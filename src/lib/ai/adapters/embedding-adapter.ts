@@ -66,7 +66,16 @@ export async function embedTexts(
     })
     // 消耗记账（嵌入只有输入，无输出）
     const inputTokens = texts.reduce((s, t) => s + estimateTokens(t), 0)
-    void recordUsage({ projectId: projectId ?? null, timestamp: Date.now(), category: 'retrieval.embed', model: cfg.model, inputTokens, outputTokens: 0 })
+    void recordUsage({
+      projectId: projectId ?? null,
+      timestamp: Date.now(),
+      category: 'retrieval.embed',
+      provider: cfg.provider,
+      model: cfg.model,
+      taskKind: 'analysis',
+      inputTokens,
+      outputTokens: 0,
+    })
     return out
   } finally {
     clearTimeout(timer)

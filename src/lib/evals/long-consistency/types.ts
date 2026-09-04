@@ -22,7 +22,7 @@ export interface LongConsistencyFixture {
   evidenceIds: string[]
 }
 
-export type EvalVariant = 'legacy-500-tail' | 'tail-summary' | 'handoff-tail-summary'
+export type EvalVariant = 'baseline-500-tail' | 'tail-summary' | 'handoff-tail-summary'
 export type EvalBudgetMode = 'fixed' | 'natural'
 
 export interface BuiltEvalCase {

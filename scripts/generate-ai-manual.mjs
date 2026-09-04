@@ -8,7 +8,7 @@
  *   ① PromptModuleKey 枚举          (src/lib/types/prompt.ts)
  *   ② prompt 种子模板               (src/lib/ai/prompt-seeds.ts) — key/name/description/variables
  *   ③ CONTEXT_SOURCES 上下文源       (src/lib/registry/context-sources.ts) — key/label/scope/layer
- *   ④ FIELD_REGISTRY 可写字段        (src/lib/registry/field-registry.ts) — target/field/aliases
+ *   ④ FIELD_REGISTRY 可写字段        (src/lib/registry/field-registry.ts) — target/field/labels
  *   ⑤ AI 调用点 category             (src/components, src/lib) — category + 文件位置
  *   ⑥ FormalAIEntryBindingV1          (src/lib/agent/ai-entry-registry.json)
  *

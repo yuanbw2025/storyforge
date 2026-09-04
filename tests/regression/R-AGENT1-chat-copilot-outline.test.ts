@@ -21,36 +21,25 @@ import {
 } from '../../src/lib/generation/generation-node'
 import { assembleContext } from '../../src/lib/registry/assemble-context'
 import type { Project } from '../../src/lib/types'
-import { resolveScopeLike } from '../../src/lib/world-engine/scope'
+import { resolveScopeLike } from '../../src/lib/workspace/scope'
 import { useAIConfigStore } from '../../src/stores/ai-config'
 import { buildNarrativeBriefV1 } from '../../src/lib/agent/narrative-brief'
 import { AgentTeamBudgetTracker } from '../../src/lib/agent/team-budget'
-import { backfillResourceUidsV1 } from '../../src/lib/context-gateway/resource-identity'
-import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
+import { stampCurrentFixtureResourceUidsV1 } from '../helpers/current-resource-identity'
+import { resolveWorkspaceOwnership } from '../../src/lib/workspace/ownership'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
+import { stampNewRecord } from '../../src/lib/workspace/scope'
 
 async function prepareOutlineCopilot(
   ...args: Parameters<typeof prepareOutlineCopilotRaw>
 ): ReturnType<typeof prepareOutlineCopilotRaw> {
-  await ensureWorkspaceOwnership(args[0].projectId)
-  await backfillResourceUidsV1(args[0].projectId)
+  await resolveWorkspaceOwnership(args[0].projectId)
+  await stampCurrentFixtureResourceUidsV1(args[0].projectId)
   return prepareOutlineCopilotRaw(...args)
 }
 
 async function addProject(enableMultiWorld = false): Promise<Project> {
-  const now = Date.now()
-  const project: Project = {
-    name: '潮汐纪元',
-    genre: 'fantasy',
-    genres: ['fantasy'],
-    status: 'drafting',
-    description: '',
-    targetWordCount: 100_000,
-    enableMultiWorld,
-    createdAt: now,
-    updatedAt: now,
-  }
-  const id = await db.projects.add(project) as number
-  return { ...project, id }
+  return (await seedCurrentWorkspace('潮汐纪元', { enableMultiWorld })).project
 }
 
 async function addVolume(
@@ -59,7 +48,8 @@ async function addVolume(
   worldGroupId: number | null = null,
 ): Promise<number> {
   const now = Date.now()
-  return await db.outlineNodes.add({
+  const { scope } = await resolveWorkspaceOwnership(projectId)
+  return await db.outlineNodes.add(stampNewRecord(scope, 'outlineNodes', {
     projectId,
     parentId: null,
     type: 'volume',
@@ -69,7 +59,7 @@ async function addVolume(
     worldGroupId,
     createdAt: now,
     updatedAt: now,
-  }) as number
+  }, { owner: 'work' }) as never) as number
 }
 
 async function makeNodeInput(input: {
@@ -79,6 +69,7 @@ async function makeNodeInput(input: {
   snapshot: OutlineCopilotSnapshot
   worldGroupId?: number | null
 }): Promise<OutlineCopilotInput> {
+  const { work } = await resolveWorkspaceOwnership(input.project.id!)
   const nodes = await db.outlineNodes.where('projectId').equals(input.project.id!).toArray()
   const volumes = nodes
     .filter(node => node.type === 'volume' && node.parentId === null)
@@ -95,6 +86,7 @@ async function makeNodeInput(input: {
   })
   return {
     project: input.project,
+    work,
     worldGroupId,
     authorRequest: input.mode === 'volumes' ? '规划三卷主线大纲' : '把这一卷展开为章节大纲',
     supplementalContext: '',
@@ -124,13 +116,14 @@ describe('AGENT-1 27.1-d · ChatCopilot 大纲闭环', () => {
   it('没有卷时选择卷纲模式，只经正式上下文源装配且不写大纲', async () => {
     const project = await addProject()
     const now = Date.now()
-    await db.worldviews.add({
+    const { scope } = await resolveWorkspaceOwnership(project.id!)
+    await db.worldviews.add(stampNewRecord(scope, 'worldviews', {
       projectId: project.id!,
       worldGroupId: null,
       worldOrigin: '盐海每十年退潮一次，海床会升起一座浮空城。',
       createdAt: now,
       updatedAt: now,
-    } as never)
+    }, { owner: 'world' }) as never)
 
     const prepared = await prepareOutlineCopilot({
       projectId: project.id!,
@@ -206,13 +199,14 @@ describe('AGENT-1 27.1-d · ChatCopilot 大纲闭环', () => {
   it('平衡模式只用一次定向修复恢复大纲 JSON，修复提示不重复发送完整世界上下文', async () => {
     const project = await addProject()
     const now = Date.now()
-    await db.worldviews.add({
+    const { scope } = await resolveWorkspaceOwnership(project.id!)
+    await db.worldviews.add(stampNewRecord(scope, 'worldviews', {
       projectId: project.id!,
       worldGroupId: null,
       worldOrigin: '盐海每十年退潮一次，海床会升起一座浮空城。',
       createdAt: now,
       updatedAt: now,
-    } as never)
+    }, { owner: 'world' }) as never)
     const runAI = vi.fn()
       .mockResolvedValueOnce('这里是大纲：第一卷退潮')
       .mockResolvedValueOnce(JSON.stringify([
@@ -286,14 +280,15 @@ describe('AGENT-1 27.1-d · ChatCopilot 大纲闭环', () => {
   it('已有卷时默认生成目标卷章节，并把章节写入正确父级与世界作用域', async () => {
     const project = await addProject(true)
     const now = Date.now()
-    const worldId = await db.worldGroups.add({
+    const { scope } = await resolveWorkspaceOwnership(project.id!)
+    const worldId = await db.worldGroups.add(stampNewRecord(scope, 'worldGroups', {
       projectId: project.id!,
       name: '盐海界',
       type: 'primary',
       order: 0,
       createdAt: now,
       updatedAt: now,
-    }) as number
+    }, { owner: 'world' }) as never) as number
     const volumeId = await addVolume(project.id!, '第一卷：退潮', worldId)
     const prepared = await prepareOutlineCopilot({
       projectId: project.id!,
@@ -394,6 +389,7 @@ describe('AGENT-1 27.1-d · ChatCopilot 大纲闭环', () => {
       projectId: project.id!,
       worldGroupId: null,
       scope,
+      purpose: 'outline-generation',
     })
     const event = await appendAgentEvent({
       projectId: project.id!,

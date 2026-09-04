@@ -17,7 +17,7 @@ import {
   resolveReadScopeLike,
   resolveScopeLike,
   stampNewRecord,
-} from '../world-engine/scope'
+} from '../workspace/scope'
 
 export interface FactCandidateDiffRow {
   subjectName: string

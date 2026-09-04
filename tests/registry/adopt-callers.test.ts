@@ -5,18 +5,10 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { useWorldviewStore } from '../../src/stores/worldview'
 import { applyChunkResult } from '../../src/lib/import/chunk-writer'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
 
 async function createProject(): Promise<number> {
-  const now = Date.now()
-  return await db.projects.add({
-    name: 'Adopt callers',
-    genre: '',
-    description: '',
-    targetWordCount: 0,
-    enableMultiWorld: false,
-    createdAt: now,
-    updatedAt: now,
-  } as any) as number
+  return (await seedCurrentWorkspace('Adopt callers')).scope.projectId
 }
 
 describe('Phase 1.2b · adopt 调用方迁移', () => {
@@ -50,7 +42,9 @@ describe('Phase 1.2b · adopt 调用方迁移', () => {
     await applyChunkResult(projectId, {
       characters: [{
         name: '燕飞',
-        role: '主角',
+        roleWeight: 'main',
+        moralAxis: 'good',
+        orderAxis: 'lawful',
         shortDescription: '旧王血脉',
         appearance: '',
         personality: '',
@@ -64,7 +58,9 @@ describe('Phase 1.2b · adopt 调用方迁移', () => {
     await applyChunkResult(projectId, {
       characters: [{
         name: '燕飞',
-        role: 'protagonist',
+        roleWeight: 'main',
+        moralAxis: 'good',
+        orderAxis: 'lawful',
         shortDescription: '旧王血脉',
         appearance: '黑衣负剑',
         personality: '',
@@ -79,7 +75,7 @@ describe('Phase 1.2b · adopt 调用方迁移', () => {
     const rows = await db.characters.where('projectId').equals(projectId).toArray()
     expect(rows).toHaveLength(1)
     expect(rows[0].name).toBe('燕飞')
-    expect(rows[0].role).toBe('protagonist')
+    expect(rows[0].roleWeight).toBe('main')
     expect(rows[0].appearance).toBe('黑衣负剑')
   })
 })

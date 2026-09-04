@@ -42,10 +42,10 @@ describe('R-AI-CONFIG · API Key 存储策略', () => {
     expect(localStorage.getItem(REMEMBER_KEY)).toBe('true')
   })
 
-  it('兼容旧版 localStorage 配置:已有 apiKey 初始化为已记住状态', async () => {
+  it('没有当前显式记住标记时拒绝读取 localStorage 中的残留 API Key', async () => {
     localStorage.setItem(CONFIG_KEY, JSON.stringify({
       provider: 'deepseek',
-      apiKey: 'sk-legacy',
+      apiKey: 'sk-residual',
       model: 'deepseek-chat',
       baseUrl: 'https://api.deepseek.com/v1',
       temperature: 0.7,
@@ -54,8 +54,8 @@ describe('R-AI-CONFIG · API Key 存储策略', () => {
 
     const useAIConfigStore = await freshStore()
 
-    expect(useAIConfigStore.getState().rememberApiKey).toBe(true)
-    expect(useAIConfigStore.getState().config.apiKey).toBe('sk-legacy')
+    expect(useAIConfigStore.getState().rememberApiKey).toBe(false)
+    expect(useAIConfigStore.getState().config.apiKey).toBe('')
   })
 
   it('session-only 模式保存预设时不把当前 API Key 写进预设 localStorage', async () => {
@@ -127,7 +127,7 @@ describe('R-AI-CONFIG · API Key 存储策略', () => {
     expect(useAIConfigStore.getState().config.apiKey).toBe('')
   })
 
-  it('应用预设后修改配置仍保留可覆盖的来源预设', async () => {
+  it('应用预设后修改配置仍保留可覆盖的来源预设，官方 provider 只保存当前登记模型', async () => {
     const useAIConfigStore = await freshStore()
     const id = useAIConfigStore.getState().saveAsPreset('主力配置')
     useAIConfigStore.getState().applyPreset(id)
@@ -139,7 +139,7 @@ describe('R-AI-CONFIG · API Key 存储策略', () => {
     useAIConfigStore.getState().updatePresetFromCurrent(id)
     const preset = useAIConfigStore.getState().presets.find(p => p.id === id)
     expect(preset?.config.baseUrl).toBe('https://example.com/v1')
-    expect(preset?.config.model).toBe('new-model')
+    expect(preset?.config.model).toBe(PROVIDER_PRESETS.deepseek?.model)
     expect(useAIConfigStore.getState().activePresetId).toBe(id)
   })
 
@@ -197,9 +197,6 @@ describe('R-AI-CONFIG · API Key 存储策略', () => {
       maxOutput: 65_536,
     })
     expect(getModelPreset('agnes', 'agnes-2.5-pro').maxContext).toBe(524_288)
-    // Historical imports remain budget-safe even after the live provider
-    // removed 1.5 from its selectable model directory.
-    expect(getModelPreset('agnes', 'agnes-1.5-flash').maxContext).toBe(262_144)
     expect(getModelPreset('agnes', 'agnes-2.0-flash').maxContext).toBe(262_144)
 
     const useAIConfigStore = await freshStore()
@@ -246,35 +243,27 @@ describe('R-AI-CONFIG · API Key 存储策略', () => {
     })
   })
 
-  it('加载时迁移已停用的 DeepSeek 与 Gemini 模型别名', async () => {
+  it('加载时拒绝官方提供商未登记的模型 ID 并回到当前默认模型', async () => {
+    localStorage.setItem(REMEMBER_KEY, 'true')
     localStorage.setItem(CONFIG_KEY, JSON.stringify({
       provider: 'deepseek',
       apiKey: 'deepseek-key',
-      model: 'deepseek-reasoner',
+      model: 'retired-model-id',
       baseUrl: 'https://api.deepseek.com/v1',
       temperature: 0.7,
       maxTokens: 0,
     }))
-    let useAIConfigStore = await freshStore()
+    const useAIConfigStore = await freshStore()
     expect(useAIConfigStore.getState().config.model).toBe('deepseek-v4-flash')
-
-    localStorage.setItem(CONFIG_KEY, JSON.stringify({
-      provider: 'gemini',
-      apiKey: 'gemini-key',
-      model: 'gemini-3-flash-preview',
-      baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
-      temperature: 0.7,
-      maxTokens: 0,
-    }))
-    useAIConfigStore = await freshStore()
-    expect(useAIConfigStore.getState().config.model).toBe('gemini-3.5-flash')
+    expect(useAIConfigStore.getState().config.apiKey).toBe('deepseek-key')
   })
 
-  it('加载时无损迁移 Agnes 历史大小写模型 ID', async () => {
+  it('Agnes 模型 ID 大小写不匹配时拒绝猜测并回到当前默认模型', async () => {
+    localStorage.setItem(REMEMBER_KEY, 'true')
     localStorage.setItem(CONFIG_KEY, JSON.stringify({
       provider: 'agnes',
       apiKey: 'agnes-key',
-      model: 'Agnes-2.0-Flash',
+      model: 'AGNES-NOT-REGISTERED',
       baseUrl: 'https://apihub.agnes-ai.com/v1',
       temperature: 0.7,
       maxTokens: 0,
@@ -282,17 +271,17 @@ describe('R-AI-CONFIG · API Key 存储策略', () => {
 
     const useAIConfigStore = await freshStore()
 
-    expect(useAIConfigStore.getState().config.model).toBe('agnes-2.0-flash')
+    expect(useAIConfigStore.getState().config.model).toBe('agnes-2.5-flash')
     expect(useAIConfigStore.getState().config.apiKey).toBe('agnes-key')
     expect(JSON.parse(localStorage.getItem(CONFIG_KEY) || '{}')).toMatchObject({
       provider: 'agnes',
       apiKey: 'agnes-key',
-      model: 'agnes-2.0-flash',
+      model: 'agnes-2.5-flash',
     })
-    expect(getModelPreset('agnes', 'Agnes-2.0-Flash').maxContext).toBe(262_144)
+    expect(getModelPreset('agnes', 'AGNES-NOT-REGISTERED').maxContext).toBe(524_288)
   })
 
-  it('豆包 provider 使用当前方舟在线推理模型并迁移旧模型名', async () => {
+  it('豆包 provider 只接受当前方舟在线推理模型', async () => {
     expect(PROVIDER_PRESETS.doubao?.baseUrl).toBe('https://ark.cn-beijing.volces.com/api/v3')
     expect(PROVIDER_PRESETS.doubao?.model).toBe('doubao-1-5-pro-32k-250115')
     expect(PROVIDER_MODELS.doubao?.map(model => model.value)).toEqual([
@@ -305,7 +294,6 @@ describe('R-AI-CONFIG · API Key 存储策略', () => {
       maxContext: 32_000,
       maxOutput: 4_096,
     })
-    expect(getModelPreset('doubao', 'doubao-pro-32k').maxContext).toBe(32_000)
     expect(getModelPreset('doubao', 'deepseek-v4-flash-ga-260731')).toMatchObject({
       maxContext: 128_000,
       maxOutput: 8_192,
@@ -318,7 +306,7 @@ describe('R-AI-CONFIG · API Key 存储策略', () => {
     localStorage.setItem(CONFIG_KEY, JSON.stringify({
       provider: 'doubao',
       apiKey: '',
-      model: 'doubao-pro-32k',
+      model: 'retired-model-id',
       baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
       temperature: 0.7,
       maxTokens: 0,

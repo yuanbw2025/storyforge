@@ -7,7 +7,7 @@ import type {
   WorkspaceScope,
 } from '../../types'
 import { hashChapterText, normalizeChapterText } from '../../ai/chapter-memory/text-normalization'
-import { assertRecordInScope, readOwnedRows } from '../../world-engine/scope'
+import { assertRecordInScope, readOwnedRows } from '../../workspace/scope'
 import {
   CONSISTENCY_AGENT_DEEP_SOURCES_V1,
   CONSISTENCY_AGENT_FAST_SOURCES_V1,

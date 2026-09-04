@@ -1,6 +1,8 @@
 import type { PromptWorkflow } from '../types'
+import { createLinearWorkflowGraph } from '../workflow/graph'
 
 export type WorkflowSeed = Omit<PromptWorkflow, 'id' | 'createdAt' | 'updatedAt'>
+type WorkflowSeedDraft = Omit<WorkflowSeed, 'graph'>
 
 const uid = () => `s-${Math.random().toString(36).slice(2, 10)}`
 
@@ -8,7 +10,7 @@ const uid = () => `s-${Math.random().toString(36).slice(2, 10)}`
  * 内置工作流种子。
  * 借鉴蛙蛙写作的"链式工作流"理念：一键跑完一段创作流程，每步可暂停。
  */
-export const SYSTEM_WORKFLOW_SEEDS: WorkflowSeed[] = [
+const SYSTEM_WORKFLOW_DRAFTS: WorkflowSeedDraft[] = [
   // 1. 极速起书（通用版）
   {
     scope: 'system',
@@ -123,3 +125,9 @@ export const SYSTEM_WORKFLOW_SEEDS: WorkflowSeed[] = [
     ],
   },
 ]
+
+/** 系统工作流在进入数据库前即拥有完整显式图；运行时不推断缺失拓扑。 */
+export const SYSTEM_WORKFLOW_SEEDS: WorkflowSeed[] = SYSTEM_WORKFLOW_DRAFTS.map(seed => ({
+  ...seed,
+  graph: createLinearWorkflowGraph(seed.steps),
+}))

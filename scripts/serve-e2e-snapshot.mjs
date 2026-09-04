@@ -16,6 +16,7 @@ const snapshotEntries = [
   'public',
   'src',
   'tailwind.config.ts',
+  'tests/helpers',
   'tsconfig.json',
   'vite.config.ts',
 ]

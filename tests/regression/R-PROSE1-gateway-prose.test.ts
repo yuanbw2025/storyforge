@@ -17,15 +17,15 @@ import { buildChapterInformationBoundaryV1 } from '../../src/lib/agent/informati
 import { hashCanonicalValue } from '../../src/lib/agent/run/hash'
 import { hashChapterText } from '../../src/lib/ai/chapter-memory/text-normalization'
 import { normalizeProseForEditorV1, plainTextToHtml } from '../../src/lib/utils/html'
-import { generateWorkspaceUid } from '../../src/lib/memory/identity'
-import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
-import { stampNewRecord, type WorkspaceScope } from '../../src/lib/world-engine/scope'
+import { createWorkspace } from '../../src/lib/workspace/create-workspace'
+import { stampNewRecord, type WorkspaceScope } from '../../src/lib/workspace/scope'
 import { useAIConfigStore } from '../../src/stores/ai-config'
 import { prepareProseCopilot } from '../../src/lib/agent/prose-copilot'
 import {
   resolveAgentSkillV1,
   validateAgentSkillContextEvidenceV1,
 } from '../../src/lib/agent/skill-registry'
+import { captureWorkspaceContentRevisionV1 } from '../../src/lib/authoring/content-revision'
 
 const now = 1_787_905_000_000
 
@@ -41,11 +41,12 @@ async function addScoped(
 }
 
 async function seed() {
-  const projectId = await db.projects.add({
-    workspaceUid: generateWorkspaceUid(), name: 'PROSE-1 潮门正文', genre: 'fantasy', genres: ['fantasy'],
-    status: 'drafting', description: '', targetWordCount: 1_000_000, createdAt: now, updatedAt: now,
-  } as any) as number
-  const { scope } = await ensureWorkspaceOwnership(projectId)
+  const created = await createWorkspace({
+    name: 'PROSE-1 潮门正文', genres: ['fantasy'], status: 'drafting', description: '',
+    targetWordCount: 1_000_000,
+  }, { purpose: 'independent-work', kind: 'novel', novelProfile: 'long' })
+  const { scope } = created
+  const projectId = scope.projectId
   const groupId = await addScoped(scope, 'worldGroups', {
     name: '潮汐大陆', description: '', type: 'primary', order: 0,
   }, 'world')
@@ -77,8 +78,10 @@ async function seed() {
     lastUsedSummary: '守灯人进入潮门并听见潮钟',
   }, 'work')
   const characterId = await addScoped(scope, 'characters', {
-    homeWorldGroupId: groupId, isCrossWorld: false, name: '守灯人', role: 'protagonist',
+    homeWorldGroupId: groupId, isCrossWorld: false, name: '守灯人',
+    roleWeight: 'main', moralAxis: 'good', orderAxis: 'lawful', shortDescription: '谨慎的守潮者',
     personality: '谨慎', background: '守潮者', appearance: '', motivation: '寻找潮钟',
+    abilities: '', relationships: '[]', arc: '',
   }, 'world')
   await db.chapters.update(chapterId, { perspectiveCharacterId: characterId })
   const arcId = await addScoped(scope, 'storyArcs', {
@@ -174,12 +177,17 @@ async function exactPending(fixture: Awaited<ReturnType<typeof seed>>) {
     scope: fixture.scope, snapshot, attempt: begun.attempt, output: outputText,
   })
   snapshot = finalized.snapshot
+  const contentRevision = await captureWorkspaceContentRevisionV1({
+    scope: fixture.scope,
+    worldGroupId: fixture.groupId,
+  })
   const body = {
     version: 1 as const, type: 'prose-generation-candidate' as const,
     projectId: fixture.projectId, chapterId: fixture.chapterId, chapterTitle: '第二章',
     worldGroupId: fixture.groupId, operation: 'generate' as const, sourceTextHash,
     outputText, outputTextHash: await hashCanonicalValue(outputText), gatewayEvidenceVersion: 3 as const,
     expectedContentHash: await hashChapterText(outputText), informationBoundaryHash: boundary.manifestHash,
+    contentRevision,
     perspectiveCharacterId: fixture.characterId, perspectiveFromChapter: true, createdAt: Date.now(),
   }
   const candidate: ProseGenerationCandidateV1 = {
@@ -249,7 +257,6 @@ describe.sequential('PROSE-1 · 正文 Gateway 单一上下文与 exact adoption
       authorRequest: '写第二章正文',
       skillId: 'prose.generate',
       perspectiveCharacterId: fixture.characterId,
-      creativeReliabilityEnabled: false,
     })
     expect(prepared.contextEvidence.inputStateSourceKeys).toEqual(expect.arrayContaining([
       'chapterOutline', 'detailedOutline', 'storyArcs', 'storylineProgress',

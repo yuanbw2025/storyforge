@@ -4,7 +4,7 @@ import { db } from '../../src/lib/db/schema'
 import type { WorkspaceScope } from '../../src/lib/types'
 import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
 import { getAgentSkillV1 } from '../../src/lib/agent/skill-registry'
-import { parseInventoryEventsStrictV1 } from '../../src/lib/ai/adapters/inventory-extract-adapter'
+import { parseInventoryEvents } from '../../src/lib/ai/adapters/inventory-extract-adapter'
 import {
   abandonInventoryExtractionV1,
   adoptInventoryExtractionCandidateV1,
@@ -14,29 +14,20 @@ import {
   readRecoverableInventoryExtractionV1,
   resumeInventoryExtractionCandidateV1,
 } from '../../src/lib/agent/run/inventory-extraction-durable'
+import { currentWorkFixtureRecordV1, seedCurrentWorkspace } from '../helpers/current-workspace'
+import { stampNewRecord } from '../../src/lib/workspace/scope'
 
 async function seed(options: { long?: boolean } = {}) {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    name: '物品提取', genre: 'fantasy', genres: ['fantasy'], status: 'drafting', description: '',
-    targetWordCount: 80_000, worldCode: `inventory-${now}`, worldVersion: 1, createdAt: now, updatedAt: now,
-  } as any) as number
-  const worldId = await db.worlds.add({
-    projectId, code: `inventory-${now}`, name: '潮门世界', description: '', currentVersion: 1,
-    createdAt: now, updatedAt: now,
-  }) as number
-  const workId = await db.works.add({
-    projectId, worldId, title: '潮门纪', description: '', genres: ['fantasy'], status: 'drafting',
-    targetWordCount: 80_000, createdAt: now, updatedAt: now,
-  } as any) as number
-  await db.projects.update(projectId, { activeWorldId: worldId, activeWorkId: workId, ownershipSchemaVersion: 1 })
-  const worldGroupId = await db.worldGroups.add({
-    projectId, worldId, name: '主世界', order: 0, createdAt: now, updatedAt: now,
-  }) as number
-  const volumeId = await db.outlineNodes.add({
-    projectId, workId, worldGroupId, parentId: null, type: 'volume', title: '第一卷', summary: '',
+  const created = await seedCurrentWorkspace('物品提取', { enableMultiWorld: true })
+  const { projectId, worldId, workId } = created.scope
+  const worldGroupId = await db.worldGroups.add(stampNewRecord(created.scope, 'worldGroups', {
+    projectId, name: '主世界', type: 'primary', order: 0, createdAt: now, updatedAt: now,
+  }, { owner: 'world' })) as number
+  const volumeId = await db.outlineNodes.add(stampNewRecord(created.scope, 'outlineNodes', {
+    projectId, worldGroupId, parentId: null, type: 'volume', title: '第一卷', summary: '',
     order: 0, createdAt: now, updatedAt: now,
-  } as any) as number
+  }, { owner: 'work' })) as number
   const chapterIds: number[] = []
   const outlineIds: number[] = []
   const contents = [
@@ -46,46 +37,46 @@ async function seed(options: { long?: boolean } = {}) {
     '阿澜穿过潮门，确认背包里没有新增或消耗任何物品。钟叔只远远看着她，没有发生物品交接。两人沿着潮湿石阶继续前行，直到钟声在空旷街道上渐渐消散。',
   ]
   for (let index = 0; index < 2; index++) {
-    const outlineId = await db.outlineNodes.add({
-      projectId, workId, worldGroupId, parentId: volumeId, type: 'chapter',
+    const outlineId = await db.outlineNodes.add(stampNewRecord(created.scope, 'outlineNodes', {
+      projectId, worldGroupId, parentId: volumeId, type: 'chapter',
       title: `第${index + 1}章`, summary: `第${index + 1}章摘要`, order: index,
       createdAt: now + index, updatedAt: now + index,
-    } as any) as number
+    }, { owner: 'work' })) as number
     outlineIds.push(outlineId)
-    chapterIds.push(await db.chapters.add({
-      projectId, workId, outlineNodeId: outlineId, title: `第${index + 1}章`,
+    chapterIds.push(await db.chapters.add(stampNewRecord(created.scope, 'chapters', {
+      projectId, outlineNodeId: outlineId, title: `第${index + 1}章`,
       content: `<p>${contents[index]}</p>`, wordCount: contents[index].length,
       status: 'draft', order: index, notes: '', createdAt: now + index, updatedAt: now + index,
-    } as any) as number)
+    }, { owner: 'work' })) as number)
   }
   const characterIds = [
-    await db.characters.add({
-      projectId, worldId, workId: null, homeWorldGroupId: worldGroupId,
-      name: '阿澜', role: 'protagonist', roleWeight: 'main', moralAxis: 'neutral', orderAxis: 'neutral',
+    await db.characters.add(stampNewRecord(created.scope, 'characters', {
+      projectId, homeWorldGroupId: worldGroupId,
+      name: '阿澜', roleWeight: 'main', moralAxis: 'neutral', orderAxis: 'neutral',
       shortDescription: '潮门守卫', appearance: '', personality: '', background: '', motivation: '',
       abilities: '', relationships: '', arc: '', createdAt: now, updatedAt: now,
-    } as any) as number,
-    await db.characters.add({
-      projectId, worldId, workId: null, homeWorldGroupId: worldGroupId,
-      name: '钟叔', role: 'supporting', roleWeight: 'secondary', moralAxis: 'good', orderAxis: 'lawful',
+    }, { owner: 'world' })) as number,
+    await db.characters.add(stampNewRecord(created.scope, 'characters', {
+      projectId, homeWorldGroupId: worldGroupId,
+      name: '钟叔', roleWeight: 'secondary', moralAxis: 'good', orderAxis: 'lawful',
       shortDescription: '老钟匠', appearance: '', personality: '', background: '', motivation: '',
       abilities: '', relationships: '', arc: '', createdAt: now + 1, updatedAt: now + 1,
-    } as any) as number,
+    }, { owner: 'world' })) as number,
   ]
   const originalIds = [
-    await db.itemLedger.add({
-      projectId, workId, itemName: '旧钥匙', heldByName: '阿澜', characterId: characterIds[0],
+    await db.itemLedger.add(stampNewRecord(created.scope, 'itemLedger', {
+      projectId, itemName: '已有钥匙', heldByName: '阿澜', characterId: characterIds[0],
       action: 'gain', quantity: 1, chapterId: chapterIds[0], chapterTitle: '第1章', note: '旧提取结果',
       createdAt: now,
-    } as any) as number,
-    await db.itemLedger.add({
-      projectId, workId, itemName: '旧地图', heldByName: '钟叔', characterId: characterIds[1],
+    }, { owner: 'work' })) as number,
+    await db.itemLedger.add(stampNewRecord(created.scope, 'itemLedger', {
+      projectId, itemName: '已有地图', heldByName: '钟叔', characterId: characterIds[1],
       action: 'gain', quantity: 1, chapterId: chapterIds[1], chapterTitle: '第2章', note: '旧提取结果',
       createdAt: now + 1,
-    } as any) as number,
+    }, { owner: 'work' })) as number,
   ]
   return {
-    scope: { projectId, worldId, workId } satisfies WorkspaceScope,
+    scope: created.scope satisfies WorkspaceScope,
     projectId, worldId, workId, worldGroupId, volumeId, outlineIds, chapterIds, characterIds, originalIds,
   }
 }
@@ -125,7 +116,7 @@ describe.sequential('R-HARNESS63 · 物品栏 durable 分块提取与原子替�
       runAI: async (messages, callIndex) => {
         const prompt = messages.map(message => message.content).join('\n')
         prompts.push(prompt)
-        expect(prompt).toContain('旧钥匙')
+        expect(prompt).toContain('已有钥匙')
         expect(prompt).toContain('阿澜')
         return callIndex === 0 ? response(item()) : response(item('断潮绳', '钟叔', 'gain', 1, '阿澜所赠'))
       },
@@ -271,7 +262,7 @@ describe.sequential('R-HARNESS63 · 物品栏 durable 分块提取与原子替�
     }) as number
     await db.characters.add({
       projectId: fixture.projectId, worldId: fixture.worldId, workId: null, homeWorldGroupId: otherGroupId,
-      name: '阿澜', role: 'supporting', roleWeight: 'secondary', moralAxis: 'neutral', orderAxis: 'neutral',
+      name: '阿澜', roleWeight: 'secondary', moralAxis: 'neutral', orderAxis: 'neutral',
       shortDescription: '同名异界角色', appearance: '', personality: '', background: '', motivation: '',
       abilities: '', relationships: '', arc: '', createdAt: now, updatedAt: now,
     } as any)
@@ -364,10 +355,10 @@ describe.sequential('R-HARNESS63 · 物品栏 durable 分块提取与原子替�
   it('只读取当前 Work 正文、物品流水与当前 World 角色', async () => {
     const fixture = await seed()
     const now = Date.now()
-    const foreignWorkId = await db.works.add({
+    const foreignWorkId = await db.works.add(currentWorkFixtureRecordV1({
       projectId: fixture.projectId, worldId: fixture.worldId, title: '同世界外部作品', description: '',
       genres: ['fantasy'], status: 'drafting', targetWordCount: 1_000, createdAt: now, updatedAt: now,
-    } as any) as number
+    })) as number
     await db.chapters.add({
       projectId: fixture.projectId, workId: foreignWorkId, outlineNodeId: null, title: '外部章节',
       content: '<p>秘密银钥匙只存在于另一部作品。</p>', wordCount: 30,
@@ -383,7 +374,7 @@ describe.sequential('R-HARNESS63 · 物品栏 durable 分块提取与原子替�
     }) as number
     await db.characters.add({
       projectId: fixture.projectId, worldId: foreignWorldId, workId: null, homeWorldGroupId: null,
-      name: '异界持有者', role: 'supporting', roleWeight: 'secondary', moralAxis: 'neutral', orderAxis: 'neutral',
+      name: '异界持有者', roleWeight: 'secondary', moralAxis: 'neutral', orderAxis: 'neutral',
       shortDescription: '', appearance: '', personality: '', background: '', motivation: '', abilities: '',
       relationships: '', arc: '', createdAt: now, updatedAt: now,
     } as any)
@@ -391,7 +382,7 @@ describe.sequential('R-HARNESS63 · 物品栏 durable 分块提取与原子替�
       scope: fixture.scope, request: { mode: 'all' },
       runAI: async messages => {
         const prompt = messages.map(message => message.content).join('\n')
-        expect(prompt).toContain('旧钥匙')
+        expect(prompt).toContain('已有钥匙')
         expect(prompt).toContain('阿澜')
         expect(prompt).not.toContain('秘密银钥匙')
         expect(prompt).not.toContain('外部圣杯')
@@ -435,12 +426,12 @@ describe.sequential('R-HARNESS63 · 物品栏 durable 分块提取与原子替�
   })
 
   it('严格 parser 拒绝额外字段、容错枚举、非正整数、缺少持有人与非 JSON', () => {
-    expect(parseInventoryEventsStrictV1(response(item()))).toEqual([item()])
-    expect(() => parseInventoryEventsStrictV1(JSON.stringify([{ ...item(), extra: true }]))).toThrow('字段不在允许闭集')
-    expect(() => parseInventoryEventsStrictV1(JSON.stringify([{ ...item(), action: '获得' }]))).toThrow('字段类型或枚举无效')
-    expect(() => parseInventoryEventsStrictV1(JSON.stringify([{ ...item(), quantity: 1.5 }]))).toThrow('字段类型或枚举无效')
-    expect(() => parseInventoryEventsStrictV1(JSON.stringify([{ ...item(), heldByName: '' }]))).toThrow('字段类型或枚举无效')
-    expect(() => parseInventoryEventsStrictV1('物品建议如下')).toThrow('不是有效 JSON')
+    expect(parseInventoryEvents(response(item()))).toEqual([item()])
+    expect(() => parseInventoryEvents(JSON.stringify([{ ...item(), extra: true }]))).toThrow('字段不在允许闭集')
+    expect(() => parseInventoryEvents(JSON.stringify([{ ...item(), action: '获得' }]))).toThrow('字段类型或枚举无效')
+    expect(() => parseInventoryEvents(JSON.stringify([{ ...item(), quantity: 1.5 }]))).toThrow('字段类型或枚举无效')
+    expect(() => parseInventoryEvents(JSON.stringify([{ ...item(), heldByName: '' }]))).toThrow('字段类型或枚举无效')
+    expect(() => parseInventoryEvents('物品建议如下')).toThrow('不是有效 JSON')
   })
 
   it('旧组件逐章 chat、手拼上下文、先删后写和直接 adopt 旁路已下线，人工 CRUD 保留', () => {

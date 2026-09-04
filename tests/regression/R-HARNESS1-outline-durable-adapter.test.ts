@@ -17,8 +17,6 @@ import {
   beginOutlineGenerationAdoptionV1,
   commitOutlineGenerationAdoptionV1,
   createOutlineGenerationTraceV1,
-  isOutlineDurableHarnessEnabledV1,
-  OUTLINE_DURABLE_HARNESS_STORAGE_KEY,
   OUTLINE_GENERATION_ADOPTION_INTENT_PAYLOAD_TYPE,
   OUTLINE_GENERATION_CANDIDATE_PAYLOAD_TYPE,
   OUTLINE_GENERATION_CONVERSATION_PURPOSE,
@@ -32,10 +30,11 @@ import { adoptGeneratedOutlineItems } from '../../src/lib/outline/adopt-generati
 import { encodeGenerationOperation, type OutlineGenerationRequest } from '../../src/lib/outline/generation-request'
 import type { AssembleContextResult } from '../../src/lib/registry/types'
 import type { WorkspaceScope } from '../../src/lib/types'
-import { generateWorkspaceUid, generateWorkCode } from '../../src/lib/memory/identity'
-import { backfillResourceUidsV1 } from '../../src/lib/context-gateway/resource-identity'
+import { stampCurrentFixtureResourceUidsV1 } from '../helpers/current-resource-identity'
 import { prepareOutlineGatewayAssemblyV1 } from '../../src/lib/outline/gateway-context'
 import { useAIConfigStore } from '../../src/stores/ai-config'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
+import { stampNewRecord } from '../../src/lib/workspace/scope'
 
 async function createWorkspace(): Promise<{
   scope: WorkspaceScope
@@ -43,57 +42,17 @@ async function createWorkspace(): Promise<{
   outlineNodeId: number
 }> {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    workspaceUid: generateWorkspaceUid(),
-    name: '大纲 durable adapter',
-    genre: 'fantasy',
-    genres: ['fantasy'],
-    description: '',
-    status: 'drafting',
-    targetWordCount: 100_000,
-    worldCode: 'outline-durable-world',
-    worldVersion: 1,
-    createdAt: now,
-    updatedAt: now,
-  } as any) as number
-  const worldId = await db.worlds.add({
-    projectId,
-    code: 'outline-durable-world',
-    name: '潮汐世界',
-    description: '',
-    currentVersion: 1,
-    createdAt: now,
-    updatedAt: now,
-  }) as number
-  const workId = await db.works.add({
-    projectId,
-    worldId,
-    code: generateWorkCode(),
-    title: '潮城纪事',
-    description: '',
-    genres: ['fantasy'],
-    status: 'drafting',
-    targetWordCount: 100_000,
-    createdAt: now,
-    updatedAt: now,
-  }) as number
-  await db.projects.update(projectId, {
-    activeWorldId: worldId,
-    activeWorkId: workId,
-    ownershipSchemaVersion: 1,
-  })
-  const worldGroupId = await db.worldGroups.add({
-    projectId,
-    worldId,
+  const created = await seedCurrentWorkspace('大纲 durable adapter', { enableMultiWorld: true })
+  const worldGroupId = await db.worldGroups.add(stampNewRecord(created.scope, 'worldGroups', {
+    projectId: created.scope.projectId,
     name: '主世界',
+    type: 'primary',
     order: 0,
     createdAt: now,
     updatedAt: now,
-  }) as number
-  const outlineNodeId = await db.outlineNodes.add({
-    projectId,
-    worldId: null,
-    workId,
+  }, { owner: 'world' })) as number
+  const outlineNodeId = await db.outlineNodes.add(stampNewRecord(created.scope, 'outlineNodes', {
+    projectId: created.scope.projectId,
     worldGroupId,
     parentId: null,
     type: 'volume',
@@ -102,9 +61,9 @@ async function createWorkspace(): Promise<{
     order: 0,
     createdAt: now,
     updatedAt: now,
-  }) as number
-  await backfillResourceUidsV1(projectId)
-  return { scope: { projectId, worldId, workId }, worldGroupId, outlineNodeId }
+  }, { owner: 'work' })) as number
+  await stampCurrentFixtureResourceUidsV1(created.scope.projectId)
+  return { scope: created.scope, worldGroupId, outlineNodeId }
 }
 
 async function assembly(
@@ -170,11 +129,9 @@ describe.sequential('R-HARNESS1-outline-durable-adapter · 大纲双写接入', 
     await db.delete()
     await db.open()
     clearRecentGenerationShadowTracesV1()
-    localStorage.removeItem(OUTLINE_DURABLE_HARNESS_STORAGE_KEY)
   })
 
   afterEach(() => {
-    localStorage.removeItem(OUTLINE_DURABLE_HARNESS_STORAGE_KEY)
     db.close()
   })
 
@@ -412,7 +369,7 @@ describe.sequential('R-HARNESS1-outline-durable-adapter · 大纲双写接入', 
       '基于旧世界状态生成的章纲',
     )
     expect(candidate.contentRevision).toMatchObject({ version: 1 })
-    await db.projects.update(fixture.scope.projectId, {
+    await db.works.update(fixture.scope.workId, {
       description: '作者在生成后补充了新的故事约束',
       updatedAt: Date.now(),
     })
@@ -427,7 +384,7 @@ describe.sequential('R-HARNESS1-outline-durable-adapter · 大纲双写接入', 
         startingOrder: 0,
         baseExistingTitles: [],
       },
-    })).rejects.toThrow(/候选生成后项目内容已变化.*projects/)
+    })).rejects.toThrow(/候选生成后项目内容已变化.*works/)
 
     const chapters = (await db.outlineNodes.where('projectId').equals(fixture.scope.projectId).toArray())
       .filter(row => row.type === 'chapter')
@@ -895,12 +852,6 @@ describe.sequential('R-HARNESS1-outline-durable-adapter · 大纲双写接入', 
 
     expect(await db.agentRuns.count()).toBe(0)
     expect(await db.agentEvents.count()).toBe(0)
-  })
-
-  it('本机回滚开关默认启用，显式 disabled 后关闭 durable 接入', () => {
-    expect(isOutlineDurableHarnessEnabledV1()).toBe(true)
-    localStorage.setItem(OUTLINE_DURABLE_HARNESS_STORAGE_KEY, 'disabled')
-    expect(isOutlineDurableHarnessEnabledV1()).toBe(false)
   })
 
   it('模型失败继续抛出原错误，并把失败步骤写入 durable ledger', async () => {

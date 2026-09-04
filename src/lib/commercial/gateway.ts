@@ -7,7 +7,7 @@ import {
 } from './authority'
 import { CommercialWebhookErrorV1, verifyCommercialWebhookWithSecretsV1 } from './webhook'
 import type { CommercialPaymentEventV1 } from './webhook'
-import type { GameProductType } from '../types'
+import { PRODUCTION_PRODUCT_KINDS_V1, type ProductionProductKindV1 } from '../types'
 
 export interface CommercialGatewayRequestV1 {
   method: string
@@ -247,16 +247,13 @@ export function createCommercialGatewayV1(input: {
         requestId = typeof body.requestId === 'string' ? body.requestId : null
         if (request.path === '/v1/commercial/discover') {
           fields(body, [], ['productType', 'query'])
-          const products: GameProductType[] = [
-            'storygame', 'character-interaction', 'text-adventure', 'avg',
-            'narrative-simulation', 'text-open-world', 'ttrpg',
-          ]
-          if ((body.productType != null && (typeof body.productType !== 'string' || !products.includes(body.productType as GameProductType)))
+          const products: readonly ProductionProductKindV1[] = PRODUCTION_PRODUCT_KINDS_V1
+          if ((body.productType != null && (typeof body.productType !== 'string' || !products.includes(body.productType as ProductionProductKindV1)))
             || (body.query != null && typeof body.query !== 'string')) {
             throw new CommercialAuthorityErrorV1('protocol', '发现筛选字段无效')
           }
           result = response(200, input.authority.discover({
-            productType: body.productType as GameProductType | undefined,
+            productType: body.productType as ProductionProductKindV1 | undefined,
             query: body.query as string | undefined,
           }))
         } else {
@@ -269,7 +266,7 @@ export function createCommercialGatewayV1(input: {
             ])
             result = response(201, await input.authority.createListing({
               principal, requestId: body.requestId as string, releaseHash: body.releaseHash as string,
-              productType: body.productType as GameProductType, title: body.title as string,
+              productType: body.productType as ProductionProductKindV1, title: body.title as string,
               summary: body.summary as string, contentWarnings: body.contentWarnings as string[],
               license: body.license as CommercialLicenseV1, currency: body.currency as string,
               amountMinor: body.amountMinor as number, creatorShareBps: body.creatorShareBps as number,

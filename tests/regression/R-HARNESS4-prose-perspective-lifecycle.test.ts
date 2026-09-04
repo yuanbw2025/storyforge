@@ -4,6 +4,8 @@ import { deriveExportProjectJSON } from '../../src/lib/export/registry-export'
 import { deriveImportProjectJSON } from '../../src/lib/export/registry-import'
 import { adopt } from '../../src/lib/registry/adopt'
 import { useCharacterStore } from '../../src/stores/character'
+import { seedCurrentProject } from '../helpers/current-workspace'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
 
 describe('HARNESS-4 · 正文视角字段治理生命周期', () => {
   beforeEach(async () => {
@@ -15,9 +17,9 @@ describe('HARNESS-4 · 正文视角字段治理生命周期', () => {
 
   async function seed() {
     const now = Date.now()
-    const projectId = await db.projects.add({
+    const projectId = await seedCurrentProject({
       name: '视角生命周期',
-      genre: 'fantasy',
+      genres: ['fantasy'],
       description: '',
       targetWordCount: 100_000,
       enableMultiWorld: false,
@@ -30,6 +32,8 @@ describe('HARNESS-4 · 正文视角字段治理生命周期', () => {
       roleWeight: 'main',
       moralAxis: 'neutral',
       orderAxis: 'neutral',
+      homeWorldGroupId: null,
+      isCrossWorld: false,
       createdAt: now,
       updatedAt: now,
     } as any) as number
@@ -53,6 +57,7 @@ describe('HARNESS-4 · 正文视角字段治理生命周期', () => {
       createdAt: now,
       updatedAt: now,
     } as any) as number
+    await finalizeCurrentFixtureV1(projectId)
     return { projectId, characterId, outlineNodeId }
   }
 
@@ -106,6 +111,7 @@ describe('HARNESS-4 · 正文视角字段治理生命周期', () => {
       createdAt: now,
       updatedAt: now,
     } as any) as number
+    await finalizeCurrentFixtureV1(seeded.projectId)
 
     const exported = await deriveExportProjectJSON(seeded.projectId)
     const importedProjectId = await deriveImportProjectJSON(exported)

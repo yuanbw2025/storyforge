@@ -6,18 +6,12 @@ import { db } from '../../src/lib/db/schema'
 import { CONTEXT_SOURCES } from '../../src/lib/registry/context-sources'
 import { assembleContext } from '../../src/lib/registry/assemble-context'
 import { checkRegistry } from '../../src/lib/registry/validate'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
+import { stampNewRecord } from '../../src/lib/workspace/scope'
+import type { WorkspaceScope } from '../../src/lib/types'
 
-async function createProject(): Promise<number> {
-  const now = Date.now()
-  return await db.projects.add({
-    name: 'Context Test',
-    genre: '',
-    description: '',
-    targetWordCount: 0,
-    enableMultiWorld: true,
-    createdAt: now,
-    updatedAt: now,
-  } as any) as number
+async function createProject(): Promise<WorkspaceScope> {
+  return (await seedCurrentWorkspace('Context Test', { enableMultiWorld: true })).scope
 }
 
 describe('Phase 1.3a · 统一上下文装配层', () => {
@@ -45,25 +39,26 @@ describe('Phase 1.3a · 统一上下文装配层', () => {
 
   it('assembleContext 按显式 worldGroupId 隔离世界观和角色', async () => {
     const now = Date.now()
-    const projectId = await createProject()
-    const worldA = await db.worldGroups.add({
+    const scope = await createProject()
+    const { projectId } = scope
+    const worldA = await db.worldGroups.add(stampNewRecord(scope, 'worldGroups', {
       projectId, name: '炉火界', type: 'primary', order: 0, createdAt: now, updatedAt: now,
-    } as any) as number
-    const worldB = await db.worldGroups.add({
+    }, { owner: 'world' }) as any) as number
+    const worldB = await db.worldGroups.add(stampNewRecord(scope, 'worldGroups', {
       projectId, name: '冰海界', type: 'parallel', order: 1, createdAt: now, updatedAt: now,
-    } as any) as number
-    await db.worldviews.add({
+    }, { owner: 'world' }) as any) as number
+    await db.worldviews.add(stampNewRecord(scope, 'worldviews', {
       projectId, worldGroupId: worldA, worldOrigin: '炉火界只信奉火焰契约', createdAt: now, updatedAt: now,
-    } as any)
-    await db.worldviews.add({
+    }, { owner: 'world' }) as any)
+    await db.worldviews.add(stampNewRecord(scope, 'worldviews', {
       projectId, worldGroupId: worldB, worldOrigin: '冰海界由潮汐神殿统治', createdAt: now, updatedAt: now,
-    } as any)
-    await db.characters.add({
-      projectId, homeWorldGroupId: worldA, name: '赤衡', role: 'protagonist', shortDescription: '火契继承人', createdAt: now, updatedAt: now,
-    } as any)
-    await db.characters.add({
-      projectId, homeWorldGroupId: worldB, name: '澜青', role: 'antagonist', shortDescription: '潮汐祭司', createdAt: now, updatedAt: now,
-    } as any)
+    }, { owner: 'world' }) as any)
+    await db.characters.add(stampNewRecord(scope, 'characters', {
+      projectId, homeWorldGroupId: worldA, name: '赤衡', roleWeight: 'main', moralAxis: 'good', orderAxis: 'neutral', shortDescription: '火契继承人', createdAt: now, updatedAt: now,
+    }, { owner: 'world' }) as any)
+    await db.characters.add(stampNewRecord(scope, 'characters', {
+      projectId, homeWorldGroupId: worldB, name: '澜青', roleWeight: 'main', moralAxis: 'evil', orderAxis: 'neutral', shortDescription: '潮汐祭司', createdAt: now, updatedAt: now,
+    }, { owner: 'world' }) as any)
 
     const assembled = await assembleContext({
       projectId,
@@ -80,16 +75,16 @@ describe('Phase 1.3a · 统一上下文装配层', () => {
 
   it('targetCharacter 精确读取一个角色完整字段并记录原始来源哈希', async () => {
     const now = Date.now()
-    const projectId = await createProject()
-    const worldId = await db.worldGroups.add({
+    const scope = await createProject()
+    const { projectId } = scope
+    const worldId = await db.worldGroups.add(stampNewRecord(scope, 'worldGroups', {
       projectId, name: '主世界', type: 'primary', order: 0, createdAt: now, updatedAt: now,
-    } as any) as number
-    const targetId = await db.characters.add({
+    }, { owner: 'world' }) as any) as number
+    const targetId = await db.characters.add(stampNewRecord(scope, 'characters', {
       projectId,
       homeWorldGroupId: worldId,
       name: '青禾',
-      role: 'npc',
-      roleWeight: 'npc',
+      roleWeight: 'secondary',
       moralAxis: 'neutral',
       orderAxis: 'lawful',
       shortDescription: '守门人',
@@ -102,13 +97,12 @@ describe('Phase 1.3a · 统一上下文装配层', () => {
       arc: '',
       createdAt: now,
       updatedAt: now,
-    } as any) as number
-    await db.characters.add({
+    }, { owner: 'world' }) as any) as number
+    await db.characters.add(stampNewRecord(scope, 'characters', {
       projectId,
       homeWorldGroupId: worldId,
       name: '旁人',
-      role: 'npc',
-      roleWeight: 'npc',
+      roleWeight: 'secondary',
       moralAxis: 'neutral',
       orderAxis: 'neutral',
       shortDescription: '不应进入目标上下文',
@@ -121,7 +115,7 @@ describe('Phase 1.3a · 统一上下文装配层', () => {
       arc: '',
       createdAt: now,
       updatedAt: now,
-    } as any)
+    }, { owner: 'world' }) as any)
 
     const assembled = await assembleContext({
       projectId,
@@ -146,21 +140,28 @@ describe('Phase 1.3a · 统一上下文装配层', () => {
     })
   })
 
-  it('worldGroupId 为 null 时世界观/力量体系可回退到项目首条，非 null 仍严格隔离', async () => {
+  it('worldGroupId 为 null 时只读取明确未分组的世界资源，非 null 仍严格隔离', async () => {
     const now = Date.now()
-    const projectId = await createProject()
-    const primaryWorld = await db.worldGroups.add({
+    const scope = await createProject()
+    const { projectId } = scope
+    const primaryWorld = await db.worldGroups.add(stampNewRecord(scope, 'worldGroups', {
       projectId, name: '主世界', type: 'primary', order: 0, createdAt: now, updatedAt: now,
-    } as any) as number
-    const otherWorld = await db.worldGroups.add({
+    }, { owner: 'world' }) as any) as number
+    const otherWorld = await db.worldGroups.add(stampNewRecord(scope, 'worldGroups', {
       projectId, name: '副世界', type: 'parallel', order: 1, createdAt: now, updatedAt: now,
-    } as any) as number
-    await db.worldviews.add({
+    }, { owner: 'world' }) as any) as number
+    await db.worldviews.add(stampNewRecord(scope, 'worldviews', {
+      projectId, worldGroupId: null, worldOrigin: '星门坠落后灵气复苏', createdAt: now, updatedAt: now,
+    }, { owner: 'world' }) as any)
+    await db.powerSystems.add(stampNewRecord(scope, 'powerSystems', {
+      projectId, worldGroupId: null, name: '星门修炼法', description: '观星入境', levels: '[]', rules: '不可越阶吸收星核', createdAt: now, updatedAt: now,
+    }, { owner: 'world' }) as any)
+    await db.worldviews.add(stampNewRecord(scope, 'worldviews', {
       projectId, worldGroupId: primaryWorld, worldOrigin: '星门坠落后灵气复苏', createdAt: now, updatedAt: now,
-    } as any)
-    await db.powerSystems.add({
+    }, { owner: 'world' }) as any)
+    await db.powerSystems.add(stampNewRecord(scope, 'powerSystems', {
       projectId, worldGroupId: primaryWorld, name: '星门修炼法', description: '观星入境', levels: '[]', rules: '不可越阶吸收星核', createdAt: now, updatedAt: now,
-    } as any)
+    }, { owner: 'world' }) as any)
 
     const defaultCtx = await assembleContext({
       projectId,
@@ -184,15 +185,16 @@ describe('Phase 1.3a · 统一上下文装配层', () => {
 
   it('worldRules 按 worldGroupId 隔离 profile 与历史辅助数据', async () => {
     const now = Date.now()
-    const projectId = await createProject()
-    const worldA = await db.worldGroups.add({
+    const scope = await createProject()
+    const { projectId } = scope
+    const worldA = await db.worldGroups.add(stampNewRecord(scope, 'worldGroups', {
       projectId, name: '镜城', type: 'primary', order: 0, createdAt: now, updatedAt: now,
-    } as any) as number
-    const worldB = await db.worldGroups.add({
+    }, { owner: 'world' }) as any) as number
+    const worldB = await db.worldGroups.add(stampNewRecord(scope, 'worldGroups', {
       projectId, name: '雾都', type: 'parallel', order: 1, createdAt: now, updatedAt: now,
-    } as any) as number
+    }, { owner: 'world' }) as any) as number
 
-    await db.worldRulesProfiles.add({
+    await db.worldRulesProfiles.add(stampNewRecord(scope, 'worldRulesProfiles', {
       projectId,
       worldGroupId: worldA,
       entries: {
@@ -205,8 +207,8 @@ describe('Phase 1.3a · 统一上下文装配层', () => {
       customNodes: [],
       createdAt: now,
       updatedAt: now,
-    } as any)
-    await db.worldRulesProfiles.add({
+    }, { owner: 'world' }) as any)
+    await db.worldRulesProfiles.add(stampNewRecord(scope, 'worldRulesProfiles', {
       projectId,
       worldGroupId: worldB,
       entries: {
@@ -219,23 +221,23 @@ describe('Phase 1.3a · 统一上下文装配层', () => {
       customNodes: [],
       createdAt: now,
       updatedAt: now,
-    } as any)
-    await db.historicalTimelineEvents.add({
+    }, { owner: 'world' }) as any)
+    await db.historicalTimelineEvents.add(stampNewRecord(scope, 'historicalTimelineEvents', {
       projectId, worldGroupId: worldA, era: 'custom', year: 1, date: '镜元年',
       title: '镜城开埠', description: '', isHistorical: false, createdAt: now, updatedAt: now,
-    } as any)
-    await db.historicalTimelineEvents.add({
+    }, { owner: 'world' }) as any)
+    await db.historicalTimelineEvents.add(stampNewRecord(scope, 'historicalTimelineEvents', {
       projectId, worldGroupId: worldB, era: 'custom', year: 1, date: '雾元年',
       title: '雾钟敲响', description: '', isHistorical: false, createdAt: now, updatedAt: now,
-    } as any)
-    await db.historicalKeywords.add({
+    }, { owner: 'world' }) as any)
+    await db.historicalKeywords.add(stampNewRecord(scope, 'historicalKeywords', {
       projectId, worldGroupId: worldA, keyword: '镜税', category: 'politics', era: 'custom',
       description: '', createdAt: now, updatedAt: now,
-    } as any)
-    await db.historicalKeywords.add({
+    }, { owner: 'world' }) as any)
+    await db.historicalKeywords.add(stampNewRecord(scope, 'historicalKeywords', {
       projectId, worldGroupId: worldB, keyword: '雾钟', category: 'politics', era: 'custom',
       description: '', createdAt: now, updatedAt: now,
-    } as any)
+    }, { owner: 'world' }) as any)
 
     const assembled = await assembleContext({
       projectId,
@@ -252,26 +254,27 @@ describe('Phase 1.3a · 统一上下文装配层', () => {
     expect(assembled.text).not.toContain('雾钟')
   })
 
-  it('historical source 按 worldGroupId 精确读取当前世界，不混入默认世界旧数据', async () => {
+  it('historical source 按 worldGroupId 精确读取当前世界，不混入未分组世界数据', async () => {
     const now = Date.now()
-    const projectId = await createProject()
-    const worldA = await db.worldGroups.add({
+    const scope = await createProject()
+    const { projectId } = scope
+    const worldA = await db.worldGroups.add(stampNewRecord(scope, 'worldGroups', {
       projectId, name: '镜城', type: 'primary', order: 0, createdAt: now, updatedAt: now,
-    } as any) as number
-    const worldB = await db.worldGroups.add({
+    }, { owner: 'world' }) as any) as number
+    const worldB = await db.worldGroups.add(stampNewRecord(scope, 'worldGroups', {
       projectId, name: '雾都', type: 'parallel', order: 1, createdAt: now, updatedAt: now,
-    } as any) as number
+    }, { owner: 'world' }) as any) as number
 
     await db.historicalTimelineEvents.bulkAdd([
       { projectId, worldGroupId: worldA, era: 'custom', year: 1, date: '镜元年', title: '镜城开埠', description: '', isHistorical: false, createdAt: now, updatedAt: now },
       { projectId, worldGroupId: worldB, era: 'custom', year: 2, date: '雾元年', title: '雾钟敲响', description: '', isHistorical: false, createdAt: now, updatedAt: now },
-      { projectId, worldGroupId: null, era: 'custom', year: 0, date: '旧纪元', title: '全局旧史', description: '', isHistorical: true, createdAt: now, updatedAt: now },
-    ] as any[])
+      { projectId, worldGroupId: null, era: 'custom', year: 0, date: '未分组纪元', title: '未分组世界史', description: '', isHistorical: true, createdAt: now, updatedAt: now },
+    ].map(row => stampNewRecord(scope, 'historicalTimelineEvents', row, { owner: 'world' })) as any[])
     await db.historicalKeywords.bulkAdd([
       { projectId, worldGroupId: worldA, keyword: '镜税', category: 'politics', era: 'custom', description: '', createdAt: now, updatedAt: now },
       { projectId, worldGroupId: worldB, keyword: '雾钟', category: 'politics', era: 'custom', description: '', createdAt: now, updatedAt: now },
       { projectId, worldGroupId: null, keyword: '通用礼法', category: 'culture', era: 'custom', description: '', createdAt: now, updatedAt: now },
-    ] as any[])
+    ].map(row => stampNewRecord(scope, 'historicalKeywords', row, { owner: 'world' })) as any[])
 
     const assembled = await assembleContext({
       projectId,
@@ -282,7 +285,7 @@ describe('Phase 1.3a · 统一上下文装配层', () => {
     expect(assembled.included).toEqual(['historical'])
     expect(assembled.text).toContain('镜城开埠')
     expect(assembled.text).toContain('镜税')
-    expect(assembled.text).not.toContain('全局旧史')
+    expect(assembled.text).not.toContain('未分组世界史')
     expect(assembled.text).not.toContain('通用礼法')
     expect(assembled.text).not.toContain('雾钟敲响')
     expect(assembled.text).not.toContain('雾钟')
@@ -290,18 +293,39 @@ describe('Phase 1.3a · 统一上下文装配层', () => {
 
   it('assembleContext 真裁剪:预算不足时 L3 从最终文本移除', async () => {
     const now = Date.now()
-    const projectId = await createProject()
+    const scope = await createProject()
+    const { projectId } = scope
     // L3 源「引用手法」:参考作品 + 一条超长维度分析
-    const refId = await db.references.add({
+    const refId = await db.references.add(stampNewRecord(scope, 'references', {
       projectId, title: '长篇参考作品', author: '某大师', type: 'reference',
       analysisStatus: 'done', analysisProgress: 100,
       createdAt: now, updatedAt: now,
-    } as any) as number
-    await db.referenceChunkAnalysis.add({
-      referenceId: refId, chunkIndex: 0,
+    }, { owner: 'work' }) as any) as number
+    const analysisRunId = await db.referenceAnalysisRuns.add(stampNewRecord(scope, 'referenceAnalysisRuns', {
+      projectId,
+      referenceId: refId,
+      version: 1,
+      status: 'active',
+      depth: 'quick',
+      sourceFilename: 'reference.txt',
+      fileHash: 'reference-hash',
+      totalChars: 1_000,
+      sourceKind: 'own-work',
+      usageScope: 'creative-reference',
+      rightsNote: '',
+      rightsConfirmed: true,
+      rightsDeclaredAt: now,
+      expectedChunks: 1,
+      completedChunks: 1,
+      progress: 100,
+      createdAt: now,
+      updatedAt: now,
+    }, { owner: 'work' }) as any) as number
+    await db.referenceChunkAnalysis.add(stampNewRecord(scope, 'referenceChunkAnalysis', {
+      referenceId: refId, analysisRunId, chunkIndex: 0,
       narrativeStyle: '这是一段非常长的叙事手法分析。'.repeat(200),
       createdAt: now,
-    } as any)
+    }, { owner: 'work' }) as any)
 
     const assembled = await assembleContext({
       projectId,

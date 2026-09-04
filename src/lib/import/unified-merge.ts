@@ -30,8 +30,7 @@ function isNonCharacterConceptName(name: string): boolean {
 }
 
 function isProtagonistLike(raw: unknown): boolean {
-  const role = String(raw || '').trim().toLowerCase()
-  return role === 'protagonist' || role.includes('主角') || role.includes('主人公')
+  return raw === 'main'
 }
 
 function compactField(label: string, value: unknown): string {
@@ -82,7 +81,7 @@ export function normalizeNonCharacterConcepts(input: UnifiedParseResult): Unifie
   if (conceptTexts.length === 0) return input
 
   const conceptText = conceptTexts.join('\n')
-  const protagonists = kept.filter(c => isProtagonistLike(c.role))
+  const protagonists = kept.filter(c => isProtagonistLike(c.roleWeight))
   if (protagonists.length === 1) {
     protagonists[0].abilities = appendText(protagonists[0].abilities, conceptText)
     return { ...input, characters: kept }
@@ -123,6 +122,8 @@ export function mergeUnified(
 ): UnifiedParseResult {
   const out: UnifiedParseResult = {
     worldview: { ...(acc.worldview || {}) },
+    geography: { ...(acc.geography || {}) },
+    history: { ...(acc.history || {}) },
     characters: [...(acc.characters || [])],
     outline: [...(acc.outline || [])],
     codexCandidates: [...(acc.codexCandidates || [])],
@@ -136,6 +137,18 @@ export function mergeUnified(
         out.worldview![k] = appendDedupParagraph(out.worldview![k] || '', v.trim())
       }
     }
+  }
+  if (fresh.geography?.overview?.trim()) {
+    out.geography!.overview = appendDedupParagraph(
+      out.geography!.overview || '',
+      fresh.geography.overview.trim(),
+    )
+  }
+  if (fresh.history?.overview?.trim()) {
+    out.history!.overview = appendDedupParagraph(
+      out.history!.overview || '',
+      fresh.history.overview.trim(),
+    )
   }
   // 角色：按名字去重——每块都会重复吐出同一角色，旧代码无脑 push 堆到几百个。
   // 同名只保留信息最全的一条（不同称呼的语义合并仍由「AI 整理角色卡」处理）。
@@ -198,7 +211,7 @@ export function buildRollingContext(merged: UnifiedParseResult): string {
     const recent = merged.characters.slice(-40) // 只取最近 40 个，避免无限增长
     for (const c of recent) {
       const name = String(c.name || '')
-      const role = String(c.role || '')
+      const role = String(c.roleWeight || '')
       const desc = String(c.shortDescription || '').slice(0, 30)
       lines.push(`- ${name}（${role}）${desc ? '：' + desc : ''}`)
     }
@@ -216,6 +229,10 @@ export function buildRollingContext(merged: UnifiedParseResult): string {
       lines.push('【已识别世界观要点】')
       lines.push(keep.join(' / '))
     }
+  }
+  if (merged.history?.overview?.trim()) {
+    lines.push('【已识别历史要点】')
+    lines.push(merged.history.overview.trim().slice(0, 160))
   }
   if (merged.codexCandidates?.length) {
     lines.push(`【已识别词条候选（${merged.codexCandidates.length} 条）】`)
@@ -235,6 +252,8 @@ export function normalizeUnified(raw: unknown, codex?: {
   const r = (raw as UnifiedParseResult) || {}
   return normalizeNonCharacterConcepts({
     worldview: r.worldview && typeof r.worldview === 'object' ? r.worldview : {},
+    geography: r.geography && typeof r.geography === 'object' ? r.geography : {},
+    history: r.history && typeof r.history === 'object' ? r.history : {},
     characters: Array.isArray(r.characters) ? r.characters : [],
     outline: Array.isArray(r.outline) ? r.outline : [],
     codexCandidates: codex
@@ -269,7 +288,7 @@ export function buildFinalReport(session: ImportSession): string {
     `· 文件总字数：${session.totalChars.toLocaleString()} 字`,
     `· 分块：${session.totalChunks} 块（每块约 ${session.chunkSize.toLocaleString()} 字）`,
     `· 成功：${done} 块；失败：${failed} 块`,
-    `· 累计入库：世界观字段 ${totalWv}、角色 ${totalChars}（合并前）、大纲节点 ${totalOl}、写作技法已分析`,
+    `· 累计入库：世界内容字段 ${totalWv}、角色 ${totalChars}（合并前）、大纲节点 ${totalOl}、写作技法已分析`,
     `· 待作者审查：Codex 词条候选 ${codexCandidates} 条（尚未自动入库）`,
   ]
   if (failed > 0) {

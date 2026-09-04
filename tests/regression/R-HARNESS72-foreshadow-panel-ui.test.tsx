@@ -6,6 +6,8 @@ import { useAIConfigStore } from '../../src/stores/ai-config'
 import { useForeshadowStore } from '../../src/stores/foreshadow'
 import { DialogProvider } from '../../src/components/shared/Dialog'
 import { ToastProvider } from '../../src/components/shared/Toast'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
+import { seedCurrentProject } from '../helpers/current-workspace'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
@@ -69,15 +71,17 @@ describe('R-HARNESS72 · 伏笔建议作者确认 UI', () => {
 
   it('候选先可见且正式表零写入，作者选取后才调用 durable 采纳并刷新正式伏笔', async () => {
     const now = Date.now()
-    const projectId = await db.projects.add({
-      name: '伏笔 UI', genre: 'suspense', genres: ['suspense'], status: 'drafting',
-      description: '', targetWordCount: 0, enableMultiWorld: false,
-      createdAt: now, updatedAt: now,
-    } as any) as number
+    const projectId = await seedCurrentProject({
+      name: '伏笔 UI', genres: ['suspense'], createdAt: now, updatedAt: now,
+    })
     const project = (await db.projects.get(projectId))!
+    const scope = {
+      worldId: project.activeWorldId!,
+      workId: project.activeWorkId!,
+    }
     const candidate = {
       version: 1, kind: 'foreshadow-suggestions-candidate', portable: false,
-      projectId, worldId: -1, workId: -1,
+      projectId, ...scope,
       suggestions: [
         { name: '反照的空椅', type: 'symbol', description: '空椅反复出现，结尾揭示被抹去的见证人。' },
         { name: '逆流的钟声', type: 'timeline', description: '钟声与时间方向相反，最终标记真相发生时刻。' },
@@ -93,6 +97,7 @@ describe('R-HARNESS72 · 伏笔建议作者确认 UI', () => {
         plantChapterId: null, echoChapterIds: '[]', resolveChapterId: null, notes: '',
         createdAt: now, updatedAt: now,
       } as any)
+      await finalizeCurrentFixtureV1(projectId)
       await useForeshadowStore.getState().loadAll(projectId)
       resolveAdoption()
       return { written: 1 }
@@ -130,17 +135,13 @@ describe('R-HARNESS72 · 伏笔建议作者确认 UI', () => {
 
   it('挂载时恢复待确认候选且拒绝整批不写正式伏笔', async () => {
     const now = Date.now()
-    const projectId = await db.projects.add({
-      name: '伏笔恢复 UI', genre: 'fantasy', genres: ['fantasy'], status: 'drafting',
-      description: '', targetWordCount: 0, enableMultiWorld: false,
-      createdAt: now, updatedAt: now,
-    } as any) as number
+    const projectId = await seedCurrentProject({ name: '伏笔恢复 UI', createdAt: now, updatedAt: now })
     const project = (await db.projects.get(projectId))!
     runnerMocks.readPending.mockResolvedValue({
       snapshot: { run: { id: 73 } },
       candidate: {
         version: 1, kind: 'foreshadow-suggestions-candidate', portable: false,
-        projectId, worldId: -1, workId: -1,
+        projectId, worldId: project.activeWorldId!, workId: project.activeWorkId!,
         suggestions: [{ name: '镜中缺口', type: 'symbol', description: '镜面缺口最终映出凶手站位。' }],
       },
     })

@@ -1,21 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../../src/lib/db/schema'
-import { assembleContext } from '../../src/lib/registry/assemble-context'
-import { createContextManifestFromAssemblyV1 } from '../../src/lib/agent/run/context-manifest'
 import {
-  beginProseGenerationStepV1,
+  beginProseGenerationGatewayStepV1,
   commitProseGenerationAdoptionV1,
   createProseGenerationDurableRunV1,
+  finalizeProseGenerationGatewayStepV1,
   hashProseGenerationCandidateV1,
   persistProseGenerationCandidateV1,
   readLatestProseGenerationCandidateV1,
   recordProseGenerationCandidateV1,
-  recordProseGenerationModelOutputV1,
   recoverProseGenerationCandidateV1,
   rejectProseGenerationCandidateV1,
   isProseGenerationCandidateCurrentV1,
   PROSE_GENERATION_CANDIDATE_TYPE_V1,
-  PROSE_GENERATION_SOURCE_KEYS_V1,
   PROSE_GENERATION_STEP_ID_V1,
   type ProseGenerationCandidateV1,
   type ProseGenerationOperationV1,
@@ -26,6 +23,10 @@ import { hashChapterText, normalizeChapterText } from '../../src/lib/ai/chapter-
 import type { WorkspaceScope } from '../../src/lib/types'
 import { buildChapterInformationBoundaryV1 } from '../../src/lib/agent/information-boundary'
 import { captureWorkspaceContentRevisionV1 } from '../../src/lib/authoring/content-revision'
+import { prepareProseGatewayAssemblyV1 } from '../../src/lib/prose/gateway-context'
+import { useAIConfigStore } from '../../src/stores/ai-config'
+import { createWorkspace as createWorkspaceRoot } from '../../src/lib/workspace/create-workspace'
+import { stampNewRecord } from '../../src/lib/workspace/scope'
 
 async function createWorkspace(label: string): Promise<{
   scope: WorkspaceScope
@@ -35,53 +36,16 @@ async function createWorkspace(label: string): Promise<{
   content: string
 }> {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    name: label,
-    genre: 'fantasy',
-    genres: ['fantasy'],
-    status: 'drafting',
-    description: '',
-    targetWordCount: 100_000,
-    worldCode: `world-${label}`,
-    worldVersion: 1,
-    createdAt: now,
-    updatedAt: now,
-  } as any) as number
-  const worldId = await db.worlds.add({
+  const created = await createWorkspaceRoot({
+    name: label, genres: ['fantasy'], status: 'drafting', description: '', targetWordCount: 100_000,
+  }, { purpose: 'independent-work', kind: 'novel', novelProfile: 'long' })
+  const { scope } = created
+  const projectId = scope.projectId
+  const worldGroupId = await db.worldGroups.add(stampNewRecord(scope, 'worldGroups', {
+    projectId, name: '主世界', description: '', type: 'primary', order: 0, createdAt: now, updatedAt: now,
+  } as any, { owner: 'world' })) as number
+  const outlineNodeId = await db.outlineNodes.add(stampNewRecord(scope, 'outlineNodes', {
     projectId,
-    code: `world-${label}`,
-    name: `${label}世界`,
-    description: '',
-    currentVersion: 1,
-    createdAt: now,
-    updatedAt: now,
-  }) as number
-  const workId = await db.works.add({
-    projectId,
-    worldId,
-    title: label,
-    description: '',
-    genres: ['fantasy'],
-    status: 'drafting',
-    targetWordCount: 100_000,
-    createdAt: now,
-    updatedAt: now,
-  }) as number
-  await db.projects.update(projectId, {
-    activeWorldId: worldId,
-    activeWorkId: workId,
-    ownershipSchemaVersion: 1,
-  })
-  const worldGroupId = await db.worldGroups.add({
-    projectId,
-    name: '主世界',
-    order: 0,
-    createdAt: now,
-    updatedAt: now,
-  }) as number
-  const outlineNodeId = await db.outlineNodes.add({
-    projectId,
-    workId,
     worldGroupId,
     parentId: null,
     type: 'chapter',
@@ -90,11 +54,16 @@ async function createWorkspace(label: string): Promise<{
     order: 0,
     createdAt: now,
     updatedAt: now,
-  } as any) as number
+  } as any, { owner: 'work' })) as number
+  await db.detailedOutlines.add(stampNewRecord(scope, 'detailedOutlines', {
+    projectId, outlineNodeId, scenes: [{ sceneId: 'scene-1', title: '潮门开启', summary: '守灯人目睹潮门开启。', characterIds: [], location: '潮门', conflict: '海潮倒流', pace: 'medium', estimatedWords: 1200 }],
+    openingHook: '潮声骤停。', endingCliffhanger: '门后传来钟响。', sceneLocation: '潮门',
+    appearingCharacterIds: [], foreshadowIds: [], emotionArc: 'rising', prohibitions: [],
+    lastUsedSummary: '守灯人抵达潮门。', createdAt: now, updatedAt: now,
+  } as any, { owner: 'work' }))
   const content = '<p>守灯人抵达潮门。</p>'
-  const chapterId = await db.chapters.add({
+  const chapterId = await db.chapters.add(stampNewRecord(scope, 'chapters', {
     projectId,
-    workId,
     outlineNodeId,
     title: '潮门',
     content,
@@ -104,8 +73,9 @@ async function createWorkspace(label: string): Promise<{
     notes: '',
     createdAt: now,
     updatedAt: now,
-  } as any) as number
-  return { scope: { projectId, worldId, workId }, worldGroupId, outlineNodeId, chapterId, content }
+    perspectiveCharacterId: null,
+  } as any, { owner: 'work' })) as number
+  return { scope, worldGroupId, outlineNodeId, chapterId, content }
 }
 
 async function preparePending(
@@ -120,25 +90,16 @@ async function preparePending(
     chapterId: fixture.chapterId,
     operation,
   })
-  const assembled = await assembleContext({
+  const assembled = await prepareProseGatewayAssemblyV1({
     projectId: fixture.scope.projectId,
     scope: fixture.scope,
     worldGroupId: fixture.worldGroupId,
     chapterId: fixture.chapterId,
     outlineNodeId: fixture.outlineNodeId,
-    sourceKeys: [...PROSE_GENERATION_SOURCE_KEYS_V1],
-    inputBudgetMaxTokens: 48_000,
-  })
-  const manifest = await createContextManifestFromAssemblyV1({
-    runId: snapshot.run.id,
-    stepId: PROSE_GENERATION_STEP_ID_V1,
-    attempt: 1,
-    projectId: fixture.scope.projectId,
-    worldGroupId: fixture.worldGroupId,
-    declaredSourceKeys: PROSE_GENERATION_SOURCE_KEYS_V1,
-    assembled,
-    boundary: { chapterId: fixture.chapterId, outlineNodeId: fixture.outlineNodeId },
-    readerVersion: 'chapter-prose-generation-context-v1',
+    operation,
+    authorRequest: '生成潮门正文',
+    perspectiveCharacterId: null,
+    config: useAIConfigStore.getState().config,
   })
   const sourceTextHash = await hashChapterText(fixture.content)
   const informationBoundary = await buildChapterInformationBoundaryV1({
@@ -148,23 +109,31 @@ async function preparePending(
     worldGroupId: fixture.worldGroupId,
     perspectiveCharacterId: null,
   })
-  snapshot = await beginProseGenerationStepV1({
+  const messages = [{ role: 'user' as const, content: `受控资料：\n${assembled.text}\n\n生成潮门正文` }]
+  const begun = await beginProseGenerationGatewayStepV1({
     scope: fixture.scope,
     snapshot,
-    contextManifest: manifest,
+    worldGroupId: fixture.worldGroupId,
+    chapterId: fixture.chapterId,
+    outlineNodeId: fixture.outlineNodeId,
+    assembled,
+    messages,
     binding: {
       operation,
       sourceTextHash,
-      promptHash: await hashCanonicalValue([{ role: 'user', content: '生成潮门正文' }]),
+      promptHash: await hashCanonicalValue(messages),
       informationBoundaryHash: informationBoundary.manifestHash,
     },
   })
+  snapshot = begun.snapshot
   const outputText = operation === 'continue' ? '潮声里传来第二次钟响。' : '潮门在暮色中缓缓开启。'
-  snapshot = await recordProseGenerationModelOutputV1({
+  const finalized = await finalizeProseGenerationGatewayStepV1({
     scope: fixture.scope,
     snapshot,
+    attempt: begun.attempt,
     output: outputText,
   })
+  snapshot = finalized.snapshot
   const baseCandidate = {
     version: 1 as const,
     type: PROSE_GENERATION_CANDIDATE_TYPE_V1,
@@ -180,6 +149,7 @@ async function preparePending(
     }),
     outputText,
     outputTextHash: await hashCanonicalValue(outputText),
+    gatewayEvidenceVersion: 3 as const,
     expectedContentHash: await hashChapterText(
       operation === 'continue'
         ? [normalizeChapterText(fixture.content), normalizeChapterText(outputText)].join('\n')
@@ -197,7 +167,7 @@ async function preparePending(
       runId: snapshot.run.id,
       stepId: PROSE_GENERATION_STEP_ID_V1,
       attempt: 1,
-      contextManifestHash: manifest.manifestHash,
+      contextManifestHash: finalized.manifest.manifestHash,
       candidateHash,
     },
   }

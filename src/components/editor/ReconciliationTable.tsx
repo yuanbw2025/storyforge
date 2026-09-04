@@ -149,7 +149,7 @@ export function ReconciliationTable({
     const initSections = (): ReconciliationSection[] => {
       const result: ReconciliationSection[] = []
 
-      // 支持同一分区内不同条目选择不同动作；兼容 PR 初版的 section-only key。
+      // 当前格式以 section:action 为键，支持同一分区内不同条目选择不同动作。
       const savedActions = reconciliation.actions || {}
 
       for (const config of SECTION_CONFIGS) {
@@ -175,7 +175,7 @@ export function ReconciliationTable({
             defaultAction: config.defaultAction,
             items: items.map((item, index) => {
               const savedAction = Object.entries(savedActions)
-                .filter(([key]) => key === config.key || key.startsWith(`${config.key}:`))
+                .filter(([key]) => key.startsWith(`${config.key}:`))
                 .map(([, action]) => action)
                 .find(action => action.indices.includes(index))
               const status = savedAction

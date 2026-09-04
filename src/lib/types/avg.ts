@@ -1,63 +1,4 @@
-export const AVG_MEDIA_KINDS = [
-  'background',
-  'character-pose',
-  'character-expression',
-  'cg',
-  'ui',
-  'bgm',
-  'ambience',
-  'sfx',
-  'voice',
-] as const
-export type AvgMediaKind = typeof AVG_MEDIA_KINDS[number]
-
-export interface AvgMediaAsset {
-  id?: number
-  projectId: number
-  worldId: number
-  workId: number
-  assetKey: string
-  version: number
-  kind: AvgMediaKind
-  name: string
-  mimeType: string
-  byteSize: number
-  width: number | null
-  height: number | null
-  durationMs: number | null
-  contentHash: string
-  source: string
-  license: string
-  altText: string
-  characterTag: string
-  sceneTag: string
-  createdAt: number
-  updatedAt: number
-}
-
-export interface AvgMediaBlob {
-  id?: number
-  projectId: number
-  worldId: number
-  workId: number
-  mediaAssetId: number
-  /** GAMEPROD-1 shared content-addressed storage link; legacy rows keep inline data only. */
-  blobObjectId?: number | null
-  /** Structured-clone-safe binary; callers materialize a Blob with the asset mimeType. */
-  data?: ArrayBuffer | null
-  createdAt: number
-}
-
-export interface AvgPresentationModule {
-  id?: number
-  projectId: number
-  worldId: number
-  workId: number
-  gameDefinitionId: number
-  contentJson: string
-  createdAt: number
-  updatedAt: number
-}
+import type { FrozenProductMediaAsset } from './product-media'
 
 export const AVG_STAGE_LAYERS = [
   'background', 'environment', 'actor-back', 'actor-front', 'effect', 'dialogue', 'overlay',
@@ -100,24 +41,6 @@ export interface AvgPresentationContentV1 {
   cues: AvgPresentationCue[]
 }
 
-export interface FrozenAvgMediaAsset {
-  assetKey: string
-  version: number
-  kind: AvgMediaKind
-  name: string
-  mimeType: string
-  byteSize: number
-  width: number | null
-  height: number | null
-  durationMs: number | null
-  contentHash: string
-  source: string
-  license: string
-  altText: string
-  characterTag: string
-  sceneTag: string
-}
-
 export interface AvgActorStageState {
   actorKey: string
   assetKey: string
@@ -141,11 +64,11 @@ export interface AvgStageState {
   lastTransition: string | null
 }
 
-export interface SimulationAvgPresentationState {
+export interface AvgRuntimePresentationState {
   schema: 'storyforge.avg-presentation'
   version: 1
   contentHash: string
-  assets: FrozenAvgMediaAsset[]
+  assets: FrozenProductMediaAsset[]
   cues: AvgPresentationCue[]
   currentNodeKey: string
   currentBeatKey: string | null

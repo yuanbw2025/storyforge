@@ -19,6 +19,15 @@ export async function applyCharacterReferenceRemap(input: CharacterReferenceRema
   const toCharacterId = input.toCharacterId
   const toName = input.toName
 
+  // itemLedger 同时保存稳定 ID 与作者可读名称；必须先更新两者，再让
+  // 注册表通用重映射处理其余 ID 引用。否则通用步骤先改 ID 后，名称
+  // 修复就再也找不到原角色记录。
+  await remapItemLedgerCharacterRefs(
+    input.projectId,
+    input.fromCharacterId,
+    toCharacterId,
+    toName,
+  )
   await remapSimpleCharacterRefs(input.projectId, input.fromCharacterId, toCharacterId)
   await remapRegisteredCharacterArrays(input.projectId, input.fromCharacterId, toCharacterId)
   await remapRegisteredCharacterJson(
@@ -28,12 +37,6 @@ export async function applyCharacterReferenceRemap(input: CharacterReferenceRema
     toName,
   )
   await remapCharacterStateCards(input.projectId, input.fromName, toName)
-  await remapItemLedgerCharacterRefs(
-    input.projectId,
-    input.fromCharacterId,
-    toCharacterId,
-    toName,
-  )
   await remapTemporalFactCharacterRefs({
     projectId: input.projectId,
     fromCharacterId: input.fromCharacterId,

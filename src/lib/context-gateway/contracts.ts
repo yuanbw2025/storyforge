@@ -61,6 +61,11 @@ function assertScope(scope: ContextResourceDescriptorV1['scope']): void {
   if (scope.worldGroupId != null && (!Number.isSafeInteger(scope.worldGroupId) || scope.worldGroupId < 1)) {
     fail('invalid-scope', 'worldGroupId 非法')
   }
+  if (scope.worldReleaseId != null
+    && (!Number.isSafeInteger(scope.worldReleaseId) || scope.worldReleaseId < 1)) {
+    fail('invalid-scope', 'worldReleaseId 非法')
+  }
+  if (scope.worldReleaseHash != null) requireHash(scope.worldReleaseHash, 'scope.worldReleaseHash')
 }
 
 export function contextSourceRefOwnerV1(ref: ContextSourceRefV1): DomainOwnershipSpec {
@@ -125,6 +130,12 @@ export function assertContextResourceDescriptorV1(input: {
     fail('metadata-body-leak', `${descriptor.resourceKey} 的 metadata 夹带正文`)
   }
   assertScope(descriptor.scope)
+  if (descriptor.worldSemantic) {
+    if (!descriptor.worldSemantic.area.trim() || !descriptor.worldSemantic.resourceKind.trim()
+      || !descriptor.worldSemantic.resourceCoordinate.trim()) {
+      fail('invalid-world-semantic', `${descriptor.resourceKey} 世界语义身份非法`)
+    }
+  }
   if (descriptor.sourceRefs.length === 0) fail('missing-source-ref', `${descriptor.resourceKey} 没有 Canon/source ref`)
   for (const ref of descriptor.sourceRefs) {
     assertContextSourceRefV1(ref)

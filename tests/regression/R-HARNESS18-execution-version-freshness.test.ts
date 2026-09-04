@@ -12,71 +12,42 @@ import { AgentTeamBudgetTracker } from '../../src/lib/agent/team-budget'
 import {
   assertMasterAgentRunContractExecutionBindingsV1,
   buildMasterAgentRunContractV1,
-  hashMasterAgentPlanV1,
   restoreMasterAgentCandidatesV1,
   runDurableMasterAgentPlanV1,
-  MASTER_AGENT_PLAN_CHECKPOINT_KIND_V1,
-  MASTER_AGENT_PLAN_CHECKPOINT_VERSION_V1,
-  type MasterAgentPlanCheckpointV1,
 } from '../../src/lib/agent/run/master-durable'
 import { acceptAgentRunContractV1 } from '../../src/lib/agent/run/contract'
-import { appendAgentRunEventV1, createAgentRunV1 } from '../../src/lib/agent/run/event-store'
-import { createAgentRunCheckpointV1 } from '../../src/lib/agent/run/checkpoint'
-import { hashCanonicalValue } from '../../src/lib/agent/run/hash'
+import { computeMasterCandidateHashV1 } from '../../src/lib/agent/run/master-candidate-hash'
+import { createWorkspace as createCurrentWorkspace } from '../../src/lib/workspace/create-workspace'
 import type { MasterAgentPlan } from '../../src/lib/agent/orchestrator'
 import type { WorkspaceScope } from '../../src/lib/types'
+import { currentWorldOriginCandidateFixtureV1 } from '../helpers/current-worldview-field'
+import { prepareRequiredMasterGatewayFixtureV1 } from '../helpers/master-agent-gateway'
 
 const plan: MasterAgentPlan = {
   summary: '补全潮汐世界来源。',
+  workflow: {
+    version: 1,
+    workflowId: 'single-domain-direct',
+    reasonCodes: ['single-explicit-domain'],
+  },
   tasks: [{
     id: 'world-1',
     agentId: 'world-origin',
-    skillId: 'world-origin.complete',
+    skillId: 'world-origin.worldview-field',
     instruction: '补全潮汐世界来源',
     dependsOn: [],
   }],
 }
 
 async function createWorkspace(): Promise<WorkspaceScope> {
-  const now = Date.now()
-  const projectId = await db.projects.add({
+  return (await createCurrentWorkspace({
     name: 'H18 版本绑定',
-    genre: 'fantasy',
     genres: ['fantasy'],
     description: '',
     status: 'drafting',
     targetWordCount: 100_000,
-    worldCode: 'h18-world',
-    worldVersion: 1,
-    createdAt: now,
-    updatedAt: now,
-  } as any) as number
-  const worldId = await db.worlds.add({
-    projectId,
-    code: 'h18-world',
-    name: 'H18 世界',
-    description: '',
-    currentVersion: 1,
-    createdAt: now,
-    updatedAt: now,
-  }) as number
-  const workId = await db.works.add({
-    projectId,
-    worldId,
-    title: 'H18 作品',
-    description: '',
-    genres: ['fantasy'],
-    status: 'drafting',
-    targetWordCount: 100_000,
-    createdAt: now,
-    updatedAt: now,
-  }) as number
-  await db.projects.update(projectId, {
-    activeWorldId: worldId,
-    activeWorkId: workId,
-    ownershipSchemaVersion: 1,
-  })
-  return { projectId, worldId, workId }
+    enableMultiWorld: false,
+  }, { kind: 'novel', novelProfile: 'long' })).scope
 }
 
 async function createConversation(scope: WorkspaceScope): Promise<number> {
@@ -84,17 +55,17 @@ async function createConversation(scope: WorkspaceScope): Promise<number> {
     projectId: scope.projectId,
     scope,
     worldGroupId: null,
+    purpose: 'master-authoring',
   })
   return conversation.id
 }
 
-function contract(includeExecutionBindings = true) {
+function contract() {
   return buildMasterAgentRunContractV1({
     scope: { projectId: 1, worldId: 2, workId: 3 },
     worldGroupId: null,
     plan,
     budgetEvidence: new AgentTeamBudgetTracker('balanced').snapshot(),
-    includeExecutionBindings,
   })
 }
 
@@ -102,7 +73,13 @@ function generationDependency(scope: WorkspaceScope) {
   return {
     execute: async (options: Parameters<NonNullable<Parameters<typeof runDurableMasterAgentPlanV1>[1]['execute']>>[0]) => {
       const task = options.plan.tasks[0]
+      const currentWorld = currentWorldOriginCandidateFixtureV1('世界由周期性潮汐塑造。')
       await options.executionTrace?.taskStarted?.(task)
+      const gateway = await prepareRequiredMasterGatewayFixtureV1({
+        scope: options.scope,
+        worldGroupId: options.worldGroupId,
+        executionTrace: options.executionTrace!,
+      }, task, currentWorld.draft)
       await options.executionTrace?.candidateReady?.(task, {
         payload: {
           version: 1,
@@ -110,15 +87,17 @@ function generationDependency(scope: WorkspaceScope) {
           agentId: task.agentId,
           skillId: task.skillId,
           label: '潮汐世界来源',
-          contextSources: ['worldview'],
-          baseSnapshot: {},
+          contextSources: gateway.contextSources,
+          contextEvidence: gateway.contextEvidence,
+          ...currentWorld.payload,
           dependsOnTaskIds: [],
           workspaceScope: scope,
           teamBudgetEvidence: options.budget.snapshot(),
         },
-        draft: '世界由周期性潮汐塑造。',
+        draft: currentWorld.draft,
         runtimeNode: {} as any,
-        runtimeOutput: '世界由周期性潮汐塑造。',
+        runtimeOutput: currentWorld.runtimeOutput,
+        contextGatewayRuntime: gateway.contextGatewayRuntime,
       })
     },
   }
@@ -137,15 +116,14 @@ describe.sequential('R-HARNESS18 · Skill、Prompt 与 Tool 执行版本绑定',
     const binding = current.executionBindings[0]
     expect(binding).toEqual({
       stepId: 'master:world-1',
-      ...createAgentSkillExecutionBindingV1(getAgentSkillV1('world-origin.complete')),
+      ...createAgentSkillExecutionBindingV1(getAgentSkillV1('world-origin.worldview-field')),
     })
     expect(binding.toolSchemaVersion).toBe(AGENT_TOOL_SCHEMA_VERSION_V1)
     expect(binding.toolSchemaHash).toBe(AGENT_TOOL_SCHEMA_HASH_V1)
     expect(await verifyAgentToolSchemaBindingV1()).toBe(true)
 
     const accepted = await acceptAgentRunContractV1(current)
-    const acceptedLegacy = await acceptAgentRunContractV1(contract(false))
-    expect(accepted.contractHash).not.toBe(acceptedLegacy.contractHash)
+    expect(accepted.contractHash).toMatch(/^[a-f0-9]{64}$/)
   })
 
   it('Prompt、Tool hash 或 Skill 身份被篡改时拒绝执行与恢复', () => {
@@ -153,7 +131,7 @@ describe.sequential('R-HARNESS18 · Skill、Prompt 与 Tool 执行版本绑定',
     expect(() => assertMasterAgentRunContractExecutionBindingsV1(current, plan)).not.toThrow()
 
     for (const bindingPatch of [
-      { promptVersion: 'world-origin-copilot-v999' },
+      { promptVersion: 'worldview-field-copilot-v999' },
       { toolSchemaHash: 'f'.repeat(64) },
       { skillId: 'character.create' },
     ]) {
@@ -175,73 +153,25 @@ describe.sequential('R-HARNESS18 · Skill、Prompt 与 Tool 执行版本绑定',
       budget: new AgentTeamBudgetTracker('balanced'),
     }, generationDependency(scope))
     const candidate = result.candidates[0]
-    expect(candidate.payload.executionBinding?.promptVersion).toBe('world-origin-copilot-v1')
+    expect(candidate.payload.executionBinding?.promptVersion).toBe('worldview-field-copilot-v1')
 
-    const { candidateHash, executionBinding, ...payloadWithoutHashOrBinding } = candidate.payload
-    expect(await hashCanonicalValue({
-      draft: candidate.draft,
-      payload: { ...payloadWithoutHashOrBinding, executionBinding },
-    })).toBe(candidateHash)
-    expect(await hashCanonicalValue({
-      draft: candidate.draft,
-      payload: payloadWithoutHashOrBinding,
-    })).not.toBe(candidateHash)
+    const { executionBinding: _executionBinding, ...payloadWithoutBinding } = candidate.payload
+    expect(await computeMasterCandidateHashV1(candidate.payload, candidate.draft))
+      .toBe(candidate.payload.candidateHash)
+    expect(await computeMasterCandidateHashV1(
+      payloadWithoutBinding as typeof candidate.payload,
+      candidate.draft,
+    )).not.toBe(candidate.payload.candidateHash)
 
     const tampered = JSON.parse(candidate.event.payload)
-    tampered.executionBinding.promptVersion = 'world-origin-copilot-v999'
+    tampered.executionBinding.promptVersion = 'worldview-field-copilot-v999'
     await db.agentEvents.update(candidate.event.id!, { payload: JSON.stringify(tampered) })
     await expect(restoreMasterAgentCandidatesV1({ scope, runId: result.runId }))
       .rejects.toThrow('与当前 Skill/Prompt/Tool 版本不一致')
   })
 
-  it('HARNESS-18 前的旧 RunContract 与无 binding 候选仍可实际生成和恢复', async () => {
-    const scope = await createWorkspace()
-    const conversationId = await createConversation(scope)
-    const budgetEvidence = new AgentTeamBudgetTracker('balanced').snapshot()
-    const legacyContract = buildMasterAgentRunContractV1({
-      scope,
-      worldGroupId: null,
-      plan,
-      budgetEvidence,
-      includeExecutionBindings: false,
-    })
-    let snapshot = await createAgentRunV1({
-      scope,
-      worldGroupId: null,
-      conversationId,
-      contract: legacyContract,
-    })
-    snapshot = await appendAgentRunEventV1({
-      scope,
-      runId: snapshot.run.id,
-      type: 'step.scheduled',
-      payload: { stepId: 'master:world-1' },
-      expectedLastSequence: snapshot.projection.lastSequence,
-    })
-    const checkpoint: MasterAgentPlanCheckpointV1 = {
-      version: MASTER_AGENT_PLAN_CHECKPOINT_VERSION_V1,
-      kind: MASTER_AGENT_PLAN_CHECKPOINT_KIND_V1,
-      plan,
-      planHash: await hashMasterAgentPlanV1(plan),
-      budgetEvidence,
-    }
-    const saved = await createAgentRunCheckpointV1({
-      scope,
-      runId: snapshot.run.id,
-      resumePayload: checkpoint,
-      expectedLastSequence: snapshot.projection.lastSequence,
-    })
-
-    const resumed = await runDurableMasterAgentPlanV1({
-      scope,
-      worldGroupId: null,
-      runId: saved.snapshot.run.id,
-    }, generationDependency(scope))
-    expect(resumed.candidates[0].payload.executionBinding).toBeUndefined()
-
-    const restored = await restoreMasterAgentCandidatesV1({ scope, runId: resumed.runId })
-    expect(restored.snapshot.contract.executionBindings).toBeUndefined()
-    expect(restored.candidates[0].payload.executionBinding).toBeUndefined()
-    expect(restored.candidates[0].draft).toBe('世界由周期性潮汐塑造。')
+  it('缺少当前 Skill 执行绑定的 RunContract 被拒绝', async () => {
+    const { executionBindings: _removed, ...unbound } = contract()
+    await expect(acceptAgentRunContractV1(unbound)).rejects.toThrow('必须冻结 runtimeBindingHash 或 executionBindings')
   })
 })

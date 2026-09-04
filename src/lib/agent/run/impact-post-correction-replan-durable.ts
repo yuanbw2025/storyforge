@@ -19,7 +19,7 @@ import { createAgentRunCheckpointV1, readLatestVerifiedAgentRunCheckpointV1 } fr
 import { createContextManifestFromAssemblyV1 } from './context-manifest'
 import { createVerificationReceiptV1 } from './verification-receipt'
 import { hashCanonicalValue } from './hash'
-import { assertRecordInScope, readOwnedRows } from '../../world-engine/scope'
+import { assertRecordInScope, readOwnedRows } from '../../workspace/scope'
 import type { AgentRunRecord } from '../../types/agent-run'
 import { replanImpactRemediationV1 } from '../../consistency/impact-remediation-replan'
 
@@ -118,6 +118,7 @@ function contract(input: {
   parentReceiptHash: string
   parentArtifactHash: string
   relation: string
+  runtimeBindingHash: string
 }) {
   return {
     version: 1 as const,
@@ -135,6 +136,7 @@ function contract(input: {
       chapterIds: [input.sourceChapterId],
     },
     permissions: { contextSourceKeys: ['chapterContent'], writeTargets: [] },
+    runtimeBindingHash: input.runtimeBindingHash,
     budget: {
       maxModelCalls: 1, maxToolCalls: 0, maxInputTokens: 1, maxOutputTokens: 1,
       maxAttemptsPerStep: 1, maxProtocolErrors: 0,
@@ -238,6 +240,12 @@ export async function executeImpactPostCorrectionReplanV1(input: {
         parentReceiptHash: correction.receiptHash,
         parentArtifactHash: correction.targetPostStateHash,
         relation,
+        runtimeBindingHash: await hashCanonicalValue({
+          schema: 'storyforge.impact-post-correction-replan-runtime',
+          version: 1,
+          stepId: IMPACT_POST_CORRECTION_REPLAN_STEP_ID_V1,
+          verifierSet: IMPACT_POST_CORRECTION_REPLAN_VERIFIER_SET_V1,
+        }),
       }),
     })
     await input.onDurableBoundary?.('run.created', snapshot)

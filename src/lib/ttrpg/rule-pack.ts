@@ -7,7 +7,7 @@ import type {
   TtrpgDegreeV2,
   TtrpgResolutionRequestV2,
 } from "../types";
-import { hashGameProductionValueV2 } from "../game-production/hash";
+import { hashProductProductionValueV2 } from "../product-production/hash";
 import { assertTtrpgDieSidesV2, sampleTtrpgDiceWithSha256V2 } from "./dice";
 import type { TtrpgDiceRollTraceV2 } from "../types";
 import { resolveTtrpgResolutionV2 } from "./resolution";
@@ -1316,9 +1316,7 @@ export function parseRulePackV1(value: string | unknown): RulePackV1 {
         "description",
         "tags",
         "grantedActionKeys",
-        ...(Object.prototype.hasOwnProperty.call(row, "mechanics")
-          ? ["mechanics"]
-          : []),
+        "mechanics",
       ],
       `items[${index}]`,
     );
@@ -1328,9 +1326,7 @@ export function parseRulePackV1(value: string | unknown): RulePackV1 {
       64,
     );
     validateKnown(grantedActionKeys, actionKeys, "item.grantedActionKeys");
-    let mechanics: import("../types").RuleItemDefinitionV1["mechanics"];
-    if (row.mechanics != null) {
-      const raw = object(row.mechanics, `items[${index}].mechanics`);
+    const raw = object(row.mechanics, `items[${index}].mechanics`);
       exact(
         raw,
         [
@@ -1371,7 +1367,7 @@ export function parseRulePackV1(value: string | unknown): RulePackV1 {
           : finite(raw.weight, `items[${index}].mechanics.weight`, 0, 1_000_000);
       if (typeof raw.requiresAttunement !== "boolean")
         fail(`items[${index}].mechanics.requiresAttunement 无效`);
-      mechanics = {
+    const mechanics: import("../types").RuleItemDefinitionV1["mechanics"] = {
         category: key(raw.category, `items[${index}].mechanics.category`),
         stackPolicy,
         maxStack,
@@ -1400,15 +1396,14 @@ export function parseRulePackV1(value: string | unknown): RulePackV1 {
                 1,
                 100_000,
               ),
-      };
-    }
+    };
     return {
       key: key(row.key, "item.key"),
       name: text(row.name, "item.name", 200),
       description: text(row.description, "item.description"),
       tags: textArray(row.tags, "item.tags", 64),
       grantedActionKeys,
-      ...(mechanics ? { mechanics } : {}),
+      mechanics,
     };
   });
   uniqueKeys(items, "items");
@@ -1420,8 +1415,6 @@ export function parseRulePackV1(value: string | unknown): RulePackV1 {
     "awardPerMilestone",
     "attributeIncreaseCost",
     "maximumAttributeValue",
-  ];
-  for (const optional of [
     "progressionModel",
     "skillIncreaseCost",
     "maximumSkillValue",
@@ -1429,10 +1422,7 @@ export function parseRulePackV1(value: string | unknown): RulePackV1 {
     "maximumLevel",
     "rankOrder",
     "rankIncreaseCost",
-  ]) {
-    if (Object.prototype.hasOwnProperty.call(advancement, optional))
-      advancementFields.push(optional);
-  }
+  ];
   exact(advancement, advancementFields, "advancement");
   key(advancement.currencyKey, "advancement.currencyKey");
   text(advancement.currencyName, "advancement.currencyName", 200);
@@ -1446,34 +1436,21 @@ export function parseRulePackV1(value: string | unknown): RulePackV1 {
     advancement.maximumAttributeValue,
     "advancement.maximumAttributeValue",
   );
-  const progressionModel =
-    advancement.progressionModel == null
-      ? null
-      : enumValue(
-          advancement.progressionModel,
-          ["numeric-level", "rank", "point-buy", "classless"] as const,
-          "advancement.progressionModel",
-        );
-  if (advancement.skillIncreaseCost != null)
-    integer(advancement.skillIncreaseCost, "advancement.skillIncreaseCost", 1);
-  if (advancement.maximumSkillValue != null)
-    finite(advancement.maximumSkillValue, "advancement.maximumSkillValue", 0);
-  if (advancement.levelIncreaseCost != null)
-    integer(advancement.levelIncreaseCost, "advancement.levelIncreaseCost", 1);
-  if (advancement.maximumLevel != null)
-    integer(advancement.maximumLevel, "advancement.maximumLevel", 1);
-  if (advancement.rankIncreaseCost != null)
-    integer(advancement.rankIncreaseCost, "advancement.rankIncreaseCost", 1);
-  const rankOrder =
-    advancement.rankOrder == null
-      ? []
-      : keyArray(advancement.rankOrder, "advancement.rankOrder", 32);
+  const progressionModel = enumValue(
+    advancement.progressionModel,
+    ["numeric-level", "rank", "point-buy", "classless"] as const,
+    "advancement.progressionModel",
+  );
+  integer(advancement.skillIncreaseCost, "advancement.skillIncreaseCost", 1);
+  finite(advancement.maximumSkillValue, "advancement.maximumSkillValue", 0);
+  integer(advancement.levelIncreaseCost, "advancement.levelIncreaseCost", 1);
+  integer(advancement.maximumLevel, "advancement.maximumLevel", 1);
+  integer(advancement.rankIncreaseCost, "advancement.rankIncreaseCost", 1);
+  const rankOrder = keyArray(advancement.rankOrder, "advancement.rankOrder", 32);
   if (progressionModel === "rank" && rankOrder.length < 2)
     fail("阶位成长必须声明至少两个 rankOrder");
   if (progressionModel !== "rank" && rankOrder.length)
     fail("非阶位成长不得声明 rankOrder");
-  if (progressionModel === "numeric-level" && advancement.maximumLevel == null)
-    fail("等级成长必须声明 maximumLevel");
 
   const sheet = object(root.characterSheetUi, "characterSheetUi");
   exact(sheet, ["sections"], "characterSheetUi");
@@ -1689,7 +1666,7 @@ export interface RuleDiceResolutionV1 {
 export async function commitRulePackDiceSeedV2(seed: string): Promise<string> {
   if (typeof seed !== "string" || !seed.trim() || seed.length > 10_000)
     fail("dice.seed 无效");
-  return hashGameProductionValueV2({ seed });
+  return hashProductProductionValueV2({ seed });
 }
 
 async function deterministicRuleDice(input: {
@@ -1730,7 +1707,7 @@ async function deterministicRuleDice(input: {
     seedCommitment: await commitRulePackDiceSeedV2(input.seed),
     nonce: input.nonce,
   };
-  return { ...basis, proofHash: await hashGameProductionValueV2(basis) };
+  return { ...basis, proofHash: await hashProductProductionValueV2(basis) };
 }
 
 export async function resolveRulePackDiceModelV1(input: {
@@ -1766,8 +1743,8 @@ export async function verifyRulePackDiceResolutionV2(input: {
       return false;
     const expected = await resolveRulePackDiceModelV1(input);
     return (
-      (await hashGameProductionValueV2(expected)) ===
-      (await hashGameProductionValueV2(input.resolution))
+      (await hashProductProductionValueV2(expected)) ===
+      (await hashProductProductionValueV2(input.resolution))
     );
   } catch {
     return false;
@@ -2058,7 +2035,7 @@ export async function resolveRulePackCheckV1(input: {
     seedCommitment: await commitRulePackDiceSeedV2(input.seed),
     nonce: input.nonce,
   };
-  return { ...basis, proofHash: await hashGameProductionValueV2(basis) };
+  return { ...basis, proofHash: await hashProductProductionValueV2(basis) };
 }
 
 export async function verifyRulePackCheckResolutionV2(input: {
@@ -2099,8 +2076,8 @@ export async function verifyRulePackCheckResolutionV2(input: {
       opponent: input.opponent,
     });
     return (
-      (await hashGameProductionValueV2(expected)) ===
-      (await hashGameProductionValueV2(input.resolution))
+      (await hashProductProductionValueV2(expected)) ===
+      (await hashProductProductionValueV2(input.resolution))
     );
   } catch {
     return false;

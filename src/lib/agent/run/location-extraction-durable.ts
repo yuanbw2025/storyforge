@@ -10,7 +10,7 @@ import { htmlToPlainText } from '../../utils/html'
 import type { AIConfig, Chapter, ChatMessage, WorkspaceScope } from '../../types'
 import { assembleContext } from '../../registry/assemble-context'
 import { adopt } from '../../registry/adopt'
-import { readOwnedRows } from '../../world-engine/scope'
+import { readOwnedRows } from '../../workspace/scope'
 import { getAgentSkillV1 } from '../skill-registry'
 import { createAgentSkillExecutionBindingV1 } from '../execution-binding'
 import {

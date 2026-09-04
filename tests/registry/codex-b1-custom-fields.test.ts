@@ -9,11 +9,12 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { useCodexStore } from '../../src/stores/codex'
 import { parseFieldSchema, stringifyFieldSchema, type CodexFieldDef } from '../../src/lib/types/codex'
+import { seedCurrentProject } from '../helpers/current-workspace'
 
 async function createProject(): Promise<number> {
   const now = Date.now()
-  return await db.projects.add({
-    name: 'CodexB1', genre: '', description: '', targetWordCount: 0,
+  return await seedCurrentProject({
+    name: 'CodexB1', genres: [], description: '', targetWordCount: 0,
     enableMultiWorld: false, createdAt: now, updatedAt: now,
   } as any) as number
 }

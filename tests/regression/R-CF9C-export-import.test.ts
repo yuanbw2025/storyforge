@@ -5,6 +5,8 @@ import {
   parseCharacterDrivenPlanArcs,
   stringifyCharacterDrivenPlanArcs,
 } from '../../src/lib/types'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
+import { seedCurrentProject } from '../helpers/current-workspace'
 
 describe('R-CF9C · 方案导出导入便携引用', () => {
   beforeEach(async () => {
@@ -15,9 +17,8 @@ describe('R-CF9C · 方案导出导入便携引用', () => {
   afterEach(() => db.close())
 
   it('重映射角色、父版本和 active 引用，不泄漏源数据库主键', async () => {
-    const projectId = await db.projects.add({
+    const projectId = await seedCurrentProject({
       name: '便携方案',
-      genre: 'fantasy',
       genres: ['fantasy'],
       status: 'drafting',
       description: '',
@@ -28,10 +29,12 @@ describe('R-CF9C · 方案导出导入便携引用', () => {
     const characterId = await db.characters.add({
       projectId,
       name: '高主键角色',
-      role: 'protagonist',
       roleWeight: 'main',
       moralAxis: 'good',
       orderAxis: 'neutral',
+      shortDescription: '', appearance: '', personality: '', background: '',
+      motivation: '', abilities: '', relationships: '', arc: '',
+      homeWorldGroupId: null, isCrossWorld: false,
       createdAt: 1,
       updatedAt: 1,
     } as any)
@@ -71,18 +74,19 @@ describe('R-CF9C · 方案导出导入便携引用', () => {
       createdAt: 2,
       updatedAt: 2,
     })
-    await db.projects.update(projectId, { activeCharacterDrivenPlanId: childId })
+    const sourceWorkId = (await db.projects.get(projectId))?.activeWorkId
+    await db.works.update(sourceWorkId!, { activeCharacterDrivenPlanId: childId })
+    await finalizeCurrentFixtureV1(projectId)
 
     const exported = await exportProjectJSON(projectId)
     expect(exported.project).not.toHaveProperty('activeCharacterDrivenPlanId')
-    expect(exported.project._activeCharacterDrivenPlanExportId).toBe(1)
+    expect(exported.works[0]._activeCharacterDrivenPlanExportId).toBe(1)
     expect(exported.characterDrivenPlans?.[0]._arcCharacterIndexes).toEqual([0])
     expect(exported.characterDrivenPlans?.[1]._parentExportId).toBe(0)
 
     // 先制造其它项目记录，保证新主键与源主键不同，测试不能误打误撞通过。
-    await db.projects.add({
+    await seedCurrentProject({
       name: '占位',
-      genre: 'other',
       genres: ['other'],
       status: 'drafting',
       description: '',
@@ -95,42 +99,12 @@ describe('R-CF9C · 方案导出导入便携引用', () => {
     const importedPlans = await db.characterDrivenPlans
       .where('projectId').equals(importedProjectId)
       .sortBy('version')
-    const importedProject = await db.projects.get(importedProjectId)
+    const importedWork = await db.works.where('projectId').equals(importedProjectId).first()
 
     expect(importedPlans).toHaveLength(2)
     expect(parseCharacterDrivenPlanArcs(importedPlans[0].arcs)[0].characterId).toBe(importedCharacter?.id)
     expect(importedPlans[1].parentPlanId).toBe(importedPlans[0].id)
-    expect(importedProject?.activeCharacterDrivenPlanId).toBe(importedPlans[1].id)
+    expect(importedWork?.activeCharacterDrivenPlanId).toBe(importedPlans[1].id)
   })
 
-  it('旧格式只有原始 active ID 时清空引用，不猜测新项目记录', async () => {
-    const data: any = {
-      version: 3,
-      exportedAt: 1,
-      project: {
-        name: '旧备份',
-        genre: 'other',
-        genres: ['other'],
-        status: 'drafting',
-        description: '',
-        targetWordCount: 1,
-        activeCharacterDrivenPlanId: 999,
-        createdAt: 1,
-        updatedAt: 1,
-      },
-      worldviews: [],
-      storyCores: [],
-      powerSystems: [],
-      characters: [],
-      outlineNodes: [],
-      chapters: [],
-      foreshadows: [],
-      geographies: [],
-      histories: [],
-      creativeRules: [],
-      characterRelations: [],
-    }
-    const importedId = await importProjectJSON(data)
-    expect((await db.projects.get(importedId))?.activeCharacterDrivenPlanId).toBeNull()
-  })
 })

@@ -11,18 +11,23 @@ import { CommunityHttpClientV1 } from '../../lib/community/http-client'
 import { CommercialOperationsHttpClientV1 } from '../../lib/commercial/operations-http-client'
 import type { CommercialListingV1 } from '../../lib/commercial/authority'
 import type { CommunitySocialEdgeV1 } from '../../lib/community/authority'
-import { exportGameDistributionBundleV1, importMarketplaceGameDistributionV1 } from '../../lib/game-platform/distribution-bundle'
-import type { GameDistributionBundleV1, MarketplaceImportProvenanceV1 } from '../../lib/game-platform/distribution-bundle'
-import type { GameProductType, GameRelease, WorkspaceScope } from '../../lib/types'
+import { exportProductDistributionBundleV2, importMarketplaceProductDistributionV2 } from '../../lib/product-platform/distribution-bundle'
+import type { ProductDistributionBundleV2, MarketplaceImportProvenanceV2 } from '../../lib/product-platform/distribution-bundle'
+import {
+  isProductionProductKindV1,
+  type ProductionProductKindV1,
+  type ProductRelease,
+  type WorkspaceScope,
+} from '../../lib/types'
 import type { OnlineRoomJoinHandoffV1 } from '../../lib/online/http-transport'
 import LfgCenterPanel from './LfgCenterPanel'
 import CommunityReviewPanel from './CommunityReviewPanel'
 import CommunitySafetyPanel from './CommunitySafetyPanel'
 import CommercialOperationsPanel from './CommercialOperationsPanel'
 import {
-  currentGamePlatformEnvironmentV1,
-  evaluateGamePlatformCapabilityV1,
-} from '../../lib/game-platform/capability-status'
+  currentProductPlatformEnvironmentV1,
+  evaluateProductPlatformCapabilityV1,
+} from '../../lib/product-platform/capability-status'
 
 type MarketplaceClientV1 = Pick<CommercialHttpClientV1,
   'discover' | 'acquire' | 'downloadRelease' | 'createListing' | 'registerRelease' | 'submitListing'
@@ -30,28 +35,29 @@ type MarketplaceClientV1 = Pick<CommercialHttpClientV1,
   | 'suspendListing' | 'withdrawListing'>
 
 interface LocalReleaseView {
-  row: GameRelease
-  productType: GameProductType
+  row: ProductRelease
+  productType: ProductionProductKindV1
   title: string
 }
 
-const PRODUCT_OPTIONS: Array<{ value: '' | GameProductType; label: string }> = [
+const PRODUCT_OPTIONS: Array<{ value: '' | ProductionProductKindV1; label: string }> = [
   { value: '', label: '全部产品' }, { value: 'ttrpg', label: '跑团战役' },
-  { value: 'storygame', label: '分支叙事' }, { value: 'character-interaction', label: '角色互动' },
+  { value: 'character-interaction', label: '角色互动' },
   { value: 'text-adventure', label: '文字冒险' }, { value: 'avg', label: 'AVG / Galgame' },
-  { value: 'narrative-simulation', label: '叙事模拟' }, { value: 'text-open-world', label: '文字开放世界' },
+  { value: 'text-open-world', label: '文字开放世界' },
 ]
 
-function releaseView(row: GameRelease): LocalReleaseView | null {
+function releaseView(row: ProductRelease): LocalReleaseView | null {
   try {
     const manifest = JSON.parse(row.manifestJson) as {
-      productType?: GameProductType
+      productType?: ProductionProductKindV1
       runtimePackage?: { definition?: { title?: string } }
       definition?: { title?: string }
     }
-    if (!PRODUCT_OPTIONS.some(item => item.value === manifest.productType)) return null
+    if (row.productType !== manifest.productType
+      || !isProductionProductKindV1(row.productType)) return null
     return {
-      row, productType: manifest.productType!,
+      row, productType: row.productType,
       title: manifest.runtimePackage?.definition?.title || manifest.definition?.title || row.label,
     }
   } catch { return null }
@@ -77,20 +83,20 @@ export default function MarketplacePanel(props: {
   communityClient?: CommunityHttpClientV1
   operationsClient?: CommercialOperationsHttpClientV1
   initialServiceUrl?: string
-  onImported?: (release: GameRelease) => void | Promise<void>
+  onImported?: (release: ProductRelease) => void | Promise<void>
   onRoomHandoff?: (handoff: OnlineRoomJoinHandoffV1) => void | Promise<void>
-  exportBundle?: (input: { scope: WorkspaceScope; gameReleaseId: number }) => Promise<GameDistributionBundleV1>
+  exportBundle?: (input: { scope: WorkspaceScope; productReleaseId: number }) => Promise<ProductDistributionBundleV2>
   importBundle?: (input: {
     scope: WorkspaceScope
     bundle: unknown
-    provenance: MarketplaceImportProvenanceV1
-  }) => Promise<GameRelease>
+    provenance: MarketplaceImportProvenanceV2
+  }) => Promise<ProductRelease>
 }) {
   const [serviceUrl, setServiceUrl] = useState(props.initialServiceUrl ?? import.meta.env.VITE_STORYFORGE_PLATFORM_SERVICE_URL ?? '')
   const [accessToken, setAccessToken] = useState('')
   const [mode, setMode] = useState<'discover' | 'groups' | 'creator' | 'review' | 'safety' | 'operations'>('discover')
   const [query, setQuery] = useState('')
-  const [productType, setProductType] = useState<'' | GameProductType>('')
+  const [productType, setProductType] = useState<'' | ProductionProductKindV1>('')
   const [listings, setListings] = useState<CommercialListingV1[]>([])
   const [localReleases, setLocalReleases] = useState<LocalReleaseView[]>([])
   const [selectedReleaseId, setSelectedReleaseId] = useState<number | null>(null)
@@ -138,7 +144,7 @@ export default function MarketplacePanel(props: {
 
   const refreshLocal = useCallback(async () => {
     if (!props.scope) { setLocalReleases([]); return }
-    const rows = await db.gameReleases.where('workId').equals(props.scope.workId).toArray()
+    const rows = await db.productReleases.where('workId').equals(props.scope.workId).toArray()
     const views = rows.flatMap(row => {
       const view = releaseView(row)
       return view ? [view] : []
@@ -199,7 +205,7 @@ export default function MarketplacePanel(props: {
     if (!accessToken.trim()) throw new Error('请输入当前账号的访问凭据。')
     if (!props.scope) throw new Error('请选择一个已完成 World/Work 初始化的本地工作区。')
     const payload = await client.downloadRelease({ accessToken: accessToken.trim(), releaseHash: listing.releaseHash })
-    const release = await (props.importBundle ?? importMarketplaceGameDistributionV1)({
+    const release = await (props.importBundle ?? importMarketplaceProductDistributionV2)({
       scope: props.scope, bundle: payload.bundle, provenance: payload.provenance,
     })
     await refreshLocal()
@@ -224,7 +230,7 @@ export default function MarketplacePanel(props: {
   const submitRelease = () => run('submit', async () => {
     if (!client) throw new Error('请先配置市场服务地址。')
     if (!accessToken.trim()) throw new Error('请输入创作者账号访问凭据。')
-    if (!props.scope || selectedReleaseId == null) throw new Error('当前 Work 没有可提交的正式 GameRelease。')
+    if (!props.scope || selectedReleaseId == null) throw new Error('当前 Work 没有可提交的正式 ProductRelease。')
     const selected = localReleases.find(item => item.row.id === selectedReleaseId)
     if (!selected) throw new Error('所选 Release 已不存在。')
     const fingerprint = JSON.stringify({
@@ -241,11 +247,11 @@ export default function MarketplacePanel(props: {
       }
     }
     const ids = submission.current
-    const bundle = await (props.exportBundle ?? exportGameDistributionBundleV1)({
-      scope: props.scope, gameReleaseId: selectedReleaseId,
+    const bundle = await (props.exportBundle ?? exportProductDistributionBundleV2)({
+      scope: props.scope, productReleaseId: selectedReleaseId,
     })
     const listingInput = {
-      releaseHash: bundle.gameRelease.contentHash,
+      releaseHash: bundle.productRelease.contentHash,
       title: creatorTitle.trim(), summary: creatorSummary.trim(), contentWarnings: [] as string[],
       license: {
         licenseId: 'storyforge.creator-standard', licenseVersion: '1.0.0', allowOfflineExport: true,
@@ -307,7 +313,7 @@ export default function MarketplacePanel(props: {
     setAllowRemix(listing.license.allowRemix)
     setRequiresAttribution(listing.license.requiresAttribution)
     submission.current = null
-    setMessage(`正在修订《${listing.title}》；请选择修正后的正式 GameRelease，再重新提交。`)
+    setMessage(`正在修订《${listing.title}》；请选择修正后的正式 ProductRelease，再重新提交。`)
   }
   const withdrawRemoteListing = (listingId: string) => run(`withdraw:${listingId}`, async () => {
     if (!client) throw new Error('请先配置市场服务地址。')
@@ -318,8 +324,8 @@ export default function MarketplacePanel(props: {
     setMessage(`《${listing.title}》已撤回；已合法导出的本地副本不会被远程删除。`)
   })
 
-  const catalogDecision = evaluateGamePlatformCapabilityV1('release-catalog', {
-    environment: currentGamePlatformEnvironmentV1(), experimentalProject: false, authorOptIn: false,
+  const catalogDecision = evaluateProductPlatformCapabilityV1('release-catalog', {
+    environment: currentProductPlatformEnvironmentV1(), experimentalProject: false, authorOptIn: false,
     onlineServiceConfigured: client != null, aiGmBetaGatePassed: false,
   })
   const rolloutBlockers = catalogDecision.blockers.filter(blocker => blocker !== '在线服务未配置')
@@ -328,14 +334,14 @@ export default function MarketplacePanel(props: {
       <div className="flex items-center gap-2 text-sm font-semibold text-text-primary"><ShieldAlert className="h-4 w-4 text-warning" />社区市场尚未进入当前环境</div>
       <p className="mt-2 max-w-3xl text-xs leading-6 text-text-secondary">{catalogDecision.capability.reason}</p>
       <p className="mt-2 text-[10px] text-warning">{rolloutBlockers.join('；')}</p>
-      <p className="mt-2 text-[10px] text-text-muted">本地 GameRelease、完整分发包导出和离线游玩仍可使用；目录服务通过部署验收前不向生产用户展示伪入口。</p>
+      <p className="mt-2 text-[10px] text-text-muted">本地 ProductRelease、完整分发包导出和离线游玩仍可使用；目录服务通过部署验收前不向生产用户展示伪入口。</p>
     </section>
   }
 
   return <div className="space-y-5 p-5" data-testid="community-marketplace">
     <section className="rounded-lg border border-border bg-bg-elevated p-5">
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <div><div className="text-[10px] uppercase tracking-[0.18em] text-accent">COMMUNITY / MARKETPLACE</div><h2 className="mt-1 text-base font-semibold text-text-primary">发现、购买和发布可验证游戏</h2><p className="mt-2 max-w-3xl text-xs leading-6 text-text-muted">目录、权益与支付由服务端授权；下载包会在浏览器内复验 GameRelease、WorldRelease 和每个媒资哈希，再写入当前 Work。</p></div>
+        <div><div className="text-[10px] uppercase tracking-[0.18em] text-accent">COMMUNITY / MARKETPLACE</div><h2 className="mt-1 text-base font-semibold text-text-primary">发现、购买和发布可验证游戏</h2><p className="mt-2 max-w-3xl text-xs leading-6 text-text-muted">目录、权益与支付由服务端授权；下载包会在浏览器内复验 ProductRelease、WorldRelease 和每个媒资哈希，再写入当前 Work。</p></div>
         {busy && <Loader2 className="h-5 w-5 animate-spin text-accent" />}
       </div>
       <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.7fr)]">
@@ -372,7 +378,7 @@ export default function MarketplacePanel(props: {
     </section> : mode === 'safety' ? <CommunitySafetyPanel client={communityClient} accessToken={accessToken} /> : mode === 'operations' ? <CommercialOperationsPanel client={operationsClient} accessToken={accessToken} /> : <>
     <section className="rounded-lg border border-border bg-bg-elevated p-5">
       <div className="flex items-center gap-2"><Send className="h-4 w-4 text-accent" /><h3 className="text-sm font-semibold text-text-primary">{revisionListingId ? '修订并重新提交发行物' : '提交当前 Work 的正式发行物'}</h3>{revisionListingId && <button onClick={() => { setRevisionListingId(null); submission.current = null }} className="ml-auto rounded border border-border px-2 py-1 text-[10px] text-text-muted">取消修订</button>}</div>
-      <div className="mt-4 grid gap-3 md:grid-cols-2"><label className="grid gap-2 text-[10px] text-text-muted">本地 GameRelease<select value={selectedReleaseId ?? ''} onChange={event => { setSelectedReleaseId(Number(event.target.value) || null); submission.current = null }} className="rounded border border-border bg-bg-base p-2 text-xs text-text-primary"><option value="">请选择正式发布</option>{localReleases.map(item => <option key={item.row.id} value={item.row.id}>{item.title} · v{item.row.version} · {item.productType}</option>)}</select></label><label className="grid gap-2 text-[10px] text-text-muted">售价（分）<input type="number" min={0} step={1} value={amountMinor} onChange={event => { setAmountMinor(Math.max(0, Number(event.target.value) || 0)); submission.current = null }} className="rounded border border-border bg-bg-base p-2 text-xs text-text-primary" /></label><label className="grid gap-2 text-[10px] text-text-muted">公开标题<input value={creatorTitle} onChange={event => { setCreatorTitle(event.target.value); submission.current = null }} className="rounded border border-border bg-bg-base p-2 text-xs text-text-primary" /></label><label className="grid gap-2 text-[10px] text-text-muted">简介<input value={creatorSummary} onChange={event => { setCreatorSummary(event.target.value); submission.current = null }} className="rounded border border-border bg-bg-base p-2 text-xs text-text-primary" /></label></div>
+      <div className="mt-4 grid gap-3 md:grid-cols-2"><label className="grid gap-2 text-[10px] text-text-muted">本地 ProductRelease<select value={selectedReleaseId ?? ''} onChange={event => { setSelectedReleaseId(Number(event.target.value) || null); submission.current = null }} className="rounded border border-border bg-bg-base p-2 text-xs text-text-primary"><option value="">请选择正式发布</option>{localReleases.map(item => <option key={item.row.id} value={item.row.id}>{item.title} · v{item.row.version} · {item.productType}</option>)}</select></label><label className="grid gap-2 text-[10px] text-text-muted">售价（分）<input type="number" min={0} step={1} value={amountMinor} onChange={event => { setAmountMinor(Math.max(0, Number(event.target.value) || 0)); submission.current = null }} className="rounded border border-border bg-bg-base p-2 text-xs text-text-primary" /></label><label className="grid gap-2 text-[10px] text-text-muted">公开标题<input value={creatorTitle} onChange={event => { setCreatorTitle(event.target.value); submission.current = null }} className="rounded border border-border bg-bg-base p-2 text-xs text-text-primary" /></label><label className="grid gap-2 text-[10px] text-text-muted">简介<input value={creatorSummary} onChange={event => { setCreatorSummary(event.target.value); submission.current = null }} className="rounded border border-border bg-bg-base p-2 text-xs text-text-primary" /></label></div>
       <div className="mt-4 flex flex-wrap gap-4 text-xs text-text-secondary"><label className="flex items-center gap-2"><input type="checkbox" checked={allowRemix} onChange={event => { setAllowRemix(event.target.checked); submission.current = null }} />允许合规派生</label><label className="flex items-center gap-2"><input type="checkbox" checked={requiresAttribution} onChange={event => { setRequiresAttribution(event.target.checked); submission.current = null }} />要求署名</label></div>
       <p className="mt-4 text-xs leading-5 text-text-muted">提交时会本地冻结完整分发包、上传内容寻址媒资并确认权利；目录先进入 submitted，审核通过后才公开。相同表单重试沿用请求 ID，不会重复建单。</p>
       <button disabled={busy != null || !client || selectedReleaseId == null || !creatorTitle.trim() || !creatorSummary.trim()} onClick={() => void submitRelease()} className="mt-4 flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white disabled:opacity-40"><Upload className="h-4 w-4" />{revisionListingId ? '上传修订版并重新提交' : '冻结、上传并提交审核'}</button>

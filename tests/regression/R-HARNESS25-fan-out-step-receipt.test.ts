@@ -5,7 +5,6 @@ import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-
 import { getOrCreateAgentConversation, updateAgentEventCandidate } from '../../src/lib/agent/conversations'
 import type { MasterAgentPlan } from '../../src/lib/agent/orchestrator'
 import {
-  MASTER_AGENT_REPLAN_STORAGE_KEY,
   replanDurableMasterAgentRunV1,
   restoreMasterAgentCandidatesV1,
   runDurableMasterAgentPlanV1,
@@ -26,54 +25,18 @@ import {
 } from '../../src/lib/agent/run/master-step-verification'
 import { AgentTeamBudgetTracker } from '../../src/lib/agent/team-budget'
 import type { WorkspaceScope } from '../../src/lib/types'
-import { backfillResourceUidsV1 } from '../../src/lib/context-gateway/resource-identity'
-import { generateWorkCode, generateWorkspaceUid } from '../../src/lib/memory/identity'
+import { stampCurrentFixtureResourceUidsV1 } from '../helpers/current-resource-identity'
 import { prepareRequiredMasterGatewayFixtureV1 } from '../helpers/master-agent-gateway'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
+import { currentWorldOriginCandidateFixtureV1 } from '../helpers/current-worldview-field'
 
 async function createWorkspace(label: string): Promise<{
   scope: WorkspaceScope
   worldGroupId: number
 }> {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    workspaceUid: generateWorkspaceUid(),
-    name: label,
-    genre: 'fantasy',
-    genres: ['fantasy'],
-    description: '',
-    status: 'drafting',
-    targetWordCount: 100_000,
-    worldCode: `world-${label}`,
-    worldVersion: 1,
-    createdAt: now,
-    updatedAt: now,
-  } as any) as number
-  const worldId = await db.worlds.add({
-    projectId,
-    code: `world-${label}`,
-    name: `${label}世界`,
-    description: '',
-    currentVersion: 1,
-    createdAt: now,
-    updatedAt: now,
-  }) as number
-  const workId = await db.works.add({
-    projectId,
-    worldId,
-    title: label,
-    code: generateWorkCode(),
-    description: '',
-    genres: ['fantasy'],
-    status: 'drafting',
-    targetWordCount: 100_000,
-    createdAt: now,
-    updatedAt: now,
-  }) as number
-  await db.projects.update(projectId, {
-    activeWorldId: worldId,
-    activeWorkId: workId,
-    ownershipSchemaVersion: 1,
-  })
+  const created = await seedCurrentWorkspace(label)
+  const { projectId, worldId, workId } = created.scope
   const worldGroupId = await db.worldGroups.add({
     projectId,
     worldId,
@@ -82,7 +45,7 @@ async function createWorkspace(label: string): Promise<{
     createdAt: now,
     updatedAt: now,
   } as any) as number
-  await backfillResourceUidsV1(projectId)
+  await stampCurrentFixtureResourceUidsV1(projectId)
   return { scope: { projectId, worldId, workId }, worldGroupId }
 }
 
@@ -93,7 +56,7 @@ function fanOutPlan(): MasterAgentPlan {
       {
         id: 'world-1',
         agentId: 'world-origin',
-        skillId: 'world-origin.complete',
+        skillId: 'world-origin.worldview-field',
         instruction: '建立潮汐世界。',
         dependsOn: [],
       },
@@ -126,10 +89,10 @@ const inspirationDraft = JSON.stringify({
     powerHierarchy: '',
     continentLayout: '',
     climateByRegion: '',
-    historyLine: '',
     races: '',
     factionLayout: '',
   },
+  history: { overview: '' },
   storyCore: {
     logline: '守灯人追查被雨抹去的名字',
     theme: '记忆',
@@ -172,12 +135,17 @@ async function executeFixture(
     })
     options.budget.settleCall(reservation, output)
     const sources = sourcesFor(task.id)
-    const gateway = task.id === 'character-1'
+    const currentWorld = task.id === 'world-1'
+      ? currentWorldOriginCandidateFixtureV1(output)
+      : undefined
+    const candidateDraft = currentWorld?.draft ?? output
+    const candidateOutput = currentWorld?.runtimeOutput ?? output
+    const gateway = task.id === 'character-1' || task.id === 'world-1'
       ? await prepareRequiredMasterGatewayFixtureV1({
           scope: options.scope,
           worldGroupId: options.worldGroupId,
           executionTrace: options.executionTrace,
-        }, task, output)
+        }, task, candidateDraft)
       : undefined
     await options.executionTrace.candidateReady(task, {
       payload: {
@@ -195,18 +163,18 @@ async function executeFixture(
           estimatedInputTokens: 20,
           inputBudgetTokens: 14_000,
         },
-        baseSnapshot: task.id === 'world-1'
-          ? { id: null, updatedAt: null, worldOrigin: '' }
+        ...(currentWorld
+          ? currentWorld.payload
           : task.id === 'character-1'
-            ? { serialized: '[]', visibleNames: [] }
-            : {},
+            ? { baseSnapshot: { serialized: '[]', visibleNames: [] } }
+            : { baseSnapshot: {} }),
         ...(task.id === 'inspiration-1' ? { mode: 'single', selectedFragmentIds: ['memory'] } : {}),
         workspaceScope: options.scope,
         dependsOnTaskIds: task.dependsOn,
       },
-      draft: output,
+      draft: candidateDraft,
       runtimeNode: {},
-      runtimeOutput: output,
+      runtimeOutput: candidateOutput,
       ...(gateway ? { contextGatewayRuntime: gateway.contextGatewayRuntime } : {}),
     })
   }
@@ -218,6 +186,7 @@ async function createRun(label: string) {
     projectId: fixture.scope.projectId,
     worldGroupId: fixture.worldGroupId,
     scope: fixture.scope,
+    purpose: 'fan-out-step-receipt',
   })
   const result = await runDurableMasterAgentPlanV1({
     scope: fixture.scope,
@@ -233,11 +202,9 @@ describe.sequential('R-HARNESS25 · fan-out 步骤回执与 fresh join', { timeo
   beforeEach(async () => {
     await db.delete()
     await db.open()
-    globalThis.localStorage?.removeItem(MASTER_AGENT_REPLAN_STORAGE_KEY)
   })
 
   afterEach(() => {
-    globalThis.localStorage?.removeItem(MASTER_AGENT_REPLAN_STORAGE_KEY)
     db.close()
   })
 
@@ -278,7 +245,7 @@ describe.sequential('R-HARNESS25 · fan-out 步骤回执与 fresh join', { timeo
     await updateAgentEventCandidate(
       world.event.id!,
       fixture.scope.projectId,
-      '潮汐改由月轮和海底钟阵共同维持。',
+      currentWorldOriginCandidateFixtureV1('潮汐改由月轮和海底钟阵共同维持。').draft,
       fixture.scope,
     )
     const restored = await restoreMasterAgentCandidatesV1({ scope: fixture.scope, runId: result.runId })
@@ -349,12 +316,12 @@ describe.sequential('R-HARNESS25 · fan-out 步骤回执与 fresh join', { timeo
   })
 
   it('结构化叶子未通过确定性验证时不持久化候选，也不会启动下游汇合模型', async () => {
-    globalThis.localStorage?.setItem(MASTER_AGENT_REPLAN_STORAGE_KEY, 'disabled')
     const fixture = await createWorkspace('叶子硬门')
     const conversation = await getOrCreateAgentConversation({
       projectId: fixture.scope.projectId,
       worldGroupId: fixture.worldGroupId,
       scope: fixture.scope,
+      purpose: 'fan-out-leaf-verification',
     })
     let runId = 0
     await expect(runDurableMasterAgentPlanV1({
@@ -366,6 +333,7 @@ describe.sequential('R-HARNESS25 · fan-out 步骤回执与 fresh join', { timeo
       onDurableBoundary: boundary => { runId = boundary.runId },
     }, {
       execute: ((options: any) => executeFixture(options, { 'inspiration-1': '{}' })) as any,
+      disableAutomaticReplanForTest: true,
     })).rejects.toThrow('缺少字段 worldview')
 
     const snapshot = await readAgentRunV1(fixture.scope, runId)

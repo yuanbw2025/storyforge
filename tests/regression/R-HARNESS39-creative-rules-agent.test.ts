@@ -26,85 +26,44 @@ import {
   selectAgentSkillIdV1,
 } from '../../src/lib/agent/workflow-catalog'
 import { db } from '../../src/lib/db/schema'
+import { stampNewRecord } from '../../src/lib/workspace/scope'
 import {
   adoptGenerationNodeOutput,
   runGenerationNode,
 } from '../../src/lib/generation/generation-node'
 import type { Project, WorkspaceScope } from '../../src/lib/types'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
 
 const now = 1_920_000_000_000
 
 async function seedWorkspace(): Promise<{ project: Project; scope: WorkspaceScope; rulesId: number }> {
-  const projectId = await db.projects.add({
-    name: '潮钟纪事',
-    genre: 'fantasy',
-    genres: ['fantasy'],
-    description: '',
-    status: 'drafting',
-    targetWordCount: 120_000,
-    worldCode: 'harness39-world',
-    worldVersion: 1,
-    createdAt: now,
-    updatedAt: now,
-  } as Project) as number
-  const worldId = await db.worlds.add({
+  const { project, scope } = await seedCurrentWorkspace('潮钟纪事')
+  const { projectId } = scope
+  await db.worldviews.add(stampNewRecord(scope, 'worldviews', {
     projectId,
-    code: 'harness39-world',
-    name: '潮钟世界',
-    description: '',
-    currentVersion: 1,
-    createdAt: now,
-    updatedAt: now,
-  }) as number
-  const workId = await db.works.add({
-    projectId,
-    worldId,
-    title: '潮钟纪事',
-    description: '',
-    genres: ['fantasy'],
-    status: 'drafting',
-    targetWordCount: 120_000,
-    createdAt: now,
-    updatedAt: now,
-  }) as number
-  const scope = { projectId, worldId, workId }
-  await db.projects.update(projectId, {
-    activeWorldId: worldId,
-    activeWorkId: workId,
-    ownershipSchemaVersion: 1,
-  })
-  await db.worldviews.add({
-    projectId,
-    worldId,
     worldOrigin: '港城以潮汐钟封存居民主动典当的记忆。',
     factionLayout: '守钟会与拾忆行会争夺记忆的归还权。',
     createdAt: now,
     updatedAt: now,
-  } as never)
-  await db.storyCores.add({
+  }, { owner: 'world' }) as never)
+  await db.storyCores.add(stampNewRecord(scope, 'storyCores', {
     projectId,
-    workId,
     theme: '记忆与责任',
     centralConflict: '主角必须在救回父亲与公开制度真相之间选择。',
     createdAt: now,
     updatedAt: now,
-  } as never)
-  const rulesId = await db.creativeRules.add({
+  }, { owner: 'work' }) as never)
+  const rulesId = await db.creativeRules.add(stampNewRecord(scope, 'creativeRules', {
     projectId,
-    workId,
     writingStyle: '克制、具体，以行动代替解释。',
     narrativePOV: 'third-limited',
-    toneAndMood: '',
     atmosphere: '冷峻中保留微弱希望。',
     prohibitions: JSON.stringify(['不得使用现代网络用语']),
     consistencyRules: JSON.stringify(['记忆转移必须经潮汐钟见证']),
     specialRequirements: '重要秘密必须通过可见证据逐步释放。',
-    referenceWorks: '[]',
     createdAt: now,
     updatedAt: now,
-  } as never) as number
-  const project = await db.projects.get(projectId)
-  if (!project) throw new Error('测试项目创建失败')
+  }, { owner: 'work' }) as never) as number
   return { project, scope, rulesId }
 }
 
@@ -152,7 +111,7 @@ describe.sequential('R-HARNESS39 · 创作规则 Agent Skill 与受治理采纳'
       agentId: 'world-origin',
       owner: 'world-foundation-agent',
       executionMode: 'creative-rules',
-      contextSourceKeys: ['projectStatus', 'worldview', 'storyCore', 'creativeRules'],
+      contextSourceKeys: ['workStatus', 'worldview', 'storyCore', 'creativeRules'],
       writeTargets: [{
         table: 'creativeRules',
         fields: ['writingStyle', 'atmosphere', 'specialRequirements'],
@@ -177,7 +136,7 @@ describe.sequential('R-HARNESS39 · 创作规则 Agent Skill 与受治理采纳'
     const generated = await runGenerationNode(prepared.node, prepared.prepared)
 
     expect(generated.gate?.status).toBe('pass')
-    expect(prepared.contextSources).toEqual(['projectStatus', 'worldview', 'storyCore', 'creativeRules'])
+    expect(prepared.contextSources).toEqual(['workStatus', 'worldview', 'storyCore', 'creativeRules'])
     expect(prepared.contextEvidence.sourceEvidence?.every(source => source.sourceHash)).toBe(true)
     expect(prepared.contextEvidence.inputState).toMatchObject({
       state: 'complete',
@@ -221,13 +180,12 @@ describe.sequential('R-HARNESS39 · 创作规则 Agent Skill 与受治理采纳'
       handling: 'create-from-request',
     })
 
-    await db.storyCores.add({
+    await db.storyCores.add(stampNewRecord(scope, 'storyCores', {
       projectId: project.id!,
-      workId: scope.workId,
       theme: '记忆与责任',
       createdAt: now,
       updatedAt: now,
-    } as never)
+    }, { owner: 'work' }) as never)
     const partial = await prepareCreativeRulesCopilotV1({
       projectId: project.id!,
       scope,
@@ -243,20 +201,17 @@ describe.sequential('R-HARNESS39 · 创作规则 Agent Skill 与受治理采纳'
     expect(wrongField.adopted).toBe(false)
     expect(wrongField.gate?.issues.map(issue => issue.code)).toContain('creative-rules-field-mismatch')
 
-    await db.creativeRules.add({
+    await db.creativeRules.add(stampNewRecord(scope, 'creativeRules', {
       projectId: project.id!,
-      workId: scope.workId,
       writingStyle: '',
       narrativePOV: 'third-limited',
-      toneAndMood: '',
       atmosphere: '压抑但不绝望',
       prohibitions: '[]',
       consistencyRules: '[]',
       specialRequirements: '',
-      referenceWorks: '[]',
       createdAt: now,
       updatedAt: now,
-    } as never)
+    }, { owner: 'work' }) as never)
     const unchangedPrepared = await prepareCreativeRulesCopilotV1({
       projectId: project.id!,
       scope,
@@ -333,6 +288,7 @@ describe.sequential('R-HARNESS39 · 创作规则 Agent Skill 与受治理采纳'
       projectId: project.id!,
       scope,
       worldGroupId: null,
+      purpose: 'creative-rules-generation',
     })
     const run = await runDurableMasterAgentPlanV1({
       scope,

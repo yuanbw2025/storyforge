@@ -26,7 +26,6 @@ import type { AssembleContextResult } from '../../lib/registry/types'
 import {
   adoptOutlineGenerationCandidateV1,
   createOutlineGenerationTraceV1,
-  isOutlineDurableHarnessEnabledV1,
   rejectOutlineGenerationCandidateV1,
   recoverPendingOutlineGenerationAdoptionsV1,
   restoreLatestOutlineGenerationCandidateV1,
@@ -35,7 +34,7 @@ import {
   type OutlineGenerationCandidateV1,
   type OutlineGenerationAdoptionIntentV1,
 } from '../../lib/outline/harness'
-import type { ChatMessage, OutlineNode, Project } from '../../lib/types'
+import type { ChatMessage, OutlineNode, Project, Work } from '../../lib/types'
 import type { AgentExecutionBoundaryV1 } from '../../lib/types'
 import { flushPendingEditsV1 } from '../../lib/authoring/pending-edit-coordinator'
 import {
@@ -43,7 +42,7 @@ import {
   captureWorkspaceContentRevisionV1,
   type WorkspaceContentRevisionVectorV1,
 } from '../../lib/authoring/content-revision'
-import { resolveScopeLike } from '../../lib/world-engine/scope'
+import { resolveScopeLike } from '../../lib/workspace/scope'
 
 type GenerationAI = Pick<
   UseAIStreamReturn,
@@ -52,6 +51,7 @@ type GenerationAI = Pick<
 
 interface Options {
   project: Project
+  work: Work | null
   nodes: OutlineNode[]
   volumes: OutlineNode[]
   hint: string
@@ -73,6 +73,7 @@ interface Options {
 
 export function useOutlineGenerationController({
   project,
+  work,
   nodes,
   volumes,
   hint,
@@ -109,16 +110,17 @@ export function useOutlineGenerationController({
         : activeModuleKey
 
   const buildNode = useCallback((request: OutlineGenerationRequest) => (
-    createOutlineGenerationNode({
+    work ? createOutlineGenerationNode({
       request,
       project,
+      work,
       nodes,
       volumes,
       hint,
       runOptions,
       ai,
-    })
-  ), [ai, hint, nodes, project, runOptions, volumes])
+    }) : null
+  ), [ai, hint, nodes, project, runOptions, volumes, work])
 
   const preparedNodeResult = useMemo<{
     prepared: PreparedGenerationNode | null
@@ -130,10 +132,11 @@ export function useOutlineGenerationController({
     }
     try {
       return {
-        prepared: prepareGenerationNode(
-          buildNode(pendingRequest),
-          preparedContext.assembled,
-        ),
+        prepared: (() => {
+          const node = buildNode(pendingRequest)
+          if (!node) throw new Error('当前作品尚未加载。')
+          return prepareGenerationNode(node, preparedContext.assembled)
+        })(),
         error: '',
       }
     } catch (error) {
@@ -195,6 +198,7 @@ export function useOutlineGenerationController({
         worldGroupId: targetWorldGroupId,
       })
       const node = buildNode(request)
+      if (!node) throw new Error('当前作品尚未加载。')
       const prepared = preparedSnapshot ?? prepareGenerationNode(node, assembled)
       generationTrace = await createOutlineGenerationTraceV1({
         projectId: project.id!,
@@ -252,7 +256,6 @@ export function useOutlineGenerationController({
   useEffect(() => {
     if (project.id == null || ai.isStreaming || restoreProjectRef.current === project.id) return
     restoreProjectRef.current = project.id
-    if (executionBoundary !== 'formal' && !isOutlineDurableHarnessEnabledV1()) return
     let cancelled = false
     void (async () => {
       const recovery = await recoverPendingOutlineGenerationAdoptionsV1(project.id!)

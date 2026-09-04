@@ -1,7 +1,7 @@
 import type { UseAIStreamReturn } from '../../hooks/useAIStream'
 import type { GenerationNode } from '../generation/generation-node'
 import type { AssembleContextResult } from '../registry/types'
-import type { OutlineNode, Project } from '../types'
+import type { OutlineNode, Project, Work } from '../types'
 import type { RunOptions } from '../ai/adapters/outline-adapter'
 import {
   parseChapterOutlineOutput,
@@ -26,13 +26,14 @@ export class OutlineGenerationSkipError extends Error {
 export function createOutlineGenerationNode(input: {
   request: OutlineGenerationRequest
   project: Project
+  work: Work
   nodes: OutlineNode[]
   volumes: OutlineNode[]
   hint: string
   runOptions: RunOptions
   ai: OutlineGenerationAI
 }): GenerationNode<AssembleContextResult, string> {
-  const { request, project, nodes, volumes, hint, runOptions, ai } = input
+  const { request, project, work, nodes, volumes, hint, runOptions, ai } = input
   const category = outlineGenerationModuleKey(request)
   return {
     id: encodeGenerationOperation(request),
@@ -41,7 +42,7 @@ export function createOutlineGenerationNode(input: {
     assembleInput: assembled => {
       const plan = buildOutlineGenerationPlan({
         request,
-        project,
+        work,
         nodes,
         volumes,
         assembled,

@@ -29,9 +29,13 @@ export function isMasterCandidateContextGatewayRequiredV1(
 }
 
 /**
- * Required-Gateway candidates cannot include contextManifestHash in their own
- * identity: ContextManifestV3 already binds candidateHash, so including the
- * manifest hash would form an unsatisfiable hash cycle.
+ * Required-Gateway candidates cannot include evidence produced after their
+ * identity is frozen. ContextManifestV3 binds candidateHash first; the
+ * independent semantic review and final step receipt then bind that manifest,
+ * the candidate text, and their own evidence hashes. Including any of those
+ * follow-on artifacts (or their cumulative budget snapshot) in candidateHash
+ * would create a hash cycle or make legitimate evidence collection mutate the
+ * already-bound candidate identity.
  */
 export async function computeMasterCandidateHashV1(
   payload: MasterCandidatePayload,
@@ -41,6 +45,11 @@ export async function computeMasterCandidateHashV1(
   if (!isMasterCandidateContextGatewayRequiredV1(payload)) {
     return hashCanonicalValue({ draft, payload: withoutCandidateHash })
   }
-  const { contextManifestHash: _contextManifestHash, ...gatewayPayload } = withoutCandidateHash
+  const {
+    contextManifestHash: _contextManifestHash,
+    semanticReview: _semanticReview,
+    teamBudgetEvidence: _teamBudgetEvidence,
+    ...gatewayPayload
+  } = withoutCandidateHash
   return hashCanonicalValue({ draft, payload: gatewayPayload })
 }

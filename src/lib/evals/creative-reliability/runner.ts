@@ -84,8 +84,8 @@ function executionOrder(index: number): [
   CreativeReliabilityEvalVariantV1,
 ] {
   return index % 2 === 0
-    ? ['legacy-direct', 'creative-reliability']
-    : ['creative-reliability', 'legacy-direct']
+    ? ['baseline-direct', 'creative-reliability']
+    : ['creative-reliability', 'baseline-direct']
 }
 
 function isHash(value: unknown): value is string {
@@ -144,22 +144,22 @@ function completedCases(
   checkpoint: CreativeReliabilityEvalCheckpointV1,
 ): CreativeReliabilityEvalCaseV1[] {
   return checkpoint.cases.map(item => {
-    const legacy = item.generations['legacy-direct']
+    const baseline = item.generations['baseline-direct']
     const current = item.generations['creative-reliability']
-    const legacyVerification = item.verifications['legacy-direct']
+    const baselineVerification = item.verifications['baseline-direct']
     const currentVerification = item.verifications['creative-reliability']
-    if (!legacy || !current || !legacyVerification || !currentVerification) {
+    if (!baseline || !current || !baselineVerification || !currentVerification) {
       throw new Error('CREL checkpoint 尚未完成全部成对生成与验证')
     }
     return {
       fixtureId: item.fixtureId,
       executionOrder: item.executionOrder,
       generations: {
-        'legacy-direct': legacy,
+        'baseline-direct': baseline,
         'creative-reliability': current,
       },
       verifications: {
-        'legacy-direct': legacyVerification,
+        'baseline-direct': baselineVerification,
         'creative-reliability': currentVerification,
       },
       humanReview: null,

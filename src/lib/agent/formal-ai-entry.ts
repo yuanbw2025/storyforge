@@ -21,7 +21,7 @@ export type FormalAIExecutionBoundaryV1 =
   | 'authoring-draft'
   | 'eval-only'
   | 'experimental'
-  | 'simulation-runtime'
+  | 'product-runtime'
 
 export interface FormalAIEntryBindingV1 {
   version: 1
@@ -55,7 +55,7 @@ const ENTRY_KEYS = new Set([
 const ENTRY_KINDS = new Set<FormalAIEntryKindV1>(['formal', 'auxiliary', 'evaluation', 'experimental'])
 const EXECUTION_BOUNDARIES = new Set<FormalAIExecutionBoundaryV1>([
   'durable-run', 'generation-node', 'read-only', 'authoring-draft',
-  'eval-only', 'experimental', 'simulation-runtime',
+  'eval-only', 'experimental', 'product-runtime',
 ])
 
 function fail(message: string): never {

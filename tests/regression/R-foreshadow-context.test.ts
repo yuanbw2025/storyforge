@@ -9,14 +9,16 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { CONTEXT_SOURCE_BY_KEY } from '../../src/lib/registry/context-sources'
 import { buildForeshadowTaskContext } from '../../src/lib/foreshadow/context'
+import { seedCurrentProject } from '../helpers/current-workspace'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
 
 const foreshadowsSource = CONTEXT_SOURCE_BY_KEY.get('foreshadows')!
 
 async function seedProject() {
   const now = Date.now()
-  const projectId = await db.projects.add({
+  const projectId = await seedCurrentProject({
     name: '伏笔上下文测试',
-    genre: '',
+    genres: [],
     description: '',
     targetWordCount: 0,
     enableMultiWorld: false,
@@ -61,6 +63,7 @@ async function seedProject() {
     outlineIds.push(outlineId)
     chapterIds.push(chapterId)
   }
+  await finalizeCurrentFixtureV1(projectId)
   return { projectId, outlineIds, chapterIds, now }
 }
 
@@ -99,6 +102,7 @@ describe('R-foreshadow-context · 伏笔任务上下文', () => {
         updatedAt: now,
       },
     ] as any[])
+    await finalizeCurrentFixtureV1(projectId)
 
     const plant = await foreshadowsSource.read({ projectId, chapterId: chapterIds[0] } as any)
     expect(plant).toContain('【当前章节伏笔任务】')

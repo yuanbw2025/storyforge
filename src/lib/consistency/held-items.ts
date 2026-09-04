@@ -1,6 +1,6 @@
 import type { Chapter, ItemLedgerEntry, OutlineNode } from '../types'
 import type { ConsistencyFinding } from '../ai/adapters/consistency-audit-adapter'
-import { readOwnedRows, resolveScope } from '../world-engine/scope'
+import { readOwnedRows, resolveScope } from '../workspace/scope'
 import type { WorkspaceScope } from '../types/world-ownership'
 import { resolveProjectionBoundary } from './projection-boundary'
 
@@ -72,9 +72,7 @@ export function projectHeldItems(input: ProjectHeldItemsInput): HeldItemProjecti
     if (input.characterId != null && (entry.characterId ?? null) !== (input.characterId ?? null)) continue
     const itemKey = normalizeItemName(entry.itemName)
     if (!itemKey) continue
-    // v1-v3 backups predate heldByName. Registry import now fills it, while
-    // this fallback also keeps already-imported legacy rows readable.
-    const heldByName = (entry.heldByName ?? '').trim()
+    const heldByName = entry.heldByName.trim()
     const ownerKey = entry.characterId != null ? `id:${entry.characterId}` : `name:${heldByName}`
     const key = JSON.stringify([ownerKey, itemKey])
     const entryChapterId = entry.chapterId ?? null

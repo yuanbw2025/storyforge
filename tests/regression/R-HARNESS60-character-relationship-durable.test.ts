@@ -13,41 +13,35 @@ import {
 } from '../../src/lib/agent/run/character-relationship-durable'
 import { getAgentSkillV1 } from '../../src/lib/agent/skill-registry'
 import { assembleContext } from '../../src/lib/registry/assemble-context'
+import { stampNewRecord } from '../../src/lib/workspace/scope'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
 
 async function seed() {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    name: '关系提取', genre: 'fantasy', genres: ['fantasy'], status: 'drafting', description: '',
-    targetWordCount: 80_000, worldCode: `rel-${now}`, worldVersion: 1, createdAt: now, updatedAt: now,
-  } as any) as number
-  const worldId = await db.worlds.add({
-    projectId, code: `rel-${now}`, name: '潮钟世界', description: '', currentVersion: 1, createdAt: now, updatedAt: now,
-  }) as number
-  const workId = await db.works.add({
-    projectId, worldId, title: '关系提取', description: '', genres: ['fantasy'], status: 'drafting',
-    targetWordCount: 80_000, createdAt: now, updatedAt: now,
-  } as any) as number
-  await db.projects.update(projectId, { activeWorldId: worldId, activeWorkId: workId, ownershipSchemaVersion: 1 })
-  const worldGroupId = await db.worldGroups.add({ projectId, worldId, name: '主世界', order: 0, createdAt: now, updatedAt: now }) as number
-  const outlineNodeId = await db.outlineNodes.add({
-    projectId, workId, worldGroupId, parentId: null, type: 'chapter', title: '第一章',
+  const { scope } = await seedCurrentWorkspace('关系提取')
+  const { projectId } = scope
+  const worldGroupId = await db.worldGroups.add(stampNewRecord(scope, 'worldGroups', {
+    projectId, name: '主世界', order: 0, createdAt: now, updatedAt: now,
+  }, { owner: 'world' }) as never) as number
+  const outlineNodeId = await db.outlineNodes.add(stampNewRecord(scope, 'outlineNodes', {
+    projectId, worldGroupId, parentId: null, type: 'chapter', title: '第一章',
     summary: '阿澜与钟叔在旧港结盟。', order: 0, createdAt: now, updatedAt: now,
-  } as any) as number
-  await db.chapters.add({
-    projectId, workId, outlineNodeId, title: '第一章',
+  }, { owner: 'work' }) as never) as number
+  await db.chapters.add(stampNewRecord(scope, 'chapters', {
+    projectId, outlineNodeId, title: '第一章',
     content: '<p>阿澜把钥匙交给钟叔。钟叔答应与她共同守住潮门。</p>', wordCount: 24,
     status: 'draft', order: 0, notes: '', createdAt: now, updatedAt: now,
-  } as any)
-  const firstId = await db.characters.add({
-    projectId, worldId, workId: null, homeWorldGroupId: worldGroupId, name: '阿澜', roleWeight: 'protagonist',
+  }, { owner: 'work' }) as never)
+  const firstId = await db.characters.add(stampNewRecord(scope, 'characters', {
+    projectId, homeWorldGroupId: worldGroupId, name: '阿澜', roleWeight: 'main',
     moralAxis: 'neutral', orderAxis: 'neutral', shortDescription: '守门人', relationships: '', createdAt: now, updatedAt: now,
-  } as any) as number
-  const secondId = await db.characters.add({
-    projectId, worldId, workId: null, homeWorldGroupId: worldGroupId, name: '钟叔', roleWeight: 'supporting',
+  }, { owner: 'world' }) as never) as number
+  const secondId = await db.characters.add(stampNewRecord(scope, 'characters', {
+    projectId, homeWorldGroupId: worldGroupId, name: '钟叔', roleWeight: 'secondary',
     moralAxis: 'good', orderAxis: 'lawful', shortDescription: '老钟匠', relationships: '', createdAt: now, updatedAt: now,
-  } as any) as number
+  }, { owner: 'world' }) as never) as number
   return {
-    scope: { projectId, worldId, workId } satisfies WorkspaceScope,
+    scope: scope satisfies WorkspaceScope,
     projectId, worldGroupId, firstId, secondId,
   }
 }
@@ -154,7 +148,7 @@ describe.sequential('R-HARNESS60 · 角色关系 durable 提取与采纳', () =>
     expect(await db.characterRelations.count()).toBe(0)
   })
 
-  it('旧面板直调与逐条写入旁路已下线，人工 CRUD 仍保留', () => {
+  it('面板直调与逐条写入旁路已下线，人工 CRUD 仍保留', () => {
     const source = readFileSync('src/components/relations/CharacterRelationPanel.tsx', 'utf8')
     expect(source).not.toContain('useAIStream')
     expect(source).not.toContain('createAISessionKey')
@@ -213,26 +207,26 @@ describe.sequential('R-HARNESS60 · 角色关系 durable 提取与采纳', () =>
 
   it('多世界候选只读取、匹配并写回当前世界组', async () => {
     const fixture = await seed()
-    const otherGroupId = await db.worldGroups.add({
-      projectId: fixture.projectId, worldId: fixture.scope.worldId, name: '支线世界', order: 1,
+    const otherGroupId = await db.worldGroups.add(stampNewRecord(fixture.scope, 'worldGroups', {
+      projectId: fixture.projectId, name: '支线世界', order: 1,
       createdAt: Date.now(), updatedAt: Date.now(),
-    }) as number
-    await db.characters.add({
-      projectId: fixture.projectId, worldId: fixture.scope.worldId, workId: null,
-      homeWorldGroupId: otherGroupId, name: '异界阿澜', roleWeight: 'supporting',
+    }, { owner: 'world' }) as never) as number
+    await db.characters.add(stampNewRecord(fixture.scope, 'characters', {
+      projectId: fixture.projectId,
+      homeWorldGroupId: otherGroupId, name: '异界阿澜', roleWeight: 'secondary',
       moralAxis: 'neutral', orderAxis: 'neutral', shortDescription: '', relationships: '',
       createdAt: Date.now(), updatedAt: Date.now(),
-    } as any)
-    const otherOutlineNodeId = await db.outlineNodes.add({
-      projectId: fixture.projectId, workId: fixture.scope.workId, worldGroupId: otherGroupId,
+    }, { owner: 'world' }) as never)
+    const otherOutlineNodeId = await db.outlineNodes.add(stampNewRecord(fixture.scope, 'outlineNodes', {
+      projectId: fixture.projectId, worldGroupId: otherGroupId,
       parentId: null, type: 'chapter', title: '异界章', summary: '异界阿澜单独行动。', order: 1,
       createdAt: Date.now(), updatedAt: Date.now(),
-    } as any) as number
-    await db.chapters.add({
-      projectId: fixture.projectId, workId: fixture.scope.workId, outlineNodeId: otherOutlineNodeId,
+    }, { owner: 'work' }) as never) as number
+    await db.chapters.add(stampNewRecord(fixture.scope, 'chapters', {
+      projectId: fixture.projectId, outlineNodeId: otherOutlineNodeId,
       title: '异界章', content: '<p>异界阿澜进入了不应泄漏的另一个世界。</p>', wordCount: 22,
       status: 'draft', order: 1, notes: '', createdAt: Date.now(), updatedAt: Date.now(),
-    } as any)
+    }, { owner: 'work' }) as never)
     const generated = await generateCharacterRelationshipCandidateV1({
       scope: fixture.scope, worldGroupId: fixture.worldGroupId,
       runAI: async messages => {

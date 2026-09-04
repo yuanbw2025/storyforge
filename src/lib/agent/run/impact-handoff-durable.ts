@@ -10,7 +10,7 @@ import {
   buildImpactRemediationPlanV1,
   type ImpactRemediationPlanV1,
 } from '../../consistency/impact-remediation-plan'
-import { assertRecordInScope, getTableSpec } from '../../world-engine/scope'
+import { assertRecordInScope, getTableSpec } from '../../workspace/scope'
 import {
   readImpactAuthorReviewsV1,
   type ImpactAuthorReviewRecordV1,

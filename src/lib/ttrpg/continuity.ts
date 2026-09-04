@@ -1,17 +1,16 @@
 import { db } from "../db/schema";
-import { verifyPlayableGamePackageSource } from "../game-production/preview-source";
+import { verifyProductRuntimeSource } from "../product-production/preview-source";
 import {
-  hashSimulationRuntimeStateV1,
-  readSimulationState,
-} from "../simulation/runtime";
-import { buildPlayableWorldBundleFromRelease } from "../simulation/canon-snapshot";
+  hashProductRuntimeStateV1,
+  readProductRuntimeState,
+} from "./runtime-api";
 import type {
-  SimulationSession,
+  ProductRuntimeSession,
   WorkspaceScope,
-  WorldReleaseManifestV2,
 } from "../types";
-import { createContinuedTtrpgGameInstanceV2 } from "../world-engine/instances";
-import { resolveScope } from "../world-engine/scope";
+import { EMPTY_PRODUCT_RUNTIME_STATE } from "../types";
+import { createContinuedTtrpgRuntimeInstanceV2 } from "../product/runtime-instances";
+import { resolveScope } from "../workspace/scope";
 import { parseTtrpgCampaignContentV1 } from "./campaign";
 import {
   buildTtrpgContinuationStateV2,
@@ -23,17 +22,17 @@ import { createInitialTtrpgProductStateV1 } from "./runtime";
 
 async function verifiedTtrpgSource(
   scope: WorkspaceScope,
-  gameReleaseId: number,
+  productReleaseId: number,
 ) {
-  const playable = await verifyPlayableGamePackageSource({
+  const playable = await verifyProductRuntimeSource({
     scope,
-    source: { kind: "release", gameReleaseId },
+    source: { kind: "release", productReleaseId },
   });
   if (
     playable.runtimePackage.productType !== "ttrpg" ||
     !playable.runtimePackage.ttrpg
   )
-    throw new Error("[ttrpg-continuity] GameRelease 不是正式 TTRPG 发布");
+    throw new Error("[ttrpg-continuity] ProductRelease 不是正式 TTRPG 发布");
   return playable;
 }
 
@@ -41,13 +40,13 @@ async function verifiedTtrpgSource(
 export async function previewTtrpgContinuationV2(input: {
   scope: WorkspaceScope;
   parentSessionId: number;
-  targetGameReleaseId: number;
+  targetProductReleaseId: number;
   compatibility: TtrpgContinuationCompatibilityV2;
   transitionKey: string;
   approvedBy: string;
 }): Promise<TtrpgContinuationPlanV2> {
   const scope = await resolveScope({ scope: input.scope });
-  const parent = await db.simulationSessions.get(input.parentSessionId);
+  const parent = await db.productRuntimeSessions.get(input.parentSessionId);
   if (
     !parent ||
     parent.kind !== "ttrpg" ||
@@ -55,42 +54,19 @@ export async function previewTtrpgContinuationV2(input: {
     parent.projectId !== scope.projectId ||
     parent.worldId !== scope.worldId ||
     parent.workId !== scope.workId ||
-    parent.gameReleaseId == null
+    parent.productReleaseId == null
   ) {
     throw new Error(
       "[ttrpg-continuity] 父 TTRPG Instance 不存在或不在当前 Work",
     );
   }
   const [parentPlayable, targetPlayable, parentState] = await Promise.all([
-    verifiedTtrpgSource(scope, parent.gameReleaseId),
-    verifiedTtrpgSource(scope, input.targetGameReleaseId),
-    readSimulationState(parent.id!),
+    verifiedTtrpgSource(scope, parent.productReleaseId),
+    verifiedTtrpgSource(scope, input.targetProductReleaseId),
+    readProductRuntimeState(parent.id!),
   ]);
-  if (targetPlayable.sourceWorldReleaseId == null) {
-    throw new Error(
-      "[ttrpg-continuity] 续团目标必须绑定正式 WorldRelease",
-    );
-  }
-  const targetRelease = await db.worldReleases.get(
-    targetPlayable.sourceWorldReleaseId,
-  );
-  if (
-    !targetRelease ||
-    targetRelease.projectId !== scope.projectId ||
-    targetRelease.worldId !== scope.worldId
-  ) {
-    throw new Error("[ttrpg-continuity] 目标世界发布不存在或跨 World");
-  }
-  const targetWorldManifest = JSON.parse(
-    targetRelease.manifestJson,
-  ) as WorldReleaseManifestV2;
-  const playableWorld = await buildPlayableWorldBundleFromRelease({
-    manifest: targetWorldManifest,
-    worldContentHash: targetRelease.contentHash,
-    createdAt: targetRelease.createdAt,
-  });
   const targetInitialState = createInitialTtrpgProductStateV1({
-    initialState: playableWorld.initialState,
+    initialState: structuredClone(EMPTY_PRODUCT_RUNTIME_STATE),
     content: targetPlayable.runtimePackage.ttrpg!,
   });
   const parentRulePack = parseRulePackV1(
@@ -107,12 +83,12 @@ export async function previewTtrpgContinuationV2(input: {
     targetPlayable.runtimePackage.ttrpg!.campaign,
     targetRulePack,
   );
-  const parentStateHash = await hashSimulationRuntimeStateV1(parentState);
+  const parentStateHash = await hashProductRuntimeStateV1(parentState);
   const result = await buildTtrpgContinuationStateV2({
     parentSessionId: parent.id!,
     parentSequence: parentState.lastSequence,
     parentStateHash,
-    targetGameReleaseId: input.targetGameReleaseId,
+    targetProductReleaseId: input.targetProductReleaseId,
     parentState,
     targetInitialState,
     parentRulePack,
@@ -132,16 +108,16 @@ export async function createTtrpgContinuationFromPlanV2(input: {
   title: string;
   worldGroupId?: number | null;
   seed?: string;
-}): Promise<SimulationSession> {
+}): Promise<ProductRuntimeSession> {
   if (
     input.plan.schema !== "storyforge.ttrpg-continuation-plan" ||
     input.plan.version !== 2
   ) {
     throw new Error("[ttrpg-continuity] 续团计划格式无效");
   }
-  return createContinuedTtrpgGameInstanceV2({
+  return createContinuedTtrpgRuntimeInstanceV2({
     scope: input.scope,
-    targetGameReleaseId: input.plan.targetGameReleaseId,
+    targetProductReleaseId: input.plan.targetProductReleaseId,
     title: input.title,
     worldGroupId: input.worldGroupId,
     seed: input.seed,

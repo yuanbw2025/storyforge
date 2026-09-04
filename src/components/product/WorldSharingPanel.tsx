@@ -5,15 +5,14 @@ import {
 import type { CommunityWorldLicense, Project } from '../../lib/types'
 import {
   createWorldPackage,
-  createWorldPackageV2,
   downloadWorldPackage,
   importWorldPackage,
   inspectWorldPackage,
   type WorldPackageTrustReport,
   type WorldPackageUse,
-} from '../../lib/product/world-package'
+} from '../../lib/world-engine/world-package'
 import type { WorldRelease } from '../../lib/types'
-import { resolveWorkspaceScope } from '../../lib/world-engine/ownership'
+import { resolveWorkspaceScope } from '../../lib/workspace/ownership'
 import { listWorldReleases } from '../../lib/world-engine/releases'
 
 const LICENSE_OPTIONS: Array<{ value: CommunityWorldLicense; label: string }> = [
@@ -24,25 +23,35 @@ const LICENSE_OPTIONS: Array<{ value: CommunityWorldLicense; label: string }> = 
 ]
 
 const USE_OPTIONS: Array<{ id: WorldPackageUse; label: string }> = [
-  { id: 'writing', label: '分步骤写作' },
+  { id: 'world-remix', label: '复制并改编世界' },
   { id: 'ttrpg', label: '跑团' },
-  { id: 'characterChat', label: '角色聊天' },
-  { id: 'textGame', label: '文字游戏' },
+  { id: 'character-interaction', label: '角色互动' },
+  { id: 'ai-town', label: 'AI 小镇' },
+  { id: 'text-adventure', label: '文字冒险' },
+  { id: 'avg', label: 'AVG' },
+  { id: 'text-open-world', label: '文字开放世界' },
 ]
 
 interface Props {
   project?: Project
-  onImported?: (projectId: number) => void
+  worldReleaseRevision?: number
+  onImported?: (projectId: number) => void | Promise<void>
 }
 
 type Preview = { input: unknown; report: WorldPackageTrustReport }
 
-export default function WorldSharingPanel({ project, onImported }: Props) {
+export default function WorldSharingPanel({ project, worldReleaseRevision = 0, onImported }: Props) {
   const fileRef = useRef<HTMLInputElement>(null)
   const [authorName, setAuthorName] = useState('')
   const [license, setLicense] = useState<CommunityWorldLicense>('CC-BY-4.0')
   const [allowedUses, setAllowedUses] = useState<Record<WorldPackageUse, boolean>>({
-    writing: true, ttrpg: true, characterChat: true, textGame: true,
+    'world-remix': true,
+    ttrpg: true,
+    'character-interaction': true,
+    'ai-town': true,
+    'text-adventure': true,
+    avg: true,
+    'text-open-world': true,
   })
   const [warnings, setWarnings] = useState('')
   const [busy, setBusy] = useState(false)
@@ -58,7 +67,7 @@ export default function WorldSharingPanel({ project, onImported }: Props) {
       .then(releases => { if (!cancelled) setLatestRelease(releases[0] ?? null) })
       .catch(() => { if (!cancelled) setLatestRelease(null) })
     return () => { cancelled = true }
-  }, [project?.id, project?.worldVersion])
+  }, [project?.id, worldReleaseRevision])
 
   const publish = async () => {
     if (!project?.id) return
@@ -70,13 +79,10 @@ export default function WorldSharingPanel({ project, onImported }: Props) {
         allowedUses,
         contentWarnings: warnings.split(/[，,\n]/),
       }
-      const pkg = latestRelease?.id
-        ? await createWorldPackageV2(latestRelease.id, options)
-        : await createWorldPackage(project.id, options)
+      if (!latestRelease?.id) throw new Error('请先在世界引擎封存一个纯语义 WorldRelease。')
+      const pkg = await createWorldPackage(latestRelease.id, options)
       downloadWorldPackage(pkg, `storyforge-world-${pkg.manifest.sourceWorldCode}-v${pkg.manifest.sourceWorldVersion}.json`)
-      setMessage(latestRelease
-        ? '世界分享包 v2 已生成；内容来自不可变发布版本，不包含正文和运行记录。'
-        : '兼容世界分享包 v1 已生成；建立不可变发布版本后可生成 v2。')
+      setMessage('纯语义世界分享包已生成；不包含任何产品制作、媒资或运行记录。')
     } catch (error) {
       setMessage(error instanceof Error ? error.message : '生成分享包失败。')
     } finally { setBusy(false) }
@@ -96,7 +102,7 @@ export default function WorldSharingPanel({ project, onImported }: Props) {
   }
 
   const importPackage = async () => {
-    if (!preview?.report.valid) return
+    if (!preview?.report.importable) return
     setBusy(true); setMessage(null)
     try {
       const id = await importWorldPackage(preview.input)
@@ -119,12 +125,12 @@ export default function WorldSharingPanel({ project, onImported }: Props) {
       <div className="sf-sharing-grid">
         <div className="sf-sharing-column">
           <div className="sf-sharing-title"><Share2 className="h-4 w-4" /><strong>生成世界分享包</strong></div>
-          <p>{latestRelease ? `导出不可变版本 v${latestRelease.version} 的世界设定与已选叙事模块。` : '导出兼容 v1 世界资料；先在上方发布修订即可升级为 v2。'}正文、笔记、Agent 会话、API 配置和运行存档不会进入文件。</p>
+          <p>{latestRelease ? `导出不可变版本 v${latestRelease.version} 的纯语义世界内容。` : '先在上方封存纯语义世界修订，才能生成分享包。'}产品制作、媒资、会话、API 配置和运行存档不会进入文件。</p>
           <label className="sf-sharing-label">作者署名<input value={authorName} onChange={event => setAuthorName(event.target.value)} placeholder="例如：林岚" /></label>
           <label className="sf-sharing-label">许可<select value={license} onChange={event => setLicense(event.target.value as CommunityWorldLicense)}>{LICENSE_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
           <fieldset className="sf-sharing-fieldset"><legend>允许的二创用途</legend><div className="sf-sharing-checks">{USE_OPTIONS.map(option => <label key={option.id}><input type="checkbox" checked={allowedUses[option.id]} onChange={event => setAllowedUses(previous => ({ ...previous, [option.id]: event.target.checked }))} />{option.label}</label>)}</div></fieldset>
           <label className="sf-sharing-label">内容警告（可选）<input value={warnings} onChange={event => setWarnings(event.target.value)} placeholder="逗号分隔，例如：战争、灾难" /></label>
-          <button className="sf-button sf-button-primary" onClick={() => void publish()} disabled={busy || !project?.id || !authorName.trim()}>
+          <button className="sf-button sf-button-primary" onClick={() => void publish()} disabled={busy || !project?.id || !latestRelease?.id || !authorName.trim()}>
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}下载世界分享包
           </button>
         </div>
@@ -152,7 +158,7 @@ function WorldPackagePreview({ preview, busy, onImport }: { preview: Preview; bu
       {manifest && <div className="sf-sharing-preview-meta"><strong>{manifest.name}</strong><span>{manifest.sourceWorldCode} · v{manifest.sourceWorldVersion}</span><span>作者：{manifest.authorName} · {manifest.license}</span><span>用途：{USE_OPTIONS.filter(option => manifest.allowedUses[option.id]).map(option => option.label).join('、')}</span>{manifest.contentWarnings.length > 0 && <span>警告：{manifest.contentWarnings.join('、')}</span>}</div>}
       {report.errors.map(error => <p key={error} className="sf-sharing-error">{error}</p>)}
       {report.warnings.map(warning => <p key={warning} className="sf-sharing-warning">{warning}</p>)}
-      {report.valid && <button className="sf-button sf-button-primary" onClick={onImport} disabled={busy}><ShieldCheck className="h-4 w-4" />确认导入为本地副本</button>}
+      {report.importable && <button className="sf-button sf-button-primary" onClick={onImport} disabled={busy}><ShieldCheck className="h-4 w-4" />确认导入纯语义世界</button>}
     </div>
   )
 }

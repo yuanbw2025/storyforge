@@ -1,6 +1,5 @@
 /**
- * HTML 与纯文本互转工具
- * 用于 TipTap 富文本 <-> 旧纯文本内容 的双向兼容
+ * 当前正文 HTML 与模型纯文本之间的显式转换工具。
  */
 
 /** 判断字符串是否为 HTML（启发式：包含任意 HTML 标签） */
@@ -17,7 +16,7 @@ export function plainTextToHtml(text: string): string {
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
-  // 兼容 CRLF
+  // 统一换行符。
   const lines = text.replace(/\r\n/g, '\n').split('\n')
   return lines
     .map(l => (l.trim().length === 0 ? '<p></p>' : `<p>${escape(l)}</p>`))
@@ -37,12 +36,6 @@ export function normalizeProseForEditorV1(text: string): string {
     .map(line => line.trimEnd())
     .filter(line => line.trim().length > 0)
     .join('\n')
-}
-
-/** 将任意内容（可能是 HTML 或纯文本）标准化为 HTML */
-export function toHtml(content: string): string {
-  if (!content) return ''
-  return isHtml(content) ? content : plainTextToHtml(content)
 }
 
 /** HTML → 纯文本（剥离标签，段落之间用 \n 分隔） */
@@ -79,6 +72,6 @@ export function htmlToPlainText(html: string): string {
 /** 统计字数（中文按字符数、英文按单词拆分再合计） */
 export function countWords(plainText: string): number {
   if (!plainText) return 0
-  // 简化处理：直接返回非空白字符数（与旧实现一致）
+  // 中文按字符、英文按连续非空白内容计入当前统一统计口径。
   return plainText.replace(/\s/g, '').length
 }

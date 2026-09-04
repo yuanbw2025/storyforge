@@ -3,6 +3,8 @@ import { createRoot } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import CharacterWorldAffiliations from '../../src/components/character/CharacterWorldAffiliations'
 import { db } from '../../src/lib/db/schema'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
+import { seedCurrentProject } from '../helpers/current-workspace'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
@@ -26,15 +28,14 @@ describe('WORLD-1 · 角色种族与修炼关联视图', () => {
 
   it('普通角色只看到所属世界选项，选择体系时原子清空旧境界', async () => {
     const now = Date.now()
-    const projectId = await db.projects.add({
-      name: 'ui', genre: '', description: '', targetWordCount: 0,
-      enableMultiWorld: true, createdAt: now, updatedAt: now,
-    } as any) as number
+    const projectId = await seedCurrentProject({
+      name: 'ui', enableMultiWorld: true, createdAt: now, updatedAt: now,
+    })
     const worldA = await db.worldGroups.add({
-      projectId, name: '镜界', type: 'primary', order: 0, createdAt: now, updatedAt: now,
+      projectId, name: '镜界', description: '', type: 'primary', order: 0, createdAt: now, updatedAt: now,
     } as any) as number
     const worldB = await db.worldGroups.add({
-      projectId, name: '雾界', type: 'parallel', order: 1, createdAt: now, updatedAt: now,
+      projectId, name: '雾界', description: '', type: 'parallel', order: 1, createdAt: now, updatedAt: now,
     } as any) as number
     const categoryId = await db.codexCategories.add({
       projectId, domain: 'humanity', builtInKey: 'race', name: '种族',
@@ -53,6 +54,7 @@ describe('WORLD-1 · 角色种族与修炼关联视图', () => {
       projectId, worldGroupId: worldB, name: '雾术', description: '', stages: '[]',
       createdAt: now, updatedAt: now,
     })
+    await finalizeCurrentFixtureV1(projectId)
     const onChange = vi.fn()
 
     await act(async () => {

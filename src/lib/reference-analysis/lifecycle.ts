@@ -12,7 +12,6 @@ import type {
 } from '../types'
 import { ANALYSIS_DIMENSIONS } from '../types/reference'
 import type { ChunkPlan } from '../import/chunker'
-import { ensureLegacyActiveReferenceRun } from './legacy-bridge'
 import type { WorkspaceScope } from '../types/world-ownership'
 import {
   assertRecordInScope,
@@ -20,9 +19,8 @@ import {
   resolveReadScopeLike,
   resolveScopeLike,
   stampNewRecord,
-} from '../world-engine/scope'
+} from '../workspace/scope'
 
-export { ensureLegacyActiveReferenceRun } from './legacy-bridge'
 
 export const REFERENCE_ANALYSIS_RUN_POLICY = Object.freeze({
   maxRunsPerReference: 6,
@@ -54,9 +52,9 @@ function constrainUsageScope(
 }
 
 async function requireReference(referenceId: number): Promise<{ ref: Reference; scope: WorkspaceScope }> {
-  const beforeMigration = await db.references.get(referenceId)
-  if (!beforeMigration?.id) throw new Error('参考资料不存在')
-  const scope = await resolveScopeLike(beforeMigration.projectId)
+  const existingRecord = await db.references.get(referenceId)
+  if (!existingRecord?.id) throw new Error('参考资料不存在')
+  const scope = await resolveScopeLike(existingRecord.projectId)
   const ref = await db.references.get(referenceId)
   if (!ref?.id || !await assertRecordInScope(scope, 'references', ref, { owner: 'work' })) {
     throw new Error('参考资料不存在或不属于当前作品')
@@ -69,9 +67,9 @@ async function requireRun(runId: number): Promise<{
   ref: Reference
   scope: WorkspaceScope
 }> {
-  const beforeMigration = await db.referenceAnalysisRuns.get(runId)
-  if (!beforeMigration?.id) throw new Error('分析版本不存在')
-  const scope = await resolveScopeLike(beforeMigration.projectId)
+  const existingRecord = await db.referenceAnalysisRuns.get(runId)
+  if (!existingRecord?.id) throw new Error('分析版本不存在')
+  const scope = await resolveScopeLike(existingRecord.projectId)
   const run = await db.referenceAnalysisRuns.get(runId)
   if (!run?.id || !await assertRecordInScope(scope, 'referenceAnalysisRuns', run, { owner: 'work' })) {
     throw new Error('分析版本不存在或不属于当前作品')
@@ -106,7 +104,6 @@ export async function createReferenceAnalysisRun(
     throw new Error(`每份参考最多保留 ${REFERENCE_ANALYSIS_RUN_POLICY.maxRunsPerReference} 个版本，请先删除未使用版本`)
   }
 
-  await ensureLegacyActiveReferenceRun(ref.id!, scope)
   const existing = (await readOwnedRows<ReferenceAnalysisRun>(scope, 'referenceAnalysisRuns', { owner: 'work' }))
     .filter(run => run.referenceId === ref.id)
   const version = Math.max(0, ...existing.map(run => run.version)) + 1
@@ -166,7 +163,6 @@ export async function createReferenceAnalysisRun(
 
 export async function listReferenceAnalysisRuns(referenceId: number): Promise<ReferenceAnalysisRun[]> {
   const { scope } = await requireReference(referenceId)
-  await ensureLegacyActiveReferenceRun(referenceId, scope)
   const runs = (await readOwnedRows<ReferenceAnalysisRun>(scope, 'referenceAnalysisRuns', { owner: 'work' }))
     .filter(run => run.referenceId === referenceId)
   return runs.sort((a, b) => b.version - a.version)
@@ -176,8 +172,6 @@ export async function getActiveReferenceAnalysisRun(
   referenceId: number,
 ): Promise<ReferenceAnalysisRun | undefined> {
   const { scope } = await requireReference(referenceId)
-  const legacy = await ensureLegacyActiveReferenceRun(referenceId, scope)
-  if (legacy) return legacy
   return (await readOwnedRows<ReferenceAnalysisRun>(scope, 'referenceAnalysisRuns', { owner: 'work' }))
     .filter(run => run.referenceId === referenceId)
     .find(run => run.status === 'active')
@@ -194,9 +188,7 @@ export async function getReferenceAnalysisRunChunks(
   if (run && run.referenceId !== referenceId) return []
   const chunks = await readOwnedRows<ReferenceChunkAnalysis>(scope, 'referenceChunkAnalysis', { owner: 'work' })
   return chunks
-    .filter(chunk => run?.id ? chunk.analysisRunId === run.id : (
-      chunk.referenceId === referenceId && chunk.analysisRunId == null
-    ))
+    .filter(chunk => run?.id != null && chunk.analysisRunId === run.id)
     .sort((left, right) => left.chunkIndex - right.chunkIndex)
 }
 
@@ -258,7 +250,7 @@ export async function completeReferenceAnalysisRun(
       completedAt: Date.now(),
     })
     const active = await getActiveReferenceAnalysisRun(run.referenceId)
-    if (!active) await patchReferenceCompatibility(run.referenceId, {
+    if (!active) await patchReferenceActiveProjection(run.referenceId, {
       analysisStatus: 'failed',
       analysisError: error || '没有可用分析结果',
       analysisProgress: 0,
@@ -327,12 +319,12 @@ export async function updateReferenceAnalysisDerived(
   await patchReferenceAnalysisRun(runId, changes)
   const run = await db.referenceAnalysisRuns.get(runId)
   if (!run || run.status !== 'active') return
-  await patchReferenceCompatibility(run.referenceId, changes as Partial<Reference>)
+  await patchReferenceActiveProjection(run.referenceId, changes as Partial<Reference>)
 }
 
 export async function discardReferenceAnalysisRun(runId: number): Promise<void> {
-  const beforeMigration = await db.referenceAnalysisRuns.get(runId)
-  if (!beforeMigration) return
+  const existingRecord = await db.referenceAnalysisRuns.get(runId)
+  if (!existingRecord) return
   const { run } = await requireRun(runId)
   if (run.status === 'active') throw new Error('不能删除当前激活版本，请先激活另一版本')
   await db.transaction(
@@ -349,8 +341,8 @@ export async function discardReferenceAnalysisRun(runId: number): Promise<void> 
 }
 
 export async function deleteReferenceWithAnalysis(referenceId: number): Promise<number | undefined> {
-  const beforeMigration = await db.references.get(referenceId)
-  if (!beforeMigration?.id) return undefined
+  const existingRecord = await db.references.get(referenceId)
+  if (!existingRecord?.id) return undefined
   const { ref, scope } = await requireReference(referenceId)
   const runs = (await readOwnedRows<ReferenceAnalysisRun>(scope, 'referenceAnalysisRuns', { owner: 'work' }))
     .filter(run => run.referenceId === referenceId)
@@ -384,9 +376,9 @@ export async function deleteReferenceWithAnalysis(referenceId: number): Promise<
   return ref.projectId
 }
 
-async function patchReferenceCompatibility(referenceId: number, changes: Partial<Reference>): Promise<void> {
-  const beforeMigration = await db.references.get(referenceId)
-  if (!beforeMigration) return
+async function patchReferenceActiveProjection(referenceId: number, changes: Partial<Reference>): Promise<void> {
+  const existing = await db.references.get(referenceId)
+  if (!existing) return
   const { ref, scope } = await requireReference(referenceId)
   const result = await adopt({
     projectId: ref.projectId,
@@ -396,7 +388,7 @@ async function patchReferenceCompatibility(referenceId: number, changes: Partial
     mode: 'replace',
     data: changes as Record<string, unknown>,
   })
-  if (!result.written.length) throw new Error('参考资料兼容投影写回失败')
+  if (!result.written.length) throw new Error('参考资料激活投影写回失败')
 }
 
 function parseIdArray(value: unknown): number[] {

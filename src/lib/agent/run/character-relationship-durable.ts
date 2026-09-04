@@ -3,7 +3,7 @@ import type { AIConfig, Character, CharacterRelation, ChatMessage, WorkspaceScop
 import { chat } from '../../ai/client'
 import { assembleContext } from '../../registry/assemble-context'
 import { adopt } from '../../registry/adopt'
-import { readOwnedRows } from '../../world-engine/scope'
+import { readOwnedRows } from '../../workspace/scope'
 import { usePromptStore } from '../../../stores/prompt'
 import { renderPrompt } from '../../ai/prompt-engine'
 import { matchRelations, type ExtractedRelation, type MatchedRelation } from '../../ai/relation-extractor'

@@ -11,6 +11,9 @@ import {
   beginImpactManualCorrectionV1,
   completeImpactManualCorrectionV1,
 } from '../../src/lib/agent/run/impact-manual-correction-durable'
+import { seedCurrentProject } from '../helpers/current-workspace'
+import { resolveWorkspaceScope } from '../../src/lib/workspace/ownership'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
 
 async function seed(name = '人工修正证明'): Promise<{
   scope: WorkspaceScope
@@ -19,22 +22,12 @@ async function seed(name = '人工修正证明'): Promise<{
   worldGroupId: number
 }> {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    name, genre: 'fantasy', genres: ['fantasy'], status: 'drafting', description: '',
-    targetWordCount: 100_000, worldCode: `correction-${now}`, worldVersion: 1,
+  const projectId = await seedCurrentProject({
+    name, genres: ['fantasy'], status: 'drafting', description: '',
+    targetWordCount: 100_000,
     createdAt: now, updatedAt: now,
   } as any) as number
-  const worldId = await db.worlds.add({
-    projectId, code: `correction-${now}`, name: '主世界', description: '', currentVersion: 1,
-    createdAt: now, updatedAt: now,
-  }) as number
-  const workId = await db.works.add({
-    projectId, worldId, title: name, description: '', genres: ['fantasy'], status: 'drafting',
-    targetWordCount: 100_000, createdAt: now, updatedAt: now,
-  } as any) as number
-  await db.projects.update(projectId, {
-    activeWorldId: worldId, activeWorkId: workId, ownershipSchemaVersion: 1,
-  })
+  const { worldId, workId } = await resolveWorkspaceScope(projectId)
   const worldGroupId = await db.worldGroups.add({
     projectId, worldId, name: '主世界', order: 0, createdAt: now, updatedAt: now,
   }) as number
@@ -46,6 +39,7 @@ async function seed(name = '人工修正证明'): Promise<{
     projectId, workId, outlineNodeId, title: '第一章', content: '<p>潮声穿过旧港。</p>',
     wordCount: 8, status: 'draft', order: 0, notes: '', createdAt: now, updatedAt: now,
   } as any) as number
+  await finalizeCurrentFixtureV1(projectId)
   return { scope: { projectId, worldId, workId }, chapterId, outlineNodeId, worldGroupId }
 }
 

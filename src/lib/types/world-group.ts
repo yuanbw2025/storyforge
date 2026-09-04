@@ -74,8 +74,8 @@ export interface WorldGroupLink extends RagDocumentMetadata {
   /** 是否双向 */
   bidirectional: boolean
   createdAt: number
-  /** 关系规则最近一次作者修改时间；旧备份缺失时以 createdAt 作为 revision。 */
-  updatedAt?: number
+  /** 关系规则最近一次作者修改时间。 */
+  updatedAt: number
 }
 
 /** 世界组类型标签 */

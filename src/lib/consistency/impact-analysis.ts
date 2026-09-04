@@ -18,7 +18,7 @@ import {
   resolveReadScopeLike,
   resolveScopeLike,
   type WorkspaceScopeLike,
-} from '../world-engine/scope'
+} from '../workspace/scope'
 import type { Chapter, OutlineNode } from '../types'
 
 /**
@@ -199,11 +199,17 @@ export async function buildEditImpactGraphV1(
     addNode({ id: factId, kind: 'fact', table: 'temporalFacts', recordId: fact.id ?? null, status: fact.status, label: `${fact.subjectName}/${fact.predicate}` })
     addEdge({ from: sourceNodeId, to: factId, relation: 'source-fact', evidence: fact.sourceQuote })
     if (['stale', 'source-missing', 'invalid-range'].includes(fact.status) && fact.id != null) staleFactIds.push(fact.id)
-    if (fact.sourceRecordTable && fact.sourceRecordId != null) {
-      const sourceRecordId = `${fact.sourceRecordTable}:${fact.sourceRecordId}`
+    const typedSourceRecordId = fact.sourceRecordTable === 'worldviews' ? fact.sourceWorldviewId
+      : fact.sourceRecordTable === 'powerSystems' ? fact.sourcePowerSystemId
+        : fact.sourceRecordTable === 'cultivationSystems' ? fact.sourceCultivationSystemId
+          : fact.sourceRecordTable === 'storyCores' ? fact.sourceStoryCoreId
+            : fact.sourceRecordTable === 'characters' ? fact.sourceCharacterId
+              : null
+    if (fact.sourceRecordTable && typedSourceRecordId != null) {
+      const sourceRecordId = `${fact.sourceRecordTable}:${typedSourceRecordId}`
       sourceRecordIds.push(sourceRecordId)
       const nodeId = `source-record:${sourceRecordId}`
-      addNode({ id: nodeId, kind: 'source-record', table: fact.sourceRecordTable, recordId: fact.sourceRecordId })
+      addNode({ id: nodeId, kind: 'source-record', table: fact.sourceRecordTable, recordId: typedSourceRecordId })
       addEdge({ from: nodeId, to: factId, relation: 'fact-source-record' })
     }
   }

@@ -23,7 +23,7 @@ import {
   resolveScope,
   scopeTransactionTables,
   type WorkspaceScopeLike,
-} from '../world-engine/scope'
+} from '../workspace/scope'
 import { REGISTRY_BY_NAME } from '../registry/project-tables'
 import { FIELD_BY_TARGET } from '../registry/field-registry'
 import { hashCanonicalValue } from '../agent/run/hash'
@@ -112,7 +112,7 @@ export function makeRagEntryKey(documentId: string, fieldKey: string): string {
 
 function fieldLabel(tableName: string, fieldKey: string): string {
   const field = FIELD_BY_TARGET.get(tableName)?.find(candidate => candidate.field === fieldKey)
-  return field?.label ?? field?.aliases?.find(alias => /[\u3400-\u9fff]/.test(alias)) ?? fieldKey
+  return field?.label ?? field?.labels?.find(label => /[\u3400-\u9fff]/.test(label)) ?? fieldKey
 }
 
 function titleWithoutField(descriptor: ContextResourceDescriptorV1, label: string): string {
@@ -142,7 +142,7 @@ async function listAllFieldDescriptors(scope: WorkspaceScope, worldGroupId: numb
   return descriptors
 }
 
-/** 旧资料库 UI 兼容桥：字段集合由 Canon Provider 派生，不再维护手写表/字段清单。 */
+/** 当前资料目录投影：字段集合由 Canon Provider 派生，不维护第二份表或字段清单。 */
 export async function buildRagLibrary(input: {
   projectId: number
   scope?: WorkspaceScope

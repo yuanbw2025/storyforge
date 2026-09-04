@@ -122,7 +122,7 @@ export interface AdventureActionDefinition {
   narrativeChoiceKey: string | null
   /**
    * Talk actions never mutate relationship state themselves. They reference a
-   * frozen CHATGAME scene/rule and the authoritative adventure command emits
+   * frozen character-interaction scene/rule and the authoritative adventure command emits
    * the shared interaction event protocol before applying adventure effects.
    */
   interaction?: {
@@ -169,17 +169,6 @@ export interface AdventureContentV1 {
   quests: AdventureQuestDefinition[]
   actions: AdventureActionDefinition[]
   initialInventory: Array<{ itemKey: string; quantity: number }>
-}
-
-export interface AdventureModule {
-  id?: number
-  projectId: number
-  worldId: number
-  workId: number
-  gameDefinitionId: number
-  contentJson: string
-  createdAt: number
-  updatedAt: number
 }
 
 export interface AdventureInventoryEntry {
@@ -233,7 +222,7 @@ export interface AdventureCheckEvidence {
   outcome: AdventureCheckOutcome
 }
 
-export interface SimulationAdventureState {
+export interface AdventureRuntimeState {
   schema: 'storyforge.text-adventure'
   version: 1
   contentHash: string

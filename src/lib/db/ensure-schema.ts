@@ -1,49 +1,35 @@
-import Dexie from 'dexie'
+import {
+  db,
+  STORYFORGE_SCHEMA_VERSION,
+  STORYFORGE_STORES,
+} from './schema'
 
 export const REQUIRED_TABLES = [
-  'aiUsageLog',
-  'agentConversations',
-  'agentEvents',
-  'agentRunCheckpoints',
-  'agentRunArtifacts',
-  'agentRunEvents',
-  'agentRuns',
-  'adventureModules',
   'adaptationProjects',
   'adaptationSourceUnits',
-  'screenplayScenes',
-  'comicPages', 'comicPanels', 'comicVisualSubjects', 'comicMediaAssets', 'mediaBlobObjects',
-  'avgMediaAssets',
-  'avgMediaBlobs',
-  'avgPresentationModules',
+  'agentConversations',
+  'agentEvents',
+  'agentRunArtifacts',
+  'agentRunCheckpoints',
+  'agentRunEvents',
+  'agentRuns',
+  'aiUsageLog',
   'chapters',
-  'characterInteractionBriefs',
-  'characterInteractionArtifacts',
-  'characterInteractionMediaAssets',
-  'characterInteractionProductionSteps',
-  'characterInteractionProductReleases',
-  'characterInteractionProductions',
-  'characterInteractionSourceSelections',
-  'characterRelations',
   'characterDrivenPlans',
+  'characterRelations',
   'characters',
   'codexCategories',
   'codexEntries',
+  'comicMediaAssets',
+  'comicPages',
+  'comicPanels',
+  'comicVisualSubjects',
   'creativeRules',
-  'cultivationSystems',
   'cultivationProgress',
+  'cultivationSystems',
   'detailedOutlines',
   'emotionBeatCards',
   'foreshadows',
-  'gameBuildArtifacts',
-  'gameBuilds',
-  'gameDefinitions',
-  'gameProductionBriefs',
-  'gameProductionCommands',
-  'gameProductions',
-  'gameQualityGateReceipts',
-  'gameReleases',
-  'gameRulePacks',
   'geographies',
   'historicalKeywords',
   'historicalTimelineEvents',
@@ -54,35 +40,42 @@ export const REQUIRED_TABLES = [
   'importSessions',
   'inspirationWorkspaces',
   'importantLocations',
-  'interactionCharacterProfiles',
-  'interactionSceneTemplates',
   'itemLedger',
   'knowledgeLedger',
-  'notes',
-  'narrativeModules',
+  'mediaBlobObjects',
   'narrativeBeats',
   'narrativeChoices',
+  'narrativeModules',
   'narrativeNodes',
   'narrativeSummaryNodes',
-  'narrativeSimulationModules',
-  'openWorldModules',
   'nodeFlows',
   'nodeRuns',
-  'ownershipMigrations',
+  'notes',
   'outlineNodes',
+  'ownershipScopeChanges',
   'powerSystems',
+  'productBuildArtifacts',
+  'productBuilds',
+  'productMediaAssets',
+  'productMediaBlobs',
+  'productProductionBriefs',
+  'productProductionCommands',
+  'productProductions',
+  'productQualityGateReceipts',
+  'productReleases',
+  'productRuntimeCheckpoints',
+  'productRuntimeEvents',
+  'productRuntimeSessions',
   'projects',
   'promptTemplates',
   'promptWorkflows',
-  'referenceChunkAnalysis',
   'referenceAnalysisRuns',
   'referenceAnalysisSources',
+  'referenceChunkAnalysis',
   'references',
   'retrievalChunks',
+  'screenplayScenes',
   'snapshots',
-  'simulationCheckpoints',
-  'simulationEvents',
-  'simulationSessions',
   'stateCards',
   'storyArcs',
   'storyCores',
@@ -90,145 +83,57 @@ export const REQUIRED_TABLES = [
   'storylineProgress',
   'storyTimelineEvents',
   'temporalFacts',
-  'ttrpgCampaignModules',
-  'ttrpgProductReleases',
-  'ttrpgProductionBriefs',
-  'ttrpgProductionBuilds',
-  'ttrpgProductionMediaAssets',
-  'ttrpgProductions',
-  'ttrpgProductionSteps',
+  'ttrpgRulePacks',
   'ttrpgRuntimeAssetRequests',
   'ttrpgSessionParticipants',
-  'ttrpgSourceSelections',
   'userStyleProfiles',
-  'worldGroupLinks',
-  'worldGroups',
-  'worldNodes',
-  'worldRulesProfiles',
-  'worldReleases',
-  'worldRevisions',
-  'worldviews',
-  'worlds',
   'workCharacterBindings',
   'works',
   'workspaceDocuments',
+  'worldDerivations',
+  'worldGroupLinks',
+  'worldGroups',
+  'worldNodes',
+  'worldReleases',
+  'worldRevisions',
+  'worldRulesProfiles',
+  'worlds',
+  'worldviews',
 ] as const
 
-export interface EnsureSchemaOptions {
-  /** Production must keep this false. Development may pass import.meta.env.DEV. */
-  allowReset?: boolean
-  /** Tests can disable browser alert while still asserting non-destructive behavior. */
-  notifyUser?: boolean
-  /** Latest Dexie version. Older databases may be upgraded and must not be treated as corrupt. */
-  expectedVersion?: number
+export interface CurrentSchemaState {
+  version: number
+  tables: string[]
+}
+
+export function assertCurrentSchemaDefinition(): void {
+  const declared = Object.keys(STORYFORGE_STORES).sort()
+  const required = [...REQUIRED_TABLES].sort()
+  if (declared.length !== required.length
+    || declared.some((name, index) => name !== required[index])) {
+    throw new Error('[schema] REQUIRED_TABLES 与唯一当前 schema 不一致')
+  }
 }
 
 /**
- * Schema 健康自检 + 自动恢复。
- *
- * 背景：开发期常出现"旧 session 的代码把 DB 升到一个奇怪的高版本，
- *      新代码的版本号比它低，Dexie 增量升级不会触发，新表就建不出来"
- *      的尴尬。HANDOFF §决议 7 明确：开发期无真实用户，schema 不一致时直接清库。
- *
- * 本函数在 App 启动最早期跑：
- *   1. 用原生 IndexedDB API 探测 storyforge DB 当前版本和表列表
- *   2. 若期望表全在 → 直接放行
- *   3. 若缺表 → 开发环境可删库重建;生产环境只提示,绝不自动删库
- *
- * 删库失败（被其他 tab 占住）会抛错，由调用方决定怎么提示用户。
+ * Opens and verifies the only supported database schema. There is no upgrade,
+ * import or compatibility path from any prior database generation.
  */
-export async function ensureSchema(
-  expectedTables: readonly string[],
-  options: EnsureSchemaOptions = {},
-): Promise<{ reset: boolean; missing: string[]; blocked: boolean }> {
-  const dbName = 'storyforge'
-  const { allowReset = false, notifyUser = true, expectedVersion } = options
-
-  // 1. 检查 DB 是否存在 + 当前 schema
-  const info = await probeDatabase(dbName)
-  if (info === null) {
-    // DB 还不存在，让 Dexie 后续按最新定义创建
-    return { reset: false, missing: [], blocked: false }
+export async function openCurrentSchema(): Promise<CurrentSchemaState> {
+  assertCurrentSchemaDefinition()
+  await db.open()
+  if (db.verno !== STORYFORGE_SCHEMA_VERSION) {
+    db.close()
+    throw new Error('[schema] 只支持当前 schema v' + STORYFORGE_SCHEMA_VERSION)
   }
-
-  const missing = expectedTables.filter(t => !info.stores.includes(t))
-  if (missing.length === 0) {
-    // 全部期望表都在
-    return { reset: false, missing: [], blocked: false }
+  const tables = db.tables.map(table => table.name).sort()
+  const expected = [...REQUIRED_TABLES].sort()
+  if (tables.length !== expected.length
+    || tables.some((name, index) => name !== expected[index])) {
+    db.close()
+    throw new Error('[schema] 当前数据库表集合与代码定义不一致')
   }
-
-  // A lower schema version is a normal release upgrade. Dexie will create the
-  // missing stores transactionally in db.open(); resetting or warning here would
-  // misclassify every legitimate production upgrade as database corruption.
-  if (expectedVersion != null && info.version < expectedVersion) {
-    console.info(
-      `[schema] DB v${info.version} will upgrade to v${expectedVersion}; pending stores: [${missing.join(', ')}]`,
-    )
-    return { reset: false, missing, blocked: false }
-  }
-
-  if (!allowReset) {
-    console.error(
-      `[schema] DB v${info.version} 缺少表 [${missing.join(', ')}]。生产环境已阻止自动删库,请先导出备份后再处理。`,
-    )
-    if (notifyUser) notifySchemaMismatch(missing)
-    return { reset: false, missing, blocked: true }
-  }
-
-  console.warn(
-    `[schema] DB v${info.version} 缺少表 [${missing.join(', ')}]，开发环境自动删库重建`,
-  )
-
-  // 2. 删库
-  await Dexie.delete(dbName)
-  console.info('[schema] DB 已重置，下次打开时会按最新 schema 全新创建')
-
-  return { reset: true, missing, blocked: false }
+  return { version: db.verno, tables }
 }
 
-function notifySchemaMismatch(missing: string[]) {
-  try {
-    if (typeof window === 'undefined' || typeof window.alert !== 'function') return
-    window.alert(
-      'StoryForge 检测到本地数据库结构不完整,为保护你的小说数据,系统不会自动清空数据库。\n\n' +
-      `缺失表:${missing.join(', ')}\n\n` +
-      '请先导出备份,然后刷新页面或联系维护者处理。',
-    )
-  } catch {
-    // 提示失败不能影响数据保护路径。
-  }
-}
-
-/** 探测 DB：不存在返回 null，存在返回 { version, stores }。 */
-function probeDatabase(name: string): Promise<{ version: number; stores: string[] } | null> {
-  return new Promise((resolve, reject) => {
-    let upgradeNeededFired = false
-    const req = indexedDB.open(name)
-    req.onsuccess = () => {
-      const db = req.result
-      // 如果触发了 onupgradeneeded 但版本仍是 1，说明 DB 此前不存在
-      if (upgradeNeededFired) {
-        const version = db.version
-        const stores = [...db.objectStoreNames]
-        db.close()
-        // DB 是被这次 open 创建出来的，stores 必然为空 — 视为"不存在"
-        if (version === 1 && stores.length === 0) {
-          // 立刻清掉这个空库，让 Dexie 后面按真实 schema 创建
-          indexedDB.deleteDatabase(name)
-          resolve(null)
-          return
-        }
-        resolve({ version, stores })
-      } else {
-        const result = { version: db.version, stores: [...db.objectStoreNames] }
-        db.close()
-        resolve(result)
-      }
-    }
-    req.onerror = () => reject(req.error)
-    req.onupgradeneeded = () => {
-      upgradeNeededFired = true
-    }
-    req.onblocked = () => reject(new Error('IndexedDB 打开被阻塞，请关闭其他 storyforge tab'))
-  })
-}
+assertCurrentSchemaDefinition()

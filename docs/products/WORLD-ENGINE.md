@@ -1,6 +1,6 @@
 # 世界引擎产品契约
 
-> 版本：1.0.0 · 生效：2026-08-26 · 对应总纲：§5、阶段 D
+> 版本：1.3.0 · 生效：2026-08-31 · 对应总纲：§5、阶段 D
 
 ## 1. 定义
 
@@ -43,42 +43,73 @@
 - 是否有原文证据与可查询索引；
 - 上层产品的最低输入是否满足。
 
+当前契约还明确区分 `selected`、`partial-selection` 与 `omitted`：资源未被本次封存选择，不等于世界中不存在；候选、冲突和被规则排除的行也不得伪装成已确认 Canon。画像与资源目录均保存确认/候选/冲突/遗漏数量、最近 revision、原文证据和可查询索引能力。
+
 “完整度 80%”只能作展示摘要；上层产品必须读取具体能力项，不能用单一百分比代替数据契约。
 
-## 5. 统一数据出口
+## 5. 中立世界资源协议
 
-上层产品不直接手写查询 `worldviews`、`characters` 等表清单。统一出口分三层：
+### 5.1 统一什么
 
-1. `describeWorldRelease`：元数据、能力画像、目录、版本和 hash；
-2. `searchWorldRelease`：按实体、关系、时间、故事线、文本和产品需求检索资源描述符；
-3. `readWorldResource`：按稳定 resource ID 读取详情、结构化事实与原文证据。
+上层产品不得直接手写查询 `worldviews`、`characters` 等底层表清单。世界引擎提供三类稳定能力：
 
-所有返回包含 source release、resource version/hash、owner、引用和可见性。预算不足时返回 `insufficient`/`omitted`，不返回“内容不存在”的错误结论。
+1. `describeWorldRelease`：返回版本身份、hash、能力画像和可导航资源目录；
+2. `searchWorldRelease`：接收产品需求或查询条件，返回资源描述符和匹配状态；
+3. `readWorldResource`：按 release + 稳定 resource ID + detail level 读取详情、结构化事实与原文证据。
 
-产品可先提交 `SourceRequirement`，世界出口返回匹配、缺口与补充建议。补充内容若由上层 Agent 创建，默认属于该产品；只有作者明确选择并采纳后才能成为世界新版本候选。
+现行 V1 实现由 `describeWorldReleaseV1`、`searchWorldReleaseV1`、`readWorldResourceV1` 和 `readWorldOriginalEvidenceV1` 提供。它们只读取并校验不可变 `WorldRelease`，返回的 source ref 指向 release/hash 而不是作者草稿；目录投影使用有界缓存，草稿变化不会污染已缓存的旧 release。
 
-## 6. 与独立长篇的关系
+统一协议必须携带 source release、resource version/hash、owner、引用、可见性、provenance，并区分 `matched`、`missing`、`conflict`、`omitted` 和 `insufficient`。预算未允许读取某项资源时，不得把它报告为“不存在”。
 
-分步骤长篇可以作为世界引擎内容来源，但不自动等同于共享世界：
+### 5.2 不统一什么
 
-- 长篇项目可独立存在和完成；
-- 作者选择“发布为世界引擎”时才建立/更新世界草稿或封存版本；
-- 转换保存来源作品和 revision，不改变长篇 owner；
+世界出口不定义一份让所有上层产品照单全收的通用 payload，也不预设某类产品的角色卡、规则、游戏时长、结局或运行字段。不同产品需要的数据广度、细节层级和证据类型可以完全不同。
+
+每个上层产品在自己的阶段二契约中提供 `WorldRequirementAdapter`（名称可按实现调整），把当前用户目标和产品配置转换成稳定必读、建议/选读、条件读取和禁止读取。网关只负责在指定不可变 release 内可靠地解释和满足这些需求。产品侧可对结果继续排序、组合或请求补充读取，但不得绕过协议查询世界底表。
+
+适配器可以由类型化代码/配置与产品 Skill 协作：代码/schema 固定版本、权限、必读和禁止边界，Skill/Prompt 处理开放式目标和语义查询。不能只靠提示词声明“必须读取”，也不能把世界物理表名复制进每个产品。
+
+旧产品 reader 和兼容白名单已全部退役。现行代码中，只有世界引擎基础设施可以解码物理 `WorldRelease` manifest；上层产品、组件、Agent 和产品专用 service 只能通过中立 provider 与冻结 `ProductSourcePlan` 读取。架构检查器同时拒绝恢复旧 reader、旧上下文来源和跑团专用世界目录。
+
+### 5.3 先锁定读取计划，再记录实际来源
+
+用户确认开始后，产品先把 WorldReference、需求适配器版本、需求、允许范围、缺失/补充策略以及咨询阶段 Context Manifest refs 冻结为 `ProductSourcePlan`。生产尚未执行时不能假装已经知道全部会用到的资源。
+
+阶段三中的 Agent 可在该 plan 允许的同一不可变 WorldRelease 内继续 `describe/search/read`；每个 durable run 保存自己的不可变 Context Manifest，ProductRelease 聚合生产证据为 `ProductSourceManifest` 快照并冻结 hash。确定性编译不是例外：用户入选资源及从中立 relation 推导的必要依赖，必须由 Gateway 和编译器的同一闭包解析器确定，并先在该 run 中留下原文级证据，才能组装 RuntimePackage。开放式运行若需要继续查询世界，也必须经 ProductRelease 继承的 source plan 执行，读取证据归 session/run manifest，不能改读最新草稿或追写旧 ProductRelease。
+
+同一 WorldRelease 因产品和任务不同，可以产生不同 plan 和 manifest；这正是协议统一而 payload 不统一的设计目的。
+
+上层 Agent 因来源缺失而创作的补充内容默认属于该产品实例。只有世界作者另行发起显式候选/采纳流程，才可能成为新的世界版本；正常生产和运行不回写世界。
+
+## 6. 与独立长篇、短篇的关系
+
+分步骤长篇和短篇可以作为世界引擎内容来源，但不自动等同于共享世界：
+
+- 长篇、短篇可独立存在和完成；
+- 作者选择“基于作品创建世界草稿”或“发布为世界引擎”时才建立/更新世界草稿或封存版本；
+- 系统自动选取、投影和快照已确认内容，用户不需要复制粘贴；
+- 转换保存来源作品、revision、范围和 hash，不改变作品 owner；
 - 世界可引用作品中的确认内容，也可只发布选定部分。
 
 同样，世界引擎可为新作品提供来源，但作品后续写作不自动回写世界。
+
+小说转剧本、小说转漫画当前保持独立，不提供“封装为世界”入口；其改编产物也不因包含完整故事而自动获得世界身份。
 
 ## 7. 多世界
 
 多世界不是把多个表简单堆叠。封存版本要表达世界集合、各子世界版本、关系、通道/迁移条件、时间或规则差异，以及角色/事件跨世界引用。上层产品可以选择整个集合或允许的子集，仍锁定版本。
 
+资源目录中的世界组与通道必须互相暴露稳定 relation，产品能够从通道导航到两端世界，而无需读取 `worldGroups` / `worldGroupLinks` 底表。世界草稿的能力投影按显式 `projectId + worldId + workId` scope 统计；同项目的另一 World/Work、另一项目及独立作品内部 scope 均不得串入。
+
 ## 8. 验收
 
 - 空白、部分和完整世界均可创建、编辑、封存；
 - world code 稳定，release 不可变、hash 可验证；
-- 上层产品只通过统一出口读取，不维护字段清单；
+- 上层产品只通过中立协议和自己的需求适配器读取，不维护世界底层字段清单；
+- 两种需求明显不同的产品可以从同一 release 得到不同 source manifest，且来源/遗漏均可追溯；
 - 草稿更新不改变已有产品 build/session；
 - 导入导出、复制、删除、重映射和多世界引用完整；
 - 世界表无上层媒资/运行记录；
-- 长篇与世界之间转换显式、可追溯、可拒绝；
+- 长篇/短篇与世界之间转换显式、一键、可追溯、可拒绝且无需手工复制；
 - 目录→检索→详情/原文在大规模夹具下可用。
+- 千级资源冻结、发布、目录、检索和原文核查不得退化为逐行 IndexedDB 游标链；规模回归必须保留。

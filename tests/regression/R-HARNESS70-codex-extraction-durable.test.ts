@@ -6,9 +6,10 @@ import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-
 import { getAgentSkillV1 } from '../../src/lib/agent/skill-registry'
 import { CONTEXT_SOURCE_BY_KEY } from '../../src/lib/registry/context-sources'
 import { PROJECT_TABLES } from '../../src/lib/registry/project-tables'
-import { backfillResourceUidsV1 } from '../../src/lib/context-gateway/resource-identity'
+import { stampCurrentFixtureResourceUidsV1 } from '../helpers/current-resource-identity'
 import { parseCodexEntriesStrictV1 } from '../../src/lib/ai/adapters/structured-extract-adapter'
 import * as codexAdapter from '../../src/lib/ai/adapters/structured-extract-adapter'
+import { currentWorkFixtureRecordV1, seedCurrentWorkspace } from '../helpers/current-workspace'
 import {
   abandonCodexExtractionV1,
   adoptCodexExtractionCandidateV1,
@@ -21,20 +22,8 @@ import {
 
 async function seed(suffix = '') {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    name: `词条拆分${suffix}`, genre: 'fantasy', genres: ['fantasy'], status: 'drafting',
-    description: '', targetWordCount: 80_000, worldCode: `codex-${now}-${suffix}`,
-    worldVersion: 1, enableMultiWorld: true, createdAt: now, updatedAt: now,
-  } as any) as number
-  const worldId = await db.worlds.add({
-    projectId, code: `codex-${now}-${suffix}`, name: '曜月世界', description: '', currentVersion: 1,
-    createdAt: now, updatedAt: now,
-  }) as number
-  const workId = await db.works.add({
-    projectId, worldId, title: `潮汐纪${suffix}`, description: '', genres: ['fantasy'], status: 'drafting',
-    targetWordCount: 80_000, createdAt: now, updatedAt: now,
-  } as any) as number
-  await db.projects.update(projectId, { activeWorldId: worldId, activeWorkId: workId, ownershipSchemaVersion: 1 })
+  const created = await seedCurrentWorkspace(`词条拆分${suffix}`, { enableMultiWorld: true })
+  const { projectId, worldId, workId } = created.scope
   const worldGroupId = await db.worldGroups.add({
     projectId, worldId, name: '曜月界', description: '', type: 'primary', icon: '🌙', order: 0,
     createdAt: now, updatedAt: now,
@@ -49,7 +38,7 @@ async function seed(suffix = '') {
     description: '生于旧港。', fields: JSON.stringify({ habitat: '旧港' }), refs: '{}', tags: '[]',
     importance: 1, order: 0, createdAt: now, updatedAt: now,
   } as any) as number
-  await backfillResourceUidsV1(projectId)
+  await stampCurrentFixtureResourceUidsV1(projectId)
   return {
     scope: { projectId, worldId, workId } satisfies WorkspaceScope,
     projectId, worldId, workId, worldGroupId, categoryId, existingId,
@@ -320,10 +309,10 @@ describe.sequential('R-HARNESS70 · Codex 词条 durable 分块抽取与原子�
     expect((await db.agentRuns.where('projectId').equals(importedId).toArray())
       .find(run => run.contractJson.includes('world-origin.codex-extract'))?.status).toBe('cancelled')
     const now = Date.now()
-    const otherWorkId = await db.works.add({
+    const otherWorkId = await db.works.add(currentWorkFixtureRecordV1({
       projectId: fixture.projectId, worldId: fixture.worldId, title: '另一作品', description: '', genres: ['fantasy'],
       status: 'drafting', targetWordCount: 1_000, createdAt: now, updatedAt: now,
-    } as any) as number
+    })) as number
     await expect(readPendingCodexExtractionCandidateV1({
       scope: { ...fixture.scope, workId: otherWorkId },
     })).resolves.toBeNull()

@@ -19,17 +19,17 @@ import {
 } from '../outline/gateway-context'
 import type { AssembleContextResult } from '../registry/types'
 import {
-  isLegacyReadScope,
   readOwnedRows,
   resolveReadScopeLike,
   resolveScope,
   scopeTransactionTables,
-} from '../world-engine/scope'
+} from '../workspace/scope'
 import type {
   AIConfig,
   ChatMessage,
   OutlineNode,
   Project,
+  Work,
   WorkspaceScope,
 } from '../types'
 import {
@@ -61,7 +61,6 @@ import {
 } from './creative-execution'
 import type { CreativeAssumptionV1, CreativeQualityModeV1 } from './creative-reliability'
 import {
-  isCreativeReliabilityRuntimeEnabledV1,
   parseCreativeArtifactV1,
   type CreativeArtifactV1,
 } from './creative-reliability'
@@ -84,6 +83,7 @@ export interface OutlineCopilotSnapshot {
 
 export interface OutlineCopilotInput {
   project: Project
+  work: Work
   scope?: WorkspaceScope
   worldGroupId: number | null
   authorRequest: string
@@ -95,7 +95,6 @@ export interface OutlineCopilotInput {
   volumes: OutlineNode[]
   assembled: AssembleContextResult
   narrativeBrief: NarrativeBriefV1
-  creativeReliabilityEnabled?: boolean
   snapshot: OutlineCopilotSnapshot
   config: AIConfig
   parameterValues?: Record<string, unknown>
@@ -313,16 +312,14 @@ function buildOutlineMessages(input: OutlineCopilotInput) {
     : ''
   const plan = buildOutlineGenerationPlan({
     request: generationRequest(input),
-    project: input.project,
+    work: input.work,
     nodes: input.nodes,
     volumes: input.volumes,
     assembled: input.assembled,
     hint: [
       input.inputGuidance,
       input.authorRequest + supplemental,
-      ...(input.creativeReliabilityEnabled !== false
-        ? [formatNarrativeBriefForPromptV1(input.narrativeBrief)]
-        : []),
+      formatNarrativeBriefForPromptV1(input.narrativeBrief),
     ].join('\n\n'),
     options: { parameterValues: input.parameterValues },
   })
@@ -397,7 +394,6 @@ export async function prepareOutlineCopilot(input: {
   generationOverrides?: { temperature?: number; maxTokens?: number }
   contextCompressionRuntime?: AgentContextCompressionRuntimeV1
   inheritedAssumptions?: readonly CreativeAssumptionV1[]
-  creativeReliabilityEnabled?: boolean
   signal?: AbortSignal
 }, dependencies: OutlineCopilotDependencies = {}): Promise<PreparedOutlineCopilot> {
   const project = await db.projects.get(input.projectId)
@@ -409,7 +405,11 @@ export async function prepareOutlineCopilot(input: {
   const request = assertAuthorRequest(input.authorRequest)
   const skill = resolveAgentSkillV1('outline', input.skillId)
   const readScope = input.scope ?? await resolveReadScopeLike(input.projectId)
-  const scope = isLegacyReadScope(readScope) ? undefined : readScope
+  const scope = readScope
+  const work = await db.works.get(scope.workId)
+  if (!work || work.projectId !== input.projectId || work.worldId !== scope.worldId) {
+    throw new Error('当前作品不存在。')
+  }
   const allNodes = await readOwnedRows<OutlineNode>(readScope, 'outlineNodes', { owner: 'work' })
   const nodes = rowsInWorld(allNodes, worldGroupId)
   const volumes = nodes
@@ -463,10 +463,9 @@ export async function prepareOutlineCopilot(input: {
     assembled,
     inheritedAssumptions: input.inheritedAssumptions,
   })
-  const creativeReliabilityEnabled = input.creativeReliabilityEnabled
-    ?? isCreativeReliabilityRuntimeEnabledV1()
   const nodeInput: OutlineCopilotInput = {
     project,
+    work,
     scope,
     worldGroupId,
     authorRequest: request,
@@ -478,7 +477,6 @@ export async function prepareOutlineCopilot(input: {
     volumes,
     assembled,
     narrativeBrief,
-    creativeReliabilityEnabled,
     snapshot,
     config,
     parameterValues: input.parameterValues,

@@ -2,13 +2,14 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import type { WorkspaceScope } from '../../src/lib/types'
 import { getAgentSkillV1 } from '../../src/lib/agent/skill-registry'
-import { backfillResourceUidsV1 } from '../../src/lib/context-gateway/resource-identity'
+import { stampCurrentFixtureResourceUidsV1 } from '../helpers/current-resource-identity'
 import {
   adoptCodexExtractionCandidateV1,
   generateCodexEnrichmentCandidateV1,
   generateCodexExtractionCandidateV1,
   readPendingCodexExtractionCandidateV1,
 } from '../../src/lib/agent/run/codex-extraction-durable'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
 
 const NOW = 1_788_400_000_000
 
@@ -17,20 +18,8 @@ async function seed(): Promise<{
   categoryId: number
   worldGroupId: number
 }> {
-  const projectId = await db.projects.add({
-    name: '潮族志', genre: 'fantasy', genres: ['fantasy'], description: '', status: 'drafting',
-    targetWordCount: 300_000, worldCode: 'race5-world', worldVersion: 1,
-    enableMultiWorld: true, createdAt: NOW, updatedAt: NOW,
-  } as never) as number
-  const worldId = await db.worlds.add({
-    projectId, code: 'race5-world', name: '潮界', description: '', currentVersion: 1,
-    createdAt: NOW, updatedAt: NOW,
-  }) as number
-  const workId = await db.works.add({
-    projectId, worldId, title: '潮族志', description: '', genres: ['fantasy'], status: 'drafting',
-    targetWordCount: 300_000, createdAt: NOW, updatedAt: NOW,
-  } as never) as number
-  await db.projects.update(projectId, { activeWorldId: worldId, activeWorkId: workId, ownershipSchemaVersion: 1 })
+  const createdWorkspaceV1 = await seedCurrentWorkspace('潮族志', { enableMultiWorld: true })
+  const { projectId, worldId, workId } = createdWorkspaceV1.scope
   const worldGroupId = await db.worldGroups.add({
     projectId, worldId, name: '主潮界', order: 0, createdAt: NOW, updatedAt: NOW,
   } as never) as number
@@ -44,7 +33,7 @@ async function seed(): Promise<{
     builtInKey: 'race', fieldSchema: JSON.stringify([{ key: 'custom', label: '风俗', type: 'text' }]),
     hidden: false, order: 0, worldGroupId: null, createdAt: NOW, updatedAt: NOW,
   } as never) as number
-  await backfillResourceUidsV1(projectId)
+  await stampCurrentFixtureResourceUidsV1(projectId)
   return { scope: { projectId, worldId, workId }, categoryId, worldGroupId }
 }
 

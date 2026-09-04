@@ -22,8 +22,8 @@ import {
   X,
 } from "lucide-react";
 import { db } from "../../lib/db/schema";
-import { verifyPlayableGamePackageSource } from "../../lib/game-production/preview-source";
-import { verifyGameReleaseManifestV2 } from "../../lib/game-production/runtime-package";
+import { verifyProductRuntimeSource } from "../../lib/product-production/preview-source";
+import { verifyProductReleaseManifestV1 } from "../../lib/product-production/runtime-package";
 import {
   activateTtrpgCampaignSupplementV2,
   completeTtrpgSessionZero,
@@ -41,7 +41,7 @@ import {
   customizeTtrpgPlayerCharacterV1,
   discoverTtrpgClue,
   openTtrpgCampaignScene,
-  readSimulationStateVersion,
+  readProductRuntimeStateVersion,
   recordTtrpgHumanResponseV2,
   recordTtrpgVersionTransitionV2,
   recordTtrpgWorldEvolutionV2,
@@ -49,7 +49,7 @@ import {
   submitTtrpgActionIntentV2,
   updateTtrpgTabletopV1,
   type TtrpgTabletopOperationV1,
-} from "../../lib/simulation/runtime";
+} from "../../lib/ttrpg/runtime-api";
 import { parseTtrpgCampaignContentV1 } from "../../lib/ttrpg/campaign";
 import {
   createTtrpgContinuationFromPlanV2,
@@ -77,8 +77,6 @@ import {
 } from "../../lib/ttrpg/rule-pack";
 import {
   configureTtrpgSessionParticipantV2,
-  finalizeMigratedTtrpgParticipantsV2,
-  migrateLegacyTtrpgSessionParticipantsV2,
   readTtrpgSessionParticipantsV2,
 } from "../../lib/ttrpg/participants";
 import {
@@ -94,17 +92,17 @@ import TtrpgOnlineRoomPanel from "./TtrpgOnlineRoomPanel";
 import type { OnlineRoomJoinHandoffV1 } from "../../lib/online/http-transport";
 import {
   currentAiGmBetaGatePassedV1,
-  currentGamePlatformEnvironmentV1,
-  evaluateGamePlatformCapabilityV1,
-} from "../../lib/game-platform/capability-status";
+  currentProductPlatformEnvironmentV1,
+  evaluateProductPlatformCapabilityV1,
+} from "../../lib/product-platform/capability-status";
 import type {
-  GameRelease,
-  GameRuntimePackageV2,
-  PlayableGameSourceV1,
+  ProductRelease,
+  ProductRuntimePackageV1,
+  ProductRuntimeSourceV1,
   RulePackV1,
-  SimulationCheckpoint,
-  SimulationRuntimeState,
-  SimulationSession,
+  ProductRuntimeCheckpoint,
+  ProductRuntimeState,
+  ProductRuntimeSession,
   TtrpgCampaignContentV1,
   TtrpgCharacterSheetV2,
   TtrpgEffectAudienceV2,
@@ -178,9 +176,9 @@ const CHARACTER_IDENTITY_LIST_FIELDS = [
 >;
 
 interface FrozenCampaignView {
-  runtimePackage: GameRuntimePackageV2;
-  source: PlayableGameSourceV1;
-  /** Online rooms may only bind an immutable published GameRelease. */
+  runtimePackage: ProductRuntimePackageV1;
+  source: ProductRuntimeSourceV1;
+  /** Online rooms may only bind an immutable published ProductRelease. */
   onlineReleaseHash: string | null;
   rulePack: RulePackV1;
   campaign: TtrpgCampaignContentV1;
@@ -196,7 +194,7 @@ function commandId(
 }
 
 function numberAttribute(
-  state: SimulationRuntimeState,
+  state: ProductRuntimeState,
   entityKey: string,
   key: string,
 ): number | null {
@@ -206,7 +204,7 @@ function numberAttribute(
 
 function TabletopBoard(props: {
   tabletop: NonNullable<TtrpgViewerProjectionV1["tabletop"]>;
-  state: SimulationRuntimeState;
+  state: ProductRuntimeState;
   mode: PlayerMode;
   actorKey: string;
   selectedTokenKey: string;
@@ -239,10 +237,10 @@ function TabletopBoard(props: {
 }
 
 export default function TtrpgCampaignGuide(props: {
-  session: SimulationSession;
-  state: SimulationRuntimeState;
+  session: ProductRuntimeSession;
+  state: ProductRuntimeState;
   workspaceScope?: WorkspaceScope;
-  checkpoints: SimulationCheckpoint[];
+  checkpoints: ProductRuntimeCheckpoint[];
   onCheckpoint: (name: string) => Promise<void>;
   onBranch: (title: string) => Promise<number>;
   onRestoreCheckpoint: (checkpointId: number) => Promise<number>;
@@ -329,7 +327,7 @@ export default function TtrpgCampaignGuide(props: {
     useState("");
   const [campaignTransitionNotes, setCampaignTransitionNotes] = useState("");
   const [continuationReleases, setContinuationReleases] = useState<
-    GameRelease[]
+    ProductRelease[]
   >([]);
   const [continuationTargetReleaseId, setContinuationTargetReleaseId] =
     useState("");
@@ -353,10 +351,8 @@ export default function TtrpgCampaignGuide(props: {
   const [participants, setParticipants] = useState<
     TtrpgSessionParticipantRecordV2[]
   >([]);
-  const [participantsMissing, setParticipantsMissing] = useState(false);
-  const [legacyAuthorityAccepted, setLegacyAuthorityAccepted] = useState(false);
   const aiConfig = useAIConfigStore((state) => state.config);
-  const updateProject = useProjectStore((state) => state.updateProject);
+  const updateWorkspace = useProjectStore((state) => state.updateWorkspace);
 
   const product = props.state.ttrpg?.product ?? null;
   const productCampaignKey = product?.campaignKey ?? null;
@@ -370,7 +366,7 @@ export default function TtrpgCampaignGuide(props: {
     void db.projects.get(projectId).then((project) => {
       if (!cancelled)
         setAiExperimentEnabled(
-          project?.gamePlatformOptIns?.ttrpgAiGmExperimental === true,
+          project?.productPlatformOptIns?.ttrpgAiGmExperimental === true,
         );
     });
     return () => {
@@ -387,19 +383,19 @@ export default function TtrpgCampaignGuide(props: {
         cancelled = true;
       };
     void (async () => {
-      let runtimePackage: GameRuntimePackageV2;
-      let playableSource: PlayableGameSourceV1;
+      let runtimePackage: ProductRuntimePackageV1;
+      let playableSource: ProductRuntimeSourceV1;
       let onlineReleaseHash: string | null = null;
-      if (props.session.gameReleaseId != null) {
-        playableSource = { kind: "release", gameReleaseId: props.session.gameReleaseId };
-        const release = await db.gameReleases.get(props.session.gameReleaseId);
+      if (props.session.productReleaseId != null) {
+        playableSource = { kind: "release", productReleaseId: props.session.productReleaseId };
+        const release = await db.productReleases.get(props.session.productReleaseId);
         if (!release) throw new Error("正式战役发布不存在。");
-        const manifest = await verifyGameReleaseManifestV2(
+        const manifest = await verifyProductReleaseManifestV1(
           release.manifestJson,
         );
         runtimePackage = manifest.runtimePackage;
         onlineReleaseHash = release.contentHash;
-      } else if (props.session.gameBuildId != null) {
+      } else if (props.session.productBuildId != null) {
         const scope =
           props.workspaceScope?.projectId != null &&
           props.workspaceScope.worldId != null &&
@@ -418,55 +414,21 @@ export default function TtrpgCampaignGuide(props: {
               : null;
         if (!scope)
           throw new Error("TTRPG Build Preview 缺少正式工作区 owner。");
-        const build = await db.gameBuilds.get(props.session.gameBuildId);
+        const build = await db.productBuilds.get(props.session.productBuildId);
         if (!build?.previewHash)
           throw new Error("TTRPG Build Preview 不存在或尚未冻结。");
         playableSource = {
           kind: "build",
-          gameBuildId: props.session.gameBuildId,
+          productBuildId: props.session.productBuildId,
           expectedPreviewHash: build.previewHash,
         };
-        const resolved = await verifyPlayableGamePackageSource({
-          scope,
-          source: playableSource,
-        });
-        runtimePackage = resolved.runtimePackage;
-      } else if (props.session.ttrpgBuildId != null) {
-        const scope =
-          props.workspaceScope?.projectId != null &&
-          props.workspaceScope.worldId != null &&
-          props.workspaceScope.workId != null
-            ? {
-                projectId: props.workspaceScope.projectId,
-                worldId: props.workspaceScope.worldId,
-                workId: props.workspaceScope.workId,
-              }
-            : props.session.worldId != null && props.session.workId != null
-              ? {
-                  projectId: props.session.projectId,
-                  worldId: props.session.worldId,
-                  workId: props.session.workId,
-                }
-              : null;
-        if (!scope)
-          throw new Error("TTRPG Product Build 缺少正式工作区 owner。");
-        const build = await db.ttrpgProductionBuilds.get(
-          props.session.ttrpgBuildId,
-        );
-        if (!build?.buildHash)
-          throw new Error("TTRPG Product Build 不存在或尚未冻结。");
-        playableSource = {
-          kind: "ttrpg-build",
-          ttrpgBuildId: props.session.ttrpgBuildId,
-          expectedBuildHash: build.buildHash,
-        };
-        const resolved = await verifyPlayableGamePackageSource({
+        const resolved = await verifyProductRuntimeSource({
           scope,
           source: playableSource,
         });
         runtimePackage = resolved.runtimePackage;
       } else {
-        throw new Error("TTRPG 会话没有绑定 GameRelease 或 Build Preview。");
+        throw new Error("TTRPG 会话没有绑定 ProductRelease 或 Build Preview。");
       }
       if (runtimePackage.productType !== "ttrpg" || !runtimePackage.ttrpg) {
         throw new Error("会话绑定的不是正式 TTRPG 产品包。");
@@ -500,9 +462,8 @@ export default function TtrpgCampaignGuide(props: {
   }, [
     productCampaignKey,
     productRulePackContentHash,
-    props.session.gameBuildId,
-    props.session.gameReleaseId,
-    props.session.ttrpgBuildId,
+    props.session.productBuildId,
+    props.session.productReleaseId,
     props.session.projectId,
     props.session.workId,
     props.session.worldId,
@@ -518,14 +479,14 @@ export default function TtrpgCampaignGuide(props: {
     if (
       props.session.worldId == null ||
       props.session.workId == null ||
-      props.session.gameReleaseId == null
+      props.session.productReleaseId == null
     ) {
       setContinuationReleases([]);
       return () => {
         cancelled = true;
       };
     }
-    void db.gameReleases
+    void db.productReleases
       .where("projectId")
       .equals(props.session.projectId)
       .toArray()
@@ -540,7 +501,7 @@ export default function TtrpgCampaignGuide(props: {
               )
               .map(async (row) => {
                 try {
-                  const manifest = await verifyGameReleaseManifestV2(
+                  const manifest = await verifyProductReleaseManifestV1(
                     row.manifestJson,
                   );
                   return manifest.productType === "ttrpg" ? row : null;
@@ -549,14 +510,14 @@ export default function TtrpgCampaignGuide(props: {
                 }
               }),
           )
-        ).filter((row): row is GameRelease => row != null);
+        ).filter((row): row is ProductRelease => row != null);
         compatible.sort((left, right) => right.version - left.version);
         if (!cancelled) {
           setContinuationReleases(compatible);
           setContinuationTargetReleaseId((current) =>
             compatible.some((row) => String(row.id) === current)
               ? current
-              : String(props.session.gameReleaseId),
+              : String(props.session.productReleaseId),
           );
         }
       });
@@ -564,7 +525,7 @@ export default function TtrpgCampaignGuide(props: {
       cancelled = true;
     };
   }, [
-    props.session.gameReleaseId,
+    props.session.productReleaseId,
     props.session.projectId,
     props.session.workId,
     props.session.worldId,
@@ -572,21 +533,17 @@ export default function TtrpgCampaignGuide(props: {
 
   useEffect(() => {
     let cancelled = false;
-    setParticipantsMissing(false);
     void readTtrpgSessionParticipantsV2(props.session.id!)
       .then((rows) => {
         if (!cancelled) {
           setParticipants(rows);
-          setParticipantsMissing(false);
         }
       })
       .catch((cause) => {
         if (cancelled) return;
         const message = cause instanceof Error ? cause.message : String(cause);
-        if (message.includes("旧会话尚未建立显式席位")) {
-          setParticipants([]);
-          setParticipantsMissing(true);
-        } else setError(message);
+        setParticipants([]);
+        setError(message);
       });
     return () => {
       cancelled = true;
@@ -907,8 +864,8 @@ export default function TtrpgCampaignGuide(props: {
       setBusy(false);
     }
   };
-  const aiGmDecision = evaluateGamePlatformCapabilityV1("ttrpg-ai-gm", {
-    environment: currentGamePlatformEnvironmentV1(),
+  const aiGmDecision = evaluateProductPlatformCapabilityV1("ttrpg-ai-gm", {
+    environment: currentProductPlatformEnvironmentV1(),
     experimentalProject: aiExperimentEnabled,
     authorOptIn: false,
     onlineServiceConfigured: false,
@@ -922,9 +879,9 @@ export default function TtrpgCampaignGuide(props: {
         const project = await db.projects.get(projectId);
         if (!project)
           throw new Error("当前项目不存在，无法保存 AI GM 实验授权。");
-        await updateProject(projectId, {
-          gamePlatformOptIns: {
-            ...project.gamePlatformOptIns,
+        await updateWorkspace(projectId, {
+          productPlatformOptIns: {
+            ...project.productPlatformOptIns,
             ttrpgAiGmExperimental: enabled,
           },
         });
@@ -935,7 +892,7 @@ export default function TtrpgCampaignGuide(props: {
     );
   const commitTabletop = async (operation: TtrpgTabletopOperationV1) => {
     await run(async () => {
-      const version = await readSimulationStateVersion(props.session.id!);
+      const version = await readProductRuntimeStateVersion(props.session.id!);
       const tabletopActorKey = mode === "gm" ? "gm" : clueRecipientKey;
       await updateTtrpgTabletopV1({
         sessionId: props.session.id!,
@@ -959,7 +916,7 @@ export default function TtrpgCampaignGuide(props: {
     build: (commandId: string, eventSequence: number) => TtrpgItemCommandV2;
   }) => {
     await run(async () => {
-      const version = await readSimulationStateVersion(props.session.id!);
+      const version = await readProductRuntimeStateVersion(props.session.id!);
       const id = commandId(
         `item-${input.kind}`,
         props.session.id!,
@@ -987,7 +944,7 @@ export default function TtrpgCampaignGuide(props: {
   }) => {
     if (!selectedActor) throw new Error("当前没有可处置行动的角色。");
     await run(async () => {
-      const version = await readSimulationStateVersion(props.session.id!);
+      const version = await readProductRuntimeStateVersion(props.session.id!);
       await commitTtrpgIntentDispositionV2({
         sessionId: props.session.id!,
         commandId: commandId(
@@ -1048,12 +1005,6 @@ export default function TtrpgCampaignGuide(props: {
       row.role === "gm" ||
       (row.actorKey != null && selectedCharacterKeys.has(row.actorKey)),
   );
-  const migratedAuthorityPending =
-    product.sessionZero.completed &&
-    participants.length > 0 &&
-    activeParticipantRows.some(
-      (row) => row.sessionZeroAcceptedAtSequence == null,
-    );
   const participantReady =
     activeParticipantRows.some((row) => row.role === "gm") &&
     [...selectedCharacterKeys].every((characterKey) =>
@@ -1319,39 +1270,6 @@ export default function TtrpgCampaignGuide(props: {
               <div className="text-xs font-medium text-text-primary">
                 席位、AI 身份与代打授权
               </div>
-              {participantsMissing && (
-                <div className="rounded border border-warning/40 bg-warning/5 p-3">
-                  <p className="text-xs leading-5 text-warning">
-                    这是旧版跑团会话，尚无可审计的席位与控制权记录。迁移只会从冻结发布重建席位，不会替你确认安全边界、AI
-                    身份或代打授权。
-                  </p>
-                  <button
-                    disabled={busy}
-                    onClick={() =>
-                      void run(
-                        async () => {
-                          const rows =
-                            await migrateLegacyTtrpgSessionParticipantsV2({
-                              sessionId: props.session.id!,
-                              commandId: commandId(
-                                "migrate-participants",
-                                props.session.id!,
-                                props.state.lastSequence,
-                              ),
-                              requestedByViewerKey: "viewer.gm",
-                            });
-                          setParticipants(rows);
-                          setParticipantsMissing(false);
-                        },
-                        { refresh: false },
-                      )
-                    }
-                    className="mt-2 rounded border border-warning/50 px-3 py-1.5 text-xs text-warning disabled:opacity-40"
-                  >
-                    安全迁移旧席位
-                  </button>
-                </div>
-              )}
               {participants.map((row) => {
                 const actorName = row.actorKey
                   ? (props.state.entities[row.actorKey]?.name ?? row.actorKey)
@@ -1560,7 +1478,7 @@ export default function TtrpgCampaignGuide(props: {
               }
               onClick={() =>
                 void run(async () => {
-                  const version = await readSimulationStateVersion(
+                  const version = await readProductRuntimeStateVersion(
                     props.session.id!,
                   );
                   await completeTtrpgSessionZero({
@@ -1589,287 +1507,6 @@ export default function TtrpgCampaignGuide(props: {
             Session Zero 已完成；安全共识已写入可回放事件。
           </div>
         )}
-
-        {product.sessionZero.completed &&
-          (participantsMissing || migratedAuthorityPending) && (
-            <section
-              className="rounded border border-warning/50 bg-warning/5 p-4"
-              data-testid="ttrpg-legacy-participant-migration"
-            >
-              <div className="flex items-center gap-2 text-sm font-semibold text-text-primary">
-                <ShieldCheck className="h-4 w-4 text-warning" />
-                旧会话席位重新确认
-              </div>
-              <p className="mt-2 text-xs leading-5 text-text-secondary">
-                旧 Session Zero
-                不能替代新版席位授权。系统不会从历史控制方式推断同意；请重建席位、逐项披露
-                AI 身份，再由本局 KP 明确确认当前活动席位。
-              </p>
-              {participantsMissing && (
-                <button
-                  disabled={busy}
-                  onClick={() =>
-                    void run(
-                      async () => {
-                        const rows =
-                          await migrateLegacyTtrpgSessionParticipantsV2({
-                            sessionId: props.session.id!,
-                            commandId: commandId(
-                              "migrate-participants",
-                              props.session.id!,
-                              props.state.lastSequence,
-                            ),
-                            requestedByViewerKey: "viewer.gm",
-                          });
-                        setParticipants(rows);
-                        setParticipantsMissing(false);
-                      },
-                      { refresh: false },
-                    )
-                  }
-                  className="mt-3 rounded border border-warning/50 px-3 py-2 text-xs text-warning disabled:opacity-40"
-                >
-                  从冻结发布重建席位
-                </button>
-              )}
-              {migratedAuthorityPending && (
-                <div className="mt-3 space-y-2">
-                  {activeParticipantRows.map((row) => {
-                    const actorName = row.actorKey
-                      ? (props.state.entities[row.actorKey]?.name ??
-                        row.actorKey)
-                      : "KP / GM";
-                    const save = (
-                      changes: Parameters<
-                        typeof configureTtrpgSessionParticipantV2
-                      >[0],
-                    ) =>
-                      void run(
-                        async () => {
-                          await configureTtrpgSessionParticipantV2(changes);
-                          setParticipants(
-                            await readTtrpgSessionParticipantsV2(
-                              props.session.id!,
-                            ),
-                          );
-                        },
-                        { refresh: false },
-                      );
-                    return (
-                      <article
-                        key={row.seatKey}
-                        className="rounded border border-border bg-bg-base p-3"
-                      >
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <strong className="text-xs text-text-primary">
-                            {actorName}
-                          </strong>
-                          <select
-                            aria-label={`${actorName} 迁移后控制方式`}
-                            value={row.controller}
-                            disabled={busy}
-                            onChange={(event) => {
-                              const controller = event.target
-                                .value as TtrpgSessionParticipantRecordV2["controller"];
-                              save({
-                                sessionId: props.session.id!,
-                                seatKey: row.seatKey,
-                                expectedRevision: row.revision,
-                                commandId: commandId(
-                                  "legacy-seat-controller",
-                                  props.session.id!,
-                                  row.revision,
-                                  row.seatKey,
-                                ),
-                                requestedByViewerKey: "viewer.gm",
-                                controller,
-                                assignmentState:
-                                  controller === "vacant"
-                                    ? "vacant"
-                                    : "assigned",
-                              });
-                            }}
-                            className="rounded border border-border bg-bg-surface px-2 py-1 text-[10px] text-text-primary"
-                          >
-                            <option value="human">真人</option>
-                            <option value="ai">AI</option>
-                            <option value="hybrid">
-                              真人最终确认 + AI 建议
-                            </option>
-                            {row.role === "player" && (
-                              <option value="vacant">待加入</option>
-                            )}
-                          </select>
-                        </div>
-                        <div className="mt-2 grid gap-2 text-[10px] text-text-secondary sm:grid-cols-4">
-                          <label className="flex items-center gap-2">
-                            <input
-                              type="checkbox"
-                              checked={row.consent.aiIdentityDisclosed}
-                              disabled={busy}
-                              onChange={(event) =>
-                                save({
-                                  sessionId: props.session.id!,
-                                  seatKey: row.seatKey,
-                                  expectedRevision: row.revision,
-                                  commandId: commandId(
-                                    "legacy-ai-disclosure",
-                                    props.session.id!,
-                                    row.revision,
-                                    row.seatKey,
-                                  ),
-                                  requestedByViewerKey: "viewer.gm",
-                                  consent: {
-                                    aiIdentityDisclosed: event.target.checked,
-                                  },
-                                })
-                              }
-                            />
-                            已向本席位披露 AI 身份
-                          </label>
-                          <label className="flex items-center gap-2">
-                            <input
-                              type="checkbox"
-                              checked={row.consent.aiAdviceAllowed}
-                              disabled={
-                                busy || !row.consent.aiIdentityDisclosed
-                              }
-                              onChange={(event) =>
-                                save({
-                                  sessionId: props.session.id!,
-                                  seatKey: row.seatKey,
-                                  expectedRevision: row.revision,
-                                  commandId: commandId(
-                                    "legacy-ai-advice",
-                                    props.session.id!,
-                                    row.revision,
-                                    row.seatKey,
-                                  ),
-                                  requestedByViewerKey: "viewer.gm",
-                                  consent: {
-                                    aiAdviceAllowed: event.target.checked,
-                                  },
-                                })
-                              }
-                            />
-                            允许 AI 角色建议
-                          </label>
-                          <label className="flex items-center gap-2">
-                            <input
-                              type="checkbox"
-                              checked={row.consent.aiSubstitutionAllowed}
-                              disabled={
-                                busy ||
-                                !row.consent.aiIdentityDisclosed ||
-                                row.controller === "ai"
-                              }
-                              onChange={(event) =>
-                                save({
-                                  sessionId: props.session.id!,
-                                  seatKey: row.seatKey,
-                                  expectedRevision: row.revision,
-                                  commandId: commandId(
-                                    "legacy-ai-substitute",
-                                    props.session.id!,
-                                    row.revision,
-                                    row.seatKey,
-                                  ),
-                                  requestedByViewerKey: "viewer.gm",
-                                  consent: {
-                                    aiSubstitutionAllowed: event.target.checked,
-                                  },
-                                  substitutionPolicy: event.target.checked
-                                    ? "with-owner-consent"
-                                    : "never",
-                                })
-                              }
-                            />
-                            允许缺席时 AI 代打
-                          </label>
-                          {row.role === "player" && (
-                            <label className="flex items-center gap-2">
-                              <input
-                                type="checkbox"
-                                checked={row.consent.generatedPortraitAllowed}
-                                disabled={busy}
-                                onChange={(event) =>
-                                  save({
-                                    sessionId: props.session.id!,
-                                    seatKey: row.seatKey,
-                                    expectedRevision: row.revision,
-                                    commandId: commandId(
-                                      "legacy-generated-portrait",
-                                      props.session.id!,
-                                      row.revision,
-                                      row.seatKey,
-                                    ),
-                                    requestedByViewerKey: "viewer.gm",
-                                    consent: {
-                                      generatedPortraitAllowed:
-                                        event.target.checked,
-                                    },
-                                  })
-                                }
-                              />
-                              允许生成角色立绘、表情与 Token
-                            </label>
-                          )}
-                        </div>
-                      </article>
-                    );
-                  })}
-                  <label className="flex items-start gap-2 rounded border border-warning/30 bg-bg-base p-3 text-xs text-text-secondary">
-                    <input
-                      type="checkbox"
-                      checked={legacyAuthorityAccepted}
-                      onChange={(event) =>
-                        setLegacyAuthorityAccepted(event.target.checked)
-                      }
-                    />
-                    <span>
-                      我已与当前活动席位重新确认控制权、安全边界及 AI
-                      披露；未勾选的 AI 代打授权继续保持关闭。
-                    </span>
-                  </label>
-                  <button
-                    disabled={
-                      busy || !legacyAuthorityAccepted || !participantReady
-                    }
-                    onClick={() =>
-                      void run(
-                        async () => {
-                          const rows =
-                            await finalizeMigratedTtrpgParticipantsV2({
-                              sessionId: props.session.id!,
-                              baseSequence: props.state.lastSequence,
-                              selectedCharacterKeys:
-                                product.sessionZero.selectedCharacterKeys,
-                              commandId: commandId(
-                                "finalize-migrated-participants",
-                                props.session.id!,
-                                props.state.lastSequence,
-                              ),
-                              requestedByViewerKey: "viewer.gm",
-                            });
-                          setParticipants(rows);
-                          setLegacyAuthorityAccepted(false);
-                        },
-                        { refresh: false },
-                      )
-                    }
-                    className="rounded bg-warning px-4 py-2 text-xs text-black disabled:opacity-40"
-                  >
-                    确认并恢复本局席位权威
-                  </button>
-                  {!participantReady && (
-                    <p className="text-xs text-warning">
-                      活动席位仍有空缺，或 AI/混合席位尚未完成身份披露。
-                    </p>
-                  )}
-                </div>
-              )}
-            </section>
-          )}
 
         {product.sessionZero.completed && (
           <section
@@ -1901,7 +1538,7 @@ export default function TtrpgCampaignGuide(props: {
                   disabled={busy}
                   onClick={() =>
                     void run(async () => {
-                      const version = await readSimulationStateVersion(
+                      const version = await readProductRuntimeStateVersion(
                         props.session.id!,
                       );
                       await changeTtrpgSafetyStatus({
@@ -1936,7 +1573,7 @@ export default function TtrpgCampaignGuide(props: {
                     disabled={busy || !safetyReason.trim()}
                     onClick={() =>
                       void run(async () => {
-                        const version = await readSimulationStateVersion(
+                        const version = await readProductRuntimeStateVersion(
                           props.session.id!,
                         );
                         await changeTtrpgSafetyStatus({
@@ -2221,7 +1858,7 @@ export default function TtrpgCampaignGuide(props: {
                 }
                 onClick={() =>
                   void run(async () => {
-                    const version = await readSimulationStateVersion(
+                    const version = await readProductRuntimeStateVersion(
                       props.session.id!,
                     );
                     await customizeTtrpgPlayerCharacterV1({
@@ -2691,7 +2328,7 @@ export default function TtrpgCampaignGuide(props: {
                               onClick={() =>
                                 void run(async () => {
                                   const version =
-                                    await readSimulationStateVersion(
+                                    await readProductRuntimeStateVersion(
                                       props.session.id!,
                                     );
                                   await advanceTtrpgCharacterV1({
@@ -2748,7 +2385,7 @@ export default function TtrpgCampaignGuide(props: {
                                   onClick={() =>
                                     void run(async () => {
                                       const version =
-                                        await readSimulationStateVersion(
+                                        await readProductRuntimeStateVersion(
                                           props.session.id!,
                                         );
                                       await advanceTtrpgCharacterV1({
@@ -2793,7 +2430,7 @@ export default function TtrpgCampaignGuide(props: {
                         }
                         onClick={() =>
                           void run(async () => {
-                            const version = await readSimulationStateVersion(
+                            const version = await readProductRuntimeStateVersion(
                               props.session.id!,
                             );
                             await advanceTtrpgCharacterV1({
@@ -2834,7 +2471,7 @@ export default function TtrpgCampaignGuide(props: {
                         }
                         onClick={() =>
                           void run(async () => {
-                            const version = await readSimulationStateVersion(
+                            const version = await readProductRuntimeStateVersion(
                               props.session.id!,
                             );
                             await advanceTtrpgCharacterV1({
@@ -3031,7 +2668,7 @@ export default function TtrpgCampaignGuide(props: {
                         }
                         onClick={() =>
                           void run(async () => {
-                            const version = await readSimulationStateVersion(
+                            const version = await readProductRuntimeStateVersion(
                               props.session.id!,
                             );
                             await openTtrpgCampaignScene({
@@ -3179,7 +2816,7 @@ export default function TtrpgCampaignGuide(props: {
                           }
                           onClick={() =>
                             void run(async () => {
-                              const version = await readSimulationStateVersion(
+                              const version = await readProductRuntimeStateVersion(
                                 props.session.id!,
                               );
                               await submitTtrpgActionIntentV2({
@@ -3300,7 +2937,7 @@ export default function TtrpgCampaignGuide(props: {
                                     await generateTtrpgGmActorActionCandidateV1(
                                       {
                                         scope: props.workspaceScope,
-                                        simulationSessionId: props.session.id!,
+                                        productRuntimeSessionId: props.session.id!,
                                         objective:
                                           "依据当前 NPC 的目标、已知信息、现场局势和冻结规则，选择一个合理且不替真人玩家做决定的行动。",
                                         aiConfig,
@@ -3321,7 +2958,7 @@ export default function TtrpgCampaignGuide(props: {
                                     runId: generated.candidate.runId,
                                   });
                                   const version =
-                                    await readSimulationStateVersion(
+                                    await readProductRuntimeStateVersion(
                                       props.session.id!,
                                     );
                                   setGmActorPendingSequence(version.sequence);
@@ -3386,7 +3023,7 @@ export default function TtrpgCampaignGuide(props: {
                                       runId: gmActorCandidate.runId,
                                     });
                                     const version =
-                                      await readSimulationStateVersion(
+                                      await readProductRuntimeStateVersion(
                                         props.session.id!,
                                       );
                                     setGmActorPendingSequence(version.sequence);
@@ -3489,11 +3126,11 @@ export default function TtrpgCampaignGuide(props: {
                                     );
                                   const cycle = await runTtrpgAiPlayerCycleV1({
                                     scope: props.workspaceScope,
-                                    simulationSessionId: props.session.id!,
+                                    productRuntimeSessionId: props.session.id!,
                                     aiConfig,
                                   });
                                   const version =
-                                    await readSimulationStateVersion(
+                                    await readProductRuntimeStateVersion(
                                       props.session.id!,
                                     );
                                   if (cycle.committedActions > 0) {
@@ -3775,7 +3412,7 @@ export default function TtrpgCampaignGuide(props: {
                               onClick={() =>
                                 void run(async () => {
                                   const version =
-                                    await readSimulationStateVersion(
+                                    await readProductRuntimeStateVersion(
                                       props.session.id!,
                                     );
                                   const target =
@@ -3931,7 +3568,7 @@ export default function TtrpgCampaignGuide(props: {
                         }
                         onClick={() =>
                           void run(async () => {
-                            const version = await readSimulationStateVersion(
+                            const version = await readProductRuntimeStateVersion(
                               props.session.id!,
                             );
                             await completeTtrpgRestV2({
@@ -4239,7 +3876,7 @@ export default function TtrpgCampaignGuide(props: {
                         disabled={busy || !humanResponseText.trim()}
                         onClick={() =>
                           void run(async () => {
-                            const version = await readSimulationStateVersion(
+                            const version = await readProductRuntimeStateVersion(
                               props.session.id!,
                             );
                             await recordTtrpgHumanResponseV2({
@@ -4273,7 +3910,7 @@ export default function TtrpgCampaignGuide(props: {
                         disabled={busy}
                         onClick={() =>
                           void run(async () => {
-                            const version = await readSimulationStateVersion(
+                            const version = await readProductRuntimeStateVersion(
                               props.session.id!,
                             );
                             await recordTtrpgHumanResponseV2({
@@ -4482,7 +4119,7 @@ export default function TtrpgCampaignGuide(props: {
                         }
                         onClick={() =>
                           run(async () => {
-                            const version = await readSimulationStateVersion(
+                            const version = await readProductRuntimeStateVersion(
                               props.session.id!,
                             );
                             const effects: TtrpgEffectPrimitiveV2[] = [];
@@ -4709,7 +4346,7 @@ export default function TtrpgCampaignGuide(props: {
                       }
                       onClick={() =>
                         void run(async () => {
-                          const version = await readSimulationStateVersion(
+                          const version = await readProductRuntimeStateVersion(
                             props.session.id!,
                           );
                           await commitTtrpgHumanGmNarrationV1({
@@ -4810,7 +4447,7 @@ export default function TtrpgCampaignGuide(props: {
                               const generated =
                                 await generateTtrpgGmNarrationCandidateV1({
                                   scope: props.workspaceScope,
-                                  simulationSessionId: props.session.id!,
+                                  productRuntimeSessionId: props.session.id!,
                                   objective: gmObjective,
                                   aiConfig,
                                 });
@@ -4825,7 +4462,7 @@ export default function TtrpgCampaignGuide(props: {
                           disabled={busy || safetyPaused}
                           onClick={() =>
                             void run(async () => {
-                              const version = await readSimulationStateVersion(
+                              const version = await readProductRuntimeStateVersion(
                                 props.session.id!,
                               );
                               await commitTtrpgDeterministicFallbackV1({
@@ -5360,7 +4997,7 @@ export default function TtrpgCampaignGuide(props: {
                               onClick={() =>
                                 void run(async () => {
                                   const version =
-                                    await readSimulationStateVersion(
+                                    await readProductRuntimeStateVersion(
                                       props.session.id!,
                                     );
                                   await discoverTtrpgClue({
@@ -5392,7 +5029,7 @@ export default function TtrpgCampaignGuide(props: {
                               onClick={() =>
                                 void run(async () => {
                                   const version =
-                                    await readSimulationStateVersion(
+                                    await readProductRuntimeStateVersion(
                                       props.session.id!,
                                     );
                                   await discoverTtrpgClue({
@@ -5541,7 +5178,7 @@ export default function TtrpgCampaignGuide(props: {
                       }
                       onClick={() =>
                         void run(async () => {
-                          const version = await readSimulationStateVersion(
+                          const version = await readProductRuntimeStateVersion(
                             props.session.id!,
                           );
                           const ordinal = campaignState.playSessions.length + 1;
@@ -5617,7 +5254,7 @@ export default function TtrpgCampaignGuide(props: {
                       disabled={busy || safetyPaused || !viewerProjection}
                       onClick={() =>
                         void run(async () => {
-                          const version = await readSimulationStateVersion(
+                          const version = await readProductRuntimeStateVersion(
                             props.session.id!,
                           );
                           const automaticRecaps =
@@ -5710,7 +5347,7 @@ export default function TtrpgCampaignGuide(props: {
                       const change = async (
                         status: "active" | "reserve" | "retired",
                       ) => {
-                        const version = await readSimulationStateVersion(
+                        const version = await readProductRuntimeStateVersion(
                           props.session.id!,
                         );
                         await changeTtrpgCampaignRosterV2({
@@ -5833,7 +5470,7 @@ export default function TtrpgCampaignGuide(props: {
                     }
                     onClick={() =>
                       void run(async () => {
-                        const version = await readSimulationStateVersion(
+                        const version = await readProductRuntimeStateVersion(
                           props.session.id!,
                         );
                         await activateTtrpgCampaignSupplementV2({
@@ -5898,7 +5535,7 @@ export default function TtrpgCampaignGuide(props: {
                     }
                     onClick={() =>
                       void run(async () => {
-                        const version = await readSimulationStateVersion(
+                        const version = await readProductRuntimeStateVersion(
                           props.session.id!,
                         );
                         await recordTtrpgWorldEvolutionV2({
@@ -5971,7 +5608,7 @@ export default function TtrpgCampaignGuide(props: {
                     }
                     onClick={() =>
                       void run(async () => {
-                        const version = await readSimulationStateVersion(
+                        const version = await readProductRuntimeStateVersion(
                           props.session.id!,
                         );
                         await recordTtrpgVersionTransitionV2({
@@ -6019,7 +5656,7 @@ export default function TtrpgCampaignGuide(props: {
                       {continuationReleases.map((release) => (
                         <option key={release.id} value={release.id}>
                           v{release.version} · {release.label}
-                          {release.id === props.session.gameReleaseId
+                          {release.id === props.session.productReleaseId
                             ? "（同内容安全续团）"
                             : ""}
                         </option>
@@ -6045,7 +5682,7 @@ export default function TtrpgCampaignGuide(props: {
                               if (!targetRelease)
                                 throw new Error("目标 TTRPG 发布不存在。");
                               const targetManifest =
-                                await verifyGameReleaseManifestV2(
+                                await verifyProductReleaseManifestV1(
                                   targetRelease.manifestJson,
                                 );
                               const targetTtrpg =
@@ -6072,7 +5709,7 @@ export default function TtrpgCampaignGuide(props: {
                                   workId: props.session.workId!,
                                 },
                                 parentSessionId: props.session.id!,
-                                targetGameReleaseId: targetRelease.id!,
+                                targetProductReleaseId: targetRelease.id!,
                                 compatibility: sameContent
                                   ? "same-content"
                                   : "manual-migration",
@@ -6231,7 +5868,7 @@ export default function TtrpgCampaignGuide(props: {
                               onClick={() =>
                                 void run(async () => {
                                   const version =
-                                    await readSimulationStateVersion(
+                                    await readProductRuntimeStateVersion(
                                       props.session.id!,
                                     );
                                   await recordTtrpgWorldEvolutionV2({
@@ -6444,7 +6081,7 @@ export default function TtrpgCampaignGuide(props: {
                         }
                         onClick={() =>
                           void run(async () => {
-                            const version = await readSimulationStateVersion(
+                            const version = await readProductRuntimeStateVersion(
                               props.session.id!,
                             );
                             await completeTtrpgCampaignEnding({

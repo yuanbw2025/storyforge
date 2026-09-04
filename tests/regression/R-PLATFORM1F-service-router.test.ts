@@ -1,16 +1,16 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
-  createGamePlatformServiceRouterV1,
-  createMemoryGamePlatformRateLimiterV1,
-  evaluateGamePlatformProductionReadinessV1,
-  type GamePlatformRequestGuardAuditV1,
-} from '../../src/lib/game-platform/service-router'
+  createProductPlatformServiceRouterV1,
+  createMemoryProductPlatformRateLimiterV1,
+  evaluateProductPlatformProductionReadinessV1,
+  type ProductPlatformRequestGuardAuditV1,
+} from '../../src/lib/product-platform/service-router'
 
-function guard(input: { limit?: number; audits?: GamePlatformRequestGuardAuditV1[] } = {}) {
+function guard(input: { limit?: number; audits?: ProductPlatformRequestGuardAuditV1[] } = {}) {
   return {
     resolveSubject: async () => ({ subjectKey: 'verified:test-user', subjectKind: 'account' as const }),
-    rateLimiter: createMemoryGamePlatformRateLimiterV1({ limit: input.limit ?? 100, windowMs: 60_000 }),
-    audit: async (entry: GamePlatformRequestGuardAuditV1) => { input.audits?.push(entry) },
+    rateLimiter: createMemoryProductPlatformRateLimiterV1({ limit: input.limit ?? 100, windowMs: 60_000 }),
+    audit: async (entry: ProductPlatformRequestGuardAuditV1) => { input.audits?.push(entry) },
     now: () => 1_000,
   }
 }
@@ -24,7 +24,7 @@ describe('PLATFORM-1F · unified deployable service router and readiness', () =>
     })
     const commercial = handler('commercial'); const community = handler('community')
     const online = handler('online'); const operations = handler('operations')
-    const router = createGamePlatformServiceRouterV1({
+    const router = createProductPlatformServiceRouterV1({
       commercial, community, online, operations,
       readiness: () => ({ ready: true, serviceVersion: '1.0.0', checks: {} }),
       guard: guard(),
@@ -42,17 +42,17 @@ describe('PLATFORM-1F · unified deployable service router and readiness', () =>
   })
 
   it('生产环境缺少托管依赖时健康检查返回 503；内存实现只允许开发态', async () => {
-    const development = evaluateGamePlatformProductionReadinessV1({
+    const development = evaluateProductPlatformProductionReadinessV1({
       serviceVersion: 'dev', environment: 'development', dependencies: { 'identity-provider': 'memory' },
     })
     expect(development).toMatchObject({ ready: true, checks: { 'identity-provider': 'development-only', 'payment-provider': 'missing' } })
-    const production = evaluateGamePlatformProductionReadinessV1({
+    const production = evaluateProductPlatformProductionReadinessV1({
       serviceVersion: '2026.08.21', environment: 'production',
       dependencies: { 'identity-provider': 'configured', 'transactional-commercial-store': 'memory' },
     })
     expect(production.ready).toBe(false)
     const unavailable = vi.fn(async () => new Response(null, { status: 500 }))
-    const router = createGamePlatformServiceRouterV1({ commercial: unavailable, community: unavailable, online: unavailable, operations: unavailable, readiness: () => production, guard: guard() })
+    const router = createProductPlatformServiceRouterV1({ commercial: unavailable, community: unavailable, online: unavailable, operations: unavailable, readiness: () => production, guard: guard() })
     const response = await router(new Request('https://platform.test/healthz/platform'))
     expect(response.status).toBe(503)
     await expect(response.json()).resolves.toMatchObject({ ready: false, checks: { 'transactional-commercial-store': 'development-only', 'object-storage': 'missing' } })
@@ -61,16 +61,16 @@ describe('PLATFORM-1F · unified deployable service router and readiness', () =>
 
   it('未知路径和错误健康检查方法 fail-closed', async () => {
     const unavailable = vi.fn(async () => new Response(null, { status: 500 }))
-    const router = createGamePlatformServiceRouterV1({ commercial: unavailable, community: unavailable, online: unavailable, operations: unavailable, readiness: () => ({ ready: true, serviceVersion: '1', checks: {} }), guard: guard() })
+    const router = createProductPlatformServiceRouterV1({ commercial: unavailable, community: unavailable, online: unavailable, operations: unavailable, readiness: () => ({ ready: true, serviceVersion: '1', checks: {} }), guard: guard() })
     expect((await router(new Request('https://platform.test/v1/private/admin'))).status).toBe(404)
     expect((await router(new Request('https://platform.test/healthz/platform', { method: 'POST' }))).status).toBe(405)
   })
 
   it('每个领域请求先经过可信主体、限流与无凭据审计；超限返回 429 且不调用领域处理器', async () => {
-    const audits: GamePlatformRequestGuardAuditV1[] = []
+    const audits: ProductPlatformRequestGuardAuditV1[] = []
     const commercial = vi.fn(async () => new Response('{"ok":true}', { status: 200 }))
     const unavailable = vi.fn(async () => new Response(null, { status: 500 }))
-    const router = createGamePlatformServiceRouterV1({
+    const router = createProductPlatformServiceRouterV1({
       commercial, community: unavailable, online: unavailable, operations: unavailable,
       readiness: () => ({ ready: true, serviceVersion: '1', checks: {} }),
       guard: guard({ limit: 1, audits }),
@@ -94,12 +94,12 @@ describe('PLATFORM-1F · unified deployable service router and readiness', () =>
 
   it('请求守卫或审计不可用时 fail-closed，领域处理器不会收到请求', async () => {
     const handler = vi.fn(async () => new Response(null, { status: 200 }))
-    const router = createGamePlatformServiceRouterV1({
+    const router = createProductPlatformServiceRouterV1({
       commercial: handler, community: handler, online: handler, operations: handler,
       readiness: () => ({ ready: true, serviceVersion: '1', checks: {} }),
       guard: {
         resolveSubject: async () => { throw new Error('identity provider down') },
-        rateLimiter: createMemoryGamePlatformRateLimiterV1({ limit: 1, windowMs: 1000 }),
+        rateLimiter: createMemoryProductPlatformRateLimiterV1({ limit: 1, windowMs: 1000 }),
         audit: async () => undefined,
       },
     })

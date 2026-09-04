@@ -3,8 +3,8 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import type {
   RulePackV1,
+  ProductWorldSourceSelectionV1,
   WorkspaceScope,
-  WorldGameSourceSelectionV2,
 } from "../../src/lib/types";
 import { createD20FantasyRulePackV1 } from "../../src/lib/ttrpg/d20-fantasy-rule-pack";
 import { createD100InvestigationRulePackV1 } from "../../src/lib/ttrpg/d100-investigation-rule-pack";
@@ -20,30 +20,17 @@ import {
   compileTtrpgProductionBriefV2,
   resolveTtrpgProductionRulePackV2,
 } from "../../src/lib/ttrpg/production-brief";
+import { CURRENT_PRODUCT_RESOURCE_KEYS, currentProductSelection } from "../helpers/current-product-world";
 
 const scope: WorkspaceScope = { projectId: 1, worldId: 1, workId: 1 };
+const WORLD_HASH = "a".repeat(64);
 
-function selection(): WorldGameSourceSelectionV2 {
-  return {
-    schema: "storyforge.world-game-source",
-    version: 2,
-    productType: "ttrpg",
-    worldContentHash: "a".repeat(64),
-    narrativeModuleExportIds: [0],
-    characterExportIds: [0],
-    characterRelationExportIds: [],
-    importantLocationExportIds: [0],
-    artifactExportIds: [],
-    codexEntryExportIds: [],
-    storyArcExportIds: [0],
-    avgMediaAssetExportIds: [],
-    productSource: {
-      kind: "ttrpg",
-      participantCharacterExportIds: [0],
-      locationExportIds: [0],
-      questStoryArcExportIds: [0],
-    },
-  };
+function selection(): ProductWorldSourceSelectionV1 {
+  return currentProductSelection("ttrpg", {
+    participants: [CURRENT_PRODUCT_RESOURCE_KEYS.character],
+    locations: [CURRENT_PRODUCT_RESOURCE_KEYS.location],
+    quests: [CURRENT_PRODUCT_RESOURCE_KEYS.arc],
+  });
 }
 
 const d20Values = {
@@ -292,6 +279,7 @@ describe("R-TTRPG-3H · executable deep rule packs", () => {
       const brief = await compileTtrpgProductionBriefV2({
         scope,
         selection: selection(),
+        worldContentHash: WORLD_HASH,
         title: "深规则生产",
         premise: "把冻结世界改编为可玩的规则战役。",
         tone: ["冒险"],

@@ -118,11 +118,11 @@ export function buildReadOnlyAgentRunContractV1(input: {
   worldGroupId: number | null
   limits?: Partial<ReadOnlyAgentLimits>
   maxAttemptsPerStep?: number
-  runtimeBindingHash?: string
+  runtimeBindingHash: string
 }): AgentRunContractV1 {
   const objective = input.goal.trim()
   if (!objective) throw new Error('Agent 目标不能为空')
-  if (input.runtimeBindingHash && !/^[0-9a-f]{64}$/u.test(input.runtimeBindingHash)) {
+  if (!/^[0-9a-f]{64}$/u.test(input.runtimeBindingHash)) {
     throw new Error('runtimeBindingHash 必须是 SHA-256')
   }
   const limits = resolveReadOnlyAgentLimits(input.limits)
@@ -138,7 +138,7 @@ export function buildReadOnlyAgentRunContractV1(input: {
       contextSourceKeys: [...AGENT_READ_CONTEXT_SOURCE_KEYS],
       writeTargets: [],
     },
-    ...(input.runtimeBindingHash ? { runtimeBindingHash: input.runtimeBindingHash } : {}),
+    runtimeBindingHash: input.runtimeBindingHash,
     budget: {
       maxModelCalls: limits.maxSteps,
       maxToolCalls: limits.maxToolCalls,
@@ -489,20 +489,37 @@ export async function runDurableReadOnlyAgentV1(
   const context = assertContextScope(input)
   const limits = resolveReadOnlyAgentLimits(input.limits)
   const executionBinding = normalizeExecutionBinding(input.executionBinding)
-  const runtimeBindingHash = await hashCanonicalValue(executionBinding)
+  const allowedToolNames = [...input.allowedToolNames]
+  if (new Set(allowedToolNames).size !== allowedToolNames.length) {
+    throw new Error('只读 Agent 工具授权不得重复')
+  }
+  const allowedToolSet = new Set(allowedToolNames)
+  const allowedTools = AGENT_READ_TOOLS.filter(tool => allowedToolSet.has(tool.name))
+  if (allowedTools.length !== allowedToolNames.length) {
+    throw new Error('只读 Agent 工具授权包含未登记工具')
+  }
+  const toolSchemaSetHash = await hashCanonicalValue(allowedTools.map(tool => ({
+    name: tool.name,
+    risk: tool.risk,
+    parameters: tool.parameters,
+    sourceKeys: tool.sourceKeys,
+    inputBudgetTokens: tool.inputBudgetTokens,
+  })))
+  const runtimeBindingHash = await hashCanonicalValue({
+    executionBinding,
+    allowedToolNames,
+    toolSchemaSetHash,
+  })
   const existingSnapshot = input.runId == null
     ? null
     : await readAgentRunV1(input.scope, input.runId)
-  // Pre-HARNESS-29 runs did not freeze provider/model/transport. They retain
-  // their historical contract shape; every newly created run is bound.
-  const bindRuntime = input.runId == null || existingSnapshot?.contract.runtimeBindingHash !== undefined
   const contract = buildReadOnlyAgentRunContractV1({
     goal: input.goal,
     projectId: input.scope.projectId,
     worldGroupId: input.worldGroupId,
     limits,
     maxAttemptsPerStep: input.maxAttemptsPerStep,
-    ...(bindRuntime ? { runtimeBindingHash } : {}),
+    runtimeBindingHash,
   })
   const accepted = await acceptAgentRunContractV1(contract)
   let snapshot: AgentRunSnapshotV1
@@ -537,14 +554,6 @@ export async function runDurableReadOnlyAgentV1(
   const prepared = await prepareAttempt({ request: input, snapshot })
   snapshot = prepared.snapshot
   const attempt = prepared.attempt
-  const toolSchemaSetHash = await hashCanonicalValue(AGENT_READ_TOOLS.map(tool => ({
-    name: tool.name,
-    risk: tool.risk,
-    parameters: tool.parameters,
-    sourceKeys: tool.sourceKeys,
-    inputBudgetTokens: tool.inputBudgetTokens,
-  })))
-
   const append = async <T extends AgentRunEventTypeV1>(
     type: T,
     payload: Parameters<typeof appendAgentRunEventV1<T>>[0]['payload'],
@@ -675,6 +684,7 @@ export async function runDurableReadOnlyAgentV1(
     signal: input.signal,
     onEvent: input.onEvent,
     executionTrace: trace,
+    allowedToolNames: input.allowedToolNames,
   })
   snapshot = await readAgentRunV1(input.scope, snapshot.run.id)
   return result({ snapshot, resumed: false, execution: liveResult, liveResult })

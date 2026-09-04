@@ -7,16 +7,24 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { useGistStore } from '../../src/stores/gist'
+import { seedCurrentProject } from '../helpers/current-workspace'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
 
 const PAT = 'ghp_fake'
 
 async function seedProject(): Promise<number> {
   const now = Date.now()
-  const pid = await db.projects.add({
-    name: '待备份的书', genre: '', description: '', targetWordCount: 0,
+  const pid = await seedCurrentProject({
+    name: '待备份的书', genres: [], description: '', targetWordCount: 0,
     enableMultiWorld: false, createdAt: now, updatedAt: now,
   } as any) as number
-  await db.characters.add({ projectId: pid, name: '主角甲', role: 'protagonist', createdAt: now, updatedAt: now } as any)
+  await db.characters.add({
+    projectId: pid, name: '主角甲', roleWeight: 'main', moralAxis: 'neutral',
+    orderAxis: 'neutral', shortDescription: '', appearance: '', personality: '',
+    background: '', motivation: '', abilities: '', relationships: '', arc: '',
+    homeWorldGroupId: null, isCrossWorld: false, createdAt: now, updatedAt: now,
+  } as any)
+  await finalizeCurrentFixtureV1(pid)
   return pid
 }
 
@@ -64,13 +72,13 @@ describe('R-GIST · PAT 存储策略', () => {
     expect(useGistStore.getState().rememberPat).toBe(true)
   })
 
-  it('兼容旧 localStorage token:初始化为已记住状态', async () => {
+  it('localStorage 中已有 token 时初始化为已记住状态', async () => {
     localStorage.setItem('sf-gist-pat', PAT)
-    localStorage.setItem('sf-gist-user', 'legacy-user')
+    localStorage.setItem('sf-gist-user', 'stored-user')
     vi.resetModules()
     const fresh = await import('../../src/stores/gist')
     expect(fresh.useGistStore.getState().pat).toBe(PAT)
-    expect(fresh.useGistStore.getState().username).toBe('legacy-user')
+    expect(fresh.useGistStore.getState().username).toBe('stored-user')
     expect(fresh.useGistStore.getState().rememberPat).toBe(true)
   })
 })
@@ -164,8 +172,8 @@ describe('R-GIST · 版本历史回溯', () => {
 
   it('列出历史版本(最新在前) + 恢复指定旧版本', async () => {
     // 造两份合法的导出快照(新/旧版本，项目名不同以便区分)
-    const pid = await db.projects.add({
-      name: '版本书', genre: '', description: '', targetWordCount: 0,
+    const pid = await seedCurrentProject({
+      name: '版本书', genres: [], description: '', targetWordCount: 0,
       enableMultiWorld: false, createdAt: Date.now(), updatedAt: Date.now(),
     } as any) as number
     const { exportProjectJSON } = await import('../../src/lib/export/json-export')

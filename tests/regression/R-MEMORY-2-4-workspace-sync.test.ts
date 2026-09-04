@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
 import { db } from '../../src/lib/db/schema'
-import { generateWorkspaceUid } from '../../src/lib/memory/identity'
 import {
   buildWorkspaceSelfCheckReportV1,
   buildWorkspaceFileAdoptionCandidatesV1,
@@ -18,8 +17,8 @@ import {
   workspaceMarkdownToChapterHtmlV1,
 } from '../../src/lib/memory/workspace-projection'
 import { adopt, hashAdoptRecordFieldsV1 } from '../../src/lib/registry/adopt'
-import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
-import { stampNewRecord } from '../../src/lib/world-engine/scope'
+import { stampNewRecord } from '../../src/lib/workspace/scope'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
 
 function notFound(): DOMException {
   return new DOMException('not found', 'NotFoundError')
@@ -124,24 +123,20 @@ function makeFakeWorkspaceDirectory(name = 'StoryForgeMemory') {
 
 async function seedWorkspace() {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    workspaceUid: generateWorkspaceUid(),
-    name: '磁盘记忆', genre: 'fantasy', genres: ['fantasy'], status: 'drafting',
-    description: '三方核对', targetWordCount: 100_000, createdAt: now, updatedAt: now,
-  } as any) as number
-  const ownership = await ensureWorkspaceOwnership(projectId)
-  const outlineNodeId = await db.outlineNodes.add(stampNewRecord(ownership.scope, 'outlineNodes', {
-    projectId, workId: ownership.scope.workId,
+  const created = await seedCurrentWorkspace('磁盘记忆')
+  const projectId = created.scope.projectId
+  const outlineNodeId = await db.outlineNodes.add(stampNewRecord(created.scope, 'outlineNodes', {
+    projectId,
     parentId: null, type: 'chapter', title: '第一章', summary: '', order: 0,
     createdAt: now, updatedAt: now,
   }, { owner: 'work' }) as any) as number
-  const chapterId = await db.chapters.add(stampNewRecord(ownership.scope, 'chapters', {
-    projectId, workId: ownership.scope.workId, outlineNodeId, title: '第一章',
+  const chapterId = await db.chapters.add(stampNewRecord(created.scope, 'chapters', {
+    projectId, outlineNodeId, title: '第一章',
     content: '<p>潮声穿过旧港。</p><p><strong>灯没有灭。</strong></p>',
     wordCount: 12, status: 'draft', order: 0, notes: '作者笔记',
     createdAt: now, updatedAt: now,
   }, { owner: 'work' }) as any) as number
-  return { projectId, chapterId }
+  return { projectId, chapterId, scope: created.scope }
 }
 
 describe('MEMORY-2～4 · registered projection and author-triggered sync', () => {
@@ -246,7 +241,6 @@ describe('MEMORY-2～4 · registered projection and author-triggered sync', () =
     const byTable = new Map(bindings.map(binding => [binding.tableName, binding]))
     const projectFile = JSON.parse(fake.read(byTable.get('projects')!.relativePath)!)
     projectFile.data.name = '硬盘上的新书名'
-    projectFile.data.description = ''
     fake.write(byTable.get('projects')!.relativePath, `${JSON.stringify(projectFile, null, 2)}\n`)
 
     const worldFile = parseYaml(fake.read(byTable.get('worlds')!.relativePath)!)
@@ -283,7 +277,7 @@ describe('MEMORY-2～4 · registered projection and author-triggered sync', () =
     })
     expect(receipt.databaseAdoptionReceiptHashes).toHaveLength(5)
     expect((await db.projects.get(seeded.projectId))?.name).toBe('硬盘上的新书名')
-    expect((await db.projects.get(seeded.projectId))?.description).toBe('')
+    expect(await db.projects.get(seeded.projectId)).not.toHaveProperty('description')
     expect((await db.worlds.where('projectId').equals(seeded.projectId).first())?.description)
       .toBe('由作者在 YAML 中补充的世界说明')
     expect((await db.works.where('projectId').equals(seeded.projectId).first())?.genres)
@@ -346,14 +340,13 @@ describe('MEMORY-2～4 · registered projection and author-triggered sync', () =
 
   it('rejects a staged multi-field candidate when any protected database field changes before adoption', async () => {
     const seeded = await seedWorkspace()
-    const ownership = await ensureWorkspaceOwnership(seeded.projectId)
     const chapter = await db.chapters.get(seeded.chapterId) as any
     const fields = ['title', 'status', 'order', 'notes', 'content', 'wordCount']
     const expectedHash = await hashAdoptRecordFieldsV1(chapter, fields)
     await db.chapters.update(seeded.chapterId, { notes: '候选生成后项目又变化', updatedAt: Date.now() })
     const result = await adopt({
       projectId: seeded.projectId,
-      scope: ownership.scope,
+      scope: seeded.scope,
       recordId: seeded.chapterId,
       target: 'chapters',
       mode: 'replace',
@@ -381,10 +374,9 @@ describe('MEMORY-2～4 · registered projection and author-triggered sync', () =
 
   it('restores registered formal content and evidence into an empty database with remapped local IDs', async () => {
     const seeded = await seedWorkspace()
-    const ownership = await ensureWorkspaceOwnership(seeded.projectId)
     await db.notes.add({
       projectId: seeded.projectId,
-      workId: ownership.scope.workId,
+      workId: seeded.scope.workId,
       chapterId: seeded.chapterId,
       content: '恢复胶囊中的正式笔记证据',
       color: 'yellow',
@@ -399,11 +391,7 @@ describe('MEMORY-2～4 · registered projection and author-triggered sync', () =
 
     await db.delete()
     await db.open()
-    const dummyProjectId = await db.projects.add({
-      workspaceUid: generateWorkspaceUid(), name: '占位项目', genre: 'other', genres: [], status: 'drafting',
-      description: '', targetWordCount: 1, createdAt: Date.now(), updatedAt: Date.now(),
-    } as any) as number
-    await ensureWorkspaceOwnership(dummyProjectId)
+    await seedCurrentWorkspace('占位项目')
 
     const restored = await restoreWorkspaceFromFolderV1(fake.handle)
     expect(restored.projectId).not.toBe(seeded.projectId)

@@ -1,6 +1,6 @@
 import type {
   RulePackV1,
-  SimulationRuntimeState,
+  ProductRuntimeState,
   TtrpgEffectLedgerStateV2,
   TtrpgEffectLedgerTransitionV2,
   TtrpgEffectPlanV2,
@@ -52,10 +52,10 @@ export function createEmptyTtrpgEffectLedgerV2(): TtrpgEffectLedgerStateV2 {
 export function parseTtrpgEffectLedgerStateV2(value: unknown): TtrpgEffectLedgerStateV2 {
   if (!value || typeof value !== 'object' || Array.isArray(value)) fail('效果账本必须是对象')
   const row = value as Record<string, unknown>
-  const legacy = ['schema', 'version', 'appliedIdempotencyKeys', 'advancementBalances', 'socialBalances', 'storyClocks', 'storyFacts', 'entries']
-  const current = [...legacy, 'pendingChoices']
+  const v2BaseFields = ['schema', 'version', 'appliedIdempotencyKeys', 'advancementBalances', 'socialBalances', 'storyClocks', 'storyFacts', 'entries']
+  const current = [...v2BaseFields, 'pendingChoices']
   const fields = Object.keys(row).sort().join(',')
-  if (![legacy.sort().join(','), current.sort().join(',')].includes(fields)
+  if (![v2BaseFields.sort().join(','), current.sort().join(',')].includes(fields)
     || row.schema !== 'storyforge.ttrpg-effect-ledger' || row.version !== 2
     || !Array.isArray(row.appliedIdempotencyKeys) || row.appliedIdempotencyKeys.length > 100_000
     || !Array.isArray(row.entries) || row.entries.length > 100_000
@@ -129,12 +129,12 @@ export function parseTtrpgEffectLedgerStateV2(value: unknown): TtrpgEffectLedger
 
 /** Pure proposal transition: records alternatives but applies no mechanics. */
 export function proposeTtrpgEffectChoiceToRuntimeV2(input: {
-  state: SimulationRuntimeState
+  state: ProductRuntimeState
   plan: TtrpgEffectPlanV2
   actionSequence: number
   ownerActorKey: string
   eventSequence: number
-}): { state: SimulationRuntimeState; choice: TtrpgPendingEffectChoiceV2 } {
+}): { state: ProductRuntimeState; choice: TtrpgPendingEffectChoiceV2 } {
   const plan = parseTtrpgEffectPlanV2(input.plan)
   const state = structuredClone(input.state)
   const product = state.ttrpg?.product
@@ -167,13 +167,13 @@ export function proposeTtrpgEffectChoiceToRuntimeV2(input: {
 
 /** Pure resolution transition: selects one frozen alternative and applies it atomically. */
 export function resolveTtrpgEffectChoiceToRuntimeV2(input: {
-  state: SimulationRuntimeState
+  state: ProductRuntimeState
   rulePack: RulePackV1
   choiceKey: string
   selectedEffectKey: string
   commandId: string
   eventSequence: number
-}): { state: SimulationRuntimeState; plan: TtrpgEffectPlanV2; transitions: TtrpgEffectLedgerTransitionV2[] } {
+}): { state: ProductRuntimeState; plan: TtrpgEffectPlanV2; transitions: TtrpgEffectLedgerTransitionV2[] } {
   const choiceKey = key(input.choiceKey, 'choiceKey')
   const selectedEffectKey = key(input.selectedEffectKey, 'selectedEffectKey')
   const commandId = key(input.commandId, 'commandId')
@@ -210,11 +210,11 @@ function setBalance(target: Record<string, number>, balanceKey: string, delta: n
 
 /** Pure atomic interpreter: returns a cloned state or throws without partial mutation. */
 export function applyTtrpgEffectPlanToRuntimeV2(input: {
-  state: SimulationRuntimeState
+  state: ProductRuntimeState
   rulePack: RulePackV1
   plan: TtrpgEffectPlanV2
   eventSequence: number
-}): { state: SimulationRuntimeState; transitions: TtrpgEffectLedgerTransitionV2[] } {
+}): { state: ProductRuntimeState; transitions: TtrpgEffectLedgerTransitionV2[] } {
   const plan = parseTtrpgEffectPlanV2(input.plan)
   const rulePack = parseRulePackV1(input.rulePack)
   const state = structuredClone(input.state)

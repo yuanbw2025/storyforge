@@ -11,7 +11,6 @@ import {
   type AgentSkillContextCompressionPolicyV1,
 } from '../../src/lib/agent/skill-registry'
 import { AgentTeamBudgetTracker } from '../../src/lib/agent/team-budget'
-import { prepareWorldOriginCopilot } from '../../src/lib/agent/world-origin-copilot'
 import {
   createContextManifestFromAssemblyV1,
   parseContextManifestV1,
@@ -21,7 +20,7 @@ import { estimateTokens } from '../../src/lib/ai/context-budget'
 import { assembleContext } from '../../src/lib/registry/assemble-context'
 import { db } from '../../src/lib/db/schema'
 import type { AIConfig, ChatMessage } from '../../src/lib/types'
-import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
 
 const CONFIG: AIConfig = {
   provider: 'openai',
@@ -50,14 +49,6 @@ function validResponse(anchors: readonly ContextCompressionAnchorV1[]): string {
   })
 }
 
-function responseFromMessages(messages: readonly ChatMessage[]): string {
-  const marker = messages[1]?.content.match(
-    /【必须覆盖的逐字锚点】(\[[\s\S]*?\])\n\n【待压缩原文】/u,
-  )
-  if (!marker) throw new Error('测试无法读取压缩锚点')
-  return validResponse(JSON.parse(marker[1]) as ContextCompressionAnchorV1[])
-}
-
 function session(input: {
   content: string
   targetTokens: number
@@ -66,7 +57,7 @@ function session(input: {
   budget?: AgentTeamBudgetTracker
   requiredFutureModelCalls?: number
 }) {
-  const skill = getAgentSkillV1('world-origin.complete', 'world-origin')
+  const skill = getAgentSkillV1('world-origin.worldview-field', 'world-origin')
   return createAgentContextCompressionSessionV1({
     policy: input.policy ?? skill.contextCompression,
     config: CONFIG,
@@ -131,7 +122,7 @@ describe('R-HARNESS16 · 语义压缩、锚点保真与单来源回退', () => {
       inputTokens,
       compression: transformed!.compression,
     }]
-    const skill = getAgentSkillV1('world-origin.complete', 'world-origin')
+    const skill = getAgentSkillV1('world-origin.worldview-field', 'world-origin')
     const result = {
       included: ['worldview'],
       omitted: [],
@@ -280,11 +271,14 @@ describe('R-HARNESS16 · 语义压缩、锚点保真与单来源回退', () => {
   })
 
   it('assembleContext 只在正式 reader 读出原文后应用压缩，不允许伪造 sourceHash', async () => {
+    await db.delete()
+    await db.open()
+    const projectId = (await seedCurrentWorkspace('Semantic compression')).scope.projectId
     const content = sourceText(1_100)
     const inputBudgetTokens = 1_400
     const anchors = extractContextCompressionAnchorsV1({ content, targetTokens: inputBudgetTokens })
     const policy: AgentSkillContextCompressionPolicyV1 = {
-      ...getAgentSkillV1('world-origin.complete', 'world-origin').contextCompression,
+      ...getAgentSkillV1('world-origin.worldview-field', 'world-origin').contextCompression,
       sourceKeys: ['manualText'],
     }
     const compression = session({
@@ -294,7 +288,7 @@ describe('R-HARNESS16 · 语义压缩、锚点保真与单来源回退', () => {
       policy,
     })
     const assembled = await assembleContext({
-      projectId: 1,
+      projectId,
       sourceKeys: ['manualText'],
       manualSourceText: content,
       inputBudgetTokens,
@@ -314,7 +308,7 @@ describe('R-HARNESS16 · 语义压缩、锚点保真与单来源回退', () => {
       policy,
     })
     await expect(assembleContext({
-      projectId: 1,
+      projectId,
       sourceKeys: ['manualText'],
       manualSourceText: content,
       inputBudgetTokens,
@@ -327,70 +321,6 @@ describe('R-HARNESS16 · 语义压缩、锚点保真与单来源回退', () => {
         } : result
       },
     })).rejects.toThrow('转换证据无效')
-  })
-
-  it('世界领域 Agent 的正式只读工具实际应用 Skill 压缩策略并把证据带入候选', async () => {
-    await db.delete()
-    await db.open()
-    try {
-      const now = Date.now()
-      const projectId = await db.projects.add({
-        name: '潮汐纪元',
-        genre: 'fantasy',
-        genres: ['fantasy'],
-        status: 'drafting',
-        description: '',
-        targetWordCount: 100_000,
-        enableMultiWorld: false,
-        createdAt: now,
-        updatedAt: now,
-      }) as number
-      await db.worldviews.add({
-        projectId,
-        worldGroupId: null,
-        worldOrigin: '潮门开启必须由守灯人敲钟，任何人不得绕过守灯仪式，主角当前尚未知晓钟声来源。',
-        continentLayout: '潮'.repeat(5_000),
-        historyLine: '海历3021年建立盐城。',
-        geography: '',
-        history: '海历3021年建立盐城。',
-        society: '',
-        culture: '',
-        economy: '',
-        rules: '',
-        summary: '',
-        createdAt: now,
-        updatedAt: now,
-      })
-      await ensureWorkspaceOwnership(projectId)
-      const budget = new AgentTeamBudgetTracker('balanced')
-      const complete = vi.fn(async (messages: ChatMessage[]) => responseFromMessages(messages))
-      const prepared = await prepareWorldOriginCopilot({
-        projectId,
-        worldGroupId: null,
-        authorRequest: '补全世界来源',
-        contextProfile: 'balanced',
-        contextCompressionRuntime: {
-          budget,
-          requiredFutureModelCalls: 1,
-          complete,
-        },
-      })
-
-      const worldview = prepared.contextEvidence.sourceEvidence
-        ?.find(source => source.key === 'worldview')
-      expect(complete).toHaveBeenCalledOnce()
-      expect(worldview).toMatchObject({
-        status: 'included',
-        delivery: 'compressed',
-        compression: { outcome: 'verified' },
-      })
-      const prompt = prepared.prepared.messages.map(message => message.content).join('\n')
-      expect(prompt).toContain('语义压缩导航摘要')
-      expect(prompt).toContain('任何人不得绕过守灯仪式')
-      expect(prompt).not.toContain('潮'.repeat(1_000))
-      expect(await db.agentRuns.count()).toBe(0)
-    } finally {
-      db.close()
-    }
+    db.close()
   })
 })

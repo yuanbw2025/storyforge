@@ -36,6 +36,16 @@ const unlimited = () => ({
   cooldownRounds: null,
   reset: [],
 });
+const itemMechanics = (category: string, stackable = false) => ({
+  category,
+  stackPolicy: stackable ? "stackable" as const : "unique" as const,
+  maxStack: stackable ? 10 : 1,
+  weight: null,
+  equipSlots: [],
+  requiresAttunement: false,
+  maximumCharges: null,
+  maximumDurability: null,
+});
 
 const SRD_5_2_1_ATTRIBUTION =
   "This work includes material from the System Reference Document 5.2.1 (“SRD 5.2.1”) by Wizards of the Coast LLC, available at https://www.dndbeyond.com/srd. The SRD 5.2.1 is licensed under the Creative Commons Attribution 4.0 International License, available at https://creativecommons.org/licenses/by/4.0/legalcode.";
@@ -573,6 +583,7 @@ export const STORYFORGE_D20_FANTASY_RULE_PACK_V1: RulePackV1 = {
       description: "绳索、照明、书写和简单露营用品。",
       tags: ["tool", "travel"],
       grantedActionKeys: ["investigate", "perceive", "overcome"],
+      mechanics: itemMechanics("tool"),
     },
     {
       key: "martial-weapon",
@@ -585,6 +596,7 @@ export const STORYFORGE_D20_FANTASY_RULE_PACK_V1: RulePackV1 = {
         "strike-disadvantage",
         "grapple",
       ],
+      mechanics: itemMechanics("weapon"),
     },
     {
       key: "healer-kit",
@@ -592,6 +604,7 @@ export const STORYFORGE_D20_FANTASY_RULE_PACK_V1: RulePackV1 = {
       description: "支持安全休整与伤势叙事的消耗品集合。",
       tags: ["healing", "consumable"],
       grantedActionKeys: ["second-wind"],
+      mechanics: itemMechanics("consumable", true),
     },
   ],
   advancement: {

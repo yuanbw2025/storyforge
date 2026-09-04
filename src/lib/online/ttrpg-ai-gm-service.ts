@@ -1,8 +1,8 @@
 import type {
-  SimulationTtrpgActionReceiptV2,
-  SimulationTtrpgGmSynthesisFrameV2,
-  SimulationTtrpgModelEvidenceV1,
-  SimulationTtrpgRuleActionResultV1,
+  TtrpgRuntimeActionReceiptV2,
+  TtrpgRuntimeGmSynthesisFrameV2,
+  TtrpgRuntimeModelEvidenceV1,
+  TtrpgRuntimeRuleActionResultV1,
 } from "../types";
 import {
   assertTtrpgFeedbackOutcomeConsistentV2,
@@ -30,7 +30,7 @@ export interface OnlineTtrpgAiGmServiceV1 {
     releaseHash: string;
     objective: string;
     projection: TtrpgViewerProjectionV1;
-    action: SimulationTtrpgRuleActionResultV1;
+    action: TtrpgRuntimeRuleActionResultV1;
   }): Promise<unknown>;
 }
 
@@ -45,8 +45,8 @@ export interface OnlineTtrpgAiGmActorProposalV1 {
 export interface OnlineTtrpgAiGmProposalV1 {
   runId: number;
   text: string;
-  modelEvidence: SimulationTtrpgModelEvidenceV1;
-  synthesisFrame: SimulationTtrpgGmSynthesisFrameV2;
+  modelEvidence: TtrpgRuntimeModelEvidenceV1;
+  synthesisFrame: TtrpgRuntimeGmSynthesisFrameV2;
 }
 
 function fail(message: string): never {
@@ -139,7 +139,7 @@ export function parseOnlineTtrpgAiGmActorProposalV1(input: {
   return { runId, actionKey, targetKey, approach, spokenIntent };
 }
 
-function parseEvidence(value: unknown): SimulationTtrpgModelEvidenceV1 {
+function parseEvidence(value: unknown): TtrpgRuntimeModelEvidenceV1 {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     fail("modelEvidence 必须是对象");
   }
@@ -178,8 +178,8 @@ function parseEvidence(value: unknown): SimulationTtrpgModelEvidenceV1 {
 
 export function parseOnlineTtrpgAiGmProposalV1(input: {
   value: unknown;
-  action: SimulationTtrpgRuleActionResultV1;
-  receipt: SimulationTtrpgActionReceiptV2;
+  action: TtrpgRuntimeRuleActionResultV1;
+  receipt: TtrpgRuntimeActionReceiptV2;
 }): OnlineTtrpgAiGmProposalV1 {
   if (!input.value || typeof input.value !== "object" || Array.isArray(input.value)) {
     fail("AI GM 服务返回值必须是对象");

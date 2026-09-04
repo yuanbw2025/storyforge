@@ -1,12 +1,8 @@
-import type { GameProductType, GameRelease } from '../types'
+import type { ProductRelease, ProductRuntimePackageV1 } from '../types'
 
 interface PlayerLibraryRelease {
-  release: GameRelease
-  manifest: {
-    productType: GameProductType
-    definition: { title: string; gameKey: string }
-    worldRelease: { narrativeModuleExportId: number }
-  } | null
+  release: ProductRelease
+  manifest: ProductRuntimePackageV1 | null
 }
 
 function normalizedTitle(title: string): string {
@@ -31,7 +27,7 @@ function isNewer(left: PlayerLibraryRelease, right: PlayerLibraryRelease): boole
 
 /**
  * Player shelves expose one current game per product + player-facing title.
- * Older immutable releases remain available to authoring, existing saves and exports;
+ * Older immutable releases remain available to version history, existing saves and exports;
  * they are only collapsed in the player-facing catalog.
  */
 export function currentPlayerReleases<T extends PlayerLibraryRelease>(items: readonly T[]): T[] {
@@ -41,7 +37,7 @@ export function currentPlayerReleases<T extends PlayerLibraryRelease>(items: rea
     const key = item.manifest
       ? titleKey
         ? `${item.manifest.productType}:title:${titleKey}`
-        : `${item.manifest.productType}:module:${item.manifest.worldRelease.narrativeModuleExportId}`
+        : `${item.manifest.productType}:game:${item.manifest.definition.productKey}:world:${item.manifest.sourceWorld.contentHash}`
       : `unreadable:${item.release.id ?? item.release.contentHash}`
     const existing = current.get(key)
     if (!existing || isNewer(item, existing)) current.set(key, item)

@@ -9,6 +9,7 @@ import {
   normalizeCodexImportCandidates,
 } from '../../src/lib/import/codex-classification'
 import type { CodexImportCandidate } from '../../src/lib/types/import-session-data'
+import { seedCurrentProject } from '../helpers/current-workspace'
 
 function candidate(patch: Partial<CodexImportCandidate> = {}): CodexImportCandidate {
   return {
@@ -137,9 +138,9 @@ describe('WORLD-1 Phase 35-c: Codex 外部导入分类', () => {
   })
 
   it('确认后才写入；同世界同名只补空字段，不覆盖作者内容，多世界不串', async () => {
-    const projectId = await db.projects.add({
+    const projectId = await seedCurrentProject({
       name: '多世界',
-      genre: 'fantasy',
+      genres: ['fantasy'],
       enableMultiWorld: true,
       createdAt: 1,
       updatedAt: 1,

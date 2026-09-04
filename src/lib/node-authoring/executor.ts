@@ -2,7 +2,6 @@ import { estimateTokens } from '../ai/context-budget'
 import { chat } from '../ai/client'
 import { useAIConfigStore } from '../../stores/ai-config'
 import {
-  isCreativeReliabilityRuntimeEnabledV1,
   parseCreativeArtifactV1,
   resolveCreativeQualityPolicyV1,
 } from '../agent/creative-reliability'
@@ -17,7 +16,7 @@ import {
   resolveAuthoringBoundRecordId,
 } from './bindings'
 import { validateAuthoringGraph, topologicalAuthoringOrder } from './graph'
-import { parseAuthoringGraph } from './migration'
+import { parseAuthoringGraph } from './graph-codec'
 import type {
   AuthoringCandidate,
   AuthoringCandidateDomain,
@@ -28,7 +27,8 @@ import type {
 } from './contracts'
 import { safeAuthoringGraphJson } from './contracts'
 import { adoptDomainCandidate, executeDomainNode } from './domain-execution'
-import { assertRecordInScope, readOwnedRows, resolveScopeLike, stampNewRecord } from '../world-engine/scope'
+import { authoringDomainActionBindingV1 } from './domain-action-registry'
+import { assertRecordInScope, readOwnedRows, resolveScopeLike, stampNewRecord } from '../workspace/scope'
 
 export interface AuthoringRunSnapshot {
   nodeId: string
@@ -178,7 +178,6 @@ export function buildAuthoringExecutionPlan(input: {
   let estimatedMaxOutputTokens = 0
   const aiState = useAIConfigStore.getState()
   const defaultMaxTokens = aiState.config.maxTokens > 0 ? aiState.config.maxTokens : 16_000
-  const reliabilityEnabled = isCreativeReliabilityRuntimeEnabledV1()
   const reliabilityPolicy = resolveCreativeQualityPolicyV1(aiState.creativeQualityMode)
   for (const node of ordered) {
     const template = AUTHORING_NODE_BY_ID.get(node.templateId)
@@ -201,8 +200,7 @@ export function buildAuthoringExecutionPlan(input: {
     const maxTokens = requestedMaxTokens > 0
       ? Math.max(100, Math.round(requestedMaxTokens))
       : 16_000
-    const canRepairOnce = reliabilityEnabled
-      && reliabilityPolicy.allowAutomaticRepair
+    const canRepairOnce = reliabilityPolicy.allowAutomaticRepair
       && (node.templateId === 'outline.volume'
         || node.templateId === 'outline.chapter'
         || node.templateId === 'chapter.prose')
@@ -376,6 +374,7 @@ async function executeNode(input: {
     return { output: variants.join('\n\n--- 候选分隔 ---\n\n'), variants, semantic: 'candidate' }
   }
   if (template.capability === 'generate-field' || template.capability === 'generate-collection') {
+    const actionBinding = authoringDomainActionBindingV1(template)
     const aiState = useAIConfigStore.getState()
     const domain = await executeDomainNode({
       node,
@@ -385,13 +384,15 @@ async function executeNode(input: {
       worldGroupId: input.worldGroupId,
       aiConfig: requestedAIConfig(node, inputs),
       creativeReliability: {
-        enabled: isCreativeReliabilityRuntimeEnabledV1(),
         qualityMode: aiState.creativeQualityMode,
         budgetProfile: aiState.agentTeamBudgetProfile,
       },
       signal: input.signal,
     })
     if (domain) return domain
+    if (actionBinding?.mode === 'formal-domain-action') {
+      throw new Error(`节点 ${template.label} 已登记正式领域动作，但执行器没有返回领域候选；已阻止回退到通用生成。`)
+    }
     const sourceKeys = template.reads?.sourceKeys ?? []
     const upstream = composeInputs(inputs.filter(item => item.state !== 'control'))
     const binding = !upstream && sourceKeys.length
@@ -479,11 +480,12 @@ export async function adoptAuthoringCandidate(input: {
   if (!storedFlow || !await assertRecordInScope(scope, 'nodeFlows', storedFlow, { owner: 'work' })) {
     throw new Error('节点图不存在或不属于当前作品。')
   }
-  const parsed = parseAuthoringGraph(input.flow.graphJson)
-  const node = parsed.graph.nodes.find(item => item.id === input.nodeId)
+  const graph = parseAuthoringGraph(input.flow.graphJson)
+  const node = graph.nodes.find(item => item.id === input.nodeId)
   if (!node) throw new Error('候选节点不存在。')
   if (node.binding?.mode === 'live') throw new Error('实时 Canon 绑定节点只读，不能重复采纳；请采纳它的下游候选节点。')
   const template = AUTHORING_NODE_BY_ID.get(node.templateId)
+  const actionBinding = template ? authoringDomainActionBindingV1(template) : null
   const latestRuns = (await readOwnedRows<NodeRunRecord>(scope, 'nodeRuns', { owner: 'work' }))
     .filter(run => run.flowId === input.flow.id)
   latestRuns.sort((left, right) => right.startedAt - left.startedAt)
@@ -522,6 +524,12 @@ export async function adoptAuthoringCandidate(input: {
       worldGroupId: input.flow.worldGroupId ?? null,
     })
     if (adopted) return adopted
+  }
+  if (actionBinding?.mode === 'formal-domain-action') {
+    throw new Error('该正式节点缺少分步骤领域候选证据；请用当前版本重新运行节点后再采纳。')
+  }
+  if (actionBinding?.mode === 'experimental-draft') {
+    throw new Error('实验性自由节点只生成候选草稿，不能直接写入 Canon；请接入已登记的正式领域节点后再采纳。')
   }
   if (!template?.writes) throw new Error('该节点没有登记可采纳的写回契约。')
   const write = template.writes
@@ -648,15 +656,15 @@ export async function runAuthoringGraph(input: {
   if (!storedFlow || !await assertRecordInScope(scope, 'nodeFlows', storedFlow, { owner: 'work' })) {
     throw new Error('节点图不存在或不属于当前作品。')
   }
-  const parsed = parseAuthoringGraph(input.flow.graphJson)
-  const issues = validateAuthoringGraph(parsed.graph)
+  const graph = parseAuthoringGraph(input.flow.graphJson)
+  const issues = validateAuthoringGraph(graph)
   if (issues.length) throw new Error(issues.map(issue => issue.message).join('；'))
-  let ordered = topologicalAuthoringOrder(parsed.graph, input.targetNodeId)
+  let ordered = topologicalAuthoringOrder(graph, input.targetNodeId)
   if (input.runNodeIds) ordered = ordered.filter(node => input.runNodeIds?.has(node.id))
   if (!ordered.length) throw new Error('本次执行计划没有需要运行的节点。')
   const now = Date.now()
   let plan = buildAuthoringExecutionPlan({
-    graph: parsed.graph,
+    graph,
     targetNodeId: input.targetNodeId,
     runNodeIds: input.runNodeIds,
   })
@@ -686,7 +694,7 @@ export async function runAuthoringGraph(input: {
     }
     ordered = previousPlan.orderedNodeIds
       .filter(nodeId => !completed.has(nodeId))
-      .map(nodeId => parsed.graph.nodes.find(node => node.id === nodeId))
+      .map(nodeId => graph.nodes.find(node => node.id === nodeId))
       .filter((node): node is AuthoringNodeInstance => Boolean(node))
     if (!ordered.length) throw new Error('该运行没有待恢复节点。')
     plan = { ...previousPlan, pendingNodeIds: ordered.map(node => node.id) }
@@ -734,7 +742,7 @@ export async function runAuthoringGraph(input: {
 
   for (const node of ordered) {
     if (input.signal?.aborted) break
-    const inputs = incomingFor(parsed.graph, node, candidates)
+    const inputs = incomingFor(graph, node, candidates)
     snapshots[node.id] = {
       nodeId: node.id,
       nodeTitle: node.title,

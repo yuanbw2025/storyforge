@@ -20,7 +20,7 @@ export function assertAgentSkillContextGatewayPolicyV1(
 ): NonNullable<AgentSkillDefinitionV1['contextGateway']> {
   const gateway = skill.contextGateway
   if (!gateway) fail(`Skill ${skill.id} 尚未声明 Context Gateway 权限`)
-  if (gateway.version !== 1 || !['shadow', 'required'].includes(gateway.rollout)) {
+  if (gateway.version !== 1 || gateway.rollout !== 'required') {
     fail(`Skill ${skill.id} 的 Gateway version/rollout 无效`)
   }
   const registeredTargets = new Set(skill.writeTargets.flatMap(target => (

@@ -12,7 +12,7 @@ import {
   storyArcIntentAlignmentV1,
   type StoryArcIntentAlignmentV1,
 } from '../lib/storyline/intent-projection'
-import { assertRecordInScope, readOwnedRows, resolveScopeLike, stampNewRecord, type WorkspaceScopeLike } from '../lib/world-engine/scope'
+import { assertRecordInScope, readOwnedRows, resolveScopeLike, stampNewRecord, type WorkspaceScopeLike } from '../lib/workspace/scope'
 
 const now = () => Date.now()
 

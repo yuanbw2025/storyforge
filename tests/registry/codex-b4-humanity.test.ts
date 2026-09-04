@@ -7,11 +7,12 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { useCodexStore } from '../../src/stores/codex'
+import { seedCurrentProject } from '../helpers/current-workspace'
 
 async function createProject(): Promise<number> {
   const now = Date.now()
-  return await db.projects.add({
-    name: 'CodexB4', genre: '', description: '', targetWordCount: 0,
+  return seedCurrentProject({
+    name: 'CodexB4', genres: [], description: '', targetWordCount: 0,
     enableMultiWorld: false, createdAt: now, updatedAt: now,
   } as any) as number
 }

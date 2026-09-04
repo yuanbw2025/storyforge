@@ -16,7 +16,7 @@ import {
   rejectForeshadowSuggestionCandidateV1,
   type ForeshadowSuggestionCandidateV1,
 } from '../../lib/agent/run/foreshadow-suggestions-durable'
-import { resolveScopeLike } from '../../lib/world-engine/scope'
+import { resolveScopeLike } from '../../lib/workspace/scope'
 import { resolveCanonicalChapterSequence } from '../../lib/ai/chapter-memory/canonical-chapter-sequence'
 import { parseForeshadowEchoChapterIds } from '../../lib/foreshadow/context'
 import PromptRunPanel from '../shared/PromptRunPanel'

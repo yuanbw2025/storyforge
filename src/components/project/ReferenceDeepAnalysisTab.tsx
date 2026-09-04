@@ -321,7 +321,7 @@ export default function ReferenceDeepAnalysisTab({ reference }: Props) {
             </p>
             <p className="mt-1">
               来源：{selectedRun.sourceKind} · 范围：{selectedRun.usageScope}
-              {!selectedRun.rightsConfirmed && <span className="text-amber-400"> · 旧数据未确认声明</span>}
+              {!selectedRun.rightsConfirmed && <span className="text-amber-400"> · 来源权利尚未确认</span>}
             </p>
             {selectedRun.error && <p className="text-amber-400 mt-1">{selectedRun.error}</p>}
           </div>

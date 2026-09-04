@@ -8,14 +8,14 @@ import { db } from '../../src/lib/db/schema'
 import {
   H86_AGENT_PROMPT_VERSION_V1,
   H86_GENERATOR_PAIR_VERSION_V1,
-  H86_LEGACY_PROMPT_VERSION_V1,
+  H86_BASELINE_PROMPT_VERSION_V1,
   H86_VERIFIER_PROMPT_VERSION_V1,
   buildH86VerifierMessagesV1,
   createH86CallEvidenceV1,
   evaluateH86MachineGateV1,
   exportH86CheckpointV1,
   importH86CheckpointV1,
-  parseH86LegacyStoryArcOutputV1,
+  parseH86BaselineStoryArcOutputV1,
   parseH86VerifierAssessmentV1,
   runH86StoryArcMainPathEvalV1,
   verifyH86CheckpointV1,
@@ -86,14 +86,14 @@ function generatedOutput(name: string): string {
 }
 
 async function generationAttempt(input: {
-  variant: 'legacy-direct' | 'agent-harness'
+  variant: 'baseline-direct' | 'agent-harness'
   fixtureId: string
   attempt: number
   status?: 'succeeded' | 'provider-failed'
   promptVersion?: string
 }): Promise<H86GenerationAttemptV1> {
-  const promptVersion = input.variant === 'legacy-direct'
-    ? H86_LEGACY_PROMPT_VERSION_V1
+  const promptVersion = input.variant === 'baseline-direct'
+    ? H86_BASELINE_PROMPT_VERSION_V1
     : input.promptVersion ?? H86_AGENT_PROMPT_VERSION_V1
   const output = input.status === 'provider-failed' ? null : generatedOutput(input.fixtureId)
   const call = await createH86CallEvidenceV1({
@@ -102,7 +102,7 @@ async function generationAttempt(input: {
     identity: { ...generator, promptVersion },
     messages: [{ role: 'user', content: input.fixtureId }],
     output,
-    usage: output ? { inputTokens: 100, outputTokens: 50, durationMs: input.variant === 'legacy-direct' ? 100 : 90 } : null,
+    usage: output ? { inputTokens: 100, outputTokens: 50, durationMs: input.variant === 'baseline-direct' ? 100 : 90 } : null,
     status: output ? 'succeeded' : 'provider-failed',
     ...(output ? {} : { failureCode: 'provider_error', failureMessage: 'temporary outage' }),
   })
@@ -139,7 +139,7 @@ async function generationAttempt(input: {
 }
 
 async function verificationAttempt(input: {
-  variant: 'legacy-direct' | 'agent-harness'
+  variant: 'baseline-direct' | 'agent-harness'
   fixtureIndex: number
   attempt: number
 }): Promise<H86VerificationAttemptV1> {
@@ -204,11 +204,11 @@ describe.sequential('R-HARNESS86 · 真实故事线主路径配对评测', { tim
     db.close()
   })
 
-  it('冻结 6 个合成 development，并严格解析旧入口和独立 verifier 协议', () => {
+  it('冻结 6 个合成 development，并严格解析基线直连和独立 verifier 协议', () => {
     expect(H86_STORY_ARC_DEVELOPMENT_FIXTURES_V1).toHaveLength(6)
     expect(new Set(H86_STORY_ARC_DEVELOPMENT_FIXTURES_V1.map(item => item.id)).size).toBe(6)
     const fixture = H86_STORY_ARC_DEVELOPMENT_FIXTURES_V1[0]
-    const legacy = parseH86LegacyStoryArcOutputV1(JSON.stringify({
+    const baseline = parseH86BaselineStoryArcOutputV1(JSON.stringify({
       name: '潮汐主线',
       description: '守灯人查明真相。',
       stages: [
@@ -217,7 +217,7 @@ describe.sequential('R-HARNESS86 · 真实故事线主路径配对评测', { tim
         { title: '三', description: '完成抉择', keyEvents: ['救城'] },
       ],
     }), fixture)
-    expect(JSON.parse(legacy)[0]).toMatchObject({ type: 'main', name: '潮汐主线' })
+    expect(JSON.parse(baseline)[0]).toMatchObject({ type: 'main', name: '潮汐主线' })
 
     const assessment = parseH86VerifierAssessmentV1(JSON.stringify({
       semanticScore: 0.9,
@@ -237,7 +237,7 @@ describe.sequential('R-HARNESS86 · 真实故事线主路径配对评测', { tim
       ...assessment,
       missingRequiredFactIds: ['f3'],
     }), fixture)).toThrow('fact_partition')
-    expect(buildH86VerifierMessagesV1({ fixture, variant: 'agent-harness', output: legacy })[1].content)
+    expect(buildH86VerifierMessagesV1({ fixture, variant: 'agent-harness', output: baseline })[1].content)
       .not.toContain('hiddenLabel')
   })
 
@@ -265,9 +265,9 @@ describe.sequential('R-HARNESS86 · 真实故事线主路径配对评测', { tim
 
     expect(record.status).toBe('completed')
     expect(record.cases.map(item => item.executionOrder[0])).toEqual([
-      'legacy-direct', 'agent-harness', 'legacy-direct', 'agent-harness', 'legacy-direct', 'agent-harness',
+      'baseline-direct', 'agent-harness', 'baseline-direct', 'agent-harness', 'baseline-direct', 'agent-harness',
     ])
-    expect(record.aggregate?.legacyDirect.totalCalls).toBe(12)
+    expect(record.aggregate?.baselineDirect.totalCalls).toBe(12)
     expect(record.aggregate?.agentHarness.totalCalls).toBe(12)
     expect(record.aggregate?.agentHarness.durableEvidenceCoverage).toBe(1)
     expect(record.machineGate).toEqual({ passed: true, failures: [], humanReviewRequired: true })
@@ -343,7 +343,7 @@ describe.sequential('R-HARNESS86 · 真实故事线主路径配对评测', { tim
       },
     })
     expect(first.status).toBe('provider-blocked')
-    expect(first.cases[0].variants['legacy-direct'].generationAttempts).toHaveLength(1)
+    expect(first.cases[0].variants['baseline-direct'].generationAttempts).toHaveLength(1)
     expect(await verifyH86CheckpointV1(first)).toBe(true)
 
     const callsBeforeNoRetry = generationCalls
@@ -396,7 +396,7 @@ describe.sequential('R-HARNESS86 · 真实故事线主路径配对评测', { tim
       },
     })
     expect(resumed.status).toBe('completed')
-    expect(resumed.cases[0].variants['legacy-direct'].generationAttempts).toHaveLength(2)
+    expect(resumed.cases[0].variants['baseline-direct'].generationAttempts).toHaveLength(2)
     expect(resumed.cases[0].variants['agent-harness'].generationAttempts).toHaveLength(1)
     expect(generationCalls).toBe(13)
   })
@@ -415,7 +415,7 @@ describe.sequential('R-HARNESS86 · 真实故事线主路径配对评测', { tim
             fixtureId: input.fixture.id,
             attempt: input.attempt,
           })
-          if (!injected && input.variant === 'legacy-direct') {
+          if (!injected && input.variant === 'baseline-direct') {
             injected = true
             return {
               ...success,
@@ -423,7 +423,7 @@ describe.sequential('R-HARNESS86 · 真实故事线主路径配对评测', { tim
               output: '',
               outputHash: null,
               parserPassed: false,
-              failureCode: 'legacy_parse_failed',
+              failureCode: 'baseline_parse_failed',
               failureMessage: 'invalid JSON',
             }
           }
@@ -438,11 +438,11 @@ describe.sequential('R-HARNESS86 · 真实故事线主路径配对评测', { tim
     })
 
     expect(record.status).toBe('completed')
-    expect(record.aggregate?.legacyDirect.completionRate).toBe(5 / 6)
-    expect(record.aggregate?.legacyDirect.verifierCompletionRate).toBe(5 / 6)
+    expect(record.aggregate?.baselineDirect.completionRate).toBe(5 / 6)
+    expect(record.aggregate?.baselineDirect.verifierCompletionRate).toBe(5 / 6)
     expect(record.aggregate?.agentHarness.completionRate).toBe(1)
     expect(record.machineGate?.passed).toBe(false)
-    expect(record.machineGate?.failures).toContain('legacy-completion')
+    expect(record.machineGate?.failures).toContain('baseline-completion')
     expect(h86CheckpointHasCompletePairedOutputsV1(record)).toBe(false)
     expect(await verifyH86CheckpointV1(record)).toBe(true)
   })
@@ -475,7 +475,7 @@ describe.sequential('R-HARNESS86 · 真实故事线主路径配对评测', { tim
     }
     expect(review.status).toBe('completed')
     expect(review.aggregate).toMatchObject({
-      legacyDirect: { reviewedCases: 6, averageLineEditRatio: 0 },
+      baselineDirect: { reviewedCases: 6, averageLineEditRatio: 0 },
       agentHarness: { reviewedCases: 6, averageLineEditRatio: 0 },
       ties: 6,
     })
@@ -552,8 +552,8 @@ describe.sequential('R-HARNESS86 · 真实故事线主路径配对评测', { tim
           ? '这不是 JSON'
           : JSON.stringify({ storyArcs: JSON.parse(generatedOutput('Agent 候选')) })
         : JSON.stringify({
-            name: '旧入口候选',
-            description: '旧入口生成的故事线。',
+            name: '基线直连候选',
+            description: '基线直连生成的故事线。',
             stages: [
               { title: '触发', description: '触发冲突', keyEvents: ['事件一'] },
               { title: '升级', description: '升级冲突', keyEvents: ['事件二'] },
@@ -571,9 +571,9 @@ describe.sequential('R-HARNESS86 · 真实故事线主路径配对评测', { tim
       verifierConfig: { ...config, model: 'verifier-test' },
     })
     const fixture = H86_STORY_ARC_DEVELOPMENT_FIXTURES_V1[0]
-    const legacy = await dependencies.generate({
+    const baseline = await dependencies.generate({
       fixture,
-      variant: 'legacy-direct',
+      variant: 'baseline-direct',
       generator: { provider: 'openai', model: 'generator-test', promptVersion: H86_GENERATOR_PAIR_VERSION_V1 },
       attempt: 1,
     })
@@ -584,7 +584,7 @@ describe.sequential('R-HARNESS86 · 真实故事线主路径配对评测', { tim
       attempt: 1,
     })
 
-    expect(legacy).toMatchObject({ status: 'succeeded', parserPassed: true })
+    expect(baseline).toMatchObject({ status: 'succeeded', parserPassed: true })
     expect(agent).toMatchObject({
       status: 'succeeded',
       parserPassed: true,

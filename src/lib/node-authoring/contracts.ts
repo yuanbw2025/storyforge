@@ -134,8 +134,6 @@ export interface AuthoringNodeTemplate {
   writes?: AuthoringWriteContract
   promptModuleKey?: PromptModuleKey
   parameters?: AuthoringParameterDefinition[]
-  /** FLOW-2 kind is retained only for compatibility and conversion. */
-  legacyKind?: string
   /** Semantic suggestions for the smart connection menu. */
   recommendedBefore?: string[]
   recommendedAfter?: string[]
@@ -209,12 +207,6 @@ export interface AuthoringNodeGraph {
   groups?: Array<{ id: string; title: string; color?: string }>
 }
 
-export interface AuthoringGraphParseResult {
-  graph: AuthoringNodeGraph
-  sourceVersion: 1 | 2
-  migrated: boolean
-}
-
 export interface AuthoringInputEnvelope {
   sourceNodeId: string
   sourcePortId: string
@@ -247,7 +239,7 @@ export interface AuthoringCandidate {
   output: string
   /** Multiple generations remain grouped under one node so the run record is still portable. */
   variants?: string[]
-  /** CREL evidence is aligned with variants by index; legacy candidates omit it. */
+  /** CREL evidence is aligned with variants by index when this node uses the creative-reliability pipeline. */
   creativeArtifacts?: CreativeArtifactV1[]
   /** Stable selection for edited variants whose text no longer exactly matches the original output. */
   selectedVariantIndex?: number
@@ -262,6 +254,31 @@ export interface AuthoringCandidate {
 }
 
 export type AuthoringCandidateDomain =
+  | {
+      kind: 'worldview-field'
+      targetField: string
+      snapshot: import('../agent/worldview-field-copilot').WorldviewFieldCopilotSnapshot
+    }
+  | {
+      kind: 'story-core-field'
+      targetField: string
+      snapshot: import('../agent/story-core-copilot').StoryCoreCopilotSnapshot
+    }
+  | {
+      kind: 'character-supplement'
+      snapshot: import('../agent/character-supplement-copilot').CharacterSupplementCopilotSnapshotV1
+    }
+  | {
+      kind: 'story-arc'
+      snapshot: import('../agent/story-arc-copilot').StoryArcCopilotSnapshot
+      mutation: import('../agent/story-arc-copilot').StoryArcMutationRequestV1
+    }
+  | {
+      kind: 'character-relation'
+      producerRunId: number
+      candidateHash: string
+      candidateCount: number
+    }
   | {
       kind: 'character'
       rosterSnapshot: string
@@ -293,6 +310,9 @@ export type AuthoringCandidateDomain =
         chapterContentHash: string
         chapterHadContent: boolean
         chapterOrder: number
+        perspectiveCharacterId: number | null
+        informationBoundaryHash: string
+        perspectiveFromChapter: boolean
       }
     }
   | {

@@ -28,9 +28,9 @@ import {
 import type { OnlineRoomMemberV1 } from "../../lib/online/room-authority";
 import { parseOnlineTtrpgRoomProjectionV1 } from "../../lib/online/ttrpg-projection";
 import {
-  currentGamePlatformEnvironmentV1,
-  evaluateGamePlatformCapabilityV1,
-} from "../../lib/game-platform/capability-status";
+  currentProductPlatformEnvironmentV1,
+  evaluateProductPlatformCapabilityV1,
+} from "../../lib/product-platform/capability-status";
 import TtrpgTabletopSurface from "./TtrpgTabletopSurface";
 import { parseTtrpgDiceExpressionV2 } from "../../lib/ttrpg/dice";
 
@@ -206,7 +206,7 @@ export default function TtrpgOnlineRoomPanel(props: {
     appliedHandoffRef.current = key;
     if (handoff.releaseHash !== props.releaseHash) {
       setError(
-        "该招募席位绑定了另一份 GameRelease，请先下载并从对应发布进入。",
+        "该招募席位绑定了另一份 ProductRelease，请先下载并从对应发布进入。",
       );
       return;
     }
@@ -287,7 +287,7 @@ export default function TtrpgOnlineRoomPanel(props: {
     credentials: OnlineRoomCredentialBundleV1,
   ) => {
     if (credentials.releaseHash !== props.releaseHash) {
-      throw new Error("该邀请绑定了另一份 GameRelease，请从对应发布进入。");
+      throw new Error("该邀请绑定了另一份 ProductRelease，请从对应发布进入。");
     }
     const client = new OnlineRoomClientV1(
       {
@@ -333,10 +333,10 @@ export default function TtrpgOnlineRoomPanel(props: {
     );
   }
 
-  const capabilityDecision = evaluateGamePlatformCapabilityV1(
+  const capabilityDecision = evaluateProductPlatformCapabilityV1(
     "online-authoritative-room",
     {
-      environment: currentGamePlatformEnvironmentV1(),
+      environment: currentProductPlatformEnvironmentV1(),
       experimentalProject: false,
       authorOptIn: false,
       onlineServiceConfigured: true,

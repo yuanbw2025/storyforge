@@ -1,29 +1,33 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import {
-  exportGameDistributionBundleV1,
-  importMarketplaceGameDistributionV1,
-  verifyGameDistributionBundleV1,
-  type MarketplaceImportProvenanceV1,
-} from '../../src/lib/game-platform/distribution-bundle'
-import { hashGameProductionValueV2 } from '../../src/lib/game-production/hash'
-import { putMediaBlobObject, sha256MediaData } from '../../src/lib/game-production/media-blob-store'
-import { createGameReleaseManifestV2, parseGameRuntimePackageV2 } from '../../src/lib/game-production/runtime-package'
-import { assertGameReleaseUnchanged } from '../../src/lib/text-game/releases'
-import type { FrozenRuntimeMediaAssetV2, GameRuntimePackageV2, WorkspaceScope } from '../../src/lib/types'
-import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
+  exportProductDistributionBundleV2,
+  importMarketplaceProductDistributionV2,
+  verifyProductDistributionBundleV2,
+  type MarketplaceImportProvenanceV2,
+} from '../../src/lib/product-platform/distribution-bundle'
+import { hashProductProductionValueV2 } from '../../src/lib/product-production/hash'
+import { putMediaBlobObject, sha256MediaData } from '../../src/lib/product-production/media-blob-store'
+import { parseProductRuntimePackageV1 } from '../../src/lib/product-production/runtime-package'
+import { assertProductReleaseUnchanged } from '../../src/lib/product/releases'
+import type { FrozenRuntimeMediaAssetV2, ProductRuntimePackageV1, WorkspaceScope } from '../../src/lib/types'
+import { resolveWorkspaceOwnership } from '../../src/lib/workspace/ownership'
 import { createWorldRevision, publishWorldRevision } from '../../src/lib/world-engine/releases'
+import { CURRENT_PRODUCT_RESOURCE_KEYS, currentProductSelection } from '../helpers/current-product-world'
+import { createFixtureProductReleaseManifestV1 } from '../helpers/product-release-v1'
+import { seedCurrentProject } from '../helpers/current-workspace'
 
 async function workspace(name: string) {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    name, genre: 'interactive-fiction', genres: ['interactive-fiction'], status: 'drafting',
+  const projectId = await seedCurrentProject({
+    workspacePurpose: 'world-engine',
+    name, genres: ['interactive-fiction'], status: 'drafting',
     description: '', targetWordCount: 1, createdAt: now, updatedAt: now,
   } as never) as number
-  return ensureWorkspaceOwnership(projectId)
+  return resolveWorkspaceOwnership(projectId)
 }
 
-function narrative(): GameRuntimePackageV2['narrative'] {
+function narrative(): ProductRuntimePackageV1['narrative'] {
   return {
     moduleKind: 'main', moduleTitle: '可分发短篇', entryNodeKey: 'ending.arrive',
     nodes: [{
@@ -38,22 +42,18 @@ function narrative(): GameRuntimePackageV2['narrative'] {
   }
 }
 
-function avgPackage(worldContentHash: string, asset: FrozenRuntimeMediaAssetV2): GameRuntimePackageV2 {
-  return parseGameRuntimePackageV2({
-    schema: 'storyforge.game-runtime-package', version: 2, productType: 'avg',
+function avgPackage(worldContentHash: string, asset: FrozenRuntimeMediaAssetV2): ProductRuntimePackageV1 {
+  return parseProductRuntimePackageV1({
+    schema: 'storyforge.product-runtime-package', version: 1, productType: 'avg',
     definition: {
-      gameKey: 'market.harbor', title: '市场雾港', description: '可离线导入的完整游戏。',
+      productKey: 'market.harbor', title: '市场雾港', description: '可离线导入的完整游戏。',
       enabledCapabilities: ['narrative', 'presentation'], rulesetVersion: 1, initialVariables: {},
     },
     sourceWorld: {
       contentHash: worldContentHash,
-      selection: {
-        schema: 'storyforge.world-game-source', version: 2, productType: 'avg', worldContentHash,
-        narrativeModuleExportIds: [], characterExportIds: [], characterRelationExportIds: [],
-        importantLocationExportIds: [], artifactExportIds: [], codexEntryExportIds: [],
-        storyArcExportIds: [], avgMediaAssetExportIds: [],
-        productSource: { kind: 'avg', presentationStyle: 'minimal', existingMediaAssetExportIds: [] },
-      },
+      selection: currentProductSelection('avg', {
+        story: [CURRENT_PRODUCT_RESOURCE_KEYS.story],
+      }),
     },
     narrative: narrative(),
     presentation: { version: 1, cues: [], assets: [asset] },
@@ -73,30 +73,31 @@ async function publishedFixture(scope: WorkspaceScope) {
   }
   const object = await putMediaBlobObject({ scope, data, mimeType: asset.mimeType, expectedContentHash: contentHash })
   const now = Date.now()
-  const mediaAssetId = await db.avgMediaAssets.add({
+  const manifest = await createFixtureProductReleaseManifestV1({
+    runtimePackage: avgPackage(worldRelease.contentHash, asset), productionKey: 'market.harbor',
+  })
+  const releaseId = await db.productReleases.add({
     projectId: scope.projectId, worldId: scope.worldId, workId: scope.workId,
+    productionKey: 'market.harbor', productType: 'avg', worldReleaseId: worldRelease.id!, version: 1, label: '市场雾港 v1',
+    manifestJson: JSON.stringify(manifest), contentHash: await hashProductProductionValueV2(manifest), createdAt: now,
+  }) as number
+  const mediaAssetId = await db.productMediaAssets.add({
+    projectId: scope.projectId, worldId: scope.worldId, workId: scope.workId,
+    ownerKind: 'release', productType: 'avg', productReleaseId: releaseId, productRuntimeSessionId: null,
     assetKey: asset.assetKey, version: asset.version, kind: asset.kind, name: asset.name,
     mimeType: asset.mimeType, byteSize: asset.byteSize, width: asset.width, height: asset.height,
     durationMs: asset.durationMs, contentHash: asset.contentHash, source: asset.source, license: asset.license,
     altText: asset.altText, characterTag: asset.characterTag, sceneTag: asset.sceneTag,
     createdAt: now, updatedAt: now,
   }) as number
-  await db.avgMediaBlobs.add({
+  await db.productMediaBlobs.add({
     projectId: scope.projectId, worldId: scope.worldId, workId: scope.workId,
     mediaAssetId, blobObjectId: object.id!, data: null, createdAt: now,
   })
-  const manifest = await createGameReleaseManifestV2({
-    runtimePackage: avgPackage(worldRelease.contentHash, asset), productionProvenance: null,
-  })
-  const releaseId = await db.gameReleases.add({
-    projectId: scope.projectId, worldId: scope.worldId, workId: scope.workId,
-    gameDefinitionId: null, worldReleaseId: worldRelease.id!, version: 1, label: '市场雾港 v1',
-    manifestJson: JSON.stringify(manifest), contentHash: await hashGameProductionValueV2(manifest), createdAt: now,
-  }) as number
   return { releaseId, data, asset }
 }
 
-function provenance(overrides: Partial<MarketplaceImportProvenanceV1> = {}): MarketplaceImportProvenanceV1 {
+function provenance(overrides: Partial<MarketplaceImportProvenanceV2> = {}): MarketplaceImportProvenanceV2 {
   return {
     listingId: 'listing.market-harbor', orderId: 'order.market-harbor',
     entitlementId: 'entitlement.market-harbor',
@@ -110,7 +111,7 @@ function provenance(overrides: Partial<MarketplaceImportProvenanceV1> = {}): Mar
   }
 }
 
-describe('PLATFORM-1C · Marketplace GameDistributionBundle', () => {
+describe('PLATFORM-1C · Marketplace ProductDistributionBundle', () => {
   beforeEach(async () => {
     db.close()
     await db.delete()
@@ -118,68 +119,67 @@ describe('PLATFORM-1C · Marketplace GameDistributionBundle', () => {
   })
   afterEach(() => db.close())
 
-  it('冻结 GameRelease、WorldRelease 与内容寻址媒资，并导入现有治理表后可直接验证游玩来源', async () => {
+  it('冻结自包含 ProductRelease、世界来源证明与产品媒资，导入后无需复制 WorldRelease 即可运行', async () => {
     const source = await workspace('创作者工作区')
     const fixture = await publishedFixture(source.scope)
-    const bundle = await exportGameDistributionBundleV1({ scope: source.scope, gameReleaseId: fixture.releaseId })
+    const bundle = await exportProductDistributionBundleV2({ scope: source.scope, productReleaseId: fixture.releaseId })
     expect(bundle.media).toHaveLength(1)
-    await expect(verifyGameDistributionBundleV1(JSON.parse(JSON.stringify(bundle)))).resolves.toEqual(bundle)
+    await expect(verifyProductDistributionBundleV2(JSON.parse(JSON.stringify(bundle)))).resolves.toEqual(bundle)
 
     const target = await workspace('玩家工作区')
-    const imported = await importMarketplaceGameDistributionV1({
+    const imported = await importMarketplaceProductDistributionV2({
       scope: target.scope, bundle: JSON.parse(JSON.stringify(bundle)), provenance: provenance(),
     })
-    await expect(assertGameReleaseUnchanged(imported.id!)).resolves.toMatchObject({ id: imported.id })
+    await expect(assertProductReleaseUnchanged(imported.id!)).resolves.toMatchObject({ id: imported.id })
     expect(imported.distributionProvenance).toMatchObject({
       source: 'marketplace', listingId: 'listing.market-harbor', localCopyPreserved: true,
       attribution: ['雾港工作室 · 原作'],
     })
-    expect(await db.worldReleases.where('worldId').equals(target.scope.worldId).count()).toBe(1)
-    expect(await db.avgMediaAssets.where('workId').equals(target.scope.workId).first()).not.toHaveProperty('blobContentHash')
+    expect(await db.worldReleases.where('worldId').equals(target.scope.worldId).count()).toBe(0)
+    expect(await db.productMediaAssets.where('workId').equals(target.scope.workId).first()).not.toHaveProperty('blobContentHash')
     const importedBlob = await db.mediaBlobObjects.where('workId').equals(target.scope.workId).first()
     expect(new Uint8Array(importedBlob!.data!)).toEqual(new Uint8Array(fixture.data))
 
-    const repeated = await importMarketplaceGameDistributionV1({
+    const repeated = await importMarketplaceProductDistributionV2({
       scope: target.scope, bundle, provenance: provenance(),
     })
     expect(repeated.id).toBe(imported.id)
-    expect(await db.gameReleases.where('workId').equals(target.scope.workId).count()).toBe(1)
+    expect(await db.productReleases.where('workId').equals(target.scope.workId).count()).toBe(1)
     expect(await db.mediaBlobObjects.where('workId').equals(target.scope.workId).count()).toBe(1)
   }, 40_000)
 
-  it('拒绝媒资、世界依赖和总包任一层篡改', async () => {
+  it('拒绝媒资、世界来源证明和总包任一层篡改', async () => {
     const source = await workspace('篡改来源')
     const fixture = await publishedFixture(source.scope)
-    const bundle = await exportGameDistributionBundleV1({ scope: source.scope, gameReleaseId: fixture.releaseId })
+    const bundle = await exportProductDistributionBundleV2({ scope: source.scope, productReleaseId: fixture.releaseId })
 
     const mediaTamper = structuredClone(bundle)
     mediaTamper.media[0].dataBase64 = `${mediaTamper.media[0].dataBase64.slice(0, -4)}AAAA`
-    await expect(verifyGameDistributionBundleV1(mediaTamper)).rejects.toThrow(/媒资/)
+    await expect(verifyProductDistributionBundleV2(mediaTamper)).rejects.toThrow(/媒资/)
 
     const worldTamper = structuredClone(bundle)
-    const dependency = worldTamper.worldRelease.manifest.dependencies[0]
-    dependency.rowCount += 1
-    await expect(verifyGameDistributionBundleV1(worldTamper)).rejects.toThrow(/dependency/)
+    worldTamper.sourceWorld.contentHash = 'f'.repeat(64)
+    await expect(verifyProductDistributionBundleV2(worldTamper)).rejects.toThrow(/世界来源证明/)
 
     const bundleTamper = structuredClone(bundle)
     bundleTamper.bundleHash = '0'.repeat(64)
-    await expect(verifyGameDistributionBundleV1(bundleTamper)).rejects.toThrow(/bundleHash/)
+    await expect(verifyProductDistributionBundleV2(bundleTamper)).rejects.toThrow(/bundleHash/)
   }, 40_000)
 
   it('许可不允许离线交付或归因回执不完整时，在目标 Work 中零业务写入', async () => {
     const source = await workspace('许可来源')
     const fixture = await publishedFixture(source.scope)
-    const bundle = await exportGameDistributionBundleV1({ scope: source.scope, gameReleaseId: fixture.releaseId })
+    const bundle = await exportProductDistributionBundleV2({ scope: source.scope, productReleaseId: fixture.releaseId })
     const target = await workspace('许可目标')
 
-    await expect(importMarketplaceGameDistributionV1({
+    await expect(importMarketplaceProductDistributionV2({
       scope: target.scope, bundle,
       provenance: provenance({ license: { ...provenance().license, allowOfflineExport: false } }),
     })).rejects.toThrow(/许可/)
-    await expect(importMarketplaceGameDistributionV1({
+    await expect(importMarketplaceProductDistributionV2({
       scope: target.scope, bundle, provenance: provenance({ attribution: [] }),
     })).rejects.toThrow(/归因/)
-    expect(await db.gameReleases.where('workId').equals(target.scope.workId).count()).toBe(0)
+    expect(await db.productReleases.where('workId').equals(target.scope.workId).count()).toBe(0)
     expect(await db.worldReleases.where('worldId').equals(target.scope.worldId).count()).toBe(0)
     expect(await db.mediaBlobObjects.where('workId').equals(target.scope.workId).count()).toBe(0)
   }, 40_000)

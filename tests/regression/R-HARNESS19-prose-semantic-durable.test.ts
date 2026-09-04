@@ -3,20 +3,19 @@ import { db } from '../../src/lib/db/schema'
 import { assembleContext } from '../../src/lib/registry/assemble-context'
 import { createContextManifestFromAssemblyV1 } from '../../src/lib/agent/run/context-manifest'
 import {
-  beginProseGenerationStepV1,
+  beginProseGenerationGatewayStepV1,
   beginProseSemanticStepV1,
   commitProseGenerationAdoptionV1,
   completeProseSemanticStepV1,
   createProseGenerationDurableRunV1,
+  finalizeProseGenerationGatewayStepV1,
   hashProseGenerationCandidateV1,
   isProseGenerationCandidateCurrentV1,
   persistProseGenerationCandidateV1,
   readLatestProseGenerationCandidateV1,
   recordProseGenerationCandidateV1,
-  recordProseGenerationModelOutputV1,
   recordProseSemanticModelOutputV1,
   recoverProseGenerationCandidateV1,
-  PROSE_GENERATION_SOURCE_KEYS_V1,
   PROSE_GENERATION_STEP_ID_V1,
   PROSE_SEMANTIC_REVIEW_STEP_ID_V1,
   type ProseGenerationCandidateV1,
@@ -36,6 +35,11 @@ import { hashChapterText } from '../../src/lib/ai/chapter-memory/text-normalizat
 import type { WorkspaceScope } from '../../src/lib/types'
 import type { AssembleContextResult } from '../../src/lib/registry/types'
 import { runDurableProseSemanticReviewV1 } from '../../src/lib/agent/run/prose-semantic-durable'
+import { createWorkspace } from '../../src/lib/workspace/create-workspace'
+import { stampNewRecord } from '../../src/lib/workspace/scope'
+import { prepareProseGatewayAssemblyV1 } from '../../src/lib/prose/gateway-context'
+import { useAIConfigStore } from '../../src/stores/ai-config'
+import { captureWorkspaceContentRevisionV1 } from '../../src/lib/authoring/content-revision'
 
 function withGatewayEvidence(assembled: AssembleContextResult): AssembleContextResult {
   const content = '【章纲】守灯人在潮门外观察退潮，不知道月井密钥。'
@@ -60,46 +64,14 @@ async function seedWorkspace(): Promise<{
   chapterId: number
 }> {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    name: 'H19 正文语义闭环',
-    genre: 'fantasy',
-    genres: ['fantasy'],
-    status: 'drafting',
-    description: '',
-    targetWordCount: 100_000,
-    worldCode: 'h19-world',
-    worldVersion: 1,
-    createdAt: now,
-    updatedAt: now,
-  } as any) as number
-  const worldId = await db.worlds.add({
+  const created = await createWorkspace({
+    name: 'H19 正文语义闭环', genres: ['fantasy'], status: 'drafting',
+    description: '', targetWordCount: 100_000,
+  }, { purpose: 'independent-work', kind: 'novel', novelProfile: 'long' })
+  const { scope } = created
+  const projectId = scope.projectId
+  const outlineNodeId = await db.outlineNodes.add(stampNewRecord(scope, 'outlineNodes', {
     projectId,
-    code: 'h19-world',
-    name: '潮门世界',
-    description: '',
-    currentVersion: 1,
-    createdAt: now,
-    updatedAt: now,
-  }) as number
-  const workId = await db.works.add({
-    projectId,
-    worldId,
-    title: '潮门',
-    description: '',
-    genres: ['fantasy'],
-    status: 'drafting',
-    targetWordCount: 100_000,
-    createdAt: now,
-    updatedAt: now,
-  }) as number
-  await db.projects.update(projectId, {
-    activeWorldId: worldId,
-    activeWorkId: workId,
-    ownershipSchemaVersion: 1,
-  })
-  const outlineNodeId = await db.outlineNodes.add({
-    projectId,
-    workId,
     parentId: null,
     type: 'chapter',
     title: '潮门',
@@ -107,10 +79,17 @@ async function seedWorkspace(): Promise<{
     order: 0,
     createdAt: now,
     updatedAt: now,
-  } as any) as number
-  const chapterId = await db.chapters.add({
+  } as any, { owner: 'work' })) as number
+  await db.detailedOutlines.add(stampNewRecord(scope, 'detailedOutlines', {
+    projectId, outlineNodeId,
+    scenes: [{ sceneId: 'scene-1', title: '观察退潮', summary: '守灯人在潮门外观察退潮。', characterIds: [], location: '潮门', conflict: '秘密不可泄漏', pace: 'medium', estimatedWords: 1000 }],
+    openingHook: '退潮开始。', endingCliffhanger: '潮门震动。', sceneLocation: '潮门',
+    appearingCharacterIds: [], foreshadowIds: [], emotionArc: 'rising',
+    prohibitions: ['守灯人不知道月井密钥'], lastUsedSummary: '守灯人在潮门外观察退潮。',
+    createdAt: now, updatedAt: now,
+  } as any, { owner: 'work' }))
+  const chapterId = await db.chapters.add(stampNewRecord(scope, 'chapters', {
     projectId,
-    workId,
     outlineNodeId,
     title: '潮门',
     content: '',
@@ -120,8 +99,9 @@ async function seedWorkspace(): Promise<{
     notes: '',
     createdAt: now,
     updatedAt: now,
-  } as any) as number
-  return { scope: { projectId, worldId, workId }, outlineNodeId, chapterId }
+    perspectiveCharacterId: null,
+  } as any, { owner: 'work' })) as number
+  return { scope, outlineNodeId, chapterId }
 }
 
 describe.sequential('R-HARNESS19 · 正文语义评审 durable 主路径', () => {
@@ -141,24 +121,14 @@ describe.sequential('R-HARNESS19 · 正文语义评审 durable 主路径', () =>
       operation: 'generate',
       semanticReview: true,
     })
-    const generationAssembled = withGatewayEvidence(await assembleContext({
+    const generationAssembled = await prepareProseGatewayAssemblyV1({
       projectId: fixture.scope.projectId,
       scope: fixture.scope,
+      worldGroupId: null,
       chapterId: fixture.chapterId,
       outlineNodeId: fixture.outlineNodeId,
-      sourceKeys: [...PROSE_GENERATION_SOURCE_KEYS_V1],
-      inputBudgetMaxTokens: 48_000,
-    }))
-    const generationManifest = await createContextManifestFromAssemblyV1({
-      runId: snapshot.run.id,
-      stepId: PROSE_GENERATION_STEP_ID_V1,
-      attempt: 1,
-      projectId: fixture.scope.projectId,
-      worldGroupId: null,
-      declaredSourceKeys: PROSE_GENERATION_SOURCE_KEYS_V1,
-      assembled: generationAssembled,
-      boundary: { chapterId: fixture.chapterId, outlineNodeId: fixture.outlineNodeId },
-      readerVersion: 'chapter-prose-generation-context-v1',
+      operation: 'generate', authorRequest: '写潮门正文', perspectiveCharacterId: null,
+      config: useAIConfigStore.getState().config,
     })
     const boundary = await buildChapterInformationBoundaryV1({
       scope: fixture.scope,
@@ -168,10 +138,14 @@ describe.sequential('R-HARNESS19 · 正文语义评审 durable 主路径', () =>
       perspectiveCharacterId: null,
     })
     const messages = [{ role: 'user' as const, content: '写潮门正文' }]
-    snapshot = await beginProseGenerationStepV1({
+    const begun = await beginProseGenerationGatewayStepV1({
       scope: fixture.scope,
       snapshot,
-      contextManifest: generationManifest,
+      worldGroupId: null,
+      chapterId: fixture.chapterId,
+      outlineNodeId: fixture.outlineNodeId,
+      assembled: generationAssembled,
+      messages,
       binding: {
         operation: 'generate',
         sourceTextHash: await hashChapterText(''),
@@ -180,13 +154,16 @@ describe.sequential('R-HARNESS19 · 正文语义评审 durable 主路径', () =>
       },
       budgetReservationTokens: 18_000,
     })
+    snapshot = begun.snapshot
     const outputText = '守灯人说出了月井密钥。'
-    snapshot = await recordProseGenerationModelOutputV1({
+    const finalized = await finalizeProseGenerationGatewayStepV1({
       scope: fixture.scope,
       snapshot,
+      attempt: begun.attempt,
       output: outputText,
       usedTokens: 1_200,
     })
+    snapshot = finalized.snapshot
     const stages: string[] = []
     const publishedSequences: number[] = []
     const review = vi.fn()
@@ -261,24 +238,14 @@ describe.sequential('R-HARNESS19 · 正文语义评审 durable 主路径', () =>
       'prose-semantic-rereview',
     ])
 
-    const generationAssembled = withGatewayEvidence(await assembleContext({
+    const generationAssembled = await prepareProseGatewayAssemblyV1({
       projectId: fixture.scope.projectId,
       scope: fixture.scope,
+      worldGroupId: null,
       chapterId: fixture.chapterId,
       outlineNodeId: fixture.outlineNodeId,
-      sourceKeys: [...PROSE_GENERATION_SOURCE_KEYS_V1],
-      inputBudgetMaxTokens: 48_000,
-    }))
-    const generationManifest = await createContextManifestFromAssemblyV1({
-      runId: snapshot.run.id,
-      stepId: PROSE_GENERATION_STEP_ID_V1,
-      attempt: 1,
-      projectId: fixture.scope.projectId,
-      worldGroupId: null,
-      declaredSourceKeys: PROSE_GENERATION_SOURCE_KEYS_V1,
-      assembled: generationAssembled,
-      boundary: { chapterId: fixture.chapterId, outlineNodeId: fixture.outlineNodeId },
-      readerVersion: 'chapter-prose-generation-context-v1',
+      operation: 'generate', authorRequest: '写潮门正文', perspectiveCharacterId: null,
+      config: useAIConfigStore.getState().config,
     })
     const sourceTextHash = await hashChapterText('')
     const boundary = await buildChapterInformationBoundaryV1({
@@ -288,25 +255,34 @@ describe.sequential('R-HARNESS19 · 正文语义评审 durable 主路径', () =>
       worldGroupId: null,
       perspectiveCharacterId: null,
     })
-    snapshot = await beginProseGenerationStepV1({
+    const generationMessages = [{ role: 'user' as const, content: `受控资料：\n${generationAssembled.text}\n\n写潮门正文` }]
+    const begun = await beginProseGenerationGatewayStepV1({
       scope: fixture.scope,
       snapshot,
-      contextManifest: generationManifest,
+      worldGroupId: null,
+      chapterId: fixture.chapterId,
+      outlineNodeId: fixture.outlineNodeId,
+      assembled: generationAssembled,
+      messages: generationMessages,
       binding: {
         operation: 'generate',
         sourceTextHash,
-        promptHash: await hashCanonicalValue([{ role: 'user', content: '写潮门正文' }]),
+        promptHash: await hashCanonicalValue(generationMessages),
         informationBoundaryHash: boundary.manifestHash,
       },
       budgetReservationTokens: 18_000,
     })
+    snapshot = begun.snapshot
     const outputText = '守灯人站在潮门外，只观察潮水退去。'
-    snapshot = await recordProseGenerationModelOutputV1({
+    const finalized = await finalizeProseGenerationGatewayStepV1({
       scope: fixture.scope,
       snapshot,
+      attempt: begun.attempt,
       output: outputText,
       usedTokens: 1_200,
     })
+    snapshot = finalized.snapshot
+    const generationManifest = finalized.manifest
 
     const reviewSkill = getAgentSkillV1('prose.review')
     const reviewSourceKeys = resolveAgentSkillContextSourceKeysV1(reviewSkill)
@@ -389,8 +365,10 @@ describe.sequential('R-HARNESS19 · 正文语义评审 durable 主路径', () =>
       worldGroupId: null,
       operation: 'generate' as const,
       sourceTextHash,
+      contentRevision: await captureWorkspaceContentRevisionV1({ scope: fixture.scope, worldGroupId: null }),
       outputText,
       outputTextHash: await hashCanonicalValue(outputText),
+      gatewayEvidenceVersion: 3 as const,
       expectedContentHash: await hashChapterText(outputText),
       informationBoundaryHash: boundary.manifestHash,
       perspectiveCharacterId: null,

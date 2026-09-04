@@ -9,7 +9,7 @@ import type { Character, ChatMessage, RelationType } from '../types'
 import { usePromptStore } from '../../stores/prompt'
 import { renderPrompt } from './prompt-engine'
 import { characterAxesLabel } from '../character/character-axes'
-import { readOwnedRows, resolveReadScopeLike } from '../world-engine/scope'
+import { readOwnedRows, resolveReadScopeLike } from '../workspace/scope'
 
 /** AI 返回的原始关系条目 */
 export interface ExtractedRelation {
@@ -71,14 +71,16 @@ export async function buildRelationExtractPrompt(
   }
   const chapterContent = contentParts.join('\n\n')
 
-  // 4. 获取项目名
-  const project = await db.projects.get(projectId)
-  const projectName = project?.name || '未命名项目'
+  // 4. 作品标题只来自当前 Work；Project.name 只是工作区显示名。
+  const work = await db.works.get(scope.workId)
+  if (!work || work.projectId !== projectId || work.worldId !== scope.worldId) {
+    throw new Error('当前作品不存在')
+  }
 
   // 5. 渲染 prompt
   const tpl = usePromptStore.getState().getActive('relation.extract')
   const { messages } = renderPrompt(tpl, {
-    projectName,
+    projectName: work.title,
     characterList,
     outlineSummary: outlineSummary || '',
     chapterContent: chapterContent || '',

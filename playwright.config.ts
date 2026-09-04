@@ -3,6 +3,7 @@ import { defineConfig, devices } from '@playwright/test'
 const configuredPort = Number(process.env.PLAYWRIGHT_PORT ?? 4178)
 const port = Number.isInteger(configuredPort) && configuredPort > 0 ? configuredPort : 4178
 const frozenWorkspace = process.env.PLAYWRIGHT_FROZEN_WORKSPACE === '1'
+const useSystemChrome = process.env.PLAYWRIGHT_USE_SYSTEM_CHROME === '1'
 
 export default defineConfig({
   testDir: './tests/e2e',
@@ -21,7 +22,10 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      use: {
+        ...devices['Desktop Chrome'],
+        ...(useSystemChrome ? { channel: 'chrome' as const } : {}),
+      },
     },
   ],
   webServer: {

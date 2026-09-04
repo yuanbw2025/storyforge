@@ -18,24 +18,14 @@ import { FIELD_BY_TARGET } from '../../src/lib/registry/field-registry'
 import { PROJECT_TABLES } from '../../src/lib/registry/project-tables'
 import { parseStyleLearningResultStrictV1 } from '../../src/lib/style/learning-agent'
 import type { WorkspaceScope } from '../../src/lib/types'
+import { generateWorkCode } from '../../src/lib/memory/identity'
+import { stampCurrentFixtureResourceUidsV1 } from '../helpers/current-resource-identity'
+import { currentWorkFixtureRecordV1, seedCurrentWorkspace } from '../helpers/current-workspace'
 
 async function seed(suffix = '', withProfile = true) {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    name: `纸灯小说${suffix}`, genre: 'fantasy', genres: ['fantasy'], status: 'drafting',
-    description: '作者用短促句和克制意象写一座雨城。', targetWordCount: 80_000,
-    worldCode: `style-${now}-${suffix}`, worldVersion: 1, enableMultiWorld: false,
-    createdAt: now, updatedAt: now,
-  } as any) as number
-  const worldId = await db.worlds.add({
-    projectId, code: `style-${now}-${suffix}`, name: '纸灯世界', description: '',
-    currentVersion: 1, createdAt: now, updatedAt: now,
-  }) as number
-  const workId = await db.works.add({
-    projectId, worldId, title: `雨城手稿${suffix}`, description: '', genres: ['fantasy'],
-    status: 'drafting', targetWordCount: 80_000, createdAt: now, updatedAt: now,
-  } as any) as number
-  await db.projects.update(projectId, { activeWorldId: worldId, activeWorkId: workId, ownershipSchemaVersion: 1 })
+  const created = await seedCurrentWorkspace(`纸灯小说${suffix}`)
+  const { projectId, worldId, workId } = created.scope
   const chapterId = await db.chapters.add({
     projectId, worldId, workId, title: '雨落纸灯', order: 1, status: 'polished',
     content: '<p>雨落下来。灯没有灭。阿棠把伞收在门外，只带进一身潮湿。</p><p>她不解释。旧钟又响了一次。</p>',
@@ -57,6 +47,7 @@ async function seed(suffix = '', withProfile = true) {
       createdAt: now, updatedAt: now,
     } as any) as number
   }
+  await stampCurrentFixtureResourceUidsV1(projectId)
   return {
     scope: { projectId, worldId, workId } satisfies WorkspaceScope,
     projectId, worldId, workId, chapterId, profileId,
@@ -276,10 +267,11 @@ describe.sequential('R-HARNESS76 · 文风学习 durable 候选与校准风险�
       .find(run => run.contractJson.includes('prose.style-learn'))?.status).toBe('cancelled')
 
     const now = Date.now()
-    const otherWorkId = await db.works.add({
-      projectId: pending.projectId, worldId: pending.worldId, title: '另一作品', description: '',
-      genres: ['fantasy'], status: 'drafting', targetWordCount: 1_000, createdAt: now, updatedAt: now,
-    } as any) as number
+    const otherWorkId = await db.works.add(currentWorkFixtureRecordV1({
+      projectId: pending.projectId, worldId: pending.worldId, code: generateWorkCode(), title: '另一作品', description: '',
+      genres: ['fantasy'], status: 'drafting', targetWordCount: 1_000,
+      kind: 'novel', novelProfile: 'long', createdAt: now, updatedAt: now,
+    })) as number
     expect(await readPendingStyleLearningCandidateV1({
       scope: { ...pending.scope, workId: otherWorkId },
     })).toBeNull()

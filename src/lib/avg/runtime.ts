@@ -1,22 +1,22 @@
 import type {
   AvgCueType,
-  AvgMediaAsset,
-  AvgMediaKind,
   AvgPresentationContentV1,
   AvgPresentationCue,
   AvgStageState,
   AvgValidationReport,
-  FrozenAvgMediaAsset,
+  FrozenProductMediaAsset,
+  ProductMediaKind,
   FrozenNarrativeBeat,
-  SimulationAvgPresentationState,
-  SimulationEvent,
+  AvgRuntimePresentationState,
+  ProductRuntimeEvent,
 } from '../types'
-import { AVG_CUE_TYPES, AVG_MEDIA_KINDS, AVG_STAGE_LAYERS } from '../types'
+import { AVG_CUE_TYPES, AVG_STAGE_LAYERS } from '../types'
+import { freezeProductMediaAsset } from '../product-production/media-contracts'
 
 const STABLE_KEY = /^[a-zA-Z0-9._:-]+$/
-const VISUAL_KINDS = new Set<AvgMediaKind>(['background', 'character-pose', 'character-expression', 'cg', 'ui'])
-const AUDIO_KINDS = new Set<AvgMediaKind>(['bgm', 'ambience', 'sfx', 'voice'])
-const SUPPORTED_MIME_PREFIXES: Partial<Record<AvgMediaKind, string[]>> = {
+const VISUAL_KINDS = new Set<ProductMediaKind>(['background', 'character-pose', 'character-expression', 'cg', 'ui'])
+const AUDIO_KINDS = new Set<ProductMediaKind>(['bgm', 'ambience', 'sfx', 'voice'])
+const SUPPORTED_MIME_PREFIXES: Partial<Record<ProductMediaKind, string[]>> = {
   background: ['image/'], 'character-pose': ['image/'], 'character-expression': ['image/'], cg: ['image/'], ui: ['image/'],
   bgm: ['audio/'], ambience: ['audio/'], sfx: ['audio/'], voice: ['audio/'],
 }
@@ -97,25 +97,11 @@ export function parseAvgPresentationContent(value: string | unknown): AvgPresent
   return { version: 1, cues: parsed.cues.map(parseCue) }
 }
 
-export function freezeAvgMediaAsset(asset: AvgMediaAsset | FrozenAvgMediaAsset): FrozenAvgMediaAsset {
-  if (!AVG_MEDIA_KINDS.includes(asset.kind) || !asset.name.trim() || !asset.contentHash.match(/^[a-f0-9]{64}$/)
-    || !Number.isInteger(asset.version) || asset.version < 1 || !Number.isInteger(asset.byteSize) || asset.byteSize < 0) {
-    throw new Error(`[avg] 媒资元数据无效:${asset.assetKey}`)
-  }
-  return {
-    assetKey: stableKey(asset.assetKey, 'assetKey'), version: asset.version, kind: asset.kind,
-    name: asset.name.trim(), mimeType: asset.mimeType.trim().toLowerCase(), byteSize: asset.byteSize,
-    width: asset.width, height: asset.height, durationMs: asset.durationMs, contentHash: asset.contentHash,
-    source: asset.source.trim(), license: asset.license.trim(), altText: asset.altText.trim(),
-    characterTag: asset.characterTag.trim(), sceneTag: asset.sceneTag.trim(),
-  }
-}
-
 export function validateAvgPresentation(input: {
   content: AvgPresentationContentV1
   beats: FrozenNarrativeBeat[]
-  assets: FrozenAvgMediaAsset[]
-  allWorkAssets?: FrozenAvgMediaAsset[]
+  assets: FrozenProductMediaAsset[]
+  allWorkAssets?: FrozenProductMediaAsset[]
 }): AvgValidationReport {
   const errors: string[] = []
   const warnings: string[] = []
@@ -158,12 +144,12 @@ export const EMPTY_AVG_STAGE: AvgStageState = {
   camera: { x: 0, y: 0, scale: 1 }, activeAudio: [], mask: null, lastTransition: null,
 }
 
-function audioChannel(kind: AvgMediaKind): 'bgm' | 'ambience' | 'sfx' | 'voice' {
+function audioChannel(kind: ProductMediaKind): 'bgm' | 'ambience' | 'sfx' | 'voice' {
   if (!AUDIO_KINDS.has(kind)) throw new Error(`[avg] ${kind} 不是音频类型`)
   return kind as 'bgm' | 'ambience' | 'sfx' | 'voice'
 }
 
-export function applyAvgCue(stage: AvgStageState, cue: AvgPresentationCue, assets: FrozenAvgMediaAsset[], snapshots: Record<string, AvgStageState>): AvgStageState {
+export function applyAvgCue(stage: AvgStageState, cue: AvgPresentationCue, assets: FrozenProductMediaAsset[], snapshots: Record<string, AvgStageState>): AvgStageState {
   let next = structuredClone(stage)
   const asset = cue.assetKey ? assets.find(item => item.assetKey === cue.assetKey) : null
   if (cue.assetKey && !asset) return next
@@ -210,22 +196,22 @@ export function applyAvgCue(stage: AvgStageState, cue: AvgPresentationCue, asset
 
 export function createInitialAvgPresentationState(input: {
   contentHash: string
-  assets: FrozenAvgMediaAsset[]
+  assets: FrozenProductMediaAsset[]
   content: AvgPresentationContentV1
   entryNodeKey: string
-}): SimulationAvgPresentationState {
+}): AvgRuntimePresentationState {
   return {
     schema: 'storyforge.avg-presentation', version: 1, contentHash: input.contentHash,
     // RuntimePackage v2 media additionally carries blobContentHash for the
     // resolver. Session state intentionally stores only the canonical frozen
     // AVG metadata so serialization/parsing cannot change its shape.
-    assets: input.assets.map(freezeAvgMediaAsset), cues: structuredClone(input.content.cues), currentNodeKey: input.entryNodeKey,
+    assets: input.assets.map(freezeProductMediaAsset), cues: structuredClone(input.content.cues), currentNodeKey: input.entryNodeKey,
     currentBeatKey: null, reachedBeatKeys: [], readBeatKeys: [], stage: structuredClone(EMPTY_AVG_STAGE),
     snapshots: {}, mediaFailures: [],
   }
 }
 
-export function parseAvgPresentationState(value: unknown): SimulationAvgPresentationState | null {
+export function parseAvgPresentationState(value: unknown): AvgRuntimePresentationState | null {
   if (value == null) return null
   const row = object(value, '演出状态')
   if (row.schema !== 'storyforge.avg-presentation' || row.version !== 1 || typeof row.contentHash !== 'string'
@@ -233,7 +219,7 @@ export function parseAvgPresentationState(value: unknown): SimulationAvgPresenta
     || !Array.isArray(row.reachedBeatKeys) || !row.stage || typeof row.currentNodeKey !== 'string') {
     throw new Error('[avg] 演出状态无效')
   }
-  const assets = (row.assets as AvgMediaAsset[]).map(freezeAvgMediaAsset)
+  const assets = (row.assets as FrozenProductMediaAsset[]).map(freezeProductMediaAsset)
   const cues = (row.cues as unknown[]).map(parseCue)
   const stage = structuredClone(row.stage) as AvgStageState
   if (!stage || !Array.isArray(stage.actors) || !Array.isArray(stage.activeAudio)) throw new Error('[avg] 舞台状态无效')
@@ -252,7 +238,7 @@ export function parseAvgPresentationState(value: unknown): SimulationAvgPresenta
   }
 }
 
-export function applyAvgPresentationEvent(current: SimulationAvgPresentationState | null, event: SimulationEvent, currentNodeKey: string | null, beats: FrozenNarrativeBeat[]): SimulationAvgPresentationState {
+export function applyAvgPresentationEvent(current: AvgRuntimePresentationState | null, event: ProductRuntimeEvent, currentNodeKey: string | null, beats: FrozenNarrativeBeat[]): AvgRuntimePresentationState {
   if (!current) throw new Error('[avg] 演出事件缺少冻结状态')
   const state = structuredClone(current)
   const payload = object(JSON.parse(event.payloadJson), '演出事件 payload')

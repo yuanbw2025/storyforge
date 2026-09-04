@@ -120,8 +120,8 @@ export function readHistoryAgentPromptTemplateSnapshotV1(
 
 /**
  * Durable history prompts consume the complete registered Context Gateway text
- * exactly once. Legacy variables remain populated with pointers so customized
- * templates fail closed unless they still include worldContext.
+ * exactly once. Non-context template slots receive explicit pointers to the
+ * registered input baseline, so customized templates cannot duplicate Canon.
  */
 export function buildHistoryAgentMessagesV1(input: {
   mode: HistoryAIMode

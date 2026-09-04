@@ -273,12 +273,12 @@ export default function H86StoryArcEvalPanel() {
                 <tbody>
                   <tr className="border-t border-border/50">
                     <td>旧直连</td>
-                    <td>{(aggregate.legacyDirect.completionRate * 100).toFixed(0)}%</td>
-                    <td>{(aggregate.legacyDirect.requiredFactCoverage * 100).toFixed(1)}%</td>
-                    <td>{(aggregate.legacyDirect.semanticScore * 100).toFixed(1)}%</td>
-                    <td>{(aggregate.legacyDirect.p95LatencyMs / 1_000).toFixed(1)}s</td>
-                    <td>{aggregate.legacyDirect.inputTokens + aggregate.legacyDirect.outputTokens}</td>
-                    <td>${aggregate.legacyDirect.costUsd.toFixed(4)}</td>
+                    <td>{(aggregate.baselineDirect.completionRate * 100).toFixed(0)}%</td>
+                    <td>{(aggregate.baselineDirect.requiredFactCoverage * 100).toFixed(1)}%</td>
+                    <td>{(aggregate.baselineDirect.semanticScore * 100).toFixed(1)}%</td>
+                    <td>{(aggregate.baselineDirect.p95LatencyMs / 1_000).toFixed(1)}s</td>
+                    <td>{aggregate.baselineDirect.inputTokens + aggregate.baselineDirect.outputTokens}</td>
+                    <td>${aggregate.baselineDirect.costUsd.toFixed(4)}</td>
                   </tr>
                   <tr className="border-t border-border/50">
                     <td>Agent/Harness</td>

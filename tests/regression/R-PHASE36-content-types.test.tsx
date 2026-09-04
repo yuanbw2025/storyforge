@@ -36,7 +36,7 @@ function collectLeaves(nodes: TreeNode[]): Array<Extract<TreeNode, { kind: 'leaf
 }
 
 describe('Phase 36 · 页面上游/下游内容标记', () => {
-  it('所有导航叶子和 legacy 模块都从完整映射取得内容类型', () => {
+  it('所有当前导航叶子都从完整映射取得内容类型，已退役别名不再登记', () => {
     const leaves = NAV_TREE.flatMap(section => [
       ...(section.rootLeaf ? [section.rootLeaf] : []),
       ...collectLeaves(section.children ?? []),
@@ -45,10 +45,12 @@ describe('Phase 36 · 页面上游/下游内容标记', () => {
     for (const leaf of leaves) {
       expect(leaf.contentType).toBe(MODULE_CONTENT_TYPES[leaf.id])
     }
-    expect(getModuleContentType('story-core')).toBe('upstream')
+    expect(getModuleContentType('story-design')).toBe('upstream')
     expect(getModuleContentType('editor')).toBe('writing')
-    expect(getModuleContentType('simulation-runtime')).toBe('experience')
-    expect(getModuleContentType('backup')).toBe('system')
+    expect(getModuleContentType('data-management')).toBe('system')
+    expect((MODULE_CONTENT_TYPES as Record<string, unknown>)['story-core']).toBeUndefined()
+    expect((MODULE_CONTENT_TYPES as Record<string, unknown>)['product-runtime']).toBeUndefined()
+    expect((MODULE_CONTENT_TYPES as Record<string, unknown>).backup).toBeUndefined()
   })
 
   it('完整徽标展示类型和说明，紧凑徽标不改变导航按钮的可访问名称', async () => {
@@ -97,9 +99,8 @@ describe('Phase 36 · 页面上游/下游内容标记', () => {
 
     const runtimeButton = Array.from(host.querySelectorAll('button')).find(button =>
       button.textContent?.includes('互动运行时'),
-    )!
-    expect(runtimeButton.textContent).toContain('体验')
-    await act(async () => runtimeButton.click())
-    expect(onSelect).toHaveBeenCalledWith('simulation-runtime')
+    )
+    expect(runtimeButton).toBeUndefined()
+    expect(onSelect).not.toHaveBeenCalledWith('product-runtime')
   })
 })

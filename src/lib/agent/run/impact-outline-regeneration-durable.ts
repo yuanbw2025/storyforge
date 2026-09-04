@@ -19,7 +19,7 @@ import {
   assertRecordInScope,
   readOwnedRows,
   scopeTransactionTables,
-} from '../../world-engine/scope'
+} from '../../workspace/scope'
 import { createAgentSkillExecutionBindingV1 } from '../execution-binding'
 import {
   getAgentSkillV1,
@@ -63,7 +63,6 @@ interface TargetOutlineBaselineV1 {
   type: string
   parentId: number | null
   worldGroupId: number | null
-  locked: boolean
 }
 
 interface ImpactOutlineRegenerationLineageV1 {
@@ -191,7 +190,6 @@ function targetBaseline(row: Record<string, any>): TargetOutlineBaselineV1 {
     type: row.type ?? '',
     parentId: row.parentId ?? null,
     worldGroupId: row.worldGroupId ?? null,
-    locked: row.locked === true,
   }
 }
 
@@ -272,7 +270,6 @@ async function prepareInput(input: {
     throw new Error('生成式重建当前只允许选择受影响的后续章纲摘要。')
   }
   const baseline = targetBaseline(target as Record<string, any>)
-  if (baseline.locked) throw new Error('目标章纲已锁定，不能生成重建候选。')
   const assembled = await assembleContext({
     projectId: input.scope.projectId,
     scope: input.scope,
@@ -391,10 +388,10 @@ function assertItem(value: unknown): asserts value is ImpactRemediationItemV1 {
 function assertTargetBaseline(value: unknown): asserts value is TargetOutlineBaselineV1 {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('目标章纲 baseline 无效。')
   const row = value as Record<string, unknown>
-  exactKeys(row, ['id', 'title', 'summary', 'type', 'parentId', 'worldGroupId', 'locked'], '目标章纲 baseline ')
+  exactKeys(row, ['id', 'title', 'summary', 'type', 'parentId', 'worldGroupId'], '目标章纲 baseline ')
   if (!Number.isInteger(row.id) || typeof row.title !== 'string' || typeof row.summary !== 'string'
     || row.type !== 'chapter' || !(row.parentId == null || Number.isInteger(row.parentId))
-    || !(row.worldGroupId == null || Number.isInteger(row.worldGroupId)) || typeof row.locked !== 'boolean') {
+    || !(row.worldGroupId == null || Number.isInteger(row.worldGroupId))) {
     throw new Error('目标章纲 baseline 不完整。')
   }
 }
@@ -560,7 +557,6 @@ async function currentEvidence(
     && target.type === candidate.targetBaseline.type
     && target.parentId === candidate.targetBaseline.parentId
     && target.worldGroupId === candidate.targetBaseline.worldGroupId
-    && !target.locked
     && target.summary === intent.summary
   return {
     lineageFresh,

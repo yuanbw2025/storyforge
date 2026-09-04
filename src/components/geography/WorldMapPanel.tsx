@@ -18,7 +18,7 @@ import {
   rejectWorldMapConfigCandidateV1,
   type WorldMapConfigCandidateV1,
 } from '../../lib/agent/run/world-map-config-durable'
-import { resolveScopeLike } from '../../lib/world-engine/scope'
+import { resolveScopeLike } from '../../lib/workspace/scope'
 import type { Project, WorkspaceScope } from '../../lib/types'
 import type { MapGenConfig } from '../../lib/world-map/engine'
 import WorldTreeSidebar from './WorldTreeSidebar'

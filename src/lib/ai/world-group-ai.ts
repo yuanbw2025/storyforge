@@ -139,7 +139,6 @@ export interface ExpandedWorldview {
   powerHierarchy: string
   continentLayout: string
   climateByRegion: string
-  historyLine: string
   races: string
   factionLayout: string
 }
@@ -149,12 +148,11 @@ export const WORLDVIEW_EXPAND_FIELDS_V1 = [
   'powerHierarchy',
   'continentLayout',
   'climateByRegion',
-  'historyLine',
   'races',
   'factionLayout',
 ] as const
 
-export const WORLDVIEW_EXPAND_PROMPT_VERSION_V1 = 'worldview-expand-v1' as const
+export const WORLDVIEW_EXPAND_PROMPT_VERSION_V1 = 'worldview-expand-v2' as const
 
 export function buildWorldExpandPrompt(args: {
   worldName: string
@@ -176,25 +174,6 @@ export function buildWorldExpandPrompt(args: {
   return messages
 }
 
-export function parseWorldExpandOutput(output: string): ExpandedWorldview | null {
-  const jsonMatch = output.match(/```(?:json)?\s*\n?([\s\S]*?)```/)
-  const jsonStr = jsonMatch ? jsonMatch[1].trim() : output.trim()
-  try {
-    const p = JSON.parse(jsonStr)
-    return {
-      worldOrigin: String(p.worldOrigin || ''),
-      powerHierarchy: String(p.powerHierarchy || ''),
-      continentLayout: String(p.continentLayout || ''),
-      climateByRegion: String(p.climateByRegion || ''),
-      historyLine: String(p.historyLine || ''),
-      races: String(p.races || ''),
-      factionLayout: String(p.factionLayout || ''),
-    }
-  } catch {
-    return null
-  }
-}
-
 /** HARNESS-67: all model-visible project data has already passed through the
  * Context Gateway. The adapter adds no database reads or hidden defaults. */
 export function buildWorldExpandPromptFromRegisteredContextV1(contextText: string): ChatMessage[] {
@@ -204,7 +183,7 @@ export function buildWorldExpandPromptFromRegisteredContextV1(contextText: strin
     draft: `【经过登记的当前世界资料】\n${contextText || '（登记来源为空）'}`,
     otherWorlds: '',
     storyCore: '',
-    userHint: '只依据上方登记资料生成；严格输出既定七字段且每字段非空，不得输出 Markdown、解释或额外字段。',
+    userHint: '只依据上方登记资料生成；严格输出既定六字段且每字段非空，不得输出 Markdown、解释或额外字段。',
   })
 }
 
@@ -212,8 +191,7 @@ export function readWorldExpandPromptTemplateSnapshotV1(): ChatMessage[] {
   return buildWorldExpandPromptFromRegisteredContextV1('{{REGISTERED_CONTEXT}}')
 }
 
-/** Strict parser for the governed route. The legacy parser above remains only
- * for historical callers until their migrations are completed. */
+/** 正式世界基础扩写路由的唯一输出解析器。 */
 export function parseWorldExpandOutputStrictV1(output: string): ExpandedWorldview {
   const input = output.trim()
   if (!input) throw new Error('世界扩写候选为空。')

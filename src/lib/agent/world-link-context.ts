@@ -2,7 +2,7 @@ import { db } from '../db/schema'
 import { executeContextGatewayV1, type ContextGatewayExecutionV1 } from '../context-gateway/execution'
 import { isPortableResourceUidV1 } from '../context-gateway/resource-uid'
 import type { WorkspaceScope } from '../types'
-import { assertRecordInScope } from '../world-engine/scope'
+import { assertRecordInScope } from '../workspace/scope'
 import { getAgentSkillV1 } from './skill-registry'
 
 /**
@@ -35,7 +35,7 @@ export async function executeWorldLinkContextV1(input: {
   }
   if (!isPortableResourceUidV1(target.ragDocumentId, 'world-group')
     || !isPortableResourceUidV1(link.ragDocumentId, 'world-group-link')) {
-    throw new Error('目标世界或通道缺少 portable resource UID；请先完成显式资源身份迁移。')
+    throw new Error('目标世界或通道缺少有效的 portable resource UID，拒绝继续执行。')
   }
   const targetKey = `world:${target.ragDocumentId}`
   const linkKey = `world-link:${link.ragDocumentId}`

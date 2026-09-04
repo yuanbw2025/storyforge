@@ -51,7 +51,7 @@ vi.mock('../../src/components/agent/useMasterCopilot', () => ({
         taskId: 'world-1',
         agentId: 'world-origin',
         label: '世界来源',
-        contextSources: ['projectStatus', 'worldview'],
+        contextSources: ['workStatus', 'worldview'],
         baseSnapshot: {},
       },
     }] : [],
@@ -91,9 +91,13 @@ describe('AGENT-2 · 单一主 Agent 对话入口', () => {
     mounted.push({ host, root })
     const project = {
       id: 1,
+      workspaceUid: 'WS-00000000-0000-4000-8000-000000000001',
+      workspacePurpose: 'independent-work',
       name: '潮汐纪元',
-      genre: 'fantasy',
-      genres: ['fantasy'],
+      activeWorldId: 11,
+      activeWorkId: 12,
+      createdAt: 1,
+      updatedAt: 1,
     } as Project
 
     await act(async () => root.render(createElement(ChatCopilotPanel, {
@@ -143,9 +147,13 @@ describe('AGENT-2 · 单一主 Agent 对话入口', () => {
     await act(async () => root.render(createElement(ChatCopilotPanel, {
       project: {
         id: 1,
+        workspaceUid: 'WS-00000000-0000-4000-8000-000000000001',
+        workspacePurpose: 'independent-work',
         name: '潮汐纪元',
-        genre: 'fantasy',
-        genres: ['fantasy'],
+        activeWorldId: 11,
+        activeWorkId: 12,
+        createdAt: 1,
+        updatedAt: 1,
       } as Project,
       worldGroupId: 3,
       worldName: '盐海世界',

@@ -1,5 +1,5 @@
 import { hashCanonicalValue } from '../agent/run/hash'
-import type { GameProductType } from '../types'
+import { isProductionProductKindV1, type ProductionProductKindV1 } from '../types'
 import { parseCommercialPaymentEventV1, type CommercialPaymentEventV1 } from './webhook'
 
 export type CommercialListingStatusV1 = 'draft' | 'submitted' | 'changes-requested' | 'published' | 'suspended' | 'withdrawn'
@@ -32,7 +32,7 @@ export interface CommercialListingV1 {
   listingId: string
   releaseHash: string
   creatorId: string
-  productType: GameProductType
+  productType: ProductionProductKindV1
   title: string
   summary: string
   contentWarnings: string[]
@@ -212,8 +212,8 @@ function validateLicense(value: CommercialLicenseV1): CommercialLicenseV1 {
   }
 }
 
-function validProduct(value: GameProductType): GameProductType {
-  if (!['storygame', 'character-interaction', 'text-adventure', 'avg', 'narrative-simulation', 'text-open-world', 'ttrpg'].includes(value)) {
+function validProduct(value: ProductionProductKindV1): ProductionProductKindV1 {
+  if (!isProductionProductKindV1(value)) {
     fail('protocol', 'productType 无效')
   }
   return value
@@ -277,7 +277,7 @@ export class CommercialPlatformAuthorityV1 {
     principal: CommercialPrincipalV1
     requestId: string
     releaseHash: string
-    productType: GameProductType
+    productType: ProductionProductKindV1
     title: string
     summary: string
     contentWarnings: string[]
@@ -566,7 +566,7 @@ export class CommercialPlatformAuthorityV1 {
     })
   }
 
-  discover(input: { productType?: GameProductType; query?: string }): CommercialListingV1[] {
+  discover(input: { productType?: ProductionProductKindV1; query?: string }): CommercialListingV1[] {
     const query = input.query?.trim().toLocaleLowerCase() ?? ''
     return [...this.listings.values()]
       .filter(listing => listing.status === 'published')

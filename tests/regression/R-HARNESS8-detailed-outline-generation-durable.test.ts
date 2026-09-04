@@ -21,6 +21,7 @@ import {
 } from '../../src/lib/agent/run/detailed-outline-generation-durable'
 import type { WorkspaceScope } from '../../src/lib/types'
 import { assertFormalAIEntrySnapshotIntegrityV1 } from '../../src/lib/agent/formal-ai-entry'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
 
 async function createWorkspace(label: string): Promise<{
   scope: WorkspaceScope
@@ -28,43 +29,8 @@ async function createWorkspace(label: string): Promise<{
   outlineNodeId: number
 }> {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    name: label,
-    genre: 'fantasy',
-    genres: ['fantasy'],
-    description: '',
-    status: 'drafting',
-    targetWordCount: 100_000,
-    worldCode: `world-${label}`,
-    worldVersion: 1,
-    createdAt: now,
-    updatedAt: now,
-  } as any) as number
-  const worldId = await db.worlds.add({
-    projectId,
-    code: `world-${label}`,
-    name: `${label}世界`,
-    description: '',
-    currentVersion: 1,
-    createdAt: now,
-    updatedAt: now,
-  }) as number
-  const workId = await db.works.add({
-    projectId,
-    worldId,
-    title: label,
-    description: '',
-    genres: ['fantasy'],
-    status: 'drafting',
-    targetWordCount: 100_000,
-    createdAt: now,
-    updatedAt: now,
-  }) as number
-  await db.projects.update(projectId, {
-    activeWorldId: worldId,
-    activeWorkId: workId,
-    ownershipSchemaVersion: 1,
-  })
+  const createdWorkspaceV1 = await seedCurrentWorkspace(label)
+  const { projectId, worldId, workId } = createdWorkspaceV1.scope
   const worldGroupId = await db.worldGroups.add({
     projectId,
     name: '主世界',

@@ -15,9 +15,7 @@ import type { Project } from '../types/project'
 const DB_NAME = 'storyforge-fsa'
 const STORE = 'handles'
 
-/** 每个项目记住各自绑定的文件夹 */
-export const projFolderKey = (projectId: number) => `proj-${projectId}`
-/** MEMORY-1 stable key; survives numeric project id remapping. */
+/** Stable workspace key; survives numeric project id remapping. */
 export const workspaceFolderKey = (workspaceUid: string) => `workspace-${workspaceUid}`
 /** 最近一次绑定的文件夹（首页「从本地文件夹恢复」用，跨项目/库已空时也能找回） */
 export const LAST_FOLDER_KEY = 'last'
@@ -76,37 +74,26 @@ export async function clearFolderHandle(key: string): Promise<void> {
   }
 }
 
-function stableProjectFolderKey(project: Pick<Project, 'id' | 'workspaceUid'>): string {
-  if (project.workspaceUid) return workspaceFolderKey(project.workspaceUid)
-  if (project.id != null) return projFolderKey(project.id)
-  throw new Error('[folder-handle] 项目缺少稳定身份和本地 ID')
+function stableProjectFolderKey(project: Pick<Project, 'workspaceUid'>): string {
+  if (!project.workspaceUid) throw new Error('[folder-handle] 项目缺少稳定工作区身份')
+  return workspaceFolderKey(project.workspaceUid)
 }
 
 export async function saveProjectFolderHandle(
-  project: Pick<Project, 'id' | 'workspaceUid'>,
+  project: Pick<Project, 'workspaceUid'>,
   handle: FileSystemDirectoryHandle,
 ): Promise<void> {
   await saveFolderHandle(stableProjectFolderKey(project), handle)
 }
 
-/** Read the stable binding first, then migrate the legacy numeric key once. */
 export async function loadProjectFolderHandle(
-  project: Pick<Project, 'id' | 'workspaceUid'>,
+  project: Pick<Project, 'workspaceUid'>,
 ): Promise<FileSystemDirectoryHandle | null> {
-  const stableKey = stableProjectFolderKey(project)
-  const stable = await loadFolderHandle(stableKey)
-  if (stable || !project.workspaceUid || project.id == null) return stable
-  const legacyKey = projFolderKey(project.id)
-  const legacy = await loadFolderHandle(legacyKey)
-  if (!legacy) return null
-  await saveFolderHandle(stableKey, legacy)
-  await clearFolderHandle(legacyKey)
-  return legacy
+  return loadFolderHandle(stableProjectFolderKey(project))
 }
 
 export async function clearProjectFolderHandle(
-  project: Pick<Project, 'id' | 'workspaceUid'>,
+  project: Pick<Project, 'workspaceUid'>,
 ): Promise<void> {
   await clearFolderHandle(stableProjectFolderKey(project))
-  if (project.workspaceUid && project.id != null) await clearFolderHandle(projFolderKey(project.id))
 }

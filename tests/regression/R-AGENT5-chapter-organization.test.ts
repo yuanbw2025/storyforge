@@ -13,6 +13,8 @@ import { AgentTeamBudgetTracker } from '../../src/lib/agent/team-budget'
 import { hashChapterText } from '../../src/lib/ai/chapter-memory/text-normalization'
 import type { Character, Foreshadow, Project } from '../../src/lib/types'
 import { replaceAdoptedCollection } from '../../src/lib/registry/adopt'
+import { putCurrentWorkspaceFixtureV1 } from '../helpers/current-workspace'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
 
 const now = 1_700_000_000_000
 const chapterHtml = [
@@ -102,17 +104,16 @@ function rawOrganizationOutput() {
 async function seedProject() {
   const project: Project = {
     id: 81001,
+    workspaceUid: 'WS-00000000-0000-4000-8000-000000081001',
+    workspacePurpose: 'independent-work',
     name: '整理本章测试',
-    genre: 'fantasy',
-    genres: ['fantasy'],
-    status: 'drafting',
-    description: '',
-    targetWordCount: 100_000,
     enableMultiWorld: false,
+    activeWorldId: 81001,
+    activeWorkId: 81001,
     createdAt: now,
     updatedAt: now,
   }
-  await db.projects.put(project)
+  await putCurrentWorkspaceFixtureV1(project)
   const outlineNodeId = await db.outlineNodes.add({
     projectId: project.id!,
     parentId: null,
@@ -140,11 +141,9 @@ async function seedProject() {
       id: 11,
       projectId: project.id!,
       name: '林舟',
-      role: 'protagonist',
       roleWeight: 'main',
       moralAxis: 'good',
       orderAxis: 'neutral',
-      alignment: 'good',
       shortDescription: '',
       appearance: '',
       personality: '',
@@ -153,6 +152,8 @@ async function seedProject() {
       abilities: '',
       relationships: '',
       arc: '',
+      homeWorldGroupId: null,
+      isCrossWorld: false,
       createdAt: now,
       updatedAt: now,
     },
@@ -160,11 +161,9 @@ async function seedProject() {
       id: 12,
       projectId: project.id!,
       name: '苏砚',
-      role: 'supporting',
       roleWeight: 'secondary',
       moralAxis: 'neutral',
       orderAxis: 'neutral',
-      alignment: 'good',
       shortDescription: '',
       appearance: '',
       personality: '',
@@ -173,6 +172,8 @@ async function seedProject() {
       abilities: '',
       relationships: '',
       arc: '',
+      homeWorldGroupId: null,
+      isCrossWorld: false,
       createdAt: now,
       updatedAt: now,
     },
@@ -193,6 +194,7 @@ async function seedProject() {
     updatedAt: now,
   }
   await db.foreshadows.put(foreshadow)
+  await finalizeCurrentFixtureV1(project.id!)
   return { project, chapterId, characters, foreshadow }
 }
 

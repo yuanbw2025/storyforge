@@ -8,7 +8,7 @@
  *
  * 数据走向：
  *   · 每轮写入独立 ReferenceAnalysisRun + scoped referenceChunkAnalysis。
- *   · 只有作者激活的 run 同步 Reference 兼容投影并进入创作上下文。
+ *   · 只有作者激活的 run 同步 Reference 当前投影并进入创作上下文。
  */
 import { db } from '../db/schema'
 import { chat, resolveRequestConfig, type AICallMeta } from '../ai/client'
@@ -120,7 +120,7 @@ export async function writeShallowAnalysisFromTechniques(
   if (hasAny) {
     const row: ReferenceChunkAnalysis = {
       referenceId: refId,
-      analysisRunId: run.id,
+      analysisRunId: run.id!,
       chunkIndex: 0,
       label: '全书',
       narrativeStyle: trim(w.narrativeStyle),
@@ -491,14 +491,21 @@ function buildRollingContext(prev: string, row: ReferenceChunkAnalysis): string 
 }
 
 async function writeAnalysisRow(projectId: number, row: ReferenceChunkAnalysis): Promise<void> {
+  // createdAt is an adoption-owned stamp.  The current candidate contract must
+  // not carry persistence metadata merely because the stored row type does.
+  const { createdAt: _createdAt, id: _id, ...candidate } = row
   const result = await adopt({
     projectId,
     target: 'referenceChunkAnalysis',
     mode: 'add',
-    data: row as unknown as Record<string, unknown>,
+    data: candidate as unknown as Record<string, unknown>,
   })
   if (result.written.length === 0) {
-    throw new Error(`参考分析写回被拒绝: ${result.skipped[0]?.reason ?? result.fkErrors[0]?.field ?? 'unknown'}`)
+    throw new Error(`参考分析写回被拒绝: ${result.skipped[0]?.reason
+      ?? result.typeErrors[0]?.field
+      ?? result.unknown[0]
+      ?? result.fkErrors[0]?.field
+      ?? 'unknown'}`)
   }
 }
 

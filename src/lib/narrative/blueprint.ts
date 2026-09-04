@@ -17,7 +17,7 @@ import {
   resolveScope,
   scopeTransactionTables,
   stampNewRecord,
-} from '../world-engine/scope'
+} from '../workspace/scope'
 
 function parseStringArray(value: string, label: string): string[] {
   let parsed: unknown

@@ -1,43 +1,78 @@
 # StoryForge 当前架构总览
 
-> 版本：2.0.0 · 更新：2026-08-26 · 权威层级：L1
+> 版本：2.7.0 · 更新：2026-09-04 · 权威层级：L1
 > 本文描述当前主干代码事实与目标架构接缝。产品边界以项目总纲为准；代码偏差见对齐审计。
 
 ## 1. 运行形态
 
 StoryForge 当前是 React + TypeScript + Vite 的本地优先单页应用，核心业务数据保存在浏览器 IndexedDB，文件工作区可使用 File System Access / OPFS。AI 请求发送到用户配置的模型服务。应用没有自建核心业务后端，也没有 staging；`main` 进入生产发布链。
 
-路由只有四个壳入口：
+路由只有三个壳入口：
 
 - `/`：产品综合页 `ProductHubPage`；
-- `/projects`：项目列表与传统入口；
 - `/settings`：模型与应用设置；
 - `/workspace/:projectId`：分步骤长篇工作区。
 
-综合页承载世界引擎、作品、节点、跑团、角色聊天、文字游戏与市场实验入口；分步骤工作区仍是当前主要、最完整的作者路径。
+综合页从 `PRODUCT_CATALOG_V1` 派生世界引擎、作品、节点与上层产品入口；生产环境只显示 `released`，本地/测试才按状态显示 preview/internal，experimental 还需显式 opt-in。分步骤工作区仍是当前主要、最完整的作者路径，其 Phase 5 工程主链已经验收完成。
 
 ## 2. 产品与共享底座
 
 ```mermaid
 flowchart TB
-  subgraph P["独立产品域"]
+  subgraph I["独立创作产品"]
     L["分步骤长篇"]
     N["节点模式"]
+    LC["同一长篇领域能力\nSkill / Harness / Context / Adoption / Canon"]
     S["短篇"]
     A["小说转剧本"]
     C["小说转漫画"]
-    W["世界引擎"]
-    U["跑团 / 角色聊天 / AI小镇 / 文字游戏"]
+    L --> LC
+    N --> LC
   end
-  B["共享工程底座\nReact / IndexedDB / 模型接入 / Harness / 记忆 / 媒资设施"]
-  R["三注册表\nContext / Field+Adoption / Project Tables"]
-  L <-->|"同一能力，不同操作表达"| N
-  W -->|"只读 WorldRelease"| U
-  B --> P
-  R --> B
+
+  subgraph W["世界引擎：只拥有可版本化语义"]
+    WD["世界草稿 / WorldRevision"] --> WR["不可变 WorldRelease\n编号 + hash + 能力目录 + 原文证据"]
+  end
+
+  subgraph D["具体上层产品的用户定向阶段"]
+    PI["跑团 / 角色互动 / 文字冒险 / AVG / 文字开放世界"]
+    AI["AI 小镇\n仅登记边界，尚未接入生产运行"]
+    RF["WorldReference"] --> RA["本产品 Requirement Adapter"]
+    RA --> GW["中立世界网关\ndescribe / search / read / original evidence"]
+    GW --> BP["ConfirmedProductBrief + 冻结 ProductSourcePlan"]
+    PI --> RF
+  end
+
+  subgraph P["具体产品的生产、发布与运行"]
+    H["产品主 Agent + Durable Harness"]
+    CT["内容 / 规则 / 玩法"]
+    M["产品媒资"]
+    B["Build / 组装 / 质量门"]
+    PR["不可变 ProductRelease v1\nSourceManifest + Lineage"]
+    RT["Runtime Session / 私域演化"]
+    BP --> H
+    H --> CT
+    H --> M
+    CT --> B
+    M --> B
+    B --> PR
+    PR --> RT
+    RT -->|"显式创建下一产品版本"| H
+  end
+
+  F["共享工程底座\nReact / IndexedDB / 模型接入 / Harness / 记忆 / 媒资设施"]
+  R["三注册表\nContext / Field+Adoption / Project Tables"] --> F
+  F --> I
+  F --> W
+  F --> D
+  F --> P
+  L -. "作者显式派生" .-> WD
+  S -. "作者显式派生" .-> WD
+  WR --> RF
+  RT -. "禁止自动回写" .-> WR
 ```
 
-共享底座允许复用执行、存储、模型、记忆和媒资设施，不意味着产品数据混合。世界引擎只拥有语义内容；上层产品拥有自己的 production、media、build、release、session 和 evolution。
+共享底座允许复用执行、存储、模型、记忆和媒资设施，不意味着产品数据混合。世界引擎只拥有语义内容；上层产品拥有自己的 production、media、build、release、session 和 evolution。用户可见文字游戏严格只有文字冒险、AVG、文字开放世界三种；状态推演只能是具体产品的内部能力，不另立产品、release 或 session 身份。
 
 ## 3. 当前工程指标
 
@@ -47,12 +82,12 @@ flowchart TB
 | 当前事实 | 数值 | 单一事实源 |
 |---|---:|---|
 | 应用语义版本 | `3.9.1` | `package.json` |
-| TypeScript 生产源码 | 993 个文件 / 356456 行 | `tsconfig.json` |
-| IndexedDB schema | v79 / 115 张 required tables | `schema.ts` / `REQUIRED_TABLES` |
-| PROJECT_TABLES | 115 张表 | `project-tables.ts` |
+| TypeScript 生产源码 | 971 个文件 / 326453 行 | `tsconfig.json` |
+| IndexedDB schema | v1 / 94 张 required tables | `schema.ts` / `REQUIRED_TABLES` |
+| PROJECT_TABLES | 94 张表 | `project-tables.ts` |
 | Prompt 主线 | 65 个 moduleKey / 210 条内置模板 | `PromptModuleKey` / `prompt-seeds*.ts` |
-| CONTEXT_SOURCES | 86 个上下文源 | `context-sources.ts` |
-| 写回治理 | 39 个通用 adopt target / 44 个领域扩展 | `adoption-schema.ts` |
+| CONTEXT_SOURCES | 81 个上下文源 | `context-sources.ts` |
+| 写回治理 | 38 个通用 adopt target / 34 个领域扩展 | `adoption-schema.ts` |
 <!-- project-metrics:end -->
 
 ## 4. 分层架构
@@ -60,13 +95,14 @@ flowchart TB
 | 层 | 职责 | 主要实现 |
 |---|---|---|
 | 产品与 UI | 收集意图、展示候选、作者确认、运行体验 | `src/pages`、`src/components` |
-| 产品应用服务 | 长篇、改编、世界、跑团、聊天、文字游戏生产与运行 | `src/lib/{novel,adaptation,screenplay,comic,world-engine,ttrpg,character-interaction,game-production,...}` |
+| Workspace / Work / Scope | 中立本地容器、作品身份、作用域、创建切换与生命周期 | `src/lib/workspace` |
+| 产品应用服务 | 长篇、改编、世界、跑团、聊天、文字上层产品生产与运行 | `src/lib/{novel,adaptation,screenplay,comic,world-engine,ttrpg,character-interaction,product-production,...}` |
 | Agent / Skill | 任务分类、能力契约、读写权限、Prompt/Tool 版本 | `src/lib/agent` |
 | Durable Harness | run、event、checkpoint、attempt、stale、receipt | `src/lib/agent/run` |
 | Context Gateway / 记忆 | 目录、预选、按需读取、原文与长期记忆 | `src/lib/context-gateway`、`src/lib/memory`、`src/lib/retrieval` |
 | 三注册表 | AI 读取、候选采纳、表生命周期 | `src/lib/registry` |
 | 领域一致性 | Canon、事实、关系、时间、主支线、状态和冲突 | `src/lib/consistency`、`fact-ledger`、`storyline`、`knowledge-ledger` |
-| 数据与文件 | Dexie schema、迁移、备份、导入导出、OPFS | `src/lib/db`、`migrations`、`export`、`storage`、`media` |
+| 数据与文件 | 唯一当前 Dexie schema、严格备份/导入导出、OPFS | `src/lib/db`、`export`、`storage`、`media` |
 
 ## 5. 正式 AI 主路径
 
@@ -104,11 +140,13 @@ Field Registry 决定 AI 可写字段；Adoption Schema/Extension 决定集合�
 
 ### 7.1 `Project` / `World` / `Work`
 
-`Project` 目前仍是本地物理容器和大量旧功能的兼容根；`World` 与 `Work` 提供显式语义 owner，`Work.worldId` 绑定来源世界。该兼容结构尚未完全表达总纲中的“独立长篇不等于世界引擎”，因此新增代码不能继续默认每个 Project 都是可发布世界。
+`Project` 只是 LocalWorkspace 壳：只保存稳定工作区身份、用途、活动 `World`/`Work` 指针和工作区级开关。它不保存或镜像作品标题、简介、流派、状态、目标/当前字数、封面、文风、方法论或活动叙事计划；这些语义只属于 `Work`。创建边界可以一次接收工作区和初始作品输入，但在同一事务中分别构造 Project/World/Work；切换或编辑 Work 只改变活动指针或 Work 本身，绝不回写 Project 镜像。
+
+`World` 是世界身份、公共 code、当前世界版本和导入来源的唯一权威；`Work` 是独立作品 owner，`Work.worldId` 只绑定内部语义 scope。`workspacePurpose` 与 `World.identityKind` 将独立作品的内部 scope 和可分享 `world-draft` 分开；只有后者拥有公共 world code、进入世界目录并可封存。长篇/短篇通过显式派生动作形成独立世界草稿/release，保存 source work/revision/range/hash，源作品 owner 与后续版本保持独立；剧本/漫画被确定性拒绝。备份导入只接受这一当前字段闭集；WorldRelease 的中立快照也只携带 Project 壳和独立 Work 语义，不恢复旧镜像。
 
 ### 7.2 长篇与节点
 
-分步骤工作区保存世界观、故事、角色、大纲、细纲、正文、事实、关系、伏笔、状态、检索和 run 数据。节点模式拥有 DAG、节点输入输出和运行记录，但目标是调用同一长篇能力；任何平行节点 AI/DB 写入都是架构缺陷。
+分步骤工作区保存世界观、故事、角色、大纲、细纲、正文、事实、关系、伏笔、状态、检索和 run 数据，Phase 5 已完成该主链的工程验收。节点模式拥有 DAG、节点输入输出和运行记录，可以比标准步骤更细、更自由、更可视和可调，但必须调用同一长篇能力；任何平行节点 AI/DB 写入都是架构缺陷。
 
 ### 7.3 改编产品
 
@@ -116,27 +154,32 @@ Field Registry 决定 AI 可写字段；Adoption Schema/Extension 决定集合�
 
 ### 7.4 世界引擎
 
-世界领域提供投影、完整度、world code、release、source selection 和可运行世界包设施。目标出口是稳定世界编号与不可变版本，而不是直接暴露可变 Project 表。
+世界领域提供显式 world-draft、按 `World/Work` scope 隔离的语义能力投影、稳定 world code、revision/release、显式作品派生、多世界关系以及不可变资源目录。`WorldRelease` 只从 `PROJECT_TABLES.worldSemantic` 派生确认 Canon，并记录选入/遗漏、候选、冲突、证据和 hash；不含媒资、production、build、可执行蓝图或 runtime。
+
+上层产品先通过 `listWorldReferenceCatalogV1` 取得只读、中立的可选世界来源，不获取物理 `WorldRelease` 行、manifest 或 Provider。资源出口由 `describeWorldReleaseV1`、`searchWorldReleaseV1`、`readWorldResourceV1` 和 `readWorldOriginalEvidenceV1` 构成；产品侧只依赖 `world-release-client` / Context Gateway 的中立接口。目录按稳定 resource UID、release/hash 和关系导航；有界缓存只缓存已校验 release 投影，千级资源规模回归阻止逐行 IndexedDB 游标退化。跑团、角色互动、文字冒险、AVG、文字开放世界分别拥有需求适配器，证明统一协议不等于统一 payload；AI 小镇在专项契约完成前不进入生产注册表。
 
 ### 7.5 上层产品
 
-游戏生产使用 consultation、brief、command、build、artifact、media、release 与质量证据；角色互动和跑团有各自 production/runtime 数据。`SimulationSession` 及事件/checkpoint 保存私域运行。媒资通过共享设施存储，归具体 build/product release，不归 WorldRelease。
+上层产品生产使用 consultation、brief、command、build、artifact、media、release 与质量证据。Production 和 Release 根记录都以索引化 `productType` 冻结产品身份；工作台、查询、Build、Release 和 Session 按该身份隔离。`ProductRuntimeSession` 及事件/checkpoint 保存私域运行。媒资通过共享设施存储：发布媒资绑定 `ProductRelease`，运行中新生成的媒资绑定 `ProductRuntimeSession`，二者均不归 `WorldRelease`。
+
+这些数据逻辑上分成两个产品阶段：用户引用世界、配置并确认方向形成 product draft/Brief；用户明确开始后进入 production/build/release/runtime。两阶段都属于上层产品，不属于世界引擎。通用 runtime 内核拒绝从世界草稿或 WorldRelease 直接启动正式上层产品；正式运行必须从产品自己的不可变 ProductRelease 或同一生产链的可验证 Build Preview 启动，并在 session 中持久化来源 hash。当前生产身份闭集为跑团、角色互动、文字冒险、AVG、文字开放世界；AI 小镇只有产品目录边界，未接入时不能借其他身份运行。共享工厂不改变各产品分别拥有需求适配器、生产模块、质量门和玩家运行面的事实。
 
 ## 8. 世界到产品的单向流
 
 ```mermaid
 flowchart LR
-  D["世界草稿"] -->|"作者封存"| R["不可变 WorldRelease"]
-  R -->|"SourceSelection / manifest / hash"| P["产品 Production"]
+  D["阶段一\n世界语义草稿"] -->|"作者封存"| R["WorldReference\n不可变 WorldRelease"]
+  R --> I["阶段二\n产品入口引用世界、填写专用设置、与主 Agent 定向"]
+  I -->|"用户明确开始\nBrief + SourcePlan"| P["阶段三\n产品 Production"]
   P --> M["产品媒资"]
   P --> B["Build + 验证"]
   M --> B
-  B --> G["不可变 Product Release"]
+  B --> G["不可变 ProductRelease\n冻结 SourceManifest 与父版本谱系"]
   G --> S["Runtime Session / 私域演化"]
   S -. "不得自动回写" .-> D
 ```
 
-运行时只读绑定 release。若未来把衍生内容转成世界新版本，应走另一个显式创作/采纳流程。
+世界读取统一的是 `describe/search/read` 的版本、资源、来源和遗漏协议；每个产品用自己的 requirement adapter 生成 SourcePlan。production 的每个 run 只在 plan 锁定的 WorldRelease 内渐进读取并保存 Context Manifest，ProductRelease 聚合为不可变 SourceManifest 快照；不同产品不共享固定 payload。运行时绑定 ProductRelease，任何继续读取世界的权限也从该 release 的 SourcePlan 继承，新证据归 session/run manifest，不追写 release。若未来把衍生内容转成世界新版本，应走另一个显式创作/采纳流程。
 
 ## 9. 失败与恢复
 
@@ -155,25 +198,31 @@ src/
     ├── agent/              Skill、AI 入口与 durable run
     ├── context-gateway/    渐进式上下文目录和读取
     ├── registry/           三注册表
-    ├── db|migrations|export|storage/
+    ├── workspace/          中立 Project/World-scope/Work 根、作用域与生命周期
+    ├── db|export|storage/
     ├── novel|outline|prose|storyline/
     ├── adaptation|screenplay|comic/
-    ├── world-engine/
-    ├── ttrpg|character-interaction|game-production/
-    ├── simulation|text-game|adventure|avg|open-world/
+    ├── world-engine/          只负责可分享世界语义、派生、冻结与引用
+    ├── product/               产品身份、成熟度和 ProductRelease/Build 运行入口
+    ├── product-production|product-platform/  上层产品共享生产和发布设施
+    ├── ttrpg|character-interaction/          跑团与角色互动产品域
+    ├── text-game|adventure|avg|open-world/  三种文字游戏及共享文字内容设施
     └── media/              跨产品媒资设施，不是世界引擎模块
 ```
 
 ## 11. 当前诚实边界
 
-- 代码中已存在大量上层产品、市场和托管能力，但存在“实现领先于总纲发展顺序”和实验入口可见的问题；不等于这些产品已完整交付。
-- Product/World/Work 的兼容关系仍会把独立作品与世界引擎混在同一 Project 表达，需要按对齐审计渐进纠正，不能再扩大耦合。
-- Harness、Context Gateway 和规模夹具证明了重要工程基础，不等于百万字真实小说的一致性已经完成验证。
-- 世界 Release、上层 Production/Release 与媒资 owner 已有基础，但“稳定世界数据出口供所有上层产品统一读取”仍需收口。
+- 代码中已存在大量上层产品、市场和托管能力，但除产品目录标为 `released` 的条目外均不等于已经完整交付；preview/internal/experimental 的可见性由机器门控。
+- Project/World/Work 可以位于同一本地物理工作区，但身份权威已经拆分：Project 只管理工作区，World 管理世界身份，Work 管理独立作品；存在内部 World 语义 scope 不等于建立了可分享世界。
+- 分步骤长篇 Phase 5 工程主链和 10万/30万/100万字符规模门已经完成；真实作者长期文学一致性仍需持续研究，但不是尚未完成的功能施工项。
+- 世界 Release、中立资源协议、五种已接入产品的需求适配器、五项逻辑契约校验、三阶段 runtime 闸门和产品成熟度门已经形成共享架构基线；它们规定接入方式，不替代各上层产品的 Brief/production/media/runtime 专项实现。
+- 唯一 schema v1 直接表达当前 Product Production/Build/Release、Product Runtime、World 与 Work 模型。现行业务代码不包含退役产品身份、历史 schema、旧字段投影、双读或旧运行入口；非当前数据库和备份明确拒绝。
+- ProductRelease 谱系已经有跨产品逻辑 validator，并在角色互动参考纵切面落地；其它上层产品在转为 released 前仍需按自己的物理 schema 接入同一逻辑闸门。
+- 节点官方模板已绑定正式长篇领域 action，通用生成仅限显式 experimental draft 且不能采纳 Canon；完整跨模式真实 UI 体验仍是节点产品维护事项。
 - 账户、云端社区、支付和商业平台不是当前核心运行前提；相关代码必须 capability gate / experimental，不能掩盖主产品未完成。
 
 当前能力与缺口以 [`roadmap/CAPABILITY-BASELINE.md`](./roadmap/CAPABILITY-BASELINE.md) 和
-[`audits/PROJECT-CHARTER-ALIGNMENT-AUDIT-20260826.md`](./audits/PROJECT-CHARTER-ALIGNMENT-AUDIT-20260826.md) 为准。
+[`audits/CURRENT-ARCHITECTURE-AUDIT-20260903.md`](./audits/CURRENT-ARCHITECTURE-AUDIT-20260903.md) 为准。
 
 ## 12. 交付门
 

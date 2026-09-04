@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { adopt } from '../../src/lib/registry/adopt'
 import { assembleContext } from '../../src/lib/registry/assemble-context'
-import { readOwnedRows, assertRecordInScope, resolveReadScope } from '../../src/lib/world-engine/scope'
+import { readOwnedRows, assertRecordInScope, resolveReadScope } from '../../src/lib/workspace/scope'
 import type { WorkspaceScope } from '../../src/lib/types/world-ownership'
 import { appendAgentEvent, getOrCreateAgentConversation, readAgentEvents } from '../../src/lib/agent/conversations'
 import { useCultivationStore } from '../../src/stores/cultivation'
@@ -14,32 +14,27 @@ import { useCharacterDrivenPlanStore } from '../../src/stores/character-driven-p
 import { useEmotionBeatStore } from '../../src/stores/emotion-beat'
 import { useNoteStore } from '../../src/stores/note'
 import { useNodeFlowStore } from '../../src/stores/node-flow'
+import { addCurrentWorkFixtureV1, seedCurrentWorkspace } from '../helpers/current-workspace'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
 
 async function createGoldenProject(): Promise<{ projectId: number; worldId: number; a: WorkspaceScope; b: WorkspaceScope }> {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    name: 'C3 Golden Project', genre: 'fantasy', genres: ['fantasy'], status: 'drafting',
-    description: '共享世界，隔离作品', targetWordCount: 100000, createdAt: now, updatedAt: now,
-  } as any) as number
-  const worldId = await db.worlds.add({
-    projectId, code: 'c3-golden-world', name: '共享世界 Canon', description: 'World only',
-    currentVersion: 1, createdAt: now, updatedAt: now,
-  }) as number
-  const workA = await db.works.add({
-    projectId, worldId, title: '作品 A', description: '', genres: ['fantasy'], status: 'drafting',
-    targetWordCount: 50000, createdAt: now, updatedAt: now,
-  }) as number
-  const workB = await db.works.add({
-    projectId, worldId, title: '作品 B', description: '', genres: ['fantasy'], status: 'drafting',
-    targetWordCount: 50000, createdAt: now, updatedAt: now,
-  }) as number
-  await db.projects.update(projectId, {
-    activeWorldId: worldId,
-    activeWorkId: workA,
-    ownershipSchemaVersion: 1,
-    worldCode: 'c3-golden-world',
-    worldVersion: 1,
+  const root = await seedCurrentWorkspace('C3 Golden Project')
+  const projectId = root.scope.projectId
+  const worldId = root.scope.worldId
+  const workA = root.scope.workId
+  await db.worlds.update(worldId, {
+    name: '共享世界 Canon',
+    description: 'World only',
+    updatedAt: now,
   })
+  const workBRoot = await addCurrentWorkFixtureV1({
+    projectId,
+    worldId,
+    create: { title: '作品 B', targetWordCount: 50_000 },
+    now,
+  })
+  const workB = workBRoot.id!
   return {
     projectId,
     worldId,
@@ -55,46 +50,6 @@ describe('WORLD-2C C3 · scope-aware world/work chain', () => {
   })
 
   afterEach(() => db.close())
-
-  it('旧分步骤项目只读装配零写入，兼容 scope 不得被复用于写回', async () => {
-    const projectId = await db.projects.add({
-      name: '旧分步骤项目', genre: 'fantasy', genres: ['fantasy'], status: 'drafting',
-      description: '', targetWordCount: 100000, createdAt: 1, updatedAt: 1,
-    } as any) as number
-    await db.storyCores.add({
-      projectId, theme: '旧项目主题', createdAt: 1, updatedAt: 1,
-    } as any)
-
-    const readScope = await resolveReadScope({ projectId })
-    expect(await resolveReadScope({ scope: readScope })).toEqual(readScope)
-    const context = await assembleContext({ projectId, sourceKeys: ['storyCore'] })
-    expect(context.text).toContain('旧项目主题')
-    expect(await db.worlds.count()).toBe(0)
-    expect(await db.works.count()).toBe(0)
-    expect(await db.ownershipMigrations.count()).toBe(0)
-
-    await expect(adopt({
-      projectId,
-      scope: readScope,
-      target: 'storyCores',
-      mode: 'replace',
-      data: { theme: '不得写入' },
-    })).rejects.toThrow('WorkspaceScope')
-  })
-
-  it('只读入口对半成品 World/Work 归属失败关闭，不猜测默认作品', async () => {
-    const projectId = await db.projects.add({
-      name: '不完整归属', genre: 'fantasy', createdAt: 1, updatedAt: 1,
-    } as any) as number
-    await db.worlds.add({
-      projectId, code: 'partial-owner', name: '孤立世界', description: '',
-      currentVersion: 1, createdAt: 1, updatedAt: 1,
-    })
-
-    await expect(assembleContext({ projectId, sourceKeys: ['storyCore'] }))
-      .rejects.toThrow('不完整的 World/Work 归属')
-    expect(await db.ownershipMigrations.count()).toBe(0)
-  })
 
   it('同一 World 下两部 Work 的故事核心与正文上下文严格隔离', async () => {
     const { a, b } = await createGoldenProject()
@@ -119,6 +74,7 @@ describe('WORLD-2C C3 · scope-aware world/work chain', () => {
       { projectId: a.projectId, workId: a.workId, worldId: null, theme: 'A theme', createdAt: now, updatedAt: now },
       { projectId: b.projectId, workId: b.workId, worldId: null, theme: 'B theme', createdAt: now, updatedAt: now },
     ] as any)
+    await finalizeCurrentFixtureV1(a.projectId)
 
     const contextA = await assembleContext({
       projectId: a.projectId, scope: a, sourceKeys: ['storyCore', 'chapterContent'], chapterId: chapterA,
@@ -142,6 +98,7 @@ describe('WORLD-2C C3 · scope-aware world/work chain', () => {
       { projectId: a.projectId, workId: a.workId, worldId: null, theme: 'old A', createdAt: now, updatedAt: now },
       { projectId: b.projectId, workId: b.workId, worldId: null, theme: 'old B', createdAt: now, updatedAt: now },
     ] as any, { allKeys: true }) as number[]
+    await finalizeCurrentFixtureV1(a.projectId)
 
     const writtenA = await adopt({
       projectId: a.projectId, scope: a, target: 'storyCores',
@@ -166,13 +123,14 @@ describe('WORLD-2C C3 · scope-aware world/work chain', () => {
     const row = await db.storyCores.add({
       projectId: a.projectId, workId: a.workId, worldId: null, theme: 'A', createdAt: now, updatedAt: now,
     } as any) as number
+    await finalizeCurrentFixtureV1(a.projectId)
     const owned = await readOwnedRows<any>(b, 'storyCores', { owner: 'work' })
     expect(owned).toEqual([])
     expect(await assertRecordInScope(a, 'storyCores', await db.storyCores.get(row), { owner: 'work' })).toBe(true)
     expect(await assertRecordInScope(b, 'storyCores', await db.storyCores.get(row), { owner: 'work' })).toBe(false)
     await expect(resolveReadScope({
       scope: { projectId: a.projectId, worldId: 0, workId: 0 },
-    })).rejects.toThrow('旧项目只读 scope')
+    })).rejects.toThrow('WorkspaceScope 必须包含有效')
     await expect(adopt({
       projectId: a.projectId, scope: { ...a, workId: 999999 }, target: 'storyCores', mode: 'replace', data: { theme: 'bad' },
     })).rejects.toThrow('WorkspaceScope')
@@ -180,8 +138,10 @@ describe('WORLD-2C C3 · scope-aware world/work chain', () => {
 
   it('Agent 对话与事件流按 Work 隔离，不能读取另一部作品的运行记录', async () => {
     const { a, b } = await createGoldenProject()
-    const conversationA = await getOrCreateAgentConversation({ projectId: a.projectId, worldGroupId: null, scope: a })
-    const conversationB = await getOrCreateAgentConversation({ projectId: b.projectId, worldGroupId: null, scope: b })
+    const conversationA = await getOrCreateAgentConversation({
+                                                               purpose: 'test:r-world2c-c3-scope-aware:1', projectId: a.projectId, worldGroupId: null, scope: a })
+    const conversationB = await getOrCreateAgentConversation({
+                                                               purpose: 'test:r-world2c-c3-scope-aware:2', projectId: b.projectId, worldGroupId: null, scope: b })
     await appendAgentEvent({ projectId: a.projectId, scope: a, conversationId: conversationA.id!, kind: 'message', role: 'user', content: 'A event' })
     await appendAgentEvent({ projectId: b.projectId, scope: b, conversationId: conversationB.id!, kind: 'message', role: 'user', content: 'B event' })
     expect((await readAgentEvents(conversationA.id!, a)).map(event => event.content)).toEqual(['A event'])
@@ -191,7 +151,7 @@ describe('WORLD-2C C3 · scope-aware world/work chain', () => {
 
   it('ownership 就绪后的上游设定仍绑定 World，正文产物只写入当前 Work', async () => {
     const { a, b } = await createGoldenProject()
-    await db.projects.update(a.projectId, { includeCultivationProgressInAI: true })
+    await db.works.update(a.workId, { includeCultivationProgressInAI: true })
     const systemId = await useCultivationStore.getState().addSystem({
       projectId: a.projectId,
       worldGroupId: null,
@@ -230,7 +190,7 @@ describe('WORLD-2C C3 · scope-aware world/work chain', () => {
 
     const now = Date.now()
     const characterId = await db.characters.add({
-      projectId: a.projectId, worldId: a.worldId, name: '林舟', role: 'protagonist',
+      projectId: a.projectId, worldId: a.worldId, name: '林舟',
       roleWeight: 'main', moralAxis: 'good', orderAxis: 'lawful',
       homeWorldGroupId: null, isCrossWorld: false,
       cultivationSystemId: systemId, cultivationStageId: 'foundation',
@@ -245,6 +205,7 @@ describe('WORLD-2C C3 · scope-aware world/work chain', () => {
       content: '<p>林舟在生死关头凝成道基，正式踏入筑基境。</p>',
       wordCount: 22, status: 'draft', order: 0, notes: '', createdAt: now, updatedAt: now,
     } as any) as number
+    await finalizeCurrentFixtureV1(a.projectId)
     const beatId = await useEmotionBeatStore.getState().saveCard({
       projectId: a.projectId,
       chapterId,

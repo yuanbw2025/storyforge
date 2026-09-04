@@ -8,21 +8,23 @@ import { db } from '../../src/lib/db/schema'
 import { deriveExportProjectJSON } from '../../src/lib/export/registry-export'
 import { deriveImportProjectJSON } from '../../src/lib/export/registry-import'
 import { aggregateInventory } from '../../src/lib/types/item-ledger'
+import { seedCurrentProject } from '../helpers/current-workspace'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
 
 const now = Date.now()
 
 async function seedExportProject() {
-  const projectId = await db.projects.add({
-    name: 'INV1-EXPORT', genre: '', description: '', targetWordCount: 0,
+  const projectId = await seedCurrentProject({
+    name: 'INV1-EXPORT', genres: [], description: '', targetWordCount: 0,
     enableMultiWorld: false, createdAt: now, updatedAt: now,
   } as any) as number
   const worldGroupId = await db.worldGroups.add({
     projectId, name: '主世界', type: 'primary', order: 0, createdAt: now, updatedAt: now,
   } as any) as number
   const charA = await db.characters.add({
-    projectId, name: '林风', role: 'protagonist', roleWeight: 'main',
+    projectId, name: '林风', roleWeight: 'main',
     moralAxis: 'good', orderAxis: 'lawful', shortDescription: '',
-    homeWorldGroupId: worldGroupId, createdAt: now, updatedAt: now,
+    homeWorldGroupId: worldGroupId, isCrossWorld: false, createdAt: now, updatedAt: now,
   } as any) as number
   const vol = await db.outlineNodes.add({
     projectId, parentId: null, type: 'volume', title: '卷一', summary: '',
@@ -45,7 +47,7 @@ async function seedExportProject() {
   } as any)
   // 未归属物品
   await db.itemLedger.add({
-    projectId, itemName: '祖传玉佩', heldByName: '未知(历史数据)', characterId: null,
+    projectId, itemName: '祖传玉佩', heldByName: '未知（作者未指定）', characterId: null,
     action: 'gain', quantity: 1, chapterId: null, createdAt: now, updatedAt: now,
   } as any)
   // 需要状态卡也有一条，否则 import 时 stateCards 为空会导致一些表跳过
@@ -54,6 +56,7 @@ async function seedExportProject() {
     fields: JSON.stringify([{ key: '境界', value: '炼气' }]),
     createdAt: now, updatedAt: now,
   } as any)
+  await finalizeCurrentFixtureV1(projectId)
   return { projectId, charA }
 }
 
@@ -87,7 +90,7 @@ describe('INV-1 · characterId 导出往返', () => {
     const jade = entries.find(e => e.itemName === '祖传玉佩')
     expect(jade).toBeDefined()
     expect(jade!.characterId).toBeNull()
-    expect(jade!.heldByName).toBe('未知(历史数据)')
+    expect(jade!.heldByName).toBe('未知（作者未指定）')
   })
 
   it('往返后按角色过滤仍能查到物品', async () => {

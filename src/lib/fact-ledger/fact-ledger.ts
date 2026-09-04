@@ -25,7 +25,7 @@ import {
   resolveReadScopeLike,
   resolveScopeLike,
   stampNewRecord,
-} from '../world-engine/scope'
+} from '../workspace/scope'
 import type { WorkspaceScope } from '../types/world-ownership'
 
 const now = () => Date.now()
@@ -40,10 +40,11 @@ function sameFactSubject(left: TemporalFact, right: TemporalFact): boolean {
   ] as const
   const leftTyped = typedFields.find(field => left[field] != null)
   const rightTyped = typedFields.find(field => right[field] != null)
-  if (leftTyped && rightTyped) {
-    return leftTyped === rightTyped && left[leftTyped] === right[rightTyped]
+  if (leftTyped || rightTyped) {
+    return leftTyped != null && rightTyped != null
+      && leftTyped === rightTyped
+      && left[leftTyped] === right[rightTyped]
   }
-  // 兼容旧事实：一侧尚未回填 typed FK 时，以同世界精确 subjectName 对齐。
   return left.subjectName === right.subjectName
 }
 
@@ -165,9 +166,9 @@ export interface ConfirmFactResult {
 }
 
 export async function confirmFactCandidate(factId: number): Promise<ConfirmFactResult> {
-  const beforeMigration = await db.temporalFacts.get(factId)
-  if (!beforeMigration || beforeMigration.id == null) return { confirmed: false, clashes: [], reason: 'missing' }
-  const scope = await resolveScopeLike(beforeMigration.projectId)
+  const existingRecord = await db.temporalFacts.get(factId)
+  if (!existingRecord || existingRecord.id == null) return { confirmed: false, clashes: [], reason: 'missing' }
+  const scope = await resolveScopeLike(existingRecord.projectId)
   const fact = await db.temporalFacts.get(factId)
   if (!fact || !await assertRecordInScope(scope, 'temporalFacts', fact, { owner: 'work' })) {
     throw new Error('事实候选不存在或不属于当前作品。')
@@ -273,9 +274,9 @@ export interface ReplaceConstitutionFactResult {
 export async function replaceConstitutionFactCandidate(
   factId: number,
 ): Promise<ReplaceConstitutionFactResult> {
-  const beforeMigration = await db.temporalFacts.get(factId)
-  if (!beforeMigration || beforeMigration.id == null) return { confirmed: false, clashes: [], replaced: 0, reason: 'missing' }
-  const scope = await resolveScopeLike(beforeMigration.projectId)
+  const existingRecord = await db.temporalFacts.get(factId)
+  if (!existingRecord || existingRecord.id == null) return { confirmed: false, clashes: [], replaced: 0, reason: 'missing' }
+  const scope = await resolveScopeLike(existingRecord.projectId)
   const fact = await db.temporalFacts.get(factId)
   if (!fact || !await assertRecordInScope(scope, 'temporalFacts', fact, { owner: 'work' })) {
     throw new Error('世界宪法候选不存在或不属于当前作品。')
@@ -323,9 +324,9 @@ export async function replaceConstitutionFactCandidate(
 
 /** 作者否决候选/异常事实（不入 Canon、不再注入生成）。不动已确认/已锁定事实。 */
 export async function rejectFactCandidate(factId: number): Promise<void> {
-  const beforeMigration = await db.temporalFacts.get(factId)
-  if (!beforeMigration || beforeMigration.id == null) return
-  const scope = await resolveScopeLike(beforeMigration.projectId)
+  const existingRecord = await db.temporalFacts.get(factId)
+  if (!existingRecord || existingRecord.id == null) return
+  const scope = await resolveScopeLike(existingRecord.projectId)
   const fact = await db.temporalFacts.get(factId)
   if (!fact || !await assertRecordInScope(scope, 'temporalFacts', fact, { owner: 'work' })) {
     throw new Error('事实候选不存在或不属于当前作品。')

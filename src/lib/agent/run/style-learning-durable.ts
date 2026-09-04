@@ -16,7 +16,7 @@ import {
   type StyleLearningBaselineV1,
 } from '../../style/learning-agent'
 import type { AIConfig, ChatMessage, WorkspaceScope } from '../../types'
-import { readOwnedRows, scopeTransactionTables } from '../../world-engine/scope'
+import { readOwnedRows, scopeTransactionTables } from '../../workspace/scope'
 import { createAgentSkillExecutionBindingV1 } from '../execution-binding'
 import { getAgentSkillV1 } from '../skill-registry'
 import { createAgentRunCheckpointV1, readLatestVerifiedAgentRunCheckpointV1 } from './checkpoint'

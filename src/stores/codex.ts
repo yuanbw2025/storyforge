@@ -11,7 +11,7 @@ import {
   BUILTIN_CATEGORIES, stringifyFieldSchema,
   type CodexCategory, type CodexEntry, type CodexDomain, type CodexFieldDef,
 } from '../lib/types/codex'
-import { assertRecordInScope, readOwnedRows, resolveReadScopeLike, resolveScopeLike, stampNewRecord, type WorkspaceScopeLike } from '../lib/world-engine/scope'
+import { assertRecordInScope, readOwnedRows, resolveReadScopeLike, resolveScopeLike, stampNewRecord, type WorkspaceScopeLike } from '../lib/workspace/scope'
 
 interface CodexStore {
   categories: CodexCategory[]
@@ -31,12 +31,17 @@ interface CodexStore {
   setCategoryHidden: (id: number, hidden: boolean) => Promise<void>
 
   // 词条
-  addEntry: (e: Omit<CodexEntry, 'id' | 'createdAt' | 'updatedAt'>) => Promise<number>
+  addEntry: (e: Omit<CodexEntry,
+    'id' | 'createdAt' | 'updatedAt' | 'origin' | 'sourceEvidenceQuotes'
+    | 'sourceContentHash' | 'producerRunId' | 'producerCandidateHash'>
+    & Partial<Pick<CodexEntry,
+      'origin' | 'sourceEvidenceQuotes' | 'sourceContentHash' | 'producerRunId' | 'producerCandidateHash'>>
+  ) => Promise<number>
   updateEntry: (id: number, patch: Partial<CodexEntry>) => Promise<void>
   deleteEntry: (id: number) => Promise<void>
 
   // 查询辅助
-  getCategoriesByDomain: (domain: CodexDomain, worldGroupId?: number | null) => CodexCategory[]
+  getCategoriesByDomain: (domain: CodexDomain) => CodexCategory[]
   getEntriesByCategory: (categoryId: number) => CodexEntry[]
 }
 
@@ -64,10 +69,10 @@ export const useCodexStore = create<CodexStore>((set, get) => ({
   loadedProjectId: null,
 
   loadAll: async (scopeInput) => {
-    const scope = await resolveScopeLike(scopeInput)
-    const projectId = scope.projectId
     set({ loading: true })
     try {
+      const scope = await resolveScopeLike(scopeInput)
+      const projectId = scope.projectId
       await get().ensureBuiltIns(scope)
       const [categories, entries] = await Promise.all([
         readOwnedRows<CodexCategory>(scope, 'codexCategories', { owner: 'world' }),
@@ -76,15 +81,15 @@ export const useCodexStore = create<CodexStore>((set, get) => ({
       set({ categories, entries, loading: false, loadedProjectId: projectId })
     } catch (err) {
       console.error('[Codex] loadAll 失败:', err)
-      set({ loading: false })
+      set({ categories: [], entries: [], loading: false, loadedProjectId: null })
     }
   },
 
   loadExisting: async (scopeInput) => {
-    const scope = await resolveReadScopeLike(scopeInput)
-    const projectId = scope.projectId
     set({ loading: true })
     try {
+      const scope = await resolveReadScopeLike(scopeInput)
+      const projectId = scope.projectId
       const [categories, entries] = await Promise.all([
         readOwnedRows<CodexCategory>(scope, 'codexCategories', { owner: 'world' }),
         readOwnedRows<CodexEntry>(scope, 'codexEntries', { owner: 'world' }),
@@ -92,7 +97,7 @@ export const useCodexStore = create<CodexStore>((set, get) => ({
       set({ categories, entries, loading: false, loadedProjectId: projectId })
     } catch (err) {
       console.error('[Codex] loadExisting 失败:', err)
-      set({ loading: false })
+      set({ categories: [], entries: [], loading: false, loadedProjectId: null })
     }
   },
 
@@ -100,46 +105,14 @@ export const useCodexStore = create<CodexStore>((set, get) => ({
     const scope = await resolveScopeLike(scopeInput)
     const projectId = scope.projectId
     // 并发锁:同项目已有调用在跑就复用它,从根上杜绝并发重复播种;
-    // 内部仍保留自愈去重,清理历史/其它路径产生的重复。
     const lockKey = `${projectId}:${scope.worldId}`
     const running = ensureBuiltInsInFlight.get(lockKey)
     if (running) return running
     const task = (async () => {
-    // 自愈式幂等：先去重历史重复，再补齐缺失的内置分类。
-    // ① 每个 builtInKey 只保留 id 最小的一条；多余分类下的词条/子分类改挂到保留项后删除多余分类。
-    // ② 再只播种当前缺失的内置 key。
+    // 当前数据只需要幂等补齐内置分类；唯一性由写入口和并发锁保证。
     const cats = await readOwnedRows<CodexCategory>(scope, 'codexCategories', { owner: 'world' })
     const builtins = cats.filter(c => !!c.builtInKey)
-
-    // ① 去重历史重复
-    const byKey = new Map<string, CodexCategory[]>()
-    for (const c of builtins) {
-      const arr = byKey.get(c.builtInKey!) ?? []
-      arr.push(c)
-      byKey.set(c.builtInKey!, arr)
-    }
-    for (const group of byKey.values()) {
-      if (group.length <= 1) continue
-      group.sort((a, b) => (a.id ?? 0) - (b.id ?? 0))
-      const keep = group[0]
-      for (const extra of group.slice(1)) {
-        // 多余分类下的词条改挂到保留项，避免删分类时孤立词条
-        const orphanEntries = (await readOwnedRows<CodexEntry>(scope, 'codexEntries', { owner: 'world' }))
-          .filter(e => e.categoryId === extra.id)
-        for (const e of orphanEntries) {
-          await db.codexEntries.update(e.id!, { categoryId: keep.id! })
-        }
-        // 多余分类的子分类改挂到保留项
-        for (const child of cats.filter(c => c.parentId === extra.id)) {
-          await db.codexCategories.update(child.id!, { parentId: keep.id! })
-        }
-        await db.codexCategories.delete(extra.id!)
-        console.log('[Codex] 已合并重复内置分类:', extra.builtInKey, '#', extra.id, '→ #', keep.id)
-      }
-    }
-
-    // ② 补齐缺失的内置 key
-    const existingKeys = new Set([...byKey.keys()])
+    const existingKeys = new Set(builtins.map(category => category.builtInKey!))
     const missing = BUILTIN_CATEGORIES.filter(seed => !existingKeys.has(seed.builtInKey))
     if (missing.length === 0) return
 
@@ -155,7 +128,6 @@ export const useCodexStore = create<CodexStore>((set, get) => ({
       fieldSchema: stringifyFieldSchema(seed.fields),
       hidden: false,
       order: baseOrder + i,
-      worldGroupId: null,
       createdAt: ts,
       updatedAt: ts,
     }, { owner: 'world' }) as CodexCategory)
@@ -225,16 +197,30 @@ export const useCodexStore = create<CodexStore>((set, get) => ({
     if (!category || !await assertRecordInScope(scope, 'codexCategories', category, { owner: 'world' })) {
       throw new Error('[Codex] 分类不属于当前 World')
     }
-    const row = stampNewRecord(scope, 'codexEntries', { ...e, createdAt: ts, updatedAt: ts } as CodexEntry, { owner: 'world' }) as CodexEntry
+    const row = stampNewRecord(scope, 'codexEntries', {
+      ...e,
+      origin: 'manual',
+      sourceEvidenceQuotes: '[]',
+      sourceContentHash: '',
+      producerRunId: null,
+      producerCandidateHash: null,
+      ...(e.origin ? { origin: e.origin } : {}),
+      ...(e.sourceEvidenceQuotes ? { sourceEvidenceQuotes: e.sourceEvidenceQuotes } : {}),
+      ...(e.sourceContentHash ? { sourceContentHash: e.sourceContentHash } : {}),
+      ...(e.producerRunId != null ? { producerRunId: e.producerRunId } : {}),
+      ...(e.producerCandidateHash != null ? { producerCandidateHash: e.producerCandidateHash } : {}),
+      createdAt: ts,
+      updatedAt: ts,
+    } as CodexEntry, { owner: 'world' }) as CodexEntry
     const id = await db.codexEntries.add(row) as number
     set({ entries: [...get().entries, { ...row, id }] })
     return id
   },
 
   updateEntry: (id, patch) => enqueueEntryUpdate(id, async () => {
-    const beforeMigration = get().entries.find(e => e.id === id) ?? await db.codexEntries.get(id)
-    if (!beforeMigration) return
-    const scope = await resolveScopeLike(beforeMigration.projectId)
+    const existingEntry = get().entries.find(e => e.id === id) ?? await db.codexEntries.get(id)
+    if (!existingEntry) return
+    const scope = await resolveScopeLike(existingEntry.projectId)
     const current = await db.codexEntries.get(id)
     if (!current || !await assertRecordInScope(scope, 'codexEntries', current, { owner: 'world' })) return
     if (patch.categoryId != null) {
@@ -247,9 +233,9 @@ export const useCodexStore = create<CodexStore>((set, get) => ({
   }),
 
   deleteEntry: async (id) => {
-    const beforeMigration = get().entries.find(item => item.id === id) ?? await db.codexEntries.get(id)
-    if (!beforeMigration) return
-    const scope = await resolveScopeLike(beforeMigration.projectId)
+    const existingEntry = get().entries.find(item => item.id === id) ?? await db.codexEntries.get(id)
+    if (!existingEntry) return
+    const scope = await resolveScopeLike(existingEntry.projectId)
     const entry = await db.codexEntries.get(id)
     if (!entry || !await assertRecordInScope(scope, 'codexEntries', entry, { owner: 'world' })) return
     await db.transaction('rw', db.codexEntries, db.characters, async () => {
@@ -259,10 +245,9 @@ export const useCodexStore = create<CodexStore>((set, get) => ({
     set({ entries: get().entries.filter(e => e.id !== id) })
   },
 
-  getCategoriesByDomain: (domain, worldGroupId) => {
+  getCategoriesByDomain: (domain) => {
     return get().categories
       .filter(c => c.domain === domain)
-      .filter(c => worldGroupId === undefined ? true : (c.worldGroupId ?? null) === (worldGroupId ?? null))
       .sort((a, b) => a.order - b.order)
   },
 

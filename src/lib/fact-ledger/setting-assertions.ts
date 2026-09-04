@@ -16,7 +16,7 @@ import {
   resolveScopeLike,
   scopeTransactionTables,
   stampNewRecord,
-} from '../world-engine/scope'
+} from '../workspace/scope'
 
 export interface SettingAssertionSource {
   sourceKey: string
@@ -395,7 +395,6 @@ export function readSettingAssertionExtractPromptTemplateSnapshotV1(): ChatMessa
 function sourcePatch(source: SettingAssertionSource): Partial<TemporalFact> {
   const patch: Partial<TemporalFact> = {
     sourceRecordTable: source.table,
-    sourceRecordId: source.recordId,
     sourceField: source.field,
     sourceFingerprint: source.fingerprint,
   }

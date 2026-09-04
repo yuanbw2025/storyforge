@@ -16,7 +16,7 @@ import {
 import { countWords, htmlToPlainText } from '../../utils/html'
 import { assembleContext } from '../../registry/assemble-context'
 import { adopt } from '../../registry/adopt'
-import { assertRecordInScope, readOwnedRows } from '../../world-engine/scope'
+import { assertRecordInScope, readOwnedRows } from '../../workspace/scope'
 import { usePromptStore } from '../../../stores/prompt'
 import { propagateChapterEditStale } from '../../consistency/impact-analysis'
 import { getAgentSkillV1 } from '../skill-registry'

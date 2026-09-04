@@ -58,7 +58,7 @@ export default function StyleLearningPanel({ project }: Props) {
     [chapters],
   )
 
-  // 默认选最近 6 个候选章节，避免旧项目一打开就把全部成稿送进模型。
+  // 默认选最近 6 个候选章节，避免一次把全部成稿送进模型。
   useEffect(() => {
     setSelectedIds(new Set(candidates.slice(-MAX_CORPUS_CHAPTERS).map(c => c.id!)))
   }, [candidates])

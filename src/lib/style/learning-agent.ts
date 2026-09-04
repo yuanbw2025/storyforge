@@ -3,7 +3,7 @@ import { renderPrompt } from '../ai/prompt-engine'
 import type { Chapter, ChatMessage, PromptTemplate, WorkspaceScope } from '../types'
 import type { UserStyleProfile } from '../types/user-style'
 import { countWords, htmlToPlainText } from '../utils/html'
-import { readOwnedRows } from '../world-engine/scope'
+import { readOwnedRows } from '../workspace/scope'
 import {
   formatStyleCalibrationFeedback,
   formatStyleFewShotPairs,

@@ -7,6 +7,8 @@ import {
 import { trimMessagesToFit } from '../../src/lib/ai/context-budget'
 import { assembleContext } from '../../src/lib/registry/assemble-context'
 import { usePromptStore } from '../../src/stores/prompt'
+import { db } from '../../src/lib/db/schema'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
 
 const originalPromptState = usePromptStore.getState()
 
@@ -156,8 +158,11 @@ describe('NS-1 T6/T7 · minimum continuity envelope and template contract', () =
   })
 
   it('keeps protected assembleContext sources while trimming optional layers', async () => {
+    await db.delete()
+    await db.open()
+    const projectId = (await seedCurrentWorkspace('Continuity envelope')).scope.projectId
     const result = await assembleContext({
-      projectId: 1,
+      projectId,
       chapterId: 2,
       inputBudgetTokens: 200,
       continuitySnapshot: {
@@ -176,5 +181,6 @@ describe('NS-1 T6/T7 · minimum continuity envelope and template contract', () =
     expect(result.text).toContain('必须保留的 handoff')
     expect(result.text).toContain('必须保留的真实 tail')
     expect(result.overBudgetAfterTrim).toBe(false)
+    db.close()
   })
 })

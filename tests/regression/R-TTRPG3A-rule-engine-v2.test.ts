@@ -13,7 +13,7 @@ import {
 } from '../../src/lib/ttrpg/action-economy'
 import { createStoryForgeRulePackV1 } from '../../src/lib/ttrpg/storyforge-rule-pack'
 import { createD20FantasyRulePackV1 } from '../../src/lib/ttrpg/d20-fantasy-rule-pack'
-import { hashGameProductionValueV2 } from '../../src/lib/game-production/hash'
+import { hashProductProductionValueV2 } from '../../src/lib/product-production/hash'
 import {
   applyTtrpgHouseRuleOverlayV2,
   parseTtrpgHouseRuleOverlayV2,
@@ -24,7 +24,7 @@ describe('TTRPG-3A · RulePack V2 generic resolver and EffectPlan DSL', () => {
   it('d100 共享合同覆盖规则导入、运行时、联机与正式 UI，没有各自维护上限', () => {
     const source = (relative: string) => readFileSync(path.resolve(process.cwd(), relative), 'utf8')
     expect(source('src/lib/ttrpg/rule-pack.ts')).toContain("assertTtrpgDieSidesV2(row.sides")
-    expect(source('src/lib/simulation/runtime.ts')).toContain('parseTtrpgDiceExpressionV2(expression)')
+    expect(source('src/lib/product/runtime-dice.ts')).toContain('parseTtrpgDiceExpressionV2(expression)')
     expect(source('src/lib/online/verifiable-dice.ts')).toContain('parseTtrpgDiceExpressionV2(expression)')
     const ui = source('src/components/ttrpg/TtrpgOnlineRoomPanel.tsx')
     expect(ui).toContain('parseTtrpgDiceExpressionV2(diceExpression)')
@@ -150,7 +150,7 @@ describe('TTRPG-3A · RulePack V2 generic resolver and EffectPlan DSL', () => {
 
   it('HouseRule Overlay 只允许白名单差异、绑定基线 hash，并在应用后重新执行 d100 与 fixture 守卫', async () => {
     const base = createStoryForgeRulePackV1()
-    const baseContentHash = await hashGameProductionValueV2(base)
+    const baseContentHash = await hashProductProductionValueV2(base)
     const overlay = {
       schema: 'storyforge.ttrpg-house-rule-overlay' as const, version: 2 as const,
       overlayKey: 'overlay.high-variance', title: '高波动村规', author: '测试主持人',
@@ -184,7 +184,7 @@ describe('TTRPG-3A · RulePack V2 generic resolver and EffectPlan DSL', () => {
       phase: 'action', target: 'self', costResourceKey: 'heroic-dice', costAmount: 0,
       requirements: [{ kind: 'resource', resourceKey: 'vigor', operator: 'at-most', value: 0 }],
     })
-    const baseContentHash = await hashGameProductionValueV2(base)
+    const baseContentHash = await hashProductProductionValueV2(base)
     const applied = await applyTtrpgHouseRuleOverlayV2({
       baseRulePack: base,
       overlay: {
@@ -210,7 +210,7 @@ describe('TTRPG-3A · RulePack V2 generic resolver and EffectPlan DSL', () => {
   it('村规概率预览给出改动前后的可量化成功率，不把数值影响藏在说明文字中', async () => {
     const base = createStoryForgeRulePackV1()
     const before = previewTtrpgCheckProbabilityV2({ rulePack: base, checkKey: 'standard', attributeValue: 1, difficulty: 8 })
-    const baseContentHash = await hashGameProductionValueV2(base)
+    const baseContentHash = await hashProductProductionValueV2(base)
     const applied = await applyTtrpgHouseRuleOverlayV2({
       baseRulePack: base,
       overlay: {

@@ -1,7 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('../../src/lib/ai/client', () => ({
-  chat: vi.fn(async () => '节点生成的候选世界来源。'),
+  chat: vi.fn(async () => JSON.stringify({
+    field: 'worldOrigin',
+    value: '节点生成的候选世界来源。',
+  })),
 }))
 
 import { db } from '../../src/lib/db/schema'
@@ -18,17 +21,17 @@ import {
   type AuthoringNodeGraph,
   type AuthoringNodeInstance,
 } from '../../src/lib/node-authoring'
-import { resolveScopeLike, stampNewRecord } from '../../src/lib/world-engine/scope'
+import { resolveScopeLike, stampNewRecord } from '../../src/lib/workspace/scope'
+import { putCurrentWorkspaceFixtureV1 } from '../helpers/current-workspace'
 
 const project: Project = {
   id: 73002,
+  workspaceUid: 'WS-00000000-0000-4000-8000-000000073002',
+  workspacePurpose: 'independent-work',
   name: '领域节点同步测试',
-  genre: 'fantasy',
-  genres: ['fantasy'],
-  status: 'drafting',
-  description: '',
-  targetWordCount: 100_000,
   enableMultiWorld: false,
+  activeWorldId: 73002,
+  activeWorkId: 73002,
   createdAt: 1,
   updatedAt: 1,
 }
@@ -37,7 +40,7 @@ describe('FLOW-3C · Canon 绑定概览与下游失效', () => {
   beforeEach(async () => {
     await db.delete()
     await db.open()
-    await db.projects.put(project)
+    await putCurrentWorkspaceFixtureV1(project)
     const scope = await resolveScopeLike(project.id!)
     await db.worldviews.put(stampNewRecord(scope, 'worldviews', {
       projectId: project.id!,

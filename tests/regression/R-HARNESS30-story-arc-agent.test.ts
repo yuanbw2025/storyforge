@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   createStoryArcCopilotNode,
   parseStoryArcCandidateDraft,
-  parseStoryArcModelResponseLegacyV1,
   parseStoryArcModelResponseV2,
   prepareStoryArcCopilot,
   revalidateStoryArcCreativeDraftV1,
@@ -39,17 +38,15 @@ import {
   verifyMasterAgentRunV1,
 } from '../../src/lib/agent/run/master-verification'
 import { AgentTeamBudgetTracker } from '../../src/lib/agent/team-budget'
-import { hashCanonicalValue } from '../../src/lib/agent/run/hash'
 import { db } from '../../src/lib/db/schema'
-import { generateWorkspaceUid } from '../../src/lib/memory/identity'
-import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
-import { stampNewRecord } from '../../src/lib/world-engine/scope'
+import { stampNewRecord } from '../../src/lib/workspace/scope'
 import {
   adoptGenerationNodeOutput,
   runGenerationNode,
 } from '../../src/lib/generation/generation-node'
 import type { AIConfig, Project, WorkspaceScope } from '../../src/lib/types'
 import { useAIConfigStore } from '../../src/stores/ai-config'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
 
 const STORY_ARC_CONFIG: AIConfig = {
   provider: 'openai',
@@ -65,7 +62,6 @@ const ORIGINAL_AI_STATE = {
   config: structuredClone(useAIConfigStore.getState().config),
   presets: structuredClone(useAIConfigStore.getState().presets),
   taskRoutes: structuredClone(useAIConfigStore.getState().taskRoutes),
-  creativeReliabilityEnabled: useAIConfigStore.getState().creativeReliabilityEnabled,
   creativeQualityMode: useAIConfigStore.getState().creativeQualityMode,
 }
 
@@ -75,35 +71,28 @@ const directWorkflow = {
   reasonCodes: ['single-explicit-domain' as const],
 }
 
+const sequentialWorkflow = {
+  version: 1 as const,
+  workflowId: 'multi-domain-sequential' as const,
+  reasonCodes: ['multiple-explicit-domains' as const],
+}
+
 async function createWorkspace(): Promise<{ project: Project; scope: WorkspaceScope }> {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    workspaceUid: generateWorkspaceUid(),
-    name: '潮汐纪元',
-    genre: 'fantasy',
-    genres: ['fantasy'],
-    description: '',
-    status: 'drafting',
-    targetWordCount: 100_000,
-    createdAt: now,
-    updatedAt: now,
-  } as Project) as number
-  const { scope } = await ensureWorkspaceOwnership(projectId)
+  const { project, scope } = await seedCurrentWorkspace('潮汐纪元')
   await db.worldviews.add(stampNewRecord(scope, 'worldviews', {
-    projectId,
+    projectId: project.id!,
     worldOrigin: '盐海每十年退潮一次，海床会升起一座浮空城。',
     createdAt: now,
     updatedAt: now,
   }, { owner: 'world' }) as never)
   await db.storyCores.add(stampNewRecord(scope, 'storyCores', {
-    projectId,
+    projectId: project.id!,
     theme: '记忆与责任',
     centralConflict: '守灯人必须决定是否敲响会抹除全城记忆的潮汐钟。',
     createdAt: now,
     updatedAt: now,
   }, { owner: 'work' }) as never)
-  const project = await db.projects.get(projectId)
-  if (!project) throw new Error('测试项目创建失败')
   return { project, scope }
 }
 
@@ -200,17 +189,12 @@ describe.sequential('R-HARNESS30 · 故事线 Agent Skill 与受治理采纳', (
       config: STORY_ARC_CONFIG,
       presets: [],
       taskRoutes: {},
-      creativeReliabilityEnabled: true,
       creativeQualityMode: 'balanced',
     })
-    useAIConfigStore.getState().setCreativeReliabilityEnabled(true)
   })
 
   afterEach(() => {
     vi.unstubAllGlobals()
-    useAIConfigStore.getState().setCreativeReliabilityEnabled(
-      ORIGINAL_AI_STATE.creativeReliabilityEnabled,
-    )
     useAIConfigStore.setState(ORIGINAL_AI_STATE)
     db.close()
   })
@@ -296,39 +280,6 @@ describe.sequential('R-HARNESS30 · 故事线 Agent Skill 与受治理采纳', (
     expect(await db.storyArcs.count()).toBe(0)
   })
 
-  it('本机回滚开关恢复单次严格旧路径，不附加 NarrativeBrief 或 CREL 证据', async () => {
-    const { project, scope } = await createWorkspace()
-    useAIConfigStore.getState().setCreativeReliabilityEnabled(false)
-    const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
-      const body = JSON.parse(String(init?.body))
-      const prompt = body.messages.map((message: { content: string }) => message.content).join('\n')
-      expect(prompt).not.toContain('本轮叙事任务（运行时合同，不是新增 Canon）')
-      expect(prompt).not.toContain('assumptions 字符串数组')
-      return new Response(JSON.stringify({
-        choices: [{ message: { content: JSON.stringify({ storyArcs: [mainArc()] }) } }],
-        usage: { prompt_tokens: 21, completion_tokens: 32, total_tokens: 53 },
-      }), { status: 200 })
-    })
-    vi.stubGlobal('fetch', fetchMock)
-
-    const candidates = await executeMasterAgentPlan({
-      projectId: project.id!,
-      scope,
-      worldGroupId: null,
-      plan: plan(),
-      budget: new AgentTeamBudgetTracker('balanced'),
-    })
-
-    expect(fetchMock).toHaveBeenCalledOnce()
-    expect(candidates).toHaveLength(1)
-    expect(candidates[0].payload.creativeArtifact).toBeUndefined()
-    expect(candidates[0].payload.narrativeBrief).toBeUndefined()
-    expect(parseStoryArcCandidateDraft(candidates[0].draft)).toEqual([mainArc()])
-    expect(parseStoryArcModelResponseLegacyV1(
-      `\`\`\`json\n${JSON.stringify({ storyArcs: [mainArc()] })}\n\`\`\``,
-    )).toEqual([mainArc()])
-  })
-
   it('上游临时假设通过独立元数据进入后续任务且不改变依赖草稿哈希', async () => {
     const { project, scope } = await createWorkspace()
     let callIndex = 0
@@ -374,6 +325,7 @@ describe.sequential('R-HARNESS30 · 故事线 Agent Skill 与受治理采纳', (
           instruction: '生成一条支线故事线',
           dependsOn: ['main-arc'],
         }],
+        workflow: sequentialWorkflow,
       },
       budget: new AgentTeamBudgetTracker('balanced'),
     })
@@ -385,10 +337,7 @@ describe.sequential('R-HARNESS30 · 故事线 Agent Skill 与受治理采纳', (
         status: 'provisional',
       }),
     ])
-    expect(candidates[1].payload.dependencyBindings).toEqual([{
-      taskId: 'main-arc',
-      outputHash: await hashCanonicalValue(candidates[0].draft),
-    }])
+    expect(candidates[1].payload.dependencyBindings).toBeUndefined()
   })
 
   it('生成候选后保持零写入，作者确认眼前候选后才写入 storyArcs', async () => {
@@ -965,6 +914,7 @@ describe.sequential('R-HARNESS30 · 故事线 Agent Skill 与受治理采纳', (
       projectId: project.id!,
       scope,
       worldGroupId: null,
+      purpose: 'master-authoring',
     })
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({
       choices: [{ message: { content: JSON.stringify({ storyArcs: [expandedArc()] }) } }],
@@ -1021,6 +971,7 @@ describe.sequential('R-HARNESS30 · 故事线 Agent Skill 与受治理采纳', (
       projectId: project.id!,
       scope,
       worldGroupId: null,
+      purpose: 'master-authoring',
     })
     const execute = vi.fn(async options => {
       const task = options.plan.tasks[0]
@@ -1111,6 +1062,7 @@ describe.sequential('R-HARNESS30 · 故事线 Agent Skill 与受治理采纳', (
       projectId: project.id!,
       scope,
       worldGroupId: null,
+      purpose: 'master-authoring',
     })
     const execute = async options => {
       const task = options.plan.tasks[0]

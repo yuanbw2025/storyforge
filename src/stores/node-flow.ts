@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { db } from '../lib/db/schema'
 import type { NodeFlow, NodeRunRecord } from '../lib/types'
-import { parseAuthoringGraph } from '../lib/node-authoring/migration'
+import { parseAuthoringGraph } from '../lib/node-authoring/graph-codec'
 import { emptyAuthoringGraph, safeAuthoringGraphJson } from '../lib/node-authoring/contracts'
 import type { AuthoringNodeGraph } from '../lib/node-authoring/contracts'
 import {
@@ -11,7 +11,7 @@ import {
   resolveScopeLike,
   stampNewRecord,
   type WorkspaceScopeLike,
-} from '../lib/world-engine/scope'
+} from '../lib/workspace/scope'
 
 interface NodeFlowStore {
   projectId: number | null
@@ -79,9 +79,9 @@ export const useNodeFlowStore = create<NodeFlowStore>((set, get) => ({
   },
 
   removeFlow: async flowId => {
-    const beforeMigration = await db.nodeFlows.get(flowId)
-    if (!beforeMigration) return
-    const scope = await resolveScopeLike(beforeMigration.projectId)
+    const existingRecord = await db.nodeFlows.get(flowId)
+    if (!existingRecord) return
+    const scope = await resolveScopeLike(existingRecord.projectId)
     const flow = await db.nodeFlows.get(flowId)
     if (!flow || !await assertRecordInScope(scope, 'nodeFlows', flow, { owner: 'work' })) return
     await db.transaction('rw', db.nodeFlows, db.nodeRuns, async () => {

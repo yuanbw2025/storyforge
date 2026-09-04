@@ -7,21 +7,15 @@ import {
   undoEntityRename,
 } from '../../src/lib/editor/entity-rename'
 import { useStateCardStore } from '../../src/stores/state-card'
+import { stampNewRecord } from '../../src/lib/workspace/scope'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
 
 const now = 1_800_000_000_000
 
 async function seedProject() {
-  const projectId = await db.projects.add({
-    name: '实体改名测试',
-    genre: 'xuanhuan',
-    genres: ['xuanhuan'],
-    status: 'ongoing',
-    description: '',
-    targetWordCount: 500_000,
-    createdAt: now,
-    updatedAt: now,
-  } as any)
-  const outlineNodeId = await db.outlineNodes.add({
+  const { scope } = await seedCurrentWorkspace('实体改名测试')
+  const { projectId } = scope
+  const outlineNodeId = await db.outlineNodes.add(stampNewRecord(scope, 'outlineNodes', {
     projectId,
     parentId: null,
     type: 'chapter',
@@ -30,8 +24,8 @@ async function seedProject() {
     order: 0,
     createdAt: now,
     updatedAt: now,
-  } as any)
-  const chapterId = await db.chapters.add({
+  }, { owner: 'work' }) as never)
+  const chapterId = await db.chapters.add(stampNewRecord(scope, 'chapters', {
     projectId,
     outlineNodeId,
     title: '第一章',
@@ -42,11 +36,10 @@ async function seedProject() {
     notes: '',
     createdAt: now,
     updatedAt: now,
-  } as any)
-  const characterId = await db.characters.add({
+  }, { owner: 'work' }) as never)
+  const characterId = await db.characters.add(stampNewRecord(scope, 'characters', {
     projectId,
     name: '李明',
-    role: 'protagonist',
     roleWeight: 'main',
     moralAxis: 'good',
     orderAxis: 'neutral',
@@ -60,11 +53,10 @@ async function seedProject() {
     arc: '',
     createdAt: now,
     updatedAt: now,
-  } as any)
-  const longerCharacterId = await db.characters.add({
+  }, { owner: 'world' }) as never)
+  const longerCharacterId = await db.characters.add(stampNewRecord(scope, 'characters', {
     projectId,
     name: '李明轩',
-    role: 'supporting',
     roleWeight: 'secondary',
     moralAxis: 'neutral',
     orderAxis: 'neutral',
@@ -78,16 +70,16 @@ async function seedProject() {
     arc: '',
     createdAt: now,
     updatedAt: now,
-  } as any)
-  const stateCardId = await db.stateCards.add({
+  }, { owner: 'world' }) as never)
+  const stateCardId = await db.stateCards.add(stampNewRecord(scope, 'stateCards', {
     projectId,
     category: 'character',
     entityName: '李明',
     fields: JSON.stringify([{ key: '位置', value: '山门' }]),
     createdAt: now,
     updatedAt: now,
-  })
-  const factId = await db.temporalFacts.add({
+  }, { owner: 'work' }) as never)
+  const factId = await db.temporalFacts.add(stampNewRecord(scope, 'temporalFacts', {
     projectId,
     characterId,
     subjectName: '李明',
@@ -99,8 +91,8 @@ async function seedProject() {
     locked: false,
     createdAt: now,
     updatedAt: now,
-  } as any)
-  const knowledgeId = await db.knowledgeLedger.add({
+  }, { owner: 'work' }) as never)
+  const knowledgeId = await db.knowledgeLedger.add(stampNewRecord(scope, 'knowledgeLedger', {
     projectId,
     characterId,
     characterName: '李明',
@@ -111,8 +103,8 @@ async function seedProject() {
     status: 'confirmed',
     createdAt: now,
     updatedAt: now,
-  } as any)
-  const cultivationId = await db.cultivationProgress.add({
+  }, { owner: 'work' }) as never)
+  const cultivationId = await db.cultivationProgress.add(stampNewRecord(scope, 'cultivationProgress', {
     projectId,
     characterId,
     characterName: '李明',
@@ -126,8 +118,8 @@ async function seedProject() {
     status: 'confirmed',
     createdAt: now,
     updatedAt: now,
-  } as any)
-  const itemId = await db.itemLedger.add({
+  }, { owner: 'work' }) as never)
+  const itemId = await db.itemLedger.add(stampNewRecord(scope, 'itemLedger', {
     projectId,
     itemName: '青锋剑',
     action: 'gain',
@@ -136,8 +128,9 @@ async function seedProject() {
     characterId,
     chapterId,
     createdAt: now,
-  })
+  }, { owner: 'work' }) as never)
   return {
+    scope,
     projectId,
     outlineNodeId,
     chapterId,
@@ -210,8 +203,8 @@ describe('EDITOR-5 · 安全实体改名', () => {
   })
 
   it('地点与势力词条使用类型匹配的状态卡并同步事实显示名', async () => {
-    const { projectId } = await seedProject()
-    const locationId = await db.importantLocations.add({
+    const { projectId, scope } = await seedProject()
+    const locationId = await db.importantLocations.add(stampNewRecord(scope, 'importantLocations', {
       projectId,
       name: '旧城',
       tags: '[]',
@@ -221,16 +214,16 @@ describe('EDITOR-5 · 安全实体改名', () => {
       sortOrder: 0,
       createdAt: now,
       updatedAt: now,
-    })
-    const locationCardId = await db.stateCards.add({
+    }, { owner: 'world' }) as never)
+    const locationCardId = await db.stateCards.add(stampNewRecord(scope, 'stateCards', {
       projectId,
       category: 'location',
       entityName: '旧城',
       fields: '[]',
       createdAt: now,
       updatedAt: now,
-    })
-    const locationFactId = await db.temporalFacts.add({
+    }, { owner: 'work' }) as never)
+    const locationFactId = await db.temporalFacts.add(stampNewRecord(scope, 'temporalFacts', {
       projectId,
       locationId,
       subjectName: '旧城',
@@ -242,8 +235,8 @@ describe('EDITOR-5 · 安全实体改名', () => {
       locked: false,
       createdAt: now,
       updatedAt: now,
-    } as any)
-    const categoryId = await db.codexCategories.add({
+    }, { owner: 'work' }) as never)
+    const categoryId = await db.codexCategories.add(stampNewRecord(scope, 'codexCategories', {
       projectId,
       domain: 'humanity',
       parentId: null,
@@ -253,8 +246,8 @@ describe('EDITOR-5 · 安全实体改名', () => {
       order: 0,
       createdAt: now,
       updatedAt: now,
-    })
-    const codexId = await db.codexEntries.add({
+    }, { owner: 'world' }) as never)
+    const codexId = await db.codexEntries.add(stampNewRecord(scope, 'codexEntries', {
       projectId,
       categoryId,
       name: '玄门',
@@ -264,16 +257,16 @@ describe('EDITOR-5 · 安全实体改名', () => {
       order: 0,
       createdAt: now,
       updatedAt: now,
-    })
-    const factionCardId = await db.stateCards.add({
+    }, { owner: 'world' }) as never)
+    const factionCardId = await db.stateCards.add(stampNewRecord(scope, 'stateCards', {
       projectId,
       category: 'faction',
       entityName: '玄门',
       fields: '[]',
       createdAt: now,
       updatedAt: now,
-    })
-    const codexFactId = await db.temporalFacts.add({
+    }, { owner: 'work' }) as never)
+    const codexFactId = await db.temporalFacts.add(stampNewRecord(scope, 'temporalFacts', {
       projectId,
       codexEntryId: codexId,
       subjectName: '玄门',
@@ -285,7 +278,7 @@ describe('EDITOR-5 · 安全实体改名', () => {
       locked: false,
       createdAt: now,
       updatedAt: now,
-    } as any)
+    }, { owner: 'work' }) as never)
 
     const locationPreview = await buildEntityRenamePreview(projectId, { kind: 'location', id: locationId }, '新城')
     await executeEntityRename({
@@ -313,8 +306,8 @@ describe('EDITOR-5 · 安全实体改名', () => {
   })
 
   it('跨类型同名和物品同名都会阻止无法判定归属的全局替换', async () => {
-    const { projectId, characterId } = await seedProject()
-    await db.importantLocations.add({
+    const { projectId, scope, characterId } = await seedProject()
+    await db.importantLocations.add(stampNewRecord(scope, 'importantLocations', {
       projectId,
       name: '李明',
       tags: '[]',
@@ -324,11 +317,11 @@ describe('EDITOR-5 · 安全实体改名', () => {
       sortOrder: 0,
       createdAt: now,
       updatedAt: now,
-    })
+    }, { owner: 'world' }) as never)
     const oldCollision = await buildEntityRenamePreview(projectId, { kind: 'character', id: characterId }, '林照')
     expect(oldCollision.blockers.join('')).toContain('旧名称')
 
-    await db.itemLedger.add({
+    await db.itemLedger.add(stampNewRecord(scope, 'itemLedger', {
       projectId,
       itemName: '天问',
       action: 'gain',
@@ -336,7 +329,7 @@ describe('EDITOR-5 · 安全实体改名', () => {
       heldByName: '李明',
       characterId,
       createdAt: now,
-    })
+    }, { owner: 'work' }) as never)
     const newCollision = await buildEntityRenamePreview(projectId, { kind: 'character', id: characterId }, '天问')
     expect(newCollision.blockers.join('')).toContain('新名称')
 
@@ -345,15 +338,15 @@ describe('EDITOR-5 · 安全实体改名', () => {
   })
 
   it('不会把新名称已有的同类型状态卡静默合并', async () => {
-    const { projectId, characterId } = await seedProject()
-    await db.stateCards.add({
+    const { projectId, scope, characterId } = await seedProject()
+    await db.stateCards.add(stampNewRecord(scope, 'stateCards', {
       projectId,
       category: 'character',
       entityName: '林照',
       fields: JSON.stringify([{ key: '位置', value: '未知' }]),
       createdAt: now,
       updatedAt: now,
-    })
+    }, { owner: 'work' }) as never)
 
     const preview = await buildEntityRenamePreview(
       projectId,

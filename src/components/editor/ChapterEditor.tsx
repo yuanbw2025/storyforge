@@ -9,6 +9,7 @@ import { useAIStream } from '../../hooks/useAIStream'
 import { createAISessionKey } from '../../stores/ai-generation-session'
 import { useAutoSave } from '../../hooks/useAutoSave'
 import { useBeforeUnload } from '../../hooks/useBeforeUnload'
+import { useActiveWork } from '../../hooks/useActiveWork'
 import { buildChapterContentPrompt, buildContinuePrompt, buildPolishPrompt, buildExpandPrompt, buildDeAIPrompt } from '../../lib/ai/adapters/chapter-adapter'
 import { buildReviewRevisePrompt, type ReviewResult } from '../../lib/ai/adapters/review-adapter'
 import { rebuildChapterChunks, ensureChunkEmbeddings, rebuildProjectNarrativeSummaries } from '../../lib/retrieval/retrieval'
@@ -199,7 +200,7 @@ import {
   type ImpactStoryTimelineRegenerationCandidateV1,
 } from '../../lib/agent/run/impact-story-timeline-regeneration-durable'
 import { classifyAgentRunFailureV1 } from '../../lib/agent/run/failure-policy'
-import { resolveScopeLike } from '../../lib/world-engine/scope'
+import { resolveScopeLike } from '../../lib/workspace/scope'
 import {
   buildPostAdoptionAuthorizationSnapshotV1,
   invalidateChapterPostAdoptionDerivativesV1,
@@ -280,6 +281,7 @@ interface Props {
 
 export default function ChapterEditor({ project, outlineNodeId }: Props) {
   const navigate = useNavigate()
+  const activeWork = useActiveWork(project)
   const {
     chapters,
     currentChapter,
@@ -301,7 +303,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   const { detailedOutlines, loadAll: loadDetailedOutlines } = useDetailedOutlineStore()
   const { cards: emotionBeatCards, loadAll: loadEmotionBeats } = useEmotionBeatStore()
 
-  // content 为 HTML 字符串；旧数据是纯文本，RichEditor 内部会自动包装
+  // content 始终使用当前正文 HTML 协议。
   const [content, setContent] = useState('')
   const [plainText, setPlainText] = useState('')
   const [savedContent, setSavedContent] = useState('')
@@ -1207,8 +1209,8 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     console.log(`[ContextGateway] ${taskType} 模式 — path:${assembled.contextGatewayExecution.path} selected:${assembled.contextGatewayExecution.retrievalTrace.mandatory.length + assembled.contextGatewayExecution.retrievalTrace.autoSelected.length} tokens:${assembled.totalInputTokens}`)
 
     // Phase E: 题材约束 + 写作风格注入
-    const genreCtx = buildGenreConstraintContext(project.genres?.length ? project.genres : project.genre)
-    const styleCtx = project.writingStyleId ? buildStylePromptInjection(project.writingStyleId) : ''
+    const genreCtx = buildGenreConstraintContext(activeWork?.genres ?? [])
+    const styleCtx = activeWork?.writingStyleId ? buildStylePromptInjection(activeWork.writingStyleId) : ''
 
     const parts = [assembled.text]
     if (genreCtx) parts.push(genreCtx)
@@ -3813,8 +3815,8 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
                       ? '父正文回执或正文产物已失效，需要重新处理'
                       : postAdoptionChainState === 'prose-completed'
                         ? '正文已完成，章后处理尚未启动'
-                        : postAdoptionChainState === 'legacy-unlinked'
-                          ? '兼容后处理记录未绑定正文 Run'
+                        : postAdoptionChainState === 'unlinked'
+                          ? '章后处理记录未绑定正文 Run'
                           : '正文已完成，章后处理正在执行'}
             </div>
           )}
@@ -3832,7 +3834,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
               </div>
               <div className="mt-1 text-sky-200/80">
                 任务：{transitionSnapshotRef.current.contract.automationAuthorization.taskTypes.join('、')}；
-                路由：{transitionSnapshotRef.current.contract.automationAuthorization.modelRoutes?.map(route => `${route.taskType}=${route.provider}/${route.model}`).join('；') || '旧版运行未冻结'}；
+                路由：{transitionSnapshotRef.current.contract.automationAuthorization.modelRoutes?.map(route => `${route.taskType}=${route.provider}/${route.model}`).join('；') || '本轮未冻结模型路由'}；
                 预计费用：{transitionSnapshotRef.current.contract.automationAuthorization.estimate.costUsdMax == null
                   ? '未知（自动模式需另行授权未知价格）'
                   : `$${transitionSnapshotRef.current.contract.automationAuthorization.estimate.costUsdMin?.toFixed(4)}–$${transitionSnapshotRef.current.contract.automationAuthorization.estimate.costUsdMax.toFixed(4)}`}。

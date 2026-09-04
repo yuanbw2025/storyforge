@@ -1,4 +1,4 @@
-import type { SimulationTtrpgRuleActionResultV1 } from "../types";
+import type { TtrpgRuntimeRuleActionResultV1 } from "../types";
 
 /**
  * Public room events are a separate privacy boundary from viewer projections.
@@ -6,7 +6,7 @@ import type { SimulationTtrpgRuleActionResultV1 } from "../types";
  * never be copied wholesale onto the room broadcast stream.
  */
 export function createPublicTtrpgActionEventV1(
-  result: SimulationTtrpgRuleActionResultV1,
+  result: TtrpgRuntimeRuleActionResultV1,
 ): Record<string, unknown> {
   const hidden = result.check?.visibility === "gm-only";
   return {
@@ -100,7 +100,7 @@ export function createPublicTtrpgActionEventV1(
  * motives and other viewer-scoped inventory evidence.
  */
 export function createPrivateTtrpgActorActionEventV1(
-  result: SimulationTtrpgRuleActionResultV1,
+  result: TtrpgRuntimeRuleActionResultV1,
 ): Record<string, unknown> {
   return {
     ...createPublicTtrpgActionEventV1(result),

@@ -14,6 +14,8 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
+import { seedCurrentProject } from '../helpers/current-workspace'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
 
 describe('R-03: 多世界导出/导入 worldGroupId remap', () => {
   beforeEach(async () => {
@@ -27,9 +29,9 @@ describe('R-03: 多世界导出/导入 worldGroupId remap', () => {
 
   it('导入后所有 worldScoped 表归属到导入后的副世界', async () => {
     const now = Date.now()
-    const projectId = await db.projects.add({
+    const projectId = await seedCurrentProject({
       name: 'R-03 多世界项目',
-      genre: 'fantasy',
+      genres: ['fantasy'],
       description: '',
       targetWordCount: 0,
       enableMultiWorld: true,
@@ -56,7 +58,6 @@ describe('R-03: 多世界导出/导入 worldGroupId remap', () => {
 
     const categoryId = await db.codexCategories.add({
       projectId,
-      worldGroupId: sideId,
       domain: 'natural',
       parentId: null,
       name: '灵材',
@@ -66,9 +67,14 @@ describe('R-03: 多世界导出/导入 worldGroupId remap', () => {
       updatedAt: now,
     } as any) as number
 
-    await db.worldviews.add({ projectId, worldGroupId: sideId, geography: '', history: '', society: '', culture: '', economy: '', rules: '', summary: '', createdAt: now, updatedAt: now } as any)
+    await db.worldviews.add({ projectId, worldGroupId: sideId, worldOrigin: '', createdAt: now, updatedAt: now } as any)
     await db.powerSystems.add({ projectId, worldGroupId: sideId, name: '斗气', description: '', levels: '[]', rules: '', createdAt: now, updatedAt: now } as any)
-    await db.characters.add({ projectId, homeWorldGroupId: sideId, name: '萧炎', role: 'protagonist', shortDescription: '', appearance: '', personality: '', background: '', motivation: '', abilities: '', relationships: '[]', arc: '', createdAt: now, updatedAt: now } as any)
+    await db.characters.add({
+      projectId, homeWorldGroupId: sideId, name: '萧炎', roleWeight: 'main',
+      moralAxis: 'neutral', orderAxis: 'chaotic', isCrossWorld: false,
+      shortDescription: '', appearance: '', personality: '', background: '', motivation: '',
+      abilities: '', relationships: '[]', arc: '', createdAt: now, updatedAt: now,
+    } as any)
     await db.outlineNodes.add({ projectId, worldGroupId: sideId, parentId: null, type: 'volume', title: '斗破卷', summary: '', order: 0, createdAt: now, updatedAt: now } as any)
     await db.geographies.add({ projectId, worldGroupId: sideId, overview: '', locations: '[]', createdAt: now, updatedAt: now } as any)
     await db.histories.add({ projectId, worldGroupId: sideId, overview: '', eraSystem: '', events: '[]', createdAt: now, updatedAt: now } as any)
@@ -77,7 +83,11 @@ describe('R-03: 多世界导出/导入 worldGroupId remap', () => {
     await db.historicalKeywords.add({ projectId, worldGroupId: sideId, keyword: '异火', category: 'technology', era: 'custom', description: '', createdAt: now, updatedAt: now } as any)
     await db.codexEntries.add({ projectId, worldGroupId: sideId, categoryId, name: '青莲地心火', summary: '', description: '', fields: '{}', refs: '{}', order: 0, createdAt: now, updatedAt: now } as any)
     await db.worldRulesProfiles.add({ projectId, worldGroupId: sideId, entries: {}, customNodes: [], globalNote: '斗气世界规则', createdAt: now, updatedAt: now } as any)
-    await db.worldGroupLinks.add({ projectId, fromGroupId: primaryId, toGroupId: sideId, type: 'portal', createdAt: now } as any)
+    await db.worldGroupLinks.add({
+      projectId, fromGroupId: primaryId, toGroupId: sideId, linkType: 'portal',
+      name: '', description: '', bidirectional: false, createdAt: now, updatedAt: now,
+    } as any)
+    await finalizeCurrentFixtureV1(projectId)
 
     const exported = await exportProjectJSON(projectId)
     expect((exported.worldviews[0] as any).worldGroupId).toBeUndefined()
@@ -109,7 +119,9 @@ describe('R-03: 多世界导出/导入 worldGroupId remap', () => {
     expect(await countWorldGroupId(db.worldNodes)).toBe(1)
     expect(await countWorldGroupId(db.historicalTimelineEvents)).toBe(1)
     expect(await countWorldGroupId(db.historicalKeywords)).toBe(1)
-    expect(await countWorldGroupId(db.codexCategories)).toBe(1)
+    expect(await db.codexCategories.where('projectId').equals(importedProjectId).count()).toBe(1)
+    expect((await db.codexCategories.where('projectId').equals(importedProjectId).first()) as Record<string, unknown>)
+      .not.toHaveProperty('worldGroupId')
     expect(await countWorldGroupId(db.codexEntries)).toBe(1)
     expect(await countWorldGroupId(db.worldRulesProfiles)).toBe(1)
 

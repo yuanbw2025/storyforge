@@ -10,17 +10,18 @@ async function openCleanHome(page: Page) {
       return root.getDirectoryHandle('custom-location', { create: true })
     }
   })
-  await page.goto('./projects', { waitUntil: 'domcontentloaded' })
-  await expect(page.getByRole('heading', { name: /开始.*第一部.*小说/ })).toBeVisible({ timeout: 15_000 })
+  await page.goto('./', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('heading', { name: '你的创作与游玩空间', exact: true })).toBeVisible({ timeout: 15_000 })
 }
 
 async function createProject(page: Page, name: string) {
-  await page.getByRole('button', { name: '+ 新建项目', exact: true }).click()
-  await page.getByPlaceholder('如：《剑出山门》').fill(name)
+  await page.getByRole('banner').getByRole('button', { name: '新建', exact: true }).click()
+  await page.getByRole('button', { name: /长篇小说/ }).click()
+  await page.getByLabel('名称').fill(name)
   await page.getByRole('button', { name: '选择项目文件夹', exact: true }).click()
   await expect(page.getByText(/已选择：/)).toBeVisible()
-  await page.getByRole('button', { name: '创建', exact: true }).click()
-  await expect(page).toHaveURL(/\/storyforge\/workspace\/\d+$/)
+  await page.getByRole('button', { name: '创建长篇小说', exact: true }).click()
+  await expect(page).toHaveURL(/\/storyforge\/workspace\/\d+\?module=outline$/)
 }
 
 function sidebarButton(page: Page, name: string) {
@@ -92,10 +93,12 @@ test('本地记忆工作区以真实浏览器文件系统完成手动双向核�
     const storyforge = await root.getDirectoryHandle('.storyforge')
     const manifest = JSON.parse(await (await (await storyforge.getFileHandle('manifest.json')).getFile()).text())
     return {
+      work: manifest.documents.find((item: { documentKind: string }) => item.documentKind === 'work').relativePath,
       story: manifest.documents.find((item: { documentKind: string }) => item.documentKind === 'story-core').relativePath,
       rules: manifest.documents.find((item: { documentKind: string }) => item.documentKind === 'creative-rules').relativePath,
     }
   })
+  expect(semanticPaths.work).toMatch(/^works\/WORK-[a-f0-9-]+\/work\.yaml$/i)
   expect(semanticPaths.story).toMatch(/^works\/WORK-[a-f0-9-]+\/memory\/story-core\.yaml$/i)
   expect(semanticPaths.rules).toMatch(/^works\/WORK-[a-f0-9-]+\/memory\/creative-rules\.yaml$/i)
   expect(await opfsFileText(page, semanticPaths.story)).toContain('浏览器创建的潮汐记忆故事')
@@ -131,21 +134,25 @@ test('本地记忆工作区以真实浏览器文件系统完成手动双向核�
   await expect(page.getByPlaceholder(/描述期望的写作风格/)).toHaveValue('硬盘修订的克制证据文风')
   await sidebarButton(page, '数据管理').click()
 
-  await page.evaluate(async () => {
-    const root = await navigator.storage.getDirectory()
-    const handle = await root.getFileHandle('storyforge.workspace.json')
-    const decoded = JSON.parse(await (await handle.getFile()).text())
-    decoded.data.name = '硬盘修改后的项目名'
+  await page.evaluate(async ({ workPath }) => {
+    const parts = workPath.split('/').filter(Boolean)
+    const fileName = parts.pop()!
+    let directory = await navigator.storage.getDirectory()
+    for (const part of parts) directory = await directory.getDirectoryHandle(part)
+    const handle = await directory.getFileHandle(fileName)
+    const original = await (await handle.getFile()).text()
+    const next = original.replace(/^([\t ]*)title:.*$/m, '$1title: 硬盘修改后的作品名')
+    if (next === original) throw new Error('未找到作品 title 字段')
     const writable = await handle.createWritable()
-    await writable.write(`${JSON.stringify(decoded, null, 2)}\n`)
+    await writable.write(next)
     await writable.close()
-  })
+  }, { workPath: semanticPaths.work })
   await page.getByRole('button', { name: '检查记忆与本地文件', exact: true }).click()
   await expect(page.getByText(/本地改动 1/)).toBeVisible()
-  await expect(page.getByText(/storyforge\.workspace\.json.*name/)).toBeVisible()
+  await expect(page.getByText(/work\.yaml.*title/)).toBeVisible()
   await page.getByRole('button', { name: '确认采纳本地改动', exact: true }).click()
   await expect(page.getByText('本地文件改动已采纳，并完成数据库与文件回读核对', { exact: true })).toBeVisible({ timeout: 15_000 })
-  await expect(page.getByTitle('硬盘修改后的项目名')).toBeVisible()
+  await expect(page.getByTitle('硬盘修改后的作品名')).toBeVisible()
   await expect(page.getByText(/已一致 \d+ · 项目内改动 0 · 本地改动 0/)).toBeVisible()
 
   // The storage location can be changed from Settings. Rebinding alone is
@@ -165,5 +172,6 @@ test('本地记忆工作区以真实浏览器文件系统完成手动双向核�
   await expect(page.getByText(/核对完成：发现 \d+ 项需要处理/)).toBeVisible()
   await page.getByRole('button', { name: '确认写入项目改动', exact: true }).click()
   await expect(page.getByText('项目改动已写入本地文件，并完成回读核对', { exact: true })).toBeVisible({ timeout: 15_000 })
-  expect(await opfsFileText(page, 'custom-location/storyforge.workspace.json')).toContain('硬盘修改后的项目名')
+  expect(await opfsFileText(page, `custom-location/${semanticPaths.work}`)).toContain('硬盘修改后的作品名')
+  expect(await opfsFileText(page, 'custom-location/storyforge.workspace.json')).toContain('OPFS 记忆验收')
 })

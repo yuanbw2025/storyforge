@@ -5,11 +5,10 @@ import { applyCharacterReferenceRemap } from '../lib/registry/character-referenc
 import { normalizeCharacterAxes } from '../lib/character/character-axes'
 import { transactionTablesFor } from '../lib/registry/lifecycle'
 import { refreshSettingAssertionSourceStatus } from '../lib/fact-ledger/setting-assertions'
-import { assertRecordInScope, readOwnedRows, resolveReadScopeLike, resolveScopeLike, stampNewRecord, type WorkspaceScopeLike } from '../lib/world-engine/scope'
+import { assertRecordInScope, readOwnedRows, resolveReadScopeLike, resolveScopeLike, stampNewRecord, type WorkspaceScopeLike } from '../lib/workspace/scope'
 import { coordinatePendingEditV1 } from '../lib/authoring/pending-edit-coordinator'
 
-// 注:势力(Faction)已于 C2 并入「势力」词条,旧 factions 表数据由
-// migrations/faction-to-codex 一次性迁移;本 store 不再管理势力。
+// 势力由 Codex「势力」词条管理，本 store 只管理角色主档。
 
 interface CharacterStore {
   characters: Character[]
@@ -17,10 +16,7 @@ interface CharacterStore {
 
   loadAll: (scope: WorkspaceScopeLike) => Promise<void>
 
-  addCharacter: (
-    char: Omit<Character, 'id' | 'createdAt' | 'updatedAt' | 'role'>
-      & Partial<Pick<Character, 'role'>>
-  ) => Promise<number>
+  addCharacter: (char: Omit<Character, 'id' | 'createdAt' | 'updatedAt'>) => Promise<number>
   updateCharacter: (id: number, data: Partial<Character>) => Promise<void>
   deleteCharacter: (id: number) => Promise<void>
 }
@@ -83,9 +79,9 @@ export const useCharacterStore = create<CharacterStore>((set, get) => ({
   },
 
   deleteCharacter: async (id) => {
-    const beforeMigration = await db.characters.get(id)
-    if (!beforeMigration) return
-    const projectId = beforeMigration.projectId
+    const existingCharacter = await db.characters.get(id)
+    if (!existingCharacter) return
+    const projectId = existingCharacter.projectId
     const scope = await resolveScopeLike(projectId)
     const preChar = await db.characters.get(id)
     if (!preChar) return

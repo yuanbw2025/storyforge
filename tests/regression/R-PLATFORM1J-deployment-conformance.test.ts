@@ -1,22 +1,22 @@
 import { describe, expect, it } from 'vitest'
 import { hashCanonicalValue } from '../../src/lib/agent/run/hash'
 import {
-  GAME_PLATFORM_DEPLOYMENT_SCENARIOS_V1,
-  GamePlatformDeploymentScenarioErrorV1,
-  runGamePlatformDeploymentConformanceV1,
-  verifyGamePlatformDeploymentConformanceReceiptV1,
-  type GamePlatformDeploymentScenarioRunnersV1,
-} from '../../src/lib/game-platform/deployment-conformance'
+  PRODUCT_PLATFORM_DEPLOYMENT_SCENARIOS_V1,
+  ProductPlatformDeploymentScenarioErrorV1,
+  runProductPlatformDeploymentConformanceV1,
+  verifyProductPlatformDeploymentConformanceReceiptV1,
+  type ProductPlatformDeploymentScenarioRunnersV1,
+} from '../../src/lib/product-platform/deployment-conformance'
 
 function runners(input: {
   fail?: string
   hang?: string
-} = {}): GamePlatformDeploymentScenarioRunnersV1 {
-  return Object.fromEntries(GAME_PLATFORM_DEPLOYMENT_SCENARIOS_V1.map(scenario => [
+} = {}): ProductPlatformDeploymentScenarioRunnersV1 {
+  return Object.fromEntries(PRODUCT_PLATFORM_DEPLOYMENT_SCENARIOS_V1.map(scenario => [
     scenario,
     async ({ signal }: { signal: AbortSignal }) => {
       if (scenario === input.fail) {
-        throw new GamePlatformDeploymentScenarioErrorV1('staging-assertion-failed')
+        throw new ProductPlatformDeploymentScenarioErrorV1('staging-assertion-failed')
       }
       if (scenario === input.hang) {
         return new Promise((_, reject) => {
@@ -25,13 +25,13 @@ function runners(input: {
       }
       return { evidenceHash: await hashCanonicalValue({ scenario, isolated: true }), assertionCount: 3 }
     },
-  ])) as GamePlatformDeploymentScenarioRunnersV1
+  ])) as ProductPlatformDeploymentScenarioRunnersV1
 }
 
 describe('PLATFORM-1J · external deployment conformance receipt', () => {
   it('十项 staging 演练全部通过才签发可晋级 receipt，篡改或缺项均不可验证', async () => {
     let now = 2_000_000
-    const receipt = await runGamePlatformDeploymentConformanceV1({
+    const receipt = await runProductPlatformDeploymentConformanceV1({
       environment: 'staging',
       deploymentId: 'deploy.staging.cn-east-1.42',
       deploymentTargetHash: 'a'.repeat(64),
@@ -40,20 +40,20 @@ describe('PLATFORM-1J · external deployment conformance receipt', () => {
       now: () => now++,
     })
     expect(receipt.readyForPromotion).toBe(true)
-    expect(receipt.scenarios.map(row => row.scenario)).toEqual(GAME_PLATFORM_DEPLOYMENT_SCENARIOS_V1)
+    expect(receipt.scenarios.map(row => row.scenario)).toEqual(PRODUCT_PLATFORM_DEPLOYMENT_SCENARIOS_V1)
     expect(receipt.scenarios.every(row => row.status === 'passed' && row.assertionCount === 3)).toBe(true)
-    await expect(verifyGamePlatformDeploymentConformanceReceiptV1(receipt)).resolves.toEqual(receipt)
+    await expect(verifyProductPlatformDeploymentConformanceReceiptV1(receipt)).resolves.toEqual(receipt)
 
     const tampered = structuredClone(receipt)
     tampered.scenarios[0].assertionCount += 1
-    await expect(verifyGamePlatformDeploymentConformanceReceiptV1(tampered)).rejects.toThrow(/hash/)
+    await expect(verifyProductPlatformDeploymentConformanceReceiptV1(tampered)).rejects.toThrow(/hash/)
     const missing = structuredClone(receipt) as unknown as { scenarios: unknown[] }
     missing.scenarios.pop()
-    await expect(verifyGamePlatformDeploymentConformanceReceiptV1(missing)).rejects.toThrow('状态无效')
+    await expect(verifyProductPlatformDeploymentConformanceReceiptV1(missing)).rejects.toThrow('状态无效')
   })
 
   it('单项失败不中止后续灾备与删除演练，只保留稳定错误码', async () => {
-    const receipt = await runGamePlatformDeploymentConformanceV1({
+    const receipt = await runProductPlatformDeploymentConformanceV1({
       environment: 'production', deploymentId: 'deploy.production.1',
       deploymentTargetHash: 'b'.repeat(64), serviceVersion: 'production-1',
       runners: runners({ fail: 'webhook-key-rotation' }), now: () => 100,
@@ -64,11 +64,11 @@ describe('PLATFORM-1J · external deployment conformance receipt', () => {
       status: 'failed', code: 'staging-assertion-failed', evidenceHash: null, assertionCount: 0,
     })
     expect(receipt.scenarios.at(-1)).toMatchObject({ scenario: 'data-export-delete', status: 'passed' })
-    await expect(verifyGamePlatformDeploymentConformanceReceiptV1(receipt)).resolves.toEqual(receipt)
+    await expect(verifyProductPlatformDeploymentConformanceReceiptV1(receipt)).resolves.toEqual(receipt)
   })
 
   it('超时会取消场景并脱敏为 scenario-timeout，不把供应商异常写入 receipt', async () => {
-    const receipt = await runGamePlatformDeploymentConformanceV1({
+    const receipt = await runProductPlatformDeploymentConformanceV1({
       environment: 'staging', deploymentId: 'deploy.timeout.1',
       deploymentTargetHash: 'c'.repeat(64), serviceVersion: 'timeout-1',
       runners: runners({ hang: 'realtime-cross-instance' }), scenarioTimeoutMs: 100,

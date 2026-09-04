@@ -5,7 +5,7 @@ import { buildEmotionBeatPromptFromContext } from '../../ai/adapters/emotion-bea
 import { prepareContinuityContext } from '../../ai/chapter-memory/continuity-context'
 import { assembleContext } from '../../registry/assemble-context'
 import { adopt } from '../../registry/adopt'
-import { assertRecordInScope, readOwnedRows } from '../../world-engine/scope'
+import { assertRecordInScope, readOwnedRows } from '../../workspace/scope'
 import { getAgentSkillV1 } from '../skill-registry'
 import { createAgentSkillExecutionBindingV1 } from '../execution-binding'
 import {

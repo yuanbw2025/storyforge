@@ -1,22 +1,21 @@
 import { useEffect, useState } from 'react'
+import { liveQuery } from 'dexie'
 import { db } from '../lib/db/schema'
 import type { Project, Work } from '../lib/types'
 
-/** Read the real active Work; Project compatibility mirrors never infer media type. */
+/** Read the active Work from the current Project identity. */
 export function useActiveWork(project?: Project | null): Work | null {
   const [work, setWork] = useState<Work | null>(null)
   useEffect(() => {
-    let cancelled = false
-    const load = async () => {
-      if (project?.id == null || project.activeWorkId == null) {
-        if (!cancelled) setWork(null)
-        return
-      }
-      const row = await db.works.get(project.activeWorkId)
-      if (!cancelled) setWork(row?.projectId === project.id ? row : null)
+    if (project?.id == null || project.activeWorkId == null) {
+      setWork(null)
+      return
     }
-    void load()
-    return () => { cancelled = true }
-  }, [project?.id, project?.activeWorkId, project?.updatedAt])
+    const subscription = liveQuery(() => db.works.get(project.activeWorkId!)).subscribe({
+      next: row => setWork(row && row.projectId === project.id ? row : null),
+      error: () => setWork(null),
+    })
+    return () => subscription.unsubscribe()
+  }, [project?.id, project?.activeWorkId])
   return work
 }

@@ -426,29 +426,30 @@ export const GENRE_METADATA: GenreMetadata[] = [
   },
 ]
 
-const GENRE_METADATA_ALIASES: Record<string, string> = {
+/** 当前 Work.genres 选项到共享题材元数据的显式映射。 */
+const GENRE_METADATA_ID_BY_WORK_GENRE: Readonly<Record<string, string>> = {
   kehuan: 'scifi',
   qihuan: 'xifan',
   xifang: 'xifan',
 }
 
-export function normalizeGenreMetadataId(genreId: string): string {
-  return GENRE_METADATA_ALIASES[genreId] ?? genreId
+export function resolveGenreMetadataId(genreId: string): string {
+  return GENRE_METADATA_ID_BY_WORK_GENRE[genreId] ?? genreId
 }
 
 /**
  * 根据题材 ID 获取元数据
  */
 export function getGenreMetadata(genreId: string): GenreMetadata | undefined {
-  const normalized = normalizeGenreMetadataId(genreId)
-  return GENRE_METADATA.find(g => g.id === normalized)
+  const metadataId = resolveGenreMetadataId(genreId)
+  return GENRE_METADATA.find(g => g.id === metadataId)
 }
 
 /**
  * 构建题材约束上下文（注入 AI prompt）
  */
-export function buildGenreConstraintContext(genreIds: string | string[]): string {
-  const ids = (Array.isArray(genreIds) ? genreIds : [genreIds])
+export function buildGenreConstraintContext(genreIds: readonly string[]): string {
+  const ids = genreIds
     .map(id => id.trim())
     .filter(Boolean)
   const metas = new Map<string, GenreMetadata>()

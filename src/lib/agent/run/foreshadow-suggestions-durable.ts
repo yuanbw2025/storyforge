@@ -16,7 +16,7 @@ import {
 } from '../../foreshadow/suggestions'
 import { assembleContext } from '../../registry/assemble-context'
 import type { AIConfig, ChatMessage, WorkspaceScope } from '../../types'
-import { readOwnedRows } from '../../world-engine/scope'
+import { readOwnedRows } from '../../workspace/scope'
 import { createAgentSkillExecutionBindingV1 } from '../execution-binding'
 import { getAgentSkillV1 } from '../skill-registry'
 import { createAgentRunCheckpointV1, readLatestVerifiedAgentRunCheckpointV1 } from './checkpoint'
@@ -226,8 +226,8 @@ async function prepareInput(
     .map(segment => segment.content)
     .join('\n\n')
   const messages = buildForeshadowSuggestionMessagesV1({
-    projectName: baseline.project.name,
-    genre: baseline.project.genres.join('、') || baseline.project.genre,
+    projectName: baseline.work.title,
+    genre: baseline.work.genres.join('、'),
     worldContext,
     characterContext,
     existingForeshadows: baselineContext,
@@ -319,14 +319,14 @@ function assertRequest(value: unknown): asserts value is ForeshadowSuggestionReq
 function assertBaseline(value: unknown): asserts value is ForeshadowSuggestionBaselineV1 {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('伏笔建议 baseline 无效。')
   const row = value as Record<string, any>
-  exactKeys(row, ['version', 'project', 'worldGroupId', 'foreshadows'], '伏笔建议 baseline ')
-  if (row.version !== 1 || !row.project || typeof row.project !== 'object' || Array.isArray(row.project)
+  exactKeys(row, ['version', 'work', 'worldGroupId', 'foreshadows'], '伏笔建议 baseline ')
+  if (row.version !== 1 || !row.work || typeof row.work !== 'object' || Array.isArray(row.work)
     || !Array.isArray(row.foreshadows)) throw new Error('伏笔建议 baseline 不完整。')
-  exactKeys(row.project, ['id', 'name', 'genre', 'genres', 'description'], '伏笔建议项目 baseline ')
-  if (!Number.isInteger(row.project.id) || typeof row.project.name !== 'string'
-    || typeof row.project.genre !== 'string' || !Array.isArray(row.project.genres)
-    || row.project.genres.some((genre: unknown) => typeof genre !== 'string')
-    || typeof row.project.description !== 'string') throw new Error('伏笔建议项目 baseline 无效。')
+  exactKeys(row.work, ['id', 'title', 'genres', 'description'], '伏笔建议作品 baseline ')
+  if (!Number.isInteger(row.work.id) || typeof row.work.title !== 'string'
+    || !Array.isArray(row.work.genres)
+    || row.work.genres.some((genre: unknown) => typeof genre !== 'string')
+    || typeof row.work.description !== 'string') throw new Error('伏笔建议作品 baseline 无效。')
   for (const item of row.foreshadows) {
     if (!item || typeof item !== 'object' || Array.isArray(item)) throw new Error('伏笔正式记录 baseline 无效。')
     exactKeys(item, [
@@ -359,7 +359,7 @@ async function parseCandidate(value: unknown): Promise<ForeshadowSuggestionCandi
   }
   assertRequest(row.request)
   assertBaseline(row.baseline)
-  if (row.baseline.project.id !== row.projectId || row.baseline.worldGroupId !== row.request.worldGroupId
+  if (row.baseline.work.id !== row.workId || row.baseline.worldGroupId !== row.request.worldGroupId
     || await hashCanonicalValue(row.baseline) !== row.baselineHash) {
     throw new Error('伏笔建议候选 baseline 不匹配。')
   }
@@ -455,7 +455,7 @@ function expectedPostMatches(
   candidate: ForeshadowSuggestionCandidateV1,
   intent: ForeshadowSuggestionAdoptionIntentV1,
 ): boolean {
-  if (!sameValue(current.project, candidate.baseline.project)
+  if (!sameValue(current.work, candidate.baseline.work)
     || current.worldGroupId !== candidate.baseline.worldGroupId) return false
   const originals = new Map(candidate.baseline.foreshadows.map(row => [row.id, row]))
   for (const original of candidate.baseline.foreshadows) {

@@ -1,9 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import fs from 'node:fs'
-import path from 'node:path'
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
 import { db } from '../../src/lib/db/schema'
-import { exportProjectJSON, importProjectJSON, type ProjectExportData } from '../../src/lib/export/json-export'
+import { exportProjectJSON } from '../../src/lib/export/json-export'
 import { AgentTeamBudgetTracker } from '../../src/lib/agent/team-budget'
 import {
   refreshDurableConsistencyAuditFreshnessV1,
@@ -12,6 +10,7 @@ import {
 import { hashCanonicalValue } from '../../src/lib/agent/run/hash'
 import { assembleContext } from '../../src/lib/registry/assemble-context'
 import { generateWorkCode } from '../../src/lib/memory/identity'
+import { generateWorkspaceScopeCode } from '../../src/lib/workspace/identity'
 import {
   adoptWorkspaceFileChangesV1,
   buildWorkspaceFileAdoptionCandidatesV1,
@@ -22,11 +21,12 @@ import {
   synchronizeProjectChangesToFolderV1,
 } from '../../src/lib/memory/workspace-projection'
 import { buildWorkspaceImpactPlanV1 } from '../../src/lib/memory/workspace-impact'
-import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
-import { resolveScopeLike } from '../../src/lib/world-engine/scope'
-import { backfillResourceUidsV1 } from '../../src/lib/context-gateway/resource-identity'
+import { resolveWorkspaceOwnership } from '../../src/lib/workspace/ownership'
+import { resolveScopeLike } from '../../src/lib/workspace/scope'
+import { stampCurrentFixtureResourceUidsV1 } from '../helpers/current-resource-identity'
+import { seedFullProject } from '../helpers/seed-full-project'
+import { currentWorkFixtureRecordV1 } from '../helpers/current-workspace'
 
-const legacyFixturePath = path.resolve(__dirname, '../fixtures/legacy-export-v3.json')
 const now = 1_800_000_000_000
 
 function notFound(): DOMException {
@@ -128,13 +128,11 @@ function longChapterText(index: number): string {
 }
 
 async function seedRepresentativeLongform() {
-  const legacy = JSON.parse(fs.readFileSync(legacyFixturePath, 'utf8')) as ProjectExportData
-  const projectId = await importProjectJSON(legacy)
-  const first = await ensureWorkspaceOwnership(projectId)
+  const base = await seedFullProject()
+  const projectId = base.projectId
+  const first = await resolveWorkspaceOwnership(projectId)
   await db.projects.update(projectId, {
     name: '隔离长篇记忆验收',
-    status: 'drafting',
-    targetWordCount: 240_000,
     enableMultiWorld: true,
     updatedAt: now,
   })
@@ -154,7 +152,6 @@ async function seedRepresentativeLongform() {
     theme: '记忆必须经证据与作者裁决才能成为事实',
     centralConflict: '被篡改的历史与可验证记忆之间的冲突',
     plotPattern: '三幕式长篇',
-    storyLines: '林舟追索潮汐档案',
     mainPlot: '林舟追索潮汐档案并修复主世界',
     subPlots: '玄铁剑的归属与镜界来客的承诺',
     updatedAt: now,
@@ -163,12 +160,10 @@ async function seedRepresentativeLongform() {
     workId: first.scope.workId,
     writingStyle: '克制、具象、因果清晰',
     narrativePOV: 'third-limited',
-    toneAndMood: '冷峻中保留希望',
     atmosphere: '冷峻中保留希望',
     prohibitions: JSON.stringify(['禁止无证据复活', '禁止跨 Work 串线']),
     consistencyRules: JSON.stringify(['物品变更必须有章节证据', '承诺必须被后文承接']),
     specialRequirements: '每章结尾保留一个可追踪开放环',
-    referenceWorks: '[]',
     citedReferenceIds: '[]',
     citedInsightIds: '[]',
     updatedAt: now,
@@ -210,14 +205,15 @@ async function seedRepresentativeLongform() {
 
   const secondWorldId = await db.worlds.add({
     projectId,
-    code: 'WORLD-MIRROR-ACCEPTANCE',
+    identityKind: 'workspace-scope',
+    code: generateWorkspaceScopeCode(now + 1, 0.345678),
     name: '隔离镜界',
     description: '用于证明多 World/Work 不串线',
     currentVersion: 1,
     createdAt: now,
     updatedAt: now,
   }) as number
-  const secondWorkId = await db.works.add({
+  const secondWorkId = await db.works.add(currentWorkFixtureRecordV1({
     projectId,
     worldId: secondWorldId,
     code: generateWorkCode(),
@@ -226,9 +222,11 @@ async function seedRepresentativeLongform() {
     genres: ['mystery'],
     status: 'drafting',
     targetWordCount: 80_000,
+    kind: 'novel',
+    novelProfile: 'long',
     createdAt: now,
     updatedAt: now,
-  }) as number
+  })) as number
   const secondStoryId = await db.storyCores.add({
     projectId,
     workId: secondWorkId,
@@ -237,7 +235,6 @@ async function seedRepresentativeLongform() {
     theme: '乙作品绝不串线标记',
     centralConflict: '侦探与无声城市',
     plotPattern: '谜案',
-    storyLines: '寻找钟声',
     mainPlot: '寻找钟声',
     subPlots: '',
     createdAt: now,
@@ -248,12 +245,10 @@ async function seedRepresentativeLongform() {
     workId: secondWorkId,
     writingStyle: '乙作品专属文风',
     narrativePOV: 'first-person',
-    toneAndMood: '迷离',
     atmosphere: '迷离',
     prohibitions: JSON.stringify(['禁止出现林舟']),
     consistencyRules: JSON.stringify(['乙作品规则标记']),
     specialRequirements: '',
-    referenceWorks: '[]',
     citedReferenceIds: '[]',
     citedInsightIds: '[]',
     createdAt: now,
@@ -291,7 +286,7 @@ async function seedRepresentativeLongform() {
     subjectName: '林舟',
     predicate: 'location',
     factKind: 'state',
-    value: '旧港',
+    value: '先前港口',
     sourceType: 'chapter',
     sourceChapterId: sacrificial.id,
     validFromChapterId: sacrificial.id,
@@ -305,7 +300,7 @@ async function seedRepresentativeLongform() {
 
   // A real workspace enters through project.loadProject before disk-memory
   // self-check. Keep this acceptance fixture on that explicit CTXG-2 migration boundary.
-  await backfillResourceUidsV1(projectId)
+  await stampCurrentFixtureResourceUidsV1(projectId)
 
   return {
     projectId,
@@ -523,8 +518,13 @@ describe('MEMORY-CLOSE-3 · 隔离长篇、多 World/Work、恢复与继续创�
       expectedPlanHash: auditDirty.plan.planHash,
     })
     const settledIndex = JSON.parse(disk.read('.storyforge/runs/memory-index.json')).index
-    expect(settledIndex.runs).toHaveLength(1)
-    expect(settledIndex.runs[0]).toMatchObject({ state: 'settled', settlementSource: 'terminal-event' })
+    expect(settledIndex.runs).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        state: 'settled',
+        settlementSource: 'terminal-event',
+        terminalReceiptHash: durable.snapshot.projection.terminalReceiptHash,
+      }),
+    ]))
 
     // Source edits stale the receipt; a later interrupted sync resumes without repeating model/adoption/history work.
     await db.chapters.update(seeded.target.id, {
@@ -632,7 +632,7 @@ describe('MEMORY-CLOSE-3 · 隔离长篇、多 World/Work、恢复与继续创�
     expect(modelCalls).toBe(1)
   }, 60_000)
 
-  it('恢复仍处于 completed 的历史 Harness Run 时显式失效本地主键绑定凭据并保留证据', async () => {
+  it('恢复仍处于 completed 的 Harness Run 时显式失效本地主键绑定凭据并保留证据', async () => {
     const seeded = await seedRepresentativeLongform()
     const disk = memoryDirectory('StoryForgeCompletedHarnessRestore')
     const baseline = await buildWorkspaceSelfCheckReportV1(seeded.projectId, disk.handle)
@@ -683,11 +683,19 @@ describe('MEMORY-CLOSE-3 · 隔离长篇、多 World/Work、恢复与继续创�
       agentRunCheckpoints: countsBefore.agentRunCheckpoints,
     })
     expect(countsAfter.agentRunEvents).toBe(countsBefore.agentRunEvents + 1)
-    const importedRun = await db.agentRuns.where('projectId').equals(restored.projectId).first()
-    expect(importedRun?.status).toBe('running')
-    const lastEvent = await db.agentRunEvents.where('runId').equals(importedRun!.id!).last()
-    expect(lastEvent?.type).toBe('verification.staled')
-    expect(JSON.parse(lastEvent!.payloadJson)).toMatchObject({ reason: 'project-import-scope-rebound' })
+    const importedRuns = await db.agentRuns.where('projectId').equals(restored.projectId).toArray()
+    const importedEvents = await db.agentRunEvents.where('projectId').equals(restored.projectId).toArray()
+    const reboundEvent = importedEvents.find(event => {
+      if (event.type !== 'verification.staled') return false
+      try {
+        return JSON.parse(event.payloadJson).reason === 'project-import-scope-rebound'
+      } catch {
+        return false
+      }
+    })
+    expect(reboundEvent).toBeDefined()
+    const reboundRun = importedRuns.find(run => run.id === reboundEvent!.runId)
+    expect(reboundRun?.status).toBe('running')
     expect(disk.writeOrder.some(relativePath => (
       relativePath.includes('.storyforge/history/') && relativePath.endsWith('/.storyforge/recovery/project.json')
     ))).toBe(true)

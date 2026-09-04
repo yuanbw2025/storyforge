@@ -12,21 +12,17 @@ import { executeImpactPostCorrectionRemediationV1 } from '../../src/lib/agent/ru
 import type { ImpactRemediationBoundaryV1 } from '../../src/lib/agent/run/impact-remediation-durable'
 import { staleAgentRunVerificationV1 } from '../../src/lib/agent/run/event-store'
 import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
+import { seedCurrentProject } from '../helpers/current-workspace'
+import { resolveWorkspaceScope } from '../../src/lib/workspace/ownership'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
 
 async function seed() {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    name: '修正后确定性重建', genre: 'fantasy', genres: ['fantasy'], status: 'drafting', description: '',
-    targetWordCount: 100_000, worldCode: `h58-${now}`, worldVersion: 1, createdAt: now, updatedAt: now,
+  const projectId = await seedCurrentProject({
+    name: '修正后确定性重建', genres: ['fantasy'], status: 'drafting', description: '',
+    targetWordCount: 100_000,createdAt: now, updatedAt: now,
   } as any) as number
-  const worldId = await db.worlds.add({
-    projectId, code: `h58-${now}`, name: '主世界', description: '', currentVersion: 1, createdAt: now, updatedAt: now,
-  }) as number
-  const workId = await db.works.add({
-    projectId, worldId, title: '修正后确定性重建', description: '', genres: ['fantasy'], status: 'drafting',
-    targetWordCount: 100_000, createdAt: now, updatedAt: now,
-  } as any) as number
-  await db.projects.update(projectId, { activeWorldId: worldId, activeWorkId: workId, ownershipSchemaVersion: 1 })
+  const { worldId, workId } = await resolveWorkspaceScope(projectId)
   const worldGroupId = await db.worldGroups.add({
     projectId, worldId, name: '主世界', order: 0, createdAt: now, updatedAt: now,
   }) as number
@@ -57,6 +53,7 @@ async function seed() {
     title: '第一章', summary: '旧摘要', keywords: [], sourceHash: '0'.repeat(64), status: 'stale',
     generatedBy: 'test', createdAt: now, updatedAt: now,
   } as any)
+  await finalizeCurrentFixtureV1(projectId)
   return {
     scope: { projectId, worldId, workId } satisfies WorkspaceScope,
     projectId, worldGroupId, outlineNodeId, chapterId, factId,

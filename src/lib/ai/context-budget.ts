@@ -32,8 +32,6 @@ export const MODEL_CONTEXT_PRESETS: Record<string, ModelContextPreset> = {
   'deepseek': { label: 'DeepSeek V4 默认', maxContext: 1_000_000, maxOutput: 384_000 },
   'deepseek:deepseek-v4-flash': { label: 'DeepSeek V4 Flash', maxContext: 1_000_000, maxOutput: 384_000 },
   'deepseek:deepseek-v4-pro': { label: 'DeepSeek V4 Pro', maxContext: 1_000_000, maxOutput: 384_000 },
-  'deepseek:deepseek-chat': { label: 'DeepSeek 历史别名', maxContext: 1_000_000, maxOutput: 384_000 },
-  'deepseek:deepseek-reasoner': { label: 'DeepSeek 历史推理别名', maxContext: 1_000_000, maxOutput: 384_000 },
 
   // Gemini
   'gemini': { label: 'Gemini 默认', maxContext: 1_048_576, maxOutput: 65_536 },
@@ -94,7 +92,6 @@ export const MODEL_CONTEXT_PRESETS: Record<string, ModelContextPreset> = {
   'agnes:agnes-2.5-flash': { label: 'Agnes 2.5 Flash', maxContext: 524_288, maxOutput: 65_536 },
   'agnes:agnes-2.5-pro': { label: 'Agnes 2.5 Pro', maxContext: 524_288, maxOutput: 65_536 },
   'agnes:agnes-2.5-pro-alpha': { label: 'Agnes 2.5 Pro Alpha', maxContext: 524_288, maxOutput: 65_536 },
-  'agnes:agnes-1.5-flash': { label: 'Agnes 1.5 Flash', maxContext: 262_144, maxOutput: 65_536 },
   'agnes:agnes-2.0-flash': { label: 'Agnes 2.0 Flash', maxContext: 262_144, maxOutput: 65_536 },
 
   // LongCat(美团 · OpenAI 兼容 · 1M 上下文)

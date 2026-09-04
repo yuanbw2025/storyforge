@@ -21,7 +21,7 @@ vi.mock('../../src/lib/agent/run/reference-derived-durable', () => ({
   readPendingReferenceDerivedCandidateV1: mocks.pending,
   readRecoverableReferenceDerivedRunV1: mocks.recoverable,
 }))
-vi.mock('../../src/lib/world-engine/scope', () => ({ resolveScopeLike: mocks.resolveScope }))
+vi.mock('../../src/lib/workspace/scope', () => ({ resolveScopeLike: mocks.resolveScope }))
 
 import { useReferenceDerivedAI } from '../../src/components/project/useReferenceDerivedAI'
 

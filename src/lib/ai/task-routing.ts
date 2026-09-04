@@ -79,7 +79,7 @@ const CREATION_PREFIXES = [
   'history.storm',
   'technology',
   'emotion.beat',
-  'simulation.',
+  'open-world-evolution.',
   'inspiration.',
   'codex.enrich',
   'node.',

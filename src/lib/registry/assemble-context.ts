@@ -1,8 +1,4 @@
-/**
- * assembleContext(Phase 1.3a) · 统一上下文装配入口。
- *
- * 1.3a 只新增入口。1.3b 再把 ai.start/chat 调用迁移到这里。
- */
+/** assembleContext · 当前唯一上下文装配入口。 */
 import { estimateTokens, getModelPreset, type ContextLayer, type ContextSegment } from '../ai/context-budget'
 import { CONTEXT_SOURCES, CONTEXT_SOURCE_BY_KEY } from './context-sources'
 import type {
@@ -14,7 +10,7 @@ import type {
 import { prepareContinuityContext } from '../ai/chapter-memory/continuity-context'
 import { sha256Text } from '../ai/chapter-memory/text-normalization'
 import { db } from '../db/schema'
-import { assertRecordInScope, resolveReadScope } from '../world-engine/scope'
+import { assertRecordInScope, resolveReadScope } from '../workspace/scope'
 import { maybeInjectHarnessFaultV1 } from '../agent/dev-fault-injection'
 
 // CTXG contracts share the existing assembleContext/CONTEXT_SOURCES boundary.
@@ -375,7 +371,7 @@ function selectSources(input: AssembleContextInput): ContextSource[] {
 
 function requirementsMet(source: ContextSource, input: AssembleContextInput): boolean {
   if (source.requiresWorldGroupId && !Object.prototype.hasOwnProperty.call(input, 'worldGroupId')) return false
-  if (source.requiresSimulationSessionId && input.simulationSessionId == null) return false
+  if (source.requiresProductRuntimeSessionId && input.productRuntimeSessionId == null) return false
   if (source.requiresOutlineNodeId && input.outlineNodeId == null && input.chapterId == null) return false
   if (
     source.requiresChapterId

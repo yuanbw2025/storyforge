@@ -4,7 +4,7 @@ import type { ContextSourceRefV1, FrozenResourceScopeV1, ContextTimeRangeV1 } fr
 import type { Chapter, OutlineNode, WorkspaceScope } from '../types'
 import type { NarrativeSummaryNode } from '../types/narrative-summary'
 import type { RetrievalChunk } from '../types/retrieval-chunk'
-import { readOwnedRows, resolveScope } from '../world-engine/scope'
+import { readOwnedRows, resolveScope } from '../workspace/scope'
 
 function normalizedTerms(query: string): string[] {
   const normalized = query.toLocaleLowerCase('zh-CN').trim()

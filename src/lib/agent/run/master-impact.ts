@@ -1,6 +1,6 @@
 import { appendAgentEvent } from '../conversations'
 import { buildEditImpactGraphV1, type EditImpactGraphV1 } from '../../consistency/impact-analysis'
-import { readOwnedRows } from '../../world-engine/scope'
+import { readOwnedRows } from '../../workspace/scope'
 import type { AgentEvent, WorkspaceScope } from '../../types'
 import type { MasterAgentDurableCandidateV1 } from './master-durable'
 import type { AgentRunSnapshotV1 } from './event-store'
@@ -35,7 +35,6 @@ const TARGET_TABLE_BY_AGENT: Record<string, string> = {
 }
 
 function targetTableFor(candidate: MasterAgentDurableCandidateV1): string {
-  if (candidate.payload.skillId === 'outline.world-game') return 'gameDefinitions'
   if (candidate.payload.skillId === 'world-origin.story-core') return 'storyCores'
   if (candidate.payload.skillId === 'world-origin.creative-rules') return 'creativeRules'
   if (candidate.payload.skillId === 'outline.story-arcs') return 'storyArcs'

@@ -10,8 +10,10 @@ import {
 import { readAgentRunV1 } from '../../src/lib/agent/run/event-store'
 import { buildMemoryArtifactIndexV1 } from '../../src/lib/memory/settlement'
 import { generateWorkspaceUid } from '../../src/lib/memory/identity'
-import { resolveScopeLike } from '../../src/lib/world-engine/scope'
+import { resolveScopeLike } from '../../src/lib/workspace/scope'
 import type { Project } from '../../src/lib/types'
+import { putCurrentWorkspaceFixtureV1 } from '../helpers/current-workspace'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
 
 const now = 1_700_000_000_000
 const targetText = '林舟再次获得潮汐钥匙。'
@@ -21,26 +23,23 @@ async function seedConsistencyProject() {
   const project: Project = {
     id: 92_001,
     name: '记忆收口一致性审计',
-    genre: 'fantasy',
-    genres: ['fantasy'],
-    status: 'drafting',
-    description: '',
-    targetWordCount: 100_000,
     enableMultiWorld: false,
     workspaceUid: generateWorkspaceUid(),
+    workspacePurpose: 'independent-work',
+    activeWorldId: 92_001,
+    activeWorkId: 92_001,
     createdAt: now,
     updatedAt: now,
   }
-  await db.projects.put(project)
+  await putCurrentWorkspaceFixtureV1(project)
   await db.creativeRules.add({
     projectId: project.id!,
     writingStyle: '',
     narrativePOV: 'third-limited',
-    toneAndMood: '',
+    atmosphere: '',
     prohibitions: '[]',
     consistencyRules: JSON.stringify(['潮汐钥匙只能获得一次']),
     specialRequirements: '',
-    referenceWorks: '[]',
     citedReferenceIds: '[]',
     createdAt: now,
     updatedAt: now,
@@ -110,6 +109,7 @@ async function seedConsistencyProject() {
     note: '',
     createdAt: now,
   })
+  await finalizeCurrentFixtureV1(project.id!)
   const scope = await resolveScopeLike(project.id!)
   return { project, scope, targetChapterId, targetOutlineId }
 }

@@ -5,18 +5,19 @@ import {
   buildLongTermConsistencyDossierV1,
   formatLongTermConsistencyDossierV1,
 } from '../../src/lib/memory/consistency-dossier'
-import { generateWorkCode, generateWorkspaceUid } from '../../src/lib/memory/identity'
 import { assembleContext } from '../../src/lib/registry/assemble-context'
 import { useUserStyleStore } from '../../src/stores/user-style'
-import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
+import {
+  addCurrentWorldFixtureV1,
+  addCurrentWorkFixtureV1,
+  seedCurrentWorkspace,
+} from '../helpers/current-workspace'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
 
 async function seed() {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    workspaceUid: generateWorkspaceUid(), name: '一致性工程', genre: 'fantasy', genres: [], status: 'drafting',
-    description: '', targetWordCount: 1000, createdAt: now, updatedAt: now,
-  } as any) as number
-  const ownership = await ensureWorkspaceOwnership(projectId)
+  const ownership = await seedCurrentWorkspace('一致性工程')
+  const projectId = ownership.scope.projectId
   const firstOutlineId = await db.outlineNodes.add({
     projectId, workId: ownership.scope.workId, parentId: null, type: 'chapter', title: '旧章', summary: '龙印第一次出现',
     order: 0, createdAt: now, updatedAt: now,
@@ -34,13 +35,15 @@ async function seed() {
     projectId, workId: ownership.scope.workId, outlineNodeId: boundaryOutlineId, title: '新章', content: '',
     wordCount: 0, status: 'outline', order: 1, notes: '', createdAt: now, updatedAt: now,
   } as any) as number
-  const otherWorldId = await db.worlds.add({
-    projectId, code: 'other-world', name: '隔离世界', description: '', currentVersion: 1, createdAt: now, updatedAt: now,
-  } as any) as number
-  const otherWorkId = await db.works.add({
-    projectId, worldId: otherWorldId, code: generateWorkCode(), title: '隔离作品', description: '', genres: [],
-    status: 'drafting', targetWordCount: 100, createdAt: now, updatedAt: now,
-  } as any) as number
+  const otherWorld = await addCurrentWorldFixtureV1({ projectId, name: '隔离世界', now })
+  const otherWork = await addCurrentWorkFixtureV1({
+    projectId,
+    worldId: otherWorld.id!,
+    create: { title: '隔离作品', targetWordCount: 100 },
+    now,
+  })
+  const otherWorkId = otherWork.id!
+  await finalizeCurrentFixtureV1(projectId)
   return { now, projectId, scope: ownership.scope, firstChapterId, boundaryChapterId, firstContent, otherWorkId }
 }
 

@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { useLocationStore } from '../../src/stores/location'
+import { seedCurrentProject } from '../helpers/current-workspace'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
 
 describe('WORLD-1 · 城池与重要地点生命周期', () => {
   beforeEach(async () => {
@@ -11,8 +13,8 @@ describe('WORLD-1 · 城池与重要地点生命周期', () => {
 
   it('删除地点子树时原子置空相关城池引用，不删除词条或无关地点', async () => {
     const now = Date.now()
-    const projectId = await db.projects.add({
-      name: '地点生命周期', genre: '', description: '', targetWordCount: 0,
+    const projectId = await seedCurrentProject({
+      name: '地点生命周期', genres: [], description: '', targetWordCount: 0,
       enableMultiWorld: false, createdAt: now, updatedAt: now,
     } as any) as number
     const categoryId = await db.codexCategories.add({
@@ -34,12 +36,17 @@ describe('WORLD-1 · 城池与重要地点生命周期', () => {
     })
     const childCityId = await db.codexEntries.add({
       projectId, categoryId, name: '雁门', summary: '', description: '', fields: '{}',
-      tags: '[]', order: 0, importantLocationId: childId, createdAt: now, updatedAt: now,
+      refs: '{}', tags: '[]', order: 0, importantLocationId: childId,
+      worldGroupId: null, origin: 'manual', sourceEvidenceQuotes: '[]', sourceContentHash: '',
+      producerRunId: null, producerCandidateHash: null, createdAt: now, updatedAt: now,
     } as any) as number
     const retainedCityId = await db.codexEntries.add({
       projectId, categoryId, name: '南港城', summary: '', description: '', fields: '{}',
-      tags: '[]', order: 1, importantLocationId: retainedId, createdAt: now, updatedAt: now,
+      refs: '{}', tags: '[]', order: 1, importantLocationId: retainedId,
+      worldGroupId: null, origin: 'manual', sourceEvidenceQuotes: '[]', sourceContentHash: '',
+      producerRunId: null, producerCandidateHash: null, createdAt: now, updatedAt: now,
     } as any) as number
+    await finalizeCurrentFixtureV1(projectId)
 
     await useLocationStore.getState().loadAll(projectId)
     await useLocationStore.getState().deleteLocation(parentId)

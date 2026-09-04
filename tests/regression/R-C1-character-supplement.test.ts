@@ -2,14 +2,17 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { adopt } from '../../src/lib/registry/adopt'
 import type { Character } from '../../src/lib/types'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
+import { seedCurrentProject } from '../helpers/current-workspace'
 
 function makeChar(over: Partial<Character> = {}): Character {
   const now = Date.now()
   return {
-    projectId: 1, name: '云无心', role: 'npc', roleWeight: 'npc',
+    projectId: 1, name: '云无心', roleWeight: 'npc',
     moralAxis: 'neutral', orderAxis: 'neutral',
     shortDescription: '客栈老板', appearance: '满脸风霜', personality: '',
     background: '', motivation: '', abilities: '', relationships: '', arc: '',
+    homeWorldGroupId: null, isCrossWorld: false,
     createdAt: now, updatedAt: now, ...over,
   }
 }
@@ -20,8 +23,9 @@ describe('R-C1-character-supplement', () => {
 
   it('adopt(recordId, merge-diffs) 只更新补全字段，保留既有、不动未选维度', async () => {
     const now = Date.now()
-    const projectId = await db.projects.add({ name: 'P', genre: 'wuxia', createdAt: now, updatedAt: now } as any) as number
+    const projectId = await seedCurrentProject({ name: 'P', genres: ['wuxia'], createdAt: now, updatedAt: now } as any) as number
     const id = await db.characters.add(makeChar({ projectId }) as any) as number
+    await finalizeCurrentFixtureV1(projectId)
 
     // 模拟 AI 补全 personality / values / goals（A 新增的扩展维度字段）
     const patch = { personality: '外冷内热', values: '义字当先', goals: '重开分号' }
@@ -41,9 +45,10 @@ describe('R-C1-character-supplement', () => {
 
   it('adopt(recordId) 拒绝跨项目记录（不属于本项目不写）', async () => {
     const now = Date.now()
-    const p1 = await db.projects.add({ name: 'P1', createdAt: now, updatedAt: now } as any) as number
-    const p2 = await db.projects.add({ name: 'P2', createdAt: now, updatedAt: now } as any) as number
+    const p1 = await seedCurrentProject({ name: 'P1', createdAt: now, updatedAt: now } as any) as number
+    const p2 = await seedCurrentProject({ name: 'P2', createdAt: now, updatedAt: now } as any) as number
     const id = await db.characters.add(makeChar({ projectId: p1 }) as any) as number
+    await finalizeCurrentFixtureV1(p1)
     const result = await adopt({ projectId: p2, target: 'characters', recordId: id, mode: 'merge-diffs', data: { personality: '篡改' } })
     expect(result.written).toHaveLength(0)
     expect((await db.characters.get(id))!.personality).toBe('') // 未被改

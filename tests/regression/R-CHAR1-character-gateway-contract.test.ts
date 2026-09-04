@@ -18,11 +18,10 @@ import { getOrCreateAgentConversation } from '../../src/lib/agent/conversations'
 import { AgentTeamBudgetTracker } from '../../src/lib/agent/team-budget'
 import { getAgentSkillV1 } from '../../src/lib/agent/skill-registry'
 import { db } from '../../src/lib/db/schema'
-import { generateWorkspaceUid } from '../../src/lib/memory/identity'
 import { REGISTRY_BY_NAME } from '../../src/lib/registry/project-tables'
 import type { WorkspaceScope } from '../../src/lib/types'
-import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
-import { stampNewRecord } from '../../src/lib/world-engine/scope'
+import { stampNewRecord } from '../../src/lib/workspace/scope'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
 
 const now = 1_920_000_000_000
 
@@ -36,12 +35,9 @@ async function seed(): Promise<{
   chapterId: number
   storyArcId: number
 }> {
-  const projectId = await db.projects.add({
-    workspaceUid: generateWorkspaceUid(), name: '角色关系网', genre: 'fantasy', genres: ['fantasy'],
-    status: 'drafting', description: '', targetWordCount: 300_000, enableMultiWorld: true,
-    worldCode: 'char1-world', worldVersion: 1, createdAt: now, updatedAt: now,
-  } as any) as number
-  const { scope } = await ensureWorkspaceOwnership(projectId)
+  const created = await seedCurrentWorkspace('角色关系网', { enableMultiWorld: true })
+  const { scope } = created
+  const { projectId } = scope
   const worldA = await db.worldGroups.add(stampNewRecord(scope, 'worldGroups', {
     projectId, name: '潮灯界', type: 'primary', order: 0, createdAt: now, updatedAt: now,
   }, { owner: 'world' }) as never) as number
@@ -69,7 +65,7 @@ async function seed(): Promise<{
     significance: '主角守门之地', parentId: null, sortOrder: 0, createdAt: now, updatedAt: now,
   }, { owner: 'world' }) as never) as number
   const characterId = await db.characters.add(stampNewRecord(scope, 'characters', {
-    projectId, homeWorldGroupId: worldA, isCrossWorld: false, name: '青禾', role: 'protagonist',
+    projectId, homeWorldGroupId: worldA, isCrossWorld: false, name: '青禾',
     roleWeight: 'main', moralAxis: 'good', orderAxis: 'lawful', shortDescription: '潮门守人',
     appearance: '', personality: '', background: '幼年目睹旧港沉没。', motivation: '阻止潮灾重演。',
     abilities: '能听懂潮声。', relationships: '', arc: '', goals: '', narrativeStatus: 'active',
@@ -77,13 +73,13 @@ async function seed(): Promise<{
     createdAt: now, updatedAt: now,
   }, { owner: 'world' }) as never) as number
   const otherCharacterId = await db.characters.add(stampNewRecord(scope, 'characters', {
-    projectId, homeWorldGroupId: worldA, isCrossWorld: false, name: '闻钟', role: 'supporting',
+    projectId, homeWorldGroupId: worldA, isCrossWorld: false, name: '闻钟',
     roleWeight: 'secondary', moralAxis: 'neutral', orderAxis: 'chaotic', shortDescription: '青禾的失踪导师',
     appearance: '', personality: '', background: '', motivation: '', abilities: '', relationships: '', arc: '',
     createdAt: now, updatedAt: now,
   }, { owner: 'world' }) as never) as number
   await db.characters.add(stampNewRecord(scope, 'characters', {
-    projectId, homeWorldGroupId: worldB, isCrossWorld: false, name: '青禾', role: 'antagonist',
+    projectId, homeWorldGroupId: worldB, isCrossWorld: false, name: '青禾',
     roleWeight: 'main', moralAxis: 'evil', orderAxis: 'lawful', shortDescription: '另一个世界的同名角色',
     appearance: '', personality: '', background: '', motivation: '', abilities: '', relationships: '', arc: '',
     createdAt: now, updatedAt: now,
@@ -234,6 +230,7 @@ describe('CHAR-1 · 角色创建、补全、关系检索与状态演化', () => 
     })
     const conversation = await getOrCreateAgentConversation({
       projectId: fixture.projectId, worldGroupId: fixture.worldA, scope: fixture.scope,
+      purpose: 'character-lifecycle',
     })
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({
       choices: [{ message: { content: JSON.stringify(lifecycleCandidate(fixture.characterId)) } }],

@@ -1,26 +1,26 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
-  createGamePlatformActiveReadinessV1,
-  type GamePlatformProductionDependencyAdapterV1,
-  type GamePlatformProductionDependencyAdaptersV1,
-  type GamePlatformProductionProbeAuditV1,
-} from '../../src/lib/game-platform/production-runtime'
+  createProductPlatformActiveReadinessV1,
+  type ProductPlatformProductionDependencyAdapterV1,
+  type ProductPlatformProductionDependencyAdaptersV1,
+  type ProductPlatformProductionProbeAuditV1,
+} from '../../src/lib/product-platform/production-runtime'
 import {
-  GAME_PLATFORM_PRODUCTION_DEPENDENCIES_V1,
-  type GamePlatformProductionDependencyV1,
-} from '../../src/lib/game-platform/service-router'
+  PRODUCT_PLATFORM_PRODUCTION_DEPENDENCIES_V1,
+  type ProductPlatformProductionDependencyV1,
+} from '../../src/lib/product-platform/service-router'
 
 function configuredEvidence() {
-  return Object.fromEntries(GAME_PLATFORM_PRODUCTION_DEPENDENCIES_V1.map(dependency => [
+  return Object.fromEntries(PRODUCT_PLATFORM_PRODUCTION_DEPENDENCIES_V1.map(dependency => [
     dependency, 'configured' as const,
   ]))
 }
 
 function externalAdapters(input: {
-  health?: Partial<Record<GamePlatformProductionDependencyV1, boolean>>
-  calls?: Partial<Record<GamePlatformProductionDependencyV1, number>>
-} = {}): GamePlatformProductionDependencyAdaptersV1 {
-  return Object.fromEntries(GAME_PLATFORM_PRODUCTION_DEPENDENCIES_V1.map(dependency => [
+  health?: Partial<Record<ProductPlatformProductionDependencyV1, boolean>>
+  calls?: Partial<Record<ProductPlatformProductionDependencyV1, number>>
+} = {}): ProductPlatformProductionDependencyAdaptersV1 {
+  return Object.fromEntries(PRODUCT_PLATFORM_PRODUCTION_DEPENDENCIES_V1.map(dependency => [
     dependency,
     {
       dependency,
@@ -30,13 +30,13 @@ function externalAdapters(input: {
         if (input.calls) input.calls[dependency] = (input.calls[dependency] ?? 0) + 1
         return { ok: input.health?.[dependency] ?? true, code: input.health?.[dependency] === false ? 'dependency-down' : 'ok' }
       },
-    } satisfies GamePlatformProductionDependencyAdapterV1,
+    } satisfies ProductPlatformProductionDependencyAdapterV1,
   ]))
 }
 
 describe('PLATFORM-1I · active production adapters and readiness', () => {
   it('configured 只是意图声明：没有匹配外部适配器时全部 fail-closed', async () => {
-    const readiness = createGamePlatformActiveReadinessV1({
+    const readiness = createProductPlatformActiveReadinessV1({
       serviceVersion: 'production-1',
       environment: 'production',
       dependencyEvidence: configuredEvidence(),
@@ -53,10 +53,10 @@ describe('PLATFORM-1I · active production adapters and readiness', () => {
 
   it('只接受匹配的 external 活探针；缓存合并常规请求，强制健康检查可动态摘除', async () => {
     let clock = 10_000
-    const calls: Partial<Record<GamePlatformProductionDependencyV1, number>> = {}
-    const health: Partial<Record<GamePlatformProductionDependencyV1, boolean>> = {}
-    const audits: GamePlatformProductionProbeAuditV1[] = []
-    const readiness = createGamePlatformActiveReadinessV1({
+    const calls: Partial<Record<ProductPlatformProductionDependencyV1, number>> = {}
+    const health: Partial<Record<ProductPlatformProductionDependencyV1, boolean>> = {}
+    const audits: ProductPlatformProductionProbeAuditV1[] = []
+    const readiness = createProductPlatformActiveReadinessV1({
       serviceVersion: 'production-2',
       environment: 'production',
       dependencyEvidence: configuredEvidence(),
@@ -95,7 +95,7 @@ describe('PLATFORM-1I · active production adapters and readiness', () => {
       adapters['payment-provider'] = {
         dependency: 'object-storage', adapterId: 'wrong.payment', deployment: 'external',
         probe: async () => ({ ok: true, code: 'ok' }),
-      } as unknown as GamePlatformProductionDependencyAdapterV1<'payment-provider'>
+      } as unknown as ProductPlatformProductionDependencyAdapterV1<'payment-provider'>
       adapters['object-storage'] = {
         dependency: 'object-storage', adapterId: 'invalid.result', deployment: 'external',
         probe: async () => ({ ok: true, code: 'contains spaces' }),
@@ -106,7 +106,7 @@ describe('PLATFORM-1I · active production adapters and readiness', () => {
           signal.addEventListener('abort', () => { reject(new Error('aborted')) }, { once: true })
         }),
       }
-      const readiness = createGamePlatformActiveReadinessV1({
+      const readiness = createProductPlatformActiveReadinessV1({
         serviceVersion: 'production-3', environment: 'production',
         dependencyEvidence: configuredEvidence(), adapters, probeTimeoutMs: 50,
       })

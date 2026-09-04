@@ -18,23 +18,13 @@ import {
   rejectWorldviewExpandCandidateV1,
   type WorldviewExpandBoundaryV1,
 } from '../../src/lib/agent/run/worldview-expand-durable'
+import { currentWorkFixtureRecordV1, seedCurrentWorkspace } from '../helpers/current-workspace'
+import { stampCurrentFixtureResourceUidsV1 } from '../helpers/current-resource-identity'
 
 async function seed(suffix = '') {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    name: `七字段扩写${suffix}`, genre: 'fantasy', genres: ['fantasy'], status: 'drafting',
-    description: '', targetWordCount: 100_000, worldCode: `expand-${now}-${suffix}`, worldVersion: 1,
-    enableMultiWorld: true, createdAt: now, updatedAt: now,
-  } as any) as number
-  const worldId = await db.worlds.add({
-    projectId, code: `expand-${now}-${suffix}`, name: '潮钟宇宙', description: '', currentVersion: 1,
-    createdAt: now, updatedAt: now,
-  }) as number
-  const workId = await db.works.add({
-    projectId, worldId, title: `七字段扩写${suffix}`, description: '', genres: ['fantasy'], status: 'drafting',
-    targetWordCount: 100_000, createdAt: now, updatedAt: now,
-  } as any) as number
-  await db.projects.update(projectId, { activeWorldId: worldId, activeWorkId: workId, ownershipSchemaVersion: 1 })
+  const created = await seedCurrentWorkspace(`六字段扩写${suffix}`, { enableMultiWorld: true })
+  const { projectId, worldId, workId } = created.scope
   const worldGroupId = await db.worldGroups.add({
     projectId, worldId, name: '潮钟界', description: '盐雾吞食记忆，三座堤城争夺退潮航道。',
     type: 'traversal', icon: '🌊', color: '#336699', order: 0,
@@ -46,19 +36,20 @@ async function seed(suffix = '') {
     icon: '☀️', order: 1, createdAt: now, updatedAt: now,
   } as any) as number
   const worldviewId = await db.worldviews.add({
-    projectId, worldId, worldGroupId, geography: '', history: '', society: '', culture: '', economy: '', rules: '', summary: '',
+    projectId, worldId, worldGroupId,
     worldOrigin: '旧起源', powerHierarchy: '旧力量', continentLayout: '旧地貌', climateByRegion: '旧气候',
-    historyLine: '旧历史', races: '旧种族', factionLayout: '旧势力', worldStructure: '潮汐夹层世界',
+    races: '旧种族', factionLayout: '旧势力', worldStructure: '潮汐夹层世界',
     createdAt: now, updatedAt: now,
   } as any) as number
   const siblingWorldviewId = await db.worldviews.add({
-    projectId, worldId, worldGroupId: siblingGroupId, geography: '', history: '', society: '', culture: '', economy: '', rules: '', summary: '',
+    projectId, worldId, worldGroupId: siblingGroupId,
     worldOrigin: '炎昼旧起源', createdAt: now, updatedAt: now,
   } as any) as number
   await db.storyCores.add({
     projectId, workId, theme: '记忆能否成为货币', centralConflict: '堤城争夺潮窗', plotPattern: '递进',
-    storyLines: '', mainPlot: '主角追查盐雾吞忆的源头。', createdAt: now, updatedAt: now,
+    mainPlot: '主角追查盐雾吞忆的源头。', createdAt: now, updatedAt: now,
   } as any)
+  await stampCurrentFixtureResourceUidsV1(projectId)
   return {
     scope: { projectId, worldId, workId } satisfies WorkspaceScope,
     projectId, worldId, workId, worldGroupId, siblingGroupId, worldviewId, siblingWorldviewId,
@@ -71,7 +62,6 @@ function response(extra: Record<string, unknown> = {}) {
     powerHierarchy: '听潮者依次掌握辨潮、借潮、定潮和改潮，每次晋升都要抵押一段真实记忆。',
     continentLayout: '三座堤城沿环形内海分布，退潮时显露连接诸城的盐晶航道。',
     climateByRegion: '内海常年湿冷，外环盐漠昼夜温差极大，退潮季会出现吞忆盐雾。',
-    historyLine: '初代守潮人建立堤城，百年前航道断裂，今日第十三声潮钟再次响起。',
     races: '堤城人以记忆契约维持身份，盐漠游民用骨铃保存不能被盐雾夺走的名字。',
     factionLayout: '三座堤城分别控制钟塔、盐库与航闸，游民商队掌握唯一不受潮窗限制的陆路。',
     ...extra,
@@ -104,21 +94,21 @@ async function targetRow(fixture: Awaited<ReturnType<typeof seed>>) {
   return db.worldviews.get(fixture.worldviewId)
 }
 
-describe.sequential('R-HARNESS67 · 世界组七字段扩写 durable 候选与原子采纳', () => {
+describe.sequential('R-HARNESS67 · 世界组六字段扩写 durable 候选与原子采纳', () => {
   beforeEach(async () => { await db.delete(); await db.open() })
   afterEach(() => { vi.restoreAllMocks(); db.close() })
 
   it('Skill/Context/Field 三注册表闭合，四个登记来源进入模型且候选确认前零正式写入', async () => {
     expect(['manualText', 'worldGroups', 'storyCore', 'worldview'].map(key => CONTEXT_SOURCE_BY_KEY.has(key))).toEqual([true, true, true, true])
     expect(FIELD_BY_TARGET.get('worldviews')?.map(field => field.field)).toEqual(expect.arrayContaining([
-      'worldOrigin', 'powerHierarchy', 'continentLayout', 'climateByRegion', 'historyLine', 'races', 'factionLayout',
+      'worldOrigin', 'powerHierarchy', 'continentLayout', 'climateByRegion', 'races', 'factionLayout',
     ]))
     expect(getAgentSkillV1('world-origin.worldview-expand')).toMatchObject({
       agentId: 'world-origin', executionMode: 'worldview-expand',
       contextSourceKeys: ['manualText', 'worldGroups', 'storyCore', 'worldview'],
       writeTargets: [{
         table: 'worldviews',
-        fields: ['worldOrigin', 'powerHierarchy', 'continentLayout', 'climateByRegion', 'historyLine', 'races', 'factionLayout'],
+        fields: ['worldOrigin', 'powerHierarchy', 'continentLayout', 'climateByRegion', 'races', 'factionLayout'],
       }],
     })
     const fixture = await seed()
@@ -137,7 +127,7 @@ describe.sequential('R-HARNESS67 · 世界组七字段扩写 durable 候选与�
     expect(generated.snapshot.events.some(event => event.type === 'adoption.started')).toBe(false)
   })
 
-  it('刷新恢复同一七字段候选，确认后一次采纳并保留非目标字段/其它世界', async () => {
+  it('刷新恢复同一六字段候选，确认后一次采纳并保留非目标字段/其它世界', async () => {
     const fixture = await seed()
     const generated = await generate(fixture)
     const recovered = await readPendingWorldviewExpandCandidateV1({ scope: fixture.scope, worldGroupId: fixture.worldGroupId })
@@ -159,8 +149,8 @@ describe.sequential('R-HARNESS67 · 世界组七字段扩写 durable 候选与�
     expect(() => parseWorldExpandOutputStrictV1(response({ extra: true }))).toThrow('只能包含')
     const missing = JSON.parse(response()); delete missing.races
     expect(() => parseWorldExpandOutputStrictV1(JSON.stringify(missing))).toThrow('只能包含')
-    expect(() => parseWorldExpandOutputStrictV1(response({ historyLine: '' }))).toThrow('historyLine')
-    expect(() => parseWorldExpandOutputStrictV1(response({ historyLine: '长'.repeat(30_001) }))).toThrow('historyLine')
+    expect(() => parseWorldExpandOutputStrictV1(response({ races: '' }))).toThrow('races')
+    expect(() => parseWorldExpandOutputStrictV1(response({ races: '长'.repeat(30_001) }))).toThrow('races')
     const fixture = await seed('strict')
     await expect(generate(fixture, { output: JSON.stringify(missing) })).rejects.toThrow('只能包含')
     expect((await targetRow(fixture))?.worldOrigin).toBe('旧起源')
@@ -223,7 +213,7 @@ describe.sequential('R-HARNESS67 · 世界组七字段扩写 durable 候选与�
     const fixture = await seed()
     const generated = await generate(fixture)
     vi.spyOn(worldGroupAI, 'readWorldExpandPromptTemplateSnapshotV1').mockReturnValue([
-      { role: 'system', content: '部署后的七字段协议' },
+      { role: 'system', content: '部署后的六字段协议' },
       { role: 'user', content: '{{REGISTERED_CONTEXT}}' },
     ])
     await expect(adoptWorldviewExpandCandidateV1({
@@ -232,7 +222,7 @@ describe.sequential('R-HARNESS67 · 世界组七字段扩写 durable 候选与�
     expect((await targetRow(fixture))?.worldOrigin).toBe('旧起源')
   })
 
-  it('作者拒绝后候选不再恢复，正式七字段保持不变', async () => {
+  it('作者拒绝后候选不再恢复，正式六字段保持不变', async () => {
     const fixture = await seed()
     const generated = await generate(fixture)
     const rejected = await rejectWorldviewExpandCandidateV1({
@@ -321,10 +311,10 @@ describe.sequential('R-HARNESS67 · 世界组七字段扩写 durable 候选与�
     const first = await seed('one')
     const generated = await generate(first)
     const now = Date.now()
-    const otherWorkId = await db.works.add({
+    const otherWorkId = await db.works.add(currentWorkFixtureRecordV1({
       projectId: first.projectId, worldId: first.worldId, title: '同世界另一作品', description: '',
       genres: ['fantasy'], status: 'drafting', targetWordCount: 100_000, createdAt: now, updatedAt: now,
-    } as any) as number
+    })) as number
     const otherWorkScope = { ...first.scope, workId: otherWorkId }
     await expect(readPendingWorldviewExpandCandidateV1({
       scope: otherWorkScope,
@@ -340,10 +330,10 @@ describe.sequential('R-HARNESS67 · 世界组七字段扩写 durable 候选与�
       projectId: first.projectId, code: `other-world-${now}`, name: '同项目另一世界', description: '',
       currentVersion: 1, createdAt: now, updatedAt: now,
     }) as number
-    const otherWorldWorkId = await db.works.add({
+    const otherWorldWorkId = await db.works.add(currentWorkFixtureRecordV1({
       projectId: first.projectId, worldId: otherWorldId, title: '另一世界作品', description: '',
       genres: ['fantasy'], status: 'drafting', targetWordCount: 100_000, createdAt: now, updatedAt: now,
-    } as any) as number
+    })) as number
     const otherWorldScope = { projectId: first.projectId, worldId: otherWorldId, workId: otherWorldWorkId }
     await expect(readPendingWorldviewExpandCandidateV1({
       scope: otherWorldScope,

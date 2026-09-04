@@ -1,16 +1,6 @@
 /**
- * 生命周期派生 API(Phase 1.1a)
- *
- * 全部从 PROJECT_TABLES 派生,不再手写表清单。
- *   - cascadeDeleteProject(projectId)
- *   - cascadeDeleteGroup(projectId, wgId)
- *   - stampPrimaryWorld(projectId, primaryId)
- *   - transactionTablesFor(operation)
- *
- * 治理依据:docs/DATA-GOVERNANCE.md（表生命周期必须从 PROJECT_TABLES 派生）。
- *
- * ⚠️ Phase 1.1a 阶段:本文件【纯新增】,现有 stores 暂未切换调用。
- *    1.1b 才把 deleteProject/deleteGroup/migrate 改成调这里。
+ * 当前表生命周期派生 API。所有事务表集合从 PROJECT_TABLES 派生，
+ * 禁止在 Store 或 service 中维护第二份手写清单。
  */
 import type { Table } from 'dexie'
 import { db } from '../db/schema'
@@ -41,10 +31,10 @@ export function exportableTables(): TableSpec[] {
 
 /**
  * 某个生命周期操作需要的 Dexie 事务表清单。
- * 防止"事务声明漏表"(Phase 0 反复踩的坑)。
+ * 防止事务声明漏表。
  */
 export function transactionTablesFor(
-  op: 'deleteProject' | 'deleteGroup' | 'migrate' | 'importProject' | 'deleteChapters',
+  op: 'deleteProject' | 'deleteGroup' | 'assignPrimaryWorld' | 'importProject' | 'deleteChapters',
 ): Table[] {
   if (op === 'deleteProject' || op === 'importProject' || op === 'deleteChapters') {
     // 删项目/导入项目/删章节:所有非 global 表。导入与局部删除事务保持宽表声明,
@@ -55,13 +45,12 @@ export function transactionTablesFor(
     // 删世界组:所有 worldScoped 表 + 角色(homeWorldGroupId setNull)+ 大纲(worldGroupId setNull)+ 世界组本身
     const set = new Set<Table>(worldScopedTables().map(s => s.table))
     set.add(db.characters)
-    set.add(db.codexCategories)
     set.add(db.outlineNodes)
     set.add(db.worldGroups)
     set.add(db.worldGroupLinks)
     return [...set]
   }
-  // migrate:所有 worldScoped 表
+  // 归属到主世界：所有 worldScoped 表。
   return worldScopedTables().map(s => s.table)
 }
 
@@ -175,11 +164,6 @@ async function deleteBlobsInTransaction(
       const owners = blobOwnerRows.get(spec.name) ?? []
       const keys = owners.map(row => ref.keyResolver(row)) as number[]
       if (keys.length) await db.importFiles.bulkDelete(keys)
-      // 老式直接挂 importSessionId 的
-      const legacy = owners
-        .map(row => row.importSessionId)
-        .filter((v: unknown): v is number => v != null)
-      if (legacy.length) await db.importFiles.bulkDelete(legacy)
     }
   }
 }
@@ -190,14 +174,6 @@ async function deleteBlobsInTransaction(
 
 export async function cascadeDeleteGroup(projectId: number, wgId: number): Promise<void> {
   await db.transaction('rw', transactionTablesFor('deleteGroup'), async () => {
-    // 分类 schema 已改为项目级共享；旧备份可能仍带 worldGroupId。删除世界时只清
-    // 这个历史归属值，绝不删除分类及其它世界复用的字段结构。
-    const legacyCategories = await db.codexCategories.where('projectId').equals(projectId).toArray()
-    for (const category of legacyCategories) {
-      if (category.id != null && category.worldGroupId === wgId) {
-        await db.codexCategories.update(category.id, { worldGroupId: null, updatedAt: Date.now() })
-      }
-    }
     for (const spec of worldScopedTables()) {
       const wgField = spec.worldGroupField ?? 'worldGroupId'
 
@@ -251,11 +227,11 @@ export async function cascadeDeleteGroup(projectId: number, wgId: number): Promi
 }
 
 // ─────────────────────────────────────────────────────────────
-// stampPrimaryWorld - 开启多世界时盖章(派生自注册表)
+// assignUnscopedRecordsToPrimaryWorld - 开启多世界时归属无主记录
 // ─────────────────────────────────────────────────────────────
 
-export async function stampPrimaryWorld(projectId: number, primaryId: number): Promise<void> {
-  await db.transaction('rw', transactionTablesFor('migrate'), async () => {
+export async function assignUnscopedRecordsToPrimaryWorld(projectId: number, primaryId: number): Promise<void> {
+  await db.transaction('rw', transactionTablesFor('assignPrimaryWorld'), async () => {
     for (const spec of worldScopedTables()) {
       const wgField = spec.worldGroupField ?? 'worldGroupId'
       const rows = await spec.table.where('projectId').equals(projectId).toArray()

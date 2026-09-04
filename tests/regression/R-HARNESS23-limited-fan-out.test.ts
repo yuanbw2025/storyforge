@@ -3,7 +3,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { getOrCreateAgentConversation } from '../../src/lib/agent/conversations'
 import {
-  MASTER_AGENT_REPLAN_STORAGE_KEY,
   runDurableMasterAgentPlanV1,
   type DurableMasterAgentResultV1,
 } from '../../src/lib/agent/run/master-durable'
@@ -13,8 +12,9 @@ import { useAIConfigStore } from '../../src/stores/ai-config'
 import { MASTER_WORKFLOW_FAN_OUT_STORAGE_KEY } from '../../src/lib/agent/workflow-catalog'
 import type { MasterAgentPlan } from '../../src/lib/agent/orchestrator'
 import type { WorkspaceScope } from '../../src/lib/types'
-import { backfillResourceUidsV1 } from '../../src/lib/context-gateway/resource-identity'
-import { generateWorkCode, generateWorkspaceUid } from '../../src/lib/memory/identity'
+import { stampCurrentFixtureResourceUidsV1 } from '../helpers/current-resource-identity'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
+import { currentWorldOriginDraftV1 } from '../helpers/current-worldview-field'
 
 const inspirationResult = {
   worldview: {
@@ -22,10 +22,10 @@ const inspirationResult = {
     powerHierarchy: '',
     continentLayout: '',
     climateByRegion: '',
-    historyLine: '',
     races: '',
     factionLayout: '',
   },
+  history: { overview: '' },
   storyCore: {
     logline: '守塔人追查被雨抹去的名字',
     theme: '记忆',
@@ -48,7 +48,7 @@ function modelContent(prompt: string): string {
       shortDescription: '负责记录被雨抹去之名的人。',
     })
   }
-  return '潮汐退去之后，第一座盐城从海床苏醒，并以月轮记录文明纪年。'
+  return currentWorldOriginDraftV1('潮汐退去之后，第一座盐城从海床苏醒，并以月轮记录文明纪年。')
 }
 
 async function createWorkspace(): Promise<{
@@ -56,45 +56,8 @@ async function createWorkspace(): Promise<{
   worldGroupId: number
 }> {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    workspaceUid: generateWorkspaceUid(),
-    name: '有限并行项目',
-    genre: 'fantasy',
-    genres: ['fantasy'],
-    description: '',
-    status: 'drafting',
-    targetWordCount: 100_000,
-    worldCode: 'fan-out-world',
-    worldVersion: 1,
-    createdAt: now,
-    updatedAt: now,
-  } as any) as number
-  const worldId = await db.worlds.add({
-    projectId,
-    code: 'fan-out-world',
-    name: '并行世界',
-    description: '',
-    currentVersion: 1,
-    createdAt: now,
-    updatedAt: now,
-  }) as number
-  const workId = await db.works.add({
-    projectId,
-    worldId,
-    title: '并行作品',
-    code: generateWorkCode(),
-    description: '',
-    genres: ['fantasy'],
-    status: 'drafting',
-    targetWordCount: 100_000,
-    createdAt: now,
-    updatedAt: now,
-  }) as number
-  await db.projects.update(projectId, {
-    activeWorldId: worldId,
-    activeWorkId: workId,
-    ownershipSchemaVersion: 1,
-  })
+  const createdWorkspaceV1 = await seedCurrentWorkspace('有限并行项目')
+  const { projectId, worldId, workId } = createdWorkspaceV1.scope
   const worldGroupId = await db.worldGroups.add({
     projectId,
     worldId,
@@ -118,7 +81,7 @@ async function createWorkspace(): Promise<{
     createdAt: now,
     updatedAt: now,
   } as any)
-  await backfillResourceUidsV1(projectId)
+  await stampCurrentFixtureResourceUidsV1(projectId)
   return { scope: { projectId, worldId, workId }, worldGroupId }
 }
 
@@ -129,7 +92,7 @@ function fanOutPlan(): MasterAgentPlan {
       {
         id: 'world-1',
         agentId: 'world-origin',
-        skillId: 'world-origin.complete',
+        skillId: 'world-origin.worldview-field',
         instruction: '建立潮汐退去后盐城苏醒的世界来源。',
         dependsOn: [],
       },
@@ -163,7 +126,6 @@ describe.sequential('R-HARNESS23 · 主 Agent 有限 fan-out', { timeout: 15_000
     await db.delete()
     await db.open()
     globalThis.localStorage?.removeItem(MASTER_WORKFLOW_FAN_OUT_STORAGE_KEY)
-    globalThis.localStorage?.setItem(MASTER_AGENT_REPLAN_STORAGE_KEY, 'disabled')
     useAIConfigStore.setState({
       config: {
         ...originalConfig,
@@ -182,7 +144,6 @@ describe.sequential('R-HARNESS23 · 主 Agent 有限 fan-out', { timeout: 15_000
   afterEach(() => {
     vi.unstubAllGlobals()
     globalThis.localStorage?.removeItem(MASTER_WORKFLOW_FAN_OUT_STORAGE_KEY)
-    globalThis.localStorage?.removeItem(MASTER_AGENT_REPLAN_STORAGE_KEY)
     useAIConfigStore.setState({ config: originalConfig, presets: [], taskRoutes: {} })
     db.close()
   })
@@ -193,10 +154,16 @@ describe.sequential('R-HARNESS23 · 主 Agent 有限 fan-out', { timeout: 15_000
       projectId: fixture.scope.projectId,
       worldGroupId: fixture.worldGroupId,
       scope: fixture.scope,
+      purpose: 'master-authoring',
     })
     let activeCalls = 0
     let maxActiveCalls = 0
     let failInspiration = true
+    let initialLeafStarts = 0
+    let releaseInitialLeaves: (() => void) | null = null
+    const initialLeavesReady = new Promise<void>(resolve => {
+      releaseInitialLeaves = resolve
+    })
     const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
       const body = JSON.parse(String(init?.body)) as {
         messages?: Array<{ content?: string }>
@@ -205,7 +172,19 @@ describe.sequential('R-HARNESS23 · 主 Agent 有限 fan-out', { timeout: 15_000
       const inspiration = prompt.includes('反推灵感中的记忆冲突')
       activeCalls += 1
       maxActiveCalls = Math.max(maxActiveCalls, activeCalls)
-      await new Promise(resolve => setTimeout(resolve, 30))
+      if (failInspiration) {
+        initialLeafStarts += 1
+        if (initialLeafStarts === 2) releaseInitialLeaves?.()
+        await Promise.race([
+          initialLeavesReady,
+          new Promise<never>((_, reject) => setTimeout(
+            () => reject(new Error('fan-out 叶子模型调用未并发启动')),
+            1_000,
+          )),
+        ])
+      } else {
+        await new Promise(resolve => setTimeout(resolve, 30))
+      }
       activeCalls -= 1
       if (inspiration && failInspiration) throw new Error('模拟灵感调用失败')
       const content = modelContent(prompt)
@@ -268,6 +247,7 @@ describe.sequential('R-HARNESS23 · 主 Agent 有限 fan-out', { timeout: 15_000
       projectId: fixture.scope.projectId,
       worldGroupId: fixture.worldGroupId,
       scope: fixture.scope,
+      purpose: 'master-authoring',
     })
     globalThis.localStorage?.setItem(MASTER_WORKFLOW_FAN_OUT_STORAGE_KEY, 'disabled')
     let activeCalls = 0
@@ -297,7 +277,7 @@ describe.sequential('R-HARNESS23 · 主 Agent 有限 fan-out', { timeout: 15_000
     })
     expect(maxActiveCalls).toBe(1)
     expect(fetchMock).toHaveBeenCalledTimes(3)
-    expect(result.plan.workflow?.workflowId).toBe('multi-domain-fan-out')
+    expect(result.plan.workflow.workflowId).toBe('multi-domain-fan-out')
     expect((await readAgentRunV1(fixture.scope, result.runId)).contract.workflowKind)
       .toBe('fan-out-synthesize')
   })

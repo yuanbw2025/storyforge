@@ -12,7 +12,7 @@ import {
   resolveReadScopeLike,
   resolveScopeLike,
   type WorkspaceScopeLike,
-} from '../lib/world-engine/scope'
+} from '../lib/workspace/scope'
 
 interface KnowledgeLedgerStore {
   events: KnowledgeLedgerEntry[]

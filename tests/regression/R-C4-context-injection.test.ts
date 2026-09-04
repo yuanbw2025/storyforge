@@ -6,7 +6,7 @@ import type { Character } from '../../src/lib/types'
 function core(over: Partial<Character>): Character {
   const now = Date.now()
   return {
-    projectId: 1, name: '林默', role: 'supporting', roleWeight: 'main',
+    projectId: 1, name: '林默', roleWeight: 'main',
     moralAxis: 'neutral', orderAxis: 'lawful',
     shortDescription: '', appearance: '', personality: '', background: '',
     motivation: '', abilities: '', relationships: '', arc: '',

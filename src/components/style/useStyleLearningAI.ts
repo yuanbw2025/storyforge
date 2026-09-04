@@ -9,7 +9,7 @@ import {
   type StyleLearningCandidateV1,
 } from '../../lib/agent/run/style-learning-durable'
 import type { AIConfig } from '../../lib/types'
-import { resolveScopeLike } from '../../lib/world-engine/scope'
+import { resolveScopeLike } from '../../lib/workspace/scope'
 
 export interface StyleLearningLaneState {
   candidate: StyleLearningCandidateV1 | null

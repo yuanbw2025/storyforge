@@ -1,32 +1,20 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import {
-  Check,
-  GitBranch,
   Gamepad2,
+  GitBranch,
   Loader2,
-  Play,
-  Plus,
-  RefreshCw,
   Rocket,
   ShieldCheck,
   WandSparkles,
 } from 'lucide-react'
 import type {
-  NarrativeModule,
-  SimulationSessionKind,
+  ProductProductionHandoffV1,
   WorldRelease,
-  WorldReleaseManifestV2,
   WorldRevision,
   WorkspaceScope,
 } from '../../lib/types'
 import type { WorldReleaseSection } from '../../lib/registry/types'
-import {
-  createStarterNarrativeModule,
-  projectStoryArcsToNarrative,
-  validateNarrativeModule,
-} from '../../lib/narrative/blueprint'
-import { readOwnedRows, resolveScopeLike } from '../../lib/world-engine/scope'
-import { selectWorkNarrativeModule } from '../../lib/world-engine/works'
+import { resolveScopeLike } from '../../lib/workspace/scope'
 import {
   createWorldRevision,
   diffWorldRevisions,
@@ -36,49 +24,27 @@ import {
   WORLD_RELEASE_SECTIONS,
   worldReleaseSectionTables,
 } from '../../lib/world-engine/releases'
-import { createWorldInstance } from '../../lib/world-engine/instances'
-import { installMistHarborDemoWorld } from '../../lib/world-engine/mist-harbor-demo'
-import { changeRecordScope } from '../../lib/world-engine/scope-conversion'
-import { db } from '../../lib/db/schema'
 import { useDialog } from '../shared/Dialog'
-
-const KIND_LABELS: Record<NarrativeModule['kind'], string> = {
-  main: '主线',
-  side: '支线',
-  quest: '任务',
-  opening: '开局',
-  free: '自由探索',
-}
-
-const INSTANCE_KINDS: Array<{ value: SimulationSessionKind; label: string }> = [
-  { value: 'chatgame', label: '角色聊天' },
-  { value: 'npc-evolution', label: 'NPC 演进' },
-]
 
 interface Props {
   projectId: number
   activeWorkId?: number | null
   onChanged: () => Promise<void> | void
-  onOpenRuntime: () => void
-  onOpenGameProduction: (handoff: import('../../lib/types').WorldGameProductionHandoffV2) => void
+  onOpenProductProduction: (handoff: ProductProductionHandoffV1) => void
 }
 
-export default function WorldNarrativeReleasePanel({ projectId, activeWorkId, onChanged, onOpenRuntime, onOpenGameProduction }: Props) {
+export default function WorldNarrativeReleasePanel({
+  projectId,
+  activeWorkId,
+  onChanged,
+  onOpenProductProduction,
+}: Props) {
   const dialog = useDialog()
   const [scope, setScope] = useState<WorkspaceScope | null>(null)
-  const [modules, setModules] = useState<NarrativeModule[]>([])
-  const [validity, setValidity] = useState<Record<number, boolean>>({})
-  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
-  const [activeModuleId, setActiveModuleId] = useState<number | null>(null)
   const [revisions, setRevisions] = useState<WorldRevision[]>([])
   const [releases, setReleases] = useState<WorldRelease[]>([])
   const [revisionLabel, setRevisionLabel] = useState('')
-  const [instanceKind, setInstanceKind] = useState<SimulationSessionKind>('chatgame')
-  const [instanceTitle, setInstanceTitle] = useState('')
-  const [releaseId, setReleaseId] = useState<number | null>(null)
-  const [releaseNarrativeExportId, setReleaseNarrativeExportId] = useState<number | null>(null)
-  const [newModuleKind, setNewModuleKind] = useState<NarrativeModule['kind']>('quest')
-  const [newModuleTitle, setNewModuleTitle] = useState('')
+  const [selectedReleaseId, setSelectedReleaseId] = useState<number | null>(null)
   const [selectedSections, setSelectedSections] = useState<Set<WorldReleaseSection>>(
     () => new Set(WORLD_RELEASE_SECTIONS.map(section => section.key)),
   )
@@ -92,97 +58,52 @@ export default function WorldNarrativeReleasePanel({ projectId, activeWorkId, on
 
   const load = useCallback(async () => {
     const resolved = await resolveScopeLike(projectId)
-    const [rows, work, revisionRows, releaseRows] = await Promise.all([
-      readOwnedRows<NarrativeModule>(resolved, 'narrativeModules'),
-      db.works.get(resolved.workId),
+    const [revisionRows, releaseRows] = await Promise.all([
       listWorldRevisions(resolved),
       listWorldReleases(resolved),
     ])
-    const checks = await Promise.all(rows.map(async module => [
-      module.id!,
-      (await validateNarrativeModule(resolved, module.id!)).valid,
-    ] as const))
     setScope(resolved)
-    setModules(rows)
-    setValidity(Object.fromEntries(checks))
-    setActiveModuleId(work?.activeNarrativeModuleId ?? null)
-    setSelectedIds(previous => {
-      const available = new Set(rows.map(module => module.id!))
-      const retained = [...previous].filter(id => available.has(id))
-      return new Set(retained.length ? retained : rows.map(module => module.id!))
-    })
     setRevisions(revisionRows)
     setReleases(releaseRows)
     setRevisionDiff(revisionRows.length > 1
       ? await diffWorldRevisions(revisionRows[1].id!, revisionRows[0].id!)
       : null)
-    setReleaseId(previous => releaseRows.some(release => release.id === previous)
+    setSelectedReleaseId(previous => releaseRows.some(release => release.id === previous)
       ? previous
       : releaseRows[0]?.id ?? null)
   }, [projectId])
 
   useEffect(() => {
-    void load().catch(cause => setMessage(cause instanceof Error ? cause.message : '读取叙事蓝图失败'))
+    void load().catch(cause => setMessage(cause instanceof Error ? cause.message : '读取世界版本失败'))
   }, [activeWorkId, load])
 
   const latestRevision = revisions[0] ?? null
   const latestRelease = releases[0] ?? null
-  const selectedRelease = releases.find(release => release.id === releaseId) ?? null
-  const releaseNarrativeModules = useMemo(() => {
-    if (!selectedRelease) return []
-    try {
-      return (JSON.parse(selectedRelease.manifestJson) as WorldReleaseManifestV2).selectedNarrativeModules
-    } catch { return [] }
-  }, [selectedRelease])
-  const selectedReleaseModule = releaseNarrativeModules.find(module => module.exportId === releaseNarrativeExportId) ?? null
-  const canRevise = selectedSections.size > 0 && [...selectedIds].every(id => validity[id])
-
-  useEffect(() => {
-    setReleaseNarrativeExportId(previous => releaseNarrativeModules.some(module => module.exportId === previous)
-      ? previous
-      : releaseNarrativeModules[0]?.exportId ?? null)
-  }, [releaseNarrativeModules])
+  const selectedRelease = releases.find(release => release.id === selectedReleaseId) ?? null
 
   const run = async (action: () => Promise<void>) => {
     if (busy) return
-    setBusy(true); setMessage('')
-    try { await action() } catch (cause) {
+    setBusy(true)
+    setMessage('')
+    try {
+      await action()
+    } catch (cause) {
       setMessage(cause instanceof Error ? cause.message : '操作失败')
-    } finally { setBusy(false) }
+    } finally {
+      setBusy(false)
+    }
   }
 
-  const projectArcs = () => run(async () => {
-    if (!scope) return
-    const projected = await projectStoryArcsToNarrative(scope)
-    setMessage(projected.length ? `已同步 ${projected.length} 条主线/支线。` : '当前作品还没有可投影的故事线。')
-    await load()
-  })
-
-  const createModule = () => run(async () => {
-    if (!scope || !newModuleTitle.trim()) return
-    const created = await createStarterNarrativeModule({
-      scope,
-      owner: 'work',
-      kind: newModuleKind,
-      title: newModuleTitle,
-    })
-    await selectWorkNarrativeModule(scope, created.id!)
-    setNewModuleTitle('')
-    setMessage(`已创建可执行${KIND_LABELS[created.kind]}“${created.title}”，并设为当前叙事。`)
-    await load()
-  })
-
   const createRevision = () => run(async () => {
-    if (!scope || !canRevise) return
+    if (!scope || selectedSections.size === 0) return
     await createWorldRevision({
       scope,
       label: revisionLabel,
       parentRevisionId: latestRevision?.id ?? null,
       selectedTables: [...selectedSections].flatMap(worldReleaseSectionTables),
-      selectedNarrativeModuleIds: [...selectedIds],
     })
     setRevisionLabel('')
-    setMessage('已冻结新的世界草稿修订。')
+    setMessage('已冻结新的纯语义世界修订；上层产品、媒资和运行状态均未进入。')
     await load()
   })
 
@@ -190,113 +111,42 @@ export default function WorldNarrativeReleasePanel({ projectId, activeWorkId, on
     if (!latestRevision?.id) return
     const confirmed = await dialog.confirm({
       title: `发布修订 ${latestRevision.revision}？`,
-      message: '发布后该版本保持不可变；后续修改会进入新的草稿修订。',
-      confirmText: '发布版本',
+      message: '发布后该 WorldRelease 保持不可变；后续草稿修改只会进入新修订。',
+      confirmText: '发布世界版本',
     })
     if (!confirmed) return
     await publishWorldRevision(latestRevision.id)
-    setMessage('不可变世界版本已发布。')
+    setMessage('不可变 WorldRelease 已发布，可在具体产品内引用。')
     await load()
     await onChanged()
   })
 
-  const startInstance = () => run(async () => {
-    if (!scope || !releaseId || releaseNarrativeExportId == null || !selectedReleaseModule) return
-    const instance = await createWorldInstance({
-      scope,
-      kind: instanceKind,
-      title: instanceTitle.trim() || `${INSTANCE_KINDS.find(item => item.value === instanceKind)?.label ?? '互动'} · ${selectedReleaseModule.title}`,
-      releaseId,
-      releaseNarrativeModuleExportId: releaseNarrativeExportId,
+  const handoff = (productType: ProductProductionHandoffV1['productType']) => {
+    if (!selectedRelease?.id) return
+    onOpenProductProduction({
+      schema: 'storyforge.product-production-handoff',
+      version: 1,
+      productType,
+      worldReleaseId: selectedRelease.id,
+      worldContentHash: selectedRelease.contentHash,
     })
-    setMessage(`已创建独立实例“${instance.title}”。`)
-    setInstanceTitle('')
-    await onChanged()
-  })
-
-  const installMistHarbor = () => run(async () => {
-    if (!scope) return
-    const confirmed = await dialog.confirm({
-      title: '建立雾港演示世界？',
-      message: '会在当前世界中补齐正式世界设定、规则、地理、历史、角色、关系、故事核心、十章大纲/细纲/正文、伏笔、artifact 道具、主线和本地视觉媒资；不会覆盖你后来手写的章节正文，也不会绕过发布流程。',
-      confirmText: '建立演示世界',
-    })
-    if (!confirmed) return
-    const result = await installMistHarborDemoWorld({ scope })
-    setSelectedIds(previous => new Set([...previous, result.narrativeModuleId]))
-    setMessage(`雾港世界已就绪：${result.characterCount} 名完整角色、${result.locationCount} 个重要地点、${result.worldRuleEntryCount} 条世界规则、${result.chapterCount} 章正文、${result.detailedOutlineCount} 章细纲、${result.foreshadowCount} 条伏笔、${result.artifactCount} 件道具和 ${result.mediaAssetCount} 项视觉媒资。下一步冻结并发布 WorldRelease。`)
-    await load()
-    await onChanged()
-  })
+  }
 
   return (
-    <section className="sf-world-pipeline" aria-label="叙事蓝图与世界发布">
+    <section className="sf-world-pipeline" aria-label="世界修订、发布与产品交接">
       <div className="sf-world-pipeline-heading">
-        <div><span className="sf-card-kicker"><GitBranch className="h-4 w-4" /> 可执行叙事</span><h3>叙事蓝图与发布</h3></div>
-        <button className="sf-button sf-button-secondary" onClick={projectArcs} disabled={busy}>
-          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}同步主线与支线
-        </button>
+        <div>
+          <span className="sf-card-kicker"><GitBranch className="h-4 w-4" /> SEMANTIC WORLD RELEASE</span>
+          <h3>冻结世界与交给具体产品</h3>
+        </div>
+        <span className="sf-project-status"><ShieldCheck className="h-3.5 w-3.5" />世界页不创建产品或运行实例</span>
       </div>
 
       <div className="sf-world-pipeline-grid">
         <div className="sf-world-pipeline-stage">
-          <div className="sf-world-pipeline-stage-head"><span>1</span><div><strong>选择叙事</strong><small>同一来源供分步骤创作和互动实例使用</small></div></div>
-          <div className="sf-world-module-create">
-            <select aria-label="新叙事类型" value={newModuleKind} onChange={event => setNewModuleKind(event.target.value as NarrativeModule['kind'])}>
-              {Object.entries(KIND_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-            </select>
-            <input aria-label="新叙事名称" value={newModuleTitle} onChange={event => setNewModuleTitle(event.target.value)} placeholder="新叙事名称" />
-            <button className="sf-icon-button" title="创建叙事" aria-label="创建叙事" onClick={createModule} disabled={busy || !newModuleTitle.trim()}><Plus className="h-4 w-4" /></button>
-          </div>
-          <div className="sf-world-module-list">
-            {modules.map(module => (
-              <div key={module.id} className={`sf-world-module-row ${module.id === activeModuleId ? 'active' : ''}`}>
-                <input
-                  type="checkbox"
-                  aria-label={`纳入发布 ${module.title}`}
-                  checked={selectedIds.has(module.id!)}
-                  onChange={event => setSelectedIds(previous => {
-                    const next = new Set(previous)
-                    if (event.target.checked) next.add(module.id!); else next.delete(module.id!)
-                    return next
-                  })}
-                />
-                <button onClick={() => run(async () => {
-                  if (!scope) return
-                  await selectWorkNarrativeModule(scope, module.id!)
-                  setActiveModuleId(module.id!)
-                  setMessage(`当前作品已选择${KIND_LABELS[module.kind]}“${module.title}”。`)
-                })}>
-                  <span><strong>{module.title}</strong><small>{KIND_LABELS[module.kind]}</small></span>
-                  <span className={validity[module.id!] ? 'ready' : 'warning'}>{validity[module.id!] ? '可执行' : '待补全'}</span>
-                </button>
-                <select
-                  aria-label={`共享范围 ${module.title}`}
-                  value={module.worldId != null ? 'world' : 'work'}
-                  disabled={busy}
-                  onChange={event => run(async () => {
-                    if (!scope) return
-                    const targetOwner = event.target.value as 'world' | 'work'
-                    await changeRecordScope({ scope, tableName: 'narrativeModules', recordId: module.id!, targetOwner })
-                    setMessage(targetOwner === 'world'
-                      ? `“${module.title}”已设为整个世界可复用的叙事。`
-                      : `“${module.title}”已收回当前作品。`)
-                    await load()
-                  })}
-                >
-                  <option value="work">本作品</option>
-                  <option value="world">整个世界</option>
-                </select>
-              </div>
-            ))}
-            {!modules.length && <p>先在“主线与支线”中建立故事线，再同步为可执行蓝图。</p>}
-          </div>
-        </div>
-
-        <div className="sf-world-pipeline-stage">
-          <div className="sf-world-pipeline-stage-head"><span>2</span><div><strong>冻结并发布</strong><small>逐次修订可比较，发布版本不可变</small></div></div>
+          <div className="sf-world-pipeline-stage-head"><span>1</span><div><strong>选择语义范围</strong><small>能力清单由 PROJECT_TABLES 的 worldSemantic 登记派生</small></div></div>
           <fieldset className="sf-world-release-sections">
-            <legend>发布范围</legend>
+            <legend>封存范围</legend>
             {WORLD_RELEASE_SECTIONS.map(section => (
               <label key={section.key} title={section.description}>
                 <input
@@ -304,7 +154,8 @@ export default function WorldNarrativeReleasePanel({ projectId, activeWorkId, on
                   checked={selectedSections.has(section.key)}
                   onChange={event => setSelectedSections(previous => {
                     const next = new Set(previous)
-                    if (event.target.checked) next.add(section.key); else next.delete(section.key)
+                    if (event.target.checked) next.add(section.key)
+                    else next.delete(section.key)
                     return next
                   })}
                 />
@@ -314,69 +165,37 @@ export default function WorldNarrativeReleasePanel({ projectId, activeWorkId, on
           </fieldset>
           <label className="sf-world-pipeline-field">修订名称<input value={revisionLabel} onChange={event => setRevisionLabel(event.target.value)} placeholder={`例如：世界修订 ${revisions.length + 1}`} /></label>
           <div className="sf-world-pipeline-actions">
-            <button className="sf-button sf-button-secondary" onClick={createRevision} disabled={busy || !canRevise}><ShieldCheck className="h-4 w-4" />冻结修订</button>
-            <button className="sf-button sf-button-primary" onClick={publish} disabled={busy || !latestRevision?.id || latestRelease?.revisionId === latestRevision.id}><Rocket className="h-4 w-4" />发布版本</button>
+            <button className="sf-button sf-button-secondary" onClick={createRevision} disabled={busy || selectedSections.size === 0}>
+              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}冻结修订
+            </button>
+            <button className="sf-button sf-button-primary" onClick={publish} disabled={busy || !latestRevision?.id || latestRelease?.revisionId === latestRevision.id}>
+              <Rocket className="h-4 w-4" />发布版本
+            </button>
           </div>
           <div className="sf-world-pipeline-status"><span>修订 {revisions.length}</span><span>发布 {releases.length}</span>{latestRelease && <span>当前 v{latestRelease.version}</span>}</div>
-          {revisionDiff && (
-            <div className="sf-world-revision-diff" role="region" aria-label="最新修订差异">
-              <strong>相对修订 {revisions[1]?.revision}</strong>
-              <span>新增 {revisionDiff.added.length}</span>
-              <span>变更 {revisionDiff.changed.length}</span>
-              <span>移除 {revisionDiff.removed.length}</span>
-              {!!revisionDiff.changed.length && <small title={revisionDiff.changed.join(', ')}>{revisionDiff.changed.join('、')}</small>}
-            </div>
-          )}
+          {revisionDiff && <div className="sf-world-revision-diff" role="region" aria-label="最新修订差异">
+            <strong>相对修订 {revisions[1]?.revision}</strong>
+            <span>新增 {revisionDiff.added.length}</span>
+            <span>变更 {revisionDiff.changed.length}</span>
+            <span>移除 {revisionDiff.removed.length}</span>
+          </div>}
         </div>
 
         <div className="sf-world-pipeline-stage">
-          <div className="sf-world-pipeline-stage-head"><span>3</span><div><strong>启动独立实例</strong><small>每个实例单独记录事件、分支和检查点</small></div></div>
-          <p className="sf-world-pipeline-note">正式跑团与文字游戏统一从制作中心或跑团页生成 GameRelease；这里仅保留角色聊天和 NPC 演进的世界诊断实例。已有旧跑团实例仍可查看和导出。</p>
-          <div className="sf-world-pipeline-selects">
-            <select aria-label="互动实例类型" value={instanceKind} onChange={event => setInstanceKind(event.target.value as SimulationSessionKind)}>{INSTANCE_KINDS.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}</select>
-            <select value={releaseId ?? ''} onChange={event => setReleaseId(Number(event.target.value) || null)}><option value="">选择发布版本</option>{releases.map(release => <option key={release.id} value={release.id}>v{release.version} · {release.label}</option>)}</select>
-          </div>
-          <label className="sf-world-pipeline-field">冻结叙事<select value={releaseNarrativeExportId ?? ''} onChange={event => setReleaseNarrativeExportId(event.target.value === '' ? null : Number(event.target.value))}><option value="">选择发布版本中的叙事</option>{releaseNarrativeModules.map(module => <option key={module.exportId} value={module.exportId}>{KIND_LABELS[module.kind]} · {module.title}</option>)}</select></label>
-          <label className="sf-world-pipeline-field">实例名称<input value={instanceTitle} onChange={event => setInstanceTitle(event.target.value)} placeholder={selectedReleaseModule ? `基于“${selectedReleaseModule.title}”` : '先选择冻结叙事'} /></label>
+          <div className="sf-world-pipeline-stage-head"><span>2</span><div><strong>显式交给产品</strong><small>只传 release ID + hash；产品继续完成设置、会谈和开始授权</small></div></div>
+          <label className="sf-world-pipeline-field">冻结世界版本<select value={selectedReleaseId ?? ''} onChange={event => setSelectedReleaseId(Number(event.target.value) || null)}><option value="">选择 WorldRelease</option>{releases.map(release => <option key={release.id} value={release.id}>v{release.version} · {release.label}</option>)}</select></label>
+          <p className="sf-world-pipeline-note">这里不会生成游戏、媒资、聊天会话或跑团实例。进入具体产品后，用户仍需确认产品设置和 Brief，并明确下达开始指令。</p>
+          {selectedRelease && <code>{selectedRelease.sourceWorldCode}@v{selectedRelease.version} · {selectedRelease.contentHash.slice(0, 16)}…</code>}
           <div className="sf-world-pipeline-actions">
-            <button className="sf-button sf-button-primary" onClick={startInstance} disabled={busy || !releaseId || !selectedReleaseModule}><Play className="h-4 w-4" />创建实例</button>
-            <button className="sf-button sf-button-secondary" onClick={onOpenRuntime}><Check className="h-4 w-4" />查看实例</button>
+            <button className="sf-button sf-button-secondary" onClick={() => handoff('text-adventure')} disabled={!selectedRelease?.id}>
+              <Gamepad2 className="h-4 w-4" />交给文字游戏
+            </button>
+            <button className="sf-button sf-button-primary" onClick={() => handoff('ttrpg')} disabled={!selectedRelease?.id}>
+              <WandSparkles className="h-4 w-4" />交给跑团
+            </button>
           </div>
         </div>
       </div>
-      <section className="sf-world-game-bridge" aria-label="世界到文字游戏">
-        <div>
-          <span className="sf-card-kicker"><Gamepad2 className="h-4 w-4" /> WORLD → GAME PRODUCTION</span>
-          <h3>基于冻结世界制作游戏</h3>
-          <p>进入统一制作中心后，Agent 会先给出主线、支线、角色等起点建议；你确认主角、起点、规模与媒资目标并明确开始后，系统才会自主生产、装配、质检和生成未发布 Build 预览。</p>
-          <button className="sf-button sf-button-secondary" onClick={installMistHarbor} disabled={busy}>
-            <WandSparkles className="h-4 w-4" />建立雾港演示世界
-          </button>
-        </div>
-        <div className="sf-world-game-bridge-source">
-          <strong>{selectedRelease ? `v${selectedRelease.version} · ${selectedRelease.label}` : '先发布一个世界版本'}</strong>
-          <span>{selectedReleaseModule ? `${KIND_LABELS[selectedReleaseModule.kind]} · ${selectedReleaseModule.title}` : '选择冻结叙事'}</span>
-          {selectedRelease && <code>{selectedRelease.contentHash.slice(0, 16)}…</code>}
-        </div>
-        <div className="sf-world-pipeline-stage">
-          <div className="sf-world-pipeline-stage-head"><span><ShieldCheck className="h-4 w-4" /></span><div><strong>统一生产流程</strong><small>会谈 → Brief → 作者授权 → 并行制作 → Build Preview → 原子发布</small></div></div>
-          <p className="sf-world-pipeline-note">旧“AI 候选直接采纳发布”和快速映射按钮已从产品 UI 下线，避免绕过生产控制、素材装配与整包质量门。已有旧 GameRelease 和存档保持不变。</p>
-          <div className="sf-world-pipeline-actions">
-            <button className="sf-button sf-button-secondary" onClick={() => selectedRelease && onOpenGameProduction({
-              schema: 'storyforge.world-game-production-handoff', version: 2, productType: 'storygame',
-              worldReleaseId: selectedRelease.id!, worldContentHash: selectedRelease.contentHash,
-            })} disabled={busy || !selectedRelease?.id}>
-              <Gamepad2 className="h-4 w-4" />进入游戏制作中心
-            </button>
-            <button className="sf-button sf-button-primary" onClick={() => selectedRelease && onOpenGameProduction({
-              schema: 'storyforge.world-game-production-handoff', version: 2, productType: 'ttrpg',
-              worldReleaseId: selectedRelease.id!, worldContentHash: selectedRelease.contentHash,
-            })} disabled={busy || !selectedRelease?.id}>
-              <WandSparkles className="h-4 w-4" />用此世界制作跑团
-            </button>
-          </div>
-        </div>
-      </section>
       {message && <p className="sf-product-message" role="status">{message}</p>}
     </section>
   )

@@ -25,14 +25,13 @@ import {
 import { verifyMasterAgentRunV1 } from '../../src/lib/agent/run/master-verification'
 import { AgentTeamBudgetTracker } from '../../src/lib/agent/team-budget'
 import { db } from '../../src/lib/db/schema'
-import { generateWorkspaceUid } from '../../src/lib/memory/identity'
-import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
-import { stampNewRecord } from '../../src/lib/world-engine/scope'
+import { stampNewRecord } from '../../src/lib/workspace/scope'
 import {
   adoptGenerationNodeOutput,
   runGenerationNode,
 } from '../../src/lib/generation/generation-node'
 import type { Project, WorkspaceScope } from '../../src/lib/types'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
 
 const directWorkflow = {
   version: 1 as const,
@@ -42,18 +41,9 @@ const directWorkflow = {
 
 async function createWorkspace(): Promise<{ project: Project; scope: WorkspaceScope }> {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    workspaceUid: generateWorkspaceUid(),
-    name: '镜城纪事',
-    genre: 'fantasy',
-    genres: ['fantasy'],
-    description: '',
-    status: 'drafting',
-    targetWordCount: 120_000,
-    createdAt: now,
-    updatedAt: now,
-  } as Project) as number
-  const { scope } = await ensureWorkspaceOwnership(projectId)
+  const created = await seedCurrentWorkspace('镜城纪事')
+  const { project, scope } = created
+  const { projectId } = scope
   await db.worldviews.add(stampNewRecord(scope, 'worldviews', {
     projectId,
     worldOrigin: '镜海退潮时，城民被典当的记忆会凝成盐晶。',
@@ -68,14 +58,11 @@ async function createWorkspace(): Promise<{ project: Project; scope: WorkspaceSc
     theme: '记忆与责任',
     centralConflict: '主角必须在保住父亲记忆与公开镜税真相之间选择。',
     plotPattern: '线性调查',
-    storyLines: '',
     mainPlot: '主角沿盐晶来源追查镜税制度。',
     subPlots: '拾忆行会内部的继承权争夺。',
     createdAt: now,
     updatedAt: now,
   }, { owner: 'work' }) as never)
-  const project = await db.projects.get(projectId)
-  if (!project) throw new Error('测试项目创建失败')
   return { project, scope }
 }
 
@@ -184,7 +171,6 @@ describe.sequential('R-HARNESS31 · 故事核心 Agent Skill 与受治理采纳'
       roleWeight: 'main',
       moralAxis: 'good',
       orderAxis: 'neutral',
-      role: 'protagonist',
       shortDescription: '他只能记住潮水退去后的一小时。',
       personality: '克制而执拗。',
       background: '父亲在潮汐钟失窃当天主动典当了关于他的记忆。',
@@ -312,6 +298,7 @@ describe.sequential('R-HARNESS31 · 故事核心 Agent Skill 与受治理采纳'
       projectId: project.id!,
       scope,
       worldGroupId: null,
+      purpose: 'story-core-generation',
     })
     const execute = vi.fn(async options => {
       const task = options.plan.tasks[0]
@@ -405,7 +392,7 @@ describe.sequential('R-HARNESS31 · 故事核心 Agent Skill 与受治理采纳'
       usage: { prompt_tokens: 31, completion_tokens: 23, total_tokens: 54 },
     }), { status: 200 })))
     const conversation = await getOrCreateAgentConversation({
-      projectId: project.id!, scope, worldGroupId: null,
+      projectId: project.id!, scope, worldGroupId: null, purpose: 'story-core-generation',
     })
     const run = await runDurableMasterAgentPlanV1({
       scope,

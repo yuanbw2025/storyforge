@@ -1,7 +1,7 @@
 import Dexie from 'dexie'
 import { db } from '../db/schema'
 import type { MediaBlobObject, WorkspaceScope } from '../types'
-import { assertRecordInScope, resolveScope, stampNewRecord } from '../world-engine/scope'
+import { assertRecordInScope, resolveScope, stampNewRecord } from '../workspace/scope'
 import { hashCanonicalValue } from '../agent/run/hash'
 import { assertMediaBlobObjectV1 } from '../comic/contracts'
 import { PROJECT_TABLES } from '../registry/project-tables'

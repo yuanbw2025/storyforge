@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { generateWorkspaceUid } from '../../src/lib/memory/identity'
-import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
-import { stampNewRecord, type WorkspaceScope } from '../../src/lib/world-engine/scope'
+import { resolveWorkspaceOwnership } from '../../src/lib/workspace/ownership'
+import { stampNewRecord, type WorkspaceScope } from '../../src/lib/workspace/scope'
 import { prepareOutlineGatewayAssemblyV1 } from '../../src/lib/outline/gateway-context'
 import { useAIConfigStore } from '../../src/stores/ai-config'
+import { seedCurrentProject } from '../helpers/current-workspace'
 
 const now = 1_787_900_000_000
 
@@ -23,12 +24,12 @@ async function addScoped(
 }
 
 async function seed() {
-  const projectId = await db.projects.add({
+  const projectId = await seedCurrentProject({
     workspaceUid: generateWorkspaceUid(),
-    name: 'OUTLINE-1 潮汐长篇', genre: 'fantasy', genres: ['fantasy'], status: 'drafting',
+    name: 'OUTLINE-1 潮汐长篇', genres: ['fantasy'], status: 'drafting',
     description: '', targetWordCount: 1_000_000, createdAt: now, updatedAt: now,
   } as any) as number
-  const { scope } = await ensureWorkspaceOwnership(projectId)
+  const { scope } = await resolveWorkspaceOwnership(projectId)
   const groupId = await addScoped(scope, 'worldGroups', {
     name: '潮汐大陆', description: '', type: 'primary', order: 0,
   }, 'world')

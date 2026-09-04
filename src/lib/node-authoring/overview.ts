@@ -14,6 +14,16 @@ const TABLE_SEMANTICS: Record<string, AuthoringNodeInstance['outputs'][number]['
   storyArcs: 'story.arc',
 }
 
+const CANON_SOURCE_TEMPLATE_BY_TABLE: Readonly<Record<string, string>> = {
+  geographies: 'source.world-geography',
+  importantLocations: 'source.world-geography',
+  histories: 'source.world-history',
+  historicalTimelineEvents: 'source.world-history',
+  historicalKeywords: 'source.world-history',
+  worldRulesProfiles: 'source.world-rules',
+  canonAssertions: 'source.world-rules',
+}
+
 function templateForEntry(tableName: string, fieldKey: string) {
   return AUTHORING_NODE_CATALOG.find(template => (
     template.writes?.target === tableName && template.writes.fields?.length === 1 && template.writes.fields[0] === fieldKey
@@ -21,7 +31,9 @@ function templateForEntry(tableName: string, fieldKey: string) {
 }
 
 function nodeForEntry(entry: Awaited<ReturnType<typeof buildRagLibrary>>[number], index: number): AuthoringNodeInstance {
-  const template = templateForEntry(entry.tableName, entry.fieldKey) ?? AUTHORING_NODE_BY_ID.get('source.project-context')!
+  const writeTemplate = templateForEntry(entry.tableName, entry.fieldKey)
+  const sourceTemplateId = CANON_SOURCE_TEMPLATE_BY_TABLE[entry.tableName] ?? 'source.project-context'
+  const template = writeTemplate ?? AUTHORING_NODE_BY_ID.get(sourceTemplateId)!
   const semantic = templateForEntry(entry.tableName, entry.fieldKey)?.outputs[0]?.semantic
     ?? TABLE_SEMANTICS[entry.tableName]
     ?? 'any'
@@ -29,7 +41,7 @@ function nodeForEntry(entry: Awaited<ReturnType<typeof buildRagLibrary>>[number]
     id: `overview-${hashAuthoringText(entry.key)}`,
     templateId: template.id,
     templateVersion: template.version,
-    title: templateForEntry(entry.tableName, entry.fieldKey)
+    title: writeTemplate
       ? `${template.label} · ${entry.title}`
       : `${entry.fieldLabel} · ${entry.title}`,
     x: 80 + (index % 4) * 360,
@@ -39,9 +51,7 @@ function nodeForEntry(entry: Awaited<ReturnType<typeof buildRagLibrary>>[number]
       ragEntryKeys: [entry.key],
       contextBudget: Math.min(entry.tokenCap, 12_000),
     },
-    inputs: template.id === 'source.project-context'
-      ? []
-      : structuredClone(template.inputs),
+    inputs: structuredClone(template.inputs),
     outputs: template.outputs.map(port => ({ ...port, semantic, state: 'canon' as const })),
     binding: {
       mode: 'live',

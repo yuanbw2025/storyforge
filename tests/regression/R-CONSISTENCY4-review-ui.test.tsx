@@ -4,6 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import ReviewPanel from '../../src/components/editor/ReviewPanel'
 import { db } from '../../src/lib/db/schema'
 import { useReviewResultStore } from '../../src/stores/review-result'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
+import { seedCurrentProject } from '../helpers/current-workspace'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
@@ -40,10 +42,7 @@ describe('CONSISTENCY-4 · ReviewPanel 存亡 finding 出口', () => {
 
   it('真实 Dexie 章序与死亡 Canon 经闭集引用进入硬冲突卡片', async () => {
     const now = Date.now()
-    const projectId = await db.projects.add({
-      name: '存亡 UI 验收', genre: '', description: '', targetWordCount: 0,
-      enableMultiWorld: false, createdAt: now, updatedAt: now,
-    } as any) as number
+    const projectId = await seedCurrentProject({ name: '存亡 UI 验收', createdAt: now, updatedAt: now })
     const volumeId = await db.outlineNodes.add({
       projectId, parentId: null, type: 'volume', title: '卷一',
       summary: '', order: 0, createdAt: now, updatedAt: now,
@@ -67,7 +66,7 @@ describe('CONSISTENCY-4 · ReviewPanel 存亡 finding 出口', () => {
       notes: '', createdAt: now, updatedAt: now,
     } as any) as number
     const characterId = await db.characters.add({
-      projectId, name: '林飞', role: 'protagonist',
+      projectId, name: '林飞',
       roleWeight: 'main', moralAxis: 'good', orderAxis: 'lawful',
       shortDescription: '', appearance: '', personality: '', background: '',
       motivation: '', abilities: '', relationships: '', arc: '',
@@ -81,6 +80,7 @@ describe('CONSISTENCY-4 · ReviewPanel 存亡 finding 出口', () => {
       validFromChapterId: deathChapterId, validToChapterId: null,
       status: 'confirmed', locked: false, createdAt: now, updatedAt: now,
     })
+    await finalizeCurrentFixtureV1(projectId)
 
     const chapterContent = '林飞推门走进议事厅，亲手展开了地图。'
     startMock.mockResolvedValue(JSON.stringify({

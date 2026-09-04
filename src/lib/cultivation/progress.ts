@@ -21,7 +21,7 @@ import {
   resolveScopeLike,
   scopeTransactionTables,
   type WorkspaceScopeLike,
-} from '../world-engine/scope'
+} from '../workspace/scope'
 import type { WorkspaceScope } from '../types/world-ownership'
 
 export interface CultivationProgressCandidate {
@@ -737,9 +737,9 @@ export async function readCultivationProgressContext(
   outlineNodeId?: number | null,
   workspaceScope?: WorkspaceScope,
 ): Promise<string> {
-  const project = await db.projects.get(projectId)
-  if (!project?.includeCultivationProgressInAI) return ''
   const scope = await resolveReadScopeLike(workspaceScope ?? projectId)
+  const work = await db.works.get(scope.workId)
+  if (!work?.includeCultivationProgressInAI) return ''
   const [rows, chapters, outlineNodes] = await Promise.all([
     readOwnedRows<CultivationProgress>(scope, 'cultivationProgress', { owner: 'work' }),
     readOwnedRows<Chapter>(scope, 'chapters', { owner: 'work' }),

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../../src/lib/db/schema'
+import { loadProductProductionConsultationSourceV2 } from '../../src/lib/product-production/world-source'
 import {
   generateTtrpgCampaignProposalCandidateV2,
   ttrpgCampaignDesignFromProposalCandidateV2,
@@ -8,45 +9,46 @@ import {
   createAuthorGuidedTtrpgCampaignDesignV2,
   parseTtrpgCampaignDesignV2,
 } from '../../src/lib/ttrpg/campaign-proposal'
-import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
+import { createWorkspace } from '../../src/lib/workspace/create-workspace'
+import { stampNewRecord } from '../../src/lib/workspace/scope'
 import { createWorldRevision, publishWorldRevision } from '../../src/lib/world-engine/releases'
 
 async function workspace() {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    name: 'TTRPG 提案 Harness', genre: 'mystery', genres: ['mystery'], status: 'drafting',
-    description: '', targetWordCount: 50_000, createdAt: now, updatedAt: now,
-  } as never) as number
-  const owned = await ensureWorkspaceOwnership(projectId)
+  const owned = await createWorkspace({
+    name: 'TTRPG 提案 Harness', genres: ['mystery'], status: 'drafting',
+    description: '', targetWordCount: 50_000,
+  }, { purpose: 'world-engine', kind: 'novel', novelProfile: 'long' })
+  const { projectId } = owned.scope
   await db.characters.bulkAdd([
-    {
-      projectId, worldId: owned.scope.worldId, workId: owned.scope.workId,
-      isCrossWorld: true, name: '林舟', role: 'protagonist', roleWeight: 'main',
+    stampNewRecord(owned.scope, 'characters', {
+      projectId, isCrossWorld: true, name: '林舟', roleWeight: 'main',
+      moralAxis: 'good', orderAxis: 'lawful',
       identity: '调查失踪信号的守灯人', createdAt: now, updatedAt: now,
-    },
-    {
-      projectId, worldId: owned.scope.worldId, workId: owned.scope.workId,
-      isCrossWorld: true, name: '潮汐学者', role: 'supporting', roleWeight: 'npc',
+    } as any, { owner: 'world' }),
+    stampNewRecord(owned.scope, 'characters', {
+      projectId, isCrossWorld: true, name: '潮汐学者', roleWeight: 'npc',
+      moralAxis: 'neutral', orderAxis: 'neutral',
       identity: '掌握封锁记录的学者', createdAt: now, updatedAt: now,
-    },
+    } as any, { owner: 'world' }),
   ] as never[])
-  await db.importantLocations.add({
-    projectId, worldId: owned.scope.worldId, workId: owned.scope.workId,
+  await db.importantLocations.add(stampNewRecord(owned.scope, 'importantLocations', {
+    projectId,
     parentId: null, name: '雾港潮门', type: 'harbor', description: '潮门将在暴潮前封闭。',
     createdAt: now, updatedAt: now,
-  } as never)
-  const revision = await createWorldRevision({ scope: owned.scope, label: '冻结提案来源', selectedNarrativeModuleIds: [] })
+  } as any, { owner: 'world' }))
+  const revision = await createWorldRevision({ scope: owned.scope, label: '冻结提案来源' })
   const release = await publishWorldRevision(revision.id!)
   return { ...owned, release }
 }
 
-function validOutput(worldHash: string) {
+function validOutput(requiredSourceRef: string) {
   const proposal = (key: string, structure: 'linear' | 'branching' | 'node-based' | 'sandbox', focus: string) => ({
     proposalKey: key, title: focus, pitch: `${focus}的独立玩法方向。`,
     background: `雾港封锁记录引发${focus}。`, coreConflict: `玩家必须解决${focus}并承担代价。`,
     structure, opening: `潮门关闭前，${focus}首先显现。`,
     frontConcepts: [`${focus}的对手推进六格 Clock`], secretConcepts: [`${focus}背后存在可交叉验证的隐情`],
-    endingConcepts: [`阻止${focus}`, `接受${focus}的局部后果`], sourceRefs: [`world:${worldHash}`],
+    endingConcepts: [`阻止${focus}`, `接受${focus}的局部后果`], sourceRefs: [requiredSourceRef],
   })
   return JSON.stringify({ proposals: [
     proposal('proposal.evidence', 'node-based', '证据网络'),
@@ -61,6 +63,8 @@ describe('TTRPG-3M · durable campaign proposal Harness', () => {
 
   it('只读冻结 WorldRelease，协议失败仅修复一次，产出三种有来源候选与终端运行证据', async () => {
     const owned = await workspace()
+    const catalog = await loadProductProductionConsultationSourceV2({ scope: owned.scope, worldReleaseId: owned.release.id! })
+    const requiredSourceRef = `world-reference:${catalog.worldReference.referenceHash}`
     let calls = 0
     const generated = await generateTtrpgCampaignProposalCandidateV2({
       scope: owned.scope, worldReleaseId: owned.release.id!,
@@ -71,7 +75,7 @@ describe('TTRPG-3M · durable campaign proposal Harness', () => {
       },
       runAI: async () => {
         calls += 1
-        return calls === 1 ? JSON.stringify({ proposals: [] }) : validOutput(owned.release.contentHash)
+        return calls === 1 ? JSON.stringify({ proposals: [] }) : validOutput(requiredSourceRef)
       },
     })
     expect(calls).toBe(2)
@@ -82,7 +86,7 @@ describe('TTRPG-3M · durable campaign proposal Harness', () => {
     expect(generated.candidate.candidateHash).toMatch(/^[0-9a-f]{64}$/)
     expect(generated.candidate.proposals).toHaveLength(3)
     expect(new Set(generated.candidate.proposals.map(item => item.structure)).size).toBe(3)
-    expect(generated.candidate.proposals.every(item => item.sourceRefs.includes(`world:${owned.release.contentHash}`))).toBe(true)
+    expect(generated.candidate.proposals.every(item => item.sourceRefs.includes(requiredSourceRef))).toBe(true)
     expect(generated.snapshot.projection.state).toBe('completed')
     expect(generated.snapshot.projection.terminalReceiptHash).toMatch(/^[0-9a-f]{64}$/)
     expect(await db.agentRuns.count()).toBe(1)
@@ -106,11 +110,13 @@ describe('TTRPG-3M · durable campaign proposal Harness', () => {
 
   it('只重生成指定分区，并由代码保留其它分区、锁定来源和作者说明', async () => {
     const owned = await workspace()
+    const catalog = await loadProductProductionConsultationSourceV2({ scope: owned.scope, worldReleaseId: owned.release.id! })
+    const requiredSourceRef = `world-reference:${catalog.worldReference.referenceHash}`
     const prior = createAuthorGuidedTtrpgCampaignDesignV2({
       sourceWorldContentHash: owned.release.contentHash,
       title: '潮门失踪案', background: '作者冻结的旧背景', coreConflict: '作者冻结的旧冲突',
       opening: '作者冻结的旧开场', structure: 'node-based',
-      sourceRefs: [`world:${owned.release.contentHash}`],
+      sourceRefs: [requiredSourceRef],
     })
     prior.selection.sectionSources.fronts = 'proposal.faction-pressure'
     prior.selection.lockedSections = ['fronts']
@@ -124,7 +130,7 @@ describe('TTRPG-3M · durable campaign proposal Harness', () => {
         opening: '作者冻结的旧开场', structure: 'node-based',
       },
       priorDesign: prior, regenerateSections: ['secrets'],
-      runAI: async () => validOutput(owned.release.contentHash),
+      runAI: async () => validOutput(requiredSourceRef),
     })
     expect(generated.candidate.regeneratedSections).toEqual(['secrets'])
     expect(generated.candidate.preservedSections).toEqual(['background', 'coreConflict', 'opening', 'fronts', 'endings'])

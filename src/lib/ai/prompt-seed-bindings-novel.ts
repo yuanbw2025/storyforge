@@ -38,7 +38,7 @@ export const NOVEL_PROMPT_SEED_BINDINGS: Record<string, NovelPromptSeedBinding> 
       {
         "variable": "length_mode",
         "label": "篇幅模式",
-        "projectField": "lengthMode",
+        "workField": "lengthMode",
         "manual": true,
         "required": false,
         "placeholder": "可补充或修正自动读取的项目资料"
@@ -46,7 +46,7 @@ export const NOVEL_PROMPT_SEED_BINDINGS: Record<string, NovelPromptSeedBinding> 
       {
         "variable": "serialization_mode",
         "label": "连载模式",
-        "projectField": "serializationMode",
+        "workField": "serializationMode",
         "manual": true,
         "required": false,
         "placeholder": "可补充或修正自动读取的项目资料"
@@ -54,7 +54,7 @@ export const NOVEL_PROMPT_SEED_BINDINGS: Record<string, NovelPromptSeedBinding> 
       {
         "variable": "genre_candidates",
         "label": "候选题材",
-        "projectField": "genres",
+        "workField": "genres",
         "manual": true,
         "required": false,
         "placeholder": "可补充或修正自动读取的项目资料"
@@ -110,7 +110,7 @@ export const NOVEL_PROMPT_SEED_BINDINGS: Record<string, NovelPromptSeedBinding> 
       {
         "variable": "length_mode",
         "label": "篇幅模式",
-        "projectField": "lengthMode",
+        "workField": "lengthMode",
         "manual": true,
         "required": false,
         "placeholder": "可补充或修正自动读取的项目资料"
@@ -118,7 +118,7 @@ export const NOVEL_PROMPT_SEED_BINDINGS: Record<string, NovelPromptSeedBinding> 
       {
         "variable": "delivery_mode",
         "label": "交付 · 模式",
-        "projectField": "serializationMode",
+        "workField": "serializationMode",
         "manual": true,
         "required": false,
         "placeholder": "可补充或修正自动读取的项目资料"
@@ -137,7 +137,7 @@ export const NOVEL_PROMPT_SEED_BINDINGS: Record<string, NovelPromptSeedBinding> 
       {
         "variable": "candidate_genres",
         "label": "候选题材",
-        "projectField": "genres",
+        "workField": "genres",
         "manual": true,
         "required": false,
         "placeholder": "可补充或修正自动读取的项目资料"
@@ -783,7 +783,7 @@ export const NOVEL_PROMPT_SEED_BINDINGS: Record<string, NovelPromptSeedBinding> 
       {
         "variable": "length_mode",
         "label": "篇幅模式",
-        "projectField": "lengthMode",
+        "workField": "lengthMode",
         "manual": true,
         "required": false,
         "placeholder": "可补充或修正自动读取的项目资料"
@@ -920,7 +920,7 @@ export const NOVEL_PROMPT_SEED_BINDINGS: Record<string, NovelPromptSeedBinding> 
       {
         "variable": "length_mode",
         "label": "篇幅模式",
-        "projectField": "lengthMode",
+        "workField": "lengthMode",
         "manual": true,
         "required": false,
         "placeholder": "可补充或修正自动读取的项目资料"
@@ -980,7 +980,7 @@ export const NOVEL_PROMPT_SEED_BINDINGS: Record<string, NovelPromptSeedBinding> 
       {
         "variable": "length_mode",
         "label": "篇幅模式",
-        "projectField": "lengthMode",
+        "workField": "lengthMode",
         "manual": true,
         "required": false,
         "placeholder": "可补充或修正自动读取的项目资料"
@@ -988,7 +988,7 @@ export const NOVEL_PROMPT_SEED_BINDINGS: Record<string, NovelPromptSeedBinding> 
       {
         "variable": "delivery_mode",
         "label": "交付 · 模式",
-        "projectField": "serializationMode",
+        "workField": "serializationMode",
         "manual": true,
         "required": false,
         "placeholder": "可补充或修正自动读取的项目资料"
@@ -3133,7 +3133,7 @@ export const NOVEL_PROMPT_SEED_BINDINGS: Record<string, NovelPromptSeedBinding> 
       {
         "variable": "genre",
         "label": "题材",
-        "projectField": "genres",
+        "workField": "genres",
         "manual": true,
         "required": false,
         "placeholder": "可补充或修正自动读取的项目资料"
@@ -3267,7 +3267,7 @@ export const NOVEL_PROMPT_SEED_BINDINGS: Record<string, NovelPromptSeedBinding> 
       {
         "variable": "genre",
         "label": "题材",
-        "projectField": "genres",
+        "workField": "genres",
         "manual": true,
         "required": false,
         "placeholder": "可补充或修正自动读取的项目资料"
@@ -4531,7 +4531,7 @@ export const NOVEL_PROMPT_SEED_BINDINGS: Record<string, NovelPromptSeedBinding> 
       {
         "variable": "serial",
         "label": "连载模式",
-        "projectField": "serializationMode",
+        "workField": "serializationMode",
         "manual": true,
         "required": false,
         "placeholder": "可补充或修正自动读取的项目资料"

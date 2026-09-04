@@ -11,7 +11,6 @@ function character(patch: Partial<Character> = {}): Character {
     id: 1,
     projectId: 1,
     name: '测试角色',
-    role: 'protagonist',
     roleWeight: 'main',
     moralAxis: 'neutral',
     orderAxis: 'neutral',

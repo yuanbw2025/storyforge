@@ -1,25 +1,42 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { readFileSync } from 'node:fs'
-import path from 'node:path'
 import { db } from '../../src/lib/db/schema'
 import {
   createWorldPackage,
   importWorldPackage,
   inspectWorldPackage,
-  WORLD_PACKAGE_V1_REQUIRED_TABLES,
-} from '../../src/lib/product/world-package'
+} from '../../src/lib/world-engine/world-package'
+import { createWorkspace } from '../../src/lib/workspace/create-workspace'
+import { createWorldRevision, publishWorldRevision } from '../../src/lib/world-engine/releases'
+import { hashWorldReleaseValueV1 } from '../../src/lib/world-engine/release-hash'
+import { stampNewRecord } from '../../src/lib/workspace/scope'
+
+const ALL_WORLD_PACKAGE_USES = {
+  'world-remix': true,
+  ttrpg: true,
+  'character-interaction': true,
+  'ai-town': true,
+  'text-adventure': true,
+  avg: true,
+  'text-open-world': true,
+} as const
 
 function canonicalize(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonicalize)
-  if (!value || typeof value !== 'object') return value
+  if (value == null || typeof value !== 'object') return value
   return Object.fromEntries(Object.keys(value as Record<string, unknown>).sort()
     .map(key => [key, canonicalize((value as Record<string, unknown>)[key])]))
 }
 
-async function digest(value: unknown): Promise<string> {
-  const bytes = new TextEncoder().encode(JSON.stringify(canonicalize(value)))
-  const hash = await crypto.subtle.digest('SHA-256', bytes)
-  return Array.from(new Uint8Array(hash), byte => byte.toString(16).padStart(2, '0')).join('')
+async function resignPackageIntegrity(pkg: Awaited<ReturnType<typeof createWorldPackage>>): Promise<void> {
+  const payload = {
+    format: pkg.format,
+    packageVersion: pkg.packageVersion,
+    manifest: pkg.manifest,
+    release: pkg.release,
+  }
+  const bytes = new TextEncoder().encode(JSON.stringify(canonicalize(payload)))
+  const digest = await crypto.subtle.digest('SHA-256', bytes)
+  pkg.integrity.digest = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('')
 }
 
 describe('PLATFORM-1 · 本地世界发布包', () => {
@@ -32,41 +49,74 @@ describe('PLATFORM-1 · 本地世界发布包', () => {
 
   async function seedProject() {
     const now = Date.now()
-    const projectId = await db.projects.add({
-      name: '潮汐之后', genre: 'kehuan', genres: ['kehuan'], description: '海平面吞没大陆后的漂浮聚落。',
-      status: 'ongoing', targetWordCount: 500000, currentWordCount: 1200, enableMultiWorld: true,
-      worldCode: 'W-TIDE-0001', worldVersion: 3, createdAt: now, updatedAt: now,
-    } as any) as number
-    const groupId = await db.worldGroups.add({ projectId, name: '主世界', slug: 'main', order: 0, createdAt: now, updatedAt: now } as any) as number
-    await db.worldviews.add({ projectId, worldGroupId: groupId, worldOrigin: '退潮后海床城市升起。', createdAt: now, updatedAt: now } as any)
-    await db.characters.add({ projectId, homeWorldGroupId: groupId, name: '守灯人', role: 'protagonist', description: '看守潮汐灯塔。', createdAt: now, updatedAt: now } as any)
-    const volumeId = await db.outlineNodes.add({ projectId, parentId: null, type: 'volume', title: '不应被分享的正文结构', summary: '', order: 0, createdAt: now, updatedAt: now } as any) as number
-    await db.chapters.add({ projectId, outlineNodeId: volumeId, title: '不应导出的章节', content: '<p>作者私稿</p>', wordCount: 5, status: 'draft', order: 0, createdAt: now, updatedAt: now } as any)
-    return projectId
+    const created = await createWorkspace({
+      name: '潮汐之后', genres: ['kehuan'], description: '海平面吞没大陆后的漂浮聚落。',
+      status: 'drafting', targetWordCount: 0, enableMultiWorld: true,
+    }, { purpose: 'world-engine', kind: 'novel', novelProfile: 'long' })
+    const groupId = await db.worldGroups.add(stampNewRecord(created.scope, 'worldGroups', {
+      projectId: created.scope.projectId, name: '主世界', slug: 'main', order: 0, createdAt: now, updatedAt: now,
+    } as any, { owner: 'world' })) as number
+    await db.worldviews.add(stampNewRecord(created.scope, 'worldviews', {
+      projectId: created.scope.projectId, worldGroupId: groupId,
+      worldOrigin: '退潮后海床城市升起。', createdAt: now, updatedAt: now,
+    } as any, { owner: 'world' }))
+    await db.characters.add(stampNewRecord(created.scope, 'characters', {
+      projectId: created.scope.projectId, homeWorldGroupId: groupId,
+      name: '守灯人', roleWeight: 'main', moralAxis: 'good', orderAxis: 'lawful',
+      shortDescription: '看守潮汐灯塔。', appearance: '', personality: '', background: '',
+      motivation: '', abilities: '', relationships: '[]', arc: '', createdAt: now, updatedAt: now,
+    } as any, { owner: 'world' }))
+    const volumeId = await db.outlineNodes.add(stampNewRecord(created.scope, 'outlineNodes', {
+      projectId: created.scope.projectId, parentId: null, type: 'volume', title: '第一卷',
+      summary: '世界引擎可选的完整小说语义', order: 0, createdAt: now, updatedAt: now,
+    } as any, { owner: 'work' })) as number
+    await db.chapters.add(stampNewRecord(created.scope, 'chapters', {
+      projectId: created.scope.projectId, outlineNodeId: volumeId, title: '退潮之日',
+      content: '<p>作者确认的世界正文</p>', wordCount: 10, status: 'draft', order: 0,
+      createdAt: now, updatedAt: now,
+    } as any, { owner: 'work' }))
+    await db.productMediaAssets.add(stampNewRecord(created.scope, 'productMediaAssets', {
+      projectId: created.scope.projectId, assetKey: 'private-cover', version: 1,
+      kind: 'background', name: '产品私有背景', mimeType: 'image/png', byteSize: 10,
+      contentHash: 'a'.repeat(64), createdAt: now, updatedAt: now,
+    } as any, { owner: 'work' }))
+    const revision = await createWorldRevision({ scope: created.scope, label: '世界语义版本一' })
+    const release = await publishWorldRevision(revision.id!)
+    return { ...created, release }
   }
 
-  it('只发布注册表明确允许的世界表，并保留用途、许可与完整性', async () => {
-    const projectId = await seedProject()
-    const pkg = await createWorldPackage(projectId, {
+  it('v3 只发布注册表登记的世界语义，并用当前产品身份保留用途、许可与完整性', async () => {
+    const seeded = await seedProject()
+    const pkg = await createWorldPackage(seeded.release.id!, {
       authorName: '林岚', license: 'CC-BY-4.0',
-      allowedUses: { writing: true, ttrpg: true, characterChat: false, textGame: false },
+      allowedUses: {
+        ...ALL_WORLD_PACKAGE_USES,
+        'character-interaction': false,
+        'ai-town': false,
+        avg: false,
+      },
       contentWarnings: ['灾难'],
     })
     const report = await inspectWorldPackage(pkg)
 
     expect(report.valid).toBe(true)
-    expect(pkg.manifest.packageId).toBe('W-TIDE-0001@v3')
-    expect(pkg.manifest.allowedUses.characterChat).toBe(false)
-    expect((pkg.portableProject as any).characters).toHaveLength(1)
-    expect((pkg.portableProject as any).chapters).toBeUndefined()
-    expect((pkg.portableProject as any).nodeFlows).toBeUndefined()
+    expect(report.importable).toBe(true)
+    expect(pkg.manifest.packageId).toBe(`${seeded.world.code}@v1`)
+    expect(pkg.packageVersion).toBe(3)
+    expect(pkg.manifest.allowedUses['character-interaction']).toBe(false)
+    expect(pkg.release.manifest.semanticContract).toBe(3)
+    expect(pkg.release.manifest.records.characters).toHaveLength(1)
+    expect(pkg.release.manifest.records.chapters).toHaveLength(1)
+    expect(pkg.release.manifest.records.productMediaAssets).toBeUndefined()
+    expect(pkg.release.manifest.selectedTables).not.toContain('productMediaAssets')
+    expect(pkg.release.manifest).not.toHaveProperty('selectedNarrativeModules')
   })
 
-  it('篡改发布信息或混入私有正文时拒绝导入', async () => {
-    const projectId = await seedProject()
-    const pkg = await createWorldPackage(projectId, {
+  it('篡改发布信息或混入产品媒资时拒绝导入', async () => {
+    const seeded = await seedProject()
+    const pkg = await createWorldPackage(seeded.release.id!, {
       authorName: '匿名', license: 'ALL-RIGHTS-RESERVED',
-      allowedUses: { writing: true, ttrpg: false, characterChat: false, textGame: false },
+      allowedUses: { ...ALL_WORLD_PACKAGE_USES, ttrpg: false, 'character-interaction': false, 'ai-town': false },
     })
     const tampered = JSON.parse(JSON.stringify(pkg))
     tampered.manifest.description = '被替换的描述'
@@ -75,77 +125,99 @@ describe('PLATFORM-1 · 本地世界发布包', () => {
     expect(tamperedReport.errors.join('；')).toContain('完整性校验失败')
 
     const leaked = JSON.parse(JSON.stringify(pkg))
-    leaked.portableProject.chapters = [{ title: '私稿' }]
+    leaked.release.manifest.semanticSnapshot.productMediaAssets = [{ name: '越界媒资' }]
     const leakedReport = await inspectWorldPackage(leaked)
     expect(leakedReport.valid).toBe(false)
-    expect(leakedReport.errors.join('；')).toContain('私有表「chapters」')
+    expect(leakedReport.errors.join('；')).toMatch(/productMediaAssets|完整性校验失败/)
     await expect(importWorldPackage(leaked)).rejects.toThrow('世界分享包预检失败')
     expect(await db.projects.count()).toBe(1)
   })
 
-  it('导入为新本地编号并保存来源，不覆盖原项目或私有正文', async () => {
-    const projectId = await seedProject()
-    const pkg = await createWorldPackage(projectId, {
+  it('目录语义身份不可重标，source manifest 必须完整分区', async () => {
+    const seeded = await seedProject()
+    const pkg = await createWorldPackage(seeded.release.id!, {
+      authorName: '匿名', license: 'ALL-RIGHTS-RESERVED',
+      allowedUses: { ...ALL_WORLD_PACKAGE_USES },
+    })
+    const mutations: Array<(copy: typeof pkg) => void> = [
+      copy => { copy.release.manifest.resourceCatalog![0]!.resourceId = 'world:forged:semantic:story:forged' },
+      copy => { copy.release.manifest.resourceCatalog![0]!.resourceKind = 'forged-kind' },
+      copy => {
+        const resource = copy.release.manifest.resourceCatalog![0]!
+        resource.area = resource.area === 'story' ? 'foundation' : 'story'
+      },
+    ]
+    for (const mutate of mutations) {
+      const copy = structuredClone(pkg)
+      mutate(copy)
+      const report = await inspectWorldPackage(copy)
+      expect(report.valid).toBe(false)
+      expect(report.errors.join('；')).toContain('resourceCatalog 与 dependency/PROJECT_TABLES 语义身份不一致')
+    }
+
+    const partition = structuredClone(pkg)
+    partition.release.manifest.sourceManifest!.selectedResourceIds.pop()
+    const partitionReport = await inspectWorldPackage(partition)
+    expect(partitionReport.valid).toBe(false)
+    expect(partitionReport.errors.join('；')).toContain('selected/omitted 未与 PROJECT_TABLES 完整分区')
+  })
+
+  it('selected table 即使为空也必须在语义 records 中存在，不能被导入器默认为无事发生', async () => {
+    const seeded = await seedProject()
+    const pkg = await createWorldPackage(seeded.release.id!, {
+      authorName: '匿名', license: 'ALL-RIGHTS-RESERVED',
+      allowedUses: { ...ALL_WORLD_PACKAGE_USES },
+    })
+    const emptySelectedTable = pkg.release.manifest.selectedTables.find(table => (
+      Array.isArray(pkg.release.manifest.records[table])
+      && pkg.release.manifest.records[table]!.length === 0
+    ))
+    expect(emptySelectedTable).toBeTruthy()
+    const missing = structuredClone(pkg)
+    delete missing.release.manifest.records[emptySelectedTable!]
+    missing.release.contentHash = await hashWorldReleaseValueV1(missing.release.manifest)
+    missing.manifest.releaseHash = missing.release.contentHash
+    await resignPackageIntegrity(missing)
+
+    const report = await inspectWorldPackage(missing)
+    expect(report.valid).toBe(false)
+    expect(report.errors.join('；')).toMatch(/records|selectedTables/)
+    await expect(importWorldPackage(missing)).rejects.toThrow('世界分享包预检失败')
+  })
+
+  it('导入为新本地编号并保存来源，不覆盖原世界或带入产品媒资', async () => {
+    const seeded = await seedProject()
+    const pkg = await createWorldPackage(seeded.release.id!, {
       authorName: '林岚', license: 'CC-BY-SA-4.0',
-      allowedUses: { writing: true, ttrpg: true, characterChat: true, textGame: true },
+      allowedUses: { ...ALL_WORLD_PACKAGE_USES },
     })
     const importedId = await importWorldPackage(pkg)
     const imported = await db.projects.get(importedId)
+    const importedWorld = imported?.activeWorldId == null ? undefined : await db.worlds.get(imported.activeWorldId)
 
-    expect(importedId).not.toBe(projectId)
-    expect(imported?.worldCode).toMatch(/^W-[A-Z0-9]{5}-[A-Z0-9]{4}$/)
-    expect(imported?.worldCode).not.toBe('W-TIDE-0001')
-    expect(imported?.communityOrigin?.sourceWorldCode).toBe('W-TIDE-0001')
-    expect(imported?.communityOrigin?.license).toBe('CC-BY-SA-4.0')
+    expect(importedId).not.toBe(seeded.scope.projectId)
+    expect(imported).not.toHaveProperty('worldCode')
+    expect(imported).not.toHaveProperty('worldVersion')
+    expect(importedWorld?.code).toMatch(/^W-[A-Z0-9]{5}-[A-Z0-9]{4}$/)
+    expect(importedWorld?.code).not.toBe(seeded.world.code)
+    expect(importedWorld?.communityOrigin?.sourceWorldCode).toBe(seeded.world.code)
+    expect(importedWorld?.communityOrigin?.license).toBe('CC-BY-SA-4.0')
     expect(await db.worldviews.where('projectId').equals(importedId).count()).toBe(1)
     expect(await db.characters.where('projectId').equals(importedId).count()).toBe(1)
-    expect(await db.chapters.where('projectId').equals(importedId).count()).toBe(0)
-    expect((await db.projects.get(projectId))?.worldCode).toBe('W-TIDE-0001')
+    expect(await db.chapters.where('projectId').equals(importedId).count()).toBe(1)
+    expect(await db.productMediaAssets.where('projectId').equals(importedId).count()).toBe(0)
+    expect(await db.worldReleases.where('projectId').equals(importedId).count()).toBe(1)
+    expect((await db.worlds.get(seeded.scope.worldId))?.code).toBe(seeded.world.code)
   })
 
-  it('WORLD-2 后仍可预检并导入不含新根表和新发布表的历史 v1 包', async () => {
-    const legacyBackup = JSON.parse(readFileSync(
-      path.resolve(__dirname, '../fixtures/legacy-export-v3.json'),
-      'utf8',
-    )) as Record<string, unknown>
-    const portableProject = Object.fromEntries([
-      ['version', legacyBackup.version],
-      ['exportedAt', legacyBackup.exportedAt],
-      ['project', legacyBackup.project],
-      ...WORLD_PACKAGE_V1_REQUIRED_TABLES.map(table => [table, legacyBackup[table] ?? []]),
-    ])
-    const manifest = {
-      packageId: 'W-LEGACY-0001@v1',
-      sourceWorldCode: 'W-LEGACY-0001',
-      sourceWorldVersion: 1,
-      name: '历史 v1 世界',
-      description: 'WORLD-2 之前导出的世界包',
-      authorName: '历史作者',
-      attribution: '历史作者 · 历史 v1 世界',
-      license: 'CC-BY-4.0',
-      allowedUses: { writing: true, ttrpg: true, characterChat: false, textGame: false },
-      contentWarnings: [],
-      publishedAt: 1,
-    }
-    const payload = {
-      format: 'storyforge.world-package',
-      packageVersion: 1,
-      manifest,
-      portableProject,
-    }
-    const pkg = {
-      ...payload,
-      integrity: { algorithm: 'SHA-256', digest: await digest(payload) },
-    }
-
-    const report = await inspectWorldPackage(pkg)
-    expect(report.valid, report.errors.join('；')).toBe(true)
-    const importedId = await importWorldPackage(pkg)
-    expect(await db.projects.get(importedId)).toMatchObject({
-      name: '全量作品（导入）',
-      worldVersion: 1,
-      communityOrigin: { sourceWorldCode: 'W-LEGACY-0001' },
+  it('未知协议 fail-closed', async () => {
+    const report = await inspectWorldPackage({
+      format: 'storyforge.world-package', packageVersion: 999, manifest: {},
+      integrity: { algorithm: 'SHA-256', digest: '0'.repeat(64) },
     })
-    expect(await db.worldviews.where('projectId').equals(importedId).count()).toBe(2)
+    expect(report.valid).toBe(false)
+    expect(report.importable).toBe(false)
+    await expect(importWorldPackage({ format: 'storyforge.world-package', packageVersion: 999 }))
+      .rejects.toThrow('世界分享包预检失败')
   })
 })

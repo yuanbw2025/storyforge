@@ -6,7 +6,7 @@ import type {
   AnyAgentRunEventV1,
   WorkspaceScope,
 } from '../../types'
-import { scopeTransactionTables } from '../../world-engine/scope'
+import { scopeTransactionTables } from '../../workspace/scope'
 import { parseAgentRunEventV1 } from './event-schema'
 import {
   AgentRunStoreError,
@@ -252,21 +252,21 @@ export async function createAgentRunCheckpointInTransactionV1(input: {
 export async function createAgentRunCheckpointV1(input: {
   scope: WorkspaceScope
   runId: number
-  simulationSessionId?: number
+  productRuntimeSessionId?: number
   resumePayload?: unknown
   expectedLastSequence?: number
   now?: number
 }): Promise<{ checkpoint: AgentRunCheckpointRecord & { id: number }; snapshot: AgentRunSnapshotV1 }> {
   return withAgentRunMutationLockV1(input.runId, () => db.transaction(
     'rw',
-    input.simulationSessionId == null
+    input.productRuntimeSessionId == null
       ? agentRunScopeTransactionTablesV1(input.runId, db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints)
-      : scopeTransactionTables(db.simulationSessions, db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints),
+      : scopeTransactionTables(db.productRuntimeSessions, db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints),
     async () => {
       const snapshot = await readVerifiedAgentRunInTransactionV1(input.scope, input.runId)
       if (
-        input.simulationSessionId != null
-        && snapshot.run.simulationSessionId !== input.simulationSessionId
+        input.productRuntimeSessionId != null
+        && snapshot.run.productRuntimeSessionId !== input.productRuntimeSessionId
       ) fail('checkpoint_scope', '运行实例 owner 与检查点参数不一致')
       if (
         input.expectedLastSequence != null
@@ -317,7 +317,7 @@ export async function readLatestVerifiedAgentRunCheckpointV1(
   return db.transaction(
     'r',
     options.owner === 'instance'
-      ? scopeTransactionTables(db.simulationSessions, db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints)
+      ? scopeTransactionTables(db.productRuntimeSessions, db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints)
       : agentRunScopeTransactionTablesV1(runId, db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints),
     async () => {
       const snapshot = await readVerifiedAgentRunInTransactionV1(scope, runId)

@@ -8,11 +8,12 @@ import {
 } from '../../src/lib/types'
 import { assembleContext } from '../../src/lib/registry/assemble-context'
 import { adoptCharacterDrivenVolumes } from '../../src/lib/story-planning/character-driven-adoption'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
+import { seedCurrentProject } from '../helpers/current-workspace'
 
 async function seedProject() {
-  return await db.projects.add({
+  return await seedCurrentProject({
     name: '角色驱动测试',
-    genre: 'fantasy',
     genres: ['fantasy'],
     status: 'drafting',
     description: '',
@@ -51,18 +52,36 @@ describe('R-CF9C · 持久化角色驱动工作区', () => {
     db.close()
   })
 
+  it('只读取当前 JSON 与当前字段，不再接受旧别名或损坏数据', () => {
+    expect(() => parseCharacterDrivenPlanArcs('{broken')).toThrow('不是有效的当前 JSON 数组')
+    expect(() => parseCharacterDrivenPlanArcs(JSON.stringify([{
+      characterId: null,
+      name: '林舟',
+      role: '主角',
+      initialState: '逃避',
+      targetState: '承担',
+      characterRole: '旧字段',
+    }]))).toThrow('包含非当前字段')
+    expect(() => parseCharacterDrivenPlotVolumes(JSON.stringify([{
+      title: '旧卷名',
+      summary: '旧摘要',
+      characterArcs: '旧弧光',
+      chapters: [],
+    }]))).toThrow('缺少当前字段')
+  })
+
   it('CRUD、版本复制、生成结果和 active 方案均持久化', async () => {
     const projectId = await seedProject()
     const characterId = await db.characters.add({
       projectId,
       name: '林舟',
-      role: 'protagonist',
       roleWeight: 'main',
       moralAxis: 'good',
       orderAxis: 'neutral',
       createdAt: 1,
       updatedAt: 1,
     } as any)
+    await finalizeCurrentFixtureV1(projectId)
     const store = useCharacterDrivenPlanStore.getState()
     const planId = await store.createPlan(projectId, '归乡方案')
     await useCharacterDrivenPlanStore.getState().saveInputs(planId, {
@@ -88,12 +107,13 @@ describe('R-CF9C · 持久化角色驱动工作区', () => {
       version: 2,
       status: 'generated',
     })
-    expect((await db.projects.get(projectId))?.activeCharacterDrivenPlanId).toBe(planId)
+    const activeWorkId = (await db.projects.get(projectId))?.activeWorkId
+    expect((await db.works.get(activeWorkId!))?.activeCharacterDrivenPlanId).toBe(planId)
 
     await useCharacterDrivenPlanStore.getState().deletePlan(planId)
     expect(await db.characterDrivenPlans.get(planId)).toBeUndefined()
     expect((await db.characterDrivenPlans.get(copyId))?.parentPlanId).toBeNull()
-    expect((await db.projects.get(projectId))?.activeCharacterDrivenPlanId).toBeNull()
+    expect((await db.works.get(activeWorkId!))?.activeCharacterDrivenPlanId).toBeNull()
   })
 
   it('连续输入保存按调用顺序落库，后发完整快照不会被较早 blur 覆盖', async () => {
@@ -101,13 +121,13 @@ describe('R-CF9C · 持久化角色驱动工作区', () => {
     const characterId = await db.characters.add({
       projectId,
       name: '林舟',
-      role: 'protagonist',
       roleWeight: 'main',
       moralAxis: 'good',
       orderAxis: 'neutral',
       createdAt: 1,
       updatedAt: 1,
     } as any)
+    await finalizeCurrentFixtureV1(projectId)
     const planId = await useCharacterDrivenPlanStore.getState().createPlan(projectId, '连续保存方案')
     const earlier = useCharacterDrivenPlanStore.getState().saveInputs(planId, {
       arcs: [{
@@ -138,13 +158,13 @@ describe('R-CF9C · 持久化角色驱动工作区', () => {
     const characterId = await db.characters.add({
       projectId,
       name: '林舟（新名）',
-      role: 'protagonist',
       roleWeight: 'main',
       moralAxis: 'good',
       orderAxis: 'neutral',
       createdAt: 1,
       updatedAt: 1,
     } as any)
+    await finalizeCurrentFixtureV1(projectId)
     const planId = await useCharacterDrivenPlanStore.getState().createPlan(projectId, '归乡方案')
     await useCharacterDrivenPlanStore.getState().saveInputs(planId, {
       arcs: [{
@@ -224,6 +244,7 @@ describe('R-CF9C · 持久化角色驱动工作区', () => {
       createdAt: 1,
       updatedAt: 1,
     } as any)
+    await finalizeCurrentFixtureV1(projectId)
 
     const first = await adoptCharacterDrivenVolumes({ projectId, volumes: generated })
     const second = await adoptCharacterDrivenVolumes({ projectId, volumes: generated })

@@ -152,10 +152,10 @@ export function classifyRequestedDomainIdsV1(request: string): Set<DomainAgentId
   const pinnedStoryCoreTask = /^生成故事核心字段。目标字段\s*=\s*(?:logline|concept|theme|centralConflict|plotPattern|mainPlot|subPlots)\b/i.test(request)
   const creativeRulesMention = /创作规则|目标字段\s*=\s*(?:writingStyle|atmosphere|specialRequirements)\b/i.test(request)
   const pinnedCreativeRulesTask = /^生成创作规则字段。目标字段\s*=\s*(?:writingStyle|atmosphere|specialRequirements)\b/i.test(request)
-  const hasOutline = pinnedStoryCoreTask || pinnedCreativeRulesTask
+  const hasOutline = hasWorldGame
     ? false
-    : hasWorldGame
-      ? true
+    : pinnedStoryCoreTask || pinnedCreativeRulesTask
+    ? false
     : hasProse
       ? outlineAction
       : storyCoreMention
@@ -186,9 +186,6 @@ export function classifyRequestedDomainIdsV1(request: string): Set<DomainAgentId
 
 export function selectAgentSkillIdV1(agentId: DomainAgentId, request: string): AgentSkillId {
   if (agentId === 'outline') {
-    if (/(?:文字游戏|分支互动叙事|分支叙事|文字冒险|AVG|视觉小说)/i.test(request)) {
-      return 'outline.world-game'
-    }
     if (/(?:映射|分析|更新).{0,10}(?:本章|章节).{0,10}(?:故事线|进度|交汇)|(?:动态进度|故事线进度)/.test(request)) {
       return 'outline.storyline-progress'
     }

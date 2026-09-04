@@ -12,13 +12,12 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { adopt } from '../../src/lib/registry/adopt'
-import { getTopLevelVolumes, isTopLevelVolumeNode } from '../../src/lib/outline/selectors'
-import { useOutlineStore } from '../../src/stores/outline'
+import { seedCurrentProject } from '../helpers/current-workspace'
 
 async function createProject(): Promise<number> {
   const now = Date.now()
-  return await db.projects.add({
-    name: 'FB10 Test', genre: '', description: '', targetWordCount: 0,
+  return await seedCurrentProject({
+    name: 'FB10 Test', genres: [], description: '', targetWordCount: 0,
     enableMultiWorld: false, createdAt: now, updatedAt: now,
   } as any) as number
 }
@@ -50,21 +49,8 @@ describe('R-FB10 · 卷级大纲采纳写入', () => {
     await adoptVolume(pid, '第一卷 风起', 0)
     const vol = (await db.outlineNodes.where('projectId').equals(pid).toArray())
       .find(n => n.type === 'volume')!
-    // 根因坐实:adopt 旧实现丢弃 parentId:null → 存成 undefined → UI `parentId === null` 严格过滤把卷藏起
     expect(vol.parentId).toBe(null)
     expect(vol.parentId === null).toBe(true)
-  })
-
-  it('左侧卷列表 selector 兼容历史坏数据 parentId 缺失,避免已写入卷被隐藏', () => {
-    const rows = [
-      { projectId: 1, parentId: null, type: 'volume', title: '第一卷', summary: '', order: 1, createdAt: 1, updatedAt: 1 },
-      { projectId: 1, type: 'volume', title: '旧数据卷', summary: '', order: 0, createdAt: 1, updatedAt: 1 },
-      { projectId: 1, parentId: 1, type: 'chapter', title: '第一章', summary: '', order: 0, createdAt: 1, updatedAt: 1 },
-    ] as any[]
-
-    expect(isTopLevelVolumeNode(rows[0])).toBe(true)
-    expect(isTopLevelVolumeNode(rows[1])).toBe(true)
-    expect(getTopLevelVolumes(rows).map(v => v.title)).toEqual(['旧数据卷', '第一卷'])
   })
 
   it('同名卷再采纳:被 skip 且 written 为空、带可反馈的原因(不静默)', async () => {
@@ -102,25 +88,5 @@ describe('R-FB10 · 卷级大纲采纳写入', () => {
     const row = await db.outlineNodes.get(r.written[0].id!)
     expect(row?.summary).toBe('')
     expect(typeof row?.summary).toBe('string')
-  })
-
-  it('store.loadAll 会治愈本地旧脏节点 summary 缺失，纯点击进入大纲不再读 undefined.trim', async () => {
-    const pid = await createProject()
-    const rawId = await db.outlineNodes.add({
-      projectId: pid,
-      parentId: null,
-      type: 'volume',
-      title: '旧脏数据卷',
-      order: 0,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    } as any) as number
-
-    await useOutlineStore.getState().loadAll(pid)
-
-    const loaded = useOutlineStore.getState().nodes.find(node => node.id === rawId)
-    expect(loaded?.summary).toBe('')
-    expect(loaded?.summary.trim()).toBe('')
-    expect(loaded?.parentId).toBe(null)
   })
 })

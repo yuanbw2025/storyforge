@@ -74,7 +74,10 @@ describe('MEMORY-STORAGE-1 · 项目存储工作区设置', () => {
   const project = {
     id: 7,
     name: '项目存储设置验收',
-    workspaceUid: 'ws_01JPROJECTSTORAGE0000000001',
+    workspaceUid: 'WS-00000000-0000-4000-8000-000000000007',
+    workspacePurpose: 'independent-work',
+    activeWorldId: 11,
+    activeWorkId: 12,
     createdAt: 1,
     updatedAt: 1,
   } as Project

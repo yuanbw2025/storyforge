@@ -299,11 +299,11 @@ describe('R-HARNESS85 · verified evidence pair subtype adjudication', () => {
     await expect(verifyH4SubtypeAdjudicationCheckpointV1(completed)).resolves.toBe(true)
   })
 
-  it('accepts and resumes the signed legacy two-call 429 checkpoint from the live run', async () => {
+  it('拒绝把旧式通用错误码伪装成可恢复的 429 检查点', async () => {
     const base = await createBase([CONFLICT_FIXTURE.id])
     const rateLimit = Object.assign(new Error('free users rate limit'), { status: 429 })
     const first = await runH4SubtypeAdjudicationV1({
-      runId: 'h85-legacy-rate-limit-test',
+      runId: 'h85-invalid-rate-limit-test',
       codeRevision: 'h85-test',
       baseCheckpoint: base,
       adjudicator: adjudicatorBinding(),
@@ -319,32 +319,27 @@ describe('R-HARNESS85 · verified evidence pair subtype adjudication', () => {
       resumeFrom: first,
       now: () => 1,
     })
-    const legacy = structuredClone(second)
-    legacy.status = 'failed'
-    legacy.failures = legacy.failures.map(failure => ({
+    const invalid = structuredClone(second)
+    invalid.status = 'failed'
+    invalid.failures = invalid.failures.map(failure => ({
       ...failure,
       code: 'adjudicator_error',
       message: 'AI API Error (429): free users rate limit',
     }))
-    legacy.calls = legacy.calls.map(call => ({ ...call, failureCode: 'adjudicator_error' }))
-    const signedLegacy = await resignCheckpoint(legacy)
+    invalid.calls = invalid.calls.map(call => ({ ...call, failureCode: 'adjudicator_error' }))
+    const signedInvalid = await resignCheckpoint(invalid)
 
-    expect(signedLegacy.attempts[0].count).toBe(2)
-    await expect(verifyH4SubtypeAdjudicationCheckpointV1(signedLegacy)).resolves.toBe(true)
-    const completed = await runH4SubtypeAdjudicationV1({
-      runId: signedLegacy.runId,
-      codeRevision: signedLegacy.codeRevision,
+    expect(signedInvalid.attempts[0].count).toBe(2)
+    await expect(verifyH4SubtypeAdjudicationCheckpointV1(signedInvalid)).resolves.toBe(false)
+    await expect(runH4SubtypeAdjudicationV1({
+      runId: signedInvalid.runId,
+      codeRevision: signedInvalid.codeRevision,
       baseCheckpoint: base,
       adjudicator: adjudicatorBinding(),
       call: async input => ({ output: adjudicationOutput(input.fixture.id) }),
-      resumeFrom: signedLegacy,
+      resumeFrom: signedInvalid,
       now: () => 2,
-    })
-
-    expect(completed.status).toBe('completed')
-    expect(completed.attempts[0].count).toBe(3)
-    expect(completed.calls).toHaveLength(3)
-    await expect(verifyH4SubtypeAdjudicationCheckpointV1(completed)).resolves.toBe(true)
+    })).rejects.toThrow('failed 与终止条件不匹配')
   })
 
   it('rejects re-signed stage hash and call-ledger tampering', async () => {

@@ -13,6 +13,8 @@ import { filterExistingIds } from '../../src/components/outline/DetailedOutlineP
 import { useWorldNodeStore } from '../../src/stores/world-node'
 import { parseWorldPortals } from '../../src/lib/utils/world-portals'
 import type { AIConfig, Location } from '../../src/lib/types'
+import { seedCurrentProject } from '../helpers/current-workspace'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
 
 describe('R-18: request trimming and abort signal', () => {
   afterEach(() => {
@@ -102,8 +104,8 @@ describe('R-18: world portal cleanup', () => {
 
   it('deleting a world node subtree removes reverse portal references and tolerates invalid portal JSON', async () => {
     const now = Date.now()
-    const projectId = await db.projects.add({
-      name: 'R-18-world-node', genre: '', description: '', targetWordCount: 0,
+    const projectId = await seedCurrentProject({
+      name: 'R-18-world-node', genres: [], description: '', targetWordCount: 0,
       enableMultiWorld: false, createdAt: now, updatedAt: now,
     } as any) as number
     const rootId = await db.worldNodes.add(worldNode(projectId, null, 'root', now)) as number
@@ -116,6 +118,7 @@ describe('R-18: world portal cleanup', () => {
       ...worldNode(projectId, null, 'broken', now),
       portalsJSON: '{bad json',
     } as any)
+    await finalizeCurrentFixtureV1(projectId)
 
     await useWorldNodeStore.getState().deleteNode(rootId)
 
@@ -154,7 +157,7 @@ describe('R-18: multiworld context wiring', () => {
 describe('R-18: onboarding settings route', () => {
   it('WelcomeGuide settings CTA goes to a global settings route, not an invalid workspace id', () => {
     const app = readFileSync(resolve(process.cwd(), 'src/App.tsx'), 'utf8')
-    const home = readFileSync(resolve(process.cwd(), 'src/pages/HomePage.tsx'), 'utf8')
+    const home = readFileSync(resolve(process.cwd(), 'src/pages/ProductHubPage.tsx'), 'utf8')
     expect(app).toContain('path="/settings"')
     expect(home).toContain("navigate('/settings')")
     expect(home).not.toContain("navigate('/workspace/settings')")

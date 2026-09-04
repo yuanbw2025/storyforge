@@ -1,4 +1,4 @@
-import type { SimulationTtrpgRestReceiptV2 } from "../types";
+import type { TtrpgRuntimeRestReceiptV2 } from "../types";
 import { OnlineRoomAuthorityError } from "./room-authority";
 
 export interface OnlineTtrpgRestCommandV1 {
@@ -47,7 +47,7 @@ export function parseOnlineTtrpgRestCommandV1(value: unknown): OnlineTtrpgRestCo
   };
 }
 
-export function createOnlineTtrpgRestVisiblePayloadV1(receipt: SimulationTtrpgRestReceiptV2): unknown {
+export function createOnlineTtrpgRestVisiblePayloadV1(receipt: TtrpgRuntimeRestReceiptV2): unknown {
   return {
     eventSequence: receipt.eventSequence,
     restKey: receipt.restKey,

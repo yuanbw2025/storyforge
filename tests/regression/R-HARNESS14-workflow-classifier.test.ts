@@ -20,6 +20,7 @@ import { AgentTeamBudgetTracker } from '../../src/lib/agent/team-budget'
 import { getOrCreateAgentConversation } from '../../src/lib/agent/conversations'
 import type { MasterAgentPlan } from '../../src/lib/agent/orchestrator'
 import type { WorkspaceScope } from '../../src/lib/types'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
 
 const directWorkflow = {
   version: 1 as const,
@@ -28,45 +29,7 @@ const directWorkflow = {
 }
 
 async function createWorkspace(): Promise<WorkspaceScope> {
-  const now = Date.now()
-  const projectId = await db.projects.add({
-    name: 'H14 工作流',
-    genre: 'fantasy',
-    genres: ['fantasy'],
-    description: '',
-    status: 'drafting',
-    targetWordCount: 100_000,
-    worldCode: 'h14-world',
-    worldVersion: 1,
-    createdAt: now,
-    updatedAt: now,
-  } as any) as number
-  const worldId = await db.worlds.add({
-    projectId,
-    code: 'h14-world',
-    name: 'H14 世界',
-    description: '',
-    currentVersion: 1,
-    createdAt: now,
-    updatedAt: now,
-  }) as number
-  const workId = await db.works.add({
-    projectId,
-    worldId,
-    title: 'H14 作品',
-    description: '',
-    genres: ['fantasy'],
-    status: 'drafting',
-    targetWordCount: 100_000,
-    createdAt: now,
-    updatedAt: now,
-  }) as number
-  await db.projects.update(projectId, {
-    activeWorldId: worldId,
-    activeWorkId: workId,
-    ownershipSchemaVersion: 1,
-  })
-  return { projectId, worldId, workId }
+  return (await seedCurrentWorkspace('H14 工作流')).scope
 }
 
 describe.sequential('R-HARNESS14 · 固定工作流分类与 Skill 冻结', () => {
@@ -161,8 +124,8 @@ describe.sequential('R-HARNESS14 · 固定工作流分类与 Skill 冻结', () =
     ])
   })
 
-  it('旧计划不被补写新字段，继续保持原 plan hash 结构和顺序工作流语义', () => {
-    const legacy = {
+  it('缺少冻结 workflow 或 Skill 的计划被当前契约拒绝', () => {
+    const incomplete = {
       summary: '建立世界来源。',
       tasks: [{
         id: 'world-1',
@@ -171,14 +134,11 @@ describe.sequential('R-HARNESS14 · 固定工作流分类与 Skill 冻结', () =
         dependsOn: [],
       }],
     }
-    const parsed = parseMasterAgentPlanV1(legacy)
-    expect(parsed).toEqual(legacy)
-    expect(buildMasterAgentRunContractV1({
-      scope: { projectId: 1, worldId: 2, workId: 3 },
-      worldGroupId: null,
-      plan: parsed,
-      budgetEvidence: new AgentTeamBudgetTracker('balanced').snapshot(),
-    }).workflowKind).toBe('multi-domain-sequential')
+    expect(() => parseMasterAgentPlanV1(incomplete)).toThrow('字段不符合严格契约')
+    expect(() => parseMasterAgentPlanV1({
+      ...incomplete,
+      workflow: directWorkflow,
+    })).toThrow('字段不符合严格契约')
   })
 
   it('未知 workflow、跨 Agent Skill 和 direct 多任务都 fail-closed', () => {
@@ -210,8 +170,8 @@ describe.sequential('R-HARNESS14 · 固定工作流分类与 Skill 冻结', () =
     expect(() => parseMasterAgentPlanV1({
       summary: '伪并行依赖链。',
       tasks: [
-        { id: 'world', agentId: 'world-origin', instruction: '生成世界', dependsOn: [] },
-        { id: 'character', agentId: 'character', instruction: '生成角色', dependsOn: ['world'] },
+        { id: 'world', agentId: 'world-origin', skillId: 'world-origin.worldview-field', instruction: '生成世界', dependsOn: [] },
+        { id: 'character', agentId: 'character', skillId: 'character.create', instruction: '生成角色', dependsOn: ['world'] },
       ],
       workflow: {
         version: 1,
@@ -223,8 +183,8 @@ describe.sequential('R-HARNESS14 · 固定工作流分类与 Skill 冻结', () =
     expect(() => parseMasterAgentPlanV1({
       summary: '共享写目标的伪并行。',
       tasks: [
-        { id: 'world-a', agentId: 'world-origin', instruction: '生成世界甲', dependsOn: [] },
-        { id: 'world-b', agentId: 'world-origin', instruction: '生成世界乙', dependsOn: [] },
+        { id: 'world-a', agentId: 'world-origin', skillId: 'world-origin.worldview-field', instruction: '生成世界甲', dependsOn: [] },
+        { id: 'world-b', agentId: 'world-origin', skillId: 'world-origin.worldview-field', instruction: '生成世界乙', dependsOn: [] },
       ],
       workflow: {
         version: 1,
@@ -240,6 +200,7 @@ describe.sequential('R-HARNESS14 · 固定工作流分类与 Skill 冻结', () =
       projectId: scope.projectId,
       scope,
       worldGroupId: null,
+      purpose: 'master-authoring',
     })
     const plan: MasterAgentPlan = {
       summary: '展开章纲。',

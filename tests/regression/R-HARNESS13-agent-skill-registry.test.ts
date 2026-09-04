@@ -13,7 +13,13 @@ function contractFor(tasks: Parameters<typeof buildMasterAgentRunContractV1>[0][
   return buildMasterAgentRunContractV1({
     scope: { projectId: 1, worldId: 10, workId: 20 },
     worldGroupId: null,
-    plan: { summary: 'Skill 权限测试', tasks },
+    plan: {
+      summary: 'Skill 权限测试',
+      tasks,
+      workflow: tasks.length === 1
+        ? { version: 1, workflowId: 'single-domain-direct', reasonCodes: ['single-explicit-domain'] }
+        : { version: 1, workflowId: 'multi-domain-sequential', reasonCodes: ['multiple-explicit-domains'] },
+    },
     budgetEvidence: new AgentTeamBudgetTracker('balanced').snapshot(),
   })
 }
@@ -50,12 +56,12 @@ describe('R-HARNESS13 · Agent Skill 单一事实源', () => {
 
   it('主 Agent RunContract 从 Skill 派生最小上下文和写权限', () => {
     const contract = contractFor([
-      { id: 'world', agentId: 'world-origin', instruction: '补全世界来源', dependsOn: [] },
-      { id: 'character', agentId: 'character', instruction: '创建角色', dependsOn: ['world'] },
-      { id: 'prose', agentId: 'prose', instruction: '写第一章正文', dependsOn: ['character'] },
+      { id: 'world', agentId: 'world-origin', skillId: 'world-origin.worldview-field', instruction: '补全世界来源', dependsOn: [] },
+      { id: 'character', agentId: 'character', skillId: 'character.create', instruction: '创建角色', dependsOn: ['world'] },
+      { id: 'prose', agentId: 'prose', skillId: 'prose.write', instruction: '写第一章正文', dependsOn: ['character'] },
     ])
 
-    expect(contract.permissions.contextSourceKeys).toContain('projectStatus')
+    expect(contract.permissions.contextSourceKeys).toContain('workStatus')
     expect(contract.permissions.contextSourceKeys).toContain('ragSelection')
     // PROSE-1: prose no longer freezes every potential source into the outer
     // contract; the required Gateway exposes the governed ragSelection catalog.
@@ -82,12 +88,13 @@ describe('R-HARNESS13 · Agent Skill 单一事实源', () => {
 
   it('正文视角不会绕过 Gateway 把角色认知源塞回外层权限', () => {
     const withoutPerspective = contractFor([
-      { id: 'prose', agentId: 'prose', instruction: '写第一章正文', dependsOn: [] },
+      { id: 'prose', agentId: 'prose', skillId: 'prose.write', instruction: '写第一章正文', dependsOn: [] },
     ])
     const withPerspective = contractFor([
       {
         id: 'prose',
         agentId: 'prose',
+        skillId: 'prose.write',
         instruction: '以守灯人视角写第一章正文',
         dependsOn: [],
         perspectiveCharacterId: 7,
@@ -121,10 +128,19 @@ describe('R-HARNESS13 · Agent Skill 单一事实源', () => {
     const prose = getDefaultAgentSkillV1('prose')
     const world = getDefaultAgentSkillV1('world-origin')
     expect(resolveAgentSkillContextSourceKeysV1(world)).toEqual([
-      'projectStatus',
+      'workStatus',
+      'canonAssertions',
       'worldview',
+      'storyCore',
       'powerSystem',
       'codex',
+      'characters',
+      'creativeRules',
+      'worldRules',
+      'historical',
+      'storyArcs',
+      'existingVolumeOutlines',
+      'references',
     ])
     expect(resolveAgentSkillContextSourceKeysV1(prose)).not.toContain('characterKnowledge')
     expect(resolveAgentSkillContextSourceKeysV1(prose, { includeOptional: true }))

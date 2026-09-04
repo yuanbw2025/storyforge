@@ -11,7 +11,7 @@ import {
   resolveScope,
   scopeTransactionTables,
   stampNewRecord,
-} from '../world-engine/scope'
+} from '../workspace/scope'
 import type { WorkspaceScope } from '../types/world-ownership'
 import { hashCanonicalValue } from './run/hash'
 import {
@@ -30,18 +30,19 @@ import { computeMasterCandidateHashV1 } from './run/master-candidate-hash'
 export async function getOrCreateAgentConversation(input: {
   projectId: number
   worldGroupId: number | null
-  purpose?: string
+  purpose: string
   title?: string
   scope?: WorkspaceScope
 }): Promise<AgentConversation> {
   const scope = input.scope ?? await resolveScope({ projectId: input.projectId })
-  const purpose = input.purpose?.trim() || undefined
+  const purpose = input.purpose.trim()
+  if (!purpose) throw new Error('Agent 对话必须声明稳定 purpose。')
   const rows = await readOwnedRows<AgentConversation>(scope, 'agentConversations', { owner: 'work' })
   const current = rows
     .filter(row => (
       row.status === 'active'
       && (row.worldGroupId ?? null) === input.worldGroupId
-      && (purpose ? row.purpose === purpose : row.purpose == null)
+      && row.purpose === purpose
     ))
     .sort((left, right) => right.updatedAt - left.updatedAt)[0]
   if (current) return current
@@ -175,15 +176,16 @@ export async function updateAgentEventCandidate(
     payload = { ...payload, outputHash: await hashCanonicalValue(content) }
   }
 
-  // Legacy conversational candidates have no durable run binding and keep
-  // their original lightweight update semantics. Durable candidates append an
-  // event-store revision so the edited draft remains hash-bound and recoverable.
   if (
-    payload
-    && typeof payload.runId === 'number'
-    && typeof payload.runStepId === 'string'
-    && typeof payload.candidateHash === 'string'
+    !payload
+    || typeof payload.runId !== 'number'
+    || typeof payload.runStepId !== 'string'
+    || typeof payload.candidateHash !== 'string'
+    || event.durableRunId !== payload.runId
   ) {
+    throw new Error('该候选缺少当前 durable Harness 绑定，不能进入正式修订流程。')
+  }
+  {
     const previousCandidateHash = payload.candidateHash
     const {
       candidateHash: _oldHash,
@@ -289,10 +291,4 @@ export async function updateAgentEventCandidate(
     return nextPayload
   }
 
-  const nextPayload = payload ? JSON.stringify(payload) : null
-  await db.agentEvents.update(eventId, {
-    content,
-    ...(nextPayload ? { payload: nextPayload } : {}),
-  })
-  return nextPayload
 }

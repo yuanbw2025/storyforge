@@ -59,7 +59,7 @@ function usageEntry(
     category: meta?.category ?? '',
     provider: config.provider,
     model: config.model,
-    taskKind: taskKind ?? undefined,
+    taskKind,
     inputTokens: usage.inputTokens,
     outputTokens: usage.outputTokens,
   }

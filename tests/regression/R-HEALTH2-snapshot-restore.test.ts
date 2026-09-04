@@ -1,11 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { useBackupStore } from '../../src/stores/backup'
+import { seedCurrentProject } from '../helpers/current-workspace'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
 
 async function seedProject(): Promise<{ projectId: number; chapterId: number }> {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    name: '快照恢复测试', genre: '', description: '', targetWordCount: 0,
+  const projectId = await seedCurrentProject({
+    name: '快照恢复测试', genres: [], description: '', targetWordCount: 0,
     enableMultiWorld: false, createdAt: now, updatedAt: now,
   } as any) as number
   const volumeId = await db.outlineNodes.add({
@@ -20,6 +22,7 @@ async function seedProject(): Promise<{ projectId: number; chapterId: number }> 
     projectId, outlineNodeId, title: '第一章', content: '<p>快照中的原始正文</p>',
     wordCount: 9, status: 'draft', order: 0, createdAt: now, updatedAt: now,
   } as any) as number
+  await finalizeCurrentFixtureV1(projectId)
   return { projectId, chapterId }
 }
 
@@ -71,4 +74,3 @@ describe('HEALTH-2 · 项目快照恢复关键流程', () => {
     expect(remaining.some(snapshot => snapshot.label === '自动 22')).toBe(true)
   })
 })
-

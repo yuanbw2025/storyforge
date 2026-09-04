@@ -89,7 +89,7 @@ import {
   type AgentTeamBudgetProfile,
 } from '../team-budget'
 import { db } from '../../db/schema'
-import { assertRecordInScope, readOwnedRows, scopeTransactionTables } from '../../world-engine/scope'
+import { assertRecordInScope, readOwnedRows, scopeTransactionTables } from '../../workspace/scope'
 import {
   MASTER_CANDIDATE_SEMANTIC_REVIEW_VERIFIER_SET_V1,
   MasterCandidateSemanticReviewBlockedError,
@@ -99,7 +99,7 @@ import {
   verifyMasterCandidateSemanticReviewArtifactV1,
 } from '../master-candidate-semantic-review'
 import { STORY_CORE_FIELDS, resolveStoryCoreFieldV1 } from '../story-core-copilot'
-import { CREATIVE_RULES_FIELDS } from '../creative-rules-copilot'
+import { CREATIVE_RULES_FIELDS, resolveCreativeRulesFieldV1 } from '../creative-rules-copilot'
 import {
   WORLDVIEW_AGENT_FIELDS,
   parseWorldviewFieldOutputBudgetV1,
@@ -137,35 +137,7 @@ import { recordAgentRunArtifactV1 } from '../../memory/artifact-store'
 
 export const MASTER_AGENT_PLAN_CHECKPOINT_KIND_V1 = 'master-agent-plan'
 export const MASTER_AGENT_PLAN_CHECKPOINT_VERSION_V1 = 1 as const
-export const MASTER_AGENT_DURABLE_HARNESS_STORAGE_KEY = 'storyforge:harness:master-agent-durable-v1'
-export const MASTER_AGENT_REPLAN_STORAGE_KEY = 'storyforge:harness:master-agent-replan-v1'
-export const MASTER_CANDIDATE_SEMANTIC_REVIEW_STORAGE_KEY = 'storyforge:harness:master-candidate-semantic-review-v1'
 export const MAX_MASTER_AGENT_REPLANS_V1 = 1
-
-export function isMasterAgentDurableHarnessEnabledV1(): boolean {
-  try {
-    return globalThis.localStorage?.getItem(MASTER_AGENT_DURABLE_HARNESS_STORAGE_KEY) !== 'disabled'
-  } catch {
-    return true
-  }
-}
-
-export function isMasterAgentReplanEnabledV1(): boolean {
-  try {
-    return globalThis.localStorage?.getItem(MASTER_AGENT_REPLAN_STORAGE_KEY) !== 'disabled'
-  } catch {
-    return true
-  }
-}
-
-/** HARNESS-26 release evidence is still pending, so new production runs opt in explicitly. */
-export function isMasterCandidateSemanticReviewEnabledV1(): boolean {
-  try {
-    return globalThis.localStorage?.getItem(MASTER_CANDIDATE_SEMANTIC_REVIEW_STORAGE_KEY) === 'enabled'
-  } catch {
-    return false
-  }
-}
 
 const MAX_PLAN_TASKS = 5
 const MAX_PLAN_SUMMARY_CHARS = 500
@@ -218,6 +190,8 @@ export interface RunDurableMasterAgentInputV1 {
   plan?: MasterAgentPlan
   runId?: number
   budget?: AgentTeamBudgetTracker
+  /** Explicit creation-time policy. The choice is frozen into the durable Run Contract. */
+  candidateSemanticReview?: 'required' | 'disabled'
   signal?: AbortSignal
   onDurableBoundary?: (boundary: MasterAgentDurableBoundaryV1) => void | Promise<void>
   onTask?: (
@@ -232,6 +206,8 @@ export interface MasterAgentDurableDependenciesV1 {
   execute?: typeof executeMasterAgentPlan
   replan?: typeof createMasterAgentReplanV1
   semanticReview?: typeof runMasterCandidateSemanticReviewWithClientV1
+  /** Deterministic failure inspection only; production may never disable the current replan path. */
+  disableAutomaticReplanForTest?: boolean
 }
 
 function fail(message: string): never {
@@ -263,25 +239,21 @@ function dependencyBindings(
     if (!isRecord(item)) fail(`${label}[${index}] 无效`)
     assertKeysWithOptional(
       item,
-      ['taskId', 'outputHash'],
-      ['candidateHash', 'generation', 'verificationReceiptHash'],
+      ['taskId', 'outputHash', 'candidateHash', 'generation'],
+      ['verificationReceiptHash'],
       `${label}[${index}]`,
     )
-    const candidateHash = item.candidateHash === undefined
-      ? undefined
-      : readHash(item.candidateHash, `${label}[${index}].candidateHash`)
-    const generation = item.generation === undefined
-      ? undefined
-      : readInteger(item.generation, `${label}[${index}].generation`)
-    if (generation !== undefined && generation < 1) fail(`${label}[${index}].generation 无效`)
+    const candidateHash = readHash(item.candidateHash, `${label}[${index}].candidateHash`)
+    const generation = readInteger(item.generation, `${label}[${index}].generation`)
+    if (generation < 1) fail(`${label}[${index}].generation 无效`)
     const verificationReceiptHash = item.verificationReceiptHash === undefined
       ? undefined
       : readHash(item.verificationReceiptHash, `${label}[${index}].verificationReceiptHash`)
     return {
       taskId: readString(item.taskId, `${label}[${index}].taskId`, MAX_TASK_ID_CHARS),
       outputHash: readHash(item.outputHash, `${label}[${index}].outputHash`),
-      ...(candidateHash ? { candidateHash } : {}),
-      ...(generation === undefined ? {} : { generation }),
+      candidateHash,
+      generation,
       ...(verificationReceiptHash ? { verificationReceiptHash } : {}),
     }
   })
@@ -471,19 +443,19 @@ function readOptionalStoryArcMutationRequest(
   }
 }
 
-function readOptionalSkillId(
+function readRequiredSkillId(
   value: Record<string, unknown>,
   agentId: DomainAgentId,
   label: string,
-): AgentSkillId | undefined {
-  if (!Object.prototype.hasOwnProperty.call(value, 'skillId')) return undefined
+): AgentSkillId {
+  if (!Object.prototype.hasOwnProperty.call(value, 'skillId')) fail(label + '.skillId 缺失')
   if (typeof value.skillId !== 'string') fail(label + '.skillId 无效')
   const skill = getAgentSkillV1(value.skillId, agentId)
   const allowedModes: Record<DomainAgentId, ReadonlySet<string>> = {
-    'world-origin': new Set(['complete', 'worldview-field', 'story-core', 'creative-rules']),
+    'world-origin': new Set(['worldview-field', 'story-core', 'creative-rules']),
     character: new Set(['create', 'supplement', 'lifecycle']),
     inspiration: new Set(['reverse']),
-    outline: new Set(['auto', 'story-arcs', 'storyline-progress', 'character-driven', 'character-revision', 'world-game', 'volumes', 'chapters']),
+    outline: new Set(['auto', 'story-arcs', 'storyline-progress', 'character-driven', 'character-revision', 'volumes', 'chapters']),
     prose: new Set(['auto', 'generate', 'continue']),
   }
   if (!allowedModes[agentId].has(skill.executionMode)) {
@@ -523,7 +495,7 @@ function assertAcyclic(plan: MasterAgentPlan): void {
 /** Strictly validates the persisted plan instead of trusting a UI plan object. */
 export function parseMasterAgentPlanV1(value: unknown): MasterAgentPlan {
   if (!isRecord(value)) fail('主 Agent 计划必须是对象')
-  assertKeysWithOptional(value, ['summary', 'tasks'], ['workflow'], '主 Agent 计划')
+  assertKeysWithOptional(value, ['summary', 'tasks', 'workflow'], [], '主 Agent 计划')
   const summary = readString(value.summary, '主 Agent 计划 summary', MAX_PLAN_SUMMARY_CHARS)
   if (!Array.isArray(value.tasks) || value.tasks.length < 1 || value.tasks.length > MAX_PLAN_TASKS) {
     fail(`主 Agent 计划任务数必须在 1-${MAX_PLAN_TASKS} 之间`)
@@ -533,8 +505,8 @@ export function parseMasterAgentPlanV1(value: unknown): MasterAgentPlan {
     if (!isRecord(item)) fail(`主 Agent 计划任务 ${index + 1} 无效`)
     assertKeysWithOptional(
       item,
-      ['id', 'agentId', 'instruction', 'dependsOn'],
-      ['perspectiveCharacterId', 'skillId', 'inspirationFragmentIds', 'characterDrivenPlanId', 'characterRevisionRequest', 'characterSupplementRequest', 'characterLifecycleRequest', 'storylineProgressChapterId', 'storyArcMutationRequest', 'promptExecution'],
+      ['id', 'agentId', 'skillId', 'instruction', 'dependsOn'],
+      ['perspectiveCharacterId', 'inspirationFragmentIds', 'characterDrivenPlanId', 'characterRevisionRequest', 'characterSupplementRequest', 'characterLifecycleRequest', 'storylineProgressChapterId', 'storyArcMutationRequest', 'promptExecution'],
       '主 Agent 计划任务 ' + (index + 1),
     )
     const id = readString(item.id, `主 Agent 计划任务 ${index + 1}.id`, MAX_TASK_ID_CHARS)
@@ -555,7 +527,7 @@ export function parseMasterAgentPlanV1(value: unknown): MasterAgentPlan {
     const dependsOn = [...new Set(item.dependsOn as string[])]
     if (dependsOn.includes(id)) fail(`主 Agent 计划任务 ${id} 不得依赖自身`)
     const perspectiveCharacterId = readOptionalPerspectiveCharacterId(item, '主 Agent 计划任务 ' + id)
-    const skillId = readOptionalSkillId(item, agentId, '主 Agent 计划任务 ' + id)
+    const skillId = readRequiredSkillId(item, agentId, '主 Agent 计划任务 ' + id)
     const inspirationFragmentIds = readOptionalInspirationFragmentIds(
       item,
       agentId,
@@ -606,7 +578,7 @@ export function parseMasterAgentPlanV1(value: unknown): MasterAgentPlan {
     return {
       id,
       agentId,
-      ...(skillId !== undefined ? { skillId } : {}),
+      skillId,
       instruction,
       dependsOn,
       ...(perspectiveCharacterId !== undefined ? { perspectiveCharacterId } : {}),
@@ -620,20 +592,18 @@ export function parseMasterAgentPlanV1(value: unknown): MasterAgentPlan {
       ...(promptExecution !== undefined ? { promptExecution } : {}),
     }
   })
-  const workflow = value.workflow === undefined
-    ? undefined
-    : parseMasterWorkflowSelectionV1(value.workflow)
+  const workflow = parseMasterWorkflowSelectionV1(value.workflow)
   const result: MasterAgentPlan = {
     summary,
     tasks,
-    ...(workflow ? { workflow } : {}),
+    workflow,
   }
   const known = new Set(tasks.map(task => task.id))
   tasks.forEach(task => task.dependsOn.forEach(dep => {
     if (!known.has(dep)) fail(`主 Agent 计划任务 ${task.id} 依赖不存在的任务 ${dep}`)
   }))
   assertAcyclic(result)
-  if (workflow) assertMasterWorkflowTaskCompatibilityV1(workflow, tasks)
+  assertMasterWorkflowTaskCompatibilityV1(workflow, tasks)
   return result
 }
 
@@ -661,7 +631,20 @@ function writeTargetsForPlan(plan: MasterAgentPlan): Array<{
   const byTable = new Map<string, { fields: Set<string>; adoptionExtension?: string }>()
   plan.tasks.forEach(task => {
     const skill = resolveAgentSkillV1(task.agentId, task.skillId)
-    skill.writeTargets.forEach(target => {
+    const writeTargets = skill.executionMode === 'worldview-field'
+      ? skill.writeTargets.map(target => target.table === 'worldviews'
+          ? { ...target, fields: [resolveWorldviewAgentFieldV1(task.instruction)] }
+          : target)
+      : skill.executionMode === 'story-core'
+        ? skill.writeTargets.map(target => target.table === 'storyCores'
+            ? { ...target, fields: [resolveStoryCoreFieldV1(task.instruction)] }
+            : target)
+        : skill.executionMode === 'creative-rules'
+          ? skill.writeTargets.map(target => target.table === 'creativeRules'
+              ? { ...target, fields: [resolveCreativeRulesFieldV1(task.instruction)] }
+              : target)
+          : skill.writeTargets
+    writeTargets.forEach(target => {
       const existing = byTable.get(target.table) ?? { fields: new Set<string>() }
       target.fields.forEach(field => existing.fields.add(field))
       if (target.adoptionExtension && existing.adoptionExtension && target.adoptionExtension !== existing.adoptionExtension) {
@@ -686,7 +669,6 @@ function semanticReviewTaskIdsForPlan(plan: MasterAgentPlan): string[] {
     .filter(task => (
       task.dependsOn.length === 0
       && (task.agentId === 'world-origin' || task.agentId === 'inspiration')
-      && requiredContextGatewayWriteTargetForTaskV1(task) == null
     ))
     .map(task => task.id)
 }
@@ -713,7 +695,7 @@ function requiredContextGatewayWriteTargetForTaskV1(task: MasterAgentTask): stri
   // Required Gateway rollout is a Skill contract, not a hard-coded list of
   // domains. Once outline/detail/prose Skills move to required, the Master
   // Agent must derive their canary target from the same frozen write registry
-  // instead of silently retaining the pre-migration world/character allowlist.
+  // instead of introducing a hard-coded world/character allowlist.
   return skill.writeTargets
     .flatMap(target => target.fields.map(field => `${target.table}.${field}`))
     .find(target => isContextGatewayRequiredForWriteTargetV1(skill, target))
@@ -724,13 +706,12 @@ export function buildMasterAgentRunContractV1(input: {
   worldGroupId: number | null
   plan: MasterAgentPlan
   budgetEvidence: AgentTeamBudgetEvidence
-  includeExecutionBindings?: boolean
   includeDependencyReceiptPolicy?: boolean
   includeCandidateSemanticReviewPolicy?: boolean
 }) {
   const plan = parseMasterAgentPlanV1(input.plan)
   const policy = resolveAgentTeamBudgetPolicy(input.budgetEvidence.profile)
-  const workflow = plan.workflow ? getMasterWorkflowV1(plan.workflow) : null
+  const workflow = getMasterWorkflowV1(plan.workflow)
   const includeDependencyReceiptPolicy = input.includeDependencyReceiptPolicy
     ?? workflow?.strategy === 'fan-out'
   const semanticReviewTaskIds = input.includeCandidateSemanticReviewPolicy
@@ -781,9 +762,7 @@ export function buildMasterAgentRunContractV1(input: {
   return {
     version: 1 as const,
     objective: plan.summary,
-    workflowKind: workflow
-      ? workflow.runContractWorkflowKind
-      : 'multi-domain-sequential' as const,
+    workflowKind: workflow.runContractWorkflowKind,
     scope: {
       projectId: input.scope.projectId,
       worldGroupId: input.worldGroupId,
@@ -792,8 +771,7 @@ export function buildMasterAgentRunContractV1(input: {
       contextSourceKeys: sourceKeysForPlan(plan),
       writeTargets: writeTargetsForPlan(plan),
     },
-    ...(input.includeExecutionBindings === false ? {} : {
-      executionBindings: [
+    executionBindings: [
         ...plan.tasks.map(task => ({
           stepId: taskStepId(task.id),
           ...createAgentSkillExecutionBindingV1(resolveAgentSkillV1(task.agentId, task.skillId)),
@@ -821,7 +799,6 @@ export function buildMasterAgentRunContractV1(input: {
             }))
           : []),
       ],
-    }),
     ...(includeDependencyReceiptPolicy ? {
       dependencyReceiptPolicy: {
         requiredForJoin: true as const,
@@ -971,7 +948,6 @@ export interface ReplanDurableMasterAgentRunInputV1 {
 export async function replanDurableMasterAgentRunV1(
   input: ReplanDurableMasterAgentRunInputV1,
 ): Promise<AgentRunSnapshotV1> {
-  if (!isMasterAgentReplanEnabledV1()) fail('主 Agent 有限重规划已通过回滚开关关闭')
   const before = await readAgentRunV1(input.scope, input.runId)
   if (before.projection.state !== 'paused') fail('只有 paused 主 Agent run 可以有限重规划')
   const maxReplans = before.contract.budget.maxReplans ?? 0
@@ -1014,7 +990,6 @@ export async function replanDurableMasterAgentRunV1(
     worldGroupId: before.run.worldGroupId ?? null,
     plan: nextPlan,
     budgetEvidence: parsedBudget,
-    includeExecutionBindings: before.contract.executionBindings !== undefined,
     includeDependencyReceiptPolicy: before.contract.dependencyReceiptPolicy !== undefined,
     includeCandidateSemanticReviewPolicy: before.contract.candidateSemanticReviewPolicy !== undefined,
   }))
@@ -1220,13 +1195,35 @@ function parseCandidatePayload(value: unknown, label: string): MasterCandidatePa
   if (payload.version !== 1) fail(`${label} payload 版本不支持`)
   if (typeof payload.taskId !== 'string' || typeof payload.agentId !== 'string') fail(`${label} payload 缺少任务身份`)
   if (!DOMAIN_AGENT_IDS.includes(payload.agentId as DomainAgentId)) fail(`${label} payload 领域无效`)
-  if (payload.skillId !== undefined) getAgentSkillV1(payload.skillId, payload.agentId)
-  if (payload.executionBinding !== undefined) {
-    assertAgentSkillExecutionBindingV1(
-      payload.executionBinding,
-      resolveAgentSkillV1(payload.agentId, payload.skillId),
-      `${label} executionBinding`,
-    )
+  if (typeof payload.skillId !== 'string') fail(`${label} payload 缺少当前 skillId`)
+  getAgentSkillV1(payload.skillId, payload.agentId)
+  if (payload.executionBinding === undefined) fail(`${label} 缺少当前 executionBinding`)
+  assertAgentSkillExecutionBindingV1(
+    payload.executionBinding,
+    resolveAgentSkillV1(payload.agentId, payload.skillId),
+    `${label} executionBinding`,
+  )
+  if (!Number.isInteger(payload.runGeneration) || payload.runGeneration! < 1) {
+    fail(`${label} runGeneration 无效`)
+  }
+  if (!Array.isArray(payload.dependencyBindings)) {
+    fail(`${label} dependencyBindings 无效`)
+  }
+  for (const [index, binding] of payload.dependencyBindings.entries()) {
+    if (
+      !isRecord(binding)
+      || typeof binding.taskId !== 'string'
+      || !binding.taskId.trim()
+      || typeof binding.outputHash !== 'string'
+      || !/^[a-f0-9]{64}$/u.test(binding.outputHash)
+      || typeof binding.candidateHash !== 'string'
+      || !/^[a-f0-9]{64}$/u.test(binding.candidateHash)
+      || !Number.isInteger(binding.generation)
+      || binding.generation! < 1
+      || (binding.verificationReceiptHash !== undefined
+        && (typeof binding.verificationReceiptHash !== 'string'
+          || !/^[a-f0-9]{64}$/u.test(binding.verificationReceiptHash)))
+    ) fail(`${label} dependencyBindings[${index}] 无效`)
   }
   if (payload.generator !== undefined) {
     if (
@@ -1389,8 +1386,9 @@ function assertCandidateMatchesTaskSkill(
   payload: MasterCandidatePayload,
   label: string,
 ): void {
+  if (typeof payload.skillId !== 'string') fail(`${label} 缺少当前 skillId`)
   const taskSkill = resolveAgentSkillV1(task.agentId, task.skillId)
-  const candidateSkill = resolveAgentSkillV1(payload.agentId, payload.skillId)
+  const candidateSkill = getAgentSkillV1(payload.skillId, payload.agentId)
   if (candidateSkill.id !== taskSkill.id) fail(`${label} 的 Skill 与计划不一致`)
   if (payload.executionBinding !== undefined) {
     assertAgentSkillExecutionBindingV1(payload.executionBinding, taskSkill, `${label} executionBinding`)
@@ -1498,7 +1496,9 @@ export function assertMasterAgentRunContractExecutionBindingsV1(
   contract: AgentRunSnapshotV1['contract'],
   plan: MasterAgentPlan,
 ): void {
-  if (contract.executionBindings === undefined) return
+  if (contract.executionBindings === undefined) {
+    fail('主 Agent RunContract 缺少当前执行绑定')
+  }
   const expected = new Map<string, ReturnType<typeof resolveAgentSkillV1>>()
   for (const task of plan.tasks) {
     expected.set(taskStepId(task.id), resolveAgentSkillV1(task.agentId, task.skillId))
@@ -1715,9 +1715,8 @@ async function readPersistedCandidates(input: {
   const candidateByTask = new Map(candidates.map(candidate => [candidate.payload.taskId, candidate]))
   for (const candidate of candidates) {
     const task = taskById.get(candidate.payload.taskId)!
-    const bindings = candidate.payload.dependencyBindings
-    if (bindings === undefined) continue
-    const candidateGeneration = candidate.payload.runGeneration ?? input.snapshot.projection.generation
+    const bindings = candidate.payload.dependencyBindings!
+    const candidateGeneration = candidate.payload.runGeneration!
     const candidateCarried = input.snapshot.events.some(event => (
       event.generation === input.snapshot.projection.generation
       && event.type === 'candidate.carried-forward'
@@ -1749,7 +1748,7 @@ async function readPersistedCandidates(input: {
         upstream.payload.runId !== candidate.payload.runId
       ) fail(`候选事件 ${candidate.event.id} 的依赖 ${binding.taskId} 跨 Run 或版本不匹配`)
       const upstreamStepId = taskStepId(binding.taskId)
-      const upstreamGeneration = upstream.payload.runGeneration ?? candidateGeneration
+      const upstreamGeneration = upstream.payload.runGeneration!
       const upstreamCarried = input.snapshot.events.some(event => (
         event.generation === binding.generation
         && event.type === 'candidate.carried-forward'
@@ -1789,11 +1788,11 @@ async function readPersistedCandidates(input: {
           candidateHash: binding.candidateHash ?? upstream.payload.candidateHash!,
           outputHash: binding.outputHash,
           receiptHash: binding.verificationReceiptHash,
-          generation: binding.generation ?? candidateGeneration,
+          generation: binding.generation!,
           beforeSequence: joinEvent!.sequence,
           semanticReview: upstream.payload.semanticReview ?? semanticArtifacts.find(artifact => (
             artifact.taskId === binding.taskId
-            && artifact.runGeneration === (binding.generation ?? candidateGeneration)
+            && artifact.runGeneration === binding.generation
             && artifact.candidateTextHash === binding.outputHash
           )),
           generator: upstream.payload.generator,
@@ -1834,6 +1833,10 @@ export async function runDurableMasterAgentPlanV1(
 ): Promise<DurableMasterAgentResultV1> {
   const now = input.now ?? Date.now
   const execute = dependencies.execute ?? executeMasterAgentPlan
+  if (dependencies.disableAutomaticReplanForTest && import.meta.env.MODE !== 'test') {
+    fail('disableAutomaticReplanForTest 仅允许隔离测试环境')
+  }
+  const automaticReplanEnabled = !dependencies.disableAutomaticReplanForTest
   let snapshot: AgentRunSnapshotV1
   let plan: MasterAgentPlan
   let budget: AgentTeamBudgetTracker
@@ -1850,7 +1853,7 @@ export async function runDurableMasterAgentPlanV1(
       worldGroupId: input.worldGroupId,
       plan,
       budgetEvidence: evidence,
-      includeCandidateSemanticReviewPolicy: isMasterCandidateSemanticReviewEnabledV1(),
+      includeCandidateSemanticReviewPolicy: input.candidateSemanticReview === 'required',
     })
     await assertConversationScope(input)
     snapshot = await createAgentRunV1({
@@ -1903,7 +1906,6 @@ export async function runDurableMasterAgentPlanV1(
       worldGroupId: input.worldGroupId,
       plan,
       budgetEvidence: checkpointPayload.budgetEvidence,
-      includeExecutionBindings: snapshot.contract.executionBindings !== undefined,
       includeDependencyReceiptPolicy: snapshot.contract.dependencyReceiptPolicy !== undefined,
       includeCandidateSemanticReviewPolicy: snapshot.contract.candidateSemanticReviewPolicy !== undefined,
     }))
@@ -2068,7 +2070,7 @@ export async function runDurableMasterAgentPlanV1(
       const stepId = taskStepId(task.id)
       let step = snapshot.projection.steps[stepId]
       if (!step) fail(`主 Agent durable run 缺少步骤 ${stepId}`)
-      if (plan.workflow?.workflowId === 'staged-author-confirmed') {
+      if (plan.workflow.workflowId === 'staged-author-confirmed') {
         const unconfirmedDependencies = task.dependsOn.filter(taskId => (
           snapshot.projection.steps[taskStepId(taskId)]?.status !== 'succeeded'
         ))
@@ -2285,6 +2287,7 @@ export async function runDurableMasterAgentPlanV1(
         ...candidatePayload,
         taskId: task.id,
         agentId: task.agentId,
+        skillId: skill.id as AgentSkillId,
         dependsOnTaskIds: [...task.dependsOn],
         workspaceScope: input.scope,
         runId: snapshot.run.id,
@@ -2292,10 +2295,8 @@ export async function runDurableMasterAgentPlanV1(
         runStepId: stepId,
         dependencyBindings: frozenDependencies,
         teamBudgetEvidence: candidate.payload.teamBudgetEvidence ?? budget.snapshot(),
-        ...(snapshot.contract.executionBindings === undefined ? {} : {
-          executionBinding: candidateExecutionBinding
-            ?? createAgentSkillExecutionBindingV1(resolveAgentSkillV1(task.agentId, task.skillId)),
-        }),
+        executionBinding: candidateExecutionBinding
+          ?? createAgentSkillExecutionBindingV1(resolveAgentSkillV1(task.agentId, task.skillId)),
         candidateHash: undefined,
       }
       const draft = candidate.draft
@@ -2359,9 +2360,6 @@ export async function runDurableMasterAgentPlanV1(
       }
       const semanticRequired = snapshot.contract.candidateSemanticReviewPolicy
         ?.taskIds.includes(task.id) === true
-      if (gatewayRequired && semanticRequired) {
-        fail(`主 Agent 任务 ${task.id} 的 Gateway canary 尚未开放并行语义终验`)
-      }
       if (semanticRequired) {
         if (
           (task.agentId !== 'world-origin' && task.agentId !== 'inspiration')
@@ -2777,7 +2775,6 @@ export async function runDurableMasterAgentPlanV1(
       const replanCount = snapshot.events.filter(event => event.type === 'plan.replanned').length
       const replanLimit = snapshot.contract.budget.maxReplans ?? 0
       const replanExhausted = requiresReplan
-        && isMasterAgentReplanEnabledV1()
         && replanCount >= replanLimit
       if (['running', 'awaiting_confirmation'].includes(snapshot.projection.state)) {
         snapshot = replanExhausted
@@ -2822,7 +2819,7 @@ export async function runDurableMasterAgentPlanV1(
         requiresReplan
         && replanFailures.length > 0
         && !replanExhausted
-        && isMasterAgentReplanEnabledV1()
+        && automaticReplanEnabled
       ) {
         let replannedSnapshot: AgentRunSnapshotV1
         try {

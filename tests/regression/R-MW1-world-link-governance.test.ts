@@ -6,43 +6,42 @@ import { executeWorldLinkContextV1 } from '../../src/lib/agent/world-link-contex
 import { CANON_RESOURCE_PROVIDER_V1 } from '../../src/lib/context-gateway/canon-provider'
 import { FIELD_BY_TARGET } from '../../src/lib/registry/field-registry'
 import { useWorldGroupStore } from '../../src/stores/world-group'
-import { stampNewRecord } from '../../src/lib/world-engine/scope'
+import { stampNewRecord } from '../../src/lib/workspace/scope'
 import type { ContextResourceDescriptorV1, WorkspaceScope } from '../../src/lib/types'
+import {
+  addCurrentWorldFixtureV1,
+  addCurrentWorkFixtureV1,
+  seedCurrentWorkspace,
+} from '../helpers/current-workspace'
 
 const now = 1_787_600_000_000
 
 async function seed() {
-  const projectId = await db.projects.add({
-    name: '诸界同名审计', genre: 'fantasy', genres: ['fantasy'], status: 'drafting',
-    description: '', targetWordCount: 1_000_000, enableMultiWorld: true,
-    createdAt: now, updatedAt: now,
-  } as any) as number
-  const worldA = await db.worlds.add({
-    projectId, code: `mw-a-${projectId}`, name: '世界根 A', description: '', currentVersion: 1,
-    createdAt: now, updatedAt: now,
-  }) as number
-  const worldB = await db.worlds.add({
-    projectId, code: `mw-b-${projectId}`, name: '世界根 B', description: '', currentVersion: 1,
-    createdAt: now, updatedAt: now,
-  }) as number
-  const workA = await db.works.add({
-    projectId, worldId: worldA, title: '作品 A', description: '', genres: [], status: 'drafting',
-    targetWordCount: 500_000, createdAt: now, updatedAt: now,
-  } as any) as number
-  const workA2 = await db.works.add({
-    projectId, worldId: worldA, title: '作品 A2', description: '', genres: [], status: 'drafting',
-    targetWordCount: 500_000, createdAt: now, updatedAt: now,
-  } as any) as number
-  const workB = await db.works.add({
-    projectId, worldId: worldB, title: '作品 B', description: '', genres: [], status: 'drafting',
-    targetWordCount: 500_000, createdAt: now, updatedAt: now,
-  } as any) as number
+  const root = await seedCurrentWorkspace('诸界同名审计', { enableMultiWorld: true })
+  const projectId = root.scope.projectId
+  const worldA = root.scope.worldId
+  const workA = root.scope.workId
+  await db.worlds.update(worldA, { name: '世界根 A', updatedAt: now })
+  const secondWorkA = await addCurrentWorkFixtureV1({
+    projectId,
+    worldId: worldA,
+    create: { title: '作品 A2', targetWordCount: 500_000 },
+    now,
+  })
+  const worldBRoot = await addCurrentWorldFixtureV1({ projectId, name: '世界根 B', now: now + 1 })
+  const workBRoot = await addCurrentWorkFixtureV1({
+    projectId,
+    worldId: worldBRoot.id!,
+    create: { title: '作品 B', targetWordCount: 500_000 },
+    now,
+  })
+  const workA2 = secondWorkA.id!
+  const worldB = worldBRoot.id!
+  const workB = workBRoot.id!
   const scopeA = { projectId, worldId: worldA, workId: workA } satisfies WorkspaceScope
   const scopeA2 = { projectId, worldId: worldA, workId: workA2 } satisfies WorkspaceScope
   const scopeB = { projectId, worldId: worldB, workId: workB } satisfies WorkspaceScope
-  await db.projects.update(projectId, { activeWorldId: worldA, activeWorkId: workA, ownershipSchemaVersion: 1 })
-  await db.projects.update(projectId, { worldCode: `mw-a-${projectId}`, worldVersion: 1 })
-
+  await db.projects.update(projectId, { activeWorldId: worldA, activeWorkId: workA })
   const addGroup = (scope: WorkspaceScope, row: Record<string, unknown>) => db.worldGroups.add(stampNewRecord(scope, 'worldGroups', {
     projectId, description: '', icon: '🌐', order: 0, createdAt: now, updatedAt: now, ...row,
   }, { owner: 'world' })) as Promise<number>
@@ -69,11 +68,13 @@ async function seed() {
   }, { owner: 'world' }))
 
   await db.characters.add(stampNewRecord(scopeA, 'characters', {
-    projectId, homeWorldGroupId: groupA, isCrossWorld: false, name: '守门人', role: 'supporting',
+    projectId, homeWorldGroupId: groupA, isCrossWorld: false, name: '守门人',
+    roleWeight: 'secondary', moralAxis: 'neutral', orderAxis: 'neutral',
     shortDescription: 'A 世界角色', createdAt: now, updatedAt: now,
   }, { owner: 'world' }) as any)
   await db.characters.add(stampNewRecord(scopeB, 'characters', {
-    projectId, homeWorldGroupId: groupB, isCrossWorld: false, name: '守门人', role: 'supporting',
+    projectId, homeWorldGroupId: groupB, isCrossWorld: false, name: '守门人',
+    roleWeight: 'secondary', moralAxis: 'neutral', orderAxis: 'neutral',
     shortDescription: 'B 世界角色', createdAt: now, updatedAt: now,
   }, { owner: 'world' }) as any)
   await db.storyArcs.add(stampNewRecord(scopeA2, 'storyArcs', {

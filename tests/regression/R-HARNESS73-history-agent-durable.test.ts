@@ -18,24 +18,13 @@ import {
   type HistoryAgentAdoptionBoundaryV1,
   type HistoryAgentBoundaryV1,
 } from '../../src/lib/agent/run/history-agent-durable'
+import { currentWorkFixtureRecordV1, seedCurrentWorkspace } from '../helpers/current-workspace'
+import { stampCurrentFixtureResourceUidsV1 } from '../helpers/current-resource-identity'
 
 async function seed(suffix = '') {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    name: `镜城史志${suffix}`, genre: 'historical', genres: ['historical'], status: 'drafting',
-    description: '镜税署在星历三百年改写了盐晶流通法。', targetWordCount: 90_000,
-    worldCode: `history-${now}-${suffix}`, worldVersion: 1, enableMultiWorld: true,
-    createdAt: now, updatedAt: now,
-  } as any) as number
-  const worldId = await db.worlds.add({
-    projectId, code: `history-${now}-${suffix}`, name: '镜海世界', description: '',
-    currentVersion: 1, createdAt: now, updatedAt: now,
-  }) as number
-  const workId = await db.works.add({
-    projectId, worldId, title: `盐晶纪事${suffix}`, description: '', genres: ['historical'],
-    status: 'drafting', targetWordCount: 90_000, createdAt: now, updatedAt: now,
-  } as any) as number
-  await db.projects.update(projectId, { activeWorldId: worldId, activeWorkId: workId, ownershipSchemaVersion: 1 })
+  const created = await seedCurrentWorkspace(`镜城史志${suffix}`, { enableMultiWorld: true })
+  const { projectId, worldId, workId } = created.scope
   const worldGroupId = await db.worldGroups.add({
     projectId, worldId, name: '镜城', description: '', type: 'primary', icon: '🪞', order: 0,
     createdAt: now, updatedAt: now,
@@ -68,6 +57,7 @@ async function seed(suffix = '') {
     relatedChapterIds: [], customTimeRange: '星历三世纪', location: '镜海沿岸',
     createdAt: now, updatedAt: now,
   } as any) as number
+  await stampCurrentFixtureResourceUidsV1(projectId)
   return {
     scope: { projectId, worldId, workId } satisfies WorkspaceScope,
     projectId, worldId, workId, worldGroupId, historyId, eventId, keywordId,
@@ -278,10 +268,10 @@ describe.sequential('R-HARNESS73 · 历史双 Agent durable 候选与定点采�
       .find(run => run.contractJson.includes('world-origin.history-storm'))?.status).toBe('cancelled')
 
     const now = Date.now()
-    const otherWorkId = await db.works.add({
+    const otherWorkId = await db.works.add(currentWorkFixtureRecordV1({
       projectId: pending.projectId, worldId: pending.worldId, title: '另一作品', description: '',
       genres: ['historical'], status: 'drafting', targetWordCount: 1_000, createdAt: now, updatedAt: now,
-    } as any) as number
+    })) as number
     expect(await readPendingHistoryAgentCandidateV1({
       scope: { ...pending.scope, workId: otherWorkId }, worldGroupId: pending.worldGroupId, mode: 'storm',
     })).toBeNull()

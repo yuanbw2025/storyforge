@@ -1,5 +1,4 @@
 import type { Chapter, OutlineNode } from '../types'
-import { resolveCanonicalChapterSequence } from '../ai/chapter-memory/canonical-chapter-sequence'
 import { walkOutlineChaptersInCanonicalOrder } from '../outline/canonical-outline-walk'
 
 export interface ProjectionBoundary {
@@ -46,23 +45,6 @@ export function resolveProjectionBoundary(input: {
     targetOrder = orderOfChapter.get(input.chapterId) ?? null
   }
   if (targetOrder != null) return { targetOrder, orderOfChapter, worldOfChapter }
-
-  // 兼容历史“正文存在但大纲节点已丢失”的尾部顺序。
-  if (input.chapterId != null) {
-    const { sequence } = resolveCanonicalChapterSequence(input.outlineNodes, input.chapters)
-    const fallbackOrder = new Map<number, number>()
-    const fallbackWorld = new Map<number, number | null>()
-    sequence.forEach((entry, index) => {
-      if (entry.chapter.id == null) return
-      fallbackOrder.set(entry.chapter.id, index)
-      fallbackWorld.set(entry.chapter.id, entry.worldGroupId)
-    })
-    return {
-      targetOrder: fallbackOrder.get(input.chapterId) ?? null,
-      orderOfChapter: fallbackOrder,
-      worldOfChapter: fallbackWorld,
-    }
-  }
 
   return { targetOrder: null, orderOfChapter, worldOfChapter }
 }

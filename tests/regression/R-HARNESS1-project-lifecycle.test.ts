@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
 import { cascadeDeleteGroup, cascadeDeleteProject } from '../../src/lib/registry/lifecycle'
-import { deleteWork } from '../../src/lib/world-engine/lifecycle'
+import { deleteWork } from '../../src/lib/workspace/lifecycle'
 import {
   appendAgentRunEventV1,
   createAgentRunV1,
@@ -13,6 +13,8 @@ import {
 import { createAgentRunCheckpointV1, verifyAgentRunCheckpointV1 } from '../../src/lib/agent/run/checkpoint'
 import { seedFullProject } from '../helpers/seed-full-project'
 import type { WorkspaceScope } from '../../src/lib/types'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
+import { stampNewRecord } from '../../src/lib/workspace/scope'
 
 function runContract(input: { projectId: number; worldGroupId: number; outlineNodeId: number }) {
   return {
@@ -28,6 +30,7 @@ function runContract(input: { projectId: number; worldGroupId: number; outlineNo
       contextSourceKeys: ['worldview', 'storyCore'],
       writeTargets: [{ table: 'outlineNodes', fields: ['summary'], mode: 'candidate-only' }],
     },
+    runtimeBindingHash: 'a'.repeat(64),
     budget: {
       maxModelCalls: 1,
       maxToolCalls: 0,
@@ -56,55 +59,14 @@ async function createSmallWorkspace(): Promise<{
   outlineNodeId: number
 }> {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    name: '完成凭证移植',
-    genre: 'fantasy',
-    genres: ['fantasy'],
-    description: '',
-    status: 'drafting',
-    targetWordCount: 20_000,
-    createdAt: now,
-    updatedAt: now,
-  } as any) as number
-  const worldId = await db.worlds.add({
-    projectId,
-    code: `receipt-${projectId}`,
-    name: '凭证世界',
-    description: '',
-    currentVersion: 1,
-    createdAt: now,
-    updatedAt: now,
-  }) as number
-  const workId = await db.works.add({
-    projectId,
-    worldId,
-    title: '凭证作品',
-    description: '',
-    genres: ['fantasy'],
-    status: 'drafting',
-    targetWordCount: 20_000,
-    createdAt: now,
-    updatedAt: now,
-  }) as number
-  await db.projects.update(projectId, {
-    activeWorldId: worldId,
-    activeWorkId: workId,
-    ownershipSchemaVersion: 1,
-    worldCode: `receipt-${projectId}`,
-    worldVersion: 1,
-  })
-  const worldGroupId = await db.worldGroups.add({
-    projectId,
-    worldId,
+  const { scope } = await seedCurrentWorkspace('完成凭证移植')
+  const worldGroupId = await db.worldGroups.add(stampNewRecord(scope, 'worldGroups', {
     name: '主世界',
     order: 0,
     createdAt: now,
     updatedAt: now,
-  }) as number
-  const outlineNodeId = await db.outlineNodes.add({
-    projectId,
-    worldId: null,
-    workId,
+  }, { owner: 'world' })) as number
+  const outlineNodeId = await db.outlineNodes.add(stampNewRecord(scope, 'outlineNodes', {
     worldGroupId,
     parentId: null,
     type: 'volume',
@@ -113,8 +75,8 @@ async function createSmallWorkspace(): Promise<{
     order: 0,
     createdAt: now,
     updatedAt: now,
-  }) as number
-  return { scope: { projectId, worldId, workId }, worldGroupId, outlineNodeId }
+  }, { owner: 'work' })) as number
+  return { scope, worldGroupId, outlineNodeId }
 }
 
 async function importedScope(projectId: number): Promise<WorkspaceScope> {
@@ -220,7 +182,7 @@ describe('R-HARNESS1-project-lifecycle · run 全生命周期', () => {
     expect(await db.agentRunCheckpoints.where('projectId').equals(projectDeleteProjectId).count()).toBe(0)
   })
 
-  it('导入 completed run 后追加 receipt stale 证据，不沿用旧完成态', async () => {
+  it('导入 completed run 后追加 receipt stale 证据，不沿用来源完成态', async () => {
     const fixture = await createSmallWorkspace()
     let snapshot = await createAgentRunV1({
       scope: fixture.scope,
@@ -279,7 +241,7 @@ describe('R-HARNESS1-project-lifecycle · run 全生命周期', () => {
     })
   })
 
-  it('多代契约与旧检查点一并重映射，但旧代检查点不能恢复新代运行', async () => {
+  it('多代契约与前代检查点一并重映射，但前代检查点不能恢复新代运行', async () => {
     const fixture = await createSmallWorkspace()
     const created = await createAgentRunV1({
       scope: fixture.scope,
@@ -290,7 +252,7 @@ describe('R-HARNESS1-project-lifecycle · run 全生命周期', () => {
         outlineNodeId: fixture.outlineNodeId,
       }),
     })
-    const oldCheckpoint = await createAgentRunCheckpointV1({
+    const generationOneCheckpoint = await createAgentRunCheckpointV1({
       scope: fixture.scope,
       runId: created.run.id,
     })
@@ -306,7 +268,7 @@ describe('R-HARNESS1-project-lifecycle · run 全生命周期', () => {
       scope: fixture.scope,
       runId: created.run.id,
       contract: nextContract,
-      expectedLastSequence: oldCheckpoint.snapshot.projection.lastSequence,
+      expectedLastSequence: generationOneCheckpoint.snapshot.projection.lastSequence,
     })
 
     const importedProjectId = await importProjectJSON(await exportProjectJSON(fixture.scope.projectId))

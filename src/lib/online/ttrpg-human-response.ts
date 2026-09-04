@@ -1,4 +1,4 @@
-import type { SimulationTtrpgHumanResponseV2 } from "../types";
+import type { TtrpgRuntimeHumanResponseV2 } from "../types";
 import { OnlineRoomAuthorityError } from "./room-authority";
 
 export interface OnlineTtrpgHumanResponseCommandV1 {
@@ -75,7 +75,7 @@ export function parseOnlineTtrpgHumanResponseCommandV1(
 }
 
 export function createOnlineTtrpgHumanResponseVisiblePayloadsV1(input: {
-  response: SimulationTtrpgHumanResponseV2;
+  response: TtrpgRuntimeHumanResponseV2;
   ownerMemberId: string;
 }): {
   publicPayload: unknown;

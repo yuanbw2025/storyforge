@@ -6,6 +6,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { useItemLedgerStore } from '../../src/stores/item-ledger'
+import { seedCurrentProject } from '../helpers/current-workspace'
 
 const now = Date.now()
 
@@ -21,9 +22,9 @@ describe('QUICKWIN-2 · 物品栏编辑保存', () => {
   })
 
   it('updateEntry 能修改物品名、数量、动作和备注，并持久化到 Dexie', async () => {
-    const projectId = await db.projects.add({
+    const projectId = await seedCurrentProject({
       name: 'QUICKWIN2',
-      genre: '',
+      genres: [],
       description: '',
       targetWordCount: 0,
       enableMultiWorld: false,

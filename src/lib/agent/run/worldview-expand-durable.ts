@@ -15,7 +15,7 @@ import {
   assertRecordInScope,
   readOwnedRows,
   scopeTransactionTables,
-} from '../../world-engine/scope'
+} from '../../workspace/scope'
 import { createAgentSkillExecutionBindingV1 } from '../execution-binding'
 import { getAgentSkillV1 } from '../skill-registry'
 import { createAgentRunCheckpointV1, readLatestVerifiedAgentRunCheckpointV1 } from './checkpoint'
@@ -55,16 +55,6 @@ interface WorldGroupSnapshotV1 {
 interface WorldviewSnapshotV1 {
   id: number | null
   fields: Record<string, unknown>
-}
-
-const NEW_WORLDVIEW_DEFAULT_FIELDS: Record<string, unknown> = {
-  geography: '',
-  history: '',
-  society: '',
-  culture: '',
-  economy: '',
-  rules: '',
-  summary: '',
 }
 
 export interface WorldviewExpandCandidateV1 {
@@ -182,7 +172,7 @@ function nonTargetWorldviewFields(snapshot: WorldviewSnapshotV1): Record<string,
 }
 
 function expectedNonTargetWorldviewFields(snapshot: WorldviewSnapshotV1): Record<string, unknown> {
-  return snapshot.id == null ? { ...NEW_WORLDVIEW_DEFAULT_FIELDS } : nonTargetWorldviewFields(snapshot)
+  return snapshot.id == null ? {} : nonTargetWorldviewFields(snapshot)
 }
 
 async function readTarget(
@@ -240,7 +230,7 @@ function contract(scope: WorkspaceScope, group: WorldGroup & { id: number }) {
   const skill = getAgentSkillV1('world-origin.worldview-expand', 'world-origin')
   return {
     version: 1 as const,
-    objective: `为世界组 #${group.id} “${group.name}”生成可确认七字段世界观扩写`,
+    objective: `为世界组 #${group.id} “${group.name}”生成可确认六字段世界观扩写`,
     workflowKind: 'plan-execute' as const,
     scope: { projectId: scope.projectId, worldGroupId: group.id },
     permissions: {
@@ -765,7 +755,7 @@ export async function adoptWorldviewExpandCandidateV1(input: {
   evidence = await currentEvidence(input.scope, candidate)
   if (!evidence.expectedMatches || !evidence.groupFresh || !evidence.externalFresh || !evidence.templateFresh) {
     await pauseUnsafeRun(input.scope, snapshot, 'worldview-expand-terminal-evidence-stale')
-    throw new Error('正式写入后七字段、非目标字段或外部来源变化，本次回执不会通过终验。')
+    throw new Error('正式写入后六字段、非目标字段或外部来源变化，本次回执不会通过终验。')
   }
   if (snapshot.projection.steps[WORLDVIEW_EXPAND_STEP_ID_V1]?.status === 'running') {
     snapshot = await append(input.scope, snapshot, 'step.succeeded', {

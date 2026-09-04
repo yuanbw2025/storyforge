@@ -12,16 +12,16 @@ import {
 import { db } from '../../src/lib/db/schema'
 import type { AIConfigPreset, Project } from '../../src/lib/types'
 import { useAIConfigStore } from '../../src/stores/ai-config'
+import { putCurrentWorkspaceFixtureV1 } from '../helpers/current-workspace'
 
 const project: Project = {
   id: 73001,
+  workspaceUid: 'WS-00000000-0000-4000-8000-000000073001',
+  workspacePurpose: 'independent-work',
   name: '主 Agent 测试',
-  genre: 'fantasy',
-  genres: ['fantasy'],
-  status: 'drafting',
-  description: '',
-  targetWordCount: 100_000,
   enableMultiWorld: false,
+  activeWorldId: 73001,
+  activeWorkId: 73001,
   createdAt: 1,
   updatedAt: 1,
 }
@@ -30,7 +30,7 @@ describe('AGENT-2 · 主 Agent 编排与持久会话', () => {
   beforeEach(async () => {
     await db.delete()
     await db.open()
-    await db.projects.put(project)
+    await putCurrentWorkspaceFixtureV1(project)
   })
 
   afterEach(() => {
@@ -273,8 +273,9 @@ describe('AGENT-2 · 主 Agent 编排与持久会话', () => {
     expect(plan.tasks.map(task => task.agentId)).toEqual(['outline'])
   })
 
-  it('事件按严格序号持久化，候选编辑和刷新恢复不丢失', async () => {
+  it('没有 durable Harness 绑定的候选不能重新进入正式编辑', async () => {
     const conversation = await getOrCreateAgentConversation({
+      purpose: 'test:r-agent2-main-orchestrator:1',
       projectId: project.id!,
       worldGroupId: null,
     })
@@ -292,16 +293,18 @@ describe('AGENT-2 · 主 Agent 编排与持久会话', () => {
       content: '初稿',
       payload: { label: '世界来源' },
     })
-    await updateAgentEventCandidate(candidate.id!, project.id!, '作者修订稿')
+    await expect(updateAgentEventCandidate(candidate.id!, project.id!, '作者修订稿'))
+      .rejects.toThrow('缺少当前 durable Harness 绑定')
     const restored = await readAgentEvents(conversation.id!)
     expect(restored.map(event => event.sequence)).toEqual([1, 2])
     expect(restored[0].id).toBe(first.id)
-    expect(restored[1].content).toBe('作者修订稿')
+    expect(restored[1].content).toBe('初稿')
     expect((await db.agentConversations.get(conversation.id!))?.title).toBe('建立潮汐世界')
   })
 
   it('下游候选不能在依赖的上游候选确认前写入', async () => {
     const conversation = await getOrCreateAgentConversation({
+      purpose: 'test:r-agent2-main-orchestrator:2',
       projectId: project.id!,
       worldGroupId: null,
     })
@@ -343,7 +346,7 @@ describe('AGENT-2 · 主 Agent 编排与持久会话', () => {
       event: downstream,
       payload: JSON.parse(downstream.payload),
       draft: downstream.content,
-    })).rejects.toThrow('请先采纳')
+    })).rejects.toThrow('缺少当前 Run 冻结的依赖绑定')
     expect(await db.outlineNodes.count()).toBe(0)
   })
 })

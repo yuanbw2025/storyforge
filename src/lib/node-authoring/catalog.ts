@@ -122,6 +122,33 @@ function collectionTemplate(input: {
   }
 }
 
+function canonSourceTemplate(input: {
+  id: string
+  label: string
+  description: string
+  semantic: AuthoringSemantic
+  sourceKeys: string[]
+}): AuthoringNodeTemplate {
+  return {
+    id: input.id,
+    version: 1,
+    label: input.label,
+    description: input.description,
+    category: '输入/世界 Canon',
+    class: 'content',
+    capability: 'read-canon',
+    inputs: [],
+    outputs: [{
+      id: 'context',
+      label: input.label,
+      semantic: input.semantic,
+      cardinality: 'many',
+      state: 'canon',
+    }],
+    reads: { sourceKeys: input.sourceKeys, allowExactFields: true },
+  }
+}
+
 const WORLD_FIELDS: FieldTemplateInput[] = [
   { id: 'world.origin', label: '世界来源', description: '世界、文明或时代从何而来。', category: '世界观/起源', target: 'worldviews', field: 'worldOrigin', sourceKey: 'worldview', semantic: 'world.setting', promptModuleKey: 'worldview.dimension', recommendedAfter: ['story.concept', 'world.structure'] },
   { id: 'world.power', label: '力量体系', description: '力量来源、层级、规则与限制。', category: '世界观/起源', target: 'worldviews', field: 'powerHierarchy', sourceKey: 'worldview', semantic: 'world.rule', promptModuleKey: 'worldview.dimension' },
@@ -134,8 +161,6 @@ const WORLD_FIELDS: FieldTemplateInput[] = [
   { id: 'world.climate', label: '气候环境', description: '区域气候、季节与自然灾害。', category: '世界观/自然', target: 'worldviews', field: 'climateByRegion', sourceKey: 'worldview', semantic: 'world.setting', promptModuleKey: 'worldview.dimension' },
   { id: 'world.resources-overview', label: '自然资源', description: '资源分布、丰饶程度与总体特点。', category: '世界观/自然', target: 'worldviews', field: 'naturalResourceOverview', sourceKey: 'worldview', semantic: 'world.setting', promptModuleKey: 'worldview.dimension' },
   { id: 'world.resources-detail', label: '自然资源细分', description: '异兽、作物、药材、矿产和特产。', category: '世界观/自然', target: 'worldviews', field: 'naturalResources', sourceKey: 'worldview', semantic: 'world.setting', promptModuleKey: 'worldview.dimension' },
-  { id: 'world.history', label: '世界历史线', description: '王朝、文明、灾变与关键时代。', category: '世界观/历史', target: 'worldviews', field: 'historyLine', sourceKey: 'historical', semantic: 'world.history', promptModuleKey: 'worldview.dimension' },
-  { id: 'world.events', label: '世界大事记', description: '对当前世界有长期影响的重大事件。', category: '世界观/历史', target: 'worldviews', field: 'worldEvents', sourceKey: 'historical', semantic: 'world.history', promptModuleKey: 'worldview.dimension' },
   { id: 'world.races', label: '种族与民族', description: '人群特征、历史、能力与关系。', category: '世界观/人文', target: 'worldviews', field: 'races', sourceKey: 'worldview', semantic: 'world.setting', promptModuleKey: 'worldview.dimension' },
   { id: 'world.factions', label: '势力分布', description: '国家、门派、组织和阵营格局。', category: '世界观/人文', target: 'worldviews', field: 'factionLayout', sourceKey: 'worldview', semantic: 'world.setting', promptModuleKey: 'worldview.dimension', recommendedAfter: ['story.conflict', 'character.profile'] },
   { id: 'world.politics', label: '政治制度', description: '政体、官制、法律、军事与外交。', category: '世界观/人文', target: 'worldviews', field: 'politicsOverview', sourceKey: 'worldview', semantic: 'world.setting', promptModuleKey: 'worldview.dimension' },
@@ -542,22 +567,43 @@ const CONTROL_TEMPLATES: AuthoringNodeTemplate[] = [
 
 const PROCESSOR_TEMPLATES: AuthoringNodeTemplate[] = [
   {
-    id: 'input.manual-text', version: 1, label: '自由文本', description: '作者要求、临时设定或任意文字。', category: '输入', class: 'content', capability: 'manual-draft', inputs: [], outputs: [{ id: 'text', label: '文字', semantic: 'text', cardinality: 'one', state: 'draft' }], legacyKind: 'input.text', parameters: [{ key: 'text', label: '作者输入', type: 'text', defaultValue: '' }],
+    id: 'input.manual-text', version: 1, label: '自由文本', description: '作者要求、临时设定或任意文字。', category: '输入', class: 'content', capability: 'manual-draft', inputs: [], outputs: [{ id: 'text', label: '文字', semantic: 'text', cardinality: 'one', state: 'draft' }], parameters: [{ key: 'text', label: '作者输入', type: 'text', defaultValue: '' }],
   },
   {
-    id: 'source.project-context', version: 1, label: '项目资料', description: '通过登记上下文或稳定字段键读取 Canon。', category: '输入', class: 'content', capability: 'read-canon', inputs: [], outputs: [{ id: 'context', label: '项目资料', semantic: 'any', cardinality: 'many', state: 'canon' }], reads: { sourceKeys: ['ragSelection'], allowExactFields: true }, legacyKind: 'source.context',
+    id: 'source.project-context', version: 1, label: '项目资料', description: '通过登记上下文或稳定字段键读取 Canon。', category: '输入', class: 'content', capability: 'read-canon', inputs: [], outputs: [{ id: 'context', label: '项目资料', semantic: 'any', cardinality: 'many', state: 'canon' }], reads: { sourceKeys: ['ragSelection'], allowExactFields: true },
+  },
+  canonSourceTemplate({
+    id: 'source.world-geography',
+    label: '地理 Canon',
+    description: '从 CONTEXT_SOURCES 读取正式地理总述与地点，不复制世界数据。',
+    semantic: 'world.location',
+    sourceKeys: ['geography', 'locations'],
+  }),
+  canonSourceTemplate({
+    id: 'source.world-history',
+    label: '历史 Canon',
+    description: '从 CONTEXT_SOURCES 读取正式历史总述、纪年、事件与历史关键词。',
+    semantic: 'world.history',
+    sourceKeys: ['historical'],
+  }),
+  canonSourceTemplate({
+    id: 'source.world-rules',
+    label: '世界规则 Canon',
+    description: '从 CONTEXT_SOURCES 读取真实与幻想规则及已确认事实。',
+    semantic: 'world.rule',
+    sourceKeys: ['worldRules', 'canonAssertions'],
+  }),
+  {
+    id: 'processor.compose', version: 1, label: '整理与合并', description: '按字段、优先级和模板组合上游内容。', category: '处理', class: 'processor', capability: 'transform', inputs: [contextInput()], outputs: [{ id: 'text', label: '整理结果', semantic: 'text', cardinality: 'one', state: 'draft' }], parameters: [{ key: 'template', label: '组合模板', type: 'text', defaultValue: '' }],
   },
   {
-    id: 'processor.compose', version: 1, label: '整理与合并', description: '按字段、优先级和模板组合上游内容。', category: '处理', class: 'processor', capability: 'transform', inputs: [contextInput()], outputs: [{ id: 'text', label: '整理结果', semantic: 'text', cardinality: 'one', state: 'draft' }], legacyKind: 'transform.compose', parameters: [{ key: 'template', label: '组合模板', type: 'text', defaultValue: '' }],
+    id: 'processor.free-generation', version: 1, label: '自由创作', description: '按作者自由指令生成候选内容。', category: '处理', class: 'processor', capability: 'transform', inputs: generationInputs(), outputs: [candidateOutput('candidate')], promptModuleKey: 'prompt.operations', parameters: [{ key: 'instruction', label: '创作指令', type: 'text', defaultValue: '' }],
   },
   {
-    id: 'processor.free-generation', version: 1, label: '自由创作', description: '保留 FLOW-2 自由指令能力，输出仍是候选。', category: '处理', class: 'processor', capability: 'transform', inputs: generationInputs(), outputs: [candidateOutput('candidate')], legacyKind: 'generation.freeform', promptModuleKey: 'prompt.operations', parameters: [{ key: 'instruction', label: '创作指令', type: 'text', defaultValue: '' }],
+    id: 'processor.validate', version: 1, label: '内容校验', description: '执行空值、必含和禁用内容检查。', category: '处理', class: 'processor', capability: 'validate', inputs: [{ id: 'candidate', label: '待校验内容', semantic: 'any', cardinality: 'one', state: 'candidate', required: true }], outputs: [candidateOutput('candidate')], parameters: [{ key: 'requiredTerms', label: '必含内容', type: 'text' }, { key: 'forbiddenTerms', label: '禁用内容', type: 'text' }],
   },
   {
-    id: 'processor.validate', version: 1, label: '内容校验', description: '执行空值、必含和禁用内容检查。', category: '处理', class: 'processor', capability: 'validate', inputs: [{ id: 'candidate', label: '待校验内容', semantic: 'any', cardinality: 'one', state: 'candidate', required: true }], outputs: [candidateOutput('candidate')], legacyKind: 'validation.required', parameters: [{ key: 'requiredTerms', label: '必含内容', type: 'text' }, { key: 'forbiddenTerms', label: '禁用内容', type: 'text' }],
-  },
-  {
-    id: 'output.review-adopt', version: 1, label: '预览与采纳', description: '查看差异并通过上游写契约确认采纳。', category: '输出', class: 'output', capability: 'adopt', inputs: [{ id: 'candidate', label: '候选内容', semantic: 'any', cardinality: 'one', state: 'candidate', required: true }], outputs: [{ id: 'adopted', label: '已确认内容', semantic: 'any', cardinality: 'one', state: 'canon' }], legacyKind: 'output.preview',
+    id: 'output.review-adopt', version: 1, label: '预览与采纳', description: '查看差异并通过上游写契约确认采纳。', category: '输出', class: 'output', capability: 'adopt', inputs: [{ id: 'candidate', label: '候选内容', semantic: 'any', cardinality: 'one', state: 'candidate', required: true }], outputs: [{ id: 'adopted', label: '已确认内容', semantic: 'any', cardinality: 'one', state: 'canon' }],
   },
 ]
 

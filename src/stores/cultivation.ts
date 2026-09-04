@@ -19,7 +19,7 @@ import {
   resolveScopeLike,
   stampNewRecord,
   type WorkspaceScopeLike,
-} from '../lib/world-engine/scope'
+} from '../lib/workspace/scope'
 import { coordinatePendingEditV1 } from '../lib/authoring/pending-edit-coordinator'
 
 interface CultivationStore {
@@ -39,9 +39,14 @@ export const useCultivationStore = create<CultivationStore>((set, get) => ({
 
   loadAll: async (scopeInput) => {
     set({ loading: true })
-    const scope = await resolveReadScopeLike(scopeInput)
-    const systems = await readOwnedRows<CultivationSystem>(scope, 'cultivationSystems', { owner: 'world' })
-    set({ systems, loading: false })
+    try {
+      const scope = await resolveReadScopeLike(scopeInput)
+      const systems = await readOwnedRows<CultivationSystem>(scope, 'cultivationSystems', { owner: 'world' })
+      set({ systems, loading: false })
+    } catch (error) {
+      console.error('[Cultivation] loadAll 失败:', error)
+      set({ systems: [], loading: false })
+    }
   },
 
   addSystem: async (system) => {
@@ -104,9 +109,9 @@ export const useCultivationStore = create<CultivationStore>((set, get) => ({
   },
 
   deleteSystem: async (id) => {
-    const beforeMigration = get().systems.find(system => system.id === id) ?? await db.cultivationSystems.get(id)
-    if (!beforeMigration) return
-    const scope = await resolveScopeLike(beforeMigration.projectId)
+    const existingSystem = get().systems.find(system => system.id === id) ?? await db.cultivationSystems.get(id)
+    if (!existingSystem) return
+    const scope = await resolveScopeLike(existingSystem.projectId)
     const current = await db.cultivationSystems.get(id)
     if (!current || !await assertRecordInScope(scope, 'cultivationSystems', current, { owner: 'world' })) return
     await db.transaction('rw', transactionTablesForReferences('cultivationSystems'), async () => {

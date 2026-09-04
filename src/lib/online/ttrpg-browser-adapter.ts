@@ -1,6 +1,6 @@
 import { db } from '../db/schema'
 import { hashCanonicalValue } from '../agent/run/hash'
-import { verifyGameReleaseManifestV2 } from '../game-production/runtime-package'
+import { verifyProductReleaseManifestV1 } from '../product-production/runtime-package'
 import {
   changeTtrpgSafetyStatus,
   commitTtrpgEffectPlanV2,
@@ -11,8 +11,8 @@ import {
   completeTtrpgCampaignEnding,
   discoverTtrpgClue,
   openTtrpgCampaignScene,
-  readSimulationState,
-  readSimulationStateVersion,
+  readProductRuntimeState,
+  readProductRuntimeStateVersion,
   recordTtrpgHumanResponseV2,
   completeTtrpgRestV2,
   startTtrpgCampaignSessionV2,
@@ -20,7 +20,7 @@ import {
   resolveTtrpgRuleAction,
   submitTtrpgActionIntentV2,
   updateTtrpgTabletopV1,
-} from '../simulation/runtime'
+} from '../ttrpg/runtime-api'
 import { parseTtrpgCampaignContentV1 } from '../ttrpg/campaign'
 import { parseRulePackV1 } from '../ttrpg/rule-pack'
 import {
@@ -75,7 +75,7 @@ interface TtrpgRoomChatEntryV1 {
 
 export interface BrowserTtrpgRoomAdapterInspectionV1 {
   releaseHash: string
-  simulationSessionId: number
+  productRuntimeSessionId: number
   diceCommitments: OnlineDiceCommitmentSeriesV1
 }
 
@@ -131,15 +131,15 @@ function publicEvent(kind: OnlineRoomCommandKindV1, payload: unknown): {
 /**
  * Binds the authoritative room protocol to the existing formal browser TTRPG
  * runtime. This is the real local-host bridge used by the current pure-client
- * product: every rules mutation still goes through the frozen GameRelease and
- * canonical simulation event log. It deliberately omits checkpoint hooks so a
+ * product: every rules mutation still goes through the frozen ProductRelease and
+ * canonical product-runtime event log. It deliberately omits checkpoint hooks so a
  * deployment cannot mistake IndexedDB for a transactional server room store.
  */
 export class BrowserFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV1 {
   private readonly chat: TtrpgRoomChatEntryV1[] = []
 
   private constructor(
-    private readonly simulationSessionId: number,
+    private readonly productRuntimeSessionId: number,
     private readonly releaseHash: string,
     private readonly rulePack: RulePackV1,
     private readonly campaign: TtrpgCampaignContentV1,
@@ -150,26 +150,26 @@ export class BrowserFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV
   static async create(input: {
     roomId: string
     releaseHash: string
-    simulationSessionId: number
+    productRuntimeSessionId: number
     maximumCommittedRolls?: number
     memberIdForActor?: (actorKey: string) => string | null
   }): Promise<BrowserFormalTtrpgRoomAdapterV1> {
-    if (!Number.isInteger(input.simulationSessionId) || input.simulationSessionId < 1) {
-      fail('domain_configuration', 'simulationSessionId 无效')
+    if (!Number.isInteger(input.productRuntimeSessionId) || input.productRuntimeSessionId < 1) {
+      fail('domain_configuration', 'productRuntimeSessionId 无效')
     }
-    const session = await db.simulationSessions.get(input.simulationSessionId)
-    const release = session?.gameReleaseId == null ? null : await db.gameReleases.get(session.gameReleaseId)
+    const session = await db.productRuntimeSessions.get(input.productRuntimeSessionId)
+    const release = session?.productReleaseId == null ? null : await db.productReleases.get(session.productReleaseId)
     if (!session || session.kind !== 'ttrpg' || !release || release.contentHash !== input.releaseHash) {
-      fail('release_mismatch', '在线房间必须绑定未改变的正式 TTRPG GameRelease')
+      fail('release_mismatch', '在线房间必须绑定未改变的正式 TTRPG ProductRelease')
     }
-    const manifest = await verifyGameReleaseManifestV2(release.manifestJson)
+    const manifest = await verifyProductReleaseManifestV1(release.manifestJson)
     if (manifest.productType !== 'ttrpg' || !manifest.runtimePackage.ttrpg
       || manifest.packageHash !== session.runtimeSourceHash) {
       fail('release_mismatch', '在线房间的正式 TTRPG RuntimePackage 不一致')
     }
     const rulePack = parseRulePackV1(manifest.runtimePackage.ttrpg.rulePack.content)
     const campaign = parseTtrpgCampaignContentV1(manifest.runtimePackage.ttrpg.campaign, rulePack)
-    const state = await readSimulationState(session.id!)
+    const state = await readProductRuntimeState(session.id!)
     if (!state.ttrpg?.product?.sessionZero.completed) {
       fail('domain_configuration', '创建在线房间前必须完成 Session Zero 与角色编组')
     }
@@ -186,7 +186,7 @@ export class BrowserFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV
   inspect(): BrowserTtrpgRoomAdapterInspectionV1 {
     return {
       releaseHash: this.releaseHash,
-      simulationSessionId: this.simulationSessionId,
+      productRuntimeSessionId: this.productRuntimeSessionId,
       diceCommitments: structuredClone(this.dice.commitments),
     }
   }
@@ -194,7 +194,7 @@ export class BrowserFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV
   async apply(input: Parameters<OnlineRoomDomainAdapterV1['apply']>[0]): Promise<OnlineRoomDomainEventV1> {
     if (input.releaseHash !== this.releaseHash) fail('release_mismatch', '命令 Release 与房间适配器不一致')
     const payload = record(input.command.payload, `${input.command.kind}.payload`)
-    const version = await readSimulationStateVersion(this.simulationSessionId)
+    const version = await readProductRuntimeStateVersion(this.productRuntimeSessionId)
     const commandId = `online:${await hashCanonicalValue({
       roomId: input.roomId,
       memberId: input.member.memberId,
@@ -208,7 +208,7 @@ export class BrowserFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV
         exact(payload, ['reason'], 'safety.pause.payload')
         const reason = text(payload.reason, 'reason', 2_000)
         await changeTtrpgSafetyStatus({
-          sessionId: this.simulationSessionId, commandId,
+          sessionId: this.productRuntimeSessionId, commandId,
           baseSequence: version.sequence, baseStateHash: version.stateHash,
           status: 'paused', reason, changedBy: input.member.actorKey ?? input.member.memberId,
         })
@@ -216,7 +216,7 @@ export class BrowserFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV
       } else if (input.command.kind === 'safety.resume') {
         exact(payload, [], 'safety.resume.payload')
         await changeTtrpgSafetyStatus({
-          sessionId: this.simulationSessionId, commandId,
+          sessionId: this.productRuntimeSessionId, commandId,
           baseSequence: version.sequence, baseStateHash: version.stateHash,
           status: 'active', changedBy: input.member.memberId,
         })
@@ -225,7 +225,7 @@ export class BrowserFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV
         exact(payload, ['sceneKey'], 'scene.open.payload')
         const sceneKey = key(payload.sceneKey, 'sceneKey')
         await openTtrpgCampaignScene({
-          sessionId: this.simulationSessionId, commandId,
+          sessionId: this.productRuntimeSessionId, commandId,
           baseSequence: version.sequence, baseStateHash: version.stateHash, sceneKey,
         })
         const scene = this.campaign.scenes.find(item => item.sceneKey === sceneKey)!
@@ -242,7 +242,7 @@ export class BrowserFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV
           fail('forbidden', '玩家只能为自己的角色发现私密线索')
         }
         await discoverTtrpgClue({
-          sessionId: this.simulationSessionId, commandId,
+          sessionId: this.productRuntimeSessionId, commandId,
           baseSequence: version.sequence, baseStateHash: version.stateHash,
           clueKey, actorKey, visibility,
         })
@@ -268,13 +268,13 @@ export class BrowserFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV
         const actionKey = key(payload.actionKey, 'actionKey')
         const targetKey = payload.targetKey == null ? null : key(payload.targetKey, 'targetKey')
         await resolveTtrpgRuleAction({
-          sessionId: this.simulationSessionId, commandId,
+          sessionId: this.productRuntimeSessionId, commandId,
           baseSequence: version.sequence, baseStateHash: version.stateHash,
           actionKey, actorKey, targetKey,
           difficulty: optionalNumber(payload.difficulty, 'difficulty'),
           situationalModifier: optionalNumber(payload.situationalModifier, 'situationalModifier'),
         })
-        const state = await readSimulationState(this.simulationSessionId)
+        const state = await readProductRuntimeState(this.productRuntimeSessionId)
         const history = state.ttrpg?.product?.actionHistory ?? []
         const result = history[history.length - 1]
         if (!result) fail('domain_state', '规则行动没有生成正式结果')
@@ -308,14 +308,14 @@ export class BrowserFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV
         }
         const participant = input.member.role === 'gm'
           ? await db.ttrpgSessionParticipants
-              .where('sessionId').equals(this.simulationSessionId)
+              .where('sessionId').equals(this.productRuntimeSessionId)
               .filter(row => row.role === 'gm').first()
           : await db.ttrpgSessionParticipants
-              .where('sessionId').equals(this.simulationSessionId)
+              .where('sessionId').equals(this.productRuntimeSessionId)
               .filter(row => row.role === 'player' && row.actorKey === actorKey).first()
         if (!participant) fail('domain_state', '在线席位没有对应的正式 TTRPG participant')
         const event = await submitTtrpgActionIntentV2({
-          sessionId: this.simulationSessionId,
+          sessionId: this.productRuntimeSessionId,
           commandId,
           baseSequence: version.sequence,
           baseStateHash: version.stateHash,
@@ -334,7 +334,7 @@ export class BrowserFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV
             viewerKey: participant.viewerKey,
           },
         })
-        const state = await readSimulationState(this.simulationSessionId)
+        const state = await readProductRuntimeState(this.productRuntimeSessionId)
         const result = event.type === 'ttrpg.rule.action.resolved'
           ? state.ttrpg?.product?.actionHistory.find(item => item.eventSequence === event.sequence)
           : state.ttrpg?.product?.intentReceipts?.find(item => item.eventSequence === event.sequence)
@@ -366,12 +366,12 @@ export class BrowserFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV
           fail('forbidden', '真人回应必须来自角色本人的已认证玩家席位')
         }
         const participant = await db.ttrpgSessionParticipants
-          .where('sessionId').equals(this.simulationSessionId)
+          .where('sessionId').equals(this.productRuntimeSessionId)
           .filter(row => row.role === 'player' && row.actorKey === actorKey)
           .first()
         if (!participant) fail('domain_state', '在线席位没有对应的正式 TTRPG participant')
         const event = await recordTtrpgHumanResponseV2({
-          sessionId: this.simulationSessionId,
+          sessionId: this.productRuntimeSessionId,
           commandId,
           baseSequence: version.sequence,
           baseStateHash: version.stateHash,
@@ -383,7 +383,7 @@ export class BrowserFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV
           audience: responseCommand.audience,
           viewerKey: participant.viewerKey,
         })
-        const state = await readSimulationState(this.simulationSessionId)
+        const state = await readProductRuntimeState(this.productRuntimeSessionId)
         const response = state.ttrpg?.product?.humanResponses?.find(
           item => item.eventSequence === event.sequence,
         )
@@ -406,14 +406,14 @@ export class BrowserFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV
           eventSequence: version.sequence + 1,
         })
         const event = await commitTtrpgItemCommandV2({
-          sessionId: this.simulationSessionId,
+          sessionId: this.productRuntimeSessionId,
           commandId,
           baseSequence: version.sequence,
           baseStateHash: version.stateHash,
           command,
           requestedBy: { role: input.member.role === 'gm' ? 'gm' : 'player', actorKey },
         })
-        const state = await readSimulationState(this.simulationSessionId)
+        const state = await readProductRuntimeState(this.productRuntimeSessionId)
         const receipt = state.ttrpg?.product?.itemHistory?.find(
           item => item.eventSequence === event.sequence,
         )
@@ -429,7 +429,7 @@ export class BrowserFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV
       } else if (input.command.kind === 'rest.complete') {
         const rest = parseOnlineTtrpgRestCommandV1(payload)
         const event = await completeTtrpgRestV2({
-          sessionId: this.simulationSessionId,
+          sessionId: this.productRuntimeSessionId,
           commandId,
           baseSequence: version.sequence,
           baseStateHash: version.stateHash,
@@ -439,7 +439,7 @@ export class BrowserFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV
           reason: rest.reason,
           gmKey: 'gm',
         })
-        const state = await readSimulationState(this.simulationSessionId)
+        const state = await readProductRuntimeState(this.productRuntimeSessionId)
         const receipt = state.ttrpg?.product?.restHistory?.find(
           item => item.eventSequence === event.sequence,
         )
@@ -449,14 +449,14 @@ export class BrowserFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV
       } else if (input.command.kind === 'effects.apply') {
         const effectCommand = buildOnlineTtrpgEffectCommandV1({ payload, commandId })
         const event = await commitTtrpgEffectPlanV2({
-          sessionId: this.simulationSessionId,
+          sessionId: this.productRuntimeSessionId,
           commandId,
           baseSequence: version.sequence,
           baseStateHash: version.stateHash,
           plan: effectCommand.plan,
           actionSequence: effectCommand.actionSequence,
         })
-        const state = await readSimulationState(this.simulationSessionId)
+        const state = await readProductRuntimeState(this.productRuntimeSessionId)
         const entry = state.ttrpg?.product?.effectLedger?.entries.find(
           item => item.eventSequence === event.sequence,
         )
@@ -471,7 +471,7 @@ export class BrowserFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV
       } else if (input.command.kind === 'effects.choice.propose') {
         const proposal = buildOnlineTtrpgEffectChoiceProposalCommandV1({ payload, commandId })
         const event = await proposeTtrpgEffectChoiceV2({
-          sessionId: this.simulationSessionId,
+          sessionId: this.productRuntimeSessionId,
           commandId,
           baseSequence: version.sequence,
           baseStateHash: version.stateHash,
@@ -480,7 +480,7 @@ export class BrowserFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV
           ownerActorKey: proposal.ownerActorKey,
           gmKey: 'gm',
         })
-        const state = await readSimulationState(this.simulationSessionId)
+        const state = await readProductRuntimeState(this.productRuntimeSessionId)
         const choice = state.ttrpg?.product?.effectLedger?.pendingChoices.find(
           item => item.proposedEventSequence === event.sequence,
         )
@@ -494,7 +494,7 @@ export class BrowserFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV
         const actorKey = input.command.actorKey ?? input.member.actorKey
         if (!actorKey) fail('domain_protocol', '后果选择缺少角色身份')
         const event = await resolveTtrpgEffectChoiceV2({
-          sessionId: this.simulationSessionId,
+          sessionId: this.productRuntimeSessionId,
           commandId,
           baseSequence: version.sequence,
           baseStateHash: version.stateHash,
@@ -503,7 +503,7 @@ export class BrowserFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV
           requestedBy: { role: input.member.role === 'gm' ? 'gm' : 'player', actorKey },
           gmKey: input.member.role === 'gm' ? 'gm' : undefined,
         })
-        const state = await readSimulationState(this.simulationSessionId)
+        const state = await readProductRuntimeState(this.productRuntimeSessionId)
         const entry = state.ttrpg?.product?.effectLedger?.entries.find(
           item => item.eventSequence === event.sequence,
         )
@@ -514,7 +514,7 @@ export class BrowserFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV
         privatePayloadByMemberId = routed.privatePayloadByMemberId
       } else if (input.command.kind === 'campaign.session.start') {
         const start = parseOnlineTtrpgCampaignSessionStartV1(payload)
-        const state = await readSimulationState(this.simulationSessionId)
+        const state = await readProductRuntimeState(this.productRuntimeSessionId)
         const campaignState = state.ttrpg?.campaign
         if (!campaignState) fail('domain_state', '正式战役缺少长期连续性状态')
         const participantKeys = campaignState.roster
@@ -523,7 +523,7 @@ export class BrowserFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV
         const ordinal = campaignState.playSessions.length + 1
         const sessionKey = `session.${ordinal}`
         await startTtrpgCampaignSessionV2({
-          sessionId: this.simulationSessionId,
+          sessionId: this.productRuntimeSessionId,
           commandId,
           baseSequence: version.sequence,
           baseStateHash: version.stateHash,
@@ -538,7 +538,7 @@ export class BrowserFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV
         gmPrivatePayload = { sessionKey, ordinal, title: start.title, participantKeys }
       } else if (input.command.kind === 'campaign.session.complete') {
         const completion = parseOnlineTtrpgCampaignSessionCompleteV1(payload)
-        const state = await readSimulationState(this.simulationSessionId)
+        const state = await readProductRuntimeState(this.productRuntimeSessionId)
         const campaignState = state.ttrpg?.campaign
         const sessionKey = campaignState?.activeSessionKey
         const playSession = campaignState?.playSessions.find(item => item.sessionKey === sessionKey)
@@ -558,7 +558,7 @@ export class BrowserFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV
           ? `${automatic.publicSummary}\n主持公开补充：${completion.publicNote}`.slice(0, 20_000)
           : automatic.publicSummary
         await completeTtrpgCampaignSessionV2({
-          sessionId: this.simulationSessionId,
+          sessionId: this.productRuntimeSessionId,
           commandId,
           baseSequence: version.sequence,
           baseStateHash: version.stateHash,
@@ -608,7 +608,7 @@ export class BrowserFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV
         }
         const narration = text(payload.text, 'text', 20_000)
         await commitTtrpgHumanGmNarrationV1({
-          sessionId: this.simulationSessionId, commandId,
+          sessionId: this.productRuntimeSessionId, commandId,
           baseSequence: version.sequence, baseStateHash: version.stateHash,
           actionSequence: Number(payload.actionSequence), text: narration, gmKey: input.member.memberId,
         })
@@ -619,7 +619,7 @@ export class BrowserFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV
         exact(payload, ['endingKey'], 'ending.choose.payload')
         const endingKey = key(payload.endingKey, 'endingKey')
         await completeTtrpgCampaignEnding({
-          sessionId: this.simulationSessionId, commandId,
+          sessionId: this.productRuntimeSessionId, commandId,
           baseSequence: version.sequence, baseStateHash: version.stateHash,
           endingKey, completedBy: input.member.memberId,
         })
@@ -645,7 +645,7 @@ export class BrowserFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV
       } else if (input.command.kind === 'tabletop.move') {
         exact(payload, ['tokenKey', 'x', 'y'], 'tabletop.move.payload')
         await updateTtrpgTabletopV1({
-          sessionId: this.simulationSessionId, commandId,
+          sessionId: this.productRuntimeSessionId, commandId,
           baseSequence: version.sequence, baseStateHash: version.stateHash,
           role: input.member.role === 'gm' ? 'gm' : 'player',
           actorKey: input.command.actorKey ?? input.member.memberId,
@@ -658,7 +658,7 @@ export class BrowserFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV
       } else if (input.command.kind === 'tabletop.fog') {
         exact(payload, ['fogKey', 'revealed'], 'tabletop.fog.payload')
         await updateTtrpgTabletopV1({
-          sessionId: this.simulationSessionId, commandId,
+          sessionId: this.productRuntimeSessionId, commandId,
           baseSequence: version.sequence, baseStateHash: version.stateHash,
           role: 'gm', actorKey: input.member.memberId,
           operation: { kind: 'set-fog', fogKey: key(payload.fogKey, 'fogKey'), revealed: boolean(payload.revealed, 'revealed') },
@@ -667,7 +667,7 @@ export class BrowserFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV
       } else if (input.command.kind === 'tabletop.layer') {
         exact(payload, ['layerKey', 'visible'], 'tabletop.layer.payload')
         await updateTtrpgTabletopV1({
-          sessionId: this.simulationSessionId, commandId,
+          sessionId: this.productRuntimeSessionId, commandId,
           baseSequence: version.sequence, baseStateHash: version.stateHash,
           role: 'gm', actorKey: input.member.memberId,
           operation: { kind: 'set-layer', layerKey: key(payload.layerKey, 'layerKey'), visible: boolean(payload.visible, 'visible') },
@@ -678,11 +678,11 @@ export class BrowserFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV
       if (error instanceof OnlineRoomAuthorityError) throw error
       fail('domain_rejected', error instanceof Error ? error.message : '正式 TTRPG 命令被拒绝')
     }
-    const state = await readSimulationState(this.simulationSessionId)
+    const state = await readProductRuntimeState(this.productRuntimeSessionId)
     const resultingStateHash = await hashCanonicalValue({
       releaseHash: this.releaseHash,
       roomSequence: input.sequence,
-      simulationState: state,
+      productRuntimeState: state,
       chat: this.chat,
       diceNextRollIndex: this.dice.exportServerCheckpoint().nextRollIndex,
     })
@@ -696,9 +696,9 @@ export class BrowserFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV
 
   async project(input: Parameters<OnlineRoomDomainAdapterV1['project']>[0]): Promise<unknown> {
     if (input.releaseHash !== this.releaseHash) fail('release_mismatch', '投影 Release 与房间适配器不一致')
-    const state = await readSimulationState(this.simulationSessionId)
+    const state = await readProductRuntimeState(this.productRuntimeSessionId)
     const participants = await db.ttrpgSessionParticipants
-      .where('sessionId').equals(this.simulationSessionId).toArray()
+      .where('sessionId').equals(this.productRuntimeSessionId).toArray()
     return {
       schema: 'storyforge.online-ttrpg-projection',
       version: 1,

@@ -13,7 +13,7 @@ import type {
   ScreenplayScene,
   WorkspaceScope,
 } from '../../types'
-import { readOwnedRows } from '../../world-engine/scope'
+import { readOwnedRows } from '../../workspace/scope'
 import { adoptScreenplaySceneBatchV1, type ScreenplayCastResourceV1, type ScreenplaySceneCandidateV1 } from '../../screenplay/adoption'
 import { adoptComicStoryboardBatchV1, assertComicStoryboardCandidateV1, type ComicPageCandidateV1 } from '../../comic/adoption'
 import { assertAdaptationBriefV1, assertAdaptationPlanV1 } from '../../adaptation/contracts'

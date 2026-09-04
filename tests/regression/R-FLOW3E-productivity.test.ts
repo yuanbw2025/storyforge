@@ -14,16 +14,18 @@ import {
   runAuthoringGraph,
   type AuthoringNodeGraph,
 } from '../../src/lib/node-authoring'
+import { generateWorkspaceUid } from '../../src/lib/memory/identity'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
+import { putCurrentWorkspaceFixtureV1 } from '../helpers/current-workspace'
 
 const project = {
   id: 73100,
+  workspaceUid: generateWorkspaceUid(),
+  workspacePurpose: 'independent-work' as const,
   name: 'FLOW-3E 大图效率测试',
-  genre: 'fantasy',
-  genres: ['fantasy'],
-  status: 'drafting' as const,
-  description: '',
-  targetWordCount: 100_000,
   enableMultiWorld: false,
+  activeWorldId: 73100,
+  activeWorkId: 73100,
   createdAt: 1,
   updatedAt: 1,
 }
@@ -63,7 +65,7 @@ describe('FLOW-3E · 大图效率、模板与可恢复执行', () => {
   beforeEach(async () => {
     await db.delete()
     await db.open()
-    await db.projects.put(project)
+    await putCurrentWorkspaceFixtureV1(project)
   })
 
   afterEach(() => db.close())
@@ -72,7 +74,7 @@ describe('FLOW-3E · 大图效率、模板与可恢复执行', () => {
     expect(AUTHORING_OFFICIAL_TEMPLATES).toHaveLength(6)
     for (const template of AUTHORING_OFFICIAL_TEMPLATES) {
       const graph = buildOfficialAuthoringTemplate(template.id)
-      expect(parseAuthoringGraph(JSON.stringify(graph)).graph).toMatchObject({ version: 2 })
+      expect(parseAuthoringGraph(JSON.stringify(graph))).toMatchObject({ version: 2 })
       expect(graph.nodes.some(node => node.templateId === 'source.project-context')).toBe(true)
       expect(graph.nodes.every(node => AUTHORING_NODE_BY_ID.has(node.templateId))).toBe(true)
       expect(graph.nodes.some(node => node.templateId === 'output.review-adopt')).toBe(false)
@@ -128,6 +130,7 @@ describe('FLOW-3E · 大图效率、模板与可恢复执行', () => {
       createdAt: now,
       updatedAt: now,
     }) as number
+    await finalizeCurrentFixtureV1(project.id)
     const flow = (await db.nodeFlows.get(flowId))!
     const controller = new AbortController()
     controller.abort('paused')
@@ -154,6 +157,7 @@ describe('FLOW-3E · 大图效率、模板与可恢复执行', () => {
       createdAt: now,
       updatedAt: now,
     }) as number
+    await finalizeCurrentFixtureV1(project.id)
     const flow = (await db.nodeFlows.get(flowId))!
     const result = await runAuthoringGraph({ flow })
     const exported = await exportProjectJSON(project.id)

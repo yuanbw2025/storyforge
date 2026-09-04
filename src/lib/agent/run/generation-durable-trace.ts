@@ -12,7 +12,7 @@ import type {
 } from '../../types'
 import type { ChatMessage } from '../../types'
 import { db } from '../../db/schema'
-import { scopeTransactionTables } from '../../world-engine/scope'
+import { scopeTransactionTables } from '../../workspace/scope'
 import {
   appendAgentRunEventV1,
   type AgentRunSnapshotV1,

@@ -1,7 +1,7 @@
 import { inspectAdaptationFreshness } from './source-manifest'
 import { db } from '../db/schema'
 import type { AdaptationProject, WorkspaceScope } from '../types'
-import { resolveScope, scopeTransactionTables } from '../world-engine/scope'
+import { resolveScope, scopeTransactionTables } from '../workspace/scope'
 import { validateScreenplayBlocksV1 } from '../screenplay/contracts'
 import { inspectComicQualityV1 } from '../comic/qa'
 

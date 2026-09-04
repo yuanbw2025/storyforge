@@ -1,8 +1,8 @@
-import { hashGameProductionValueV2 } from "../game-production/hash";
+import { hashProductProductionValueV2 } from "../product-production/hash";
 import type {
   RulePackV1,
-  SimulationRuntimeState,
-  SimulationTtrpgRosterEntryV2,
+  ProductRuntimeState,
+  TtrpgRuntimeRosterEntryV2,
   TtrpgCampaignContentV1,
 } from "../types";
 
@@ -25,7 +25,7 @@ export interface TtrpgContinuationPlanV2 {
   parentSessionId: number;
   parentSequence: number;
   parentStateHash: string;
-  targetGameReleaseId: number;
+  targetProductReleaseId: number;
   fromRulePackContentHash: string;
   toRulePackContentHash: string;
   fromCampaignKey: string;
@@ -71,7 +71,7 @@ function compatibleCustomization(input: {
   characterKey: string;
   parentCampaign: TtrpgCampaignContentV1;
   targetCampaign: TtrpgCampaignContentV1;
-  parentState: SimulationRuntimeState;
+  parentState: ProductRuntimeState;
 }): boolean {
   const customization =
     input.parentState.ttrpg?.product?.characterCustomizations.find(
@@ -114,9 +114,9 @@ export async function buildTtrpgContinuationStateV2(input: {
   parentSessionId: number;
   parentSequence: number;
   parentStateHash: string;
-  targetGameReleaseId: number;
-  parentState: SimulationRuntimeState;
-  targetInitialState: SimulationRuntimeState;
+  targetProductReleaseId: number;
+  parentState: ProductRuntimeState;
+  targetInitialState: ProductRuntimeState;
   parentRulePack: RulePackV1;
   targetRulePack: RulePackV1;
   parentCampaign: TtrpgCampaignContentV1;
@@ -125,7 +125,7 @@ export async function buildTtrpgContinuationStateV2(input: {
   transitionKey: string;
   approvedBy: string;
 }): Promise<{
-  state: SimulationRuntimeState;
+  state: ProductRuntimeState;
   plan: TtrpgContinuationPlanV2;
 }> {
   if (
@@ -185,13 +185,13 @@ export async function buildTtrpgContinuationStateV2(input: {
   const parentRoster = parentContinuity.roster.length
     ? parentContinuity.roster
     : parentProduct.sessionZero.selectedCharacterKeys.map(
-        (characterKey): SimulationTtrpgRosterEntryV2 => ({
+        (characterKey): TtrpgRuntimeRosterEntryV2 => ({
           characterKey,
           status: "active",
           joinedSessionKey: null,
           leftSessionKey: null,
           replacementFor: null,
-          reason: "旧版战役活动角色",
+          reason: "父版本战役活动角色",
           updatedSequence: input.parentSequence,
         }),
       );
@@ -426,7 +426,7 @@ export async function buildTtrpgContinuationStateV2(input: {
   carried.push("目标规则仍定义的资源当前值与状态效果");
 
   state.lastSequence = 0;
-  const migratedStateHash = await hashGameProductionValueV2({
+  const migratedStateHash = await hashProductProductionValueV2({
     ttrpg: state.ttrpg,
     entities: Object.fromEntries(
       input.targetCampaign.characterTemplates.map((template) => [
@@ -441,7 +441,7 @@ export async function buildTtrpgContinuationStateV2(input: {
     parentSessionId: input.parentSessionId,
     parentSequence: input.parentSequence,
     parentStateHash: input.parentStateHash,
-    targetGameReleaseId: input.targetGameReleaseId,
+    targetProductReleaseId: input.targetProductReleaseId,
     fromRulePackContentHash: parentProduct.rulePackContentHash,
     toRulePackContentHash: targetProduct.rulePackContentHash,
     fromCampaignKey: parentProduct.campaignKey,
@@ -457,6 +457,6 @@ export async function buildTtrpgContinuationStateV2(input: {
     warnings,
     migratedStateHash,
   };
-  const planHash = await hashGameProductionValueV2(planWithoutHash);
+  const planHash = await hashProductProductionValueV2(planWithoutHash);
   return { state, plan: { ...planWithoutHash, planHash } };
 }

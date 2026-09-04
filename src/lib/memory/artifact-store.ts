@@ -59,7 +59,7 @@ function sameEvidenceEvent(
 export async function recordAgentRunArtifactV1(input: {
   scope: WorkspaceScope
   runId: number
-  simulationSessionId?: number
+  productRuntimeSessionId?: number
   artifactKind: ExactRunArtifactKindV1
   content: string
   stepId?: string
@@ -91,11 +91,11 @@ export async function recordAgentRunArtifactV1(input: {
       db.agentRunEvents,
       db.worlds,
       db.works,
-      db.simulationSessions,
+      db.productRuntimeSessions,
     ),
     async () => {
       let snapshot = await readVerifiedAgentRunInTransactionV1(input.scope, input.runId)
-      if ((snapshot.run.simulationSessionId ?? undefined) !== input.simulationSessionId) {
+      if ((snapshot.run.productRuntimeSessionId ?? undefined) !== input.productRuntimeSessionId) {
         fail('runtime-owner', '运行实例 owner 与 artifact 参数不一致')
       }
       if (input.expectedLastSequence != null && snapshot.projection.lastSequence !== input.expectedLastSequence) {

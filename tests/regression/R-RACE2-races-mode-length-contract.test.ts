@@ -2,8 +2,8 @@ import { readFileSync } from 'node:fs'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { generateWorkspaceUid } from '../../src/lib/memory/identity'
-import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
-import { stampNewRecord } from '../../src/lib/world-engine/scope'
+import { resolveWorkspaceOwnership } from '../../src/lib/workspace/ownership'
+import { stampNewRecord } from '../../src/lib/workspace/scope'
 import { useAIConfigStore } from '../../src/stores/ai-config'
 import {
   parseWorldviewFieldOutputBudgetV1,
@@ -12,15 +12,16 @@ import {
   resolveWorldviewFieldOutputBudgetV1,
 } from '../../src/lib/agent/worldview-field-copilot'
 import { runGenerationNode } from '../../src/lib/generation/generation-node'
+import { seedCurrentProject } from '../helpers/current-workspace'
 
 const NOW = 1_788_200_000_000
 
 async function seedWorkspace() {
-  const projectId = await db.projects.add({
-    workspaceUid: generateWorkspaceUid(), name: '雾港迁徙史', genre: 'fantasy', genres: ['fantasy'],
+  const projectId = await seedCurrentProject({
+    workspaceUid: generateWorkspaceUid(), name: '雾港迁徙史', genres: ['fantasy'],
     description: '', status: 'drafting', targetWordCount: 300_000, createdAt: NOW, updatedAt: NOW,
   } as never) as number
-  return { projectId, scope: (await ensureWorkspaceOwnership(projectId)).scope }
+  return { projectId, scope: (await resolveWorkspaceOwnership(projectId)).scope }
 }
 
 function request(mode: 'expand' | 'rewrite' | 'polish') {

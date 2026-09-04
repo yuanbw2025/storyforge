@@ -4,12 +4,14 @@ import {
   adoptGeneratedOutlineItems,
   adoptGeneratedOutlineSummary,
 } from '../../src/lib/outline/adopt-generation'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
+import { seedCurrentProject } from '../helpers/current-workspace'
 
 async function createProject(name = '大纲采纳 service 测试'): Promise<number> {
   const now = Date.now()
-  return await db.projects.add({
+  return await seedCurrentProject({
     name,
-    genre: '',
+    genres: [],
     description: '',
     targetWordCount: 0,
     enableMultiWorld: false,
@@ -72,6 +74,7 @@ describe('AUDIT-6 · 大纲生成结果写回 use-case', () => {
       createdAt: now,
       updatedAt: now,
     } as any)
+    await finalizeCurrentFixtureV1(projectId)
 
     const result = await adoptGeneratedOutlineItems({
       projectId,
@@ -106,6 +109,7 @@ describe('AUDIT-6 · 大纲生成结果写回 use-case', () => {
       createdAt: now,
       updatedAt: now,
     } as any) as number
+    await finalizeCurrentFixtureV1(projectId)
 
     const success = await adoptGeneratedOutlineSummary(projectId, volumeId, '新卷纲')
     expect(success).toEqual({ written: true, reason: undefined })

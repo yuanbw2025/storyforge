@@ -128,8 +128,8 @@ export interface RunReadOnlyAgentInput {
   signal?: AbortSignal
   onEvent?: (event: ReadOnlyAgentEvent) => void
   executionTrace?: ReadOnlyAgentExecutionTrace
-  /** Frozen per-run capability subset. Omitted only for legacy generic read-only runs. */
-  allowedToolNames?: readonly string[]
+  /** Frozen per-run capability subset; every run must grant an explicit closed set. */
+  allowedToolNames: readonly string[]
   /** Deterministic host gate used by bounded retrieval to stop as soon as evidence is sufficient. */
   stopAfterToolBatch?: (input: {
     step: number
@@ -245,17 +245,13 @@ export async function runReadOnlyAgent(input: RunReadOnlyAgentInput): Promise<Re
     events.push(event)
     input.onEvent?.(event)
   }
-  const allowedToolNames = input.allowedToolNames == null
-    ? null
-    : new Set(input.allowedToolNames)
-  if (allowedToolNames && allowedToolNames.size !== input.allowedToolNames!.length) {
+  const allowedToolNames = new Set(input.allowedToolNames)
+  if (allowedToolNames.size !== input.allowedToolNames.length) {
     throw new Error('Agent 只读工具授权不得重复')
   }
-  if (allowedToolNames) {
-    for (const name of allowedToolNames) {
-      const tool = AGENT_TOOL_BY_NAME.get(name)
-      if (!tool || tool.risk !== 'read') throw new Error(`Agent 未登记只读工具授权：${name}`)
-    }
+  for (const name of allowedToolNames) {
+    const tool = AGENT_TOOL_BY_NAME.get(name)
+    if (!tool || tool.risk !== 'read') throw new Error(`Agent 未登记只读工具授权：${name}`)
   }
   const transcript: ChatMessage[] = [
     { role: 'system', content: input.model.systemPrompt ?? buildAgentProtocolSystemPrompt(input.allowedToolNames) },
@@ -366,7 +362,7 @@ export async function runReadOnlyAgent(input: RunReadOnlyAgentInput): Promise<Re
       })
     }
 
-    if (allowedToolNames && action.calls.some(call => !allowedToolNames.has(call.name))) {
+    if (action.calls.some(call => !allowedToolNames.has(call.name))) {
       protocolErrors += 1
       const unauthorized = action.calls.filter(call => !allowedToolNames.has(call.name)).map(call => call.name)
       const message = `本次 Skill 未授权只读工具：${[...new Set(unauthorized)].join(', ')}`

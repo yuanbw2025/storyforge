@@ -2,10 +2,10 @@ import type { LongConsistencyFixture } from './types'
 
 /**
  * 把"上一章建立的关键事实"放在 previousChapterText 的【最前】，后接足够长的无关收尾，
- * 使尾部 500 字纯属填充。这样 legacy-500-tail 必然漏掉这些早期事实，
+ * 使尾部 500 字纯属填充。这样 baseline-500-tail 必然漏掉这些早期事实，
  * 只有 handoff（从上一章全文抽取）才可能把它们带到下一章 → A/B 才真的有分辨力。
  *
- * 反例（旧夹具的错）：事实塞在正文末尾 + 总长不足 500 → legacy 尾巴看了全文，永远拿到答案，
+ * 反例（早期夹具的错）：事实塞在正文末尾 + 总长不足 500 → 基线尾部窗口看了全文，永远拿到答案，
  * 两个变体得分一样高，测不出 handoff 的价值。
  */
 const tailFiller = (label: string) =>

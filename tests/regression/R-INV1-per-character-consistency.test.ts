@@ -7,36 +7,41 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { checkHeldItemAcquisition, projectHeldItems } from '../../src/lib/consistency/held-items'
 import type { Chapter, ItemLedgerEntry, OutlineNode } from '../../src/lib/types'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
 
 const now = Date.now()
 
 async function seedTwoCharacters() {
-  const projectId = await db.projects.add({
-    name: 'INV1-CONSISTENCY', genre: '', description: '', targetWordCount: 0,
-    enableMultiWorld: false, createdAt: now, updatedAt: now,
-  } as any) as number
+  const createdWorkspaceV1 = await seedCurrentWorkspace('INV1-CONSISTENCY', {
+    genres: [],
+    targetWordCount: 0,
+  })
+  const { projectId, worldId, workId } = createdWorkspaceV1.scope
   const charA = await db.characters.add({
-    projectId, name: '林风', role: 'protagonist', roleWeight: 'main',
+    projectId, worldId, name: '林风', roleWeight: 'main',
     moralAxis: 'good', orderAxis: 'lawful', shortDescription: '',
-    homeWorldGroupId: null, createdAt: now, updatedAt: now,
+    appearance: '', personality: '', background: '', motivation: '', abilities: '',
+    relationships: '', arc: '', homeWorldGroupId: null, createdAt: now, updatedAt: now,
   } as any) as number
   const charB = await db.characters.add({
-    projectId, name: '张铁', role: 'supporting', roleWeight: 'secondary',
+    projectId, worldId, name: '张铁', roleWeight: 'secondary',
     moralAxis: 'neutral', orderAxis: 'neutral', shortDescription: '',
-    homeWorldGroupId: null, createdAt: now, updatedAt: now,
+    appearance: '', personality: '', background: '', motivation: '', abilities: '',
+    relationships: '', arc: '', homeWorldGroupId: null, createdAt: now, updatedAt: now,
   } as any) as number
   const volume = await db.outlineNodes.add({
-    projectId, parentId: null, type: 'volume', title: '卷一', summary: '',
+    projectId, workId, parentId: null, type: 'volume', title: '卷一', summary: '',
     order: 0, worldGroupId: null, createdAt: now, updatedAt: now,
   } as any) as number
   const chapterIds: number[] = []
   for (let i = 0; i < 3; i++) {
     const nodeId = await db.outlineNodes.add({
-      projectId, parentId: volume, type: 'chapter', title: `第${i + 1}章`,
+      projectId, workId, parentId: volume, type: 'chapter', title: `第${i + 1}章`,
       summary: '', order: i, createdAt: now, updatedAt: now,
     } as any) as number
     const chapterId = await db.chapters.add({
-      projectId, outlineNodeId: nodeId, title: `第${i + 1}章`,
+      projectId, workId, outlineNodeId: nodeId, title: `第${i + 1}章`,
       content: '', wordCount: 0, status: 'draft', order: i, notes: '',
       createdAt: now, updatedAt: now,
     } as any) as number
@@ -44,10 +49,11 @@ async function seedTwoCharacters() {
   }
   // 角色 A 持有青铜铃（第1章获得）
   await db.itemLedger.add({
-    projectId, itemName: '青铜铃', heldByName: '林风', characterId: charA,
+    projectId, workId, itemName: '青铜铃', heldByName: '林风', characterId: charA,
     action: 'gain', quantity: 1, chapterId: chapterIds[0], chapterTitle: '第1章',
     createdAt: now,
   } as any)
+  await finalizeCurrentFixtureV1(projectId)
   return { projectId, charA, charB, chapterIds }
 }
 

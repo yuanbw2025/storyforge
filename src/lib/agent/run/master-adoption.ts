@@ -7,7 +7,7 @@ import {
   type ExecutedMasterCandidate,
 } from '../orchestrator'
 import { appendAgentEvent } from '../conversations'
-import { scopeTransactionTables } from '../../world-engine/scope'
+import { scopeTransactionTables } from '../../workspace/scope'
 import {
   restoreMasterAgentCandidatesV1,
   type MasterAgentDurableCandidateV1,
@@ -19,7 +19,7 @@ import {
   type AgentRunSnapshotV1,
 } from './event-store'
 import { hashCanonicalValue } from './hash'
-import { readOwnedRows } from '../../world-engine/scope'
+import { readOwnedRows } from '../../workspace/scope'
 import { adoptGeneratedOutlineItems } from '../../outline/adopt-generation'
 import { parseCharacterCandidateDraft } from '../character-copilot'
 import { parseOutlineCandidateDraft } from '../outline-copilot'
@@ -67,10 +67,6 @@ import {
 } from './checkpoint'
 import { appendMasterAgentImpactReportV1 } from './master-impact'
 import { readFreshMasterCandidateStepReceiptV1 } from './master-step-verification'
-import {
-  worldGameCandidateMatchesBusinessStateV1,
-  type WorldGameCopilotSnapshotV1,
-} from '../world-game-copilot'
 import { assertWorkspaceContentRevisionFreshV1 } from '../../authoring/content-revision'
 import { maybeInjectHarnessFaultV1 } from '../dev-fault-injection'
 import { assertContextGatewayCandidateAdoptableV1 } from '../../context-gateway/execution'
@@ -84,7 +80,6 @@ export interface MasterAgentCandidateAdoptionRefV1 {
   runtime?: ExecutedMasterCandidate
   worldGroupId?: number | null
 }
-
 export interface MasterAgentCandidateAdoptionResultV1 {
   message: string
   adoptionHash: string
@@ -505,9 +500,7 @@ async function businessAlreadyMatches(
       return parsed.field === candidate.payload.creativeRulesField
         && creativeRulesCandidateMatchesRowV1(parsed, row)
     }
-    const rows = await readOwnedRows<any>(input.scope, 'worldviews', { owner: 'world' })
-    const row = rows.find(item => (item.worldGroupId ?? null) === (input.worldGroupId ?? null))
-    return (row?.worldOrigin ?? '') === candidate.draft.trim()
+    throw new Error(`世界领域候选使用了未登记的当前 Skill：${candidate.payload.skillId}`)
   }
   if (agentId === 'character') {
     if (candidate.payload.skillId === 'character.lifecycle') {
@@ -557,13 +550,6 @@ async function businessAlreadyMatches(
     return false
   }
   if (agentId === 'outline') {
-    if (candidate.payload.skillId === 'outline.world-game') {
-      return worldGameCandidateMatchesBusinessStateV1({
-        scope: input.scope,
-        snapshot: candidate.payload.baseSnapshot as WorldGameCopilotSnapshotV1,
-        draft: candidate.draft,
-      })
-    }
     if (candidate.payload.skillId === 'outline.character-revision') {
       return characterRevisionCandidateMatchesBusinessStateV1({
         scope: input.scope,
@@ -669,8 +655,7 @@ async function repairPartialOutlineAdoption(
     return
   }
     if (
-      candidate.payload.skillId === 'outline.world-game'
-      || candidate.payload.skillId === 'outline.story-arcs'
+      candidate.payload.skillId === 'outline.story-arcs'
       || candidate.payload.skillId === 'outline.storyline-progress'
       || candidate.payload.skillId === 'outline.character-driven'
     ) return

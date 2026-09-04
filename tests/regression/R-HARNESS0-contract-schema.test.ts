@@ -21,6 +21,7 @@ function validContract() {
         { table: 'outlineNodes', fields: ['summary'], mode: 'author-confirmed' },
       ],
     },
+    runtimeBindingHash: 'a'.repeat(64),
     budget: {
       maxModelCalls: 3,
       maxToolCalls: 0,
@@ -65,6 +66,7 @@ describe('R-HARNESS0-contract-schema · RunContractV1', () => {
       acceptance: source.acceptance,
       budget: source.budget,
       permissions: source.permissions,
+      runtimeBindingHash: source.runtimeBindingHash,
       scope: source.scope,
       workflowKind: source.workflowKind,
       objective: source.objective,
@@ -77,8 +79,8 @@ describe('R-HARNESS0-contract-schema · RunContractV1', () => {
     expect(second.contractHash).toBe(first.contractHash)
   })
 
-  it('可选 Runner 预算进入规范化契约和 hash，旧契约仍保持兼容', async () => {
-    const legacy = await acceptAgentRunContractV1(validContract())
+  it('可选 Runner 预算进入规范化契约和 hash', async () => {
+    const baseline = await acceptAgentRunContractV1(validContract())
     const source = validContract()
     const extended = {
       ...source,
@@ -94,7 +96,7 @@ describe('R-HARNESS0-contract-schema · RunContractV1', () => {
       maxToolResultTokens: 24_000,
       maxProtocolErrors: 2,
     })
-    expect(accepted.contractHash).not.toBe(legacy.contractHash)
+    expect(accepted.contractHash).not.toBe(baseline.contractHash)
     extended.budget.maxProtocolErrors = -1
     expect(() => parseAgentRunContractV1(extended)).toThrow('contract.budget.maxProtocolErrors')
   })

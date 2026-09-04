@@ -17,11 +17,12 @@ import {
 import { decodeGenerationOperation } from '../../lib/outline/generation-request'
 import type { OutlineGenerationRequest } from '../../lib/outline/generation-request'
 import type { AssembleContextResult } from '../../lib/registry/types'
-import type { OutlineNode, Project } from '../../lib/types'
+import type { OutlineNode, Project, Work } from '../../lib/types'
 import { flushPendingEditsV1 } from '../../lib/authoring/pending-edit-coordinator'
 
 interface Options {
   project: Project
+  work: Work | null
   multiWorldEnabled: boolean
   volumes: OutlineNode[]
   nodes: OutlineNode[]
@@ -66,6 +67,7 @@ function projectRestoredBatch(input: Awaited<ReturnType<typeof restoreLatestOutl
 
 export function useOutlineBatchGeneration({
   project,
+  work,
   multiWorldEnabled,
   volumes,
   nodes,
@@ -103,7 +105,7 @@ export function useOutlineBatchGeneration({
   }, [onInfo, project.id])
 
   const generate = useCallback(async () => {
-    if (project.id == null || volumes.length === 0) return
+    if (project.id == null || !work || volumes.length === 0) return
     if (candidates.size > 0) {
       await rejectCandidates(candidates.values(), '作者启动了新的批量章纲任务，旧批量候选已失效。')
     }
@@ -119,6 +121,7 @@ export function useOutlineBatchGeneration({
       await flushPendingEditsV1()
       const generationResult = await runBatchOutlineGeneration({
         project,
+        work,
         nodes,
         volumes,
         userHint: hint || undefined,
@@ -167,6 +170,7 @@ export function useOutlineBatchGeneration({
     project,
     runOptions,
     volumes,
+    work,
   ])
 
   const cancel = useCallback(() => {

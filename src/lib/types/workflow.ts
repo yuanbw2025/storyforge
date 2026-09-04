@@ -12,7 +12,7 @@ import type { PromptModuleKey } from './prompt'
  * 步骤输出的"自动写回"目标（Phase 17）
  *
  * 工作流跑完一步后，输出文本可以自动保存到当前项目的对应数据：
- * - worldview-field: 写到 worldview[field]（如 worldOrigin、historyLine）
+ * - worldview-field: 写到 worldview[field]（如 worldOrigin、races）
  * - storyCore-field: 写到 storyCore[field]（如 logline、theme）
  * - chapter-content: 写到指定章节的 content（需要 chapterId 或 outlineNodeId）
  * - none: 不自动写，仅复制到剪贴板（默认）
@@ -98,11 +98,8 @@ export interface PromptWorkflow {
   /** 适用题材标签（与 PromptTemplate.genres 对齐） */
   genres?: string[]
   steps: PromptWorkflowStep[]
-  /**
-   * FLOW-1 可视化 DAG。旧行为空时继续按 steps 线性执行，并在编辑器内生成兼容布局；
-   * 不需要 DB schema/index 迁移。
-   */
-  graph?: PromptWorkflowGraph
+  /** FLOW-1 可视化 DAG；步骤顺序与数据依赖都必须显式存在于图中。 */
+  graph: PromptWorkflowGraph
   /** 是否为默认推荐 */
   isDefault?: boolean
   createdAt: number

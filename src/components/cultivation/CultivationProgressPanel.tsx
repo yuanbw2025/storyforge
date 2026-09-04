@@ -15,7 +15,7 @@ import {
 import { htmlToPlainText } from '../../lib/utils/html'
 import { resolveRequestConfig } from '../../lib/ai/client'
 import { getAIConfigRequiredMessage, isAIConfigReady } from '../../lib/ai/config-readiness'
-import { resolveScopeLike } from '../../lib/world-engine/scope'
+import { resolveScopeLike } from '../../lib/workspace/scope'
 import { useAIConfigStore } from '../../stores/ai-config'
 import { useChapterStore } from '../../stores/chapter'
 import { useCharacterStore } from '../../stores/character'
@@ -24,6 +24,7 @@ import { useCultivationProgressStore } from '../../stores/cultivation-progress'
 import { useOutlineStore } from '../../stores/outline'
 import { useProjectStore } from '../../stores/project'
 import { useDialog } from '../shared/Dialog'
+import { useActiveWork } from '../../hooks/useActiveWork'
 
 const TRANSITION_LABELS = {
   enter: '首次确认',
@@ -44,7 +45,8 @@ export default function CultivationProgressPanel({ project }: { project: Project
   const systems = useCultivationStore(state => state.systems)
   const loadSystems = useCultivationStore(state => state.loadAll)
   const { events, loadAll: loadEvents, deleteEvent } = useCultivationProgressStore()
-  const updateProject = useProjectStore(state => state.updateProject)
+  const updateActiveWork = useProjectStore(state => state.updateActiveWork)
+  const activeWork = useActiveWork(project)
 
   const [selectedChapterId, setSelectedChapterId] = useState<number | null>(null)
   const [selectedCharacterId, setSelectedCharacterId] = useState<number | null>(null)
@@ -311,8 +313,8 @@ export default function CultivationProgressPanel({ project }: { project: Project
         <label className="flex items-center gap-2 text-xs text-text-secondary border border-border rounded-lg px-3 py-2">
           <input
             type="checkbox"
-            checked={Boolean(project.includeCultivationProgressInAI)}
-            onChange={event => updateProject(project.id!, {
+            checked={Boolean(activeWork?.includeCultivationProgressInAI)}
+            onChange={event => updateActiveWork(project.id!, {
               includeCultivationProgressInAI: event.target.checked,
             })}
           />

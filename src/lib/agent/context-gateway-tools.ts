@@ -9,6 +9,7 @@ import {
 import {
   assertContextGatewayTokenRequestV1,
   claimContextGatewayReadCallV1,
+  isContextGatewayResourceAllowedV1,
   issueContextSourceRefCapabilitiesV1,
   resolveContextSourceRefCapabilityV1,
   settleContextGatewayTokensV1,
@@ -347,7 +348,7 @@ async function catalogPage(input: {
       maxItems: remaining,
     })
     const filtered = filterContextResourcePageV1({ page: validated, policy: input.session.policy })
-    items.push(...filtered.items)
+    items.push(...filtered.items.filter(item => isContextGatewayResourceAllowedV1(input.session, item.resourceKey)))
     usedBindings.push(binding)
     if (rawPage.nextCursor) {
       providerCursor = rawPage.nextCursor
@@ -388,6 +389,9 @@ async function locateResource(input: {
   resourceKey: string
   maxTokens: number
 }): Promise<{ binding: ContextGatewayProviderBindingV1; descriptor: ContextResourceDescriptorV1 }> {
+  if (!isContextGatewayResourceAllowedV1(input.session, input.resourceKey)) {
+    throw new Error('资源不在当前产品 SourcePlan 的允许集合中')
+  }
   let lastError: unknown
   for (const binding of input.session.providers) {
     try {

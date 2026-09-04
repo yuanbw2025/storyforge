@@ -20,17 +20,17 @@ import {
 } from '../../src/lib/registry/field-registry'
 import { checkRegistry } from '../../src/lib/registry/validate'
 import { generateWorkspaceUid } from '../../src/lib/memory/identity'
-import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
-import { stampNewRecord } from '../../src/lib/world-engine/scope'
+import { resolveWorkspaceOwnership } from '../../src/lib/workspace/ownership'
+import { stampNewRecord } from '../../src/lib/workspace/scope'
 import type { NaturalResources, WorkspaceScope } from '../../src/lib/types'
+import { seedCurrentProject } from '../helpers/current-workspace'
 
 const NOW = 1_788_200_000_000
 
 async function seedWorkspace(name: string): Promise<{ projectId: number; scope: WorkspaceScope }> {
-  const projectId = await db.projects.add({
+  const projectId = await seedCurrentProject({
     workspaceUid: generateWorkspaceUid(),
     name,
-    genre: 'fantasy',
     genres: ['fantasy'],
     description: '',
     status: 'drafting',
@@ -38,7 +38,7 @@ async function seedWorkspace(name: string): Promise<{ projectId: number; scope: 
     createdAt: NOW,
     updatedAt: NOW,
   } as never) as number
-  const ownership = await ensureWorkspaceOwnership(projectId)
+  const ownership = await resolveWorkspaceOwnership(projectId)
   return { projectId, scope: ownership.scope }
 }
 

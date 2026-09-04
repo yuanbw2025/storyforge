@@ -10,7 +10,7 @@ import {
   rejectHistoryAgentCandidateV1,
   type HistoryAgentCandidateV1,
 } from '../../lib/agent/run/history-agent-durable'
-import { resolveScopeLike } from '../../lib/world-engine/scope'
+import { resolveScopeLike } from '../../lib/workspace/scope'
 
 export interface HistoryAgentLaneState {
   candidate: HistoryAgentCandidateV1 | null

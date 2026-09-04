@@ -8,10 +8,12 @@ import { hashCanonicalValue } from '../agent/run/hash'
 import { CONTEXT_SOURCES } from '../registry/context-sources'
 import type {
   ContextPacketV1,
+  ContextAccessPolicyV1,
   ContextResourceDescriptorV1,
   ContextSufficiencyObligationV1,
   ContextSufficiencyReportV1,
   ContextTimeRangeV1,
+  FrozenResourceScopeV1,
   RetrievalDecisionV1,
   RetrievalQueryTraceV1,
   RetrievalTraceV1,
@@ -81,6 +83,13 @@ export interface ExecuteContextGatewayInputV1 {
   timeRange?: ContextTimeRangeV1
   /** Runtime narrowing only; callers cannot add kinds not declared by the Skill. */
   excludedResourceKinds?: readonly ContextResourceDescriptorV1['kind'][]
+  /** Cross-product production may read an immutable WorldRelease instead of
+   * the mutable current Work scope. The locator must still belong to scope. */
+  resourceScope?: FrozenResourceScopeV1
+  /** Adapter-frozen policy; validated as a narrowing of the Skill grant. */
+  accessPolicyOverride?: ContextAccessPolicyV1
+  /** Exact resource permission derived from ProductSourcePlan selectors. */
+  allowedResourceKeys?: readonly string[]
   /** Omit to disable extra planning calls while preserving deterministic selection. */
   additionalReadModel?: AgentModelAdapter
   additionalReadsEnabled?: boolean
@@ -120,7 +129,15 @@ function fail(code: string, message: string): never {
   throw new ContextGatewayExecutionErrorV1(code, message)
 }
 
-function frozenScope(input: ExecuteContextGatewayInputV1) {
+function frozenScope(input: ExecuteContextGatewayInputV1): FrozenResourceScopeV1 {
+  if (input.resourceScope) {
+    if (input.resourceScope.projectId !== input.scope.projectId
+      || (input.resourceScope.worldId != null && input.resourceScope.worldId !== input.scope.worldId)
+      || (input.resourceScope.workId != null && input.resourceScope.workId !== input.scope.workId)) {
+      fail('resource-scope', '冻结资源 scope 不属于当前 WorkspaceScope')
+    }
+    return { ...input.resourceScope }
+  }
   return {
     projectId: input.scope.projectId,
     worldId: input.scope.worldId,
@@ -129,6 +146,25 @@ function frozenScope(input: ExecuteContextGatewayInputV1) {
     ...(input.chapterId == null ? {} : { chapterId: input.chapterId }),
     ...(input.characterId === undefined ? {} : { characterId: input.characterId }),
   }
+}
+
+function narrowedAccessPolicy(input: ExecuteContextGatewayInputV1): ContextAccessPolicyV1 {
+  const declared = createContextAccessPolicyForExecutionV1(input.skill, input.excludedResourceKinds)
+  const override = input.accessPolicyOverride
+  if (!override) return declared
+  const subset = <T>(values: readonly T[], allowed: readonly T[]) => values.every(value => allowed.includes(value))
+  if (!subset(override.allowedSourceKeys, declared.allowedSourceKeys)
+    || !subset(override.mandatorySourceKeys, override.allowedSourceKeys)
+    || !subset(override.allowedResourceKinds, declared.allowedResourceKinds)
+    || !subset(override.allowedDepths, declared.allowedDepths)
+    || override.selectorPolicyId !== declared.selectorPolicyId
+    || override.maxReadCalls > declared.maxReadCalls
+    || override.maxRetrievedTokens > declared.maxRetrievedTokens
+    || (override.allowOriginalRead && !declared.allowOriginalRead)
+    || override.candidateAccess !== 'forbidden') {
+    fail('policy-override', 'SourcePlan policy 超出 Agent Skill 的静态权限')
+  }
+  return structuredClone(override)
 }
 
 function hardFailure(report: ContextSufficiencyReportV1): ContextSufficiencyObligationV1 | undefined {
@@ -338,11 +374,12 @@ export async function executeContextGatewayV1(
   input: ExecuteContextGatewayInputV1,
 ): Promise<ContextGatewayExecutionV1> {
   const gatewayPolicy = assertAgentSkillContextGatewayPolicyV1(input.skill)
-  const accessPolicy = createContextAccessPolicyForExecutionV1(
-    input.skill,
-    input.excludedResourceKinds,
-  )
-  const session = await createContextGatewayToolSessionV1({ scope: frozenScope(input), policy: accessPolicy })
+  const accessPolicy = narrowedAccessPolicy(input)
+  const session = await createContextGatewayToolSessionV1({
+    scope: frozenScope(input),
+    policy: accessPolicy,
+    allowedResourceKeys: input.allowedResourceKeys,
+  })
   const catalog = await collectCatalog(session)
   const readsAllowed = input.additionalReadsEnabled !== false
     && input.additionalReadModel != null
@@ -365,7 +402,12 @@ export async function executeContextGatewayV1(
   })
   const initialHardFailure = hardFailure(selector.sufficiency)
   if (initialHardFailure) {
-    fail('hard-sufficiency', `${initialHardFailure.id}:${initialHardFailure.reasonCode}`)
+    const omission = selector.omitted.find(item => initialHardFailure.id.endsWith(item.resourceKey))
+    fail('hard-sufficiency', [
+      initialHardFailure.id,
+      initialHardFailure.reasonCode,
+      omission ? `omitted=${omission.reasonCode}` : '',
+    ].filter(Boolean).join(':'))
   }
 
   const mandatoryInputKeys = new Set(input.mandatoryResourceKeys ?? [])
@@ -641,9 +683,9 @@ export async function assertContextGatewayCandidateAdoptableV1(input: {
   candidateHash: string
   contextManifestHash?: string
   excludedResourceKinds?: readonly ContextResourceDescriptorV1['kind'][]
-}): Promise<{ mode: 'legacy-or-shadow' } | { mode: 'required'; manifestHash: string; freshnessHash: string }> {
+}): Promise<{ mode: 'registry-context' } | { mode: 'required'; manifestHash: string; freshnessHash: string }> {
   if (!isContextGatewayRequiredForWriteTargetV1(input.skill, input.writeTarget)) {
-    return { mode: 'legacy-or-shadow' }
+    return { mode: 'registry-context' }
   }
   if (!input.contextManifestHash) fail('candidate-manifest-required', `Skill ${input.skill.id} 的候选缺少 ContextManifestV3`)
   const verified = await verifyContextGatewayCandidateEvidenceV1({

@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AssembleContextResult } from '../../src/lib/registry/types'
 import type { OutlineNode } from '../../src/lib/types'
+import { currentWorkFixtureRecordV1 } from '../helpers/current-workspace'
 
 const mocks = vi.hoisted(() => ({
   runBatch: vi.fn(),
@@ -96,7 +97,25 @@ function options(patch: Partial<Parameters<typeof useOutlineBatchGeneration>[0]>
     { ...outlineNode(2, 'volume', null, '第二卷', 1), worldGroupId: 22 },
   ]
   return {
-    project: { id: 1, name: '测试项目', genre: '幻想', createdAt: 1, updatedAt: 1 } as any,
+    project: {
+      id: 1,
+      workspaceUid: 'WS-00000000-0000-4000-8000-000000000001',
+      workspacePurpose: 'independent-work',
+      name: '测试工作区',
+      activeWorldId: 1,
+      activeWorkId: 1,
+      createdAt: 1,
+      updatedAt: 1,
+    },
+    work: currentWorkFixtureRecordV1({
+      id: 1,
+      projectId: 1,
+      worldId: 1,
+      title: '测试作品',
+      genres: ['幻想'],
+      createdAt: 1,
+      updatedAt: 1,
+    }),
     multiWorldEnabled: false,
     volumes,
     nodes: volumes,

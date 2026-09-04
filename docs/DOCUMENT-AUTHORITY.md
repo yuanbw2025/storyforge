@@ -1,6 +1,6 @@
 # StoryForge 文档权威与归档规则
 
-> 版本：1.0.0 · 生效：2026-08-26
+> 版本：1.5.0 · 生效：2026-09-03
 > 本文回答“哪些文档仍可指导开发”。未列入现行清单的历史材料，不得作为设计或施工权威。
 
 ## 1. 裁决层级
@@ -46,8 +46,7 @@
 - `docs/AI-FUNCTIONS-MANUAL.generated.md`：代码生成，不手改。
 - `docs/AI-FUNCTIONS-MANUAL.semantic.md`：生成清单的人工语义注解。
 - `docs/CONSISTENCY-COVERAGE-MAP.md`：Canon 一致性反例状态。
-- `docs/audits/BRANCH-CONSOLIDATION-LEDGER-20260825.md`：本次分支整合证据。
-- `docs/audits/PROJECT-CHARTER-ALIGNMENT-AUDIT-20260826.md`：当前主干与总纲偏差。
+- `docs/audits/CURRENT-ARCHITECTURE-AUDIT-20260903.md`：当前代码树的项目级架构闭环审计；不替代具体产品方案和质量认证。
 
 ### 2.4 用户、维护与法律资料
 
@@ -94,3 +93,5 @@
 ## 6. 复审
 
 每次总纲版本升级、重大产品边界变化、schema 大版本或发布前，复审本文白名单。若某文档无法判断是否仍有效，先移出默认路由并登记审计，不允许“暂时都保留”继续制造多重事实源。
+
+本次 1.5.0 复审已核对总纲 1.5.0、当前架构审计、产品契约、数据治理、能力基线与完成索引。现行业务、产品入口和权威文档只描述当前架构；历史数据库结构、迁移器与兼容夹具不保留在当前仓库，只能从 Git/WPS 归档取证。旧文档仍不得恢复为施工权威。

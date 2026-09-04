@@ -4,7 +4,7 @@ import { db } from '../../src/lib/db/schema'
 import type { WorkspaceScope } from '../../src/lib/types'
 import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
 import { getAgentSkillV1 } from '../../src/lib/agent/skill-registry'
-import { parseStoryEventsStrictV1 } from '../../src/lib/ai/adapters/story-timeline-adapter'
+import { parseStoryEvents } from '../../src/lib/ai/adapters/story-timeline-adapter'
 import { usePromptStore } from '../../src/stores/prompt'
 import {
   abandonStoryTimelineExtractionV1,
@@ -15,22 +15,13 @@ import {
   readRecoverableStoryTimelineExtractionV1,
   resumeStoryTimelineExtractionCandidateV1,
 } from '../../src/lib/agent/run/story-timeline-extraction-durable'
+import { currentWorkFixtureRecordV1, seedCurrentWorkspace } from '../helpers/current-workspace'
+import { stampCurrentFixtureResourceUidsV1 } from '../helpers/current-resource-identity'
 
 async function seed(options: { long?: boolean } = {}) {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    name: '故事年表提取', genre: 'fantasy', genres: ['fantasy'], status: 'drafting', description: '',
-    targetWordCount: 80_000, worldCode: `timeline-${now}`, worldVersion: 1, createdAt: now, updatedAt: now,
-  } as any) as number
-  const worldId = await db.worlds.add({
-    projectId, code: `timeline-${now}`, name: '潮门世界', description: '', currentVersion: 1,
-    createdAt: now, updatedAt: now,
-  }) as number
-  const workId = await db.works.add({
-    projectId, worldId, title: '潮门纪', description: '', genres: ['fantasy'], status: 'drafting',
-    targetWordCount: 80_000, createdAt: now, updatedAt: now,
-  } as any) as number
-  await db.projects.update(projectId, { activeWorldId: worldId, activeWorkId: workId, ownershipSchemaVersion: 1 })
+  const created = await seedCurrentWorkspace('故事年表提取')
+  const { projectId, worldId, workId } = created.scope
   const worldGroupId = await db.worldGroups.add({
     projectId, worldId, name: '主世界', order: 0, createdAt: now, updatedAt: now,
   }) as number
@@ -72,6 +63,7 @@ async function seed(options: { long?: boolean } = {}) {
       description: '范围外人工记录', chapterId: chapterIds[2], chapterTitle: '第3章', order: 9, createdAt: now + 2,
     } as any) as number,
   ]
+  await stampCurrentFixtureResourceUidsV1(projectId)
   return {
     scope: { projectId, worldId, workId } satisfies WorkspaceScope,
     projectId, worldId, workId, worldGroupId, volumeId, chapterIds, originalIds,
@@ -365,10 +357,10 @@ describe.sequential('R-HARNESS64 · 故事年表 durable 分块提取与原子�
   it('只读取当前 Work 的章节与正式年表，隔离同项目其它 Work', async () => {
     const fixture = await seed()
     const now = Date.now()
-    const foreignWorkId = await db.works.add({
+    const foreignWorkId = await db.works.add(currentWorkFixtureRecordV1({
       projectId: fixture.projectId, worldId: fixture.worldId, title: '同世界外部作品', description: '',
       genres: ['fantasy'], status: 'drafting', targetWordCount: 1_000, createdAt: now, updatedAt: now,
-    } as any) as number
+    })) as number
     await db.chapters.add({
       projectId: fixture.projectId, workId: foreignWorkId, outlineNodeId: null, title: '外部章节',
       content: '<p>秘密银门只存在于另一部作品，外部议会在这里宣布了永恒封锁。</p>', wordCount: 60,
@@ -419,13 +411,13 @@ describe.sequential('R-HARNESS64 · 故事年表 durable 分块提取与原子�
   })
 
   it('严格 parser 拒绝额外/缺失字段、非 1..3 整数重要度与非 JSON', () => {
-    expect(parseStoryEventsStrictV1(response(event()))).toEqual([event()])
-    expect(() => parseStoryEventsStrictV1(JSON.stringify([{ ...event(), extra: true }]))).toThrow('字段不在允许闭集')
+    expect(parseStoryEvents(response(event()))).toEqual([event()])
+    expect(() => parseStoryEvents(JSON.stringify([{ ...event(), extra: true }]))).toThrow('字段不在允许闭集')
     const { description: _description, ...missing } = event()
-    expect(() => parseStoryEventsStrictV1(JSON.stringify([missing]))).toThrow('字段不在允许闭集')
-    expect(() => parseStoryEventsStrictV1(JSON.stringify([{ ...event(), importance: 1.5 }]))).toThrow('字段类型或重要度无效')
-    expect(() => parseStoryEventsStrictV1(JSON.stringify([{ ...event(), importance: 4 }]))).toThrow('字段类型或重要度无效')
-    expect(() => parseStoryEventsStrictV1('年表建议如下')).toThrow('不是有效 JSON')
+    expect(() => parseStoryEvents(JSON.stringify([missing]))).toThrow('字段不在允许闭集')
+    expect(() => parseStoryEvents(JSON.stringify([{ ...event(), importance: 1.5 }]))).toThrow('字段类型或重要度无效')
+    expect(() => parseStoryEvents(JSON.stringify([{ ...event(), importance: 4 }]))).toThrow('字段类型或重要度无效')
+    expect(() => parseStoryEvents('年表建议如下')).toThrow('不是有效 JSON')
   })
 
   it('旧组件 chat、Context、分块/parser 与先删后写旁路已下线，人工 CRUD 保留', () => {

@@ -16,12 +16,14 @@ import { useChapterStore } from '../../stores/chapter'
 import { useItemLedgerStore } from '../../stores/item-ledger'
 import { useCodexStore } from '../../stores/codex'
 import { aggregateInventory } from '../../lib/types/item-ledger'
+import { characterAxesLabel } from '../../lib/character/character-axes'
 import { CInput } from '../shared/CompositionInput'
 import {
   INITIAL_RECORD_TARGET_CLASS,
   initialRecordTargetAttributes,
   useInitialRecordTarget,
 } from '../shared/initial-record-target'
+import { useActiveWork } from '../../hooks/useActiveWork'
 
 interface Props {
   project: Project
@@ -39,6 +41,7 @@ function findField(fields: StateField[], keys: string[]): string {
 }
 
 export default function StatePanel({ project, onOpenInventory, initialStateCardId }: Props) {
+  const activeWork = useActiveWork(project)
   const projectId = project.id!
   const { cards, loading, loadAll, addCard, updateCard, buildStateContext } = useStateCardStore()
   const { characters, loadAll: loadCharacters } = useCharacterStore()
@@ -89,7 +92,7 @@ export default function StatePanel({ project, onOpenInventory, initialStateCardI
     const url = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }))
     const link = document.createElement('a')
     link.href = url
-    link.download = `${project.name}_角色状态卡.txt`
+    link.download = `${activeWork?.title ?? '当前作品'}_角色状态卡.txt`
     link.click()
     URL.revokeObjectURL(url)
   }
@@ -333,7 +336,7 @@ function CharacterStateCard({
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <h3 className="font-semibold text-text-primary truncate">{character.name}</h3>
-            <span className="text-[10px] px-1.5 py-0.5 rounded bg-bg-elevated text-text-muted">{character.role}</span>
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-bg-elevated text-text-muted">{characterAxesLabel(character)}</span>
             {!card && <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400">待提取</span>}
           </div>
           <p className="text-xs text-text-muted mt-0.5 line-clamp-2">{character.shortDescription || '暂无角色简介'}</p>

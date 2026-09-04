@@ -18,8 +18,7 @@ export function readChapterDragPayload(event: ReactDragEvent): ChapterDragPayloa
     if (sourceParentId != null && !Number.isFinite(sourceParentId)) return null
     return { chapterId, sourceParentId }
   } catch {
-    const legacyId = Number(raw)
-    return Number.isFinite(legacyId) ? { chapterId: legacyId, sourceParentId: null } : null
+    return null
   }
 }
 

@@ -4,7 +4,7 @@ import { assembleContext } from '../../registry/assemble-context'
 import type { ImpactHandoffV2 } from '../../consistency/impact-handoff'
 import type { ImpactRemediationPlanV1 } from '../../consistency/impact-remediation-plan'
 import { hashChapterText } from '../../ai/chapter-memory/text-normalization'
-import { assertRecordInScope, getTableSpec } from '../../world-engine/scope'
+import { assertRecordInScope, getTableSpec } from '../../workspace/scope'
 import {
   resolveCurrentImpactHandoffTargetV2,
   validateCurrentImpactHandoffV2,
@@ -79,6 +79,7 @@ function contract(input: {
   reviewRunId: number
   reviewReceiptHash: string
   relation: string
+  runtimeBindingHash: string
 }) {
   return {
     version: 1 as const,
@@ -104,6 +105,7 @@ function contract(input: {
       contextSourceKeys: ['chapterContent'],
       writeTargets: [],
     },
+    runtimeBindingHash: input.runtimeBindingHash,
     budget: {
       // RunContract V1 currently requires a positive model ceiling even for a
       // zero-model durable workflow. No model event is emitted by this unit.
@@ -299,6 +301,12 @@ export async function beginImpactManualCorrectionV1(input: {
       reviewRunId: current.review.runId,
       reviewReceiptHash: current.review.receiptHash,
       relation,
+      runtimeBindingHash: await hashCanonicalValue({
+        schema: 'storyforge.impact-manual-correction-runtime',
+        version: 1,
+        stepId: IMPACT_MANUAL_CORRECTION_STEP_ID_V1,
+        verifierSet: IMPACT_MANUAL_CORRECTION_VERIFIER_SET_V1,
+      }),
     }),
   })
   snapshot = await appendAgentRunEventV1({

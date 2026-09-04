@@ -7,7 +7,8 @@ import {
   synchronizeProjectChangesToFolderV1,
   WORKSPACE_FILE_SCAN_MAX_BYTES_V1,
 } from '../../src/lib/memory/workspace-projection'
-import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
+import { resolveWorkspaceOwnership } from '../../src/lib/workspace/ownership'
+import { seedCurrentProject } from '../helpers/current-workspace'
 
 function notFound(): DOMException { return new DOMException('not found', 'NotFoundError') }
 
@@ -93,11 +94,11 @@ function metadataDirectory() {
 
 async function seed() {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    workspaceUid: generateWorkspaceUid(), name: '性能项目', genre: 'fantasy', genres: [], status: 'drafting',
+  const projectId = await seedCurrentProject({
+    workspaceUid: generateWorkspaceUid(), name: '性能项目', genres: [], status: 'drafting',
     description: '', targetWordCount: 1_000_000, createdAt: now, updatedAt: now,
   } as any) as number
-  const ownership = await ensureWorkspaceOwnership(projectId)
+  const ownership = await resolveWorkspaceOwnership(projectId)
   const outlineNodeId = await db.outlineNodes.add({
     projectId, workId: ownership.scope.workId, parentId: null, type: 'chapter', title: '长章', summary: '', order: 0,
     createdAt: now, updatedAt: now,

@@ -98,8 +98,8 @@ export function walkOutlineChaptersInCanonicalOrder(outlineNodes: OutlineNode[])
 
 /**
  * Group canonical chapters under their top-level volume, even when chapters
- * are nested through story blocks or arcs. Authoring UIs must not assume the
- * legacy two-level `volume -> chapter` shape.
+ * are nested through story blocks or arcs. Authoring UIs must support the
+ * current arbitrary-depth outline tree instead of assuming two levels.
  */
 export function groupOutlineChaptersByTopLevelVolume(
   outlineNodes: OutlineNode[],

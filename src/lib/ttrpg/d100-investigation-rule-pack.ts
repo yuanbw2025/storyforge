@@ -26,6 +26,16 @@ const unlimited = () => ({
   cooldownRounds: null,
   reset: [],
 });
+const itemMechanics = (category: string) => ({
+  category,
+  stackPolicy: "unique" as const,
+  maxStack: 1,
+  weight: null,
+  equipSlots: [],
+  requiresAttunement: false,
+  maximumCharges: null,
+  maximumDurability: null,
+});
 
 const PERCENT_TRAITS = [
   "investigation",
@@ -398,6 +408,7 @@ export const STORYFORGE_D100_INVESTIGATION_RULE_PACK_V1: RulePackV1 = {
       description: "取样、记录、照明与基础检测工具。",
       tags: ["tool", "investigation"],
       grantedActionKeys: ["investigate", "observe", "connect-clues"],
+      mechanics: itemMechanics("tool"),
     },
     {
       key: "recording-device",
@@ -405,6 +416,7 @@ export const STORYFORGE_D100_INVESTIGATION_RULE_PACK_V1: RulePackV1 = {
       description: "保存访谈、环境与时间线证据的便携设备。",
       tags: ["tool", "evidence"],
       grantedActionKeys: ["observe", "influence"],
+      mechanics: itemMechanics("evidence"),
     },
     {
       key: "protective-gear",
@@ -412,6 +424,7 @@ export const STORYFORGE_D100_INVESTIGATION_RULE_PACK_V1: RulePackV1 = {
       description: "用于危险现场的基础防护与急救用品。",
       tags: ["armor", "medical"],
       grantedActionKeys: ["force", "confront", "recover"],
+      mechanics: itemMechanics("armor"),
     },
   ],
   advancement: {

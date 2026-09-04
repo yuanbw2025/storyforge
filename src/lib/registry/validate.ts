@@ -1,11 +1,6 @@
 /**
- * 注册表完整性校验(Phase 1.1a)
- *
- * 启动期调用 validateRegistry():
- *   - PROJECT_TABLES 与 Dexie 实例双向覆盖(漏登记/多登记立刻发现)
- *   - 所有 ref/remap 的 target 表名存在
- *
- * 不一致 → 开发期 throw,生产期 console.error(不阻断启动,避免误伤用户)。
+ * 当前三注册表完整性校验。启动时双向核对 PROJECT_TABLES、
+ * FIELD_REGISTRY、Adoption Schema 与 CONTEXT_SOURCES；任何不一致都必须阻断应用启动。
  */
 import { db } from '../db/schema'
 import { PROJECT_TABLES, REGISTRY_BY_NAME } from './project-tables'
@@ -54,26 +49,24 @@ export function checkRegistry(): RegistryValidationResult {
         errors.push(`${spec.name}.resourceIdentity 要求 registered-fields，但 FIELD_REGISTRY 无字段`)
       }
     }
-    if (spec.communityShare === 'world' && !spec.releaseSection) {
-      errors.push(`${spec.name}.communityShare=world 必须登记 releaseSection`)
-    }
-    if (spec.releaseSection && spec.communityShare !== 'world') {
-      errors.push(`${spec.name}.releaseSection 只能用于 world 可发布表`)
-    }
     if (spec.owner !== 'global' && !spec.domainOwner) {
       errors.push(`${spec.name}.domainOwner 未登记逻辑归属`)
     }
     if (spec.domainOwner) {
-      const { allowed, legacyDefault, locator } = spec.domainOwner
+      const { allowed, defaultOwner, locator } = spec.domainOwner
       if (allowed.length === 0) errors.push(`${spec.name}.domainOwner.allowed 不能为空`)
       if (new Set(allowed).size !== allowed.length) {
         errors.push(`${spec.name}.domainOwner.allowed 存在重复 owner`)
       }
-      if (!allowed.includes(legacyDefault)) {
-        errors.push(`${spec.name}.domainOwner.legacyDefault 不在 allowed 中`)
+      if (!allowed.includes(defaultOwner)) {
+        errors.push(`${spec.name}.domainOwner.defaultOwner 不在 allowed 中`)
       }
-      if (spec.worldDomains?.length && legacyDefault === 'workspace') {
-        errors.push(`${spec.name}.worldDomains 不能默认归属 workspace`)
+      if (spec.worldSemantic && defaultOwner === 'workspace') {
+        errors.push(`${spec.name}.worldSemantic 不能默认归属 workspace`)
+      }
+      if (spec.worldSemantic?.canonPolicy === 'confirmed-rows-only'
+        && (!spec.worldSemantic.statusField || !spec.worldSemantic.confirmedStatusValues?.length)) {
+        errors.push(`${spec.name}.worldSemantic confirmed-rows-only 缺少状态字段/允许值`)
       }
       if (locator.kind === 'workspace' && !allowed.includes('workspace')) {
         errors.push(`${spec.name}.domainOwner workspace locator 未允许 workspace`)
@@ -93,14 +86,13 @@ export function checkRegistry(): RegistryValidationResult {
           errors.push(`${spec.name}.domainOwner parent owner 未在 allowed 中: ${locator.owner}`)
         }
       }
-      if ((spec.name === 'worlds' || spec.name === 'works' || spec.name === 'workCharacterBindings')
-        && locator.kind === 'compat-project') {
-        errors.push(`${spec.name}.domainOwner 新根/绑定不得使用 compat-project`)
-      }
     }
 
     for (const ref of spec.refs ?? []) {
       if (ref.kind === 'simple' || ref.kind === 'json') {
+        if (ref.kind === 'simple' && ref.field !== 'id') {
+          errors.push(`${spec.name}.refs(simple) 必须从父表 id 指向依赖表外键，禁止反向登记: ${ref.field} -> ${ref.target}`)
+        }
         const t = parseTargetTable(ref.target)
         if (t && !REGISTRY_BY_NAME.has(t)) {
           errors.push(`${spec.name}.refs 指向不存在的表: ${ref.target}`)
@@ -294,15 +286,11 @@ export function checkRegistry(): RegistryValidationResult {
   return { ok: errors.length === 0, errors }
 }
 
-/** 启动期调用 */
-export function validateRegistry(opts?: { throwOnError?: boolean }): void {
+/** 启动期硬门。 */
+export function validateRegistry(): void {
   const result = checkRegistry()
   if (result.ok) return
 
   const msg = `[Registry] 注册表校验失败:\n  - ${result.errors.join('\n  - ')}`
-  if (opts?.throwOnError) {
-    throw new Error(msg)
-  } else {
-    console.error(msg)
-  }
+  throw new Error(msg)
 }

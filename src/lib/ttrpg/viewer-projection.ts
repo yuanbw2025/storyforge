@@ -1,6 +1,6 @@
 import type {
   RulePackV1,
-  SimulationRuntimeState,
+  ProductRuntimeState,
   TtrpgCharacterSheetV2,
   TtrpgCampaignContentV1,
   TtrpgTabletopMapV1,
@@ -575,7 +575,7 @@ export function summarizeTtrpgSessionFactRecapV2(
 }
 
 export function createTtrpgAutomaticSessionRecapsV2(input: {
-  state: SimulationRuntimeState;
+  state: ProductRuntimeState;
   campaign: TtrpgCampaignContentV1;
   rulePack: RulePackV1;
   sessionKey: string;
@@ -639,7 +639,7 @@ function fail(message: string): never {
  * knowledge and never inherit a player's private actor view.
  */
 export function createTtrpgViewerProjectionV1(input: {
-  state: SimulationRuntimeState;
+  state: ProductRuntimeState;
   campaign: TtrpgCampaignContentV1;
   rulePack: RulePackV1;
   role: TtrpgViewerRoleV1;

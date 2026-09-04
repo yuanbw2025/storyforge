@@ -27,7 +27,7 @@ export function buildVolumeOutlinePrompt(
   userHint?: string,
   options?: RunOptions,
   characterContext?: string,
-  /** Phase 32: 世界规则清单（替代旧 historicalContext + creativeMode） */
+  /** 世界规则清单。 */
   worldRulesContext?: string,
   request?: VolumeOutlineRequest,
 ): ChatMessage[] {

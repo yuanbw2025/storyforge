@@ -1,5 +1,5 @@
 import type { Chapter, OutlineNode, WorkspaceScope } from '../../types'
-import { readOwnedRows, resolveReadScopeLike } from '../../world-engine/scope'
+import { readOwnedRows, resolveReadScopeLike } from '../../workspace/scope'
 import { formatHandoff } from './handoff-format'
 import { getChapterDerivedMemoryStatus, normalizeChapterText } from './text-normalization'
 import {

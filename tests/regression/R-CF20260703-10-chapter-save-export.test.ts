@@ -4,6 +4,8 @@ import { buildBestChapterByOutlineMap, pickBestChapterForOutline } from '../../s
 import { resolveCanonicalChapterSequence } from '../../src/lib/ai/chapter-memory/canonical-chapter-sequence'
 import { exportProjectMarkdown, exportProjectTXT } from '../../src/lib/export/text-export'
 import type { Chapter, OutlineNode } from '../../src/lib/types'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
+import { seedCurrentProject } from '../helpers/current-workspace'
 
 const now = Date.now()
 
@@ -66,9 +68,9 @@ describe('CF-20260703-10 · duplicate chapter rows do not hide saved prose', () 
   })
 
   it('exports Markdown/TXT with saved prose when an empty duplicate exists for the same outline node', async () => {
-    const projectId = await db.projects.add({
+    const projectId = await seedCurrentProject({
       name: '导出重复章项目',
-      genre: 'fantasy',
+      genres: ['fantasy'],
       description: '',
       targetWordCount: 0,
       enableMultiWorld: false,
@@ -120,6 +122,7 @@ describe('CF-20260703-10 · duplicate chapter rows do not hide saved prose', () 
       createdAt: now + 1000,
       updatedAt: now + 1000,
     } as any)
+    await finalizeCurrentFixtureV1(projectId)
 
     const md = await exportProjectMarkdown(projectId)
     const txt = await exportProjectTXT(projectId)

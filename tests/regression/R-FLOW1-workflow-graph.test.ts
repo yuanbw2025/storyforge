@@ -3,7 +3,7 @@ import type { PromptWorkflow, PromptWorkflowGraphEdge, PromptWorkflowStep } from
 import {
   collectWorkflowUpstreamInputs,
   compileWorkflowGraph,
-  createLegacyWorkflowGraph,
+  createLinearWorkflowGraph,
   formatWorkflowUpstreamContext,
   groupWorkflowInputsByVariable,
   validateWorkflowGraph,
@@ -18,7 +18,7 @@ function step(stepId: string, label = stepId): PromptWorkflowStep {
 }
 
 function workflow(steps: PromptWorkflowStep[], edges?: PromptWorkflowGraphEdge[]): PromptWorkflow {
-  const graph = createLegacyWorkflowGraph(steps)
+  const graph = createLinearWorkflowGraph(steps)
   return {
     scope: 'user',
     name: 'FLOW-1 测试',
@@ -31,29 +31,30 @@ function workflow(steps: PromptWorkflowStep[], edges?: PromptWorkflowGraphEdge[]
 }
 
 describe('FLOW-1 · 可视化工作流图', () => {
-  it('旧线性工作流生成兼容图并保持相邻步骤顺序与变量语义', () => {
+  it('显式线性图保持相邻步骤顺序与变量语义', () => {
     const rows = [
       step('a', '故事核心'),
       { ...step('b', '世界起源'), inputMapping: { previousOutput: 'storyCore' } },
       step('c', '角色'),
     ]
-    const legacy: PromptWorkflow = {
+    const linear: PromptWorkflow = {
       scope: 'user',
-      name: '旧工作流',
+      name: '线性工作流',
       description: '',
       steps: rows,
+      graph: createLinearWorkflowGraph(rows),
       createdAt: 1,
       updatedAt: 1,
     }
 
-    const compiled = compileWorkflowGraph(legacy)
+    const compiled = compileWorkflowGraph(linear)
 
     expect(compiled.orderedSteps.map(item => item.stepId)).toEqual(['a', 'b', 'c'])
     expect(compiled.graph.edges).toMatchObject([
       { sourceStepId: 'a', targetStepId: 'b', targetVariable: 'storyCore' },
       { sourceStepId: 'b', targetStepId: 'c', targetVariable: 'worldContext' },
     ])
-    expect(legacy.graph).toBeUndefined()
+    expect(linear.graph.nodes).toHaveLength(3)
   })
 
   it('分叉和汇合使用作者步骤顺序做稳定拓扑排序', () => {

@@ -21,6 +21,7 @@ import { useMasterCopilot } from './useMasterCopilot'
 import CreativeArtifactSummary from './CreativeArtifactSummary'
 import HarnessEvidencePanel from './HarnessEvidencePanel'
 import type { HarnessLifecycleEvidenceV1 } from '../../lib/agent/harness-evidence'
+import { useActiveWork } from '../../hooks/useActiveWork'
 
 interface Props {
   project: Project
@@ -41,6 +42,7 @@ export default function ChatCopilotPanel({
   worldName,
   onClose,
 }: Props) {
+  const activeWork = useActiveWork(project)
   const copilot = useMasterCopilot({ project, worldGroupId })
   const creativeQualityMode = useAIConfigStore(state => state.creativeQualityMode)
   const teamBudgetProfile = useAIConfigStore(state => state.agentTeamBudgetProfile)
@@ -101,8 +103,8 @@ export default function ChatCopilotPanel({
                 单一对话入口
               </span>
             </div>
-            <p className="mt-1 truncate text-[11px] text-text-muted" title={`${project.name} · ${worldName}`}>
-              {project.name} · {worldName}
+            <p className="mt-1 truncate text-[11px] text-text-muted" title={`${activeWork?.title ?? '当前作品'} · ${worldName}`}>
+              {activeWork?.title ?? '当前作品'} · {worldName}
             </p>
           </div>
           <button

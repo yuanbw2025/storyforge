@@ -8,13 +8,14 @@ import {
   type CharacterRevisionScopeInput,
 } from '../../src/lib/story-planning/character-revision'
 import { prepareCharacterRevisionCopilotV1 } from '../../src/lib/agent/character-revision-copilot'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
+import { seedCurrentProject } from '../helpers/current-workspace'
 
 const now = 1_800_000_000_000
 
 async function seedProject(chapterCount = 6, writtenCount = 2) {
-  const projectId = await db.projects.add({
+  const projectId = await seedCurrentProject({
     name: '中途重规划测试',
-    genre: 'xuanhuan',
     genres: ['xuanhuan'],
     status: 'ongoing',
     description: '',
@@ -67,6 +68,7 @@ async function seedProject(chapterCount = 6, writtenCount = 2) {
       } as any))
     }
   }
+  await finalizeCurrentFixtureV1(projectId)
   return { projectId, volumeId, nodeIds, chapterIds }
 }
 
@@ -222,6 +224,7 @@ describe('R-CF12 · 角色变化影响分析与受控大纲 patch', () => {
       createdAt: now,
       updatedAt: now,
     } as any)
+    await finalizeCurrentFixtureV1(projectId)
     const prepared = await prepareCharacterRevisionCopilotV1({
       projectId,
       worldGroupId: null,

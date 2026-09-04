@@ -160,14 +160,14 @@ async function validateCase(
     }
     const adoptableStatus = generation.status === 'ready'
       || generation.status === 'usable-with-warnings'
-      || generation.status === 'legacy-ready'
+      || generation.status === 'baseline-ready'
     if (generation.adoptable !== (generation.editableArtifact && adoptableStatus)) {
       throw new Error('adoptable 与产物状态不一致')
     }
     if (!Number.isInteger(generation.artifactModelCalls) || generation.artifactModelCalls < 1) {
       throw new Error('artifactModelCalls 无效')
     }
-    if (variant === 'legacy-direct' && generation.artifactModelCalls !== 1) {
+    if (variant === 'baseline-direct' && generation.artifactModelCalls !== 1) {
       throw new Error('旧直连基线必须只有一次产物调用')
     }
     if (variant === 'creative-reliability' && generation.artifactModelCalls > 2) {
@@ -199,7 +199,7 @@ async function validateCase(
         || repairTargetIssueCodes.some(code => typeof code !== 'string' || !code.trim())
         || new Set(repairTargetIssueCodes).size !== repairTargetIssueCodes.length
       ) throw new Error('generation repairTargetIssueCodes 无效')
-      if (variant === 'legacy-direct' && repairTargetIssueCodes.length) {
+      if (variant === 'baseline-direct' && repairTargetIssueCodes.length) {
         throw new Error('旧直连基线不得伪造修复目标')
       }
       if (generation.calls.length === 1 && repairTargetIssueCodes.length) {
@@ -395,27 +395,27 @@ function aggregateVariant(
 export function aggregateCreativeReliabilityEvalV1(
   cases: readonly CreativeReliabilityEvalCaseV1[],
 ): CreativeReliabilityEvalAggregateV1 {
-  const legacyDirect = aggregateVariant(cases, 'legacy-direct')
+  const baselineDirect = aggregateVariant(cases, 'baseline-direct')
   const creativeReliability = aggregateVariant(cases, 'creative-reliability')
   return {
-    legacyDirect,
+    baselineDirect,
     creativeReliability,
     comparison: {
-      tokenPerAdoptableMultiplier: legacyDirect.tokensPerAdoptableArtifact
+      tokenPerAdoptableMultiplier: baselineDirect.tokensPerAdoptableArtifact
         && creativeReliability.tokensPerAdoptableArtifact != null
-        ? creativeReliability.tokensPerAdoptableArtifact / legacyDirect.tokensPerAdoptableArtifact
+        ? creativeReliability.tokensPerAdoptableArtifact / baselineDirect.tokensPerAdoptableArtifact
         : null,
-      costPerAdoptableMultiplier: legacyDirect.costPerAdoptableArtifactUsd
+      costPerAdoptableMultiplier: baselineDirect.costPerAdoptableArtifactUsd
         && creativeReliability.costPerAdoptableArtifactUsd != null
-        ? creativeReliability.costPerAdoptableArtifactUsd / legacyDirect.costPerAdoptableArtifactUsd
+        ? creativeReliability.costPerAdoptableArtifactUsd / baselineDirect.costPerAdoptableArtifactUsd
         : null,
-      p95LatencyMultiplier: legacyDirect.p95LatencyMs > 0
-        ? creativeReliability.p95LatencyMs / legacyDirect.p95LatencyMs
+      p95LatencyMultiplier: baselineDirect.p95LatencyMs > 0
+        ? creativeReliability.p95LatencyMs / baselineDirect.p95LatencyMs
         : null,
-      semanticRegression: Math.max(0, legacyDirect.semanticScore - creativeReliability.semanticScore),
-      willingToEditDelta: legacyDirect.willingToEditRate != null
+      semanticRegression: Math.max(0, baselineDirect.semanticScore - creativeReliability.semanticScore),
+      willingToEditDelta: baselineDirect.willingToEditRate != null
         && creativeReliability.willingToEditRate != null
-        ? creativeReliability.willingToEditRate - legacyDirect.willingToEditRate
+        ? creativeReliability.willingToEditRate - baselineDirect.willingToEditRate
         : null,
     },
   }
@@ -477,7 +477,7 @@ function evaluateCommunityGate(
   if (!machineGate.passed) failures.push('machine-gate')
   if (
     aggregate.creativeReliability.humanReviewCount < minimumHumanReviews
-    || aggregate.legacyDirect.humanReviewCount < minimumHumanReviews
+    || aggregate.baselineDirect.humanReviewCount < minimumHumanReviews
   ) failures.push('human-review-incomplete')
   if (
     aggregate.creativeReliability.willingToEditRate == null

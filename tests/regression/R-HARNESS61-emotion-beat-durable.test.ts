@@ -12,22 +12,13 @@ import {
   rejectEmotionBeatCandidateV1,
 } from '../../src/lib/agent/run/emotion-beat-durable'
 import { getAgentSkillV1 } from '../../src/lib/agent/skill-registry'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
+import { stampCurrentFixtureResourceUidsV1 } from '../helpers/current-resource-identity'
 
 async function seed() {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    name: '情绪节拍', genre: 'fantasy', genres: ['fantasy'], status: 'drafting', description: '',
-    targetWordCount: 80_000, worldCode: `beat-${now}`, worldVersion: 1, createdAt: now, updatedAt: now,
-  } as any) as number
-  const worldId = await db.worlds.add({
-    projectId, code: `beat-${now}`, name: '潮钟世界', description: '', currentVersion: 1,
-    createdAt: now, updatedAt: now,
-  }) as number
-  const workId = await db.works.add({
-    projectId, worldId, title: '情绪节拍', description: '', genres: ['fantasy'], status: 'drafting',
-    targetWordCount: 80_000, createdAt: now, updatedAt: now,
-  } as any) as number
-  await db.projects.update(projectId, { activeWorldId: worldId, activeWorkId: workId, ownershipSchemaVersion: 1 })
+  const created = await seedCurrentWorkspace('情绪节拍')
+  const { projectId, worldId, workId } = created.scope
   const worldGroupId = await db.worldGroups.add({
     projectId, worldId, name: '主世界', order: 0, createdAt: now, updatedAt: now,
   }) as number
@@ -70,20 +61,21 @@ async function seed() {
   } as any)
   await db.creativeRules.add({
     projectId, workId, writingStyle: '克制、具体，以行动代替解释。', narrativePOV: 'third-limited',
-    toneAndMood: '', atmosphere: '冷峻中保留微弱希望。', prohibitions: JSON.stringify(['不得使用现代网络用语']),
-    consistencyRules: JSON.stringify(['记忆转移必须经潮钟见证']), specialRequirements: '', referenceWorks: '[]',
+    atmosphere: '冷峻中保留微弱希望。', prohibitions: JSON.stringify(['不得使用现代网络用语']),
+    consistencyRules: JSON.stringify(['记忆转移必须经潮钟见证']), specialRequirements: '',
     createdAt: now, updatedAt: now,
   } as any)
   await db.characters.add({
-    projectId, worldId, workId: null, homeWorldGroupId: worldGroupId, name: '阿澜', roleWeight: 'protagonist',
+    projectId, worldId, homeWorldGroupId: worldGroupId, name: '阿澜', roleWeight: 'main',
     moralAxis: 'neutral', orderAxis: 'neutral', shortDescription: '必须公开钥匙的守门人', relationships: '',
     createdAt: now, updatedAt: now,
   } as any)
   await db.characters.add({
-    projectId, worldId, workId: null, homeWorldGroupId: worldGroupId, name: '钟叔', roleWeight: 'supporting',
+    projectId, worldId, homeWorldGroupId: worldGroupId, name: '钟叔', roleWeight: 'secondary',
     moralAxis: 'good', orderAxis: 'lawful', shortDescription: '在亲情与公共责任间犹疑的老钟匠', relationships: '',
     createdAt: now, updatedAt: now,
   } as any)
+  await stampCurrentFixtureResourceUidsV1(projectId)
   return {
     scope: { projectId, worldId, workId } satisfies WorkspaceScope,
     projectId, worldId, workId, worldGroupId, outlineNodeId, chapterId,

@@ -11,8 +11,8 @@ import type {
   Location,
   WorkspaceScope,
 } from '../types'
-import { assertRecordInScope, resolveScope, scopeTransactionTables, stampNewRecord } from '../world-engine/scope'
-import { effectiveWorkKind } from '../world-engine/work-kind'
+import { assertRecordInScope, resolveScope, scopeTransactionTables, stampNewRecord } from '../workspace/scope'
+import { effectiveWorkKind } from '../workspace/work-kind'
 import {
   assertComicPageV1,
   assertComicPanelV1,

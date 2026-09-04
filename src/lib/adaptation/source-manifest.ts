@@ -17,9 +17,9 @@ import type {
 import { resolveCanonicalChapterSequence } from '../ai/chapter-memory/canonical-chapter-sequence'
 import { hashCanonicalValue } from '../agent/run/hash'
 import { countWords, htmlToPlainText } from '../utils/html'
-import { buildWorkRecord, projectCompatibilityMirror } from '../world-engine/works'
-import { effectiveWorkKind } from '../world-engine/work-kind'
-import { assertRecordInScope, readOwnedRows, resolveScope, scopeTransactionTables, stampNewRecord } from '../world-engine/scope'
+import { buildWorkRecord } from '../workspace/works'
+import { effectiveWorkKind } from '../workspace/work-kind'
+import { assertRecordInScope, readOwnedRows, resolveScope, scopeTransactionTables, stampNewRecord } from '../workspace/scope'
 import {
   assertAdaptationBriefV1,
   assertAdaptationPlanV1,
@@ -484,7 +484,11 @@ export async function createAdaptation(input: CreateAdaptationInput): Promise<{
       activeSourceManifestHash: manifest.manifestHash,
     })
     await db.adaptationSourceUnits.bulkAdd(manifest.units.map(unit => stampNewRecord(targetScope, 'adaptationSourceUnits', unit, { owner: 'work' })))
-    await db.projects.update(project.id!, { ...projectCompatibilityMirror(world, targetWork), updatedAt: now })
+    await db.projects.update(project.id!, {
+      activeWorldId: world.id!,
+      activeWorkId: targetWork.id!,
+      updatedAt: now,
+    })
     return {
       adaptation: root,
       targetWork,
@@ -808,17 +812,12 @@ async function updateAdaptationRootContent(
     assertAdaptationProjectInvariant(next)
     await db.adaptationProjects.put(next)
     if (markWorkOngoing) {
-      const [work, world, project] = await Promise.all([
-        db.works.get(root.workId),
-        db.worlds.get(root.worldId),
-        db.projects.get(root.projectId),
-      ])
-      if (!work || !world || !project) throw new Error('[adaptation] 目标工作区已缺失')
+      const work = await db.works.get(root.workId)
+      if (!work || work.projectId !== root.projectId || work.worldId !== root.worldId) {
+        throw new Error('[adaptation] 目标作品已缺失')
+      }
       const ongoingWork: Work = { ...work, status: 'ongoing', updatedAt }
       await db.works.put(ongoingWork)
-      if (project.activeWorkId === root.workId) {
-        await db.projects.update(project.id!, { ...projectCompatibilityMirror(world, ongoingWork), updatedAt })
-      }
     }
     return next
   })

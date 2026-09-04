@@ -14,30 +14,20 @@ const baseNode = {
   updatedAt: 1,
 } satisfies Omit<OutlineNode, 'summary'>
 
-describe('R-CF-outline-summary-crash: 大纲脏 summary 不击穿 UI', () => {
-  it('选择器会把历史/导入脏节点的 summary 兜成字符串', () => {
-    const dirty = { ...baseNode } as unknown as OutlineNode
-    const volumes = getTopLevelVolumes([dirty])
-
-    expect(volumes).toHaveLength(1)
-    expect(volumes[0].summary).toBe('')
-    expect(() => volumes[0].summary.trim()).not.toThrow()
+describe('R-CURRENT-OUTLINE · 当前大纲结构严格边界', () => {
+  it('选择器拒绝缺少 summary 的非当前节点', () => {
+    const invalid = { ...baseNode } as unknown as OutlineNode
+    expect(() => getTopLevelVolumes([invalid])).toThrow('当前大纲节点缺少 summary')
   })
 
-  it('单节点规范化同时兜住 title/order/parentId', () => {
-    const dirty = {
+  it('单节点规范化拒绝缺少 title/order/parentId 的非当前节点', () => {
+    const invalid = {
       ...baseNode,
       parentId: undefined,
       title: undefined,
       summary: undefined,
       order: undefined,
     } as unknown as OutlineNode
-
-    const normalized = normalizeOutlineNode(dirty)
-
-    expect(normalized.parentId).toBeNull()
-    expect(normalized.title).toBe('')
-    expect(normalized.summary).toBe('')
-    expect(normalized.order).toBe(0)
+    expect(() => normalizeOutlineNode(invalid)).toThrow('parentId 必须为 null 或正整数')
   })
 })

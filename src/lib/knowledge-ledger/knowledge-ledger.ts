@@ -7,7 +7,7 @@ import {
   resolveReadScopeLike,
   resolveScopeLike,
   type WorkspaceScopeLike,
-} from '../world-engine/scope'
+} from '../workspace/scope'
 import type { WorkspaceScope } from '../types/world-ownership'
 import { adopt } from '../registry/adopt'
 import { resolveProjectionBoundary } from '../consistency/projection-boundary'
@@ -95,9 +95,9 @@ export async function confirmKnowledgeCandidate(
   eventId: number,
   scopeInput?: WorkspaceScopeLike,
 ): Promise<boolean> {
-  const beforeMigration = await db.knowledgeLedger.get(eventId)
-  if (!beforeMigration) return false
-  const scope = await resolveScopeLike(scopeInput ?? beforeMigration.projectId)
+  const existingRecord = await db.knowledgeLedger.get(eventId)
+  if (!existingRecord) return false
+  const scope = await resolveScopeLike(scopeInput ?? existingRecord.projectId)
   const entry = await db.knowledgeLedger.get(eventId)
   if (!await assertRecordInScope(scope, 'knowledgeLedger', entry, { owner: 'work' })) return false
   if (!entry?.id || !['candidate', 'source-missing', 'invalid-range'].includes(entry.status)) return false
@@ -121,9 +121,9 @@ export async function rejectKnowledgeCandidate(
   eventId: number,
   scopeInput?: WorkspaceScopeLike,
 ): Promise<boolean> {
-  const beforeMigration = await db.knowledgeLedger.get(eventId)
-  if (!beforeMigration) return false
-  const scope = await resolveScopeLike(scopeInput ?? beforeMigration.projectId)
+  const existingRecord = await db.knowledgeLedger.get(eventId)
+  if (!existingRecord) return false
+  const scope = await resolveScopeLike(scopeInput ?? existingRecord.projectId)
   const entry = await db.knowledgeLedger.get(eventId)
   if (!await assertRecordInScope(scope, 'knowledgeLedger', entry, { owner: 'work' })) return false
   if (!entry?.id || entry.status === 'confirmed') return false

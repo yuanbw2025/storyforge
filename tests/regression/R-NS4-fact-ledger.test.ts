@@ -6,13 +6,19 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { adoptFactCandidates, confirmFactCandidate, rejectFactCandidate } from '../../src/lib/fact-ledger/fact-ledger'
 import type { ExtractedFactCandidate } from '../../src/lib/ai/adapters/fact-extract-adapter'
+import { seedCurrentProject } from '../helpers/current-workspace'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
 
 const now = Date.now()
 async function seed() {
-  const pid = await db.projects.add({ name: 'P', genre: 'x', description: '', targetWordCount: 0, enableMultiWorld: false, createdAt: now, updatedAt: now } as any) as number
-  const charId = await db.characters.add({ projectId: pid, name: '林飞', role: 'protagonist', createdAt: now, updatedAt: now } as any) as number
+  const pid = await seedCurrentProject({ name: 'P', genres: ['x'], description: '', targetWordCount: 0, enableMultiWorld: false, createdAt: now, updatedAt: now } as any) as number
+  const charId = await db.characters.add({
+    projectId: pid, name: '林飞', roleWeight: 'main', moralAxis: 'good', orderAxis: 'neutral',
+    homeWorldGroupId: null, isCrossWorld: false, createdAt: now, updatedAt: now,
+  } as any) as number
   const c1 = await db.chapters.add({ projectId: pid, outlineNodeId: null, title: '第1章', content: '', wordCount: 0, status: 'draft', order: 0, notes: '', createdAt: now, updatedAt: now } as any) as number
   const c2 = await db.chapters.add({ projectId: pid, outlineNodeId: null, title: '第2章', content: '', wordCount: 0, status: 'draft', order: 1, notes: '', createdAt: now, updatedAt: now } as any) as number
+  await finalizeCurrentFixtureV1(pid)
   return { pid, charId, c1, c2 }
 }
 const cand = (over: Partial<ExtractedFactCandidate>): ExtractedFactCandidate => ({ subjectName: '林飞', predicate: 'location', factKind: 'state', value: '洛阳', sourceQuote: 'q', ...over })
@@ -43,9 +49,11 @@ describe('NS-4 · fact-ledger', () => {
     const { pid, charId, c1 } = await seed()
     await db.characters.update(charId, { homeWorldGroupId: 7 })
     const otherWorldCharacterId = await db.characters.add({
-      projectId: pid, name: '林飞', role: 'supporting',
-      homeWorldGroupId: 8, createdAt: now, updatedAt: now,
+      projectId: pid, name: '林飞', roleWeight: 'secondary', moralAxis: 'neutral',
+      orderAxis: 'neutral', homeWorldGroupId: 8, isCrossWorld: false,
+      createdAt: now, updatedAt: now,
     } as any) as number
+    await finalizeCurrentFixtureV1(pid)
     const death = cand({ predicate: 'aliveStatus', value: '身亡' })
     const invalid = cand({ predicate: 'aliveStatus', value: '半死不活' })
     const first = await adoptFactCandidates({
@@ -65,9 +73,10 @@ describe('NS-4 · fact-ledger', () => {
   })
 
   it('确认单值 state 候选 → 关闭旧权威、自身升 confirmed', async () => {
-    const { pid, c1, c2 } = await seed()
+    const { pid, charId, c1, c2 } = await seed()
     // 旧权威:第1章 location=洛阳(confirmed)
-    await db.temporalFacts.add({ projectId: pid, subjectName: '林飞', predicate: 'location', factKind: 'state', value: '洛阳', sourceType: 'chapter', sourceChapterId: c1, validFromChapterId: c1, validToChapterId: null, status: 'confirmed', locked: false, createdAt: now, updatedAt: now } as any)
+    await db.temporalFacts.add({ projectId: pid, characterId: charId, subjectName: '林飞', predicate: 'location', factKind: 'state', value: '洛阳', sourceType: 'chapter', sourceChapterId: c1, validFromChapterId: c1, validToChapterId: null, status: 'confirmed', locked: false, createdAt: now, updatedAt: now } as any)
+    await finalizeCurrentFixtureV1(pid)
     // 新候选:第2章 location=北境
     await adoptFactCandidates({ projectId: pid, sourceChapterId: c2, candidates: [cand({ value: '北境' })] })
     const newCand = (await db.temporalFacts.where('projectId').equals(pid).filter(f => f.value === '北境').toArray())[0]
@@ -131,6 +140,7 @@ describe('NS-4 · fact-ledger', () => {
       projectId: pid, subjectName: '旧角色', predicate: 'location', factKind: 'state', value: '旧城',
       sourceType: 'manual', status: 'source-missing', locked: false, createdAt: now, updatedAt: now,
     } as any) as number
+    await finalizeCurrentFixtureV1(pid)
 
     await confirmFactCandidate(staleId)
     await rejectFactCandidate(missingId)

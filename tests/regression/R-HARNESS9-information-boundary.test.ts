@@ -13,8 +13,9 @@ import {
 } from '../../src/lib/agent/run/prose-generation-durable'
 import { hashCanonicalValue } from '../../src/lib/agent/run/hash'
 import { hashChapterText } from '../../src/lib/ai/chapter-memory/text-normalization'
-import { backfillResourceUidsV1 } from '../../src/lib/context-gateway/resource-identity'
+import { stampCurrentFixtureResourceUidsV1 } from '../helpers/current-resource-identity'
 import type { WorkspaceScope } from '../../src/lib/types'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
 
 async function seedBoundaryProject(): Promise<{
   scope: WorkspaceScope
@@ -26,43 +27,8 @@ async function seedBoundaryProject(): Promise<{
   privateClaim: string
 }> {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    name: '信息边界项目',
-    genre: 'fantasy',
-    genres: ['fantasy'],
-    status: 'drafting',
-    description: '',
-    targetWordCount: 100_000,
-    worldCode: 'boundary-world',
-    worldVersion: 1,
-    createdAt: now,
-    updatedAt: now,
-  } as any) as number
-  const worldId = await db.worlds.add({
-    projectId,
-    code: 'boundary-world',
-    name: '边界世界',
-    description: '',
-    currentVersion: 1,
-    createdAt: now,
-    updatedAt: now,
-  }) as number
-  const workId = await db.works.add({
-    projectId,
-    worldId,
-    title: '边界作品',
-    description: '',
-    genres: ['fantasy'],
-    status: 'drafting',
-    targetWordCount: 100_000,
-    createdAt: now,
-    updatedAt: now,
-  }) as number
-  await db.projects.update(projectId, {
-    activeWorldId: worldId,
-    activeWorkId: workId,
-    ownershipSchemaVersion: 1,
-  })
+  const createdWorkspaceV1 = await seedCurrentWorkspace('信息边界项目')
+  const { projectId, worldId, workId } = createdWorkspaceV1.scope
   const scope = { projectId, worldId, workId }
   const volumeId = await db.outlineNodes.add({
     projectId,
@@ -131,7 +97,6 @@ async function seedBoundaryProject(): Promise<{
     projectId,
     worldId,
     name: '守灯人',
-    role: 'protagonist',
     roleWeight: 'main',
     moralAxis: 'neutral',
     orderAxis: 'neutral',
@@ -153,7 +118,6 @@ async function seedBoundaryProject(): Promise<{
     projectId,
     worldId,
     name: '钟匠',
-    role: 'supporting',
     roleWeight: 'secondary',
     moralAxis: 'neutral',
     orderAxis: 'neutral',
@@ -200,7 +164,7 @@ async function seedBoundaryProject(): Promise<{
       updatedAt: now + 1,
     },
   ] as any)
-  await backfillResourceUidsV1(projectId)
+  await stampCurrentFixtureResourceUidsV1(projectId)
   return {
     scope,
     currentChapterId,
@@ -302,7 +266,9 @@ describe.sequential('R-HARNESS9 · 正文信息边界', () => {
         candidateHash: await hashProseGenerationCandidateV1(candidateBody),
       },
     }
-    expect(await isProseGenerationCandidateCurrentV1(candidate)).toBe(true)
+    // A candidate-shaped object without a persisted run ledger is never a
+    // current formal candidate, even when its content hashes still match.
+    expect(await isProseGenerationCandidateCurrentV1(candidate)).toBe(false)
 
     await db.outlineNodes.update(fixture.futureOutlineId, {
       summary: '守灯人在钟楼地下发现第二枚从未登记的黑色钟芯',

@@ -11,6 +11,8 @@ import { useChapterStore } from '../../src/stores/chapter'
 import { useCultivationStore } from '../../src/stores/cultivation'
 import { applyCharacterReferenceRemap } from '../../src/lib/registry/character-references'
 import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
+import { seedCurrentProject } from '../helpers/current-workspace'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
 
 const now = 1_800_000_000_000
 const stages: CultivationStage[] = [
@@ -21,9 +23,8 @@ const stages: CultivationStage[] = [
 ]
 
 async function seed() {
-  const projectId = await db.projects.add({
+  const projectId = await seedCurrentProject({
     name: '修炼进度测试',
-    genre: '',
     genres: [],
     status: 'drafting',
     description: '',
@@ -59,15 +60,18 @@ async function seed() {
     stages: stringifyCultivationStages(stages), createdAt: now, updatedAt: now,
   }) as number
   const characterId = await db.characters.add({
-    projectId, name: '林舟', role: 'protagonist', roleWeight: 'main',
+    projectId, name: '林舟', roleWeight: 'main',
     moralAxis: 'good', orderAxis: 'lawful', homeWorldGroupId: null, isCrossWorld: false,
     cultivationSystemId: systemId, cultivationStageId: 'unity',
     createdAt: now, updatedAt: now,
   } as any) as number
+  await finalizeCurrentFixtureV1(projectId)
   const characters = await db.characters.where('projectId').equals(projectId).toArray()
   const systems = await db.cultivationSystems.where('projectId').equals(projectId).toArray()
+  const workId = (await db.projects.get(projectId))?.activeWorkId
+  if (workId == null) throw new Error('当前 Work 缺失')
   return {
-    projectId, firstChapter, secondChapter, characterId, systemId, characters, systems,
+    projectId, workId, firstChapter, secondChapter, characterId, systemId, characters, systems,
   }
 }
 
@@ -197,7 +201,7 @@ describe('WORLD-1 / Phase 34 · 修炼进度', () => {
     expect(await readCultivationProgressContext(
       seeded.projectId, null, seeded.secondChapter,
     )).toBe('')
-    await db.projects.update(seeded.projectId, { includeCultivationProgressInAI: true })
+    await db.works.update(seeded.workId, { includeCultivationProgressInAI: true })
     expect(await readCultivationProgressContext(
       seeded.projectId, null, seeded.firstChapter,
     )).toBe('')

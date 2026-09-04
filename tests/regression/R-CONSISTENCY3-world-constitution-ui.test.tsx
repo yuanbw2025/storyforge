@@ -49,7 +49,7 @@ vi.mock('../../src/stores/fact-ledger', () => ({
   }),
 }))
 
-vi.mock('../../src/lib/world-engine/scope', () => ({ resolveScopeLike: mocks.resolveScopeLike }))
+vi.mock('../../src/lib/workspace/scope', () => ({ resolveScopeLike: mocks.resolveScopeLike }))
 
 vi.mock('../../src/lib/agent/run/constitution-extraction-durable', () => ({
   generateConstitutionExtractionCandidateV1: mocks.generate,
@@ -65,7 +65,10 @@ import WorldConstitutionPanel from '../../src/components/facts/WorldConstitution
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
 const project = {
-  id: 1, name: 'UI', genre: 'fantasy', description: '', targetWordCount: 0,
+  id: 1,
+  workspaceUid: 'WS-00000000-0000-4000-8000-000000000001',
+  workspacePurpose: 'independent-work',
+  name: 'UI', activeWorldId: 11, activeWorkId: 12,
   createdAt: 1, updatedAt: 1,
 } as Project
 const mounted: Array<{ host: HTMLDivElement; root: ReturnType<typeof createRoot> }> = []

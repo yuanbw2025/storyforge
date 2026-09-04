@@ -25,7 +25,7 @@ import { createContextManifestFromAssemblyV1, createContextManifestV2FromV1 } fr
 import {
   assertRecordInScope,
   readOwnedRows,
-} from '../../world-engine/scope'
+} from '../../workspace/scope'
 import { DETAILED_OUTLINE_GENERATION_SOURCE_KEYS_V1 } from './detailed-outline-generation-durable'
 import {
   assertAgentSkillExecutionBindingIntegrityV2,
@@ -206,7 +206,7 @@ export async function buildDetailedOutlineBatchRunContractV3(input: {
   outlineNodeIds: number[]
   formalEntry: AgentRunFormalAIEntryBindingV1
 }): Promise<AgentRunContractV3> {
-  const legacy = buildDetailedOutlineBatchRunContractV1(input)
+  const baseContract = buildDetailedOutlineBatchRunContractV1(input)
   const skill = getAgentSkillV1('outline.details', 'outline')
   const binding = await createAgentSkillExecutionBindingV2(skill, {
     writeTargets: skill.writeTargets.map(target => ({
@@ -219,7 +219,7 @@ export async function buildDetailedOutlineBatchRunContractV3(input: {
   await assertAgentSkillExecutionBindingIntegrityV2(binding, '批量细纲正式 binding')
   const ids = [...new Set(input.outlineNodeIds)]
   return {
-    ...legacy,
+    ...baseContract,
     version: 3,
     executionBoundary: 'formal',
     permissions: {
@@ -519,6 +519,7 @@ export async function persistDetailedOutlineBatchCandidateV1(input: {
   const event = await appendAgentEvent({
     projectId: input.scope.projectId,
     conversationId: conversation.id,
+    durableRunId: input.candidate.runId,
     kind: 'candidate',
     content: input.candidate.output,
     payload: {

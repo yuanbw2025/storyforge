@@ -22,6 +22,8 @@ import {
 } from '../../src/lib/agent/run/chapter-post-adoption-durable'
 import { hashChapterText } from '../../src/lib/ai/chapter-memory/text-normalization'
 import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
+import { stampNewRecord } from '../../src/lib/workspace/scope'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
 
 const CONTENT = '<p>守灯人抵达潮门，点亮了旧灯。</p>'
 
@@ -31,37 +33,21 @@ async function createWorkspace(label: string): Promise<{
   chapterId: number
 }> {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    name: label,
-    genre: 'fantasy',
-    genres: ['fantasy'],
-    status: 'drafting',
-    description: '',
-    targetWordCount: 100_000,
-    worldCode: `world-${label}`,
-    worldVersion: 1,
-    createdAt: now,
-    updatedAt: now,
-  } as any) as number
-  const worldId = await db.worlds.add({
-    projectId, code: `world-${label}`, name: `${label}世界`, description: '', currentVersion: 1,
+  const created = await seedCurrentWorkspace(label, { enableMultiWorld: true })
+  const { projectId } = created.scope
+  const worldGroupId = await db.worldGroups.add(stampNewRecord(created.scope, 'worldGroups', {
+    projectId, name: '主世界', description: '', type: 'primary', order: 0,
     createdAt: now, updatedAt: now,
-  }) as number
-  const workId = await db.works.add({
-    projectId, worldId, title: label, description: '', genres: ['fantasy'], status: 'drafting',
-    targetWordCount: 100_000, createdAt: now, updatedAt: now,
-  }) as number
-  await db.projects.update(projectId, { activeWorldId: worldId, activeWorkId: workId, ownershipSchemaVersion: 1 })
-  const worldGroupId = await db.worldGroups.add({ projectId, worldId, name: '主世界', order: 0, createdAt: now, updatedAt: now }) as number
-  const outlineNodeId = await db.outlineNodes.add({
-    projectId, workId, worldGroupId, parentId: null, type: 'chapter', title: '潮门', summary: '守灯人抵达潮门。', order: 0,
+  }, { owner: 'world' })) as number
+  const outlineNodeId = await db.outlineNodes.add(stampNewRecord(created.scope, 'outlineNodes', {
+    projectId, worldGroupId, parentId: null, type: 'chapter', title: '潮门', summary: '守灯人抵达潮门。', order: 0,
     createdAt: now, updatedAt: now,
-  } as any) as number
-  const chapterId = await db.chapters.add({
-    projectId, workId, outlineNodeId, title: '潮门', content: CONTENT, wordCount: 15, status: 'draft', order: 0, notes: '',
+  }, { owner: 'work' }) as any) as number
+  const chapterId = await db.chapters.add(stampNewRecord(created.scope, 'chapters', {
+    projectId, outlineNodeId, title: '潮门', content: CONTENT, wordCount: 15, status: 'draft', order: 0, notes: '',
     createdAt: now, updatedAt: now,
-  } as any) as number
-  return { scope: { projectId, worldId, workId }, worldGroupId, chapterId }
+  }, { owner: 'work' }) as any) as number
+  return { scope: created.scope, worldGroupId, chapterId }
 }
 
 async function completeProseParent(fixture: Awaited<ReturnType<typeof createWorkspace>>) {
@@ -168,7 +154,7 @@ describe.sequential('R-HARNESS21 · 正文 Run 与章后处理 Run 的父子 lin
     expect(staleChild.projection.terminalReceiptHash).toBeUndefined()
   })
 
-  it('导入后父键、契约 lineage 一并重映射，旧完成回执按项目边界失效', async () => {
+  it('导入后父键、契约 lineage 一并重映射，来源项目完成回执不跨项目生效', async () => {
     const fixture = await createWorkspace('lineage-portable')
     const parent = await completeProseParent(fixture)
     const child = await createChapterPostAdoptionDurableRunV1({

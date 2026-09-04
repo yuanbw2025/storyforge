@@ -38,7 +38,7 @@ export type ReferenceAnalysisRunStatus =
 export interface Reference extends RagDocumentMetadata {
   id?: number
   projectId: number
-  workId?: number | null
+  workId: number
   title: string        // 书名 / 文件名
   author: string       // 作者
   type: ReferenceType  // 故事参考 | 风格参考
@@ -76,8 +76,11 @@ export interface Reference extends RagDocumentMetadata {
 
 /** 导入到"项目参考"时保存的结构化数据 */
 export interface ImportedReferenceData {
-  /** 世界观各维度 */
+  /** 世界基础各维度 */
   worldview?: Record<string, string>
+  /** 地理与历史保持独立语义分区，不混回世界基础字段。 */
+  geography?: { overview?: string }
+  history?: { overview?: string }
   /** 角色列表 */
   characters?: Array<Record<string, unknown>>
   /** 大纲结构 */
@@ -92,7 +95,7 @@ export interface ImportedReferenceData {
   importedAt?: number
 }
 
-export type CreateReferenceInput = Omit<Reference, 'id' | 'createdAt' | 'updatedAt'>
+export type CreateReferenceInput = Omit<Reference, 'id' | 'workId' | 'createdAt' | 'updatedAt'>
 
 // ── 作品分析（13 个小说维度 + 题材自适应历史维度） ──
 
@@ -115,8 +118,8 @@ export interface ReferenceChunkAnalysis {
   workId?: number | null
   /** 关联的 Reference id */
   referenceId: number
-  /** IDEA-1：所属分析版本；旧项目的历史行允许缺省并由运行时兼容桥接。 */
-  analysisRunId?: number
+  /** 所属分析版本。 */
+  analysisRunId: number
   /** 块序号（0-based） */
   chunkIndex: number
   /** 本块标签（如"第 X 章"或"3/48 块"） */
@@ -180,7 +183,7 @@ export interface ReferenceChunkAnalysis {
 export interface ReferenceAnalysisRun {
   id?: number
   projectId: number
-  workId?: number | null
+  workId: number
   referenceId: number
   version: number
   status: ReferenceAnalysisRunStatus
@@ -191,7 +194,7 @@ export interface ReferenceAnalysisRun {
   sourceKind: ReferenceSourceKind
   usageScope: ReferenceUsageScope
   rightsNote: string
-  /** 是否由作者在 UI 中显式确认；旧导入兼容桥接为 false。 */
+  /** 是否由作者在 UI 中显式确认。 */
   rightsConfirmed: boolean
   rightsDeclaredAt: number
   expectedChunks: number
@@ -210,8 +213,8 @@ export interface ReferenceAnalysisRun {
 export interface ReferenceAnalysisSource {
   /** 与 ReferenceAnalysisRun.id 相同，作为主键。 */
   analysisRunId: number
-  projectId?: number
-  workId?: number | null
+  projectId: number
+  workId: number
   filename: string
   fileHash: string
   chunks: Array<{

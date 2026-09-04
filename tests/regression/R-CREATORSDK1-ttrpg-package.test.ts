@@ -15,17 +15,17 @@ import {
   verifyTtrpgCreatorTrustManifestV1,
 } from '../../src/lib/ttrpg/creator-sdk'
 import { createStoryForgeRulePackV1 } from '../../src/lib/ttrpg/storyforge-rule-pack'
-import type { PlayableWorldBundleV1 } from '../../src/lib/types'
+import type { ProductWorldSourceBundleV1 } from '../../src/lib/types'
 
 const NOW = 1_800_000_000_000
 
-function playableWorld(): PlayableWorldBundleV1 {
+function worldSourceBundle(): ProductWorldSourceBundleV1 {
   return {
-    schema: 'storyforge.playable-world-bundle', version: 1, compilerVersion: 1,
+    schema: 'storyforge.product-world-source-bundle', version: 1, compilerVersion: 1,
     source: { worldCode: 'creator-sdk', worldName: '创作者群岛', worldContentHash: 'a'.repeat(64) },
     createdAt: NOW,
     canonSnapshot: {
-      schema: 'storyforge.simulation-canon', version: 1, createdAt: NOW,
+      schema: 'storyforge.product-runtime-canon', version: 1, createdAt: NOW,
       worldGroupId: null, worldLabel: '创作者群岛',
       sources: [{
         sourceKey: 'release-world:creator-sdk', kind: 'world', recordId: null,
@@ -51,7 +51,7 @@ function playableWorld(): PlayableWorldBundleV1 {
         },
       },
       memories: [], narratives: [], ttrpg: null, chat: null, interaction: null, narrative: null,
-      adventure: null, presentation: null, narrativeSimulation: null, openWorld: null, lastSequence: 0,
+      adventure: null, presentation: null, openWorldEvolution: null, openWorld: null, lastSequence: 0,
     },
     diagnostics: [], bundleHash: 'b'.repeat(64),
   }
@@ -68,7 +68,7 @@ describe('CREATOR-SDK-1 · signed data-only TTRPG packages', () => {
     const keys = await signingKeys()
     const rulePack = createStoryForgeRulePackV1()
     const campaign = compileTtrpgCampaignDraftV1({
-      playableWorld: playableWorld(), rulePack, fixtureOnly: true, confirmDefaultMappings: true,
+      worldSourceBundle: worldSourceBundle(), rulePack, fixtureOnly: true, confirmDefaultMappings: true,
     })
     const signed = await createSignedTtrpgCreatorPackageV1({
       packageId: 'storyforge.campaign.creator-islands', packageVersion: '1.0.0',

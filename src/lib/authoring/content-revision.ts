@@ -1,7 +1,7 @@
 import { PROJECT_TABLES } from '../registry/project-tables'
 import type { TableSpec } from '../registry/types'
 import type { WorkspaceScope } from '../types'
-import { assertRecordInScope, readOwnedRows } from '../world-engine/scope'
+import { assertRecordInScope, readOwnedRows } from '../workspace/scope'
 import { hashCanonicalValue } from '../agent/run/hash'
 
 export interface WorkspaceContentRevisionEntryV1 {
@@ -20,10 +20,6 @@ function hash(value: unknown): value is string {
   return typeof value === 'string' && /^[a-f0-9]{64}$/.test(value)
 }
 
-function isBinaryTable(spec: TableSpec): boolean {
-  return spec.portableData?.kind === 'binary-blob'
-}
-
 /**
  * Derive the conservative Canon set from PROJECT_TABLES metadata. Agent logs,
  * caches, usage and transient tables are excluded without introducing another
@@ -31,8 +27,7 @@ function isBinaryTable(spec: TableSpec): boolean {
  */
 export function contentRevisionTableSpecsV1(): TableSpec[] {
   return PROJECT_TABLES
-    .filter(spec => !isBinaryTable(spec))
-    .filter(spec => spec.workspaceProjection != null || (spec.worldDomains?.length ?? 0) > 0)
+    .filter(spec => spec.workspaceProjection != null || spec.worldSemantic != null)
     .sort((left, right) => left.name.localeCompare(right.name))
 }
 

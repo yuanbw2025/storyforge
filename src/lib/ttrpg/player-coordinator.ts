@@ -1,7 +1,7 @@
 import type { AIConfig, ChatMessage, WorkspaceScope } from '../types'
 import { db } from '../db/schema'
 import { readLatestVerifiedAgentRunCheckpointV1 } from '../agent/run/checkpoint'
-import { readSimulationState } from '../simulation/runtime'
+import { readProductRuntimeState } from './runtime-api'
 import { readTtrpgSessionParticipantsV2 } from './participants'
 import {
   adoptTtrpgPlayerActionCandidateV1,
@@ -29,7 +29,7 @@ async function reusableCandidate(input: {
   sessionId: number
   coordinatorKey: string
 }): Promise<TtrpgPlayerActionCandidateV1 | null> {
-  const runs = await db.agentRuns.where('simulationSessionId').equals(input.sessionId).reverse().limit(24).toArray()
+  const runs = await db.agentRuns.where('productRuntimeSessionId').equals(input.sessionId).reverse().limit(24).toArray()
   for (const run of runs) {
     if (run.id == null || ['failed', 'cancelled'].includes(run.status)) continue
     try {
@@ -51,17 +51,17 @@ async function reusableCandidate(input: {
  */
 export async function coordinateTtrpgAiPlayerEpochV1(input: {
   scope: WorkspaceScope
-  simulationSessionId: number
+  productRuntimeSessionId: number
   objective?: string
   allowManualActivation?: boolean
   aiConfig?: AIConfig
   runAI?: RunAI
   signal?: AbortSignal
 }): Promise<TtrpgAiPlayerCoordinatorResultV1> {
-  const state = await readSimulationState(input.simulationSessionId)
+  const state = await readProductRuntimeState(input.productRuntimeSessionId)
   const actorKey = state.ttrpg?.activeActorKey ?? null
   if (!actorKey) return { status: 'no-active-actor', actorKey: null }
-  const participants = await readTtrpgSessionParticipantsV2(input.simulationSessionId)
+  const participants = await readTtrpgSessionParticipantsV2(input.productRuntimeSessionId)
   const seat = participants.find(row => row.role === 'player' && row.actorKey === actorKey)
   if (!seat) return { status: 'gm-controlled', actorKey }
   if (seat.controller === 'human') return { status: 'human-controlled', actorKey }
@@ -69,13 +69,13 @@ export async function coordinateTtrpgAiPlayerEpochV1(input: {
     return { status: 'vacant', actorKey }
   }
   if (seat.activation === 'manual' && !input.allowManualActivation) return { status: 'manual-required', actorKey }
-  const coordinatorKey = `ttrpg-player:${input.simulationSessionId}:${state.lastSequence}:${actorKey}`
+  const coordinatorKey = `ttrpg-player:${input.productRuntimeSessionId}:${state.lastSequence}:${actorKey}`
   const existing = await reusableCandidate({
-    scope: input.scope, sessionId: input.simulationSessionId, coordinatorKey,
+    scope: input.scope, sessionId: input.productRuntimeSessionId, coordinatorKey,
   })
   const candidate = existing ?? (await generateTtrpgPlayerActionCandidateV1({
     scope: input.scope,
-    simulationSessionId: input.simulationSessionId,
+    productRuntimeSessionId: input.productRuntimeSessionId,
     actorKey,
     objective: input.objective?.trim() || '依据本角色目标、当前玩家可见场景和可用行动，选择一个合理且能推动游戏的角色内行动。',
     aiConfig: input.aiConfig,
@@ -99,7 +99,7 @@ export async function coordinateTtrpgAiPlayerEpochV1(input: {
  */
 export async function runTtrpgAiPlayerCycleV1(input: {
   scope: WorkspaceScope
-  simulationSessionId: number
+  productRuntimeSessionId: number
   maxCommittedActions?: number
   objective?: string
   aiConfig?: AIConfig

@@ -22,7 +22,7 @@ import { resolveRequestConfig } from '../../lib/ai/client'
 import { getAIConfigRequiredMessage, isAIConfigReady } from '../../lib/ai/config-readiness'
 import type { ExtractedCodexEntry } from '../../lib/ai/adapters/structured-extract-adapter'
 import { useToast } from '../shared/Toast'
-import { resolveScopeLike } from '../../lib/world-engine/scope'
+import { resolveScopeLike } from '../../lib/workspace/scope'
 import {
   abandonCodexExtractionV1,
   adoptCodexExtractionCandidateV1,
@@ -167,7 +167,7 @@ export default function CodexPanel({ project, fixedDomain, fixedCategoryKeys, em
     const id = await addCategory({
       projectId, domain, parentId: null, name, icon: '📁',
       fieldSchema: '[]', hidden: false,
-      order: domainCats.length, worldGroupId: null,
+      order: domainCats.length,
     })
     setActiveCatId(id)
     setActiveEntryId(null)

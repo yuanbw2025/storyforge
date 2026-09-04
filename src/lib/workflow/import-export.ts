@@ -35,8 +35,8 @@ function parseEdge(value: unknown): PromptWorkflowGraphEdge | null {
   }
 }
 
-function parseGraph(value: unknown): PromptWorkflowGraph | undefined {
-  if (value == null) return undefined
+function parseGraph(value: unknown): PromptWorkflowGraph {
+  if (value == null) throw new Error('工作流必须包含显式 graph。')
   if (!isRecord(value) || value.version !== 1 || !Array.isArray(value.nodes) || !Array.isArray(value.edges)) {
     throw new Error('工作流 graph 必须是 version=1 的节点图。')
   }

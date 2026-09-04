@@ -10,8 +10,8 @@ import { batchGenerateDetails } from '../../src/lib/ai/batch-detail-runner'
 import { hashCanonicalValue } from '../../src/lib/agent/run/hash'
 import { prepareDetailedOutlineGatewayAssemblyV1 } from '../../src/lib/outline/detail-gateway-context'
 import { generateWorkspaceUid } from '../../src/lib/memory/identity'
-import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
-import { stampNewRecord } from '../../src/lib/world-engine/scope'
+import { resolveWorkspaceOwnership } from '../../src/lib/workspace/ownership'
+import { stampNewRecord } from '../../src/lib/workspace/scope'
 import { useAIConfigStore } from '../../src/stores/ai-config'
 import { verifyContextGatewayCandidateEvidenceV1 } from '../../src/lib/context-gateway/attempt-evidence'
 import {
@@ -29,6 +29,7 @@ import {
   type DetailedOutlineBatchCandidateV1,
 } from '../../src/lib/agent/run/detailed-outline-batch-durable'
 import type { WorkspaceScope } from '../../src/lib/types'
+import { seedCurrentProject } from '../helpers/current-workspace'
 
 const OUTPUT = JSON.stringify({
   openingHook: '潮声从上一章的门缝里涌来。',
@@ -54,10 +55,9 @@ async function createWorkspace(): Promise<{
   outlineNodeIds: number[]
 }> {
   const now = Date.now()
-  const projectId = await db.projects.add({
+  const projectId = await seedCurrentProject({
     workspaceUid: generateWorkspaceUid(),
     name: '批量细纲 durable',
-    genre: 'fantasy',
     genres: ['fantasy'],
     description: '',
     status: 'drafting',
@@ -65,7 +65,7 @@ async function createWorkspace(): Promise<{
     createdAt: now,
     updatedAt: now,
   } as any) as number
-  const { scope } = await ensureWorkspaceOwnership(projectId)
+  const { scope } = await resolveWorkspaceOwnership(projectId)
   const worldGroupId = await db.worldGroups.add(stampNewRecord(scope, 'worldGroups', {
     projectId,
     name: '主世界',

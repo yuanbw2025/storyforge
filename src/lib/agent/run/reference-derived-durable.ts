@@ -15,7 +15,7 @@ import {
 import { assembleContext } from '../../registry/assemble-context'
 import { adopt, hashAdoptFieldValueV1 } from '../../registry/adopt'
 import type { AIConfig, ChatMessage, WorkspaceScope } from '../../types'
-import { readOwnedRows } from '../../world-engine/scope'
+import { readOwnedRows } from '../../workspace/scope'
 import { createAgentSkillExecutionBindingV1 } from '../execution-binding'
 import { getAgentSkillV1 } from '../skill-registry'
 import { createAgentRunCheckpointV1, readLatestVerifiedAgentRunCheckpointV1 } from './checkpoint'
@@ -765,12 +765,12 @@ export async function adoptReferenceDerivedCandidateV1(input: {
   evidence = await currentEvidence(input.scope, candidate)
   if (!evidence.sourceFresh || !evidence.contextFresh || !evidence.promptFresh) {
     await pauseUnsafeRun(input.scope, snapshot, 'reference-derived-source-changed-before-projection')
-    throw new Error('参考派生 Agent 写入版本后来源状态变化，兼容投影已停止。')
+    throw new Error('参考派生 Agent 写入版本后来源状态变化，当前投影已停止。')
   }
   if (candidate.baseline.run.status === 'active' && !evidence.projectionMatches) {
     if (!evidence.originalReferenceFresh) {
       await pauseUnsafeRun(input.scope, snapshot, 'reference-derived-projection-field-diverged')
-      throw new Error('当前参考资料兼容投影已变化，正式写入已停止。')
+      throw new Error('当前参考资料激活投影已变化，正式写入已停止。')
     }
     try {
       await writeFieldWithCas({
@@ -785,7 +785,7 @@ export async function adoptReferenceDerivedCandidateV1(input: {
       evidence = await currentEvidence(input.scope, candidate)
       if (!evidence.projectionMatches) {
         await pauseUnsafeRun(input.scope, snapshot, 'reference-derived-projection-write-rejected')
-        throw new Error(`参考资料兼容投影写入失败：${error instanceof Error ? error.message : String(error)}。`)
+        throw new Error(`参考资料激活投影写入失败：${error instanceof Error ? error.message : String(error)}。`)
       }
     }
     await input.onDurableBoundary?.('formal.projection-written', snapshot)

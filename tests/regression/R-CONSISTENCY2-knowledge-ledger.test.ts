@@ -13,6 +13,8 @@ import {
 } from '../../src/lib/knowledge-ledger/lifecycle'
 import type { Chapter, KnowledgeLedgerEntry, OutlineNode } from '../../src/lib/types'
 import { assembleContext } from '../../src/lib/registry/assemble-context'
+import { seedCurrentProject } from '../helpers/current-workspace'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
 
 const now = 1_720_000_000_000
 
@@ -122,14 +124,16 @@ describe('CONSISTENCY-2 · 角色认知事件账本', () => {
   })
 
   it('adopt 强制把外部 confirmed 输入降为 candidate', async () => {
-    const projectId = await db.projects.add({
-      name: '认知账本', genre: '', description: '', targetWordCount: 0,
+    const projectId = await seedCurrentProject({
+      name: '认知账本', genres: [], description: '', targetWordCount: 0,
       enableMultiWorld: false, createdAt: now, updatedAt: now,
     } as any) as number
     const characterId = await db.characters.add({
       projectId, name: '林飞', roleWeight: 'main', moralAxis: 'neutral',
-      orderAxis: 'neutral', createdAt: now, updatedAt: now,
+      orderAxis: 'neutral', homeWorldGroupId: null, isCrossWorld: false,
+      createdAt: now, updatedAt: now,
     } as any) as number
+    await finalizeCurrentFixtureV1(projectId)
 
     const result = await adopt({
       projectId,
@@ -148,8 +152,8 @@ describe('CONSISTENCY-2 · 角色认知事件账本', () => {
   })
 
   it('角色合并/删除和章节删除保留记录并安全降级', async () => {
-    const projectId = await db.projects.add({
-      name: '生命周期', genre: '', description: '', targetWordCount: 0,
+    const projectId = await seedCurrentProject({
+      name: '生命周期', genres: [], description: '', targetWordCount: 0,
       enableMultiWorld: false, createdAt: now, updatedAt: now,
     } as any) as number
     const id = await db.knowledgeLedger.add({
@@ -176,13 +180,14 @@ describe('CONSISTENCY-2 · 角色认知事件账本', () => {
   })
 
   it('characterKnowledge 上下文只注入目标章之前的已确认认知', async () => {
-    const projectId = await db.projects.add({
-      name: '上下文', genre: '', description: '', targetWordCount: 0,
+    const projectId = await seedCurrentProject({
+      name: '上下文', genres: [], description: '', targetWordCount: 0,
       enableMultiWorld: false, createdAt: now, updatedAt: now,
     } as any) as number
     const characterId = await db.characters.add({
       projectId, name: '林飞', roleWeight: 'main', moralAxis: 'neutral',
-      orderAxis: 'neutral', createdAt: now, updatedAt: now,
+      orderAxis: 'neutral', homeWorldGroupId: null, isCrossWorld: false,
+      createdAt: now, updatedAt: now,
     } as any) as number
     const volumeId = await db.outlineNodes.add({
       projectId, parentId: null, type: 'volume', title: '卷一', summary: '',
@@ -209,6 +214,7 @@ describe('CONSISTENCY-2 · 角色认知事件账本', () => {
       statement: '密门在书架后', action: 'learn', sourceType: 'chapter',
       sourceChapterId: firstChapter, status: 'confirmed', createdAt: now, updatedAt: now,
     })
+    await finalizeCurrentFixtureV1(projectId)
 
     const atFirst = await assembleContext({
       projectId, chapterId: firstChapter, characterId,

@@ -30,7 +30,6 @@ export const DOMAIN_AGENT_IDS = ['world-origin', 'character', 'inspiration', 'ou
 export type DomainAgentId = typeof DOMAIN_AGENT_IDS[number]
 
 export type AgentSkillExecutionModeV1 =
-  | 'complete'
   | 'worldview-field'
   | 'world-suggest'
   | 'worldview-expand'
@@ -57,7 +56,6 @@ export type AgentSkillExecutionModeV1 =
   | 'storyline-progress'
   | 'character-driven'
   | 'character-revision'
-  | 'world-game'
   | 'impact-summary-regenerate'
   | 'volumes'
   | 'chapters'
@@ -82,17 +80,16 @@ export type AgentSkillExecutionModeV1 =
   | 'character-interaction-production'
   | 'adventure-intent'
   | 'adventure-narrator'
-  | 'simulation-briefing'
-  | 'simulation-advisor'
-  | 'simulation-narrator'
-  | 'simulation-actor-suggestion'
+  | 'open-world-briefing'
+  | 'open-world-advisor'
+  | 'open-world-outcome-narrator'
+  | 'open-world-actor-suggestion'
   | 'open-world-expression'
   | 'open-world-narration'
   | 'ttrpg-gm-narrator'
   | 'ttrpg-gm-actor-intent'
   | 'ttrpg-player-intent'
-  | 'ttrpg-character-sheet-candidate'
-  | 'game-production'
+  | 'product-production'
   | 'adaptation-brief'
   | 'adaptation-impact'
   | 'screenplay-plan'
@@ -130,12 +127,11 @@ export interface AgentSkillContextCompressionPolicyV1 {
 
 export interface AgentSkillContextGatewayPolicyV1 {
   version: 1
-  /** shadow is evidence-only; required makes V3 freshness an adoption precondition. */
-  rollout: 'shadow' | 'required'
+  /** Current Gateway execution is always authoritative for declared targets. */
+  rollout: 'required'
   /**
-   * Optional canary boundary. When present, only these registered table.field
-   * write targets require the Gateway/V3 adoption gate; the remaining targets
-   * stay on the legacy path until their own phase gate passes.
+   * Optional target boundary. When present, it documents the registered
+   * table.field targets whose candidates carry Gateway evidence.
    */
   requiredWriteTargets?: readonly string[]
   providerSourceKeys: readonly string[]
@@ -167,7 +163,12 @@ export interface AgentSkillDefinitionV1 {
   optionalContextSourceKeys: readonly string[]
   inputPolicy: AgentSkillInputPolicyV1
   contextCompression: AgentSkillContextCompressionPolicyV1
-  /** Optional until each formal domain is migrated through its phase gate. */
+  /**
+   * Present only when the Skill supports progressive resource disclosure.
+   * Other Skills receive bounded context exclusively from their registered
+   * contextSourceKeys/readToolNames; omission is a current explicit boundary,
+   * not a compatibility or rollout state.
+   */
   contextGateway?: AgentSkillContextGatewayPolicyV1
   maxOutputTokens: number
   writeTargets: readonly AgentSkillWriteTargetV1[]
@@ -207,14 +208,29 @@ const OUTLINE_CONTEXT_GATEWAY_POLICY = {
   ],
 } as const satisfies AgentSkillContextGatewayPolicyV1
 
-const WORLD_GAME_CONTEXT_SOURCE_KEYS = ['worldGameAuthoring'] as const
+const PRODUCT_PRODUCTION_WORLD_GATEWAY_POLICY = {
+  version: 1,
+  rollout: 'required',
+  providerSourceKeys: ['worldRelease'],
+  allowedResourceKinds: [...CONTEXT_RESOURCE_KINDS_V1],
+  allowedDepths: ['index', 'summary', 'focused', 'full', 'original'],
+  maxReadCalls: 200,
+  maxRetrievedTokens: 100_000,
+  maxPlanningSteps: 8,
+  maxPlanningModelTokens: 24_000,
+  allowOriginalRead: true,
+  additionalReadToolNames: [
+    'list_context_catalog', 'search_context', 'read_context_resource', 'read_original_evidence',
+  ],
+} as const satisfies AgentSkillContextGatewayPolicyV1
+
 const ADAPTATION_BRIEF_CONTEXT_SOURCE_KEYS = ['adaptation.sourceManifest', 'adaptation.sourceContent', 'characters', 'worldview', 'creativeRules'] as const
 const ADAPTATION_PLAN_CONTEXT_SOURCE_KEYS = ['adaptation.sourceManifest', 'adaptation.sourceContent', 'adaptation.currentBrief', 'characters'] as const
 const SCREENPLAY_SCENES_CONTEXT_SOURCE_KEYS = ['adaptation.sourceManifest', 'adaptation.sourceContent', 'adaptation.currentBrief', 'adaptation.currentPlan', 'characters'] as const
 const COMIC_STORYBOARD_CONTEXT_SOURCE_KEYS = ['adaptation.sourceManifest', 'adaptation.sourceContent', 'adaptation.currentBrief', 'adaptation.currentPlan', 'comic.visualBible', 'characters'] as const
 
 const STORY_CORE_CONTEXT_SOURCE_KEYS = [
-  'projectStatus',
+  'workStatus',
   'canonAssertions',
   'worldview',
   'storyCore',
@@ -226,14 +242,14 @@ const STORY_CORE_CONTEXT_SOURCE_KEYS = [
 ] as const
 
 const CREATIVE_RULES_CONTEXT_SOURCE_KEYS = [
-  'projectStatus',
+  'workStatus',
   'worldview',
   'storyCore',
   'creativeRules',
 ] as const
 
 const WORLDVIEW_FIELD_CONTEXT_SOURCE_KEYS = [
-  'projectStatus',
+  'workStatus',
   'canonAssertions',
   'worldview',
   'storyCore',
@@ -421,7 +437,7 @@ const HISTORY_AGENT_INPUT_POLICY: AgentSkillInputPolicyV1 = {
 }
 
 const OUTLINE_STORY_ARC_CONTEXT_SOURCE_KEYS = [
-  'projectStatus',
+  'workStatus',
   'canonAssertions',
   'worldview',
   'storyCore',
@@ -441,14 +457,14 @@ const OUTLINE_STORY_ARC_CONTEXT_SOURCE_KEYS = [
 ] as const
 
 const OUTLINE_STORYLINE_PROGRESS_CONTEXT_SOURCE_KEYS = [
-  'projectStatus',
+  'workStatus',
   'storyArcs',
   'storylineProgress',
   'chapterContent',
 ] as const
 
 const OUTLINE_CHARACTER_DRIVEN_CONTEXT_SOURCE_KEYS = [
-  'projectStatus',
+  'workStatus',
   'canonAssertions',
   'worldview',
   'storyCore',
@@ -685,24 +701,6 @@ const OUTLINE_VOLUME_INPUT_POLICY = {
     complete: {
       handling: 'grounded-transform',
       instruction: '严格把已有世界、故事核心、角色与故事线编排为卷纲，不新增冲突前提。',
-    },
-  },
-} as const satisfies AgentSkillInputPolicyV1
-
-const WORLD_GAME_INPUT_POLICY = {
-  sourceKeys: ['worldGameAuthoring'],
-  states: {
-    empty: {
-      handling: 'require-upstream',
-      instruction: '缺少已发布的冻结世界或叙事时停止生成，先完成 WorldRelease。',
-    },
-    partial: {
-      handling: 'grounded-transform',
-      instruction: '把已选择的冻结世界资产作为创作地基，补足新的危机、行动、分支后果和结局；不要逐字复刻来源剧情。',
-    },
-    complete: {
-      handling: 'grounded-transform',
-      instruction: '使用完整冻结创作包演化新的可玩剧情；保留便携身份引用，同时让冲突、推进、选择和结局形成独立游戏体验。',
     },
   },
 } as const satisfies AgentSkillInputPolicyV1
@@ -984,7 +982,6 @@ const CHARACTER_SUPPLEMENT_COMPRESSION_POLICY = compressionPolicy([
 ])
 const INSPIRATION_COMPRESSION_POLICY = compressionPolicy(['inspirationWorkspace'])
 const OUTLINE_COMPRESSION_POLICY = compressionPolicy(['ragSelection'])
-const WORLD_GAME_COMPRESSION_POLICY = compressionPolicy(['worldGameAuthoring'])
 const OUTLINE_STORY_ARC_COMPRESSION_POLICY = compressionPolicy([
   'worldview',
   'storyCore',
@@ -1096,15 +1093,15 @@ const ADVENTURE_RUNTIME_INPUT_POLICY: AgentSkillInputPolicyV1 = {
   },
 }
 const ADVENTURE_RUNTIME_COMPRESSION_POLICY = compressionPolicy(['adventureRuntime'])
-const NARRATIVE_SIMULATION_RUNTIME_INPUT_POLICY: AgentSkillInputPolicyV1 = {
-  sourceKeys: ['narrativeSimulationRuntime'],
+const OPEN_WORLD_EVOLUTION_RUNTIME_INPUT_POLICY: AgentSkillInputPolicyV1 = {
+  sourceKeys: ['textOpenWorldEvolutionRuntime'],
   states: {
-    empty: { handling: 'require-upstream', instruction: '缺少叙事模拟运行时上下文时停止，不得臆造局势、行动或结果。' },
-    partial: { handling: 'require-upstream', instruction: '叙事模拟运行时上下文不完整时停止，等待重新装配。' },
+    empty: { handling: 'require-upstream', instruction: '缺少文字开放世界内部状态演化上下文时停止，不得臆造局势、行动或结果。' },
+    partial: { handling: 'require-upstream', instruction: '文字开放世界内部状态演化上下文不完整时停止，等待重新装配。' },
     complete: { handling: 'grounded-transform', instruction: '只能依据玩家可见状态与正式事件证据生成表现候选，不得改写确定性结算。' },
   },
 }
-const NARRATIVE_SIMULATION_RUNTIME_COMPRESSION_POLICY = compressionPolicy(['narrativeSimulationRuntime'])
+const OPEN_WORLD_EVOLUTION_RUNTIME_COMPRESSION_POLICY = compressionPolicy(['textOpenWorldEvolutionRuntime'])
 const OPEN_WORLD_RUNTIME_INPUT_POLICY: AgentSkillInputPolicyV1 = {
   sourceKeys: ['openWorldRuntime'],
   states: {
@@ -1132,24 +1129,6 @@ const TTRPG_PLAYER_RUNTIME_INPUT_POLICY: AgentSkillInputPolicyV1 = {
   },
 }
 const TTRPG_PLAYER_RUNTIME_COMPRESSION_POLICY = compressionPolicy(['ttrpgPlayerRuntime'])
-const TTRPG_CHARACTER_AUTHORING_INPUT_POLICY: AgentSkillInputPolicyV1 = {
-  sourceKeys: ['ttrpg.character-authoring'],
-  states: {
-    empty: { handling: 'require-upstream', instruction: '缺少冻结 RulePack、CampaignPack 或目标玩家角色时停止，不得凭空车卡。' },
-    partial: { handling: 'require-upstream', instruction: '单角色车卡上下文不完整时停止，等待重新装配。' },
-    complete: { handling: 'grounded-transform', instruction: '只能提出角色卡候选；数值必须遵守 RulePack，锁定字段不得改变，采用前必须由作者确认。' },
-  },
-}
-const TTRPG_CHARACTER_AUTHORING_COMPRESSION_POLICY = compressionPolicy(['ttrpg.character-authoring'])
-const AVG_AUTHORING_INPUT_POLICY: AgentSkillInputPolicyV1 = {
-  sourceKeys: ['avgAuthoring'],
-  states: {
-    empty: { handling: 'require-upstream', instruction: '缺少 AVG 媒资与演出上下文时停止，不得臆造媒资 key。' },
-    partial: { handling: 'grounded-transform', instruction: '只指出缺失项和可用改进，不得把建议直接写入演出模块。' },
-    complete: { handling: 'grounded-transform', instruction: '基于已登记媒资与 Beat 给出只读演出审阅建议。' },
-  },
-}
-const AVG_AUTHORING_COMPRESSION_POLICY = compressionPolicy(['avgAuthoring'])
 const PROSE_STYLE_LEARNING_INPUT_POLICY = {
   sourceKeys: ['styleLearningBaseline'],
   states: {
@@ -1169,7 +1148,7 @@ const PROSE_STYLE_LEARNING_INPUT_POLICY = {
 } as const satisfies AgentSkillInputPolicyV1
 const PROSE_STYLE_LEARNING_COMPRESSION_POLICY = compressionPolicy(['styleLearningBaseline'])
 
-function gameProductionInputPolicy(sourceKeys: readonly string[]): AgentSkillInputPolicyV1 {
+function productProductionInputPolicy(sourceKeys: readonly string[]): AgentSkillInputPolicyV1 {
   return {
     sourceKeys,
     states: {
@@ -1183,26 +1162,6 @@ function gameProductionInputPolicy(sourceKeys: readonly string[]): AgentSkillInp
 export const AGENT_SKILLS = [
   {
     version: 1,
-    id: 'world-origin.complete',
-    agentId: 'world-origin',
-    defaultForAgent: true,
-    label: '世界来源补全',
-    owner: 'world-foundation-agent',
-    promptVersion: 'world-origin-copilot-v1',
-    executionMode: 'complete',
-    contextTaskKind: 'agent-world-origin',
-    readToolNames: ['read_project_status', 'read_worldview'],
-    contextSourceKeys: [],
-    optionalContextSourceKeys: [],
-    inputPolicy: WORLD_FOUNDATION_INPUT_POLICY,
-    contextCompression: WORLD_COMPRESSION_POLICY,
-    maxOutputTokens: 3_000,
-    writeTargets: [{ table: 'worldviews', fields: ['worldOrigin'] }],
-    lastVerifiedAt: '2026-08-08',
-    regressionTests: ['R-AGENT1-chat-copilot-world-origin', 'R-HARNESS2-master-terminal-verifier', 'R-HARNESS16-semantic-context-compression', 'R-HARNESS18-execution-version-freshness'],
-  },
-  {
-    version: 1,
     id: 'world-origin.review',
     agentId: 'world-origin',
     defaultForAgent: false,
@@ -1212,7 +1171,7 @@ export const AGENT_SKILLS = [
     executionMode: 'review',
     contextTaskKind: 'agent-world-origin',
     readToolNames: [],
-    contextSourceKeys: ['projectStatus', 'worldview', 'storyCore', 'powerSystem', 'codex', 'characters', 'storyArcs'],
+    contextSourceKeys: ['workStatus', 'worldview', 'storyCore', 'powerSystem', 'codex', 'characters', 'storyArcs'],
     optionalContextSourceKeys: [],
     inputPolicy: WORLD_FOUNDATION_INPUT_POLICY,
     contextCompression: WORLD_COMPRESSION_POLICY,
@@ -1225,7 +1184,7 @@ export const AGENT_SKILLS = [
     version: 1,
     id: 'world-origin.worldview-field',
     agentId: 'world-origin',
-    defaultForAgent: false,
+    defaultForAgent: true,
     label: '世界基座单字段生成',
     owner: 'world-foundation-agent',
     promptVersion: 'worldview-field-copilot-v1',
@@ -1354,9 +1313,9 @@ export const AGENT_SKILLS = [
     id: 'world-origin.worldview-expand',
     agentId: 'world-origin',
     defaultForAgent: false,
-    label: '世界组七字段扩写',
+    label: '世界组六字段扩写',
     owner: 'world-foundation-agent',
-    promptVersion: 'worldview-expand-v1',
+    promptVersion: 'worldview-expand-v2',
     executionMode: 'worldview-expand',
     contextTaskKind: 'agent-world-origin',
     readToolNames: [],
@@ -1365,16 +1324,16 @@ export const AGENT_SKILLS = [
     inputPolicy: {
       sourceKeys: WORLDVIEW_EXPAND_CONTEXT_SOURCE_KEYS,
       states: {
-        empty: { handling: 'create-from-request', instruction: '只依据作者已保存的世界草稿创建七字段候选，不得声称引用了不存在的设定。' },
-        partial: { handling: 'reference-and-create', instruction: '锁定已有世界观和故事核心，只补足本次七字段候选并保持其它世界差异化。' },
-        complete: { handling: 'grounded-transform', instruction: '严格依据当前世界正式设定扩写七字段，禁止覆盖非目标字段或其它世界。' },
+        empty: { handling: 'create-from-request', instruction: '只依据作者已保存的世界草稿创建六字段候选，不得声称引用了不存在的设定。' },
+        partial: { handling: 'reference-and-create', instruction: '锁定已有世界观和故事核心，只补足本次六字段候选并保持其它世界差异化。' },
+        complete: { handling: 'grounded-transform', instruction: '严格依据当前世界正式设定扩写六字段，禁止覆盖非目标字段或其它世界。' },
       },
     },
     contextCompression: WORLDVIEW_EXPAND_COMPRESSION_POLICY,
     maxOutputTokens: 8_000,
     writeTargets: [{
       table: 'worldviews',
-      fields: ['worldOrigin', 'powerHierarchy', 'continentLayout', 'climateByRegion', 'historyLine', 'races', 'factionLayout'],
+      fields: ['worldOrigin', 'powerHierarchy', 'continentLayout', 'climateByRegion', 'races', 'factionLayout'],
     }],
     lastVerifiedAt: '2026-08-14',
     regressionTests: ['R-HARNESS67-worldview-expand-durable'],
@@ -2071,38 +2030,6 @@ export const AGENT_SKILLS = [
   },
   {
     version: 1,
-    id: 'outline.world-game',
-    agentId: 'outline',
-    defaultForAgent: false,
-    label: '冻结世界演化为文字游戏',
-    owner: 'outline-agent',
-    promptVersion: 'world-game-copilot-v1',
-    executionMode: 'world-game',
-    contextTaskKind: 'agent-outline',
-    readToolNames: [],
-    contextSourceKeys: WORLD_GAME_CONTEXT_SOURCE_KEYS,
-    optionalContextSourceKeys: [],
-    inputPolicy: WORLD_GAME_INPUT_POLICY,
-    contextCompression: WORLD_GAME_COMPRESSION_POLICY,
-    maxOutputTokens: 12_000,
-    writeTargets: [
-      { table: 'narrativeModules', fields: [], adoptionExtension: 'world-game-narrative-modules' },
-      { table: 'narrativeNodes', fields: [], adoptionExtension: 'world-game-narrative-nodes' },
-      { table: 'narrativeBeats', fields: [], adoptionExtension: 'world-game-narrative-beats' },
-      { table: 'narrativeChoices', fields: [], adoptionExtension: 'world-game-narrative-choices' },
-      { table: 'gameDefinitions', fields: [], adoptionExtension: 'world-game-definitions' },
-      { table: 'adventureModules', fields: [], adoptionExtension: 'world-game-adventure-modules' },
-      { table: 'interactionCharacterProfiles', fields: [], adoptionExtension: 'world-game-interaction-profiles' },
-      { table: 'interactionSceneTemplates', fields: [], adoptionExtension: 'world-game-interaction-scenes' },
-      { table: 'avgPresentationModules', fields: [], adoptionExtension: 'world-game-avg-presentations' },
-      { table: 'avgMediaAssets', fields: [], adoptionExtension: 'world-game-avg-media-assets' },
-      { table: 'avgMediaBlobs', fields: [], adoptionExtension: 'world-game-avg-media-blobs' },
-    ],
-    lastVerifiedAt: '2026-08-15',
-    regressionTests: ['R-WORLDGAME5-main-agent-authoring'],
-  },
-  {
-    version: 1,
     id: 'outline.adaptation-brief',
     agentId: 'outline',
     defaultForAgent: false,
@@ -2786,28 +2713,8 @@ export const AGENT_SKILLS = [
     contextCompression: ADVENTURE_RUNTIME_COMPRESSION_POLICY,
     maxOutputTokens: 1_000,
     writeTargets: [],
-    lastVerifiedAt: '2026-08-14',
-    regressionTests: ['R-TEXTADV1-harness'],
-  },
-  {
-    version: 1,
-    id: 'prose.avg-presentation-review',
-    agentId: 'prose',
-    defaultForAgent: false,
-    label: 'AVG 演出只读审阅',
-    owner: 'prose-agent',
-    promptVersion: 'avg-presentation-review-v1',
-    executionMode: 'review',
-    contextTaskKind: 'agent-prose',
-    readToolNames: [],
-    contextSourceKeys: ['avgAuthoring'],
-    optionalContextSourceKeys: [],
-    inputPolicy: AVG_AUTHORING_INPUT_POLICY,
-    contextCompression: AVG_AUTHORING_COMPRESSION_POLICY,
-    maxOutputTokens: 2_000,
-    writeTargets: [],
-    lastVerifiedAt: '2026-08-14',
-    regressionTests: ['R-AVG1-core'],
+    lastVerifiedAt: '2026-09-01',
+    regressionTests: ['R-HARNESS-RUNTIME2-product-skills'],
   },
   {
     version: 1,
@@ -2826,88 +2733,88 @@ export const AGENT_SKILLS = [
     contextCompression: ADVENTURE_RUNTIME_COMPRESSION_POLICY,
     maxOutputTokens: 2_000,
     writeTargets: [],
-    lastVerifiedAt: '2026-08-14',
-    regressionTests: ['R-TEXTADV1-harness'],
+    lastVerifiedAt: '2026-09-01',
+    regressionTests: ['R-HARNESS-RUNTIME2-product-skills'],
   },
   {
     version: 1,
-    id: 'prose.simulation-turn-briefing',
+    id: 'prose.open-world-turn-briefing',
     agentId: 'prose',
     defaultForAgent: false,
-    label: '叙事模拟回合简报候选',
+    label: '文字开放世界内部状态演化·回合简报候选',
     owner: 'prose-agent',
-    promptVersion: 'narrative-simulation-briefing-v1',
-    executionMode: 'simulation-briefing',
+    promptVersion: 'text-open-world-evolution-briefing-v1',
+    executionMode: 'open-world-briefing',
     contextTaskKind: 'agent-prose',
     readToolNames: [],
-    contextSourceKeys: ['narrativeSimulationRuntime'],
+    contextSourceKeys: ['textOpenWorldEvolutionRuntime'],
     optionalContextSourceKeys: [],
-    inputPolicy: NARRATIVE_SIMULATION_RUNTIME_INPUT_POLICY,
-    contextCompression: NARRATIVE_SIMULATION_RUNTIME_COMPRESSION_POLICY,
+    inputPolicy: OPEN_WORLD_EVOLUTION_RUNTIME_INPUT_POLICY,
+    contextCompression: OPEN_WORLD_EVOLUTION_RUNTIME_COMPRESSION_POLICY,
     maxOutputTokens: 2_000,
     writeTargets: [],
-    lastVerifiedAt: '2026-08-14',
-    regressionTests: ['R-TEXTSIM1-harness'],
+    lastVerifiedAt: '2026-09-01',
+    regressionTests: ['R-HARNESS-RUNTIME2-product-skills'],
   },
   {
     version: 1,
-    id: 'prose.simulation-advisor-performance',
+    id: 'prose.open-world-advisor-performance',
     agentId: 'prose',
     defaultForAgent: false,
-    label: '叙事模拟顾问表演候选',
+    label: '文字开放世界内部状态演化·顾问表演候选',
     owner: 'prose-agent',
-    promptVersion: 'narrative-simulation-advisor-v1',
-    executionMode: 'simulation-advisor',
+    promptVersion: 'text-open-world-evolution-advisor-v1',
+    executionMode: 'open-world-advisor',
     contextTaskKind: 'agent-prose',
     readToolNames: [],
-    contextSourceKeys: ['narrativeSimulationRuntime'],
+    contextSourceKeys: ['textOpenWorldEvolutionRuntime'],
     optionalContextSourceKeys: [],
-    inputPolicy: NARRATIVE_SIMULATION_RUNTIME_INPUT_POLICY,
-    contextCompression: NARRATIVE_SIMULATION_RUNTIME_COMPRESSION_POLICY,
+    inputPolicy: OPEN_WORLD_EVOLUTION_RUNTIME_INPUT_POLICY,
+    contextCompression: OPEN_WORLD_EVOLUTION_RUNTIME_COMPRESSION_POLICY,
     maxOutputTokens: 2_000,
     writeTargets: [],
-    lastVerifiedAt: '2026-08-14',
-    regressionTests: ['R-TEXTSIM1-harness'],
+    lastVerifiedAt: '2026-09-01',
+    regressionTests: ['R-HARNESS-RUNTIME2-product-skills'],
   },
   {
     version: 1,
-    id: 'prose.simulation-outcome-narrator',
+    id: 'prose.open-world-outcome-narrator',
     agentId: 'prose',
     defaultForAgent: false,
-    label: '叙事模拟结果叙述候选',
+    label: '文字开放世界内部状态演化·结果叙述候选',
     owner: 'prose-agent',
-    promptVersion: 'narrative-simulation-outcome-v1',
-    executionMode: 'simulation-narrator',
+    promptVersion: 'text-open-world-evolution-outcome-v1',
+    executionMode: 'open-world-outcome-narrator',
     contextTaskKind: 'agent-prose',
     readToolNames: [],
-    contextSourceKeys: ['narrativeSimulationRuntime'],
+    contextSourceKeys: ['textOpenWorldEvolutionRuntime'],
     optionalContextSourceKeys: [],
-    inputPolicy: NARRATIVE_SIMULATION_RUNTIME_INPUT_POLICY,
-    contextCompression: NARRATIVE_SIMULATION_RUNTIME_COMPRESSION_POLICY,
+    inputPolicy: OPEN_WORLD_EVOLUTION_RUNTIME_INPUT_POLICY,
+    contextCompression: OPEN_WORLD_EVOLUTION_RUNTIME_COMPRESSION_POLICY,
     maxOutputTokens: 2_000,
     writeTargets: [],
-    lastVerifiedAt: '2026-08-14',
-    regressionTests: ['R-TEXTSIM1-harness'],
+    lastVerifiedAt: '2026-09-01',
+    regressionTests: ['R-HARNESS-RUNTIME2-product-skills'],
   },
   {
     version: 1,
-    id: 'prose.simulation-actor-action-suggestion',
+    id: 'prose.open-world-actor-action-suggestion',
     agentId: 'prose',
     defaultForAgent: false,
-    label: '叙事模拟主体行动建议候选',
+    label: '文字开放世界内部状态演化·主体行动建议候选',
     owner: 'prose-agent',
-    promptVersion: 'narrative-simulation-actor-suggestion-v1',
-    executionMode: 'simulation-actor-suggestion',
+    promptVersion: 'text-open-world-evolution-actor-suggestion-v1',
+    executionMode: 'open-world-actor-suggestion',
     contextTaskKind: 'agent-prose',
     readToolNames: [],
-    contextSourceKeys: ['narrativeSimulationRuntime'],
+    contextSourceKeys: ['textOpenWorldEvolutionRuntime'],
     optionalContextSourceKeys: [],
-    inputPolicy: NARRATIVE_SIMULATION_RUNTIME_INPUT_POLICY,
-    contextCompression: NARRATIVE_SIMULATION_RUNTIME_COMPRESSION_POLICY,
+    inputPolicy: OPEN_WORLD_EVOLUTION_RUNTIME_INPUT_POLICY,
+    contextCompression: OPEN_WORLD_EVOLUTION_RUNTIME_COMPRESSION_POLICY,
     maxOutputTokens: 2_000,
     writeTargets: [],
-    lastVerifiedAt: '2026-08-14',
-    regressionTests: ['R-TEXTSIM1-harness'],
+    lastVerifiedAt: '2026-09-01',
+    regressionTests: ['R-HARNESS-RUNTIME2-product-skills'],
   },
   {
     version: 1,
@@ -2926,8 +2833,8 @@ export const AGENT_SKILLS = [
     contextCompression: OPEN_WORLD_RUNTIME_COMPRESSION_POLICY,
     maxOutputTokens: 2_000,
     writeTargets: [],
-    lastVerifiedAt: '2026-08-14',
-    regressionTests: ['R-TEXTWORLD1-harness'],
+    lastVerifiedAt: '2026-09-01',
+    regressionTests: ['R-HARNESS-RUNTIME2-product-skills'],
   },
   {
     version: 1,
@@ -2946,28 +2853,8 @@ export const AGENT_SKILLS = [
     contextCompression: OPEN_WORLD_RUNTIME_COMPRESSION_POLICY,
     maxOutputTokens: 2_000,
     writeTargets: [],
-    lastVerifiedAt: '2026-08-14',
-    regressionTests: ['R-TEXTWORLD1-harness'],
-  },
-  {
-    version: 1,
-    id: 'character.interaction-production-step.v1',
-    agentId: 'outline',
-    defaultForAgent: false,
-    label: '冻结世界角色互动生产候选',
-    owner: 'outline-agent',
-    promptVersion: 'character-interaction-production-step-v1',
-    executionMode: 'character-interaction-production',
-    contextTaskKind: 'agent-outline',
-    readToolNames: [],
-    contextSourceKeys: ['characterInteractionProduction'],
-    optionalContextSourceKeys: [],
-    inputPolicy: gameProductionInputPolicy(['characterInteractionProduction']),
-    contextCompression: compressionPolicy(['characterInteractionProduction']),
-    maxOutputTokens: 8_000,
-    writeTargets: [],
-    lastVerifiedAt: '2026-08-25',
-    regressionTests: ['R-CHATGAME3E-production-harness'],
+    lastVerifiedAt: '2026-09-01',
+    regressionTests: ['R-HARNESS-RUNTIME2-product-skills'],
   },
   {
     version: 1,
@@ -2986,8 +2873,8 @@ export const AGENT_SKILLS = [
     contextCompression: TTRPG_GM_RUNTIME_COMPRESSION_POLICY,
     maxOutputTokens: 2_000,
     writeTargets: [],
-    lastVerifiedAt: '2026-08-21',
-    regressionTests: ['R-TTRPG2C-trustworthy-ai-gm'],
+    lastVerifiedAt: '2026-09-01',
+    regressionTests: ['R-HARNESS-RUNTIME3-ttrpg-skills'],
   },
   {
     version: 1,
@@ -3006,8 +2893,8 @@ export const AGENT_SKILLS = [
     contextCompression: TTRPG_PLAYER_RUNTIME_COMPRESSION_POLICY,
     maxOutputTokens: 1_200,
     writeTargets: [],
-    lastVerifiedAt: '2026-08-22',
-    regressionTests: ['R-TTRPG2F-ai-player'],
+    lastVerifiedAt: '2026-09-01',
+    regressionTests: ['R-HARNESS-RUNTIME3-ttrpg-skills'],
   },
   {
     version: 1,
@@ -3026,68 +2913,68 @@ export const AGENT_SKILLS = [
     contextCompression: TTRPG_GM_RUNTIME_COMPRESSION_POLICY,
     maxOutputTokens: 1_200,
     writeTargets: [],
-    lastVerifiedAt: '2026-08-22',
-    regressionTests: ['R-TTRPG3O-ai-gm-actor'],
+    lastVerifiedAt: '2026-09-01',
+    regressionTests: ['R-HARNESS-RUNTIME3-ttrpg-skills'],
   },
   {
     version: 1,
-    id: 'prose.ttrpg-character-sheet-candidate',
-    agentId: 'prose',
-    defaultForAgent: false,
-    label: 'TTRPG 完整车卡候选',
-    owner: 'prose-agent',
-    promptVersion: 'ttrpg-character-sheet-candidate-v2',
-    executionMode: 'ttrpg-character-sheet-candidate',
-    contextTaskKind: 'agent-prose',
-    readToolNames: [],
-    contextSourceKeys: ['ttrpg.character-authoring'],
-    optionalContextSourceKeys: [],
-    inputPolicy: TTRPG_CHARACTER_AUTHORING_INPUT_POLICY,
-    contextCompression: TTRPG_CHARACTER_AUTHORING_COMPRESSION_POLICY,
-    maxOutputTokens: 4_000,
-    writeTargets: [],
-    lastVerifiedAt: '2026-08-22',
-    regressionTests: ['R-TTRPG3F-character-sheet-ai'],
-  },
-  {
-    version: 1,
-    id: 'game-production.consult.v1',
+    id: 'product-production.consult.v1',
     agentId: 'outline',
     defaultForAgent: false,
     label: '游戏起点会谈建议',
     owner: 'outline-agent',
-    promptVersion: 'game-production-consult-v1',
-    executionMode: 'game-production',
+    promptVersion: 'product-production-consult-v1',
+    executionMode: 'product-production',
     contextTaskKind: 'agent-outline',
     readToolNames: [],
-    contextSourceKeys: ['game-production.consultation-source'],
+    contextSourceKeys: [],
     optionalContextSourceKeys: [],
-    inputPolicy: gameProductionInputPolicy(['game-production.consultation-source']),
-    contextCompression: compressionPolicy(['game-production.consultation-source']),
+    inputPolicy: productProductionInputPolicy(['worldRelease']),
+    contextCompression: compressionPolicy(['worldRelease']),
+    contextGateway: {
+      version: 1,
+      rollout: 'required',
+      requiredWriteTargets: ['productProductionBriefs.userIntentSummary'],
+      providerSourceKeys: ['worldRelease'],
+      allowedResourceKinds: [...CONTEXT_RESOURCE_KINDS_V1],
+      allowedDepths: ['index', 'summary', 'focused', 'full', 'original'],
+      maxReadCalls: 200,
+      maxRetrievedTokens: 100_000,
+      maxPlanningSteps: 8,
+      maxPlanningModelTokens: 24_000,
+      allowOriginalRead: true,
+      additionalReadToolNames: [
+        'list_context_catalog',
+        'search_context',
+        'read_context_resource',
+        'read_original_evidence',
+      ],
+    },
     maxOutputTokens: 4_000,
     writeTargets: [{
-      table: 'gameProductionBriefs',
+      table: 'productProductionBriefs',
       fields: ['userIntentSummary'],
-      adoptionExtension: 'game-production-briefs',
+      adoptionExtension: 'product-production-briefs',
     }],
     lastVerifiedAt: '2026-08-21',
-    regressionTests: ['R-GAMEPROD1B-consultation'],
+    regressionTests: ['R-PRODUCTPROD1B-consultation'],
   },
   {
     version: 1,
-    id: 'game-production.ttrpg-campaign-proposals.v2',
+    id: 'product-production.ttrpg-campaign-proposals.v2',
     agentId: 'outline',
     defaultForAgent: false,
     label: '冻结世界 TTRPG 三战役提案候选',
     owner: 'outline-agent',
     promptVersion: 'ttrpg-campaign-proposals-v2',
-    executionMode: 'game-production',
+    executionMode: 'product-production',
     contextTaskKind: 'agent-outline',
     readToolNames: [],
-    contextSourceKeys: ['game-production.consultation-source'],
+    contextSourceKeys: [],
     optionalContextSourceKeys: [],
-    inputPolicy: gameProductionInputPolicy(['game-production.consultation-source']),
-    contextCompression: compressionPolicy(['game-production.consultation-source']),
+    inputPolicy: productProductionInputPolicy(['worldRelease']),
+    contextCompression: compressionPolicy(['worldRelease']),
+    contextGateway: PRODUCT_PRODUCTION_WORLD_GATEWAY_POLICY,
     maxOutputTokens: 8_000,
     writeTargets: [],
     lastVerifiedAt: '2026-08-22',
@@ -3095,167 +2982,174 @@ export const AGENT_SKILLS = [
   },
   {
     version: 1,
-    id: 'game-production.brief-compile.v1',
+    id: 'product-production.brief-compile.v1',
     agentId: 'outline',
     defaultForAgent: false,
-    label: '游戏生产 Brief 编译',
+    label: '上层产品生产 Brief 编译',
     owner: 'outline-agent',
-    promptVersion: 'game-production-brief-v3',
-    executionMode: 'game-production',
+    promptVersion: 'product-production-brief-v3',
+    executionMode: 'product-production',
     contextTaskKind: 'agent-outline',
     readToolNames: [],
-    contextSourceKeys: ['game-production.consultation-source'],
+    contextSourceKeys: [],
     optionalContextSourceKeys: [],
-    inputPolicy: gameProductionInputPolicy(['game-production.consultation-source']),
-    contextCompression: compressionPolicy(['game-production.consultation-source']),
+    inputPolicy: productProductionInputPolicy(['worldRelease']),
+    contextCompression: compressionPolicy(['worldRelease']),
+    contextGateway: PRODUCT_PRODUCTION_WORLD_GATEWAY_POLICY,
     maxOutputTokens: 8_000,
     writeTargets: [{
-      table: 'gameProductionBriefs',
+      table: 'productProductionBriefs',
       fields: ['briefJson'],
-      adoptionExtension: 'game-production-briefs',
+      adoptionExtension: 'product-production-briefs',
     }],
     lastVerifiedAt: '2026-08-21',
-    regressionTests: ['R-GAMEPROD1B-consultation', 'R-GAMEPROD1B-commands'],
+    regressionTests: ['R-PRODUCTPROD1B-consultation', 'R-PRODUCTPROD1B-commands'],
   },
   {
     version: 1,
-    id: 'game-production.plan.v1',
+    id: 'product-production.plan.v1',
     agentId: 'outline',
     defaultForAgent: false,
-    label: '游戏生产 DAG 规划',
+    label: '上层产品生产 DAG 规划',
     owner: 'outline-agent',
-    promptVersion: 'game-production-plan-v3',
-    executionMode: 'game-production',
+    promptVersion: 'product-production-plan-v3',
+    executionMode: 'product-production',
     contextTaskKind: 'agent-outline',
     readToolNames: [],
-    contextSourceKeys: ['game-production.brief'],
+    contextSourceKeys: ['product-production.brief'],
     optionalContextSourceKeys: [],
-    inputPolicy: gameProductionInputPolicy(['game-production.brief']),
-    contextCompression: compressionPolicy(['game-production.brief']),
+    inputPolicy: productProductionInputPolicy(['product-production.brief']),
+    contextCompression: compressionPolicy(['product-production.brief']),
+    contextGateway: PRODUCT_PRODUCTION_WORLD_GATEWAY_POLICY,
     maxOutputTokens: 12_000,
-    writeTargets: [{ table: 'gameBuilds', fields: ['planJson'], adoptionExtension: 'game-production-builds' }],
+    writeTargets: [{ table: 'productBuilds', fields: ['planJson'], adoptionExtension: 'product-production-builds' }],
     lastVerifiedAt: '2026-08-21',
-    regressionTests: ['R-GAMEPROD1C-plan', 'R-GAMEPROD1D-scheduler'],
+    regressionTests: ['R-PRODUCTPROD1C-plan', 'R-PRODUCTPROD1D-scheduler'],
   },
   {
     version: 1,
-    id: 'game-production.content.v1',
+    id: 'product-production.content.v1',
     agentId: 'outline',
     defaultForAgent: false,
     label: '游戏内容产物生成',
     owner: 'outline-agent',
-    promptVersion: 'game-production-content-v1',
-    executionMode: 'game-production',
+    promptVersion: 'product-production-content-v1',
+    executionMode: 'product-production',
     contextTaskKind: 'agent-outline',
     readToolNames: [],
-    contextSourceKeys: ['game-production.brief'],
-    optionalContextSourceKeys: ['game-production.artifact-inputs'],
-    inputPolicy: gameProductionInputPolicy(['game-production.brief']),
-    contextCompression: compressionPolicy(['game-production.brief', 'game-production.artifact-inputs']),
+    contextSourceKeys: ['product-production.brief'],
+    optionalContextSourceKeys: ['product-production.artifact-inputs'],
+    inputPolicy: productProductionInputPolicy(['product-production.brief']),
+    contextCompression: compressionPolicy(['product-production.brief', 'product-production.artifact-inputs']),
+    contextGateway: PRODUCT_PRODUCTION_WORLD_GATEWAY_POLICY,
     maxOutputTokens: 16_000,
-    writeTargets: [{ table: 'gameBuildArtifacts', fields: ['payloadJson'], adoptionExtension: 'game-production-artifacts' }],
+    writeTargets: [{ table: 'productBuildArtifacts', fields: ['payloadJson'], adoptionExtension: 'product-production-artifacts' }],
     lastVerifiedAt: '2026-08-21',
-    regressionTests: ['R-GAMEPROD1F-production-executor'],
+    regressionTests: ['R-PRODUCTPROD1F-production-executor'],
   },
   {
     version: 1,
-    id: 'game-production.media-requirements.v1',
+    id: 'product-production.media-requirements.v1',
     agentId: 'outline',
     defaultForAgent: false,
     label: '游戏媒资需求拆分',
     owner: 'outline-agent',
-    promptVersion: 'game-production-media-requirements-v1',
-    executionMode: 'game-production',
+    promptVersion: 'product-production-media-requirements-v1',
+    executionMode: 'product-production',
     contextTaskKind: 'agent-outline',
     readToolNames: [],
-    contextSourceKeys: ['game-production.brief'],
-    optionalContextSourceKeys: ['game-production.artifact-inputs'],
-    inputPolicy: gameProductionInputPolicy(['game-production.brief']),
-    contextCompression: compressionPolicy(['game-production.brief', 'game-production.artifact-inputs']),
+    contextSourceKeys: ['product-production.brief'],
+    optionalContextSourceKeys: ['product-production.artifact-inputs'],
+    inputPolicy: productProductionInputPolicy(['product-production.brief']),
+    contextCompression: compressionPolicy(['product-production.brief', 'product-production.artifact-inputs']),
+    contextGateway: PRODUCT_PRODUCTION_WORLD_GATEWAY_POLICY,
     maxOutputTokens: 8_000,
-    writeTargets: [{ table: 'gameBuildArtifacts', fields: ['metadataJson'], adoptionExtension: 'game-production-artifacts' }],
+    writeTargets: [{ table: 'productBuildArtifacts', fields: ['metadataJson'], adoptionExtension: 'product-production-artifacts' }],
     lastVerifiedAt: '2026-08-21',
-    regressionTests: ['R-GAMEPROD1F-production-executor'],
+    regressionTests: ['R-PRODUCTPROD1F-production-executor'],
   },
   {
     version: 1,
-    id: 'game-production.media-request.v1',
+    id: 'product-production.media-request.v1',
     agentId: 'outline',
     defaultForAgent: false,
     label: '游戏媒资请求',
     owner: 'outline-agent',
-    promptVersion: 'game-production-media-request-v1',
-    executionMode: 'game-production',
+    promptVersion: 'product-production-media-request-v1',
+    executionMode: 'product-production',
     contextTaskKind: 'agent-outline',
     readToolNames: [],
-    contextSourceKeys: ['game-production.brief'],
-    optionalContextSourceKeys: ['game-production.artifact-inputs'],
-    inputPolicy: gameProductionInputPolicy(['game-production.brief']),
-    contextCompression: compressionPolicy(['game-production.brief', 'game-production.artifact-inputs']),
+    contextSourceKeys: ['product-production.brief'],
+    optionalContextSourceKeys: ['product-production.artifact-inputs'],
+    inputPolicy: productProductionInputPolicy(['product-production.brief']),
+    contextCompression: compressionPolicy(['product-production.brief', 'product-production.artifact-inputs']),
+    contextGateway: PRODUCT_PRODUCTION_WORLD_GATEWAY_POLICY,
     maxOutputTokens: 4_000,
-    writeTargets: [{ table: 'gameBuildArtifacts', fields: [], adoptionExtension: 'game-production-artifacts' }],
+    writeTargets: [{ table: 'productBuildArtifacts', fields: [], adoptionExtension: 'product-production-artifacts' }],
     lastVerifiedAt: '2026-08-21',
-    regressionTests: ['R-GAMEPROD1E-media-adapters', 'R-GAMEPROD1F-production-executor'],
+    regressionTests: ['R-PRODUCTPROD1E-media-adapters', 'R-PRODUCTPROD1F-production-executor'],
   },
   {
     version: 1,
-    id: 'game-production.integrate.v1',
+    id: 'product-production.integrate.v1',
     agentId: 'outline',
     defaultForAgent: false,
     label: '游戏包自动集成',
     owner: 'outline-agent',
-    promptVersion: 'game-production-integrate-v1',
-    executionMode: 'game-production',
+    promptVersion: 'product-production-integrate-v1',
+    executionMode: 'product-production',
     contextTaskKind: 'agent-outline',
     readToolNames: [],
-    contextSourceKeys: ['game-production.brief'],
-    optionalContextSourceKeys: ['game-production.artifact-inputs'],
-    inputPolicy: gameProductionInputPolicy(['game-production.brief']),
-    contextCompression: compressionPolicy(['game-production.brief', 'game-production.artifact-inputs']),
+    contextSourceKeys: ['product-production.brief'],
+    optionalContextSourceKeys: ['product-production.artifact-inputs'],
+    inputPolicy: productProductionInputPolicy(['product-production.brief']),
+    contextCompression: compressionPolicy(['product-production.brief', 'product-production.artifact-inputs']),
+    contextGateway: PRODUCT_PRODUCTION_WORLD_GATEWAY_POLICY,
     maxOutputTokens: 6_000,
-    writeTargets: [{ table: 'gameBuilds', fields: ['manifestJson', 'previewManifestJson'], adoptionExtension: 'game-production-builds' }],
+    writeTargets: [{ table: 'productBuilds', fields: ['manifestJson', 'previewManifestJson'], adoptionExtension: 'product-production-builds' }],
     lastVerifiedAt: '2026-08-21',
-    regressionTests: ['R-GAMEPROD1F-production-executor'],
+    regressionTests: ['R-PRODUCTPROD1F-production-executor'],
   },
   {
     version: 1,
-    id: 'game-production.quality-review.v1',
+    id: 'product-production.quality-review.v1',
     agentId: 'outline',
     defaultForAgent: false,
     label: '游戏质量审查',
     owner: 'outline-agent',
-    promptVersion: 'game-production-quality-v1',
-    executionMode: 'game-production',
+    promptVersion: 'product-production-quality-v1',
+    executionMode: 'product-production',
     contextTaskKind: 'agent-outline',
     readToolNames: [],
-    contextSourceKeys: ['game-production.brief', 'game-production.quality-feedback'],
+    contextSourceKeys: ['product-production.brief', 'product-production.quality-feedback'],
     optionalContextSourceKeys: [],
-    inputPolicy: gameProductionInputPolicy(['game-production.brief', 'game-production.quality-feedback']),
-    contextCompression: compressionPolicy(['game-production.brief', 'game-production.quality-feedback']),
+    inputPolicy: productProductionInputPolicy(['product-production.brief', 'product-production.quality-feedback']),
+    contextCompression: compressionPolicy(['product-production.brief', 'product-production.quality-feedback']),
+    contextGateway: PRODUCT_PRODUCTION_WORLD_GATEWAY_POLICY,
     maxOutputTokens: 6_000,
-    writeTargets: [{ table: 'gameBuilds', fields: ['qualityReportJson'], adoptionExtension: 'game-production-builds' }],
+    writeTargets: [{ table: 'productBuilds', fields: ['qualityReportJson'], adoptionExtension: 'product-production-builds' }],
     lastVerifiedAt: '2026-08-21',
-    regressionTests: ['R-GAMEPROD1F-production-executor'],
+    regressionTests: ['R-PRODUCTPROD1F-production-executor'],
   },
   {
     version: 1,
-    id: 'game-production.evolution-impact.v1',
+    id: 'product-production.evolution-impact.v1',
     agentId: 'outline',
     defaultForAgent: false,
     label: '游戏持续演化影响分析',
     owner: 'outline-agent',
-    promptVersion: 'game-production-evolution-v1',
-    executionMode: 'game-production',
+    promptVersion: 'product-production-evolution-v1',
+    executionMode: 'product-production',
     contextTaskKind: 'agent-outline',
     readToolNames: [],
-    contextSourceKeys: ['game-production.evolution-base'],
+    contextSourceKeys: ['product-production.evolution-base'],
     optionalContextSourceKeys: [],
-    inputPolicy: gameProductionInputPolicy(['game-production.evolution-base']),
-    contextCompression: compressionPolicy(['game-production.evolution-base']),
+    inputPolicy: productProductionInputPolicy(['product-production.evolution-base']),
+    contextCompression: compressionPolicy(['product-production.evolution-base']),
     maxOutputTokens: 8_000,
-    writeTargets: [{ table: 'gameBuilds', fields: ['compatibilityJson'], adoptionExtension: 'game-production-builds' }],
+    writeTargets: [{ table: 'productBuilds', fields: ['compatibilityJson'], adoptionExtension: 'product-production-builds' }],
     lastVerifiedAt: '2026-08-21',
-    regressionTests: ['R-GAMEPROD1B-commands', 'R-GAMEPROD1D-scheduler', 'R-GAMEPROD1F-production-executor'],
+    regressionTests: ['R-PRODUCTPROD1B-commands', 'R-PRODUCTPROD1D-scheduler', 'R-PRODUCTPROD1F-production-executor'],
   },
 ] as const satisfies readonly AgentSkillDefinitionV1[]
 
@@ -3480,11 +3374,11 @@ export function validateAgentSkillDefinitionsV1(
   definitions: readonly AgentSkillDefinitionV1[],
 ): void {
   const executionModesByAgent: Record<DomainAgentId, ReadonlySet<AgentSkillExecutionModeV1>> = {
-    'world-origin': new Set(['complete', 'worldview-field', 'world-suggest', 'worldview-expand', 'world-link-context', 'constitution-extract', 'codex-extract', 'codex-enrich', 'story-core', 'creative-rules', 'locations', 'map-config', 'history-consult', 'history-storm', 'review']),
+    'world-origin': new Set(['worldview-field', 'world-suggest', 'worldview-expand', 'world-link-context', 'constitution-extract', 'codex-extract', 'codex-enrich', 'story-core', 'creative-rules', 'locations', 'map-config', 'history-consult', 'history-storm', 'review']),
     character: new Set(['create', 'supplement', 'lifecycle', 'relationships', 'character-reply', 'memory-curator']),
     inspiration: new Set(['reference-summary', 'reference-characters', 'reverse', 'review']),
-    outline: new Set(['auto', 'story-arcs', 'foreshadow-suggestions', 'storyline-progress', 'character-driven', 'character-revision', 'world-game', 'impact-summary-regenerate', 'volumes', 'chapters', 'details', 'adaptation-brief', 'adaptation-impact', 'screenplay-plan', 'comic-plan', 'comic-storyboard', 'character-interaction-production', 'game-production']),
-    prose: new Set(['auto', 'generate', 'continue', 'emotion-beats', 'inventory-extraction', 'story-timeline-extraction', 'cultivation-progress-extraction', 'style-learn', 'selection-edit', 'selection-check', 'review', 'revise', 'organize', 'memory', 'consistency', 'scene-director', 'adventure-intent', 'adventure-narrator', 'simulation-briefing', 'simulation-advisor', 'simulation-narrator', 'simulation-actor-suggestion', 'open-world-expression', 'open-world-narration', 'screenplay-scenes', 'ttrpg-gm-narrator', 'ttrpg-gm-actor-intent', 'ttrpg-player-intent', 'ttrpg-character-sheet-candidate']),
+    outline: new Set(['auto', 'story-arcs', 'foreshadow-suggestions', 'storyline-progress', 'character-driven', 'character-revision', 'impact-summary-regenerate', 'volumes', 'chapters', 'details', 'adaptation-brief', 'adaptation-impact', 'screenplay-plan', 'comic-plan', 'comic-storyboard', 'character-interaction-production', 'product-production']),
+    prose: new Set(['auto', 'generate', 'continue', 'emotion-beats', 'inventory-extraction', 'story-timeline-extraction', 'cultivation-progress-extraction', 'style-learn', 'selection-edit', 'selection-check', 'review', 'revise', 'organize', 'memory', 'consistency', 'scene-director', 'adventure-intent', 'adventure-narrator', 'open-world-briefing', 'open-world-advisor', 'open-world-outcome-narrator', 'open-world-actor-suggestion', 'open-world-expression', 'open-world-narration', 'screenplay-scenes', 'ttrpg-gm-narrator', 'ttrpg-gm-actor-intent', 'ttrpg-player-intent']),
   }
   const ids = new Set<string>()
   const defaultAgents = new Set<DomainAgentId>()
@@ -3514,7 +3408,10 @@ export function validateAgentSkillDefinitionsV1(
       const tool = AGENT_TOOL_BY_NAME.get(toolName)
       if (!tool || tool.risk !== 'read') throw new Error(`Agent Skill ${skill.id} 引用了未知只读工具 ${toolName}`)
     }
-    const authorizedSourceKeys = resolveAgentSkillContextSourceKeysV1(skill, { includeOptional: true })
+    const authorizedSourceKeys = resolveAgentSkillContextSourceKeysV1(skill, {
+      includeOptional: true,
+      includeGatewayProviders: true,
+    })
     for (const sourceKey of authorizedSourceKeys) {
       if (!CONTEXT_SOURCE_BY_KEY.has(sourceKey)) {
         throw new Error(`Agent Skill ${skill.id} 引用了未登记上下文源 ${sourceKey}`)
@@ -3574,7 +3471,7 @@ export function validateAgentSkillDefinitionsV1(
     }
     const gateway = skill.contextGateway
     if (gateway) {
-      if (gateway.version !== 1 || !['shadow', 'required'].includes(gateway.rollout)) {
+      if (gateway.version !== 1 || gateway.rollout !== 'required') {
         throw new Error(`Agent Skill ${skill.id} 的 Context Gateway 版本或 rollout 无效`)
       }
       if (!gateway.providerSourceKeys.length

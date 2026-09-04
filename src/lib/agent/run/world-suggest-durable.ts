@@ -8,8 +8,8 @@ import {
 import { db } from '../../db/schema'
 import { adopt } from '../../registry/adopt'
 import { assembleContext } from '../../registry/assemble-context'
-import type { AIConfig, ChatMessage, Project, WorkspaceScope, WorldGroup, WorldGroupLink } from '../../types'
-import { readOwnedRows, scopeTransactionTables } from '../../world-engine/scope'
+import type { AIConfig, ChatMessage, Project, Work, WorkspaceScope, WorldGroup, WorldGroupLink } from '../../types'
+import { readOwnedRows, scopeTransactionTables } from '../../workspace/scope'
 import { createAgentSkillExecutionBindingV1 } from '../execution-binding'
 import { getAgentSkillV1 } from '../skill-registry'
 import { createAgentRunCheckpointV1, readLatestVerifiedAgentRunCheckpointV1 } from './checkpoint'
@@ -30,12 +30,12 @@ export const WORLD_SUGGEST_CONTEXT_SOURCE_KEYS_V1 = ['manualText', 'worldGroups'
 
 type RunAI = (messages: ChatMessage[]) => Promise<string>
 
-interface ProjectPromptSnapshotV1 {
+interface WorkPromptSnapshotV1 {
   id: number
-  name: string
+  title: string
   description: string
   genres: string[]
-  enableMultiWorld: boolean
+  multiWorldEnabled: boolean
 }
 
 interface WorldGroupSnapshotV1 {
@@ -97,8 +97,8 @@ export interface WorldSuggestCandidateV1 {
   worldId: number
   workId: number
   authorConcept: string
-  projectSnapshot: ProjectPromptSnapshotV1
-  projectHash: string
+  workSnapshot: WorkPromptSnapshotV1
+  workHash: string
   worldGroupsBaseline: WorldGroupSnapshotV1[]
   worldGroupsBaselineHash: string
   worldGroupLinksBaseline: WorldGroupLinkSnapshotV1[]
@@ -167,13 +167,16 @@ async function append(
   } as any)
 }
 
-function projectSnapshot(project: Project & { id: number }): ProjectPromptSnapshotV1 {
+function workPromptSnapshot(
+  project: Project & { id: number },
+  work: Work & { id: number },
+): WorkPromptSnapshotV1 {
   return {
-    id: project.id,
-    name: project.name,
-    description: project.description || '',
-    genres: [...(project.genres || [])],
-    enableMultiWorld: project.enableMultiWorld === true,
+    id: work.id,
+    title: work.title,
+    description: work.description,
+    genres: [...work.genres],
+    multiWorldEnabled: project.enableMultiWorld === true,
   }
 }
 
@@ -242,20 +245,25 @@ function formalItemSnapshot(row: WorldGroup): WorldSuggestFormalItemV1 {
 }
 
 async function readBaseline(scope: WorkspaceScope): Promise<{
-  project: ProjectPromptSnapshotV1
+  work: WorkPromptSnapshotV1
   groups: WorldGroupSnapshotV1[]
   links: WorldGroupLinkSnapshotV1[]
   storyCores: StoryCoreSnapshotV1[]
 }> {
-  const project = await db.projects.get(scope.projectId)
-  if (!project?.id) throw new Error('世界建议目标项目不存在。')
+  const [project, work] = await Promise.all([
+    db.projects.get(scope.projectId),
+    db.works.get(scope.workId),
+  ])
+  if (!project?.id || !work?.id || work.projectId !== scope.projectId || work.worldId !== scope.worldId) {
+    throw new Error('世界建议目标工作区或作品不存在。')
+  }
   const [groups, links, storyCores] = await Promise.all([
     readOwnedRows<WorldGroup>(scope, 'worldGroups', { owner: 'world' }),
     readOwnedRows<WorldGroupLink>(scope, 'worldGroupLinks', { owner: 'world' }),
     readOwnedRows<Record<string, unknown>>(scope, 'storyCores', { owner: 'work' }),
   ])
   return {
-    project: projectSnapshot(project as Project & { id: number }),
+    work: workPromptSnapshot(project as Project & { id: number }, work as Work & { id: number }),
     groups: groups
       .filter((row): row is WorldGroup & { id: number } => typeof row.id === 'number')
       .sort((left, right) => left.order - right.order || left.id - right.id)
@@ -271,19 +279,19 @@ async function readBaseline(scope: WorkspaceScope): Promise<{
   }
 }
 
-function manualRequest(project: ProjectPromptSnapshotV1, authorConcept: string): string {
+function manualRequest(work: WorkPromptSnapshotV1, authorConcept: string): string {
   return [
     '【作者本轮世界规划】',
-    `作品：${project.name}`,
-    `题材：${project.genres.join('、') || '未设置'}`,
-    `项目简介：${project.description || '未设置'}`,
-    `本轮概念：${authorConcept || project.description || '请根据当前作品资料建议差异化的新世界'}`,
+    `作品：${work.title}`,
+    `题材：${work.genres.join('、') || '未设置'}`,
+    `作品简介：${work.description || '未设置'}`,
+    `本轮概念：${authorConcept || work.description || '请根据当前作品资料建议差异化的新世界'}`,
   ].join('\n')
 }
 
 async function assembleWorldSuggestContext(
   scope: WorkspaceScope,
-  project: ProjectPromptSnapshotV1,
+  work: WorkPromptSnapshotV1,
   authorConcept: string,
   sourceKeys: readonly string[] = WORLD_SUGGEST_CONTEXT_SOURCE_KEYS_V1,
 ) {
@@ -291,7 +299,7 @@ async function assembleWorldSuggestContext(
     projectId: scope.projectId,
     scope,
     sourceKeys: [...sourceKeys],
-    manualSourceText: manualRequest(project, authorConcept),
+    manualSourceText: manualRequest(work, authorConcept),
     inputBudgetTokens: 24_000,
   })
 }
@@ -405,7 +413,7 @@ async function parseCandidate(value: unknown): Promise<WorldSuggestCandidateV1> 
   const row = value as Record<string, any>
   const keys = [
     'version', 'kind', 'portable', 'projectId', 'worldId', 'workId', 'authorConcept',
-    'projectSnapshot', 'projectHash', 'worldGroupsBaseline', 'worldGroupsBaselineHash',
+    'workSnapshot', 'workHash', 'worldGroupsBaseline', 'worldGroupsBaselineHash',
     'worldGroupLinksBaseline', 'worldGroupLinksBaselineHash', 'storyCoreBaseline', 'storyCoreBaselineHash',
     'contextManifestHash', 'contextInputHash', 'storyContextInputHash', 'promptTemplateHash',
     'promptHash', 'modelOutputHash', 'worlds', 'worldsHash', 'candidateHash',
@@ -418,7 +426,7 @@ async function parseCandidate(value: unknown): Promise<WorldSuggestCandidateV1> 
     || ![row.projectId, row.worldId, row.workId].every(Number.isInteger)
     || typeof row.authorConcept !== 'string'
     || ![
-      row.projectHash, row.worldGroupsBaselineHash, row.worldGroupLinksBaselineHash, row.storyCoreBaselineHash,
+      row.workHash, row.worldGroupsBaselineHash, row.worldGroupLinksBaselineHash, row.storyCoreBaselineHash,
       row.contextManifestHash, row.contextInputHash, row.storyContextInputHash, row.promptTemplateHash,
       row.promptHash, row.modelOutputHash, row.worldsHash, row.candidateHash,
     ].every(isHash)
@@ -426,7 +434,7 @@ async function parseCandidate(value: unknown): Promise<WorldSuggestCandidateV1> 
   const worlds = parseWorldSuggestOutputStrictV1(JSON.stringify(row.worlds))
   if (canonicalStringify(worlds) !== canonicalStringify(row.worlds)) throw new Error('世界建议候选未规范化。')
   if (await hashCanonicalValue(worlds) !== row.worldsHash) throw new Error('世界建议候选值 hash 不匹配。')
-  if (await hashCanonicalValue(row.projectSnapshot) !== row.projectHash) throw new Error('世界建议项目快照 hash 不匹配。')
+  if (await hashCanonicalValue(row.workSnapshot) !== row.workHash) throw new Error('世界建议项目快照 hash 不匹配。')
   if (await hashCanonicalValue(row.worldGroupsBaseline) !== row.worldGroupsBaselineHash) throw new Error('世界建议世界组 baseline hash 不匹配。')
   if (await hashCanonicalValue(row.worldGroupLinksBaseline) !== row.worldGroupLinksBaselineHash) throw new Error('世界建议关系 baseline hash 不匹配。')
   if (await hashCanonicalValue(row.storyCoreBaseline) !== row.storyCoreBaselineHash) throw new Error('世界建议故事核心 baseline hash 不匹配。')
@@ -509,8 +517,8 @@ function buildFormalItems(candidate: WorldSuggestCandidateV1, selectedIndexes: r
 
 async function currentEvidence(scope: WorkspaceScope, candidate: WorldSuggestCandidateV1, intent?: WorldSuggestAdoptionIntentV1 | null) {
   const baseline = await readBaseline(scope)
-  const assembled = await assembleWorldSuggestContext(scope, baseline.project, candidate.authorConcept)
-  const storyOnly = await assembleWorldSuggestContext(scope, baseline.project, candidate.authorConcept, ['storyCore'])
+  const assembled = await assembleWorldSuggestContext(scope, baseline.work, candidate.authorConcept)
+  const storyOnly = await assembleWorldSuggestContext(scope, baseline.work, candidate.authorConcept, ['storyCore'])
   const prompt = await promptEvidence(assembled.text)
   const oldIds = new Set(candidate.worldGroupsBaseline.map(row => row.id))
   const oldRows = baseline.groups.filter(row => oldIds.has(row.id))
@@ -523,7 +531,7 @@ async function currentEvidence(scope: WorkspaceScope, candidate: WorldSuggestCan
       return !!row && canonicalStringify(formalItemSnapshot(row as unknown as WorldGroup)) === canonicalStringify(item)
     })
   return {
-    projectFresh: canonicalStringify(baseline.project) === canonicalStringify(candidate.projectSnapshot),
+    workFresh: canonicalStringify(baseline.work) === canonicalStringify(candidate.workSnapshot),
     groupsFresh: canonicalStringify(baseline.groups) === canonicalStringify(candidate.worldGroupsBaseline),
     linksFresh: canonicalStringify(baseline.links) === canonicalStringify(candidate.worldGroupLinksBaseline),
     storyFresh: canonicalStringify(baseline.storyCores) === canonicalStringify(candidate.storyCoreBaseline),
@@ -549,11 +557,11 @@ async function assertFreshBeforeWrite(
 ): Promise<AgentRunSnapshotV1> {
   const evidence = await currentEvidence(scope, candidate)
   if (
-    evidence.projectFresh && evidence.groupsFresh && evidence.linksFresh && evidence.storyFresh
+    evidence.workFresh && evidence.groupsFresh && evidence.linksFresh && evidence.storyFresh
     && evidence.inputFresh && evidence.promptFresh && evidence.templateFresh
   ) return snapshot
-  const reason = !evidence.projectFresh
-    ? 'world-suggest-project-changed'
+  const reason = !evidence.workFresh
+    ? 'world-suggest-work-input-changed'
     : !evidence.groupsFresh
       ? 'world-suggest-world-groups-changed'
       : !evidence.linksFresh
@@ -583,8 +591,8 @@ export async function generateWorldSuggestCandidateV1(input: {
   snapshot = await append(input.scope, snapshot, 'step.scheduled', { stepId: WORLD_SUGGEST_STEP_ID_V1 })
   snapshot = await append(input.scope, snapshot, 'step.started', { stepId: WORLD_SUGGEST_STEP_ID_V1, attempt: 1 })
 
-  const assembled = await assembleWorldSuggestContext(input.scope, baseline.project, authorConcept)
-  const storyOnly = await assembleWorldSuggestContext(input.scope, baseline.project, authorConcept, ['storyCore'])
+  const assembled = await assembleWorldSuggestContext(input.scope, baseline.work, authorConcept)
+  const storyOnly = await assembleWorldSuggestContext(input.scope, baseline.work, authorConcept, ['storyCore'])
   const manifest = await createContextManifestFromAssemblyV1({
     runId: snapshot.run.id,
     stepId: WORLD_SUGGEST_STEP_ID_V1,
@@ -660,8 +668,8 @@ export async function generateWorldSuggestCandidateV1(input: {
     worldId: input.scope.worldId,
     workId: input.scope.workId,
     authorConcept,
-    projectSnapshot: baseline.project,
-    projectHash: await hashCanonicalValue(baseline.project),
+    workSnapshot: baseline.work,
+    workHash: await hashCanonicalValue(baseline.work),
     worldGroupsBaseline: baseline.groups,
     worldGroupsBaselineHash: await hashCanonicalValue(baseline.groups),
     worldGroupLinksBaseline: baseline.links,
@@ -782,7 +790,7 @@ async function writeFormalItems(
     async () => {
       const baseline = await readBaseline(scope)
       if (
-        canonicalStringify(baseline.project) !== canonicalStringify(intent.candidate.projectSnapshot)
+        canonicalStringify(baseline.work) !== canonicalStringify(intent.candidate.workSnapshot)
         || canonicalStringify(baseline.groups) !== canonicalStringify(intent.candidate.worldGroupsBaseline)
         || canonicalStringify(baseline.links) !== canonicalStringify(intent.candidate.worldGroupLinksBaseline)
         || canonicalStringify(baseline.storyCores) !== canonicalStringify(intent.candidate.storyCoreBaseline)
@@ -827,7 +835,7 @@ export async function adoptWorldSuggestCandidateV1(input: {
 
   let evidence = await currentEvidence(input.scope, candidate, intent)
   if (snapshot.projection.state === 'completed' && snapshot.projection.terminalReceiptHash && intent) {
-    if (!evidence.expectedMatches || !evidence.projectFresh || !evidence.linksFresh || !evidence.storyFresh || !evidence.storyContextFresh || !evidence.templateFresh) {
+    if (!evidence.expectedMatches || !evidence.workFresh || !evidence.linksFresh || !evidence.storyFresh || !evidence.storyContextFresh || !evidence.templateFresh) {
       snapshot = await staleAgentRunVerificationV1({
         scope: input.scope,
         runId: snapshot.run.id,
@@ -908,7 +916,7 @@ export async function adoptWorldSuggestCandidateV1(input: {
   }
 
   evidence = await currentEvidence(input.scope, candidate, intent)
-  if (!evidence.expectedMatches || !evidence.projectFresh || !evidence.linksFresh || !evidence.storyFresh || !evidence.storyContextFresh || !evidence.templateFresh) {
+  if (!evidence.expectedMatches || !evidence.workFresh || !evidence.linksFresh || !evidence.storyFresh || !evidence.storyContextFresh || !evidence.templateFresh) {
     await pauseUnsafeRun(input.scope, snapshot, 'world-suggest-terminal-evidence-stale')
     throw new Error('正式写入后世界组、关系或上游资料变化，本次回执不会通过终验。')
   }
@@ -928,7 +936,7 @@ export async function adoptWorldSuggestCandidateV1(input: {
   }
   const postStateHash = await hashCanonicalValue({
     formalItemsHash: intent.formalItemsHash,
-    projectHash: candidate.projectHash,
+    workHash: candidate.workHash,
     worldGroupLinksBaselineHash: candidate.worldGroupLinksBaselineHash,
     storyCoreBaselineHash: candidate.storyCoreBaselineHash,
   })

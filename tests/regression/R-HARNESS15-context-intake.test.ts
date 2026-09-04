@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { assembleContext } from '../../src/lib/registry/assemble-context'
 import {
   createContextManifestFromAssemblyV1,
@@ -11,6 +11,8 @@ import {
   resolveAgentSkillInputStateV1,
   validateAgentSkillContextEvidenceV1,
 } from '../../src/lib/agent/skill-registry'
+import { db } from '../../src/lib/db/schema'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
 
 function contextResult(input: {
   included?: string[]
@@ -35,9 +37,13 @@ function contextResult(input: {
 }
 
 describe('R-HARNESS15 · Skill 输入状态与精确上下文交付证据', () => {
+  beforeEach(async () => { await db.delete(); await db.open() })
+  afterEach(() => db.close())
+
   it('单源按预算截断时记录截断前后 token，Manifest 不再把残片伪装成全文', async () => {
+    const projectId = (await seedCurrentWorkspace('Context intake')).scope.projectId
     const assembled = await assembleContext({
-      projectId: 1,
+      projectId,
       sourceKeys: ['manualText'],
       manualSourceText: '潮'.repeat(20_000),
       inputBudgetTokens: 8_000,
@@ -56,7 +62,7 @@ describe('R-HARNESS15 · Skill 输入状态与精确上下文交付证据', () =
       runId: 15,
       stepId: 'context-intake',
       attempt: 1,
-      projectId: 1,
+      projectId,
       worldGroupId: null,
       declaredSourceKeys: ['manualText'],
       assembled,

@@ -3,7 +3,7 @@ import type { AssembleContextResult } from '../registry/types'
 import { resolveAgentSkillInputStateV1, type AgentSkillDefinitionV1 } from './skill-registry'
 
 const INPUT_SOURCE_BY_TABLE: Readonly<Record<string, string>> = {
-  projects: 'projectStatus',
+  works: 'workStatus',
   worldviews: 'worldview',
   storyCores: 'storyCore',
   characters: 'characters',
@@ -15,7 +15,7 @@ const INPUT_SOURCE_BY_TABLE: Readonly<Record<string, string>> = {
   codexEntries: 'codex',
 }
 
-/** Shared projection from the exact Gateway packet into the legacy assembly shape. */
+/** Shared projection from the exact Gateway packet into the registered assembly contract. */
 export function assembleContextGatewayPacketV1(
   execution: ContextGatewayExecutionV1,
   inputBudget: number,

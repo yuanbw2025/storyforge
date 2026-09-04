@@ -18,23 +18,15 @@ export interface NaturalResources {
   others: string             // 其他特产
 }
 
-/** 世界观（v3 §2.1 — 三大块结构：世界起源 + 自然环境 + 人文环境） */
+/** 世界观：世界起源、自然环境与人文环境的当前语义表。 */
 export interface Worldview extends RagDocumentMetadata {
   id?: number
   projectId: number
-  // ── 旧字段（P5 改 panel 时迁移到下方新结构后删） ─────────────────────────
-  geography: string       // 地理环境
-  history: string         // 历史年表
-  society: string         // 社会结构
-  culture: string         // 文化宗教
-  economy: string         // 经济体系
-  rules: string           // 世界规则/物理法则
-  summary: string         // 世界观精华摘要（AI 上下文）
 
-  // ── v3 §2.1 新字段（全部可选，渐进填充） ─────────────────────────────────
+  // 全部语义字段可渐进填充。
   // 世界起源
   worldOrigin?: string                    // 世界来源（创世神话/科技起源等）
-  powerHierarchy?: string                 // 力量体系（替代独立 powerSystems 表）
+  powerHierarchy?: string                 // 世界观中的力量层级概述
   divineDesign?: DivineDesign             // 神明设定
 
   // 自然环境
@@ -48,18 +40,14 @@ export interface Worldview extends RagDocumentMetadata {
   naturalResources?: NaturalResources
 
   // 人文环境
-  historyLine?: string                    // 世界历史线
-  worldEvents?: string                    // 世界大事记
   races?: string                          // 种族设定
-  factionLayout?: string                  // 势力分布（替代独立 factions 表）
-  politicsEconomyCulture?: string         // 旧版政治/经济/文化合并字段（兼容保留）
+  factionLayout?: string                  // 势力分布
   politicsOverview?: string               // 政治制度与权力结构概述
   economyOverview?: string                // 经济、货币、产业与贸易概述
   cultureOverview?: string                // 文化、宗教、语言与风俗概述
   internalConflicts?: string              // 矛盾冲突设计
-  itemDesign?: string                     // 道具设计（替代独立 itemSystems 表）
+  itemDesign?: string                     // 道具与器物体系概述
 
-  // ── Phase 25.4 多世界 ──
   /** 所属世界组 ID（null/undefined = 默认主世界） */
   worldGroupId?: number | null
 
@@ -67,19 +55,16 @@ export interface Worldview extends RagDocumentMetadata {
   updatedAt: number
 }
 
-/** 故事核心（v3 §2.1 — 加 logline / concept / subPlots） */
+/** 故事核心：作者确认的七项故事意图。 */
 export interface StoryCore extends RagDocumentMetadata {
   id?: number
   projectId: number
   theme: string                // 主题
   centralConflict: string      // 核心冲突
   plotPattern: string          // 情节模式
-  storyLines: string           // 故事线（旧字段；v3 重命名为 mainPlot，保留兼容）
-
-  // ── v3 §2.1 新字段 ────────────────────────────────────────
   logline?: string             // 一句话故事
   concept?: string             // 故事概念
-  mainPlot?: string            // 故事主线（替代 storyLines 的语义）
+  mainPlot?: string            // 故事主线
   subPlots?: string            // 故事副线
   createdAt: number
   updatedAt: number

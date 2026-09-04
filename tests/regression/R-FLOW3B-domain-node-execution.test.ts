@@ -1,7 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('../../src/lib/ai/client', () => ({
-  chat: vi.fn(async () => '潮汐退去后，第一座城从海床升起。'),
+  chat: vi.fn(async () => JSON.stringify({
+    field: 'worldOrigin',
+    value: '潮汐退去后，第一座城从海床升起。',
+  })),
 }))
 
 import { chat } from '../../src/lib/ai/client'
@@ -19,16 +22,18 @@ import {
 } from '../../src/lib/node-authoring/executor'
 import type { NodeFlow, Project } from '../../src/lib/types'
 import { useNodeFlowStore } from '../../src/stores/node-flow'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
+import { putCurrentWorkspaceFixtureV1 } from '../helpers/current-workspace'
+import { generateWorkspaceUid } from '../../src/lib/memory/identity'
 
 const project: Project = {
   id: 73001,
+  workspaceUid: generateWorkspaceUid(),
+  workspacePurpose: 'independent-work',
   name: '领域节点执行测试',
-  genre: 'fantasy',
-  genres: ['fantasy'],
-  status: 'drafting',
-  description: '',
-  targetWordCount: 100_000,
   enableMultiWorld: false,
+  activeWorldId: 73001,
+  activeWorkId: 73001,
   createdAt: 1,
   updatedAt: 1,
 }
@@ -53,14 +58,14 @@ describe('FLOW-3B · 领域节点运行和显式采纳', () => {
   beforeEach(async () => {
     await db.delete()
     await db.open()
-    await db.projects.put(project)
+    await putCurrentWorkspaceFixtureV1(project)
     vi.mocked(chat).mockClear()
     useNodeFlowStore.setState({ projectId: null, flows: [], runs: [], loading: false })
   })
 
   afterEach(() => db.close())
 
-  it('新建图使用 version=2，并保留 FLOW-2 保存兼容', async () => {
+  it('新建图使用当前 version=2，并拒绝把旧 FLOW-2 图重新写回', async () => {
     const flowId = await useNodeFlowStore.getState().createFlow(project.id!, null)
     const created = (await db.nodeFlows.get(flowId))!
     expect(JSON.parse(created.graphJson).version).toBe(2)
@@ -73,7 +78,7 @@ describe('FLOW-3B · 领域节点运行和显式采纳', () => {
         edges: [],
         viewport: { x: 0, y: 0, zoom: 1 },
       }),
-    })).resolves.toBe(flowId)
+    })).rejects.toThrow('不支持的节点图版本：1')
   })
 
   it('把控制参数传入共享 AI，先保存候选，确认后才写 Canon', async () => {
@@ -110,10 +115,11 @@ describe('FLOW-3B · 领域节点运行和显式采纳', () => {
       createdAt: now,
       updatedAt: now,
     }) as number
+    await finalizeCurrentFixtureV1(project.id!)
     const flow = (await db.nodeFlows.get(flowId)) as NodeFlow
 
     const outcome = await runAuthoringGraph({ flow })
-    expect(outcome.run.status).toBe('completed')
+    expect(outcome.run.status, JSON.stringify(outcome.candidates)).toBe('completed')
     expect(outcome.candidates.origin.output).toContain('第一座城')
     expect(outcome.candidates.origin.variants).toHaveLength(2)
     expect(outcome.snapshots.origin.inputs[0]).toMatchObject({

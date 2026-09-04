@@ -17,8 +17,9 @@ import {
 import type { Character } from '../../src/lib/types'
 import { useAIConfigStore } from '../../src/stores/ai-config'
 import { generateWorkspaceUid } from '../../src/lib/memory/identity'
-import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
-import { resolveScopeLike, stampNewRecord } from '../../src/lib/world-engine/scope'
+import { resolveWorkspaceOwnership } from '../../src/lib/workspace/ownership'
+import { resolveScopeLike, stampNewRecord } from '../../src/lib/workspace/scope'
+import { seedCurrentProject } from '../helpers/current-workspace'
 
 function candidate(patch: Partial<CharacterCopilotCandidate> = {}): CharacterCopilotCandidate {
   return {
@@ -38,10 +39,9 @@ function candidate(patch: Partial<CharacterCopilotCandidate> = {}): CharacterCop
 
 async function addProject(enableMultiWorld = false): Promise<number> {
   const now = Date.now()
-  const projectId = await db.projects.add({
+  const projectId = await seedCurrentProject({
     workspaceUid: generateWorkspaceUid(),
     name: enableMultiWorld ? '群界灯塔' : '潮汐纪元',
-    genre: 'fantasy',
     genres: ['fantasy'],
     status: 'drafting',
     description: '',
@@ -50,7 +50,7 @@ async function addProject(enableMultiWorld = false): Promise<number> {
     createdAt: now,
     updatedAt: now,
   }) as number
-  await ensureWorkspaceOwnership(projectId)
+  await resolveWorkspaceOwnership(projectId)
   return projectId
 }
 
@@ -64,7 +64,6 @@ async function addCharacter(
   return await db.characters.add(stampNewRecord(await resolveScopeLike(projectId), 'characters', {
     projectId,
     name,
-    role: 'protagonist',
     roleWeight: 'main',
     moralAxis: 'good',
     orderAxis: 'lawful',
@@ -197,7 +196,6 @@ describe('AGENT-1 27.1-d · ChatCopilot 角色生成闭环', () => {
       roleWeight: 'secondary',
       moralAxis: 'good',
       orderAxis: 'lawful',
-      role: 'minor',
       homeWorldGroupId: null,
       isCrossWorld: false,
     })

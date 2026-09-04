@@ -1,13 +1,12 @@
 import type {
-  PlayableWorldBundleV1,
+  ProductWorldSourceBundleV1,
   RulePackV1,
   TtrpgCampaignContentV1,
   TtrpgCharacterTemplateV1,
-  WorldGameSourceSelectionV2,
 } from '../types'
-import { isSha256Hash } from '../game-production/hash'
+import { isSha256Hash } from '../product-production/hash'
 import { evaluateRuleNumberExpressionV1, parseRulePackV1 } from './rule-pack'
-import { parseTtrpgCharacterSheetV2 } from './character-sheet'
+import { createCompleteTtrpgCharacterSheetV2, parseTtrpgCharacterSheetV2 } from './character-sheet'
 import { parseTtrpgMediaManifestV1, parseTtrpgVisualBibleV1 } from './media-contract'
 
 const KEY = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/
@@ -132,22 +131,14 @@ export function parseTtrpgCampaignContentV1(
   const rootFields = [
     'schema', 'version', 'campaignKey', 'title', 'pitch', 'playerCount', 'estimatedMinutes', 'tags',
     'difficulty', 'contentWarnings', 'sessionZero', 'openingSceneKey', 'characterTemplates', 'scenes',
-    'clues', 'quests', 'endings', 'handouts', 'advancementMilestones', 'sourceWorld',
+    'clues', 'quests', 'endings', 'handouts', 'advancementMilestones', 'sourceWorld', 'gmMode',
+    'informationPolicy', 'bible', 'clocks', 'fronts', 'secrets', 'designProvenance', 'tabletop',
+    'visualBible', 'mediaManifest',
   ]
-  if (Object.prototype.hasOwnProperty.call(root, 'gmMode')) rootFields.push('gmMode')
-  if (Object.prototype.hasOwnProperty.call(root, 'informationPolicy')) rootFields.push('informationPolicy')
-  if (Object.prototype.hasOwnProperty.call(root, 'bible')) rootFields.push('bible')
-  if (Object.prototype.hasOwnProperty.call(root, 'clocks')) rootFields.push('clocks')
-  if (Object.prototype.hasOwnProperty.call(root, 'fronts')) rootFields.push('fronts')
-  if (Object.prototype.hasOwnProperty.call(root, 'secrets')) rootFields.push('secrets')
-  if (Object.prototype.hasOwnProperty.call(root, 'designProvenance')) rootFields.push('designProvenance')
-  if (Object.prototype.hasOwnProperty.call(root, 'tabletop')) rootFields.push('tabletop')
-  if (Object.prototype.hasOwnProperty.call(root, 'visualBible')) rootFields.push('visualBible')
-  if (Object.prototype.hasOwnProperty.call(root, 'mediaManifest')) rootFields.push('mediaManifest')
   exact(root, rootFields, 'campaign')
   if (root.schema !== 'storyforge.ttrpg-campaign' || root.version !== 1) fail('schema/version 无效')
   stableKey(root.campaignKey, 'campaignKey')
-  if (root.gmMode != null) enumValue(root.gmMode, ['human', 'ai', 'hybrid'] as const, 'gmMode')
+  enumValue(root.gmMode, ['human', 'ai', 'hybrid'] as const, 'gmMode')
   text(root.title, 'title', 300)
   text(root.pitch, 'pitch', 10_000)
   const playerCount = object(root.playerCount, 'playerCount')
@@ -170,52 +161,47 @@ export function parseTtrpgCampaignContentV1(
   text(sessionZero.pauseSignal, 'sessionZero.pauseSignal', 200)
   bool(sessionZero.openDoor, 'sessionZero.openDoor')
 
-  if (root.bible != null) {
-    const bible = object(root.bible, 'bible')
-    exact(bible, ['premise', 'background', 'coreConflict', 'themes', 'canonInvariants', 'sourceRefs'], 'bible')
-    text(bible.premise, 'bible.premise')
-    text(bible.background, 'bible.background')
-    text(bible.coreConflict, 'bible.coreConflict')
-    textArray(bible.themes, 'bible.themes', 100)
-    const invariants = textArray(bible.canonInvariants, 'bible.canonInvariants', 200)
-    if (!invariants.length) fail('bible.canonInvariants 不得为空')
-    const sources = keyArray(bible.sourceRefs, 'bible.sourceRefs', 200)
-    if (!sources.length) fail('bible.sourceRefs 不得为空')
-  }
-  if (root.designProvenance != null) {
-    const provenance = object(root.designProvenance, 'designProvenance')
-    exact(provenance, ['origin', 'proposalKeys', 'baseProposalKey', 'sectionSources', 'lockedSections', 'candidateHash'], 'designProvenance')
-    enumValue(provenance.origin, ['author-guided', 'ai-candidate'] as const, 'designProvenance.origin')
-    const proposalKeys = keyArray(provenance.proposalKeys, 'designProvenance.proposalKeys', 3)
-    if (proposalKeys.length < 2 || proposalKeys.length > 3) fail('designProvenance 必须绑定 2～3 个提案')
-    const baseProposalKey = stableKey(provenance.baseProposalKey, 'designProvenance.baseProposalKey')
-    if (!proposalKeys.includes(baseProposalKey)) fail('designProvenance baseProposalKey 无效')
-    const sections = ['background', 'coreConflict', 'opening', 'fronts', 'secrets', 'endings'] as const
-    const sources = object(provenance.sectionSources, 'designProvenance.sectionSources')
-    exact(sources, sections, 'designProvenance.sectionSources')
-    for (const section of sections) {
-      const proposalKey = stableKey(sources[section], `designProvenance.sectionSources.${section}`)
-      if (!proposalKeys.includes(proposalKey)) fail(`designProvenance 分区来源无效:${section}`)
-    }
-    const locks = textArray(provenance.lockedSections, 'designProvenance.lockedSections', sections.length)
-    if (locks.some(lock => !sections.includes(lock as typeof sections[number]))) fail('designProvenance 包含未知锁定分区')
-    if (provenance.candidateHash != null && !isSha256Hash(provenance.candidateHash)) fail('designProvenance candidateHash 无效')
-    if ((provenance.origin === 'ai-candidate') !== (provenance.candidateHash != null)) fail('designProvenance AI 来源与 candidateHash 不闭合')
-  }
+  const bible = object(root.bible, 'bible')
+  exact(bible, ['premise', 'background', 'coreConflict', 'themes', 'canonInvariants', 'sourceRefs'], 'bible')
+  text(bible.premise, 'bible.premise')
+  text(bible.background, 'bible.background')
+  text(bible.coreConflict, 'bible.coreConflict')
+  textArray(bible.themes, 'bible.themes', 100)
+  const invariants = textArray(bible.canonInvariants, 'bible.canonInvariants', 200)
+  if (!invariants.length) fail('bible.canonInvariants 不得为空')
+  const bibleSources = keyArray(bible.sourceRefs, 'bible.sourceRefs', 200)
+  if (!bibleSources.length) fail('bible.sourceRefs 不得为空')
 
-  if (root.informationPolicy != null) {
-    const information = object(root.informationPolicy, 'informationPolicy')
-    exact(information, [
-      'characterPrivateChannels', 'gmSecrets', 'hiddenNpcState', 'hiddenDice',
-      'interPlayerWhispers', 'revealAuditTrail',
-    ], 'informationPolicy')
-    bool(information.characterPrivateChannels, 'informationPolicy.characterPrivateChannels')
-    bool(information.gmSecrets, 'informationPolicy.gmSecrets')
-    bool(information.hiddenNpcState, 'informationPolicy.hiddenNpcState')
-    enumValue(information.hiddenDice, ['never', 'gm-only', 'allowed'] as const, 'informationPolicy.hiddenDice')
-    bool(information.interPlayerWhispers, 'informationPolicy.interPlayerWhispers')
-    bool(information.revealAuditTrail, 'informationPolicy.revealAuditTrail')
+  const provenance = object(root.designProvenance, 'designProvenance')
+  exact(provenance, ['origin', 'proposalKeys', 'baseProposalKey', 'sectionSources', 'lockedSections', 'candidateHash'], 'designProvenance')
+  enumValue(provenance.origin, ['author-guided', 'ai-candidate'] as const, 'designProvenance.origin')
+  const proposalKeys = keyArray(provenance.proposalKeys, 'designProvenance.proposalKeys', 3)
+  if (proposalKeys.length < 2 || proposalKeys.length > 3) fail('designProvenance 必须绑定 2～3 个提案')
+  const baseProposalKey = stableKey(provenance.baseProposalKey, 'designProvenance.baseProposalKey')
+  if (!proposalKeys.includes(baseProposalKey)) fail('designProvenance baseProposalKey 无效')
+  const sections = ['background', 'coreConflict', 'opening', 'fronts', 'secrets', 'endings'] as const
+  const sources = object(provenance.sectionSources, 'designProvenance.sectionSources')
+  exact(sources, sections, 'designProvenance.sectionSources')
+  for (const section of sections) {
+    const proposalKey = stableKey(sources[section], `designProvenance.sectionSources.${section}`)
+    if (!proposalKeys.includes(proposalKey)) fail(`designProvenance 分区来源无效:${section}`)
   }
+  const locks = textArray(provenance.lockedSections, 'designProvenance.lockedSections', sections.length)
+  if (locks.some(lock => !sections.includes(lock as typeof sections[number]))) fail('designProvenance 包含未知锁定分区')
+  if (provenance.candidateHash != null && !isSha256Hash(provenance.candidateHash)) fail('designProvenance candidateHash 无效')
+  if ((provenance.origin === 'ai-candidate') !== (provenance.candidateHash != null)) fail('designProvenance AI 来源与 candidateHash 不闭合')
+
+  const information = object(root.informationPolicy, 'informationPolicy')
+  exact(information, [
+    'characterPrivateChannels', 'gmSecrets', 'hiddenNpcState', 'hiddenDice',
+    'interPlayerWhispers', 'revealAuditTrail',
+  ], 'informationPolicy')
+  bool(information.characterPrivateChannels, 'informationPolicy.characterPrivateChannels')
+  bool(information.gmSecrets, 'informationPolicy.gmSecrets')
+  bool(information.hiddenNpcState, 'informationPolicy.hiddenNpcState')
+  enumValue(information.hiddenDice, ['never', 'gm-only', 'allowed'] as const, 'informationPolicy.hiddenDice')
+  bool(information.interPlayerWhispers, 'informationPolicy.interPlayerWhispers')
+  bool(information.revealAuditTrail, 'informationPolicy.revealAuditTrail')
 
   const attributeKeys = new Set(rulePack.attributes.map(row => row.key))
   const resourceKeys = new Set(rulePack.resources.map(row => row.key))
@@ -225,28 +211,23 @@ export function parseTtrpgCampaignContentV1(
   const characters = array(root.characterTemplates, 'characterTemplates', 256).map((value, index) => {
     const row = object(value, `characterTemplates[${index}]`)
     const characterFields = [
-      'characterKey', 'name', 'description', 'sourceRefs', 'role', 'attributes', 'attributeMappings',
-      'skills', 'resources', 'itemKeys', 'actionKeys', 'portraitAssetKey',
+      'characterKey', 'seatKey', 'name', 'description', 'sourceRefs', 'role', 'controller',
+      'attributes', 'attributeMappings', 'skills', 'resources', 'itemKeys', 'actionKeys',
+      'portraitAssetKey', 'playerProfile', 'gmProfile', 'characterSheet',
     ]
-    if (Object.prototype.hasOwnProperty.call(row, 'seatKey')) characterFields.push('seatKey')
-    if (Object.prototype.hasOwnProperty.call(row, 'controller')) characterFields.push('controller')
-    if (Object.prototype.hasOwnProperty.call(row, 'playerProfile')) characterFields.push('playerProfile')
-    if (Object.prototype.hasOwnProperty.call(row, 'gmProfile')) characterFields.push('gmProfile')
-    if (Object.prototype.hasOwnProperty.call(row, 'characterSheet')) characterFields.push('characterSheet')
     exact(row, characterFields, `characterTemplates[${index}]`)
     const characterKey = stableKey(row.characterKey, 'character.characterKey')
-    if (row.seatKey != null) stableKey(row.seatKey, 'character.seatKey')
+    nullableKey(row.seatKey, 'character.seatKey')
     characterKeys.push(characterKey)
     text(row.name, 'character.name', 300)
     text(row.description, 'character.description')
     keyArray(row.sourceRefs, 'character.sourceRefs', 100)
     const role = enumValue(row.role, ['player', 'npc'] as const, 'character.role')
-    if (row.seatKey != null && role !== 'player') fail('只有玩家角色可以绑定 seatKey')
-    if (row.controller != null) {
-      const controller = enumValue(row.controller, ['human', 'ai', 'open', 'gm'] as const, 'character.controller')
-      if ((role === 'npc') !== (controller === 'gm')) {
-        fail('NPC 必须由 GM 控制；玩家角色不能使用 gm controller')
-      }
+    const controller = enumValue(row.controller, ['human', 'ai', 'open', 'gm'] as const, 'character.controller')
+    if (role === 'player' && row.seatKey == null) fail('玩家角色必须绑定 seatKey')
+    if (role === 'npc' && row.seatKey != null) fail('NPC 的 seatKey 必须为 null')
+    if ((role === 'npc') !== (controller === 'gm')) {
+      fail('NPC 必须由 GM 控制；玩家角色不能使用 gm controller')
     }
     const attributes = numericRecord(row.attributes, 'character.attributes')
     validateKnown(Object.keys(attributes), attributeKeys, 'character.attributes')
@@ -270,16 +251,15 @@ export function parseTtrpgCampaignContentV1(
     validateKnown(characterItemKeys, itemKeys, 'character.itemKeys')
     validateKnown(characterActionKeys, actionKeys, 'character.actionKeys')
     nullableKey(row.portraitAssetKey, 'character.portraitAssetKey')
-    if (row.playerProfile != null) {
-      if (role !== 'player') fail('只有玩家角色可以包含 playerProfile')
+    if (role === 'player') {
+      if (row.playerProfile == null || row.gmProfile != null) fail('玩家角色必须且只能包含 playerProfile')
       const profile = object(row.playerProfile, 'character.playerProfile')
       exact(profile, ['privateGoal', 'secret', 'portrayal'], 'character.playerProfile')
       text(profile.privateGoal, 'character.playerProfile.privateGoal')
       text(profile.secret, 'character.playerProfile.secret')
       text(profile.portrayal, 'character.playerProfile.portrayal')
-    }
-    if (row.gmProfile != null) {
-      if (role !== 'npc') fail('只有 NPC 可以包含 gmProfile')
+    } else {
+      if (row.gmProfile == null || row.playerProfile != null) fail('NPC 必须且只能包含 gmProfile')
       const profile = object(row.gmProfile, 'character.gmProfile')
       exact(profile, ['objective', 'leverage', 'secret', 'portrayal', 'escalation'], 'character.gmProfile')
       text(profile.objective, 'character.gmProfile.objective')
@@ -289,10 +269,8 @@ export function parseTtrpgCampaignContentV1(
       text(profile.escalation, 'character.gmProfile.escalation')
     }
     const parsed = structuredClone(row) as unknown as TtrpgCharacterTemplateV1
-    if (row.characterSheet != null) {
-      const { characterSheet: _ignored, ...templateWithoutSheet } = parsed
-      parsed.characterSheet = parseTtrpgCharacterSheetV2(row.characterSheet, templateWithoutSheet, rulePack)
-    }
+    const { characterSheet: _ignored, ...templateWithoutSheet } = parsed
+    parsed.characterSheet = parseTtrpgCharacterSheetV2(row.characterSheet, templateWithoutSheet, rulePack)
     return parsed
   })
   unique(characterKeys, 'characterTemplates')
@@ -331,8 +309,7 @@ export function parseTtrpgCampaignContentV1(
   const sceneKeys: string[] = []
   const scenes = array(root.scenes, 'scenes', 1_000).map((value, index) => {
     const row = object(value, `scenes[${index}]`)
-    const sceneFields = ['sceneKey', 'title', 'description', 'locationKey', 'participantKeys', 'clueKeys', 'actionKeys', 'nextSceneKeys', 'failureForward', 'gmSecret', 'sourceRefs']
-    if (Object.prototype.hasOwnProperty.call(row, 'tabletopMapKey')) sceneFields.push('tabletopMapKey')
+    const sceneFields = ['sceneKey', 'title', 'description', 'locationKey', 'participantKeys', 'clueKeys', 'actionKeys', 'nextSceneKeys', 'failureForward', 'gmSecret', 'sourceRefs', 'tabletopMapKey']
     exact(row, sceneFields, `scenes[${index}]`)
     const sceneKey = stableKey(row.sceneKey, 'scene.sceneKey')
     sceneKeys.push(sceneKey)
@@ -349,7 +326,7 @@ export function parseTtrpgCampaignContentV1(
     text(row.failureForward, 'scene.failureForward')
     text(row.gmSecret, 'scene.gmSecret')
     keyArray(row.sourceRefs, 'scene.sourceRefs', 100)
-    if (Object.prototype.hasOwnProperty.call(row, 'tabletopMapKey')) nullableKey(row.tabletopMapKey, 'scene.tabletopMapKey')
+    nullableKey(row.tabletopMapKey, 'scene.tabletopMapKey')
     return structuredClone(row)
   })
   unique(sceneKeys, 'scenes')
@@ -362,8 +339,7 @@ export function parseTtrpgCampaignContentV1(
   }
 
   const clockKeys: string[] = []
-  if (root.clocks != null) {
-    array(root.clocks, 'clocks', 256).forEach((value, index) => {
+  array(root.clocks, 'clocks', 256).forEach((value, index) => {
       const row = object(value, `clocks[${index}]`)
       exact(row, ['clockKey', 'title', 'description', 'initialValue', 'maximum', 'advanceTriggers', 'onComplete', 'visibility', 'sourceRefs'], `clocks[${index}]`)
       const clockKey = stableKey(row.clockKey, 'clock.clockKey')
@@ -390,14 +366,13 @@ export function parseTtrpgCampaignContentV1(
       enumValue(row.visibility, ['gm-only', 'party', 'public'] as const, 'clock.visibility')
       const sources = keyArray(row.sourceRefs, 'clock.sourceRefs', 100)
       if (!sources.length) fail(`Clock 缺少来源:${clockKey}`)
-    })
-    unique(clockKeys, 'clocks')
-  }
+  })
+  if (!clockKeys.length) fail('clocks 不得为空')
+  unique(clockKeys, 'clocks')
   const knownClocks = new Set(clockKeys)
 
   const frontKeys: string[] = []
-  if (root.fronts != null) {
-    array(root.fronts, 'fronts', 128).forEach((value, index) => {
+  array(root.fronts, 'fronts', 128).forEach((value, index) => {
       const row = object(value, `fronts[${index}]`)
       exact(row, ['frontKey', 'title', 'goal', 'participantKeys', 'clockKeys', 'escalation', 'defeatConditions', 'sourceRefs'], `fronts[${index}]`)
       const frontKey = stableKey(row.frontKey, 'front.frontKey')
@@ -413,13 +388,12 @@ export function parseTtrpgCampaignContentV1(
       if (!textArray(row.escalation, 'front.escalation', 100).length) fail(`Front 缺少升级阶梯:${frontKey}`)
       if (!textArray(row.defeatConditions, 'front.defeatConditions', 100).length) fail(`Front 缺少阻止条件:${frontKey}`)
       if (!keyArray(row.sourceRefs, 'front.sourceRefs', 100).length) fail(`Front 缺少来源:${frontKey}`)
-    })
-    unique(frontKeys, 'fronts')
-  }
+  })
+  if (!frontKeys.length) fail('fronts 不得为空')
+  unique(frontKeys, 'fronts')
 
   const secretKeys: string[] = []
-  if (root.secrets != null) {
-    array(root.secrets, 'secrets', 512).forEach((value, index) => {
+  array(root.secrets, 'secrets', 512).forEach((value, index) => {
       const row = object(value, `secrets[${index}]`)
       exact(row, ['secretKey', 'title', 'truth', 'holderKeys', 'relatedClueKeys', 'revealRule', 'visibility', 'sourceRefs'], `secrets[${index}]`)
       const secretKey = stableKey(row.secretKey, 'secret.secretKey')
@@ -434,9 +408,9 @@ export function parseTtrpgCampaignContentV1(
       text(row.revealRule, 'secret.revealRule')
       enumValue(row.visibility, ['gm-only', 'character-private'] as const, 'secret.visibility')
       if (!keyArray(row.sourceRefs, 'secret.sourceRefs', 100).length) fail(`Secret 缺少来源:${secretKey}`)
-    })
-    unique(secretKeys, 'secrets')
-  }
+  })
+  if (!secretKeys.length) fail('secrets 不得为空')
+  unique(secretKeys, 'secrets')
 
   if (root.tabletop != null) {
     const tabletop = object(root.tabletop, 'tabletop')
@@ -541,23 +515,19 @@ export function parseTtrpgCampaignContentV1(
 
   const endingKeys = array(root.endings, 'endings', 100).map((value, index) => {
     const row = object(value, `endings[${index}]`)
-    const fields = ['endingKey', 'title', 'requirements', 'epilogue']
-    if (Object.prototype.hasOwnProperty.call(row, 'trigger')) fields.push('trigger')
-    exact(row, fields, `endings[${index}]`)
+    exact(row, ['endingKey', 'title', 'requirements', 'epilogue', 'trigger'], `endings[${index}]`)
     text(row.title, 'ending.title', 300)
     textArray(row.requirements, 'ending.requirements', 100)
     text(row.epilogue, 'ending.epilogue')
-    if (row.trigger != null) {
-      const trigger = object(row.trigger, 'ending.trigger')
-      exact(trigger, ['sceneKey', 'requiredConclusionKeys', 'forbiddenConclusionKeys'], 'ending.trigger')
-      const sceneKey = stableKey(trigger.sceneKey, 'ending.trigger.sceneKey')
-      validateKnown([sceneKey], knownScenes, 'ending.trigger.sceneKey')
-      const required = keyArray(trigger.requiredConclusionKeys, 'ending.trigger.requiredConclusionKeys', 100)
-      const forbidden = keyArray(trigger.forbiddenConclusionKeys, 'ending.trigger.forbiddenConclusionKeys', 100)
-      validateKnown(required, conclusions, 'ending.trigger.requiredConclusionKeys')
-      validateKnown(forbidden, conclusions, 'ending.trigger.forbiddenConclusionKeys')
-      if (required.some(key => forbidden.includes(key))) fail('ending.trigger 同一结论不能同时 required 和 forbidden')
-    }
+    const trigger = object(row.trigger, 'ending.trigger')
+    exact(trigger, ['sceneKey', 'requiredConclusionKeys', 'forbiddenConclusionKeys'], 'ending.trigger')
+    const sceneKey = stableKey(trigger.sceneKey, 'ending.trigger.sceneKey')
+    validateKnown([sceneKey], knownScenes, 'ending.trigger.sceneKey')
+    const required = keyArray(trigger.requiredConclusionKeys, 'ending.trigger.requiredConclusionKeys', 100)
+    const forbidden = keyArray(trigger.forbiddenConclusionKeys, 'ending.trigger.forbiddenConclusionKeys', 100)
+    validateKnown(required, conclusions, 'ending.trigger.requiredConclusionKeys')
+    validateKnown(forbidden, conclusions, 'ending.trigger.forbiddenConclusionKeys')
+    if (required.some(key => forbidden.includes(key))) fail('ending.trigger 同一结论不能同时 required 和 forbidden')
     return stableKey(row.endingKey, 'ending.endingKey')
   })
   if (endingKeys.length < 2) fail('至少需要两个结局')
@@ -588,20 +558,15 @@ export function parseTtrpgCampaignContentV1(
   const sourceWorld = object(root.sourceWorld, 'sourceWorld')
   exact(sourceWorld, ['contentHash', 'bundleHash'], 'sourceWorld')
   if (!isSha256Hash(sourceWorld.contentHash) || !isSha256Hash(sourceWorld.bundleHash)) fail('sourceWorld hash 无效')
-  if ((root.visualBible == null) !== (root.mediaManifest == null)) {
-    fail('visualBible 与 mediaManifest 必须同时存在或同时缺失')
-  }
-  if (root.visualBible != null && root.mediaManifest != null) {
-    const locationKeys = new Set(scenes.flatMap(scene => scene.locationKey == null ? [] : [String(scene.locationKey)]))
-    parseTtrpgVisualBibleV1(root.visualBible, { characterKeys: knownCharacters, locationKeys })
-    parseTtrpgMediaManifestV1(root.mediaManifest, {
-      targetRefs: new Set([
-        ...characterKeys, ...sceneKeys, ...locationKeys, ...handoutKeys,
-        ...rulePack.items.map(item => item.key),
-        ...(root.tabletop == null ? [] : (root.tabletop as { maps: Array<{ mapKey: string }> }).maps.map(map => map.mapKey)),
-      ]),
-    })
-  }
+  const locationKeys = new Set(scenes.flatMap(scene => scene.locationKey == null ? [] : [String(scene.locationKey)]))
+  parseTtrpgVisualBibleV1(root.visualBible, { characterKeys: knownCharacters, locationKeys })
+  parseTtrpgMediaManifestV1(root.mediaManifest, {
+    targetRefs: new Set([
+      ...characterKeys, ...sceneKeys, ...locationKeys, ...handoutKeys,
+      ...rulePack.items.map(item => item.key),
+      ...(root.tabletop == null ? [] : (root.tabletop as { maps: Array<{ mapKey: string }> }).maps.map(map => map.mapKey)),
+    ]),
+  })
   return structuredClone(root) as unknown as TtrpgCampaignContentV1
 }
 
@@ -642,16 +607,13 @@ export function validateTtrpgCampaignForPublicationV1(
   }
   const reachableSceneKeys = [...reachable].sort()
   const unreachableSceneKeys = campaign.scenes.map(scene => scene.sceneKey).filter(key => !reachable.has(key)).sort()
-  const hasMachineTriggers = campaign.endings.some(ending => ending.trigger != null)
   const terminalReachable = campaign.scenes.filter(scene => reachable.has(scene.sceneKey) && scene.nextSceneKeys.length === 0)
   const endingReachable = (ending: TtrpgCampaignContentV1['endings'][number]) => (
-    ending.trigger ? reachable.has(ending.trigger.sceneKey) : terminalReachable.length > 0
+    reachable.has(ending.trigger.sceneKey)
   )
   const unreachableEndingKeys = campaign.endings.filter(ending => !endingReachable(ending)).map(ending => ending.endingKey).sort()
-  const endingSceneKeys = new Set(campaign.endings.flatMap(ending => ending.trigger ? [ending.trigger.sceneKey] : []))
-  const deadEndSceneKeys = hasMachineTriggers
-    ? terminalReachable.filter(scene => !endingSceneKeys.has(scene.sceneKey)).map(scene => scene.sceneKey).sort()
-    : []
+  const endingSceneKeys = new Set(campaign.endings.map(ending => ending.trigger.sceneKey))
+  const deadEndSceneKeys = terminalReachable.filter(scene => !endingSceneKeys.has(scene.sceneKey)).map(scene => scene.sceneKey).sort()
   const requiredClues = campaign.clues.filter(clue => clue.required)
   const reachablePaths = (clue: TtrpgCampaignContentV1['clues'][number]) => (
     clue.discoveryPaths.filter(path => reachable.has(path.sceneKey))
@@ -692,14 +654,6 @@ export function validateTtrpgCampaignForPublicationV1(
   for (const counterexample of structural.counterexamples) {
     if (!counterexample.passed) errors.push(`战役反例未通过:${counterexample.caseKey}`)
   }
-  const productionCampaign = campaign.tags.includes('production-campaign-v2')
-  if (productionCampaign) {
-    if (!campaign.bible) errors.push('生产战役缺少 Campaign Bible')
-    if (!campaign.clocks?.length) errors.push('生产战役缺少 Clock')
-    if (!campaign.fronts?.length) errors.push('生产战役缺少 Front')
-    if (!campaign.secrets?.length) errors.push('生产战役缺少结构化 Secret')
-    if (campaign.endings.some(ending => !ending.trigger)) errors.push('生产战役结局缺少 machine trigger')
-  }
   return { valid: errors.length === 0, errors, warnings, unconfirmedAttributeMappings, structural }
 }
 
@@ -708,22 +662,12 @@ function safeSlug(value: string): string {
   return result.slice(0, 80) || 'world'
 }
 
-const LEGACY_FIXTURE_SCENE_KEYS = [
-  'scene.opening', 'scene.crosscheck', 'scene.respite', 'scene.confrontation',
-] as const
-
-/** Detects both newly tagged fixtures and pre-tag fixed compiler output already stored in IndexedDB. */
 export function isTtrpgFixtureCampaignV1(campaign: TtrpgCampaignContentV1): boolean {
-  if (campaign.tags.includes('fixture-only')) return true
-  const sceneKeys = campaign.scenes.map(scene => scene.sceneKey).sort()
-  const fixtureSceneKeys = [...LEGACY_FIXTURE_SCENE_KEYS].sort()
-  return campaign.campaignKey.endsWith('.lost-evidence')
-    && sceneKeys.join(',') === fixtureSceneKeys.join(',')
-    && campaign.clues.map(clue => clue.clueKey).sort().join(',') === 'clue.motive,clue.timeline'
+  return campaign.tags.includes('fixture-only')
 }
 
 function defaultCharacter(
-  entity: PlayableWorldBundleV1['initialState']['entities'][string],
+  entity: ProductWorldSourceBundleV1['initialState']['entities'][string],
   rulePack: RulePackV1,
   authorConfirmed: boolean,
   role: TtrpgCharacterTemplateV1['role'],
@@ -743,22 +687,36 @@ function defaultCharacter(
   const identity = typeof entity.attributes.identity === 'string' && entity.attributes.identity.trim()
     ? entity.attributes.identity.trim()
     : `${entity.name} 的可玩角色模板。`
-  return {
+  const template: Omit<TtrpgCharacterTemplateV1, 'characterSheet'> = {
     characterKey: sourceRef,
+    seatKey: role === 'player' ? `player.${sourceRef}` : null,
     name: entity.name,
     description: identity,
-    sourceRefs: [sourceRef], role, attributes, attributeMappings,
+    sourceRefs: [sourceRef], role, controller: role === 'player' ? 'human' : 'gm', attributes, attributeMappings,
     skills: {}, resources,
     itemKeys: rulePack.items.length ? [rulePack.items[0].key] : [],
     actionKeys: rulePack.actions.map(action => action.key),
     portraitAssetKey: null,
-    ...(role === 'npc' ? { gmProfile: {
+    playerProfile: role === 'player' ? {
+      privateGoal: '与队伍共同查明事件真相，同时保留角色自己的选择。',
+      secret: '由玩家与主持人在 Session Zero 中确认。',
+      portrayal: `依据${identity}的身份、知识边界和当前处境行动。`,
+    } : null,
+    gmProfile: role === 'npc' ? {
       objective: `维护与“${identity}”相关的核心利益，并对玩家的证据与承诺作出一致回应。`,
       leverage: entity.locationKey ? `熟悉 ${entity.locationKey} 及其人物关系。` : '掌握一条可用于交换的世界内信息。',
       secret: '对公开真相有所保留；只有玩家行动或已发现证据满足场景条件时才释放相关信息。',
       portrayal: `以${identity}的身份和立场回应，不替玩家作决定。`,
       escalation: '受到直接威胁时先提高代价或转移谈判条件，不凭空改写已提交事实。',
-    } } : {}),
+    } : null,
+  }
+  return {
+    ...template,
+    characterSheet: createCompleteTtrpgCharacterSheetV2({
+      template,
+      rulePack,
+      authoringMode: 'world-conversion',
+    }),
   }
 }
 
@@ -768,34 +726,24 @@ function defaultCharacter(
  * of presenting this fixed investigation skeleton as authored content.
  */
 export function compileTtrpgCampaignDraftV1(input: {
-  playableWorld: PlayableWorldBundleV1
+  worldSourceBundle: ProductWorldSourceBundleV1
   rulePack: RulePackV1
   fixtureOnly: true
-  selection?: WorldGameSourceSelectionV2
   campaignKey?: string
   title?: string
   confirmDefaultMappings?: boolean
 }): TtrpgCampaignContentV1 {
-  if (input.fixtureOnly !== true) fail('固定战役编译器仅允许生成测试 fixture')
-  const rulePack = parseRulePackV1(input.rulePack)
-  if (input.playableWorld.source.worldContentHash !== input.playableWorld.canonSnapshot.snapshotHash
-    && !isSha256Hash(input.playableWorld.source.worldContentHash)) fail('PlayableWorld 来源 hash 无效')
-  if (!isSha256Hash(input.playableWorld.bundleHash)) fail('PlayableWorld bundleHash 无效')
-  const entities = Object.values(input.playableWorld.initialState.entities)
-  const selectedCharacterKeys = input.selection
-    ? new Set(input.selection.characterExportIds.map(id => `release-character:${id}`)) : null
-  const selectedLocationKeys = input.selection
-    ? new Set(input.selection.importantLocationExportIds.map(id => `release-location:${id}`)) : null
-  if (input.selection && (input.selection.productType !== 'ttrpg'
-    || input.selection.worldContentHash !== input.playableWorld.source.worldContentHash
-    || input.selection.productSource?.kind !== 'ttrpg')) {
-    fail('TTRPG 素材选择与 PlayableWorld 来源不一致')
+  if (import.meta.env.MODE !== 'test' || input.fixtureOnly !== true) {
+    fail('固定战役编译器仅允许隔离测试 fixture')
   }
-  const characters = entities.filter(entity => (entity.kind === 'character' || entity.kind === 'npc' || entity.kind === 'player')
-    && (!selectedCharacterKeys || selectedCharacterKeys.has(entity.entityKey)))
+  const rulePack = parseRulePackV1(input.rulePack)
+  if (input.worldSourceBundle.source.worldContentHash !== input.worldSourceBundle.canonSnapshot.snapshotHash
+    && !isSha256Hash(input.worldSourceBundle.source.worldContentHash)) fail('ProductWorldSource 来源 hash 无效')
+  if (!isSha256Hash(input.worldSourceBundle.bundleHash)) fail('ProductWorldSource bundleHash 无效')
+  const entities = Object.values(input.worldSourceBundle.initialState.entities)
+  const characters = entities.filter(entity => entity.kind === 'character' || entity.kind === 'npc' || entity.kind === 'player')
   if (!characters.length) fail('世界发布至少需要一个角色，才能编译正式 TTRPG 战役')
-  const locations = entities.filter(entity => entity.kind === 'location'
-    && (!selectedLocationKeys || selectedLocationKeys.has(entity.entityKey)))
+  const locations = entities.filter(entity => entity.kind === 'location')
   const looksLikeNpc = (entity: typeof characters[number]) => {
     const hint = [entity.attributes.role, entity.attributes.roleWeight, entity.attributes.identity]
       .filter((value): value is string => typeof value === 'string').join(' ').toLowerCase()
@@ -814,9 +762,12 @@ export function compileTtrpgCampaignDraftV1(input: {
   ]
   const locationKey = locations[0]?.entityKey ?? null
   const participantKeys = templates.map(template => template.characterKey)
-  const title = input.title?.trim() || `${input.playableWorld.source.worldName}：失落的证据`
-  const campaignKey = input.campaignKey?.trim() || `campaign.${safeSlug(input.playableWorld.source.worldCode)}.lost-evidence`
-  const sourceRefs = [input.playableWorld.canonSnapshot.sources[0]?.sourceKey].filter((value): value is string => !!value)
+  const title = input.title?.trim() || `${input.worldSourceBundle.source.worldName}：失落的证据`
+  const campaignKey = input.campaignKey?.trim() || `campaign.${safeSlug(input.worldSourceBundle.source.worldCode)}.lost-evidence`
+  const sourceRefs = [
+    input.worldSourceBundle.canonSnapshot.sources[0]?.sourceKey
+      ?? `world.${safeSlug(input.worldSourceBundle.source.worldCode)}`,
+  ]
   const sceneSpecs: TtrpgCampaignContentV1['scenes'] = [
     { sceneKey: 'scene.opening', title: '异常出现', description: '一个本应安全的地点留下互相矛盾的痕迹。', locationKey, participantKeys, clueKeys: ['clue.timeline', 'clue.motive'], actionKeys: ['investigate', 'influence', 'overcome', 'guard'], nextSceneKeys: ['scene.crosscheck'], failureForward: '即使检定失败，玩家仍得到模糊线索，但危险时钟推进。', gmSecret: '两条线索分别指向时间与动机，必须交叉验证。', sourceRefs, tabletopMapKey: 'map.scene.opening' },
     { sceneKey: 'scene.crosscheck', title: '交叉验证', description: '玩家可以核对记录、询问目击者或冒险重建现场。', locationKey, participantKeys, clueKeys: ['clue.timeline', 'clue.motive'], actionKeys: ['investigate', 'influence', 'assist', 'guard'], nextSceneKeys: ['scene.respite', 'scene.confrontation'], failureForward: '失败会使对手先一步准备，但不会删除已经发现的事实。', gmSecret: '只有把两个结论放在一起，才能安全进入最终对质。', sourceRefs, tabletopMapKey: 'map.scene.crosscheck' },
@@ -849,9 +800,49 @@ export function compileTtrpgCampaignDraftV1(input: {
       ],
     })),
   }
+  const proposalKeys = ['proposal.fixture.primary', 'proposal.fixture.alternate']
+  const sectionSources = {
+    background: proposalKeys[0], coreConflict: proposalKeys[0], opening: proposalKeys[0],
+    fronts: proposalKeys[1], secrets: proposalKeys[1], endings: proposalKeys[1],
+  }
+  const visualBible: TtrpgCampaignContentV1['visualBible'] = {
+    schema: 'storyforge.ttrpg-visual-bible', version: 1,
+    style: {
+      description: '清晰可读的桌面叙事概念设计，优先保持角色与地点身份一致。',
+      medium: '数字概念绘画', composition: '横向场景与半身角色立绘',
+      colorPalette: ['低饱和蓝灰', '暖色线索高光'], era: '遵循冻结世界设定',
+      prohibitedElements: ['未在冻结世界中出现的现代标识'], referenceLicense: '项目自有生成素材',
+    },
+    characters: templates.map(character => ({
+      characterKey: character.characterKey,
+      identityPrompt: `${character.name}：${character.description}`,
+      silhouette: '轮廓需与角色身份和行动职责清晰对应。', attire: '服装遵循冻结世界的时代与地域设定。',
+      markers: [character.name], colorPalette: ['角色固有色', '环境协调色'],
+      expressionBaselines: [{ expressionKey: 'neutral', prompt: '保持角色身份特征的中性表情。' }],
+      referenceAssetKeys: [],
+    })),
+    locations: locationKey == null ? [] : [{
+      locationKey, identityPrompt: `冻结世界地点 ${locationKey}`, architecture: '遵循冻结世界地点事实。',
+      weather: '按场景叙事需要', timeOfDay: '按场景叙事需要', lighting: '线索区域应保持可读。',
+      anchors: [locationKey], referenceAssetKeys: [],
+    }],
+    provenancePolicy: {
+      rightsPolicyVersion: 'rights.v1', allowedSources: ['project-owned'],
+      requirePromptReceipt: true, requireHumanAdoptionForRelease: true,
+    },
+  }
+  const mediaManifest: TtrpgCampaignContentV1['mediaManifest'] = {
+    schema: 'storyforge.ttrpg-media-manifest', version: 1, slots: [],
+    runtimePolicy: {
+      enabled: false, networkPolicy: 'disabled', maximumSessionCostUsd: 0,
+      maximumConcurrentRequests: 1, maximumAttempts: 1, maximumGeneratedAssets: 0,
+      allowProviderFallback: false,
+    },
+  }
   return parseTtrpgCampaignContentV1({
     schema: 'storyforge.ttrpg-campaign', version: 1, campaignKey, title,
-    pitch: `一场发生在${input.playableWorld.source.worldName}的调查冒险。玩家必须在局势失控前找出相互印证的证据，并决定公开真相还是保护相关人物。`,
+    gmMode: 'ai',
+    pitch: `一场发生在${input.worldSourceBundle.source.worldName}的调查冒险。玩家必须在局势失控前找出相互印证的证据，并决定公开真相还是保护相关人物。`,
     playerCount: { minimum: 1, maximum: Math.max(1, playerCharacters.length) },
     estimatedMinutes: 180, tags: ['fixture-only', 'investigation', 'adventure', 'fail-forward'], difficulty: 'introductory',
     contentWarnings: ['危险场景', '人物冲突'],
@@ -859,6 +850,41 @@ export function compileTtrpgCampaignDraftV1(input: {
       premise: '共同确认调查、冒险和人物冲突的可接受尺度；任何人都可随时暂停或淡出。',
       consentChecklist: ['确认内容警告', '选择角色', '确认公开与私密信息边界', '确认暂停信号'],
       lines: [], veils: ['过度血腥细节'], pauseSignal: '暂停', openDoor: true,
+    },
+    bible: {
+      premise: '玩家通过多条独立路径查明事件真相，并决定公开或保护相关人物。',
+      background: `事件发生在${input.worldSourceBundle.source.worldName}，所有新增情节必须服从冻结世界事实。`,
+      coreConflict: '公开真相与保护相关人物之间存在不可同时消除的代价。',
+      themes: ['证据与责任', '真相的代价'],
+      canonInvariants: ['冻结世界事实不得被战役运行改写', '失败改变代价而不阻断故事'], sourceRefs,
+    },
+    clocks: [{
+      clockKey: 'clock.danger', title: '局势失控', description: '失败与拖延让对手获得更多准备时间。',
+      initialValue: 0, maximum: 4,
+      advanceTriggers: [{
+        triggerKey: 'trigger.danger.failed-investigation', sceneKey: 'scene.opening',
+        actionKey: 'investigate', amount: 1, reason: '调查失败仍给出线索，同时推进危险。',
+      }],
+      onComplete: '对手取得先手，最终对质的代价提高。', visibility: 'party', sourceRefs,
+    }],
+    fronts: [{
+      frontKey: 'front.concealment', title: '掩盖真相者', goal: '在玩家完成交叉验证前封锁证据。',
+      participantKeys: [templates[0].characterKey], clockKeys: ['clock.danger'],
+      escalation: ['制造矛盾证词', '转移关键物证', '迫使相关人物沉默'],
+      defeatConditions: ['拼合时间线与动机结论', '在最终对质中公开证据'], sourceRefs,
+    }],
+    secrets: [{
+      secretKey: 'secret.concealment', title: '主动掩盖', truth: '受益者主动改动了记录并移动物证。',
+      holderKeys: [templates[0].characterKey], relatedClueKeys: ['clue.timeline', 'clue.motive'],
+      revealRule: '玩家取得两个关键结论并进入最终对质后方可确认。', visibility: 'gm-only', sourceRefs,
+    }],
+    designProvenance: {
+      origin: 'author-guided', proposalKeys, baseProposalKey: proposalKeys[0], sectionSources,
+      lockedSections: [], candidateHash: null,
+    },
+    informationPolicy: {
+      characterPrivateChannels: true, gmSecrets: true, hiddenNpcState: true,
+      hiddenDice: 'gm-only', interPlayerWhispers: true, revealAuditTrail: true,
     },
     openingSceneKey: 'scene.opening', characterTemplates: templates, scenes: sceneSpecs,
     clues: [
@@ -873,12 +899,20 @@ export function compileTtrpgCampaignDraftV1(input: {
     ],
     quests: [{ questKey: 'quest.truth', title: '拼合真相', objective: '取得相互独立的时间线和动机证据，并决定如何使用。', requiredConclusionKeys: ['conclusion.timeline', 'conclusion.motive'], failureForward: '线索不完整时仍进入对质，但对方拥有更大谈判优势。' }],
     endings: [
-      { endingKey: 'ending.reveal', title: '公开真相', requirements: ['公开两个关键结论'], epilogue: '真相改变了局势，也让玩家承担公开它的代价。' },
-      { endingKey: 'ending.protect', title: '有限保护', requirements: ['保留或交换至少一条关键证据'], epilogue: '眼前的人得到保护，但未公开的事实成为下一阶段的压力。' },
+      {
+        endingKey: 'ending.reveal', title: '公开真相', requirements: ['公开两个关键结论'],
+        epilogue: '真相改变了局势，也让玩家承担公开它的代价。',
+        trigger: { sceneKey: 'scene.confrontation', requiredConclusionKeys: ['conclusion.timeline', 'conclusion.motive'], forbiddenConclusionKeys: [] },
+      },
+      {
+        endingKey: 'ending.protect', title: '有限保护', requirements: ['保留或交换至少一条关键证据'],
+        epilogue: '眼前的人得到保护，但未公开的事实成为下一阶段的压力。',
+        trigger: { sceneKey: 'scene.confrontation', requiredConclusionKeys: ['conclusion.timeline'], forbiddenConclusionKeys: ['conclusion.motive'] },
+      },
     ],
     handouts: [{ handoutKey: 'handout.case-notes', title: '调查记录', body: '按发现顺序记录线索、来源和公开范围。', revealClueKey: null, assetKey: null, fallbackText: '调查记录：时间线证据 / 动机证据 / 尚未公开的信息。' }],
     advancementMilestones: [{ milestoneKey: 'milestone.truth', title: '完成真相拼图', award: rulePack.advancement.awardPerMilestone }],
-    tabletop,
-    sourceWorld: { contentHash: input.playableWorld.source.worldContentHash, bundleHash: input.playableWorld.bundleHash },
+    tabletop, visualBible, mediaManifest,
+    sourceWorld: { contentHash: input.worldSourceBundle.source.worldContentHash, bundleHash: input.worldSourceBundle.bundleHash },
   }, rulePack)
 }

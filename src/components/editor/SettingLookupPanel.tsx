@@ -2,6 +2,7 @@ import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import { Search, X, BookOpen, Users, Scroll, Hash, Sparkles, Loader2, Send, FileText, Check } from 'lucide-react'
 import type { CodexEntry, BuiltInCodexKey } from '../../lib/types/codex'
 import type { Character } from '../../lib/types/character'
+import { characterAxesLabel } from '../../lib/character/character-axes'
 import type { WorldRuleNodeDef } from '../../lib/types/world-rules'
 import { WORLD_RULE_TREE } from '../../lib/types/world-rules'
 import { parseFieldSchema, parseEntryFields } from '../../lib/types/codex'
@@ -120,7 +121,7 @@ export default function SettingLookupPanel({
         const score = scoreCodexEntry(
           char.name,
           char.shortDescription || '',
-          `${char.role || ''} ${char.personality || ''} ${char.background || ''}`,
+          `${characterAxesLabel(char)} ${char.personality || ''} ${char.background || ''}`,
           q,
         )
         if (score > 0) {
@@ -129,7 +130,7 @@ export default function SettingLookupPanel({
             id: char.id!,
             name: char.name,
             summary: char.shortDescription || '暂无简介',
-            category: char.role || '角色',
+            category: characterAxesLabel(char),
             icon: '👤',
             score,
             data: char,

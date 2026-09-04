@@ -4,7 +4,7 @@ import { useAIConfigStore } from '../../stores/ai-config'
 import { createAISessionKey } from '../../stores/ai-generation-session'
 import { adopt } from '../../lib/registry/adopt'
 import { db } from '../../lib/db/schema'
-import { resolveScopeLike } from '../../lib/world-engine/scope'
+import { resolveScopeLike } from '../../lib/workspace/scope'
 import { hashCanonicalValue } from '../../lib/agent/run/hash'
 import {
   buildDetailSceneGeneratePrompt,
@@ -88,7 +88,6 @@ export function useDetailedOutlineGenerationController(
     suspendRecovery,
   } = input
   const aiConfig = useAIConfigStore(state => state.config)
-  const creativeReliabilityEnabled = useAIConfigStore(state => state.creativeReliabilityEnabled)
   const creativeQualityMode = useAIConfigStore(state => state.creativeQualityMode)
   const ai = useAIStream(createAISessionKey(
     projectId,
@@ -232,12 +231,10 @@ export function useDetailedOutlineGenerationController(
         : `完善《${chapterTitle}》的场景、冲突、情绪变化和结尾压力。`,
       assembled: context.assembled,
     })
-    const messages = creativeReliabilityEnabled
-      ? [{
-          role: 'system' as const,
-          content: formatNarrativeBriefForPromptV1(narrativeBrief),
-        }, ...baseMessages]
-      : baseMessages
+    const messages = [{
+      role: 'system' as const,
+      content: formatNarrativeBriefForPromptV1(narrativeBrief),
+    }, ...baseMessages]
     let snapshot = await createDetailedOutlineGenerationDurableRunV1({
       scope,
       worldGroupId,
@@ -289,17 +286,15 @@ export function useDetailedOutlineGenerationController(
     const manifest = finalized.manifest
     const category = operation === 'scenes' ? 'detail.scene' : 'detail.enhance'
     const modelIdentity = resolveRequestConfig(aiConfig, { category }).config
-    const creativeArtifact = creativeReliabilityEnabled
-      ? await createDetailedOutlineCreativeArtifactV1({
-          raw: output,
-          operation,
-          narrativeBrief,
-          qualityMode: creativeQualityMode,
-          modelIdentity: { provider: modelIdentity.provider, model: modelIdentity.model },
-          inputText: messages.map(message => message.content).join('\n'),
-          durationMs: Math.max(0, Date.now() - startedAt),
-        })
-      : undefined
+    const creativeArtifact = await createDetailedOutlineCreativeArtifactV1({
+      raw: output,
+      operation,
+      narrativeBrief,
+      qualityMode: creativeQualityMode,
+      modelIdentity: { provider: modelIdentity.provider, model: modelIdentity.model },
+      inputText: messages.map(message => message.content).join('\n'),
+      durationMs: Math.max(0, Date.now() - startedAt),
+    })
     const baseCandidate: Omit<DetailedOutlineGenerationCandidateV1, 'durable'> = {
       version: 1,
       type: DETAILED_OUTLINE_GENERATION_CANDIDATE_TYPE_V1,
@@ -313,7 +308,8 @@ export function useDetailedOutlineGenerationController(
       contextManifestHash: manifest.manifestHash,
       gatewayEvidenceVersion: 3,
       contentRevision,
-      ...(creativeArtifact ? { creativeArtifact, narrativeBrief } : {}),
+      creativeArtifact,
+      narrativeBrief,
       workspaceScope: scope,
       createdAt: Date.now(),
     }
@@ -337,7 +333,6 @@ export function useDetailedOutlineGenerationController(
     chapterSummary,
     chapterTitle,
     aiConfig,
-    creativeReliabilityEnabled,
     creativeQualityMode,
     currentDetailed?.scenes,
     selectedOutlineNodeId,
@@ -393,7 +388,7 @@ export function useDetailedOutlineGenerationController(
         })
       }
     } else if (pending.candidate.output !== output) {
-      throw new Error('旧版细纲候选不支持在线修订，请关闭后重新生成。')
+      throw new Error('该细纲候选缺少当前修订证据，请关闭后重新生成。')
     }
     const patch = buildDetailedOutlineCopilotPatchV1({
       raw: output,

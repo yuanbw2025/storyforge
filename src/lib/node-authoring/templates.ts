@@ -3,7 +3,8 @@ import { AUTHORING_NODE_BY_ID, defaultConfigForTemplate } from './catalog'
 import { buildAuthoringCreationChainGraph } from './creation-chain'
 import type { AuthoringEdge, AuthoringNodeGraph, AuthoringNodeInstance } from './contracts'
 import { autoLayoutAuthoringGraph } from './productivity'
-import { deriveShortNovelStructure, SHORT_NOVEL_DEFAULT_WORDS } from '../world-engine/work-kind'
+import { deriveShortNovelStructure, SHORT_NOVEL_DEFAULT_WORDS } from '../workspace/work-kind'
+import { assertOfficialAuthoringGraphUsesFormalActionsV1 } from './domain-action-registry'
 
 export const AUTHORING_OFFICIAL_TEMPLATE_IDS = [
   'world-foundation',
@@ -78,15 +79,19 @@ function projectContext(id: string, sourceKeys: string[]): AuthoringNodeInstance
 }
 
 function worldFoundationGraph(): AuthoringNodeGraph {
-  const context = projectContext('world-template-context', ['worldview', 'worldRules', 'codex', 'locations'])
+  const context = projectContext('world-template-context', ['worldview', 'codex'])
+  const geography = node('source.world-geography', 'world-template-geography', { contextBudget: 12_000 })
+  const history = node('source.world-history', 'world-template-history', { contextBudget: 12_000 })
+  const worldRules = node('source.world-rules', 'world-template-rules', { contextBudget: 12_000 })
+  const canonSources = [context, geography, history, worldRules]
   const worldNodes = [
     'world.origin', 'world.structure', 'world.terrain', 'world.waterways', 'world.climate',
     'world.races', 'world.factions', 'world.politics', 'world.economy', 'world.culture',
     'world.power', 'world.items',
   ].map((templateId, index) => node(templateId, `world-template-${index}`))
   return graph(
-    [context, ...worldNodes],
-    worldNodes.map(item => edge(context, item)),
+    [...canonSources, ...worldNodes],
+    canonSources.flatMap(source => worldNodes.map(item => edge(source, item))),
     [
       { id: 'world-natural', title: '自然环境', color: '#2d8777' },
       { id: 'world-humanity', title: '人文环境', color: '#42759a' },
@@ -247,17 +252,25 @@ export function buildOfficialAuthoringTemplate(
 ): AuthoringNodeGraph {
   const template = AUTHORING_OFFICIAL_TEMPLATE_BY_ID.get(id)
   if (!template) throw new Error(`未知官方节点模板：${id}`)
+  let built: AuthoringNodeGraph
   if (id === 'short-novel') {
     const structure = deriveShortNovelStructure(
       options.targetWordCount ?? SHORT_NOVEL_DEFAULT_WORDS,
       options.preferredChapterCount,
     )
-    return configureCreationChain({
+    built = configureCreationChain({
       chapterCount: structure.chapterCount,
       volumeCount: structure.volumeCount,
       wordCount: structure.targetWordsPerChapter,
       namePrefix: 'short',
     })
+  } else {
+    built = template.build()
   }
-  return template.build()
+  assertOfficialAuthoringGraphUsesFormalActionsV1({
+    templateId: id,
+    nodes: built.nodes,
+    catalog: AUTHORING_NODE_BY_ID,
+  })
+  return built
 }

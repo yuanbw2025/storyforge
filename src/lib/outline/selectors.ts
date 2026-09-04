@@ -1,10 +1,10 @@
 import type { OutlineNode } from '../types'
 import { normalizeOutlineNode } from './normalize'
 
-type OutlineLike = Pick<OutlineNode, 'type'> & { parentId?: number | null }
+type OutlineLike = Pick<OutlineNode, 'type' | 'parentId'>
 
 export function isTopLevelVolumeNode(node: OutlineLike): boolean {
-  return node.type === 'volume' && node.parentId == null
+  return node.type === 'volume' && node.parentId === null
 }
 
 export function getTopLevelVolumes(nodes: OutlineNode[]): OutlineNode[] {

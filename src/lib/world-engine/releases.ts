@@ -1,63 +1,77 @@
-import Dexie from 'dexie'
 import { db } from '../db/schema'
 import { PROJECT_TABLES } from '../registry/project-tables'
 import type {
-  NarrativeModule,
   WorldRelease,
-  WorldReleaseManifestV2,
+  WorldReleaseManifestV3,
+  WorldSemanticSnapshotV1,
   WorldRevision,
   WorkspaceScope,
 } from '../types'
-import type { WorldReleaseSection } from '../registry/types'
-import { assertRecordInScope, resolveScope, scopeTransactionTables } from './scope'
-import type { ProjectExportData } from '../export/json-export'
+import { WORLD_CAPABILITY_AREAS, type TableSpec, type WorldReleaseSection } from '../registry/types'
+import { resolveScope, scopeTransactionTables } from '../workspace/scope'
 import {
   deriveStrictExportProjectSnapshot,
   deriveStrictExportProjectSnapshotInCurrentTransaction,
   type StrictProjectExportSnapshot,
 } from '../export/registry-export'
-import { validateNarrativeModule } from '../narrative/blueprint'
-
-// Release snapshots are deliberately sparse world-share packages, not v6+
-// full-project backups. v5 predates mandatory adaptation-private tables.
-const WORLD_RELEASE_PORTABLE_BACKUP_VERSION = 5
+import { isShareableWorld } from './world-identity'
+import { effectiveWorkKind } from '../workspace/work-kind'
+import { parsePureWorldReleaseManifestV3, verifyPureWorldReleaseRecordV3 } from './release-codec'
+import { canonicalWorldReleaseJsonV1, hashWorldReleaseValueV1 } from './release-hash'
+import { isWorkCode, isWorkspaceUid } from '../memory/identity'
 
 export const WORLD_RELEASE_SECTIONS: ReadonlyArray<{
   key: WorldReleaseSection
   label: string
   description: string
 }> = [
-  { key: 'foundation', label: '世界基础', description: '自然、人文、规则、地点、词条与世界结构' },
-  { key: 'characters', label: '角色资产', description: '角色主档、关系与本作品角色作用' },
-  { key: 'narrative', label: '故事设计', description: '故事核心、主线支线与已选叙事蓝图' },
-  { key: 'outline', label: '大纲与细纲', description: '卷纲、章纲及场景级细纲，不包含正文' },
+  { key: 'foundation', label: '世界基础', description: '自然、人文、规则、地点、实体、词条与多世界结构' },
+  { key: 'characters', label: '角色与关系', description: '角色主档、关系与已确认认知' },
+  { key: 'narrative', label: '故事设计', description: '故事核心、主线支线、年表、事实与伏笔' },
+  { key: 'outline', label: '大纲、细纲与正文', description: '卷章结构、场景级细纲及作者确认正文' },
 ]
 
 export function worldReleaseSectionTables(section: WorldReleaseSection): string[] {
+  const areas = section === 'foundation'
+    ? new Set(['foundation', 'entities', 'multi-world'])
+    : section === 'characters'
+      ? new Set(['characters', 'relations'])
+      : section === 'narrative'
+        ? new Set(['story', 'storylines'])
+        : new Set(['outline', 'detailed-outline', 'manuscript'])
   return PROJECT_TABLES
-    .filter(spec => spec.communityShare === 'world'
-      && spec.releaseSection === section
-      && spec.name !== 'worldReleases')
+    .filter(spec => spec.worldSemantic && areas.has(spec.worldSemantic.area))
     .map(spec => spec.name)
 }
 
 export function stableJson(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`
-  if (value && typeof value === 'object') {
-    const entries = Object.entries(value as Record<string, unknown>)
-      .filter(([, child]) => child !== undefined)
-      .sort(([left], [right]) => left.localeCompare(right))
-    return `{${entries.map(([key, child]) => `${JSON.stringify(key)}:${stableJson(child)}`).join(',')}}`
-  }
-  return JSON.stringify(value) ?? 'null'
+  return canonicalWorldReleaseJsonV1(value)
 }
 
-async function sha256(value: unknown): Promise<string> {
-  const digestPromise = crypto.subtle.digest('SHA-256', new TextEncoder().encode(stableJson(value)))
-  const digest = Dexie.currentTransaction
-    ? await Dexie.waitFor(digestPromise)
-    : await digestPromise
-  return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('')
+function strictSnapshotContentJson(snapshot: StrictProjectExportSnapshot): string {
+  // exportedAt is backup transport metadata, not source content. Normalizing
+  // it lets the transaction compare two exact registry snapshots without
+  // invoking WebCrypto while IndexedDB must remain live. `ownership` is also
+  // transport metadata: an explicit non-active Work release legitimately uses
+  // a different export root while the stored project/World/Work rows remain
+  // identical and are still compared below.
+  const { ownership: _transportOwnership, ...content } = snapshot.data
+  return stableJson({ ...content, exportedAt: 0 })
+}
+
+/** Canonical content hash used by WorldRevision and WorldRelease integrity checks. */
+export async function hashWorldReleaseManifestV1(value: unknown): Promise<string> {
+  return hashWorldReleaseValueV1(value)
+}
+
+/** Portable, content-bound identity. The local numeric row id is deliberately
+ * excluded so export/import reference remapping cannot change the identity. */
+export function worldReleaseUidV1(input: {
+  worldCode: string
+  version: number
+  contentHash: string
+}): string {
+  return `WR-${encodeURIComponent(input.worldCode)}-v${input.version}-${input.contentHash.slice(0, 24)}`
 }
 
 function clone<T>(value: T): T {
@@ -68,21 +82,55 @@ function rowMatchesScope(row: Record<string, unknown>, worldExportId: number, wo
   return row._worldOwnerExportId === worldExportId || row._workOwnerExportId === workExportId
 }
 
-async function buildPortableReleaseProject(input: {
+function isSemanticCanonRow(spec: TableSpec, row: Record<string, unknown>): boolean {
+  const policy = spec.worldSemantic
+  if (!policy) return false
+  if (policy.canonPolicy === 'authoritative-table') return true
+  const status = policy.statusField ? row[policy.statusField] : undefined
+  return typeof status === 'string' && Boolean(policy.confirmedStatusValues?.includes(status))
+}
+
+interface SemanticSelectionStatsV1 {
+  table: string
+  selected: boolean
+  confirmedRowCount: number
+  candidateRowCount: number
+  conflictRowCount: number
+  omittedRowCount: number
+  latestRevision: number | null
+}
+
+function semanticExcludedState(
+  spec: TableSpec,
+  row: Record<string, unknown>,
+): 'candidate' | 'conflict' | 'omitted' {
+  const status = spec.worldSemantic?.statusField
+    ? String(row[spec.worldSemantic.statusField] ?? '').trim().toLocaleLowerCase('en-US')
+    : ''
+  if (['conflict', 'conflicted', 'contradicted', 'disputed', 'stale', 'source-missing', 'invalid-range'].includes(status)) return 'conflict'
+  if (['candidate', 'proposed', 'proposal', 'pending', 'draft', 'suggested'].includes(status)) return 'candidate'
+  return 'omitted'
+}
+
+function latestSemanticRevision(rows: readonly Record<string, unknown>[]): number | null {
+  const values = rows.flatMap(row => [row.updatedAt, row.createdAt, row.revision, row.version])
+    .filter((value): value is number => typeof value === 'number' && Number.isFinite(value))
+  return values.length ? Math.max(...values) : null
+}
+
+async function buildWorldSemanticSnapshot(input: {
   scope: WorkspaceScope
   requestedTables: string[]
-  selectedNarrativeModules: NarrativeModule[]
   strictSnapshot?: StrictProjectExportSnapshot
 }): Promise<{
-  portableProject: ProjectExportData
-  selectedNarrativeModules: WorldReleaseManifestV2['selectedNarrativeModules']
+  semanticSnapshot: WorldSemanticSnapshotV1
+  records: Record<string, unknown[]>
+  semanticSelectionStats: SemanticSelectionStatsV1[]
 }> {
   const snapshot = input.strictSnapshot
     ?? await deriveStrictExportProjectSnapshot(input.scope.projectId)
   const backup = snapshot.data
-  if (backup.version < 4 || !backup.ownership || !backup.worlds || !backup.works) {
-    throw new Error('[release] 世界发布必须基于 v4+ 严格便携快照')
-  }
+  if (!backup.ownership || !backup.worlds || !backup.works) throw new Error('[release] 当前严格快照缺少所有权根')
   const worldExportId = snapshot.exportIds.get('worlds')?.get(input.scope.worldId)
   const workExportId = snapshot.exportIds.get('works')?.get(input.scope.workId)
   const worldRoot = backup.worlds.find(row => row._exportId === worldExportId)
@@ -90,139 +138,249 @@ async function buildPortableReleaseProject(input: {
   if (!worldRoot || !workRoot) throw new Error('[release] 当前 World/Work 不在严格备份中')
   const portableWorldId = worldRoot._exportId
   const portableWorkId = workRoot._exportId
-  const moduleRows = input.selectedNarrativeModules.map(module => {
-    const exportId = module.id == null ? undefined : snapshot.exportIds.get('narrativeModules')?.get(module.id)
-    const exported = backup.narrativeModules?.find(row => row._exportId === exportId)
-    return { module, exported }
-  })
-  if (moduleRows.some(item => !item.exported)) throw new Error('[release] 叙事模块无法映射为便携 ID')
-  const selectedModuleExportIds = new Set(moduleRows.map(item => item.exported!._exportId))
-  const selectedNarrativeModules = moduleRows.map(item => ({
-    exportId: item.exported!._exportId,
-    kind: item.module.kind,
-    title: item.module.title,
-  }))
-
-  const project = clone(backup.project) as Record<string, unknown>
-  project._activeWorldExportId = portableWorldId
-  project._activeWorkExportId = portableWorkId
-  project._activeCharacterDrivenPlanExportId = null
-  project.worldCode = worldRoot.code
-  project.worldVersion = worldRoot.currentVersion
-  project.communityOrigin = worldRoot.communityOrigin
-  project.name = workRoot.title
-  project.description = workRoot.description
-  project.genres = [...workRoot.genres]
-  project.genre = workRoot.genres[0] ?? 'other'
-  project.status = workRoot.status
-  project.targetWordCount = workRoot.targetWordCount
-  for (const field of ['currentWordCount', 'coverImage', 'writingStyleId', 'methodologyId'] as const) {
-    project[field] = workRoot[field]
+  const sourceProject = clone(backup.project) as Record<string, unknown>
+  const project: Record<string, unknown> = {
+    workspaceUid: sourceProject.workspaceUid,
+    workspacePurpose: 'world-engine',
+    name: worldRoot.name ?? workRoot.title,
+    enableMultiWorld: Boolean(sourceProject.enableMultiWorld),
+    _activeWorldExportId: portableWorldId,
+    _activeWorkExportId: portableWorkId,
+    createdAt: 0,
+    updatedAt: 0,
   }
-  const portable: Record<string, unknown> = {
-    version: Math.min(backup.version, WORLD_RELEASE_PORTABLE_BACKUP_VERSION),
-    // Release content hashes must depend on content, not the wall clock used
-    // while deriving an otherwise identical portable snapshot.
-    exportedAt: 0,
+  const semanticSnapshot: WorldSemanticSnapshotV1 = {
+    schema: 'storyforge.world-semantic-snapshot',
+    version: 1,
     ownership: { contractVersion: 1, worldExportId: portableWorldId, workExportId: portableWorkId },
     project,
     worlds: [clone(worldRoot)],
     works: [{ ...clone(workRoot), _activeCharacterDrivenPlanExportId: null }],
   }
   const source = backup as unknown as Record<string, unknown>
-  const sharedMediaRows = Array.isArray(source.mediaBlobObjects)
-    ? source.mediaBlobObjects as Record<string, unknown>[]
-    : []
+  const requestedTableSet = new Set(input.requestedTables)
+  const semanticSelectionStats = PROJECT_TABLES.filter(spec => spec.worldSemantic).map(spec => {
+    const rows = Array.isArray(source[spec.name])
+      ? clone(source[spec.name] as Record<string, unknown>[])
+        .filter(row => rowMatchesScope(row, portableWorldId, portableWorkId))
+      : []
+    const selected = requestedTableSet.has(spec.name)
+    if (!selected) {
+      return {
+        table: spec.name,
+        selected,
+        confirmedRowCount: 0,
+        candidateRowCount: 0,
+        conflictRowCount: 0,
+        omittedRowCount: rows.length,
+        latestRevision: latestSemanticRevision(rows),
+      }
+    }
+    const confirmed = rows.filter(row => isSemanticCanonRow(spec, row))
+    const excluded = rows.filter(row => !isSemanticCanonRow(spec, row)).map(row => semanticExcludedState(spec, row))
+    return {
+      table: spec.name,
+      selected,
+      confirmedRowCount: confirmed.length,
+      candidateRowCount: excluded.filter(state => state === 'candidate').length,
+      conflictRowCount: excluded.filter(state => state === 'conflict').length,
+      omittedRowCount: excluded.filter(state => state === 'omitted').length,
+      latestRevision: latestSemanticRevision(rows),
+    }
+  })
+  const records: Record<string, unknown[]> = {}
   for (const tableName of input.requestedTables) {
     if (tableName === 'worlds' || tableName === 'works' || tableName === 'worldReleases') continue
     const rows = Array.isArray(source[tableName]) ? clone(source[tableName] as Record<string, unknown>[]) : []
-    if (tableName === 'narrativeModules') {
-      portable[tableName] = rows.filter(row => selectedModuleExportIds.has(row._exportId as number))
-    } else if (tableName === 'narrativeNodes'
-      || tableName === 'narrativeBeats'
-      || tableName === 'narrativeChoices') {
-      portable[tableName] = rows.filter(row => selectedModuleExportIds.has(row._moduleExportId as number))
-    } else {
-      const scopedRows = rows.filter(row => rowMatchesScope(row, portableWorldId, portableWorkId))
-      portable[tableName] = tableName === 'avgMediaBlobs'
-        ? scopedRows.map(row => {
-            if (typeof row.data === 'string' || !Number.isInteger(row._blobObjectExportId)) return row
-            const shared = sharedMediaRows.find(candidate => candidate._exportId === row._blobObjectExportId)
-            if (typeof shared?.data !== 'string') throw new Error('[release] AVG 共享媒资无法冻结到 WorldRelease')
-            return { ...row, data: shared.data }
-          })
-        : scopedRows
-    }
+    const spec = PROJECT_TABLES.find(candidate => candidate.name === tableName)
+    if (!spec?.worldSemantic) throw new Error(`[release] ${tableName} 未登记为世界语义资源`)
+    records[tableName] = rows
+      .filter(row => rowMatchesScope(row, portableWorldId, portableWorkId))
+      .filter(row => isSemanticCanonRow(spec, row))
   }
-  const portableWorks = portable.works as Array<Record<string, unknown>>
-  portableWorks[0]._activeNarrativeModuleExportId = selectedNarrativeModules[0]?.exportId ?? null
-  return { portableProject: portable as unknown as ProjectExportData, selectedNarrativeModules }
+  const portableWorks = semanticSnapshot.works
+  portableWorks[0]._activeCharacterDrivenPlanExportId = null
+  portableWorks[0]._activeNarrativeModuleExportId = null
+  for (const field of ['coverImage', 'writingStyleId', 'methodologyId']) delete portableWorks[0][field]
+  // A WorldRelease owns semantic world content, not a source product workflow.
+  // Its materialization root is therefore a neutral current-schema novel Work;
+  // workflow fields below are fixed scaffolding defaults, never copied source state.
+  portableWorks[0].kind = 'novel'
+  portableWorks[0].novelProfile = 'long'
+  portableWorks[0].status = 'drafting'
+  portableWorks[0].targetWordCount = 0
+  portableWorks[0].currentWordCount = 0
+  portableWorks[0].includeCultivationProgressInAI = false
+  portableWorks[0].postAdoptionPolicy = 'suggest'
+  portableWorks[0].postAdoptionTaskTypes = ['organization', 'memory', 'retrieval', 'consistency']
+  portableWorks[0].postAdoptionBudget = {
+    maxModelCalls: 2,
+    maxInputTokens: 48_000,
+    maxOutputTokens: 16_000,
+    maxCostUsd: 0.25,
+    allowUnknownCost: false,
+  }
+  return {
+    semanticSnapshot,
+    records,
+    semanticSelectionStats,
+  }
+}
+
+async function buildWorldReleaseManifestInternal(input: {
+  scope: WorkspaceScope
+  selectedTables?: string[]
+}, strictSnapshot?: StrictProjectExportSnapshot, options?: {
+  allowInternalSource?: boolean
+  sourceKind?: 'world-draft' | 'independent-work-derivation'
+}): Promise<WorldReleaseManifestV3> {
+  const scope = await resolveScope({ scope: input.scope })
+  const world = await db.worlds.get(scope.worldId)
+  if (!world || world.projectId !== scope.projectId) throw new Error('[release] World 不属于当前工作区')
+  if (!options?.allowInternalSource && !isShareableWorld(world)) {
+    throw new Error('[release] 独立作品的内部作用域不能直接发布；请先显式派生世界草稿')
+  }
+  const publishable = PROJECT_TABLES.filter(spec => spec.worldSemantic)
+  const requested = input.selectedTables ?? publishable.map(spec => spec.name)
+  const unknown = requested.filter(name => !publishable.some(spec => spec.name === name))
+  if (unknown.length) throw new Error(`[release] 表未登记为可发布:${unknown.join(', ')}`)
+  const selectedTables = [...new Set(requested)]
+  const { semanticSnapshot, records, semanticSelectionStats } = await buildWorldSemanticSnapshot({
+    scope,
+    requestedTables: selectedTables,
+    strictSnapshot,
+  })
+  for (const tableName of selectedTables) records[tableName] ??= []
+  const dependencies = await Promise.all(Object.entries(records).map(async ([table, rows]) => ({
+    table,
+    rowCount: rows.length,
+    contentHash: await hashWorldReleaseValueV1(rows),
+  })))
+  const resourceCatalog = dependencies.map(dependency => {
+    const semantic = PROJECT_TABLES.find(spec => spec.name === dependency.table)!.worldSemantic!
+    const stats = semanticSelectionStats.find(item => item.table === dependency.table)!
+    return {
+      // Public release coordinates describe semantic capabilities. The
+      // physical table remains an internal import locator and must never leak
+      // into product adapters or prompts.
+      resourceId: `world:${world.code}:semantic:${semantic.area}:${semantic.resourceKind}`,
+      resourceKind: semantic.resourceKind,
+      area: semantic.area,
+      table: dependency.table,
+      rowCount: dependency.rowCount,
+      contentHash: dependency.contentHash,
+      confirmedRowCount: stats.confirmedRowCount,
+      candidateRowCount: stats.candidateRowCount,
+      conflictRowCount: stats.conflictRowCount,
+      omittedRowCount: stats.omittedRowCount,
+      latestRevision: stats.latestRevision,
+    }
+  })
+  const capabilityProfile = WORLD_CAPABILITY_AREAS.map(area => {
+    const areaSpecs = PROJECT_TABLES.filter(spec => spec.worldSemantic?.area === area)
+    const areaStats = semanticSelectionStats.filter(item => areaSpecs.some(spec => spec.name === item.table))
+    const resources = resourceCatalog.filter(resource => resource.area === area)
+    const rowCount = resources.reduce((sum, resource) => sum + resource.rowCount, 0)
+    const selectedResourceCount = areaStats.filter(item => item.selected).length
+    const omittedResourceCount = areaStats.length - selectedResourceCount
+    const latestRevisions = areaStats.map(item => item.latestRevision).filter((value): value is number => value != null)
+    return {
+      area,
+      resourceCount: areaStats.length,
+      rowCount,
+      status: rowCount === 0
+        ? 'missing' as const
+        : omittedResourceCount === 0 && resources.every(resource => resource.rowCount > 0)
+          ? 'available' as const
+          : 'partial' as const,
+      selectionStatus: selectedResourceCount === 0
+        ? 'omitted' as const
+        : omittedResourceCount === 0
+          ? 'selected' as const
+          : 'partial-selection' as const,
+      selectedResourceCount,
+      omittedResourceCount,
+      confirmedRowCount: areaStats.reduce((sum, item) => sum + item.confirmedRowCount, 0),
+      candidateRowCount: areaStats.reduce((sum, item) => sum + item.candidateRowCount, 0),
+      conflictRowCount: areaStats.reduce((sum, item) => sum + item.conflictRowCount, 0),
+      omittedRowCount: areaStats.reduce((sum, item) => sum + item.omittedRowCount, 0),
+      latestRevision: latestRevisions.length ? Math.max(...latestRevisions) : null,
+      originalEvidenceAvailable: rowCount > 0,
+      queryableIndexAvailable: rowCount > 0,
+    }
+  })
+  const work = await db.works.get(scope.workId)
+  const project = await db.projects.get(scope.projectId)
+  if (!project || !work || !isWorkspaceUid(project.workspaceUid) || !isWorkCode(work.code)) {
+    throw new Error('[release] 工作区或作品缺少当前架构的稳定身份')
+  }
+  const semanticResourceId = (spec: TableSpec) =>
+    `world:${world.code}:semantic:${spec.worldSemantic!.area}:${spec.worldSemantic!.resourceKind}`
+  const selectedResourceIds = publishable.filter(spec => selectedTables.includes(spec.name)).map(semanticResourceId)
+  const omittedResourceIds = publishable.filter(spec => !selectedTables.includes(spec.name)).map(semanticResourceId)
+  const sourceManifestBase = {
+    sourceKind: options?.sourceKind ?? 'world-draft' as const,
+    sourceWorkspaceUid: project.workspaceUid,
+    sourceWorldCode: world.code,
+    sourceWorkCode: work.code,
+    selectedResourceIds,
+    omittedResourceIds,
+  }
+  const sourceManifest = { ...sourceManifestBase, contentHash: await hashWorldReleaseValueV1(sourceManifestBase) }
+  return {
+    schema: 'storyforge.world-release',
+    version: 3,
+    semanticContract: 3,
+    worldCode: world.code,
+    worldName: world.name,
+    workTitle: work.title,
+    selectedTables,
+    dependencies,
+    records,
+    semanticSnapshot,
+    capabilityProfile,
+    resourceCatalog,
+    sourceManifest,
+  }
 }
 
 export async function buildWorldReleaseManifest(input: {
   scope: WorkspaceScope
   selectedTables?: string[]
-  selectedNarrativeModuleIds?: number[]
-}, strictSnapshot?: StrictProjectExportSnapshot): Promise<WorldReleaseManifestV2> {
+}, strictSnapshot?: StrictProjectExportSnapshot): Promise<WorldReleaseManifestV3> {
+  return buildWorldReleaseManifestInternal(input, strictSnapshot)
+}
+
+/**
+ * ARCH-01: capture a novel's confirmed semantic Canon for an explicit,
+ * immutable derivation.  This never publishes the source's internal scope.
+ */
+export async function buildIndependentWorkWorldSnapshot(input: {
+  scope: WorkspaceScope
+  selectedTables?: string[]
+}): Promise<WorldReleaseManifestV3> {
   const scope = await resolveScope({ scope: input.scope })
-  const world = await db.worlds.get(scope.worldId)
-  if (!world || world.projectId !== scope.projectId) throw new Error('[release] World 不属于当前工作区')
-  const publishable = PROJECT_TABLES.filter(spec => spec.communityShare === 'world' && spec.name !== 'worldReleases')
-  const requested = input.selectedTables ?? publishable.map(spec => spec.name)
-  const unknown = requested.filter(name => !publishable.some(spec => spec.name === name))
-  if (unknown.length) throw new Error(`[release] 表未登记为可发布:${unknown.join(', ')}`)
-  const moduleIds = [...new Set(input.selectedNarrativeModuleIds ?? [])]
-  const modules: NarrativeModule[] = []
-  for (const moduleId of moduleIds) {
-    const module = await db.narrativeModules.get(moduleId)
-    if (!module || !await assertRecordInScope(scope, 'narrativeModules', module)) {
-      throw new Error(`[release] 叙事模块 ${moduleId} 不属于当前 scope`)
-    }
-    const report = await validateNarrativeModule(scope, moduleId)
-    if (!report.valid) {
-      throw new Error(`[release] 叙事模块 ${module.title} 不可执行:${[
-        ...report.errors,
-        ...report.danglingSuccessors.map(item => `${item.nodeKey}->${item.successorKey}`),
-        ...report.unreachableKeys.map(key => `不可达:${key}`),
-      ].join('；')}`)
-    }
-    modules.push(module)
+  const [project, world, work] = await Promise.all([
+    db.projects.get(scope.projectId),
+    db.worlds.get(scope.worldId),
+    db.works.get(scope.workId),
+  ])
+  if (!project || !world || !work) throw new Error('[derivation] 源作品作用域不存在')
+  if (project.workspacePurpose === 'world-engine' || isShareableWorld(world)) {
+    throw new Error('[derivation] 该来源已经是世界引擎，不需要再次派生')
   }
-  const selectedTables = [...new Set([
-    ...requested,
-    'narrativeModules',
-    'narrativeNodes',
-    'narrativeBeats',
-    'narrativeChoices',
-  ])]
-  const { portableProject, selectedNarrativeModules } = await buildPortableReleaseProject({
+  if (effectiveWorkKind(work) !== 'novel') {
+    throw new Error('[derivation] 只有长篇或短篇小说可以显式派生世界')
+  }
+  const manifest = await buildWorldReleaseManifestInternal({
     scope,
-    requestedTables: selectedTables,
-    selectedNarrativeModules: modules,
-    strictSnapshot,
+    selectedTables: input.selectedTables,
+  }, undefined, {
+    allowInternalSource: true,
+    sourceKind: 'independent-work-derivation',
   })
-  const portableRecord = portableProject as unknown as Record<string, unknown>
-  const records = Object.fromEntries(selectedTables.map(name => [
-    name,
-    Array.isArray(portableRecord[name]) ? clone(portableRecord[name] as unknown[]) : [],
-  ]))
-  const dependencies = await Promise.all(Object.entries(records).map(async ([table, rows]) => ({
-    table,
-    rowCount: rows.length,
-    contentHash: await sha256(rows),
-  })))
-  return {
-    schema: 'storyforge.world-package',
-    version: 2,
-    worldCode: world.code,
-    worldName: world.name,
-    workTitle: (await db.works.get(scope.workId))?.title ?? '',
-    selectedTables,
-    selectedNarrativeModules,
-    dependencies,
-    records,
-    portableProject: portableProject as unknown as Record<string, unknown>,
-  }
+  manifest.workTitle = work.title
+  return manifest
 }
 
 export async function createWorldRevision(input: {
@@ -230,7 +388,6 @@ export async function createWorldRevision(input: {
   label: string
   parentRevisionId?: number | null
   selectedTables?: string[]
-  selectedNarrativeModuleIds?: number[]
 }): Promise<WorldRevision> {
   const scope = await resolveScope({ scope: input.scope })
   if (input.parentRevisionId != null) {
@@ -239,9 +396,11 @@ export async function createWorldRevision(input: {
       throw new Error('[release] 父修订不属于当前 World')
     }
   }
-  const manifest = await buildWorldReleaseManifest({ ...input, scope })
+  const sourceSnapshot = await deriveStrictExportProjectSnapshot(scope.projectId)
+  const sourceSnapshotJson = strictSnapshotContentJson(sourceSnapshot)
+  const manifest = await buildWorldReleaseManifest({ ...input, scope }, sourceSnapshot)
   const manifestJson = stableJson(manifest)
-  const contentHash = await sha256(manifest)
+  const contentHash = await hashWorldReleaseManifestV1(manifest)
   return db.transaction('rw', scopeTransactionTables(
     ...PROJECT_TABLES.map(spec => spec.table),
   ), async () => {
@@ -256,11 +415,7 @@ export async function createWorldRevision(input: {
       currentScope.projectId,
       currentScope,
     )
-    const currentManifest = await buildWorldReleaseManifest(
-      { ...input, scope: currentScope },
-      strictSnapshot,
-    )
-    if (stableJson(currentManifest) !== manifestJson) {
+    if (strictSnapshotContentJson(strictSnapshot) !== sourceSnapshotJson) {
       throw new Error('[release] 世界内容在修订冻结过程中发生变化，请重试')
     }
     const revisions = await db.worldRevisions.where('worldId').equals(currentScope.worldId).toArray()
@@ -284,9 +439,9 @@ export async function createWorldRevision(input: {
 export async function publishWorldRevision(revisionId: number, label?: string): Promise<WorldRelease> {
   const revision = await db.worldRevisions.get(revisionId)
   if (!revision) throw new Error('[release] 修订不存在')
-  const recalculated = await sha256(JSON.parse(revision.manifestJson))
+  const recalculated = await hashWorldReleaseManifestV1(parsePureWorldReleaseManifestV3(revision.manifestJson))
   if (recalculated !== revision.contentHash) throw new Error('[release] 修订内容哈希不匹配')
-  return db.transaction('rw', db.worldRevisions, db.worldReleases, db.worlds, db.projects, async () => {
+  return db.transaction('rw', db.worldRevisions, db.worldReleases, db.worlds, async () => {
     const currentRevision = await db.worldRevisions.get(revisionId)
     if (!currentRevision
       || currentRevision.manifestJson !== revision.manifestJson
@@ -297,8 +452,14 @@ export async function publishWorldRevision(revisionId: number, label?: string): 
     if (existing) return existing
     const world = await db.worlds.get(currentRevision.worldId)
     if (!world || world.projectId !== currentRevision.projectId) throw new Error('[release] 修订 World 不存在')
+    if (!isShareableWorld(world)) throw new Error('[release] 内部作用域不能发布为 WorldRelease')
     const releases = await db.worldReleases.where('worldId').equals(currentRevision.worldId).toArray()
     const row: WorldRelease = {
+      releaseUid: worldReleaseUidV1({
+        worldCode: world.code,
+        version: Math.max(0, ...releases.map(item => item.version)) + 1,
+        contentHash: currentRevision.contentHash,
+      }),
       projectId: currentRevision.projectId,
       worldId: currentRevision.worldId,
       revisionId: currentRevision.id!,
@@ -312,9 +473,6 @@ export async function publishWorldRevision(revisionId: number, label?: string): 
     const id = await db.worldReleases.add(row) as number
     const updatedAt = Date.now()
     await db.worlds.update(world.id!, { currentVersion: row.version, updatedAt })
-    if ((await db.projects.get(world.projectId))?.activeWorldId === world.id) {
-      await db.projects.update(world.projectId, { worldVersion: row.version, updatedAt })
-    }
     return { ...row, id }
   })
 }
@@ -326,8 +484,8 @@ export async function diffWorldRevisions(leftId: number, rightId: number): Promi
 }> {
   const [left, right] = await Promise.all([db.worldRevisions.get(leftId), db.worldRevisions.get(rightId)])
   if (!left || !right || left.worldId !== right.worldId) throw new Error('[release] 只能比较同一 World 的修订')
-  const leftRecords = (JSON.parse(left.manifestJson) as WorldReleaseManifestV2).records
-  const rightRecords = (JSON.parse(right.manifestJson) as WorldReleaseManifestV2).records
+  const leftRecords = parsePureWorldReleaseManifestV3(left.manifestJson).records
+  const rightRecords = parsePureWorldReleaseManifestV3(right.manifestJson).records
   const names = new Set([...Object.keys(leftRecords), ...Object.keys(rightRecords)])
   const added: string[] = []; const removed: string[] = []; const changed: string[] = []
   for (const name of names) {
@@ -341,9 +499,7 @@ export async function diffWorldRevisions(leftId: number, rightId: number): Promi
 export async function assertReleaseUnchanged(releaseId: number): Promise<void> {
   const release = await db.worldReleases.get(releaseId)
   if (!release) throw new Error('[release] 发布版本不存在')
-  if (await sha256(JSON.parse(release.manifestJson)) !== release.contentHash) {
-    throw new Error('[release] 发布版本已被篡改')
-  }
+  await verifyPureWorldReleaseRecordV3(release as WorldRelease & { id: number })
 }
 
 export async function listWorldRevisions(scope: WorkspaceScope): Promise<WorldRevision[]> {

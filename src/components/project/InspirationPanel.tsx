@@ -21,12 +21,14 @@ import InspirationFusionReview from './InspirationFusionReview'
 import type { InspirationSourceKind } from '../../lib/types/inspiration-workspace'
 import { useIncrementalInspiration } from '../../hooks/useIncrementalInspiration'
 import { MAX_INSPIRATION_FRAGMENT_CHARS } from '../../lib/inspiration/workspace'
+import { useActiveWork } from '../../hooks/useActiveWork'
 
 interface Props {
   project: Project
 }
 
 export default function InspirationPanel({ project }: Props) {
+  const activeWork = useActiveWork(project)
   const wgStore = useWorldGroupStore()
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['worldview', 'storyCore', 'characters']))
   const [adoptedSections, setAdoptedSections] = useState<Set<string>>(new Set())
@@ -75,8 +77,8 @@ export default function InspirationPanel({ project }: Props) {
     setAdopting(true)
     try {
       // 确保多世界已开启 + 主世界组存在
-      const migrated = await wgStore.migrateToMultiWorld(project.id!)
-      if (!migrated) return
+      const enabled = await wgStore.enableMultiWorld(project.id!)
+      if (!enabled) return
 
       // 1. 故事核心（项目级）
       const sc = mwResult.storyCore
@@ -95,7 +97,7 @@ export default function InspirationPanel({ project }: Props) {
 
       // 2. 逐个世界：创建世界组 + 写入该世界的世界观（字段严格对齐 Worldview）
       const nameToGroupId = new Map<string, number>()
-      // 已有主世界组（migrate 创建）：复用给输出中的 primary 世界（读最新 store 状态）
+      // 复用现有主世界组给输出中的 primary 世界（读取最新 Store 状态）。
       const primaryGroupId = useWorldGroupStore.getState().groups.find(g => g.type === 'primary')?.id ?? null
       let primaryClaimed = false
       for (let i = 0; i < mwResult.worlds.length; i++) {
@@ -130,11 +132,19 @@ export default function InspirationPanel({ project }: Props) {
             powerHierarchy: w.powerHierarchy || '',
             continentLayout: w.continentLayout || '',
             climateByRegion: w.climateByRegion || '',
-            historyLine: w.historyLine || '',
             races: w.races || '',
             factionLayout: w.factionLayout || '',
           },
         })
+        if (w.historyOverview) {
+          await adopt({
+            projectId: project.id!,
+            worldGroupId: groupId,
+            target: 'histories',
+            mode: 'replace',
+            data: { overview: w.historyOverview },
+          })
+        }
       }
 
       // 3. 角色：按 homeWorld 归属，跨世界角色标记
@@ -173,7 +183,8 @@ export default function InspirationPanel({ project }: Props) {
 
   // 导出反推结果为 Markdown 文件
   const handleExportResult = () => {
-    const lines: string[] = [`# ${project.name} — 灵感反推结果\n`]
+    const workTitle = activeWork?.title ?? '当前作品'
+    const lines: string[] = [`# ${workTitle} — 灵感反推结果\n`]
     if (inspiration.trim()) lines.push(`## 原始灵感\n${inspiration}\n`)
     if (mwResult) {
       const sc = mwResult.storyCore
@@ -188,7 +199,7 @@ export default function InspirationPanel({ project }: Props) {
         if (w.worldOrigin) lines.push(`- 世界来源：${w.worldOrigin}`)
         if (w.powerHierarchy) lines.push(`- 力量体系：${w.powerHierarchy}`)
         if (w.continentLayout) lines.push(`- 地貌分布：${w.continentLayout}`)
-        if (w.historyLine) lines.push(`- 世界历史：${w.historyLine}`)
+        if (w.historyOverview) lines.push(`- 世界历史：${w.historyOverview}`)
         if (w.factionLayout) lines.push(`- 势力分布：${w.factionLayout}`)
         if (w.entryCondition) lines.push(`- 进入条件：${w.entryCondition}`)
         if (w.powerRestriction) lines.push(`- 能力限制：${w.powerRestriction}`)
@@ -207,7 +218,7 @@ export default function InspirationPanel({ project }: Props) {
       if (wv.worldOrigin) lines.push(`- 世界来源：${wv.worldOrigin}`)
       if (wv.powerHierarchy) lines.push(`- 力量体系：${wv.powerHierarchy}`)
       if (wv.continentLayout) lines.push(`- 地貌分布：${wv.continentLayout}`)
-      if (wv.historyLine) lines.push(`- 世界历史：${wv.historyLine}`)
+      if (result.history.overview) lines.push(`- 世界历史：${result.history.overview}`)
       if (wv.factionLayout) lines.push(`- 势力分布：${wv.factionLayout}`)
       lines.push(`\n## 故事核心`)
       if (sc.logline) lines.push(`- 一句话：${sc.logline}`)
@@ -223,7 +234,7 @@ export default function InspirationPanel({ project }: Props) {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `${project.name}-灵感反推.md`
+    a.download = `${workTitle}-灵感反推.md`
     a.click()
     URL.revokeObjectURL(url)
   }
@@ -246,7 +257,7 @@ export default function InspirationPanel({ project }: Props) {
     })
   }
 
-  // ── 采纳世界观 ─────────────────────────────────
+  // ── 采纳世界基础与独立历史 ─────────────────────
   const handleAdoptWorldview = async () => {
     if (!result || adoptedSections.has('worldview')) return
     setAdopting(true)
@@ -260,11 +271,18 @@ export default function InspirationPanel({ project }: Props) {
         powerHierarchy: wv.powerHierarchy || undefined,
         continentLayout: wv.continentLayout || undefined,
         climateByRegion: wv.climateByRegion || undefined,
-        historyLine: wv.historyLine || undefined,
         races: wv.races || undefined,
         factionLayout: wv.factionLayout || undefined,
       },
     })
+    if (result.history.overview) {
+      await adopt({
+        projectId: project.id!,
+        target: 'histories',
+        mode: 'replace',
+        data: { overview: result.history.overview },
+      })
+    }
     setAdoptedSections(prev => new Set(prev).add('worldview'))
     setAdopting(false)
   }

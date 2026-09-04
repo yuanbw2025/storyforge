@@ -8,64 +8,36 @@ import { AUTHORING_NODE_BY_ID, defaultConfigForTemplate } from '../../src/lib/no
 import { emptyAuthoringGraph, type AuthoringNodeInstance } from '../../src/lib/node-authoring/contracts'
 import { adoptAuthoringCandidate } from '../../src/lib/node-authoring/executor'
 import { buildRagLibrary } from '../../src/lib/retrieval/rag-library'
-import { backfillResourceUidsV1 } from '../../src/lib/context-gateway/resource-identity'
-import { buildSimulationCanonSnapshot, loadSimulationCanonCandidates, parseSimulationCanonSnapshot } from '../../src/lib/simulation/canon-snapshot'
+import { stampCurrentFixtureResourceUidsV1 } from '../helpers/current-resource-identity'
+import {
+  openWorldSemanticResourceCatalogV1,
+  readWorldSemanticResourcesV1,
+} from '../../src/lib/context-gateway/world-release-client'
 import type { NodeFlow, WorkspaceScope } from '../../src/lib/types'
-import { stampNewRecord } from '../../src/lib/world-engine/scope'
-import { createWorldInstance } from '../../src/lib/world-engine/instances'
+import { stampNewRecord } from '../../src/lib/workspace/scope'
 import { useChapterStore } from '../../src/stores/chapter'
-import { useSimulationRuntimeStore } from '../../src/stores/simulation-runtime'
+import { createWorldRevision, publishWorldRevision } from '../../src/lib/world-engine/releases'
+import { addCurrentWorkFixtureV1, seedCurrentWorkspace } from '../helpers/current-workspace'
 
 async function createTwoWorkWorkspace(): Promise<{ a: WorkspaceScope; b: WorkspaceScope }> {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    name: '跨作品边界工程',
-    genre: 'fantasy',
-    genres: ['fantasy'],
-    status: 'drafting',
-    description: '',
-    targetWordCount: 100_000,
-    createdAt: now,
-    updatedAt: now,
-  } as any) as number
-  const worldId = await db.worlds.add({
-    projectId,
-    code: 'cross-work-world',
-    name: '共享世界',
-    description: '',
-    currentVersion: 1,
-    createdAt: now,
-    updatedAt: now,
-  }) as number
-  const workA = await db.works.add({
-    projectId,
-    worldId,
-    title: '作品 A',
-    description: '',
-    genres: ['fantasy'],
-    status: 'drafting',
+  const createdWorkspaceV1 = await seedCurrentWorkspace('跨作品边界工程', {
+    purpose: 'world-engine',
     targetWordCount: 50_000,
-    createdAt: now,
-    updatedAt: now,
-  }) as number
-  const workB = await db.works.add({
-    projectId,
-    worldId,
-    title: '作品 B',
-    description: '',
-    genres: ['fantasy'],
-    status: 'drafting',
-    targetWordCount: 50_000,
-    createdAt: now,
-    updatedAt: now,
-  }) as number
-  await db.projects.update(projectId, {
-    activeWorldId: worldId,
-    activeWorkId: workA,
-    ownershipSchemaVersion: 1,
-    worldCode: 'cross-work-world',
-    worldVersion: 1,
   })
+  const { projectId, worldId, workId: workA } = createdWorkspaceV1.scope
+  const secondWork = await addCurrentWorkFixtureV1({
+    projectId,
+    worldId,
+    create: {
+      title: '作品 B',
+      kind: 'novel',
+      novelProfile: 'long',
+      targetWordCount: 50_000,
+    },
+    now,
+  })
+  const workB = secondWork.id!
   return {
     a: { projectId, worldId, workId: workA },
     b: { projectId, worldId, workId: workB },
@@ -195,7 +167,7 @@ describe('WORLD-2C · 双 Work 下游边界反例', () => {
       { projectId: b.projectId, worldId: null, workId: b.workId, theme: 'B主题秘密', createdAt: now, updatedAt: now },
     ] as any)
 
-    await backfillResourceUidsV1(a.projectId)
+    await stampCurrentFixtureResourceUidsV1(a.projectId)
     const rag = await buildRagLibrary({ projectId: a.projectId, scope: a, worldGroupId: null })
     const ragText = rag.map(entry => entry.content).join('\n')
     const snapshot = await generateContextSnapshot(a)
@@ -209,7 +181,7 @@ describe('WORLD-2C · 双 Work 下游边界反例', () => {
     }
   })
 
-  it('Simulation Canon 只汇入当前 Work 的物品流水', async () => {
+  it('冻结 Work B 的 WorldRelease 后只暴露 B 的语义资源，活动 Work 切换不会改写出口', async () => {
     const { a, b } = await createTwoWorkWorkspace()
     const now = Date.now()
     await db.itemLedger.bulkAdd([
@@ -217,49 +189,37 @@ describe('WORLD-2C · 双 Work 下游边界反例', () => {
       { projectId: b.projectId, workId: b.workId, itemName: 'B王冠', action: 'gain', quantity: 1, heldByName: '旅人', createdAt: now + 1 },
     ] as any)
 
-    const catalog = await loadSimulationCanonCandidates({ projectId: a.projectId, scope: a, worldGroupId: null })
-    expect(catalog.candidates.map(candidate => candidate.name)).toContain('A钥匙')
-    expect(catalog.candidates.map(candidate => candidate.name)).not.toContain('B王冠')
-  })
-
-  it('显式为非当前 Work B 创建实例时，冻结快照和绑定都不得回落到活动 Work A', async () => {
-    const { a, b } = await createTwoWorkWorkspace()
-    const now = Date.now()
-    await db.itemLedger.bulkAdd([
-      { projectId: a.projectId, workId: a.workId, itemName: 'A密钥', action: 'gain', quantity: 1, heldByName: '甲', createdAt: now },
-      { projectId: b.projectId, workId: b.workId, itemName: 'B徽记', action: 'gain', quantity: 1, heldByName: '乙', createdAt: now + 1 },
-    ] as any)
-    const catalogB = await loadSimulationCanonCandidates({ projectId: b.projectId, scope: b, worldGroupId: null })
-    const sourceKeys = catalogB.candidates
-      .filter(candidate => candidate.name === 'B徽记')
-      .map(candidate => candidate.sourceKey)
-
-    await expect(useSimulationRuntimeStore.getState().createSession({
-      projectId: b.projectId,
+    const revision = await createWorldRevision({
       scope: b,
-      worldGroupId: null,
-      kind: 'chatgame',
-      title: 'B 的冻结实例',
-      sourceKeys,
-    })).rejects.toThrow('正式 GameRelease')
-
-    const frozen = await buildSimulationCanonSnapshot({ projectId: b.projectId, scope: b, worldGroupId: null, sourceKeys })
-    const session = await createWorldInstance({
-      scope: b,
-      worldGroupId: null,
-      kind: 'sandbox',
-      title: 'B 的冻结实例',
-      draftSnapshotHash: frozen.snapshot.snapshotHash,
-      canonSnapshot: frozen.snapshot,
-      initialState: frozen.initialState,
+      label: '作品 B 语义冻结',
+      selectedTables: ['itemLedger'],
     })
-    const sessionId = session.id!
+    const release = await publishWorldRevision(revision.id!)
+    await db.projects.update(a.projectId, { activeWorkId: a.workId })
+    const opened = await openWorldSemanticResourceCatalogV1({
+      localReleaseRecordId: release.id!,
+      expectedProjectId: b.projectId,
+      expectedWorldId: b.worldId,
+    })
+    const first = await readWorldSemanticResourcesV1({
+      scope: opened.scope,
+      descriptors: opened.resources,
+    })
+    const firstText = JSON.stringify(first.map(resource => resource.value))
+    expect(firstText).toContain('B王冠')
+    expect(firstText).not.toContain('A钥匙')
 
-    const savedSession = await db.simulationSessions.get(sessionId)
-    const snapshot = parseSimulationCanonSnapshot(savedSession!.canonSnapshotJson)
-    expect(savedSession).toMatchObject({ worldId: b.worldId, workId: b.workId })
-    expect(snapshot?.sources.map(source => source.name)).toEqual(['B徽记'])
-    expect(snapshot?.sources.map(source => source.name)).not.toContain('A密钥')
+    await db.projects.update(a.projectId, { activeWorkId: a.workId })
+    const reopened = await openWorldSemanticResourceCatalogV1({
+      localReleaseRecordId: release.id!,
+      expectedProjectId: b.projectId,
+      expectedWorldId: b.worldId,
+    })
+    const second = await readWorldSemanticResourcesV1({
+      scope: reopened.scope,
+      descriptors: reopened.resources,
+    })
+    expect(JSON.stringify(second.map(resource => resource.value))).toBe(firstText)
   })
 
   it('切换到 Work B 后不能采纳 Work A 节点图的候选', async () => {

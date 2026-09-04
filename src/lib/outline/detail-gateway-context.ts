@@ -6,7 +6,7 @@ import { executeContextGatewayV1, type ContextGatewayExecutionV1 } from '../cont
 import type { AssembleContextResult } from '../registry/types'
 import type { AIConfig, OutlineNode, WorkspaceScope } from '../types'
 import { parseStages } from '../types/story-arc'
-import { readOwnedRows, resolveScope } from '../world-engine/scope'
+import { readOwnedRows, resolveScope } from '../workspace/scope'
 import { assertDetailedOutlineTargetsUnwrittenFutureV1 } from './future-boundary'
 
 type StableRow = {

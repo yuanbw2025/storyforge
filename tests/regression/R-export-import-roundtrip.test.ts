@@ -10,12 +10,14 @@ import { db } from '../../src/lib/db/schema'
 import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
 import { parseWorldPortals } from '../../src/lib/utils/world-portals'
 import { CHAPTER_TEXT_NORMALIZATION_VERSION, hashChapterText } from '../../src/lib/ai/chapter-memory/text-normalization'
+import { seedCurrentProject } from '../helpers/current-workspace'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
 
 const now = Date.now()
 
 async function seedFullProject(): Promise<number> {
-  const projectId = await db.projects.add({
-    name: '完整作品', genre: 'fantasy', description: '测试往返', targetWordCount: 100000,
+  const projectId = await seedCurrentProject({
+    name: '完整作品', genres: ['fantasy'], description: '测试往返', targetWordCount: 100000,
     enableMultiWorld: false, createdAt: now, updatedAt: now,
   } as any) as number
 
@@ -67,7 +69,8 @@ async function seedFullProject(): Promise<number> {
     createdAt: now, updatedAt: now,
   } as any)
   await db.characters.add({
-    projectId, name: '林惊羽', role: 'protagonist', shortDescription: '天才剑修',
+    projectId, name: '林惊羽', roleWeight: 'main', moralAxis: 'good', orderAxis: 'neutral',
+    homeWorldGroupId: null, isCrossWorld: false, shortDescription: '天才剑修',
     personality: '坚毅', background: '灭门遗孤', createdAt: now, updatedAt: now,
   } as any)
   await db.stateCards.add({
@@ -91,6 +94,7 @@ async function seedFullProject(): Promise<number> {
     portalsJSON: JSON.stringify([{ name: '镜门', targetWorldId: mirrorWorldId, x: 10, y: 20 }]),
   })
 
+  await finalizeCurrentFixtureV1(projectId)
   return projectId
 }
 
@@ -151,20 +155,6 @@ describe('R-roundtrip · 全量内容导出→导入往返', () => {
     expect(portals[0].targetWorldId).not.toBe(sourceMirror.id)
   })
 
-  it('导入缺 summary 键的大纲节点 → 注册表 defaults 兜成空串（杜绝「chrome 导入后必现」）', async () => {
-    const srcId = await seedFullProject()
-    const exported = await exportProjectJSON(srcId)
-    // 模拟老版本/跨版本导出：outlineNodes 整体缺 summary 键（导出对 undefined 字段会省略）
-    for (const node of exported.outlineNodes as any[]) delete node.summary
-    const newId = await importProjectJSON(exported)
-    const nodes = await db.outlineNodes.where('projectId').equals(newId).toArray()
-    expect(nodes.length).toBeGreaterThan(0)
-    for (const n of nodes) {
-      expect(typeof n.summary).toBe('string') // 不变量:落库恒为 string，不再 undefined
-      expect(n.summary).toBe('')
-    }
-  })
-
   it('二次往返(导入后再导出再导入)仍完整(可反复导入)', async () => {
     const srcId = await seedFullProject()
     const e1 = await exportProjectJSON(srcId)
@@ -177,35 +167,17 @@ describe('R-roundtrip · 全量内容导出→导入往返', () => {
     expect(detail?.scenes?.[0]?.title).toBe('废墟苏醒')
   })
 
-  it('NS-4 旧备份只有 stateCards 时，导入后生成可审 TemporalFact 候选且不重复', async () => {
-    const srcId = await seedFullProject()
-    const exported = await exportProjectJSON(srcId)
-    delete (exported as any).temporalFacts // 模拟 NS-4 前旧备份：只有 stateCards，没有事实账本
-
-    const importedId = await importProjectJSON(exported)
-    const importedFacts = await db.temporalFacts.where('projectId').equals(importedId).toArray()
-    expect(importedFacts).toHaveLength(1)
-    expect(importedFacts[0]).toMatchObject({
-      subjectName: '林惊羽',
-      predicate: 'powerStage',
-      value: '炼气一层',
-      status: 'candidate',
-      sourceType: 'import',
-    })
-
-    const exportedAgain = await exportProjectJSON(importedId)
-    const importedAgainId = await importProjectJSON(exportedAgain)
-    const importedAgainFacts = await db.temporalFacts.where('projectId').equals(importedAgainId).toArray()
-    expect(importedAgainFacts).toHaveLength(1) // 新备份已有 temporalFacts，不再按 stateCards 重复生成
-  })
-
-  it('NS-4 temporalFacts 往返:分类型 FK(character/chapter/worldGroup)重映射到新项目实体', async () => {
-    const pid = await db.projects.add({ name: '事实往返', genre: 'fantasy', description: '', targetWordCount: 0, enableMultiWorld: false, createdAt: now, updatedAt: now } as any) as number
-    const wgId = await db.worldGroups.add({ projectId: pid, name: '主世界', type: 'main', order: 0, createdAt: now, updatedAt: now } as any) as number
-    const charId = await db.characters.add({ projectId: pid, name: '秦弦', role: 'protagonist', createdAt: now, updatedAt: now } as any) as number
+  it('当前事实账本往返:分类型 FK(character/chapter/worldGroup)重映射到新项目实体', async () => {
+    const pid = await seedCurrentProject({ name: '事实往返', genres: ['fantasy'], description: '', targetWordCount: 0, enableMultiWorld: false, createdAt: now, updatedAt: now } as any) as number
+    const wgId = await db.worldGroups.add({ projectId: pid, name: '主世界', type: 'primary', order: 0, createdAt: now, updatedAt: now } as any) as number
+    const charId = await db.characters.add({
+      projectId: pid, name: '秦弦', roleWeight: 'main', moralAxis: 'neutral', orderAxis: 'neutral',
+      homeWorldGroupId: wgId, isCrossWorld: false, createdAt: now, updatedAt: now,
+    } as any) as number
     const nodeId = await db.outlineNodes.add({ projectId: pid, parentId: null, type: 'chapter', title: '第1章', summary: '', order: 0, createdAt: now, updatedAt: now } as any) as number
     const chapId = await db.chapters.add({ projectId: pid, outlineNodeId: nodeId, title: '第1章', content: '<p>正文</p>', wordCount: 2, status: 'draft', order: 0, notes: '', createdAt: now, updatedAt: now } as any) as number
     await db.temporalFacts.add({ projectId: pid, worldGroupId: wgId, characterId: charId, subjectName: '秦弦', predicate: 'powerStage', factKind: 'state', value: '金丹', sourceType: 'chapter', sourceChapterId: chapId, validFromChapterId: chapId, status: 'confirmed', locked: false, createdAt: now, updatedAt: now } as any)
+    await finalizeCurrentFixtureV1(pid)
 
     const exported = await exportProjectJSON(pid)
     const newId = await importProjectJSON(exported)

@@ -6,65 +6,56 @@ import {
   FileCog, History, Upload, Download, Settings,
   Map, ClipboardList, GitBranch, Clock, MapPin, Scale,
   Drama, Package, CalendarClock, ScanSearch, Coins, Feather, Database, TrendingUp, Workflow,
-  Gamepad2,
   Replace,
 } from 'lucide-react'
 
-/**
- * Phase 4 起的侧边栏模块 ID。
- * 一个叶子 = 一个 panel。新加的占位叶子也在这里登记。
- */
+/** 当前侧边栏模块 ID；一个叶子对应一个正式 panel。 */
 export type SidebarModule =
   // 著作信息
   | 'info'
   | 'references'
-  | 'inspiration'              // Phase 26.4 — 灵感反推
+  | 'inspiration'
 
   // 设定库
-  | 'world-overview'        // Phase 25.4 — 世界总览（多世界）
-  | 'world-rules'           // Phase 32 — 真实与幻想
-  | 'worldview-origin'      // 占位 (P5)
-  | 'worldview-natural'     // 占位 (P5)
-  | 'worldview-humanity'    // 占位 (P6)
-  | 'story-design'          // = 旧 story-core
-  | 'characters'            // 角色生成
-  | 'characters-main'       // 主要角色
-  | 'characters-minor'      // 占位 (P7)
-  | 'characters-npc'        // 占位 (P7)
-  | 'characters-extra'      // 占位 (P7)
-  | 'relations'             // 关系网
-  | 'geography'             // 地理环境（legacy）
-  | 'locations'             // 重要地点（Phase 25.3）
-  | 'history'               // 历史年表
-  // 'codex' 独立侧栏入口已于 C4 移除：词条改在「自然环境」「人文环境」面板内就地编辑
+  | 'world-overview'
+  | 'world-rules'
+  | 'worldview-origin'
+  | 'worldview-natural'
+  | 'worldview-humanity'
+  | 'story-design'
+  | 'characters'
+  | 'characters-main'
+  | 'characters-minor'
+  | 'characters-npc'
+  | 'characters-extra'
+  | 'relations'
+  | 'geography'
+  | 'locations'
+  | 'history'
 
   // 创作区
   | 'rules'
   | 'outline'
-  | 'character-driven-plot'  // Phase 26.3 — 角色驱动剧情
-  | 'visual-workflows'       // FLOW-1 — 可视化节点创作工作流
-  | 'rag-library'            // RAG-1 — 可见资料与检索管理
-  | 'simulation-runtime'     // SIM-1 — NPC/跑团/角色聊天共享运行时
-  | 'detailed-outline'      // 占位 (P8)
-  | 'chapters-list'         // 占位 (P8)
+  | 'character-driven-plot'
+  | 'visual-workflows'
+  | 'rag-library'
+  | 'detailed-outline'
+  | 'chapters-list'
   | 'editor'
   | 'foreshadow'
-  | 'style-learning'        // FB-5 自适应文风学习
-  | 'global-replace'        // 全局替换
-
-  // 作品学习（一级）
-  | 'master-studies'
+  | 'style-learning'
+  | 'global-replace'
 
   // 提示词库（一级）
   | 'prompts'
 
   // 设置区
-  | 'version-history'       // 占位 (P9)
-  | 'import-doc'            // 占位 (P10)
-  | 'export'                // = DataManagementPanel (export 入口)
-  | 'usage-stats'           // = UsageStatsPage（AI 消耗统计）
-  | 'settings'              // = AIConfigPanel
-  | 'data-management'       // 数据管理
+  | 'version-history'
+  | 'import-doc'
+  | 'export'
+  | 'usage-stats'
+  | 'settings'
+  | 'data-management'
 
   // 状态表（A1）
   | 'state-table'
@@ -89,9 +80,7 @@ export type SidebarModule =
 
   // 世界地图（Phase 20）
   | 'world-map'
-  // legacy aliases，路由仍兼容但不再出现在 sidebar
   | 'power-system'
-  | 'story-core' | 'backup'
 
 export type ModuleContentType = 'upstream' | 'writing' | 'downstream' | 'tool' | 'experience' | 'system'
 
@@ -129,7 +118,7 @@ export const MODULE_CONTENT_TYPE_DEFINITIONS: Record<ModuleContentType, ModuleCo
 
 /**
  * Phase 36 的模块内容类型单一事实源。
- * legacy 路由也必须显式登记，避免从旧入口进入时丢失标记。
+ * 所有正式模块都必须显式登记，避免新增入口丢失内容类型标记。
  */
 export const MODULE_CONTENT_TYPES: Record<SidebarModule, ModuleContentType> = {
   info: 'upstream',
@@ -155,14 +144,12 @@ export const MODULE_CONTENT_TYPES: Record<SidebarModule, ModuleContentType> = {
   'character-driven-plot': 'tool',
   'visual-workflows': 'tool',
   'rag-library': 'tool',
-  'simulation-runtime': 'experience',
   'detailed-outline': 'upstream',
   'chapters-list': 'writing',
   editor: 'writing',
   foreshadow: 'upstream',
   'style-learning': 'tool',
   'global-replace': 'tool',
-  'master-studies': 'tool',
   prompts: 'system',
   'version-history': 'system',
   'import-doc': 'system',
@@ -179,8 +166,6 @@ export const MODULE_CONTENT_TYPES: Record<SidebarModule, ModuleContentType> = {
   'story-arc': 'upstream',
   'world-map': 'upstream',
   'power-system': 'upstream',
-  'story-core': 'upstream',
-  backup: 'system',
 }
 
 export function getModuleContentType(module: SidebarModule): ModuleContentType {
@@ -293,14 +278,6 @@ export const NAV_TREE: TreeSection[] = [
       leaf('scene-verify',     '场景考证', ScanSearch),
     ],
   },
-  {
-    sectionId: 'experience',
-    label: '体验中心',
-    children: [
-      leaf('simulation-runtime', '互动运行时', Gamepad2),
-    ],
-  },
-  // 作品学习已整合进「项目参考 → 深度分析」tab（Phase 20）
   {
     sectionId: 'prompts',
     label: '提示词库',

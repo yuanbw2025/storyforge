@@ -7,10 +7,10 @@ import type {
 } from '../../src/lib/agent/orchestrator'
 import { resolveAgentSkillV1 } from '../../src/lib/agent/skill-registry'
 import { executeContextGatewayV1 } from '../../src/lib/context-gateway/execution'
-import { backfillResourceUidsV1 } from '../../src/lib/context-gateway/resource-identity'
+import { stampCurrentFixtureResourceUidsV1 } from './current-resource-identity'
 import type { WorkspaceScope } from '../../src/lib/types'
 import type { ContextResourceDescriptorV1 } from '../../src/lib/registry/types'
-import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
+import { resolveWorkspaceOwnership } from '../../src/lib/workspace/ownership'
 
 interface MasterGatewayFixtureOptions {
   scope: WorkspaceScope
@@ -39,8 +39,8 @@ export async function prepareRequiredMasterGatewayFixtureV1(
   if (skill.contextGateway?.rollout !== 'required') {
     throw new Error(`测试任务 ${task.id} 的 Skill ${skill.id} 不是 required Gateway`)
   }
-  await ensureWorkspaceOwnership(options.scope.projectId)
-  await backfillResourceUidsV1(options.scope.projectId)
+  await resolveWorkspaceOwnership(options.scope.projectId)
+  await stampCurrentFixtureResourceUidsV1(options.scope.projectId)
   const execution = await executeContextGatewayV1({
     skill,
     scope: options.scope,

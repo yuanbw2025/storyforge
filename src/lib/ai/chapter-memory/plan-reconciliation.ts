@@ -1,5 +1,5 @@
 import type { Chapter, DetailedOutline, OutlineNode, WorkspaceScope } from '../../types'
-import { readOwnedRows, resolveReadScopeLike } from '../../world-engine/scope'
+import { readOwnedRows, resolveReadScopeLike } from '../../workspace/scope'
 import { hashChapterText, sha256Text } from './text-normalization'
 import { resolveCanonicalChapterSequence } from './canonical-chapter-sequence'
 

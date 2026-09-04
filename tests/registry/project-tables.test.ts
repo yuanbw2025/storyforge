@@ -1,13 +1,10 @@
 /**
- * Phase 1.1a 注册表单元测试
+ * 当前 PROJECT_TABLES 注册表单元测试
  *
  * 验证:
  *   ① 注册表完整性(全部表双向覆盖 + ref target 存在)
  *   ② 派生选择器正确
- *   ③ cascadeDeleteProject / cascadeDeleteGroup / stampPrimaryWorld 与现有手写逻辑等价
- *
- * 注意:Phase 1.1a 这些派生 API 是【纯新增】,现有 stores 还没切换。
- *       本测试直接调派生 API,确认它们正确,为 1.1b 切换做保证。
+ *   ③ cascadeDeleteProject / cascadeDeleteGroup / assignUnscopedRecordsToPrimaryWorld 只按现行注册表执行
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { db } from '../../src/lib/db/schema'
@@ -17,10 +14,11 @@ import { parseEntryRefs } from '../../src/lib/types/codex'
 import {
   projectScopedTables, worldScopedTables, exportableTables,
   transactionTablesFor, transactionTablesForReferences,
-  cascadeDeleteProject, cascadeDeleteGroup, stampPrimaryWorld,
+  assignUnscopedRecordsToPrimaryWorld, cascadeDeleteProject, cascadeDeleteGroup,
 } from '../../src/lib/registry/lifecycle'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
 
-describe('Phase 1.1a · PROJECT_TABLES 注册表', () => {
+describe('PROJECT_TABLES 当前注册表', () => {
   describe('完整性校验', () => {
     it('注册表与 Dexie 双向覆盖,无遗漏无多余', () => {
       const result = checkRegistry()
@@ -28,8 +26,10 @@ describe('Phase 1.1a · PROJECT_TABLES 注册表', () => {
       expect(result.ok, result.errors.join('; ')).toBe(true)
     })
 
-    it('登记了全部 115 张表', () => {
-      expect(PROJECT_TABLES.length).toBe(115)   // v79 两条历史迁移线汇合
+    it('注册表与当前 Dexie schema 保持同源，不用历史固定表数冒充合同', () => {
+      expect(PROJECT_TABLES.length).toBeGreaterThan(0)
+      expect(PROJECT_TABLES.map(spec => spec.name).sort())
+        .toEqual(db.tables.map(table => table.name).sort())
     })
 
     it('每张表名唯一', () => {
@@ -37,11 +37,18 @@ describe('Phase 1.1a · PROJECT_TABLES 注册表', () => {
       expect(new Set(names).size).toBe(names.length)
     })
 
+    it('simple 生命周期引用统一从父表 id 指向依赖表外键', () => {
+      const malformed = PROJECT_TABLES.flatMap(spec => (spec.refs ?? [])
+        .filter(ref => ref.kind === 'simple' && ref.field !== 'id')
+        .map(ref => `${spec.name}.${ref.field} -> ${ref.target}`))
+      expect(malformed).toEqual([])
+    })
+
     it('MEMORY-10 为 100% 表登记分配唯一磁盘记忆策略', () => {
       const allowed = new Set(['editable', 'evidence', 'derived-none', 'not-applicable'])
       expect(PROJECT_TABLES.every(spec => allowed.has(spec.memoryClassification.classification))).toBe(true)
       expect(PROJECT_TABLES.filter(spec => spec.memoryClassification.classification === 'editable').map(spec => spec.name).sort())
-        .toEqual(['chapters', 'characterInteractionBriefs', 'characterInteractionProductions', 'creativeRules', 'gameProductionBriefs', 'gameProductions', 'gameRulePacks', 'projects', 'storyCores', 'ttrpgCampaignModules', 'ttrpgProductionBriefs', 'ttrpgProductions', 'works', 'worlds'])
+        .toEqual(['chapters', 'creativeRules', 'productProductionBriefs', 'productProductions', 'projects', 'storyCores', 'ttrpgRulePacks', 'works', 'worlds'])
       expect(PROJECT_TABLES.find(spec => spec.name === 'agentRunEvents')?.memoryClassification.classification).toBe('evidence')
       expect(PROJECT_TABLES.find(spec => spec.name === 'retrievalChunks')?.memoryClassification.classification).toBe('derived-none')
       expect(PROJECT_TABLES.find(spec => spec.name === 'promptTemplates')?.memoryClassification.classification).toBe('not-applicable')
@@ -56,23 +63,32 @@ describe('Phase 1.1a · PROJECT_TABLES 注册表', () => {
         kind: 'field', owner: 'world', field: 'worldId',
       })
       expect(PROJECT_TABLES.find(spec => spec.name === 'storyCores')?.domainOwner).toMatchObject({
-        allowed: ['work'], legacyDefault: 'work', locator: { kind: 'field', owner: 'work', field: 'workId' },
+        allowed: ['work'], defaultOwner: 'work', locator: { kind: 'field', owner: 'work', field: 'workId' },
       })
       expect(PROJECT_TABLES.find(spec => spec.name === 'chapters')?.domainOwner).toMatchObject({
-        allowed: ['work'], legacyDefault: 'work', locator: { kind: 'field', owner: 'work', field: 'workId' },
+        allowed: ['work'], defaultOwner: 'work', locator: { kind: 'field', owner: 'work', field: 'workId' },
       })
     })
 
-    it('所有世界发布表都从同一注册表声明用户可选分区', () => {
-      const publishable = PROJECT_TABLES.filter(spec => spec.communityShare === 'world')
+    it('世界发布资源只由 worldSemantic 声明，不含产品媒资、发布和运行数据', () => {
+      const publishable = PROJECT_TABLES.filter(spec => spec.worldSemantic != null)
       expect(publishable.length).toBeGreaterThan(0)
-      expect(publishable.every(spec => spec.releaseSection != null)).toBe(true)
-      expect(publishable.filter(spec => spec.releaseSection === 'outline').map(spec => spec.name))
-        .toEqual(expect.arrayContaining(['outlineNodes', 'detailedOutlines']))
-      expect(publishable.filter(spec => spec.releaseSection === 'narrative').map(spec => spec.name))
-        .toEqual(expect.arrayContaining(['storyCores', 'storyArcs', 'narrativeModules', 'narrativeNodes']))
-      expect(publishable.filter(spec => spec.releaseSection === 'characters').map(spec => spec.name))
-        .toEqual(expect.arrayContaining(['characters', 'characterRelations', 'workCharacterBindings']))
+      expect(publishable.every(spec => spec.worldSemantic?.area && spec.worldSemantic.resourceKind)).toBe(true)
+      expect(publishable.filter(spec => spec.worldSemantic?.area === 'outline').map(spec => spec.name))
+        .toEqual(expect.arrayContaining(['outlineNodes']))
+      expect(publishable.filter(spec => spec.worldSemantic?.area === 'detailed-outline').map(spec => spec.name))
+        .toEqual(expect.arrayContaining(['detailedOutlines']))
+      expect(publishable.filter(spec => spec.worldSemantic?.area === 'story').map(spec => spec.name))
+        .toEqual(expect.arrayContaining(['storyCores']))
+      expect(publishable.filter(spec => spec.worldSemantic?.area === 'characters').map(spec => spec.name))
+        .toEqual(expect.arrayContaining(['characters', 'workCharacterBindings']))
+      expect(publishable.filter(spec => spec.worldSemantic?.area === 'relations').map(spec => spec.name))
+        .toEqual(expect.arrayContaining(['characterRelations']))
+      const names = publishable.map(spec => spec.name)
+      expect(names).not.toEqual(expect.arrayContaining([
+        'productMediaAssets', 'productMediaBlobs', 'productBuilds', 'productReleases',
+        'productRuntimeSessions', 'narrativeModules', 'narrativeNodes',
+      ]))
     })
   })
 
@@ -136,19 +152,34 @@ describe('Phase 1.1a · PROJECT_TABLES 注册表', () => {
     })
   })
 
-  describe('派生生命周期 API 行为', () => {
+  describe('当前生命周期 API 行为', () => {
     beforeEach(async () => { await db.delete(); await db.open() })
     afterEach(async () => { db.close() })
 
     it('cascadeDeleteProject 清空所有项目级数据(含间接归属 blob)', async () => {
       const now = Date.now()
-      const projectId = await db.projects.add({
-        name: 'P', genre: '', description: '', targetWordCount: 0,
-        enableMultiWorld: false, createdAt: now, updatedAt: now,
-      } as any) as number
+      const createdWorkspaceV1 = await seedCurrentWorkspace('P', { genres: [], targetWordCount: 0 })
+      const { projectId, worldId } = createdWorkspaceV1.scope
 
-      await db.worldviews.add({ projectId, worldOrigin: 'x', createdAt: now, updatedAt: now } as any)
-      await db.characters.add({ projectId, name: 'A', role: 'protagonist', createdAt: now, updatedAt: now } as any)
+      await db.worldviews.add({ projectId, worldId, worldOrigin: 'x', createdAt: now, updatedAt: now } as any)
+      await db.characters.add({
+        projectId,
+        worldId,
+        name: 'A',
+        roleWeight: 'main',
+        moralAxis: 'neutral',
+        orderAxis: 'neutral',
+        shortDescription: '',
+        appearance: '',
+        personality: '',
+        background: '',
+        motivation: '',
+        abilities: '',
+        relationships: '',
+        arc: '',
+        createdAt: now,
+        updatedAt: now,
+      } as any)
       const sessionId = await db.importSessions.add({
         projectId, type: 'character', status: 'done', filename: 'f', fileSize: 1,
         fileHash: 'h', totalChunks: 1, completedChunks: 1, parsedSummary: {} as any,
@@ -187,25 +218,30 @@ describe('Phase 1.1a · PROJECT_TABLES 注册表', () => {
 
     it('cascadeDeleteGroup 删世界数据 + 所有词条分类保留 + 大纲 setNull', async () => {
       const now = Date.now()
-      const projectId = await db.projects.add({
-        name: 'P', genre: '', description: '', targetWordCount: 0,
-        enableMultiWorld: true, createdAt: now, updatedAt: now,
-      } as any) as number
+      const createdWorkspaceV1 = await seedCurrentWorkspace('P', {
+        genres: [],
+        targetWordCount: 0,
+        enableMultiWorld: true,
+      })
+      const { projectId, worldId, workId } = createdWorkspaceV1.scope
       const wgId = await db.worldGroups.add({
-        projectId, name: '斗破', type: 'parallel', order: 1, createdAt: now, updatedAt: now,
+        projectId, worldId, name: '斗破', type: 'parallel', order: 1, createdAt: now, updatedAt: now,
+      } as any) as number
+      const otherWorldGroupId = await db.worldGroups.add({
+        projectId, worldId, name: '异界', type: 'parallel', order: 2, createdAt: now, updatedAt: now,
       } as any) as number
 
-      await db.worldviews.add({ projectId, worldGroupId: wgId, worldOrigin: 'x', createdAt: now, updatedAt: now } as any)
+      await db.worldviews.add({ projectId, worldId, worldGroupId: wgId, worldOrigin: 'x', createdAt: now, updatedAt: now } as any)
       // 内置词条分类(builtInKey 非空,worldGroupId=null)应保留
       const categoryId = await db.codexCategories.add({ projectId, worldGroupId: null, builtInKey: 'mineral', domain: 'natural', name: '矿物', createdAt: now, updatedAt: now } as any) as number
-      // 自定义分类也是项目级共享 schema，即使旧备份带 worldGroupId 也不能随世界删除
-      await db.codexCategories.add({ projectId, worldGroupId: wgId, domain: 'natural', name: '旧自定义分类', createdAt: now, updatedAt: now } as any)
+      // 自定义分类同样是项目级共享 schema，不随任何世界组删除。
+      await db.codexCategories.add({ projectId, worldGroupId: null, domain: 'natural', name: '自定义分类', createdAt: now, updatedAt: now } as any)
       const doomedEntryId = await db.codexEntries.add({
         projectId, worldGroupId: wgId, categoryId, name: '玄铁', fields: '{}', refs: '{}',
         createdAt: now, updatedAt: now,
       } as any) as number
       const survivorId = await db.codexEntries.add({
-        projectId, worldGroupId: 999, categoryId, name: '异界器物', fields: '{}',
+        projectId, worldGroupId: otherWorldGroupId, categoryId, name: '异界器物', fields: '{}',
         refs: JSON.stringify({ material: [doomedEntryId] }), createdAt: now, updatedAt: now,
       } as any) as number
       const systemId = await db.cultivationSystems.add({
@@ -213,12 +249,14 @@ describe('Phase 1.1a · PROJECT_TABLES 注册表', () => {
         createdAt: now, updatedAt: now,
       } as any) as number
       const characterId = await db.characters.add({
-        projectId, name: '旅者', role: 'protagonist',
+        projectId, worldId, name: '旅者', roleWeight: 'main', moralAxis: 'neutral', orderAxis: 'neutral',
+        shortDescription: '', appearance: '', personality: '', background: '', motivation: '', abilities: '',
+        relationships: '', arc: '',
         cultivationSystemId: systemId, cultivationStageId: 'root',
         createdAt: now, updatedAt: now,
       } as any) as number
       // 大纲卷挂该世界 → 应被 setNull 不删
-      const nodeId = await db.outlineNodes.add({ projectId, worldGroupId: wgId, parentId: null, type: 'volume', title: '第一卷', summary: '', order: 0, createdAt: now, updatedAt: now } as any) as number
+      const nodeId = await db.outlineNodes.add({ projectId, workId, worldGroupId: wgId, parentId: null, type: 'volume', title: '第一卷', summary: '', order: 0, createdAt: now, updatedAt: now } as any) as number
 
       await cascadeDeleteGroup(projectId, wgId)
 
@@ -239,25 +277,23 @@ describe('Phase 1.1a · PROJECT_TABLES 注册表', () => {
       expect(await db.worldGroups.get(wgId), '世界组本身删').toBeUndefined()
     })
 
-    it('stampPrimaryWorld 盖章所有 null,但内置词条分类不盖', async () => {
+    it('assignUnscopedRecordsToPrimaryWorld 归属所有 null，但内置词条分类不参与', async () => {
       const now = Date.now()
-      const projectId = await db.projects.add({
-        name: 'P', genre: '', description: '', targetWordCount: 0,
-        enableMultiWorld: false, createdAt: now, updatedAt: now,
-      } as any) as number
+      const createdWorkspaceV1 = await seedCurrentWorkspace('P', { genres: [], targetWordCount: 0 })
+      const { projectId, worldId, workId } = createdWorkspaceV1.scope
       const primaryId = await db.worldGroups.add({
-        projectId, name: '主世界', type: 'primary', order: 0, createdAt: now, updatedAt: now,
+        projectId, worldId, name: '主世界', type: 'primary', order: 0, createdAt: now, updatedAt: now,
       } as any) as number
 
-      await db.worldviews.add({ projectId, worldOrigin: 'x', createdAt: now, updatedAt: now } as any)
-      await db.outlineNodes.add({ projectId, parentId: null, type: 'volume', title: 'V', summary: '', order: 0, createdAt: now, updatedAt: now } as any)
+      await db.worldviews.add({ projectId, worldId, worldOrigin: 'x', createdAt: now, updatedAt: now } as any)
+      await db.outlineNodes.add({ projectId, workId, parentId: null, type: 'volume', title: 'V', summary: '', order: 0, createdAt: now, updatedAt: now } as any)
       await db.codexCategories.add({ projectId, worldGroupId: null, builtInKey: 'mineral', domain: 'natural', name: '矿物', createdAt: now, updatedAt: now } as any)
       const cultivationId = await db.cultivationSystems.add({
-        projectId, worldGroupId: null, name: '单世界修炼', description: '', stages: '[]',
+        projectId, worldId, worldGroupId: null, name: '单世界修炼', description: '', stages: '[]',
         createdAt: now, updatedAt: now,
       } as any) as number
 
-      await stampPrimaryWorld(projectId, primaryId)
+      await assignUnscopedRecordsToPrimaryWorld(projectId, primaryId)
 
       const wv = await db.worldviews.where('projectId').equals(projectId).first()
       expect(wv?.worldGroupId, 'worldview 盖章').toBe(primaryId)

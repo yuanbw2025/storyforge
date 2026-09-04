@@ -7,7 +7,7 @@ import {
 } from './sidebar-tree'
 import ContentTypeBadge from './ContentTypeBadge'
 
-// 重导出供其他组件用（保留旧 import 路径）
+// Public sidebar module type.
 export type { SidebarModule }
 
 // ── Props ─────────────────────────────────────────────────────────────
@@ -24,22 +24,10 @@ interface SidebarProps {
   secondaryModules?: Set<SidebarModule>
 }
 
-/** legacy → new 别名映射（路由层兼容） */
-const LEGACY_ALIASES: Partial<Record<SidebarModule, SidebarModule>> = {
-  'story-core':      'story-design',
-  'backup':          'data-management',
-  'detailed-outline': 'chapters-list',
-  'editor':          'chapters-list',
-}
-
-function normalize(m: SidebarModule): SidebarModule {
-  return LEGACY_ALIASES[m] ?? m
-}
-
 export default function Sidebar({
   active, onSelect, onBack, projectName, collapsed, onToggleCollapse, hiddenModules, secondaryModules,
 }: SidebarProps) {
-  const normActive = normalize(active)
+  const normActive = active
   const [showSecondary, setShowSecondary] = useState(false)
   const foldedModules = !showSecondary && !secondaryModules?.has(normActive) ? secondaryModules : undefined
 

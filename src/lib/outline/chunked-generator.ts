@@ -7,7 +7,7 @@
  */
 import type { ChatMessage } from '../types'
 import { executeRegisteredAIEntryV1 } from '../agent/formal-ai-entry'
-import { parseChapterOutlineSmart, type ParsedChapter } from '../ai/parse-outline-output'
+import { parseChapterOutlineOutput, type ParsedChapter } from '../ai/parse-outline-output'
 import { useAIConfigStore } from '../../stores/ai-config'
 import { divideChaptersIntoBlocks, getBlockLabels, type ChunkedGenerationConfig } from './generation-modes'
 import { NarrativeEngine, type ChapterFocus } from './narrative-engine'
@@ -396,7 +396,7 @@ async function generateBlockChapters(
       projectId: options.volumeId,
     })
 
-    const parsed = await parseChapterOutlineSmart(rawOutput, config)
+    const parsed = parseChapterOutlineOutput(rawOutput)
 
     if (options.config.enableNarrativeEngine && parsed.length > 0) {
       const hasReveal = parsed.some(ch => /揭秘|发现|真相/.test(ch.summary))

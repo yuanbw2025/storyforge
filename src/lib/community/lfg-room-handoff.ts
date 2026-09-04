@@ -1,4 +1,4 @@
-import { hashGameProductionValueV2 } from '../game-production/hash'
+import { hashProductProductionValueV2 } from '../product-production/hash'
 import type { HostedFormalTtrpgRoomRegistryV1 } from '../online/ttrpg-room-registry'
 import {
   CommunityAuthorityErrorV1,
@@ -138,7 +138,7 @@ export class CommunityLfgRoomHandoffServiceV1 {
         postId, applicationId: binding.applicationId, applicantId: application.userId,
         roomId, releaseHash, actorKey: binding.actorKey, expiresAt: input.expiresAt,
       }
-      const contextHash = await hashGameProductionValueV2(context)
+      const contextHash = await hashProductProductionValueV2(context)
       const secretId = `secret.lfg-room.${contextHash}`
       const secretResult = await this.input.vault.putIfAbsent({
         secretId, contextHash,
@@ -180,7 +180,7 @@ export class CommunityLfgRoomHandoffServiceV1 {
       || record.releaseHash !== authorized.post.releaseHash || record.expiresAt <= (this.input.now?.() ?? Date.now())) {
       throw new CommunityAuthorityErrorV1('handoff_invalid', '房间交接已过期或与申请不一致')
     }
-    const contextHash = await hashGameProductionValueV2({
+    const contextHash = await hashProductProductionValueV2({
       postId: record.postId, applicationId, applicantId: record.applicantId,
       roomId: record.roomId, releaseHash: record.releaseHash, actorKey: record.actorKey,
       expiresAt: record.expiresAt,

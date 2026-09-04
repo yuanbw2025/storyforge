@@ -29,12 +29,11 @@ import type {
   WorkspaceScope,
 } from '../types'
 import {
-  isLegacyReadScope,
   readOwnedRows,
   resolveReadScopeLike,
   resolveScope,
   scopeTransactionTables,
-} from '../world-engine/scope'
+} from '../workspace/scope'
 import {
   attachAgentContextInputStateV1,
   evidenceFromContextResult,
@@ -355,7 +354,9 @@ export async function prepareCharacterCopilot(input: {
   }
   const worldGroupId = project.enableMultiWorld ? input.worldGroupId : null
   const readScope = input.scope ?? await resolveReadScopeLike(input.projectId)
-  const scope = isLegacyReadScope(readScope) ? undefined : readScope
+  const scope = readScope
+  const work = await db.works.get(scope.workId)
+  if (!work || work.projectId !== input.projectId) throw new Error('当前作品不存在。')
   const beforeRead = await readCharacterRosterSnapshot(input.projectId, worldGroupId, scope)
   const routingCategory = input.routingCategory ?? 'character.generate'
   const config = input.configOverride ?? resolveRequestConfig(
@@ -368,7 +369,7 @@ export async function prepareCharacterCopilot(input: {
   const contextPolicy = resolveAgentContextPolicy(skill.contextTaskKind, contextProfile)
   const gatewayRequired = isContextGatewayRequiredForWriteTargetV1(skill, 'characters.name')
   if (gatewayRequired && !scope) {
-    throw new Error('角色创建 Gateway required 入口需要稳定 WorkspaceScope，旧项目必须先完成所有权迁移。')
+    throw new Error('角色创建 Gateway required 入口需要完整的当前 WorkspaceScope。')
   }
   const contextGatewayExecution = gatewayRequired
     ? await executeContextGatewayV1({
@@ -405,8 +406,8 @@ export async function prepareCharacterCopilot(input: {
   const nodeInput: CharacterCopilotInput = {
     projectId: input.projectId,
     scope,
-    projectName: project.name,
-    genres: project.genres?.join('/') || project.genre || '',
+    projectName: work.title,
+    genres: work.genres.join('/'),
     worldGroupId,
     authorRequest,
     inputGuidance,
@@ -429,7 +430,7 @@ export async function prepareCharacterCopilot(input: {
     const rendered = await renderFrozenPromptExecutionV1({
       options: input.promptExecution,
       context: {
-        projectName: project.name,
+        projectName: work.title,
         genres: nodeInput.genres,
         worldContext: nodeInput.worldContext || '（暂无）',
         existingCharacters: nodeInput.characterContext || '（暂无）',

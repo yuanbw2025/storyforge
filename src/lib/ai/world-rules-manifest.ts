@@ -244,7 +244,7 @@ export function estimateManifestTokens(manifestText: string): number {
 
 // ── 便捷：从 DB 读取并生成完整清单 ────────────────────────────
 
-import { readOwnedRows, resolveScope } from '../world-engine/scope'
+import { readOwnedRows, resolveScope } from '../workspace/scope'
 import type { WorkspaceScope } from '../types/world-ownership'
 
 /**

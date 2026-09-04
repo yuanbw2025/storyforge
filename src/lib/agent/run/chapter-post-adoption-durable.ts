@@ -28,7 +28,7 @@ import {
   staleAgentRunVerificationV1,
   type AgentRunSnapshotV1,
 } from './event-store'
-import { PROSE_GENERATION_VERIFIER_SET_V1, PROSE_GENERATION_VERIFIER_SET_V2, PROSE_GENERATION_VERIFIER_SET_V3 } from './prose-generation-durable'
+import { PROSE_GENERATION_VERIFIER_SET_V2, PROSE_GENERATION_VERIFIER_SET_V3 } from './prose-generation-durable'
 import { createVerificationReceiptV1 } from './verification-receipt'
 import { hashCanonicalValue } from './hash'
 import type { AgentRunFailureActionV1, AgentRunFailureCategoryV1 } from '../../types/agent-run'
@@ -36,7 +36,7 @@ import { verifyContextManifestIntegrityV1 } from './context-manifest'
 import {
   assertRecordInScope,
   readOwnedRows,
-} from '../../world-engine/scope'
+} from '../../workspace/scope'
 import {
   preflightPostAdoptionAutoV1,
   type PostAdoptionAuthorizationSnapshotV1,
@@ -62,7 +62,6 @@ const ORGANIZATION_SKILL_V1 = getAgentSkillV1('prose.organize', 'prose')
 const MEMORY_SKILL_V1 = getAgentSkillV1('prose.memory', 'prose')
 const CONSISTENCY_SKILL_V1 = getAgentSkillV1('prose.consistency', 'prose')
 const PROSE_TERMINAL_VERIFIERS_V1 = new Set<string>([
-  PROSE_GENERATION_VERIFIER_SET_V1,
   PROSE_GENERATION_VERIFIER_SET_V2,
   PROSE_GENERATION_VERIFIER_SET_V3,
 ])
@@ -137,7 +136,7 @@ export type ChapterPostAdoptionChainStateV1 =
   | 'downstream-failed'
   | 'downstream-completed'
   | 'upstream-invalid'
-  | 'legacy-unlinked'
+  | 'unlinked'
 
 export interface ChapterPostAdoptionDurableEvidenceV1 {
   runId: number
@@ -444,11 +443,11 @@ async function assertChapterPostAdoptionLineageCurrentV1(
 export function chapterPostAdoptionChainStateV1(
   snapshot: AgentRunSnapshotV1 | null,
 ): ChapterPostAdoptionChainStateV1 {
-  if (!snapshot) return 'legacy-unlinked'
+  if (!snapshot) return 'unlinked'
   if (snapshot.projection.state === 'completed' && snapshot.projection.terminalReceiptHash) return 'downstream-completed'
   const authorization = snapshot.projection.steps[CHAPTER_POST_ADOPTION_STEP_IDS_V1.authorization]
   if (authorization?.status === 'awaiting_confirmation') return 'downstream-suggested'
-  if (!snapshot.contract.lineage?.parent) return 'legacy-unlinked'
+  if (!snapshot.contract.lineage?.parent) return 'unlinked'
   const steps = Object.values(snapshot.projection.steps)
   if (snapshot.projection.state === 'awaiting_confirmation' || steps.some(step => step.status === 'awaiting_confirmation')) {
     return 'downstream-awaiting-confirmation'

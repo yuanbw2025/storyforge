@@ -22,7 +22,7 @@ import {
   readOwnedRows,
   resolveScope,
   scopeTransactionTables,
-} from '../world-engine/scope'
+} from '../workspace/scope'
 import type { OutlineNode } from '../types'
 import {
   assertWorkspaceContentRevisionFreshV1,
@@ -169,6 +169,7 @@ export async function persistOutlineGenerationCandidateV1(input: {
     persistCandidate: () => appendAgentEvent({
         projectId: input.scope.projectId,
         conversationId: input.conversationId,
+        durableRunId: input.durable.runId,
         kind: 'candidate',
         role: 'assistant',
         content: input.output,

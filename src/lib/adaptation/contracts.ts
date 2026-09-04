@@ -7,7 +7,7 @@ import type {
   ScreenplayTargetSpecV1,
   Work,
 } from '../types'
-import { effectiveWorkKind } from '../world-engine/work-kind'
+import { effectiveWorkKind } from '../workspace/work-kind'
 
 const MAX_BRIEF_BYTES = 64_000
 const MAX_PLAN_BYTES = 128_000

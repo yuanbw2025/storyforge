@@ -31,10 +31,10 @@ function compareChapterCandidates(a: Chapter, b: Chapter): number {
 /**
  * Pick the canonical chapter row for one outline node.
  *
- * Historical data can contain duplicate `chapters` rows for the same
- * `outlineNodeId`. Prefer the row that actually has prose, then the larger
+ * A damaged or concurrent write can leave duplicate `chapters` rows for the
+ * same `outlineNodeId`. Prefer the row that actually has prose, then the larger
  * effective word count, then the latest edit time. Ties keep the lowest id so
- * legacy deterministic ordering is preserved.
+ * corruption recovery remains deterministic.
  */
 export function pickBestChapterForOutline(chapters: Chapter[]): Chapter | undefined {
   if (chapters.length === 0) return undefined

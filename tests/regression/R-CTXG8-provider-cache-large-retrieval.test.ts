@@ -9,15 +9,14 @@ import {
   restoreContextGatewayCacheReliabilityV1,
 } from '../../src/lib/context-gateway/provider-cache'
 import { planNarrativeRetrievalV1 } from '../../src/lib/context-gateway/narrative-retrieval'
-import { generateWorkspaceUid } from '../../src/lib/memory/identity'
 import type {
   ContextResourceDescriptorV1,
   ContextResourceProviderV1,
   FrozenResourceScopeV1,
   WorkspaceScope,
 } from '../../src/lib/types'
-import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
-import { stampNewRecord } from '../../src/lib/world-engine/scope'
+import { stampNewRecord } from '../../src/lib/workspace/scope'
+import { createWorkspace } from '../../src/lib/workspace/create-workspace'
 
 const NOW = 1_787_900_000_000
 const HASH_A = 'a'.repeat(64)
@@ -97,13 +96,10 @@ function fakeProvider(input: {
 }
 
 async function seedWorkspace(name = 'CTXG-8 缓存与长篇') {
-  const projectId = await db.projects.add({
-    workspaceUid: generateWorkspaceUid(), name, genre: 'fantasy', genres: ['fantasy'],
-    status: 'drafting', description: '', targetWordCount: 1_000_000,
-    createdAt: NOW, updatedAt: NOW,
-  } as any) as number
-  const ownership = await ensureWorkspaceOwnership(projectId)
-  return { projectId, scope: ownership.scope }
+  const created = await createWorkspace({
+    name, genres: ['fantasy'], status: 'drafting', description: '', targetWordCount: 1_000_000,
+  }, { purpose: 'independent-work', kind: 'novel', novelProfile: 'long' })
+  return { projectId: created.scope.projectId, scope: created.scope }
 }
 
 async function addScoped(

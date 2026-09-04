@@ -2,12 +2,14 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { adoptChapterOutlineWorkshopResult } from '../../src/lib/outline/adopt-workshop'
 import { db } from '../../src/lib/db/schema'
 import { assembleContext } from '../../src/lib/registry/assemble-context'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
+import { seedCurrentProject } from '../helpers/current-workspace'
 
 async function seed() {
   const now = Date.now()
-  const projectId = await db.projects.add({
+  const projectId = await seedCurrentProject({
     name: '工坊采纳',
-    genre: '',
+    genres: [],
     description: '',
     targetWordCount: 0,
     enableMultiWorld: false,
@@ -28,11 +30,22 @@ async function seed() {
     projectId,
     name: '林舟',
     roleWeight: 'main',
-    moralAxis: 'gray',
+    moralAxis: 'neutral',
     orderAxis: 'neutral',
+    shortDescription: '',
+    appearance: '',
+    personality: '',
+    background: '',
+    motivation: '',
+    abilities: '',
+    relationships: '',
+    arc: '',
+    homeWorldGroupId: null,
+    isCrossWorld: false,
     createdAt: now,
     updatedAt: now,
   } as any) as number
+  await finalizeCurrentFixtureV1(projectId)
   return { projectId, outlineNodeId, characterId }
 }
 

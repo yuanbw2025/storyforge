@@ -1,5 +1,5 @@
 import { hashCanonicalValue } from "../agent/run/hash";
-import type { SimulationTtrpgModelEvidenceV1 } from "../types";
+import type { TtrpgRuntimeModelEvidenceV1 } from "../types";
 import { evaluateTtrpgGmCandidateOutputV1 } from "./gm-harness";
 import type { TtrpgGmRuntimeViewV1 } from "./gm-context";
 
@@ -22,7 +22,7 @@ export interface TtrpgGmOperationalEvalSampleV1 {
   protocolAccepted: boolean;
   secretLeak: boolean;
   stateContradiction: boolean;
-  modelEvidence: SimulationTtrpgModelEvidenceV1;
+  modelEvidence: TtrpgRuntimeModelEvidenceV1;
 }
 
 export interface TtrpgGmOperationalGateV1 {
@@ -250,26 +250,89 @@ function sealedView(): TtrpgGmRuntimeViewV1 {
         total: 11,
         dc: 8,
         success: true,
+        visibility: "public",
         rule: {
           actionKey: "investigate",
           checkKey: "standard",
           attributeKey: "mind",
+          skillKey: null,
+          skillValue: null,
           diceModelKey: "two-d6",
           rolledDice: [4, 5],
           keptDice: [4, 5],
           degree: "success",
+          mode: "total-vs-target",
+          successes: null,
+          winnerRef: null,
+          tiedRefs: [],
+          calculationTrace: ["11 >= 8"],
+          opponent: null,
           proofHash: "d".repeat(64),
-          rollTrace: null,
-          seedCommitment: null,
-          nonce: null,
+          rollTrace: { algorithm: "uint32-rejection-v2", sides: 6, requestedDice: 2, consumedSamples: 2, rejectedSamples: 0 },
+          seedCommitment: "e".repeat(64),
+          nonce: "gm-eval",
           rulePackContentHash: "c".repeat(64),
         },
       },
       resourceChanges: [],
       conditionChanges: [],
       abilityChange: null,
+      actorAuthority: null,
       nextActorKey: "player.1",
       nextRound: 2,
+      receipt: {
+        schema: "storyforge.ttrpg-action-receipt",
+        version: 2,
+        receiptKey: "action-receipt.8",
+        actionSequence: 8,
+        terminalStatus: "resolved-check",
+        context: {
+          schema: "storyforge.ttrpg-action-context",
+          version: 2,
+          sceneKey: "scene.current",
+          sceneSnapshot: {
+            title: "潮汐档案室",
+            description: "玩家正在核对一份受损记录。",
+            locationKey: "location.archive",
+            failureForward: "失败仍得到残缺时间戳。",
+            gmSecret: "馆长在午夜前偷偷调换了蓝色封皮的原始账册。",
+          },
+          round: 1,
+          activeActorKey: "player.1",
+          actorKey: "player.1",
+          actorController: "human",
+          targetKey: null,
+          actionKey: "investigate",
+          actionPhase: "action",
+          declaredIntent: null,
+          checkSnapshot: {
+            checkKey: "standard", attributeKey: "mind", attributeValue: 2,
+            skillKey: null, skillValue: null, diceModelKey: "two-d6", difficulty: 8,
+          },
+          criticality: "meaningful",
+          criticalityReasons: ["关键线索检定"],
+          actorConditionKeys: [],
+          actorInventoryInstanceIds: [],
+          grantingItemInstanceIds: [],
+          abilityStateKey: "ability.investigate",
+          abilityUsesBefore: null,
+          abilityCooldownBefore: 0,
+          activeQuestKeys: ["quest.truth"],
+          discoveredConclusionKeys: [],
+          observers: [],
+          reactionWindows: [],
+          reactionCandidates: [],
+        },
+        mechanicalSummary: "林舟执行调查并成功发现时间差。",
+        actorConsequence: "林舟获得一条可继续核对的线索。",
+        sceneConsequence: "档案室的时间线出现可见缺口。",
+        worldConsequence: "没有自动改写世界事实。",
+        failForwardAvailable: true,
+        changedEntityKeys: [],
+        suggestedNextActionKeys: [],
+        nextActorKey: "player.1",
+        nextRound: 2,
+      },
     },
     participants: [
       {
@@ -338,6 +401,17 @@ const valid = (
 ) =>
   JSON.stringify({
     narration,
+    synthesisFrame: {
+      schema: "storyforge.ttrpg-gm-synthesis-frame",
+      version: 2,
+      actionSequence: 8,
+      mechanicalOutcome: "林舟执行调查并成功发现时间差。",
+      actorFeedback: "林舟获得一条可继续核对的线索。",
+      reactions: [],
+      sceneUpdate: "档案室的时间线出现可见缺口。",
+      worldUpdate: "没有自动改写世界事实。",
+      nextPrompts: [],
+    },
     offeredClueKeys,
     recommendedNextSceneKeys,
   });

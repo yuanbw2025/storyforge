@@ -1,10 +1,11 @@
 import { CTextarea } from '../shared/CompositionInput'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Save, X, ChevronDown } from 'lucide-react'
 import { useProjectStore } from '../../stores/project'
 import { useWorldGroupStore } from '../../stores/world-group'
 import type { Project } from '../../lib/types'
 import { GENRE_OPTIONS } from '../../lib/types'
+import { useActiveWork } from '../../hooks/useActiveWork'
 
 // 按 group 分组
 const GENRE_GROUPS = Array.from(
@@ -21,29 +22,38 @@ interface ProjectInfoPanelProps {
 }
 
 export default function ProjectInfoPanel({ project, onUpdate }: ProjectInfoPanelProps) {
-  const { updateProject } = useProjectStore()
+  const { updateWorkspace, updateActiveWork } = useProjectStore()
+  const activeWork = useActiveWork(project)
   const [form, setForm] = useState({
-    name: project.name,
-    genre: project.genre,
-    genres: project.genres?.length ? project.genres : (project.genre ? [project.genre] : []),
-    description: project.description,
-    targetWordCount: project.targetWordCount,
+    title: '',
+    genres: [] as string[],
+    description: '',
+    targetWordCount: 500_000,
   })
   const [saving, setSaving] = useState(false)
   const [showGenreDropdown, setShowGenreDropdown] = useState(false)
 
+  useEffect(() => {
+    if (!activeWork) return
+    setForm({
+      title: activeWork.title,
+      genres: [...activeWork.genres],
+      description: activeWork.description,
+      targetWordCount: activeWork.targetWordCount,
+    })
+  }, [activeWork])
+
   const handleSave = async () => {
-    if (!project.id) return
+    if (!project.id || !activeWork) return
     setSaving(true)
     const updates = {
-      name: form.name,
-      genre: form.genres[0] || form.genre,
+      title: form.title,
       genres: form.genres,
       description: form.description,
       targetWordCount: form.targetWordCount,
     }
-    await updateProject(project.id, updates)
-    onUpdate({ ...project, ...updates, updatedAt: Date.now() })
+    await updateActiveWork(project.id, updates)
+    onUpdate(project)
     setSaving(false)
   }
 
@@ -80,11 +90,11 @@ export default function ProjectInfoPanel({ project, onUpdate }: ProjectInfoPanel
 
       <div className="space-y-5">
         <div>
-          <label className="block text-sm text-text-secondary mb-1.5">项目名称</label>
+          <label className="block text-sm text-text-secondary mb-1.5">作品名称</label>
           <input
             type="text"
-            value={form.name}
-            onChange={(e) => setForm({ ...form, name: e.target.value })}
+            value={form.title}
+            onChange={(e) => setForm({ ...form, title: e.target.value })}
             className="w-full px-3 py-2 bg-bg-base border border-border rounded-lg text-text-primary focus:outline-none focus:border-accent transition-colors"
           />
         </div>
@@ -190,10 +200,10 @@ export default function ProjectInfoPanel({ project, onUpdate }: ProjectInfoPanel
                 const next = !project.enableMultiWorld
                 // 开启时：确保主世界组 + 把现有项目级数据归属到主世界组
                 if (next) {
-                  const migrated = await useWorldGroupStore.getState().migrateToMultiWorld(project.id)
-                  if (!migrated) return
+                  const enabled = await useWorldGroupStore.getState().enableMultiWorld(project.id)
+                  if (!enabled) return
                 }
-                await updateProject(project.id, { enableMultiWorld: next })
+                await updateWorkspace(project.id, { enableMultiWorld: next })
                 onUpdate({ ...project, enableMultiWorld: next, updatedAt: Date.now() })
               }}
               className={`relative w-10 h-5 rounded-full transition-colors shrink-0 ml-4 ${

@@ -55,9 +55,9 @@ const ALL_MODULE_KEYS: { value: PromptModuleKey; label: string }[] = [
   { value: 'geography.concept-map',       label: '地理 · 概念地图 SVG' },
   { value: 'geography.image-map-prompt',  label: '地理 · 图像 Prompt' },
   { value: 'import.parse-all',            label: '导入 · 智能统一解析' },
-  { value: 'import.parse-character',      label: '导入 · 角色解析（旧版）' },
-  { value: 'import.parse-worldview',      label: '导入 · 世界观解析（旧版）' },
-  { value: 'import.parse-outline',        label: '导入 · 大纲解析（旧版）' },
+  { value: 'import.parse-character',      label: '导入 · 角色专项解析' },
+  { value: 'import.parse-worldview',      label: '导入 · 世界观专项解析' },
+  { value: 'import.parse-outline',        label: '导入 · 大纲专项解析' },
   { value: 'style.learn',                 label: '文风 · 画像学习' },
   { value: 'style.calibrate',             label: '文风 · 互动校准' },
 ]
@@ -398,13 +398,13 @@ export default function PromptTemplateEditor({ template, onChanged, onDeleted }:
                   {binding.manual && <span className="text-text-muted">可人工补充</span>}
                 </div>
                 <div className="mt-1 flex flex-wrap gap-1 text-[10px] text-text-secondary">
-                  {binding.projectField && (
-                    <span className="px-1.5 py-0.5 bg-bg-base rounded">项目字段：{binding.projectField}</span>
+                  {binding.workField && (
+                    <span className="px-1.5 py-0.5 bg-bg-base rounded">项目字段：{binding.workField}</span>
                   )}
                   {binding.sourceKeys?.map(sourceKey => (
                     <span key={sourceKey} className="px-1.5 py-0.5 bg-bg-base rounded">上下文：{sourceKey}</span>
                   ))}
-                  {!binding.projectField && !binding.sourceKeys?.length && (
+                  {!binding.workField && !binding.sourceKeys?.length && (
                     <span className="px-1.5 py-0.5 bg-bg-base rounded">人工输入</span>
                   )}
                 </div>

@@ -1,26 +1,25 @@
-import type { Project } from '../types'
+import { db } from '../db/schema'
+import { isShareableWorld } from './world-identity'
 import { PROJECT_TABLES } from '../registry/project-tables'
-import type { WorldDomainArea } from '../registry/types'
+import type { WorldCapabilityArea } from '../registry/types'
+import type { CommunityWorldOrigin, Project, Work, World, WorkspaceScope } from '../types'
+import { assertRecordInScope } from '../workspace/scope'
 
-/**
- * 世界引擎当前阶段的兼容领域投影。
- *
- * 这是从现有 Project + 已登记业务表派生的只读视图，不是新的持久化根对象。
- * WORLD-2C 再把它迁移为显式 World/Work 关系前，旧 Project 仍是本地存储边界。
- */
+/** ARCH-07A: semantic-only capability projection for one explicit world draft. */
 export interface WorldProjection {
   kind: 'world'
   id: string
   projectId: number
+  worldId: number
   code: string
   version: number
   name: string
   description: string
+  communityOrigin?: CommunityWorldOrigin
   completeness: number
   readiness: 'empty' | 'building' | 'usable'
-  domains: Record<WorldDomainArea, WorldDomainSummary>
+  domains: Record<WorldCapabilityArea, WorldDomainSummary>
   work: WorkProjection
-  runtime: RuntimeProjection
 }
 
 export interface WorkProjection {
@@ -28,18 +27,14 @@ export interface WorkProjection {
   id: string
   projectId: number
   title: string
+  description: string
+  genres: string[]
   sourceWorldId: string
   currentWordCount: number
 }
 
-export interface RuntimeProjection {
-  instanceCount: number
-  eventCount: number
-  checkpointCount: number
-}
-
 export interface WorldDomainSummary {
-  key: WorldDomainArea
+  key: WorldCapabilityArea
   label: string
   description: string
   tableCount: number
@@ -56,47 +51,34 @@ export interface WorldTableSummary {
 }
 
 const DOMAIN_DEFINITIONS: ReadonlyArray<{
-  key: WorldDomainArea
+  key: WorldCapabilityArea
   label: string
   description: string
   requiredTables: readonly string[]
 }> = [
-  {
-    key: 'foundation',
-    label: '世界基础 Canon',
-    description: '规则、起源、自然、人文、空间、历史与能力体系。',
-    requiredTables: ['worldviews', 'worldRulesProfiles'],
-  },
-  {
-    key: 'assets',
-    label: '世界资产',
-    description: '角色、关系、地点、物品、词条和可复用实体。',
-    requiredTables: ['characters'],
-  },
-  {
-    key: 'narrative',
-    label: '叙事设计',
-    description: '故事核心、主线、支线、故事弧、大纲、细纲和伏笔。',
-    requiredTables: ['storyCores', 'outlineNodes'],
-  },
-  {
-    key: 'structure',
-    label: '世界结构',
-    description: '单世界区域、多位面、多世界和通道关系。',
-    requiredTables: ['worldGroups'],
-  },
-  {
-    key: 'runtime',
-    label: '状态与实例',
-    description: '事件、状态机、检查点和独立运行实例。',
-    requiredTables: ['simulationSessions'],
-  },
+  { key: 'foundation', label: '世界基础', description: '自然、人文、历史、规则和力量体系。', requiredTables: ['worldviews'] },
+  { key: 'story', label: '故事语义', description: '故事核心、年表、事实、伏笔与演化证据。', requiredTables: ['storyCores'] },
+  { key: 'characters', label: '角色', description: '角色身份、状态和人物设定。', requiredTables: ['characters'] },
+  { key: 'relations', label: '关系与认知', description: '角色关系及已确认的角色认知。', requiredTables: [] },
+  { key: 'entities', label: '实体与地点', description: '地点、物品、组织、词条和空间节点。', requiredTables: [] },
+  { key: 'storylines', label: '主线与支线', description: '故事线、推进状态和交汇关系。', requiredTables: ['storyArcs'] },
+  { key: 'outline', label: '大纲', description: '卷纲、章纲和稳定叙事结构。', requiredTables: ['outlineNodes'] },
+  { key: 'detailed-outline', label: '细纲', description: '场景级细纲、人物出场与伏笔绑定。', requiredTables: ['detailedOutlines'] },
+  { key: 'manuscript', label: '正文', description: '作者确认的章节与正文原文。', requiredTables: ['chapters'] },
+  { key: 'multi-world', label: '多世界关系', description: '子世界、位面和显式通道规则。', requiredTables: [] },
 ]
 
-const COMPLETENESS_WEIGHTS: Readonly<Record<'foundation' | 'assets' | 'narrative', number>> = {
-  foundation: 0.45,
-  assets: 0.25,
-  narrative: 0.3,
+const COMPLETENESS_WEIGHTS: Readonly<Record<WorldCapabilityArea, number>> = {
+  foundation: 0.2,
+  story: 0.15,
+  characters: 0.15,
+  relations: 0.05,
+  entities: 0.1,
+  storylines: 0.1,
+  outline: 0.1,
+  'detailed-outline': 0.05,
+  manuscript: 0.1,
+  'multi-world': 0,
 }
 
 function clampPercent(value: number): number {
@@ -109,23 +91,24 @@ function getProjectId(row: unknown): number | undefined {
   return typeof projectId === 'number' ? projectId : undefined
 }
 
+function scopeKey(scope: WorkspaceScope): string {
+  return `${scope.projectId}:${scope.worldId}:${scope.workId}`
+}
+
 function summarizeDomain(
-  projectId: number,
+  scope: WorkspaceScope,
   definition: (typeof DOMAIN_DEFINITIONS)[number],
-  countsByProject: ReadonlyMap<number, ReadonlyMap<string, number>>,
+  countsByScope: ReadonlyMap<string, ReadonlyMap<string, number>>,
 ): WorldDomainSummary {
-  const specs = PROJECT_TABLES.filter(spec => spec.worldDomains?.includes(definition.key))
-  const projectCounts = countsByProject.get(projectId)
-  const tables = specs.map(spec => ({ name: spec.name, rowCount: projectCounts?.get(spec.name) ?? 0 }))
+  const specs = PROJECT_TABLES.filter(spec => spec.worldSemantic?.area === definition.key)
+  const scopeCounts = countsByScope.get(scopeKey(scope))
+  const tables = specs.map(spec => ({ name: spec.name, rowCount: scopeCounts?.get(spec.name) ?? 0 }))
   const activeTableCount = tables.filter(table => table.rowCount > 0).length
   const coverage = specs.length === 0 ? 0 : clampPercent((activeTableCount / specs.length) * 100)
   const activeTableNames = new Set(tables.filter(table => table.rowCount > 0).map(table => table.name))
-  const hasRequiredContent = definition.requiredTables.every(table => activeTableNames.has(table))
-  const status = activeTableCount === 0
-    ? 'empty'
-    : hasRequiredContent
-      ? 'ready'
-      : 'partial'
+  const hasRequiredContent = definition.requiredTables.length === 0
+    ? activeTableCount > 0
+    : definition.requiredTables.every(table => activeTableNames.has(table))
   return {
     key: definition.key,
     label: definition.label,
@@ -134,96 +117,125 @@ function summarizeDomain(
     activeTableCount,
     rowCount: tables.reduce((sum, table) => sum + table.rowCount, 0),
     coverage,
-    status,
+    status: activeTableCount === 0 ? 'empty' : hasRequiredContent ? 'ready' : 'partial',
     tables,
   }
 }
 
-async function loadWorldDomainCounts(projectIds: ReadonlySet<number>): Promise<Map<number, Map<string, number>>> {
-  const countsByProject = new Map<number, Map<string, number>>()
-  for (const projectId of projectIds) countsByProject.set(projectId, new Map())
-  if (projectIds.size === 0) return countsByProject
-
-  const worldSpecs = PROJECT_TABLES.filter(spec => spec.worldDomains?.length)
-  const uniqueSpecs = [...new Map(worldSpecs.map(spec => [spec.name, spec])).values()]
-  const rowsByTable = await Promise.all(uniqueSpecs.map(async spec => ({
-    name: spec.name,
-    rows: await spec.table.toArray(),
-  })))
-
-  for (const { name, rows } of rowsByTable) {
+async function loadWorldDomainCounts(scopes: readonly WorkspaceScope[]): Promise<Map<string, Map<string, number>>> {
+  const countsByScope = new Map<string, Map<string, number>>()
+  const scopesByProject = new Map<number, WorkspaceScope[]>()
+  for (const scope of scopes) {
+    countsByScope.set(scopeKey(scope), new Map())
+    const projectScopes = scopesByProject.get(scope.projectId) ?? []
+    projectScopes.push(scope)
+    scopesByProject.set(scope.projectId, projectScopes)
+  }
+  if (scopes.length === 0) return countsByScope
+  const specs = PROJECT_TABLES.filter(spec => spec.worldSemantic)
+  const rowsByTable = await Promise.all(specs.map(async spec => ({ spec, rows: await spec.table.toArray() })))
+  for (const { spec, rows } of rowsByTable) {
     for (const row of rows) {
       const projectId = getProjectId(row)
-      if (projectId == null || !projectIds.has(projectId)) continue
-      const projectCounts = countsByProject.get(projectId)!
-      projectCounts.set(name, (projectCounts.get(name) ?? 0) + 1)
+      const candidateScopes = projectId == null ? undefined : scopesByProject.get(projectId)
+      if (!candidateScopes?.length) continue
+      const matches = await Promise.all(candidateScopes.map(scope => assertRecordInScope(scope, spec.name, row)))
+      for (let index = 0; index < candidateScopes.length; index += 1) {
+        if (!matches[index]) continue
+        const counts = countsByScope.get(scopeKey(candidateScopes[index]))!
+        counts.set(spec.name, (counts.get(spec.name) ?? 0) + 1)
+      }
     }
   }
-  return countsByProject
+  return countsByScope
 }
 
-function calculateCompleteness(domains: Record<WorldDomainArea, WorldDomainSummary>): number {
-  return clampPercent(
-    (domains.foundation.coverage * COMPLETENESS_WEIGHTS.foundation)
-      + (domains.assets.coverage * COMPLETENESS_WEIGHTS.assets)
-      + (domains.narrative.coverage * COMPLETENESS_WEIGHTS.narrative),
-  )
+function calculateCompleteness(domains: Record<WorldCapabilityArea, WorldDomainSummary>): number {
+  return clampPercent(Object.entries(COMPLETENESS_WEIGHTS).reduce(
+    (sum, [area, weight]) => sum + domains[area as WorldCapabilityArea].coverage * weight,
+    0,
+  ))
 }
 
-function calculateReadiness(domains: Record<WorldDomainArea, WorldDomainSummary>): WorldProjection['readiness'] {
-  if (domains.foundation.status === 'empty' && domains.narrative.status === 'empty') return 'empty'
-  if (domains.foundation.status === 'ready' && domains.assets.status !== 'empty' && domains.narrative.status !== 'empty') return 'usable'
+function calculateReadiness(domains: Record<WorldCapabilityArea, WorldDomainSummary>): WorldProjection['readiness'] {
+  if (domains.foundation.status === 'empty'
+    && domains.story.status === 'empty'
+    && domains.characters.status === 'empty') return 'empty'
+  if (domains.foundation.status !== 'empty'
+    && (domains.story.status !== 'empty' || domains.characters.status !== 'empty')) return 'usable'
   return 'building'
 }
 
 function createWorldProjection(
   project: Project & { id: number },
-  countsByProject: ReadonlyMap<number, ReadonlyMap<string, number>>,
+  world: World & { id: number },
+  work: Work & { id: number },
+  countsByScope: ReadonlyMap<string, ReadonlyMap<string, number>>,
 ): WorldProjection {
-  const summaries = DOMAIN_DEFINITIONS.map(definition => summarizeDomain(project.id, definition, countsByProject))
-  const domains = Object.fromEntries(summaries.map(summary => [summary.key, summary])) as Record<WorldDomainArea, WorldDomainSummary>
-  const runtime = domains.runtime
+  const scope = { projectId: project.id, worldId: world.id, workId: work.id }
+  const summaries = DOMAIN_DEFINITIONS.map(definition => summarizeDomain(scope, definition, countsByScope))
+  const domains = Object.fromEntries(summaries.map(summary => [summary.key, summary])) as Record<WorldCapabilityArea, WorldDomainSummary>
   return {
     kind: 'world',
-    id: `project:${project.id}`,
+    id: `world:${world.id}`,
     projectId: project.id,
-    code: project.worldCode ?? '待分配编号',
-    version: project.worldVersion ?? 1,
-    name: project.name,
-    description: project.description || '这个世界还没有写下简介。',
+    worldId: world.id,
+    code: world.code,
+    version: world.currentVersion,
+    name: world.name,
+    description: world.description || '这个世界还没有写下简介。',
+    communityOrigin: world.communityOrigin,
     completeness: calculateCompleteness(domains),
     readiness: calculateReadiness(domains),
     domains,
     work: {
       kind: 'work',
-      id: `project:${project.id}:work:default`,
+      id: `project:${project.id}:work:${work.id}`,
       projectId: project.id,
-      title: project.name,
-      sourceWorldId: `project:${project.id}`,
-      currentWordCount: project.currentWordCount ?? 0,
-    },
-    runtime: {
-      instanceCount: runtime.tables.find(table => table.name === 'simulationSessions')?.rowCount ?? 0,
-      eventCount: runtime.tables.find(table => table.name === 'simulationEvents')?.rowCount ?? 0,
-      checkpointCount: runtime.tables.find(table => table.name === 'simulationCheckpoints')?.rowCount ?? 0,
+      title: work.title,
+      description: work.description,
+      genres: [...work.genres],
+      sourceWorldId: `world:${world.id}`,
+      currentWordCount: work.currentWordCount,
     },
   }
 }
 
-/**
- * 从现有三注册表批量派生世界引擎首页需要的只读投影。
- * 每张登记表只扫描一次，世界库中的项目数量不会放大表扫描次数。
- */
+/** Only explicitly classified world-draft roots enter the catalog. */
 export async function loadWorldProjections(projects: readonly Project[]): Promise<WorldProjection[]> {
-  const persistedProjects = projects.map(project => {
+  const persisted = projects.map(project => {
     if (!project.id) throw new Error('世界投影需要有效的项目 ID。')
     return project as Project & { id: number }
   })
-  const countsByProject = await loadWorldDomainCounts(new Set(persistedProjects.map(project => project.id)))
-  return persistedProjects.map(project => createWorldProjection(project, countsByProject))
+  const roots = await Promise.all(persisted.map(async project => {
+    if (project.activeWorldId == null || project.activeWorkId == null) return null
+    const [world, work] = await Promise.all([
+      db.worlds.get(project.activeWorldId),
+      db.works.get(project.activeWorkId),
+    ])
+    return world && work
+      && world.projectId === project.id
+      && work.projectId === project.id
+      && work.worldId === world.id
+      && isShareableWorld(world)
+      ? {
+          project,
+          world: world as World & { id: number },
+          work: work as Work & { id: number },
+        }
+      : null
+  }))
+  const visible = roots.filter((row): row is NonNullable<typeof row> => row != null)
+  const counts = await loadWorldDomainCounts(visible.map(({ project, world, work }) => ({
+    projectId: project.id,
+    worldId: world.id,
+    workId: work.id,
+  })))
+  return visible.map(({ project, world, work }) => createWorldProjection(project, world, work, counts))
 }
 
-/** 从现有三注册表派生单个世界的兼容只读投影。 */
 export async function loadWorldProjection(project: Project): Promise<WorldProjection> {
-  return (await loadWorldProjections([project]))[0]
+  const projection = (await loadWorldProjections([project]))[0]
+  if (!projection) throw new Error('该工作区没有经作者确认的世界身份。')
+  return projection
 }

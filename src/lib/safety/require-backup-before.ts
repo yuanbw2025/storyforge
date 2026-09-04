@@ -6,7 +6,7 @@
  * 适用场景:
  *   - 删项目(deleteProject)
  *   - 删世界组(deleteGroup)
- *   - 启用多世界(migrateToMultiWorld,因为它会修改 schema 归属)
+ *   - 启用多世界(enableMultiWorld，因为它会重分配当前记录的世界归属)
  *   - 覆盖式导入(importProjectJSON 时若目标项目已存在)
  *   - 还原快照(restoreSnapshot)
  *   - 其它任何"不可逆"操作
@@ -136,7 +136,7 @@ export async function requireBackupBefore(
  *     确认 → proceed-backup-now
  *     取消 → proceed-already-backed-up(用户声明已自己备份了)
  *
- * 更友好的 UI 见 Phase 2/3 替换。
+ * 这是无定制对话框时的当前降级交互。
  */
 async function promptUserChoiceFallback(options: RequireBackupOptions): Promise<BackupChoice> {
   const banner = `⚠️ 危险操作:${options.operation}`

@@ -39,7 +39,7 @@ import {
   detailedOutlinePostStateMatchesPatchV1,
 } from '../agent/detailed-outline-copilot'
 import { prepareDetailedOutlineGatewayAssemblyV1 } from '../outline/detail-gateway-context'
-import { readOwnedRows } from '../world-engine/scope'
+import { readOwnedRows } from '../workspace/scope'
 import { flushPendingEditsV1 } from '../authoring/pending-edit-coordinator'
 import { db } from '../db/schema'
 

@@ -21,7 +21,6 @@ import ContentTypeBadge from '../components/layout/ContentTypeBadge'
 import { getModuleContentType, MODULE_CONTENT_TYPES } from '../components/layout/sidebar-tree'
 import PropertiesPanel from '../components/layout/PropertiesPanel'
 import ProjectInfoPanel from '../components/project/ProjectInfoPanel'
-// 旧「作品学习」面板已整合进 ReferencePanel（Phase 20，子系统于 v32 下线）
 const ReferencePanel = lazy(() => import('../components/project/ReferencePanel'))
 const SettingsPage = lazy(() => import('../components/settings/SettingsPage'))
 const UsageStatsPage = lazy(() => import('../components/settings/UsageStatsPage'))
@@ -30,7 +29,6 @@ const ImportDocPanel = lazy(() => import('../components/system/ImportDocPanel'))
 const PromptManagerPanel = lazy(() => import('../components/settings/prompt/PromptManagerPanel'))
 const NodeAuthoringWorkspace = lazy(() => import('../components/node-authoring/NodeAuthoringWorkspace'))
 const RagLibraryPanel = lazy(() => import('../components/retrieval/RagLibraryPanel'))
-const SimulationRuntimePanel = lazy(() => import('../components/simulation/SimulationRuntimePanel'))
 const DataManagementPanel = lazy(() => import('../components/data/DataManagementPanel'))
 const WorldRulesPanel = lazy(() => import('../components/worldview/WorldRulesPanel'))
 const StoryCorePanel = lazy(() => import('../components/worldview/StoryCorePanel'))
@@ -68,7 +66,7 @@ const GlobalReplacePanel = lazy(() => import('../components/tools/GlobalReplaceP
 const ChatCopilotPanel = lazy(() => import('../components/agent/ChatCopilotPanel'))
 import { useLocationStore } from '../stores/location'
 import { useWorldGroupStore } from '../stores/world-group'
-import { resolveScopeLike } from '../lib/world-engine/scope'
+import { resolveScopeLike } from '../lib/workspace/scope'
 import {
   isImpactHandoffRouteModuleV2,
   parseImpactHandoffV2,
@@ -86,9 +84,10 @@ import { flushPendingEditsV1 } from '../lib/authoring/pending-edit-coordinator'
 import { useToast } from '../components/shared/Toast'
 import { useActiveWork } from '../hooks/useActiveWork'
 import WorkKindBadge from '../components/work/WorkKindBadge'
-import { effectiveNovelProfile, effectiveWorkKind, SHORT_NOVEL_DEFAULT_WORDS } from '../lib/world-engine/work-kind'
-import { switchNovelProfile } from '../lib/world-engine/works'
+import { effectiveNovelProfile, effectiveWorkKind, SHORT_NOVEL_DEFAULT_WORDS } from '../lib/workspace/work-kind'
+import { switchNovelProfile } from '../lib/workspace/works'
 import { secondaryNovelWorkflowModules } from '../lib/novel/workflow'
+import WorldDerivationActions from '../components/world-engine/WorldDerivationActions'
 
 export default function WorkspacePage() {
   const { projectId } = useParams()
@@ -100,7 +99,7 @@ export default function WorkspacePage() {
   const initialSidebarModule = initialModule && Object.prototype.hasOwnProperty.call(MODULE_CONTENT_TYPES, initialModule)
     ? initialModule as SidebarModule
     : null
-  const backPath = initialSidebarModule ? '/' : '/projects'
+  const backPath = '/'
   const [activeModule, setActiveModule] = useState<SidebarModule>(initialSidebarModule ?? 'info')
   const [loading, setLoading] = useState(true)
   const [editorNodeId, setEditorNodeId] = useState<number | null>(null)
@@ -306,7 +305,6 @@ export default function WorkspacePage() {
     'editor',
     'foreshadow',
     'visual-workflows',
-    'simulation-runtime',
   ])
   const isImmersiveModule = immersiveModules.has(activeModule)
   const copilotWorldGroupId = project.enableMultiWorld ? activeWorldGroupId : null
@@ -426,7 +424,6 @@ export default function WorkspacePage() {
 
       // ── 设定库 - 故事设计 ─────────────────────────────────────────
       case 'story-design':
-      case 'story-core':
         return <StoryCorePanel
           project={project}
           initialStoryCoreId={impactHandoff?.targetModule === 'story-design' && impactHandoffTarget?.table === 'storyCores'
@@ -481,14 +478,6 @@ export default function WorkspacePage() {
         return <NodeAuthoringWorkspace project={project} worldGroupId={copilotWorldGroupId} />
       case 'rag-library':
         return <RagLibraryPanel project={project} />
-      case 'simulation-runtime':
-        return <SimulationRuntimePanel
-          project={project}
-          worldGroupId={copilotWorldGroupId}
-          workspaceScope={project.id != null && project.activeWorldId != null && project.activeWorkId != null
-            ? { projectId: project.id, worldId: project.activeWorldId, workId: project.activeWorkId }
-            : undefined}
-        />
       case 'detailed-outline':
         return <DetailedOutlinePanel
           project={project}
@@ -557,10 +546,6 @@ export default function WorkspacePage() {
       case 'global-replace':
         return <GlobalReplacePanel project={project} />
 
-      // 作品学习已整合进项目参考 → 深度分析 tab（Phase 20）
-      case 'master-studies':
-        return <ReferencePanel project={project} />
-
       // ── 提示词库（一级） ───────────────────────────────────────────
       case 'prompts':
         return <PromptManagerPanel project={project} />
@@ -578,7 +563,6 @@ export default function WorkspacePage() {
       case 'usage-stats':
         return <UsageStatsPage project={project} />
       case 'data-management':
-      case 'backup':
       case 'export':
         return <DataManagementPanel
           project={project}
@@ -597,7 +581,7 @@ export default function WorkspacePage() {
         active={activeModule}
         onSelect={selectModule}
         onBack={() => afterPendingEdits(() => navigate(backPath), '当前编辑未能保存，已阻止离开工作区')}
-        projectName={project.name}
+        projectName={activeWork?.title ?? project.name}
         collapsed={sidebarCollapsed}
         onToggleCollapse={() => setSidebarCollapsed(v => !v)}
         hiddenModules={hiddenModules}
@@ -629,6 +613,11 @@ export default function WorkspacePage() {
             {profileSwitchError && <span className="max-w-72 truncate text-[11px] text-red-600" title={profileSwitchError}>{profileSwitchError}</span>}
           </div>
           <div className="flex items-center gap-1">
+            <WorldDerivationActions
+              project={project}
+              compact
+              onDerived={targetProjectId => navigate(`/workspace/${targetProjectId}?module=info`)}
+            />
             <button
               onClick={() => {
                 setShowCopilot(value => {

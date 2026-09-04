@@ -54,12 +54,14 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
 const project = {
   id: 1,
+  workspaceUid: 'WS-00000000-0000-4000-8000-000000000001',
+  workspacePurpose: 'independent-work',
   name: '归途项目',
-  genre: 'fantasy',
-  genres: ['fantasy'],
   activeWorldId: 11,
   activeWorkId: 12,
   enableMultiWorld: false,
+  createdAt: 1,
+  updatedAt: 1,
 } as Project
 
 const plan = {

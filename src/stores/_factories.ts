@@ -12,7 +12,7 @@
 import { create } from 'zustand'
 import type { Table, UpdateSpec } from 'dexie'
 import { db } from '../lib/db/schema'
-import { getTableSpec, readOwnedRows, resolveScopeLike, stampNewRecord, type WorkspaceScopeLike } from '../lib/world-engine/scope'
+import { getTableSpec, readOwnedRows, resolveScopeLike, stampNewRecord, type WorkspaceScopeLike } from '../lib/workspace/scope'
 import { coordinatePendingEditV1 } from '../lib/authoring/pending-edit-coordinator'
 
 const now = () => Date.now()
@@ -88,7 +88,7 @@ export function createProjectSingletonStore<K extends string, T extends ProjectS
       loadAll: async (scopeInput: WorkspaceScopeLike, worldGroupId: number | null = null) => {
         set({ loading: true, activeWorldGroupId: worldGroupId } as unknown as Partial<State> as State)
         const scope = await resolveScopeLike(scopeInput)
-        const owner = getTableSpec(String(table)).domainOwner?.legacyDefault
+        const owner = getTableSpec(String(table)).domainOwner?.defaultOwner
         const scopedRows = await readOwnedRows<T>(scope, String(table), {
           owner: owner === 'world' || owner === 'work' ? owner : undefined,
         })
@@ -118,7 +118,7 @@ export function createProjectSingletonStore<K extends string, T extends ProjectS
             const projectId = data.projectId ?? (current as { projectId?: number } | null)?.projectId
             if (!current?.id && projectId != null) {
               const scope = await resolveScopeLike(projectId)
-              const owner = getTableSpec(String(table)).domainOwner?.legacyDefault
+              const owner = getTableSpec(String(table)).domainOwner?.defaultOwner
               const all = await readOwnedRows<T>(scope, String(table), {
                 owner: owner === 'world' || owner === 'work' ? owner : undefined,
               })
@@ -151,7 +151,7 @@ export function createProjectSingletonStore<K extends string, T extends ProjectS
                 updatedAt: ts,
                 ...data,
               } as T, {
-                owner: getTableSpec(String(table)).domainOwner?.legacyDefault === 'world' ? 'world' : 'work',
+                owner: getTableSpec(String(table)).domainOwner?.defaultOwner === 'world' ? 'world' : 'work',
               })
               const id = (await getTable().add(toInsert)) as number
               set({

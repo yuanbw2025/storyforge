@@ -21,7 +21,7 @@ import {
 } from '../../lib/agent/consistency-agent'
 import { AgentTeamBudgetTracker } from '../../lib/agent/team-budget'
 import { runDurableConsistencyAuditV1 } from '../../lib/agent/run/consistency-audit-durable'
-import { resolveScopeLike } from '../../lib/world-engine/scope'
+import { resolveScopeLike } from '../../lib/workspace/scope'
 import { useAIConfigStore } from '../../stores/ai-config'
 import { prepareProseGatewayAssemblyV1 } from '../../lib/prose/gateway-context'
 

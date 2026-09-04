@@ -1,8 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
-import { generateWorkspaceUid } from '../../src/lib/memory/identity'
-import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
-import { stampNewRecord } from '../../src/lib/world-engine/scope'
+import { stampNewRecord } from '../../src/lib/workspace/scope'
 import { getAgentSkillV1, type AgentSkillDefinitionV1 } from '../../src/lib/agent/skill-registry'
 import { createAgentSkillExecutionBindingV2, assertAgentSkillExecutionBindingIntegrityV2 } from '../../src/lib/agent/execution-binding'
 import { runReadOnlyAgent, type AgentModelAdapter } from '../../src/lib/agent/runner'
@@ -24,17 +22,13 @@ import { createContextAccessPolicyFromSkillV1 } from '../../src/lib/context-gate
 import { CANON_RESOURCE_PROVIDER_V1 } from '../../src/lib/context-gateway/canon-provider'
 import { selectContextResourcesV1, contextSelectorCategoryForKindV1 } from '../../src/lib/context-gateway/selector'
 import type { ContextResourceDescriptorV1, WorkspaceScope } from '../../src/lib/types'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
 
 const NOW = 1_787_800_000_000
 
 async function seedWorkspace(name = 'CTXG-7 快慢路径') {
-  const projectId = await db.projects.add({
-    workspaceUid: generateWorkspaceUid(), name, genre: 'fantasy', genres: ['fantasy'],
-    status: 'drafting', description: '', targetWordCount: 1_000_000,
-    createdAt: NOW, updatedAt: NOW,
-  } as any) as number
-  const ownership = await ensureWorkspaceOwnership(projectId)
-  return { projectId, scope: ownership.scope }
+  const created = await seedCurrentWorkspace(name)
+  return { projectId: created.scope.projectId, scope: created.scope }
 }
 
 async function addScoped(
@@ -238,13 +232,13 @@ describe('CTXG-7 · Gateway fast/complex execution', () => {
       allowedToolNames: ['list_context_catalog'],
       limits: { maxProtocolErrors: 0 },
       model: scriptedModel([{
-        type: 'tool', calls: [{ name: 'read_project_status', arguments: {} }],
+        type: 'tool', calls: [{ name: 'read_work_status', arguments: {} }],
       }], protocolCalls),
     })
     expect(result.status).toBe('protocol_error')
     expect(result.toolCalls).toBe(0)
     expect(result.transcript[0].content).toContain('list_context_catalog')
-    expect(result.transcript[0].content).not.toContain('read_project_status(')
+    expect(result.transcript[0].content).not.toContain('read_work_status(')
   })
 
   it('known edit targets use exact Mandatory Original and fail closed instead of returning a prefix', async () => {
@@ -285,7 +279,7 @@ describe('CTXG-7 · Gateway fast/complex execution', () => {
     })).rejects.toThrow('hard-sufficiency')
   })
 
-  it('freezes Gateway policy in Skill V2 and requires V3 only after a Skill rollout becomes required', async () => {
+  it('freezes the authoritative Gateway policy in Skill V2 and requires V3 evidence', async () => {
     const fixture = await seedWorkspace()
     const skill = worldviewSkill()
     const binding = await createAgentSkillExecutionBindingV2(skill)
@@ -297,19 +291,16 @@ describe('CTXG-7 · Gateway fast/complex execution', () => {
     }
     await expect(assertAgentSkillExecutionBindingIntegrityV2(tampered)).rejects.toThrow('skillDefinitionHash')
 
-    const shadowSkill: AgentSkillDefinitionV1 = {
-      ...skill,
-      contextGateway: { ...skill.contextGateway!, rollout: 'shadow', requiredWriteTargets: [] },
-    }
+    const registryContextSkill: AgentSkillDefinitionV1 = { ...skill, contextGateway: undefined }
     await expect(assertContextGatewayCandidateAdoptableV1({
-      skill: shadowSkill,
+      skill: registryContextSkill,
       scope: fixture.scope,
       worldGroupId: null,
       runId: 999,
       stepId: 'task:races',
       attempt: 1,
       candidateHash: 'a'.repeat(64),
-    })).resolves.toEqual({ mode: 'legacy-or-shadow' })
+    })).resolves.toEqual({ mode: 'registry-context' })
 
     const requiredSkill = skill
     await expect(assertContextGatewayCandidateAdoptableV1({
@@ -341,6 +332,7 @@ describe('CTXG-7 · Gateway fast/complex execution', () => {
       version: 1 as const,
       objective: 'CTXG-7 V3 candidate',
       workflowKind: 'direct-generation',
+      runtimeBindingHash: 'b'.repeat(64),
       scope: { projectId: fixture.projectId, worldGroupId: null },
       permissions: { contextSourceKeys: ['ragSelection'], writeTargets: [] },
       budget: {

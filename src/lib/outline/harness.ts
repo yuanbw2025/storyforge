@@ -34,7 +34,7 @@ import {
   type WorkspaceContentRevisionVectorV1,
 } from '../authoring/content-revision'
 import type { AssembleContextResult } from '../registry/types'
-import { resolveScope } from '../world-engine/scope'
+import { resolveScope } from '../workspace/scope'
 import type {
   AgentExecutionBoundaryV1,
   AgentRunContractV3,
@@ -56,23 +56,6 @@ import {
 import { outlineGatewayExecutionFromAssemblyV1 } from './gateway-context'
 
 export * from './candidate-lifecycle'
-
-/** Historical read-only alias. Formal V2 runs resolve the exact runtime set. */
-export const OUTLINE_GENERATION_SOURCE_KEYS: readonly string[] = Object.freeze(
-  resolveAgentSkillContextSourceKeysV1(
-    getAgentSkillV1('outline.compose', 'outline'),
-  ),
-)
-
-export const OUTLINE_DURABLE_HARNESS_STORAGE_KEY = 'storyforge:harness:outline-durable-v1'
-
-export function isOutlineDurableHarnessEnabledV1(): boolean {
-  try {
-    return globalThis.localStorage?.getItem(OUTLINE_DURABLE_HARNESS_STORAGE_KEY) !== 'disabled'
-  } catch {
-    return true
-  }
-}
 
 function targetOutlineNodeId(request: OutlineGenerationRequest): number | undefined {
   if (request.kind === 'single-chapter') return request.chapterId
@@ -422,7 +405,7 @@ export async function createOutlineGenerationTraceV1(input: {
   const binding = await resolveOutlineGenerationExecutionBindingV2({ ...input, executionBoundary })
   assertAgentSkillBindingMatchesAssemblyV2(binding, input.assembled, `大纲 ${encodeGenerationOperation(input.request)}`)
   const shadow = await createOutlineGenerationShadowTraceV1({ ...input, executionBoundary, binding })
-  const durableEnabled = input.durable ?? isOutlineDurableHarnessEnabledV1()
+  const durableEnabled = input.durable ?? true
   if (!durableEnabled) {
     if (executionBoundary === 'formal') {
       throw new Error('正式大纲运行必须启用 durable Harness，已阻止模型调用。')

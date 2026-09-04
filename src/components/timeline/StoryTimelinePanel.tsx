@@ -14,7 +14,7 @@ import { getAIConfigRequiredMessage, isAIConfigReady } from '../../lib/ai/config
 import { htmlToPlainText } from '../../lib/utils/html'
 import { STORY_IMPORTANCE_LABELS } from '../../lib/types/story-timeline'
 import type { Project } from '../../lib/types'
-import { resolveScopeLike } from '../../lib/world-engine/scope'
+import { resolveScopeLike } from '../../lib/workspace/scope'
 import ExtractionReviewPanel from '../shared/ExtractionReviewPanel'
 import {
   abandonStoryTimelineExtractionV1,

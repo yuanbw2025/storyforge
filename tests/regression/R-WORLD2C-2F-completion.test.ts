@@ -9,16 +9,19 @@ import {
   validateNarrativeModule,
 } from '../../src/lib/narrative/blueprint'
 import {
-  createWorldPackageV2,
+  createWorldPackage,
   importWorldPackage,
   inspectWorldPackage,
-} from '../../src/lib/product/world-package'
-import { appendSimulationEvent, branchSimulationSession, readSimulationState } from '../../src/lib/simulation/runtime'
-import type { SimulationSessionKind, WorldReleaseManifestV2, WorkspaceScope } from '../../src/lib/types'
-import { createWorldInstance, readBoundInstances } from '../../src/lib/world-engine/instances'
-import { deleteWork, deleteWorld } from '../../src/lib/world-engine/lifecycle'
-import { ensureWorkspaceOwnership } from '../../src/lib/world-engine/ownership'
-import { changeRecordScope } from '../../src/lib/world-engine/scope-conversion'
+} from '../../src/lib/world-engine/world-package'
+import { branchProductRuntimeSession, readProductRuntimeState } from '../../src/lib/product/runtime-api'
+import { appendProductRuntimeEvent } from '../../src/lib/product/runtime-core'
+import type { WorldReleaseManifestV3, WorkspaceScope } from '../../src/lib/types'
+import { createWorkspace as createWorkspaceRoot } from '../../src/lib/workspace/create-workspace'
+import { createProductRuntimeInstance, readBoundInstances } from '../../src/lib/product/runtime-instances'
+import { createCurrentTtrpgRuntimeTestBedV1 } from '../helpers/current-product-runtime'
+import { deleteWork, deleteWorld } from '../../src/lib/workspace/lifecycle'
+import { resolveWorkspaceOwnership } from '../../src/lib/workspace/ownership'
+import { changeRecordScope } from '../../src/lib/registry/ownership-scope-conversion'
 import {
   assertReleaseUnchanged,
   createWorldRevision,
@@ -31,28 +34,28 @@ import {
   createWorldWork,
   selectWorkNarrativeModule,
   switchActiveWork,
-  updateProjectAndActiveWork,
-} from '../../src/lib/world-engine/works'
+  updateActiveWork,
+} from '../../src/lib/workspace/works'
+import { stampCurrentFixtureResourceUidsV1 } from '../helpers/current-resource-identity'
 
 const PACKAGE_OPTIONS = {
   authorName: '世界作者',
   license: 'CC-BY-4.0' as const,
-  allowedUses: { writing: true, ttrpg: true, characterChat: true, textGame: true },
+  allowedUses: {
+    'world-remix': true, ttrpg: true, 'character-interaction': true, 'ai-town': true,
+    'text-adventure': true, avg: true, 'text-open-world': true,
+  },
 }
 
 async function createWorkspace(name = 'WORLD-2 完成项目') {
-  const now = Date.now()
-  const projectId = await db.projects.add({
+  return createWorkspaceRoot({
     name,
-    genre: 'fantasy',
     genres: ['fantasy'],
     status: 'drafting',
     description: '世界引擎完成判据',
-    targetWordCount: 100000,
-    createdAt: now,
-    updatedAt: now,
-  } as any) as number
-  return ensureWorkspaceOwnership(projectId)
+    targetWordCount: 100_000,
+    enableMultiWorld: true,
+  }, { purpose: 'world-engine', kind: 'novel', novelProfile: 'long' })
 }
 
 function stages(prefix: string) {
@@ -94,8 +97,9 @@ describe('WORLD-2C C4/C5 · strict ownership and lifecycle completion', () => {
       createdAt: Date.now(),
       updatedAt: Date.now(),
     } as any)
+    await stampCurrentFixtureResourceUidsV1(ownership.scope.projectId)
     const backup = await exportProjectJSON(ownership.scope.projectId)
-    expect(backup.version).toBe(9)
+    expect(backup.version).toBe(10)
     const beforeProjects = await db.projects.count()
     const damaged = structuredClone(backup) as any
     damaged.storyCores[0]._workOwnerExportId = 999999
@@ -109,7 +113,7 @@ describe('WORLD-2C C4/C5 · strict ownership and lifecycle completion', () => {
     expect(await db.projects.count()).toBe(beforeProjects)
   })
 
-  it('删除 Work 级联父归属节点和绑定实例，但不影响另一 Work 或 World Canon', async () => {
+  it('删除 Work 级联父归属节点，但不影响另一 Work 或 World Canon', async () => {
     const ownership = await createWorkspace('双作品删除隔离')
     const workA = ownership.work
     const workB = await createWorldWork(ownership.scope.projectId, { title: '作品 B' })
@@ -128,20 +132,11 @@ describe('WORLD-2C C4/C5 · strict ownership and lifecycle completion', () => {
       createdAt: Date.now(),
       updatedAt: Date.now(),
     } as any)
-    await createWorldInstance({
-      scope: scopeA,
-      kind: 'chatgame',
-      title: 'A 的角色聊天',
-      draftSnapshotHash: 'draft-a',
-      narrativeModuleId: moduleA.id,
-    })
-
     await deleteWork(workA.id!)
 
     expect(await db.works.get(workA.id!)).toBeUndefined()
     expect(await db.narrativeModules.get(moduleA.id!)).toBeUndefined()
     expect(await db.narrativeNodes.where('moduleId').equals(moduleA.id!).count()).toBe(0)
-    expect(await db.simulationSessions.where('workId').equals(workA.id!).count()).toBe(0)
     expect(await db.works.get(workB.id!)).toBeDefined()
     expect(await db.narrativeModules.get(moduleB.id!)).toBeDefined()
     expect(await db.narrativeNodes.where('moduleId').equals(moduleB.id!).count()).toBe(2)
@@ -157,7 +152,7 @@ describe('WORLD-2C C4/C5 · strict ownership and lifecycle completion', () => {
     expect(await db.works.where('worldId').equals(ownership.scope.worldId).count()).toBe(0)
   })
 
-  it('切换和删除活动 Work 时完整刷新 Project 兼容镜像，项目编辑反写当前 Work', async () => {
+  it('切换和删除活动 Work 只刷新 Project 指针，作品资料始终只写 Work', async () => {
     const ownership = await createWorkspace('镜像作品 A')
     await db.works.update(ownership.scope.workId, {
       title: '作品 A',
@@ -188,23 +183,15 @@ describe('WORLD-2C C4/C5 · strict ownership and lifecycle completion', () => {
     expect(await db.projects.get(ownership.scope.projectId)).toMatchObject({
       activeWorldId: ownership.scope.worldId,
       activeWorkId: workB.id,
-      name: '作品 B',
-      description: 'B 简介',
-      genre: 'mystery',
-      genres: ['mystery'],
-      status: 'ongoing',
-      targetWordCount: 222000,
-      currentWordCount: 2200,
-      coverImage: 'cover-b',
-      writingStyleId: 'style-b',
-      methodologyId: 'method-b',
+      name: '镜像作品 A',
     })
+    expect(await db.projects.get(ownership.scope.projectId)).not.toHaveProperty('genres')
+    expect(await db.projects.get(ownership.scope.projectId)).not.toHaveProperty('description')
 
-    await updateProjectAndActiveWork(ownership.scope.projectId, {
-      name: '作品 B 改名',
+    await updateActiveWork(ownership.scope.projectId, {
+      title: '作品 B 改名',
       description: 'B 新简介',
       genres: ['sci-fi'],
-      genre: 'sci-fi',
       targetWordCount: 333000,
       writingStyleId: 'style-b2',
     })
@@ -219,30 +206,28 @@ describe('WORLD-2C C4/C5 · strict ownership and lifecycle completion', () => {
     await deleteWork(workB.id!)
     expect(await db.projects.get(ownership.scope.projectId)).toMatchObject({
       activeWorkId: ownership.scope.workId,
-      name: '作品 A',
+      name: '镜像作品 A',
+    })
+    expect(await db.works.get(ownership.scope.workId)).toMatchObject({
+      title: '作品 A',
       description: 'A 简介',
-      genre: 'fantasy',
       genres: ['fantasy'],
       targetWordCount: 111000,
       currentWordCount: 1100,
-      coverImage: 'cover-a',
-      writingStyleId: 'style-a',
-      methodologyId: 'method-a',
     })
   })
 
   it('伪造 World/Work scope 创建实例时拒绝且不产生任何运行记录', async () => {
     const ownership = await createWorkspace('伪造实例作用域')
     const forged = { ...ownership.scope, workId: ownership.scope.workId + 9999 }
-    const before = await db.simulationSessions.count()
+    const before = await db.productRuntimeSessions.count()
 
-    await expect(createWorldInstance({
+    await expect(createProductRuntimeInstance({
       scope: forged,
-      kind: 'chatgame',
+      kind: 'character-interaction',
       title: '不得创建',
-      draftSnapshotHash: 'forged-draft',
-    })).rejects.toThrow('有效 World/Work')
-    expect(await db.simulationSessions.count()).toBe(before)
+    } as any)).rejects.toThrow('有效 World/Work')
+    expect(await db.productRuntimeSessions.count()).toBe(before)
     await expect(readBoundInstances(forged)).rejects.toThrow('有效 World/Work')
   })
 })
@@ -356,8 +341,8 @@ describe('WORLD-2D · executable narrative blueprint completion', () => {
       targetOwner: 'work',
     })).rejects.toThrow('其它作用域引用')
 
-    const receipt = await db.ownershipMigrations.where('projectId').equals(ownership.scope.projectId).first()
-    expect(receipt?.scopeChanges?.at(-1)).toMatchObject({
+    const audit = await db.ownershipScopeChanges.where('projectId').equals(ownership.scope.projectId).last()
+    expect(audit).toMatchObject({
       tableName: 'narrativeModules',
       recordId: module.id,
       previousOwner: 'work',
@@ -381,31 +366,46 @@ describe('WORLD-2D · executable narrative blueprint completion', () => {
     expect(await db.worldRevisions.count()).toBe(0)
   })
 
-  it('非当前 Work B 的修订冻结 B 的根、兼容镜像和内容，不混入活动 Work A', async () => {
+  it('非当前 Work B 的修订冻结 B 的语义根和内容，不混入活动 Work A', async () => {
     const ownership = await createWorkspace('活动作品 A')
     const workB = await createWorldWork(ownership.scope.projectId, { title: '非活动作品 B' })
     const scopeB = { ...ownership.scope, workId: workB.id! }
-    await createNarrativeModule({ scope: ownership.scope, owner: 'work', kind: 'main', title: 'A 主线' })
-    const moduleB = await createNarrativeModule({ scope: scopeB, owner: 'work', kind: 'main', title: 'B 主线' })
-    await addNarrativeNode({ scope: scopeB, moduleId: moduleB.id!, key: 'entry', kind: 'entry', title: 'B 入口', successorKeys: ['end'] })
-    await addNarrativeNode({ scope: scopeB, moduleId: moduleB.id!, key: 'end', kind: 'ending', title: 'B 结局' })
+    await db.storyCores.add({
+      projectId: ownership.scope.projectId,
+      worldId: null,
+      workId: ownership.scope.workId,
+      theme: 'A 的故事',
+      premise: '只属于 A',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    } as any)
+    await db.storyCores.add({
+      projectId: scopeB.projectId,
+      worldId: null,
+      workId: scopeB.workId,
+      theme: 'B 的故事',
+      premise: '只属于 B',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    } as any)
     const revision = await createWorldRevision({
       scope: scopeB,
       label: 'B 的修订',
-      selectedNarrativeModuleIds: [moduleB.id!],
     })
-    const manifest = JSON.parse(revision.manifestJson) as WorldReleaseManifestV2
-    const portableProject = manifest.portableProject as any
+    const manifest = JSON.parse(revision.manifestJson) as WorldReleaseManifestV3
+    const semanticSnapshot = manifest.semanticSnapshot
 
     expect((await db.projects.get(scopeB.projectId))?.activeWorkId).toBe(ownership.scope.workId)
     expect(manifest.workTitle).toBe('非活动作品 B')
-    expect(portableProject.project).toMatchObject({
-      name: '非活动作品 B',
-      _activeWorkExportId: portableProject.ownership.workExportId,
+    expect(semanticSnapshot.project).toMatchObject({
+      name: '活动作品 A',
+      _activeWorkExportId: semanticSnapshot.ownership.workExportId,
     })
-    expect(portableProject.works).toHaveLength(1)
-    expect(portableProject.works[0].title).toBe('非活动作品 B')
-    expect((manifest.records.narrativeModules as any[]).map(row => row.title)).toEqual(['B 主线'])
+    expect(semanticSnapshot.works).toHaveLength(1)
+    expect(semanticSnapshot.works[0].title).toBe('非活动作品 B')
+    expect((manifest.records.storyCores as any[]).map(row => row.theme)).toEqual(['B 的故事'])
+    expect(manifest.records.narrativeModules).toBeUndefined()
+    expect(manifest).not.toHaveProperty('selectedNarrativeModules')
   })
 })
 
@@ -423,17 +423,17 @@ describe('WORLD-2E/2F · immutable releases and unified instances', () => {
       createdAt: Date.now(),
       updatedAt: Date.now(),
     } as any) as number
+    await stampCurrentFixtureResourceUidsV1(ownership.scope.projectId)
     await selectWorkNarrativeModule(ownership.scope, modules[0].id!)
     const revision = await createWorldRevision({
       scope: ownership.scope,
       label: '世界修订一',
-      selectedNarrativeModuleIds: modules.map(module => module.id!),
     })
     const release = await publishWorldRevision(revision.id!, '世界发布一')
     return { ownership, modules, worldviewId, revision, release }
   }
 
-  it('发布后修改草稿不改变旧 Release；新修订显示差异且 v2 可干净导入', async () => {
+  it('发布后修改草稿不改变旧 Release；新修订显示差异且当前协议可干净导入', async () => {
     const seeded = await seedRelease()
     const frozenJson = seeded.release.manifestJson
     await db.worldviews.update(seeded.worldviewId, { worldOrigin: '修改后的草稿世界', updatedAt: Date.now() })
@@ -445,20 +445,20 @@ describe('WORLD-2E/2F · immutable releases and unified instances', () => {
       scope: seeded.ownership.scope,
       label: '世界修订二',
       parentRevisionId: seeded.revision.id,
-      selectedNarrativeModuleIds: seeded.modules.map(module => module.id!),
     })
     const diff = await diffWorldRevisions(seeded.revision.id!, revision2.id!)
-    expect(diff.changed).toEqual(expect.arrayContaining(['worldviews', 'narrativeModules']))
+    expect(diff.changed).toContain('worldviews')
+    expect(diff.changed).not.toContain('narrativeModules')
 
-    const pkg = await createWorldPackageV2(seeded.release.id!, PACKAGE_OPTIONS)
+    const pkg = await createWorldPackage(seeded.release.id!, PACKAGE_OPTIONS)
     const report = await inspectWorldPackage(pkg)
     expect(report.valid, report.errors.join('；')).toBe(true)
     const importedProjectId = await importWorldPackage(pkg)
-    const importedScope = await ensureWorkspaceOwnership(importedProjectId)
-    expect(await db.narrativeModules.where('projectId').equals(importedProjectId).count()).toBe(3)
-    expect((await db.works.get(importedScope.scope.workId))?.activeNarrativeModuleId).toBeTypeOf('number')
+    const importedScope = await resolveWorkspaceOwnership(importedProjectId)
+    expect(await db.narrativeModules.where('projectId').equals(importedProjectId).count()).toBe(0)
+    expect((await db.works.get(importedScope.scope.workId))?.activeNarrativeModuleId ?? null).toBeNull()
     expect(await db.worldReleases.where('projectId').equals(importedProjectId).count()).toBe(1)
-    expect((await db.projects.get(importedProjectId))?.communityOrigin?.sourceWorldCode)
+    expect((await db.worlds.get(importedScope.scope.worldId))?.communityOrigin?.sourceWorldCode)
       .toBe(seeded.release.sourceWorldCode)
   })
 
@@ -476,48 +476,41 @@ describe('WORLD-2E/2F · immutable releases and unified instances', () => {
       scope: seeded.ownership.scope,
       label: '世界修订二',
       parentRevisionId: seeded.revision.id,
-      selectedNarrativeModuleIds: seeded.modules.map(module => module.id!),
     })
     const release2 = await publishWorldRevision(revision2.id!)
     expect((await listWorldRevisions(seeded.ownership.scope)).map(item => item.revision)).toEqual([2, 1])
     expect((await listWorldReleases(seeded.ownership.scope)).map(item => item.id)).toEqual([release2.id, seeded.release.id])
   })
 
-  it('同一 Release 建立三类 legacy 隔离实例，事件确定回放且分支继承冻结绑定', async () => {
+  it('WorldRelease 只能进入产品制作；正式产品拒绝直跑，受治理 Build 可验证确定性内核', async () => {
     const seeded = await seedRelease()
-    const manifest = JSON.parse(seeded.release.manifestJson) as WorldReleaseManifestV2
-    const narrativeModuleExportId = manifest.selectedNarrativeModules[0].exportId
-    const kinds: SimulationSessionKind[] = ['ttrpg', 'chatgame', 'npc-evolution']
-    const sessions = []
-    for (const kind of kinds) {
-      sessions.push(await createWorldInstance({
+    for (const kind of ['ttrpg', 'character-interaction'] as const) {
+      await expect(createProductRuntimeInstance({
         scope: seeded.ownership.scope,
         kind,
-        title: `${kind} 实例`,
+        title: `${kind} 不得直跑`,
         releaseId: seeded.release.id,
-        releaseNarrativeModuleExportId: narrativeModuleExportId,
         seed: `seed-${kind}`,
-      }))
+      } as any)).rejects.toThrow('必须且只能绑定一个 Product Release/Build')
     }
-    for (let index = 0; index < sessions.length; index++) {
-      await appendSimulationEvent({ sessionId: sessions[index].id!, type: 'time.advanced', payload: { amount: index + 1 } })
-    }
-    const states = await Promise.all(sessions.map(session => readSimulationState(session.id!)))
-    expect(states.map(state => state.clock)).toEqual([1, 2, 3])
-    expect(await readSimulationState(sessions[0].id!)).toEqual(await readSimulationState(sessions[0].id!))
-    expect(await readBoundInstances(seeded.ownership.scope)).toHaveLength(3)
+    const bed = await createCurrentTtrpgRuntimeTestBedV1({
+      title: '测试专用产品内核',
+      seed: 'seed-evolution',
+    })
+    const session = bed.session
+    await appendProductRuntimeEvent({ sessionId: session.id!, type: 'time.advanced', payload: { amount: 3 } })
+    expect((await readProductRuntimeState(session.id!)).clock).toBe(3)
+    expect(await readProductRuntimeState(session.id!)).toEqual(await readProductRuntimeState(session.id!))
 
-    const child = await branchSimulationSession({
-      parentSessionId: sessions[0].id!,
+    const child = await branchProductRuntimeSession({
+      parentSessionId: session.id!,
       throughSequence: 1,
-      title: '跑团分支',
+      title: '测试内核分支',
     })
     expect(child).toMatchObject({
-      worldId: seeded.ownership.scope.worldId,
-      workId: seeded.ownership.scope.workId,
-      worldReleaseId: seeded.release.id,
-      narrativeModuleId: null,
-      narrativeModuleExportId,
+      productReleaseId: null,
+      productBuildId: bed.buildId,
+      runtimeSourceHash: expect.stringMatching(/^[0-9a-f]{64}$/),
     })
     expect((await db.worldReleases.get(seeded.release.id!))?.manifestJson).toBe(seeded.release.manifestJson)
   })

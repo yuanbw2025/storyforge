@@ -9,6 +9,8 @@ import {
 } from '../../src/lib/agent/consistency-agent'
 import { AgentTeamBudgetTracker } from '../../src/lib/agent/team-budget'
 import type { Project } from '../../src/lib/types'
+import { putCurrentWorkspaceFixtureV1 } from '../helpers/current-workspace'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
 
 const now = 1_700_000_000_000
 const targetText = '林舟再次获得潮汐钥匙。'
@@ -17,26 +19,24 @@ const targetHtml = `<p>${targetText}</p>`
 async function seedConsistencyProject() {
   const project: Project = {
     id: 82001,
+    workspaceUid: 'WS-00000000-0000-4000-8000-000000082001',
+    workspacePurpose: 'independent-work',
     name: '一致性 Agent 测试',
-    genre: 'fantasy',
-    genres: ['fantasy'],
-    status: 'drafting',
-    description: '',
-    targetWordCount: 100_000,
     enableMultiWorld: false,
+    activeWorldId: 82001,
+    activeWorkId: 82001,
     createdAt: now,
     updatedAt: now,
   }
-  await db.projects.put(project)
+  await putCurrentWorkspaceFixtureV1(project)
   await db.creativeRules.add({
     projectId: project.id!,
     writingStyle: '',
     narrativePOV: 'third-limited',
-    toneAndMood: '',
+    atmosphere: '',
     prohibitions: '[]',
     consistencyRules: JSON.stringify(['潮汐钥匙只能获得一次']),
     specialRequirements: '',
-    referenceWorks: '[]',
     citedReferenceIds: '[]',
     createdAt: now,
     updatedAt: now,
@@ -98,11 +98,9 @@ async function seedConsistencyProject() {
   await db.characters.add({
     projectId: project.id!,
     name: '林舟',
-    role: 'protagonist',
     roleWeight: 'main',
     moralAxis: 'good',
     orderAxis: 'neutral',
-    alignment: 'good',
     shortDescription: '',
     appearance: '',
     personality: '',
@@ -125,6 +123,7 @@ async function seedConsistencyProject() {
     note: '',
     createdAt: now,
   })
+  await finalizeCurrentFixtureV1(project.id!)
   return { project, targetChapterId, targetOutlineId }
 }
 

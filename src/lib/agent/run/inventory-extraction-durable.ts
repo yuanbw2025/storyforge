@@ -1,7 +1,7 @@
 import { chat } from '../../ai/client'
 import {
   buildInventoryExtractPromptFromContext,
-  parseInventoryEventsStrictV1,
+  parseInventoryEvents,
   readInventoryExtractPromptTemplateSnapshotV1,
   type ExtractedItemEvent,
 } from '../../ai/adapters/inventory-extract-adapter'
@@ -9,7 +9,7 @@ import { splitExtractionText, uniqueBy } from '../../ai/structured-extraction'
 import type { AIConfig, Chapter, ChatMessage, OutlineNode, WorkspaceScope } from '../../types'
 import { assembleContext } from '../../registry/assemble-context'
 import { replaceAdoptedCollection } from '../../registry/adopt'
-import { readOwnedRows } from '../../world-engine/scope'
+import { readOwnedRows } from '../../workspace/scope'
 import { selectInventoryExtractionChapters, type InventoryExtractionMode } from '../../inventory/extraction-range'
 import { getAgentSkillV1 } from '../skill-registry'
 import { createAgentSkillExecutionBindingV1 } from '../execution-binding'
@@ -628,7 +628,7 @@ function parseCandidateItems(value: unknown, plan: InventoryExtractionPlanV1): I
     if (!item || typeof item !== 'object' || Array.isArray(item)) throw new Error(`物品候选 ${index + 1} 无效。`)
     const row = item as Record<string, unknown>
     assertExactKeys(row, ['itemName', 'heldByName', 'action', 'quantity', 'note', 'chapterId', 'chapterTitle'], '物品候选 ')
-    const parsed = parseInventoryEventsStrictV1(JSON.stringify([{
+    const parsed = parseInventoryEvents(JSON.stringify([{
       itemName: row.itemName,
       heldByName: row.heldByName,
       action: row.action,
@@ -715,7 +715,7 @@ function parseFormalRow(value: unknown, chapterId: number, candidate: InventoryE
     'itemName', 'heldByName', 'characterId', 'action', 'quantity',
     'chapterId', 'chapterTitle', 'note',
   ], '物品正式行 ')
-  const parsed = parseInventoryEventsStrictV1(JSON.stringify([{
+  const parsed = parseInventoryEvents(JSON.stringify([{
     itemName: row.itemName,
     heldByName: row.heldByName,
     action: row.action,
@@ -951,7 +951,7 @@ async function continueExtraction(input: {
     })
     let parsed: ExtractedItemEvent[]
     try {
-      parsed = parseInventoryEventsStrictV1(raw)
+      parsed = parseInventoryEvents(raw)
     } catch (error) {
       snapshot = await append(input.scope, snapshot, 'step.failed', {
         stepId: INVENTORY_EXTRACTION_STEP_ID_V1, attempt: 1,

@@ -81,8 +81,8 @@ function blindOrder(
   const nibble = Number.parseInt(checkpoint.checkpointHash.slice(-1), 16)
   const index = checkpoint.cases.findIndex(item => item.fixtureId === fixtureId)
   return (nibble + index) % 2 === 0
-    ? ['legacy-direct', 'creative-reliability']
-    : ['creative-reliability', 'legacy-direct']
+    ? ['baseline-direct', 'creative-reliability']
+    : ['creative-reliability', 'baseline-direct']
 }
 
 function initialVerdict(output: string, label: 'A' | 'B'): CreativeReliabilityBlindVerdictV1 {
@@ -504,12 +504,12 @@ export default function CreativeReliabilityEvalPanel() {
                 <tbody>
                   <tr className="border-t border-border/50">
                     <td>旧直连</td>
-                    <td>{(aggregate.legacyDirect.editableArtifactRate * 100).toFixed(0)}%</td>
-                    <td>{(aggregate.legacyDirect.adoptableRate * 100).toFixed(0)}%</td>
-                    <td>{aggregate.legacyDirect.averageArtifactModelCalls.toFixed(2)}</td>
-                    <td>{aggregate.legacyDirect.tokensPerAdoptableArtifact?.toFixed(0) ?? '—'}</td>
-                    <td>{(aggregate.legacyDirect.semanticScore * 100).toFixed(0)}%</td>
-                    <td>{(aggregate.legacyDirect.narrativeProgressRate * 100).toFixed(0)}%</td>
+                    <td>{(aggregate.baselineDirect.editableArtifactRate * 100).toFixed(0)}%</td>
+                    <td>{(aggregate.baselineDirect.adoptableRate * 100).toFixed(0)}%</td>
+                    <td>{aggregate.baselineDirect.averageArtifactModelCalls.toFixed(2)}</td>
+                    <td>{aggregate.baselineDirect.tokensPerAdoptableArtifact?.toFixed(0) ?? '—'}</td>
+                    <td>{(aggregate.baselineDirect.semanticScore * 100).toFixed(0)}%</td>
+                    <td>{(aggregate.baselineDirect.narrativeProgressRate * 100).toFixed(0)}%</td>
                   </tr>
                   <tr className="border-t border-border/50">
                     <td>CREL</td>

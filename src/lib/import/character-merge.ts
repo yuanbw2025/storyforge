@@ -26,6 +26,7 @@ import type { AIConfig, Character } from '../types'
 import { resolveRequestConfig } from '../ai/client'
 import { chatWithAbort } from './chat-with-abort'
 import { CHARACTER_DIMENSIONS } from '../character/character-dimensions'
+import { characterAxesLabel } from '../character/character-axes'
 import { transactionTablesFor } from '../registry/lifecycle'
 
 // 合并保留的角色文字字段：所有维度 + relationships(单源，加维度自动跟随)
@@ -64,7 +65,7 @@ export async function runCharacterMerge(args: RunCharacterMergeArgs): Promise<vo
   // 角色清单（截到最近 200 个，避免 prompt 爆炸）
   const recent = allChars.slice(-200)
   const lines = recent.map(c =>
-    `${c.name}｜${c.role}｜${(c.shortDescription || '').slice(0, 40)}`,
+    `${c.name}｜${characterAxesLabel(c)}｜${(c.shortDescription || '').slice(0, 40)}`,
   )
   const characterList = lines.join('\n')
 

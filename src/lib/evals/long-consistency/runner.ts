@@ -16,8 +16,8 @@ export const NS1_ACCEPTANCE_THRESHOLDS = Object.freeze({
   minimumRequiredFactRecall: 0.85,
   minimumConstraintRecall: 0.85,
   minimumEvidenceCitationRecall: 0.9,
-  maximumEstimatedInputTokenMultiplierVsLegacy: 1.6,
-  minimumFactRecallImprovementVsLegacy: 0.1,
+  maximumEstimatedInputTokenMultiplierVsBaseline: 1.6,
+  minimumFactRecallImprovementVsBaseline: 0.1,
 })
 
 export const NS0_FIXED_MAX_TOKENS = 1200
@@ -28,7 +28,7 @@ export interface Ns1GateResult {
 }
 
 export function evaluateNs1Gate(
-  legacy: EvalRunRecord,
+  baseline: EvalRunRecord,
   candidate: EvalRunRecord,
   options: { requireFactImprovement?: boolean } = {},
 ): Ns1GateResult {
@@ -44,13 +44,13 @@ export function evaluateNs1Gate(
   ) failures.push('evidence-citation')
   if (
     metrics.estimatedInputTokens
-    > legacy.aggregate.estimatedInputTokens * NS1_ACCEPTANCE_THRESHOLDS.maximumEstimatedInputTokenMultiplierVsLegacy
+    > baseline.aggregate.estimatedInputTokens * NS1_ACCEPTANCE_THRESHOLDS.maximumEstimatedInputTokenMultiplierVsBaseline
   ) failures.push('input-cost')
   if (
     options.requireFactImprovement !== false
     &&
-    metrics.requiredFactRecall - legacy.aggregate.requiredFactRecall
-    < NS1_ACCEPTANCE_THRESHOLDS.minimumFactRecallImprovementVsLegacy
+    metrics.requiredFactRecall - baseline.aggregate.requiredFactRecall
+    < NS1_ACCEPTANCE_THRESHOLDS.minimumFactRecallImprovementVsBaseline
   ) failures.push('fact-improvement')
   return { passed: failures.length === 0, failures }
 }
@@ -80,7 +80,7 @@ export const EMPTY_EVAL_MEMORY: ExtractedEvalMemory = {
 }
 
 function buildEvalContinuity(fixture: LongConsistencyFixture, variant: EvalVariant, memory: ExtractedEvalMemory) {
-  if (variant === 'legacy-500-tail') return undefined
+  if (variant === 'baseline-500-tail') return undefined
   return {
     handoff: memory.handoffText || undefined,
     previousTail: fixture.task === 'completion'
@@ -127,7 +127,9 @@ export function buildEvalCase(
         parameterValues: { chapterLength: 800, pace: '中', tone: '严肃' },
         continuity: buildEvalContinuity(fixture, variant, memory),
         continuityBudgetTokens: 3000,
-        skipContinuityEnvelope: variant === 'legacy-500-tail',
+        // The baseline differs only in how much predecessor memory it receives.
+        // It still passes through the current scope/quarantine envelope.
+        skipContinuityEnvelope: false,
       },
     )
   } else if (fixture.task === 'continuation') {
@@ -141,7 +143,7 @@ export function buildEvalCase(
         parameterValues: { continueLength: 800, pace: '中', tone: '严肃' },
         continuity: buildEvalContinuity(fixture, variant, memory),
         continuityBudgetTokens: 3000,
-        skipContinuityEnvelope: variant === 'legacy-500-tail',
+        skipContinuityEnvelope: false,
       },
     )
   } else {
@@ -153,7 +155,7 @@ export function buildEvalCase(
     )
   }
 
-  const finalMessages = fixture.task === 'expansion' && variant !== 'legacy-500-tail'
+  const finalMessages = fixture.task === 'expansion' && variant !== 'baseline-500-tail'
     ? appendRealContinuity(messages, memory)
     : messages
   return {

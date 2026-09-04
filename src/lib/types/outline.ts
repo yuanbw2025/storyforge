@@ -112,7 +112,7 @@ export interface Chapter extends RagDocumentMetadata {
   summary?: string
   /** NS-1: 下一章直接承接所需的派生记忆；非 Canon。 */
   continuityHandoff?: ChapterContinuityHandoff
-  /** NS-1: summary 生成时对应的标准化正文 SHA-256。旧摘要无此字段即 unverified。 */
+  /** NS-1: summary 生成时对应的标准化正文 SHA-256；缺失证据的摘要一律视为 stale。 */
   summarySourceTextHash?: string
   /** NS-1: summary hash 所用的正文标准化算法版本。 */
   summaryTextNormalizationVersion?: string

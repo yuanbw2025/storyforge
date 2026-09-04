@@ -11,7 +11,7 @@ import {
   rebuildProjectNarrativeSummaries,
 } from '../../retrieval/retrieval'
 import { hashChapterText } from '../../ai/chapter-memory/text-normalization'
-import { assertRecordInScope, readOwnedRows } from '../../world-engine/scope'
+import { assertRecordInScope, readOwnedRows } from '../../workspace/scope'
 import {
   appendAgentRunEventV1,
   createAgentRunV1,
@@ -156,6 +156,7 @@ function remediationContract(input: {
   sourceChapterId: number
   planHash: string
   parent?: ImpactRemediationParentV1
+  runtimeBindingHash: string
 }) {
   return {
     version: 1 as const,
@@ -173,6 +174,7 @@ function remediationContract(input: {
       // write targets and therefore do not bypass FIELD_REGISTRY/adopt().
       writeTargets: [],
     },
+    runtimeBindingHash: input.runtimeBindingHash,
     budget: {
       // RunContract currently requires a positive ceiling even for zero-model work.
       maxModelCalls: 1,
@@ -340,6 +342,12 @@ export async function executeImpactRemediationV1(input: {
         sourceChapterId: input.plan.source.recordId,
         planHash: input.plan.planHash,
         parent: input.parent,
+        runtimeBindingHash: await hashCanonicalValue({
+          schema: 'storyforge.impact-remediation-runtime',
+          version: 1,
+          stepId: IMPACT_REMEDIATION_STEP_ID_V1,
+          verifierSet: IMPACT_REMEDIATION_VERIFIER_SET_V1,
+        }),
       }),
     })
     await notifyBoundary(input.onDurableBoundary, 'run.created', snapshot)

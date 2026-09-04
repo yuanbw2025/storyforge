@@ -32,7 +32,7 @@ vi.mock('../../src/stores/ai-config', () => ({
   }),
 }))
 
-vi.mock('../../src/lib/world-engine/scope', () => ({
+vi.mock('../../src/lib/workspace/scope', () => ({
   resolveScopeLike: mocks.resolveScopeLike,
 }))
 
@@ -72,7 +72,6 @@ const candidate = {
     powerHierarchy: '守灯人通过记忆契约维持力量。',
     continentLayout: '群岛围绕沉没的钟塔分布。',
     climateByRegion: '外海终年暴雨，内港受潮汐钟庇护。',
-    historyLine: '旧纪元崩毁后，港城以遗忘换取存续。',
     races: '人类、潮裔与失忆者共同生活。',
     factionLayout: '灯塔议会与拾忆者长期对峙。',
   },
@@ -125,7 +124,7 @@ afterEach(async () => {
   }
 })
 
-describe('R-HARNESS67 · 世界组七字段扩写 UI', () => {
+describe('R-HARNESS67 · 世界组六字段扩写 UI', () => {
   it('未保存的名称、类型或描述禁止进入模型调用', async () => {
     const host = await renderDetail()
     const description = host.querySelector<HTMLTextAreaElement>(
@@ -147,11 +146,11 @@ describe('R-HARNESS67 · 世界组七字段扩写 UI', () => {
       scope,
       worldGroupId: 7,
     }))
-    expect(host.textContent).toContain('七字段世界观候选尚未写入')
+    expect(host.textContent).toContain('六字段世界观候选尚未写入')
     expect(host.textContent).toContain(candidate.values.worldOrigin)
     expect(mocks.adopt).not.toHaveBeenCalled()
 
-    await act(async () => button(host, '确认写入七字段').click())
+    await act(async () => button(host, '确认写入六字段').click())
     expect(mocks.adopt).toHaveBeenCalledWith({ scope, worldGroupId: 7, runId: 67 })
     expect(host.textContent).toContain('已写入世界观')
   })
@@ -163,13 +162,13 @@ describe('R-HARNESS67 · 世界组七字段扩写 UI', () => {
     })
     const host = await renderDetail()
 
-    await vi.waitFor(() => expect(host.textContent).toContain('七字段世界观候选尚未写入'))
+    await vi.waitFor(() => expect(host.textContent).toContain('六字段世界观候选尚未写入'))
     expect(mocks.generate).not.toHaveBeenCalled()
     expect(button(host, 'AI 扩写世界观').disabled).toBe(true)
 
     await act(async () => button(host, '放弃候选').click())
     expect(mocks.reject).toHaveBeenCalledWith({ scope, worldGroupId: 7, runId: 68 })
-    expect(host.textContent).not.toContain('七字段世界观候选尚未写入')
+    expect(host.textContent).not.toContain('六字段世界观候选尚未写入')
   })
 
   it('未知模型结果窗口只允许放弃，不自动重试', async () => {
@@ -200,7 +199,7 @@ describe('R-HARNESS67 · 世界组七字段扩写 UI', () => {
     })
     const host = await renderDetail()
 
-    await vi.waitFor(() => expect(host.textContent).toContain('七字段采纳等待恢复终验'))
+    await vi.waitFor(() => expect(host.textContent).toContain('六字段采纳等待恢复终验'))
     expect(host.textContent).toContain('不会重复调用模型')
     expect(button(host, 'AI 扩写世界观').disabled).toBe(true)
     expect(button(host, '放弃候选')).toBeUndefined()

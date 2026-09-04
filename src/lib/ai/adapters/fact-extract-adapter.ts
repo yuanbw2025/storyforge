@@ -76,8 +76,8 @@ export function parseFactExtractResult(args: {
   return parsed.facts.flatMap((raw): ExtractedFactCandidate[] => {
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return []
     const item = raw as Record<string, unknown>
-    const subjectName = String(item.subject ?? item.subjectName ?? '').trim()
-    const quote = String(item.quote ?? item.sourceQuote ?? '').trim()
+    const subjectName = String(item.subject ?? '').trim()
+    const quote = String(item.quote ?? '').trim()
     // 谓词必须过受控注册表，未登记直接丢（不入权威账本）
     const spec = normalizeFactPredicate(String(item.predicate ?? ''))
     const value = spec ? normalizeFactValue(spec, item.value) : null
@@ -93,5 +93,62 @@ export function parseFactExtractResult(args: {
       objectName,
       sourceQuote: quote,
     }]
+  })
+}
+
+/**
+ * Parse the editable, current-schema fact candidate emitted by the generation
+ * node. This is intentionally separate from the provider wire parser above:
+ * provider JSON uses `subject`/`quote`, while persisted candidate JSON has one
+ * canonical shape (`subjectName`/`sourceQuote`) and never accepts aliases.
+ */
+export function parseCanonicalFactCandidateDraftV1(args: {
+  raw: string
+  chapterContent: string
+}): ExtractedFactCandidate[] {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(args.raw)
+  } catch {
+    throw new Error('事实候选必须是合法 JSON。')
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('事实候选根必须是对象。')
+  }
+  const root = parsed as Record<string, unknown>
+  if (Object.keys(root).length !== 1 || !Array.isArray(root.facts)) {
+    throw new Error('事实候选只能包含 facts 数组。')
+  }
+  return root.facts.map((raw, index): ExtractedFactCandidate => {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+      throw new Error(`事实候选 facts[${index}] 必须是对象。`)
+    }
+    const item = raw as Record<string, unknown>
+    const allowed = new Set(['subjectName', 'predicate', 'factKind', 'value', 'objectName', 'sourceQuote'])
+    const unknown = Object.keys(item).filter(key => !allowed.has(key))
+    if (unknown.length) throw new Error(`事实候选 facts[${index}] 含非当前字段：${unknown.join('、')}。`)
+
+    const subjectName = typeof item.subjectName === 'string' ? item.subjectName.trim() : ''
+    const predicate = typeof item.predicate === 'string' ? item.predicate.trim() : ''
+    const sourceQuote = typeof item.sourceQuote === 'string' ? item.sourceQuote.trim() : ''
+    const spec = FACT_PREDICATE_REGISTRY.find(entry => entry.key === predicate)
+    const value = spec ? normalizeFactValue(spec, item.value) : null
+    if (!spec || !subjectName || !value || item.factKind !== spec.factKind) {
+      throw new Error(`事实候选 facts[${index}] 的主体、谓词、类型或值无效。`)
+    }
+    if (!sourceQuote || !args.chapterContent.includes(sourceQuote)) {
+      throw new Error(`事实候选 facts[${index}] 的逐字证据不在当前正文中。`)
+    }
+    const objectName = typeof item.objectName === 'string' && item.objectName.trim()
+      ? item.objectName.trim()
+      : undefined
+    return {
+      subjectName,
+      predicate: spec.key,
+      factKind: spec.factKind,
+      value,
+      objectName,
+      sourceQuote,
+    }
   })
 }

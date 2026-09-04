@@ -5,7 +5,7 @@ import {
   type CommercialPlatformSnapshotV1,
   type CommercialPrincipalV1,
 } from '../../src/lib/commercial/authority'
-import { TransactionalPlatformSnapshotPersistenceV1 } from '../../src/lib/game-platform/transactional-snapshot-persistence'
+import { TransactionalPlatformSnapshotPersistenceV1 } from '../../src/lib/product-platform/transactional-snapshot-persistence'
 import type {
   TransactionalKeyValueStorageV1,
   TransactionalKeyValueTransactionV1,

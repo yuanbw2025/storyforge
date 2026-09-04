@@ -1,15 +1,15 @@
-import { verifyGameReleaseManifestV2 } from "../game-production/runtime-package";
-import { verifyPlayableGamePackageSource } from "../game-production/preview-source";
+import { verifyProductReleaseManifestV1 } from "../product-production/runtime-package";
+import { verifyProductRuntimeSource } from "../product-production/preview-source";
 import { db } from "../db/schema";
 import type { AssembleContextInput } from "../registry/types";
 import type {
-  GameRuntimePackageV2,
-  SimulationTtrpgRuleActionResultV1,
+  ProductRuntimePackageV1,
+  TtrpgRuntimeRuleActionResultV1,
   WorkspaceScope,
 } from "../types";
-import { assertInstanceBinding } from "../world-engine/instances";
-import { resolveScope } from "../world-engine/scope";
-import { assertGameReleaseUnchanged } from "../text-game/releases";
+import { assertInstanceBinding } from "../product/runtime-instances";
+import { resolveScope } from "../workspace/scope";
+import { assertProductReleaseUnchanged } from "../product/releases";
 import { parseTtrpgCampaignContentV1 } from "./campaign";
 import { parseRulePackV1 } from "./rule-pack";
 import { readTtrpgSessionParticipantsV2 } from "./participants";
@@ -66,7 +66,7 @@ export interface TtrpgGmRuntimeViewV1 {
       role: "player" | "npc";
     }>;
   };
-  latestAction: SimulationTtrpgRuleActionResultV1 | null;
+  latestAction: TtrpgRuntimeRuleActionResultV1 | null;
   participants: Array<{
     entityKey: string;
     name: string;
@@ -135,7 +135,7 @@ export interface TtrpgGmRuntimeViewV1 {
       targetKey: string | null;
       actionKey: string;
       actionName: string;
-      outcome: SimulationTtrpgRuleActionResultV1["outcome"];
+      outcome: TtrpgRuntimeRuleActionResultV1["outcome"];
       resourceChanges: Array<{
         entityKey: string;
         resourceKey: string;
@@ -166,16 +166,15 @@ function fail(message: string): never {
  */
 export async function loadTtrpgGmRuntimeViewV1(input: {
   scope: WorkspaceScope;
-  simulationSessionId: number;
+  productRuntimeSessionId: number;
 }): Promise<TtrpgGmRuntimeViewV1> {
   const session = await assertInstanceBinding(
-    input.simulationSessionId,
+    input.productRuntimeSessionId,
     input.scope,
   );
   const sourceCount = [
-    session.gameReleaseId,
-    session.gameBuildId,
-    session.ttrpgBuildId,
+    session.productReleaseId,
+    session.productBuildId,
   ].filter((value) => value != null).length;
   if (
     session.kind !== "ttrpg" ||
@@ -184,44 +183,30 @@ export async function loadTtrpgGmRuntimeViewV1(input: {
   ) {
     fail("只能读取绑定唯一已验证 Release 或 Build Preview 的 TTRPG 实例");
   }
-  let runtimePackage: GameRuntimePackageV2;
+  let runtimePackage: ProductRuntimePackageV1;
   let packageHash: string;
   let sourceIdentityHash: string;
-  if (session.gameReleaseId != null) {
-    const release = await assertGameReleaseUnchanged(session.gameReleaseId);
-    const manifest = await verifyGameReleaseManifestV2(release.manifestJson);
+  if (session.productReleaseId != null) {
+    const release = await assertProductReleaseUnchanged(session.productReleaseId);
+    const manifest = await verifyProductReleaseManifestV1(release.manifestJson);
     runtimePackage = manifest.runtimePackage;
     packageHash = manifest.packageHash;
     sourceIdentityHash = release.contentHash;
-  } else if (session.gameBuildId != null) {
-    const build = await db.gameBuilds.get(session.gameBuildId!);
+  } else if (session.productBuildId != null) {
+    const build = await db.productBuilds.get(session.productBuildId!);
     if (!build?.previewHash) fail("Build Preview 缺少冻结 previewHash");
-    const playable = await verifyPlayableGamePackageSource({
+    const playable = await verifyProductRuntimeSource({
       scope: input.scope,
       source: {
         kind: "build",
-        gameBuildId: session.gameBuildId!,
+        productBuildId: session.productBuildId!,
         expectedPreviewHash: build.previewHash,
       },
     });
     runtimePackage = playable.runtimePackage;
     packageHash = playable.packageHash;
     sourceIdentityHash = build.previewHash;
-  } else {
-    const build = await db.ttrpgProductionBuilds.get(session.ttrpgBuildId!);
-    if (!build?.buildHash) fail("TTRPG Product Build 缺少冻结 buildHash");
-    const playable = await verifyPlayableGamePackageSource({
-      scope: input.scope,
-      source: {
-        kind: "ttrpg-build",
-        ttrpgBuildId: session.ttrpgBuildId!,
-        expectedBuildHash: build.buildHash,
-      },
-    });
-    runtimePackage = playable.runtimePackage;
-    packageHash = playable.packageHash;
-    sourceIdentityHash = build.buildHash;
-  }
+  } else fail("旧 TTRPG 专用 Build 已下线；请重新生成统一 Product Build");
   if (
     runtimePackage.productType !== "ttrpg" ||
     !runtimePackage.ttrpg ||
@@ -234,8 +219,8 @@ export async function loadTtrpgGmRuntimeViewV1(input: {
     runtimePackage.ttrpg.campaign,
     rulePack,
   );
-  const { readSimulationState } = await import("../simulation/runtime");
-  const state = await readSimulationState(session.id!);
+  const { readProductRuntimeState } = await import("./runtime-api");
+  const state = await readProductRuntimeState(session.id!);
   const product = state.ttrpg?.product;
   if (
     !product ||
@@ -510,12 +495,12 @@ export async function loadTtrpgGmRuntimeViewV1(input: {
 export async function readTtrpgGmRuntimeContextV1(
   input: AssembleContextInput,
 ): Promise<string> {
-  if (input.simulationSessionId == null) return "";
+  if (input.productRuntimeSessionId == null) return "";
   const scope =
     input.scope ?? (await resolveScope({ projectId: input.projectId }));
   const view = await loadTtrpgGmRuntimeViewV1({
     scope,
-    simulationSessionId: input.simulationSessionId,
+    productRuntimeSessionId: input.productRuntimeSessionId,
   });
   if (
     input.worldGroupId !== undefined &&

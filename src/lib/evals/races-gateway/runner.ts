@@ -19,13 +19,14 @@ import {
   verifyContextGatewayCandidateEvidenceV1,
 } from '../../context-gateway/attempt-evidence'
 import { db } from '../../db/schema'
-import { generateWorkCode, generateWorkspaceUid } from '../../memory/identity'
 import { readAgentRunArtifactExactV1 } from '../../memory/artifact-store'
 import { cascadeDeleteProject } from '../../registry/lifecycle'
 import type { ContextSourceRefV1 } from '../../registry/types'
-import type { AIConfig, Character, Project, WorkspaceScope, Worldview } from '../../types'
-import { ensureWorkspaceOwnership } from '../../world-engine/ownership'
-import { stampNewRecord } from '../../world-engine/scope'
+import type { AIConfig, Character, WorkspaceScope, Worldview } from '../../types'
+import { resolveWorkspaceOwnership } from '../../workspace/ownership'
+import { stampNewRecord } from '../../workspace/scope'
+import { createWorkspace } from '../../workspace/create-workspace'
+import { createWorldWork } from '../../workspace/works'
 import { RACES_GATEWAY_EVAL_FIXTURES_V1 } from './fixtures'
 import { RacesGatewayBlindGraderFailureV1 } from './protocol'
 import {
@@ -110,25 +111,21 @@ function planFor(fixture: RacesGatewayEvalFixtureV1): MasterAgentPlan {
 
 function emptyWorldview(): Omit<Worldview, 'id' | 'projectId'> {
   return {
-    geography: '', history: '', society: '', culture: '', economy: '', rules: '', summary: '',
     worldOrigin: '', races: '', createdAt: Date.now(), updatedAt: Date.now(),
   }
 }
 
 async function seedWorkspace(fixture: RacesGatewayEvalFixtureV1): Promise<SeededRacesGatewayWorkspaceV1> {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    workspaceUid: generateWorkspaceUid(),
+  const created = await createWorkspace({
     name: fixture.title,
-    genre: 'fantasy',
     genres: ['fantasy'],
     description: `${PROJECT_MARKER} ${fixture.id}`,
     status: 'drafting',
     targetWordCount: 1_000_000,
-    createdAt: now,
-    updatedAt: now,
-  } as Project) as number
-  const scope = (await ensureWorkspaceOwnership(projectId)).scope
+  }, { purpose: 'independent-work', kind: 'novel', novelProfile: 'long' })
+  const { scope } = created
+  const projectId = scope.projectId
   let worldviewId: number | null = null
   if (fixture.kind === 'partial-world' || fixture.kind === 'pinned-mandatory'
     || fixture.kind === 'expand' || fixture.kind === 'polish') {
@@ -147,7 +144,7 @@ async function seedWorkspace(fixture: RacesGatewayEvalFixtureV1): Promise<Seeded
       const character = stampNewRecord(scope, 'characters', {
         projectId,
         name: isTarget ? fixture.expectedAnchor! : `目录填充角色${fixture.id}-${index + 1}`,
-        role: 'supporting', roleWeight: 'secondary', moralAxis: 'neutral', orderAxis: 'neutral',
+        roleWeight: 'secondary', moralAxis: 'neutral', orderAxis: 'neutral',
         shortDescription: isTarget
           ? `${fixture.expectedAnchor}负责保存跨族群通行契约，身份不能被同名概念替代。`
           : `第 ${index + 1} 位普通港口居民。`,
@@ -416,7 +413,7 @@ async function sourceResult(input: {
   if (!result?.projectId || !result.runId || !result.candidateEventId) {
     throw new Error(`源样本 ${input.fixture.sourceCaseId ?? '<none>'} 不可用`)
   }
-  const scope = (await ensureWorkspaceOwnership(result.projectId)).scope
+  const scope = (await resolveWorkspaceOwnership(result.projectId)).scope
   return { result, scope }
 }
 
@@ -427,15 +424,12 @@ async function executeCrossScopeFixture(
   const startedAt = performance.now()
   try {
     const source = await sourceResult({ fixture, results })
-    const now = Date.now()
-    const otherWorkId = await db.works.add({
-      projectId: source.scope.projectId,
-      worldId: source.scope.worldId,
-      code: generateWorkCode(),
+    const otherWork = await createWorldWork(source.scope.projectId, {
       title: `${fixture.id} 攻击作品`,
       description: '', genres: ['fantasy'], status: 'drafting', targetWordCount: 10_000,
-      createdAt: now, updatedAt: now,
-    }) as number
+      kind: 'novel', novelProfile: 'long',
+    })
+    const otherWorkId = otherWork.id!
     let blocked = false
     let message = ''
     try {
@@ -693,9 +687,11 @@ export function exportRacesGatewayEvalCheckpointV1(checkpoint: RacesGatewayEvalC
 }
 
 export async function cleanupRacesGatewayEvalProjectsV1(): Promise<number> {
-  const projects = (await db.projects.toArray()).filter(project => project.description.startsWith(PROJECT_MARKER))
-  for (const project of projects) if (project.id != null) await cascadeDeleteProject(project.id)
-  return projects.length
+  const projectIds = [...new Set((await db.works.toArray())
+    .filter(work => work.description.startsWith(PROJECT_MARKER))
+    .map(work => work.projectId))]
+  for (const projectId of projectIds) await cascadeDeleteProject(projectId)
+  return projectIds.length
 }
 
 export async function clearRacesGatewayEvalCheckpointV1(): Promise<void> {

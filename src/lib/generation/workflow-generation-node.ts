@@ -3,7 +3,7 @@ import type { ChatMessage } from '../types'
 import type { GenerationNode } from './generation-node'
 
 /**
- * 既有 PromptWorkflow 步骤到 GenerationNode 的兼容适配器。
+ * PromptWorkflow 步骤到统一 GenerationNode 的正式适配器。
  * category 仍来自已登记的 promptModuleKey；写回继续由 WorkflowRunner 的
  * 作者确认按钮触发，不在节点 run 阶段自动执行。
  */

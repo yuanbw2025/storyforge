@@ -5,14 +5,25 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { exportFactMemoryMarkdown, importFactCandidateDiff } from '../../src/lib/fact-ledger/human-readable-io'
+import { seedCurrentProject } from '../helpers/current-workspace'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
 
 const now = Date.now()
 
 async function seed() {
-  const pid = await db.projects.add({ name: 'P', genre: 'x', description: '', targetWordCount: 0, enableMultiWorld: false, createdAt: now, updatedAt: now } as any) as number
-  const charId = await db.characters.add({ projectId: pid, name: '林飞', role: 'protagonist', createdAt: now, updatedAt: now } as any) as number
-  const ch = await db.chapters.add({ projectId: pid, outlineNodeId: null, title: '第1章', content: '林飞在洛阳。', wordCount: 0, status: 'draft', order: 0, notes: '', createdAt: now, updatedAt: now } as any) as number
-  const ch2 = await db.chapters.add({ projectId: pid, outlineNodeId: null, title: '第2章', content: '林飞去北境。', wordCount: 0, status: 'draft', order: 1, notes: '', createdAt: now, updatedAt: now } as any) as number
+  const pid = await seedCurrentProject({ name: 'P', genres: ['x'], description: '', targetWordCount: 0, enableMultiWorld: false, createdAt: now, updatedAt: now } as any) as number
+  const charId = await db.characters.add({
+    projectId: pid, name: '林飞', roleWeight: 'main', moralAxis: 'neutral', orderAxis: 'neutral',
+    shortDescription: '', appearance: '', personality: '', background: '', motivation: '',
+    abilities: '', relationships: '', arc: '', homeWorldGroupId: null, isCrossWorld: false,
+    createdAt: now, updatedAt: now,
+  } as any) as number
+  const volumeId = await db.outlineNodes.add({ projectId: pid, parentId: null, type: 'volume', title: '第一卷', summary: '', order: 0, createdAt: now, updatedAt: now } as any) as number
+  const firstNodeId = await db.outlineNodes.add({ projectId: pid, parentId: volumeId, type: 'chapter', title: '第1章', summary: '', order: 0, createdAt: now, updatedAt: now } as any) as number
+  const secondNodeId = await db.outlineNodes.add({ projectId: pid, parentId: volumeId, type: 'chapter', title: '第2章', summary: '', order: 1, createdAt: now, updatedAt: now } as any) as number
+  const ch = await db.chapters.add({ projectId: pid, outlineNodeId: firstNodeId, title: '第1章', content: '林飞在洛阳。', wordCount: 0, status: 'draft', order: 0, notes: '', createdAt: now, updatedAt: now } as any) as number
+  const ch2 = await db.chapters.add({ projectId: pid, outlineNodeId: secondNodeId, title: '第2章', content: '林飞去北境。', wordCount: 0, status: 'draft', order: 1, notes: '', createdAt: now, updatedAt: now } as any) as number
+  await finalizeCurrentFixtureV1(pid)
   return { pid, charId, ch, ch2 }
 }
 
@@ -32,6 +43,7 @@ describe('NS-4 · human-readable IO', () => {
       title: '全书叙事摘要', summary: '林飞开局在洛阳。', keywords: ['林飞', '洛阳'],
       sourceHash: 'h', status: 'verified', generatedBy: 'system-rollup', createdAt: now, updatedAt: now,
     } as any)
+    await finalizeCurrentFixtureV1(pid)
 
     const md = await exportFactMemoryMarkdown(pid)
     expect(md).toContain('事实账本')
@@ -42,8 +54,10 @@ describe('NS-4 · human-readable IO', () => {
 
   it('导入候选 diff 只写 candidate/import，并跳过无效谓词与坏章节引用', async () => {
     const { pid, charId, ch, ch2 } = await seed()
-    const otherProject = await db.projects.add({ name: 'Other', genre: 'x', description: '', targetWordCount: 0, enableMultiWorld: false, createdAt: now, updatedAt: now } as any) as number
-    const foreignChapter = await db.chapters.add({ projectId: otherProject, outlineNodeId: null, title: '外部章', content: '', wordCount: 0, status: 'draft', order: 0, notes: '', createdAt: now, updatedAt: now } as any) as number
+    const otherProject = await seedCurrentProject({ name: 'Other', genres: ['x'], description: '', targetWordCount: 0, enableMultiWorld: false, createdAt: now, updatedAt: now } as any) as number
+    const foreignNode = await db.outlineNodes.add({ projectId: otherProject, parentId: null, type: 'chapter', title: '外部章', summary: '', order: 0, createdAt: now, updatedAt: now } as any) as number
+    const foreignChapter = await db.chapters.add({ projectId: otherProject, outlineNodeId: foreignNode, title: '外部章', content: '', wordCount: 0, status: 'draft', order: 0, notes: '', createdAt: now, updatedAt: now } as any) as number
+    await finalizeCurrentFixtureV1(otherProject)
 
     const result = await importFactCandidateDiff(pid, {
       facts: [

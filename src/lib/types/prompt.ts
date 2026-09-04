@@ -1,11 +1,10 @@
 /**
  * 提示词模板系统类型定义
  *
- * Phase 1 落地范围：把硬编码 prompts 下沉到 IndexedDB。
- * 历史设计详见 WPS 云文档 storyforge故事熔炉 / 仓库文档迁移_20260708 / archive。
+ * 当前 PromptTemplate / Workflow 持久化协议。
  */
 
-/** 提示词模块标识 — Phase 1 当前用到的全集 */
+/** 当前提示词模块标识全集。 */
 export type PromptModuleKey =
   // 世界观
   | 'worldview.dimension'
@@ -30,7 +29,7 @@ export type PromptModuleKey =
   // 地理 / 概念地图
   | 'geography.concept-map'
   | 'geography.image-map-prompt'
-  // —— 后续 Phase 启用 ——
+  // 扩展创作与产品模块
   | 'worldview.generate'
   | 'worldview.worldbuilding'
   | 'story.generate'
@@ -92,23 +91,23 @@ export type PromptModuleKey =
   | 'style.learn'
   | 'style.calibrate'
 
-export type PromptProjectField =
-  | 'name'
+export type PromptWorkField =
+  | 'title'
   | 'genres'
   | 'description'
   | 'targetWordCount'
   | 'lengthMode'
   | 'serializationMode'
 
-/** 普通 PromptTemplate 的单个变量如何从项目或作者输入获得值。 */
+/** 普通 PromptTemplate 的单个变量如何从当前 Work 或作者输入获得值。 */
 export interface PromptVariableBinding {
   variable: string
   label: string
   description?: string
   /** 统一从 CONTEXT_SOURCES 读取；运行时只装配一次，避免重复注入。 */
   sourceKeys?: string[]
-  /** 从项目元信息派生，不读取故事事实。 */
-  projectField?: PromptProjectField
+  /** 从当前 Work 元信息派生，不读取故事事实。 */
+  workField?: PromptWorkField
   /** 是否允许作者在工作流步骤中补充或修正。 */
   manual?: boolean
   required?: boolean
@@ -121,7 +120,7 @@ export interface PromptApplicability {
   genres?: string[]
 }
 
-/** 模板可调参数定义（Phase 12） */
+/** 模板可调参数定义。 */
 export interface PromptParameter {
   /** 在模板里用 {{key}} 插入；usesXxx 用于条件块 */
   key: string
@@ -145,7 +144,7 @@ export interface PromptParameter {
   optional?: boolean
 }
 
-/** 单条示例（Phase 12 加，P15 启用 UI） */
+/** 单条示例。 */
 export interface PromptExample {
   id: string
   text: string
@@ -175,7 +174,7 @@ export interface PromptTemplate {
   parentId?: number
   isActive: boolean
 
-  // ── Phase 12 新增字段（全部可选，向后兼容） ────────────────────────────
+  // 不同模板按能力选择性声明以下字段；未声明即不参与该能力。
   /** 是否标记为"默认推荐" — UI 显示徽章 */
   isDefault?: boolean
   /** 所属题材包（如 ['xuanhuan'] ['yanqing']）；空则为通用包 */
@@ -193,7 +192,7 @@ export interface PromptTemplate {
   continuityMode?: 'inherit' | 'required' | 'off'
   /** 外部内容资产的稳定编号，只用于普通模板识别，不建立独立运行入口。 */
   assetId?: string
-  /** 模板变量的声明式字段绑定，由原 WorkflowRunner 统一装配。 */
+  /** 模板变量的声明式字段绑定，由当前 WorkflowRunner 统一装配。 */
   variableBindings?: PromptVariableBinding[]
   /** 该内容模板适用的篇幅、连载形态或题材。 */
   applicability?: PromptApplicability

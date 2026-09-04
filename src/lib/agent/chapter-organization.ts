@@ -49,7 +49,7 @@ import {
   resolveReadScopeLike,
   resolveScopeLike,
   stampNewRecord,
-} from '../world-engine/scope'
+} from '../workspace/scope'
 import {
   adoptStorylineAnalysisCandidates,
   parseStorylineProgressResult,
@@ -121,7 +121,7 @@ export interface ChapterOrganizationCandidate {
   domainStatus: Record<ChapterOrganizationDomain, ChapterOrganizationDomainStatus>
   domainErrors: Partial<Record<ChapterOrganizationDomain, string>>
   budget: AgentTeamBudgetEvidence
-  /** H5 durable harness evidence; absent for legacy/manual runs. */
+  /** H5 durable Harness evidence; absent only for explicitly manual organization. */
   durable?: ChapterOrganizationDurableEvidence
 }
 
@@ -209,7 +209,7 @@ function records(value: unknown): Record<string, unknown>[] {
 }
 
 function exactQuote(item: Record<string, unknown>, text: string): string | null {
-  const sourceQuote = String(item.sourceQuote ?? item.quote ?? '').trim()
+  const sourceQuote = String(item.sourceQuote ?? '').trim()
   return sourceQuote && text.includes(sourceQuote) ? sourceQuote : null
 }
 
@@ -235,15 +235,17 @@ function parseStateCandidates(
 }
 
 function parseInventoryCandidates(value: unknown, text: string): EvidencedItemEvent[] {
-  return withExactEvidence(value, text).flatMap(({ item, sourceQuote }) => (
-    parseInventoryEvents(JSON.stringify([item])).map(event => ({ ...event, sourceQuote }))
-  ))
+  return withExactEvidence(value, text).flatMap(({ item, sourceQuote }) => {
+    const { sourceQuote: _sourceQuote, ...candidate } = item
+    return parseInventoryEvents(JSON.stringify([candidate])).map(event => ({ ...event, sourceQuote }))
+  })
 }
 
 function parseStoryCandidates(value: unknown, text: string): EvidencedStoryEvent[] {
-  return withExactEvidence(value, text).flatMap(({ item, sourceQuote }) => (
-    parseStoryEvents(JSON.stringify([item])).map(event => ({ ...event, sourceQuote }))
-  ))
+  return withExactEvidence(value, text).flatMap(({ item, sourceQuote }) => {
+    const { sourceQuote: _sourceQuote, ...candidate } = item
+    return parseStoryEvents(JSON.stringify([candidate])).map(event => ({ ...event, sourceQuote }))
+  })
 }
 
 function parseRelationCandidates(input: {
@@ -499,6 +501,7 @@ export async function persistChapterOrganizationCandidate(
   const conversation = stampNewRecord(scope, 'agentConversations', {
     projectId: candidate.projectId,
     worldGroupId: candidate.worldGroupId,
+    purpose: 'chapter.organization',
     title: `整理本章 · ${candidate.chapterTitle}`,
     status: 'archived',
     createdAt: now,
@@ -509,6 +512,7 @@ export async function persistChapterOrganizationCandidate(
     const event = stampNewRecord(scope, 'agentEvents', {
       projectId: candidate.projectId,
       conversationId,
+      durableRunId: options.durable?.runId ?? null,
       sequence: 1,
       kind: 'candidate',
       content: summarizeChapterOrganizationCandidate(storedCandidate),

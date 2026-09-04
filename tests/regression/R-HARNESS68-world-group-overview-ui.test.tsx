@@ -55,7 +55,7 @@ vi.mock('../../src/stores/ai-config', () => ({
   }),
 }))
 
-vi.mock('../../src/lib/world-engine/scope', () => ({ resolveScopeLike: mocks.resolveScopeLike }))
+vi.mock('../../src/lib/workspace/scope', () => ({ resolveScopeLike: mocks.resolveScopeLike }))
 
 vi.mock('../../src/lib/agent/run/world-suggest-durable', () => ({
   generateWorldSuggestCandidateV1: mocks.generate,
@@ -74,12 +74,12 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
 const project = {
   id: 1,
+  workspaceUid: 'WS-00000000-0000-4000-8000-000000000001',
+  workspacePurpose: 'world-engine',
   name: '诸界航路',
-  description: '主角通过潮汐门探索递进世界。',
-  genre: 'fantasy',
-  genres: ['fantasy'],
-  status: 'drafting',
-  targetWordCount: 100_000,
+  enableMultiWorld: true,
+  activeWorldId: 11,
+  activeWorkId: 12,
   createdAt: 1,
   updatedAt: 1,
 } as Project

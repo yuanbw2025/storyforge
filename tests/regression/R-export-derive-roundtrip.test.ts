@@ -1,19 +1,14 @@
 /**
- * R-export-derive-roundtrip · 派生引擎往返 + 旧格式向后兼容
+ * R-export-derive-roundtrip · 当前派生引擎完整往返
  *
  * AUDIT-1 导入安全闸:
  * ① 派生导出 → 派生导入:全表行数一致 + 外键/树/世界组重映射正确。
- * ② 真实旧格式 fixture → 派生导入(已下载的旧备份 / Gist 旧存档能被新引擎读)。
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import fs from 'node:fs'
-import path from 'node:path'
 import { db } from '../../src/lib/db/schema'
 import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
 import { seedFullProject, EXPORTABLE_PROJECT_TABLES } from '../helpers/seed-full-project'
 import { parseWorldPortals } from '../../src/lib/utils/world-portals'
-
-const legacyFixturePath = path.resolve(__dirname, '../fixtures/legacy-export-v3.json')
 
 async function tableCount(name: string, projectId: number): Promise<number> {
   return await (db as any)[name].where('projectId').equals(projectId).count()
@@ -59,7 +54,7 @@ async function expectKeysRemapped(newId: number) {
   expect(portals[0].targetWorldId).toBe(mirror.id)
 }
 
-describe('R-export-derive-roundtrip · 派生往返 + 旧格式兼容', () => {
+describe('R-export-derive-roundtrip · 当前派生往返', () => {
   beforeEach(async () => { await db.delete(); await db.open() })
   afterEach(async () => { db.close() })
 
@@ -70,17 +65,5 @@ describe('R-export-derive-roundtrip · 派生往返 + 旧格式兼容', () => {
     expect(newId).not.toBe(projectId)
     await expectSameCounts(projectId, newId)
     await expectKeysRemapped(newId)
-  })
-
-  it('② 真实旧格式 fixture → 派生导入:外键/树/世界组重映射正确(旧备份兼容)', async () => {
-    const legacy = JSON.parse(fs.readFileSync(legacyFixturePath, 'utf8'))
-    const newId = await importProjectJSON(legacy)
-    await expectKeysRemapped(newId)
-    // fixture 即 seedFullProject 的导出,行数应与重新 seed 的源项目一致
-    const { projectId: freshSrc } = await seedFullProject()
-    // 旧备份只需完整恢复它实际包含的表；新增表不能被要求凭空生成记录。
-    const legacyTables = EXPORTABLE_PROJECT_TABLES.filter(name => Array.isArray(legacy[name]))
-    await expectSameCounts(freshSrc, newId, legacyTables)
-    expect(await db.knowledgeLedger.where('projectId').equals(newId).count()).toBe(0)
   })
 })

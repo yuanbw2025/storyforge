@@ -15,12 +15,11 @@ import { assembleContext } from '../registry/assemble-context'
 import type { AdoptResult, AssembleContextResult } from '../registry/types'
 import type { AIConfig, ChatMessage, CreativeRules, WorkspaceScope } from '../types'
 import {
-  isLegacyReadScope,
   readOwnedRows,
   resolveReadScopeLike,
   resolveScope,
   scopeTransactionTables,
-} from '../world-engine/scope'
+} from '../workspace/scope'
 import {
   createAgentContextCompressionSessionV1,
   type AgentContextCompressionRuntimeV1,
@@ -123,7 +122,7 @@ function asText(value: unknown): string {
 function valuesOf(row: CreativeRules | null): Record<CreativeRulesField, string> {
   return {
     writingStyle: asText(row?.writingStyle),
-    atmosphere: asText(row?.atmosphere) || asText(row?.toneAndMood),
+    atmosphere: asText(row?.atmosphere),
     specialRequirements: asText(row?.specialRequirements),
   }
 }
@@ -138,11 +137,8 @@ function snapshotOf(row: CreativeRules | null): CreativeRulesCopilotSnapshotV1 {
       updatedAt: row?.updatedAt ?? null,
       values,
       narrativePOV: asText(row?.narrativePOV),
-      toneAndMood: asText(row?.toneAndMood),
       prohibitions: asText(row?.prohibitions),
       consistencyRules: asText(row?.consistencyRules),
-      referenceWorks: asText(row?.referenceWorks),
-      referenceWorksV2: row?.referenceWorksV2 ?? null,
       citedReferenceIds: asText(row?.citedReferenceIds),
       citedInsightIds: asText(row?.citedInsightIds),
     }),
@@ -354,7 +350,9 @@ export async function prepareCreativeRulesCopilotV1(
   }
   const worldGroupId = project.enableMultiWorld ? input.worldGroupId : null
   const readScope = input.scope ?? await resolveReadScopeLike(input.projectId)
-  const scope = isLegacyReadScope(readScope) ? undefined : readScope
+  const scope = readScope
+  const work = await db.works.get(scope.workId)
+  if (!work || work.projectId !== input.projectId) throw new Error('当前作品不存在。')
   const before = await readSnapshot(input.projectId, scope)
   const routingCategory = input.routingCategory ?? 'agent.world-foundation.creative-rules'
   const config = input.configOverride ?? resolveRequestConfig(
@@ -403,8 +401,8 @@ export async function prepareCreativeRulesCopilotV1(
     targetField,
     assembled,
     snapshot,
-    projectName: project.name,
-    genres: project.genres?.join('、') || project.genre || '',
+    projectName: work.title,
+    genres: work.genres.join('、'),
     config,
     routingCategory,
     generationOverrides: input.generationOverrides,

@@ -27,7 +27,7 @@ import {
   readOwnedRows,
   resolveScope,
   scopeTransactionTables,
-} from '../world-engine/scope'
+} from '../workspace/scope'
 import {
   attachAgentContextInputStateV1,
   evidenceFromContextResult,
@@ -62,7 +62,6 @@ import {
   type CreativeRawModelResultV1,
 } from './creative-execution'
 import {
-  isCreativeReliabilityRuntimeEnabledV1,
   parseCreativeArtifactV1,
   type CreativeAssumptionV1,
   type CreativeArtifactIssueV1,
@@ -87,11 +86,11 @@ export interface ProseCopilotSnapshot {
   chapterHadContent: boolean
   chapterOrder: number
   /** 叙事视角角色；缺省表示本轮不注入任何角色认知投影。 */
-  perspectiveCharacterId?: number | null
-  /** H9：生成时的信息边界；旧候选缺省时按兼容路径重建。 */
-  informationBoundaryHash?: string
+  perspectiveCharacterId: number | null
+  /** 生成时冻结的信息边界。 */
+  informationBoundaryHash: string
   /** 视角来自章节字段时，章节视角变化必须使候选过期；主 Agent 显式视角不绑定该字段。 */
-  perspectiveFromChapter?: boolean
+  perspectiveFromChapter: boolean
 }
 
 export interface ProseCopilotInput {
@@ -107,7 +106,6 @@ export interface ProseCopilotInput {
   snapshot: ProseCopilotSnapshot
   assembled: ProseGatewayAssemblyV1
   narrativeBrief: NarrativeBriefV1
-  creativeReliabilityEnabled?: boolean
   previousTail: string
   config: AIConfig
   /** 显式叙事视角。不得让模型从正文或角色列表自行猜测。 */
@@ -249,9 +247,9 @@ async function snapshotOf(
   outline: OutlineNode,
   chapter: Chapter | null,
   order: number,
-  perspectiveCharacterId?: number | null,
-  informationBoundaryHash?: string,
-  perspectiveFromChapter?: boolean,
+  perspectiveCharacterId: number | null,
+  informationBoundaryHash: string,
+  perspectiveFromChapter: boolean,
 ): Promise<ProseCopilotSnapshot> {
   return {
     outlineNodeId: outline.id!,
@@ -318,8 +316,7 @@ function sameSnapshot(left: ProseCopilotSnapshot, right: ProseCopilotSnapshot): 
     && left.chapterContentHash === right.chapterContentHash
     && left.chapterHadContent === right.chapterHadContent
     && left.perspectiveCharacterId === right.perspectiveCharacterId
-    && (left.informationBoundaryHash == null
-      || left.informationBoundaryHash === right.informationBoundaryHash)
+    && left.informationBoundaryHash === right.informationBoundaryHash
 }
 
 function candidateIssues(
@@ -359,9 +356,7 @@ function buildProseMessages(input: ProseCopilotInput) {
   const hint = [
     input.inputGuidance,
     input.authorRequest + wordCountHint + supplemental,
-    ...(input.creativeReliabilityEnabled !== false
-      ? [formatNarrativeBriefForPromptV1(input.narrativeBrief)]
-      : []),
+    formatNarrativeBriefForPromptV1(input.narrativeBrief),
   ].join('\n\n')
   if (input.operation === 'continue') {
     const context = characters ? `${world}\n\n${characters}` : world
@@ -402,10 +397,9 @@ async function adoptCandidate(input: {
     worldGroupId: input.worldGroupId,
     perspectiveCharacterId: input.snapshot.perspectiveCharacterId ?? null,
   })
-  if (
-    input.snapshot.informationBoundaryHash != null
-    && informationBoundary.manifestHash !== input.snapshot.informationBoundaryHash
-  ) throw new ProseCopilotStaleError()
+  if (informationBoundary.manifestHash !== input.snapshot.informationBoundaryHash) {
+    throw new ProseCopilotStaleError()
+  }
   const boundaryIssues = validateProseInformationBoundaryV1(candidate, informationBoundary)
   if (boundaryIssues.length) throw new Error(boundaryIssues.map(issue => issue.message).join('；'))
   const chapterId = await db.transaction(
@@ -528,7 +522,6 @@ export async function prepareProseCopilot(input: {
   generationOverrides?: { temperature?: number; maxTokens?: number }
   contextCompressionRuntime?: AgentContextCompressionRuntimeV1
   inheritedAssumptions?: readonly CreativeAssumptionV1[]
-  creativeReliabilityEnabled?: boolean
   signal?: AbortSignal
 }, dependencies: ProseCopilotDependencies = {}): Promise<PreparedProseCopilot> {
   const project = await db.projects.get(input.projectId)
@@ -594,7 +587,7 @@ export async function prepareProseCopilot(input: {
     perspectiveCharacterId,
     config,
     contextProfile,
-    requireDetailedOutline: false,
+    allowOutlineOnlyAgentDraft: true,
     signal: input.signal,
   })
   const current = await readSnapshot(scope, snapshot, worldGroupId)
@@ -618,8 +611,6 @@ export async function prepareProseCopilot(input: {
     assembled,
     inheritedAssumptions: input.inheritedAssumptions,
   })
-  const creativeReliabilityEnabled = input.creativeReliabilityEnabled
-    ?? isCreativeReliabilityRuntimeEnabledV1()
   const nodeInput: ProseCopilotInput = {
     project,
     scope,
@@ -633,7 +624,6 @@ export async function prepareProseCopilot(input: {
     snapshot,
     assembled,
     narrativeBrief,
-    creativeReliabilityEnabled,
     previousTail: '',
     config,
     parameterValues: input.parameterValues,

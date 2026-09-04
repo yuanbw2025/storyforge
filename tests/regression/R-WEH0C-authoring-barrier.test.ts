@@ -14,6 +14,7 @@ import {
   verifyWorkspaceContentRevisionV1,
 } from '../../src/lib/authoring/content-revision'
 import type { WorkspaceScope } from '../../src/lib/types'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
 
 function deferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void
@@ -33,24 +34,8 @@ async function seed(): Promise<{
   siblingWorldviewId: number
 }> {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    name: 'WEH-0C 修订向量', genre: 'fantasy', genres: ['fantasy'], status: 'drafting',
-    description: '', targetWordCount: 1_000_000, enableMultiWorld: true,
-    createdAt: now, updatedAt: now,
-  } as any) as number
-  const worldId = await db.worlds.add({
-    projectId, code: `weh0c-${now}`, name: '主世界', description: '', currentVersion: 1,
-    createdAt: now, updatedAt: now,
-  }) as number
-  const workId = await db.works.add({
-    projectId, worldId, title: 'WEH-0C 修订向量', description: '', genres: ['fantasy'],
-    status: 'drafting', targetWordCount: 1_000_000, createdAt: now, updatedAt: now,
-  } as any) as number
-  await db.projects.update(projectId, {
-    activeWorldId: worldId,
-    activeWorkId: workId,
-    ownershipSchemaVersion: 1,
-  })
+  const createdWorkspaceV1 = await seedCurrentWorkspace('WEH-0C 修订向量', { enableMultiWorld: true })
+  const { projectId, worldId, workId } = createdWorkspaceV1.scope
   const primaryGroupId = await db.worldGroups.add({
     projectId, worldId, name: '主世界', description: '', type: 'primary', order: 0,
     createdAt: now, updatedAt: now,

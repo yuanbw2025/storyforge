@@ -3,7 +3,7 @@ import { db } from '../lib/db/schema'
 import type { OutlineNode } from '../lib/types'
 import { normalizeOutlineNode } from '../lib/outline/normalize'
 import { useChapterStore } from './chapter'
-import { assertRecordInScope, readOwnedRows, resolveReadScopeLike, resolveScopeLike, stampNewRecord, type WorkspaceScopeLike } from '../lib/world-engine/scope'
+import { assertRecordInScope, readOwnedRows, resolveReadScopeLike, resolveScopeLike, stampNewRecord, type WorkspaceScopeLike } from '../lib/workspace/scope'
 import { coordinatePendingEditV1 } from '../lib/authoring/pending-edit-coordinator'
 
 interface OutlineStore {

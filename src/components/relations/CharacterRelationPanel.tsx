@@ -7,7 +7,7 @@ import type { Project, RelationType } from '../../lib/types'
 import { CInput, CTextarea } from '../shared/CompositionInput'
 import { useToast } from '../shared/Toast'
 import { useAIConfigStore } from '../../stores/ai-config'
-import { resolveScopeLike } from '../../lib/world-engine/scope'
+import { resolveScopeLike } from '../../lib/workspace/scope'
 import {
   adoptCharacterRelationshipCandidateV1,
   generateCharacterRelationshipCandidateV1,

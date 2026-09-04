@@ -21,23 +21,13 @@ import {
   type ReferenceDerivedAdoptionBoundaryV1,
   type ReferenceDerivedBoundaryV1,
 } from '../../src/lib/agent/run/reference-derived-durable'
+import { currentWorkFixtureRecordV1, seedCurrentWorkspace } from '../helpers/current-workspace'
+import { stampCurrentFixtureResourceUidsV1 } from '../helpers/current-resource-identity'
 
 async function seed(suffix = '', status: 'active' | 'ready' = 'active') {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    name: `参考分析${suffix}`, genre: 'fantasy', genres: ['fantasy'], status: 'drafting',
-    description: '', targetWordCount: 80_000, worldCode: `ref-${now}-${suffix}`, worldVersion: 1,
-    createdAt: now, updatedAt: now,
-  } as any) as number
-  const worldId = await db.worlds.add({
-    projectId, code: `ref-${now}-${suffix}`, name: '参考世界', description: '', currentVersion: 1,
-    createdAt: now, updatedAt: now,
-  }) as number
-  const workId = await db.works.add({
-    projectId, worldId, title: `分析作品${suffix}`, description: '', genres: ['fantasy'],
-    status: 'drafting', targetWordCount: 80_000, createdAt: now, updatedAt: now,
-  } as any) as number
-  await db.projects.update(projectId, { activeWorldId: worldId, activeWorkId: workId, ownershipSchemaVersion: 1 })
+  const created = await seedCurrentWorkspace(`参考分析${suffix}`)
+  const { projectId, worldId, workId } = created.scope
   const referenceId = await db.references.add({
     projectId, workId, title: '镜海叙事样本', author: '作者甲', type: 'story', note: '', url: '',
     createdAt: now, updatedAt: now,
@@ -63,6 +53,7 @@ async function seed(suffix = '', status: 'active' | 'ready' = 'active') {
       createdAt: now + 1,
     },
   ] as any)
+  await stampCurrentFixtureResourceUidsV1(projectId)
   return {
     scope: { projectId, worldId, workId } satisfies WorkspaceScope,
     projectId, worldId, workId, referenceId, analysisRunId,
@@ -278,10 +269,10 @@ describe.sequential('R-HARNESS74 · 参考分析派生 durable 候选与双投�
     expect((await db.agentRuns.where('projectId').equals(importedId).toArray())
       .find(run => run.contractJson.includes('inspiration.reference-characters'))?.status).toBe('cancelled')
 
-    const otherWorkId = await db.works.add({
+    const otherWorkId = await db.works.add(currentWorkFixtureRecordV1({
       projectId: pending.projectId, worldId: pending.worldId, title: '另一作品', description: '',
       genres: ['fantasy'], status: 'drafting', targetWordCount: 1_000, createdAt: Date.now(), updatedAt: Date.now(),
-    } as any) as number
+    })) as number
     expect(await readPendingReferenceDerivedCandidateV1({
       scope: { ...pending.scope, workId: otherWorkId }, mode: 'characters', analysisRunId: pending.analysisRunId,
     })).toBeNull()

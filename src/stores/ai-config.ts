@@ -21,9 +21,7 @@ import {
   type AgentTeamBudgetProfile,
 } from '../lib/agent/team-budget'
 import {
-  isCreativeReliabilityRuntimeEnabledV1,
   sanitizeCreativeQualityModeV1,
-  setCreativeReliabilityRuntimeEnabledV1,
   type CreativeQualityModeV1,
 } from '../lib/agent/creative-reliability'
 
@@ -42,7 +40,7 @@ export const CREATIVE_QUALITY_MODE_KEY = 'storyforge-creative-quality-mode-v1'
 const DEFAULT_CONFIG: AIConfig = {
   provider: 'deepseek',
   apiKey: '',
-  model: 'deepseek-chat',
+  model: 'deepseek-v4-flash',
   baseUrl: 'https://api.deepseek.com/v1',
   temperature: 0.7,
   maxTokens: 0,
@@ -238,8 +236,7 @@ function loadInitialConfig(): { config: AIConfig; rememberApiKey: boolean } {
   } catch { /* ignore */ }
 
   const rememberRaw = localStorage.getItem(REMEMBER_API_KEY)
-  const legacyHasLocalKey = typeof savedConfig.apiKey === 'string' && savedConfig.apiKey.length > 0
-  const rememberApiKey = rememberRaw == null ? legacyHasLocalKey : rememberRaw === 'true'
+  const rememberApiKey = rememberRaw === 'true'
   const sessionKey = sessionStorage.getItem(SESSION_API_KEY) || ''
 
   const config = normalizeConfigModel({
@@ -293,7 +290,6 @@ interface AIConfigStore {
   taskRoutes: AITaskRoutes
   agentContextProfiles: AgentContextProfiles
   agentTeamBudgetProfile: AgentTeamBudgetProfile
-  creativeReliabilityEnabled: boolean
   creativeQualityMode: CreativeQualityModeV1
   /** 当前生效的预设 id（null = 未对应任何预设/已改动） */
   activePresetId: string | null
@@ -315,7 +311,6 @@ interface AIConfigStore {
   setTaskRoute: (taskKind: AITaskKind, presetId: string | null) => void
   setAgentContextProfile: (taskKind: AgentContextTaskKind, profile: AgentContextProfile) => void
   setAgentTeamBudgetProfile: (profile: AgentTeamBudgetProfile) => void
-  setCreativeReliabilityEnabled: (enabled: boolean) => void
   setCreativeQualityMode: (mode: CreativeQualityModeV1) => void
 }
 
@@ -328,7 +323,6 @@ export const useAIConfigStore = create<AIConfigStore>((set, get) => ({
   taskRoutes: loadTaskRoutes(),
   agentContextProfiles: loadAgentContextProfiles(),
   agentTeamBudgetProfile: loadAgentTeamBudgetProfile(),
-  creativeReliabilityEnabled: isCreativeReliabilityRuntimeEnabledV1(),
   creativeQualityMode: loadCreativeQualityMode(),
   activePresetId: null,
   editingPresetId: null,
@@ -435,11 +429,6 @@ export const useAIConfigStore = create<AIConfigStore>((set, get) => ({
     const agentTeamBudgetProfile = sanitizeAgentTeamBudgetProfile(profile)
     saveAgentTeamBudgetProfile(agentTeamBudgetProfile)
     set({ agentTeamBudgetProfile })
-  },
-
-  setCreativeReliabilityEnabled: enabled => {
-    setCreativeReliabilityRuntimeEnabledV1(enabled)
-    set({ creativeReliabilityEnabled: enabled })
   },
 
   setCreativeQualityMode: mode => {

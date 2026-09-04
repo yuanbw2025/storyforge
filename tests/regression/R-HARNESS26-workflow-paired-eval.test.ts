@@ -27,8 +27,9 @@ import type {
 } from '../../src/lib/evals/agent-harness/types'
 import type { WorkspaceScope } from '../../src/lib/types'
 import { useAIConfigStore } from '../../src/stores/ai-config'
-import { backfillResourceUidsV1 } from '../../src/lib/context-gateway/resource-identity'
-import { generateWorkCode, generateWorkspaceUid } from '../../src/lib/memory/identity'
+import { stampCurrentFixtureResourceUidsV1 } from '../helpers/current-resource-identity'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
+import { currentWorldOriginDraftV1 } from '../helpers/current-worldview-field'
 
 const EXECUTION: AgentHarnessWorkflowExecutionV1 = {
   generator: {
@@ -358,13 +359,33 @@ describe.sequential('R-HARNESS26 · 顺序/fan-out 配对评测与发布门', { 
     let activeVariant: AgentHarnessWorkflowVariantV1 = 'sequential'
     let activeCalls = 0
     let maxActiveCalls = 0
+    let fanOutLeafStarts = 0
+    let releaseFanOutLeaves: (() => void) | null = null
+    const fanOutLeavesReady = new Promise<void>(resolve => {
+      releaseFanOutLeaves = resolve
+    })
     const usage = new Map<AgentHarnessWorkflowVariantV1, { input: number; output: number }>()
     const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
       const body = JSON.parse(String(init?.body)) as { messages?: Array<{ content?: string }> }
       const prompt = body.messages?.map(message => message.content ?? '').join('\n') ?? ''
       activeCalls += 1
       maxActiveCalls = Math.max(maxActiveCalls, activeCalls)
-      await new Promise(resolve => setTimeout(resolve, 20))
+      const fanOutLeaf = activeVariant === 'fan-out'
+        && !prompt.includes('根据两个上游候选设计守忆者角色')
+        && fanOutLeafStarts < 2
+      if (fanOutLeaf) {
+        fanOutLeafStarts += 1
+        if (fanOutLeafStarts === 2) releaseFanOutLeaves?.()
+        await Promise.race([
+          fanOutLeavesReady,
+          new Promise<never>((_, reject) => setTimeout(
+            () => reject(new Error('paired fan-out 叶子模型调用未并发启动')),
+            1_000,
+          )),
+        ])
+      } else {
+        await new Promise(resolve => setTimeout(resolve, 20))
+      }
       activeCalls -= 1
       const totals = usage.get(activeVariant) ?? { input: 0, output: 0 }
       totals.input += 100
@@ -395,6 +416,7 @@ describe.sequential('R-HARNESS26 · 顺序/fan-out 配对评测与发布门', { 
           projectId: workspace.scope.projectId,
           worldGroupId: workspace.worldGroupId,
           scope: workspace.scope,
+          purpose: 'workflow-paired-eval',
         })
         const result = await runDurableMasterAgentPlanV1({
           scope: workspace.scope,
@@ -461,10 +483,10 @@ const inspirationResult = {
     powerHierarchy: '',
     continentLayout: '',
     climateByRegion: '',
-    historyLine: '',
     races: '',
     factionLayout: '',
   },
+  history: { overview: '' },
   storyCore: {
     logline: '守塔人追查被雨抹去的名字',
     theme: '记忆',
@@ -487,7 +509,7 @@ function modelContent(prompt: string): string {
       shortDescription: '负责记录被雨抹去之名的人。',
     })
   }
-  return '潮汐退去之后，第一座盐城从海床苏醒，并以月轮记录文明纪年。'
+  return currentWorldOriginDraftV1('潮汐退去之后，第一座盐城从海床苏醒，并以月轮记录文明纪年。')
 }
 
 function fanOutPlan(): MasterAgentPlan {
@@ -497,7 +519,7 @@ function fanOutPlan(): MasterAgentPlan {
       {
         id: 'world-1',
         agentId: 'world-origin',
-        skillId: 'world-origin.complete',
+        skillId: 'world-origin.worldview-field',
         instruction: '建立潮汐退去后盐城苏醒的世界来源。',
         dependsOn: [],
       },
@@ -529,45 +551,8 @@ async function createWorkspace(variant: AgentHarnessWorkflowVariantV1): Promise<
   worldGroupId: number
 }> {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    workspaceUid: generateWorkspaceUid(),
-    name: `HARNESS-26 ${variant}`,
-    genre: 'fantasy',
-    genres: ['fantasy'],
-    description: '',
-    status: 'drafting',
-    targetWordCount: 100_000,
-    worldCode: `h26-${variant}`,
-    worldVersion: 1,
-    createdAt: now,
-    updatedAt: now,
-  } as any) as number
-  const worldId = await db.worlds.add({
-    projectId,
-    code: `h26-${variant}`,
-    name: '盐城世界',
-    description: '',
-    currentVersion: 1,
-    createdAt: now,
-    updatedAt: now,
-  }) as number
-  const workId = await db.works.add({
-    projectId,
-    worldId,
-    title: '盐城作品',
-    code: generateWorkCode(),
-    description: '',
-    genres: ['fantasy'],
-    status: 'drafting',
-    targetWordCount: 100_000,
-    createdAt: now,
-    updatedAt: now,
-  }) as number
-  await db.projects.update(projectId, {
-    activeWorldId: worldId,
-    activeWorkId: workId,
-    ownershipSchemaVersion: 1,
-  })
+  const createdWorkspaceV1 = await seedCurrentWorkspace(`HARNESS-26 ${variant}`)
+  const { projectId, worldId, workId } = createdWorkspaceV1.scope
   const worldGroupId = await db.worldGroups.add({
     projectId,
     worldId,
@@ -591,6 +576,6 @@ async function createWorkspace(variant: AgentHarnessWorkflowVariantV1): Promise<
     createdAt: now,
     updatedAt: now,
   } as any)
-  await backfillResourceUidsV1(projectId)
+  await stampCurrentFixtureResourceUidsV1(projectId)
   return { scope: { projectId, worldId, workId }, worldGroupId }
 }

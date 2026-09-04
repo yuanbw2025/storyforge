@@ -7,7 +7,7 @@ import {
 } from '../adapters/chapter-memory-adapter'
 import { CHAPTER_TEXT_NORMALIZATION_VERSION } from './text-normalization'
 import { loadChapterPlanSnapshot } from './plan-reconciliation'
-import { assertRecordInScope, resolveScopeLike } from '../../world-engine/scope'
+import { assertRecordInScope, resolveScopeLike } from '../../workspace/scope'
 import { db } from '../../db/schema'
 
 export interface ChapterMemoryTaskResult {

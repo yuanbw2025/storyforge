@@ -1,10 +1,8 @@
 import 'fake-indexeddb/auto'
 import { act, createElement } from 'react'
 import { createRoot } from 'react-dom/client'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
-  appendAgentEvent,
-  getOrCreateAgentConversation,
   readAgentEvents,
 } from '../../src/lib/agent/conversations'
 import {
@@ -17,21 +15,12 @@ import {
   flushCandidateDraftsV1,
   resetCandidateDraftCoordinatorForTestsV1,
 } from '../../src/lib/agent/candidate-draft-coordinator'
+import { seedCurrentMasterCandidate } from '../helpers/current-master-candidate'
+import { currentWorldOriginDraftV1 } from '../helpers/current-worldview-field'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
-const project: Project = {
-  id: 98005,
-  name: '候选决策屏障',
-  genre: 'fantasy',
-  genres: ['fantasy'],
-  description: '',
-  status: 'drafting',
-  targetWordCount: 100_000,
-  enableMultiWorld: false,
-  createdAt: 1,
-  updatedAt: 1,
-}
+let project: Project
 
 let controller: MasterCopilotController | null = null
 
@@ -56,33 +45,9 @@ describe('WEH-0D master candidate decision barrier', () => {
     resetCandidateDraftCoordinatorForTestsV1()
     await db.delete()
     await db.open()
-    await db.projects.put(project)
-    const conversation = await getOrCreateAgentConversation({
-      projectId: project.id!,
-      worldGroupId: null,
-    })
-    await appendAgentEvent({
-      projectId: project.id!,
-      conversationId: conversation.id!,
-      durableRunId: 404,
-      kind: 'candidate',
-      content: '数据库中的旧候选',
-      payload: {
-        version: 1,
-        taskId: 'missing-run-step',
-        agentId: 'world-origin',
-        label: '故意损坏的 durable 候选',
-        contextSources: [],
-        baseSnapshot: {},
-        runId: 404,
-        runStepId: 'missing-run-step',
-        candidateHash: 'missing-candidate-hash',
-      },
-    })
     host = document.createElement('div')
     document.body.append(host)
     root = createRoot(host)
-    await act(async () => root.render(createElement(Harness)))
   })
 
   afterEach(async () => {
@@ -96,8 +61,12 @@ describe('WEH-0D master candidate decision barrier', () => {
   })
 
   it('最后一版草稿无法同步时不允许采纳，并在内存中保留作者文本', async () => {
+    const fixture = await seedCurrentMasterCandidate('候选决策屏障', '数据库中的候选')
+    project = fixture.project
+    await act(async () => root.render(createElement(Harness)))
     const ready = await waitForController(value => !value.loading && value.pendingCandidates.length === 1)
     const eventId = ready.pendingCandidates[0].event.id!
+    vi.spyOn(db.agentEvents, 'update').mockRejectedValueOnce(new Error('测试中的持久化故障'))
 
     await act(async () => {
       await ready.updateCandidate(eventId, '作者尚未同步的最终草稿')
@@ -117,25 +86,18 @@ describe('WEH-0D master candidate decision barrier', () => {
     expect(blocked.pendingCandidates[0].event.content).toBe('作者尚未同步的最终草稿')
     const conversationId = blocked.events[0].conversationId
     const persisted = await readAgentEvents(conversationId)
-    expect(persisted.find(event => event.id === eventId)?.content).toBe('数据库中的旧候选')
+    expect(persisted.find(event => event.id === eventId)?.content)
+      .toBe(currentWorldOriginDraftV1('数据库中的候选'))
     expect(persisted.filter(event => event.kind === 'confirmation')).toHaveLength(0)
     expect(await db.worldviews.count()).toBe(0)
   })
 
   it('存在未同步候选时刷新意图被显式拦截并触发保存', async () => {
+    const fixture = await seedCurrentMasterCandidate('刷新候选屏障', '刷新前初稿')
+    project = fixture.project
+    await act(async () => root.render(createElement(Harness)))
     const ready = await waitForController(value => !value.loading && value.pendingCandidates.length === 1)
     const eventId = ready.pendingCandidates[0].event.id!
-    await db.agentEvents.update(eventId, {
-      durableRunId: null,
-      payload: JSON.stringify({
-        version: 1,
-        taskId: 'legacy-candidate',
-        agentId: 'world-origin',
-        label: '旧版候选',
-        contextSources: [],
-        baseSnapshot: {},
-      }),
-    })
     await act(async () => {
       await ready.updateCandidate(eventId, '刷新前最后一版')
     })

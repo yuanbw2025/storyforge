@@ -24,7 +24,7 @@ import {
   resolveScopeLike,
   scopeTransactionTables,
   stampNewRecord,
-} from '../../world-engine/scope'
+} from '../../workspace/scope'
 
 export const CHAPTER_TRANSITION_STEP_IDS_V1 = {
   retrieval: 'chapter-transition:retrieval',
@@ -81,6 +81,7 @@ export function buildChapterTransitionRunContractV1(input: {
   projectId: number
   worldGroupId: number | null
   chapterId: number
+  runtimeBindingHash: string
 }) {
   return {
     version: 1 as const,
@@ -112,6 +113,7 @@ export function buildChapterTransitionRunContractV1(input: {
         },
       ],
     },
+    runtimeBindingHash: input.runtimeBindingHash,
     budget: {
       maxModelCalls: 2,
       maxToolCalls: 0,
@@ -157,6 +159,12 @@ export async function createChapterTransitionDurableRunV1(input: {
       projectId: input.scope.projectId,
       worldGroupId: input.worldGroupId,
       chapterId: input.chapterId,
+      runtimeBindingHash: await hashCanonicalValue({
+        schema: 'storyforge.chapter-transition-runtime',
+        version: 1,
+        stepIds: CHAPTER_TRANSITION_STEP_IDS_V1,
+        verifierSet: CHAPTER_TRANSITION_VERIFIER_SET_V1,
+      }),
     }),
   })
 }
@@ -330,6 +338,7 @@ export async function persistChapterTransitionCandidateV1(input: {
   const conversation = stampNewRecord(input.scope, 'agentConversations', {
     projectId: input.scope.projectId,
     worldGroupId: input.candidate.worldGroupId,
+    purpose: 'chapter.transition',
     title: `章节后处理 · ${input.candidate.chapterTitle}`,
     status: 'archived',
     createdAt: now,
@@ -343,6 +352,7 @@ export async function persistChapterTransitionCandidateV1(input: {
       const event = stampNewRecord(input.scope, 'agentEvents', {
         projectId: input.scope.projectId,
         conversationId,
+        durableRunId: input.candidate.durable.runId,
         sequence: 1,
         kind: 'candidate',
         content: `章节后处理状态候选 ${input.candidate.stateDiffs.length} 条`,

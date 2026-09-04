@@ -2,7 +2,7 @@ import type {
   RuleActionDefinitionV1,
   RulePackV1,
   RuntimeAttributes,
-  SimulationTtrpgProductStateV1,
+  TtrpgRuntimeProductStateV1,
 } from "../types";
 
 export interface TtrpgActionRequirementEvaluationV2 {
@@ -20,7 +20,7 @@ export function evaluateTtrpgActionRequirementsV2(input: {
   rulePack: RulePackV1;
   actorAttributes: RuntimeAttributes | null | undefined;
   actorConditions:
-    | SimulationTtrpgProductStateV1["conditions"][string]
+    | TtrpgRuntimeProductStateV1["conditions"][string]
     | null
     | undefined;
 }): TtrpgActionRequirementEvaluationV2 {

@@ -66,10 +66,10 @@ describe('Phase 3.2 · parseStateDiffs', () => {
 })
 
 describe('Phase 3.2 · parseInventoryEvents', () => {
-  it('解析物品流水 + 归一 action/quantity', () => {
+  it('解析严格闭集物品流水', () => {
     const raw = JSON.stringify([
       { itemName: '令牌', heldByName: '林风', action: 'gain', quantity: 2, note: '掌门所赐' },
-      { itemName: '丹药', heldByName: '林风', action: 'consume', quantity: '3', note: '' },
+      { itemName: '丹药', heldByName: '林风', action: 'consume', quantity: 3, note: '' },
     ])
     const events = parseInventoryEvents(raw)
     expect(events).toHaveLength(2)
@@ -77,23 +77,21 @@ describe('Phase 3.2 · parseInventoryEvents', () => {
     expect(events[1]).toMatchObject({ itemName: '丹药', heldByName: '林风', action: 'consume', quantity: 3 })
   })
 
-  it('未知 action 默认 gain;quantity 缺省/非法归一为 1', () => {
+  it('未知 action 或缺省 quantity 直接拒绝，不做隐式改写', () => {
     const raw = JSON.stringify([{ itemName: '剑', heldByName: '张铁', action: 'weird', note: '' }])
-    const events = parseInventoryEvents(raw)
-    expect(events[0].action).toBe('gain')
-    expect(events[0].quantity).toBe(1)
+    expect(() => parseInventoryEvents(raw)).toThrow('字段不在允许闭集')
   })
 
-  it('空 itemName 或空 heldByName 被过滤', () => {
+  it('空 itemName 或空 heldByName 令整批候选失败', () => {
     const raw = JSON.stringify([
-      { itemName: '', heldByName: '林风', action: 'gain', quantity: 1 },
-      { itemName: '剑', heldByName: '', action: 'gain', quantity: 1 },
+      { itemName: '', heldByName: '林风', action: 'gain', quantity: 1, note: '' },
+      { itemName: '剑', heldByName: '', action: 'gain', quantity: 1, note: '' },
     ])
-    expect(parseInventoryEvents(raw)).toHaveLength(0)
+    expect(() => parseInventoryEvents(raw)).toThrow('字段类型或枚举无效')
   })
 
-  it('坏 JSON 返回空数组', () => {
-    expect(parseInventoryEvents('not json')).toEqual([])
+  it('坏 JSON 显式失败', () => {
+    expect(() => parseInventoryEvents('not json')).toThrow('不是有效 JSON')
   })
 })
 
@@ -107,8 +105,8 @@ describe('Phase 3.2 · parseStoryEvents', () => {
     expect(events[0].title).toBe('初入宗门')
   })
 
-  it('坏输入返回空数组不崩溃', () => {
-    expect(parseStoryEvents('无')).toEqual([])
+  it('坏输入显式失败', () => {
+    expect(() => parseStoryEvents('无')).toThrow('不是有效 JSON')
   })
 })
 

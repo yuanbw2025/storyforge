@@ -32,10 +32,9 @@ import type {
 import { parseCharacterDrivenPlanArcs } from '../types'
 import {
   assertRecordInScope,
-  isLegacyReadScope,
   readOwnedRows,
   resolveReadScopeLike,
-} from '../world-engine/scope'
+} from '../workspace/scope'
 import {
   attachAgentContextInputStateV1,
   mergeContextEvidence,
@@ -421,8 +420,8 @@ async function readSnapshot(input: {
   request: CharacterRevisionTaskInputV1
 }): Promise<{ snapshot: CharacterRevisionCopilotSnapshotV1; manualSourceText: string }> {
   const readScope = input.scope ?? await resolveReadScopeLike(input.projectId)
-  const scope = isLegacyReadScope(readScope) ? undefined : readScope
-  const revision = await buildCharacterRevisionSnapshot(scope ?? input.projectId)
+  const scope = readScope
+  const revision = await buildCharacterRevisionSnapshot(scope)
   if (!revision.plannedChapterCount) throw new Error('当前作品没有可重规划的章节大纲。')
   let plan: CharacterDrivenPlan | null = null
   if (input.request.planId != null) {
@@ -652,7 +651,7 @@ export async function prepareCharacterRevisionCopilotV1(
     throw new Error('多世界项目必须先选择当前世界，才能分析角色变更。')
   }
   const readScope = input.scope ?? await resolveReadScopeLike(input.projectId)
-  const scope = isLegacyReadScope(readScope) ? undefined : readScope
+  const scope = readScope
   const before = await readSnapshot({ projectId: input.projectId, scope, request })
   const routingCategory = input.routingCategory ?? 'agent.outline.character-revision'
   const config = input.configOverride ?? resolveRequestConfig(

@@ -15,12 +15,13 @@ import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-
 import { cascadeDeleteProject } from '../../src/lib/registry/lifecycle'
 import { assembleContext } from '../../src/lib/registry/assemble-context'
 import { useInspirationWorkspaceStore } from '../../src/stores/inspiration-workspace'
+import { seedCurrentProject } from '../helpers/current-workspace'
 
 async function createProject(name = 'CM1 Test'): Promise<number> {
   const now = Date.now()
-  return await db.projects.add({
+  return await seedCurrentProject({
     name,
-    genre: '',
+    genres: [],
     description: '',
     targetWordCount: 0,
     enableMultiWorld: false,

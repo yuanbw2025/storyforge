@@ -8,11 +8,9 @@ import {
 import { parseNativeAgentToolCalls } from '../../src/lib/agent/protocol'
 import {
   buildReadOnlyAgentRunContractV1,
-  runDurableReadOnlyAgentV1,
 } from '../../src/lib/agent/run/read-only-durable'
 import { createAgentRunV1, readAgentRunV1 } from '../../src/lib/agent/run/event-store'
 import { hashCanonicalValue } from '../../src/lib/agent/run/hash'
-import type { AgentModelAdapter } from '../../src/lib/agent/runner'
 import {
   getAIProviderCapabilityProfileV1,
   getJsonObjectResponseCapabilityV1,
@@ -23,6 +21,7 @@ import { PROJECT_TABLES } from '../../src/lib/registry/project-tables'
 import { AGENT_READ_TOOLS } from '../../src/lib/agent/tool-registry'
 import type { AIConfig, WorkspaceScope } from '../../src/lib/types'
 import { useAIConfigStore } from '../../src/stores/ai-config'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
 
 const OPENAI_CONFIG: AIConfig = {
   provider: 'openai',
@@ -33,6 +32,8 @@ const OPENAI_CONFIG: AIConfig = {
   maxTokens: 1_024,
   contextWindow: 32_000,
 }
+
+const ALL_READ_TOOL_NAMES = AGENT_READ_TOOLS.map(tool => tool.name)
 
 const ROUTED_CUSTOM_CONFIG: AIConfig = {
   ...OPENAI_CONFIG,
@@ -52,42 +53,8 @@ async function createWorkspace(label: string): Promise<{
   worldGroupId: number
 }> {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    name: label,
-    genre: 'fantasy',
-    genres: ['fantasy'],
-    description: '',
-    status: 'drafting',
-    targetWordCount: 100_000,
-    enableMultiWorld: true,
-    createdAt: now,
-    updatedAt: now,
-  } as any) as number
-  const worldId = await db.worlds.add({
-    projectId,
-    code: `world-${label}`,
-    name: `${label}世界`,
-    description: '',
-    currentVersion: 1,
-    createdAt: now,
-    updatedAt: now,
-  }) as number
-  const workId = await db.works.add({
-    projectId,
-    worldId,
-    title: label,
-    description: '',
-    genres: ['fantasy'],
-    status: 'drafting',
-    targetWordCount: 100_000,
-    createdAt: now,
-    updatedAt: now,
-  }) as number
-  await db.projects.update(projectId, {
-    activeWorldId: worldId,
-    activeWorkId: workId,
-    ownershipSchemaVersion: 1,
-  })
+  const createdWorkspaceV1 = await seedCurrentWorkspace(label, { enableMultiWorld: true })
+  const { projectId, worldId, workId } = createdWorkspaceV1.scope
   const worldGroupId = await db.worldGroups.add({
     projectId,
     worldId,
@@ -159,10 +126,10 @@ describe('R-HARNESS29 · provider-native read tool transport', () => {
     expect(parseNativeAgentToolCalls([{
       id: 'call-1',
       type: 'function',
-      function: { name: 'read_project_status', arguments: '{}' },
+      function: { name: 'read_work_status', arguments: '{}' },
     }])).toEqual({
       type: 'tool',
-      calls: [{ name: 'read_project_status', arguments: {} }],
+      calls: [{ name: 'read_work_status', arguments: {} }],
     })
     expect(() => parseNativeAgentToolCalls([{
       id: 'call-1',
@@ -172,12 +139,12 @@ describe('R-HARNESS29 · provider-native read tool transport', () => {
     expect(() => parseNativeAgentToolCalls([{
       id: 'call-1',
       type: 'function',
-      function: { name: 'read_project_status', arguments: '{bad' },
+      function: { name: 'read_work_status', arguments: '{bad' },
     }])).toThrow('不是合法 JSON')
     expect(() => parseNativeAgentToolCalls([{
       id: 'call-1',
       type: 'function',
-      function: { name: 'read_project_status', arguments: '{}' },
+      function: { name: 'read_work_status', arguments: '{}' },
       injected: true,
     }])).toThrow('只允许')
   })
@@ -194,7 +161,7 @@ describe('R-HARNESS29 · provider-native read tool transport', () => {
             tool_calls: [{
               id: 'call-project',
               type: 'function',
-              function: { name: 'read_project_status', arguments: '{}' },
+              function: { name: 'read_work_status', arguments: '{}' },
             }],
           },
         }],
@@ -215,6 +182,7 @@ describe('R-HARNESS29 · provider-native read tool transport', () => {
       },
       config: OPENAI_CONFIG,
       transport: 'native-tools-v1',
+      allowedToolNames: ALL_READ_TOOL_NAMES,
     })
 
     expect(result).toMatchObject({
@@ -234,10 +202,10 @@ describe('R-HARNESS29 · provider-native read tool transport', () => {
     expect(firstBody.tools.map((tool: { function: { name: string } }) => tool.function.name))
       .toContain('read_character_driven_plan')
     expect(JSON.stringify(firstBody.tools)).not.toMatch(/projectId|worldGroupId/u)
-    expect(firstBody.messages[0].content).not.toContain('read_project_status(')
+    expect(firstBody.messages[0].content).not.toContain('read_work_status(')
     const secondBody = JSON.parse(String(fetchMock.mock.calls[1][1]?.body))
     expect(secondBody.messages.at(-1).content).toContain('只读工具结果')
-    expect(secondBody.messages.at(-1).content).toContain('read_project_status')
+    expect(secondBody.messages.at(-1).content).toContain('read_work_status')
     expect(await contentTableCounts()).toEqual(before)
   })
 
@@ -250,6 +218,7 @@ describe('R-HARNESS29 · provider-native read tool transport', () => {
       context: { projectId: fixture.scope.projectId, scope: fixture.scope, worldGroupId: fixture.worldGroupId },
       config: { ...OPENAI_CONFIG, contextWindow: 512, maxTokens: 128 },
       transport: 'native-tools-v1',
+      allowedToolNames: ALL_READ_TOOL_NAMES,
     })
     expect(result.status).toBe('model_error')
     expect(fetchMock).not.toHaveBeenCalled()
@@ -278,6 +247,7 @@ describe('R-HARNESS29 · provider-native read tool transport', () => {
       context: { projectId: fixture.scope.projectId, scope: fixture.scope, worldGroupId: fixture.worldGroupId },
       config: OPENAI_CONFIG,
       transport: 'native-tools-v1',
+      allowedToolNames: ALL_READ_TOOL_NAMES,
       limits: { maxProtocolErrors: 0 },
     })
     expect(result.status).toBe('protocol_error')
@@ -302,6 +272,7 @@ describe('R-HARNESS29 · provider-native read tool transport', () => {
       context: { projectId: fixture.scope.projectId, scope: fixture.scope, worldGroupId: fixture.worldGroupId },
       config: OPENAI_CONFIG,
       transport: 'native-tools-v1',
+      allowedToolNames: ALL_READ_TOOL_NAMES,
       limits: { maxProtocolErrors: 0 },
     })
     expect(result.status).toBe('protocol_error')
@@ -335,6 +306,7 @@ describe('R-HARNESS29 · provider-native read tool transport', () => {
       context: { projectId: fixture.scope.projectId, scope: fixture.scope, worldGroupId: fixture.worldGroupId },
       config: OPENAI_CONFIG,
       transport: 'native-tools-v1',
+      allowedToolNames: ALL_READ_TOOL_NAMES,
       limits: { maxProtocolErrors: 1 },
     })).resolves.toMatchObject({
       status: 'completed',
@@ -356,6 +328,7 @@ describe('R-HARNESS29 · provider-native read tool transport', () => {
     localStorage.setItem(NATIVE_READ_TOOLS_STORAGE_KEY_V1, 'enabled')
     useAIConfigStore.setState({
       config: OPENAI_CONFIG,
+      allowedToolNames: ALL_READ_TOOL_NAMES,
       presets: [{ id: 'routed-review', name: '评审路由', config: ROUTED_CUSTOM_CONFIG }],
       taskRoutes: { review: 'routed-review' },
     })
@@ -375,6 +348,7 @@ describe('R-HARNESS29 · provider-native read tool transport', () => {
       goal: '按真实 provider 选择 transport',
       context: { projectId: fixture.scope.projectId, scope: fixture.scope, worldGroupId: fixture.worldGroupId },
       config: OPENAI_CONFIG,
+      allowedToolNames: ALL_READ_TOOL_NAMES,
     })).resolves.toMatchObject({ status: 'completed', answer: '已按路由核查' })
     expect(fetchMock).toHaveBeenCalledOnce()
 
@@ -383,6 +357,7 @@ describe('R-HARNESS29 · provider-native read tool transport', () => {
       context: { projectId: fixture.scope.projectId, scope: fixture.scope, worldGroupId: fixture.worldGroupId },
       config: OPENAI_CONFIG,
       transport: 'native-tools-v1',
+      allowedToolNames: ALL_READ_TOOL_NAMES,
     })).toThrow('尚无 StoryForge 原生工具调用合同证据')
     expect(fetchMock).toHaveBeenCalledOnce()
   })
@@ -409,6 +384,7 @@ describe('R-HARNESS29 · provider-native read tool transport', () => {
       context: { projectId: fixture.scope.projectId, scope: fixture.scope, worldGroupId: fixture.worldGroupId },
       config: OPENAI_CONFIG,
       transport: 'auto',
+      allowedToolNames: ALL_READ_TOOL_NAMES,
     })
     useAIConfigStore.setState({
       presets: [{ id: 'changed-route', name: '运行中改路由', config: OPENAI_CONFIG }],
@@ -418,11 +394,23 @@ describe('R-HARNESS29 · provider-native read tool transport', () => {
     const capabilityProfileHash = await hashCanonicalValue(
       getAIProviderCapabilityProfileV1(ROUTED_CUSTOM_CONFIG.provider),
     )
-    const expectedBindingHash = await hashCanonicalValue({
+    const executionBinding = {
       provider: ROUTED_CUSTOM_CONFIG.provider,
       model: ROUTED_CUSTOM_CONFIG.model,
       adapterVersion: 'chat-client-text-json-v1',
       capabilityProfileHash,
+    }
+    const toolSchemaSetHash = await hashCanonicalValue(AGENT_READ_TOOLS.map(tool => ({
+      name: tool.name,
+      risk: tool.risk,
+      parameters: tool.parameters,
+      sourceKeys: tool.sourceKeys,
+      inputBudgetTokens: tool.inputBudgetTokens,
+    })))
+    const expectedBindingHash = await hashCanonicalValue({
+      executionBinding,
+      allowedToolNames: ALL_READ_TOOL_NAMES,
+      toolSchemaSetHash,
     })
 
     expect((await readAgentRunV1(fixture.scope, result.runId)).contract.runtimeBindingHash)
@@ -446,6 +434,7 @@ describe('R-HARNESS29 · provider-native read tool transport', () => {
       context: { projectId: fixture.scope.projectId, scope: fixture.scope, worldGroupId: fixture.worldGroupId },
       config: OPENAI_CONFIG,
       transport: 'text-json-v1',
+      allowedToolNames: ALL_READ_TOOL_NAMES,
       onDurableBoundary: boundary => {
         runId = boundary.runId
         if (boundary.type === 'model.responded') throw new Error('simulated-stop')
@@ -460,43 +449,25 @@ describe('R-HARNESS29 · provider-native read tool transport', () => {
       context: { projectId: fixture.scope.projectId, scope: fixture.scope, worldGroupId: fixture.worldGroupId },
       config: OPENAI_CONFIG,
       transport: 'native-tools-v1',
+      allowedToolNames: ALL_READ_TOOL_NAMES,
       runId,
     })).rejects.toThrow('目标、权限或预算契约不一致')
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
-  it('keeps pre-HARNESS-29 durable contracts recoverable without fabricating a binding', async () => {
-    const fixture = await createWorkspace('旧运行兼容')
-    const goal = '恢复旧只读运行'
+  it('拒绝缺失运行时绑定的非现行只读契约', async () => {
+    const fixture = await createWorkspace('拒绝无绑定契约')
     const contract = buildReadOnlyAgentRunContractV1({
-      goal,
+      goal: '验证当前只读契约边界',
       projectId: fixture.scope.projectId,
       worldGroupId: fixture.worldGroupId,
+      runtimeBindingHash: 'b'.repeat(64),
     })
-    expect(contract.runtimeBindingHash).toBeUndefined()
-    const created = await createAgentRunV1({
+    const { runtimeBindingHash: _removedBinding, ...unboundContract } = contract
+    await expect(createAgentRunV1({
       scope: fixture.scope,
       worldGroupId: fixture.worldGroupId,
-      contract,
-    })
-    const model: AgentModelAdapter = {
-      complete: vi.fn(async () => ({ content: '{"type":"final","answer":"旧运行已恢复"}' })),
-    }
-
-    const recovered = await runDurableReadOnlyAgentV1({
-      scope: fixture.scope,
-      worldGroupId: fixture.worldGroupId,
-      runId: created.run.id,
-      goal,
-      context: { projectId: fixture.scope.projectId, scope: fixture.scope, worldGroupId: fixture.worldGroupId },
-      model,
-      executionBinding: {
-        provider: 'legacy',
-        model: 'legacy-model',
-        adapterVersion: 'chat-client-v1',
-      },
-    })
-    expect(recovered.execution.answer).toBe('旧运行已恢复')
-    expect((await readAgentRunV1(fixture.scope, created.run.id)).contract.runtimeBindingHash).toBeUndefined()
+      contract: unboundContract,
+    })).rejects.toThrow(/runtimeBindingHash|executionBindings/)
   })
 })

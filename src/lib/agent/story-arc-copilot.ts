@@ -18,12 +18,11 @@ import type { AIConfig, ChatMessage, StoryArc, StoryArcType, WorkspaceScope } fr
 import { parseStages, stringifyStages, type StoryStage } from '../types/story-arc'
 import type { StorylineCrossing, StorylineProgress } from '../types/storyline-progress'
 import {
-  isLegacyReadScope,
   readOwnedRows,
   resolveReadScopeLike,
   resolveScope,
   scopeTransactionTables,
-} from '../world-engine/scope'
+} from '../workspace/scope'
 import {
   attachAgentContextInputStateV1,
   evidenceFromContextResult,
@@ -42,7 +41,6 @@ import {
   type AgentSkillId,
 } from './skill-registry'
 import {
-  isCreativeReliabilityRuntimeEnabledV1,
   parseCreativeArtifactV1,
   resolveCreativeQualityPolicyV1,
   type CreativeArtifactFragmentV1,
@@ -136,7 +134,6 @@ export interface StoryArcCopilotInput {
   mutation: StoryArcMutationRequestV1
   assembled: AssembleContextResult
   narrativeBrief: NarrativeBriefV1
-  creativeReliabilityEnabled?: boolean
   snapshot: StoryArcCopilotSnapshot
   config: AIConfig
   routingCategory: string
@@ -450,31 +447,6 @@ export function parseStoryArcModelResponseV2(raw: string): StoryArcCopilotCandid
         throw new Error('故事线模型响应.storyArcs 必须是 JSON 数组。')
       }
       if (source.assumptions !== undefined) parseStoryArcAssumptionTextsV1(source.assumptions, true)
-      return parseStoryArcCandidateRowsV1(source.storyArcs)
-    },
-  })
-}
-
-/** Strict pre-CREL parser used only by the local rollback path. */
-export function parseStoryArcModelResponseLegacyV1(raw: string): StoryArcCopilotCandidate[] {
-  return parseStructuredOutputV1({
-    raw,
-    contract: {
-      version: 1,
-      schemaId: 'story-arc-model-response.v1',
-      target: 'storyArcs.batch',
-      root: 'object',
-      maxChars: MAX_CANDIDATE_CHARS,
-      allowedRootFields: ['storyArcs'],
-      requiredRootFields: ['storyArcs'],
-      unknownRootFieldMessage: '故事线模型响应包含不允许的字段。',
-    },
-    parse: value => {
-      const source = value as Record<string, unknown>
-      assertExactKeys(source, ['storyArcs'], [], '故事线模型响应')
-      if (!Array.isArray(source.storyArcs)) {
-        throw new Error('故事线模型响应.storyArcs 必须是 JSON 数组。')
-      }
       return parseStoryArcCandidateRowsV1(source.storyArcs)
     },
   })
@@ -1226,12 +1198,10 @@ function buildStoryArcMessages(input: StoryArcCopilotInput): ChatMessage[] {
 6.2 ${operationInstruction}
 6.3 变换既有故事线时，每个保留或修改的阶段必须逐字回传原 stageId；新增阶段必须省略 stageId，禁止编造 ID。新建故事线时所有阶段都必须省略 stageId。
 6.4 新建故事线或新增阶段时，description 与 keyEvents 必须交代：触发它的正式证据或作者要求、关联角色、开始时点，以及它与既有主线/支线的因果关系。正式上下文没有确认的信息只能列入 assumptions，不得伪造为 Canon。
-7. 只输出一个严格 JSON 对象，不输出 Markdown、解释或额外字段。顶层${input.creativeReliabilityEnabled !== false ? '必须有 storyArcs，可选 assumptions' : '只能有 storyArcs'}；最小结构严格使用：
+7. 只输出一个严格 JSON 对象，不输出 Markdown、解释或额外字段。顶层必须有 storyArcs，可选 assumptions；最小结构严格使用：
 {"storyArcs":[{"name":"名称","type":"main|sub","description":"整体描述","stages":[{"title":"阶段标题","description":"阶段描述","keyEvents":["事件"]}]}]}
 8. 阶段对象内的 turningPoint、startVolume、endVolume 都是可选字段；turningPoint 如填写必须是描述转折的字符串，绝不能写 true/false；startVolume/endVolume 只有在两者都有明确卷级依据时才成对填写整数。没有明确依据就省略，不要输出占位值。
-${input.creativeReliabilityEnabled !== false
-  ? '9. 若你为“开放创作空间”补充了会被下游依赖、但正式上下文没有确认的事实，可增加 assumptions 字符串数组，最多 7 项；不要把故事线本身重复抄入 assumptions。'
-  : ''}`,
+9. 若你为“开放创作空间”补充了会被下游依赖、但正式上下文没有确认的事实，可增加 assumptions 字符串数组，最多 7 项；不要把故事线本身重复抄入 assumptions。`,
   }, {
     role: 'user' as const,
     content: [
@@ -1252,9 +1222,7 @@ ${input.creativeReliabilityEnabled !== false
         })),
       }, null, 2)}`] : []),
       `【作者要求】\n${input.authorRequest}${supplemental}`,
-      ...(input.creativeReliabilityEnabled !== false
-        ? [formatNarrativeBriefForPromptV1(input.narrativeBrief)]
-        : []),
+      formatNarrativeBriefForPromptV1(input.narrativeBrief),
       `【正式上下文】\n${input.assembled.text || '（当前没有已填写的正式上游内容）'}`,
     ].join('\n\n'),
   }]
@@ -1419,7 +1387,6 @@ export async function prepareStoryArcCopilot(
     generationOverrides?: { temperature?: number; maxTokens?: number }
     contextCompressionRuntime?: AgentContextCompressionRuntimeV1
     inheritedAssumptions?: readonly CreativeAssumptionV1[]
-    creativeReliabilityEnabled?: boolean
     mutationRequest?: StoryArcMutationRequestV1
     signal?: AbortSignal
   },
@@ -1435,7 +1402,11 @@ export async function prepareStoryArcCopilot(
   }
   const worldGroupId = project.enableMultiWorld ? input.worldGroupId : null
   const readScope = input.scope ?? await resolveReadScopeLike(input.projectId)
-  const scope = isLegacyReadScope(readScope) ? undefined : readScope
+  const scope = readScope
+  const work = await db.works.get(scope.workId)
+  if (!work || work.projectId !== input.projectId || work.worldId !== scope.worldId) {
+    throw new Error('当前 Work 不存在或不属于请求作用域。')
+  }
   const before = await readSnapshot(input.projectId, scope)
   const mutation = parseStoryArcMutationRequestV1(input.mutationRequest ?? { operation: 'create' })
   const targetArc = mutation.operation === 'create'
@@ -1464,7 +1435,7 @@ export async function prepareStoryArcCopilot(
     : undefined
   const gatewayRequired = isContextGatewayRequiredForWriteTargetV1(skill, 'storyArcs.name')
   if (gatewayRequired && !scope) {
-    throw new Error('故事线 Gateway required 写入需要稳定 WorkspaceScope，旧项目必须先完成所有权迁移。')
+    throw new Error('故事线 Gateway required 写入需要完整的当前 WorkspaceScope。')
   }
   const mandatoryIntentResourceKeys = before.storyIntent.ragDocumentId
     ? STORY_INTENT_FIELDS_V1
@@ -1555,11 +1526,9 @@ export async function prepareStoryArcCopilot(
     assembled,
     inheritedAssumptions: input.inheritedAssumptions,
   })
-  const creativeReliabilityEnabled = input.creativeReliabilityEnabled
-    ?? isCreativeReliabilityRuntimeEnabledV1()
   const nodeInput: StoryArcCopilotInput = {
     projectId: input.projectId,
-    projectName: project.name,
+    projectName: work.title,
     scope,
     worldGroupId,
     authorRequest: request,
@@ -1569,7 +1538,6 @@ export async function prepareStoryArcCopilot(
     mutation,
     assembled,
     narrativeBrief,
-    creativeReliabilityEnabled,
     snapshot,
     config,
     routingCategory,
@@ -1649,11 +1617,7 @@ export function createStoryArcCopilotNode(
     kind: 'outline.story-arcs',
     editableInput: true,
     assembleInput: buildStoryArcMessages,
-    run: async messages => (
-      input.creativeReliabilityEnabled !== false
-        ? parseStoryArcModelResponseV2(await runAI(messages))
-        : parseStoryArcModelResponseLegacyV1(await runAI(messages))
-    ),
+    run: async messages => parseStoryArcModelResponseV2(await runAI(messages)),
     gate: output => {
       const issues = candidateIssues(output, input.snapshot, input.kind, input.mutation)
       return { status: issues.length ? 'blocked' : 'pass', issues }

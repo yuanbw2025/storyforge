@@ -14,14 +14,15 @@ import { assembleContext } from '../../registry/assemble-context'
 import { cascadeDeleteProject } from '../../registry/lifecycle'
 import type { AIConfig, ChatMessage, Project, WorkspaceScope } from '../../types'
 import type { CreativeReliabilityFixtureV1 } from './fixtures'
+import { createWorkspace } from '../../workspace/create-workspace'
 import {
   CREATIVE_RELIABILITY_GENERATOR_PROMPT_VERSION_V1,
-  CREATIVE_RELIABILITY_LEGACY_PROMPT_VERSION_V1,
+  CREATIVE_RELIABILITY_BASELINE_PROMPT_VERSION_V1,
   CREATIVE_RELIABILITY_REPAIR_PROMPT_VERSION_V1,
   CREATIVE_RELIABILITY_VERIFIER_PROMPT_VERSION_V1,
-  buildCreativeReliabilityLegacyMessagesV1,
+  buildCreativeReliabilityBaselineMessagesV1,
   buildCreativeReliabilityVerifierMessagesV1,
-  parseCreativeReliabilityLegacyOutputV1,
+  parseCreativeReliabilityBaselineOutputV1,
   parseCreativeReliabilityVerifierAssessmentV1,
 } from './protocol'
 import type { CreativeReliabilityEvalRunDependenciesV1 } from './runner'
@@ -187,52 +188,35 @@ function assertSeedAdoption(
 }
 
 async function seedWorkspace(fixture: CreativeReliabilityFixtureV1): Promise<CreativeReliabilityWorkspaceV1> {
-  const now = Date.now()
-  const projectId = await db.projects.add({
+  const created = await createWorkspace({
     name: `${CREL_PROJECT_PREFIX}${fixture.id} ${fixture.projectName}`,
-    genre: fixture.genre,
     genres: [fixture.genre],
     description: 'CREL 隔离评测项目；运行后按 PROJECT_TABLES 生命周期清理。',
     status: 'drafting',
     targetWordCount: 100_000,
-    worldCode: `crel-${fixture.id}`,
-    worldVersion: 1,
-    createdAt: now,
-    updatedAt: now,
-  } as Project) as number
-  const worldId = await db.worlds.add({
-    projectId,
-    code: `crel-${fixture.id}`,
-    name: fixture.worldName,
-    description: fixture.worldOrigin,
-    currentVersion: 1,
-    createdAt: now,
-    updatedAt: now,
-  }) as number
-  const workId = await db.works.add({
-    projectId,
-    worldId,
-    title: fixture.projectName,
-    description: fixture.logline,
-    genres: [fixture.genre],
-    status: 'drafting',
-    targetWordCount: 100_000,
-    createdAt: now,
-    updatedAt: now,
-  }) as number
-  await db.projects.update(projectId, {
-    activeWorldId: worldId,
-    activeWorkId: workId,
-    ownershipSchemaVersion: 1,
+  }, {
+    purpose: 'independent-work',
+    kind: 'novel',
+    novelProfile: 'long',
   })
-  const scope = { projectId, worldId, workId }
-  if (fixture.worldOrigin || fixture.worldRules) {
+  const { scope } = created
+  const projectId = scope.projectId
+  if (fixture.worldOrigin) {
     assertSeedAdoption('worldviews', await adopt({
       projectId,
       scope,
       target: 'worldviews',
       mode: 'replace',
-      data: { rules: fixture.worldRules, worldOrigin: fixture.worldOrigin },
+      data: { worldOrigin: fixture.worldOrigin },
+    }), 1)
+  }
+  if (fixture.worldRules) {
+    assertSeedAdoption('worldRulesProfiles', await adopt({
+      projectId,
+      scope,
+      target: 'worldRulesProfiles',
+      mode: 'replace',
+      data: { entries: {}, customNodes: [], globalNote: fixture.worldRules },
     }), 1)
   }
   if (fixture.theme || fixture.centralConflict || fixture.logline || fixture.mainPlot) {
@@ -257,7 +241,6 @@ async function seedWorkspace(fixture: CreativeReliabilityFixtureV1): Promise<Cre
       mode: 'add-many',
       data: fixture.characters.map(character => ({
         name: character.name,
-        role: character.role,
         roleWeight: character.role === 'supporting' ? 'secondary' : 'main',
         moralAxis: 'neutral',
         orderAxis: 'neutral',
@@ -290,7 +273,7 @@ export async function cleanupStrandedCreativeReliabilityWorkspacesV1(): Promise<
   return projects.length
 }
 
-async function legacyGeneration(input: {
+async function baselineGeneration(input: {
   fixture: CreativeReliabilityFixtureV1
   identity: CreativeReliabilityEvalIdentityV1
   config: AIConfig
@@ -308,7 +291,7 @@ async function legacyGeneration(input: {
       'codex', 'characters', 'creativeRules', 'worldRules', 'historical', 'locations',
     ],
   })
-  const messages = buildCreativeReliabilityLegacyMessagesV1({
+  const messages = buildCreativeReliabilityBaselineMessagesV1({
     fixture: input.fixture,
     assembledContext: assembled.text,
   })
@@ -321,15 +304,15 @@ async function legacyGeneration(input: {
       stage: 'generation',
       purpose: 'generate',
       callIndex: 1,
-      promptVersion: CREATIVE_RELIABILITY_LEGACY_PROMPT_VERSION_V1,
-      category: 'eval.crel.legacy-generator',
+      promptVersion: CREATIVE_RELIABILITY_BASELINE_PROMPT_VERSION_V1,
+      category: 'eval.crel.baseline-generator',
     })
   } catch (error) {
     if (!(error instanceof CreativeReliabilityCallFailure)) throw error
     const calls = [error.call]
     return {
-      variant: 'legacy-direct',
-      status: error.call.status === 'provider-failed' ? 'provider-failed' : 'legacy-protocol-failed',
+      variant: 'baseline-direct',
+      status: error.call.status === 'provider-failed' ? 'provider-failed' : 'baseline-protocol-failed',
       presentedText: '',
       outputHash: null,
       editableArtifact: false,
@@ -337,16 +320,16 @@ async function legacyGeneration(input: {
       artifactModelCalls: 1,
       calls,
       usage: aggregateUsage(calls),
-      issueCodes: [error.call.failureCode ?? 'legacy_provider_failed'],
+      issueCodes: [error.call.failureCode ?? 'baseline_provider_failed'],
       repairTargetIssueCodes: [],
     }
   }
   try {
-    const presentedText = parseCreativeReliabilityLegacyOutputV1(response.output)
+    const presentedText = parseCreativeReliabilityBaselineOutputV1(response.output)
     const calls = [response.call]
     return {
-      variant: 'legacy-direct',
-      status: 'legacy-ready',
+      variant: 'baseline-direct',
+      status: 'baseline-ready',
       presentedText,
       outputHash: await hashCanonicalValue(presentedText),
       editableArtifact: true,
@@ -360,8 +343,8 @@ async function legacyGeneration(input: {
   } catch {
     const calls = [response.call]
     return {
-      variant: 'legacy-direct',
-      status: 'legacy-protocol-failed',
+      variant: 'baseline-direct',
+      status: 'baseline-protocol-failed',
       presentedText: '',
       outputHash: null,
       editableArtifact: false,
@@ -369,7 +352,7 @@ async function legacyGeneration(input: {
       artifactModelCalls: 1,
       calls,
       usage: aggregateUsage(calls),
-      issueCodes: ['legacy-parse-failed'],
+      issueCodes: ['baseline-parse-failed'],
       repairTargetIssueCodes: [],
     }
   }
@@ -390,7 +373,6 @@ async function creativeGeneration(input: {
       worldGroupId: null,
       authorRequest: input.fixture.authorRequest,
       skillId: 'outline.story-arcs',
-      creativeReliabilityEnabled: true,
       configOverride: input.config,
       generationOverrides: {
         temperature: input.parameters.temperature,
@@ -558,8 +540,8 @@ export function createCreativeReliabilityBrowserDependenciesV1(input: {
     generate: async request => {
       const workspace = await seedWorkspace(request.fixture)
       try {
-        return request.variant === 'legacy-direct'
-          ? await legacyGeneration({
+        return request.variant === 'baseline-direct'
+          ? await baselineGeneration({
               ...request,
               config: input.generatorConfig,
               workspace,

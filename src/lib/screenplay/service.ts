@@ -2,8 +2,8 @@ import { nanoid } from 'nanoid'
 import { db } from '../db/schema'
 import type { AdaptationProject, ScreenplayBlock, ScreenplayScene, ScreenplaySceneStatus, WorkspaceScope } from '../types'
 import { inspectAdaptationFreshness } from '../adaptation/source-manifest'
-import { assertRecordInScope, resolveScope, scopeTransactionTables, stampNewRecord } from '../world-engine/scope'
-import { effectiveWorkKind } from '../world-engine/work-kind'
+import { assertRecordInScope, resolveScope, scopeTransactionTables, stampNewRecord } from '../workspace/scope'
+import { effectiveWorkKind } from '../workspace/work-kind'
 import { assertValidScreenplaySceneV1 } from './contracts'
 
 export interface ScreenplaySceneDraftV1 {

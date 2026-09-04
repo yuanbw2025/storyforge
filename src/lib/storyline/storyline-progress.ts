@@ -24,7 +24,7 @@ import {
   resolveReadScopeLike,
   resolveScope,
   scopeTransactionTables,
-} from '../world-engine/scope'
+} from '../workspace/scope'
 import { hashCanonicalValue } from '../agent/run/hash'
 
 export interface StorylineProgressCandidate {
@@ -136,7 +136,7 @@ export function parseStorylineProgressResult(args: {
     const arcId = finiteId(item.arcId)
     const boundary = arcId == null ? undefined : arcsById.get(arcId)
     const status = String(item.status ?? '').trim() as StorylineProgressStatus
-    const quote = String(item.quote ?? item.evidenceQuote ?? '').trim()
+    const quote = String(item.quote ?? '').trim()
     const note = String(item.progressNote ?? '').trim()
     const stageIdRaw = item.currentStageId == null ? null : String(item.currentStageId).trim()
     const stageId = stageIdRaw || null
@@ -163,7 +163,7 @@ export function parseStorylineProgressResult(args: {
     const rawA = finiteId(item.arcIdA)
     const rawB = finiteId(item.arcIdB)
     const note = String(item.note ?? '').trim()
-    const quote = String(item.quote ?? item.evidenceQuote ?? '').trim()
+    const quote = String(item.quote ?? '').trim()
     if (
       rawA == null || rawB == null || rawA === rawB
       || !arcsById.has(rawA) || !arcsById.has(rawB)
@@ -180,8 +180,8 @@ export function parseStorylineProgressResult(args: {
   const newArcs = arrayOfRecords(parsed.newArcs).flatMap((item): NewStorylineCandidate[] => {
     const name = String(item.name ?? '').trim()
     const description = String(item.description ?? '').trim()
-    const evidenceQuote = String(item.quote ?? item.evidenceQuote ?? '').trim()
-    const arcType = String(item.type ?? item.arcType ?? '').trim() as 'main' | 'sub'
+    const evidenceQuote = String(item.quote ?? '').trim()
+    const arcType = String(item.type ?? '').trim() as 'main' | 'sub'
     const key = normalizeName(name)
     if (
       !name || !description || (arcType !== 'main' && arcType !== 'sub')
@@ -193,6 +193,87 @@ export function parseStorylineProgressResult(args: {
   })
 
   return { progress, crossings, newArcs }
+}
+
+const CANONICAL_STORYLINE_ROOT_FIELDS = ['progress', 'crossings', 'newArcs'] as const
+const CANONICAL_STORYLINE_ROW_FIELDS = {
+  progress: ['kind', 'arcId', 'currentStageId', 'status', 'progressNote', 'involvedEntities', 'evidenceQuote'],
+  crossings: ['kind', 'arcIdA', 'arcIdB', 'note', 'evidenceQuote'],
+  newArcs: ['kind', 'name', 'arcType', 'description', 'evidenceQuote'],
+} as const
+
+function assertExactCandidateRecord(
+  value: unknown,
+  allowed: readonly string[],
+  label: string,
+): asserts value is Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`${label} 必须是对象。`)
+  }
+  const keys = Object.keys(value)
+  const unknown = keys.filter(key => !allowed.includes(key))
+  const missing = allowed.filter(key => !(key in value))
+  if (unknown.length || missing.length) {
+    throw new Error(`${label} 字段不符合当前契约：${[
+      unknown.length ? `未知 ${unknown.join('、')}` : '',
+      missing.length ? `缺少 ${missing.join('、')}` : '',
+    ].filter(Boolean).join('；')}。`)
+  }
+}
+
+/** Parse the single current editable/persisted storyline candidate shape. */
+export function parseCanonicalStorylineCandidateV1(value: unknown): StorylineAnalysisCandidates {
+  assertExactCandidateRecord(value, CANONICAL_STORYLINE_ROOT_FIELDS, '故事线候选')
+  const root = value as Record<string, unknown>
+  for (const key of CANONICAL_STORYLINE_ROOT_FIELDS) {
+    if (!Array.isArray(root[key])) throw new Error(`故事线候选.${key} 必须是数组。`)
+    root[key].forEach((row, index) => {
+      assertExactCandidateRecord(row, CANONICAL_STORYLINE_ROW_FIELDS[key], `故事线候选.${key}[${index}]`)
+    })
+  }
+  return value as unknown as StorylineAnalysisCandidates
+}
+
+/** Revalidate an edited/restored canonical candidate against current Canon. */
+export function validateCanonicalStorylineCandidateV1(args: {
+  candidate: unknown
+  chapterContent: string
+  arcs: ArcBoundary[]
+}): StorylineAnalysisCandidates {
+  const candidate = parseCanonicalStorylineCandidateV1(args.candidate)
+  const wire = {
+    progress: candidate.progress.map(item => ({
+      arcId: item.arcId,
+      currentStageId: item.currentStageId,
+      status: item.status,
+      progressNote: item.progressNote,
+      involvedEntities: item.involvedEntities,
+      quote: item.evidenceQuote,
+    })),
+    crossings: candidate.crossings.map(item => ({
+      arcIdA: item.arcIdA,
+      arcIdB: item.arcIdB,
+      note: item.note,
+      quote: item.evidenceQuote,
+    })),
+    newArcs: candidate.newArcs.map(item => ({
+      name: item.name,
+      type: item.arcType,
+      description: item.description,
+      quote: item.evidenceQuote,
+    })),
+  }
+  const validated = parseStorylineProgressResult({
+    raw: JSON.stringify(wire),
+    chapterContent: args.chapterContent,
+    arcs: args.arcs,
+  })
+  if (
+    validated.progress.length !== candidate.progress.length
+    || validated.crossings.length !== candidate.crossings.length
+    || validated.newArcs.length !== candidate.newArcs.length
+  ) throw new Error('故事线候选没有通过当前闭集或逐字证据校验。')
+  return validated
 }
 
 export async function acceptStorylineProgressCandidate(args: {
@@ -313,8 +394,8 @@ export async function adoptStorylineAnalysisCandidates(args: {
     throw new Error('正文已变化，候选证据不再成立，请重新映射')
   }
   const arcs = await readOwnedRows<StoryArc>(scope, 'storyArcs', { owner: 'work' })
-  const parsed = parseStorylineProgressResult({
-    raw: JSON.stringify(args.candidate),
+  const parsed = validateCanonicalStorylineCandidateV1({
+    candidate: args.candidate,
     chapterContent: content,
     arcs,
   })
@@ -531,14 +612,12 @@ function mergeAdoptResults(results: Awaited<ReturnType<typeof adopt>>[]): Awaite
   return results.reduce((merged, result) => ({
     ...merged,
     written: [...merged.written, ...result.written],
-    aliasMapped: [...merged.aliasMapped, ...result.aliasMapped],
     skipped: [...merged.skipped, ...result.skipped],
     unknown: [...merged.unknown, ...result.unknown],
     typeErrors: [...merged.typeErrors, ...result.typeErrors],
     fkErrors: [...merged.fkErrors, ...result.fkErrors],
   }), {
     written: [],
-    aliasMapped: [],
     skipped: [],
     unknown: [],
     typeErrors: [],

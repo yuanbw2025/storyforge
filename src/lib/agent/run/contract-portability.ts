@@ -85,17 +85,17 @@ export async function portableizeAgentRunContractV1(input: {
       ...(source.scope.runtime ? {
         runtime: {
           ...source.scope.runtime,
-          simulationSessionId: portableId(
-            source.scope.runtime.simulationSessionId,
-            'simulationSessions',
+          productRuntimeSessionId: portableId(
+            source.scope.runtime.productRuntimeSessionId,
+            'productRuntimeSessions',
             input.idMaps,
           ),
         },
       } : {}),
-      ...(source.scope.gameProduction ? {
-        gameProduction: {
-          ...source.scope.gameProduction,
-          gameBuildId: portableId(source.scope.gameProduction.gameBuildId, 'gameBuilds', input.idMaps),
+      ...(source.scope.productProduction ? {
+        productProduction: {
+          ...source.scope.productProduction,
+          productBuildId: portableId(source.scope.productProduction.productBuildId, 'productBuilds', input.idMaps),
         },
       } : {}),
     },
@@ -140,17 +140,17 @@ export async function rebindPortableAgentRunContractV1(input: {
       ...(portable.scope.runtime ? {
         runtime: {
           ...portable.scope.runtime,
-          simulationSessionId: reboundId(
-            portable.scope.runtime.simulationSessionId,
-            'simulationSessions',
+          productRuntimeSessionId: reboundId(
+            portable.scope.runtime.productRuntimeSessionId,
+            'productRuntimeSessions',
             input.idMaps,
           ),
         },
       } : {}),
-      ...(portable.scope.gameProduction ? {
-        gameProduction: {
-          ...portable.scope.gameProduction,
-          gameBuildId: reboundId(portable.scope.gameProduction.gameBuildId, 'gameBuilds', input.idMaps),
+      ...(portable.scope.productProduction ? {
+        productProduction: {
+          ...portable.scope.productProduction,
+          productBuildId: reboundId(portable.scope.productProduction.productBuildId, 'productBuilds', input.idMaps),
         },
       } : {}),
     },

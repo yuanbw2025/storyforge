@@ -24,13 +24,13 @@ const registry = JSON.parse(readFileSync('src/lib/agent/ai-entry-registry.json',
 describe('R-HARNESS59 / WEH-0H · 正式 AI 入口机器绑定', () => {
   it('AST 守卫证明实际 member/alias/wrapper 调用均携带登记 entryId', () => {
     const output = execFileSync(process.execPath, ['scripts/check-ai-entry-registry.mjs'], { encoding: 'utf8' })
-    expect(output).toContain('39 bindings / 43 calls')
-    expect(output).toContain('formal 19, auxiliary 15, evaluation 4, experimental 1')
+    expect(output).toContain('36 bindings / 40 calls')
+    expect(output).toContain('formal 16, auxiliary 15, evaluation 4, experimental 1')
   })
 
   it('唯一注册表严格解析且每项连接 Skill、执行器、候选和调用方', () => {
     expect(registry.version).toBe(2)
-    expect(FORMAL_AI_ENTRY_REGISTRY_V1.entries).toHaveLength(39)
+    expect(FORMAL_AI_ENTRY_REGISTRY_V1.entries).toHaveLength(36)
     for (const entry of FORMAL_AI_ENTRY_REGISTRY_V1.entries) {
       expect(entry.skillId).not.toBe('')
       expect(entry.runContractBuilderId).not.toBe('')

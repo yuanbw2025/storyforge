@@ -6,6 +6,7 @@ const attribute = (key: string): RuleNumberExpressionV1 => ({ op: 'attribute', k
 const add = (...values: RuleNumberExpressionV1[]): RuleNumberExpressionV1 => ({ op: 'add', values })
 const multiply = (left: RuleNumberExpressionV1, right: RuleNumberExpressionV1): RuleNumberExpressionV1 => ({ op: 'multiply', left, right })
 const unlimited = () => ({ mode: 'unlimited' as const, maximum: null, resourceKey: null, cost: null, sharedPoolKey: null, cooldownRounds: null, reset: [] })
+const itemMechanics = (category: string) => ({ category, stackPolicy: 'unique' as const, maxStack: 1, weight: null, equipSlots: [], requiresAttunement: false, maximumCharges: null, maximumDurability: null })
 
 export const TTRPG_RANK_LITE_TIERS_V2 = ['D', 'C', 'B', 'A'] as const
 export type TtrpgRankLiteTierV2 = typeof TTRPG_RANK_LITE_TIERS_V2[number]
@@ -73,9 +74,9 @@ export const RANK_LITE_RULE_PACK_V1: RulePackV1 = {
   ],
   turnStructure: { initiativeDiceModelKey: 'rank-d20', initiativeAttributeKey: 'mind', phases: ['start', 'action', 'end'], actionsPerTurn: 1, reactionsPerRound: 1 },
   items: [
-    { key: 'field-kit', name: '专业工具', description: '与角色专长相符的工具包。', tags: ['tool'], grantedActionKeys: ['investigate'] },
-    { key: 'sidearm', name: '制式武器', description: '用于危险冲突的基础装备。', tags: ['weapon'], grantedActionKeys: ['strike'] },
-    { key: 'protective-gear', name: '防护装具', description: '降低环境风险的基础装备。', tags: ['armor'], grantedActionKeys: ['protect'] },
+    { key: 'field-kit', name: '专业工具', description: '与角色专长相符的工具包。', tags: ['tool'], grantedActionKeys: ['investigate'], mechanics: itemMechanics('tool') },
+    { key: 'sidearm', name: '制式武器', description: '用于危险冲突的基础装备。', tags: ['weapon'], grantedActionKeys: ['strike'], mechanics: itemMechanics('weapon') },
+    { key: 'protective-gear', name: '防护装具', description: '降低环境风险的基础装备。', tags: ['armor'], grantedActionKeys: ['protect'], mechanics: itemMechanics('armor') },
   ],
   advancement: {
     currencyKey: 'xp', currencyName: '成长点', awardPerMilestone: 1,

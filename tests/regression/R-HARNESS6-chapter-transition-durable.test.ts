@@ -28,6 +28,9 @@ import {
   rebuildProjectNarrativeSummaries,
 } from '../../src/lib/retrieval/retrieval'
 import type { WorkspaceScope } from '../../src/lib/types'
+import { seedCurrentProject } from '../helpers/current-workspace'
+import { resolveWorkspaceScope } from '../../src/lib/workspace/ownership'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
 
 async function createWorkspace(label: string): Promise<{
   scope: WorkspaceScope
@@ -37,43 +40,18 @@ async function createWorkspace(label: string): Promise<{
   content: string
 }> {
   const now = Date.now()
-  const projectId = await db.projects.add({
+  const projectId = await seedCurrentProject({
     name: label,
-    genre: 'fantasy',
     genres: ['fantasy'],
     status: 'drafting',
     description: '',
     targetWordCount: 100_000,
-    worldCode: `world-${label}`,
-    worldVersion: 1,
+
+
     createdAt: now,
     updatedAt: now,
   } as any) as number
-  const worldId = await db.worlds.add({
-    projectId,
-    code: `world-${label}`,
-    name: `${label}世界`,
-    description: '',
-    currentVersion: 1,
-    createdAt: now,
-    updatedAt: now,
-  }) as number
-  const workId = await db.works.add({
-    projectId,
-    worldId,
-    title: label,
-    description: '',
-    genres: ['fantasy'],
-    status: 'drafting',
-    targetWordCount: 100_000,
-    createdAt: now,
-    updatedAt: now,
-  }) as number
-  await db.projects.update(projectId, {
-    activeWorldId: worldId,
-    activeWorkId: workId,
-    ownershipSchemaVersion: 1,
-  })
+  const { worldId, workId } = await resolveWorkspaceScope(projectId)
   const worldGroupId = await db.worldGroups.add({
     projectId,
     name: '主世界',
@@ -107,6 +85,7 @@ async function createWorkspace(label: string): Promise<{
     createdAt: now,
     updatedAt: now,
   } as any) as number
+  await finalizeCurrentFixtureV1(projectId)
   return { scope: { projectId, worldId, workId }, worldGroupId, outlineNodeId, chapterId, content }
 }
 

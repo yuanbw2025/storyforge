@@ -1,14 +1,14 @@
 import type {
   FrozenRuntimeMediaAssetV2,
-  GameRuntimePackageV2,
+  ProductRuntimePackageV1,
   RulePackV1,
   TtrpgCampaignContentV1,
   TtrpgCharacterSheetV2,
   TtrpgCharacterTemplateV1,
   TtrpgProductionBriefV2,
-  WorldGameSourceSelectionV2,
+  ProductWorldSourceSelectionV1,
 } from '../types'
-import type { WorldGameSourceCatalog } from '../text-game/world-generation'
+import type { ProductProductionWorldSourceCatalogV2 as ProductWorldSourceCatalog } from '../product-production/world-source'
 import {
   parseTtrpgCampaignContentV1,
   validateTtrpgCampaignForPublicationV1,
@@ -24,9 +24,8 @@ function safeKey(value: string, fallback: string): string {
   return normalized || fallback
 }
 
-function releasedLocationKey(exportId: number): string {
-  if (!Number.isInteger(exportId) || exportId < 0) fail(`冻结地点 exportId 无效:${exportId}`)
-  return `release-location:${exportId}`
+function productLocationKey(index: number): string {
+  return `location.world.${String(index + 1).padStart(3, '0')}`
 }
 
 /** Bind governed production assets to stable TTRPG slots without changing slot identity. */
@@ -65,7 +64,7 @@ export function bindProductionMediaToTtrpgCampaignV1(
   return campaign
 }
 
-type Narrative = GameRuntimePackageV2['narrative']
+type Narrative = ProductRuntimePackageV1['narrative']
 
 function resources(rulePack: RulePackV1, attributes: Record<string, number>): Record<string, number> {
   return Object.fromEntries(rulePack.resources.map(resource => {
@@ -79,19 +78,18 @@ function productionStartingProgression(input: {
   startingLevelOrTier: string
   attributes: Record<string, number>
 }): TtrpgCharacterSheetV2['rules']['progression'] {
-  const model = input.rulePack.advancement.progressionModel ?? 'point-buy'
+  const model = input.rulePack.advancement.progressionModel
   const requested = input.startingLevelOrTier.trim()
   if (model === 'numeric-level') {
     const level = requested === '规则默认' ? 1 : Number(requested)
-    const maximum = input.rulePack.advancement.maximumLevel ?? 20
+    const maximum = input.rulePack.advancement.maximumLevel
     if (!Number.isInteger(level) || level < 1 || level > maximum) {
       fail(`初始等级必须是 1～${maximum} 的整数`)
     }
     return { model: 'numeric-level', level, rankKey: null, experience: 0, unspentPoints: 0 }
   }
   if (model === 'rank') {
-    const order = input.rulePack.advancement.rankOrder?.length
-      ? input.rulePack.advancement.rankOrder : ['D', 'C', 'B', 'A']
+    const order = input.rulePack.advancement.rankOrder
     const rankKey = order[Number(input.attributes.rankPower) - 1]
       ?? (requested === '规则默认' ? order[0] : requested)
     if (!rankKey || !order.includes(rankKey)) fail(`初始阶位必须属于 ${order.join('/')}`)
@@ -105,11 +103,11 @@ function characterFromSeat(input: {
   characterPolicy: TtrpgProductionBriefV2['characters']
   index: number
   rulePack: RulePackV1
-  sourceCatalog: Pick<WorldGameSourceCatalog, 'characters'>
+  sourceCatalog: Pick<ProductWorldSourceCatalog, 'characters'>
   confirmed: boolean
 }): TtrpgCharacterTemplateV1 {
-  const source = input.seat.sourceCharacterExportId == null ? null
-    : input.sourceCatalog.characters.find(character => character.exportId === input.seat.sourceCharacterExportId) ?? null
+  const source = input.seat.sourceCharacterResourceKey == null ? null
+    : input.sourceCatalog.characters.find(character => character.resourceKey === input.seat.sourceCharacterResourceKey) ?? null
   let attributes = Object.fromEntries(input.rulePack.attributes.map(attribute => [attribute.key, attribute.defaultValue]))
   if (input.rulePack.ruleSystemId === 'storyforge.rank-lite' && input.seat.characterMode === 'quick-card' && input.seat.rankTier) {
     const card = createRankLiteQuickCardsV2().find(candidate => candidate.tier === input.seat.rankTier)
@@ -137,12 +135,12 @@ function characterFromSeat(input: {
   ) {
     attributes.level = progression.level
   }
-  const sourceRefs = source ? [`character:${source.exportId}`] : [`seat:${input.seat.seatKey}`]
+  const sourceRefs = source ? [source.resourceKey] : [`seat:${input.seat.seatKey}`]
   const name = input.seat.characterName || source?.name || `${input.seat.label}角色`
   const description = source?.description || `${name} 是由${input.seat.characterMode === 'manual' ? '玩家手动完善' : input.seat.characterMode === 'quick-card' ? `${input.seat.rankTier}级快速卡` : 'AI 按规则生成'}的玩家角色。`
   const rank = attributes.rankPower ?? 1
   const template: Omit<TtrpgCharacterTemplateV1, 'characterSheet'> = {
-    characterKey: source ? `release-character:${source.exportId}`
+    characterKey: source ? `character.world.${String(input.index + 1).padStart(3, '0')}`
       : safeKey(`pc.${input.seat.seatKey}`, `pc.${input.index + 1}`), name, description,
     seatKey: input.seat.seatKey, sourceRefs, role: 'player', controller: input.seat.controller, attributes,
     attributeMappings: Object.fromEntries(input.rulePack.attributes.map(attribute => [attribute.key, {
@@ -161,6 +159,7 @@ function characterFromSeat(input: {
       secret: source ? `与 ${source.name} 的冻结背景相关、需由 KP 按信息规则逐步揭示的私人信息。` : '由玩家与 KP 在 Session Zero 确认的私人信息。',
       portrayal: `${input.seat.controller === 'ai' ? 'AI' : '真人'}控制；行动必须遵守角色已知信息、资源、状态和规则限制。`,
     },
+    gmProfile: null,
   }
   return {
     ...template,
@@ -181,7 +180,7 @@ function characterFromSeat(input: {
 }
 
 function npcTemplate(input: {
-  source: WorldGameSourceCatalog['characters'][number] | null
+  source: ProductWorldSourceCatalog['characters'][number] | null
   index: number
   rulePack: RulePackV1
   campaign: TtrpgProductionBriefV2['campaign']
@@ -193,10 +192,10 @@ function npcTemplate(input: {
   ]))
   const name = input.source?.name ?? '核心对手'
   const description = input.source?.description || `围绕“${input.campaign.coreConflict}”采取行动的关键 NPC。`
-  const sourceRefs = input.source ? [`character:${input.source.exportId}`] : ['world:generated-npc']
+  const sourceRefs = input.source ? [input.source.resourceKey] : ['product:generated-npc']
   const template: Omit<TtrpgCharacterTemplateV1, 'characterSheet'> = {
-    characterKey: input.source ? `release-character:${input.source.exportId}` : `npc.generated.${input.index + 1}`,
-    name, description, sourceRefs, role: 'npc', controller: 'gm', attributes,
+    characterKey: input.source ? `npc.world.${String(input.index + 1).padStart(3, '0')}` : `npc.generated.${input.index + 1}`,
+    seatKey: null, name, description, sourceRefs, role: 'npc', controller: 'gm', attributes,
     attributeMappings: Object.fromEntries(input.rulePack.attributes.map(attribute => [attribute.key, {
       value: attributes[attribute.key], derivationRule: `按 NPC 在“${input.campaign.coreConflict}”中的阻力职能映射。`,
       sourceRefs, authorConfirmed: input.confirmed,
@@ -204,6 +203,7 @@ function npcTemplate(input: {
     skills: Object.fromEntries(input.rulePack.actions.map((action, actionIndex) => [action.key, 1 + actionIndex % 3])),
     resources: resources(input.rulePack, attributes), itemKeys: input.rulePack.items.slice(0, 1).map(item => item.key),
     actionKeys: input.rulePack.actions.map(action => action.key), portraitAssetKey: null,
+    playerProfile: null,
     gmProfile: {
       objective: `依照自身立场影响“${input.campaign.coreConflict}”的走向。`,
       leverage: input.source?.description || '掌握一项能改变局部局势的资源、关系或情报。',
@@ -235,36 +235,27 @@ function npcTemplate(input: {
 export function compileProductionTtrpgCampaignV2(input: {
   productionKey: string
   brief: TtrpgProductionBriefV2
-  selection: WorldGameSourceSelectionV2
+  selection: ProductWorldSourceSelectionV1
   narrative: Narrative
-  sourceCatalog: Pick<WorldGameSourceCatalog, 'characters' | 'locations' | 'artifacts' | 'storyArcs'>
+  sourceCatalog: Pick<ProductWorldSourceCatalog, 'characters' | 'locations' | 'artifacts' | 'storyArcs'>
   rulePack: RulePackV1
   worldContentHash: string
-  playableWorldBundleHash: string
-  /** Root provenance ref. Development inputs must not masquerade as world:. */
-  sourceRef?: string
+  worldSourceBundleHash: string
 }): TtrpgCampaignContentV1 {
   const rulePack = parseRulePackV1(input.rulePack)
   const brief = input.brief
-  const resolvedDesign = brief.campaignDesign ? resolveTtrpgCampaignDesignV2(brief.campaignDesign) : {
-    background: brief.campaign.background,
-    coreConflict: brief.campaign.coreConflict,
-    opening: brief.story.openingScene,
-    frontConcepts: [brief.campaign.coreConflict],
-    secretConcepts: [`围绕“${brief.campaign.coreConflict}”存在尚未公开的真实动机。`],
-    endingConcepts: ['公开真相并承担后果', '保护眼前的人并保留后续压力'],
-    lockedSections: [],
-  }
+  const resolvedDesign = resolveTtrpgCampaignDesignV2(brief.campaignDesign)
   const effectiveCampaign = { ...brief.campaign, background: resolvedDesign.background, coreConflict: resolvedDesign.coreConflict }
-  const sourceRef = input.sourceRef ?? `world:${input.worldContentHash}`
+  const sourceRef = `world:${input.worldContentHash}`
   if (input.narrative.nodes.length < 3) fail('模型叙事不足以编译 CampaignPack')
   const playerCharacters = brief.table.seats.map((seat, index) => characterFromSeat({
     seat, characterPolicy: brief.characters, index, rulePack, sourceCatalog: input.sourceCatalog,
     confirmed: brief.confirmations.numericMappings,
   }))
-  const usedSourceIds = new Set(brief.table.seats.flatMap(seat => seat.sourceCharacterExportId == null ? [] : [seat.sourceCharacterExportId]))
+  const usedSourceKeys = new Set(brief.table.seats.flatMap(seat => seat.sourceCharacterResourceKey == null ? [] : [seat.sourceCharacterResourceKey]))
+  const selectedCharacterKeys = new Set(input.selection.roleBindings.participants ?? [])
   const npcSources = input.sourceCatalog.characters.filter(character => (
-    input.selection.characterExportIds.includes(character.exportId) && !usedSourceIds.has(character.exportId)
+    selectedCharacterKeys.has(character.resourceKey) && !usedSourceKeys.has(character.resourceKey)
   ))
   const npcs = (npcSources.length ? npcSources : [null]).slice(0, 8).map((source, index) => npcTemplate({
     source, index, rulePack, campaign: effectiveCampaign, confirmed: brief.confirmations.numericMappings,
@@ -298,19 +289,20 @@ export function compileProductionTtrpgCampaignV2(input: {
       visibility: 'discoverable' as const, sourceRefs: [sourceRef],
     }
   })
-  const locationIds = input.selection.importantLocationExportIds
-  for (const locationId of locationIds) {
-    if (!input.sourceCatalog.locations.some(location => location.exportId === locationId)) {
-      fail(`冻结素材选择引用了不存在的地点:${locationId}`)
+  const locationResourceKeys = input.selection.roleBindings.locations ?? []
+  for (const locationResourceKey of locationResourceKeys) {
+    if (!input.sourceCatalog.locations.some(location => location.resourceKey === locationResourceKey)) {
+      fail(`冻结素材选择引用了不存在的地点:${locationResourceKey}`)
     }
   }
   const scenes = input.narrative.nodes.map((node, index) => {
-    const locationId = locationIds[index % Math.max(1, locationIds.length)] ?? null
+    const locationResourceKey = locationResourceKeys[index % Math.max(1, locationResourceKeys.length)] ?? null
     const directClue = clueKeys.get(node.key)
     return {
       sceneKey: node.key, title: node.title,
       description: node.key === input.narrative.entryNodeKey ? `${resolvedDesign.opening}\n${node.summary}` : node.summary,
-      locationKey: locationId == null ? null : releasedLocationKey(locationId),
+      locationKey: locationResourceKey == null ? null
+        : productLocationKey(locationResourceKeys.indexOf(locationResourceKey)),
       participantKeys, clueKeys: directClue ? [directClue] : [], actionKeys,
       nextSceneKeys: [...node.successorKeys],
       failureForward: brief.story.failForward
@@ -318,7 +310,7 @@ export function compileProductionTtrpgCampaignV2(input: {
         : '由 KP 根据当前事实提供替代行动。',
       gmSecret: `本场只可依据已冻结背景、玩家行动和已满足的揭示条件推进；核心隐情围绕“${resolvedDesign.coreConflict}”。`,
       sourceRefs: [sourceRef],
-      ...(brief.media.maps ? { tabletopMapKey: `map.${index + 1}` } : {}),
+      tabletopMapKey: brief.media.maps ? `map.${index + 1}` : null,
     }
   })
   const requiredConclusions = clues.filter(clue => clue.required).map(clue => clue.conclusionKey)
@@ -457,8 +449,9 @@ export function compileProductionTtrpgCampaignV2(input: {
       referenceAssetKeys: character.portraitAssetKey ? [character.portraitAssetKey] : [],
     })),
     locations: locationKeys.map(locationKey => {
-      const sourceId = Number(locationKey.replace(/^release-location:/, ''))
-      const source = input.sourceCatalog.locations.find(location => location.exportId === sourceId)
+      const sourceIndex = Number(locationKey.replace(/^location\.world\./, '')) - 1
+      const sourceResourceKey = locationResourceKeys[sourceIndex]
+      const source = input.sourceCatalog.locations.find(location => location.resourceKey === sourceResourceKey)
       return {
         locationKey,
         identityPrompt: `${source?.name ?? locationKey}。${source?.description || '严格依据冻结世界地点设定。'}`,
@@ -553,32 +546,28 @@ export function compileProductionTtrpgCampaignV2(input: {
       sourceRefs: [worldSourceRef],
     },
     clocks, fronts, secrets,
-    ...(brief.campaignDesign ? {
-      designProvenance: {
-        origin: brief.campaignDesign.origin,
-        proposalKeys: brief.campaignDesign.proposals.map(proposal => proposal.proposalKey),
-        baseProposalKey: brief.campaignDesign.selection.baseProposalKey,
-        sectionSources: structuredClone(brief.campaignDesign.selection.sectionSources),
-        lockedSections: [...brief.campaignDesign.selection.lockedSections],
-        candidateHash: brief.campaignDesign.candidateEvidence?.candidateHash ?? null,
-      },
-    } : {}),
+    designProvenance: {
+      origin: brief.campaignDesign.origin,
+      proposalKeys: brief.campaignDesign.proposals.map(proposal => proposal.proposalKey),
+      baseProposalKey: brief.campaignDesign.selection.baseProposalKey,
+      sectionSources: structuredClone(brief.campaignDesign.selection.sectionSources),
+      lockedSections: [...brief.campaignDesign.selection.lockedSections],
+      candidateHash: brief.campaignDesign.candidateEvidence?.candidateHash ?? null,
+    },
     informationPolicy: structuredClone(brief.information),
     openingSceneKey: input.narrative.entryNodeKey, characterTemplates: characters, scenes, clues, quests,
     endings, handouts,
     advancementMilestones: quests.map((quest, index) => ({
       milestoneKey: `milestone.${index + 1}`, title: `完成：${quest.title}`, award: rulePack.advancement.awardPerMilestone,
     })),
-    ...(tabletop ? { tabletop } : {}),
+    tabletop: tabletop ?? null,
     visualBible, mediaManifest,
-    sourceWorld: { contentHash: input.worldContentHash, bundleHash: input.playableWorldBundleHash },
+    sourceWorld: { contentHash: input.worldContentHash, bundleHash: input.worldSourceBundleHash },
   }
   const parsed = parseTtrpgCampaignContentV1(campaign, rulePack)
   const report = validateTtrpgCampaignForPublicationV1(parsed, rulePack)
   if (!report.valid) fail(`CampaignPack 发布预检失败:${report.errors.join('；')}`)
-  if (brief.campaignDesign) {
-    const lockErrors = validateTtrpgCampaignDesignLocksV2({ design: brief.campaignDesign, campaign: parsed })
-    if (lockErrors.length) fail(`战役提案锁定内容未保持:${lockErrors.join('；')}`)
-  }
+  const lockErrors = validateTtrpgCampaignDesignLocksV2({ design: brief.campaignDesign, campaign: parsed })
+  if (lockErrors.length) fail(`战役提案锁定内容未保持:${lockErrors.join('；')}`)
   return parsed
 }

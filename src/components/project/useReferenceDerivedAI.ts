@@ -10,7 +10,7 @@ import {
   rejectReferenceDerivedCandidateV1,
   type ReferenceDerivedCandidateV1,
 } from '../../lib/agent/run/reference-derived-durable'
-import { resolveScopeLike } from '../../lib/world-engine/scope'
+import { resolveScopeLike } from '../../lib/workspace/scope'
 
 export interface ReferenceDerivedLaneState {
   candidate: ReferenceDerivedCandidateV1 | null

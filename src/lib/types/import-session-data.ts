@@ -5,6 +5,8 @@
  */
 export interface UnifiedParseResult {
   worldview?: Record<string, string>
+  geography?: { overview?: string }
+  history?: { overview?: string }
   characters?: Array<Record<string, unknown>>
   outline?: Array<Record<string, unknown>>
   /**

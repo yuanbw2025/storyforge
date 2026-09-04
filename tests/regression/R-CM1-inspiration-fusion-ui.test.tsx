@@ -47,10 +47,10 @@ const result: ReverseResult = {
     powerHierarchy: '',
     continentLayout: '',
     climateByRegion: '',
-    historyLine: '',
     races: '',
     factionLayout: '',
   },
+  history: { overview: '' },
   storyCore: {
     logline: '守城人追查被雨抹去的名字',
     theme: '记忆',

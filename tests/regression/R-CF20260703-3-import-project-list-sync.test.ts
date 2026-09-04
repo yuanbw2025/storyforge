@@ -1,21 +1,20 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { useProjectStore } from '../../src/stores/project'
-import type { Project } from '../../src/lib/types'
+import { seedCurrentProject } from '../helpers/current-workspace'
 
 const now = 1_780_000_000_000
 
 async function addProject(name: string, updatedAt: number): Promise<number> {
-  return await db.projects.add({
+  return await seedCurrentProject({
     name,
-    genre: 'other',
     genres: ['other'],
     status: 'drafting',
     description: '',
     targetWordCount: 0,
     createdAt: updatedAt,
     updatedAt,
-  } as Project) as number
+  }) as number
 }
 
 describe('CF-20260703-3 · 工作区导入 JSON 后项目列表同步', () => {

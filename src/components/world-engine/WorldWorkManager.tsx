@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { BookOpenText, Check, Plus, Trash2, X } from 'lucide-react'
 import type { Work } from '../../lib/types/world-ownership'
-import { createWorldWork, listWorldWorks, switchActiveWork } from '../../lib/world-engine/works'
-import { deleteWork } from '../../lib/world-engine/lifecycle'
+import { createWorldWork, listWorldWorks, switchActiveWork } from '../../lib/workspace/works'
+import { deleteWork } from '../../lib/workspace/lifecycle'
 import { useDialog } from '../shared/Dialog'
 import WorkKindBadge from '../work/WorkKindBadge'
 

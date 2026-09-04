@@ -21,9 +21,12 @@ export interface ReverseWorldview {
   powerHierarchy: string
   continentLayout: string
   climateByRegion: string
-  historyLine: string
   races: string
   factionLayout: string
+}
+
+export interface ReverseHistory {
+  overview: string
 }
 
 export interface ReverseStoryCore {
@@ -48,6 +51,7 @@ export interface ReverseCharacter {
 
 export interface ReverseResult {
   worldview: ReverseWorldview
+  history: ReverseHistory
   storyCore: ReverseStoryCore
   characters: ReverseCharacter[]
 }
@@ -64,7 +68,7 @@ export interface ReverseWorld {
   powerHierarchy: string
   continentLayout: string
   climateByRegion: string
-  historyLine: string
+  historyOverview: string
   races: string
   factionLayout: string
   entryCondition: string
@@ -164,7 +168,7 @@ export function parseReverseMultiWorldOutput(output: string): ReverseMultiWorldR
           powerHierarchy: asText(w.powerHierarchy),
           continentLayout: asText(w.continentLayout),
           climateByRegion: asText(w.climateByRegion),
-          historyLine: asText(w.historyLine),
+          historyOverview: asText(w.historyOverview),
           races: asText(w.races),
           factionLayout: asText(w.factionLayout),
           entryCondition: asText(w.entryCondition),
@@ -221,9 +225,12 @@ export function parseReverseOutput(output: string): ReverseResult | null {
       powerHierarchy: asText(parsed.worldview?.powerHierarchy),
       continentLayout: asText(parsed.worldview?.continentLayout),
       climateByRegion: asText(parsed.worldview?.climateByRegion),
-      historyLine: asText(parsed.worldview?.historyLine),
       races: asText(parsed.worldview?.races),
       factionLayout: asText(parsed.worldview?.factionLayout),
+    }
+
+    const history: ReverseHistory = {
+      overview: asText(parsed.history?.overview),
     }
 
     const storyCore: ReverseStoryCore = {
@@ -246,7 +253,7 @@ export function parseReverseOutput(output: string): ReverseResult | null {
         }))
       : []
 
-    return { worldview, storyCore, characters }
+    return { worldview, history, storyCore, characters }
   } catch {
     return null
   }

@@ -48,6 +48,7 @@ export default function InspirationMultiWorldResult({
           </div>
           {world.worldOrigin && <FieldRow label="世界来源" value={world.worldOrigin} />}
           {world.powerHierarchy && <FieldRow label="力量体系" value={world.powerHierarchy} />}
+          {world.historyOverview && <FieldRow label="世界历史" value={world.historyOverview} />}
           {world.factionLayout && <FieldRow label="势力分布" value={world.factionLayout} />}
           {world.entryCondition && <FieldRow label="进入条件" value={world.entryCondition} />}
           {world.powerRestriction && <FieldRow label="能力限制" value={world.powerRestriction} />}

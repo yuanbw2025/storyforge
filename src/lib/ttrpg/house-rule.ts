@@ -4,7 +4,7 @@ import type {
   TtrpgHouseRuleOverlayV2,
   TtrpgHouseRulePatchV2,
 } from "../types";
-import { hashGameProductionValueV2 } from "../game-production/hash";
+import { hashProductProductionValueV2 } from "../product-production/hash";
 import { parseRulePackV1, runRulePackFixturesV1 } from "./rule-pack";
 import { resolveTtrpgResolutionV2 } from "./resolution";
 
@@ -236,7 +236,7 @@ export async function applyTtrpgHouseRuleOverlayV2(input: {
 }> {
   const base = parseRulePackV1(input.baseRulePack);
   const overlay = parseTtrpgHouseRuleOverlayV2(input.overlay);
-  const baseHash = await hashGameProductionValueV2(base);
+  const baseHash = await hashProductProductionValueV2(base);
   if (
     overlay.baseRuleSystemId !== base.ruleSystemId ||
     overlay.baseRuleSystemVersion !== base.ruleSystemVersion ||
@@ -266,7 +266,7 @@ export async function applyTtrpgHouseRuleOverlayV2(input: {
   runRulePackFixturesV1(rulePack);
   return {
     rulePack,
-    contentHash: await hashGameProductionValueV2(rulePack),
+    contentHash: await hashProductProductionValueV2(rulePack),
     diff,
   };
 }

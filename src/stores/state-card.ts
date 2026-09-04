@@ -6,7 +6,7 @@ import { db } from '../lib/db/schema'
 import type { StateCard, StateCategory, StateDiffItem, StateField } from '../lib/types'
 import { parseFields, stringifyFields } from '../lib/types/state-card'
 import { adopt } from '../lib/registry/adopt'
-import { assertRecordInScope, readOwnedRows, resolveScopeLike, stampNewRecord, type WorkspaceScopeLike } from '../lib/world-engine/scope'
+import { assertRecordInScope, readOwnedRows, resolveScopeLike, stampNewRecord, type WorkspaceScopeLike } from '../lib/workspace/scope'
 
 const now = () => Date.now()
 

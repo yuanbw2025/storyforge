@@ -18,12 +18,11 @@ import type { AdoptResult, AssembleContextResult } from '../registry/types'
 import type { AIConfig, ChatMessage, StoryCore } from '../types'
 import type { WorkspaceScope } from '../types/world-ownership'
 import {
-  isLegacyReadScope,
   readOwnedRows,
   resolveReadScopeLike,
   resolveScope,
   scopeTransactionTables,
-} from '../world-engine/scope'
+} from '../workspace/scope'
 import {
   createAgentContextCompressionSessionV1,
   type AgentContextCompressionRuntimeV1,
@@ -150,7 +149,7 @@ function valuesOf(row: StoryCore | null): Record<StoryCoreField, string> {
     theme: asText(row?.theme),
     centralConflict: asText(row?.centralConflict),
     plotPattern: asText(row?.plotPattern),
-    mainPlot: asText(row?.mainPlot) || asText(row?.storyLines),
+    mainPlot: asText(row?.mainPlot),
     subPlots: asText(row?.subPlots),
   }
 }
@@ -393,7 +392,9 @@ export async function prepareStoryCoreCopilot(
   }
   const worldGroupId = project.enableMultiWorld ? input.worldGroupId : null
   const readScope = input.scope ?? await resolveReadScopeLike(input.projectId)
-  const scope = isLegacyReadScope(readScope) ? undefined : readScope
+  const scope = readScope
+  const work = await db.works.get(scope.workId)
+  if (!work || work.projectId !== input.projectId) throw new Error('当前作品不存在。')
   const before = await readSnapshot(input.projectId, scope)
   const targetField = resolveStoryCoreFieldV1(request)
   const capability = STORY_CORE_FIELD_CAPABILITIES.get(targetField)
@@ -422,7 +423,7 @@ export async function prepareStoryCoreCopilot(
     : undefined
   const gatewayRequired = isContextGatewayRequiredForWriteTargetV1(skill, `storyCores.${targetField}`)
   if (gatewayRequired && !scope) {
-    throw new Error('故事核心 Gateway required 字段需要稳定 WorkspaceScope，旧项目必须先完成所有权迁移。')
+    throw new Error('故事核心 Gateway required 字段需要完整的当前 WorkspaceScope。')
   }
   const targetResourceKey = before.values[targetField].trim() && before.ragDocumentId
     ? `story-core-field:${before.ragDocumentId}:field:${targetField}`
@@ -470,7 +471,7 @@ export async function prepareStoryCoreCopilot(
   }
   const nodeInput: StoryCoreCopilotInput = {
     projectId: input.projectId,
-    projectName: project.name,
+    projectName: work.title,
     scope,
     worldGroupId,
     authorRequest: request,
@@ -489,8 +490,8 @@ export async function prepareStoryCoreCopilot(
     const rendered = await renderFrozenPromptExecutionV1({
       options: input.promptExecution,
       context: {
-        projectName: project.name,
-        genres: project.genres?.join('/') || project.genre || '',
+        projectName: work.title,
+        genres: work.genres.join('/'),
         dimension: STORY_CORE_FIELD_LABELS[targetField],
         worldContext: assembled.text || '（当前没有已填写的正式设定）',
         storyCore: assembled.text || '',

@@ -53,7 +53,7 @@ export async function hashChapterText(content: string): Promise<string> {
   return sha256Text(normalizeChapterText(content))
 }
 
-export type DerivedMemoryStatus = 'missing' | 'unverified' | 'verified' | 'stale'
+export type DerivedMemoryStatus = 'missing' | 'verified' | 'stale'
 
 export async function getChapterDerivedMemoryStatus(chapter: Chapter): Promise<{
   summary: DerivedMemoryStatus
@@ -64,7 +64,7 @@ export async function getChapterDerivedMemoryStatus(chapter: Chapter): Promise<{
   const summary = !chapter.summary
     ? 'missing'
     : !chapter.summarySourceTextHash
-      ? 'unverified'
+      ? 'stale'
       : chapter.summaryTextNormalizationVersion !== CHAPTER_TEXT_NORMALIZATION_VERSION
         ? 'stale'
         : chapter.summarySourceTextHash === currentSourceTextHash ? 'verified' : 'stale'

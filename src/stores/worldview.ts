@@ -1,9 +1,9 @@
 import { create } from 'zustand'
 import { db } from '../lib/db/schema'
-import type { Worldview, StoryCore, PowerSystem, DivineDesign, NaturalResources } from '../lib/types'
+import type { Worldview, StoryCore, PowerSystem } from '../lib/types'
 import { adopt } from '../lib/registry/adopt'
 import { refreshSettingAssertionSourceStatus } from '../lib/fact-ledger/setting-assertions'
-import { readOwnedRows, resolveScopeLike, stampNewRecord, type WorkspaceScopeLike } from '../lib/world-engine/scope'
+import { readOwnedRows, resolveScopeLike, stampNewRecord, type WorkspaceScopeLike } from '../lib/workspace/scope'
 import { coordinatePendingEditV1 } from '../lib/authoring/pending-edit-coordinator'
 
 interface WorldviewStore {
@@ -22,27 +22,6 @@ interface WorldviewStore {
 }
 
 const now = () => Date.now()
-
-function parseObjectField<T extends object>(value: unknown): T | undefined {
-  if (value && typeof value === 'object' && !Array.isArray(value)) return value as T
-  if (typeof value !== 'string') return undefined
-  try {
-    const parsed = JSON.parse(value)
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as T : undefined
-  } catch {
-    return undefined
-  }
-}
-
-/** 兼容 adopt 旧版曾把原生对象字段序列化成 JSON string 的记录。 */
-export function normalizeWorldviewRecord(row: Worldview | null | undefined): Worldview | null {
-  if (!row) return null
-  return {
-    ...row,
-    divineDesign: parseObjectField<DivineDesign>(row.divineDesign),
-    naturalResources: parseObjectField<NaturalResources>(row.naturalResources),
-  }
-}
 
 export const useWorldviewStore = create<WorldviewStore>((set, get) => ({
   worldview: null,
@@ -68,7 +47,7 @@ export const useWorldviewStore = create<WorldviewStore>((set, get) => ({
       ? psList[0]
       : psList.find(p => p.worldGroupId === worldGroupId)
     set({
-      worldview: normalizeWorldviewRecord(wv),
+      worldview: wv ?? null,
       storyCore: sc || null,   // 故事核心是项目级，不分世界
       powerSystem: ps || null,
       loading: false,
@@ -95,7 +74,7 @@ export const useWorldviewStore = create<WorldviewStore>((set, get) => ({
         const next = (targetWorldGroupId == null
           ? (list.find(w => w.worldGroupId == null) ?? list[0])
           : list.find(w => w.worldGroupId === targetWorldGroupId)) ?? null
-        set({ worldview: normalizeWorldviewRecord(next) })
+        set({ worldview: next })
       },
     })
   },

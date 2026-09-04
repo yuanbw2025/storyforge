@@ -67,7 +67,9 @@ function metrics() {
     return total + countMatches(source, /\n/g)
   }, 0)
   const schema = read('src/lib/db/schema.ts')
-  const schemaVersions = [...schema.matchAll(/this\.version\((\d+)\)/g)].map(match => Number(match[1]))
+  const schemaVersionMatch = schema.match(/export const STORYFORGE_SCHEMA_VERSION\s*=\s*(\d+)/)
+  if (!schemaVersionMatch) throw new Error('无法从 schema.ts 读取 STORYFORGE_SCHEMA_VERSION')
+  const schemaVersion = Number(schemaVersionMatch[1])
   const required = read('src/lib/db/ensure-schema.ts').match(/export const REQUIRED_TABLES = \[([\s\S]*?)\] as const/)?.[1] ?? ''
   const promptType = read('src/lib/types/prompt.ts').match(/export type PromptModuleKey =([\s\S]*?)(?:\n\nexport|\n\/\*\*|\nexport interface)/)?.[1] ?? ''
   const promptKeys = new Set([...promptType.matchAll(/\|\s*'([^']+)'/g)].map(match => match[1]))
@@ -79,7 +81,7 @@ function metrics() {
     version: JSON.parse(read('package.json')).version,
     sourceFiles: files.length,
     sourceLines,
-    schemaVersion: Math.max(...schemaVersions),
+    schemaVersion,
     requiredTables: countMatches(required, /'[^']+'/g),
     projectTables: declaredArrayLength('src/lib/registry/project-tables.ts', 'PROJECT_TABLES'),
     promptModuleKeys: promptKeys.size,

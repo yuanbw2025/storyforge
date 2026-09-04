@@ -15,7 +15,7 @@ import {
   type ChapterOrganizationDurableEvidence,
   type ChapterOrganizationDomain,
 } from '../chapter-organization'
-import { assertRecordInScope, readOwnedRows, resolveScopeLike } from '../../world-engine/scope'
+import { assertRecordInScope, readOwnedRows, resolveScopeLike } from '../../workspace/scope'
 
 export const CHAPTER_ORGANIZATION_DURABLE_STEP_ID_V1 = 'chapter-organization'
 export const CHAPTER_ORGANIZATION_DURABLE_VERIFIER_SET_V1 = 'chapter-organization-terminal-v1'
@@ -85,6 +85,7 @@ export function buildChapterOrganizationRunContractV1(input: {
   projectId: number
   worldGroupId: number | null
   chapterId: number
+  runtimeBindingHash: string
 }) {
   return {
     version: 1 as const,
@@ -125,6 +126,7 @@ export function buildChapterOrganizationRunContractV1(input: {
         },
       ],
     },
+    runtimeBindingHash: input.runtimeBindingHash,
     budget: {
       maxModelCalls: 1,
       maxToolCalls: 0,
@@ -179,6 +181,12 @@ export async function createChapterOrganizationDurableRunV1(input: {
       projectId: input.scope.projectId,
       worldGroupId: input.worldGroupId,
       chapterId: input.chapterId,
+      runtimeBindingHash: await hashCanonicalValue({
+        schema: 'storyforge.chapter-organization-runtime',
+        version: 1,
+        stepId: CHAPTER_ORGANIZATION_DURABLE_STEP_ID_V1,
+        verifierSet: CHAPTER_ORGANIZATION_DURABLE_VERIFIER_SET_V1,
+      }),
     }),
   })
 }

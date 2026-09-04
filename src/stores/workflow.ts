@@ -42,6 +42,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
           await db.promptWorkflows.update(old.id!, {
             description: seed.description,
             steps: seed.steps,
+            graph: seed.graph,
             isDefault: seed.isDefault,
             genres: seed.genres,
             updatedAt: now,

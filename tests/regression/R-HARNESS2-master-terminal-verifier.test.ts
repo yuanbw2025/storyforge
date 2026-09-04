@@ -13,71 +13,33 @@ import { verifyVerificationReceiptIntegrityV1 } from '../../src/lib/agent/run/ve
 import { readAgentRunV1 } from '../../src/lib/agent/run/event-store'
 import { AgentTeamBudgetTracker } from '../../src/lib/agent/team-budget'
 import type { WorkspaceScope } from '../../src/lib/types'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
+import { currentWorldOriginCandidateFixtureV1 } from '../helpers/current-worldview-field'
+import { prepareRequiredMasterGatewayFixtureV1 } from '../helpers/master-agent-gateway'
+import { stampNewRecord } from '../../src/lib/workspace/scope'
 
 async function createWorkspace(label: string): Promise<{
   scope: WorkspaceScope
   worldGroupId: number
 }> {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    name: label,
-    genre: 'fantasy',
-    genres: ['fantasy'],
-    description: '',
-    status: 'drafting',
-    targetWordCount: 100_000,
-    worldCode: `world-${label}`,
-    worldVersion: 1,
-    createdAt: now,
-    updatedAt: now,
-  } as any) as number
-  const worldId = await db.worlds.add({
-    projectId,
-    code: `world-${label}`,
-    name: `${label}世界`,
-    description: '',
-    currentVersion: 1,
-    createdAt: now,
-    updatedAt: now,
-  }) as number
-  const workId = await db.works.add({
-    projectId,
-    worldId,
-    title: label,
-    description: '',
-    genres: ['fantasy'],
-    status: 'drafting',
-    targetWordCount: 100_000,
-    createdAt: now,
-    updatedAt: now,
-  }) as number
-  await db.projects.update(projectId, {
-    activeWorldId: worldId,
-    activeWorkId: workId,
-    ownershipSchemaVersion: 1,
-  })
-  const worldGroupId = await db.worldGroups.add({
+  const createdWorkspaceV1 = await seedCurrentWorkspace(label)
+  const { projectId, worldId, workId } = createdWorkspaceV1.scope
+  const worldGroupId = await db.worldGroups.add(stampNewRecord(createdWorkspaceV1.scope, 'worldGroups', {
     projectId,
     name: '主世界',
+    type: 'primary',
     order: 0,
     createdAt: now,
     updatedAt: now,
-  }) as number
+  }, { owner: 'world' })) as number
   return { scope: { projectId, worldId, workId }, worldGroupId }
 }
 
-const contextEvidence = {
-  profile: 'balanced' as const,
-  included: ['worldview'],
-  omitted: [],
-  trimmed: [],
-  estimatedInputTokens: 18,
-  inputBudgetTokens: 14_000,
-}
-
-async function runWorldOrigin(label: string, includeContext = true) {
+async function runWorldOrigin(label: string) {
   const fixture = await createWorkspace(label)
   const conversation = await getOrCreateAgentConversation({
+    purpose: 'test:r-harness2-master-terminal-verifier:1',
     projectId: fixture.scope.projectId,
     worldGroupId: fixture.worldGroupId,
     scope: fixture.scope,
@@ -89,7 +51,14 @@ async function runWorldOrigin(label: string, includeContext = true) {
     conversationId: conversation.id,
     plan: {
       summary: '验证世界来源终态。',
-      tasks: [{ id: 'world-1', agentId: 'world-origin', instruction: '建立世界来源。', dependsOn: [] }],
+      tasks: [{
+        id: 'world-1',
+        agentId: 'world-origin',
+        skillId: 'world-origin.worldview-field',
+        instruction: '建立世界来源。',
+        dependsOn: [],
+      }],
+      workflow: { version: 1, workflowId: 'single-domain-direct', reasonCodes: ['single-explicit-domain'] },
     },
     budget: new AgentTeamBudgetTracker('balanced'),
   }, { execute: async (options: any) => {
@@ -101,23 +70,31 @@ async function runWorldOrigin(label: string, includeContext = true) {
       maxOutputTokens: 100,
     })
     options.budget.settleCall(reservation, draft)
+    const currentWorld = currentWorldOriginCandidateFixtureV1(draft)
+    const gateway = await prepareRequiredMasterGatewayFixtureV1({
+      scope: options.scope,
+      worldGroupId: options.worldGroupId,
+      executionTrace: options.executionTrace,
+    }, task, currentWorld.draft)
     await options.executionTrace.candidateReady(task, {
       payload: {
         version: 1,
         taskId: task.id,
         agentId: task.agentId,
+        skillId: task.skillId,
         label: '世界来源',
-        contextSources: ['worldview'],
-        ...(includeContext ? { contextEvidence } : {}),
-        baseSnapshot: { id: null, updatedAt: null, worldOrigin: '' },
+        contextSources: gateway.contextSources,
+        contextEvidence: gateway.contextEvidence,
+        ...currentWorld.payload,
         workspaceScope: options.scope,
         dependsOnTaskIds: [],
       },
-      draft,
+      draft: currentWorld.draft,
       runtimeNode: {} as any,
-      runtimeOutput: draft,
+      runtimeOutput: currentWorld.runtimeOutput,
+      contextGatewayRuntime: gateway.contextGatewayRuntime,
     })
-  }})
+  }, disableAutomaticReplanForTest: true })
   const candidate = result.candidates[0]
   const ref = {
     scope: fixture.scope,
@@ -162,16 +139,7 @@ describe.sequential('R-HARNESS2-master-terminal-verifier · 主 Agent 完成判�
     })
   })
 
-  it('缺少上下文装配证据或正式状态不匹配时拒绝伪完成', async () => {
-    const missingContext = await runWorldOrigin('终态缺上下文', false)
-    const rejected = await verifyMasterAgentRunV1({
-      scope: missingContext.fixture.scope,
-      runId: missingContext.result.runId,
-    })
-    expect(rejected.accepted).toBe(false)
-    expect(rejected.codes).toContain('world-1:context-manifest-missing')
-    expect(rejected.snapshot.projection.state).toBe('failed')
-
+  it('正式状态与已采纳候选不匹配时拒绝伪完成', async () => {
     const mismatched = await runWorldOrigin('终态状态冲突')
     const worldview = await db.worldviews.where('projectId').equals(mismatched.fixture.scope.projectId).first()
     if (!worldview?.id) throw new Error('测试世界来源未写入')

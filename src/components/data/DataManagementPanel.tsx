@@ -43,6 +43,7 @@ import {
 } from '../../lib/memory/runtime'
 import { buildWorkspaceImpactPlanV1 } from '../../lib/memory/workspace-impact'
 import { useProjectStore } from '../../stores/project'
+import { useActiveWork } from '../../hooks/useActiveWork'
 
 type Tab = 'export' | 'backup'
 type ExportStatus = 'idle' | 'loading' | 'success' | 'error'
@@ -97,6 +98,7 @@ export default function DataManagementPanel({ project, onImported, onOpenStorage
 
 // ── 导出/导入 Tab ────────────────────────────────────────────
 function ExportTab({ project, onImported, onOpenStorageSettings }: Props) {
+  const activeWork = useActiveWork(project)
   const [status, setStatus] = useState<ExportStatus>('idle')
   const [message, setMessage] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -117,7 +119,7 @@ function ExportTab({ project, onImported, onOpenStorageSettings }: Props) {
   useEffect(() => {
     let cancelled = false
     void (async () => {
-      const h = await loadProjectFolderHandle({ id: project.id, workspaceUid: project.workspaceUid })
+      const h = await loadProjectFolderHandle({ workspaceUid: project.workspaceUid })
       if (!h || cancelled) return
       setFolderHandle(h)
       setFolderName(h.name)
@@ -160,7 +162,7 @@ function ExportTab({ project, onImported, onOpenStorageSettings }: Props) {
     try {
       show('loading', '正在导出 Markdown...')
       const md = await exportProjectMarkdown(project.id!)
-      downloadTextFile(md, `${project.name}_${new Date().toISOString().slice(0, 10)}.md`, 'text/markdown')
+      downloadTextFile(md, `${activeWork?.title ?? '当前作品'}_${new Date().toISOString().slice(0, 10)}.md`, 'text/markdown')
       show('success', 'Markdown 导出成功！')
     } catch (e) { show('error', `导出失败：${(e as Error).message}`) }
   }
@@ -169,7 +171,7 @@ function ExportTab({ project, onImported, onOpenStorageSettings }: Props) {
     try {
       show('loading', '正在导出 TXT...')
       const txt = await exportProjectTXT(project.id!)
-      downloadTextFile(txt, `${project.name}_${new Date().toISOString().slice(0, 10)}.txt`)
+      downloadTextFile(txt, `${activeWork?.title ?? '当前作品'}_${new Date().toISOString().slice(0, 10)}.txt`)
       show('success', 'TXT 导出成功！')
     } catch (e) { show('error', `导出失败：${(e as Error).message}`) }
   }

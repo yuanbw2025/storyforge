@@ -34,19 +34,20 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
 const project = {
   id: 1,
+  workspaceUid: 'WS-00000000-0000-4000-8000-000000000001',
+  workspacePurpose: 'independent-work',
   name: '潮门纪事',
-  genre: 'fantasy',
-  genres: ['fantasy'],
   enableMultiWorld: false,
   activeWorldId: 11,
   activeWorkId: 12,
+  createdAt: 1,
+  updatedAt: 1,
 } as Project
 
 const character = {
   id: 7,
   projectId: 1,
   name: '青禾',
-  role: 'npc',
   roleWeight: 'npc',
   moralAxis: 'good',
   orderAxis: 'lawful',

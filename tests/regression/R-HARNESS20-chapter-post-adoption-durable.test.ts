@@ -34,6 +34,8 @@ import {
   CHAPTER_POST_ADOPTION_STEP_IDS_V1,
   type ChapterPostAdoptionDurableEvidenceV1,
 } from '../../src/lib/agent/run/chapter-post-adoption-durable'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
+import { stampCurrentFixtureResourceUidsV1 } from '../helpers/current-resource-identity'
 
 const CONTENT = '<p>守灯人抵达潮门，点亮了旧灯。</p>'
 
@@ -44,40 +46,9 @@ async function createWorkspace(label: string): Promise<{
   chapterId: number
 }> {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    name: label,
-    genre: 'fantasy',
-    genres: ['fantasy'],
-    status: 'drafting',
-    description: '',
-    targetWordCount: 100_000,
-    worldCode: `world-${label}`,
-    worldVersion: 1,
-    createdAt: now,
-    updatedAt: now,
-  } as any) as number
-  const worldId = await db.worlds.add({
-    projectId,
-    code: `world-${label}`,
-    name: `${label}世界`,
-    description: '',
-    currentVersion: 1,
-    createdAt: now,
-    updatedAt: now,
-  }) as number
-  const workId = await db.works.add({
-    projectId,
-    worldId,
-    title: label,
-    description: '',
-    genres: ['fantasy'],
-    status: 'drafting',
-    targetWordCount: 100_000,
-    createdAt: now,
-    updatedAt: now,
-  }) as number
-  await db.projects.update(projectId, { activeWorldId: worldId, activeWorkId: workId, ownershipSchemaVersion: 1 })
-  const worldGroupId = await db.worldGroups.add({ projectId, name: '主世界', order: 0, createdAt: now, updatedAt: now }) as number
+  const created = await seedCurrentWorkspace(label)
+  const { projectId, worldId, workId } = created.scope
+  const worldGroupId = await db.worldGroups.add({ projectId, worldId, name: '主世界', order: 0, createdAt: now, updatedAt: now }) as number
   const outlineNodeId = await db.outlineNodes.add({
     projectId, workId, worldGroupId, parentId: null, type: 'chapter', title: '潮门',
     summary: '守灯人抵达潮门。', order: 0, createdAt: now, updatedAt: now,
@@ -86,6 +57,7 @@ async function createWorkspace(label: string): Promise<{
     projectId, workId, outlineNodeId, title: '潮门', content: CONTENT, wordCount: 15,
     status: 'draft', order: 0, notes: '', createdAt: now, updatedAt: now,
   } as any) as number
+  await stampCurrentFixtureResourceUidsV1(projectId)
   return { scope: { projectId, worldId, workId }, worldGroupId, outlineNodeId, chapterId }
 }
 

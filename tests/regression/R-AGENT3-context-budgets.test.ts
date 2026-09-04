@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   evidenceFromContextResult,
   mergeContextEvidence,
@@ -7,8 +7,12 @@ import {
   splitAgentContextPolicy,
 } from '../../src/lib/agent/context-policy'
 import { assembleContext } from '../../src/lib/registry/assemble-context'
+import { db } from '../../src/lib/db/schema'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
 
 describe('AGENT-1 27.1-e · 领域上下文预算与输入证据', () => {
+  beforeEach(async () => { await db.delete(); await db.open() })
+  afterEach(() => db.close())
   it('旧配置默认均衡，未知档位不会突破安全闭集', () => {
     expect(sanitizeAgentContextProfiles(null)).toMatchObject({
       'agent-world-origin': 'balanced',
@@ -56,9 +60,10 @@ describe('AGENT-1 27.1-e · 领域上下文预算与输入证据', () => {
   })
 
   it('领域上限与模型窗口取较小值，源比例只能收窄登记预算', async () => {
+    const projectId = (await seedCurrentWorkspace('Context budget')).scope.projectId
     const text = '潮'.repeat(80_000)
     const compact = await assembleContext({
-      projectId: 1,
+      projectId,
       sourceKeys: ['manualText'],
       manualSourceText: text,
       inputBudgetMaxTokens: 12_000,
@@ -69,7 +74,7 @@ describe('AGENT-1 27.1-e · 领域上下文预算与输入证据', () => {
     expect(compact.text).toContain('该上下文源已按预算截断')
 
     const clamped = await assembleContext({
-      projectId: 1,
+      projectId,
       sourceKeys: ['manualText'],
       manualSourceText: text,
       inputBudgetTokens: 120_000,

@@ -22,8 +22,8 @@ import { useDetailedOutlineStore } from '../../src/stores/detailed-outline'
 import { useCharacterStore } from '../../src/stores/character'
 import { useForeshadowStore } from '../../src/stores/foreshadow'
 import type { Project, WorkspaceScope } from '../../src/lib/types'
-import { generateWorkspaceUid, generateWorkCode } from '../../src/lib/memory/identity'
-import { backfillResourceUidsV1 } from '../../src/lib/context-gateway/resource-identity'
+import { stampCurrentFixtureResourceUidsV1 } from '../helpers/current-resource-identity'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
 
 const mocks = vi.hoisted(() => ({
   starts: [] as string[],
@@ -185,45 +185,8 @@ async function seedWorkspace(): Promise<{
   narrativeModuleId: number
 }> {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    workspaceUid: generateWorkspaceUid(),
-    name: '潮门纪事',
-    genre: 'fantasy',
-    genres: ['fantasy'],
-    description: '',
-    status: 'drafting',
-    targetWordCount: 100_000,
-    worldCode: 'tide-gate',
-    worldVersion: 1,
-    createdAt: now,
-    updatedAt: now,
-  } as any) as number
-  const worldId = await db.worlds.add({
-    projectId,
-    code: 'tide-gate',
-    name: '潮门世界',
-    description: '',
-    currentVersion: 1,
-    createdAt: now,
-    updatedAt: now,
-  }) as number
-  const workId = await db.works.add({
-    projectId,
-    worldId,
-    code: generateWorkCode(),
-    title: '潮门纪事',
-    description: '',
-    genres: ['fantasy'],
-    status: 'drafting',
-    targetWordCount: 100_000,
-    createdAt: now,
-    updatedAt: now,
-  }) as number
-  await db.projects.update(projectId, {
-    activeWorldId: worldId,
-    activeWorkId: workId,
-    ownershipSchemaVersion: 1,
-  })
+  const created = await seedCurrentWorkspace('潮门纪事')
+  const { projectId, worldId, workId } = created.scope
   const worldGroupId = await db.worldGroups.add({
     projectId,
     worldId,
@@ -266,7 +229,7 @@ async function seedWorkspace(): Promise<{
     order: 0, createdAt: now, updatedAt: now,
   } as any)
   await db.works.update(workId, { activeNarrativeModuleId: narrativeModuleId })
-  await backfillResourceUidsV1(projectId)
+  await stampCurrentFixtureResourceUidsV1(projectId)
   const project = await db.projects.get(projectId) as Project
   useOutlineStore.setState({ nodes: [await db.outlineNodes.get(outlineNodeId)!] as any })
   return {
