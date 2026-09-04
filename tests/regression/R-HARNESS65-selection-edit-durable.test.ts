@@ -17,6 +17,8 @@ import {
   rejectSelectionEditCandidateV1,
   type SelectionEditBoundaryV1,
 } from '../../src/lib/agent/run/selection-edit-durable'
+import { stampCurrentFixtureResourceUidsV1 } from '../helpers/current-resource-identity'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
 
 const SOURCE_HTML = '<p>雨落在旧钟楼上。阿澜握紧钥匙。她没有回头。</p>'
 const SELECTED = '阿澜握紧钥匙。'
@@ -25,20 +27,8 @@ const EXPECTED_HTML = '<p>雨落在旧钟楼上。阿澜将冰凉的钥匙攥得
 
 async function seed(suffix = '') {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    name: `局部编辑${suffix}`, genre: 'fantasy', genres: ['fantasy'], status: 'drafting', description: '',
-    targetWordCount: 80_000,
-    createdAt: now, updatedAt: now,
-  } as any) as number
-  const worldId = await db.worlds.add({
-    projectId, code: `selection-${now}-${suffix}`, name: '潮钟世界', description: '', currentVersion: 1,
-    createdAt: now, updatedAt: now,
-  }) as number
-  const workId = await db.works.add({
-    projectId, worldId, title: `局部编辑${suffix}`, description: '', genres: ['fantasy'], status: 'drafting',
-    targetWordCount: 80_000, createdAt: now, updatedAt: now,
-  } as any) as number
-  await db.projects.update(projectId, { activeWorldId: worldId, activeWorkId: workId, ownershipSchemaVersion: 1 })
+  const created = await seedCurrentWorkspace(`局部编辑${suffix}`)
+  const { projectId, worldId, workId } = created.scope
   const worldGroupId = await db.worldGroups.add({
     projectId, worldId, name: '主世界', order: 0, createdAt: now, updatedAt: now,
   }) as number
@@ -51,6 +41,7 @@ async function seed(suffix = '') {
     wordCount: SOURCE_HTML.replace(/<[^>]+>/g, '').length, status: 'draft', order: 0, notes: '',
     createdAt: now, updatedAt: now,
   } as any) as number
+  await stampCurrentFixtureResourceUidsV1(projectId)
   return {
     scope: { projectId, worldId, workId } satisfies WorkspaceScope,
     projectId, worldId, workId, worldGroupId, outlineNodeId, chapterId,

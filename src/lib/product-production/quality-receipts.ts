@@ -6,8 +6,8 @@ import type {
   ProductRuntimeKind,
   WorkspaceScope,
 } from '../types'
+import { PRODUCT_RUNTIME_KINDS } from '../types'
 import { readProductRuntimeState } from '../product/runtime-api'
-import { FORMAL_PRODUCT_SESSION_KINDS_V1 } from '../product/runtime-boundary'
 import { assertRecordInScope, resolveScope, scopeTransactionTables, stampNewRecord } from '../workspace/scope'
 import {
   createProductBrowserPerformanceReceiptV1,
@@ -358,7 +358,7 @@ function parsePlaythroughEvidence(value: string | unknown): ProductMainRoutePlay
     'schema', 'version', 'packageHash', 'previewHash', 'runtimeSourceHash', 'sessionKind',
     'routeEvents', 'eventStreamHash', 'choiceCount', 'endingKey', 'environment', 'confirmation',
   ], 'playthrough evidence')
-  const sessionKinds = new Set<ProductRuntimeKind>(FORMAL_PRODUCT_SESSION_KINDS_V1)
+  const sessionKinds = new Set<ProductRuntimeKind>(PRODUCT_RUNTIME_KINDS)
   if (row.schema !== 'storyforge.product-main-route-playthrough-evidence' || row.version !== 1
     || !isSha256Hash(row.packageHash) || !isSha256Hash(row.previewHash)
     || !isSha256Hash(row.runtimeSourceHash) || !isSha256Hash(row.eventStreamHash)

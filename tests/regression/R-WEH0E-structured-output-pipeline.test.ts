@@ -18,7 +18,6 @@ const contract: StructuredOutputContractV1 = {
   maxChars: 10_000,
   allowedRootFields: ['field', 'value'],
   requiredRootFields: ['field', 'value'],
-  fieldAliases: { content: 'value' },
 }
 
 function parseField(value: unknown): { field: string; value: string } {
@@ -144,18 +143,10 @@ describe('WEH-0E structured output pipeline', () => {
     })).toThrow(StructuredOutputPipelineErrorV1)
   })
 
-  it('只应用登记 alias，alias 冲突和未知字段均 fail closed', () => {
-    const aliased = evaluateStructuredOutputV1({
-      raw: '{"field":"races","content":"潮民"}',
-      contract,
-      parse: parseField,
-    })
-    expect(aliased.output.value).toBe('潮民')
-    expect(aliased.evidence.appliedAliases).toEqual([{ alias: 'content', canonical: 'value' }])
-
-    const conflict = errorOf('{"field":"races","value":"A","content":"B"}')
-    expect(conflict.evidence.issues[0]).toMatchObject({
-      code: 'structured-output-alias-conflict',
+  it('错误字段名和未知字段均 fail closed，不自动改写为正式字段', () => {
+    const wrongField = errorOf('{"field":"races","content":"潮民"}')
+    expect(wrongField.evidence.issues[0]).toMatchObject({
+      code: 'structured-output-unknown-field',
       path: '$.content',
     })
     const unknown = errorOf('{"field":"races","value":"A","writeOtherField":true}')

@@ -403,6 +403,8 @@ export async function prepareCharacterDrivenCopilotV1(
   }
   const readScope = input.scope ?? await resolveReadScopeLike(input.projectId)
   const scope = readScope
+  const work = await db.works.get(scope.workId)
+  if (!work || work.projectId !== input.projectId) throw new Error('当前作品不存在。')
   const before = await readSnapshot(input.projectId, scope, input.planId)
   const routingCategory = input.routingCategory ?? 'agent.outline.character-driven'
   const config = input.configOverride ?? resolveRequestConfig(
@@ -468,8 +470,8 @@ export async function prepareCharacterDrivenCopilotV1(
     planContext: planContext.content,
     assembled,
     snapshot,
-    projectName: project.name,
-    genres: project.genres?.join('/') || project.genre || '',
+    projectName: work.title,
+    genres: work.genres.join('/'),
     config,
     routingCategory,
     generationOverrides: input.generationOverrides,

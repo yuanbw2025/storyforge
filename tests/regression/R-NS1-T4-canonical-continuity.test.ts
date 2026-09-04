@@ -10,6 +10,8 @@ import { assembleContext } from '../../src/lib/registry/assemble-context'
 import type { Chapter, OutlineNode } from '../../src/lib/types'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
+import { seedCurrentProject } from '../helpers/current-workspace'
 
 const now = Date.now()
 
@@ -85,15 +87,15 @@ describe('NS-1 T4/T5 · canonical sequence and continuity sources', () => {
   })
 
   it('keeps cross-world direct predecessor handoff/tail but summaries only from current world', async () => {
-    const projectId = await db.projects.add({
-      name: '多世界承接', genre: 'fantasy', description: '', targetWordCount: 1000,
+    const projectId = await seedCurrentProject({
+      name: '多世界承接', genres: ['fantasy'], description: '', targetWordCount: 1000,
       enableMultiWorld: true, createdAt: now, updatedAt: now,
     } as any) as number
     const worldA = await db.worldGroups.add({
-      projectId, name: '火界', type: 'primary', order: 0, createdAt: now, updatedAt: now,
+      projectId, name: '火界', description: '', type: 'primary', order: 0, createdAt: now, updatedAt: now,
     } as any) as number
     const worldB = await db.worldGroups.add({
-      projectId, name: '冰界', type: 'parallel', order: 1, createdAt: now, updatedAt: now,
+      projectId, name: '冰界', description: '', type: 'parallel', order: 1, createdAt: now, updatedAt: now,
     } as any) as number
     const volumeA1 = await db.outlineNodes.add({
       projectId, parentId: null, type: 'volume', title: '火界一', summary: '', order: 0,
@@ -189,6 +191,7 @@ describe('NS-1 T4/T5 · canonical sequence and continuity sources', () => {
       status: 'outline', order: -1, notes: '', summary: '未来泄漏摘要',
       createdAt: now, updatedAt: now,
     } as any)
+    await finalizeCurrentFixtureV1(projectId)
 
     const snapshot = await prepareContinuityContext({ projectId, chapterId: currentId })
     expect(snapshot.predecessor?.chapter.id).toBe(chapterB)

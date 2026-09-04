@@ -7,23 +7,23 @@ import {
   hashChapterText,
   normalizeChapterText,
 } from '../../src/lib/ai/chapter-memory/text-normalization'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
+import { stampNewRecord } from '../../src/lib/workspace/scope'
 
 async function seedChapter(content = '<p>第一行&nbsp;文字</p><p>第二行</p>') {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    name: 'NS1 T1', genre: 'fantasy', description: '', targetWordCount: 1000,
-    enableMultiWorld: false, createdAt: now, updatedAt: now,
-  } as any) as number
-  const outlineNodeId = await db.outlineNodes.add({
-    projectId, parentId: null, type: 'chapter', title: '第一章', summary: '',
+  const created = await seedCurrentWorkspace('NS1 T1')
+  const { scope } = created
+  const outlineNodeId = await db.outlineNodes.add(stampNewRecord(scope, 'outlineNodes', {
+    projectId: scope.projectId, parentId: null, type: 'chapter', title: '第一章', summary: '',
     order: 0, createdAt: now, updatedAt: now,
-  } as any) as number
-  const chapterId = await db.chapters.add({
-    projectId, outlineNodeId, title: '第一章', content, wordCount: 7,
-    status: 'draft', order: 0, notes: '', summary: '旧摘要',
+  }, { owner: 'work' })) as number
+  const chapterId = await db.chapters.add(stampNewRecord(scope, 'chapters', {
+    projectId: scope.projectId, outlineNodeId, title: '第一章', content, wordCount: 7,
+    status: 'draft', order: 0, notes: '', summary: '无来源摘要',
     createdAt: now, updatedAt: now,
-  } as any) as number
-  return { projectId, chapterId, content }
+  }, { owner: 'work' })) as number
+  return { projectId: scope.projectId, chapterId, content }
 }
 
 describe('NS-1 T1 · chapter memory fields and atomic CAS', () => {
@@ -39,11 +39,11 @@ describe('NS-1 T1 · chapter memory fields and atomic CAS', () => {
       .toBe(await hashChapterText('第一行 文字\n第二行'))
   })
 
-  it('treats legacy summaries without source metadata as unverified', async () => {
+  it('缺少来源证据的摘要一律标记为 stale', async () => {
     const { chapterId } = await seedChapter()
     const chapter = await db.chapters.get(chapterId)
     const status = await getChapterDerivedMemoryStatus(chapter!)
-    expect(status.summary).toBe('unverified')
+    expect(status.summary).toBe('stale')
     expect(status.handoff).toBe('missing')
   })
 
@@ -112,6 +112,6 @@ describe('NS-1 T1 · chapter memory fields and atomic CAS', () => {
 
     expect(result.written).toHaveLength(0)
     expect(result.skipped[0]?.reason).toContain('CAS 失败')
-    expect((await db.chapters.get(chapterId))?.summary).toBe('旧摘要')
+    expect((await db.chapters.get(chapterId))?.summary).toBe('无来源摘要')
   })
 })

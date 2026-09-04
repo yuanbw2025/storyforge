@@ -21,12 +21,14 @@ import InspirationFusionReview from './InspirationFusionReview'
 import type { InspirationSourceKind } from '../../lib/types/inspiration-workspace'
 import { useIncrementalInspiration } from '../../hooks/useIncrementalInspiration'
 import { MAX_INSPIRATION_FRAGMENT_CHARS } from '../../lib/inspiration/workspace'
+import { useActiveWork } from '../../hooks/useActiveWork'
 
 interface Props {
   project: Project
 }
 
 export default function InspirationPanel({ project }: Props) {
+  const activeWork = useActiveWork(project)
   const wgStore = useWorldGroupStore()
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['worldview', 'storyCore', 'characters']))
   const [adoptedSections, setAdoptedSections] = useState<Set<string>>(new Set())
@@ -75,8 +77,8 @@ export default function InspirationPanel({ project }: Props) {
     setAdopting(true)
     try {
       // 确保多世界已开启 + 主世界组存在
-      const migrated = await wgStore.migrateToMultiWorld(project.id!)
-      if (!migrated) return
+      const enabled = await wgStore.enableMultiWorld(project.id!)
+      if (!enabled) return
 
       // 1. 故事核心（项目级）
       const sc = mwResult.storyCore
@@ -95,7 +97,7 @@ export default function InspirationPanel({ project }: Props) {
 
       // 2. 逐个世界：创建世界组 + 写入该世界的世界观（字段严格对齐 Worldview）
       const nameToGroupId = new Map<string, number>()
-      // 已有主世界组（migrate 创建）：复用给输出中的 primary 世界（读最新 store 状态）
+      // 复用现有主世界组给输出中的 primary 世界（读取最新 Store 状态）。
       const primaryGroupId = useWorldGroupStore.getState().groups.find(g => g.type === 'primary')?.id ?? null
       let primaryClaimed = false
       for (let i = 0; i < mwResult.worlds.length; i++) {
@@ -181,7 +183,8 @@ export default function InspirationPanel({ project }: Props) {
 
   // 导出反推结果为 Markdown 文件
   const handleExportResult = () => {
-    const lines: string[] = [`# ${project.name} — 灵感反推结果\n`]
+    const workTitle = activeWork?.title ?? '当前作品'
+    const lines: string[] = [`# ${workTitle} — 灵感反推结果\n`]
     if (inspiration.trim()) lines.push(`## 原始灵感\n${inspiration}\n`)
     if (mwResult) {
       const sc = mwResult.storyCore
@@ -231,7 +234,7 @@ export default function InspirationPanel({ project }: Props) {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `${project.name}-灵感反推.md`
+    a.download = `${workTitle}-灵感反推.md`
     a.click()
     URL.revokeObjectURL(url)
   }

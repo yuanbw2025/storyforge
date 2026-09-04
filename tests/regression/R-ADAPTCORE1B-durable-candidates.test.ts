@@ -22,7 +22,7 @@ const brief: AdaptationBriefV1 = {
 }
 
 async function fixture() {
-  const source = await createWorkspace({ name: '可恢复来源', genre: 'other', genres: ['other'], status: 'drafting', description: '旧站抉择', targetWordCount: 10_000, enableMultiWorld: false }, { kind: 'novel', novelProfile: 'short' })
+  const source = await createWorkspace({ name: '可恢复来源', genres: ['other'], status: 'drafting', description: '旧站抉择', targetWordCount: 10_000, enableMultiWorld: false }, { kind: 'novel', novelProfile: 'short' })
   const chapter = await db.chapters.where('projectId').equals(source.scope.projectId).filter(row => row.workId === source.scope.workId).first()
   await db.chapters.update(chapter!.id!, { content: '<p>暴雨中，林岚走进旧车站。</p>', summary: '进入旧站', updatedAt: Date.now() })
   const created = await createAdaptation({ sourceScope: source.scope, sourceWorkId: source.scope.workId, title: '旧站剧本', sourceSelection: { mode: 'entire-work' }, medium: 'screenplay', targetSpec })

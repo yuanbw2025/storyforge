@@ -8,7 +8,7 @@ import { AUTHORING_NODE_BY_ID, defaultConfigForTemplate } from '../../src/lib/no
 import { emptyAuthoringGraph, type AuthoringNodeInstance } from '../../src/lib/node-authoring/contracts'
 import { adoptAuthoringCandidate } from '../../src/lib/node-authoring/executor'
 import { buildRagLibrary } from '../../src/lib/retrieval/rag-library'
-import { backfillResourceUidsV1 } from '../../src/lib/context-gateway/resource-identity'
+import { stampCurrentFixtureResourceUidsV1 } from '../helpers/current-resource-identity'
 import {
   openWorldSemanticResourceCatalogV1,
   readWorldSemanticResourcesV1,
@@ -17,72 +17,27 @@ import type { NodeFlow, WorkspaceScope } from '../../src/lib/types'
 import { stampNewRecord } from '../../src/lib/workspace/scope'
 import { useChapterStore } from '../../src/stores/chapter'
 import { createWorldRevision, publishWorldRevision } from '../../src/lib/world-engine/releases'
-import { generateWorkCode, generateWorkspaceUid } from '../../src/lib/memory/identity'
-import { nativeOwnershipReceipt } from '../../src/lib/workspace/ownership'
+import { addCurrentWorkFixtureV1, seedCurrentWorkspace } from '../helpers/current-workspace'
 
 async function createTwoWorkWorkspace(): Promise<{ a: WorkspaceScope; b: WorkspaceScope }> {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    workspaceUid: generateWorkspaceUid(),
-    workspacePurpose: 'world-engine',
-    name: '跨作品边界工程',
-    genre: 'fantasy',
-    genres: ['fantasy'],
-    status: 'drafting',
-    description: '',
-    targetWordCount: 100_000,
-    createdAt: now,
-    updatedAt: now,
-  } as any) as number
-  const worldId = await db.worlds.add({
-    projectId,
-    identityKind: 'world-draft',
-    code: 'W-CROSS-WORK',
-    name: '共享世界',
-    description: '',
-    currentVersion: 1,
-    createdAt: now,
-    updatedAt: now,
-  }) as number
-  const workA = await db.works.add({
-    projectId,
-    worldId,
-    code: generateWorkCode(),
-    title: '作品 A',
-    description: '',
-    genres: ['fantasy'],
-    status: 'drafting',
+  const createdWorkspaceV1 = await seedCurrentWorkspace('跨作品边界工程', {
+    purpose: 'world-engine',
     targetWordCount: 50_000,
-    createdAt: now,
-    updatedAt: now,
-  }) as number
-  const workB = await db.works.add({
-    projectId,
-    worldId,
-    code: generateWorkCode(),
-    title: '作品 B',
-    description: '',
-    genres: ['fantasy'],
-    status: 'drafting',
-    targetWordCount: 50_000,
-    createdAt: now,
-    updatedAt: now,
-  }) as number
-  await db.projects.update(projectId, {
-    activeWorldId: worldId,
-    activeWorkId: workA,
-    ownershipSchemaVersion: 1,
-
-
   })
-  const project = await db.projects.get(projectId)
-  await db.ownershipMigrations.add(nativeOwnershipReceipt({
+  const { projectId, worldId, workId: workA } = createdWorkspaceV1.scope
+  const secondWork = await addCurrentWorkFixtureV1({
     projectId,
     worldId,
-    workId: workA,
-    workspaceUid: project!.workspaceUid!,
-    createdAt: now,
-  }))
+    create: {
+      title: '作品 B',
+      kind: 'novel',
+      novelProfile: 'long',
+      targetWordCount: 50_000,
+    },
+    now,
+  })
+  const workB = secondWork.id!
   return {
     a: { projectId, worldId, workId: workA },
     b: { projectId, worldId, workId: workB },
@@ -212,7 +167,7 @@ describe('WORLD-2C · 双 Work 下游边界反例', () => {
       { projectId: b.projectId, worldId: null, workId: b.workId, theme: 'B主题秘密', createdAt: now, updatedAt: now },
     ] as any)
 
-    await backfillResourceUidsV1(a.projectId)
+    await stampCurrentFixtureResourceUidsV1(a.projectId)
     const rag = await buildRagLibrary({ projectId: a.projectId, scope: a, worldGroupId: null })
     const ragText = rag.map(entry => entry.content).join('\n')
     const snapshot = await generateContextSnapshot(a)

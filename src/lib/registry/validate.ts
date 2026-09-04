@@ -1,11 +1,6 @@
 /**
- * 注册表完整性校验(Phase 1.1a)
- *
- * 启动期调用 validateRegistry():
- *   - PROJECT_TABLES 与 Dexie 实例双向覆盖(漏登记/多登记立刻发现)
- *   - 所有 ref/remap 的 target 表名存在
- *
- * 不一致 → 开发期 throw,生产期 console.error(不阻断启动,避免误伤用户)。
+ * 当前三注册表完整性校验。启动时双向核对 PROJECT_TABLES、
+ * FIELD_REGISTRY、Adoption Schema 与 CONTEXT_SOURCES；任何不一致都必须阻断应用启动。
  */
 import { db } from '../db/schema'
 import { PROJECT_TABLES, REGISTRY_BY_NAME } from './project-tables'
@@ -291,15 +286,11 @@ export function checkRegistry(): RegistryValidationResult {
   return { ok: errors.length === 0, errors }
 }
 
-/** 启动期调用 */
-export function validateRegistry(opts?: { throwOnError?: boolean }): void {
+/** 启动期硬门。 */
+export function validateRegistry(): void {
   const result = checkRegistry()
   if (result.ok) return
 
   const msg = `[Registry] 注册表校验失败:\n  - ${result.errors.join('\n  - ')}`
-  if (opts?.throwOnError) {
-    throw new Error(msg)
-  } else {
-    console.error(msg)
-  }
+  throw new Error(msg)
 }

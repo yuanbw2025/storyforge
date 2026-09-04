@@ -1,4 +1,4 @@
-import type { ChatMessage, OutlineNode, Project } from '../types'
+import type { ChatMessage, OutlineNode, Work } from '../types'
 import {
   buildChapterOutlinePrompt,
   buildSingleChapterOutlinePrompt,
@@ -59,14 +59,14 @@ export function outlineGenerationTargetError(
 
 export function buildOutlineGenerationPlan(input: {
   request: OutlineGenerationRequest
-  project: Project
+  work: Work
   nodes: OutlineNode[]
   volumes: OutlineNode[]
   assembled: AssembleContextResult
   hint: string
   options: RunOptions
 }): OutlineGenerationPlan {
-  const { request, project, nodes, volumes, assembled, hint, options } = input
+  const { request, work, nodes, volumes, assembled, hint, options } = input
   const targetError = outlineGenerationTargetError(request, nodes, volumes)
   if (targetError) return { status: 'skip', reason: targetError }
 
@@ -97,11 +97,11 @@ export function buildOutlineGenerationPlan(input: {
       status: 'ready',
       category: 'outline.volume',
       messages: buildVolumeOutlinePrompt(
-        project.name,
-        project.genre,
+        work.title,
+        work.genres.join('、'),
         assembled.text,
         contextPart(assembled, 'storyCore'),
-        project.targetWordCount || 500000,
+        work.targetWordCount,
         hint,
         options,
         contextPart(assembled, 'characters'),

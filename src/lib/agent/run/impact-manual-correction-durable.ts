@@ -79,6 +79,7 @@ function contract(input: {
   reviewRunId: number
   reviewReceiptHash: string
   relation: string
+  runtimeBindingHash: string
 }) {
   return {
     version: 1 as const,
@@ -104,6 +105,7 @@ function contract(input: {
       contextSourceKeys: ['chapterContent'],
       writeTargets: [],
     },
+    runtimeBindingHash: input.runtimeBindingHash,
     budget: {
       // RunContract V1 currently requires a positive model ceiling even for a
       // zero-model durable workflow. No model event is emitted by this unit.
@@ -299,6 +301,12 @@ export async function beginImpactManualCorrectionV1(input: {
       reviewRunId: current.review.runId,
       reviewReceiptHash: current.review.receiptHash,
       relation,
+      runtimeBindingHash: await hashCanonicalValue({
+        schema: 'storyforge.impact-manual-correction-runtime',
+        version: 1,
+        stepId: IMPACT_MANUAL_CORRECTION_STEP_ID_V1,
+        verifierSet: IMPACT_MANUAL_CORRECTION_VERIFIER_SET_V1,
+      }),
     }),
   })
   snapshot = await appendAgentRunEventV1({

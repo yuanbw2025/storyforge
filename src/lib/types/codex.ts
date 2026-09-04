@@ -69,11 +69,6 @@ export interface CodexCategory extends RagDocumentMetadata {
   /** 是否隐藏（内置分类不可删，但可隐藏） */
   hidden?: boolean
   order: number
-  /**
-   * 历史兼容字段。分类 schema 由整个项目共享，不按世界复制；
-   * 新数据始终写 null，旧备份中的数值也按项目级分类处理。
-   */
-  worldGroupId?: number | null
   createdAt: number
   updatedAt: number
 }
@@ -106,16 +101,16 @@ export interface CodexEntry extends RagDocumentMetadata {
   cultivationStageId?: string | null
   /** 城池词条对应的空间地点；人文属性与地点树分层，删除地点只断开软引用。 */
   importantLocationId?: number | null
-  /** 正式词条来源；历史人工词条缺省按 manual 解释。 */
-  origin?: 'manual' | 'verbatim-extraction' | 'ai-created-suggestion' | 'import'
+  /** 正式词条来源。 */
+  origin: 'manual' | 'verbatim-extraction' | 'ai-created-suggestion' | 'import'
   /** 抽取候选采用时冻结的逐字引文；AI 新建建议固定为空数组。 */
-  sourceEvidenceQuotes?: string
+  sourceEvidenceQuotes: string
   /** 发起抽取/补全时完整原始来源的内容 hash，便于回查而不复制大正文。 */
-  sourceContentHash?: string
+  sourceContentHash: string
   /** 产生该 AI 词条的 durable Run；运行删除时只断开引用，不删除词条。 */
-  producerRunId?: number | null
+  producerRunId: number | null
   /** 作者实际采纳的冻结候选 hash。 */
-  producerCandidateHash?: string | null
+  producerCandidateHash: string | null
   order: number
   worldGroupId?: number | null
   createdAt: number
@@ -173,8 +168,8 @@ export function stringifyEntryRefs(refs: Record<string, number[]>): string {
  * - `target === null`：单世界数据，只读取尚未归属世界组的词条。
  * - `target === number`：多世界数据，只读取该世界的词条；null 不是“全局词条”。
  *
- * 开启多世界时，stampPrimaryWorld 会把既有 null 词条迁移到主世界。因此把 null
- * 继续视为全局会让迁移后新建错位数据泄漏到所有世界。
+ * 开启多世界时，当前归属操作会把尚未指定世界的词条归入主世界。
+ * 因此 null 不是跨世界全局词条，不能在多世界读取中放宽。
  */
 export function codexEntryInWorld(
   entry: Pick<CodexEntry, 'worldGroupId'>,
@@ -233,9 +228,6 @@ export const BUILTIN_CATEGORIES: BuiltInCategorySeed[] = [
     domain: 'natural', builtInKey: 'beast', name: '灵兽异兽', icon: '🐅',
     fields: [
       { key: 'kind', label: '类别', type: 'select', options: ['走兽', '飞禽', '水族', '虫豸', '异种'] },
-      // WORLD-1 已有结构化关联；保留这两个旧文本字段承载老项目无法自动推断的数据。
-      { key: 'cultivation', label: '修炼体系（旧文本备注）', type: 'text', placeholder: '旧数据兼容；新数据请使用上方结构化关联' },
-      { key: 'realm', label: '境界（旧文本备注）', type: 'text' },
       { key: 'body', label: '体型外貌', type: 'longtext' },
       { key: 'habit', label: '习性性情', type: 'longtext' },
       { key: 'habitat', label: '栖息地', type: 'text' },

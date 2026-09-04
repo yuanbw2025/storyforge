@@ -16,13 +16,15 @@ import {
 } from '../../src/lib/fact-ledger/fact-ledger'
 import { adopt } from '../../src/lib/registry/adopt'
 import type { TemporalFact } from '../../src/lib/types'
+import { seedCurrentProject } from '../helpers/current-workspace'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
 
 const now = 1
 
 async function seedSettingProject() {
-  const projectId = await db.projects.add({
+  const projectId = await seedCurrentProject({
     name: '世界宪法回归',
-    genre: 'fantasy',
+    genres: ['fantasy'],
     description: '',
     targetWordCount: 0,
     createdAt: now,
@@ -64,12 +66,17 @@ async function seedSettingProject() {
     projectId,
     homeWorldGroupId: worldGroupId,
     name: '林飞',
+    roleWeight: 'main',
+    moralAxis: 'good',
+    orderAxis: 'neutral',
+    isCrossWorld: false,
     background: '林飞自幼父母双亡。',
     relationships: '',
     identity: '遗民',
     createdAt: now,
     updatedAt: now,
   } as any) as number
+  await finalizeCurrentFixtureV1(projectId)
   return { projectId, worldGroupId, worldviewId, powerSystemId, storyCoreId, characterId }
 }
 
@@ -160,6 +167,7 @@ describe('CONSISTENCY-3 · 世界宪法闭集、生命周期与回报通道', ()
       sourceWorldviewId: seeded.worldviewId,
       sourceField: 'worldOrigin',
     })) as number
+    await finalizeCurrentFixtureV1(seeded.projectId)
     expect((await confirmFactCandidate(factId)).confirmed).toBe(true)
     const before = await assembleContext({
       projectId: seeded.projectId,
@@ -236,6 +244,7 @@ describe('CONSISTENCY-3 · 世界宪法闭集、生命周期与回报通道', ()
         sourceQuote: '遗民',
       }),
     ])
+    await finalizeCurrentFixtureV1(seeded.projectId)
 
     const importedProjectId = await importProjectJSON(await exportProjectJSON(seeded.projectId))
     const [rows, worldview, powerSystem, storyCore, character] = await Promise.all([
@@ -273,6 +282,7 @@ describe('CONSISTENCY-3 · 世界宪法闭集、生命周期与回报通道', ()
       sourceFingerprint: fingerprintSettingSource('术士借用月亮潮汐施法。'),
       sourceQuote: '术士借用月亮潮汐施法',
     })) as number
+    await finalizeCurrentFixtureV1(seeded.projectId)
     expect(await replaceConstitutionFactCandidate(candidateId)).toMatchObject({
       confirmed: false,
       replaced: 0,

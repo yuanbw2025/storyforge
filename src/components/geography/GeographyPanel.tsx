@@ -10,6 +10,7 @@ import type { Project, Location, LocationType } from '../../lib/types'
 import { nanoid } from '../../lib/utils/id'
 import { sanitizeSvg } from '../../lib/utils/sanitize-svg'
 import LocationTreeMap from './LocationTreeMap'
+import { useActiveWork } from '../../hooks/useActiveWork'
 
 const LOCATION_TYPES: { value: LocationType; label: string }[] = [
   { value: 'continent', label: '大陆' },
@@ -41,6 +42,7 @@ interface Props {
 }
 
 export default function GeographyPanel({ project }: Props) {
+  const activeWork = useActiveWork(project)
   const { geography, loadAll, save } = useGeographyStore()
   const activeGroupId = useWorldGroupStore(s => s.activeGroupId)
   const [overview, setOverview] = useState('')
@@ -138,7 +140,7 @@ export default function GeographyPanel({ project }: Props) {
 
   // AI 图像 prompt
   const handleGenerateImagePrompt = () => {
-    const prompt = buildImageMapPrompt(project.name, overview, locations)
+    const prompt = buildImageMapPrompt(activeWork?.title ?? '当前作品', overview, locations)
     setImagePrompt(prompt)
   }
 

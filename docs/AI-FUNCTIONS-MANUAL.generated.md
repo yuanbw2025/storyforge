@@ -103,7 +103,7 @@
 | `openWorldRuntime` | 文字开放世界玩家视角 | runtime | L0 | 8000 |
 | `interactionRuntime` | 角色互动单一视角 | runtime | L0 | 8000 |
 | `productRuntime` | 冻结运行时状态 | runtime | L0 | 8000 |
-| `projectStatus` | 项目概况 | project | L2 | 1200 |
+| `workStatus` | 作品概况 | project | L2 | 1200 |
 | `worldGroups` | 世界组目录 | project | L2 | 1500 |
 | `outlineTree` | 大纲树 | world | L2 | 6000 |
 | `searchResults` | 项目内搜索结果 | world | L2 | 2200 |
@@ -178,13 +178,13 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `chapters` | `content` `continuityHandoff` `notes` `order` `outlineNodeId` `perspectiveCharacterId` `planReconciliation` `status` `summary` `summarySourceTextHash` `summaryTextNormalizationVersion` `title` `wordCount` |
 | `characterDrivenPlans` | `generatedVolumes` `status` |
 | `characterRelations` | `description` `fromCharacterId` `isBidirectional` `label` `relationType` `toCharacterId` |
-| `characters` | `abilities` `activeChapterRange` `alignment` `appearance` `arc` `background` `cultivationStageId` `cultivationSystemId` `ending` `exitChapterId` `fears` `firstAppearChapterId` `firstAppearance` `goals` `habits` `homeWorldGroupId` `identity` `importantLocationId` `innerConflict` `isCrossWorld` `keyEvents` `location` `moralAxis` `motivation` `name` `narrativeStatus` `orderAxis` `personality` `powerLevel` `powerSystemId` `profile` `raceEntryId` `relationships` `role` `roleWeight` `shortDescription` `signatureItem` `speechStyle` `statusEvidenceChapterId` `statusEvidenceStoryArcId` `statusProducerCandidateHash` `statusProducerContractHash` `statusReason` `storyRole` `strengths` `values` `weaknesses` |
-| `codexCategories` | `builtInKey` `domain` `fieldSchema` `hidden` `icon` `name` `order` `parentId` `worldGroupId` |
+| `characters` | `abilities` `activeChapterRange` `appearance` `arc` `background` `cultivationStageId` `cultivationSystemId` `ending` `exitChapterId` `fears` `firstAppearChapterId` `firstAppearance` `goals` `habits` `homeWorldGroupId` `identity` `importantLocationId` `innerConflict` `isCrossWorld` `keyEvents` `location` `moralAxis` `motivation` `name` `narrativeStatus` `orderAxis` `personality` `powerLevel` `powerSystemId` `profile` `raceEntryId` `relationships` `roleWeight` `shortDescription` `signatureItem` `speechStyle` `statusEvidenceChapterId` `statusEvidenceStoryArcId` `statusProducerCandidateHash` `statusProducerContractHash` `statusReason` `storyRole` `strengths` `values` `weaknesses` |
+| `codexCategories` | `builtInKey` `domain` `fieldSchema` `hidden` `icon` `name` `order` `parentId` |
 | `codexEntries` | `categoryId` `cultivationStageId` `cultivationSystemId` `description` `fields` `icon` `importance` `importantLocationId` `name` `order` `origin` `producerCandidateHash` `producerRunId` `refs` `sourceContentHash` `sourceEvidenceQuotes` `summary` `tags` `worldGroupId` |
 | `comicPages` | `summary` |
 | `comicPanels` | `action` `continuityRefs` `frame` `lettering` `negativePrompt` `shot` `sourceUnitIds` `visualPrompt` |
 | `comicVisualSubjects` | `design` `label` `sourceUnitIds` |
-| `creativeRules` | `atmosphere` `citedInsightIds` `citedReferenceIds` `consistencyRules` `narrativePOV` `prohibitions` `referenceWorksV2` `specialRequirements` `writingStyle` |
+| `creativeRules` | `atmosphere` `citedInsightIds` `citedReferenceIds` `consistencyRules` `narrativePOV` `prohibitions` `specialRequirements` `writingStyle` |
 | `cultivationProgress` | `characterId` `characterName` `cultivationSystemId` `cultivationSystemName` `sourceChapterId` `sourceChapterTitle` `sourceOffset` `sourceQuote` `stageId` `stageName` `status` `transition` `trigger` `worldGroupId` |
 | `cultivationSystems` | `description` `name` `stages` `worldGroupId` |
 | `detailedOutlines` | `appearingCharacterIds` `emotionArc` `endingCliffhanger` `foreshadowIds` `lastUsedSummary` `openingHook` `outlineNodeId` `prohibitions` `sceneLocation` `scenes` |
@@ -203,7 +203,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `productBuildArtifacts` | `metadataJson` `payloadJson` `qualityJson` `rightsJson` |
 | `productBuilds` | `compatibilityJson` `manifestJson` `planJson` `previewManifestJson` `qualityReportJson` |
 | `productProductionBriefs` | `briefJson` `userIntentSummary` |
-| `projects` | `creativeMode` `description` `enableMultiWorld` `genres` `name` `status` `targetWordCount` |
+| `projects` | `enableMultiWorld` `name` |
 | `referenceAnalysisRuns` | `activatedAt` `analysisSummary` `completedAt` `completedChunks` `depth` `error` `expectedChunks` `fileHash` `mergedCharacters` `progress` `referenceId` `rightsConfirmed` `rightsDeclaredAt` `rightsNote` `sourceFilename` `sourceKind` `status` `totalChars` `usageScope` `version` |
 | `referenceChunkAnalysis` | `analysisRunId` `characterCraft` `chunkIndex` `climaxDesign` `conflictEscalation` `dailyLife` `dialogueTechnique` `emotionalBeats` `endOffset` `foreshadowing` `historicalContext` `label` `languageCustoms` `materialCulture` `narrativeStyle` `openingTechnique` `otherTechniques` `pacingControl` `plotStructure` `proseStyle` `rawExcerpt` `referenceId` `socialInstitutions` `startOffset` `worldBuilding` |
 | `references` | `analysisDepth` `analysisError` `analysisProgress` `analysisStatus` `analysisSummary` `fileHash` `genre` `importSessionId` `mergedCharacters` `totalChars` |
@@ -215,7 +215,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `storylineProgress` | `arcId` `currentStageId` `evidenceQuote` `involvedEntities` `lastActiveChapterId` `lastActiveChapterTitle` `progressNote` `status` |
 | `ttrpgRulePacks` | `contentHash` `rulePackJson` `ruleSystemId` `ruleSystemVersion` `status` `title` |
 | `userStyleProfiles` | `enabled` `profile` `sampleCount` `sampleWords` `sourceChapterIds` |
-| `works` | `description` `genres` `methodologyId` `status` `targetWordCount` `title` `writingStyleId` |
+| `works` | `customGenre` `description` `genres` `includeCultivationProgressInAI` `methodologyId` `status` `targetWordCount` `title` `writingStyleId` |
 | `worldGroups` | `description` `entryCondition` `exitCondition` `icon` `name` `order` `plannedChapterCount` `powerRestriction` `takeawayRules` `type` |
 | `worldNodes` | `mapConfigJSON` |
 | `worldRulesProfiles` | `customNodes` `entries` `globalNote` |
@@ -238,7 +238,6 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `story-arc-dynamic-lifecycle` | `storyArcs` | `PROJECT_TABLES refs` | `src/lib/storyline/lifecycle.ts` | 2027-01-01 |
 | `cultivation-codex-reference-lifecycle` | `codexEntries` | `PROJECT_TABLES refs + cultivation DAG validator` | `src/lib/codex/references.ts`<br/>`src/lib/cultivation/lifecycle.ts`<br/>`src/lib/location/lifecycle.ts` | 2027-01-01 |
 | `cultivation-progress-lifecycle` | `cultivationProgress` | `ADOPTION_SCHEMAS + PROJECT_TABLES + cultivation DAG validator + canonical chapter sequence` | `src/lib/cultivation/progress.ts`<br/>`src/lib/cultivation/progress-lifecycle.ts` | 2027-01-01 |
-| `codex-category-scope-lifecycle` | `codexCategories` | `PROJECT_TABLES lifecycle` | `src/lib/registry/lifecycle.ts` | 2027-01-01 |
 | `workspace-root-lifecycle` | `projects` | `PROJECT_TABLES + workspace purpose + import trust + world lifecycle` | `src/lib/export/registry-import.ts`<br/>`src/lib/memory/workspace-projection.ts`<br/>`src/lib/world-engine/world-package.ts`<br/>`src/lib/workspace/lifecycle.ts`<br/>`src/lib/workspace/ownership.ts`<br/>`src/lib/world-engine/releases.ts`<br/>`src/lib/workspace/works.ts`<br/>`src/lib/workspace/create-workspace.ts`<br/>`src/lib/world-engine/derivation.ts`<br/>`src/lib/world-engine/promotion.ts`<br/>`src/lib/adaptation/source-manifest.ts` | 2027-08-01 |
 | `world-root-lifecycle` | `worlds` | `PROJECT_TABLES refs + world package trust + world release lifecycle` | `src/lib/world-engine/world-package.ts`<br/>`src/lib/workspace/lifecycle.ts`<br/>`src/lib/workspace/ownership.ts`<br/>`src/lib/world-engine/releases.ts`<br/>`src/lib/workspace/create-workspace.ts`<br/>`src/lib/world-engine/derivation.ts`<br/>`src/lib/world-engine/promotion.ts` | 2027-08-01 |
 | `work-root-lifecycle` | `works` | `PROJECT_TABLES refs + WorkspaceScope + stable work code + narrative lifecycle` | `src/lib/memory/workspace-projection.ts`<br/>`src/lib/workspace/lifecycle.ts`<br/>`src/lib/workspace/ownership.ts`<br/>`src/lib/workspace/works.ts`<br/>`src/lib/workspace/create-workspace.ts`<br/>`src/lib/world-engine/derivation.ts`<br/>`src/lib/adaptation/source-manifest.ts`<br/>`src/lib/adaptation/completion.ts` | 2027-08-01 |
@@ -264,34 +263,34 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 ## 四、AI 调用点（消耗统计 category · 在哪触发)
 
 共 41 个 category。
-未分类调用: 0 个。动态 category 调用: 35 个。
+未分类调用: 0 个。动态 category 调用: 34 个。
 
 | category | 触发文件 |
 |---|---|
-| `agent.orchestrator` | `src/lib/agent/orchestrator.ts:751` |
-| `agent.orchestrator.replan` | `src/lib/agent/orchestrator.ts:838` |
+| `agent.orchestrator` | `src/lib/agent/orchestrator.ts:748` |
+| `agent.orchestrator.replan` | `src/lib/agent/orchestrator.ts:835` |
 | `agent.readonly` | `src/lib/agent/client-adapter.ts:118` |
 | `authoring.ttrpg-campaign` | `src/lib/ttrpg/campaign-proposal-harness.ts:429` |
 | `canon.setting.extract` | `src/lib/agent/run/constitution-extraction-durable.ts:508` |
 | `chapter.content` | `src/lib/generation/chapter-generation-node.ts:23` |
 | `chapter.continue` | `src/lib/generation/chapter-generation-node.ts:26` |
-| `chapter.continuity` | `src/lib/node-authoring/domain-execution.ts:772`<br/>`src/lib/node-authoring/domain-execution.ts:836` |
-| `chapter.deai` | `src/components/editor/ChapterEditor.tsx:1681` |
-| `chapter.expand` | `src/components/editor/ChapterEditor.tsx:1659` |
-| `chapter.polish` | `src/components/editor/ChapterEditor.tsx:1649` |
+| `chapter.continuity` | `src/lib/node-authoring/domain-execution.ts:776`<br/>`src/lib/node-authoring/domain-execution.ts:840` |
+| `chapter.deai` | `src/components/editor/ChapterEditor.tsx:1683` |
+| `chapter.expand` | `src/components/editor/ChapterEditor.tsx:1661` |
+| `chapter.polish` | `src/components/editor/ChapterEditor.tsx:1651` |
 | `chapter.toolbar` | `src/lib/agent/run/selection-edit-durable.ts:567` |
 | `cultivation.progress` | `src/lib/agent/run/cultivation-progress-extraction-durable.ts:558` |
-| `detail.chapter-planning` | `src/lib/node-authoring/domain-execution.ts:601` |
+| `detail.chapter-planning` | `src/lib/node-authoring/domain-execution.ts:605` |
 | `emotion.beat` | `src/lib/agent/run/emotion-beat-durable.ts:396` |
 | `foreshadow.suggest` | `src/lib/agent/run/foreshadow-suggestions-durable.ts:569` |
-| `geography.concept-map` | `src/components/geography/GeographyPanel.tsx:127` |
+| `geography.concept-map` | `src/components/geography/GeographyPanel.tsx:129` |
 | `geography.world-map` | `src/lib/agent/run/world-map-config-durable.ts:362` |
 | `inventory.extract` | `src/lib/agent/run/inventory-extraction-durable.ts:943` |
 | `location.extract` | `src/lib/agent/run/location-extraction-durable.ts:618` |
 | `node.creation` | `src/lib/node-authoring/executor.ts:360` |
-| `outline.chapter` | `src/lib/ai/batch-outline-runner.ts:198`<br/>`src/lib/outline/generation-node.ts:60` |
-| `outline.impact-regenerate` | `src/lib/agent/run/impact-outline-regeneration-durable.ts:652` |
-| `outline.volume` | `src/lib/outline/generation-node.ts:55` |
+| `outline.chapter` | `src/lib/ai/batch-outline-runner.ts:200`<br/>`src/lib/outline/generation-node.ts:61` |
+| `outline.impact-regenerate` | `src/lib/agent/run/impact-outline-regeneration-durable.ts:648` |
+| `outline.volume` | `src/lib/outline/generation-node.ts:56` |
 | `outline.workshop.collision` | `src/lib/outline/workshop.ts:452` |
 | `outline.workshop.motivation` | `src/lib/outline/workshop.ts:447` |
 | `outline.workshop.scan` | `src/lib/outline/workshop.ts:442` |
@@ -302,44 +301,43 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `review.outline-workshop` | `src/lib/outline/workshop.ts:457` |
 | `review.quality` | `src/components/editor/ReviewPanel.tsx:112` |
 | `review.readability` | `src/components/editor/ReviewPanel.tsx:133` |
-| `review.revise` | `src/components/editor/ChapterEditor.tsx:1709` |
+| `review.revise` | `src/components/editor/ChapterEditor.tsx:1711` |
 | `runtime.ttrpg-player` | `src/lib/ttrpg/player-harness.ts:298` |
 | `scene.verify` | `src/components/scene/SceneVerifyPanel.tsx:81` |
 | `story.timeline` | `src/lib/agent/run/impact-story-timeline-regeneration-durable.ts:670`<br/>`src/lib/agent/run/story-timeline-extraction-durable.ts:758` |
 | `style.learn` | `src/lib/agent/run/style-learning-durable.ts:493` |
-| `world-group.expand` | `src/lib/agent/run/worldview-expand-durable.ts:470` |
-| `world-group.suggest` | `src/lib/agent/run/world-suggest-durable.ts:614` |
+| `world-group.expand` | `src/lib/agent/run/worldview-expand-durable.ts:466` |
+| `world-group.suggest` | `src/lib/agent/run/world-suggest-durable.ts:622` |
 
 ### 动态 category 调用
 
 - `src/components/editor/ReviewPanel.tsx:160 · ai.start`
 - `src/lib/adventure/harness.ts:245 · chat`
-- `src/lib/agent/character-copilot.ts:513 · chat`
-- `src/lib/agent/character-driven-copilot.ts:503 · chat`
+- `src/lib/agent/character-copilot.ts:515 · chat`
+- `src/lib/agent/character-driven-copilot.ts:505 · chat`
 - `src/lib/agent/character-lifecycle-copilot.ts:448 · chat`
 - `src/lib/agent/character-revision-copilot.ts:727 · chat`
 - `src/lib/agent/character-supplement-copilot.ts:578 · chat`
 - `src/lib/agent/context-compression.ts:333 · chat`
-- `src/lib/agent/creative-rules-copilot.ts:438 · chat`
-- `src/lib/agent/inspiration-copilot.ts:343 · chat`
+- `src/lib/agent/creative-rules-copilot.ts:437 · chat`
+- `src/lib/agent/inspiration-copilot.ts:345 · chat`
 - `src/lib/agent/master-candidate-semantic-review.ts:601 · chat`
-- `src/lib/agent/outline-copilot.ts:485 · chat`
-- `src/lib/agent/outline-copilot.ts:735 · chat`
-- `src/lib/agent/prose-copilot.ts:644 · chat`
-- `src/lib/agent/prose-copilot.ts:910 · chat`
+- `src/lib/agent/outline-copilot.ts:492 · chat`
+- `src/lib/agent/outline-copilot.ts:742 · chat`
+- `src/lib/agent/prose-copilot.ts:642 · chat`
+- `src/lib/agent/prose-copilot.ts:908 · chat`
 - `src/lib/agent/run/adaptation-durable.ts:411 · chat`
 - `src/lib/agent/run/codex-extraction-durable.ts:779 · chat`
 - `src/lib/agent/run/history-agent-durable.ts:514 · chat`
 - `src/lib/agent/run/reference-derived-durable.ts:506 · chat`
-- `src/lib/agent/story-arc-copilot.ts:1548 · chat`
-- `src/lib/agent/story-arc-copilot.ts:1600 · chat`
-- `src/lib/agent/story-core-copilot.ts:555 · chat`
-- `src/lib/agent/storyline-progress-copilot.ts:374 · chat`
-- `src/lib/agent/world-origin-copilot.ts:254 · chat`
-- `src/lib/agent/worldview-field-copilot.ts:888 · chat`
+- `src/lib/agent/story-arc-copilot.ts:1552 · chat`
+- `src/lib/agent/story-arc-copilot.ts:1604 · chat`
+- `src/lib/agent/story-core-copilot.ts:557 · chat`
+- `src/lib/agent/storyline-progress-copilot.ts:366 · chat`
+- `src/lib/agent/worldview-field-copilot.ts:890 · chat`
 - `src/lib/character-interaction/harness.ts:396 · chat`
-- `src/lib/evals/agent-harness/story-arc-main-path-browser.ts:99 · chat`
-- `src/lib/evals/creative-reliability/browser.ts:88 · chat`
+- `src/lib/evals/agent-harness/story-arc-main-path-browser.ts:98 · chat`
+- `src/lib/evals/creative-reliability/browser.ts:89 · chat`
 - `src/lib/generation/workflow-generation-node.ts:23 · ai.start`
 - `src/lib/node-authoring/executor.ts:417 · chat`
 - `src/lib/open-world/evolution-harness.ts:246 · chat`
@@ -393,4 +391,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `ce953c2d`
+生成时间基准:commit `4c6ac46f`

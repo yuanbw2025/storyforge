@@ -1,7 +1,7 @@
 import { chat } from '../../ai/client'
 import {
   buildStoryTimelinePrompt,
-  parseStoryEventsStrictV1,
+  parseStoryEvents,
   readStoryTimelinePromptTemplateSnapshotV1,
   type ExtractedStoryEvent,
 } from '../../ai/adapters/story-timeline-adapter'
@@ -482,7 +482,7 @@ function parseCandidateItems(value: unknown, plan: StoryTimelineExtractionPlanV1
     assertExactKeys(row, [
       'title', 'storyTime', 'importance', 'description', 'chapterId', 'chapterTitle',
     ], '故事年表候选 ')
-    const parsed = parseStoryEventsStrictV1(JSON.stringify([{
+    const parsed = parseStoryEvents(JSON.stringify([{
       title: row.title,
       storyTime: row.storyTime,
       importance: row.importance,
@@ -572,7 +572,7 @@ function parseFormalRow(
   assertExactKeys(row, [
     'title', 'storyTime', 'importance', 'description', 'chapterId', 'chapterTitle', 'order',
   ], '故事年表正式行 ')
-  const parsed = parseStoryEventsStrictV1(JSON.stringify([{
+  const parsed = parseStoryEvents(JSON.stringify([{
     title: row.title,
     storyTime: row.storyTime,
     importance: row.importance,
@@ -766,7 +766,7 @@ async function continueExtraction(input: {
     })
     let parsed: ExtractedStoryEvent[]
     try {
-      parsed = parseStoryEventsStrictV1(raw)
+      parsed = parseStoryEvents(raw)
     } catch (error) {
       snapshot = await append(input.scope, snapshot, 'step.failed', {
         stepId: STORY_TIMELINE_EXTRACTION_STEP_ID_V1, attempt: 1,

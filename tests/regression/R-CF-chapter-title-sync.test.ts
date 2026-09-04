@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { useChapterStore } from '../../src/stores/chapter'
 import { useOutlineStore } from '../../src/stores/outline'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
+import { seedCurrentProject } from '../helpers/current-workspace'
 
 describe('R-CF-chapter-title-sync: 大纲章名同步正文记录', () => {
   beforeEach(async () => {
@@ -17,8 +19,8 @@ describe('R-CF-chapter-title-sync: 大纲章名同步正文记录', () => {
 
   it('修改 chapter 类型大纲节点标题时同步 chapters.title 和当前章节内存', async () => {
     const now = Date.now()
-    const projectId = await db.projects.add({
-      name: '标题同步', genre: '', description: '', targetWordCount: 0,
+    const projectId = await seedCurrentProject({
+      name: '标题同步', genres: [], description: '', targetWordCount: 0,
       enableMultiWorld: false, createdAt: now, updatedAt: now,
     } as any) as number
     const outlineNodeId = await db.outlineNodes.add({
@@ -31,6 +33,7 @@ describe('R-CF-chapter-title-sync: 大纲章名同步正文记录', () => {
       content: '<p>正文</p>', wordCount: 2, status: 'draft', order: 0, notes: '',
       createdAt: now, updatedAt: now,
     } as any) as number
+    await finalizeCurrentFixtureV1(projectId)
 
     await useOutlineStore.getState().loadAll(projectId)
     await useChapterStore.getState().loadAll(projectId)

@@ -1,8 +1,8 @@
-/** 写作状态 */
-export type ProjectStatus = 'drafting' | 'ongoing' | 'paused' | 'completed'
+/** 作品创作状态。状态属于 Work，不属于 LocalWorkspace。 */
+export type WorkStatus = 'drafting' | 'ongoing' | 'paused' | 'completed'
 
-/** 项目状态标签 */
-export const PROJECT_STATUS_LABELS: Record<ProjectStatus, string> = {
+/** 作品状态标签 */
+export const WORK_STATUS_LABELS: Record<WorkStatus, string> = {
   drafting:  '构思中',
   ongoing:   '连载中',
   paused:    '暂停',
@@ -10,7 +10,7 @@ export const PROJECT_STATUS_LABELS: Record<ProjectStatus, string> = {
 }
 
 /**
- * 流派标签（多选字符串，取代旧的单选 NovelGenre 枚举）
+ * 流派标签（多选字符串）
  * 参考起点、纵横、晋江分类体系
  */
 export const GENRE_OPTIONS = [
@@ -70,12 +70,6 @@ export const GENRE_OPTIONS = [
   { group: '其他', value: 'other',          label: '其他' },
 ] as const
 
-/** 旧的单选类型（保留兼容性） */
-export type NovelGenre = string
-
-/** 创作模式 */
-export type CreativeMode = 'fantasy' | 'historical'
-
 export type CommunityWorldLicense =
   | 'CC-BY-4.0'
   | 'CC-BY-SA-4.0'
@@ -110,70 +104,52 @@ export interface ProductPlatformProjectOptInsV1 {
   ttrpgAiGmExperimental?: boolean
 }
 
-/** 项目 */
+/**
+ * 本地工作区壳。
+ *
+ * 这里只保存稳定身份、产品目的、活动根指针和工作区级开关。作品标题、
+ * 流派、状态、字数、封面、文风等内容只属于 Work，禁止在这里镜像。
+ */
 export interface Project {
   id?: number
   /** MEMORY-1: immutable portable identity for this LocalWorkspace. */
-  workspaceUid?: string
-  /** ARCH-01: explicit product identity; legacy ambiguity defaults to independent work. */
-  workspacePurpose?: WorkspacePurpose
+  workspaceUid: string
+  /** ARCH-01: explicit product identity. */
+  workspacePurpose: WorkspacePurpose
+  /** 工作区显示名；切换或编辑 Work 不会改写它。 */
   name: string
-  /** 兼容旧数据的单选流派（保留此字段避免旧代码报错，值始终有效） */
-  genre: string
-  /** 多选流派标签 */
-  genres: string[]
-  /** 用户在 GENRE_OPTIONS 之外自定义的流派标签（v3 §2.2，多选时显示在最末） */
-  customGenre?: string
-  /** 写作状态 */
-  status: ProjectStatus
-  description: string
-  targetWordCount: number  // 目标字数
-  /** 当前已写字数（v3 §2.2 状态栏，由 chapter 字数累加得到） */
-  currentWordCount?: number
-  /** 封面图（base64 或 object URL） */
-  coverImage?: string
-
-  // ── Phase E 新字段 ──
-  /** 写作风格预设 ID */
-  writingStyleId?: string
-  /** 创作方法论 ID */
-  methodologyId?: string
-
-  // ── PHASE-H4 新字段 ──
-  /** 创作模式：fantasy=玄幻/幻想模式，historical=历史/考证模式 */
-  creativeMode?: CreativeMode
-
-  // ── Phase 25.4 多世界 ──
   /** 是否启用多世界模式（默认 false） */
   enableMultiWorld?: boolean
 
   /** 当前 World/Work 指针；世界身份和版本只存在于 World/WorldRelease。 */
-  activeWorldId?: number | null
-  activeWorkId?: number | null
-  /** WORLD-2C ownership 合同版本；缺失表示尚未执行惰性迁移。 */
-  ownershipSchemaVersion?: number
+  activeWorldId: number | null
+  activeWorkId: number | null
 
-  /** Phase 34：把作者确认的正文修炼进度注入后续 AI 写作；默认关闭。 */
-  includeCultivationProgressInAI?: boolean
-
-  /** STORY-1：作者明确设为后续 AI 参考的角色驱动方案；不自动猜最近方案。 */
-  activeCharacterDrivenPlanId?: number | null
-
-  /** 游戏平台的项目级显式授权；缺失与 false 等价，旧项目默认不加入实验。 */
+  /** 游戏平台的项目级显式授权；缺失与 false 等价。 */
   productPlatformOptIns?: ProductPlatformProjectOptInsV1
 
   createdAt: number        // timestamp
   updatedAt: number        // timestamp
 }
 
-/** 创建项目入参 */
-export type CreateProjectInput = Omit<Project, 'id' | 'createdAt' | 'updatedAt'>
-
-/** 将旧数据迁移：确保 genres[]、status、genre 字段始终有效 */
-export function migrateGenre(p: Project): Project {
-  const genres = p.genres && p.genres.length > 0
-    ? p.genres
-    : p.genre ? [p.genre] : ['other']
-  const genre = p.genre || (genres[0] ?? 'other')
-  return { ...p, genre, genres, status: p.status ?? 'drafting' }
+/**
+ * 创建工作区时一次性收集工作区和初始 Work 的输入；创建边界会把字段分别
+ * 写入各自 owner，绝不把 Work 字段复制到 Project。
+ */
+export interface CreateWorkspaceInput {
+  workspaceUid?: string
+  workspacePurpose?: WorkspacePurpose
+  name: string
+  genres: string[]
+  customGenre?: string
+  status: WorkStatus
+  description: string
+  targetWordCount: number
+  coverImage?: string
+  writingStyleId?: string
+  methodologyId?: string
+  enableMultiWorld?: boolean
+  includeCultivationProgressInAI?: boolean
+  activeCharacterDrivenPlanId?: number | null
+  productPlatformOptIns?: ProductPlatformProjectOptInsV1
 }

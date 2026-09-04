@@ -702,6 +702,8 @@ export async function prepareWorldviewFieldCopilot(
   const worldGroupId = project.enableMultiWorld ? input.worldGroupId : null
   const readScope = input.scope ?? await resolveReadScopeLike(input.projectId)
   const scope = readScope
+  const work = await db.works.get(scope.workId)
+  if (!work || work.projectId !== input.projectId) throw new Error('当前作品不存在。')
   const before = await readSnapshot(input.projectId, worldGroupId, scope)
   const targetField = resolveWorldviewAgentFieldV1(request)
   const capability = WORLDVIEW_AGENT_FIELD_CAPABILITIES.get(targetField)
@@ -733,7 +735,7 @@ export async function prepareWorldviewFieldCopilot(
     `worldviews.${targetField}`,
   )
   if (gatewayRequired && !scope) {
-    throw new Error('世界基座 Gateway required 字段需要稳定 WorkspaceScope，旧项目必须先完成所有权迁移。')
+    throw new Error('世界基座 Gateway required 字段需要完整的当前 WorkspaceScope。')
   }
   const targetResourceKey = hasMaterial(before.values[targetField])
     && before.ragDocumentId
@@ -788,7 +790,7 @@ export async function prepareWorldviewFieldCopilot(
   }
   const nodeInput: WorldviewFieldCopilotInput = {
     projectId: input.projectId,
-    projectName: project.name,
+    projectName: work.title,
     scope,
     worldGroupId,
     authorRequest: request,
@@ -810,8 +812,8 @@ export async function prepareWorldviewFieldCopilot(
     const rendered = await renderFrozenPromptExecutionV1({
       options: input.promptExecution,
       context: {
-        projectName: project.name,
-        genres: project.genres?.join('/') || project.genre || '',
+        projectName: work.title,
+        genres: work.genres.join('/'),
         dimension: WORLDVIEW_AGENT_FIELD_LABELS[targetField],
         worldContext: assembled.text || '（当前没有已填写的正式设定）',
         existingWorldview: assembled.text || '',
@@ -826,7 +828,7 @@ export async function prepareWorldviewFieldCopilot(
         ...(nodeInput.supplementalContext.trim()
           ? [`【本轮已验证上游候选（尚未采纳，不属于 Canon）】\n${nodeInput.supplementalContext.trim()}`]
           : []),
-        `【低权重灵感：作品名】\n${project.name}`,
+        `【低权重灵感：作品名】\n${work.title}`,
         `【Harness 登记的正式上下文】\n${assembled.text || '（当前没有已填写的正式设定）'}`,
       ],
     })

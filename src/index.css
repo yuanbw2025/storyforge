@@ -353,57 +353,6 @@
   --editor-mark-ink: #E9DEC8;
 }
 
-/* ============================================================
-   兼容旧主题名
-   ============================================================ */
-[data-theme="midnight"],
-[data-theme="work"] {
-  --bg-base: #1A0F0A; --bg-surface: #251810; --bg-elevated: #30201A;
-  --bg-hover: rgba(217,119,87,0.08);
-  --text-primary: #F5E6D3; --text-secondary: #B89A7A; --text-muted: #6F5A45;
-  --accent: #D97757; --accent-hover: #E8906D; --accent-muted: #B85C3F;
-  --success: #4ADE80; --warning: #FBBF24; --error: #EF4444; --info: #60A5FA;
-  --border: rgba(200,161,85,0.22); --border-hover: rgba(200,161,85,0.40);
-  --accent-soft: rgba(217,119,87,0.18); --border-subtle: rgba(200,161,85,0.12);
-  --editor-page-bg: #2A1A12; --editor-ruled-line: rgba(200,161,85,0.13);
-  --editor-selection-bg: rgba(217,119,87,0.34); --editor-selection-text: #FFF7ED;
-  --editor-ink-primary: #F5E6D3; --editor-ink-strong: #FFFFFF; --editor-ink-cream: #F5E6D3; --editor-ink-muted: #D6B98C;
-  --editor-ink-gold: #FACC15; --editor-ink-orange: #FB923C; --editor-ink-red: #F87171; --editor-ink-blue: #93C5FD; --editor-ink-green: #86EFAC; --editor-ink-purple: #C4B5FD;
-  --editor-mark-yellow: #6B4E10; --editor-mark-red: #5A1F1F; --editor-mark-blue: #1E3A5F; --editor-mark-green: #14532D; --editor-mark-purple: #3B2A63; --editor-mark-brown: #4A3326; --editor-mark-ink: #3A2418;
-}
-
-[data-theme="ocean"],
-[data-theme="graphite"] {
-  --bg-base: #1A0F0A; --bg-surface: #251810; --bg-elevated: #30201A;
-  --bg-hover: rgba(217,119,87,0.08);
-  --text-primary: #F5E6D3; --text-secondary: #B89A7A; --text-muted: #6F5A45;
-  --accent: #D97757; --accent-hover: #E8906D; --accent-muted: #B85C3F;
-  --success: #4ADE80; --warning: #FBBF24; --error: #EF4444; --info: #60A5FA;
-  --border: rgba(200,161,85,0.22); --border-hover: rgba(200,161,85,0.40);
-  --accent-soft: rgba(217,119,87,0.18);
-  --editor-page-bg: #2A1A12; --editor-ruled-line: rgba(200,161,85,0.13);
-  --editor-selection-bg: rgba(217,119,87,0.34); --editor-selection-text: #FFF7ED;
-  --editor-ink-primary: #F5E6D3; --editor-ink-strong: #FFFFFF; --editor-ink-cream: #F5E6D3; --editor-ink-muted: #D6B98C;
-  --editor-ink-gold: #FACC15; --editor-ink-orange: #FB923C; --editor-ink-red: #F87171; --editor-ink-blue: #93C5FD; --editor-ink-green: #86EFAC; --editor-ink-purple: #C4B5FD;
-  --editor-mark-yellow: #6B4E10; --editor-mark-red: #5A1F1F; --editor-mark-blue: #1E3A5F; --editor-mark-green: #14532D; --editor-mark-purple: #3B2A63; --editor-mark-brown: #4A3326; --editor-mark-ink: #3A2418;
-}
-
-[data-theme="mist"],
-[data-theme="parchment"] {
-  --bg-base: #FAF7F0; --bg-surface: #F5F1E8; --bg-elevated: #FFFFFF;
-  --bg-hover: rgba(31,27,22,0.04);
-  --text-primary: #1F1B16; --text-secondary: #56503F; --text-muted: #8A7E6A;
-  --accent: #A04E35; --accent-hover: #8E442E; --accent-muted: #D6A86C;
-  --success: #16A34A; --warning: #D97706; --error: #DC2626; --info: #2563EB;
-  --border: rgba(31,27,22,0.12); --border-hover: rgba(31,27,22,0.22);
-  --accent-soft: rgba(184,92,63,0.10);
-  --editor-page-bg: #FFFDF7; --editor-ruled-line: rgba(31,27,22,0.08);
-  --editor-selection-bg: rgba(37,99,235,0.20); --editor-selection-text: #111827;
-  --editor-ink-primary: #1F1B16; --editor-ink-strong: #050505; --editor-ink-cream: #7A4A1F; --editor-ink-muted: #725A32;
-  --editor-ink-gold: #8A5B00; --editor-ink-orange: #B54708; --editor-ink-red: #B91C1C; --editor-ink-blue: #1D4ED8; --editor-ink-green: #15803D; --editor-ink-purple: #7E22CE;
-  --editor-mark-yellow: #FFE45C; --editor-mark-red: #FFD6D6; --editor-mark-blue: #D7E8FF; --editor-mark-green: #D8F5DF; --editor-mark-purple: #EAD7FF; --editor-mark-brown: #F1E7D4; --editor-mark-ink: #E9DEC8;
-}
-
 /* ========================================
    全局基础样式
    ======================================== */

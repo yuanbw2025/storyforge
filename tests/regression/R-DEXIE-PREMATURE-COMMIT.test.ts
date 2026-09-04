@@ -10,47 +10,11 @@ import { deriveStrictExportProjectJSON } from '../../src/lib/export/registry-exp
 import { deriveImportProjectJSON } from '../../src/lib/export/registry-import'
 import type { AgentEvent, Character, WorkspaceScope } from '../../src/lib/types'
 import { readOwnedRows, scopeTransactionTables } from '../../src/lib/workspace/scope'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
 
 async function createWorkspace(): Promise<WorkspaceScope> {
-  const now = Date.now()
-  const projectId = await db.projects.add({
-    name: 'Dexie transaction longevity',
-    genre: 'fantasy',
-    genres: ['fantasy'],
-    status: 'drafting',
-    description: '',
-    targetWordCount: 100_000,
-
-
-    createdAt: now,
-    updatedAt: now,
-  } as any) as number
-  const worldId = await db.worlds.add({
-    projectId,
-    code: 'dexie-transaction-longevity',
-    name: '事务世界',
-    description: '',
-    currentVersion: 1,
-    createdAt: now,
-    updatedAt: now,
-  }) as number
-  const workId = await db.works.add({
-    projectId,
-    worldId,
-    title: '事务作品',
-    description: '',
-    genres: ['fantasy'],
-    status: 'drafting',
-    targetWordCount: 100_000,
-    createdAt: now,
-    updatedAt: now,
-  }) as number
-  await db.projects.update(projectId, {
-    activeWorldId: worldId,
-    activeWorkId: workId,
-    ownershipSchemaVersion: 1,
-  })
-  return { projectId, worldId, workId }
+  return (await seedCurrentWorkspace('Dexie transaction longevity')).scope
 }
 
 describe.sequential('R-DEXIE-PREMATURE-COMMIT · long reads and ledgers keep write transactions alive', () => {
@@ -68,7 +32,6 @@ describe.sequential('R-DEXIE-PREMATURE-COMMIT · long reads and ledgers keep wri
       projectId: scope.projectId,
       worldId: scope.worldId,
       name: `存量角色 ${index + 1}`,
-      role: 'minor',
       roleWeight: 'secondary',
       moralAxis: 'neutral',
       orderAxis: 'neutral',
@@ -95,6 +58,7 @@ describe.sequential('R-DEXIE-PREMATURE-COMMIT · long reads and ledgers keep wri
   it('appends the next sequence after a long Agent conversation', async () => {
     const scope = await createWorkspace()
     const conversation = await getOrCreateAgentConversation({
+      purpose: 'test:r-dexie-premature-commit:1',
       projectId: scope.projectId,
       worldGroupId: null,
       scope,
@@ -167,6 +131,7 @@ describe.sequential('R-DEXIE-PREMATURE-COMMIT · long reads and ledgers keep wri
           contextSourceKeys: ['worldview', 'storyCore'],
           writeTargets: [{ table: 'outlineNodes', fields: ['summary'], mode: 'candidate-only' }],
         },
+        runtimeBindingHash: 'a'.repeat(64),
         budget: {
           maxModelCalls: 3,
           maxToolCalls: 300,
@@ -215,6 +180,7 @@ describe.sequential('R-DEXIE-PREMATURE-COMMIT · long reads and ledgers keep wri
     }
     expect(snapshot.events).toHaveLength(167)
 
+    await finalizeCurrentFixtureV1(scope.projectId)
     const exported = await deriveStrictExportProjectJSON(scope.projectId)
     const importedProjectId = await deriveImportProjectJSON(exported)
     const importedProject = await db.projects.get(importedProjectId)

@@ -107,9 +107,9 @@ export interface ProductRuntimeCanonCandidate {
 export interface RuntimeEntityState {
   entityKey: string;
   kind: RuntimeEntityKind;
-  sourceId?: number | null;
+  sourceId: number | null;
   name: string;
-  locationKey?: string | null;
+  locationKey: string | null;
   lifecycleStatus: RuntimeLifecycleStatus;
   attributes: RuntimeAttributes;
 }
@@ -126,8 +126,8 @@ export interface RuntimeMemory {
 
 export interface TtrpgRuntimeScene {
   sceneId: string;
-  /** Stable CampaignPack scene key; null for legacy free-form scenes. */
-  sceneKey?: string | null;
+  /** Stable CampaignPack scene key. */
+  sceneKey: string;
   title: string;
   description: string;
   locationKey: string | null;
@@ -150,28 +150,26 @@ export interface TtrpgRuntimeCheck {
   total: number;
   dc: number;
   success: boolean;
-  /** Defaults to public when replaying a legacy event. */
-  visibility?: "public" | "gm-only";
-  /** Formal RulePack evidence. Legacy free-form checks omit this block. */
-  rule?: {
+  visibility: "public" | "gm-only";
+  /** Formal RulePack evidence. */
+  rule: {
     actionKey: string;
     checkKey: string;
     attributeKey: string;
-    /** Character-sheet skill selected by the action; legacy events omit both fields. */
-    skillKey?: string;
-    skillValue?: number;
+    /** Character-sheet skill selected by the action, or null for attribute-only checks. */
+    skillKey: string | null;
+    skillValue: number | null;
     diceModelKey: string;
     rolledDice: number[];
     keptDice: number[];
     degree: TtrpgDegreeV2;
-    /** Omitted only by legacy total-vs-target events. */
-    mode?: TtrpgResolutionRequestV2["mode"];
-    successes?: number | null;
-    winnerRef?: string | null;
-    tiedRefs?: string[];
-    calculationTrace?: string[];
+    mode: TtrpgResolutionRequestV2["mode"];
+    successes: number | null;
+    winnerRef: string | null;
+    tiedRefs: string[];
+    calculationTrace: string[];
     /** Opposed-check receipt for the target; null for non-opposed checks. */
-    opponent?: {
+    opponent: {
       contestantRef: string;
       attributeKey: string;
       rolledDice: number[];
@@ -182,13 +180,12 @@ export interface TtrpgRuntimeCheck {
       rollTrace: TtrpgDiceRollTraceV2;
       proofHash: string;
     } | null;
-    /** Null only when replaying a pre-V2 event written before rejection-sampling traces. */
-    rollTrace: TtrpgDiceRollTraceV2 | null;
-    seedCommitment: string | null;
-    nonce: string | null;
+    rollTrace: TtrpgDiceRollTraceV2;
+    seedCommitment: string;
+    nonce: string;
     proofHash: string;
     rulePackContentHash: string;
-  } | null;
+  };
 }
 
 export interface TtrpgRuntimeState {
@@ -197,7 +194,7 @@ export interface TtrpgRuntimeState {
   activeActorKey: string | null;
   turnOrder: string[];
   /** Deterministic RulePack initiative receipt for the active formal scene. */
-  initiative?: {
+  initiative: {
     sceneKey: string;
     diceModelKey: string;
     attributeKey: string;
@@ -217,10 +214,10 @@ export interface TtrpgRuntimeState {
   checks: TtrpgRuntimeCheck[];
   attacks: TtrpgRuntimeAttackResult[];
   encounter: TtrpgRuntimeEncounter | null;
-  /** 长期战役资料；旧跑团存档缺失时按空状态处理。 */
-  campaign?: TtrpgRuntimeCampaignState | null;
-  /** Formal ProductRelease projection; absent on legacy world-only sessions. */
-  product?: TtrpgRuntimeProductStateV1 | null;
+  /** Product-owned long-campaign state. */
+  campaign: TtrpgRuntimeCampaignState;
+  /** Formal ProductRelease projection. */
+  product: TtrpgRuntimeProductStateV1;
 }
 
 export interface TtrpgRuntimeProductStateV1 {
@@ -243,8 +240,8 @@ export interface TtrpgRuntimeProductStateV1 {
     changedBy: string | null;
     changedAtSequence: number | null;
   };
-  /** Frozen CampaignPack policy; absent legacy states are treated as never. */
-  hiddenDicePolicy?: "never" | "gm-only" | "allowed";
+  /** Frozen CampaignPack policy. */
+  hiddenDicePolicy: "never" | "gm-only" | "allowed";
   sceneKeys: string[];
   openedSceneKeys: string[];
   clueCatalog: Array<{
@@ -253,8 +250,8 @@ export interface TtrpgRuntimeProductStateV1 {
     required: boolean;
     sourceVisibility: "gm-only" | "discoverable" | "public";
   }>;
-  /** Frozen CampaignPack clocks; absent legacy states retain an empty catalog. */
-  clockCatalog?: Array<{
+  /** Frozen CampaignPack clocks. */
+  clockCatalog: Array<{
     clockKey: string;
     title: string;
     initialValue: number;
@@ -276,20 +273,20 @@ export interface TtrpgRuntimeProductStateV1 {
       duration: number | null;
     }>
   >;
-  /** V2 action/reaction budget. Null only for pre-V2 replay snapshots. */
-  actionEconomy?: TtrpgRuntimeActionEconomyV2 | null;
+  /** Action/reaction budget. */
+  actionEconomy: TtrpgRuntimeActionEconomyV2;
   /** ItemDefinition stays in RulePack; mutable ownership/charges/durability live here. */
-  inventory?: TtrpgInventoryStateV2 | null;
+  inventory: TtrpgInventoryStateV2;
   /** Every direct inventory command leaves a replayable before/after receipt. */
-  itemHistory?: TtrpgRuntimeItemReceiptV2[];
+  itemHistory: TtrpgRuntimeItemReceiptV2[];
   /** Per actor/action remaining uses and cooldown clocks. */
-  abilityStates?: Record<string, TtrpgAbilityRuntimeStateV2> | null;
+  abilityStates: Record<string, TtrpgAbilityRuntimeStateV2>;
   /** Shared ability pools, keyed by the frozen RulePack pool key. */
-  usagePools?: Record<string, TtrpgUsagePoolStateV2> | null;
+  usagePools: Record<string, TtrpgUsagePoolStateV2>;
   /** Atomic reward/penalty, advancement, social and story-clock receipts. */
-  effectLedger?: TtrpgEffectLedgerStateV2 | null;
+  effectLedger: TtrpgEffectLedgerStateV2;
   /** Per-character spendable growth state; awards remain in the campaign ledger. */
-  characterProgression?: Record<
+  characterProgression: Record<
     string,
     {
       model: "numeric-level" | "rank" | "point-buy" | "classless";
@@ -307,23 +304,23 @@ export interface TtrpgRuntimeProductStateV1 {
         cost: number;
       }>;
     }
-  > | null;
+  >;
   characterCustomizations: Array<{
     characterKey: string;
     name: string;
     description: string;
     attributes: Record<string, number>;
     /** Complete replacement card validated against the frozen template/RulePack. */
-    characterSheet?: TtrpgCharacterSheetV2;
+    characterSheet: TtrpgCharacterSheetV2;
     customizedAtSequence: number;
   }>;
   actionHistory: TtrpgRuntimeRuleActionResultV1[];
   /** Terminal feedback for submitted intents that did not become a rule action. */
-  intentReceipts?: TtrpgRuntimeIntentReceiptV2[];
+  intentReceipts: TtrpgRuntimeIntentReceiptV2[];
   /** Human-owned responses to prompt-human windows; never authored by GM or AI. */
-  humanResponses?: TtrpgRuntimeHumanResponseV2[];
-  /** Formal rest/reset receipts. Legacy states default to an empty ledger. */
-  restHistory?: TtrpgRuntimeRestReceiptV2[];
+  humanResponses: TtrpgRuntimeHumanResponseV2[];
+  /** Formal rest/reset receipts. */
+  restHistory: TtrpgRuntimeRestReceiptV2[];
   /** Author-confirmed AI/human GM prose bound to one already-resolved rule action. */
   gmNarrations: TtrpgRuntimeGmNarrationV1[];
   questProgress: Array<{
@@ -336,11 +333,11 @@ export interface TtrpgRuntimeProductStateV1 {
     endingKey: string;
     title: string;
     epilogue: string;
-    trigger?: {
+    trigger: {
       sceneKey: string;
       requiredConclusionKeys: string[];
       forbiddenConclusionKeys: string[];
-    } | null;
+    };
   }>;
   ending: null | {
     endingKey: string;
@@ -358,9 +355,9 @@ export interface TtrpgRuntimeProductStateV1 {
     awardedMilestoneKeys: string[];
   };
   /** Durable tabletop authority projected from the frozen CampaignPack. */
-  tabletop?: TtrpgRuntimeTabletopStateV1 | null;
+  tabletop: TtrpgRuntimeTabletopStateV1 | null;
   /** Playable placeholders and event-bound runtime media; bytes never enter replay state. */
-  media?: {
+  media: {
     visualBibleHash: string | null;
     generatedCount: number;
     runtimePolicy: import("./ttrpg-product").TtrpgMediaManifestV1["runtimePolicy"];
@@ -380,7 +377,7 @@ export interface TtrpgRuntimeProductStateV1 {
       lastErrorCode: string | null;
       updatedAtSequence: number | null;
     }>;
-  } | null;
+  };
 }
 
 export interface TtrpgRuntimeTabletopStateV1 {
@@ -424,8 +421,8 @@ export interface TtrpgRuntimeGmNarrationV1 {
   modelEvidence: TtrpgRuntimeModelEvidenceV1 | null;
   modelCalls: TtrpgRuntimeModelEvidenceV1[];
   repairApplied: boolean;
-  /** Structured, receipt-bound feedback. Legacy narration events omit it. */
-  synthesisFrame?: TtrpgRuntimeGmSynthesisFrameV2 | null;
+  /** Structured, receipt-bound feedback. */
+  synthesisFrame: TtrpgRuntimeGmSynthesisFrameV2;
 }
 
 export interface TtrpgRuntimeModelEvidenceV1 {
@@ -493,7 +490,7 @@ export interface TtrpgRuntimeActionContextV2 {
   version: 2;
   sceneKey: string;
   /** Frozen environment and GM truth at declaration time; viewer projections never expose it wholesale. */
-  sceneSnapshot?: {
+  sceneSnapshot: {
     title: string;
     description: string;
     locationKey: string | null;
@@ -507,20 +504,20 @@ export interface TtrpgRuntimeActionContextV2 {
   targetKey: string | null;
   actionKey: string;
   actionPhase: "free" | "action" | "reaction" | "downtime";
-  /** Original player declaration bound to this resolved action. Legacy/direct rule actions omit it. */
-  declaredIntent?: {
+  /** Original player declaration, or null for an explicit rule-button action. */
+  declaredIntent: {
     intentKey: string;
     rawInput: string;
     goal: string | null;
     method: string | null;
-  };
-  /** Exact rule input used for this action, absent only on automatic/legacy actions. */
-  checkSnapshot?: null | {
+  } | null;
+  /** Exact rule input used for this action, null for automatic actions. */
+  checkSnapshot: null | {
     checkKey: string;
     attributeKey: string;
     attributeValue: number;
-    skillKey?: string;
-    skillValue?: number;
+    skillKey: string | null;
+    skillValue: number | null;
     diceModelKey: string;
     difficulty: number;
   };
@@ -536,8 +533,7 @@ export interface TtrpgRuntimeActionContextV2 {
   discoveredConclusionKeys: string[];
   observers: TtrpgRuntimeActionObserverV2[];
   reactionWindows: TtrpgRuntimeReactionWindowV2[];
-  /** Absent only on legacy receipts. Full candidates remain inside GM/event boundaries. */
-  reactionCandidates?: TtrpgRuntimeReactionCandidateV2[];
+  reactionCandidates: TtrpgRuntimeReactionCandidateV2[];
 }
 
 /**
@@ -550,8 +546,7 @@ export interface TtrpgRuntimeActionReceiptV2 {
   version: 2;
   receiptKey: string;
   actionSequence: number;
-  /** `resolved` is retained only for replaying pre-intent-pipeline events. */
-  terminalStatus: "resolved" | "resolved-no-roll" | "resolved-check";
+  terminalStatus: "resolved-no-roll" | "resolved-check";
   context: TtrpgRuntimeActionContextV2;
   mechanicalSummary: string;
   actorConsequence: string;
@@ -626,8 +621,7 @@ export interface TtrpgRuntimeRuleActionResultV1 {
   actionName: string;
   actorKey: string;
   targetKey: string | null;
-  /** Null only for legacy events written before the action-economy ledger. */
-  actionPhase: "free" | "action" | "reaction" | "downtime" | null;
+  actionPhase: "free" | "action" | "reaction" | "downtime";
   outcome: "automatic" | TtrpgDegreeV2;
   check: TtrpgRuntimeCheck | null;
   resourceChanges: Array<{
@@ -645,7 +639,6 @@ export interface TtrpgRuntimeRuleActionResultV1 {
     stacks: number;
     duration: number | null;
   }>;
-  /** Null only for legacy events written before usage/cooldown enforcement. */
   abilityChange: null | {
     stateKey: string;
     before: TtrpgAbilityRuntimeStateV2;
@@ -655,7 +648,7 @@ export interface TtrpgRuntimeRuleActionResultV1 {
     sharedPoolAfter: TtrpgUsagePoolStateV2 | null;
   };
   /** Present only when a durable AI-player or AI-GM actor Run authorized the exact intent. */
-  actorAuthority?: null | {
+  actorAuthority: null | {
     source:
       "ai-player" | "hybrid-confirmed" | "ai-gm-npc" | "hybrid-gm-confirmed";
     viewerKey: string;
@@ -665,8 +658,8 @@ export interface TtrpgRuntimeRuleActionResultV1 {
     approach: string;
     spokenIntent: string | null;
   };
-  /** Present on every newly committed formal action; absent only on legacy replay events. */
-  receipt?: TtrpgRuntimeActionReceiptV2 | null;
+  /** Present on every committed formal action. */
+  receipt: TtrpgRuntimeActionReceiptV2;
   nextActorKey: string | null;
   nextRound: number;
 }
@@ -1097,7 +1090,7 @@ export interface ProductRuntimeState {
     eventSequence: number;
     text: string;
   }>;
-  /** 旧存档缺少该字段时按 null 处理。 */
+  /** Present only for TTRPG instances; other upper products keep it absent. */
   ttrpg?: TtrpgRuntimeState | null;
   /** Governed character-interaction state. */
   interaction?: CharacterInteractionRuntimeState | null;
@@ -1114,17 +1107,14 @@ export interface ProductRuntimeState {
   lastSequence: number;
 }
 
-export interface ProductRuntimeSession {
+interface ProductRuntimeSessionBase {
   id?: number;
   projectId: number;
-  worldGroupId?: number | null;
-  worldId?: number | null;
-  workId?: number | null;
-  productReleaseId?: number | null;
-  /** PRODUCTPROD-1 preview source; mutually exclusive with a formal productReleaseId. */
-  productBuildId?: number | null;
+  worldGroupId: number | null;
+  worldId: number;
+  workId: number;
   /** Hash of the exact preview or release runtime source used to create this session. */
-  runtimeSourceHash?: string | null;
+  runtimeSourceHash: string;
   kind: ProductRuntimeKind;
   title: string;
   status: ProductRuntimeStatus;
@@ -1137,14 +1127,20 @@ export interface ProductRuntimeSession {
    * use this cache when its sequence matches the latest persisted event and
    * its content hash verifies. Imported current sessions must pass the v10 runtime-source contract.
    */
-  runtimeHeadSequence?: number | null;
-  runtimeHeadStateJson?: string | null;
-  runtimeHeadStateHash?: string | null;
-  parentSessionId?: number | null;
-  parentThroughSequence?: number | null;
+  runtimeHeadSequence: number;
+  runtimeHeadStateJson: string;
+  runtimeHeadStateHash: string;
+  parentSessionId: number | null;
+  parentThroughSequence: number | null;
   createdAt: number;
   updatedAt: number;
 }
+
+/** Every current runtime instance has exactly one immutable production source. */
+export type ProductRuntimeSession = ProductRuntimeSessionBase & (
+  | { productReleaseId: number; productBuildId: null }
+  | { productReleaseId: null; productBuildId: number }
+);
 
 export const PRODUCT_RUNTIME_EVENT_TYPES = [
   "time.advanced",
@@ -1158,20 +1154,8 @@ export const PRODUCT_RUNTIME_EVENT_TYPES = [
   "narrative.choice.committed",
   "narrative.ending.reached",
   "ttrpg.scene.opened",
-  "ttrpg.action.recorded",
   "ttrpg.check.resolved",
   "ttrpg.gm.response.recorded",
-  "ttrpg.turn.advanced",
-  "ttrpg.encounter.started",
-  "ttrpg.encounter.resolved",
-  "ttrpg.combat.attack.resolved",
-  "ttrpg.combat.resource.changed",
-  "ttrpg.combat.condition.applied",
-  "ttrpg.combat.condition.removed",
-  "ttrpg.combat.turn.advanced",
-  "ttrpg.campaign.summary.updated",
-  "ttrpg.campaign.quest.upserted",
-  "ttrpg.campaign.schedule.upserted",
   "ttrpg.campaign.session.started",
   "ttrpg.campaign.session.completed",
   "ttrpg.campaign.roster.changed",

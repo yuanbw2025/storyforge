@@ -16,11 +16,11 @@ export interface AIUsageEntry {
   timestamp: number
   /** 消耗类型标识（moduleKey 或显式 category，如 'chapter.content'） */
   category: string
-  /** 实际发出请求的 provider；旧记录可能没有。 */
-  provider?: AIProvider
+  /** 实际发出请求的 provider。 */
+  provider: AIProvider
   model: string
-  /** 统一任务路由分类；旧记录和未知 category 可能没有。 */
-  taskKind?: AITaskKind
+  /** 统一任务路由分类；显式请求未进入任务路由时为 null。 */
+  taskKind: AITaskKind | null
   inputTokens: number
   outputTokens: number
   /** 计算所得费用（美元） */
@@ -99,7 +99,7 @@ export function modelPrice(model: string): ModelPrice {
 
 /**
  * Returns null when StoryForge has no explicit price entry. Creative evidence
- * must not present the legacy fallback price as if it were the provider's bill.
+ * must not present the generic estimate as if it were the provider's bill.
  */
 export function knownModelPrice(model: string): ModelPrice | null {
   return MODEL_PRICING.find(p => p.match(model || ''))?.price ?? null

@@ -11,7 +11,7 @@ import type {
   WorkspaceImpactPlanV1,
 } from '../types'
 import type { Chapter } from '../types'
-import { ensureWorkspaceOwnership } from '../workspace/ownership'
+import { resolveWorkspaceOwnership } from '../workspace/ownership'
 
 function executionForImpact(action: string, mode: string): WorkspaceImpactExecutionV1 {
   if (mode === 'deterministic') return 'deterministic-rebuild'
@@ -121,7 +121,7 @@ export async function buildWorkspaceImpactPlanV1(input: {
   candidateSet: WorkspaceFileCandidateSetV1
 }): Promise<WorkspaceImpactPlanV1> {
   if (input.candidateSet.projectId !== input.projectId) throw new Error('[memory-impact] candidate set 项目不匹配')
-  await ensureWorkspaceOwnership(input.projectId)
+  await resolveWorkspaceOwnership(input.projectId)
   const items: WorkspaceImpactItemV1[] = []
   const graphHashes: string[] = []
   for (const candidate of input.candidateSet.candidates) {

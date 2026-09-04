@@ -57,13 +57,6 @@ import { outlineGatewayExecutionFromAssemblyV1 } from './gateway-context'
 
 export * from './candidate-lifecycle'
 
-/** Historical read-only alias. Formal V2 runs resolve the exact runtime set. */
-export const OUTLINE_GENERATION_SOURCE_KEYS: readonly string[] = Object.freeze(
-  resolveAgentSkillContextSourceKeysV1(
-    getAgentSkillV1('outline.compose', 'outline'),
-  ),
-)
-
 function targetOutlineNodeId(request: OutlineGenerationRequest): number | undefined {
   if (request.kind === 'single-chapter') return request.chapterId
   if (request.kind === 'single-volume' || request.kind === 'chapters') return request.volumeId

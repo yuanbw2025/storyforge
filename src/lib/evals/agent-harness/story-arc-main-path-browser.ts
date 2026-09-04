@@ -37,8 +37,7 @@ import {
   type H86VerificationCallInputV1,
 } from './story-arc-main-path'
 import type { H86StoryArcFixtureV1 } from './story-arc-main-path-fixtures'
-import { generateWorkCode, generateWorkspaceUid } from '../../memory/identity'
-import { backfillResourceUidsV1 } from '../../context-gateway/resource-identity'
+import { createWorkspace } from '../../workspace/create-workspace'
 
 const H86_PROJECT_PREFIX = '[H86-EVAL] '
 const CALL_TIMEOUT_MS = 180_000
@@ -174,47 +173,19 @@ class H86CallFailure extends Error {
 }
 
 async function seedWorkspace(fixture: H86StoryArcFixtureV1): Promise<H86WorkspaceV1> {
-  const now = Date.now()
-  const projectId = await db.projects.add({
-    workspaceUid: generateWorkspaceUid(),
+  const created = await createWorkspace({
     name: `${H86_PROJECT_PREFIX}${fixture.id} ${fixture.projectName}`,
-    genre: fixture.genre,
     genres: [fixture.genre],
     description: 'HARNESS-86 隔离评测项目；运行后由 PROJECT_TABLES 生命周期清理。',
     status: 'drafting',
     targetWordCount: 100_000,
-
-
-    createdAt: now,
-    updatedAt: now,
-  } as Project) as number
-  const worldId = await db.worlds.add({
-    projectId,
-    code: `h86-${fixture.id}`,
-    name: fixture.worldName,
-    description: fixture.worldOrigin,
-    currentVersion: 1,
-    createdAt: now,
-    updatedAt: now,
-  }) as number
-  const workId = await db.works.add({
-    projectId,
-    worldId,
-    title: fixture.projectName,
-    code: generateWorkCode(),
-    description: fixture.logline,
-    genres: [fixture.genre],
-    status: 'drafting',
-    targetWordCount: 100_000,
-    createdAt: now,
-    updatedAt: now,
-  }) as number
-  await db.projects.update(projectId, {
-    activeWorldId: worldId,
-    activeWorkId: workId,
-    ownershipSchemaVersion: 1,
+  }, {
+    purpose: 'independent-work',
+    kind: 'novel',
+    novelProfile: 'long',
   })
-  const scope = { projectId, worldId, workId }
+  const { scope } = created
+  const projectId = scope.projectId
   assertSeedAdoption('worldviews', await adopt({
     projectId,
     scope,
@@ -254,7 +225,6 @@ async function seedWorkspace(fixture: H86StoryArcFixtureV1): Promise<H86Workspac
     mode: 'add-many',
     data: fixture.characters.map(item => ({
       name: item.name,
-      role: item.role,
       roleWeight: item.role === 'protagonist' || item.role === 'antagonist' ? 'main' : 'secondary',
       moralAxis: 'neutral',
       orderAxis: 'neutral',
@@ -282,7 +252,6 @@ async function seedWorkspace(fixture: H86StoryArcFixtureV1): Promise<H86Workspac
       },
     }), 1)
   }
-  await backfillResourceUidsV1(projectId)
   const project = await db.projects.get(projectId)
   if (!project) throw new Error('H86 评测项目创建失败')
   return { project, scope }
@@ -408,6 +377,7 @@ async function agentHarnessGeneration(
       projectId: workspace.scope.projectId,
       scope: workspace.scope,
       worldGroupId: null,
+      purpose: 'evaluation.story-arc-main-path',
     })
     const plan = directPlan(input.fixture)
     const execute: NonNullable<MasterAgentDurableDependenciesV1['execute']> = async options => {

@@ -64,7 +64,11 @@ import {
 } from '../agent/chapter-organization'
 import { AgentTeamBudgetTracker, type AgentTeamBudgetProfile } from '../agent/team-budget'
 import { hashChapterText, normalizeChapterText } from '../ai/chapter-memory/text-normalization'
-import { buildFactExtractPrompt, parseFactExtractResult } from '../ai/adapters/fact-extract-adapter'
+import {
+  buildFactExtractPrompt,
+  parseCanonicalFactCandidateDraftV1,
+  parseFactExtractResult,
+} from '../ai/adapters/fact-extract-adapter'
 import { adoptFactCandidates } from '../fact-ledger/fact-ledger'
 import { adoptChapterOutlineWorkshopResult } from '../outline/adopt-workshop'
 import { assembleContext } from '../registry/assemble-context'
@@ -874,7 +878,7 @@ export async function executeDomainNode(input: DomainExecutionInput): Promise<Do
 }
 
 function emptyAdoptResult(): AdoptResult {
-  return { written: [], aliasMapped: [], unknown: [], typeErrors: [], fkErrors: [], skipped: [] }
+  return { written: [], unknown: [], typeErrors: [], fkErrors: [], skipped: [] }
 }
 
 /** 领域节点专用采纳器；未命中领域候选时返回 null。 */
@@ -1056,9 +1060,11 @@ export async function adoptDomainCandidate(input: {
   if (input.domain.kind === 'facts') {
     let candidates: Parameters<typeof adoptFactCandidates>[0]['candidates']
     try {
-      const parsed = JSON.parse(input.output) as { facts?: unknown }
       const sourceChapter = await db.chapters.get(input.domain.chapterId)
-      candidates = parseFactExtractResult({ raw: JSON.stringify(parsed), chapterContent: normalizeChapterText(sourceChapter?.content ?? '') })
+      candidates = parseCanonicalFactCandidateDraftV1({
+        raw: input.output,
+        chapterContent: normalizeChapterText(sourceChapter?.content ?? ''),
+      })
     } catch {
       throw new Error('事实候选必须是合法 JSON；请先修正候选后再采纳。')
     }

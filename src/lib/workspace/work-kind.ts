@@ -5,13 +5,13 @@ export const SHORT_NOVEL_MAX_WORDS = 25_000
 export const SHORT_NOVEL_DEFAULT_WORDS = 10_000
 
 export function effectiveWorkKind(work: Pick<Work, 'kind'>): WorkKind {
-  return work.kind ?? 'novel'
+  return work.kind
 }
 
 export function effectiveNovelProfile(
   work: Pick<Work, 'kind' | 'novelProfile'>,
 ): NovelWorkflowProfile | null {
-  return effectiveWorkKind(work) === 'novel' ? (work.novelProfile ?? 'long') : null
+  return work.kind === 'novel' ? work.novelProfile : null
 }
 
 export function assertShortNovelTargetWords(targetWordCount: number): void {
@@ -42,14 +42,14 @@ export function normalizeNewWorkClassification(input: {
 export function assertStoredWorkClassification(
   work: Pick<Work, 'kind' | 'novelProfile'> & Partial<Pick<Work, 'targetWordCount'>>,
 ): void {
-  if (work.kind != null && !(['novel', 'screenplay', 'comic'] as const).includes(work.kind)) {
+  if (!(['novel', 'screenplay', 'comic'] as const).includes(work.kind)) {
     throw new Error(`未知 Work kind：${String(work.kind)}`)
   }
   if (work.novelProfile != null && !(['short', 'long'] as const).includes(work.novelProfile)) {
     throw new Error(`未知小说 Profile：${String(work.novelProfile)}`)
   }
-  const kind = effectiveWorkKind(work)
-  const profile = effectiveNovelProfile(work)
+  const kind = work.kind
+  const profile = kind === 'novel' ? work.novelProfile : null
   if (kind === 'novel' && profile == null) throw new Error('小说 Work 必须解析出 short 或 long Profile')
   if (kind !== 'novel' && work.novelProfile != null) throw new Error('剧本或漫画 Work 不能携带小说 Profile')
   if (kind === 'novel' && profile === 'short') assertShortNovelTargetWords(work.targetWordCount ?? Number.NaN)

@@ -8,14 +8,15 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { applyProjectFromSession } from '../../src/lib/import/pipeline'
+import { seedCurrentProject } from '../helpers/current-workspace'
 
 describe('R-reuse-to-project · 复用已解析灌进设定库', () => {
   beforeEach(async () => { await db.delete(); await db.open() })
   afterEach(async () => { db.close() })
 
   it('用 session.merged 把世界观/角色写进设定库(零重复解析)', async () => {
-    const projectId = await db.projects.add({
-      name: '测试项目', genre: 'fantasy', createdAt: 1, updatedAt: 1,
+    const projectId = await seedCurrentProject({
+      name: '测试项目', genres: ['fantasy'], createdAt: 1, updatedAt: 1,
     } as any) as number
 
     const session = {
@@ -24,8 +25,14 @@ describe('R-reuse-to-project · 复用已解析灌进设定库', () => {
       merged: {
         worldview: { worldOrigin: '混沌初开，造物主立世创世' },
         characters: [
-          { name: '林惊羽', role: 'protagonist', personality: '坚毅', shortDescription: '天才剑修' },
-          { name: '苏长歌', role: 'supporting', personality: '温婉' },
+          {
+            name: '林惊羽', roleWeight: 'main', moralAxis: 'good', orderAxis: 'neutral',
+            personality: '坚毅', shortDescription: '天才剑修',
+          },
+          {
+            name: '苏长歌', roleWeight: 'secondary', moralAxis: 'good', orderAxis: 'neutral',
+            personality: '温婉',
+          },
         ],
       },
     } as any
@@ -45,8 +52,8 @@ describe('R-reuse-to-project · 复用已解析灌进设定库', () => {
   })
 
   it('merged 为空时不报错，返回零计数', async () => {
-    const projectId = await db.projects.add({
-      name: '空项目', genre: 'other', createdAt: 1, updatedAt: 1,
+    const projectId = await seedCurrentProject({
+      name: '空项目', genres: ['other'], createdAt: 1, updatedAt: 1,
     } as any) as number
     const session = { id: 2, projectId, filename: 'x.txt', totalChars: 0, totalChunks: 0, chunks: [], status: 'done', merged: undefined } as any
     const counts = await applyProjectFromSession(projectId, session, null)

@@ -26,7 +26,6 @@ import {
 async function fixture() {
   const created = await createWorkspace({
     name: 'ARCH-05 中立世界协议',
-    genre: 'fantasy',
     genres: ['fantasy'],
     status: 'drafting',
     description: '',
@@ -54,12 +53,12 @@ async function fixture() {
   const characters = await db.characters.bulkAdd([
     stampNewRecord(created.scope, 'characters', {
       projectId: created.scope.projectId,
-      name: '守潮人', role: 'protagonist', roleWeight: 'main', shortDescription: '守卫潮门',
+      name: '守潮人', roleWeight: 'main', moralAxis: 'good', orderAxis: 'lawful', shortDescription: '守卫潮门',
       background: '熟悉月相法则', personality: '谨慎', createdAt: now, updatedAt: now,
     } as any, { owner: 'world' }),
     stampNewRecord(created.scope, 'characters', {
       projectId: created.scope.projectId,
-      name: '渡海者', role: 'supporting', roleWeight: 'secondary', shortDescription: '寻找失落群岛',
+      name: '渡海者', roleWeight: 'secondary', moralAxis: 'neutral', orderAxis: 'neutral', shortDescription: '寻找失落群岛',
       background: '来自外海', personality: '果决', createdAt: now + 1, updatedAt: now + 1,
     } as any, { owner: 'world' }),
   ], { allKeys: true }) as number[]
@@ -248,7 +247,7 @@ describe('ARCH-05 · 中立 WorldRelease Gateway 与产品需求适配器', () =
       ...owned.reference,
       releaseHash: 'f'.repeat(64),
     })).rejects.toThrow(/releaseUid|不再同时匹配/)
-    await db.worldviews.toCollection().modify({ summary: '草稿已变化但 release 不变' })
+    await db.worldviews.toCollection().modify({ races: '草稿已变化但 release 不变' })
     await expect(validateWorldReferenceV1(owned.reference)).resolves.toEqual(owned.reference)
     const frozen = await describeWorldReleaseV1(owned.resourceScope)
     expect(JSON.stringify(frozen)).not.toContain('草稿已变化')

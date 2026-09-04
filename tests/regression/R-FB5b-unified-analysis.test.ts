@@ -18,17 +18,21 @@ import {
 import type { WritingTechniques } from '../../src/lib/types/import-session-data'
 import { writeShallowAnalysisFromTechniques } from '../../src/lib/reference-analysis/pipeline'
 import { buildRefAnalysisContext } from '../../src/lib/ai/context-builder'
+import { seedCurrentProject } from '../helpers/current-workspace'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
 
 async function createProjectAndRef(): Promise<number> {
   const now = Date.now()
-  const pid = await db.projects.add({
-    name: 'FB5b', genre: '', description: '', targetWordCount: 0,
+  const pid = await seedCurrentProject({
+    name: 'FB5b', genres: [], description: '', targetWordCount: 0,
     enableMultiWorld: false, createdAt: now, updatedAt: now,
   } as any) as number
-  return await db.references.add({
+  const referenceId = await db.references.add({
     projectId: pid, title: '某范本', author: '', type: 'story', note: '', url: '',
     createdAt: now, updatedAt: now,
   } as any) as number
+  await finalizeCurrentFixtureV1(pid)
+  return referenceId
 }
 
 const WT: WritingTechniques = {

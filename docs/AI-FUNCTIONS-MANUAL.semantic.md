@@ -24,28 +24,28 @@
 
 ### 灵感反推 — `moduleKey: inspiration.reverse`
 - **业务意图**:用户写碎片想法,AI 反向生成世界观/故事核心/角色草稿。是"下游→上游"的反推流。
-- **角色模型**:角色草稿必须同时产出戏份权重与九宫格阵营两轴；旧 `role` 只作为派生兼容字段。
-- **坑**:写回经 `adopt()`,AI 输出的别名字段(如 `summary`→`worldOrigin`)自动归一,不再静默丢字段(Phase 1.2b 修复)。
+- **角色模型**:角色草稿必须同时产出戏份权重与九宫格阵营两轴；当前协议不接受其它角色分类字段或字段别名。
+- **写回边界**:结构化输出必须使用当前字段闭集；未知字段、别名字段或缺失必填字段均在候选进入写回前被拒绝。
 - **上下文边界**:HARNESS-34 后生成只进入 Inspiration Agent 的 `inspiration.reverse` Skill；作者勾选的碎片 ID 冻结到 durable plan，未勾选内容不会发给模型，读取只经 `read_inspiration_workspace → assembleContext()`。
 - **候选与写回**:结构化候选可刷新恢复、编辑、拒绝或确认；确认只经 `adopt(inspirationWorkspaces)` 新增一个版本，不自动写世界观、故事核心、角色或世界组。版本确认后，面板里的分区/多世界采纳仍是另一项显式作者动作。
-- **兼容边界**:碎片来源、增量版本、差异审阅、多世界预览和导出保留；旧面板级 `useAIStream`、直接模型调用和组件级上下文装配已删除。
+- **当前边界**:碎片来源、增量版本、差异审阅、多世界预览和导出均属于当前能力；面板只能发起已登记的 durable 入口，不能直接调用模型或自行装配上下文。
 - **证据边界**:现有回归证明任务契约、碎片隔离、候选 gate/CAS 和版本采纳，不证明真实模型文学质量、成本或延迟收益。
 
 ### 角色生成 — `moduleKey: character.generate`
 - **业务意图**:根据现有阵容与世界上下文设计角色；戏份(main/secondary/NPC/路人)与阵营(道德轴×秩序轴)彼此独立。
-- **写回约束**:`roleWeight`、`moralAxis`、`orderAxis` 三项必填；`role` 由注册表写回层统一派生，调用方不得手写兼容映射。
+- **写回约束**:`roleWeight`、`moralAxis`、`orderAxis` 三项必填；当前 Character schema 不存在通用 `role` 字段，调用方不得自行发明映射。
 
 ### 故事核心单字段生成 — `moduleKey: story.generate`
 - **业务意图**:七个故事核心字段保留独立生成和人工编辑，但 AI 生成统一进入世界基座 Agent 的 `world-origin.story-core` Skill；每次只产生一个可审查字段候选。
 - **上下文**:Skill 声明世界、故事核心、力量、词条、角色、故事线和卷纲来源，统一经 `assembleContext()` 执行预算、压缩和全文救援；空、部分填写和完整填写分别使用明确策略。
 - **写回约束**:模型只能返回 `{field,value}`；候选可跨刷新编辑/拒绝/确认，确认前正式数据零写入，确认后只经 `adopt(storyCores)`。任一故事核心字段变化都会使旧候选过期。
-- **兼容边界**:`story.generate` Prompt 面板继续承载作者参数和自定义要求，但旧 `story-adapter` 已删除；Prompt 设置不会绕过 Skill 合同或直接成为写入入口。
+- **当前边界**:`story.generate` Prompt 面板承载作者参数和自定义要求，但 Prompt 设置不会绕过 Skill 合同或直接成为写入入口。
 
 ### 世界基座单字段生成 — `moduleKey: worldview.dimension`
 - **业务意图**:世界起源、自然环境和人文环境的 17 个 AI 字段按钮共用 `world-foundation-agent` 的 `world-origin.worldview-field` Skill；不是为每个字段新增 Agent。
 - **上下文**:只经 `CONTEXT_SOURCES + assembleContext()` 读取世界观、规则/事实、故事核心、力量、词条、角色、故事线、卷纲和参考资料；空、部分填写和完整填写分别执行创建、下游反推补全和受约束变更。世界观字段的原始长文本是否压缩、全文救援或确定性回退均记录上下文证据。
 - **写回约束**:文本字段只能返回 `{field,value}`；`divineDesign` 的 `value` 必须是严格四字段对象。候选进入 durable 主 Agent，确认前 `worldviews` 零写入，确认后只经 `adopt(worldviews)`；完整世界观 snapshot/CAS、字段错投 gate 和终态回读阻止过期候选覆盖作者修改。
-- **兼容边界**:人工编辑、力量/神明/自然物产/人文词条和 `worldview.dimension` Prompt 配置继续保留；面板不再调用 `useAIStream`、组件级拼接、`slice()` 或神明二次拆分模型。旧 `world-origin.complete` 只用于历史候选恢复，新请求由 `world-origin.worldview-field` 收口。
+- **当前边界**:人工编辑、力量/神明/自然物产/人文词条和 `worldview.dimension` Prompt 配置均属于当前能力；17 个字段的新请求、恢复和采纳统一由 `world-origin.worldview-field` 处理。面板不能直接调用模型、组件级拼接上下文、固定 `slice()` 或启动神明二次拆分模型。
 - **证据边界**:HARNESS-32 已有 7 项领域合同测试、3 项面板 UI 测试、主 Agent durable 回归和 Chromium 神明刷新闭环；模型仍为模拟响应，不能据此宣称文学质量或真实 provider 成本收益已经提升。
 
 ### 状态提取 — `moduleKey:`(无独立模板,走 state-extract-adapter)
@@ -84,11 +84,11 @@
 
 ### 分步骤主 Agent 的执行版本
 - **业务意图**:每次新主 Agent 运行按计划步骤冻结 Skill、提示词和只读工具 schema 版本；候选与运行合同使用同一绑定，刷新恢复时可判断结果究竟由哪套执行协议产生。
-- **作者可见证据**:新候选共用 `HarnessEvidencePanel`，逐来源显示全文/语义压缩/确定性截断/未输入、字符与 token 前后数量、原始来源哈希，并显示内容修订、Context Manifest、候选、采纳和 terminal receipt 身份。五段状态只从真实持久化证据派生；多任务尚未全部确认时终态保持等待，旧候选缺证据时显示不可用，不补造成功。
+- **作者可见证据**:候选共用 `HarnessEvidencePanel`，逐来源显示全文/语义压缩/确定性截断/未输入、字符与 token 前后数量、原始来源哈希，并显示内容修订、Context Manifest、候选、采纳和 terminal receipt 身份。五段状态只从真实持久化证据派生；多任务尚未全部确认时终态保持等待，缺少当前必需证据的持久化数据会被拒绝，不补造成功。
 - **错误分类**:正式入口统一归入 save、scope、context、budget、provider、parse、schema、gate、candidate、stale、adoption、terminal 十二类，并记录确定性 fingerprint；类别用于定位责任层，不授权隐藏重试或绕过作者确认。
 - **故障演练边界**:`dev-fault-injection.ts` 只在 DEV/test 中以进程内存启用，覆盖保存、上下文、候选、采纳和终态关键边界；生产 UI 没有开关、存储或导入路径。
-- **兼容边界**:HARNESS-18 前的运行没有 execution binding，继续按旧 hash 恢复；新运行不得省略绑定。修改 Skill、提示词协议或工具声明后必须升级相应版本并重跑登记回归。
-- **fan-out 回执**:新 fan-out 运行要求每个上游候选先取得绑定 candidate/output、Context Manifest、attempt 和 verifier 版本的确定性步骤回执，汇合模型调用前再次检查 freshness，下游候选冻结实际消费的 receipt hash。作者编辑或重规划会使旧回执失效；历史无回执运行只按旧协议读取，不补造证据。
+- **执行绑定**:所有当前运行都必须冻结 execution binding；缺失或 hash/version 不匹配时直接拒绝恢复。修改 Skill、提示词协议或工具声明后必须升级相应版本并重跑登记回归。
+- **fan-out 回执**:fan-out 运行要求每个上游候选先取得绑定 candidate/output、Context Manifest、attempt 和 verifier 版本的确定性步骤回执，汇合模型调用前再次检查 freshness，下游候选冻结实际消费的 receipt hash。作者编辑或重规划会使此前回执失效；缺少当前回执的运行不能继续。
 - **维护闸门**:`check:agent-freshness` 检查 owner、提示词版本、复核日期和回归证据；工具 schema 的实际快照另由 SHA-256 回归校验。版本绑定用于可归因和防漂移，不代表模型输出已经通过质量评测。
 
 ---

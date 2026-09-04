@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { buildProseGenerationRunContractV1 } from '../../src/lib/agent/run/prose-generation-durable'
 
 describe('CREL-12 · 章节正文默认不追加隐藏语义调用', () => {
-  it('默认 durable 合同只允许一次生成；显式旧评审能力仍可独立调用', () => {
+  it('默认 durable 合同只允许一次生成；显式语义评审能力可独立调用', () => {
     const base = {
       projectId: 1,
       worldGroupId: null,
@@ -14,7 +14,8 @@ describe('CREL-12 · 章节正文默认不追加隐藏语义调用', () => {
     const defaultContract = buildProseGenerationRunContractV1(base)
     expect(defaultContract.budget.maxModelCalls).toBe(1)
     expect(defaultContract.acceptance.some(item => item.id === 'prose-generation.semantic-review')).toBe(false)
-    expect(defaultContract.executionBindings).toBeUndefined()
+    expect(defaultContract.executionBindings).toHaveLength(1)
+    expect(defaultContract.executionBindings?.[0]?.stepId).toBe('prose-generation')
 
     const explicitReviewContract = buildProseGenerationRunContractV1({ ...base, semanticReview: true })
     expect(explicitReviewContract.budget.maxModelCalls).toBe(4)

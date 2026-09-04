@@ -77,7 +77,7 @@ function surface(input: Omit<ProductSurfaceEntryV1, 'version'>): ProductSurfaceE
 
 export const PRODUCT_CATALOG_V1: readonly ProductCatalogEntryV1[] = Object.freeze([
   entry({ id: 'world-engine', label: '世界引擎', family: 'world-engine', status: 'released', charterPhase: 'D', requiresWorldReference: false, ownsRuntime: false, ownsMedia: false, maturityNote: '语义编辑、显式派生、冻结版本与中立读取出口。' }),
-  entry({ id: 'independent.longform', label: '分步骤长篇', family: 'independent-creation', status: 'released', charterPhase: 'B', requiresWorldReference: false, ownsRuntime: false, ownsMedia: false, maturityNote: 'Phase 5 工程主链已验收；文学质量继续增量研究。' }),
+  entry({ id: 'independent.longform', label: '分步骤长篇', family: 'independent-creation', status: 'released', charterPhase: 'B', requiresWorldReference: false, ownsRuntime: false, ownsMedia: false, maturityNote: '工程主链已验收；文学质量继续增量研究。' }),
   entry({ id: 'independent.shortform', label: '短篇小说', family: 'independent-creation', status: 'preview', charterPhase: 'C', requiresWorldReference: false, ownsRuntime: false, ownsMedia: false, maturityNote: '复用长篇底座，但独立产品体验尚未专项封板。' }),
   entry({ id: 'independent.screenplay', label: '小说转剧本', family: 'independent-creation', status: 'preview', charterPhase: 'C', requiresWorldReference: false, ownsRuntime: false, ownsMedia: false, maturityNote: '已有生产基础，完整改编与导出纵切面待专项验收。' }),
   entry({ id: 'independent.comic', label: '小说转漫画', family: 'independent-creation', status: 'preview', charterPhase: 'C', requiresWorldReference: false, ownsRuntime: false, ownsMedia: true, maturityNote: '已有数据与工作台基础，生图、一致性、排版和交付待专项验收。' }),

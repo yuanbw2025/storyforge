@@ -21,7 +21,6 @@ import ContentTypeBadge from '../components/layout/ContentTypeBadge'
 import { getModuleContentType, MODULE_CONTENT_TYPES } from '../components/layout/sidebar-tree'
 import PropertiesPanel from '../components/layout/PropertiesPanel'
 import ProjectInfoPanel from '../components/project/ProjectInfoPanel'
-// 旧「作品学习」面板已整合进 ReferencePanel（Phase 20，子系统于 v32 下线）
 const ReferencePanel = lazy(() => import('../components/project/ReferencePanel'))
 const SettingsPage = lazy(() => import('../components/settings/SettingsPage'))
 const UsageStatsPage = lazy(() => import('../components/settings/UsageStatsPage'))
@@ -547,10 +546,6 @@ export default function WorkspacePage() {
       case 'global-replace':
         return <GlobalReplacePanel project={project} />
 
-      // 作品学习已整合进项目参考 → 深度分析 tab（Phase 20）
-      case 'master-studies':
-        return <ReferencePanel project={project} />
-
       // ── 提示词库（一级） ───────────────────────────────────────────
       case 'prompts':
         return <PromptManagerPanel project={project} />
@@ -586,7 +581,7 @@ export default function WorkspacePage() {
         active={activeModule}
         onSelect={selectModule}
         onBack={() => afterPendingEdits(() => navigate(backPath), '当前编辑未能保存，已阻止离开工作区')}
-        projectName={project.name}
+        projectName={activeWork?.title ?? project.name}
         collapsed={sidebarCollapsed}
         onToggleCollapse={() => setSidebarCollapsed(v => !v)}
         hiddenModules={hiddenModules}

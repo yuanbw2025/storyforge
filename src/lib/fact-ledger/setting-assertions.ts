@@ -395,7 +395,6 @@ export function readSettingAssertionExtractPromptTemplateSnapshotV1(): ChatMessa
 function sourcePatch(source: SettingAssertionSource): Partial<TemporalFact> {
   const patch: Partial<TemporalFact> = {
     sourceRecordTable: source.table,
-    sourceRecordId: source.recordId,
     sourceField: source.field,
     sourceFingerprint: source.fingerprint,
   }

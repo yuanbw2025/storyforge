@@ -1,24 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../../src/lib/db/schema'
-import { ensureWorkspaceOwnership } from '../../src/lib/workspace/ownership'
 import { stampNewRecord } from '../../src/lib/workspace/scope'
-import { generateWorkspaceUid } from '../../src/lib/memory/identity'
 import type { ContextAccessPolicyV1, ContextResourceKind, WorkspaceScope } from '../../src/lib/types'
 import { createContextGatewayToolSessionV1 } from '../../src/lib/context-gateway/tool-session'
 import { CANON_RESOURCE_PROVIDER_V1, contextResourceSpecsV1 } from '../../src/lib/context-gateway/canon-provider'
 import { AGENT_READ_TOOLS, executeAgentTool } from '../../src/lib/agent/tool-registry'
+import { currentWorkFixtureRecordV1, seedCurrentWorkspace } from '../helpers/current-workspace'
 
 const now = 1_787_600_000_000
 
 async function seedWorkspace() {
-  const projectId = await db.projects.add({
-    workspaceUid: generateWorkspaceUid(),
-    name: 'CTXG-4 工具项目',
-    genre: 'fantasy', genres: ['fantasy'], status: 'drafting', description: '',
-    targetWordCount: 1_000_000, enableMultiWorld: true, createdAt: now, updatedAt: now,
-  } as any) as number
-  const ownership = await ensureWorkspaceOwnership(projectId)
-  return { projectId, scope: ownership.scope }
+  const created = await seedCurrentWorkspace('CTXG-4 工具项目', { enableMultiWorld: true })
+  return { projectId: created.scope.projectId, scope: created.scope }
 }
 
 async function addScoped(
@@ -77,8 +70,9 @@ async function seedResources() {
     races: '不应泄漏的雾族。',
   }, 'world')
   const characterId = await addScoped(scope, 'characters', {
-    homeWorldGroupId: primaryGroupId, isCrossWorld: false, name: '航海者', role: 'protagonist',
-    roleWeight: 'main', shortDescription: '追逐潮门', identity: '潮民', goals: '开启潮门',
+    homeWorldGroupId: primaryGroupId, isCrossWorld: false, name: '航海者',
+    roleWeight: 'main', moralAxis: 'neutral', orderAxis: 'neutral',
+    shortDescription: '追逐潮门', identity: '潮民', goals: '开启潮门',
   }, 'world')
   const arcId = await addScoped(scope, 'storyArcs', {
     name: '潮门主线', type: 'main', description: '寻找潮门', stages: '[]',
@@ -104,10 +98,10 @@ async function seedResources() {
   const candidatePlanId = await addScoped(scope, 'characterDrivenPlans', {
     name: '未采纳潮门计划', premise: '候选方案', generatedArcs: '[]', generatedVolumes: '[]', status: 'generated',
   }, 'work')
-  const otherWorkId = await db.works.add({
+  const otherWorkId = await db.works.add(currentWorkFixtureRecordV1({
     projectId: scope.projectId, worldId: scope.worldId, code: 'ctxg4-other-work', title: '隔离作品',
     description: '', genres: [], status: 'drafting', targetWordCount: 1000, createdAt: now, updatedAt: now,
-  } as any) as number
+  })) as number
   await addScoped({ ...scope, workId: otherWorkId }, 'storyCores', {
     logline: '不应泄漏的另一作品故事', concept: '', theme: '', centralConflict: '',
     plotPattern: '', mainPlot: '', subPlots: '',

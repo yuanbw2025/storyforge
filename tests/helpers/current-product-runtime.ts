@@ -10,6 +10,7 @@ import {
   loadCurrentProductWorldSourceCatalogV1,
   seedCurrentProductWorld,
 } from './current-product-world'
+import { stampNewRecord } from '../../src/lib/workspace/scope'
 
 export interface CurrentProductRuntimeTestBedV1 {
   project: Awaited<ReturnType<typeof seedCurrentProductWorld>>['project']
@@ -92,15 +93,15 @@ export async function createCurrentTtrpgRuntimeTestBedV1(input: {
 }> {
   const owned = await seedCurrentProductWorld(input.title)
   const worldGroupId = input.withWorldGroup
-    ? await db.worldGroups.add({
+    ? await db.worldGroups.add(stampNewRecord(owned.scope, 'worldGroups', {
         projectId: owned.scope.projectId,
-        worldId: owned.scope.worldId,
         name: '潮汐界',
+        description: '',
         type: 'primary',
         order: 0,
         createdAt: Date.now(),
         updatedAt: Date.now(),
-      }) as number
+      }, { owner: 'world' })) as number
     : null
   const catalog = await loadCurrentProductWorldSourceCatalogV1({
     scope: owned.scope,

@@ -5,10 +5,12 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { propagateChapterEditStale, analyzeEditImpact, buildEditImpactGraphV1 } from '../../src/lib/consistency/impact-analysis'
+import { seedCurrentProject } from '../helpers/current-workspace'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
 
 const now = Date.now()
 async function seed() {
-  const pid = await db.projects.add({ name: 'P', genre: 'x', description: '', targetWordCount: 0, enableMultiWorld: false, createdAt: now, updatedAt: now } as any) as number
+  const pid = await seedCurrentProject({ name: 'P', genres: ['x'], description: '', targetWordCount: 0, enableMultiWorld: false, createdAt: now, updatedAt: now } as any) as number
   const vol = await db.outlineNodes.add({ projectId: pid, parentId: null, type: 'volume', title: '卷', summary: '', order: 0, createdAt: now, updatedAt: now } as any) as number
   const chaps: number[] = []
   for (let i = 0; i < 3; i++) {
@@ -16,9 +18,14 @@ async function seed() {
     const c = await db.chapters.add({ projectId: pid, outlineNodeId: n, title: `第${i + 1}章`, content: `第${i + 1}章正文`, wordCount: 0, status: 'draft', order: i, notes: '', createdAt: now, updatedAt: now } as any) as number
     chaps.push(c)
   }
+  await finalizeCurrentFixtureV1(pid)
   return { pid, chaps }
 }
-const addFact = (pid: number, chapterId: number, over: any) => db.temporalFacts.add({ projectId: pid, subjectName: '林飞', predicate: 'location', factKind: 'state', value: '洛阳', sourceType: 'chapter', sourceChapterId: chapterId, sourceQuote: '林飞在洛阳', validFromChapterId: chapterId, status: 'confirmed', locked: false, createdAt: now, updatedAt: now, ...over } as any)
+const addFact = async (pid: number, chapterId: number, over: any) => {
+  const id = await db.temporalFacts.add({ projectId: pid, subjectName: '林飞', predicate: 'location', factKind: 'state', value: '洛阳', sourceType: 'chapter', sourceChapterId: chapterId, sourceQuote: '林飞在洛阳', validFromChapterId: chapterId, status: 'confirmed', locked: false, createdAt: now, updatedAt: now, ...over } as any)
+  await finalizeCurrentFixtureV1(pid)
+  return id
+}
 
 describe('NS-6 · 影响分析与 stale 传播', () => {
   beforeEach(async () => { await db.delete(); await db.open() })

@@ -53,8 +53,8 @@ function htmlToMarkdown(html: string): string {
 export async function exportProjectMarkdown(scopeInput: WorkspaceScopeLike): Promise<string> {
   const scope = await resolveReadScopeLike(scopeInput)
   const projectId = scope.projectId
-  const project = await db.projects.get(projectId)
-  if (!project) throw new Error('项目不存在')
+  const work = await db.works.get(scope.workId)
+  if (!work || work.projectId !== projectId || work.worldId !== scope.worldId) throw new Error('作品不存在')
 
   const [outlineNodes, chapters] = await Promise.all([
     readOwnedRows<OutlineNode>(scope, 'outlineNodes', { owner: 'work' }),
@@ -66,7 +66,7 @@ export async function exportProjectMarkdown(scopeInput: WorkspaceScopeLike): Pro
 
   // 构建树
   const tree = buildTree(outlineNodes)
-  let md = `# ${project.name}\n\n`
+  let md = `# ${work.title}\n\n`
 
   for (const volume of tree) {
     md += `## ${volume.node.title}\n\n`
@@ -94,8 +94,8 @@ export async function exportProjectMarkdown(scopeInput: WorkspaceScopeLike): Pro
 export async function exportProjectTXT(scopeInput: WorkspaceScopeLike): Promise<string> {
   const scope = await resolveReadScopeLike(scopeInput)
   const projectId = scope.projectId
-  const project = await db.projects.get(projectId)
-  if (!project) throw new Error('项目不存在')
+  const work = await db.works.get(scope.workId)
+  if (!work || work.projectId !== projectId || work.worldId !== scope.worldId) throw new Error('作品不存在')
 
   const [outlineNodes, chapters] = await Promise.all([
     readOwnedRows<OutlineNode>(scope, 'outlineNodes', { owner: 'work' }),
@@ -105,7 +105,7 @@ export async function exportProjectTXT(scopeInput: WorkspaceScopeLike): Promise<
   const chapterMap = buildBestChapterByOutlineMap(chapters)
 
   const tree = buildTree(outlineNodes)
-  let txt = `${project.name}\n${'='.repeat(project.name.length * 2)}\n\n`
+  let txt = `${work.title}\n${'='.repeat(work.title.length * 2)}\n\n`
 
   for (const volume of tree) {
     txt += `【${volume.node.title}】\n\n`

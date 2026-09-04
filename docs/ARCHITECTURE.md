@@ -1,6 +1,6 @@
 # StoryForge 当前架构总览
 
-> 版本：2.6.0 · 更新：2026-09-03 · 权威层级：L1
+> 版本：2.7.0 · 更新：2026-09-04 · 权威层级：L1
 > 本文描述当前主干代码事实与目标架构接缝。产品边界以项目总纲为准；代码偏差见对齐审计。
 
 ## 1. 运行形态
@@ -82,12 +82,12 @@ flowchart TB
 | 当前事实 | 数值 | 单一事实源 |
 |---|---:|---|
 | 应用语义版本 | `3.9.1` | `package.json` |
-| TypeScript 生产源码 | 984 个文件 / 330805 行 | `tsconfig.json` |
-| IndexedDB schema | v94 / 94 张 required tables | `schema.ts` / `REQUIRED_TABLES` |
+| TypeScript 生产源码 | 971 个文件 / 326453 行 | `tsconfig.json` |
+| IndexedDB schema | v1 / 94 张 required tables | `schema.ts` / `REQUIRED_TABLES` |
 | PROJECT_TABLES | 94 张表 | `project-tables.ts` |
 | Prompt 主线 | 65 个 moduleKey / 210 条内置模板 | `PromptModuleKey` / `prompt-seeds*.ts` |
 | CONTEXT_SOURCES | 81 个上下文源 | `context-sources.ts` |
-| 写回治理 | 38 个通用 adopt target / 35 个领域扩展 | `adoption-schema.ts` |
+| 写回治理 | 38 个通用 adopt target / 34 个领域扩展 | `adoption-schema.ts` |
 <!-- project-metrics:end -->
 
 ## 4. 分层架构
@@ -102,7 +102,7 @@ flowchart TB
 | Context Gateway / 记忆 | 目录、预选、按需读取、原文与长期记忆 | `src/lib/context-gateway`、`src/lib/memory`、`src/lib/retrieval` |
 | 三注册表 | AI 读取、候选采纳、表生命周期 | `src/lib/registry` |
 | 领域一致性 | Canon、事实、关系、时间、主支线、状态和冲突 | `src/lib/consistency`、`fact-ledger`、`storyline`、`knowledge-ledger` |
-| 数据与文件 | Dexie schema、迁移、备份、导入导出、OPFS | `src/lib/db`、`migrations`、`export`、`storage`、`media` |
+| 数据与文件 | 唯一当前 Dexie schema、严格备份/导入导出、OPFS | `src/lib/db`、`export`、`storage`、`media` |
 
 ## 5. 正式 AI 主路径
 
@@ -140,7 +140,9 @@ Field Registry 决定 AI 可写字段；Adoption Schema/Extension 决定集合�
 
 ### 7.1 `Project` / `World` / `Work`
 
-`Project` 只是本地工作空间壳和当前编辑指针，不镜像世界编号、版本或社区来源。`World` 是世界身份、公共 code、当前世界版本和导入来源的唯一权威；`Work` 是独立作品 owner，`Work.worldId` 只绑定内部语义 scope。`workspacePurpose` 与 `World.identityKind` 将独立作品的内部 scope 和可分享 `world-draft` 分开；只有后者拥有公共 world code、进入世界目录并可封存。长篇/短篇通过显式派生动作形成独立世界草稿/release，保存 source work/revision/range/hash，源作品 owner 与后续版本保持独立；剧本/漫画被确定性拒绝。
+`Project` 只是 LocalWorkspace 壳：只保存稳定工作区身份、用途、活动 `World`/`Work` 指针和工作区级开关。它不保存或镜像作品标题、简介、流派、状态、目标/当前字数、封面、文风、方法论或活动叙事计划；这些语义只属于 `Work`。创建边界可以一次接收工作区和初始作品输入，但在同一事务中分别构造 Project/World/Work；切换或编辑 Work 只改变活动指针或 Work 本身，绝不回写 Project 镜像。
+
+`World` 是世界身份、公共 code、当前世界版本和导入来源的唯一权威；`Work` 是独立作品 owner，`Work.worldId` 只绑定内部语义 scope。`workspacePurpose` 与 `World.identityKind` 将独立作品的内部 scope 和可分享 `world-draft` 分开；只有后者拥有公共 world code、进入世界目录并可封存。长篇/短篇通过显式派生动作形成独立世界草稿/release，保存 source work/revision/range/hash，源作品 owner 与后续版本保持独立；剧本/漫画被确定性拒绝。备份导入只接受这一当前字段闭集；WorldRelease 的中立快照也只携带 Project 壳和独立 Work 语义，不恢复旧镜像。
 
 ### 7.2 长篇与节点
 
@@ -197,7 +199,7 @@ src/
     ├── context-gateway/    渐进式上下文目录和读取
     ├── registry/           三注册表
     ├── workspace/          中立 Project/World-scope/Work 根、作用域与生命周期
-    ├── db|migrations|export|storage/
+    ├── db|export|storage/
     ├── novel|outline|prose|storyline/
     ├── adaptation|screenplay|comic/
     ├── world-engine/          只负责可分享世界语义、派生、冻结与引用
@@ -214,7 +216,7 @@ src/
 - Project/World/Work 可以位于同一本地物理工作区，但身份权威已经拆分：Project 只管理工作区，World 管理世界身份，Work 管理独立作品；存在内部 World 语义 scope 不等于建立了可分享世界。
 - 分步骤长篇 Phase 5 工程主链和 10万/30万/100万字符规模门已经完成；真实作者长期文学一致性仍需持续研究，但不是尚未完成的功能施工项。
 - 世界 Release、中立资源协议、五种已接入产品的需求适配器、五项逻辑契约校验、三阶段 runtime 闸门和产品成熟度门已经形成共享架构基线；它们规定接入方式，不替代各上层产品的 Brief/production/media/runtime 专项实现。
-- schema v94 已将现行产品数据收口到索引化 Product Production/Build/Release 与 Product Runtime 根，把世界公共身份唯一收口到 World，并将存量混合内容投影到当前正式语义表。现行业务代码不包含退役产品身份、双读或运行入口；Dexie 历史 schema 和隔离迁移夹具只用于单向打开存量数据。
+- 唯一 schema v1 直接表达当前 Product Production/Build/Release、Product Runtime、World 与 Work 模型。现行业务代码不包含退役产品身份、历史 schema、旧字段投影、双读或旧运行入口；非当前数据库和备份明确拒绝。
 - ProductRelease 谱系已经有跨产品逻辑 validator，并在角色互动参考纵切面落地；其它上层产品在转为 released 前仍需按自己的物理 schema 接入同一逻辑闸门。
 - 节点官方模板已绑定正式长篇领域 action，通用生成仅限显式 experimental draft 且不能采纳 Canon；完整跨模式真实 UI 体验仍是节点产品维护事项。
 - 账户、云端社区、支付和商业平台不是当前核心运行前提；相关代码必须 capability gate / experimental，不能掩盖主产品未完成。

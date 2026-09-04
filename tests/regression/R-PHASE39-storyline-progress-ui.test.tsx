@@ -5,7 +5,12 @@ import StorylineProgressPanel from '../../src/components/outline/StorylineProgre
 import { db } from '../../src/lib/db/schema'
 import { stringifyStages } from '../../src/lib/types'
 import { useStorylineProgressStore } from '../../src/stores/storyline-progress'
-import { acceptStorylineProgressCandidate, parseStorylineProgressResult } from '../../src/lib/storyline/storyline-progress'
+import {
+  acceptStorylineProgressCandidate,
+  validateCanonicalStorylineCandidateV1,
+} from '../../src/lib/storyline/storyline-progress'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
+import { seedCurrentProject } from '../helpers/current-workspace'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
@@ -30,15 +35,7 @@ describe('Phase 39 · 动态故事线作者确认 UI', () => {
 
   it('映射已写章节后只显示候选，作者点击采纳才落库', async () => {
     const now = Date.now()
-    const projectId = await db.projects.add({
-      name: '故事线 UI',
-      genre: '',
-      description: '',
-      targetWordCount: 0,
-      enableMultiWorld: false,
-      createdAt: now,
-      updatedAt: now,
-    } as any) as number
+    const projectId = await seedCurrentProject({ name: '故事线 UI', createdAt: now, updatedAt: now })
     const volumeId = await db.outlineNodes.add({
       projectId,
       parentId: null,
@@ -85,15 +82,17 @@ describe('Phase 39 · 动态故事线作者确认 UI', () => {
       createdAt: now,
       updatedAt: now,
     }) as number
+    await finalizeCurrentFixtureV1(projectId)
     const arcs = await db.storyArcs.where('projectId').equals(projectId).toArray()
     const candidateDraft = JSON.stringify({
       progress: [{
+        kind: 'progress',
         arcId,
         currentStageId: 'hand-over',
         status: 'active',
         progressNote: '钥匙已交付',
         involvedEntities: ['林飞', '青铜钥匙'],
-        quote: '交出了青铜钥匙',
+        evidenceQuote: '交出了青铜钥匙',
       }],
       crossings: [],
       newArcs: [],
@@ -116,8 +115,8 @@ describe('Phase 39 · 动态故事线作者确认 UI', () => {
           }])
         },
         adoptCandidate: async (candidate: any) => {
-          const parsed = parseStorylineProgressResult({
-            raw: candidate.event.content,
+          const parsed = validateCanonicalStorylineCandidateV1({
+            candidate: JSON.parse(candidate.event.content),
             chapterContent: '林飞交出了青铜钥匙。',
             arcs,
           })

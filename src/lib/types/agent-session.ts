@@ -14,8 +14,8 @@ export interface AgentConversation {
   projectId: number
   workId?: number | null
   worldGroupId?: number | null
-  /** Stable product-owned channel. Missing means the legacy general copilot. */
-  purpose?: string
+  /** Stable product/workflow-owned channel. */
+  purpose: string
   title: string
   status: 'active' | 'archived'
   createdAt: number
@@ -33,8 +33,8 @@ export interface AgentEvent {
   projectId: number
   workId?: number | null
   conversationId: number
-  /** Durable run ownership outside the hash-bound candidate payload; absent on legacy events. */
-  durableRunId?: number | null
+  /** Durable run ownership outside the hash-bound candidate payload; null for author-only messages. */
+  durableRunId: number | null
   sequence: number
   kind: AgentEventKind
   role?: 'user' | 'assistant' | 'system'

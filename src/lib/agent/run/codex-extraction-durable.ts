@@ -279,7 +279,7 @@ async function prepareSources(scope: WorkspaceScope, rawRequest: CodexExtraction
   })
   if (!isPortableResourceUidV1(baseline.category.ragDocumentId, 'codex-category')
     || baseline.entries.some(entry => !isPortableResourceUidV1(entry.ragDocumentId, 'codex-entry'))) {
-    throw new Error('Codex 资源身份尚未迁移，请刷新工作区后重试。')
+    throw new Error('Codex 资源缺少有效的 portable resource UID，拒绝继续执行。')
   }
   const mandatoryResourceKeys = [
     `codex-entry:${baseline.category.ragDocumentId}`,

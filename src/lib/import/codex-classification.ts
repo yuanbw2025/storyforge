@@ -350,6 +350,11 @@ export async function applyCodexImportCandidates(args: {
           refs: '{}',
           tags: JSON.stringify(candidate.tags),
           order,
+          origin: 'import',
+          sourceEvidenceQuotes: '[]',
+          sourceContentHash: '',
+          producerRunId: null,
+          producerCandidateHash: null,
           createdAt: Date.now(),
           updatedAt: Date.now(),
         } satisfies CodexEntry)

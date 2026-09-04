@@ -112,9 +112,9 @@ export const useEmotionBeatStore = create<EmotionBeatStore>((set, get) => ({
 
   updateCard: async (id, data) => {
     try {
-      const beforeMigration = await db.emotionBeatCards.get(id)
-      if (!beforeMigration) return
-      const scope = await resolveScopeLike(beforeMigration.projectId)
+      const existingRecord = await db.emotionBeatCards.get(id)
+      if (!existingRecord) return
+      const scope = await resolveScopeLike(existingRecord.projectId)
       const current = await db.emotionBeatCards.get(id)
       if (!current || !await assertRecordInScope(scope, 'emotionBeatCards', current, { owner: 'work' })) return
       const patch: Record<string, unknown> = { ...data, updatedAt: now() }
@@ -135,9 +135,9 @@ export const useEmotionBeatStore = create<EmotionBeatStore>((set, get) => ({
 
   deleteCard: async (id) => {
     try {
-      const beforeMigration = await db.emotionBeatCards.get(id)
-      if (!beforeMigration) return
-      const scope = await resolveScopeLike(beforeMigration.projectId)
+      const existingRecord = await db.emotionBeatCards.get(id)
+      if (!existingRecord) return
+      const scope = await resolveScopeLike(existingRecord.projectId)
       const current = await db.emotionBeatCards.get(id)
       if (!current || !await assertRecordInScope(scope, 'emotionBeatCards', current, { owner: 'work' })) return
       await db.emotionBeatCards.delete(id)

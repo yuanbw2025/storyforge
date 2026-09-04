@@ -75,10 +75,10 @@ export const useHistoricalStore = create<HistoricalStore>((set, get) => ({
   },
 
   updateEvent: async (id, patch) => {
-    const beforeMigration = get().events.find(event => event.id === id)
+    const existingRecord = get().events.find(event => event.id === id)
       ?? await db.historicalTimelineEvents.get(id)
-    if (!beforeMigration) return
-    const scope = await resolveScopeLike(beforeMigration.projectId)
+    if (!existingRecord) return
+    const scope = await resolveScopeLike(existingRecord.projectId)
     const current = await db.historicalTimelineEvents.get(id)
     if (!current || !await assertRecordInScope(scope, 'historicalTimelineEvents', current, { owner: 'world' })) return
     const now = Date.now()
@@ -95,9 +95,9 @@ export const useHistoricalStore = create<HistoricalStore>((set, get) => ({
   },
 
   deleteEvent: async (id) => {
-    const beforeMigration = await db.historicalTimelineEvents.get(id)
-    if (!beforeMigration) return
-    const scope = await resolveScopeLike(beforeMigration.projectId)
+    const existingRecord = await db.historicalTimelineEvents.get(id)
+    if (!existingRecord) return
+    const scope = await resolveScopeLike(existingRecord.projectId)
     const event = await db.historicalTimelineEvents.get(id)
     if (!event || !await assertRecordInScope(scope, 'historicalTimelineEvents', event, { owner: 'world' })) return
     await db.historicalTimelineEvents.delete(id)
@@ -135,10 +135,10 @@ export const useHistoricalStore = create<HistoricalStore>((set, get) => ({
   },
 
   updateKeyword: async (id, patch) => {
-    const beforeMigration = get().keywords.find(keyword => keyword.id === id)
+    const existingRecord = get().keywords.find(keyword => keyword.id === id)
       ?? await db.historicalKeywords.get(id)
-    if (!beforeMigration) return
-    const scope = await resolveScopeLike(beforeMigration.projectId)
+    if (!existingRecord) return
+    const scope = await resolveScopeLike(existingRecord.projectId)
     const current = await db.historicalKeywords.get(id)
     if (!current || !await assertRecordInScope(scope, 'historicalKeywords', current, { owner: 'world' })) return
     const now = Date.now()
@@ -154,9 +154,9 @@ export const useHistoricalStore = create<HistoricalStore>((set, get) => ({
   },
 
   deleteKeyword: async (id) => {
-    const beforeMigration = await db.historicalKeywords.get(id)
-    if (!beforeMigration) return
-    const scope = await resolveScopeLike(beforeMigration.projectId)
+    const existingRecord = await db.historicalKeywords.get(id)
+    if (!existingRecord) return
+    const scope = await resolveScopeLike(existingRecord.projectId)
     const keyword = await db.historicalKeywords.get(id)
     if (!keyword || !await assertRecordInScope(scope, 'historicalKeywords', keyword, { owner: 'world' })) return
     await db.historicalKeywords.delete(id)

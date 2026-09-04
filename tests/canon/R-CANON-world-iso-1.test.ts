@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { rebuildChapterChunks, retrieveChunks } from '../../src/lib/retrieval/retrieval'
+import { seedCurrentProject } from '../helpers/current-workspace'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
 
 const now = Date.now()
 
@@ -15,9 +17,9 @@ describe('CANON 覆盖基线 · 世界隔离', () => {
   })
 
   it('R-CANON-world-iso-1 · 检索输入不会召回其它世界的角色片段', async () => {
-    const projectId = await db.projects.add({
+    const projectId = await seedCurrentProject({
       name: 'CANON 世界隔离',
-      genre: '',
+      genres: [],
       description: '',
       targetWordCount: 0,
       enableMultiWorld: true,
@@ -59,6 +61,7 @@ describe('CANON 覆盖基线 · 世界隔离', () => {
         updatedAt: now,
       } as any) as number)
     }
+    await finalizeCurrentFixtureV1(projectId)
 
     const sourceChapter = await db.chapters.get(chapterIds[0])
     await rebuildChapterChunks({

@@ -1,7 +1,7 @@
 import { chat } from '../../ai/client'
 import {
   buildVoronoiMapPromptFromRegisteredContextV1,
-  parseVoronoiMapConfigStrictV1,
+  parseVoronoiMapConfig,
   readVoronoiMapPromptTemplateSnapshotV1,
 } from '../../ai/adapters/voronoi-map-adapter'
 import type { AIConfig, ChatMessage, WorkspaceScope, WorldNode } from '../../types'
@@ -382,7 +382,7 @@ export async function generateWorldMapConfigCandidateV1(input: {
 
   let mapConfig: MapGenConfig
   try {
-    mapConfig = parseVoronoiMapConfigStrictV1(raw, assembled.text)
+    mapConfig = parseVoronoiMapConfig(raw, assembled.text)
     if (mapConfig.mapName !== node.name) throw new Error('模型返回的 mapName 与冻结目标世界节点名称不一致。')
   } catch (error) {
     snapshot = await append(input.scope, snapshot, 'step.failed', {

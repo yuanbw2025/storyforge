@@ -20,7 +20,7 @@ import { createWorkspace as createWorkspaceRoot } from '../../src/lib/workspace/
 import { createProductRuntimeInstance, readBoundInstances } from '../../src/lib/product/runtime-instances'
 import { createCurrentTtrpgRuntimeTestBedV1 } from '../helpers/current-product-runtime'
 import { deleteWork, deleteWorld } from '../../src/lib/workspace/lifecycle'
-import { ensureWorkspaceOwnership } from '../../src/lib/workspace/ownership'
+import { resolveWorkspaceOwnership } from '../../src/lib/workspace/ownership'
 import { changeRecordScope } from '../../src/lib/registry/ownership-scope-conversion'
 import {
   assertReleaseUnchanged,
@@ -34,8 +34,9 @@ import {
   createWorldWork,
   selectWorkNarrativeModule,
   switchActiveWork,
-  updateProjectAndActiveWork,
+  updateActiveWork,
 } from '../../src/lib/workspace/works'
+import { stampCurrentFixtureResourceUidsV1 } from '../helpers/current-resource-identity'
 
 const PACKAGE_OPTIONS = {
   authorName: '世界作者',
@@ -49,7 +50,6 @@ const PACKAGE_OPTIONS = {
 async function createWorkspace(name = 'WORLD-2 完成项目') {
   return createWorkspaceRoot({
     name,
-    genre: 'fantasy',
     genres: ['fantasy'],
     status: 'drafting',
     description: '世界引擎完成判据',
@@ -97,6 +97,7 @@ describe('WORLD-2C C4/C5 · strict ownership and lifecycle completion', () => {
       createdAt: Date.now(),
       updatedAt: Date.now(),
     } as any)
+    await stampCurrentFixtureResourceUidsV1(ownership.scope.projectId)
     const backup = await exportProjectJSON(ownership.scope.projectId)
     expect(backup.version).toBe(10)
     const beforeProjects = await db.projects.count()
@@ -151,7 +152,7 @@ describe('WORLD-2C C4/C5 · strict ownership and lifecycle completion', () => {
     expect(await db.works.where('worldId').equals(ownership.scope.worldId).count()).toBe(0)
   })
 
-  it('切换和删除活动 Work 时完整刷新 Project 兼容镜像，项目编辑反写当前 Work', async () => {
+  it('切换和删除活动 Work 只刷新 Project 指针，作品资料始终只写 Work', async () => {
     const ownership = await createWorkspace('镜像作品 A')
     await db.works.update(ownership.scope.workId, {
       title: '作品 A',
@@ -182,23 +183,15 @@ describe('WORLD-2C C4/C5 · strict ownership and lifecycle completion', () => {
     expect(await db.projects.get(ownership.scope.projectId)).toMatchObject({
       activeWorldId: ownership.scope.worldId,
       activeWorkId: workB.id,
-      name: '作品 B',
-      description: 'B 简介',
-      genre: 'mystery',
-      genres: ['mystery'],
-      status: 'ongoing',
-      targetWordCount: 222000,
-      currentWordCount: 2200,
-      coverImage: 'cover-b',
-      writingStyleId: 'style-b',
-      methodologyId: 'method-b',
+      name: '镜像作品 A',
     })
+    expect(await db.projects.get(ownership.scope.projectId)).not.toHaveProperty('genres')
+    expect(await db.projects.get(ownership.scope.projectId)).not.toHaveProperty('description')
 
-    await updateProjectAndActiveWork(ownership.scope.projectId, {
-      name: '作品 B 改名',
+    await updateActiveWork(ownership.scope.projectId, {
+      title: '作品 B 改名',
       description: 'B 新简介',
       genres: ['sci-fi'],
-      genre: 'sci-fi',
       targetWordCount: 333000,
       writingStyleId: 'style-b2',
     })
@@ -213,15 +206,14 @@ describe('WORLD-2C C4/C5 · strict ownership and lifecycle completion', () => {
     await deleteWork(workB.id!)
     expect(await db.projects.get(ownership.scope.projectId)).toMatchObject({
       activeWorkId: ownership.scope.workId,
-      name: '作品 A',
+      name: '镜像作品 A',
+    })
+    expect(await db.works.get(ownership.scope.workId)).toMatchObject({
+      title: '作品 A',
       description: 'A 简介',
-      genre: 'fantasy',
       genres: ['fantasy'],
       targetWordCount: 111000,
       currentWordCount: 1100,
-      coverImage: 'cover-a',
-      writingStyleId: 'style-a',
-      methodologyId: 'method-a',
     })
   })
 
@@ -349,8 +341,8 @@ describe('WORLD-2D · executable narrative blueprint completion', () => {
       targetOwner: 'work',
     })).rejects.toThrow('其它作用域引用')
 
-    const receipt = await db.ownershipMigrations.where('projectId').equals(ownership.scope.projectId).first()
-    expect(receipt?.scopeChanges?.at(-1)).toMatchObject({
+    const audit = await db.ownershipScopeChanges.where('projectId').equals(ownership.scope.projectId).last()
+    expect(audit).toMatchObject({
       tableName: 'narrativeModules',
       recordId: module.id,
       previousOwner: 'work',
@@ -374,7 +366,7 @@ describe('WORLD-2D · executable narrative blueprint completion', () => {
     expect(await db.worldRevisions.count()).toBe(0)
   })
 
-  it('非当前 Work B 的修订冻结 B 的根、兼容镜像和内容，不混入活动 Work A', async () => {
+  it('非当前 Work B 的修订冻结 B 的语义根和内容，不混入活动 Work A', async () => {
     const ownership = await createWorkspace('活动作品 A')
     const workB = await createWorldWork(ownership.scope.projectId, { title: '非活动作品 B' })
     const scopeB = { ...ownership.scope, workId: workB.id! }
@@ -401,16 +393,16 @@ describe('WORLD-2D · executable narrative blueprint completion', () => {
       label: 'B 的修订',
     })
     const manifest = JSON.parse(revision.manifestJson) as WorldReleaseManifestV3
-    const portableProject = manifest.portableProject as any
+    const semanticSnapshot = manifest.semanticSnapshot
 
     expect((await db.projects.get(scopeB.projectId))?.activeWorkId).toBe(ownership.scope.workId)
     expect(manifest.workTitle).toBe('非活动作品 B')
-    expect(portableProject.project).toMatchObject({
+    expect(semanticSnapshot.project).toMatchObject({
       name: '活动作品 A',
-      _activeWorkExportId: portableProject.ownership.workExportId,
+      _activeWorkExportId: semanticSnapshot.ownership.workExportId,
     })
-    expect(portableProject.works).toHaveLength(1)
-    expect(portableProject.works[0].title).toBe('非活动作品 B')
+    expect(semanticSnapshot.works).toHaveLength(1)
+    expect(semanticSnapshot.works[0].title).toBe('非活动作品 B')
     expect((manifest.records.storyCores as any[]).map(row => row.theme)).toEqual(['B 的故事'])
     expect(manifest.records.narrativeModules).toBeUndefined()
     expect(manifest).not.toHaveProperty('selectedNarrativeModules')
@@ -431,6 +423,7 @@ describe('WORLD-2E/2F · immutable releases and unified instances', () => {
       createdAt: Date.now(),
       updatedAt: Date.now(),
     } as any) as number
+    await stampCurrentFixtureResourceUidsV1(ownership.scope.projectId)
     await selectWorkNarrativeModule(ownership.scope, modules[0].id!)
     const revision = await createWorldRevision({
       scope: ownership.scope,
@@ -440,7 +433,7 @@ describe('WORLD-2E/2F · immutable releases and unified instances', () => {
     return { ownership, modules, worldviewId, revision, release }
   }
 
-  it('发布后修改草稿不改变旧 Release；新修订显示差异且 v2 可干净导入', async () => {
+  it('发布后修改草稿不改变旧 Release；新修订显示差异且当前协议可干净导入', async () => {
     const seeded = await seedRelease()
     const frozenJson = seeded.release.manifestJson
     await db.worldviews.update(seeded.worldviewId, { worldOrigin: '修改后的草稿世界', updatedAt: Date.now() })
@@ -461,7 +454,7 @@ describe('WORLD-2E/2F · immutable releases and unified instances', () => {
     const report = await inspectWorldPackage(pkg)
     expect(report.valid, report.errors.join('；')).toBe(true)
     const importedProjectId = await importWorldPackage(pkg)
-    const importedScope = await ensureWorkspaceOwnership(importedProjectId)
+    const importedScope = await resolveWorkspaceOwnership(importedProjectId)
     expect(await db.narrativeModules.where('projectId').equals(importedProjectId).count()).toBe(0)
     expect((await db.works.get(importedScope.scope.workId))?.activeNarrativeModuleId ?? null).toBeNull()
     expect(await db.worldReleases.where('projectId').equals(importedProjectId).count()).toBe(1)

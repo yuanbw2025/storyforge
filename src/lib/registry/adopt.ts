@@ -1,8 +1,4 @@
-/**
- * adopt() 统一写回入口(Phase 1.2a)。
- *
- * 本文件是纯新增写回层;现有调用方在 1.2b 再逐步迁移。
- */
+/** 当前架构唯一的结构化采纳入口。只接受 FIELD_REGISTRY 的规范字段与规范类型。 */
 import Dexie from 'dexie'
 import { db } from '../db/schema'
 import {
@@ -181,7 +177,7 @@ export async function replaceAdoptedCollection(input: {
 }
 
 function emptyResult(): AdoptResult {
-  return { written: [], aliasMapped: [], unknown: [], typeErrors: [], fkErrors: [], skipped: [] }
+  return { written: [], unknown: [], typeErrors: [], fkErrors: [], skipped: [] }
 }
 
 async function adoptCollectionRecord(
@@ -610,71 +606,58 @@ function normalizeAndValidate(
 ): Record<string, unknown> | null {
   const out: Record<string, unknown> = {}
   const byName = new Map(fieldSpecs.map(f => [f.field, f] as const))
-  const byAlias = new Map<string, FieldSpec>()
-  for (const f of fieldSpecs) for (const a of f.aliases ?? []) byAlias.set(a, f)
+  const unknownBefore = result.unknown.length
+  const typeErrorsBefore = result.typeErrors.length
 
   for (const [key, val] of Object.entries(raw)) {
     // 空字符串跳过;但 null 必须保留——如 outlineNodes 顶层卷的 parentId:null。
     // 旧实现 `val == null` 一并跳过,导致顶层卷写库时丢了 parentId(存成 undefined),
     // 而大纲面板用 `parentId === null` 严格过滤顶层卷 → 卷被藏起,表现为"采纳没反应"(FB-10b)。
     if (val === '' && !options.preserveEmptyStrings) continue
-    let spec = byName.get(key)
-    let canonical = key
+    const spec = byName.get(key)
     if (!spec) {
-      const aliasHit = byAlias.get(key)
-      if (!aliasHit) {
-        result.unknown.push(key)
-        continue
-      }
-      spec = aliasHit
-      canonical = aliasHit.field
-      result.aliasMapped.push({ from: key, to: canonical })
+      result.unknown.push(key)
+      continue
     }
 
     // null 直接保留(不走类型转换,避免 String(null)→'null');是字段的合法显式值
     if (val == null) {
-      out[canonical] = null
+      out[key] = null
       continue
     }
     const cleaned = validateAndCoerce(spec, val, result)
-    if (cleaned !== undefined) out[canonical] = cleaned
+    if (cleaned !== undefined) out[key] = cleaned
   }
 
+  // 一条候选只要包含未知字段或错误类型，就整条拒绝，禁止把部分字段悄悄写入。
+  if (result.unknown.length > unknownBefore || result.typeErrors.length > typeErrorsBefore) return null
   return out
 }
 
 function validateAndCoerce(spec: FieldSpec, value: unknown, result: AdoptResult): unknown {
   const raw = spec.sanitize ? spec.sanitize(value) : value
-  if (spec.type === 'string' || spec.type === 'longtext') return String(raw)
+  if (spec.type === 'string' || spec.type === 'longtext') {
+    if (typeof raw === 'string') return raw
+    result.typeErrors.push({ field: spec.field, expected: spec.type, got: typeof value })
+    return undefined
+  }
   if (spec.type === 'number') {
-    const n = typeof raw === 'number' ? raw : Number(raw)
-    if (Number.isFinite(n)) return n
+    if (typeof raw === 'number' && Number.isFinite(raw)) return raw
     result.typeErrors.push({ field: spec.field, expected: 'number', got: typeof value })
     return undefined
   }
   if (spec.type === 'boolean') {
     if (typeof raw === 'boolean') return raw
-    if (raw === 'true' || raw === '是' || raw === 'yes' || raw === 1) return true
-    if (raw === 'false' || raw === '否' || raw === 'no' || raw === 0) return false
     result.typeErrors.push({ field: spec.field, expected: 'boolean', got: typeof value })
     return undefined
   }
   if (spec.type === 'enum') {
-    const normalized = spec.enumAliasMap?.[String(raw)] ?? String(raw)
-    if (!spec.enums || spec.enums.includes(normalized)) return normalized
-    result.typeErrors.push({ field: spec.field, expected: `enum:${spec.enums.join('|')}`, got: String(value) })
+    if (typeof raw === 'string' && (!spec.enums || spec.enums.includes(raw))) return raw
+    result.typeErrors.push({ field: spec.field, expected: `enum:${spec.enums?.join('|') ?? ''}`, got: String(value) })
     return undefined
   }
   if (spec.type === 'array') {
     if (Array.isArray(raw)) return raw
-    if (typeof raw === 'string') {
-      try {
-        const parsed = JSON.parse(raw)
-        if (Array.isArray(parsed)) return parsed
-      } catch {
-        // fall through
-      }
-    }
     result.typeErrors.push({ field: spec.field, expected: 'array', got: typeof value })
     return undefined
   }
@@ -691,16 +674,6 @@ function validateAndCoerce(spec: FieldSpec, value: unknown, result: AdoptResult)
     return JSON.stringify(raw)
   }
   if (spec.type === 'object') {
-    if (typeof raw === 'string') {
-      try {
-        const parsed = JSON.parse(raw)
-        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed
-      } catch {
-        // fall through
-      }
-      result.typeErrors.push({ field: spec.field, expected: 'object', got: 'string' })
-      return undefined
-    }
     if (raw && typeof raw === 'object' && !Array.isArray(raw)) return raw
     result.typeErrors.push({ field: spec.field, expected: 'object', got: typeof value })
     return undefined
@@ -720,7 +693,7 @@ async function findSingleton(input: AdoptInput, tableSpec: TableSpec): Promise<a
 
 function defaultSingletonRow(target: string): Record<string, unknown> {
   if (target === 'worldviews') {
-    return { summary: '' }
+    return { worldOrigin: '' }
   }
   if (target === 'storyCores') {
     return { theme: '', centralConflict: '', plotPattern: '', mainPlot: '' }
@@ -729,11 +702,10 @@ function defaultSingletonRow(target: string): Record<string, unknown> {
     return {
       writingStyle: '',
       narrativePOV: 'third-limited',
-      toneAndMood: '',
+      atmosphere: '',
       prohibitions: '[]',
       consistencyRules: '[]',
       specialRequirements: '',
-      referenceWorks: '[]',
     }
   }
   return {}

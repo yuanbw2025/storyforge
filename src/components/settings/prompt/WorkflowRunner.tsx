@@ -16,6 +16,7 @@ import { assembleContext } from '../../../lib/registry/assemble-context'
 import { db } from '../../../lib/db/schema'
 import type { PromptWorkflow, PromptWorkflowStep, SaveTarget } from '../../../lib/types/workflow'
 import type { Project } from '../../../lib/types'
+import { useActiveWork } from '../../../hooks/useActiveWork'
 import { assembleWorkflowStepVars } from './workflow-helpers'
 import {
   prepareGenerationNode,
@@ -61,6 +62,7 @@ async function findExistingOutlineNode(
  * 从 PromptWorkflowsPanel.tsx 抽出。
  */
 export default function WorkflowRunner({ workflow, project, onClose }: RunnerProps) {
+  const activeWork = useActiveWork(project)
   const toast = useToast()
   const ai = useAIStream()
   const { loadAll: loadWorldview } = useWorldviewStore()
@@ -286,8 +288,8 @@ export default function WorkflowRunner({ workflow, project, onClose }: RunnerPro
     // ③ 纯逻辑整形(可单测,见 tests/regression/R-WF-*)
     const ctx = assembleWorkflowStepVars({
       step,
-      projectName: project?.name,
-      genres: project?.genre,
+      projectName: activeWork?.title,
+      genres: activeWork?.genres.join('、'),
       assembledContext: assembledText,
       worldRulesContext: worldRulesText,
       userInput: userInputsRef.current.get(step.stepId),
@@ -319,6 +321,7 @@ export default function WorkflowRunner({ workflow, project, onClose }: RunnerPro
         const bound = await assembleBoundPrompt({
           template: tpl,
           project,
+          work: activeWork,
           worldGroupId: wg,
           previousOutput: workflowContext,
           workflowValues: groupWorkflowInputsByVariable(upstreamInputs),

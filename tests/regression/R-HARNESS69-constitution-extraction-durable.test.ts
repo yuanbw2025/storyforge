@@ -22,23 +22,13 @@ import {
   rejectConstitutionExtractionCandidateV1,
   type ConstitutionExtractionBoundaryV1,
 } from '../../src/lib/agent/run/constitution-extraction-durable'
+import { currentWorkFixtureRecordV1, seedCurrentWorkspace } from '../helpers/current-workspace'
+import { stampCurrentFixtureResourceUidsV1 } from '../helpers/current-resource-identity'
 
 async function seed(suffix = '') {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    name: `宪法扫描${suffix}`, genre: 'fantasy', genres: ['fantasy'], status: 'drafting',
-    description: '', targetWordCount: 100_000,
-enableMultiWorld: true, createdAt: now, updatedAt: now,
-  } as any) as number
-  const worldId = await db.worlds.add({
-    projectId, code: `constitution-${now}-${suffix}`, name: `曜月宇宙${suffix}`, description: '',
-    currentVersion: 1, createdAt: now, updatedAt: now,
-  }) as number
-  const workId = await db.works.add({
-    projectId, worldId, title: `潮汐遗民${suffix}`, description: '', genres: ['fantasy'],
-    status: 'drafting', targetWordCount: 100_000, createdAt: now, updatedAt: now,
-  } as any) as number
-  await db.projects.update(projectId, { activeWorldId: worldId, activeWorkId: workId, ownershipSchemaVersion: 1 })
+  const created = await seedCurrentWorkspace(`宪法扫描${suffix}`, { enableMultiWorld: true })
+  const { projectId, worldId, workId } = created.scope
   const worldGroupId = await db.worldGroups.add({
     projectId, worldId, name: `曜月界${suffix}`, description: '', type: 'primary', icon: '🌙', order: 0,
     createdAt: now, updatedAt: now,
@@ -58,9 +48,11 @@ enableMultiWorld: true, createdAt: now, updatedAt: now,
   } as any) as number
   const characterId = await db.characters.add({
     projectId, worldId, homeWorldGroupId: worldGroupId, name: `林飞${suffix}`,
+    roleWeight: 'main', moralAxis: 'neutral', orderAxis: 'neutral',
     background: '林飞自幼父母双亡。', relationships: '', identity: '遗民',
     createdAt: now, updatedAt: now,
   } as any) as number
+  await stampCurrentFixtureResourceUidsV1(projectId)
   return {
     scope: { projectId, worldId, workId } satisfies WorkspaceScope,
     projectId, worldId, workId, worldGroupId, worldviewId, powerSystemId, storyCoreId, characterId,
@@ -311,10 +303,10 @@ describe.sequential('R-HARNESS69 · 世界宪法扫描 durable 双层确认', ()
     const fixture = await seed('isolation')
     const generated = await generate(fixture)
     const now = Date.now()
-    const otherWorkId = await db.works.add({
+    const otherWorkId = await db.works.add(currentWorkFixtureRecordV1({
       projectId: fixture.projectId, worldId: fixture.worldId, title: '另一作品', description: '',
       genres: ['fantasy'], status: 'drafting', targetWordCount: 10_000, createdAt: now, updatedAt: now,
-    } as any) as number
+    })) as number
     const otherWorkScope = { ...fixture.scope, workId: otherWorkId }
     await expect(readPendingConstitutionExtractionCandidateV1({ scope: otherWorkScope })).resolves.toBeNull()
     await expect(adoptConstitutionExtractionCandidateV1({
@@ -325,10 +317,10 @@ describe.sequential('R-HARNESS69 · 世界宪法扫描 durable 双层确认', ()
       projectId: fixture.projectId, code: `other-${now}`, name: '另一世界', description: '',
       currentVersion: 1, createdAt: now, updatedAt: now,
     }) as number
-    const otherWorldWorkId = await db.works.add({
+    const otherWorldWorkId = await db.works.add(currentWorkFixtureRecordV1({
       projectId: fixture.projectId, worldId: otherWorldId, title: '另一世界作品', description: '',
       genres: ['fantasy'], status: 'drafting', targetWordCount: 10_000, createdAt: now, updatedAt: now,
-    } as any) as number
+    })) as number
     const otherWorldScope = { projectId: fixture.projectId, worldId: otherWorldId, workId: otherWorldWorkId }
     await expect(readPendingConstitutionExtractionCandidateV1({ scope: otherWorldScope })).resolves.toBeNull()
     await expect(adoptConstitutionExtractionCandidateV1({

@@ -8,10 +8,9 @@ import {
   type LongFormScaleTierV1,
 } from '../../src/lib/evals'
 import { prepareProseGatewayAssemblyV1 } from '../../src/lib/prose/gateway-context'
-import { generateWorkspaceUid } from '../../src/lib/memory/identity'
-import { ensureWorkspaceOwnership } from '../../src/lib/workspace/ownership'
 import { stampNewRecord, type WorkspaceScope } from '../../src/lib/workspace/scope'
 import { useAIConfigStore } from '../../src/stores/ai-config'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
 
 const NOW = 1_788_500_000_000
 const CHAPTERS_BY_TIER: Readonly<Record<LongFormScaleTierV1, number>> = {
@@ -47,19 +46,11 @@ function chapterBody(index: number, minimumCharacters: number): string {
 }
 
 async function seedScale(tier: LongFormScaleTierV1) {
-  const projectId = await db.projects.add({
-    workspaceUid: generateWorkspaceUid(),
-    name: `PHASE4 ${tier} 字符封闭规模门`,
-    genre: 'fantasy',
-    genres: ['fantasy'],
-    status: 'drafting',
-    description: '',
-    targetWordCount: tier,
+  const { scope } = await seedCurrentWorkspace(`PHASE4 ${tier} 字符封闭规模门`, {
     enableMultiWorld: true,
-    createdAt: NOW,
-    updatedAt: NOW,
-  } as any) as number
-  const { scope } = await ensureWorkspaceOwnership(projectId)
+  })
+  const { projectId } = scope
+  await db.works.update(scope.workId, { targetWordCount: tier, updatedAt: NOW })
   const groupId = await addScoped(scope, 'worldGroups', {
     name: '潮汐大陆', description: '当前测试世界', type: 'primary', order: 0,
   }, 'world')
@@ -135,7 +126,8 @@ async function seedScale(tier: LongFormScaleTierV1) {
   }, 'work')
 
   const characterId = await addScoped(scope, 'characters', {
-    homeWorldGroupId: groupId, isCrossWorld: false, name: '林舟', role: 'protagonist',
+    homeWorldGroupId: groupId, isCrossWorld: false, name: '林舟',
+    roleWeight: 'main', moralAxis: 'neutral', orderAxis: 'neutral',
     personality: '谨慎守信', background: '守灯人', appearance: '左手有潮纹', motivation: '阻止潮门崩塌',
   }, 'world')
   await db.chapters.update(targetChapterId, { perspectiveCharacterId: characterId })
@@ -149,7 +141,7 @@ async function seedScale(tier: LongFormScaleTierV1) {
     involvedEntities: JSON.stringify(['林舟', '银潮钟']), evidenceQuote: '银潮钟已在上一章停止鸣响。',
   }, 'work')
   const earlyFactId = await addScoped(scope, 'temporalFacts', {
-    worldGroupId: groupId, subjectName: '星砂钥', predicate: 'activation-rule', factKind: 'rule',
+    worldGroupId: groupId, subjectName: '星砂钥', predicate: 'activation-rule', factKind: 'state',
     value: '远距硬事实标记：星砂钥只能由守灯人在无月之夜启用。', sourceType: 'chapter',
     sourceChapterId: written[0].chapterId, validFromChapterId: written[0].chapterId,
     validToChapterId: null, status: 'confirmed', locked: true,

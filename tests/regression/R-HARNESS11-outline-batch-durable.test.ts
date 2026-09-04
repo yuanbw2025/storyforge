@@ -12,12 +12,11 @@ import {
 } from '../../src/lib/outline/harness'
 import { adoptGeneratedOutlineItems } from '../../src/lib/outline/adopt-generation'
 import type { OutlineNode, Project, WorkspaceScope } from '../../src/lib/types'
-import { backfillResourceUidsV1 } from '../../src/lib/context-gateway/resource-identity'
 import { prepareOutlineGatewayAssemblyV1 } from '../../src/lib/outline/gateway-context'
 import { useAIConfigStore } from '../../src/stores/ai-config'
-import { ensureWorkspaceOwnership } from '../../src/lib/workspace/ownership'
-import { generateWorkspaceUid, generateWorkCode } from '../../src/lib/memory/identity'
 import { verifyContextGatewayCandidateEvidenceV1 } from '../../src/lib/context-gateway/attempt-evidence'
+import { stampNewRecord } from '../../src/lib/workspace/scope'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
 
 async function createWorkspace(): Promise<{
   scope: WorkspaceScope
@@ -26,57 +25,18 @@ async function createWorkspace(): Promise<{
   volumes: OutlineNode[]
 }> {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    workspaceUid: generateWorkspaceUid(),
-    name: '批量章纲 durable',
-    genre: 'fantasy',
-    genres: ['fantasy'],
-    description: '',
-    status: 'drafting',
-    targetWordCount: 100_000,
-
-
-    createdAt: now,
-    updatedAt: now,
-  } as any) as number
-  const worldId = await db.worlds.add({
+  const { project, scope } = await seedCurrentWorkspace('批量章纲 durable')
+  const { projectId } = scope
+  const worldGroupId = await db.worldGroups.add(stampNewRecord(scope, 'worldGroups', {
     projectId,
-    code: 'outline-batch-world',
-    name: '潮汐世界',
-    description: '',
-    currentVersion: 1,
-    createdAt: now,
-    updatedAt: now,
-  }) as number
-  const workId = await db.works.add({
-    projectId,
-    worldId,
-    code: generateWorkCode(),
-    title: '潮城纪事',
-    description: '',
-    genres: ['fantasy'],
-    status: 'drafting',
-    targetWordCount: 100_000,
-    createdAt: now,
-    updatedAt: now,
-  }) as number
-  await db.projects.update(projectId, {
-    activeWorldId: worldId,
-    activeWorkId: workId,
-    ownershipSchemaVersion: 1,
-  })
-  const worldGroupId = await db.worldGroups.add({
-    projectId,
-    worldId,
     name: '主世界',
     order: 0,
     createdAt: now,
     updatedAt: now,
-  }) as number
+  }, { owner: 'world' }) as never) as number
   const volumeIds = await db.outlineNodes.bulkAdd([
-    {
+    stampNewRecord(scope, 'outlineNodes', {
       projectId,
-      workId,
       worldGroupId,
       parentId: null,
       type: 'volume',
@@ -85,10 +45,9 @@ async function createWorkspace(): Promise<{
       order: 0,
       createdAt: now,
       updatedAt: now,
-    },
-    {
+    }, { owner: 'work' }),
+    stampNewRecord(scope, 'outlineNodes', {
       projectId,
-      workId,
       worldGroupId,
       parentId: null,
       type: 'volume',
@@ -97,14 +56,11 @@ async function createWorkspace(): Promise<{
       order: 1,
       createdAt: now,
       updatedAt: now,
-    },
+    }, { owner: 'work' }),
   ] as any, { allKeys: true }) as number[]
-  await ensureWorkspaceOwnership(projectId)
-  await backfillResourceUidsV1(projectId)
-  const project = await db.projects.get(projectId) as Project
   const volumes = await db.outlineNodes.bulkGet(volumeIds) as OutlineNode[]
   return {
-    scope: { projectId, worldId, workId },
+    scope,
     project,
     worldGroupId,
     volumes,
@@ -116,7 +72,6 @@ async function assembleBatchContext(input: {
   volume: OutlineNode
   priorOutlineCandidateText?: string
 }) {
-  await backfillResourceUidsV1(input.fixture.scope.projectId)
   return prepareOutlineGatewayAssemblyV1({
     projectId: input.fixture.scope.projectId,
     scope: input.fixture.scope,
@@ -304,17 +259,15 @@ describe.sequential('R-HARNESS11 · 批量章纲 durable 主路径', () => {
   it('相邻卷属于不同世界时不注入上一世界的未采纳候选', async () => {
     const fixture = await createWorkspace()
     const now = Date.now()
-    const otherWorldGroupId = await db.worldGroups.add({
+    const otherWorldGroupId = await db.worldGroups.add(stampNewRecord(fixture.scope, 'worldGroups', {
       projectId: fixture.scope.projectId,
-      worldId: fixture.scope.worldId,
       name: '镜像世界',
       order: 1,
       createdAt: now,
       updatedAt: now,
-    }) as number
+    }, { owner: 'world' }) as never) as number
     await db.outlineNodes.update(fixture.volumes[1].id!, { worldGroupId: otherWorldGroupId })
     fixture.volumes[1] = { ...fixture.volumes[1], worldGroupId: otherWorldGroupId }
-    await backfillResourceUidsV1(fixture.scope.projectId)
     const priorInputs: Array<string | undefined> = []
     const result = await runBatchOutlineGeneration({
       project: fixture.project,

@@ -486,11 +486,7 @@ export async function cloneTtrpgSessionParticipantsV2(input: {
     .where("sessionId")
     .equals(input.parentSessionId)
     .toArray();
-  // Legacy/kernel TTRPG sessions can predate explicit seat authority and do
-  // not have a World/Work Instance scope. Branching their event-sourced state
-  // must remain possible, but there is no participant authority to fabricate
-  // or copy in that case.
-  if (!parentRows.length) return;
+  if (!parentRows.length) fail("正式 TTRPG 父实例缺少参与者席位权限，不能建立分支");
   if (
     input.child.id == null ||
     input.child.worldId == null ||

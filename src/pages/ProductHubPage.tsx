@@ -241,7 +241,7 @@ function StatusDot({ tone = 'success' }: { tone?: 'success' | 'warning' | 'neutr
 }
 
 function projectToWorld(project: Project, index: number, projection: WorldProjection): ProductWorld {
-  const tags = (project.genres?.length ? project.genres : [project.genre]).filter(Boolean).slice(0, 2)
+  const tags = projection.work.genres.filter(Boolean).slice(0, 2)
   return {
     projectId: project.id!,
     code: projection.code,
@@ -324,6 +324,34 @@ function FeaturePanelFallback() {
   return <div className="flex min-h-[20rem] items-center justify-center text-sm text-text-muted">面板加载中…</div>
 }
 
+function WorkspaceLibraryCard(props: {
+  project: Project
+  deleteConfirm: number | null
+  onOpen: () => void
+  onRemove: () => void
+}) {
+  const activeWork = useActiveWork(props.project)
+  const isWorld = props.project.workspacePurpose === 'world-engine'
+  const title = activeWork?.title ?? props.project.name
+  const description = activeWork?.description || '尚未填写简介'
+  return <article className="rounded-lg border border-border bg-bg-surface p-4">
+    <div className="flex items-start justify-between gap-3">
+      <button className="min-w-0 flex-1 text-left" onClick={props.onOpen}>
+        <span className="text-[10px] uppercase tracking-wider text-text-muted">{isWorld ? '世界引擎' : '独立作品'}</span>
+        <strong className="mt-1 block truncate text-sm text-text-primary">{title}</strong>
+        <span className="mt-1 block line-clamp-2 text-xs leading-5 text-text-secondary">{description}</span>
+      </button>
+      {props.project.id && <button
+        type="button"
+        className={props.deleteConfirm === props.project.id ? 'rounded bg-danger/10 px-2 py-1 text-xs text-danger' : 'rounded p-1.5 text-text-muted hover:bg-danger/10 hover:text-danger'}
+        onClick={props.onRemove}
+        title={props.deleteConfirm === props.project.id ? '再次点击确认删除' : '删除工作区'}
+        aria-label={props.deleteConfirm === props.project.id ? `确认删除 ${title}` : `删除 ${title}`}
+      >{props.deleteConfirm === props.project.id ? '确认删除' : <Trash2 className="h-4 w-4" />}</button>}
+    </div>
+  </article>
+}
+
 function WorkspaceLibrary(props: {
   projects: Project[]
   onReload: () => void | Promise<void>
@@ -383,25 +411,13 @@ function WorkspaceLibrary(props: {
     </div>
     {restoreMessage && <p className="mb-3 text-xs text-text-muted" role="status">{restoreMessage}</p>}
     <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-      {props.projects.map(project => {
-        const isWorld = project.workspacePurpose === 'world-engine'
-        return <article key={project.id} className="rounded-lg border border-border bg-bg-surface p-4">
-          <div className="flex items-start justify-between gap-3">
-            <button className="min-w-0 flex-1 text-left" onClick={() => project.id && (isWorld ? props.onOpenWorld(project.id) : props.onOpenWork(project.id))}>
-              <span className="text-[10px] uppercase tracking-wider text-text-muted">{isWorld ? '世界引擎' : '独立作品'}</span>
-              <strong className="mt-1 block truncate text-sm text-text-primary">{project.name}</strong>
-              <span className="mt-1 block line-clamp-2 text-xs leading-5 text-text-secondary">{project.description || '尚未填写简介'}</span>
-            </button>
-            {project.id && <button
-              type="button"
-              className={deleteConfirm === project.id ? 'rounded bg-danger/10 px-2 py-1 text-xs text-danger' : 'rounded p-1.5 text-text-muted hover:bg-danger/10 hover:text-danger'}
-              onClick={() => void remove(project.id!)}
-              title={deleteConfirm === project.id ? '再次点击确认删除' : '删除工作区'}
-              aria-label={deleteConfirm === project.id ? `确认删除 ${project.name}` : `删除 ${project.name}`}
-            >{deleteConfirm === project.id ? '确认删除' : <Trash2 className="h-4 w-4" />}</button>}
-          </div>
-        </article>
-      })}
+      {props.projects.map(project => <WorkspaceLibraryCard
+        key={project.id}
+        project={project}
+        deleteConfirm={deleteConfirm}
+        onOpen={() => project.id && (project.workspacePurpose === 'world-engine' ? props.onOpenWorld(project.id) : props.onOpenWork(project.id))}
+        onRemove={() => void remove(project.id!)}
+      />)}
       {props.projects.length === 0 && <p className="py-8 text-sm text-text-muted">还没有本地工作区。</p>}
     </div>
   </section>
@@ -411,7 +427,7 @@ function HomePage({ projects, worlds, activeWorld, activeWorkProject, onSelect, 
   const activeWork = useActiveWork(activeWorkProject)
   return <>
     <div className="sf-home-intro"><div><div className="sf-eyebrow">STORYFORGE · LOCAL WORKSPACE</div><h1>你的创作与游玩空间</h1><p>从一个世界出发，继续写作、编排、游玩，或者开始一段新的故事。</p></div><div className="sf-intro-actions"><Button icon={Hash} onClick={onOpenWorldPicker}>使用世界编号</Button><Button variant="primary" icon={Plus} onClick={onOpenCreate}>新建内容</Button></div></div>
-    {(activeWorld || activeWorkProject) ? <section className="sf-resume-grid">{activeWorld && <article className="sf-resume-card sf-resume-primary"><div className="sf-resume-visual"><span className="sf-visual-label"><StatusDot /> 当前世界</span><span className="sf-visual-rule" /><span className="sf-visual-coordinate">{activeWorld.code} · v{activeWorld.version}</span></div><div className="sf-resume-content"><span className="sf-card-kicker"><Globe2 className="h-4 w-4" /> 世界引擎</span><h2>{activeWorld.name}</h2><p>{activeWorld.description}</p><div className="sf-progress"><span style={{ width: `${activeWorld.completeness}%` }} /></div><div className="sf-resume-meta"><span>数据域覆盖 {activeWorld.completeness}%</span><span>{activeWorld.source}</span></div><Button icon={ArrowRight} onClick={() => onSelect('worlds')}>进入世界引擎</Button></div></article>}{activeWorkProject && <article className="sf-resume-card sf-resume-secondary"><div className="sf-resume-secondary-head"><span className="sf-card-kicker"><BookOpenText className="h-4 w-4" /> 最近作品</span><StatusDot tone="neutral" /></div><div className="sf-campaign-avatar"><BookOpenText className="h-5 w-5" /></div><h2>{activeWorkProject.name}</h2>{activeWork && <WorkKindBadge work={activeWork} />}<p>{activeWork && effectiveWorkKind(activeWork) !== 'novel' ? '进入作品工作台继续制作' : `分步骤创作 · ${activeWorkProject.currentWordCount ? `${(activeWorkProject.currentWordCount / 10000).toFixed(1)} 万字` : '尚未开始正文'}`}</p><div className="sf-event-list"><div><StatusDot /><span>作品保持独立，不会自动公开为世界</span></div><div><StatusDot tone="warning" /><span>继续完善当前作品</span></div></div><Button variant="quiet" icon={ArrowRight} onClick={() => onSelect('novel')}>继续创作</Button></article>}</section> : <EmptyProjectState onCreate={onOpenCreate} />}
+    {(activeWorld || activeWorkProject) ? <section className="sf-resume-grid">{activeWorld && <article className="sf-resume-card sf-resume-primary"><div className="sf-resume-visual"><span className="sf-visual-label"><StatusDot /> 当前世界</span><span className="sf-visual-rule" /><span className="sf-visual-coordinate">{activeWorld.code} · v{activeWorld.version}</span></div><div className="sf-resume-content"><span className="sf-card-kicker"><Globe2 className="h-4 w-4" /> 世界引擎</span><h2>{activeWorld.name}</h2><p>{activeWorld.description}</p><div className="sf-progress"><span style={{ width: `${activeWorld.completeness}%` }} /></div><div className="sf-resume-meta"><span>数据域覆盖 {activeWorld.completeness}%</span><span>{activeWorld.source}</span></div><Button icon={ArrowRight} onClick={() => onSelect('worlds')}>进入世界引擎</Button></div></article>}{activeWorkProject && <article className="sf-resume-card sf-resume-secondary"><div className="sf-resume-secondary-head"><span className="sf-card-kicker"><BookOpenText className="h-4 w-4" /> 最近作品</span><StatusDot tone="neutral" /></div><div className="sf-campaign-avatar"><BookOpenText className="h-5 w-5" /></div><h2>{activeWork?.title ?? activeWorkProject.name}</h2>{activeWork && <WorkKindBadge work={activeWork} />}<p>{activeWork && effectiveWorkKind(activeWork) !== 'novel' ? '进入作品工作台继续制作' : `分步骤创作 · ${activeWork?.currentWordCount ? `${(activeWork.currentWordCount / 10000).toFixed(1)} 万字` : '尚未开始正文'}`}</p><div className="sf-event-list"><div><StatusDot /><span>作品保持独立，不会自动公开为世界</span></div><div><StatusDot tone="warning" /><span>继续完善当前作品</span></div></div><Button variant="quiet" icon={ArrowRight} onClick={() => onSelect('novel')}>继续创作</Button></article>}</section> : <EmptyProjectState onCreate={onOpenCreate} />}
     <section className="sf-section"><div className="sf-section-header"><div><div className="sf-eyebrow">YOUR WORKSPACE</div><h2>从这里开始</h2></div><button className="sf-text-button" onClick={onOpenCreate}>新建 <ArrowRight className="h-4 w-4" /></button></div><div className="sf-feature-grid">{(Object.keys(FEATURE_META) as Array<Exclude<TabId, 'home'>>).filter(id => tabDecision(id)?.visible).map(id => { const meta = FEATURE_META[id]; const Icon = meta.icon; const surfaceId = TAB_SURFACE_IDS[id]!; return <button key={id} className="sf-feature-card" onClick={() => onSelect(id)}><span className={`sf-feature-icon sf-feature-${meta.accent}`}><Icon className="h-5 w-5" /></span><span className="sf-feature-copy"><span className="sf-eyebrow">{meta.eyebrow} <SurfaceMaturityBadge surfaceId={surfaceId} /></span><h3>{NAV_TABS.find(tab => tab.id === id)?.label}</h3><p>{meta.description}</p></span><span className="sf-feature-footer"><span>{id === 'worlds' ? `${worlds.length} 个世界` : id === 'novel' ? '独立作品工作流' : id === 'nodes' ? '同源 DAG 工作区' : id === 'ttrpg' ? '冻结来源制作与试玩' : id === 'chat' ? '多角色生产与运行预览' : id === 'market' ? '显式研究入口' : '三类独立文字游戏'}</span><ArrowRight className="h-4 w-4" /></span></button> })}</div></section>
     <WorkspaceLibrary projects={projects} onReload={onReload} onOpenWorld={projectId => { const world = worlds.find(item => item.projectId === projectId); if (world) onSelectWorld(world); onSelect('worlds') }} onOpenWork={projectId => { onSelectWork(projectId); onSelect('novel') }} />
     <section className="sf-section"><div className="sf-section-header"><div><div className="sf-eyebrow">WORLD LIBRARY</div><h2>我的世界引擎</h2></div><button className="sf-text-button" onClick={() => onSelect('worlds')}>管理世界 <ArrowRight className="h-4 w-4" /></button></div><div className="sf-world-grid">{worlds.slice(0, 3).map(world => <WorldCard key={world.code} world={world} onOpen={() => { onSelectWorld(world); onSelect('worlds') }} />)}<button className="sf-new-world-card" onClick={onOpenCreate}><span className="sf-new-world-plus"><Plus className="h-5 w-5" /></span><strong>从零创建世界</strong><span>建立一个可被上层产品引用的新世界</span></button></div></section>
@@ -484,7 +500,7 @@ function NovelPage({ project, onCreate, onDerived }: { project?: Project; onCrea
   }
   const alternateProductId: StoryForgeProductIdV1 = profile === 'short' ? 'independent.longform' : 'independent.shortform'
   const canSwitchProfile = productDecision(alternateProductId).enterable
-  return <><PageHeading eyebrow="AUTHORING / STEP BY STEP" title={profile === 'short' ? '短篇小说创作' : '长篇小说创作'} description={profile === 'short' ? '独立短篇产品复用同一份可靠 Canon 与生成底座。' : '独立运行完整的分步骤长篇创作流程；世界引擎不是前置条件。'} action={<div className="flex flex-wrap items-center justify-end gap-2">{activeWork && <WorkKindBadge work={activeWork} />}<MaturityBadge productId={activeProductId} /><WorldDerivationActions project={project} onDerived={onDerived} />{canSwitchProfile && <Button onClick={() => void changeProfile(profile === 'short' ? 'long' : 'short')} disabled={profileBusy}>{profileBusy ? '切换中…' : profile === 'short' ? '扩写为长篇' : '切换为短篇'}</Button>}<Button variant="primary" icon={ArrowRight} onClick={() => setView('chapters')}>打开正文</Button></div>} />{profileError && <p className="mb-3 text-sm text-red-600" role="alert">{profileError}</p>}<div className="sf-subnav"><button className={view === 'outline' ? 'active' : ''} onClick={() => setView('outline')}><BookOpenText className="h-4 w-4" />卷纲与章纲</button><button className={view === 'chapters' ? 'active' : ''} onClick={() => setView('chapters')}><BookOpenText className="h-4 w-4" />章节与正文</button><span className="sf-subnav-spacer" /><span className="sf-subnav-note">{project.name}</span></div><section className="sf-product-panel sf-novel-panel"><Suspense fallback={<FeaturePanelFallback />}>{view === 'outline' ? <OutlinePanel project={project} onOpenChapter={id => { setNodeId(id); setView('chapters') }} /> : <ChaptersListPanel project={project} initialNodeId={nodeId} />}</Suspense></section></>
+  return <><PageHeading eyebrow="AUTHORING / STEP BY STEP" title={profile === 'short' ? '短篇小说创作' : '长篇小说创作'} description={profile === 'short' ? '独立短篇产品复用同一份可靠 Canon 与生成底座。' : '独立运行完整的分步骤长篇创作流程；世界引擎不是前置条件。'} action={<div className="flex flex-wrap items-center justify-end gap-2">{activeWork && <WorkKindBadge work={activeWork} />}<MaturityBadge productId={activeProductId} /><WorldDerivationActions project={project} onDerived={onDerived} />{canSwitchProfile && <Button onClick={() => void changeProfile(profile === 'short' ? 'long' : 'short')} disabled={profileBusy}>{profileBusy ? '切换中…' : profile === 'short' ? '扩写为长篇' : '切换为短篇'}</Button>}<Button variant="primary" icon={ArrowRight} onClick={() => setView('chapters')}>打开正文</Button></div>} />{profileError && <p className="mb-3 text-sm text-red-600" role="alert">{profileError}</p>}<div className="sf-subnav"><button className={view === 'outline' ? 'active' : ''} onClick={() => setView('outline')}><BookOpenText className="h-4 w-4" />卷纲与章纲</button><button className={view === 'chapters' ? 'active' : ''} onClick={() => setView('chapters')}><BookOpenText className="h-4 w-4" />章节与正文</button><span className="sf-subnav-spacer" /><span className="sf-subnav-note">{activeWork?.title ?? '当前作品'}</span></div><section className="sf-product-panel sf-novel-panel"><Suspense fallback={<FeaturePanelFallback />}>{view === 'outline' ? <OutlinePanel project={project} onOpenChapter={id => { setNodeId(id); setView('chapters') }} /> : <ChaptersListPanel project={project} initialNodeId={nodeId} />}</Suspense></section></>
 }
 
 function NodesPage({ project, onCreate }: { project?: Project; onCreate: () => void }) {
@@ -536,7 +552,7 @@ function CharacterInteractionPage({ project, world, onOpenWorldPicker, onCreate,
 }
 
 function TextGamePage({ project, world, onOpenWorldPicker, onCreate, initialProduct = 'text-adventure', initialMode = 'play', initialProductionHandoff = null }: { project?: Project; world?: ProductWorld; onOpenWorldPicker: () => void; onCreate: () => void; initialProduct?: TextGameProductKindV1; initialMode?: 'play' | 'production'; initialProductionHandoff?: ProductProductionHandoffV1 | null }) {
-  const updateProject = useProjectStore(state => state.updateProject)
+  const updateWorkspace = useProjectStore(state => state.updateWorkspace)
   const [mode, setMode] = useState<'play' | 'production'>(initialMode)
   const [product, setProduct] = useState<TextGameProductKindV1>(initialProduct)
   const [previewSessionId, setPreviewSessionId] = useState<number | null>(null)
@@ -602,7 +618,7 @@ function TextGamePage({ project, world, onOpenWorldPicker, onCreate, initialProd
           setMode('play')
         }
       }}
-    /> : <CapabilityConsentGate decision={productionDecision} onEnable={() => updateProject(project.id!, {
+    /> : <CapabilityConsentGate decision={productionDecision} onEnable={() => updateWorkspace(project.id!, {
       productPlatformOptIns: { ...project.productPlatformOptIns, productProductionV3: true },
     })} />
     : isAdventure
@@ -614,7 +630,7 @@ function TextGamePage({ project, world, onOpenWorldPicker, onCreate, initialProd
 }
 
 function CreatePanel({ onClose, onCreated }: { onClose: () => void; onCreated: (kind: 'worlds' | 'novel', id: number) => void }) {
-  const { createProject } = useProjectStore()
+  const { createWorkspace } = useProjectStore()
   const [kind, setKind] = useState<'choose' | 'worlds' | 'long-novel' | 'short-novel'>('choose')
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
@@ -632,8 +648,8 @@ function CreatePanel({ onClose, onCreated }: { onClose: () => void; onCreated: (
     try {
       const isShort = kind === 'short-novel'
       const isNovel = isShort || kind === 'long-novel'
-      const id = await createProject({
-        name: name.trim(), genre: 'other', genres: ['other'], status: 'drafting',
+      const id = await createWorkspace({
+        name: name.trim(), genres: ['other'], status: 'drafting',
         description: description.trim(), targetWordCount: isShort ? targetWordCount : 500_000, enableMultiWorld: false,
       }, isNovel ? {
         purpose: 'independent-work',

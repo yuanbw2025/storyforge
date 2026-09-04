@@ -14,11 +14,12 @@ import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-
 import { cascadeDeleteProject } from '../../src/lib/registry/lifecycle'
 import { adopt } from '../../src/lib/registry/adopt'
 import { resolveScopeLike } from '../../src/lib/workspace/scope'
+import { seedCurrentProject } from '../helpers/current-workspace'
 
 async function createProject(): Promise<number> {
   const now = Date.now()
-  return await db.projects.add({
-    name: 'FB5 Test', genre: '', description: '', targetWordCount: 0,
+  return await seedCurrentProject({
+    name: 'FB5 Test', genres: [], description: '', targetWordCount: 0,
     enableMultiWorld: false, createdAt: now, updatedAt: now,
   } as any) as number
 }

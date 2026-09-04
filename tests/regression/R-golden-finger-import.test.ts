@@ -8,13 +8,17 @@ describe('R-GF: golden-finger import classification', () => {
       characters: [
         {
           name: '林尘',
-          role: 'protagonist',
+          roleWeight: 'main',
+          moralAxis: 'neutral',
+          orderAxis: 'neutral',
           shortDescription: '落魄少年',
           abilities: '基础剑术',
         },
         {
           name: '金手指设定',
-          role: 'supporting',
+          roleWeight: 'secondary',
+          moralAxis: 'neutral',
+          orderAxis: 'neutral',
           shortDescription: '识海中的熟练度面板',
           abilities: '消耗灵气推演功法',
           motivation: '每次推演都需要付出寿元代价',
@@ -36,7 +40,9 @@ describe('R-GF: golden-finger import classification', () => {
       characters: [
         {
           name: '随身系统',
-          role: 'supporting',
+          roleWeight: 'secondary',
+          moralAxis: 'neutral',
+          orderAxis: 'neutral',
           shortDescription: '任务面板与奖励规则',
           abilities: '发布任务并兑换奖励',
         },
@@ -54,7 +60,9 @@ describe('R-GF: golden-finger import classification', () => {
       characters: [
         {
           name: '系统精灵小白',
-          role: 'supporting',
+          roleWeight: 'secondary',
+          moralAxis: 'neutral',
+          orderAxis: 'neutral',
           shortDescription: '会吐槽的引导者',
           personality: '毒舌但护短',
         },

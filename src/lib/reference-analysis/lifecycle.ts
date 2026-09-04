@@ -52,9 +52,9 @@ function constrainUsageScope(
 }
 
 async function requireReference(referenceId: number): Promise<{ ref: Reference; scope: WorkspaceScope }> {
-  const beforeMigration = await db.references.get(referenceId)
-  if (!beforeMigration?.id) throw new Error('参考资料不存在')
-  const scope = await resolveScopeLike(beforeMigration.projectId)
+  const existingRecord = await db.references.get(referenceId)
+  if (!existingRecord?.id) throw new Error('参考资料不存在')
+  const scope = await resolveScopeLike(existingRecord.projectId)
   const ref = await db.references.get(referenceId)
   if (!ref?.id || !await assertRecordInScope(scope, 'references', ref, { owner: 'work' })) {
     throw new Error('参考资料不存在或不属于当前作品')
@@ -67,9 +67,9 @@ async function requireRun(runId: number): Promise<{
   ref: Reference
   scope: WorkspaceScope
 }> {
-  const beforeMigration = await db.referenceAnalysisRuns.get(runId)
-  if (!beforeMigration?.id) throw new Error('分析版本不存在')
-  const scope = await resolveScopeLike(beforeMigration.projectId)
+  const existingRecord = await db.referenceAnalysisRuns.get(runId)
+  if (!existingRecord?.id) throw new Error('分析版本不存在')
+  const scope = await resolveScopeLike(existingRecord.projectId)
   const run = await db.referenceAnalysisRuns.get(runId)
   if (!run?.id || !await assertRecordInScope(scope, 'referenceAnalysisRuns', run, { owner: 'work' })) {
     throw new Error('分析版本不存在或不属于当前作品')
@@ -250,7 +250,7 @@ export async function completeReferenceAnalysisRun(
       completedAt: Date.now(),
     })
     const active = await getActiveReferenceAnalysisRun(run.referenceId)
-    if (!active) await patchReferenceCompatibility(run.referenceId, {
+    if (!active) await patchReferenceActiveProjection(run.referenceId, {
       analysisStatus: 'failed',
       analysisError: error || '没有可用分析结果',
       analysisProgress: 0,
@@ -319,12 +319,12 @@ export async function updateReferenceAnalysisDerived(
   await patchReferenceAnalysisRun(runId, changes)
   const run = await db.referenceAnalysisRuns.get(runId)
   if (!run || run.status !== 'active') return
-  await patchReferenceCompatibility(run.referenceId, changes as Partial<Reference>)
+  await patchReferenceActiveProjection(run.referenceId, changes as Partial<Reference>)
 }
 
 export async function discardReferenceAnalysisRun(runId: number): Promise<void> {
-  const beforeMigration = await db.referenceAnalysisRuns.get(runId)
-  if (!beforeMigration) return
+  const existingRecord = await db.referenceAnalysisRuns.get(runId)
+  if (!existingRecord) return
   const { run } = await requireRun(runId)
   if (run.status === 'active') throw new Error('不能删除当前激活版本，请先激活另一版本')
   await db.transaction(
@@ -341,8 +341,8 @@ export async function discardReferenceAnalysisRun(runId: number): Promise<void> 
 }
 
 export async function deleteReferenceWithAnalysis(referenceId: number): Promise<number | undefined> {
-  const beforeMigration = await db.references.get(referenceId)
-  if (!beforeMigration?.id) return undefined
+  const existingRecord = await db.references.get(referenceId)
+  if (!existingRecord?.id) return undefined
   const { ref, scope } = await requireReference(referenceId)
   const runs = (await readOwnedRows<ReferenceAnalysisRun>(scope, 'referenceAnalysisRuns', { owner: 'work' }))
     .filter(run => run.referenceId === referenceId)
@@ -376,9 +376,9 @@ export async function deleteReferenceWithAnalysis(referenceId: number): Promise<
   return ref.projectId
 }
 
-async function patchReferenceCompatibility(referenceId: number, changes: Partial<Reference>): Promise<void> {
-  const beforeMigration = await db.references.get(referenceId)
-  if (!beforeMigration) return
+async function patchReferenceActiveProjection(referenceId: number, changes: Partial<Reference>): Promise<void> {
+  const existing = await db.references.get(referenceId)
+  if (!existing) return
   const { ref, scope } = await requireReference(referenceId)
   const result = await adopt({
     projectId: ref.projectId,
@@ -388,7 +388,7 @@ async function patchReferenceCompatibility(referenceId: number, changes: Partial
     mode: 'replace',
     data: changes as Record<string, unknown>,
   })
-  if (!result.written.length) throw new Error('参考资料兼容投影写回失败')
+  if (!result.written.length) throw new Error('参考资料激活投影写回失败')
 }
 
 function parseIdArray(value: unknown): number[] {

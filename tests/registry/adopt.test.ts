@@ -1,8 +1,4 @@
-/**
- * Phase 1.2a · FIELD_REGISTRY + AdoptionSchema + adopt()
- *
- * 本测试只验证纯新增写回层,不迁移现有调用方。
- */
+/** 当前架构 FIELD_REGISTRY + AdoptionSchema + adopt() 契约。 */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { FIELD_REGISTRY, FIELD_BY_TARGET } from '../../src/lib/registry/field-registry'
@@ -82,7 +78,7 @@ describe('Phase 1.2a · 统一写回层', () => {
     }
   })
 
-  it('单例写回:worldviews.summary 自动映射到 worldOrigin', async () => {
+  it('单例写回:未知世界观字段会令整条候选拒绝，不做旧字段映射或部分写入', async () => {
     const projectId = await createProject()
     const result = await adopt({
       projectId,
@@ -92,13 +88,25 @@ describe('Phase 1.2a · 统一写回层', () => {
       data: {
         summary: '天地由九重炉火锻成',
         powerHierarchy: '凡人 / 修士 / 天君',
-        ignoredField: 'x',
       },
     })
 
-    expect(result.aliasMapped).toContainEqual({ from: 'summary', to: 'worldOrigin' })
-    expect(result.unknown).toContain('ignoredField')
-    expect(result.written.length).toBe(1)
+    expect(result.unknown).toEqual(['summary'])
+    expect(result.written).toHaveLength(0)
+    expect(await db.worldviews.where('projectId').equals(projectId).count()).toBe(0)
+
+    const accepted = await adopt({
+      projectId,
+      worldGroupId: 101,
+      target: 'worldviews',
+      mode: 'replace',
+      data: {
+        worldOrigin: '天地由九重炉火锻成',
+        powerHierarchy: '凡人 / 修士 / 天君',
+      },
+    })
+    expect(accepted.unknown).toHaveLength(0)
+    expect(accepted.written).toHaveLength(1)
 
     const rows = await db.worldviews.where('projectId').equals(projectId).toArray()
     expect(rows).toHaveLength(1)
@@ -147,7 +155,7 @@ describe('Phase 1.2a · 统一写回层', () => {
     expect(row?.theme).toBe('自由意志')
   })
 
-  it('集合写回:characters 按三轴派生 role,同名角色自动合并', async () => {
+  it('集合写回:characters 保留三轴身份,同名角色自动合并', async () => {
     const projectId = await createProject()
     const worldGroupId = await createWorldGroup(projectId, '炉火界')
     const result = await adopt({
@@ -156,19 +164,19 @@ describe('Phase 1.2a · 统一写回层', () => {
       target: 'characters',
       mode: 'add-many',
       data: [
-        { name: '燕飞', roleWeight: 'main', moralAxis: 'good', orderAxis: 'neutral', summary: '背负旧王血脉' },
-        { name: '燕飞', roleWeight: 'main', moralAxis: 'evil', orderAxis: 'neutral', summary: '重复角色' },
+        { name: '燕飞', roleWeight: 'main', moralAxis: 'good', orderAxis: 'neutral', shortDescription: '背负旧王血脉' },
+        { name: '燕飞', roleWeight: 'main', moralAxis: 'evil', orderAxis: 'neutral', shortDescription: '重复角色' },
       ],
     })
 
     expect(result.written.length).toBe(2)
     expect(result.skipped).toHaveLength(0)
-    expect(result.aliasMapped).toContainEqual({ from: 'summary', to: 'shortDescription' })
 
     const rows = await db.characters.where('projectId').equals(projectId).toArray()
     expect(rows).toHaveLength(1)
     expect(rows[0].name).toBe('燕飞')
-    expect(rows[0].role).toBe('antagonist')
+    expect(rows[0]).toMatchObject({ roleWeight: 'main', moralAxis: 'evil', orderAxis: 'neutral' })
+    expect(rows[0]).not.toHaveProperty('role')
     expect(rows[0].shortDescription).toBe('重复角色')
     expect(rows[0].homeWorldGroupId).toBe(worldGroupId)
   })
@@ -182,21 +190,25 @@ describe('Phase 1.2a · 统一写回层', () => {
       worldGroupId: firstWorldGroupId,
       target: 'characters',
       mode: 'add',
-      data: { name: '燕飞', roleWeight: 'main', moralAxis: 'good', orderAxis: 'neutral', summary: '主世界角色' },
+      data: { name: '燕飞', roleWeight: 'main', moralAxis: 'good', orderAxis: 'neutral', shortDescription: '主世界角色' },
     })
     await adopt({
       projectId,
       worldGroupId: secondWorldGroupId,
       target: 'characters',
       mode: 'add',
-      data: { name: '燕飞', roleWeight: 'main', moralAxis: 'evil', orderAxis: 'neutral', summary: '副世界角色' },
+      data: { name: '燕飞', roleWeight: 'main', moralAxis: 'evil', orderAxis: 'neutral', shortDescription: '副世界角色' },
     })
 
     const rows = await db.characters.where('projectId').equals(projectId).toArray()
     expect(rows).toHaveLength(2)
     expect(rows.map(r => r.homeWorldGroupId).sort()).toEqual([firstWorldGroupId, secondWorldGroupId].sort())
-    expect(rows.find(r => r.homeWorldGroupId === firstWorldGroupId)?.role).toBe('protagonist')
-    expect(rows.find(r => r.homeWorldGroupId === secondWorldGroupId)?.role).toBe('antagonist')
+    expect(rows.find(r => r.homeWorldGroupId === firstWorldGroupId)).toMatchObject({
+      roleWeight: 'main', moralAxis: 'good', orderAxis: 'neutral',
+    })
+    expect(rows.find(r => r.homeWorldGroupId === secondWorldGroupId)).toMatchObject({
+      roleWeight: 'main', moralAxis: 'evil', orderAxis: 'neutral',
+    })
   })
 
   it('集合写回:codexEntries 校验 categoryId,无效 FK 不落库', async () => {
@@ -256,7 +268,6 @@ describe('Phase 1.2a · 统一写回层', () => {
     const characterId = await db.characters.add(stampNewRecord(scope, 'characters', {
       projectId,
       name: '沈璃',
-      role: 'supporting',
       roleWeight: 'main',
       moralAxis: 'neutral',
       orderAxis: 'neutral',

@@ -1,9 +1,4 @@
-/**
- * 三注册表 · 共享类型定义(Phase 1.1a)
- *
- * 这里只定义类型,不含数据。数据在 project-tables.ts。
- * 治理依据:docs/DATA-GOVERNANCE.md（PROJECT_TABLES 单一事实源）。
- */
+/** 三注册表的当前共享类型；实际表数据只在 project-tables.ts 登记。 */
 import type { Table } from 'dexie'
 import type { AIProvider } from '../types/ai'
 import type { ContextLayer, ContextSegment } from '../ai/context-budget'
@@ -90,7 +85,7 @@ export type DomainOwnerLocator =
 
 /**
  * Logical product owner for a table. Every current row must resolve through
- * one explicit locator; older rows are upgraded before entering this layer.
+ * one explicit locator; malformed or ownerless rows are rejected before entering this layer.
  */
 export interface DomainOwnershipSpec {
   allowed: readonly DomainOwnerKind[]
@@ -206,11 +201,7 @@ export interface ExportRemapField {
    * 合法的可空拓扑环。必填或 onUnmapped=drop 的引用不得设为 deferred。
    */
   deferred?: true
-  /**
-   * 导出后该字段在 JSON 里的名字(历史命名,毫无规律,必须逐字段声明以逐字节兼容旧备份)。
-   * 例:worldGroupId → '_worldGroupExportId'、outlineNodeId → '_outlineExportId'、
-   *     fromCharacterId → '_fromCharacterIndex'。
-   */
+  /** 当前便携协议中的外键坐标字段名。 */
   exportAs: string
   /**
    * 该外键找不到映射时:
@@ -220,7 +211,7 @@ export interface ExportRemapField {
    */
   onUnmapped?: 'drop' | 'require' | 'null'
   /**
-   * Optional backward pointer patched after every table is imported. Use only
+   * Optional cyclic pointer patched after every table is imported. Use only
    * to break an intentional parent/current-child cycle; ordinary refs still
    * participate in topological ordering so source-missing policies remain
    * accurate during the first pass.
@@ -230,7 +221,7 @@ export interface ExportRemapField {
 
 /**
  * JSON 字段内引用的导出重映射(区别于 refs:refs 管删除级联,这里管导出/导入重映射)。
- * exportAs 是新增的便携影子字段；保留原字段保证旧版导出契约可读，新版导入优先用影子字段重映射。
+ * exportAs 是当前便携协议的稳定影子坐标；导入时只用该坐标重映射。
  */
 export type ExportRefRemap = {
   field: string
@@ -279,24 +270,6 @@ export type PortableDataSpec = {
   kind: 'agent-run-child'
   parentField: string
   contractHashField: string
-} | {
-  /** Binary field encoded as a data URL after the IndexedDB snapshot transaction. */
-  kind: 'binary-blob'
-  field: string
-  /** Optional shared-object link that replaces legacy inline bytes. */
-  allowMissingWhen?: { exportField: string; importField: string }
-  /** Optional metadata contract checked before an imported binary row is committed. */
-  integrity?: {
-    metadataTable: string
-    referenceField: string
-    hashField: string
-    sizeField: string
-  }
-  /** Hash/size fields live on the binary row itself (product-neutral object store). */
-  selfIntegrity?: {
-    hashField: string
-    sizeField: string
-  }
 } | {
   /** CTXG-2 immutable UTF-8 body or a verified evidence-pruned tombstone. */
   kind: 'exact-run-artifact'
@@ -385,10 +358,8 @@ export interface TableSpec<T = any> {
   /** Product-neutral stable reference to a governed binary object table, used by shared GC. */
   mediaRef?: { blobTable: string; field: string }
   /**
-   * 导入兜底默认值：声明该表"非可选字段"在缺失时的默认值。
-   * 导入引擎写入前做 `{ ...defaults, ...row }`,保证老数据/跨版本导入的 JSON
-   * 即使缺某个非可选字段,落库时也满足类型不变量(如 outlineNodes.summary 恒为 string)。
-   * 这是「数据进入边界统一兜底」的单一来源,避免在每个读取处散补 `?.`。
+   * 当前版本的规范构造默认值。只在已通过 FIELD_REGISTRY 闭集校验的数据上应用，
+   * 不接受缺失身份、历史字段或跨版本输入。
    */
   defaults?: Record<string, unknown>
   /** 备注(说明为什么这样配) */
@@ -396,10 +367,10 @@ export interface TableSpec<T = any> {
 }
 
 /**
- * FIELD_REGISTRY 字段定义(Phase 1.2a)。
+ * FIELD_REGISTRY 字段定义。
  *
- * 只描述 AI/结构化采纳允许写入的字段。调用方给出的别名字段会在 adopt()
- * 里归一成这里登记的 canonical field。
+ * 只描述当前 AI/结构化采纳允许写入的 canonical 字段。未知字段必须拒绝，
+ * 不得在 adopt() 中猜测或映射字段名。
  */
 export interface FieldSpec {
   /** 目标表名,必须存在于 PROJECT_TABLES */
@@ -411,11 +382,10 @@ export interface FieldSpec {
   type: 'string' | 'longtext' | 'json' | 'object' | 'number' | 'boolean' | 'enum' | 'array'
   enums?: string[]
   worldScoped?: boolean
-  aliases?: string[]
+  /** 仅用于界面和上下文展示的自然语言标签；不得作为写入字段名。 */
+  labels?: string[]
   sanitize?: (val: unknown) => unknown
   label?: string
-  /** 中文/别名枚举归一,如 主角 -> protagonist */
-  enumAliasMap?: Record<string, string>
   /**
    * AI generation is opt-in. A registered writable field is not automatically
    * generatable; formal Skills derive their target set and field contract from
@@ -458,7 +428,7 @@ export interface CollectionAdoptionSpec {
   /** 数组成员校验:过滤不存在的成员,并记录 fkErrors */
   arrayMemberChecks?: { field: string; itemTarget: string }[]
   mergeStrategy?: 'overwrite-non-empty' | 'append-text' | 'union-array'
-  /** 允许统一写回入口按这些字段清空旧集合，再写入新结果。 */
+  /** 允许统一写回入口按这些字段清空当前集合，再写入新结果。 */
   replaceScope?: string[]
 }
 
@@ -478,7 +448,7 @@ export interface AdoptionExtensionSpec {
 
 export interface AdoptInput {
   projectId: number
-  /** WORLD-2C C3: explicit logical read/write boundary. projectId remains a legacy adapter. */
+  /** Explicit logical read/write boundary. */
   scope?: WorkspaceScope
   worldGroupId?: number | null
   /** 集合表中定点更新既有记录；AI 补全空卷/空章等场景使用。 */
@@ -511,7 +481,6 @@ export interface AdoptInput {
 
 export interface AdoptResult {
   written: { id: number; fields: string[] }[]
-  aliasMapped: { from: string; to: string }[]
   unknown: string[]
   typeErrors: { field: string; expected: string; got: string }[]
   fkErrors: { field: string; refValue: unknown }[]
@@ -563,7 +532,7 @@ export type ContextSourceTransformer = (
 
 export interface AssembleContextInput {
   projectId: number
-  /** WORLD-2C C3: explicit logical read boundary. projectId remains a legacy adapter. */
+  /** Explicit logical read boundary; callers should always provide current WorkspaceScope. */
   scope?: WorkspaceScope
   /** Explicit world target. null is a valid explicit single-world/global target. */
   worldGroupId?: number | null
@@ -723,9 +692,9 @@ export interface ContextResourceDescriptorV1 {
   tokenEstimate: Partial<Record<ContextResourceDepthV1, number>>
   availableDepths: ContextResourceDepthV1[]
   priority: 'normal' | 'pinned' | 'must-read'
-  /** CTXG-5: 作者检索权重；旧 V1 descriptor 缺省按 1 处理。 */
+  /** 作者检索权重；未设置时按 1 处理。 */
   retrievalWeight?: number
-  /** CTXG-5: 作者为该资源冻结的单次读取上限；旧 V1 descriptor 缺省不额外收窄。 */
+  /** 作者为该资源冻结的单次读取上限；未设置时不额外收窄。 */
   tokenCap?: number
 }
 

@@ -228,6 +228,7 @@ export function parseTtrpgProductionBriefV2(
       "creationMode",
       "naturalLanguageInstruction",
       "campaign",
+      "campaignDesign",
       "rules",
       "table",
       "characters",
@@ -237,7 +238,6 @@ export function parseTtrpgProductionBriefV2(
       "media",
       "confirmations",
     ];
-  if (Object.prototype.hasOwnProperty.call(row, "campaignDesign")) rootFields.push("campaignDesign");
   exact(row, rootFields, "brief");
   if (row.schema !== "storyforge.ttrpg-production-brief" || row.version !== 2)
     fail("schema/version 无效");
@@ -475,7 +475,7 @@ export function parseTtrpgProductionBriefV2(
     ],
     "confirmations",
   );
-  const campaignDesign = row.campaignDesign == null ? undefined : parseTtrpgCampaignDesignV2(row.campaignDesign);
+  const campaignDesign = parseTtrpgCampaignDesignV2(row.campaignDesign);
   return {
     schema: "storyforge.ttrpg-production-brief",
     version: 2,
@@ -514,7 +514,7 @@ export function parseTtrpgProductionBriefV2(
         720,
       ),
     },
-    ...(campaignDesign ? { campaignDesign } : {}),
+    campaignDesign,
     rules: {
       origin,
       rulePackRecordId,
@@ -1099,7 +1099,7 @@ export function unresolvedTtrpgProductionBriefDecisionsV2(
 ): string[] {
   const parsed = parseTtrpgProductionBriefV2(brief);
   const unresolved: string[] = [];
-  if (parsed.campaignDesign && !parsed.campaignDesign.selection.confirmed)
+  if (!parsed.campaignDesign.selection.confirmed)
     unresolved.push("ttrpg-campaign-proposal-selection");
   if (!parsed.confirmations.worldCanonBoundary)
     unresolved.push("ttrpg-world-canon-boundary");

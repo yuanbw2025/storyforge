@@ -79,9 +79,9 @@ export const useNodeFlowStore = create<NodeFlowStore>((set, get) => ({
   },
 
   removeFlow: async flowId => {
-    const beforeMigration = await db.nodeFlows.get(flowId)
-    if (!beforeMigration) return
-    const scope = await resolveScopeLike(beforeMigration.projectId)
+    const existingRecord = await db.nodeFlows.get(flowId)
+    if (!existingRecord) return
+    const scope = await resolveScopeLike(existingRecord.projectId)
     const flow = await db.nodeFlows.get(flowId)
     if (!flow || !await assertRecordInScope(scope, 'nodeFlows', flow, { owner: 'work' })) return
     await db.transaction('rw', db.nodeFlows, db.nodeRuns, async () => {

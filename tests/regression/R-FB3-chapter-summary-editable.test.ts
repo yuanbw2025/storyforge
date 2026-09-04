@@ -12,11 +12,12 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { adopt } from '../../src/lib/registry/adopt'
 import { useOutlineStore } from '../../src/stores/outline'
+import { seedCurrentProject } from '../helpers/current-workspace'
 
 async function createProject(): Promise<number> {
   const now = Date.now()
-  return await db.projects.add({
-    name: 'FB3 Test', genre: '', description: '', targetWordCount: 0,
+  return await seedCurrentProject({
+    name: 'FB3 Test', genres: [], description: '', targetWordCount: 0,
     enableMultiWorld: false, createdAt: now, updatedAt: now,
   } as any) as number
 }

@@ -99,7 +99,7 @@ export const SAVE_TARGET_PRESETS = [
   { label: '故事.核心冲突', value: 'storyCore-field:centralConflict' },
   { label: '故事.故事主线', value: 'storyCore-field:mainPlot' },
   { label: '创作规则.写作风格', value: 'creativeRules-field:writingStyle' },
-  { label: '创作规则.基调氛围', value: 'creativeRules-field:toneAndMood' },
+  { label: '创作规则.基调氛围', value: 'creativeRules-field:atmosphere' },
   { label: '⚡ 批量创建：角色库（要求 AI 输出 JSON 数组）', value: 'create-characters:_' },
   { label: '⚡ 批量创建：大纲节点（要求 AI 输出 JSON 数组）', value: 'create-outline-nodes:_' },
   { label: '⚡ 批量创建：伏笔（要求 AI 输出 JSON 数组）', value: 'create-foreshadows:_' },
@@ -142,7 +142,7 @@ const SAVE_TARGET_FIELD_LABELS: Record<string, string> = {
   summary: '世界观摘要',
   logline: '一句话故事', concept: '故事概念', theme: '主题',
   centralConflict: '核心冲突', mainPlot: '故事主线',
-  writingStyle: '写作风格', toneAndMood: '基调氛围',
+  writingStyle: '写作风格', atmosphere: '基调氛围',
 }
 
 /** 把 SaveTarget 格式化成运行时 UI 里展示的中文标签 */

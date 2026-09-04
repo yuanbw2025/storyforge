@@ -30,18 +30,19 @@ import { computeMasterCandidateHashV1 } from './run/master-candidate-hash'
 export async function getOrCreateAgentConversation(input: {
   projectId: number
   worldGroupId: number | null
-  purpose?: string
+  purpose: string
   title?: string
   scope?: WorkspaceScope
 }): Promise<AgentConversation> {
   const scope = input.scope ?? await resolveScope({ projectId: input.projectId })
-  const purpose = input.purpose?.trim() || undefined
+  const purpose = input.purpose.trim()
+  if (!purpose) throw new Error('Agent 对话必须声明稳定 purpose。')
   const rows = await readOwnedRows<AgentConversation>(scope, 'agentConversations', { owner: 'work' })
   const current = rows
     .filter(row => (
       row.status === 'active'
       && (row.worldGroupId ?? null) === input.worldGroupId
-      && (purpose ? row.purpose === purpose : row.purpose == null)
+      && row.purpose === purpose
     ))
     .sort((left, right) => right.updatedAt - left.updatedAt)[0]
   if (current) return current

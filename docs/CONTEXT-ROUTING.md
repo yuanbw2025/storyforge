@@ -49,7 +49,7 @@ rg -n 'skill-id|moduleKey|sourceKey|targetField' \
 
 # 一个表的完整生命周期
 rg -n 'tableName|ownerField|refs' \
-  src/lib/registry/project-tables.ts src/lib/db src/lib/migrations src/lib/export tests
+  src/lib/registry/project-tables.ts src/lib/db src/lib/export tests
 
 # 历史原因而不是旧文档预载
 git log --all --oneline -- path/to/file

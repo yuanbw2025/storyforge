@@ -14,32 +14,27 @@ import { useCharacterDrivenPlanStore } from '../../src/stores/character-driven-p
 import { useEmotionBeatStore } from '../../src/stores/emotion-beat'
 import { useNoteStore } from '../../src/stores/note'
 import { useNodeFlowStore } from '../../src/stores/node-flow'
+import { addCurrentWorkFixtureV1, seedCurrentWorkspace } from '../helpers/current-workspace'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
 
 async function createGoldenProject(): Promise<{ projectId: number; worldId: number; a: WorkspaceScope; b: WorkspaceScope }> {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    name: 'C3 Golden Project', genre: 'fantasy', genres: ['fantasy'], status: 'drafting',
-    description: '共享世界，隔离作品', targetWordCount: 100000, createdAt: now, updatedAt: now,
-  } as any) as number
-  const worldId = await db.worlds.add({
-    projectId, code: 'c3-golden-world', name: '共享世界 Canon', description: 'World only',
-    currentVersion: 1, createdAt: now, updatedAt: now,
-  }) as number
-  const workA = await db.works.add({
-    projectId, worldId, title: '作品 A', description: '', genres: ['fantasy'], status: 'drafting',
-    targetWordCount: 50000, createdAt: now, updatedAt: now,
-  }) as number
-  const workB = await db.works.add({
-    projectId, worldId, title: '作品 B', description: '', genres: ['fantasy'], status: 'drafting',
-    targetWordCount: 50000, createdAt: now, updatedAt: now,
-  }) as number
-  await db.projects.update(projectId, {
-    activeWorldId: worldId,
-    activeWorkId: workA,
-    ownershipSchemaVersion: 1,
-
-
+  const root = await seedCurrentWorkspace('C3 Golden Project')
+  const projectId = root.scope.projectId
+  const worldId = root.scope.worldId
+  const workA = root.scope.workId
+  await db.worlds.update(worldId, {
+    name: '共享世界 Canon',
+    description: 'World only',
+    updatedAt: now,
   })
+  const workBRoot = await addCurrentWorkFixtureV1({
+    projectId,
+    worldId,
+    create: { title: '作品 B', targetWordCount: 50_000 },
+    now,
+  })
+  const workB = workBRoot.id!
   return {
     projectId,
     worldId,
@@ -79,6 +74,7 @@ describe('WORLD-2C C3 · scope-aware world/work chain', () => {
       { projectId: a.projectId, workId: a.workId, worldId: null, theme: 'A theme', createdAt: now, updatedAt: now },
       { projectId: b.projectId, workId: b.workId, worldId: null, theme: 'B theme', createdAt: now, updatedAt: now },
     ] as any)
+    await finalizeCurrentFixtureV1(a.projectId)
 
     const contextA = await assembleContext({
       projectId: a.projectId, scope: a, sourceKeys: ['storyCore', 'chapterContent'], chapterId: chapterA,
@@ -102,6 +98,7 @@ describe('WORLD-2C C3 · scope-aware world/work chain', () => {
       { projectId: a.projectId, workId: a.workId, worldId: null, theme: 'old A', createdAt: now, updatedAt: now },
       { projectId: b.projectId, workId: b.workId, worldId: null, theme: 'old B', createdAt: now, updatedAt: now },
     ] as any, { allKeys: true }) as number[]
+    await finalizeCurrentFixtureV1(a.projectId)
 
     const writtenA = await adopt({
       projectId: a.projectId, scope: a, target: 'storyCores',
@@ -126,6 +123,7 @@ describe('WORLD-2C C3 · scope-aware world/work chain', () => {
     const row = await db.storyCores.add({
       projectId: a.projectId, workId: a.workId, worldId: null, theme: 'A', createdAt: now, updatedAt: now,
     } as any) as number
+    await finalizeCurrentFixtureV1(a.projectId)
     const owned = await readOwnedRows<any>(b, 'storyCores', { owner: 'work' })
     expect(owned).toEqual([])
     expect(await assertRecordInScope(a, 'storyCores', await db.storyCores.get(row), { owner: 'work' })).toBe(true)
@@ -140,8 +138,10 @@ describe('WORLD-2C C3 · scope-aware world/work chain', () => {
 
   it('Agent 对话与事件流按 Work 隔离，不能读取另一部作品的运行记录', async () => {
     const { a, b } = await createGoldenProject()
-    const conversationA = await getOrCreateAgentConversation({ projectId: a.projectId, worldGroupId: null, scope: a })
-    const conversationB = await getOrCreateAgentConversation({ projectId: b.projectId, worldGroupId: null, scope: b })
+    const conversationA = await getOrCreateAgentConversation({
+                                                               purpose: 'test:r-world2c-c3-scope-aware:1', projectId: a.projectId, worldGroupId: null, scope: a })
+    const conversationB = await getOrCreateAgentConversation({
+                                                               purpose: 'test:r-world2c-c3-scope-aware:2', projectId: b.projectId, worldGroupId: null, scope: b })
     await appendAgentEvent({ projectId: a.projectId, scope: a, conversationId: conversationA.id!, kind: 'message', role: 'user', content: 'A event' })
     await appendAgentEvent({ projectId: b.projectId, scope: b, conversationId: conversationB.id!, kind: 'message', role: 'user', content: 'B event' })
     expect((await readAgentEvents(conversationA.id!, a)).map(event => event.content)).toEqual(['A event'])
@@ -151,7 +151,7 @@ describe('WORLD-2C C3 · scope-aware world/work chain', () => {
 
   it('ownership 就绪后的上游设定仍绑定 World，正文产物只写入当前 Work', async () => {
     const { a, b } = await createGoldenProject()
-    await db.projects.update(a.projectId, { includeCultivationProgressInAI: true })
+    await db.works.update(a.workId, { includeCultivationProgressInAI: true })
     const systemId = await useCultivationStore.getState().addSystem({
       projectId: a.projectId,
       worldGroupId: null,
@@ -190,7 +190,7 @@ describe('WORLD-2C C3 · scope-aware world/work chain', () => {
 
     const now = Date.now()
     const characterId = await db.characters.add({
-      projectId: a.projectId, worldId: a.worldId, name: '林舟', role: 'protagonist',
+      projectId: a.projectId, worldId: a.worldId, name: '林舟',
       roleWeight: 'main', moralAxis: 'good', orderAxis: 'lawful',
       homeWorldGroupId: null, isCrossWorld: false,
       cultivationSystemId: systemId, cultivationStageId: 'foundation',
@@ -205,6 +205,7 @@ describe('WORLD-2C C3 · scope-aware world/work chain', () => {
       content: '<p>林舟在生死关头凝成道基，正式踏入筑基境。</p>',
       wordCount: 22, status: 'draft', order: 0, notes: '', createdAt: now, updatedAt: now,
     } as any) as number
+    await finalizeCurrentFixtureV1(a.projectId)
     const beatId = await useEmotionBeatStore.getState().saveCard({
       projectId: a.projectId,
       chapterId,

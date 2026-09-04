@@ -9,6 +9,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { applyChunkResult } from '../../src/lib/import/chunk-writer'
+import { seedCurrentProject } from '../helpers/current-workspace'
 
 describe('R-13: import chunk target world routing', () => {
   beforeEach(async () => {
@@ -22,9 +23,8 @@ describe('R-13: import chunk target world routing', () => {
 
   it('stamps imported worldview, characters, and outline nodes to target world', async () => {
     const now = Date.now()
-    const projectId = await db.projects.add({
+    const projectId = await seedCurrentProject({
       name: 'Import Target Test',
-      genre: 'fantasy',
       genres: ['fantasy'],
       status: 'drafting',
       description: '',
@@ -43,7 +43,9 @@ describe('R-13: import chunk target world routing', () => {
       projectId,
       homeWorldGroupId: worldB,
       name: '沈砚',
-      role: 'protagonist',
+      roleWeight: 'main',
+      moralAxis: 'neutral',
+      orderAxis: 'neutral',
       shortDescription: '雾都旧角色',
       createdAt: now,
       updatedAt: now,
@@ -51,7 +53,10 @@ describe('R-13: import chunk target world routing', () => {
 
     await applyChunkResult(projectId, {
       worldview: { worldOrigin: '镜城由海贸兴起。' },
-      characters: [{ name: '沈砚', role: 'protagonist', shortDescription: '镜城账房' }],
+      characters: [{
+        name: '沈砚', roleWeight: 'main', moralAxis: 'neutral', orderAxis: 'neutral',
+        shortDescription: '镜城账房',
+      }],
       outline: [{ title: '镜城卷', summary: '镜税风波', children: [{ title: '第一章', summary: '入城' }] }],
     } as any, worldA)
 
@@ -68,4 +73,3 @@ describe('R-13: import chunk target world routing', () => {
     expect(nodes.every(node => node.worldGroupId === worldA)).toBe(true)
   })
 })
-

@@ -28,7 +28,7 @@ import {
   staleAgentRunVerificationV1,
   type AgentRunSnapshotV1,
 } from './event-store'
-import { PROSE_GENERATION_VERIFIER_SET_V1, PROSE_GENERATION_VERIFIER_SET_V2, PROSE_GENERATION_VERIFIER_SET_V3 } from './prose-generation-durable'
+import { PROSE_GENERATION_VERIFIER_SET_V2, PROSE_GENERATION_VERIFIER_SET_V3 } from './prose-generation-durable'
 import { createVerificationReceiptV1 } from './verification-receipt'
 import { hashCanonicalValue } from './hash'
 import type { AgentRunFailureActionV1, AgentRunFailureCategoryV1 } from '../../types/agent-run'
@@ -62,7 +62,6 @@ const ORGANIZATION_SKILL_V1 = getAgentSkillV1('prose.organize', 'prose')
 const MEMORY_SKILL_V1 = getAgentSkillV1('prose.memory', 'prose')
 const CONSISTENCY_SKILL_V1 = getAgentSkillV1('prose.consistency', 'prose')
 const PROSE_TERMINAL_VERIFIERS_V1 = new Set<string>([
-  PROSE_GENERATION_VERIFIER_SET_V1,
   PROSE_GENERATION_VERIFIER_SET_V2,
   PROSE_GENERATION_VERIFIER_SET_V3,
 ])

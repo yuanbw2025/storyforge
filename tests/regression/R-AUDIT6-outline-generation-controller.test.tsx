@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { UseAIStreamReturn } from '../../src/hooks/useAIStream'
 import type { AssembleContextResult } from '../../src/lib/registry/types'
-import type { OutlineNode, Project } from '../../src/lib/types'
+import type { OutlineNode, Project, Work } from '../../src/lib/types'
 import { useOutlineGenerationController } from '../../src/components/outline/useOutlineGenerationController'
 import { resolveOutlineGenerationSourceKeysV2 } from '../../src/lib/outline/harness'
 
@@ -65,13 +65,31 @@ function assembled(text: string): AssembleContextResult {
 
 const project: Project = {
   id: 1,
+  workspaceUid: 'WS-00000000-0000-4000-8000-000000000001',
+  workspacePurpose: 'independent-work',
   name: '控制器测试',
-  genre: '玄幻',
-  description: '',
-  targetWordCount: 500_000,
   enableMultiWorld: true,
+  activeWorldId: 101,
+  activeWorkId: 201,
   createdAt: 1,
   updatedAt: 1,
+}
+
+const work: Work = {
+  id: 201, projectId: 1, worldId: 101,
+  code: 'WORK-00000000-0000-4000-8000-000000000201',
+  kind: 'novel', novelProfile: 'long', title: '控制器测试',
+  description: '', genres: ['玄幻'], status: 'drafting',
+  targetWordCount: 500_000, currentWordCount: 0,
+  includeCultivationProgressInAI: false,
+  activeCharacterDrivenPlanId: null, activeNarrativeModuleId: null,
+  postAdoptionPolicy: 'suggest',
+  postAdoptionTaskTypes: ['organization', 'memory', 'retrieval', 'consistency'],
+  postAdoptionBudget: {
+    maxModelCalls: 2, maxInputTokens: 48_000, maxOutputTokens: 16_000,
+    maxCostUsd: 0.25, allowUnknownCost: false,
+  },
+  createdAt: 1, updatedAt: 1,
 }
 
 const volumes = [
@@ -111,6 +129,7 @@ async function mount(patch: Partial<Parameters<typeof useOutlineGenerationContro
   const ai = createAI()
   const options: Parameters<typeof useOutlineGenerationController>[0] = {
     project,
+    work,
     nodes: volumes,
     volumes,
     hint: '',

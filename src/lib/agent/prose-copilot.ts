@@ -86,11 +86,11 @@ export interface ProseCopilotSnapshot {
   chapterHadContent: boolean
   chapterOrder: number
   /** 叙事视角角色；缺省表示本轮不注入任何角色认知投影。 */
-  perspectiveCharacterId?: number | null
-  /** H9：生成时的信息边界；旧候选缺省时按兼容路径重建。 */
-  informationBoundaryHash?: string
+  perspectiveCharacterId: number | null
+  /** 生成时冻结的信息边界。 */
+  informationBoundaryHash: string
   /** 视角来自章节字段时，章节视角变化必须使候选过期；主 Agent 显式视角不绑定该字段。 */
-  perspectiveFromChapter?: boolean
+  perspectiveFromChapter: boolean
 }
 
 export interface ProseCopilotInput {
@@ -247,9 +247,9 @@ async function snapshotOf(
   outline: OutlineNode,
   chapter: Chapter | null,
   order: number,
-  perspectiveCharacterId?: number | null,
-  informationBoundaryHash?: string,
-  perspectiveFromChapter?: boolean,
+  perspectiveCharacterId: number | null,
+  informationBoundaryHash: string,
+  perspectiveFromChapter: boolean,
 ): Promise<ProseCopilotSnapshot> {
   return {
     outlineNodeId: outline.id!,
@@ -316,8 +316,7 @@ function sameSnapshot(left: ProseCopilotSnapshot, right: ProseCopilotSnapshot): 
     && left.chapterContentHash === right.chapterContentHash
     && left.chapterHadContent === right.chapterHadContent
     && left.perspectiveCharacterId === right.perspectiveCharacterId
-    && (left.informationBoundaryHash == null
-      || left.informationBoundaryHash === right.informationBoundaryHash)
+    && left.informationBoundaryHash === right.informationBoundaryHash
 }
 
 function candidateIssues(
@@ -398,10 +397,9 @@ async function adoptCandidate(input: {
     worldGroupId: input.worldGroupId,
     perspectiveCharacterId: input.snapshot.perspectiveCharacterId ?? null,
   })
-  if (
-    input.snapshot.informationBoundaryHash != null
-    && informationBoundary.manifestHash !== input.snapshot.informationBoundaryHash
-  ) throw new ProseCopilotStaleError()
+  if (informationBoundary.manifestHash !== input.snapshot.informationBoundaryHash) {
+    throw new ProseCopilotStaleError()
+  }
   const boundaryIssues = validateProseInformationBoundaryV1(candidate, informationBoundary)
   if (boundaryIssues.length) throw new Error(boundaryIssues.map(issue => issue.message).join('；'))
   const chapterId = await db.transaction(

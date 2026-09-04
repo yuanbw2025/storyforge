@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { generateWorkspaceUid } from '../../src/lib/memory/identity'
-import { ensureWorkspaceOwnership } from '../../src/lib/workspace/ownership'
+import { resolveWorkspaceOwnership } from '../../src/lib/workspace/ownership'
 import { stampNewRecord } from '../../src/lib/workspace/scope'
 import type { WorkspaceScope } from '../../src/lib/types'
 import { AgentTeamBudgetTracker } from '../../src/lib/agent/team-budget'
@@ -21,6 +21,7 @@ import {
   resetHarnessFaultInjectionV1,
 } from '../../src/lib/agent/dev-fault-injection'
 import { verifyContextGatewayCandidateEvidenceV1 } from '../../src/lib/context-gateway/attempt-evidence'
+import { seedCurrentProject } from '../helpers/current-workspace'
 
 const NOW = 1_788_300_000_000
 
@@ -30,12 +31,12 @@ async function seedWorkspace(name: string): Promise<{
   primaryGroupId: number
   secondaryGroupId: number
 }> {
-  const projectId = await db.projects.add({
-    workspaceUid: generateWorkspaceUid(), name, genre: 'fantasy', genres: ['fantasy'],
+  const projectId = await seedCurrentProject({
+    workspaceUid: generateWorkspaceUid(), name, genres: ['fantasy'],
     description: '', status: 'drafting', targetWordCount: 1_000_000, enableMultiWorld: true,
     createdAt: NOW, updatedAt: NOW,
   } as never) as number
-  const scope = (await ensureWorkspaceOwnership(projectId)).scope
+  const scope = (await resolveWorkspaceOwnership(projectId)).scope
   const primaryGroupId = await db.worldGroups.add(stampNewRecord(scope, 'worldGroups', {
     projectId, worldId: scope.worldId, name: '主世界', order: 0, createdAt: NOW, updatedAt: NOW,
   }, { owner: 'world' }) as never) as number
@@ -66,6 +67,7 @@ function goodResponse(value = '潮民以船籍区分民族身份，与岛上钟�
 
 async function runCandidate(fixture: Awaited<ReturnType<typeof seedWorkspace>>) {
   const conversation = await getOrCreateAgentConversation({
+    purpose: 'test:r-race4-races-fault-matrix:1',
     projectId: fixture.projectId, scope: fixture.scope, worldGroupId: fixture.primaryGroupId,
   })
   const result = await runDurableMasterAgentPlanV1({

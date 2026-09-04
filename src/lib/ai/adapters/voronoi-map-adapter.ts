@@ -237,70 +237,6 @@ export function readVoronoiMapPromptTemplateSnapshotV1(): ChatMessage[] {
   return buildVoronoiMapPromptFromRegisteredContextV1('{{REGISTERED_CONTEXT}}', '{{TARGET_WORLD_NODE}}')
 }
 
-/**
- * 解析 AI 返回的 JSON 为 MapGenConfig
- */
-export function parseVoronoiMapConfig(raw: string, sourceText = ''): MapGenConfig {
-  const cleaned = raw
-    .replace(/^```(?:json)?\s*\n?/i, '')
-    .replace(/\n?\s*```\s*$/i, '')
-    .trim()
-
-  const parsed = JSON.parse(cleaned)
-
-  const config: MapGenConfig = {
-    width: 1200,
-    height: 800,
-    seed: String(parsed.seed || Math.floor(Math.random() * 1e10)),
-    mapName: parsed.mapName || 'Fantasy World',
-    pointCount: clamp(parsed.pointCount || 10000, 5000, 20000),
-    landRatio: clamp(parsed.landRatio || 0.45, 0.15, 0.8),
-    continentCount: clamp(parsed.continentCount || 2, 1, 5),
-    stateCount: clamp(parsed.stateCount || 8, 2, 15),
-    burgDensity: clamp(parsed.burgDensity || 0.5, 0.1, 1.5),
-    temperatureShift: clamp(parsed.temperatureShift || 0, -20, 20),
-    precipitationFactor: clamp(parsed.precipitationFactor || 1.0, 0.2, 3.0),
-  }
-
-  // 地形模板
-  if (parsed.heightmapTemplate && VALID_TEMPLATES.includes(parsed.heightmapTemplate)) {
-    config.heightmapTemplate = parsed.heightmapTemplate
-  }
-
-  // 命名风格
-  if (parsed.namingStyle && VALID_NAMING.includes(parsed.namingStyle)) {
-    config.namingStyle = parsed.namingStyle
-  }
-
-  // 名称列表
-  if (Array.isArray(parsed.stateNames) && parsed.stateNames.length > 0) {
-    config.stateNames = parsed.stateNames.map(String)
-  }
-  if (Array.isArray(parsed.burgNames) && parsed.burgNames.length > 0) {
-    config.burgNames = parsed.burgNames.map(String)
-  }
-  if (Array.isArray(parsed.riverNames) && parsed.riverNames.length > 0) {
-    config.riverNames = parsed.riverNames.map(String)
-  }
-
-  const spatialEntities = normalizeSpatialEntities(parsed.spatialEntities, sourceText)
-  if (spatialEntities.length > 0) {
-    config.spatialEntities = spatialEntities
-    const entityNames = new Set(spatialEntities.map(entity => entity.name))
-    const spatialRelations = normalizeSpatialRelations(parsed.spatialRelations, entityNames, sourceText)
-    if (spatialRelations.length > 0) config.spatialRelations = spatialRelations
-  }
-
-  const widthEvidence = cleanEvidence(parsed.mapWidthEvidenceQuote)
-  const mapWidthKm = toPositiveNumber(parsed.mapWidthKm)
-  if (mapWidthKm && widthEvidence && hasExactEvidence(sourceText, widthEvidence)) {
-    config.mapWidthKm = clamp(mapWidthKm, 1, 1_000_000)
-    config.mapWidthEvidenceQuote = widthEvidence
-  }
-
-  return config
-}
-
 const STRICT_TOP_LEVEL_KEYS = [
   'seed', 'mapName', 'pointCount', 'landRatio', 'continentCount', 'stateCount',
   'burgDensity', 'temperatureShift', 'precipitationFactor', 'heightmapTemplate',
@@ -349,9 +285,8 @@ function strictNames(value: unknown, label: string, max: number): string[] {
   return names
 }
 
-/** Strict durable protocol. Unlike the legacy parser it never clamps, drops,
- * demotes or invents a random seed to conceal malformed model output. */
-export function parseVoronoiMapConfigStrictV1(raw: string, sourceText: string): MapGenConfig {
+/** Current closed map protocol. Malformed model output is rejected, never normalized into new facts. */
+export function parseVoronoiMapConfig(raw: string, sourceText: string): MapGenConfig {
   const cleaned = raw.trim()
   if (cleaned.startsWith('```') || cleaned.endsWith('```')) {
     throw new Error('地图配置必须是纯 JSON，不得包含 Markdown 代码围栏。')
@@ -482,69 +417,6 @@ export function parseVoronoiMapConfigStrictV1(raw: string, sourceText: string): 
   }
 }
 
-function clamp(v: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, v))
-}
-
-function normalizeSpatialEntities(value: unknown, sourceText: string): MapSpatialEntity[] {
-  if (!Array.isArray(value)) return []
-  const seen = new Set<string>()
-  return value.flatMap(item => {
-    if (!isRecord(item)) return []
-    const name = cleanName(item.name)
-    if (!name || seen.has(name) || !isAllowed(item.kind, VALID_ENTITY_KINDS)) return []
-    const evidenceQuote = cleanEvidence(item.evidenceQuote)
-    const explicit = item.source === 'explicit' && !!evidenceQuote && hasExactEvidence(sourceText, evidenceQuote)
-    const entity: MapSpatialEntity = {
-      name,
-      kind: item.kind,
-      source: explicit ? 'explicit' : 'inferred',
-    }
-    if (isAllowed(item.scaleTier, VALID_SCALE_TIERS)) entity.scaleTier = item.scaleTier
-    const capitalName = cleanName(item.capitalName)
-    if (item.kind === 'state' && capitalName) entity.capitalName = capitalName
-    if (explicit) entity.evidenceQuote = evidenceQuote
-    seen.add(name)
-    return [entity]
-  }).slice(0, 120)
-}
-
-function normalizeSpatialRelations(
-  value: unknown,
-  entityNames: Set<string>,
-  sourceText: string,
-): MapSpatialRelation[] {
-  if (!Array.isArray(value)) return []
-  return value.flatMap(item => {
-    if (!isRecord(item)) return []
-    const from = cleanName(item.from)
-    const to = cleanName(item.to)
-    if (!from || !to || from === to || !entityNames.has(from) || !entityNames.has(to)) return []
-    const direction = isAllowed(item.direction, VALID_DIRECTIONS) ? item.direction : undefined
-    const distanceTier = isAllowed(item.distanceTier, VALID_DISTANCE_TIERS) ? item.distanceTier : undefined
-    const distanceUnit = isAllowed(item.distanceUnit, VALID_DISTANCE_UNITS) ? item.distanceUnit : undefined
-    const rawDistance = toPositiveNumber(item.distanceValue)
-    const distanceValue = distanceUnit && rawDistance ? clamp(rawDistance, 0.001, 10_000_000) : undefined
-    if (!direction && !distanceTier && !distanceValue) return []
-
-    const evidenceQuote = cleanEvidence(item.evidenceQuote)
-    const explicit = item.source === 'explicit' && !!evidenceQuote && hasExactEvidence(sourceText, evidenceQuote)
-    const relation: MapSpatialRelation = {
-      from,
-      to,
-      source: explicit ? 'explicit' : 'inferred',
-    }
-    if (direction) relation.direction = direction
-    if (distanceTier) relation.distanceTier = distanceTier
-    if (distanceValue && distanceUnit) {
-      relation.distanceValue = distanceValue
-      relation.distanceUnit = distanceUnit
-    }
-    if (explicit) relation.evidenceQuote = evidenceQuote
-    return [relation]
-  }).slice(0, 240)
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
@@ -553,19 +425,6 @@ function isAllowed<T extends string>(value: unknown, allowed: readonly T[]): val
   return typeof value === 'string' && allowed.includes(value as T)
 }
 
-function cleanName(value: unknown): string {
-  return typeof value === 'string' ? value.trim().slice(0, 100) : ''
-}
-
-function cleanEvidence(value: unknown): string {
-  return typeof value === 'string' ? value.trim().slice(0, 300) : ''
-}
-
 function hasExactEvidence(sourceText: string, quote: string): boolean {
   return quote.length >= 2 && sourceText.includes(quote)
-}
-
-function toPositiveNumber(value: unknown): number | undefined {
-  const number = typeof value === 'number' ? value : Number(value)
-  return Number.isFinite(number) && number > 0 ? number : undefined
 }

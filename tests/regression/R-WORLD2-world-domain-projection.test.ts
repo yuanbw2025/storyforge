@@ -3,22 +3,21 @@ import { db } from '../../src/lib/db/schema'
 import { WORLD_CAPABILITY_AREAS } from '../../src/lib/registry/types'
 import type { Project, Work, World, WorkspaceScope } from '../../src/lib/types'
 import { createWorkspace, type CreatedWorkspace } from '../../src/lib/workspace/create-workspace'
+import { generateWorldCode } from '../../src/lib/workspace/identity'
+import { generateWorkCode } from '../../src/lib/memory/identity'
 import { loadWorldProjection, loadWorldProjections } from '../../src/lib/world-engine/domain'
 import { createWorldRevision } from '../../src/lib/world-engine/releases'
 import { stampNewRecord } from '../../src/lib/workspace/scope'
+import { currentWorkFixtureRecordV1 } from '../helpers/current-workspace'
 
-async function worldEngine(name: string, now = Date.now()): Promise<CreatedWorkspace> {
+async function worldEngine(name: string): Promise<CreatedWorkspace> {
   return createWorkspace({
     name,
-    genre: 'other',
     genres: ['other'],
     status: 'drafting',
     description: '',
     targetWordCount: 500_000,
-    currentWordCount: 500_000,
     enableMultiWorld: true,
-    createdAt: now,
-    updatedAt: now,
   }, { purpose: 'world-engine', kind: 'novel', novelProfile: 'long' })
 }
 
@@ -30,7 +29,7 @@ async function addAlternateScope(
   const world: World = {
     projectId: project.id,
     identityKind: 'world-draft',
-    code: `W-ALTERNATE-${suffix.padEnd(4, '0')}`,
+    code: generateWorldCode(now, suffix === 'B' ? 0.42 : 0.24),
     name: `备用世界-${suffix}`,
     description: '',
     currentVersion: 0,
@@ -38,10 +37,10 @@ async function addAlternateScope(
     updatedAt: now,
   }
   const worldId = await db.worlds.add(world) as number
-  const work: Work = {
+  const work: Work = currentWorkFixtureRecordV1({
     projectId: project.id,
     worldId,
-    code: `WORK-ALT-${suffix}`,
+    code: generateWorkCode(),
     kind: 'novel',
     novelProfile: 'long',
     title: `备用作品-${suffix}`,
@@ -52,7 +51,7 @@ async function addAlternateScope(
     currentWordCount: 0,
     createdAt: now,
     updatedAt: now,
-  }
+  })
   const workId = await db.works.add(work) as number
   return {
     scope: { projectId: project.id, worldId, workId },
@@ -150,8 +149,8 @@ describe('WORLD-2 · 世界领域投影', () => {
 
   it('同项目多 World/Work 与不同项目都严格隔离，同时每张语义表只扫描一次', async () => {
     const now = Date.now()
-    const first = await worldEngine('甲世界', now)
-    const second = await worldEngine('乙世界', now + 1)
+    const first = await worldEngine('甲世界')
+    const second = await worldEngine('乙世界')
     await db.worldviews.add(stampNewRecord(first.scope, 'worldviews', {
       projectId: first.scope.projectId,
       worldOrigin: '甲世界事实',
@@ -217,7 +216,6 @@ describe('WORLD-2 · 世界领域投影', () => {
 
     const independent = await createWorkspace({
       name: '独立长篇',
-      genre: 'other',
       genres: ['other'],
       status: 'drafting',
       description: '',

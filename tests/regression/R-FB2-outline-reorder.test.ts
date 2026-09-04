@@ -9,6 +9,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { useOutlineStore } from '../../src/stores/outline'
 import { computeReorder } from '../../src/components/outline/useDragReorder'
+import { seedCurrentProject } from '../helpers/current-workspace'
 
 async function seedVolumeWithChapters(projectId: number, n: number): Promise<{ volId: number; chapterIds: number[] }> {
   const store = useOutlineStore.getState()
@@ -32,7 +33,7 @@ describe('R-FB2 · 大纲排序/插入', () => {
   })
 
   it('reorderNodes:同级 order 重写为 0..n-1（DB + 内存一致）', async () => {
-    const pid = await db.projects.add({ name: 'P', genre: '', description: '', targetWordCount: 0, enableMultiWorld: false, createdAt: Date.now(), updatedAt: Date.now() } as any) as number
+    const pid = await seedCurrentProject({ name: 'P', genres: [], description: '', targetWordCount: 0, enableMultiWorld: false, createdAt: Date.now(), updatedAt: Date.now() } as any) as number
     const { chapterIds } = await seedVolumeWithChapters(pid, 3)
     const [a, b, c] = chapterIds
 
@@ -51,7 +52,7 @@ describe('R-FB2 · 大纲排序/插入', () => {
   })
 
   it('insertNodeAt:在中间插入,插入后 order 连续无重复', async () => {
-    const pid = await db.projects.add({ name: 'P2', genre: '', description: '', targetWordCount: 0, enableMultiWorld: false, createdAt: Date.now(), updatedAt: Date.now() } as any) as number
+    const pid = await seedCurrentProject({ name: 'P2', genres: [], description: '', targetWordCount: 0, enableMultiWorld: false, createdAt: Date.now(), updatedAt: Date.now() } as any) as number
     const { volId, chapterIds } = await seedVolumeWithChapters(pid, 3)
 
     // 在第 1 章(index 0)之后插入一章 → 新章应排在 index 1

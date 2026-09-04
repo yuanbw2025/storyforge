@@ -40,8 +40,7 @@ export function buildCreativeRulesContext(rules: CreativeRules | null): string {
   if (rules.writingStyle) parts.push(`写作风格：${rules.writingStyle.slice(0, 200)}`)
   const pov = rules.narrativePOV
   if (pov) parts.push(`叙事视角：${POV_LABELS[pov] || pov}`)
-  const atmosphere = rules.atmosphere || rules.toneAndMood
-  if (atmosphere) parts.push(`基调氛围：${atmosphere.slice(0, 150)}`)
+  if (rules.atmosphere) parts.push(`基调氛围：${rules.atmosphere.slice(0, 150)}`)
   if (rules.specialRequirements) parts.push(`特殊要求：${rules.specialRequirements.slice(0, 200)}`)
   try {
     const proh: string[] = JSON.parse(rules.prohibitions || '[]')
@@ -57,7 +56,7 @@ export function buildCreativeRulesContext(rules: CreativeRules | null): string {
 
 // ── 单一事实源：世界观/故事核心/力量体系的字段格式化（单世界与多世界共用，杜绝漂移） ──
 
-/** 格式化自然物产（珍禽异兽/灵药/矿石/其他）。Phase 35-b 迁到词条后将从此移除，改由 codex 注入。 */
+/** 格式化当前世界观中由作者维护的自然物产明细。 */
 function formatNaturalResources(nr: Worldview['naturalResources']): string {
   if (!nr) return ''
   const parts = [
@@ -71,8 +70,7 @@ function formatNaturalResources(nr: Worldview['naturalResources']): string {
 
 /**
  * 格式化世界观全部字段为【世界观】块。
- * 覆盖所有当前面板可填字段。存量字段由数据库升级一次性迁入正式表，
- * 因此上下文装配不承担格式兼容或双读职责。
+ * 覆盖所有当前面板可填字段；上下文装配只读取当前规范字段。
  */
 export function formatWorldviewBlock(wv: Worldview | null): string {
   if (!wv) return ''
@@ -82,8 +80,7 @@ export function formatWorldviewBlock(wv: Worldview | null): string {
   const divine = d?.hasDivinity
     ? `神明设定：${[d.divineRank, d.divineNames, d.divineRules].filter(Boolean).join('；')}`
     : ''
-  const v3 = [
-    wv.summary && `摘要：${wv.summary}`,
+  const fields = [
     wv.worldOrigin && `世界来源：${wv.worldOrigin}`,
     wv.powerHierarchy && `力量体系：${wv.powerHierarchy}`,
     divine,
@@ -103,7 +100,7 @@ export function formatWorldviewBlock(wv: Worldview | null): string {
     wv.internalConflicts && `矛盾冲突：${wv.internalConflicts}`,
     wv.itemDesign && `道具设计：${wv.itemDesign}`,
   ].filter(Boolean)
-  return v3.length ? `【世界观】\n${v3.join('\n')}` : ''
+  return fields.length ? `【世界观】\n${fields.join('\n')}` : ''
 }
 
 /** 格式化故事核心为【故事核心】块（全字段）。 */

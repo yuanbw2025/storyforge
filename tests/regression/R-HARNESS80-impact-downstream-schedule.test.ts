@@ -24,6 +24,8 @@ import {
 } from '../../src/lib/agent/run/impact-story-timeline-regeneration-durable'
 import { staleAgentRunVerificationV1 } from '../../src/lib/agent/run/event-store'
 import type { WorkspaceScope } from '../../src/lib/types'
+import { stampCurrentFixtureResourceUidsV1 } from '../helpers/current-resource-identity'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
 
 const OUTLINE_OUTPUT = JSON.stringify({
   summary: '钟楼根据半开启的潮门调整撤离次序，并留下追查潮声来源的因果钩子。',
@@ -41,19 +43,8 @@ const TIMELINE_OUTPUT = JSON.stringify({
 
 async function seed(label = 'h80') {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    name: `影响调度-${label}`, genre: 'fantasy', genres: ['fantasy'], status: 'drafting', description: '',
-    targetWordCount: 100_000,createdAt: now, updatedAt: now,
-  } as any) as number
-  const worldId = await db.worlds.add({
-    projectId, code: `${label}-${now}`, name: '主世界', description: '', currentVersion: 1,
-    createdAt: now, updatedAt: now,
-  }) as number
-  const workId = await db.works.add({
-    projectId, worldId, title: label, description: '', genres: ['fantasy'], status: 'drafting',
-    targetWordCount: 100_000, createdAt: now, updatedAt: now,
-  } as any) as number
-  await db.projects.update(projectId, { activeWorldId: worldId, activeWorkId: workId, ownershipSchemaVersion: 1 })
+  const created = await seedCurrentWorkspace(`影响调度-${label}`)
+  const { projectId, worldId, workId } = created.scope
   const worldGroupId = await db.worldGroups.add({
     projectId, worldId, name: '主世界', order: 0, createdAt: now, updatedAt: now,
   }) as number
@@ -94,6 +85,7 @@ async function seed(label = 'h80') {
     projectId, workId, logline: '潮汐改变港城命运', concept: '', theme: '', centralConflict: '',
     plotPattern: '', mainPlot: '', subPlots: '', createdAt: now, updatedAt: now,
   } as any)
+  await stampCurrentFixtureResourceUidsV1(projectId)
   return {
     scope: { projectId, worldId, workId } satisfies WorkspaceScope,
     projectId,

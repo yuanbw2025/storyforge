@@ -686,8 +686,8 @@ function textSystem(taskKey: string, brief: ProductProductionBriefV3): string {
     '{"schema":"storyforge.product-design-artifact","version":1,"title":"...","logline":"...","playerGoal":"...","coreLoop":["..."],"sourceAnchors":["..."],"invariants":["..."],"tone":["..."],"targetPlayMinutes":1,"targetEndingCount":1}。' +
     `sourceAnchors 只能从 ${JSON.stringify([...brief.source.startingPoint.sourceRefs, `world:${brief.source.worldContentHash}`])} 中选择且至少一个；目标分钟=${brief.scale.targetPlayMinutes}，结局=${brief.scale.targetEndingCount}。`
   if (taskKey === 'content.narrative') {
-    const ttrpgDesign = brief.intent.productType === 'ttrpg' && brief.ttrpg?.campaignDesign
-      ? resolveTtrpgCampaignDesignV2(brief.ttrpg.campaignDesign) : null
+    const ttrpgDesign = brief.intent.productType === 'ttrpg'
+      ? resolveTtrpgCampaignDesignV2(brief.ttrpg!.campaignDesign) : null
     return `${common}\n生成完整可玩的分支叙事。输出字段必须精确为：` +
     '{"schema":"storyforge.product-narrative-artifact","version":1,"moduleKind":"main|side|quest|opening|free","moduleTitle":"...","entryNodeKey":"...","nodes":[{"key":"...","kind":"entry|scene|choice|ending","title":"...","summary":"...","condition":{},"effects":[]}],"beats":[{"beatKey":"...","nodeKey":"...","kind":"narration|dialogue|action|system","speakerKey":null,"text":"...","order":0}],"choices":[{"choiceKey":"...","sourceNodeKey":"...","text":"...","description":"","unavailableReason":"","targetNodeKey":"...","displayCondition":{},"availableCondition":{},"effects":[],"tags":[],"order":0}]}。' +
     `所有 key/beatKey/choiceKey/nodeKey 必须匹配 ^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$。` +

@@ -189,6 +189,7 @@ function initialRuntimeState(
     entities[template.characterKey] = {
       entityKey: template.characterKey,
       kind: template.role === "player" ? "player" : "npc",
+      sourceId: null,
       name: template.name,
       lifecycleStatus: "active",
       locationKey: null,
@@ -200,6 +201,7 @@ function initialRuntimeState(
       entities[scene.locationKey] = {
         entityKey: scene.locationKey,
         kind: "location",
+        sourceId: null,
         name: scene.locationKey,
         lifecycleStatus: "active",
         locationKey: null,

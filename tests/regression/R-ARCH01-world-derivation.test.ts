@@ -10,7 +10,6 @@ import type { WorldReleaseManifestV3, Worldview } from '../../src/lib/types'
 function projectInput(name: string, targetWordCount = 100_000) {
   return {
     name,
-    genre: 'other',
     genres: ['other'],
     status: 'drafting' as const,
     description: '',

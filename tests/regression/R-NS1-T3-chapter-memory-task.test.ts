@@ -2,11 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { runChapterMemoryTask } from '../../src/lib/ai/chapter-memory/run-chapter-memory'
 import { getChapterDerivedMemoryStatus } from '../../src/lib/ai/chapter-memory/text-normalization'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
+import { seedCurrentProject } from '../helpers/current-workspace'
 
 async function seed() {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    name: 'NS1 T3', genre: 'fantasy', description: '', targetWordCount: 1000,
+  const projectId = await seedCurrentProject({
+    name: 'NS1 T3', genres: ['fantasy'], description: '', targetWordCount: 1000,
     enableMultiWorld: false, createdAt: now, updatedAt: now,
   } as any) as number
   const outlineNodeId = await db.outlineNodes.add({
@@ -18,6 +20,7 @@ async function seed() {
     projectId, outlineNodeId, title: '第一章', content, wordCount: 22,
     status: 'draft', order: 0, notes: '', createdAt: now, updatedAt: now,
   } as any) as number
+  await finalizeCurrentFixtureV1(projectId)
   return { projectId, chapterId, content }
 }
 

@@ -1,16 +1,16 @@
-import { importProjectJSON, type ProjectExportData } from '../export/json-export'
-import { inspectProjectBackup } from '../export/backup-trust'
+import { importProjectJSON } from '../export/json-export'
 import { PROJECT_TABLES } from '../registry/project-tables'
 import { db } from '../db/schema'
 import { cascadeDeleteProject } from '../registry/lifecycle'
 import type { CommunityWorldLicense, WorldReleaseManifestV3 } from '../types'
 import { generateWorldCode } from '../workspace/identity'
-import { assertReleaseUnchanged, stableJson } from './releases'
+import { assertReleaseUnchanged, stableJson, worldReleaseUidV1 } from './releases'
 import { resolveWorkspaceScope } from '../workspace/ownership'
 import {
   parsePureWorldReleaseManifestV3,
   verifyPureWorldReleaseManifestV3,
 } from './release-codec'
+import { assertWorldSemanticSnapshotV1, materializeWorldReleaseBackupV1 } from './semantic-snapshot'
 
 export const WORLD_PACKAGE_FORMAT = 'storyforge.world-package'
 export const WORLD_PACKAGE_VERSION = 3
@@ -69,10 +69,6 @@ const LICENSES = new Set<CommunityWorldLicense>([
   'CC-BY-NC-4.0',
   'ALL-RIGHTS-RESERVED',
 ])
-const ROOT_TABLES = new Set(['worlds', 'works'])
-const WORLD_SEMANTIC_TABLES = new Set(
-  PROJECT_TABLES.filter(spec => spec.worldSemantic).map(spec => spec.name),
-)
 const WORLD_PACKAGE_MAX_BYTES = 32 * 1024 * 1024
 const WORLD_PACKAGE_KEYS = new Set(['format', 'packageVersion', 'manifest', 'release', 'integrity'])
 const WORLD_PACKAGE_MANIFEST_KEYS = new Set([
@@ -241,26 +237,8 @@ export async function inspectWorldPackage(input: unknown): Promise<WorldPackageT
       || manifest.name !== releaseManifest.worldName) {
       errors.push('世界分享包的发布身份不一致。')
     }
-    const portable = releaseManifest.portableProject as unknown as ProjectExportData
-    const portableRecord = portable as unknown as Record<string, unknown>
-    const backupReport = inspectProjectBackup(portable)
-    if (!backupReport.valid) errors.push(...backupReport.errors)
-    warnings.push(...backupReport.warnings)
-    const selected = new Set(releaseManifest.selectedTables)
-    for (const tableName of releaseManifest.selectedTables) {
-      const rows = portableRecord[tableName]
-      if (!Array.isArray(rows)) {
-        errors.push(`便携数据缺少冻结资源「${tableName}」。`)
-      } else if (canonicalStringify(rows) !== canonicalStringify(releaseManifest.records[tableName])) {
-        errors.push(`便携数据与冻结资源「${tableName}」不一致。`)
-      }
-    }
-    for (const [tableName, rows] of Object.entries(portable)) {
-      if (!Array.isArray(rows) || ROOT_TABLES.has(tableName)) continue
-      if (!WORLD_SEMANTIC_TABLES.has(tableName) || !selected.has(tableName)) {
-        if (rows.length > 0) errors.push(`纯语义世界包包含未冻结的资源「${tableName}」。`)
-      }
-    }
+    try { assertWorldSemanticSnapshotV1(releaseManifest.semanticSnapshot) }
+    catch (error) { errors.push(error instanceof Error ? error.message : '世界语义快照无效。') }
   }
 
   const integrity = input.integrity
@@ -292,15 +270,13 @@ export async function importWorldPackage(input: unknown): Promise<number> {
   }
   const release = input.release
   const releaseManifest = parsePureWorldReleaseManifestV3(release.manifest)
-  const packageData = releaseManifest.portableProject as unknown as ProjectExportData
-  const sourceProject = packageData.project as unknown as Record<string, unknown>
-  const portableProjectKeys = [
-    'workspaceUid', 'name', 'description', 'genres', 'genre', 'status',
-    'targetWordCount', 'currentWordCount', 'enableMultiWorld',
-    'ownershipSchemaVersion', '_activeWorldExportId', '_activeWorkExportId',
-    '_activeCharacterDrivenPlanExportId', 'createdAt', 'updatedAt',
+  const sourceProject = releaseManifest.semanticSnapshot.project
+  const semanticProjectKeys = [
+    'workspaceUid', 'workspacePurpose', 'name', 'enableMultiWorld', 'productPlatformOptIns',
+    '_activeWorldExportId', '_activeWorkExportId',
+    'createdAt', 'updatedAt',
   ] as const
-  const project = Object.fromEntries(portableProjectKeys
+  const project = Object.fromEntries(semanticProjectKeys
     .filter(key => Object.prototype.hasOwnProperty.call(sourceProject, key))
     .map(key => [key, sourceProject[key]])) as Record<string, unknown>
   project.workspacePurpose = 'world-engine'
@@ -312,10 +288,7 @@ export async function importWorldPackage(input: unknown): Promise<number> {
     license: report.manifest.license,
     importedAt: Date.now(),
   }
-  project.status = 'drafting'
-  project.targetWordCount = 0
-  project.currentWordCount = 0
-  const importedProjectId = await importProjectJSON({ ...packageData, project } as ProjectExportData)
+  const importedProjectId = await importProjectJSON(materializeWorldReleaseBackupV1(releaseManifest, project))
   try {
     const importedProject = await db.projects.get(importedProjectId)
     if (!importedProject?.activeWorldId) {
@@ -343,6 +316,11 @@ export async function importWorldPackage(input: unknown): Promise<number> {
       updatedAt: now,
     }) as number
     await db.worldReleases.add({
+      releaseUid: worldReleaseUidV1({
+        worldCode: report.manifest.sourceWorldCode,
+        version: Number(release.version),
+        contentHash: String(release.contentHash),
+      }),
       projectId: importedProjectId,
       worldId: scope.worldId,
       revisionId,

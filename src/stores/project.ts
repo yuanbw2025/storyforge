@@ -1,13 +1,16 @@
 import { create } from 'zustand'
 import { db } from '../lib/db/schema'
-import type { Project, CreateProjectInput } from '../lib/types'
-import { migrateGenre } from '../lib/types'
+import type { Project, CreateWorkspaceInput } from '../lib/types'
 import { requireBackupBefore } from '../lib/safety/require-backup-before'
 import { cascadeDeleteProject } from '../lib/registry/lifecycle'
-import { ensureWorkspaceOwnership } from '../lib/workspace/ownership'
-import { updateProjectAndActiveWork } from '../lib/workspace/works'
+import { resolveWorkspaceOwnership } from '../lib/workspace/ownership'
+import {
+  updateActiveWork,
+  updateWorkspace,
+  type ActiveWorkPatch,
+  type WorkspacePatch,
+} from '../lib/workspace/works'
 import { clearProjectFolderHandle } from '../lib/storage/folder-handle-store'
-import { backfillResourceUidsV1 } from '../lib/context-gateway/resource-identity'
 import { createWorkspace, type CreateWorkspaceOptions } from '../lib/workspace/create-workspace'
 
 interface ProjectStore {
@@ -17,8 +20,9 @@ interface ProjectStore {
 
   loadProjects: () => Promise<void>
   loadProject: (id: number) => Promise<Project | undefined>
-  createProject: (data: CreateProjectInput, options?: CreateWorkspaceOptions) => Promise<number>
-  updateProject: (id: number, data: Partial<Project>) => Promise<void>
+  createWorkspace: (data: CreateWorkspaceInput, options?: CreateWorkspaceOptions) => Promise<number>
+  updateWorkspace: (id: number, data: WorkspacePatch) => Promise<void>
+  updateActiveWork: (id: number, data: ActiveWorkPatch) => Promise<void>
   deleteProject: (id: number) => Promise<void>
   setCurrentProject: (id: number | null) => void
 }
@@ -31,33 +35,15 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
   loadProjects: async () => {
     set({ loading: true })
     const raw = await db.projects.orderBy('updatedAt').reverse().toArray()
-    // 汇总每个项目的字数（从 chapters 表实时计算）
-    const allChapters = await db.chapters.toArray()
-    const wordCountByProject = new Map<number, number>()
-    for (const ch of allChapters) {
-      wordCountByProject.set(
-        ch.projectId,
-        (wordCountByProject.get(ch.projectId) ?? 0) + (ch.wordCount ?? 0),
-      )
-    }
-    // 兼容旧数据：确保每条记录都有 genres[] 和 status
-    const projects = raw.map(rawProject => {
-      const migrated = migrateGenre(rawProject)
-      migrated.currentWordCount = wordCountByProject.get(rawProject.id!) ?? 0
-      return migrated
-    })
-    set({ projects, loading: false })
+    set({ projects: raw, loading: false })
   },
 
   loadProject: async (id: number) => {
     const raw = await db.projects.get(id)
     if (!raw) return undefined
-    // WORLD-2C C2: projectId-only routes resolve through one ownership
-    // service before any project-scoped stores begin reading the workspace.
-    const project = migrateGenre((await ensureWorkspaceOwnership(id)).project)
-    // CTXG-2 explicit workspace-entry migration. Catalog/search remain strictly
-    // read-only; identity repair happens once before feature stores load.
-    await backfillResourceUidsV1(id)
+    // Project routes resolve through the sole current ownership service before
+    // any project-scoped store begins reading the workspace.
+    const project = (await resolveWorkspaceOwnership(id)).project
     const projects = get().projects
     const exists = projects.some(p => p.id === id)
     const nextProjects = exists
@@ -67,14 +53,19 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     return project
   },
 
-  createProject: async (data: CreateProjectInput, options?: CreateWorkspaceOptions) => {
+  createWorkspace: async (data: CreateWorkspaceInput, options?: CreateWorkspaceOptions) => {
     const created = await createWorkspace(data, options)
     await get().loadProjects()
     return created.scope.projectId
   },
 
-  updateProject: async (id: number, data: Partial<Project>) => {
-    await updateProjectAndActiveWork(id, data)
+  updateWorkspace: async (id: number, data: WorkspacePatch) => {
+    await updateWorkspace(id, data)
+    await get().loadProjects()
+  },
+
+  updateActiveWork: async (id: number, data: ActiveWorkPatch) => {
+    await updateActiveWork(id, data)
     await get().loadProjects()
   },
 

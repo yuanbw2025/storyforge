@@ -24,54 +24,36 @@ import {
 } from '../../src/lib/agent/chapter-organization'
 import { AgentTeamBudgetTracker } from '../../src/lib/agent/team-budget'
 import { hashChapterText } from '../../src/lib/ai/chapter-memory/text-normalization'
+import { generateWorkCode } from '../../src/lib/memory/identity'
+import { stampNewRecord } from '../../src/lib/workspace/scope'
+import { currentWorkFixtureRecordV1, seedCurrentWorkspace } from '../helpers/current-workspace'
+import { stampCurrentFixtureResourceUidsV1 } from '../helpers/current-resource-identity'
 
 async function seed(label: string, projectId?: number, worldId?: number): Promise<{
   scope: WorkspaceScope
   chapterId: number
 }> {
   const now = Date.now()
-  const pid = projectId ?? await db.projects.add({
-    name: label,
-    genre: 'fantasy',
-    genres: ['fantasy'],
-    status: 'drafting',
-    description: '',
-    targetWordCount: 100_000,
-    createdAt: now,
-    updatedAt: now,
-  } as any) as number
-  const wid = worldId ?? await db.worlds.add({
-    projectId: pid,
-    code: `world-${label}`,
-    name: `${label}世界`,
-    description: '',
-    currentVersion: 1,
-    createdAt: now,
-    updatedAt: now,
-  }) as number
-  const workId = await db.works.add({
+  const created = projectId == null ? await seedCurrentWorkspace(label) : null
+  const pid = created?.scope.projectId ?? projectId!
+  const wid = created?.scope.worldId ?? worldId!
+  const workId = created?.scope.workId ?? await db.works.add(currentWorkFixtureRecordV1({
     projectId: pid,
     worldId: wid,
+    code: generateWorkCode(),
     title: label,
     description: '',
     genres: ['fantasy'],
     status: 'drafting',
     targetWordCount: 100_000,
+    kind: 'novel',
+    novelProfile: 'long',
     createdAt: now,
     updatedAt: now,
-  }) as number
-  if (projectId == null) {
-    await db.projects.update(pid, {
-      activeWorldId: wid,
-      activeWorkId: workId,
-      ownershipSchemaVersion: 1,
-
-
-    })
-  }
-  const outlineNodeId = await db.outlineNodes.add({
+  })) as number
+  const scope = { projectId: pid, worldId: wid, workId }
+  const outlineNodeId = await db.outlineNodes.add(stampNewRecord(scope, 'outlineNodes', {
     projectId: pid,
-    workId,
     parentId: null,
     type: 'chapter',
     title: `${label}章`,
@@ -79,10 +61,9 @@ async function seed(label: string, projectId?: number, worldId?: number): Promis
     order: 0,
     createdAt: now,
     updatedAt: now,
-  } as any) as number
-  const chapterId = await db.chapters.add({
+  }, { owner: 'work' }) as never) as number
+  const chapterId = await db.chapters.add(stampNewRecord(scope, 'chapters', {
     projectId: pid,
-    workId,
     outlineNodeId,
     title: `${label}章`,
     content: '<p>林舟抵达潮门，并与苏砚并肩点亮旧灯。</p>',
@@ -92,8 +73,9 @@ async function seed(label: string, projectId?: number, worldId?: number): Promis
     notes: '',
     createdAt: now,
     updatedAt: now,
-  } as any) as number
-  return { scope: { projectId: pid, worldId: wid, workId }, chapterId }
+  }, { owner: 'work' }) as never) as number
+  await stampCurrentFixtureResourceUidsV1(pid)
+  return { scope, chapterId }
 }
 
 describe.sequential('PROGRESS-1 · 章后策略、预算与七域演化', () => {
@@ -104,7 +86,7 @@ describe.sequential('PROGRESS-1 · 章后策略、预算与七域演化', () => 
 
   afterEach(() => db.close())
 
-  it('旧 Work 默认 suggest；建议 Run 在作者确认前零模型调用，刷新/重复创建保持同一个 task', async () => {
+  it('当前 Work 默认 suggest；建议 Run 在作者确认前零模型调用，刷新/重复创建保持同一个 task', async () => {
     const fixture = await seed('suggest')
     const settings = await readWorkPostAdoptionSettingsV1(fixture.scope)
     expect(settings.policy).toBe('suggest')
@@ -311,8 +293,8 @@ describe.sequential('PROGRESS-1 · 章后策略、预算与七域演化', () => 
     const fixture = await seed('storyline')
     const now = Date.now()
     const arcs: StoryArc[] = [
-      { projectId: fixture.scope.projectId, workId: fixture.scope.workId, name: '潮门主线', type: 'main', stages: JSON.stringify([{ id: 'open', title: '开门', description: '', keyEvents: [] }]), description: '', createdAt: now, updatedAt: now } as any,
-      { projectId: fixture.scope.projectId, workId: fixture.scope.workId, name: '苏砚支线', type: 'sub', stages: '[]', description: '', createdAt: now, updatedAt: now } as any,
+      stampNewRecord(fixture.scope, 'storyArcs', { projectId: fixture.scope.projectId, name: '潮门主线', type: 'main', stages: JSON.stringify([{ id: 'open', title: '开门', description: '', keyEvents: [] }]), description: '', createdAt: now, updatedAt: now }, { owner: 'work' }) as StoryArc,
+      stampNewRecord(fixture.scope, 'storyArcs', { projectId: fixture.scope.projectId, name: '苏砚支线', type: 'sub', stages: '[]', description: '', createdAt: now, updatedAt: now }, { owner: 'work' }) as StoryArc,
     ]
     const arcIds = await db.storyArcs.bulkAdd(arcs, { allKeys: true }) as number[]
     const chapter = await db.chapters.get(fixture.chapterId)

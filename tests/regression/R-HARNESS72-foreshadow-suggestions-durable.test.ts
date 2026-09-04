@@ -17,24 +17,13 @@ import {
   type ForeshadowSuggestionAdoptionBoundaryV1,
   type ForeshadowSuggestionBoundaryV1,
 } from '../../src/lib/agent/run/foreshadow-suggestions-durable'
+import { stampCurrentFixtureResourceUidsV1 } from '../helpers/current-resource-identity'
+import { currentWorkFixtureRecordV1, seedCurrentWorkspace } from '../helpers/current-workspace'
 
 async function seed(suffix = '') {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    name: `镜城伏笔${suffix}`, genre: 'suspense', genres: ['suspense'], status: 'drafting',
-    description: '守灯人追查一枚不属于任何人的记忆盐晶。', targetWordCount: 90_000,
-enableMultiWorld: true,
-    createdAt: now, updatedAt: now,
-  } as any) as number
-  const worldId = await db.worlds.add({
-    projectId, code: `foreshadow-${now}-${suffix}`, name: '镜海世界', description: '',
-    currentVersion: 1, createdAt: now, updatedAt: now,
-  }) as number
-  const workId = await db.works.add({
-    projectId, worldId, title: `无主盐晶${suffix}`, description: '', genres: ['suspense'],
-    status: 'drafting', targetWordCount: 90_000, createdAt: now, updatedAt: now,
-  } as any) as number
-  await db.projects.update(projectId, { activeWorldId: worldId, activeWorkId: workId, ownershipSchemaVersion: 1 })
+  const created = await seedCurrentWorkspace(`镜城伏笔${suffix}`, { enableMultiWorld: true })
+  const { projectId, worldId, workId } = created.scope
   const worldGroupId = await db.worldGroups.add({
     projectId, worldId, name: '镜城', description: '', type: 'primary', icon: '🪞', order: 0,
     createdAt: now, updatedAt: now,
@@ -49,7 +38,7 @@ enableMultiWorld: true,
   } as any) as number
   const characterId = await db.characters.add({
     projectId, worldId, homeWorldGroupId: worldGroupId, isCrossWorld: false, name: '沈砚',
-    role: 'protagonist', roleWeight: 'main', moralAxis: 'good', orderAxis: 'lawful',
+    roleWeight: 'main', moralAxis: 'good', orderAxis: 'lawful',
     shortDescription: '能听见盐晶中的遗言。', createdAt: now, updatedAt: now,
   } as any) as number
   const existingId = await db.foreshadows.add({
@@ -58,6 +47,7 @@ enableMultiWorld: true,
     plantChapterId: null, echoChapterIds: '[]', resolveChapterId: null, notes: '',
     createdAt: now, updatedAt: now,
   } as any) as number
+  await stampCurrentFixtureResourceUidsV1(projectId)
   return {
     scope: { projectId, worldId, workId } satisfies WorkspaceScope,
     projectId, worldId, workId, worldGroupId, storyCoreId, characterId, existingId,
@@ -185,8 +175,8 @@ describe.sequential('R-HARNESS72 · 伏笔建议 durable 候选与原子采纳',
     ['正式伏笔', async (fixture: Awaited<ReturnType<typeof seed>>) => {
       await db.foreshadows.update(fixture.existingId, { description: '作者改写正式伏笔', updatedAt: Date.now() + 1 })
     }],
-    ['项目', async (fixture: Awaited<ReturnType<typeof seed>>) => {
-      await db.projects.update(fixture.projectId, { description: '作者更新项目简介', updatedAt: Date.now() + 1 })
+    ['作品', async (fixture: Awaited<ReturnType<typeof seed>>) => {
+      await db.works.update(fixture.workId, { description: '作者更新作品简介', updatedAt: Date.now() + 1 })
     }],
     ['故事核心', async (fixture: Awaited<ReturnType<typeof seed>>) => {
       await db.storyCores.update(fixture.storyCoreId, { theme: '被遗忘者的责任', updatedAt: Date.now() + 1 })
@@ -268,10 +258,10 @@ describe.sequential('R-HARNESS72 · 伏笔建议 durable 候选与原子采纳',
       .find(run => run.contractJson.includes('outline.foreshadow-suggestions'))?.status).toBe('cancelled')
 
     const now = Date.now()
-    const otherWorkId = await db.works.add({
+    const otherWorkId = await db.works.add(currentWorkFixtureRecordV1({
       projectId: pending.projectId, worldId: pending.worldId, title: '另一作品', description: '',
       genres: ['suspense'], status: 'drafting', targetWordCount: 1_000, createdAt: now, updatedAt: now,
-    } as any) as number
+    })) as number
     await expect(readPendingForeshadowSuggestionCandidateV1({
       scope: { ...pending.scope, workId: otherWorkId },
     })).resolves.toBeNull()

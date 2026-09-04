@@ -109,9 +109,9 @@ export const useCultivationStore = create<CultivationStore>((set, get) => ({
   },
 
   deleteSystem: async (id) => {
-    const beforeMigration = get().systems.find(system => system.id === id) ?? await db.cultivationSystems.get(id)
-    if (!beforeMigration) return
-    const scope = await resolveScopeLike(beforeMigration.projectId)
+    const existingSystem = get().systems.find(system => system.id === id) ?? await db.cultivationSystems.get(id)
+    if (!existingSystem) return
+    const scope = await resolveScopeLike(existingSystem.projectId)
     const current = await db.cultivationSystems.get(id)
     if (!current || !await assertRecordInScope(scope, 'cultivationSystems', current, { owner: 'world' })) return
     await db.transaction('rw', transactionTablesForReferences('cultivationSystems'), async () => {

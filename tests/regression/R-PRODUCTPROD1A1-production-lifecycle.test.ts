@@ -3,7 +3,8 @@ import { db } from '../../src/lib/db/schema'
 import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
 import { carryForwardProductBuildArtifactsAcrossBuildsV1 } from '../../src/lib/product-production/artifact-store'
 import { deleteWork } from '../../src/lib/workspace/lifecycle'
-import { ensureWorkspaceOwnership } from '../../src/lib/workspace/ownership'
+import { createWorkspace } from '../../src/lib/workspace/create-workspace'
+import { resolveWorkspaceOwnership } from '../../src/lib/workspace/ownership'
 
 const HASH_A = 'a'.repeat(64)
 const HASH_B = 'b'.repeat(64)
@@ -16,12 +17,15 @@ async function sha256(data: ArrayBuffer): Promise<string> {
 
 async function seedProductionGraph() {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    name: 'PRODUCTPROD 生产生命周期', genre: 'interactive-fiction', genres: ['interactive-fiction'],
-    status: 'drafting', description: '', targetWordCount: 1, createdAt: now, updatedAt: now,
-  } as never) as number
-  const ownership = await ensureWorkspaceOwnership(projectId)
-  const { worldId, workId } = ownership.scope
+  const ownership = await createWorkspace({
+    name: 'PRODUCTPROD 生产生命周期',
+    genres: ['interactive-fiction'],
+    status: 'drafting',
+    description: '',
+    targetWordCount: 1,
+    enableMultiWorld: false,
+  }, { purpose: 'world-engine', kind: 'novel', novelProfile: 'long' })
+  const { projectId, worldId, workId } = ownership.scope
   const revisionId = await db.worldRevisions.add({
     projectId, worldId, parentRevisionId: null, revision: 1, label: '来源修订', manifestJson: '{}',
     contentHash: HASH_A, createdAt: now, updatedAt: now,
@@ -130,7 +134,7 @@ describe('R-PRODUCTPROD-1A1 · current product-production lifecycle', () => {
 
   it.sequential('跨 Build 只复用已验收 Artifact，错误父链或损坏媒资时事务零写入', async () => {
     const source = await db.projects.where('name').equals('PRODUCTPROD 生产生命周期').first()
-    const ownership = await ensureWorkspaceOwnership(source!.id!)
+    const ownership = await resolveWorkspaceOwnership(source!.id!)
     const production = await db.productProductions.where('projectId').equals(source!.id!).first()
     const sourceBuild = await db.productBuilds.where('productionId').equals(production!.id!).first()
     const sourceArtifact = await db.productBuildArtifacts.where('buildId').equals(sourceBuild!.id!).first()

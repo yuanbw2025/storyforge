@@ -41,10 +41,10 @@ const OPTIONAL_BOUNDARY_SCHEMA: AgentToolJsonSchema = {
 
 const READ_TOOL_SPECS: readonly ReadToolSpec[] = [
   {
-    name: 'read_project_status',
-    description: '读取当前项目的紧凑填写概况、字数和模块数量，不返回整表原文。',
+    name: 'read_work_status',
+    description: '读取当前作品的紧凑填写概况、字数和模块数量，不返回整表原文。',
     parameters: EMPTY_SCHEMA,
-    sourceKeys: ['projectStatus'],
+    sourceKeys: ['workStatus'],
     inputBudgetTokens: 1400,
     argRules: { allowed: [] },
   },
@@ -497,7 +497,7 @@ export const AGENT_TOOL_BY_NAME: ReadonlyMap<string, AgentToolDefinition> = new 
   AGENT_READ_TOOLS.map(tool => [tool.name, tool] as const),
 )
 
-/** Canonical tool declaration input for the HARNESS-18 runtime binding hash. */
+/** Canonical tool declaration input for the current runtime binding hash. */
 export function getAgentToolSchemaSnapshotV1(): unknown {
   return AGENT_READ_TOOLS.map(tool => ({
     name: tool.name,

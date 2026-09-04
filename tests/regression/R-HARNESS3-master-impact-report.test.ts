@@ -7,6 +7,7 @@ import { appendMasterAgentImpactReportV1 } from '../../src/lib/agent/run/master-
 import { parseAgentEventPayload } from '../../src/lib/types/agent-session'
 import type { MasterAgentDurableCandidateV1 } from '../../src/lib/agent/run/master-durable'
 import type { WorkspaceScope } from '../../src/lib/types'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
 
 async function createWorkspace(): Promise<{
   scope: WorkspaceScope
@@ -16,41 +17,8 @@ async function createWorkspace(): Promise<{
   downstreamChapterId: number
 }> {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    name: '正文影响报告',
-    genre: 'fantasy',
-    genres: ['fantasy'],
-    description: '',
-    status: 'drafting',
-    targetWordCount: 100_000,
-    createdAt: now,
-    updatedAt: now,
-  } as any) as number
-  const worldId = await db.worlds.add({
-    projectId,
-    code: 'impact-world',
-    name: '影响世界',
-    description: '',
-    currentVersion: 1,
-    createdAt: now,
-    updatedAt: now,
-  }) as number
-  const workId = await db.works.add({
-    projectId,
-    worldId,
-    title: '影响作品',
-    description: '',
-    genres: ['fantasy'],
-    status: 'drafting',
-    targetWordCount: 100_000,
-    createdAt: now,
-    updatedAt: now,
-  }) as number
-  await db.projects.update(projectId, {
-    activeWorldId: worldId,
-    activeWorkId: workId,
-    ownershipSchemaVersion: 1,
-  })
+  const createdWorkspaceV1 = await seedCurrentWorkspace('正文影响报告')
+  const { projectId, worldId, workId } = createdWorkspaceV1.scope
   const worldGroupId = await db.worldGroups.add({
     projectId,
     name: '主世界',
@@ -156,6 +124,7 @@ describe.sequential('R-HARNESS3-master-impact-report · 采纳后的上下游反
       updatedAt: Date.now(),
     } as any) as number
     const conversation = await getOrCreateAgentConversation({
+      purpose: 'test:r-harness3-master-impact-report:1',
       projectId: fixture.scope.projectId,
       worldGroupId: fixture.worldGroupId,
       scope: fixture.scope,
@@ -165,7 +134,8 @@ describe.sequential('R-HARNESS3-master-impact-report · 采纳后的上下游反
       worldGroupId: fixture.worldGroupId,
       plan: {
         summary: '正文影响报告测试',
-        tasks: [{ id: 'prose-1', agentId: 'prose', instruction: '写正文', dependsOn: [] }],
+        tasks: [{ id: 'prose-1', agentId: 'prose', skillId: 'prose.write', instruction: '写正文', dependsOn: [] }],
+        workflow: { version: 1, workflowId: 'single-domain-direct', reasonCodes: ['single-explicit-domain'] },
       },
       budgetEvidence: {
         profile: 'balanced',
@@ -192,8 +162,9 @@ describe.sequential('R-HARNESS3-master-impact-report · 采纳后的上下游反
         version: 1,
         taskId: 'prose-1',
         agentId: 'prose',
+        skillId: 'prose.write',
         label: '第一章正文',
-        contextSources: ['chapterOutline', 'currentFacts'],
+        contextSources: ['ragSelection'],
         proseOutlineNodeId: fixture.firstOutlineId,
         runId: run.run.id,
         runStepId: 'master:prose-1',

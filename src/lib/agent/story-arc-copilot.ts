@@ -1403,6 +1403,10 @@ export async function prepareStoryArcCopilot(
   const worldGroupId = project.enableMultiWorld ? input.worldGroupId : null
   const readScope = input.scope ?? await resolveReadScopeLike(input.projectId)
   const scope = readScope
+  const work = await db.works.get(scope.workId)
+  if (!work || work.projectId !== input.projectId || work.worldId !== scope.worldId) {
+    throw new Error('当前 Work 不存在或不属于请求作用域。')
+  }
   const before = await readSnapshot(input.projectId, scope)
   const mutation = parseStoryArcMutationRequestV1(input.mutationRequest ?? { operation: 'create' })
   const targetArc = mutation.operation === 'create'
@@ -1431,7 +1435,7 @@ export async function prepareStoryArcCopilot(
     : undefined
   const gatewayRequired = isContextGatewayRequiredForWriteTargetV1(skill, 'storyArcs.name')
   if (gatewayRequired && !scope) {
-    throw new Error('故事线 Gateway required 写入需要稳定 WorkspaceScope，旧项目必须先完成所有权迁移。')
+    throw new Error('故事线 Gateway required 写入需要完整的当前 WorkspaceScope。')
   }
   const mandatoryIntentResourceKeys = before.storyIntent.ragDocumentId
     ? STORY_INTENT_FIELDS_V1
@@ -1524,7 +1528,7 @@ export async function prepareStoryArcCopilot(
   })
   const nodeInput: StoryArcCopilotInput = {
     projectId: input.projectId,
-    projectName: project.name,
+    projectName: work.title,
     scope,
     worldGroupId,
     authorRequest: request,

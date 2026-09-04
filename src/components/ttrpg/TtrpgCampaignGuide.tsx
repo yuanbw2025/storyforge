@@ -352,7 +352,7 @@ export default function TtrpgCampaignGuide(props: {
     TtrpgSessionParticipantRecordV2[]
   >([]);
   const aiConfig = useAIConfigStore((state) => state.config);
-  const updateProject = useProjectStore((state) => state.updateProject);
+  const updateWorkspace = useProjectStore((state) => state.updateWorkspace);
 
   const product = props.state.ttrpg?.product ?? null;
   const productCampaignKey = product?.campaignKey ?? null;
@@ -879,7 +879,7 @@ export default function TtrpgCampaignGuide(props: {
         const project = await db.projects.get(projectId);
         if (!project)
           throw new Error("当前项目不存在，无法保存 AI GM 实验授权。");
-        await updateProject(projectId, {
+        await updateWorkspace(projectId, {
           productPlatformOptIns: {
             ...project.productPlatformOptIns,
             ttrpgAiGmExperimental: enabled,

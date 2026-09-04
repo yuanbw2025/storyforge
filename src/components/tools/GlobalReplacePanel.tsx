@@ -187,7 +187,6 @@ export default function GlobalReplacePanel({ project }: Props) {
     // 世界观搜索
     if ((scope === 'all' || scope === 'worldview') && worldview) {
       const wvFields: [string, string][] = [
-        ['精华摘要', worldview.summary],
         ['世界来源', worldview.worldOrigin || ''],
         ['力量体系', worldview.powerHierarchy || ''],
         ['神明层级', worldview.divineDesign?.divineRank || ''],
@@ -404,7 +403,6 @@ export default function GlobalReplacePanel({ project }: Props) {
           if (!worldview) continue
 
           const fieldToKey: Record<string, keyof typeof worldview> = {
-            '精华摘要': 'summary',
             '世界来源': 'worldOrigin',
             '力量体系': 'powerHierarchy',
             '世界结构': 'worldStructure',

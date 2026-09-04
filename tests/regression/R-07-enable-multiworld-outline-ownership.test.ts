@@ -1,13 +1,11 @@
 /**
- * R-07: migrateToMultiWorld 漏给 outlineNodes 盖章
+ * R-07: enableMultiWorld 必须为 outlineNodes 归属主世界
  *
- * R-07：大纲迁移 owner stamp 反例。
+ * R-07：大纲世界 owner 归属反例。
  *
  * 反例:
- *   旧 migrateToMultiWorld 给 worldviews/codexEntries 等盖章到主世界,
- *   但漏了 outlineNodes(也带 worldGroupId)→
- *   老用户启用多世界后,所有大纲 worldGroupId=null,
- *   UI 按当前世界(主世界)过滤大纲时匹配不到任何卷 → 大纲整体"消失"。
+ *   enableMultiWorld 如果只处理 worldviews/codexEntries 而漏掉 outlineNodes，
+ *   开启后 UI 按主世界过滤时会无法看到原有大纲。
  *
  * 灾难:用户以为几个月的大纲被吃了(数据其实还在,只是失去世界归属)。
  *
@@ -18,8 +16,9 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { useWorldGroupStore } from '../../src/stores/world-group'
+import { seedCurrentProject } from '../helpers/current-workspace'
 
-describe('R-07: migrateToMultiWorld 给 outlineNodes 盖章', () => {
+describe('R-07: enableMultiWorld 归属 outlineNodes', () => {
   beforeEach(async () => {
     await db.delete()
     await db.open()
@@ -31,8 +30,8 @@ describe('R-07: migrateToMultiWorld 给 outlineNodes 盖章', () => {
 
   it('启用多世界后,所有大纲节点盖章到主世界(卷/故事块/章节)', async () => {
     const now = Date.now()
-    const projectId = await db.projects.add({
-      name: 'R-07', genre: 'fantasy', description: '', targetWordCount: 0,
+    const projectId = await seedCurrentProject({
+      name: 'R-07', genres: ['fantasy'], description: '', targetWordCount: 0,
       enableMultiWorld: false, createdAt: now, updatedAt: now,
     } as any) as number
 
@@ -41,7 +40,7 @@ describe('R-07: migrateToMultiWorld 给 outlineNodes 盖章', () => {
       await db.outlineNodes.add({
         projectId, parentId, type,
         title: `${type}-${order}`, summary: '', order,
-        // 注意:故意不设 worldGroupId(模拟单世界历史数据)
+        // 单世界当前态不需要 worldGroupId。
         createdAt: now, updatedAt: now,
       } as any) as number
 
@@ -63,7 +62,7 @@ describe('R-07: migrateToMultiWorld 给 outlineNodes 盖章', () => {
     expect(before.every(n => n.worldGroupId == null)).toBe(true)
 
     // 执行:启用多世界
-    await useWorldGroupStore.getState().migrateToMultiWorld(projectId)
+    await useWorldGroupStore.getState().enableMultiWorld(projectId)
 
     // 拿到主世界 id
     const primary = await db.worldGroups
@@ -89,12 +88,12 @@ describe('R-07: migrateToMultiWorld 给 outlineNodes 盖章', () => {
 
   it('UI 视角:启用多世界后按主世界过滤,大纲卷依然可见(灾难复现验证)', async () => {
     const now = Date.now()
-    const projectId = await db.projects.add({
-      name: 'R-07b', genre: '', description: '', targetWordCount: 0,
+    const projectId = await seedCurrentProject({
+      name: 'R-07b', genres: [], description: '', targetWordCount: 0,
       enableMultiWorld: false, createdAt: now, updatedAt: now,
     } as any) as number
 
-    // 50 卷大纲(模拟老用户半年积累)
+    // 50 卷大纲，覆盖大规模当前内容。
     for (let i = 0; i < 50; i++) {
       await db.outlineNodes.add({
         projectId, parentId: null, type: 'volume',
@@ -103,7 +102,7 @@ describe('R-07: migrateToMultiWorld 给 outlineNodes 盖章', () => {
       } as any)
     }
 
-    await useWorldGroupStore.getState().migrateToMultiWorld(projectId)
+    await useWorldGroupStore.getState().enableMultiWorld(projectId)
 
     const primary = await db.worldGroups
       .where('projectId').equals(projectId)

@@ -14,6 +14,7 @@ import { assembleContext } from '../../registry/assemble-context'
 import { cascadeDeleteProject } from '../../registry/lifecycle'
 import type { AIConfig, ChatMessage, Project, WorkspaceScope } from '../../types'
 import type { CreativeReliabilityFixtureV1 } from './fixtures'
+import { createWorkspace } from '../../workspace/create-workspace'
 import {
   CREATIVE_RELIABILITY_GENERATOR_PROMPT_VERSION_V1,
   CREATIVE_RELIABILITY_BASELINE_PROMPT_VERSION_V1,
@@ -187,45 +188,19 @@ function assertSeedAdoption(
 }
 
 async function seedWorkspace(fixture: CreativeReliabilityFixtureV1): Promise<CreativeReliabilityWorkspaceV1> {
-  const now = Date.now()
-  const projectId = await db.projects.add({
+  const created = await createWorkspace({
     name: `${CREL_PROJECT_PREFIX}${fixture.id} ${fixture.projectName}`,
-    genre: fixture.genre,
     genres: [fixture.genre],
     description: 'CREL 隔离评测项目；运行后按 PROJECT_TABLES 生命周期清理。',
     status: 'drafting',
     targetWordCount: 100_000,
-
-
-    createdAt: now,
-    updatedAt: now,
-  } as Project) as number
-  const worldId = await db.worlds.add({
-    projectId,
-    code: `crel-${fixture.id}`,
-    name: fixture.worldName,
-    description: fixture.worldOrigin,
-    currentVersion: 1,
-    createdAt: now,
-    updatedAt: now,
-  }) as number
-  const workId = await db.works.add({
-    projectId,
-    worldId,
-    title: fixture.projectName,
-    description: fixture.logline,
-    genres: [fixture.genre],
-    status: 'drafting',
-    targetWordCount: 100_000,
-    createdAt: now,
-    updatedAt: now,
-  }) as number
-  await db.projects.update(projectId, {
-    activeWorldId: worldId,
-    activeWorkId: workId,
-    ownershipSchemaVersion: 1,
+  }, {
+    purpose: 'independent-work',
+    kind: 'novel',
+    novelProfile: 'long',
   })
-  const scope = { projectId, worldId, workId }
+  const { scope } = created
+  const projectId = scope.projectId
   if (fixture.worldOrigin) {
     assertSeedAdoption('worldviews', await adopt({
       projectId,
@@ -266,7 +241,6 @@ async function seedWorkspace(fixture: CreativeReliabilityFixtureV1): Promise<Cre
       mode: 'add-many',
       data: fixture.characters.map(character => ({
         name: character.name,
-        role: character.role,
         roleWeight: character.role === 'supporting' ? 'secondary' : 'main',
         moralAxis: 'neutral',
         orderAxis: 'neutral',

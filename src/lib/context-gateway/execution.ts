@@ -402,7 +402,12 @@ export async function executeContextGatewayV1(
   })
   const initialHardFailure = hardFailure(selector.sufficiency)
   if (initialHardFailure) {
-    fail('hard-sufficiency', `${initialHardFailure.id}:${initialHardFailure.reasonCode}`)
+    const omission = selector.omitted.find(item => initialHardFailure.id.endsWith(item.resourceKey))
+    fail('hard-sufficiency', [
+      initialHardFailure.id,
+      initialHardFailure.reasonCode,
+      omission ? `omitted=${omission.reasonCode}` : '',
+    ].filter(Boolean).join(':'))
   }
 
   const mandatoryInputKeys = new Set(input.mandatoryResourceKeys ?? [])

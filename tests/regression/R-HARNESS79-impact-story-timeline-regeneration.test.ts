@@ -21,6 +21,8 @@ import {
 import { staleAgentRunVerificationV1 } from '../../src/lib/agent/run/event-store'
 import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
 import type { WorkspaceScope } from '../../src/lib/types'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
+import { stampCurrentFixtureResourceUidsV1 } from '../helpers/current-resource-identity'
 
 const VALID_OUTPUT = JSON.stringify({
   storyTime: '潮汐纪元第七日黄昏',
@@ -32,19 +34,8 @@ const VALID_OUTPUT = JSON.stringify({
 
 async function seed(label = 'h79') {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    name: `年表影响重建-${label}`, genre: 'fantasy', genres: ['fantasy'], status: 'drafting', description: '',
-    targetWordCount: 100_000,createdAt: now, updatedAt: now,
-  } as any) as number
-  const worldId = await db.worlds.add({
-    projectId, code: `${label}-${now}`, name: '主世界', description: '', currentVersion: 1,
-    createdAt: now, updatedAt: now,
-  }) as number
-  const workId = await db.works.add({
-    projectId, worldId, title: label, description: '', genres: ['fantasy'], status: 'drafting',
-    targetWordCount: 100_000, createdAt: now, updatedAt: now,
-  } as any) as number
-  await db.projects.update(projectId, { activeWorldId: worldId, activeWorkId: workId, ownershipSchemaVersion: 1 })
+  const created = await seedCurrentWorkspace(`年表影响重建-${label}`)
+  const { projectId, worldId, workId } = created.scope
   const worldGroupId = await db.worldGroups.add({
     projectId, worldId, name: '主世界', order: 0, createdAt: now, updatedAt: now,
   }) as number
@@ -81,6 +72,7 @@ async function seed(label = 'h79') {
     description: '潮门完全开启，船队恢复通行。', chapterId: targetChapterId,
     chapterTitle: '第二章', order: 0, createdAt: now,
   } as any) as number
+  await stampCurrentFixtureResourceUidsV1(projectId)
   return {
     scope: { projectId, worldId, workId } satisfies WorkspaceScope,
     projectId,

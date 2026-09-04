@@ -17,6 +17,7 @@ import {
   useInitialRecordTarget,
 } from '../shared/initial-record-target'
 import HarnessEvidencePanel from '../agent/HarnessEvidencePanel'
+import { useActiveWork } from '../../hooks/useActiveWork'
 
 const POV_OPTIONS: { value: NarrativePOV; label: string; desc: string }[] = [
   { value: 'first-person', label: '第一人称', desc: '以"我"的视角叙述' },
@@ -31,6 +32,7 @@ interface Props {
 }
 
 export default function CreativeRulesPanel({ project, initialRulesId }: Props) {
+  const activeWork = useActiveWork(project)
   const { creativeRules, loadAll, save } = useCreativeRulesStore()
   const { references, loadAll: loadRefs } = useReferenceStore()
   const activeGroupId = useWorldGroupStore(state => state.activeGroupId)
@@ -40,11 +42,10 @@ export default function CreativeRulesPanel({ project, initialRulesId }: Props) {
   })
   const [writingStyle, setWritingStyle] = useState('')
   const [narrativePOV, setNarrativePOV] = useState<NarrativePOV>('third-limited')
-  const [toneAndMood, setToneAndMood] = useState('')
+  const [atmosphere, setAtmosphere] = useState('')
   const [prohibitions, setProhibitions] = useState<string[]>([])
   const [consistencyRules, setConsistencyRules] = useState<string[]>([])
   const [specialRequirements, setSpecialRequirements] = useState('')
-  const [referenceWorks, setReferenceWorks] = useState<string[]>([])
   const [citedRefIds, setCitedRefIds] = useState<number[]>([])
   useInitialRecordTarget(initialRulesId, creativeRules?.id === initialRulesId)
 
@@ -57,11 +58,10 @@ export default function CreativeRulesPanel({ project, initialRulesId }: Props) {
     if (creativeRules) {
       setWritingStyle(creativeRules.writingStyle || '')
       setNarrativePOV(creativeRules.narrativePOV || 'third-limited')
-      setToneAndMood(creativeRules.atmosphere || creativeRules.toneAndMood || '')
+      setAtmosphere(creativeRules.atmosphere)
       setSpecialRequirements(creativeRules.specialRequirements || '')
       try { setProhibitions(JSON.parse(creativeRules.prohibitions || '[]')) } catch { setProhibitions([]) }
       try { setConsistencyRules(JSON.parse(creativeRules.consistencyRules || '[]')) } catch { setConsistencyRules([]) }
-      try { setReferenceWorks(JSON.parse(creativeRules.referenceWorks || '[]')) } catch { setReferenceWorks([]) }
       try { setCitedRefIds(JSON.parse(creativeRules.citedReferenceIds || '[]')) } catch { setCitedRefIds([]) }
     }
   }, [creativeRules])
@@ -84,7 +84,7 @@ export default function CreativeRulesPanel({ project, initialRulesId }: Props) {
   const generateField = async (target: CreativeRulesField) => {
     const instruction = formatCreativeRulesGenerationRequestV1({ field: target })
     await copilot.submitTargetedRequest(
-      `${instruction} 为“${project.name}”提供可执行建议。`,
+      `${instruction} 为“${activeWork?.title ?? '当前作品'}”提供可执行建议。`,
       {
         id: `creative-rules-${target}`,
         agentId: 'world-origin',
@@ -286,9 +286,9 @@ export default function CreativeRulesPanel({ project, initialRulesId }: Props) {
           </button>
         </div>
         <CTextarea
-          value={toneAndMood}
-          onChange={e => setToneAndMood(e.target.value)}
-          onBlur={() => saveField({ atmosphere: toneAndMood })}
+          value={atmosphere}
+          onChange={e => setAtmosphere(e.target.value)}
+          onBlur={() => saveField({ atmosphere })}
           placeholder="描述作品的整体基调和氛围，如：黑暗压抑、热血激昂、温馨治愈..."
           className="w-full h-20 p-3 bg-bg-surface border border-border rounded-lg text-text-primary text-sm resize-y focus:outline-none focus:border-accent"
         />
@@ -304,9 +304,6 @@ export default function CreativeRulesPanel({ project, initialRulesId }: Props) {
 
       {/* 一致性规则 */}
       {renderList('一致性规则', '如：修炼体系必须遵循金木水火土五行', consistencyRules, setConsistencyRules, 'consistencyRules')}
-
-      {/* 参考作品 */}
-      {renderList('参考作品', '如：《凡人修仙传》', referenceWorks, setReferenceWorks, 'referenceWorks')}
 
       {/* 引用手法 —— Phase 20 */}
       <div className="mb-6">

@@ -11,11 +11,12 @@ import { db } from '../../src/lib/db/schema'
 import { useCodexStore } from '../../src/stores/codex'
 import { buildCodexContext } from '../../src/lib/ai/codex-context'
 import { formatWorldviewBlock } from '../../src/lib/ai/context-builder'
+import { seedCurrentProject } from '../helpers/current-workspace'
 
 async function createProject(): Promise<number> {
   const now = Date.now()
-  return await db.projects.add({
-    name: 'C6ctx', genre: '', description: '', targetWordCount: 0,
+  return seedCurrentProject({
+    name: 'C6ctx', genres: [], description: '', targetWordCount: 0,
     enableMultiWorld: false, createdAt: now, updatedAt: now,
   } as any) as number
 }

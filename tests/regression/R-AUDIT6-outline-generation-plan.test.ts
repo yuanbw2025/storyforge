@@ -5,7 +5,7 @@ import {
   outlineGenerationTargetError,
 } from '../../src/lib/outline/generation-plan'
 import type { AssembleContextResult } from '../../src/lib/registry/types'
-import type { OutlineNode, Project } from '../../src/lib/types'
+import type { OutlineNode, Work } from '../../src/lib/types'
 
 function node(
   id: number,
@@ -28,13 +28,28 @@ function node(
   }
 }
 
-const project: Project = {
+const work: Work = {
   id: 1,
-  name: '计划测试',
-  genre: '玄幻',
+  projectId: 1,
+  worldId: 1,
+  code: 'WORK-00000000-0000-4000-8000-000000000001',
+  kind: 'novel',
+  novelProfile: 'long',
+  title: '计划测试',
+  genres: ['xuanhuan'],
+  status: 'drafting',
   description: '',
   targetWordCount: 500_000,
-  enableMultiWorld: false,
+  currentWordCount: 0,
+  includeCultivationProgressInAI: false,
+  activeCharacterDrivenPlanId: null,
+  activeNarrativeModuleId: null,
+  postAdoptionPolicy: 'suggest',
+  postAdoptionTaskTypes: ['organization', 'memory', 'retrieval', 'consistency'],
+  postAdoptionBudget: {
+    maxModelCalls: 2, maxInputTokens: 48_000, maxOutputTokens: 16_000,
+    maxCostUsd: 0.25, allowUnknownCost: false,
+  },
   createdAt: 1,
   updatedAt: 1,
 }
@@ -71,7 +86,7 @@ describe('AUDIT-6 · 大纲生成纯计划', () => {
   it('卷请求读取注册表上下文片段并构造 volume category', () => {
     const plan = buildOutlineGenerationPlan({
       request: { kind: 'volumes' },
-      project,
+      work,
       nodes,
       volumes,
       assembled: context(),
@@ -90,13 +105,13 @@ describe('AUDIT-6 · 大纲生成纯计划', () => {
 
   it('卷数已满足和目标卷缺失时返回明确 skip，不构造 AI 请求', () => {
     const satisfied = buildOutlineGenerationPlan({
-      request: { kind: 'volumes' }, project, nodes, volumes, assembled: context(), hint: '',
+      request: { kind: 'volumes' }, work, nodes, volumes, assembled: context(), hint: '',
       options: { parameterValues: { volumeCount: 2 } },
     })
     expect(satisfied).toEqual({ status: 'skip', reason: '当前已有 2 卷，已达到你设定的 2 卷，无需继续生成。' })
 
     const missing = buildOutlineGenerationPlan({
-      request: { kind: 'single-volume', volumeId: 999 }, project, nodes, volumes, assembled: context(), hint: '', options: {},
+      request: { kind: 'single-volume', volumeId: 999 }, work, nodes, volumes, assembled: context(), hint: '', options: {},
     })
     expect(missing).toEqual({ status: 'skip', reason: '要补全的卷不存在，请重新选择。' })
   })
@@ -104,7 +119,7 @@ describe('AUDIT-6 · 大纲生成纯计划', () => {
   it('整卷章纲使用指定卷和前卷摘要', () => {
     const plan = buildOutlineGenerationPlan({
       request: { kind: 'chapters', volumeId: 2 },
-      project,
+      work,
       nodes,
       volumes,
       assembled: context(),
@@ -125,7 +140,7 @@ describe('AUDIT-6 · 大纲生成纯计划', () => {
     expect(findGenerationTargetVolume({ kind: 'single-chapter', chapterId: 11 }, nodes, normalizedVolumeCopies)?.id).toBe(2)
     const plan = buildOutlineGenerationPlan({
       request: { kind: 'single-chapter', chapterId: 11 },
-      project,
+      work,
       nodes,
       volumes: normalizedVolumeCopies,
       assembled: context(),
@@ -147,7 +162,7 @@ describe('AUDIT-6 · 大纲生成纯计划', () => {
       .toBe('要生成章纲的卷不存在，请重新选择。')
     const plan = buildOutlineGenerationPlan({
       request: { kind: 'single-chapter', chapterId: 999 },
-      project,
+      work,
       nodes,
       volumes,
       assembled: context(),

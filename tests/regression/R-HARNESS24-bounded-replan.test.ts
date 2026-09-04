@@ -12,10 +12,11 @@ import { classifyAgentRunFailureV1 } from '../../src/lib/agent/run/failure-polic
 import { AgentTeamBudgetTracker } from '../../src/lib/agent/team-budget'
 import type { MasterAgentPlan } from '../../src/lib/agent/orchestrator'
 import type { WorkspaceScope } from '../../src/lib/types'
-import { backfillResourceUidsV1 } from '../../src/lib/context-gateway/resource-identity'
-import { generateWorkCode, generateWorkspaceUid } from '../../src/lib/memory/identity'
 import { prepareRequiredMasterGatewayFixtureV1 } from '../helpers/master-agent-gateway'
 import { resolveAgentSkillV1 } from '../../src/lib/agent/skill-registry'
+import { stampNewRecord } from '../../src/lib/workspace/scope'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
+import { currentWorldOriginCandidateFixtureV1 } from '../helpers/current-worldview-field'
 
 async function createWorkspace(label: string): Promise<{
   scope: WorkspaceScope
@@ -23,60 +24,22 @@ async function createWorkspace(label: string): Promise<{
   conversationId: number
 }> {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    workspaceUid: generateWorkspaceUid(),
-    name: label,
-    genre: 'fantasy',
-    genres: ['fantasy'],
-    description: '',
-    status: 'drafting',
-    targetWordCount: 100_000,
-
-
-    createdAt: now,
-    updatedAt: now,
-  } as any) as number
-  const worldId = await db.worlds.add({
+  const { scope } = await seedCurrentWorkspace(label)
+  const { projectId } = scope
+  const worldGroupId = await db.worldGroups.add(stampNewRecord(scope, 'worldGroups', {
     projectId,
-    code: `world-${label}`,
-    name: `${label}世界`,
-    description: '',
-    currentVersion: 1,
-    createdAt: now,
-    updatedAt: now,
-  }) as number
-  const workId = await db.works.add({
-    projectId,
-    worldId,
-    title: label,
-    code: generateWorkCode(),
-    description: '',
-    genres: ['fantasy'],
-    status: 'drafting',
-    targetWordCount: 100_000,
-    createdAt: now,
-    updatedAt: now,
-  }) as number
-  await db.projects.update(projectId, {
-    activeWorldId: worldId,
-    activeWorkId: workId,
-    ownershipSchemaVersion: 1,
-  })
-  const worldGroupId = await db.worldGroups.add({
-    projectId,
-    worldId,
     name: '主世界',
+    type: 'primary',
     order: 0,
     createdAt: now,
     updatedAt: now,
-  } as any) as number
-  const scope = { projectId, worldId, workId }
+  }, { owner: 'world' }) as never) as number
   const conversation = await getOrCreateAgentConversation({
     projectId,
     worldGroupId,
     scope,
+    purpose: 'bounded-replan-evaluation',
   })
-  await backfillResourceUidsV1(projectId)
   return { scope, worldGroupId, conversationId: conversation.id! }
 }
 
@@ -84,10 +47,15 @@ function plan(): MasterAgentPlan {
   return {
     summary: '建立潮汐世界，再生成守灯人和卷纲。',
     tasks: [
-      { id: 'world-1', agentId: 'world-origin', instruction: '建立潮汐世界。', dependsOn: [] },
-      { id: 'character-1', agentId: 'character', instruction: '按旧策略生成守灯人。', dependsOn: ['world-1'] },
-      { id: 'outline-1', agentId: 'outline', instruction: '根据守灯人规划卷纲。', dependsOn: ['character-1'] },
+      { id: 'world-1', agentId: 'world-origin', skillId: 'world-origin.worldview-field', instruction: '建立潮汐世界。', dependsOn: [] },
+      { id: 'character-1', agentId: 'character', skillId: 'character.create', instruction: '按基线策略生成守灯人。', dependsOn: ['world-1'] },
+      { id: 'outline-1', agentId: 'outline', skillId: 'outline.compose', instruction: '根据守灯人规划卷纲。', dependsOn: ['character-1'] },
     ],
+    workflow: {
+      version: 1,
+      workflowId: 'multi-domain-sequential',
+      reasonCodes: ['multiple-explicit-domains'],
+    },
   }
 }
 
@@ -102,13 +70,13 @@ function revisedPlan(): MasterAgentPlan {
 }
 
 function outputFor(taskId: string): string {
-  if (taskId === 'world-1') return '潮汐由沉睡海神维持。'
+  if (taskId === 'world-1') return currentWorldOriginCandidateFixtureV1('潮汐由沉睡海神维持。').draft
   if (taskId === 'character-1') return JSON.stringify({ name: '守灯人', desire: '守住潮门' })
   return JSON.stringify([{ title: '潮门初启', summary: '守灯人发现潮门正在失控。' }])
 }
 
 function executor(input: {
-  failOldCharacter?: boolean
+  failBaselineCharacter?: boolean
   failAllCharacters?: boolean
   calls?: ReturnType<typeof vi.fn>
 }) {
@@ -123,14 +91,17 @@ function executor(input: {
         maxOutputTokens: 100,
       })
       if (
-        (input.failAllCharacters || input.failOldCharacter)
+        (input.failAllCharacters || input.failBaselineCharacter)
         && task.id === 'character-1'
-        && (input.failAllCharacters || task.instruction.includes('旧策略'))
+        && (input.failAllCharacters || task.instruction.includes('基线策略'))
       ) {
         options.budget.settleFailedCall(reservation)
         throw new Error('network socket unavailable while generating character')
       }
       const output = outputFor(task.id)
+      const worldCandidate = task.id === 'world-1'
+        ? currentWorldOriginCandidateFixtureV1('潮汐由沉睡海神维持。')
+        : null
       options.budget.settleCall(reservation, output)
       const skill = resolveAgentSkillV1(task.agentId, task.skillId)
       const gateway = skill.contextGateway?.rollout === 'required'
@@ -145,18 +116,17 @@ function executor(input: {
           version: 1,
           taskId: task.id,
           agentId: task.agentId,
+          skillId: task.skillId,
           label: task.agentId,
           contextSources: gateway?.contextSources ?? ['worldview'],
           ...(gateway ? { contextEvidence: gateway.contextEvidence } : {}),
-          baseSnapshot: task.id === 'world-1'
-            ? { id: null, updatedAt: null, worldOrigin: '' }
-            : {},
+          ...(worldCandidate?.payload ?? { baseSnapshot: {} }),
           workspaceScope: options.scope,
           dependsOnTaskIds: task.dependsOn,
         },
         draft: output,
         runtimeNode: {},
-        runtimeOutput: output,
+        runtimeOutput: worldCandidate?.runtimeOutput ?? output,
         ...(gateway ? { contextGatewayRuntime: gateway.contextGatewayRuntime } : {}),
       })
     }
@@ -195,7 +165,7 @@ describe.sequential('R-HARNESS24 · 有限重规划与局部 stale', { timeout: 
       budget: new AgentTeamBudgetTracker('balanced'),
       onDurableBoundary: boundary => { runId = boundary.runId },
     }, {
-      execute: executor({ failOldCharacter: true, calls }) as any,
+      execute: executor({ failBaselineCharacter: true, calls }) as any,
     })).rejects.toThrow('network socket unavailable')
 
     const first = await readAgentRunV1(fixture.scope, runId)
@@ -209,7 +179,7 @@ describe.sequential('R-HARNESS24 · 有限重规划与局部 stale', { timeout: 
       worldGroupId: fixture.worldGroupId,
       runId,
     }, {
-      execute: executor({ failOldCharacter: true, calls }) as any,
+      execute: executor({ failBaselineCharacter: true, calls }) as any,
       replan: async input => {
         const reservation = input.budget.reserveCall({
           label: 'test-replan',

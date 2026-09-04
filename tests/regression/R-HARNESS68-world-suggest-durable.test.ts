@@ -18,24 +18,13 @@ import {
   rejectWorldSuggestCandidateV1,
   type WorldSuggestBoundaryV1,
 } from '../../src/lib/agent/run/world-suggest-durable'
+import { currentWorkFixtureRecordV1, seedCurrentWorkspace } from '../helpers/current-workspace'
+import { stampCurrentFixtureResourceUidsV1 } from '../helpers/current-resource-identity'
 
 async function seed(suffix = '') {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    name: `诸界航路${suffix}`, genre: 'fantasy', genres: ['fantasy', 'adventure'], status: 'drafting',
-    description: '主角通过潮汐门探索递进世界。', targetWordCount: 120_000,
-enableMultiWorld: true,
-    createdAt: now, updatedAt: now,
-  } as any) as number
-  const worldId = await db.worlds.add({
-    projectId, code: `suggest-${now}-${suffix}`, name: '潮路宇宙', description: '', currentVersion: 1,
-    createdAt: now, updatedAt: now,
-  }) as number
-  const workId = await db.works.add({
-    projectId, worldId, title: `诸界航路${suffix}`, description: '', genres: ['fantasy'], status: 'drafting',
-    targetWordCount: 120_000, createdAt: now, updatedAt: now,
-  } as any) as number
-  await db.projects.update(projectId, { activeWorldId: worldId, activeWorkId: workId, ownershipSchemaVersion: 1 })
+  const created = await seedCurrentWorkspace(`诸界航路${suffix}`, { enableMultiWorld: true })
+  const { projectId, worldId, workId } = created.scope
   const primaryGroupId = await db.worldGroups.add({
     projectId, worldId, name: '归潮港', description: '所有潮汐门的起点。', type: 'primary',
     icon: '⚓', order: 0, createdAt: now, updatedAt: now,
@@ -52,6 +41,7 @@ enableMultiWorld: true,
     projectId, workId, theme: '力量是否值得失去身份', centralConflict: '潮路公会垄断世界门',
     plotPattern: '逐界升级', mainPlot: '主角寻找不需要牺牲记忆的归途。', createdAt: now, updatedAt: now,
   } as any) as number
+  await stampCurrentFixtureResourceUidsV1(projectId)
   return {
     scope: { projectId, worldId, workId } satisfies WorkspaceScope,
     projectId, worldId, workId, primaryGroupId, existingGroupId, linkId, storyCoreId,
@@ -196,8 +186,8 @@ describe.sequential('R-HARNESS68 · 多世界建议 durable 候选与选择式�
   })
 
   it.each([
-    ['项目提示', async (fixture: Awaited<ReturnType<typeof seed>>) => {
-      await db.projects.update(fixture.projectId, { description: '作者改写了项目简介', updatedAt: Date.now() + 1 })
+    ['作品提示', async (fixture: Awaited<ReturnType<typeof seed>>) => {
+      await db.works.update(fixture.workId, { description: '作者改写了作品简介', updatedAt: Date.now() + 1 })
     }],
     ['世界目录', async (fixture: Awaited<ReturnType<typeof seed>>) => {
       await db.worldGroups.update(fixture.existingGroupId, { description: '作者改写已有世界', updatedAt: Date.now() + 1 })
@@ -295,10 +285,10 @@ describe.sequential('R-HARNESS68 · 多世界建议 durable 候选与选择式�
     const first = await seed('one')
     const generated = await generate(first)
     const now = Date.now()
-    const otherWorkId = await db.works.add({
+    const otherWorkId = await db.works.add(currentWorkFixtureRecordV1({
       projectId: first.projectId, worldId: first.worldId, title: '同世界另一作品', description: '',
       genres: ['fantasy'], status: 'drafting', targetWordCount: 100_000, createdAt: now, updatedAt: now,
-    } as any) as number
+    })) as number
     const otherWorkScope = { ...first.scope, workId: otherWorkId }
     await expect(readPendingWorldSuggestCandidateV1({ scope: otherWorkScope })).resolves.toBeNull()
     await expect(adoptWorldSuggestCandidateV1({
@@ -309,10 +299,10 @@ describe.sequential('R-HARNESS68 · 多世界建议 durable 候选与选择式�
       projectId: first.projectId, code: `other-${now}`, name: '同项目另一世界', description: '',
       currentVersion: 1, createdAt: now, updatedAt: now,
     }) as number
-    const otherWorldWorkId = await db.works.add({
+    const otherWorldWorkId = await db.works.add(currentWorkFixtureRecordV1({
       projectId: first.projectId, worldId: otherWorldId, title: '另一世界作品', description: '',
       genres: ['fantasy'], status: 'drafting', targetWordCount: 100_000, createdAt: now, updatedAt: now,
-    } as any) as number
+    })) as number
     const otherWorldScope = { projectId: first.projectId, worldId: otherWorldId, workId: otherWorldWorkId }
     await expect(readPendingWorldSuggestCandidateV1({ scope: otherWorldScope })).resolves.toBeNull()
     await expect(adoptWorldSuggestCandidateV1({

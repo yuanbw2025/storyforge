@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { prepareCharacterDrivenCopilotV1 } from '../../src/lib/agent/character-driven-copilot'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
+import { seedCurrentProject } from '../helpers/current-workspace'
 
 const textOf = (messages: { content: string }[]) => messages.map(m => m.content).join('\n\n')
 
@@ -11,11 +13,10 @@ afterEach(async () => {
 
 describe('R-CF20260702-character-driven-mainline', () => {
   it('角色驱动剧情 prompt 通过注册表上下文注入故事核心全字段与主线对齐约束', async () => {
-    const projectId = await db.projects.add({
+    const projectId = await seedCurrentProject({
       name: '测试书',
-      genre: '玄幻',
       genres: ['xuanhuan'],
-      status: 'draft',
+      status: 'drafting',
       createdAt: Date.now(),
       updatedAt: Date.now(),
     } as any)
@@ -31,11 +32,19 @@ describe('R-CF20260702-character-driven-mainline', () => {
     const characterId = await db.characters.add({
       projectId,
       name: '林砚',
-      role: 'protagonist',
       roleWeight: 'main',
       moralAxis: 'good',
       orderAxis: 'neutral',
+      shortDescription: '',
+      appearance: '',
+      personality: '',
+      background: '',
+      motivation: '',
+      abilities: '',
       relationships: '[]',
+      arc: '',
+      homeWorldGroupId: null,
+      isCrossWorld: false,
       createdAt: 1,
       updatedAt: 1,
     } as any) as number
@@ -57,6 +66,7 @@ describe('R-CF20260702-character-driven-mainline', () => {
       createdAt: 1,
       updatedAt: 1,
     } as any) as number
+    await finalizeCurrentFixtureV1(projectId)
 
     const prepared = await prepareCharacterDrivenCopilotV1({
       projectId,

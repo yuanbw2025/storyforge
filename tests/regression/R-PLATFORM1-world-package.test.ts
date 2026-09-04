@@ -50,7 +50,7 @@ describe('PLATFORM-1 · 本地世界发布包', () => {
   async function seedProject() {
     const now = Date.now()
     const created = await createWorkspace({
-      name: '潮汐之后', genre: 'kehuan', genres: ['kehuan'], description: '海平面吞没大陆后的漂浮聚落。',
+      name: '潮汐之后', genres: ['kehuan'], description: '海平面吞没大陆后的漂浮聚落。',
       status: 'drafting', targetWordCount: 0, enableMultiWorld: true,
     }, { purpose: 'world-engine', kind: 'novel', novelProfile: 'long' })
     const groupId = await db.worldGroups.add(stampNewRecord(created.scope, 'worldGroups', {
@@ -62,7 +62,9 @@ describe('PLATFORM-1 · 本地世界发布包', () => {
     } as any, { owner: 'world' }))
     await db.characters.add(stampNewRecord(created.scope, 'characters', {
       projectId: created.scope.projectId, homeWorldGroupId: groupId,
-      name: '守灯人', role: 'protagonist', description: '看守潮汐灯塔。', createdAt: now, updatedAt: now,
+      name: '守灯人', roleWeight: 'main', moralAxis: 'good', orderAxis: 'lawful',
+      shortDescription: '看守潮汐灯塔。', appearance: '', personality: '', background: '',
+      motivation: '', abilities: '', relationships: '[]', arc: '', createdAt: now, updatedAt: now,
     } as any, { owner: 'world' }))
     const volumeId = await db.outlineNodes.add(stampNewRecord(created.scope, 'outlineNodes', {
       projectId: created.scope.projectId, parentId: null, type: 'volume', title: '第一卷',
@@ -103,9 +105,9 @@ describe('PLATFORM-1 · 本地世界发布包', () => {
     expect(pkg.packageVersion).toBe(3)
     expect(pkg.manifest.allowedUses['character-interaction']).toBe(false)
     expect(pkg.release.manifest.semanticContract).toBe(3)
-    expect((pkg.release.manifest.portableProject as any).characters).toHaveLength(1)
-    expect((pkg.release.manifest.portableProject as any).chapters).toHaveLength(1)
-    expect((pkg.release.manifest.portableProject as any).productMediaAssets).toBeUndefined()
+    expect(pkg.release.manifest.records.characters).toHaveLength(1)
+    expect(pkg.release.manifest.records.chapters).toHaveLength(1)
+    expect(pkg.release.manifest.records.productMediaAssets).toBeUndefined()
     expect(pkg.release.manifest.selectedTables).not.toContain('productMediaAssets')
     expect(pkg.release.manifest).not.toHaveProperty('selectedNarrativeModules')
   })
@@ -123,7 +125,7 @@ describe('PLATFORM-1 · 本地世界发布包', () => {
     expect(tamperedReport.errors.join('；')).toContain('完整性校验失败')
 
     const leaked = JSON.parse(JSON.stringify(pkg))
-    leaked.release.manifest.portableProject.productMediaAssets = [{ name: '越界媒资' }]
+    leaked.release.manifest.semanticSnapshot.productMediaAssets = [{ name: '越界媒资' }]
     const leakedReport = await inspectWorldPackage(leaked)
     expect(leakedReport.valid).toBe(false)
     expect(leakedReport.errors.join('；')).toMatch(/productMediaAssets|完整性校验失败/)
@@ -160,28 +162,26 @@ describe('PLATFORM-1 · 本地世界发布包', () => {
     expect(partitionReport.errors.join('；')).toContain('selected/omitted 未与 PROJECT_TABLES 完整分区')
   })
 
-  it('selected table 即使为空也必须在便携数据中存在，不能被导入器默认为无事发生', async () => {
+  it('selected table 即使为空也必须在语义 records 中存在，不能被导入器默认为无事发生', async () => {
     const seeded = await seedProject()
     const pkg = await createWorldPackage(seeded.release.id!, {
       authorName: '匿名', license: 'ALL-RIGHTS-RESERVED',
       allowedUses: { ...ALL_WORLD_PACKAGE_USES },
     })
-    const portable = pkg.release.manifest.portableProject as Record<string, unknown>
     const emptySelectedTable = pkg.release.manifest.selectedTables.find(table => (
       Array.isArray(pkg.release.manifest.records[table])
       && pkg.release.manifest.records[table]!.length === 0
-      && Array.isArray(portable[table])
     ))
     expect(emptySelectedTable).toBeTruthy()
     const missing = structuredClone(pkg)
-    delete (missing.release.manifest.portableProject as Record<string, unknown>)[emptySelectedTable!]
+    delete missing.release.manifest.records[emptySelectedTable!]
     missing.release.contentHash = await hashWorldReleaseValueV1(missing.release.manifest)
     missing.manifest.releaseHash = missing.release.contentHash
     await resignPackageIntegrity(missing)
 
     const report = await inspectWorldPackage(missing)
     expect(report.valid).toBe(false)
-    expect(report.errors.join('；')).toContain(`便携数据缺少冻结资源「${emptySelectedTable}」`)
+    expect(report.errors.join('；')).toMatch(/records|selectedTables/)
     await expect(importWorldPackage(missing)).rejects.toThrow('世界分享包预检失败')
   })
 
@@ -210,14 +210,14 @@ describe('PLATFORM-1 · 本地世界发布包', () => {
     expect((await db.worlds.get(seeded.scope.worldId))?.code).toBe(seeded.world.code)
   })
 
-  it('旧协议和未知版本 fail-closed，不保留分类迁移旁路', async () => {
+  it('未知协议 fail-closed', async () => {
     const report = await inspectWorldPackage({
-      format: 'storyforge.world-package', packageVersion: 1, manifest: {}, portableProject: {},
+      format: 'storyforge.world-package', packageVersion: 999, manifest: {},
       integrity: { algorithm: 'SHA-256', digest: '0'.repeat(64) },
     })
     expect(report.valid).toBe(false)
     expect(report.importable).toBe(false)
-    await expect(importWorldPackage({ format: 'storyforge.world-package', packageVersion: 1 }))
+    await expect(importWorldPackage({ format: 'storyforge.world-package', packageVersion: 999 }))
       .rejects.toThrow('世界分享包预检失败')
   })
 })

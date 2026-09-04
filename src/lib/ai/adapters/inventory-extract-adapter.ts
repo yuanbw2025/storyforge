@@ -66,9 +66,8 @@ export function readInventoryExtractPromptTemplateSnapshotV1() {
   }
 }
 
-/** Strict durable protocol. Legacy callers keep the tolerant parser below
- * until their own migration unit removes it. */
-export function parseInventoryEventsStrictV1(raw: string): ExtractedItemEvent[] {
+/** Current closed extraction protocol used by every inventory entry point. */
+export function parseInventoryEvents(raw: string): ExtractedItemEvent[] {
   let source = raw.trim()
   const fenced = source.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/)
   if (fenced) source = fenced[1]
@@ -103,30 +102,4 @@ export function parseInventoryEventsStrictV1(raw: string): ExtractedItemEvent[] 
       note: row.note.trim(),
     }
   })
-}
-
-/** 解析 AI 输出为物品事件数组 */
-export function parseInventoryEvents(raw: string): ExtractedItemEvent[] {
-  const trimmed = raw.trim()
-  const fence = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/)
-  let jsonStr = fence ? fence[1].trim() : trimmed
-  // 容错：截取第一个 [ 到最后一个 ]
-  const start = jsonStr.indexOf('[')
-  const end = jsonStr.lastIndexOf(']')
-  if (start >= 0 && end > start) jsonStr = jsonStr.slice(start, end + 1)
-  try {
-    const arr = JSON.parse(jsonStr)
-    if (!Array.isArray(arr)) return []
-    return arr
-      .map((e: Record<string, unknown>): ExtractedItemEvent => ({
-        itemName: String(e.itemName || '').trim(),
-        heldByName: String(e.heldByName || '').trim(),
-        action: e.action === 'consume' ? 'consume' : 'gain',
-        quantity: Math.max(1, Math.round(Number(e.quantity) || 1)),
-        note: String(e.note || '').trim(),
-      }))
-      .filter(e => e.itemName && e.heldByName)
-  } catch {
-    return []
-  }
 }

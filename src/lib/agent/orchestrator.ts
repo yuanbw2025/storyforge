@@ -57,10 +57,6 @@ import {
   type ProseCopilotSnapshot,
 } from './prose-copilot'
 import {
-  prepareWorldOriginCopilot,
-  type WorldOriginSnapshot,
-} from './world-origin-copilot'
-import {
   adoptRestoredStoryCoreCandidate,
   parseStoryCoreCandidateDraft,
   prepareStoryCoreCopilot,
@@ -207,8 +203,8 @@ export type { DomainAgentId }
 export interface MasterAgentTask {
   id: string
   agentId: DomainAgentId
-  /** 新计划冻结具体 Skill；旧 durable 计划缺省时回退到该 Agent 的默认 Skill。 */
-  skillId?: AgentSkillId
+  /** Every durable task freezes one exact current Skill identity. */
+  skillId: AgentSkillId
   instruction: string
   dependsOn: string[]
   /** 正文领域的显式叙事视角；缺省时正文不注入角色认知。 */
@@ -233,17 +229,17 @@ export interface MasterAgentTask {
 export interface MasterAgentPlan {
   summary: string
   tasks: MasterAgentTask[]
-  /** 旧 durable 计划没有该字段，恢复时保持原始 plan hash 与顺序工作流语义。 */
-  workflow?: MasterWorkflowSelectionV1
+  /** Frozen workflow selected before the durable run is authorized. */
+  workflow: MasterWorkflowSelectionV1
 }
 
 export interface MasterCandidateDependencyBindingV1 {
   taskId: string
   outputHash: string
-  /** Present on durable candidates; binds the exact upstream author-editable candidate. */
-  candidateHash?: string
-  /** Present on durable candidates; prevents a revised contract generation from joining old output. */
-  generation?: number
+  /** Binds the exact upstream author-editable candidate. */
+  candidateHash: string
+  /** Prevents a revised contract generation from joining another generation's output. */
+  generation: number
   /** Present when the RunContract requires a fresh deterministic upstream receipt. */
   verificationReceiptHash?: string
 }
@@ -252,15 +248,15 @@ export interface MasterCandidatePayload {
   version: 1
   taskId: string
   agentId: DomainAgentId
-  skillId?: AgentSkillId
-  /** Absent on candidates created before HARNESS-18. */
+  skillId: AgentSkillId
+  /** Frozen Skill/Prompt/Tool identity for this formal candidate. */
   executionBinding?: AgentSkillExecutionBindingV1
   label: string
   contextSources: string[]
   contextEvidence?: AgentContextEvidence
   /** Durable Context Manifest identity frozen before candidate persistence. */
   contextManifestHash?: string
-  /** Absent on candidates created before WEH-0C. */
+  /** Source revision vector used for stale detection when the target has Canon state. */
   contentRevision?: WorkspaceContentRevisionVectorV1
   teamBudgetEvidence?: AgentTeamBudgetEvidence
   baseSnapshot: unknown
@@ -283,11 +279,11 @@ export interface MasterCandidatePayload {
   proseOperation?: ProseCopilotOperation
   proseOutlineNodeId?: number
   dependsOnTaskIds?: string[]
-  /** Absent on candidates created before HARNESS-22. */
+  /** Exact upstream candidates and receipts consumed by this task. */
   dependencyBindings?: MasterCandidateDependencyBindingV1[]
   workspaceScope?: WorkspaceScope
   runId?: number
-  /** Absent on candidates created before HARNESS-22. */
+  /** Durable run generation that produced this candidate. */
   runGeneration?: number
   runStepId?: string
   candidateHash?: string
@@ -297,9 +293,9 @@ export interface MasterCandidatePayload {
   semanticReview?: MasterCandidateSemanticReviewArtifactV1
   /** Present on candidates governed by the bounded creative-reliability policy. */
   creativeArtifact?: CreativeArtifactV1
-  /** Absent on candidates created before WEH-0E or on free-text outputs. */
+  /** Structured-output evidence for governed structured output paths. */
   structuredOutputEvidence?: StructuredOutputRunEvidenceV1
-  /** Absent on candidates created before WEH-0F or on non-governed prompt paths. */
+  /** Prompt evidence for tasks that freeze a governed prompt execution. */
   promptExecutionEvidence?: PromptExecutionEvidenceV1
   /** Per-run narrative drive derived only from already assembled registered sources. */
   narrativeBrief?: NarrativeBriefV1
@@ -588,6 +584,7 @@ export async function createMasterAgentPlan(input: {
   const workflow = selectMasterWorkflowV1(request)
   if (input.pinnedTask) {
     const pinned = input.pinnedTask
+    const pinnedSkillId = pinned.skillId ?? selectAgentSkillIdV1(pinned.agentId, request)
     if (pinned.agentId !== 'inspiration' && pinned.inspirationFragmentIds !== undefined) {
       throw new Error('只有灵感领域任务可以固定灵感碎片。')
     }
@@ -595,40 +592,40 @@ export async function createMasterAgentPlan(input: {
       pinned.characterDrivenPlanId !== undefined
       && (
         pinned.agentId !== 'outline'
-        || pinned.skillId !== 'outline.character-driven'
+        || pinnedSkillId !== 'outline.character-driven'
         || !Number.isInteger(pinned.characterDrivenPlanId)
         || pinned.characterDrivenPlanId < 1
       )
     ) throw new Error('只有角色驱动大纲 Skill 可以固定角色驱动方案。')
-    if (pinned.skillId === 'outline.character-driven' && pinned.characterDrivenPlanId === undefined) {
+    if (pinnedSkillId === 'outline.character-driven' && pinned.characterDrivenPlanId === undefined) {
       throw new Error('角色驱动大纲 Skill 必须固定角色驱动方案。')
     }
     if (
       pinned.characterRevisionRequest !== undefined
-      && (pinned.agentId !== 'outline' || pinned.skillId !== 'outline.character-revision')
+      && (pinned.agentId !== 'outline' || pinnedSkillId !== 'outline.character-revision')
     ) throw new Error('只有角色中途重规划 Skill 可以固定角色变更请求。')
-    if (pinned.skillId === 'outline.character-revision' && pinned.characterRevisionRequest === undefined) {
+    if (pinnedSkillId === 'outline.character-revision' && pinned.characterRevisionRequest === undefined) {
       throw new Error('角色中途重规划 Skill 必须固定角色变更请求。')
     }
     if (
       pinned.characterSupplementRequest !== undefined
-      && (pinned.agentId !== 'character' || pinned.skillId !== 'character.supplement')
+      && (pinned.agentId !== 'character' || pinnedSkillId !== 'character.supplement')
     ) throw new Error('只有角色补全 Skill 可以固定角色补全请求。')
-    if (pinned.skillId === 'character.supplement' && pinned.characterSupplementRequest === undefined) {
+    if (pinnedSkillId === 'character.supplement' && pinned.characterSupplementRequest === undefined) {
       throw new Error('角色补全 Skill 必须固定角色补全请求。')
     }
     if (
       pinned.characterLifecycleRequest !== undefined
-      && (pinned.agentId !== 'character' || pinned.skillId !== 'character.lifecycle')
+      && (pinned.agentId !== 'character' || pinnedSkillId !== 'character.lifecycle')
     ) throw new Error('只有角色状态 Skill 可以固定生命周期请求。')
-    if (pinned.skillId === 'character.lifecycle' && pinned.characterLifecycleRequest === undefined) {
+    if (pinnedSkillId === 'character.lifecycle' && pinned.characterLifecycleRequest === undefined) {
       throw new Error('角色状态 Skill 必须固定生命周期请求。')
     }
     if (
       pinned.storylineProgressChapterId !== undefined
-      && (pinned.agentId !== 'outline' || pinned.skillId !== 'outline.storyline-progress')
+      && (pinned.agentId !== 'outline' || pinnedSkillId !== 'outline.storyline-progress')
     ) throw new Error('只有故事线进度 Skill 可以固定映射章节。')
-    if (pinned.skillId === 'outline.storyline-progress') {
+    if (pinnedSkillId === 'outline.storyline-progress') {
       const chapterId = pinned.storylineProgressChapterId
       if (typeof chapterId !== 'number' || !Number.isInteger(chapterId) || chapterId < 1) {
         throw new Error('故事线进度 Skill 必须固定已写章节 ID。')
@@ -636,7 +633,7 @@ export async function createMasterAgentPlan(input: {
     }
     if (
       pinned.storyArcMutationRequest !== undefined
-      && (pinned.agentId !== 'outline' || pinned.skillId !== 'outline.story-arcs')
+      && (pinned.agentId !== 'outline' || pinnedSkillId !== 'outline.story-arcs')
     ) throw new Error('只有故事线 Skill 可以固定既有故事线变换请求。')
     const characterRevisionRequest = pinned.characterRevisionRequest === undefined
       ? undefined
@@ -657,7 +654,7 @@ export async function createMasterAgentPlan(input: {
     const task: MasterAgentTask = {
       id: pinned.id ?? `${pinned.agentId}-targeted`,
       agentId: pinned.agentId,
-      ...(pinned.skillId ? { skillId: pinned.skillId } : {}),
+      skillId: pinnedSkillId,
       instruction,
       dependsOn: [...new Set(pinned.dependsOn ?? [])].slice(0, 5),
       ...(pinned.perspectiveCharacterId !== undefined
@@ -708,7 +705,7 @@ export async function createMasterAgentPlan(input: {
     useAIConfigStore.getState().config,
     { category: AGENT_ROLE_CATEGORIES.orchestrator },
   ).config
-  const status = await executeAgentTool('read_project_status', {
+  const status = await executeAgentTool('read_work_status', {
     projectId: input.projectId,
     scope: input.scope,
     worldGroupId: input.worldGroupId,
@@ -954,7 +951,7 @@ async function executeSequentialMasterAgentPlan(
     runtimeAssumptions.set(taskId, scopeRuntimeAssumptionsV1(taskId, assumptions))
   }
   const orderedTasks = topologicalTasks(input.plan)
-  const stagedAuthorConfirmed = input.plan.workflow?.workflowId === 'staged-author-confirmed'
+  const stagedAuthorConfirmed = input.plan.workflow.workflowId === 'staged-author-confirmed'
   const authorConfirmedTaskIds = new Set(input.authorConfirmedTaskIds ?? [])
   for (let taskIndex = 0; taskIndex < orderedTasks.length; taskIndex += 1) {
     const task = orderedTasks[taskIndex]
@@ -971,14 +968,11 @@ async function executeSequentialMasterAgentPlan(
         scope,
         worldGroupId: input.worldGroupId,
       })
-      const dependencyBindings = await Promise.all(task.dependsOn.map(async taskId => {
-        const output = outputs.get(taskId)
-        if (!output?.trim()) throw new Error(`主 Agent 任务 ${task.id} 缺少依赖输出 ${taskId}。`)
-        return {
-          taskId,
-          outputHash: await hashCanonicalValue(output),
+      for (const taskId of task.dependsOn) {
+        if (!outputs.get(taskId)?.trim()) {
+          throw new Error(`主 Agent 任务 ${task.id} 缺少依赖输出 ${taskId}。`)
         }
-      }))
+      }
       // A staged downstream task must re-read author-confirmed Canon through
       // its registered Context Gateway.  Candidate prose and provisional
       // assumptions remain lineage evidence, never downstream context.
@@ -1057,7 +1051,6 @@ async function executeSequentialMasterAgentPlan(
               worldviewFieldOutputBudget: prepared.input.outputBudget,
               workspaceScope: scope,
               dependsOnTaskIds: task.dependsOn,
-              dependencyBindings,
               generator: prepared.modelIdentity,
               structuredOutputEvidence: result.structuredOutputEvidence,
               promptExecutionEvidence: prepared.promptExecutionEvidence,
@@ -1118,7 +1111,6 @@ async function executeSequentialMasterAgentPlan(
               storyCoreField: prepared.targetField,
               workspaceScope: scope,
               dependsOnTaskIds: task.dependsOn,
-              dependencyBindings,
               generator: prepared.modelIdentity,
               structuredOutputEvidence: result.structuredOutputEvidence,
               promptExecutionEvidence: prepared.promptExecutionEvidence,
@@ -1171,7 +1163,6 @@ async function executeSequentialMasterAgentPlan(
               creativeRulesField: prepared.targetField,
               workspaceScope: scope,
               dependsOnTaskIds: task.dependsOn,
-              dependencyBindings,
               generator: prepared.modelIdentity,
               structuredOutputEvidence: result.structuredOutputEvidence,
             },
@@ -1219,7 +1210,6 @@ async function executeSequentialMasterAgentPlan(
               storylineProgressChapterId: prepared.chapterId,
               workspaceScope: scope,
               dependsOnTaskIds: task.dependsOn,
-              dependencyBindings,
               generator: prepared.modelIdentity,
               structuredOutputEvidence: result.structuredOutputEvidence,
             },
@@ -1229,46 +1219,7 @@ async function executeSequentialMasterAgentPlan(
           })
           outputs.set(task.id, draft)
         } else {
-          const prepared = await prepareWorldOriginCopilot({
-            projectId: input.projectId,
-            scope,
-            worldGroupId: input.worldGroupId,
-            authorRequest: task.instruction,
-            skillId: skill.id as AgentSkillId,
-            routingCategory: AGENT_ROLE_CATEGORIES['world-origin'],
-            contextProfile,
-            contextCompressionRuntime,
-            signal: input.signal,
-          })
-          const result = await runBudgetedGenerationNode({
-            node: prepared.node,
-            prepared: prepared.prepared,
-            budget,
-            callLabel: '世界领域 Agent',
-            maxOutputTokens: skill.maxOutputTokens,
-          })
-          const draft = result.output
-          candidates.push({
-            payload: {
-              version: 1,
-              taskId: task.id,
-              agentId: task.agentId,
-              skillId: skill.id as AgentSkillId,
-              executionBinding,
-              label: '世界来源',
-              contextSources: prepared.contextSources,
-              contextEvidence: prepared.contextEvidence,
-              baseSnapshot: prepared.snapshot,
-              workspaceScope: scope,
-              dependsOnTaskIds: task.dependsOn,
-              dependencyBindings,
-              generator: prepared.modelIdentity,
-            },
-            draft,
-            runtimeNode: prepared.node,
-            runtimeOutput: result.output,
-          })
-          outputs.set(task.id, draft)
+          throw new Error(`主 Agent 不支持世界领域 Skill ${skill.id}；请使用已登记的字段、故事核心或创作规则入口。`)
         }
       } else if (task.agentId === 'character') {
         if (skill.executionMode === 'lifecycle') {
@@ -1310,7 +1261,6 @@ async function executeSequentialMasterAgentPlan(
               workspaceScope: scope,
               characterLifecycleRequest: task.characterLifecycleRequest,
               dependsOnTaskIds: task.dependsOn,
-              dependencyBindings,
               generator: prepared.modelIdentity,
               structuredOutputEvidence: result.structuredOutputEvidence,
             },
@@ -1371,7 +1321,6 @@ async function executeSequentialMasterAgentPlan(
               workspaceScope: scope,
               characterSupplementRequest: task.characterSupplementRequest,
               dependsOnTaskIds: task.dependsOn,
-              dependencyBindings,
               generator: prepared.modelIdentity,
               structuredOutputEvidence: result.structuredOutputEvidence,
             },
@@ -1430,7 +1379,6 @@ async function executeSequentialMasterAgentPlan(
               baseSnapshot: prepared.snapshot,
               workspaceScope: scope,
               dependsOnTaskIds: task.dependsOn,
-              dependencyBindings,
               generator: prepared.modelIdentity,
               structuredOutputEvidence: result.structuredOutputEvidence,
               promptExecutionEvidence: prepared.promptExecutionEvidence,
@@ -1502,7 +1450,6 @@ async function executeSequentialMasterAgentPlan(
             mode: prepared.mode,
             selectedFragmentIds,
             dependsOnTaskIds: task.dependsOn,
-            dependencyBindings,
             generator: prepared.modelIdentity,
             structuredOutputEvidence: result.structuredOutputEvidence,
           },
@@ -1550,7 +1497,6 @@ async function executeSequentialMasterAgentPlan(
               workspaceScope: scope,
               characterRevisionRequest: task.characterRevisionRequest,
               dependsOnTaskIds: task.dependsOn,
-              dependencyBindings,
               structuredOutputEvidence: result.structuredOutputEvidence,
             },
             draft,
@@ -1602,7 +1548,6 @@ async function executeSequentialMasterAgentPlan(
               workspaceScope: scope,
               characterDrivenPlanId: prepared.snapshot.planId,
               dependsOnTaskIds: task.dependsOn,
-              dependencyBindings,
               structuredOutputEvidence: result.structuredOutputEvidence,
             },
             draft,
@@ -1659,7 +1604,6 @@ async function executeSequentialMasterAgentPlan(
               storyArcKind: prepared.kind,
               storyArcMutationRequest: prepared.mutation,
               dependsOnTaskIds: task.dependsOn,
-              dependencyBindings,
               creativeArtifact: result.artifact,
               narrativeBrief: prepared.input.narrativeBrief,
             },
@@ -1723,7 +1667,6 @@ async function executeSequentialMasterAgentPlan(
               outlineMode: prepared.mode,
               outlineParentId: prepared.parentVolumeId,
               dependsOnTaskIds: task.dependsOn,
-              dependencyBindings,
               creativeArtifact: result.artifact,
               narrativeBrief: prepared.input.narrativeBrief,
             },
@@ -1788,7 +1731,6 @@ async function executeSequentialMasterAgentPlan(
             proseOutlineNodeId: prepared.outlineNodeId,
             perspectiveCharacterId: prepared.perspectiveCharacterId,
             dependsOnTaskIds: task.dependsOn,
-            dependencyBindings,
             creativeArtifact: result.artifact,
             narrativeBrief: prepared.input.narrativeBrief,
             informationBoundary: prepared.informationBoundary,
@@ -1878,7 +1820,15 @@ async function executeFanOutMasterAgentPlan(
       try {
         const generated = await executeSequentialMasterAgentPlan({
           ...input,
-          plan: { summary: input.plan.summary, tasks: [task] },
+          plan: {
+            summary: input.plan.summary,
+            tasks: [task],
+            workflow: {
+              version: 1,
+              workflowId: 'single-domain-direct',
+              reasonCodes: ['single-explicit-domain'],
+            },
+          },
           budget,
           completedTaskOutputs,
           completedTaskAssumptions,
@@ -1937,19 +1887,10 @@ async function executeFanOutMasterAgentPlan(
 export async function executeMasterAgentPlan(
   input: ExecuteMasterAgentPlanInput,
 ): Promise<ExecutedMasterCandidate[]> {
-  const workflow = input.plan.workflow ? getMasterWorkflowV1(input.plan.workflow) : null
-  return workflow?.strategy === 'fan-out' && isMasterFanOutEnabledV1()
+  const workflow = getMasterWorkflowV1(input.plan.workflow)
+  return workflow.strategy === 'fan-out' && isMasterFanOutEnabledV1()
     ? executeFanOutMasterAgentPlan(input)
     : executeSequentialMasterAgentPlan(input)
-}
-
-function sameWorldSnapshot(
-  left: WorldOriginSnapshot,
-  right: WorldOriginSnapshot,
-): boolean {
-  return left.id === right.id
-    && left.updatedAt === right.updatedAt
-    && left.worldOrigin === right.worldOrigin
 }
 
 function sameWorkspaceScope(left: WorkspaceScope, right: WorkspaceScope): boolean {
@@ -1985,14 +1926,6 @@ async function resolveCandidateScope(input: {
     throw new Error('Agent 候选不属于当前作品。')
   }
   return scope
-}
-
-async function currentWorldSnapshot(scope: WorkspaceScope, worldGroupId: number | null): Promise<WorldOriginSnapshot> {
-  const rows = await readOwnedRows<any>(scope, 'worldviews', { owner: 'world' })
-  const row = worldGroupId == null
-    ? (rows.find(item => (item.worldGroupId ?? null) === null) ?? rows[0] ?? null)
-    : (rows.find(item => item.worldGroupId === worldGroupId) ?? null)
-  return { id: row?.id ?? null, updatedAt: row?.updatedAt ?? null, worldOrigin: row?.worldOrigin ?? '' }
 }
 
 async function currentRosterSnapshot(scope: WorkspaceScope, worldGroupId: number | null): Promise<CharacterRosterSnapshot> {
@@ -2152,7 +2085,7 @@ export async function adoptMasterCandidate(input: {
           input.payload.baseSnapshot as CharacterRevisionCopilotSnapshotV1,
         )
       : input.payload.agentId === 'world-origin'
-      ? input.draft
+      ? (() => { throw new Error(`世界领域候选使用了未登记的当前 Skill：${input.payload.skillId ?? 'missing'}`) })()
       : input.payload.agentId === 'character'
         ? input.payload.skillId === 'character.supplement'
           ? parseCharacterSupplementCandidateDraftV1(
@@ -2198,22 +2131,7 @@ export async function adoptMasterCandidate(input: {
         targetField: input.payload.creativeRulesField,
         draft: input.draft,
       })
-    } else {
-      const base = input.payload.baseSnapshot as WorldOriginSnapshot
-      if (!sameWorldSnapshot(base, await currentWorldSnapshot(scope, input.worldGroupId))) {
-        throw new Error('世界来源已在候选生成后发生变化，请重新生成。')
-      }
-      const draft = input.draft.trim()
-      if (draft.length < 4 || draft.length > 12_000) throw new Error('世界来源候选长度无效。')
-      await adopt({
-        projectId: input.projectId,
-        scope,
-        worldGroupId: input.worldGroupId,
-        target: 'worldviews',
-        mode: 'replace',
-        data: { worldOrigin: draft },
-      })
-    }
+    } else throw new Error(`世界领域候选使用了未登记的当前 Skill：${input.payload.skillId ?? 'missing'}`)
   } else if (input.payload.agentId === 'character') {
     if (input.payload.skillId === 'character.supplement') {
       if (!input.payload.characterSupplementRequest) {
@@ -2335,7 +2253,7 @@ export async function adoptMasterCandidate(input: {
       ? `故事核心“${input.payload.label}”已写入项目。`
       : input.payload.skillId === 'world-origin.creative-rules'
       ? `创作规则“${input.payload.label}”已写入项目。`
-      : '世界来源已写入项目。'
+      : (() => { throw new Error(`世界领域候选使用了未登记的当前 Skill：${input.payload.skillId ?? 'missing'}`) })()
     : input.payload.agentId === 'character'
       ? input.payload.skillId === 'character.lifecycle'
         ? `角色状态已更新为 ${(parseCharacterLifecycleCandidateV1(

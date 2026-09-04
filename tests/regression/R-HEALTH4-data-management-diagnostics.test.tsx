@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import DataManagementPanel from '../../src/components/data/DataManagementPanel'
 import { db } from '../../src/lib/db/schema'
-import type { Project } from '../../src/lib/types'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
@@ -33,6 +33,7 @@ afterEach(async () => {
   await db.delete()
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
+  globalThis.localStorage?.removeItem('storyforge-test-api-key-sentinel')
 })
 
 async function waitFor(predicate: () => boolean) {
@@ -46,13 +47,9 @@ async function waitFor(predicate: () => boolean) {
 describe('HEALTH-4 · 数据管理诊断下载用户路径', () => {
   it('点击后生成隐私诊断 JSON 并给出成功反馈', async () => {
     await db.open()
-    const projectId = await db.projects.add({
-      name: '不可泄漏书名-SENTINEL',
-      apiKey: 'sk-SENTINEL',
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    } as never)
-    const project = await db.projects.get(projectId) as Project
+    const createdWorkspaceV1 = await seedCurrentWorkspace('不可泄漏书名-SENTINEL')
+    const project = createdWorkspaceV1.project
+    globalThis.localStorage?.setItem('storyforge-test-api-key-sentinel', 'sk-SENTINEL')
 
     let downloadedBlob: Blob | null = null
     const createObjectURL = vi.fn((blob: Blob) => {

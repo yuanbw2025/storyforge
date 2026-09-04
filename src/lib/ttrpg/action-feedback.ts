@@ -529,8 +529,8 @@ export function createTtrpgActionReceiptV2(input: {
     targetKey: input.targetKey,
     actionKey: input.action.key,
     actionPhase: input.action.phase,
-    ...(input.declaredIntent ? { declaredIntent: input.declaredIntent } : {}),
-    checkSnapshot: input.check?.rule
+    declaredIntent: input.declaredIntent ?? null,
+    checkSnapshot: input.check
       ? {
           checkKey: input.check.rule.checkKey,
           attributeKey: input.check.rule.attributeKey,
@@ -539,12 +539,8 @@ export function createTtrpgActionReceiptV2(input: {
               input.check.rule.attributeKey
             ],
           ),
-          ...(input.check.rule.skillKey == null
-            ? {}
-            : {
-                skillKey: input.check.rule.skillKey,
-                skillValue: input.check.rule.skillValue ?? 0,
-              }),
+          skillKey: input.check.rule.skillKey,
+          skillValue: input.check.rule.skillValue,
           diceModelKey: input.check.rule.diceModelKey,
           difficulty: input.check.dc,
         }
@@ -811,7 +807,7 @@ export function parseTtrpgActionReceiptV2(
   if (
     row.schema !== "storyforge.ttrpg-action-receipt" ||
     row.version !== 2 ||
-    !["resolved", "resolved-no-roll", "resolved-check"].includes(
+    !["resolved-no-roll", "resolved-check"].includes(
       String(row.terminalStatus),
     )
   ) {
@@ -827,6 +823,7 @@ export function parseTtrpgActionReceiptV2(
     "schema",
     "version",
     "sceneKey",
+    "sceneSnapshot",
     "round",
     "activeActorKey",
     "actorKey",
@@ -834,6 +831,8 @@ export function parseTtrpgActionReceiptV2(
     "targetKey",
     "actionKey",
     "actionPhase",
+    "declaredIntent",
+    "checkSnapshot",
     "criticality",
     "criticalityReasons",
     "actorConditionKeys",
@@ -846,15 +845,8 @@ export function parseTtrpgActionReceiptV2(
     "discoveredConclusionKeys",
     "observers",
     "reactionWindows",
+    "reactionCandidates",
   ];
-  if (Object.prototype.hasOwnProperty.call(contextRow, "sceneSnapshot"))
-    contextFields.push("sceneSnapshot");
-  if (Object.prototype.hasOwnProperty.call(contextRow, "checkSnapshot"))
-    contextFields.push("checkSnapshot");
-  if (Object.prototype.hasOwnProperty.call(contextRow, "declaredIntent"))
-    contextFields.push("declaredIntent");
-  if (Object.prototype.hasOwnProperty.call(contextRow, "reactionCandidates"))
-    contextFields.push("reactionCandidates");
   exact(
     contextRow,
     contextFields,
@@ -876,14 +868,11 @@ export function parseTtrpgActionReceiptV2(
   const reactionWindows = contextRow.reactionWindows.map((item, index) =>
     parseReactionWindow(item, `ActionContext.reactionWindows[${index}]`),
   );
-  const reactionCandidates = Array.isArray(contextRow.reactionCandidates)
-    ? contextRow.reactionCandidates.map((item, index) =>
-        parseReactionCandidate(
-          item,
-          `ActionContext.reactionCandidates[${index}]`,
-        ),
-      )
-    : undefined;
+  if (!Array.isArray(contextRow.reactionCandidates))
+    fail("ActionContext 反应候选必须是数组");
+  const reactionCandidates = contextRow.reactionCandidates.map((item, index) =>
+    parseReactionCandidate(item, `ActionContext.reactionCandidates[${index}]`),
+  );
   if (
     reactionWindows.length !== 4 ||
     new Set(reactionWindows.map((item) => item.layer)).size !== 4
@@ -897,7 +886,7 @@ export function parseTtrpgActionReceiptV2(
     )
   )
     fail("ActionContext 缺少行动者观察记录");
-  if (reactionCandidates) {
+  {
     const relevantObservers = new Map(
       observers
         .filter(
@@ -936,7 +925,7 @@ export function parseTtrpgActionReceiptV2(
       : key(row.nextActorKey, "ActionReceipt.nextActorKey");
   const declaredIntent =
     contextRow.declaredIntent == null
-      ? undefined
+      ? null
       : (() => {
           const intent = object(
             contextRow.declaredIntent,
@@ -971,9 +960,8 @@ export function parseTtrpgActionReceiptV2(
                   ),
           };
         })();
-  const sceneSnapshot = contextRow.sceneSnapshot == null
-    ? undefined
-    : (() => {
+  if (contextRow.sceneSnapshot == null) fail("ActionContext 缺少场景快照");
+  const sceneSnapshot = (() => {
         const snapshot = object(contextRow.sceneSnapshot, "ActionContext.sceneSnapshot");
         exact(
           snapshot,
@@ -1001,9 +989,8 @@ export function parseTtrpgActionReceiptV2(
             "checkKey",
             "attributeKey",
             "attributeValue",
-            ...(Object.prototype.hasOwnProperty.call(snapshot, "skillKey")
-              ? ["skillKey", "skillValue"]
-              : []),
+            "skillKey",
+            "skillValue",
             "diceModelKey",
             "difficulty",
           ],
@@ -1026,9 +1013,8 @@ export function parseTtrpgActionReceiptV2(
           checkKey: key(snapshot.checkKey, "ActionContext.checkSnapshot.checkKey"),
           attributeKey: key(snapshot.attributeKey, "ActionContext.checkSnapshot.attributeKey"),
           attributeValue: finite(snapshot.attributeValue, "ActionContext.checkSnapshot.attributeValue"),
-          ...(skillKey == null
-            ? {}
-            : { skillKey, skillValue: skillValue as number }),
+          skillKey,
+          skillValue,
           diceModelKey: key(snapshot.diceModelKey, "ActionContext.checkSnapshot.diceModelKey"),
           difficulty: integer(snapshot.difficulty, "ActionContext.checkSnapshot.difficulty", 0),
         };
@@ -1048,7 +1034,7 @@ export function parseTtrpgActionReceiptV2(
       schema: "storyforge.ttrpg-action-context",
       version: 2,
       sceneKey: key(contextRow.sceneKey, "ActionContext.sceneKey"),
-      ...(sceneSnapshot ? { sceneSnapshot } : {}),
+      sceneSnapshot,
       round: integer(contextRow.round, "ActionContext.round", 1),
       activeActorKey: key(
         contextRow.activeActorKey,
@@ -1067,10 +1053,8 @@ export function parseTtrpgActionReceiptV2(
         ["free", "action", "reaction", "downtime"] as const,
         "ActionContext.actionPhase",
       ),
-      ...(declaredIntent ? { declaredIntent } : {}),
-      ...(Object.prototype.hasOwnProperty.call(contextRow, "checkSnapshot")
-        ? { checkSnapshot }
-        : {}),
+      declaredIntent,
+      checkSnapshot,
       criticality: enumValue(
         contextRow.criticality,
         ["routine", "meaningful", "critical"] as const,
@@ -1112,7 +1096,7 @@ export function parseTtrpgActionReceiptV2(
       ),
       observers,
       reactionWindows,
-      ...(reactionCandidates ? { reactionCandidates } : {}),
+      reactionCandidates,
     },
     mechanicalSummary: text(
       row.mechanicalSummary,
@@ -1148,7 +1132,7 @@ export function createDeterministicGmSynthesisFrameV2(
   receipt: TtrpgRuntimeActionReceiptV2,
 ): TtrpgRuntimeGmSynthesisFrameV2 {
   const candidateByActor = new Map(
-    (receipt.context.reactionCandidates ?? []).map((candidate) => [
+    receipt.context.reactionCandidates.map((candidate) => [
       candidate.actorKey,
       candidate,
     ]),

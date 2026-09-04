@@ -16,69 +16,48 @@ import { AgentTeamBudgetTracker } from '../../src/lib/agent/team-budget'
 import type { MasterAgentPlan } from '../../src/lib/agent/orchestrator'
 import type { WorkspaceScope } from '../../src/lib/types'
 import { prepareRequiredMasterGatewayFixtureV1 } from '../helpers/master-agent-gateway'
-import { generateWorkCode, generateWorkspaceUid } from '../../src/lib/memory/identity'
+import { createWorkspace as createCurrentWorkspace } from '../../src/lib/workspace/create-workspace'
+import { stampNewRecord } from '../../src/lib/workspace/scope'
+import {
+  currentWorldOriginCandidateFixtureV1,
+  currentWorldOriginDraftV1,
+} from '../helpers/current-worldview-field'
 
 async function createWorkspace(label: string): Promise<{
   scope: WorkspaceScope
   worldGroupId: number
 }> {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    workspaceUid: generateWorkspaceUid(),
+  const created = await createCurrentWorkspace({
     name: label,
-    genre: 'fantasy',
     genres: ['fantasy'],
     description: '',
     status: 'drafting',
     targetWordCount: 100_000,
-
-
-    createdAt: now,
-    updatedAt: now,
-  } as any) as number
-  const worldId = await db.worlds.add({
-    projectId,
-    code: `world-${label}`,
-    name: `${label}世界`,
-    description: '',
-    currentVersion: 1,
-    createdAt: now,
-    updatedAt: now,
-  }) as number
-  const workId = await db.works.add({
-    projectId,
-    worldId,
-    title: label,
-    code: generateWorkCode(),
-    description: '',
-    genres: ['fantasy'],
-    status: 'drafting',
-    targetWordCount: 100_000,
-    createdAt: now,
-    updatedAt: now,
-  }) as number
-  await db.projects.update(projectId, {
-    activeWorldId: worldId,
-    activeWorkId: workId,
-    ownershipSchemaVersion: 1,
-  })
-  const worldGroupId = await db.worldGroups.add({
-    projectId,
-    worldId,
+    enableMultiWorld: true,
+  }, { kind: 'novel', novelProfile: 'long' })
+  const worldGroupId = await db.worldGroups.add(stampNewRecord(created.scope, 'worldGroups', {
+    projectId: created.scope.projectId,
     name: '主世界',
+    type: 'primary',
     order: 0,
     createdAt: now,
     updatedAt: now,
-  }) as number
-  return { scope: { projectId, worldId, workId }, worldGroupId }
+  }, { owner: 'world' })) as number
+  return { scope: created.scope, worldGroupId }
 }
 
 function plan(): MasterAgentPlan {
   return {
     summary: '先建立世界来源，再生成角色候选。',
+    workflow: {
+      version: 1,
+      workflowId: 'multi-domain-sequential',
+      reasonCodes: ['multiple-explicit-domains'],
+    },
     tasks: [
-      { id: 'world-1', agentId: 'world-origin', instruction: '建立潮汐世界的来源。', dependsOn: [] },
-      { id: 'character-1', agentId: 'character', instruction: '根据世界来源生成守灯人。', dependsOn: ['world-1'] },
+      { id: 'world-1', agentId: 'world-origin', skillId: 'world-origin.worldview-field', instruction: '建立潮汐世界的来源。', dependsOn: [] },
+      { id: 'character-1', agentId: 'character', skillId: 'character.create', instruction: '根据世界来源生成守灯人。', dependsOn: ['world-1'] },
     ],
   }
 }
@@ -103,8 +82,11 @@ async function executeFixture(options: any): Promise<void> {
 
 async function emitFixtureTask(options: any, task: MasterAgentPlan['tasks'][number]): Promise<void> {
   await options.executionTrace.taskStarted(task)
-  const output = task.agentId === 'world-origin'
-    ? '潮汐由沉睡的海神维持。'
+  const worldCandidate = task.agentId === 'world-origin'
+    ? currentWorldOriginCandidateFixtureV1('潮汐由沉睡的海神维持。')
+    : null
+  const output = worldCandidate
+    ? worldCandidate.draft
     : JSON.stringify({
         name: '守灯人',
         roleWeight: 'main',
@@ -119,31 +101,28 @@ async function emitFixtureTask(options: any, task: MasterAgentPlan['tasks'][numb
     maxOutputTokens: 100,
   })
   options.budget.settleCall(reservation, output)
-  const gateway = task.agentId === 'character'
-    ? await prepareRequiredMasterGatewayFixtureV1({
-        scope: options.scope,
-        worldGroupId: options.worldGroupId,
-        executionTrace: options.executionTrace,
-      }, task, output)
-    : undefined
+  const gateway = await prepareRequiredMasterGatewayFixtureV1({
+    scope: options.scope,
+    worldGroupId: options.worldGroupId,
+    executionTrace: options.executionTrace,
+  }, task, output)
   await options.executionTrace.candidateReady(task, {
     payload: {
       version: 1,
       taskId: task.id,
       agentId: task.agentId,
+      skillId: task.skillId,
       label: task.agentId,
-      contextSources: gateway?.contextSources ?? ['worldview'],
-      ...(gateway ? { contextEvidence: gateway.contextEvidence } : {}),
-      baseSnapshot: task.agentId === 'world-origin'
-        ? { id: null, updatedAt: null, worldOrigin: '' }
-        : { serialized: '[]', visibleNames: [] },
+      contextSources: gateway.contextSources,
+      contextEvidence: gateway.contextEvidence,
+      ...(worldCandidate?.payload ?? { baseSnapshot: { serialized: '[]', visibleNames: [] } }),
       workspaceScope: options.scope,
       dependsOnTaskIds: task.dependsOn,
     },
     draft: output,
     runtimeNode: {} as any,
-    runtimeOutput: output,
-    ...(gateway ? { contextGatewayRuntime: gateway.contextGatewayRuntime } : {}),
+    runtimeOutput: worldCandidate?.runtimeOutput ?? output,
+    contextGatewayRuntime: gateway.contextGatewayRuntime,
   })
 }
 
@@ -153,6 +132,7 @@ async function createRun(label: string) {
     projectId: fixture.scope.projectId,
     worldGroupId: fixture.worldGroupId,
     scope: fixture.scope,
+    purpose: 'master-authoring',
   })
   const result = await runDurableMasterAgentPlanV1({
     scope: fixture.scope,
@@ -188,6 +168,7 @@ describe.sequential('R-HARNESS22 · 主 Agent 同代依赖 join', { timeout: 15_
 
     await expect(beginMasterAgentCandidateAdoptionV1({
       scope: fixture.scope,
+      purpose: 'master-authoring',
       runId: result.runId,
       candidateEventId: character.event.id!,
     })).rejects.toThrow('请先完成采纳')
@@ -203,6 +184,7 @@ describe.sequential('R-HARNESS22 · 主 Agent 同代依赖 join', { timeout: 15_
       projectId: fixture.scope.projectId,
       worldGroupId: fixture.worldGroupId,
       scope: fixture.scope,
+      purpose: 'master-authoring',
     })
     const started: string[] = []
     const observedCanon: string[] = []
@@ -231,7 +213,8 @@ describe.sequential('R-HARNESS22 · 主 Agent 同代依赖 join', { timeout: 15_
     expect(first.projection.steps['master:character-1']).toMatchObject({ status: 'scheduled', attempt: 0 })
 
     const world = first.candidates[0]
-    const revisedWorld = '潮汐改由月轮与海底钟阵共同维持，旧海神只是失真的民间传说。'
+    const revisedWorldValue = '潮汐改由月轮与海底钟阵共同维持，旧海神只是失真的民间传说。'
+    const revisedWorld = currentWorldOriginDraftV1(revisedWorldValue)
     await updateAgentEventCandidate(
       world.event.id!,
       fixture.scope.projectId,
@@ -250,7 +233,7 @@ describe.sequential('R-HARNESS22 · 主 Agent 同代依赖 join', { timeout: 15_
       runId: first.runId,
     }, { execute: executeStaged as any })
     expect(started).toEqual(['world-1', 'character-1'])
-    expect(observedCanon).toEqual([revisedWorld])
+    expect(observedCanon).toEqual([revisedWorldValue])
     expect(resumed.candidates.map(item => item.payload.taskId)).toEqual(['world-1', 'character-1'])
   })
 
@@ -260,6 +243,7 @@ describe.sequential('R-HARNESS22 · 主 Agent 同代依赖 join', { timeout: 15_
       projectId: fixture.scope.projectId,
       worldGroupId: fixture.worldGroupId,
       scope: fixture.scope,
+      purpose: 'master-authoring',
     })
     await expect(runDurableMasterAgentPlanV1({
       scope: fixture.scope,
@@ -287,7 +271,7 @@ describe.sequential('R-HARNESS22 · 主 Agent 同代依赖 join', { timeout: 15_
     await updateAgentEventCandidate(
       world.event.id!,
       fixture.scope.projectId,
-      '潮汐改由月轮与海底钟阵共同维持。',
+      currentWorldOriginDraftV1('潮汐改由月轮与海底钟阵共同维持。'),
       fixture.scope,
     )
     const restored = await restoreMasterAgentCandidatesV1({ scope: fixture.scope, runId: result.runId })
@@ -324,12 +308,13 @@ describe.sequential('R-HARNESS22 · 主 Agent 同代依赖 join', { timeout: 15_
       .toMatchObject({ status: 'succeeded', confirmation: 'adopt' })
   })
 
-  it('恢复 HARNESS-22 前的上游候选后，新下游可冻结当前 generation 并完成采纳', async () => {
-    const fixture = await createWorkspace('旧候选恢复')
+  it('缺少当前 generation 与依赖清单的候选不能恢复', async () => {
+    const fixture = await createWorkspace('损坏候选拒绝')
     const conversation = await getOrCreateAgentConversation({
       projectId: fixture.scope.projectId,
       worldGroupId: fixture.worldGroupId,
       scope: fixture.scope,
+      purpose: 'master-authoring',
     })
     await expect(runDurableMasterAgentPlanV1({
       scope: fixture.scope,
@@ -341,47 +326,26 @@ describe.sequential('R-HARNESS22 · 主 Agent 同代依赖 join', { timeout: 15_
       execute: (async (options: any) => {
         await emitFixtureTask(options, options.plan.tasks[0])
         const worldEvent = (await db.agentEvents.toArray()).find(event => event.kind === 'candidate')!
-        const legacyPayload = JSON.parse(worldEvent.payload) as Record<string, unknown>
-        delete legacyPayload.runGeneration
-        delete legacyPayload.dependencyBindings
-        await db.agentEvents.update(worldEvent.id!, { payload: JSON.stringify(legacyPayload) })
+        const incompletePayload = JSON.parse(worldEvent.payload) as Record<string, unknown>
+        delete incompletePayload.runGeneration
+        delete incompletePayload.dependencyBindings
+        await db.agentEvents.update(worldEvent.id!, { payload: JSON.stringify(incompletePayload) })
         await updateAgentEventCandidate(
           worldEvent.id!,
           fixture.scope.projectId,
           worldEvent.content,
           fixture.scope,
         )
-        throw new Error('模拟旧版本宿主中断')
+        throw new Error('模拟宿主中断')
       }) as any,
-    })).rejects.toThrow('模拟旧版本宿主中断')
+    })).rejects.toThrow('模拟宿主中断')
 
     const run = (await db.agentRuns.toArray())[0]
 
-    const resumed = await runDurableMasterAgentPlanV1({
+    await expect(runDurableMasterAgentPlanV1({
       scope: fixture.scope,
       worldGroupId: fixture.worldGroupId,
       runId: run.id!,
-    }, { execute: executeFixture as any })
-    const world = resumed.candidates.find(candidate => candidate.payload.taskId === 'world-1')!
-    const character = resumed.candidates.find(candidate => candidate.payload.taskId === 'character-1')!
-    expect(world.payload.runGeneration).toBeUndefined()
-    expect(character.payload.dependencyBindings).toEqual([{
-      taskId: 'world-1',
-      candidateHash: world.payload.candidateHash,
-      outputHash: await hashCanonicalValue(world.draft),
-      generation: 1,
-    }])
-
-    await commitMasterAgentCandidateAdoptionV1({
-      scope: fixture.scope,
-      runId: resumed.runId,
-      candidateEventId: world.event.id!,
-    })
-    await commitMasterAgentCandidateAdoptionV1({
-      scope: fixture.scope,
-      runId: resumed.runId,
-      candidateEventId: character.event.id!,
-    })
-    expect(await db.characters.count()).toBe(1)
+    }, { execute: executeFixture as any })).rejects.toThrow(/runGeneration|dependencyBindings/)
   })
 })

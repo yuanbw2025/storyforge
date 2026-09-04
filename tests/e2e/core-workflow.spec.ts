@@ -926,7 +926,7 @@ test('对照润色沉淀有界样本，并完成文风画像与互动校准闭�
       value.onerror = () => reject(value.error)
     })
     const database = await new Promise<IDBDatabase>((resolve, reject) => {
-      const opening = indexedDB.open('storyforge')
+      const opening = indexedDB.open('storyforge-core')
       opening.onsuccess = () => resolve(opening.result)
       opening.onerror = () => reject(opening.error)
     })
@@ -954,7 +954,7 @@ test('对照润色沉淀有界样本，并完成文风画像与互动校准闭�
       value.onerror = () => reject(value.error)
     })
     const database = await new Promise<IDBDatabase>((resolve, reject) => {
-      const opening = indexedDB.open('storyforge')
+      const opening = indexedDB.open('storyforge-core')
       opening.onsuccess = () => resolve(opening.result)
       opening.onerror = () => reject(opening.error)
     })
@@ -975,7 +975,7 @@ test('对照润色沉淀有界样本，并完成文风画像与互动校准闭�
       value.onerror = () => reject(value.error)
     })
     const database = await new Promise<IDBDatabase>((resolve, reject) => {
-      const opening = indexedDB.open('storyforge')
+      const opening = indexedDB.open('storyforge-core')
       opening.onsuccess = () => resolve(opening.result)
       opening.onerror = () => reject(opening.error)
     })
@@ -1034,8 +1034,7 @@ test('手动快照可恢复为新项目且不覆盖原项目', async ({ page }) 
   const library = page.getByTestId('workspace-library')
   await expect(library.locator('article')).toHaveCount(2)
   await expect(library.locator('article').filter({ hasText: projectName })).toHaveCount(2)
-  await expect(library.getByText(projectName, { exact: true })).toBeVisible()
-  await expect(library.getByText(`${projectName}（导入）`, { exact: true })).toBeVisible()
+  await expect(library.getByText(projectName, { exact: true })).toHaveCount(2)
 })
 
 test('删除项目经过双重安全门且不影响其它项目', async ({ page }) => {
@@ -3183,7 +3182,7 @@ test('伏笔建议刷新恢复候选，作者确认后才原子新增正式伏�
     }
     const combined = request.messages?.map(message => message.content).join('\n') ?? ''
     expect(combined).toContain('【伏笔建议正式基线】')
-    expect(combined).toContain('项目：E2E 伏笔 durable 建议闭环')
+    expect(combined).toContain('作品：E2E 伏笔 durable 建议闭环')
     expect(combined).toContain('已有伏笔：无')
     expect(combined).toContain('【HARNESS-72 严格输出协议】')
     await route.fulfill({
@@ -3371,7 +3370,7 @@ test('参考分析总结刷新恢复持久候选，确认后同步版本和激�
       value.onerror = () => reject(value.error)
     })
     const database = await new Promise<IDBDatabase>((resolve, reject) => {
-      const opening = indexedDB.open('storyforge')
+      const opening = indexedDB.open('storyforge-core')
       opening.onsuccess = () => resolve(opening.result)
       opening.onerror = () => reject(opening.error)
     })
@@ -3543,7 +3542,7 @@ test('影响人工修正后可恢复章纲与年表生成式候选并经确认�
       value.onerror = () => reject(value.error)
     })
     const database = await new Promise<IDBDatabase>((resolve, reject) => {
-      const opening = indexedDB.open('storyforge')
+      const opening = indexedDB.open('storyforge-core')
       opening.onsuccess = () => resolve(opening.result)
       opening.onerror = () => reject(opening.error)
     })
@@ -3682,7 +3681,7 @@ test('影响人工修正后可恢复章纲与年表生成式候选并经确认�
       value.onerror = () => reject(value.error)
     })
     const database = await new Promise<IDBDatabase>((resolve, reject) => {
-      const opening = indexedDB.open('storyforge')
+      const opening = indexedDB.open('storyforge-core')
       opening.onsuccess = () => resolve(opening.result)
       opening.onerror = () => reject(opening.error)
     })
@@ -3717,7 +3716,7 @@ test('影响人工修正后可恢复章纲与年表生成式候选并经确认�
       value.onerror = () => reject(value.error)
     })
     const database = await new Promise<IDBDatabase>((resolve, reject) => {
-      const opening = indexedDB.open('storyforge')
+      const opening = indexedDB.open('storyforge-core')
       opening.onsuccess = () => resolve(opening.result)
       opening.onerror = () => reject(opening.error)
     })
@@ -3784,7 +3783,7 @@ test('影响人工修正后可恢复章纲与年表生成式候选并经确认�
       value.onerror = () => reject(value.error)
     })
     const database = await new Promise<IDBDatabase>((resolve, reject) => {
-      const opening = indexedDB.open('storyforge')
+      const opening = indexedDB.open('storyforge-core')
       opening.onsuccess = () => resolve(opening.result)
       opening.onerror = () => reject(opening.error)
     })
@@ -3829,7 +3828,7 @@ test('影响人工修正后可恢复章纲与年表生成式候选并经确认�
       value.onerror = () => reject(value.error)
     })
     const database = await new Promise<IDBDatabase>((resolve, reject) => {
-      const opening = indexedDB.open('storyforge')
+      const opening = indexedDB.open('storyforge-core')
       opening.onsuccess = () => resolve(opening.result)
       opening.onerror = () => reject(opening.error)
     })
@@ -3966,7 +3965,7 @@ test('Prompt 示例 AI 只进入编辑草稿，作者保存后才写全局模板
       value.onerror = () => reject(value.error)
     })
     const database = await new Promise<IDBDatabase>((resolve, reject) => {
-      const opening = indexedDB.open('storyforge')
+      const opening = indexedDB.open('storyforge-core')
       opening.onsuccess = () => resolve(opening.result)
       opening.onerror = () => reject(opening.error)
     })
@@ -3995,7 +3994,7 @@ test('Prompt 示例 AI 只进入编辑草稿，作者保存后才写全局模板
       value.onerror = () => reject(value.error)
     })
     const database = await new Promise<IDBDatabase>((resolve, reject) => {
-      const opening = indexedDB.open('storyforge')
+      const opening = indexedDB.open('storyforge-core')
       opening.onsuccess = () => resolve(opening.result)
       opening.onerror = () => reject(opening.error)
     })

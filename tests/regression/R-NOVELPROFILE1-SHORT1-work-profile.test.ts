@@ -6,19 +6,16 @@ import { createWorkspace } from '../../src/lib/workspace/create-workspace'
 import {
   readCanonicalWorkManuscriptWordCount,
   switchNovelProfile,
-  updateProjectAndActiveWork,
+  updateActiveWork,
 } from '../../src/lib/workspace/works'
 import {
   deriveShortNovelStructure,
-  effectiveNovelProfile,
-  effectiveWorkKind,
 } from '../../src/lib/workspace/work-kind'
-import type { Chapter, CreateProjectInput, Work } from '../../src/lib/types'
+import type { Chapter, CreateWorkspaceInput } from '../../src/lib/types'
 
-function projectInput(name: string, targetWordCount: number): CreateProjectInput {
+function projectInput(name: string, targetWordCount: number): CreateWorkspaceInput {
   return {
     name,
-    genre: 'other',
     genres: ['other'],
     status: 'drafting',
     description: '',
@@ -34,14 +31,6 @@ describe('NOVEL-PROFILE-1 / SHORT-1 · Work 分类与短篇边界', () => {
   })
 
   afterEach(() => db.close())
-
-  it('旧 Work 缺失字段时只在读取期解释为长篇小说', () => {
-    const legacy = {} as Work
-    expect(effectiveWorkKind(legacy)).toBe('novel')
-    expect(effectiveNovelProfile(legacy)).toBe('long')
-    expect(legacy).not.toHaveProperty('kind')
-    expect(legacy).not.toHaveProperty('novelProfile')
-  })
 
   it('短篇结构建议覆盖全部边界并允许作者指定任意正整数章数', () => {
     expect(deriveShortNovelStructure(5_000)).toMatchObject({ volumeCount: 1, chapterCount: 2, targetWordsPerChapter: 2_500 })
@@ -78,7 +67,7 @@ describe('NOVEL-PROFILE-1 / SHORT-1 · Work 分类与短篇边界', () => {
     expect(upper.work).toMatchObject({ kind: 'novel', novelProfile: 'short', targetWordCount: 25_000 })
   })
 
-  it('短篇原子创建同 Work 的单卷和动态章节，长篇旧行为不创建骨架', async () => {
+  it('短篇原子创建同 Work 的单卷和动态章节，长篇不创建短篇骨架', async () => {
     const short = await createWorkspace(projectInput('短篇骨架', 18_000), {
       kind: 'novel',
       novelProfile: 'short',
@@ -108,7 +97,7 @@ describe('NOVEL-PROFILE-1 / SHORT-1 · Work 分类与短篇边界', () => {
     expect(await db.works.count()).toBe(0)
   })
 
-  it('v5 往返保留 Profile，v4 缺失字段按旧长篇读取，非法 v5 在写库前拒绝', async () => {
+  it('当前备份往返保留 Profile，非当前版本与非法组合均在写库前拒绝', async () => {
     const created = await createWorkspace(projectInput('短篇备份', 10_000), {
       kind: 'novel',
       novelProfile: 'short',
@@ -124,20 +113,17 @@ describe('NOVEL-PROFILE-1 / SHORT-1 · Work 分类与短篇边界', () => {
       targetWordCount: 10_000,
     })
 
-    const legacy = structuredClone(backup) as any
-    legacy.version = 4
-    delete legacy.works[0].kind
-    delete legacy.works[0].novelProfile
-    const legacyId = await importProjectJSON(legacy)
-    const legacyWork = (await db.works.where('projectId').equals(legacyId).first())!
-    expect(effectiveWorkKind(legacyWork)).toBe('novel')
-    expect(effectiveNovelProfile(legacyWork)).toBe('long')
+    const wrongVersion = structuredClone(backup) as any
+    wrongVersion.version = 9
+    const beforeWrongVersion = await db.projects.count()
+    await expect(importProjectJSON(wrongVersion)).rejects.toThrow('只接受当前备份版本 v10')
+    expect(await db.projects.count()).toBe(beforeWrongVersion)
 
     const invalid = structuredClone(backup) as any
     invalid.works[0].kind = 'screenplay'
     invalid.works[0].novelProfile = 'short'
     const before = await db.projects.count()
-    await expect(importProjectJSON(invalid)).rejects.toThrow('v5 Work 分类非法')
+    await expect(importProjectJSON(invalid)).rejects.toThrow('作品类型或流程配置无效')
     expect(await db.projects.count()).toBe(before)
   })
 
@@ -177,19 +163,20 @@ describe('NOVEL-PROFILE-1 / SHORT-1 · Work 分类与短篇边界', () => {
     expect((await db.works.get(created.scope.workId))?.novelProfile).toBe('long')
   })
 
-  it('标记短篇完成以实时正文为准并修复 Work/Project 缓存', async () => {
+  it('标记短篇完成以实时正文为准并只修复 Work 字数', async () => {
     const created = await createWorkspace(projectInput('短篇完成门', 10_000), {
       kind: 'novel',
       novelProfile: 'short',
     })
     const first = (await db.chapters.where('projectId').equals(created.scope.projectId).first())!
     await db.chapters.update(first.id!, { content: '字'.repeat(4_999), wordCount: 99_999 })
-    await expect(updateProjectAndActiveWork(created.scope.projectId, { status: 'completed' })).rejects.toThrow('当前 4999 字')
+    await expect(updateActiveWork(created.scope.projectId, { status: 'completed' })).rejects.toThrow('当前 4999 字')
 
     await db.chapters.update(first.id!, { content: '字'.repeat(5_000), wordCount: 1 })
-    await updateProjectAndActiveWork(created.scope.projectId, { status: 'completed' })
+    await updateActiveWork(created.scope.projectId, { status: 'completed' })
     expect(await readCanonicalWorkManuscriptWordCount(created.scope)).toBe(5_000)
     expect(await db.works.get(created.scope.workId)).toMatchObject({ status: 'completed', currentWordCount: 5_000 })
-    expect(await db.projects.get(created.scope.projectId)).toMatchObject({ status: 'completed', currentWordCount: 5_000 })
+    expect(await db.projects.get(created.scope.projectId)).not.toHaveProperty('status')
+    expect(await db.projects.get(created.scope.projectId)).not.toHaveProperty('currentWordCount')
   })
 })

@@ -324,13 +324,11 @@ export function parseProductProductionBriefV3(value: unknown): ProductProduction
     fail('ttrpg 产品与 TtrpgProductionBriefV2 不闭合')
   }
   if (parsed.ttrpg) {
-    if (parsed.ttrpg.campaignDesign
-      && parsed.ttrpg.campaignDesign.sourceWorldContentHash !== parsed.source.worldContentHash) {
+    if (parsed.ttrpg.campaignDesign.sourceWorldContentHash !== parsed.source.worldContentHash) {
       fail('TTRPG 战役提案来源与冻结 WorldRelease 不一致')
     }
     const proposalDecisionUnresolved = parsed.unresolvedDecisionKeys.includes('ttrpg-campaign-proposal-selection')
-    if (parsed.ttrpg.campaignDesign
-      && proposalDecisionUnresolved === parsed.ttrpg.campaignDesign.selection.confirmed) {
+    if (proposalDecisionUnresolved === parsed.ttrpg.campaignDesign.selection.confirmed) {
       fail('TTRPG 战役提案确认状态与 unresolvedDecisionKeys 不一致')
     }
     const allowedCharacters = new Set(parsed.source.selection.roleBindings.participants ?? [])
@@ -339,7 +337,7 @@ export function parseProductProductionBriefV3(value: unknown): ProductProduction
       fail('TTRPG 席位引用了未进入冻结选择的世界角色')
     }
     if (parsed.authorConfirmations?.ttrpgDefaultRuleMappings !== parsed.ttrpg.confirmations.numericMappings) {
-      fail('旧版数值映射确认与 TTRPG Brief 不一致')
+      fail('数值映射确认与 TTRPG Brief 不一致')
     }
   }
   return parsed

@@ -9,9 +9,10 @@ import {
   contextResourceSpecsV1,
 } from '../../src/lib/context-gateway/canon-provider'
 import { assertResourcePageV1 } from '../../src/lib/context-gateway/contracts'
-import { generateWorkspaceUid } from '../../src/lib/memory/identity'
-import { ensureWorkspaceOwnership } from '../../src/lib/workspace/ownership'
 import { stampNewRecord } from '../../src/lib/workspace/scope'
+import { resolveWorkspaceOwnership } from '../../src/lib/workspace/ownership'
+import { generateWorkCode } from '../../src/lib/memory/identity'
+import { generateWorkspaceScopeCode } from '../../src/lib/workspace/identity'
 import { normalizeChapterText, sha256Text } from '../../src/lib/ai/chapter-memory/text-normalization'
 import {
   buildRagLibrary,
@@ -22,23 +23,13 @@ import type {
   FrozenResourceScopeV1,
   WorkspaceScope,
 } from '../../src/lib/types'
+import { currentWorkFixtureRecordV1, seedCurrentWorkspace } from '../helpers/current-workspace'
 
 const now = 1_787_500_000_000
 
 async function seedWorkspace(name = 'CTXG-3 Canon 目录') {
-  const projectId = await db.projects.add({
-    workspaceUid: generateWorkspaceUid(),
-    name,
-    genre: 'fantasy',
-    genres: ['fantasy'],
-    status: 'drafting',
-    description: '',
-    targetWordCount: 1_000_000,
-    createdAt: now,
-    updatedAt: now,
-  } as any) as number
-  const ownership = await ensureWorkspaceOwnership(projectId)
-  return { projectId, scope: ownership.scope }
+  const created = await seedCurrentWorkspace(name, { enableMultiWorld: true })
+  return { projectId: created.scope.projectId, scope: created.scope }
 }
 
 async function addScoped(
@@ -139,7 +130,8 @@ async function seedSixDomains() {
     characterIds.push(await addScoped(scope, 'characters', {
       homeWorldGroupId: primaryGroupId, isCrossWorld: false,
       name: index === 2 ? '最后创建的角色' : `角色 ${index + 1}`,
-      role: index === 0 ? 'protagonist' : 'supporting', roleWeight: index === 0 ? 'main' : 'secondary',
+      roleWeight: index === 0 ? 'main' : 'secondary',
+      moralAxis: 'neutral', orderAxis: 'neutral',
       shortDescription: `角色简介 ${index}`, identity: '潮民', profile: '', personality: '谨慎', goals: '找到真镜',
     }, 'world'))
   }
@@ -356,7 +348,7 @@ describe('CTXG-3 · Canon resource provider', () => {
     })).content).toBe('潮民与镜裔已经停战。')
   })
 
-  it('preserves legacy Codex custom-field and item-event keys through the provider bridge', async () => {
+  it('preserves current dynamic Codex custom-field and item-event keys through the provider', async () => {
     const fixture = await seedSixDomains()
     const scope = frozen(fixture.scope, fixture.primaryGroupId)
     const initial = await buildRagLibrary({
@@ -397,23 +389,27 @@ describe('CTXG-3 · Canon resource provider', () => {
   it('isolates World/Work/WorldGroup, preserves keys across rename/import, and removes deleted resources', async () => {
     const fixture = await seedSixDomains()
     const scope = frozen(fixture.scope, fixture.primaryGroupId)
-    const otherWorkId = await db.works.add({
-      projectId: fixture.projectId, worldId: fixture.scope.worldId, code: 'work-ctxg3-other', title: '另一作品',
-      description: '', genres: [], status: 'drafting', targetWordCount: 1000, createdAt: now, updatedAt: now,
-    } as any) as number
+    const otherWorkId = await db.works.add(currentWorkFixtureRecordV1({
+      projectId: fixture.projectId, worldId: fixture.scope.worldId, code: generateWorkCode(), title: '另一作品',
+      kind: 'novel', novelProfile: 'long', description: '', genres: [], status: 'drafting',
+      targetWordCount: 1000, currentWordCount: 0, createdAt: now, updatedAt: now,
+    })) as number
     const otherWorkScope = { projectId: fixture.projectId, worldId: fixture.scope.worldId, workId: otherWorkId }
     await addScoped(otherWorkScope, 'storyCores', {
       logline: '不应泄漏的另一作品', concept: '', theme: '', centralConflict: '', plotPattern: '', mainPlot: '', subPlots: '',
     }, 'work')
     const otherWorldId = await db.worlds.add({
-      projectId: fixture.projectId, code: 'world-ctxg3-other', name: '另一 World 根', description: '', currentVersion: 1, createdAt: now, updatedAt: now,
+      projectId: fixture.projectId, identityKind: 'workspace-scope', code: generateWorkspaceScopeCode(now + 1),
+      name: '另一 World 根', description: '', currentVersion: 0, createdAt: now, updatedAt: now,
     } as any) as number
-    const otherWorldWorkId = await db.works.add({
-      projectId: fixture.projectId, worldId: otherWorldId, code: 'work-ctxg3-world2', title: '另一世界作品',
-      description: '', genres: [], status: 'drafting', targetWordCount: 1000, createdAt: now, updatedAt: now,
-    } as any) as number
+    const otherWorldWorkId = await db.works.add(currentWorkFixtureRecordV1({
+      projectId: fixture.projectId, worldId: otherWorldId, code: generateWorkCode(), title: '另一世界作品',
+      kind: 'novel', novelProfile: 'long', description: '', genres: [], status: 'drafting',
+      targetWordCount: 1000, currentWordCount: 0, createdAt: now, updatedAt: now,
+    })) as number
     await addScoped({ projectId: fixture.projectId, worldId: otherWorldId, workId: otherWorldWorkId }, 'characters', {
-      homeWorldGroupId: null, isCrossWorld: false, name: '不应泄漏的另一世界角色', role: 'supporting', roleWeight: 'secondary', shortDescription: '隔离',
+      homeWorldGroupId: null, isCrossWorld: false, name: '不应泄漏的另一世界角色',
+      roleWeight: 'secondary', moralAxis: 'neutral', orderAxis: 'neutral', shortDescription: '隔离',
     }, 'world')
     const primaryDescriptors = await allDescriptors(scope, 5)
     expect(primaryDescriptors.some(item => item.shortSummary.includes('不应泄漏'))).toBe(false)
@@ -432,16 +428,14 @@ describe('CTXG-3 · Canon resource provider', () => {
     const primaryGroupUid = (await db.worldGroups.get(fixture.primaryGroupId))?.ragDocumentId
     const exported = await exportProjectJSON(fixture.projectId)
     const importedProjectId = await importProjectJSON(exported)
-    const importedOwnership = await ensureWorkspaceOwnership(importedProjectId)
+    const importedOwnership = await resolveWorkspaceOwnership(importedProjectId)
     const importedGroup = (await db.worldGroups.where('projectId').equals(importedProjectId).toArray())
       .find(group => group.ragDocumentId === primaryGroupUid)
     expect(importedGroup?.id).toBeTruthy()
     const importedKeys = (await allDescriptors(frozen(importedOwnership.scope, importedGroup!.id!), 10))
       .map(item => item.resourceKey).sort()
-    // Current schema legitimately backfills explicit defaults for legacy
-    // character/story-arc rows on import. Stable record/field identities that
-    // existed before export must remain unchanged; additive default descriptors
-    // are allowed and separately asserted by their current contracts.
+    // Current import preserves every stable record/field identity. Descriptors
+    // derived from explicit current defaults may be additive.
     expect(importedKeys).toEqual(expect.arrayContaining(beforeImportKeys))
     const importedRaces = (await allDescriptors(frozen(importedOwnership.scope, importedGroup!.id!), 20))
       .find(item => item.resourceKey.endsWith(':field:races'))!

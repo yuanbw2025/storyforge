@@ -3,7 +3,7 @@ import type { AssembleContextResult } from '../registry/types'
 import { resolveAgentSkillInputStateV1, type AgentSkillDefinitionV1 } from './skill-registry'
 
 const INPUT_SOURCE_BY_TABLE: Readonly<Record<string, string>> = {
-  projects: 'projectStatus',
+  works: 'workStatus',
   worldviews: 'worldview',
   storyCores: 'storyCore',
   characters: 'characters',

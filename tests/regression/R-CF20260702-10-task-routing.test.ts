@@ -207,7 +207,7 @@ describe('R-CF20260702-10 · route storage and client boundary', () => {
     expect(JSON.parse(localStorage.getItem(TASK_ROUTES_KEY) || '{}')).toEqual({})
   })
 
-  it('persists a主 Agent role route and keeps old four-kind storage backward compatible', async () => {
+  it('持久化主 Agent 角色路由并拒绝未登记的路由键', async () => {
     const { useAIConfigStore, TASK_ROUTES_KEY } = await import('../../src/stores/ai-config')
     const id = useAIConfigStore.getState().saveAsPreset('正文 Agent 模型')
     useAIConfigStore.getState().setTaskRoute('agent-prose', id)

@@ -10,6 +10,8 @@ import {
   normalizeConstitutionValue,
 } from '../../src/lib/fact-ledger/setting-assertions'
 import type { TemporalFact } from '../../src/lib/types'
+import { seedCurrentProject } from '../helpers/current-workspace'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
 
 const now = 1
 
@@ -48,8 +50,8 @@ describe('CANON 覆盖基线 · 世界宪法设定互斥', () => {
   })
 
   it('R-CANON-setting-clash-1 · 世界起源与力量来源断言冲突', async () => {
-    await db.projects.add({
-      name: 'Canon fixture', genre: 'fantasy', genres: ['fantasy'], status: 'drafting',
+    await seedCurrentProject({
+      name: 'Canon fixture', genres: ['fantasy'], status: 'drafting',
       description: '', targetWordCount: 0, createdAt: now, updatedAt: now,
     } as any)
     const worldviewId = await db.worldviews.add({
@@ -81,6 +83,7 @@ describe('CANON 覆盖基线 · 世界宪法设定互斥', () => {
       sourceQuote: '力量只会从血脉中觉醒',
       status: 'candidate',
     })) as number
+    await finalizeCurrentFixtureV1(1)
 
     const result = await confirmFactCandidate(candidateId)
     const [confirmed, candidate] = await Promise.all([

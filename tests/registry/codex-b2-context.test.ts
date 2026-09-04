@@ -8,11 +8,13 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { assembleContext } from '../../src/lib/registry/assemble-context'
+import { seedCurrentProject } from '../helpers/current-workspace'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
 
 async function seedWithCodexEntry(): Promise<number> {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    name: 'CodexB2', genre: '', description: '', targetWordCount: 0,
+  const projectId = await seedCurrentProject({
+    name: 'CodexB2', genres: [], description: '', targetWordCount: 0,
     enableMultiWorld: false, createdAt: now, updatedAt: now,
   } as any) as number
   const catId = await db.codexCategories.add({
@@ -25,6 +27,7 @@ async function seedWithCodexEntry(): Promise<number> {
     description: '炼制重兵器的上佳材料,触手生寒。', fields: '{}', order: 0, worldGroupId: null,
     createdAt: now, updatedAt: now,
   } as any)
+  await finalizeCurrentFixtureV1(projectId)
   return projectId
 }
 
@@ -56,6 +59,7 @@ describe('Codex B2 · 词条进生成上下文', () => {
         createdAt: now, updatedAt: now,
       } as any,
     ])
+    await finalizeCurrentFixtureV1(projectId)
 
     const mirror = await assembleContext({ projectId, worldGroupId: 7, sourceKeys: ['codex'] })
     expect(mirror.text).toContain('镜界玄铁')

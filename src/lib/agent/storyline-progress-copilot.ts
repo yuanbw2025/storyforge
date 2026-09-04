@@ -17,7 +17,9 @@ import type {
 } from '../types'
 import {
   adoptStorylineAnalysisCandidates,
+  parseCanonicalStorylineCandidateV1,
   parseStorylineProgressResult,
+  validateCanonicalStorylineCandidateV1,
   type StorylineAnalysisCandidates,
 } from '../storyline/storyline-progress'
 import {
@@ -175,14 +177,8 @@ function parseCandidateDraft(
       if (!Array.isArray(source.progress) || !Array.isArray(source.crossings) || !Array.isArray(source.newArcs)) {
         throw new Error('故事线进度候选的三个字段都必须是数组。')
       }
-      const wire = {
-        ...source,
-        progress: source.progress.map(item => normalizeEvidenceField(item)),
-        crossings: source.crossings.map(item => normalizeEvidenceField(item)),
-        newArcs: source.newArcs.map(item => normalizeEvidenceField(item)),
-      }
       const normalized = parseStorylineProgressResult({
-        raw: JSON.stringify(wire),
+        raw: JSON.stringify(source),
         chapterContent: input.chapterContent,
         arcs: input.snapshot.arcs,
       })
@@ -198,20 +194,16 @@ function parseCandidateDraft(
   })
 }
 
-function normalizeEvidenceField(value: unknown): unknown {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return value
-  const row = value as Record<string, unknown>
-  return row.quote === undefined && typeof row.evidenceQuote === 'string'
-    ? { ...row, quote: row.evidenceQuote }
-    : row
-}
-
 function candidateIssues(
   candidate: StorylineAnalysisCandidates,
   input: Pick<StorylineProgressCopilotInputV1, 'chapterContent' | 'snapshot'>,
 ): GenerationGateIssue[] {
   try {
-    parseCandidateDraft(JSON.stringify(candidate), input)
+    validateCanonicalStorylineCandidateV1({
+      candidate,
+      chapterContent: input.chapterContent,
+      arcs: input.snapshot.arcs,
+    })
     return []
   } catch (error) {
     return [{
@@ -394,9 +386,10 @@ export function createStorylineProgressCopilotNodeV1(
       const current = await readCurrent()
       if (current.serialized !== input.snapshot.serialized) throw new StorylineProgressCopilotStaleError()
       const chapterContent = await readChapterContent(input.projectId, input.chapterId, input.scope)
-      const candidate = parseCandidateDraft(JSON.stringify(output), {
+      const candidate = validateCanonicalStorylineCandidateV1({
+        candidate: output,
         chapterContent,
-        snapshot: { ...input.snapshot, arcs: current.arcs },
+        arcs: current.arcs,
       })
       return adoptOutput(candidate)
     },
@@ -420,21 +413,9 @@ export function parseStorylineProgressCandidateDraftV1(draft: string): Storyline
       if (!Array.isArray(raw.progress) || !Array.isArray(raw.crossings) || !Array.isArray(raw.newArcs)) {
         throw new Error('故事线进度候选缺少三个数组字段。')
       }
-      return {
-        progress: raw.progress.map(normalizeRestoredEvidenceRow) as StorylineAnalysisCandidates['progress'],
-        crossings: raw.crossings.map(normalizeRestoredEvidenceRow) as StorylineAnalysisCandidates['crossings'],
-        newArcs: raw.newArcs.map(normalizeRestoredEvidenceRow) as StorylineAnalysisCandidates['newArcs'],
-      }
+      return parseCanonicalStorylineCandidateV1(raw)
     },
   })
-}
-
-function normalizeRestoredEvidenceRow(value: unknown): unknown {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return value
-  const row = value as Record<string, unknown>
-  return row.evidenceQuote === undefined && typeof row.quote === 'string'
-    ? { ...row, evidenceQuote: row.quote }
-    : row
 }
 
 export async function adoptRestoredStorylineProgressCandidateV1(input: {
@@ -447,9 +428,10 @@ export async function adoptRestoredStorylineProgressCandidateV1(input: {
   const current = await readSnapshot(input.projectId, input.chapterId, input.scope)
   if (current.serialized !== input.snapshot.serialized) throw new StorylineProgressCopilotStaleError()
   const chapterContent = await readChapterContent(input.projectId, input.chapterId, input.scope)
-  const candidate = parseCandidateDraft(input.draft, {
+  const candidate = validateCanonicalStorylineCandidateV1({
+    candidate: parseStorylineProgressCandidateDraftV1(input.draft),
     chapterContent,
-    snapshot: current,
+    arcs: current.arcs,
   })
   return adoptStorylineAnalysisCandidates({
     projectId: input.projectId,

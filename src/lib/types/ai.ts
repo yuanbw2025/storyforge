@@ -125,7 +125,7 @@ export const PROVIDER_MODELS: Record<string, { value: string; label: string; des
     { value: 'agnes-2.5-flash', label: 'Agnes 2.5 Flash', desc: '512K 上下文·Agent/推理推荐' },
     { value: 'agnes-2.5-pro', label: 'Agnes 2.5 Pro', desc: '服务实时目录·高质量独立评审' },
     { value: 'agnes-2.5-pro-alpha', label: 'Agnes 2.5 Pro Alpha', desc: '服务实时目录·实验性' },
-    { value: 'agnes-2.0-flash', label: 'Agnes 2.0 Flash', desc: '256K 上下文·兼容回退' },
+    { value: 'agnes-2.0-flash', label: 'Agnes 2.0 Flash', desc: '256K 上下文·备用模型' },
   ],
   longcat: [
     { value: 'LongCat-2.0', label: 'LongCat 2.0', desc: '美团 LongCat · OpenAI 兼容 · 1M 上下文' },
@@ -215,35 +215,11 @@ export const PROVIDER_PRESETS: Record<string, Partial<AIConfig>> = {
   },
 }
 
-const PROVIDER_MODEL_ALIASES: Partial<Record<AIProvider, ReadonlyMap<string, string>>> = {
-  deepseek: new Map([
-    ['deepseek-chat', 'deepseek-v4-flash'],
-    ['deepseek-reasoner', 'deepseek-v4-flash'],
-    ['deepseek-v4-flash', 'deepseek-v4-flash'],
-    ['deepseek-v4-pro', 'deepseek-v4-pro'],
-  ]),
-  gemini: new Map([
-    ['gemini-3-flash-preview', 'gemini-3.5-flash'],
-    ['gemini-3.5-flash', 'gemini-3.5-flash'],
-    ['gemini-3.5-flash-lite', 'gemini-3.5-flash-lite'],
-    ['gemini-3.7-flash', 'gemini-3.7-flash'],
-  ]),
-  agnes: new Map([
-    ['agnes-1.5-flash', 'agnes-1.5-flash'],
-    ['agnes-2.0-flash', 'agnes-2.0-flash'],
-    ['agnes-2.5-flash', 'agnes-2.5-flash'],
-    ['agnes-2.5-pro', 'agnes-2.5-pro'],
-    ['agnes-2.5-pro-alpha', 'agnes-2.5-pro-alpha'],
-  ]),
-  doubao: new Map([
-    ['doubao-pro-32k', 'doubao-1-5-pro-32k-250115'],
-    ['doubao-seed-2-0-pro-260215', 'doubao-1-5-pro-32k-250115'],
-    ['doubao-seed-2-0-lite-260215', 'doubao-1-5-pro-32k-250115'],
-    ['doubao-1-5-pro-32k-250115', 'doubao-1-5-pro-32k-250115'],
-  ]),
-}
-
-/** 将历史模型名迁移为各开放平台当前使用的大小写敏感 ID。 */
+/** Official providers accept only their current registered model IDs; custom/local providers remain open. */
 export function normalizeProviderModel(provider: AIProvider, model: string): string {
-  return PROVIDER_MODEL_ALIASES[provider]?.get(model.trim().toLowerCase()) ?? model
+  const normalized = model.trim()
+  const registered = PROVIDER_MODELS[provider]
+  if (!registered?.length) return normalized
+  if (registered.some(option => option.value === normalized)) return normalized
+  return PROVIDER_PRESETS[provider]?.model ?? registered[0].value
 }

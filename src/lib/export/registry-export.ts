@@ -5,8 +5,7 @@
  * 按其元数据(worldScoped / tree / exportRemap / exportIdField / exportRefRemap)自动
  * 把库内记录转成可移植的 ProjectExportData——加新表只需在注册表登记一行,自动进出导出。
  *
- * 产物与旧手写版**逐字段等价**(R-export-derive-equivalence 锁死),故旧备份格式、Gist
- * 云存档全部兼容。
+ * 输出只遵循当前便携备份契约；不存在历史格式分支。
  */
 import Dexie from 'dexie'
 import { db } from '../db/schema'
@@ -15,15 +14,13 @@ import { remapWorldPortalTargets } from '../utils/world-portals'
 import type { TableSpec } from '../registry/types'
 import type { ProjectExportData } from './json-export'
 import { redactAuthoringSecrets } from '../node-authoring/contracts'
-import { ensureWorkspaceOwnership } from '../workspace/ownership'
+import { resolveWorkspaceOwnership } from '../workspace/ownership'
 import { portableizeAgentRunLedgerExportV1 } from '../agent/run/ledger-portability'
 import { assertAgentRunArtifactRecordIntegrityV1 } from '../memory/artifact-record'
 import { readVerifiedMediaBlobObjectData } from '../product-production/media-blob-store'
 
-/** 旧 fixture 等价导出版本；仅供兼容测试和无 ownership 的空项目使用。 */
-const EXPORT_VERSION = 3
-/** v10 adds the closed upper-product production/runtime graph contract. */
-export const STRICT_EXPORT_VERSION = 10
+/** 当前完整便携备份契约。 */
+export const CURRENT_EXPORT_VERSION = 10
 
 export interface StrictProjectExportSnapshot {
   data: ProjectExportData
@@ -80,8 +77,8 @@ function toExportRow(
       const map = idMaps.get(rr.remapVia)
       const raw = parseIdArray(obj[rr.field])
       obj[rr.exportAs] = raw.map(id => map?.get(id)).filter((id): id is number => id != null)
-      // v4 is a portable contract: the shadow indexes are authoritative and
-      // local numeric IDs must not leak into or destabilize a later restore.
+      // Portable shadow indexes are authoritative; local numeric IDs must not
+      // leak into or destabilize a later restore.
       if (strictOwners) delete obj[rr.field]
     } else if (rr.kind === 'scene-character-ids') {
       const map = idMaps.get(rr.remapVia)
@@ -217,16 +214,9 @@ function parseIdArray(value: unknown): number[] {
   }
 }
 
-/**
- * 派生导出:产出与手写 exportProjectJSON 逐字段等价的 ProjectExportData。
- */
-export async function deriveExportProjectJSON(
-  projectId: number,
-  options: { strict?: boolean } = {},
-): Promise<ProjectExportData> {
-  return options.strict
-    ? deriveStrictExportProjectJSON(projectId)
-    : deriveProjectExport(projectId, EXPORT_VERSION, false)
+/** 派生当前架构的完整、严格便携备份。 */
+export async function deriveExportProjectJSON(projectId: number): Promise<ProjectExportData> {
+  return deriveStrictExportProjectJSON(projectId)
 }
 
 async function captureProjectExportInTransaction(
@@ -283,16 +273,6 @@ async function captureProjectExport(projectId: number, version: number, strictOw
   return db.transaction('r', tables, () => captureProjectExportInTransaction(projectId, version, strictOwners))
 }
 
-async function deriveProjectExport(projectId: number, version: number, strictOwners: boolean): Promise<ProjectExportData> {
-  const captured = await captureProjectExport(projectId, version, strictOwners)
-  // Binary materialization (Blob/OPFS/crypto) is intentionally outside the
-  // read snapshot transaction. Dexie's promise zone can otherwise preserve a
-  // just-finished transaction into this continuation and report a premature
-  // commit when an external storage promise is awaited.
-  const result = await Dexie.ignoreTransaction(() => portableizeSnapshot(captured))
-  return result.data
-}
-
 async function portableizeSnapshot(snapshot: StrictProjectExportSnapshot): Promise<StrictProjectExportSnapshot> {
   if (PROJECT_TABLES.some(spec => spec.portableData?.kind === 'agent-run-root')) {
     const portableLedger = portableizeAgentRunLedgerExportV1(snapshot.data, snapshot.exportIds)
@@ -309,12 +289,12 @@ async function portableizeSnapshot(snapshot: StrictProjectExportSnapshot): Promi
       }
       continue
     }
-    if (spec.portableData?.kind !== 'binary-blob' && spec.portableData?.kind !== 'shared-media-object') continue
+    if (spec.portableData?.kind !== 'shared-media-object') continue
     const rows = portable[spec.name]
     if (!Array.isArray(rows)) continue
     for (const row of rows as Array<Record<string, unknown>>) {
       const portableData: NonNullable<TableSpec['portableData']> = spec.portableData
-      const dataField = portableData.kind === 'binary-blob' ? portableData.field : portableData.dataField
+      const dataField = portableData.dataField
       const value = row[dataField]
       const blobLike = value as { arrayBuffer?: () => Promise<ArrayBuffer>; type?: string } | null
       let buffer = value instanceof ArrayBuffer
@@ -324,43 +304,41 @@ async function portableizeSnapshot(snapshot: StrictProjectExportSnapshot): Promi
           : blobLike && typeof blobLike.arrayBuffer === 'function'
             ? (Dexie.currentTransaction ? await Dexie.waitFor(blobLike.arrayBuffer()) : await blobLike.arrayBuffer())
             : null
-      if (!buffer && portableData.kind === 'shared-media-object') {
+      if (!buffer) {
         const read = readVerifiedMediaBlobObjectData(
           row as unknown as import('../types').MediaBlobObjectRecordV1,
         )
         buffer = Dexie.currentTransaction ? await Dexie.waitFor(read) : await read
       }
-      if (!buffer && portableData.kind === 'binary-blob'
-        && portableData.allowMissingWhen && row[portableData.allowMissingWhen.exportField] != null) {
-        row[dataField] = null
-        continue
-      }
       if (!buffer) throw new Error(`[deriveExport] ${spec.name}.${dataField} 不是便携二进制`)
 
       let mimeType = blobLike?.type || 'application/octet-stream'
-      if (portableData.kind === 'shared-media-object') {
-        if (row[portableData.stateField] !== 'ready') {
-          throw new Error(`[deriveExport] ${spec.name} 只允许导出 ready 共享媒资`)
-        }
-        if (row[portableData.sizeField] !== buffer.byteLength) {
-          throw new Error(`[deriveExport] ${spec.name} 二进制大小与记录不一致`)
-        }
-        const digestPromise = crypto.subtle.digest('SHA-256', buffer)
-        const digest = Dexie.currentTransaction ? await Dexie.waitFor(digestPromise) : await digestPromise
-        const hash = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('')
-        if (row[portableData.hashField] !== hash) {
-          throw new Error(`[deriveExport] ${spec.name} 二进制哈希与记录不一致`)
-        }
-        const declaredMime = row[portableData.mimeField]
-        if (typeof declaredMime !== 'string' || !declaredMime.trim()) {
-          throw new Error(`[deriveExport] ${spec.name} 缺少 MIME 类型`)
-        }
-        mimeType = declaredMime
-        row[portableData.backendField] = 'indexeddb'
-        row[portableData.pathField] = null
-        row[portableData.leaseOwnerField] = null
-        row[portableData.leaseExpiresAtField] = null
+      if (row[portableData.stateField] !== 'ready') {
+        throw new Error(`[deriveExport] ${spec.name} 只允许导出 ready 共享媒资`)
       }
+      if (row[portableData.sizeField] !== buffer.byteLength) {
+        throw new Error(`[deriveExport] ${spec.name} 二进制大小与记录不一致`)
+      }
+      const digestPromise = crypto.subtle.digest('SHA-256', buffer)
+      const digest = Dexie.currentTransaction ? await Dexie.waitFor(digestPromise) : await digestPromise
+      const hash = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('')
+      if (row[portableData.hashField] !== hash) {
+        throw new Error(`[deriveExport] ${spec.name} 二进制哈希与记录不一致`)
+      }
+      const declaredMime = row[portableData.mimeField]
+      if (typeof declaredMime !== 'string' || !declaredMime.trim()) {
+        throw new Error(`[deriveExport] ${spec.name} 缺少 MIME 类型`)
+      }
+      mimeType = declaredMime
+      row[portableData.backendField] = 'indexeddb'
+      row[portableData.pathField] = null
+      row[portableData.leaseOwnerField] = null
+      row[portableData.leaseExpiresAtField] = null
+      // Verification time belongs to the local storage copy, not to the
+      // content-addressed portable object. A restore verifies the bytes again;
+      // exporting that local timestamp would make an unchanged round-trip
+      // appear different on every machine/import.
+      row[portableData.lastVerifiedAtField] = null
       const bytes = new Uint8Array(buffer)
       let binary = ''
       for (let offset = 0; offset < bytes.length; offset += 0x8000) {
@@ -373,25 +351,16 @@ async function portableizeSnapshot(snapshot: StrictProjectExportSnapshot): Promi
 }
 
 /**
- * WORLD-2C C4 strict export. The v3 derivation remains available for old
- * fixture equivalence tests, while all user-facing backups use this boundary.
- * Logical World/Work ownership is represented only by portable shadow IDs;
- * physical IDs never cross the backup boundary.
+ * 当前架构的唯一导出路径。逻辑 World/Work 所有权只使用便携影子 ID，
+ * 物理主键绝不跨越备份边界。
  */
 export async function deriveStrictExportProjectJSON(projectId: number): Promise<ProjectExportData> {
   return (await deriveStrictExportProjectSnapshot(projectId)).data
 }
 
 export async function deriveStrictExportProjectSnapshot(projectId: number): Promise<StrictProjectExportSnapshot> {
-  const existingWorlds = await db.worlds.where('projectId').equals(projectId).count()
-  const existingWorks = await db.works.where('projectId').equals(projectId).count()
-  if (existingWorlds === 0 && existingWorks === 0) {
-    // Preserve the zero-data backup contract: there is no ownership to
-    // migrate, so an empty workspace remains a compact v3-compatible file.
-    return captureProjectExport(projectId, EXPORT_VERSION, false)
-  }
-  const ownership = await ensureWorkspaceOwnership(projectId)
-  const captured = await captureProjectExport(projectId, STRICT_EXPORT_VERSION, true)
+  const ownership = await resolveWorkspaceOwnership(projectId)
+  const captured = await captureProjectExport(projectId, CURRENT_EXPORT_VERSION, true)
   const snapshot = await Dexie.ignoreTransaction(() => portableizeSnapshot(captured))
   const worldExportId = snapshot.exportIds.get('worlds')?.get(ownership.scope.worldId)
   const workExportId = snapshot.exportIds.get('works')?.get(ownership.scope.workId)
@@ -401,8 +370,6 @@ export async function deriveStrictExportProjectSnapshot(projectId: number): Prom
     worldExportId,
     workExportId,
   }
-  // Keep the ownership resolver observable to callers and make an accidental
-  // unused migration result impossible to hide in diagnostics.
   if (!ownership.scope.worldId || !ownership.scope.workId) throw new Error('[strictExport] ownership 根不完整')
   return snapshot
 }
@@ -420,7 +387,7 @@ export async function deriveStrictExportProjectSnapshotInCurrentTransaction(
     throw new Error('[strictExport] 当前事务快照只能在已打开的 Dexie 事务中派生')
   }
   const snapshot = await portableizeSnapshot(
-    await captureProjectExportInTransaction(projectId, STRICT_EXPORT_VERSION, true),
+    await captureProjectExportInTransaction(projectId, CURRENT_EXPORT_VERSION, true),
   )
   const worldExportId = snapshot.exportIds.get('worlds')?.get(ownership.worldId)
   const workExportId = snapshot.exportIds.get('works')?.get(ownership.workId)

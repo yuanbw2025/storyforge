@@ -86,7 +86,7 @@ export function buildEditorEntityReferences(
     try {
       const parsed = JSON.parse(location.tags || '[]')
       if (Array.isArray(parsed)) tags = parsed.filter(value => typeof value === 'string').slice(0, 6).join(' / ')
-    } catch { /* invalid legacy tags stay hidden */ }
+    } catch { /* malformed entity tags stay hidden */ }
     references.push({
       id: `location:${location.id ?? location.name}`,
       name: location.name.trim(),

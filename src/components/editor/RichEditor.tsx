@@ -13,7 +13,7 @@ import {
   FontSize,
   TextStyle,
 } from '@tiptap/extension-text-style'
-import { toHtml, countWords } from '../../lib/utils/html'
+import { countWords } from '../../lib/utils/html'
 import { loadEditorTypography, saveEditorTypography, applyEditorTypography, type EditorTypography } from '../../lib/editor-typography'
 import {
   filterEditorEntityReferences,
@@ -21,7 +21,6 @@ import {
 } from '../../lib/editor/entity-reference'
 import {
   BlockSpacing,
-  normalizeThemeAdaptiveColorHtml,
   resolveColorForInput,
   type PendingTextStyle,
 } from '../../lib/editor/rich-editor-theme'
@@ -47,7 +46,7 @@ export interface RichEditorHandle {
   getPlainText: () => string
   /** 获取字数（去空白字符） */
   getWordCount: () => number
-  /** 设置全部内容（HTML 或纯文本皆可，内部会自动转换） */
+  /** 设置全部内容（当前正文 HTML） */
   setContent: (content: string) => void
   /** 聚焦编辑器 */
   focus: () => void
@@ -56,7 +55,7 @@ export interface RichEditorHandle {
 }
 
 interface Props {
-  /** 受控值：HTML 字符串（兼容旧纯文本数据） */
+  /** 受控值：当前正文 HTML 字符串 */
   value: string
   /** 内容变化回调（HTML） */
   onChange: (html: string, plainText: string) => void
@@ -77,7 +76,7 @@ interface Props {
 /**
  * TipTap 富文本编辑器 + 工具栏
  * - 通过 ref 暴露命令式 API，便于与 AI 流式输出、选区操作集成
- * - value 允许传入旧的纯文本（自动包装为 <p>），新内容以 HTML 保存
+ * - value 与命令式写入统一使用当前正文 HTML 协议
  */
 const RichEditor = forwardRef<RichEditorHandle, Props>(function RichEditor(
   { value, onChange, placeholder = '开始写作...', className = '', minHeight = 400, disabled = false, showToolbar = true, entityReferences = [], contentHeader },
@@ -158,7 +157,7 @@ const RichEditor = forwardRef<RichEditorHandle, Props>(function RichEditor(
       BlockSpacing,
       Placeholder.configure({ placeholder }),
     ],
-    content: normalizeThemeAdaptiveColorHtml(toHtml(value)),
+    content: value,
     editable: !disabled,
     editorProps: {
       attributes: {
@@ -307,7 +306,7 @@ const RichEditor = forwardRef<RichEditorHandle, Props>(function RichEditor(
     // 但引用尚未被下一次 render 清空。访问其 schema 会在 getHTML 内崩溃。
     if (!editor || editor.isDestroyed) return
     const current = editor.getHTML()
-    const incoming = normalizeThemeAdaptiveColorHtml(toHtml(value))
+    const incoming = value
     if (incoming !== current) {
       editor.commands.setContent(incoming, { emitUpdate: false })
     }
@@ -329,25 +328,25 @@ const RichEditor = forwardRef<RichEditorHandle, Props>(function RichEditor(
     (): RichEditorHandle => ({
       insertContent: (html) => {
         if (!editor || editor.isDestroyed) return
-        editor.chain().focus().insertContent(toHtml(html)).run()
+        editor.chain().focus().insertContent(html).run()
       },
       appendContent: (html) => {
         if (!editor || editor.isDestroyed) return
         const end = editor.state.doc.content.size
-        editor.chain().focus().insertContentAt(end, toHtml(html)).run()
+        editor.chain().focus().insertContentAt(end, html).run()
       },
       replaceSelection: (html) => {
         if (!editor || editor.isDestroyed) return
         const { from, to } = editor.state.selection
         if (from === to) {
           // 无选区 → 直接插入
-          editor.chain().focus().insertContent(toHtml(html)).run()
+          editor.chain().focus().insertContent(html).run()
         } else {
           editor
             .chain()
             .focus()
             .deleteRange({ from, to })
-            .insertContent(toHtml(html))
+            .insertContent(html)
             .run()
         }
       },
@@ -381,7 +380,7 @@ const RichEditor = forwardRef<RichEditorHandle, Props>(function RichEditor(
       getWordCount: () => countWords(editor && !editor.isDestroyed ? editor.getText() : ''),
       setContent: (content) => {
         if (!editor || editor.isDestroyed) return
-        editor.commands.setContent(toHtml(content), { emitUpdate: false })
+        editor.commands.setContent(content, { emitUpdate: false })
       },
       focus: () => {
         if (!editor || editor.isDestroyed) return

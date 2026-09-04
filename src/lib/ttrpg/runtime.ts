@@ -137,7 +137,7 @@ export function createInitialTtrpgProductStateV1(input: {
           value,
         ]),
       ),
-      // Compatibility projection for the existing deterministic encounter core.
+      // Current encounter-core attributes compiled from the selected rule pack.
       hp: template.resources.vigor ?? 1,
       maxHp: maximums.vigor ?? template.resources.vigor ?? 1,
       armorClass: derived.defense ?? 8,
@@ -220,7 +220,7 @@ export function createInitialTtrpgProductStateV1(input: {
         changedBy: null,
         changedAtSequence: null,
       },
-      hiddenDicePolicy: campaign.informationPolicy?.hiddenDice ?? "never",
+      hiddenDicePolicy: campaign.informationPolicy.hiddenDice,
       sceneKeys: campaign.scenes.map((scene) => scene.sceneKey),
       openedSceneKeys: [],
       clueCatalog: campaign.clues.map((clue) => ({
@@ -229,7 +229,7 @@ export function createInitialTtrpgProductStateV1(input: {
         required: clue.required,
         sourceVisibility: clue.visibility,
       })),
-      clockCatalog: (campaign.clocks ?? []).map((clock) => ({
+      clockCatalog: campaign.clocks.map((clock) => ({
         clockKey: clock.clockKey,
         title: clock.title,
         initialValue: clock.initialValue,
@@ -252,18 +252,7 @@ export function createInitialTtrpgProductStateV1(input: {
         campaign.characterTemplates
           .filter((template) => template.role === "player")
           .map((template) => {
-            const progression = template.characterSheet?.rules.progression ?? {
-              model:
-                rulePack.advancement.progressionModel ?? ("point-buy" as const),
-              level:
-                rulePack.advancement.progressionModel === "numeric-level"
-                  ? 1
-                  : null,
-              rankKey:
-                rulePack.advancement.progressionModel === "rank"
-                  ? (rulePack.advancement.rankOrder?.[0] ?? null)
-                  : null,
-            };
+            const progression = template.characterSheet.rules.progression;
             return [
               template.characterKey,
               {
@@ -294,7 +283,7 @@ export function createInitialTtrpgProductStateV1(input: {
         endingKey: ending.endingKey,
         title: ending.title,
         epilogue: ending.epilogue,
-        trigger: ending.trigger ? structuredClone(ending.trigger) : null,
+        trigger: structuredClone(ending.trigger),
       })),
       ending: null,
       advancement: {
@@ -347,8 +336,7 @@ export function createInitialTtrpgProductStateV1(input: {
             updatedAtSequence: null,
           }
         : null,
-      media: campaign.mediaManifest
-        ? {
+      media: {
             visualBibleHash: null,
             generatedCount: 0,
             runtimePolicy: structuredClone(
@@ -372,8 +360,7 @@ export function createInitialTtrpgProductStateV1(input: {
               lastErrorCode: null,
               updatedAtSequence: null,
             })),
-          }
-        : null,
+          },
     },
   };
   return state;
@@ -413,8 +400,8 @@ export function assertInitialTtrpgProductStateV1(input: {
     JSON.stringify(expectedProduct.clueCatalog)
       ? "clues"
       : "",
-    stableJson(actualProduct.clockCatalog ?? []) !==
-    stableJson(expectedProduct.clockCatalog ?? [])
+    stableJson(actualProduct.clockCatalog) !==
+    stableJson(expectedProduct.clockCatalog)
       ? "clocks"
       : "",
     JSON.stringify(actualProduct.sessionZero.requiredItemKeys) !==

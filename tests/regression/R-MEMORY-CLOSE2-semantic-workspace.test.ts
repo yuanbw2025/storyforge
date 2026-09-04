@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
 import { db } from '../../src/lib/db/schema'
-import { generateWorkCode, generateWorkspaceUid } from '../../src/lib/memory/identity'
+import { generateWorkCode } from '../../src/lib/memory/identity'
+import { generateWorkspaceScopeCode } from '../../src/lib/workspace/identity'
 import {
   adoptWorkspaceFileChangesV1,
   buildWorkspaceFileAdoptionCandidatesV1,
@@ -12,8 +13,8 @@ import {
 } from '../../src/lib/memory/workspace-projection'
 import { buildWorkspaceImpactPlanV1 } from '../../src/lib/memory/workspace-impact'
 import { createContextManifestV1, createContextManifestV2FromV1 } from '../../src/lib/agent/run/context-manifest'
-import { ensureWorkspaceOwnership } from '../../src/lib/workspace/ownership'
 import { stampNewRecord } from '../../src/lib/workspace/scope'
+import { currentWorkFixtureRecordV1, seedCurrentWorkspace } from '../helpers/current-workspace'
 
 function notFound(): DOMException {
   return new DOMException('not found', 'NotFoundError')
@@ -90,29 +91,19 @@ function memoryDirectory() {
 
 async function seedTwoWorks() {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    workspaceUid: generateWorkspaceUid(),
-    name: '双作品语义记忆',
-    genre: 'fantasy',
-    genres: ['fantasy'],
-    status: 'drafting',
-    description: '',
-    targetWordCount: 200_000,
-    enableMultiWorld: true,
-    createdAt: now,
-    updatedAt: now,
-  } as any) as number
-  const first = await ensureWorkspaceOwnership(projectId)
+  const first = await seedCurrentWorkspace('双作品语义记忆', { enableMultiWorld: true })
+  const { projectId } = first.scope
   const secondWorldId = await db.worlds.add({
     projectId,
-    code: 'WORLD-SEMANTIC-SECOND',
+    identityKind: 'workspace-scope',
+    code: generateWorkspaceScopeCode(now + 1, 0.234567),
     name: '第二世界',
     description: '',
-    currentVersion: 1,
+    currentVersion: 0,
     createdAt: now,
     updatedAt: now,
   }) as number
-  const secondWorkId = await db.works.add({
+  const secondWorkId = await db.works.add(currentWorkFixtureRecordV1({
     projectId,
     worldId: secondWorldId,
     code: generateWorkCode(),
@@ -121,9 +112,11 @@ async function seedTwoWorks() {
     genres: ['mystery'],
     status: 'drafting',
     targetWordCount: 80_000,
+    kind: 'novel',
+    novelProfile: 'long',
     createdAt: now,
     updatedAt: now,
-  }) as number
+  })) as number
   const addChapter = async (scope: { projectId: number; worldId: number; workId: number }, title: string) => {
     const outlineNodeId = await db.outlineNodes.add(stampNewRecord(scope, 'outlineNodes', {
       projectId, workId: scope.workId, parentId: null, type: 'chapter', title, summary: '', order: 0,
@@ -154,12 +147,10 @@ async function seedTwoWorks() {
     projectId, workId,
     writingStyle: `克制${suffix}`,
     narrativePOV: 'third-limited' as const,
-    toneAndMood: `冷峻${suffix}`,
     atmosphere: `冷峻${suffix}`,
     prohibitions: JSON.stringify([`禁止${suffix}`]),
     consistencyRules: JSON.stringify([`规则${suffix}`]),
     specialRequirements: `要求${suffix}`,
-    referenceWorks: '[]',
     citedReferenceIds: '[]',
     citedInsightIds: '[]',
     createdAt: now,

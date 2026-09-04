@@ -11,38 +11,28 @@
 import Dexie from 'dexie'
 import { db } from '../db/schema'
 import { PROJECT_TABLES } from '../registry/project-tables'
-import { backfillResourceUidsInCurrentTransactionV1 } from '../context-gateway/resource-identity'
+import { isPortableResourceUidV1 } from '../context-gateway/resource-uid'
 import { remapWorldPortalTargets } from '../utils/world-portals'
 import { transactionTablesFor } from '../registry/lifecycle'
-import { importLegacyArraysToCodex } from '../migrations/legacy-to-codex-upgrade'
-import { migrateStateCardsToTemporalFactCandidates } from '../migrations/state-cards-to-temporal-facts'
 import type { TableSpec } from '../registry/types'
 import type { ProjectExportData } from './json-export'
-import { upgradeImportedCharacterAxesV32 } from '../migrations/character-axes-upgrade'
-import { ensureWorkspaceOwnership } from '../workspace/ownership'
+import { CURRENT_BACKUP_VERSION } from './backup-trust'
 import { rebindPortableAgentRunContractV1 } from '../agent/run/contract-portability'
 import { finalizeImportedAgentRunLedgersV1 } from '../agent/run/ledger-portability'
 import {
   generateWorkspaceUid,
-  generateWorkCode,
   isWorkspaceUid,
   isWorkCode,
 } from '../memory/identity'
 import { assertAgentRunArtifactRecordIntegrityV1 } from '../memory/artifact-record'
 import { assertStoredWorkClassification } from '../workspace/work-kind'
+import { isCurrentWorldCode } from '../workspace/identity'
 import { assertAdaptationProjectInvariant } from '../adaptation/contracts'
 import { validateScreenplayBlocksV1 } from '../screenplay/contracts'
 import { assertComicLetteringV1, assertComicMediaAssetV1, assertNormalizedFrameV1, framesOverlap } from '../comic/contracts'
 import type { AdaptationProject, ComicLetteringItemV1, ComicMediaAsset, ScreenplayBlock, Work } from '../types'
 import { PRODUCTION_PRODUCT_KINDS_V1 } from '../types'
-
-const PORTABLE_OWNER_VERSION = 4
-const WORK_CLASSIFICATION_VERSION = 5
-const ADAPTATION_VERSION = 6
-const SCREENPLAY_VERSION = 7
-const COMIC_STORYBOARD_VERSION = 8
-const COMIC_MEDIA_VERSION = 9
-const PRODUCT_ARCHITECTURE_VERSION = 10
+import { isCompleteCharacterAxes } from '../character/character-axes'
 
 function portableRows(value: Record<string, any>, name: string): Record<string, any>[] {
   const rows = value[name]
@@ -185,48 +175,74 @@ function strictOwnerShadow(spec: TableSpec, row: Record<string, any>): {
   return null
 }
 
-function validateStrictOwnership(data: ProjectExportData): void {
-  if (data.version < PORTABLE_OWNER_VERSION) return
+function validateCurrentBackup(data: ProjectExportData): void {
+  if (data.version !== CURRENT_BACKUP_VERSION) {
+    throw new Error(`[deriveImport] 只接受当前备份版本 v${CURRENT_BACKUP_VERSION}`)
+  }
   const value = data as unknown as Record<string, any>
   if (!Array.isArray(value.worlds) || !value.worlds.length || !Array.isArray(value.works) || !value.works.length) {
-    throw new Error('[deriveImport] v4 备份缺少 World/Work 根')
+    throw new Error('[deriveImport] 当前备份缺少 World/Work 根')
   }
   const worldIds = new Set(value.worlds.map((row: any) => row?._exportId))
   const workIds = new Set(value.works.map((row: any) => row?._exportId))
   const instanceIds = new Set((value.productRuntimeSessions ?? []).map((row: any) => row?._exportId))
   if (worldIds.size !== value.worlds.length || workIds.size !== value.works.length
     || [...worldIds].some(id => !Number.isInteger(id)) || [...workIds].some(id => !Number.isInteger(id))) {
-    throw new Error('[deriveImport] v4 World/Work 便携 ID 重复或无效')
+    throw new Error('[deriveImport] World/Work 便携 ID 重复或无效')
+  }
+  const worldCodes = new Set<string>()
+  for (const row of value.worlds as Array<Record<string, unknown>>) {
+    if ((row.identityKind !== 'workspace-scope' && row.identityKind !== 'world-draft')
+      || !isCurrentWorldCode(row.identityKind, row.code)
+      || worldCodes.has(row.code)) {
+      throw new Error('[deriveImport] World 身份或稳定编号无效')
+    }
+    worldCodes.add(row.code)
   }
   const ownership = value.ownership
   if (!ownership || !worldIds.has(ownership.worldExportId) || !workIds.has(ownership.workExportId)) {
-    throw new Error('[deriveImport] v4 active owner 指针缺失或越界')
+    throw new Error('[deriveImport] active owner 指针缺失或越界')
   }
-  if (data.version >= WORK_CLASSIFICATION_VERSION) {
-    for (const row of value.works as Array<Record<string, unknown>>) {
-      try {
-        assertStoredWorkClassification(row as any)
-      } catch (error) {
-        throw new Error(`[deriveImport] v5 Work 分类非法：${error instanceof Error ? error.message : String(error)}`)
+  const resourceUids = new Set<string>()
+  for (const spec of PROJECT_TABLES) {
+    if (!spec.exportable || !spec.resourceIdentity) continue
+    const rows = value[spec.name]
+    if (!Array.isArray(rows)) throw new Error(`[deriveImport] 当前备份缺少 ${spec.name}`)
+    for (const row of rows) {
+      const uid = row?.[spec.resourceIdentity.field]
+      if (!isPortableResourceUidV1(uid, spec.resourceIdentity.resourceKind)) {
+        throw new Error(`[deriveImport] ${spec.name}.${spec.resourceIdentity.field} 缺少当前资源身份`)
       }
+      if (resourceUids.has(uid)) throw new Error(`[deriveImport] resource UID 重复：${uid}`)
+      resourceUids.add(uid)
     }
   }
-  if (data.version >= ADAPTATION_VERSION) validateAdaptationBackup(value)
-  if (data.version >= SCREENPLAY_VERSION) validateScreenplayBackup(value)
-  if (data.version >= COMIC_STORYBOARD_VERSION) validateComicStoryboardBackup(value)
-  if (data.version >= COMIC_MEDIA_VERSION) validateComicMediaBackup(value)
-  if (data.version >= PRODUCT_ARCHITECTURE_VERSION) validateProductArchitectureBackup(value)
+  const workCodes = new Set<string>()
+  for (const row of value.works as Array<Record<string, unknown>>) {
+    if (!isWorkCode(row.code) || workCodes.has(row.code)) throw new Error('[deriveImport] Work code 无效或重复')
+    workCodes.add(row.code)
+    try {
+      assertStoredWorkClassification(row as any)
+    } catch (error) {
+      throw new Error(`[deriveImport] Work 分类非法：${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+  validateAdaptationBackup(value)
+  validateScreenplayBackup(value)
+  validateComicStoryboardBackup(value)
+  validateComicMediaBackup(value)
+  validateProductArchitectureBackup(value)
   for (const spec of PROJECT_TABLES) {
     if (!spec.exportable || spec.name === 'projects' || spec.name === 'worlds' || spec.name === 'works') continue
     const rows = value[spec.name]
     if (!Array.isArray(rows)) continue
     for (const row of rows) {
       if (!row || typeof row !== 'object') throw new Error(`[deriveImport] ${spec.name} 包含非法记录`)
-      if ('worldId' in row || 'workId' in row) throw new Error(`[deriveImport] v4 ${spec.name} 泄露本地主键 owner`)
+      if ('worldId' in row || 'workId' in row) throw new Error(`[deriveImport] ${spec.name} 泄露本地主键 owner`)
       const shadow = strictOwnerShadow(spec, row)
       if (!shadow) continue
       const validIds = shadow.kind === 'world' ? worldIds : shadow.kind === 'work' ? workIds : instanceIds
-      if (!validIds.has(shadow.exportId)) throw new Error(`[deriveImport] v4 owner 越界:${spec.name}`)
+      if (!validIds.has(shadow.exportId)) throw new Error(`[deriveImport] owner 越界:${spec.name}`)
     }
   }
 }
@@ -432,13 +448,11 @@ function validateComicMediaBackup(value: Record<string, any>): void {
   assets.forEach((_asset, key) => visit(key))
 }
 
-function restoreStrictOwner(
-  dataVersion: number,
+function restoreCurrentOwner(
   spec: TableSpec,
   obj: Record<string, any>,
   newIdMaps: Map<string, Map<number, number>>,
 ): void {
-  if (dataVersion < PORTABLE_OWNER_VERSION) return
   const shadow = strictOwnerShadow(spec, obj)
   delete obj._worldOwnerExportId
   delete obj._workOwnerExportId
@@ -446,9 +460,9 @@ function restoreStrictOwner(
   if (!shadow) return
   const ownerMap = newIdMaps.get(shadow.kind === 'world' ? 'worlds' : shadow.kind === 'work' ? 'works' : 'productRuntimeSessions')
   const mapped = ownerMap?.get(shadow.exportId)
-  if (mapped == null) throw new Error(`[deriveImport] v4 owner 无法重映射:${spec.name}`)
+  if (mapped == null) throw new Error(`[deriveImport] owner 无法重映射:${spec.name}`)
   if (obj[shadow.field] != null && obj[shadow.field] !== mapped) {
-    throw new Error(`[deriveImport] v4 owner 与外键冲突:${spec.name}.${shadow.field}`)
+    throw new Error(`[deriveImport] owner 与外键冲突:${spec.name}.${shadow.field}`)
   }
   obj[shadow.field] = mapped
   const locator = spec.domainOwner?.locator
@@ -467,8 +481,8 @@ function restoreStrictOwner(
 function deriveImportOrder(specs: TableSpec[]): TableSpec[] {
   const done = new Set<string>()
   const order: TableSpec[] = []
-  // World/Work are ownership roots, so v4 must materialize them before any
-  // domain-owned row. Optional backward references (for example Work -> active
+  // World/Work are ownership roots and must materialize before any
+  // domain-owned row. Optional reverse references (for example Work -> active
   // character plan) are patched after all tables have been imported.
   for (const rootName of ['worlds', 'works']) {
     const root = specs.find(spec => spec.name === rootName)
@@ -559,30 +573,6 @@ function restorePortableBinaryBlob(value: unknown, label: string): ArrayBuffer {
   return bytes.buffer
 }
 
-async function assertPortableBinaryIntegrity(
-  spec: TableSpec,
-  row: Record<string, any>,
-  data: ArrayBuffer,
-): Promise<void> {
-  const integrity = spec.portableData?.kind === 'binary-blob' ? spec.portableData.integrity : null
-  const selfIntegrity = spec.portableData?.kind === 'binary-blob' ? spec.portableData.selfIntegrity : null
-  if (selfIntegrity) {
-    if (row[selfIntegrity.sizeField] !== data.byteLength) throw new Error(`[deriveImport] ${spec.name} 二进制大小与本行元数据不一致`)
-    const digest = await Dexie.waitFor(crypto.subtle.digest('SHA-256', data))
-    const hash = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('')
-    if (row[selfIntegrity.hashField] !== hash) throw new Error(`[deriveImport] ${spec.name} 二进制哈希与本行元数据不一致`)
-  }
-  if (!integrity) return
-  const referenceId = row[integrity.referenceField]
-  const metadataTable = (db as any)[integrity.metadataTable]
-  const metadata = Number.isInteger(referenceId) && metadataTable ? await metadataTable.get(referenceId) : null
-  if (!metadata) throw new Error(`[deriveImport] ${spec.name} 缺少二进制元数据引用`)
-  if (metadata[integrity.sizeField] !== data.byteLength) throw new Error(`[deriveImport] ${spec.name} 二进制大小与元数据不一致`)
-  const digest = await Dexie.waitFor(crypto.subtle.digest('SHA-256', data))
-  const hash = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('')
-  if (metadata[integrity.hashField] !== hash) throw new Error(`[deriveImport] ${spec.name} 二进制哈希与元数据不一致`)
-}
-
 async function restorePortableSharedMediaObject(
   spec: TableSpec,
   row: Record<string, any>,
@@ -619,8 +609,8 @@ async function restorePortableSharedMediaObject(
  * 与手写 importProjectJSON 行为一致(往返完整性由 R-export-fullcoverage 锁死)。
  */
 export async function deriveImportProjectJSON(data: ProjectExportData): Promise<number> {
-  if (!data.version || !data.project) throw new Error('无效的导出文件格式')
-  validateStrictOwnership(data)
+  if (!data.project) throw new Error('无效的导出文件格式')
+  validateCurrentBackup(data)
   const now = Date.now()
   const specs = PROJECT_TABLES.filter(s => s.exportable && s.name !== 'projects')
   const order = deriveImportOrder(specs)
@@ -628,41 +618,35 @@ export async function deriveImportProjectJSON(data: ProjectExportData): Promise<
   if (!projectSpec) throw new Error('[deriveImport] PROJECT_TABLES 缺少 projects 根表')
 
   const importedProjectId = await db.transaction('rw', transactionTablesFor('importProject'), async () => {
-    const projectData: Record<string, any> = { ...data.project }
+    const projectData = data.project as unknown as Record<string, unknown>
     const pendingProjectRefs = new Map<string, number | null>()
     for (const rm of projectSpec.exportRemap ?? []) {
       const exportValue = projectData[rm.exportAs]
       pendingProjectRefs.set(rm.field, typeof exportValue === 'number' ? exportValue : null)
-      delete projectData[rm.exportAs]
-      // 数据库主键不具备跨项目便携性；旧备份若只有原始 ID，宁可清空也不能误绑定。
-      delete projectData[rm.field]
     }
     const requestedWorkspaceUid = projectData.workspaceUid
     const workspaceUidCollision = isWorkspaceUid(requestedWorkspaceUid)
       ? await db.projects.where('workspaceUid').equals(requestedWorkspaceUid).first()
       : null
-    projectData.workspaceUid = isWorkspaceUid(requestedWorkspaceUid) && !workspaceUidCollision
-      ? requestedWorkspaceUid
-      : generateWorkspaceUid()
+    if (!isWorkspaceUid(requestedWorkspaceUid)) throw new Error('[deriveImport] workspaceUid 无效')
     const newProjectId = await db.projects.add({
-      ...projectData,
+      workspaceUid: workspaceUidCollision ? generateWorkspaceUid() : requestedWorkspaceUid,
+      workspacePurpose: projectData.workspacePurpose,
       name: `${data.project.name}（导入）`,
+      enableMultiWorld: projectData.enableMultiWorld,
+      productPlatformOptIns: projectData.productPlatformOptIns,
+      activeWorldId: null,
+      activeWorkId: null,
       createdAt: now,
       updatedAt: now,
     } as any) as number
-
-    // 旧版备份兼容:factions/itemSystems 表已删除 → 并入「势力」/「人工器物」词条
-    const legacyFactions = (data as any).factions as any[] | undefined
-    const legacyItemSystems = (data as any).itemSystems as any[] | undefined
-    if (legacyFactions?.length || legacyItemSystems?.length) {
-      await importLegacyArraysToCodex(db, newProjectId, { factions: legacyFactions, itemSystems: legacyItemSystems })
-    }
 
     const newIdMaps = new Map<string, Map<number, number>>()
     const deferredForeignKeys: Array<{ table: any; id: number; field: string; target: string; exportId: number }> = []
 
     for (const spec of order) {
-      const rawRows: any[] = (data as any)[spec.name] ?? []
+      const rawRows: any[] = (data as any)[spec.name]
+      if (!Array.isArray(rawRows)) throw new Error(`[deriveImport] 当前备份缺少 ${spec.name}`)
       const rows = spec.tree ? topoSortTreeRows(rawRows) : rawRows
       const newIdMap = new Map<number, number>()
       const pendingRefRemap: Array<{ newId: number; stashed: Record<string, any> }> = []
@@ -670,10 +654,7 @@ export async function deriveImportProjectJSON(data: ProjectExportData): Promise<
       let exportIndex = -1
       for (const row of rows) {
         exportIndex++
-        // 注册表声明的兜底默认值先铺底，再用 row 覆盖：老数据/跨版本导入缺某非可选字段时，
-        // 落库仍满足类型不变量（如 outlineNodes.summary 恒为 string，杜绝「导入后大纲崩」）。
-        const obj: any = { ...spec.defaults, ...row }
-        if (spec.name === 'works' && !isWorkCode(obj.code)) obj.code = generateWorkCode()
+        const obj: any = { ...row }
         const exportId = obj._exportId
         delete obj._exportId
 
@@ -709,7 +690,7 @@ export async function deriveImportProjectJSON(data: ProjectExportData): Promise<
           obj[rm.field] = mappedId
         }
         if (dropRow) continue
-        restoreStrictOwner(data.version, spec, obj, newIdMaps)
+        restoreCurrentOwner(spec, obj, newIdMaps)
         if (spec.name === 'knowledgeLedger' && hasUnmappedKnowledgeRef && obj.status !== 'rejected') {
           obj.status = 'source-missing'
         }
@@ -732,19 +713,6 @@ export async function deriveImportProjectJSON(data: ProjectExportData): Promise<
         if (spec.portableData?.kind === 'exact-run-artifact') {
           await Dexie.waitFor(assertAgentRunArtifactRecordIntegrityV1(obj))
         }
-        if (spec.portableData?.kind === 'binary-blob') {
-          if (obj[spec.portableData.field] == null && spec.portableData.allowMissingWhen
-            && obj[spec.portableData.allowMissingWhen.importField] != null) {
-            obj[spec.portableData.field] = null
-          } else {
-            const binary = restorePortableBinaryBlob(
-              obj[spec.portableData.field],
-              `${spec.name}.${spec.portableData.field}`,
-            )
-            await assertPortableBinaryIntegrity(spec, obj, binary)
-            obj[spec.portableData.field] = binary
-          }
-        }
         if (spec.portableData?.kind === 'shared-media-object') {
           await restorePortableSharedMediaObject(spec, obj)
         }
@@ -763,8 +731,8 @@ export async function deriveImportProjectJSON(data: ProjectExportData): Promise<
           obj[spec.portableData.contractField] = rebound.contractJson
           obj[spec.portableData.contractHashField] = rebound.contractHash
         }
-        if (spec.name === 'characters') {
-          Object.assign(obj, upgradeImportedCharacterAxesV32(obj))
+        if (spec.name === 'characters' && !isCompleteCharacterAxes(obj)) {
+          throw new Error(`[deriveImport] 角色「${String(obj.name ?? '')}」缺少当前三轴分类`)
         }
 
         // JSON 引用字段(portals)先剥离,待全表映射建好后两阶段回填
@@ -812,7 +780,7 @@ export async function deriveImportProjectJSON(data: ProjectExportData): Promise<
           if (!refMap) continue
           for (const pending of pendingRefRemap) {
             const portableRefs = pending.stashed[rr.exportAs]
-            if (portableRefs == null) continue // 旧备份没有影子字段：保留原值，不猜测旧 db id。
+            if (portableRefs == null) continue
             const patch = rr.kind === 'id-array'
               ? remapPortableIdArray(portableRefs, refMap, rr.storage === 'json-string')
               : rr.kind === 'scene-character-ids'
@@ -860,13 +828,6 @@ export async function deriveImportProjectJSON(data: ProjectExportData): Promise<
       await db.projects.update(newProjectId, projectPatch as any)
     }
 
-    // NS-4：旧备份可能只有 stateCards、没有 temporalFacts。导入后用新项目内的
-    // 新 stateCard 主键生成可审候选；旧卡保留，不自动升 Canon。函数幂等，若备份已有
-    // 对应候选不会重复写。
-    if (((data as any).temporalFacts?.length ?? 0) === 0) {
-      await migrateStateCardsToTemporalFactCandidates(db, newProjectId)
-    }
-
     const agentRunIds = [...(newIdMaps.get('agentRuns')?.values() ?? [])]
     if (agentRunIds.length > 0) {
       await finalizeImportedAgentRunLedgersV1({
@@ -876,14 +837,8 @@ export async function deriveImportProjectJSON(data: ProjectExportData): Promise<
       })
     }
 
-    await backfillResourceUidsInCurrentTransactionV1(newProjectId)
-
     return newProjectId
   })
-  // v1-v3 had no portable owner shadows. Upgrade only after the import
-  // transaction commits; the ownership service performs its own preflight and
-  // atomic stamping without guessing external IDs.
-  if (data.version < PORTABLE_OWNER_VERSION) await ensureWorkspaceOwnership(importedProjectId)
   return importedProjectId
 }
 

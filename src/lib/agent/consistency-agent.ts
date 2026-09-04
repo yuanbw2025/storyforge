@@ -448,6 +448,7 @@ export async function persistConsistencyAgentCandidate(
   const conversation = stampNewRecord(scope, 'agentConversations', {
     projectId: candidate.projectId,
     worldGroupId: candidate.worldGroupId,
+    purpose: 'consistency.audit',
     title: `一致性 Agent · ${candidate.chapterTitle}`,
     status: 'archived',
     createdAt: now,

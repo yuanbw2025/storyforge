@@ -22,23 +22,13 @@ import {
   type CultivationProgressExtractionAdoptionBoundaryV1,
   type CultivationProgressExtractionBoundaryV1,
 } from '../../src/lib/agent/run/cultivation-progress-extraction-durable'
+import { currentWorkFixtureRecordV1, seedCurrentWorkspace } from '../helpers/current-workspace'
+import { stampCurrentFixtureResourceUidsV1 } from '../helpers/current-resource-identity'
 
 async function seed(suffix = '') {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    name: `修炼进度${suffix}`, genre: 'fantasy', genres: ['fantasy'], status: 'drafting',
-    description: '', targetWordCount: 100_000, enableMultiWorld: true,
-createdAt: now, updatedAt: now,
-  } as any) as number
-  const worldId = await db.worlds.add({
-    projectId, code: `cultivation-${now}-${suffix}`, name: `剑界${suffix}`, description: '',
-    currentVersion: 1, createdAt: now, updatedAt: now,
-  }) as number
-  const workId = await db.works.add({
-    projectId, worldId, title: `雷劫篇${suffix}`, description: '', genres: ['fantasy'],
-    status: 'drafting', targetWordCount: 100_000, createdAt: now, updatedAt: now,
-  } as any) as number
-  await db.projects.update(projectId, { activeWorldId: worldId, activeWorkId: workId, ownershipSchemaVersion: 1 })
+  const created = await seedCurrentWorkspace(`修炼进度${suffix}`, { enableMultiWorld: true })
+  const { projectId, worldId, workId } = created.scope
   const worldGroupId = await db.worldGroups.add({
     projectId, worldId, name: `剑界${suffix}`, description: '', type: 'primary', icon: '⚔️', order: 0,
     createdAt: now, updatedAt: now,
@@ -84,7 +74,7 @@ createdAt: now, updatedAt: now,
     createdAt: now, updatedAt: now,
   }) as number
   const characterId = await db.characters.add({
-    projectId, worldId, name: '林舟', role: 'protagonist', roleWeight: 'main',
+    projectId, worldId, name: '林舟', roleWeight: 'main',
     moralAxis: 'good', orderAxis: 'lawful', cultivationSystemId: systemId,
     homeWorldGroupId: worldGroupId, isCrossWorld: false, createdAt: now, updatedAt: now,
   } as any) as number
@@ -100,6 +90,7 @@ createdAt: now, updatedAt: now,
     sourceChapterId: laterChapterId, sourceChapterTitle: '剑胎已成', sourceQuote: '剑胎稳固',
     sourceOffset: 2, trigger: '', status: 'confirmed', createdAt: now, updatedAt: now,
   } as any) as number
+  await stampCurrentFixtureResourceUidsV1(projectId)
   return {
     scope: { projectId, worldId, workId } satisfies WorkspaceScope,
     projectId, worldId, workId, worldGroupId, chapterId, systemId, characterId,
@@ -350,10 +341,10 @@ describe.sequential('R-HARNESS71 · 修炼进度 durable 提取', () => {
     const fixture = await seed('isolation')
     const generated = await generate(fixture)
     const now = Date.now()
-    const otherWorkId = await db.works.add({
+    const otherWorkId = await db.works.add(currentWorkFixtureRecordV1({
       projectId: fixture.projectId, worldId: fixture.worldId, title: '另一作品', description: '',
       genres: ['fantasy'], status: 'drafting', targetWordCount: 10_000, createdAt: now, updatedAt: now,
-    } as any) as number
+    })) as number
     const otherWork = { ...fixture.scope, workId: otherWorkId }
     await expect(readPendingCultivationProgressExtractionCandidateV1({ scope: otherWork })).resolves.toBeNull()
     await expect(adoptCultivationProgressExtractionCandidateV1({
@@ -364,10 +355,10 @@ describe.sequential('R-HARNESS71 · 修炼进度 durable 提取', () => {
       projectId: fixture.projectId, code: `other-${now}`, name: '另一世界', description: '',
       currentVersion: 1, createdAt: now, updatedAt: now,
     }) as number
-    const otherWorldWorkId = await db.works.add({
+    const otherWorldWorkId = await db.works.add(currentWorkFixtureRecordV1({
       projectId: fixture.projectId, worldId: otherWorldId, title: '另一世界作品', description: '',
       genres: ['fantasy'], status: 'drafting', targetWordCount: 10_000, createdAt: now, updatedAt: now,
-    } as any) as number
+    })) as number
     const otherWorld = { projectId: fixture.projectId, worldId: otherWorldId, workId: otherWorldWorkId }
     await expect(readPendingCultivationProgressExtractionCandidateV1({ scope: otherWorld })).resolves.toBeNull()
     await expect(adoptCultivationProgressExtractionCandidateV1({

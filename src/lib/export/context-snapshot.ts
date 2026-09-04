@@ -23,6 +23,7 @@ export async function generateContextSnapshot(scopeInput: WorkspaceScopeLike): P
   const projectId = scope.projectId
   const [
     project,
+    work,
     worldviews,
     histories,
     storyCores,
@@ -33,6 +34,7 @@ export async function generateContextSnapshot(scopeInput: WorkspaceScopeLike): P
     foreshadows,
   ] = await Promise.all([
     db.projects.get(projectId),
+    db.works.get(scope.workId),
     readOwnedRows<any>(scope, 'worldviews', { owner: 'world' }),
     readOwnedRows<any>(scope, 'histories', { owner: 'world' }),
     readOwnedRows<any>(scope, 'storyCores', { owner: 'work' }),
@@ -43,19 +45,18 @@ export async function generateContextSnapshot(scopeInput: WorkspaceScopeLike): P
     readOwnedRows<any>(scope, 'foreshadows', { owner: 'work' }),
   ])
 
-  if (!project) throw new Error('项目不存在')
+  if (!project || !work || work.projectId !== projectId) throw new Error('工作区或作品不存在')
 
   const sections: string[] = []
 
   // ── 头部 ──
-  sections.push(`# 上下文快照：${project.name}\n生成时间：${new Date().toLocaleString('zh-CN')}\n类型：${project.genre || '未指定'}`)
+  sections.push(`# 上下文快照：${work.title}\n生成时间：${new Date().toLocaleString('zh-CN')}\n类型：${work.genres.join('、') || '未指定'}`)
 
   // ── 世界观（当前字段）──
   const wv = worldviews[0]
   if (wv) {
     const parts: string[] = ['## 世界观']
-    if (wv.summary) parts.push(wv.summary)
-    const v3: [string, string | undefined][] = [
+    const fields: [string, string | undefined][] = [
       ['世界来源', wv.worldOrigin], ['力量体系', wv.powerHierarchy],
       ['世界结构', wv.worldStructure], ['地貌分布', wv.continentLayout],
       ['气候环境', wv.climateByRegion], ['山川水系', wv.mountainsRivers],
@@ -64,7 +65,7 @@ export async function generateContextSnapshot(scopeInput: WorkspaceScopeLike): P
       ['文化制度', wv.cultureOverview],
       ['矛盾冲突', wv.internalConflicts],
     ]
-    for (const [label, val] of v3) {
+    for (const [label, val] of fields) {
       if (val) parts.push(`**${label}**：${compress(val, 250)}`)
     }
     sections.push(parts.join('\n'))

@@ -23,13 +23,11 @@ const mocks = vi.hoisted(() => ({
       projectId: 1,
       writingStyle: '旧写作风格',
       narrativePOV: 'third-limited',
-      toneAndMood: '旧字段基调',
       atmosphere: '规范字段基调',
       prohibitions: '[]',
       consistencyRules: '[]',
       specialRequirements: '旧特殊要求',
-      referenceWorks: '[]',
-      citedReferenceIds: '[]',
+        citedReferenceIds: '[]',
       createdAt: 1,
       updatedAt: 1,
     } as any,
@@ -64,12 +62,14 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
 const project = {
   id: 1,
+  workspaceUid: 'WS-00000000-0000-4000-8000-000000000001',
+  workspacePurpose: 'independent-work',
   name: '潮钟纪事',
-  genre: 'fantasy',
-  genres: ['fantasy'],
   enableMultiWorld: false,
   activeWorldId: 11,
   activeWorkId: 12,
+  createdAt: 1,
+  updatedAt: 1,
 } as Project
 
 const mounted: Array<{ host: HTMLDivElement; root: ReturnType<typeof createRoot> }> = []
@@ -112,10 +112,10 @@ function pendingCandidate(field: 'writingStyle' | 'atmosphere' | 'specialRequire
       skillId: 'world-origin.creative-rules',
       creativeRulesField: field,
       label: labels[field],
-      contextSources: ['projectStatus', 'worldview', 'storyCore', 'creativeRules'],
+      contextSources: ['workStatus', 'worldview', 'storyCore', 'creativeRules'],
       contextEvidence: {
         profile: 'balanced',
-        included: ['projectStatus', 'worldview', 'storyCore', 'creativeRules'],
+        included: ['workStatus', 'worldview', 'storyCore', 'creativeRules'],
         omitted: [],
         trimmed: ['worldview'],
         estimatedInputTokens: 510,
@@ -182,9 +182,6 @@ describe('R-HARNESS39 · 创作规则面板统一进入主 Agent Harness', () =>
       projectId: project.id,
       atmosphere: '作者改写后的规范基调',
     })
-    expect(mocks.rulesStore.save).not.toHaveBeenCalledWith(expect.objectContaining({
-      toneAndMood: expect.anything(),
-    }))
   })
 
   it('刷新恢复的候选展示输入证据，可编辑、拒绝并确认后回读正式规则', async () => {

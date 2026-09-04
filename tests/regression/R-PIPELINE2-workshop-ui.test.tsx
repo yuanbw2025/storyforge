@@ -120,7 +120,7 @@ async function mount() {
       project: {
         id: 1,
         name: '工坊测试',
-        genre: '',
+        genres: [],
         description: '',
         targetWordCount: 0,
         enableMultiWorld: false,

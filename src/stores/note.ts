@@ -68,9 +68,9 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
   },
 
   updateNote: async (id, data) => {
-    const beforeMigration = await db.notes.get(id)
-    if (!beforeMigration) return
-    const scope = await resolveScopeLike(beforeMigration.projectId)
+    const existingRecord = await db.notes.get(id)
+    if (!existingRecord) return
+    const scope = await resolveScopeLike(existingRecord.projectId)
     const current = await db.notes.get(id)
     if (!current || !await assertRecordInScope(scope, 'notes', current, { owner: 'work' })) return
     if (data.chapterId != null) {
@@ -85,9 +85,9 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
   },
 
   deleteNote: async (id) => {
-    const beforeMigration = await db.notes.get(id)
-    if (!beforeMigration) return
-    const scope = await resolveScopeLike(beforeMigration.projectId)
+    const existingRecord = await db.notes.get(id)
+    if (!existingRecord) return
+    const scope = await resolveScopeLike(existingRecord.projectId)
     const current = await db.notes.get(id)
     if (!current || !await assertRecordInScope(scope, 'notes', current, { owner: 'work' })) return
     await db.notes.delete(id)
@@ -95,9 +95,9 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
   },
 
   togglePin: async (id) => {
-    const beforeMigration = get().notes.find(n => n.id === id) ?? await db.notes.get(id)
-    if (!beforeMigration) return
-    const scope = await resolveScopeLike(beforeMigration.projectId)
+    const existingRecord = get().notes.find(n => n.id === id) ?? await db.notes.get(id)
+    if (!existingRecord) return
+    const scope = await resolveScopeLike(existingRecord.projectId)
     const note = await db.notes.get(id)
     if (!note || !await assertRecordInScope(scope, 'notes', note, { owner: 'work' })) return
     const pinned = !note.pinned

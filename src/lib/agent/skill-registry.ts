@@ -30,7 +30,6 @@ export const DOMAIN_AGENT_IDS = ['world-origin', 'character', 'inspiration', 'ou
 export type DomainAgentId = typeof DOMAIN_AGENT_IDS[number]
 
 export type AgentSkillExecutionModeV1 =
-  | 'complete'
   | 'worldview-field'
   | 'world-suggest'
   | 'worldview-expand'
@@ -164,7 +163,12 @@ export interface AgentSkillDefinitionV1 {
   optionalContextSourceKeys: readonly string[]
   inputPolicy: AgentSkillInputPolicyV1
   contextCompression: AgentSkillContextCompressionPolicyV1
-  /** Optional until each formal domain is migrated through its phase gate. */
+  /**
+   * Present only when the Skill supports progressive resource disclosure.
+   * Other Skills receive bounded context exclusively from their registered
+   * contextSourceKeys/readToolNames; omission is a current explicit boundary,
+   * not a compatibility or rollout state.
+   */
   contextGateway?: AgentSkillContextGatewayPolicyV1
   maxOutputTokens: number
   writeTargets: readonly AgentSkillWriteTargetV1[]
@@ -226,7 +230,7 @@ const SCREENPLAY_SCENES_CONTEXT_SOURCE_KEYS = ['adaptation.sourceManifest', 'ada
 const COMIC_STORYBOARD_CONTEXT_SOURCE_KEYS = ['adaptation.sourceManifest', 'adaptation.sourceContent', 'adaptation.currentBrief', 'adaptation.currentPlan', 'comic.visualBible', 'characters'] as const
 
 const STORY_CORE_CONTEXT_SOURCE_KEYS = [
-  'projectStatus',
+  'workStatus',
   'canonAssertions',
   'worldview',
   'storyCore',
@@ -238,14 +242,14 @@ const STORY_CORE_CONTEXT_SOURCE_KEYS = [
 ] as const
 
 const CREATIVE_RULES_CONTEXT_SOURCE_KEYS = [
-  'projectStatus',
+  'workStatus',
   'worldview',
   'storyCore',
   'creativeRules',
 ] as const
 
 const WORLDVIEW_FIELD_CONTEXT_SOURCE_KEYS = [
-  'projectStatus',
+  'workStatus',
   'canonAssertions',
   'worldview',
   'storyCore',
@@ -433,7 +437,7 @@ const HISTORY_AGENT_INPUT_POLICY: AgentSkillInputPolicyV1 = {
 }
 
 const OUTLINE_STORY_ARC_CONTEXT_SOURCE_KEYS = [
-  'projectStatus',
+  'workStatus',
   'canonAssertions',
   'worldview',
   'storyCore',
@@ -453,14 +457,14 @@ const OUTLINE_STORY_ARC_CONTEXT_SOURCE_KEYS = [
 ] as const
 
 const OUTLINE_STORYLINE_PROGRESS_CONTEXT_SOURCE_KEYS = [
-  'projectStatus',
+  'workStatus',
   'storyArcs',
   'storylineProgress',
   'chapterContent',
 ] as const
 
 const OUTLINE_CHARACTER_DRIVEN_CONTEXT_SOURCE_KEYS = [
-  'projectStatus',
+  'workStatus',
   'canonAssertions',
   'worldview',
   'storyCore',
@@ -1158,26 +1162,6 @@ function productProductionInputPolicy(sourceKeys: readonly string[]): AgentSkill
 export const AGENT_SKILLS = [
   {
     version: 1,
-    id: 'world-origin.complete',
-    agentId: 'world-origin',
-    defaultForAgent: true,
-    label: '世界来源补全',
-    owner: 'world-foundation-agent',
-    promptVersion: 'world-origin-copilot-v1',
-    executionMode: 'complete',
-    contextTaskKind: 'agent-world-origin',
-    readToolNames: ['read_project_status', 'read_worldview'],
-    contextSourceKeys: [],
-    optionalContextSourceKeys: [],
-    inputPolicy: WORLD_FOUNDATION_INPUT_POLICY,
-    contextCompression: WORLD_COMPRESSION_POLICY,
-    maxOutputTokens: 3_000,
-    writeTargets: [{ table: 'worldviews', fields: ['worldOrigin'] }],
-    lastVerifiedAt: '2026-08-08',
-    regressionTests: ['R-AGENT1-chat-copilot-world-origin', 'R-HARNESS2-master-terminal-verifier', 'R-HARNESS16-semantic-context-compression', 'R-HARNESS18-execution-version-freshness'],
-  },
-  {
-    version: 1,
     id: 'world-origin.review',
     agentId: 'world-origin',
     defaultForAgent: false,
@@ -1187,7 +1171,7 @@ export const AGENT_SKILLS = [
     executionMode: 'review',
     contextTaskKind: 'agent-world-origin',
     readToolNames: [],
-    contextSourceKeys: ['projectStatus', 'worldview', 'storyCore', 'powerSystem', 'codex', 'characters', 'storyArcs'],
+    contextSourceKeys: ['workStatus', 'worldview', 'storyCore', 'powerSystem', 'codex', 'characters', 'storyArcs'],
     optionalContextSourceKeys: [],
     inputPolicy: WORLD_FOUNDATION_INPUT_POLICY,
     contextCompression: WORLD_COMPRESSION_POLICY,
@@ -1200,7 +1184,7 @@ export const AGENT_SKILLS = [
     version: 1,
     id: 'world-origin.worldview-field',
     agentId: 'world-origin',
-    defaultForAgent: false,
+    defaultForAgent: true,
     label: '世界基座单字段生成',
     owner: 'world-foundation-agent',
     promptVersion: 'worldview-field-copilot-v1',
@@ -3390,7 +3374,7 @@ export function validateAgentSkillDefinitionsV1(
   definitions: readonly AgentSkillDefinitionV1[],
 ): void {
   const executionModesByAgent: Record<DomainAgentId, ReadonlySet<AgentSkillExecutionModeV1>> = {
-    'world-origin': new Set(['complete', 'worldview-field', 'world-suggest', 'worldview-expand', 'world-link-context', 'constitution-extract', 'codex-extract', 'codex-enrich', 'story-core', 'creative-rules', 'locations', 'map-config', 'history-consult', 'history-storm', 'review']),
+    'world-origin': new Set(['worldview-field', 'world-suggest', 'worldview-expand', 'world-link-context', 'constitution-extract', 'codex-extract', 'codex-enrich', 'story-core', 'creative-rules', 'locations', 'map-config', 'history-consult', 'history-storm', 'review']),
     character: new Set(['create', 'supplement', 'lifecycle', 'relationships', 'character-reply', 'memory-curator']),
     inspiration: new Set(['reference-summary', 'reference-characters', 'reverse', 'review']),
     outline: new Set(['auto', 'story-arcs', 'foreshadow-suggestions', 'storyline-progress', 'character-driven', 'character-revision', 'impact-summary-regenerate', 'volumes', 'chapters', 'details', 'adaptation-brief', 'adaptation-impact', 'screenplay-plan', 'comic-plan', 'comic-storyboard', 'character-interaction-production', 'product-production']),
@@ -3487,7 +3471,7 @@ export function validateAgentSkillDefinitionsV1(
     }
     const gateway = skill.contextGateway
     if (gateway) {
-      if (gateway.version !== 1 || !['shadow', 'required'].includes(gateway.rollout)) {
+      if (gateway.version !== 1 || gateway.rollout !== 'required') {
         throw new Error(`Agent Skill ${skill.id} 的 Context Gateway 版本或 rollout 无效`)
       }
       if (!gateway.providerSourceKeys.length

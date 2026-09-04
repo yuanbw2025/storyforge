@@ -107,6 +107,11 @@ describe('R-HARNESS27 · fan-out 叶子证据型语义终验协议', () => {
         instruction: '执行 review。',
         dependsOn: [],
       }],
+      workflow: {
+        version: 1,
+        workflowId: 'single-domain',
+        reasonCodes: ['explicit-single-domain'],
+      },
     })).toThrow('不是主计划可直接执行的生成 Skill')
   })
 

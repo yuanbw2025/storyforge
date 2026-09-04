@@ -59,7 +59,7 @@ function linearTargetVariable(step: PromptWorkflowStep): string {
   return step.inputMapping?.previousOutput?.trim() || 'worldContext'
 }
 
-/** 为新建工作流或数据库升级生成一张显式线性图。 */
+/** 为新建工作流生成一张显式线性图。 */
 export function createLinearWorkflowGraph(steps: PromptWorkflowStep[]): PromptWorkflowGraph {
   return {
     version: WORKFLOW_GRAPH_VERSION,

@@ -11,7 +11,7 @@ import {
 } from '../../src/lib/generation/generation-node'
 import {
   createOutlineGenerationShadowTraceV1,
-  OUTLINE_GENERATION_SOURCE_KEYS,
+  resolveOutlineGenerationSourceKeysV2,
 } from '../../src/lib/outline/harness'
 import type { AssembleContextResult } from '../../src/lib/registry/types'
 
@@ -26,7 +26,8 @@ function outlineAssembly(): AssembleContextResult {
       trimmable: true,
     }],
     included: ['ragSelection'],
-    omitted: OUTLINE_GENERATION_SOURCE_KEYS.filter(key => key !== 'ragSelection'),
+    omitted: resolveOutlineGenerationSourceKeysV2({ request: { kind: 'volumes' } })
+      .filter(key => key !== 'ragSelection'),
     trimmed: [],
     totalInputTokens: 9,
     inputBudget: 8_000,

@@ -13,16 +13,17 @@ import { validateAuthoringGraph } from '../../src/lib/node-authoring/graph'
 import { emptyAuthoringGraph, type AuthoringNodeInstance } from '../../src/lib/node-authoring/contracts'
 import { validateAuthoringNodeCatalog } from '../../src/lib/node-authoring/validate-catalog'
 import type { AIConfig, NodeFlow, Project } from '../../src/lib/types'
+import { putCurrentWorkspaceFixtureV1 } from '../helpers/current-workspace'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
 
 const project: Project = {
   id: 83003,
+  workspaceUid: 'WS-00000000-0000-4000-8000-000000083003',
+  workspacePurpose: 'independent-work',
   name: 'FLOW-3D 连续性测试',
-  genre: 'fantasy',
-  genres: ['fantasy'],
-  status: 'drafting',
-  description: '',
-  targetWordCount: 100_000,
   enableMultiWorld: false,
+  activeWorldId: 83003,
+  activeWorkId: 83003,
   createdAt: 1,
   updatedAt: 1,
 }
@@ -56,7 +57,7 @@ describe('FLOW-3D · 连续性网络与写后整理', () => {
   beforeEach(async () => {
     await db.delete()
     await db.open()
-    await db.projects.put(project)
+    await putCurrentWorkspaceFixtureV1(project)
     const volumeId = await db.outlineNodes.add({
       projectId: project.id!, parentId: null, type: 'volume', title: '第一卷', summary: '潮门卷', order: 0,
       worldGroupId: null, createdAt: 1, updatedAt: 1,
@@ -71,7 +72,9 @@ describe('FLOW-3D · 连续性网络与写后整理', () => {
       createdAt: 1, updatedAt: 1,
     } as any)
     const characterId = await db.characters.add({
-      projectId: project.id!, name: '林风', shortDescription: '测潮者', homeWorldGroupId: null, createdAt: 1, updatedAt: 1,
+      projectId: project.id!, name: '林风', shortDescription: '测潮者',
+      roleWeight: 'main', moralAxis: 'neutral', orderAxis: 'neutral',
+      homeWorldGroupId: null, isCrossWorld: false, createdAt: 1, updatedAt: 1,
     } as any)
     await db.foreshadows.add({
       projectId: project.id!, name: '海床铜钟', type: 'environment', status: 'planned',
@@ -82,6 +85,7 @@ describe('FLOW-3D · 连续性网络与写后整理', () => {
       projectId: project.id!, fromCharacterId: characterId, toCharacterId: characterId + 1,
       relationType: 'friend', label: '同伴', description: '', isBidirectional: true, createdAt: 1, updatedAt: 1,
     } as any).catch(() => undefined)
+    await finalizeCurrentFixtureV1(project.id!)
     vi.mocked(chat).mockReset()
   })
 

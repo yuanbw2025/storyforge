@@ -12,11 +12,13 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { assembleContext } from '../../src/lib/registry/assemble-context'
 import { CONTEXT_SOURCE_BY_KEY } from '../../src/lib/registry/context-sources'
+import { seedCurrentProject } from '../helpers/current-workspace'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
 
 async function seed(): Promise<{ projectId: number; nodeId: number }> {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    name: 'FB9', genre: '', description: '', targetWordCount: 0,
+  const projectId = await seedCurrentProject({
+    name: 'FB9', genres: [], description: '', targetWordCount: 0,
     enableMultiWorld: false, createdAt: now, updatedAt: now,
   } as any) as number
   const nodeId = await db.outlineNodes.add({
@@ -34,6 +36,7 @@ async function seed(): Promise<{ projectId: number; nodeId: number }> {
     ],
     createdAt: now, updatedAt: now,
   } as any)
+  await finalizeCurrentFixtureV1(projectId)
   return { projectId, nodeId }
 }
 
@@ -64,14 +67,15 @@ describe('R-FB9 · 细纲进入生成上下文', () => {
 
   it('该章节没有细纲时,源安静省略(不报错、不注入空块)', async () => {
     const now = Date.now()
-    const projectId = await db.projects.add({
-      name: 'FB9b', genre: '', description: '', targetWordCount: 0,
+    const projectId = await seedCurrentProject({
+      name: 'FB9b', genres: [], description: '', targetWordCount: 0,
       enableMultiWorld: false, createdAt: now, updatedAt: now,
     } as any) as number
     const nodeId = await db.outlineNodes.add({
       projectId, parentId: null, type: 'chapter', title: '空章', summary: '', order: 0,
       createdAt: now, updatedAt: now,
     } as any) as number
+    await finalizeCurrentFixtureV1(projectId)
     const r = await assembleContext({ projectId, outlineNodeId: nodeId, sourceKeys: ['detailedOutline'] })
     expect(r.included).not.toContain('detailedOutline')
     expect(r.omitted).toContain('detailedOutline')

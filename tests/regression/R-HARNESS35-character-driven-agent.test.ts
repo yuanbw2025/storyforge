@@ -24,6 +24,9 @@ import { parseCharacterDrivenPlotVolumes } from '../../src/lib/types'
 import { useAIConfigStore } from '../../src/stores/ai-config'
 import type { WorkspaceScope } from '../../src/lib/types'
 import { hashCanonicalValue } from '../../src/lib/agent/run/hash'
+import { seedCurrentProject } from '../helpers/current-workspace'
+import { resolveWorkspaceScope } from '../../src/lib/workspace/ownership'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
 
 const generated = [{
   volumeTitle: '第一卷 归途',
@@ -39,9 +42,8 @@ const generated = [{
 
 async function seedWorkspace() {
   const now = Date.now()
-  const projectId = await db.projects.add({
+  const projectId = await seedCurrentProject({
     name: '归途项目',
-    genre: 'fantasy',
     genres: ['fantasy'],
     status: 'drafting',
     description: '',
@@ -52,30 +54,8 @@ async function seedWorkspace() {
     createdAt: now,
     updatedAt: now,
   } as any) as number
-  const worldId = await db.worlds.add({
-    projectId,
-    code: 'harness35-world',
-    name: '归途世界',
-    currentVersion: 1,
-    createdAt: now,
-    updatedAt: now,
-  } as any) as number
-  const workId = await db.works.add({
-    projectId,
-    worldId,
-    title: '归途作品',
-    genres: ['fantasy'],
-    status: 'drafting',
-    targetWordCount: 100_000,
-    createdAt: now,
-    updatedAt: now,
-  } as any) as number
+  const { worldId, workId } = await resolveWorkspaceScope(projectId)
   const scope: WorkspaceScope = { projectId, worldId, workId }
-  await db.projects.update(projectId, {
-    activeWorldId: worldId,
-    activeWorkId: workId,
-    ownershipSchemaVersion: 1,
-  })
   await db.storyCores.add({
     projectId,
     workId,
@@ -89,7 +69,6 @@ async function seedWorkspace() {
     projectId,
     worldId,
     name: '林舟',
-    role: 'protagonist',
     roleWeight: 'main',
     moralAxis: 'good',
     orderAxis: 'neutral',
@@ -141,7 +120,7 @@ async function seedWorkspace() {
     updatedAt: now,
   } as any) as number
   await db.works.update(workId, { activeCharacterDrivenPlanId: activeOtherPlanId })
-  await db.projects.update(projectId, { activeCharacterDrivenPlanId: activeOtherPlanId })
+  await finalizeCurrentFixtureV1(projectId)
   return { projectId, scope, selectedPlanId, activeOtherPlanId }
 }
 
@@ -224,6 +203,7 @@ describe('R-HARNESS35 · 角色驱动规划主入口契约', () => {
   it('durable 执行只读固定方案输入，确认前不写方案，确认后经 adopt 定点更新', async () => {
     const seeded = await seedWorkspace()
     const conversation = await getOrCreateAgentConversation({
+      purpose: 'test:r-harness35-character-driven-agent:1',
       projectId: seeded.projectId,
       worldGroupId: null,
       scope: seeded.scope,
@@ -257,6 +237,7 @@ describe('R-HARNESS35 · 角色驱动规划主入口契约', () => {
           dependsOn: [],
           characterDrivenPlanId: seeded.selectedPlanId,
         }],
+        workflow: { version: 1, workflowId: 'single-domain-direct', reasonCodes: ['single-explicit-domain'] },
       },
       budget: new AgentTeamBudgetTracker('balanced'),
     })

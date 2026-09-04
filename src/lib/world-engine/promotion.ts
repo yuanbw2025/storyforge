@@ -2,7 +2,7 @@ import { db } from '../db/schema'
 import { generateWorldCode } from '../workspace/identity'
 import { isPublicWorldCode } from './world-identity'
 import { effectiveWorkKind } from '../workspace/work-kind'
-import { ensureWorkspaceOwnership } from '../workspace/ownership'
+import { resolveWorkspaceOwnership } from '../workspace/ownership'
 
 async function allocatePublicWorldCode(projectId: number): Promise<string> {
   for (let attempt = 0; attempt < 8; attempt += 1) {
@@ -19,7 +19,7 @@ async function allocatePublicWorldCode(projectId: number): Promise<string> {
  * purpose and active roots without mirroring world code or version.
  */
 export async function promoteNovelWorkspaceToWorldEngine(projectId: number): Promise<void> {
-  const ownership = await ensureWorkspaceOwnership(projectId)
+  const ownership = await resolveWorkspaceOwnership(projectId)
   if (effectiveWorkKind(ownership.work) !== 'novel') {
     throw new Error('[world-promotion] 只有长篇或短篇小说可以派生为世界引擎')
   }

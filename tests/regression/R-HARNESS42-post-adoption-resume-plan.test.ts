@@ -12,17 +12,12 @@ import {
   buildChapterPostAdoptionResumePlanV1,
   isChapterPostAdoptionStepRunnableV1,
 } from '../../src/lib/agent/run/chapter-post-adoption-resume'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
 
 async function seed(): Promise<{ scope: WorkspaceScope; chapterId: number; worldGroupId: number }> {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    name: '后处理恢复计划', genre: 'fantasy', genres: ['fantasy'], status: 'drafting',
-    description: '', targetWordCount: 100_000,
-    createdAt: now, updatedAt: now,
-  } as any) as number
-  const worldId = await db.worlds.add({ projectId, code: 'resume-world', name: '主世界', description: '', currentVersion: 1, createdAt: now, updatedAt: now }) as number
-  const workId = await db.works.add({ projectId, worldId, title: '恢复计划', description: '', genres: ['fantasy'], status: 'drafting', targetWordCount: 100_000, createdAt: now, updatedAt: now } as any) as number
-  await db.projects.update(projectId, { activeWorldId: worldId, activeWorkId: workId, ownershipSchemaVersion: 1 })
+  const createdWorkspaceV1 = await seedCurrentWorkspace('后处理恢复计划')
+  const { projectId, worldId, workId } = createdWorkspaceV1.scope
   const worldGroupId = await db.worldGroups.add({ projectId, name: '主世界', order: 0, createdAt: now, updatedAt: now }) as number
   const volumeId = await db.outlineNodes.add({ projectId, workId, worldGroupId, parentId: null, type: 'volume', title: '第一卷', summary: '', order: 0, createdAt: now, updatedAt: now } as any) as number
   const outlineNodeId = await db.outlineNodes.add({ projectId, workId, worldGroupId, parentId: volumeId, type: 'chapter', title: '恢复', summary: '', order: 0, createdAt: now, updatedAt: now } as any) as number

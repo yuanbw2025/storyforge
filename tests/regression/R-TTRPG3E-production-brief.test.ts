@@ -276,15 +276,15 @@ describe("R-TTRPG-3E · nine-step production brief", () => {
         },
       },
     });
-    expect(brief.campaignDesign?.proposals).toHaveLength(3);
-    const design = brief.campaignDesign!;
+    expect(brief.campaignDesign.proposals).toHaveLength(3);
+    const design = brief.campaignDesign;
     design.selection.sectionSources.fronts = "proposal.faction-pressure";
     design.selection.sectionSources.secrets = "proposal.escalating-crisis";
     design.selection.sectionSources.endings = "proposal.faction-pressure";
     design.selection.lockedSections = ["background", "coreConflict", "opening", "fronts", "secrets", "endings"];
     design.selection.authorNotes = "保留证据网背景，混合阵营压力与升级危机。";
     design.selection.confirmed = true;
-    expect(parseTtrpgProductionBriefV2(brief).campaignDesign?.selection.sectionSources).toMatchObject({
+    expect(parseTtrpgProductionBriefV2(brief).campaignDesign.selection.sectionSources).toMatchObject({
       fronts: "proposal.faction-pressure",
       secrets: "proposal.escalating-crisis",
       endings: "proposal.faction-pressure",

@@ -12,7 +12,7 @@ import { db } from '../db/schema'
 import { adopt } from '../registry/adopt'
 import type { UnifiedParseResult } from '../types'
 import { CHARACTER_DIMENSIONS } from '../character/character-dimensions'
-import { upgradeImportedCharacterAxesV32 } from '../migrations/character-axes-upgrade'
+import { isCompleteCharacterAxes } from '../character/character-axes'
 import { readOwnedRows, resolveReadScopeLike } from '../workspace/scope'
 import {
   deduplicateWorldviewText,
@@ -125,14 +125,13 @@ export async function applyChunkResult(
 
     for (const c of result.characters) {
       if (!c || typeof c.name !== 'string' || !c.name.trim()) continue
-      // Import is the only current boundary allowed to translate pre-v33 role
-      // rows. Formal adopt() remains strict and accepts only the three-axis
-      // character contract.
-      const migratedCharacter = upgradeImportedCharacterAxesV32(c as unknown as Record<string, unknown>)
+      if (!isCompleteCharacterAxes(c)) {
+        throw new Error(`[import] 角色「${c.name.trim()}」缺少当前三轴分类`)
+      }
       const axes = {
-        roleWeight: migratedCharacter.roleWeight,
-        moralAxis: migratedCharacter.moralAxis,
-        orderAxis: migratedCharacter.orderAxis,
+        roleWeight: c.roleWeight,
+        moralAxis: c.moralAxis,
+        orderAxis: c.orderAxis,
       }
       const incomingFields = pickCharacterFields(c as Record<string, unknown>)
 

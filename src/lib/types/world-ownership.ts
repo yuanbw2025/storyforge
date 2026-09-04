@@ -1,10 +1,6 @@
-import type { CommunityWorldOrigin, ProjectStatus } from './project'
+import type { CommunityWorldOrigin, WorkStatus } from './project'
 
-/**
- * PROGRESS-1: author-owned policy for work that may follow prose adoption.
- * Missing fields are intentionally interpreted as `suggest`; this keeps every
- * pre-PROGRESS-1 Work safe without a destructive IndexedDB migration.
- */
+/** Author-owned policy for work that may follow prose adoption. */
 export type PostAdoptionPolicyV1 = 'off' | 'suggest' | 'auto-with-budget'
 
 export type PostAdoptionTaskTypeV1 =
@@ -36,7 +32,7 @@ export type WorldIdentityKind = 'workspace-scope' | 'world-draft'
 export interface World {
   id?: number
   projectId: number
-  identityKind?: WorldIdentityKind
+  identityKind: WorldIdentityKind
   code: string
   name: string
   description: string
@@ -52,26 +48,27 @@ export interface Work {
   projectId: number
   worldId: number
   /** MEMORY-1: immutable portable identity; titles and local numeric ids may change. */
-  code?: string
-  /** Missing on legacy rows, which always resolve to novel. */
-  kind?: WorkKind
-  /** Only meaningful for novel works. Missing legacy novel rows resolve to long. */
-  novelProfile?: NovelWorkflowProfile | null
+  code: string
+  kind: WorkKind
+  /** `null` is required for non-novel works. */
+  novelProfile: NovelWorkflowProfile | null
   title: string
   description: string
   genres: string[]
-  status: ProjectStatus
+  customGenre?: string
+  status: WorkStatus
   targetWordCount: number
-  currentWordCount?: number
+  currentWordCount: number
   coverImage?: string
   writingStyleId?: string
   methodologyId?: string
-  activeCharacterDrivenPlanId?: number | null
-  activeNarrativeModuleId?: number | null
-  /** PROGRESS-1: omitted on legacy rows and resolved to the safe `suggest` default. */
-  postAdoptionPolicy?: PostAdoptionPolicyV1
-  postAdoptionTaskTypes?: PostAdoptionTaskTypeV1[]
-  postAdoptionBudget?: PostAdoptionBudgetV1
+  /** 把作者确认的正文修炼进度注入后续 AI 写作；默认关闭。 */
+  includeCultivationProgressInAI: boolean
+  activeCharacterDrivenPlanId: number | null
+  activeNarrativeModuleId: number | null
+  postAdoptionPolicy: PostAdoptionPolicyV1
+  postAdoptionTaskTypes: PostAdoptionTaskTypeV1[]
+  postAdoptionBudget: PostAdoptionBudgetV1
   createdAt: number
   updatedAt: number
 }
@@ -92,25 +89,10 @@ export interface WorkCharacterBinding {
   updatedAt: number
 }
 
-export type OwnershipMigrationStatus = 'prepared' | 'ready' | 'failed' | 'rolled-back'
-
 export interface WorkspaceScope {
   projectId: number
   worldId: number
   workId: number
-}
-
-export interface OwnershipBeforeImageRow {
-  id: number
-  hadWorldId: boolean
-  hadWorkId: boolean
-  worldId?: number | null
-  workId?: number | null
-}
-
-export interface OwnershipBeforeImageValue {
-  present: boolean
-  value?: unknown
 }
 
 export interface OwnershipScopeChange {
@@ -121,29 +103,11 @@ export interface OwnershipScopeChange {
   changedAt: number
 }
 
-/**
- * Compact ownership provenance and scope-change audit. Migrated workspaces
- * retain their recovery before-image; natively created workspaces use an
- * empty before-image and are deliberately not rollbackable. Manuscript text
- * and other content payloads are never stored here.
- */
-export interface OwnershipMigrationReceipt {
+/** Immutable audit event for an explicit current-architecture scope change. */
+export interface OwnershipScopeChangeRecord extends OwnershipScopeChange {
   id?: number
   projectId: number
-  contractVersion: number
-  status: OwnershipMigrationStatus
-  sourceFingerprint: string
-  sourceCounts: Record<string, number>
-  readyFingerprint?: string
-  defaultWorldId?: number | null
-  defaultWorkId?: number | null
-  createdDefaultWorld?: boolean
-  createdDefaultWork?: boolean
-  projectBeforeImage: Record<string, OwnershipBeforeImageValue>
-  ownerBeforeImages: Record<string, OwnershipBeforeImageRow[]>
-  scopeChanges?: OwnershipScopeChange[]
-  errorCode?: string
-  preparedAt: number
-  completedAt?: number
-  updatedAt: number
+  worldId: number
+  workId: number
+  createdAt: number
 }

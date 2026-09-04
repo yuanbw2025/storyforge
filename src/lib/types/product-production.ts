@@ -319,8 +319,8 @@ export interface TtrpgProductionBriefV2 {
     targetSessions: number;
     targetSessionMinutes: number;
   };
-  /** Optional only for legacy Briefs; new production Briefs freeze proposal comparison/mixing. */
-  campaignDesign?: TtrpgCampaignDesignV2;
+  /** Author-confirmed proposal comparison/mixing frozen into every production Brief. */
+  campaignDesign: TtrpgCampaignDesignV2;
   rules: {
     origin:
       | "builtin-storyforge"
@@ -724,7 +724,7 @@ export interface ProductProductionBriefRecordV1 {
   estimateJson: string;
   briefJson: string;
   briefHash: string;
-  /** Frozen stage-two read authority. Empty legacy sentinels are rejected and
+  /** Frozen stage-two read authority. Empty sentinels are rejected and
    * require the author to save a fresh Brief before production can start. */
   sourcePlanJson: string;
   sourcePlanHash: string;

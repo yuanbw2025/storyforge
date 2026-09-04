@@ -111,9 +111,8 @@ export interface TemporalFact {
   sourceType: FactSourceType
   sourceChapterId?: number | null
   sourceRecordTable?: string
-  sourceRecordId?: number | null
   sourceQuote?: string
-  /** CONSISTENCY-3：可移植的设定来源 FK；旧多态 sourceRecordId 仅保留兼容。 */
+  /** 可移植、可校验的设定来源 FK。 */
   sourceWorldviewId?: number | null
   sourcePowerSystemId?: number | null
   sourceCultivationSystemId?: number | null

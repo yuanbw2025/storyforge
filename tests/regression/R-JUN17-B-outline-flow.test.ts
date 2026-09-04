@@ -8,6 +8,8 @@ import {
 import { assembleContext } from '../../src/lib/registry/assemble-context'
 import { CONTEXT_SOURCE_BY_KEY } from '../../src/lib/registry/context-sources'
 import { adopt } from '../../src/lib/registry/adopt'
+import { seedCurrentProject } from '../helpers/current-workspace'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
 
 describe('R-JUN17-B · 大纲生成流程', () => {
   beforeEach(async () => { await db.delete(); await db.open() })
@@ -75,14 +77,15 @@ describe('R-JUN17-B · 大纲生成流程', () => {
   it('B-2: existingVolumeOutlines 经 CONTEXT_SOURCES/assembleContext 读取', async () => {
     expect(CONTEXT_SOURCE_BY_KEY.has('existingVolumeOutlines')).toBe(true)
     const now = Date.now()
-    const projectId = await db.projects.add({
-      name: '上下文测试', genre: '', description: '', targetWordCount: 500_000,
+    const projectId = await seedCurrentProject({
+      name: '上下文测试', genres: [], description: '', targetWordCount: 500_000,
       enableMultiWorld: false, createdAt: now, updatedAt: now,
     } as any) as number
     await db.outlineNodes.bulkAdd([
       { projectId, parentId: null, type: 'volume', title: '第一卷', summary: '主角出山', order: 0, createdAt: now, updatedAt: now },
       { projectId, parentId: null, type: 'volume', title: '第二卷', summary: '宗门大战', order: 1, createdAt: now, updatedAt: now },
     ] as any)
+    await finalizeCurrentFixtureV1(projectId)
     const result = await assembleContext({ projectId, sourceKeys: ['existingVolumeOutlines'] })
     expect(result.included).toContain('existingVolumeOutlines')
     expect(result.text).toContain('第一卷')
@@ -93,14 +96,15 @@ describe('R-JUN17-B · 大纲生成流程', () => {
   it('ENH-OUTLINE-1: 卷纲上下文通过正式 foreshadows 源读取既有伏笔', async () => {
     expect(CONTEXT_SOURCE_BY_KEY.has('foreshadows')).toBe(true)
     const now = Date.now()
-    const projectId = await db.projects.add({
-      name: '伏笔骨架测试', genre: '', description: '', targetWordCount: 500_000,
+    const projectId = await seedCurrentProject({
+      name: '伏笔骨架测试', genres: [], description: '', targetWordCount: 500_000,
       enableMultiWorld: false, createdAt: now, updatedAt: now,
     } as any) as number
     await db.foreshadows.add({
       projectId, name: '断裂玉佩', type: 'chekhov', status: 'planted',
       description: '指向主角身世', createdAt: now, updatedAt: now,
     } as any)
+    await finalizeCurrentFixtureV1(projectId)
 
     const result = await assembleContext({ projectId, sourceKeys: ['foreshadows'] })
     expect(result.included).toContain('foreshadows')
@@ -111,8 +115,8 @@ describe('R-JUN17-B · 大纲生成流程', () => {
   it('QUICKWIN-4: 章纲/卷纲上下文经 CONTEXT_SOURCES 读取目标卷已写正文进度', async () => {
     expect(CONTEXT_SOURCE_BY_KEY.has('writtenChapterProgress')).toBe(true)
     const now = Date.now()
-    const projectId = await db.projects.add({
-      name: '已写进度测试', genre: '', description: '', targetWordCount: 500_000,
+    const projectId = await seedCurrentProject({
+      name: '已写进度测试', genres: [], description: '', targetWordCount: 500_000,
       enableMultiWorld: false, createdAt: now, updatedAt: now,
     } as any) as number
     const firstVolumeId = await db.outlineNodes.add({
@@ -151,6 +155,7 @@ describe('R-JUN17-B · 大纲生成流程', () => {
         wordCount: 24, status: 'draft', order: 1, notes: '', createdAt: now, updatedAt: now,
       },
     ] as any)
+    await finalizeCurrentFixtureV1(projectId)
 
     const result = await assembleContext({
       projectId,
@@ -183,14 +188,15 @@ describe('R-JUN17-B · 大纲生成流程', () => {
 
   it('B-3/B-4: adopt(recordId) 只更新当前项目中的目标大纲节点', async () => {
     const now = Date.now()
-    const projectId = await db.projects.add({
-      name: '定点采纳', genre: '', description: '', targetWordCount: 0,
+    const projectId = await seedCurrentProject({
+      name: '定点采纳', genres: [], description: '', targetWordCount: 0,
       enableMultiWorld: false, createdAt: now, updatedAt: now,
     } as any) as number
     const nodeId = await db.outlineNodes.add({
       projectId, parentId: null, type: 'volume', title: '第三卷', summary: '', order: 2,
       createdAt: now, updatedAt: now,
     } as any) as number
+    await finalizeCurrentFixtureV1(projectId)
     const result = await adopt({
       projectId,
       target: 'outlineNodes',
@@ -201,8 +207,8 @@ describe('R-JUN17-B · 大纲生成流程', () => {
     expect(result.written).toHaveLength(1)
     expect((await db.outlineNodes.get(nodeId))?.summary).toBe('AI 补全后的卷纲')
 
-    const otherProjectId = await db.projects.add({
-      name: '其它定点采纳项目', genre: '', description: '', targetWordCount: 0,
+    const otherProjectId = await seedCurrentProject({
+      name: '其它定点采纳项目', genres: [], description: '', targetWordCount: 0,
       enableMultiWorld: false, createdAt: now, updatedAt: now,
     } as any) as number
     const rejected = await adopt({

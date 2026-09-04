@@ -243,7 +243,7 @@ function presentedValue(tableName: string, fieldKey: string, exact: string): str
 
 function labelForField(field: FieldSpec | undefined, fieldKey: string): string {
   return field?.label
-    ?? field?.aliases?.find(alias => /[\u3400-\u9fff]/.test(alias))
+    ?? field?.labels?.find(label => /[\u3400-\u9fff]/.test(label))
     ?? fieldKey
 }
 
@@ -279,7 +279,7 @@ async function fieldsForRow(spec: ResourceSpec, row: ResourceRow): Promise<Field
     })
   }
 
-  // 兼容旧 RAG 选择键，但字段定义仍实时派生自 Codex 分类 schema，而非维护第二份字段清单。
+  // Codex 自定义字段使用稳定 custom.* 命名空间；定义实时派生自分类 schema，不维护第二份字段清单。
   if (spec.name === 'codexEntries' && typeof row.categoryId === 'number') {
     const category = await db.codexCategories.get(row.categoryId)
     if (category?.projectId === row.projectId) {
@@ -300,7 +300,7 @@ async function fieldsForRow(spec: ResourceSpec, row: ResourceRow): Promise<Field
     }
   }
 
-  // 旧资料库把物品流水显示为一个可选择事件；保留同一逻辑键，证据则拆回实际源字段。
+  // 物品流水提供一个当前的聚合事件资源，证据仍精确指向组成它的实际源字段。
   if (spec.name === 'itemLedger') {
     const holder = typeof row.heldByName === 'string' && row.heldByName.trim() ? row.heldByName.trim() : '未知持有人'
     const itemName = exactValue(row.itemName).trim()
@@ -400,8 +400,7 @@ async function worldGroupForRow(
 ): Promise<number | null | undefined> {
   if (spec.name === 'worldGroups') return row.id ?? undefined
   if (spec.name === 'worldGroupLinks') return fallback
-  // Codex 分类 schema 属于整个 World，而不是某个 worldGroup。旧备份仍可能
-  // 带有 worldGroupId=null；不能据此把分类从多世界 Gateway 目录中隐藏。
+  // Codex 分类 schema 属于整个 World，而不是某个 worldGroup。
   if (spec.name === 'codexCategories') return undefined
   if (typeof row.worldGroupId === 'number' || row.worldGroupId === null) return row.worldGroupId as number | null
   if (spec.homeWorldScoped) return (row.homeWorldGroupId as number | null | undefined) ?? null
@@ -1295,7 +1294,7 @@ async function readResource(input: ResourceReadInputV1): Promise<ContextResource
 }
 
 /**
- * 旧资料库 UI 已持有当前页 descriptor 时的定点读取桥。
+ * 当前资料目录 UI 已持有 descriptor 时的定点读取入口。
  * 它按 source ref 直接定位一行并重新校验当前 hash，避免为每个字段扫描整个目录。
  */
 export async function readCanonicalDescriptorV1(input: {

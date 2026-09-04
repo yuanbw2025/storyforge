@@ -51,7 +51,7 @@ export function buildImportParsePrompt(
 /**
  * 从 AI 输出中抽取 JSON（去掉 ```json 包裹）。
  *
- * 兼容流式输出被截断的情况：
+ * 对模型流式输出的常见截断进行有界容错：
  * 1) 优先匹配完整的 ```json ... ``` 代码块；
  * 2) 匹配不到就退化为"找到第一个 ```json 之后的所有内容"（fence 未闭合 = 被截断）；
  * 3) 再退化为从第一个 `{` / `[` 开始截；
@@ -88,10 +88,10 @@ function tryParseWithRepair(jsonStr: string, mightBeTruncated = false): unknown 
     return JSON.parse(jsonStr)
   } catch (err) {
     // 模型偶发输出合法 JavaScript 对象字面量而非严格 JSON（最常见是单引号或尾逗号）。
-    // JSON5 只负责语法兼容；上层仍会按闭集字段和枚举重新整形，不能借此写入任意字段。
+    // JSON5 只负责语法容错；上层仍会按闭集字段和枚举重新整形，不能借此写入任意字段。
     try {
       const parsed = JSON5.parse(jsonStr)
-      console.warn('[import] AI 输出不是严格 JSON，已按 JSON5 兼容解析')
+      console.warn('[import] AI 输出不是严格 JSON，已按 JSON5 容错解析')
       return parsed
     } catch { /* 继续走既有截断修复 */ }
 
@@ -169,8 +169,3 @@ function closeBrackets(s: string): string {
   }
   return out
 }
-
-
-// 统一解析结果的 TS 结构移到 ../../types/import-session-data.ts 作为共享类型，
-// 避免分块流水线跟本 adapter 循环依赖。这里 re-export 以保持旧 import 路径兼容。
-export type { UnifiedParseResult } from '../../types/import-session-data'

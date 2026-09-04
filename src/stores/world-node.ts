@@ -109,9 +109,9 @@ export const useWorldNodeStore = create<WorldNodeStore>((set, get) => ({
   },
 
   updateNode: async (id, patch) => {
-    const beforeMigration = await db.worldNodes.get(id)
-    if (!beforeMigration) return
-    const scope = await resolveScopeLike(beforeMigration.projectId)
+    const existingNode = await db.worldNodes.get(id)
+    if (!existingNode) return
+    const scope = await resolveScopeLike(existingNode.projectId)
     const current = await db.worldNodes.get(id)
     if (!current || !await assertRecordInScope(scope, 'worldNodes', current, { owner: 'world' })) return
     if (patch.parentId != null) {
@@ -123,9 +123,9 @@ export const useWorldNodeStore = create<WorldNodeStore>((set, get) => ({
   },
 
   deleteNode: async (id) => {
-    const beforeMigration = await db.worldNodes.get(id)
-    if (!beforeMigration) return
-    const scope = await resolveScopeLike(beforeMigration.projectId)
+    const existingNode = await db.worldNodes.get(id)
+    if (!existingNode) return
+    const scope = await resolveScopeLike(existingNode.projectId)
     const node = await db.worldNodes.get(id)
     if (!node || !await assertRecordInScope(scope, 'worldNodes', node, { owner: 'world' })) return
 
@@ -165,9 +165,9 @@ export const useWorldNodeStore = create<WorldNodeStore>((set, get) => ({
   },
 
   addPortal: async (worldId, portal) => {
-    const beforeMigration = await db.worldNodes.get(worldId)
-    if (!beforeMigration) return
-    const scope = await resolveScopeLike(beforeMigration.projectId)
+    const existingRecord = await db.worldNodes.get(worldId)
+    if (!existingRecord) return
+    const scope = await resolveScopeLike(existingRecord.projectId)
     const [node, target] = await Promise.all([
       db.worldNodes.get(worldId),
       db.worldNodes.get(portal.targetWorldId),
@@ -185,9 +185,9 @@ export const useWorldNodeStore = create<WorldNodeStore>((set, get) => ({
   },
 
   removePortal: async (worldId, targetWorldId) => {
-    const beforeMigration = await db.worldNodes.get(worldId)
-    if (!beforeMigration) return
-    const scope = await resolveScopeLike(beforeMigration.projectId)
+    const existingRecord = await db.worldNodes.get(worldId)
+    if (!existingRecord) return
+    const scope = await resolveScopeLike(existingRecord.projectId)
     const node = await db.worldNodes.get(worldId)
     if (!node || !await assertRecordInScope(scope, 'worldNodes', node, { owner: 'world' })) return
     const portals = parseWorldPortals(node.portalsJSON)

@@ -500,9 +500,7 @@ async function businessAlreadyMatches(
       return parsed.field === candidate.payload.creativeRulesField
         && creativeRulesCandidateMatchesRowV1(parsed, row)
     }
-    const rows = await readOwnedRows<any>(input.scope, 'worldviews', { owner: 'world' })
-    const row = rows.find(item => (item.worldGroupId ?? null) === (input.worldGroupId ?? null))
-    return (row?.worldOrigin ?? '') === candidate.draft.trim()
+    throw new Error(`世界领域候选使用了未登记的当前 Skill：${candidate.payload.skillId}`)
   }
   if (agentId === 'character') {
     if (candidate.payload.skillId === 'character.lifecycle') {

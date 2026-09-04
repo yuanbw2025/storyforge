@@ -4,7 +4,6 @@ import { assertProductReleaseUnchanged } from "./releases";
 import { cascadeRegisteredReferences } from "../workspace/lifecycle";
 import { db } from "../db/schema";
 import { evaluateNarrativeChoices, applyNarrativeChoiceEffects } from "./narrative-content";
-import { isFormalProductSessionKindV1 } from "./runtime-boundary";
 import { normalizeProductRuntimeCommandIdV1 } from "./runtime-command-id";
 import { assertProductRuntimeIntegerV1, isProductRuntimeJsonObjectV1, stableProductRuntimeJsonV1, type ProductRuntimeJsonObjectV1 } from "./runtime-values";
 import { parseNarrativeCondition, parseNarrativeEffects, evaluateNarrativeCondition, applyNarrativeEffects } from "../narrative/blueprint";
@@ -953,14 +952,10 @@ function defaultSeed(): string {
 
 async function prepareProductRuntimeSessionRecord(
   input: CreateProductRuntimeSessionInput,
-  binding?: Pick<
-    ProductRuntimeSession,
-    | "worldId"
-    | "workId"
-    | "productReleaseId"
-    | "productBuildId"
-    | "runtimeSourceHash"
-  >,
+  binding: Pick<ProductRuntimeSession, "worldId" | "workId" | "runtimeSourceHash"> & (
+    | { productReleaseId: number; productBuildId: null }
+    | { productReleaseId: null; productBuildId: number }
+  ),
 ): Promise<ProductRuntimeSession> {
   await assertSessionWorkspace(input);
   if (!PRODUCT_RUNTIME_KINDS.includes(input.kind))
@@ -1797,58 +1792,36 @@ async function branchProductRuntimeSessionInternal(
     canonSnapshot: parseJsonObject(parent.canonSnapshotJson, "Canon 冻结快照"),
     initialState: state,
   };
-  const parentBuild =
-    parent.productBuildId == null
-      ? null
-      : await db.productBuilds.get(parent.productBuildId);
-  const child =
-    isFormalProductSessionKindV1(parent.kind) &&
-    parent.productReleaseId != null &&
-    parent.worldId != null &&
-    parent.workId != null
-      ? await createReleasedProductRuntimeSession({
-          ...childInput,
-          worldId: parent.worldId,
-          workId: parent.workId,
-          productReleaseId: parent.productReleaseId,
-          origin: "branch",
-        })
-      : isFormalProductSessionKindV1(parent.kind) &&
-          parent.productBuildId != null &&
-          parentBuild &&
-          parent.runtimeSourceHash &&
-          parent.worldId != null &&
-          parent.workId != null
-        ? await createPreviewProductRuntimeSession({
-            ...childInput,
-            worldId: parent.worldId,
-            workId: parent.workId,
-            productBuildId: parent.productBuildId,
-            expectedPreviewHash: parentBuild.previewHash,
-            runtimeSourceHash: parent.runtimeSourceHash,
-            origin: "branch",
-          })
-        : (() => {
-            throw new Error("运行分支必须继承不可变 ProductRelease 或受治理的 Build Preview。");
-          })();
+  let child: ProductRuntimeSession;
+  if (parent.productReleaseId != null) {
+    child = await createReleasedProductRuntimeSession({
+      ...childInput,
+      worldId: parent.worldId,
+      workId: parent.workId,
+      productReleaseId: parent.productReleaseId,
+      origin: "branch",
+    });
+  } else {
+    const parentBuild = await db.productBuilds.get(parent.productBuildId);
+    if (!parentBuild) throw new Error("运行分支绑定的 Build Preview 不存在。");
+    child = await createPreviewProductRuntimeSession({
+      ...childInput,
+      worldId: parent.worldId,
+      workId: parent.workId,
+      productBuildId: parent.productBuildId,
+      expectedPreviewHash: parentBuild.previewHash,
+      runtimeSourceHash: parent.runtimeSourceHash,
+      origin: "branch",
+    });
+  }
   await db.productRuntimeSessions.update(child.id!, {
     parentSessionId: parent.id!,
     parentThroughSequence: input.throughSequence,
-    worldId: parent.worldId ?? null,
-    workId: parent.workId ?? null,
-    productReleaseId: parent.productReleaseId ?? null,
-    productBuildId: parent.productBuildId ?? null,
-    runtimeSourceHash: parent.runtimeSourceHash ?? null,
   });
   const boundChild = {
     ...child,
     parentSessionId: parent.id!,
     parentThroughSequence: input.throughSequence,
-    worldId: parent.worldId ?? null,
-    workId: parent.workId ?? null,
-    productReleaseId: parent.productReleaseId ?? null,
-    productBuildId: parent.productBuildId ?? null,
-    runtimeSourceHash: parent.runtimeSourceHash ?? null,
   };
   try {
     await cloneProductRuntimeBranchExtensionsV1({

@@ -22,6 +22,7 @@ import {
 } from './releases'
 import { resolveScope, scopeTransactionTables } from '../workspace/scope'
 import { effectiveNovelProfile, effectiveWorkKind } from '../workspace/work-kind'
+import { materializeWorldReleaseBackupV1 } from './semantic-snapshot'
 
 export type WorldDerivationRangeV1 =
   | { kind: 'all-confirmed-canon' }
@@ -89,7 +90,12 @@ export async function deriveNovelToWorld(
 
   let targetProjectId: number | null = null
   try {
-    targetProjectId = await importProjectJSON(snapshot.portableProject as any)
+    // Import first as an independent workspace because the frozen source still
+    // carries an internal workspace-scope World. The explicit promotion below
+    // atomically creates the public world-draft identity.
+    targetProjectId = await importProjectJSON(materializeWorldReleaseBackupV1(snapshot, {
+      workspacePurpose: 'independent-work',
+    }))
     await promoteNovelWorkspaceToWorldEngine(targetProjectId)
     const targetScope = await resolveScope({ projectId: targetProjectId })
     const targetName = input.targetName?.trim() || `${sourceWork.title} · 世界`
@@ -98,7 +104,7 @@ export async function deriveNovelToWorld(
     const renamedAt = Date.now()
     await db.transaction('rw', scopeTransactionTables(db.worldDerivations), async () => {
       await Promise.all([
-        db.projects.update(targetProjectId!, { name: targetName, description: targetDescription, updatedAt: renamedAt }),
+        db.projects.update(targetProjectId!, { name: targetName, updatedAt: renamedAt }),
         db.worlds.update(targetScope.worldId, { name: targetName, description: targetDescription, updatedAt: renamedAt }),
         db.works.update(targetScope.workId, { title: targetName, description: targetDescription, updatedAt: renamedAt }),
       ])

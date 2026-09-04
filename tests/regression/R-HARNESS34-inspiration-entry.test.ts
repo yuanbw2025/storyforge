@@ -12,6 +12,7 @@ import { AgentTeamBudgetTracker } from '../../src/lib/agent/team-budget'
 import { db } from '../../src/lib/db/schema'
 import { useAIConfigStore } from '../../src/stores/ai-config'
 import type { WorkspaceScope } from '../../src/lib/types'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
 
 describe('R-HARNESS34 · 灵感反推主入口契约', () => {
   const originalConfig = useAIConfigStore.getState().config
@@ -80,40 +81,9 @@ describe('R-HARNESS34 · 灵感反推主入口契约', () => {
 
   it('定向 durable 执行只读取冻结的碎片，确认前不写入灵感版本', async () => {
     const now = Date.now()
-    const projectId = await db.projects.add({
-      name: '灵感入口项目',
-      genre: 'fantasy',
-      genres: ['fantasy'],
-      status: 'drafting',
-      description: '',
-      targetWordCount: 100_000,
-      createdAt: now,
-      updatedAt: now,
-    } as any) as number
-    const worldId = await db.worlds.add({
-      projectId,
-      code: 'harness34-world',
-      name: '灵感世界',
-      currentVersion: 1,
-      createdAt: now,
-      updatedAt: now,
-    } as any) as number
-    const workId = await db.works.add({
-      projectId,
-      worldId,
-      title: '灵感作品',
-      genres: ['fantasy'],
-      status: 'drafting',
-      targetWordCount: 100_000,
-      createdAt: now,
-      updatedAt: now,
-    } as any) as number
-    const scope: WorkspaceScope = { projectId, worldId, workId }
-    await db.projects.update(projectId, {
-      activeWorldId: worldId,
-      activeWorkId: workId,
-      ownershipSchemaVersion: 1,
-    })
+    const createdWorkspaceV1 = await seedCurrentWorkspace('灵感入口项目')
+    const scope: WorkspaceScope = createdWorkspaceV1.scope
+    const { projectId, worldId, workId } = scope
     const worldGroupId = await db.worldGroups.add({
       projectId,
       worldId,
@@ -147,6 +117,7 @@ describe('R-HARNESS34 · 灵感反推主入口契约', () => {
       updatedAt: now,
     } as any)
     const conversation = await getOrCreateAgentConversation({
+      purpose: 'test:r-harness34-inspiration-entry:1',
       projectId,
       worldGroupId,
       scope,
@@ -201,6 +172,7 @@ describe('R-HARNESS34 · 灵感反推主入口契约', () => {
           dependsOn: [],
           inspirationFragmentIds: ['selected'],
         }],
+        workflow: { version: 1, workflowId: 'single-domain-direct', reasonCodes: ['single-explicit-domain'] },
       },
       budget: new AgentTeamBudgetTracker('balanced'),
     })

@@ -14,22 +14,13 @@ import {
   readRecoverableLocationExtractionV1,
   resumeLocationExtractionCandidateV1,
 } from '../../src/lib/agent/run/location-extraction-durable'
+import { currentWorkFixtureRecordV1, seedCurrentWorkspace } from '../helpers/current-workspace'
+import { stampCurrentFixtureResourceUidsV1 } from '../helpers/current-resource-identity'
 
 async function seed(options: { long?: boolean } = {}) {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    name: '地点提取', genre: 'fantasy', genres: ['fantasy'], status: 'drafting', description: '',
-    targetWordCount: 80_000,createdAt: now, updatedAt: now,
-  } as any) as number
-  const worldId = await db.worlds.add({
-    projectId, code: `locations-${now}`, name: '潮门世界', description: '', currentVersion: 1,
-    createdAt: now, updatedAt: now,
-  }) as number
-  const workId = await db.works.add({
-    projectId, worldId, title: '潮门纪', description: '', genres: ['fantasy'], status: 'drafting',
-    targetWordCount: 80_000, createdAt: now, updatedAt: now,
-  } as any) as number
-  await db.projects.update(projectId, { activeWorldId: worldId, activeWorkId: workId, ownershipSchemaVersion: 1 })
+  const created = await seedCurrentWorkspace('地点提取')
+  const { projectId, worldId, workId } = created.scope
   const worldGroupId = await db.worldGroups.add({
     projectId, worldId, name: '主世界', order: 0, createdAt: now, updatedAt: now,
   }) as number
@@ -48,6 +39,7 @@ async function seed(options: { long?: boolean } = {}) {
     projectId, worldId, name: '旧港', tags: JSON.stringify(['港口']), description: '潮门外的老港区。',
     significance: '阿澜的出发地。', parentId: null, sortOrder: 0, createdAt: now, updatedAt: now,
   } as any) as number
+  await stampCurrentFixtureResourceUidsV1(projectId)
   return {
     scope: { projectId, worldId, workId } satisfies WorkspaceScope,
     projectId, worldId, workId, worldGroupId, outlineNodeId, chapterId, originalLocationId,
@@ -314,10 +306,10 @@ describe.sequential('R-HARNESS62 · 重要地点 durable 分块提取与采纳',
   it('只读取当前 Work 正文和当前 World 地点，不泄漏同项目其他作品与世界', async () => {
     const fixture = await seed()
     const now = Date.now()
-    const foreignWorkId = await db.works.add({
+    const foreignWorkId = await db.works.add(currentWorkFixtureRecordV1({
       projectId: fixture.projectId, worldId: fixture.worldId, title: '同世界其他作品', description: '',
       genres: ['fantasy'], status: 'drafting', targetWordCount: 1_000, createdAt: now, updatedAt: now,
-    } as any) as number
+    })) as number
     await db.chapters.add({
       projectId: fixture.projectId, workId: foreignWorkId, outlineNodeId: null, title: '外部章节',
       content: '<p>秘密外城只存在于另一部作品，绝不应被读取。</p>', wordCount: 40,

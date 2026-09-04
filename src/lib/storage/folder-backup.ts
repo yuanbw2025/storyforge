@@ -9,6 +9,7 @@
  * 句柄持久化在 folder-handle-store.ts（独立 IndexedDB），与本模块配合。
  */
 import { exportProjectJSON, type ProjectExportData } from '../export/json-export'
+import { inspectProjectBackup } from '../export/backup-trust'
 import { db } from '../db/schema'
 
 interface WindowWithFSA extends Window {
@@ -132,7 +133,13 @@ export async function readStoryforgeBackups(
       try {
         const file = await entry.getFile()
         const text = await file.text()
-        out.push({ name, data: JSON.parse(text) as ProjectExportData })
+        const parsed = JSON.parse(text) as ProjectExportData
+        const report = inspectProjectBackup(parsed)
+        if (!report.valid) {
+          console.warn('[folder] 跳过非当前格式的备份文件:', name, report.errors.join('；'))
+          continue
+        }
+        out.push({ name, data: parsed })
       } catch (e) {
         console.warn('[folder] 跳过无法解析的备份文件:', name, e)
       }

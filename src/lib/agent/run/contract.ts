@@ -336,7 +336,10 @@ function readParentLineage(value: unknown, path: string): AgentRunParentLineageV
   }
 }
 
-export function parseAgentRunContractV1(value: unknown): AgentRunContractV1 {
+function parseAgentRunContractV1Base(
+  value: unknown,
+  bindingCarriedBySkillSnapshot: boolean,
+): AgentRunContractV1 {
   const record = readRecord(value, 'contract')
   assertExactKeys(
     record,
@@ -447,6 +450,13 @@ export function parseAgentRunContractV1(value: unknown): AgentRunContractV1 {
     failSchema('invalid_execution_binding', 'contract.executionBindings', '存在字段时不得为空')
   }
   if (executionBindings) assertUnique(executionBindings.map(item => item.stepId), 'contract.executionBindings')
+  if (!bindingCarriedBySkillSnapshot && record.runtimeBindingHash === undefined && executionBindings === undefined) {
+    failSchema(
+      'missing_execution_binding',
+      'contract',
+      '当前 RunContract 必须冻结 runtimeBindingHash 或 executionBindings',
+    )
+  }
 
   let dependencyReceiptPolicy: AgentRunContractV1['dependencyReceiptPolicy']
   if (record.dependencyReceiptPolicy !== undefined) {
@@ -703,6 +713,10 @@ export function parseAgentRunContractV1(value: unknown): AgentRunContractV1 {
   }
 }
 
+export function parseAgentRunContractV1(value: unknown): AgentRunContractV1 {
+  return parseAgentRunContractV1Base(value, false)
+}
+
 export async function acceptAgentRunContractV1(value: unknown): Promise<AcceptedAgentRunContractV1> {
   const contract = parseAgentRunContractV1(value)
   return { contract, contractHash: await hashCanonicalValue(contract) }
@@ -775,7 +789,7 @@ function parseSkillBoundContract(
   const baseShape = { ...record, version: 1 } as Record<string, unknown>
   delete baseShape.executionBindings
   if (expectedVersion === 3) delete baseShape.executionBoundary
-  const base = parseAgentRunContractV1(baseShape)
+  const base = parseAgentRunContractV1Base(baseShape, true)
   const permissionSources = [...new Set(base.permissions.contextSourceKeys)].sort()
   const bindingSources = [...new Set(executionBindings.flatMap(binding => binding.contextSourceKeys))].sort()
   if (JSON.stringify(permissionSources) !== JSON.stringify(bindingSources)) {

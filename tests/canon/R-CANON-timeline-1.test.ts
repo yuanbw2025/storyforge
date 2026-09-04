@@ -22,7 +22,7 @@ function timelineFixture() {
     notes: '', createdAt: 1, updatedAt: 1,
   }))
   const characters: Character[] = [{
-    id: 7, projectId: 1, name: '林飞', role: 'protagonist',
+    id: 7, projectId: 1, name: '林飞',
     roleWeight: 'main', moralAxis: 'good', orderAxis: 'lawful',
     shortDescription: '', appearance: '', personality: '', background: '',
     motivation: '', abilities: '', relationships: '', arc: '',

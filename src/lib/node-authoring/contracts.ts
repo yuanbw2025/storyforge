@@ -239,7 +239,7 @@ export interface AuthoringCandidate {
   output: string
   /** Multiple generations remain grouped under one node so the run record is still portable. */
   variants?: string[]
-  /** CREL evidence is aligned with variants by index; legacy candidates omit it. */
+  /** CREL evidence is aligned with variants by index when this node uses the creative-reliability pipeline. */
   creativeArtifacts?: CreativeArtifactV1[]
   /** Stable selection for edited variants whose text no longer exactly matches the original output. */
   selectedVariantIndex?: number
@@ -310,6 +310,9 @@ export type AuthoringCandidateDomain =
         chapterContentHash: string
         chapterHadContent: boolean
         chapterOrder: number
+        perspectiveCharacterId: number | null
+        informationBoundaryHash: string
+        perspectiveFromChapter: boolean
       }
     }
   | {

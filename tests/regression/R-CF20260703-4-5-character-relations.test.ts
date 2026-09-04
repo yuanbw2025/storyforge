@@ -6,6 +6,8 @@ import {
   syncRelationToCharacterFields,
 } from '../../src/lib/relations/relationship-summary'
 import type { Character, CharacterRelation } from '../../src/lib/types'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
+import { seedCurrentProject } from '../helpers/current-workspace'
 
 const panelSource = readFileSync('src/components/relations/CharacterRelationPanel.tsx', 'utf8')
 const graphSource = readFileSync('src/components/relations/RelationGraph.tsx', 'utf8')
@@ -14,9 +16,9 @@ const durableSource = readFileSync('src/lib/agent/run/character-relationship-dur
 const now = 1_780_000_000_000
 
 async function createProject(name = '关系测试项目'): Promise<number> {
-  return await db.projects.add({
+  return await seedCurrentProject({
     name,
-    genre: '',
+    genres: [],
     description: '',
     targetWordCount: 0,
     createdAt: now,
@@ -28,7 +30,6 @@ async function createCharacter(projectId: number, name: string, relationships = 
   const id = await db.characters.add({
     projectId,
     name,
-    role: 'supporting',
     roleWeight: 'secondary',
     moralAxis: 'neutral',
     orderAxis: 'neutral',
@@ -40,6 +41,8 @@ async function createCharacter(projectId: number, name: string, relationships = 
     abilities: '',
     relationships,
     arc: '',
+    homeWorldGroupId: null,
+    isCrossWorld: false,
     createdAt: now,
     updatedAt: now,
   } as Character) as number
@@ -155,6 +158,7 @@ describe('CF-20260703-4/5 · 角色关系保存反馈与角色词条同步', () 
     const b = await createCharacter(projectId, '乙')
     const c = await createCharacter(projectId, '丙')
     const staleCharacters = [a, b, c]
+    await finalizeCurrentFixtureV1(projectId)
 
     await syncRelationToCharacterFields({
       projectId,

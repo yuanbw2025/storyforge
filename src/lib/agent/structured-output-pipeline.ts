@@ -25,7 +25,6 @@ export const STRUCTURED_OUTPUT_NORMALIZATION_STEPS_V1 = [
   'insert-missing-array-commas',
   'merge-single-allowed-object-tail',
   'unescape-allowed-root-field',
-  'apply-registered-field-alias',
 ] as const
 
 export type StructuredOutputNormalizationStepV1 =
@@ -51,25 +50,18 @@ export interface StructuredOutputContractV1 {
   requiredRootFields?: readonly string[]
   unknownRootFieldMessage?: string
   missingRootFieldMessage?: string
-  /** Explicit top-level alias -> canonical field mapping. */
-  fieldAliases?: Readonly<Record<string, string>>
 }
 
 export interface StructuredOutputAttemptEvidenceV1 {
   version: 1
   schemaId: string
   target: string
-  /**
-   * Minimal, contract-derived shape needed by the single repair call. Older
-   * persisted V1 evidence may omit it and remains readable, but new attempts
-   * always record it so the repairer never has to guess from schemaId alone.
-   */
-  contractShape?: StructuredOutputContractShapeV1
+  /** Minimal, contract-derived shape needed by the single repair call. */
+  contractShape: StructuredOutputContractShapeV1
   status: StructuredOutputStatusV1
   originalText: string
   normalizedText: string
   normalizationSteps: StructuredOutputNormalizationStepV1[]
-  appliedAliases: Array<{ alias: string; canonical: string }>
   issues: StructuredOutputIssueV1[]
 }
 
@@ -460,7 +452,6 @@ function fail(input: {
   originalText: string
   normalizedText: string
   steps: StructuredOutputNormalizationStepV1[]
-  aliases: Array<{ alias: string; canonical: string }>
   status?: StructuredOutputStatusV1
   issue: Omit<StructuredOutputIssueV1, 'version' | 'fingerprint'>
 }): never {
@@ -472,7 +463,6 @@ function fail(input: {
     originalText: input.originalText,
     normalizedText: input.normalizedText,
     normalizationSteps: input.steps,
-    appliedAliases: input.aliases,
     issues: [issue(input.issue)],
   }))
 }
@@ -514,7 +504,6 @@ export function evaluateStructuredOutputV1<T>(input: {
   const originalText = input.raw
   let normalizedText = originalText
   const steps: StructuredOutputNormalizationStepV1[] = []
-  const aliases: Array<{ alias: string; canonical: string }> = []
 
   if (normalizedText.startsWith('\uFEFF')) {
     normalizedText = normalizedText.slice(1)
@@ -527,7 +516,7 @@ export function evaluateStructuredOutputV1<T>(input: {
   }
   if (!normalizedText) {
     fail({
-      contract, originalText, normalizedText, steps, aliases,
+      contract, originalText, normalizedText, steps,
       issue: {
         code: 'structured-output-empty', category: 'parse', path: '$',
         message: '模型没有返回结构化内容。', repairable: true,
@@ -536,7 +525,7 @@ export function evaluateStructuredOutputV1<T>(input: {
   }
   if (originalText.length > contract.maxChars) {
     fail({
-      contract, originalText, normalizedText, steps, aliases, status: 'blocked',
+      contract, originalText, normalizedText, steps, status: 'blocked',
       issue: {
         code: 'structured-output-too-large', category: 'length', path: '$',
         message: `结构化输出超过 ${contract.maxChars} 字符，已阻止自动处理。`, repairable: false,
@@ -572,7 +561,7 @@ export function evaluateStructuredOutputV1<T>(input: {
       const remainder = `${normalizedText.slice(0, balancedStart)}${normalizedText.slice(balancedStart + balanced.length)}`
       if (/[{[]/.test(remainder) || /^\s*,\s*"[^"\\]+"\s*:/.test(remainder)) {
         fail({
-          contract, originalText, normalizedText, steps, aliases,
+          contract, originalText, normalizedText, steps,
           issue: {
             code: 'structured-output-ambiguous-root', category: 'parse', path: '$',
             message: '模型响应包含多个可能的 JSON 根，无法安全选择。', repairable: true,
@@ -608,7 +597,7 @@ export function evaluateStructuredOutputV1<T>(input: {
       }
       if (parsed === undefined) {
         fail({
-          contract, originalText, normalizedText, steps, aliases,
+          contract, originalText, normalizedText, steps,
           issue: {
             code: 'structured-output-invalid-json', category: 'parse', path: '$',
             message: '模型响应不是有效且完整的 JSON。', repairable: true,
@@ -620,36 +609,13 @@ export function evaluateStructuredOutputV1<T>(input: {
 
   if (!rootMatches(parsed, contract.root)) {
     fail({
-      contract, originalText, normalizedText, steps, aliases,
+      contract, originalText, normalizedText, steps,
       issue: {
         code: 'structured-output-root-mismatch', category: 'schema', path: '$',
         message: `结构化输出根必须是 JSON ${contract.root === 'array' ? '数组' : '对象'}。`,
         repairable: true,
       },
     })
-  }
-
-  if (contract.root === 'object' && contract.fieldAliases && parsed) {
-    const source = { ...(parsed as Record<string, unknown>) }
-    for (const [alias, canonical] of Object.entries(contract.fieldAliases)) {
-      if (!Object.prototype.hasOwnProperty.call(source, alias)) continue
-      if (Object.prototype.hasOwnProperty.call(source, canonical)) {
-        fail({
-          contract, originalText, normalizedText, steps, aliases,
-          issue: {
-            code: 'structured-output-alias-conflict', category: 'schema', path: `$.${alias}`,
-            message: `字段 alias ${alias} 与正式字段 ${canonical} 同时存在，无法安全选择。`,
-            repairable: true,
-          },
-        })
-      }
-      source[canonical] = source[alias]
-      delete source[alias]
-      aliases.push({ alias, canonical })
-    }
-    if (aliases.length) steps.push('apply-registered-field-alias')
-    parsed = source
-    normalizedText = JSON.stringify(source)
   }
 
   if (contract.root === 'object' && parsed) {
@@ -659,7 +625,7 @@ export function evaluateStructuredOutputV1<T>(input: {
     const unknownField = allowed ? Object.keys(source).find(key => !allowed.includes(key)) : undefined
     if (unknownField) {
       fail({
-        contract, originalText, normalizedText, steps, aliases,
+        contract, originalText, normalizedText, steps,
         issue: {
           code: 'structured-output-unknown-field', category: 'schema', path: `$.${unknownField}`,
           message: contract.unknownRootFieldMessage
@@ -671,7 +637,7 @@ export function evaluateStructuredOutputV1<T>(input: {
     const missingField = required.find(key => !Object.prototype.hasOwnProperty.call(source, key))
     if (missingField) {
       fail({
-        contract, originalText, normalizedText, steps, aliases,
+        contract, originalText, normalizedText, steps,
         issue: {
           code: 'structured-output-missing-field', category: 'schema', path: `$.${missingField}`,
           message: contract.missingRootFieldMessage
@@ -688,7 +654,7 @@ export function evaluateStructuredOutputV1<T>(input: {
   } catch (error) {
     if (error instanceof StructuredOutputPipelineErrorV1) throw error
     fail({
-      contract, originalText, normalizedText, steps, aliases,
+      contract, originalText, normalizedText, steps,
       issue: schemaIssue(error),
     })
   }
@@ -702,7 +668,6 @@ export function evaluateStructuredOutputV1<T>(input: {
     originalText,
     normalizedText,
     normalizationSteps: steps,
-    appliedAliases: aliases,
     issues: [],
   })
   if (output && typeof output === 'object') evidenceByOutput.set(output as object, attemptEvidence)
@@ -736,17 +701,15 @@ export function buildStructuredOutputRepairMessagesV1(input: {
     })),
   ]
   const shape = input.evidence.contractShape
-  const shapeRules = shape
-    ? [
-        `JSON 根类型必须是 ${shape.root === 'object' ? 'object' : 'array'}。`,
-        ...(shape.root === 'object' && shape.allowedRootFields
-          ? [`根对象只允许直接包含这些字段：${shape.allowedRootFields.join('、')}。不得增加外层包装字段。`]
-          : []),
-        ...(shape.root === 'object' && shape.requiredRootFields.length
-          ? [`根对象必须包含这些字段：${shape.requiredRootFields.join('、')}。`]
-          : []),
-      ]
-    : ['旧版证据没有保存根结构；必须依据列出的错误与原始输出修复，禁止臆造包装层。']
+  const shapeRules = [
+    `JSON 根类型必须是 ${shape.root === 'object' ? 'object' : 'array'}。`,
+    ...(shape.root === 'object' && shape.allowedRootFields
+      ? [`根对象只允许直接包含这些字段：${shape.allowedRootFields.join('、')}。不得增加外层包装字段。`]
+      : []),
+    ...(shape.root === 'object' && shape.requiredRootFields.length
+      ? [`根对象必须包含这些字段：${shape.requiredRootFields.join('、')}。`]
+      : []),
+  ]
   return [{
     role: 'system',
     content: [
@@ -818,39 +781,29 @@ export function parseStructuredOutputRunEvidenceV1(value: unknown): StructuredOu
       || typeof attempt.normalizedText !== 'string'
       || attempt.normalizedText.length > 240_000
       || !Array.isArray(attempt.normalizationSteps)
-      || !Array.isArray(attempt.appliedAliases)
       || !Array.isArray(attempt.issues)
     ) throw new Error(`结构化输出运行证据 attempts[${index}].evidence 无效。`)
-    if (attempt.contractShape !== undefined) {
-      const shape = attempt.contractShape
-      const allowedRootFields = isRecord(shape) ? shape.allowedRootFields : undefined
-      const requiredRootFields = isRecord(shape) ? shape.requiredRootFields : undefined
-      if (
-        !isRecord(shape)
-        || (shape.root !== 'object' && shape.root !== 'array')
-        || !(allowedRootFields === null || Array.isArray(allowedRootFields))
-        || (Array.isArray(allowedRootFields) && allowedRootFields.some(field => (
-          typeof field !== 'string' || !field
-        )))
-        || !Array.isArray(requiredRootFields)
-        || requiredRootFields.some(field => typeof field !== 'string' || !field)
-        || (Array.isArray(allowedRootFields) && requiredRootFields.some(field => (
-          !allowedRootFields.includes(field)
-        )))
-      ) throw new Error(`结构化输出运行证据 attempts[${index}].contractShape 无效。`)
-    }
+    const shape = attempt.contractShape
+    const allowedRootFields = isRecord(shape) ? shape.allowedRootFields : undefined
+    const requiredRootFields = isRecord(shape) ? shape.requiredRootFields : undefined
+    if (
+      !isRecord(shape)
+      || (shape.root !== 'object' && shape.root !== 'array')
+      || !(allowedRootFields === null || Array.isArray(allowedRootFields))
+      || (Array.isArray(allowedRootFields) && allowedRootFields.some(field => (
+        typeof field !== 'string' || !field
+      )))
+      || !Array.isArray(requiredRootFields)
+      || requiredRootFields.some(field => typeof field !== 'string' || !field)
+      || (Array.isArray(allowedRootFields) && requiredRootFields.some(field => (
+        !allowedRootFields.includes(field)
+      )))
+    ) throw new Error(`结构化输出运行证据 attempts[${index}].contractShape 无效。`)
     if (attempt.normalizationSteps.some(step => (
       !STRUCTURED_OUTPUT_NORMALIZATION_STEPS_V1.includes(step as StructuredOutputNormalizationStepV1)
     ))) {
       throw new Error(`结构化输出运行证据 attempts[${index}] 包含未知 normalize 步骤。`)
     }
-    if (attempt.appliedAliases.some(alias => (
-      !isRecord(alias)
-      || typeof alias.alias !== 'string'
-      || !alias.alias
-      || typeof alias.canonical !== 'string'
-      || !alias.canonical
-    ))) throw new Error(`结构化输出运行证据 attempts[${index}] alias 无效。`)
     const allowedCategories: StructuredOutputIssueCategoryV1[] = [
       'parse', 'schema', 'target', 'permission', 'scope', 'stale', 'length',
     ]

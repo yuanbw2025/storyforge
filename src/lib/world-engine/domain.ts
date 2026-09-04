@@ -27,6 +27,8 @@ export interface WorkProjection {
   id: string
   projectId: number
   title: string
+  description: string
+  genres: string[]
   sourceWorldId: string
   currentWordCount: number
 }
@@ -191,8 +193,10 @@ function createWorldProjection(
       id: `project:${project.id}:work:${work.id}`,
       projectId: project.id,
       title: work.title,
+      description: work.description,
+      genres: [...work.genres],
       sourceWorldId: `world:${world.id}`,
-      currentWordCount: work.currentWordCount ?? project.currentWordCount ?? 0,
+      currentWordCount: work.currentWordCount,
     },
   }
 }

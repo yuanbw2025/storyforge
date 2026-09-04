@@ -26,7 +26,7 @@ function parseAuthoringPort(value: unknown, label: string): AuthoringPortDefinit
   return value as unknown as AuthoringPortDefinition
 }
 
-/** Decode only the current domain-node graph contract. Unsupported records are removed by DB migration. */
+/** Decode only the current domain-node graph contract and reject every other shape. */
 export function parseAuthoringGraph(value: string | null | undefined): AuthoringNodeGraph {
   if (!value?.trim()) return emptyAuthoringGraph()
   const parsed = JSON.parse(value) as unknown

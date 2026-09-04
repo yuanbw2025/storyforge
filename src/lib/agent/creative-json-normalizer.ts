@@ -37,7 +37,7 @@ function creativeIssue(error: StructuredOutputPipelineErrorV1): CreativeArtifact
 }
 
 /**
- * CreativeArtifact compatibility adapter over the single WEH-0E structured
+ * CreativeArtifact facade over the single WEH-0E structured
  * output pipeline. It accepts only deterministic envelope salvage and never
  * invents fields or creative content.
  */

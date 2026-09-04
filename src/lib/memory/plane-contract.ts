@@ -53,7 +53,7 @@ export const MEMORY_PLANE_CONTRACT_V1 = {
       mutableBy: 'workspace-sync-or-recovery',
       tableNames: [
         'workspaceDocuments',
-        'ownershipMigrations',
+        'ownershipScopeChanges',
         'snapshots',
         'importSessions',
         'importJobs',

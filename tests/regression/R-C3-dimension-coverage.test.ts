@@ -3,6 +3,7 @@ import { db } from '../../src/lib/db/schema'
 import { adopt } from '../../src/lib/registry/adopt'
 import { CHARACTER_DIMENSIONS } from '../../src/lib/character/character-dimensions'
 import { FIELD_BY_TARGET } from '../../src/lib/registry/field-registry'
+import { seedCurrentProject } from '../helpers/current-workspace'
 
 /**
  * C3 守卫：每个角色维度都必须能被 adopt 写回（FIELD_REGISTRY 已登记），
@@ -20,7 +21,7 @@ describe('R-C3-dimension-coverage', () => {
 
   it('生成路径：一次 adopt 写入全部维度 → 全部落库，无静默丢弃', async () => {
     const now = Date.now()
-    const projectId = await db.projects.add({ name: 'P', genre: 'x', createdAt: now, updatedAt: now } as any) as number
+    const projectId = await seedCurrentProject({ name: 'P', genres: ['x'], createdAt: now, updatedAt: now } as any) as number
     // 模拟生成器 onAccept：每个维度填一个可识别值
     const dimData = Object.fromEntries(CHARACTER_DIMENSIONS.map(d => [d.key, `V-${d.key}`]))
     const result = await adopt({

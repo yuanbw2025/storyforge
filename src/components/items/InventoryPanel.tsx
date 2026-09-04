@@ -120,15 +120,9 @@ export default function InventoryPanel({ project, initialEntryId }: Props) {
     return () => { active = false }
   }, [project.id])
 
-  const visibleEntries = useMemo(
-    () => selectedCharacterId != null
-      ? entries
-      : entries.filter(entry => !((entry.characterId ?? null) === null && entry.heldByName === '未知(历史数据)')),
-    [entries, selectedCharacterId],
-  )
   const inventory = useMemo(
-    () => aggregateInventory(visibleEntries, selectedCharacterId ?? undefined),
-    [visibleEntries, selectedCharacterId],
+    () => aggregateInventory(entries, selectedCharacterId ?? undefined),
+    [entries, selectedCharacterId],
   )
 
   const inventoryStats = useMemo(() => ({
@@ -158,11 +152,6 @@ export default function InventoryPanel({ project, initialEntryId }: Props) {
     return result
   }, [characters])
 
-  // 未归属条目（历史数据的 characterId === null && heldByName === '未知(历史数据)'）
-  const unclaimedEntries = useMemo(
-    () => entries.filter(e => (e.characterId ?? null) === null && e.heldByName === '未知(历史数据)'),
-    [entries],
-  )
   const targetEntry = entries.find(entry => entry.id === initialEntryId) ?? null
   const targetInventoryKey = targetEntry
     ? JSON.stringify([targetEntry.characterId ?? targetEntry.heldByName, targetEntry.itemName.trim()])
@@ -175,9 +164,7 @@ export default function InventoryPanel({ project, initialEntryId }: Props) {
   }, [targetEntry, targetInventoryKey])
   useInitialRecordTarget(
     initialEntryId,
-    targetEntry != null && (
-      targetEntry.heldByName === '未知(历史数据)' || expanded === targetInventoryKey
-    ),
+    targetEntry != null && expanded === targetInventoryKey,
   )
 
   const handleExtract = async () => {
@@ -694,44 +681,6 @@ export default function InventoryPanel({ project, initialEntryId }: Props) {
         </div>
       )}
 
-      {/* 未归属（历史数据） */}
-      {unclaimedEntries.length > 0 && selectedCharacterId == null && (
-        <div className="border border-dashed border-border/60 rounded-xl p-4 bg-bg-elevated/30">
-          <p className="text-xs text-text-muted mb-2">
-            未归属物品（历史数据）。可在这里选择角色认领，原始记录不会丢失。
-          </p>
-          <div className="text-[10px] text-text-muted space-y-1">
-            {unclaimedEntries.map(e => (
-              <div
-                key={e.id}
-                {...initialRecordTargetAttributes(e.id === initialEntryId, e.id)}
-                className={`flex items-center gap-2 rounded ${e.id === initialEntryId ? INITIAL_RECORD_TARGET_CLASS : ''}`}
-              >
-                <span>{e.itemName}</span>
-                <span className="text-text-muted/60">{e.action === 'gain' ? '获得' : '消耗'} ×{e.quantity}</span>
-                {e.chapterTitle && <span className="text-text-muted/60">· {e.chapterTitle}</span>}
-                <select
-                  value=""
-                  aria-label={`认领${e.itemName}`}
-                  onChange={event => {
-                    const characterId = Number(event.target.value)
-                    const character = characters.find(candidate => candidate.id === characterId)
-                    if (character && e.id != null) {
-                      void updateEntry(e.id, { characterId, heldByName: character.name })
-                    }
-                  }}
-                  className="ml-auto bg-bg-base border border-border rounded px-1.5 py-0.5 text-text-secondary"
-                >
-                  <option value="">选择角色认领…</option>
-                  {groupedCharacters.flatMap(group => group.chars).map(character => (
-                    <option key={character.id} value={character.id}>{character.name}</option>
-                  ))}
-                </select>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   )
 }

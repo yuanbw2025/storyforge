@@ -9,23 +9,15 @@ import { applyTtrpgItemCommandV2, parseTtrpgItemCommandV2, ttrpgItemDefinitionFr
 import { parseRulePackV1 } from './rule-pack'
 import {
   applyTtrpgTabletopOperationV1,
-  assertTtrpgAction,
-  assertTtrpgAttackResult,
   assertTtrpgCampaignMemoryV2,
   assertTtrpgCampaignPlaySessionV2,
   assertTtrpgCheck,
-  assertTtrpgCondition,
-  assertTtrpgEncounter,
-  assertTtrpgNpcSchedule,
-  assertTtrpgQuest,
   assertTtrpgRosterEntryV2,
   assertTtrpgRuleActionResult,
   assertTtrpgScene,
   assertTtrpgSupplementReceiptV2,
   assertTtrpgVersionTransitionV2,
   assertTtrpgWorldEvolutionV2,
-  emptyTtrpgCampaignState,
-  isNpcRuntimeEntity,
   longCampaignKey,
   longCampaignText,
   parseTtrpgHumanResponseV2,
@@ -58,7 +50,7 @@ export function applyTtrpgRuntimeEventV1(
     case "ttrpg.character.customized": {
       const ttrpg = requireTtrpgState(state);
       const product = ttrpg.product;
-      if (!product || product.sessionZero.completed || ttrpg.scene) {
+      if (product.sessionZero.completed || ttrpg.scene) {
         throw new Error("角色只能在正式战役 Session Zero 完成前定制。");
       }
       const characterKey = String(payload.characterKey ?? "").trim();
@@ -127,9 +119,9 @@ export function applyTtrpgRuntimeEventV1(
       const before = payload.before;
       const after = payload.after;
       const cost = assertFiniteInteger(payload.cost, "成长消费", 1, 1_000_000);
-      const progression = product?.characterProgression?.[characterKey];
+      const progression = product.characterProgression[characterKey];
       if (
-        !product?.sessionZero.completed ||
+        !product.sessionZero.completed ||
         product.ending ||
         !progression ||
         event.actorKey !== characterKey ||
@@ -218,8 +210,6 @@ export function applyTtrpgRuntimeEventV1(
     case "ttrpg.session-zero.completed": {
       const ttrpg = requireTtrpgState(state);
       const product = ttrpg.product;
-      if (!product)
-        throw new Error("Session Zero 只能用于正式 TTRPG 产品会话。");
       if (product.sessionZero.completed)
         throw new Error("Session Zero 已完成，不能重复提交。");
       if (!Array.isArray(payload.acceptedItemKeys))
@@ -256,7 +246,6 @@ export function applyTtrpgRuntimeEventV1(
         completedBy,
         completedAtSequence: event.sequence,
       };
-      ttrpg.campaign = ttrpg.campaign ?? emptyTtrpgCampaignState();
       const existingRoster = new Map(
         ttrpg.campaign.roster.map((entry) => [entry.characterKey, entry]),
       );
@@ -279,7 +268,7 @@ export function applyTtrpgRuntimeEventV1(
     case "ttrpg.safety.changed": {
       const ttrpg = requireTtrpgState(state);
       const product = ttrpg.product;
-      if (!product?.sessionZero.completed || product.ending)
+      if (!product.sessionZero.completed || product.ending)
         throw new Error("当前正式战役不能变更安全状态。");
       const status = String(payload.status ?? "");
       const reason =
@@ -305,7 +294,7 @@ export function applyTtrpgRuntimeEventV1(
     case "ttrpg.clue.discovered": {
       const ttrpg = requireTtrpgState(state);
       const product = ttrpg.product;
-      if (!product || !product.sessionZero.completed)
+      if (!product.sessionZero.completed)
         throw new Error("正式战役尚未完成 Session Zero。");
       if (!ttrpg.scene || ttrpg.scene.status !== "active")
         throw new Error("请先打开一个正式战役场景。");
@@ -372,17 +361,12 @@ export function applyTtrpgRuntimeEventV1(
     case "ttrpg.scene.opened": {
       const ttrpg = requireTtrpgState(state);
       const scene = assertTtrpgScene(payload.scene);
-      if (ttrpg.product) {
-        if (!ttrpg.product.sessionZero.completed)
-          throw new Error("正式战役必须先完成 Session Zero。");
-        if (ttrpg.product.ending)
-          throw new Error("正式战役已经结束，不能再打开场景。");
-        if (
-          !scene.sceneKey ||
-          !ttrpg.product.sceneKeys.includes(scene.sceneKey)
-        ) {
-          throw new Error("正式场景必须来自冻结 CampaignPack。");
-        }
+      if (!ttrpg.product.sessionZero.completed)
+        throw new Error("正式战役必须先完成 Session Zero。");
+      if (ttrpg.product.ending)
+        throw new Error("正式战役已经结束，不能再打开场景。");
+      if (!ttrpg.product.sceneKeys.includes(scene.sceneKey)) {
+        throw new Error("正式场景必须来自冻结 CampaignPack。");
       }
       const rawTurnOrder = payload.turnOrder;
       if (!Array.isArray(rawTurnOrder) || rawTurnOrder.length === 0) {
@@ -397,17 +381,15 @@ export function applyTtrpgRuntimeEventV1(
           throw new Error(`跑团行动者不存在或类型不支持: ${actorKey}`);
         }
       }
-      const initiative = ttrpg.product
-        ? parseTtrpgState({
-            ...ttrpg,
-            scene,
-            round: 1,
-            activeActorKey: turnOrder[0],
-            turnOrder,
-            initiative: payload.initiative,
-          })!.initiative
-        : null;
-      if (ttrpg.product && initiative?.sceneKey !== scene.sceneKey) {
+      const initiative = parseTtrpgState({
+        ...ttrpg,
+        scene,
+        round: 1,
+        activeActorKey: turnOrder[0],
+        turnOrder,
+        initiative: payload.initiative,
+      })!.initiative;
+      if (initiative?.sceneKey !== scene.sceneKey) {
         throw new Error("正式场景先攻收据没有绑定当前场景。");
       }
       if (scene.locationKey != null) {
@@ -416,16 +398,12 @@ export function applyTtrpgRuntimeEventV1(
           throw new Error(`跑团场景地点不存在: ${scene.locationKey}`);
       }
       ttrpg.scene = scene;
-      if (
-        ttrpg.product &&
-        scene.sceneKey &&
-        !ttrpg.product.openedSceneKeys.includes(scene.sceneKey)
-      ) {
+      if (!ttrpg.product.openedSceneKeys.includes(scene.sceneKey)) {
         ttrpg.product.openedSceneKeys.push(scene.sceneKey);
       }
-      if (ttrpg.product?.tabletop && scene.sceneKey) {
+      if (ttrpg.product.tabletop) {
         const tabletopMap = ttrpg.product.tabletop.maps.find((map) =>
-          map.sceneKeys.includes(scene.sceneKey!),
+          map.sceneKeys.includes(scene.sceneKey),
         );
         ttrpg.product.tabletop.currentMapKey = tabletopMap?.mapKey ?? null;
         ttrpg.product.tabletop.updatedAtSequence = event.sequence;
@@ -434,35 +412,31 @@ export function applyTtrpgRuntimeEventV1(
       ttrpg.activeActorKey = turnOrder[0];
       ttrpg.turnOrder = turnOrder;
       ttrpg.initiative = initiative;
-      if (ttrpg.product?.abilityStates) {
-        if (!Array.isArray(payload.abilityResets))
-          throw new Error("正式场景事件缺少能力场景重置计划。");
-        for (const raw of payload.abilityResets) {
-          if (!isObject(raw)) throw new Error("能力场景重置项无效。");
-          const stateKey = String(raw.stateKey ?? "").trim();
-          const before = parseTtrpgAbilityRuntimeStateV2(raw.before);
-          const after = parseTtrpgAbilityRuntimeStateV2(raw.after);
-          if (
-            stateKey !==
-              ttrpgAbilityStateKeyV2(
-                before.actorInstanceId,
-                before.abilityKey,
-              ) ||
-            stableJson(ttrpg.product.abilityStates[stateKey]) !==
-              stableJson(before)
-          ) {
-            throw new Error(`能力场景重置基线不一致:${stateKey}`);
-          }
-          ttrpg.product.abilityStates[stateKey] = after;
+      if (!Array.isArray(payload.abilityResets))
+        throw new Error("正式场景事件缺少能力场景重置计划。");
+      for (const raw of payload.abilityResets) {
+        if (!isObject(raw)) throw new Error("能力场景重置项无效。");
+        const stateKey = String(raw.stateKey ?? "").trim();
+        const before = parseTtrpgAbilityRuntimeStateV2(raw.before);
+        const after = parseTtrpgAbilityRuntimeStateV2(raw.after);
+        if (
+          stateKey !==
+            ttrpgAbilityStateKeyV2(
+              before.actorInstanceId,
+              before.abilityKey,
+            ) ||
+          stableJson(ttrpg.product.abilityStates[stateKey]) !==
+            stableJson(before)
+        ) {
+          throw new Error(`能力场景重置基线不一致:${stateKey}`);
         }
+        ttrpg.product.abilityStates[stateKey] = after;
       }
-      if (ttrpg.product?.actionEconomy && scene.sceneKey) {
-        ttrpg.product.actionEconomy = startTtrpgActionEconomySceneV2({
-          economy: ttrpg.product.actionEconomy,
-          sceneKey: scene.sceneKey,
-          turnOrder,
-        });
-      }
+      ttrpg.product.actionEconomy = startTtrpgActionEconomySceneV2({
+        economy: ttrpg.product.actionEconomy,
+        sceneKey: scene.sceneKey,
+        turnOrder,
+      });
       ttrpg.actions = [];
       ttrpg.checks = [];
       ttrpg.attacks = [];
@@ -472,7 +446,6 @@ export function applyTtrpgRuntimeEventV1(
     case "ttrpg.media.requested": {
       const product = requireTtrpgState(state).product;
       if (
-        !product?.media ||
         !product.media.runtimePolicy.enabled ||
         product.media.runtimePolicy.networkPolicy === "disabled"
       ) {
@@ -509,7 +482,6 @@ export function applyTtrpgRuntimeEventV1(
     }
     case "ttrpg.media.available": {
       const product = requireTtrpgState(state).product;
-      if (!product?.media) throw new Error("正式 TTRPG 缺少媒资投影。");
       const slotKey = String(payload.slotKey ?? "").trim();
       const requestKey = String(payload.requestKey ?? "").trim();
       const assetKey = String(payload.assetKey ?? "").trim();
@@ -551,7 +523,6 @@ export function applyTtrpgRuntimeEventV1(
     }
     case "ttrpg.media.failed": {
       const product = requireTtrpgState(state).product;
-      if (!product?.media) throw new Error("正式 TTRPG 缺少媒资投影。");
       const slotKey = String(payload.slotKey ?? "").trim();
       const requestKey = String(payload.requestKey ?? "").trim();
       const errorCode = String(payload.errorCode ?? "").trim();
@@ -572,7 +543,6 @@ export function applyTtrpgRuntimeEventV1(
     }
     case "ttrpg.media.cancelled": {
       const product = requireTtrpgState(state).product;
-      if (!product?.media) throw new Error("正式 TTRPG 缺少媒资投影。");
       const slotKey = String(payload.slotKey ?? "").trim();
       const requestKey = String(payload.requestKey ?? "").trim();
       const slot = product.media.slots.find((item) => item.slotKey === slotKey);
@@ -591,7 +561,7 @@ export function applyTtrpgRuntimeEventV1(
     case "ttrpg.tabletop.updated": {
       const product = requireTtrpgState(state).product;
       if (
-        !product?.sessionZero.completed ||
+        !product.sessionZero.completed ||
         !product.tabletop ||
         !state.ttrpg?.scene ||
         state.ttrpg.scene.status !== "active"
@@ -616,24 +586,6 @@ export function applyTtrpgRuntimeEventV1(
       });
       break;
     }
-    case "ttrpg.action.recorded": {
-      const ttrpg = requireTtrpgState(state);
-      if (ttrpg.product)
-        throw new Error("正式 TTRPG 禁止绕过 RulePack 记录自由动作。");
-      if (!ttrpg.scene || ttrpg.scene.status !== "active")
-        throw new Error("跑团尚未开始活动场景。");
-      const action = assertTtrpgAction({
-        eventSequence: event.sequence,
-        actorKey: payload.actorKey,
-        text: payload.text,
-      });
-      if (!ttrpg.turnOrder.includes(action.actorKey))
-        throw new Error("跑团动作行动者不在当前回合顺序中。");
-      if (ttrpg.activeActorKey !== action.actorKey)
-        throw new Error("当前还没轮到该行动者。");
-      ttrpg.actions.push(action);
-      break;
-    }
     case "ttrpg.check.resolved": {
       const ttrpg = requireTtrpgState(state);
       if (!isObject(payload.check))
@@ -644,23 +596,20 @@ export function applyTtrpgRuntimeEventV1(
       });
       if (!ttrpg.turnOrder.includes(check.actorKey))
         throw new Error("跑团检定行动者不在当前回合顺序中。");
-      if (ttrpg.product) {
-        if (
-          !check.rule ||
-          check.rule.rulePackContentHash !== ttrpg.product.rulePackContentHash
-        ) {
-          throw new Error("正式 TTRPG 检定缺少匹配冻结规则包的裁定证据。");
-        }
-        if (ttrpg.activeActorKey !== check.actorKey)
-          throw new Error("当前还没轮到该正式规则行动者。");
+      if (
+        check.rule.rulePackContentHash !== ttrpg.product.rulePackContentHash
+      ) {
+        throw new Error("正式 TTRPG 检定缺少匹配冻结规则包的裁定证据。");
       }
+      if (ttrpg.activeActorKey !== check.actorKey)
+        throw new Error("当前还没轮到该正式规则行动者。");
       ttrpg.checks.push(check);
       break;
     }
     case "ttrpg.intent.receipted": {
       const ttrpg = requireTtrpgState(state);
       const product = ttrpg.product;
-      if (!product?.sessionZero.completed || !ttrpg.scene) {
+      if (!product.sessionZero.completed || !ttrpg.scene) {
         throw new Error("正式行动意图收据需要已打开的 CampaignPack 场景。");
       }
       const receipt = parseTtrpgIntentReceiptV2(payload.receipt);
@@ -671,7 +620,7 @@ export function applyTtrpgRuntimeEventV1(
       ) {
         throw new Error("正式行动意图收据与事件身份不一致。");
       }
-      const history = product.intentReceipts ?? (product.intentReceipts = []);
+      const history = product.intentReceipts;
       if (history.some((item) => item.intentKey === receipt.intentKey)) {
         throw new Error("正式行动意图已经存在终态收据。");
       }
@@ -681,7 +630,7 @@ export function applyTtrpgRuntimeEventV1(
     case "ttrpg.human-response.recorded": {
       const ttrpg = requireTtrpgState(state);
       const product = ttrpg.product;
-      if (!product?.sessionZero.completed || !ttrpg.scene) {
+      if (!product.sessionZero.completed || !ttrpg.scene) {
         throw new Error("真人角色回应需要已打开的正式 CampaignPack 场景。");
       }
       const response = parseTtrpgHumanResponseV2(payload.response);
@@ -713,7 +662,7 @@ export function applyTtrpgRuntimeEventV1(
       if (observer?.responsePolicy !== "prompt-human" || !promptWindow) {
         throw new Error("该角色没有属于本人的开放回应窗口。");
       }
-      const history = product.humanResponses ?? (product.humanResponses = []);
+      const history = product.humanResponses;
       if (history.some((item) => item.responseKey === response.responseKey)) {
         throw new Error("该真人角色已经回应本次行动。");
       }
@@ -724,7 +673,6 @@ export function applyTtrpgRuntimeEventV1(
       const ttrpg = requireTtrpgState(state);
       const product = ttrpg.product;
       if (
-        !product ||
         !product.sessionZero.completed ||
         !ttrpg.scene ||
         ttrpg.scene.status !== "active"
@@ -762,7 +710,7 @@ export function applyTtrpgRuntimeEventV1(
         const declaredIntentKey = receipt.context.declaredIntent?.intentKey;
         if (
           declaredIntentKey &&
-          ((product.intentReceipts ?? []).some(
+          (product.intentReceipts.some(
             (item) => item.intentKey === declaredIntentKey,
           ) ||
             product.actionHistory.some(
@@ -785,7 +733,7 @@ export function applyTtrpgRuntimeEventV1(
         const actorConditions = (product.conditions[result.actorKey] ?? []).map(
           (condition) => condition.conditionKey,
         );
-        const actorInventory = Object.values(product.inventory?.items ?? {})
+        const actorInventory = Object.values(product.inventory.items)
           .filter(
             (item) =>
               item.ownerRef === result.actorKey &&
@@ -846,12 +794,11 @@ export function applyTtrpgRuntimeEventV1(
               ]
             : without;
       }
-      if (product.abilityStates && !result.abilityChange) {
+      if (!result.abilityChange) {
         throw new Error("正式规则行动缺少能力次数/冷却变化证据。");
       }
-      if (result.abilityChange) {
+      {
         if (
-          !product.abilityStates ||
           stableJson(product.abilityStates[result.abilityChange.stateKey]) !==
             stableJson(result.abilityChange.before)
         ) {
@@ -862,7 +809,6 @@ export function applyTtrpgRuntimeEventV1(
         );
         if (result.abilityChange.sharedPoolKey != null) {
           if (
-            !product.usagePools ||
             stableJson(
               product.usagePools[result.abilityChange.sharedPoolKey],
             ) !== stableJson(result.abilityChange.sharedPoolBefore)
@@ -873,7 +819,7 @@ export function applyTtrpgRuntimeEventV1(
             structuredClone(result.abilityChange.sharedPoolAfter!);
         }
       }
-      if (product.actionEconomy && result.actionPhase) {
+      if (result.actionPhase) {
         const transition = spendTtrpgActionEconomyV2({
           economy: product.actionEconomy,
           turnOrder: ttrpg.turnOrder,
@@ -919,8 +865,7 @@ export function applyTtrpgRuntimeEventV1(
       const ttrpg = requireTtrpgState(state);
       const product = ttrpg.product;
       if (
-        !product?.sessionZero.completed ||
-        !product.abilityStates ||
+        !product.sessionZero.completed ||
         product.ending
       ) {
         throw new Error("正式休息需要进行中的 CampaignPack 与能力账本。");
@@ -935,7 +880,7 @@ export function applyTtrpgRuntimeEventV1(
       ) {
         throw new Error("正式休息收据与事件身份不一致。");
       }
-      const history = product.restHistory ?? (product.restHistory = []);
+      const history = product.restHistory;
       if (history.some((item) => item.restKey === receipt.restKey)) {
         throw new Error("正式休息 key 已经提交。");
       }
@@ -986,7 +931,7 @@ export function applyTtrpgRuntimeEventV1(
     case "ttrpg.item.changed": {
       const ttrpg = requireTtrpgState(state);
       const product = ttrpg.product;
-      if (!product?.sessionZero.completed || !product.inventory) {
+      if (!product.sessionZero.completed) {
         throw new Error("正式物品命令需要已完成 Session Zero 的库存账本。");
       }
       const command = parseTtrpgItemCommandV2(payload.command);
@@ -1043,7 +988,7 @@ export function applyTtrpgRuntimeEventV1(
       const after = structuredClone(
         product.inventory.items[command.instanceId] ?? null,
       );
-      const history = product.itemHistory ?? (product.itemHistory = []);
+      const history = product.itemHistory;
       if (
         history.some(
           (receipt) =>
@@ -1075,7 +1020,7 @@ export function applyTtrpgRuntimeEventV1(
     }
     case "ttrpg.effects.choice.proposed": {
       const product = requireTtrpgState(state).product;
-      if (!product?.sessionZero.completed || !product.effectLedger) {
+      if (!product.sessionZero.completed) {
         throw new Error("正式效果选择需要已完成 Session Zero 的效果账本。");
       }
       const plan = parseTtrpgEffectPlanV2(payload.plan);
@@ -1104,7 +1049,7 @@ export function applyTtrpgRuntimeEventV1(
     }
     case "ttrpg.effects.applied": {
       const product = requireTtrpgState(state).product;
-      if (!product?.sessionZero.completed || !product.effectLedger) {
+      if (!product.sessionZero.completed) {
         throw new Error("正式 EffectPlan 需要已完成 Session Zero 的效果账本。");
       }
       const plan = parseTtrpgEffectPlanV2(payload.plan);
@@ -1195,8 +1140,8 @@ export function applyTtrpgRuntimeEventV1(
       const text = String(payload.text ?? "").trim();
       if (!text || text.length > 20_000)
         throw new Error("AI GM 叙事文本无效。");
-      if (ttrpg.product) {
-        const source = String(payload.source ?? "ai-confirmed");
+      {
+        const source = String(payload.source ?? "");
         const candidateHash =
           payload.candidateHash == null ? null : String(payload.candidateHash);
         const runId =
@@ -1244,15 +1189,14 @@ export function applyTtrpgRuntimeEventV1(
           throw new Error("最近规则行动已经有正式 GM 叙事。");
         }
         const modelEvidence = parseTtrpgModelEvidenceV1(payload.modelEvidence);
-        const modelCalls = Array.isArray(payload.modelCalls)
-          ? payload.modelCalls
-              .map(parseTtrpgModelEvidenceV1)
-              .filter(
-                (item): item is TtrpgRuntimeModelEvidenceV1 => item != null,
-              )
-          : modelEvidence
-            ? [modelEvidence]
-            : [];
+        if (!Array.isArray(payload.modelCalls)) {
+          throw new Error("正式 GM 响应缺少模型调用账本。");
+        }
+        const modelCalls = payload.modelCalls
+          .map(parseTtrpgModelEvidenceV1)
+          .filter(
+            (item): item is TtrpgRuntimeModelEvidenceV1 => item != null,
+          );
         const repairApplied = payload.repairApplied === true;
         if (
           modelCalls.length > 2 ||
@@ -1261,17 +1205,10 @@ export function applyTtrpgRuntimeEventV1(
         ) {
           throw new Error("正式 GM 模型调用或修复证据无效。");
         }
-        const synthesisFrame =
-          payload.synthesisFrame == null
-            ? null
-            : latestAction.receipt
-              ? parseTtrpgGmSynthesisFrameV2(
-                  payload.synthesisFrame,
-                  latestAction.receipt,
-                )
-              : (() => {
-                  throw new Error("正式 GM 综合帧缺少 ActionReceipt。");
-                })();
+        const synthesisFrame = parseTtrpgGmSynthesisFrameV2(
+          payload.synthesisFrame,
+          latestAction.receipt,
+        );
         ttrpg.product.gmNarrations.push({
           eventSequence: event.sequence,
           actionSequence,
@@ -1294,7 +1231,6 @@ export function applyTtrpgRuntimeEventV1(
       const ttrpg = requireTtrpgState(state);
       const product = ttrpg.product;
       if (
-        !product ||
         product.ending ||
         !ttrpg.scene ||
         ttrpg.scene.status !== "active"
@@ -1320,22 +1256,16 @@ export function applyTtrpgRuntimeEventV1(
           return clue ? [clue.conclusionKey] : [];
         }),
       );
-      if (ending.trigger) {
-        if (
-          ending.trigger.sceneKey !== ttrpg.scene.sceneKey ||
-          ending.trigger.requiredConclusionKeys.some(
-            (key) => !knownConclusions.has(key),
-          ) ||
-          ending.trigger.forbiddenConclusionKeys.some((key) =>
-            knownConclusions.has(key),
-          )
-        ) {
-          throw new Error("战役结局触发条件与当前状态不一致。");
-        }
-      } else if (
-        product.questProgress.some((quest) => quest.status !== "completed")
+      if (
+        ending.trigger.sceneKey !== ttrpg.scene.sceneKey ||
+        ending.trigger.requiredConclusionKeys.some(
+          (key) => !knownConclusions.has(key),
+        ) ||
+        ending.trigger.forbiddenConclusionKeys.some((key) =>
+          knownConclusions.has(key),
+        )
       ) {
-        throw new Error("正式战役仍有未完成主线任务。");
+        throw new Error("战役结局触发条件与当前状态不一致。");
       }
       if (!Array.isArray(payload.awardedMilestones))
         throw new Error("战役结局缺少成长里程碑。");
@@ -1376,262 +1306,16 @@ export function applyTtrpgRuntimeEventV1(
       });
       break;
     }
-    case "ttrpg.turn.advanced": {
-      const ttrpg = requireTtrpgState(state);
-      if (!ttrpg.scene || ttrpg.scene.status !== "active")
-        throw new Error("跑团尚未开始活动场景。");
-      const nextActorKey = String(payload.nextActorKey ?? "").trim();
-      const round = assertFiniteInteger(
-        payload.round,
-        "跑团回合",
-        1,
-        Number.MAX_SAFE_INTEGER,
-      );
-      if (!ttrpg.turnOrder.includes(nextActorKey))
-        throw new Error("下一个行动者不在当前回合顺序中。");
-      const currentIndex = ttrpg.turnOrder.indexOf(ttrpg.activeActorKey ?? "");
-      const nextIndex = (currentIndex + 1) % ttrpg.turnOrder.length;
-      const expectedActorKey = ttrpg.turnOrder[nextIndex];
-      const expectedRound = ttrpg.round + (nextIndex === 0 ? 1 : 0);
-      if (nextActorKey !== expectedActorKey || round !== expectedRound) {
-        throw new Error("跑团回合推进与确定性顺序不一致。");
-      }
-      ttrpg.activeActorKey = nextActorKey;
-      ttrpg.round = round;
-      break;
-    }
-    case "ttrpg.encounter.started": {
-      const ttrpg = requireTtrpgState(state);
-      if (!ttrpg.scene || ttrpg.scene.status !== "active")
-        throw new Error("请先开始一个跑团场景。");
-      if (ttrpg.encounter?.status === "active")
-        throw new Error("当前已有进行中的战斗遭遇。");
-      const encounter = assertTtrpgEncounter(payload.encounter);
-      for (const actorKey of encounter.turnOrder) {
-        const actor = state.entities[actorKey];
-        if (!actor || !["player", "character", "npc"].includes(actor.kind)) {
-          throw new Error(`遭遇参与者不存在或类型不支持: ${actorKey}`);
-        }
-      }
-      if (encounter.activeActorKey !== encounter.turnOrder[0])
-        throw new Error("遭遇必须从先攻最高者开始。");
-      ttrpg.encounter = encounter;
-      break;
-    }
-    case "ttrpg.encounter.resolved": {
-      const ttrpg = requireTtrpgState(state);
-      const encounter = ttrpg.encounter;
-      if (!encounter || encounter.status !== "active")
-        throw new Error("当前没有进行中的战斗遭遇。");
-      const reason = String(payload.reason ?? "").trim();
-      if (reason.length > 2_000) throw new Error("遭遇结束理由过长。");
-      encounter.status = "resolved";
-      encounter.activeActorKey = null;
-      if (reason)
-        state.narratives.push({
-          eventSequence: event.sequence,
-          text: `遭遇结束：${reason}`,
-        });
-      break;
-    }
-    case "ttrpg.combat.attack.resolved": {
-      const ttrpg = requireTtrpgState(state);
-      const encounter = ttrpg.encounter;
-      if (!encounter || encounter.status !== "active")
-        throw new Error("请先开始一个战斗遭遇。");
-      const attack = assertTtrpgAttackResult(payload.attack);
-      if (
-        attack.actorKey !== event.actorKey ||
-        attack.targetKey !== event.targetKey
-      ) {
-        throw new Error("攻击事件的行动者或目标与事件元数据不一致。");
-      }
-      if (encounter.activeActorKey !== attack.actorKey)
-        throw new Error("当前还没轮到该战斗行动者。");
-      if (
-        !encounter.combatants[attack.actorKey] ||
-        !encounter.combatants[attack.targetKey]
-      ) {
-        throw new Error("攻击行动者或目标不在当前遭遇中。");
-      }
-      ttrpg.attacks.push(attack);
-      break;
-    }
-    case "ttrpg.combat.resource.changed": {
-      const ttrpg = requireTtrpgState(state);
-      const encounter = ttrpg.encounter;
-      if (!encounter || encounter.status !== "active")
-        throw new Error("请先开始一个战斗遭遇。");
-      const entityKey = String(payload.entityKey ?? "").trim();
-      const resourceKey = String(payload.resourceKey ?? "").trim();
-      const delta = assertFiniteInteger(
-        payload.delta,
-        "资源变化量",
-        -1_000_000_000,
-        1_000_000_000,
-      );
-      const combatant = encounter.combatants[entityKey];
-      if (!combatant || !resourceKey || resourceKey.length > 80)
-        throw new Error("资源变化目标无效。");
-      if (event.targetKey !== entityKey)
-        throw new Error("资源变化事件目标与实体不一致。");
-      const resource = combatant.resources[resourceKey];
-      if (!resource) throw new Error(`战斗参与者没有资源: ${resourceKey}`);
-      const expectedCurrent = Math.max(
-        0,
-        Math.min(resource.maximum, resource.current + delta),
-      );
-      const current = assertFiniteInteger(
-        payload.current,
-        "资源当前值",
-        0,
-        resource.maximum,
-      );
-      if (current !== expectedCurrent)
-        throw new Error("资源变化结果与当前资源不一致。");
-      combatant.resources[resourceKey] = { ...resource, current };
-      break;
-    }
-    case "ttrpg.combat.condition.applied": {
-      const ttrpg = requireTtrpgState(state);
-      const encounter = ttrpg.encounter;
-      if (!encounter || encounter.status !== "active")
-        throw new Error("请先开始一个战斗遭遇。");
-      const entityKey = String(payload.entityKey ?? "").trim();
-      const combatant = encounter.combatants[entityKey];
-      if (!combatant) throw new Error("状态效果目标不在当前遭遇中。");
-      if (event.targetKey !== entityKey)
-        throw new Error("状态效果事件目标与实体不一致。");
-      const condition = assertTtrpgCondition(payload.condition);
-      const existing = combatant.conditions.find(
-        (item) => item.conditionId === condition.conditionId,
-      );
-      if (existing) {
-        existing.stacks = Math.min(1_000, existing.stacks + condition.stacks);
-        existing.duration = condition.duration;
-        existing.description = condition.description;
-      } else {
-        combatant.conditions.push(condition);
-      }
-      break;
-    }
-    case "ttrpg.combat.condition.removed": {
-      const ttrpg = requireTtrpgState(state);
-      const encounter = ttrpg.encounter;
-      if (!encounter || encounter.status !== "active")
-        throw new Error("请先开始一个战斗遭遇。");
-      const entityKey = String(payload.entityKey ?? "").trim();
-      const conditionId = String(payload.conditionId ?? "").trim();
-      const combatant = encounter.combatants[entityKey];
-      if (!combatant || !conditionId) throw new Error("状态效果移除目标无效。");
-      if (event.targetKey !== entityKey)
-        throw new Error("状态效果事件目标与实体不一致。");
-      combatant.conditions = combatant.conditions.filter(
-        (condition) => condition.conditionId !== conditionId,
-      );
-      break;
-    }
-    case "ttrpg.combat.turn.advanced": {
-      const ttrpg = requireTtrpgState(state);
-      const encounter = ttrpg.encounter;
-      if (!encounter || encounter.status !== "active")
-        throw new Error("请先开始一个战斗遭遇。");
-      const nextActorKey = String(payload.nextActorKey ?? "").trim();
-      const round = assertFiniteInteger(
-        payload.round,
-        "战斗回合",
-        1,
-        Number.MAX_SAFE_INTEGER,
-      );
-      if (!encounter.turnOrder.includes(nextActorKey))
-        throw new Error("下一个战斗行动者不在遭遇中。");
-      const currentIndex = encounter.turnOrder.indexOf(
-        encounter.activeActorKey ?? "",
-      );
-      const nextIndex = (currentIndex + 1) % encounter.turnOrder.length;
-      const expectedActorKey = encounter.turnOrder[nextIndex];
-      const expectedRound = encounter.round + (nextIndex === 0 ? 1 : 0);
-      if (nextActorKey !== expectedActorKey || round !== expectedRound)
-        throw new Error("战斗回合推进与先攻顺序不一致。");
-      const leaving = encounter.activeActorKey
-        ? encounter.combatants[encounter.activeActorKey]
-        : null;
-      if (leaving) {
-        leaving.conditions = leaving.conditions
-          .map((condition) =>
-            condition.duration == null
-              ? condition
-              : { ...condition, duration: condition.duration - 1 },
-          )
-          .filter(
-            (condition) => condition.duration == null || condition.duration > 0,
-          );
-      }
-      encounter.activeActorKey = nextActorKey;
-      encounter.round = round;
-      break;
-    }
-    case "ttrpg.campaign.summary.updated": {
-      const ttrpg = requireTtrpgState(state);
-      const baseSequence = assertFiniteInteger(
-        payload.baseSequence,
-        "战役摘要基线序号",
-        0,
-        event.sequence - 1,
-      );
-      if (baseSequence !== event.sequence - 1)
-        throw new Error("战役摘要基线与事件序号不一致。");
-      const summary = String(payload.summary ?? "").trim();
-      if (summary.length > 20_000) throw new Error("长期战役摘要过长。");
-      ttrpg.campaign = ttrpg.campaign ?? emptyTtrpgCampaignState();
-      ttrpg.campaign.summary = summary;
-      break;
-    }
-    case "ttrpg.campaign.quest.upserted": {
-      const ttrpg = requireTtrpgState(state);
-      const quest = assertTtrpgQuest(payload.quest);
-      if (quest.updatedSequence !== event.sequence)
-        throw new Error("战役任务更新时间序号不一致。");
-      ttrpg.campaign = ttrpg.campaign ?? emptyTtrpgCampaignState();
-      const index = ttrpg.campaign.quests.findIndex(
-        (item) => item.questId === quest.questId,
-      );
-      if (index >= 0) ttrpg.campaign.quests[index] = quest;
-      else ttrpg.campaign.quests.push(quest);
-      break;
-    }
-    case "ttrpg.campaign.schedule.upserted": {
-      const ttrpg = requireTtrpgState(state);
-      const schedule = assertTtrpgNpcSchedule(payload.schedule);
-      if (schedule.updatedSequence !== event.sequence)
-        throw new Error("NPC 日程更新时间序号不一致。");
-      const npc = state.entities[schedule.entityKey];
-      if (!npc || !isNpcRuntimeEntity(npc))
-        throw new Error("NPC 日程目标不是当前运行时 NPC。");
-      if (schedule.locationKey != null) {
-        const location = state.entities[schedule.locationKey];
-        if (!location || location.kind !== "location")
-          throw new Error("NPC 日程地点不是当前运行时地点。");
-      }
-      ttrpg.campaign = ttrpg.campaign ?? emptyTtrpgCampaignState();
-      const index = ttrpg.campaign.npcSchedules.findIndex(
-        (item) => item.scheduleId === schedule.scheduleId,
-      );
-      if (index >= 0) ttrpg.campaign.npcSchedules[index] = schedule;
-      else ttrpg.campaign.npcSchedules.push(schedule);
-      break;
-    }
     case "ttrpg.campaign.session.started": {
       const ttrpg = requireTtrpgState(state);
       const product = ttrpg.product;
       if (
-        !product?.sessionZero.completed ||
+        !product.sessionZero.completed ||
         product.ending ||
-        ttrpg.campaign?.activeSessionKey != null
+        ttrpg.campaign.activeSessionKey != null
       ) {
         throw new Error("当前正式战役不能开始新的长期分场。");
       }
-      ttrpg.campaign = ttrpg.campaign ?? emptyTtrpgCampaignState();
       const playSession = assertTtrpgCampaignPlaySessionV2(payload.playSession);
       if (
         playSession.status !== "active" ||
@@ -1673,7 +1357,7 @@ export function applyTtrpgRuntimeEventV1(
     }
     case "ttrpg.campaign.session.completed": {
       const ttrpg = requireTtrpgState(state);
-      const campaignState = ttrpg.campaign ?? emptyTtrpgCampaignState();
+      const campaignState = ttrpg.campaign;
       const sessionKey = longCampaignKey(
         payload.sessionKey,
         "长期战役完成分场 key",
@@ -1716,8 +1400,6 @@ export function applyTtrpgRuntimeEventV1(
         throw new Error("长期战役记忆没有唯一绑定当前分场或合法受众。");
       }
       const product = ttrpg.product;
-      if (!product?.abilityStates)
-        throw new Error("长期战役缺少技能次数台账。");
       for (const raw of payload.abilityResets) {
         if (!isObject(raw)) throw new Error("能力跨场重置项无效。");
         const stateKey = String(raw.stateKey ?? "").trim();
@@ -1750,7 +1432,7 @@ export function applyTtrpgRuntimeEventV1(
     }
     case "ttrpg.campaign.roster.changed": {
       const ttrpg = requireTtrpgState(state);
-      const campaignState = ttrpg.campaign ?? emptyTtrpgCampaignState();
+      const campaignState = ttrpg.campaign;
       if (campaignState.activeSessionKey != null)
         throw new Error("长期战役只能在两场之间变更编组。");
       const entry = assertTtrpgRosterEntryV2(payload.entry);
@@ -1762,7 +1444,7 @@ export function applyTtrpgRuntimeEventV1(
         !prior ||
         entry.updatedSequence !== event.sequence ||
         state.entities[entry.characterKey]?.kind !== "player" ||
-        !ttrpg.product?.characterProgression?.[entry.characterKey] ||
+        !ttrpg.product.characterProgression[entry.characterKey] ||
         prior.status === "retired" ||
         prior.status === entry.status ||
         (prior.status === "reserve" && entry.status !== "active") ||
@@ -1799,7 +1481,7 @@ export function applyTtrpgRuntimeEventV1(
     }
     case "ttrpg.campaign.supplement.activated": {
       const ttrpg = requireTtrpgState(state);
-      const campaignState = ttrpg.campaign ?? emptyTtrpgCampaignState();
+      const campaignState = ttrpg.campaign;
       if (campaignState.activeSessionKey != null)
         throw new Error("补充包只能在两场之间激活。");
       const supplement = assertTtrpgSupplementReceiptV2(payload.supplement);
@@ -1823,7 +1505,7 @@ export function applyTtrpgRuntimeEventV1(
     }
     case "ttrpg.campaign.world-evolution.recorded": {
       const ttrpg = requireTtrpgState(state);
-      const campaignState = ttrpg.campaign ?? emptyTtrpgCampaignState();
+      const campaignState = ttrpg.campaign;
       if (campaignState.activeSessionKey != null)
         throw new Error("世界演化候选只能在两场之间记录或复审。");
       const candidate = assertTtrpgWorldEvolutionV2(payload.candidate);
@@ -1866,9 +1548,9 @@ export function applyTtrpgRuntimeEventV1(
     }
     case "ttrpg.campaign.version-transition.recorded": {
       const ttrpg = requireTtrpgState(state);
-      const campaignState = ttrpg.campaign ?? emptyTtrpgCampaignState();
+      const campaignState = ttrpg.campaign;
       const product = ttrpg.product;
-      if (!product || campaignState.activeSessionKey != null)
+      if (campaignState.activeSessionKey != null)
         throw new Error("版本迁移只能在冻结战役的两场之间记录。");
       const transition = assertTtrpgVersionTransitionV2(payload.transition);
       if (

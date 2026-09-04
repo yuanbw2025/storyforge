@@ -5,30 +5,50 @@ import {
   recordRuntimeDiagnosticError,
   resetRuntimeDiagnostics,
 } from '../../src/lib/diagnostics/local-diagnostic-report'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
+
+const SECRET_STORAGE_KEY = 'storyforge-test-api-key-sentinel'
 
 afterEach(async () => {
   resetRuntimeDiagnostics()
+  globalThis.localStorage?.removeItem(SECRET_STORAGE_KEY)
   await db.delete()
 })
 
 describe('AUDIT-7 · 本地隐私诊断包', () => {
   it('只导出表数量，不导出项目正文、名称或 API Key', async () => {
     await db.open()
-    await db.projects.add({
-      name: '绝密书名-SENTINEL',
-      apiKey: 'sk-SENTINEL-SECRET',
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    } as never)
+    const createdWorkspaceV1 = await seedCurrentWorkspace('绝密书名-SENTINEL')
+    const { projectId, workId } = createdWorkspaceV1.scope
+    const now = Date.now()
+    const outlineNodeId = await db.outlineNodes.add({
+      projectId,
+      workId,
+      parentId: null,
+      type: 'chapter',
+      title: '诊断隐私章',
+      summary: '',
+      order: 0,
+      worldGroupId: null,
+      createdAt: now,
+      updatedAt: now,
+    } as any) as number
     await db.chapters.add({
-      projectId: 1,
-      outlineNodeId: 1,
+      projectId,
+      workId,
+      outlineNodeId,
+      title: '诊断隐私章',
       content: '绝密正文-SENTINEL',
+      wordCount: 13,
       order: 0,
       status: 'draft',
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    } as never)
+      notes: '',
+      createdAt: now,
+      updatedAt: now,
+    } as any)
+    globalThis.localStorage?.setItem(SECRET_STORAGE_KEY, 'sk-SENTINEL-SECRET')
+    await finalizeCurrentFixtureV1(projectId)
 
     const report = await buildLocalDiagnosticReport()
     const serialized = JSON.stringify(report)

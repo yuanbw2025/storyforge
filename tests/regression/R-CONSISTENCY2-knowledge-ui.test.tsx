@@ -3,6 +3,8 @@ import { createRoot } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import KnowledgeLedgerPanel from '../../src/components/facts/KnowledgeLedgerPanel'
 import { db } from '../../src/lib/db/schema'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
+import { seedCurrentProject } from '../helpers/current-workspace'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
@@ -26,13 +28,12 @@ describe('CONSISTENCY-2 · 角色认知用户出口', () => {
 
   it('事实库角色认知视图展示候选及人工确认/否决出口', async () => {
     const now = Date.now()
-    const projectId = await db.projects.add({
-      name: 'UI', genre: '', description: '', targetWordCount: 0,
-      enableMultiWorld: false, createdAt: now, updatedAt: now,
-    } as any) as number
+    const projectId = await seedCurrentProject({ name: 'UI', createdAt: now, updatedAt: now })
     const characterId = await db.characters.add({
       projectId, name: '林飞', roleWeight: 'main', moralAxis: 'neutral',
-      orderAxis: 'neutral', createdAt: now, updatedAt: now,
+      orderAxis: 'neutral', shortDescription: '', appearance: '', personality: '',
+      background: '', motivation: '', abilities: '', relationships: '', arc: '',
+      homeWorldGroupId: null, isCrossWorld: false, createdAt: now, updatedAt: now,
     } as any) as number
     await db.knowledgeLedger.add({
       projectId, characterId, characterName: '林飞',
@@ -40,10 +41,11 @@ describe('CONSISTENCY-2 · 角色认知用户出口', () => {
       action: 'learn', sourceType: 'manual', sourceChapterId: null,
       status: 'candidate', createdAt: now, updatedAt: now,
     })
+    await finalizeCurrentFixtureV1(projectId)
 
     await act(async () => {
       root.render(createElement(KnowledgeLedgerPanel, {
-        project: { id: projectId, name: 'UI' } as any,
+        project: (await db.projects.get(projectId))!,
         onShowFacts: () => undefined,
       }))
     })

@@ -134,13 +134,13 @@ describe('R-HARNESS0-event-projection · 严格事件回放', () => {
       .toThrow('仅支持版本 1')
   })
 
-  it('兼容旧确认事件，并严格解析完整的作者复核元数据', () => {
-    const legacy = parseAgentRunEventV1(event(1, 'confirmation.recorded', {
+  it('同时支持普通作者决策与带复核元数据的当前确认事件', () => {
+    const ordinary = parseAgentRunEventV1(event(1, 'confirmation.recorded', {
       stepId: 'outline.generate',
       candidateHash: OUTPUT_HASH,
       decision: 'adopt',
     }))
-    expect(legacy.payload).toEqual({
+    expect(ordinary.payload).toEqual({
       stepId: 'outline.generate',
       candidateHash: OUTPUT_HASH,
       decision: 'adopt',

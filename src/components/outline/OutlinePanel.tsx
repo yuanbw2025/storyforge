@@ -34,6 +34,7 @@ import { decodeGenerationOperation, type OutlineGenerationRequest } from '../../
 import { useInitialRecordTarget } from '../shared/initial-record-target'
 import type { GenerationMode, ChunkedGenerationConfig } from '../../lib/outline/generation-modes'
 import { reviewChapterOutlines, rewriteChapterOutline, toReviewChapters, type ChapterReviewResult, type ChapterReviewIssue, type RewriteResult } from '../../lib/outline/chapter-reviewer'
+import { useActiveWork } from '../../hooks/useActiveWork'
 
 interface Props {
   project: Project
@@ -44,6 +45,7 @@ interface Props {
 export default function OutlinePanel({ project, onOpenChapter, initialNodeId }: Props) {
   const dialog = useDialog()
   const toast = useToast()
+  const activeWork = useActiveWork(project)
   const { nodes, loadAll, addNode, updateNode, deleteNode, reorderNodes, insertNodeAt, moveNodeToParent } = useOutlineStore()
   const worldGroups = useWorldGroupStore(s => s.groups)
   const aiConfig = useAIConfigStore(s => s.config)
@@ -100,7 +102,7 @@ export default function OutlinePanel({ project, onOpenChapter, initialNodeId }: 
   useOutlineChapterCountEstimate({
     selectedVolumeId: selectedVolId,
     selectedVolumeExists: selectedVol != null,
-    targetWordCount: project.targetWordCount,
+    targetWordCount: activeWork?.targetWordCount ?? 500_000,
     volumeCount: volumes.length,
     parameterValues,
     setParameterValues,
@@ -226,6 +228,7 @@ export default function OutlinePanel({ project, onOpenChapter, initialNodeId }: 
 
   const generation = useOutlineGenerationController({
     project,
+    work: activeWork,
     nodes,
     volumes,
     hint,
@@ -531,6 +534,7 @@ export default function OutlinePanel({ project, onOpenChapter, initialNodeId }: 
 
   const batch = useOutlineBatchGeneration({
     project,
+    work: activeWork,
     multiWorldEnabled: Boolean(project.enableMultiWorld),
     volumes,
     nodes,

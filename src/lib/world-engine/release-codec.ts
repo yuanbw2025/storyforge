@@ -2,6 +2,7 @@ import { PROJECT_TABLES } from '../registry/project-tables'
 import { WORLD_CAPABILITY_AREAS, type WorldCapabilityArea } from '../registry/types'
 import type { WorldRelease, WorldReleaseManifestV3 } from '../types'
 import { hashWorldReleaseValueV1 } from './release-hash'
+import { assertWorldSemanticSnapshotV1 } from './semantic-snapshot'
 
 const HASH = /^[a-f0-9]{64}$/
 const WORLD_SEMANTIC_TABLES = new Set(
@@ -11,7 +12,7 @@ const WORLD_SEMANTIC_SPECS = PROJECT_TABLES.filter(spec => spec.worldSemantic)
 const WORLD_SEMANTIC_BY_TABLE = new Map(WORLD_SEMANTIC_SPECS.map(spec => [spec.name, spec] as const))
 const WORLD_RELEASE_MANIFEST_KEYS = new Set([
   'schema', 'version', 'semanticContract', 'worldCode', 'worldName', 'workTitle',
-  'selectedTables', 'dependencies', 'records', 'portableProject',
+  'selectedTables', 'dependencies', 'records', 'semanticSnapshot',
   'capabilityProfile', 'resourceCatalog', 'sourceManifest',
 ])
 
@@ -61,8 +62,7 @@ function exactUniqueStrings(value: unknown, label: string): string[] {
  * The only active decoder for immutable semantic WorldRelease payloads.
  *
  * Product modules must never import this codec. They consume the neutral
- * Context Gateway protocol instead. Migration modules may inspect older
- * payloads through their own explicitly historical decoder.
+ * Context Gateway protocol instead.
  */
 export function parsePureWorldReleaseManifestV3(
   value: string | unknown,
@@ -148,7 +148,11 @@ export function parsePureWorldReleaseManifestV3(
     }
     capabilityAreas.add(capability.area)
   }
-  if (!isRecord(manifest.portableProject)) fail('portable', 'portableProject 缺失')
+  try {
+    assertWorldSemanticSnapshotV1(manifest.semanticSnapshot)
+  } catch (error) {
+    fail('snapshot', error instanceof Error ? error.message : '世界语义快照无效')
+  }
   if (!manifest.sourceManifest || !isRecord(manifest.sourceManifest)
     || !['world-draft', 'independent-work-derivation'].includes(manifest.sourceManifest.sourceKind)
     || manifest.sourceManifest.sourceWorldCode !== manifest.worldCode

@@ -29,6 +29,7 @@ import type {
   ChatMessage,
   OutlineNode,
   Project,
+  Work,
   WorkspaceScope,
 } from '../types'
 import {
@@ -82,6 +83,7 @@ export interface OutlineCopilotSnapshot {
 
 export interface OutlineCopilotInput {
   project: Project
+  work: Work
   scope?: WorkspaceScope
   worldGroupId: number | null
   authorRequest: string
@@ -310,7 +312,7 @@ function buildOutlineMessages(input: OutlineCopilotInput) {
     : ''
   const plan = buildOutlineGenerationPlan({
     request: generationRequest(input),
-    project: input.project,
+    work: input.work,
     nodes: input.nodes,
     volumes: input.volumes,
     assembled: input.assembled,
@@ -404,6 +406,10 @@ export async function prepareOutlineCopilot(input: {
   const skill = resolveAgentSkillV1('outline', input.skillId)
   const readScope = input.scope ?? await resolveReadScopeLike(input.projectId)
   const scope = readScope
+  const work = await db.works.get(scope.workId)
+  if (!work || work.projectId !== input.projectId || work.worldId !== scope.worldId) {
+    throw new Error('当前作品不存在。')
+  }
   const allNodes = await readOwnedRows<OutlineNode>(readScope, 'outlineNodes', { owner: 'work' })
   const nodes = rowsInWorld(allNodes, worldGroupId)
   const volumes = nodes
@@ -459,6 +465,7 @@ export async function prepareOutlineCopilot(input: {
   })
   const nodeInput: OutlineCopilotInput = {
     project,
+    work,
     scope,
     worldGroupId,
     authorRequest: request,

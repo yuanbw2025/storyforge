@@ -16,11 +16,13 @@ import {
 import { verifiedRawExcerpt } from '../../src/lib/reference-analysis/pipeline'
 import type { ReferenceChunkAnalysis } from '../../src/lib/types'
 import { resolveScopeLike, stampNewRecord } from '../../src/lib/workspace/scope'
+import { seedCurrentProject } from '../helpers/current-workspace'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
 
 async function seedProjectAndReference(title = '演化参考') {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    name: 'IDEA-1', genre: '', description: '', targetWordCount: 0,
+  const projectId = await seedCurrentProject({
+    name: 'IDEA-1', genres: [], description: '', targetWordCount: 0,
     enableMultiWorld: false, createdAt: now, updatedAt: now,
   } as any) as number
   const referenceId = await db.references.add({
@@ -29,6 +31,7 @@ async function seedProjectAndReference(title = '演化参考') {
     fileHash: 'reference-hash', totalChars: 100,
     createdAt: now, updatedAt: now,
   } as any) as number
+  await finalizeCurrentFixtureV1(projectId)
   return { projectId, referenceId, now }
 }
 
@@ -195,6 +198,7 @@ describe('R-IDEA1 · 参考资料版本化演化', () => {
       projectId, title: '保留', author: '', type: 'story', note: '', url: '',
       createdAt: now, updatedAt: now,
     } as any) as number
+    await finalizeCurrentFixtureV1(projectId)
     const run = await createReferenceAnalysisRun({
       referenceId,
       depth: 'deep',
@@ -211,9 +215,9 @@ describe('R-IDEA1 · 参考资料版本化演化', () => {
     const scope = await resolveScopeLike(projectId)
     await db.creativeRules.add(stampNewRecord(scope, 'creativeRules', {
       projectId,
-      writingStyle: '', narrativePOV: 'third-limited', toneAndMood: '',
+      writingStyle: '', narrativePOV: 'third-limited', atmosphere: '',
       prohibitions: '[]', consistencyRules: '[]', specialRequirements: '',
-      referenceWorks: '[]', citedReferenceIds: JSON.stringify([referenceId, otherRefId]),
+      citedReferenceIds: JSON.stringify([referenceId, otherRefId]),
       createdAt: now, updatedAt: now,
     } as any, { owner: 'work' }) as any)
 

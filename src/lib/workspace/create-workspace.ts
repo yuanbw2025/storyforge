@@ -3,7 +3,7 @@ import { generateWorkspaceUid } from '../memory/identity'
 import { generateWorkspaceScopeCode, generateWorldCode } from './identity'
 import type {
   Chapter,
-  CreateProjectInput,
+  CreateWorkspaceInput,
   NovelWorkflowProfile,
   OutlineNode,
   Project,
@@ -14,9 +14,8 @@ import type {
   World,
   CommunityWorldOrigin,
 } from '../types'
-import { nativeOwnershipReceipt, WORKSPACE_OWNERSHIP_CONTRACT_VERSION } from './ownership'
 import { scopeTransactionTables, stampNewRecord } from './scope'
-import { buildWorkRecord, projectActiveWorkProjection } from './works'
+import { buildWorkRecord } from './works'
 import { deriveShortNovelStructure } from './work-kind'
 
 export interface CreateWorkspaceOptions {
@@ -40,19 +39,29 @@ export interface CreatedWorkspace {
   scope: WorkspaceScope
 }
 
-function projectRoot(input: CreateProjectInput, options: CreateWorkspaceOptions, now: number): Project {
-  const genres = input.genres?.length ? [...input.genres] : [input.genre || 'other']
+function projectRoot(input: CreateWorkspaceInput, options: CreateWorkspaceOptions, now: number): Project {
+  const allowedInputKeys = new Set([
+    'workspaceUid', 'workspacePurpose', 'name', 'genres', 'customGenre', 'status',
+    'description', 'targetWordCount', 'coverImage', 'writingStyleId', 'methodologyId',
+    'enableMultiWorld', 'includeCultivationProgressInAI', 'activeCharacterDrivenPlanId',
+    'productPlatformOptIns',
+  ])
+  const unknownKeys = Object.keys(input).filter(key => !allowedInputKeys.has(key))
+  if (unknownKeys.length) {
+    throw new Error(`创建工作区包含非当前字段：${unknownKeys.join('、')}`)
+  }
+  if (!Array.isArray(input.genres) || input.genres.some(genre => typeof genre !== 'string')) {
+    throw new Error('创建工作区 genres 必须是字符串数组')
+  }
   const purpose = options.purpose ?? input.workspacePurpose ?? 'independent-work'
   return {
-    ...input,
     workspaceUid: input.workspaceUid ?? generateWorkspaceUid(),
     workspacePurpose: purpose,
-    genres,
-    genre: input.genre || genres[0] || 'other',
-    status: input.status ?? 'drafting',
+    name: input.name,
+    enableMultiWorld: input.enableMultiWorld,
     activeWorldId: null,
     activeWorkId: null,
-    ownershipSchemaVersion: WORKSPACE_OWNERSHIP_CONTRACT_VERSION,
+    productPlatformOptIns: input.productPlatformOptIns,
     createdAt: now,
     updatedAt: now,
   }
@@ -108,15 +117,15 @@ async function createShortNovelSkeleton(
 
 /**
  * Creates a new LocalWorkspace and its initial World/Work roots atomically.
- * Legacy ownership migration remains separate and is never called here.
  */
 export async function createWorkspace(
-  input: CreateProjectInput,
+  input: CreateWorkspaceInput,
   options: CreateWorkspaceOptions = {},
 ): Promise<CreatedWorkspace> {
   const now = Date.now()
   const preparedProject = projectRoot(input, options, now)
-  return db.transaction('rw', scopeTransactionTables(db.outlineNodes, db.chapters, db.ownershipMigrations), async () => {
+  const genres = input.genres.length ? [...input.genres] : ['other']
+  return db.transaction('rw', scopeTransactionTables(db.outlineNodes, db.chapters), async () => {
     const projectId = await db.projects.add(preparedProject) as number
     const world: World = {
       projectId,
@@ -125,7 +134,7 @@ export async function createWorkspace(
         ? options.world?.code ?? generateWorldCode()
         : generateWorkspaceScopeCode(now),
       name: preparedProject.name,
-      description: preparedProject.description,
+      description: input.description,
       currentVersion: preparedProject.workspacePurpose === 'world-engine'
         ? options.world?.currentVersion ?? 0
         : 0,
@@ -140,17 +149,21 @@ export async function createWorkspace(
       projectId,
       worldId,
       fallback: {
-        genres: preparedProject.genres,
-        targetWordCount: preparedProject.targetWordCount,
-        writingStyleId: preparedProject.writingStyleId,
-        methodologyId: preparedProject.methodologyId,
+        genres,
+        targetWordCount: input.targetWordCount,
+        writingStyleId: input.writingStyleId,
+        methodologyId: input.methodologyId,
+        includeCultivationProgressInAI: input.includeCultivationProgressInAI ?? false,
       },
       create: {
         title: preparedProject.name,
-        description: preparedProject.description,
-        genres: preparedProject.genres,
-        status: preparedProject.status,
-        targetWordCount: preparedProject.targetWordCount,
+        description: input.description,
+        genres,
+        customGenre: input.customGenre,
+        status: input.status,
+        targetWordCount: input.targetWordCount,
+        coverImage: input.coverImage,
+        activeCharacterDrivenPlanId: input.activeCharacterDrivenPlanId,
         kind: options.kind,
         novelProfile: options.novelProfile,
       },
@@ -163,15 +176,8 @@ export async function createWorkspace(
     }
     const createdWorld = { ...world, id: worldId }
     const createdWork = { ...work, id: workId }
-    const projectPatch = projectActiveWorkProjection(createdWorld, createdWork)
+    const projectPatch = { activeWorldId: worldId, activeWorkId: workId }
     await db.projects.update(projectId, { ...projectPatch, updatedAt: now })
-    await db.ownershipMigrations.add(nativeOwnershipReceipt({
-      projectId,
-      worldId,
-      workId,
-      workspaceUid: preparedProject.workspaceUid!,
-      createdAt: now,
-    }))
     return {
       project: { ...preparedProject, ...projectPatch, id: projectId, updatedAt: now },
       world: createdWorld,

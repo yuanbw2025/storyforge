@@ -123,8 +123,8 @@ describe('WORLD-1 地图空间约束布局', () => {
     expect(result.diagnostics.violations.some(item => item.severity === 'conflict')).toBe(true)
   })
 
-  it('没有空间实体的旧配置仍返回空布局和估算比例尺', () => {
-    const result = solveSpatialLayout({ width: 1200, height: 800, seed: 'legacy' })
+  it('没有空间实体的当前配置返回空布局和估算比例尺', () => {
+    const result = solveSpatialLayout({ width: 1200, height: 800, seed: 'empty-layout' })
     expect(result.placements).toEqual([])
     expect(result.diagnostics).toEqual({ iterations: 0, violations: [] })
     expect(result.scale.source).toBe('estimated')
@@ -132,7 +132,21 @@ describe('WORLD-1 地图空间约束布局', () => {
 
   it('AI explicit 事实必须有逐字证据，关系端点必须在实体闭集中', () => {
     const sourceText = '天南帝国以天南城为都。落雁镇在天南城西北百里。疆域东西横跨三千公里。'
-    const config = parseVoronoiMapConfig(JSON.stringify({
+    const payload = {
+      seed: 'evidence-layout',
+      mapName: '天南疆域',
+      pointCount: 10_000,
+      landRatio: 0.45,
+      continentCount: 1,
+      stateCount: 2,
+      burgDensity: 0.5,
+      temperatureShift: 0,
+      precipitationFactor: 1,
+      heightmapTemplate: 'continents',
+      namingStyle: 'chinese',
+      stateNames: ['天南帝国', '北境联盟'],
+      burgNames: ['天南城', '落雁镇'],
+      riverNames: [],
       spatialEntities: [
         {
           name: '天南帝国',
@@ -146,9 +160,8 @@ describe('WORLD-1 地图空间约束布局', () => {
           kind: 'settlement',
           scaleTier: 'town',
           source: 'explicit',
-          evidenceQuote: '用户并没有写这一句',
+          evidenceQuote: '落雁镇在天南城西北百里',
         },
-        { name: '坏类型', kind: 'planet', source: 'inferred' },
       ],
       spatialRelations: [
         {
@@ -160,16 +173,11 @@ describe('WORLD-1 地图空间约束布局', () => {
           source: 'explicit',
           evidenceQuote: '落雁镇在天南城西北百里',
         },
-        {
-          from: '不存在的城',
-          to: '天南帝国',
-          direction: 'east',
-          source: 'inferred',
-        },
       ],
       mapWidthKm: 3000,
       mapWidthEvidenceQuote: '疆域东西横跨三千公里',
-    }), sourceText)
+    }
+    const config = parseVoronoiMapConfig(JSON.stringify(payload), sourceText)
 
     expect(config.spatialEntities).toHaveLength(2)
     expect(config.spatialEntities?.[0]).toMatchObject({
@@ -179,9 +187,9 @@ describe('WORLD-1 地图空间约束布局', () => {
     })
     expect(config.spatialEntities?.[1]).toMatchObject({
       name: '落雁镇',
-      source: 'inferred',
+      source: 'explicit',
+      evidenceQuote: '落雁镇在天南城西北百里',
     })
-    expect(config.spatialEntities?.[1]).not.toHaveProperty('evidenceQuote')
     expect(config.spatialRelations).toHaveLength(1)
     expect(config.spatialRelations?.[0]).toMatchObject({
       direction: 'north-west',
@@ -190,6 +198,21 @@ describe('WORLD-1 地图空间约束布局', () => {
       source: 'explicit',
     })
     expect(config.mapWidthKm).toBe(3000)
+    expect(() => parseVoronoiMapConfig(JSON.stringify({
+      ...payload,
+      spatialRelations: [...payload.spatialRelations, {
+        from: '不存在的城',
+        to: '天南帝国',
+        direction: 'east',
+        source: 'inferred',
+      }],
+    }), sourceText)).toThrow('空间关系端点必须是两个不同的登记实体')
+    expect(() => parseVoronoiMapConfig(JSON.stringify({
+      ...payload,
+      spatialEntities: payload.spatialEntities.map(entity => entity.name === '落雁镇'
+        ? { ...entity, evidenceQuote: '用户并没有写这一句' }
+        : entity),
+    }), sourceText)).toThrow('explicit 证据不是登记来源逐字引文')
   })
 
   it('地图 prompt 明确要求空间关系、闭集和证据边界', () => {

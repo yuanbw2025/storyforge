@@ -4,8 +4,8 @@ import { SYSTEM_PROMPT_SEEDS } from '../../src/lib/ai/prompt-seeds'
 import { NOVEL_CONTENT_PROMPT_SEEDS } from '../../src/lib/ai/prompt-seeds-novel'
 import { usePromptStore } from '../../src/stores/prompt'
 import { CONTEXT_SOURCE_BY_KEY } from '../../src/lib/registry/context-sources'
-import { assembleBoundPrompt, promptTemplateMatchesProject } from '../../src/lib/ai/prompt-variable-bindings'
-import type { Project, PromptTemplate } from '../../src/lib/types'
+import { assembleBoundPrompt, promptTemplateMatchesWork } from '../../src/lib/ai/prompt-variable-bindings'
+import type { PromptTemplate, Work } from '../../src/lib/types'
 import { seedCurrentWorkspace } from '../helpers/current-workspace'
 
 describe('小说创作 Prompt 内容回归主模板体系', () => {
@@ -43,7 +43,7 @@ describe('小说创作 Prompt 内容回归主模板体系', () => {
         .toEqual(new Set(seed.variables.filter(variable => variable !== 'userHint')))
       for (const binding of bindings) {
         expect(
-          Boolean(binding.manual || binding.projectField || binding.sourceKeys?.length),
+          Boolean(binding.manual || binding.workField || binding.sourceKeys?.length),
           `${seed.assetId}:${binding.variable} 没有输入来源`,
         ).toBe(true)
         for (const sourceKey of binding.sourceKeys ?? []) {
@@ -72,16 +72,16 @@ describe('小说创作 Prompt 内容回归主模板体系', () => {
     const source = NOVEL_CONTENT_PROMPT_SEEDS.find(seed => seed.assetId === 'P00-A')!
     const template: PromptTemplate = { ...source, createdAt: 1, updatedAt: 1 }
     const created = await seedCurrentWorkspace('绑定测试')
-    const project: Project = {
-      ...created.project,
-      genre: 'kehuan', genres: ['kehuan'], status: 'ongoing',
+    const work: Work = {
+      ...created.work,
+      genres: ['kehuan'], status: 'ongoing',
       description: '测试描述', targetWordCount: 300_000,
     }
-    const missing = await assembleBoundPrompt({ template, project })
+    const missing = await assembleBoundPrompt({ template, project: created.project, work })
     expect(missing.missingVariables).toContain('作者原始想法')
 
     const ready = await assembleBoundPrompt({
-      template, project, manualValues: { raw_intent: '太空站上的身份危机' },
+      template, project: created.project, work, manualValues: { raw_intent: '太空站上的身份危机' },
     })
     const finalText = ready.messages.map(message => message.content).join('\n')
     expect(finalText.match(/太空站上的身份危机/g)).toHaveLength(1)
@@ -90,18 +90,31 @@ describe('小说创作 Prompt 内容回归主模板体系', () => {
   })
 
   it('题材、篇幅和连载限定不会被当作所有项目通用模板', () => {
-    const project = (overrides: Partial<Project> = {}): Project => ({
-      id: 502, name: '适用性测试', genre: 'kehuan', genres: ['kehuan'], status: 'drafting',
-      description: '', targetWordCount: 300_000, createdAt: 1, updatedAt: 1, ...overrides,
+    const work = (overrides: Partial<Work> = {}): Work => ({
+      id: 502, projectId: 1, worldId: 1,
+      code: 'WORK-00000000-0000-4000-8000-000000000502',
+      kind: 'novel', novelProfile: 'long', title: '适用性测试',
+      genres: ['kehuan'], status: 'drafting', description: '',
+      targetWordCount: 300_000, currentWordCount: 0,
+      includeCultivationProgressInAI: false,
+      activeCharacterDrivenPlanId: null, activeNarrativeModuleId: null,
+      postAdoptionPolicy: 'suggest',
+      postAdoptionTaskTypes: ['organization', 'memory', 'retrieval', 'consistency'],
+      postAdoptionBudget: {
+        maxModelCalls: 2, maxInputTokens: 48_000, maxOutputTokens: 16_000,
+        maxCostUsd: 0.25, allowUnknownCost: false,
+      },
+      createdAt: 1, updatedAt: 1, ...overrides,
     })
     const asTemplate = (assetId: string): PromptTemplate => ({
       ...NOVEL_CONTENT_PROMPT_SEEDS.find(seed => seed.assetId === assetId)!, createdAt: 1, updatedAt: 1,
     })
-    expect(promptTemplateMatchesProject(asTemplate('G-SCIFI-A'), project())).toBe(true)
-    expect(promptTemplateMatchesProject(asTemplate('G-HISTORY-A'), project())).toBe(false)
-    expect(promptTemplateMatchesProject(asTemplate('P09L-A'), project())).toBe(true)
-    expect(promptTemplateMatchesProject(asTemplate('P09S-A'), project())).toBe(false)
-    expect(promptTemplateMatchesProject(asTemplate('P09S-A'), project({ targetWordCount: 30_000 }))).toBe(true)
+    expect(promptTemplateMatchesWork(asTemplate('G-SCIFI-A'), work())).toBe(true)
+    expect(promptTemplateMatchesWork(asTemplate('G-HISTORY-A'), work())).toBe(false)
+    expect(promptTemplateMatchesWork(asTemplate('P09L-A'), work())).toBe(true)
+    expect(promptTemplateMatchesWork(asTemplate('P09S-A'), work())).toBe(false)
+    expect(promptTemplateMatchesWork(asTemplate('P09S-A'), work({ targetWordCount: 30_000 }))).toBe(false)
+    expect(promptTemplateMatchesWork(asTemplate('P09S-A'), work({ novelProfile: 'short', targetWordCount: 30_000 }))).toBe(true)
   })
 
   it('复用原 Prompt store 增量写入，并保留已有模板的激活选择', async () => {

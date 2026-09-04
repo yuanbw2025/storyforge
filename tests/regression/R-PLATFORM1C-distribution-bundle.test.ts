@@ -11,19 +11,20 @@ import { putMediaBlobObject, sha256MediaData } from '../../src/lib/product-produ
 import { parseProductRuntimePackageV1 } from '../../src/lib/product-production/runtime-package'
 import { assertProductReleaseUnchanged } from '../../src/lib/product/releases'
 import type { FrozenRuntimeMediaAssetV2, ProductRuntimePackageV1, WorkspaceScope } from '../../src/lib/types'
-import { ensureWorkspaceOwnership } from '../../src/lib/workspace/ownership'
+import { resolveWorkspaceOwnership } from '../../src/lib/workspace/ownership'
 import { createWorldRevision, publishWorldRevision } from '../../src/lib/world-engine/releases'
 import { CURRENT_PRODUCT_RESOURCE_KEYS, currentProductSelection } from '../helpers/current-product-world'
 import { createFixtureProductReleaseManifestV1 } from '../helpers/product-release-v1'
+import { seedCurrentProject } from '../helpers/current-workspace'
 
 async function workspace(name: string) {
   const now = Date.now()
-  const projectId = await db.projects.add({
+  const projectId = await seedCurrentProject({
     workspacePurpose: 'world-engine',
-    name, genre: 'interactive-fiction', genres: ['interactive-fiction'], status: 'drafting',
+    name, genres: ['interactive-fiction'], status: 'drafting',
     description: '', targetWordCount: 1, createdAt: now, updatedAt: now,
   } as never) as number
-  return ensureWorkspaceOwnership(projectId)
+  return resolveWorkspaceOwnership(projectId)
 }
 
 function narrative(): ProductRuntimePackageV1['narrative'] {

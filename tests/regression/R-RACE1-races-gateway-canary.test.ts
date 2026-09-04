@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { generateWorkspaceUid } from '../../src/lib/memory/identity'
-import { ensureWorkspaceOwnership } from '../../src/lib/workspace/ownership'
+import { resolveWorkspaceOwnership } from '../../src/lib/workspace/ownership'
 import { stampNewRecord } from '../../src/lib/workspace/scope'
 import type { WorkspaceScope } from '../../src/lib/types'
 import { AgentTeamBudgetTracker } from '../../src/lib/agent/team-budget'
@@ -15,14 +15,14 @@ import { commitMasterAgentCandidateAdoptionV1 } from '../../src/lib/agent/run/ma
 import { readContextGatewayManifestV3ForAttemptV1 } from '../../src/lib/context-gateway/attempt-evidence'
 import { assertContextGatewayCandidateAdoptableV1 } from '../../src/lib/context-gateway/execution'
 import { getAgentSkillV1 } from '../../src/lib/agent/skill-registry'
+import { seedCurrentProject } from '../helpers/current-workspace'
 
 const NOW = 1_788_100_000_000
 
 async function seedWorkspace(name: string): Promise<{ projectId: number; scope: WorkspaceScope }> {
-  const projectId = await db.projects.add({
+  const projectId = await seedCurrentProject({
     workspaceUid: generateWorkspaceUid(),
     name,
-    genre: 'fantasy',
     genres: ['fantasy'],
     description: '',
     status: 'drafting',
@@ -30,7 +30,7 @@ async function seedWorkspace(name: string): Promise<{ projectId: number; scope: 
     createdAt: NOW,
     updatedAt: NOW,
   } as never) as number
-  const ownership = await ensureWorkspaceOwnership(projectId)
+  const ownership = await resolveWorkspaceOwnership(projectId)
   return { projectId, scope: ownership.scope }
 }
 
@@ -54,6 +54,7 @@ function plan(hint = ''): MasterAgentPlan {
 
 async function runCandidate(fixture: { projectId: number; scope: WorkspaceScope }) {
   const conversation = await getOrCreateAgentConversation({
+    purpose: 'test:r-race1-races-gateway-canary:1',
     projectId: fixture.projectId,
     scope: fixture.scope,
     worldGroupId: null,

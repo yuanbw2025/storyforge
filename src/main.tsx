@@ -7,16 +7,14 @@ import { DialogProvider } from './components/shared/Dialog'
 import { ToastProvider } from './components/shared/Toast'
 import { usePromptStore } from './stores/prompt'
 import { useWorkflowStore } from './stores/workflow'
-import { ensureSchema, REQUIRED_TABLES } from './lib/db/ensure-schema'
+import { openCurrentSchema } from './lib/db/ensure-schema'
 import { validateRegistry } from './lib/registry/validate'
-import { db } from './lib/db/schema'
-import { finalizeCharacterAxesMigrationSnapshots } from './lib/migrations/finalize-character-axes-snapshots'
 import { applyStoryForgeTheme, resolveStoryForgeTheme } from './lib/theme'
 import { registerStoryForgeServiceWorker } from './lib/pwa/register-service-worker'
 import { installRuntimeDiagnostics } from './lib/diagnostics/local-diagnostic-report'
 import './index.css'
 
-// 从 localStorage 恢复主题（兼容旧主题名迁移）
+// 从当前主题闭集恢复；未知值回到默认主题。
 applyStoryForgeTheme(resolveStoryForgeTheme(localStorage.getItem('storyforge-theme')))
 registerStoryForgeServiceWorker()
 installRuntimeDiagnostics()
@@ -45,36 +43,21 @@ async function bootstrap() {
   // 0. FB-11: 尽早申请持久化存储,降低 IndexedDB 被浏览器驱逐("重置")的概率。
   void requestPersistentStorage()
 
-  // 0. Phase 1.1b: 注册表完整性校验。开发环境 throw(立刻发现漏登记),生产环境只告警。
-  try {
-    validateRegistry({ throwOnError: import.meta.env.DEV })
-  } catch (e) {
-    console.error('[bootstrap] registry validation failed:', e)
-  }
+  // 0. 三注册表是启动硬门；不完整的读写与生命周期定义不得进入 UI。
+  validateRegistry()
 
-  // 1. Schema 健康自检：开发环境可自动 reset，生产环境绝不自动删库。
-  try {
-    const schemaState = await ensureSchema(REQUIRED_TABLES, {
-      allowReset: import.meta.env.DEV,
-      expectedVersion: db.verno,
-    })
-    if (schemaState.blocked) {
-      throw new Error(`数据库结构检查已阻断打开：缺少 ${schemaState.missing.join(', ')}`)
-    }
-    await db.open()
-    await finalizeCharacterAxesMigrationSnapshots()
-  } catch (e) {
-    console.error('[bootstrap] schema check failed:', e)
-  }
+  // 1. 当前 schema 是应用启动硬门。任何其它数据库版本都必须停止启动，
+  // 不能在打开失败后继续执行 Store 初始化并造成半可用界面。
+  await openCurrentSchema()
 
-  // 2. Phase 1：初始化提示词模板（必要时 seed 系统模板）
+  // 2. 初始化提示词模板（必要时 seed 系统模板）。
   try {
     await usePromptStore.getState().init()
   } catch (e) {
     console.error('[bootstrap] prompt store init failed:', e)
   }
 
-  // 3. Phase 16：初始化工作流（必要时 seed 系统工作流）
+  // 3. 初始化工作流（必要时 seed 系统工作流）。
   try {
     await useWorkflowStore.getState().init()
   } catch (e) {
@@ -96,4 +79,20 @@ async function bootstrap() {
   )
 }
 
-bootstrap()
+void bootstrap().catch((error: unknown) => {
+  console.error('[bootstrap] application startup blocked:', error)
+  const message = error instanceof Error ? error.message : String(error)
+  const root = document.getElementById('root')
+  if (!root) return
+  ReactDOM.createRoot(root).render(
+    <main className="min-h-screen bg-bg-base p-8 text-text-primary" role="alert">
+      <div className="mx-auto max-w-2xl rounded-xl border border-error/40 bg-bg-surface p-6">
+        <h1 className="text-lg font-semibold text-error">StoryForge 无法启动</h1>
+        <p className="mt-3 text-sm leading-6">
+          当前版本只支持由当前架构创建的数据，应用已在任何 Store 初始化之前停止。
+        </p>
+        <pre className="mt-4 overflow-auto rounded bg-bg-elevated p-3 text-xs">{message}</pre>
+      </div>
+    </main>,
+  )
+})

@@ -542,8 +542,8 @@ export interface RuleItemDefinitionV1 {
   description: string;
   tags: string[];
   grantedActionKeys: string[];
-  /** Optional complete inventory behavior. Absence preserves legacy persistent unique-item semantics. */
-  mechanics?: {
+  /** Complete deterministic inventory behavior. */
+  mechanics: {
     category: string;
     stackPolicy: "unique" | "stackable";
     maxStack: number | null;
@@ -561,14 +561,13 @@ export interface RuleAdvancementDefinitionV1 {
   awardPerMilestone: number;
   attributeIncreaseCost: number;
   maximumAttributeValue: number;
-  /** Optional only for legacy packs; built-in/current packs declare a complete growth model. */
-  progressionModel?: TtrpgCharacterProgressionModelV2;
-  skillIncreaseCost?: number;
-  maximumSkillValue?: number;
-  levelIncreaseCost?: number;
-  maximumLevel?: number;
-  rankOrder?: string[];
-  rankIncreaseCost?: number;
+  progressionModel: TtrpgCharacterProgressionModelV2;
+  skillIncreaseCost: number;
+  maximumSkillValue: number;
+  levelIncreaseCost: number;
+  maximumLevel: number;
+  rankOrder: string[];
+  rankIncreaseCost: number;
 }
 
 export interface RuleCharacterSheetSchemaV1 {
@@ -775,18 +774,14 @@ export interface TtrpgHouseRuleDiffV2 {
 
 export interface TtrpgCharacterTemplateV1 {
   characterKey: string;
-  /** Production seat identity; legacy releases derive player.N by roster order. */
-  seatKey?: string;
+  /** Production seat identity; null for NPC templates. */
+  seatKey: string | null;
   name: string;
   description: string;
   sourceRefs: string[];
   role: "player" | "npc";
-  /**
-   * Frozen seat authority. Legacy releases omit this field and are interpreted
-   * as human-controlled players / GM-controlled NPCs. New production builds
-   * persist it so reaction orchestration cannot make an AI act for a human.
-   */
-  controller?: "human" | "ai" | "open" | "gm";
+  /** Frozen authority prevents AI from acting for a human-controlled seat. */
+  controller: "human" | "ai" | "open" | "gm";
   attributes: Record<string, number>;
   attributeMappings: Record<
     string,
@@ -802,22 +797,21 @@ export interface TtrpgCharacterTemplateV1 {
   itemKeys: string[];
   actionKeys: string[];
   portraitAssetKey: string | null;
-  /** Optional only for legacy releases. Every new production build freezes it. */
-  characterSheet?: TtrpgCharacterSheetV2;
+  characterSheet: TtrpgCharacterSheetV2;
   /** Private player intent is only projected to that seat and the GM. */
-  playerProfile?: {
+  playerProfile: {
     privateGoal: string;
     secret: string;
     portrayal: string;
-  };
-  /** Optional for legacy releases; new NPC templates freeze this GM-only prep card. */
-  gmProfile?: {
+  } | null;
+  /** GM-only preparation card; null for player templates. */
+  gmProfile: {
     objective: string;
     leverage: string;
     secret: string;
     portrayal: string;
     escalation: string;
-  };
+  } | null;
 }
 
 export interface TtrpgClueV1 {
@@ -848,8 +842,8 @@ export interface TtrpgSceneV1 {
   failureForward: string;
   gmSecret: string;
   sourceRefs: string[];
-  /** Optional for legacy CampaignPacks; new campaigns bind a frozen tabletop map. */
-  tabletopMapKey?: string | null;
+  /** Frozen tabletop map binding; null when the product disables maps. */
+  tabletopMapKey: string | null;
 }
 
 /** Frozen campaign truth bible. These values are GM-authority facts, not prose hints. */
@@ -910,8 +904,8 @@ export interface TtrpgCampaignEndingV1 {
   title: string;
   requirements: string[];
   epilogue: string;
-  /** Optional only for legacy packs; every production campaign freezes a machine-checkable trigger. */
-  trigger?: {
+  /** Machine-checkable ending trigger. */
+  trigger: {
     sceneKey: string;
     requiredConclusionKeys: string[];
     forbiddenConclusionKeys: string[];
@@ -1059,8 +1053,8 @@ export interface TtrpgCampaignContentV1 {
   schema: "storyforge.ttrpg-campaign";
   version: 1;
   campaignKey: string;
-  /** Formal table authority for the GM seat; legacy releases default to human. */
-  gmMode?: "human" | "ai" | "hybrid";
+  /** Formal table authority for the GM seat. */
+  gmMode: "human" | "ai" | "hybrid";
   title: string;
   pitch: string;
   playerCount: { minimum: number; maximum: number };
@@ -1076,13 +1070,12 @@ export interface TtrpgCampaignContentV1 {
     pauseSignal: string;
     openDoor: boolean;
   };
-  /** Optional only for legacy packs; new production campaigns freeze these authoring structures. */
-  bible?: TtrpgCampaignBibleV1;
-  clocks?: TtrpgCampaignClockV1[];
-  fronts?: TtrpgCampaignFrontV1[];
-  secrets?: TtrpgCampaignSecretV1[];
+  bible: TtrpgCampaignBibleV1;
+  clocks: TtrpgCampaignClockV1[];
+  fronts: TtrpgCampaignFrontV1[];
+  secrets: TtrpgCampaignSecretV1[];
   /** Proposal/mixing provenance copied from the frozen Production Brief. */
-  designProvenance?: {
+  designProvenance: {
     origin: "author-guided" | "ai-candidate";
     proposalKeys: string[];
     baseProposalKey: string;
@@ -1090,8 +1083,8 @@ export interface TtrpgCampaignContentV1 {
     lockedSections: Array<"background" | "coreConflict" | "opening" | "fronts" | "secrets" | "endings">;
     candidateHash: string | null;
   };
-  /** Frozen table-information policy. Legacy CampaignPacks default to public dice. */
-  informationPolicy?: {
+  /** Frozen table-information policy. */
+  informationPolicy: {
     characterPrivateChannels: boolean;
     gmSecrets: boolean;
     hiddenNpcState: boolean;
@@ -1124,11 +1117,10 @@ export interface TtrpgCampaignContentV1 {
     title: string;
     award: number;
   }>;
-  /** Optional for legacy CampaignPacks; generated campaigns include a data-only tabletop. */
-  tabletop?: TtrpgTabletopPresentationV1;
-  /** Optional for legacy releases; new production campaigns freeze continuity and runtime slots. */
-  visualBible?: TtrpgVisualBibleV1;
-  mediaManifest?: TtrpgMediaManifestV1;
+  /** Null is an explicit no-map product decision. */
+  tabletop: TtrpgTabletopPresentationV1 | null;
+  visualBible: TtrpgVisualBibleV1;
+  mediaManifest: TtrpgMediaManifestV1;
   sourceWorld: {
     contentHash: string;
     bundleHash: string;

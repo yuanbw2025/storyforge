@@ -26,10 +26,9 @@ export interface ForeshadowSuggestionBaselineRowV1 {
 
 export interface ForeshadowSuggestionBaselineV1 {
   version: 1
-  project: {
+  work: {
     id: number
-    name: string
-    genre: string
+    title: string
     genres: string[]
     description: string
   }
@@ -70,11 +69,13 @@ export async function readForeshadowSuggestionBaselineV1(input: {
   scope: WorkspaceScope
   worldGroupId: number | null
 }): Promise<ForeshadowSuggestionBaselineV1> {
-  const [project, rows] = await Promise.all([
-    db.projects.get(input.scope.projectId),
+  const [work, rows] = await Promise.all([
+    db.works.get(input.scope.workId),
     readOwnedRows<Record<string, unknown>>(input.scope, 'foreshadows', { owner: 'work' }),
   ])
-  if (!project?.id) throw new Error('伏笔建议目标项目不存在。')
+  if (!work?.id || work.projectId !== input.scope.projectId || work.worldId !== input.scope.worldId) {
+    throw new Error('伏笔建议目标作品不存在。')
+  }
   const foreshadows = rows.map(row => {
     if (!Number.isInteger(row.id) || !TYPES.has(row.type as ForeshadowType)
       || !STATUSES.has(String(row.status)) || !Number.isFinite(row.createdAt)
@@ -103,12 +104,11 @@ export async function readForeshadowSuggestionBaselineV1(input: {
   }).sort((left, right) => left.id - right.id)
   return {
     version: 1,
-    project: {
-      id: project.id,
-      name: project.name,
-      genre: project.genre,
-      genres: [...project.genres],
-      description: project.description,
+    work: {
+      id: work.id,
+      title: work.title,
+      genres: [...work.genres],
+      description: work.description,
     },
     worldGroupId: input.worldGroupId,
     foreshadows,
@@ -118,9 +118,9 @@ export async function readForeshadowSuggestionBaselineV1(input: {
 export function formatForeshadowSuggestionBaselineV1(baseline: ForeshadowSuggestionBaselineV1): string {
   return [
     '【伏笔建议正式基线】',
-    `项目：${baseline.project.name}`,
-    `题材：${baseline.project.genres.join('、') || baseline.project.genre || '未设置'}`,
-    baseline.project.description ? `项目说明：${baseline.project.description}` : '',
+    `作品：${baseline.work.title}`,
+    `题材：${baseline.work.genres.join('、') || '未设置'}`,
+    baseline.work.description ? `作品说明：${baseline.work.description}` : '',
     `目标世界组：${baseline.worldGroupId ?? '主世界/未分组'}`,
     baseline.foreshadows.length ? '已有伏笔（名称不得重复）：' : '已有伏笔：无',
     ...baseline.foreshadows.map(row => (

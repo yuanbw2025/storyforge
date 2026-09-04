@@ -1,14 +1,5 @@
 import type { RagDocumentMetadata } from './rag-library'
 
-/** 角色定位（v3 §2.1 — 扩展 npc / extra 两类） */
-export type CharacterRole =
-  | 'protagonist'    // 主角
-  | 'antagonist'     // 反派
-  | 'supporting'     // 重要配角
-  | 'minor'          // 次要角色
-  | 'npc'            // NPC（紧凑列表展示）
-  | 'extra'          // 路人（表格行：姓名/出场时间/章节/作用/结局）
-
 /** 戏份权重（R1：与阵营正交） */
 export type CharacterRoleWeight = 'main' | 'secondary' | 'npc' | 'extra'
 
@@ -18,9 +9,6 @@ export type CharacterMoralAxis = 'good' | 'neutral' | 'evil'
 /** 阵营九宫格：秩序轴 */
 export type CharacterOrderAxis = 'lawful' | 'neutral' | 'chaotic'
 
-/** 旧二值阵营，仅为旧数据兼容保留。新代码使用 moralAxis/orderAxis。 */
-export type CharacterAlignment = 'good' | 'evil'
-
 /** 角色在作品规划层的生命周期；变化只能经作者确认候选写入。 */
 export type CharacterNarrativeStatus = 'planned' | 'active' | 'inactive' | 'retired' | 'deceased'
 
@@ -29,13 +17,9 @@ export interface Character extends RagDocumentMetadata {
   id?: number
   projectId: number
   name: string
-  /** 兼容字段：始终由 roleWeight + moralAxis 派生，不再作为独立输入。 */
-  role: CharacterRole
   roleWeight: CharacterRoleWeight
   moralAxis: CharacterMoralAxis
   orderAxis: CharacterOrderAxis
-  /** @deprecated 旧二值阵营。新代码使用 moralAxis/orderAxis。 */
-  alignment?: CharacterAlignment
   shortDescription: string   // 一句话简介
   appearance: string         // 外貌
   personality: string        // 性格
@@ -77,7 +61,7 @@ export interface Character extends RagDocumentMetadata {
   activeChapterRange?: string
   /** 退场/死亡章节 ID */
   exitChapterId?: number | null
-  /** 当前规划状态。旧数据缺失时按 active 解释。 */
+  /** 当前规划状态。 */
   narrativeStatus?: CharacterNarrativeStatus
   /** 最近一次状态变化所绑定的章节证据。 */
   statusEvidenceChapterId?: number | null
@@ -90,7 +74,7 @@ export interface Character extends RagDocumentMetadata {
   statusProducerCandidateHash?: string | null
 
   // ── Phase 25.4 多世界 ──
-  /** 角色原属世界组 ID；null 只表示尚未归属/单世界兼容，不代表跨世界。 */
+  /** 角色原属世界组 ID；null 表示尚未归属，不代表跨世界。 */
   homeWorldGroupId?: number | null
   /** 是否跨世界角色（主角、系统精灵等，在所有世界中可见） */
   isCrossWorld?: boolean

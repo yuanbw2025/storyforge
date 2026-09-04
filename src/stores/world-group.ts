@@ -1,17 +1,14 @@
-/**
- * Phase 25.4 — 多世界系统 Store
- */
+/** 当前多世界创作域 Store。 */
 import { create } from 'zustand'
 import { db } from '../lib/db/schema'
 import type { WorldGroup, WorldGroupLink } from '../lib/types'
 import { requireBackupBefore } from '../lib/safety/require-backup-before'
-import { cascadeDeleteGroup, stampPrimaryWorld } from '../lib/registry/lifecycle'
+import { assignUnscopedRecordsToPrimaryWorld, cascadeDeleteGroup } from '../lib/registry/lifecycle'
 import { assertRecordInScope, readOwnedRows, resolveScopeLike, stampNewRecord, type WorkspaceScopeLike } from '../lib/workspace/scope'
 
 const now = () => Date.now()
 
-// Phase 1.1b: 原 PROJECT_TABLES_ALL 手写 45 表清单已删除,
-// deleteGroup/migrate 改用 lib/registry/lifecycle 派生 API。
+// 删除、重分配作用域均由 PROJECT_TABLES 派生完整生命周期。
 
 interface WorldGroupStore {
   groups: WorldGroup[]
@@ -38,7 +35,7 @@ interface WorldGroupStore {
   ensurePrimaryGroup: (scope: WorkspaceScopeLike) => Promise<number>
 
   // 开启多世界：确保主世界组 + 把现有项目级数据归属到主世界组
-  migrateToMultiWorld: (scope: WorkspaceScopeLike) => Promise<boolean>
+  enableMultiWorld: (scope: WorkspaceScopeLike) => Promise<boolean>
 
   // 切换活跃世界
   setActiveGroup: (id: number | null) => void
@@ -93,7 +90,7 @@ export const useWorldGroupStore = create<WorldGroupStore>((set, get) => ({
     if (!group || group.type === 'primary') return // 不允许删主世界
     if (!await assertRecordInScope(await resolveScopeLike(group.projectId), 'worldGroups', group, { owner: 'world' })) return
 
-    // 数据红线:删世界组前强制提示备份(Pre-Phase 0 安全网)
+    // 删除世界组会级联清除当前世界的数据，执行前必须显式备份确认。
     const proceed = await requireBackupBefore({
       operation: `删除世界「${group.name}」`,
       projectId: group.projectId,
@@ -104,8 +101,8 @@ export const useWorldGroupStore = create<WorldGroupStore>((set, get) => ({
 
     const pid = group.projectId
 
-    // Phase 1.1b: 级联删除从 PROJECT_TABLES 注册表派生(worldScoped 表 + 角色归属清除 +
-    // 大纲 setNull + 内置词条分类保留 + 删世界组本身)。行为与手写版等价(R-01 保证)。
+    // 级联删除从 PROJECT_TABLES 派生：世界作用域表、角色归属、
+    // 大纲引用、内置词条分类和世界组本身共享同一生命周期定义。
     await cascadeDeleteGroup(pid, id)
 
     // 刷新 store
@@ -204,13 +201,11 @@ export const useWorldGroupStore = create<WorldGroupStore>((set, get) => ({
     return id
   },
 
-  migrateToMultiWorld: async (scopeInput: WorkspaceScopeLike) => {
+  enableMultiWorld: async (scopeInput: WorkspaceScopeLike) => {
     const scope = await resolveScopeLike(scopeInput)
     const projectId = scope.projectId
-    // 数据红线:启用多世界前强制提示备份(Pre-Phase 0 安全网)
-    // 理由:此操作会给现有数据盖章 worldGroupId,虽然不删数据,但当前代码已知有
-    //       P0-1/P0-2/P0-8 三处事务作用域 + 漏盖章问题,失败时可能让大纲消失。
-    //       Phase 0 修完后这个安全网可以减弱(但保留)。
+    // 从单世界创作切换到多世界创作会批量重分配语义记录的 worldGroupId，
+    // 因此即使不删除数据，也必须先经过显式备份确认。
     const proceed = await requireBackupBefore({
       operation: '启用多世界模式',
       projectId,
@@ -221,9 +216,9 @@ export const useWorldGroupStore = create<WorldGroupStore>((set, get) => ({
     // 1. 确保主世界组存在
     const primaryId = await get().ensurePrimaryGroup(scope)
 
-    // 2. Phase 1.1b: 盖章从 PROJECT_TABLES 注册表派生(所有 worldScoped 表的 null 记录
-    //    盖章到主世界；codexCategories 是项目级共享 schema，不在 worldScoped 清单中)。
-    await stampPrimaryWorld(projectId, primaryId)
+    // 2. 从 PROJECT_TABLES 派生所有需要重分配的世界作用域记录；
+    // codexCategories 是工作区共享分类，不参与世界作用域变更。
+    await assignUnscopedRecordsToPrimaryWorld(projectId, primaryId)
     return true
   },
 

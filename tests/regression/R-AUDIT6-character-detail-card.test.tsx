@@ -21,7 +21,6 @@ function character(patch: Partial<Character> = {}): Character {
     id: 7,
     projectId: 1,
     name: '林照雪',
-    role: 'protagonist',
     roleWeight: 'main',
     moralAxis: 'good',
     orderAxis: 'lawful',
@@ -53,12 +52,12 @@ const worlds: WorldGroup[] = [{
 
 const project = {
   id: 1,
+  workspaceUid: 'WS-00000000-0000-4000-8000-000000000001',
+  workspacePurpose: 'independent-work',
   name: '镜城纪事',
-  genre: 'fantasy',
-  genres: ['fantasy'],
-  status: 'drafting',
-  description: '',
-  targetWordCount: 100_000,
+  enableMultiWorld: true,
+  activeWorldId: 11,
+  activeWorkId: 12,
   createdAt: 1,
   updatedAt: 1,
 } satisfies Project

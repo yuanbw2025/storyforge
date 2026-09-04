@@ -86,7 +86,7 @@ describe('R-export-fullcoverage · 全表多世界往返安全网', () => {
     // 角色关系重映射
     const newRels = await db.characterRelations.where('projectId').equals(newId).toArray()
     expect(newRels).toHaveLength(1)
-    const newChar2 = newChars.find(c => c.role === 'supporting')!
+    const newChar2 = newChars.find(c => c.name === '苏长歌')!
     expect(newRels[0].fromCharacterId).toBe(newChar1.id)
     expect(newRels[0].toCharacterId).toBe(newChar2.id)
 
@@ -187,12 +187,12 @@ describe('R-export-fullcoverage · 全表多世界往返安全网', () => {
     const newLocChild = newLocs.find(l => l.name === '青云峰')!
     expect(newLocChild.parentId).toBe(newLocParent.id)
 
-    // 词条树 + 词条外键 + 世界组
+    // World 级共享词条分类树 + 具体词条的世界组归属
     const newCats = await db.codexCategories.where('projectId').equals(newId).toArray()
     const newCat = newCats.find(c => c.name === '势力')!
     const newSubCat = newCats.find(c => c.name === '宗门')!
     expect(newSubCat.parentId).toBe(newCat.id)
-    expect(newSubCat.worldGroupId).toBe(newWgA)
+    expect(newSubCat).not.toHaveProperty('worldGroupId')
     const newEntry = await db.codexEntries.where('projectId').equals(newId).first()
     expect(newEntry!.categoryId).toBe(newSubCat.id)
     expect(newEntry!.worldGroupId).toBe(newWgA)

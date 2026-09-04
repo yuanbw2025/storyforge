@@ -8,13 +8,15 @@ import { db } from '../../src/lib/db/schema'
 import { assembleContext } from '../../src/lib/registry/assemble-context'
 import { checkHeldItemAcquisition, projectHeldItems } from '../../src/lib/consistency/held-items'
 import type { Chapter, ItemLedgerEntry, OutlineNode } from '../../src/lib/types'
+import { seedCurrentProject } from '../helpers/current-workspace'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
 
 const now = Date.now()
 
 async function seedProject() {
-  const projectId = await db.projects.add({
+  const projectId = await seedCurrentProject({
     name: 'CONSISTENCY1',
-    genre: '',
+    genres: [],
     description: '',
     targetWordCount: 0,
     enableMultiWorld: true,
@@ -63,6 +65,7 @@ async function seedProject() {
     nodeIds.push(nodeId)
     chapterIds.push(chapterId)
   }
+  await finalizeCurrentFixtureV1(projectId)
   return { projectId, worldA, worldB, chapterIds, nodeIds }
 }
 
@@ -146,6 +149,7 @@ describe('CONSISTENCY-1 · heldItems 投影与确定性校验', () => {
       chapterTitle: '第1章',
       createdAt: now,
     } as any)
+    await finalizeCurrentFixtureV1(projectId)
 
     const ctx = await assembleContext({
       projectId,

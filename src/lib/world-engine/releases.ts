@@ -3,12 +3,12 @@ import { PROJECT_TABLES } from '../registry/project-tables'
 import type {
   WorldRelease,
   WorldReleaseManifestV3,
+  WorldSemanticSnapshotV1,
   WorldRevision,
   WorkspaceScope,
 } from '../types'
 import { WORLD_CAPABILITY_AREAS, type TableSpec, type WorldReleaseSection } from '../registry/types'
 import { resolveScope, scopeTransactionTables } from '../workspace/scope'
-import type { ProjectExportData } from '../export/json-export'
 import {
   deriveStrictExportProjectSnapshot,
   deriveStrictExportProjectSnapshotInCurrentTransaction,
@@ -19,10 +19,6 @@ import { effectiveWorkKind } from '../workspace/work-kind'
 import { parsePureWorldReleaseManifestV3, verifyPureWorldReleaseRecordV3 } from './release-codec'
 import { canonicalWorldReleaseJsonV1, hashWorldReleaseValueV1 } from './release-hash'
 import { isWorkCode, isWorkspaceUid } from '../memory/identity'
-
-// Release snapshots are deliberately sparse world-share packages, not v6+
-// full-project backups. v5 predates mandatory adaptation-private tables.
-const WORLD_RELEASE_PORTABLE_BACKUP_VERSION = 5
 
 export const WORLD_RELEASE_SECTIONS: ReadonlyArray<{
   key: WorldReleaseSection
@@ -122,20 +118,19 @@ function latestSemanticRevision(rows: readonly Record<string, unknown>[]): numbe
   return values.length ? Math.max(...values) : null
 }
 
-async function buildPortableReleaseProject(input: {
+async function buildWorldSemanticSnapshot(input: {
   scope: WorkspaceScope
   requestedTables: string[]
   strictSnapshot?: StrictProjectExportSnapshot
 }): Promise<{
-  portableProject: ProjectExportData
+  semanticSnapshot: WorldSemanticSnapshotV1
+  records: Record<string, unknown[]>
   semanticSelectionStats: SemanticSelectionStatsV1[]
 }> {
   const snapshot = input.strictSnapshot
     ?? await deriveStrictExportProjectSnapshot(input.scope.projectId)
   const backup = snapshot.data
-  if (backup.version < 4 || !backup.ownership || !backup.worlds || !backup.works) {
-    throw new Error('[release] 世界发布必须基于 v4+ 严格便携快照')
-  }
+  if (!backup.ownership || !backup.worlds || !backup.works) throw new Error('[release] 当前严格快照缺少所有权根')
   const worldExportId = snapshot.exportIds.get('worlds')?.get(input.scope.worldId)
   const workExportId = snapshot.exportIds.get('works')?.get(input.scope.workId)
   const worldRoot = backup.worlds.find(row => row._exportId === worldExportId)
@@ -148,25 +143,15 @@ async function buildPortableReleaseProject(input: {
     workspaceUid: sourceProject.workspaceUid,
     workspacePurpose: 'world-engine',
     name: worldRoot.name ?? workRoot.title,
-    description: worldRoot.description ?? workRoot.description ?? '',
-    genres: Array.isArray(workRoot.genres) ? [...workRoot.genres] : ['other'],
-    genre: Array.isArray(workRoot.genres) ? workRoot.genres[0] ?? 'other' : 'other',
-    status: 'drafting',
-    targetWordCount: 0,
-    currentWordCount: 0,
     enableMultiWorld: Boolean(sourceProject.enableMultiWorld),
-    ownershipSchemaVersion: 1,
     _activeWorldExportId: portableWorldId,
     _activeWorkExportId: portableWorkId,
-    _activeCharacterDrivenPlanExportId: null,
     createdAt: 0,
     updatedAt: 0,
   }
-  const portable: Record<string, unknown> = {
-    version: Math.min(backup.version, WORLD_RELEASE_PORTABLE_BACKUP_VERSION),
-    // Release content hashes must depend on content, not the wall clock used
-    // while deriving an otherwise identical portable snapshot.
-    exportedAt: 0,
+  const semanticSnapshot: WorldSemanticSnapshotV1 = {
+    schema: 'storyforge.world-semantic-snapshot',
+    version: 1,
     ownership: { contractVersion: 1, worldExportId: portableWorldId, workExportId: portableWorkId },
     project,
     worlds: [clone(worldRoot)],
@@ -203,30 +188,41 @@ async function buildPortableReleaseProject(input: {
       latestRevision: latestSemanticRevision(rows),
     }
   })
+  const records: Record<string, unknown[]> = {}
   for (const tableName of input.requestedTables) {
     if (tableName === 'worlds' || tableName === 'works' || tableName === 'worldReleases') continue
     const rows = Array.isArray(source[tableName]) ? clone(source[tableName] as Record<string, unknown>[]) : []
     const spec = PROJECT_TABLES.find(candidate => candidate.name === tableName)
     if (!spec?.worldSemantic) throw new Error(`[release] ${tableName} 未登记为世界语义资源`)
-    portable[tableName] = rows
+    records[tableName] = rows
       .filter(row => rowMatchesScope(row, portableWorldId, portableWorkId))
       .filter(row => isSemanticCanonRow(spec, row))
   }
-  const portableWorks = portable.works as Array<Record<string, unknown>>
+  const portableWorks = semanticSnapshot.works
+  portableWorks[0]._activeCharacterDrivenPlanExportId = null
   portableWorks[0]._activeNarrativeModuleExportId = null
-  for (const field of [
-    'coverImage', 'writingStyleId', 'methodologyId', 'activeCharacterDrivenPlanId',
-    'postAdoptionPolicy', 'postAdoptionTaskTypes', 'postAdoptionBudget',
-  ]) delete portableWorks[0][field]
-  // A WorldRelease owns semantic world content, not the source product's
-  // long/short/screenplay/comic workflow identity. Keep only a neutral Work
-  // compatibility root; derivation provenance records the true source kind.
+  for (const field of ['coverImage', 'writingStyleId', 'methodologyId']) delete portableWorks[0][field]
+  // A WorldRelease owns semantic world content, not a source product workflow.
+  // Its materialization root is therefore a neutral current-schema novel Work;
+  // workflow fields below are fixed scaffolding defaults, never copied source state.
   portableWorks[0].kind = 'novel'
   portableWorks[0].novelProfile = 'long'
+  portableWorks[0].status = 'drafting'
   portableWorks[0].targetWordCount = 0
   portableWorks[0].currentWordCount = 0
+  portableWorks[0].includeCultivationProgressInAI = false
+  portableWorks[0].postAdoptionPolicy = 'suggest'
+  portableWorks[0].postAdoptionTaskTypes = ['organization', 'memory', 'retrieval', 'consistency']
+  portableWorks[0].postAdoptionBudget = {
+    maxModelCalls: 2,
+    maxInputTokens: 48_000,
+    maxOutputTokens: 16_000,
+    maxCostUsd: 0.25,
+    allowUnknownCost: false,
+  }
   return {
-    portableProject: portable as unknown as ProjectExportData,
+    semanticSnapshot,
+    records,
     semanticSelectionStats,
   }
 }
@@ -249,16 +245,12 @@ async function buildWorldReleaseManifestInternal(input: {
   const unknown = requested.filter(name => !publishable.some(spec => spec.name === name))
   if (unknown.length) throw new Error(`[release] 表未登记为可发布:${unknown.join(', ')}`)
   const selectedTables = [...new Set(requested)]
-  const { portableProject, semanticSelectionStats } = await buildPortableReleaseProject({
+  const { semanticSnapshot, records, semanticSelectionStats } = await buildWorldSemanticSnapshot({
     scope,
     requestedTables: selectedTables,
     strictSnapshot,
   })
-  const portableRecord = portableProject as unknown as Record<string, unknown>
-  const records = Object.fromEntries(selectedTables.map(name => [
-    name,
-    Array.isArray(portableRecord[name]) ? clone(portableRecord[name] as unknown[]) : [],
-  ]))
+  for (const tableName of selectedTables) records[tableName] ??= []
   const dependencies = await Promise.all(Object.entries(records).map(async ([table, rows]) => ({
     table,
     rowCount: rows.length,
@@ -345,7 +337,7 @@ async function buildWorldReleaseManifestInternal(input: {
     selectedTables,
     dependencies,
     records,
-    portableProject: portableProject as unknown as Record<string, unknown>,
+    semanticSnapshot,
     capabilityProfile,
     resourceCatalog,
     sourceManifest,

@@ -56,9 +56,9 @@ async function resolveOwnedPlan(id: number): Promise<{
   plan: CharacterDrivenPlan
   scope: WorkspaceScope
 } | null> {
-  const beforeMigration = await db.characterDrivenPlans.get(id)
-  if (!beforeMigration) return null
-  const scope = await resolveScopeLike(beforeMigration.projectId)
+  const existingRecord = await db.characterDrivenPlans.get(id)
+  if (!existingRecord) return null
+  const scope = await resolveScopeLike(existingRecord.projectId)
   const plan = await db.characterDrivenPlans.get(id)
   if (!plan || !await assertRecordInScope(scope, 'characterDrivenPlans', plan, { owner: 'work' })) return null
   return { plan, scope }
@@ -73,14 +73,13 @@ export const useCharacterDrivenPlanStore = create<CharacterDrivenPlanStore>((set
   loadAll: async (scopeInput) => {
     set({ loading: true })
     const scope = await resolveReadScopeLike(scopeInput)
-    const [plans, project, work] = await Promise.all([
+    const [plans, work] = await Promise.all([
       readOwnedRows<CharacterDrivenPlan>(scope, 'characterDrivenPlans', { owner: 'work' })
         .then(rows => rows.sort((left, right) => right.updatedAt - left.updatedAt)),
-      db.projects.get(scope.projectId),
       scope.workId > 0 ? db.works.get(scope.workId) : undefined,
     ])
     const current = get().currentPlanId
-    const activeCandidate = work?.activeCharacterDrivenPlanId ?? project?.activeCharacterDrivenPlanId
+    const activeCandidate = work?.activeCharacterDrivenPlanId
     const active = plans.some(plan => plan.id === activeCandidate)
       ? activeCandidate ?? null
       : null
@@ -215,9 +214,8 @@ export const useCharacterDrivenPlanStore = create<CharacterDrivenPlanStore>((set
       }
     }
     const updatedAt = now()
-    await db.transaction('rw', db.projects, db.works, async () => {
+    await db.transaction('rw', db.works, async () => {
       await db.works.update(scope.workId, { activeCharacterDrivenPlanId: id, updatedAt })
-      await db.projects.update(projectId, { activeCharacterDrivenPlanId: id, updatedAt })
     })
     set({ activePlanId: id })
   },
@@ -225,9 +223,9 @@ export const useCharacterDrivenPlanStore = create<CharacterDrivenPlanStore>((set
   deletePlan: async (id) => {
     const resolved = await resolveOwnedPlan(id)
     if (!resolved?.plan.id) return
-    const { plan, scope } = resolved
+    const { scope } = resolved
     const updatedAt = now()
-    await db.transaction('rw', db.characterDrivenPlans, db.projects, db.works, async () => {
+    await db.transaction('rw', db.characterDrivenPlans, db.works, async () => {
       const children = (await readOwnedRows<CharacterDrivenPlan>(scope, 'characterDrivenPlans', { owner: 'work' }))
         .filter(child => child.parentPlanId === id)
       if (children.length) {
@@ -235,13 +233,6 @@ export const useCharacterDrivenPlanStore = create<CharacterDrivenPlanStore>((set
           key: child.id!,
           changes: { parentPlanId: null, updatedAt },
         })))
-      }
-      const project = await db.projects.get(plan.projectId)
-      if (project?.activeCharacterDrivenPlanId === id) {
-        await db.projects.update(plan.projectId, {
-          activeCharacterDrivenPlanId: null,
-          updatedAt,
-        })
       }
       const work = await db.works.get(scope.workId)
       if (work?.activeCharacterDrivenPlanId === id) {

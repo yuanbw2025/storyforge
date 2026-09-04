@@ -11,36 +11,35 @@ export function derivePromptLengthMode(targetWordCount: number): 'short' | 'medi
   return 'long'
 }
 
-/** New Work-aware resolver. Legacy rows keep the historical word-count heuristic. */
+/** Resolve novel prompt profile from the sole Work owner. */
 export function resolveNovelPromptMode(
   work: Pick<Work, 'kind' | 'novelProfile'> | null | undefined,
-  projectMirror: Pick<Project, 'targetWordCount'>,
 ): 'short' | 'medium' | 'long' {
-  if (!work || (work.kind == null && work.novelProfile == null)) {
-    return derivePromptLengthMode(projectMirror.targetWordCount)
-  }
+  if (!work) throw new Error('Prompt 匹配需要明确的 Work')
+  if (work.kind == null) throw new Error('小说 Work 缺少当前类型或流程配置')
   if (effectiveWorkKind(work) !== 'novel') throw new Error('非小说 Work 不能匹配小说 Prompt')
+  if (work.novelProfile == null) throw new Error('小说 Work 缺少当前类型或流程配置')
   return work.novelProfile === 'short' ? 'short' : 'long'
 }
 
-export function derivePromptSerializationMode(project: Project): 'standalone' | 'serial' {
-  return project.status === 'ongoing' ? 'serial' : 'standalone'
+export function derivePromptSerializationMode(work: Pick<Work, 'status'>): 'standalone' | 'serial' {
+  return work.status === 'ongoing' ? 'serial' : 'standalone'
 }
 
 export function getPromptBindingSourceKeys(template: PromptTemplate): string[] {
   return [...new Set(template.variableBindings?.flatMap(binding => binding.sourceKeys ?? []) ?? [])]
 }
 
-export function promptTemplateMatchesProject(template: PromptTemplate, project: Project, work?: Work | null): boolean {
-  if (work && effectiveWorkKind(work) !== 'novel') return false
+export function promptTemplateMatchesWork(template: PromptTemplate, work: Work): boolean {
+  if (effectiveWorkKind(work) !== 'novel') return false
   const applicability = template.applicability
   if (!applicability) return true
   if (applicability.lengthModes?.length
-    && !applicability.lengthModes.includes(resolveNovelPromptMode(work, project))) return false
+    && !applicability.lengthModes.includes(resolveNovelPromptMode(work))) return false
   if (applicability.serializationModes?.length
-    && !applicability.serializationModes.includes(derivePromptSerializationMode(project))) return false
+    && !applicability.serializationModes.includes(derivePromptSerializationMode(work))) return false
   if (applicability.genres?.length
-    && !project.genres.some(genre => applicability.genres!.includes(genre))) return false
+    && !work.genres.some(genre => applicability.genres!.includes(genre))) return false
   return true
 }
 
@@ -62,7 +61,7 @@ export interface AssembleBoundPromptInput {
 export interface AssembleBoundPromptResult {
   variables: PromptVariableContext
   missingVariables: string[]
-  missingScopes: ('project' | 'world' | 'outline' | 'chapter')[]
+  missingScopes: ('project' | 'work' | 'world' | 'outline' | 'chapter')[]
   messages: ChatMessage[]
   modelOverride?: { temperature?: number; maxTokens?: number }
 }
@@ -80,9 +79,9 @@ export async function assembleBoundPrompt(input: AssembleBoundPromptInput): Prom
     }
   }
 
-  const missingScopes = new Set<'project' | 'world' | 'outline' | 'chapter'>()
-  const hasAutomaticProjectInput = bindings.some(binding => binding.sourceKeys?.length || binding.projectField)
-  if (hasAutomaticProjectInput && !input.project?.id) missingScopes.add('project')
+  const missingScopes = new Set<'project' | 'work' | 'world' | 'outline' | 'chapter'>()
+  if (bindings.some(binding => binding.sourceKeys?.length) && !input.project?.id) missingScopes.add('project')
+  if (bindings.some(binding => binding.workField) && !input.work) missingScopes.add('work')
 
   const unresolvedSources = bindings
     .filter(binding => binding.required
@@ -100,19 +99,19 @@ export async function assembleBoundPrompt(input: AssembleBoundPromptInput): Prom
     && input.outlineNodeId == null && input.chapterId == null) missingScopes.add('outline')
 
   const variables: PromptVariableContext = {
-    projectName: input.project?.name ?? '',
-    genres: input.project?.genres.join(' / ') ?? '',
-    description: input.project?.description ?? '',
-    targetWordCount: input.work?.targetWordCount ?? input.project?.targetWordCount,
+    projectName: input.work?.title ?? '',
+    genres: input.work?.genres.join(' / ') ?? '',
+    description: input.work?.description ?? '',
+    targetWordCount: input.work?.targetWordCount,
     worldContext: input.previousOutput?.trim() || '',
     userHint: input.userHint?.trim() || '',
   }
   for (const binding of bindings) {
     const parts: string[] = []
-    const projectValue = input.project && binding.projectField
-      ? readPromptProjectField(input.project, binding.projectField, input.work)
+    const workValue = input.work && binding.workField
+      ? readPromptWorkField(input.work, binding.workField)
       : ''
-    if (projectValue) parts.push(projectValue)
+    if (workValue) parts.push(workValue)
     if (binding.sourceKeys?.length) {
       parts.push(`从下方统一项目上下文中选取与“${binding.label}”相关的已确认资料。`)
     }
@@ -143,7 +142,7 @@ export async function assembleBoundPrompt(input: AssembleBoundPromptInput): Prom
       if (!binding.required) return false
       if (input.manualValues?.[binding.variable]?.trim()) return false
       if (input.workflowValues?.[binding.variable]?.trim()) return false
-      if (input.project && binding.projectField && readPromptProjectField(input.project, binding.projectField, input.work)) return false
+      if (input.work && binding.workField && readPromptWorkField(input.work, binding.workField)) return false
       if (binding.sourceKeys?.some(key => includedSources.has(key))) return false
       return true
     })
@@ -163,17 +162,16 @@ export async function assembleBoundPrompt(input: AssembleBoundPromptInput): Prom
   }
 }
 
-function readPromptProjectField(
-  project: Project,
-  field: NonNullable<PromptTemplate['variableBindings']>[number]['projectField'],
-  work?: Work | null,
+function readPromptWorkField(
+  work: Work,
+  field: NonNullable<PromptTemplate['variableBindings']>[number]['workField'],
 ): string {
-  if (field === 'name') return project.name
-  if (field === 'genres') return project.genres.join(' / ')
-  if (field === 'description') return project.description
-  if (field === 'targetWordCount') return String(work?.targetWordCount ?? project.targetWordCount)
-  if (field === 'lengthMode') return resolveNovelPromptMode(work, project)
-  if (field === 'serializationMode') return derivePromptSerializationMode(project)
+  if (field === 'title') return work.title
+  if (field === 'genres') return work.genres.join(' / ')
+  if (field === 'description') return work.description
+  if (field === 'targetWordCount') return String(work.targetWordCount)
+  if (field === 'lengthMode') return resolveNovelPromptMode(work)
+  if (field === 'serializationMode') return derivePromptSerializationMode(work)
   return ''
 }
 

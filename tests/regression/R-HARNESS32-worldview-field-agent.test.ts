@@ -30,9 +30,8 @@ import {
   runGenerationNode,
 } from '../../src/lib/generation/generation-node'
 import type { Project, WorkspaceScope } from '../../src/lib/types'
-import { generateWorkspaceUid } from '../../src/lib/memory/identity'
-import { ensureWorkspaceOwnership } from '../../src/lib/workspace/ownership'
 import { stampNewRecord } from '../../src/lib/workspace/scope'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
 
 const directWorkflow = {
   version: 1 as const,
@@ -42,18 +41,9 @@ const directWorkflow = {
 
 async function createWorkspace(): Promise<{ project: Project; scope: WorkspaceScope; worldviewId: number }> {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    workspaceUid: generateWorkspaceUid(),
-    name: '镜城纪事',
-    genre: 'fantasy',
-    genres: ['fantasy'],
-    description: '',
-    status: 'drafting',
-    targetWordCount: 120_000,
-    createdAt: now,
-    updatedAt: now,
-  } as Project) as number
-  const { scope } = await ensureWorkspaceOwnership(projectId)
+  const created = await seedCurrentWorkspace('镜城纪事')
+  const { project, scope } = created
+  const { projectId } = scope
   const worldviewId = await db.worldviews.add(stampNewRecord(scope, 'worldviews', {
     projectId,
     worldOrigin: '镜海退潮时，城民被典当的记忆会凝成盐晶。',
@@ -74,8 +64,6 @@ async function createWorkspace(): Promise<{ project: Project; scope: WorkspaceSc
     createdAt: now,
     updatedAt: now,
   }, { owner: 'work' }) as never)
-  const project = await db.projects.get(projectId)
-  if (!project) throw new Error('测试项目创建失败')
   return { project, scope, worldviewId }
 }
 
@@ -182,7 +170,6 @@ describe.sequential('R-HARNESS32 · 世界基座字段 Agent Skill 与受治理�
       roleWeight: 'main',
       moralAxis: 'good',
       orderAxis: 'neutral',
-      role: 'protagonist',
       shortDescription: '他只能记住潮水退去后的一小时。',
       personality: '克制而执拗。',
       background: '父亲在潮汐钟失窃当天主动典当了关于他的记忆。',
@@ -313,6 +300,7 @@ describe.sequential('R-HARNESS32 · 世界基座字段 Agent Skill 与受治理�
       projectId: project.id!,
       scope,
       worldGroupId: null,
+      purpose: 'worldview-field-generation',
     })
     const execute = vi.fn(async options => {
       const task = options.plan.tasks[0]

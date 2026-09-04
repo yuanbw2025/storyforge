@@ -7,6 +7,7 @@ import {
   readLatestImpactPatchCandidateV1,
   rejectImpactPatchCandidateV1,
 } from '../../src/lib/agent/run/impact-patch-durable'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
 
 async function seed(): Promise<{
   scope: WorkspaceScope
@@ -15,14 +16,8 @@ async function seed(): Promise<{
   worldGroupId: number
 }> {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    name: '影响修订', genre: 'fantasy', genres: ['fantasy'], status: 'drafting',
-    description: '', targetWordCount: 100_000,
-    createdAt: now, updatedAt: now,
-  } as any) as number
-  const worldId = await db.worlds.add({ projectId, code: 'patch-world', name: '主世界', description: '', currentVersion: 1, createdAt: now, updatedAt: now }) as number
-  const workId = await db.works.add({ projectId, worldId, title: '影响修订', description: '', genres: ['fantasy'], status: 'drafting', targetWordCount: 100_000, createdAt: now, updatedAt: now } as any) as number
-  await db.projects.update(projectId, { activeWorldId: worldId, activeWorkId: workId, ownershipSchemaVersion: 1 })
+  const createdWorkspaceV1 = await seedCurrentWorkspace('影响修订')
+  const { projectId, worldId, workId } = createdWorkspaceV1.scope
   const worldGroupId = await db.worldGroups.add({ projectId, name: '主世界', order: 0, createdAt: now, updatedAt: now }) as number
   const volumeId = await db.outlineNodes.add({ projectId, workId, worldGroupId, parentId: null, type: 'volume', title: '第一卷', summary: '', order: 0, createdAt: now, updatedAt: now } as any) as number
   const sourceOutlineId = await db.outlineNodes.add({ projectId, workId, worldGroupId, parentId: volumeId, type: 'chapter', title: '潮门', summary: '潮门初见', order: 0, createdAt: now, updatedAt: now } as any) as number
@@ -95,25 +90,6 @@ describe.sequential('R-HARNESS44 · 影响 patch 候选与作者确认写回', (
     const tampered = structuredClone(created.candidate)
     tampered.proposal.fields.summary = '篡改后的摘要。'
     await expect(adoptImpactPatchCandidateV1({ scope: fixture.scope, candidate: tampered })).rejects.toThrow('候选 hash 不匹配')
-    expect((await db.outlineNodes.get(fixture.downstreamOutlineId))?.summary).toBe('等待后续安排')
-  })
-
-  it('目标带作者锁时不允许通过反向 patch 写回', async () => {
-    const fixture = await seed()
-    const created = await createImpactPatchCandidateV1({
-      scope: fixture.scope,
-      worldGroupId: fixture.worldGroupId,
-      sourceChapterId: fixture.sourceChapterId,
-      proposal: {
-        target: 'outlineNodes',
-        recordId: fixture.downstreamOutlineId,
-        fields: { summary: '锁定节点不应被改写。' },
-        reason: '验证作者锁边界。',
-        evidenceRefs: [],
-      },
-    })
-    await db.outlineNodes.update(fixture.downstreamOutlineId, { locked: true } as any)
-    await expect(adoptImpactPatchCandidateV1({ scope: fixture.scope, candidate: created.candidate })).rejects.toThrow('已锁定')
     expect((await db.outlineNodes.get(fixture.downstreamOutlineId))?.summary).toBe('等待后续安排')
   })
 

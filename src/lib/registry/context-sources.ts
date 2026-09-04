@@ -93,7 +93,7 @@ import {
 } from '../inspiration/workspace'
 import {
   readAgentOutlineTree,
-  readAgentProjectStatus,
+  readAgentWorkStatus,
   readAgentSearchResults,
   readAgentWorldGroups,
 } from '../agent/read-sources'
@@ -603,18 +603,15 @@ async function readOpenWorldRuntimeContext(input: AssembleContextInput): Promise
 async function readWorldview(projectId: number, worldGroupId?: number | null, scope?: WorkspaceScope): Promise<Worldview | null> {
   const resolved = scope ?? await resolveScope({ projectId })
   const rows = await readOwnedRows<Worldview>(resolved, 'worldviews', { owner: 'world' })
-  if (worldGroupId != null) {
-    return rows.find(w => w.worldGroupId === worldGroupId) ?? null
-  }
-  return rows.find(w => (w.worldGroupId ?? null) === null) ?? rows[0] ?? null
+  if (worldGroupId === undefined) return null
+  return rows.find(w => (w.worldGroupId ?? null) === worldGroupId) ?? null
 }
 
 async function readGeographyContext(projectId: number, worldGroupId?: number | null, scope?: WorkspaceScope): Promise<string> {
   const resolved = scope ?? await resolveScope({ projectId })
   const rows = await readOwnedRows<Geography>(resolved, 'geographies', { owner: 'world' })
-  const geography = worldGroupId != null
-    ? rows.find(row => row.worldGroupId === worldGroupId)
-    : rows.find(row => (row.worldGroupId ?? null) === null) ?? rows[0]
+  if (worldGroupId === undefined) return ''
+  const geography = rows.find(row => (row.worldGroupId ?? null) === worldGroupId)
   if (!geography) return ''
   const parts: string[] = []
   if (geography.overview?.trim()) parts.push(`【地理总述】\n${geography.overview.trim()}`)
@@ -635,10 +632,8 @@ async function readGeographyContext(projectId: number, worldGroupId?: number | n
 async function readPowerSystem(projectId: number, worldGroupId?: number | null, scope?: WorkspaceScope): Promise<PowerSystem | null> {
   const resolved = scope ?? await resolveScope({ projectId })
   const rows = await readOwnedRows<PowerSystem>(resolved, 'powerSystems', { owner: 'world' })
-  if (worldGroupId != null) {
-    return rows.find(p => p.worldGroupId === worldGroupId) ?? null
-  }
-  return rows.find(p => (p.worldGroupId ?? null) === null) ?? rows[0] ?? null
+  if (worldGroupId === undefined) return null
+  return rows.find(p => (p.worldGroupId ?? null) === worldGroupId) ?? null
 }
 
 async function readCharacters(projectId: number, worldGroupId?: number | null, scope?: WorkspaceScope): Promise<Character[]> {
@@ -711,12 +706,9 @@ export async function readActiveCharacterDrivenPlanContext(
   scope?: WorkspaceScope,
   explicitPlanId?: number,
 ): Promise<string> {
-  const project = await db.projects.get(projectId)
   const resolved = scope ?? await resolveScope({ projectId })
   const work = resolved.workId > 0 ? await db.works.get(resolved.workId) : null
-  const activeId = explicitPlanId
-    ?? work?.activeCharacterDrivenPlanId
-    ?? project?.activeCharacterDrivenPlanId
+  const activeId = explicitPlanId ?? work?.activeCharacterDrivenPlanId
   if (activeId == null) return ''
 
   const plan = await db.characterDrivenPlans.get(activeId)
@@ -1535,14 +1527,14 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     read: readProductRuntimeContext,
   },
   {
-    // AGENT-1: 对话副驾只读工具使用的紧凑项目摘要，不返回整表原始数据。
-    key: 'projectStatus',
-    label: '项目概况',
+    // AGENT-1: 对话副驾只读工具使用的紧凑作品摘要，不返回整表原始数据。
+    key: 'workStatus',
+    label: '作品概况',
     scope: 'project',
     ownerFrom: 'work',
     layer: 'L2',
     budgetTokens: 1200,
-    read: readAgentProjectStatus,
+    read: readAgentWorkStatus,
   },
   {
     // AGENT-1: 世界组与连接关系的有界目录。

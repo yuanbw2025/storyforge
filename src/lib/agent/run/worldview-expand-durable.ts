@@ -57,10 +57,6 @@ interface WorldviewSnapshotV1 {
   fields: Record<string, unknown>
 }
 
-const NEW_WORLDVIEW_DEFAULT_FIELDS: Record<string, unknown> = {
-  summary: '',
-}
-
 export interface WorldviewExpandCandidateV1 {
   version: 1
   kind: 'worldview-expand-candidate'
@@ -176,7 +172,7 @@ function nonTargetWorldviewFields(snapshot: WorldviewSnapshotV1): Record<string,
 }
 
 function expectedNonTargetWorldviewFields(snapshot: WorldviewSnapshotV1): Record<string, unknown> {
-  return snapshot.id == null ? { ...NEW_WORLDVIEW_DEFAULT_FIELDS } : nonTargetWorldviewFields(snapshot)
+  return snapshot.id == null ? {} : nonTargetWorldviewFields(snapshot)
 }
 
 async function readTarget(

@@ -54,9 +54,11 @@ function matches(text: string, query: string): boolean {
   return text.toLocaleLowerCase().includes(query.toLocaleLowerCase())
 }
 
-export async function readAgentProjectStatus(input: AssembleContextInput): Promise<string> {
+export async function readAgentWorkStatus(input: AssembleContextInput): Promise<string> {
   const project = await db.projects.get(input.projectId)
   if (!project || !input.scope) return ''
+  const work = await db.works.get(input.scope.workId)
+  if (!work || work.projectId !== input.projectId || work.worldId !== input.scope.worldId) return ''
 
   const [
     worldGroups,
@@ -83,10 +85,10 @@ export async function readAgentProjectStatus(input: AssembleContextInput): Promi
   ), 0)
 
   return [
-    '【项目概况】',
-    `项目：${project.name}`,
-    `状态：${project.status ?? 'drafting'}；模式：${project.enableMultiWorld ? '多世界' : '单世界'}`,
-    `字数：${totalWords}/${project.targetWordCount || 0}`,
+    '【作品概况】',
+    `作品：${work.title}`,
+    `状态：${work.status}；模式：${project.enableMultiWorld ? '多世界' : '单世界'}`,
+    `字数：${totalWords}/${work.targetWordCount}`,
     `章节：${chapters.length}（已有正文 ${writtenChapters.length}）`,
     `世界组：${worldGroups}；世界观：${worldviews}；故事核心：${storyCores}`,
     `角色：${characters}；大纲节点：${outlineNodes}；伏笔：${foreshadows}；参考资料：${references}`,

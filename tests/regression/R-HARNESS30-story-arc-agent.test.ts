@@ -38,10 +38,7 @@ import {
   verifyMasterAgentRunV1,
 } from '../../src/lib/agent/run/master-verification'
 import { AgentTeamBudgetTracker } from '../../src/lib/agent/team-budget'
-import { hashCanonicalValue } from '../../src/lib/agent/run/hash'
 import { db } from '../../src/lib/db/schema'
-import { generateWorkspaceUid } from '../../src/lib/memory/identity'
-import { ensureWorkspaceOwnership } from '../../src/lib/workspace/ownership'
 import { stampNewRecord } from '../../src/lib/workspace/scope'
 import {
   adoptGenerationNodeOutput,
@@ -49,6 +46,7 @@ import {
 } from '../../src/lib/generation/generation-node'
 import type { AIConfig, Project, WorkspaceScope } from '../../src/lib/types'
 import { useAIConfigStore } from '../../src/stores/ai-config'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
 
 const STORY_ARC_CONFIG: AIConfig = {
   provider: 'openai',
@@ -73,35 +71,28 @@ const directWorkflow = {
   reasonCodes: ['single-explicit-domain' as const],
 }
 
+const sequentialWorkflow = {
+  version: 1 as const,
+  workflowId: 'multi-domain-sequential' as const,
+  reasonCodes: ['multiple-explicit-domains' as const],
+}
+
 async function createWorkspace(): Promise<{ project: Project; scope: WorkspaceScope }> {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    workspaceUid: generateWorkspaceUid(),
-    name: '潮汐纪元',
-    genre: 'fantasy',
-    genres: ['fantasy'],
-    description: '',
-    status: 'drafting',
-    targetWordCount: 100_000,
-    createdAt: now,
-    updatedAt: now,
-  } as Project) as number
-  const { scope } = await ensureWorkspaceOwnership(projectId)
+  const { project, scope } = await seedCurrentWorkspace('潮汐纪元')
   await db.worldviews.add(stampNewRecord(scope, 'worldviews', {
-    projectId,
+    projectId: project.id!,
     worldOrigin: '盐海每十年退潮一次，海床会升起一座浮空城。',
     createdAt: now,
     updatedAt: now,
   }, { owner: 'world' }) as never)
   await db.storyCores.add(stampNewRecord(scope, 'storyCores', {
-    projectId,
+    projectId: project.id!,
     theme: '记忆与责任',
     centralConflict: '守灯人必须决定是否敲响会抹除全城记忆的潮汐钟。',
     createdAt: now,
     updatedAt: now,
   }, { owner: 'work' }) as never)
-  const project = await db.projects.get(projectId)
-  if (!project) throw new Error('测试项目创建失败')
   return { project, scope }
 }
 
@@ -334,6 +325,7 @@ describe.sequential('R-HARNESS30 · 故事线 Agent Skill 与受治理采纳', (
           instruction: '生成一条支线故事线',
           dependsOn: ['main-arc'],
         }],
+        workflow: sequentialWorkflow,
       },
       budget: new AgentTeamBudgetTracker('balanced'),
     })
@@ -345,10 +337,7 @@ describe.sequential('R-HARNESS30 · 故事线 Agent Skill 与受治理采纳', (
         status: 'provisional',
       }),
     ])
-    expect(candidates[1].payload.dependencyBindings).toEqual([{
-      taskId: 'main-arc',
-      outputHash: await hashCanonicalValue(candidates[0].draft),
-    }])
+    expect(candidates[1].payload.dependencyBindings).toBeUndefined()
   })
 
   it('生成候选后保持零写入，作者确认眼前候选后才写入 storyArcs', async () => {
@@ -925,6 +914,7 @@ describe.sequential('R-HARNESS30 · 故事线 Agent Skill 与受治理采纳', (
       projectId: project.id!,
       scope,
       worldGroupId: null,
+      purpose: 'master-authoring',
     })
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({
       choices: [{ message: { content: JSON.stringify({ storyArcs: [expandedArc()] }) } }],
@@ -981,6 +971,7 @@ describe.sequential('R-HARNESS30 · 故事线 Agent Skill 与受治理采纳', (
       projectId: project.id!,
       scope,
       worldGroupId: null,
+      purpose: 'master-authoring',
     })
     const execute = vi.fn(async options => {
       const task = options.plan.tasks[0]
@@ -1071,6 +1062,7 @@ describe.sequential('R-HARNESS30 · 故事线 Agent Skill 与受治理采纳', (
       projectId: project.id!,
       scope,
       worldGroupId: null,
+      purpose: 'master-authoring',
     })
     const execute = async options => {
       const task = options.plan.tasks[0]

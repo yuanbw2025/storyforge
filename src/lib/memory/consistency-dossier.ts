@@ -115,7 +115,7 @@ export async function buildLongTermConsistencyDossierV1(input: {
     throw new Error('无法为当前作品边界建立长期一致性档案')
   }
   if (!isWorkspaceUid(project.workspaceUid) || !isWorkCode(work.code) || !world.code.trim()) {
-    throw new Error('当前作品缺少已迁移的 Workspace/World/Work 可移植身份')
+    throw new Error('当前作品缺少有效的 Workspace/World/Work 可移植身份')
   }
   const workspaceUid = project.workspaceUid
   const workCode = work.code

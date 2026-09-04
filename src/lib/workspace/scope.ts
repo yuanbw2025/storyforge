@@ -79,9 +79,8 @@ export async function resolveScope(input: ScopeInput): Promise<WorkspaceScope> {
   return resolveWorkspaceScope(input.projectId)
 }
 
-/** Reads and writes share the same scope contract; there is no project-only
- * runtime path. Opening an older local database completes its one-way owner
- * migration before returning a scope. */
+/** Reads and writes share the same current scope contract; there is no
+ * project-only or pre-cutover database path. */
 export async function resolveReadScope(input: ScopeInput): Promise<WorkspaceScope> {
   return resolveScope(input)
 }

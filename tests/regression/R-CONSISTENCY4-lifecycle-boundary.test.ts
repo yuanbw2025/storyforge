@@ -22,14 +22,14 @@ function fixtures() {
   }))
   const characters: Character[] = [
     {
-      id: 7, projectId: 1, name: '林飞', role: 'protagonist',
+      id: 7, projectId: 1, name: '林飞',
       roleWeight: 'main', moralAxis: 'good', orderAxis: 'lawful',
       shortDescription: '', appearance: '', personality: '', background: '',
       motivation: '', abilities: '', relationships: '', arc: '',
       homeWorldGroupId: 8, createdAt: 1, updatedAt: 1,
     },
     {
-      id: 9, projectId: 1, name: '顾舟', role: 'supporting',
+      id: 9, projectId: 1, name: '顾舟',
       roleWeight: 'secondary', moralAxis: 'neutral', orderAxis: 'neutral',
       shortDescription: '', appearance: '', personality: '', background: '',
       motivation: '', abilities: '', relationships: '', arc: '',

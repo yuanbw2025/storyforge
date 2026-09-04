@@ -7,26 +7,32 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { cascadeDeleteProject } from '../../src/lib/registry/lifecycle'
 import { useCharacterStore } from '../../src/stores/character'
+import { seedCurrentProject } from '../helpers/current-workspace'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
 
 const now = Date.now()
 
 async function seedProject() {
-  const projectId = await db.projects.add({
-    name: 'INV1-DELETE', genre: '', description: '', targetWordCount: 0,
+  const projectId = await seedCurrentProject({
+    name: 'INV1-DELETE', genres: [], description: '', targetWordCount: 0,
     enableMultiWorld: false, createdAt: now, updatedAt: now,
   } as any) as number
   const worldGroupId = await db.worldGroups.add({
-    projectId, name: '主世界', type: 'primary', order: 0, createdAt: now, updatedAt: now,
+    projectId, name: '主世界', description: '', type: 'primary', order: 0,
+    createdAt: now, updatedAt: now,
   } as any) as number
   const charA = await db.characters.add({
-    projectId, name: '林风', role: 'protagonist', roleWeight: 'main',
+    projectId, name: '林风', roleWeight: 'main',
     moralAxis: 'good', orderAxis: 'lawful', shortDescription: '',
-    homeWorldGroupId: worldGroupId, createdAt: now, updatedAt: now,
+    appearance: '', personality: '', background: '', motivation: '', abilities: '',
+    relationships: '', arc: '', homeWorldGroupId: worldGroupId, isCrossWorld: false,
+    createdAt: now, updatedAt: now,
   } as any) as number
   const entryId = await db.itemLedger.add({
     projectId, itemName: '青铜铃', heldByName: '林风', characterId: charA,
     action: 'gain', quantity: 1, chapterId: null, createdAt: now,
   } as any) as number
+  await finalizeCurrentFixtureV1(projectId)
   return { projectId, charA, entryId }
 }
 

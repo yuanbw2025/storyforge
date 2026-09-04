@@ -16,20 +16,15 @@ import { deriveExportProjectJSON } from '../../src/lib/export/registry-export'
 import { deriveImportProjectJSON } from '../../src/lib/export/registry-import'
 import { assembleContext } from '../../src/lib/registry/assemble-context'
 import { useChapterStore } from '../../src/stores/chapter'
+import { stampNewRecord } from '../../src/lib/workspace/scope'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
 
 const now = 1_800_000_000_000
 
 async function seed() {
-  const projectId = await db.projects.add({
-    name: '故事线测试',
-    genre: '',
-    description: '',
-    targetWordCount: 0,
-    enableMultiWorld: false,
-    createdAt: now,
-    updatedAt: now,
-  } as any) as number
-  const volumeId = await db.outlineNodes.add({
+  const { scope } = await seedCurrentWorkspace('故事线测试')
+  const { projectId } = scope
+  const volumeId = await db.outlineNodes.add(stampNewRecord(scope, 'outlineNodes', {
     projectId,
     parentId: null,
     type: 'volume',
@@ -38,8 +33,8 @@ async function seed() {
     order: 0,
     createdAt: now,
     updatedAt: now,
-  } as any) as number
-  const nodeId = await db.outlineNodes.add({
+  }, { owner: 'work' }) as never) as number
+  const nodeId = await db.outlineNodes.add(stampNewRecord(scope, 'outlineNodes', {
     projectId,
     parentId: volumeId,
     type: 'chapter',
@@ -48,8 +43,8 @@ async function seed() {
     order: 0,
     createdAt: now,
     updatedAt: now,
-  } as any) as number
-  const chapterId = await db.chapters.add({
+  }, { owner: 'work' }) as never) as number
+  const chapterId = await db.chapters.add(stampNewRecord(scope, 'chapters', {
     projectId,
     outlineNodeId: nodeId,
     title: '雨夜相逢',
@@ -60,8 +55,8 @@ async function seed() {
     notes: '',
     createdAt: now,
     updatedAt: now,
-  } as any) as number
-  const arcA = await db.storyArcs.add({
+  }, { owner: 'work' }) as never) as number
+  const arcA = await db.storyArcs.add(stampNewRecord(scope, 'storyArcs', {
     projectId,
     name: '寻钥主线',
     type: 'main',
@@ -74,8 +69,8 @@ async function seed() {
     description: '',
     createdAt: now,
     updatedAt: now,
-  }) as number
-  const arcB = await db.storyArcs.add({
+  }, { owner: 'work' }) as never) as number
+  const arcB = await db.storyArcs.add(stampNewRecord(scope, 'storyArcs', {
     projectId,
     name: '师徒支线',
     type: 'sub',
@@ -88,9 +83,9 @@ async function seed() {
     description: '',
     createdAt: now,
     updatedAt: now,
-  }) as number
+  }, { owner: 'work' }) as never) as number
   const arcs = await db.storyArcs.where('projectId').equals(projectId).toArray()
-  return { projectId, chapterId, arcA, arcB, arcs }
+  return { projectId, scope, chapterId, arcA, arcB, arcs }
 }
 
 describe('Phase 39 · 动态故事线进度闭环', () => {
@@ -218,10 +213,10 @@ describe('Phase 39 · 动态故事线进度闭环', () => {
   })
 
   it('按规范章序注入上下文，绝不把后续章节的最新投影泄漏给前章', async () => {
-    const { projectId, chapterId: earlierChapterId, arcA } = await seed()
+    const { projectId, scope, chapterId: earlierChapterId, arcA } = await seed()
     const volume = (await db.outlineNodes.where('projectId').equals(projectId).toArray())
       .find(node => node.type === 'volume')!
-    const laterNodeId = await db.outlineNodes.add({
+    const laterNodeId = await db.outlineNodes.add(stampNewRecord(scope, 'outlineNodes', {
       projectId,
       parentId: volume.id!,
       type: 'chapter',
@@ -230,8 +225,8 @@ describe('Phase 39 · 动态故事线进度闭环', () => {
       order: 1,
       createdAt: now,
       updatedAt: now,
-    } as any) as number
-    const laterChapterId = await db.chapters.add({
+    }, { owner: 'work' }) as never) as number
+    const laterChapterId = await db.chapters.add(stampNewRecord(scope, 'chapters', {
       projectId,
       outlineNodeId: laterNodeId,
       title: '终局',
@@ -242,7 +237,7 @@ describe('Phase 39 · 动态故事线进度闭环', () => {
       notes: '',
       createdAt: now,
       updatedAt: now,
-    } as any) as number
+    }, { owner: 'work' }) as never) as number
     await acceptStorylineProgressCandidate({
       projectId,
       chapterId: laterChapterId,

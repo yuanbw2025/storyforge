@@ -4,7 +4,7 @@ export interface WorldRevision {
   id?: number
   projectId: number
   worldId: number
-  parentRevisionId?: number | null
+  parentRevisionId: number | null
   revision: number
   label: string
   manifestJson: string
@@ -15,12 +15,8 @@ export interface WorldRevision {
 
 export interface WorldRelease {
   id?: number
-  /**
-   * Stable release identity used by WorldReference. Unlike the local Dexie id,
-   * this value survives export/import remapping and is bound to the release
-   * content hash. Historical rows are deterministically backfilled by v83.
-   */
-  releaseUid?: string
+  /** Stable, content-bound identity used by every WorldReference. */
+  releaseUid: string
   projectId: number
   worldId: number
   revisionId: number
@@ -47,9 +43,27 @@ export interface WorldDerivationV1 {
   sourceRangeJson: string
   selectedResourceIdsJson: string
   sourceContentHash: string
-  targetRevisionId?: number | null
-  targetReleaseId?: number | null
+  targetRevisionId: number | null
+  targetReleaseId: number | null
   createdAt: number
+}
+
+/**
+ * A frozen world is not a partial project backup. This small current protocol
+ * carries only the neutral workspace roots needed to materialize a new world
+ * workspace; semantic records remain in WorldReleaseManifestV3.records.
+ */
+export interface WorldSemanticSnapshotV1 {
+  schema: 'storyforge.world-semantic-snapshot'
+  version: 1
+  ownership: {
+    contractVersion: 1
+    worldExportId: number
+    workExportId: number
+  }
+  project: Record<string, unknown>
+  worlds: Record<string, unknown>[]
+  works: Record<string, unknown>[]
 }
 
 export interface WorldReleaseManifestV3 {
@@ -67,23 +81,23 @@ export interface WorldReleaseManifestV3 {
     contentHash: string
   }>
   records: Record<string, unknown[]>
-  portableProject: Record<string, unknown>
+  semanticSnapshot: WorldSemanticSnapshotV1
   capabilityProfile: Array<{
     area: WorldCapabilityArea
     resourceCount: number
     rowCount: number
     status: 'missing' | 'partial' | 'available'
     /** D-WORLD-01: selection and content sufficiency are separate facts. */
-    selectionStatus?: 'selected' | 'partial-selection' | 'omitted'
-    selectedResourceCount?: number
-    omittedResourceCount?: number
-    confirmedRowCount?: number
-    candidateRowCount?: number
-    conflictRowCount?: number
-    omittedRowCount?: number
-    latestRevision?: number | null
-    originalEvidenceAvailable?: boolean
-    queryableIndexAvailable?: boolean
+    selectionStatus: 'selected' | 'partial-selection' | 'omitted'
+    selectedResourceCount: number
+    omittedResourceCount: number
+    confirmedRowCount: number
+    candidateRowCount: number
+    conflictRowCount: number
+    omittedRowCount: number
+    latestRevision: number | null
+    originalEvidenceAvailable: boolean
+    queryableIndexAvailable: boolean
   }>
   resourceCatalog: Array<{
     resourceId: string
@@ -92,11 +106,11 @@ export interface WorldReleaseManifestV3 {
     table: string
     rowCount: number
     contentHash: string
-    confirmedRowCount?: number
-    candidateRowCount?: number
-    conflictRowCount?: number
-    omittedRowCount?: number
-    latestRevision?: number | null
+    confirmedRowCount: number
+    candidateRowCount: number
+    conflictRowCount: number
+    omittedRowCount: number
+    latestRevision: number | null
   }>
   sourceManifest: {
     sourceKind: 'world-draft' | 'independent-work-derivation'

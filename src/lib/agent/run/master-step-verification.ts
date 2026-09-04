@@ -50,8 +50,7 @@ function validateCandidateDraft(payload: MasterCandidatePayload, draft: string):
       }
       return
     }
-    if (!draft.trim()) throw new Error('世界来源候选为空。')
-    return
+    throw new Error(`世界领域候选使用了未登记的当前 Skill：${payload.skillId}`)
   }
   if (payload.agentId === 'character') {
     parseCharacterCandidateDraft(draft)

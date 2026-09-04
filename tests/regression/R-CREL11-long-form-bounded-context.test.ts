@@ -7,54 +7,25 @@ import {
 import { db } from '../../src/lib/db/schema'
 import { assembleContext } from '../../src/lib/registry/assemble-context'
 import type { WorkspaceScope } from '../../src/lib/types'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
 
 const GENRES = ['fantasy', 'mystery', 'romance'] as const
 
 async function seedLongWork(genre: typeof GENRES[number]) {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    name: `CREL11-${genre}`,
-    genre,
+  const createdWorkspaceV1 = await seedCurrentWorkspace(`CREL11-${genre}`, {
     genres: [genre],
-    description: '12 章连续性边界夹具',
     targetWordCount: 120_000,
-    enableMultiWorld: false,
-    createdAt: now,
-    updatedAt: now,
-  } as any) as number
-  const worldId = await db.worlds.add({
-    projectId,
-    code: `crel11-${genre}`,
-    name: `${genre}-world`,
-    description: '',
-    currentVersion: 1,
-    createdAt: now,
-    updatedAt: now,
-  } as any) as number
-  const workId = await db.works.add({
-    projectId,
-    worldId,
-    title: `${genre}-work`,
-    description: '',
-    genres: [genre],
-    status: 'drafting',
-    targetWordCount: 120_000,
-    createdAt: now,
-    updatedAt: now,
-  } as any) as number
-  const scope = { projectId, worldId, workId } satisfies WorkspaceScope
-  await db.projects.update(projectId, {
-    activeWorldId: worldId,
-    activeWorkId: workId,
-    ownershipSchemaVersion: 1,
   })
+  const scope = createdWorkspaceV1.scope satisfies WorkspaceScope
+  const { projectId, worldId, workId } = scope
 
   const characterId = await db.characters.add({
     projectId,
     worldId,
     homeWorldGroupId: null,
     name: `${genre}-主角`,
-    role: 'protagonist',
     roleWeight: 'main',
     moralAxis: 'neutral',
     orderAxis: 'neutral',
@@ -142,6 +113,7 @@ async function seedLongWork(genre: typeof GENRES[number]) {
     updatedAt: now + 1,
   })
 
+  await finalizeCurrentFixtureV1(projectId)
   return { scope, projectId, chapterIds, outlineNodeIds }
 }
 

@@ -11,42 +11,12 @@ import { db } from '../../src/lib/db/schema'
 import type { Project, WorkspaceScope } from '../../src/lib/types'
 import { stringifyStages } from '../../src/lib/types'
 import { selectAgentSkillIdV1 } from '../../src/lib/agent/workflow-catalog'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
 
 async function workspace(): Promise<{ project: Project; scope: WorkspaceScope; chapterId: number; arcId: number }> {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    name: '故事线映射测试',
-    genre: 'fantasy',
-    genres: ['fantasy'],
-    description: '',
-    status: 'drafting',
-    targetWordCount: 100_000,
-
-
-    createdAt: now,
-    updatedAt: now,
-  } as Project) as number
-  const worldId = await db.worlds.add({
-    projectId,
-    code: 'harness-40-world',
-    name: '映射世界',
-    description: '',
-    currentVersion: 1,
-    createdAt: now,
-    updatedAt: now,
-  }) as number
-  const workId = await db.works.add({
-    projectId,
-    worldId,
-    title: '故事线映射测试',
-    description: '',
-    genres: ['fantasy'],
-    status: 'drafting',
-    targetWordCount: 100_000,
-    createdAt: now,
-    updatedAt: now,
-  }) as number
-  await db.projects.update(projectId, { activeWorldId: worldId, activeWorkId: workId, ownershipSchemaVersion: 1 })
+  const createdWorkspaceV1 = await seedCurrentWorkspace('故事线映射测试')
+  const { projectId, worldId, workId } = createdWorkspaceV1.scope
   const volumeId = await db.outlineNodes.add({
     projectId,
     workId,
@@ -189,19 +159,29 @@ describe.sequential('R-HARNESS40 · 故事线进度映射 Skill', () => {
     expect(durableSnapshot).not.toContain('不应进入 durable 快照的证据全文')
   })
 
-  it('恢复 durable 候选时兼容 quote 字段并规范化证据', () => {
+  it('恢复 durable 候选只接受当前 canonical 字段', () => {
     const restored = parseStorylineProgressCandidateDraftV1(JSON.stringify({
       progress: [{
+        kind: 'progress',
         arcId: 1,
         currentStageId: null,
         status: 'active',
         progressNote: '推进',
-        quote: '正文证据',
+        involvedEntities: [],
+        evidenceQuote: '正文证据',
       }],
       crossings: [],
       newArcs: [],
     }))
     expect(restored.progress[0]?.evidenceQuote).toBe('正文证据')
+    expect(() => parseStorylineProgressCandidateDraftV1(JSON.stringify({
+      progress: [{
+        kind: 'progress', arcId: 1, currentStageId: null, status: 'active',
+        progressNote: '推进', involvedEntities: [], quote: '旧字段',
+      }],
+      crossings: [],
+      newArcs: [],
+    }))).toThrow('字段不符合当前契约')
   })
 
   it('没有逐字正文证据或候选结构越界时阻断写入', async () => {
@@ -215,12 +195,13 @@ describe.sequential('R-HARNESS40 · 故事线进度映射 Skill', () => {
     }, { runAI: async () => draft(arcId) })
     const invalid = JSON.stringify({
       progress: [{
+        kind: 'progress',
         arcId,
         currentStageId: 'not-a-stage',
         status: 'active',
         progressNote: '无证据',
         involvedEntities: [],
-        quote: '不存在的句子',
+        evidenceQuote: '不存在的句子',
       }],
       crossings: [],
       newArcs: [],
@@ -243,6 +224,7 @@ describe.sequential('R-HARNESS40 · 故事线进度映射 Skill', () => {
     await db.chapters.update(chapterId, { content: '<p>作者已经改写了这一章。</p>', updatedAt: Date.now() })
     await expect(adoptGenerationNodeOutput(prepared.node, {
       progress: [{
+        kind: 'progress',
         arcId,
         currentStageId: 'hand-over',
         status: 'active',

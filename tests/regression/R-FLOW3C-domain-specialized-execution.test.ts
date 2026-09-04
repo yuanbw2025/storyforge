@@ -19,23 +19,13 @@ import {
   runAuthoringGraph,
 } from '../../src/lib/node-authoring/executor'
 import { buildRagLibrary } from '../../src/lib/retrieval/rag-library'
-import { backfillResourceUidsV1 } from '../../src/lib/context-gateway/resource-identity'
+import { stampCurrentFixtureResourceUidsV1 } from '../helpers/current-resource-identity'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
 import { useAIConfigStore } from '../../src/stores/ai-config'
 import type { AIConfig, NodeFlow, Project } from '../../src/lib/types'
 import { resolveScopeLike, stampNewRecord } from '../../src/lib/workspace/scope'
 
-const project: Project = {
-  id: 73003,
-  name: '领域节点专用执行测试',
-  genre: 'fantasy',
-  genres: ['fantasy'],
-  status: 'drafting',
-  description: '',
-  targetWordCount: 100_000,
-  enableMultiWorld: false,
-  createdAt: 1,
-  updatedAt: 1,
-}
+let project: Project
 
 const aiConfig: AIConfig = {
   provider: 'custom',
@@ -110,22 +100,23 @@ describe('FLOW-3C · 领域节点专用执行器', () => {
   beforeEach(async () => {
     await db.delete()
     await db.open()
-    await db.projects.put(project)
-    await db.worldviews.put({
+    const seeded = await seedCurrentWorkspace('领域节点专用执行测试')
+    project = seeded.project
+    await db.worldviews.put(stampNewRecord(seeded.scope, 'worldviews', {
       projectId: project.id!,
       worldGroupId: null,
       worldOrigin: '潮汐退去后，第一座城从海床升起。',
       createdAt: 1,
       updatedAt: 1,
-    } as any)
-    await db.storyCores.put({
+    }, { owner: 'world' }) as any)
+    await db.storyCores.put(stampNewRecord(seeded.scope, 'storyCores', {
       projectId: project.id!,
       logline: '一名测潮者寻找沉没城市。',
       concept: '海床上的城市会在退潮时醒来。',
       createdAt: 1,
       updatedAt: 1,
-    } as any)
-    await backfillResourceUidsV1(project.id!)
+    }, { owner: 'work' }) as any)
+    await stampCurrentFixtureResourceUidsV1(project.id!)
     vi.mocked(chat).mockReset()
     useAIConfigStore.setState({
       config: aiConfig,
@@ -245,10 +236,10 @@ describe('FLOW-3C · 领域节点专用执行器', () => {
 
   it('细纲协议失败保留原始候选，作者可本地修正后采纳且不会追加调用', async () => {
     const volumeId = await db.outlineNodes.add({
-      projectId: project.id!, parentId: null, type: 'volume', title: '第一卷：潮门', summary: '卷摘要', order: 0, worldGroupId: null, createdAt: 1, updatedAt: 1,
+      projectId: project.id!, workId: project.activeWorkId!, worldId: null, parentId: null, type: 'volume', title: '第一卷：潮门', summary: '卷摘要', order: 0, worldGroupId: null, createdAt: 1, updatedAt: 1,
     })
     await db.outlineNodes.add({
-      projectId: project.id!, parentId: volumeId, type: 'chapter', title: '第一章：退潮', summary: '主角在海岸发现城门。', order: 0, worldGroupId: null, createdAt: 1, updatedAt: 1,
+      projectId: project.id!, workId: project.activeWorkId!, worldId: null, parentId: volumeId, type: 'chapter', title: '第一章：退潮', summary: '主角在海岸发现城门。', order: 0, worldGroupId: null, createdAt: 1, updatedAt: 1,
     })
     vi.mocked(chat).mockResolvedValueOnce('这是一份尚未整理成 JSON 的场景想法。')
 
@@ -276,13 +267,13 @@ describe('FLOW-3C · 领域节点专用执行器', () => {
 
   it('细纲节点过滤无效 FK，正文节点拒绝覆盖已有正文并支持正式采纳', async () => {
     const volumeId = await db.outlineNodes.add({
-      projectId: project.id!, parentId: null, type: 'volume', title: '第一卷：潮门', summary: '卷摘要', order: 0, worldGroupId: null, createdAt: 1, updatedAt: 1,
+      projectId: project.id!, workId: project.activeWorkId!, worldId: null, parentId: null, type: 'volume', title: '第一卷：潮门', summary: '卷摘要', order: 0, worldGroupId: null, createdAt: 1, updatedAt: 1,
     })
     const chapterId = await db.outlineNodes.add({
-      projectId: project.id!, parentId: volumeId, type: 'chapter', title: '第一章：退潮', summary: '主角在海岸发现城门。', order: 0, worldGroupId: null, createdAt: 1, updatedAt: 1,
+      projectId: project.id!, workId: project.activeWorkId!, worldId: null, parentId: volumeId, type: 'chapter', title: '第一章：退潮', summary: '主角在海岸发现城门。', order: 0, worldGroupId: null, createdAt: 1, updatedAt: 1,
     })
     const foreshadowId = await db.foreshadows.add({
-      projectId: project.id!,
+      projectId: project.id!, workId: project.activeWorkId!, worldId: null,
       name: '海床铜钟',
       type: 'environment',
       status: 'planned',
@@ -315,7 +306,7 @@ describe('FLOW-3C · 领域节点专用执行器', () => {
     // Direct Dexie fixture writes bypass the governed adoption path that assigns
     // portable resource identities. Formal prose Gateway execution must see the
     // same migrated identity state as a real workspace.
-    await backfillResourceUidsV1(project.id!)
+    await stampCurrentFixtureResourceUidsV1(project.id!)
     vi.mocked(chat).mockResolvedValueOnce('潮声在夜色中持续了很久，直到城门从海床升起，露出一条通往旧文明的石阶。主角沿着湿冷的石阶向下，听见远处有人敲响沉重的铜钟，海水在身后重新合拢。石壁上的古老刻痕逐渐亮起，照出一条没有尽头的黑暗长廊。')
     const prose = await executeDomainNode({
       node: node('chapter.prose', { chapterTitle: '第一章：退潮', request: '生成第一章正文' }),
@@ -332,10 +323,10 @@ describe('FLOW-3C · 领域节点专用执行器', () => {
 
   it('细纲节点遵守候选数量控制并保留全部可比较版本', async () => {
     const volumeId = await db.outlineNodes.add({
-      projectId: project.id!, parentId: null, type: 'volume', title: '第一卷：潮门', summary: '卷摘要', order: 0, worldGroupId: null, createdAt: 1, updatedAt: 1,
+      projectId: project.id!, workId: project.activeWorkId!, worldId: null, parentId: null, type: 'volume', title: '第一卷：潮门', summary: '卷摘要', order: 0, worldGroupId: null, createdAt: 1, updatedAt: 1,
     })
     await db.outlineNodes.add({
-      projectId: project.id!, parentId: volumeId, type: 'chapter', title: '第一章：退潮', summary: '主角在海岸发现城门。', order: 0, worldGroupId: null, createdAt: 1, updatedAt: 1,
+      projectId: project.id!, workId: project.activeWorkId!, worldId: null, parentId: volumeId, type: 'chapter', title: '第一章：退潮', summary: '主角在海岸发现城门。', order: 0, worldGroupId: null, createdAt: 1, updatedAt: 1,
     })
     vi.mocked(chat)
       .mockResolvedValueOnce(detailDraft)
@@ -356,10 +347,10 @@ describe('FLOW-3C · 领域节点专用执行器', () => {
 
   it('细纲节点从上游结构化章纲候选解析目标章节，无需重复填写标题', async () => {
     const volumeId = await db.outlineNodes.add({
-      projectId: project.id!, parentId: null, type: 'volume', title: '第一卷：潮门', summary: '卷摘要', order: 0, worldGroupId: null, createdAt: 1, updatedAt: 1,
+      projectId: project.id!, workId: project.activeWorkId!, worldId: null, parentId: null, type: 'volume', title: '第一卷：潮门', summary: '卷摘要', order: 0, worldGroupId: null, createdAt: 1, updatedAt: 1,
     })
     const chapterId = await db.outlineNodes.add({
-      projectId: project.id!, parentId: volumeId, type: 'chapter', title: '第一章：退潮', summary: '主角在海岸发现城门。', order: 0, worldGroupId: null, createdAt: 1, updatedAt: 1,
+      projectId: project.id!, workId: project.activeWorkId!, worldId: null, parentId: volumeId, type: 'chapter', title: '第一章：退潮', summary: '主角在海岸发现城门。', order: 0, worldGroupId: null, createdAt: 1, updatedAt: 1,
     })
     vi.mocked(chat).mockResolvedValueOnce(detailDraft)
     const upstream: AuthoringInputEnvelope = {
@@ -375,14 +366,14 @@ describe('FLOW-3C · 领域节点专用执行器', () => {
 
   it('角色维度节点按稳定资料绑定定点写回，不会误更新第一个角色', async () => {
     const firstId = await db.characters.add({
-      projectId: project.id!, name: '先行者', shortDescription: '已有角色一。', motivation: '原动机一',
+      projectId: project.id!, worldId: project.activeWorldId!, name: '先行者', shortDescription: '已有角色一。', motivation: '原动机一',
       worldGroupId: null, homeWorldGroupId: null, createdAt: 1, updatedAt: 1,
     } as any)
     const secondId = await db.characters.add({
-      projectId: project.id!, name: '潮汐测者', shortDescription: '已有角色二。', motivation: '原动机二',
+      projectId: project.id!, worldId: project.activeWorldId!, name: '潮汐测者', shortDescription: '已有角色二。', motivation: '原动机二',
       worldGroupId: null, homeWorldGroupId: null, createdAt: 1, updatedAt: 1,
     } as any)
-    await backfillResourceUidsV1(project.id!)
+    await stampCurrentFixtureResourceUidsV1(project.id!)
     const target = (await buildRagLibrary({ projectId: project.id!, worldGroupId: null }))
       .find(entry => entry.tableName === 'characters' && entry.recordId === secondId && entry.fieldKey === 'motivation')
     expect(target).toBeDefined()

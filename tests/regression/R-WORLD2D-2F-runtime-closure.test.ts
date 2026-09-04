@@ -29,7 +29,6 @@ import { createWorldWork, selectWorkNarrativeModule } from '../../src/lib/worksp
 async function createWorkspace(name: string) {
   return createWorkspaceRoot({
     name,
-    genre: 'fantasy',
     genres: ['fantasy'],
     status: 'drafting',
     description: 'WORLD-2D..2F 边界闭环测试',
@@ -115,8 +114,17 @@ describe('WORLD-2D..2F · 世界语义发布与产品阶段闸门', () => {
     const characterId = await db.characters.add(stampNewRecord(scope, 'characters', {
       projectId: scope.projectId,
       name: '冻结角色',
-      role: 'protagonist',
-      description: '',
+      roleWeight: 'main',
+      moralAxis: 'neutral',
+      orderAxis: 'neutral',
+      shortDescription: '',
+      appearance: '',
+      personality: '',
+      background: '',
+      motivation: '',
+      abilities: '',
+      relationships: '',
+      arc: '',
       createdAt: now,
       updatedAt: now,
     } as any, { owner: 'world' })) as number
@@ -184,7 +192,7 @@ describe('WORLD-2D..2F · 世界语义发布与产品阶段闸门', () => {
     expect(manifest.records.references).toBeUndefined()
     expect(manifest.records.narrativeModules).toBeUndefined()
     expect(manifest).not.toHaveProperty('selectedNarrativeModules')
-    expect((manifest.portableProject as Record<string, unknown>).references).toBeUndefined()
+    expect(manifest.semanticSnapshot).not.toHaveProperty('references')
 
     const allSections = ['foundation', 'characters', 'narrative', 'outline'] as const
     const fullRevision = await createWorldRevision({
@@ -224,8 +232,8 @@ describe('WORLD-2D..2F · 世界语义发布与产品阶段闸门', () => {
     expect(report.errors.join('；')).toContain('selectedTables 不允许重复')
 
     const mismatched = structuredClone(pkg)
-    const portableStoryCores = mismatched.release.manifest.portableProject.storyCores as Array<Record<string, unknown>>
-    portableStoryCores[0].logline = '与冻结 records 不一致的内容'
+    const frozenStoryCores = mismatched.release.manifest.records.storyCores as Array<Record<string, unknown>>
+    frozenStoryCores[0].logline = '篡改冻结 records 的内容'
     const mismatchReport = await inspectWorldPackage(mismatched)
     expect(mismatchReport.valid).toBe(false)
     expect(mismatchReport.errors.join('；')).toContain('WorldRelease contentHash 不匹配')

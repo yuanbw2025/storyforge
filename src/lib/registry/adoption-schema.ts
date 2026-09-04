@@ -1,5 +1,5 @@
 /**
- * ADOPTION_SCHEMAS(Phase 1.2a) · 集合写回策略登记。
+ * ADOPTION_SCHEMAS · 当前集合写回策略登记。
  *
  * 单例表走 FIELD_REGISTRY 定位记录;集合表必须在这里登记 identity / 去重 /
  * 自动盖章 / FK 校验策略。
@@ -410,7 +410,7 @@ export const ADOPTION_EXTENSIONS: readonly AdoptionExtensionSpec[] = Object.free
     target: 'references',
     entrypoints: ['src/lib/reference-analysis/lifecycle.ts'],
     policyRegistry: 'REFERENCE_ANALYSIS_RUN_POLICY + PROJECT_TABLES refs',
-    reason: '激活版本需原子同步兼容投影；删除参考需同时清理版本、分块、原文与创作规则引用。',
+    reason: '激活版本需原子同步当前投影；删除参考需同时清理版本、分块、原文与创作规则引用。',
     reviewAfter: '2027-01-01',
   },
   {
@@ -509,14 +509,6 @@ export const ADOPTION_EXTENSIONS: readonly AdoptionExtensionSpec[] = Object.free
     reviewAfter: '2027-01-01',
   },
   {
-    id: 'codex-category-scope-lifecycle',
-    target: 'codexCategories',
-    entrypoints: ['src/lib/registry/lifecycle.ts'],
-    policyRegistry: 'PROJECT_TABLES lifecycle',
-    reason: '分类 schema 已改为项目级共享；删除世界时需原子清除旧备份残留的 worldGroupId，而不是删除分类。',
-    reviewAfter: '2027-01-01',
-  },
-  {
     id: 'workspace-root-lifecycle',
     target: 'projects',
     entrypoints: [
@@ -533,7 +525,7 @@ export const ADOPTION_EXTENSIONS: readonly AdoptionExtensionSpec[] = Object.free
       'src/lib/adaptation/source-manifest.ts',
     ],
     policyRegistry: 'PROJECT_TABLES + workspace purpose + import trust + world lifecycle',
-    reason: '项目根创建、稳定身份补齐、导入恢复和世界/作品根级联属于受信生命周期；作者可编辑字段仍只能经 adopt()。',
+    reason: '项目根创建、当前格式导入恢复和世界/作品根级联属于受信生命周期；缺失身份直接拒绝，作者可编辑字段仍只能经 adopt()。',
     reviewAfter: '2027-08-01',
   },
   {

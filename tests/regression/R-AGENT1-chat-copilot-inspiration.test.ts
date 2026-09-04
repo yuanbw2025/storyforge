@@ -15,6 +15,8 @@ import {
 import { parseInspirationVersions } from '../../src/lib/inspiration/workspace'
 import { useAIConfigStore } from '../../src/stores/ai-config'
 import { useInspirationWorkspaceStore } from '../../src/stores/inspiration-workspace'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
+import { seedCurrentProject } from '../helpers/current-workspace'
 
 const singleResult = {
   worldview: {
@@ -38,9 +40,8 @@ const singleResult = {
 
 async function addProject(enableMultiWorld = false): Promise<number> {
   const now = Date.now()
-  return await db.projects.add({
+  return await seedCurrentProject({
     name: enableMultiWorld ? '多世界灵感' : '灵感项目',
-    genre: 'fantasy',
     genres: ['fantasy'],
     status: 'drafting',
     description: '',
@@ -75,6 +76,7 @@ async function addWorkspace(projectId: number) {
     createdAt: now,
     updatedAt: now,
   })
+  await finalizeCurrentFixtureV1(projectId)
   return (await db.inspirationWorkspaces.get(id))!
 }
 

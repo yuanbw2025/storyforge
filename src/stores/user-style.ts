@@ -142,9 +142,11 @@ export const useUserStyleStore = create<UserStyleState>((set, get) => ({
   clearLearnedStyle: async () => {
     const { profile } = get()
     if (profile?.id == null) return
-    const scope = await resolveScopeLike(profile.workId != null && profile.worldId != null
-      ? { projectId: profile.projectId, worldId: profile.worldId, workId: profile.workId }
-      : profile.projectId)
+    const scope = await resolveScopeLike({
+      projectId: profile.projectId,
+      worldId: profile.worldId,
+      workId: profile.workId,
+    })
     const current = await db.userStyleProfiles.get(profile.id)
     if (!current || !await assertRecordInScope(scope, 'userStyleProfiles', current, { owner: 'work' })) return
     await db.userStyleProfiles.delete(profile.id)

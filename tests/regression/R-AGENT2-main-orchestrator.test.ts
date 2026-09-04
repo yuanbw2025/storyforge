@@ -12,16 +12,16 @@ import {
 import { db } from '../../src/lib/db/schema'
 import type { AIConfigPreset, Project } from '../../src/lib/types'
 import { useAIConfigStore } from '../../src/stores/ai-config'
+import { putCurrentWorkspaceFixtureV1 } from '../helpers/current-workspace'
 
 const project: Project = {
   id: 73001,
+  workspaceUid: 'WS-00000000-0000-4000-8000-000000073001',
+  workspacePurpose: 'independent-work',
   name: '主 Agent 测试',
-  genre: 'fantasy',
-  genres: ['fantasy'],
-  status: 'drafting',
-  description: '',
-  targetWordCount: 100_000,
   enableMultiWorld: false,
+  activeWorldId: 73001,
+  activeWorkId: 73001,
   createdAt: 1,
   updatedAt: 1,
 }
@@ -30,7 +30,7 @@ describe('AGENT-2 · 主 Agent 编排与持久会话', () => {
   beforeEach(async () => {
     await db.delete()
     await db.open()
-    await db.projects.put(project)
+    await putCurrentWorkspaceFixtureV1(project)
   })
 
   afterEach(() => {
@@ -275,6 +275,7 @@ describe('AGENT-2 · 主 Agent 编排与持久会话', () => {
 
   it('没有 durable Harness 绑定的候选不能重新进入正式编辑', async () => {
     const conversation = await getOrCreateAgentConversation({
+      purpose: 'test:r-agent2-main-orchestrator:1',
       projectId: project.id!,
       worldGroupId: null,
     })
@@ -303,6 +304,7 @@ describe('AGENT-2 · 主 Agent 编排与持久会话', () => {
 
   it('下游候选不能在依赖的上游候选确认前写入', async () => {
     const conversation = await getOrCreateAgentConversation({
+      purpose: 'test:r-agent2-main-orchestrator:2',
       projectId: project.id!,
       worldGroupId: null,
     })

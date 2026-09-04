@@ -13,19 +13,8 @@ export type StoryForgeTheme = typeof THEME_OPTIONS[number]['value']
 
 const THEME_VALUES = new Set<string>(THEME_OPTIONS.map(theme => theme.value))
 
-const THEME_MIGRATE: Record<string, StoryForgeTheme> = {
-  work: 'forge',
-  midnight: 'forge',
-  ocean: 'forge',
-  graphite: 'forge',
-  mist: 'paper',
-  parchment: 'paper',
-}
-
 export function resolveStoryForgeTheme(savedTheme: string | null): StoryForgeTheme {
   if (!savedTheme) return DEFAULT_THEME
-  const migrated = THEME_MIGRATE[savedTheme]
-  if (migrated) return migrated
   if (THEME_VALUES.has(savedTheme)) return savedTheme as StoryForgeTheme
   return DEFAULT_THEME
 }

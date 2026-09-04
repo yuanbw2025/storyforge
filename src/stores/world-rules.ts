@@ -58,26 +58,19 @@ export const useWorldRulesStore = create<WorldRulesState>((set, get) => ({
     try {
       const targetWorldGroupId = worldGroupId ?? null
       const scope = await resolveScopeLike(scopeInput)
-      const profile = await db.transaction('rw', db.projects, db.worldRulesProfiles, async () => {
+      const profile = await db.transaction('rw', db.worldRulesProfiles, async () => {
         const profiles = await readOwnedRows<WorldRulesProfile>(scope, 'worldRulesProfiles', { owner: 'world' })
         const existing = profiles.find(p => (p.worldGroupId ?? null) === targetWorldGroupId)
         if (existing) return existing
 
-        // 首次访问，创建空 profile
-        // Phase 32.9: 检查旧项目是否设过 creativeMode=historical，自动迁移提示
-        const project = await db.projects.get(scope.projectId)
-        const wasHistorical = project?.creativeMode === 'historical'
-        const migrationNote = wasHistorical
-          ? '【自动迁移提示】本项目原先使用「历史考证」模式。现已升级为维度级「真实与幻想」规则体系，请在左侧各维度中分别设定哪些内容取自真实、哪些是架空改造。'
-          : ''
-
+        // 首次访问，创建当前架构的空 profile。
         const now = Date.now()
         const id = await db.worldRulesProfiles.add(stampNewRecord(scope, 'worldRulesProfiles', {
           projectId: scope.projectId,
           worldGroupId: targetWorldGroupId,
           entries: {},
           customNodes: [],
-          globalNote: migrationNote,
+          globalNote: '',
           createdAt: now,
           updatedAt: now,
         }, { owner: 'world' }))

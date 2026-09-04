@@ -1,13 +1,13 @@
 /**
- * PROJECT_TABLES 注册表(Phase 1.1a)· 单一事实源
+ * PROJECT_TABLES 注册表·单一事实源
  *
- * 全部项目 Dexie 表的元信息登记在此。
- * 导出/导入/删项目/删世界组/迁移多世界 全部从这里派生(见 lifecycle.ts)。
+ * 全部项目 Dexie 表的元信息登记在此。导出、导入、删除、作用域归属与
+ * 引用重映射都从注册表派生（见 lifecycle.ts）。
  *
- * ⚠️ 加新表 = 在此加一行 + schema.ts 加版本 + types 加类型。其它生命周期自动覆盖。
+ * 加新表 = 在此登记 + schema.ts 声明 + types 定义，其它生命周期自动覆盖。
  *
  * 当前事实来源:本注册表 + schema.ts + ensure-schema.ts，三者由 CI 双向校验。
- * 历史手写表清单已归档，禁止恢复为第二事实源。
+ * 禁止在该注册表之外手写第二份表清单。
  * 治理依据:docs/DATA-GOVERNANCE.md。
  */
 import { db } from '../db/schema'
@@ -59,17 +59,11 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
       dependencyEmitter: 'workspace-root-impact-v1', schemaVersion: 1,
     },
     exportRemap: [
-      {
-        field: 'activeCharacterDrivenPlanId',
-        remapVia: 'characterDrivenPlans',
-        exportAs: '_activeCharacterDrivenPlanExportId',
-      },
       { field: 'activeWorldId', remapVia: 'worlds', exportAs: '_activeWorldExportId' },
       { field: 'activeWorkId', remapVia: 'works', exportAs: '_activeWorkExportId' },
     ],
-    note: 'WORLD-2C 后作为 LocalWorkspace 物理兼容根，不再冒充 World/Work' },
+    note: 'LocalWorkspace 根；只承载工作区身份、产品目的与活动 World/Work 指针' },
 
-  // WORLD-2C C1 added empty roots; C2 now creates/adopts them lazily on workspace entry.
   { table: db.worlds, name: 'worlds', owner: 'project', exportable: true, exportIdField: true,
     domainOwner: WORKSPACE_DOMAIN_OWNER,
     workspaceProjection: {
@@ -252,9 +246,9 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     ],
     note: '角色身份保持世界级；本表只保存作品内角色作用投影' },
 
-  { table: db.ownershipMigrations, name: 'ownershipMigrations', owner: 'transient', exportable: false,
+  { table: db.ownershipScopeChanges, name: 'ownershipScopeChanges', owner: 'transient', exportable: false,
     domainOwner: WORKSPACE_DOMAIN_OWNER,
-    note: 'WORLD-2C ownership 来源、惰性迁移 before-image 与作用域变更审计，不保存手稿正文' },
+    note: '作者显式改变 World/Work 作用域时追加的不可变审计事件，不保存内容载荷' },
 
   { table: db.workspaceDocuments, name: 'workspaceDocuments', owner: 'project', exportable: false,
     domainOwner: WORKSPACE_DOMAIN_OWNER,
@@ -309,7 +303,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     refs: [
       { kind: 'simple', field: 'id', target: 'storyArcs[sourceStoryCoreId]', onDelete: 'setNull' },
     ],
-    note: '每个 Work 一份故事核心；旧 project/world 兼容行在所有权迁移时归入明确 Work' },
+    note: '每个 Work 一份故事核心，必须拥有明确 Work 身份' },
 
   { table: db.powerSystems, name: 'powerSystems', owner: 'project', worldScoped: true,
     resourceIdentity: RESOURCE_IDENTITY('power-system', 'worldview-field', '力量体系'),
@@ -635,7 +629,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     exportable: true, exportIdField: true, tree: { parentField: 'parentPlanId' },
     refs: [
       { kind: 'json', field: 'arcs', jsonPath: '$[].characterId', target: 'characters[id]', onDelete: 'remap' },
-      { kind: 'simple', field: 'id', target: 'projects[activeCharacterDrivenPlanId]', onDelete: 'setNull' },
+      { kind: 'simple', field: 'id', target: 'works[activeCharacterDrivenPlanId]', onDelete: 'setNull' },
       { kind: 'simple', field: 'id', target: 'characterDrivenPlans[parentPlanId]', onDelete: 'setNull' },
     ],
     exportRemap: [{
@@ -737,9 +731,8 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     refs: [{ kind: 'simple', field: 'id', target: 'codexEntries[categoryId]', onDelete: 'cascade' }],
     exportRemap: [
       { field: 'parentId', remapVia: 'codexCategories', selfTree: true, exportAs: '_parentExportId' },
-      { field: 'worldGroupId', remapVia: 'worldGroups', exportAs: '_worldGroupExportId' },
     ],
-    note: '分类 schema 项目级共享；worldGroupId 仅为旧备份兼容字段，不参与世界生命周期' },
+    note: '分类 schema 属于当前 World 根，具体词条再按 worldGroupId 隔离' },
 
   { table: db.codexEntries, name: 'codexEntries', owner: 'project', worldScoped: true,
     resourceIdentity: RESOURCE_IDENTITY('codex-entry', 'codex-entry', '设定词条'),
@@ -766,7 +759,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
   { table: db.userStyleProfiles, name: 'userStyleProfiles', owner: 'project', exportable: true,
     resourceIdentity: RESOURCE_IDENTITY('user-style', 'reference', '作者文风'),
     domainOwner: WORK_DOMAIN_OWNER,
-    note: '每个 Work 一份作者文风画像；物理 projectId 兼容旧库，逻辑归属由 Work scope 隔离' },
+    note: '每个 Work 一份作者文风画像；由 projectId/worldId/workId 共同证明当前作用域' },
 
   // ───────────────────── 增量灵感工作区（CM-1） ─────────────────────
   { table: db.inspirationWorkspaces, name: 'inspirationWorkspaces', owner: 'project', exportable: true,

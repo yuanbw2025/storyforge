@@ -197,7 +197,7 @@ export interface AgentRunContractV1 {
     parentRunId: number
     relation: string
   }
-  /** Absent on root/legacy runs; immutable once a child run is created. */
+  /** Present only for a child run and immutable once created. */
   lineage?: {
     parent: AgentRunParentLineageV1
   }
@@ -206,9 +206,9 @@ export interface AgentRunContractV1 {
     contextSourceKeys: string[]
     writeTargets: AgentRunWriteTargetV1[]
   }
-  /** Absent on runs created before HARNESS-29; binds provider/model/transport capabilities. */
+  /** Binds provider/model/transport capabilities for runners without Skill snapshots. */
   runtimeBindingHash?: string
-  /** Absent on runs created before HARNESS-18. */
+  /** Frozen V1 Skill bindings for Skill-driven runs. */
   executionBindings?: AgentRunStepExecutionBindingV1[]
   /** Absent on runs created before HARNESS-25 and on workflows without a candidate join. */
   dependencyReceiptPolicy?: {
@@ -254,11 +254,11 @@ export interface AgentRunContractV1 {
     maxInputTokens: number
     maxOutputTokens: number
     maxAttemptsPerStep: number
-    /** Bounded contract-generation changes; absent on pre-HARNESS-24 runs. */
+    /** Bounded contract-generation changes for workflows that support replanning. */
     maxReplans?: number
-    /** Runner-specific evidence ceiling; absent on older/non-tool contracts. */
+    /** Runner-specific evidence ceiling for tool-driven contracts. */
     maxToolResultTokens?: number
-    /** Strict protocol repair allowance; absent on older/non-protocol contracts. */
+    /** Strict protocol repair allowance for model-protocol contracts. */
     maxProtocolErrors?: number
   }
   acceptance: AgentRunAcceptanceCriterionV1[]
@@ -272,7 +272,8 @@ export interface AgentRunContractV1 {
 
 /**
  * V2 requires every executable step to carry a complete Skill-derived binding.
- * Historical V1 contracts remain readable and are never upgraded in place.
+ * V1 remains the active compact contract for deterministic and specialized
+ * runners; V2 adds complete Skill snapshots for multi-step generation.
  */
 export interface AgentRunContractV2 extends Omit<AgentRunContractV1, 'version' | 'executionBindings'> {
   version: 2
@@ -530,13 +531,13 @@ export interface AgentRunRecord {
   id?: number
   projectId: number
   workId?: number | null
-  /** Exactly one of workId / productRuntimeSessionId owns every non-legacy run. */
+  /** Exactly one of workId / productRuntimeSessionId owns every run. */
   productRuntimeSessionId?: number | null
   /** PRODUCTPROD-1 build owner; build runs remain Work-owned and never use this as a second owner. */
   productBuildId?: number | null
   worldGroupId?: number | null
   conversationId?: number | null
-  /** Materialized child index; mirrors contract.ownership or legacy lineage.parent. */
+  /** Materialized child index; mirrors the contract's current parent relation. */
   parentRunId?: number | null
   parentRelation?: string | null
   parentReceiptHash?: string | null

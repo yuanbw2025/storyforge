@@ -10,25 +10,43 @@ import { parseTtrpgEffectLedgerStateV2 } from "./effect-runtime";
 import { parseTtrpgInventoryStateV2 } from "./item-ledger";
 import { type TtrpgRuntimeScene, type TtrpgRuntimeAction, type TtrpgRuntimeCheck, type TtrpgDegreeV2, type TtrpgRuntimeIntentReceiptV2, type TtrpgRuntimeHumanResponseV2, type TtrpgRuntimeRestReceiptV2, type TtrpgRuntimeResource, type TtrpgRuntimeCondition, type TtrpgRuntimeCombatant, type TtrpgRuntimeEncounter, type TtrpgRuntimeAttackResult, type TtrpgRuntimeState, type TtrpgRuntimeModelEvidenceV1, type TtrpgRuntimeTabletopStateV1, type TtrpgCharacterSheetV2, type TtrpgRuntimeItemReceiptV2, type TtrpgRuntimeCampaignState, type TtrpgRuntimeQuest, type TtrpgRuntimeQuestStatus, SIMULATION_TTRPG_QUEST_STATUSES, type TtrpgRuntimeNpcSchedule, type TtrpgRuntimeCampaignSessionV2, type TtrpgRuntimeRosterEntryV2, type TtrpgRuntimeCampaignMemoryV2, type TtrpgRuntimeSupplementReceiptV2, type TtrpgRuntimeWorldEvolutionV2, type TtrpgRuntimeVersionTransitionV2, type ProductRuntimeState, type RuntimeEntityState, type TtrpgRuntimeTurnCandidate, type TtrpgRuntimeCheckRequest } from "../types";
 
+function assertExactKeys(
+  value: Record<string, unknown>,
+  expected: readonly string[],
+  label: string,
+): void {
+  const actual = Object.keys(value).sort();
+  const wanted = [...expected].sort();
+  if (
+    actual.length !== wanted.length ||
+    actual.some((key, index) => key !== wanted[index])
+  ) {
+    throw new Error(`${label} 字段不精确：${actual.join(", ")}`);
+  }
+}
+
 export function isNpcRuntimeEntity(entity: RuntimeEntityState): boolean {
   return entity.kind === "npc" || (entity.kind === "character"
     && (entity.attributes.role === "npc" || entity.attributes.roleWeight === "npc"));
 }
 export function assertTtrpgScene(value: unknown): TtrpgRuntimeScene {
   if (!isObject(value)) throw new Error("跑团场景必须是对象。");
+  assertExactKeys(
+    value,
+    ["sceneId", "sceneKey", "title", "description", "locationKey", "status"],
+    "跑团场景",
+  );
   const sceneId = String(value.sceneId ?? "").trim();
-  const sceneKey =
-    value.sceneKey == null ? null : String(value.sceneKey).trim() || null;
+  const sceneKey = String(value.sceneKey ?? "").trim();
   const title = String(value.title ?? "").trim();
   const description = String(value.description ?? "").trim();
   const locationKey =
     value.locationKey == null ? null : String(value.locationKey).trim() || null;
-  const status = String(value.status ?? "active");
+  const status = String(value.status ?? "");
   if (!sceneId || sceneId.length > 160)
     throw new Error("跑团场景缺少有效 ID。");
   if (
-    sceneKey != null &&
-    (sceneKey.length > 200 || !/^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(sceneKey))
+    !sceneKey || sceneKey.length > 200 || !/^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(sceneKey)
   ) {
     throw new Error("跑团 Campaign 场景 key 无效。");
   }
@@ -48,6 +66,7 @@ export function assertTtrpgScene(value: unknown): TtrpgRuntimeScene {
 
 export function assertTtrpgAction(value: unknown): TtrpgRuntimeAction {
   if (!isObject(value)) throw new Error("跑团动作必须是对象。");
+  assertExactKeys(value, ["eventSequence", "actorKey", "text"], "跑团动作");
   const eventSequence = assertFiniteInteger(
     value.eventSequence,
     "跑团动作事件序号",
@@ -76,6 +95,14 @@ export function ttrpgDegreeSucceededV2(
 
 export function assertTtrpgCheck(value: unknown): TtrpgRuntimeCheck {
   if (!isObject(value)) throw new Error("跑团检定必须是对象。");
+  assertExactKeys(
+    value,
+    [
+      "eventSequence", "actorKey", "skill", "expression", "dice", "modifier",
+      "total", "dc", "success", "visibility", "rule",
+    ],
+    "跑团检定",
+  );
   const eventSequence = assertFiniteInteger(
     value.eventSequence,
     "跑团检定事件序号",
@@ -100,39 +127,39 @@ export function assertTtrpgCheck(value: unknown): TtrpgRuntimeCheck {
   const modifier = Number(value.modifier);
   const total = Number(value.total);
   const success = value.success;
-  const visibility =
-    value.visibility == null ? "public" : String(value.visibility);
+  const visibility = String(value.visibility ?? "");
   if (!["public", "gm-only"].includes(visibility)) {
     throw new Error("跑团检定可见性无效。");
   }
-  const formalDegree = isObject(value.rule)
-    ? String(value.rule.degree ?? "")
-    : null;
-  const formalMode =
-    isObject(value.rule) && value.rule.mode != null
-      ? String(value.rule.mode)
-      : null;
+  if (!isObject(value.rule)) throw new Error("正式规则检定证据必须是对象。");
+  assertExactKeys(
+    value.rule,
+    [
+      "actionKey", "checkKey", "attributeKey", "skillKey", "skillValue",
+      "diceModelKey", "rolledDice", "keptDice", "degree", "mode", "successes",
+      "winnerRef", "tiedRefs", "calculationTrace", "opponent", "rollTrace",
+      "seedCommitment", "nonce", "proofHash", "rulePackContentHash",
+    ],
+    "正式规则检定证据",
+  );
+  const formalDegree = String(value.rule.degree ?? "");
   if (
     modifier !== parsed.modifier ||
     total !== normalizedDice.reduce((sum, die) => sum + die, modifier)
   ) {
     throw new Error("跑团检定合计与骰式不一致。");
   }
-  const expectedSuccess =
-    formalMode == null
-      ? total >= dc
-      : [
+  const expectedSuccess = [
           "partial-success",
           "success",
           "hard-success",
           "extreme-success",
           "critical-success",
-        ].includes(formalDegree ?? "");
+        ].includes(formalDegree);
   if (success !== expectedSuccess)
     throw new Error("跑团检定成功状态与合计不一致。");
-  let rule: TtrpgRuntimeCheck["rule"] = null;
-  if (value.rule != null) {
-    if (!isObject(value.rule)) throw new Error("正式规则检定证据必须是对象。");
+  let rule: TtrpgRuntimeCheck["rule"];
+  {
     const actionKey = String(value.rule.actionKey ?? "").trim();
     const checkKey = String(value.rule.checkKey ?? "").trim();
     const attributeKey = String(value.rule.attributeKey ?? "").trim();
@@ -142,7 +169,7 @@ export function assertTtrpgCheck(value: unknown): TtrpgRuntimeCheck {
       value.rule.skillValue == null ? null : Number(value.rule.skillValue);
     const diceModelKey = String(value.rule.diceModelKey ?? "").trim();
     const degree = String(value.rule.degree ?? "");
-    const mode = value.rule.mode == null ? undefined : String(value.rule.mode);
+    const mode = String(value.rule.mode ?? "");
     const seedCommitment =
       value.rule.seedCommitment == null
         ? null
@@ -180,7 +207,6 @@ export function assertTtrpgCheck(value: unknown): TtrpgRuntimeCheck {
       throw new Error("正式规则检定结果等级无效。");
     }
     if (
-      mode != null &&
       !["total-vs-target", "roll-under", "success-pool", "opposed"].includes(
         mode,
       )
@@ -306,40 +332,28 @@ export function assertTtrpgCheck(value: unknown): TtrpgRuntimeCheck {
       actionKey,
       checkKey,
       attributeKey,
-      ...(skillKey == null
-        ? {}
-        : { skillKey, skillValue: skillValue as number }),
+      skillKey,
+      skillValue,
       diceModelKey,
       rolledDice,
       keptDice,
       degree: degree as NonNullable<TtrpgRuntimeCheck["rule"]>["degree"],
-      ...(mode == null
-        ? {}
-        : {
-            mode: mode as NonNullable<TtrpgRuntimeCheck["rule"]>["mode"],
-            successes:
-              value.rule.successes == null
-                ? null
-                : assertFiniteInteger(
-                    value.rule.successes,
-                    "正式规则成功数",
-                    0,
-                    10_000,
-                  ),
-            winnerRef,
-            tiedRefs,
-            calculationTrace,
-            opponent,
-          }),
-      rollTrace:
-        value.rule.rollTrace == null
+      mode: mode as TtrpgRuntimeCheck["rule"]["mode"],
+      successes:
+        value.rule.successes == null
           ? null
-          : assertTtrpgDiceRollTraceV2(value.rule.rollTrace),
-      seedCommitment,
-      nonce,
+          : assertFiniteInteger(value.rule.successes, "正式规则成功数", 0, 10_000),
+      winnerRef,
+      tiedRefs,
+      calculationTrace,
+      opponent,
+      rollTrace: assertTtrpgDiceRollTraceV2(value.rule.rollTrace),
+      seedCommitment: seedCommitment ?? "",
+      nonce: nonce ?? "",
       proofHash,
       rulePackContentHash,
     };
+    if (!rule.seedCommitment || !rule.nonce) throw new Error("正式规则随机数承诺证据不完整。");
   }
   return {
     eventSequence,
@@ -360,6 +374,15 @@ export function assertTtrpgRuleActionResult(
   value: unknown,
 ): import("../types").TtrpgRuntimeRuleActionResultV1 {
   if (!isObject(value)) throw new Error("正式规则行动结果必须是对象。");
+  assertExactKeys(
+    value,
+    [
+      "eventSequence", "actionKey", "actionName", "actorKey", "targetKey",
+      "actionPhase", "outcome", "check", "resourceChanges", "conditionChanges",
+      "abilityChange", "actorAuthority", "receipt", "nextActorKey", "nextRound",
+    ],
+    "正式规则行动结果",
+  );
   const eventSequence = assertFiniteInteger(
     value.eventSequence,
     "规则行动事件序号",
@@ -371,12 +394,9 @@ export function assertTtrpgRuleActionResult(
   const actorKey = String(value.actorKey ?? "").trim();
   const targetKey =
     value.targetKey == null ? null : String(value.targetKey).trim() || null;
-  const actionPhase =
-    value.actionPhase == null
-      ? null
-      : (String(
-          value.actionPhase,
-        ) as import("../types").TtrpgRuntimeRuleActionResultV1["actionPhase"]);
+  const actionPhase = String(
+    value.actionPhase ?? "",
+  ) as import("../types").TtrpgRuntimeRuleActionResultV1["actionPhase"];
   const outcome = String(
     value.outcome ?? "",
   ) as import("../types").TtrpgRuntimeRuleActionResultV1["outcome"];
@@ -384,8 +404,7 @@ export function assertTtrpgRuleActionResult(
     !actionKey ||
     !actionName ||
     !actorKey ||
-    (actionPhase != null &&
-      !["free", "action", "reaction", "downtime"].includes(actionPhase)) ||
+    !["free", "action", "reaction", "downtime"].includes(actionPhase) ||
     ![
       "automatic",
       "critical-failure",
@@ -557,11 +576,9 @@ export function assertTtrpgRuleActionResult(
       spokenIntent,
     };
   }
-  const receipt =
-    value.receipt == null ? null : parseTtrpgActionReceiptV2(value.receipt);
+  const receipt = parseTtrpgActionReceiptV2(value.receipt);
   if (
-    receipt &&
-    (receipt.actionSequence !== eventSequence ||
+    receipt.actionSequence !== eventSequence ||
       receipt.context.actorKey !== actorKey ||
       receipt.context.targetKey !== targetKey ||
       receipt.context.actionKey !== actionKey ||
@@ -570,7 +587,7 @@ export function assertTtrpgRuleActionResult(
         (value.nextActorKey == null
           ? null
           : String(value.nextActorKey).trim() || null) ||
-      receipt.nextRound !== Number(value.nextRound))
+      receipt.nextRound !== Number(value.nextRound)
   ) {
     throw new Error("ActionReceipt 与规则行动结果身份或回合推进不一致。");
   }
@@ -1081,21 +1098,6 @@ export function assertTtrpgAttackResult(value: unknown): TtrpgRuntimeAttackResul
   };
 }
 
-function emptyTtrpgState(): TtrpgRuntimeState {
-  return {
-    scene: null,
-    round: 0,
-    activeActorKey: null,
-    turnOrder: [],
-    actions: [],
-    checks: [],
-    attacks: [],
-    encounter: null,
-    campaign: emptyTtrpgCampaignState(),
-    product: null,
-  };
-}
-
 export function parseTtrpgModelEvidenceV1(
   value: unknown,
 ): TtrpgRuntimeModelEvidenceV1 | null {
@@ -1167,6 +1169,14 @@ function parseTtrpgTabletopStateV1(
   ) {
     throw new Error("正式 TTRPG 桌面状态无效。");
   }
+  assertExactKeys(
+    value,
+    [
+      "currentMapKey", "maps", "tokens", "visibleLayerKeys",
+      "revealedFogKeys", "updatedAtSequence",
+    ],
+    "正式 TTRPG 桌面状态",
+  );
   const maps = value.maps.map((raw, index) => {
     if (
       !isObject(raw) ||
@@ -1291,8 +1301,7 @@ function parseTtrpgTabletopStateV1(
 
 function parseTtrpgMediaStateV1(
   value: unknown,
-): NonNullable<NonNullable<TtrpgRuntimeState["product"]>["media"]> | null {
-  if (value == null) return null;
+): TtrpgRuntimeState["product"]["media"] {
   if (
     !isObject(value) ||
     !isObject(value.runtimePolicy) ||
@@ -1300,6 +1309,11 @@ function parseTtrpgMediaStateV1(
   ) {
     throw new Error("正式 TTRPG 媒资状态无效。");
   }
+  assertExactKeys(
+    value,
+    ["visualBibleHash", "generatedCount", "runtimePolicy", "slots"],
+    "正式 TTRPG 媒资状态",
+  );
   const visualBibleHash =
     value.visualBibleHash == null ? null : String(value.visualBibleHash);
   if (visualBibleHash != null && !/^[a-f0-9]{64}$/.test(visualBibleHash))
@@ -1476,13 +1490,26 @@ function parseTtrpgMediaStateV1(
 function parseTtrpgProductState(
   value: unknown,
 ): TtrpgRuntimeState["product"] {
-  if (value == null) return null;
   if (
     !isObject(value) ||
     !/^[0-9a-f]{64}$/.test(String(value.rulePackContentHash ?? ""))
   ) {
     throw new Error("正式 TTRPG 产品状态无效。");
   }
+  assertExactKeys(
+    value,
+    [
+      "rulePackContentHash", "campaignKey", "campaignTitle", "openingSceneKey",
+      "sessionZero", "safety", "hiddenDicePolicy", "sceneKeys", "openedSceneKeys",
+      "clueCatalog", "clockCatalog", "discoveredClues", "conditions",
+      "actionEconomy", "inventory", "itemHistory", "abilityStates", "usagePools",
+      "effectLedger", "characterProgression", "characterCustomizations",
+      "actionHistory", "intentReceipts", "humanResponses", "restHistory",
+      "gmNarrations", "questProgress", "endingCatalog", "ending", "advancement",
+      "tabletop", "media",
+    ],
+    "正式 TTRPG 产品状态",
+  );
   const campaignKey = String(value.campaignKey ?? "").trim();
   const campaignTitle = String(value.campaignTitle ?? "").trim();
   const openingSceneKey = String(value.openingSceneKey ?? "").trim();
@@ -1495,17 +1522,26 @@ function parseTtrpgProductState(
   ) {
     throw new Error("正式 TTRPG Session Zero 状态无效。");
   }
+  assertExactKeys(
+    value.sessionZero,
+    [
+      "completed", "requiredItemKeys", "acceptedItemKeys", "selectedCharacterKeys",
+      "completedBy", "completedAtSequence",
+    ],
+    "正式 TTRPG Session Zero",
+  );
   const requiredItemKeys = value.sessionZero.requiredItemKeys.map((item) =>
     String(item).trim(),
   );
   const acceptedItemKeys = value.sessionZero.acceptedItemKeys.map((item) =>
     String(item).trim(),
   );
-  const selectedCharacterKeys = Array.isArray(
-    value.sessionZero.selectedCharacterKeys,
-  )
-    ? value.sessionZero.selectedCharacterKeys.map((item) => String(item).trim())
-    : [];
+  if (!Array.isArray(value.sessionZero.selectedCharacterKeys)) {
+    throw new Error("正式 TTRPG Session Zero 缺少角色选择。");
+  }
+  const selectedCharacterKeys = value.sessionZero.selectedCharacterKeys.map(
+    (item) => String(item).trim(),
+  );
   if (
     !requiredItemKeys.length ||
     [...requiredItemKeys, ...acceptedItemKeys].some((item) => !item) ||
@@ -1533,19 +1569,23 @@ function parseTtrpgProductState(
   if (completed !== (completedBy != null && completedAtSequence != null))
     throw new Error("Session Zero 完成状态不一致。");
   const rawSafety = value.safety;
-  const safetyStatus = isObject(rawSafety)
-    ? String(rawSafety.status ?? "")
-    : "active";
+  if (!isObject(rawSafety)) throw new Error("正式 TTRPG 安全状态无效。");
+  assertExactKeys(
+    rawSafety,
+    ["status", "reason", "changedBy", "changedAtSequence"],
+    "正式 TTRPG 安全状态",
+  );
+  const safetyStatus = String(rawSafety.status ?? "");
   const safetyReason =
-    isObject(rawSafety) && rawSafety.reason != null
+    rawSafety.reason != null
       ? String(rawSafety.reason).trim() || null
       : null;
   const safetyChangedBy =
-    isObject(rawSafety) && rawSafety.changedBy != null
+    rawSafety.changedBy != null
       ? String(rawSafety.changedBy).trim() || null
       : null;
   const safetyChangedAtSequence =
-    isObject(rawSafety) && rawSafety.changedAtSequence != null
+    rawSafety.changedAtSequence != null
       ? assertFiniteInteger(
           rawSafety.changedAtSequence,
           "安全状态变更序号",
@@ -1560,14 +1600,15 @@ function parseTtrpgProductState(
   ) {
     throw new Error("正式 TTRPG 安全状态无效。");
   }
-  const hiddenDicePolicy =
-    value.hiddenDicePolicy == null ? "never" : String(value.hiddenDicePolicy);
+  const hiddenDicePolicy = String(value.hiddenDicePolicy ?? "");
   if (!["never", "gm-only", "allowed"].includes(hiddenDicePolicy)) {
     throw new Error("正式 TTRPG 暗骰策略无效。");
   }
   if (
     !Array.isArray(value.sceneKeys) ||
+    !Array.isArray(value.openedSceneKeys) ||
     !Array.isArray(value.clueCatalog) ||
+    !Array.isArray(value.clockCatalog) ||
     !Array.isArray(value.discoveredClues)
   ) {
     throw new Error("正式 TTRPG 战役索引无效。");
@@ -1580,9 +1621,9 @@ function parseTtrpgProductState(
   ) {
     throw new Error("正式 TTRPG 场景索引无效。");
   }
-  const openedSceneKeys = Array.isArray(value.openedSceneKeys)
-    ? value.openedSceneKeys.map((item) => String(item).trim())
-    : [];
+  const openedSceneKeys = value.openedSceneKeys.map((item) =>
+    String(item).trim(),
+  );
   if (
     openedSceneKeys.some((key) => !sceneKeys.includes(key)) ||
     new Set(openedSceneKeys).size !== openedSceneKeys.length
@@ -1615,9 +1656,7 @@ function parseTtrpgProductState(
   ) {
     throw new Error("正式 TTRPG 线索索引重复。");
   }
-  const clockCatalog = (
-    Array.isArray(value.clockCatalog) ? value.clockCatalog : []
-  ).map((raw, index) => {
+  const clockCatalog = value.clockCatalog.map((raw, index) => {
     if (!isObject(raw)) throw new Error(`正式 TTRPG Clock ${index} 无效。`);
     const clockKey = String(raw.clockKey ?? "").trim();
     const title = String(raw.title ?? "").trim();
@@ -1722,12 +1761,21 @@ function parseTtrpgProductState(
       throw new Error("正式 TTRPG 状态效果重复。");
     conditions[entityKey] = parsed;
   }
-  const characterCustomizations = (
-    Array.isArray(value.characterCustomizations)
-      ? value.characterCustomizations
-      : []
-  ).map((raw, index) => {
-    if (!isObject(raw) || !isObject(raw.attributes))
+  if (
+    !Array.isArray(value.characterCustomizations) ||
+    !Array.isArray(value.intentReceipts) ||
+    !Array.isArray(value.humanResponses) ||
+    !Array.isArray(value.restHistory) ||
+    !Array.isArray(value.itemHistory)
+  ) {
+    throw new Error("正式 TTRPG 当前账本不完整。");
+  }
+  const characterCustomizations = value.characterCustomizations.map((raw, index) => {
+    if (
+      !isObject(raw) ||
+      !isObject(raw.attributes) ||
+      !isObject(raw.characterSheet)
+    )
       throw new Error(`正式 TTRPG 自定义角色 ${index} 无效。`);
     const characterKey = String(raw.characterKey ?? "").trim();
     const name = String(raw.name ?? "").trim();
@@ -1755,21 +1803,14 @@ function parseTtrpgProductState(
       !Object.keys(attributes).length
     )
       throw new Error(`正式 TTRPG 自定义角色 ${index} 字段无效。`);
-    if (raw.characterSheet != null && !isObject(raw.characterSheet)) {
-      throw new Error(`正式 TTRPG 自定义角色 ${index} 完整角色卡无效。`);
-    }
     return {
       characterKey,
       name,
       description,
       attributes,
-      ...(raw.characterSheet == null
-        ? {}
-        : {
-            characterSheet: structuredClone(
-              raw.characterSheet,
-            ) as unknown as TtrpgCharacterSheetV2,
-          }),
+      characterSheet: structuredClone(
+        raw.characterSheet,
+      ) as unknown as TtrpgCharacterSheetV2,
       customizedAtSequence: assertFiniteInteger(
         raw.customizedAtSequence,
         "角色定制事件序号",
@@ -1785,9 +1826,7 @@ function parseTtrpgProductState(
     throw new Error("同一正式角色不能存在多份当前定制。");
   }
   const actionHistory = value.actionHistory.map(assertTtrpgRuleActionResult);
-  const intentReceipts = (
-    Array.isArray(value.intentReceipts) ? value.intentReceipts : []
-  ).map(parseTtrpgIntentReceiptV2);
+  const intentReceipts = value.intentReceipts.map(parseTtrpgIntentReceiptV2);
   if (
     new Set(intentReceipts.map((item) => item.intentKey)).size !==
       intentReceipts.length ||
@@ -1799,9 +1838,7 @@ function parseTtrpgProductState(
   ) {
     throw new Error("正式 TTRPG 行动意图收据重复或乱序。");
   }
-  const humanResponses = (
-    Array.isArray(value.humanResponses) ? value.humanResponses : []
-  ).map(parseTtrpgHumanResponseV2);
+  const humanResponses = value.humanResponses.map(parseTtrpgHumanResponseV2);
   if (
     new Set(humanResponses.map((item) => item.responseKey)).size !==
       humanResponses.length ||
@@ -1813,9 +1850,7 @@ function parseTtrpgProductState(
   ) {
     throw new Error("真人角色回应重复或乱序。");
   }
-  const restHistory = (
-    Array.isArray(value.restHistory) ? value.restHistory : []
-  ).map(parseTtrpgRestReceiptV2);
+  const restHistory = value.restHistory.map(parseTtrpgRestReceiptV2);
   if (
     new Set(restHistory.map((item) => item.restKey)).size !==
       restHistory.length ||
@@ -1829,7 +1864,7 @@ function parseTtrpgProductState(
   const gmNarrations = value.gmNarrations.map((raw, index) => {
     if (!isObject(raw)) throw new Error(`正式 TTRPG GM 叙事 ${index} 无效。`);
     const text = String(raw.text ?? "").trim();
-    const source = raw.source == null ? "ai-confirmed" : String(raw.source);
+    const source = String(raw.source ?? "");
     const candidateHash =
       raw.candidateHash == null ? null : String(raw.candidateHash);
     const runId =
@@ -1842,15 +1877,12 @@ function parseTtrpgProductState(
             Number.MAX_SAFE_INTEGER,
           );
     const modelEvidence = parseTtrpgModelEvidenceV1(raw.modelEvidence);
-    const modelCalls = Array.isArray(raw.modelCalls)
-      ? raw.modelCalls
-          .map(parseTtrpgModelEvidenceV1)
-          .filter(
-            (item): item is TtrpgRuntimeModelEvidenceV1 => item != null,
-          )
-      : modelEvidence
-        ? [modelEvidence]
-        : [];
+    if (!Array.isArray(raw.modelCalls)) {
+      throw new Error(`正式 TTRPG GM 叙事 ${index} 缺少模型调用账本。`);
+    }
+    const modelCalls = raw.modelCalls
+      .map(parseTtrpgModelEvidenceV1)
+      .filter((item): item is TtrpgRuntimeModelEvidenceV1 => item != null);
     const repairApplied = raw.repairApplied === true;
     const actionSequence = assertFiniteInteger(
       raw.actionSequence,
@@ -1861,16 +1893,15 @@ function parseTtrpgProductState(
     const actionReceipt =
       actionHistory.find((action) => action.eventSequence === actionSequence)
         ?.receipt ?? null;
-    const synthesisFrame =
-      raw.synthesisFrame == null
-        ? null
-        : actionReceipt
-          ? parseTtrpgGmSynthesisFrameV2(raw.synthesisFrame, actionReceipt)
-          : (() => {
-              throw new Error(
-                `正式 TTRPG GM 叙事 ${index} 的综合帧缺少 ActionReceipt。`,
-              );
-            })();
+    if (!actionReceipt) {
+      throw new Error(
+        `正式 TTRPG GM 叙事 ${index} 的综合帧缺少 ActionReceipt。`,
+      );
+    }
+    const synthesisFrame = parseTtrpgGmSynthesisFrameV2(
+      raw.synthesisFrame,
+      actionReceipt,
+    );
     if (
       !text ||
       text.length > 20_000 ||
@@ -1980,23 +2011,20 @@ function parseTtrpgProductState(
     ) {
       throw new Error(`正式 TTRPG 结局 ${index} 字段无效。`);
     }
-    let trigger: NonNullable<
-      TtrpgRuntimeState["product"]
-    >["endingCatalog"][number]["trigger"] = null;
-    if (raw.trigger != null) {
-      if (!isObject(raw.trigger))
-        throw new Error(`正式 TTRPG 结局 ${index} trigger 无效。`);
-      const sceneKey = String(raw.trigger.sceneKey ?? "").trim();
-      const requiredConclusionKeys = Array.isArray(
-        raw.trigger.requiredConclusionKeys,
-      )
-        ? raw.trigger.requiredConclusionKeys.map((item) => String(item).trim())
-        : [];
-      const forbiddenConclusionKeys = Array.isArray(
-        raw.trigger.forbiddenConclusionKeys,
-      )
-        ? raw.trigger.forbiddenConclusionKeys.map((item) => String(item).trim())
-        : [];
+    if (
+      !isObject(raw.trigger) ||
+      !Array.isArray(raw.trigger.requiredConclusionKeys) ||
+      !Array.isArray(raw.trigger.forbiddenConclusionKeys)
+    ) {
+      throw new Error(`正式 TTRPG 结局 ${index} trigger 无效。`);
+    }
+    const sceneKey = String(raw.trigger.sceneKey ?? "").trim();
+    const requiredConclusionKeys = raw.trigger.requiredConclusionKeys.map(
+      (item) => String(item).trim(),
+    );
+    const forbiddenConclusionKeys = raw.trigger.forbiddenConclusionKeys.map(
+      (item) => String(item).trim(),
+    );
       const knownConclusions = new Set(
         clueCatalog.map((item) => item.conclusionKey),
       );
@@ -2013,8 +2041,7 @@ function parseTtrpgProductState(
       ) {
         throw new Error(`正式 TTRPG 结局 ${index} trigger 字段无效。`);
       }
-      trigger = { sceneKey, requiredConclusionKeys, forbiddenConclusionKeys };
-    }
+    const trigger = { sceneKey, requiredConclusionKeys, forbiddenConclusionKeys };
     return { endingKey, title, epilogue, trigger };
   });
   if (
@@ -2090,14 +2117,8 @@ function parseTtrpgProductState(
   }
   const tabletop = parseTtrpgTabletopStateV1(value.tabletop);
   const media = parseTtrpgMediaStateV1(value.media);
-  const actionEconomy =
-    value.actionEconomy == null
-      ? null
-      : parseTtrpgActionEconomyV2(value.actionEconomy);
-  const inventory =
-    value.inventory == null
-      ? null
-      : parseTtrpgInventoryStateV2(value.inventory);
+  const actionEconomy = parseTtrpgActionEconomyV2(value.actionEconomy);
+  const inventory = parseTtrpgInventoryStateV2(value.inventory);
   const itemSnapshot = (
     raw: unknown,
     itemInstanceId: string,
@@ -2117,10 +2138,7 @@ function parseTtrpgProductState(
       );
     }
   };
-  const itemHistory: TtrpgRuntimeItemReceiptV2[] = Array.isArray(
-    value.itemHistory,
-  )
-    ? value.itemHistory.map((raw, index) => {
+  const itemHistory: TtrpgRuntimeItemReceiptV2[] = value.itemHistory.map((raw, index) => {
         if (!isObject(raw) || !isObject(raw.requestedBy)) {
           throw new Error(`正式 TTRPG 物品收据 ${index} 无效。`);
         }
@@ -2188,8 +2206,7 @@ function parseTtrpgProductState(
           before,
           after,
         };
-      })
-    : [];
+      });
   if (
     itemHistory.length > 100_000 ||
     new Set(itemHistory.map((item) => item.eventSequence)).size !==
@@ -2199,10 +2216,7 @@ function parseTtrpgProductState(
   ) {
     throw new Error("正式 TTRPG 物品收据过多或重复。");
   }
-  const abilityStates =
-    value.abilityStates == null
-      ? null
-      : (() => {
+  const abilityStates = (() => {
           if (
             !isObject(value.abilityStates) ||
             Object.keys(value.abilityStates).length > 10_000
@@ -2225,10 +2239,7 @@ function parseTtrpgProductState(
             }),
           );
         })();
-  const usagePools =
-    value.usagePools == null
-      ? null
-      : (() => {
+  const usagePools = (() => {
           if (
             !isObject(value.usagePools) ||
             Object.keys(value.usagePools).length > 1_000
@@ -2244,16 +2255,10 @@ function parseTtrpgProductState(
             }),
           );
         })();
-  const effectLedger =
-    value.effectLedger == null
-      ? null
-      : parseTtrpgEffectLedgerStateV2(value.effectLedger);
+  const effectLedger = parseTtrpgEffectLedgerStateV2(value.effectLedger);
   const characterProgression: NonNullable<
     TtrpgRuntimeState["product"]
-  >["characterProgression"] =
-    value.characterProgression == null
-      ? null
-      : (() => {
+  >["characterProgression"] = (() => {
           if (
             !isObject(value.characterProgression) ||
             Object.keys(value.characterProgression).length > 256
@@ -2440,6 +2445,14 @@ function parseTtrpgProductState(
 export function parseTtrpgState(value: unknown): TtrpgRuntimeState | null {
   if (value == null) return null;
   if (!isObject(value)) throw new Error("跑团状态必须是对象或 null。");
+  assertExactKeys(
+    value,
+    [
+      "scene", "round", "activeActorKey", "turnOrder", "initiative", "actions",
+      "checks", "attacks", "encounter", "campaign", "product",
+    ],
+    "正式 TTRPG 运行态",
+  );
   const scene = value.scene == null ? null : assertTtrpgScene(value.scene);
   const round = assertFiniteInteger(
     value.round,
@@ -2540,10 +2553,15 @@ export function parseTtrpgState(value: unknown): TtrpgRuntimeState | null {
             throw new Error("跑团先攻顺序与回合顺序不一致。");
           return { sceneKey, diceModelKey, attributeKey, entries };
         })();
-  if (!Array.isArray(value.actions) || !Array.isArray(value.checks))
-    throw new Error("跑团动作与检定记录必须是数组。");
-  if (value.attacks != null && !Array.isArray(value.attacks))
-    throw new Error("跑团攻击记录必须是数组。");
+  if (
+    !Array.isArray(value.actions) ||
+    !Array.isArray(value.checks) ||
+    !Array.isArray(value.attacks) ||
+    !isObject(value.campaign) ||
+    !isObject(value.product)
+  ) {
+    throw new Error("跑团当前运行态结构不完整。");
+  }
   return {
     scene,
     round,
@@ -2552,7 +2570,7 @@ export function parseTtrpgState(value: unknown): TtrpgRuntimeState | null {
     initiative,
     actions: value.actions.map(assertTtrpgAction),
     checks: value.checks.map(assertTtrpgCheck),
-    attacks: (value.attacks ?? []).map(assertTtrpgAttackResult),
+    attacks: value.attacks.map(assertTtrpgAttackResult),
     encounter:
       value.encounter == null ? null : assertTtrpgEncounter(value.encounter),
     campaign: parseTtrpgCampaignState(value.campaign),
@@ -2913,12 +2931,28 @@ export function assertTtrpgVersionTransitionV2(
 }
 
 function parseTtrpgCampaignState(value: unknown): TtrpgRuntimeCampaignState {
-  if (value == null) return emptyTtrpgCampaignState();
   if (!isObject(value)) throw new Error("长期战役状态必须是对象。");
+  assertExactKeys(
+    value,
+    [
+      "summary", "quests", "npcSchedules", "activeSessionKey", "playSessions",
+      "roster", "memories", "supplements", "worldEvolution", "versionTransitions",
+    ],
+    "长期战役状态",
+  );
   const summary = String(value.summary ?? "").trim();
   if (summary.length > 20_000) throw new Error("长期战役摘要过长。");
-  if (!Array.isArray(value.quests) || !Array.isArray(value.npcSchedules)) {
-    throw new Error("长期战役任务和 NPC 日程必须是数组。");
+  if (
+    !Array.isArray(value.quests) ||
+    !Array.isArray(value.npcSchedules) ||
+    !Array.isArray(value.playSessions) ||
+    !Array.isArray(value.roster) ||
+    !Array.isArray(value.memories) ||
+    !Array.isArray(value.supplements) ||
+    !Array.isArray(value.worldEvolution) ||
+    !Array.isArray(value.versionTransitions)
+  ) {
+    throw new Error("长期战役当前账本结构不完整。");
   }
   const quests = value.quests.map(assertTtrpgQuest);
   const npcSchedules = value.npcSchedules.map(assertTtrpgNpcSchedule);
@@ -2929,24 +2963,14 @@ function parseTtrpgCampaignState(value: unknown): TtrpgRuntimeCampaignState {
     npcSchedules.length
   )
     throw new Error("NPC 日程 ID 不能重复。");
-  const playSessions = Array.isArray(value.playSessions)
-    ? value.playSessions.map(assertTtrpgCampaignPlaySessionV2)
-    : [];
-  const roster = Array.isArray(value.roster)
-    ? value.roster.map(assertTtrpgRosterEntryV2)
-    : [];
-  const memories = Array.isArray(value.memories)
-    ? value.memories.map(assertTtrpgCampaignMemoryV2)
-    : [];
-  const supplements = Array.isArray(value.supplements)
-    ? value.supplements.map(assertTtrpgSupplementReceiptV2)
-    : [];
-  const worldEvolution = Array.isArray(value.worldEvolution)
-    ? value.worldEvolution.map(assertTtrpgWorldEvolutionV2)
-    : [];
-  const versionTransitions = Array.isArray(value.versionTransitions)
-    ? value.versionTransitions.map(assertTtrpgVersionTransitionV2)
-    : [];
+  const playSessions = value.playSessions.map(assertTtrpgCampaignPlaySessionV2);
+  const roster = value.roster.map(assertTtrpgRosterEntryV2);
+  const memories = value.memories.map(assertTtrpgCampaignMemoryV2);
+  const supplements = value.supplements.map(assertTtrpgSupplementReceiptV2);
+  const worldEvolution = value.worldEvolution.map(assertTtrpgWorldEvolutionV2);
+  const versionTransitions = value.versionTransitions.map(
+    assertTtrpgVersionTransitionV2,
+  );
   const activeSessionKey =
     value.activeSessionKey == null
       ? null
@@ -3000,7 +3024,9 @@ function parseTtrpgCampaignState(value: unknown): TtrpgRuntimeCampaignState {
 export function requireTtrpgState(
   state: ProductRuntimeState,
 ): TtrpgRuntimeState {
-  if (!state.ttrpg) state.ttrpg = emptyTtrpgState();
+  if (!state.ttrpg) {
+    throw new Error("当前产品实例尚未初始化正式 TTRPG 运行态。");
+  }
   return state.ttrpg;
 }
 

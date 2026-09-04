@@ -28,8 +28,15 @@ import { FIELD_BY_TARGET } from '../../src/lib/registry/field-registry'
 import { db } from '../../src/lib/db/schema'
 import { useAIConfigStore } from '../../src/stores/ai-config'
 import type { WorkspaceScope } from '../../src/lib/types'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
+import { stampCurrentFixtureResourceUidsV1 } from '../helpers/current-resource-identity'
 
 const now = 1_900_000_000_000
+const DIRECT_WORKFLOW = {
+  version: 1 as const,
+  workflowId: 'single-domain-direct' as const,
+  reasonCodes: ['single-explicit-domain' as const],
+}
 
 function request(planId: number | null, characterId: number): CharacterRevisionTaskInputV1 {
   return {
@@ -124,43 +131,9 @@ function modelPlan(nodeIds: number[]) {
 }
 
 async function seedWorkspace() {
-  const projectId = await db.projects.add({
-    name: '中途重规划作品',
-    genre: 'fantasy',
-    genres: ['fantasy'],
-    status: 'drafting',
-    description: '',
-    targetWordCount: 100_000,
-    enableMultiWorld: false,
-
-
-    createdAt: now,
-    updatedAt: now,
-  } as any) as number
-  const worldId = await db.worlds.add({
-    projectId,
-    code: 'harness36-world',
-    name: '旧城世界',
-    currentVersion: 1,
-    createdAt: now,
-    updatedAt: now,
-  } as any) as number
-  const workId = await db.works.add({
-    projectId,
-    worldId,
-    title: '旧城作品',
-    genres: ['fantasy'],
-    status: 'drafting',
-    targetWordCount: 100_000,
-    createdAt: now,
-    updatedAt: now,
-  } as any) as number
+  const created = await seedCurrentWorkspace('中途重规划作品')
+  const { projectId, worldId, workId } = created.scope
   const scope: WorkspaceScope = { projectId, worldId, workId }
-  await db.projects.update(projectId, {
-    activeWorldId: worldId,
-    activeWorkId: workId,
-    ownershipSchemaVersion: 1,
-  })
   await db.storyCores.add({
     projectId,
     workId,
@@ -172,7 +145,6 @@ async function seedWorkspace() {
     projectId,
     worldId,
     name: '林舟',
-    role: 'protagonist',
     roleWeight: 'main',
     moralAxis: 'good',
     orderAxis: 'neutral',
@@ -252,6 +224,7 @@ async function seedWorkspace() {
     createdAt: now,
     updatedAt: now,
   } as any) as number
+  await stampCurrentFixtureResourceUidsV1(projectId)
   return { projectId, worldId, workId, scope, characterId, planId, nodeIds }
 }
 
@@ -353,6 +326,7 @@ describe('R-HARNESS36 · 角色中途重规划 Agent/Harness 主路径', () => {
       projectId: seeded.projectId,
       worldGroupId: null,
       scope: seeded.scope,
+      purpose: 'character-revision',
     })
     const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
       const body = JSON.parse(String(init?.body)) as { messages?: Array<{ content?: string }> }
@@ -374,6 +348,7 @@ describe('R-HARNESS36 · 角色中途重规划 Agent/Harness 主路径', () => {
       conversationId: conversation.id,
       plan: {
         summary: '角色中途重规划',
+        workflow: DIRECT_WORKFLOW,
         tasks: [{
           id: 'character-revision-targeted',
           agentId: 'outline',

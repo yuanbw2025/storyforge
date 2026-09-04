@@ -111,12 +111,12 @@ export default function CharacterRevisionPanel({
 
   useEffect(() => {
     if (characterId != null && characters.some(character => character.id === characterId)) return
-    const planArc = parseCharacterDrivenPlanArcs(plan?.arcs).find(arc =>
+    const planArc = (plan ? parseCharacterDrivenPlanArcs(plan.arcs) : []).find(arc =>
       arc.characterId != null && characters.some(character => character.id === arc.characterId),
     )
     const fallback = characters.find(character => character.roleWeight === 'main') ?? characters[0]
     setCharacterId(planArc?.characterId ?? fallback?.id ?? null)
-  }, [characters, plan?.id, characterId, plan?.arcs])
+  }, [characters, plan, characterId])
 
   const selectedCharacter = characters.find(character => character.id === characterId)
   const effectiveBoundary = snapshot

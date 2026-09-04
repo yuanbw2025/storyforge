@@ -63,7 +63,7 @@ function rights(source: MediaRightsV1['source']): MediaRightsV1 {
 }
 
 async function fixture() {
-  const source = await createWorkspace({ name: '漫画来源', genre: 'other', genres: ['other'], status: 'drafting', description: '暴雨旧站', targetWordCount: 10_000, enableMultiWorld: false }, { kind: 'novel', novelProfile: 'short' })
+  const source = await createWorkspace({ name: '漫画来源', genres: ['other'], status: 'drafting', description: '暴雨旧站', targetWordCount: 10_000, enableMultiWorld: false }, { kind: 'novel', novelProfile: 'short' })
   const chapter = await db.chapters.where('projectId').equals(source.scope.projectId).filter(row => row.workId === source.scope.workId).first()
   await db.chapters.update(chapter!.id!, { content: '<p>暴雨中，林岚走进旧车站，末班车迟迟未到。</p>', summary: '进入旧站', updatedAt: Date.now() })
   const created = await createAdaptation({ sourceScope: source.scope, sourceWorkId: source.scope.workId, title: '旧站漫画', sourceSelection: { mode: 'entire-work' }, medium: 'comic', targetSpec })
@@ -114,7 +114,24 @@ describe('COMIC-1/2 · complete comic production workflow', () => {
 
   it('视觉条目验证角色绑定、Geography 地点 key 与来源 manifest', async () => {
     const item = await fixture(); const now = Date.now()
-    const characterId = await db.characters.add({ projectId: item.scope.projectId, worldId: item.scope.worldId, name: '林岚', role: 'protagonist', createdAt: now, updatedAt: now } as any) as number
+    const characterId = await db.characters.add({
+      projectId: item.scope.projectId,
+      worldId: item.scope.worldId,
+      name: '林岚',
+      roleWeight: 'main',
+      moralAxis: 'neutral',
+      orderAxis: 'neutral',
+      shortDescription: '',
+      appearance: '',
+      personality: '',
+      background: '',
+      motivation: '',
+      abilities: '',
+      relationships: '',
+      arc: '',
+      createdAt: now,
+      updatedAt: now,
+    } as any) as number
     await expect(saveComicVisualSubject({ scope: item.scope, draft: { stableKey: 'hero', kind: 'character', characterId, locationRefKey: null, label: '林岚', design: EMPTY_DESIGN, sourceUnitIds: [item.unit.id!], status: 'reviewed' } })).rejects.toThrow('尚未绑定')
     await db.workCharacterBindings.add({ projectId: item.scope.projectId, workId: item.scope.workId, characterId, role: 'protagonist', createdAt: now, updatedAt: now })
     const hero = await saveComicVisualSubject({ scope: item.scope, draft: { stableKey: 'hero', kind: 'character', characterId, locationRefKey: null, label: '林岚', design: { ...EMPTY_DESIGN, description: '短发、深色风衣' }, sourceUnitIds: [item.unit.id!], status: 'reviewed' } })

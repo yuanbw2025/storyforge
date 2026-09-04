@@ -1,8 +1,4 @@
-/**
- * assembleContext(Phase 1.3a) · 统一上下文装配入口。
- *
- * 1.3a 只新增入口。1.3b 再把 ai.start/chat 调用迁移到这里。
- */
+/** assembleContext · 当前唯一上下文装配入口。 */
 import { estimateTokens, getModelPreset, type ContextLayer, type ContextSegment } from '../ai/context-budget'
 import { CONTEXT_SOURCES, CONTEXT_SOURCE_BY_KEY } from './context-sources'
 import type {

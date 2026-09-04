@@ -51,7 +51,6 @@ import {
   buildTtrpgContinuationStateV2,
   type TtrpgContinuationRequestV2,
 } from '../ttrpg/continuity-state'
-import { isFormalProductSessionKindV1 } from '../product/runtime-boundary'
 import { resolveScope, scopeTransactionTables } from '../workspace/scope'
 
 /**
@@ -290,9 +289,6 @@ export async function createProductRuntimeInstance(
   input: CreateProductRuntimeInstanceInput,
 ): Promise<ProductRuntimeSession> {
   const scope = await resolveScope({ scope: input.scope })
-  if (!isFormalProductSessionKindV1(input.kind)) {
-    throw new Error('[instance] 此入口只创建上层产品实例；Sandbox 使用独立测试入口')
-  }
   if (!input.productSource || (input.productSource.kind !== 'release' && input.productSource.kind !== 'build')) {
     throw new Error('[instance] 正式产品实例必须且只能绑定一个 Product Release/Build')
   }
@@ -382,7 +378,7 @@ export async function createProductRuntimeInstance(
       runtimePackage.ttrpg!.campaign,
       targetRulePack,
     )
-    const migrated = await buildTtrpgContinuationStateV2({
+    const continued = await buildTtrpgContinuationStateV2({
       parentSessionId: continuationParent.id!,
       parentSequence: continuation.expectedParentSequence,
       parentStateHash: continuation.expectedParentStateHash,
@@ -397,10 +393,10 @@ export async function createProductRuntimeInstance(
       transitionKey: continuation.transitionKey,
       approvedBy: continuation.approvedBy,
     })
-    if (migrated.plan.planHash !== continuation.expectedPlanHash) {
+    if (continued.plan.planHash !== continuation.expectedPlanHash) {
       throw new Error('[instance] 跨发布续团计划已变化，请重新预览并确认')
     }
-    initialState = migrated.state
+    initialState = continued.state
   }
 
   const sessionInput: CreateProductRuntimeSessionInput = {
@@ -619,7 +615,7 @@ export async function assertInstanceBinding(
     session.productReleaseId != null,
     session.productBuildId != null,
   ].filter(Boolean).length
-  if (isFormalProductSessionKindV1(session.kind) && sources !== 1) {
+  if (sources !== 1) {
     throw new Error('[instance] 正式产品实例必须且只能绑定一个 Product Release/Build')
   }
   if (session.productReleaseId != null) {

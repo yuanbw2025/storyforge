@@ -117,6 +117,7 @@ function buildImpactPatchContract(input: {
   worldGroupId: number | null
   sourceChapterId: number
   targetOutlineNodeId: number
+  runtimeBindingHash: string
 }) {
   return {
     version: 1 as const,
@@ -132,6 +133,7 @@ function buildImpactPatchContract(input: {
       contextSourceKeys: ['chapterContent'],
       writeTargets: [{ table: 'outlineNodes', fields: ['summary'], mode: 'author-confirmed' as const }],
     },
+    runtimeBindingHash: input.runtimeBindingHash,
     budget: {
       // RunContract keeps a positive ceiling even for deterministic work;
       // this step records modelCalls=0 in evidence and never emits a request.
@@ -166,12 +168,6 @@ async function readTargetOutline(scope: WorkspaceScope, recordId: number): Promi
   const row = rows.find(candidate => candidate.id === recordId)
   if (!row) throw new Error('影响 patch 目标大纲节点不存在或越界。')
   return row
-}
-
-function assertTargetUnlocked(target: Record<string, any>): void {
-  // outlineNodes has no first-class lock column yet, but imported/forward-compatible
-  // rows may carry one. Never let this narrow patch bypass an author lock.
-  if (target.locked === true) throw new Error('影响 patch 目标大纲节点已锁定，拒绝写回。')
 }
 
 async function currentPostStateHash(scope: WorkspaceScope, candidate: ImpactPatchCandidateV1): Promise<string> {
@@ -223,6 +219,12 @@ export async function createImpactPatchCandidateV1(input: {
       worldGroupId: input.worldGroupId,
       sourceChapterId: input.sourceChapterId,
       targetOutlineNodeId: input.proposal.recordId,
+      runtimeBindingHash: await hashCanonicalValue({
+        schema: 'storyforge.impact-patch-runtime',
+        version: 1,
+        stepId: IMPACT_PATCH_STEP_ID_V1,
+        verifierSet: IMPACT_PATCH_VERIFIER_SET_V1,
+      }),
     }),
   })
   snapshot = await append(input.scope, snapshot, 'step.scheduled', { stepId: IMPACT_PATCH_STEP_ID_V1 })
@@ -362,7 +364,6 @@ export async function adoptImpactPatchCandidateV1(input: {
     throw new Error('影响 patch 来源正文或影响图已变化，候选已过期。')
   }
   const target = await readTargetOutline(input.scope, input.candidate.proposal.recordId)
-  assertTargetUnlocked(target)
   let snapshot = await readAgentRunV1(input.scope, durable.runId)
   const step = snapshot.projection.steps[IMPACT_PATCH_STEP_ID_V1]
   if (!step || step.status !== 'awaiting_confirmation' || step.candidateHash !== durable.candidateHash) {

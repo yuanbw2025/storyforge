@@ -24,7 +24,6 @@ import {
 import { CANON_RESOURCE_PROVIDER_V1 } from '../../src/lib/context-gateway/canon-provider'
 import { selectContextResourcesV1 } from '../../src/lib/context-gateway/selector'
 import { createContextGatewayToolSessionV1 } from '../../src/lib/context-gateway/tool-session'
-import { generateWorkspaceUid } from '../../src/lib/memory/identity'
 import { recordAgentRunArtifactV1 } from '../../src/lib/memory/artifact-store'
 import {
   createWorkingContextCompactionCheckpointV1,
@@ -37,8 +36,9 @@ import type {
   RetrievalDecisionV1,
   WorkspaceScope,
 } from '../../src/lib/types'
-import { ensureWorkspaceOwnership } from '../../src/lib/workspace/ownership'
+import { resolveWorkspaceOwnership } from '../../src/lib/workspace/ownership'
 import { stampNewRecord } from '../../src/lib/workspace/scope'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
 
 const NOW = 1_787_700_000_000
 
@@ -59,11 +59,9 @@ function policy(): ContextAccessPolicyV1 {
 }
 
 async function seed() {
-  const projectId = await db.projects.add({
-    workspaceUid: generateWorkspaceUid(), name: 'CTXG-6 证据项目', genre: 'fantasy', genres: ['fantasy'],
-    status: 'drafting', description: '', targetWordCount: 1_000_000, createdAt: NOW, updatedAt: NOW,
-  } as any) as number
-  const ownership = await ensureWorkspaceOwnership(projectId)
+  const created = await seedCurrentWorkspace('CTXG-6 证据项目')
+  const projectId = created.scope.projectId
+  const ownership = await resolveWorkspaceOwnership(projectId)
   const worldviewId = await db.worldviews.add(stampNewRecord(ownership.scope, 'worldviews', {
     projectId, worldGroupId: null, races: '潮民依靠月相航行，不向无风海撤帆。',
     createdAt: NOW, updatedAt: NOW,
@@ -76,6 +74,7 @@ function contract(projectId: number) {
     version: 1,
     objective: '生成种族与民族候选',
     workflowKind: 'direct-generation',
+    runtimeBindingHash: 'a'.repeat(64),
     scope: { projectId, worldGroupId: null },
     permissions: { contextSourceKeys: ['ragSelection'], writeTargets: [] },
     budget: {

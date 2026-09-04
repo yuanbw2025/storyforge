@@ -14,6 +14,8 @@ import {
 } from '../../src/lib/agent/run/impact-post-correction-replan-durable'
 import { staleAgentRunVerificationV1 } from '../../src/lib/agent/run/event-store'
 import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
+import { stampNewRecord } from '../../src/lib/workspace/scope'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
 
 async function seed(): Promise<{
   scope: WorkspaceScope
@@ -21,55 +23,44 @@ async function seed(): Promise<{
   secondChapterId: number
   sourceOutlineNodeId: number
   factId: number
-  arcId: number
+  sourceStoryCoreId: number
   worldGroupId: number
 }> {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    name: '修正后重规划', genre: 'fantasy', genres: ['fantasy'], status: 'drafting', description: '',
-    targetWordCount: 100_000,createdAt: now, updatedAt: now,
-  } as any) as number
-  const worldId = await db.worlds.add({
-    projectId, code: `replan-${now}`, name: '主世界', description: '', currentVersion: 1,
-    createdAt: now, updatedAt: now,
-  }) as number
-  const workId = await db.works.add({
-    projectId, worldId, title: '修正后重规划', description: '', genres: ['fantasy'], status: 'drafting',
-    targetWordCount: 100_000, createdAt: now, updatedAt: now,
-  } as any) as number
-  await db.projects.update(projectId, { activeWorldId: worldId, activeWorkId: workId, ownershipSchemaVersion: 1 })
-  const worldGroupId = await db.worldGroups.add({
-    projectId, worldId, name: '主世界', order: 0, createdAt: now, updatedAt: now,
-  }) as number
-  const sourceOutlineNodeId = await db.outlineNodes.add({
-    projectId, workId, worldGroupId, parentId: null, type: 'chapter', title: '第一章', summary: '潮门开启',
+  const { scope } = await seedCurrentWorkspace('修正后重规划')
+  const { projectId } = scope
+  const worldGroupId = await db.worldGroups.add(stampNewRecord(scope, 'worldGroups', {
+    projectId, name: '主世界', order: 0, createdAt: now, updatedAt: now,
+  }, { owner: 'world' }) as never) as number
+  const sourceOutlineNodeId = await db.outlineNodes.add(stampNewRecord(scope, 'outlineNodes', {
+    projectId, worldGroupId, parentId: null, type: 'chapter', title: '第一章', summary: '潮门开启',
     order: 0, createdAt: now, updatedAt: now,
-  } as any) as number
-  const secondOutlineNodeId = await db.outlineNodes.add({
-    projectId, workId, worldGroupId, parentId: null, type: 'chapter', title: '第二章', summary: '钟楼回应',
+  }, { owner: 'work' }) as never) as number
+  const secondOutlineNodeId = await db.outlineNodes.add(stampNewRecord(scope, 'outlineNodes', {
+    projectId, worldGroupId, parentId: null, type: 'chapter', title: '第二章', summary: '钟楼回应',
     order: 1, createdAt: now, updatedAt: now,
-  } as any) as number
-  const sourceChapterId = await db.chapters.add({
-    projectId, workId, outlineNodeId: sourceOutlineNodeId, title: '第一章', content: '<p>潮门开启。</p>',
+  }, { owner: 'work' }) as never) as number
+  const sourceChapterId = await db.chapters.add(stampNewRecord(scope, 'chapters', {
+    projectId, outlineNodeId: sourceOutlineNodeId, title: '第一章', content: '<p>潮门开启。</p>',
     wordCount: 6, status: 'draft', order: 0, notes: '', createdAt: now, updatedAt: now,
-  } as any) as number
-  const secondChapterId = await db.chapters.add({
-    projectId, workId, outlineNodeId: secondOutlineNodeId, title: '第二章', content: '<p>钟楼回应。</p>',
+  }, { owner: 'work' }) as never) as number
+  const secondChapterId = await db.chapters.add(stampNewRecord(scope, 'chapters', {
+    projectId, outlineNodeId: secondOutlineNodeId, title: '第二章', content: '<p>钟楼回应。</p>',
     wordCount: 6, status: 'draft', order: 1, notes: '', createdAt: now, updatedAt: now,
-  } as any) as number
-  const arcId = await db.storyArcs.add({
-    projectId, workId, worldGroupId, name: '潮门主线', type: 'main', description: '', status: 'active',
+  }, { owner: 'work' }) as never) as number
+  const sourceStoryCoreId = await db.storyCores.add(stampNewRecord(scope, 'storyCores', {
+    projectId, theme: '潮门与钟楼的回应',
     createdAt: now, updatedAt: now,
-  } as any) as number
-  const factId = await db.temporalFacts.add({
-    projectId, workId, worldGroupId, subjectType: 'location', subjectId: null, subjectName: '潮门',
-    predicate: 'state', value: '开启', validFromChapterId: sourceChapterId, validToChapterId: null,
-    sourceChapterId, sourceQuote: '潮门开启', sourceTextHash: '', status: 'confirmed', locked: false,
+  }, { owner: 'work' }) as never) as number
+  const factId = await db.temporalFacts.add(stampNewRecord(scope, 'temporalFacts', {
+    projectId, worldGroupId, locationId: null, subjectName: '潮门',
+    predicate: 'state', factKind: 'state', value: '开启', validFromChapterId: sourceChapterId, validToChapterId: null,
+    sourceType: 'chapter', sourceChapterId, sourceQuote: '潮门开启', status: 'confirmed', locked: false,
     createdAt: now, updatedAt: now,
-  } as any) as number
+  }, { owner: 'work' }) as never) as number
   return {
-    scope: { projectId, worldId, workId }, sourceChapterId, secondChapterId,
-    sourceOutlineNodeId, factId, arcId, worldGroupId,
+    scope, sourceChapterId, secondChapterId,
+    sourceOutlineNodeId, factId, sourceStoryCoreId, worldGroupId,
   }
 }
 
@@ -122,8 +113,8 @@ describe.sequential('R-HARNESS57 · 人工修正后的 stale/replan', () => {
     const started = await beginFactCorrection(fixture)
     await db.temporalFacts.update(fixture.factId, {
       sourceChapterId: fixture.secondChapterId,
-      sourceRecordTable: 'storyArcs',
-      sourceRecordId: fixture.arcId,
+      sourceRecordTable: 'storyCores',
+      sourceStoryCoreId: fixture.sourceStoryCoreId,
       updatedAt: Date.now(),
     })
     await completeImpactManualCorrectionV1({ scope: fixture.scope, handoff: started.handoff })
@@ -138,14 +129,14 @@ describe.sequential('R-HARNESS57 · 人工修正后的 stale/replan', () => {
     const started = await beginFactCorrection(fixture)
     await db.temporalFacts.update(fixture.factId, {
       value: '开启并绑定主线',
-      sourceRecordTable: 'storyArcs',
-      sourceRecordId: fixture.arcId,
+      sourceRecordTable: 'storyCores',
+      sourceStoryCoreId: fixture.sourceStoryCoreId,
       updatedAt: Date.now(),
     })
     await completeImpactManualCorrectionV1({ scope: fixture.scope, handoff: started.handoff })
     const result = await executeImpactPostCorrectionReplanV1({ scope: fixture.scope, handoff: started.handoff })
     expect(result.output.remainingItemIds).toContain(started.item.id)
-    expect(result.output.newItemIds).toContain(`impact-remediation:source-record:storyArcs:${fixture.arcId}`)
+    expect(result.output.newItemIds).toContain(`impact-remediation:source-record:storyCores:${fixture.sourceStoryCoreId}`)
   })
 
   it('重复执行与来源编辑器恢复都复用同一 child Run，旧 review 不再冒充当前', async () => {

@@ -15,9 +15,12 @@ import {
 } from '../../src/lib/agent/runner'
 import { db } from '../../src/lib/db/schema'
 import { PROJECT_TABLES } from '../../src/lib/registry/project-tables'
+import { AGENT_READ_TOOLS } from '../../src/lib/agent/tool-registry'
 import { seedCurrentWorkspace } from '../helpers/current-workspace'
 import { resolveWorkspaceScope } from '../../src/lib/workspace/ownership'
 import { stampNewRecord } from '../../src/lib/workspace/scope'
+
+const ALL_READ_TOOL_NAMES = AGENT_READ_TOOLS.map(tool => tool.name)
 
 async function addProject(name = 'Agent Runner') {
   return (await seedCurrentWorkspace(name)).scope.projectId
@@ -98,8 +101,8 @@ describe('R-AGENT1 · 严格只读 AgentRunner', () => {
     expect(() => parseAgentProtocolAction(
       '{"type":"tool","calls":[{"name":"save_chapter_content","arguments":{}}]}',
     )).toThrow('只读工具')
-    expect(formatAgentToolCatalog()).not.toMatch(/\((?:[^)]*,\s*)?(projectId|worldGroupId):/)
-    expect(buildAgentProtocolSystemPrompt()).toContain('不可信数据')
+    expect(formatAgentToolCatalog(ALL_READ_TOOL_NAMES)).not.toMatch(/\((?:[^)]*,\s*)?(projectId|worldGroupId):/)
+    expect(buildAgentProtocolSystemPrompt(ALL_READ_TOOL_NAMES)).toContain('不可信数据')
   })
 
   it('协议型客户端在物理窗口不足时拒绝静默裁掉目标或工具证据', async () => {
@@ -142,6 +145,7 @@ describe('R-AGENT1 · 严格只读 AgentRunner', () => {
     const result = await runReadOnlyAgentWithClient({
       goal: '只读检查',
       context: { projectId },
+      allowedToolNames: ALL_READ_TOOL_NAMES,
       config: {
         provider: 'custom',
         apiKey: '',
@@ -178,13 +182,14 @@ describe('R-AGENT1 · 严格只读 AgentRunner', () => {
     const before = await tableCounts()
     const seen: Array<Parameters<AgentModelAdapter['complete']>[0]> = []
     const model = scriptedModel([
-      '{"type":"tool","calls":[{"name":"read_project_status","arguments":{}},{"name":"read_world_groups","arguments":{}}]}',
+      '{"type":"tool","calls":[{"name":"read_work_status","arguments":{}},{"name":"read_world_groups","arguments":{}}]}',
       '{"type":"final","answer":"项目为单世界，当前尚未建立正文。"}',
     ], seen)
 
     const result = await runReadOnlyAgent({
       goal: '检查项目基础情况',
       context: { projectId },
+      allowedToolNames: ALL_READ_TOOL_NAMES,
       model,
     })
 
@@ -193,7 +198,7 @@ describe('R-AGENT1 · 严格只读 AgentRunner', () => {
     expect(result.steps).toBe(2)
     expect(result.toolCalls).toBe(2)
     expect(seen).toHaveLength(2)
-    expect(seen[1].at(-1)?.content).toContain('read_project_status')
+    expect(seen[1].at(-1)?.content).toContain('read_work_status')
     expect(seen[1].at(-1)?.content).toContain('只读工具结果')
     expect(await tableCounts()).toEqual(before)
   })
@@ -204,6 +209,7 @@ describe('R-AGENT1 · 严格只读 AgentRunner', () => {
     const result = await runReadOnlyAgent({
       goal: '给出结论',
       context: { projectId },
+      allowedToolNames: ALL_READ_TOOL_NAMES,
       model: scriptedModel([
         '我认为可以完成。```json\n{"type":"final","answer":"猜测"}\n```',
         '{"type":"final","answer":"已按严格协议修正"}',
@@ -218,6 +224,7 @@ describe('R-AGENT1 · 严格只读 AgentRunner', () => {
     const rejectImmediately = await runReadOnlyAgent({
       goal: '禁止修正',
       context: { projectId },
+      allowedToolNames: ALL_READ_TOOL_NAMES,
       model: scriptedModel(['不是 JSON']),
       limits: { maxProtocolErrors: 0 },
     })
@@ -227,10 +234,11 @@ describe('R-AGENT1 · 严格只读 AgentRunner', () => {
 
   it('重复同一只读调用立即识别为循环，不再次执行', async () => {
     const projectId = await addProject()
-    const action = '{"type":"tool","calls":[{"name":"read_project_status","arguments":{}}]}'
+    const action = '{"type":"tool","calls":[{"name":"read_work_status","arguments":{}}]}'
     const result = await runReadOnlyAgent({
       goal: '检查',
       context: { projectId },
+      allowedToolNames: ALL_READ_TOOL_NAMES,
       model: scriptedModel([action, action]),
     })
 
@@ -247,6 +255,7 @@ describe('R-AGENT1 · 严格只读 AgentRunner', () => {
     const preflight = await runReadOnlyAgent({
       goal: '预算太小',
       context: { projectId },
+      allowedToolNames: ALL_READ_TOOL_NAMES,
       model: noModel,
       limits: { maxTotalTokens: 1 },
     })
@@ -257,6 +266,7 @@ describe('R-AGENT1 · 严格只读 AgentRunner', () => {
     const usageOverflow = await runReadOnlyAgent({
       goal: '真实 usage 超限',
       context: { projectId },
+      allowedToolNames: ALL_READ_TOOL_NAMES,
       model: scriptedModel([{
         content: '{"type":"final","answer":"不会采用"}',
         usage: { inputTokens: 5_000, outputTokens: 1_000, totalTokens: 6_000 },
@@ -269,6 +279,7 @@ describe('R-AGENT1 · 严格只读 AgentRunner', () => {
     const underreportedUsage = await runReadOnlyAgent({
       goal: '不能相信零用量',
       context: { projectId },
+      allowedToolNames: ALL_READ_TOOL_NAMES,
       model: scriptedModel([{
         content: '{"type":"final","answer":"完成"}',
         usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
@@ -280,8 +291,9 @@ describe('R-AGENT1 · 严格只读 AgentRunner', () => {
     const toolLimit = await runReadOnlyAgent({
       goal: '工具过多',
       context: { projectId },
+      allowedToolNames: ALL_READ_TOOL_NAMES,
       model: scriptedModel([
-        '{"type":"tool","calls":[{"name":"read_project_status","arguments":{}},{"name":"read_world_groups","arguments":{}}]}',
+        '{"type":"tool","calls":[{"name":"read_work_status","arguments":{}},{"name":"read_world_groups","arguments":{}}]}',
       ]),
       limits: { maxToolCalls: 1 },
     })
@@ -291,6 +303,7 @@ describe('R-AGENT1 · 严格只读 AgentRunner', () => {
     const resultOverflow = await runReadOnlyAgent({
       goal: '读取超长章节',
       context: { projectId },
+      allowedToolNames: ALL_READ_TOOL_NAMES,
       model: scriptedModel([
         `{"type":"tool","calls":[{"name":"read_chapter","arguments":{"chapterId":${chapterId}}}]}`,
       ]),
@@ -302,15 +315,16 @@ describe('R-AGENT1 · 严格只读 AgentRunner', () => {
     const stopBeforeSecondTool = await runReadOnlyAgent({
       goal: '读取超长章节后不要继续',
       context: { projectId },
+      allowedToolNames: ALL_READ_TOOL_NAMES,
       model: scriptedModel([
-        `{"type":"tool","calls":[{"name":"read_chapter","arguments":{"chapterId":${chapterId}}},{"name":"read_project_status","arguments":{}}]}`,
+        `{"type":"tool","calls":[{"name":"read_chapter","arguments":{"chapterId":${chapterId}}},{"name":"read_work_status","arguments":{}}]}`,
       ]),
       limits: { maxToolResultTokens: 100 },
     })
     expect(stopBeforeSecondTool.status).toBe('tool_result_budget')
     expect(stopBeforeSecondTool.toolCalls).toBe(1)
     expect(stopBeforeSecondTool.events.some(
-      event => event.type === 'tool' && event.name === 'read_project_status',
+      event => event.type === 'tool' && event.name === 'read_work_status',
     )).toBe(false)
   })
 
@@ -322,6 +336,7 @@ describe('R-AGENT1 · 严格只读 AgentRunner', () => {
     const result = await runReadOnlyAgent({
       goal: '读取指定章节',
       context: { projectId },
+      allowedToolNames: ALL_READ_TOOL_NAMES,
       model: scriptedModel([
         `{"type":"tool","calls":[{"name":"read_chapter","arguments":{"chapterId":${foreignChapterId}}}]}`,
         '{"type":"final","answer":"该章节不属于当前项目，无法读取。"}',
@@ -342,6 +357,7 @@ describe('R-AGENT1 · 严格只读 AgentRunner', () => {
     const result = await runReadOnlyAgent({
       goal: '停止',
       context: { projectId },
+      allowedToolNames: ALL_READ_TOOL_NAMES,
       model,
       signal: controller.signal,
     })
@@ -356,8 +372,9 @@ describe('R-AGENT1 · 严格只读 AgentRunner', () => {
     const result = await runReadOnlyAgent({
       goal: '读取后停止',
       context: { projectId },
+      allowedToolNames: ALL_READ_TOOL_NAMES,
       model: scriptedModel([
-        '{"type":"tool","calls":[{"name":"read_project_status","arguments":{}},{"name":"read_world_groups","arguments":{}}]}',
+        '{"type":"tool","calls":[{"name":"read_work_status","arguments":{}},{"name":"read_world_groups","arguments":{}}]}',
       ]),
       signal: controller.signal,
       onEvent: event => {

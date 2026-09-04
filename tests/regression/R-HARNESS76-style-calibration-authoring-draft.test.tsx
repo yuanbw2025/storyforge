@@ -16,6 +16,9 @@ import { db } from '../../src/lib/db/schema'
 import type { UserStyleProfile } from '../../src/lib/types/user-style'
 import { useAIConfigStore } from '../../src/stores/ai-config'
 import { useUserStyleStore } from '../../src/stores/user-style'
+import { seedCurrentProject } from '../helpers/current-workspace'
+import { resolveWorkspaceScope } from '../../src/lib/workspace/ownership'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
@@ -39,25 +42,18 @@ function button(host: HTMLElement, text: string): HTMLButtonElement {
 
 async function seed(): Promise<{ projectId: number; profile: UserStyleProfile }> {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    name: '校准草稿', genre: 'modern', genres: ['modern'], status: 'drafting', description: '',
+  const projectId = await seedCurrentProject({
+    name: '校准草稿', genres: ['modern'], status: 'drafting', description: '',
     targetWordCount: 10_000,
     createdAt: now, updatedAt: now,
   } as any) as number
-  const worldId = await db.worlds.add({
-    projectId, code: `calibration-${now}`, name: '校准世界', description: '', currentVersion: 1,
-    createdAt: now, updatedAt: now,
-  }) as number
-  const workId = await db.works.add({
-    projectId, worldId, title: '校准作品', description: '', genres: ['modern'], status: 'drafting',
-    targetWordCount: 10_000, createdAt: now, updatedAt: now,
-  } as any) as number
-  await db.projects.update(projectId, { activeWorldId: worldId, activeWorkId: workId, ownershipSchemaVersion: 1 })
+  const { worldId, workId } = await resolveWorkspaceScope(projectId)
   const id = await db.userStyleProfiles.add({
     projectId, worldId, workId, profile: '偏爱短句与白描', enabled: true,
     sourceChapterIds: '[]', sampleCount: 0, sampleWords: 0,
     revisionPairs: '[]', calibrationFeedback: '[]', createdAt: now, updatedAt: now,
   } as any) as number
+  await finalizeCurrentFixtureV1(projectId)
   return { projectId, profile: (await db.userStyleProfiles.get(id))! }
 }
 

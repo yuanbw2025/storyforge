@@ -3,16 +3,14 @@
  *
  * R-04：导入原子性与外键反例。
  *
- * 反例:
- *   旧导入逻辑先创建项目,再遇到无效 FK 时用 0 fallback 或静默跳过。
- *   一旦中途失败,会留下半个导入项目。
- *
  * 期望:
  *   FK remap 缺失时在事务内抛错,整个导入回滚,不留下项目或子表残留。
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { db } from '../../src/lib/db/schema'
-import { importProjectJSON } from '../../src/lib/export/json-export'
+import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
+import { seedCurrentProject } from '../helpers/current-workspace'
 
 describe('R-04: importProjectJSON 原子性 + FK fail-fast', () => {
   beforeEach(async () => {
@@ -26,44 +24,37 @@ describe('R-04: importProjectJSON 原子性 + FK fail-fast', () => {
 
   it('章节引用缺失的大纲节点时,导入抛错且整体回滚', async () => {
     const now = Date.now()
-    const brokenExport = {
-      version: 3,
-      exportedAt: now,
-      project: {
-        name: '坏导入',
-        genre: 'fantasy',
-        description: '',
-        targetWordCount: 0,
-        enableMultiWorld: false,
-        createdAt: now,
-        updatedAt: now,
-      },
-      worldviews: [],
-      storyCores: [],
-      powerSystems: [],
-      characters: [],
-      factions: [],
-      outlineNodes: [],
-      chapters: [{
-        _outlineExportId: 999,
-        title: '孤儿章节',
-        content: '',
-        wordCount: 0,
-        status: 'draft',
-        order: 0,
-        notes: '',
-        createdAt: now,
-        updatedAt: now,
-      }],
-      foreshadows: [],
-      geographies: [],
-      histories: [],
-      itemSystems: [],
-      creativeRules: [],
-      characterRelations: [],
-    }
+    const projectId = await seedCurrentProject({ name: '坏导入', createdAt: now, updatedAt: now })
+    const outlineNodeId = await db.outlineNodes.add({
+      projectId,
+      parentId: null,
+      type: 'chapter',
+      title: '孤儿章节',
+      summary: '',
+      order: 0,
+      createdAt: now,
+      updatedAt: now,
+    } as any) as number
+    await db.chapters.add({
+      projectId,
+      outlineNodeId,
+      title: '孤儿章节',
+      content: '',
+      wordCount: 0,
+      status: 'draft',
+      order: 0,
+      notes: '',
+      createdAt: now,
+      updatedAt: now,
+    } as any)
+    await finalizeCurrentFixtureV1(projectId)
+    const brokenExport = await exportProjectJSON(projectId)
+    brokenExport.outlineNodes = []
 
-    await expect(importProjectJSON(brokenExport as any)).rejects.toThrow('chapters.outlineNodeId')
+    await db.delete()
+    await db.open()
+
+    await expect(importProjectJSON(brokenExport)).rejects.toThrow('chapters.outlineNodeId')
 
     expect(await db.projects.count()).toBe(0)
     expect(await db.chapters.count()).toBe(0)

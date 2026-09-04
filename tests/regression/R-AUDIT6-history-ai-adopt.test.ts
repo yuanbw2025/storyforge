@@ -1,12 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { adopt } from '../../src/lib/registry/adopt'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
+import { seedCurrentProject } from '../helpers/current-workspace'
 
 async function createProject(name: string): Promise<number> {
   const now = Date.now()
-  return await db.projects.add({
+  return await seedCurrentProject({
     name,
-    genre: '',
+    genres: [],
     description: '',
     targetWordCount: 0,
     enableMultiWorld: true,
@@ -26,9 +28,18 @@ describe('AUDIT-6 · 历史双 agent 采纳写回', () => {
   it('通过 FIELD_REGISTRY 定点写入事件考据与关键词风暴，不改其它字段', async () => {
     const projectId = await createProject('历史项目')
     const now = Date.now()
+    const worldGroupId = await db.worldGroups.add({
+      projectId,
+      name: '主世界',
+      description: '',
+      type: 'primary',
+      order: 0,
+      createdAt: now,
+      updatedAt: now,
+    }) as number
     const eventId = await db.historicalTimelineEvents.add({
       projectId,
-      worldGroupId: 3,
+      worldGroupId,
       era: 'custom',
       year: 1,
       date: '元年',
@@ -40,7 +51,7 @@ describe('AUDIT-6 · 历史双 agent 采纳写回', () => {
     } as any) as number
     const keywordId = await db.historicalKeywords.add({
       projectId,
-      worldGroupId: 3,
+      worldGroupId,
       keyword: '水车',
       category: 'technology',
       era: 'custom',
@@ -48,10 +59,11 @@ describe('AUDIT-6 · 历史双 agent 采纳写回', () => {
       createdAt: now,
       updatedAt: now,
     } as any) as number
+    await finalizeCurrentFixtureV1(projectId)
 
     const eventResult = await adopt({
       projectId,
-      worldGroupId: 3,
+      worldGroupId,
       target: 'historicalTimelineEvents',
       recordId: eventId,
       mode: 'replace',
@@ -59,7 +71,7 @@ describe('AUDIT-6 · 历史双 agent 采纳写回', () => {
     })
     const keywordResult = await adopt({
       projectId,
-      worldGroupId: 3,
+      worldGroupId,
       target: 'historicalKeywords',
       recordId: keywordId,
       mode: 'replace',
@@ -85,6 +97,7 @@ describe('AUDIT-6 · 历史双 agent 采纳写回', () => {
       era: 'custom', year: 1, date: '元年', title: '秘密', description: '',
       isHistorical: false, createdAt: now, updatedAt: now,
     } as any) as number
+    await finalizeCurrentFixtureV1(ownerProjectId)
 
     const result = await adopt({
       projectId: otherProjectId,

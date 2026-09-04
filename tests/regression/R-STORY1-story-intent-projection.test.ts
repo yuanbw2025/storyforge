@@ -22,10 +22,11 @@ import {
   readStoryCoreIntentSnapshotV1,
   storyArcIntentAlignmentV1,
 } from '../../src/lib/storyline/intent-projection'
-import { ensureWorkspaceOwnership } from '../../src/lib/workspace/ownership'
+import { resolveWorkspaceOwnership } from '../../src/lib/workspace/ownership'
 import { cascadeRegisteredReferences } from '../../src/lib/workspace/lifecycle'
 import { stampNewRecord } from '../../src/lib/workspace/scope'
 import type { StoryArc, StoryCore, WorkspaceScope } from '../../src/lib/types'
+import { seedCurrentProject } from '../helpers/current-workspace'
 
 const NOW = 1_788_300_000_000
 
@@ -34,10 +35,9 @@ async function seedWorkspace(): Promise<{
   scope: WorkspaceScope
   storyCoreId: number
 }> {
-  const projectId = await db.projects.add({
+  const projectId = await seedCurrentProject({
     workspaceUid: generateWorkspaceUid(),
     name: '潮汐意图工程',
-    genre: 'fantasy',
     genres: ['fantasy'],
     description: '',
     status: 'drafting',
@@ -45,7 +45,7 @@ async function seedWorkspace(): Promise<{
     createdAt: NOW,
     updatedAt: NOW,
   } as never) as number
-  const { scope } = await ensureWorkspaceOwnership(projectId)
+  const { scope } = await resolveWorkspaceOwnership(projectId)
   await db.worldviews.add(stampNewRecord(scope, 'worldviews', {
     projectId,
     worldOrigin: '潮海每十年退潮一次，记忆盐晶成为城市能源。',
@@ -89,9 +89,9 @@ afterEach(async () => {
 
 describe.sequential('STORY-1 · 故事意图与可执行故事线投影', () => {
   it('空项目故事线把无故事核心记录视为有效冻结基线，后来新增意图才标记 stale', async () => {
-    const empty = await readStoryCoreIntentSnapshotV1((await ensureWorkspaceOwnership(
-      await db.projects.add({
-        workspaceUid: generateWorkspaceUid(), name: '空意图基线', genre: 'fantasy', genres: ['fantasy'],
+    const empty = await readStoryCoreIntentSnapshotV1((await resolveWorkspaceOwnership(
+      await seedCurrentProject({
+        workspaceUid: generateWorkspaceUid(), name: '空意图基线', genres: ['fantasy'],
         description: '', status: 'drafting', targetWordCount: 100_000, createdAt: NOW, updatedAt: NOW,
       } as never) as number,
     )).scope)

@@ -24,6 +24,7 @@ import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-
 import { applyCharacterReferenceRemap } from '../../src/lib/registry/character-references'
 import { transactionTablesFor } from '../../src/lib/registry/lifecycle'
 import { completeAdaptationProductionV1, reopenAdaptationProductionV1 } from '../../src/lib/adaptation/completion'
+import { stampNewRecord } from '../../src/lib/workspace/scope'
 
 const spec: ScreenplayTargetSpecV1 = {
   format: 'film', language: 'zh-CN', episodeCount: null, targetMinutesPerEpisode: 100,
@@ -37,7 +38,7 @@ const brief: AdaptationBriefV1 = {
 }
 
 async function setup() {
-  const source = await createWorkspace({ name: '剧本来源', genre: 'other', genres: ['other'], status: 'drafting', description: '风雨夜的选择', targetWordCount: 10_000, enableMultiWorld: false }, { kind: 'novel', novelProfile: 'short' })
+  const source = await createWorkspace({ name: '剧本来源', genres: ['other'], status: 'drafting', description: '风雨夜的选择', targetWordCount: 10_000, enableMultiWorld: false }, { kind: 'novel', novelProfile: 'short' })
   const chapters = await db.chapters.where('projectId').equals(source.scope.projectId).sortBy('order')
   await db.chapters.update(chapters[0].id!, { content: '<p>林岚走进旧车站。</p>', summary: '进入车站', updatedAt: Date.now() })
   const created = await createAdaptation({ sourceScope: source.scope, sourceWorkId: source.scope.workId, title: '旧车站', sourceSelection: { mode: 'entire-work' }, medium: 'screenplay', targetSpec: spec })
@@ -50,8 +51,32 @@ async function setup() {
   root = await confirmAdaptationPlan({ adaptationProjectId: root.id!, expectedRevision: root.revision })
   await startAdaptationProduction({ adaptationProjectId: root.id!, expectedRevision: root.revision })
   const now = Date.now()
-  const characterId = await db.characters.add({ projectId: source.scope.projectId, worldId: source.scope.worldId, name: '林岚', role: 'protagonist', createdAt: now, updatedAt: now } as any) as number
-  await db.workCharacterBindings.add({ projectId: source.scope.projectId, workId: created.scope.workId, characterId, role: 'protagonist', createdAt: now, updatedAt: now })
+  const characterId = await db.characters.add(stampNewRecord(source.scope, 'characters', {
+    projectId: source.scope.projectId,
+    name: '林岚',
+    roleWeight: 'main',
+    moralAxis: 'neutral',
+    orderAxis: 'neutral',
+    shortDescription: '',
+    appearance: '',
+    personality: '',
+    background: '',
+    motivation: '',
+    abilities: '',
+    relationships: '',
+    arc: '',
+    homeWorldGroupId: null,
+    isCrossWorld: false,
+    createdAt: now,
+    updatedAt: now,
+  }, { owner: 'world' })) as number
+  await db.workCharacterBindings.add(stampNewRecord(created.scope, 'workCharacterBindings', {
+    projectId: source.scope.projectId,
+    characterId,
+    role: 'protagonist',
+    createdAt: now,
+    updatedAt: now,
+  }, { owner: 'work' }))
   return { ...created, source, unitId: chapterUnit.id!, characterId }
 }
 

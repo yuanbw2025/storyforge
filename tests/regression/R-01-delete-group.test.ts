@@ -20,6 +20,8 @@
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { db } from '../../src/lib/db/schema'
+import { seedCurrentProject } from '../helpers/current-workspace'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
 
 describe('R-01: deleteGroup 事务作用域完整性', () => {
   beforeEach(async () => {
@@ -36,9 +38,9 @@ describe('R-01: deleteGroup 事务作用域完整性', () => {
   it('准备:能正常建项目 + 多世界(基础设施检查)', async () => {
     const now = Date.now()
 
-    const projectId = await db.projects.add({
+    const projectId = await seedCurrentProject({
       name: 'R-01 测试项目',
-      genre: 'fantasy',
+      genres: ['fantasy'],
       description: '',
       targetWordCount: 0,
       enableMultiWorld: true,
@@ -84,8 +86,8 @@ describe('R-01: deleteGroup 事务作用域完整性', () => {
    */
   it('删除非主世界后,所有 worldScoped/homeWorldScoped 表中无该 wgId 残留', async () => {
     const now = Date.now()
-    const projectId = await db.projects.add({
-      name: 'test', genre: '', description: '', targetWordCount: 0,
+    const projectId = await seedCurrentProject({
+      name: 'test', genres: [], description: '', targetWordCount: 0,
       enableMultiWorld: true, createdAt: now, updatedAt: now,
     } as any) as number
 
@@ -108,10 +110,19 @@ describe('R-01: deleteGroup 事务作用域完整性', () => {
     await db.historicalTimelineEvents.add({ projectId, worldGroupId: sideWg, date: '元朝', title: '建立', description: '', type: 'event', isHistorical: true, createdAt: now, updatedAt: now } as any)
     await db.historicalKeywords.add({ projectId, worldGroupId: sideWg, term: '武林', category: 'general', description: '', createdAt: now, updatedAt: now } as any)
     const outlineId = await db.outlineNodes.add({ projectId, worldGroupId: sideWg, parentId: null, type: 'volume', title: '副世界卷', summary: '', order: 0, createdAt: now, updatedAt: now } as any) as number
-    const categoryId = await db.codexCategories.add({ projectId, worldGroupId: sideWg, domain: 'natural', parentId: null, name: '灵材', fieldSchema: '[]', order: 0, createdAt: now, updatedAt: now } as any) as number
+    const categoryId = await db.codexCategories.add({ projectId, domain: 'natural', parentId: null, name: '灵材', fieldSchema: '[]', order: 0, createdAt: now, updatedAt: now } as any) as number
     await db.codexEntries.add({ projectId, worldGroupId: sideWg, categoryId, name: '玄铁', summary: '', description: '', fields: '{}', refs: '{}', order: 0, createdAt: now, updatedAt: now } as any)
-    await db.characters.add({ projectId, homeWorldGroupId: sideWg, name: '萧炎', role: 'protagonist', shortDescription: '', appearance: '', personality: '', background: '', motivation: '', abilities: '', relationships: '[]', arc: '', createdAt: now, updatedAt: now } as any)
-    await db.worldGroupLinks.add({ projectId, fromGroupId: sideWg, toGroupId: primaryWg, type: 'portal', createdAt: now } as any)
+    await db.characters.add({
+      projectId, homeWorldGroupId: sideWg, name: '萧炎', roleWeight: 'main',
+      moralAxis: 'neutral', orderAxis: 'chaotic', isCrossWorld: false,
+      shortDescription: '', appearance: '', personality: '', background: '', motivation: '',
+      abilities: '', relationships: '[]', arc: '', createdAt: now, updatedAt: now,
+    } as any)
+    await db.worldGroupLinks.add({
+      projectId, fromGroupId: sideWg, toGroupId: primaryWg, linkType: 'portal',
+      name: '', description: '', bidirectional: false, createdAt: now, updatedAt: now,
+    } as any)
+    await finalizeCurrentFixtureV1(projectId)
 
     // 动态 import store(避免顶层 import 时 store 初始化干扰其它测试)
     const { useWorldGroupStore } = await import('../../src/stores/world-group')
@@ -135,7 +146,6 @@ describe('R-01: deleteGroup 事务作用域完整性', () => {
       historicalTimelineEvents: await countWorldGroupId(db.historicalTimelineEvents),
       historicalKeywords: await countWorldGroupId(db.historicalKeywords),
       outlineNodes: await countWorldGroupId(db.outlineNodes),
-      codexCategories: await countWorldGroupId(db.codexCategories),
       codexEntries: await countWorldGroupId(db.codexEntries),
       characters: (await db.characters.where('projectId').equals(projectId).toArray())
         .filter(row => row.homeWorldGroupId === sideWg).length,
@@ -147,6 +157,9 @@ describe('R-01: deleteGroup 事务作用域完整性', () => {
       expect(count, `${table} 中应无 worldGroupId=${sideWg} 的残留`).toBe(0)
     }
 
+    expect(await db.codexCategories.get(categoryId)).toMatchObject({ name: '灵材' })
+    expect((await db.codexCategories.get(categoryId)) as Record<string, unknown>)
+      .not.toHaveProperty('worldGroupId')
     expect(await db.outlineNodes.get(outlineId)).toMatchObject({ worldGroupId: null })
   })
 })

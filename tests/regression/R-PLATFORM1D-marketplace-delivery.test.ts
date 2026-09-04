@@ -21,10 +21,11 @@ import {
 import { hashProductProductionValueV2 } from '../../src/lib/product-production/hash'
 import { assertProductReleaseUnchanged } from '../../src/lib/product/releases'
 import type { ProductRuntimePackageV1, WorkspaceScope } from '../../src/lib/types'
-import { ensureWorkspaceOwnership } from '../../src/lib/workspace/ownership'
+import { resolveWorkspaceOwnership } from '../../src/lib/workspace/ownership'
 import { createWorldRevision, publishWorldRevision } from '../../src/lib/world-engine/releases'
 import { CURRENT_PRODUCT_RESOURCE_KEYS, currentProductSelection } from '../helpers/current-product-world'
 import { createFixtureProductReleaseManifestV1 } from '../helpers/product-release-v1'
+import { seedCurrentProject } from '../helpers/current-workspace'
 
 class CommercialStore implements CommercialPlatformPersistenceV1 {
   snapshot: CommercialPlatformSnapshotV1 | null = null
@@ -38,12 +39,12 @@ class CommercialStore implements CommercialPlatformPersistenceV1 {
 
 async function workspace(name: string) {
   const now = Date.now()
-  const projectId = await db.projects.add({
+  const projectId = await seedCurrentProject({
     workspacePurpose: 'world-engine',
-    name, genre: 'interactive-fiction', genres: ['interactive-fiction'], status: 'drafting',
+    name, genres: ['interactive-fiction'], status: 'drafting',
     description: '', targetWordCount: 1, createdAt: now, updatedAt: now,
   } as never) as number
-  return ensureWorkspaceOwnership(projectId)
+  return resolveWorkspaceOwnership(projectId)
 }
 
 function avgPackage(worldContentHash: string): ProductRuntimePackageV1 {

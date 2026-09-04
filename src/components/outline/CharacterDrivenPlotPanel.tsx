@@ -105,7 +105,7 @@ export default function CharacterDrivenPlotPanel({ project, worldGroupId }: Prop
 
   // Hydrate author inputs only when selecting/loading a different immutable plan
   // identity. Same-plan async saves update the store object and must not replay an
-  // older blur snapshot over newer local typing.
+  // stale blur snapshot over newer local typing.
   useEffect(() => {
     const selectedPlanInputs = selectedPlanInputsRef.current
     if (selectedPlanId == null || selectedPlanInputs.arcs == null) {

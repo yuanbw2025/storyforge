@@ -15,7 +15,7 @@ import { createWorldReferenceV1, resolveWorldReferenceResourceScopeV1 } from '..
 
 async function phaseDFixture(characterCount = 0) {
   const created = await createWorkspace({
-    name: 'Phase D 世界引擎', genre: 'fantasy', genres: ['fantasy'], status: 'drafting',
+    name: 'Phase D 世界引擎', genres: ['fantasy'], status: 'drafting',
     description: '多世界与大规模语义目录', targetWordCount: 0, enableMultiWorld: true,
   }, { purpose: 'world-engine', kind: 'novel', novelProfile: 'long' })
   const now = 1_788_100_000_000
@@ -57,7 +57,8 @@ async function phaseDFixture(characterCount = 0) {
     const rows = Array.from({ length: characterCount }, (_, index) => stampNewRecord(created.scope, 'characters', {
       projectId: created.scope.projectId,
       name: `规模角色-${String(index).padStart(4, '0')}`,
-      role: index === 0 ? 'protagonist' : 'supporting', roleWeight: index === 0 ? 'main' : 'secondary',
+      roleWeight: index === 0 ? 'main' : 'secondary',
+      moralAxis: 'neutral', orderAxis: 'neutral',
       shortDescription: `第 ${index} 位潮门记录者`, background: '出生于群岛', personality: '谨慎',
       appearance: '', motivation: '', abilities: '', relationships: '[]', arc: '',
       createdAt: now + 100 + index, updatedAt: now + 100 + index,

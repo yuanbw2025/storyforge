@@ -32,9 +32,8 @@ export function readStoryTimelinePromptTemplateSnapshotV1() {
   }
 }
 
-/** HARNESS-64 durable protocol: exact keys and exact types; legacy callers keep
- * the tolerant parser below until their own migration removes it. */
-export function parseStoryEventsStrictV1(raw: string): ExtractedStoryEvent[] {
+/** Current closed extraction protocol used by every story-timeline entry point. */
+export function parseStoryEvents(raw: string): ExtractedStoryEvent[] {
   let source = raw.trim()
   const fenced = source.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/)
   if (fenced) source = fenced[1]
@@ -67,32 +66,4 @@ export function parseStoryEventsStrictV1(raw: string): ExtractedStoryEvent[] {
       description: row.description.trim(),
     }
   })
-}
-
-export function parseStoryEvents(raw: string): ExtractedStoryEvent[] {
-  const trimmed = raw.trim()
-  const fence = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/)
-  let jsonStr = fence ? fence[1].trim() : trimmed
-  const start = jsonStr.indexOf('[')
-  const end = jsonStr.lastIndexOf(']')
-  if (start >= 0 && end > start) jsonStr = jsonStr.slice(start, end + 1)
-  try {
-    const arr = JSON.parse(jsonStr)
-    if (!Array.isArray(arr)) return []
-    return arr
-      .map((e: Record<string, unknown>): ExtractedStoryEvent => {
-        let imp = Math.round(Number(e.importance) || 2)
-        if (imp < 1) imp = 1
-        if (imp > 3) imp = 3
-        return {
-          title: String(e.title || '').trim(),
-          storyTime: String(e.storyTime || '').trim(),
-          importance: imp,
-          description: String(e.description || '').trim(),
-        }
-      })
-      .filter(e => e.title)
-  } catch {
-    return []
-  }
 }

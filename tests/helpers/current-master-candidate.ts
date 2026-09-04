@@ -2,6 +2,8 @@ import { getOrCreateAgentConversation } from '../../src/lib/agent/conversations'
 import { runDurableMasterAgentPlanV1 } from '../../src/lib/agent/run/master-durable'
 import { AgentTeamBudgetTracker } from '../../src/lib/agent/team-budget'
 import { seedCurrentWorkspace } from './current-workspace'
+import { currentWorldOriginCandidateFixtureV1 } from './current-worldview-field'
+import { prepareRequiredMasterGatewayFixtureV1 } from './master-agent-gateway'
 
 /**
  * Creates a native current workspace and one real durable Master candidate.
@@ -13,6 +15,7 @@ export async function seedCurrentMasterCandidate(
 ) {
   const workspace = await seedCurrentWorkspace(name)
   const conversation = await getOrCreateAgentConversation({
+    purpose: 'master-authoring',
     projectId: workspace.scope.projectId,
     worldGroupId: null,
     scope: workspace.scope,
@@ -27,9 +30,15 @@ export async function seedCurrentMasterCandidate(
       tasks: [{
         id: 'world-origin-1',
         agentId: 'world-origin',
+        skillId: 'world-origin.worldview-field',
         instruction: '生成世界来源候选。',
         dependsOn: [],
       }],
+      workflow: {
+        version: 1,
+        workflowId: 'single-domain-direct',
+        reasonCodes: ['single-explicit-domain'],
+      },
     },
     budget,
   }, {
@@ -42,21 +51,30 @@ export async function seedCurrentMasterCandidate(
         maxOutputTokens: 200,
       })
       options.budget.settleCall(reservation, draft)
+      const currentWorld = currentWorldOriginCandidateFixtureV1(draft)
+      const gateway = await prepareRequiredMasterGatewayFixtureV1({
+        scope: options.scope,
+        worldGroupId: options.worldGroupId,
+        executionTrace: options.executionTrace!,
+      }, task, currentWorld.draft)
       await options.executionTrace.candidateReady(task, {
         payload: {
           version: 1,
           taskId: task.id,
           agentId: task.agentId,
+          skillId: task.skillId,
           label: '世界来源候选',
-          contextSources: ['worldview'],
-          baseSnapshot: { id: null, updatedAt: null, worldOrigin: '' },
+          contextSources: gateway.contextSources,
+          contextEvidence: gateway.contextEvidence,
+          ...currentWorld.payload,
           workspaceScope: options.scope,
           dependsOnTaskIds: [],
           teamBudgetEvidence: options.budget.snapshot(),
         },
-        draft,
+        draft: currentWorld.draft,
         runtimeNode: {} as any,
-        runtimeOutput: draft,
+        runtimeOutput: currentWorld.runtimeOutput,
+        contextGatewayRuntime: gateway.contextGatewayRuntime,
       })
     },
   })

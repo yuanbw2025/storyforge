@@ -19,7 +19,7 @@ import { parseProductProductionBriefV3 } from '../../src/lib/product-production/
 import { canonicalProductProductionJsonV2, hashProductProductionValueV2 } from '../../src/lib/product-production/hash'
 import { createProductBuildPreviewManifestV1 } from '../../src/lib/product-production/preview-manifest'
 import { parseProductRuntimePackageV1 } from '../../src/lib/product-production/runtime-package'
-import { ensureWorkspaceOwnership } from '../../src/lib/workspace/ownership'
+import { createWorkspace } from '../../src/lib/workspace/create-workspace'
 import { commitNarrativeChoice, readProductRuntimeStateVersion } from '../../src/lib/avg/runtime-api'
 import { EMPTY_PRODUCT_RUNTIME_STATE } from '../../src/lib/types'
 import { CURRENT_PRODUCT_RESOURCE_KEYS, currentProductSelection } from '../helpers/current-product-world'
@@ -81,11 +81,15 @@ async function fixture() {
   const now = Date.now()
   const brief = commercialBrief()
   const briefHash = await hashProductProductionValueV2(brief)
-  const projectId = await db.projects.add({
-    name: 'browser receipt fixture', genre: 'interactive-fiction', genres: ['interactive-fiction'],
-    status: 'drafting', description: '', targetWordCount: 1, createdAt: now, updatedAt: now,
-  } as never) as number
-  const owned = await ensureWorkspaceOwnership(projectId)
+  const owned = await createWorkspace({
+    name: 'browser receipt fixture',
+    genres: ['interactive-fiction'],
+    status: 'drafting',
+    description: '',
+    targetWordCount: 1,
+    enableMultiWorld: false,
+  }, { purpose: 'world-engine', kind: 'novel', novelProfile: 'long' })
+  const projectId = owned.scope.projectId
   const productionId = await db.productProductions.add({
     ...owned.scope, productionKey: `perf.${projectId}`, title: '性能验收', status: 'preview-ready',
     productType: 'avg',

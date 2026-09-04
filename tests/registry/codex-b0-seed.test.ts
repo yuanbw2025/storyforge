@@ -1,7 +1,7 @@
 /**
  * 词条化重构 Stage B0 · 内置分类 seed 锁定
  *
- * 锁住 35-a 已建好的地基(防回潮):
+ * 锁定当前能力:
  * ① ensureBuiltIns 播种全部内置分类;② 幂等(重复调用不重复建);
  * ③ 内置分类的 fieldSchema 含 ref 字段(材料↔成品关联能力的基础)。
  */
@@ -9,11 +9,12 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { useCodexStore } from '../../src/stores/codex'
 import { BUILTIN_CATEGORIES, parseFieldSchema } from '../../src/lib/types/codex'
+import { seedCurrentProject } from '../helpers/current-workspace'
 
 async function createProject(): Promise<number> {
   const now = Date.now()
-  return await db.projects.add({
-    name: 'CodexB0', genre: '', description: '', targetWordCount: 0,
+  return await seedCurrentProject({
+    name: 'CodexB0', genres: [], description: '', targetWordCount: 0,
     enableMultiWorld: false, createdAt: now, updatedAt: now,
   } as any) as number
 }
@@ -59,44 +60,6 @@ describe('Codex B0 · 内置分类 seed', () => {
     const byKey = new Map<string, number>()
     for (const c of builtins) byKey.set(c.builtInKey!, (byKey.get(c.builtInKey!) ?? 0) + 1)
     for (const n of byKey.values()) expect(n).toBe(1)
-  })
-
-  it('自愈去重:历史重复的内置分类被合并,词条不丢失', async () => {
-    const projectId = await createProject()
-    const ts = Date.now()
-    // 手动造一份"每类两条"的重复(模拟旧 race 残留)
-    for (let pass = 0; pass < 2; pass++) {
-      for (const seed of BUILTIN_CATEGORIES) {
-        await db.codexCategories.add({
-          projectId, domain: seed.domain, parentId: null, name: seed.name,
-          icon: seed.icon, builtInKey: seed.builtInKey, fieldSchema: '[]',
-          hidden: false, order: 0, worldGroupId: null, createdAt: ts, updatedAt: ts,
-        } as any)
-      }
-    }
-    const dupCats = await db.codexCategories.where('projectId').equals(projectId)
-      .filter(c => c.builtInKey === 'mineral').toArray()
-    expect(dupCats.length).toBe(2)
-    // 把一条词条挂在"将被删除"的那条重复分类下(id 较大者)
-    const toBeDeleted = dupCats.sort((a, b) => (b.id! - a.id!))[0]
-    const keptId = dupCats.sort((a, b) => (a.id! - b.id!))[0].id!
-    await db.codexEntries.add({
-      projectId, categoryId: toBeDeleted.id!, name: '玄铁精', summary: '',
-      description: '', fields: '{}', order: 0, worldGroupId: null,
-      createdAt: ts, updatedAt: ts,
-    } as any)
-
-    await useCodexStore.getState().ensureBuiltIns(projectId)
-
-    // 每个内置 key 只剩一条
-    const after = await db.codexCategories.where('projectId').equals(projectId)
-      .filter(c => !!c.builtInKey).toArray()
-    expect(after.length).toBe(BUILTIN_CATEGORIES.length)
-    // 词条改挂到了保留项,没丢
-    const entry = (await db.codexEntries.where('projectId').equals(projectId).toArray())
-      .find(e => e.name === '玄铁精')!
-    expect(entry).toBeTruthy()
-    expect(entry.categoryId).toBe(keptId)
   })
 
   it('内置分类的 fieldSchema 含 ref 字段(材料↔成品基础)', async () => {

@@ -183,8 +183,7 @@ export interface CommunityPlatformSnapshotV1 {
   lfgPosts: CommunityLfgPostV1[]
   lfgApplications: CommunityLfgApplicationV1[]
   lfgAttendance: CommunityLfgAttendanceV1[]
-  /** Added compatibly after COMMUNITY-1; old v1 snapshots may omit it. */
-  reviews?: CommunityReviewV1[]
+  reviews: CommunityReviewV1[]
   reports: CommunityReportV1[]
   appeals: CommunityAppealV1[]
   receipts: Array<[string, CommunityReceiptV1]>
@@ -257,7 +256,7 @@ export async function verifyCommunityPlatformSnapshotV1(snapshot: CommunityPlatf
     || !Array.isArray(snapshot.profiles) || !Array.isArray(snapshot.edges)
     || !Array.isArray(snapshot.lineages) || !Array.isArray(snapshot.lfgPosts)
     || !Array.isArray(snapshot.lfgApplications) || !Array.isArray(snapshot.lfgAttendance)
-    || (snapshot.reviews != null && !Array.isArray(snapshot.reviews)) || !Array.isArray(snapshot.reports)
+    || !Array.isArray(snapshot.reviews) || !Array.isArray(snapshot.reports)
     || !Array.isArray(snapshot.appeals) || !Array.isArray(snapshot.receipts) || !Array.isArray(snapshot.audits)) {
     fail('snapshot_invalid', '社区平台快照结构无效')
   }
@@ -1081,7 +1080,7 @@ export class CommunityPlatformAuthorityV1 {
     for (const row of snapshot.lfgPosts) this.lfgPosts.set(row.postId, clone(row))
     for (const row of snapshot.lfgApplications) this.lfgApplications.set(row.applicationId, clone(row))
     for (const row of snapshot.lfgAttendance) this.lfgAttendance.set(row.attendanceId, clone(row))
-    for (const row of snapshot.reviews ?? []) this.reviews.set(row.reviewId, clone(row))
+    for (const row of snapshot.reviews) this.reviews.set(row.reviewId, clone(row))
     for (const row of snapshot.reports) this.reports.set(row.reportId, clone(row))
     for (const row of snapshot.appeals) this.appeals.set(row.appealId, clone(row))
     for (const [keyValue, receipt] of snapshot.receipts) this.receipts.set(keyValue, clone(receipt))

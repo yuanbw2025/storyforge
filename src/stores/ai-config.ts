@@ -40,7 +40,7 @@ export const CREATIVE_QUALITY_MODE_KEY = 'storyforge-creative-quality-mode-v1'
 const DEFAULT_CONFIG: AIConfig = {
   provider: 'deepseek',
   apiKey: '',
-  model: 'deepseek-chat',
+  model: 'deepseek-v4-flash',
   baseUrl: 'https://api.deepseek.com/v1',
   temperature: 0.7,
   maxTokens: 0,
@@ -236,8 +236,7 @@ function loadInitialConfig(): { config: AIConfig; rememberApiKey: boolean } {
   } catch { /* ignore */ }
 
   const rememberRaw = localStorage.getItem(REMEMBER_API_KEY)
-  const legacyHasLocalKey = typeof savedConfig.apiKey === 'string' && savedConfig.apiKey.length > 0
-  const rememberApiKey = rememberRaw == null ? legacyHasLocalKey : rememberRaw === 'true'
+  const rememberApiKey = rememberRaw === 'true'
   const sessionKey = sessionStorage.getItem(SESSION_API_KEY) || ''
 
   const config = normalizeConfigModel({

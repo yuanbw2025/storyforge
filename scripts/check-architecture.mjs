@@ -37,9 +37,7 @@ function walk(dir, acc = []) {
   return acc
 }
 
-/** Same traversal for architecture vocabulary checks. Unlike walk(), this also
- * includes current test files; isolated one-way migration fixtures are skipped
- * by the caller so historical schema names cannot leak back into active tests. */
+/** Same traversal for architecture vocabulary checks, including tests. */
 function walkIncludingTests(dir, acc = []) {
   for (const ent of fs.readdirSync(path.join(root, dir), { withFileTypes: true })) {
     const rel = `${dir}/${ent.name}`
@@ -489,11 +487,11 @@ if (!/prepareDetailedOutlineGatewayAssemblyV1\s*\(/.test(batchDetailRunnerGovern
   || !/executeRegisteredAIEntryV1\s*\(\s*['"]outline\.detail\.batch['"]/.test(batchDetailRunnerGovernanceSource)) {
   violations.push('[⑬Gateway批量收口] 批量细纲必须复用 shared Detail Gateway、exact V3 evidence 和正式 AI 入口')
 }
-if (!/PROSE_GENERATION_SOURCE_KEYS_V1[\s\S]*?resolveAgentSkillContextSourceKeysV1\s*\([\s\S]*?getAgentSkillV1\('prose\.generate'/.test(proseDurableSource)) {
-  violations.push('[⑬Skill来源别名] prose 历史来源别名必须只读派生自 prose.generate Skill')
+if (/export\s+const\s+PROSE_GENERATION_SOURCE_KEYS_V1\b/.test(proseDurableSource)) {
+  violations.push('[⑬Skill来源单源] prose 不得重新导出固定来源清单，运行契约必须从激活 Skill 派生')
 }
-if (!/OUTLINE_GENERATION_SOURCE_KEYS[\s\S]*?resolveAgentSkillContextSourceKeysV1\s*\([\s\S]*?getAgentSkillV1\('outline\.compose'/.test(outlineHarnessSource)) {
-  violations.push('[⑬Skill来源别名] outline 历史来源别名必须只读派生自 outline.compose Skill')
+if (/export\s+const\s+OUTLINE_GENERATION_SOURCE_KEYS\b/.test(outlineHarnessSource)) {
+  violations.push('[⑬Skill来源单源] outline 不得重新导出固定来源清单，运行契约必须从激活 Skill 派生')
 }
 if (!/version:\s*2[\s\S]*?executionBindings:\s*stepBindings/.test(proseDurableSource)
   || !/buildProseGenerationRunContractV3[\s\S]*?executionBoundary:\s*'formal'/.test(proseDurableSource)) {
@@ -679,9 +677,10 @@ for (const file of [
   }
 }
 if (!structuredOutputSource.includes('structured-output-ambiguous-root')
-  || !structuredOutputSource.includes('apply-registered-field-alias')
+  || !structuredOutputSource.includes('structured-output-unknown-field')
+  || /fieldAliases|appliedAliases|apply-registered-field-alias/.test(structuredOutputSource)
   || !structuredOutputSource.includes('StructuredOutputRepairFailedErrorV1')) {
-  violations.push('[⑰确定性修复] StructuredOutputPipeline 必须拒绝竞争根、登记 alias 并保存 repair 失败证据')
+  violations.push('[⑰确定性修复] StructuredOutputPipeline 必须拒绝竞争根和非当前字段，且不得恢复字段 alias；repair 失败必须留证')
 }
 if ((teamExecutionSource.match(/claimCanonRetry\(retryIssues\)/g) ?? []).length !== 1
   || !teamExecutionSource.includes("purpose: 'repair'")
@@ -927,7 +926,6 @@ if (!assembleContextSource.includes("from '../context-gateway/contracts'")) {
 const projectTableSource = read('src/lib/registry/project-tables.ts')
 const scopeSource = read('src/lib/workspace/scope.ts')
 const resourceUidSource = read('src/lib/context-gateway/resource-uid.ts')
-const resourceIdentitySource = read('src/lib/context-gateway/resource-identity.ts')
 const ragLibrarySource = read('src/lib/retrieval/rag-library.ts')
 const artifactStoreSource = read('src/lib/memory/artifact-store.ts')
 const artifactRecordSource = read('src/lib/memory/artifact-record.ts')
@@ -942,10 +940,9 @@ if (!resourceUidSource.includes('crypto.randomUUID()')
   || /projectId|row\.id/.test(resourceUidSource.split('createPortableResourceUidV1')[1]?.split('/** Stamps')[0] ?? '')) {
   violations.push('[㉓资源身份可移植] resource UID 不得派生自 projectId 或 Dexie numeric id')
 }
-if (!resourceIdentitySource.includes("PROJECT_TABLES.filter(spec => spec.resourceIdentity != null)")
-  || !resourceIdentitySource.includes("db.transaction('rw'")
-  || !resourceIdentitySource.includes('let written = 0')) {
-  violations.push('[㉓显式 backfill] 身份迁移必须从 PROJECT_TABLES 派生、全事务且返回幂等证据')
+if (fs.existsSync(path.join(root, 'src/lib/context-gateway/resource-identity.ts'))
+  || /backfillResourceUids|ensureResourceIdentit/.test(scopeSource)) {
+  violations.push('[㉓当前资源身份] 禁止恢复资源身份 backfill；当前记录必须在统一新建边界一次性盖章')
 }
 if (/descriptor\.table\.update\(/.test(ragLibrarySource.match(/export async function buildRagLibrary[\s\S]*?function descriptorFor/)?.[0] ?? '')
   || !ragLibrarySource.includes("'identity-missing'")) {
@@ -972,7 +969,7 @@ if (!artifactRetentionStoreSource.includes('pruneUnreferencedAgentRunArtifactsIn
   violations.push('[㉓artifact 清理] Run 删除必须 mark-and-sweep，共享正文保留并留下 tombstone')
 }
 
-// ── ㉔ CTXG-3 Canon resource descriptor 覆盖与旧 RAG 收口 ──
+// ── ㉔ CTXG-3 Canon resource descriptor 覆盖与资料目录单源化 ──
 const canonProviderSource = read('src/lib/context-gateway/canon-provider.ts')
 const contextSourceRegistrySource = read('src/lib/registry/context-sources.ts')
 const registryValidationSource = read('src/lib/registry/validate.ts')
@@ -998,18 +995,18 @@ for (const token of [
 }
 for (const legacyList of ['WORLDVIEW_FIELDS', 'STORY_CORE_FIELDS', 'CHARACTER_FIELDS', 'function descriptors(']) {
   if (ragLibrarySource.includes(legacyList)) {
-    violations.push(`[㉔旧 RAG 清单] rag-library.ts 不得恢复手写 ${legacyList}`)
+    violations.push(`[㉔资料目录清单] rag-library.ts 不得恢复手写 ${legacyList}`)
   }
 }
 if (!ragLibrarySource.includes('CANON_RESOURCE_PROVIDER_V1.listMetadata')
   || !ragLibrarySource.includes('readCanonicalDescriptorV1')) {
-  violations.push('[㉔旧 RAG 收口] 旧资料库 UI 必须从 Canon Provider 分页目录与定点读取派生')
+  violations.push('[㉔资料目录单源] 资料目录 UI 必须从 Canon Provider 分页目录与定点读取派生')
 }
 if (/\.(?:add|put|update|delete|bulkPut|bulkDelete|clear)\s*\(/.test(canonProviderSource)) {
   violations.push('[㉔Provider 只读] Canon Provider 不得写任何数据库表')
 }
 
-// ── ㉕ CTXG-4 四个 Gateway 工具必须复用唯一 Tool Registry 与统一 Runner ──
+// ── ㉕ CTXG-4 Gateway 工具必须复用唯一 Tool Registry 与统一 Runner ──
 const agentToolRegistrySource = read('src/lib/agent/tool-registry.ts')
 const gatewayToolsSource = read('src/lib/agent/context-gateway-tools.ts')
 const gatewaySessionSource = read('src/lib/context-gateway/tool-session.ts')
@@ -1055,9 +1052,10 @@ if (!gatewayToolsSource.includes('sourceRefCount: descriptor.sourceRefs.length')
 if (/\bdb\./.test(gatewayToolsSource)) {
   violations.push('[㉕工具只读] Context Gateway tool adapter 不得直接访问或写数据库')
 }
-if (!agentExecutionBindingSource.includes("AGENT_TOOL_SCHEMA_VERSION_V1 = 'agent-read-tools-v4'")
+if (!agentExecutionBindingSource.includes("AGENT_TOOL_SCHEMA_VERSION_V1 = 'agent-read-tools-v5'")
+  || !agentExecutionBindingSource.includes("AGENT_TOOL_SCHEMA_HASH_V1 = '4ee6ed218f3c78035c9bbf9b05dee66bfb3efc8a11f43d99ebe0a3b9e36d043d'")
   || !agentExecutionBindingSource.includes('verifyAgentToolSchemaBindingV1')) {
-  violations.push('[㉕工具版本] 四个工具必须升级并冻结 Agent tool schema version/hash')
+  violations.push('[㉕工具版本] 当前 Gateway 工具必须冻结并校验 Agent tool schema version/hash')
 }
 
 // ── ㉖ CTXG-5 选择器必须由 task kind / Policy / descriptors 纯派生 ──
@@ -1210,7 +1208,7 @@ for (const token of [
 ]) {
   if (!contextProviderCacheSource.includes(token)) violations.push(`[㉙缓存失效] Provider cache 缺少 ${token}`)
 }
-if (/\bdb\.|from ['"]\.\.\/db\//.test(contextProviderCacheSource)
+if (/\bdb\./.test(contextProviderCacheSource)
   || /contextGateway(?:Cache|Catalog|Index)(?:Entries|Records)?\s*!:\s*Table/.test(schemaSource)) {
   violations.push('[㉙缓存非权威] Gateway cache 必须是可丢弃的 Provider 包装，不得直接写库或新增权威表')
 }
@@ -1302,7 +1300,9 @@ const worldReleaseSource = read('src/lib/world-engine/releases.ts')
 const worldPackageSource = read('src/lib/world-engine/world-package.ts')
 const worldSharingPanelSource = read('src/components/product/WorldSharingPanel.tsx')
 const worldDerivationSource = read('src/lib/world-engine/derivation.ts')
-if (!workspaceIdentitySource.includes("project.workspacePurpose ?? 'independent-work'")
+if (!workspaceIdentitySource.includes("project.workspacePurpose === 'independent-work'")
+  || !workspaceIdentitySource.includes("project.workspacePurpose === 'world-engine'")
+  || !workspaceIdentitySource.includes('throw new Error')
   || !workspaceIdentitySource.includes('generateWorkspaceScopeCode')
   || !worldIdentitySource.includes("world.identityKind === 'world-draft'")
   || !worldIdentitySource.includes('isPublicWorldCode(world.code)')
@@ -1357,24 +1357,27 @@ for (const file of walk('src')) {
     }
   }
 }
-const formalRuntimeBoundarySource = read('src/lib/product/runtime-boundary.ts')
+const productRuntimeTypeSource = read('src/lib/types/product-runtime.ts')
 const productRuntimeInstanceSource = read('src/lib/product/runtime-instances.ts')
 const productRuntimeCoreSource = read('src/lib/product/runtime-core.ts')
 const productRuntimeAdapterSource = read('src/lib/product/runtime-product-adapters.ts')
 const productRuntimeApiSource = read('src/lib/product/runtime-api.ts')
 const productRuntimeStoreSource = read('src/stores/ttrpg-runtime-player.ts')
 const sidebarTreeSource = read('src/components/layout/sidebar-tree.ts')
-if (!formalRuntimeBoundarySource.includes('PRODUCTION_PRODUCT_KINDS_V1')) {
-  violations.push('[㉝正式运行类型] runtime-boundary.ts 必须直接复用封闭产品身份注册表')
+if (!productRuntimeTypeSource.includes('PRODUCTION_PRODUCT_KINDS_V1')
+  || !productRuntimeTypeSource.includes('PRODUCT_RUNTIME_KINDS = [...PRODUCTION_PRODUCT_KINDS_V1]')) {
+  violations.push('[㉝正式运行类型] Product Runtime 类型必须直接复用封闭产品身份注册表')
 }
-if (!productRuntimeInstanceSource.includes('if (!isFormalProductSessionKindV1(input.kind))')
+if (!productRuntimeInstanceSource.includes("input.productSource.kind !== 'release' && input.productSource.kind !== 'build'")
   || !productRuntimeInstanceSource.includes('verifyProductRuntimeSource({')
   || !productRuntimeInstanceSource.includes('source: input.productSource')
+  || !productRuntimeInstanceSource.includes('if (input.kind !== expectedKind)')
   || productRuntimeInstanceSource.includes('explicitLegacyBinding')
   || /worldReleaseId\??:\s*number/.test(productRuntimeInstanceSource)) {
   violations.push('[㉝底层实例闸门] 正式产品必须统一拒绝 WorldRelease/草稿直启，禁止恢复 legacy 特例')
 }
-if (!productRuntimeCoreSource.includes('isFormalProductSessionKindV1(parent.kind)')
+if (!productRuntimeCoreSource.includes('verifyFormalRuntimeSourceV1(')
+  || !productRuntimeCoreSource.includes('sourceCount !== 1')
   || /\bcreateSession\s*:/.test(productRuntimeStoreSource)) {
   violations.push('[㉝运行核心旁路] ProductRuntime core 必须验证正式分支来源，store 不得暴露无绑定创建入口')
 }
@@ -1634,8 +1637,9 @@ for (const token of [
 ]) {
   if (!releaseCodecSource.includes(token)) violations.push(`[㉝B世界发布反篡改] release-codec.ts 缺少 ${token}`)
 }
-if (!worldPackageSource.includes('便携数据缺少冻结资源')
-  || !worldPackageSource.includes('便携数据与冻结资源')) {
+const worldSemanticSnapshotSource = read('src/lib/world-engine/semantic-snapshot.ts')
+if (!worldSemanticSnapshotSource.includes('Object.keys(manifest.records).length !== selected.size')
+  || !worldSemanticSnapshotSource.includes('!Array.isArray(manifest.records[table])')) {
   violations.push('[㉝B世界包精确闭合] 导入必须要求每个 selected table 存在且与冻结 records 一致，包括空表')
 }
 
@@ -1711,10 +1715,12 @@ if (!productRuntimeMediaLibrarySource.includes('productRuntimeSessionId: number'
   || !productRuntimeMediaLibrarySource.includes("ownerKind: 'runtime'")) {
   violations.push('[㉝B运行媒资隔离] 运行中新生成的媒资必须绑定具体 ProductRuntimeSession')
 }
-if (!currentSchemaSource.includes("this.version(93).stores({")
-  || !currentSchemaSource.includes("this.version(94).stores({}).upgrade(migrateCanonicalAuthoringContentV94)")
+if (!currentSchemaSource.includes("STORYFORGE_DATABASE_NAME = 'storyforge-core'")
+  || !currentSchemaSource.includes('STORYFORGE_SCHEMA_VERSION = 1')
+  || (currentSchemaSource.match(/\.version\(/g) ?? []).length !== 1
+  || currentSchemaSource.includes('.upgrade(')
   || !currentSchemaSource.includes("productMediaAssets: '++id, projectId, worldId, workId, ownerKind, productType, productReleaseId, productRuntimeSessionId, &[productReleaseId+assetKey+version], &[productRuntimeSessionId+assetKey+version]")) {
-  violations.push('[㉝B根与媒资索引] 当前 schema 必须保留 v93 根/媒资隔离，并由 v94 单向收口当前内容模型')
+  violations.push('[㉝B唯一当前 schema] 必须使用 storyforge-core v1 单基线、零 upgrade，并保留当前根/媒资隔离索引')
 }
 if (!deriveImportSrc.includes('ProductMedia 必须具有唯一、有效的产品所有者')
   || !deriveImportSrc.includes("asset.ownerKind === 'release'")
@@ -1766,6 +1772,7 @@ const WORLD_RELEASE_PHYSICAL_OWNERS = new Set([
   'src/lib/world-engine/release-codec.ts',
   'src/lib/world-engine/releases.ts',
   'src/lib/world-engine/world-reference.ts',
+  'src/lib/world-engine/semantic-snapshot.ts',
 ])
 for (const file of walk('src')) {
   const source = read(file)
@@ -1870,6 +1877,7 @@ const RETIRED_ARCHITECTURE_FILES = [
   'src/lib/product/world-package.ts',
   'src/lib/product/_runtime-kernel.ts',
   'src/lib/reference-analysis/legacy-bridge.ts',
+  'src/lib/ai/adapters/worldview-adapter.ts',
 ]
 for (const file of RETIRED_ARCHITECTURE_FILES) {
   if (fs.existsSync(path.join(root, file))) violations.push(`[㉝C旧架构文件] ${file} 已退役，不得恢复`)
@@ -1902,20 +1910,15 @@ for (const file of walk('src')) {
     const accessesRetiredStore = new RegExp(`\\bdb\\.${token}\\b`).test(source)
     const registersRetiredStore = new RegExp(`\\b(?:name|target):\\s*['\"]${token}['\"]`).test(source)
     if (accessesRetiredStore || registersRetiredStore) {
-      violations.push(`[㉝C旧表清场] ${file}: 已删除表 ${token} 只能留在历史 Dexie schema 声明`)
+      violations.push(`[㉝C旧表清场] ${file}: 已删除表 ${token} 不得存在于当前源码`)
     }
   }
 }
 
-// Current source and current tests must speak only the active Product*/runtime
-// protocol. Historical names are confined to src/lib/db/schema.ts,
-// src/lib/migrations and tests/migrations/legacy, which are one-way upgrade
-// evidence rather than callable product architecture.
+// Current source and tests must speak only the active Product*/runtime protocol.
 const currentArchitectureFiles = [
-  ...walkIncludingTests('src').filter(file => (
-    file !== 'src/lib/db/schema.ts' && !file.startsWith('src/lib/migrations/')
-  )),
-  ...walkIncludingTests('tests').filter(file => !file.startsWith('tests/migrations/legacy/')),
+  ...walkIncludingTests('src'),
+  ...walkIncludingTests('tests'),
 ]
 const retiredArchitecturePatterns = [
   ['旧 Game 生产协议', /\b(?:GameProduction|GameBuild|GameRelease|GameRuntimePackage|PlayableWorld)\b/],
@@ -1930,12 +1933,17 @@ const retiredArchitecturePatterns = [
   ['旧内容写入字段', /\b(?:storyLines|historyLine|worldEvents|politicsEconomyCulture)\b/],
   ['产品发布误属文字游戏', /types\/text-game['"][^\n]*Product(?:Release|RuntimePackage|WorldSource)/],
   ['正式产品开发夹具身份', /\bdevelopment-fixture\b/],
+  ['旧状态卡迁移谓词', /\bmigratedStateCard\b/],
+  ['旧作品学习模块别名', /\bmaster-studies\b/],
+  ['旧数据库名称', /indexedDB\.open\(\s*['"]storyforge['"]\s*\)/],
+  ['旧多世界过渡符号', /\b(?:migrateToMultiWorld|stampPrimaryWorld)\b/],
+  ['未声明的大纲锁定字段', /\b(?:outlineNode|target)\.locked\b/],
 ]
 for (const file of currentArchitectureFiles) {
   const source = read(file)
   for (const [label, pattern] of retiredArchitecturePatterns) {
     if (pattern.test(source) || pattern.test(file)) {
-      violations.push(`[㉝C现行树零旧协议] ${file}: ${label}只能存在于隔离的单向迁移层`)
+      violations.push(`[㉝C现行树零旧协议] ${file}: ${label}不得存在于当前源码或测试`)
     }
   }
 }
@@ -1959,8 +1967,9 @@ if (/createLegacyWorkflowGraph|workflow\.graph\s*\?\?|workflow\.graph\s*==\s*nul
   violations.push('[㉞工作流单轨执行] 当前 Runner 只能消费显式 DAG，不得按步骤相邻关系降级执行')
 }
 if (/(?:^|\n)\s*(?:geography|history|society|culture|economy|rules)\??:\s*string\b/.test(worldviewInterfaceSource)
-  || !fs.existsSync(path.join(root, 'src/lib/migrations/canonical-authoring-content-v94.ts'))) {
-  violations.push('[㉞当前内容单源] Worldview 不得重新吸收地理、历史、社会、文化、经济或规则旧字段；存量文本只经 v94 迁移')
+  || fs.existsSync(path.join(root, 'src/lib/migrations'))
+  || fs.existsSync(path.join(root, 'tests/migrations/legacy'))) {
+  violations.push('[㉞当前内容单源] Worldview 不得重新吸收旧聚合字段，现行树也不得保留旧数据库迁移实现或夹具')
 }
 for (const token of [
   'gameDefinitionId', 'currentGameDefinitionId', 'adoptedGameDefinitionId',
@@ -2171,6 +2180,170 @@ const documentedRoutes = [...architectureOverviewSource.matchAll(/^- `([^`]+)`�
   .sort()
 if (JSON.stringify(appRoutes) !== JSON.stringify(documentedRoutes)) {
   violations.push(`[㊳路由文档同源] App 路由 ${JSON.stringify(appRoutes)} 与 ARCHITECTURE 路由 ${JSON.stringify(documentedRoutes)} 不一致`)
+}
+
+// ── ㊴ 当前架构硬切换：LocalWorkspace 壳与 Work 作品数据必须永久分离 ──
+const projectTypeAst = parseSource('src/lib/types/project.ts')
+const ownershipTypeAst = parseSource('src/lib/types/world-ownership.ts')
+const declaredInterfaceKeys = (sourceFile, interfaceName) => {
+  let keys = null
+  visit(sourceFile, node => {
+    if (ts.isInterfaceDeclaration(node) && node.name.text === interfaceName) {
+      keys = node.members.map(propertyName).filter(value => value != null)
+    }
+  })
+  return keys
+}
+const expectedProjectKeys = [
+  'id', 'workspaceUid', 'workspacePurpose', 'name', 'enableMultiWorld',
+  'activeWorldId', 'activeWorkId', 'productPlatformOptIns', 'createdAt', 'updatedAt',
+].sort()
+const actualProjectKeys = declaredInterfaceKeys(projectTypeAst, 'Project')?.sort() ?? null
+if (!actualProjectKeys || JSON.stringify(actualProjectKeys) !== JSON.stringify(expectedProjectKeys)) {
+  violations.push(`[㊴Project 壳单源] Project 只能拥有 ${expectedProjectKeys.join('、')}；当前为 ${actualProjectKeys?.join('、') ?? '未声明'}`)
+}
+
+const requiredWorkOwnedKeys = [
+  'title', 'description', 'genres', 'customGenre', 'status', 'targetWordCount',
+  'currentWordCount', 'coverImage', 'writingStyleId', 'methodologyId',
+  'includeCultivationProgressInAI', 'activeCharacterDrivenPlanId', 'activeNarrativeModuleId',
+]
+const actualWorkKeys = new Set(declaredInterfaceKeys(ownershipTypeAst, 'Work') ?? [])
+for (const key of requiredWorkOwnedKeys) {
+  if (!actualWorkKeys.has(key)) violations.push(`[㊴Work 作品单源] Work 缺少唯一归属字段 ${key}`)
+}
+
+const retiredProjectWorkSymbols = [
+  'projectActiveWorkProjection', 'projectProjectionWithoutWork',
+  'projectProjectionWithoutWorld', 'updateProjectAndActiveWork',
+  'CreateProjectInput', 'PromptProjectField', 'projectField', 'projectStatus',
+  'readAgentProjectStatus', 'read_project_status', 'ProjectStatus', 'PROJECT_STATUS_LABELS',
+]
+for (const file of currentArchitectureFiles) {
+  const source = read(file)
+  for (const symbol of retiredProjectWorkSymbols) {
+    if (new RegExp(`\\b${symbol}\\b`).test(source)) {
+      violations.push(`[㊴Project/Work 旧镜像] ${file}: 已退役符号 ${symbol} 不得恢复`)
+    }
+  }
+}
+
+const backupTrustSource = read('src/lib/export/backup-trust.ts')
+const registryImportSource = read('src/lib/export/registry-import.ts')
+const gatewayInputSource = read('src/lib/agent/context-gateway-input.ts')
+const workspaceProjectionSource = read('src/lib/memory/workspace-projection.ts')
+const workspaceIdentitySourceV1 = read('src/lib/workspace/identity.ts')
+const workspaceOwnershipSourceV1 = read('src/lib/workspace/ownership.ts')
+for (const token of ['CURRENT_PROJECT_EXPORT_KEYS', 'CURRENT_WORLD_EXPORT_KEYS', 'CURRENT_WORK_EXPORT_KEYS', 'inspectExactKeys']) {
+  if (!backupTrustSource.includes(token)) violations.push(`[㊴严格备份边界] backup-trust.ts 缺少 ${token}`)
+}
+if (/\.\.\.\s*(?:data\.project|projectData)/.test(registryImportSource)
+  || !registryImportSource.includes('workspacePurpose: projectData.workspacePurpose')
+  || !registryImportSource.includes('activeWorkId: null')) {
+  violations.push('[㊴严格导入边界] Project 必须按当前壳字段显式构造，禁止展开外部项目对象')
+}
+if (!gatewayInputSource.includes("works: 'workStatus'")
+  || gatewayInputSource.includes("projects: 'workStatus'")) {
+  violations.push('[㊴Work 上下文单源] workStatus 必须从 works 表读取，禁止回退到 projects')
+}
+if (!workspaceIdentitySourceV1.includes('isWorkspaceScopeCode')
+  || !workspaceIdentitySourceV1.includes('isPublicWorldCode')
+  || !workspaceOwnershipSourceV1.includes('isCurrentWorldCode(world.identityKind, world.code)')) {
+  violations.push('[㊴当前根身份] Workspace/World/Work 根必须校验与 identityKind 匹配的当前稳定编号')
+}
+const portableRootReader = workspaceProjectionSource.match(/async function readCurrentPortableRoots[\s\S]*?\n}\n/)?.[0] ?? ''
+if (!portableRootReader
+  || /generateWorkspaceUid|generateWorkCode|\.update\s*\(/.test(portableRootReader)
+  || /chapter[^\n]*workId[^\n]*\?\?[^\n]*activeWorkId/.test(workspaceProjectionSource)) {
+  violations.push('[㊴语义文件身份硬门] 文件投影只能验证当前根与精确 Work owner，不得回填身份或借活动指针补 owner')
+}
+if (!registrySrc.includes("target: 'works[activeCharacterDrivenPlanId]'")) {
+  violations.push('[㊴作品叙事计划归属] activeCharacterDrivenPlanId 引用必须挂在 Work，而不是 Project')
+}
+for (const file of [
+  'src/lib/agent/character-copilot.ts',
+  'src/lib/agent/story-arc-copilot.ts',
+  'src/lib/agent/worldview-field-copilot.ts',
+  'src/lib/ai/relation-extractor.ts',
+  'src/lib/export/text-export.ts',
+]) {
+  const source = read(file)
+  if (/\bproject\??\.name\b/.test(source)
+    || /\bproject\??\.(?:description|genres|status|targetWordCount|currentWordCount)\b/.test(source)) {
+    violations.push(`[㊴作品语义读取] ${file}: 创作上下文与作品导出必须读取 Work，不得读取 Project 镜像`)
+  }
+}
+
+const genreMetadataSource = read('src/lib/ai/genre-metadata.ts')
+if (/buildGenreConstraintContext\s*\(\s*genreIds:\s*string\s*\|\s*string\[\]/.test(genreMetadataSource)
+  || genreMetadataSource.includes('GENRE_METADATA_ALIASES')
+  || genreMetadataSource.includes('normalizeGenreMetadataId')) {
+  violations.push('[㊴题材当前格式] 题材上下文只接受 Work.genres 数组；不得恢复旧单值输入或别名兼容命名')
+}
+
+const reconciliationTableSource = read('src/components/editor/ReconciliationTable.tsx')
+if (/key\s*===\s*config\.key\s*\|\|/.test(reconciliationTableSource)
+  || reconciliationTableSource.includes('section-only key')) {
+  violations.push('[㊴对账当前格式] 章节对账只接受 section:action 键，不得恢复 section-only 回退')
+}
+
+// ── ㊵ 正式 Master Harness 只接受当前 Skill 身份与领域候选协议 ──
+const currentMasterOrchestratorSource = read('src/lib/agent/orchestrator.ts')
+const masterVerificationSource = read('src/lib/agent/run/master-step-verification.ts')
+const masterCandidateHashSource = read('src/lib/agent/run/master-candidate-hash.ts')
+const skillExecutionModeBlock = proseSkillRegistrySource.slice(
+  proseSkillRegistrySource.indexOf('export type AgentSkillExecutionModeV1'),
+  proseSkillRegistrySource.indexOf('export interface AgentSkillInputPolicyV1'),
+)
+if (fs.existsSync(path.join(root, 'src/lib/agent/world-origin-copilot.ts'))
+  || proseSkillRegistrySource.includes("id: 'world-origin.complete'")
+  || /\|\s*'complete'/.test(skillExecutionModeBlock)
+  || /'world-origin':\s*new Set\(\[[^\]]*'complete'/.test(proseSkillRegistrySource)) {
+  violations.push('[㊵世界候选单轨] 通用 world-origin.complete 与 complete 执行模式已退役，不得恢复')
+}
+if (!/export interface MasterAgentTask\s*\{[\s\S]*?skillId:\s*AgentSkillId/.test(currentMasterOrchestratorSource)
+  || !/export interface MasterCandidatePayload\s*\{[\s\S]*?skillId:\s*AgentSkillId/.test(currentMasterOrchestratorSource)
+  || !masterDurableSource.includes('readRequiredSkillId')
+  || masterDurableSource.includes('readOptionalSkillId')
+  || !masterDurableSource.includes("['id', 'agentId', 'skillId', 'instruction', 'dependsOn']")) {
+  violations.push('[㊵Skill 身份必填] 正式计划、候选与恢复必须冻结并严格校验当前 Skill ID')
+}
+if (!masterAdoptionSource.includes('世界领域候选使用了未登记的当前 Skill')
+  || !masterVerificationSource.includes('世界领域候选使用了未登记的当前 Skill')) {
+  violations.push('[㊵世界候选闭集] 世界候选验证与采纳必须拒绝未登记 Skill，不得回退到通用文本协议')
+}
+for (const field of ['contextManifestHash', 'semanticReview', 'teamBudgetEvidence']) {
+  if (!masterCandidateHashSource.includes(`${field}: _${field}`)) {
+    violations.push(`[㊵候选证据无环] Gateway 候选身份必须排除后置证据字段 ${field}`)
+  }
+}
+
+// ── ㊶ 当前 schema 必须在任何 Store 初始化前 fail closed ──
+const applicationBootstrapSource = read('src/main.tsx')
+const applicationBootstrapAst = parseSource('src/main.tsx')
+let currentSchemaCallInsideTry = false
+let registryCallInsideTry = false
+visit(applicationBootstrapAst, node => {
+  if (!ts.isTryStatement(node)) return
+  visit(node.tryBlock, child => {
+    if (!ts.isCallExpression(child) || !ts.isIdentifier(child.expression)) return
+    if (child.expression.text === 'openCurrentSchema') currentSchemaCallInsideTry = true
+    if (child.expression.text === 'validateRegistry') registryCallInsideTry = true
+  })
+})
+const currentSchemaOpenIndex = applicationBootstrapSource.indexOf('await openCurrentSchema()')
+const registryValidationIndex = applicationBootstrapSource.indexOf('validateRegistry()')
+const promptStoreInitIndex = applicationBootstrapSource.indexOf('usePromptStore.getState().init()')
+if (registryValidationIndex < 0
+  || currentSchemaOpenIndex < 0
+  || promptStoreInitIndex < 0
+  || registryValidationIndex > promptStoreInitIndex
+  || currentSchemaOpenIndex > promptStoreInitIndex
+  || registryCallInsideTry
+  || currentSchemaCallInsideTry
+  || /validateRegistry\s*\(\s*\{/.test(applicationBootstrapSource)
+  || !applicationBootstrapSource.includes('void bootstrap().catch(')) {
+  violations.push('[㊶当前架构启动硬门] 三注册表与 schema 校验必须先于 Store 初始化、不得被局部 catch 吞掉，启动失败必须进入显式终态')
 }
 
 // ── 报告 ──

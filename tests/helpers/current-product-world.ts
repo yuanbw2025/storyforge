@@ -113,7 +113,6 @@ export async function loadCurrentProductWorldSourceCatalogV1(input: {
 export async function seedCurrentProductWorld(name: string) {
   const created = await createWorkspace({
     name,
-    genre: 'interactive-fiction',
     genres: ['interactive-fiction'],
     status: 'drafting',
     description: '用于统一产品生产链测试的纯语义世界。',
@@ -155,12 +154,12 @@ export async function seedCurrentProductWorld(name: string) {
   } as never, { owner: 'work' })) as number
   const characterIds = await db.characters.bulkAdd([
     stampNewRecord(created.scope, 'characters', {
-      projectId: created.scope.projectId, name: '林舟', role: 'protagonist', roleWeight: 'main',
+      projectId: created.scope.projectId, name: '林舟', roleWeight: 'main', moralAxis: 'good', orderAxis: 'lawful',
       identity: '谨慎的守灯调查者', shortDescription: '负责雾港灯塔的年轻守灯人。',
       background: '熟悉潮汐钟结构。', personality: '谨慎而固执', createdAt: now, updatedAt: now,
     } as never, { owner: 'world' }),
     stampNewRecord(created.scope, 'characters', {
-      projectId: created.scope.projectId, name: '守潮人', role: 'supporting', roleWeight: 'secondary',
+      projectId: created.scope.projectId, name: '守潮人', roleWeight: 'secondary', moralAxis: 'neutral', orderAxis: 'neutral',
       identity: '掌握旧港秘密的向导', shortDescription: '知道失踪船队真相。',
       background: '来自旧港议会。', personality: '克制而多疑', createdAt: now + 1, updatedAt: now + 1,
     } as never, { owner: 'world' }),

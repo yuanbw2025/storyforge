@@ -9,7 +9,7 @@ import { htmlToPlainText } from '../../lib/utils/html'
 import { resolveCanonicalChapterSequence } from '../../lib/ai/chapter-memory/canonical-chapter-sequence'
 import { readOwnedRows, resolveReadScopeLike } from '../../lib/workspace/scope'
 import {
-  parseStorylineProgressResult,
+  validateCanonicalStorylineCandidateV1,
   type StorylineAnalysisCandidates,
 } from '../../lib/storyline/storyline-progress'
 import {
@@ -74,11 +74,15 @@ export default function StorylineProgressPanel(props: {
     if (!pendingCandidate) return EMPTY
     const targetChapter = chapters.find(row => row.id === pendingCandidate.payload.storylineProgressChapterId)
     if (!targetChapter) return EMPTY
-    return parseStorylineProgressResult({
-      raw: pendingCandidate.event.content,
-      chapterContent: htmlToPlainText(targetChapter.content || '').trim(),
-      arcs: props.arcs,
-    })
+    try {
+      return validateCanonicalStorylineCandidateV1({
+        candidate: JSON.parse(pendingCandidate.event.content),
+        chapterContent: htmlToPlainText(targetChapter.content || '').trim(),
+        arcs: props.arcs,
+      })
+    } catch {
+      return EMPTY
+    }
   }, [chapters, pendingCandidate, props.arcs])
 
   const analyze = async () => {

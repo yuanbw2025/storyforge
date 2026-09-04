@@ -9,7 +9,7 @@ import { FIELD_BY_TARGET } from '../../src/lib/registry/field-registry'
 import { ADOPTION_BY_TARGET } from '../../src/lib/registry/adoption-schema'
 import { assembleContext } from '../../src/lib/registry/assemble-context'
 import { adopt, hashAdoptFieldValueV1 } from '../../src/lib/registry/adopt'
-import { parseVoronoiMapConfigStrictV1 } from '../../src/lib/ai/adapters/voronoi-map-adapter'
+import { parseVoronoiMapConfig } from '../../src/lib/ai/adapters/voronoi-map-adapter'
 import * as mapAdapter from '../../src/lib/ai/adapters/voronoi-map-adapter'
 import {
   abandonWorldMapConfigRunV1,
@@ -20,23 +20,13 @@ import {
   readRecoverableWorldMapConfigRunV1,
   rejectWorldMapConfigCandidateV1,
 } from '../../src/lib/agent/run/world-map-config-durable'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
+import { stampCurrentFixtureResourceUidsV1 } from '../helpers/current-resource-identity'
 
 async function seed(suffix = '') {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    name: `地图治理${suffix}`, genre: 'fantasy', genres: ['fantasy'], status: 'drafting', description: '',
-    targetWordCount: 80_000,
-    createdAt: now, updatedAt: now,
-  } as any) as number
-  const worldId = await db.worlds.add({
-    projectId, code: `map-${now}-${suffix}`, name: '潮钟世界', description: '', currentVersion: 1,
-    createdAt: now, updatedAt: now,
-  }) as number
-  const workId = await db.works.add({
-    projectId, worldId, title: `地图治理${suffix}`, description: '', genres: ['fantasy'], status: 'drafting',
-    targetWordCount: 80_000, createdAt: now, updatedAt: now,
-  } as any) as number
-  await db.projects.update(projectId, { activeWorldId: worldId, activeWorkId: workId, ownershipSchemaVersion: 1 })
+  const created = await seedCurrentWorkspace(`地图治理${suffix}`)
+  const { projectId, worldId, workId } = created.scope
   const worldGroupId = await db.worldGroups.add({
     projectId, worldId, name: '主世界', order: 0, createdAt: now, updatedAt: now,
   }) as number
@@ -51,7 +41,7 @@ async function seed(suffix = '') {
   } as any)
   await db.geographies.add({
     projectId, worldId, worldGroupId, overview: '潮河是两国的天然边界',
-    locations: JSON.stringify([{ id: 'legacy-port', name: '旧潮港', type: 'city', description: '潮河西岸港口', significance: '', parentId: null, order: 0 }]),
+    locations: JSON.stringify([{ id: 'current-port', name: '旧潮港', type: 'city', description: '潮河西岸港口', significance: '', parentId: null, order: 0 }]),
     worldMapData: '', createdAt: now, updatedAt: now,
   } as any)
   await db.importantLocations.add({
@@ -75,6 +65,7 @@ async function seed(suffix = '') {
     projectId, worldId, worldGroupId, parentId: worldNodeId, name: '雾海层', description: '',
     sortOrder: 1, icon: '☁️', createdAt: now, updatedAt: now,
   } as any) as number
+  await stampCurrentFixtureResourceUidsV1(projectId)
   return {
     scope: { projectId, worldId, workId } satisfies WorkspaceScope,
     projectId, worldId, workId, worldGroupId, worldNodeId, siblingNodeId,
@@ -221,15 +212,15 @@ describe.sequential('R-HARNESS66 · 世界地图 durable 配置候选与定点�
       projectId: fixture.projectId, scope: fixture.scope, worldGroupId: fixture.worldGroupId,
       sourceKeys: ['worldview', 'geography', 'codex', 'locations'],
     })).text
-    expect(() => parseVoronoiMapConfigStrictV1(response('潮钟界', { extra: true }), context)).toThrow('未允许字段')
-    expect(() => parseVoronoiMapConfigStrictV1(`\`\`\`json\n${response()}\n\`\`\``, context)).toThrow('代码围栏')
-    expect(() => parseVoronoiMapConfigStrictV1(response('潮钟界', { pointCount: 3000 }), context)).toThrow('pointCount')
-    expect(() => parseVoronoiMapConfigStrictV1(response('潮钟界', {
+    expect(() => parseVoronoiMapConfig(response('潮钟界', { extra: true }), context)).toThrow('未允许字段')
+    expect(() => parseVoronoiMapConfig(`\`\`\`json\n${response()}\n\`\`\``, context)).toThrow('代码围栏')
+    expect(() => parseVoronoiMapConfig(response('潮钟界', { pointCount: 3000 }), context)).toThrow('pointCount')
+    expect(() => parseVoronoiMapConfig(response('潮钟界', {
       mapWidthEvidenceQuote: '用户从未写过的三千公里',
     }), context)).toThrow('逐字引文')
     const missingSeed = JSON.parse(response())
     delete missingSeed.seed
-    expect(() => parseVoronoiMapConfigStrictV1(JSON.stringify(missingSeed), context)).toThrow('缺少字段 seed')
+    expect(() => parseVoronoiMapConfig(JSON.stringify(missingSeed), context)).toThrow('缺少字段 seed')
     await expect(generate(fixture, { output: JSON.stringify(missingSeed) })).rejects.toThrow('缺少字段 seed')
     expect((await db.worldNodes.get(fixture.worldNodeId))?.mapConfigJSON).toBeUndefined()
   })

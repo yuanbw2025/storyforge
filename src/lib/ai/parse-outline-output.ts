@@ -382,13 +382,3 @@ export function parseChapterOutlineOutput(text: string): ParsedChapter[] {
   flushCh()
   return chapters
 }
-
-/**
- * 历史分块生成器的兼容入口。
- *
- * 名称保留用于接纳旧功能分支；实现仍遵守 HARNESS-11，只做确定性解析，
- * 不在解析器内部因格式异常隐藏发起第二次模型调用。
- */
-export function parseChapterOutlineSmart(text: string, _legacyConfig?: unknown): ParsedChapter[] {
-  return parseChapterOutlineOutput(text)
-}

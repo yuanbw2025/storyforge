@@ -22,9 +22,8 @@ export interface NaturalResources {
 export interface Worldview extends RagDocumentMetadata {
   id?: number
   projectId: number
-  summary: string         // 世界观精华摘要（AI 上下文）
 
-  // ── v3 §2.1 新字段（全部可选，渐进填充） ─────────────────────────────────
+  // 全部语义字段可渐进填充。
   // 世界起源
   worldOrigin?: string                    // 世界来源（创世神话/科技起源等）
   powerHierarchy?: string                 // 世界观中的力量层级概述
@@ -49,7 +48,6 @@ export interface Worldview extends RagDocumentMetadata {
   internalConflicts?: string              // 矛盾冲突设计
   itemDesign?: string                     // 道具与器物体系概述
 
-  // ── Phase 25.4 多世界 ──
   /** 所属世界组 ID（null/undefined = 默认主世界） */
   worldGroupId?: number | null
 

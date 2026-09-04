@@ -38,6 +38,7 @@ import { PRODUCT_BROWSER_PERFORMANCE_POLICY_V1 } from '../../src/lib/product-pro
 import { recordProductBrowserPerformanceMeasurementV1 } from '../../src/lib/product-production/quality-receipts'
 import { createStoryForgeRulePackV1 } from '../../src/lib/ttrpg/storyforge-rule-pack'
 import { createWorldRevision, publishWorldRevision } from '../../src/lib/world-engine/releases'
+import { stampCurrentFixtureResourceUidsV1 } from './current-resource-identity'
 
 const now = 1_700_000_000_000 // 固定时间戳,保证派生/手写两版导出可逐字段比对
 
@@ -299,8 +300,8 @@ export async function seedFullProject() {
   const projectId = await db.projects.add({
     workspaceUid: 'WS-11111111-1111-4111-8111-111111111111',
     workspacePurpose: 'world-engine',
-    name: '全量作品', genre: 'fantasy', genres: ['fantasy'], description: '全表往返',
-    targetWordCount: 100000, enableMultiWorld: true, createdAt: now, updatedAt: now,
+    name: '全量工作区', enableMultiWorld: true,
+    activeWorldId: null, activeWorkId: null, createdAt: now, updatedAt: now,
   } as any) as number
 
   // ── WORLD-2C C1 显式世界/作品根 ──
@@ -323,16 +324,29 @@ export async function seedFullProject() {
     genres: ['fantasy'],
     status: 'drafting',
     targetWordCount: 100000,
+    currentWordCount: 0,
     kind: 'novel',
     novelProfile: 'long',
+    includeCultivationProgressInAI: false,
+    activeCharacterDrivenPlanId: null,
+    activeNarrativeModuleId: null,
+    postAdoptionPolicy: 'suggest',
+    postAdoptionTaskTypes: ['organization', 'memory', 'retrieval', 'consistency'],
+    postAdoptionBudget: {
+      maxModelCalls: 2,
+      maxInputTokens: 48_000,
+      maxOutputTokens: 16_000,
+      maxCostUsd: 0.25,
+      allowUnknownCost: false,
+    },
     createdAt: now,
     updatedAt: now,
   }) as number
 
   // ── 双世界组(order 决定导出序) ──
-  const wgA = await db.worldGroups.add({ projectId, name: '主世界群', order: 0, createdAt: now, updatedAt: now } as any) as number
-  const wgB = await db.worldGroups.add({ projectId, name: '镜世界群', order: 1, createdAt: now, updatedAt: now } as any) as number
-  await db.worldGroupLinks.add({ projectId, fromGroupId: wgA, toGroupId: wgB, type: 'portal', createdAt: now, updatedAt: now } as any)
+  const wgA = await db.worldGroups.add({ projectId, name: '主世界群', description: '', type: 'primary', order: 0, createdAt: now, updatedAt: now } as any) as number
+  const wgB = await db.worldGroups.add({ projectId, name: '镜世界群', description: '', type: 'parallel', order: 1, createdAt: now, updatedAt: now } as any) as number
+  await db.worldGroupLinks.add({ projectId, fromGroupId: wgA, toGroupId: wgB, linkType: 'portal', name: '镜门', description: '', bidirectional: false, createdAt: now, updatedAt: now } as any)
 
   // ── worldScoped 设定表(挂 wgA / wgB,验证 worldGroupId 重映射) ──
   await db.worldviews.add({ projectId, worldGroupId: wgA, worldOrigin: '混沌创世', powerHierarchy: '炼气→金丹', createdAt: now, updatedAt: now } as any)
@@ -364,12 +378,20 @@ export async function seedFullProject() {
 
   // ── 角色(homeWorldScoped:一个挂 wgA,一个跨世界) ──
   const char1 = await db.characters.add({
-    projectId, homeWorldGroupId: wgA, name: '林惊羽', role: 'protagonist', personality: '坚毅',
+    projectId, homeWorldGroupId: wgA, name: '林惊羽', roleWeight: 'main',
+    moralAxis: 'neutral', orderAxis: 'neutral', personality: '坚毅',
+    isCrossWorld: false, shortDescription: '', appearance: '', background: '', motivation: '',
+    abilities: '', relationships: '', arc: '',
     cultivationSystemId: cultivationSystem, cultivationStageId: 'qi',
     createdAt: now, updatedAt: now,
   } as any) as number
-  const char2 = await db.characters.add({ projectId, isCrossWorld: true, name: '苏长歌', role: 'supporting', createdAt: now, updatedAt: now } as any) as number
-  await db.characterRelations.add({ projectId, fromCharacterId: char1, toCharacterId: char2, type: 'ally', description: '同门', createdAt: now, updatedAt: now } as any)
+  const char2 = await db.characters.add({
+    projectId, homeWorldGroupId: null, isCrossWorld: true, name: '苏长歌', roleWeight: 'secondary',
+    moralAxis: 'neutral', orderAxis: 'neutral', shortDescription: '', appearance: '', personality: '',
+    background: '', motivation: '', abilities: '', relationships: '', arc: '',
+    createdAt: now, updatedAt: now,
+  } as any) as number
+  await db.characterRelations.add({ projectId, fromCharacterId: char1, toCharacterId: char2, relationType: 'ally', label: '盟友', description: '同门', isBidirectional: true, createdAt: now, updatedAt: now } as any)
   await db.workCharacterBindings.add({
     projectId,
     workId,
@@ -399,10 +421,8 @@ export async function seedFullProject() {
   }) as number
   await db.works.update(workId, { activeCharacterDrivenPlanId: characterDrivenPlan })
   await db.projects.update(projectId, {
-    activeCharacterDrivenPlanId: characterDrivenPlan,
     activeWorldId: worldId,
     activeWorkId: workId,
-    ownershipSchemaVersion: 1,
   })
 
   // ── 大纲(树,wgA)+ 章节 + 细纲 + 情感卡 ──
@@ -455,7 +475,7 @@ export async function seedFullProject() {
     order: 0, createdAt: now, updatedAt: now,
   })
   await db.works.update(workId, { activeNarrativeModuleId: narrativeModule })
-  // WorldRelease 的严格导出不接受隐式 active Work/World。旧共享夹具在首次冻结前
+  // WorldRelease 的严格导出不接受隐式 active Work/World。全量夹具在首次冻结前
   // 必须先补齐所有现有语义记录的明确 owner。
   await stampFixtureOwners(projectId, worldId, workId)
   const worldRevisionRecord = await createWorldRevision({
@@ -562,8 +582,8 @@ export async function seedFullProject() {
   await db.creativeRules.add({ projectId, citedReferenceIds: [ref1], content: '多爽点', createdAt: now, updatedAt: now } as any)
 
   // ── 词条(树,wgA) ──
-  const cat = await db.codexCategories.add({ projectId, worldGroupId: wgA, parentId: null, name: '势力', order: 0, createdAt: now, updatedAt: now } as any) as number
-  const subCat = await db.codexCategories.add({ projectId, worldGroupId: wgA, parentId: cat, name: '宗门', order: 0, createdAt: now, updatedAt: now } as any) as number
+  const cat = await db.codexCategories.add({ projectId, domain: 'humanity', parentId: null, name: '势力', fieldSchema: '[]', order: 0, createdAt: now, updatedAt: now } as any) as number
+  const subCat = await db.codexCategories.add({ projectId, domain: 'humanity', parentId: cat, name: '宗门', fieldSchema: '[]', order: 0, createdAt: now, updatedAt: now } as any) as number
   const codexEntry = await db.codexEntries.add({
     projectId, worldGroupId: wgA, categoryId: subCat, name: '青云宗', summary: '正道魁首',
     importantLocationId: locParent,
@@ -602,6 +622,7 @@ export async function seedFullProject() {
   const agentConversation = await db.agentConversations.add({
     projectId,
     worldGroupId: wgA,
+    purpose: 'master-authoring',
     title: '建立主世界与主角',
     status: 'active',
     createdAt: now,
@@ -626,6 +647,7 @@ export async function seedFullProject() {
       contextSourceKeys: ['worldview', 'storyCore'],
       writeTargets: [{ table: 'outlineNodes', fields: ['summary'], mode: 'candidate-only' }],
     },
+    runtimeBindingHash: '9'.repeat(64),
     budget: {
       maxModelCalls: 1,
       maxToolCalls: 0,
@@ -1127,6 +1149,7 @@ export async function seedFullProject() {
           adoptionExtension: 'product-production-builds',
         }],
       },
+      runtimeBindingHash: '8'.repeat(64),
       dependencyReceiptPolicy: {
         requiredForJoin: true,
         verifierSetVersion: 'product-production-root-v1',
@@ -1214,31 +1237,26 @@ export async function seedFullProject() {
     updatedAt: now,
   }) as number
 
-  // 旧共享种子最初只带 projectId；在全量备份边界前按 PROJECT_TABLES
-  // 为每个受治理记录补齐 v4 World/Work owner，避免物理 ID 或隐式活动作品泄漏。
+  // 在全量备份边界前按 PROJECT_TABLES 为每个受治理记录补齐当前
+  // World/Work owner，避免物理 ID 或隐式活动作品泄漏。
   await stampFixtureOwners(projectId, worldId, workId)
 
-  // 新媒介能力必须与历史 82 表在同一个真实项目中完成严格往返，不能只靠孤立夹具。
-  // 先完成旧记录 owner 补齐，再通过正式领域服务创建两个目标 Work 及其来源清单。
+  // 媒介能力必须与全部当前表在同一个真实项目中完成严格往返，不能只靠孤立夹具。
+  // 先完成 owner 补齐，再通过正式领域服务创建两个目标 Work 及其来源清单。
   const adaptationProducts = await seedAdaptationProducts({ projectId, worldId, workId })
   await stampFixtureOwners(projectId, worldId, workId)
   // createAdaptation() 模拟真实交互会切换当前 Work；全量夹具的基准身份仍是最早的
-  // 小说 Work，因此恢复指针及旧 fixture 的项目兼容镜像，不改变新增目标 Work。
-  const mirroredProject = await db.projects.get(projectId) as any
+  // 小说 Work，因此恢复指针，不改变新增目标 Work。
+  const workspace = await db.projects.get(projectId)
+  if (!workspace) throw new Error('全量夹具工作区不存在')
   const restoredProject = {
-    ...mirroredProject,
-    name: '全量作品',
-    genre: 'fantasy',
-    genres: ['fantasy'],
-    description: '全表往返',
-    targetWordCount: 100000,
+    ...workspace,
     activeWorldId: worldId,
     activeWorkId: workId,
-    activeCharacterDrivenPlanId: characterDrivenPlan,
     updatedAt: now,
   }
-  for (const key of ['status', 'currentWordCount', 'coverImage', 'writingStyleId', 'methodologyId']) delete restoredProject[key]
   await db.projects.put(restoredProject)
+  await stampCurrentFixtureResourceUidsV1(projectId)
 
   return {
     projectId, wgA, wgB, char1, char2, vol, chapNode, chapter, temporalFact, ref1,

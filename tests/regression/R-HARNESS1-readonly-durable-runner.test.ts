@@ -10,49 +10,17 @@ import { readAgentRunV1 } from '../../src/lib/agent/run/event-store'
 import type { AgentModelAdapter } from '../../src/lib/agent/runner'
 import { db } from '../../src/lib/db/schema'
 import { PROJECT_TABLES } from '../../src/lib/registry/project-tables'
+import { AGENT_READ_TOOLS } from '../../src/lib/agent/tool-registry'
 import type { WorkspaceScope } from '../../src/lib/types'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
 
 async function createWorkspace(label: string): Promise<{
   scope: WorkspaceScope
   worldGroupId: number
 }> {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    name: label,
-    genre: 'fantasy',
-    genres: ['fantasy'],
-    description: '',
-    status: 'drafting',
-    targetWordCount: 100_000,
-    enableMultiWorld: true,
-    createdAt: now,
-    updatedAt: now,
-  } as any) as number
-  const worldId = await db.worlds.add({
-    projectId,
-    code: `world-${label}`,
-    name: `${label}世界`,
-    description: '',
-    currentVersion: 1,
-    createdAt: now,
-    updatedAt: now,
-  }) as number
-  const workId = await db.works.add({
-    projectId,
-    worldId,
-    title: label,
-    description: '',
-    genres: ['fantasy'],
-    status: 'drafting',
-    targetWordCount: 100_000,
-    createdAt: now,
-    updatedAt: now,
-  }) as number
-  await db.projects.update(projectId, {
-    activeWorldId: worldId,
-    activeWorkId: workId,
-    ownershipSchemaVersion: 1,
-  })
+  const createdWorkspaceV1 = await seedCurrentWorkspace(label, { enableMultiWorld: true })
+  const { projectId, worldId, workId } = createdWorkspaceV1.scope
   const worldGroupId = await db.worldGroups.add({
     projectId,
     worldId,
@@ -91,6 +59,7 @@ function durableInput(
       worldGroupId: fixture.worldGroupId,
     },
     model,
+    allowedToolNames: AGENT_READ_TOOLS.map(tool => tool.name),
     executionBinding: {
       provider: 'test',
       model: 'scripted-readonly',
@@ -127,7 +96,7 @@ describe('R-HARNESS1 · 只读 Runner durable adapter', () => {
     const fixture = await createWorkspace('只读持久证据')
     const before = await contentTableCounts()
     const outputs = [
-      '{"type":"tool","calls":[{"name":"read_project_status","arguments":{}}]}',
+      '{"type":"tool","calls":[{"name":"read_work_status","arguments":{}}]}',
       '{"type":"final","answer":"项目资料已核查。"}',
     ]
     const model: AgentModelAdapter = {
@@ -137,10 +106,11 @@ describe('R-HARNESS1 · 只读 Runner durable adapter', () => {
       goal: '核查当前项目并给出有证据的结论',
       projectId: fixture.scope.projectId,
       worldGroupId: fixture.worldGroupId,
+      runtimeBindingHash: 'a'.repeat(64),
     })
     expect(contract.workflowKind).toBe('read-only-audit')
     expect(contract.permissions.writeTargets).toEqual([])
-    expect(contract.permissions.contextSourceKeys).toContain('projectStatus')
+    expect(contract.permissions.contextSourceKeys).toContain('workStatus')
     expect(contract.permissions.contextSourceKeys).toContain('chapterContent')
     expect(contract.budget).toMatchObject({
       maxToolResultTokens: 24_000,
@@ -177,7 +147,7 @@ describe('R-HARNESS1 · 只读 Runner durable adapter', () => {
       kind: 'read-only-agent-result',
       answer: '项目资料已核查。',
     })
-    expect(JSON.stringify(checkpoint?.resumePayload)).not.toContain('read_project_status')
+    expect(JSON.stringify(checkpoint?.resumePayload)).not.toContain('read_work_status')
     expect(await contentTableCounts()).toEqual(before)
   })
 
@@ -207,6 +177,7 @@ describe('R-HARNESS1 · 只读 Runner durable adapter', () => {
         maxTokens: 1024,
         contextWindow: 32_000,
       },
+      allowedToolNames: AGENT_READ_TOOLS.map(tool => tool.name),
       meta: {
         category: 'chapter.content',
         projectId: fixture.scope.projectId + 999,

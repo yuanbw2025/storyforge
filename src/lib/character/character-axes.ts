@@ -2,7 +2,6 @@ import type {
   Character,
   CharacterMoralAxis,
   CharacterOrderAxis,
-  CharacterRole,
   CharacterRoleWeight,
 } from '../types'
 
@@ -29,18 +28,6 @@ export const ROLE_WEIGHTS = Object.keys(ROLE_WEIGHT_LABELS) as CharacterRoleWeig
 export const MORAL_AXES = Object.keys(MORAL_AXIS_LABELS) as CharacterMoralAxis[]
 export const ORDER_AXES = Object.keys(ORDER_AXIS_LABELS) as CharacterOrderAxis[]
 
-export function deriveCharacterRole(
-  roleWeight: CharacterRoleWeight,
-  moralAxis: CharacterMoralAxis,
-): CharacterRole {
-  if (roleWeight === 'secondary') return 'minor'
-  if (roleWeight === 'npc') return 'npc'
-  if (roleWeight === 'extra') return 'extra'
-  if (moralAxis === 'good') return 'protagonist'
-  if (moralAxis === 'evil') return 'antagonist'
-  return 'supporting'
-}
-
 export function isCompleteCharacterAxes(
   value: Record<string, unknown>,
 ): value is Record<string, unknown> & {
@@ -54,11 +41,10 @@ export function isCompleteCharacterAxes(
 }
 
 /**
- * 根据当前三轴刷新派生 role。
- * - 完整三轴：以三轴为准派生 role。
+ * 验证并规范化当前三轴。
+ * - 完整三轴：原样写入三轴。
  * - 定点更新：可传 fallback，用当前记录补齐未改动的轴。
  * - 半套三轴且无 fallback：原样返回，交给 AdoptionSchema 必填校验拒绝。
- * 历史角色格式只允许在数据库/导入迁移层转换，正式写入不接受旧形状。
  */
 export function normalizeCharacterAxes(
   value: Record<string, unknown>,
@@ -71,7 +57,6 @@ export function normalizeCharacterAxes(
       roleWeight: combined.roleWeight,
       moralAxis: combined.moralAxis,
       orderAxis: combined.orderAxis,
-      role: deriveCharacterRole(combined.roleWeight, combined.moralAxis),
     }
   }
 

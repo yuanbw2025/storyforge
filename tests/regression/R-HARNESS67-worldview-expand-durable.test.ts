@@ -18,23 +18,13 @@ import {
   rejectWorldviewExpandCandidateV1,
   type WorldviewExpandBoundaryV1,
 } from '../../src/lib/agent/run/worldview-expand-durable'
+import { currentWorkFixtureRecordV1, seedCurrentWorkspace } from '../helpers/current-workspace'
+import { stampCurrentFixtureResourceUidsV1 } from '../helpers/current-resource-identity'
 
 async function seed(suffix = '') {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    name: `六字段扩写${suffix}`, genre: 'fantasy', genres: ['fantasy'], status: 'drafting',
-    description: '', targetWordCount: 100_000,
-    enableMultiWorld: true, createdAt: now, updatedAt: now,
-  } as any) as number
-  const worldId = await db.worlds.add({
-    projectId, code: `expand-${now}-${suffix}`, name: '潮钟宇宙', description: '', currentVersion: 1,
-    createdAt: now, updatedAt: now,
-  }) as number
-  const workId = await db.works.add({
-    projectId, worldId, title: `六字段扩写${suffix}`, description: '', genres: ['fantasy'], status: 'drafting',
-    targetWordCount: 100_000, createdAt: now, updatedAt: now,
-  } as any) as number
-  await db.projects.update(projectId, { activeWorldId: worldId, activeWorkId: workId, ownershipSchemaVersion: 1 })
+  const created = await seedCurrentWorkspace(`六字段扩写${suffix}`, { enableMultiWorld: true })
+  const { projectId, worldId, workId } = created.scope
   const worldGroupId = await db.worldGroups.add({
     projectId, worldId, name: '潮钟界', description: '盐雾吞食记忆，三座堤城争夺退潮航道。',
     type: 'traversal', icon: '🌊', color: '#336699', order: 0,
@@ -46,19 +36,20 @@ async function seed(suffix = '') {
     icon: '☀️', order: 1, createdAt: now, updatedAt: now,
   } as any) as number
   const worldviewId = await db.worldviews.add({
-    projectId, worldId, worldGroupId, summary: '',
+    projectId, worldId, worldGroupId,
     worldOrigin: '旧起源', powerHierarchy: '旧力量', continentLayout: '旧地貌', climateByRegion: '旧气候',
     races: '旧种族', factionLayout: '旧势力', worldStructure: '潮汐夹层世界',
     createdAt: now, updatedAt: now,
   } as any) as number
   const siblingWorldviewId = await db.worldviews.add({
-    projectId, worldId, worldGroupId: siblingGroupId, summary: '',
+    projectId, worldId, worldGroupId: siblingGroupId,
     worldOrigin: '炎昼旧起源', createdAt: now, updatedAt: now,
   } as any) as number
   await db.storyCores.add({
     projectId, workId, theme: '记忆能否成为货币', centralConflict: '堤城争夺潮窗', plotPattern: '递进',
     mainPlot: '主角追查盐雾吞忆的源头。', createdAt: now, updatedAt: now,
   } as any)
+  await stampCurrentFixtureResourceUidsV1(projectId)
   return {
     scope: { projectId, worldId, workId } satisfies WorkspaceScope,
     projectId, worldId, workId, worldGroupId, siblingGroupId, worldviewId, siblingWorldviewId,
@@ -320,10 +311,10 @@ describe.sequential('R-HARNESS67 · 世界组六字段扩写 durable 候选与�
     const first = await seed('one')
     const generated = await generate(first)
     const now = Date.now()
-    const otherWorkId = await db.works.add({
+    const otherWorkId = await db.works.add(currentWorkFixtureRecordV1({
       projectId: first.projectId, worldId: first.worldId, title: '同世界另一作品', description: '',
       genres: ['fantasy'], status: 'drafting', targetWordCount: 100_000, createdAt: now, updatedAt: now,
-    } as any) as number
+    })) as number
     const otherWorkScope = { ...first.scope, workId: otherWorkId }
     await expect(readPendingWorldviewExpandCandidateV1({
       scope: otherWorkScope,
@@ -339,10 +330,10 @@ describe.sequential('R-HARNESS67 · 世界组六字段扩写 durable 候选与�
       projectId: first.projectId, code: `other-world-${now}`, name: '同项目另一世界', description: '',
       currentVersion: 1, createdAt: now, updatedAt: now,
     }) as number
-    const otherWorldWorkId = await db.works.add({
+    const otherWorldWorkId = await db.works.add(currentWorkFixtureRecordV1({
       projectId: first.projectId, worldId: otherWorldId, title: '另一世界作品', description: '',
       genres: ['fantasy'], status: 'drafting', targetWordCount: 100_000, createdAt: now, updatedAt: now,
-    } as any) as number
+    })) as number
     const otherWorldScope = { projectId: first.projectId, worldId: otherWorldId, workId: otherWorldWorkId }
     await expect(readPendingWorldviewExpandCandidateV1({
       scope: otherWorldScope,

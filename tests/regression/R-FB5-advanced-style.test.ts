@@ -14,12 +14,14 @@ import {
 } from '../../src/lib/style/style-learning'
 import type { StyleRevisionPair } from '../../src/lib/types/user-style'
 import { useUserStyleStore } from '../../src/stores/user-style'
+import { seedCurrentProject } from '../helpers/current-workspace'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
 
 async function createProject(): Promise<number> {
   const now = Date.now()
-  return await db.projects.add({
+  return await seedCurrentProject({
     name: 'FB5 Advanced Test',
-    genre: '',
+    genres: [],
     description: '',
     targetWordCount: 0,
     enableMultiWorld: false,
@@ -171,6 +173,7 @@ describe('R-FB5 · 有界改稿样本与互动校准', () => {
       createdAt: 1,
       updatedAt: 1,
     })
+    await finalizeCurrentFixtureV1(projectId)
 
     const context = await assembleContext({
       projectId,

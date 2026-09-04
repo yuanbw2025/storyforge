@@ -8,10 +8,9 @@ import type {
   Work,
   WorkKind,
   WorkspaceScope,
-  World,
 } from '../types/world-ownership'
-import type { Project, ProjectStatus } from '../types/project'
-import { ensureWorkspaceOwnership } from './ownership'
+import type { Project, WorkStatus } from '../types/project'
+import { resolveWorkspaceOwnership } from './ownership'
 import { assertRecordInScope, readOwnedRows, resolveScope, scopeTransactionTables } from './scope'
 import { generateWorkCode } from '../memory/identity'
 import {
@@ -29,8 +28,11 @@ export interface CreateWorkInput {
   title: string
   description?: string
   genres?: string[]
-  status?: ProjectStatus
+  customGenre?: string
+  status?: WorkStatus
   targetWordCount?: number
+  coverImage?: string
+  activeCharacterDrivenPlanId?: number | null
   kind?: WorkKind
   novelProfile?: NovelWorkflowProfile | null
 }
@@ -38,7 +40,7 @@ export interface CreateWorkInput {
 export function buildWorkRecord(input: {
   projectId: number
   worldId: number
-  fallback: Pick<Work, 'genres' | 'targetWordCount' | 'writingStyleId' | 'methodologyId'>
+  fallback: Pick<Work, 'genres' | 'targetWordCount' | 'writingStyleId' | 'methodologyId' | 'includeCultivationProgressInAI'>
   create: CreateWorkInput
   now: number
 }): Work {
@@ -62,10 +64,16 @@ export function buildWorkRecord(input: {
     title,
     description: input.create.description?.trim() ?? '',
     genres: input.create.genres?.length ? [...input.create.genres] : [...input.fallback.genres],
+    customGenre: input.create.customGenre?.trim() || undefined,
     status,
     targetWordCount,
+    currentWordCount: 0,
+    coverImage: input.create.coverImage,
     writingStyleId: input.fallback.writingStyleId,
     methodologyId: input.fallback.methodologyId,
+    includeCultivationProgressInAI: input.fallback.includeCultivationProgressInAI,
+    activeCharacterDrivenPlanId: input.create.activeCharacterDrivenPlanId ?? null,
+    activeNarrativeModuleId: null,
     postAdoptionPolicy: 'suggest',
     postAdoptionTaskTypes: ['organization', 'memory', 'retrieval', 'consistency'],
     postAdoptionBudget: {
@@ -80,75 +88,8 @@ export function buildWorkRecord(input: {
   }
 }
 
-const WORK_MIRROR_FIELDS = [
-  'name',
-  'description',
-  'genres',
-  'genre',
-  'status',
-  'targetWordCount',
-  'currentWordCount',
-  'coverImage',
-  'writingStyleId',
-  'methodologyId',
-  'activeCharacterDrivenPlanId',
-] as const satisfies readonly (keyof Project)[]
-
-/** Project stores the active editor projection only; World identity never mirrors here. */
-export function projectActiveWorkProjection(world: World, work: Work): Partial<Project> {
-  return {
-    activeWorldId: world.id!,
-    activeWorkId: work.id!,
-    name: work.title,
-    description: work.description,
-    genres: [...work.genres],
-    genre: work.genres[0] ?? 'other',
-    status: work.status,
-    targetWordCount: work.targetWordCount,
-    currentWordCount: work.currentWordCount,
-    coverImage: work.coverImage,
-    writingStyleId: work.writingStyleId,
-    methodologyId: work.methodologyId,
-    activeCharacterDrivenPlanId: work.activeCharacterDrivenPlanId ?? null,
-  }
-}
-
-export function projectProjectionWithoutWork(world: World): Partial<Project> {
-  return {
-    activeWorldId: world.id!,
-    activeWorkId: null,
-    name: world.name,
-    description: world.description,
-    genres: [],
-    genre: 'other',
-    status: 'drafting',
-    targetWordCount: 0,
-    currentWordCount: 0,
-    coverImage: undefined,
-    writingStyleId: undefined,
-    methodologyId: undefined,
-    activeCharacterDrivenPlanId: null,
-  }
-}
-
-export function projectProjectionWithoutWorld(): Partial<Project> {
-  return {
-    activeWorldId: null,
-    activeWorkId: null,
-    genres: [],
-    genre: 'other',
-    status: 'drafting',
-    targetWordCount: 0,
-    currentWordCount: 0,
-    coverImage: undefined,
-    writingStyleId: undefined,
-    methodologyId: undefined,
-    activeCharacterDrivenPlanId: null,
-  }
-}
-
 export async function listWorldWorks(projectId: number, worldId?: number): Promise<Work[]> {
-  const ownership = await ensureWorkspaceOwnership(projectId)
+  const ownership = await resolveWorkspaceOwnership(projectId)
   const targetWorldId = worldId ?? ownership.scope.worldId
   const world = await db.worlds.get(targetWorldId)
   if (!world || world.projectId !== projectId) throw new Error('[works] World 不属于当前工作区')
@@ -156,7 +97,7 @@ export async function listWorldWorks(projectId: number, worldId?: number): Promi
 }
 
 export async function createWorldWork(projectId: number, input: CreateWorkInput): Promise<Work> {
-  const ownership = await ensureWorkspaceOwnership(projectId)
+  const ownership = await resolveWorkspaceOwnership(projectId)
   const ts = Date.now()
   const row = buildWorkRecord({
     projectId,
@@ -175,10 +116,7 @@ export async function switchActiveWork(projectId: number, workId: number): Promi
     if (!project || !work || work.projectId !== projectId) throw new Error('[works] Work 不属于当前工作区')
     const world = await db.worlds.get(work.worldId)
     if (!world || world.projectId !== projectId) throw new Error('[works] Work 的 World 根无效')
-    await db.projects.update(projectId, {
-      ...projectActiveWorkProjection(world, work),
-      updatedAt: Date.now(),
-    })
+    await db.projects.update(projectId, { activeWorldId: world.id!, activeWorkId: work.id!, updatedAt: Date.now() })
     return { projectId, worldId: world.id!, workId: work.id! }
   })
 }
@@ -195,11 +133,8 @@ export async function switchNovelProfile(input: {
   targetWordCount?: number
 }): Promise<Work> {
   return db.transaction('rw', scopeTransactionTables(db.chapters), async () => {
-    const [project, work] = await Promise.all([
-      db.projects.get(input.projectId),
-      db.works.get(input.workId),
-    ])
-    if (!project || !work || work.projectId !== input.projectId) {
+    const work = await db.works.get(input.workId)
+    if (!work || work.projectId !== input.projectId) {
       throw new Error('[works] Work 不属于当前工作区')
     }
     if (effectiveWorkKind(work) !== 'novel') throw new Error('[works] 只有小说 Work 可以切换短篇/长篇 Profile')
@@ -236,40 +171,54 @@ export async function switchNovelProfile(input: {
       currentWordCount,
       updatedAt,
     })
-    if (project.activeWorkId === work.id) {
-      await db.projects.update(project.id!, {
-        ...projectActiveWorkProjection(world, nextWork),
-        updatedAt,
-      })
-    }
     return nextWork
   })
 }
 
-export async function updateProjectAndActiveWork(projectId: number, data: Partial<Project>): Promise<void> {
-  const ownership = await ensureWorkspaceOwnership(projectId)
+export type WorkspacePatch = Partial<Pick<
+  Project,
+  'name' | 'enableMultiWorld' | 'productPlatformOptIns'
+>>
+
+export type ActiveWorkPatch = Partial<Pick<
+  Work,
+  | 'title'
+  | 'description'
+  | 'genres'
+  | 'customGenre'
+  | 'status'
+  | 'targetWordCount'
+  | 'coverImage'
+  | 'writingStyleId'
+  | 'methodologyId'
+  | 'includeCultivationProgressInAI'
+>>
+
+/** Update workspace-owned settings only. Work metadata is rejected by the type and runtime boundary. */
+export async function updateWorkspace(projectId: number, data: WorkspacePatch): Promise<void> {
+  const allowed = new Set(['name', 'enableMultiWorld', 'productPlatformOptIns'])
+  const unknown = Object.keys(data).filter(field => !allowed.has(field))
+  if (unknown.length) throw new Error(`[works] 工作区更新包含非工作区字段：${unknown.join('、')}`)
+  await db.projects.update(projectId, { ...data, updatedAt: Date.now() })
+}
+
+/** Update metadata on the active Work; Project is never used as a mirror. */
+export async function updateActiveWork(projectId: number, data: ActiveWorkPatch): Promise<void> {
+  const ownership = await resolveWorkspaceOwnership(projectId)
   await db.transaction('rw', scopeTransactionTables(db.chapters), async () => {
-    const [project, world, work] = await Promise.all([
-      db.projects.get(projectId),
-      db.worlds.get(ownership.scope.worldId),
-      db.works.get(ownership.scope.workId),
-    ])
-    if (!project || !world || !work || world.projectId !== projectId || work.projectId !== projectId || work.worldId !== world.id) {
+    const work = await db.works.get(ownership.scope.workId)
+    if (!work || work.projectId !== projectId || work.worldId !== ownership.scope.worldId) {
       throw new Error('[works] 当前 World/Work 根无效')
     }
-    const workPatch: Partial<Work> = {}
-    if ('name' in data && data.name != null) workPatch.title = data.name
-    if ('description' in data && data.description != null) workPatch.description = data.description
-    if ('genres' in data && data.genres != null) workPatch.genres = [...data.genres]
-    else if ('genre' in data && data.genre != null) {
-      workPatch.genres = [data.genre, ...work.genres.filter(genre => genre !== data.genre)]
-    }
-    for (const field of WORK_MIRROR_FIELDS) {
-      if (['name', 'description', 'genres', 'genre'].includes(field)) continue
-      if (Object.prototype.hasOwnProperty.call(data, field)) {
-        const workField = field as keyof Work
-        ;(workPatch as Record<string, unknown>)[workField] = data[field]
-      }
+    const allowed = new Set([
+      'title', 'description', 'genres', 'customGenre', 'status', 'targetWordCount',
+      'coverImage', 'writingStyleId', 'methodologyId', 'includeCultivationProgressInAI',
+    ])
+    const unknown = Object.keys(data).filter(field => !allowed.has(field))
+    if (unknown.length) throw new Error(`[works] 作品更新包含非作品字段：${unknown.join('、')}`)
+    const workPatch: Partial<Work> = {
+      ...data,
+      ...(data.genres ? { genres: [...data.genres] } : {}),
     }
 
     const kind = effectiveWorkKind(work)
@@ -278,7 +227,7 @@ export async function updateProjectAndActiveWork(projectId: number, data: Partia
     if (kind === 'novel' && profile === 'short' && 'targetWordCount' in workPatch) {
       assertShortNovelTargetWords(requestedTarget)
     }
-    if (data.status === 'completed' && kind === 'novel' && profile === 'short') {
+    if (workPatch.status === 'completed' && kind === 'novel' && profile === 'short') {
       const actualWordCount = await readCanonicalWorkManuscriptWordCount(ownership.scope)
       if (actualWordCount < SHORT_NOVEL_MIN_WORDS || actualWordCount > SHORT_NOVEL_MAX_WORDS) {
         throw new Error(
@@ -288,13 +237,7 @@ export async function updateProjectAndActiveWork(projectId: number, data: Partia
       workPatch.currentWordCount = actualWordCount
     }
     const updatedAt = Date.now()
-    const nextWork = { ...work, ...workPatch, updatedAt }
     if (Object.keys(workPatch).length > 0) await db.works.update(work.id!, { ...workPatch, updatedAt })
-    await db.projects.update(projectId, {
-      ...data,
-      ...projectActiveWorkProjection(world, nextWork),
-      updatedAt,
-    })
   })
 }
 

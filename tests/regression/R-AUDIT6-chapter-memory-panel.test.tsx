@@ -38,8 +38,8 @@ async function mount(patch: Record<string, unknown> = {}) {
     reconciliation: undefined,
     reconciliationCurrent: false,
     onGenerateMemory: vi.fn(),
-    onConfirmActualProgress: vi.fn(),
-    onApplyOutlineCandidate: vi.fn(),
+    onSaveReconciliation: vi.fn().mockResolvedValue(undefined),
+    onForeshadowReconciliation: vi.fn().mockResolvedValue(undefined),
     ...patch,
   }
   const host = document.createElement('div')
@@ -87,27 +87,13 @@ describe('AUDIT-6 · 章节记忆与计划对账视图', () => {
     expect(stale.host.textContent).not.toContain('计划—正文对账')
   })
 
-  it('当前待确认对账展示分类、证据并转发两种处理命令', async () => {
+  it('当前待确认对账只展示现行逐条处理表格', async () => {
     const current = await mount({ reconciliation, reconciliationCurrent: true })
     expect(current.host.textContent).toContain('计划—正文对账')
-    expect(current.host.textContent).toContain('已完成：主角抵达城门')
-    expect(current.host.textContent).toContain('证据：“城门就在眼前”')
-    expect(current.host.textContent).toContain('未完成：尚未入城')
-    await act(async () => button(current.host, '确认并附加实际进展约束').click())
-    await act(async () => button(current.host, '用候选更新本章章纲').click())
-    expect(current.props.onConfirmActualProgress).toHaveBeenCalledOnce()
-    expect(current.props.onApplyOutlineCandidate).toHaveBeenCalledOnce()
-  })
-
-  it('对账写队列未完成时显示明确忙碌态、阻止重复动作并呈现错误', async () => {
-    const busy = await mount({
-      reconciliation,
-      reconciliationCurrent: true,
-      reconciliationBusy: 'actual-progress',
-      reconciliationError: '写入队列失败',
-    })
-    expect(button(busy.host, '正在附加实际进展约束...').disabled).toBe(true)
-    expect(button(busy.host, '用候选更新本章章纲').disabled).toBe(true)
-    expect(busy.host.querySelector('[role="alert"]')?.textContent).toContain('写入队列失败')
+    expect(current.host.textContent).toContain('主角抵达城门')
+    expect(current.host.textContent).toContain('城门就在眼前')
+    expect(current.host.textContent).toContain('尚未入城')
+    expect(current.host.textContent).not.toContain('确认并附加实际进展约束')
+    expect(current.host.textContent).not.toContain('用候选更新本章章纲')
   })
 })

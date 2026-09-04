@@ -229,6 +229,8 @@ export async function prepareInspirationCopilot(input: {
   const mode: InspirationResultMode = project.enableMultiWorld ? 'multiworld' : 'single'
   const readScope = await resolveReadScopeLike(input.scope ?? input.projectId)
   const scope = readScope
+  const work = await db.works.get(scope.workId)
+  if (!work || work.projectId !== input.projectId) throw new Error('当前作品不存在。')
   const snapshot = await snapshotFromResolvedScope(readScope)
   const fragments = parseInspirationFragments(snapshot.fragments)
   const selectedFragmentIds = [...new Set(input.selectedFragmentIds)]
@@ -295,8 +297,8 @@ export async function prepareInspirationCopilot(input: {
   const nodeInput: InspirationCopilotInput = {
     projectId: input.projectId,
     scope,
-    projectName: project.name,
-    genres: project.genres?.join('/') || project.genre || '',
+    projectName: work.title,
+    genres: work.genres.join('/'),
     mode,
     authorRequest,
     contextText: `${inputGuidance}\n\n${context.content}`,

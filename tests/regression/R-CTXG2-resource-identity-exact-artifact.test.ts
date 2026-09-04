@@ -1,13 +1,8 @@
-import Dexie from 'dexie'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
 import { cascadeDeleteProject } from '../../src/lib/registry/lifecycle'
 import { buildRagLibrary, updateRagDocumentPolicy } from '../../src/lib/retrieval/rag-library'
-import {
-  backfillResourceUidsV1,
-  resourceIdentityTableNamesV1,
-} from '../../src/lib/context-gateway/resource-identity'
 import { isPortableResourceUidV1 } from '../../src/lib/context-gateway/resource-uid'
 import { createAgentRunV1, deleteAgentRunV1, appendAgentRunEventV1 } from '../../src/lib/agent/run/event-store'
 import {
@@ -17,29 +12,18 @@ import {
   recordAgentRunArtifactV1,
 } from '../../src/lib/memory/artifact-store'
 import { buildMemoryArtifactIndexV1 } from '../../src/lib/memory/settlement'
-import { generateWorkspaceUid } from '../../src/lib/memory/identity'
-import { ensureWorkspaceOwnership } from '../../src/lib/workspace/ownership'
+import { createWorkspace } from '../../src/lib/workspace/create-workspace'
 import { stampNewRecord } from '../../src/lib/workspace/scope'
 import type { WorkspaceScope } from '../../src/lib/types'
 
-const opened: Dexie[] = []
-const databaseNames: string[] = []
-
 async function seedWorkspace(name = 'CTXG-2 资源工程'): Promise<{ projectId: number; scope: WorkspaceScope }> {
-  const now = 1_787_400_000_000
-  const projectId = await db.projects.add({
-    workspaceUid: generateWorkspaceUid(),
+  const created = await createWorkspace({
     name,
-    genre: 'fantasy',
     genres: ['fantasy'],
-    status: 'drafting',
     description: '',
     targetWordCount: 1_000_000,
-    createdAt: now,
-    updatedAt: now,
-  } as any) as number
-  const ownership = await ensureWorkspaceOwnership(projectId)
-  return { projectId, scope: ownership.scope }
+  })
+  return { projectId: created.scope.projectId, scope: created.scope }
 }
 
 function runContract(projectId: number) {
@@ -47,6 +31,7 @@ function runContract(projectId: number) {
     version: 1,
     objective: '验证 exact artifact 原文仓',
     workflowKind: 'read-only-audit',
+    runtimeBindingHash: 'a'.repeat(64),
     scope: { projectId, worldGroupId: null },
     permissions: { contextSourceKeys: ['chapterContent'], writeTargets: [] },
     budget: {
@@ -66,11 +51,9 @@ describe('CTXG-2 · stable resource identity and pure catalog', () => {
   afterEach(async () => {
     vi.restoreAllMocks()
     db.close()
-    for (const openedDb of opened.splice(0)) openedDb.close()
-    for (const name of databaseNames.splice(0)) await Dexie.delete(name)
   })
 
-  it('stamps new resources, rejects identity-missing reads and backfills legacy rows atomically/idempotently', async () => {
+  it('stamps every current resource at creation and rejects identity-missing rows without mutating them', async () => {
     const fixture = await seedWorkspace()
     const now = 1_787_400_000_100
     const stamped = stampNewRecord(fixture.scope, 'worldviews', {
@@ -82,58 +65,31 @@ describe('CTXG-2 · stable resource identity and pure catalog', () => {
     }, { owner: 'world' }) as Record<string, unknown>
     expect(isPortableResourceUidV1(stamped.ragDocumentId, 'worldview')).toBe(true)
     const stampedId = await db.worldviews.add(stamped as any) as number
-    const legacyA = await db.worldviews.add({
+    const invalidId = await db.worldviews.add({
       projectId: fixture.projectId, worldId: fixture.scope.worldId, worldGroupId: null,
-      worldOrigin: '旧资料 A', createdAt: now + 1, updatedAt: now + 1,
-    } as any) as number
-    const legacyB = await db.worldviews.add({
-      projectId: fixture.projectId, worldId: fixture.scope.worldId, worldGroupId: null,
-      worldOrigin: '旧资料 B', createdAt: now + 2, updatedAt: now + 2,
+      worldOrigin: '缺少资源身份的非法当前记录', createdAt: now + 1, updatedAt: now + 1,
     } as any) as number
 
     await expect(buildRagLibrary({ projectId: fixture.projectId, scope: fixture.scope }))
       .rejects.toThrow('identity-missing')
-
-    let writes = 0
-    await expect(backfillResourceUidsV1(fixture.projectId, {
-      beforeWrite: () => {
-        writes++
-        if (writes === 2) throw new Error('injected-backfill-failure')
-      },
-    })).rejects.toThrow('injected-backfill-failure')
-    expect((await db.worldviews.get(legacyA))?.ragDocumentId).toBeUndefined()
-    expect((await db.worldviews.get(legacyB))?.ragDocumentId).toBeUndefined()
+    expect((await db.worldviews.get(invalidId))?.ragDocumentId).toBeUndefined()
     expect((await db.worldviews.get(stampedId))?.ragDocumentId).toBe(stamped.ragDocumentId)
-
-    const first = await backfillResourceUidsV1(fixture.projectId)
-    expect(first.written).toBeGreaterThanOrEqual(2)
-    const afterBackfill = await db.worldviews.where('projectId').equals(fixture.projectId).toArray()
-    const uids = afterBackfill.map(row => row.ragDocumentId)
-    expect(new Set(uids).size).toBe(uids.length)
-    expect(uids.every(uid => isPortableResourceUidV1(uid))).toBe(true)
-
-    const second = await backfillResourceUidsV1(fixture.projectId)
-    expect(second.written).toBe(0)
-    expect((await db.worldviews.where('projectId').equals(fixture.projectId).toArray())
-      .map(row => row.ragDocumentId)).toEqual(uids)
-
+    await db.worldviews.delete(invalidId)
     const beforeCatalog = JSON.stringify(await db.worldviews.where('projectId').equals(fixture.projectId).toArray())
     const catalog1 = await buildRagLibrary({ projectId: fixture.projectId, scope: fixture.scope })
     const catalog2 = await buildRagLibrary({ projectId: fixture.projectId, scope: fixture.scope })
-    const afterCatalog = JSON.stringify(await db.worldviews.where('projectId').equals(fixture.projectId).toArray())
     expect(catalog2).toEqual(catalog1)
-    expect(afterCatalog).toBe(beforeCatalog)
-    expect(resourceIdentityTableNamesV1()).toContain('worldviews')
+    expect(JSON.stringify(await db.worldviews.where('projectId').equals(fixture.projectId).toArray())).toBe(beforeCatalog)
 
     const exported = await exportProjectJSON(fixture.projectId)
     const duplicateIdentityBackup = structuredClone(exported) as any
-    duplicateIdentityBackup.worldviews[1].ragDocumentId = duplicateIdentityBackup.worldviews[0].ragDocumentId
+    duplicateIdentityBackup.worldviews.push({ ...duplicateIdentityBackup.worldviews[0], id: 99 })
     const countBeforeRejectedImport = await db.projects.count()
     await expect(importProjectJSON(duplicateIdentityBackup)).rejects.toThrow('resource UID 重复')
     expect(await db.projects.count()).toBe(countBeforeRejectedImport)
     const importedProjectId = await importProjectJSON(exported)
     const imported = await db.worldviews.where('projectId').equals(importedProjectId).toArray()
-    expect(imported.map(row => row.ragDocumentId)).toEqual(uids)
+    expect(imported.map(row => row.ragDocumentId)).toEqual([stamped.ragDocumentId])
   })
 
   it('versions retrieval policy independently without changing Canon timestamps or resource UID', async () => {
@@ -170,38 +126,14 @@ describe('CTXG-2 · stable resource identity and pure catalog', () => {
     expect(v2?.worldOrigin).toBe('固定正文')
   })
 
-  it('creates v63 as an empty exact-artifact table and enforces content-address uniqueness', async () => {
-    const name = `ctxg2-v63-${Math.random()}`
-    databaseNames.push(name)
-    const legacy = new Dexie(name)
-    opened.push(legacy)
-    legacy.version(62).stores({
-      projects: '++id, name',
-      agentRunEvents: '++id, projectId, runId, &[runId+sequence], type',
-    })
-    await legacy.open()
-    await legacy.table('projects').add({ name: '旧库' })
-    await legacy.table('agentRunEvents').add({ projectId: 1, runId: 1, sequence: 1, type: 'run.created' })
-    legacy.close()
-
-    const upgraded = new Dexie(name)
-    opened.push(upgraded)
-    upgraded.version(62).stores({
-      projects: '++id, name',
-      agentRunEvents: '++id, projectId, runId, &[runId+sequence], type',
-    })
-    upgraded.version(63).stores({
-      agentRunArtifacts: '++id, projectId, &[projectId+artifactKind+contentHash], contentHash, retentionState, createdAt',
-    })
-    await upgraded.open()
-    expect(await upgraded.table('agentRunEvents').count()).toBe(1)
-    expect(await upgraded.table('agentRunArtifacts').count()).toBe(0)
+  it('current exact-artifact table enforces content-address uniqueness', async () => {
+    expect(await db.agentRunArtifacts.count()).toBe(0)
     const body = {
       projectId: 1, artifactKind: 'context-packet', contentHash: 'a'.repeat(64),
       retentionState: 'available', createdAt: 1,
     }
-    await upgraded.table('agentRunArtifacts').add(body)
-    await expect(upgraded.table('agentRunArtifacts').add(body)).rejects.toMatchObject({ name: 'ConstraintError' })
+    await db.agentRunArtifacts.add(body as any)
+    await expect(db.agentRunArtifacts.add(body as any)).rejects.toMatchObject({ name: 'ConstraintError' })
   })
 })
 

@@ -35,7 +35,7 @@ export async function executeWorldLinkContextV1(input: {
   }
   if (!isPortableResourceUidV1(target.ragDocumentId, 'world-group')
     || !isPortableResourceUidV1(link.ragDocumentId, 'world-group-link')) {
-    throw new Error('目标世界或通道缺少 portable resource UID；请先完成显式资源身份迁移。')
+    throw new Error('目标世界或通道缺少有效的 portable resource UID，拒绝继续执行。')
   }
   const targetKey = `world:${target.ragDocumentId}`
   const linkKey = `world-link:${link.ragDocumentId}`

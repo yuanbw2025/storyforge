@@ -191,7 +191,7 @@ export async function buildTtrpgContinuationStateV2(input: {
           joinedSessionKey: null,
           leftSessionKey: null,
           replacementFor: null,
-          reason: "旧版战役活动角色",
+          reason: "父版本战役活动角色",
           updatedSequence: input.parentSequence,
         }),
       );

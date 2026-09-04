@@ -10,10 +10,7 @@
  *   | `useHistoryStore`        | `histories`      | 世界观 → 历史                    |
  *   | `useCreativeRulesStore`  | `creativeRules`  | 创作 → 创作规则                  |
  *
- * (注：`itemSystems` 表的 UI 已于 C1 下线，数据迁移到「人工器物」词条，不再有专属 store。)
- *
- * 对外 API（hook 名、state 字段名、方法签名）与原手写 store 完全一致，
- * 调用方只需更新 import 路径即可。
+ * 所有单例均直接使用当前表结构与统一工厂。
  */
 
 import type {
@@ -43,9 +40,6 @@ export const useHistoryStore = createProjectSingletonStore<'history', History>({
   },
 })
 
-// C1: 道具系统 UI 已下线 —— itemSystems 表数据由 migrations/item-system-to-codex
-// 一次性迁移到「人工器物」词条;数据层(表/导出导入)保留以兼容旧备份,不再有专属 store。
-
 export const useCreativeRulesStore = createProjectSingletonStore<
   'creativeRules',
   CreativeRules
@@ -55,10 +49,9 @@ export const useCreativeRulesStore = createProjectSingletonStore<
   defaults: {
     writingStyle: '',
     narrativePOV: 'third-limited',
-    toneAndMood: '',
+    atmosphere: '',
     prohibitions: '[]',
     consistencyRules: '[]',
     specialRequirements: '',
-    referenceWorks: '[]',
   },
 })

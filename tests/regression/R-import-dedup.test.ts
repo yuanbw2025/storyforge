@@ -34,18 +34,21 @@ describe('R-import-dedup: mergeUnified deduplicates across chunks', () => {
   it('角色：同名去重，保留信息最全的一条', () => {
     let acc: UnifiedParseResult = {}
     acc = mergeUnified(acc, {
-      characters: [{ name: '夏浔', role: 'protagonist' }],
+      characters: [{ name: '夏浔', roleWeight: 'main', moralAxis: 'neutral', orderAxis: 'neutral' }],
     })
     // 后一块吐出信息更全的同名角色 → 替换
     acc = mergeUnified(acc, {
       characters: [
-        { name: '夏浔', role: 'protagonist', shortDescription: '穿越到明代的现代人', background: '锦衣卫百户' },
-        { name: '张十三', role: 'supporting' },
+        { name: '夏浔', roleWeight: 'main', moralAxis: 'neutral', orderAxis: 'neutral', shortDescription: '穿越到明代的现代人', background: '锦衣卫百户' },
+        { name: '张十三', roleWeight: 'secondary', moralAxis: 'neutral', orderAxis: 'neutral' },
       ],
     })
     // 再来一块重复且信息更少 → 不覆盖
     acc = mergeUnified(acc, {
-      characters: [{ name: '夏浔', role: 'protagonist' }, { name: '张十三', role: 'supporting' }],
+      characters: [
+        { name: '夏浔', roleWeight: 'main', moralAxis: 'neutral', orderAxis: 'neutral' },
+        { name: '张十三', roleWeight: 'secondary', moralAxis: 'neutral', orderAxis: 'neutral' },
+      ],
     })
 
     expect(acc.characters).toHaveLength(2)

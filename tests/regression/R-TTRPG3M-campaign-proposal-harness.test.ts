@@ -9,34 +9,34 @@ import {
   createAuthorGuidedTtrpgCampaignDesignV2,
   parseTtrpgCampaignDesignV2,
 } from '../../src/lib/ttrpg/campaign-proposal'
-import { ensureWorkspaceOwnership } from '../../src/lib/workspace/ownership'
+import { createWorkspace } from '../../src/lib/workspace/create-workspace'
+import { stampNewRecord } from '../../src/lib/workspace/scope'
 import { createWorldRevision, publishWorldRevision } from '../../src/lib/world-engine/releases'
 
 async function workspace() {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    workspacePurpose: 'world-engine',
-    name: 'TTRPG 提案 Harness', genre: 'mystery', genres: ['mystery'], status: 'drafting',
-    description: '', targetWordCount: 50_000, createdAt: now, updatedAt: now,
-  } as never) as number
-  const owned = await ensureWorkspaceOwnership(projectId)
+  const owned = await createWorkspace({
+    name: 'TTRPG 提案 Harness', genres: ['mystery'], status: 'drafting',
+    description: '', targetWordCount: 50_000,
+  }, { purpose: 'world-engine', kind: 'novel', novelProfile: 'long' })
+  const { projectId } = owned.scope
   await db.characters.bulkAdd([
-    {
-      projectId, worldId: owned.scope.worldId, workId: owned.scope.workId,
-      isCrossWorld: true, name: '林舟', role: 'protagonist', roleWeight: 'main',
+    stampNewRecord(owned.scope, 'characters', {
+      projectId, isCrossWorld: true, name: '林舟', roleWeight: 'main',
+      moralAxis: 'good', orderAxis: 'lawful',
       identity: '调查失踪信号的守灯人', createdAt: now, updatedAt: now,
-    },
-    {
-      projectId, worldId: owned.scope.worldId, workId: owned.scope.workId,
-      isCrossWorld: true, name: '潮汐学者', role: 'supporting', roleWeight: 'npc',
+    } as any, { owner: 'world' }),
+    stampNewRecord(owned.scope, 'characters', {
+      projectId, isCrossWorld: true, name: '潮汐学者', roleWeight: 'npc',
+      moralAxis: 'neutral', orderAxis: 'neutral',
       identity: '掌握封锁记录的学者', createdAt: now, updatedAt: now,
-    },
+    } as any, { owner: 'world' }),
   ] as never[])
-  await db.importantLocations.add({
-    projectId, worldId: owned.scope.worldId, workId: owned.scope.workId,
+  await db.importantLocations.add(stampNewRecord(owned.scope, 'importantLocations', {
+    projectId,
     parentId: null, name: '雾港潮门', type: 'harbor', description: '潮门将在暴潮前封闭。',
     createdAt: now, updatedAt: now,
-  } as never)
+  } as any, { owner: 'world' }))
   const revision = await createWorldRevision({ scope: owned.scope, label: '冻结提案来源' })
   const release = await publishWorldRevision(revision.id!)
   return { ...owned, release }

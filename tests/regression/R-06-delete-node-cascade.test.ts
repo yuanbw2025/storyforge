@@ -16,6 +16,8 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { useOutlineStore } from '../../src/stores/outline'
 import { useChapterStore } from '../../src/stores/chapter'
+import { seedCurrentProject } from '../helpers/current-workspace'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
 
 describe('R-06: deleteNode 级联 emotionBeatCards', () => {
   beforeEach(async () => {
@@ -29,8 +31,8 @@ describe('R-06: deleteNode 级联 emotionBeatCards', () => {
 
   it('删大纲节点后,章节 + 细纲 + 情感节拍卡全部清空', async () => {
     const now = Date.now()
-    const projectId = await db.projects.add({
-      name: 'R-06', genre: '', description: '', targetWordCount: 0,
+    const projectId = await seedCurrentProject({
+      name: 'R-06', genres: [], description: '', targetWordCount: 0,
       enableMultiWorld: false, createdAt: now, updatedAt: now,
     } as any) as number
 
@@ -78,6 +80,7 @@ describe('R-06: deleteNode 级联 emotionBeatCards', () => {
       sourceHash: 'hash', status: 'verified', generatedBy: 'system-rollup',
       createdAt: now, updatedAt: now,
     } as any)
+    await finalizeCurrentFixtureV1(projectId)
 
     // 加载到内存(模拟真实使用)
     await useChapterStore.getState().loadAll(projectId)
@@ -117,8 +120,8 @@ describe('R-06: deleteNode 级联 emotionBeatCards', () => {
 
   it('删带子节点的卷,递归级联清理所有后代章节与节拍卡', async () => {
     const now = Date.now()
-    const projectId = await db.projects.add({
-      name: 'R-06b', genre: '', description: '', targetWordCount: 0,
+    const projectId = await seedCurrentProject({
+      name: 'R-06b', genres: [], description: '', targetWordCount: 0,
       enableMultiWorld: false, createdAt: now, updatedAt: now,
     } as any) as number
 
@@ -148,6 +151,7 @@ describe('R-06: deleteNode 级联 emotionBeatCards', () => {
     }
     await makeChapter(0)
     await makeChapter(1)
+    await finalizeCurrentFixtureV1(projectId)
 
     expect(await db.chapters.count()).toBe(2)
     expect(await db.emotionBeatCards.count()).toBe(2)

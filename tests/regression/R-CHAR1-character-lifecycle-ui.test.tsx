@@ -33,9 +33,19 @@ import CharacterLifecycleAction from '../../src/components/character/CharacterLi
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
-const project = { id: 1, name: '潮门纪事', enableMultiWorld: false } as Project
+const project = {
+  id: 1,
+  workspaceUid: 'WS-00000000-0000-4000-8000-000000000001',
+  workspacePurpose: 'independent-work',
+  name: '潮门纪事',
+  enableMultiWorld: false,
+  activeWorldId: 11,
+  activeWorkId: 12,
+  createdAt: 1,
+  updatedAt: 1,
+} as Project
 const character = {
-  id: 7, projectId: 1, name: '青禾', role: 'protagonist', roleWeight: 'main',
+  id: 7, projectId: 1, name: '青禾', roleWeight: 'main',
   moralAxis: 'good', orderAxis: 'lawful', shortDescription: '', appearance: '', personality: '',
   background: '', motivation: '', abilities: '', relationships: '', arc: '', narrativeStatus: 'active',
   ragDocumentId: 'res:v1:character:00000000-0000-4000-8000-000000000007',

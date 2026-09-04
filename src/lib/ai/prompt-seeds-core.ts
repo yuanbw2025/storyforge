@@ -4,7 +4,7 @@ import type { PromptSeed } from './prompt-seed-type'
 /**
  * 系统级内置提示词模板。
  *
- * 来源：从旧 src/lib/ai/prompts/*.ts 逐字迁移 + Phase 8/10 增量 + Phase 13 题材包。
+ * 当前内置 PromptTemplate 种子；运行时仍由登记、版本与作者配置共同约束。
  * 用户启动 App 时若 promptTemplates 表为空，自动 seed 这套模板。
  *
  * 模板语法见 src/lib/ai/prompt-engine.ts。

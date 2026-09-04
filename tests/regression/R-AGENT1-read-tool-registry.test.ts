@@ -3,13 +3,15 @@ import { AGENT_READ_TOOLS, executeAgentTool } from '../../src/lib/agent/tool-reg
 import { db } from '../../src/lib/db/schema'
 import { CONTEXT_SOURCE_BY_KEY } from '../../src/lib/registry/context-sources'
 import { PROJECT_TABLES } from '../../src/lib/registry/project-tables'
-import { ensureWorkspaceOwnership } from '../../src/lib/workspace/ownership'
-import { backfillResourceUidsV1 } from '../../src/lib/context-gateway/resource-identity'
+import { resolveWorkspaceOwnership } from '../../src/lib/workspace/ownership'
+import { stampCurrentFixtureResourceUidsV1 } from '../helpers/current-resource-identity'
 import { createContextGatewayToolSessionV1 } from '../../src/lib/context-gateway/tool-session'
 import { CANON_RESOURCE_KINDS_V1, CANON_RESOURCE_PROVIDER_V1 } from '../../src/lib/context-gateway/canon-provider'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
+import { stampNewRecord } from '../../src/lib/workspace/scope'
 
 const EXPECTED_TOOLS = [
-  'read_project_status',
+  'read_work_status',
   'read_worldview',
   'read_story_core',
   'read_characters',
@@ -31,23 +33,13 @@ const EXPECTED_TOOLS = [
 ]
 
 async function addProject(name: string, enableMultiWorld: boolean) {
-  const now = Date.now()
-  return await db.projects.add({
-    name,
-    genre: 'other',
-    genres: ['other'],
-    status: 'drafting',
-    description: '',
-    targetWordCount: 100_000,
-    enableMultiWorld,
-    createdAt: now,
-    updatedAt: now,
-  }) as number
+  return (await seedCurrentWorkspace(name, { enableMultiWorld })).scope.projectId
 }
 
 async function addWorld(projectId: number, name: string, order: number) {
   const now = Date.now()
-  return await db.worldGroups.add({
+  const { scope } = await resolveWorkspaceOwnership(projectId)
+  return await db.worldGroups.add(stampNewRecord(scope, 'worldGroups', {
     projectId,
     name,
     description: `${name}描述`,
@@ -55,12 +47,13 @@ async function addWorld(projectId: number, name: string, order: number) {
     order,
     createdAt: now,
     updatedAt: now,
-  }) as number
+  }, { owner: 'world' }) as never) as number
 }
 
 async function addOutline(projectId: number, worldGroupId: number | null, title: string, order: number) {
   const now = Date.now()
-  return await db.outlineNodes.add({
+  const { scope } = await resolveWorkspaceOwnership(projectId)
+  return await db.outlineNodes.add(stampNewRecord(scope, 'outlineNodes', {
     projectId,
     parentId: null,
     type: 'chapter',
@@ -70,12 +63,13 @@ async function addOutline(projectId: number, worldGroupId: number | null, title:
     worldGroupId,
     createdAt: now,
     updatedAt: now,
-  }) as number
+  }, { owner: 'work' }) as never) as number
 }
 
 async function addChapter(projectId: number, outlineNodeId: number, title: string, content: string, order = 0) {
   const now = Date.now()
-  return await db.chapters.add({
+  const { scope } = await resolveWorkspaceOwnership(projectId)
+  return await db.chapters.add(stampNewRecord(scope, 'chapters', {
     projectId,
     outlineNodeId,
     title,
@@ -86,7 +80,7 @@ async function addChapter(projectId: number, outlineNodeId: number, title: strin
     notes: '',
     createdAt: now,
     updatedAt: now,
-  }) as number
+  }, { owner: 'work' }) as never) as number
 }
 
 async function tableCounts() {
@@ -110,7 +104,7 @@ describe('R-AGENT1 · 只读 Tool Registry', () => {
       expect(tool.inputBudgetTokens).toBeGreaterThan(0)
       for (const sourceKey of tool.sourceKeys) expect(CONTEXT_SOURCE_BY_KEY.has(sourceKey)).toBe(true)
     }
-    expect(CONTEXT_SOURCE_BY_KEY.has('projectStatus')).toBe(true)
+    expect(CONTEXT_SOURCE_BY_KEY.has('workStatus')).toBe(true)
     expect(CONTEXT_SOURCE_BY_KEY.has('worldGroups')).toBe(true)
     expect(CONTEXT_SOURCE_BY_KEY.has('outlineTree')).toBe(true)
     expect(CONTEXT_SOURCE_BY_KEY.has('searchResults')).toBe(true)
@@ -126,7 +120,7 @@ describe('R-AGENT1 · 只读 Tool Registry', () => {
     const outlineB = await addOutline(projectB, worldB, 'B章纲', 0)
     const chapterB = await addChapter(projectB, outlineB, 'B章', '绝不能泄漏的正文')
 
-    const injected = await executeAgentTool('read_project_status', { projectId: projectA }, {
+    const injected = await executeAgentTool('read_work_status', { projectId: projectA }, {
       projectId: projectB,
     })
     expect(injected.ok).toBe(false)
@@ -233,10 +227,10 @@ describe('R-AGENT1 · 只读 Tool Registry', () => {
     const nodeId = await addOutline(projectId, null, '第一章节点', 0)
     const chapterId = await addChapter(projectId, nodeId, '第一章', '主角取得铜钥匙。')
     const now = Date.now()
-    const characterId = await db.characters.add({
+    const ownership = await resolveWorkspaceOwnership(projectId)
+    const characterId = await db.characters.add(stampNewRecord(ownership.scope, 'characters', {
       projectId,
       name: '主角',
-      role: 'protagonist',
       roleWeight: 'main',
       moralAxis: 'good',
       orderAxis: 'neutral',
@@ -252,9 +246,9 @@ describe('R-AGENT1 · 只读 Tool Registry', () => {
       isCrossWorld: true,
       createdAt: now,
       updatedAt: now,
-    }) as number
+    }, { owner: 'world' }) as never) as number
     const before = await tableCounts()
-    await db.inspirationWorkspaces.add({
+    await db.inspirationWorkspaces.add(stampNewRecord(ownership.scope, 'inspirationWorkspaces', {
       projectId,
       fragments: JSON.stringify([{
         id: 'idea-1',
@@ -266,8 +260,8 @@ describe('R-AGENT1 · 只读 Tool Registry', () => {
       versions: '[]',
       createdAt: now,
       updatedAt: now,
-    })
-    const characterDrivenPlanId = await db.characterDrivenPlans.add({
+    }, { owner: 'work' }) as never)
+    const characterDrivenPlanId = await db.characterDrivenPlans.add(stampNewRecord(ownership.scope, 'characterDrivenPlans', {
       projectId,
       name: '只读方案',
       arcs: JSON.stringify([{
@@ -284,9 +278,8 @@ describe('R-AGENT1 · 只读 Tool Registry', () => {
       parentPlanId: null,
       createdAt: now,
       updatedAt: now,
-    } as any)
-    const ownership = await ensureWorkspaceOwnership(projectId)
-    await backfillResourceUidsV1(projectId)
+    }, { owner: 'work' }) as never)
+    await stampCurrentFixtureResourceUidsV1(projectId)
     const gatewaySession = await createContextGatewayToolSessionV1({
       scope: { ...ownership.scope, worldGroupId: null },
       policy: {
@@ -335,8 +328,10 @@ describe('R-AGENT1 · 只读 Tool Registry', () => {
     const projectA = await addProject('灵感 A', false)
     const projectB = await addProject('灵感 B', false)
     const now = Date.now()
+    const scopeA = (await resolveWorkspaceOwnership(projectA)).scope
+    const scopeB = (await resolveWorkspaceOwnership(projectB)).scope
     await db.inspirationWorkspaces.bulkAdd([
-      {
+      stampNewRecord(scopeA, 'inspirationWorkspaces', {
         projectId: projectA,
         fragments: JSON.stringify([
           { id: 'a-1', text: '会吞掉名字的雨', label: '', sourceKind: 'author', createdAt: now },
@@ -345,8 +340,8 @@ describe('R-AGENT1 · 只读 Tool Registry', () => {
         versions: '[]',
         createdAt: now,
         updatedAt: now,
-      },
-      {
+      }, { owner: 'work' }),
+      stampNewRecord(scopeB, 'inspirationWorkspaces', {
         projectId: projectB,
         fragments: JSON.stringify([
           { id: 'b-1', text: '另一个项目的秘密', label: '', sourceKind: 'author', createdAt: now },
@@ -354,8 +349,8 @@ describe('R-AGENT1 · 只读 Tool Registry', () => {
         versions: '[]',
         createdAt: now,
         updatedAt: now,
-      },
-    ])
+      }, { owner: 'work' }),
+    ] as never[])
 
     const selected = await executeAgentTool(
       'read_inspiration_workspace',

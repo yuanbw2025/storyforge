@@ -8,15 +8,16 @@ import {
   readMediaBlobObjectData,
   recoverInterruptedMediaBlobObjects,
 } from '../../src/lib/product-production/media-blob-store'
-import { ensureWorkspaceOwnership } from '../../src/lib/workspace/ownership'
+import { resolveWorkspaceOwnership } from '../../src/lib/workspace/ownership'
+import { seedCurrentProject } from '../helpers/current-workspace'
 
 async function workspace(name: string) {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    name, genre: 'visual', genres: ['visual'], status: 'drafting', description: '',
+  const projectId = await seedCurrentProject({
+    name, genres: ['visual'], status: 'drafting', description: '',
     targetWordCount: 1, createdAt: now, updatedAt: now,
   } as never) as number
-  return ensureWorkspaceOwnership(projectId)
+  return resolveWorkspaceOwnership(projectId)
 }
 
 function bytes(value: string): ArrayBuffer {

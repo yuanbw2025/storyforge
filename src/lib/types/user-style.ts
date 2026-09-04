@@ -29,12 +29,12 @@ export interface StyleCalibrationFeedback {
   createdAt: number
 }
 
-/** 文风画像（每个 Work 单例；projectId 字段保留旧库兼容）。 */
+/** 文风画像（每个 Work 单例）。 */
 export interface UserStyleProfile {
   id?: number
   projectId: number
-  worldId?: number
-  workId?: number
+  worldId: number
+  workId: number
   /** AI 生成的文风画像(markdown 文本,给人看 + 给 AI 读;用户可手改) */
   profile: string
   /** 是否注入下游章节生成(关闭则不进上下文) */

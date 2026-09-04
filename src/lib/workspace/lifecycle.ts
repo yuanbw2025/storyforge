@@ -8,12 +8,7 @@
 import { db } from '../db/schema'
 import { PROJECT_TABLES, REGISTRY_BY_NAME } from '../registry/project-tables'
 import { transactionTablesFor, cascadeDeleteProject } from '../registry/lifecycle'
-import { ensureWorkspaceOwnership } from './ownership'
-import {
-  projectActiveWorkProjection,
-  projectProjectionWithoutWork,
-  projectProjectionWithoutWorld,
-} from './works'
+import { resolveWorkspaceOwnership } from './ownership'
 import { markAndSweepAgentRunArtifactsV1 } from '../memory/artifact-retention-store'
 
 function ownerField(spec: typeof PROJECT_TABLES[number]): { owner: 'world' | 'work'; field: string } | null {
@@ -91,7 +86,7 @@ async function deleteOwnerRows(owner: 'world' | 'work', ownerId: number): Promis
 export async function deleteWork(workId: number): Promise<void> {
   const work = await db.works.get(workId)
   if (!work) return
-  await ensureWorkspaceOwnership(work.projectId)
+  await resolveWorkspaceOwnership(work.projectId)
   await db.transaction('rw', transactionTablesFor('deleteProject'), async () => {
     await cascadeRegisteredReferences('works', workId)
     await deleteOwnerRows('work', workId)
@@ -103,7 +98,8 @@ export async function deleteWork(workId: number): Promise<void> {
       const world = await db.worlds.get(work.worldId)
       if (!world) throw new Error('[workspace-lifecycle] Work 的语义作用域根在删除过程中丢失')
       await db.projects.update(work.projectId, {
-        ...(nextWork ? projectActiveWorkProjection(world, nextWork) : projectProjectionWithoutWork(world)),
+        activeWorldId: world.id!,
+        activeWorkId: nextWork?.id ?? null,
         updatedAt: Date.now(),
       })
     }
@@ -118,7 +114,7 @@ export async function deleteWorld(worldId: number, options: { confirm: boolean }
   if (works.length && !options.confirm) {
     throw new Error('[workspace-lifecycle] 删除 World 前必须显式确认其 Works 将一并删除')
   }
-  await ensureWorkspaceOwnership(world.projectId)
+  await resolveWorkspaceOwnership(world.projectId)
   await db.transaction('rw', transactionTablesFor('deleteProject'), async () => {
     for (const work of works) {
       await cascadeRegisteredReferences('works', work.id!)
@@ -138,11 +134,8 @@ export async function deleteWorld(worldId: number, options: { confirm: boolean }
         nextWork = candidates[candidates.length - 1]
       }
       await db.projects.update(world.projectId, {
-        ...(nextWorld
-          ? nextWork
-            ? projectActiveWorkProjection(nextWorld, nextWork)
-            : projectProjectionWithoutWork(nextWorld)
-          : projectProjectionWithoutWorld()),
+        activeWorldId: nextWorld?.id ?? null,
+        activeWorkId: nextWork?.id ?? null,
         updatedAt: Date.now(),
       })
     }

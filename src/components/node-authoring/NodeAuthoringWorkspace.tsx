@@ -77,6 +77,7 @@ import type { RagLibraryEntry } from '../../lib/types'
 import RagEntrySelector from '../retrieval/RagEntrySelector'
 import { useDialog } from '../shared/Dialog'
 import { useToast } from '../shared/Toast'
+import { useActiveWork } from '../../hooks/useActiveWork'
 
 const NODE_WIDTH = 238
 const NODE_HEIGHT = 168
@@ -430,6 +431,7 @@ function SmartConnectionMenu(props: { anchor: { nodeId: string; portId: string; 
 
 export default function NodeAuthoringWorkspace(props: { project: Project; worldGroupId: number | null }) {
   const projectId = props.project.id!
+  const activeWork = useActiveWork(props.project)
   const dialog = useDialog()
   const toast = useToast()
   const flows = useNodeFlowStore(state => state.flows)
@@ -492,8 +494,8 @@ export default function NodeAuthoringWorkspace(props: { project: Project; worldG
         name: template.name,
         description: template.description,
         graph: buildOfficialAuthoringTemplate(templateId, {
-          targetWordCount: props.project.targetWordCount >= 5_000 && props.project.targetWordCount <= 25_000
-            ? props.project.targetWordCount
+          targetWordCount: activeWork && activeWork.targetWordCount >= 5_000 && activeWork.targetWordCount <= 25_000
+            ? activeWork.targetWordCount
             : undefined,
         }),
       })
@@ -567,8 +569,8 @@ export default function NodeAuthoringWorkspace(props: { project: Project; worldG
   const toggleFavorite = (id: string) => changeGraph({ ...graph, nodes: graph.nodes.map(node => node.id === id ? { ...node, favorite: !node.favorite } : node) })
   const applyOfficialTemplate = (templateId: Parameters<typeof buildOfficialAuthoringTemplate>[0]) => {
     const nextGraph = buildOfficialAuthoringTemplate(templateId, {
-      targetWordCount: props.project.targetWordCount >= 5_000 && props.project.targetWordCount <= 25_000
-        ? props.project.targetWordCount
+      targetWordCount: activeWork && activeWork.targetWordCount >= 5_000 && activeWork.targetWordCount <= 25_000
+        ? activeWork.targetWordCount
         : undefined,
     })
     const template = AUTHORING_OFFICIAL_TEMPLATES.find(item => item.id === templateId)!

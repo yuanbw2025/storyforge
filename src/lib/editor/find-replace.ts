@@ -1,4 +1,4 @@
-import { countWords, toHtml } from '../utils/html'
+import { countWords } from '../utils/html'
 import { buildBestChapterByOutlineMap } from '../chapters/selectors'
 import { walkOutlineChaptersInCanonicalOrder } from '../outline/canonical-outline-walk'
 import type { Chapter, OutlineNode } from '../types'
@@ -137,7 +137,7 @@ function isInsideProtectedLongerTerm(
 
 function createHtmlContainer(content: string): HTMLDivElement {
   const container = document.createElement('div')
-  container.innerHTML = toHtml(content)
+  container.innerHTML = content
   return container
 }
 

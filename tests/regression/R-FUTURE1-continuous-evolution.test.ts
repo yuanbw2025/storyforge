@@ -6,7 +6,8 @@ import {
   buildFutureEvolutionPlanV1,
 } from '../../src/lib/outline/future-evolution'
 import type { WorkspaceScope } from '../../src/lib/types'
-import { generateWorkspaceUid, generateWorkCode } from '../../src/lib/memory/identity'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
 
 async function seedWorkspace(): Promise<{
   scope: WorkspaceScope
@@ -16,24 +17,10 @@ async function seedWorkspace(): Promise<{
   outlineIds: number[]
 }> {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    workspaceUid: generateWorkspaceUid(),
-    name: '未来演化验收', genre: 'fantasy', genres: ['fantasy'], description: '',
-    status: 'drafting', targetWordCount: 1_000_000,
-    createdAt: now, updatedAt: now,
-  } as any) as number
-  const worldId = await db.worlds.add({
-    projectId, code: 'future-world', name: '演化世界', description: '', currentVersion: 1,
-    createdAt: now, updatedAt: now,
-  }) as number
-  const workId = await db.works.add({
-    projectId, worldId, code: generateWorkCode(), title: '未来演化验收', description: '',
-    genres: ['fantasy'], status: 'drafting', targetWordCount: 1_000_000,
-    createdAt: now, updatedAt: now,
-  }) as number
-  await db.projects.update(projectId, {
-    activeWorldId: worldId, activeWorkId: workId, ownershipSchemaVersion: 1,
+  const createdWorkspaceV1 = await seedCurrentWorkspace('未来演化验收', {
+    targetWordCount: 1_000_000,
   })
+  const { projectId, worldId, workId } = createdWorkspaceV1.scope
   const worldGroupId = await db.worldGroups.add({
     projectId, worldId, name: '主世界', order: 0, createdAt: now, updatedAt: now,
   }) as number
@@ -87,23 +74,24 @@ async function seedWorkspace(): Promise<{
   await db.characters.bulkAdd([
     {
       projectId, worldId, homeWorldGroupId: worldGroupId, isCrossWorld: false,
-      name: '守灯人', role: 'protagonist', roleWeight: 'main', moralAxis: 'good', orderAxis: 'lawful',
+      name: '守灯人', roleWeight: 'main', moralAxis: 'good', orderAxis: 'lawful',
       shortDescription: '', appearance: '', personality: '', background: '', motivation: '', abilities: '',
       relationships: '', arc: '', createdAt: now, updatedAt: now,
     },
     {
       projectId, worldId, homeWorldGroupId: otherWorldGroupId, isCrossWorld: false,
-      name: '异界旅人', role: 'supporting', roleWeight: 'secondary', moralAxis: 'neutral', orderAxis: 'neutral',
+      name: '异界旅人', roleWeight: 'secondary', moralAxis: 'neutral', orderAxis: 'neutral',
       shortDescription: '', appearance: '', personality: '', background: '', motivation: '', abilities: '',
       relationships: '', arc: '', createdAt: now, updatedAt: now,
     },
     {
       projectId, worldId, homeWorldGroupId: otherWorldGroupId, isCrossWorld: true,
-      name: '跨界信使', role: 'supporting', roleWeight: 'secondary', moralAxis: 'neutral', orderAxis: 'neutral',
+      name: '跨界信使', roleWeight: 'secondary', moralAxis: 'neutral', orderAxis: 'neutral',
       shortDescription: '', appearance: '', personality: '', background: '', motivation: '', abilities: '',
       relationships: '', arc: '', createdAt: now, updatedAt: now,
     },
   ] as any)
+  await finalizeCurrentFixtureV1(projectId)
   return {
     scope: { projectId, worldId, workId }, worldGroupId, otherWorldGroupId, chapterIds, outlineIds,
   }

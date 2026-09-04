@@ -26,6 +26,16 @@ const unlimited = () => ({
   cooldownRounds: null,
   reset: [],
 });
+const itemMechanics = (category: string) => ({
+  category,
+  stackPolicy: "unique" as const,
+  maxStack: 1,
+  weight: null,
+  equipSlots: [],
+  requiresAttunement: false,
+  maximumCharges: null,
+  maximumDurability: null,
+});
 
 /** StoryForge-owned, commercially usable first-party narrative TTRPG rules. */
 export const STORYFORGE_RULE_PACK_V1: RulePackV1 = {
@@ -338,6 +348,7 @@ export const STORYFORGE_RULE_PACK_V1: RulePackV1 = {
       description: "记录、取样和现场检查所需的轻便工具。",
       tags: ["tool", "investigation"],
       grantedActionKeys: ["investigate"],
+      mechanics: itemMechanics("tool"),
     },
     {
       key: "protective-gear",
@@ -345,6 +356,7 @@ export const STORYFORGE_RULE_PACK_V1: RulePackV1 = {
       description: "适合危险现场的基础防护。",
       tags: ["armor"],
       grantedActionKeys: [],
+      mechanics: itemMechanics("armor"),
     },
   ],
   advancement: {

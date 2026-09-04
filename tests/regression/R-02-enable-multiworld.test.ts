@@ -1,19 +1,20 @@
 /**
- * R-2: migrateToMultiWorld 事务作用域完整性
+ * R-02: enableMultiWorld 事务作用域完整性
  *
- * R-02：多世界迁移生命周期反例。
+ * R-02：多世界归属生命周期反例。
  *
  * 反例:
- *   migrateToMultiWorld 的事务声明没有包含 codexEntries,
- *   但事务体内会 stamp(db.codexEntries, ...),导致 Dexie 抛事务作用域错误。
+ *   enableMultiWorld 的事务声明必须包含 codexEntries，
+ *   否则归属记录时 Dexie 会拒绝越界事务。
  *
  * 期望:
  *   开启多世界不抛错,已有 codexEntries 全部盖章到主世界。
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { db } from '../../src/lib/db/schema'
+import { seedCurrentProject } from '../helpers/current-workspace'
 
-describe('R-02: migrateToMultiWorld 事务作用域完整性', () => {
+describe('R-02: enableMultiWorld 事务作用域完整性', () => {
   beforeEach(async () => {
     await db.delete()
     await db.open()
@@ -25,9 +26,9 @@ describe('R-02: migrateToMultiWorld 事务作用域完整性', () => {
 
   it('开启多世界后,已有词条全部归属主世界', async () => {
     const now = Date.now()
-    const projectId = await db.projects.add({
+    const projectId = await seedCurrentProject({
       name: 'R-02 测试项目',
-      genre: 'fantasy',
+      genres: ['fantasy'],
       description: '',
       targetWordCount: 0,
       enableMultiWorld: false,
@@ -78,7 +79,7 @@ describe('R-02: migrateToMultiWorld 事务作用域完整性', () => {
 
     const { useWorldGroupStore } = await import('../../src/stores/world-group')
 
-    await expect(useWorldGroupStore.getState().migrateToMultiWorld(projectId)).resolves.not.toThrow()
+    await expect(useWorldGroupStore.getState().enableMultiWorld(projectId)).resolves.not.toThrow()
 
     const primary = await db.worldGroups
       .where('projectId').equals(projectId)

@@ -7,33 +7,25 @@ import {
   type ImpactHandoffV2,
 } from '../../src/lib/consistency/impact-handoff'
 import { resolveCurrentImpactHandoffTargetV2 } from '../../src/lib/agent/run/impact-handoff-durable'
+import { addCurrentWorkFixtureV1, seedCurrentWorkspace } from '../helpers/current-workspace'
 
 const HASH = 'a'.repeat(64)
 
 async function seed() {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    name: '精确落点', genre: 'fantasy', genres: ['fantasy'], status: 'drafting',
-    description: '', targetWordCount: 100_000,
-    createdAt: now, updatedAt: now,
-  } as any) as number
-  const worldId = await db.worlds.add({
-    projectId, code: 'target', name: '主世界', description: '', currentVersion: 1,
-    createdAt: now, updatedAt: now,
-  }) as number
-  const workId = await db.works.add({
-    projectId, worldId, title: '当前作品', description: '', genres: ['fantasy'],
-    status: 'drafting', targetWordCount: 100_000, createdAt: now, updatedAt: now,
-  } as any) as number
-  const otherWorkId = await db.works.add({
-    projectId, worldId, title: '另一作品', description: '', genres: ['fantasy'],
-    status: 'drafting', targetWordCount: 100_000, createdAt: now, updatedAt: now,
-  } as any) as number
-  await db.projects.update(projectId, {
-    activeWorldId: worldId,
-    activeWorkId: workId,
-    ownershipSchemaVersion: 1,
+  const createdWorkspaceV1 = await seedCurrentWorkspace('精确落点')
+  const { projectId, worldId, workId } = createdWorkspaceV1.scope
+  const otherWork = await addCurrentWorkFixtureV1({
+    projectId,
+    worldId,
+    create: {
+      title: '另一作品',
+      kind: 'novel',
+      novelProfile: 'long',
+    },
+    now,
   })
+  const otherWorkId = otherWork.id!
   const volumeId = await db.outlineNodes.add({
     projectId, workId, parentId: null, type: 'volume', title: '卷一', summary: '', order: 0,
     createdAt: now, updatedAt: now,

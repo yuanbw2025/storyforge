@@ -22,16 +22,18 @@ import {
 } from '../../src/lib/node-authoring/executor'
 import type { NodeFlow, Project } from '../../src/lib/types'
 import { useNodeFlowStore } from '../../src/stores/node-flow'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
+import { putCurrentWorkspaceFixtureV1 } from '../helpers/current-workspace'
+import { generateWorkspaceUid } from '../../src/lib/memory/identity'
 
 const project: Project = {
   id: 73001,
+  workspaceUid: generateWorkspaceUid(),
+  workspacePurpose: 'independent-work',
   name: '领域节点执行测试',
-  genre: 'fantasy',
-  genres: ['fantasy'],
-  status: 'drafting',
-  description: '',
-  targetWordCount: 100_000,
   enableMultiWorld: false,
+  activeWorldId: 73001,
+  activeWorkId: 73001,
   createdAt: 1,
   updatedAt: 1,
 }
@@ -56,7 +58,7 @@ describe('FLOW-3B · 领域节点运行和显式采纳', () => {
   beforeEach(async () => {
     await db.delete()
     await db.open()
-    await db.projects.put(project)
+    await putCurrentWorkspaceFixtureV1(project)
     vi.mocked(chat).mockClear()
     useNodeFlowStore.setState({ projectId: null, flows: [], runs: [], loading: false })
   })
@@ -113,6 +115,7 @@ describe('FLOW-3B · 领域节点运行和显式采纳', () => {
       createdAt: now,
       updatedAt: now,
     }) as number
+    await finalizeCurrentFixtureV1(project.id!)
     const flow = (await db.nodeFlows.get(flowId)) as NodeFlow
 
     const outcome = await runAuthoringGraph({ flow })

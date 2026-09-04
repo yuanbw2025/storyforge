@@ -15,7 +15,7 @@ import {
   type ParsedChapter,
 } from './parse-outline-output'
 import type { AssembleContextResult } from '../registry/types'
-import type { ChatMessage, OutlineNode, Project } from '../types'
+import type { ChatMessage, OutlineNode, Project, Work } from '../types'
 import type { OutlineGenerationTraceV1 } from '../outline/harness'
 import {
   assertWorkspaceContentRevisionFreshV1,
@@ -54,6 +54,7 @@ export interface BatchOutlineContextRequest {
 
 export interface BatchOutlineOptions {
   project: Project
+  work: Work
   nodes: OutlineNode[]
   volumes: OutlineNode[]
   assembleContext: (request: BatchOutlineContextRequest) => Promise<AssembleContextResult>
@@ -128,6 +129,7 @@ export async function runBatchOutlineGeneration(
 ): Promise<BatchOutlineResult> {
   const {
     project,
+    work,
     nodes,
     volumes,
     assembleContext,
@@ -200,6 +202,7 @@ export async function runBatchOutlineGeneration(
       const node = createOutlineGenerationNode({
         request,
         project,
+        work,
         nodes,
         volumes,
         hint: userHint ?? '',

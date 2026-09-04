@@ -57,6 +57,7 @@ function reviewContract(input: {
   planHash: string
   itemId: string
   decision: ImpactReviewDecisionV1
+  runtimeBindingHash: string
 }) {
   return {
     version: 1 as const,
@@ -71,6 +72,7 @@ function reviewContract(input: {
       contextSourceKeys: ['chapterContent'],
       writeTargets: [],
     },
+    runtimeBindingHash: input.runtimeBindingHash,
     budget: {
       maxModelCalls: 1,
       maxToolCalls: 0,
@@ -355,6 +357,12 @@ export async function executeImpactAuthorReviewV1(input: {
       planHash: input.plan.planHash,
       itemId: input.itemId,
       decision: input.decision,
+      runtimeBindingHash: await hashCanonicalValue({
+        schema: 'storyforge.impact-author-review-runtime',
+        version: 1,
+        stepId: IMPACT_REVIEW_STEP_ID_V1,
+        verifierSet: IMPACT_REVIEW_VERIFIER_SET_V1,
+      }),
     }),
   })
   snapshot = await append(input.scope, snapshot, 'step.scheduled', { stepId: IMPACT_REVIEW_STEP_ID_V1 })

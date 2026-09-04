@@ -1,115 +1,45 @@
-/**
- * FIELD_REGISTRY(Phase 1.2a) · AI/结构化采纳允许写入的字段单一事实源。
- *
- * 本任务只新增写回层,不迁移现有调用方。1.2b 才把面板/store 写回切到 adopt()。
- */
+/** FIELD_REGISTRY · 当前 AI/结构化采纳允许写入字段的单一事实源。 */
 import type { FieldSpec } from './types'
-
-const roleAliases: Record<string, string> = {
-  主角: 'protagonist',
-  男主: 'protagonist',
-  女主: 'protagonist',
-  主人公: 'protagonist',
-  反派: 'antagonist',
-  大反派: 'antagonist',
-  配角: 'supporting',
-  重要配角: 'supporting',
-  次要: 'minor',
-  次要角色: 'minor',
-  NPC: 'npc',
-  npc: 'npc',
-  路人: 'extra',
-  龙套: 'extra',
-}
-
-const roleWeightAliases: Record<string, string> = {
-  主要: 'main',
-  主要角色: 'main',
-  核心角色: 'main',
-  主角: 'main',
-  反派: 'main',
-  重要配角: 'main',
-  次要: 'secondary',
-  次要角色: 'secondary',
-  NPC: 'npc',
-  npc: 'npc',
-  路人: 'extra',
-  龙套: 'extra',
-}
-
-const chapterStatusAliases: Record<string, string> = {
-  大纲: 'outline',
-  草稿: 'draft',
-  初稿: 'draft',
-  已修改: 'revised',
-  修改: 'revised',
-  润色: 'polished',
-  已润色: 'polished',
-  定稿: 'final',
-}
-
-const foreshadowStatusAliases: Record<string, string> = {
-  计划中: 'planned',
-  已埋设: 'planted',
-  已呼应: 'echoed',
-  已回收: 'resolved',
-  回收: 'resolved',
-}
-
-const foreshadowTypeAliases: Record<string, string> = {
-  契诃夫之枪: 'chekhov',
-  预言: 'prophecy',
-  预言暗示: 'prophecy',
-  象征: 'symbol',
-  角色伏笔: 'character',
-  对话伏笔: 'dialogue',
-  环境伏笔: 'environment',
-  时间线伏笔: 'timeline',
-  红鲱鱼: 'red-herring',
-  平行伏笔: 'parallel',
-  回调: 'callback',
-}
 
 const trimString = (val: unknown): unknown =>
   typeof val === 'string' ? val.trim() : val
 
-function text(target: string, field: string, aliases?: string[]): FieldSpec {
-  return { target, field, type: 'string', aliases, sanitize: trimString }
+function text(target: string, field: string, labels?: string[]): FieldSpec {
+  return { target, field, type: 'string', labels, sanitize: trimString }
 }
 
-function longtext(target: string, field: string, aliases?: string[]): FieldSpec {
-  return { target, field, type: 'longtext', aliases, sanitize: trimString }
+function longtext(target: string, field: string, labels?: string[]): FieldSpec {
+  return { target, field, type: 'longtext', labels, sanitize: trimString }
 }
 
-function num(target: string, field: string, aliases?: string[]): FieldSpec {
-  return { target, field, type: 'number', aliases }
+function num(target: string, field: string, labels?: string[]): FieldSpec {
+  return { target, field, type: 'number', labels }
 }
 
-function bool(target: string, field: string, aliases?: string[]): FieldSpec {
-  return { target, field, type: 'boolean', aliases }
+function bool(target: string, field: string, labels?: string[]): FieldSpec {
+  return { target, field, type: 'boolean', labels }
 }
 
-function json(target: string, field: string, aliases?: string[]): FieldSpec {
-  return { target, field, type: 'json', aliases }
+function json(target: string, field: string, labels?: string[]): FieldSpec {
+  return { target, field, type: 'json', labels }
 }
 
 /** IndexedDB 原生对象字段（区别于以 JSON string 存储的 json 字段）。 */
-function object(target: string, field: string, aliases?: string[]): FieldSpec {
-  return { target, field, type: 'object', aliases }
+function object(target: string, field: string, labels?: string[]): FieldSpec {
+  return { target, field, type: 'object', labels }
 }
 
-function arr(target: string, field: string, aliases?: string[]): FieldSpec {
-  return { target, field, type: 'array', aliases }
+function arr(target: string, field: string, labels?: string[]): FieldSpec {
+  return { target, field, type: 'array', labels }
 }
 
 function enumeration(
   target: string,
   field: string,
   enums: string[],
-  enumAliasMap?: Record<string, string>,
-  aliases?: string[],
+  labels?: string[],
 ): FieldSpec {
-  return { target, field, type: 'enum', enums, enumAliasMap, aliases, sanitize: trimString }
+  return { target, field, type: 'enum', enums, labels, sanitize: trimString }
 }
 
 const ALL_WORLDVIEW_FIELD_MODES = ['expand', 'rewrite', 'polish'] as const
@@ -121,75 +51,75 @@ const ALL_WORLDVIEW_FIELD_MODES = ['expand', 'rewrite', 'polish'] as const
  */
 export const WORLDVIEW_GENERATABLE_FIELD_SPECS = [
   {
-    target: 'worldviews', field: 'worldOrigin', type: 'longtext', aliases: ['summary', 'origin', 'worldSummary', '世界来源', '世界起源'], sanitize: trimString,
+    target: 'worldviews', field: 'worldOrigin', type: 'longtext', labels: ['世界来源', '世界起源'], sanitize: trimString,
     aiGeneration: { version: 1, domain: 'worldview-foundation', label: '世界来源', kind: 'text', directDependencies: [], modes: ALL_WORLDVIEW_FIELD_MODES, outputSchemaId: 'worldview-field.text.v1', maxChars: 12_000, temporaryAssumptions: 'allowed' },
   },
   {
-    target: 'worldviews', field: 'powerHierarchy', type: 'longtext', aliases: ['powerSystem', 'power', '力量体系'], sanitize: trimString,
+    target: 'worldviews', field: 'powerHierarchy', type: 'longtext', labels: ['力量体系'], sanitize: trimString,
     aiGeneration: { version: 1, domain: 'worldview-foundation', label: '力量体系', kind: 'text', directDependencies: ['worldOrigin'], modes: ALL_WORLDVIEW_FIELD_MODES, outputSchemaId: 'worldview-field.text.v1', maxChars: 30_000, temporaryAssumptions: 'allowed' },
   },
   {
-    target: 'worldviews', field: 'divineDesign', type: 'object', aliases: ['divinity', '神明设定'],
+    target: 'worldviews', field: 'divineDesign', type: 'object', labels: ['神明设定'],
     aiGeneration: { version: 1, domain: 'worldview-foundation', label: '神明与信仰', kind: 'divine-design', directDependencies: ['worldOrigin', 'powerHierarchy'], modes: ALL_WORLDVIEW_FIELD_MODES, outputSchemaId: 'worldview-field.divine-design.v1', maxChars: 60_000, temporaryAssumptions: 'allowed' },
   },
   {
-    target: 'worldviews', field: 'worldStructure', type: 'longtext', aliases: ['structure', '世界结构'], sanitize: trimString,
+    target: 'worldviews', field: 'worldStructure', type: 'longtext', labels: ['世界结构'], sanitize: trimString,
     aiGeneration: { version: 1, domain: 'worldview-foundation', label: '世界结构', kind: 'text', directDependencies: ['worldOrigin'], modes: ALL_WORLDVIEW_FIELD_MODES, outputSchemaId: 'worldview-field.text.v1', maxChars: 20_000, temporaryAssumptions: 'allowed' },
   },
   {
-    target: 'worldviews', field: 'worldDimensions', type: 'longtext', aliases: ['dimensions', '世界尺寸'], sanitize: trimString,
+    target: 'worldviews', field: 'worldDimensions', type: 'longtext', labels: ['世界尺寸'], sanitize: trimString,
     aiGeneration: { version: 1, domain: 'worldview-foundation', label: '疆域尺寸', kind: 'text', directDependencies: ['worldStructure'], modes: ALL_WORLDVIEW_FIELD_MODES, outputSchemaId: 'worldview-field.text.v1', maxChars: 12_000, temporaryAssumptions: 'allowed' },
   },
   {
-    target: 'worldviews', field: 'continentLayout', type: 'longtext', aliases: ['continent', 'layout', '地貌分布', '大陆分布'], sanitize: trimString,
+    target: 'worldviews', field: 'continentLayout', type: 'longtext', labels: ['地貌分布', '大陆分布'], sanitize: trimString,
     aiGeneration: { version: 1, domain: 'worldview-foundation', label: '地貌分布', kind: 'text', directDependencies: ['worldStructure', 'worldDimensions'], modes: ALL_WORLDVIEW_FIELD_MODES, outputSchemaId: 'worldview-field.text.v1', maxChars: 30_000, temporaryAssumptions: 'allowed' },
   },
   {
-    target: 'worldviews', field: 'regionDimensions', type: 'longtext', aliases: ['区域面积'], sanitize: trimString,
+    target: 'worldviews', field: 'regionDimensions', type: 'longtext', labels: ['区域面积'], sanitize: trimString,
     aiGeneration: { version: 1, domain: 'worldview-foundation', label: '城池重镇', kind: 'text', directDependencies: ['continentLayout', 'worldDimensions'], modes: ALL_WORLDVIEW_FIELD_MODES, outputSchemaId: 'worldview-field.text.v1', maxChars: 30_000, temporaryAssumptions: 'allowed' },
   },
   {
-    target: 'worldviews', field: 'mountainsRivers', type: 'longtext', aliases: ['山川河流'], sanitize: trimString,
+    target: 'worldviews', field: 'mountainsRivers', type: 'longtext', labels: ['山川河流'], sanitize: trimString,
     aiGeneration: { version: 1, domain: 'worldview-foundation', label: '山川水系', kind: 'text', directDependencies: ['continentLayout', 'worldDimensions'], modes: ALL_WORLDVIEW_FIELD_MODES, outputSchemaId: 'worldview-field.text.v1', maxChars: 30_000, temporaryAssumptions: 'allowed' },
   },
   {
-    target: 'worldviews', field: 'climateByRegion', type: 'longtext', aliases: ['climate', '气候'], sanitize: trimString,
+    target: 'worldviews', field: 'climateByRegion', type: 'longtext', labels: ['气候'], sanitize: trimString,
     aiGeneration: { version: 1, domain: 'worldview-foundation', label: '气候环境', kind: 'text', directDependencies: ['continentLayout', 'mountainsRivers'], modes: ALL_WORLDVIEW_FIELD_MODES, outputSchemaId: 'worldview-field.text.v1', maxChars: 30_000, temporaryAssumptions: 'allowed' },
   },
   {
-    target: 'worldviews', field: 'naturalResourceOverview', type: 'longtext', aliases: ['自然资源概述', '自然资源全貌'], sanitize: trimString,
+    target: 'worldviews', field: 'naturalResourceOverview', type: 'longtext', labels: ['自然资源概述', '自然资源全貌'], sanitize: trimString,
     aiGeneration: { version: 1, domain: 'worldview-foundation', label: '自然资源概述', kind: 'text', directDependencies: ['continentLayout', 'mountainsRivers', 'climateByRegion'], modes: ALL_WORLDVIEW_FIELD_MODES, outputSchemaId: 'worldview-field.text.v1', maxChars: 30_000, temporaryAssumptions: 'allowed' },
   },
   {
-    target: 'worldviews', field: 'naturalResources', type: 'object', aliases: ['resources', '自然资源'],
+    target: 'worldviews', field: 'naturalResources', type: 'object', labels: ['自然资源'],
     aiGeneration: { version: 1, domain: 'worldview-foundation', label: '自然资源明细', kind: 'natural-resources', directDependencies: ['naturalResourceOverview', 'continentLayout', 'climateByRegion'], modes: ALL_WORLDVIEW_FIELD_MODES, outputSchemaId: 'worldview-field.natural-resources.v1', maxChars: 80_000, temporaryAssumptions: 'allowed' },
   },
   {
-    target: 'worldviews', field: 'races', type: 'longtext', aliases: ['species', '种族'], sanitize: trimString,
+    target: 'worldviews', field: 'races', type: 'longtext', labels: ['种族'], sanitize: trimString,
     aiGeneration: { version: 1, domain: 'worldview-foundation', label: '种族与民族', kind: 'text', directDependencies: ['worldOrigin', 'continentLayout', 'climateByRegion', 'naturalResourceOverview'], modes: ALL_WORLDVIEW_FIELD_MODES, outputSchemaId: 'worldview-field.text.v1', maxChars: 30_000, temporaryAssumptions: 'allowed' },
   },
   {
-    target: 'worldviews', field: 'factionLayout', type: 'longtext', aliases: ['factions', '势力分布'], sanitize: trimString,
+    target: 'worldviews', field: 'factionLayout', type: 'longtext', labels: ['势力分布'], sanitize: trimString,
     aiGeneration: { version: 1, domain: 'worldview-foundation', label: '势力分布', kind: 'text', directDependencies: ['races', 'regionDimensions', 'powerHierarchy'], modes: ALL_WORLDVIEW_FIELD_MODES, outputSchemaId: 'worldview-field.text.v1', maxChars: 30_000, temporaryAssumptions: 'allowed' },
   },
   {
-    target: 'worldviews', field: 'politicsOverview', type: 'longtext', aliases: ['政治概述', '政治制度概述'], sanitize: trimString,
+    target: 'worldviews', field: 'politicsOverview', type: 'longtext', labels: ['政治概述', '政治制度概述'], sanitize: trimString,
     aiGeneration: { version: 1, domain: 'worldview-foundation', label: '政治制度', kind: 'text', directDependencies: ['factionLayout', 'races', 'regionDimensions'], modes: ALL_WORLDVIEW_FIELD_MODES, outputSchemaId: 'worldview-field.text.v1', maxChars: 30_000, temporaryAssumptions: 'allowed' },
   },
   {
-    target: 'worldviews', field: 'economyOverview', type: 'longtext', aliases: ['经济概述', '经济制度概述'], sanitize: trimString,
+    target: 'worldviews', field: 'economyOverview', type: 'longtext', labels: ['经济概述', '经济制度概述'], sanitize: trimString,
     aiGeneration: { version: 1, domain: 'worldview-foundation', label: '经济制度', kind: 'text', directDependencies: ['naturalResourceOverview', 'regionDimensions', 'factionLayout'], modes: ALL_WORLDVIEW_FIELD_MODES, outputSchemaId: 'worldview-field.text.v1', maxChars: 30_000, temporaryAssumptions: 'allowed' },
   },
   {
-    target: 'worldviews', field: 'cultureOverview', type: 'longtext', aliases: ['文化概述', '文化制度概述'], sanitize: trimString,
+    target: 'worldviews', field: 'cultureOverview', type: 'longtext', labels: ['文化概述', '文化制度概述'], sanitize: trimString,
     aiGeneration: { version: 1, domain: 'worldview-foundation', label: '文化制度', kind: 'text', directDependencies: ['races', 'politicsOverview', 'economyOverview', 'divineDesign'], modes: ALL_WORLDVIEW_FIELD_MODES, outputSchemaId: 'worldview-field.text.v1', maxChars: 30_000, temporaryAssumptions: 'allowed' },
   },
   {
-    target: 'worldviews', field: 'internalConflicts', type: 'longtext', aliases: ['conflicts', '内部矛盾'], sanitize: trimString,
+    target: 'worldviews', field: 'internalConflicts', type: 'longtext', labels: ['内部矛盾'], sanitize: trimString,
     aiGeneration: { version: 1, domain: 'worldview-foundation', label: '矛盾冲突', kind: 'text', directDependencies: ['races', 'factionLayout', 'politicsOverview', 'economyOverview', 'cultureOverview'], modes: ALL_WORLDVIEW_FIELD_MODES, outputSchemaId: 'worldview-field.text.v1', maxChars: 30_000, temporaryAssumptions: 'allowed' },
   },
   {
-    target: 'worldviews', field: 'itemDesign', type: 'longtext', aliases: ['items', 'artifactDesign', '道具设计'], sanitize: trimString,
+    target: 'worldviews', field: 'itemDesign', type: 'longtext', labels: ['道具设计'], sanitize: trimString,
     aiGeneration: { version: 1, domain: 'worldview-foundation', label: '道具与器物', kind: 'text', directDependencies: ['powerHierarchy', 'naturalResourceOverview', 'economyOverview', 'cultureOverview'], modes: ALL_WORLDVIEW_FIELD_MODES, outputSchemaId: 'worldview-field.text.v1', maxChars: 30_000, temporaryAssumptions: 'allowed' },
   },
 ] as const satisfies readonly FieldSpec[]
@@ -199,31 +129,31 @@ export type WorldviewGeneratableField = typeof WORLDVIEW_GENERATABLE_FIELD_SPECS
 /** STORY-1 single source for the seven author intent fields. */
 export const STORY_CORE_GENERATABLE_FIELD_SPECS = [
   {
-    target: 'storyCores', field: 'logline', type: 'longtext', aliases: ['一句话故事'], sanitize: trimString,
+    target: 'storyCores', field: 'logline', type: 'longtext', labels: ['一句话故事'], sanitize: trimString,
     aiGeneration: { version: 1, domain: 'story-intent', label: '一句话故事', kind: 'text', directDependencies: ['concept', 'centralConflict', 'mainPlot'], modes: ALL_WORLDVIEW_FIELD_MODES, outputSchemaId: 'story-core-field.text.v1', maxChars: 1_000, temporaryAssumptions: 'forbidden' },
   },
   {
-    target: 'storyCores', field: 'concept', type: 'longtext', aliases: ['故事概念'], sanitize: trimString,
+    target: 'storyCores', field: 'concept', type: 'longtext', labels: ['故事概念'], sanitize: trimString,
     aiGeneration: { version: 1, domain: 'story-intent', label: '故事概念', kind: 'text', directDependencies: [], modes: ALL_WORLDVIEW_FIELD_MODES, outputSchemaId: 'story-core-field.text.v1', maxChars: 4_000, temporaryAssumptions: 'forbidden' },
   },
   {
-    target: 'storyCores', field: 'theme', type: 'longtext', aliases: ['主题'], sanitize: trimString,
+    target: 'storyCores', field: 'theme', type: 'longtext', labels: ['主题'], sanitize: trimString,
     aiGeneration: { version: 1, domain: 'story-intent', label: '故事主题', kind: 'text', directDependencies: ['concept'], modes: ALL_WORLDVIEW_FIELD_MODES, outputSchemaId: 'story-core-field.text.v1', maxChars: 4_000, temporaryAssumptions: 'forbidden' },
   },
   {
-    target: 'storyCores', field: 'centralConflict', type: 'longtext', aliases: ['conflict', '核心冲突'], sanitize: trimString,
+    target: 'storyCores', field: 'centralConflict', type: 'longtext', labels: ['核心冲突'], sanitize: trimString,
     aiGeneration: { version: 1, domain: 'story-intent', label: '核心冲突', kind: 'text', directDependencies: ['concept', 'theme'], modes: ALL_WORLDVIEW_FIELD_MODES, outputSchemaId: 'story-core-field.text.v1', maxChars: 12_000, temporaryAssumptions: 'forbidden' },
   },
   {
-    target: 'storyCores', field: 'plotPattern', type: 'longtext', aliases: ['pattern', '情节模式'], sanitize: trimString,
+    target: 'storyCores', field: 'plotPattern', type: 'longtext', labels: ['情节模式'], sanitize: trimString,
     aiGeneration: { version: 1, domain: 'story-intent', label: '故事模式', kind: 'text', directDependencies: ['centralConflict'], modes: ALL_WORLDVIEW_FIELD_MODES, outputSchemaId: 'story-core-field.text.v1', maxChars: 4_000, temporaryAssumptions: 'forbidden' },
   },
   {
-    target: 'storyCores', field: 'mainPlot', type: 'longtext', aliases: ['plot', '主线', '故事主线'], sanitize: trimString,
+    target: 'storyCores', field: 'mainPlot', type: 'longtext', labels: ['主线', '故事主线'], sanitize: trimString,
     aiGeneration: { version: 1, domain: 'story-intent', label: '故事主线意图', kind: 'text', directDependencies: ['centralConflict', 'plotPattern'], modes: ALL_WORLDVIEW_FIELD_MODES, outputSchemaId: 'story-core-field.text.v1', maxChars: 30_000, temporaryAssumptions: 'forbidden' },
   },
   {
-    target: 'storyCores', field: 'subPlots', type: 'longtext', aliases: ['subplots', '复线'], sanitize: trimString,
+    target: 'storyCores', field: 'subPlots', type: 'longtext', labels: ['复线'], sanitize: trimString,
     aiGeneration: { version: 1, domain: 'story-intent', label: '故事复线意图', kind: 'text', directDependencies: ['mainPlot', 'centralConflict'], modes: ALL_WORLDVIEW_FIELD_MODES, outputSchemaId: 'story-core-field.text.v1', maxChars: 30_000, temporaryAssumptions: 'forbidden' },
   },
 ] as const satisfies readonly FieldSpec[]
@@ -234,11 +164,6 @@ export const FIELD_REGISTRY: FieldSpec[] = [
   // MEMORY-5: author-edited workspace roots. Stable identities, owner IDs,
   // active pointers and derived counters remain outside the editable surface.
   text('projects', 'name'),
-  longtext('projects', 'description'),
-  arr('projects', 'genres'),
-  enumeration('projects', 'status', ['drafting', 'ongoing', 'paused', 'completed']),
-  num('projects', 'targetWordCount'),
-  enumeration('projects', 'creativeMode', ['fantasy', 'historical']),
   bool('projects', 'enableMultiWorld'),
 
   text('worlds', 'name'),
@@ -247,10 +172,12 @@ export const FIELD_REGISTRY: FieldSpec[] = [
   text('works', 'title'),
   longtext('works', 'description'),
   arr('works', 'genres'),
+  text('works', 'customGenre'),
   enumeration('works', 'status', ['drafting', 'ongoing', 'paused', 'completed']),
   num('works', 'targetWordCount'),
   text('works', 'writingStyleId'),
   text('works', 'methodologyId'),
+  bool('works', 'includeCultivationProgressInAI'),
 
   // ADAPT-CORE: only editable structured intent/plan fields are model-facing.
   // IDs, hashes, versions, status, revision and timestamps stay system-owned.
@@ -327,45 +254,26 @@ export const FIELD_REGISTRY: FieldSpec[] = [
   text('characters', 'name', ['姓名', '角色名']),
   enumeration(
     'characters',
-    'role',
-    ['protagonist', 'antagonist', 'supporting', 'minor', 'npc', 'extra'],
-    roleAliases,
-    ['定位', '角色定位'],
-  ),
-  enumeration(
-    'characters',
     'roleWeight',
     ['main', 'secondary', 'npc', 'extra'],
-    roleWeightAliases,
     ['戏份', '戏份权重', '角色权重'],
   ),
   enumeration(
     'characters',
     'moralAxis',
     ['good', 'neutral', 'evil'],
-    {
-      善: 'good', 善良: 'good', 正派: 'good',
-      中: 'neutral', 中立: 'neutral', 绝对中立: 'neutral',
-      恶: 'evil', 邪恶: 'evil', 反派: 'evil',
-    },
     ['道德轴', '善恶轴'],
   ),
   enumeration(
     'characters',
     'orderAxis',
     ['lawful', 'neutral', 'chaotic'],
-    {
-      守序: 'lawful', 秩序: 'lawful',
-      中立: 'neutral', 绝对中立: 'neutral',
-      混乱: 'chaotic',
-    },
     ['秩序轴', '守序混乱轴'],
   ),
-  enumeration('characters', 'alignment', ['good', 'evil'], { 正派: 'good', 反派: 'evil', 善: 'good', 恶: 'evil' }, ['阵营']),
-  longtext('characters', 'shortDescription', ['description', 'summary', '简介', '一句话简介']),
+  longtext('characters', 'shortDescription', ['简介', '一句话简介']),
   longtext('characters', 'appearance', ['外貌']),
   longtext('characters', 'personality', ['性格']),
-  longtext('characters', 'background', ['背景', 'backgroundStory']),
+  longtext('characters', 'background', ['背景']),
   longtext('characters', 'motivation', ['动机']),
   longtext('characters', 'abilities', ['能力']),
   longtext('characters', 'relationships', ['关系']),
@@ -397,7 +305,7 @@ export const FIELD_REGISTRY: FieldSpec[] = [
   longtext('characters', 'statusReason'),
   text('characters', 'statusProducerContractHash'),
   text('characters', 'statusProducerCandidateHash'),
-  num('characters', 'homeWorldGroupId', ['worldGroupId', 'homeWorld']),
+  num('characters', 'homeWorldGroupId', ['所属世界ID']),
   bool('characters', 'isCrossWorld'),
   num('characters', 'raceEntryId', ['种族词条ID']),
   num('characters', 'cultivationSystemId', ['修炼体系ID', '主修体系ID']),
@@ -418,26 +326,24 @@ export const FIELD_REGISTRY: FieldSpec[] = [
   bool('characterRelations', 'isBidirectional', ['双向关系']),
 
   // creativeRules
-  longtext('creativeRules', 'writingStyle', ['style', '文风']),
+  longtext('creativeRules', 'writingStyle', ['文风']),
   enumeration(
     'creativeRules',
     'narrativePOV',
     ['first-person', 'third-limited', 'third-omniscient', 'multi-pov'],
-    { 第一人称: 'first-person', 第三人称有限: 'third-limited', 第三人称全知: 'third-omniscient', 多视角: 'multi-pov' },
     ['pov', '叙事视角'],
   ),
-  longtext('creativeRules', 'atmosphere', ['toneAndMood', 'tone', '氛围', '基调']),
+  longtext('creativeRules', 'atmosphere', ['氛围', '基调']),
   json('creativeRules', 'prohibitions', ['禁止事项']),
   json('creativeRules', 'consistencyRules', ['一致性规则']),
   longtext('creativeRules', 'specialRequirements', ['特殊要求']),
-  json('creativeRules', 'referenceWorksV2', ['referenceWorks', '参考作品']),
   json('creativeRules', 'citedReferenceIds'),
   json('creativeRules', 'citedInsightIds'),
 
   // outline / chapters / detailed outline
   text('outlineNodes', 'title', ['标题']),
   longtext('outlineNodes', 'summary', ['摘要']),
-  enumeration('outlineNodes', 'type', ['volume', 'arc', 'storyBlock', 'chapter'], undefined, ['节点类型']),
+  enumeration('outlineNodes', 'type', ['volume', 'arc', 'storyBlock', 'chapter'], ['节点类型']),
   num('outlineNodes', 'parentId'),
   num('outlineNodes', 'order'),
   num('outlineNodes', 'worldGroupId'),
@@ -451,7 +357,7 @@ export const FIELD_REGISTRY: FieldSpec[] = [
   text('chapters', 'summaryTextNormalizationVersion'),
   num('chapters', 'outlineNodeId'),
   num('chapters', 'wordCount'),
-  enumeration('chapters', 'status', ['outline', 'draft', 'revised', 'polished', 'final'], chapterStatusAliases, ['状态']),
+  enumeration('chapters', 'status', ['outline', 'draft', 'revised', 'polished', 'final'], ['状态']),
   num('chapters', 'order'),
   num('chapters', 'perspectiveCharacterId', ['叙事视角角色']),
   longtext('chapters', 'notes', ['笔记']),
@@ -477,8 +383,8 @@ export const FIELD_REGISTRY: FieldSpec[] = [
 
   // foreshadows / story arcs
   text('foreshadows', 'name', ['伏笔名']),
-  enumeration('foreshadows', 'type', ['chekhov', 'prophecy', 'symbol', 'character', 'dialogue', 'environment', 'timeline', 'red-herring', 'parallel', 'callback'], foreshadowTypeAliases),
-  enumeration('foreshadows', 'status', ['planned', 'planted', 'echoed', 'resolved'], foreshadowStatusAliases),
+  enumeration('foreshadows', 'type', ['chekhov', 'prophecy', 'symbol', 'character', 'dialogue', 'environment', 'timeline', 'red-herring', 'parallel', 'callback']),
+  enumeration('foreshadows', 'status', ['planned', 'planted', 'echoed', 'resolved']),
   longtext('foreshadows', 'description', ['描述']),
   num('foreshadows', 'plantChapterId'),
   json('foreshadows', 'echoChapterIds'),
@@ -490,7 +396,7 @@ export const FIELD_REGISTRY: FieldSpec[] = [
   enumeration('foreshadows', 'urgency', ['low', 'medium', 'high', 'critical']),
 
   text('storyArcs', 'name', ['故事线名']),
-  enumeration('storyArcs', 'type', ['main', 'sub'], { 主线: 'main', 支线: 'sub', 复线: 'sub' }),
+  enumeration('storyArcs', 'type', ['main', 'sub']),
   json('storyArcs', 'stages', ['阶段']),
   longtext('storyArcs', 'description', ['描述']),
   enumeration('storyArcs', 'origin', ['manual', 'ai', 'import']),
@@ -505,14 +411,7 @@ export const FIELD_REGISTRY: FieldSpec[] = [
   // Phase 39：作者确认的动态故事线投影与交汇
   num('storylineProgress', 'arcId', ['故事线ID']),
   text('storylineProgress', 'currentStageId', ['当前阶段ID']),
-  enumeration('storylineProgress', 'status', ['dormant', 'active', 'climax', 'resolved', 'abandoned'], {
-    休眠: 'dormant',
-    活跃: 'active',
-    高潮: 'climax',
-    已解决: 'resolved',
-    已完成: 'resolved',
-    已放弃: 'abandoned',
-  }),
+  enumeration('storylineProgress', 'status', ['dormant', 'active', 'climax', 'resolved', 'abandoned']),
   longtext('storylineProgress', 'progressNote', ['进度说明']),
   num('storylineProgress', 'lastActiveChapterId', ['最近活跃章节ID']),
   text('storylineProgress', 'lastActiveChapterTitle', ['最近活跃章节']),
@@ -528,14 +427,13 @@ export const FIELD_REGISTRY: FieldSpec[] = [
 
   // codex
   text('codexCategories', 'name', ['分类名']),
-  enumeration('codexCategories', 'domain', ['natural', 'humanity', 'origin'], { 自然: 'natural', 自然环境: 'natural', 人文: 'humanity', 人文环境: 'humanity', 起源: 'origin', 世界起源: 'origin' }),
+  enumeration('codexCategories', 'domain', ['natural', 'humanity', 'origin']),
   num('codexCategories', 'parentId'),
   text('codexCategories', 'icon'),
   text('codexCategories', 'builtInKey'),
   json('codexCategories', 'fieldSchema'),
   bool('codexCategories', 'hidden'),
   num('codexCategories', 'order'),
-  num('codexCategories', 'worldGroupId'),
 
   text('codexEntries', 'name', ['词条名']),
   num('codexEntries', 'categoryId'),
@@ -571,12 +469,7 @@ export const FIELD_REGISTRY: FieldSpec[] = [
   text('cultivationProgress', 'cultivationSystemName', ['修炼体系名']),
   text('cultivationProgress', 'stageId', ['境界ID']),
   text('cultivationProgress', 'stageName', ['境界名']),
-  enumeration('cultivationProgress', 'transition', ['enter', 'advance', 'regress', 'switch'], {
-    初次确认: 'enter',
-    突破: 'advance',
-    倒退: 'regress',
-    改道: 'switch',
-  }),
+  enumeration('cultivationProgress', 'transition', ['enter', 'advance', 'regress', 'switch']),
   num('cultivationProgress', 'sourceChapterId', ['来源章节ID']),
   text('cultivationProgress', 'sourceChapterTitle', ['来源章节']),
   longtext('cultivationProgress', 'sourceQuote', ['正文证据', '逐字引文']),
@@ -596,7 +489,7 @@ export const FIELD_REGISTRY: FieldSpec[] = [
   json('worldNodes', 'mapConfigJSON', ['地图配置']),
 
   text('itemLedger', 'itemName', ['物品名']),
-  enumeration('itemLedger', 'action', ['gain', 'consume'], { 获得: 'gain', 消耗: 'consume', 失去: 'consume' }),
+  enumeration('itemLedger', 'action', ['gain', 'consume']),
   num('itemLedger', 'quantity', ['数量']),
   text('itemLedger', 'heldByName', ['持有人', '归属', '持有者', '持有角色']),
   num('itemLedger', 'characterId', ['角色ID', '绑定角色']),
@@ -611,21 +504,9 @@ export const FIELD_REGISTRY: FieldSpec[] = [
   text('knowledgeLedger', 'knowledgeKey', ['知识Key', '知识键']),
   longtext('knowledgeLedger', 'statement', ['知识命题', '事实内容']),
   num('knowledgeLedger', 'factId', ['关联事实ID']),
-  enumeration('knowledgeLedger', 'action', ['learn', 'mislearn', 'forget', 'correct'], {
-    获知: 'learn',
-    学会: 'learn',
-    误认: 'mislearn',
-    误以为: 'mislearn',
-    遗忘: 'forget',
-    忘记: 'forget',
-    纠正: 'correct',
-  }),
+  enumeration('knowledgeLedger', 'action', ['learn', 'mislearn', 'forget', 'correct']),
   longtext('knowledgeLedger', 'belief', ['错误认知', '相信内容']),
-  enumeration('knowledgeLedger', 'sourceType', ['chapter', 'manual', 'import'], {
-    章节: 'chapter',
-    手动: 'manual',
-    导入: 'import',
-  }),
+  enumeration('knowledgeLedger', 'sourceType', ['chapter', 'manual', 'import']),
   num('knowledgeLedger', 'sourceChapterId', ['来源章节ID']),
   longtext('knowledgeLedger', 'sourceQuote', ['来源引文', '证据']),
   enumeration('knowledgeLedger', 'status', ['candidate', 'confirmed', 'rejected', 'source-missing', 'invalid-range']),

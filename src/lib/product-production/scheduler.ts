@@ -425,7 +425,13 @@ function combineProductProductionContextV1(input: {
   }
 }
 
-function rootContract(scope: WorkspaceScope, build: { id: number; buildNumber: number; controlEpoch: number; planHash: string }) {
+async function rootContract(scope: WorkspaceScope, build: { id: number; buildNumber: number; controlEpoch: number; planHash: string }) {
+  const runtimeBindingHash = await hashProductProductionValueV2({
+    schema: 'storyforge.product-production-root-runtime',
+    version: 1,
+    executor: 'product-production-scheduler',
+    planHash: build.planHash,
+  })
   return {
     version: 1 as const,
     objective: `负责 ProductBuild ${build.buildNumber} 的有界 DAG 所有权、预算与 terminal join`,
@@ -448,6 +454,7 @@ function rootContract(scope: WorkspaceScope, build: { id: number; buildNumber: n
         adoptionExtension: 'product-production-builds',
       }],
     },
+    runtimeBindingHash,
     dependencyReceiptPolicy: { requiredForJoin: true as const, verifierSetVersion: 'product-production-root-v1' },
     budget: {
       maxModelCalls: 1, maxToolCalls: 0, maxInputTokens: 1, maxOutputTokens: 1,
@@ -470,7 +477,7 @@ function rootContract(scope: WorkspaceScope, build: { id: number; buildNumber: n
   }
 }
 
-function taskContract(input: {
+async function taskContract(input: {
   scope: WorkspaceScope
   rootRunId: number
   build: { id: number; buildNumber: number; controlEpoch: number; planHash: string }
@@ -479,6 +486,17 @@ function taskContract(input: {
 }) {
   const sourceKeys = taskContractContextSourceKeys(input.task)
   const skill = input.task.skillId ? getAgentSkillV1(input.task.skillId) : null
+  const runtimeBindingHash = await hashProductProductionValueV2({
+    schema: 'storyforge.product-production-task-runtime',
+    version: 1,
+    executor: 'product-production-scheduler',
+    planHash: input.build.planHash,
+    taskKey: input.task.taskKey,
+    taskKind: input.task.kind,
+    executionMode: input.task.executionMode,
+    skillId: input.task.skillId ?? null,
+    capabilityBindingHash: input.capabilityBindingHash ?? null,
+  })
   return {
     version: 1 as const,
     objective: `执行 ProductBuild ${input.build.buildNumber} 的任务 ${input.task.taskKey}`,
@@ -496,7 +514,7 @@ function taskContract(input: {
       },
     },
     permissions: { contextSourceKeys: sourceKeys, writeTargets: artifactWriteTargets(input.task) },
-    ...(input.capabilityBindingHash ? { runtimeBindingHash: input.capabilityBindingHash } : {}),
+    runtimeBindingHash,
     ...(skill ? { executionBindings: [{ stepId: input.task.taskKey, ...createAgentSkillExecutionBindingV1(skill) }] } : {}),
     dependencyReceiptPolicy: { requiredForJoin: true as const, verifierSetVersion: 'product-production-task-v1' },
     budget: {
@@ -777,7 +795,7 @@ async function ensureRootRun(input: {
   if (ledger.rootClaim?.owner !== claimOwner) throw new Error('[product-production-scheduler] root claim 丢失')
   let root = await createAgentRunV1({
     scope: input.scope, productBuildId: state.build.id!,
-    contract: rootContract(input.scope, {
+    contract: await rootContract(input.scope, {
       id: state.build.id!, buildNumber: state.build.buildNumber,
       controlEpoch: state.build.controlEpoch, planHash: state.build.planHash,
     }),
@@ -903,7 +921,7 @@ async function ensureCarriedForwardTaskRuns(input: {
       try {
         snapshot = await createAgentRunV1({
           scope: input.scope, productBuildId: input.build.id,
-          contract: taskContract({
+          contract: await taskContract({
             scope: input.scope, rootRunId: input.root.run.id, build: input.build,
             task, capabilityBindingHash,
           }),
@@ -1670,7 +1688,7 @@ export async function runProductProductionSchedulerCycleV1(input: {
     try {
       const snapshot = await createAgentRunV1({
         scope, productBuildId: state.build.id!,
-        contract: taskContract({
+        contract: await taskContract({
           scope, rootRunId: state.root.run.id,
           build: {
             id: state.build.id!, buildNumber: state.build.buildNumber,

@@ -253,6 +253,7 @@ export function useMasterCopilot(input: {
       const conversation = await getOrCreateAgentConversation({
         projectId: project.id!,
         worldGroupId,
+        purpose: 'master-authoring',
         scope: workspaceScope,
       })
       if (!active) return
@@ -337,6 +338,7 @@ export function useMasterCopilot(input: {
           version: 1,
           taskId: '',
           agentId: 'character',
+          skillId: 'character.create',
           label: '候选',
           contextSources: [],
           baseSnapshot: {},
@@ -642,6 +644,7 @@ export function useMasterCopilot(input: {
           version: 1,
           taskId: '',
           agentId: 'character',
+          skillId: 'character.create',
           label: '候选',
           contextSources: [],
           baseSnapshot: {},

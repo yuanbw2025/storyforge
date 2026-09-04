@@ -27,19 +27,15 @@ export interface DetailedScene {
   notes: string               // 作者备注
 }
 
-/**
- * 归一化场景列表（CF-20260630-2 数据红线）。
- * 历史 bug：FIELD_REGISTRY 曾把 `detailedOutlines.scenes` 登记为 `json`，adopt() 会 JSON.stringify
- * 成字符串入库，导致渲染端 `scenes.reduce/.map` 崩溃（"scenes.reduce is not a function"）。
- * 读取时统一回数组、best-effort 自愈旧字符串数据（不动 DB、刷新即正常）。
- */
+/** 当前结构读取边界：场景必须已经是数组，不接受旧字符串或损坏项。 */
 export function normalizeDetailedScenes(value: unknown): DetailedScene[] {
-  const arr = Array.isArray(value)
-    ? value
-    : typeof value === 'string'
-      ? (() => { try { const p = JSON.parse(value || '[]'); return Array.isArray(p) ? p : [] } catch { return [] } })()
-      : []
-  return arr.filter((s): s is DetailedScene => !!s && typeof s === 'object' && !Array.isArray(s))
+  if (!Array.isArray(value)) {
+    throw new Error('细纲 scenes 必须是当前结构的数组')
+  }
+  if (value.some(scene => !scene || typeof scene !== 'object' || Array.isArray(scene))) {
+    throw new Error('细纲 scenes 包含非法场景项')
+  }
+  return value as DetailedScene[]
 }
 
 /** 情绪走向 */

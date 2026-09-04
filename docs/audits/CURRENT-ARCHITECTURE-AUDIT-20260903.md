@@ -1,23 +1,23 @@
 # StoryForge 当前架构清场审计
 
-> 版本：1.3.0  
-> 审计基线：2026-09-03 当前工作树  
-> 权威层级：L4（代码事实与治理证据）  
+> 版本：2.2.0
+> 审计基线：2026-09-04 当前硬切换工作树
+> 权威层级：L4（代码事实与治理证据）
 > 裁决依据：`PROJECT-MASTER-CHARTER.md` 1.5.0、三个核心注册表、当前 schema、正式入口与自动检查器
 
 ## 1. 审计结论
 
-StoryForge 的现行架构已经收口为“独立创作产品 + 世界引擎 + 上层衍生产品 + 共享工程底座”，不存在仍可从正式页面切回旧 Game/Simulation 协议、旧产品身份、旧世界 reader、可变世界直启 runtime、手写世界表清单或第二套节点生成后端的路径。通用 Workspace/Work/Scope 能力也已从 `world-engine` 命名空间迁入中立 `workspace` 层，独立作品不再在模块依赖上伪装成世界引擎子功能。
+StoryForge 的现行架构已经收口为“独立创作产品 + 世界引擎 + 上层衍生产品 + 共享工程底座”，不存在仍可从正式页面切回旧 Game/Simulation 协议、旧产品身份、旧世界 reader、可变世界直启 runtime、手写世界表清单或第二套节点生成后端的路径。通用 Workspace/Work/Scope 能力也已从 `world-engine` 命名空间迁入中立 `workspace` 层，独立作品不再在模块依赖上伪装成世界引擎子功能。LocalWorkspace 根进一步完成硬切分：`Project` 仅为工作区壳，全部作品元数据和活动叙事计划由 `Work` 单独拥有，旧镜像读写与导入 fallback 已删除。
 
 本次清场所说的“删除旧架构”，采用以下可验证边界：
 
 - 正式业务源码、类型、页面、Store、service、路由、表注册、AI 入口和现行文档只允许当前协议；
-- 旧数据库版本只能留在 Dexie 历史 schema 与 `src/lib/migrations/`，用于把已有用户数据单向升级到当前模型；
-- 旧格式回归样本只能留在 `tests/migrations/legacy/` 或明确的兼容性测试边界，不能被正式产品导入；
+- Dexie 只声明当前 schema v1，不声明或执行任何前代数据库升级链；
+- 旧数据库、旧备份、旧字段和旧输出别名一律明确拒绝，不做双读、补字段、猜测转换或静默降级；
 - 评测需要的基线方案属于测量工具，不得成为生产候选、写入或运行入口；
 - Git 历史与 WPS 过时归档负责追溯，当前文档库不再保存互相竞争的旧方案。
 
-因此，“旧代码不再运行”和“已有用户数据仍能安全升级”同时成立。直接删除历史 schema 或单向迁移会使旧浏览器数据库无法打开，这不属于架构清场，而属于数据破坏，明确禁止。
+因此，本交付是明确的硬切换：只支持由当前代码创建或通过当前严格导入契约验证的数据。旧浏览器数据库不会被当前应用自动打开、升级或改写；需要历史取证时只查看 Git/WPS 归档，不把历史结构重新带回产品代码。
 
 ## 2. 审计方法
 
@@ -164,10 +164,11 @@ flowchart LR
 - 删除上层产品直接解码 WorldRelease、专用世界 reader、跑团专用目录和 shadow/双读网关；
 - 删除世界页面绕过 Brief/SourcePlan/ProductRelease 直接创建 runtime 的路径；
 - 删除旧 Product/World 身份镜像、兼容 scope 旁路和运行候选绑定；
+- 删除 Project 对 Work 标题、简介、流派、状态、字数、封面、文风、方法论和活动叙事计划的镜像；创建、更新、上下文、导入导出及 WorldRelease 物化均按 owner 单轨处理，并由架构检查器锁定字段闭集；
 - 把 Workspace 创建、作品分类、作用域、owner 迁移与生命周期移入中立 `src/lib/workspace`；`src/lib/world-engine` 只剩世界派生、语义、封存、引用和世界包职责；
 - 删除产品侧对 WorldRelease 物理 Provider 的依赖；产品只能调用 `world-release-client` / Context Gateway 中立协议，且确定性编译必须携带作者确认的精确 selection 与匹配的 WorldReference hash；
 - 删除 Product Runtime 对可变 `worldGroups` 的存在性查询；运行只依赖已验证 Build/ProductRelease 的冻结来源，`worldGroupId` 仅作为产品内部投影标记，不能被解引用为实时世界事实；
-- 删除世界观旧混合字段与运行时降级读取，存量内容由 schema v94 单向投影到当前正式表；
+- 删除世界观旧混合字段、运行时降级读取与旧字段投影；非当前结构在读取或导入边界明确失败；
 - 删除依赖步骤数组相邻关系的工作流降级，PromptWorkflow 必须持久化显式 DAG；
 - 删除节点模式的第二套通用生成/直接写入路径，正式节点只能调用登记的领域能力；
 - 删除可关闭 Creative Reliability 正式链的设置和运行分支；正式故事线、大纲、正文与节点执行始终经过当前候选、证据和验证协议；
@@ -176,17 +177,25 @@ flowchart LR
 - 为世界版本发布建立显式刷新信号，分享面板在同页发布后立即读取最新不可变 Release，不再依赖组件重挂载；
 - 正式 AI GM 的浏览器验收模拟器也必须返回当前四字段闭集及完整 `GmSynthesisFrame`，测试不再通过旧形状绕过真实 Harness 契约；
 - `App.tsx` 的真实路由集合与本架构文档建立自动一致性检查，已删除文档中不存在的 `/projects` 入口。
+- 删除全部前代 schema migration 源码、迁移测试和旧导出样本；当前应用只打开 `storyforge-core` 的唯一 schema v1，不触碰旧数据库。
+- 把 schema 校验和三注册表校验放在 Store 初始化之前的顶层启动闸门；任一不一致均显示致命启动错误，生产环境不再 fail-open。
+- 语义文件工作区只读取并校验当前 Workspace/World/Work 身份；缺失、重复或格式错误时直接停止，不再生成、补写或借用活动 Work。
+- 章节、故事核心和创作规则的文件候选必须解析到其精确 Work owner；章节缺少 `workId` 不再回退到 `activeWorkId`。
+- 导入时对 Project/World/Work 根执行字段闭集、唯一性和稳定代码验证；多余旧字段、旧 World 代码或非 UUID Work 代码在写库前被拒绝。
+- 删除未在 `OutlineNode` 当前类型、schema 和注册表中声明的伪 `locked` 字段读取与伪测试；不允许用“向前兼容”绕过字段闭集。
+- 删除旧状态卡迁移谓词、不可见的旧作品学习路由别名和旧多世界迁移符号；当前操作只表达“启用多世界”和“将未归属记录明确分配给主世界”。
 
-## 7. 保留但已隔离的历史能力
+## 7. 历史能力硬切换
 
-以下内容不是现行架构，保留的唯一理由是防止已有用户数据丢失：
+当前仓库不保留旧 schema、旧迁移执行器、旧格式夹具或旧字段规范化器：
 
-- `src/lib/db/schema.ts` 中旧 Dexie version/store 声明；
-- `src/lib/migrations/` 中只向当前 schema 迁移的转换器；
-- `tests/migrations/legacy/` 中证明旧数据库能够被安全打开、转换、重映射和清理的夹具；
-- 导入边界对旧备份的预检与单向规范化。
+- `src/lib/db/schema.ts` 只声明唯一当前 schema v1；
+- `src/lib/migrations/` 与 `tests/migrations/legacy/` 不存在；
+- 导入边界只接受当前备份版本、当前字段和当前引用关系；
+- 旧数据库、旧备份、旧字段、缺失 owner/identity 以及非当前结构必须返回明确错误；
+- 禁止为“先打开再说”恢复默认值填充、字段 alias、双读或隐式迁移。
 
-它们不得被 UI、Agent、产品 service、正式 runtime 或当前注册表作为运行分支调用。迁移不提供回滚到旧模型的 API；新写入只产生当前协议数据。
+以后若当前 schema v1 发生正式演进，必须针对届时仍受支持的当前版本另立设计与验证；这不构成恢复本次已删除的前代架构。
 
 ## 8. 当前能力与后续产品开发
 
@@ -241,16 +250,15 @@ flowchart LR
 | 验证 | 目的 | 最终结果 |
 |---|---|---|
 | `npm run check:architecture` | 产品边界、旧协议、阶段、所有权、路由文档和节点同源 | 通过；正式树未检出退役架构入口 |
-| `npm run check:required-tables` | schema 与 PROJECT_TABLES 生命周期闭合 | 通过；schema v94 与 94 张登记表一致 |
+| `npm run check:required-tables` | schema 与 PROJECT_TABLES 生命周期闭合 | 通过；唯一 schema v1 与 94 张登记表一致 |
 | `npm run check:ai-manual` / `check:ai-entry-registry` | AI 入口与说明同源 | 通过；36 个登记 binding 覆盖 40 个调用点 |
 | `npm run check:docs` / `check:roadmap` | 当前文档唯一权威，无失效链接 | 通过；25 份现行文档进入权威清单 |
 | `npx tsc --noEmit` / `npm run lint` / `npm run build` | 类型、静态质量与生产构建 | 通过；生产 bundle 大小闸门通过 |
-| `npm run ci` | 全部静态闸门、生产依赖审计、Lint、类型、覆盖率、构建与包体 | 通过；527 个测试文件、2518 项测试全部成功；语句覆盖率 82.42%，生产构建及包体闸门通过 |
-| `PLAYWRIGHT_USE_SYSTEM_CHROME=1 npm run ci:e2e` | 隔离浏览器真实用户路径 | 通过；系统 Chrome 62/62，耗时 10.0 分钟 |
-| `npx vitest run tests/regression/R-WORLD1-cultivation-progress-ui.test.tsx --reporter=verbose` | 清除全量日志中最后一项 React 异步测试告警 | 通过；1/1 且无 `act(...)` 告警 |
+| `npm run ci` | 全部静态闸门、生产依赖审计、Lint、类型、覆盖率、构建与包体 | 通过；499 个测试文件、2436 项测试全部成功；语句/行覆盖率 83.25%，分支 71.52%，函数 80.70%；生产构建及包体闸门通过 |
+| `PLAYWRIGHT_USE_SYSTEM_CHROME=1 PLAYWRIGHT_FROZEN_WORKSPACE=1 npm run ci:e2e` | 隔离浏览器真实用户路径 | 通过；系统 Chrome 62/62，耗时 8.3 分钟 |
 | `npm audit --omit=dev` | 生产依赖已知漏洞 | 通过；0 项生产漏洞 |
 
-完整依赖审计仍报告 6 项仅位于 Vitest 2 内嵌 Vite/esbuild 的开发工具链公告；自动修复会强制升级到 Vitest 5，属于需要单独验证的破坏性工具升级。它不进入生产 bundle，不能被写成生产安全漏洞，也不能用 `npm audit fix --force` 在本次架构清场中静默改写测试基础设施。
+覆盖率运行仍会输出少量已知 React `act(...)` 测试告警和故障注入场景的预期错误日志；它们没有造成失败，但也不被本审计误写为“无告警”。这些是测试清洁度改进项，不是旧架构入口或产品功能失败。
 
 如果任何一项失败，本文件不得把相应能力写成“已验证”；必须记录根因并修复或明确降级能力状态。
 

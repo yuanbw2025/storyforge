@@ -6,12 +6,16 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { CONTEXT_SOURCES } from '../../src/lib/registry/context-sources'
+import { seedCurrentProject } from '../helpers/current-workspace'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
 
 const now = Date.now()
 const currentFacts = CONTEXT_SOURCES.find(s => s.key === 'currentFacts')!
 
 async function seed() {
-  const pid = await db.projects.add({ name: 'P', genre: 'x', description: '', targetWordCount: 0, enableMultiWorld: false, createdAt: now, updatedAt: now } as any) as number
+  const pid = await seedCurrentProject({ name: 'P', genres: ['x'], description: '', targetWordCount: 0, enableMultiWorld: true, createdAt: now, updatedAt: now } as any) as number
+  const worldA = await db.worldGroups.add({ projectId: pid, name: '本界', description: '', type: 'primary', order: 0, createdAt: now, updatedAt: now } as any) as number
+  const worldB = await db.worldGroups.add({ projectId: pid, name: '他界', description: '', type: 'parallel', order: 1, createdAt: now, updatedAt: now } as any) as number
   const vol = await db.outlineNodes.add({ projectId: pid, parentId: null, type: 'volume', title: '卷', summary: '', order: 0, createdAt: now, updatedAt: now } as any) as number
   const nodes: number[] = []
   const chaps: number[] = []
@@ -20,9 +24,14 @@ async function seed() {
     const c = await db.chapters.add({ projectId: pid, outlineNodeId: n, title: `第${i + 1}章`, content: '', wordCount: 0, status: 'draft', order: i, notes: '', createdAt: now, updatedAt: now } as any) as number
     nodes.push(n); chaps.push(c)
   }
-  return { pid, chaps } // chaps[0..2] 规范序 0,1,2
+  await finalizeCurrentFixtureV1(pid)
+  return { pid, chaps, worldA, worldB } // chaps[0..2] 规范序 0,1,2
 }
-const fact = (pid: number, over: any) => db.temporalFacts.add({ projectId: pid, subjectName: '林飞', predicate: 'location', factKind: 'state', value: 'X', sourceType: 'chapter', status: 'confirmed', locked: false, worldGroupId: null, createdAt: now, updatedAt: now, ...over } as any)
+const fact = async (pid: number, over: any) => {
+  const id = await db.temporalFacts.add({ projectId: pid, subjectName: '林飞', predicate: 'location', factKind: 'state', value: 'X', sourceType: 'chapter', status: 'confirmed', locked: false, worldGroupId: null, createdAt: now, updatedAt: now, ...over } as any)
+  await finalizeCurrentFixtureV1(pid)
+  return id
+}
 
 describe('NS-4 · currentFacts 源', () => {
   beforeEach(async () => { await db.delete(); await db.open() })
@@ -59,10 +68,10 @@ describe('NS-4 · currentFacts 源', () => {
   })
 
   it('世界过滤:别的世界的事实不串入当前世界', async () => {
-    const { pid, chaps } = await seed()
-    await fact(pid, { value: '本界事', validFromChapterId: chaps[0], worldGroupId: 7 })
-    await fact(pid, { value: '他界事', validFromChapterId: chaps[0], worldGroupId: 99 })
-    const out = await currentFacts.read({ projectId: pid, chapterId: chaps[1], worldGroupId: 7 } as any)
+    const { pid, chaps, worldA, worldB } = await seed()
+    await fact(pid, { value: '本界事', validFromChapterId: chaps[0], worldGroupId: worldA })
+    await fact(pid, { value: '他界事', validFromChapterId: chaps[0], worldGroupId: worldB })
+    const out = await currentFacts.read({ projectId: pid, chapterId: chaps[1], worldGroupId: worldA } as any)
     expect(out).toContain('本界事')
     expect(out).not.toContain('他界事')
   })

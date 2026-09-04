@@ -16,6 +16,8 @@ import {
   memoryRunExportIdV1,
 } from './settlement-core'
 
+const MEMORY_SETTLEMENT_TERMINAL_STATES = new Set(['completed', 'failed', 'cancelled'])
+
 // MEMINT-0 keeps exact evidence, retention and working-context replay behind
 // the existing settlement boundary instead of exposing a parallel memory API.
 export { planExactArtifactRetentionV1 } from './artifact-retention'
@@ -112,6 +114,9 @@ export async function buildMemoryArtifactIndexV1(
       && snapshot.projection.memorySettlement?.receiptHash === settlementEventCandidate.payload.receiptHash
       ? settlementEventCandidate
       : undefined
+    if (MEMORY_SETTLEMENT_TERMINAL_STATES.has(snapshot.projection.state) && !settlementEvent) {
+      throw new Error(`[memory-settlement] Run ${run.id} 缺少当前终态记忆结算事件`)
+    }
     const receipt = await buildMemorySettlementReceiptFromSnapshotV1({
       snapshot,
       scope,

@@ -492,10 +492,10 @@ export async function prepareCharacterSupplementCopilotV1(
   const writeTarget = `characters.${request.dimensions[0]}`
   const gatewayRequired = isContextGatewayRequiredForWriteTargetV1(skill, writeTarget)
   if (gatewayRequired && !scope) {
-    throw new Error('角色补全 Gateway required 入口需要稳定 WorkspaceScope，旧项目必须先完成所有权迁移。')
+    throw new Error('角色补全 Gateway required 入口需要完整的当前 WorkspaceScope。')
   }
   if (!character.ragDocumentId) {
-    throw new Error('目标角色缺少 portable resource UID，必须先完成角色资料身份迁移。')
+    throw new Error('目标角色缺少有效的 portable resource UID，拒绝继续执行。')
   }
   const targetResourceKey = `character:${character.ragDocumentId}`
   const contextGatewayExecution = gatewayRequired

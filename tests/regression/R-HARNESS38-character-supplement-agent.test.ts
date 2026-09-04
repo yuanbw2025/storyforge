@@ -25,9 +25,8 @@ import { getOrCreateAgentConversation } from '../../src/lib/agent/conversations'
 import { AgentTeamBudgetTracker } from '../../src/lib/agent/team-budget'
 import { db } from '../../src/lib/db/schema'
 import { useAIConfigStore } from '../../src/stores/ai-config'
-import { generateWorkspaceUid } from '../../src/lib/memory/identity'
-import { ensureWorkspaceOwnership } from '../../src/lib/workspace/ownership'
 import { stampNewRecord } from '../../src/lib/workspace/scope'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
 
 const now = 1_910_000_000_000
 
@@ -50,23 +49,8 @@ function candidate(): CharacterSupplementCandidateV1 {
 }
 
 async function seedWorkspace() {
-  const projectId = await db.projects.add({
-    workspaceUid: generateWorkspaceUid(),
-    name: '角色补全作品',
-    genre: 'fantasy',
-    genres: ['fantasy'],
-    status: 'drafting',
-    description: '',
-    targetWordCount: 100_000,
-    enableMultiWorld: false,
-
-
-    createdAt: now,
-    updatedAt: now,
-  } as any) as number
-  const owned = await ensureWorkspaceOwnership(projectId)
-  const { scope } = owned
-  const { worldId, workId } = scope
+  const { scope } = await seedCurrentWorkspace('角色补全作品')
+  const { projectId, worldId, workId } = scope
   await db.worldviews.add(stampNewRecord(scope, 'worldviews', {
     projectId,
     worldId,
@@ -88,7 +72,6 @@ async function seedWorkspace() {
     homeWorldGroupId: null,
     isCrossWorld: false,
     name: '青禾',
-    role: 'npc',
     roleWeight: 'npc',
     moralAxis: 'good',
     orderAxis: 'lawful',
@@ -144,7 +127,7 @@ describe('R-HARNESS38 · 已有角色补全领域契约', () => {
     }), request(7))).toThrow('不允许的字段')
   })
 
-  it('反向哺喂开关精确控制事实与正文来源，模型完成后仍不写正式角色', async () => {
+  it('剧情证据开关精确控制事实与正文来源，模型完成后仍不写正式角色', async () => {
     const seeded = await seedWorkspace()
     const prepared = await prepareCharacterSupplementCopilotV1({
       projectId: seeded.projectId,
@@ -279,6 +262,7 @@ describe('R-HARNESS38 · 已有角色补全领域契约', () => {
       projectId: seeded.projectId,
       worldGroupId: null,
       scope: seeded.scope,
+      purpose: 'character-supplement:青禾',
     })
     const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
       const body = JSON.parse(String(init?.body)) as { messages?: Array<{ content?: string }> }

@@ -10,12 +10,12 @@ import {
   readVerifiedAgentRunInTransactionV1,
 } from '../../src/lib/agent/run/event-store'
 import { parseAgentRunEventV1 } from '../../src/lib/agent/run/event-schema'
-import { generateWorkspaceUid } from '../../src/lib/memory/identity'
 import { buildMemoryArtifactIndexV1, evaluateMemorySettlementBarrierV1 } from '../../src/lib/memory/settlement'
 import { buildWorkspaceSelfCheckReportV1, synchronizeProjectChangesToFolderV1 } from '../../src/lib/memory/workspace-projection'
 import * as settlementCore from '../../src/lib/memory/settlement-core'
-import { ensureWorkspaceOwnership } from '../../src/lib/workspace/ownership'
 import aiEntryRegistry from '../../src/lib/agent/ai-entry-registry.json'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
+import { stampNewRecord } from '../../src/lib/workspace/scope'
 
 const HASH_A = 'a'.repeat(64)
 const HASH_B = 'b'.repeat(64)
@@ -55,20 +55,31 @@ function memoryDirectory(): FileSystemDirectoryHandle {
 
 async function seed() {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    workspaceUid: generateWorkspaceUid(), name: '沉淀屏障', genre: 'fantasy', genres: [], status: 'drafting',
-    description: '', targetWordCount: 100, createdAt: now, updatedAt: now,
-  } as any) as number
-  const ownership = await ensureWorkspaceOwnership(projectId)
-  const outlineNodeId = await db.outlineNodes.add({
-    projectId, workId: ownership.scope.workId, parentId: null, type: 'chapter', title: '一', summary: '', order: 0,
-    createdAt: now, updatedAt: now,
-  } as any) as number
-  const chapterId = await db.chapters.add({
-    projectId, workId: ownership.scope.workId, outlineNodeId, title: '一', content: '<p>正文</p>', wordCount: 2,
-    status: 'draft', order: 0, notes: '', createdAt: now, updatedAt: now,
-  } as any) as number
-  return { projectId, chapterId, scope: ownership.scope }
+  const created = await seedCurrentWorkspace('沉淀屏障')
+  const { scope } = created
+  const outlineNodeId = await db.outlineNodes.add(stampNewRecord(scope, 'outlineNodes', {
+    projectId: scope.projectId,
+    parentId: null,
+    type: 'chapter',
+    title: '一',
+    summary: '',
+    order: 0,
+    createdAt: now,
+    updatedAt: now,
+  }, { owner: 'work' })) as number
+  const chapterId = await db.chapters.add(stampNewRecord(scope, 'chapters', {
+    projectId: scope.projectId,
+    outlineNodeId,
+    title: '一',
+    content: '<p>正文</p>',
+    wordCount: 2,
+    status: 'draft',
+    order: 0,
+    notes: '',
+    createdAt: now,
+    updatedAt: now,
+  }, { owner: 'work' })) as number
+  return { projectId: scope.projectId, chapterId, scope }
 }
 
 describe('MEMORY-8 · Harness settlement and ContextManifestV2', () => {
@@ -97,6 +108,7 @@ describe('MEMORY-8 · Harness settlement and ContextManifestV2', () => {
         objective: '生成并由作者采纳章节标题候选',
         workflowKind: 'direct-generation',
         scope: { projectId: seeded.projectId, worldGroupId: null, chapterIds: [seeded.chapterId] },
+        runtimeBindingHash: HASH_A,
         permissions: {
           contextSourceKeys: ['chapterContent'],
           writeTargets: [{ table: 'chapters', fields: ['title'], mode: 'author-confirmed' }],
@@ -178,6 +190,7 @@ describe('MEMORY-8 · Harness settlement and ContextManifestV2', () => {
         objective: '验证终态与记忆结算必须原子提交',
         workflowKind: 'read-only-audit',
         scope: { projectId: seeded.projectId, worldGroupId: null },
+        runtimeBindingHash: HASH_B,
         permissions: {
           contextSourceKeys: ['chapterContent'],
           writeTargets: [],
@@ -231,24 +244,25 @@ describe('MEMORY-8 · Harness settlement and ContextManifestV2', () => {
     expect(persisted.events.at(-1)?.type).toBe('verification.started')
   })
 
-  it('keeps legacy completed runs readable and labels their index settlement as derived', async () => {
+  it('拒绝缺少原子记忆结算事件的损坏终态运行', async () => {
     const seeded = await seed()
     let snapshot = await createAgentRunV1({
       scope: seeded.scope,
       contract: {
         version: 1,
-        objective: '读取旧版无显式记忆结算的完成运行',
+        objective: '验证终态结算完整性',
         workflowKind: 'read-only-audit',
         scope: { projectId: seeded.projectId, worldGroupId: null },
         permissions: { contextSourceKeys: ['chapterContent'], writeTargets: [] },
+        runtimeBindingHash: HASH_C,
         budget: {
           maxModelCalls: 1, maxToolCalls: 0, maxInputTokens: 100,
           maxOutputTokens: 100, maxAttemptsPerStep: 1,
         },
-        acceptance: [{ id: 'legacy.output', kind: 'output-present', required: true }],
+        acceptance: [{ id: 'current.output', kind: 'output-present', required: true }],
         verificationPlan: [{
-          id: 'legacy.terminal', kind: 'terminal', verifier: 'legacy-memory-v1',
-          criterionIds: ['legacy.output'],
+          id: 'current.terminal', kind: 'terminal', verifier: 'current-memory-v1',
+          criterionIds: ['current.output'],
         }],
         failurePolicy: {
           onProtocolError: 'fail', onVerificationFailure: 'fail', onStaleInput: 'pause-for-author',
@@ -256,10 +270,10 @@ describe('MEMORY-8 · Harness settlement and ContextManifestV2', () => {
       },
     })
     for (const [type, payload] of [
-      ['step.scheduled', { stepId: 'legacy' }],
-      ['step.started', { stepId: 'legacy', attempt: 1 }],
-      ['step.succeeded', { stepId: 'legacy', attempt: 1, outputHash: HASH_A }],
-      ['verification.started', { verifierSetVersion: 'legacy-memory-v1' }],
+      ['step.scheduled', { stepId: 'current' }],
+      ['step.started', { stepId: 'current', attempt: 1 }],
+      ['step.succeeded', { stepId: 'current', attempt: 1, outputHash: HASH_A }],
+      ['verification.started', { verifierSetVersion: 'current-memory-v1' }],
     ] as const) {
       snapshot = await appendAgentRunEventV1({
         scope: seeded.scope,
@@ -275,7 +289,7 @@ describe('MEMORY-8 · Harness settlement and ContextManifestV2', () => {
       db.projects, db.worlds, db.works, db.agentRuns, db.agentRunEvents,
       async () => {
         const current = await readVerifiedAgentRunInTransactionV1(seeded.scope, snapshot.run.id)
-        const legacyAccepted = parseAgentRunEventV1({
+        const corruptedAccepted = parseAgentRunEventV1({
           version: 1,
           runId: current.run.id,
           sequence: current.projection.lastSequence + 1,
@@ -287,20 +301,15 @@ describe('MEMORY-8 · Harness settlement and ContextManifestV2', () => {
           createdAt: Date.now(),
           payload: { receiptHash: HASH_B },
         })
-        await appendPrivilegedAgentRunEventInTransactionV1(current, legacyAccepted)
+        await appendPrivilegedAgentRunEventInTransactionV1(current, corruptedAccepted)
       },
     )
 
-    const legacy = await readAgentRunV1(seeded.scope, snapshot.run.id)
-    expect(legacy.projection.state).toBe('completed')
-    expect(legacy.projection.memorySettlement).toBeUndefined()
-    const index = await buildMemoryArtifactIndexV1(seeded.projectId)
-    expect(index.runs[0]).toMatchObject({
-      state: 'settled',
-      settlementSource: 'derived-current',
-      settlementReceiptHash: null,
-      settlementRecordedAt: null,
-    })
+    const corrupted = await readAgentRunV1(seeded.scope, snapshot.run.id)
+    expect(corrupted.projection.state).toBe('completed')
+    expect(corrupted.projection.memorySettlement).toBeUndefined()
+    await expect(buildMemoryArtifactIndexV1(seeded.projectId))
+      .rejects.toThrow('缺少当前终态记忆结算事件')
   })
 
   it('keeps failed terminal settlement receipts verifiable across project export and ID remap', async () => {
@@ -312,6 +321,7 @@ describe('MEMORY-8 · Harness settlement and ContextManifestV2', () => {
         objective: '失败 Run 的记忆结算必须可移植',
         workflowKind: 'direct-generation',
         scope: { projectId: seeded.projectId, worldGroupId: null },
+        runtimeBindingHash: HASH_A,
         permissions: { contextSourceKeys: ['chapterContent'], writeTargets: [] },
         budget: {
           maxModelCalls: 1, maxToolCalls: 0, maxInputTokens: 100,

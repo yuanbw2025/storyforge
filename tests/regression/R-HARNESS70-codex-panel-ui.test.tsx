@@ -75,9 +75,11 @@ import CodexPanel from '../../src/components/codex/CodexPanel'
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
 const project = {
-  id: 1, activeWorldId: 11, activeWorkId: 12, enableMultiWorld: true,
-  name: '潮汐纪', description: '', genre: 'fantasy', genres: ['fantasy'], status: 'drafting',
-  targetWordCount: 80_000, createdAt: 1, updatedAt: 1,
+  id: 1,
+  workspaceUid: 'WS-00000000-0000-4000-8000-000000000001',
+  workspacePurpose: 'independent-work',
+  activeWorldId: 11, activeWorkId: 12, enableMultiWorld: true,
+  name: '潮汐纪', createdAt: 1, updatedAt: 1,
 } as Project
 const scope = { projectId: 1, worldId: 11, workId: 12 }
 const extracted = {

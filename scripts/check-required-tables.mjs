@@ -25,26 +25,16 @@ if (missing.length > 0 || extra.length > 0) {
 console.log(`[required-tables] ok: ${requiredTables.length} tables match schema.ts`)
 
 function extractSchemaTables(source) {
-  const names = new Set()
-  const dropped = new Set()
-  const storeBlockRe = /this\.version\(\d+\)\.stores\(\{([\s\S]*?)\n\s*\}\)/g
-  let block
-  while ((block = storeBlockRe.exec(source))) {
-    // 建表(带索引字符串)
-    const tableRe = /\n\s*([A-Za-z]\w*)\s*:\s*'[^']*'/g
-    let table
-    while ((table = tableRe.exec(block[1]))) {
-      names.add(table[1])
-    }
-    // 删表(置 null):后续版本把某表设为 null = 删除该表
-    const dropRe = /\n\s*([A-Za-z]\w*)\s*:\s*null/g
-    let drop
-    while ((drop = dropRe.exec(block[1]))) {
-      dropped.add(drop[1])
-    }
+  const match = source.match(/export const STORYFORGE_STORES = \{([\s\S]*?)\n\} as const/)
+  if (!match) {
+    console.error('[required-tables] STORYFORGE_STORES not found')
+    process.exit(1)
   }
-  for (const name of dropped) names.delete(name)
-  return [...names].sort()
+  const names = []
+  const tableRe = /\n\s*([A-Za-z]\w*)\s*:\s*'[^']*'/g
+  let table
+  while ((table = tableRe.exec(match[1]))) names.push(table[1])
+  return names.sort()
 }
 
 function extractRequiredTables(source) {

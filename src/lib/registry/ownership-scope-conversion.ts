@@ -153,11 +153,12 @@ export async function changeRecordScope(input: {
       targetOwner: input.targetOwner,
       changedAt: now,
     }
-    const receipt = await db.ownershipMigrations.where('projectId').equals(scope.projectId).first()
-    if (!receipt || receipt.status !== 'ready') throw new Error('[scope-change] ownership migration receipt 不可用')
-    await db.ownershipMigrations.update(receipt.id!, {
-      scopeChanges: [...(receipt.scopeChanges ?? []), audit],
-      updatedAt: now,
+    await db.ownershipScopeChanges.add({
+      ...audit,
+      projectId: scope.projectId,
+      worldId: scope.worldId,
+      workId: scope.workId,
+      createdAt: now,
     })
     return audit
   })

@@ -19,7 +19,8 @@ import {
 import { buildMemoryArtifactIndexV1 } from '../../src/lib/memory/settlement'
 import { recordAgentRunArtifactV1 } from '../../src/lib/memory/artifact-store'
 import { planExactArtifactRetentionV1 } from '../../src/lib/memory/artifact-retention'
-import { ensureWorkspaceOwnership } from '../../src/lib/workspace/ownership'
+import { resolveWorkspaceOwnership } from '../../src/lib/workspace/ownership'
+import { seedCurrentProject } from '../helpers/current-workspace'
 
 const HASH_A = 'a'.repeat(64)
 const HASH_B = 'b'.repeat(64)
@@ -27,10 +28,9 @@ const HASH_C = 'c'.repeat(64)
 
 async function seed() {
   const now = 1_787_360_000_000
-  const projectId = await db.projects.add({
+  const projectId = await seedCurrentProject({
     workspaceUid: generateWorkspaceUid(),
     name: 'MEMINT 接缝',
-    genre: 'fantasy',
     genres: [],
     status: 'drafting',
     description: '',
@@ -38,7 +38,7 @@ async function seed() {
     createdAt: now,
     updatedAt: now,
   } as any) as number
-  const ownership = await ensureWorkspaceOwnership(projectId)
+  const ownership = await resolveWorkspaceOwnership(projectId)
   return { projectId, scope: ownership.scope }
 }
 
@@ -53,6 +53,7 @@ async function runFixture() {
       workflowKind: 'read-only-audit',
       scope: { projectId: seeded.projectId, worldGroupId: null },
       permissions: { contextSourceKeys: ['chapterContent'], writeTargets: [] },
+      runtimeBindingHash: 'a'.repeat(64),
       budget: {
         maxModelCalls: 1,
         maxToolCalls: 0,

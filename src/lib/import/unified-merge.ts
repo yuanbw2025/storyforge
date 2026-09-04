@@ -30,8 +30,7 @@ function isNonCharacterConceptName(name: string): boolean {
 }
 
 function isProtagonistLike(raw: unknown): boolean {
-  const role = String(raw || '').trim().toLowerCase()
-  return role === 'protagonist' || role.includes('主角') || role.includes('主人公')
+  return raw === 'main'
 }
 
 function compactField(label: string, value: unknown): string {
@@ -82,7 +81,7 @@ export function normalizeNonCharacterConcepts(input: UnifiedParseResult): Unifie
   if (conceptTexts.length === 0) return input
 
   const conceptText = conceptTexts.join('\n')
-  const protagonists = kept.filter(c => isProtagonistLike(c.role))
+  const protagonists = kept.filter(c => isProtagonistLike(c.roleWeight))
   if (protagonists.length === 1) {
     protagonists[0].abilities = appendText(protagonists[0].abilities, conceptText)
     return { ...input, characters: kept }
@@ -212,7 +211,7 @@ export function buildRollingContext(merged: UnifiedParseResult): string {
     const recent = merged.characters.slice(-40) // 只取最近 40 个，避免无限增长
     for (const c of recent) {
       const name = String(c.name || '')
-      const role = String(c.role || '')
+      const role = String(c.roleWeight || '')
       const desc = String(c.shortDescription || '').slice(0, 30)
       lines.push(`- ${name}（${role}）${desc ? '：' + desc : ''}`)
     }

@@ -6,6 +6,8 @@ import { db } from '../../src/lib/db/schema'
 import { stringifyCultivationStages } from '../../src/lib/types'
 import { useAIConfigStore } from '../../src/stores/ai-config'
 import { useCultivationProgressStore } from '../../src/stores/cultivation-progress'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
+import { seedCurrentProject } from '../helpers/current-workspace'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
@@ -69,11 +71,7 @@ describe('WORLD-1 · 修炼进度作者确认 UI', () => {
 
   it('AI 结果先停留为候选，作者确认后才落库并显示正文当前境界', async () => {
     const now = Date.now()
-    const projectId = await db.projects.add({
-      name: '修炼 UI', genre: '', genres: [], status: 'drafting',
-      description: '', targetWordCount: 0, enableMultiWorld: false,
-      createdAt: now, updatedAt: now,
-    } as any) as number
+    const projectId = await seedCurrentProject({ name: '修炼 UI', createdAt: now, updatedAt: now })
     const volumeId = await db.outlineNodes.add({
       projectId, parentId: null, type: 'volume', title: '卷一', summary: '',
       order: 0, createdAt: now, updatedAt: now,
@@ -97,20 +95,23 @@ describe('WORLD-1 · 修炼进度作者确认 UI', () => {
       createdAt: now, updatedAt: now,
     }) as number
     const characterId = await db.characters.add({
-      projectId, name: '林舟', role: 'protagonist', roleWeight: 'main',
+      projectId, name: '林舟', roleWeight: 'main',
       moralAxis: 'good', orderAxis: 'lawful',
+      shortDescription: '', appearance: '', personality: '', background: '',
+      motivation: '', abilities: '', relationships: '', arc: '',
       cultivationSystemId: systemId, cultivationStageId: 'sword',
       homeWorldGroupId: null, isCrossWorld: false,
       createdAt: now, updatedAt: now,
     } as any) as number
+    await finalizeCurrentFixtureV1(projectId)
     const project = (await db.projects.get(projectId))!
     const candidate = {
       version: 1,
       kind: 'cultivation-progress-extraction-candidate',
       portable: false,
       projectId,
-      worldId: -1,
-      workId: -1,
+      worldId: project.activeWorldId!,
+      workId: project.activeWorkId!,
       chapterId,
       worldGroupId: null,
       events: [{
@@ -132,6 +133,7 @@ describe('WORLD-1 · 修炼进度作者确认 UI', () => {
         sourceQuote: '正式踏入炼体境', sourceOffset: 22, trigger: '承受九次雷击',
         status: 'confirmed', createdAt: now, updatedAt: now,
       } as any)
+      await finalizeCurrentFixtureV1(projectId)
       useCultivationProgressStore.setState({ events: await db.cultivationProgress.toArray() })
       return { written: 1 }
     })

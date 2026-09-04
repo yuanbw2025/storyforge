@@ -36,15 +36,14 @@ import type {
   World,
 } from '../types'
 import type { WorkspaceScope } from '../types/world-ownership'
-import { ensureWorkspaceOwnership } from '../workspace/ownership'
+import { resolveWorkspaceOwnership } from '../workspace/ownership'
 import {
   generateDocumentId,
-  generateWorkspaceUid,
-  generateWorkCode,
   isWorkspaceUid,
   isWorkspaceDocumentId,
   isWorkCode,
 } from './identity'
+import { isCurrentWorldCode } from '../workspace/identity'
 
 const turndown = new TurndownService({
   bulletListMarker: '-',
@@ -93,6 +92,17 @@ interface StoryforgeMemoryIndexEnvelopeV1 {
     schemaVersion: 1
   }
   index: Awaited<ReturnType<typeof buildMemoryArtifactIndexV1>>
+}
+
+function currentProjectionWorkspaceUid(documents: readonly ProjectionDocumentV1[]): string {
+  const workspaceUid = documents[0]?.identity.workspaceUid
+  if (!isWorkspaceUid(workspaceUid)) {
+    throw new Error('[memory-workspace] 当前投影缺少有效 Workspace 身份')
+  }
+  if (documents.some(document => document.identity.workspaceUid !== workspaceUid)) {
+    throw new Error('[memory-workspace] 当前投影混入了其他 Workspace 身份')
+  }
+  return workspaceUid
 }
 
 function normalizeLineEndings(value: string): string {
@@ -178,34 +188,34 @@ function projectionSpec(tableName: string): WorkspaceProjectionSpecV1 {
   return spec
 }
 
-async function ensurePortableRoots(projectId: number): Promise<{
+async function readCurrentPortableRoots(projectId: number): Promise<{
   project: Project
   worlds: World[]
   works: Work[]
 }> {
-  await ensureWorkspaceOwnership(projectId)
-  return db.transaction('rw', db.projects, db.worlds, db.works, async () => {
-    const project = await db.projects.get(projectId)
-    if (!project) throw new Error('[memory-workspace] LocalWorkspace 不存在')
-    let workspaceUid = project.workspaceUid
-    if (!isWorkspaceUid(workspaceUid)) {
-      workspaceUid = generateWorkspaceUid()
-      await db.projects.update(projectId, { workspaceUid })
+  const ownership = await resolveWorkspaceOwnership(projectId)
+  const [worlds, works] = await Promise.all([
+    db.worlds.where('projectId').equals(projectId).toArray(),
+    db.works.where('projectId').equals(projectId).toArray(),
+  ])
+  const worldIds = new Set<number>()
+  const worldCodes = new Set<string>()
+  for (const world of worlds) {
+    if (!world.id || !isCurrentWorldCode(world.identityKind, world.code)
+      || worldIds.has(world.id) || worldCodes.has(world.code)) {
+      throw new Error(`[memory-workspace] World ${world.id ?? '?'} 缺少唯一、有效的当前身份`)
     }
-    const worlds = await db.worlds.where('projectId').equals(projectId).toArray()
-    const works = await db.works.where('projectId').equals(projectId).toArray()
-    const used = new Set<string>()
-    for (const work of works) {
-      if (!isWorkCode(work.code) || used.has(work.code)) {
-        let code = generateWorkCode()
-        while (used.has(code)) code = generateWorkCode()
-        await db.works.update(work.id!, { code })
-        work.code = code
-      }
-      used.add(work.code!)
+    worldIds.add(world.id)
+    worldCodes.add(world.code)
+  }
+  const workCodes = new Set<string>()
+  for (const work of works) {
+    if (!work.id || !worldIds.has(work.worldId) || !isWorkCode(work.code) || workCodes.has(work.code)) {
+      throw new Error(`[memory-workspace] Work ${work.id ?? '?'} 缺少唯一、有效的当前身份或 World owner`)
     }
-    return { project: { ...project, workspaceUid }, worlds, works }
-  })
+    workCodes.add(work.code)
+  }
+  return { project: ownership.project, worlds, works }
 }
 
 function identityFor(
@@ -290,16 +300,9 @@ function chapterText(
   return `---\n${frontmatter}---\n${contentMarkdown}`
 }
 
-function projectSemantic(project: Project, activeWorld?: World, activeWork?: Work): Record<string, unknown> {
-  void activeWorld
-  void activeWork
+function projectSemantic(project: Project): Record<string, unknown> {
   return {
     name: project.name,
-    description: project.description,
-    genres: [...project.genres],
-    status: project.status,
-    targetWordCount: project.targetWordCount,
-    creativeMode: project.creativeMode ?? null,
     enableMultiWorld: project.enableMultiWorld ?? false,
   }
 }
@@ -317,19 +320,20 @@ function workSemantic(work: Work, world: World): Record<string, unknown> {
     title: work.title,
     description: work.description,
     genres: [...work.genres],
+    customGenre: work.customGenre ?? null,
     status: work.status,
     targetWordCount: work.targetWordCount,
     writingStyleId: work.writingStyleId ?? null,
     methodologyId: work.methodologyId ?? null,
+    includeCultivationProgressInAI: work.includeCultivationProgressInAI,
   }
 }
 
-const PROJECT_WORKSPACE_FIELDS = [
-  'name', 'description', 'genres', 'status', 'targetWordCount', 'creativeMode', 'enableMultiWorld',
-] as const
+const PROJECT_WORKSPACE_FIELDS = ['name', 'enableMultiWorld'] as const
 const WORLD_WORKSPACE_FIELDS = ['name', 'description'] as const
 const WORK_WORKSPACE_FIELDS = [
-  'title', 'description', 'genres', 'status', 'targetWordCount', 'writingStyleId', 'methodologyId',
+  'title', 'description', 'genres', 'customGenre', 'status', 'targetWordCount', 'writingStyleId',
+  'methodologyId', 'includeCultivationProgressInAI',
 ] as const
 const CHAPTER_WORKSPACE_FIELDS = ['title', 'status', 'order', 'notes', 'content'] as const
 const STORY_CORE_DISK_FIELDS = [
@@ -367,7 +371,7 @@ const POV_TO_DISK: Readonly<Record<CreativeRules['narrativePOV'], string>> = {
   'third-omniscient': '第三人称全知',
   'multi-pov': '多视角',
 }
-const PROJECT_STATUSES = new Set(['drafting', 'ongoing', 'paused', 'completed'])
+const WORK_STATUSES = new Set(['drafting', 'ongoing', 'paused', 'completed'])
 const CHAPTER_STATUSES = new Set(['outline', 'draft', 'revised', 'polished', 'final'])
 
 function assertExactObjectKeys(
@@ -438,13 +442,6 @@ function normalizeWorkspaceSemanticV1(
     assertExactObjectKeys(semanticValue, PROJECT_WORKSPACE_FIELDS, 'LocalWorkspace')
     const normalized = {
       name: strictString(semanticValue.name, 'name', true),
-      description: strictString(semanticValue.description, 'description'),
-      genres: strictGenres(semanticValue.genres, 'genres'),
-      status: strictEnum(semanticValue.status, 'status', PROJECT_STATUSES),
-      targetWordCount: strictNumber(semanticValue.targetWordCount, 'targetWordCount', true),
-      creativeMode: semanticValue.creativeMode == null
-        ? null
-        : strictEnum(semanticValue.creativeMode, 'creativeMode', new Set(['fantasy', 'historical'])),
       enableMultiWorld: (() => {
         if (typeof semanticValue.enableMultiWorld !== 'boolean') throw new Error('enableMultiWorld 必须是布尔值')
         return semanticValue.enableMultiWorld
@@ -466,10 +463,17 @@ function normalizeWorkspaceSemanticV1(
       title: strictString(semanticValue.title, 'title', true),
       description: strictString(semanticValue.description, 'description'),
       genres: strictGenres(semanticValue.genres, 'genres'),
-      status: strictEnum(semanticValue.status, 'status', PROJECT_STATUSES),
+      customGenre: strictNullableString(semanticValue.customGenre, 'customGenre'),
+      status: strictEnum(semanticValue.status, 'status', WORK_STATUSES),
       targetWordCount: strictNumber(semanticValue.targetWordCount, 'targetWordCount', true),
       writingStyleId: strictNullableString(semanticValue.writingStyleId, 'writingStyleId'),
       methodologyId: strictNullableString(semanticValue.methodologyId, 'methodologyId'),
+      includeCultivationProgressInAI: (() => {
+        if (typeof semanticValue.includeCultivationProgressInAI !== 'boolean') {
+          throw new Error('includeCultivationProgressInAI 必须是布尔值')
+        }
+        return semanticValue.includeCultivationProgressInAI
+      })(),
     }
     return { semanticValue: normalized, patch: normalized, compareAndSetFields: WORK_WORKSPACE_FIELDS }
   }
@@ -572,7 +576,7 @@ function creativeRulesSemantic(row: CreativeRules): Record<string, unknown> {
   return {
     写作风格: row.writingStyle ?? '',
     叙事视角: pov,
-    基调与氛围: row.atmosphere ?? row.toneAndMood ?? '',
+    基调与氛围: row.atmosphere,
     禁止事项: parseStoredStringList(row.prohibitions, '禁止事项'),
     一致性规则: parseStoredStringList(row.consistencyRules, '一致性规则'),
     特殊要求: row.specialRequirements ?? '',
@@ -684,17 +688,15 @@ async function createMemoryIndexProjectionDocumentV1(
 }
 
 export async function buildWorkspaceProjectionV1(projectId: number): Promise<ProjectionDocumentV1[]> {
-  const { project, worlds, works } = await ensurePortableRoots(projectId)
+  const { project, worlds, works } = await readCurrentPortableRoots(projectId)
   const workspaceUid = project.workspaceUid!
   const worldById = new Map(worlds.map(world => [world.id!, world]))
   const workById = new Map(works.map(work => [work.id!, work]))
-  const activeWorld = project.activeWorldId == null ? undefined : worldById.get(project.activeWorldId)
-  const activeWork = project.activeWorkId == null ? undefined : workById.get(project.activeWorkId)
   const documents: ProjectionDocumentV1[] = []
 
   documents.push(await createProjectionDocument({
     projectId, workspaceUid, tableName: 'projects', recordId: projectId,
-    semanticValue: projectSemantic(project, activeWorld, activeWork),
+    semanticValue: projectSemantic(project),
     pathFor: () => 'storyforge.workspace.json',
   }))
 
@@ -757,7 +759,7 @@ export async function buildWorkspaceProjectionV1(projectId: number): Promise<Pro
 
   const chapters = await db.chapters.where('projectId').equals(projectId).toArray()
   for (const chapter of chapters.sort((left, right) => left.order - right.order || (left.id ?? 0) - (right.id ?? 0))) {
-    const workId = (chapter as Chapter & { workId?: number }).workId ?? project.activeWorkId
+    const workId = (chapter as Chapter & { workId?: number }).workId
     const work = workId == null ? undefined : workById.get(workId)
     if (!work) throw new Error(`[memory-workspace] Chapter ${chapter.id} 缺少 Work owner`)
     const world = worldById.get(work.worldId)
@@ -1014,7 +1016,7 @@ export async function buildWorkspaceSelfCheckReportV1(
   const planBody = {
     version: 1 as const,
     projectId,
-    workspaceUid: documents[0]?.identity.workspaceUid ?? '',
+    workspaceUid: currentProjectionWorkspaceUid(documents),
     modelPolicy: 'none' as const,
     items,
   }
@@ -1148,7 +1150,7 @@ async function scopeForWorkspaceCandidateV1(
   projectId: number,
   candidate: WorkspaceFileAdoptionCandidateV1,
 ): Promise<WorkspaceScope> {
-  const fallback = (await ensureWorkspaceOwnership(projectId)).scope
+  const workspaceScope = (await resolveWorkspaceOwnership(projectId)).scope
   if (candidate.tableName === 'works') {
     const work = await db.works.get(candidate.recordId)
     if (!work) throw new Error(`[memory-workspace] Work ${candidate.recordId} 已不存在`)
@@ -1170,7 +1172,7 @@ async function scopeForWorkspaceCandidateV1(
     }
     return { projectId, worldId: work.worldId, workId: work.id! }
   }
-  return fallback
+  return workspaceScope
 }
 
 /**
@@ -1274,7 +1276,7 @@ async function buildManifest(
 ): Promise<WorkspaceManifestV1> {
   const body = {
     version: 1 as const,
-    workspaceUid: documents[0]?.identity.workspaceUid ?? '',
+    workspaceUid: currentProjectionWorkspaceUid(documents),
     revision,
     writtenAt: Date.now(),
     hashAlgorithm: 'sha256-canonical-v1' as const,
@@ -1602,7 +1604,7 @@ export async function restoreWorkspaceFromFolderV1(
       createdAt: originalProject.createdAt,
       updatedAt: originalProject.updatedAt,
     })
-    await ensureWorkspaceOwnership(projectId)
+    await resolveWorkspaceOwnership(projectId)
     const [worlds, works] = await Promise.all([
       db.worlds.where('projectId').equals(projectId).toArray(),
       db.works.where('projectId').equals(projectId).toArray(),

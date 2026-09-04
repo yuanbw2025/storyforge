@@ -7,23 +7,29 @@ import { db } from '../../src/lib/db/schema'
 import { aggregateInventory } from '../../src/lib/types/item-ledger'
 import type { ItemLedgerEntry } from '../../src/lib/types'
 import { adopt } from '../../src/lib/registry/adopt'
+import { seedCurrentProject } from '../helpers/current-workspace'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
 
 const now = Date.now()
 
 async function seedProject() {
-  const projectId = await db.projects.add({
-    name: 'INV1-OWNER', genre: '', description: '', targetWordCount: 0,
+  const projectId = await seedCurrentProject({
+    name: 'INV1-OWNER', genres: [], description: '', targetWordCount: 0,
     enableMultiWorld: false, createdAt: now, updatedAt: now,
   } as any) as number
   const charA = await db.characters.add({
-    projectId, name: '林风', role: 'protagonist', roleWeight: 'main',
+    projectId, name: '林风', roleWeight: 'main',
     moralAxis: 'good', orderAxis: 'lawful', shortDescription: '',
-    homeWorldGroupId: null, createdAt: now, updatedAt: now,
+    appearance: '', personality: '', background: '', motivation: '', abilities: '',
+    relationships: '', arc: '', homeWorldGroupId: null, isCrossWorld: false,
+    createdAt: now, updatedAt: now,
   } as any) as number
   const charB = await db.characters.add({
-    projectId, name: '张铁', role: 'supporting', roleWeight: 'secondary',
+    projectId, name: '张铁', roleWeight: 'secondary',
     moralAxis: 'neutral', orderAxis: 'neutral', shortDescription: '',
-    homeWorldGroupId: null, createdAt: now, updatedAt: now,
+    appearance: '', personality: '', background: '', motivation: '', abilities: '',
+    relationships: '', arc: '', homeWorldGroupId: null, isCrossWorld: false,
+    createdAt: now, updatedAt: now,
   } as any) as number
   const entries: ItemLedgerEntry[] = [
     { projectId, itemName: '剑', heldByName: '林风', characterId: charA, action: 'gain', quantity: 1, createdAt: now },
@@ -31,6 +37,7 @@ async function seedProject() {
     { projectId, itemName: '令牌', heldByName: '张铁', characterId: charB, action: 'gain', quantity: 1, createdAt: now + 2 },
   ]
   await db.itemLedger.bulkAdd(entries as any)
+  await finalizeCurrentFixtureV1(projectId)
   return { projectId, charA, charB, entries }
 }
 
@@ -76,7 +83,7 @@ describe('INV-1 · aggregateInventory 按角色过滤', () => {
   it('未归属条目(characterId=null)可被无过滤的 aggregateInventory 返回', async () => {
     const { projectId, entries } = await seedProject()
     const unowned: ItemLedgerEntry = {
-      projectId, itemName: '祖传玉佩', heldByName: '未知(历史数据)',
+      projectId, itemName: '祖传玉佩', heldByName: '未知持有人',
       characterId: null, action: 'gain', quantity: 1, createdAt: Date.now(),
     } as any
     await db.itemLedger.add(unowned as any)

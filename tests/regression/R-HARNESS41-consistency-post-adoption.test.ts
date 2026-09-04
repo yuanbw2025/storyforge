@@ -19,23 +19,25 @@ import {
   beginChapterPostAdoptionStepV1,
 } from '../../src/lib/agent/run/chapter-post-adoption-durable'
 import type { WorkspaceScope } from '../../src/lib/types'
+import { seedCurrentProject } from '../helpers/current-workspace'
+import { resolveWorkspaceScope } from '../../src/lib/workspace/ownership'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
 
 const CONTENT = '<p>守灯人抵达潮门，点亮了旧灯。</p>'
 
 async function seed(): Promise<{ scope: WorkspaceScope; chapterId: number; outlineNodeId: number; worldGroupId: number }> {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    name: '一致性后处理', genre: 'fantasy', genres: ['fantasy'], status: 'drafting',
+  const projectId = await seedCurrentProject({
+    name: '一致性后处理', genres: ['fantasy'], status: 'drafting',
     description: '', targetWordCount: 100_000,
     createdAt: now, updatedAt: now,
   } as any) as number
-  const worldId = await db.worlds.add({ projectId, code: 'consistency-world', name: '主世界', description: '', currentVersion: 1, createdAt: now, updatedAt: now }) as number
-  const workId = await db.works.add({ projectId, worldId, title: '一致性后处理', description: '', genres: ['fantasy'], status: 'drafting', targetWordCount: 100_000, createdAt: now, updatedAt: now } as any) as number
-  await db.projects.update(projectId, { activeWorldId: worldId, activeWorkId: workId, ownershipSchemaVersion: 1 })
+  const { worldId, workId } = await resolveWorkspaceScope(projectId)
   const worldGroupId = await db.worldGroups.add({ projectId, name: '主世界', order: 0, createdAt: now, updatedAt: now }) as number
   const volumeId = await db.outlineNodes.add({ projectId, workId, worldGroupId, parentId: null, type: 'volume', title: '第一卷', summary: '', order: 0, createdAt: now, updatedAt: now } as any) as number
   const outlineNodeId = await db.outlineNodes.add({ projectId, workId, worldGroupId, parentId: volumeId, type: 'chapter', title: '潮门', summary: '', order: 0, createdAt: now, updatedAt: now } as any) as number
   const chapterId = await db.chapters.add({ projectId, workId, outlineNodeId, title: '潮门', content: CONTENT, wordCount: 15, status: 'draft', order: 0, notes: '', createdAt: now, updatedAt: now } as any) as number
+  await finalizeCurrentFixtureV1(projectId)
   return { scope: { projectId, worldId, workId }, chapterId, outlineNodeId, worldGroupId }
 }
 

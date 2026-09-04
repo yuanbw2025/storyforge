@@ -11,7 +11,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import {
   LAST_FOLDER_KEY,
-  saveFolderHandle, loadFolderHandle, clearFolderHandle, projFolderKey,
+  saveFolderHandle, loadFolderHandle, clearFolderHandle, workspaceFolderKey,
   loadProjectFolderHandle,
 } from '../../src/lib/storage/folder-handle-store'
 import {
@@ -19,6 +19,8 @@ import {
 } from '../../src/lib/storage/folder-backup'
 import { importProjectJSON } from '../../src/lib/export/json-export'
 import { bindCreatedProjectStorageWorkspace } from '../../src/lib/storage/project-storage-workspace'
+import { seedCurrentProject } from '../helpers/current-workspace'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
 
 // ── 假的 FileSystemDirectoryHandle（内存版）──
 function makeFakeDir(name = 'BackupDir') {
@@ -58,7 +60,7 @@ describe('R-FOLDER · 本地文件夹持久层', () => {
     // 真实 FileSystemDirectoryHandle 是可结构化克隆的宿主对象;jsdom/fake-indexeddb
     // 无法克隆带方法的假对象,故此用例用纯可克隆对象验证「存/读/清」往返本身。
     const handle = { name: '我的备份盘', kind: 'directory' as const }
-    const key = projFolderKey(7)
+    const key = workspaceFolderKey('WS-00000000-0000-4000-8000-000000000007')
     await saveFolderHandle(key, handle as any)
 
     const got = await loadFolderHandle(key)
@@ -70,9 +72,9 @@ describe('R-FOLDER · 本地文件夹持久层', () => {
   })
 
   it('新建项目选择的位置同时成为稳定项目工作区和最近使用目录，但不会写文件', async () => {
-    const projectId = await db.projects.add({
+    const projectId = await seedCurrentProject({
       name: 'D盘项目',
-      workspaceUid: 'ws_01JPROJECTSTORAGE0000000001',
+      workspaceUid: 'WS-00000000-0000-4000-8000-000000000008',
       createdAt: Date.now(),
       updatedAt: Date.now(),
     } as never) as number
@@ -88,11 +90,17 @@ describe('R-FOLDER · 本地文件夹持久层', () => {
 
   it('写盘 → 回读 → 导入往返,数据一致', async () => {
     const now = Date.now()
-    const pid = await db.projects.add({
-      name: '盘里的书', genre: '', description: '', targetWordCount: 0,
+    const pid = await seedCurrentProject({
+      name: '盘里的书', genres: [], description: '', targetWordCount: 0,
       enableMultiWorld: false, createdAt: now, updatedAt: now,
     } as any) as number
-    await db.characters.add({ projectId: pid, name: '盘中角色', role: 'protagonist', createdAt: now, updatedAt: now } as any)
+    await db.characters.add({
+      projectId: pid, name: '盘中角色', roleWeight: 'main', moralAxis: 'neutral',
+      orderAxis: 'neutral', shortDescription: '', appearance: '', personality: '',
+      background: '', motivation: '', abilities: '', relationships: '', arc: '',
+      homeWorldGroupId: null, isCrossWorld: false, createdAt: now, updatedAt: now,
+    } as any)
+    await finalizeCurrentFixtureV1(pid)
 
     const dir = makeFakeDir()
     // 写盘:文件名按书名生成
@@ -118,11 +126,11 @@ describe('R-FOLDER · 本地文件夹持久层', () => {
 
   it('回读忽略非 storyforge 文件 + 解析失败的文件', async () => {
     const dir = makeFakeDir()
-    dir._files.set('storyforge-好书.json', JSON.stringify({ version: 3, exportedAt: 1, project: { name: '好书' }, worldviews: [], storyCores: [], powerSystems: [], characters: [], outlineNodes: [], chapters: [], foreshadows: [], geographies: [], histories: [], creativeRules: [], characterRelations: [] }))
+    dir._files.set('storyforge-过时备份.json', JSON.stringify({ version: 3, exportedAt: 1, project: { name: '过时备份' } }))
     dir._files.set('readme.txt', '不是备份')
     dir._files.set('storyforge-坏文件.json', '{坏 JSON')
 
     const backups = await readStoryforgeBackups(dir as any)
-    expect(backups.map(b => b.name)).toEqual(['storyforge-好书.json'])
+    expect(backups).toEqual([])
   })
 })

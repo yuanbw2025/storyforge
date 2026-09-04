@@ -5,10 +5,9 @@ import {
   parseDetailedOutlineCopilotDraftV1,
 } from '../../src/lib/agent/detailed-outline-copilot'
 import { prepareDetailedOutlineGatewayAssemblyV1 } from '../../src/lib/outline/detail-gateway-context'
-import { generateWorkspaceUid } from '../../src/lib/memory/identity'
-import { ensureWorkspaceOwnership } from '../../src/lib/workspace/ownership'
 import { stampNewRecord, type WorkspaceScope } from '../../src/lib/workspace/scope'
 import { useAIConfigStore } from '../../src/stores/ai-config'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
 
 const now = 1_787_900_100_000
 
@@ -27,12 +26,8 @@ async function addScoped(
 }
 
 async function seed() {
-  const projectId = await db.projects.add({
-    workspaceUid: generateWorkspaceUid(),
-    name: 'DETAIL-1 潮门细纲', genre: 'fantasy', genres: ['fantasy'], status: 'drafting',
-    description: '', targetWordCount: 1_000_000, createdAt: now, updatedAt: now,
-  } as any) as number
-  const { scope } = await ensureWorkspaceOwnership(projectId)
+  const { scope } = await seedCurrentWorkspace('DETAIL-1 潮门细纲')
+  const { projectId } = scope
   const groupId = await addScoped(scope, 'worldGroups', {
     name: '潮汐大陆', description: '', type: 'primary', order: 0,
   }, 'world')
@@ -64,17 +59,17 @@ async function seed() {
   }, 'work')
   const factId = await addScoped(scope, 'temporalFacts', {
     worldGroupId: groupId,
-    factKey: 'mirror-awake', category: 'event', subjectType: 'item', subjectId: 'mirror',
-    predicate: 'state', objectText: '镜片已经苏醒', status: 'confirmed', importance: 'critical',
+    subjectName: '镜片', predicate: 'state', factKind: 'state', value: '已经苏醒',
+    sourceType: 'chapter', status: 'confirmed', locked: false,
     validFromChapterId: priorChapterId, validToChapterId: null, sourceChapterId: priorChapterId,
-    evidenceQuote: '镜片在潮声中苏醒。', confidence: 1,
+    sourceQuote: '镜片在潮声中苏醒。', confidence: 1,
   }, 'work')
   const otherFactId = await addScoped(scope, 'temporalFacts', {
     worldGroupId: otherGroupId,
-    factKey: 'mirror-sea-secret', category: 'event', subjectType: 'item', subjectId: 'other',
-    predicate: 'state', objectText: '镜海秘密不得泄漏', status: 'confirmed', importance: 'critical',
+    subjectName: '镜海秘密', predicate: 'state', factKind: 'state', value: '不得泄漏',
+    sourceType: 'manual', status: 'confirmed', locked: false,
     validFromChapterId: null, validToChapterId: null, sourceChapterId: null,
-    evidenceQuote: '不得泄漏。', confidence: 1,
+    sourceQuote: '不得泄漏。', confidence: 1,
   }, 'work')
   const progressId = await addScoped(scope, 'storylineProgress', {
     arcId, currentStageId: 'stage-1', status: 'active', progressNote: '刚进入旧城',

@@ -22,6 +22,7 @@ import { resolveScopeLike, stampNewRecord } from '../../src/lib/workspace/scope'
 import { useAIConfigStore } from '../../src/stores/ai-config'
 import { buildNarrativeBriefV1 } from '../../src/lib/agent/narrative-brief'
 import { AgentTeamBudgetTracker } from '../../src/lib/agent/team-budget'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
 
 const longDraft = (marker: string) => (
   `${marker}。退潮后的盐海露出黑色礁脊，守灯人沿着潮痕走向沉默的钟楼。`
@@ -35,19 +36,9 @@ async function seedProject(): Promise<{
   secondId: number
 }> {
   const now = Date.now()
-  const project: Project = {
-    name: '潮汐正文',
-    genre: 'fantasy',
-    genres: ['fantasy'],
-    status: 'drafting',
-    description: '',
-    targetWordCount: 100_000,
-    enableMultiWorld: false,
-    createdAt: now,
-    updatedAt: now,
-  }
-  project.id = await db.projects.add(project) as number
-  const scope = await resolveScopeLike(project.id)
+  const created = await seedCurrentWorkspace('潮汐正文')
+  const project = created.project
+  const scope = created.scope
   const volumeId = await db.outlineNodes.add(stampNewRecord(scope, 'outlineNodes', {
     parentId: null,
     type: 'volume',
@@ -403,7 +394,7 @@ describe('AGENT-1 27.1-d · ChatCopilot 正文闭环', () => {
     }, { owner: 'world' }) as any) as number
     const sideId = await db.characters.add(stampNewRecord(scope, 'characters', {
       name: '钟匠',
-      roleWeight: 'supporting',
+      roleWeight: 'secondary',
       moralAxis: 'neutral',
       orderAxis: 'neutral',
       createdAt: now,
@@ -579,6 +570,7 @@ describe('AGENT-1 27.1-d · ChatCopilot 正文闭环', () => {
       projectId: project.id!,
       worldGroupId: null,
       scope,
+      purpose: 'prose-copilot',
     })
     const event = await appendAgentEvent({
       projectId: project.id!,

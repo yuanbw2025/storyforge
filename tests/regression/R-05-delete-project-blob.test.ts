@@ -1,24 +1,17 @@
 /**
- * R-05: deleteProject 漏间接归属表 + blob 残留
+ * R-05: deleteProject 间接归属表 + blob 生命周期
  *
  * R-05：删除项目与 blob 回收反例。
  *
- * 反例:
- *   旧 deleteProject 只删带 projectId 字段的表;
- *   importLogs/importFiles 通过 sessionId 间接挂项目 → 删项目后 blob 永久残留;
- *   importJobs 虽有 projectId 但旧代码也漏删。
- *
- * 灾难:用户导入 10MB 小说 blob 后删项目 → blob 永久残留 → IndexedDB 配额爆
- *      → 应用无法保存新数据 → 写到一半的章节存不进去 → 白屏。
- *
- * 期望:删项目后,以下表中无任何残留:
+ * 当前契约:删项目后,以下表中无任何残留:
  *   ① importSessions ② importLogs ③ importFiles ④ importJobs
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { useProjectStore } from '../../src/stores/project'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
 
-describe('R-05: deleteProject 漏间接归属表 + blob 残留', () => {
+describe('R-05: deleteProject 间接归属表 + blob 生命周期', () => {
   beforeEach(async () => {
     await db.delete()
     await db.open()
@@ -31,16 +24,7 @@ describe('R-05: deleteProject 漏间接归属表 + blob 残留', () => {
   it('删项目后,所有间接归属表 + blob 无残留', async () => {
     const now = Date.now()
 
-    // 建项目
-    const projectId = await db.projects.add({
-      name: 'R-05 测试项目',
-      genre: 'fantasy',
-      description: '',
-      targetWordCount: 0,
-      enableMultiWorld: false,
-      createdAt: now,
-      updatedAt: now,
-    } as any) as number
+    const projectId = (await seedCurrentWorkspace('R-05 测试项目', { targetWordCount: 0 })).scope.projectId
 
     // ─── 准备:导入流水线产生的 4 类记录 ─────────────────────
     // (a) importSessions(直接 projectId)
@@ -108,16 +92,8 @@ describe('R-05: deleteProject 漏间接归属表 + blob 残留', () => {
   it('删项目后,其它项目的 importFiles blob 不受影响', async () => {
     const now = Date.now()
 
-    // 建两个项目
-    const projectA = await db.projects.add({
-      name: 'A', genre: '', description: '', targetWordCount: 0,
-      enableMultiWorld: false, createdAt: now, updatedAt: now,
-    } as any) as number
-
-    const projectB = await db.projects.add({
-      name: 'B', genre: '', description: '', targetWordCount: 0,
-      enableMultiWorld: false, createdAt: now, updatedAt: now,
-    } as any) as number
+    const projectA = (await seedCurrentWorkspace('A', { genres: [], targetWordCount: 0 })).scope.projectId
+    const projectB = (await seedCurrentWorkspace('B', { genres: [], targetWordCount: 0 })).scope.projectId
 
     // 各自有一个 importSession + importFile
     const sessionA = await db.importSessions.add({

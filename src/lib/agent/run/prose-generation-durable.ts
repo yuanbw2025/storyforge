@@ -22,7 +22,6 @@ import { createContextManifestFromAssemblyV1, createContextManifestV2FromV1 } fr
 import {
   assertRecordInScope,
   readOwnedRows,
-  resolveScope,
   scopeTransactionTables,
   stampNewRecord,
 } from '../../workspace/scope'
@@ -73,17 +72,9 @@ export const PROSE_GENERATION_STEP_ID_V1 = 'prose-generation'
 export const PROSE_SEMANTIC_REVIEW_STEP_ID_V1 = 'prose-semantic-review'
 export const PROSE_SEMANTIC_REVISION_STEP_ID_V1 = 'prose-semantic-revision'
 export const PROSE_SEMANTIC_REREVIEW_STEP_ID_V1 = 'prose-semantic-rereview'
-export const PROSE_GENERATION_VERIFIER_SET_V1 = 'prose-generation-terminal-v1'
 export const PROSE_GENERATION_VERIFIER_SET_V2 = 'prose-generation-terminal-v2-information-boundary'
 export const PROSE_GENERATION_VERIFIER_SET_V3 = 'prose-generation-terminal-v3-semantic-review'
 export const PROSE_GENERATION_CANDIDATE_TYPE_V1 = 'prose-generation-candidate'
-
-/** Historical read-only alias. Formal V2 runs resolve the exact runtime set. */
-export const PROSE_GENERATION_SOURCE_KEYS_V1: readonly string[] = Object.freeze(
-  resolveAgentSkillContextSourceKeysV1(
-    getAgentSkillV1('prose.generate', 'prose'),
-  ),
-)
 
 export type ProseGenerationOperationV1 = 'generate' | 'continue'
 
@@ -134,38 +125,20 @@ export interface ProseGenerationCandidateV1 {
   operation: ProseGenerationOperationV1
   /** Hash of the chapter content at the moment the model request started. */
   sourceTextHash: string
-  /** Absent on candidates generated before WEH-0C. */
-  contentRevision?: WorkspaceContentRevisionVectorV1
+  contentRevision: WorkspaceContentRevisionVectorV1
   outputText: string
   outputTextHash: string
-  /** Present when exact Context Gateway V3 evidence is required for adoption. */
-  gatewayEvidenceVersion?: 3
+  gatewayEvidenceVersion: 3
   /** Expected normalized chapter hash after this candidate is adopted. */
   expectedContentHash: string
-  /** H9：新候选绑定生成时的信息边界；旧候选缺省以保持刷新恢复兼容。 */
-  informationBoundaryHash?: string
+  /** Candidate-bound information boundary. */
+  informationBoundaryHash: string
   perspectiveCharacterId?: number | null
   perspectiveFromChapter?: boolean
   /** Absent on candidates created before HARNESS-19. */
   semanticReview?: ProseGenerationSemanticReviewEvidenceV1
   createdAt: number
   durable: ProseGenerationDurableEvidenceV1
-}
-
-/**
- * New prose contracts (V2/V3) make the information-boundary verifier a
- * required acceptance criterion. Historical V1 runs did not have that
- * criterion and remain readable for migration/recovery compatibility.
- */
-export function requiresProseInformationBoundaryV1(
-  snapshot: AgentRunSnapshotV1,
-): boolean {
-  return snapshot.contract.acceptance.some(item => (
-    item.id === 'prose-generation.information-boundary' && item.required
-  )) || snapshot.contract.verificationPlan.some(item => (
-    item.id === 'prose-generation.terminal'
-      && [PROSE_GENERATION_VERIFIER_SET_V2, PROSE_GENERATION_VERIFIER_SET_V3].includes(item.verifier as typeof PROSE_GENERATION_VERIFIER_SET_V2 | typeof PROSE_GENERATION_VERIFIER_SET_V3)
-  ))
 }
 
 export function buildProseGenerationRunContractV1(input: {
@@ -193,21 +166,21 @@ export function buildProseGenerationRunContractV1(input: {
       chapterIds: [input.chapterId],
     },
     permissions: {
-      contextSourceKeys: [...PROSE_GENERATION_SOURCE_KEYS_V1],
+      contextSourceKeys: resolveAgentSkillContextSourceKeysV1(generationSkill),
       writeTargets: [{
         table: 'chapters',
         fields: ['content', 'wordCount'],
         mode: 'author-confirmed' as const,
       }],
     },
-    ...(semanticReview ? {
-      executionBindings: [
-        { stepId: PROSE_GENERATION_STEP_ID_V1, ...createAgentSkillExecutionBindingV1(generationSkill), ...(input.formalEntry ? { formalEntry: input.formalEntry } : {}) },
+    executionBindings: [
+      { stepId: PROSE_GENERATION_STEP_ID_V1, ...createAgentSkillExecutionBindingV1(generationSkill), ...(input.formalEntry ? { formalEntry: input.formalEntry } : {}) },
+      ...(semanticReview ? [
         { stepId: PROSE_SEMANTIC_REVIEW_STEP_ID_V1, ...createAgentSkillExecutionBindingV1(reviewSkill) },
         { stepId: PROSE_SEMANTIC_REVISION_STEP_ID_V1, ...createAgentSkillExecutionBindingV1(revisionSkill) },
         { stepId: PROSE_SEMANTIC_REREVIEW_STEP_ID_V1, ...createAgentSkillExecutionBindingV1(reviewSkill) },
-      ],
-    } : {}),
+      ] : []),
+    ],
     budget: {
       maxModelCalls: semanticReview ? 4 : 1,
       maxToolCalls: 0,
@@ -324,7 +297,8 @@ function requiresSemanticReview(snapshot: AgentRunSnapshotV1): boolean {
 }
 
 export function assertProseGenerationExecutionBindingsV1(snapshot: AgentRunSnapshotV1): void {
-  if (!snapshot.contract.executionBindings) return
+  const executionBindings = snapshot.contract.executionBindings
+  if (!executionBindings) throw new Error('正文生成 RunContract 缺少当前 execution bindings。')
   const operation = snapshot.contract.objective.startsWith('续写') ? 'continue' : 'generate'
   const expected = new Map<string, ReturnType<typeof getAgentSkillV1>>([
     [PROSE_GENERATION_STEP_ID_V1, getAgentSkillV1(`prose.${operation}`, 'prose')],
@@ -334,10 +308,10 @@ export function assertProseGenerationExecutionBindingsV1(snapshot: AgentRunSnaps
       [PROSE_SEMANTIC_REREVIEW_STEP_ID_V1, getAgentSkillV1('prose.review', 'prose')],
     ] as const : []),
   ])
-  if (snapshot.contract.executionBindings.length !== expected.size) {
+  if (executionBindings.length !== expected.size) {
     throw new Error('正文生成 RunContract execution bindings 数量无效。')
   }
-  for (const binding of snapshot.contract.executionBindings) {
+  for (const binding of executionBindings) {
     const skill = expected.get(binding.stepId)
     if (!skill) throw new Error(`正文生成 RunContract 包含未知 execution binding：${binding.stepId}`)
     const { stepId: _stepId, formalEntry: _formalEntry, ...skillBinding } = binding
@@ -528,7 +502,7 @@ export async function beginProseGenerationGatewayStepV1(input: {
     operation: ProseGenerationOperationV1
     sourceTextHash: string
     promptHash: string
-    informationBoundaryHash?: string
+    informationBoundaryHash: string
   }
   budgetReservationTokens?: number
 }): Promise<{ snapshot: AgentRunSnapshotV1; attempt: ProseGatewayAttemptV1 }> {
@@ -627,83 +601,6 @@ export async function finalizeProseGenerationGatewayStepV1(input: {
     expectedLastSequence: snapshot.projection.lastSequence,
   })
   return { snapshot: finalized.snapshot, manifest: finalized.manifest }
-}
-
-export async function beginProseGenerationStepV1(input: {
-  scope: WorkspaceScope
-  snapshot: AgentRunSnapshotV1
-  contextManifest: ContextManifestV1
-  binding: {
-    operation: ProseGenerationOperationV1
-    sourceTextHash: string
-    promptHash: string
-    informationBoundaryHash?: string
-  }
-  budgetReservationTokens?: number
-}): Promise<AgentRunSnapshotV1> {
-  assertProseGenerationExecutionBindingsV1(input.snapshot)
-  const formalSnapshot = input.snapshot.contract.executionBindings
-    ?.find(item => item.stepId === PROSE_GENERATION_STEP_ID_V1)?.formalEntry
-  if (!formalSnapshot) throw new Error('正文生成 RunContract 缺少 FormalAIEntry snapshot。')
-  const formalEntry = await assertFormalAIEntrySnapshotIntegrityV1(formalSnapshot)
-  if (formalEntry.entryId !== proseGenerationFormalEntryIdV1(input.binding.operation)
-    || formalEntry.skillId !== `prose.${input.binding.operation}`
-    || !formalEntry.adoptAllowed || !formalEntry.adoptionTargets.includes('chapters')) {
-    throw new Error('正文生成 FormalAIEntry 与 operation/Skill/采纳目标不匹配。')
-  }
-  if (input.contextManifest.runId !== input.snapshot.run.id
-    || input.contextManifest.stepId !== PROSE_GENERATION_STEP_ID_V1) {
-    throw new Error('正文生成 Context Manifest 与 durable run 不匹配。')
-  }
-  let snapshot = await append(input.scope, input.snapshot, 'step.scheduled', {
-    stepId: PROSE_GENERATION_STEP_ID_V1,
-  })
-  snapshot = await append(input.scope, snapshot, 'step.started', {
-    stepId: PROSE_GENERATION_STEP_ID_V1,
-    attempt: 1,
-  })
-  snapshot = await append(input.scope, snapshot, 'context.assembled', {
-    stepId: PROSE_GENERATION_STEP_ID_V1,
-    attempt: 1,
-    manifestHash: input.contextManifest.manifestHash,
-  })
-  snapshot = await append(input.scope, snapshot, 'model.requested', {
-    stepId: PROSE_GENERATION_STEP_ID_V1,
-    attempt: 1,
-    bindingHash: await hashCanonicalValue(input.binding),
-  })
-  if (input.budgetReservationTokens == null) return snapshot
-  return append(input.scope, snapshot, 'budget.reserved', {
-    stepId: PROSE_GENERATION_STEP_ID_V1,
-    modelCalls: 1,
-    toolCalls: 0,
-    tokens: Math.max(1, Math.floor(input.budgetReservationTokens)),
-  })
-}
-
-export async function recordProseGenerationModelOutputV1(input: {
-  scope: WorkspaceScope
-  snapshot: AgentRunSnapshotV1
-  output: string
-  usedTokens?: number
-}): Promise<AgentRunSnapshotV1> {
-  const step = input.snapshot.projection.steps[PROSE_GENERATION_STEP_ID_V1]
-  if (!step || step.status !== 'running' || step.attempt !== 1) {
-    throw new Error('正文生成 durable step 不在模型响应状态。')
-  }
-  let snapshot = await append(input.scope, input.snapshot, 'model.responded', {
-    stepId: PROSE_GENERATION_STEP_ID_V1,
-    attempt: 1,
-    outputHash: await hashCanonicalValue(input.output),
-  })
-  if (input.usedTokens == null) return snapshot
-  snapshot = await append(input.scope, snapshot, 'budget.settled', {
-    stepId: PROSE_GENERATION_STEP_ID_V1,
-    modelCalls: 1,
-    toolCalls: 0,
-    tokens: Math.max(0, Math.floor(input.usedTokens)),
-  })
-  return snapshot
 }
 
 export type ProseSemanticStepIdV1 =
@@ -821,9 +718,9 @@ function isProseGenerationCandidate(value: unknown): value is ProseGenerationCan
     && typeof candidate.sourceTextHash === 'string'
     && typeof candidate.outputText === 'string'
     && typeof candidate.outputTextHash === 'string'
-    && (candidate.gatewayEvidenceVersion === undefined || candidate.gatewayEvidenceVersion === 3)
+    && candidate.gatewayEvidenceVersion === 3
     && typeof candidate.expectedContentHash === 'string'
-    && (candidate.informationBoundaryHash === undefined || typeof candidate.informationBoundaryHash === 'string')
+    && typeof candidate.informationBoundaryHash === 'string'
     && (candidate.perspectiveCharacterId === undefined
       || candidate.perspectiveCharacterId === null
       || typeof candidate.perspectiveCharacterId === 'number')
@@ -838,12 +735,10 @@ function isProseGenerationCandidate(value: unknown): value is ProseGenerationCan
     && !!candidate.durable
     && candidate.durable.stepId === PROSE_GENERATION_STEP_ID_V1
   if (!valid) return false
-  if (candidate.contentRevision !== undefined) {
-    try {
-      candidate.contentRevision = parseWorkspaceContentRevisionV1(candidate.contentRevision)
-    } catch {
-      return false
-    }
+  try {
+    candidate.contentRevision = parseWorkspaceContentRevisionV1(candidate.contentRevision)
+  } catch {
+    return false
   }
   return true
 }
@@ -853,8 +748,7 @@ export async function hashProseGenerationCandidateV1(
 ): Promise<string> {
   // ContextManifestV3 already binds the exact response/candidate hash. Using
   // outputTextHash avoids a circular hash through durable.contextManifestHash.
-  if (candidate.gatewayEvidenceVersion === 3) return candidate.outputTextHash
-  return hashCanonicalValue(candidate)
+  return candidate.outputTextHash
 }
 
 export async function persistProseGenerationCandidateV1(input: {
@@ -883,6 +777,7 @@ export async function persistProseGenerationCandidateV1(input: {
   const conversation = stampNewRecord(input.scope, 'agentConversations', {
     projectId: input.scope.projectId,
     worldGroupId: input.candidate.worldGroupId,
+    purpose: 'prose.candidate',
     title: `${input.candidate.operation === 'continue' ? '续写' : '生成正文'} · ${input.candidate.chapterTitle}`,
     status: 'archived',
     createdAt: now,
@@ -984,10 +879,9 @@ export async function isProseGenerationCandidateCurrentV1(
   if (await hashProseGenerationCandidateV1(candidateBody) !== durable.candidateHash) return false
   if (candidate.semanticReview && !await verifySemanticReviewEvidence(candidate)) return false
   let scope: WorkspaceScope
-  let run: AgentRunSnapshotV1
   try {
     scope = await resolveScopeForCandidate(candidate)
-    run = await readAgentRunV1(scope, candidate.durable.runId)
+    await readAgentRunV1(scope, candidate.durable.runId)
   } catch {
     return false
   }
@@ -1005,7 +899,6 @@ export async function isProseGenerationCandidateCurrentV1(
     candidate.perspectiveFromChapter
     && (chapter.perspectiveCharacterId ?? null) !== (candidate.perspectiveCharacterId ?? null)
   ) return false
-  if (!candidate.informationBoundaryHash) return !requiresProseInformationBoundaryV1(run)
   try {
     scope ??= await resolveScopeForCandidate(candidate)
     const boundary = await buildChapterInformationBoundaryV1({
@@ -1031,7 +924,7 @@ async function resolveScopeForCandidate(candidate: ProseGenerationCandidateV1): 
       return { projectId: candidate.projectId, worldId: work.worldId, workId: work.id }
     }
   }
-  return resolveScope({ projectId: candidate.projectId })
+  throw new Error('正文候选来源章节缺少当前 Work 身份。')
 }
 
 /** Recover an event-store crash window without calling the model again. */
@@ -1134,36 +1027,32 @@ export async function commitProseGenerationAdoptionV1(input: {
   contentHtml: string
   wordCount: number
 }): Promise<{ snapshot: AgentRunSnapshotV1; receiptHash: string; receipt?: VerificationReceiptV1 }> {
-  if (input.candidate.contentRevision) {
-    try {
-      await assertWorkspaceContentRevisionFreshV1(input.candidate.contentRevision, {
-        scope: input.scope,
-        worldGroupId: input.candidate.worldGroupId,
-      })
-    } catch (error) {
-      await markProseGenerationStaleV1({
-        scope: input.scope,
-        runId: input.runId,
-        reason: error instanceof Error ? error.message : 'content_revision_changed',
-      })
-      throw new Error(`正文候选已过期：${error instanceof Error ? error.message : String(error)}`)
-    }
-  }
-  if (input.candidate.gatewayEvidenceVersion === 3) {
-    await assertContextGatewayCandidateAdoptableV1({
-      skill: getAgentSkillV1(`prose.${input.candidate.operation}`, 'prose'),
-      writeTarget: 'chapters.content',
+  try {
+    await assertWorkspaceContentRevisionFreshV1(input.candidate.contentRevision, {
       scope: input.scope,
       worldGroupId: input.candidate.worldGroupId,
-      chapterId: input.candidate.chapterId,
-      characterId: input.candidate.perspectiveCharacterId ?? null,
-      runId: input.runId,
-      stepId: input.candidate.durable.stepId,
-      attempt: input.candidate.durable.attempt,
-      candidateHash: input.candidate.durable.candidateHash,
-      contextManifestHash: input.candidate.durable.contextManifestHash,
     })
+  } catch (error) {
+    await markProseGenerationStaleV1({
+      scope: input.scope,
+      runId: input.runId,
+      reason: error instanceof Error ? error.message : 'content_revision_changed',
+    })
+    throw new Error(`正文候选已过期：${error instanceof Error ? error.message : String(error)}`)
   }
+  await assertContextGatewayCandidateAdoptableV1({
+    skill: getAgentSkillV1(`prose.${input.candidate.operation}`, 'prose'),
+    writeTarget: 'chapters.content',
+    scope: input.scope,
+    worldGroupId: input.candidate.worldGroupId,
+    chapterId: input.candidate.chapterId,
+    characterId: input.candidate.perspectiveCharacterId ?? null,
+    runId: input.runId,
+    stepId: input.candidate.durable.stepId,
+    attempt: input.candidate.durable.attempt,
+    candidateHash: input.candidate.durable.candidateHash,
+    contextManifestHash: input.candidate.durable.contextManifestHash,
+  })
   if (!await isProseGenerationCandidateCurrentV1(input.candidate)) {
     await markProseGenerationStaleV1({
       scope: input.scope,
@@ -1323,29 +1212,20 @@ export async function verifyProseGenerationRunV1(input: {
   if (await hashChapterText(chapter.content ?? '') !== input.candidate.expectedContentHash) {
     throw new Error('正文生成终态校验发现章节正文与候选不一致。')
   }
-  const requiresInformationBoundary = requiresProseInformationBoundaryV1(snapshot)
-  if (requiresInformationBoundary && !input.candidate.informationBoundaryHash) {
-    throw new Error('正文生成终态校验缺少当前合同要求的信息边界证据。')
-  }
-  const hasInformationBoundary = Boolean(input.candidate.informationBoundaryHash)
-  if (hasInformationBoundary) {
-    const currentBoundary = await buildChapterInformationBoundaryV1({
-      scope: input.scope,
-      chapterId: input.candidate.chapterId,
-      outlineNodeId: chapter.outlineNodeId,
-      worldGroupId: input.candidate.worldGroupId,
-      perspectiveCharacterId: input.candidate.perspectiveCharacterId ?? null,
-    })
-    if (
-      currentBoundary.manifestHash !== input.candidate.informationBoundaryHash
-      || validateProseInformationBoundaryV1(input.candidate.outputText, currentBoundary).length > 0
-    ) throw new Error('正文生成终态校验发现信息边界已变化或候选包含提前泄漏。')
-  }
+  const currentBoundary = await buildChapterInformationBoundaryV1({
+    scope: input.scope,
+    chapterId: input.candidate.chapterId,
+    outlineNodeId: chapter.outlineNodeId,
+    worldGroupId: input.candidate.worldGroupId,
+    perspectiveCharacterId: input.candidate.perspectiveCharacterId ?? null,
+  })
+  if (
+    currentBoundary.manifestHash !== input.candidate.informationBoundaryHash
+    || validateProseInformationBoundaryV1(input.candidate.outputText, currentBoundary).length > 0
+  ) throw new Error('正文生成终态校验发现信息边界已变化或候选包含提前泄漏。')
   const verifierSetVersion = semanticRequired
     ? PROSE_GENERATION_VERIFIER_SET_V3
-    : hasInformationBoundary
-      ? PROSE_GENERATION_VERIFIER_SET_V2
-      : PROSE_GENERATION_VERIFIER_SET_V1
+    : PROSE_GENERATION_VERIFIER_SET_V2
   snapshot = await append(input.scope, snapshot, 'verification.started', {
     verifierSetVersion,
   })
@@ -1378,11 +1258,11 @@ export async function verifyProseGenerationRunV1(input: {
     } : {}),
     criteria: [
       { id: 'prose-generation.candidate', status: 'passed', evidenceRefs: [`candidate:${input.candidate.durable.candidateHash}`] },
-      ...(hasInformationBoundary ? [{
+      {
         id: 'prose-generation.information-boundary',
         status: 'passed' as const,
         evidenceRefs: [`information-boundary:${input.candidate.informationBoundaryHash}`],
-      }] : []),
+      },
       ...(semanticRequired ? [{
         id: 'prose-generation.semantic-review',
         status: 'passed' as const,

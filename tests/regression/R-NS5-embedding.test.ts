@@ -7,10 +7,12 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { rebuildChapterChunks, retrieveChunks, ensureChunkEmbeddings, embedQuery } from '../../src/lib/retrieval/retrieval'
 import type { EmbeddingConfig } from '../../src/lib/types'
+import { seedCurrentProject } from '../helpers/current-workspace'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
 
 const now = Date.now()
 async function seed(texts: string[]) {
-  const pid = await db.projects.add({ name: 'P', genre: 'x', description: '', targetWordCount: 0, enableMultiWorld: false, createdAt: now, updatedAt: now } as any) as number
+  const pid = await seedCurrentProject({ name: 'P', genres: ['x'], description: '', targetWordCount: 0, enableMultiWorld: false, createdAt: now, updatedAt: now } as any) as number
   const vol = await db.outlineNodes.add({ projectId: pid, parentId: null, type: 'volume', title: '卷', summary: '', order: 0, createdAt: now, updatedAt: now } as any) as number
   const chaps: number[] = []
   for (let i = 0; i < texts.length; i++) {
@@ -18,6 +20,7 @@ async function seed(texts: string[]) {
     const c = await db.chapters.add({ projectId: pid, outlineNodeId: n, title: `第${i + 1}章`, content: texts[i], wordCount: 0, status: 'draft', order: i, notes: '', createdAt: now, updatedAt: now } as any) as number
     chaps.push(c)
   }
+  await finalizeCurrentFixtureV1(pid)
   return { pid, chaps }
 }
 const cfg = (over: Partial<EmbeddingConfig> = {}): EmbeddingConfig => ({ enabled: true, provider: 'ollama', apiKey: '', baseUrl: 'http://x/v1', model: 'bge-m3', ...over })

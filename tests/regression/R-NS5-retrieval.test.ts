@@ -14,18 +14,23 @@ import {
   retrieveChunks,
 } from '../../src/lib/retrieval/retrieval'
 import { useChapterStore } from '../../src/stores/chapter'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
 
 const now = Date.now()
 async function seedChapters(texts: string[]) {
-  const pid = await db.projects.add({ name: 'P', genre: 'x', description: '', targetWordCount: 0, enableMultiWorld: false, createdAt: now, updatedAt: now } as any) as number
-  const vol = await db.outlineNodes.add({ projectId: pid, parentId: null, type: 'volume', title: '卷', summary: '', order: 0, createdAt: now, updatedAt: now } as any) as number
+  const createdWorkspaceV1 = await seedCurrentWorkspace('P', { genres: ['x'], targetWordCount: 0 })
+  const scope = createdWorkspaceV1.scope
+  const pid = scope.projectId
+  const vol = await db.outlineNodes.add({ projectId: pid, workId: scope.workId, parentId: null, type: 'volume', title: '卷', summary: '', order: 0, createdAt: now, updatedAt: now } as any) as number
   const chaps: number[] = []
   for (let i = 0; i < texts.length; i++) {
-    const n = await db.outlineNodes.add({ projectId: pid, parentId: vol, type: 'chapter', title: `第${i + 1}章`, summary: '', order: i, createdAt: now, updatedAt: now } as any) as number
-    const c = await db.chapters.add({ projectId: pid, outlineNodeId: n, title: `第${i + 1}章`, content: texts[i], wordCount: 0, status: 'draft', order: i, notes: '', createdAt: now, updatedAt: now } as any) as number
+    const n = await db.outlineNodes.add({ projectId: pid, workId: scope.workId, parentId: vol, type: 'chapter', title: `第${i + 1}章`, summary: '', order: i, createdAt: now, updatedAt: now } as any) as number
+    const c = await db.chapters.add({ projectId: pid, workId: scope.workId, outlineNodeId: n, title: `第${i + 1}章`, content: texts[i], wordCount: 0, status: 'draft', order: i, notes: '', createdAt: now, updatedAt: now } as any) as number
     chaps.push(c)
   }
-  return { pid, chaps }
+  await finalizeCurrentFixtureV1(pid)
+  return { pid, scope, chaps }
 }
 
 describe('NS-5 · retrieval', () => {
@@ -69,14 +74,32 @@ describe('NS-5 · retrieval', () => {
     expect(sources).not.toContain(chaps[2]) // 当前/未来章不召回
   })
 
-  it('老项目一键重建：没有 retrievalChunks 时先为历史章节切块，再可召回', async () => {
-    const { pid, chaps } = await seedChapters([
+  it('当前项目缺少派生索引时先为已写章节切块，再可召回', async () => {
+    const { pid, scope, chaps } = await seedChapters([
       '第一章：林飞把青铜铃交给苏禾保管。',
       '第二章：当前要写苏禾归还铃铛。',
     ])
-    await db.characters.add({ projectId: pid, name: '苏禾', role: 'supporting', createdAt: now, updatedAt: now } as any)
+    await db.characters.add({
+      projectId: pid,
+      worldId: scope.worldId,
+      name: '苏禾',
+      roleWeight: 'secondary',
+      moralAxis: 'neutral',
+      orderAxis: 'neutral',
+      shortDescription: '',
+      appearance: '',
+      personality: '',
+      background: '',
+      motivation: '',
+      abilities: '',
+      relationships: '',
+      arc: '',
+      createdAt: now,
+      updatedAt: now,
+    } as any)
     const categoryId = await db.codexCategories.add({ projectId: pid, name: '器物', order: 0, createdAt: now, updatedAt: now } as any) as number
     await db.codexEntries.add({ projectId: pid, categoryId, name: '青铜铃', order: 0, createdAt: now, updatedAt: now } as any)
+    await finalizeCurrentFixtureV1(pid)
 
     expect(await db.retrievalChunks.where('projectId').equals(pid).count()).toBe(0)
     const built = await rebuildProjectRetrievalChunks({ projectId: pid })

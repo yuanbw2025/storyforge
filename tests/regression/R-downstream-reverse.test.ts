@@ -11,13 +11,15 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { assembleContext } from '../../src/lib/registry/assemble-context'
+import { seedCurrentProject } from '../helpers/current-workspace'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
 
 const REVERSE_KEYS = ['storyCore', 'characters', 'storyArcs'] as const
 
 async function seedProjectWithCharacter(): Promise<number> {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    name: 'Reverse', genre: '', description: '', targetWordCount: 0,
+  const projectId = await seedCurrentProject({
+    name: 'Reverse', genres: [], description: '', targetWordCount: 0,
     enableMultiWorld: false, createdAt: now, updatedAt: now,
   } as any) as number
   await db.storyCores.add({
@@ -25,9 +27,12 @@ async function seedProjectWithCharacter(): Promise<number> {
     createdAt: now, updatedAt: now,
   } as any)
   await db.characters.add({
-    projectId, name: '林惊羽', role: 'protagonist', roleWeight: 'main', moralAxis: 'good', orderAxis: 'neutral', shortDescription: '天才剑修',
-    personality: '坚毅', background: '灭门遗孤', motivation: '复仇', createdAt: now, updatedAt: now,
+    projectId, name: '林惊羽', roleWeight: 'main', moralAxis: 'good', orderAxis: 'neutral',
+    shortDescription: '天才剑修', appearance: '', personality: '坚毅', background: '灭门遗孤',
+    motivation: '复仇', abilities: '', relationships: '', arc: '', homeWorldGroupId: null,
+    isCrossWorld: false, createdAt: now, updatedAt: now,
   } as any)
+  await finalizeCurrentFixtureV1(projectId)
   return projectId
 }
 

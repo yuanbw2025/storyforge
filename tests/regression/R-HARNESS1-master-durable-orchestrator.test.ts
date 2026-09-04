@@ -35,71 +35,51 @@ import { AgentTeamBudgetTracker } from '../../src/lib/agent/team-budget'
 import type { MasterAgentPlan } from '../../src/lib/agent/orchestrator'
 import type { WorkspaceScope } from '../../src/lib/types'
 import { prepareRequiredMasterGatewayFixtureV1 } from '../helpers/master-agent-gateway'
-import { generateWorkCode, generateWorkspaceUid } from '../../src/lib/memory/identity'
-import { backfillResourceUidsV1 } from '../../src/lib/context-gateway/resource-identity'
+import { stampCurrentFixtureResourceUidsV1 } from '../helpers/current-resource-identity'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
+import { stampNewRecord } from '../../src/lib/workspace/scope'
+import {
+  currentWorldOriginCandidateFixtureV1,
+  currentWorldOriginDraftV1,
+} from '../helpers/current-worldview-field'
+
+const DIRECT_WORKFLOW = {
+  version: 1 as const,
+  workflowId: 'single-domain-direct' as const,
+  reasonCodes: ['single-explicit-domain' as const],
+}
+
+const SEQUENTIAL_WORKFLOW = {
+  version: 1 as const,
+  workflowId: 'multi-domain-sequential' as const,
+  reasonCodes: ['multiple-explicit-domains' as const],
+}
 
 async function createWorkspace(label: string): Promise<{
   scope: WorkspaceScope
   worldGroupId: number
 }> {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    workspaceUid: generateWorkspaceUid(),
-    name: label,
-    genre: 'fantasy',
-    genres: ['fantasy'],
-    description: '',
-    status: 'drafting',
-    targetWordCount: 100_000,
-
-
-    createdAt: now,
-    updatedAt: now,
-  } as any) as number
-  const worldId = await db.worlds.add({
-    projectId,
-    code: `world-${label}`,
-    name: `${label}世界`,
-    description: '',
-    currentVersion: 1,
-    createdAt: now,
-    updatedAt: now,
-  }) as number
-  const workId = await db.works.add({
-    projectId,
-    worldId,
-    title: label,
-    code: generateWorkCode(),
-    description: '',
-    genres: ['fantasy'],
-    status: 'drafting',
-    targetWordCount: 100_000,
-    createdAt: now,
-    updatedAt: now,
-  }) as number
-  await db.projects.update(projectId, {
-    activeWorldId: worldId,
-    activeWorkId: workId,
-    ownershipSchemaVersion: 1,
-  })
-  const worldGroupId = await db.worldGroups.add({
-    projectId,
-    worldId,
+  const created = await seedCurrentWorkspace(label, { enableMultiWorld: true })
+  const worldGroupId = await db.worldGroups.add(stampNewRecord(created.scope, 'worldGroups', {
+    projectId: created.scope.projectId,
     name: '主世界',
+    type: 'primary',
     order: 0,
     createdAt: now,
     updatedAt: now,
-  }) as number
-  return { scope: { projectId, worldId, workId }, worldGroupId }
+  }, { owner: 'world' })) as number
+  return { scope: created.scope, worldGroupId }
 }
 
 function plan(): MasterAgentPlan {
   return {
     summary: '先建立世界来源，再生成角色候选。',
     tasks: [
-      { id: 'world-1', agentId: 'world-origin', instruction: '建立潮汐世界的来源。', dependsOn: [] },
-      { id: 'character-1', agentId: 'character', instruction: '根据世界来源生成守灯人。', dependsOn: ['world-1'] },
+      { id: 'world-1', agentId: 'world-origin', skillId: 'world-origin.worldview-field', instruction: '建立潮汐世界的来源。', dependsOn: [] },
+      { id: 'character-1', agentId: 'character', skillId: 'character.create', instruction: '根据世界来源生成守灯人。', dependsOn: ['world-1'] },
     ],
+    workflow: SEQUENTIAL_WORKFLOW,
   }
 }
 
@@ -112,8 +92,11 @@ function fakeExecutor(input: {
       if (options.completedTaskOutputs?.[task.id]) continue
       input.calls(task.id)
       await options.executionTrace.taskStarted(task)
-      const output = task.agentId === 'world-origin'
-        ? '潮汐由沉睡的海神维持。'
+      const worldCandidate = task.agentId === 'world-origin'
+        ? currentWorldOriginCandidateFixtureV1('潮汐由沉睡的海神维持。')
+        : null
+      const output = worldCandidate
+        ? worldCandidate.draft
         : JSON.stringify({ name: '守灯人', roleWeight: 'main', moralAxis: 'good', orderAxis: 'lawful', relationships: '守护潮门' })
       const reservation = options.budget.reserveCall({
         label: task.id,
@@ -121,40 +104,28 @@ function fakeExecutor(input: {
         maxOutputTokens: 100,
       })
       options.budget.settleCall(reservation, output)
-      const gateway = task.agentId === 'character'
-        ? await prepareRequiredMasterGatewayFixtureV1({
-            scope: options.scope,
-            worldGroupId: options.worldGroupId,
-            executionTrace: options.executionTrace,
-          }, task, output)
-        : undefined
+      const gateway = await prepareRequiredMasterGatewayFixtureV1({
+        scope: options.scope,
+        worldGroupId: options.worldGroupId,
+        executionTrace: options.executionTrace,
+      }, task, output)
       await options.executionTrace.candidateReady(task, {
         payload: {
           version: 1,
           taskId: task.id,
           agentId: task.agentId,
+          skillId: task.skillId,
           label: task.agentId,
-          contextSources: gateway?.contextSources ?? ['worldview'],
-          ...(gateway ? { contextEvidence: gateway.contextEvidence } : {
-            contextEvidence: {
-              profile: 'balanced',
-              included: ['worldview'],
-              omitted: [],
-              trimmed: [],
-              estimatedInputTokens: 1,
-              inputBudgetTokens: 100,
-            },
-          }),
-          baseSnapshot: task.agentId === 'world-origin'
-            ? { id: null, updatedAt: null, worldOrigin: '' }
-            : {},
+          contextSources: gateway.contextSources,
+          contextEvidence: gateway.contextEvidence,
+          ...(worldCandidate?.payload ?? { baseSnapshot: {} }),
           workspaceScope: options.scope,
           dependsOnTaskIds: task.dependsOn,
         },
         draft: output,
         runtimeNode: {} as any,
-        runtimeOutput: output,
-        ...(gateway ? { contextGatewayRuntime: gateway.contextGatewayRuntime } : {}),
+        runtimeOutput: worldCandidate?.runtimeOutput ?? output,
+        contextGatewayRuntime: gateway.contextGatewayRuntime,
       })
       if (input.failAfterTask === task.id) throw new Error('模拟宿主中断')
     }
@@ -185,19 +156,23 @@ describe.sequential('R-HARNESS1-master-durable-orchestrator · 主 Agent durable
       tasks: [{
         id: 'prose-1',
         agentId: 'prose',
+        skillId: 'prose.write',
         instruction: '写第一章正文。',
         dependsOn: [],
         perspectiveCharacterId: 7,
       }],
+      workflow: DIRECT_WORKFLOW,
     })
     const withoutPerspective = parseMasterAgentPlanV1({
       summary: '生成正文，但不猜测叙事视角。',
       tasks: [{
         id: 'prose-1',
         agentId: 'prose',
+        skillId: 'prose.write',
         instruction: '写第一章正文。',
         dependsOn: [],
       }],
+      workflow: DIRECT_WORKFLOW,
     })
 
     expect(withPerspective.tasks[0].perspectiveCharacterId).toBe(7)
@@ -218,10 +193,12 @@ describe.sequential('R-HARNESS1-master-durable-orchestrator · 主 Agent durable
       tasks: [{
         id: 'prose-1',
         agentId: 'prose',
+        skillId: 'prose.write',
         instruction: '写第一章正文。',
         dependsOn: [],
         perspectiveCharacterId: 0,
       }],
+      workflow: DIRECT_WORKFLOW,
     })).toThrow('perspectiveCharacterId 无效')
   })
 
@@ -247,6 +224,7 @@ describe.sequential('R-HARNESS1-master-durable-orchestrator · 主 Agent durable
       projectId: fixture.scope.projectId,
       worldGroupId: fixture.worldGroupId,
       scope: fixture.scope,
+      purpose: 'master-authoring',
     })
     const calls = vi.fn()
     const result = await runDurableMasterAgentPlanV1({
@@ -274,13 +252,18 @@ describe.sequential('R-HARNESS1-master-durable-orchestrator · 主 Agent durable
       projectId: beforeFixture.scope.projectId,
       worldGroupId: beforeFixture.worldGroupId,
       scope: beforeFixture.scope,
+      purpose: 'master-authoring',
     })
     configureHarnessFaultInjectionV1(['candidate.before-persist'])
     await expect(runDurableMasterAgentPlanV1({
       scope: beforeFixture.scope,
       worldGroupId: beforeFixture.worldGroupId,
       conversationId: beforeConversation.id,
-      plan: { summary: '建立世界。', tasks: [{ id: 'world-1', agentId: 'world-origin', instruction: '生成。', dependsOn: [] }] },
+      plan: {
+        summary: '建立世界。',
+        tasks: [{ id: 'world-1', agentId: 'world-origin', skillId: 'world-origin.worldview-field', instruction: '生成。', dependsOn: [] }],
+        workflow: DIRECT_WORKFLOW,
+      },
       budget: new AgentTeamBudgetTracker('balanced'),
     }, { execute: fakeExecutor({ calls: vi.fn() }) as any })).rejects.toThrow('candidate.before-persist')
     expect((await db.agentEvents.toArray()).filter(event => event.kind === 'candidate')).toHaveLength(0)
@@ -294,13 +277,18 @@ describe.sequential('R-HARNESS1-master-durable-orchestrator · 主 Agent durable
       projectId: afterFixture.scope.projectId,
       worldGroupId: afterFixture.worldGroupId,
       scope: afterFixture.scope,
+      purpose: 'master-authoring',
     })
     configureHarnessFaultInjectionV1(['candidate.after-persist'])
     await expect(runDurableMasterAgentPlanV1({
       scope: afterFixture.scope,
       worldGroupId: afterFixture.worldGroupId,
       conversationId: afterConversation.id,
-      plan: { summary: '建立世界。', tasks: [{ id: 'world-1', agentId: 'world-origin', instruction: '生成。', dependsOn: [] }] },
+      plan: {
+        summary: '建立世界。',
+        tasks: [{ id: 'world-1', agentId: 'world-origin', skillId: 'world-origin.worldview-field', instruction: '生成。', dependsOn: [] }],
+        workflow: DIRECT_WORKFLOW,
+      },
       budget: new AgentTeamBudgetTracker('balanced'),
     }, { execute: fakeExecutor({ calls: vi.fn() }) as any })).rejects.toThrow('candidate.after-persist')
     const run = (await db.agentRuns.toArray())[0]
@@ -317,6 +305,7 @@ describe.sequential('R-HARNESS1-master-durable-orchestrator · 主 Agent durable
       projectId: fixture.scope.projectId,
       worldGroupId: fixture.worldGroupId,
       scope: fixture.scope,
+      purpose: 'master-authoring',
     })
     const calls = vi.fn()
     await expect(runDurableMasterAgentPlanV1({
@@ -354,6 +343,7 @@ describe.sequential('R-HARNESS1-master-durable-orchestrator · 主 Agent durable
       projectId: fixture.scope.projectId,
       worldGroupId: fixture.worldGroupId,
       scope: fixture.scope,
+      purpose: 'master-authoring',
     })
     const calls = vi.fn()
     await expect(runDurableMasterAgentPlanV1({
@@ -393,6 +383,7 @@ describe.sequential('R-HARNESS1-master-durable-orchestrator · 主 Agent durable
       projectId: fixture.scope.projectId,
       worldGroupId: fixture.worldGroupId,
       scope: fixture.scope,
+      purpose: 'master-authoring',
     })
     const result = await runDurableMasterAgentPlanV1({
       scope: fixture.scope,
@@ -400,7 +391,8 @@ describe.sequential('R-HARNESS1-master-durable-orchestrator · 主 Agent durable
       conversationId: conversation.id,
       plan: {
         summary: '建立世界来源。',
-        tasks: [{ id: 'world-1', agentId: 'world-origin', instruction: '生成世界来源。', dependsOn: [] }],
+        tasks: [{ id: 'world-1', agentId: 'world-origin', skillId: 'world-origin.worldview-field', instruction: '生成世界来源。', dependsOn: [] }],
+        workflow: DIRECT_WORKFLOW,
       },
       budget: new AgentTeamBudgetTracker('balanced'),
     }, { execute: fakeExecutor({ calls: vi.fn() }) as any })
@@ -419,7 +411,7 @@ describe.sequential('R-HARNESS1-master-durable-orchestrator · 主 Agent durable
       candidateHash: candidate.payload.candidateHash,
     })
     const committed = await commitMasterAgentCandidateAdoptionV1(ref)
-    expect(committed.message).toContain('世界来源')
+    expect(committed.message).toContain('世界基座')
     snapshot = await readAgentRunV1(fixture.scope, result.runId)
     expect(snapshot.projection.steps['master:world-1']).toMatchObject({
       status: 'succeeded',
@@ -447,6 +439,7 @@ describe.sequential('R-HARNESS1-master-durable-orchestrator · 主 Agent durable
       projectId: fixture.scope.projectId,
       worldGroupId: fixture.worldGroupId,
       scope: fixture.scope,
+      purpose: 'master-authoring',
     })
     const result = await runDurableMasterAgentPlanV1({
       scope: fixture.scope,
@@ -454,12 +447,14 @@ describe.sequential('R-HARNESS1-master-durable-orchestrator · 主 Agent durable
       conversationId: conversation.id,
       plan: {
         summary: '建立可修订的世界来源。',
-        tasks: [{ id: 'world-1', agentId: 'world-origin', instruction: '生成世界来源。', dependsOn: [] }],
+        tasks: [{ id: 'world-1', agentId: 'world-origin', skillId: 'world-origin.worldview-field', instruction: '生成世界来源。', dependsOn: [] }],
+        workflow: DIRECT_WORKFLOW,
       },
       budget: new AgentTeamBudgetTracker('balanced'),
     }, { execute: fakeExecutor({ calls: vi.fn() }) as any })
     const original = result.candidates[0]
-    const revisedDraft = '作者确认后的潮汐世界来源。'
+    const revisedValue = '作者确认后的潮汐世界来源。'
+    const revisedDraft = currentWorldOriginDraftV1(revisedValue)
 
     await updateAgentEventCandidate(
       original.event.id!,
@@ -486,8 +481,8 @@ describe.sequential('R-HARNESS1-master-durable-orchestrator · 主 Agent durable
       runId: result.runId,
       candidateEventId: original.event.id!,
     })
-    expect(committed.message).toContain('世界来源')
-    expect((await db.worldviews.toArray()).map(row => row.worldOrigin)).toEqual([revisedDraft])
+    expect(committed.message).toContain('世界基座')
+    expect((await db.worldviews.toArray()).map(row => row.worldOrigin)).toEqual([revisedValue])
   })
 
   it('业务写入后宿主中断，恢复扫描只补齐采纳证据，不重复写业务', async () => {
@@ -496,6 +491,7 @@ describe.sequential('R-HARNESS1-master-durable-orchestrator · 主 Agent durable
       projectId: fixture.scope.projectId,
       worldGroupId: fixture.worldGroupId,
       scope: fixture.scope,
+      purpose: 'master-authoring',
     })
     const result = await runDurableMasterAgentPlanV1({
       scope: fixture.scope,
@@ -503,7 +499,8 @@ describe.sequential('R-HARNESS1-master-durable-orchestrator · 主 Agent durable
       conversationId: conversation.id,
       plan: {
         summary: '建立世界来源。',
-        tasks: [{ id: 'world-1', agentId: 'world-origin', instruction: '生成世界来源。', dependsOn: [] }],
+        tasks: [{ id: 'world-1', agentId: 'world-origin', skillId: 'world-origin.worldview-field', instruction: '生成世界来源。', dependsOn: [] }],
+        workflow: DIRECT_WORKFLOW,
       },
       budget: new AgentTeamBudgetTracker('balanced'),
     }, { execute: fakeExecutor({ calls: vi.fn() }) as any })
@@ -541,6 +538,7 @@ describe.sequential('R-HARNESS1-master-durable-orchestrator · 主 Agent durable
       projectId: fixture.scope.projectId,
       worldGroupId: fixture.worldGroupId,
       scope: fixture.scope,
+      purpose: 'master-authoring',
     })
     const result = await runDurableMasterAgentPlanV1({
       scope: fixture.scope,
@@ -548,7 +546,8 @@ describe.sequential('R-HARNESS1-master-durable-orchestrator · 主 Agent durable
       conversationId: conversation.id,
       plan: {
         summary: '建立世界来源。',
-        tasks: [{ id: 'world-1', agentId: 'world-origin', instruction: '生成世界来源。', dependsOn: [] }],
+        tasks: [{ id: 'world-1', agentId: 'world-origin', skillId: 'world-origin.worldview-field', instruction: '生成世界来源。', dependsOn: [] }],
+        workflow: DIRECT_WORKFLOW,
       },
       budget: new AgentTeamBudgetTracker('balanced'),
     }, { execute: fakeExecutor({ calls: vi.fn() }) as any })
@@ -602,7 +601,7 @@ describe.sequential('R-HARNESS1-master-durable-orchestrator · 主 Agent durable
       createdAt: Date.now(),
       updatedAt: Date.now(),
     } as any) as number
-    await backfillResourceUidsV1(fixture.scope.projectId)
+    await stampCurrentFixtureResourceUidsV1(fixture.scope.projectId)
     const prepared = await prepareOutlineCopilot({
       projectId: fixture.scope.projectId,
       scope: fixture.scope,
@@ -617,6 +616,7 @@ describe.sequential('R-HARNESS1-master-durable-orchestrator · 主 Agent durable
       projectId: fixture.scope.projectId,
       worldGroupId: fixture.worldGroupId,
       scope: fixture.scope,
+      purpose: 'master-authoring',
     })
     const result = await runDurableMasterAgentPlanV1({
       scope: fixture.scope,
@@ -624,7 +624,8 @@ describe.sequential('R-HARNESS1-master-durable-orchestrator · 主 Agent durable
       conversationId: conversation.id,
       plan: {
         summary: '生成第一卷章节大纲。',
-        tasks: [{ id: 'outline-1', agentId: 'outline', instruction: '生成两个章节。', dependsOn: [] }],
+        tasks: [{ id: 'outline-1', agentId: 'outline', skillId: 'outline.compose', instruction: '生成两个章节。', dependsOn: [] }],
+        workflow: DIRECT_WORKFLOW,
       },
       budget: new AgentTeamBudgetTracker('balanced'),
     }, { execute: async (options: any) => {
@@ -647,6 +648,7 @@ describe.sequential('R-HARNESS1-master-durable-orchestrator · 主 Agent durable
           version: 1,
           taskId: task.id,
           agentId: task.agentId,
+          skillId: task.skillId,
           label: '章节大纲',
           contextSources: gateway.contextSources,
           contextEvidence: gateway.contextEvidence,
@@ -724,7 +726,7 @@ describe.sequential('R-HARNESS1-master-durable-orchestrator · 主 Agent durable
         order: 0,
         updatedAt: Date.now(),
       } as any) as number
-      await backfillResourceUidsV1(fixture.scope.projectId)
+      await stampCurrentFixtureResourceUidsV1(fixture.scope.projectId)
       const prepared = await prepareProseCopilot({
         projectId: fixture.scope.projectId,
         scope: fixture.scope,
@@ -736,6 +738,7 @@ describe.sequential('R-HARNESS1-master-durable-orchestrator · 主 Agent durable
         projectId: fixture.scope.projectId,
         worldGroupId: fixture.worldGroupId,
         scope: fixture.scope,
+        purpose: 'master-authoring',
       })
       const result = await runDurableMasterAgentPlanV1({
         scope: fixture.scope,
@@ -743,7 +746,8 @@ describe.sequential('R-HARNESS1-master-durable-orchestrator · 主 Agent durable
         conversationId: conversation.id,
         plan: {
           summary: '生成第一章正文。',
-          tasks: [{ id: 'prose-1', agentId: 'prose', instruction: '写第一章正文。', dependsOn: [] }],
+          tasks: [{ id: 'prose-1', agentId: 'prose', skillId: 'prose.write', instruction: '写第一章正文。', dependsOn: [] }],
+          workflow: DIRECT_WORKFLOW,
         },
         budget: new AgentTeamBudgetTracker('balanced'),
       }, { execute: async (options: any) => {
@@ -767,6 +771,7 @@ describe.sequential('R-HARNESS1-master-durable-orchestrator · 主 Agent durable
             version: 1,
             taskId: task.id,
             agentId: task.agentId,
+            skillId: task.skillId,
             label: '第一章正文',
             contextSources: gateway.contextSources,
             contextEvidence: gateway.contextEvidence,

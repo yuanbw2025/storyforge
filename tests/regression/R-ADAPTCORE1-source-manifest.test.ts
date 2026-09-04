@@ -17,7 +17,7 @@ import { assembleContext } from '../../src/lib/registry/assemble-context'
 import type {
   AdaptationBriefV1,
   AdaptationPlanV1,
-  CreateProjectInput,
+  CreateWorkspaceInput,
   ScreenplayTargetSpecV1,
 } from '../../src/lib/types'
 
@@ -67,10 +67,9 @@ const plan: AdaptationPlanV1 = {
   globalAssumptions: [],
 }
 
-function input(name: string): CreateProjectInput {
+function input(name: string): CreateWorkspaceInput {
   return {
     name,
-    genre: 'other',
     genres: ['other'],
     status: 'drafting',
     description: '一个可以改编的故事',

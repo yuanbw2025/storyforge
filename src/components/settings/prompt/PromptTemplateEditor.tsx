@@ -398,13 +398,13 @@ export default function PromptTemplateEditor({ template, onChanged, onDeleted }:
                   {binding.manual && <span className="text-text-muted">可人工补充</span>}
                 </div>
                 <div className="mt-1 flex flex-wrap gap-1 text-[10px] text-text-secondary">
-                  {binding.projectField && (
-                    <span className="px-1.5 py-0.5 bg-bg-base rounded">项目字段：{binding.projectField}</span>
+                  {binding.workField && (
+                    <span className="px-1.5 py-0.5 bg-bg-base rounded">项目字段：{binding.workField}</span>
                   )}
                   {binding.sourceKeys?.map(sourceKey => (
                     <span key={sourceKey} className="px-1.5 py-0.5 bg-bg-base rounded">上下文：{sourceKey}</span>
                   ))}
-                  {!binding.projectField && !binding.sourceKeys?.length && (
+                  {!binding.workField && !binding.sourceKeys?.length && (
                     <span className="px-1.5 py-0.5 bg-bg-base rounded">人工输入</span>
                   )}
                 </div>

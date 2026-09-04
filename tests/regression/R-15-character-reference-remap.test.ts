@@ -7,6 +7,8 @@ import { useCharacterStore } from '../../src/stores/character'
 import { applyCharacterReferenceRemap } from '../../src/lib/registry/character-references'
 import { transactionTablesFor } from '../../src/lib/registry/lifecycle'
 import { parseFields, stringifyFields } from '../../src/lib/types/state-card'
+import { seedCurrentProject } from '../helpers/current-workspace'
+import { finalizeCurrentFixtureV1 } from '../helpers/current-resource-identity'
 
 describe('R-15: character reference remap', () => {
   beforeEach(async () => {
@@ -20,15 +22,16 @@ describe('R-15: character reference remap', () => {
 
   it('removes deleted character ids from detailed outline arrays and scene JSON', async () => {
     const now = Date.now()
-    const projectId = await db.projects.add({
-      name: 'R-15-delete', genre: '', description: '', targetWordCount: 0,
+    const projectId = await seedCurrentProject({
+      name: 'R-15-delete', genres: [], description: '', targetWordCount: 0,
       enableMultiWorld: false, createdAt: now, updatedAt: now,
     } as any) as number
     const deletedId = await db.characters.add(character(projectId, '旧角色', now)) as number
     const keptId = await db.characters.add(character(projectId, '保留角色', now)) as number
     await db.characterRelations.add({
       projectId, fromCharacterId: deletedId, toCharacterId: keptId,
-      type: 'ally', description: '', createdAt: now, updatedAt: now,
+      relationType: 'ally', label: '盟友', description: '', isBidirectional: true,
+      createdAt: now, updatedAt: now,
     } as any)
     const sourceOutlineId = await db.outlineNodes.add({
       projectId, parentId: null, type: 'chapter', title: '引用章节', summary: '',
@@ -51,6 +54,7 @@ describe('R-15: character reference remap', () => {
       sourceType: 'chapter', status: 'confirmed', locked: false,
       createdAt: now, updatedAt: now,
     } as any) as number
+    await finalizeCurrentFixtureV1(projectId)
     await useCharacterStore.getState().loadAll(projectId)
     await useCharacterStore.getState().deleteCharacter(deletedId)
 
@@ -68,15 +72,16 @@ describe('R-15: character reference remap', () => {
 
   it('remaps merged character ids to the primary character and merges state cards by name', async () => {
     const now = Date.now()
-    const projectId = await db.projects.add({
-      name: 'R-15-merge', genre: '', description: '', targetWordCount: 0,
+    const projectId = await seedCurrentProject({
+      name: 'R-15-merge', genres: [], description: '', targetWordCount: 0,
       enableMultiWorld: false, createdAt: now, updatedAt: now,
     } as any) as number
     const primaryId = await db.characters.add(character(projectId, '主角色', now)) as number
     const aliasId = await db.characters.add(character(projectId, '别名角色', now)) as number
     await db.characterRelations.add({
       projectId, fromCharacterId: primaryId, toCharacterId: aliasId,
-      type: 'ally', description: '', createdAt: now, updatedAt: now,
+      relationType: 'ally', label: '盟友', description: '', isBidirectional: true,
+      createdAt: now, updatedAt: now,
     } as any)
     const sourceOutlineId = await db.outlineNodes.add({
       projectId, parentId: null, type: 'chapter', title: '合并引用章节', summary: '',
@@ -111,6 +116,7 @@ describe('R-15: character reference remap', () => {
       projectId, itemName: '别名佩剑', heldByName: '别名角色', characterId: aliasId,
       action: 'gain', quantity: 1, createdAt: now,
     } as any) as number
+    await finalizeCurrentFixtureV1(projectId)
     await db.transaction('rw', transactionTablesFor('importProject'), async () => {
       await applyCharacterReferenceRemap({
         projectId,
@@ -144,9 +150,10 @@ describe('R-15: character reference remap', () => {
 
 function character(projectId: number, name: string, now: number) {
   return {
-    projectId, name, role: 'supporting',
+    projectId, name, roleWeight: 'secondary', moralAxis: 'neutral', orderAxis: 'neutral',
     shortDescription: '', appearance: '', personality: '', background: '',
-    motivation: '', abilities: '', relationships: '', arc: '',
+    motivation: '', abilities: '', relationships: '', arc: '', homeWorldGroupId: null,
+    isCrossWorld: false,
     createdAt: now, updatedAt: now,
   }
 }

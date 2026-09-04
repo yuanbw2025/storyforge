@@ -29,7 +29,7 @@ import { db } from '../../src/lib/db/schema'
 import { createProductBuildPreviewManifestV1 } from '../../src/lib/product-production/preview-manifest'
 import { createProductRuntimeInstanceFromSource } from '../../src/lib/product/runtime-instances'
 import { createWorldRevision, publishWorldRevision } from '../../src/lib/world-engine/releases'
-import { ensureWorkspaceOwnership } from '../../src/lib/workspace/ownership'
+import { createWorkspace } from '../../src/lib/workspace/create-workspace'
 import { readProductRuntimeState } from '../../src/lib/product/runtime-api'
 import {
   CURRENT_PRODUCT_RESOURCE_KEYS,
@@ -164,13 +164,14 @@ function runtimePackage(productType: ProductionProductKindV1): ProductRuntimePac
 }
 
 async function workspace(name: string) {
-  const now = Date.now()
-  const projectId = await db.projects.add({
-    workspacePurpose: 'world-engine',
-    name, genre: 'interactive-fiction', genres: ['interactive-fiction'], status: 'drafting',
-    description: '', targetWordCount: 1, createdAt: now, updatedAt: now,
-  } as never) as number
-  return ensureWorkspaceOwnership(projectId)
+  return createWorkspace({
+    name,
+    genres: ['interactive-fiction'],
+    status: 'drafting',
+    description: '',
+    targetWordCount: 1,
+    enableMultiWorld: false,
+  }, { purpose: 'world-engine', kind: 'novel', novelProfile: 'long' })
 }
 
 async function insertPreviewBuild(input: {

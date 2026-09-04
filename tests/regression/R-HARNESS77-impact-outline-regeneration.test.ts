@@ -21,6 +21,8 @@ import {
 } from '../../src/lib/agent/run/impact-outline-regeneration-durable'
 import { staleAgentRunVerificationV1 } from '../../src/lib/agent/run/event-store'
 import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
+import { seedCurrentWorkspace } from '../helpers/current-workspace'
+import { stampNewRecord } from '../../src/lib/workspace/scope'
 
 const VALID_OUTPUT = JSON.stringify({
   summary: '钟楼根据半开启的潮门重新安排守夜人撤离，并留下下一章追查潮声来源的因果钩子。',
@@ -30,55 +32,44 @@ const VALID_OUTPUT = JSON.stringify({
 
 async function seed(label = 'h77') {
   const now = Date.now()
-  const projectId = await db.projects.add({
-    name: `生成式影响重建-${label}`, genre: 'fantasy', genres: ['fantasy'], status: 'drafting', description: '',
-    targetWordCount: 100_000,createdAt: now, updatedAt: now,
-  } as any) as number
-  const worldId = await db.worlds.add({
-    projectId, code: `${label}-${now}`, name: '主世界', description: '', currentVersion: 1,
-    createdAt: now, updatedAt: now,
-  }) as number
-  const workId = await db.works.add({
-    projectId, worldId, title: label, description: '', genres: ['fantasy'], status: 'drafting',
-    targetWordCount: 100_000, createdAt: now, updatedAt: now,
-  } as any) as number
-  await db.projects.update(projectId, { activeWorldId: worldId, activeWorkId: workId, ownershipSchemaVersion: 1 })
-  const worldGroupId = await db.worldGroups.add({
-    projectId, worldId, name: '主世界', order: 0, createdAt: now, updatedAt: now,
-  }) as number
-  const volumeId = await db.outlineNodes.add({
-    projectId, workId, worldGroupId, parentId: null, type: 'volume', title: '第一卷', summary: '',
+  const created = await seedCurrentWorkspace(`生成式影响重建-${label}`, { enableMultiWorld: true })
+  const { projectId } = created.scope
+  const worldGroupId = await db.worldGroups.add(stampNewRecord(created.scope, 'worldGroups', {
+    projectId, name: '主世界', type: 'primary', order: 0, createdAt: now, updatedAt: now,
+  }, { owner: 'world' })) as number
+  const volumeId = await db.outlineNodes.add(stampNewRecord(created.scope, 'outlineNodes', {
+    projectId, worldGroupId, parentId: null, type: 'volume', title: '第一卷', summary: '',
     order: 0, createdAt: now, updatedAt: now,
-  } as any) as number
-  const sourceOutlineNodeId = await db.outlineNodes.add({
-    projectId, workId, worldGroupId, parentId: volumeId, type: 'chapter', title: '第一章', summary: '潮门开启',
+  }, { owner: 'work' })) as number
+  const sourceOutlineNodeId = await db.outlineNodes.add(stampNewRecord(created.scope, 'outlineNodes', {
+    projectId, worldGroupId, parentId: volumeId, type: 'chapter', title: '第一章', summary: '潮门开启',
     order: 0, createdAt: now, updatedAt: now,
-  } as any) as number
-  const targetOutlineNodeId = await db.outlineNodes.add({
-    projectId, workId, worldGroupId, parentId: volumeId, type: 'chapter', title: '第二章', summary: '钟楼照常回应',
+  }, { owner: 'work' })) as number
+  const targetOutlineNodeId = await db.outlineNodes.add(stampNewRecord(created.scope, 'outlineNodes', {
+    projectId, worldGroupId, parentId: volumeId, type: 'chapter', title: '第二章', summary: '钟楼照常回应',
     order: 1, createdAt: now, updatedAt: now,
-  } as any) as number
-  const sourceChapterId = await db.chapters.add({
-    projectId, workId, outlineNodeId: sourceOutlineNodeId, title: '第一章', content: '<p>潮门只开启一半，钟声穿过旧港。</p>',
+  }, { owner: 'work' })) as number
+  const sourceChapterId = await db.chapters.add(stampNewRecord(created.scope, 'chapters', {
+    projectId, outlineNodeId: sourceOutlineNodeId, title: '第一章', content: '<p>潮门只开启一半，钟声穿过旧港。</p>',
     wordCount: 17, status: 'revised', order: 0, notes: '', createdAt: now, updatedAt: now,
-  } as any) as number
-  await db.chapters.add({
-    projectId, workId, outlineNodeId: targetOutlineNodeId, title: '第二章', content: '<p>钟楼仍按旧计划回应。</p>',
+  }, { owner: 'work' })) as number
+  await db.chapters.add(stampNewRecord(created.scope, 'chapters', {
+    projectId, outlineNodeId: targetOutlineNodeId, title: '第二章', content: '<p>钟楼仍按既定计划回应。</p>',
     wordCount: 12, status: 'draft', order: 1, notes: '', createdAt: now, updatedAt: now,
-  } as any)
-  const factId = await db.temporalFacts.add({
-    projectId, workId, worldGroupId, subjectType: 'location', subjectId: null, subjectName: '潮门',
+  }, { owner: 'work' }) as any)
+  const factId = await db.temporalFacts.add(stampNewRecord(created.scope, 'temporalFacts', {
+    projectId, worldGroupId, subjectType: 'location', subjectId: null, subjectName: '潮门',
     predicate: 'state', value: '开启', validFromChapterId: sourceChapterId, validToChapterId: null,
     sourceChapterId, sourceQuote: '潮门', sourceTextHash: '', status: 'confirmed', locked: false,
     createdAt: now, updatedAt: now,
-  } as any) as number
-  await db.storyCores.add({
-    projectId, workId, logline: '潮汐改变港城命运', concept: '', theme: '', centralConflict: '',
+  }, { owner: 'work' }) as any) as number
+  await db.storyCores.add(stampNewRecord(created.scope, 'storyCores', {
+    projectId, logline: '潮汐改变港城命运', concept: '', theme: '', centralConflict: '',
     plotPattern: '', mainPlot: '', subPlots: '',
     createdAt: now, updatedAt: now,
-  } as any)
+  }, { owner: 'work' }) as any)
   return {
-    scope: { projectId, worldId, workId } satisfies WorkspaceScope,
+    scope: created.scope satisfies WorkspaceScope,
     projectId, worldGroupId, volumeId, sourceOutlineNodeId, targetOutlineNodeId, sourceChapterId, factId,
   }
 }
