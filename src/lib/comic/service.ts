@@ -155,7 +155,7 @@ export async function updateComicPanel(input: {
   scope: WorkspaceScope
   panelId: number
   expectedRevision: number
-  patch: Partial<Pick<ComicPanel, 'frame' | 'sourceUnitIds' | 'shot' | 'action' | 'visualPrompt' | 'negativePrompt' | 'continuityRefs' | 'lettering' | 'selectedMediaAssetKey' | 'imageTransform' | 'status'>>
+  patch: Partial<Pick<ComicPanel, 'frame' | 'sourceUnitIds' | 'shot' | 'nextPanelKey' | 'narrativeFunction' | 'moment' | 'action' | 'visualPrompt' | 'negativePrompt' | 'continuityRefs' | 'subjectStates' | 'protectedAreas' | 'lettering' | 'selectedMediaAssetKey' | 'imageTransform' | 'status'>>
 }): Promise<ComicPanel> {
   const { scope, adaptation } = await requireComic(input.scope, true)
   const deps = await dependencies(adaptation)
@@ -165,7 +165,7 @@ export async function updateComicPanel(input: {
     if (!panel || !page || !await assertRecordInScope(scope, 'comicPanels', panel, { owner: 'work' }) || page.adaptationProjectId !== adaptation.id) throw new Error('[comic] 格不存在或越界')
     if (panel.revision !== input.expectedRevision) throw new Error('[comic] 格已变化，请刷新')
     if (panel.status === 'locked' && input.patch.status !== 'reviewed') throw new Error('[comic] 锁定格必须先解锁')
-    const next: ComicPanel = { ...panel, ...structuredClone(input.patch), action: input.patch.action?.trim() ?? panel.action, visualPrompt: input.patch.visualPrompt?.trim() ?? panel.visualPrompt, negativePrompt: input.patch.negativePrompt?.trim() ?? panel.negativePrompt, revision: panel.revision + 1, updatedAt: Date.now() }
+    const next: ComicPanel = { ...panel, ...structuredClone(input.patch), action: input.patch.action?.trim() ?? panel.action, visualPrompt: input.patch.visualPrompt?.trim() ?? panel.visualPrompt, negativePrompt: input.patch.negativePrompt?.trim() ?? panel.negativePrompt, narrativeReviewRevision: null, visualReviewRevision: null, visualReviewBasis: null, visualReviewedAt: null, revision: panel.revision + 1, updatedAt: Date.now() }
     if (next.selectedMediaAssetKey) {
       const asset = await db.comicMediaAssets.where('[workId+stableKey]').equals([scope.workId, next.selectedMediaAssetKey]).first()
       if (!asset || asset.disposition !== 'available' || asset.role !== 'panel-render' || asset.panelId !== panel.id) throw new Error('[comic] 所选成图不存在或不属于当前格')

@@ -99,7 +99,7 @@ describe('WORLD-2C C4/C5 · strict ownership and lifecycle completion', () => {
     } as any)
     await stampCurrentFixtureResourceUidsV1(ownership.scope.projectId)
     const backup = await exportProjectJSON(ownership.scope.projectId)
-    expect(backup.version).toBe(13)
+    expect(backup.version).toBe(14)
     const beforeProjects = await db.projects.count()
     const damaged = structuredClone(backup) as any
     damaged.storyCores[0]._workOwnerExportId = 999999

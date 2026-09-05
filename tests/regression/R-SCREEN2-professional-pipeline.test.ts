@@ -254,7 +254,7 @@ describe('SCREEN-2 · professional novel-to-screenplay pipeline', () => {
     expect(prompts.get('targeted-rewrite')).toContain('只修复作者选中的开放问题')
 
     const backup = await exportProjectJSON(item.source.scope.projectId)
-    expect(backup).toMatchObject({ version: 13 })
+    expect(backup).toMatchObject({ version: 14 })
     expect(backup.screenplayBeats).toHaveLength(1)
     expect(backup.screenplaySceneCards).toHaveLength(1)
     expect(backup.screenplayReviewIssues.length).toBeGreaterThanOrEqual(2)

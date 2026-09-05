@@ -104,7 +104,7 @@ describe('NOVEL-PROFILE-1 / SHORT-1 · Work 分类与短篇边界', () => {
       novelProfile: 'short',
     })
     const backup = await exportProjectJSON(created.scope.projectId)
-    expect(backup.version).toBe(13)
+    expect(backup.version).toBe(14)
     expect(backup.works?.[0]).toMatchObject({ kind: 'novel', novelProfile: 'short' })
 
     const importedId = await importProjectJSON(structuredClone(backup))
@@ -117,7 +117,7 @@ describe('NOVEL-PROFILE-1 / SHORT-1 · Work 分类与短篇边界', () => {
     const wrongVersion = structuredClone(backup) as any
     wrongVersion.version = 9
     const beforeWrongVersion = await db.projects.count()
-    await expect(importProjectJSON(wrongVersion)).rejects.toThrow('只接受当前备份版本 v13')
+    await expect(importProjectJSON(wrongVersion)).rejects.toThrow('只接受当前备份版本 v14')
     expect(await db.projects.count()).toBe(beforeWrongVersion)
 
     const invalid = structuredClone(backup) as any

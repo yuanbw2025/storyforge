@@ -10,7 +10,6 @@ import {
   Sparkles,
   Trash2,
   Unlock,
-  X,
 } from "lucide-react";
 import type {
   AdaptationProject,
@@ -62,14 +61,6 @@ import {
   renderComicPageSvgV1,
   renderComicPrintHtmlV1,
 } from "../../lib/comic/renderers";
-import AdaptationSetupPanel from "../adaptation/AdaptationSetupPanel";
-import {
-  adoptAdaptationCandidateV1,
-  generateAdaptationCandidateV1,
-  readPendingAdaptationCandidateV1,
-  rejectAdaptationCandidateV1,
-} from "../../lib/agent/run/adaptation-durable";
-import type { ComicPageCandidateV1 } from "../../lib/comic/adoption";
 import {
   getAIConfigRequiredMessage,
   isAIConfigReady,
@@ -79,6 +70,7 @@ import { useDialog } from "../shared/Dialog";
 import ComicPanelInspector from "./ComicPanelInspector";
 import ComicQaPanel from "./ComicQaPanel";
 import ComicVisualPanel from "./ComicVisualPanel";
+import ComicPipelinePanel from "./ComicPipelinePanel";
 import {
   EMPTY_COMIC_SUBJECT_DESIGN,
   type ComicPageGroup,
@@ -161,11 +153,6 @@ export default function ComicStudio({ scope }: Props) {
   const [message, setMessage] = useState("");
   const [dragPageId, setDragPageId] = useState<number | null>(null);
   const [dragPanelId, setDragPanelId] = useState<number | null>(null);
-  const [aiCandidate, setAiCandidate] = useState<{
-    runId: number;
-    payload: ComicPageCandidateV1[];
-    text: string;
-  } | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const aiConfig = useAIConfigStore((state) => state.config);
   const dialog = useDialog();
@@ -242,27 +229,6 @@ export default function ComicStudio({ scope }: Props) {
       setError(cause instanceof Error ? cause.message : "读取漫画失败"),
     );
   }, [reload]);
-  useEffect(() => {
-    let cancelled = false;
-    void readPendingAdaptationCandidateV1({
-      scope,
-      artifactKind: "comic-storyboard",
-    })
-      .then((pending) => {
-        if (!pending || cancelled) return;
-        const payload = pending.candidate.payload as ComicPageCandidateV1[];
-        setAiCandidate({
-          runId: pending.snapshot.run.id,
-          payload,
-          text: JSON.stringify(payload, null, 2),
-        });
-      })
-      .catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
-  }, [scope]);
-
   const currentGroup = useMemo(
     () => groups.find((group) => group.page.id === selectedPageId) ?? null,
     [groups, selectedPageId],
@@ -376,14 +342,14 @@ export default function ComicStudio({ scope }: Props) {
             <p>先冻结 Brief、章页计划与视觉圣经，再进入页格生产。</p>
           </div>
         </header>
-        <AdaptationSetupPanel
+        <ComicPipelinePanel
           scope={scope}
           adaptation={adaptation}
           sourceUnits={units}
-          onChanged={async (root) => {
-            setAdaptation(root);
-            await reload();
-          }}
+          pages={groups.map((group) => group.page)}
+          panels={groups.flatMap((group) => group.panels)}
+          subjectCount={subjects.length}
+          onChanged={reload}
         />
         {error && <p className="comic-error">{error}</p>}
       </div>
@@ -478,10 +444,15 @@ export default function ComicStudio({ scope }: Props) {
             frame: editingPanel.frame,
             sourceUnitIds: editingPanel.sourceUnitIds,
             shot: editingPanel.shot,
+            nextPanelKey: editingPanel.nextPanelKey,
+            narrativeFunction: editingPanel.narrativeFunction,
+            moment: editingPanel.moment,
             action: editingPanel.action,
             visualPrompt: editingPanel.visualPrompt,
             negativePrompt: editingPanel.negativePrompt,
             continuityRefs: editingPanel.continuityRefs,
+            subjectStates: editingPanel.subjectStates,
+            protectedAreas: editingPanel.protectedAreas,
             lettering: editingPanel.lettering,
             imageTransform: editingPanel.imageTransform,
             status: editingPanel.status,
@@ -489,73 +460,6 @@ export default function ComicStudio({ scope }: Props) {
         }),
       "格已保存",
     );
-  const generateStoryboard = async () => {
-    if (busy || aiCandidate) return;
-    if (!isAIConfigReady(aiConfig)) {
-      setError(getAIConfigRequiredMessage(aiConfig));
-      return;
-    }
-    const sectionKey =
-      adaptation.plan?.sections.find(
-        (section) => section.episodeNumber === currentGroup?.page.chapterNumber,
-      )?.stableKey ?? adaptation.plan?.sections[0]?.stableKey;
-    if (!sectionKey) {
-      setError("请先确认漫画结构计划。");
-      return;
-    }
-    setBusy(true);
-    setError("");
-    try {
-      const generated = await generateAdaptationCandidateV1({
-        scope,
-        adaptationProjectId: adaptation.id!,
-        artifactKind: "comic-storyboard",
-        selectedPlanSectionKeys: [sectionKey],
-        aiConfig,
-      });
-      const payload = generated.candidate.payload as ComicPageCandidateV1[];
-      setAiCandidate({
-        runId: generated.snapshot.run.id,
-        payload,
-        text: JSON.stringify(payload, null, 2),
-      });
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "漫画分镜生成失败");
-    } finally {
-      setBusy(false);
-    }
-  };
-  const acceptStoryboard = async () => {
-    if (!aiCandidate || busy) return;
-    setBusy(true);
-    setError("");
-    try {
-      await adoptAdaptationCandidateV1<"comic-storyboard">({
-        scope,
-        runId: aiCandidate.runId,
-        authorPayload: JSON.parse(aiCandidate.text) as ComicPageCandidateV1[],
-      });
-      setAiCandidate(null);
-      await reload();
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "采纳漫画分镜失败");
-    } finally {
-      setBusy(false);
-    }
-  };
-  const rejectStoryboard = async () => {
-    if (!aiCandidate || busy) return;
-    setBusy(true);
-    setError("");
-    try {
-      await rejectAdaptationCandidateV1({ scope, runId: aiCandidate.runId });
-      setAiCandidate(null);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "放弃候选失败");
-    } finally {
-      setBusy(false);
-    }
-  };
   const generateMedia = async (regenerate: boolean, subject = false) => {
     if (busy) return;
     if (!isAIConfigReady(aiConfig)) {
@@ -812,6 +716,15 @@ export default function ComicStudio({ scope }: Props) {
           )}
         </div>
       </header>
+      <ComicPipelinePanel
+        scope={scope}
+        adaptation={adaptation}
+        sourceUnits={units}
+        pages={groups.map((group) => group.page)}
+        panels={groups.flatMap((group) => group.panels)}
+        subjectCount={subjects.length}
+        onChanged={reload}
+      />
       <nav className="comic-toolbar">
         <button
           className={tab === "storyboard" ? "active" : ""}
@@ -853,37 +766,6 @@ export default function ComicStudio({ scope }: Props) {
           接受 provider 一致性能力限制
         </label>
       </nav>
-      {aiCandidate && (
-        <section className="comic-ai-candidate">
-          <header>
-            <strong>
-              <Sparkles />
-              AI 漫画分镜候选 · 尚未写入正式页格
-            </strong>
-            <span>{aiCandidate.payload.length} 页</span>
-          </header>
-          <p>
-            页面重叠开关不会由模型开启；确认时整批验证来源、视觉条目、布局和排字，任一错误则全部不落库。
-          </p>
-          <textarea
-            value={aiCandidate.text}
-            onChange={(event) =>
-              setAiCandidate({ ...aiCandidate, text: event.target.value })
-            }
-            spellCheck={false}
-          />
-          <footer>
-            <button onClick={() => void rejectStoryboard()}>
-              <X />
-              放弃
-            </button>
-            <button className="primary" onClick={() => void acceptStoryboard()}>
-              <Check />
-              作者确认并原子采纳
-            </button>
-          </footer>
-        </section>
-      )}
       {tab === "storyboard" && (
         <div className="comic-layout">
           <aside className="comic-pages">
@@ -913,15 +795,6 @@ export default function ComicStudio({ scope }: Props) {
               >
                 <Plus />
                 新页
-              </button>
-              <button
-                onClick={() => void generateStoryboard()}
-                disabled={
-                  busy || !!aiCandidate || freshness?.status !== "unchanged"
-                }
-              >
-                <Sparkles />
-                AI 分镜
               </button>
             </div>
             {groups.map((group, index) => (

@@ -338,6 +338,41 @@ async function readComicVisualBibleContext(input: AssembleContextInput): Promise
   ].join('\n')
 }
 
+async function readComicScriptBeatsContext(input: AssembleContextInput): Promise<string> {
+  const root = await requireTargetAdaptation(input)
+  if (root.medium !== 'comic') return ''
+  const rows = await db.comicScriptBeats.where('[adaptationProjectId+manifestVersion]').equals([root.id!, root.activeSourceManifestVersion]).sortBy('order')
+  return rows.length ? ['【已确认漫画脚本节拍】', ...rows.map(row => `${row.stableKey}｜第${row.chapterNumber}章｜${row.narrativeFunction}｜${row.visualAction}｜对白意图：${row.dialogueIntent || '-'}｜情绪：${row.emotion}｜facts ${row.causalFactKeys.join(',')}｜decisions ${row.decisionKeys.join(',')}｜sources ${row.sourceUnitKeys.join(',')}`)].join('\n') : ''
+}
+
+async function readComicPagePlansContext(input: AssembleContextInput): Promise<string> {
+  const root = await requireTargetAdaptation(input)
+  if (root.medium !== 'comic') return ''
+  const rows = await db.comicPagePlans.where('[adaptationProjectId+manifestVersion]').equals([root.id!, root.activeSourceManifestVersion]).sortBy('order')
+  return rows.length ? ['【已确认漫画分页与页节奏】', ...rows.map(row => `${row.stableKey}｜页${row.pageNumber}｜第${row.chapterNumber}章｜${row.goal}｜beats ${row.beatKeys.join(',')}｜页末：${row.endReveal || '-'}｜翻页：${row.pageTurn}｜${row.expectedPanelCount}格｜文字预算${row.textBudget}字`)].join('\n') : ''
+}
+
+async function readComicSelectedMediaContext(input: AssembleContextInput): Promise<string> {
+  const root = await requireTargetAdaptation(input)
+  if (root.medium !== 'comic') return ''
+  const [pages, assets, subjects] = await Promise.all([
+    db.comicPages.where('adaptationProjectId').equals(root.id!).toArray(),
+    db.comicMediaAssets.where('adaptationProjectId').equals(root.id!).toArray(),
+    db.comicVisualSubjects.where('adaptationProjectId').equals(root.id!).toArray(),
+  ])
+  const pageIds = pages.flatMap(page => page.id == null ? [] : [page.id]); const panels = pageIds.length ? await db.comicPanels.where('pageId').anyOf(pageIds).toArray() : []
+  const selected = new Set([...panels.flatMap(panel => panel.selectedMediaAssetKey ? [panel.selectedMediaAssetKey] : []), ...subjects.flatMap(subject => subject.selectedMediaAssetKey ? [subject.selectedMediaAssetKey] : [])])
+  const rows = assets.filter(asset => selected.has(asset.stableKey) && asset.disposition === 'available')
+  return rows.length ? ['【漫画已选媒资元数据｜不等同于视觉观察】', ...rows.map(asset => JSON.stringify({ assetKey: asset.stableKey, role: asset.role, origin: asset.origin, panelKey: panels.find(panel => panel.id === asset.panelId)?.stableKey ?? null, subjectKey: asset.subjectKey, contentHashEvidence: asset.requestHash ?? null, referenceAssetKeys: asset.referenceAssetKeys, providerReceipt: asset.providerReceipt, rights: asset.rights, quality: asset.quality }))].join('\n') : ''
+}
+
+async function readComicReviewIssuesContext(input: AssembleContextInput): Promise<string> {
+  const root = await requireTargetAdaptation(input)
+  if (root.medium !== 'comic') return ''
+  const rows = await db.comicReviewIssues.where('[adaptationProjectId+manifestVersion]').equals([root.id!, root.activeSourceManifestVersion]).filter(row => row.status === 'open').toArray()
+  return rows.length ? ['【开放漫画审查问题】', ...rows.map(row => `${row.stableKey}｜${row.category}/${row.severity}｜page ${row.pageKey}${row.panelKey ? ` panel ${row.panelKey}` : ''}${row.subjectKey ? ` subject ${row.subjectKey}` : ''}${row.assetKey ? ` asset ${row.assetKey}` : ''}｜${row.problem}｜证据：${row.evidence}｜建议：${row.suggestion}`)].join('\n') : ''
+}
+
 async function readComicCurrentPagesContext(input: AssembleContextInput): Promise<string> {
   const root = await requireTargetAdaptation(input)
   if (root.medium !== 'comic' || !input.comicPageIds?.length) return ''
@@ -1614,6 +1649,22 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     protectedFromTrim: true,
     requiresAdaptationProjectId: true,
     read: readComicVisualBibleContext,
+  },
+  {
+    key: 'comic.scriptBeats', label: '已确认漫画脚本节拍', scope: 'project', layer: 'L0', ownerFrom: 'work',
+    budgetTokens: 12_000, protectedFromTrim: true, requiresAdaptationProjectId: true, read: readComicScriptBeatsContext,
+  },
+  {
+    key: 'comic.pagePlans', label: '已确认漫画分页与页节奏', scope: 'project', layer: 'L0', ownerFrom: 'work',
+    budgetTokens: 14_000, protectedFromTrim: true, requiresAdaptationProjectId: true, read: readComicPagePlansContext,
+  },
+  {
+    key: 'comic.selectedMedia', label: '漫画已选媒资证据', scope: 'project', layer: 'L0', ownerFrom: 'work',
+    budgetTokens: 12_000, protectedFromTrim: true, requiresAdaptationProjectId: true, read: readComicSelectedMediaContext,
+  },
+  {
+    key: 'comic.reviewIssues', label: '开放漫画审查问题', scope: 'project', layer: 'L0', ownerFrom: 'work',
+    budgetTokens: 10_000, protectedFromTrim: true, requiresAdaptationProjectId: true, read: readComicReviewIssuesContext,
   },
   {
     key: 'comic.currentPages',
