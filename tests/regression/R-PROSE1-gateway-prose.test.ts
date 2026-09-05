@@ -247,6 +247,36 @@ describe.sequential('PROSE-1 · 正文 Gateway 单一上下文与 exact adoption
     expect(assembled.contextGatewayExecution.contextPacket.sourceRefs.some(ref => ref.table === 'narrativeChoices')).toBe(true)
   })
 
+  it('前章交接记忆过期时保留 Canon 正文尾部，并排除过期派生内容', async () => {
+    const fixture = await seed()
+    await db.chapters.update(fixture.priorChapterId, {
+      continuityHandoff: {
+        chapterId: fixture.priorChapterId,
+        sourceTextHash: '0'.repeat(64),
+        schemaVersion: 1,
+        extractorVersion: 'legacy-test',
+        textNormalizationVersion: 'legacy-normalization',
+        finalScene: { activeCharacters: [] },
+        stateChanges: [],
+        knowledgeChanges: [],
+        commitments: [],
+        openLoops: ['不应装入的过期交接'],
+        immediateNextIntent: '不应装入的过期交接',
+        evidenceQuotes: [],
+        generatedAt: now,
+      },
+    })
+
+    const assembled = await assemblyFor(fixture)
+    const priorChapter = await db.chapters.get(fixture.priorChapterId)
+    const continuityKey = `chapter:${priorChapter!.ragDocumentId}:continuity-tail`
+    const mandatory = new Set(assembled.contextGatewayExecution.retrievalTrace.mandatory.map(item => item.resourceKey))
+
+    expect(mandatory).toContain(continuityKey)
+    expect(assembled.text).toContain('镜片在潮声中苏醒')
+    expect(assembled.text).not.toContain('不应装入的过期交接')
+  })
+
   it('主 Agent 正文候选把 Gateway 实际来源写入输入状态证据并通过严格 Skill 校验', async () => {
     const fixture = await seed()
     await db.projects.update(fixture.projectId, { enableMultiWorld: true })

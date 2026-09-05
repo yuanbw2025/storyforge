@@ -47,7 +47,9 @@ export default function AIStreamOutput({
   editable = false,
 }: AIStreamOutputProps) {
   const [editableOutput, setEditableOutput] = useState(output)
-  useEffect(() => setEditableOutput(output), [output])
+  useEffect(() => {
+    if (editable && !isStreaming) setEditableOutput(output)
+  }, [editable, isStreaming, output])
   const displayedOutput = editable && !isStreaming ? editableOutput : output
   const hasOutput = displayedOutput.length > 0
   const [marked, setMarked] = useState<'good' | 'bad' | null>(null)

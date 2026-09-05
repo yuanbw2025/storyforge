@@ -267,7 +267,6 @@ interface PendingChapterGeneration {
   operation: ChapterGenerationOperation
   category: ChapterGenerationCategory
   prepared: PreparedGenerationNode
-  backgroundMemoryIds: number[]
   assembled: Awaited<ReturnType<typeof assembleContext>>
   generationBinding: AgentSkillExecutionBindingV2
   informationBoundary: InformationBoundaryManifestV1
@@ -379,6 +378,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   const [pendingGeneration, setPendingGeneration] = useState<PendingChapterGeneration | null>(null)
   const [proseCandidate, setProseCandidate] = useState<ProseGenerationCandidateV1 | null>(null)
   const [proseGenerationError, setProseGenerationError] = useState('')
+  const [preparingGeneration, setPreparingGeneration] = useState(false)
   const [planReconciliationCurrent, setPlanReconciliationCurrent] = useState(false)
   const [organizationRun, setOrganizationRun] = useState<ChapterOrganizationRun | null>(null)
   const [organizationCurrent, setOrganizationCurrent] = useState(false)
@@ -1152,8 +1152,8 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     }
   }
 
-  const prepareContinuityBeforeGeneration = async (): Promise<number[]> => {
-    if (!currentChapter?.id) return []
+  const prepareContinuityBeforeGeneration = async (): Promise<void> => {
+    if (!currentChapter?.id) return
     const snapshot = await prepareContinuityContext({
       projectId: project.id!,
       chapterId: currentChapter.id,
@@ -1166,16 +1166,6 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       // 直接前驱优先且同步补建；失败仍由真实 tail 保底。
       await rebuildChapterMemoryById(predecessorId)
     }
-    return snapshot.memoryRebuildCandidateIds
-      .filter(id => id !== predecessorId)
-      .slice(-4)
-  }
-
-  const scheduleRecentMemoryRebuild = (chapterIds: number[]) => {
-    if (!chapterIds.length) return
-    void (async () => {
-      for (const chapterId of chapterIds) await rebuildChapterMemoryById(chapterId)
-    })()
   }
 
   const buildFullWorldCtx = async (
@@ -1446,7 +1436,6 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     operation: ChapterGenerationOperation,
     category: ChapterGenerationCategory,
     prepared: PreparedGenerationNode,
-    backgroundMemoryIds: number[],
     messages?: ChatMessage[],
     assembled?: Awaited<ReturnType<typeof assembleContext>>,
     generationBinding?: AgentSkillExecutionBindingV2,
@@ -1455,6 +1444,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   ) => {
     if (!informationBoundary || !generationBinding || !contentRevision) {
       setProseGenerationError('正文生成缺少 Skill 或信息边界快照，已阻止模型调用。')
+      setPreparingGeneration(false)
       return
     }
     ai.setOperation(operation)
@@ -1471,15 +1461,16 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       contentRevision,
     }).catch(error => {
       console.error('[ChapterEditor] 生成节点执行失败:', error)
+      setProseGenerationError(error instanceof Error ? error.message : '正文生成失败。')
+    }).finally(() => {
+      setPreparingGeneration(false)
     })
-    scheduleRecentMemoryRebuild(backgroundMemoryIds)
   }
 
   const prepareOrRunChapterGeneration = (
     operation: ChapterGenerationOperation,
     category: ChapterGenerationCategory,
     messages: ChatMessage[],
-    backgroundMemoryIds: number[],
     assembled: Awaited<ReturnType<typeof assembleContext>>,
     generationBinding: AgentSkillExecutionBindingV2,
     informationBoundary: InformationBoundaryManifestV1,
@@ -1493,12 +1484,12 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
         operation,
         category,
         prepared,
-        backgroundMemoryIds,
         assembled,
         generationBinding,
         informationBoundary,
         contentRevision,
       })
+      setPreparingGeneration(false)
       return
     }
     setPendingGeneration(null)
@@ -1506,7 +1497,6 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       operation,
       category,
       prepared,
-      backgroundMemoryIds,
       undefined,
       assembled,
       generationBinding,
@@ -1516,131 +1506,133 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   }
 
   const handleGenerate = async () => {
-    if (!outlineNode) return
+    if (!outlineNode || preparingGeneration || ai.isStreaming) return
+    setPreparingGeneration(true)
     setProseGenerationError('')
     try {
       await flushPendingEditsV1()
+      await persistCurrentEditorContent()
+      await prepareContinuityBeforeGeneration()
+      const scope = await resolveScopeLike(project.id!)
+      const contentRevision = await captureWorkspaceContentRevisionV1({
+        scope,
+        worldGroupId: chapterWorldGroupId ?? null,
+      })
+      const {
+        text: fullCtx,
+        segments: assembledSegments,
+        assembled,
+        generationBinding,
+        characterContext,
+        worldRulesContext,
+        continuity,
+        continuityBudgetTokens,
+      } = await buildFullWorldCtx('generate', 'write')
+      await assertWorkspaceContentRevisionFreshV1(contentRevision, {
+        scope,
+        worldGroupId: chapterWorldGroupId ?? null,
+      })
+      const informationBoundary = await buildChapterInformationBoundaryV1({
+        scope: await resolveScopeLike(project.id!),
+        chapterId: currentChapter?.id ?? null,
+        outlineNodeId: outlineNode.id!,
+        worldGroupId: chapterWorldGroupId ?? null,
+        perspectiveCharacterId,
+      })
+      const messages = buildChapterContentPrompt(
+        outlineNode.title,
+        outlineNode.summary,
+        fullCtx,
+        characterContext,
+        continuity.previousTail,
+        worldRulesContext,
+        [buildInformationBoundaryInstructionV1(informationBoundary), customInstruction.trim()]
+          .filter(Boolean)
+          .join('\n'),
+        { continuity, continuityBudgetTokens },
+      )
+
+      // Phase 21.3: 计算上下文预算
+      const segments = analyzeContextSegments([
+        { label: 'System Prompt', content: messages.find(m => m.role === 'system')?.content || '', layer: 'L0' },
+        { label: '章节大纲', content: outlineNode.summary || '', layer: 'L1' },
+        ...assembledSegments,
+        { label: 'User Prompt', content: messages.find(m => m.role === 'user')?.content || '', layer: 'L1' },
+      ])
+      setContextBudget(calculateBudget(aiConfig.provider, aiConfig.model, segments, aiConfig.contextWindow))
+
+      prepareOrRunChapterGeneration(
+        'generate',
+        'chapter.content',
+        messages,
+        assembled,
+        generationBinding,
+        informationBoundary,
+        contentRevision,
+      )
     } catch (error) {
-      setProseGenerationError(error instanceof Error ? error.message : '作者编辑保存失败，已阻止正式生成。')
-      return
+      console.error('[ChapterEditor] 正文生成准备失败:', error)
+      setProseGenerationError(error instanceof Error ? error.message : '正文生成准备失败。')
+      setPreparingGeneration(false)
     }
-    await persistCurrentEditorContent()
-    const backgroundMemoryIds = await prepareContinuityBeforeGeneration()
-    const scope = await resolveScopeLike(project.id!)
-    const contentRevision = await captureWorkspaceContentRevisionV1({
-      scope,
-      worldGroupId: chapterWorldGroupId ?? null,
-    })
-    const {
-      text: fullCtx,
-      segments: assembledSegments,
-      assembled,
-      generationBinding,
-      characterContext,
-      worldRulesContext,
-      continuity,
-      continuityBudgetTokens,
-    } = await buildFullWorldCtx('generate', 'write')
-    await assertWorkspaceContentRevisionFreshV1(contentRevision, {
-      scope,
-      worldGroupId: chapterWorldGroupId ?? null,
-    })
-    const informationBoundary = await buildChapterInformationBoundaryV1({
-      scope: await resolveScopeLike(project.id!),
-      chapterId: currentChapter?.id ?? null,
-      outlineNodeId: outlineNode.id!,
-      worldGroupId: chapterWorldGroupId ?? null,
-      perspectiveCharacterId,
-    })
-    const messages = buildChapterContentPrompt(
-      outlineNode.title,
-      outlineNode.summary,
-      fullCtx,
-      characterContext,
-      continuity.previousTail,
-      worldRulesContext,
-      [buildInformationBoundaryInstructionV1(informationBoundary), customInstruction.trim()]
-        .filter(Boolean)
-        .join('\n'),
-      { continuity, continuityBudgetTokens },
-    )
-
-    // Phase 21.3: 计算上下文预算
-    const segments = analyzeContextSegments([
-      { label: 'System Prompt', content: messages.find(m => m.role === 'system')?.content || '', layer: 'L0' },
-      { label: '章节大纲', content: outlineNode.summary || '', layer: 'L1' },
-      ...assembledSegments,
-      { label: 'User Prompt', content: messages.find(m => m.role === 'user')?.content || '', layer: 'L1' },
-    ])
-    setContextBudget(calculateBudget(aiConfig.provider, aiConfig.model, segments, aiConfig.contextWindow))
-
-    prepareOrRunChapterGeneration(
-      'generate',
-      'chapter.content',
-      messages,
-      backgroundMemoryIds,
-      assembled,
-      generationBinding,
-      informationBoundary,
-      contentRevision,
-    )
   }
 
   const handleContinue = async () => {
-    if (!plainText || !outlineNode) return
+    if (!plainText || !outlineNode || preparingGeneration || ai.isStreaming) return
+    setPreparingGeneration(true)
     setProseGenerationError('')
     try {
       await flushPendingEditsV1()
+      await persistCurrentEditorContent()
+      await prepareContinuityBeforeGeneration()
+      const scope = await resolveScopeLike(project.id!)
+      const contentRevision = await captureWorkspaceContentRevisionV1({
+        scope,
+        worldGroupId: chapterWorldGroupId ?? null,
+      })
+      const {
+        text: fullCtx,
+        assembled,
+        generationBinding,
+        characterContext,
+        continuity,
+        continuityBudgetTokens,
+      } = await buildFullWorldCtx('continue', 'write')
+      await assertWorkspaceContentRevisionFreshV1(contentRevision, {
+        scope,
+        worldGroupId: chapterWorldGroupId ?? null,
+      })
+      const informationBoundary = await buildChapterInformationBoundaryV1({
+        scope: await resolveScopeLike(project.id!),
+        chapterId: currentChapter?.id ?? null,
+        outlineNodeId: outlineNode.id!,
+        worldGroupId: chapterWorldGroupId ?? null,
+        perspectiveCharacterId,
+      })
+      const ctxWithChars = characterContext ? `${fullCtx}\n\n【角色设定】\n${characterContext}` : fullCtx
+      const messages = buildContinuePrompt(
+        plainText,
+        outlineNode.summary,
+        ctxWithChars,
+        [buildInformationBoundaryInstructionV1(informationBoundary), customInstruction.trim()]
+          .filter(Boolean)
+          .join('\n'),
+        { continuity, continuityBudgetTokens },
+      )
+      prepareOrRunChapterGeneration(
+        'continue',
+        'chapter.continue',
+        messages,
+        assembled,
+        generationBinding,
+        informationBoundary,
+        contentRevision,
+      )
     } catch (error) {
-      setProseGenerationError(error instanceof Error ? error.message : '作者编辑保存失败，已阻止正式续写。')
-      return
+      console.error('[ChapterEditor] 正文续写准备失败:', error)
+      setProseGenerationError(error instanceof Error ? error.message : '正文续写准备失败。')
+      setPreparingGeneration(false)
     }
-    await persistCurrentEditorContent()
-    const backgroundMemoryIds = await prepareContinuityBeforeGeneration()
-    const scope = await resolveScopeLike(project.id!)
-    const contentRevision = await captureWorkspaceContentRevisionV1({
-      scope,
-      worldGroupId: chapterWorldGroupId ?? null,
-    })
-    const {
-      text: fullCtx,
-      assembled,
-      generationBinding,
-      characterContext,
-      continuity,
-      continuityBudgetTokens,
-    } = await buildFullWorldCtx('continue', 'write')
-    await assertWorkspaceContentRevisionFreshV1(contentRevision, {
-      scope,
-      worldGroupId: chapterWorldGroupId ?? null,
-    })
-    const informationBoundary = await buildChapterInformationBoundaryV1({
-      scope: await resolveScopeLike(project.id!),
-      chapterId: currentChapter?.id ?? null,
-      outlineNodeId: outlineNode.id!,
-      worldGroupId: chapterWorldGroupId ?? null,
-      perspectiveCharacterId,
-    })
-    const ctxWithChars = characterContext ? `${fullCtx}\n\n【角色设定】\n${characterContext}` : fullCtx
-    const messages = buildContinuePrompt(
-      plainText,
-      outlineNode.summary,
-      ctxWithChars,
-      [buildInformationBoundaryInstructionV1(informationBoundary), customInstruction.trim()]
-        .filter(Boolean)
-        .join('\n'),
-      { continuity, continuityBudgetTokens },
-    )
-    prepareOrRunChapterGeneration(
-      'continue',
-      'chapter.continue',
-      messages,
-      backgroundMemoryIds,
-      assembled,
-      generationBinding,
-      informationBoundary,
-      contentRevision,
-    )
   }
 
   const handlePolish = () => {
@@ -3368,6 +3360,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       {compareSourceHtml == null && (
         <ChapterEditorToolbar
           isStreaming={ai.isStreaming}
+          isPreparingGeneration={preparingGeneration}
           hasText={!!plainText}
           organizingChapter={organizingChapter}
           hasOrganizationCandidate={Boolean(
@@ -3643,11 +3636,11 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
             onConfirm={messages => {
               const pending = pendingGeneration
               setPendingGeneration(null)
+              setPreparingGeneration(true)
               runPreparedChapterGeneration(
                 pending.operation,
                 pending.category,
                 pending.prepared,
-                pending.backgroundMemoryIds,
                 messages,
                 pending.assembled,
                 pending.generationBinding,
@@ -3661,7 +3654,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
 
       {proseGenerationError && (
         <div className="mb-3 rounded-lg border border-error/30 bg-error/5 px-3 py-2 text-xs text-error">
-          正文候选未通过质量门：{proseGenerationError}
+          正文生成未完成：{proseGenerationError}
         </div>
       )}
 

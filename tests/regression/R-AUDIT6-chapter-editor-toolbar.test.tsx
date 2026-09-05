@@ -10,6 +10,7 @@ const mounted: Array<{ host: HTMLDivElement; root: ReturnType<typeof createRoot>
 async function mount(patch: Record<string, unknown> = {}) {
   const props = {
     isStreaming: false,
+    isPreparingGeneration: false,
     hasText: true,
     organizingChapter: false,
     hasOrganizationCandidate: false,
@@ -146,6 +147,16 @@ describe('AUDIT-6 / HEALTH-4 · 正文编辑器工具栏', () => {
     }
     expect(button(host, '停止整理').disabled).toBe(true)
     expect(button(host, '便签').disabled).toBe(false)
+  })
+
+  it('正文前置组装期间显示准备状态并阻止重复点击', async () => {
+    const { host, props } = await mount({ isPreparingGeneration: true })
+    const preparing = button(host, '准备中...')
+
+    expect(preparing.disabled).toBe(true)
+    await act(async () => preparing.click())
+    expect(props.onGenerate).not.toHaveBeenCalled()
+    expect(button(host, '📝 续写').disabled).toBe(true)
   })
 
   it('展示影响分析结果、开关状态并转发组合输入', async () => {

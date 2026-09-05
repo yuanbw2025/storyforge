@@ -1,5 +1,9 @@
 import { estimateTokens } from '../ai/context-budget'
-import { normalizeChapterText, sha256Text } from '../ai/chapter-memory/text-normalization'
+import {
+  CHAPTER_TEXT_NORMALIZATION_VERSION,
+  normalizeChapterText,
+  sha256Text,
+} from '../ai/chapter-memory/text-normalization'
 import { canonicalStringify, hashCanonicalValue } from '../agent/run/hash'
 import { db } from '../db/schema'
 import { FIELD_BY_TARGET } from '../registry/field-registry'
@@ -519,10 +523,16 @@ async function chapterDerivedAuthority(row: ResourceRow, field: string): Promise
   if (!['summary', 'continuityHandoff', 'planReconciliation'].includes(field)) return 'author-canon'
   const content = typeof row.content === 'string' ? normalizeChapterText(row.content) : ''
   const currentHash = await sha256Text(content)
+  const derivedValue = row[field] as { sourceTextHash?: unknown; textNormalizationVersion?: unknown } | undefined
+  const normalizationVersion = field === 'summary'
+    ? row.summaryTextNormalizationVersion
+    : derivedValue?.textNormalizationVersion
   const expected = field === 'summary'
     ? row.summarySourceTextHash
-    : (row[field] as { sourceTextHash?: unknown } | undefined)?.sourceTextHash
-  return expected === currentHash ? 'derived-summary' : 'candidate'
+    : derivedValue?.sourceTextHash
+  return expected === currentHash && normalizationVersion === CHAPTER_TEXT_NORMALIZATION_VERSION
+    ? 'derived-summary'
+    : 'candidate'
 }
 
 async function authorityFor(spec: ResourceSpec, row: ResourceRow, field?: string): Promise<ContextResourceAuthorityV1> {
@@ -785,16 +795,23 @@ async function nestedChapterContinuity(
   if (spec.name !== 'chapters' || typeof row.content !== 'string' || !row.content.trim()) return []
   const plain = normalizeChapterText(row.content)
   const tail = plain.slice(-4_000)
-  const fields = ['content', 'summary', 'continuityHandoff', 'planReconciliation']
-    .filter(field => row[field] !== undefined && exactValue(row[field]).trim())
+  const derivedFields = (await Promise.all(
+    ['summary', 'continuityHandoff', 'planReconciliation'].map(async field => {
+      if (row[field] === undefined || !exactValue(row[field]).trim()) return null
+      const authority = await chapterDerivedAuthority(row, field)
+      return authority === 'candidate' ? null : { field, authority }
+    }),
+  )).filter((item): item is NonNullable<typeof item> => item != null)
+  const includedDerivedFields = new Set(derivedFields.map(item => item.field))
+  const fields = ['content', ...derivedFields.map(item => item.field)]
   const refs = await Promise.all(fields.map(field => sourceRef(spec, row, field, exactValue(row[field]))))
   const relations = await relationsForRow(spec, row)
   const body = [
     '【章节直接连续性】',
     `章节：${rowTitle(spec, row)}`,
-    row.summary ? `已验摘要：${exactValue(row.summary)}` : '',
-    row.continuityHandoff ? `交接：${exactValue(row.continuityHandoff)}` : '',
-    row.planReconciliation ? `计划对账：${exactValue(row.planReconciliation)}` : '',
+    includedDerivedFields.has('summary') ? `已验摘要：${exactValue(row.summary)}` : '',
+    includedDerivedFields.has('continuityHandoff') ? `交接：${exactValue(row.continuityHandoff)}` : '',
+    includedDerivedFields.has('planReconciliation') ? `计划对账：${exactValue(row.planReconciliation)}` : '',
     `原文尾部（最多 4000 字符）：\n${tail}`,
   ].filter(Boolean).join('\n')
   return [await makeDescriptor({
@@ -807,7 +824,10 @@ async function nestedChapterContinuity(
     fullContent: body,
     sourceRefs: refs,
     relations: [{ kind: 'parent', targetResourceKey: recordKey(spec, row), direction: 'outgoing' }, ...relations],
-    authority: await chapterDerivedAuthority(row, row.continuityHandoff ? 'continuityHandoff' : 'content'),
+    // The author-written tail is always Canon. Verified derived memory may
+    // enrich it, while stale/unverified memory is omitted instead of hiding the
+    // entire mandatory continuity resource as an undiscoverable candidate.
+    authority: conservativeAuthority(['author-canon', ...derivedFields.map(item => item.authority)]),
     policyField: 'content',
     timeRange: timeRangeForRow(spec.name, row),
   })]

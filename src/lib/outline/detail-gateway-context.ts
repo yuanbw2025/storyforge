@@ -95,21 +95,36 @@ export async function prepareDetailedOutlineGatewayAssemblyV1(input: {
   const outlineOriginals = unique([originalOutlineKeys(target), ...adjacent.map(originalOutlineKeys)].flat())
 
   const currentDetail = details.find(row => row.outlineNodeId === input.outlineNodeId)
-  const detailKeys = currentDetail?.ragDocumentId
-    ? [`detailed-outline:${currentDetail.ragDocumentId}`]
+  // CONTEXT_SOURCES only exposes a detailed outline after it contains at least one
+  // scene. An empty placeholder row still has a stable resource id, but requiring
+  // that id here creates an impossible mandatory read before the first scene plan
+  // can be generated.
+  const registeredDetailResourceId = currentDetail?.ragDocumentId
+    && Array.isArray(currentDetail.scenes)
+    && currentDetail.scenes.length > 0
+    ? currentDetail.ragDocumentId
+    : null
+  const detailKeys = registeredDetailResourceId
+    ? [`detailed-outline:${registeredDetailResourceId}`]
     : []
-  const detailOriginalKeys = currentDetail?.ragDocumentId && Array.isArray(currentDetail.scenes) && currentDetail.scenes.length
-    ? [`detailed-outline:${currentDetail.ragDocumentId}:field:scenes`]
+  const detailOriginalKeys = registeredDetailResourceId
+    ? [`detailed-outline:${registeredDetailResourceId}:field:scenes`]
     : []
 
   const currentArcs = arcs.filter(row => inWorld(row, input.worldGroupId) && row.ragDocumentId)
   const arcKeys = currentArcs.map(row => `story-arc:${row.ragDocumentId}`)
-  const arcStageOriginals = currentArcs
-    .filter(row => typeof row.stages === 'string' && row.stages.trim())
-    .map(row => `story-arc:${row.ragDocumentId}:field:stages`)
-  const stageKeys = currentArcs.flatMap(row => typeof row.stages === 'string'
-    ? parseStages(row.stages).map(stage => `story-arc:${row.ragDocumentId}:stage:${encodeURIComponent(stage.id)}`)
-    : [])
+  // Canon intentionally omits empty JSON containers such as `[]`. Derive both
+  // the original field and nested stage requirements from the parsed stages so
+  // an empty placeholder can never become an impossible mandatory resource.
+  const currentArcStages = currentArcs.map(row => ({
+    row,
+    stages: typeof row.stages === 'string' ? parseStages(row.stages) : [],
+  }))
+  const arcStageOriginals = currentArcStages
+    .filter(({ stages }) => stages.length > 0)
+    .map(({ row }) => `story-arc:${row.ragDocumentId}:field:stages`)
+  const stageKeys = currentArcStages.flatMap(({ row, stages }) => stages
+    .map(stage => `story-arc:${row.ragDocumentId}:stage:${encodeURIComponent(stage.id)}`))
   const progressKeys = progress
     .filter(row => row.ragDocumentId && currentArcs.some(arc => arc.id === row.arcId))
     .map(row => `storyline-progress:${row.ragDocumentId}`)

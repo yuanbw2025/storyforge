@@ -131,6 +131,7 @@ export default function ScenePanel({ project, outlineNodeId, chapterTitle, chapt
       setExpanded(true)
       await generateScenes()
     } catch (error) {
+      console.error('[ScenePanel] 场景细纲生成失败:', error)
       toast.error(error instanceof Error ? error.message : '场景细纲生成失败，请重试。')
     }
   }

@@ -227,6 +227,24 @@ describe('R-CTXG5 Context Gateway deterministic selector', () => {
     ]))
   })
 
+  it('allows same-title temporal facts to coexist without treating narrative history as an entity identity conflict', async () => {
+    const result = await selectContextResourcesV1({
+      taskKind: 'agent-prose',
+      accessPolicy: accessPolicy('agent-prose', 4_000),
+      scope,
+      descriptors: [
+        descriptor({ key: 'fact:w:beat-1', kind: 'fact', title: '情感节拍 · 情感节拍', tokens: 300 }),
+        descriptor({ key: 'fact:w:beat-2', kind: 'fact', title: '情感节拍 · 情感节拍', tokens: 300, revision: 2 }),
+      ],
+      budgetTokens: 4_000,
+      mandatoryResourceKeys: ['fact:w:beat-1', 'fact:w:beat-2'],
+      readsAllowed: true,
+    })
+
+    expect(result.selected.map(item => item.resourceKey)).toEqual(['fact:w:beat-1', 'fact:w:beat-2'])
+    expect(result.sufficiency.obligations.some(item => item.id.startsWith('same-name-conflict:'))).toBe(false)
+  })
+
   it('keeps cross-scope and implicit candidates out while allowing an explicitly keyed candidate', async () => {
     const resources = [
       descriptor({ key: 'character:w:canon', kind: 'character' }),

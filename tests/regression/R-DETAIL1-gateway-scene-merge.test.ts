@@ -199,6 +199,58 @@ describe('DETAIL-1 · 细纲 Gateway 与场景合并治理', () => {
     })).resolves.toMatchObject({ contextGatewayExecution: { path: 'deterministic-fast' } })
   })
 
+  it('空细纲占位记录不被误列为 mandatory resource，首次拆场景仍可运行', async () => {
+    const fixture = await seed()
+    const detail = await db.detailedOutlines.get(fixture.detailId)
+    await db.detailedOutlines.update(fixture.detailId, {
+      scenes: [],
+      openingHook: '',
+      endingCliffhanger: '',
+      sceneLocation: '',
+      lastUsedSummary: '',
+    })
+
+    const assembly = await prepareDetailedOutlineGatewayAssemblyV1({
+      projectId: fixture.projectId,
+      scope: fixture.scope,
+      worldGroupId: fixture.groupId,
+      outlineNodeId: fixture.targetId,
+      operation: 'scenes',
+      authorRequest: '首次拆分场景',
+      config: useAIConfigStore.getState().config,
+    })
+    const mandatory = new Set(assembly.contextGatewayExecution.retrievalTrace.mandatory.map(item => item.resourceKey))
+
+    expect(detail?.ragDocumentId).toBeTruthy()
+    expect(assembly.contextGatewayExecution.path).toBe('deterministic-fast')
+    expect(mandatory).not.toContain(`detailed-outline:${detail!.ragDocumentId}`)
+    expect(mandatory).not.toContain(`detailed-outline:${detail!.ragDocumentId}:field:scenes`)
+  })
+
+  it('空故事线阶段不被误列为 mandatory 原文，首次拆场景仍可运行', async () => {
+    const fixture = await seed()
+    const arc = await db.storyArcs.get(fixture.arcId)
+    await db.storyArcs.update(fixture.arcId, { stages: '[]' })
+
+    const assembly = await prepareDetailedOutlineGatewayAssemblyV1({
+      projectId: fixture.projectId,
+      scope: fixture.scope,
+      worldGroupId: fixture.groupId,
+      outlineNodeId: fixture.targetId,
+      operation: 'scenes',
+      authorRequest: '在故事线尚未分阶段时拆分场景',
+      config: useAIConfigStore.getState().config,
+    })
+    const mandatory = new Set(assembly.contextGatewayExecution.retrievalTrace.mandatory.map(item => item.resourceKey))
+    const arcResourceKey = `story-arc:${arc!.ragDocumentId}`
+
+    expect(arc?.ragDocumentId).toBeTruthy()
+    expect(assembly.contextGatewayExecution.path).toBe('deterministic-fast')
+    expect(mandatory).toContain(arcResourceKey)
+    expect(mandatory).not.toContain(`${arcResourceKey}:field:stages`)
+    expect([...mandatory].some(key => key.startsWith(`${arcResourceKey}:stage:`))).toBe(false)
+  })
+
   it('已有场景只能按稳定 sceneId 显式保留、修改、新增或删除，不允许无条件追加', () => {
     const currentScenes = [
       { sceneId: 'scene-a', title: '入门', summary: '守灯人进入潮门。', characterIds: [], location: '潮门', conflict: '是否前进', pace: 'medium' as const, estimatedWords: 800, notes: '保留' },

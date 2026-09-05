@@ -38,6 +38,7 @@ const IMPACT_REVIEW_ACTION_LABELS: Record<string, string> = {
 
 interface Props {
   isStreaming: boolean
+  isPreparingGeneration: boolean
   hasText: boolean
   organizingChapter: boolean
   hasOrganizationCandidate: boolean
@@ -123,6 +124,7 @@ interface Props {
 
 export default function ChapterEditorToolbar({
   isStreaming,
+  isPreparingGeneration,
   hasText,
   organizingChapter,
   hasOrganizationCandidate,
@@ -213,11 +215,13 @@ export default function ChapterEditorToolbar({
     ?? impactDownstreamSchedule?.items.find(item => item.status === 'blocked')
   return (
     <div className="flex flex-wrap gap-2 border-t border-border/60 bg-bg-surface/35 px-6 py-3">
-      <button onClick={onGenerate} disabled={isStreaming}
-        className="rounded-md border border-accent/40 bg-accent/10 px-3 py-1.5 text-xs font-medium text-accent hover:bg-accent/20 disabled:opacity-50 transition-colors">
-        ✨ 生成正文
+      <button onClick={onGenerate} disabled={isStreaming || isPreparingGeneration}
+        className="flex items-center gap-1 rounded-md border border-accent/40 bg-accent/10 px-3 py-1.5 text-xs font-medium text-accent hover:bg-accent/20 disabled:opacity-50 transition-colors">
+        {isPreparingGeneration
+          ? <><Loader2 className="h-3 w-3 animate-spin" />准备中...</>
+          : '✨ 生成正文'}
       </button>
-      <button onClick={onContinue} disabled={isStreaming || !hasText}
+      <button onClick={onContinue} disabled={isStreaming || isPreparingGeneration || !hasText}
         className="rounded-md border border-border bg-bg-elevated px-3 py-1.5 text-xs text-text-secondary hover:text-text-primary disabled:opacity-50 transition-colors">
         📝 续写
       </button>

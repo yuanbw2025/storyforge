@@ -388,6 +388,17 @@ function normalizedTitle(value: string): string {
   return value.trim().toLocaleLowerCase('zh-CN').replace(/[\s·:：/／_-]+/g, '')
 }
 
+// A shared display title is only an identity conflict for resources whose name
+// identifies a durable entity. Facts, chapters, beats, outlines, and other
+// temporal/structural records may legitimately reuse a title while carrying
+// different content at different positions in the narrative.
+const SAME_NAME_CANON_IDENTITY_KINDS = new Set<ContextResourceKind>([
+  'character',
+  'location',
+  'codex-entry',
+  'story-arc',
+])
+
 function assertSelectorPolicy(policy: ContextSelectorPolicyV1, taskKind: AgentContextTaskKind): void {
   if (!AGENT_CONTEXT_TASK_KINDS.includes(taskKind) || policy.taskKind !== taskKind
     || policy.version !== CONTEXT_SELECTOR_VERSION_V1 || !policy.selectorPolicyId.trim()) {
@@ -838,7 +849,10 @@ export async function selectContextResourcesV1(input: ContextSelectorInputV1): P
     })
   }
   const titleGroups = new Map<string, ContextResourceDescriptorV1[]>()
-  for (const descriptor of available.filter(item => selectedKeys.has(item.resourceKey))) {
+  for (const descriptor of available.filter(item => (
+    selectedKeys.has(item.resourceKey)
+    && SAME_NAME_CANON_IDENTITY_KINDS.has(item.kind)
+  ))) {
     const title = `${descriptor.kind}:${normalizedTitle(descriptor.title)}`
     if (!title) continue
     titleGroups.set(title, [...(titleGroups.get(title) ?? []), descriptor])
