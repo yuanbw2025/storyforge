@@ -38,6 +38,7 @@ const activeDocs = [
   'docs/products/UPPER-PRODUCTS.md',
   'docs/roadmap/README.md',
   'docs/roadmap/CAPABILITY-BASELINE.md',
+  'docs/roadmap/INDEPENDENT-CREATION-DEVELOPMENT-PLAN.md',
   'docs/roadmap/COMPLETED.md',
   'docs/audits/CURRENT-ARCHITECTURE-AUDIT-20260903.md',
   'docs/ttrpg/licenses/SRD-5.2.1-CC-BY-4.0.md',

@@ -1,6 +1,6 @@
 # StoryForge 当前施工路线
 
-> 版本：1.3.0 · 更新：2026-08-31 · 权威层级：L2
+> 版本：1.4.0 · 更新：2026-09-06 · 权威层级：L2
 > 顺序来自项目总纲 §11。任务只有进入本文件并满足前置，才是当前 backlog；旧阶段号不自动续用。
 
 ## 状态
@@ -34,11 +34,14 @@ Phase 5 已完成世界观/故事/角色/主支线/大纲/细纲/正文、候选
 
 三项都必须保持独立产品闭环。允许从同一治理基线创建不同分支并行施工；它们可以复用稳定底座，但不能共用万能产物表或万能 Agent。
 
+专业流程、Agent/Skill DAG、Prompt Spec、数据 owner、黄金样例和验收门以 [`INDEPENDENT-CREATION-DEVELOPMENT-PLAN.md`](./INDEPENDENT-CREATION-DEVELOPMENT-PLAN.md) 为当前施工方案。先完成共享来源分析、改编决策和独立创作 release，再分别进入三个产品；不得从现有单次 Prompt 骨架直接扩成一键全自动生成。
+
 | ID | 状态 | 工作 | 前置与完成重点 |
 |---|---|---|---|
+| C-CREATION-00 | NEXT | 独立创作专业共享底座 | 原创 fixtures/eval、来源事实与因果、改编决策、不可变 creation release、三注册表和创建向导 |
 | C-SHORT-01 | QUEUED | 短篇小说完整产品 | Phase 5 长篇共享能力可复用；轻量规划→正文→版本→导出，非长篇开关；支持显式一键派生世界 |
-| C-SCREENPLAY-01 | QUEUED | 小说转剧本完整产品 | source manifest、改编 Brief、场次、连续性、格式、源文证据和导出 |
-| C-COMIC-01 | QUEUED | 小说转漫画完整产品 | 漫画脚本→视觉圣经→生图→一致性→排版→成品导出 |
+| C-SCREENPLAY-01 | QUEUED | 小说转剧本完整产品 | 来源事实/因果→Brief/决策→人物弧/beat→scene card→场次→审校/局部重写→专业格式/release |
+| C-COMIC-01 | QUEUED | 小说转漫画完整产品 | 来源与 Brief→漫画脚本→分页/分格→视觉圣经/subject state→生图/一致性→排字→成品 release |
 
 ## 阶段 D · 世界引擎（已完成架构基线）
 
