@@ -1,7 +1,10 @@
 import type {
   AdaptationBriefV1,
+  AdaptationCausalEdgeV1,
+  AdaptationDecisionV1,
   AdaptationPlanV1,
   AdaptationProject,
+  AdaptationSourceFactV1,
   ComicTargetSpecV1,
   ComicGlobalVisualBibleV1,
   ScreenplayTargetSpecV1,
@@ -11,6 +14,7 @@ import { effectiveWorkKind } from '../workspace/work-kind'
 
 const MAX_BRIEF_BYTES = 64_000
 const MAX_PLAN_BYTES = 128_000
+const STABLE_KEY = /^[a-z0-9][a-z0-9._-]{0,95}$/i
 
 function assertText(value: unknown, label: string, max = 4_000): asserts value is string {
   if (typeof value !== 'string' || value.length > max) throw new Error(`[adaptation] ${label} 必须是至多 ${max} 字符的文本`)
@@ -19,6 +23,80 @@ function assertText(value: unknown, label: string, max = 4_000): asserts value i
 function assertTextArray(value: unknown, label: string, maxItems = 200): asserts value is string[] {
   if (!Array.isArray(value) || value.length > maxItems) throw new Error(`[adaptation] ${label} 必须是至多 ${maxItems} 项的文本数组`)
   value.forEach((item, index) => assertText(item, `${label}[${index}]`, 2_000))
+}
+
+function assertExactKeys(value: unknown, label: string, allowed: readonly string[]): asserts value is Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`[adaptation] ${label} 必须是对象`)
+  const keys = Object.keys(value)
+  const unknown = keys.filter(key => !allowed.includes(key))
+  const missing = allowed.filter(key => key !== 'id' && !keys.includes(key))
+  if (unknown.length) throw new Error(`[adaptation] ${label} 含未知字段：${unknown.join('、')}`)
+  if (missing.length) throw new Error(`[adaptation] ${label} 缺少字段：${missing.join('、')}`)
+}
+
+function assertStableKey(value: unknown, label: string): asserts value is string {
+  if (typeof value !== 'string' || !STABLE_KEY.test(value)) throw new Error(`[adaptation] ${label} stableKey 非法`)
+}
+
+function assertUniquePortableKeys(value: unknown, label: string, allowEmpty = true): asserts value is string[] {
+  assertTextArray(value, label, 500)
+  if (!allowEmpty && value.length === 0) throw new Error(`[adaptation] ${label} 不得为空`)
+  if (value.some(item => !STABLE_KEY.test(item))) throw new Error(`[adaptation] ${label} 含非法稳定 key`)
+  if (new Set(value).size !== value.length) throw new Error(`[adaptation] ${label} 含重复项`)
+}
+
+const SHARED_ANALYSIS_KEYS = [
+  'id', 'projectId', 'workId', 'adaptationProjectId', 'manifestVersion',
+  'stableKey', 'authorStatus', 'createdAt', 'updatedAt',
+] as const
+
+function assertSharedAnalysisEnvelope(
+  value: Record<string, unknown>,
+  label: string,
+): void {
+  for (const key of ['projectId', 'workId', 'adaptationProjectId', 'manifestVersion', 'createdAt', 'updatedAt'] as const) {
+    if (!Number.isInteger(value[key]) || Number(value[key]) <= 0) throw new Error(`[adaptation] ${label}.${key} 必须为正整数`)
+  }
+  if (value.id != null && (!Number.isInteger(value.id) || Number(value.id) <= 0)) throw new Error(`[adaptation] ${label}.id 非法`)
+  assertStableKey(value.stableKey, `${label}.stableKey`)
+  if (value.authorStatus !== 'confirmed' && value.authorStatus !== 'rejected') throw new Error(`[adaptation] ${label}.authorStatus 非法`)
+}
+
+export function assertAdaptationSourceFactV1(value: unknown): asserts value is AdaptationSourceFactV1 {
+  assertExactKeys(value, 'SourceFact', [...SHARED_ANALYSIS_KEYS, 'kind', 'statement', 'subjectKeys', 'sourceUnitKeys', 'confidence'])
+  assertSharedAnalysisEnvelope(value, 'SourceFact')
+  if (!['event', 'character-state', 'relationship', 'location', 'object', 'motif'].includes(String(value.kind))) {
+    throw new Error('[adaptation] SourceFact.kind 非法')
+  }
+  assertText(value.statement, 'SourceFact.statement', 8_000)
+  if (!value.statement.trim()) throw new Error('[adaptation] SourceFact.statement 不得为空')
+  assertUniquePortableKeys(value.subjectKeys, 'SourceFact.subjectKeys')
+  assertUniquePortableKeys(value.sourceUnitKeys, 'SourceFact.sourceUnitKeys', false)
+  if (typeof value.confidence !== 'number' || !Number.isFinite(value.confidence) || value.confidence < 0 || value.confidence > 1) {
+    throw new Error('[adaptation] SourceFact.confidence 必须在 0～1')
+  }
+}
+
+export function assertAdaptationCausalEdgeV1(value: unknown): asserts value is AdaptationCausalEdgeV1 {
+  assertExactKeys(value, 'CausalEdge', [...SHARED_ANALYSIS_KEYS, 'fromFactKey', 'toFactKey', 'relation', 'rationale', 'sourceUnitKeys'])
+  assertSharedAnalysisEnvelope(value, 'CausalEdge')
+  assertStableKey(value.fromFactKey, 'CausalEdge.fromFactKey')
+  assertStableKey(value.toFactKey, 'CausalEdge.toFactKey')
+  if (value.fromFactKey === value.toFactKey) throw new Error('[adaptation] CausalEdge 不得自环')
+  if (!['cause', 'enables', 'motivates', 'reveals', 'prevents'].includes(String(value.relation))) throw new Error('[adaptation] CausalEdge.relation 非法')
+  assertText(value.rationale, 'CausalEdge.rationale', 8_000)
+  if (!value.rationale.trim()) throw new Error('[adaptation] CausalEdge.rationale 不得为空')
+  assertUniquePortableKeys(value.sourceUnitKeys, 'CausalEdge.sourceUnitKeys', false)
+}
+
+export function assertAdaptationDecisionV1(value: unknown): asserts value is AdaptationDecisionV1 {
+  assertExactKeys(value, 'Decision', [...SHARED_ANALYSIS_KEYS, 'action', 'sourceFactKeys', 'targetKeys', 'rationale'])
+  assertSharedAnalysisEnvelope(value, 'Decision')
+  if (!['keep', 'cut', 'merge', 'reorder', 'externalize', 'add'].includes(String(value.action))) throw new Error('[adaptation] Decision.action 非法')
+  assertUniquePortableKeys(value.sourceFactKeys, 'Decision.sourceFactKeys', value.action === 'add')
+  assertUniquePortableKeys(value.targetKeys, 'Decision.targetKeys')
+  assertText(value.rationale, 'Decision.rationale', 8_000)
+  if (!value.rationale.trim()) throw new Error('[adaptation] Decision.rationale 不得为空')
 }
 
 function assertPortableStructuredContent(value: unknown, label: string): void {

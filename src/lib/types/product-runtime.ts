@@ -1125,7 +1125,7 @@ interface ProductRuntimeSessionBase {
   /**
    * Derived current-state head. The event log remains canonical: readers only
    * use this cache when its sequence matches the latest persisted event and
-   * its content hash verifies. Imported current sessions must pass the v11 runtime-source contract.
+   * its content hash verifies. Imported current sessions must pass the current backup runtime-source contract.
    */
   runtimeHeadSequence: number;
   runtimeHeadStateJson: string;

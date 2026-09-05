@@ -135,16 +135,15 @@ export interface ShortNovelReleaseManifestV1 {
   createdAt: number
 }
 
-/**
- * Immutable releases for independent creation products. V1 deliberately only
- * accepts short-novel; later products must extend the closed union explicitly.
- */
+export type CreationProductKindV1 = 'short-novel' | 'screenplay' | 'comic'
+
+/** Shared append-only envelope. Every product supplies its own closed manifest codec. */
 export interface CreationReleaseV1 {
   id?: number
   projectId: number
   worldId: number
   workId: number
-  productKind: 'short-novel'
+  productKind: CreationProductKindV1
   version: number
   label: string
   parentReleaseId: number | null

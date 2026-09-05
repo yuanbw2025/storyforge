@@ -21,6 +21,11 @@ import {
   startAdaptationProduction,
 } from '../../src/lib/adaptation/source-manifest'
 import { createScreenplayScene } from '../../src/lib/screenplay/service'
+import {
+  adoptAdaptationCausalEdgesV1,
+  adoptAdaptationDecisionsV1,
+  adoptAdaptationSourceFactsV1,
+} from '../../src/lib/adaptation/analysis'
 import { createComicPage, saveComicVisualSubject } from '../../src/lib/comic/service'
 import { commitUploadedComicAssetV1 } from '../../src/lib/comic/media-service'
 import type {
@@ -132,6 +137,22 @@ async function seedAdaptationProducts(sourceScope: WorkspaceScope) {
   const screenplayUnit = (await listActiveSourceUnits(screenplay.adaptation.id!))
     .find(unit => unit.sourceKind === 'chapter')
   if (!screenplayUnit?.id) throw new Error('全量夹具缺少剧本来源章节单元')
+  let screenplayAnalysisRoot = screenplay.adaptation
+  await adoptAdaptationSourceFactsV1({
+    scope: screenplay.scope,
+    adaptationProjectId: screenplayAnalysisRoot.id!,
+    expectedAdaptationRevision: screenplayAnalysisRoot.revision,
+    sourceManifestVersion: screenplayAnalysisRoot.activeSourceManifestVersion,
+    items: [
+      { authorStatus: 'confirmed', candidate: { stableKey: 'fact.enter-gate', kind: 'event', statement: '林惊羽踏入青云山门。', subjectKeys: ['character.lin-jingyu'], sourceUnitKeys: [screenplayUnit.sourceUnitKey], confidence: 1 } },
+      { authorStatus: 'confirmed', candidate: { stableKey: 'fact.face-choice', kind: 'character-state', statement: '林惊羽必须在复仇与守护之间选择。', subjectKeys: ['character.lin-jingyu'], sourceUnitKeys: [screenplayUnit.sourceUnitKey], confidence: 0.9 } },
+    ],
+  })
+  screenplayAnalysisRoot = (await db.adaptationProjects.get(screenplayAnalysisRoot.id!))!
+  await adoptAdaptationCausalEdgesV1({ scope: screenplay.scope, adaptationProjectId: screenplayAnalysisRoot.id!, expectedAdaptationRevision: screenplayAnalysisRoot.revision, sourceManifestVersion: screenplayAnalysisRoot.activeSourceManifestVersion, items: [{ authorStatus: 'confirmed', candidate: { stableKey: 'edge.gate-choice', fromFactKey: 'fact.enter-gate', toFactKey: 'fact.face-choice', relation: 'enables', rationale: '进入山门使选择成为当下行动。', sourceUnitKeys: [screenplayUnit.sourceUnitKey] } }] })
+  screenplayAnalysisRoot = (await db.adaptationProjects.get(screenplayAnalysisRoot.id!))!
+  await adoptAdaptationDecisionsV1({ scope: screenplay.scope, adaptationProjectId: screenplayAnalysisRoot.id!, expectedAdaptationRevision: screenplayAnalysisRoot.revision, sourceManifestVersion: screenplayAnalysisRoot.activeSourceManifestVersion, items: [{ authorStatus: 'confirmed', candidate: { stableKey: 'decision.keep-choice', action: 'keep', sourceFactKeys: ['fact.face-choice'], targetKeys: ['act-1'], rationale: '保留核心选择作为剧本主轴。' } }] })
+  screenplayAnalysisRoot = (await db.adaptationProjects.get(screenplayAnalysisRoot.id!))!
   const screenplayPlan: AdaptationPlanV1 = {
     version: 1,
     premise: '林惊羽必须决定复仇还是守护。',
@@ -145,7 +166,7 @@ async function seedAdaptationProducts(sourceScope: WorkspaceScope) {
     }],
     globalAssumptions: [],
   }
-  let screenplayRoot = await saveAdaptationBriefDraft({ adaptationProjectId: screenplay.adaptation.id!, brief: adaptationBrief, expectedRevision: screenplay.adaptation.revision })
+  let screenplayRoot = await saveAdaptationBriefDraft({ adaptationProjectId: screenplay.adaptation.id!, brief: adaptationBrief, expectedRevision: screenplayAnalysisRoot.revision })
   screenplayRoot = await confirmAdaptationBrief({ adaptationProjectId: screenplayRoot.id!, expectedRevision: screenplayRoot.revision })
   screenplayRoot = await saveAdaptationPlanDraft({ adaptationProjectId: screenplayRoot.id!, plan: screenplayPlan, expectedRevision: screenplayRoot.revision })
   screenplayRoot = await confirmAdaptationPlan({ adaptationProjectId: screenplayRoot.id!, expectedRevision: screenplayRoot.revision })
@@ -175,6 +196,11 @@ async function seedAdaptationProducts(sourceScope: WorkspaceScope) {
   const comicUnit = (await listActiveSourceUnits(comic.adaptation.id!))
     .find(unit => unit.sourceKind === 'chapter')
   if (!comicUnit?.id) throw new Error('全量夹具缺少漫画来源章节单元')
+  let comicAnalysisRoot = comic.adaptation
+  await adoptAdaptationSourceFactsV1({ scope: comic.scope, adaptationProjectId: comicAnalysisRoot.id!, expectedAdaptationRevision: comicAnalysisRoot.revision, sourceManifestVersion: comicAnalysisRoot.activeSourceManifestVersion, items: [{ authorStatus: 'confirmed', candidate: { stableKey: 'fact.gate-reveal', kind: 'event', statement: '云雾散开，青云山门显现。', subjectKeys: ['location.qingyun-gate'], sourceUnitKeys: [comicUnit.sourceUnitKey], confidence: 1 } }] })
+  comicAnalysisRoot = (await db.adaptationProjects.get(comicAnalysisRoot.id!))!
+  await adoptAdaptationDecisionsV1({ scope: comic.scope, adaptationProjectId: comicAnalysisRoot.id!, expectedAdaptationRevision: comicAnalysisRoot.revision, sourceManifestVersion: comicAnalysisRoot.activeSourceManifestVersion, items: [{ authorStatus: 'confirmed', candidate: { stableKey: 'decision.externalize-gate', action: 'externalize', sourceFactKeys: ['fact.gate-reveal'], targetKeys: ['comic-chapter-1'], rationale: '用建立镜头外化山门压迫感。' } }] })
+  comicAnalysisRoot = (await db.adaptationProjects.get(comicAnalysisRoot.id!))!
   const comicPlan: AdaptationPlanV1 = {
     version: 1,
     premise: '用一页建立山门与人物的力量关系。',
@@ -188,7 +214,7 @@ async function seedAdaptationProducts(sourceScope: WorkspaceScope) {
     }],
     globalAssumptions: [],
   }
-  let comicRoot = await saveAdaptationBriefDraft({ adaptationProjectId: comic.adaptation.id!, brief: adaptationBrief, expectedRevision: comic.adaptation.revision })
+  let comicRoot = await saveAdaptationBriefDraft({ adaptationProjectId: comic.adaptation.id!, brief: adaptationBrief, expectedRevision: comicAnalysisRoot.revision })
   comicRoot = await confirmAdaptationBrief({ adaptationProjectId: comicRoot.id!, expectedRevision: comicRoot.revision })
   comicRoot = await saveAdaptationPlanDraft({ adaptationProjectId: comicRoot.id!, plan: comicPlan, expectedRevision: comicRoot.revision })
   comicRoot = await confirmAdaptationPlan({ adaptationProjectId: comicRoot.id!, expectedRevision: comicRoot.revision })

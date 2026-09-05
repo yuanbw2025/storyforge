@@ -192,6 +192,23 @@ export const FIELD_REGISTRY: FieldSpec[] = [
   object('adaptationProjects', 'plan'),
   object('adaptationProjects', 'visualBible'),
 
+  // ADAPT-FOUNDATION-1: model-authored content is proposed as a CreativeArtifact;
+  // owner, manifest, stable identity, author decision and timestamps are system-owned.
+  enumeration('adaptationSourceFacts', 'kind', ['event', 'character-state', 'relationship', 'location', 'object', 'motif']),
+  longtext('adaptationSourceFacts', 'statement'),
+  arr('adaptationSourceFacts', 'subjectKeys'),
+  arr('adaptationSourceFacts', 'sourceUnitKeys'),
+  num('adaptationSourceFacts', 'confidence'),
+  text('adaptationCausalEdges', 'fromFactKey'),
+  text('adaptationCausalEdges', 'toFactKey'),
+  enumeration('adaptationCausalEdges', 'relation', ['cause', 'enables', 'motivates', 'reveals', 'prevents']),
+  longtext('adaptationCausalEdges', 'rationale'),
+  arr('adaptationCausalEdges', 'sourceUnitKeys'),
+  enumeration('adaptationDecisions', 'action', ['keep', 'cut', 'merge', 'reorder', 'externalize', 'add']),
+  arr('adaptationDecisions', 'sourceFactKeys'),
+  arr('adaptationDecisions', 'targetKeys'),
+  longtext('adaptationDecisions', 'rationale'),
+
   // SCREEN-1: model-facing scene content only. Stable identity, owner,
   // revision, status and source review version remain system-owned.
   text('screenplayScenes', 'planSectionKey'),

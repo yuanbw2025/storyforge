@@ -225,6 +225,40 @@ async function readAdaptationPlanContext(input: AssembleContextInput): Promise<s
   return `【已确认改编计划｜manifest v${root.planSourceManifestVersion}】\n${JSON.stringify(root.plan)}`
 }
 
+async function readAdaptationSourceFactsContext(input: AssembleContextInput): Promise<string> {
+  const root = await requireTargetAdaptation(input)
+  const { listAdaptationAnalysisV1 } = await import('../adaptation/analysis')
+  const analysis = await listAdaptationAnalysisV1({
+    scope: input.scope!,
+    adaptationProjectId: root.id!,
+    manifestVersion: root.activeSourceManifestVersion,
+  })
+  const facts = analysis.facts.filter(item => item.authorStatus === 'confirmed')
+  const edges = analysis.edges.filter(item => item.authorStatus === 'confirmed')
+  if (!facts.length && !edges.length) return ''
+  return [
+    `【已确认来源事实与因果图｜manifest v${root.activeSourceManifestVersion}】`,
+    ...facts.map(fact => `FACT ${fact.stableKey}｜${fact.kind}｜${fact.statement}｜subjects ${fact.subjectKeys.join(', ') || '-'}｜sources ${fact.sourceUnitKeys.join(', ')}`),
+    ...edges.map(edge => `EDGE ${edge.stableKey}｜${edge.fromFactKey} -${edge.relation}-> ${edge.toFactKey}｜${edge.rationale}｜sources ${edge.sourceUnitKeys.join(', ')}`),
+  ].join('\n')
+}
+
+async function readAdaptationDecisionsContext(input: AssembleContextInput): Promise<string> {
+  const root = await requireTargetAdaptation(input)
+  const { listAdaptationAnalysisV1 } = await import('../adaptation/analysis')
+  const { decisions } = await listAdaptationAnalysisV1({
+    scope: input.scope!,
+    adaptationProjectId: root.id!,
+    manifestVersion: root.activeSourceManifestVersion,
+  })
+  const confirmed = decisions.filter(item => item.authorStatus === 'confirmed')
+  if (!confirmed.length) return ''
+  return [
+    `【已确认改编决策｜manifest v${root.activeSourceManifestVersion}】`,
+    ...confirmed.map(decision => `- ${decision.stableKey}｜${decision.action}｜facts ${decision.sourceFactKeys.join(', ') || '(新增)'}｜targets ${decision.targetKeys.join(', ') || '-'}｜${decision.rationale}`),
+  ].join('\n')
+}
+
 async function readScreenplayCurrentScenesContext(input: AssembleContextInput): Promise<string> {
   const root = await requireTargetAdaptation(input)
   if (root.medium !== 'screenplay' || !input.screenplaySceneIds?.length) return ''
@@ -1459,6 +1493,28 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     protectedFromTrim: true,
     requiresAdaptationProjectId: true,
     read: readAdaptationPlanContext,
+  },
+  {
+    key: 'adaptation.sourceFacts',
+    label: '已确认改编来源事实与因果图',
+    scope: 'project',
+    layer: 'L0',
+    ownerFrom: 'work',
+    budgetTokens: 10_000,
+    protectedFromTrim: true,
+    requiresAdaptationProjectId: true,
+    read: readAdaptationSourceFactsContext,
+  },
+  {
+    key: 'adaptation.decisions',
+    label: '已确认改编决策',
+    scope: 'project',
+    layer: 'L0',
+    ownerFrom: 'work',
+    budgetTokens: 8_000,
+    protectedFromTrim: true,
+    requiresAdaptationProjectId: true,
+    read: readAdaptationDecisionsContext,
   },
   {
     key: 'screenplay.currentScenes',

@@ -5,7 +5,10 @@ import {
 } from './schema'
 
 export const REQUIRED_TABLES = [
+  'adaptationCausalEdges',
+  'adaptationDecisions',
   'adaptationProjects',
+  'adaptationSourceFacts',
   'adaptationSourceUnits',
   'agentConversations',
   'agentEvents',
@@ -117,8 +120,8 @@ export function assertCurrentSchemaDefinition(): void {
   }
 }
 
-/** Opens the current schema. Dexie preserves the supported v1 baseline while
- * adding the v2 short-form production and independent release stores. */
+/** Opens the current schema. Dexie preserves v1 and the v2 short-form step,
+ * then adds the v3 medium-neutral adaptation analysis stores. */
 export async function openCurrentSchema(): Promise<CurrentSchemaState> {
   assertCurrentSchemaDefinition()
   await db.open()

@@ -15,8 +15,8 @@
 | ID | 状态 | 当前事实与证据 | 缺口 |
 |---|---|---|---|
 | A-GOV-01 | implemented | 总纲、WPS 完整归档、唯一现行文档白名单和当前架构审计已建立 | 后续正常功能分支按协作流程短期存在，不重新解释为长期架构分叉 |
-| A-GOV-02 | implemented | 身份/派生、纯语义 WorldRelease、三阶段闸门、五项逻辑契约、中立网关、五种已接入产品适配器、节点同源与能力/成熟度门均已机器化；schema v2 与静态门只允许当前产品身份和运行入口 | 后续产品仍须逐项完成专项功能；治理完成不代表这些产品已经完成 |
-| BASE-DATA-01 | implemented | Dexie 当前 schema v2；仅支持已发布 v1→v2 加表迁移并有保留数据反例；`npm run check:required-tables` 验证 required/project tables；非当前备份和旧字段明确拒绝 | 新表仍必须先登记；后续 schema 演进继续明确支持窗口并补迁移、回滚和生命周期反例 |
+| A-GOV-02 | implemented | 身份/派生、纯语义 WorldRelease、三阶段闸门、五项逻辑契约、中立网关、五种已接入产品适配器、节点同源与能力/成熟度门均已机器化；schema v3 与静态门只允许当前产品身份和运行入口 | 后续产品仍须逐项完成专项功能；治理完成不代表这些产品已经完成 |
+| BASE-DATA-01 | implemented | Dexie 当前 schema v3；支持已发布 v1→v2→v3 纯加表迁移并有保留数据反例；`npm run check:required-tables` 验证 required/project tables；非当前备份和旧字段明确拒绝 | 新表仍必须先登记；后续 schema 演进继续明确支持窗口并补迁移、回滚和生命周期反例 |
 | BASE-REG-01 | implemented | Context、Field/Adoption、Project Tables 三注册表与架构检查器存在；Project 仅为 Workspace 壳，World/Work 身份、作品数据和上层产品读取边界已分离 | 后续新入口必须先登记，不得恢复组件私有清单、Project/Work 镜像或物理世界表读取 |
 | BASE-AI-01 | implemented | AI 入口注册表与自动生成手册区分 formal/auxiliary/evaluation/experimental | 登记证明边界，不证明所有 formal UI 纵切面完成 |
 | BASE-HARNESS-01 | implemented | Run contract、ledger、checkpoint、candidate/stale、receipt 及多个 durable use case | 并非所有旧按钮都统一到同样成熟度 |
