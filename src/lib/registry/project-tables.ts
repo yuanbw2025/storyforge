@@ -939,6 +939,10 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
       { field: 'sessionId', remapVia: 'productRuntimeSessions',
         exportAs: '_productRuntimeSessionExportId', onUnmapped: 'require' },
     ],
+    exportRefRemap: [{
+      field: 'payloadJson', remapVia: 'productRuntimeSessions', kind: 'json-id-paths',
+      paths: ['envelope.sessionId'], exportAs: '_portablePayloadJson',
+    }],
     defaults: {
       actorKey: null, targetKey: null, commandId: null,
       baseSequence: null, baseStateHash: null, payloadJson: '{}',

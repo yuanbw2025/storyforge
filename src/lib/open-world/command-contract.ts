@@ -69,7 +69,9 @@ export async function fingerprintTextOpenWorldCommandV1(value: unknown): Promise
     schema: command.schema,
     version: command.version,
     commandId: command.commandId,
-    sessionId: command.sessionId,
+    // Command lookup and uniqueness are already scoped by the owning Session.
+    // Keeping the local IndexedDB primary key out of the gameplay identity
+    // makes an exported event stream portable after its envelope is remapped.
     actorKey: command.actorKey,
     actionKey: command.actionKey,
     payload: command.payload,

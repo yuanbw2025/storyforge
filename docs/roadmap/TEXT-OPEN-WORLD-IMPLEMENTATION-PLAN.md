@@ -1,6 +1,6 @@
 # AI 主导文字开放世界游戏 · 完整开发清单
 
-> 版本：1.1.11
+> 版本：1.1.12
 > 建立日期：2026-09-06
 > 对应总任务：`E-OPENWORLD-01`
 > 当前状态：`IN_PROGRESS`；用户已于2026-09-06明确下达完整产品开发指令
@@ -36,13 +36,13 @@
 | 指标 | 当前值 |
 |---|---|
 | 首版工作包 | 121 |
-| 已完成 | 21（G0全部完成；G1运行包至统一Feedback Receipt完成） |
-| 产品总进度 | 21 / 121（17.4%） |
-| G1～G7业务功能进度 | 11 / 111（9.9%） |
+| 已完成 | 22（G0全部完成；G1运行包至三注册表与生命周期完成） |
+| 产品总进度 | 22 / 121（18.2%） |
+| G1～G7业务功能进度 | 12 / 111（10.8%） |
 | 当前阶段 | G1 运行包、Action/Event与数据治理底座 |
 | G0阶段进度 | 10 / 10（100%） |
-| G1阶段进度 | 11 / 13（84.6%） |
-| 当前工作包 | `TOW-G1-12` |
+| G1阶段进度 | 12 / 13（92.3%） |
+| 当前工作包 | `TOW-G1-13` |
 | 当前阻塞项 | 无 |
 
 每次状态变化必须同时更新本节汇总、对应任务行、验证证据和变更记录。
@@ -117,8 +117,8 @@ G7 盐脊验收、发布更新与旧入口收口
 | TOW-G1-09 | DONE | 打通Checkpoint、Replay与子分支 | G1-08 | 检查点终态约束、Hash/正文/序号/协议/重放诊断、runtime head诊断修复、历史检查点子分支重基线及父未来事件保留均有测试 |
 | TOW-G1-10 | DONE | 打通ProductBuild、ProductRelease、InitialState与Session绑定 | G1-01、G1-09 | vNext 15模块作为共享ProductRuntimePackage的产品字段逐层校验；正式ProductRelease/Build Preview保持唯一冻结来源；新游戏确定性重建InitialState；命令边界复核ProductRelease或ProductBuild；存档与子分支固定原版本，来源和投影漂移fail-closed |
 | TOW-G1-11 | DONE | 建立统一成功/失败/降级Receipt | G1-04、G1-06 | outcome/reason/degradation进入终态事件及批次指纹；统一回执覆盖拒绝、待确认、pending、成功、规则内失败和降级；仅终态成功/降级允许叙述成功；回执由规范事件派生并有Hash、证据序列和防伪反例 |
-| TOW-G1-12 | READY | 完成三注册表与数据全生命周期 | G1-01～G1-11 | Context、Field/Adoption、Project Tables、迁移、导入导出、删除和引用重映射均有正反例 |
-| TOW-G1-13 | QUEUED | 人工最小包端到端验证 | G1-01～G1-12 | 不调用AI完成发布→启动→行动→保存→刷新→重放→分支，相关测试与E2E通过 |
+| TOW-G1-12 | DONE | 完成三注册表与数据全生命周期 | G1-01～G1-11 | `openWorldRuntime`可装配vNext玩家视角且隔离隐藏知识/锁定任务/NPC私有字段；AI无Session/Event通用adopt旁路；现有4张物理表均由`PROJECT_TABLES`派生导出、恢复、删除与引用重映射；Canon快照内容寻址且无本地主键；命令事件正文可移植并在恢复后继续幂等重试；跨项目读取fail-closed；本阶段不新增物理表，故无需schema migration |
+| TOW-G1-13 | READY | 人工最小包端到端验证 | G1-01～G1-12 | 不调用AI完成发布→启动→行动→保存→刷新→重放→分支，相关测试与E2E通过 |
 
 阶段出口：后续所有玩法和AI共同依赖的唯一运行内核。
 
@@ -353,6 +353,7 @@ G7 盐脊验收、发布更新与旧入口收口
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| 1.1.12 | 2026-09-06 | 完成G1-12 vNext玩家可见Context、隐藏信息隔离、AI/确定性写入分治、Canon与命令事件便携化、跨项目备份恢复/幂等重试及Session级联删除；总进度22/121，业务功能12/111 |
 | 1.1.11 | 2026-09-06 | 完成G1-11统一Feedback Receipt、终态outcome/reason/degradation事件证据、pending成功隔离和逐命令TOCTOU来源复核；总进度21/121，业务功能11/111 |
 | 1.1.10 | 2026-09-06 | 完成G1-10 vNext运行包接入主干ProductBuild/ProductRelease、确定性InitialState、正式Session及逐命令来源绑定；旧存档/子分支固定原ProductRelease；总进度20/121，业务功能10/111 |
 | 1.1.9 | 2026-09-06 | 完成G1-09 vNext检查点、Hash/协议/重放诊断、runtime head修复和历史检查点子分支重基线；总进度19/121，业务功能9/111 |
