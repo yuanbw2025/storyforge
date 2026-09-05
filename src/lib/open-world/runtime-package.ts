@@ -1,4 +1,4 @@
-import { canonicalGameProductionJsonV2, isSha256Hash } from '../game-production/hash'
+import { canonicalProductProductionJsonV2, isSha256Hash } from '../product-production/hash'
 import type {
   TextOpenWorldRuntimeModuleEnvelopeV1,
   TextOpenWorldRuntimeModuleKeyV1,
@@ -83,7 +83,7 @@ function moduleEnvelope(value: unknown, expectedKey: TextOpenWorldRuntimeModuleK
     },
   ) as TextOpenWorldRuntimeModuleKeyV1[]
   if (dependencies.includes(expectedKey)) fail(`modules.${expectedKey} 不能依赖自身`)
-  canonicalGameProductionJsonV2(parsed.payload)
+  canonicalProductProductionJsonV2(parsed.payload)
   return {
     moduleKey: expectedKey,
     schemaVersion: integer(parsed.schemaVersion, `modules.${expectedKey}.schemaVersion`, 1, 1_000),

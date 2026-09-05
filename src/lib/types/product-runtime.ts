@@ -1146,6 +1146,7 @@ export type ProductRuntimeSession = ProductRuntimeSessionBase & (
 );
 
 export const PRODUCT_RUNTIME_EVENT_TYPES = [
+  "textworld.command.committed",
   "time.advanced",
   "entity.upserted",
   "entity.patched",

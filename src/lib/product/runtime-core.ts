@@ -1316,6 +1316,9 @@ export async function appendProductRuntimeEvent(input: {
   if (input.type.startsWith("world.")) {
     throw new Error("受治理的开放世界事件只能通过对应的专用命令生成。");
   }
+  if (input.type.startsWith("textworld.")) {
+    throw new Error("受治理的文字开放世界 vNext 事件只能通过对应的专用命令 API 生成。");
+  }
   if (
     input.type.startsWith("ttrpg.")
     || (input.type.startsWith("narrative.") && input.type !== "narrative.recorded")

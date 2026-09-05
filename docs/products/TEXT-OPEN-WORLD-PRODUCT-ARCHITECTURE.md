@@ -1,6 +1,6 @@
 # AI 主导文字开放世界游戏 · 整体产品与游戏系统施工规格
 
-> 规格版本：1.1.4
+> 规格版本：1.1.5
 > 生效日期：2026-09-06
 > 文档层级：L2 文字开放世界整体产品施工入口
 > 当前状态：目标架构已冻结并进入分阶段实现；实际完成度以完整开发清单为准
@@ -333,6 +333,16 @@ CommandEnvelope {
   requestedAt
 }
 ```
+
+现行vNext命令合同实现于 `src/lib/types/text-open-world-command.ts` 和
+`src/lib/open-world/command-contract.ts`，权威提交与结果查询实现于
+`src/lib/open-world/commands.ts`。命令内容使用稳定指纹；`requestedAt`只作为审计时间，
+不进入幂等身份，因此传输重试可以更新时间但不能改变Action、payload、来源或基线。
+首次提交只写入一条由`[sessionId+commandId]`唯一约束保护的正式命令事件，同ID同内容返回
+原Receipt，同ID不同内容冲突。客户端遇到结果未知时必须查询事件事实源，不得盲目换ID重发。
+
+G1-03只完成提交边界和空操作投影；Action可用性、Condition与Effect仍分别由G1-04～G1-06
+接入同一事务。没有Effect事件前，`textworld.command.committed`不得被UI解释成玩法成功。
 
 ### 4.2 GameActionDefinition
 
@@ -2523,6 +2533,7 @@ Session中的高频状态优先作为Event和可重建Projection存在，不建�
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| 1.1.5 | 2026-09-06 | 落地vNext统一CommandEnvelope、稳定指纹、事务幂等事件、stale保护和未知结果查询边界 |
 | 1.1.4 | 2026-09-06 | 落地15个领域Module Schema与跨模块完整性校验，补齐“类型存在但引用不可运行”的确定性阻断 |
 | 1.1.3 | 2026-09-06 | 落地TextOpenWorldRuntimePackage vNext严格包络、15个逻辑模块依赖、来源Hash、校准、媒资、质量和旧Release兼容策略 |
 | 1.1.2 | 2026-09-06 | 冻结五项首批校准参数并登记稳定决策ID、内容规模、关系阈值、保护任务UI、随机任务正文策略和AI预算硬保护 |
