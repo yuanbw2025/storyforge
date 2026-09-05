@@ -18,6 +18,7 @@ import {
 } from './event-contract'
 import { parseTextOpenWorldCommandEventPayloadV1 } from './command-contract'
 import { parseTextOpenWorldModulesV1 } from './modules'
+import { createInitialTextOpenWorldInventoryV1, deriveTextOpenWorldInventoryQuantitiesV1 } from './inventory'
 import { deriveTextOpenWorldPlayerStatsFromModulesV1 } from './player-stats'
 import { deriveTextOpenWorldProgressionStatusV1 } from './progression'
 import { parseTextOpenWorldRuntimePackageV1 } from './runtime-package'
@@ -63,6 +64,7 @@ function initialEffectState(modules: TextOpenWorldParsedModulesV1): TextOpenWorl
   const regionKnowledgeByKey = Object.fromEntries(modules.world.regions.map(region => [region.key, region.initialKnowledge]))
   const initialRegionKey = modules.world.locations.find(location => location.key === modules.world.initialLocationKey)!.regionKey
   regionKnowledgeByKey[initialRegionKey] = 'visited'
+  const initialInventory = createInitialTextOpenWorldInventoryV1(modules)
   return {
     version: 1,
     player: {
@@ -73,7 +75,7 @@ function initialEffectState(modules: TextOpenWorldParsedModulesV1): TextOpenWorl
       learnedSkillKeys: [...modules.actors.player.build.learnedSkillKeys],
     },
     inventory: {
-      itemQuantities: Object.fromEntries(modules.actors.player.build.startingItemKeys.map(itemKey => [itemKey, 1])),
+      ...initialInventory,
       equippedItemKeyBySlot: { weapon: null, armor: null, accessory: null },
       knownRecipeKeys: modules.crafting.recipes.filter(recipe => recipe.learnedByDefault).map(recipe => recipe.key),
       currency: modules.actors.player.build.startingCurrency,
@@ -204,9 +206,15 @@ export function deriveTextOpenWorldContextsV1(value: TextOpenWorldSessionProject
     equippedItemKeyBySlot: state.inventory.equippedItemKeyBySlot,
   })
   const progression = deriveTextOpenWorldProgressionStatusV1(modules, state.player.experience)
+  const inventoryQuantities = deriveTextOpenWorldInventoryQuantitiesV1(modules, state.inventory)
   const condition: TextOpenWorldConditionEvaluationContextV1 = {
-    player: { level: state.player.level, experience: state.player.experience, health: state.player.health, maximumHealth: playerStats.maximumHealth, morality: state.relationships.morality, attributes: structuredClone(state.player.attributes), statusKeys: [...state.player.statusKeys] },
-    inventory: { itemQuantities: structuredClone(state.inventory.itemQuantities), currency: state.inventory.currency, equippedItemKeys: Object.values(state.inventory.equippedItemKeyBySlot).filter((key): key is string => key != null), knownRecipeKeys: [...state.inventory.knownRecipeKeys] },
+    player: {
+      level: state.player.level, experience: state.player.experience,
+      health: state.player.health, maximumHealth: playerStats.maximumHealth,
+      skillResource: state.player.skillResource, maximumSkillResource: playerStats.maximumSkillResource,
+      morality: state.relationships.morality, attributes: structuredClone(state.player.attributes), statusKeys: [...state.player.statusKeys],
+    },
+    inventory: { itemQuantities: inventoryQuantities, currency: state.inventory.currency, equippedItemKeys: Object.values(state.inventory.equippedItemKeyBySlot).filter((key): key is string => key != null), knownRecipeKeys: [...state.inventory.knownRecipeKeys] },
     quests: { statusByQuestKey: structuredClone(state.quests.statusByQuestKey), stageByQuestKey: Object.fromEntries(Object.entries(state.quests.stageByQuestKey).filter((entry): entry is [string, string] => entry[1] != null)), objectiveStatusByKey: structuredClone(state.quests.objectiveStatusByKey), resultTags: [...state.quests.resultTags] },
     map: { currentLocationKey: state.map.currentLocationKey, regionKnowledgeByKey: structuredClone(state.map.regionKnowledgeByKey), unlockedFastTravelPointKeys: [...state.map.unlockedFastTravelPointKeys], openEdgeKeys: [...state.map.openEdgeKeys] },
     time: { worldMinute: state.time.worldMinute, minutesPerDay: modules['time-weather'].minutesPerDay, timePeriodKey: periodKey, weatherKey: state.time.currentWeatherByRegionKey[regionKey], deadlineWorldMinuteByKey: structuredClone(state.time.deadlineWorldMinuteByKey) },
@@ -223,7 +231,7 @@ export function deriveTextOpenWorldContextsV1(value: TextOpenWorldSessionProject
     conditionResults: Object.fromEntries(Object.entries(evaluations).map(([key, result]) => [key, { satisfied: result.satisfied, publicReason: result.publicReason }])),
     completedOnceActionKeys: [...projection.actions.completedOnceActionKeys], cooldownUntilWorldMinuteByActionKey: structuredClone(projection.actions.cooldownUntilWorldMinuteByActionKey),
     validTargetKeysByScope: {
-      actor: actorTargets, location: [...state.map.revealedLocationKeys], item: Object.keys(state.inventory.itemQuantities),
+      actor: actorTargets, location: [...state.map.revealedLocationKeys], item: Object.keys(inventoryQuantities),
       quest: Object.entries(state.quests.statusByQuestKey).filter(([, status]) => status === 'available' || status === 'active').map(([key]) => key),
       vendor: modules.economy.vendors.filter(vendor => vendor.locationKey === state.map.currentLocationKey && actorTargets.includes(vendor.actorKey)).map(vendor => vendor.key),
       encounter: modules.combat.encounters.filter(encounter => encounter.locationKey === state.map.currentLocationKey).map(encounter => encounter.key),

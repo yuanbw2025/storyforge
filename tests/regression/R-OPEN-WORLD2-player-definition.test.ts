@@ -138,7 +138,11 @@ describe('Text Open World vNext · protagonist definition and frozen initial bui
     const state = await readProductRuntimeState(session.id!)
     expect(state.textOpenWorld?.runtimePackage.modules.actors.payload).toMatchObject({ player })
     expect(state.textOpenWorld?.state.player).toMatchObject({ level: 1, attributes: build.attributes })
-    expect(state.textOpenWorld?.state.inventory).toMatchObject({ currency: 12, itemQuantities: { 'item.rust-sword': 1 } })
+    expect(state.textOpenWorld?.state.inventory).toMatchObject({
+      currency: 12,
+      stackQuantities: {},
+      itemInstances: { 'instance.initial.1.item.rust-sword': { itemKey: 'item.rust-sword', acquiredByClaimKey: 'initial-build' } },
+    })
   })
 
   it('拒绝跨World、非角色资源、缺少Hash证据和非法初始构筑', async () => {

@@ -102,4 +102,19 @@ describe('Text Open World vNext · unified Action registry and availability proj
       conditionResults: { 'condition.missing': { satisfied: true, publicReason: null } },
     }))).toThrow('conditionResults引用未知条件')
   })
+
+  it('使用和丢弃Action只能作用于其Effect声明的物品，不能伪造同背包目标', () => {
+    const registry = createTextOpenWorldActionRegistryV1(createTextOpenWorldVNextFixture())
+    const itemContext = context({
+      conditionResults: { 'condition.health-not-full': { satisfied: true, publicReason: null } },
+      validTargetKeysByScope: { item: ['item.rust-sword', 'item.salt-crystal', 'item.brine-tonic'] },
+    })
+    const projection = registry.project(itemContext)
+    expect(projection.find(item => item.action.key === 'action.use-brine-tonic'))
+      .toMatchObject({ available: true, validTargetKeys: ['item.brine-tonic'] })
+    expect(projection.find(item => item.action.key === 'action.drop-salt-crystal'))
+      .toMatchObject({ available: true, validTargetKeys: ['item.salt-crystal'], confirmationRequired: true })
+    expect(() => registry.resolve({ actionKey: 'action.use-brine-tonic', targetKey: 'item.rust-sword', context: itemContext }))
+      .toThrow('targetKey不在Action可用目标中')
+  })
 })

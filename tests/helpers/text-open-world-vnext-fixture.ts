@@ -146,7 +146,10 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
     },
     actions: {
       version: 1,
-      conditions: [{ key: 'condition.always', expression: { op: 'all', conditions: [{ op: 'player-number', field: 'level', comparator: 'gte', value: 1 }] }, failureMessage: '角色尚未进入可行动状态。' }],
+      conditions: [
+        { key: 'condition.always', expression: { op: 'all', conditions: [{ op: 'player-number', field: 'level', comparator: 'gte', value: 1 }] }, failureMessage: '角色尚未进入可行动状态。' },
+        { key: 'condition.health-not-full', expression: { op: 'player-resource-below-maximum', resource: 'health' }, failureMessage: '生命已经满了。' },
+      ],
       effects: [
         { key: 'effect.restore-health', operation: 'change-player-resource', payload: { resource: 'health', amount: 10 } },
         { key: 'effect.reward-experience', operation: 'grant-experience', payload: { amount: 100 } },
@@ -155,6 +158,8 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
         { key: 'effect.rest-time', operation: 'advance-time', payload: { minutes: 480 } },
         { key: 'effect.respawn-salt-port', operation: 'respawn', payload: { fastTravelPointKey: 'fast-travel.salt-port', healthRatio: 1 } },
         { key: 'effect.start-ridge-jackal', operation: 'start-combat', payload: { encounterKey: 'encounter.ridge-jackal' } },
+        { key: 'effect.consume-brine-tonic', operation: 'remove-item', payload: { itemKey: 'item.brine-tonic', quantity: 1, reason: 'consume' } },
+        { key: 'effect.drop-salt-crystal', operation: 'remove-item', payload: { itemKey: 'item.salt-crystal', quantity: 1, reason: 'drop' } },
       ],
       actions: [{
         key: 'action.investigate-channel', category: 'investigate', label: '检查盐渠',
@@ -177,6 +182,16 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
         actorScope: 'player', targetScope: 'encounter', locationKeys: ['location.ridge-channel'], requirementConditionKeys: [], costEffectKeys: [],
         successEffectKeys: ['effect.start-ridge-jackal'], failureEffectKeys: [], timeCostMinutes: 0,
         confirmationPolicy: 'never', repeatPolicy: 'repeatable', cooldownMinutes: null,
+      }, {
+        key: 'action.use-brine-tonic', category: 'use', label: '使用盐露药剂', description: '消耗一瓶盐露药剂并恢复生命。',
+        actorScope: 'player', targetScope: 'item', locationKeys: [], requirementConditionKeys: ['condition.health-not-full'], costEffectKeys: ['effect.consume-brine-tonic'],
+        successEffectKeys: ['effect.restore-health'], failureEffectKeys: [], timeCostMinutes: 0,
+        confirmationPolicy: 'never', repeatPolicy: 'repeatable', cooldownMinutes: null,
+      }, {
+        key: 'action.drop-salt-crystal', category: 'drop', label: '丢弃盐晶', description: '从背包中丢弃一枚盐晶。',
+        actorScope: 'player', targetScope: 'item', locationKeys: [], requirementConditionKeys: [], costEffectKeys: ['effect.drop-salt-crystal'],
+        successEffectKeys: [], failureEffectKeys: [], timeCostMinutes: 0,
+        confirmationPolicy: 'always', repeatPolicy: 'repeatable', cooldownMinutes: null,
       }],
     },
     progression: {
@@ -225,18 +240,27 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
       items: [
         {
           key: 'item.rust-sword', title: '旧盐刀', description: '守渠人常用的短刀。', kind: 'equipment',
-          stackable: false, consumable: false, critical: false, baseValue: 10, equipmentSlotKey: 'weapon',
-          statModifiers: { attack: 2 }, effectKeys: [],
+          tags: ['武器'], stackPolicy: 'instanced', maximumStack: null, unique: false,
+          consumable: false, critical: false, droppable: true, sellable: true, baseValue: 10, useActionKey: null, equipmentSlotKey: 'weapon',
+          statModifiers: { attack: 2 }, effectKeys: [], sourceRefs: [], presentationRefs: [],
         },
         {
           key: 'item.salt-crystal', title: '盐晶', description: '可以制作药剂的粗盐晶。', kind: 'material',
-          stackable: true, consumable: false, critical: false, baseValue: 2, equipmentSlotKey: null,
-          statModifiers: {}, effectKeys: [],
+          tags: ['材料'], stackPolicy: 'stacked', maximumStack: 999, unique: false,
+          consumable: false, critical: false, droppable: true, sellable: true, baseValue: 2, useActionKey: null, equipmentSlotKey: null,
+          statModifiers: {}, effectKeys: [], sourceRefs: [], presentationRefs: [],
         },
         {
           key: 'item.brine-tonic', title: '盐露药剂', description: '恢复少量生命。', kind: 'consumable',
-          stackable: true, consumable: true, critical: false, baseValue: 8, equipmentSlotKey: null,
-          statModifiers: {}, effectKeys: ['effect.restore-health'],
+          tags: ['消耗品'], stackPolicy: 'stacked', maximumStack: 99, unique: false,
+          consumable: true, critical: false, droppable: true, sellable: true, baseValue: 8, useActionKey: 'action.use-brine-tonic', equipmentSlotKey: null,
+          statModifiers: {}, effectKeys: ['effect.restore-health'], sourceRefs: [], presentationRefs: [],
+        },
+        {
+          key: 'item.canal-seal', title: '守渠印', description: '维系主线身份的关键印记。', kind: 'quest',
+          tags: ['任务物品'], stackPolicy: 'instanced', maximumStack: null, unique: true,
+          consumable: false, critical: true, droppable: false, sellable: false, baseValue: 0, useActionKey: null, equipmentSlotKey: null,
+          statModifiers: {}, effectKeys: [], sourceRefs: ['world-release:canal-seal'], presentationRefs: [],
         },
       ],
       dropTables: [{ key: 'drop.salt-jackal', entries: [{ itemKey: 'item.salt-crystal', minimum: 1, maximum: 2, weight: 1 }] }],

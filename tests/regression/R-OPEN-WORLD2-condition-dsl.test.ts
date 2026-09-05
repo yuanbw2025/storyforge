@@ -7,7 +7,7 @@ import { createTextOpenWorldVNextFixture } from '../helpers/text-open-world-vnex
 function evaluationContext(): TextOpenWorldConditionEvaluationContextV1 {
   return {
     player: {
-      level: 1, experience: 0, health: 35, maximumHealth: 35, morality: 0,
+      level: 1, experience: 0, health: 35, maximumHealth: 35, skillResource: 2, maximumSkillResource: 4, morality: 0,
       attributes: { power: 3, vitality: 3, agility: 3 }, statusKeys: ['status.rested'],
     },
     inventory: {

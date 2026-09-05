@@ -11,6 +11,7 @@ import type {
   TextOpenWorldRuntimePackageV1,
 } from '../types'
 import { parseTextOpenWorldModulesV1 } from './modules'
+import { createTextOpenWorldItemInstanceIdV1, deriveTextOpenWorldInventoryQuantitiesV1 } from './inventory'
 import { deriveTextOpenWorldPlayerStatsFromModulesV1 } from './player-stats'
 import { levelForTextOpenWorldExperienceV1 } from './progression'
 
@@ -58,7 +59,8 @@ function parseDefinition(value: unknown, refs: Refs, label: string): TextOpenWor
   if (operation === 'change-player-resource') { exact(payload, ['resource', 'amount'], `${label}.payload`); return { key: effectKey, operation, payload: { resource: enumValue(payload.resource, ['health', 'skill-resource'], `${label}.resource`), amount: numberValue(payload.amount, `${label}.amount`) } } }
   if (operation === 'grant-experience') { exact(payload, ['amount'], `${label}.payload`); return { key: effectKey, operation, payload: { amount: int(payload.amount, `${label}.amount`, 1) } } }
   if (operation === 'apply-status' || operation === 'remove-status') { exact(payload, ['statusKey'], `${label}.payload`); return { key: effectKey, operation, payload: { statusKey: ref(payload.statusKey, refs.statuses, `${label}.statusKey`) } } }
-  if (operation === 'grant-item' || operation === 'remove-item') { exact(payload, ['itemKey', 'quantity'], `${label}.payload`); return { key: effectKey, operation, payload: { itemKey: ref(payload.itemKey, refs.items, `${label}.itemKey`), quantity: int(payload.quantity, `${label}.quantity`, 1, 1_000_000) } } }
+  if (operation === 'grant-item') { exact(payload, ['itemKey', 'quantity'], `${label}.payload`); return { key: effectKey, operation, payload: { itemKey: ref(payload.itemKey, refs.items, `${label}.itemKey`), quantity: int(payload.quantity, `${label}.quantity`, 1, 1_000_000) } } }
+  if (operation === 'remove-item') { exact(payload, ['itemKey', 'quantity', 'reason'], `${label}.payload`); return { key: effectKey, operation, payload: { itemKey: ref(payload.itemKey, refs.items, `${label}.itemKey`), quantity: int(payload.quantity, `${label}.quantity`, 1, 1_000_000), reason: enumValue(payload.reason, ['consume', 'drop', 'sell', 'craft'], `${label}.reason`) } } }
   if (operation === 'equip-item' || operation === 'unequip-item') { exact(payload, ['itemKey'], `${label}.payload`); return { key: effectKey, operation, payload: { itemKey: ref(payload.itemKey, refs.items, `${label}.itemKey`) } } }
   if (operation === 'learn-skill') { exact(payload, ['skillKey'], `${label}.payload`); return { key: effectKey, operation, payload: { skillKey: ref(payload.skillKey, refs.skills, `${label}.skillKey`) } } }
   if (operation === 'learn-recipe') { exact(payload, ['recipeKey'], `${label}.payload`); return { key: effectKey, operation, payload: { recipeKey: ref(payload.recipeKey, refs.recipes, `${label}.recipeKey`) } } }
@@ -142,12 +144,30 @@ export function validateTextOpenWorldEffectStateV1(state: TextOpenWorldEffectSta
   if (state.player.maximumHealth !== derivedStats.maximumHealth || state.player.maximumSkillResource !== derivedStats.maximumSkillResource) fail('player资源上限与Release公式不一致')
   assertUniqueKnown(state.player.learnedSkillKeys, refs.skills, 'player.learnedSkillKeys')
   assertUniqueKnown(state.player.statusKeys, refs.statuses, 'player.statusKeys')
-  for (const [itemKey, value] of Object.entries(state.inventory.itemQuantities)) { ref(itemKey, refs.items, 'inventory itemKey'); int(value, 'inventory quantity', 1, 1_000_000) }
+  for (const [itemKey, value] of Object.entries(state.inventory.stackQuantities)) {
+    ref(itemKey, refs.items, 'inventory stack itemKey'); const definition = modules.items.items.find(item => item.key === itemKey)!
+    if (definition.stackPolicy !== 'stacked') fail(`实例物品不能进入stackQuantities:${itemKey}`)
+    int(value, 'inventory stack quantity', 1, definition.maximumStack!)
+  }
+  const instanceCountByItemKey: Record<string, number> = {}
+  for (const [instanceId, rawInstance] of Object.entries(state.inventory.itemInstances)) {
+    if (!/^instance\.[A-Za-z0-9][A-Za-z0-9._:-]{0,259}$/.test(instanceId)) fail(`物品实例ID无效:${instanceId}`)
+    const instance = row(rawInstance, `itemInstances.${instanceId}`); exact(instance, ['itemKey', 'acquiredByClaimKey', 'stateTags'], `itemInstances.${instanceId}`)
+    const itemKey = ref(instance.itemKey, refs.items, `itemInstances.${instanceId}.itemKey`)
+    const definition = modules.items.items.find(item => item.key === itemKey)!
+    if (definition.stackPolicy !== 'instanced') fail(`堆叠物品不能进入itemInstances:${itemKey}`)
+    key(instance.acquiredByClaimKey, `itemInstances.${instanceId}.acquiredByClaimKey`, CLAIM_KEY)
+    const stateTags = Array.isArray(instance.stateTags) ? instance.stateTags.map(tag => key(tag, `itemInstances.${instanceId}.stateTag`)) : fail(`itemInstances.${instanceId}.stateTags无效`)
+    if (new Set(stateTags).size !== stateTags.length) fail(`itemInstances.${instanceId}.stateTags不能重复`)
+    instanceCountByItemKey[itemKey] = (instanceCountByItemKey[itemKey] ?? 0) + 1
+  }
+  for (const item of modules.items.items) if (item.unique && (instanceCountByItemKey[item.key] ?? 0) > 1) fail(`唯一物品重复持有:${item.key}`)
+  const inventoryQuantities = deriveTextOpenWorldInventoryQuantitiesV1(modules, state.inventory)
   for (const [slot, itemKey] of Object.entries(state.inventory.equippedItemKeyBySlot)) {
     if (!['weapon', 'armor', 'accessory'].includes(slot)) fail(`未知装备位:${slot}`)
     if (itemKey == null) continue
     const definition = modules.items.items.find(candidate => candidate.key === itemKey)
-    if (!definition || definition.kind !== 'equipment' || definition.equipmentSlotKey !== slot || !state.inventory.itemQuantities[itemKey]) fail(`装备状态无效:${slot}`)
+    if (!definition || definition.kind !== 'equipment' || definition.equipmentSlotKey !== slot || !inventoryQuantities[itemKey]) fail(`装备状态无效:${slot}`)
   }
   assertUniqueKnown(state.inventory.knownRecipeKeys, refs.recipes, 'inventory.knownRecipeKeys')
   int(state.inventory.currency, 'inventory.currency', 0, 1_000_000_000)
@@ -187,6 +207,11 @@ export function validateTextOpenWorldEffectStateV1(state: TextOpenWorldEffectSta
   assertUniqueKnown(state.endings.unlockedKeys, refs.endings, 'endings.unlockedKeys')
   if (state.endings.reachedKey != null && (!refs.endings.has(state.endings.reachedKey) || !state.endings.unlockedKeys.includes(state.endings.reachedKey))) fail('reached ending无效')
   if (new Set(state.appliedClaimKeys).size !== state.appliedClaimKeys.length || state.appliedClaimKeys.some(item => !CLAIM_KEY.test(item))) fail('appliedClaimKeys无效')
+  for (const [instanceId, instance] of Object.entries(state.inventory.itemInstances)) {
+    if (instance.acquiredByClaimKey !== 'initial-build' && !state.appliedClaimKeys.includes(instance.acquiredByClaimKey)) {
+      fail(`物品实例获得来源没有正式claim证据:${instanceId}`)
+    }
+  }
   if (!modules.world.locations.some(item => item.key === state.map.currentLocationKey)) fail('currentLocationKey不存在')
   if (!state.map.revealedLocationKeys.includes(state.map.currentLocationKey)) fail('当前位置必须已经揭示')
   if (state.map.travel) {
@@ -280,15 +305,38 @@ function applyDefinitions(stateValue: TextOpenWorldEffectStateV1, effects: TextO
       case 'grant-item':
       case 'remove-item': {
         const { payload } = effect
+        const removalReason = effect.operation === 'remove-item' ? effect.payload.reason : null
         const definition = item(payload.itemKey)
-        const before = state.inventory.itemQuantities[payload.itemKey] ?? 0
-        const after = before + (effect.operation === 'grant-item' ? payload.quantity : -payload.quantity)
-        if (after < 0 || (!definition.stackable && after > 1)) fail(`${effect.key}物品数量无效`)
-        if (effect.operation === 'remove-item' && definition.critical) fail(`${effect.key}不能移除关键物品`)
-        if (effect.operation === 'remove-item' && Object.values(state.inventory.equippedItemKeyBySlot).includes(payload.itemKey)) fail(`${effect.key}不能移除已装备物品`)
-        if (after === 0) delete state.inventory.itemQuantities[payload.itemKey]
-        else state.inventory.itemQuantities[payload.itemKey] = after
-        record(changes, effect, `${effect.operation}:${payload.itemKey}`, before, after)
+        if (effect.operation === 'remove-item') {
+          if (definition.critical) fail(`${effect.key}不能移除关键物品`)
+          if (removalReason === 'consume' && !definition.consumable) fail(`${effect.key}目标不是消耗品`)
+          if (removalReason === 'drop' && !definition.droppable) fail(`${effect.key}目标不可丢弃`)
+          if (removalReason === 'sell' && !definition.sellable) fail(`${effect.key}目标不可出售`)
+          if (Object.values(state.inventory.equippedItemKeyBySlot).includes(payload.itemKey)) fail(`${effect.key}不能移除已装备物品`)
+        }
+        if (definition.stackPolicy === 'stacked') {
+          const before = state.inventory.stackQuantities[payload.itemKey] ?? 0
+          const after = before + (effect.operation === 'grant-item' ? payload.quantity : -payload.quantity)
+          if (after < 0 || after > definition.maximumStack!) fail(`${effect.key}物品堆叠数量无效`)
+          if (after === 0) delete state.inventory.stackQuantities[payload.itemKey]
+          else state.inventory.stackQuantities[payload.itemKey] = after
+          record(changes, effect, `${effect.operation}:${payload.itemKey}:${removalReason ?? 'grant'}`, before, after)
+        } else {
+          const before = Object.entries(state.inventory.itemInstances).filter(([, instance]) => instance.itemKey === payload.itemKey).map(([instanceId]) => instanceId).sort()
+          if (effect.operation === 'grant-item') {
+            if (definition.unique && (before.length > 0 || payload.quantity > 1)) fail(`${effect.key}会重复授予唯一物品`)
+            for (let ordinal = 1; ordinal <= payload.quantity; ordinal += 1) {
+              const instanceId = createTextOpenWorldItemInstanceIdV1({ appliedClaimCount: state.appliedClaimKeys.length, effectKey: effect.key, ordinal })
+              if (state.inventory.itemInstances[instanceId]) fail(`${effect.key}物品实例ID冲突`)
+              state.inventory.itemInstances[instanceId] = { itemKey: payload.itemKey, acquiredByClaimKey: claimKey, stateTags: ['new'] }
+            }
+          } else {
+            if (before.length < payload.quantity) fail(`${effect.key}物品实例数量不足`)
+            before.slice(0, payload.quantity).forEach(instanceId => { delete state.inventory.itemInstances[instanceId] })
+          }
+          const after = Object.entries(state.inventory.itemInstances).filter(([, instance]) => instance.itemKey === payload.itemKey).map(([instanceId]) => instanceId).sort()
+          record(changes, effect, `${effect.operation}:${payload.itemKey}:${removalReason ?? 'grant'}`, before, after)
+        }
         break
       }
       case 'equip-item':
@@ -303,7 +351,7 @@ function applyDefinitions(stateValue: TextOpenWorldEffectStateV1, effects: TextO
           maximumSkillResource: state.player.maximumSkillResource,
         }
         if (effect.operation === 'equip-item') {
-          if ((state.inventory.itemQuantities[payload.itemKey] ?? 0) < 1) fail(`${effect.key}背包没有目标装备`)
+          if ((deriveTextOpenWorldInventoryQuantitiesV1(modules, state.inventory)[payload.itemKey] ?? 0) < 1) fail(`${effect.key}背包没有目标装备`)
           state.inventory.equippedItemKeyBySlot[slot] = payload.itemKey
         } else {
           if (before.itemKey !== payload.itemKey) fail(`${effect.key}目标未装备`)

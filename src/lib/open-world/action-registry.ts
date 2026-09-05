@@ -115,6 +115,7 @@ export function createTextOpenWorldActionRegistryV1(value: TextOpenWorldRuntimeP
   const modules = parseTextOpenWorldModulesV1(value)
   const entries = buildEntries(modules)
   const byKey = new Map(entries.map(entry => [entry.action.key, entry]))
+  const effectByKey = new Map(modules.actions.effects.map(effect => [effect.key, effect]))
   const cloneEntry = (entry: TextOpenWorldActionCatalogEntryV1) => structuredClone(entry)
 
   const project = (rawContext: TextOpenWorldActionProjectionContextV1): TextOpenWorldActionAvailabilityV1[] => {
@@ -138,7 +139,15 @@ export function createTextOpenWorldActionRegistryV1(value: TextOpenWorldRuntimeP
       const cooldownUntil = context.cooldownUntilWorldMinuteByActionKey[action.key] ?? 0
       const cooldownRemainingMinutes = Math.max(0, cooldownUntil - context.worldMinute)
       if (action.repeatPolicy === 'cooldown' && cooldownRemainingMinutes > 0) unavailableReasons.push({ code: 'cooldown', message: `该行动还需等待${cooldownRemainingMinutes}分钟。`, conditionKey: null })
-      const validTargetKeys = action.targetScope === 'none' ? [] : [...(context.validTargetKeysByScope[action.targetScope] ?? [])]
+      let validTargetKeys = action.targetScope === 'none' ? [] : [...(context.validTargetKeysByScope[action.targetScope] ?? [])]
+      if (action.targetScope === 'item' && ['use', 'drop', 'sell'].includes(action.category)) {
+        const reason = action.category === 'use' ? 'consume' : action.category
+        const removal = action.costEffectKeys.map(effectKey => effectByKey.get(effectKey))
+          .find(effect => effect?.operation === 'remove-item' && effect.payload.reason === reason)
+        validTargetKeys = removal?.operation === 'remove-item'
+          ? validTargetKeys.filter(itemKey => itemKey === removal.payload.itemKey)
+          : []
+      }
       if (action.targetScope !== 'none' && validTargetKeys.length === 0) unavailableReasons.push({ code: 'no-valid-target', message: '当前没有可作用的目标。', conditionKey: null })
       return {
         ...cloneEntry(entry),

@@ -317,14 +317,22 @@ export interface TextOpenWorldItemModuleV1 {
     key: string
     title: string
     description: string
+    tags: string[]
     kind: 'equipment' | 'consumable' | 'material' | 'quest' | 'misc'
-    stackable: boolean
+    stackPolicy: 'stacked' | 'instanced'
+    maximumStack: number | null
+    unique: boolean
     consumable: boolean
     critical: boolean
+    droppable: boolean
+    sellable: boolean
     baseValue: number
+    useActionKey: string | null
     equipmentSlotKey: 'weapon' | 'armor' | 'accessory' | null
     statModifiers: Partial<Record<'maximumHealth' | 'attack' | 'defense' | 'criticalChance' | 'initiative' | 'skillPower' | 'skillResource', number>>
     effectKeys: string[]
+    sourceRefs: string[]
+    presentationRefs: string[]
   }>
   dropTables: Array<{
     key: string

@@ -48,7 +48,11 @@ describe('Text Open World vNext · authoritative Session Projection', () => {
       ruleset: { key: 'storyforge.standard', version: 1 },
       state: {
         player: { level: 1, experience: 0, health: 37, maximumHealth: 37, skillResource: 4, maximumSkillResource: 4, attributes: { power: 3, vitality: 3, agility: 3 } },
-        inventory: { itemQuantities: { 'item.rust-sword': 1 }, currency: 20, knownRecipeKeys: ['recipe.brine-tonic'] },
+        inventory: {
+          stackQuantities: {},
+          itemInstances: { 'instance.initial.1.item.rust-sword': { itemKey: 'item.rust-sword', acquiredByClaimKey: 'initial-build', stateTags: ['new'] } },
+          currency: 20, knownRecipeKeys: ['recipe.brine-tonic'],
+        },
         quests: { statusByQuestKey: { 'quest.main.1': 'available', 'quest.template.supplies': 'locked' } },
         map: { currentLocationKey: 'location.salt-port', revealedLocationKeys: ['location.salt-port'], regionKnowledgeByKey: { 'region.salt-port': 'visited', 'region.ridge': 'heard' }, openEdgeKeys: ['edge.port-ridge'] },
         time: { worldMinute: 480, currentWeatherByRegionKey: { 'region.salt-port': 'weather.clear', 'region.ridge': 'weather.clear' } },
@@ -114,7 +118,7 @@ describe('Text Open World vNext · authoritative Session Projection', () => {
 
   it('拒绝装备悬空、Actor缺失、ruleset漂移和不连续投影', () => {
     const projection = createInitialTextOpenWorldSessionProjectionV1(createTextOpenWorldVNextFixture())
-    const missingItem = structuredClone(projection); missingItem.state.inventory.equippedItemKeyBySlot.weapon = 'item.rust-sword'; delete missingItem.state.inventory.itemQuantities['item.rust-sword']
+    const missingItem = structuredClone(projection); missingItem.state.inventory.equippedItemKeyBySlot.weapon = 'item.rust-sword'; delete missingItem.state.inventory.itemInstances['instance.initial.1.item.rust-sword']
     expect(() => parseTextOpenWorldSessionProjectionV1(missingItem)).toThrow('装备状态无效')
     const missingActor = structuredClone(projection); delete missingActor.state.actors['actor.caretaker']
     expect(() => parseTextOpenWorldSessionProjectionV1(missingActor)).toThrow('Actor运行状态缺失')

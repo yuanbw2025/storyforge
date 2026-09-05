@@ -14,6 +14,7 @@ export type TextOpenWorldConditionExpressionV1 =
       value: number
     }
   | { op: 'player-status'; statusKey: string; present: boolean }
+  | { op: 'player-resource-below-maximum'; resource: 'health' | 'skill-resource' }
   | { op: 'inventory-quantity'; itemKey: string; comparator: TextOpenWorldNumberComparatorV1; value: number }
   | { op: 'inventory-currency'; comparator: TextOpenWorldNumberComparatorV1; value: number }
   | { op: 'inventory-equipped'; itemKey: string; equipped: boolean }
@@ -55,6 +56,8 @@ export interface TextOpenWorldConditionEvaluationContextV1 {
     experience: number
     health: number
     maximumHealth: number
+    skillResource: number
+    maximumSkillResource: number
     morality: number
     attributes: { power: number; vitality: number; agility: number }
     statusKeys: string[]

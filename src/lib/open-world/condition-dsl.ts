@@ -94,6 +94,10 @@ function parseExpression(value: unknown, refs: ReferenceCatalog, depth: number, 
     exact(parsed, ['op', 'statusKey', 'present'], label)
     return { op, statusKey: ref(parsed.statusKey, refs.statuses, `${label}.statusKey`), present: bool(parsed.present, `${label}.present`) }
   }
+  if (op === 'player-resource-below-maximum') {
+    exact(parsed, ['op', 'resource'], label)
+    return { op, resource: enumValue(parsed.resource, ['health', 'skill-resource'], `${label}.resource`) }
+  }
   if (op === 'inventory-quantity') {
     exact(parsed, ['op', 'itemKey', 'comparator', 'value'], label)
     return { op, itemKey: ref(parsed.itemKey, refs.items, `${label}.itemKey`), comparator: enumValue(parsed.comparator, COMPARATORS, `${label}.comparator`), value: numberValue(parsed.value, `${label}.value`) }
@@ -239,6 +243,9 @@ function evaluate(expression: TextOpenWorldConditionExpressionV1, context: TextO
       return compare(values[expression.field], expression.comparator, expression.value)
     }
     case 'player-status': return context.player.statusKeys.includes(expression.statusKey) === expression.present
+    case 'player-resource-below-maximum': return expression.resource === 'health'
+      ? context.player.health < context.player.maximumHealth
+      : context.player.skillResource < context.player.maximumSkillResource
     case 'inventory-quantity': return compare(context.inventory.itemQuantities[expression.itemKey] ?? 0, expression.comparator, expression.value)
     case 'inventory-currency': return compare(context.inventory.currency, expression.comparator, expression.value)
     case 'inventory-equipped': return context.inventory.equippedItemKeys.includes(expression.itemKey) === expression.equipped

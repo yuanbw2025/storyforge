@@ -11,7 +11,8 @@ function state(overrides: Partial<TextOpenWorldEffectStateV1> = {}): TextOpenWor
       attributes: { power: 3, vitality: 3, agility: 3 }, statusKeys: [], learnedSkillKeys: ['skill.basic-attack'],
     },
     inventory: {
-      itemQuantities: { 'item.rust-sword': 1, 'item.salt-crystal': 2 },
+      stackQuantities: { 'item.salt-crystal': 2 },
+      itemInstances: { 'instance.initial.1.item.rust-sword': { itemKey: 'item.rust-sword', acquiredByClaimKey: 'initial-build', stateTags: ['new'] } },
       equippedItemKeyBySlot: { weapon: null, armor: null, accessory: null },
       knownRecipeKeys: ['recipe.brine-tonic'], currency: 20,
     },
@@ -162,7 +163,7 @@ describe('Text Open World vNext · typed Effect DSL and atomic EffectPlan', () =
 
     const catalog = createTextOpenWorldEffectCatalogV1(addEffects([
       { key: 'effect.kill-caretaker', operation: 'change-actor-state', payload: { actorKey: 'actor.caretaker', alive: false, present: false, locationKey: null } },
-      { key: 'effect.remove-sword', operation: 'remove-item', payload: { itemKey: 'item.rust-sword', quantity: 1 } },
+      { key: 'effect.remove-sword', operation: 'remove-item', payload: { itemKey: 'item.rust-sword', quantity: 1, reason: 'drop' } },
     ]))
     await expect(catalog.plan({ effectKeys: ['effect.kill-caretaker'], claimKey: 'claim.kill', state: state() }))
       .rejects.toThrow('不能杀死受保护Actor')

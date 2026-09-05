@@ -583,7 +583,7 @@ async function readOpenWorldRuntimeContext(input: AssembleContextInput): Promise
   }
   const state = await readProductRuntimeStateForContext(session.id!)
   if (manifest.textOpenWorldVNext) {
-    const [sessionProjection, modulesModule, actionModule, bindingModule, feedbackModule, skillsModule, lifeModule] = await Promise.all([
+    const [sessionProjection, modulesModule, actionModule, bindingModule, feedbackModule, skillsModule, lifeModule, inventoryModule] = await Promise.all([
       import('../open-world/session-projection'),
       import('../open-world/modules'),
       import('../open-world/action-registry'),
@@ -591,6 +591,7 @@ async function readOpenWorldRuntimeContext(input: AssembleContextInput): Promise
       import('../open-world/feedback'),
       import('../open-world/skills'),
       import('../open-world/life-cycle'),
+      import('../open-world/inventory'),
     ])
     if (!state.textOpenWorld) return ''
     const binding = await bindingModule.verifyTextOpenWorldVNextSessionBindingV1(session)
@@ -603,6 +604,7 @@ async function readOpenWorldRuntimeContext(input: AssembleContextInput): Promise
       .project(derived.action)
       .filter(item => item.available)
     const runtime = projection.state
+    const inventoryQuantities = inventoryModule.deriveTextOpenWorldInventoryQuantitiesV1(modules, runtime.inventory)
     const location = modules.world.locations.find(item => item.key === runtime.map.currentLocationKey)
     if (!location) throw new Error('文字开放世界当前位置不在冻结ProductRelease/Build中。')
     const region = modules.world.regions.find(item => item.key === location.regionKey)
@@ -678,7 +680,7 @@ async function readOpenWorldRuntimeContext(input: AssembleContextInput): Promise
       `【派生战斗值】攻击=${derived.playerStats.attack}｜防御=${derived.playerStats.defense}｜暴击=${Math.round(derived.playerStats.criticalChance * 10_000) / 100}%｜先手=${derived.playerStats.initiative}`,
       '【已学技能】', ...(skillLines.length ? skillLines : ['- 无']),
       '【当前状态】', ...(statusLines.length ? statusLines : ['- 无']),
-      `【背包】${Object.entries(runtime.inventory.itemQuantities).filter(([, quantity]) => quantity > 0).map(([key, quantity]) => `${itemByKey.get(key)?.title ?? key}×${quantity}`).join('、') || '空'}｜货币=${runtime.inventory.currency}`,
+      `【背包】${Object.entries(inventoryQuantities).filter(([, quantity]) => quantity > 0).map(([key, quantity]) => `${itemByKey.get(key)?.title ?? key}×${quantity}`).join('、') || '空'}｜货币=${runtime.inventory.currency}`,
       `【装备】${Object.entries(runtime.inventory.equippedItemKeyBySlot).map(([slot, key]) => `${slot}=${key ? itemByKey.get(key)?.title ?? key : '空'}`).join('、')}`,
       `【区域认知】${visibleRegions.map(item => `${item.title}=${runtime.map.regionKnowledgeByKey[item.key]}`).join('、') || '无'}`,
       `【已发现地点】${visibleLocations.map(item => `${item.key}:${item.title}`).join('、') || '无'}`,

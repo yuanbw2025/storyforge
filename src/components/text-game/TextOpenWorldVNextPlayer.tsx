@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { ArrowLeft, GitBranch, Globe2, MapPinned, Save, Swords, UserRound } from 'lucide-react'
+import { createTextOpenWorldInventoryCatalogV1 } from '../../lib/open-world/inventory'
 import { deriveTextOpenWorldLifeProjectionV1 } from '../../lib/open-world/life-cycle'
 import { parseTextOpenWorldModulesV1 } from '../../lib/open-world/modules'
 import { deriveTextOpenWorldContextsV1 } from '../../lib/open-world/session-projection'
@@ -23,7 +24,7 @@ export default function TextOpenWorldVNextPlayer() {
   const region = modules.world.regions.find(item => item.key === location?.regionKey)
   const visibleLocations = modules.world.locations.filter(item => state.map.revealedLocationKeys.includes(item.key))
   const visibleQuests = modules.quests.quests.filter(item => state.quests.statusByQuestKey[item.key] !== 'locked')
-  const inventory = Object.entries(state.inventory.itemQuantities).filter(([, quantity]) => quantity > 0).map(([key, quantity]) => ({ item: modules.items.items.find(candidate => candidate.key === key), key, quantity }))
+  const inventory = createTextOpenWorldInventoryCatalogV1(runtimePackage).project(state.inventory)
   const derived = deriveTextOpenWorldContextsV1(projection)
   const { playerStats, progression } = derived
   const skillCatalog = createTextOpenWorldSkillCatalogV1(runtimePackage)
