@@ -717,7 +717,7 @@ export const ADOPTION_EXTENSIONS: readonly AdoptionExtensionSpec[] = Object.free
       'src/lib/product-platform/distribution-bundle.ts',
     ],
     policyRegistry: 'PRODUCT_PRODUCTION_PACKAGE_ADOPTION_V1 + PRODUCT_DISTRIBUTION_BUNDLE_V2 + PROJECT_TABLES + product validators',
-    reason: 'Production publish 只允许在单一事务中物化经 QA 的完整运行包；市场导入必须逐字验证分发包、媒资、世界来源、授权与来源回执，禁止分表发布或绕过产品 parser。',
+    reason: 'Production publish 只允许在单一事务中物化经 QA 的完整运行包；文字开放世界 vNext 内容必须作为共享 ProductRuntimePackage 的产品字段一起校验和发布；市场导入必须逐字验证分发包、媒资、世界来源、授权与来源回执，禁止分表发布或绕过产品 parser。',
     reviewAfter: '2027-08-21',
   },
   {

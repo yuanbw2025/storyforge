@@ -956,6 +956,7 @@ async function prepareProductRuntimeSessionRecord(
     | { productReleaseId: number; productBuildId: null }
     | { productReleaseId: null; productBuildId: number }
   ),
+  rulesetVersion: number,
 ): Promise<ProductRuntimeSession> {
   await assertSessionWorkspace(input);
   if (!PRODUCT_RUNTIME_KINDS.includes(input.kind))
@@ -977,7 +978,7 @@ async function prepareProductRuntimeSessionRecord(
     kind: input.kind,
     title,
     status: "active",
-    rulesetVersion: 1,
+    rulesetVersion,
     seed: input.seed?.trim() || defaultSeed(),
     canonSnapshotJson: JSON.stringify(canonSnapshot),
     initialStateJson,
@@ -1024,7 +1025,7 @@ export async function prepareReleasedProductRuntimeSessionRecordV1(
     productReleaseId: input.productReleaseId,
     productBuildId: null,
     runtimeSourceHash: manifest.packageHash,
-  });
+  }, manifest.runtimePackage.definition.rulesetVersion);
   preparedProductRuntimeSessionsV1.add(session);
   return session;
 }
@@ -1060,7 +1061,7 @@ export async function preparePreviewProductRuntimeSessionRecordV1(
     productReleaseId: null,
     productBuildId: input.productBuildId,
     runtimeSourceHash: verified.runtimeSourceHash,
-  });
+  }, verified.runtimePackage.definition.rulesetVersion);
   preparedProductRuntimeSessionsV1.add(session);
   return session;
 }
@@ -1364,7 +1365,7 @@ export async function readProductRuntimeStateVersion(sessionId: number): Promise
   };
 }
 
-type VerifiedFormalRuntimeSourceV1 = {
+export type VerifiedFormalRuntimeSourceV1 = {
   runtimePackage: ProductRuntimePackageV1;
   packageHash: string;
   source:

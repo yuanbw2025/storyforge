@@ -230,7 +230,10 @@ export async function replayTextOpenWorldEventProtocolV1(events: readonly Produc
       if (expectedFingerprint !== effect.outcomeFingerprint) fail('命令结果批次指纹无效')
       pending.ruleset = effect.ruleset; pending.effectsEventSequence = event.sequence; pending.outcomeFingerprint = effect.outcomeFingerprint
       projection.batches.push(structuredClone(pending)); pending = null; randomRequests.length = 0
-    } else fail(`事件类型不属于vNext协议:${event.type}`)
+    }
+    // ProductRuntimeSession is a shared event stream. Narrative, interaction
+    // and other product events advance the global cursor but do not belong to
+    // the vNext command/outcome sub-protocol.
     projection.lastSequence = event.sequence
   }
   projection.pendingCommandId = pending?.commandId ?? null

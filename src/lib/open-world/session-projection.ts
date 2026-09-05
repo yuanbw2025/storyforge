@@ -161,7 +161,8 @@ export function parseTextOpenWorldSessionProjectionV1(value: unknown): TextOpenW
 }
 
 export function applyTextOpenWorldSessionEventV1(current: TextOpenWorldSessionProjectionV1, event: ProductRuntimeEvent): TextOpenWorldSessionProjectionV1 {
-  const projection = parseTextOpenWorldSessionProjectionV1(current); if (event.sequence !== projection.lastEventSequence + 1) fail(`Session投影事件序号不连续:${projection.lastEventSequence + 1}->${event.sequence}`)
+  const projection = parseTextOpenWorldSessionProjectionV1(current)
+  if (event.sequence <= projection.lastEventSequence) fail(`Session投影事件序号未前进:${projection.lastEventSequence}->${event.sequence}`)
   if (event.type === 'textworld.command.committed') {
     if (projection.protocol.pendingCommandId) fail('上一命令尚未终结')
     const command = parseTextOpenWorldCommandEventPayloadV1(json(event)); if (command.envelope.commandId !== event.commandId) fail('命令事件索引不一致')

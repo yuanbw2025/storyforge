@@ -48,7 +48,12 @@ export async function inspectTextOpenWorldRuntimeHeadV1(sessionId: number): Prom
   if (!/^[a-f0-9]{64}$/.test(session.runtimeHeadStateHash)) return { ...base, code: 'cache-hash-invalid', detail: 'runtime head Hash格式无效。', repairable: true }
   let cached: ProductRuntimeState
   try { cached = parseProductRuntimeState(session.runtimeHeadStateJson) } catch (cause) { return { ...base, code: 'cache-state-invalid', detail: cause instanceof Error ? cause.message : String(cause), repairable: true } }
-  if (cached.lastSequence !== verified.state.lastSequence || cached.textOpenWorld?.lastEventSequence !== verified.state.lastSequence) return { ...base, code: 'cache-sequence-mismatch', detail: '缓存内部序号与事件头不一致。', repairable: true }
+  const latestTextOpenWorldSequence = [...verified.events].reverse()
+    .find(event => event.type.startsWith('textworld.'))?.sequence ?? 0
+  if (cached.lastSequence !== verified.state.lastSequence
+    || cached.textOpenWorld?.lastEventSequence !== latestTextOpenWorldSequence) {
+    return { ...base, code: 'cache-sequence-mismatch', detail: '缓存内部序号与共享事件头不一致。', repairable: true }
+  }
   if (await sha256Text(session.runtimeHeadStateJson) !== session.runtimeHeadStateHash) return { ...base, code: 'cache-hash-mismatch', detail: '缓存正文与其Hash不一致。', repairable: true }
   if (canonicalProductProductionJsonV2(cached) !== canonicalProductProductionJsonV2(verified.state)) return { ...base, code: 'cache-replay-mismatch', detail: '缓存状态与规范事件重放结果不一致。', repairable: true }
   return { ...base, code: 'valid', detail: 'runtime head序号、Hash和事件重放结果一致。', repairable: false }
@@ -78,9 +83,14 @@ export async function inspectTextOpenWorldCheckpointV1(checkpointId: number): Pr
   try { saved = parseProductRuntimeState(checkpoint.stateJson) } catch (cause) { return { ...base, code: 'checkpoint-state-invalid', detail: cause instanceof Error ? cause.message : String(cause), valid: false } }
   if (!isVNext(saved)) return { ...base, code: 'not-vnext', detail: '检查点不包含文字开放世界vNext投影。', valid: false }
   if (await sha256Text(checkpoint.stateJson) !== checkpoint.stateHash) return { ...base, code: 'checkpoint-hash-mismatch', detail: '检查点正文与Hash不一致。', valid: false }
-  if (saved.lastSequence !== checkpoint.throughSequence || saved.textOpenWorld!.lastEventSequence !== checkpoint.throughSequence) return { ...base, code: 'checkpoint-sequence-mismatch', detail: '检查点内部序号与throughSequence不一致。', valid: false }
   let verified: Awaited<ReturnType<typeof canonical>>
   try { verified = await canonical(session, checkpoint.throughSequence) } catch (cause) { return { ...base, code: 'event-protocol-invalid', detail: cause instanceof Error ? cause.message : String(cause), valid: false } }
+  const latestTextOpenWorldSequence = [...verified.events].reverse()
+    .find(event => event.type.startsWith('textworld.'))?.sequence ?? 0
+  if (saved.lastSequence !== checkpoint.throughSequence
+    || saved.textOpenWorld!.lastEventSequence !== latestTextOpenWorldSequence) {
+    return { ...base, code: 'checkpoint-sequence-mismatch', detail: '检查点内部序号与共享事件游标不一致。', valid: false }
+  }
   if (verified.protocol.pendingCommandId) return { ...base, code: 'event-protocol-invalid', detail: `检查点停在未终结命令:${verified.protocol.pendingCommandId}`, valid: false }
   if (canonicalProductProductionJsonV2(saved) !== canonicalProductProductionJsonV2(verified.state)) return { ...base, code: 'replay-mismatch', detail: '检查点状态与事件重放结果不一致。', valid: false }
   return { ...base, code: 'valid', detail: '检查点Hash、序号、协议和重放状态一致。', valid: true }

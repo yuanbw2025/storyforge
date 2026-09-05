@@ -3,6 +3,8 @@ import { parseAvgPresentationContent, validateAvgPresentation } from '../avg/run
 import { freezeProductMediaAsset } from './media-contracts'
 import { parseOpenWorldEvolutionContent, validateOpenWorldEvolutionContent } from '../open-world/evolution-runtime'
 import { parseOpenWorldContent, validateOpenWorldContent } from '../open-world/runtime'
+import { parseTextOpenWorldModulesV1 } from '../open-world/modules'
+import { parseTextOpenWorldRuntimePackageV1 } from '../open-world/runtime-package'
 import { validateNarrativeContentGraph } from '../product/narrative-content'
 import { parseTtrpgCampaignContentV1 } from '../ttrpg/campaign'
 import { parseRulePackV1 } from '../ttrpg/rule-pack'
@@ -270,10 +272,13 @@ export function parseProductRuntimePackageV1(value: string | unknown): ProductRu
   const selectedProduct = productType(pkg.productType)
   const hasTtrpgPresentation = selectedProduct === 'ttrpg'
     && Object.prototype.hasOwnProperty.call(pkg, 'presentation')
+  const hasTextOpenWorldVNext = selectedProduct === 'text-open-world'
+    && Object.prototype.hasOwnProperty.call(pkg, 'textOpenWorldVNext')
   exactKeys(pkg, [
     'schema', 'version', 'productType', 'definition', 'sourceWorld', 'narrative',
     ...PRODUCT_MODULE_KEYS[selectedProduct],
     ...(hasTtrpgPresentation ? ['presentation'] : []),
+    ...(hasTextOpenWorldVNext ? ['textOpenWorldVNext'] : []),
   ], 'package')
   if (pkg.schema !== 'storyforge.product-runtime-package' || pkg.version !== 1) fail('schema/version 无效')
 
@@ -363,6 +368,15 @@ export function parseProductRuntimePackageV1(value: string | unknown): ProductRu
     })
     if (!report.valid) fail(`openWorld 无效:${report.errors.join('；')}`)
     parsed.openWorld = openWorld
+  }
+  if (hasTextOpenWorldVNext) {
+    const textOpenWorldVNext = parseTextOpenWorldRuntimePackageV1(pkg.textOpenWorldVNext)
+    parseTextOpenWorldModulesV1(textOpenWorldVNext)
+    if (textOpenWorldVNext.sourceManifest.contentHash !== sourceWorld.contentHash
+      || textOpenWorldVNext.metadata.rulesetVersion !== parsed.definition.rulesetVersion) {
+      fail('textOpenWorldVNext 与 ProductRuntimePackage 来源或规则版本不一致')
+    }
+    parsed.textOpenWorldVNext = textOpenWorldVNext
   }
   if (selectedProduct === 'ttrpg') parsed.ttrpg = validateTtrpg(pkg.ttrpg, sourceWorld.contentHash)
   return parsed

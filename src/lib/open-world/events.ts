@@ -1,6 +1,11 @@
 import { db } from '../db/schema'
 import { canonicalProductProductionJsonV2 } from '../product-production/hash'
-import { applyProductRuntimeEvent, hashProductRuntimeStateV1, replayProductRuntimeEvents } from '../product/runtime-core'
+import {
+  applyProductRuntimeEvent,
+  assertFormalRuntimeSourceUnchangedV1,
+  hashProductRuntimeStateV1,
+  replayProductRuntimeEvents,
+} from '../product/runtime-core'
 import type {
   ProductRuntimeEvent,
   TextOpenWorldEffectPlanV1,
@@ -18,6 +23,10 @@ import {
   replayTextOpenWorldEventProtocolV1,
   resolveTextOpenWorldRandomEvidenceV1,
 } from './event-contract'
+import {
+  assertTextOpenWorldVNextProjectionBindingV1,
+  verifyTextOpenWorldVNextSessionBindingV1,
+} from './session-binding'
 
 function fail(message: string): never { throw new Error(`[text-open-world-event] ${message}`) }
 function payload(event: ProductRuntimeEvent): unknown { try { return JSON.parse(event.payloadJson) } catch { fail(`事件${event.sequence} payload不是合法JSON`) } }
@@ -60,10 +69,26 @@ export async function commitTextOpenWorldOutcomeBatchV1(input: {
   if (!Number.isSafeInteger(input.sessionId) || input.sessionId < 1) fail('sessionId无效')
   if (!Array.isArray(input.randomRequests) || input.randomRequests.length > 128) fail('randomRequests最多128项')
   const randomRequests = input.randomRequests.map((request, index) => parseTextOpenWorldRandomRequestV1(request, `randomRequests[${index}]`))
-  return db.transaction('rw', db.productRuntimeSessions, db.productRuntimeEvents, async () => {
+  const previewSession = await db.productRuntimeSessions.get(input.sessionId)
+  if (!previewSession || previewSession.kind !== 'text-open-world') fail('文字开放世界Session不存在')
+  const binding = await verifyTextOpenWorldVNextSessionBindingV1(previewSession)
+  return db.transaction('rw', [
+    db.productRuntimeSessions,
+    db.productRuntimeEvents,
+    db.productReleases,
+    db.productBuilds,
+    db.productProductions,
+    db.productProductionBriefs,
+  ],
+    async () => {
     const session = await db.productRuntimeSessions.get(input.sessionId)
     if (!session || session.kind !== 'text-open-world') fail('文字开放世界Session不存在')
     const events = await db.productRuntimeEvents.where('sessionId').equals(input.sessionId).sortBy('sequence')
+    await assertFormalRuntimeSourceUnchangedV1({
+      previewSession,
+      session,
+      frozen: binding.formal,
+    })
     const commandEvent = events.find(event => event.commandId === input.commandId)
     if (!commandEvent || commandEvent.type !== 'textworld.command.committed') fail('对应命令尚未提交')
     const command = parseTextOpenWorldCommandEventPayloadV1(payload(commandEvent))
@@ -80,6 +105,7 @@ export async function commitTextOpenWorldOutcomeBatchV1(input: {
     if (projection.pendingCommandId !== input.commandId || projection.lastSequence !== commandEvent.sequence) fail('对应命令不是当前待处理命令')
 
     const now = Date.now(); let currentState = replayProductRuntimeEvents(JSON.parse(session.initialStateJson), events); let sequence = projection.lastSequence
+    assertTextOpenWorldVNextProjectionBindingV1(currentState.textOpenWorld, binding)
     if (currentState.textOpenWorld) {
       const verified = await createTextOpenWorldEffectCatalogV1(currentState.textOpenWorld.runtimePackage).apply({ plan: input.plan, state: currentState.textOpenWorld.state })
       if (canonicalProductProductionJsonV2(verified.receipt) !== canonicalProductProductionJsonV2(input.receipt)) fail('Effect回执与当前Session投影不一致')

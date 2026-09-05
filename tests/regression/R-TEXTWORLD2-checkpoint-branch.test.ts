@@ -10,23 +10,17 @@ import {
 import { commitTextOpenWorldCommandV1 } from '../../src/lib/open-world/commands'
 import { createTextOpenWorldEffectCatalogV1 } from '../../src/lib/open-world/effect-dsl'
 import { commitTextOpenWorldOutcomeBatchV1 } from '../../src/lib/open-world/events'
-import { createInitialTextOpenWorldSessionProjectionV1 } from '../../src/lib/open-world/session-projection'
 import { hashProductRuntimeStateV1, readProductRuntimeState, readProductRuntimeStateVersion } from '../../src/lib/product/runtime-core'
-import type { ProductRuntimeState, ProductRuntimeSession, TextOpenWorldCommandEnvelopeV1, TextOpenWorldRuntimePackageV1 } from '../../src/lib/types'
-import { EMPTY_PRODUCT_RUNTIME_STATE } from '../../src/lib/types'
+import type { TextOpenWorldCommandEnvelopeV1, TextOpenWorldRuntimePackageV1 } from '../../src/lib/types'
+import { createGovernedTextOpenWorldSessionFixtureV1 } from '../helpers/text-open-world-product-session'
 import { createTextOpenWorldVNextFixture } from '../helpers/text-open-world-vnext-fixture'
 
-async function createSession(runtimePackage: TextOpenWorldRuntimePackageV1): Promise<ProductRuntimeSession> {
-  const now = Date.now(); const projectId = await db.projects.add({ name: 'TEXTWORLD 检查点测试', genre: 'open-world', genres: ['open-world'], status: 'drafting', description: '', targetWordCount: 1, createdAt: now, updatedAt: now } as any) as number
-  const initial: ProductRuntimeState = { ...structuredClone(EMPTY_PRODUCT_RUNTIME_STATE), textOpenWorld: createInitialTextOpenWorldSessionProjectionV1(runtimePackage) }
-  const initialStateJson = JSON.stringify(initial); const runtimeHeadStateHash = await hashProductRuntimeStateV1(initial)
-  const session: ProductRuntimeSession = {
-    projectId, worldGroupId: null, worldId: projectId, workId: projectId,
-    productReleaseId: null, productBuildId: 1, runtimeSourceHash: runtimePackage.sourceManifest.contentHash,
-    kind: 'text-open-world', title: '检查点Session', status: 'active', rulesetVersion: 1, seed: 'checkpoint-seed', canonSnapshotJson: '{}', initialStateJson,
-    runtimeHeadSequence: 0, runtimeHeadStateJson: initialStateJson, runtimeHeadStateHash, parentSessionId: null, parentThroughSequence: null, createdAt: now, updatedAt: now,
-  }
-  session.id = await db.productRuntimeSessions.add(session) as number; return session
+async function createSession(runtimePackage: TextOpenWorldRuntimePackageV1) {
+  return (await createGovernedTextOpenWorldSessionFixtureV1({
+    name: `TEXTWORLD 检查点测试-${crypto.randomUUID()}`,
+    textOpenWorldVNext: runtimePackage,
+    title: '检查点Session', seed: 'checkpoint-seed',
+  })).session
 }
 
 async function command(sessionId: number, commandId: string): Promise<TextOpenWorldCommandEnvelopeV1> {
@@ -49,15 +43,15 @@ describe('TEXTWORLD-2 · checkpoint, replay and child branch', () => {
     const runtimePackage = createTextOpenWorldVNextFixture(); const parent = await createSession(runtimePackage)
     await playReward(runtimePackage, parent.id!, 'command.parent.1', 'claim.parent.1')
     const checkpoint = await createTextOpenWorldCheckpointV1({ sessionId: parent.id!, name: '第一次奖励后' })
-    expect(await inspectTextOpenWorldCheckpointV1(checkpoint.id!)).toMatchObject({ valid: true, code: 'valid', throughSequence: 2 })
+    expect(await inspectTextOpenWorldCheckpointV1(checkpoint.id!)).toMatchObject({ valid: true, code: 'valid', throughSequence: 4 })
     await playReward(runtimePackage, parent.id!, 'command.parent.2', 'claim.parent.2')
 
     const child = await branchTextOpenWorldSessionFromCheckpointV1({ checkpointId: checkpoint.id!, title: '从第一次奖励分支', seed: 'child-seed' })
     const childState = await readProductRuntimeState(child.id!); const parentState = await readProductRuntimeState(parent.id!)
-    expect(child).toMatchObject({ parentSessionId: parent.id, parentThroughSequence: 2 })
+    expect(child).toMatchObject({ parentSessionId: parent.id, parentThroughSequence: 4 })
     expect(childState).toMatchObject({ lastSequence: 0, textOpenWorld: { lastEventSequence: 0, state: { inventory: { currency: 30 }, appliedClaimKeys: ['claim.parent.1'] }, protocol: { pendingCommandId: null, randomEvidence: [], lastCompletedCommandId: null } } })
     expect(parentState.textOpenWorld!.state.inventory.currency).toBe(40)
-    expect(await db.productRuntimeEvents.where('sessionId').equals(parent.id!).count()).toBe(4)
+    expect(await db.productRuntimeEvents.where('sessionId').equals(parent.id!).count()).toBe(6)
     expect(await db.productRuntimeEvents.where('sessionId').equals(child.id!).count()).toBe(0)
     await expect(playReward(runtimePackage, child.id!, 'command.child.1', 'claim.child.1')).resolves.toBeUndefined()
   })
@@ -85,10 +79,10 @@ describe('TEXTWORLD-2 · checkpoint, replay and child branch', () => {
   it('runtime head损坏可诊断并从规范事件安全修复', async () => {
     const runtimePackage = createTextOpenWorldVNextFixture(); const session = await createSession(runtimePackage)
     await playReward(runtimePackage, session.id!, 'command.head', 'claim.head')
-    expect(await inspectTextOpenWorldRuntimeHeadV1(session.id!)).toMatchObject({ code: 'valid', repairable: false, latestSequence: 2 })
+    expect(await inspectTextOpenWorldRuntimeHeadV1(session.id!)).toMatchObject({ code: 'valid', repairable: false, latestSequence: 4 })
     await db.productRuntimeSessions.update(session.id!, { runtimeHeadStateHash: 'f'.repeat(64) })
     expect(await inspectTextOpenWorldRuntimeHeadV1(session.id!)).toMatchObject({ code: 'cache-hash-mismatch', repairable: true })
-    expect(await repairTextOpenWorldRuntimeHeadV1(session.id!)).toMatchObject({ code: 'valid', repairable: false, latestSequence: 2 })
+    expect(await repairTextOpenWorldRuntimeHeadV1(session.id!)).toMatchObject({ code: 'valid', repairable: false, latestSequence: 4 })
     expect((await readProductRuntimeState(session.id!)).textOpenWorld!.state.inventory.currency).toBe(30)
   })
 })

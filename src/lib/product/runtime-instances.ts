@@ -39,6 +39,7 @@ import { assertProductReleaseUnchanged } from './releases'
 import { createInitialAvgPresentationState } from '../avg/runtime'
 import { createInitialOpenWorldEvolutionState } from '../open-world/evolution-runtime'
 import { createInitialOpenWorldState } from '../open-world/runtime'
+import { createInitialTextOpenWorldSessionProjectionV1 } from '../open-world/session-projection'
 import { createInitialTtrpgProductStateV1 } from '../ttrpg/runtime'
 import { verifyProductRuntimeSource } from '../product-production/preview-source'
 import {
@@ -211,6 +212,11 @@ function createProductInitialState(input: {
       input.runtimeSourceHash,
     )
     state.openWorld = createInitialOpenWorldState(runtimePackage.openWorld!, input.runtimeSourceHash)
+    if (runtimePackage.textOpenWorldVNext) {
+      state.textOpenWorld = createInitialTextOpenWorldSessionProjectionV1(
+        runtimePackage.textOpenWorldVNext,
+      )
+    }
     state = withAdventureNarrativeProjectionV1(state)
     state = withOpenWorldEvolutionProjectionV1(state)
     state = withOpenWorldNarrativeProjectionV1(state)

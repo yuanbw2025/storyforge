@@ -4,29 +4,18 @@ import { parseTextOpenWorldCommandEnvelopeV1 } from '../../src/lib/open-world/co
 import { commitTextOpenWorldCommandV1, getTextOpenWorldCommandStatusV1 } from '../../src/lib/open-world/commands'
 import {
   appendProductRuntimeEvent,
-  hashProductRuntimeStateV1,
   readProductRuntimeStateVersion,
 } from '../../src/lib/product/runtime-core'
-import { EMPTY_PRODUCT_RUNTIME_STATE, type ProductRuntimeSession, type TextOpenWorldCommandEnvelopeV1 } from '../../src/lib/types'
+import type { ProductRuntimeSession, TextOpenWorldCommandEnvelopeV1 } from '../../src/lib/types'
+import { createGovernedTextOpenWorldSessionFixtureV1 } from '../helpers/text-open-world-product-session'
+import { createTextOpenWorldVNextFixture } from '../helpers/text-open-world-vnext-fixture'
 
 async function session(status: ProductRuntimeSession['status'] = 'active'): Promise<ProductRuntimeSession> {
-  const now = Date.now()
-  const projectId = await db.projects.add({
-    name: 'TEXTWORLD vNext命令测试', genre: 'open-world', genres: ['open-world'], status: 'drafting',
-    description: '', targetWordCount: 1, createdAt: now, updatedAt: now,
-  } as any) as number
-  const stateJson = JSON.stringify(EMPTY_PRODUCT_RUNTIME_STATE)
-  const stateHash = await hashProductRuntimeStateV1(EMPTY_PRODUCT_RUNTIME_STATE)
-  const value: ProductRuntimeSession = {
-    projectId, worldGroupId: null, worldId: projectId, workId: projectId,
-    productReleaseId: null, productBuildId: 1, runtimeSourceHash: 'a'.repeat(64),
-    kind: 'text-open-world', title: 'vNext最小Session', status, rulesetVersion: 1, seed: 'command-test-seed',
-    canonSnapshotJson: '{}', initialStateJson: stateJson,
-    runtimeHeadSequence: 0, runtimeHeadStateJson: stateJson, runtimeHeadStateHash: stateHash,
-    parentSessionId: null, parentThroughSequence: null, createdAt: now, updatedAt: now,
-  }
-  value.id = (await db.productRuntimeSessions.add(value)) as number
-  return value
+  return (await createGovernedTextOpenWorldSessionFixtureV1({
+    name: `TEXTWORLD vNext命令测试-${crypto.randomUUID()}`,
+    textOpenWorldVNext: createTextOpenWorldVNextFixture(),
+    title: 'vNext最小Session', seed: 'command-test-seed', status,
+  })).session
 }
 
 async function envelope(sessionId: number, overrides: Partial<TextOpenWorldCommandEnvelopeV1> = {}): Promise<TextOpenWorldCommandEnvelopeV1> {
@@ -61,10 +50,10 @@ describe('TEXTWORLD-2 · vNext command envelope and idempotency', () => {
     const first = await commitTextOpenWorldCommandV1(command)
     const retry = await commitTextOpenWorldCommandV1({ ...command, requestedAt: command.requestedAt + 1000 })
 
-    expect(first).toMatchObject({ status: 'committed', replayed: false, eventSequence: 1, resultingSequence: 1 })
+    expect(first).toMatchObject({ status: 'committed', replayed: false, eventSequence: 3, resultingSequence: 3 })
     expect(retry).toMatchObject({ status: 'committed', replayed: true, eventId: first.eventId, resultingStateHash: first.resultingStateHash })
-    expect(await db.productRuntimeEvents.where('sessionId').equals(current.id!).count()).toBe(1)
-    expect(await readProductRuntimeStateVersion(current.id!)).toEqual({ sequence: 1, stateHash: first.resultingStateHash })
+    expect(await db.productRuntimeEvents.where('sessionId').equals(current.id!).count()).toBe(3)
+    expect(await readProductRuntimeStateVersion(current.id!)).toEqual({ sequence: 3, stateHash: first.resultingStateHash })
   })
 
   it('同ID不同内容冲突，旧基线也不能提交新命令', async () => {
@@ -77,7 +66,7 @@ describe('TEXTWORLD-2 · vNext command envelope and idempotency', () => {
     await expect(commitTextOpenWorldCommandV1({
       ...first, commandId: 'command.observe.stale', requestedAt: first.requestedAt + 1,
     })).rejects.toThrow('Session状态已变化')
-    expect(await db.productRuntimeEvents.where('sessionId').equals(current.id!).count()).toBe(1)
+    expect(await db.productRuntimeEvents.where('sessionId').equals(current.id!).count()).toBe(3)
   })
 
   it('未知传输结果可以查询，未提交命令明确返回not-found', async () => {

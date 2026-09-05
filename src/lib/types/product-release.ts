@@ -14,6 +14,7 @@ import type { OpenWorldContentV1 } from './open-world'
 import type { RagDocumentMetadata } from './rag-library'
 import type { TtrpgRuntimeContentV1 } from './ttrpg-product'
 import type { ProductionProductKindV1 } from './product-identity'
+import type { TextOpenWorldRuntimePackageV1 } from './text-open-world-runtime'
 
 /** Product-owned selection over the neutral WorldRelease resource protocol. */
 export interface ProductWorldSourceSelectionV1 {
@@ -157,6 +158,12 @@ export interface ProductRuntimePackageV1 {
   presentation?: AvgPresentationContentV1 & { assets: FrozenRuntimeMediaAssetV2[] }
   openWorldEvolution?: OpenWorldEvolutionContentV1
   openWorld?: OpenWorldContentV1
+  /**
+   * TEXTWORLD-2 governed runtime payload. Existing text-open-world releases
+   * may omit it; every vNext release/build includes it inside the one shared
+   * ProductRuntimePackage instead of creating a parallel release family.
+   */
+  textOpenWorldVNext?: TextOpenWorldRuntimePackageV1
   ttrpg?: TtrpgRuntimeContentV1
 }
 
@@ -202,6 +209,7 @@ export type TextOpenWorldProductRuntimePackageV1 = ProductRuntimePackageV1 & {
   adventure: AdventureContentV1
   openWorldEvolution: OpenWorldEvolutionContentV1
   openWorld: OpenWorldContentV1
+  textOpenWorldVNext?: TextOpenWorldRuntimePackageV1
 }
 
 export type AnyProductReleaseManifest = ProductReleaseManifestV1

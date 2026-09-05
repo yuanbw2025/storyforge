@@ -1,6 +1,7 @@
 import { db } from '../db/schema'
 import {
   applyProductRuntimeEvent,
+  assertFormalRuntimeSourceUnchangedV1,
   hashProductRuntimeStateV1,
   readProductRuntimeState,
   readProductRuntimeStateVersion,
@@ -18,6 +19,10 @@ import {
   parseTextOpenWorldCommandLookupKeyV1,
 } from './command-contract'
 import { replayTextOpenWorldEventProtocolV1 } from './event-contract'
+import {
+  assertTextOpenWorldVNextProjectionBindingV1,
+  verifyTextOpenWorldVNextSessionBindingV1,
+} from './session-binding'
 
 function fail(message: string): never { throw new Error(`[text-open-world-command] ${message}`) }
 
@@ -69,6 +74,7 @@ export async function getTextOpenWorldCommandStatusV1(input: {
   const probe = parseTextOpenWorldCommandLookupKeyV1(input)
   const session = await db.productRuntimeSessions.get(probe.sessionId)
   if (!session || session.kind !== 'text-open-world') fail('文字开放世界Session不存在')
+  await verifyTextOpenWorldVNextSessionBindingV1(session)
   const event = await findCommandEvent(probe.sessionId, probe.commandId)
   if (!event) return { status: 'not-found', sessionId: probe.sessionId, commandId: probe.commandId }
   const payload = parseEvent(event)
@@ -83,9 +89,25 @@ export async function getTextOpenWorldCommandStatusV1(input: {
 export async function commitTextOpenWorldCommandV1(value: unknown): Promise<TextOpenWorldCommandReceiptV1> {
   const envelope = parseTextOpenWorldCommandEnvelopeV1(value)
   const requestFingerprint = await fingerprintTextOpenWorldCommandV1(envelope)
-  return db.transaction('rw', db.productRuntimeSessions, db.productRuntimeEvents, async () => {
+  const previewSession = await db.productRuntimeSessions.get(envelope.sessionId)
+  if (!previewSession || previewSession.kind !== 'text-open-world') fail('文字开放世界Session不存在')
+  const binding = await verifyTextOpenWorldVNextSessionBindingV1(previewSession)
+  return db.transaction('rw', [
+    db.productRuntimeSessions,
+    db.productRuntimeEvents,
+    db.productReleases,
+    db.productBuilds,
+    db.productProductions,
+    db.productProductionBriefs,
+  ],
+    async () => {
     const session = await db.productRuntimeSessions.get(envelope.sessionId)
     if (!session || session.kind !== 'text-open-world') fail('文字开放世界Session不存在')
+    await assertFormalRuntimeSourceUnchangedV1({
+      previewSession,
+      session,
+      frozen: binding.formal,
+    })
     const existing = await findCommandEvent(envelope.sessionId, envelope.commandId)
     if (existing) {
       const payload = parseEvent(existing)
@@ -95,6 +117,7 @@ export async function commitTextOpenWorldCommandV1(value: unknown): Promise<Text
     if (session.status !== 'active') fail('只有active Session可以提交命令')
 
     const current = await readProductRuntimeState(envelope.sessionId)
+    assertTextOpenWorldVNextProjectionBindingV1(current.textOpenWorld, binding)
     const currentVersion = await readProductRuntimeStateVersion(envelope.sessionId)
     if (current.lastSequence !== envelope.baseSequence || currentVersion.stateHash !== envelope.baseStateHash) {
       fail('Session状态已变化，请查询命令状态并刷新后重试')

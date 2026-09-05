@@ -15,29 +15,18 @@ import {
   readProductRuntimeStateVersion,
 } from '../../src/lib/product/runtime-core'
 import type {
-  ProductRuntimeState,
-  ProductRuntimeSession,
   TextOpenWorldCommandEnvelopeV1,
   TextOpenWorldRuntimePackageV1,
 } from '../../src/lib/types'
-import { EMPTY_PRODUCT_RUNTIME_STATE } from '../../src/lib/types'
+import { createGovernedTextOpenWorldSessionFixtureV1 } from '../helpers/text-open-world-product-session'
 import { createTextOpenWorldVNextFixture } from '../helpers/text-open-world-vnext-fixture'
 
-async function createSession(runtimePackage: TextOpenWorldRuntimePackageV1): Promise<ProductRuntimeSession> {
-  const now = Date.now(); const projectId = await db.projects.add({
-    name: 'TEXTWORLD vNext投影测试', genre: 'open-world', genres: ['open-world'], status: 'drafting',
-    description: '', targetWordCount: 1, createdAt: now, updatedAt: now,
-  } as any) as number
-  const initial: ProductRuntimeState = { ...structuredClone(EMPTY_PRODUCT_RUNTIME_STATE), textOpenWorld: createInitialTextOpenWorldSessionProjectionV1(runtimePackage) }
-  const initialStateJson = JSON.stringify(initial); const runtimeHeadStateHash = await hashProductRuntimeStateV1(initial)
-  const session: ProductRuntimeSession = {
-    projectId, worldGroupId: null, worldId: projectId, workId: projectId,
-    productReleaseId: null, productBuildId: 1, runtimeSourceHash: runtimePackage.sourceManifest.contentHash,
-    kind: 'text-open-world', title: '投影Session', status: 'active', rulesetVersion: runtimePackage.metadata.rulesetVersion, seed: 'projection-seed',
-    canonSnapshotJson: '{}', initialStateJson, runtimeHeadSequence: 0, runtimeHeadStateJson: initialStateJson, runtimeHeadStateHash,
-    parentSessionId: null, parentThroughSequence: null, createdAt: now, updatedAt: now,
-  }
-  session.id = await db.productRuntimeSessions.add(session) as number; return session
+async function createSession(runtimePackage: TextOpenWorldRuntimePackageV1) {
+  return (await createGovernedTextOpenWorldSessionFixtureV1({
+    name: `TEXTWORLD vNext投影测试-${crypto.randomUUID()}`,
+    textOpenWorldVNext: runtimePackage,
+    title: '投影Session', seed: 'projection-seed',
+  })).session
 }
 
 async function command(sessionId: number): Promise<TextOpenWorldCommandEnvelopeV1> {
@@ -76,9 +65,9 @@ describe('TEXTWORLD-2 · authoritative Session Projection', () => {
   it('同一事件日志可重建中间态与最终态，Effect真正更新权威投影', async () => {
     const runtimePackage = createTextOpenWorldVNextFixture(); const session = await createSession(runtimePackage)
     const envelope = await command(session.id!); await commitTextOpenWorldCommandV1(envelope)
-    const afterCommand = await readProductRuntimeState(session.id!, 1)
+    const afterCommand = await readProductRuntimeState(session.id!, 3)
     expect(afterCommand.textOpenWorld).toMatchObject({
-      state: { inventory: { currency: 20 } }, protocol: { pendingCommandId: envelope.commandId, pendingActionKey: envelope.actionKey }, lastEventSequence: 1,
+      state: { inventory: { currency: 20 } }, protocol: { pendingCommandId: envelope.commandId, pendingActionKey: envelope.actionKey }, lastEventSequence: 3,
     })
     const catalog = createTextOpenWorldEffectCatalogV1(runtimePackage)
     const plan = await catalog.plan({ effectKeys: ['effect.reward-currency'], claimKey: 'claim.projection.1', state: afterCommand.textOpenWorld!.state })
@@ -86,11 +75,11 @@ describe('TEXTWORLD-2 · authoritative Session Projection', () => {
     await commitTextOpenWorldOutcomeBatchV1({ sessionId: session.id!, commandId: envelope.commandId, ruleset: { key: 'storyforge.standard', version: 1 }, randomRequests: [], plan, receipt })
 
     const final = await readProductRuntimeState(session.id!); const projection = final.textOpenWorld!
-    expect(final.lastSequence).toBe(2); expect(projection.lastEventSequence).toBe(2)
+    expect(final.lastSequence).toBe(4); expect(projection.lastEventSequence).toBe(4)
     expect(projection.state.inventory.currency).toBe(30)
     expect(projection.state.appliedClaimKeys).toEqual(['claim.projection.1'])
     expect(projection.protocol).toMatchObject({ pendingCommandId: null, lastCompletedCommandId: envelope.commandId })
-    expect((await readProductRuntimeState(session.id!, 1)).textOpenWorld!.state.inventory.currency).toBe(20)
+    expect((await readProductRuntimeState(session.id!, 3)).textOpenWorld!.state.inventory.currency).toBe(20)
   })
 
   it('Condition与Action上下文只从权威投影派生', () => {
