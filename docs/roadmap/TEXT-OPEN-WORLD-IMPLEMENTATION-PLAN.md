@@ -1,6 +1,6 @@
 # AI 主导文字开放世界游戏 · 完整开发清单
 
-> 版本：1.1.0
+> 版本：1.1.1
 > 建立日期：2026-09-06
 > 对应总任务：`E-OPENWORLD-01`
 > 当前状态：`IN_PROGRESS`；用户已于2026-09-06明确下达完整产品开发指令
@@ -36,13 +36,13 @@
 | 指标 | 当前值 |
 |---|---|
 | 首版工作包 | 121 |
-| 已完成 | 10（G0现状复核与开工冻结全部完成） |
-| 产品总进度 | 10 / 121（8.3%） |
-| G1～G7业务功能进度 | 0 / 111（0%） |
+| 已完成 | 11（G0全部完成；G1运行包边界完成） |
+| 产品总进度 | 11 / 121（9.1%） |
+| G1～G7业务功能进度 | 1 / 111（0.9%） |
 | 当前阶段 | G1 运行包、Action/Event与数据治理底座 |
 | G0阶段进度 | 10 / 10（100%） |
-| G1阶段进度 | 0 / 13（0%） |
-| 当前工作包 | `TOW-G1-01` |
+| G1阶段进度 | 1 / 13（7.7%） |
+| 当前工作包 | `TOW-G1-02` |
 | 当前阻塞项 | 无 |
 
 每次状态变化必须同时更新本节汇总、对应任务行、验证证据和变更记录。
@@ -106,8 +106,8 @@ G7 盐脊验收、发布更新与旧入口收口
 
 | ID | 状态 | 工作包 | 依赖 | 完成判据 |
 |---|---|---|---|---|
-| TOW-G1-01 | READY | 定义 `TextOpenWorldRuntimePackage` vNext | G0-10 | 模块边界、版本、稳定ID、来源Hash和兼容字段可解析 |
-| TOW-G1-02 | QUEUED | 定义各逻辑Module Schema与交叉引用 | G1-01 | narrative/world/actor/quest/action/progression/combat/item/craft/economy/relationship/time/director/knowledge/presentation均有Schema |
+| TOW-G1-01 | DONE | 定义 `TextOpenWorldRuntimePackage` vNext | G0-10 | 严格包络、15模块边界/依赖、版本、稳定ID、来源Hash、校准、媒资、质量和兼容字段可解析并有反例测试 |
+| TOW-G1-02 | READY | 定义各逻辑Module Schema与交叉引用 | G1-01 | narrative/world/actor/quest/action/progression/combat/item/craft/economy/relationship/time/director/knowledge/presentation均有Schema |
 | TOW-G1-03 | QUEUED | 建立 `CommandEnvelope` 与命令幂等 | G1-01 | 重复commandId不产生第二次效果，未知结果可查询 |
 | TOW-G1-04 | QUEUED | 建立统一Action注册与可用行动投影 | G1-02、G1-03 | UI、AI意图和任务都引用同一Action定义与风险策略 |
 | TOW-G1-05 | QUEUED | 扩展类型化Condition DSL | G1-02 | player/inventory/quest/map/time/relation/actor/world/knowledge条件可静态校验且有深度上限 |
@@ -353,6 +353,7 @@ G7 盐脊验收、发布更新与旧入口收口
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| 1.1.1 | 2026-09-06 | 完成G1-01 TextOpenWorldRuntimePackage vNext包络和严格解析；总进度11/121，业务功能1/111 |
 | 1.1.0 | 2026-09-06 | G0全部完成并通过27个相关回归测试及工程检查；用户明确启动完整产品开发，进入G1-01，总进度10/121 |
 | 1.0.4 | 2026-09-06 | 完成G0-09全部G1/G2开工卡和风险台账；总进度更新为9/121 |
 | 1.0.3 | 2026-09-06 | 完成G0-08“盐脊”纵向验收Brief；总进度更新为8/121 |
