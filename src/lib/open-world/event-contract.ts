@@ -6,6 +6,9 @@ import type {
   TextOpenWorldEffectImpactDomainV1,
   TextOpenWorldEffectPlanV1,
   TextOpenWorldEffectReceiptV1,
+  TextOpenWorldCommandOutcomeV1,
+  TextOpenWorldDegradationV1,
+  TextOpenWorldOutcomeReasonV1,
   TextOpenWorldEffectsAppliedEventPayloadV1,
   TextOpenWorldEventBatchProjectionV1,
   TextOpenWorldEventProtocolProjectionV1,
@@ -124,6 +127,41 @@ function parseReceipt(value: unknown, label: string): TextOpenWorldEffectReceipt
   }
 }
 
+function parseOutcome(value: unknown, label: string): TextOpenWorldCommandOutcomeV1 {
+  if (value !== 'success' && value !== 'failure' && value !== 'degraded') fail(`${label}无效`)
+  return value
+}
+
+function parseDegradation(value: unknown, outcome: TextOpenWorldCommandOutcomeV1, label: string): TextOpenWorldDegradationV1 | null {
+  if (value == null) {
+    if (outcome === 'degraded') fail(`${label}在degraded结果中不能为空`)
+    return null
+  }
+  if (outcome !== 'degraded') fail(`${label}只能用于degraded结果`)
+  const parsed = row(value, label); exact(parsed, ['code', 'message', 'unavailableCapability', 'fallback'], label)
+  const readable = (child: unknown, childLabel: string, maximum = 2_000) => {
+    if (typeof child !== 'string' || !child.trim() || child.length > maximum) fail(`${childLabel}无效`)
+    return child.trim().normalize('NFC')
+  }
+  return {
+    code: token(parsed.code, `${label}.code`),
+    message: readable(parsed.message, `${label}.message`),
+    unavailableCapability: token(parsed.unavailableCapability, `${label}.unavailableCapability`),
+    fallback: readable(parsed.fallback, `${label}.fallback`),
+  }
+}
+
+function parseOutcomeReason(value: unknown, outcome: TextOpenWorldCommandOutcomeV1, label: string): TextOpenWorldOutcomeReasonV1 | null {
+  if (value == null) {
+    if (outcome === 'failure') fail(`${label}在failure结果中不能为空`)
+    return null
+  }
+  if (outcome !== 'failure') fail(`${label}只能用于failure结果`)
+  const parsed = row(value, label); exact(parsed, ['code', 'message'], label)
+  if (typeof parsed.message !== 'string' || !parsed.message.trim() || parsed.message.length > 2_000) fail(`${label}.message无效`)
+  return { code: token(parsed.code, `${label}.code`), message: parsed.message.trim().normalize('NFC') }
+}
+
 export function parseTextOpenWorldRandomResolvedEventPayloadV1(value: unknown): TextOpenWorldRandomResolvedEventPayloadV1 {
   const parsed = row(value, 'randomEvent'); exact(parsed, ['schema', 'version', 'commandId', 'commandSequence', 'ruleset', 'evidence'], 'randomEvent')
   if (parsed.schema !== 'storyforge.text-open-world.random-resolved-event' || parsed.version !== 1) fail('randomEvent schema/version无效')
@@ -135,15 +173,15 @@ export function parseTextOpenWorldRandomResolvedEventPayloadV1(value: unknown): 
 }
 
 export function parseTextOpenWorldEffectsAppliedEventPayloadV1(value: unknown): TextOpenWorldEffectsAppliedEventPayloadV1 {
-  const parsed = row(value, 'effectsEvent'); exact(parsed, ['schema', 'version', 'commandId', 'commandSequence', 'ruleset', 'randomEventSequences', 'plan', 'receipt', 'outcomeFingerprint'], 'effectsEvent')
+  const parsed = row(value, 'effectsEvent'); exact(parsed, ['schema', 'version', 'commandId', 'commandSequence', 'ruleset', 'randomEventSequences', 'outcome', 'reason', 'degradation', 'plan', 'receipt', 'outcomeFingerprint'], 'effectsEvent')
   if (parsed.schema !== 'storyforge.text-open-world.effects-applied-event' || parsed.version !== 1) fail('effectsEvent schema/version无效')
-  const plan = parsePlan(parsed.plan, 'effectsEvent.plan'); const receipt = parseReceipt(parsed.receipt, 'effectsEvent.receipt')
+  const plan = parsePlan(parsed.plan, 'effectsEvent.plan'); const receipt = parseReceipt(parsed.receipt, 'effectsEvent.receipt'); const outcome = parseOutcome(parsed.outcome, 'effectsEvent.outcome'); const reason = parseOutcomeReason(parsed.reason, outcome, 'effectsEvent.reason'); const degradation = parseDegradation(parsed.degradation, outcome, 'effectsEvent.degradation')
   if (receipt.claimKey !== plan.claimKey || receipt.planHash !== plan.planHash || receipt.baseStateHash !== plan.baseStateHash || receipt.resultingStateHash !== plan.resultingStateHash || canonicalProductProductionJsonV2(receipt.impactDomains) !== canonicalProductProductionJsonV2(plan.impactDomains) || canonicalProductProductionJsonV2(receipt.changes) !== canonicalProductProductionJsonV2(plan.previewChanges)) fail('effectsEvent plan与receipt不一致')
   return {
     schema: 'storyforge.text-open-world.effects-applied-event', version: 1,
     commandId: token(parsed.commandId, 'effectsEvent.commandId', COMMAND_ID), commandSequence: integer(parsed.commandSequence, 'effectsEvent.commandSequence', 1),
     ruleset: parseRuleset(parsed.ruleset, 'effectsEvent.ruleset'), randomEventSequences: uniqueIntegers(parsed.randomEventSequences, 'effectsEvent.randomEventSequences'),
-    plan, receipt, outcomeFingerprint: hash(parsed.outcomeFingerprint, 'effectsEvent.outcomeFingerprint'),
+    outcome, reason, degradation, plan, receipt, outcomeFingerprint: hash(parsed.outcomeFingerprint, 'effectsEvent.outcomeFingerprint'),
   }
 }
 
@@ -172,6 +210,9 @@ async function outcomeFingerprint(input: {
   requests: TextOpenWorldRandomRequestV1[]
   plan: TextOpenWorldEffectPlanV1
   receipt: TextOpenWorldEffectReceiptV1
+  outcome: TextOpenWorldCommandOutcomeV1
+  degradation: TextOpenWorldDegradationV1 | null
+  reason: TextOpenWorldOutcomeReasonV1 | null
 }) { return hashProductProductionValueV2({ schema: 'storyforge.text-open-world.outcome-batch', version: 1, ...input }) }
 
 export async function createTextOpenWorldOutcomeFingerprintV1(input: {
@@ -181,15 +222,19 @@ export async function createTextOpenWorldOutcomeFingerprintV1(input: {
   randomRequests: TextOpenWorldRandomRequestV1[]
   plan: TextOpenWorldEffectPlanV1
   receipt: TextOpenWorldEffectReceiptV1
+  outcome: TextOpenWorldCommandOutcomeV1
+  degradation: TextOpenWorldDegradationV1 | null
+  reason: TextOpenWorldOutcomeReasonV1 | null
 }): Promise<string> {
   const ruleset = parseRuleset(input.ruleset, 'ruleset')
   const requests = input.randomRequests.map((request, index) => parseTextOpenWorldRandomRequestV1(request, `randomRequests[${index}]`))
   const effect = parseTextOpenWorldEffectsAppliedEventPayloadV1({
     schema: 'storyforge.text-open-world.effects-applied-event', version: 1,
     commandId: input.commandId, commandSequence: input.commandSequence, ruleset, randomEventSequences: [],
+    outcome: input.outcome, reason: input.reason, degradation: input.degradation,
     plan: input.plan, receipt: input.receipt, outcomeFingerprint: '0'.repeat(64),
   })
-  return outcomeFingerprint({ commandId: effect.commandId, commandSequence: effect.commandSequence, ruleset, requests, plan: effect.plan, receipt: effect.receipt })
+  return outcomeFingerprint({ commandId: effect.commandId, commandSequence: effect.commandSequence, ruleset, requests, plan: effect.plan, receipt: effect.receipt, outcome: effect.outcome, reason: effect.reason, degradation: effect.degradation })
 }
 
 function payload(event: ProductRuntimeEvent): unknown { try { return JSON.parse(event.payloadJson) } catch { fail(`事件${event.sequence} payload不是合法JSON`) } }
@@ -226,7 +271,7 @@ export async function replayTextOpenWorldEventProtocolV1(events: readonly Produc
       if (pending.ruleset && canonicalProductProductionJsonV2(pending.ruleset) !== canonicalProductProductionJsonV2(effect.ruleset)) fail('同一命令批次ruleset不一致')
       const { planHash, ...planBody } = effect.plan
       if (await hashProductProductionValueV2(planBody) !== planHash) fail('EffectPlan planHash无法重放')
-      const expectedFingerprint = await outcomeFingerprint({ commandId: effect.commandId, commandSequence: effect.commandSequence, ruleset: effect.ruleset, requests: randomRequests, plan: effect.plan, receipt: effect.receipt })
+      const expectedFingerprint = await outcomeFingerprint({ commandId: effect.commandId, commandSequence: effect.commandSequence, ruleset: effect.ruleset, requests: randomRequests, plan: effect.plan, receipt: effect.receipt, outcome: effect.outcome, reason: effect.reason, degradation: effect.degradation })
       if (expectedFingerprint !== effect.outcomeFingerprint) fail('命令结果批次指纹无效')
       pending.ruleset = effect.ruleset; pending.effectsEventSequence = event.sequence; pending.outcomeFingerprint = effect.outcomeFingerprint
       projection.batches.push(structuredClone(pending)); pending = null; randomRequests.length = 0

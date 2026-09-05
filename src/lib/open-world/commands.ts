@@ -51,6 +51,8 @@ async function receiptFromEvent(event: ProductRuntimeEvent, replayed: boolean): 
     schema: 'storyforge.text-open-world.command-receipt',
     version: 1,
     status: 'committed',
+    outcomeCommitted: false,
+    mayNarrateSuccess: false,
     commandId: payload.envelope.commandId,
     requestFingerprint: payload.requestFingerprint,
     eventId: event.id,

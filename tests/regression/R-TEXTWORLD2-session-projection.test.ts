@@ -72,7 +72,7 @@ describe('TEXTWORLD-2 · authoritative Session Projection', () => {
     const catalog = createTextOpenWorldEffectCatalogV1(runtimePackage)
     const plan = await catalog.plan({ effectKeys: ['effect.reward-currency'], claimKey: 'claim.projection.1', state: afterCommand.textOpenWorld!.state })
     const { receipt } = await catalog.apply({ plan, state: afterCommand.textOpenWorld!.state })
-    await commitTextOpenWorldOutcomeBatchV1({ sessionId: session.id!, commandId: envelope.commandId, ruleset: { key: 'storyforge.standard', version: 1 }, randomRequests: [], plan, receipt })
+    await commitTextOpenWorldOutcomeBatchV1({ sessionId: session.id!, commandId: envelope.commandId, ruleset: { key: 'storyforge.standard', version: 1 }, randomRequests: [], plan, receipt, outcome: 'success', reason: null, degradation: null })
 
     const final = await readProductRuntimeState(session.id!); const projection = final.textOpenWorld!
     expect(final.lastSequence).toBe(4); expect(projection.lastEventSequence).toBe(4)
@@ -105,7 +105,7 @@ describe('TEXTWORLD-2 · authoritative Session Projection', () => {
     const session = await createSession(runtimePackage); const envelope = await command(session.id!); await commitTextOpenWorldCommandV1(envelope)
     const pending = (await readProductRuntimeState(session.id!)).textOpenWorld!; const catalog = createTextOpenWorldEffectCatalogV1(runtimePackage)
     const plan = await catalog.plan({ effectKeys: [], claimKey: 'claim.cooldown.1', state: pending.state }); const { receipt } = await catalog.apply({ plan, state: pending.state })
-    await commitTextOpenWorldOutcomeBatchV1({ sessionId: session.id!, commandId: envelope.commandId, ruleset: { key: 'storyforge.standard', version: 1 }, randomRequests: [], plan, receipt })
+    await commitTextOpenWorldOutcomeBatchV1({ sessionId: session.id!, commandId: envelope.commandId, ruleset: { key: 'storyforge.standard', version: 1 }, randomRequests: [], plan, receipt, outcome: 'success', reason: null, degradation: null })
     const projection = (await readProductRuntimeState(session.id!)).textOpenWorld!
     expect(projection.actions.cooldownUntilWorldMinuteByActionKey[action.key]).toBe(540)
     expect(createTextOpenWorldActionRegistryV1(runtimePackage).project(deriveTextOpenWorldContextsV1(projection).action)[0])

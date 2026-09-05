@@ -1,5 +1,19 @@
 import type { TextOpenWorldEffectPlanV1, TextOpenWorldEffectReceiptV1 } from './text-open-world-effect'
 
+export type TextOpenWorldCommandOutcomeV1 = 'success' | 'failure' | 'degraded'
+
+export interface TextOpenWorldDegradationV1 {
+  code: string
+  message: string
+  unavailableCapability: string
+  fallback: string
+}
+
+export interface TextOpenWorldOutcomeReasonV1 {
+  code: string
+  message: string
+}
+
 export interface TextOpenWorldRulesetStampV1 {
   key: string
   version: number
@@ -35,6 +49,9 @@ export interface TextOpenWorldEffectsAppliedEventPayloadV1 {
   commandSequence: number
   ruleset: TextOpenWorldRulesetStampV1
   randomEventSequences: number[]
+  outcome: TextOpenWorldCommandOutcomeV1
+  reason: TextOpenWorldOutcomeReasonV1 | null
+  degradation: TextOpenWorldDegradationV1 | null
   plan: TextOpenWorldEffectPlanV1
   receipt: TextOpenWorldEffectReceiptV1
   outcomeFingerprint: string
@@ -70,5 +87,8 @@ export interface TextOpenWorldOutcomeBatchReceiptV1 {
   effectsEventSequence: number
   resultingSequence: number
   outcomeFingerprint: string
+  outcome: TextOpenWorldCommandOutcomeV1
+  reason: TextOpenWorldOutcomeReasonV1 | null
+  degradation: TextOpenWorldDegradationV1 | null
   replayed: boolean
 }

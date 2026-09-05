@@ -10,6 +10,9 @@ import type {
   ProductRuntimeEvent,
   TextOpenWorldEffectPlanV1,
   TextOpenWorldEffectReceiptV1,
+  TextOpenWorldCommandOutcomeV1,
+  TextOpenWorldDegradationV1,
+  TextOpenWorldOutcomeReasonV1,
   TextOpenWorldOutcomeBatchReceiptV1,
   TextOpenWorldRandomRequestV1,
   TextOpenWorldRulesetStampV1,
@@ -50,6 +53,7 @@ function priorReceipt(input: {
     randomEventIds: randomEvents.map(event => event.id!), randomEventSequences: [...effectPayload.randomEventSequences],
     effectsEventId: effectEvent.id, effectsEventSequence: effectEvent.sequence, resultingSequence: effectEvent.sequence,
     outcomeFingerprint: input.outcomeFingerprint, replayed: input.replayed,
+    outcome: effectPayload.outcome, reason: effectPayload.reason, degradation: effectPayload.degradation,
   }
 }
 
@@ -65,6 +69,9 @@ export async function commitTextOpenWorldOutcomeBatchV1(input: {
   randomRequests: TextOpenWorldRandomRequestV1[]
   plan: TextOpenWorldEffectPlanV1
   receipt: TextOpenWorldEffectReceiptV1
+  outcome: TextOpenWorldCommandOutcomeV1
+  degradation: TextOpenWorldDegradationV1 | null
+  reason: TextOpenWorldOutcomeReasonV1 | null
 }): Promise<TextOpenWorldOutcomeBatchReceiptV1> {
   if (!Number.isSafeInteger(input.sessionId) || input.sessionId < 1) fail('sessionId无效')
   if (!Array.isArray(input.randomRequests) || input.randomRequests.length > 128) fail('randomRequests最多128项')
@@ -95,7 +102,7 @@ export async function commitTextOpenWorldOutcomeBatchV1(input: {
     if (command.envelope.commandId !== input.commandId) fail('命令索引与payload不一致')
     const outcomeFingerprint = await createTextOpenWorldOutcomeFingerprintV1({
       commandId: input.commandId, commandSequence: commandEvent.sequence, ruleset: input.ruleset,
-      randomRequests, plan: input.plan, receipt: input.receipt,
+      randomRequests, plan: input.plan, receipt: input.receipt, outcome: input.outcome, reason: input.reason, degradation: input.degradation,
     })
     const projection = await replayTextOpenWorldEventProtocolV1(events, session.seed)
     const existing = projection.batches.find(batch => batch.commandId === input.commandId)
@@ -130,6 +137,7 @@ export async function commitTextOpenWorldOutcomeBatchV1(input: {
       schema: 'storyforge.text-open-world.effects-applied-event', version: 1,
       commandId: input.commandId, commandSequence: commandEvent.sequence, ruleset: input.ruleset,
       randomEventSequences: appended.map(event => event.sequence), plan: input.plan, receipt: input.receipt, outcomeFingerprint,
+      outcome: input.outcome, reason: input.reason, degradation: input.degradation,
     })
     const effectEvent: ProductRuntimeEvent = {
       projectId: session.projectId, worldGroupId: session.worldGroupId ?? null, sessionId: input.sessionId, sequence,

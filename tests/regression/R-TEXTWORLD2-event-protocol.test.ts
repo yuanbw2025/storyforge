@@ -45,7 +45,7 @@ async function outcome(sessionId: number, claimKey = 'claim.event.1') {
   const before = projection.state
   const plan = await catalog.plan({ effectKeys: ['effect.reward-currency'], claimKey, state: before })
   const { receipt } = await catalog.apply({ plan, state: before })
-  return { plan, receipt }
+  return { plan, receipt, outcome: 'success' as const, reason: null, degradation: null }
 }
 
 describe('TEXTWORLD-2 · vNext Simulation Event protocol', () => {
@@ -107,6 +107,9 @@ describe('TEXTWORLD-2 · vNext Simulation Event protocol', () => {
     const tampered = structuredClone(events) as ProductRuntimeEvent[]
     const payload = JSON.parse(tampered[3].payloadJson); payload.evidence.value = payload.evidence.value === 1 ? 2 : 1; tampered[3].payloadJson = JSON.stringify(payload)
     await expect(replayTextOpenWorldEventProtocolV1(tampered, session.seed)).rejects.toThrow('随机证据无法由Session seed重放')
+    const outcomeTampered = structuredClone(events) as ProductRuntimeEvent[]
+    const outcomePayload = JSON.parse(outcomeTampered[4].payloadJson); outcomePayload.outcome = 'failure'; outcomePayload.reason = { code: 'forged-failure', message: '伪造失败' }; outcomeTampered[4].payloadJson = JSON.stringify(outcomePayload)
+    await expect(replayTextOpenWorldEventProtocolV1(outcomeTampered, session.seed)).rejects.toThrow('命令结果批次指纹无效')
     await expect(commitTextOpenWorldOutcomeBatchV1({ sessionId: session.id!, commandId: envelope.commandId, ruleset: { ...RULESET, version: 2 }, randomRequests: [], ...await outcome(session.id!, 'claim.event.changed') }))
       .rejects.toThrow('结果批次内容不同')
   })
@@ -114,7 +117,7 @@ describe('TEXTWORLD-2 · vNext Simulation Event protocol', () => {
   it('无效Effect回执不会留下半批次，治理事件也不能绕过专用入口', async () => {
     const session = await createSession(); const envelope = await command(session.id!); await commitTextOpenWorldCommandV1(envelope)
     const result = await outcome(session.id!); const invalidReceipt = { ...result.receipt, resultingStateHash: 'f'.repeat(64) }
-    await expect(commitTextOpenWorldOutcomeBatchV1({ sessionId: session.id!, commandId: envelope.commandId, ruleset: RULESET, randomRequests: [{ drawKey: 'draw.encounter', minimumInclusive: 1, maximumInclusive: 6 }], plan: result.plan, receipt: invalidReceipt }))
+    await expect(commitTextOpenWorldOutcomeBatchV1({ sessionId: session.id!, commandId: envelope.commandId, ruleset: RULESET, randomRequests: [{ drawKey: 'draw.encounter', minimumInclusive: 1, maximumInclusive: 6 }], plan: result.plan, receipt: invalidReceipt, outcome: 'success', reason: null, degradation: null }))
       .rejects.toThrow('plan与receipt不一致')
     expect(await db.productRuntimeEvents.where('sessionId').equals(session.id!).count()).toBe(3)
     await expect(appendProductRuntimeEvent({ sessionId: session.id!, type: 'textworld.effects.applied', payload: {} }))

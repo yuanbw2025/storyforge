@@ -27,6 +27,9 @@ export interface TextOpenWorldCommandReceiptV1 {
   schema: 'storyforge.text-open-world.command-receipt'
   version: 1
   status: 'committed'
+  /** Command acceptance is not a gameplay outcome and must never be narrated as success. */
+  outcomeCommitted: false
+  mayNarrateSuccess: false
   commandId: string
   requestFingerprint: string
   eventId: number

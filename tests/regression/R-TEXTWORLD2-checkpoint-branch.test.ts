@@ -32,7 +32,7 @@ async function playReward(runtimePackage: TextOpenWorldRuntimePackageV1, session
   const envelope = await command(sessionId, commandId); await commitTextOpenWorldCommandV1(envelope)
   const pending = (await readProductRuntimeState(sessionId)).textOpenWorld!; const catalog = createTextOpenWorldEffectCatalogV1(runtimePackage)
   const plan = await catalog.plan({ effectKeys: ['effect.reward-currency'], claimKey, state: pending.state }); const { receipt } = await catalog.apply({ plan, state: pending.state })
-  await commitTextOpenWorldOutcomeBatchV1({ sessionId, commandId, ruleset: { key: 'storyforge.standard', version: 1 }, randomRequests: [], plan, receipt })
+  await commitTextOpenWorldOutcomeBatchV1({ sessionId, commandId, ruleset: { key: 'storyforge.standard', version: 1 }, randomRequests: [], plan, receipt, outcome: 'success', reason: null, degradation: null })
 }
 
 describe('TEXTWORLD-2 · checkpoint, replay and child branch', () => {
