@@ -1,6 +1,6 @@
 # StoryForge 当前能力基线
 
-> 版本：1.6.0 · 基线：2026-09-04 当前架构硬切换交付 · 权威层级：L2
+> 版本：1.7.0 · 基线：2026-09-06 短篇产品交付 · 权威层级：L2
 > 本文区分代码存在、纵切面可用和产品完成。旧完成卡不自动恢复权威，但已合入主干并由当前代码/检查器复证的 Phase 5 成果必须保留。
 
 ## 状态定义
@@ -15,8 +15,8 @@
 | ID | 状态 | 当前事实与证据 | 缺口 |
 |---|---|---|---|
 | A-GOV-01 | implemented | 总纲、WPS 完整归档、唯一现行文档白名单和当前架构审计已建立 | 后续正常功能分支按协作流程短期存在，不重新解释为长期架构分叉 |
-| A-GOV-02 | implemented | 身份/派生、纯语义 WorldRelease、三阶段闸门、五项逻辑契约、中立网关、五种已接入产品适配器、节点同源与能力/成熟度门均已机器化；唯一 schema v1 与静态门只允许当前产品身份和运行入口 | 后续产品仍须逐项完成专项功能；治理完成不代表这些产品已经完成 |
-| BASE-DATA-01 | implemented | Dexie 唯一 schema v1；`npm run check:required-tables` 验证 required/project tables；旧数据库、旧备份和旧字段明确拒绝；Project/World/Work 按精确当前字段与 owner 导入 | 新表仍必须先登记；未来 schema 演进须针对届时受支持的当前版本另立生命周期反例 |
+| A-GOV-02 | implemented | 身份/派生、纯语义 WorldRelease、三阶段闸门、五项逻辑契约、中立网关、五种已接入产品适配器、节点同源与能力/成熟度门均已机器化；schema v2 与静态门只允许当前产品身份和运行入口 | 后续产品仍须逐项完成专项功能；治理完成不代表这些产品已经完成 |
+| BASE-DATA-01 | implemented | Dexie 当前 schema v2；仅支持已发布 v1→v2 加表迁移并有保留数据反例；`npm run check:required-tables` 验证 required/project tables；非当前备份和旧字段明确拒绝 | 新表仍必须先登记；后续 schema 演进继续明确支持窗口并补迁移、回滚和生命周期反例 |
 | BASE-REG-01 | implemented | Context、Field/Adoption、Project Tables 三注册表与架构检查器存在；Project 仅为 Workspace 壳，World/Work 身份、作品数据和上层产品读取边界已分离 | 后续新入口必须先登记，不得恢复组件私有清单、Project/Work 镜像或物理世界表读取 |
 | BASE-AI-01 | implemented | AI 入口注册表与自动生成手册区分 formal/auxiliary/evaluation/experimental | 登记证明边界，不证明所有 formal UI 纵切面完成 |
 | BASE-HARNESS-01 | implemented | Run contract、ledger、checkpoint、candidate/stale、receipt 及多个 durable use case | 并非所有旧按钮都统一到同样成熟度 |
@@ -41,7 +41,7 @@
 
 | ID | 状态 | 当前事实与证据 | 缺口 |
 |---|---|---|---|
-| C-SHORT-01 | partial | 短篇由独立 Work kind/profile 拥有标题、目标字数、outline skeleton 和创建入口；只共享中立 LocalWorkspace 壳，不与 Project 镜像耦合 | 轻量完整产品体验和短篇专用导出仍未独立验收 |
+| C-SHORT-01 | implemented | 独立 `ShortNovelProductionV1`、六个专属 Skill/durable run、3～8 章工作台、逐章确认、证据审校/定向重写、完成门、append-only `CreationReleaseV1` 及 Markdown/TXT/JSON 导出已通过确定性回归、备份往返和真实 UI E2E | 文学质量和 provider 表现持续评测；不把剧本或漫画能力混入短篇产品 |
 | C-SCREENPLAY-01 | partial | adaptation source/brief/plan、screenplay scenes、durable flow 和 Studio 存在 | 大规模源文 mapping、格式导出、刷新/stale/人工审校纵切面未完整验收 |
 | C-COMIC-01 | partial | comic page/panel/visual subject/media 表、Skill、durable flow 和 Studio 存在 | 真实生图、人物一致性、气泡/排版与成品导出仍未形成完整产品 |
 
@@ -74,4 +74,4 @@
 
 ## 结论
 
-分步骤长篇 Phase 5、七项项目级架构治理与世界引擎语义/版本/出口基线均已完成。下一步不再重复这些工程，而是由短篇、改编和各上层产品在共同治理基线上建立各自的 Brief、adapter、Agent、生产、媒资、发行与运行闭环。它们可以在独立分支并行开发；共享 schema、三注册表、世界网关、逻辑契约和产品目录的变更必须先形成单独基础提交，并按治理基线串行集成。平台代码继续隔离和门控。
+分步骤长篇 Phase 5、七项项目级架构治理、世界引擎语义/版本/出口基线和短篇独立产品均已完成。下一步按独立分支顺序推进小说转剧本，再推进小说转漫画；每个产品只建立自己的 Brief、Agent、生产、媒资与发行闭环。共享 schema、三注册表、世界网关、逻辑契约和产品目录的变更仍须串行集成。平台代码继续隔离和门控。

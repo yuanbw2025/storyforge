@@ -95,6 +95,8 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
       { kind: 'simple', field: 'id', target: 'agentRuns[workId]', onDelete: 'cascade' },
       { kind: 'simple', field: 'id', target: 'adaptationProjects[workId]', onDelete: 'cascade' },
       { kind: 'simple', field: 'id', target: 'adaptationProjects[sourceWorkId]', onDelete: 'setNull' },
+      { kind: 'simple', field: 'id', target: 'shortNovelProductions[workId]', onDelete: 'cascade' },
+      { kind: 'simple', field: 'id', target: 'creationReleases[workId]', onDelete: 'cascade' },
     ],
     exportRemap: [
       { field: 'worldId', remapVia: 'worlds', exportAs: '_worldExportId', onUnmapped: 'require' },
@@ -104,6 +106,34 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
         exportAs: '_activeNarrativeModuleExportId' },
     ],
     note: 'WORLD-2C 显式作品根；同一 World 可包含多部隔离作品' },
+
+  { table: db.shortNovelProductions, name: 'shortNovelProductions', owner: 'project', exportable: true, exportIdField: true,
+    domainOwner: { allowed: ['work'], defaultOwner: 'work', locator: { kind: 'field', owner: 'work', field: 'workId' } },
+    exportRemap: [
+      { field: 'worldId', remapVia: 'worlds', exportAs: '_worldExportId', onUnmapped: 'require' },
+      { field: 'workId', remapVia: 'works', exportAs: '_workExportId', onUnmapped: 'require' },
+      { field: 'currentReleaseId', remapVia: 'creationReleases', exportAs: '_currentReleaseExportId', deferred: true },
+    ],
+    defaults: {
+      phase: 'intent', revision: 1, brief: null, briefConfirmedAt: null,
+      storyDesign: null, designConfirmedAt: null, latestReview: null,
+      reviewedManuscriptHash: null, currentReleaseId: null,
+    },
+    note: 'C-SHORT-01 短篇独立生产根；只归当前短篇 Work，保存阶段与已确认结构，不依赖世界引擎' },
+
+  { table: db.creationReleases, name: 'creationReleases', owner: 'project', exportable: true, exportIdField: true,
+    domainOwner: { allowed: ['work'], defaultOwner: 'work', locator: { kind: 'field', owner: 'work', field: 'workId' } },
+    tree: { parentField: 'parentReleaseId' },
+    refs: [
+      { kind: 'simple', field: 'id', target: 'shortNovelProductions[currentReleaseId]', onDelete: 'setNull' },
+    ],
+    exportRemap: [
+      { field: 'worldId', remapVia: 'worlds', exportAs: '_worldExportId', onUnmapped: 'require' },
+      { field: 'workId', remapVia: 'works', exportAs: '_workExportId', onUnmapped: 'require' },
+      { field: 'parentReleaseId', remapVia: 'creationReleases', exportAs: '_parentExportId', selfTree: true },
+    ],
+    defaults: { parentReleaseId: null },
+    note: '独立创作不可变发布；当前闭集只接受 short-novel，manifest 自包含且导出不得回读实时草稿' },
 
   { table: db.adaptationProjects, name: 'adaptationProjects', owner: 'project', exportable: true, exportIdField: true,
     domainOwner: { allowed: ['work'], defaultOwner: 'work', locator: { kind: 'field', owner: 'work', field: 'workId' } },

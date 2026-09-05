@@ -96,6 +96,12 @@ export type AgentSkillExecutionModeV1 =
   | 'screenplay-scenes'
   | 'comic-plan'
   | 'comic-storyboard'
+  | 'short-intent-brief'
+  | 'short-story-design'
+  | 'short-scene-plan'
+  | 'short-chapter-draft'
+  | 'short-continuity-review'
+  | 'short-targeted-rewrite'
 
 export interface AgentSkillWriteTargetV1 {
   table: string
@@ -228,6 +234,18 @@ const ADAPTATION_BRIEF_CONTEXT_SOURCE_KEYS = ['adaptation.sourceManifest', 'adap
 const ADAPTATION_PLAN_CONTEXT_SOURCE_KEYS = ['adaptation.sourceManifest', 'adaptation.sourceContent', 'adaptation.currentBrief', 'characters'] as const
 const SCREENPLAY_SCENES_CONTEXT_SOURCE_KEYS = ['adaptation.sourceManifest', 'adaptation.sourceContent', 'adaptation.currentBrief', 'adaptation.currentPlan', 'characters'] as const
 const COMIC_STORYBOARD_CONTEXT_SOURCE_KEYS = ['adaptation.sourceManifest', 'adaptation.sourceContent', 'adaptation.currentBrief', 'adaptation.currentPlan', 'comic.visualBible', 'characters'] as const
+const SHORT_NOVEL_DESIGN_CONTEXT_SOURCE_KEYS = ['workStatus', 'shortNovel.production'] as const
+const SHORT_NOVEL_MANUSCRIPT_CONTEXT_SOURCE_KEYS = ['workStatus', 'shortNovel.production', 'shortNovel.manuscript'] as const
+const SHORT_NOVEL_INPUT_POLICY: AgentSkillInputPolicyV1 = {
+  sourceKeys: ['shortNovel.production'],
+  states: {
+    empty: { handling: 'require-upstream', instruction: '当前没有短篇生产根；不得调用模型或把长篇流程伪装成短篇。' },
+    partial: { handling: 'reference-and-create', instruction: '只依据作者要求与当前已确认短篇阶段生成本步候选；缺失上游须明确指出。' },
+    complete: { handling: 'grounded-transform', instruction: '锁定短篇已确认 Brief、设计、结构和正文，只生成当前 Skill 的单一候选。' },
+  },
+}
+const SHORT_NOVEL_DESIGN_COMPRESSION_POLICY = compressionPolicy(SHORT_NOVEL_DESIGN_CONTEXT_SOURCE_KEYS)
+const SHORT_NOVEL_MANUSCRIPT_COMPRESSION_POLICY = compressionPolicy(SHORT_NOVEL_MANUSCRIPT_CONTEXT_SOURCE_KEYS)
 
 const STORY_CORE_CONTEXT_SOURCE_KEYS = [
   'workStatus',
@@ -2153,6 +2171,135 @@ export const AGENT_SKILLS = [
   },
   {
     version: 1,
+    id: 'short.intent-brief',
+    agentId: 'outline',
+    defaultForAgent: false,
+    label: '短篇创作 Brief',
+    owner: 'short-novel-production-agent',
+    promptVersion: 'short-intent-brief-v1',
+    executionMode: 'short-intent-brief',
+    contextTaskKind: 'agent-outline',
+    readToolNames: [],
+    contextSourceKeys: SHORT_NOVEL_DESIGN_CONTEXT_SOURCE_KEYS,
+    optionalContextSourceKeys: [],
+    inputPolicy: SHORT_NOVEL_INPUT_POLICY,
+    contextCompression: SHORT_NOVEL_DESIGN_COMPRESSION_POLICY,
+    maxOutputTokens: 4_000,
+    writeTargets: [{ table: 'shortNovelProductions', fields: ['brief'], adoptionExtension: 'short-novel-production-lifecycle' }],
+    lastVerifiedAt: '2026-09-06',
+    regressionTests: ['R-SHORT2-professional-production'],
+  },
+  {
+    version: 1,
+    id: 'short.story-design',
+    agentId: 'outline',
+    defaultForAgent: false,
+    label: '短篇故事设计',
+    owner: 'short-novel-production-agent',
+    promptVersion: 'short-story-design-v1',
+    executionMode: 'short-story-design',
+    contextTaskKind: 'agent-outline',
+    readToolNames: [],
+    contextSourceKeys: SHORT_NOVEL_DESIGN_CONTEXT_SOURCE_KEYS,
+    optionalContextSourceKeys: [],
+    inputPolicy: SHORT_NOVEL_INPUT_POLICY,
+    contextCompression: SHORT_NOVEL_DESIGN_COMPRESSION_POLICY,
+    maxOutputTokens: 5_000,
+    writeTargets: [{ table: 'shortNovelProductions', fields: ['storyDesign'], adoptionExtension: 'short-novel-production-lifecycle' }],
+    lastVerifiedAt: '2026-09-06',
+    regressionTests: ['R-SHORT2-professional-production'],
+  },
+  {
+    version: 1,
+    id: 'short.scene-plan',
+    agentId: 'outline',
+    defaultForAgent: false,
+    label: '短篇章节与场景卡',
+    owner: 'short-novel-production-agent',
+    promptVersion: 'short-scene-plan-v1',
+    executionMode: 'short-scene-plan',
+    contextTaskKind: 'agent-outline',
+    readToolNames: [],
+    contextSourceKeys: SHORT_NOVEL_MANUSCRIPT_CONTEXT_SOURCE_KEYS,
+    optionalContextSourceKeys: [],
+    inputPolicy: SHORT_NOVEL_INPUT_POLICY,
+    contextCompression: SHORT_NOVEL_MANUSCRIPT_COMPRESSION_POLICY,
+    maxOutputTokens: 8_000,
+    writeTargets: [
+      { table: 'outlineNodes', fields: ['title', 'summary', 'order'], adoptionExtension: 'short-novel-outline-skeleton-lifecycle' },
+      { table: 'chapters', fields: ['title', 'order'], adoptionExtension: 'chapter-delete-lifecycle' },
+    ],
+    lastVerifiedAt: '2026-09-06',
+    regressionTests: ['R-SHORT2-professional-production'],
+  },
+  {
+    version: 1,
+    id: 'short.chapter-draft',
+    agentId: 'prose',
+    defaultForAgent: false,
+    label: '短篇单章正文',
+    owner: 'short-novel-production-agent',
+    promptVersion: 'short-chapter-draft-v1',
+    executionMode: 'short-chapter-draft',
+    contextTaskKind: 'agent-prose',
+    readToolNames: [],
+    contextSourceKeys: SHORT_NOVEL_MANUSCRIPT_CONTEXT_SOURCE_KEYS,
+    optionalContextSourceKeys: [],
+    inputPolicy: SHORT_NOVEL_INPUT_POLICY,
+    contextCompression: SHORT_NOVEL_MANUSCRIPT_COMPRESSION_POLICY,
+    maxOutputTokens: 16_000,
+    writeTargets: [
+      { table: 'outlineNodes', fields: ['title'], adoptionExtension: 'short-novel-outline-skeleton-lifecycle' },
+      { table: 'chapters', fields: ['title', 'content', 'wordCount', 'status'], adoptionExtension: 'chapter-delete-lifecycle' },
+    ],
+    lastVerifiedAt: '2026-09-06',
+    regressionTests: ['R-SHORT2-professional-production'],
+  },
+  {
+    version: 1,
+    id: 'short.continuity-review',
+    agentId: 'outline',
+    defaultForAgent: false,
+    label: '短篇全篇连续性审校',
+    owner: 'short-novel-production-agent',
+    promptVersion: 'short-continuity-review-v1',
+    executionMode: 'short-continuity-review',
+    contextTaskKind: 'agent-outline',
+    readToolNames: [],
+    contextSourceKeys: SHORT_NOVEL_MANUSCRIPT_CONTEXT_SOURCE_KEYS,
+    optionalContextSourceKeys: [],
+    inputPolicy: SHORT_NOVEL_INPUT_POLICY,
+    contextCompression: SHORT_NOVEL_MANUSCRIPT_COMPRESSION_POLICY,
+    maxOutputTokens: 8_000,
+    writeTargets: [{ table: 'shortNovelProductions', fields: ['latestReview'], adoptionExtension: 'short-novel-production-lifecycle' }],
+    lastVerifiedAt: '2026-09-06',
+    regressionTests: ['R-SHORT2-professional-production'],
+  },
+  {
+    version: 1,
+    id: 'short.targeted-rewrite',
+    agentId: 'prose',
+    defaultForAgent: false,
+    label: '短篇问题定向重写',
+    owner: 'short-novel-production-agent',
+    promptVersion: 'short-targeted-rewrite-v1',
+    executionMode: 'short-targeted-rewrite',
+    contextTaskKind: 'agent-prose',
+    readToolNames: [],
+    contextSourceKeys: SHORT_NOVEL_MANUSCRIPT_CONTEXT_SOURCE_KEYS,
+    optionalContextSourceKeys: [],
+    inputPolicy: SHORT_NOVEL_INPUT_POLICY,
+    contextCompression: SHORT_NOVEL_MANUSCRIPT_COMPRESSION_POLICY,
+    maxOutputTokens: 16_000,
+    writeTargets: [
+      { table: 'outlineNodes', fields: ['title'], adoptionExtension: 'short-novel-outline-skeleton-lifecycle' },
+      { table: 'chapters', fields: ['title', 'content', 'wordCount', 'status'], adoptionExtension: 'chapter-delete-lifecycle' },
+    ],
+    lastVerifiedAt: '2026-09-06',
+    regressionTests: ['R-SHORT2-professional-production'],
+  },
+  {
+    version: 1,
     id: 'outline.compose',
     agentId: 'outline',
     defaultForAgent: true,
@@ -3377,8 +3524,8 @@ export function validateAgentSkillDefinitionsV1(
     'world-origin': new Set(['worldview-field', 'world-suggest', 'worldview-expand', 'world-link-context', 'constitution-extract', 'codex-extract', 'codex-enrich', 'story-core', 'creative-rules', 'locations', 'map-config', 'history-consult', 'history-storm', 'review']),
     character: new Set(['create', 'supplement', 'lifecycle', 'relationships', 'character-reply', 'memory-curator']),
     inspiration: new Set(['reference-summary', 'reference-characters', 'reverse', 'review']),
-    outline: new Set(['auto', 'story-arcs', 'foreshadow-suggestions', 'storyline-progress', 'character-driven', 'character-revision', 'impact-summary-regenerate', 'volumes', 'chapters', 'details', 'adaptation-brief', 'adaptation-impact', 'screenplay-plan', 'comic-plan', 'comic-storyboard', 'character-interaction-production', 'product-production']),
-    prose: new Set(['auto', 'generate', 'continue', 'emotion-beats', 'inventory-extraction', 'story-timeline-extraction', 'cultivation-progress-extraction', 'style-learn', 'selection-edit', 'selection-check', 'review', 'revise', 'organize', 'memory', 'consistency', 'scene-director', 'adventure-intent', 'adventure-narrator', 'open-world-briefing', 'open-world-advisor', 'open-world-outcome-narrator', 'open-world-actor-suggestion', 'open-world-expression', 'open-world-narration', 'screenplay-scenes', 'ttrpg-gm-narrator', 'ttrpg-gm-actor-intent', 'ttrpg-player-intent']),
+    outline: new Set(['auto', 'story-arcs', 'foreshadow-suggestions', 'storyline-progress', 'character-driven', 'character-revision', 'impact-summary-regenerate', 'volumes', 'chapters', 'details', 'adaptation-brief', 'adaptation-impact', 'screenplay-plan', 'comic-plan', 'comic-storyboard', 'short-intent-brief', 'short-story-design', 'short-scene-plan', 'short-continuity-review', 'character-interaction-production', 'product-production']),
+    prose: new Set(['auto', 'generate', 'continue', 'emotion-beats', 'inventory-extraction', 'story-timeline-extraction', 'cultivation-progress-extraction', 'style-learn', 'selection-edit', 'selection-check', 'review', 'revise', 'organize', 'memory', 'consistency', 'scene-director', 'adventure-intent', 'adventure-narrator', 'open-world-briefing', 'open-world-advisor', 'open-world-outcome-narrator', 'open-world-actor-suggestion', 'open-world-expression', 'open-world-narration', 'screenplay-scenes', 'short-chapter-draft', 'short-targeted-rewrite', 'ttrpg-gm-narrator', 'ttrpg-gm-actor-intent', 'ttrpg-player-intent']),
   }
   const ids = new Set<string>()
   const defaultAgents = new Set<DomainAgentId>()

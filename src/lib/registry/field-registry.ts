@@ -179,6 +179,13 @@ export const FIELD_REGISTRY: FieldSpec[] = [
   text('works', 'methodologyId'),
   bool('works', 'includeCultivationProgressInAI'),
 
+  // C-SHORT-01: AI only proposes structured short-form artifacts. Phase,
+  // revisions, confirmation stamps, manuscript hashes and Release pointers
+  // remain system-owned inside the dedicated lifecycle service.
+  object('shortNovelProductions', 'brief'),
+  object('shortNovelProductions', 'storyDesign'),
+  object('shortNovelProductions', 'latestReview'),
+
   // ADAPT-CORE: only editable structured intent/plan fields are model-facing.
   // IDs, hashes, versions, status, revision and timestamps stay system-owned.
   object('adaptationProjects', 'brief'),

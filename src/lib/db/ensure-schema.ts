@@ -75,6 +75,7 @@ export const REQUIRED_TABLES = [
   'references',
   'retrievalChunks',
   'screenplayScenes',
+  'shortNovelProductions',
   'snapshots',
   'stateCards',
   'storyArcs',
@@ -99,6 +100,7 @@ export const REQUIRED_TABLES = [
   'worldRulesProfiles',
   'worlds',
   'worldviews',
+  'creationReleases',
 ] as const
 
 export interface CurrentSchemaState {
@@ -115,10 +117,8 @@ export function assertCurrentSchemaDefinition(): void {
   }
 }
 
-/**
- * Opens and verifies the only supported database schema. There is no upgrade,
- * import or compatibility path from any prior database generation.
- */
+/** Opens the current schema. Dexie preserves the supported v1 baseline while
+ * adding the v2 short-form production and independent release stores. */
 export async function openCurrentSchema(): Promise<CurrentSchemaState> {
   assertCurrentSchemaDefinition()
   await db.open()

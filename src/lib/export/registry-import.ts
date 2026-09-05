@@ -33,14 +33,15 @@ import { assertComicLetteringV1, assertComicMediaAssetV1, assertNormalizedFrameV
 import type { AdaptationProject, ComicLetteringItemV1, ComicMediaAsset, ScreenplayBlock, Work } from '../types'
 import { PRODUCTION_PRODUCT_KINDS_V1 } from '../types'
 import { isCompleteCharacterAxes } from '../character/character-axes'
+import { hashCanonicalValue } from '../agent/run/hash'
 
 function portableRows(value: Record<string, any>, name: string): Record<string, any>[] {
   const rows = value[name]
-  if (!Array.isArray(rows)) throw new Error(`[deriveImport] v10 备份缺少 ${name}`)
+  if (!Array.isArray(rows)) throw new Error(`[deriveImport] v11 备份缺少 ${name}`)
   const ids = new Set<number>()
   for (const row of rows) {
     if (!row || typeof row !== 'object' || !Number.isInteger(row._exportId) || ids.has(row._exportId)) {
-      throw new Error(`[deriveImport] v10 ${name} 便携 ID 重复或无效`)
+      throw new Error(`[deriveImport] v11 ${name} 便携 ID 重复或无效`)
     }
     ids.add(row._exportId)
   }
@@ -65,48 +66,48 @@ function validateProductArchitectureBackup(value: Record<string, any>): void {
 
   for (const production of productions.values()) {
     if (!productKinds.has(production.productType) || typeof production.productionKey !== 'string' || !production.productionKey.trim()) {
-      throw new Error('[deriveImport] v10 ProductProduction 身份无效')
+      throw new Error('[deriveImport] v11 ProductProduction 身份无效')
     }
   }
   const sameOwner = (child: Record<string, any>, parent: Record<string, any>, label: string) => {
     if (child._worldExportId !== parent._worldExportId || child._workExportId !== parent._workExportId) {
-      throw new Error(`[deriveImport] v10 ${label} owner 与父记录不一致`)
+      throw new Error(`[deriveImport] v11 ${label} owner 与父记录不一致`)
     }
   }
   for (const brief of briefs) {
     const production = productions.get(brief._productionExportId)
     const worldRelease = worldReleases.get(brief._sourceWorldReleaseExportId)
-    if (!production || !worldRelease) throw new Error('[deriveImport] v10 ProductBrief 来源引用越界')
+    if (!production || !worldRelease) throw new Error('[deriveImport] v11 ProductBrief 来源引用越界')
     sameOwner(brief, production, 'ProductBrief')
     if (brief._worldExportId !== worldRelease._worldExportId) {
-      throw new Error('[deriveImport] v10 ProductBrief 与 WorldRelease 世界不一致')
+      throw new Error('[deriveImport] v11 ProductBrief 与 WorldRelease 世界不一致')
     }
   }
   for (const command of commands) {
     const production = productions.get(command._productionExportId)
-    if (!production) throw new Error('[deriveImport] v10 ProductCommand 生产引用越界')
+    if (!production) throw new Error('[deriveImport] v11 ProductCommand 生产引用越界')
     sameOwner(command, production, 'ProductCommand')
   }
   for (const build of builds.values()) {
     const production = productions.get(build._productionExportId)
-    if (!production) throw new Error('[deriveImport] v10 ProductBuild 生产引用越界')
+    if (!production) throw new Error('[deriveImport] v11 ProductBuild 生产引用越界')
     sameOwner(build, production, 'ProductBuild')
   }
   for (const row of [...artifacts, ...receipts]) {
     const build = builds.get(row._buildExportId)
-    if (!build) throw new Error('[deriveImport] v10 Build 子记录引用越界')
+    if (!build) throw new Error('[deriveImport] v11 Build 子记录引用越界')
     sameOwner(row, build, 'Build 子记录')
   }
   for (const release of releases.values()) {
     if (!productKinds.has(release.productType) || !/^[a-f0-9]{64}$/.test(String(release.contentHash ?? ''))) {
-      throw new Error('[deriveImport] v10 ProductRelease 身份或 hash 无效')
+      throw new Error('[deriveImport] v11 ProductRelease 身份或 hash 无效')
     }
     let manifest: Record<string, any>
     try { manifest = JSON.parse(String(release.manifestJson ?? '')) }
-    catch { throw new Error('[deriveImport] v10 ProductRelease manifest 不是 JSON') }
+    catch { throw new Error('[deriveImport] v11 ProductRelease manifest 不是 JSON') }
     if (manifest.schema !== 'storyforge.product-release' || manifest.version !== 1
       || manifest.productType !== release.productType) {
-      throw new Error('[deriveImport] v10 ProductRelease manifest 与根身份不一致')
+      throw new Error('[deriveImport] v11 ProductRelease manifest 与根身份不一致')
     }
   }
   for (const session of runtimeSessions) {
@@ -114,13 +115,13 @@ function validateProductArchitectureBackup(value: Record<string, any>): void {
     const buildId = session._productBuildExportId
     if (!productKinds.has(session.kind) || (releaseId == null) === (buildId == null)
       || !/^[a-f0-9]{64}$/.test(String(session.runtimeSourceHash ?? ''))) {
-      throw new Error('[deriveImport] v10 ProductRuntime 必须具有唯一、有效的产品来源')
+      throw new Error('[deriveImport] v11 ProductRuntime 必须具有唯一、有效的产品来源')
     }
     const sourceProductType = releaseId != null
       ? releases.get(releaseId)?.productType
       : productions.get(builds.get(buildId)?._productionExportId)?.productType
     if (sourceProductType !== session.kind) {
-      throw new Error('[deriveImport] v10 ProductRuntime 身份与来源产品不一致')
+      throw new Error('[deriveImport] v11 ProductRuntime 身份与来源产品不一致')
     }
   }
   for (const asset of mediaAssets) {
@@ -129,13 +130,65 @@ function validateProductArchitectureBackup(value: Record<string, any>): void {
     if (!productKinds.has(asset.productType) || (releaseId == null) === (runtimeSessionId == null)
       || (asset.ownerKind === 'release') !== (releaseId != null)
       || (asset.ownerKind === 'runtime') !== (runtimeSessionId != null)) {
-      throw new Error('[deriveImport] v10 ProductMedia 必须具有唯一、有效的产品所有者')
+      throw new Error('[deriveImport] v11 ProductMedia 必须具有唯一、有效的产品所有者')
     }
     const owner = releaseId != null ? releases.get(releaseId) : runtimeSessionById.get(runtimeSessionId)
     if (!owner || owner.productType !== asset.productType && owner.kind !== asset.productType) {
-      throw new Error('[deriveImport] v10 ProductMedia 身份与所属产品不一致')
+      throw new Error('[deriveImport] v11 ProductMedia 身份与所属产品不一致')
     }
     sameOwner(asset, owner, 'ProductMedia')
+  }
+}
+
+async function validateIndependentCreationBackup(value: Record<string, any>): Promise<void> {
+  const works = new Map(portableRows(value, 'works').map(row => [row._exportId, row]))
+  const productions = new Map(portableRows(value, 'shortNovelProductions').map(row => [row._exportId, row]))
+  const releases = new Map(portableRows(value, 'creationReleases').map(row => [row._exportId, row]))
+  const releaseVersions = new Set<string>()
+
+  for (const production of productions.values()) {
+    const work = works.get(production._workExportId)
+    if (!work || work.kind !== 'novel' || work.novelProfile !== 'short'
+      || production._worldExportId !== work._worldExportId
+      || !Number.isInteger(production.revision) || production.revision < 1) {
+      throw new Error('[deriveImport] v11 ShortNovelProduction 身份、owner 或 revision 无效')
+    }
+    if (production._currentReleaseExportId != null) {
+      const current = releases.get(production._currentReleaseExportId)
+      if (!current || current._workExportId !== production._workExportId) {
+        throw new Error('[deriveImport] v11 ShortNovelProduction 当前发布引用越界')
+      }
+    }
+  }
+
+  for (const release of releases.values()) {
+    const work = works.get(release._workExportId)
+    if (!work || work.kind !== 'novel' || work.novelProfile !== 'short'
+      || release.productKind !== 'short-novel'
+      || release._worldExportId !== work._worldExportId
+      || !Number.isInteger(release.version) || release.version < 1
+      || !Number.isInteger(release.sourceRevision) || release.sourceRevision < 1
+      || !/^[a-f0-9]{64}$/.test(String(release.contentHash ?? ''))) {
+      throw new Error('[deriveImport] v11 CreationRelease 身份、owner、版本或 hash 无效')
+    }
+    const versionKey = `${release._workExportId}:short-novel:${release.version}`
+    if (releaseVersions.has(versionKey)) throw new Error('[deriveImport] v11 CreationRelease 版本重复')
+    releaseVersions.add(versionKey)
+    if (release._parentExportId != null) {
+      const parent = releases.get(release._parentExportId)
+      if (!parent || parent._workExportId !== release._workExportId || parent.version >= release.version) {
+        throw new Error('[deriveImport] v11 CreationRelease 父版本引用无效')
+      }
+    }
+    let manifest: Record<string, any>
+    try { manifest = JSON.parse(String(release.manifestJson ?? '')) }
+    catch { throw new Error('[deriveImport] v11 CreationRelease manifest 不是 JSON') }
+    if (manifest.schema !== 'storyforge.short-novel-release' || manifest.version !== 1
+      || manifest.productKind !== 'short-novel' || manifest.work?.code !== work.code
+      || manifest.production?.revision !== release.sourceRevision
+      || await hashCanonicalValue(manifest) !== release.contentHash) {
+      throw new Error('[deriveImport] v11 CreationRelease manifest 身份或 hash 校验失败')
+    }
   }
 }
 
@@ -175,7 +228,7 @@ function strictOwnerShadow(spec: TableSpec, row: Record<string, any>): {
   return null
 }
 
-function validateCurrentBackup(data: ProjectExportData): void {
+async function validateCurrentBackup(data: ProjectExportData): Promise<void> {
   if (data.version !== CURRENT_BACKUP_VERSION) {
     throw new Error(`[deriveImport] 只接受当前备份版本 v${CURRENT_BACKUP_VERSION}`)
   }
@@ -232,6 +285,7 @@ function validateCurrentBackup(data: ProjectExportData): void {
   validateComicStoryboardBackup(value)
   validateComicMediaBackup(value)
   validateProductArchitectureBackup(value)
+  await validateIndependentCreationBackup(value)
   for (const spec of PROJECT_TABLES) {
     if (!spec.exportable || spec.name === 'projects' || spec.name === 'worlds' || spec.name === 'works') continue
     const rows = value[spec.name]
@@ -610,7 +664,7 @@ async function restorePortableSharedMediaObject(
  */
 export async function deriveImportProjectJSON(data: ProjectExportData): Promise<number> {
   if (!data.project) throw new Error('无效的导出文件格式')
-  validateCurrentBackup(data)
+  await validateCurrentBackup(data)
   const now = Date.now()
   const specs = PROJECT_TABLES.filter(s => s.exportable && s.name !== 'projects')
   const order = deriveImportOrder(specs)

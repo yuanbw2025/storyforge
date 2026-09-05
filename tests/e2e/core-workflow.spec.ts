@@ -63,6 +63,30 @@ test('短篇小说使用独立创作基座，世界页不暴露可变作品改�
   await page.getByTestId('product-tab-novel').click()
   await expect(page.getByRole('heading', { name: '短篇小说创作', exact: true })).toBeVisible()
   await expect(page.getByText('小说 · 短篇', { exact: true })).toBeVisible()
+  await expect(page.getByTestId('short-novel-studio')).toBeVisible()
+  for (const stage of ['创作意图', '故事设计', '章节卡', '正文', '全篇审校', '发布']) {
+    await expect(page.locator('.short-stage-nav').getByText(stage, { exact: true })).toBeVisible()
+  }
+  await page.locator('.short-json-editor textarea').fill(JSON.stringify({
+    version: 1,
+    premise: '暴雨封锁旧站，返乡者必须在真相与亲情之间作出选择。',
+    coreChange: '她从替家人隐瞒，变为承担说出真相的后果。',
+    dominantEmotion: '压抑逐渐转为清醒',
+    pointOfView: 'third-limited',
+    tense: 'past',
+    audience: '中文悬疑短篇读者',
+    storyPromise: '旧站事故的真相必须在结尾通过人物选择兑现。',
+    mustKeep: ['暴雨', '旧站', '亲情选择'],
+    forbidden: ['梦醒式结局'],
+    targetWordCount: 12000,
+    chapterCount: 4,
+  }, null, 2))
+  await page.getByRole('button', { name: '校验并确认本步', exact: true }).click()
+  await expect(page.locator('.short-stage-heading').getByRole('heading', { name: '故事设计', exact: true })).toBeVisible()
+  await page.reload()
+  await page.getByTestId('product-tab-novel').click()
+  await expect(page.getByTestId('short-novel-studio')).toBeVisible()
+  await expect(page.locator('.short-stage-heading').getByRole('heading', { name: '故事设计', exact: true })).toBeVisible()
 
   // 世界引擎不能把可变作品直接送进改编产品；改编拥有自己的冻结来源契约。
   await page.getByTestId('product-tab-worlds').click()

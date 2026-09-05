@@ -39,6 +39,16 @@ import { recordProductBrowserPerformanceMeasurementV1 } from '../../src/lib/prod
 import { createStoryForgeRulePackV1 } from '../../src/lib/ttrpg/storyforge-rule-pack'
 import { createWorldRevision, publishWorldRevision } from '../../src/lib/world-engine/releases'
 import { stampCurrentFixtureResourceUidsV1 } from './current-resource-identity'
+import {
+  adoptShortNovelChapterDraftV1,
+  adoptShortNovelChapterPlanV1,
+  adoptShortNovelReviewV1,
+  buildShortNovelManuscriptSnapshotV1,
+  confirmShortNovelBriefV1,
+  confirmShortNovelStoryDesignV1,
+  ensureShortNovelProductionV1,
+  publishShortNovelReleaseV1,
+} from '../../src/lib/short-novel/service'
 
 const now = 1_700_000_000_000 // 固定时间戳,保证派生/手写两版导出可逐字段比对
 
@@ -293,6 +303,57 @@ async function stampFixtureOwners(projectId: number, worldId: number, workId: nu
       }
     }
   }
+}
+
+async function seedShortNovelProduct(projectId: number, worldId: number) {
+  const workId = await db.works.add({
+    projectId, worldId,
+    code: 'WORK-33333333-3333-4333-8333-333333333333',
+    title: '全量短篇', description: '独立短篇发布往返夹具', genres: ['fantasy'],
+    status: 'drafting', targetWordCount: 5_000, currentWordCount: 0,
+    kind: 'novel', novelProfile: 'short', includeCultivationProgressInAI: false,
+    activeCharacterDrivenPlanId: null, activeNarrativeModuleId: null,
+    postAdoptionPolicy: 'suggest',
+    postAdoptionTaskTypes: ['organization', 'memory', 'retrieval', 'consistency'],
+    postAdoptionBudget: { maxModelCalls: 2, maxInputTokens: 48_000, maxOutputTokens: 16_000, maxCostUsd: 0.25, allowUnknownCost: false },
+    createdAt: now, updatedAt: now,
+  }) as number
+  const scope = { projectId, worldId, workId }
+  let production = await ensureShortNovelProductionV1(scope)
+  production = await confirmShortNovelBriefV1({
+    scope, expectedRevision: production.revision,
+    brief: {
+      version: 1, premise: '守灯人必须在风暴中作出选择。', coreChange: '从守候过去转为保护活人。', dominantEmotion: '克制哀伤',
+      pointOfView: 'third-limited', tense: 'past', audience: '测试读者', storyPromise: '结尾兑现熄灯选择。', mustKeep: [], forbidden: [], targetWordCount: 5_000, chapterCount: 3,
+    },
+  })
+  production = await confirmShortNovelStoryDesignV1({
+    scope, expectedRevision: production.revision,
+    storyDesign: {
+      version: 1, protagonist: '守灯人', desire: '再见亡者', pressure: '船队逼近幻礁', escalation: ['亡者回应', '船队转向'],
+      irreversibleTurn: '发现灯会制造新亡者', climaxChoice: '熄灯或牺牲船队', endingImage: '自然天光照亮冷灯芯', aftertaste: '告别不是背叛', thematicQuestion: '纪念的界限在哪里',
+    },
+  })
+  production = await adoptShortNovelChapterPlanV1({
+    scope, expectedRevision: production.revision,
+    plan: [
+      { stableKey: 'chapter-1', order: 0, title: '风暴', purpose: '建立压力', viewpoint: '守灯人限知', openingPressure: '风暴抵达', conflict: '亡者呼唤', turn: '船队转向', exitState: '决定检查灯室', targetWordCount: 1_667 },
+      { stableKey: 'chapter-2', order: 1, title: '名字', purpose: '揭示代价', viewpoint: '守灯人限知', openingPressure: '礁石逼近', conflict: '真相与愿望冲突', turn: '发现新名字', exitState: '拿起熄灯钳', targetWordCount: 1_667 },
+      { stableKey: 'chapter-3', order: 2, title: '天光', purpose: '完成选择', viewpoint: '守灯人限知', openingPressure: '即将撞礁', conflict: '告别或继续伤害', turn: '承认愧疚', exitState: '灯灭船回航', targetWordCount: 1_666 },
+    ],
+  })
+  const titles = ['风暴', '名字', '天光']
+  for (let index = 0; index < 3; index += 1) {
+    const sentence = `${titles[index]}之中，守灯人看见海面与自己的选择。她没有回避逼近的代价，也没有把愿望假装成事实。`
+    production = await adoptShortNovelChapterDraftV1({ scope, expectedRevision: production.revision, draft: { version: 1, chapterKey: `chapter-${index + 1}`, title: titles[index], content: Array.from({ length: 42 }, () => sentence).join('\n') } })
+  }
+  const manuscript = await buildShortNovelManuscriptSnapshotV1(scope)
+  production = await adoptShortNovelReviewV1({
+    scope, expectedRevision: production.revision, expectedManuscriptHash: manuscript.manuscriptHash,
+    review: { version: 1, summary: '因果与承诺均已复核。', strengths: ['结构完整'], issues: [] },
+  })
+  const release = await publishShortNovelReleaseV1({ scope, expectedRevision: production.revision, label: '全量短篇 v1' })
+  return { scope, release }
 }
 
 /** 种子:每张 exportable 表至少一行,带双世界组 + 树 + 各类外键。返回各源 id 便于断言。 */
@@ -1244,6 +1305,7 @@ export async function seedFullProject() {
   // 媒介能力必须与全部当前表在同一个真实项目中完成严格往返，不能只靠孤立夹具。
   // 先完成 owner 补齐，再通过正式领域服务创建两个目标 Work 及其来源清单。
   const adaptationProducts = await seedAdaptationProducts({ projectId, worldId, workId })
+  const shortNovel = await seedShortNovelProduct(projectId, worldId)
   await stampFixtureOwners(projectId, worldId, workId)
   // createAdaptation() 模拟真实交互会切换当前 Work；全量夹具的基准身份仍是最早的
   // 小说 Work，因此恢复指针，不改变新增目标 Work。
@@ -1268,6 +1330,7 @@ export async function seedFullProject() {
     productQualityGateReceipt: productQualityGateReceipt.row.id, productBuildArtifact, mediaBlobObject,
     productionAgentRun, ttrpgRulePack,
     adaptationProducts,
+    shortNovel,
   }
 }
 

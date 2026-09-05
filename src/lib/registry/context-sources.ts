@@ -152,6 +152,12 @@ async function readProductProductionQualityFeedback(input: AssembleContextInput)
 async function readProductProductionEvolutionBase(input: AssembleContextInput): Promise<string> {
   return (await import('../product-production/context')).readProductProductionEvolutionBase(input)
 }
+async function readShortNovelProductionContext(input: AssembleContextInput): Promise<string> {
+  return (await import('../short-novel/context')).readShortNovelProductionContextV1(input)
+}
+async function readShortNovelManuscriptContext(input: AssembleContextInput): Promise<string> {
+  return (await import('../short-novel/context')).readShortNovelManuscriptContextV1(input)
+}
 async function readTtrpgGmRuntimeContextV1(input: AssembleContextInput): Promise<string> {
   return (await import('../ttrpg/gm-context')).readTtrpgGmRuntimeContextV1(input)
 }
@@ -1309,6 +1315,26 @@ async function readCharacterPassages(projectId: number, name?: string, worldGrou
 }
 
 export const CONTEXT_SOURCES: ContextSource[] = [
+  {
+    key: 'shortNovel.production',
+    label: '短篇已确认生产合同',
+    scope: 'project',
+    layer: 'L0',
+    ownerFrom: 'work',
+    budgetTokens: 8_000,
+    protectedFromTrim: true,
+    read: readShortNovelProductionContext,
+  },
+  {
+    key: 'shortNovel.manuscript',
+    label: '短篇当前结构与正文',
+    scope: 'project',
+    layer: 'L0',
+    ownerFrom: 'work',
+    budgetTokens: 64_000,
+    protectedFromTrim: true,
+    read: readShortNovelManuscriptContext,
+  },
   {
     // ARCH-05: immutable WorldReference resource provider. Ordinary
     // assembleContext readers never activate it implicitly; upper-product
