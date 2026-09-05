@@ -165,6 +165,12 @@ export default function ShortNovelStudio({ project, scope }: Props) {
     void act(async () => { await rejectShortNovelCandidateV1({ scope, runId: candidate.runId }); setCandidate(null) }, false)
   }
 
+  const selectStage = (nextStage: Stage) => {
+    setStage(nextStage)
+    if (nextStage !== 'review' && nextStage !== 'release') return
+    void reload(false).catch(cause => setError(cause instanceof Error ? cause.message : '短篇状态刷新失败'))
+  }
+
   const saveManual = () => {
     if (!production || !snapshot) return
     void act(async () => {
@@ -207,7 +213,7 @@ export default function ShortNovelStudio({ project, scope }: Props) {
       <div className="short-progress"><strong>{wordCount.toLocaleString()} / {snapshot.work.targetWordCount.toLocaleString()} 字</strong><div><i style={{ width: `${percentage}%` }} /></div><small>{percentage}% · production r{production.revision}</small></div>
     </header>
     <div className="short-studio-layout">
-      <aside className="short-stage-nav">{STAGES.map((item, index) => <button key={item.id} className={stage === item.id ? 'active' : ''} onClick={() => setStage(item.id)}><span>{index < availableStageIndex || production.phase === 'complete' ? <Check /> : index === currentIndex ? <ChevronRight /> : index + 1}</span><div><strong>{item.label}</strong><small>{item.note}</small></div></button>)}</aside>
+      <aside className="short-stage-nav">{STAGES.map((item, index) => <button key={item.id} className={stage === item.id ? 'active' : ''} onClick={() => selectStage(item.id)}><span>{index < availableStageIndex || production.phase === 'complete' ? <Check /> : index === currentIndex ? <ChevronRight /> : index + 1}</span><div><strong>{item.label}</strong><small>{item.note}</small></div></button>)}</aside>
       <main className="short-stage-main">
         <section className="short-stage-heading"><div><span>STEP {currentIndex + 1}</span><h3>{STAGES[currentIndex].label}</h3><p>{STAGES[currentIndex].note}</p></div>{stage !== 'release' && <label>本步附加要求<textarea value={instruction} onChange={event => setInstruction(event.target.value)} placeholder="可选：语气、人物、禁区或本次修订要求" /></label>}</section>
 
