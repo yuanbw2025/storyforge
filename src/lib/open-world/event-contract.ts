@@ -59,7 +59,7 @@ export function parseTextOpenWorldRandomRequestV1(value: unknown, label = 'rando
   return { drawKey: token(parsed.drawKey, `${label}.drawKey`), minimumInclusive, maximumInclusive }
 }
 
-function parseRandomEvidence(value: unknown, label: string): TextOpenWorldRandomEvidenceV1 {
+export function parseTextOpenWorldRandomEvidenceV1(value: unknown, label = 'randomEvidence'): TextOpenWorldRandomEvidenceV1 {
   const parsed = row(value, label); exact(parsed, ['drawKey', 'minimumInclusive', 'maximumInclusive', 'algorithm', 'seedHash', 'inputHash', 'drawIndex', 'value'], label)
   if (parsed.algorithm !== 'sha256-range-v1') fail(`${label}.algorithm无效`)
   const request = parseTextOpenWorldRandomRequestV1({ drawKey: parsed.drawKey, minimumInclusive: parsed.minimumInclusive, maximumInclusive: parsed.maximumInclusive }, label)
@@ -130,7 +130,7 @@ export function parseTextOpenWorldRandomResolvedEventPayloadV1(value: unknown): 
   return {
     schema: 'storyforge.text-open-world.random-resolved-event', version: 1,
     commandId: token(parsed.commandId, 'randomEvent.commandId', COMMAND_ID), commandSequence: integer(parsed.commandSequence, 'randomEvent.commandSequence', 1),
-    ruleset: parseRuleset(parsed.ruleset, 'randomEvent.ruleset'), evidence: parseRandomEvidence(parsed.evidence, 'randomEvent.evidence'),
+    ruleset: parseRuleset(parsed.ruleset, 'randomEvent.ruleset'), evidence: parseTextOpenWorldRandomEvidenceV1(parsed.evidence, 'randomEvent.evidence'),
   }
 }
 

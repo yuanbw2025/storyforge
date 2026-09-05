@@ -293,6 +293,17 @@ TextOpenWorldSessionProjection {
 
 每个子投影都必须能由 `InitialState + ordered Events` 重建。为了性能保存的runtime head必须携带sequence和hash，校验失败时丢弃并重放。
 
+现行vNext投影实现于 `src/lib/types/text-open-world-session.ts` 和
+`src/lib/open-world/session-projection.ts`。RuntimePackage可以确定性生成包含玩家成长、库存与
+装备、任务、地图、时间天气、关系、战斗、Actor、世界状态、知识、结局、Action运行约束和
+Director预算的完整初态；命令、随机与Effect事件会更新同一投影，并保留中间序号读取能力。
+运行包快照随初态冻结，事件重放用Release内Effect定义重新执行计划，不能相信UI提交的after值。
+
+Condition上下文和Action投影上下文现在由Session Projection统一派生，包括时间段、当前地区
+天气、三档NPC态度、合法Actor/地点/物品/任务/商店/遭遇目标、一次性行动和冷却。UI与AI只
+消费这份派生结果，不再负责传入自报状态。当前Projection随Session初态保存完整运行包是为了
+保证离线、旧Release和重放自足；G1-10会把它与不可变GameRelease绑定并核对来源Hash。
+
 ### 3.3 不可变与可变边界
 
 Release内保存：
@@ -385,8 +396,9 @@ Action定义是唯一事实源；固定选项、任务Objective、随机事件�
 
 可用性投影统一判断操作者、当前位置、Condition结果、一次性执行、冷却、合法目标和确认
 策略。Condition未提供结果时fail-closed；失败原因只消费Condition返回的公共说明，不从
-秘密状态自行拼接。当前合法目标集合由调用方显式传入，待G1-08 Session Projection完成后由
-权威运行状态派生，不能由页面或模型自报。
+秘密状态自行拼接。运行时合法目标、Condition结果、一次性记录与冷却现在统一由
+`deriveTextOpenWorldContextsV1()`从权威Session Projection派生，不能由页面或模型自报；
+底层注册表仍保留显式Context参数，便于纯函数测试和后续服务器权威适配。
 
 ### 4.3 提交事务
 

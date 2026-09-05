@@ -14,6 +14,7 @@ import type { AdventureRuntimeState } from "./adventure";
 import type { AvgRuntimePresentationState } from "./avg";
 import type { OpenWorldEvolutionState } from "./open-world-evolution";
 import type { OpenWorldRuntimeState } from "./open-world";
+import type { TextOpenWorldSessionProjectionV1 } from "./text-open-world-session";
 import type {
   TtrpgAbilityRuntimeStateV2,
   TtrpgDegreeV2,
@@ -1107,6 +1108,8 @@ export interface ProductRuntimeState {
   openWorldEvolution?: OpenWorldEvolutionState | null;
   /** Text-open-world governed regional, travel and dynamic quest projection. */
   openWorld?: OpenWorldRuntimeState | null;
+  /** TEXTWORLD-2 vNext authoritative product projection; legacy sessions omit it. */
+  textOpenWorld?: TextOpenWorldSessionProjectionV1 | null;
   lastSequence: number;
 }
 
@@ -1306,5 +1309,6 @@ export const EMPTY_PRODUCT_RUNTIME_STATE: ProductRuntimeState = {
   presentation: null,
   openWorldEvolution: null,
   openWorld: null,
+  textOpenWorld: null,
   lastSequence: 0,
 };

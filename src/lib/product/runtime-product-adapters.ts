@@ -14,6 +14,7 @@ import { parseInteractionState, applyInteractionEvent, createInitialInteractionS
 import { evaluateNarrativeChoices } from './narrative-content'
 import { parseOpenWorldEvolutionState, applyOpenWorldEvolutionProductRuntimeEvent, openWorldEvolutionProjection, createInitialOpenWorldEvolutionState, rebaseOpenWorldEvolutionStateForBranch } from '../open-world/evolution-runtime'
 import { parseOpenWorldState, applyOpenWorldEvent, openWorldMainlineProjection, createInitialOpenWorldState, rebaseOpenWorldStateForBranch } from '../open-world/runtime'
+import { applyTextOpenWorldSessionEventV1, parseTextOpenWorldSessionProjectionV1 } from '../open-world/session-projection'
 import { assertInitialTtrpgProductStateV1 } from '../ttrpg/runtime'
 import { applyTtrpgRuntimeEventV1 } from '../ttrpg/runtime-event-reducer'
 import { cloneTtrpgRuntimeBranchExtensionsV1 } from '../ttrpg/runtime-branch'
@@ -35,7 +36,7 @@ export function parseProductOwnedRuntimeStateV1(
   value: ProductRuntimeState,
 ): Pick<
   ProductRuntimeState,
-  'ttrpg' | 'interaction' | 'adventure' | 'presentation' | 'openWorldEvolution' | 'openWorld'
+  'ttrpg' | 'interaction' | 'adventure' | 'presentation' | 'openWorldEvolution' | 'openWorld' | 'textOpenWorld'
 > {
   return {
     ttrpg: parseTtrpgState(value.ttrpg),
@@ -44,6 +45,9 @@ export function parseProductOwnedRuntimeStateV1(
     presentation: parseAvgPresentationState(value.presentation),
     openWorldEvolution: parseOpenWorldEvolutionState(value.openWorldEvolution),
     openWorld: parseOpenWorldState(value.openWorld),
+    textOpenWorld: value.textOpenWorld == null
+      ? null
+      : parseTextOpenWorldSessionProjectionV1(value.textOpenWorld),
   }
 }
 
@@ -72,6 +76,13 @@ export function applyProductOwnedRuntimeEventV1(
   event: ProductRuntimeEvent,
   payload: ProductRuntimeJsonObjectV1,
 ): ProductRuntimeState | null {
+  if (event.type.startsWith('textworld.')) {
+    if (state.textOpenWorld) {
+      state.textOpenWorld = applyTextOpenWorldSessionEventV1(state.textOpenWorld, event)
+    }
+    state.lastSequence = event.sequence
+    return state
+  }
   if (event.type.startsWith('ttrpg.')) {
     return applyTtrpgRuntimeEventV1(state, event, payload)
   }

@@ -64,23 +64,40 @@ export interface TextOpenWorldEffectStateV1 {
     statusByQuestKey: Record<string, TextOpenWorldQuestStatusV1>
     stageByQuestKey: Record<string, string | null>
     objectiveStatusByKey: Record<string, TextOpenWorldObjectiveStatusV1>
+    resultTags: string[]
   }
   map: {
     currentLocationKey: string
     revealedLocationKeys: string[]
+    regionKnowledgeByKey: Record<string, 'unknown' | 'heard' | 'visited' | 'familiar'>
     unlockedFastTravelPointKeys: string[]
+    openEdgeKeys: string[]
     travel: { edgeKey: string; destinationLocationKey: string } | null
   }
-  time: { worldMinute: number }
+  time: {
+    worldMinute: number
+    currentWeatherByRegionKey: Record<string, string>
+    deadlineWorldMinuteByKey: Record<string, number>
+  }
   relationships: {
     morality: number
     factionAffinityByKey: Record<string, number>
     storyModifierByActorKey: Record<string, number>
   }
   combat: { encounterKey: string; status: 'active' | 'victory' | 'defeat' | 'escaped' } | null
-  actors: Record<string, { alive: boolean; present: boolean; locationKey: string }>
-  world: { regionStateByKey: Record<string, string>; flags: Record<string, string | number | boolean | null> }
-  knowledge: { visibilityByKey: Record<string, 'hidden' | 'rumor' | 'known'> }
+  actors: Record<string, { alive: boolean; present: boolean; locationKey: string; scheduleState: string }>
+  world: {
+    regionStateByKey: Record<string, string>
+    regionPressureByKey: Record<string, number>
+    factionStateByKey: Record<string, string>
+    endingEligibleByKey: Record<string, boolean>
+    flags: Record<string, string | number | boolean | null>
+  }
+  knowledge: {
+    visibilityByKey: Record<string, 'hidden' | 'rumor' | 'known'>
+    readRumorKeys: string[]
+    earnedAchievementKeys: string[]
+  }
   endings: { unlockedKeys: string[]; reachedKey: string | null }
   appliedClaimKeys: string[]
 }

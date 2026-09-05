@@ -43,6 +43,7 @@ function references(modules: TextOpenWorldParsedModulesV1) {
     locations: set(modules.world.locations), travelPoints: set(modules.world.fastTravelPoints), edges: set(modules.world.edges),
     factions: set(modules.actors.factions), actors: set(modules.actors.actors), regions: set(modules.world.regions),
     encounters: set(modules.combat.encounters), knowledge: set(modules.knowledge.entries), endings: set(modules.narrative.endings),
+    rumors: set(modules.knowledge.rumors), achievements: set(modules.knowledge.achievements), weather: set(modules['time-weather'].weather),
     questStageOwner: new Map(modules.quests.stages.map(item => [item.key, item.questKey])),
   }
 }
@@ -112,7 +113,7 @@ function assertUniqueKnown(values: string[], known: ReadonlySet<string>, label: 
   values.forEach(value => { if (!known.has(value)) fail(`${label}引用不存在:${value}`) })
 }
 
-function validateState(state: TextOpenWorldEffectStateV1, modules: TextOpenWorldParsedModulesV1) {
+export function validateTextOpenWorldEffectStateV1(state: TextOpenWorldEffectStateV1, modules: TextOpenWorldParsedModulesV1) {
   if (state.version !== 1) fail('EffectState版本无效')
   const refs = references(modules)
   const maxLevel = modules.progression.rules.maximumLevel
@@ -135,21 +136,36 @@ function validateState(state: TextOpenWorldEffectStateV1, modules: TextOpenWorld
     if (stageKey != null && refs.questStageOwner.get(ref(stageKey, refs.questStages, 'quest stage')) !== questKey) fail(`quest stage归属无效:${questKey}`)
   }
   for (const [objectiveKey, status] of Object.entries(state.quests.objectiveStatusByKey)) { ref(objectiveKey, refs.objectives, 'objective status key'); enumValue(status, ['inactive', 'active', 'completed', 'failed'], `objective status:${objectiveKey}`) }
+  if (new Set(state.quests.resultTags).size !== state.quests.resultTags.length || state.quests.resultTags.some(tag => !KEY.test(tag))) fail('quests.resultTags无效')
   assertUniqueKnown(state.map.revealedLocationKeys, refs.locations, 'map.revealedLocationKeys')
+  for (const [regionKey, knowledge] of Object.entries(state.map.regionKnowledgeByKey)) { ref(regionKey, refs.regions, 'region knowledge key'); enumValue(knowledge, ['unknown', 'heard', 'visited', 'familiar'], `region knowledge:${regionKey}`) }
   assertUniqueKnown(state.map.unlockedFastTravelPointKeys, refs.travelPoints, 'map.unlockedFastTravelPointKeys')
+  for (const pointKey of state.map.unlockedFastTravelPointKeys) {
+    const locationKey = modules.world.fastTravelPoints.find(point => point.key === pointKey)!.locationKey
+    if (!state.map.revealedLocationKeys.includes(locationKey)) fail(`快速旅行点所属地点尚未揭示:${pointKey}`)
+  }
+  assertUniqueKnown(state.map.openEdgeKeys, refs.edges, 'map.openEdgeKeys')
   int(state.time.worldMinute, 'time.worldMinute')
+  for (const [regionKey, weatherKey] of Object.entries(state.time.currentWeatherByRegionKey)) { ref(regionKey, refs.regions, 'weather region key'); ref(weatherKey, refs.weather, 'weather key') }
+  for (const [deadlineKey, deadline] of Object.entries(state.time.deadlineWorldMinuteByKey)) { key(deadlineKey, 'deadline key'); int(deadline, `deadline:${deadlineKey}`) }
   numberValue(state.relationships.morality, 'relationships.morality', modules.relationships.morality.minimum, modules.relationships.morality.maximum)
   for (const [factionKey, value] of Object.entries(state.relationships.factionAffinityByKey)) { ref(factionKey, refs.factions, 'faction affinity key'); numberValue(value, 'faction affinity', modules.relationships.factionAffinity.minimum, modules.relationships.factionAffinity.maximum) }
   for (const [actorKey, value] of Object.entries(state.relationships.storyModifierByActorKey)) { ref(actorKey, refs.actors, 'story modifier actor'); numberValue(value, 'story modifier', -modules.relationships.attitude.explicitStoryModifierCap, modules.relationships.attitude.explicitStoryModifierCap) }
   if (state.combat) ref(state.combat.encounterKey, refs.encounters, 'combat encounterKey')
   for (const actorDefinition of modules.actors.actors) if (!state.actors[actorDefinition.key]) fail(`Actor运行状态缺失:${actorDefinition.key}`)
-  for (const [actorKey, actor] of Object.entries(state.actors)) { ref(actorKey, refs.actors, 'actors key'); ref(actor.locationKey, refs.locations, `actors.${actorKey}.locationKey`) }
-  for (const regionKey of Object.keys(state.world.regionStateByKey)) ref(regionKey, refs.regions, 'region state key')
+  for (const [actorKey, actor] of Object.entries(state.actors)) { ref(actorKey, refs.actors, 'actors key'); if (typeof actor.alive !== 'boolean' || typeof actor.present !== 'boolean' || (!actor.alive && actor.present)) fail(`actors.${actorKey}生存/在场状态无效`); ref(actor.locationKey, refs.locations, `actors.${actorKey}.locationKey`); text(actor.scheduleState, `actors.${actorKey}.scheduleState`) }
+  for (const [regionKey, regionState] of Object.entries(state.world.regionStateByKey)) { ref(regionKey, refs.regions, 'region state key'); text(regionState, `region state:${regionKey}`) }
+  for (const [regionKey, pressure] of Object.entries(state.world.regionPressureByKey)) { ref(regionKey, refs.regions, 'region pressure key'); numberValue(pressure, `region pressure:${regionKey}`) }
+  for (const [factionKey, factionState] of Object.entries(state.world.factionStateByKey)) { ref(factionKey, refs.factions, 'faction state key'); text(factionState, `faction state:${factionKey}`) }
+  for (const [endingKey, eligible] of Object.entries(state.world.endingEligibleByKey)) { ref(endingKey, refs.endings, 'ending eligible key'); if (typeof eligible !== 'boolean') fail(`ending eligible:${endingKey}必须是boolean`) }
   for (const [knowledgeKey, visibility] of Object.entries(state.knowledge.visibilityByKey)) { ref(knowledgeKey, refs.knowledge, 'knowledge key'); enumValue(visibility, ['hidden', 'rumor', 'known'], `knowledge visibility:${knowledgeKey}`) }
+  assertUniqueKnown(state.knowledge.readRumorKeys, refs.rumors, 'knowledge.readRumorKeys')
+  assertUniqueKnown(state.knowledge.earnedAchievementKeys, refs.achievements, 'knowledge.earnedAchievementKeys')
   assertUniqueKnown(state.endings.unlockedKeys, refs.endings, 'endings.unlockedKeys')
   if (state.endings.reachedKey != null && (!refs.endings.has(state.endings.reachedKey) || !state.endings.unlockedKeys.includes(state.endings.reachedKey))) fail('reached ending无效')
   if (new Set(state.appliedClaimKeys).size !== state.appliedClaimKeys.length || state.appliedClaimKeys.some(item => !CLAIM_KEY.test(item))) fail('appliedClaimKeys无效')
   if (!modules.world.locations.some(item => item.key === state.map.currentLocationKey)) fail('currentLocationKey不存在')
+  if (!state.map.revealedLocationKeys.includes(state.map.currentLocationKey)) fail('当前位置必须已经揭示')
   if (state.map.travel) {
     const edge = modules.world.edges.find(candidate => candidate.key === state.map.travel!.edgeKey) ?? fail('travel edgeKey不存在')
     if (![edge.fromLocationKey, edge.toLocationKey].includes(state.map.currentLocationKey) || ![edge.fromLocationKey, edge.toLocationKey].includes(state.map.travel.destinationLocationKey) || state.map.currentLocationKey === state.map.travel.destinationLocationKey) fail('travel状态端点无效')
@@ -166,7 +182,7 @@ function questTransitionAllowed(before: TextOpenWorldQuestStatusV1, after: TextO
 }
 
 function applyDefinitions(stateValue: TextOpenWorldEffectStateV1, effects: TextOpenWorldEffectDefinitionV1[], claimKey: string, modules: TextOpenWorldParsedModulesV1) {
-  validateState(stateValue, modules)
+  validateTextOpenWorldEffectStateV1(stateValue, modules)
   if (stateValue.appliedClaimKeys.includes(claimKey)) fail(`claim已应用:${claimKey}`)
   const state = structuredClone(stateValue); const changes: TextOpenWorldEffectChangeV1[] = []
   const item = (itemKey: string) => modules.items.items.find(candidate => candidate.key === itemKey) ?? fail(`物品不存在:${itemKey}`)
@@ -294,17 +310,24 @@ function applyDefinitions(stateValue: TextOpenWorldEffectStateV1, effects: TextO
       }
       case 'unlock-fast-travel': {
         const { payload } = effect; const before = state.map.unlockedFastTravelPointKeys.includes(payload.fastTravelPointKey)
+        const point = modules.world.fastTravelPoints.find(candidate => candidate.key === payload.fastTravelPointKey)!
+        if (!state.map.revealedLocationKeys.includes(point.locationKey)) fail(`${effect.key}不能解锁未揭示地点的快速旅行点`)
         addUnique(state.map.unlockedFastTravelPointKeys, payload.fastTravelPointKey); record(changes, effect, `解锁快速旅行:${payload.fastTravelPointKey}`, before, true); break
       }
       case 'enter-location': {
         const { payload } = effect; const before = state.map.currentLocationKey
         state.map.currentLocationKey = payload.locationKey; state.map.travel = null; addUnique(state.map.revealedLocationKeys, payload.locationKey)
+        const regionKey = modules.world.locations.find(location => location.key === payload.locationKey)!.regionKey
+        const rank = { unknown: 0, heard: 1, visited: 2, familiar: 3 }
+        if (rank[state.map.regionKnowledgeByKey[regionKey] ?? 'unknown'] < rank.visited) state.map.regionKnowledgeByKey[regionKey] = 'visited'
+        modules.world.fastTravelPoints.filter(point => point.locationKey === payload.locationKey).forEach(point => addUnique(state.map.unlockedFastTravelPointKeys, point.key))
         record(changes, effect, `进入地点:${payload.locationKey}`, before, payload.locationKey); break
       }
       case 'start-travel': {
         const { payload } = effect
         if (state.map.travel) fail(`${effect.key}已有进行中的旅行`)
         const edge = modules.world.edges.find(candidate => candidate.key === payload.edgeKey)!
+        if (!state.map.openEdgeKeys.includes(payload.edgeKey)) fail(`${effect.key}道路当前未开放`)
         if (![edge.fromLocationKey, edge.toLocationKey].includes(state.map.currentLocationKey) || ![edge.fromLocationKey, edge.toLocationKey].includes(payload.destinationLocationKey) || payload.destinationLocationKey === state.map.currentLocationKey) fail(`${effect.key}旅行端点无效`)
         const before = state.map.travel; state.map.travel = { edgeKey: payload.edgeKey, destinationLocationKey: payload.destinationLocationKey }
         record(changes, effect, `开始旅行:${payload.edgeKey}`, before, state.map.travel); break
@@ -327,14 +350,16 @@ function applyDefinitions(stateValue: TextOpenWorldEffectStateV1, effects: TextO
       case 'respawn': {
         const { payload } = effect; if (state.combat?.status !== 'defeat') fail(`${effect.key}只能在战败后复活`)
         const before = { health: state.player.health, locationKey: state.map.currentLocationKey, combat: state.combat }
-        state.player.health = Math.max(1, Math.ceil(state.player.maximumHealth * payload.healthRatio)); state.map.currentLocationKey = payload.locationKey; state.map.travel = null; state.combat = null
+        state.player.health = Math.max(1, Math.ceil(state.player.maximumHealth * payload.healthRatio)); state.map.currentLocationKey = payload.locationKey; state.map.travel = null; state.combat = null; addUnique(state.map.revealedLocationKeys, payload.locationKey)
+        const regionKey = modules.world.locations.find(location => location.key === payload.locationKey)!.regionKey; state.map.regionKnowledgeByKey[regionKey] = 'visited'
+        modules.world.fastTravelPoints.filter(point => point.locationKey === payload.locationKey).forEach(point => addUnique(state.map.unlockedFastTravelPointKeys, point.key))
         record(changes, effect, `在${payload.locationKey}复活`, before, { health: state.player.health, locationKey: state.map.currentLocationKey, combat: null }); break
       }
       case 'change-actor-state': {
         const { payload } = effect; const definition = modules.actors.actors.find(candidate => candidate.key === payload.actorKey)!
         const actor = state.actors[payload.actorKey] ?? fail(`${effect.key}Actor运行状态不存在`)
         if (definition.protected && payload.alive === false) fail(`${effect.key}不能杀死受保护Actor`)
-        const before = structuredClone(actor); if (payload.alive != null) actor.alive = payload.alive; if (payload.present != null) actor.present = payload.present; if (payload.locationKey != null) actor.locationKey = payload.locationKey
+        const before = structuredClone(actor); if (payload.alive != null) actor.alive = payload.alive; if (payload.alive === false) actor.present = false; else if (payload.present != null) actor.present = payload.present; if (payload.locationKey != null) actor.locationKey = payload.locationKey
         record(changes, effect, `更新Actor:${payload.actorKey}`, before, actor); break
       }
       case 'change-region-state': {
@@ -356,11 +381,28 @@ function applyDefinitions(stateValue: TextOpenWorldEffectStateV1, effects: TextO
       }
     }
   }
-  state.appliedClaimKeys.push(claimKey); validateState(state, modules)
+  state.appliedClaimKeys.push(claimKey); validateTextOpenWorldEffectStateV1(state, modules)
   return { state, changes }
 }
 
 function planBody(plan: Omit<TextOpenWorldEffectPlanV1, 'planHash'>) { return plan }
+
+/** Synchronous event replay; cryptographic plan verification is performed by the event protocol before persistence/import. */
+export function applyTextOpenWorldEffectPlanForReplayV1(
+  value: TextOpenWorldRuntimePackageV1 | string | unknown,
+  state: TextOpenWorldEffectStateV1,
+  plan: TextOpenWorldEffectPlanV1,
+): { state: TextOpenWorldEffectStateV1; changes: TextOpenWorldEffectChangeV1[] } {
+  if (plan.schema !== 'storyforge.text-open-world.effect-plan' || plan.version !== 1) fail('EffectPlan schema/version无效')
+  const modules = parseTextOpenWorldModulesV1(value); const refs = references(modules)
+  const definitions = modules.actions.effects.map((item, index) => parseDefinition(item, refs, `effects[${index}]`))
+  const byKey = new Map(definitions.map(item => [item.key, item]))
+  const canonical = plan.effectKeys.map(effectKey => byKey.get(effectKey) ?? fail(`Effect不存在:${effectKey}`))
+  if (canonicalProductProductionJsonV2(canonical) !== canonicalProductProductionJsonV2(plan.effects)) fail('EffectPlan定义与Release不一致')
+  const applied = applyDefinitions(state, canonical, plan.claimKey, modules)
+  if (canonicalProductProductionJsonV2(applied.changes) !== canonicalProductProductionJsonV2(plan.previewChanges)) fail('EffectPlan重放变化与预演不一致')
+  return applied
+}
 
 export interface TextOpenWorldEffectCatalogV1 {
   list(): TextOpenWorldEffectDefinitionV1[]

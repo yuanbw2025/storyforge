@@ -3,6 +3,7 @@ import {
   applyProductRuntimeEvent,
   hashProductRuntimeStateV1,
   readProductRuntimeState,
+  readProductRuntimeStateVersion,
 } from '../product/runtime-core'
 import type {
   ProductRuntimeEvent,
@@ -94,20 +95,17 @@ export async function commitTextOpenWorldCommandV1(value: unknown): Promise<Text
     if (session.status !== 'active') fail('只有active Session可以提交命令')
 
     const current = await readProductRuntimeState(envelope.sessionId)
-    const currentStateHash = await hashProductRuntimeStateV1(current)
-    if (current.lastSequence !== envelope.baseSequence || currentStateHash !== envelope.baseStateHash) {
+    const currentVersion = await readProductRuntimeStateVersion(envelope.sessionId)
+    if (current.lastSequence !== envelope.baseSequence || currentVersion.stateHash !== envelope.baseStateHash) {
       fail('Session状态已变化，请查询命令状态并刷新后重试')
     }
     const events = await db.productRuntimeEvents.where('sessionId').equals(envelope.sessionId).sortBy('sequence')
     const protocol = await replayTextOpenWorldEventProtocolV1(events, session.seed)
     if (protocol.pendingCommandId) fail(`上一命令尚未生成结果批次:${protocol.pendingCommandId}`)
     const resultingSequence = current.lastSequence + 1
-    const projected = structuredClone(current)
-    projected.lastSequence = resultingSequence
-    const resultingStateHash = await hashProductRuntimeStateV1(projected)
     const payload: TextOpenWorldCommandEventPayloadV1 = {
       schema: 'storyforge.text-open-world.command-event', version: 1,
-      envelope, requestFingerprint, resultingSequence, resultingStateHash,
+      envelope, requestFingerprint, resultingSequence, resultingStateHash: '0'.repeat(64),
     }
     const createdAt = Date.now()
     const event: ProductRuntimeEvent = {
@@ -124,6 +122,10 @@ export async function commitTextOpenWorldCommandV1(value: unknown): Promise<Text
       payloadJson: JSON.stringify(payload),
       createdAt,
     }
+    const preview = applyProductRuntimeEvent(current, event)
+    const resultingStateHash = await hashProductRuntimeStateV1(preview)
+    payload.resultingStateHash = resultingStateHash
+    event.payloadJson = JSON.stringify(payload)
     const replayed = applyProductRuntimeEvent(current, event)
     if (await hashProductRuntimeStateV1(replayed) !== resultingStateHash) fail('命令结果预演Hash不一致')
     event.id = (await db.productRuntimeEvents.add(event)) as number

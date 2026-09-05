@@ -1,4 +1,5 @@
 import { db } from '../db/schema'
+import { canonicalProductProductionJsonV2 } from '../product-production/hash'
 import { applyProductRuntimeEvent, hashProductRuntimeStateV1, replayProductRuntimeEvents } from '../product/runtime-core'
 import type {
   ProductRuntimeEvent,
@@ -9,6 +10,7 @@ import type {
   TextOpenWorldRulesetStampV1,
 } from '../types'
 import { parseTextOpenWorldCommandEventPayloadV1 } from './command-contract'
+import { createTextOpenWorldEffectCatalogV1 } from './effect-dsl'
 import {
   createTextOpenWorldOutcomeFingerprintV1,
   parseTextOpenWorldEffectsAppliedEventPayloadV1,
@@ -78,6 +80,10 @@ export async function commitTextOpenWorldOutcomeBatchV1(input: {
     if (projection.pendingCommandId !== input.commandId || projection.lastSequence !== commandEvent.sequence) fail('对应命令不是当前待处理命令')
 
     const now = Date.now(); let currentState = replayProductRuntimeEvents(JSON.parse(session.initialStateJson), events); let sequence = projection.lastSequence
+    if (currentState.textOpenWorld) {
+      const verified = await createTextOpenWorldEffectCatalogV1(currentState.textOpenWorld.runtimePackage).apply({ plan: input.plan, state: currentState.textOpenWorld.state })
+      if (canonicalProductProductionJsonV2(verified.receipt) !== canonicalProductProductionJsonV2(input.receipt)) fail('Effect回执与当前Session投影不一致')
+    }
     const appended: ProductRuntimeEvent[] = []
     for (let index = 0; index < randomRequests.length; index += 1) {
       sequence += 1

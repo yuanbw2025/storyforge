@@ -29,11 +29,11 @@ function effectState(): TextOpenWorldEffectStateV1 {
     version: 1,
     player: { level: 1, experience: 0, health: 35, maximumHealth: 35, skillResource: 3, maximumSkillResource: 3, attributes: { power: 3, vitality: 3, agility: 3 }, statusKeys: [], learnedSkillKeys: ['skill.basic-attack'] },
     inventory: { itemQuantities: { 'item.rust-sword': 1 }, equippedItemKeyBySlot: { weapon: null, armor: null, accessory: null }, knownRecipeKeys: ['recipe.brine-tonic'], currency: 20 },
-    quests: { statusByQuestKey: { 'quest.main.1': 'available' }, stageByQuestKey: { 'quest.main.1': null }, objectiveStatusByKey: { 'objective.main.1': 'inactive' } },
-    map: { currentLocationKey: 'location.salt-port', revealedLocationKeys: ['location.salt-port'], unlockedFastTravelPointKeys: ['fast-travel.salt-port'], travel: null },
-    time: { worldMinute: 480 }, relationships: { morality: 0, factionAffinityByKey: {}, storyModifierByActorKey: {} }, combat: null,
-    actors: { 'actor.caretaker': { alive: true, present: true, locationKey: 'location.salt-port' } },
-    world: { regionStateByKey: {}, flags: {} }, knowledge: { visibilityByKey: { 'knowledge.caretaker': 'known' } },
+    quests: { statusByQuestKey: { 'quest.main.1': 'available' }, stageByQuestKey: { 'quest.main.1': null }, objectiveStatusByKey: { 'objective.main.1': 'inactive' }, resultTags: [] },
+    map: { currentLocationKey: 'location.salt-port', revealedLocationKeys: ['location.salt-port'], regionKnowledgeByKey: { 'region.salt-port': 'visited', 'region.ridge': 'heard' }, unlockedFastTravelPointKeys: ['fast-travel.salt-port'], openEdgeKeys: ['edge.port-ridge'], travel: null },
+    time: { worldMinute: 480, currentWeatherByRegionKey: { 'region.salt-port': 'weather.clear', 'region.ridge': 'weather.clear' }, deadlineWorldMinuteByKey: {} }, relationships: { morality: 0, factionAffinityByKey: {}, storyModifierByActorKey: {} }, combat: null,
+    actors: { 'actor.caretaker': { alive: true, present: true, locationKey: 'location.salt-port', scheduleState: '检查内渠' } },
+    world: { regionStateByKey: {}, regionPressureByKey: {}, factionStateByKey: {}, endingEligibleByKey: {}, flags: {} }, knowledge: { visibilityByKey: { 'knowledge.caretaker': 'known' }, readRumorKeys: [], earnedAchievementKeys: [] },
     endings: { unlockedKeys: [], reachedKey: null }, appliedClaimKeys: [],
   }
 }
