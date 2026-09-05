@@ -11,6 +11,8 @@ import type {
   TextOpenWorldRuntimePackageV1,
 } from '../types'
 import { parseTextOpenWorldModulesV1 } from './modules'
+import { deriveTextOpenWorldPlayerStatsFromModulesV1 } from './player-stats'
+import { levelForTextOpenWorldExperienceV1 } from './progression'
 
 type Row = Record<string, unknown>
 type Refs = ReturnType<typeof references>
@@ -119,6 +121,21 @@ export function validateTextOpenWorldEffectStateV1(state: TextOpenWorldEffectSta
   const maxLevel = modules.progression.rules.maximumLevel
   int(state.player.level, 'player.level', 1, maxLevel); int(state.player.experience, 'player.experience'); numberValue(state.player.health, 'player.health', 0, state.player.maximumHealth); numberValue(state.player.maximumHealth, 'player.maximumHealth', 1); numberValue(state.player.skillResource, 'player.skillResource', 0, state.player.maximumSkillResource); numberValue(state.player.maximumSkillResource, 'player.maximumSkillResource', 0)
   Object.values(state.player.attributes).forEach(value => numberValue(value, 'player attribute', 0))
+  const maximumExperience = modules.progression.levels[maxLevel - 1].cumulativeExperience
+  if (state.player.experience > maximumExperience) fail('player.experience超过最高等级阈值')
+  const expectedLevel = levelForTextOpenWorldExperienceV1(modules, state.player.experience)
+  if (state.player.level !== expectedLevel) fail('player.level与经验阈值不一致')
+  const expectedAttributes = structuredClone(modules.actors.player.build.attributes)
+  for (let level = modules.actors.player.build.initialLevel + 1; level <= state.player.level; level += 1) {
+    const growth = modules.progression.levels[level - 1].attributeGrowth
+    expectedAttributes.power += growth.power; expectedAttributes.vitality += growth.vitality; expectedAttributes.agility += growth.agility
+  }
+  if (canonicalProductProductionJsonV2(state.player.attributes) !== canonicalProductProductionJsonV2(expectedAttributes)) fail('player.attributes与自动成长曲线不一致')
+  const derivedStats = deriveTextOpenWorldPlayerStatsFromModulesV1({
+    modules, level: state.player.level, attributes: state.player.attributes,
+    equippedItemKeyBySlot: state.inventory.equippedItemKeyBySlot,
+  })
+  if (state.player.maximumHealth !== derivedStats.maximumHealth || state.player.maximumSkillResource !== derivedStats.maximumSkillResource) fail('player资源上限与Release公式不一致')
   assertUniqueKnown(state.player.learnedSkillKeys, refs.skills, 'player.learnedSkillKeys')
   if (new Set(state.player.statusKeys).size !== state.player.statusKeys.length) fail('player.statusKeys不能重复')
   for (const [itemKey, value] of Object.entries(state.inventory.itemQuantities)) { ref(itemKey, refs.items, 'inventory itemKey'); int(value, 'inventory quantity', 1, 1_000_000) }
@@ -181,6 +198,18 @@ function questTransitionAllowed(before: TextOpenWorldQuestStatusV1, after: TextO
   return (restartable || repeatable) && after === 'available'
 }
 
+function synchronizePlayerResourceCaps(state: TextOpenWorldEffectStateV1, modules: TextOpenWorldParsedModulesV1) {
+  const before = { maximumHealth: state.player.maximumHealth, maximumSkillResource: state.player.maximumSkillResource }
+  const derived = deriveTextOpenWorldPlayerStatsFromModulesV1({
+    modules, level: state.player.level, attributes: state.player.attributes,
+    equippedItemKeyBySlot: state.inventory.equippedItemKeyBySlot,
+  })
+  state.player.health = Math.min(derived.maximumHealth, Math.max(0, state.player.health + derived.maximumHealth - before.maximumHealth))
+  state.player.skillResource = Math.min(derived.maximumSkillResource, Math.max(0, state.player.skillResource + derived.maximumSkillResource - before.maximumSkillResource))
+  state.player.maximumHealth = derived.maximumHealth
+  state.player.maximumSkillResource = derived.maximumSkillResource
+}
+
 function applyDefinitions(stateValue: TextOpenWorldEffectStateV1, effects: TextOpenWorldEffectDefinitionV1[], claimKey: string, modules: TextOpenWorldParsedModulesV1) {
   validateTextOpenWorldEffectStateV1(stateValue, modules)
   if (stateValue.appliedClaimKeys.includes(claimKey)) fail(`claim已应用:${claimKey}`)
@@ -201,10 +230,16 @@ function applyDefinitions(stateValue: TextOpenWorldEffectStateV1, effects: TextO
       }
       case 'grant-experience': {
         const { payload } = effect
-        const before = { experience: state.player.experience, level: state.player.level, attributes: structuredClone(state.player.attributes) }
-        state.player.experience += payload.amount
-        const eligibleLevels = modules.progression.levels.filter(level => level.cumulativeExperience <= state.player.experience)
-        const nextLevel = eligibleLevels[eligibleLevels.length - 1]?.level ?? 1
+        const before = {
+          experience: state.player.experience, level: state.player.level, attributes: structuredClone(state.player.attributes),
+          health: state.player.health, maximumHealth: state.player.maximumHealth,
+          skillResource: state.player.skillResource, maximumSkillResource: state.player.maximumSkillResource,
+          learnedSkillKeys: [...state.player.learnedSkillKeys],
+        }
+        const maximumExperience = modules.progression.levels[modules.progression.rules.maximumLevel - 1].cumulativeExperience
+        const appliedExperience = Math.min(payload.amount, maximumExperience - state.player.experience)
+        state.player.experience += appliedExperience
+        const nextLevel = levelForTextOpenWorldExperienceV1(modules, state.player.experience)
         for (let level = state.player.level + 1; level <= nextLevel; level += 1) {
           const growth = modules.progression.levels[level - 1].attributeGrowth
           state.player.attributes.power += growth.power
@@ -213,7 +248,13 @@ function applyDefinitions(stateValue: TextOpenWorldEffectStateV1, effects: TextO
           modules.progression.levels[level - 1].unlockedSkillKeys.forEach(skillKey => addUnique(state.player.learnedSkillKeys, skillKey))
         }
         state.player.level = Math.min(nextLevel, modules.progression.rules.maximumLevel)
-        record(changes, effect, `获得${payload.amount}经验`, before, { experience: state.player.experience, level: state.player.level, attributes: state.player.attributes })
+        synchronizePlayerResourceCaps(state, modules)
+        record(changes, effect, `获得${appliedExperience}经验${appliedExperience < payload.amount ? `（${payload.amount - appliedExperience}点因满级封顶未计入）` : ''}`, before, {
+          experience: state.player.experience, level: state.player.level, attributes: structuredClone(state.player.attributes),
+          health: state.player.health, maximumHealth: state.player.maximumHealth,
+          skillResource: state.player.skillResource, maximumSkillResource: state.player.maximumSkillResource,
+          learnedSkillKeys: [...state.player.learnedSkillKeys], appliedExperience, discardedExperience: payload.amount - appliedExperience,
+        })
         break
       }
       case 'apply-status':
@@ -245,15 +286,24 @@ function applyDefinitions(stateValue: TextOpenWorldEffectStateV1, effects: TextO
         const definition = item(payload.itemKey)
         if (definition.kind !== 'equipment' || !definition.equipmentSlotKey) fail(`${effect.key}目标不是装备`)
         const slot = definition.equipmentSlotKey
-        const before = state.inventory.equippedItemKeyBySlot[slot]
+        const before = {
+          itemKey: state.inventory.equippedItemKeyBySlot[slot], health: state.player.health,
+          maximumHealth: state.player.maximumHealth, skillResource: state.player.skillResource,
+          maximumSkillResource: state.player.maximumSkillResource,
+        }
         if (effect.operation === 'equip-item') {
           if ((state.inventory.itemQuantities[payload.itemKey] ?? 0) < 1) fail(`${effect.key}背包没有目标装备`)
           state.inventory.equippedItemKeyBySlot[slot] = payload.itemKey
         } else {
-          if (before !== payload.itemKey) fail(`${effect.key}目标未装备`)
+          if (before.itemKey !== payload.itemKey) fail(`${effect.key}目标未装备`)
           state.inventory.equippedItemKeyBySlot[slot] = null
         }
-        record(changes, effect, `${effect.operation}:${payload.itemKey}`, before, state.inventory.equippedItemKeyBySlot[slot])
+        synchronizePlayerResourceCaps(state, modules)
+        record(changes, effect, `${effect.operation}:${payload.itemKey}`, before, {
+          itemKey: state.inventory.equippedItemKeyBySlot[slot], health: state.player.health,
+          maximumHealth: state.player.maximumHealth, skillResource: state.player.skillResource,
+          maximumSkillResource: state.player.maximumSkillResource,
+        })
         break
       }
       case 'learn-skill': {

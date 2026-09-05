@@ -7,7 +7,7 @@ function state(overrides: Partial<TextOpenWorldEffectStateV1> = {}): TextOpenWor
   const initial: TextOpenWorldEffectStateV1 = {
     version: 1,
     player: {
-      level: 1, experience: 0, health: 35, maximumHealth: 35, skillResource: 3, maximumSkillResource: 3,
+      level: 1, experience: 0, health: 37, maximumHealth: 37, skillResource: 4, maximumSkillResource: 4,
       attributes: { power: 3, vitality: 3, agility: 3 }, statusKeys: [], learnedSkillKeys: ['skill.basic-attack'],
     },
     inventory: {
@@ -57,7 +57,7 @@ describe('Text Open World vNext · typed Effect DSL and atomic EffectPlan', () =
 
     const applied = await catalog.apply({ plan, state: before })
     expect(applied.state).toMatchObject({
-      player: { level: 2, experience: 100, attributes: { power: 4, vitality: 4, agility: 4 } },
+      player: { level: 2, experience: 100, health: 44, maximumHealth: 44, skillResource: 5, maximumSkillResource: 5, attributes: { power: 4, vitality: 4, agility: 4 } },
       inventory: { currency: 30 }, appliedClaimKeys: ['claim.reward.1'],
     })
     expect(applied.receipt).toMatchObject({
@@ -148,7 +148,7 @@ describe('Text Open World vNext · typed Effect DSL and atomic EffectPlan', () =
     await expect(catalog.plan({ effectKeys: ['effect.respawn-port'], claimKey: 'claim.invalid-respawn', state: state() }))
       .rejects.toThrow('只能在战败后复活')
     const applied = await catalog.apply({ plan, state: defeated })
-    expect(applied.state).toMatchObject({ player: { health: 18 }, map: { currentLocationKey: 'location.salt-port' }, combat: null })
+    expect(applied.state).toMatchObject({ player: { health: 19 }, map: { currentLocationKey: 'location.salt-port' }, combat: null })
   })
 
   it('发布时拒绝未知操作与悬空引用，运行时保护关键Actor和已装备物品', async () => {

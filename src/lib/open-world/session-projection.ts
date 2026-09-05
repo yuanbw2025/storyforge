@@ -19,6 +19,7 @@ import {
 import { parseTextOpenWorldCommandEventPayloadV1 } from './command-contract'
 import { parseTextOpenWorldModulesV1 } from './modules'
 import { deriveTextOpenWorldPlayerStatsFromModulesV1 } from './player-stats'
+import { deriveTextOpenWorldProgressionStatusV1 } from './progression'
 import { parseTextOpenWorldRuntimePackageV1 } from './runtime-package'
 
 type Row = Record<string, unknown>
@@ -202,6 +203,7 @@ export function deriveTextOpenWorldContextsV1(value: TextOpenWorldSessionProject
     modules, level: state.player.level, attributes: state.player.attributes,
     equippedItemKeyBySlot: state.inventory.equippedItemKeyBySlot,
   })
+  const progression = deriveTextOpenWorldProgressionStatusV1(modules, state.player.experience)
   const condition: TextOpenWorldConditionEvaluationContextV1 = {
     player: { level: state.player.level, experience: state.player.experience, health: state.player.health, maximumHealth: playerStats.maximumHealth, morality: state.relationships.morality, attributes: structuredClone(state.player.attributes), statusKeys: [...state.player.statusKeys] },
     inventory: { itemQuantities: structuredClone(state.inventory.itemQuantities), currency: state.inventory.currency, equippedItemKeys: Object.values(state.inventory.equippedItemKeyBySlot).filter((key): key is string => key != null), knownRecipeKeys: [...state.inventory.knownRecipeKeys] },
@@ -226,7 +228,7 @@ export function deriveTextOpenWorldContextsV1(value: TextOpenWorldSessionProject
       encounter: modules.combat.encounters.filter(encounter => encounter.locationKey === state.map.currentLocationKey).map(encounter => encounter.key),
     },
   }
-  return { condition, action, playerStats }
+  return { condition, action, playerStats, progression }
 }
 
 export function rebaseTextOpenWorldSessionProjectionForBranchV1(value: TextOpenWorldSessionProjectionV1): TextOpenWorldSessionProjectionV1 {

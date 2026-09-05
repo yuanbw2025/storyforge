@@ -653,7 +653,7 @@ async function readOpenWorldRuntimeContext(input: AssembleContextInput): Promise
       `【体验边界】${runtimePackage.experienceContract.freedomBoundary}`,
       `【当前位置】${region.title}／${location.title}｜${location.description}`,
       `【时间与天气】第${day}天｜${timePeriod?.label ?? '未知时段'}｜${weather?.label ?? weatherKey ?? '未知天气'}`,
-      `【主角】${modules.actors.player.identity.name}｜等级=${runtime.player.level}｜经验=${runtime.player.experience}｜生命=${runtime.player.health}/${derived.playerStats.maximumHealth}｜技能资源=${runtime.player.skillResource}/${derived.playerStats.maximumSkillResource}`,
+      `【主角】${modules.actors.player.identity.name}｜等级=${runtime.player.level}/${derived.progression.maximumLevel}｜经验=${runtime.player.experience}${derived.progression.nextLevelThreshold == null ? '（满级）' : `/${derived.progression.nextLevelThreshold}`}｜生命=${runtime.player.health}/${derived.playerStats.maximumHealth}｜技能资源=${runtime.player.skillResource}/${derived.playerStats.maximumSkillResource}`,
       `【主角身份】称谓=${modules.actors.player.identity.pronouns || '未指定'}｜外观=${modules.actors.player.identity.appearance || '未指定'}｜背景=${modules.actors.player.identity.background || '未指定'}｜性格=${modules.actors.player.identity.personality || '未指定'}`,
       `【主角目标】近期=${modules.actors.player.identity.shortGoal || '未指定'}｜长期=${modules.actors.player.identity.longGoal || '未指定'}｜演绎=${modules.actors.player.identity.portrayal || '未指定'}`,
       `【主角自有知识】公开=${modules.actors.player.identity.publicKnowledge || '无'}｜私密=${modules.actors.player.identity.privateKnowledge || '无'}`,

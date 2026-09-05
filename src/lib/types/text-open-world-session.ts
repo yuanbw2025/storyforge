@@ -32,6 +32,18 @@ export interface TextOpenWorldDerivedPlayerStatsV1 {
   breakdown: Record<TextOpenWorldDerivedPlayerStatKeyV1, TextOpenWorldDerivedPlayerStatBreakdownV1>
 }
 
+export interface TextOpenWorldProgressionStatusV1 {
+  level: number
+  maximumLevel: number
+  experience: number
+  currentLevelThreshold: number
+  nextLevelThreshold: number | null
+  experienceIntoLevel: number
+  experienceForNextLevel: number | null
+  progressRatio: number
+  atMaximumLevel: boolean
+}
+
 export interface TextOpenWorldDirectorProjectionV1 {
   drawCount: number
   generatedQuestInstanceCount: number
@@ -73,6 +85,7 @@ export interface TextOpenWorldDerivedContextsV1 {
   condition: TextOpenWorldConditionEvaluationContextV1
   action: TextOpenWorldActionProjectionContextV1
   playerStats: TextOpenWorldDerivedPlayerStatsV1
+  progression: TextOpenWorldProgressionStatusV1
 }
 
 export type TextOpenWorldRuntimeHeadDiagnosticCodeV1 =

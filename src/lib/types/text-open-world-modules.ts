@@ -214,6 +214,10 @@ export interface TextOpenWorldProgressionModuleV1 {
   rules: {
     maximumLevel: number
     automaticAttributeGrowth: true
+    levelUp: {
+      resourcePolicy: 'increase-by-cap-delta'
+      maximumLevelExperiencePolicy: 'cap-at-threshold'
+    }
     attributes: {
       power: { label: string }
       vitality: { label: string }

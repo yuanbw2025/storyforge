@@ -164,6 +164,7 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
       version: 1,
       rules: {
         maximumLevel: 20, automaticAttributeGrowth: true,
+        levelUp: { resourcePolicy: 'increase-by-cap-delta', maximumLevelExperiencePolicy: 'cap-at-threshold' },
         attributes: { power: { label: '力量' }, vitality: { label: '体质' }, agility: { label: '敏捷' } },
         formulas: {
           baseHealth: 20, healthPerVitality: 5, healthPerLevel: 2, attackPerPower: 2, defensePerVitality: 1,
