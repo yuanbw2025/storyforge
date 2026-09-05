@@ -341,8 +341,9 @@ CommandEnvelope {
 首次提交只写入一条由`[sessionId+commandId]`唯一约束保护的正式命令事件，同ID同内容返回
 原Receipt，同ID不同内容冲突。客户端遇到结果未知时必须查询事件事实源，不得盲目换ID重发。
 
-G1-03只完成提交边界和空操作投影；Action可用性、Condition与Effect仍分别由G1-04～G1-06
-接入同一事务。没有Effect事件前，`textworld.command.committed`不得被UI解释成玩法成功。
+G1-03只完成提交边界和空操作投影；G1-04～G1-06已经补齐Action可用性、Condition与Effect
+规划，但尚未把EffectPlan写成可重放Simulation Event。完成G1-07～G1-08之前，
+`textworld.command.committed`仍不得被UI解释成玩法成功。
 
 ### 4.2 GameActionDefinition
 
@@ -448,6 +449,14 @@ actor、world和knowledge九个域。每个Condition最多12层、256个节点�
 - unlock-ending / reach-ending。
 
 AI只能生成候选效果。解析器、引用校验器、规则服务和事务决定效果是否可执行。
+
+现行合同与执行器实现于 `src/lib/types/text-open-world-effect.ts` 和
+`src/lib/open-world/effect-dsl.ts`。Release加载时严格解析30项白名单操作并静态验证物品、
+技能、配方、任务、阶段、目标、地点、道路、阵营、角色、遭遇、知识和结局引用。执行前先在
+克隆状态上完成全部效果预演，生成绑定基线状态Hash、结果状态Hash、Release效果定义、影响域
+和变化预览的`EffectPlan`；正式应用时再次校验计划Hash、基线、Release定义和预演结果，任一
+效果失败都不会产生半提交。`claimKey`写入结果状态防止奖励等效果重复领取；关键Actor、关键
+物品、装备中物品、任务状态、数值边界、旅行端点与复活前提由代码保护，不依赖提示词。
 
 ### 4.6 Event 设计原则
 

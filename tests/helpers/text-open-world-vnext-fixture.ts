@@ -146,15 +146,15 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
       version: 1,
       conditions: [{ key: 'condition.always', expression: { op: 'all', conditions: [{ op: 'player-number', field: 'level', comparator: 'gte', value: 1 }] }, failureMessage: '角色尚未进入可行动状态。' }],
       effects: [
-        { key: 'effect.noop', operation: 'noop', payload: {} },
+        { key: 'effect.restore-health', operation: 'change-player-resource', payload: { resource: 'health', amount: 10 } },
         { key: 'effect.reward-experience', operation: 'grant-experience', payload: { amount: 100 } },
-        { key: 'effect.reward-currency', operation: 'grant-currency', payload: { amount: 10 } },
+        { key: 'effect.reward-currency', operation: 'change-currency', payload: { amount: 10 } },
       ],
       actions: [{
         key: 'action.investigate-channel', category: 'investigate', label: '检查盐渠',
         description: '检查当前位置的盐渠痕迹。', actorScope: 'player', targetScope: 'location',
         locationKeys: ['location.salt-port', 'location.ridge-channel'], requirementConditionKeys: [], costEffectKeys: [],
-        successEffectKeys: ['effect.noop'], failureEffectKeys: [], timeCostMinutes: 15,
+        successEffectKeys: [], failureEffectKeys: [], timeCostMinutes: 15,
         confirmationPolicy: 'never', repeatPolicy: 'repeatable', cooldownMinutes: null,
       }],
     },
@@ -172,7 +172,7 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
       levels: levels(),
       skills: [{
         key: 'skill.basic-attack', title: '挥击', description: '一次稳定的武器攻击。', kind: 'attack',
-        resourceCost: 0, cooldownTurns: 0, effectKeys: ['effect.noop'],
+        resourceCost: 0, cooldownTurns: 0, effectKeys: [],
       }],
     },
     combat: {
@@ -211,7 +211,7 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
         {
           key: 'item.brine-tonic', title: '盐露药剂', description: '恢复少量生命。', kind: 'consumable',
           stackable: true, consumable: true, critical: false, baseValue: 8, equipmentSlotKey: null,
-          statModifiers: {}, effectKeys: ['effect.noop'],
+          statModifiers: {}, effectKeys: ['effect.restore-health'],
         },
       ],
       dropTables: [{ key: 'drop.salt-jackal', entries: [{ itemKey: 'item.salt-crystal', minimum: 1, maximum: 2, weight: 1 }] }],
@@ -271,7 +271,7 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
       }],
       randomEvents: [{
         key: 'event.channel-rumor', title: '渠边传闻', regionKeys: ['region.salt-port'],
-        actionKeys: ['action.investigate-channel'], effectKeys: ['effect.noop'], intensity: 1, cooldownMinutes: 240,
+        actionKeys: ['action.investigate-channel'], effectKeys: [], intensity: 1, cooldownMinutes: 240,
       }],
     },
     knowledge: {

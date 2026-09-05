@@ -1,4 +1,5 @@
 import type { TextOpenWorldConditionExpressionV1 } from './text-open-world-condition'
+import type { TextOpenWorldEffectDefinitionV1 } from './text-open-world-effect'
 
 export type TextOpenWorldStorylineKindV1 = 'mainline' | 'significant'
 export type TextOpenWorldStorylineOwnerKindV1 = 'core' | 'character' | 'faction' | 'region'
@@ -175,11 +176,7 @@ export interface TextOpenWorldActionModuleV1 {
     expression: TextOpenWorldConditionExpressionV1
     failureMessage: string
   }>
-  effects: Array<{
-    key: string
-    operation: string
-    payload: unknown
-  }>
+  effects: TextOpenWorldEffectDefinitionV1[]
   actions: Array<{
     key: string
     category: TextOpenWorldActionCategoryV1
