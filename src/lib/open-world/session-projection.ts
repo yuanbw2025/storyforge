@@ -25,6 +25,7 @@ import {
 } from './inventory'
 import { deriveTextOpenWorldPlayerStatsFromModulesV1 } from './player-stats'
 import { deriveTextOpenWorldProgressionStatusV1 } from './progression'
+import { createTextOpenWorldRewardCatalogV1 } from './rewards'
 import { parseTextOpenWorldRuntimePackageV1 } from './runtime-package'
 
 type Row = Record<string, unknown>
@@ -184,10 +185,20 @@ export function applyTextOpenWorldSessionEventV1(current: TextOpenWorldSessionPr
     projection.protocol.randomEvidence.push({ eventSequence: event.sequence, evidence: random.evidence })
   } else if (event.type === 'text-open-world.effects.applied') {
     const applied = parseTextOpenWorldEffectsAppliedEventPayloadV1(json(event)); if (applied.commandId !== projection.protocol.pendingCommandId || applied.commandSequence !== projection.protocol.pendingCommandSequence) fail('Effect事件不属于当前命令')
-    const pendingRandomSequences = projection.protocol.randomEvidence.filter(item => item.eventSequence > (projection.protocol.pendingCommandSequence ?? Number.MAX_SAFE_INTEGER)).map(item => item.eventSequence)
+    const pendingRandom = projection.protocol.randomEvidence.filter(item => item.eventSequence > (projection.protocol.pendingCommandSequence ?? Number.MAX_SAFE_INTEGER))
+    const pendingRandomSequences = pendingRandom.map(item => item.eventSequence)
     if (canonicalProductProductionJsonV2(applied.ruleset) !== canonicalProductProductionJsonV2(projection.ruleset) || canonicalProductProductionJsonV2(applied.randomEventSequences) !== canonicalProductProductionJsonV2(pendingRandomSequences)) fail('Effect事件ruleset或随机序列不一致')
+    const modules = parseTextOpenWorldModulesV1(projection.runtimePackage)
+    const dropEffectKeys = new Set(modules.items.dropTables.flatMap(table => table.entries.flatMap(entry => entry.quantityEffects.map(mapping => mapping.effectKey))))
+    if (applied.plan.authorization?.kind === 'reward') {
+      const conditionResults = Object.fromEntries(Object.entries(deriveTextOpenWorldContextsV1(projection).action.conditionResults).map(([key, result]) => [key, result.satisfied]))
+      createTextOpenWorldRewardCatalogV1(projection.runtimePackage).assertAuthorization({
+        claimKey: applied.plan.claimKey, effectKeys: applied.plan.effectKeys, authorization: applied.plan.authorization,
+        evidence: pendingRandom.map(item => item.evidence), conditionResults,
+      })
+    } else if (applied.plan.effectKeys.some(effectKey => dropEffectKeys.has(effectKey))) fail('掉落Effect缺少RewardContract授权')
     projection.state = applyTextOpenWorldEffectPlanForReplayV1(projection.runtimePackage, projection.state, applied.plan).state
-    const action = parseTextOpenWorldModulesV1(projection.runtimePackage).actions.actions.find(item => item.key === projection.protocol.pendingActionKey) ?? fail('命令Action不存在')
+    const action = modules.actions.actions.find(item => item.key === projection.protocol.pendingActionKey) ?? fail('命令Action不存在')
     if (action.repeatPolicy === 'once' && !projection.actions.completedOnceActionKeys.includes(action.key)) projection.actions.completedOnceActionKeys.push(action.key)
     if (action.repeatPolicy === 'cooldown') projection.actions.cooldownUntilWorldMinuteByActionKey[action.key] = projection.state.time.worldMinute + (action.cooldownMinutes ?? 0)
     projection.protocol.lastCompletedCommandId = applied.commandId; projection.protocol.lastOutcomeFingerprint = applied.outcomeFingerprint

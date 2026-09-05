@@ -164,6 +164,9 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
         { key: 'effect.drop-salt-crystal', operation: 'remove-item', payload: { itemKey: 'item.salt-crystal', quantity: 1, reason: 'drop' } },
         { key: 'effect.equip-rust-sword', operation: 'equip-item', payload: { itemKey: 'item.rust-sword' } },
         { key: 'effect.unequip-rust-sword', operation: 'unequip-item', payload: { itemKey: 'item.rust-sword' } },
+        { key: 'effect.drop-salt-1', operation: 'grant-item', payload: { itemKey: 'item.salt-crystal', quantity: 1 } },
+        { key: 'effect.drop-salt-2', operation: 'grant-item', payload: { itemKey: 'item.salt-crystal', quantity: 2 } },
+        { key: 'effect.earn-first-clue', operation: 'earn-achievement', payload: { achievementKey: 'achievement.first-clue' } },
       ],
       actions: [{
         key: 'action.investigate-channel', category: 'investigate', label: '检查盐渠',
@@ -281,7 +284,17 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
           statModifiers: {}, effectKeys: [], sourceRefs: ['world-release:canal-seal'], presentationRefs: [],
         },
       ],
-      dropTables: [{ key: 'drop.salt-jackal', entries: [{ itemKey: 'item.salt-crystal', minimum: 1, maximum: 2, weight: 1 }] }],
+      rewardContracts: [{
+        key: 'reward.ridge-jackal', title: '渠口伏兽奖励', sourceKind: 'combat', claimPolicy: 'once-per-source',
+        expectedMinutes: 10, budgetClass: 'minor', conditionKeys: [], effectKeys: ['effect.reward-experience'], dropTableKeys: ['drop.salt-jackal'],
+      }],
+      dropTables: [{
+        key: 'drop.salt-jackal', algorithm: 'weighted-item-then-quantity-v1', rolls: 1, conditionKeys: [],
+        entries: [{
+          itemKey: 'item.salt-crystal', minimum: 1, maximum: 2, weight: 1, uniquePolicy: 'reject',
+          quantityEffects: [{ quantity: 1, effectKey: 'effect.drop-salt-1' }, { quantity: 2, effectKey: 'effect.drop-salt-2' }],
+        }],
+      }],
     },
     crafting: {
       version: 1,

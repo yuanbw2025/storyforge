@@ -10,7 +10,7 @@ export type TextOpenWorldEffectOperationV1 =
   | 'enter-location' | 'start-travel' | 'advance-time'
   | 'start-combat' | 'resolve-combat' | 'rest' | 'respawn'
   | 'change-actor-state' | 'change-region-state' | 'set-world-flag'
-  | 'unlock-ending' | 'reach-ending'
+  | 'earn-achievement' | 'unlock-ending' | 'reach-ending'
 
 export type TextOpenWorldEffectDefinitionV1 =
   | { key: string; operation: 'change-player-resource'; payload: { resource: 'health' | 'skill-resource'; amount: number } }
@@ -40,6 +40,7 @@ export type TextOpenWorldEffectDefinitionV1 =
   | { key: string; operation: 'change-actor-state'; payload: { actorKey: string; alive: boolean | null; present: boolean | null; locationKey: string | null } }
   | { key: string; operation: 'change-region-state'; payload: { regionKey: string; state: string } }
   | { key: string; operation: 'set-world-flag'; payload: { flagKey: string; value: string | number | boolean | null } }
+  | { key: string; operation: 'earn-achievement'; payload: { achievementKey: string } }
   | { key: string; operation: 'unlock-ending'; payload: { endingKey: string } }
   | { key: string; operation: 'reach-ending'; payload: { endingKey: string } }
 
@@ -118,6 +119,14 @@ export interface TextOpenWorldEffectChangeV1 {
   after: unknown
 }
 
+export interface TextOpenWorldRewardAuthorizationV1 {
+  kind: 'reward'
+  rewardKey: string
+  sourceInstanceKey: string
+  randomRequests: Array<{ drawKey: string; minimumInclusive: number; maximumInclusive: number }>
+  drops: Array<{ dropTableKey: string; itemKey: string; quantity: number; effectKey: string }>
+}
+
 export interface TextOpenWorldEffectPlanV1 {
   schema: 'storyforge.text-open-world.effect-plan'
   version: 1
@@ -126,6 +135,7 @@ export interface TextOpenWorldEffectPlanV1 {
   resultingStateHash: string
   effectKeys: string[]
   effects: TextOpenWorldEffectDefinitionV1[]
+  authorization: TextOpenWorldRewardAuthorizationV1 | null
   impactDomains: TextOpenWorldEffectImpactDomainV1[]
   previewChanges: TextOpenWorldEffectChangeV1[]
   planHash: string

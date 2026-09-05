@@ -16,6 +16,7 @@ import type {
   TextOpenWorldRandomRequestV1,
   TextOpenWorldRandomResolvedEventPayloadV1,
   TextOpenWorldRulesetStampV1,
+  TextOpenWorldRewardAuthorizationV1,
 } from '../types'
 import { parseTextOpenWorldCommandEventPayloadV1 } from './command-contract'
 
@@ -91,8 +92,29 @@ function parseChange(value: unknown, label: string): TextOpenWorldEffectChangeV1
   }
 }
 
+function parseRewardAuthorization(value: unknown, label: string): TextOpenWorldRewardAuthorizationV1 | null {
+  if (value == null) return null
+  const parsed = row(value, label); exact(parsed, ['kind', 'rewardKey', 'sourceInstanceKey', 'randomRequests', 'drops'], label)
+  if (parsed.kind !== 'reward') fail(`${label}.kind无效`)
+  if (!Array.isArray(parsed.randomRequests) || parsed.randomRequests.length > 128) fail(`${label}.randomRequests无效`)
+  if (!Array.isArray(parsed.drops) || parsed.drops.length > 128) fail(`${label}.drops无效`)
+  return {
+    kind: 'reward', rewardKey: token(parsed.rewardKey, `${label}.rewardKey`), sourceInstanceKey: token(parsed.sourceInstanceKey, `${label}.sourceInstanceKey`),
+    randomRequests: parsed.randomRequests.map((request, index) => parseTextOpenWorldRandomRequestV1(request, `${label}.randomRequests[${index}]`)),
+    drops: parsed.drops.map((drop, index) => {
+      const item = row(drop, `${label}.drops[${index}]`); exact(item, ['dropTableKey', 'itemKey', 'quantity', 'effectKey'], `${label}.drops[${index}]`)
+      return {
+        dropTableKey: token(item.dropTableKey, `${label}.drops[${index}].dropTableKey`),
+        itemKey: token(item.itemKey, `${label}.drops[${index}].itemKey`),
+        quantity: integer(item.quantity, `${label}.drops[${index}].quantity`, 1, 1_000_000),
+        effectKey: token(item.effectKey, `${label}.drops[${index}].effectKey`),
+      }
+    }),
+  }
+}
+
 function parsePlan(value: unknown, label: string): TextOpenWorldEffectPlanV1 {
-  const parsed = row(value, label); exact(parsed, ['schema', 'version', 'claimKey', 'baseStateHash', 'resultingStateHash', 'effectKeys', 'effects', 'impactDomains', 'previewChanges', 'planHash'], label)
+  const parsed = row(value, label); exact(parsed, ['schema', 'version', 'claimKey', 'baseStateHash', 'resultingStateHash', 'effectKeys', 'effects', 'authorization', 'impactDomains', 'previewChanges', 'planHash'], label)
   if (parsed.schema !== 'storyforge.text-open-world.effect-plan' || parsed.version !== 1) fail(`${label} schema/version无效`)
   const effectKeys = uniqueStrings(parsed.effectKeys, `${label}.effectKeys`)
   if (!Array.isArray(parsed.effects) || parsed.effects.length !== effectKeys.length) fail(`${label}.effects无效`)
@@ -108,7 +130,7 @@ function parsePlan(value: unknown, label: string): TextOpenWorldEffectPlanV1 {
     schema: 'storyforge.text-open-world.effect-plan', version: 1,
     claimKey: token(parsed.claimKey, `${label}.claimKey`, COMMAND_ID),
     baseStateHash: hash(parsed.baseStateHash, `${label}.baseStateHash`), resultingStateHash: hash(parsed.resultingStateHash, `${label}.resultingStateHash`),
-    effectKeys, effects, impactDomains,
+    effectKeys, effects, authorization: parseRewardAuthorization(parsed.authorization, `${label}.authorization`), impactDomains,
     previewChanges: parsed.previewChanges.map((item, index) => parseChange(item, `${label}.previewChanges[${index}]`)),
     planHash: hash(parsed.planHash, `${label}.planHash`),
   }

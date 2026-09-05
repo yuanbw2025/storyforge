@@ -8,6 +8,7 @@ import type {
   TextOpenWorldEffectStateV1,
   TextOpenWorldParsedModulesV1,
   TextOpenWorldQuestStatusV1,
+  TextOpenWorldRewardAuthorizationV1,
   TextOpenWorldRuntimePackageV1,
 } from '../types'
 import { parseTextOpenWorldModulesV1 } from './modules'
@@ -93,6 +94,7 @@ function parseDefinition(value: unknown, refs: Refs, label: string): TextOpenWor
   }
   if (operation === 'change-region-state') { exact(payload, ['regionKey', 'state'], `${label}.payload`); return { key: effectKey, operation, payload: { regionKey: ref(payload.regionKey, refs.regions, `${label}.regionKey`), state: text(payload.state, `${label}.state`) } } }
   if (operation === 'set-world-flag') { exact(payload, ['flagKey', 'value'], `${label}.payload`); return { key: effectKey, operation, payload: { flagKey: key(payload.flagKey, `${label}.flagKey`), value: scalar(payload.value, `${label}.value`) } } }
+  if (operation === 'earn-achievement') { exact(payload, ['achievementKey'], `${label}.payload`); return { key: effectKey, operation, payload: { achievementKey: ref(payload.achievementKey, refs.achievements, `${label}.achievementKey`) } } }
   if (operation === 'unlock-ending' || operation === 'reach-ending') { exact(payload, ['endingKey'], `${label}.payload`); return { key: effectKey, operation, payload: { endingKey: ref(payload.endingKey, refs.endings, `${label}.endingKey`) } } }
   fail(`${label}.operation不在白名单:${operation}`)
 }
@@ -111,7 +113,7 @@ function effectDomains(operation: TextOpenWorldEffectDefinitionV1['operation']):
   if (operation === 'start-combat') return ['combat']
   if (operation === 'change-actor-state') return ['actors']
   if (['change-region-state', 'set-world-flag'].includes(operation)) return ['world']
-  if (operation === 'reveal-knowledge') return ['knowledge']
+  if (operation === 'reveal-knowledge' || operation === 'earn-achievement') return ['knowledge']
   return ['endings']
 }
 
@@ -519,6 +521,12 @@ function applyDefinitions(stateValue: TextOpenWorldEffectStateV1, effects: TextO
         const { payload } = effect; const before = Object.prototype.hasOwnProperty.call(state.world.flags, payload.flagKey) ? state.world.flags[payload.flagKey] : null
         state.world.flags[payload.flagKey] = payload.value; record(changes, effect, `世界标记:${payload.flagKey}`, before, payload.value); break
       }
+      case 'earn-achievement': {
+        const { payload } = effect; const before = state.knowledge.earnedAchievementKeys.includes(payload.achievementKey)
+        if (before) fail(`${effect.key}不能重复获得已有成就`)
+        addUnique(state.knowledge.earnedAchievementKeys, payload.achievementKey)
+        record(changes, effect, `获得成就:${payload.achievementKey}`, before, true); break
+      }
       case 'unlock-ending': {
         const { payload } = effect; const before = state.endings.unlockedKeys.includes(payload.endingKey)
         addUnique(state.endings.unlockedKeys, payload.endingKey); record(changes, effect, `解锁结局:${payload.endingKey}`, before, true); break
@@ -556,17 +564,21 @@ export function applyTextOpenWorldEffectPlanForReplayV1(
 export interface TextOpenWorldEffectCatalogV1 {
   list(): TextOpenWorldEffectDefinitionV1[]
   get(effectKey: string): TextOpenWorldEffectDefinitionV1 | null
-  plan(input: { effectKeys: string[]; claimKey: string; state: TextOpenWorldEffectStateV1 }): Promise<TextOpenWorldEffectPlanV1>
+  plan(input: { effectKeys: string[]; claimKey: string; state: TextOpenWorldEffectStateV1; authorization?: TextOpenWorldRewardAuthorizationV1 | null }): Promise<TextOpenWorldEffectPlanV1>
   apply(input: { plan: TextOpenWorldEffectPlanV1; state: TextOpenWorldEffectStateV1 }): Promise<{ state: TextOpenWorldEffectStateV1; receipt: TextOpenWorldEffectReceiptV1 }>
 }
 
 export function createTextOpenWorldEffectCatalogV1(value: TextOpenWorldRuntimePackageV1 | string | unknown): TextOpenWorldEffectCatalogV1 {
   const modules = parseTextOpenWorldModulesV1(value); const refs = references(modules)
   const definitions = modules.actions.effects.map((item, index) => parseDefinition(item, refs, `effects[${index}]`)); const byKey = new Map(definitions.map(item => [item.key, item])); const clone = <T>(item: T): T => structuredClone(item)
-  const plan = async (input: { effectKeys: string[]; claimKey: string; state: TextOpenWorldEffectStateV1 }): Promise<TextOpenWorldEffectPlanV1> => {
+  const plan = async (input: { effectKeys: string[]; claimKey: string; state: TextOpenWorldEffectStateV1; authorization?: TextOpenWorldRewardAuthorizationV1 | null }): Promise<TextOpenWorldEffectPlanV1> => {
     const claimKey = key(input.claimKey, 'claimKey', CLAIM_KEY); if (!Array.isArray(input.effectKeys) || new Set(input.effectKeys).size !== input.effectKeys.length) fail('effectKeys必须是无重复数组')
     const effects = input.effectKeys.map(effectKey => byKey.get(key(effectKey, 'effectKey')) ?? fail(`Effect不存在:${effectKey}`)); const baseStateHash = await hashProductProductionValueV2(input.state); const preview = applyDefinitions(input.state, effects, claimKey, modules); const resultingStateHash = await hashProductProductionValueV2(preview.state); const impactDomains = [...new Set(effects.flatMap(effect => effectDomains(effect.operation)))]
-    const body: Omit<TextOpenWorldEffectPlanV1, 'planHash'> = { schema: 'storyforge.text-open-world.effect-plan', version: 1, claimKey, baseStateHash, resultingStateHash, effectKeys: [...input.effectKeys], effects: clone(effects), impactDomains, previewChanges: clone(preview.changes) }
+    const body: Omit<TextOpenWorldEffectPlanV1, 'planHash'> = {
+      schema: 'storyforge.text-open-world.effect-plan', version: 1, claimKey, baseStateHash, resultingStateHash,
+      effectKeys: [...input.effectKeys], effects: clone(effects), authorization: clone(input.authorization ?? null),
+      impactDomains, previewChanges: clone(preview.changes),
+    }
     return { ...body, planHash: await hashProductProductionValueV2(planBody(body)) }
   }
   return {

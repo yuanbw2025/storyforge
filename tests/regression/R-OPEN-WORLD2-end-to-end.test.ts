@@ -7,7 +7,11 @@ import {
   inspectTextOpenWorldRuntimeHeadV1,
   repairTextOpenWorldRuntimeHeadV1,
 } from '../../src/lib/open-world/checkpoints'
-import { readProductRuntimeState } from '../../src/lib/product/runtime-core'
+import { commitTextOpenWorldCommandV1 } from '../../src/lib/open-world/commands'
+import { createTextOpenWorldEffectCatalogV1 } from '../../src/lib/open-world/effect-dsl'
+import { commitTextOpenWorldOutcomeBatchV1 } from '../../src/lib/open-world/events'
+import { executeTextOpenWorldPendingRewardV1 } from '../../src/lib/open-world/reward-executor'
+import { readProductRuntimeState, readProductRuntimeStateVersion } from '../../src/lib/product/runtime-core'
 import { deriveTextOpenWorldContextsV1 } from '../../src/lib/open-world/session-projection'
 import { createGovernedTextOpenWorldSessionFixtureV1 } from '../helpers/text-open-world-product-session'
 import { createTextOpenWorldVNextFixture } from '../helpers/text-open-world-vnext-fixture'
@@ -47,12 +51,32 @@ describe('Text Open World vNext · no-AI minimum package end-to-end', () => {
     expect(deriveTextOpenWorldContextsV1(equippedProjection).playerStats.attack).toBe(8)
     expect(await db.productRuntimeEvents.where('sessionId').equals(session.id!).count()).toBe(6)
 
+    const rewardBase = await readProductRuntimeStateVersion(session.id!)
+    await commitTextOpenWorldCommandV1({
+      schema: 'storyforge.text-open-world.command', version: 1, commandId: 'command.end-to-end.reward', sessionId: session.id!,
+      actorKey: 'player', actionKey: 'action.investigate-channel', payload: { targetKey: 'location.salt-port' },
+      baseSequence: rewardBase.sequence, baseStateHash: rewardBase.stateHash, source: 'system-action', requestedAt: 1_200,
+    })
+    const rewardFeedback = await executeTextOpenWorldPendingRewardV1({
+      sessionId: session.id!, commandId: 'command.end-to-end.reward', rewardKey: 'reward.ridge-jackal',
+      sourceKind: 'combat', sourceInstanceKey: 'encounter.ridge-jackal.1',
+    })
+    expect(rewardFeedback).toMatchObject({ status: 'succeeded', evidenceEventSequences: [7, 8, 9, 10] })
+    const rewarded = (await readProductRuntimeState(session.id!)).textOpenWorld!
+    expect(rewarded.state.player).toMatchObject({ level: 2, experience: 100 })
+    expect(rewarded.state.inventory.stackQuantities['item.salt-crystal']).toBeGreaterThanOrEqual(1)
+    await expect(executeTextOpenWorldPendingRewardV1({
+      sessionId: session.id!, commandId: 'command.end-to-end.reward', rewardKey: 'reward.ridge-jackal',
+      sourceKind: 'combat', sourceInstanceKey: 'encounter.ridge-jackal.1',
+    })).resolves.toMatchObject({ receiptHash: rewardFeedback.receiptHash })
+    expect(await db.productRuntimeEvents.where('sessionId').equals(session.id!).count()).toBe(10)
+
     const retry = await executeTextOpenWorldActionV1({
       sessionId: session.id!, actionKey: 'action.investigate-channel', targetKey: 'location.salt-port',
       commandId: 'command.end-to-end.1', requestedAt: 9_999,
     })
     expect(retry.receiptHash).toBe(feedback.receiptHash)
-    expect(await db.productRuntimeEvents.where('sessionId').equals(session.id!).count()).toBe(6)
+    expect(await db.productRuntimeEvents.where('sessionId').equals(session.id!).count()).toBe(10)
 
     const checkpoint = await createTextOpenWorldCheckpointV1({ sessionId: session.id!, name: '调查完成' })
     await db.productRuntimeSessions.update(session.id!, { runtimeHeadSequence: null, runtimeHeadStateJson: null, runtimeHeadStateHash: null })
@@ -76,5 +100,21 @@ describe('Text Open World vNext · no-AI minimum package end-to-end', () => {
     expect((await readProductRuntimeState(branch.id!)).textOpenWorld?.state.inventory.currency).toBe(40)
     expect(await db.productRuntimeEvents.where('sessionId').equals(session.id!).count()).toBe(parentEventCount)
     expect(await db.agentRuns.where('projectId').equals(created.scope.projectId).count()).toBe(0)
+
+    const unauthorizedBase = await readProductRuntimeStateVersion(session.id!)
+    await commitTextOpenWorldCommandV1({
+      schema: 'storyforge.text-open-world.command', version: 1, commandId: 'command.end-to-end.unauthorized-drop', sessionId: session.id!,
+      actorKey: 'player', actionKey: 'action.investigate-channel', payload: { targetKey: 'location.salt-port' },
+      baseSequence: unauthorizedBase.sequence, baseStateHash: unauthorizedBase.stateHash, source: 'system-action', requestedAt: 3_000,
+    })
+    const current = (await readProductRuntimeState(session.id!)).textOpenWorld!
+    const effectCatalog = createTextOpenWorldEffectCatalogV1(created.textOpenWorldVNext)
+    const unauthorizedPlan = await effectCatalog.plan({ effectKeys: ['effect.drop-salt-1'], claimKey: 'claim.unauthorized-drop', state: current.state })
+    const unauthorizedReceipt = (await effectCatalog.apply({ plan: unauthorizedPlan, state: current.state })).receipt
+    await expect(commitTextOpenWorldOutcomeBatchV1({
+      sessionId: session.id!, commandId: 'command.end-to-end.unauthorized-drop', ruleset: current.ruleset,
+      randomRequests: [], plan: unauthorizedPlan, receipt: unauthorizedReceipt, outcome: 'success', reason: null, degradation: null,
+    })).rejects.toThrow('掉落Effect缺少RewardContract授权')
+    expect(await db.productRuntimeEvents.where('sessionId').equals(session.id!).count()).toBe(parentEventCount + 1)
   }, 20_000)
 })

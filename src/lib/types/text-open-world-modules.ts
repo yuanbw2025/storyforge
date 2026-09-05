@@ -337,9 +337,30 @@ export interface TextOpenWorldItemModuleV1 {
     sourceRefs: string[]
     presentationRefs: string[]
   }>
+  rewardContracts: Array<{
+    key: string
+    title: string
+    sourceKind: 'quest' | 'combat' | 'exploration' | 'crafting' | 'system'
+    claimPolicy: 'once-per-source'
+    expectedMinutes: number
+    budgetClass: 'minor' | 'standard' | 'major'
+    conditionKeys: string[]
+    effectKeys: string[]
+    dropTableKeys: string[]
+  }>
   dropTables: Array<{
     key: string
-    entries: Array<{ itemKey: string; minimum: number; maximum: number; weight: number }>
+    algorithm: 'weighted-item-then-quantity-v1'
+    rolls: 1
+    conditionKeys: string[]
+    entries: Array<{
+      itemKey: string
+      minimum: number
+      maximum: number
+      weight: number
+      uniquePolicy: 'reject'
+      quantityEffects: Array<{ quantity: number; effectKey: string }>
+    }>
   }>
 }
 
