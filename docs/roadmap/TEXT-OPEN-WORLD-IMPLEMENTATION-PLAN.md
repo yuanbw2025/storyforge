@@ -1,6 +1,6 @@
 # AI 主导文字开放世界游戏 · 完整开发清单
 
-> 版本：1.1.8
+> 版本：1.1.9
 > 建立日期：2026-09-06
 > 对应总任务：`E-OPENWORLD-01`
 > 当前状态：`IN_PROGRESS`；用户已于2026-09-06明确下达完整产品开发指令
@@ -36,13 +36,13 @@
 | 指标 | 当前值 |
 |---|---|
 | 首版工作包 | 121 |
-| 已完成 | 18（G0全部完成；G1运行包、模块Schema、命令、Action、Condition、Effect、Event与Session Projection完成） |
-| 产品总进度 | 18 / 121（14.9%） |
-| G1～G7业务功能进度 | 8 / 111（7.2%） |
+| 已完成 | 19（G0全部完成；G1运行包至Checkpoint/Replay/分支完成） |
+| 产品总进度 | 19 / 121（15.7%） |
+| G1～G7业务功能进度 | 9 / 111（8.1%） |
 | 当前阶段 | G1 运行包、Action/Event与数据治理底座 |
 | G0阶段进度 | 10 / 10（100%） |
-| G1阶段进度 | 8 / 13（61.5%） |
-| 当前工作包 | `TOW-G1-09` |
+| G1阶段进度 | 9 / 13（69.2%） |
+| 当前工作包 | `TOW-G1-10` |
 | 当前阻塞项 | 无 |
 
 每次状态变化必须同时更新本节汇总、对应任务行、验证证据和变更记录。
@@ -114,8 +114,8 @@ G7 盐脊验收、发布更新与旧入口收口
 | TOW-G1-06 | DONE | 扩展Effect DSL与原子 `EffectPlan` | G1-02、G1-05 | 30项白名单、静态引用、状态不变量、预演Hash、原子应用、跨域影响、幂等claim、保护对象与Receipt均有测试；禁止任意eval |
 | TOW-G1-07 | DONE | 定义Simulation Event分类和顺序规则 | G1-03、G1-06 | command→0..128个确定性random→effects终态顺序、规则版本、seed证据、结果批次指纹、原子追加、幂等重试、专用入口和篡改重放反例均有测试 |
 | TOW-G1-08 | DONE | 建立Session Projection与系统不变量 | G1-07 | RuntimePackage确定性初态、11域EffectState、Action/Director/协议状态、事件重建、中间态、状态不变量、Condition与Action权威上下文均有测试 |
-| TOW-G1-09 | READY | 打通Checkpoint、Replay与子分支 | G1-08 | Hash失败可诊断；读旧检查点创建子Session，不删除后续事件 |
-| TOW-G1-10 | QUEUED | 打通Build、ProductRelease、InitialState与Session绑定 | G1-01、G1-09 | Release不可变；Session只绑定一个版本；运行不能改来源和Release |
+| TOW-G1-09 | DONE | 打通Checkpoint、Replay与子分支 | G1-08 | 检查点终态约束、Hash/正文/序号/协议/重放诊断、runtime head诊断修复、历史检查点子分支重基线及父未来事件保留均有测试 |
+| TOW-G1-10 | READY | 打通Build、ProductRelease、InitialState与Session绑定 | G1-01、G1-09 | Release不可变；Session只绑定一个版本；运行不能改来源和Release |
 | TOW-G1-11 | QUEUED | 建立统一成功/失败/降级Receipt | G1-04、G1-06 | UI和AI表现消费同一回执，提交失败前不显示成功 |
 | TOW-G1-12 | QUEUED | 完成三注册表与数据全生命周期 | G1-01～G1-11 | Context、Field/Adoption、Project Tables、迁移、导入导出、删除和引用重映射均有正反例 |
 | TOW-G1-13 | QUEUED | 人工最小包端到端验证 | G1-01～G1-12 | 不调用AI完成发布→启动→行动→保存→刷新→重放→分支，相关测试与E2E通过 |
@@ -353,6 +353,7 @@ G7 盐脊验收、发布更新与旧入口收口
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| 1.1.9 | 2026-09-06 | 完成G1-09 vNext检查点、Hash/协议/重放诊断、runtime head修复和历史检查点子分支重基线；总进度19/121，业务功能9/111 |
 | 1.1.8 | 2026-09-06 | 完成G1-08 vNext Session Projection、确定性初态、11域状态不变量、事件重建及Condition/Action权威上下文；总进度18/121，业务功能8/111 |
 | 1.1.7 | 2026-09-06 | 完成G1-07命令/随机/Effect事件分类、顺序协议、规则版本、seed随机证据、结果批次指纹、原子追加与重放；总进度17/121，业务功能7/111 |
 | 1.1.6 | 2026-09-06 | 完成G1-06类型化Effect DSL、静态引用、EffectPlan预演Hash、原子应用、跨域影响、幂等claim、保护对象和回执；总进度16/121，业务功能6/111 |

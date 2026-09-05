@@ -14,7 +14,11 @@ import { parseInteractionState, applyInteractionEvent, createInitialInteractionS
 import { evaluateNarrativeChoices } from './narrative-content'
 import { parseOpenWorldEvolutionState, applyOpenWorldEvolutionProductRuntimeEvent, openWorldEvolutionProjection, createInitialOpenWorldEvolutionState, rebaseOpenWorldEvolutionStateForBranch } from '../open-world/evolution-runtime'
 import { parseOpenWorldState, applyOpenWorldEvent, openWorldMainlineProjection, createInitialOpenWorldState, rebaseOpenWorldStateForBranch } from '../open-world/runtime'
-import { applyTextOpenWorldSessionEventV1, parseTextOpenWorldSessionProjectionV1 } from '../open-world/session-projection'
+import {
+  applyTextOpenWorldSessionEventV1,
+  parseTextOpenWorldSessionProjectionV1,
+  rebaseTextOpenWorldSessionProjectionForBranchV1,
+} from '../open-world/session-projection'
 import { assertInitialTtrpgProductStateV1 } from '../ttrpg/runtime'
 import { applyTtrpgRuntimeEventV1 } from '../ttrpg/runtime-event-reducer'
 import { cloneTtrpgRuntimeBranchExtensionsV1 } from '../ttrpg/runtime-branch'
@@ -342,6 +346,9 @@ export function rebaseProductRuntimeStateForBranchV1(
     state.openWorldEvolution = rebaseOpenWorldEvolutionStateForBranch(state.openWorldEvolution)
   }
   if (state.openWorld) state.openWorld = rebaseOpenWorldStateForBranch(state.openWorld)
+  if (state.textOpenWorld) {
+    state.textOpenWorld = rebaseTextOpenWorldSessionProjectionForBranchV1(state.textOpenWorld)
+  }
   return state
 }
 

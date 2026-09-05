@@ -220,3 +220,14 @@ export function deriveTextOpenWorldContextsV1(value: TextOpenWorldSessionProject
   }
   return { condition, action }
 }
+
+export function rebaseTextOpenWorldSessionProjectionForBranchV1(value: TextOpenWorldSessionProjectionV1): TextOpenWorldSessionProjectionV1 {
+  const projection = parseTextOpenWorldSessionProjectionV1(value)
+  if (projection.protocol.pendingCommandId) fail('不能从尚未终结的命令批次创建分支')
+  projection.protocol = {
+    pendingCommandId: null, pendingCommandSequence: null, pendingActionKey: null, pendingActorKey: null,
+    randomEvidence: [], lastCompletedCommandId: null, lastOutcomeFingerprint: null,
+  }
+  projection.lastEventSequence = 0
+  return parseTextOpenWorldSessionProjectionV1(projection)
+}

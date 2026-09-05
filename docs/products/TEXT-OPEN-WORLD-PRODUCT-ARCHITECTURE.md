@@ -496,6 +496,20 @@ Session seed、命令序号、drawIndex和`sha256-range-v1`算法决定，并保
 并用结果批次指纹绑定命令、规则版本、随机请求和效果结果。同一结果批次重试返回原事件，
 不同内容复用commandId会失败；随机与Effect事件只能通过单一事务专用入口追加。
 
+### 4.7 Checkpoint、Replay与分支
+
+vNext存档包装实现于 `src/lib/open-world/checkpoints.ts`，继续复用共享
+`simulationSessions / simulationEvents / simulationCheckpoints`，不新建另一套存档表。只有已经
+写入Effect终态的命令边界可以建立正式检查点；检查时分别报告缺失、作用域错配、Hash格式、
+正文损坏、Hash不匹配、内部序号、事件协议和规范重放不一致，不能把所有损坏都模糊成“读档
+失败”。runtime head只是派生缓存，损坏时可以在确认事件协议有效后，以并发保护从事件重放
+修复。
+
+从历史检查点创建分支时，父Session及检查点之后的事件原样保留；子Session把该时刻完整状态
+折叠为新InitialState，并将全局序号、vNext投影序号和待处理协议状态重置为0。已领取claim、
+玩家成长和世界结果继续保留，父命令与随机证据历史通过
+`parentSessionId + parentThroughSequence`追溯，不复制成子分支伪事件。
+
 ---
 
 ## 5. 主角创建与角色身份

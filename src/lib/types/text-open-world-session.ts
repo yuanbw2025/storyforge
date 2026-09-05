@@ -45,3 +45,32 @@ export interface TextOpenWorldDerivedContextsV1 {
   condition: TextOpenWorldConditionEvaluationContextV1
   action: TextOpenWorldActionProjectionContextV1
 }
+
+export type TextOpenWorldRuntimeHeadDiagnosticCodeV1 =
+  | 'valid' | 'not-vnext' | 'cache-missing' | 'cache-sequence-mismatch' | 'cache-hash-invalid'
+  | 'cache-state-invalid' | 'cache-hash-mismatch' | 'cache-replay-mismatch'
+  | 'event-protocol-invalid'
+
+export interface TextOpenWorldRuntimeHeadInspectionV1 {
+  sessionId: number
+  latestSequence: number
+  code: TextOpenWorldRuntimeHeadDiagnosticCodeV1
+  detail: string
+  canonicalStateHash: string | null
+  cachedStateHash: string | null
+  repairable: boolean
+}
+
+export type TextOpenWorldCheckpointDiagnosticCodeV1 =
+  | 'valid' | 'not-vnext' | 'checkpoint-missing' | 'session-missing' | 'scope-mismatch'
+  | 'checkpoint-hash-invalid' | 'checkpoint-state-invalid' | 'checkpoint-hash-mismatch'
+  | 'checkpoint-sequence-mismatch' | 'event-protocol-invalid' | 'replay-mismatch'
+
+export interface TextOpenWorldCheckpointInspectionV1 {
+  checkpointId: number
+  sessionId: number | null
+  throughSequence: number | null
+  code: TextOpenWorldCheckpointDiagnosticCodeV1
+  detail: string
+  valid: boolean
+}
