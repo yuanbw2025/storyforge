@@ -69,6 +69,8 @@ import type {
   ProductBuildArtifactRecordV1,
   ProductQualityGateReceiptRecordV1,
   MediaBlobObjectRecordV1,
+  ShortNovelProductionV1,
+  CreationReleaseV1,
 } from '../types'
 import type { TemporalFact } from '../types/temporal-fact'
 
@@ -107,6 +109,24 @@ export interface ProjectExportData {
       _worldExportId: number
       _activeCharacterDrivenPlanExportId?: number | null
       _activeNarrativeModuleExportId?: number | null
+    }
+  )[]
+  shortNovelProductions: (
+    Omit<ShortNovelProductionV1, 'id' | 'projectId' | 'worldId' | 'workId' | 'currentReleaseId'>
+    & {
+      _exportId: number
+      _worldExportId: number
+      _workExportId: number
+      _currentReleaseExportId?: number | null
+    }
+  )[]
+  creationReleases: (
+    Omit<CreationReleaseV1, 'id' | 'projectId' | 'worldId' | 'workId' | 'parentReleaseId'>
+    & {
+      _exportId: number
+      _worldExportId: number
+      _workExportId: number
+      _parentExportId?: number | null
     }
   )[]
   adaptationProjects: (

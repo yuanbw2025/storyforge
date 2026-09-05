@@ -63,6 +63,98 @@ test('短篇小说使用独立创作基座，世界页不暴露可变作品改�
   await page.getByTestId('product-tab-novel').click()
   await expect(page.getByRole('heading', { name: '短篇小说创作', exact: true })).toBeVisible()
   await expect(page.getByText('小说 · 短篇', { exact: true })).toBeVisible()
+  await expect(page.getByTestId('short-novel-studio')).toBeVisible()
+  for (const stage of ['创作意图', '故事设计', '章节卡', '正文', '全篇审校', '发布']) {
+    await expect(page.locator('.short-stage-nav').getByText(stage, { exact: true })).toBeVisible()
+  }
+  await page.locator('.short-json-editor textarea').fill(JSON.stringify({
+    version: 1,
+    premise: '暴雨封锁旧站，返乡者必须在真相与亲情之间作出选择。',
+    coreChange: '她从替家人隐瞒，变为承担说出真相的后果。',
+    dominantEmotion: '压抑逐渐转为清醒',
+    pointOfView: 'third-limited',
+    tense: 'past',
+    audience: '中文悬疑短篇读者',
+    storyPromise: '旧站事故的真相必须在结尾通过人物选择兑现。',
+    mustKeep: ['暴雨', '旧站', '亲情选择'],
+    forbidden: ['梦醒式结局'],
+    targetWordCount: 12000,
+    chapterCount: 4,
+  }, null, 2))
+  await page.getByRole('button', { name: '校验并确认本步', exact: true }).click()
+  await expect(page.locator('.short-stage-heading').getByRole('heading', { name: '故事设计', exact: true })).toBeVisible()
+  await page.reload()
+  await page.getByTestId('product-tab-novel').click()
+  await expect(page.getByTestId('short-novel-studio')).toBeVisible()
+  await expect(page.locator('.short-stage-heading').getByRole('heading', { name: '故事设计', exact: true })).toBeVisible()
+
+  await page.locator('.short-json-editor textarea').fill(JSON.stringify({
+    version: 1,
+    protagonist: '返乡记者林岚',
+    desire: '在封站前查明父亲当年的事故责任',
+    pressure: '暴雨切断道路，旧站即将永久封闭',
+    escalation: ['家人要求她停止调查', '遗留录音证明父亲替人承担责任'],
+    irreversibleTurn: '林岚公开录音，失去继续隐瞒的可能',
+    climaxChoice: '在保护亲情与公布真相之间选择后者',
+    endingImage: '雨停后，她独自推开重新亮灯的候车室',
+    aftertaste: '失去旧关系后获得清醒而克制的希望',
+    thematicQuestion: '保护是否可以建立在长期隐瞒之上',
+  }, null, 2))
+  await page.getByRole('button', { name: '校验并确认本步', exact: true }).click()
+  await expect(page.locator('.short-stage-heading').getByRole('heading', { name: '章节卡', exact: true })).toBeVisible()
+
+  const shortPlan = ['封站', '录音', '代价', '天亮'].map((title, order) => ({
+    stableKey: `chapter-${order + 1}`,
+    order,
+    title,
+    purpose: ['建立旧站事故谜面', '取得能改变判断的证据', '迫使家人和主人公正面冲突', '完成不可逆选择并兑现承诺'][order],
+    viewpoint: '林岚第三人称限知',
+    openingPressure: '暴雨和封站倒计时继续推进',
+    conflict: '林岚的调查伤害她仍想保护的家人',
+    turn: '新证据改变她对父亲和事故的理解',
+    exitState: '林岚更接近真相，也失去一条退路',
+    targetWordCount: 3000,
+  }))
+  await page.locator('.short-json-editor textarea').fill(JSON.stringify(shortPlan, null, 2))
+  await page.getByRole('button', { name: '校验并确认本步', exact: true }).click()
+  await expect(page.locator('.short-stage-heading').getByRole('heading', { name: '正文', exact: true })).toBeVisible()
+
+  const chapterBodies = shortPlan.map((chapter, index) => `${chapter.title}。${`暴雨拍打旧站窗户，林岚在真相与亲情之间作出第${index + 1}次选择。`.repeat(105)}`)
+  for (const [index, chapter] of shortPlan.entries()) {
+    await page.locator('.short-chapter-run button').filter({ hasText: chapter.title }).click()
+    await expect(page.locator('.short-embedded [data-impact-target="true"]')).toContainText(chapter.title)
+    const editor = page.locator('.short-embedded').last().locator('.tiptap-editor')
+    await editor.fill(chapterBodies[index])
+    await expect(page.getByRole('button', { name: '保存', exact: true })).toBeVisible()
+    await page.getByRole('button', { name: '保存', exact: true }).click()
+    await expect(page.getByRole('button', { name: '已保存', exact: true })).toBeVisible()
+  }
+
+  await page.locator('.short-stage-nav button').filter({ hasText: '全篇审校' }).click()
+  await expect(page.locator('.short-stage-heading').getByRole('heading', { name: '全篇审校', exact: true })).toBeVisible()
+  await page.locator('.short-json-editor textarea').fill(JSON.stringify({
+    version: 1,
+    summary: '人物目标、事故因果、视角与结尾承诺已逐章核对。',
+    strengths: ['倒计时清楚', '结尾兑现开篇承诺'],
+    issues: [],
+  }, null, 2))
+  await page.getByRole('button', { name: '确认人工审校', exact: true }).click()
+  await expect(page.getByText('已达到发布条件', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: '确认并发布', exact: true }).click()
+  await expect(page.getByText(/v1 · E2E 短篇改编源 v1/)).toBeVisible()
+
+  const shortDownload = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Markdown', exact: true }).click()
+  const shortMarkdown = await shortDownload
+  const shortMarkdownPath = await shortMarkdown.path()
+  expect(shortMarkdownPath).not.toBeNull()
+  const shortMarkdownText = await readFile(shortMarkdownPath!, 'utf8')
+  expect(shortMarkdownText).toContain('# E2E 短篇改编源')
+  expect(shortMarkdownText).toContain('## 封站')
+
+  await page.reload()
+  await page.getByTestId('product-tab-novel').click()
+  await expect(page.getByText(/v1 · E2E 短篇改编源 v1/)).toBeVisible()
 
   // 世界引擎不能把可变作品直接送进改编产品；改编拥有自己的冻结来源契约。
   await page.getByTestId('product-tab-worlds').click()

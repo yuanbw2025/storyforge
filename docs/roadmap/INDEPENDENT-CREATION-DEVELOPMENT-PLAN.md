@@ -62,7 +62,7 @@
 |---|---|---|
 | 共用来源 | source selection、manifest version/hash、source unit、freshness/resync | 没有批量事实账本、人物状态、事件因果图和逐项改编决策 |
 | durable AI | Brief、Plan、剧本场次、漫画 storyboard 候选；checkpoint、stale、receipt | 每种产物单次调用；没有独立 grounding critic、专业 review 和定点 rewrite |
-| 短篇 | 独立 Work/profile、5,000～25,000 字、结构骨架、长篇领域能力 | 没有短篇生产根、短篇专属 Agent、阶段进度、完成版本和专用导出 |
+| 短篇 | 独立 Work/profile、5,000～25,000 字、3～8 章骨架、`ShortNovelProductionV1`、六个专属 Skill、durable run、审校/定向重写、不可变发布与 Markdown/TXT/JSON 导出 | 工程闭环已完成；后续只做真实文学质量和 provider 表现增量评测 |
 | 剧本 | target spec、scene AST、场次编辑/锁定、Fountain/FDX/打印 HTML | 普通创建入口缺失；Plan 过薄；没有 scene card、因果审校、不可变成品版本和完整 E2E |
 | 漫画 | page/panel、visual subject、media/blob、候选选择、SVG/PNG/WebP/CBZ | provider 无参考图/seed/inpainting；故事板与漫画脚本未分开；阅读顺序、气泡和一致性质量门不足 |
 | 发布 | Work/adaptation 可以标记 complete | complete 只改变可变状态；没有独立创作不可变 release 和漫画媒资固定清单 |
@@ -193,7 +193,7 @@ ShortNovelProductionAgentV1
 |---|---|---|---|
 | `short.intent-brief` | 作者意图、题材、目标字数、禁区 | 核心变化、主导情绪、视角、承诺、必须保留 | `shortNovelProductions.brief`；作者确认 |
 | `short.story-design` | Brief、可选人物/设定 | 开端压力、升级、不可逆转折、高潮选择、余韵 | 产品结构字段；作者确认 |
-| `short.scene-plan` | 已确认设计 | 3～12 个 scene/章节卡，含目标、冲突、转折和字数预算 | 复用 outline/chapter，但写入登记 extension |
+| `short.scene-plan` | 已确认设计 | 3～8 个 scene/章节卡，含目标、冲突、转折和字数预算 | 复用 outline/chapter，但写入登记 extension |
 | `short.chapter-draft` | 单章卡、相邻卡、近程正文、必要事实 | 单章正文候选 | 现有 chapter candidate/adopt；逐章确认 |
 | `short.continuity-review` | 全局结构、正文摘要、关键原文 | 问题列表 | 只读 critic；作者选择 |
 | `short.targeted-rewrite` | issue、目标段落、局部上下文 | patch 候选 | 只修改指定章节/段落 |
@@ -555,7 +555,7 @@ Product Hub 增加“小说转剧本”和“小说转漫画”：
 - source analysis durable pipeline、专业 Prompt 基架和创建向导。
 - 共享提交合入并验证后，产品分支再同步。
 
-### C-SHORT-01 · 短篇完整产品
+### C-SHORT-01 · 短篇完整产品（已完成）
 
 - ShortNovelProduction、专属 Agent/Skill、轻量工作台。
 - 结构到正文、审校、局部重写、release 和导出。

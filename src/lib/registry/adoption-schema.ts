@@ -556,6 +556,7 @@ export const ADOPTION_EXTENSIONS: readonly AdoptionExtensionSpec[] = Object.free
       'src/lib/world-engine/derivation.ts',
       'src/lib/adaptation/source-manifest.ts',
       'src/lib/adaptation/completion.ts',
+      'src/lib/short-novel/service.ts',
     ],
     policyRegistry: 'PROJECT_TABLES refs + WorkspaceScope + stable work code + narrative lifecycle',
     reason: 'Work 根创建、稳定 code 补齐和级联是受信生命周期；删除最后一个独占叙事蓝图时还必须原子清空 activeNarrativeModuleId。标题等作者内容仍经 adopt()。',
@@ -633,10 +634,34 @@ export const ADOPTION_EXTENSIONS: readonly AdoptionExtensionSpec[] = Object.free
   {
     id: 'short-novel-outline-skeleton-lifecycle',
     target: 'outlineNodes',
-    entrypoints: ['src/lib/workspace/create-workspace.ts'],
+    entrypoints: [
+      'src/lib/workspace/create-workspace.ts',
+      'src/lib/short-novel/service.ts',
+      'src/lib/agent/run/short-novel-durable.ts',
+    ],
     policyRegistry: 'PROJECT_TABLES tree refs + WorkspaceScope + SHORT_NOVEL_WORKFLOW_OVERRIDES',
     reason: '作者创建短篇时须在 Workspace/World/Work 同一事务内建立单卷动态章节骨架；这不是模型候选采纳，后续大纲编辑仍走既有受治理入口。',
     reviewAfter: '2027-08-01',
+  },
+  {
+    id: 'short-novel-production-lifecycle',
+    target: 'shortNovelProductions',
+    entrypoints: [
+      'src/lib/workspace/create-workspace.ts',
+      'src/lib/short-novel/service.ts',
+      'src/lib/agent/run/short-novel-durable.ts',
+    ],
+    policyRegistry: 'SHORT_NOVEL_PRODUCTION_V1 + PROJECT_TABLES + FIELD_REGISTRY + durable Harness',
+    reason: '短篇阶段、确认、review freshness 与发布指针必须和结构或正文写入原子推进，不能由组件直接改表。',
+    reviewAfter: '2027-09-06',
+  },
+  {
+    id: 'short-novel-release-lifecycle',
+    target: 'creationReleases',
+    entrypoints: ['src/lib/short-novel/service.ts'],
+    policyRegistry: 'SHORT_NOVEL_RELEASE_V1 + PROJECT_TABLES + completion gates + immutable hash',
+    reason: '独立短篇发布必须从已审校 Canon 原子冻结，自包含且 append-only；导出只能读取已验证 manifest。',
+    reviewAfter: '2027-09-06',
   },
   {
     id: 'chapter-delete-lifecycle',
@@ -644,9 +669,11 @@ export const ADOPTION_EXTENSIONS: readonly AdoptionExtensionSpec[] = Object.free
     entrypoints: [
       'src/lib/chapters/lifecycle.ts',
       'src/lib/workspace/create-workspace.ts',
+      'src/lib/short-novel/service.ts',
+      'src/lib/agent/run/short-novel-durable.ts',
     ],
-    policyRegistry: 'PROJECT_TABLES refs + WorkspaceScope + chapter deletion impact policy + short skeleton policy',
-    reason: '作者确认磁盘缺失后的级联删除与新建短篇的空章节骨架都要求领域事务；正文采纳或字段修改仍经 adopt()。',
+    policyRegistry: 'PROJECT_TABLES refs + WorkspaceScope + chapter deletion impact policy + SHORT_NOVEL_PRODUCTION_V1 + durable Harness',
+    reason: '作者确认磁盘缺失后的级联删除、短篇空骨架及短篇逐章确认写入都要求领域事务；短篇写入额外验证 stable key、生产 revision 与全稿 freshness。',
     reviewAfter: '2027-08-01',
   },
   {

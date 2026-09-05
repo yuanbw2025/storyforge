@@ -17,6 +17,7 @@ import type {
 import { scopeTransactionTables, stampNewRecord } from './scope'
 import { buildWorkRecord } from './works'
 import { deriveShortNovelStructure } from './work-kind'
+import { buildShortNovelProductionRecordV1 } from '../short-novel/service'
 
 export interface CreateWorkspaceOptions {
   /** ARCH-01: defaults to an independent authored work. */
@@ -125,7 +126,7 @@ export async function createWorkspace(
   const now = Date.now()
   const preparedProject = projectRoot(input, options, now)
   const genres = input.genres.length ? [...input.genres] : ['other']
-  return db.transaction('rw', scopeTransactionTables(db.outlineNodes, db.chapters), async () => {
+  return db.transaction('rw', scopeTransactionTables(db.outlineNodes, db.chapters, db.shortNovelProductions), async () => {
     const projectId = await db.projects.add(preparedProject) as number
     const world: World = {
       projectId,
@@ -173,6 +174,7 @@ export async function createWorkspace(
     const scope = { projectId, worldId, workId }
     if (work.kind === 'novel' && work.novelProfile === 'short') {
       await createShortNovelSkeleton(scope, work.targetWordCount, options.preferredChapterCount, now)
+      await db.shortNovelProductions.add(buildShortNovelProductionRecordV1(scope, now))
     }
     const createdWorld = { ...world, id: worldId }
     const createdWork = { ...work, id: workId }

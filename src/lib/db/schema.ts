@@ -18,6 +18,7 @@ import type {
   ComicPage,
   ComicPanel,
   ComicVisualSubject,
+  CreationReleaseV1,
   CreativeRules,
   CultivationProgress,
   CultivationSystem,
@@ -67,6 +68,7 @@ import type {
   ReferenceChunkAnalysis,
   ScreenplayScene,
   Snapshot,
+  ShortNovelProductionV1,
   StateCard,
   StoryArc,
   StoryCore,
@@ -97,10 +99,10 @@ import type { RetrievalChunk } from '../types/retrieval-chunk'
 import type { TemporalFact } from '../types/temporal-fact'
 
 export const STORYFORGE_DATABASE_NAME = 'storyforge-core'
-export const STORYFORGE_SCHEMA_VERSION = 1
+export const STORYFORGE_SCHEMA_VERSION = 2
 
-/** The only persistent schema understood by the current application. */
-export const STORYFORGE_STORES = {
+/** The hard-cutover baseline released before independent creation releases. */
+export const STORYFORGE_STORES_V1 = {
   projects: '++id, &workspaceUid, workspacePurpose, name, createdAt, updatedAt',
   worlds: '++id, projectId, identityKind, code, [projectId+identityKind], [projectId+updatedAt]',
   works: '++id, projectId, worldId, code, &[projectId+code], [projectId+worldId], [worldId+updatedAt], status, activeNarrativeModuleId',
@@ -195,6 +197,13 @@ export const STORYFORGE_STORES = {
   productRuntimeCheckpoints: '++id, projectId, worldGroupId, sessionId, [sessionId+throughSequence], createdAt',
   ttrpgSessionParticipants: '++id, projectId, worldGroupId, worldId, workId, sessionId, &[sessionId+seatKey], &[sessionId+viewerKey], [sessionId+actorKey], role, controller, assignmentState, updatedAt',
   ttrpgRuntimeAssetRequests: '++id, projectId, worldGroupId, worldId, workId, sessionId, &[sessionId+requestKey], [sessionId+slotKey], [sessionId+status], priority, mediaAssetId, processorLeaseExpiresAt, updatedAt',
+} as const satisfies Record<string, string>
+
+/** The only writable current schema. Dexie upgrades the supported v1 baseline by adding two stores. */
+export const STORYFORGE_STORES = {
+  ...STORYFORGE_STORES_V1,
+  shortNovelProductions: '++id, projectId, worldId, &workId, phase, currentReleaseId, updatedAt',
+  creationReleases: '++id, projectId, worldId, workId, productKind, &[workId+productKind+version], contentHash, parentReleaseId, createdAt',
 } as const satisfies Record<string, string>
 
 export class StoryForgeDB extends Dexie {
@@ -292,9 +301,12 @@ export class StoryForgeDB extends Dexie {
   productRuntimeCheckpoints!: Table<ProductRuntimeCheckpoint, number>
   ttrpgSessionParticipants!: Table<TtrpgSessionParticipantRecordV2, number>
   ttrpgRuntimeAssetRequests!: Table<TtrpgRuntimeAssetRequestRecordV1, number>
+  shortNovelProductions!: Table<ShortNovelProductionV1, number>
+  creationReleases!: Table<CreationReleaseV1, number>
 
   constructor(databaseName = STORYFORGE_DATABASE_NAME) {
     super(databaseName)
+    this.version(1).stores(STORYFORGE_STORES_V1)
     this.version(STORYFORGE_SCHEMA_VERSION).stores(STORYFORGE_STORES)
   }
 }
