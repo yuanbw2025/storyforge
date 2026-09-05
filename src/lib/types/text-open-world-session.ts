@@ -4,6 +4,34 @@ import type { TextOpenWorldEffectStateV1 } from './text-open-world-effect'
 import type { TextOpenWorldRandomEvidenceV1, TextOpenWorldRulesetStampV1 } from './text-open-world-event'
 import type { TextOpenWorldRuntimePackageV1 } from './text-open-world-runtime'
 
+export type TextOpenWorldDerivedPlayerStatKeyV1 =
+  | 'maximumHealth' | 'attack' | 'defense' | 'criticalChance' | 'initiative' | 'maximumSkillResource'
+
+export interface TextOpenWorldDerivedPlayerStatBreakdownV1 {
+  semanticKey: TextOpenWorldDerivedPlayerStatKeyV1
+  formulaKey: string
+  components: Array<{
+    sourceKind: 'base' | 'level' | 'attribute' | 'equipment'
+    sourceKey: string
+    value: number
+  }>
+  rawValue: number
+  minimum: number
+  maximum: number
+  value: number
+}
+
+/** Read-only values recalculated from frozen Release formulas and Session inputs. */
+export interface TextOpenWorldDerivedPlayerStatsV1 {
+  maximumHealth: number
+  attack: number
+  defense: number
+  criticalChance: number
+  initiative: number
+  maximumSkillResource: number
+  breakdown: Record<TextOpenWorldDerivedPlayerStatKeyV1, TextOpenWorldDerivedPlayerStatBreakdownV1>
+}
+
 export interface TextOpenWorldDirectorProjectionV1 {
   drawCount: number
   generatedQuestInstanceCount: number
@@ -44,6 +72,7 @@ export interface TextOpenWorldSessionProjectionV1 {
 export interface TextOpenWorldDerivedContextsV1 {
   condition: TextOpenWorldConditionEvaluationContextV1
   action: TextOpenWorldActionProjectionContextV1
+  playerStats: TextOpenWorldDerivedPlayerStatsV1
 }
 
 export type TextOpenWorldRuntimeHeadDiagnosticCodeV1 =

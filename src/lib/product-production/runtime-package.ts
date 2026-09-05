@@ -4,6 +4,7 @@ import { freezeProductMediaAsset } from './media-contracts'
 import { parseOpenWorldEvolutionContent, validateOpenWorldEvolutionContent } from '../open-world/evolution-runtime'
 import { parseOpenWorldContent, validateOpenWorldContent } from '../open-world/runtime'
 import { parseTextOpenWorldModulesV1 } from '../open-world/modules'
+import { deriveTextOpenWorldPlayerStatsFromModulesV1 } from '../open-world/player-stats'
 import { parseTextOpenWorldRuntimePackageV1 } from '../open-world/runtime-package'
 import { validateNarrativeContentGraph } from '../product/narrative-content'
 import { parseTtrpgCampaignContentV1 } from '../ttrpg/campaign'
@@ -371,7 +372,13 @@ export function parseProductRuntimePackageV1(value: string | unknown): ProductRu
   }
   if (hasTextOpenWorldVNext) {
     const textOpenWorldVNext = parseTextOpenWorldRuntimePackageV1(pkg.textOpenWorldVNext)
-    parseTextOpenWorldModulesV1(textOpenWorldVNext)
+    const textOpenWorldModules = parseTextOpenWorldModulesV1(textOpenWorldVNext)
+    deriveTextOpenWorldPlayerStatsFromModulesV1({
+      modules: textOpenWorldModules,
+      level: textOpenWorldModules.actors.player.build.initialLevel,
+      attributes: textOpenWorldModules.actors.player.build.attributes,
+      equippedItemKeyBySlot: { weapon: null, armor: null, accessory: null },
+    })
     if (textOpenWorldVNext.sourceManifest.contentHash !== sourceWorld.contentHash
       || textOpenWorldVNext.metadata.rulesetVersion !== parsed.definition.rulesetVersion) {
       fail('textOpenWorldVNext 与 ProductRuntimePackage 来源或规则版本不一致')

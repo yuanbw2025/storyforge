@@ -18,6 +18,7 @@ import {
 } from './event-contract'
 import { parseTextOpenWorldCommandEventPayloadV1 } from './command-contract'
 import { parseTextOpenWorldModulesV1 } from './modules'
+import { deriveTextOpenWorldPlayerStatsFromModulesV1 } from './player-stats'
 import { parseTextOpenWorldRuntimePackageV1 } from './runtime-package'
 
 type Row = Record<string, unknown>
@@ -51,9 +52,9 @@ function actorInitialState(modules: TextOpenWorldParsedModulesV1, actorKey: stri
 
 function initialEffectState(modules: TextOpenWorldParsedModulesV1): TextOpenWorldEffectStateV1 {
   const level = modules.actors.player.build.initialLevel; const attributes = structuredClone(modules.actors.player.build.attributes)
-  const formulas = modules.progression.rules.formulas
-  const maximumHealth = formulas.baseHealth + attributes.vitality * formulas.healthPerVitality + level * formulas.healthPerLevel
-  const maximumSkillResource = formulas.baseSkillResource + level * formulas.skillResourcePerLevel
+  const derivedStats = deriveTextOpenWorldPlayerStatsFromModulesV1({
+    modules, level, attributes, equippedItemKeyBySlot: { weapon: null, armor: null, accessory: null },
+  })
   const periodKey = timePeriodKey(modules, modules['time-weather'].initialWorldMinute)
   const firstMainlineStory = modules.narrative.storylines.find(item => item.kind === 'mainline')
   const firstStoryStage = modules.narrative.stages.filter(item => item.storylineKey === firstMainlineStory?.key).sort((a, b) => a.order - b.order)[0]
@@ -64,8 +65,10 @@ function initialEffectState(modules: TextOpenWorldParsedModulesV1): TextOpenWorl
   return {
     version: 1,
     player: {
-      level, experience: modules.progression.levels[level - 1].cumulativeExperience, health: maximumHealth, maximumHealth,
-      skillResource: maximumSkillResource, maximumSkillResource, attributes, statusKeys: [],
+      level, experience: modules.progression.levels[level - 1].cumulativeExperience,
+      health: derivedStats.maximumHealth, maximumHealth: derivedStats.maximumHealth,
+      skillResource: derivedStats.maximumSkillResource, maximumSkillResource: derivedStats.maximumSkillResource,
+      attributes, statusKeys: [],
       learnedSkillKeys: [...modules.actors.player.build.learnedSkillKeys],
     },
     inventory: {
@@ -195,8 +198,12 @@ export function deriveTextOpenWorldContextsV1(value: TextOpenWorldSessionProject
     const score = state.relationships.morality * modules.relationships.attitude.moralityWeight + affinity * modules.relationships.attitude.factionWeight + (state.relationships.storyModifierByActorKey[actor.key] ?? 0)
     return [actor.key, score <= modules.relationships.attitude.badMaximum ? 'bad' : score >= modules.relationships.attitude.goodMinimum ? 'good' : 'neutral']
   })) as Record<string, 'bad' | 'neutral' | 'good'>
+  const playerStats = deriveTextOpenWorldPlayerStatsFromModulesV1({
+    modules, level: state.player.level, attributes: state.player.attributes,
+    equippedItemKeyBySlot: state.inventory.equippedItemKeyBySlot,
+  })
   const condition: TextOpenWorldConditionEvaluationContextV1 = {
-    player: { level: state.player.level, experience: state.player.experience, health: state.player.health, maximumHealth: state.player.maximumHealth, morality: state.relationships.morality, attributes: structuredClone(state.player.attributes), statusKeys: [...state.player.statusKeys] },
+    player: { level: state.player.level, experience: state.player.experience, health: state.player.health, maximumHealth: playerStats.maximumHealth, morality: state.relationships.morality, attributes: structuredClone(state.player.attributes), statusKeys: [...state.player.statusKeys] },
     inventory: { itemQuantities: structuredClone(state.inventory.itemQuantities), currency: state.inventory.currency, equippedItemKeys: Object.values(state.inventory.equippedItemKeyBySlot).filter((key): key is string => key != null), knownRecipeKeys: [...state.inventory.knownRecipeKeys] },
     quests: { statusByQuestKey: structuredClone(state.quests.statusByQuestKey), stageByQuestKey: Object.fromEntries(Object.entries(state.quests.stageByQuestKey).filter((entry): entry is [string, string] => entry[1] != null)), objectiveStatusByKey: structuredClone(state.quests.objectiveStatusByKey), resultTags: [...state.quests.resultTags] },
     map: { currentLocationKey: state.map.currentLocationKey, regionKnowledgeByKey: structuredClone(state.map.regionKnowledgeByKey), unlockedFastTravelPointKeys: [...state.map.unlockedFastTravelPointKeys], openEdgeKeys: [...state.map.openEdgeKeys] },
@@ -219,7 +226,7 @@ export function deriveTextOpenWorldContextsV1(value: TextOpenWorldSessionProject
       encounter: modules.combat.encounters.filter(encounter => encounter.locationKey === state.map.currentLocationKey).map(encounter => encounter.key),
     },
   }
-  return { condition, action }
+  return { condition, action, playerStats }
 }
 
 export function rebaseTextOpenWorldSessionProjectionForBranchV1(value: TextOpenWorldSessionProjectionV1): TextOpenWorldSessionProjectionV1 {

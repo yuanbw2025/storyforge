@@ -87,6 +87,8 @@ describe('Text Open World vNext · ProductRuntime vNext player UI', () => {
     await waitFor(() => expect(useTextOpenWorldPlayerStore.getState().busy).toBe(false))
     expect(host.textContent).toContain('TEXT-OPEN-WORLD vNEXT · PRODUCT RELEASE PINNED')
     expect(host.textContent).toContain('Lv.1 · 0 EXP')
+    expect(host.textContent).toContain('6 · 3 · 6.5% · 3')
+    expect(host.textContent).toContain('baseHealth:20')
     await click(host, '检查盐渠', true)
     await waitFor(() => expect(useTextOpenWorldPlayerStore.getState().lastFeedback).not.toBeNull())
     await waitFor(() => expect(useTextOpenWorldPlayerStore.getState().busy).toBe(false))
