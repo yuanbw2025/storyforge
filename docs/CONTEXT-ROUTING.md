@@ -25,7 +25,7 @@
 | Agent/Harness、恢复、长程一致性 | run/step/attempt、contract、checkpoint、receipt、context/write scope | `HARNESS-QUALITY-STANDARD.md`；命中的 `src/lib/agent`、Gateway、registry、memory/retrieval 与 eval/test | 旧 Harness 蓝图、完成卡、评测流水 |
 | schema、迁移、删除、导入导出 | 表、owner、refs、schema 版本、blob | `DATA-GOVERNANCE.md`；`project-tables.ts`、schema、迁移、export、lifecycle 及正反例 | 手写历史表清单 |
 | 分步骤长篇或节点 | 具体模块、Skill、领域数据、节点 adapter | `products/LONGFORM-AND-NODE.md`、能力基线相关行、入口→下游闭包 | 上层产品完整实现 |
-| 短篇、剧本、漫画 | work/adaptation kind、source manifest、产物 owner | `products/INDEPENDENT-CREATION.md`、`roadmap/INDEPENDENT-CREATION-DEVELOPMENT-PLAN.md` 的命中阶段、对应领域代码和表/Skill | 世界引擎或游戏媒资的无关实现 |
+| 短篇、剧本、漫画 | work/adaptation kind、source manifest、产物 owner | `products/INDEPENDENT-CREATION.md`、`roadmap/INDEPENDENT-CREATION-DEVELOPMENT-PLAN.md` 和且仅和目标产品的专项方案、对应领域代码和表/Skill | 另外两个独立创作产品内部实现、世界引擎或游戏媒资的无关实现 |
 | 世界引擎 | World draft/release、code/version/completeness、source gateway | `products/WORLD-ENGINE.md`、数据治理、world-engine 代码与三注册表 | 上层运行状态、产品媒资实现 |
 | 跑团/聊天/AI 小镇/文字游戏 | WorldReference、产品 requirement adapter、Brief/SourcePlan/SourceManifest、production/build/release/session | `products/UPPER-PRODUCTS.md`、目标产品代码、中立世界资源协议和 owner | 其它上层产品内部细节 |
 | 新体系或完整产品 | 总纲阶段、稳定 ID、依赖和当前能力状态 | 总纲、对应产品契约、能力基线、路线图与质量标准 | 旧任务名驱动的历史方案 |

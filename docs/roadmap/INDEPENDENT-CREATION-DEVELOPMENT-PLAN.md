@@ -1,8 +1,18 @@
-# Phase C 独立创作产品专业开发规划
+# Phase C 独立创作产品专业开发总索引
 
-> 版本：1.0.0 · 生效：2026-09-06 · 权威层级：L2
+> 版本：1.1.0 · 生效：2026-09-06 · 权威层级：L2
 > 对应总纲：§4.3～§4.5、阶段 C
-> 性质：目标态、施工顺序与验收合同；不把尚未实现的能力描述为当前事实。当前事实仍以 `CAPABILITY-BASELINE.md`、schema、三注册表和测试为准。
+> 性质：三个独立产品的共同边界、研究索引和集成顺序；不能替代任一产品的专项施工方案。当前事实仍以 `CAPABILITY-BASELINE.md`、schema、三注册表和测试为准。
+
+## 0. 三份独立施工方案
+
+三个功能分别开发、分别验收，施工时必须只使用对应专项方案：
+
+1. [短篇小说独立产品开发设计](./SHORT-NOVEL-DEVELOPMENT-PLAN.md)
+2. [小说转剧本独立产品开发设计](./NOVEL-TO-SCREENPLAY-DEVELOPMENT-PLAN.md)
+3. [小说转漫画独立产品开发设计](./NOVEL-TO-COMIC-DEVELOPMENT-PLAN.md)
+
+共同边界与分支拓扑经过[独立创作三方案审查](./INDEPENDENT-CREATION-PLAN-AUDIT.md)。本文件中的跨产品说明用于裁决共享基础设施；专项数据、Skill、UI、完成条件和验收以对应方案为准。
 
 ## 1. 目标与裁决
 
@@ -558,13 +568,13 @@ Product Hub 增加“小说转剧本”和“小说转漫画”：
 - Fountain/FDX/PDF 从 release 导出。
 - 12K 黄金样例、100K+ 来源规模门和真实 AI 纵切面。
 
-### C-COMIC-01A · 漫画脚本与页面产品
+### C-COMIC-01A · 漫画脚本与页面里程碑
 
 - comic script、page rhythm、panelization、视觉圣经和本地排字。
 - 无真实生图也能完成 storyboard release。
 - LTR/RTL、页面安全区、CBZ/PDF 和 UI E2E。
 
-### C-COMIC-01B · 漫画视觉生产
+### C-COMIC-01B · 漫画视觉生产里程碑
 
 - provider capability negotiation、实际参考图传输、候选和局部修复。
 - subject state、多模态一致性检查、权利和 release asset pinning。
@@ -572,11 +582,14 @@ Product Hub 增加“小说转剧本”和“小说转漫画”：
 
 ### 集成纪律
 
-1. `feat/independent-creation-closure` 完成本计划和 C-CREATION-00。
-2. 从共享底座分别建立 `feat/shortform-production`、`feat/screenplay-adaptation-pipeline`、`feat/comic-adaptation-pipeline`。
-3. schema、三注册表、公共 adaptation contracts 不由三个分支重复修改；发现新共享需求先回到独立基础提交。
-4. 合入顺序：共享底座 → 短篇 → 剧本 → 漫画脚本/排版 → 漫画真实媒资。
-5. 每个产品达到自己的完成判据才从 preview 调整成熟度，不能因共享底座存在而整体宣称完成。
+1. `feat/independent-creation-closure` 只完成三份方案、审查和必要的 C-CREATION-00 设计。
+2. `feat/independent-creation-integration` 是本地串行集成分支，不在其中直接开发产品。
+3. 三个产品分别使用独立 worktree 和唯一功能分支：`feat/shortform-production`、`feat/screenplay-production`、`feat/comic-production`。
+4. 每个产品分支从当时已审定的集成基线创建；不得从另一个仍有未合并或未提交改动的产品 worktree 拉出。
+5. schema、三注册表、公共 adaptation contracts 不由多个产品分支各自发明；第二个真实调用方出现前先形成独立 foundation 提交并合入集成基线。
+6. 合入顺序：规划/共享底座 → 短篇 → 剧本 → 漫画脚本/排版 → 漫画真实媒资。
+7. 漫画脚本与视觉生产是一个漫画产品分支内的两个里程碑，不构成第四个产品。
+8. 每个产品达到自己的完成判据才调整自身成熟度，不能因共享底座或兄弟产品完成而整体宣称完成。
 
 ## 18. 每包验证闸门
 

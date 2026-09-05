@@ -34,7 +34,7 @@ Phase 5 已完成世界观/故事/角色/主支线/大纲/细纲/正文、候选
 
 三项都必须保持独立产品闭环。允许从同一治理基线创建不同分支并行施工；它们可以复用稳定底座，但不能共用万能产物表或万能 Agent。
 
-专业流程、Agent/Skill DAG、Prompt Spec、数据 owner、黄金样例和验收门以 [`INDEPENDENT-CREATION-DEVELOPMENT-PLAN.md`](./INDEPENDENT-CREATION-DEVELOPMENT-PLAN.md) 为当前施工方案。先完成共享来源分析、改编决策和独立创作 release，再分别进入三个产品；不得从现有单次 Prompt 骨架直接扩成一键全自动生成。
+共同边界、研究索引和集成顺序以 [`INDEPENDENT-CREATION-DEVELOPMENT-PLAN.md`](./INDEPENDENT-CREATION-DEVELOPMENT-PLAN.md) 为入口；实际施工必须分别使用 [`SHORT-NOVEL-DEVELOPMENT-PLAN.md`](./SHORT-NOVEL-DEVELOPMENT-PLAN.md)、[`NOVEL-TO-SCREENPLAY-DEVELOPMENT-PLAN.md`](./NOVEL-TO-SCREENPLAY-DEVELOPMENT-PLAN.md) 或 [`NOVEL-TO-COMIC-DEVELOPMENT-PLAN.md`](./NOVEL-TO-COMIC-DEVELOPMENT-PLAN.md)。三方案隔离结论见 [`INDEPENDENT-CREATION-PLAN-AUDIT.md`](./INDEPENDENT-CREATION-PLAN-AUDIT.md)。不得从现有单次 Prompt 骨架直接扩成一键全自动生成。
 
 | ID | 状态 | 工作 | 前置与完成重点 |
 |---|---|---|---|

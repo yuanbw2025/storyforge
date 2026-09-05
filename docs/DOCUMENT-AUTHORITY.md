@@ -1,6 +1,6 @@
 # StoryForge 文档权威与归档规则
 
-> 版本：1.6.0 · 生效：2026-09-06
+> 版本：1.7.0 · 生效：2026-09-06
 > 本文回答“哪些文档仍可指导开发”。未列入现行清单的历史材料，不得作为设计或施工权威。
 
 ## 1. 裁决层级
@@ -40,6 +40,9 @@
 - `docs/roadmap/README.md`
 - `docs/roadmap/CAPABILITY-BASELINE.md`
 - `docs/roadmap/INDEPENDENT-CREATION-DEVELOPMENT-PLAN.md`
+- `docs/roadmap/SHORT-NOVEL-DEVELOPMENT-PLAN.md`
+- `docs/roadmap/NOVEL-TO-SCREENPLAY-DEVELOPMENT-PLAN.md`
+- `docs/roadmap/NOVEL-TO-COMIC-DEVELOPMENT-PLAN.md`
 - `docs/roadmap/COMPLETED.md`
 
 ### 2.3 机器事实与质量证据
@@ -48,6 +51,7 @@
 - `docs/AI-FUNCTIONS-MANUAL.semantic.md`：生成清单的人工语义注解。
 - `docs/CONSISTENCY-COVERAGE-MAP.md`：Canon 一致性反例状态。
 - `docs/audits/CURRENT-ARCHITECTURE-AUDIT-20260903.md`：当前代码树的项目级架构闭环审计；不替代具体产品方案和质量认证。
+- `docs/roadmap/INDEPENDENT-CREATION-PLAN-AUDIT.md`：三份独立创作专项方案的边界、共享底座和分支隔离审查证据；不替代专项方案。
 
 ### 2.4 用户、维护与法律资料
 
@@ -95,4 +99,4 @@
 
 每次总纲版本升级、重大产品边界变化、schema 大版本或发布前，复审本文白名单。若某文档无法判断是否仍有效，先移出默认路由并登记审计，不允许“暂时都保留”继续制造多重事实源。
 
-本次 1.6.0 增量复审已登记 Phase C 独立创作产品专业开发规划，并核对它未改变总纲 1.5.0 的产品边界、当前架构事实或世界引擎 owner。现行业务、产品入口和权威文档只描述当前架构或明确标注的目标态；历史数据库结构、迁移器与兼容夹具不保留在当前仓库，只能从 Git/WPS 归档取证。旧文档仍不得恢复为施工权威。
+本次 1.7.0 增量复审把 Phase C 总规划拆成短篇、小说转剧本、小说转漫画三份专项施工方案，并登记一次跨方案隔离审查。三份方案各自拥有产品 owner、Skill DAG、UI、数据生命周期、完成条件和唯一功能分支；共享来源分析只允许通过独立 foundation 提交进入集成基线。该拆分未改变总纲 1.5.0 的产品边界、当前架构事实或世界引擎 owner。
