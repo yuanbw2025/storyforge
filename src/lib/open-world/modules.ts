@@ -2,6 +2,7 @@ import { canonicalProductProductionJsonV2 } from '../product-production/hash'
 import type {
   TextOpenWorldActionCategoryV1,
   TextOpenWorldParsedModulesV1,
+  TextOpenWorldPlayerCharacterDefinitionV1,
   TextOpenWorldQuestLifecyclePolicyV1,
   TextOpenWorldQuestTypeV1,
   TextOpenWorldRuntimeModuleKeyV1,
@@ -85,6 +86,42 @@ function versioned(packageValue: TextOpenWorldRuntimePackageV1, moduleKey: TextO
   return payload
 }
 
+function playerDefinition(value: unknown): Row {
+  const player = row(value, 'actors.player')
+  exact(player, ['key', 'identity', 'build'], 'actors.player')
+  if (player.key !== 'player') fail('actors.player.key必须为player')
+  const identity = row(player.identity, 'actors.player.identity')
+  exact(identity, [
+    'name', 'pronouns', 'appearance', 'background', 'personality', 'publicKnowledge', 'privateKnowledge',
+    'shortGoal', 'longGoal', 'portrayal', 'sourceRefs',
+  ], 'actors.player.identity')
+  ;[
+    'name', 'pronouns', 'appearance', 'background', 'personality', 'publicKnowledge', 'privateKnowledge',
+    'shortGoal', 'longGoal', 'portrayal',
+  ].forEach(field => text(identity[field], `actors.player.identity.${field}`, 20_000, field !== 'name'))
+  strings(identity.sourceRefs, 'actors.player.identity.sourceRefs', 'text')
+  const build = row(player.build, 'actors.player.build')
+  exact(build, [
+    'progressionProfileKey', 'initialLevel', 'attributes', 'learnedSkillKeys', 'startingItemKeys', 'startingCurrency',
+  ], 'actors.player.build')
+  if (key(build.progressionProfileKey, 'actors.player.build.progressionProfileKey') !== 'progression.default') {
+    fail('首版主角只能使用progression.default成长配置')
+  }
+  int(build.initialLevel, 'actors.player.build.initialLevel', 1, 20)
+  int(build.startingCurrency, 'actors.player.build.startingCurrency', 0, 1_000_000_000)
+  strings(build.learnedSkillKeys, 'actors.player.build.learnedSkillKeys')
+  strings(build.startingItemKeys, 'actors.player.build.startingItemKeys')
+  const attributes = row(build.attributes, 'actors.player.build.attributes')
+  exact(attributes, ['power', 'vitality', 'agility'], 'actors.player.build.attributes')
+  ;['power', 'vitality', 'agility'].forEach(field => int(attributes[field], `actors.player.build.attributes.${field}`, 0, 10_000))
+  return player
+}
+
+/** Strict standalone parser used by the protagonist confirmation/compiler boundary. */
+export function parseTextOpenWorldPlayerCharacterDefinitionV1(value: unknown): TextOpenWorldPlayerCharacterDefinitionV1 {
+  return structuredClone(playerDefinition(value)) as unknown as TextOpenWorldPlayerCharacterDefinitionV1
+}
+
 /** Strictly validates every v1 logical module and all cross-module stable references. */
 export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1 | string | unknown): TextOpenWorldParsedModulesV1 {
   const packageValue = parseTextOpenWorldRuntimePackageV1(value)
@@ -149,13 +186,8 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
 
   const actors = versioned(packageValue, 'actors')
   exact(actors, ['version', 'player', 'factions', 'actors', 'schedules'], 'actors')
-  const player = row(actors.player, 'actors.player'); exact(player, ['key', 'identity', 'build'], 'actors.player'); if (player.key !== 'player') fail('actors.player.key必须为player')
-  const identity = row(player.identity, 'actors.player.identity'); exact(identity, ['name', 'pronouns', 'appearance', 'background', 'personality', 'portrayal', 'sourceRefs'], 'actors.player.identity')
-  ;['name', 'pronouns', 'appearance', 'background', 'personality', 'portrayal'].forEach(field => text(identity[field], `actors.player.identity.${field}`, 20_000, field !== 'name'))
-  strings(identity.sourceRefs, 'actors.player.identity.sourceRefs', 'text')
-  const build = row(player.build, 'actors.player.build'); exact(build, ['initialLevel', 'attributes', 'learnedSkillKeys', 'startingItemKeys', 'startingCurrency'], 'actors.player.build')
-  int(build.initialLevel, 'actors.player.build.initialLevel', 1, 20); int(build.startingCurrency, 'actors.player.build.startingCurrency', 0, 1_000_000_000); strings(build.learnedSkillKeys, 'actors.player.build.learnedSkillKeys'); strings(build.startingItemKeys, 'actors.player.build.startingItemKeys')
-  const attributes = row(build.attributes, 'actors.player.build.attributes'); exact(attributes, ['power', 'vitality', 'agility'], 'actors.player.build.attributes'); ['power', 'vitality', 'agility'].forEach(field => int(attributes[field], `actors.player.build.attributes.${field}`, 0, 10_000))
+  const player = playerDefinition(actors.player)
+  const build = row(player.build, 'actors.player.build')
   const factions = catalog(actors.factions, 'actors.factions', ['key', 'title', 'description']); const actorRows = catalog(actors.actors, 'actors.actors', ['key', 'tier', 'name', 'biography', 'portrayal', 'factionKey', 'homeLocationKey', 'protected', 'serviceKeys', 'scheduleKey']); const schedules = catalog(actors.schedules, 'actors.schedules', ['key', 'actorKey', 'entries'])
   const factionKeys = keysOf(factions, 'actors.factions'); const actorKeys = keysOf(actorRows, 'actors.actors'); const scheduleKeys = keysOf(schedules, 'actors.schedules')
   factions.forEach((item, index) => { text(item.title, `actors.factions[${index}].title`, 2_000); text(item.description, `actors.factions[${index}].description`) })

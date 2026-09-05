@@ -95,10 +95,12 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
       player: {
         key: 'player',
         identity: {
-          name: '来客', pronouns: '他们', appearance: '', background: '', personality: '', portrayal: '',
+          name: '来客', pronouns: '他们', appearance: '', background: '', personality: '',
+          publicKnowledge: '', privateKnowledge: '', shortGoal: '查明盐渠断流原因', longGoal: '决定两地供水未来', portrayal: '',
           sourceRefs: ['world-release:character:player'],
         },
         build: {
+          progressionProfileKey: 'progression.default',
           initialLevel: 1, attributes: { power: 3, vitality: 3, agility: 3 },
           learnedSkillKeys: ['skill.basic-attack'], startingItemKeys: ['item.rust-sword'], startingCurrency: 20,
         },

@@ -12,6 +12,37 @@ export type TextOpenWorldActionCategoryV1 =
   | 'start-combat' | 'continue-combat' | 'escape' | 'rest'
   | 'read' | 'track' | 'untrack' | 'save' | 'load-branch'
 
+/**
+ * Product-owned protagonist definition frozen into a game Release.
+ *
+ * Story identity deliberately remains one cohesive biography-shaped object;
+ * only the deterministic gameplay build is structured separately.
+ */
+export interface TextOpenWorldPlayerCharacterDefinitionV1 {
+  key: 'player'
+  identity: {
+    name: string
+    pronouns: string
+    appearance: string
+    background: string
+    personality: string
+    publicKnowledge: string
+    privateKnowledge: string
+    shortGoal: string
+    longGoal: string
+    portrayal: string
+    sourceRefs: string[]
+  }
+  build: {
+    progressionProfileKey: string
+    initialLevel: number
+    attributes: { power: number; vitality: number; agility: number }
+    learnedSkillKeys: string[]
+    startingItemKeys: string[]
+    startingCurrency: number
+  }
+}
+
 export interface TextOpenWorldNarrativeModuleV1 {
   version: 1
   storylines: Array<{
@@ -93,25 +124,7 @@ export interface TextOpenWorldWorldModuleV1 {
 
 export interface TextOpenWorldActorModuleV1 {
   version: 1
-  player: {
-    key: 'player'
-    identity: {
-      name: string
-      pronouns: string
-      appearance: string
-      background: string
-      personality: string
-      portrayal: string
-      sourceRefs: string[]
-    }
-    build: {
-      initialLevel: number
-      attributes: { power: number; vitality: number; agility: number }
-      learnedSkillKeys: string[]
-      startingItemKeys: string[]
-      startingCurrency: number
-    }
-  }
+  player: TextOpenWorldPlayerCharacterDefinitionV1
   factions: Array<{
     key: string
     title: string
