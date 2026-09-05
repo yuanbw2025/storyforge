@@ -82,12 +82,12 @@ flowchart TB
 | 当前事实 | 数值 | 单一事实源 |
 |---|---:|---|
 | 应用语义版本 | `3.9.1` | `package.json` |
-| TypeScript 生产源码 | 978 个文件 / 328160 行 | `tsconfig.json` |
-| IndexedDB schema | v2 / 96 张 required tables | `schema.ts` / `REQUIRED_TABLES` |
-| PROJECT_TABLES | 96 张表 | `project-tables.ts` |
+| TypeScript 生产源码 | 980 个文件 / 328920 行 | `tsconfig.json` |
+| IndexedDB schema | v3 / 99 张 required tables | `schema.ts` / `REQUIRED_TABLES` |
+| PROJECT_TABLES | 99 张表 | `project-tables.ts` |
 | Prompt 主线 | 65 个 moduleKey / 210 条内置模板 | `PromptModuleKey` / `prompt-seeds*.ts` |
-| CONTEXT_SOURCES | 83 个上下文源 | `context-sources.ts` |
-| 写回治理 | 38 个通用 adopt target / 36 个领域扩展 | `adoption-schema.ts` |
+| CONTEXT_SOURCES | 85 个上下文源 | `context-sources.ts` |
+| 写回治理 | 41 个通用 adopt target / 39 个领域扩展 | `adoption-schema.ts` |
 <!-- project-metrics:end -->
 
 ## 4. 分层架构
@@ -216,7 +216,7 @@ src/
 - Project/World/Work 可以位于同一本地物理工作区，但身份权威已经拆分：Project 只管理工作区，World 管理世界身份，Work 管理独立作品；存在内部 World 语义 scope 不等于建立了可分享世界。
 - 分步骤长篇 Phase 5 工程主链和 10万/30万/100万字符规模门已经完成；真实作者长期文学一致性仍需持续研究，但不是尚未完成的功能施工项。
 - 世界 Release、中立资源协议、五种已接入产品的需求适配器、五项逻辑契约校验、三阶段 runtime 闸门和产品成熟度门已经形成共享架构基线；它们规定接入方式，不替代各上层产品的 Brief/production/media/runtime 专项实现。
-- 当前 schema v2 直接表达 Product Production/Build/Release、Product Runtime、World、Work 与独立短篇发布模型；只保留 v1→v2 的加表迁移以保护现有作者数据，不包含旧字段投影、双读或退役运行入口。非受支持数据库版本和非当前备份明确拒绝。
+- 当前 schema v3 直接表达 Product Production/Build/Release、Product Runtime、World、Work、独立短篇发布与媒介中立改编分析；保留 v1→v2→v3 的纯加表迁移以保护现有作者数据，不包含旧字段投影、双读或退役运行入口。非受支持数据库版本和非当前备份明确拒绝。
 - ProductRelease 谱系已经有跨产品逻辑 validator，并在角色互动参考纵切面落地；其它上层产品在转为 released 前仍需按自己的物理 schema 接入同一逻辑闸门。
 - 节点官方模板已绑定正式长篇领域 action，通用生成仅限显式 experimental draft 且不能采纳 Canon；完整跨模式真实 UI 体验仍是节点产品维护事项。
 - 账户、云端社区、支付和商业平台不是当前核心运行前提；相关代码必须 capability gate / experimental，不能掩盖主产品未完成。

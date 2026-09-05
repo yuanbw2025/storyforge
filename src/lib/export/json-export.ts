@@ -53,6 +53,9 @@ import type {
   ProductMediaAsset,
   ProductMediaBlob,
   AdaptationProject,
+  AdaptationCausalEdgeV1,
+  AdaptationDecisionV1,
+  AdaptationSourceFactV1,
   AdaptationSourceUnit,
   ScreenplayScene,
   ComicPage,
@@ -150,6 +153,18 @@ export interface ProjectExportData {
       _sourceOutlineExportId?: number | null
       _sourceChapterExportId?: number | null
     }
+  )[]
+  adaptationSourceFacts: (
+    Omit<AdaptationSourceFactV1, 'id' | 'projectId' | 'workId' | 'adaptationProjectId'>
+    & { _exportId: number; _workExportId: number; _adaptationProjectExportId: number }
+  )[]
+  adaptationCausalEdges: (
+    Omit<AdaptationCausalEdgeV1, 'id' | 'projectId' | 'workId' | 'adaptationProjectId'>
+    & { _exportId: number; _workExportId: number; _adaptationProjectExportId: number }
+  )[]
+  adaptationDecisions: (
+    Omit<AdaptationDecisionV1, 'id' | 'projectId' | 'workId' | 'adaptationProjectId'>
+    & { _exportId: number; _workExportId: number; _adaptationProjectExportId: number }
   )[]
   screenplayScenes: (
     Omit<ScreenplayScene, 'id' | 'projectId' | 'workId' | 'adaptationProjectId' | 'sourceUnitIds'>

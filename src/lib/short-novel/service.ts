@@ -5,6 +5,7 @@ import { buildBestChapterByOutlineMap, chapterContentWordCount } from '../chapte
 import { countWords, htmlToPlainText, plainTextToHtml } from '../utils/html'
 import { readOwnedRows, scopeTransactionTables, stampNewRecord } from '../workspace/scope'
 import { deriveShortNovelStructure, SHORT_NOVEL_MAX_WORDS, SHORT_NOVEL_MIN_WORDS } from '../workspace/work-kind'
+import { parseAndVerifyCreationReleaseManifestV1 } from '../creation-release/contracts'
 import type {
   Chapter,
   CreationReleaseV1,
@@ -337,9 +338,10 @@ export async function listShortNovelReleasesV1(scope: WorkspaceScope): Promise<C
 export async function readShortNovelReleaseManifestV1(scope: WorkspaceScope, releaseId: number): Promise<ShortNovelReleaseManifestV1> {
   const release = await db.creationReleases.get(releaseId)
   if (!release || release.projectId !== scope.projectId || release.worldId !== scope.worldId || release.workId !== scope.workId || release.productKind !== 'short-novel') throw new Error('[short-novel] Release 不存在或越界')
-  let manifest: ShortNovelReleaseManifestV1
-  try { manifest = JSON.parse(release.manifestJson) as ShortNovelReleaseManifestV1 } catch { throw new Error('[short-novel] Release manifest JSON 损坏') }
-  if (manifest.schema !== 'storyforge.short-novel-release' || manifest.version !== 1 || manifest.productKind !== 'short-novel' || await hashCanonicalValue(manifest) !== release.contentHash) throw new Error('[short-novel] Release manifest 身份或 hash 校验失败')
+  const work = await db.works.get(scope.workId)
+  if (!work) throw new Error('[short-novel] Release 所属 Work 不存在')
+  const manifest = await parseAndVerifyCreationReleaseManifestV1(release, work.code) as unknown as ShortNovelReleaseManifestV1
+  if (manifest.production?.revision !== release.sourceRevision) throw new Error('[short-novel] Release 来源 revision 不一致')
   return manifest
 }
 

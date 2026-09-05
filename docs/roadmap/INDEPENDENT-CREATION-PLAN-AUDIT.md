@@ -61,7 +61,7 @@ schema、三注册表、备份版本、产品目录和公共 adaptation contract
 
 1. 只有一个产品需要时，合同保持产品专用。
 2. 第二个真实调用方出现时，先在独立 foundation 提交中抽取最小共同协议，验证原调用方不回归，再进入后续产品分支。
-3. 当前短篇实现中的 `creationReleases` 仅接受 `short-novel`；小说转剧本开工前必须用独立 foundation 提交扩展产品闭集和共同 hash/version 外壳，不能在剧本 service 内旁路或复制第二张 Release 表。
+3. 短篇交付时的 `creationReleases` 仅接受 `short-novel`；小说转剧本开工前必须用独立 foundation 提交扩展产品闭集和共同 hash/version 外壳，不能在剧本 service 内旁路或复制第二张 Release 表。该 foundation 条件已在 `feat/independent-creation-foundation` 完成，产品专用 manifest codec 仍分别由对应产品分支实现。
 4. adaptation facts/edges/decisions 是剧本与漫画共同需要的第一批共享合同，应在剧本产品代码之前进入集成基线；漫画只复用已经审定的版本。
 5. foundation 不能包含短篇 UI、剧本场次、漫画页格或任一产品 Prompt。
 

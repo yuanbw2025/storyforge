@@ -133,12 +133,15 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
       { field: 'parentReleaseId', remapVia: 'creationReleases', exportAs: '_parentExportId', selfTree: true },
     ],
     defaults: { parentReleaseId: null },
-    note: '独立创作不可变发布；当前闭集只接受 short-novel，manifest 自包含且导出不得回读实时草稿' },
+    note: '独立创作不可变发布外壳；short-novel/screenplay/comic 各自使用闭集 manifest codec，导出不得回读实时草稿' },
 
   { table: db.adaptationProjects, name: 'adaptationProjects', owner: 'project', exportable: true, exportIdField: true,
     domainOwner: { allowed: ['work'], defaultOwner: 'work', locator: { kind: 'field', owner: 'work', field: 'workId' } },
     refs: [
       { kind: 'simple', field: 'id', target: 'adaptationSourceUnits[adaptationProjectId]', onDelete: 'cascade' },
+      { kind: 'simple', field: 'id', target: 'adaptationSourceFacts[adaptationProjectId]', onDelete: 'cascade' },
+      { kind: 'simple', field: 'id', target: 'adaptationCausalEdges[adaptationProjectId]', onDelete: 'cascade' },
+      { kind: 'simple', field: 'id', target: 'adaptationDecisions[adaptationProjectId]', onDelete: 'cascade' },
       { kind: 'simple', field: 'id', target: 'screenplayScenes[adaptationProjectId]', onDelete: 'cascade' },
       { kind: 'simple', field: 'id', target: 'comicPages[adaptationProjectId]', onDelete: 'cascade' },
       { kind: 'simple', field: 'id', target: 'comicVisualSubjects[adaptationProjectId]', onDelete: 'cascade' },
@@ -170,6 +173,33 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     ],
     defaults: { summary: '', wordCount: 0, sourceUpdatedAt: null },
     note: 'ADAPT-CORE-1 追加式不可变来源清单；不复制全文，稳定 key 和 hash 跨备份保留' },
+
+  { table: db.adaptationSourceFacts, name: 'adaptationSourceFacts', owner: 'project', exportable: true, exportIdField: true,
+    domainOwner: { allowed: ['work'], defaultOwner: 'work', locator: { kind: 'parent', owner: 'work', table: 'adaptationProjects', field: 'adaptationProjectId' } },
+    exportRemap: [
+      { field: 'workId', remapVia: 'works', exportAs: '_workExportId', onUnmapped: 'require' },
+      { field: 'adaptationProjectId', remapVia: 'adaptationProjects', exportAs: '_adaptationProjectExportId', onUnmapped: 'require' },
+    ],
+    defaults: { subjectKeys: [], confidence: 1, authorStatus: 'confirmed' },
+    note: 'ADAPT-FOUNDATION-1 目标 Work 拥有的来源事实；稳定 key 与 sourceUnitKeys 保持跨备份证据链' },
+
+  { table: db.adaptationCausalEdges, name: 'adaptationCausalEdges', owner: 'project', exportable: true, exportIdField: true,
+    domainOwner: { allowed: ['work'], defaultOwner: 'work', locator: { kind: 'parent', owner: 'work', table: 'adaptationProjects', field: 'adaptationProjectId' } },
+    exportRemap: [
+      { field: 'workId', remapVia: 'works', exportAs: '_workExportId', onUnmapped: 'require' },
+      { field: 'adaptationProjectId', remapVia: 'adaptationProjects', exportAs: '_adaptationProjectExportId', onUnmapped: 'require' },
+    ],
+    defaults: { authorStatus: 'confirmed' },
+    note: 'ADAPT-FOUNDATION-1 有证据的来源事实因果边；只引用同一 manifest 内稳定 key' },
+
+  { table: db.adaptationDecisions, name: 'adaptationDecisions', owner: 'project', exportable: true, exportIdField: true,
+    domainOwner: { allowed: ['work'], defaultOwner: 'work', locator: { kind: 'parent', owner: 'work', table: 'adaptationProjects', field: 'adaptationProjectId' } },
+    exportRemap: [
+      { field: 'workId', remapVia: 'works', exportAs: '_workExportId', onUnmapped: 'require' },
+      { field: 'adaptationProjectId', remapVia: 'adaptationProjects', exportAs: '_adaptationProjectExportId', onUnmapped: 'require' },
+    ],
+    defaults: { sourceFactKeys: [], targetKeys: [], authorStatus: 'confirmed' },
+    note: 'ADAPT-FOUNDATION-1 作者审定的删改外化决策；add 是唯一可无 sourceFactKeys 的动作' },
 
   { table: db.screenplayScenes, name: 'screenplayScenes', owner: 'project', exportable: true, exportIdField: true,
     domainOwner: { allowed: ['work'], defaultOwner: 'work', locator: { kind: 'field', owner: 'work', field: 'workId' } },

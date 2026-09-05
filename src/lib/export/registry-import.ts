@@ -27,21 +27,26 @@ import {
 import { assertAgentRunArtifactRecordIntegrityV1 } from '../memory/artifact-record'
 import { assertStoredWorkClassification } from '../workspace/work-kind'
 import { isCurrentWorldCode } from '../workspace/identity'
-import { assertAdaptationProjectInvariant } from '../adaptation/contracts'
+import {
+  assertAdaptationCausalEdgeV1,
+  assertAdaptationDecisionV1,
+  assertAdaptationProjectInvariant,
+  assertAdaptationSourceFactV1,
+} from '../adaptation/contracts'
 import { validateScreenplayBlocksV1 } from '../screenplay/contracts'
 import { assertComicLetteringV1, assertComicMediaAssetV1, assertNormalizedFrameV1, framesOverlap } from '../comic/contracts'
-import type { AdaptationProject, ComicLetteringItemV1, ComicMediaAsset, ScreenplayBlock, Work } from '../types'
+import type { AdaptationProject, ComicLetteringItemV1, ComicMediaAsset, CreationReleaseV1, ScreenplayBlock, Work } from '../types'
 import { PRODUCTION_PRODUCT_KINDS_V1 } from '../types'
 import { isCompleteCharacterAxes } from '../character/character-axes'
-import { hashCanonicalValue } from '../agent/run/hash'
+import { parseAndVerifyCreationReleaseManifestV1 } from '../creation-release/contracts'
 
 function portableRows(value: Record<string, any>, name: string): Record<string, any>[] {
   const rows = value[name]
-  if (!Array.isArray(rows)) throw new Error(`[deriveImport] v11 备份缺少 ${name}`)
+  if (!Array.isArray(rows)) throw new Error(`[deriveImport] v12 备份缺少 ${name}`)
   const ids = new Set<number>()
   for (const row of rows) {
     if (!row || typeof row !== 'object' || !Number.isInteger(row._exportId) || ids.has(row._exportId)) {
-      throw new Error(`[deriveImport] v11 ${name} 便携 ID 重复或无效`)
+      throw new Error(`[deriveImport] v12 ${name} 便携 ID 重复或无效`)
     }
     ids.add(row._exportId)
   }
@@ -66,48 +71,48 @@ function validateProductArchitectureBackup(value: Record<string, any>): void {
 
   for (const production of productions.values()) {
     if (!productKinds.has(production.productType) || typeof production.productionKey !== 'string' || !production.productionKey.trim()) {
-      throw new Error('[deriveImport] v11 ProductProduction 身份无效')
+      throw new Error('[deriveImport] v12 ProductProduction 身份无效')
     }
   }
   const sameOwner = (child: Record<string, any>, parent: Record<string, any>, label: string) => {
     if (child._worldExportId !== parent._worldExportId || child._workExportId !== parent._workExportId) {
-      throw new Error(`[deriveImport] v11 ${label} owner 与父记录不一致`)
+      throw new Error(`[deriveImport] v12 ${label} owner 与父记录不一致`)
     }
   }
   for (const brief of briefs) {
     const production = productions.get(brief._productionExportId)
     const worldRelease = worldReleases.get(brief._sourceWorldReleaseExportId)
-    if (!production || !worldRelease) throw new Error('[deriveImport] v11 ProductBrief 来源引用越界')
+    if (!production || !worldRelease) throw new Error('[deriveImport] v12 ProductBrief 来源引用越界')
     sameOwner(brief, production, 'ProductBrief')
     if (brief._worldExportId !== worldRelease._worldExportId) {
-      throw new Error('[deriveImport] v11 ProductBrief 与 WorldRelease 世界不一致')
+      throw new Error('[deriveImport] v12 ProductBrief 与 WorldRelease 世界不一致')
     }
   }
   for (const command of commands) {
     const production = productions.get(command._productionExportId)
-    if (!production) throw new Error('[deriveImport] v11 ProductCommand 生产引用越界')
+    if (!production) throw new Error('[deriveImport] v12 ProductCommand 生产引用越界')
     sameOwner(command, production, 'ProductCommand')
   }
   for (const build of builds.values()) {
     const production = productions.get(build._productionExportId)
-    if (!production) throw new Error('[deriveImport] v11 ProductBuild 生产引用越界')
+    if (!production) throw new Error('[deriveImport] v12 ProductBuild 生产引用越界')
     sameOwner(build, production, 'ProductBuild')
   }
   for (const row of [...artifacts, ...receipts]) {
     const build = builds.get(row._buildExportId)
-    if (!build) throw new Error('[deriveImport] v11 Build 子记录引用越界')
+    if (!build) throw new Error('[deriveImport] v12 Build 子记录引用越界')
     sameOwner(row, build, 'Build 子记录')
   }
   for (const release of releases.values()) {
     if (!productKinds.has(release.productType) || !/^[a-f0-9]{64}$/.test(String(release.contentHash ?? ''))) {
-      throw new Error('[deriveImport] v11 ProductRelease 身份或 hash 无效')
+      throw new Error('[deriveImport] v12 ProductRelease 身份或 hash 无效')
     }
     let manifest: Record<string, any>
     try { manifest = JSON.parse(String(release.manifestJson ?? '')) }
-    catch { throw new Error('[deriveImport] v11 ProductRelease manifest 不是 JSON') }
+    catch { throw new Error('[deriveImport] v12 ProductRelease manifest 不是 JSON') }
     if (manifest.schema !== 'storyforge.product-release' || manifest.version !== 1
       || manifest.productType !== release.productType) {
-      throw new Error('[deriveImport] v11 ProductRelease manifest 与根身份不一致')
+      throw new Error('[deriveImport] v12 ProductRelease manifest 与根身份不一致')
     }
   }
   for (const session of runtimeSessions) {
@@ -115,13 +120,13 @@ function validateProductArchitectureBackup(value: Record<string, any>): void {
     const buildId = session._productBuildExportId
     if (!productKinds.has(session.kind) || (releaseId == null) === (buildId == null)
       || !/^[a-f0-9]{64}$/.test(String(session.runtimeSourceHash ?? ''))) {
-      throw new Error('[deriveImport] v11 ProductRuntime 必须具有唯一、有效的产品来源')
+      throw new Error('[deriveImport] v12 ProductRuntime 必须具有唯一、有效的产品来源')
     }
     const sourceProductType = releaseId != null
       ? releases.get(releaseId)?.productType
       : productions.get(builds.get(buildId)?._productionExportId)?.productType
     if (sourceProductType !== session.kind) {
-      throw new Error('[deriveImport] v11 ProductRuntime 身份与来源产品不一致')
+      throw new Error('[deriveImport] v12 ProductRuntime 身份与来源产品不一致')
     }
   }
   for (const asset of mediaAssets) {
@@ -130,11 +135,11 @@ function validateProductArchitectureBackup(value: Record<string, any>): void {
     if (!productKinds.has(asset.productType) || (releaseId == null) === (runtimeSessionId == null)
       || (asset.ownerKind === 'release') !== (releaseId != null)
       || (asset.ownerKind === 'runtime') !== (runtimeSessionId != null)) {
-      throw new Error('[deriveImport] v11 ProductMedia 必须具有唯一、有效的产品所有者')
+      throw new Error('[deriveImport] v12 ProductMedia 必须具有唯一、有效的产品所有者')
     }
     const owner = releaseId != null ? releases.get(releaseId) : runtimeSessionById.get(runtimeSessionId)
     if (!owner || owner.productType !== asset.productType && owner.kind !== asset.productType) {
-      throw new Error('[deriveImport] v11 ProductMedia 身份与所属产品不一致')
+      throw new Error('[deriveImport] v12 ProductMedia 身份与所属产品不一致')
     }
     sameOwner(asset, owner, 'ProductMedia')
   }
@@ -151,43 +156,61 @@ async function validateIndependentCreationBackup(value: Record<string, any>): Pr
     if (!work || work.kind !== 'novel' || work.novelProfile !== 'short'
       || production._worldExportId !== work._worldExportId
       || !Number.isInteger(production.revision) || production.revision < 1) {
-      throw new Error('[deriveImport] v11 ShortNovelProduction 身份、owner 或 revision 无效')
+      throw new Error('[deriveImport] v12 ShortNovelProduction 身份、owner 或 revision 无效')
     }
     if (production._currentReleaseExportId != null) {
       const current = releases.get(production._currentReleaseExportId)
-      if (!current || current._workExportId !== production._workExportId) {
-        throw new Error('[deriveImport] v11 ShortNovelProduction 当前发布引用越界')
+      if (!current || current.productKind !== 'short-novel' || current._workExportId !== production._workExportId) {
+        throw new Error('[deriveImport] v12 ShortNovelProduction 当前发布引用越界')
       }
     }
   }
 
   for (const release of releases.values()) {
     const work = works.get(release._workExportId)
-    if (!work || work.kind !== 'novel' || work.novelProfile !== 'short'
-      || release.productKind !== 'short-novel'
+    const expectedKind = release.productKind === 'short-novel' ? 'novel' : release.productKind
+    if (!work || !['short-novel', 'screenplay', 'comic'].includes(release.productKind)
+      || work.kind !== expectedKind
+      || (release.productKind === 'short-novel' && work.novelProfile !== 'short')
       || release._worldExportId !== work._worldExportId
       || !Number.isInteger(release.version) || release.version < 1
       || !Number.isInteger(release.sourceRevision) || release.sourceRevision < 1
       || !/^[a-f0-9]{64}$/.test(String(release.contentHash ?? ''))) {
-      throw new Error('[deriveImport] v11 CreationRelease 身份、owner、版本或 hash 无效')
+      throw new Error('[deriveImport] v12 CreationRelease 身份、owner、版本或 hash 无效')
     }
-    const versionKey = `${release._workExportId}:short-novel:${release.version}`
-    if (releaseVersions.has(versionKey)) throw new Error('[deriveImport] v11 CreationRelease 版本重复')
+    const versionKey = `${release._workExportId}:${release.productKind}:${release.version}`
+    if (releaseVersions.has(versionKey)) throw new Error('[deriveImport] v12 CreationRelease 版本重复')
     releaseVersions.add(versionKey)
     if (release._parentExportId != null) {
       const parent = releases.get(release._parentExportId)
-      if (!parent || parent._workExportId !== release._workExportId || parent.version >= release.version) {
-        throw new Error('[deriveImport] v11 CreationRelease 父版本引用无效')
+      if (!parent || parent.productKind !== release.productKind || parent._workExportId !== release._workExportId || parent.version >= release.version) {
+        throw new Error('[deriveImport] v12 CreationRelease 父版本引用无效')
       }
     }
     let manifest: Record<string, any>
-    try { manifest = JSON.parse(String(release.manifestJson ?? '')) }
-    catch { throw new Error('[deriveImport] v11 CreationRelease manifest 不是 JSON') }
-    if (manifest.schema !== 'storyforge.short-novel-release' || manifest.version !== 1
-      || manifest.productKind !== 'short-novel' || manifest.work?.code !== work.code
-      || manifest.production?.revision !== release.sourceRevision
-      || await hashCanonicalValue(manifest) !== release.contentHash) {
-      throw new Error('[deriveImport] v11 CreationRelease manifest 身份或 hash 校验失败')
+    try {
+      manifest = await parseAndVerifyCreationReleaseManifestV1({
+        id: release._exportId + 1,
+        projectId: 1,
+        worldId: release._worldExportId + 1,
+        workId: release._workExportId + 1,
+        productKind: release.productKind,
+        version: release.version,
+        label: release.label,
+        parentReleaseId: release._parentExportId == null ? null : release._parentExportId + 1,
+        sourceRevision: release.sourceRevision,
+        manifestJson: release.manifestJson,
+        contentHash: release.contentHash,
+        createdAt: release.createdAt,
+      } as CreationReleaseV1, work.code)
+    } catch (error) {
+      throw new Error(`[deriveImport] v12 CreationRelease 校验失败：${error instanceof Error ? error.message : String(error)}`)
+    }
+    if (release.productKind !== 'short-novel') {
+      throw new Error(`[deriveImport] ${release.productKind} Release codec 尚未随对应产品启用`)
+    }
+    if (manifest.production?.revision !== release.sourceRevision) {
+      throw new Error('[deriveImport] v12 CreationRelease manifest 身份或 hash 校验失败')
     }
   }
 }
@@ -302,7 +325,9 @@ async function validateCurrentBackup(data: ProjectExportData): Promise<void> {
 }
 
 function validateAdaptationBackup(value: Record<string, any>): void {
-  if (!Array.isArray(value.adaptationProjects) || !Array.isArray(value.adaptationSourceUnits)) {
+  if (!Array.isArray(value.adaptationProjects) || !Array.isArray(value.adaptationSourceUnits)
+    || !Array.isArray(value.adaptationSourceFacts) || !Array.isArray(value.adaptationCausalEdges)
+    || !Array.isArray(value.adaptationDecisions)) {
     throw new Error('[deriveImport] v6 备份缺少改编必需表')
   }
   const works = new Map<number, Record<string, any>>((value.works ?? []).map((row: Record<string, any>) => [row._exportId, row]))
@@ -353,6 +378,82 @@ function validateAdaptationBackup(value: Record<string, any>): void {
   for (const [rootId, root] of roots) {
     const activeUnits = (value.adaptationSourceUnits as Record<string, any>[]).filter(row => row._adaptationProjectExportId === rootId && row.manifestVersion === root.activeSourceManifestVersion)
     if (activeUnits.filter(row => row.sourceKind === 'work').length !== 1) throw new Error('[deriveImport] v6 活动 manifest 必须恰有一个 work 单元')
+  }
+
+  const unitsByRootVersion = new Map<string, Set<string>>()
+  for (const unit of value.adaptationSourceUnits as Record<string, any>[]) {
+    const groupKey = `${unit._adaptationProjectExportId}:${unit.manifestVersion}`
+    const keys = unitsByRootVersion.get(groupKey) ?? new Set<string>()
+    keys.add(unit.sourceUnitKey)
+    unitsByRootVersion.set(groupKey, keys)
+  }
+  const factsByRootVersion = new Map<string, Map<string, Record<string, any>>>()
+  const analysisIdentity = new Set<string>()
+  for (const row of value.adaptationSourceFacts as Record<string, any>[]) {
+    const root = roots.get(row._adaptationProjectExportId)
+    if (!root || row._workExportId !== root._workExportId) throw new Error('[deriveImport] v12 来源事实 owner 或 adaptation 引用越界')
+    const groupKey = `${row._adaptationProjectExportId}:${row.manifestVersion}`
+    const identity = `${groupKey}:${row.stableKey}`
+    if (analysisIdentity.has(`fact:${identity}`)) throw new Error('[deriveImport] v12 来源事实 stableKey 重复')
+    const units = unitsByRootVersion.get(groupKey)
+    if (!units || !Array.isArray(row.sourceUnitKeys) || row.sourceUnitKeys.some((key: string) => !units.has(key))) throw new Error('[deriveImport] v12 来源事实 sourceUnitKeys 越界')
+    try {
+      assertAdaptationSourceFactV1({
+        id: row._exportId + 1, projectId: 1, workId: row._workExportId + 1, adaptationProjectId: row._adaptationProjectExportId + 1,
+        manifestVersion: row.manifestVersion, stableKey: row.stableKey, kind: row.kind,
+        statement: row.statement, subjectKeys: row.subjectKeys, sourceUnitKeys: row.sourceUnitKeys,
+        confidence: row.confidence, authorStatus: row.authorStatus, createdAt: row.createdAt, updatedAt: row.updatedAt,
+      })
+    } catch (error) {
+      throw new Error(`[deriveImport] v12 来源事实非法：${error instanceof Error ? error.message : String(error)}`)
+    }
+    analysisIdentity.add(`fact:${identity}`)
+    const facts = factsByRootVersion.get(groupKey) ?? new Map<string, Record<string, any>>()
+    facts.set(row.stableKey, row)
+    factsByRootVersion.set(groupKey, facts)
+  }
+  for (const row of value.adaptationCausalEdges as Record<string, any>[]) {
+    const root = roots.get(row._adaptationProjectExportId)
+    const groupKey = `${row._adaptationProjectExportId}:${row.manifestVersion}`
+    const facts = factsByRootVersion.get(groupKey)
+    const units = unitsByRootVersion.get(groupKey)
+    if (!root || row._workExportId !== root._workExportId || !facts
+      || facts.get(row.fromFactKey)?.authorStatus !== 'confirmed'
+      || facts.get(row.toFactKey)?.authorStatus !== 'confirmed') throw new Error('[deriveImport] v12 因果边 owner 或事实引用越界')
+    if (!units || !Array.isArray(row.sourceUnitKeys) || row.sourceUnitKeys.some((key: string) => !units.has(key))) throw new Error('[deriveImport] v12 因果边 sourceUnitKeys 越界')
+    const identity = `${groupKey}:${row.stableKey}`
+    if (analysisIdentity.has(`edge:${identity}`)) throw new Error('[deriveImport] v12 因果边 stableKey 重复')
+    try {
+      assertAdaptationCausalEdgeV1({
+        id: row._exportId + 1, projectId: 1, workId: row._workExportId + 1, adaptationProjectId: row._adaptationProjectExportId + 1,
+        manifestVersion: row.manifestVersion, stableKey: row.stableKey, fromFactKey: row.fromFactKey,
+        toFactKey: row.toFactKey, relation: row.relation, rationale: row.rationale,
+        sourceUnitKeys: row.sourceUnitKeys, authorStatus: row.authorStatus, createdAt: row.createdAt, updatedAt: row.updatedAt,
+      })
+    } catch (error) {
+      throw new Error(`[deriveImport] v12 因果边非法：${error instanceof Error ? error.message : String(error)}`)
+    }
+    analysisIdentity.add(`edge:${identity}`)
+  }
+  for (const row of value.adaptationDecisions as Record<string, any>[]) {
+    const root = roots.get(row._adaptationProjectExportId)
+    const groupKey = `${row._adaptationProjectExportId}:${row.manifestVersion}`
+    const facts = factsByRootVersion.get(groupKey)
+    if (!root || row._workExportId !== root._workExportId || !facts) throw new Error('[deriveImport] v12 改编决策 owner 或 adaptation 引用越界')
+    if (!Array.isArray(row.sourceFactKeys) || row.sourceFactKeys.some((key: string) => facts.get(key)?.authorStatus !== 'confirmed')) throw new Error('[deriveImport] v12 改编决策来源事实越界')
+    const identity = `${groupKey}:${row.stableKey}`
+    if (analysisIdentity.has(`decision:${identity}`)) throw new Error('[deriveImport] v12 改编决策 stableKey 重复')
+    try {
+      assertAdaptationDecisionV1({
+        id: row._exportId + 1, projectId: 1, workId: row._workExportId + 1, adaptationProjectId: row._adaptationProjectExportId + 1,
+        manifestVersion: row.manifestVersion, stableKey: row.stableKey, action: row.action,
+        sourceFactKeys: row.sourceFactKeys, targetKeys: row.targetKeys, rationale: row.rationale,
+        authorStatus: row.authorStatus, createdAt: row.createdAt, updatedAt: row.updatedAt,
+      })
+    } catch (error) {
+      throw new Error(`[deriveImport] v12 改编决策非法：${error instanceof Error ? error.message : String(error)}`)
+    }
+    analysisIdentity.add(`decision:${identity}`)
   }
 }
 
