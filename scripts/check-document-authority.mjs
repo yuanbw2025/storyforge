@@ -41,6 +41,7 @@ const activeDocs = [
   'docs/products/TEXT-OPEN-WORLD-PRODUCT-ARCHITECTURE.md',
   'docs/products/TEXT-OPEN-WORLD-NARRATIVE-BASE-ARCHITECTURE.md',
   'docs/roadmap/README.md',
+  'docs/roadmap/TEXT-OPEN-WORLD-IMPLEMENTATION-PLAN.md',
   'docs/roadmap/CAPABILITY-BASELINE.md',
   'docs/roadmap/COMPLETED.md',
   'docs/audits/CURRENT-ARCHITECTURE-AUDIT-20260903.md',

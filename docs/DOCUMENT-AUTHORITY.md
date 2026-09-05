@@ -42,6 +42,7 @@
 - `docs/products/TEXT-OPEN-WORLD-NARRATIVE-BASE-ARCHITECTURE.md`：L2 文字开放世界叙事生产子系统规格；描述故事、地区、任务、Agent/Skill和叙事验收，不冒充当前实现事实。
 - `docs/ROADMAP.md`
 - `docs/roadmap/README.md`
+- `docs/roadmap/TEXT-OPEN-WORLD-IMPLEMENTATION-PLAN.md`：L2 文字开放世界完整开发清单；以稳定工作包、依赖、状态和完成判据记录实施进度，不自行改变总路线图优先级。
 - `docs/roadmap/CAPABILITY-BASELINE.md`
 - `docs/roadmap/COMPLETED.md`
 

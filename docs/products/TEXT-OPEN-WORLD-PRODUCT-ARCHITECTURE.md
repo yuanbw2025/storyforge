@@ -1,10 +1,11 @@
 # AI 主导文字开放世界游戏 · 整体产品与游戏系统施工规格
 
-> 规格版本：1.1.0
+> 规格版本：1.1.1
 > 生效日期：2026-09-06
 > 文档层级：L2 文字开放世界整体产品施工入口
 > 当前状态：目标架构；不代表代码已经实现
 > 对应任务：阶段 E / `E-OPENWORLD-01`
+> 完整开发清单：[`TEXT-OPEN-WORLD-IMPLEMENTATION-PLAN.md`](../roadmap/TEXT-OPEN-WORLD-IMPLEMENTATION-PLAN.md)
 > 叙事子系统：`TEXT-OPEN-WORLD-NARRATIVE-BASE-ARCHITECTURE.md`
 > 产品历史：`TEXT-OPEN-WORLD-VISION-AND-EVOLUTION.md`
 > 上位权威：`PROJECT-MASTER-CHARTER.md`、`UPPER-PRODUCTS.md`、`DATA-GOVERNANCE.md`、`HARNESS-QUALITY-STANDARD.md`
@@ -2505,5 +2506,6 @@ Session中的高频状态优先作为Event和可重建Projection存在，不建�
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| 1.1.1 | 2026-09-06 | 接入文字开放世界完整开发清单；以121个首版工作包和12个后续能力承接本文施工阶段、依赖、状态和验收进度 |
 | 1.1.0 | 2026-09-06 | 冻结36项首版产品决策；收口三属性、20级上限、逐回合四类战斗操作、单货币、SVG节点地图、无个人亲密度、无友方NPC参战、标准难度、渐进教程、单Release单语言及来源/存档/媒资策略 |
 | 1.0.0 | 2026-09-05 | 建立文字开放世界整体产品施工入口；补齐角色成长、技能、战斗、物品、装备、奖励、制作、经济、任务、地图、时间、NPC关系、知识、反馈、存档、玩家UI、创作者工作台、媒资、AI边界、Build、现有代码映射、实施路线和验收体系 |
