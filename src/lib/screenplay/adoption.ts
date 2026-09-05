@@ -132,6 +132,8 @@ export async function adoptScreenplaySceneBatchV1(input: {
         estimatedSeconds: candidate.estimatedSeconds,
         sourceUnitIds,
         sourceReviewManifestVersion: input.sourceManifestVersion,
+        groundingReviewRevision: null,
+        dramaturgyReviewRevision: null,
         blocks,
         status: 'draft',
         revision: (previous?.revision ?? 0) + 1,

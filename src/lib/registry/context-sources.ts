@@ -271,6 +271,49 @@ async function readScreenplayCurrentScenesContext(input: AssembleContextInput): 
   ].join('\n'))].join('\n\n')
 }
 
+async function readScreenplayBeatsContext(input: AssembleContextInput): Promise<string> {
+  const root = await requireTargetAdaptation(input)
+  if (root.medium !== 'screenplay') return ''
+  const beats = await db.screenplayBeats
+    .where('[adaptationProjectId+manifestVersion]')
+    .equals([root.id!, root.activeSourceManifestVersion])
+    .sortBy('order')
+  if (!beats.length) return ''
+  return [
+    `【已确认 Beat Sheet｜manifest v${root.activeSourceManifestVersion}】`,
+    ...beats.map(beat => `${beat.stableKey}｜${beat.scope}｜第 ${beat.episodeNumber} 集｜${beat.sectionKey}｜${beat.objective} → ${beat.turn} → ${beat.outcome}｜冲突：${beat.conflict}｜${beat.estimatedSeconds}s｜facts ${beat.causalFactKeys.join(', ') || '-'}｜decisions ${beat.decisionKeys.join(', ')}｜sources ${beat.sourceUnitKeys.join(', ')}`),
+  ].join('\n')
+}
+
+async function readScreenplaySceneCardsContext(input: AssembleContextInput): Promise<string> {
+  const root = await requireTargetAdaptation(input)
+  if (root.medium !== 'screenplay') return ''
+  const cards = await db.screenplaySceneCards
+    .where('[adaptationProjectId+manifestVersion]')
+    .equals([root.id!, root.activeSourceManifestVersion])
+    .sortBy('order')
+  if (!cards.length) return ''
+  return [
+    `【已确认 Scene Cards｜manifest v${root.activeSourceManifestVersion}】`,
+    ...cards.map(card => `${card.stableKey}｜beat ${card.beatKey}｜第 ${card.episodeNumber} 集第 ${card.sceneNumber} 场｜目的：${card.purpose}｜冲突：${card.conflict}｜进入：${card.entryState}｜可视动作：${card.visibleAction}｜揭示：${card.informationReveal}｜退出：${card.exitState}｜${card.estimatedSeconds}s｜sources ${card.sourceUnitKeys.join(', ')}`),
+  ].join('\n')
+}
+
+async function readScreenplayReviewIssuesContext(input: AssembleContextInput): Promise<string> {
+  const root = await requireTargetAdaptation(input)
+  if (root.medium !== 'screenplay') return ''
+  const issues = await db.screenplayReviewIssues
+    .where('[adaptationProjectId+manifestVersion]')
+    .equals([root.id!, root.activeSourceManifestVersion])
+    .toArray()
+  const open = issues.filter(issue => issue.status === 'open')
+  if (!open.length) return ''
+  return [
+    `【开放剧本审查问题｜manifest v${root.activeSourceManifestVersion}】`,
+    ...open.map(issue => `${issue.stableKey}｜${issue.category}/${issue.severity}｜scene ${issue.sceneKey}${issue.blockId ? ` block ${issue.blockId}` : ''}｜scene revision ${issue.reviewedSceneRevision}｜证据：${issue.evidence}｜问题：${issue.problem}｜建议：${issue.suggestion}`),
+  ].join('\n')
+}
+
 async function readComicVisualBibleContext(input: AssembleContextInput): Promise<string> {
   const root = await requireTargetAdaptation(input)
   if (root.medium !== 'comic' || !root.visualBible || root.visualBibleSourceManifestVersion !== root.activeSourceManifestVersion) return ''
@@ -1527,6 +1570,39 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     requiresAdaptationProjectId: true,
     requiresScreenplayScenes: true,
     read: readScreenplayCurrentScenesContext,
+  },
+  {
+    key: 'screenplay.beats',
+    label: '已确认剧本 Beat Sheet',
+    scope: 'project',
+    layer: 'L0',
+    ownerFrom: 'work',
+    budgetTokens: 12_000,
+    protectedFromTrim: true,
+    requiresAdaptationProjectId: true,
+    read: readScreenplayBeatsContext,
+  },
+  {
+    key: 'screenplay.sceneCards',
+    label: '已确认剧本 Scene Cards',
+    scope: 'project',
+    layer: 'L0',
+    ownerFrom: 'work',
+    budgetTokens: 16_000,
+    protectedFromTrim: true,
+    requiresAdaptationProjectId: true,
+    read: readScreenplaySceneCardsContext,
+  },
+  {
+    key: 'screenplay.reviewIssues',
+    label: '开放剧本审查问题',
+    scope: 'project',
+    layer: 'L0',
+    ownerFrom: 'work',
+    budgetTokens: 10_000,
+    protectedFromTrim: true,
+    requiresAdaptationProjectId: true,
+    read: readScreenplayReviewIssuesContext,
   },
   {
     key: 'comic.visualBible',

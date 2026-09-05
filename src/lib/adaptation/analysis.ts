@@ -42,6 +42,8 @@ interface AnalysisAdoptionInput<T> {
   expectedAdaptationRevision: number
   sourceManifestVersion: number
   items: ReviewedAdaptationCandidateV1<T>[]
+  /** Defaults to true. Screenplay long-source analysis may merge one reviewed chunk at a time. */
+  replaceExisting?: boolean
 }
 
 function assertCandidateShape(value: unknown, allowed: readonly string[], label: string): asserts value is Record<string, unknown> {
@@ -113,9 +115,13 @@ export async function adoptAdaptationSourceFactsV1(
       .equals([root.id!, input.sourceManifestVersion])
       .toArray()
     const unitKeys = new Set(units.map(unit => unit.sourceUnitKey))
+    const existingFacts = await db.adaptationSourceFacts.where('[adaptationProjectId+manifestVersion]').equals([root.id!, input.sourceManifestVersion]).toArray()
+    const existingByKey = new Map(existingFacts.map(row => [row.stableKey, row]))
     const rows = input.items.map(({ candidate, authorStatus }) => {
       assertKnownSourceUnits(candidate.sourceUnitKeys, unitKeys, `来源事实 ${candidate.stableKey}`)
+      const previous = existingByKey.get(candidate.stableKey)
       const row: AdaptationSourceFactV1 = stampNewRecord(scope, 'adaptationSourceFacts', {
+        ...(previous ?? {}),
         projectId: scope.projectId,
         workId: scope.workId,
         adaptationProjectId: root.id!,
@@ -127,7 +133,7 @@ export async function adoptAdaptationSourceFactsV1(
         sourceUnitKeys: [...candidate.sourceUnitKeys],
         confidence: candidate.confidence,
         authorStatus,
-        createdAt: now,
+        createdAt: previous?.createdAt ?? now,
         updatedAt: now,
       }, { owner: 'work' })
       assertAdaptationSourceFactV1(row)
@@ -137,9 +143,10 @@ export async function adoptAdaptationSourceFactsV1(
     await Promise.all([
       db.adaptationCausalEdges.where('[adaptationProjectId+manifestVersion]').equals(key).delete(),
       db.adaptationDecisions.where('[adaptationProjectId+manifestVersion]').equals(key).delete(),
-      db.adaptationSourceFacts.where('[adaptationProjectId+manifestVersion]').equals(key).delete(),
+      ...(input.replaceExisting === false ? [] : [db.adaptationSourceFacts.where('[adaptationProjectId+manifestVersion]').equals(key).delete()]),
     ])
-    await db.adaptationSourceFacts.bulkAdd(rows)
+    if (input.replaceExisting === false) await db.adaptationSourceFacts.bulkPut(rows)
+    else await db.adaptationSourceFacts.bulkAdd(rows)
     await db.adaptationProjects.update(root.id!, { revision: root.revision + 1, updatedAt: now })
     return db.adaptationSourceFacts.where('[adaptationProjectId+manifestVersion]').equals(key).sortBy('stableKey')
   })

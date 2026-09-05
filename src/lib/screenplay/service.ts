@@ -75,6 +75,8 @@ export async function createScreenplayScene(scopeInput: WorkspaceScope, draft: S
       estimatedSeconds: draft.estimatedSeconds,
       sourceUnitIds: [...draft.sourceUnitIds],
       sourceReviewManifestVersion: adaptation.activeSourceManifestVersion,
+      groundingReviewRevision: null,
+      dramaturgyReviewRevision: null,
       blocks: structuredClone(draft.blocks),
       status: draft.status ?? (draft.blocks.length ? 'draft' : 'card'),
       revision: 1,
@@ -101,13 +103,17 @@ export async function updateScreenplayScene(input: {
     if (!scene || !await assertRecordInScope(scope, 'screenplayScenes', scene, { owner: 'work' }) || scene.adaptationProjectId !== adaptation.id) throw new Error('[screenplay] 场景不存在或越界')
     if (scene.revision !== input.expectedRevision) throw new Error('[screenplay] 场景已变化，请刷新')
     if (scene.status === 'locked' && input.patch.status !== 'draft') throw new Error('[screenplay] 锁定场景必须先解锁')
+    const nextRevision = scene.revision + 1
+    const changesContent = Object.keys(input.patch).some(key => key !== 'status')
     const next: ScreenplayScene = {
       ...scene,
       ...structuredClone(input.patch),
       location: input.patch.location?.trim() ?? scene.location,
       timeOfDay: input.patch.timeOfDay?.trim() ?? scene.timeOfDay,
       summary: input.patch.summary?.trim() ?? scene.summary,
-      revision: scene.revision + 1,
+      groundingReviewRevision: !changesContent && scene.groundingReviewRevision === scene.revision ? nextRevision : scene.groundingReviewRevision ?? null,
+      dramaturgyReviewRevision: !changesContent && scene.dramaturgyReviewRevision === scene.revision ? nextRevision : scene.dramaturgyReviewRevision ?? null,
+      revision: nextRevision,
       updatedAt: Date.now(),
     }
     const deps = await validationDependencies(adaptation, next.sourceReviewManifestVersion)
