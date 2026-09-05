@@ -8,6 +8,7 @@
 | [`INDEPENDENT-CREATION.md`](./INDEPENDENT-CREATION.md) | 短篇、小说转剧本、小说转漫画 |
 | [`WORLD-ENGINE.md`](./WORLD-ENGINE.md) | 世界语义内容、编号、版本、封存和数据出口 |
 | [`UPPER-PRODUCTS.md`](./UPPER-PRODUCTS.md) | 跑团、角色聊天、AI 小镇和文字游戏共同遵守的三阶段架构、交接物与扩展槽位；具体功能另行设计 |
+| [`TEXT-ADVENTURE.md`](./TEXT-ADVENTURE.md) | AI 主导文字冒险的独立产品契约、V2 通用内核、运行权威、数据边界与第一批纵切面 |
 
 实现状态统一看 [`../roadmap/CAPABILITY-BASELINE.md`](../roadmap/CAPABILITY-BASELINE.md)，下一步看
 [`../roadmap/README.md`](../roadmap/README.md)。

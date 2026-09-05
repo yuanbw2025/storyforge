@@ -224,7 +224,8 @@ export interface AdventureCheckEvidence {
 
 export interface AdventureRuntimeState {
   schema: 'storyforge.text-adventure'
-  version: 1
+  /** Version 2 keeps the durable event protocol while adding a richer content contract. */
+  version: 1 | 2
   contentHash: string
   playerKey: 'player'
   currentLocationKey: string

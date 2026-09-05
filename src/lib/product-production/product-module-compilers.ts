@@ -267,7 +267,7 @@ export function compileAdventureModuleV1(input: ProductModuleCompilerInputV1): A
       ruleKey: interactionRule.ruleKey,
     },
   }] : []
-  return parseAdventureContent({
+  const parsedAdventure = parseAdventureContent({
     version: 1, initialLocationKey, playerKey: 'player',
     playerIdentity: { name: input.brief.intent.playerRole, description: input.brief.intent.openingSituation },
     locations: input.narrative.nodes.map((node, nodeIndex) => {
@@ -303,6 +303,8 @@ export function compileAdventureModuleV1(input: ProductModuleCompilerInputV1): A
     }, ...sourceArtifactActions, ...talkAction],
     initialInventory: [],
   })
+  if (parsedAdventure.version !== 1) throw new Error('[product-adapter] V1 compiler 产生了意外的 V2 冒险内容')
+  return parsedAdventure
 }
 
 export function compileOpenWorldEvolutionModuleV1(input: ProductModuleCompilerInputV1): OpenWorldEvolutionContentV1 {

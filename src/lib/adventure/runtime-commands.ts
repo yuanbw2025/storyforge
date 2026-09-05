@@ -1,5 +1,5 @@
 /** Product-owned deterministic runtime commands: adventure. */
-import { availableAdventureActions, applyAdventureEffects, adventureNarrativeProjection } from "./runtime";
+import { availableAdventureActions, applyAdventureEffects, adventureEffectiveAbilityValue, adventureNarrativeProjection, adventureProgressionLevel } from "./runtime";
 import { db } from "../db/schema";
 import { applyProductRuntimeEvent, assertFormalRuntimeSourceUnchangedV1, commitNarrativeChoice, hashStateJson, normalizeCommandId, parseEventPayload, parseProductRuntimeState, readProductRuntimeState, readSessionEvents, replayProductRuntimeEvents, verifyFormalRuntimeSourceV1 } from "../product/runtime-core";
 import { buildProductRuntimeDiceResolutionV1, parseProductRuntimeDiceExpressionV1 } from "../product/runtime-dice";
@@ -491,6 +491,22 @@ export async function commitAdventureAction(
         event.id = (await db.productRuntimeEvents.add(event)) as number;
         return event;
       };
+      const appendProgressionIfNeeded = async () => {
+        const level = adventureProgressionLevel(
+          adventureContent,
+          projected.adventure!,
+        );
+        if (level == null || adventureContent.version !== 2) return;
+        const abilityKey = adventureContent.progression.levelAbilityKey;
+        const before = projected.adventure!.abilities[abilityKey];
+        if (level === before) return;
+        await append("adventure.ability.changed", {
+          abilityKey,
+          before,
+          after: level,
+          delta: level - before,
+        });
+      };
       if (action.kind === "talk") {
         const binding = action.interaction!;
         const scene = projected.interaction!.sceneTemplates.find(
@@ -525,7 +541,11 @@ export async function commitAdventureAction(
         });
       }
       if (action.rule.kind === "threshold") {
-        const total = projected.adventure.abilities[action.rule.abilityKey];
+        const total = adventureEffectiveAbilityValue(
+          adventureContent,
+          projected.adventure,
+          action.rule.abilityKey,
+        );
         outcome = total >= action.rule.difficulty ? "success" : "failure";
         evidence = {
           eventSequence: nextSequence(),
@@ -541,9 +561,11 @@ export async function commitAdventureAction(
         };
       } else if (action.rule.kind === "random") {
         const expression = parseProductRuntimeDiceExpressionV1(action.rule.expression);
-        const ability = projected.adventure.abilities[action.rule.abilityKey];
-        if (ability == null)
-          throw new Error(`[adventure] 能力不存在:${action.rule.abilityKey}`);
+        const ability = adventureEffectiveAbilityValue(
+          adventureContent,
+          projected.adventure,
+          action.rule.abilityKey,
+        );
         const dice = buildProductRuntimeDiceResolutionV1({
           seed: session.seed,
           sequence: nextSequence(),
@@ -642,6 +664,10 @@ export async function commitAdventureAction(
             after,
             delta: effect.delta,
           });
+          if (adventureContent.version === 2
+            && effect.resourceKey === adventureContent.progression.experienceResourceKey) {
+            await appendProgressionIfNeeded();
+          }
         } else if (effect.op === "change-ability") {
           const definition = adventureContent.abilities.find(
             (item) => item.key === effect.abilityKey,
@@ -730,6 +756,10 @@ export async function commitAdventureAction(
                   after,
                   delta: rewardEffect.delta,
                 });
+                if (adventureContent.version === 2
+                  && rewardEffect.resourceKey === adventureContent.progression.experienceResourceKey) {
+                  await appendProgressionIfNeeded();
+                }
               }
             }
           }

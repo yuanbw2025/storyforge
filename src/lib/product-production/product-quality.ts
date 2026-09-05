@@ -115,6 +115,31 @@ export function evaluateProductRuntimeProductQualityV1(input: {
         && adventure.abilities.length >= 1 && adventure.resources.length >= 1,
       [`quests=${adventure?.quests.length ?? 0}`, `abilities=${adventure?.abilities.length ?? 0}`, `resources=${adventure?.resources.length ?? 0}`]),
     )
+    if (adventure?.version === 2) {
+      const enabledCapabilities = new Set(adventure.capabilities.filter(item => item.enabled).map(item => item.key))
+      const requiredCapabilities = ['space', 'character', 'inventory', 'equipment', 'quests', 'time', 'storylets', 'endings']
+      gates.push(
+        gate('product.adventure.v2-capabilities', requiredCapabilities.every(key => enabledCapabilities.has(key)),
+          [`enabled=${[...enabledCapabilities].sort().join(',')}`]),
+        gate('product.adventure.v2-space', adventure.regions.length >= 1 && adventure.areas.length >= 1
+          && adventure.scenes.length >= adventure.locations.length
+          && adventure.locations.every(location => location.sceneKeys.length >= 1),
+        [`regions=${adventure.regions.length}`, `areas=${adventure.areas.length}`, `locations=${adventure.locations.length}`, `scenes=${adventure.scenes.length}`]),
+        gate('product.adventure.v2-character-system', adventure.abilities.some(item => item.role === 'stat')
+          && adventure.abilities.some(item => item.role === 'skill')
+          && ['health', 'mana', 'stamina', 'experience', 'skill-points'].every(role => adventure.resources.some(item => item.role === role)),
+        [`abilityRoles=${[...new Set(adventure.abilities.map(item => item.role))].join(',')}`, `resourceRoles=${[...new Set(adventure.resources.map(item => item.role))].join(',')}`]),
+        gate('product.adventure.v2-equipment', adventure.equipmentSlots.length >= 1
+          && adventure.items.some(item => item.category === 'equipment' && item.equipmentSlotKey && item.modifiers.length >= 1),
+        [`slots=${adventure.equipmentSlots.length}`, `equipment=${adventure.items.filter(item => item.category === 'equipment').length}`]),
+        gate('product.adventure.v2-quest-time-storylets-endings', adventure.quests.every(quest => quest.stages.length >= 1)
+          && adventure.resources.some(item => item.key === adventure.clock.resourceKey && item.role === 'clock')
+          && adventure.storylets.length >= 1 && adventure.endings.length >= 2,
+        [`questStages=${adventure.quests.map(item => item.stages.length).join(',')}`, `storylets=${adventure.storylets.length}`, `endings=${adventure.endings.length}`]),
+        gate('product.adventure.v2-offline-fallback', adventure.media.fallback === 'text-only',
+          [`media=${adventure.media.mode}`, `fallback=${adventure.media.fallback}`]),
+      )
+    }
   } else if (runtimePackage.productType === 'avg') {
     const presentation = runtimePackage.presentation
     const assetKeys = new Set(presentation?.assets.map(asset => asset.assetKey) ?? [])

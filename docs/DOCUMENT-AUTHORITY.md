@@ -1,6 +1,6 @@
 # StoryForge 文档权威与归档规则
 
-> 版本：1.5.0 · 生效：2026-09-03
+> 版本：1.5.1 · 生效：2026-09-06
 > 本文回答“哪些文档仍可指导开发”。未列入现行清单的历史材料，不得作为设计或施工权威。
 
 ## 1. 裁决层级
@@ -36,6 +36,7 @@
 - `docs/products/INDEPENDENT-CREATION.md`
 - `docs/products/WORLD-ENGINE.md`
 - `docs/products/UPPER-PRODUCTS.md`
+- `docs/products/TEXT-ADVENTURE.md`
 - `docs/ROADMAP.md`
 - `docs/roadmap/README.md`
 - `docs/roadmap/CAPABILITY-BASELINE.md`
