@@ -144,7 +144,7 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
     },
     actions: {
       version: 1,
-      conditions: [{ key: 'condition.always', expression: { operation: 'always' } }],
+      conditions: [{ key: 'condition.always', expression: { op: 'all', conditions: [{ op: 'player-number', field: 'level', comparator: 'gte', value: 1 }] }, failureMessage: '角色尚未进入可行动状态。' }],
       effects: [
         { key: 'effect.noop', operation: 'noop', payload: {} },
         { key: 'effect.reward-experience', operation: 'grant-experience', payload: { amount: 100 } },

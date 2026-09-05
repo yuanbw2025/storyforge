@@ -1,6 +1,6 @@
 # AI 主导文字开放世界游戏 · 整体产品与游戏系统施工规格
 
-> 规格版本：1.1.6
+> 规格版本：1.1.7
 > 生效日期：2026-09-06
 > 文档层级：L2 文字开放世界整体产品施工入口
 > 当前状态：目标架构已冻结并进入分阶段实现；实际完成度以完整开发清单为准
@@ -420,7 +420,13 @@ Action定义是唯一事实源；固定选项、任务Objective、随机事件�
 | world | flag、region-pressure、faction-state、ending-eligibility |
 | knowledge | player-knows、actor-knows、rumor-heard |
 
-操作符限制为类型允许的 `eq/ne/gt/gte/lt/lte/in/not-in/contains/present/absent`。复杂逻辑只允许有界的 `all/any/not`，限制深度和条目数。
+数值操作符限制为 `eq/neq/gt/gte/lt/lte`；集合、状态和可见性使用各自的类型化
+`present/statuses/minimum`字段，不接受通用动态路径。复杂逻辑只允许有界的`all/any/not`。
+现行合同与解释器实现于 `src/lib/types/text-open-world-condition.ts` 和
+`src/lib/open-world/condition-dsl.ts`，覆盖player、inventory、quest、map、time、relation、
+actor、world和knowledge九个域。每个Condition最多12层、256个节点，组合节点最多64项；
+所有Release资源引用在目录建立时静态校验，未知操作、任意脚本、跨任务阶段和悬空引用均
+拒绝。评估结果只返回Condition定义的公共失败说明，不泄露内部叶子或秘密值。
 
 ### 4.5 Effect DSL
 
@@ -2543,6 +2549,7 @@ Session中的高频状态优先作为Event和可重建Projection存在，不建�
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| 1.1.7 | 2026-09-06 | 落地九域类型化Condition DSL、静态引用和归属校验、复杂度硬上限与公开失败结果 |
 | 1.1.6 | 2026-09-06 | 落地统一Action目录、跨模块消费者反查、可用性与合法目标投影，并统一三种输入命令解析 |
 | 1.1.5 | 2026-09-06 | 落地vNext统一CommandEnvelope、稳定指纹、事务幂等事件、stale保护和未知结果查询边界 |
 | 1.1.4 | 2026-09-06 | 落地15个领域Module Schema与跨模块完整性校验，补齐“类型存在但引用不可运行”的确定性阻断 |

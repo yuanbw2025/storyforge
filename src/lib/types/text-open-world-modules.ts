@@ -1,3 +1,5 @@
+import type { TextOpenWorldConditionExpressionV1 } from './text-open-world-condition'
+
 export type TextOpenWorldStorylineKindV1 = 'mainline' | 'significant'
 export type TextOpenWorldStorylineOwnerKindV1 = 'core' | 'character' | 'faction' | 'region'
 export type TextOpenWorldQuestTypeV1 = 'mainline' | 'significant' | 'ordinary' | 'template'
@@ -170,7 +172,8 @@ export interface TextOpenWorldActionModuleV1 {
   version: 1
   conditions: Array<{
     key: string
-    expression: unknown
+    expression: TextOpenWorldConditionExpressionV1
+    failureMessage: string
   }>
   effects: Array<{
     key: string

@@ -9,6 +9,7 @@ import type {
 } from '../types'
 import { parseTextOpenWorldModulesV1 } from './modules'
 import { parseTextOpenWorldCommandEnvelopeV1 } from './command-contract'
+import { createTextOpenWorldConditionCatalogV1 } from './condition-dsl'
 
 const STABLE_KEY = /^[a-z][a-z0-9._:-]{0,199}$/
 
@@ -99,6 +100,7 @@ export interface TextOpenWorldActionRegistryV1 {
 }
 
 export function createTextOpenWorldActionRegistryV1(value: TextOpenWorldRuntimePackageV1 | string | unknown): TextOpenWorldActionRegistryV1 {
+  createTextOpenWorldConditionCatalogV1(value)
   const modules = parseTextOpenWorldModulesV1(value)
   const entries = buildEntries(modules)
   const byKey = new Map(entries.map(entry => [entry.action.key, entry]))
