@@ -25,6 +25,7 @@ import {
 } from './inventory'
 import { deriveTextOpenWorldPlayerStatsFromModulesV1 } from './player-stats'
 import { deriveTextOpenWorldProgressionStatusV1 } from './progression'
+import { createTextOpenWorldQuestTransitionCatalogV1 } from './quest-state-machine'
 import {
   createInitialTextOpenWorldQuestInstancesV1,
   deriveTextOpenWorldQuestConditionProjectionV1,
@@ -132,7 +133,7 @@ export function createInitialTextOpenWorldSessionProjectionV1(value: unknown): T
     schema: 'storyforge.text-open-world.session-projection', version: 1, runtimePackage,
     ruleset: { key: runtimePackage.metadata.rulesetKey, version: runtimePackage.metadata.rulesetVersion }, state,
     actions: { completedOnceActionKeys: [], cooldownUntilWorldMinuteByActionKey: {} }, director: emptyDirector(),
-    protocol: { pendingCommandId: null, pendingCommandSequence: null, pendingActionKey: null, pendingActorKey: null, randomEvidence: [], lastCompletedCommandId: null, lastOutcomeFingerprint: null },
+    protocol: { pendingCommandId: null, pendingCommandSequence: null, pendingActionKey: null, pendingActorKey: null, pendingTargetKey: null, randomEvidence: [], lastCompletedCommandId: null, lastOutcomeFingerprint: null },
     lastEventSequence: 0,
   }
 }
@@ -152,8 +153,12 @@ export function parseTextOpenWorldSessionProjectionV1(value: unknown): TextOpenW
   const director = row(parsed.director, 'director'); exact(director, ['drawCount', 'generatedQuestInstanceCount', 'revealedQuestInstanceKeys', 'activeQuestInstanceKeys', 'recentFingerprints', 'lastDrawWorldMinuteByRegionKey', 'highIntensityStreak'], 'director')
   const recent = Array.isArray(director.recentFingerprints) ? director.recentFingerprints.map((value, index) => { const item = row(value, `director.recentFingerprints[${index}]`); exact(item, ['fingerprint', 'worldMinute'], `director.recentFingerprints[${index}]`); return { fingerprint: token(item.fingerprint, `director.recentFingerprints[${index}].fingerprint`), worldMinute: integer(item.worldMinute, `director.recentFingerprints[${index}].worldMinute`) } }) : fail('director.recentFingerprints必须是数组')
   const lastDraws = row(director.lastDrawWorldMinuteByRegionKey, 'director.lastDrawWorldMinuteByRegionKey'); const lastDrawWorldMinuteByRegionKey: Record<string, number> = {}; for (const [key, minute] of Object.entries(lastDraws)) { if (!modules.world.regions.some(region => region.key === key)) fail(`未知director地区:${key}`); lastDrawWorldMinuteByRegionKey[key] = integer(minute, `director.lastDraw.${key}`) }
-  const protocol = row(parsed.protocol, 'protocol'); exact(protocol, ['pendingCommandId', 'pendingCommandSequence', 'pendingActionKey', 'pendingActorKey', 'randomEvidence', 'lastCompletedCommandId', 'lastOutcomeFingerprint'], 'protocol')
-  const pendingCommandId = nullableToken(protocol.pendingCommandId, 'protocol.pendingCommandId', COMMAND_ID); const pendingCommandSequence = protocol.pendingCommandSequence == null ? null : integer(protocol.pendingCommandSequence, 'protocol.pendingCommandSequence', 1); const pendingActionKey = nullableToken(protocol.pendingActionKey, 'protocol.pendingActionKey'); const pendingActorKey = nullableToken(protocol.pendingActorKey, 'protocol.pendingActorKey')
+  const protocol = row(parsed.protocol, 'protocol')
+  const legacyProtocol = !Object.prototype.hasOwnProperty.call(protocol, 'pendingTargetKey')
+  exact(protocol, legacyProtocol
+    ? ['pendingCommandId', 'pendingCommandSequence', 'pendingActionKey', 'pendingActorKey', 'randomEvidence', 'lastCompletedCommandId', 'lastOutcomeFingerprint']
+    : ['pendingCommandId', 'pendingCommandSequence', 'pendingActionKey', 'pendingActorKey', 'pendingTargetKey', 'randomEvidence', 'lastCompletedCommandId', 'lastOutcomeFingerprint'], 'protocol')
+  const pendingCommandId = nullableToken(protocol.pendingCommandId, 'protocol.pendingCommandId', COMMAND_ID); const pendingCommandSequence = protocol.pendingCommandSequence == null ? null : integer(protocol.pendingCommandSequence, 'protocol.pendingCommandSequence', 1); const pendingActionKey = nullableToken(protocol.pendingActionKey, 'protocol.pendingActionKey'); const pendingActorKey = nullableToken(protocol.pendingActorKey, 'protocol.pendingActorKey'); const pendingTargetKey = legacyProtocol ? null : nullableToken(protocol.pendingTargetKey, 'protocol.pendingTargetKey')
   if ((pendingCommandId == null) !== (pendingCommandSequence == null) || (pendingCommandId == null) !== (pendingActionKey == null) || (pendingCommandId == null) !== (pendingActorKey == null)) fail('pending command字段必须同时存在或为空')
   if (pendingActionKey && !actionKeys.has(pendingActionKey)) fail('pendingActionKey不存在')
   const randomEvidence = Array.isArray(protocol.randomEvidence) ? protocol.randomEvidence.map((value, index) => { const item = row(value, `protocol.randomEvidence[${index}]`); exact(item, ['eventSequence', 'evidence'], `protocol.randomEvidence[${index}]`); return { eventSequence: integer(item.eventSequence, `protocol.randomEvidence[${index}].eventSequence`, 1), evidence: parseTextOpenWorldRandomEvidenceV1(item.evidence) } }) : fail('protocol.randomEvidence必须是数组')
@@ -171,7 +176,7 @@ export function parseTextOpenWorldSessionProjectionV1(value: unknown): TextOpenW
     schema: 'storyforge.text-open-world.session-projection', version: 1, runtimePackage, ruleset: { key: token(ruleset.key, 'ruleset.key'), version: integer(ruleset.version, 'ruleset.version', 1) }, state,
     actions: { completedOnceActionKeys, cooldownUntilWorldMinuteByActionKey },
     director: { drawCount: integer(director.drawCount, 'director.drawCount'), generatedQuestInstanceCount, revealedQuestInstanceKeys, activeQuestInstanceKeys, recentFingerprints: recent, lastDrawWorldMinuteByRegionKey, highIntensityStreak },
-    protocol: { pendingCommandId, pendingCommandSequence, pendingActionKey, pendingActorKey, randomEvidence, lastCompletedCommandId: nullableToken(protocol.lastCompletedCommandId, 'protocol.lastCompletedCommandId', COMMAND_ID), lastOutcomeFingerprint: nullableToken(protocol.lastOutcomeFingerprint, 'protocol.lastOutcomeFingerprint', /^[a-f0-9]{64}$/) },
+    protocol: { pendingCommandId, pendingCommandSequence, pendingActionKey, pendingActorKey, pendingTargetKey, randomEvidence, lastCompletedCommandId: nullableToken(protocol.lastCompletedCommandId, 'protocol.lastCompletedCommandId', COMMAND_ID), lastOutcomeFingerprint: nullableToken(protocol.lastOutcomeFingerprint, 'protocol.lastOutcomeFingerprint', /^[a-f0-9]{64}$/) },
     lastEventSequence,
   }
 }
@@ -182,7 +187,7 @@ export function applyTextOpenWorldSessionEventV1(current: TextOpenWorldSessionPr
   if (event.type === 'text-open-world.command.committed') {
     if (projection.protocol.pendingCommandId) fail('上一命令尚未终结')
     const command = parseTextOpenWorldCommandEventPayloadV1(json(event)); if (command.envelope.commandId !== event.commandId) fail('命令事件索引不一致')
-    projection.protocol.pendingCommandId = command.envelope.commandId; projection.protocol.pendingCommandSequence = event.sequence; projection.protocol.pendingActionKey = command.envelope.actionKey; projection.protocol.pendingActorKey = command.envelope.actorKey
+    projection.protocol.pendingCommandId = command.envelope.commandId; projection.protocol.pendingCommandSequence = event.sequence; projection.protocol.pendingActionKey = command.envelope.actionKey; projection.protocol.pendingActorKey = command.envelope.actorKey; projection.protocol.pendingTargetKey = typeof command.envelope.payload.targetKey === 'string' ? command.envelope.payload.targetKey : null
   } else if (event.type === 'text-open-world.random.resolved') {
     const pendingEvidence = projection.protocol.randomEvidence.filter(item => item.eventSequence > (projection.protocol.pendingCommandSequence ?? Number.MAX_SAFE_INTEGER))
     const random = parseTextOpenWorldRandomResolvedEventPayloadV1(json(event)); if (random.commandId !== projection.protocol.pendingCommandId || random.commandSequence !== projection.protocol.pendingCommandSequence || random.evidence.drawIndex !== pendingEvidence.length) fail('随机事件不属于当前命令')
@@ -201,13 +206,25 @@ export function applyTextOpenWorldSessionEventV1(current: TextOpenWorldSessionPr
         claimKey: applied.plan.claimKey, effectKeys: applied.plan.effectKeys, authorization: applied.plan.authorization,
         evidence: pendingRandom.map(item => item.evidence), conditionResults,
       })
+    } else if (applied.plan.authorization?.kind === 'quest-transition') {
+      const authorization = applied.plan.authorization
+      const action = modules.actions.actions.find(item => item.key === projection.protocol.pendingActionKey) ?? fail('命令Action不存在')
+      if (projection.protocol.pendingTargetKey !== authorization.instanceKey || action.targetScope !== 'quest') fail('任务迁移授权与命令目标不一致')
+      if (action.actorScope !== projection.protocol.pendingActorKey) fail('任务迁移Action操作者不一致')
+      const intents = authorization.transitions.map(step => step.intent)
+      if (action.category === 'accept-quest') {
+        if (intents.join(',') !== 'accept,activate') fail('接受任务必须原子完成accept与activate')
+      } else if (action.category === 'abandon-quest') {
+        if (intents.length !== 1 || intents[0] !== 'abandon') fail('放弃任务Action只能执行abandon')
+      } else if (action.category !== 'quest-action' || action.actorScope !== 'system') fail('任务系统迁移必须使用system quest-action')
+      createTextOpenWorldQuestTransitionCatalogV1(projection.runtimePackage).assertAuthorization({ state: projection.state, authorization })
     } else if (applied.plan.effectKeys.some(effectKey => dropEffectKeys.has(effectKey))) fail('掉落Effect缺少RewardContract授权')
     projection.state = applyTextOpenWorldEffectPlanForReplayV1(projection.runtimePackage, projection.state, applied.plan).state
     const action = modules.actions.actions.find(item => item.key === projection.protocol.pendingActionKey) ?? fail('命令Action不存在')
     if (action.repeatPolicy === 'once' && !projection.actions.completedOnceActionKeys.includes(action.key)) projection.actions.completedOnceActionKeys.push(action.key)
     if (action.repeatPolicy === 'cooldown') projection.actions.cooldownUntilWorldMinuteByActionKey[action.key] = projection.state.time.worldMinute + (action.cooldownMinutes ?? 0)
     projection.protocol.lastCompletedCommandId = applied.commandId; projection.protocol.lastOutcomeFingerprint = applied.outcomeFingerprint
-    projection.protocol.pendingCommandId = null; projection.protocol.pendingCommandSequence = null; projection.protocol.pendingActionKey = null; projection.protocol.pendingActorKey = null
+    projection.protocol.pendingCommandId = null; projection.protocol.pendingCommandSequence = null; projection.protocol.pendingActionKey = null; projection.protocol.pendingActorKey = null; projection.protocol.pendingTargetKey = null
   } else fail(`事件类型不属于vNext Session投影:${event.type}`)
   projection.lastEventSequence = event.sequence
   return parseTextOpenWorldSessionProjectionV1(projection)
@@ -253,10 +270,13 @@ export function deriveTextOpenWorldContextsV1(value: TextOpenWorldSessionProject
     completedOnceActionKeys: [...projection.actions.completedOnceActionKeys], cooldownUntilWorldMinuteByActionKey: structuredClone(projection.actions.cooldownUntilWorldMinuteByActionKey),
     validTargetKeysByScope: {
       actor: actorTargets, location: [...state.map.revealedLocationKeys], item: Object.keys(inventoryQuantities),
-      quest: Object.values(state.quests.instancesByKey).filter(instance => instance.status === 'available' || instance.status === 'active').map(instance => instance.instanceKey),
+      quest: Object.values(state.quests.instancesByKey).filter(instance => ['revealed', 'accepted', 'active', 'suspended'].includes(instance.status)).map(instance => instance.instanceKey),
       vendor: modules.economy.vendors.filter(vendor => vendor.locationKey === state.map.currentLocationKey && actorTargets.includes(vendor.actorKey)).map(vendor => vendor.key),
       encounter: modules.combat.encounters.filter(encounter => encounter.locationKey === state.map.currentLocationKey).map(encounter => encounter.key),
     },
+    questDefinitionKeyByInstanceKey: Object.fromEntries(Object.values(state.quests.instancesByKey).map(instance => [instance.instanceKey, instance.definitionKey])),
+    questStatusByInstanceKey: Object.fromEntries(Object.values(state.quests.instancesByKey).map(instance => [instance.instanceKey, instance.status])),
+    questStageKeyByInstanceKey: Object.fromEntries(Object.values(state.quests.instancesByKey).map(instance => [instance.instanceKey, instance.currentStageKey])),
   }
   return { condition, action, playerStats, progression }
 }
@@ -265,7 +285,7 @@ export function rebaseTextOpenWorldSessionProjectionForBranchV1(value: TextOpenW
   const projection = parseTextOpenWorldSessionProjectionV1(value)
   if (projection.protocol.pendingCommandId) fail('不能从尚未终结的命令批次创建分支')
   projection.protocol = {
-    pendingCommandId: null, pendingCommandSequence: null, pendingActionKey: null, pendingActorKey: null,
+    pendingCommandId: null, pendingCommandSequence: null, pendingActionKey: null, pendingActorKey: null, pendingTargetKey: null,
     randomEvidence: [], lastCompletedCommandId: null, lastOutcomeFingerprint: null,
   }
   projection.lastEventSequence = 0

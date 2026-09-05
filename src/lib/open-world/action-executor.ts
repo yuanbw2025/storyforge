@@ -1,6 +1,6 @@
 import { db } from '../db/schema'
 import { hashProductRuntimeStateV1, readProductRuntimeState } from '../product/runtime-core'
-import type { TextOpenWorldCommandEnvelopeV1, TextOpenWorldFeedbackReceiptV1 } from '../types'
+import type { TextOpenWorldCommandEnvelopeV1, TextOpenWorldEffectDefinitionV1, TextOpenWorldFeedbackReceiptV1 } from '../types'
 import { createTextOpenWorldActionRegistryV1 } from './action-registry'
 import { ensureTextOpenWorldCombatRetryCheckpointV1 } from './checkpoints'
 import { commitTextOpenWorldCommandV1, getTextOpenWorldCommandStatusV1 } from './commands'
@@ -12,6 +12,7 @@ import {
   assertTextOpenWorldVNextProjectionBindingV1,
   verifyTextOpenWorldVNextSessionBindingV1,
 } from './session-binding'
+import { createTextOpenWorldQuestTransitionCatalogV1 } from './quest-state-machine'
 import { deriveTextOpenWorldContextsV1, parseTextOpenWorldSessionProjectionV1 } from './session-projection'
 
 const COMMAND_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/
@@ -32,8 +33,18 @@ async function settleAcceptedCommand(envelope: TextOpenWorldCommandEnvelopeV1): 
   const action = createTextOpenWorldActionRegistryV1(projection.runtimePackage).get(envelope.actionKey)
     ?? fail(`Release不存在Action:${envelope.actionKey}`)
   const effectKeys = [...new Set([...action.action.costEffectKeys, ...action.action.successEffectKeys])]
+  const modules = parseTextOpenWorldModulesV1(projection.runtimePackage)
+  const questTransitions = effectKeys.map(effectKey => modules.actions.effects.find(effect => effect.key === effectKey)!)
+    .filter((effect): effect is Extract<TextOpenWorldEffectDefinitionV1, { operation: 'transition-quest' }> => effect.operation === 'transition-quest')
+  const authorization = questTransitions.length
+    ? createTextOpenWorldQuestTransitionCatalogV1(projection.runtimePackage).prepare({
+        instanceKey: targetFrom(envelope) ?? fail('任务状态Action缺少实例目标'),
+        state: projection.state,
+        transitions: questTransitions.map(effect => ({ toStatus: effect.payload.status, stageKey: effect.payload.stageKey })),
+      })
+    : null
   const catalog = createTextOpenWorldEffectCatalogV1(projection.runtimePackage)
-  const plan = await catalog.plan({ effectKeys, claimKey: `claim.${envelope.commandId}`, state: projection.state })
+  const plan = await catalog.plan({ effectKeys, claimKey: `claim.${envelope.commandId}`, state: projection.state, authorization })
   const { receipt } = await catalog.apply({ plan, state: projection.state })
   await commitTextOpenWorldOutcomeBatchV1({
     sessionId: envelope.sessionId,

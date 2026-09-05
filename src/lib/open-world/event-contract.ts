@@ -15,6 +15,7 @@ import type {
   TextOpenWorldRandomEvidenceV1,
   TextOpenWorldRandomRequestV1,
   TextOpenWorldRandomResolvedEventPayloadV1,
+  TextOpenWorldQuestTransitionAuthorizationV1,
   TextOpenWorldRulesetStampV1,
   TextOpenWorldRewardAuthorizationV1,
 } from '../types'
@@ -113,6 +114,40 @@ function parseRewardAuthorization(value: unknown, label: string): TextOpenWorldR
   }
 }
 
+function parseAuthorization(value: unknown, label: string): TextOpenWorldEffectPlanV1['authorization'] {
+  if (value == null) return null
+  const raw = row(value, label)
+  if (raw.kind === 'reward') return parseRewardAuthorization(value, label)
+  if (raw.kind !== 'quest-transition') fail(`${label}.kind无效`)
+  exact(raw, ['kind', 'instanceKey', 'definitionKey', 'worldMinute', 'transitions'], label)
+  if (!Array.isArray(raw.transitions) || raw.transitions.length < 1 || raw.transitions.length > 8) fail(`${label}.transitions无效`)
+  const statuses = new Set(['locked', 'available', 'revealed', 'accepted', 'active', 'suspended', 'completed', 'failed', 'expired', 'abandoned', 'withdrawn'])
+  const intents = new Set(['unlock', 'reveal', 'accept', 'activate', 'suspend', 'resume', 'complete', 'fail', 'abandon', 'expire', 'withdraw', 'reoffer'])
+  return {
+    kind: 'quest-transition',
+    instanceKey: token(raw.instanceKey, `${label}.instanceKey`),
+    definitionKey: token(raw.definitionKey, `${label}.definitionKey`),
+    worldMinute: integer(raw.worldMinute, `${label}.worldMinute`),
+    transitions: raw.transitions.map((value, index) => {
+      const step = row(value, `${label}.transitions[${index}]`)
+      exact(step, ['intent', 'actorKind', 'fromStatus', 'toStatus', 'stageKey'], `${label}.transitions[${index}]`)
+      const actorKind: 'player' | 'system' = step.actorKind === 'player' || step.actorKind === 'system'
+        ? step.actorKind
+        : fail(`${label}.transitions[${index}].actorKind无效`)
+      return {
+        intent: token(step.intent, `${label}.transitions[${index}].intent`) as TextOpenWorldQuestTransitionAuthorizationV1['transitions'][number]['intent'],
+        actorKind,
+        fromStatus: token(step.fromStatus, `${label}.transitions[${index}].fromStatus`) as TextOpenWorldQuestTransitionAuthorizationV1['transitions'][number]['fromStatus'],
+        toStatus: token(step.toStatus, `${label}.transitions[${index}].toStatus`) as TextOpenWorldQuestTransitionAuthorizationV1['transitions'][number]['toStatus'],
+        stageKey: step.stageKey == null ? null : token(step.stageKey, `${label}.transitions[${index}].stageKey`),
+      }
+    }).map((step, index) => {
+      if (!intents.has(step.intent) || !statuses.has(step.fromStatus) || !statuses.has(step.toStatus)) fail(`${label}.transitions[${index}]枚举无效`)
+      return step
+    }),
+  }
+}
+
 function parsePlan(value: unknown, label: string): TextOpenWorldEffectPlanV1 {
   const parsed = row(value, label); exact(parsed, ['schema', 'version', 'claimKey', 'baseStateHash', 'resultingStateHash', 'effectKeys', 'effects', 'authorization', 'impactDomains', 'previewChanges', 'planHash'], label)
   if (parsed.schema !== 'storyforge.text-open-world.effect-plan' || parsed.version !== 1) fail(`${label} schema/version无效`)
@@ -130,7 +165,7 @@ function parsePlan(value: unknown, label: string): TextOpenWorldEffectPlanV1 {
     schema: 'storyforge.text-open-world.effect-plan', version: 1,
     claimKey: token(parsed.claimKey, `${label}.claimKey`, COMMAND_ID),
     baseStateHash: hash(parsed.baseStateHash, `${label}.baseStateHash`), resultingStateHash: hash(parsed.resultingStateHash, `${label}.resultingStateHash`),
-    effectKeys, effects, authorization: parseRewardAuthorization(parsed.authorization, `${label}.authorization`), impactDomains,
+    effectKeys, effects, authorization: parseAuthorization(parsed.authorization, `${label}.authorization`), impactDomains,
     previewChanges: parsed.previewChanges.map((item, index) => parseChange(item, `${label}.previewChanges[${index}]`)),
     planHash: hash(parsed.planHash, `${label}.planHash`),
   }

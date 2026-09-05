@@ -3,6 +3,7 @@ import type {
   TextOpenWorldActionCatalogEntryV1,
   TextOpenWorldActionProjectionContextV1,
   TextOpenWorldCommandEnvelopeV1,
+  TextOpenWorldEffectDefinitionV1,
   TextOpenWorldParsedModulesV1,
   TextOpenWorldResolvedActionV1,
   TextOpenWorldRuntimePackageV1,
@@ -81,6 +82,26 @@ function parseContext(value: TextOpenWorldActionProjectionContextV1, modules: Te
   for (const scope of ['actor', 'location', 'item', 'quest', 'vendor', 'encounter'] as const) {
     if (value.validTargetKeysByScope?.[scope] != null) validTargetKeysByScope[scope] = uniqueKeys(value.validTargetKeysByScope[scope], `validTargetKeysByScope.${scope}`)
   }
+  const questDefinitionKeyByInstanceKey: Record<string, string> = {}
+  const questKeys = new Set(modules.quests.quests.map(item => item.key))
+  for (const [instanceKey, definitionKey] of Object.entries(value.questDefinitionKeyByInstanceKey ?? {})) {
+    stableKey(instanceKey, 'questDefinitionKeyByInstanceKey.instanceKey')
+    const parsedDefinitionKey = stableKey(definitionKey, `questDefinitionKeyByInstanceKey.${instanceKey}`)
+    if (!questKeys.has(parsedDefinitionKey)) fail(`任务实例映射引用未知定义:${parsedDefinitionKey}`)
+    questDefinitionKeyByInstanceKey[instanceKey] = parsedDefinitionKey
+  }
+  const questStatusByInstanceKey = { ...(value.questStatusByInstanceKey ?? {}) }
+  for (const [instanceKey, status] of Object.entries(questStatusByInstanceKey)) {
+    stableKey(instanceKey, 'questStatusByInstanceKey.instanceKey')
+    if (!['locked', 'available', 'revealed', 'accepted', 'active', 'suspended', 'completed', 'failed', 'expired', 'abandoned', 'withdrawn'].includes(status)) fail(`任务实例状态无效:${instanceKey}`)
+  }
+  const questStageKeyByInstanceKey: Record<string, string | null> = {}
+  const questStageKeys = new Set(modules.quests.stages.map(item => item.key))
+  for (const [instanceKey, stageKey] of Object.entries(value.questStageKeyByInstanceKey ?? {})) {
+    stableKey(instanceKey, 'questStageKeyByInstanceKey.instanceKey')
+    if (stageKey != null && !questStageKeys.has(stableKey(stageKey, `questStageKeyByInstanceKey.${instanceKey}`))) fail(`任务实例Stage映射引用未知定义:${stageKey}`)
+    questStageKeyByInstanceKey[instanceKey] = stageKey
+  }
   return {
     actorKey: value.actorKey,
     currentLocationKey,
@@ -91,6 +112,9 @@ function parseContext(value: TextOpenWorldActionProjectionContextV1, modules: Te
     completedOnceActionKeys,
     cooldownUntilWorldMinuteByActionKey,
     validTargetKeysByScope,
+    questDefinitionKeyByInstanceKey,
+    questStatusByInstanceKey,
+    questStageKeyByInstanceKey,
   }
 }
 
@@ -154,6 +178,23 @@ export function createTextOpenWorldActionRegistryV1(value: TextOpenWorldRuntimeP
         validTargetKeys = equipment?.operation === 'equip-item' || equipment?.operation === 'unequip-item'
           ? validTargetKeys.filter(itemKey => itemKey === equipment.payload.itemKey)
           : []
+      }
+      if (action.targetScope === 'quest' && ['accept-quest', 'abandon-quest', 'quest-action'].includes(action.category)) {
+        const transitionDefinitions = [...action.costEffectKeys, ...action.successEffectKeys]
+          .map(effectKey => effectByKey.get(effectKey))
+          .filter((effect): effect is Extract<TextOpenWorldEffectDefinitionV1, { operation: 'transition-quest' }> => effect?.operation === 'transition-quest')
+        const questKeys = new Set(transitionDefinitions.map(effect => effect.payload.questKey))
+        validTargetKeys = questKeys.size === 1
+          ? validTargetKeys.filter(instanceKey => context.questDefinitionKeyByInstanceKey[instanceKey] === [...questKeys][0])
+          : []
+        if (action.category === 'accept-quest') validTargetKeys = validTargetKeys.filter(instanceKey => context.questStatusByInstanceKey[instanceKey] === 'revealed')
+        if (action.category === 'abandon-quest') {
+          const abandonedStageKey = transitionDefinitions[0]?.payload.stageKey ?? null
+          validTargetKeys = validTargetKeys.filter(instanceKey => (
+            ['active', 'suspended'].includes(context.questStatusByInstanceKey[instanceKey])
+            && context.questStageKeyByInstanceKey[instanceKey] === abandonedStageKey
+          ))
+        }
       }
       if (action.targetScope !== 'none' && validTargetKeys.length === 0) unavailableReasons.push({ code: 'no-valid-target', message: '当前没有可作用的目标。', conditionKey: null })
       return {

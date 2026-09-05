@@ -128,7 +128,7 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
           regionKeys: ['region.salt-port', 'region.ridge'],
           prerequisiteConditionKeys: [], rewardEffectKeys: ['effect.reward-experience'], lifecyclePolicy: 'protected-wait',
           timePolicy: 'waits', expirationMinutes: null, repeatable: false,
-          instantiationPolicy: 'session-start', initialStatus: 'available', estimatedMinutes: 30, tags: ['mainline', 'water-crisis'],
+          instantiationPolicy: 'session-start', initialStatus: 'revealed', estimatedMinutes: 30, tags: ['mainline', 'water-crisis'],
         },
         {
           key: 'quest.template.supplies', type: 'template', ownerKind: 'region', ownerKey: 'region.salt-port', title: '短缺物资',
@@ -171,6 +171,11 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
         { key: 'effect.drop-salt-1', operation: 'grant-item', payload: { itemKey: 'item.salt-crystal', quantity: 1 } },
         { key: 'effect.drop-salt-2', operation: 'grant-item', payload: { itemKey: 'item.salt-crystal', quantity: 2 } },
         { key: 'effect.earn-first-clue', operation: 'earn-achievement', payload: { achievementKey: 'achievement.first-clue' } },
+        { key: 'effect.accept-main', operation: 'transition-quest', payload: { questKey: 'quest.main.1', status: 'accepted', stageKey: null } },
+        { key: 'effect.activate-main', operation: 'transition-quest', payload: { questKey: 'quest.main.1', status: 'active', stageKey: 'quest-stage.main.1' } },
+        { key: 'effect.accept-supplies', operation: 'transition-quest', payload: { questKey: 'quest.template.supplies', status: 'accepted', stageKey: null } },
+        { key: 'effect.activate-supplies', operation: 'transition-quest', payload: { questKey: 'quest.template.supplies', status: 'active', stageKey: 'quest-stage.template.supplies' } },
+        { key: 'effect.abandon-supplies', operation: 'transition-quest', payload: { questKey: 'quest.template.supplies', status: 'abandoned', stageKey: 'quest-stage.template.supplies' } },
       ],
       actions: [{
         key: 'action.investigate-channel', category: 'investigate', label: '检查盐渠',
@@ -178,6 +183,21 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
         locationKeys: ['location.salt-port', 'location.ridge-channel'], requirementConditionKeys: [], costEffectKeys: [],
         successEffectKeys: [], failureEffectKeys: [], timeCostMinutes: 15,
         confirmationPolicy: 'never', repeatPolicy: 'repeatable', cooldownMinutes: null,
+      }, {
+        key: 'action.accept-main', category: 'accept-quest', label: '接受主线任务', description: '接受并开始调查断流的盐渠。',
+        actorScope: 'player', targetScope: 'quest', locationKeys: [], requirementConditionKeys: [], costEffectKeys: [],
+        successEffectKeys: ['effect.accept-main', 'effect.activate-main'], failureEffectKeys: [], timeCostMinutes: 0,
+        confirmationPolicy: 'never', repeatPolicy: 'repeatable', cooldownMinutes: null,
+      }, {
+        key: 'action.accept-supplies', category: 'accept-quest', label: '接受物资任务', description: '接受并开始处理当地物资短缺。',
+        actorScope: 'player', targetScope: 'quest', locationKeys: [], requirementConditionKeys: [], costEffectKeys: [],
+        successEffectKeys: ['effect.accept-supplies', 'effect.activate-supplies'], failureEffectKeys: [], timeCostMinutes: 0,
+        confirmationPolicy: 'never', repeatPolicy: 'repeatable', cooldownMinutes: null,
+      }, {
+        key: 'action.abandon-supplies', category: 'abandon-quest', label: '放弃物资任务', description: '放弃当前这一次物资委托。',
+        actorScope: 'player', targetScope: 'quest', locationKeys: [], requirementConditionKeys: [], costEffectKeys: [],
+        successEffectKeys: ['effect.abandon-supplies'], failureEffectKeys: [], timeCostMinutes: 0,
+        confirmationPolicy: 'always', repeatPolicy: 'repeatable', cooldownMinutes: null,
       }, {
         key: 'action.rest', category: 'rest', label: '休息', description: '休息并恢复生命与技能资源。',
         actorScope: 'player', targetScope: 'none', locationKeys: ['location.salt-port'], requirementConditionKeys: [], costEffectKeys: [],

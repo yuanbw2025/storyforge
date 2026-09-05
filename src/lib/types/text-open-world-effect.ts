@@ -143,6 +143,24 @@ export interface TextOpenWorldRewardAuthorizationV1 {
   drops: Array<{ dropTableKey: string; itemKey: string; quantity: number; effectKey: string }>
 }
 
+export type TextOpenWorldQuestTransitionIntentV1 =
+  | 'unlock' | 'reveal' | 'accept' | 'activate' | 'suspend' | 'resume'
+  | 'complete' | 'fail' | 'abandon' | 'expire' | 'withdraw' | 'reoffer'
+
+export interface TextOpenWorldQuestTransitionAuthorizationV1 {
+  kind: 'quest-transition'
+  instanceKey: string
+  definitionKey: string
+  worldMinute: number
+  transitions: Array<{
+    intent: TextOpenWorldQuestTransitionIntentV1
+    actorKind: 'player' | 'system'
+    fromStatus: TextOpenWorldQuestStatusV1
+    toStatus: TextOpenWorldQuestStatusV1
+    stageKey: string | null
+  }>
+}
+
 export interface TextOpenWorldEffectPlanV1 {
   schema: 'storyforge.text-open-world.effect-plan'
   version: 1
@@ -151,7 +169,7 @@ export interface TextOpenWorldEffectPlanV1 {
   resultingStateHash: string
   effectKeys: string[]
   effects: TextOpenWorldEffectDefinitionV1[]
-  authorization: TextOpenWorldRewardAuthorizationV1 | null
+  authorization: TextOpenWorldRewardAuthorizationV1 | TextOpenWorldQuestTransitionAuthorizationV1 | null
   impactDomains: TextOpenWorldEffectImpactDomainV1[]
   previewChanges: TextOpenWorldEffectChangeV1[]
   planHash: string

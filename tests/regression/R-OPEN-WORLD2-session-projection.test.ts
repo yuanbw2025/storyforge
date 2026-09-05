@@ -54,7 +54,7 @@ describe('Text Open World vNext · authoritative Session Projection', () => {
           itemInstances: { 'instance.initial.1.item.rust-sword': { itemKey: 'item.rust-sword', acquiredByClaimKey: 'initial-build', stateTags: ['new'] } },
           currency: 20, knownRecipeKeys: ['recipe.brine-tonic'],
         },
-        quests: { instancesByKey: { [mainQuestInstanceKey]: { definitionKey: 'quest.main.1', sourceKind: 'release', status: 'available', objectiveStatusByKey: { 'objective.main.1': 'inactive' } } } },
+        quests: { instancesByKey: { [mainQuestInstanceKey]: { definitionKey: 'quest.main.1', sourceKind: 'release', status: 'revealed', objectiveStatusByKey: { 'objective.main.1': 'inactive' } } } },
         map: { currentLocationKey: 'location.salt-port', revealedLocationKeys: ['location.salt-port'], regionKnowledgeByKey: { 'region.salt-port': 'visited', 'region.ridge': 'heard' }, openEdgeKeys: ['edge.port-ridge'] },
         time: { worldMinute: 480, currentWeatherByRegionKey: { 'region.salt-port': 'weather.clear', 'region.ridge': 'weather.clear' } },
         relationships: { morality: 0, factionAffinityByKey: { 'faction.canal-keepers': 0 } },
@@ -102,6 +102,12 @@ describe('Text Open World vNext · authoritative Session Projection', () => {
 
     projection.state.relationships.morality = 100
     expect(deriveTextOpenWorldContextsV1(projection).condition.relations.attitudeByActorKey['actor.caretaker']).toBe('good')
+  })
+
+  it('旧vNext终态投影缺少pendingTargetKey时显式迁移为空值', () => {
+    const legacy = createInitialTextOpenWorldSessionProjectionV1(createTextOpenWorldVNextFixture()) as any
+    delete legacy.protocol.pendingTargetKey
+    expect(parseTextOpenWorldSessionProjectionV1(legacy).protocol.pendingTargetKey).toBeNull()
   })
 
   it('once/cooldown运行约束在Effect终态后写入同一投影', async () => {

@@ -172,7 +172,7 @@ export interface TextOpenWorldQuestModuleV1 {
     expirationMinutes: number | null
     repeatable: boolean
     instantiationPolicy: TextOpenWorldQuestInstantiationPolicyV1
-    initialStatus: 'locked' | 'available'
+    initialStatus: 'locked' | 'available' | 'revealed'
     estimatedMinutes: number
     tags: string[]
   }>

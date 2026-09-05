@@ -59,7 +59,7 @@ export function createInitialTextOpenWorldQuestInstancesV1(
           return stage.objectiveKeys.map(objectiveKey => [objectiveKey, 'inactive' as const])
         })),
         createdAtWorldMinute: worldMinute,
-        offeredAtWorldMinute: definition.initialStatus === 'available' ? worldMinute : null,
+        offeredAtWorldMinute: definition.initialStatus === 'revealed' ? worldMinute : null,
         acceptedAtWorldMinute: null,
         deadlineWorldMinute: null,
         terminalAtWorldMinute: null,
@@ -89,7 +89,7 @@ export function createTextOpenWorldDirectorQuestInstanceV1(
     sourceKind: 'director',
     sourceInstanceKey,
     sourceContentHash: runtimePackage.modules.quests.contentHash,
-    status: 'available',
+    status: 'revealed',
     currentStageKey: null,
     objectiveStatusByKey: Object.fromEntries(definition.stageKeys.flatMap(stageKey => {
       const stage = modules.quests.stages.find(candidate => candidate.key === stageKey)!
@@ -106,7 +106,8 @@ export function createTextOpenWorldDirectorQuestInstanceV1(
 }
 
 const STATUS_PRIORITY: Record<TextOpenWorldQuestStatusV1, number> = {
-  active: 7, available: 6, completed: 5, failed: 4, expired: 3, abandoned: 2, locked: 1,
+  active: 11, accepted: 10, revealed: 9, available: 8, suspended: 7,
+  completed: 6, failed: 5, expired: 4, abandoned: 3, withdrawn: 2, locked: 1,
 }
 
 /**

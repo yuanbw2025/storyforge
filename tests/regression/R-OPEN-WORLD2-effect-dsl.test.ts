@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createTextOpenWorldEffectCatalogV1 } from '../../src/lib/open-world/effect-dsl'
+import { createTextOpenWorldQuestTransitionCatalogV1 } from '../../src/lib/open-world/quest-state-machine'
 import { createInitialTextOpenWorldQuestInstancesV1 } from '../../src/lib/open-world/quests'
 import type { TextOpenWorldEffectDefinitionV1, TextOpenWorldEffectStateV1 } from '../../src/lib/types'
 import { createTextOpenWorldVNextFixture } from '../helpers/text-open-world-vnext-fixture'
@@ -98,7 +99,6 @@ describe('Text Open World vNext · typed Effect DSL and atomic EffectPlan', () =
 
   it('一个EffectPlan可以原子推进任务、地图、关系、战斗、世界与结局', async () => {
     const effects: TextOpenWorldEffectDefinitionV1[] = [
-      { key: 'effect.activate-main', operation: 'transition-quest', payload: { questKey: 'quest.main.1', status: 'active', stageKey: 'quest-stage.main.1' } },
       { key: 'effect.complete-main-objective', operation: 'complete-objective', payload: { objectiveKey: 'objective.main.1' } },
       { key: 'effect.morality', operation: 'change-morality', payload: { amount: 5 } },
       { key: 'effect.affinity', operation: 'change-faction-affinity', payload: { factionKey: 'faction.canal-keepers', amount: 10 } },
@@ -122,7 +122,20 @@ describe('Text Open World vNext · typed Effect DSL and atomic EffectPlan', () =
     const mainInstanceKey = Object.keys(quests.instancesByKey)[0]
     quests.instancesByKey[mainInstanceKey].objectiveStatusByKey['objective.main.1'] = 'active'
     const before = state({ quests })
-    const plan = await catalog.plan({ effectKeys: effects.map(effect => effect.key), claimKey: 'claim.story-beat', state: before })
+    const authorization = createTextOpenWorldQuestTransitionCatalogV1(createTextOpenWorldVNextFixture()).prepare({
+      instanceKey: mainInstanceKey,
+      state: before,
+      transitions: [
+        { toStatus: 'accepted', stageKey: null },
+        { toStatus: 'active', stageKey: 'quest-stage.main.1' },
+      ],
+    })
+    const plan = await catalog.plan({
+      effectKeys: ['effect.accept-main', 'effect.activate-main', ...effects.map(effect => effect.key)],
+      claimKey: 'claim.story-beat',
+      state: before,
+      authorization,
+    })
     const { state: after } = await catalog.apply({ plan, state: before })
 
     expect(plan.impactDomains).toEqual(expect.arrayContaining(['quests', 'map', 'time', 'relationships', 'combat', 'actors', 'world', 'knowledge', 'endings']))

@@ -23,13 +23,13 @@ describe('Text Open World vNext · QuestDefinition and QuestInstance boundary', 
     const instanceKey = 'quest-instance.12.quest.main.1.release.13.session-start'
 
     expect(modules.quests.quests).toMatchObject([
-      { key: 'quest.main.1', type: 'mainline', ownerKind: 'actor', instantiationPolicy: 'session-start', initialStatus: 'available' },
+      { key: 'quest.main.1', type: 'mainline', ownerKind: 'actor', instantiationPolicy: 'session-start', initialStatus: 'revealed' },
       { key: 'quest.template.supplies', type: 'template', ownerKind: 'region', instantiationPolicy: 'director', initialStatus: 'locked' },
     ])
     expect(instances).toEqual({
       [instanceKey]: expect.objectContaining({
         instanceKey, definitionKey: 'quest.main.1', sourceKind: 'release', sourceInstanceKey: 'session-start',
-        status: 'available', offeredAtWorldMinute: 480, objectiveStatusByKey: { 'objective.main.1': 'inactive' },
+        status: 'revealed', offeredAtWorldMinute: 480, objectiveStatusByKey: { 'objective.main.1': 'inactive' },
       }),
     })
   })
@@ -56,7 +56,7 @@ describe('Text Open World vNext · QuestDefinition and QuestInstance boundary', 
     })).toBe(first.instanceKey)
     expect(projectTextOpenWorldQuestInstancesV1(modules, projection.state.quests).map(item => item.instance.instanceKey))
       .toEqual(expect.arrayContaining([first.instanceKey, second.instanceKey]))
-    expect(deriveTextOpenWorldQuestConditionProjectionV1(modules, projection.state.quests).statusByQuestKey['quest.template.supplies']).toBe('available')
+    expect(deriveTextOpenWorldQuestConditionProjectionV1(modules, projection.state.quests).statusByQuestKey['quest.template.supplies']).toBe('revealed')
     expect(modules.quests.quests.find(item => item.key === 'quest.template.supplies')).toEqual(definitionSnapshot)
     expect(() => validateTextOpenWorldEffectStateV1(projection.state, modules)).not.toThrow()
   })
@@ -91,7 +91,7 @@ describe('Text Open World vNext · QuestDefinition and QuestInstance boundary', 
 
     const hiddenFirstMain = createTextOpenWorldVNextFixture()
     ;(hiddenFirstMain.modules.quests.payload as any).quests[0].initialStatus = 'locked'
-    expect(() => parseTextOpenWorldModulesV1(hiddenFirstMain)).toThrow('严格顺序主线必须只开放第一个任务定义')
+    expect(() => parseTextOpenWorldModulesV1(hiddenFirstMain)).toThrow('严格顺序主线必须只揭示第一个任务定义')
 
     const templateCondition = createTextOpenWorldVNextFixture()
     ;(templateCondition.modules.actions.payload as any).conditions.push({

@@ -8,6 +8,7 @@ function context(overrides: Partial<TextOpenWorldActionProjectionContextV1> = {}
     actorKey: 'player', currentLocationKey: 'location.salt-port', worldMinute: 480, playerHealth: 37, combatStatus: null,
     conditionResults: {}, completedOnceActionKeys: [], cooldownUntilWorldMinuteByActionKey: {},
     validTargetKeysByScope: { location: ['location.salt-port'] },
+    questDefinitionKeyByInstanceKey: {}, questStatusByInstanceKey: {}, questStageKeyByInstanceKey: {},
     ...overrides,
   }
 }
@@ -116,5 +117,31 @@ describe('Text Open World vNext · unified Action registry and availability proj
       .toMatchObject({ available: true, validTargetKeys: ['item.salt-crystal'], confirmationRequired: true })
     expect(() => registry.resolve({ actionKey: 'action.use-brine-tonic', targetKey: 'item.rust-sword', context: itemContext }))
       .toThrow('targetKey不在Action可用目标中')
+  })
+
+  it('任务Action同时按定义、状态和当前Stage收窄到合法实例', () => {
+    const registry = createTextOpenWorldActionRegistryV1(createTextOpenWorldVNextFixture())
+    const main = 'quest-instance.12.quest.main.1.release.13.session-start'
+    const supplies = 'quest-instance.23.quest.template.supplies.director.6.draw.1'
+    const questContext = context({
+      validTargetKeysByScope: { quest: [main, supplies] },
+      questDefinitionKeyByInstanceKey: { [main]: 'quest.main.1', [supplies]: 'quest.template.supplies' },
+      questStatusByInstanceKey: { [main]: 'revealed', [supplies]: 'active' },
+      questStageKeyByInstanceKey: { [main]: null, [supplies]: 'quest-stage.template.supplies' },
+    })
+    const projection = registry.project(questContext)
+    expect(projection.find(item => item.action.key === 'action.accept-main'))
+      .toMatchObject({ available: true, validTargetKeys: [main] })
+    expect(projection.find(item => item.action.key === 'action.accept-supplies'))
+      .toMatchObject({ available: false, validTargetKeys: [] })
+    expect(projection.find(item => item.action.key === 'action.abandon-supplies'))
+      .toMatchObject({ available: true, validTargetKeys: [supplies], confirmationRequired: true })
+
+    const wrongStage = registry.project(context({
+      ...questContext,
+      questStageKeyByInstanceKey: { [main]: null, [supplies]: 'quest-stage.main.1' },
+    }))
+    expect(wrongStage.find(item => item.action.key === 'action.abandon-supplies'))
+      .toMatchObject({ available: false, validTargetKeys: [] })
   })
 })

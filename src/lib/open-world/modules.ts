@@ -240,7 +240,7 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
     if ((type === 'mainline' || type === 'significant') && (policy !== 'protected-wait' || timePolicy !== 'waits')) fail(`${label}重要任务必须受保护并等待玩家`)
     const repeatable = bool(item.repeatable, `${label}.repeatable`)
     const instantiationPolicy = enumValue(item.instantiationPolicy, ['session-start', 'director'], `${label}.instantiationPolicy`)
-    const initialStatus = enumValue(item.initialStatus, ['locked', 'available'], `${label}.initialStatus`)
+    const initialStatus = enumValue(item.initialStatus, ['locked', 'available', 'revealed'], `${label}.initialStatus`)
     if (type === 'template') {
       if (!repeatable || instantiationPolicy !== 'director' || initialStatus !== 'locked' || storylineKey != null) fail(`${label}模板任务必须由Director重复实例化且不能直接开放`)
     } else if (repeatable || instantiationPolicy !== 'session-start') fail(`${label}正式任务必须在Session开始时建立单一实例`)
@@ -282,10 +282,56 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
   const orderedMainQuestKeys = storylines.filter(item => item.kind === 'mainline').flatMap(storyline =>
     narrativeStages.filter(stage => stage.storylineKey === storyline.key).sort((left, right) => Number(left.order) - Number(right.order))
       .flatMap(stage => strings(stage.questKeys, `narrative stage ${String(stage.key)} questKeys`)))
-  const initiallyAvailableMainQuestKeys = questRows.filter(item => item.type === 'mainline' && item.initialStatus === 'available').map(item => String(item.key))
-  if (orderedMainQuestKeys.length && (initiallyAvailableMainQuestKeys.length !== 1 || initiallyAvailableMainQuestKeys[0] !== orderedMainQuestKeys[0])) {
-    fail('严格顺序主线必须只开放第一个任务定义')
+  const initiallyRevealedMainQuestKeys = questRows.filter(item => item.type === 'mainline' && item.initialStatus === 'revealed').map(item => String(item.key))
+  if (orderedMainQuestKeys.length && (initiallyRevealedMainQuestKeys.length !== 1 || initiallyRevealedMainQuestKeys[0] !== orderedMainQuestKeys[0])) {
+    fail('严格顺序主线必须只揭示第一个任务定义')
   }
+  actionRows.filter(action => ['accept-quest', 'abandon-quest'].includes(String(action.category))).forEach(action => {
+    const label = `quest action ${String(action.key)}`
+    if (action.actorScope !== 'player' || action.targetScope !== 'quest' || strings(action.costEffectKeys, `${label}.costEffectKeys`).length || strings(action.failureEffectKeys, `${label}.failureEffectKeys`).length) fail(`${label}必须是无cost/failure的玩家任务实例Action`)
+    const transitions = strings(action.successEffectKeys, `${label}.successEffectKeys`).map(effectKey => effects.find(effect => effect.key === effectKey)!)
+      .filter(effect => effect.operation === 'transition-quest')
+    if (transitions.length !== strings(action.successEffectKeys, `${label}.successEffectKeys`).length) fail(`${label}只能包含任务迁移Effect`)
+    const transitionPayloads = transitions.map(effect => row(effect.payload, `${label}.${String(effect.key)}.payload`))
+    const definitionKeys = new Set(transitionPayloads.map(payload => String(payload.questKey)))
+    if (definitionKeys.size !== 1) fail(`${label}必须只绑定一个任务定义`)
+    const definition = questRows.find(quest => quest.key === [...definitionKeys][0]) ?? fail(`${label}任务定义不存在`)
+    if (action.category === 'accept-quest') {
+      if (transitionPayloads.length !== 2 || transitionPayloads[0].status !== 'accepted' || transitionPayloads[0].stageKey != null
+        || transitionPayloads[1].status !== 'active' || !strings(definition.stageKeys, `${label}.definition.stageKeys`).includes(String(transitionPayloads[1].stageKey))) fail(`${label}必须依次accept并激活合法Stage`)
+    } else if (transitionPayloads.length !== 1 || transitionPayloads[0].status !== 'abandoned'
+      || !strings(definition.stageKeys, `${label}.definition.stageKeys`).includes(String(transitionPayloads[0].stageKey))
+      || ['mainline', 'significant'].includes(String(definition.type))) fail(`${label}不能违反任务保护策略`)
+    if (action.confirmationPolicy !== (action.category === 'abandon-quest' ? 'always' : 'never') || action.repeatPolicy !== 'repeatable') fail(`${label}确认或重复策略无效`)
+  })
+  actionRows.forEach(action => {
+    const allEffectKeys = [
+      ...strings(action.costEffectKeys, `action ${String(action.key)}.costEffectKeys`),
+      ...strings(action.successEffectKeys, `action ${String(action.key)}.successEffectKeys`),
+      ...strings(action.failureEffectKeys, `action ${String(action.key)}.failureEffectKeys`),
+    ]
+    const transitions = allEffectKeys.map(effectKey => effects.find(effect => effect.key === effectKey)!)
+      .filter(effect => effect.operation === 'transition-quest')
+    if (!transitions.length) return
+    const category = String(action.category)
+    if (!['accept-quest', 'abandon-quest', 'quest-action'].includes(category)) fail(`任务迁移Effect只能由任务生命周期Action引用:${String(action.key)}`)
+    if (category !== 'quest-action') return
+    const label = `system quest action ${String(action.key)}`
+    if (action.actorScope !== 'system' || action.targetScope !== 'quest'
+      || strings(action.costEffectKeys, `${label}.costEffectKeys`).length
+      || strings(action.failureEffectKeys, `${label}.failureEffectKeys`).length
+      || transitions.length !== strings(action.successEffectKeys, `${label}.successEffectKeys`).length
+      || action.confirmationPolicy !== 'never' || action.repeatPolicy !== 'repeatable') fail(`${label}合同无效`)
+    const payloads = transitions.map(effect => row(effect.payload, `${label}.${String(effect.key)}.payload`))
+    const definitionKeys = new Set(payloads.map(payload => String(payload.questKey)))
+    if (definitionKeys.size !== 1) fail(`${label}必须只迁移一个任务定义`)
+    const definition = questRows.find(quest => quest.key === [...definitionKeys][0]) ?? fail(`${label}任务定义不存在`)
+    const targetStatuses = payloads.map(payload => String(payload.status))
+    if (targetStatuses.includes('accepted') || targetStatuses.includes('abandoned')) fail(`${label}不能代替玩家接取或放弃`)
+    if ((definition.type === 'mainline' || definition.type === 'significant')
+      && targetStatuses.some(status => ['failed', 'expired', 'withdrawn'].includes(status))) fail(`${label}不能破坏受保护故事线`)
+    if (targetStatuses.includes('expired') && definition.timePolicy !== 'timed') fail(`${label}不能使非限时任务过期`)
+  })
 
   const progression = versioned(packageValue, 'progression')
   exact(progression, ['version', 'rules', 'levels', 'skills', 'statuses'], 'progression')
@@ -582,7 +628,7 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
   })
   questRows.forEach((item, index) => {
     const ownerKey = nullableKey(item.ownerKey, `quests.quests[${index}].ownerKey`)
-    if (ownerKey && !actorKeys.has(ownerKey) && !factionKeys.has(ownerKey) && !regionKeys.has(ownerKey)) fail(`quest owner不存在:${ownerKey}`)
+    if (ownerKey && !actorKeys.has(ownerKey) && !factionKeys.has(ownerKey) && !regionKeys.has(ownerKey) && !locationKeys.has(ownerKey)) fail(`quest owner不存在:${ownerKey}`)
   })
   actionRows.forEach((item, index) => {
     if (item.targetScope === 'vendor' && vendors.length === 0) fail(`actions.actions[${index}] 需要vendor但目录为空`)

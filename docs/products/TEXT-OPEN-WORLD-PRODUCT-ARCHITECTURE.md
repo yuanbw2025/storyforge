@@ -1101,10 +1101,12 @@ locked → available → revealed → accepted → active
                                      ├→ failed
                                      ├→ abandoned
                                      ├→ expired
-                                     └→ suspended
+                                     └→ suspended → active
+revealed ├→ abandoned / expired / withdrawn
+abandoned → available → revealed（仅可重接普通任务）
 ```
 
-- 主线不能abandon、expire或被普通NPC死亡永久阻断；
+- 主线不能fail、abandon、expire、withdraw或被普通NPC死亡永久阻断；
 - 重要故事线不能被玩家删除或因长期不参与永久失败；推进到预设安全等待点后等待玩家；
 - 普通不限时任务放弃后可以通过原渠道再次出现；
 - 普通限时任务到期关闭；

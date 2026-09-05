@@ -72,7 +72,7 @@ interface TextOpenWorldPlayerState {
   command(command: OpenWorldCommand): Promise<void>
   resolveAdventureAction(actionKey: string): Promise<void>
   choose(choiceKey: string): Promise<void>
-  executeVNextAction(actionKey: string, targetKey?: string | null, commandId?: string): Promise<TextOpenWorldFeedbackReceiptV1>
+  executeVNextAction(actionKey: string, targetKey?: string | null, commandId?: string, confirmed?: boolean): Promise<TextOpenWorldFeedbackReceiptV1>
   generatePresentation(skillId: OpenWorldRuntimeSkillIdV1, objective: string, aiConfig: AIConfig): Promise<void>
   saveCheckpoint(name: string): Promise<void>
   forkCheckpoint(checkpointId: number, title?: string): Promise<number>
@@ -225,12 +225,12 @@ export const useTextOpenWorldPlayerStore = create<TextOpenWorldPlayerState>((set
       set({ generatedCandidate: null })
       await refresh()
     }),
-    executeVNextAction: async (actionKey, targetKey, commandId) => run(async () => {
+    executeVNextAction: async (actionKey, targetKey, commandId, confirmed) => run(async () => {
       const sessionId = get().selectedSessionId
       if (sessionId == null || !get().scope) throw new Error('[text-open-world] 请先开始正式开放世界。')
       const session = await assertSession(get().scope!, sessionId)
       if (!(await readProductRuntimeState(session.id!)).textOpenWorld) throw new Error('[text-open-world] 当前存档不是vNext运行包。')
-      const feedback = await executeTextOpenWorldActionV1({ sessionId, actionKey, targetKey, commandId })
+      const feedback = await executeTextOpenWorldActionV1({ sessionId, actionKey, targetKey, commandId, confirmed })
       set({ generatedCandidate: null, lastFeedback: feedback })
       await refresh()
       return feedback

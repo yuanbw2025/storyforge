@@ -64,6 +64,7 @@ export interface TextOpenWorldSessionProtocolProjectionV1 {
   pendingCommandSequence: number | null
   pendingActionKey: string | null
   pendingActorKey: string | null
+  pendingTargetKey: string | null
   randomEvidence: Array<{ eventSequence: number; evidence: TextOpenWorldRandomEvidenceV1 }>
   lastCompletedCommandId: string | null
   lastOutcomeFingerprint: string | null

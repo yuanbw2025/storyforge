@@ -134,7 +134,7 @@ export function createTextOpenWorldRewardCatalogV1(value: TextOpenWorldRuntimePa
     assertAuthorization: (input: {
       claimKey: string
       effectKeys: string[]
-      authorization: NonNullable<TextOpenWorldEffectPlanV1['authorization']>
+      authorization: Extract<NonNullable<TextOpenWorldEffectPlanV1['authorization']>, { kind: 'reward' }>
       evidence: TextOpenWorldRandomEvidenceV1[]
       conditionResults?: ConditionResults
     }) => {

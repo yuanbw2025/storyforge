@@ -622,7 +622,8 @@ async function readOpenWorldRuntimeContext(input: AssembleContextInput): Promise
     const weather = modules['time-weather'].weather.find(item => item.key === weatherKey)
     const visibleRegions = modules.world.regions.filter(item => runtime.map.regionKnowledgeByKey[item.key] !== 'unknown')
     const visibleLocations = modules.world.locations.filter(item => runtime.map.revealedLocationKeys.includes(item.key))
-    const visibleQuests = questModule.projectTextOpenWorldQuestInstancesV1(modules, runtime.quests).filter(item => item.instance.status !== 'locked')
+    const visibleQuests = questModule.projectTextOpenWorldQuestInstancesV1(modules, runtime.quests)
+      .filter(item => !['locked', 'available'].includes(item.instance.status))
     const questLines = visibleQuests.map(({ definition: quest, instance }) => {
       const status = instance.status
       const stageKey = instance.currentStageKey

@@ -1,5 +1,7 @@
 export type TextOpenWorldNumberComparatorV1 = 'eq' | 'neq' | 'lt' | 'lte' | 'gt' | 'gte'
-export type TextOpenWorldQuestStatusV1 = 'locked' | 'available' | 'active' | 'completed' | 'failed' | 'expired' | 'abandoned'
+export type TextOpenWorldQuestStatusV1 =
+  | 'locked' | 'available' | 'revealed' | 'accepted' | 'active' | 'suspended'
+  | 'completed' | 'failed' | 'expired' | 'abandoned' | 'withdrawn'
 export type TextOpenWorldObjectiveStatusV1 = 'inactive' | 'active' | 'completed' | 'failed'
 export type TextOpenWorldKnowledgeVisibilityV1 = 'hidden' | 'rumor' | 'known'
 

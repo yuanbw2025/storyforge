@@ -14,7 +14,7 @@ type ReferenceCatalog = ReturnType<typeof references>
 
 const KEY = /^[a-z][a-z0-9._:-]{0,199}$/
 const COMPARATORS: TextOpenWorldNumberComparatorV1[] = ['eq', 'neq', 'lt', 'lte', 'gt', 'gte']
-const QUEST_STATUSES = ['locked', 'available', 'active', 'completed', 'failed', 'expired', 'abandoned'] as const
+const QUEST_STATUSES = ['locked', 'available', 'revealed', 'accepted', 'active', 'suspended', 'completed', 'failed', 'expired', 'abandoned', 'withdrawn'] as const
 const MAX_DEPTH = 12
 const MAX_NODES = 256
 const MAX_GROUP_CHILDREN = 64
@@ -121,7 +121,7 @@ function parseExpression(value: unknown, refs: ReferenceCatalog, depth: number, 
   }
   if (op === 'quest-status') {
     exact(parsed, ['op', 'questKey', 'statuses'], label)
-    if (!Array.isArray(parsed.statuses) || parsed.statuses.length < 1 || parsed.statuses.length > 7) fail(`${label}.statuses无效`)
+    if (!Array.isArray(parsed.statuses) || parsed.statuses.length < 1 || parsed.statuses.length > QUEST_STATUSES.length) fail(`${label}.statuses无效`)
     const statuses = parsed.statuses.map((item, index) => enumValue(item, QUEST_STATUSES, `${label}.statuses[${index}]`))
     if (new Set(statuses).size !== statuses.length) fail(`${label}.statuses不能重复`)
     const questKey = ref(parsed.questKey, refs.quests, `${label}.questKey`)

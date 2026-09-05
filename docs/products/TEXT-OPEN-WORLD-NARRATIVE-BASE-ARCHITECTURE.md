@@ -448,19 +448,20 @@ ExperienceContract
 ```text
 locked
   → available
-      → accepted
-          → active
-              → completed
-              → failed
-              → abandoned
-              → expired
-          → suspended
-      → withdrawn
+      → revealed
+          → accepted → active
+                         ├→ completed
+                         ├→ failed
+                         └→ suspended → active
+          ├→ abandoned
+          ├→ expired
+          └→ withdrawn
+abandoned → available → revealed（仅可重接普通任务）
 ```
 
 约束：
 
-- 主线不允许 `abandoned / expired / withdrawn`；
+- 主线不允许 `failed / abandoned / expired / withdrawn`；
 - 重要故事线不允许玩家主动 `abandoned`，也不因玩家缺席进入 `failed/expired`；
 - 普通不限时任务可放弃并重新开放；
 - 限时任务到期后关闭，是否留后续回响由任务定义决定；
