@@ -65,6 +65,9 @@ import type {
   ComicPanel,
   ComicVisualSubject,
   ComicMediaAsset,
+  ComicScriptBeatV1,
+  ComicPagePlanV1,
+  ComicReviewIssueV1,
   TtrpgRulePackRecordV1,
   TtrpgSessionParticipantRecordV2,
   TtrpgRuntimeAssetRequestRecordV1,
@@ -77,6 +80,7 @@ import type {
   MediaBlobObjectRecordV1,
   ShortNovelProductionV1,
   CreationReleaseV1,
+  CreationReleaseAssetV1,
 } from '../types'
 import type { TemporalFact } from '../types/temporal-fact'
 
@@ -134,6 +138,10 @@ export interface ProjectExportData {
       _workExportId: number
       _parentExportId?: number | null
     }
+  )[]
+  creationReleaseAssets: (
+    Omit<CreationReleaseAssetV1, 'id' | 'projectId' | 'worldId' | 'workId' | 'releaseId' | 'blobObjectId'>
+    & { _exportId: number; _worldExportId: number; _workExportId: number; _releaseExportId: number; _blobObjectExportId: number }
   )[]
   adaptationProjects: (
     Omit<AdaptationProject, 'id' | 'projectId' | 'worldId' | 'workId' | 'sourceWorkId' | 'sourceOutlineRootId' | 'sourceStartChapterId' | 'sourceEndChapterId'>
@@ -193,6 +201,18 @@ export interface ProjectExportData {
   )[]
   comicPages: (
     Omit<ComicPage, 'id' | 'projectId' | 'workId' | 'adaptationProjectId'>
+    & { _exportId: number; _workExportId: number; _adaptationProjectExportId: number }
+  )[]
+  comicScriptBeats: (
+    Omit<ComicScriptBeatV1, 'id' | 'projectId' | 'workId' | 'adaptationProjectId'>
+    & { _exportId: number; _workExportId: number; _adaptationProjectExportId: number }
+  )[]
+  comicPagePlans: (
+    Omit<ComicPagePlanV1, 'id' | 'projectId' | 'workId' | 'adaptationProjectId'>
+    & { _exportId: number; _workExportId: number; _adaptationProjectExportId: number }
+  )[]
+  comicReviewIssues: (
+    Omit<ComicReviewIssueV1, 'id' | 'projectId' | 'workId' | 'adaptationProjectId'>
     & { _exportId: number; _workExportId: number; _adaptationProjectExportId: number }
   )[]
   comicPanels: (

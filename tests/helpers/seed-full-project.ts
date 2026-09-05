@@ -12,13 +12,9 @@ import { replayAgentRunEventsV1, toAgentRunProjectionBodyV1 } from '../../src/li
 import { sha256Text } from '../../src/lib/ai/chapter-memory/text-normalization'
 import {
   confirmAdaptationBrief,
-  confirmAdaptationPlan,
-  confirmComicVisualBible,
   createAdaptation,
   listActiveSourceUnits,
   saveAdaptationBriefDraft,
-  saveAdaptationPlanDraft,
-  startAdaptationProduction,
 } from '../../src/lib/adaptation/source-manifest'
 import { createScreenplayScene } from '../../src/lib/screenplay/service'
 import {
@@ -32,11 +28,18 @@ import {
   adoptAdaptationDecisionsV1,
   adoptAdaptationSourceFactsV1,
 } from '../../src/lib/adaptation/analysis'
-import { createComicPage, saveComicVisualSubject } from '../../src/lib/comic/service'
-import { commitUploadedComicAssetV1 } from '../../src/lib/comic/media-service'
+import {
+  adoptComicPagePlansV1,
+  adoptComicPanelPlansV1,
+  adoptComicReviewIssuesV1,
+  adoptComicScriptBeatsV1,
+  adoptComicVisualBibleV1,
+  startComicProductionV1,
+} from '../../src/lib/comic/production'
+import { commitUploadedComicAssetV1, selectComicMediaAssetV1 } from '../../src/lib/comic/media-service'
+import { publishComicReleaseV1 } from '../../src/lib/comic/release'
 import type {
   AdaptationBriefV1,
-  AdaptationPlanV1,
   AnyAgentRunEventV1,
   ComicTargetSpecV1,
   ProductProductionBriefV3,
@@ -107,7 +110,7 @@ const comicTargetSpec: ComicTargetSpecV1 = {
   audience: '大众',
   readingDirection: 'ltr',
   chapterCount: 1,
-  targetPagesPerChapter: 20,
+  targetPagesPerChapter: 1,
   pageSize: { width: 1200, height: 1700, unit: 'px', bleed: 30 },
   colorMode: 'color',
   artStyleBrief: '清晰线稿与克制配色',
@@ -255,27 +258,59 @@ async function seedAdaptationProducts(sourceScope: WorkspaceScope) {
   comicAnalysisRoot = (await db.adaptationProjects.get(comicAnalysisRoot.id!))!
   await adoptAdaptationDecisionsV1({ scope: comic.scope, adaptationProjectId: comicAnalysisRoot.id!, expectedAdaptationRevision: comicAnalysisRoot.revision, sourceManifestVersion: comicAnalysisRoot.activeSourceManifestVersion, items: [{ authorStatus: 'confirmed', candidate: { stableKey: 'decision.externalize-gate', action: 'externalize', sourceFactKeys: ['fact.gate-reveal'], targetKeys: ['comic-chapter-1'], rationale: '用建立镜头外化山门压迫感。' } }] })
   comicAnalysisRoot = (await db.adaptationProjects.get(comicAnalysisRoot.id!))!
-  const comicPlan: AdaptationPlanV1 = {
-    version: 1,
-    premise: '用一页建立山门与人物的力量关系。',
-    sections: [{
-      stableKey: 'comic-chapter-1',
-      title: '山门',
-      summary: '主人公第一次看见青云山。',
-      order: 0,
-      episodeNumber: 1,
-      sourceUnitKeys: [comicUnit.sourceUnitKey],
-    }],
-    globalAssumptions: [],
-  }
   let comicRoot = await saveAdaptationBriefDraft({ adaptationProjectId: comic.adaptation.id!, brief: adaptationBrief, expectedRevision: comicAnalysisRoot.revision })
   comicRoot = await confirmAdaptationBrief({ adaptationProjectId: comicRoot.id!, expectedRevision: comicRoot.revision })
-  comicRoot = await saveAdaptationPlanDraft({ adaptationProjectId: comicRoot.id!, plan: comicPlan, expectedRevision: comicRoot.revision })
-  comicRoot = await confirmAdaptationPlan({ adaptationProjectId: comicRoot.id!, expectedRevision: comicRoot.revision })
-  comicRoot = await confirmComicVisualBible({
-    adaptationProjectId: comicRoot.id!,
-    expectedRevision: comicRoot.revision,
-    visualBible: {
+  await adoptComicScriptBeatsV1({
+    scope: comic.scope,
+    expectedAdaptationRevision: comicRoot.revision,
+    sourceManifestVersion: comicRoot.activeSourceManifestVersion,
+    candidates: [{
+      stableKey: 'comic-beat-1', sectionKey: 'comic-chapter-1', chapterNumber: 1, order: 0,
+      narrativeFunction: 'establish', visualAction: '云雾散开，林惊羽仰望青云山门。',
+      dialogueIntent: '用旁白点明地点。', emotion: '敬畏', causalFactKeys: ['fact.gate-reveal'],
+      decisionKeys: ['decision.externalize-gate'], sourceUnitKeys: [comicUnit.sourceUnitKey], estimatedPanels: 1,
+    }],
+  })
+  comicRoot = (await db.adaptationProjects.get(comicRoot.id!))!
+  await adoptComicPagePlansV1({
+    scope: comic.scope,
+    expectedAdaptationRevision: comicRoot.revision,
+    sourceManifestVersion: comicRoot.activeSourceManifestVersion,
+    candidates: [{
+      stableKey: 'comic-page-plan-1', chapterNumber: 1, pageNumber: 1, order: 0,
+      goal: '用一页建立山门与人物的力量关系。', beatKeys: ['comic-beat-1'],
+      endReveal: '青云山门完全显现。', pageTurn: 'cliffhanger', expectedPanelCount: 1, textBudget: 20,
+    }],
+  })
+  comicRoot = (await db.adaptationProjects.get(comicRoot.id!))!
+  const [comicPage] = await adoptComicPanelPlansV1({
+    scope: comic.scope,
+    expectedAdaptationRevision: comicRoot.revision,
+    sourceManifestVersion: comicRoot.activeSourceManifestVersion,
+    candidates: [{
+      pagePlanKey: 'comic-page-plan-1', stableKey: 'comic-panel-1', order: 0, nextPanelKey: null,
+      frame: { x: 0, y: 0, width: 1, height: 1 }, narrativeFunction: 'establish',
+      moment: '云雾散开，林惊羽仰望青云山门。',
+      shot: { size: 'wide', angle: 'low', movement: 'static', composition: '人物位于山门前景下方' },
+      subjectStates: [{ subjectKey: 'fixture-style', costume: '', condition: '晨雾稳定', props: [], position: '全画面' }],
+      protectedAreas: [{ x: 0.05, y: 0.05, width: 0.3, height: 0.12 }],
+      continuityRefs: [{ subjectKey: 'fixture-style', note: '保持青灰与金色主调' }],
+      lettering: [{
+        id: 'caption-1', kind: 'caption', text: '青云山。',
+        frame: { x: 0.05, y: 0.05, width: 0.3, height: 0.12 }, direction: 'horizontal',
+        fontFamily: 'storyforge-serif', fontSize: 28, textColor: '#111111', fillColor: '#ffffff',
+        strokeColor: '#111111', strokeWidth: 2, tail: null, zIndex: 1,
+      }],
+      sourceUnitKeys: [comicUnit.sourceUnitKey],
+    }],
+  })
+  comicRoot = (await db.adaptationProjects.get(comicRoot.id!))!
+  await adoptComicVisualBibleV1({
+    scope: comic.scope,
+    expectedAdaptationRevision: comicRoot.revision,
+    sourceManifestVersion: comicRoot.activeSourceManifestVersion,
+    candidate: {
+      global: {
       version: 1,
       artDirection: '东方奇幻页漫',
       linework: '清晰有重量的墨线',
@@ -284,65 +319,37 @@ async function seedAdaptationProducts(sourceScope: WorkspaceScope) {
       periodAndMaterials: '古典山门与石阶',
       cameraLanguage: ['先建立镜头，再切人物近景'],
       prohibitedDepictions: ['成图不含文字与水印'],
-    },
-  })
-  comicRoot = await startAdaptationProduction({ adaptationProjectId: comicRoot.id!, expectedRevision: comicRoot.revision })
-  const styleSubject = await saveComicVisualSubject({
-    scope: comic.scope,
-    draft: {
-      stableKey: 'fixture-style',
-      kind: 'style',
-      characterId: null,
-      locationRefKey: null,
-      label: '青云视觉风格',
-      design: {
-        description: '晨雾中的东方奇幻山门',
-        silhouette: '层叠山峰与高耸牌楼',
-        facialFeatures: '',
-        hairAndCostume: '',
-        palette: ['青灰', '金色'],
-        materials: ['青石', '木构'],
-        distinguishingMarks: ['云海金边'],
-        prohibitedChanges: ['不得改成现代建筑'],
       },
-      sourceUnitIds: [comicUnit.id],
-      status: 'reviewed',
+      subjects: [{
+        stableKey: 'fixture-style', kind: 'style', label: '青云视觉风格',
+        design: {
+          description: '晨雾中的东方奇幻山门', silhouette: '层叠山峰与高耸牌楼',
+          facialFeatures: '', hairAndCostume: '', palette: ['青灰', '金色'], materials: ['青石', '木构'],
+          distinguishingMarks: ['云海金边'], prohibitedChanges: ['不得改成现代建筑'],
+        },
+        sourceUnitKeys: [comicUnit.sourceUnitKey],
+      }],
     },
   })
-  const comicPage = await createComicPage(comic.scope, {
-    stableKey: 'page-1',
-    chapterNumber: 1,
-    summary: '林惊羽踏入青云山门。',
-    panels: [{
-      stableKey: 'page-1-panel-1',
-      frame: { x: 0, y: 0, width: 1, height: 1 },
-      shot: { size: 'wide', angle: 'low', movement: 'static', composition: '人物位于山门前景下方' },
-      action: '林惊羽仰望云海中的青云山门。',
-      visualPrompt: 'eastern fantasy mountain gate in morning mist, no text',
-      negativePrompt: 'letters, watermark, logo',
-      continuityRefs: [{ subjectKey: styleSubject.stableKey, note: '保持青灰与金色主调' }],
-      lettering: [{
-        id: 'caption-1',
-        kind: 'caption',
-        text: '青云山。',
-        frame: { x: 0.05, y: 0.05, width: 0.3, height: 0.12 },
-        direction: 'horizontal',
-        fontFamily: 'storyforge-serif',
-        fontSize: 28,
-        textColor: '#111111',
-        fillColor: '#ffffff',
-        strokeColor: '#111111',
-        strokeWidth: 2,
-        tail: null,
-        zIndex: 1,
-      }],
-      sourceUnitIds: [comicUnit.id],
+  comicRoot = (await db.adaptationProjects.get(comicRoot.id!))!
+  comicRoot = await startComicProductionV1({ scope: comic.scope, expectedAdaptationRevision: comicRoot.revision })
+  let comicPanel = comicPage.panels[0]
+  await adoptComicReviewIssuesV1({
+    scope: comic.scope, expectedAdaptationRevision: comicRoot.revision,
+    sourceManifestVersion: comicRoot.activeSourceManifestVersion, reviewKind: 'page',
+    targetPageKeys: [comicPage.page.stableKey], expectedPanelRevisions: { [comicPanel.stableKey]: comicPanel.revision },
+    candidates: [{
+      stableKey: 'comic-review-1', category: 'narrative', severity: 'minor', pageKey: comicPage.page.stableKey,
+      panelKey: comicPanel.stableKey, subjectKey: null, assetKey: null,
+      evidence: '建立镜头已呈现人物与山门关系。', problem: '旁白可进一步压缩。', suggestion: '发布前复核八字以内旁白。',
+      sourceUnitKeys: [comicUnit.sourceUnitKey],
     }],
   })
+  comicRoot = (await db.adaptationProjects.get(comicRoot.id!))!
   const comicMedia = await commitUploadedComicAssetV1({
     scope: comic.scope,
     data: fixturePng(),
-    panelId: comicPage.panels[0].id!,
+    panelId: comicPanel.id!,
     rights: {
       version: 1,
       source: 'author-upload',
@@ -353,7 +360,18 @@ async function seedAdaptationProducts(sourceScope: WorkspaceScope) {
       declaredAt: Date.now(),
     },
   })
-  return { screenplay, screenplayRoot, screenplayScene, comic, comicRoot, comicPage, comicMedia }
+  comicPanel = (await selectComicMediaAssetV1({ scope: comic.scope, assetKey: comicMedia.stableKey, panelId: comicPanel.id!, expectedRevision: comicPanel.revision })) as typeof comicPanel
+  await adoptComicReviewIssuesV1({
+    scope: comic.scope, expectedAdaptationRevision: comicRoot.revision,
+    sourceManifestVersion: comicRoot.activeSourceManifestVersion, reviewKind: 'visual',
+    targetPageKeys: [comicPage.page.stableKey], expectedPanelRevisions: { [comicPanel.stableKey]: comicPanel.revision },
+    visualInspectionConfirmed: true,
+    candidates: [],
+  })
+  comicRoot = (await db.adaptationProjects.get(comicRoot.id!))!
+  const comicRelease = await publishComicReleaseV1({ scope: comic.scope, expectedAdaptationRevision: comicRoot.revision, tier: 'visual', label: '青云山门漫画视觉版 v1' })
+  comicRoot = (await db.adaptationProjects.get(comicRoot.id!))!
+  return { screenplay, screenplayRoot, screenplayScene, comic, comicRoot, comicPage, comicMedia, comicRelease }
 }
 
 async function stampFixtureOwners(projectId: number, worldId: number, workId: number): Promise<void> {

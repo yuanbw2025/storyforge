@@ -1,13 +1,15 @@
-import { Check, Download, FileJson, Printer, RefreshCw, X } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
+import { Check, Download, FileJson, Lock, Printer, RefreshCw, X } from 'lucide-react'
 import type {
   AdaptationProject,
   ComicMediaAsset,
   ComicVisualSubject,
   Work,
   WorkspaceScope,
+  CreationReleaseV1,
 } from '../../lib/types'
-import { completeAdaptationProductionV1 } from '../../lib/adaptation/completion'
 import type { ComicQualityReportV1 } from '../../lib/comic/qa'
+import { listComicReleasesV1, publishComicReleaseV1 } from '../../lib/comic/release'
 import { renderComicStoryboardTextV1 } from '../../lib/comic/renderers'
 import type { ComicPageGroup, ComicStudioAction } from './studio-model'
 
@@ -44,6 +46,13 @@ export default function ComicQaPanel({
   safeName,
   act,
 }: Props) {
+  const [releases, setReleases] = useState<CreationReleaseV1[]>([])
+  const reloadReleases = useCallback(async () => setReleases(await listComicReleasesV1(scope)), [scope])
+  useEffect(() => { void reloadReleases() }, [reloadReleases])
+  const publish = async (tier: 'storyboard' | 'visual') => {
+    await act(() => publishComicReleaseV1({ scope, expectedAdaptationRevision: adaptation.revision, tier }), tier === 'visual' ? '漫画视觉版已发布' : '漫画分镜版已发布')
+    await reloadReleases()
+  }
   return (
     <section className="comic-qa">
       <header>
@@ -62,14 +71,14 @@ export default function ComicQaPanel({
       </header>
       {quality && (
         <>
-          <div className={`comic-qa-summary ${quality.canFormalExport ? 'valid' : 'invalid'}`}>
-            {quality.canFormalExport ? <Check /> : <X />}
-            <strong>{quality.canFormalExport ? '可正式导出' : '正式导出已阻止'}</strong>
+          <div className={`comic-qa-summary ${quality.canStoryboardRelease ? 'valid' : 'invalid'}`}>
+            {quality.canStoryboardRelease ? <Check /> : <X />}
+            <strong>{quality.canStoryboardRelease ? '可发布专业分镜版' : '分镜版发布已阻止'}</strong>
             <span>
-              {quality.issues.filter((issue) => issue.level === 'error').length} 个错误 ·{' '}
-              {quality.issues.filter((issue) => issue.level === 'warning').length} 个警告
+              视觉版{quality.canVisualRelease ? '已就绪' : `仍有 ${quality.visualBlockers.length} 项阻断`} · {quality.issues.filter((issue) => issue.level === 'warning').length} 个警告
             </span>
           </div>
+          {!quality.canStoryboardRelease && <ul>{quality.storyboardBlockers.map((blocker, index) => <li key={`story-${index}`} className="error"><code>storyboard-gate</code><span>{blocker}</span></li>)}</ul>}
           <ul>
             {quality.issues.map((issue, index) => (
               <li key={`${issue.code}-${index}`} className={issue.level}>
@@ -131,18 +140,10 @@ export default function ComicQaPanel({
           <Printer />
           PDF 打印
         </button>
-        <button
-          className="primary"
-          onClick={() => void act(
-            () => completeAdaptationProductionV1({ scope, expectedRevision: adaptation.revision }),
-            '漫画已通过正式 QA 并完稿',
-          )}
-          disabled={busy || adaptation.status === 'complete'}
-        >
-          <Check />
-          {adaptation.status === 'complete' ? '已完稿' : '标记正式完稿'}
-        </button>
+        <button className="primary" onClick={() => void publish('storyboard')} disabled={busy || adaptation.status === 'complete' || !quality?.canStoryboardRelease}><Lock />发布不可变分镜版</button>
+        <button className="primary" onClick={() => void publish('visual')} disabled={busy || adaptation.status === 'complete' || !quality?.canVisualRelease}><Lock />发布不可变视觉版</button>
       </div>
+      <div className="comic-release-list">{releases.length ? releases.map(release => { let tier = '版本'; try { tier = JSON.parse(release.manifestJson).tier === 'visual' ? '视觉版' : '分镜版' } catch { /* read codec will expose corruption when opened */ } return <article key={release.id}><strong>v{release.version} · {tier} · {release.label}</strong><small>{new Date(release.createdAt).toLocaleString()} · {release.contentHash.slice(0, 12)}</small></article> }) : <p>尚无发布版本。发布后 manifest 与视觉 Blob（仅视觉版）都由 Release 强引用冻结。</p>}</div>
     </section>
   )
 }

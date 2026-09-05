@@ -9,6 +9,7 @@ import {
   Gamepad2,
   Globe2,
   Hash,
+  Images,
   LayoutDashboard,
   Loader2,
   Menu,
@@ -32,6 +33,7 @@ import {
   type WorkspaceScope,
   type ProductProductionHandoffV1,
   type ScreenplayTargetSpecV1,
+  type ComicTargetSpecV1,
 } from '../lib/types'
 import type { OnlineRoomJoinHandoffV1 } from '../lib/online/http-transport'
 import { db } from '../lib/db/schema'
@@ -659,9 +661,13 @@ function screenplayTargetSpec(format: ScreenplayTargetSpecV1['format'], episodeC
   }
 }
 
-function CreatePanel({ projects, onClose, onCreated }: { projects: Project[]; onClose: () => void; onCreated: (kind: 'worlds' | 'novel' | 'screenplay', id: number) => void }) {
+function comicTargetSpec(input: { readingDirection: ComicTargetSpecV1['readingDirection']; chapterCount: number; pagesPerChapter: number; colorMode: ComicTargetSpecV1['colorMode']; artStyleBrief: string }): ComicTargetSpecV1 {
+  return { format: 'page-comic', audience: '青少年及以上', readingDirection: input.readingDirection, chapterCount: input.chapterCount, targetPagesPerChapter: input.pagesPerChapter, pageSize: { width: 1200, height: 1700, unit: 'px', bleed: 0 }, colorMode: input.colorMode, artStyleBrief: input.artStyleBrief.trim() || '清晰叙事、稳定人物设计、适合页漫印刷与屏幕阅读', renderCandidatesPerPanel: 3, imageCapabilityRequirement: { referenceImage: true, deterministicSeed: false, inpainting: false, commercialUseRequired: true, minimumWidth: 512, minimumHeight: 512 } }
+}
+
+function CreatePanel({ projects, onClose, onCreated }: { projects: Project[]; onClose: () => void; onCreated: (kind: 'worlds' | 'novel' | 'screenplay' | 'comic', id: number) => void }) {
   const { createWorkspace, loadProjects } = useProjectStore()
-  const [kind, setKind] = useState<'choose' | 'worlds' | 'long-novel' | 'short-novel' | 'screenplay'>('choose')
+  const [kind, setKind] = useState<'choose' | 'worlds' | 'long-novel' | 'short-novel' | 'screenplay' | 'comic'>('choose')
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [targetWordCount, setTargetWordCount] = useState(10_000)
@@ -674,9 +680,15 @@ function CreatePanel({ projects, onClose, onCreated }: { projects: Project[]; on
   const [screenplayFormat, setScreenplayFormat] = useState<ScreenplayTargetSpecV1['format']>('film')
   const [screenplayEpisodeCount, setScreenplayEpisodeCount] = useState(8)
   const [screenplayMinutes, setScreenplayMinutes] = useState(100)
+  const [comicReadingDirection, setComicReadingDirection] = useState<ComicTargetSpecV1['readingDirection']>('ltr')
+  const [comicChapterCount, setComicChapterCount] = useState(1)
+  const [comicPagesPerChapter, setComicPagesPerChapter] = useState(8)
+  const [comicColorMode, setComicColorMode] = useState<ComicTargetSpecV1['colorMode']>('color')
+  const [comicArtStyle, setComicArtStyle] = useState('清晰叙事、稳定人物设计、电影感光影的彩色页漫')
   const canCreateShort = productDecision('independent.shortform').enterable
   const canCreateLong = productDecision('independent.longform').enterable
   const canCreateScreenplay = productDecision('independent.screenplay').enterable
+  const canCreateComic = productDecision('independent.comic').enterable
   useEffect(() => {
     let cancelled = false
     void (async () => {
@@ -700,19 +712,15 @@ function CreatePanel({ projects, onClose, onCreated }: { projects: Project[]; on
     setBusy(true)
     setError('')
     try {
-      if (kind === 'screenplay') {
+      if (kind === 'screenplay' || kind === 'comic') {
         const source = screenplaySources.find(option => option.workId === screenplaySourceWorkId)
         if (!source) throw new Error('请先选择一个本地小说来源。')
-        const result = await createAdaptation({
-          sourceScope: { projectId: source.projectId, worldId: source.worldId, workId: source.workId },
-          sourceWorkId: source.workId,
-          title: name.trim(),
-          sourceSelection: { mode: 'entire-work' },
-          medium: 'screenplay',
-          targetSpec: screenplayTargetSpec(screenplayFormat, screenplayEpisodeCount, screenplayMinutes),
-        })
+        const common = { sourceScope: { projectId: source.projectId, worldId: source.worldId, workId: source.workId }, sourceWorkId: source.workId, title: name.trim(), sourceSelection: { mode: 'entire-work' as const } }
+        const result = kind === 'screenplay'
+          ? await createAdaptation({ ...common, medium: 'screenplay', targetSpec: screenplayTargetSpec(screenplayFormat, screenplayEpisodeCount, screenplayMinutes) })
+          : await createAdaptation({ ...common, medium: 'comic', targetSpec: comicTargetSpec({ readingDirection: comicReadingDirection, chapterCount: comicChapterCount, pagesPerChapter: comicPagesPerChapter, colorMode: comicColorMode, artStyleBrief: comicArtStyle }) })
         await loadProjects()
-        onCreated('screenplay', result.scope.projectId)
+        onCreated(kind, result.scope.projectId)
         return
       }
       const isShort = kind === 'short-novel'
@@ -738,7 +746,7 @@ function CreatePanel({ projects, onClose, onCreated }: { projects: Project[]; on
       setError(cause instanceof Error ? cause.message : '创建失败')
     } finally { setBusy(false) }
   }
-  const label = kind === 'worlds' ? '创建世界引擎' : kind === 'short-novel' ? '创建短篇小说' : kind === 'screenplay' ? '创建剧本项目' : '创建长篇小说'
+  const label = kind === 'worlds' ? '创建世界引擎' : kind === 'short-novel' ? '创建短篇小说' : kind === 'screenplay' ? '创建剧本项目' : kind === 'comic' ? '创建漫画项目' : '创建长篇小说'
   return <div className="sf-modal-backdrop" onMouseDown={onClose}>
     <aside className="sf-create-panel" onMouseDown={event => event.stopPropagation()}>
       <div className="sf-modal-header">
@@ -754,21 +762,32 @@ function CreatePanel({ projects, onClose, onCreated }: { projects: Project[]; on
         {canCreateShort && <button onClick={() => setKind('short-novel')}><span className="sf-create-option-icon"><BookOpenText className="h-5 w-5" /></span><span><strong>短篇小说 <MaturityBadge productId="independent.shortform" /></strong><small>5,000～25,000 字，动态单卷结构</small></span><ArrowRight className="h-4 w-4" /></button>}
         {canCreateLong && <button onClick={() => setKind('long-novel')}><span className="sf-create-option-icon"><BookOpenText className="h-5 w-5" /></span><span><strong>长篇小说</strong><small>保留熟悉的完整分步骤工作流</small></span><ArrowRight className="h-4 w-4" /></button>}
         {canCreateScreenplay && <button onClick={() => setKind('screenplay')}><span className="sf-create-option-icon"><Sparkles className="h-5 w-5" /></span><span><strong>小说转剧本 <MaturityBadge productId="independent.screenplay" /></strong><small>冻结本地小说来源，进入十步专业改编流程</small></span><ArrowRight className="h-4 w-4" /></button>}
+        {canCreateComic && <button onClick={() => setKind('comic')}><span className="sf-create-option-icon"><Images className="h-5 w-5" /></span><span><strong>小说转漫画 <MaturityBadge productId="independent.comic" /></strong><small>冻结本地小说来源，进入十二步页漫生产流程</small></span><ArrowRight className="h-4 w-4" /></button>}
       </div> : <div className="sf-create-form">
         <label>名称<input value={name} onChange={event => setName(event.target.value)} placeholder={kind === 'worlds' ? '例如：潮汐之后' : '例如：《幽都遗闻》'} autoFocus /></label>
         <label>简介<textarea value={description} onChange={event => setDescription(event.target.value)} rows={4} placeholder="一句话描述这个世界或作品" /></label>
-        {kind === 'screenplay' && <>
+        {(kind === 'screenplay' || kind === 'comic') && <>
           <label>小说来源<select aria-label="小说来源" value={screenplaySourceWorkId} onChange={event => setScreenplaySourceWorkId(event.target.value ? Number(event.target.value) : '')}><option value="">请选择本地小说</option>{screenplaySources.map(source => <option key={source.workId} value={source.workId}>{source.label}</option>)}</select></label>
+        </>}
+        {kind === 'screenplay' && <>
           <label>剧本类型<select aria-label="剧本类型" value={screenplayFormat} onChange={event => setScreenplayFormat(event.target.value as ScreenplayTargetSpecV1['format'])}><option value="film">电影</option><option value="series">剧集</option><option value="short-drama">短剧</option></select></label>
           {screenplayFormat !== 'film' && <label>集数<input aria-label="集数" type="number" min={1} max={1000} value={screenplayEpisodeCount} onChange={event => setScreenplayEpisodeCount(Number(event.target.value))} /></label>}
           <label>单集目标分钟<input aria-label="单集目标分钟" type="number" min={1} max={300} value={screenplayMinutes} onChange={event => setScreenplayMinutes(Number(event.target.value))} /></label>
           <p className="text-xs leading-5 text-text-muted">创建时冻结整部小说为 manifest v1；后续同步必须显式确认，剧本写入目标 Work，不修改来源小说。</p>
         </>}
+        {kind === 'comic' && <>
+          <label>阅读方向<select aria-label="阅读方向" value={comicReadingDirection} onChange={event => setComicReadingDirection(event.target.value as ComicTargetSpecV1['readingDirection'])}><option value="ltr">左到右</option><option value="rtl">右到左</option></select></label>
+          <label>章节数<input aria-label="漫画章节数" type="number" min={1} max={100} value={comicChapterCount} onChange={event => setComicChapterCount(Number(event.target.value))} /></label>
+          <label>每章页数<input aria-label="每章页数" type="number" min={1} max={100} value={comicPagesPerChapter} onChange={event => setComicPagesPerChapter(Number(event.target.value))} /></label>
+          <label>色彩模式<select aria-label="色彩模式" value={comicColorMode} onChange={event => setComicColorMode(event.target.value as ComicTargetSpecV1['colorMode'])}><option value="color">彩色</option><option value="grayscale">灰度</option><option value="monochrome">黑白</option></select></label>
+          <label>画风要求<textarea aria-label="画风要求" value={comicArtStyle} onChange={event => setComicArtStyle(event.target.value)} rows={3} /></label>
+          <p className="text-xs leading-5 text-text-muted">创建时冻结整部小说为 manifest v1；分镜版与视觉版分别发布。视觉版只接受实际传输参考图或作者上传并完成权利审查的成图。</p>
+        </>}
         {kind === 'short-novel' && <>
           <label>目标字数（5,000～25,000）<input type="number" min={5000} max={25000} step={500} value={targetWordCount} onChange={event => setTargetWordCount(Number(event.target.value))} /></label>
           <label>建议章节数（可空）<input type="number" min={3} max={8} step={1} value={preferredChapterCount} placeholder="自动推导 3～8 章" onChange={event => setPreferredChapterCount(event.target.value === '' ? '' : Number(event.target.value))} /></label>
         </>}
-        {kind !== 'screenplay' && <ProjectStorageFolderField value={projectFolder} onChange={setProjectFolder} disabled={busy} />}
+        {kind !== 'screenplay' && kind !== 'comic' && <ProjectStorageFolderField value={projectFolder} onChange={setProjectFolder} disabled={busy} />}
         {error && <p className="text-sm text-red-600" role="alert">{error}</p>}
         <div className="sf-create-form-actions"><Button onClick={() => setKind('choose')}>返回</Button><Button variant="primary" icon={Check} onClick={() => void create()} disabled={busy || !name.trim()}>{busy ? '创建中…' : label}</Button></div>
       </div>}

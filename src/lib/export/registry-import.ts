@@ -39,8 +39,10 @@ import {
   assertScreenplaySceneCardCandidateV1,
 } from '../screenplay/production-contracts'
 import { assertScreenplayReleaseManifestV1 } from '../screenplay/release-contracts'
+import { assertComicReleaseManifestV1 } from '../comic/release-contracts'
 import { validateScreenplayBlocksV1 } from '../screenplay/contracts'
 import { assertComicLetteringV1, assertComicMediaAssetV1, assertNormalizedFrameV1, framesOverlap } from '../comic/contracts'
+import { assertComicPagePlanCandidateV1, assertComicReviewIssueCandidateV1, assertComicScriptBeatCandidateV1 } from '../comic/production-contracts'
 import type { AdaptationProject, ComicLetteringItemV1, ComicMediaAsset, CreationReleaseV1, ScreenplayBlock, Work } from '../types'
 import { PRODUCTION_PRODUCT_KINDS_V1 } from '../types'
 import { isCompleteCharacterAxes } from '../character/character-axes'
@@ -155,6 +157,7 @@ async function validateIndependentCreationBackup(value: Record<string, any>): Pr
   const works = new Map(portableRows(value, 'works').map(row => [row._exportId, row]))
   const productions = new Map(portableRows(value, 'shortNovelProductions').map(row => [row._exportId, row]))
   const releases = new Map(portableRows(value, 'creationReleases').map(row => [row._exportId, row]))
+  const releaseAssets = portableRows(value, 'creationReleaseAssets')
   const releaseVersions = new Set<string>()
 
   for (const production of productions.values()) {
@@ -216,12 +219,27 @@ async function validateIndependentCreationBackup(value: Record<string, any>): Pr
       assertScreenplayReleaseManifestV1(manifest, work.code, release.sourceRevision)
       continue
     }
+    if (release.productKind === 'comic') {
+      assertComicReleaseManifestV1(manifest, work.code, release.sourceRevision)
+      continue
+    }
     if (release.productKind !== 'short-novel') {
       throw new Error(`[deriveImport] ${release.productKind} Release codec 尚未随对应产品启用`)
     }
     if (manifest.production?.revision !== release.sourceRevision) {
       throw new Error('[deriveImport] v12 CreationRelease manifest 身份或 hash 校验失败')
     }
+  }
+  const blobs = new Map(portableRows(value, 'mediaBlobObjects').map(row => [row._exportId, row]))
+  const releaseAssetIdentity = new Set<string>()
+  for (const asset of releaseAssets) {
+    const release = releases.get(asset._releaseExportId); const blob = blobs.get(asset._blobObjectExportId)
+    const identity = `${asset._releaseExportId}:${asset.assetKey}`
+    if (!release || release.productKind !== 'comic' || !blob || release._workExportId !== asset._workExportId || release._worldExportId !== asset._worldExportId || releaseAssetIdentity.has(identity)
+      || asset.contentHash !== blob.contentHash || !/^[a-f0-9]{64}$/i.test(asset.contentHash) || typeof asset.assetKey !== 'string' || !asset.assetKey.trim()) {
+      throw new Error('[deriveImport] v14 CreationReleaseAsset owner、Release 或 Blob 引用非法')
+    }
+    releaseAssetIdentity.add(identity)
   }
 }
 
@@ -560,16 +578,35 @@ function validateScreenplayBackup(value: Record<string, any>): void {
 }
 
 function validateComicStoryboardBackup(value: Record<string, any>): void {
-  if (!Array.isArray(value.comicPages) || !Array.isArray(value.comicPanels) || !Array.isArray(value.comicVisualSubjects)) throw new Error('[deriveImport] v8 备份缺少漫画页格或视觉条目表')
+  if (!Array.isArray(value.comicPages) || !Array.isArray(value.comicPanels) || !Array.isArray(value.comicVisualSubjects)
+    || !Array.isArray(value.comicScriptBeats) || !Array.isArray(value.comicPagePlans) || !Array.isArray(value.comicReviewIssues)) throw new Error('[deriveImport] v14 备份缺少漫画专业生产表')
   const roots = new Map<number, Record<string, any>>((value.adaptationProjects ?? []).map((row: Record<string, any>) => [row._exportId, row]))
   const units = new Map<number, Record<string, any>>((value.adaptationSourceUnits ?? []).map((row: Record<string, any>) => [row._exportId, row]))
+  const unitKeysByRootVersion = new Map<string, Set<string>>(); for (const unit of value.adaptationSourceUnits as Record<string, any>[]) { const group = `${unit._adaptationProjectExportId}:${unit.manifestVersion}`; unitKeysByRootVersion.set(group, new Set([...(unitKeysByRootVersion.get(group) ?? []), unit.sourceUnitKey])) }
+  const factKeysByRootVersion = new Map<string, Set<string>>(); for (const row of value.adaptationSourceFacts as Record<string, any>[]) if (row.authorStatus === 'confirmed') { const group = `${row._adaptationProjectExportId}:${row.manifestVersion}`; factKeysByRootVersion.set(group, new Set([...(factKeysByRootVersion.get(group) ?? []), row.stableKey])) }
+  const decisionKeysByRootVersion = new Map<string, Set<string>>(); for (const row of value.adaptationDecisions as Record<string, any>[]) if (row.authorStatus === 'confirmed') { const group = `${row._adaptationProjectExportId}:${row.manifestVersion}`; decisionKeysByRootVersion.set(group, new Set([...(decisionKeysByRootVersion.get(group) ?? []), row.stableKey])) }
+  const beatKeysByRootVersion = new Map<string, Set<string>>(); const beatIdentity = new Set<string>()
+  for (const row of value.comicScriptBeats as Record<string, any>[]) {
+    const root = roots.get(row._adaptationProjectExportId); const group = `${row._adaptationProjectExportId}:${row.manifestVersion}`
+    if (!root || root.medium !== 'comic' || row._workExportId !== root._workExportId) throw new Error('[deriveImport] v14 ComicScriptBeat owner 或媒介越界')
+    assertComicScriptBeatCandidateV1({ stableKey: row.stableKey, sectionKey: row.sectionKey, chapterNumber: row.chapterNumber, order: row.order, narrativeFunction: row.narrativeFunction, visualAction: row.visualAction, dialogueIntent: row.dialogueIntent, emotion: row.emotion, causalFactKeys: row.causalFactKeys, decisionKeys: row.decisionKeys, sourceUnitKeys: row.sourceUnitKeys, estimatedPanels: row.estimatedPanels })
+    const identity = `${group}:${row.stableKey}`; if (beatIdentity.has(identity) || row.sourceUnitKeys.some((key: string) => !unitKeysByRootVersion.get(group)?.has(key)) || row.causalFactKeys.some((key: string) => !factKeysByRootVersion.get(group)?.has(key)) || row.decisionKeys.some((key: string) => !decisionKeysByRootVersion.get(group)?.has(key))) throw new Error('[deriveImport] v14 ComicScriptBeat 身份或引用非法')
+    beatIdentity.add(identity); beatKeysByRootVersion.set(group, new Set([...(beatKeysByRootVersion.get(group) ?? []), row.stableKey]))
+  }
+  const pagePlanKeys = new Set<string>()
+  for (const row of value.comicPagePlans as Record<string, any>[]) {
+    const root = roots.get(row._adaptationProjectExportId); const group = `${row._adaptationProjectExportId}:${row.manifestVersion}`
+    if (!root || root.medium !== 'comic' || row._workExportId !== root._workExportId) throw new Error('[deriveImport] v14 ComicPagePlan owner 或媒介越界')
+    assertComicPagePlanCandidateV1({ stableKey: row.stableKey, chapterNumber: row.chapterNumber, pageNumber: row.pageNumber, order: row.order, goal: row.goal, beatKeys: row.beatKeys, endReveal: row.endReveal, pageTurn: row.pageTurn, expectedPanelCount: row.expectedPanelCount, textBudget: row.textBudget })
+    const identity = `${group}:${row.stableKey}`; if (pagePlanKeys.has(identity) || row.beatKeys.some((key: string) => !beatKeysByRootVersion.get(group)?.has(key))) throw new Error('[deriveImport] v14 ComicPagePlan 身份或 Beat 引用非法'); pagePlanKeys.add(identity)
+  }
   const pages = new Map<number, Record<string, any>>()
   const stablePages = new Set<string>(); const pageOrders = new Set<string>()
   for (const page of value.comicPages as Record<string, any>[]) {
     const root = roots.get(page._adaptationProjectExportId)
     if (!root || root.medium !== 'comic' || page._workExportId !== root._workExportId || !Number.isInteger(page._exportId) || pages.has(page._exportId)) throw new Error('[deriveImport] v8 漫画页面 owner 或便携 ID 非法')
     if (!/^[a-z0-9][a-z0-9._-]{0,95}$/i.test(page.stableKey) || stablePages.has(`${page._workExportId}:${page.stableKey}`) || !Number.isInteger(page.order) || page.order < 0 || pageOrders.has(`${page._adaptationProjectExportId}:${page.order}`)) throw new Error('[deriveImport] v8 漫画页面 stableKey 或顺序非法')
-    if (!Number.isInteger(page.chapterNumber) || page.chapterNumber < 1 || page.chapterNumber > root.targetSpec.chapterCount || typeof page.allowPanelOverlap !== 'boolean' || typeof page.summary !== 'string') throw new Error('[deriveImport] v8 漫画页面内容非法')
+    if (!Number.isInteger(page.chapterNumber) || page.chapterNumber < 1 || page.chapterNumber > root.targetSpec.chapterCount || typeof page.allowPanelOverlap !== 'boolean' || typeof page.summary !== 'string' || (page.pagePlanKey != null && !pagePlanKeys.has(`${page._adaptationProjectExportId}:${root.activeSourceManifestVersion}:${page.pagePlanKey}`))) throw new Error('[deriveImport] v14 漫画页面内容或 PagePlan 引用非法')
     pages.set(page._exportId, page); stablePages.add(`${page._workExportId}:${page.stableKey}`); pageOrders.add(`${page._adaptationProjectExportId}:${page.order}`)
   }
   const stablePanels = new Set<string>(); const panelsByPage = new Map<number, Record<string, any>[]>()
@@ -604,6 +641,7 @@ function validateComicStoryboardBackup(value: Record<string, any>): void {
     subjectKeys.add(`${subject._workExportId}:${subject.stableKey}`)
   }
   for (const panel of value.comicPanels as Record<string, any>[]) for (const ref of panel.continuityRefs) if (!subjectKeys.has(`${panel._workExportId}:${ref.subjectKey}`)) throw new Error('[deriveImport] v8 漫画格连续性引用不存在')
+  const reviewKeys = new Set<string>(); for (const row of value.comicReviewIssues as Record<string, any>[]) { const root = roots.get(row._adaptationProjectExportId); const group = `${row._adaptationProjectExportId}:${row.manifestVersion}`; const identity = `${group}:${row.stableKey}`; if (!root || root.medium !== 'comic' || row._workExportId !== root._workExportId || reviewKeys.has(identity)) throw new Error('[deriveImport] v14 ComicReviewIssue owner 或身份非法'); assertComicReviewIssueCandidateV1({ stableKey: row.stableKey, category: row.category, severity: row.severity, pageKey: row.pageKey, panelKey: row.panelKey, subjectKey: row.subjectKey, assetKey: row.assetKey, evidence: row.evidence, problem: row.problem, suggestion: row.suggestion, sourceUnitKeys: row.sourceUnitKeys }); if (!['open', 'resolved', 'dismissed'].includes(row.status) || row.sourceUnitKeys.some((key: string) => !unitKeysByRootVersion.get(group)?.has(key))) throw new Error('[deriveImport] v14 ComicReviewIssue 状态或来源非法'); reviewKeys.add(identity) }
 }
 
 function validateComicMediaBackup(value: Record<string, any>): void {

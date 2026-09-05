@@ -106,14 +106,16 @@ export async function generateComicPanelCandidatesV1(input: {
   const subjectByKey = new Map(subjects.map(subject => [subject.stableKey, subject]))
   const continuitySubjects = panel.continuityRefs.map(ref => subjectByKey.get(ref.subjectKey)).filter(Boolean) as ComicVisualSubject[]
   if (continuitySubjects.some(subject => subject.status !== 'reviewed' && subject.status !== 'locked')) throw new Error('[media] 连续性视觉条目尚未审定')
-  const referenceAssetKeys = continuitySubjects.flatMap(subject => subject.selectedMediaAssetKey ? [subject.selectedMediaAssetKey] : [])
+  const requestedReferenceAssetKeys = continuitySubjects.flatMap(subject => subject.selectedMediaAssetKey ? [subject.selectedMediaAssetKey] : [])
   const binding = imageBindingFromAIConfigV1(input.aiConfig, input.imageModel)
   const capabilityWarnings: string[] = []
   if (root.targetSpec.imageCapabilityRequirement.commercialUseRequired && input.rights.commercialUse !== 'allowed') throw new Error('[media] 目标规格要求可商用权利声明')
   if (root.targetSpec.imageCapabilityRequirement.referenceImage && !OPENAI_COMPATIBLE_IMAGE_CAPABILITY_V1.referenceImage) capabilityWarnings.push('目标规格要求参考图，但当前 provider 未声明参考图能力')
   if (root.targetSpec.imageCapabilityRequirement.deterministicSeed && !OPENAI_COMPATIBLE_IMAGE_CAPABILITY_V1.deterministicSeed) capabilityWarnings.push('目标规格要求确定性 seed，但当前 provider 未声明 seed 能力')
-  if (referenceAssetKeys.length && !OPENAI_COMPATIBLE_IMAGE_CAPABILITY_V1.referenceImage) capabilityWarnings.push('当前 provider 不支持参考图，角色/场景一致性能力有限')
+  if (requestedReferenceAssetKeys.length && !OPENAI_COMPATIBLE_IMAGE_CAPABILITY_V1.referenceImage) capabilityWarnings.push('当前 provider 不支持参考图，角色/场景一致性能力有限')
   if (capabilityWarnings.length && !input.allowLimitedConsistency) throw new Error(`[media] ${capabilityWarnings.join('；')}；请显式确认后继续`)
+  // This transport currently sends text only. Never record requested references as transmitted evidence.
+  const transmittedReferenceAssetKeys = OPENAI_COMPATIBLE_IMAGE_CAPABILITY_V1.referenceImage ? requestedReferenceAssetKeys : []
   const visualBibleHash = await hashCanonicalValue(root.visualBible)
   const prompt = [
     root.visualBible.artDirection, root.visualBible.linework, root.visualBible.lighting,
@@ -126,7 +128,7 @@ export async function generateComicPanelCandidatesV1(input: {
   const promptHash = await hashCanonicalValue({ prompt })
   const requestHash = await hashCanonicalValue({
     version: 1, workId: scope.workId, panelStableKey: panel.stableKey, panelRevision: panel.revision,
-    sourceManifestVersion: root.activeSourceManifestVersion, visualBibleHash, referenceAssetKeys,
+    sourceManifestVersion: root.activeSourceManifestVersion, visualBibleHash, requestedReferenceAssetKeys, transmittedReferenceAssetKeys,
     provider: binding.provider, model: binding.model, count: input.count, promptHash,
     regenerateNonce: input.regenerateNonce?.trim() || null,
   })
@@ -154,7 +156,7 @@ export async function generateComicPanelCandidatesV1(input: {
       const asset: ComicMediaAsset = stampNewRecord(scope, 'comicMediaAssets', {
         projectId: scope.projectId, workId: scope.workId, adaptationProjectId: root.id!,
         stableKey: `render_${requestHash.slice(0, 32)}_${candidateIndex}`, role: 'panel-render', panelId: panel.id!, subjectKey: null,
-        blobObjectId: blob.id, origin: 'generated', candidateIndex, requestHash, promptHash, referenceAssetKeys,
+        blobObjectId: blob.id, origin: 'generated', candidateIndex, requestHash, promptHash, referenceAssetKeys: transmittedReferenceAssetKeys,
         providerReceipt: receipt, rights: structuredClone(input.rights),
         quality: { width: blob.width, height: blob.height, mimeType: blob.mimeType, hasTextWarning: false, continuityWarnings: capabilityWarnings, cropWarnings: [] },
         disposition: 'available', createdAt: now, updatedAt: now,
@@ -192,9 +194,10 @@ export async function generateComicSubjectCandidatesV1(input: {
   if (root.targetSpec.imageCapabilityRequirement.commercialUseRequired && input.rights.commercialUse !== 'allowed') throw new Error('[media] 目标规格要求可商用权利声明')
   if (root.targetSpec.imageCapabilityRequirement.referenceImage && !OPENAI_COMPATIBLE_IMAGE_CAPABILITY_V1.referenceImage) capabilityWarnings.push('目标规格要求参考图，但当前 provider 未声明参考图能力')
   if (root.targetSpec.imageCapabilityRequirement.deterministicSeed && !OPENAI_COMPATIBLE_IMAGE_CAPABILITY_V1.deterministicSeed) capabilityWarnings.push('目标规格要求确定性 seed，但当前 provider 未声明 seed 能力')
-  const referenceAssetKeys = subject.selectedMediaAssetKey ? [subject.selectedMediaAssetKey] : []
-  if (referenceAssetKeys.length && !OPENAI_COMPATIBLE_IMAGE_CAPABILITY_V1.referenceImage) capabilityWarnings.push('当前 provider 不支持参考图，新候选无法直接继承已选设定图')
+  const requestedReferenceAssetKeys = subject.selectedMediaAssetKey ? [subject.selectedMediaAssetKey] : []
+  if (requestedReferenceAssetKeys.length && !OPENAI_COMPATIBLE_IMAGE_CAPABILITY_V1.referenceImage) capabilityWarnings.push('当前 provider 不支持参考图，新候选无法直接继承已选设定图')
   if (capabilityWarnings.length && !input.allowLimitedConsistency) throw new Error(`[media] ${capabilityWarnings.join('；')}；请显式确认后继续`)
+  const transmittedReferenceAssetKeys = OPENAI_COMPATIBLE_IMAGE_CAPABILITY_V1.referenceImage ? requestedReferenceAssetKeys : []
   const prompt = [
     root.visualBible.artDirection, root.visualBible.linework, root.visualBible.lighting,
     `palette: ${root.visualBible.palette.join(', ')}`, `period/materials: ${root.visualBible.periodAndMaterials}`,
@@ -208,7 +211,7 @@ export async function generateComicSubjectCandidatesV1(input: {
   const promptHash = await hashCanonicalValue({ prompt })
   const requestHash = await hashCanonicalValue({
     version: 1, workId: scope.workId, subjectStableKey: subject.stableKey, subjectRevision: subject.revision,
-    sourceManifestVersion: root.activeSourceManifestVersion, visualBibleHash: await hashCanonicalValue(root.visualBible), referenceAssetKeys,
+    sourceManifestVersion: root.activeSourceManifestVersion, visualBibleHash: await hashCanonicalValue(root.visualBible), requestedReferenceAssetKeys, transmittedReferenceAssetKeys,
     provider: binding.provider, model: binding.model, count: input.count, promptHash,
     regenerateNonce: input.regenerateNonce?.trim() || null,
   })
@@ -233,7 +236,7 @@ export async function generateComicSubjectCandidatesV1(input: {
       const asset: ComicMediaAsset = stampNewRecord(scope, 'comicMediaAssets', {
         projectId: scope.projectId, workId: scope.workId, adaptationProjectId: root.id!,
         stableKey: `render_${requestHash.slice(0, 32)}_${candidateIndex}`, role: roleForSubject(subject), panelId: null, subjectKey: subject.stableKey,
-        blobObjectId: blob.id, origin: 'generated', candidateIndex, requestHash, promptHash, referenceAssetKeys,
+        blobObjectId: blob.id, origin: 'generated', candidateIndex, requestHash, promptHash, referenceAssetKeys: transmittedReferenceAssetKeys,
         providerReceipt: receipt, rights: structuredClone(input.rights),
         quality: { width: blob.width, height: blob.height, mimeType: blob.mimeType, hasTextWarning: false, continuityWarnings: capabilityWarnings, cropWarnings: [] },
         disposition: 'available', createdAt: now, updatedAt: now,
@@ -256,7 +259,8 @@ export async function selectComicMediaAssetV1(input: { scope: WorkspaceScope; as
     if (input.panelId != null) {
       const panel = await db.comicPanels.get(input.panelId)
       if (!panel || panel.workId !== scope.workId || panel.status === 'locked' || panel.revision !== input.expectedRevision || asset.role !== 'panel-render' || asset.panelId !== panel.id) throw new Error('[media] 候选不属于当前格、格已变化或已锁定')
-      const next = { ...panel, selectedMediaAssetKey: asset.stableKey, revision: panel.revision + 1, updatedAt: Date.now() }
+      const nextRevision = panel.revision + 1
+      const next = { ...panel, selectedMediaAssetKey: asset.stableKey, narrativeReviewRevision: panel.narrativeReviewRevision === panel.revision ? nextRevision : panel.narrativeReviewRevision, visualReviewRevision: null, visualReviewBasis: null, visualReviewedAt: null, revision: nextRevision, updatedAt: Date.now() }
       await db.comicPanels.put(next); return next
     }
     const subject = await db.comicVisualSubjects.get(input.subjectId!)
@@ -280,7 +284,7 @@ export async function removeComicMediaAssetV1(input: { scope: WorkspaceScope; as
     if ((panels.length || subjects.length || referencingAssets.length) && !input.clearReferences) throw new Error('[media] asset 仍被选择或作为参考图使用，请显式清理引用')
     if (panels.some(panel => panel.status === 'locked') || subjects.some(subject => subject.status === 'locked')) throw new Error('[media] asset 被锁定格或视觉条目引用，请先解锁')
     const now = Date.now()
-    await db.comicPanels.bulkPut(panels.map(panel => ({ ...panel, selectedMediaAssetKey: null, revision: panel.revision + 1, updatedAt: now })))
+    await db.comicPanels.bulkPut(panels.map(panel => { const nextRevision = panel.revision + 1; return { ...panel, selectedMediaAssetKey: null, narrativeReviewRevision: panel.narrativeReviewRevision === panel.revision ? nextRevision : panel.narrativeReviewRevision, visualReviewRevision: null, visualReviewBasis: null, visualReviewedAt: null, revision: nextRevision, updatedAt: now } }))
     await db.comicVisualSubjects.bulkPut(subjects.map(subject => ({ ...subject, selectedMediaAssetKey: null, revision: subject.revision + 1, updatedAt: now })))
     await db.comicMediaAssets.bulkPut(referencingAssets.map(row => ({ ...row, referenceAssetKeys: row.referenceAssetKeys.filter(key => key !== asset.stableKey), updatedAt: now })))
     await db.comicMediaAssets.delete(asset.id!)

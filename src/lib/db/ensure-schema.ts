@@ -24,10 +24,14 @@ export const REQUIRED_TABLES = [
   'codexCategories',
   'codexEntries',
   'comicMediaAssets',
+  'comicPagePlans',
   'comicPages',
   'comicPanels',
+  'comicReviewIssues',
+  'comicScriptBeats',
   'comicVisualSubjects',
   'creativeRules',
+  'creationReleaseAssets',
   'cultivationProgress',
   'cultivationSystems',
   'detailedOutlines',
@@ -123,8 +127,8 @@ export function assertCurrentSchemaDefinition(): void {
   }
 }
 
-/** Opens the current schema. Dexie preserves v1, v2 short-form, and v3 shared
- * adaptation steps, then adds the v4 screenplay production stores. */
+/** Opens the current schema. Dexie preserves v1-v4 release steps, then adds
+ * the v5 comic production and immutable release-asset stores. */
 export async function openCurrentSchema(): Promise<CurrentSchemaState> {
   assertCurrentSchemaDefinition()
   await db.open()

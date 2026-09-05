@@ -9,6 +9,7 @@ import {
   STORYFORGE_STORES_V1,
   STORYFORGE_STORES_V2,
   STORYFORGE_STORES_V3,
+  STORYFORGE_STORES_V4,
 } from '../../src/lib/db/schema'
 import {
   assertCurrentSchemaDefinition,
@@ -16,7 +17,7 @@ import {
   REQUIRED_TABLES,
 } from '../../src/lib/db/ensure-schema'
 
-describe('CURRENT-SCHEMA · v1/v2/v3 to v4 additive migration', () => {
+describe('CURRENT-SCHEMA · v1/v2/v3/v4 to v5 additive migration', () => {
   beforeEach(async () => {
     db.close()
     await db.delete()
@@ -24,9 +25,9 @@ describe('CURRENT-SCHEMA · v1/v2/v3 to v4 additive migration', () => {
 
   afterEach(() => db.close())
 
-  it('数据库使用独立当前命名空间和 v4 schema', () => {
+  it('数据库使用独立当前命名空间和 v5 schema', () => {
     expect(STORYFORGE_DATABASE_NAME).toBe('storyforge-core')
-    expect(STORYFORGE_SCHEMA_VERSION).toBe(4)
+    expect(STORYFORGE_SCHEMA_VERSION).toBe(5)
     expect(db.name).toBe(STORYFORGE_DATABASE_NAME)
     expect(db.verno).toBe(STORYFORGE_SCHEMA_VERSION)
   })
@@ -63,7 +64,7 @@ describe('CURRENT-SCHEMA · v1/v2/v3 to v4 additive migration', () => {
     const upgraded = new StoryForgeDB(databaseName)
     try {
       await upgraded.open()
-      expect(upgraded.verno).toBe(4)
+      expect(upgraded.verno).toBe(5)
       expect(await upgraded.projects.get(projectId)).toMatchObject({ name: '迁移保留样例' })
       expect(await upgraded.shortNovelProductions.count()).toBe(0)
       expect(await upgraded.creationReleases.count()).toBe(0)
@@ -107,7 +108,7 @@ describe('CURRENT-SCHEMA · v1/v2/v3 to v4 additive migration', () => {
     const upgraded = new StoryForgeDB(databaseName)
     try {
       await upgraded.open()
-      expect(upgraded.verno).toBe(4)
+      expect(upgraded.verno).toBe(5)
       expect(await upgraded.projects.get(projectId)).toMatchObject({ name: 'v2 短篇保留样例' })
       expect(await upgraded.creationReleases.count()).toBe(1)
       expect(await upgraded.adaptationSourceFacts.count()).toBe(0)
@@ -150,12 +151,35 @@ describe('CURRENT-SCHEMA · v1/v2/v3 to v4 additive migration', () => {
     const upgraded = new StoryForgeDB(databaseName)
     try {
       await upgraded.open()
-      expect(upgraded.verno).toBe(4)
+      expect(upgraded.verno).toBe(5)
       expect(await upgraded.projects.get(projectId)).toMatchObject({ name: 'v3 改编分析保留样例' })
       expect(await upgraded.adaptationSourceFacts.count()).toBe(1)
       expect(await upgraded.screenplayBeats.count()).toBe(0)
       expect(await upgraded.screenplaySceneCards.count()).toBe(0)
       expect(await upgraded.screenplayReviewIssues.count()).toBe(0)
+    } finally {
+      upgraded.close()
+      await upgraded.delete()
+    }
+  })
+
+  it('从 v4 原位升级时保留剧本生产数据并新增漫画专业生产与 Release 资产表', async () => {
+    const databaseName = `storyforge-schema-v4-migration-${Date.now()}-${Math.random()}`
+    const oldDb = new Dexie(databaseName)
+    oldDb.version(4).stores(STORYFORGE_STORES_V4)
+    await oldDb.open()
+    const projectId = await oldDb.table('projects').add({ workspaceUid: 'WS-04HZZZZZZZZZZZZZZZZZZZZZZZ', workspacePurpose: 'independent-work', name: 'v4 剧本保留样例', createdAt: 4, updatedAt: 4 })
+    await oldDb.table('screenplayBeats').add({ projectId, workId: 1, adaptationProjectId: 1, manifestVersion: 1, stableKey: 'beat_keep', episodeNumber: 1, sectionKey: 'act1', order: 0, updatedAt: 4 })
+    oldDb.close()
+    const upgraded = new StoryForgeDB(databaseName)
+    try {
+      await upgraded.open()
+      expect(upgraded.verno).toBe(5)
+      expect(await upgraded.screenplayBeats.count()).toBe(1)
+      expect(await upgraded.comicScriptBeats.count()).toBe(0)
+      expect(await upgraded.comicPagePlans.count()).toBe(0)
+      expect(await upgraded.comicReviewIssues.count()).toBe(0)
+      expect(await upgraded.creationReleaseAssets.count()).toBe(0)
     } finally {
       upgraded.close()
       await upgraded.delete()

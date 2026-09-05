@@ -1,8 +1,9 @@
 # 小说转漫画独立产品开发设计
 
-> 版本：1.0.0 · 生效：2026-09-06 · 权威层级：L2
+> 版本：1.1.0 · 生效：2026-09-06 · 权威层级：L2
 > 对应总纲：§4.5、阶段 C · 产品：`independent.comic`
 > 性质：小说转漫画唯一专项施工方案。它不复用剧本场次作为页格，也不把漫画媒资交给世界引擎。
+> 实施状态：`feat/comic-production` 已完成代码与定向验收；最终 CI/E2E 证据以集成审查记录为准。
 
 ## 1. 开工卡与边界
 
@@ -116,7 +117,7 @@ provider capability negotiation 至少区分：reference image、multi-reference
 连续性检查分两层：
 
 - 确定性：subject refs、服装状态、道具、地点、时间、参考图、request hash 和媒资完整性。
-- 多模态审查：人物身份、发型/服装、相对位置、光线和关键道具的视觉偏差；只产生 issue，不自动选图。
+- 画面审查：当前统一聊天通道不传图片像素，AI 只审机器可验证的媒资元数据，不得假称看过画面；作者必须查看目标页实际成图并显式确认人物身份、发型/服装、相对位置、光线和关键道具，系统把 `author-visual` 依据、panel revision 与时间冻结为发布门禁。未来接入真实视觉输入后才能记录 `model-multimodal`，且仍只产生 issue、不自动选图。
 
 ## 8. 三注册表与生命周期
 
@@ -152,7 +153,7 @@ reader 验证 medium、Work、adaptationProject、page/panel/subject 和 manifes
 | `comic.panel-plan` | 分镜规划师 | 设计页格、镜头、动作和阅读顺序 | panels | 确认分镜 |
 | `comic.visual-bible` | 视觉开发师 | 建立 subject 与风格锚点 | visual subjects | 确认视觉圣经 |
 | `comic.image-request` | 视觉提示词编辑 | 编译单格 provider-neutral 请求 | media request | 确认生成批次 |
-| `comic.visual-continuity-review` | 连续性监修 | 对已选图做跨格审查 | issues | 选择问题 |
+| `comic.visual-continuity-review` | 媒资证据与连续性监修 | AI 审查已选媒资元数据，作者显式验图 | issues + review evidence | 选择问题并确认实际画面 |
 | `comic.targeted-repair` | 修图/重生成编排 | 只处理指定 panel/issue | image candidate | 重新选图 |
 | `comic.page-review` | 漫画成品编辑 | 审查叙事、文字和页面完整性 | issues | 发布前确认 |
 
@@ -228,7 +229,9 @@ Storyboard Release 要求脚本、分页、页格、阅读顺序、视觉圣经�
 
 ## 15. 完成定义
 
-`storyboard-ready` 可单独作为首个可交付里程碑；只有真实 provider 纵切面、参考图传输、跨格一致性、权利、Release 媒资固定和最终导出全部通过，才将 `independent.comic` 标记为 visual released。短篇或剧本状态不参与漫画结论。
+`storyboard-ready` 可单独作为首个可交付里程碑。`independent.comic` 的本地产品可以在分镜版、作者上传成图的视觉版、Release 媒资固定和最终导出通过后发布；某个图片 provider 只有在自己的真实纵切面、参考图实际传输、跨格一致性和权利证据通过后，才能被标为可生成 visual release。当前 provider 缺少 reference/seed/inpainting 时必须诚实阻断或降级，不能影响作者上传成图或分镜版的独立完成结论。短篇或剧本状态不参与漫画结论。
+
+已实现的收口项：十二阶段 durable Skill DAG、作者确认候选协议、来源事实/因果/决定、漫画脚本、分页、显式阅读链、页格、视觉圣经、provider 能力与参考图实传证据、单格修复、页级 AI 审校、媒资元数据 AI 审查与作者实际画面确认、storyboard/visual 双层不可变 Release、Release→Blob 强引用、PNG/WebP/CBZ/PDF 与 v14 备份往返。旧的一步式漫画候选和直接完稿入口已拒绝；未接入视觉输入的模型不会被标成多模态审查者。
 
 ## 16. 研究来源
 

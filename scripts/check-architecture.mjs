@@ -1716,15 +1716,16 @@ if (!productRuntimeMediaLibrarySource.includes('productRuntimeSessionId: number'
   violations.push('[㉝B运行媒资隔离] 运行中新生成的媒资必须绑定具体 ProductRuntimeSession')
 }
 if (!currentSchemaSource.includes("STORYFORGE_DATABASE_NAME = 'storyforge-core'")
-  || !currentSchemaSource.includes('STORYFORGE_SCHEMA_VERSION = 4')
+  || !currentSchemaSource.includes('STORYFORGE_SCHEMA_VERSION = 5')
   || !currentSchemaSource.includes('this.version(1).stores(STORYFORGE_STORES_V1)')
   || !currentSchemaSource.includes('this.version(2).stores(STORYFORGE_STORES_V2)')
   || !currentSchemaSource.includes('this.version(3).stores(STORYFORGE_STORES_V3)')
+  || !currentSchemaSource.includes('this.version(4).stores(STORYFORGE_STORES_V4)')
   || !currentSchemaSource.includes('this.version(STORYFORGE_SCHEMA_VERSION).stores(STORYFORGE_STORES)')
-  || (currentSchemaSource.match(/\.version\(/g) ?? []).length !== 4
+  || (currentSchemaSource.match(/\.version\(/g) ?? []).length !== 5
   || currentSchemaSource.includes('.upgrade(')
   || !currentSchemaSource.includes("productMediaAssets: '++id, projectId, worldId, workId, ownerKind, productType, productReleaseId, productRuntimeSessionId, &[productReleaseId+assetKey+version], &[productRuntimeSessionId+assetKey+version]")) {
-  violations.push('[㉝B当前 schema] 必须使用 storyforge-core v4、保留 v1/v2/v3 加表迁移、零数据改写 upgrade，并保留当前根/媒资隔离索引')
+  violations.push('[㉝B当前 schema] 必须使用 storyforge-core v5、保留 v1/v2/v3/v4 加表迁移、零数据改写 upgrade，并保留当前根/媒资隔离索引')
 }
 if (!deriveImportSrc.includes('ProductMedia 必须具有唯一、有效的产品所有者')
   || !deriveImportSrc.includes("asset.ownerKind === 'release'")

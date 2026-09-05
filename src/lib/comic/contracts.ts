@@ -65,12 +65,15 @@ export function assertComicPanelV1(input: {
   const { panel, page, adaptation } = input
   if (adaptation.medium !== 'comic' || panel.pageId !== page.id || panel.workId !== page.workId || panel.projectId !== page.projectId || page.adaptationProjectId !== adaptation.id) throw new Error('[comic] 格 owner 或父页不匹配')
   if (!STABLE_KEY.test(panel.stableKey) || !Number.isInteger(panel.order) || panel.order < 0 || !Number.isInteger(panel.revision) || panel.revision < 1) throw new Error('[comic] 格 stableKey、顺序或 revision 非法')
+  if (panel.nextPanelKey != null && !STABLE_KEY.test(panel.nextPanelKey)) throw new Error('[comic] 下一格引用非法')
   assertNormalizedFrameV1(panel.frame, `格 ${panel.stableKey} frame`, 0.04)
   if (!Array.isArray(panel.sourceUnitIds) || !panel.sourceUnitIds.length || new Set(panel.sourceUnitIds).size !== panel.sourceUnitIds.length || panel.sourceUnitIds.some(id => !input.sourceUnitIds.has(id))) throw new Error(`[comic] 格 ${panel.stableKey} 来源证据越界或重复`)
   if (panel.sourceReviewManifestVersion !== adaptation.activeSourceManifestVersion) throw new Error('[comic] 格来源审阅版本不是活动 manifest')
   if (!['extreme-wide', 'wide', 'full', 'medium', 'close-up', 'extreme-close-up', 'insert'].includes(panel.shot?.size) || !['eye-level', 'high', 'low', 'overhead', 'dutch'].includes(panel.shot?.angle) || !['static', 'pan', 'tilt', 'track', 'zoom', 'handheld'].includes(panel.shot?.movement)) throw new Error('[comic] 镜头合同非法')
   assertText(panel.shot.composition, '镜头构图', 2_000)
   assertText(panel.action, '格动作', 8_000, true)
+  if (panel.narrativeFunction != null) assertText(panel.narrativeFunction, '格叙事功能', 1_000)
+  if (panel.moment != null) assertText(panel.moment, '格冻结瞬间', 8_000)
   assertText(panel.visualPrompt, '视觉 Prompt', 8_000)
   assertText(panel.negativePrompt, '负向 Prompt', 4_000)
   if (!Array.isArray(panel.continuityRefs) || panel.continuityRefs.length > 100) throw new Error('[comic] 连续性引用非法')
@@ -80,7 +83,21 @@ export function assertComicPanelV1(input: {
     continuity.add(ref.subjectKey); assertText(ref.note, `连续性 ${ref.subjectKey}`, 2_000)
   }
   assertComicLetteringV1(panel.lettering)
+  if (panel.subjectStates != null) {
+    if (!Array.isArray(panel.subjectStates) || panel.subjectStates.length > 100 || new Set(panel.subjectStates.map(state => state.subjectKey)).size !== panel.subjectStates.length) throw new Error('[comic] 格 subject state 非法或重复')
+    for (const state of panel.subjectStates) {
+      if (!STABLE_KEY.test(state.subjectKey) || (input.subjectKeys && !input.subjectKeys.has(state.subjectKey)) || !Array.isArray(state.props)) throw new Error('[comic] 格 subject state 引用非法')
+      assertText(state.costume, 'subject costume', 2_000); assertText(state.condition, 'subject condition', 2_000); assertText(state.position, 'subject position', 2_000)
+    }
+  }
+  if (panel.protectedAreas != null) {
+    if (!Array.isArray(panel.protectedAreas) || panel.protectedAreas.length > 20) throw new Error('[comic] 格 protected areas 非法')
+    panel.protectedAreas.forEach((frame, index) => assertNormalizedFrameV1(frame, `格 ${panel.stableKey} protectedAreas[${index}]`, .01))
+  }
   if (!panel.imageTransform || !['cover', 'contain'].includes(panel.imageTransform.fit) || ![panel.imageTransform.scale, panel.imageTransform.offsetX, panel.imageTransform.offsetY, panel.imageTransform.rotation].every(Number.isFinite) || panel.imageTransform.scale < 0.1 || panel.imageTransform.scale > 10 || Math.abs(panel.imageTransform.offsetX) > 2 || Math.abs(panel.imageTransform.offsetY) > 2 || Math.abs(panel.imageTransform.rotation) > 180) throw new Error('[comic] 图片裁切变换非法')
+  if (panel.visualReviewBasis != null && !['author-visual', 'model-multimodal'].includes(panel.visualReviewBasis)) throw new Error('[comic] 视觉审查依据非法')
+  if (panel.visualReviewedAt != null && (!Number.isFinite(panel.visualReviewedAt) || panel.visualReviewedAt <= 0)) throw new Error('[comic] 视觉审查时间非法')
+  if ((panel.visualReviewRevision == null) !== (panel.visualReviewBasis == null) || (panel.visualReviewRevision == null) !== (panel.visualReviewedAt == null)) throw new Error('[comic] 视觉审查证据不完整')
   if (!['draft', 'reviewed', 'locked'].includes(panel.status)) throw new Error('[comic] 格状态非法')
 }
 
@@ -91,6 +108,22 @@ export function assertPagePanelLayoutV1(page: ComicPage, panels: ComicPanel[]): 
     for (let left = 0; left < sorted.length; left++) for (let right = left + 1; right < sorted.length; right++) {
       if (framesOverlap(sorted[left].frame, sorted[right].frame)) throw new Error(`[comic] 页面 ${page.stableKey} 的格发生重叠`)
     }
+  }
+}
+
+export function assertComicReadingOrderV1(page: ComicPage, panels: ComicPanel[], direction: 'ltr' | 'rtl'): void {
+  const sorted = [...panels].sort((left, right) => left.order - right.order)
+  assertPagePanelLayoutV1(page, sorted)
+  const byKey = new Map(sorted.map(panel => [panel.stableKey, panel]))
+  if (byKey.size !== sorted.length) throw new Error('[comic] 页面 panel stableKey 重复')
+  for (const [index, panel] of sorted.entries()) {
+    const expected = sorted[index + 1]?.stableKey ?? null
+    if ((panel.nextPanelKey ?? null) !== expected) throw new Error(`[comic] ${panel.stableKey} 的 nextPanelKey 与阅读顺序不一致`)
+    const next = sorted[index + 1]
+    if (!next) continue
+    const sameBand = Math.abs(panel.frame.y - next.frame.y) < Math.min(panel.frame.height, next.frame.height) * .35
+    if (sameBand && direction === 'ltr' && next.frame.x + .001 < panel.frame.x) throw new Error('[comic] LTR 同行格顺序必须从左向右')
+    if (sameBand && direction === 'rtl' && next.frame.x > panel.frame.x + .001) throw new Error('[comic] RTL 同行格顺序必须从右向左')
   }
 }
 
