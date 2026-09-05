@@ -44,6 +44,24 @@ export type TextOpenWorldEffectDefinitionV1 =
   | { key: string; operation: 'unlock-ending'; payload: { endingKey: string } }
   | { key: string; operation: 'reach-ending'; payload: { endingKey: string } }
 
+export interface TextOpenWorldQuestInstanceV1 {
+  instanceKey: string
+  definitionKey: string
+  sourceKind: 'release' | 'director'
+  sourceInstanceKey: string
+  sourceContentHash: string
+  status: TextOpenWorldQuestStatusV1
+  currentStageKey: string | null
+  objectiveStatusByKey: Record<string, TextOpenWorldObjectiveStatusV1>
+  createdAtWorldMinute: number
+  offeredAtWorldMinute: number | null
+  acceptedAtWorldMinute: number | null
+  deadlineWorldMinute: number | null
+  terminalAtWorldMinute: number | null
+  rewardClaimKey: string | null
+  resultTag: string | null
+}
+
 export interface TextOpenWorldEffectStateV1 {
   version: 1
   player: {
@@ -65,9 +83,7 @@ export interface TextOpenWorldEffectStateV1 {
     currency: number
   }
   quests: {
-    statusByQuestKey: Record<string, TextOpenWorldQuestStatusV1>
-    stageByQuestKey: Record<string, string | null>
-    objectiveStatusByKey: Record<string, TextOpenWorldObjectiveStatusV1>
+    instancesByKey: Record<string, TextOpenWorldQuestInstanceV1>
     resultTags: string[]
   }
   map: {

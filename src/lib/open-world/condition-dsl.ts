@@ -68,6 +68,11 @@ function references(modules: TextOpenWorldParsedModulesV1) {
     factions: set(modules.actors.factions), actors: set(modules.actors.actors), endings: set(modules.narrative.endings),
     knowledge: set(modules.knowledge.entries), rumors: set(modules.knowledge.rumors), achievements: set(modules.knowledge.achievements), statuses: set(modules.progression.statuses),
     questStageOwner: new Map(modules.quests.stages.map(item => [item.key, item.questKey])),
+    questTypeByKey: new Map(modules.quests.quests.map(item => [item.key, item.type])),
+    objectiveQuestOwner: new Map(modules.quests.objectives.map(objective => {
+      const stage = modules.quests.stages.find(item => item.key === objective.stageKey)!
+      return [objective.key, stage.questKey]
+    })),
   }
 }
 
@@ -119,18 +124,23 @@ function parseExpression(value: unknown, refs: ReferenceCatalog, depth: number, 
     if (!Array.isArray(parsed.statuses) || parsed.statuses.length < 1 || parsed.statuses.length > 7) fail(`${label}.statuses无效`)
     const statuses = parsed.statuses.map((item, index) => enumValue(item, QUEST_STATUSES, `${label}.statuses[${index}]`))
     if (new Set(statuses).size !== statuses.length) fail(`${label}.statuses不能重复`)
-    return { op, questKey: ref(parsed.questKey, refs.quests, `${label}.questKey`), statuses }
+    const questKey = ref(parsed.questKey, refs.quests, `${label}.questKey`)
+    if (refs.questTypeByKey.get(questKey) === 'template') fail(`${label}不能以模板定义代替运行时任务实例`)
+    return { op, questKey, statuses }
   }
   if (op === 'quest-stage') {
     exact(parsed, ['op', 'questKey', 'stageKey'], label)
     const questKey = ref(parsed.questKey, refs.quests, `${label}.questKey`)
     const stageKey = ref(parsed.stageKey, refs.questStages, `${label}.stageKey`)
     if (refs.questStageOwner.get(stageKey) !== questKey) fail(`${label}.stageKey不属于questKey`)
+    if (refs.questTypeByKey.get(questKey) === 'template') fail(`${label}不能以模板定义代替运行时任务实例`)
     return { op, questKey, stageKey }
   }
   if (op === 'quest-objective') {
     exact(parsed, ['op', 'objectiveKey', 'status'], label)
-    return { op, objectiveKey: ref(parsed.objectiveKey, refs.objectives, `${label}.objectiveKey`), status: enumValue(parsed.status, ['inactive', 'active', 'completed', 'failed'], `${label}.status`) }
+    const objectiveKey = ref(parsed.objectiveKey, refs.objectives, `${label}.objectiveKey`)
+    if (refs.questTypeByKey.get(refs.objectiveQuestOwner.get(objectiveKey)!) === 'template') fail(`${label}不能以模板定义代替运行时任务实例`)
+    return { op, objectiveKey, status: enumValue(parsed.status, ['inactive', 'active', 'completed', 'failed'], `${label}.status`) }
   }
   if (op === 'quest-result-tag') {
     exact(parsed, ['op', 'tag', 'present'], label)

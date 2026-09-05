@@ -18,6 +18,7 @@ import {
 } from './inventory'
 import { deriveTextOpenWorldPlayerStatsFromModulesV1 } from './player-stats'
 import { levelForTextOpenWorldExperienceV1 } from './progression'
+import { createTextOpenWorldQuestInstanceKeyV1 } from './quests'
 
 type Row = Record<string, unknown>
 type Refs = ReturnType<typeof references>
@@ -178,12 +179,52 @@ export function validateTextOpenWorldEffectStateV1(state: TextOpenWorldEffectSta
   }
   assertUniqueKnown(state.inventory.knownRecipeKeys, refs.recipes, 'inventory.knownRecipeKeys')
   int(state.inventory.currency, 'inventory.currency', 0, 1_000_000_000)
-  for (const [questKey, status] of Object.entries(state.quests.statusByQuestKey)) { ref(questKey, refs.quests, 'quest status key'); enumValue(status, QUEST_STATUSES, `quest status:${questKey}`) }
-  for (const [questKey, stageKey] of Object.entries(state.quests.stageByQuestKey)) {
-    ref(questKey, refs.quests, 'quest stage owner')
-    if (stageKey != null && refs.questStageOwner.get(ref(stageKey, refs.questStages, 'quest stage')) !== questKey) fail(`quest stage归属无效:${questKey}`)
+  const questState = row(state.quests, 'quests'); exact(questState, ['instancesByKey', 'resultTags'], 'quests')
+  const releaseInstanceCountByDefinition = new Map<string, number>()
+  const sourceRefs = new Set<string>()
+  const questInstances = row(state.quests.instancesByKey, 'quests.instancesByKey')
+  for (const [instanceKey, rawInstance] of Object.entries(questInstances)) {
+    const instance = row(rawInstance, `quests.instancesByKey.${instanceKey}`)
+    exact(instance, ['instanceKey', 'definitionKey', 'sourceKind', 'sourceInstanceKey', 'sourceContentHash', 'status', 'currentStageKey', 'objectiveStatusByKey', 'createdAtWorldMinute', 'offeredAtWorldMinute', 'acceptedAtWorldMinute', 'deadlineWorldMinute', 'terminalAtWorldMinute', 'rewardClaimKey', 'resultTag'], `quests.instancesByKey.${instanceKey}`)
+    if (instance.instanceKey !== instanceKey) fail(`任务实例记录键与instanceKey不一致:${instanceKey}`)
+    const definitionKey = ref(instance.definitionKey, refs.quests, `quests.${instanceKey}.definitionKey`)
+    const definition = modules.quests.quests.find(candidate => candidate.key === definitionKey)!
+    const sourceKind = enumValue(instance.sourceKind, ['release', 'director'], `quests.${instanceKey}.sourceKind`)
+    const sourceInstanceKey = key(instance.sourceInstanceKey, `quests.${instanceKey}.sourceInstanceKey`, /^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/)
+    if (createTextOpenWorldQuestInstanceKeyV1({ definitionKey, sourceKind, sourceInstanceKey }) !== instanceKey) fail(`任务实例ID不是稳定派生值:${instanceKey}`)
+    const sourceRef = sourceKind === 'release' ? `${sourceKind}:${definitionKey}:${sourceInstanceKey}` : `${sourceKind}:${sourceInstanceKey}`
+    if (sourceRefs.has(sourceRef)) fail(`任务实例来源重复:${sourceRef}`)
+    sourceRefs.add(sourceRef)
+    if (typeof instance.sourceContentHash !== 'string' || !isSha256Hash(instance.sourceContentHash)) fail(`quests.${instanceKey}.sourceContentHash无效`)
+    if (sourceKind === 'release') {
+      if (definition.instantiationPolicy !== 'session-start' || sourceInstanceKey !== 'session-start') fail(`Release任务实例来源无效:${instanceKey}`)
+      releaseInstanceCountByDefinition.set(definitionKey, (releaseInstanceCountByDefinition.get(definitionKey) ?? 0) + 1)
+    } else if (definition.type !== 'template' || definition.instantiationPolicy !== 'director') fail(`Director只能实例化模板任务:${instanceKey}`)
+    const status = enumValue(instance.status, QUEST_STATUSES, `quests.${instanceKey}.status`)
+    const currentStageKey = instance.currentStageKey == null ? null : ref(instance.currentStageKey, refs.questStages, `quests.${instanceKey}.currentStageKey`)
+    if (currentStageKey && refs.questStageOwner.get(currentStageKey) !== definitionKey) fail(`任务实例Stage归属无效:${instanceKey}`)
+    const objectiveStates = row(instance.objectiveStatusByKey, `quests.${instanceKey}.objectiveStatusByKey`)
+    const expectedObjectiveKeys = definition.stageKeys.flatMap(stageKey => modules.quests.stages.find(stage => stage.key === stageKey)!.objectiveKeys)
+    if (canonicalProductProductionJsonV2(Object.keys(objectiveStates).sort()) !== canonicalProductProductionJsonV2([...expectedObjectiveKeys].sort())) fail(`任务实例Objective闭集不一致:${instanceKey}`)
+    for (const [objectiveKey, objectiveStatus] of Object.entries(objectiveStates)) enumValue(objectiveStatus, ['inactive', 'active', 'completed', 'failed'], `quests.${instanceKey}.objective:${objectiveKey}`)
+    const createdAt = int(instance.createdAtWorldMinute, `quests.${instanceKey}.createdAtWorldMinute`)
+    const nullableMinute = (value: unknown, label: string) => value == null ? null : int(value, label)
+    const offeredAt = nullableMinute(instance.offeredAtWorldMinute, `quests.${instanceKey}.offeredAtWorldMinute`)
+    const acceptedAt = nullableMinute(instance.acceptedAtWorldMinute, `quests.${instanceKey}.acceptedAtWorldMinute`)
+    const deadline = nullableMinute(instance.deadlineWorldMinute, `quests.${instanceKey}.deadlineWorldMinute`)
+    const terminalAt = nullableMinute(instance.terminalAtWorldMinute, `quests.${instanceKey}.terminalAtWorldMinute`)
+    if ([offeredAt, acceptedAt, terminalAt].some(value => value != null && (value < createdAt || value > state.time.worldMinute))) fail(`任务实例时间顺序无效:${instanceKey}`)
+    if (deadline != null && deadline < createdAt) fail(`任务实例deadline早于创建时间:${instanceKey}`)
+    if (status === 'locked' && offeredAt != null) fail(`locked任务不能已有offeredAt:${instanceKey}`)
+    if (status === 'available' && offeredAt == null) fail(`available任务缺少offeredAt:${instanceKey}`)
+    if (status === 'active' && (offeredAt == null || acceptedAt == null || currentStageKey == null)) fail(`active任务缺少接取时间或Stage:${instanceKey}`)
+    if (['completed', 'failed', 'expired', 'abandoned'].includes(status) && terminalAt == null) fail(`终态任务缺少terminalAt:${instanceKey}`)
+    if (instance.rewardClaimKey != null) key(instance.rewardClaimKey, `quests.${instanceKey}.rewardClaimKey`, CLAIM_KEY)
+    if (instance.resultTag != null) key(instance.resultTag, `quests.${instanceKey}.resultTag`)
   }
-  for (const [objectiveKey, status] of Object.entries(state.quests.objectiveStatusByKey)) { ref(objectiveKey, refs.objectives, 'objective status key'); enumValue(status, ['inactive', 'active', 'completed', 'failed'], `objective status:${objectiveKey}`) }
+  for (const definition of modules.quests.quests.filter(item => item.instantiationPolicy === 'session-start')) {
+    if (releaseInstanceCountByDefinition.get(definition.key) !== 1) fail(`正式任务必须恰好有一个Release实例:${definition.key}`)
+  }
   if (new Set(state.quests.resultTags).size !== state.quests.resultTags.length || state.quests.resultTags.some(tag => !KEY.test(tag))) fail('quests.resultTags无效')
   assertUniqueKnown(state.map.revealedLocationKeys, refs.locations, 'map.revealedLocationKeys')
   for (const [regionKey, knowledge] of Object.entries(state.map.regionKnowledgeByKey)) { ref(regionKey, refs.regions, 'region knowledge key'); enumValue(knowledge, ['unknown', 'heard', 'visited', 'familiar'], `region knowledge:${regionKey}`) }
@@ -257,6 +298,12 @@ function recalculateEquipmentResourceCaps(state: TextOpenWorldEffectStateV1, mod
   state.player.skillResource = Math.min(state.player.skillResource, derived.maximumSkillResource)
   state.player.maximumHealth = derived.maximumHealth
   state.player.maximumSkillResource = derived.maximumSkillResource
+}
+
+function questInstanceForDefinition(state: TextOpenWorldEffectStateV1, definitionKey: string) {
+  const matches = Object.values(state.quests.instancesByKey).filter(instance => instance.definitionKey === definitionKey)
+  if (matches.length !== 1) fail(`任务定义必须恰好对应一个可操作实例:${definitionKey}`)
+  return matches[0]
 }
 
 function applyDefinitions(stateValue: TextOpenWorldEffectStateV1, effects: TextOpenWorldEffectDefinitionV1[], claimKey: string, modules: TextOpenWorldParsedModulesV1) {
@@ -406,17 +453,24 @@ function applyDefinitions(stateValue: TextOpenWorldEffectStateV1, effects: TextO
       case 'transition-quest': {
         const { payload } = effect
         const definition = modules.quests.quests.find(candidate => candidate.key === payload.questKey)!
-        const before = { status: state.quests.statusByQuestKey[payload.questKey] ?? 'locked', stageKey: state.quests.stageByQuestKey[payload.questKey] ?? null }
+        const instance = questInstanceForDefinition(state, payload.questKey)
+        const before = { instanceKey: instance.instanceKey, status: instance.status, stageKey: instance.currentStageKey }
         const protectedQuest = definition.type === 'mainline' || definition.type === 'significant'
         if (!questTransitionAllowed(before.status as TextOpenWorldQuestStatusV1, payload.status, protectedQuest, definition.lifecyclePolicy === 'abandon-restart', definition.repeatable)) fail(`${effect.key}任务状态迁移非法:${before.status}->${payload.status}`)
         if (payload.status === 'active' && payload.stageKey == null) fail(`${effect.key}激活任务必须指定stageKey`)
-        state.quests.statusByQuestKey[payload.questKey] = payload.status; state.quests.stageByQuestKey[payload.questKey] = payload.stageKey
-        record(changes, effect, `任务${payload.questKey}变为${payload.status}`, before, { status: payload.status, stageKey: payload.stageKey }); break
+        instance.status = payload.status; instance.currentStageKey = payload.stageKey
+        if (payload.status === 'available') instance.offeredAtWorldMinute ??= state.time.worldMinute
+        if (payload.status === 'active') { instance.offeredAtWorldMinute ??= state.time.worldMinute; instance.acceptedAtWorldMinute ??= state.time.worldMinute }
+        if (['completed', 'failed', 'expired', 'abandoned'].includes(payload.status)) instance.terminalAtWorldMinute = state.time.worldMinute
+        record(changes, effect, `任务实例${instance.instanceKey}变为${payload.status}`, before, { instanceKey: instance.instanceKey, status: payload.status, stageKey: payload.stageKey }); break
       }
       case 'complete-objective': {
-        const { payload } = effect; const before = state.quests.objectiveStatusByKey[payload.objectiveKey] ?? 'inactive'
+        const { payload } = effect
+        const stage = modules.quests.stages.find(candidate => candidate.objectiveKeys.includes(payload.objectiveKey))!
+        const instance = questInstanceForDefinition(state, stage.questKey)
+        const before = instance.objectiveStatusByKey[payload.objectiveKey] ?? 'inactive'
         if (before !== 'active') fail(`${effect.key}只能完成active目标`)
-        state.quests.objectiveStatusByKey[payload.objectiveKey] = 'completed'; record(changes, effect, `完成目标:${payload.objectiveKey}`, before, 'completed'); break
+        instance.objectiveStatusByKey[payload.objectiveKey] = 'completed'; record(changes, effect, `完成任务实例目标:${instance.instanceKey}:${payload.objectiveKey}`, before, 'completed'); break
       }
       case 'change-morality': {
         const { payload } = effect; const before = state.relationships.morality; const after = before + payload.amount

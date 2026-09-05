@@ -212,9 +212,41 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
 
   const quests = versioned(packageValue, 'quests')
   exact(quests, ['version', 'quests', 'stages', 'objectives'], 'quests')
-  const questRows = catalog(quests.quests, 'quests.quests', ['key', 'type', 'ownerKey', 'title', 'description', 'storylineKey', 'stageKeys', 'prerequisiteConditionKeys', 'rewardEffectKeys', 'lifecyclePolicy', 'expirationMinutes', 'repeatable']); const questStages = catalog(quests.stages, 'quests.stages', ['key', 'questKey', 'order', 'title', 'objectiveKeys', 'completionConditionKeys']); const objectives = catalog(quests.objectives, 'quests.objectives', ['key', 'stageKey', 'title', 'optional', 'actionKeys'])
+  const questRows = catalog(quests.quests, 'quests.quests', ['key', 'type', 'ownerKind', 'ownerKey', 'title', 'description', 'storylineKey', 'regionKeys', 'stageKeys', 'prerequisiteConditionKeys', 'rewardEffectKeys', 'lifecyclePolicy', 'timePolicy', 'expirationMinutes', 'repeatable', 'instantiationPolicy', 'initialStatus', 'estimatedMinutes', 'tags']); const questStages = catalog(quests.stages, 'quests.stages', ['key', 'questKey', 'order', 'title', 'objectiveKeys', 'completionConditionKeys']); const objectives = catalog(quests.objectives, 'quests.objectives', ['key', 'stageKey', 'title', 'optional', 'actionKeys'])
   const questKeys = keysOf(questRows, 'quests.quests'); const questStageKeys = keysOf(questStages, 'quests.stages'); const objectiveKeys = keysOf(objectives, 'quests.objectives')
-  questRows.forEach((item, index) => { const type = enumValue(item.type, QUEST_TYPES, `quests.quests[${index}].type`); nullableKey(item.ownerKey, `quests.quests[${index}].ownerKey`); text(item.title, `quests.quests[${index}].title`, 2_000); text(item.description, `quests.quests[${index}].description`); requireRef(nullableKey(item.storylineKey, `quests.quests[${index}].storylineKey`), storylineKeys, 'quest storyline'); requireRefs(strings(item.stageKeys, `quests.quests[${index}].stageKeys`), questStageKeys, 'quest stage'); requireRefs(strings(item.prerequisiteConditionKeys, `quests.quests[${index}].prerequisiteConditionKeys`), conditionKeys, 'quest condition'); requireRefs(strings(item.rewardEffectKeys, `quests.quests[${index}].rewardEffectKeys`), effectKeys, 'quest reward'); const policy = enumValue(item.lifecyclePolicy, QUEST_POLICIES, `quests.quests[${index}].lifecyclePolicy`); if ((type === 'mainline' || type === 'significant') && policy !== 'protected-wait') fail(`quests.quests[${index}] 重要任务必须protected-wait`); const expiration = item.expirationMinutes == null ? null : int(item.expirationMinutes, `quests.quests[${index}].expirationMinutes`, 1, 1_000_000_000); if (policy === 'protected-wait' && expiration != null) fail(`quests.quests[${index}] protected-wait不能过期`); const repeatable = bool(item.repeatable, `quests.quests[${index}].repeatable`); if ((type === 'mainline' || type === 'significant') && repeatable) fail(`quests.quests[${index}] 重要任务不能重复`) })
+  questRows.forEach((item, index) => {
+    const label = `quests.quests[${index}]`
+    const type = enumValue(item.type, QUEST_TYPES, `${label}.type`)
+    if (String(item.key).length > 80) fail(`${label}.key超过任务实例稳定引用预算`)
+    const ownerKind = enumValue(item.ownerKind, ['global', 'actor', 'faction', 'region', 'location'], `${label}.ownerKind`)
+    const ownerKey = nullableKey(item.ownerKey, `${label}.ownerKey`)
+    if (ownerKind === 'global') { if (ownerKey != null) fail(`${label}全局任务不能设置ownerKey`) }
+    else {
+      if (ownerKey == null) fail(`${label}.${ownerKind}任务必须设置ownerKey`)
+      requireRef(ownerKey, ownerKind === 'actor' ? actorKeys : ownerKind === 'faction' ? factionKeys : ownerKind === 'region' ? regionKeys : locationKeys, `quest ${ownerKind} owner`)
+    }
+    text(item.title, `${label}.title`, 2_000); text(item.description, `${label}.description`)
+    const storylineKey = nullableKey(item.storylineKey, `${label}.storylineKey`); requireRef(storylineKey, storylineKeys, 'quest storyline')
+    if ((type === 'mainline' || type === 'significant') !== (storylineKey != null)) fail(`${label}故事线绑定与叙事等级不一致`)
+    const ownedRegionKeys = strings(item.regionKeys, `${label}.regionKeys`); if (!ownedRegionKeys.length) fail(`${label}.regionKeys不能为空`); requireRefs(ownedRegionKeys, regionKeys, 'quest region')
+    requireRefs(strings(item.stageKeys, `${label}.stageKeys`), questStageKeys, 'quest stage')
+    requireRefs(strings(item.prerequisiteConditionKeys, `${label}.prerequisiteConditionKeys`), conditionKeys, 'quest condition')
+    requireRefs(strings(item.rewardEffectKeys, `${label}.rewardEffectKeys`), effectKeys, 'quest reward')
+    const policy = enumValue(item.lifecyclePolicy, QUEST_POLICIES, `${label}.lifecyclePolicy`)
+    const timePolicy = enumValue(item.timePolicy, ['waits', 'timed'], `${label}.timePolicy`)
+    const expiration = item.expirationMinutes == null ? null : int(item.expirationMinutes, `${label}.expirationMinutes`, 1, 1_000_000_000)
+    if (policy === 'protected-wait' && expiration != null) fail(`${label} protected-wait不能过期`)
+    if ((timePolicy === 'timed') !== (expiration != null)) fail(`${label}时间策略与expirationMinutes不一致`)
+    if ((type === 'mainline' || type === 'significant') && (policy !== 'protected-wait' || timePolicy !== 'waits')) fail(`${label}重要任务必须受保护并等待玩家`)
+    const repeatable = bool(item.repeatable, `${label}.repeatable`)
+    const instantiationPolicy = enumValue(item.instantiationPolicy, ['session-start', 'director'], `${label}.instantiationPolicy`)
+    const initialStatus = enumValue(item.initialStatus, ['locked', 'available'], `${label}.initialStatus`)
+    if (type === 'template') {
+      if (!repeatable || instantiationPolicy !== 'director' || initialStatus !== 'locked' || storylineKey != null) fail(`${label}模板任务必须由Director重复实例化且不能直接开放`)
+    } else if (repeatable || instantiationPolicy !== 'session-start') fail(`${label}正式任务必须在Session开始时建立单一实例`)
+    int(item.estimatedMinutes, `${label}.estimatedMinutes`, 1, 100_000)
+    strings(item.tags, `${label}.tags`)
+  })
   questStages.forEach((item, index) => { requireRef(key(item.questKey, `quests.stages[${index}].questKey`), questKeys, 'quest stage owner'); int(item.order, `quests.stages[${index}].order`, 0, 10_000); text(item.title, `quests.stages[${index}].title`, 2_000); requireRefs(strings(item.objectiveKeys, `quests.stages[${index}].objectiveKeys`), objectiveKeys, 'quest objective'); requireRefs(strings(item.completionConditionKeys, `quests.stages[${index}].completionConditionKeys`), conditionKeys, 'quest completion condition') })
   objectives.forEach((item, index) => { requireRef(key(item.stageKey, `quests.objectives[${index}].stageKey`), questStageKeys, 'objective stage'); text(item.title, `quests.objectives[${index}].title`, 2_000); bool(item.optional, `quests.objectives[${index}].optional`); requireRefs(strings(item.actionKeys, `quests.objectives[${index}].actionKeys`), actionKeys, 'objective action') })
   questRows.forEach((item, index) => requireSameKeys(
@@ -247,6 +279,13 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
     const owners = narrativeStages.filter(stage => strings(stage.questKeys, `narrative stage ${String(stage.key)} questKeys`).includes(String(item.key)))
     if (owners.length !== 1) fail(`重要任务必须且只能属于一个叙事阶段:${String(item.key)}`)
   })
+  const orderedMainQuestKeys = storylines.filter(item => item.kind === 'mainline').flatMap(storyline =>
+    narrativeStages.filter(stage => stage.storylineKey === storyline.key).sort((left, right) => Number(left.order) - Number(right.order))
+      .flatMap(stage => strings(stage.questKeys, `narrative stage ${String(stage.key)} questKeys`)))
+  const initiallyAvailableMainQuestKeys = questRows.filter(item => item.type === 'mainline' && item.initialStatus === 'available').map(item => String(item.key))
+  if (orderedMainQuestKeys.length && (initiallyAvailableMainQuestKeys.length !== 1 || initiallyAvailableMainQuestKeys[0] !== orderedMainQuestKeys[0])) {
+    fail('严格顺序主线必须只开放第一个任务定义')
+  }
 
   const progression = versioned(packageValue, 'progression')
   exact(progression, ['version', 'rules', 'levels', 'skills', 'statuses'], 'progression')
@@ -501,6 +540,9 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
   const deckRegions = decks.map((item, index) => key(item.regionKey, `director.decks[${index}].regionKey`)); if (new Set(deckRegions).size !== deckRegions.length) fail('director.decks.regionKey重复'); requireRefs(deckRegions, regionKeys, 'deck region')
   requireSameKeys(deckRegions, [...regionKeys], 'region director decks')
   templates.forEach((item, index) => { const questKey = key(item.questKey, `director.templates[${index}].questKey`); requireRef(questKey, questKeys, 'template quest'); if (questRows.find(quest => quest.key === questKey)?.type !== 'template') fail(`director template必须引用template任务:${questKey}`); requireRefs(strings(item.regionKeys, `director.templates[${index}].regionKeys`), regionKeys, 'template region'); strings(item.variantTextKeys, `director.templates[${index}].variantTextKeys`); key(item.fingerprint, `director.templates[${index}].fingerprint`); int(item.cooldownMinutes, `director.templates[${index}].cooldownMinutes`, 0, 1_000_000) })
+  questRows.filter(item => item.type === 'template').forEach(item => {
+    if (templates.filter(template => template.questKey === item.key).length !== 1) fail(`模板任务必须且只能绑定一个Director模板:${String(item.key)}`)
+  })
   randomEvents.forEach((item, index) => { text(item.title, `director.randomEvents[${index}].title`, 2_000); requireRefs(strings(item.regionKeys, `director.randomEvents[${index}].regionKeys`), regionKeys, 'random event region'); requireRefs(strings(item.actionKeys, `director.randomEvents[${index}].actionKeys`), actionKeys, 'random event action'); requireRefs(strings(item.effectKeys, `director.randomEvents[${index}].effectKeys`), effectKeys, 'random event effect'); int(item.intensity, `director.randomEvents[${index}].intensity`, 1, 10); int(item.cooldownMinutes, `director.randomEvents[${index}].cooldownMinutes`, 0, 1_000_000) })
   decks.forEach((item, index) => { requireRefs(strings(item.questKeys, `director.decks[${index}].questKeys`), questKeys, 'deck quest'); requireRefs(strings(item.templateKeys, `director.decks[${index}].templateKeys`), templateKeys, 'deck template'); requireRefs(strings(item.randomEventKeys, `director.decks[${index}].randomEventKeys`), randomEventKeys, 'deck event'); const maxRevealed = int(item.maximumRevealed, `director.decks[${index}].maximumRevealed`, 1, 1_000); const maxActive = int(item.maximumActive, `director.decks[${index}].maximumActive`, 1, 1_000); if (maxActive > maxRevealed) fail('deck maximumActive不能大于maximumRevealed'); int(item.cooldownMinutes, `director.decks[${index}].cooldownMinutes`, 0, 1_000_000); numberValue(item.blankWeight, `director.decks[${index}].blankWeight`, 0, 1_000_000) })
 

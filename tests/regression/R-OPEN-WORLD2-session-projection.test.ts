@@ -44,6 +44,7 @@ describe('Text Open World vNext · authoritative Session Projection', () => {
 
   it('从RuntimePackage建立覆盖全部核心域的确定性初始状态', () => {
     const projection = createInitialTextOpenWorldSessionProjectionV1(createTextOpenWorldVNextFixture())
+    const mainQuestInstanceKey = 'quest-instance.12.quest.main.1.release.13.session-start'
     expect(projection).toMatchObject({
       ruleset: { key: 'storyforge.standard', version: 1 },
       state: {
@@ -53,7 +54,7 @@ describe('Text Open World vNext · authoritative Session Projection', () => {
           itemInstances: { 'instance.initial.1.item.rust-sword': { itemKey: 'item.rust-sword', acquiredByClaimKey: 'initial-build', stateTags: ['new'] } },
           currency: 20, knownRecipeKeys: ['recipe.brine-tonic'],
         },
-        quests: { statusByQuestKey: { 'quest.main.1': 'available', 'quest.template.supplies': 'locked' } },
+        quests: { instancesByKey: { [mainQuestInstanceKey]: { definitionKey: 'quest.main.1', sourceKind: 'release', status: 'available', objectiveStatusByKey: { 'objective.main.1': 'inactive' } } } },
         map: { currentLocationKey: 'location.salt-port', revealedLocationKeys: ['location.salt-port'], regionKnowledgeByKey: { 'region.salt-port': 'visited', 'region.ridge': 'heard' }, openEdgeKeys: ['edge.port-ridge'] },
         time: { worldMinute: 480, currentWeatherByRegionKey: { 'region.salt-port': 'weather.clear', 'region.ridge': 'weather.clear' } },
         relationships: { morality: 0, factionAffinityByKey: { 'faction.canal-keepers': 0 } },
@@ -95,7 +96,7 @@ describe('Text Open World vNext · authoritative Session Projection', () => {
     })
     expect(contexts.action.conditionResults['condition.always']).toEqual({ satisfied: true, publicReason: null })
     expect(contexts.action.validTargetKeysByScope).toMatchObject({
-      actor: ['actor.caretaker'], location: ['location.salt-port'], vendor: ['vendor.caretaker'], quest: ['quest.main.1'],
+      actor: ['actor.caretaker'], location: ['location.salt-port'], vendor: ['vendor.caretaker'], quest: ['quest-instance.12.quest.main.1.release.13.session-start'],
     })
     expect(createTextOpenWorldActionRegistryV1(runtimePackage).project(contexts.action)[0]).toMatchObject({ available: true, validTargetKeys: ['location.salt-port'] })
 

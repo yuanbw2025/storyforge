@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createTextOpenWorldEffectCatalogV1 } from '../../src/lib/open-world/effect-dsl'
+import { createInitialTextOpenWorldQuestInstancesV1 } from '../../src/lib/open-world/quests'
 import type { TextOpenWorldEffectDefinitionV1, TextOpenWorldEffectStateV1 } from '../../src/lib/types'
 import { createTextOpenWorldVNextFixture } from '../helpers/text-open-world-vnext-fixture'
 
@@ -17,9 +18,7 @@ function state(overrides: Partial<TextOpenWorldEffectStateV1> = {}): TextOpenWor
       knownRecipeKeys: ['recipe.brine-tonic'], currency: 20,
     },
     quests: {
-      statusByQuestKey: { 'quest.main.1': 'available', 'quest.template.supplies': 'available' },
-      stageByQuestKey: { 'quest.main.1': null, 'quest.template.supplies': null },
-      objectiveStatusByKey: { 'objective.main.1': 'inactive', 'objective.template.supplies': 'inactive' },
+      instancesByKey: createInitialTextOpenWorldQuestInstancesV1(createTextOpenWorldVNextFixture()),
       resultTags: [],
     },
     map: {
@@ -119,13 +118,16 @@ describe('Text Open World vNext · typed Effect DSL and atomic EffectPlan', () =
       { key: 'effect.reach-ending', operation: 'reach-ending', payload: { endingKey: 'ending.cooperate' } },
     ]
     const catalog = createTextOpenWorldEffectCatalogV1(addEffects(effects))
-    const before = state({ quests: { ...state().quests, objectiveStatusByKey: { 'objective.main.1': 'active', 'objective.template.supplies': 'inactive' } } })
+    const quests = state().quests
+    const mainInstanceKey = Object.keys(quests.instancesByKey)[0]
+    quests.instancesByKey[mainInstanceKey].objectiveStatusByKey['objective.main.1'] = 'active'
+    const before = state({ quests })
     const plan = await catalog.plan({ effectKeys: effects.map(effect => effect.key), claimKey: 'claim.story-beat', state: before })
     const { state: after } = await catalog.apply({ plan, state: before })
 
     expect(plan.impactDomains).toEqual(expect.arrayContaining(['quests', 'map', 'time', 'relationships', 'combat', 'actors', 'world', 'knowledge', 'endings']))
     expect(after).toMatchObject({
-      quests: { statusByQuestKey: { 'quest.main.1': 'active' }, objectiveStatusByKey: { 'objective.main.1': 'completed' } },
+      quests: { instancesByKey: { [mainInstanceKey]: { definitionKey: 'quest.main.1', status: 'active', objectiveStatusByKey: { 'objective.main.1': 'completed' } } } },
       map: { currentLocationKey: 'location.ridge-channel', travel: null }, time: { worldMinute: 540 },
       relationships: { morality: 5, factionAffinityByKey: { 'faction.canal-keepers': 10 }, storyModifierByActorKey: { 'actor.caretaker': 5 } },
       combat: { encounterKey: 'encounter.ridge-jackal', status: 'victory' },

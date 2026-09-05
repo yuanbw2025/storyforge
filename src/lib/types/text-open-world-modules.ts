@@ -5,6 +5,9 @@ export type TextOpenWorldStorylineKindV1 = 'mainline' | 'significant'
 export type TextOpenWorldStorylineOwnerKindV1 = 'core' | 'character' | 'faction' | 'region'
 export type TextOpenWorldQuestTypeV1 = 'mainline' | 'significant' | 'ordinary' | 'template'
 export type TextOpenWorldQuestLifecyclePolicyV1 = 'protected-wait' | 'abandon-restart' | 'abandon-terminal'
+export type TextOpenWorldQuestOwnerKindV1 = 'global' | 'actor' | 'faction' | 'region' | 'location'
+export type TextOpenWorldQuestInstantiationPolicyV1 = 'session-start' | 'director'
+export type TextOpenWorldQuestTimePolicyV1 = 'waits' | 'timed'
 export type TextOpenWorldActionCategoryV1 =
   | 'move' | 'travel' | 'fast-travel' | 'observe' | 'investigate' | 'talk'
   | 'take' | 'use' | 'equip' | 'unequip' | 'drop' | 'buy' | 'sell' | 'craft'
@@ -155,16 +158,23 @@ export interface TextOpenWorldQuestModuleV1 {
   quests: Array<{
     key: string
     type: TextOpenWorldQuestTypeV1
+    ownerKind: TextOpenWorldQuestOwnerKindV1
     ownerKey: string | null
     title: string
     description: string
     storylineKey: string | null
+    regionKeys: string[]
     stageKeys: string[]
     prerequisiteConditionKeys: string[]
     rewardEffectKeys: string[]
     lifecyclePolicy: TextOpenWorldQuestLifecyclePolicyV1
+    timePolicy: TextOpenWorldQuestTimePolicyV1
     expirationMinutes: number | null
     repeatable: boolean
+    instantiationPolicy: TextOpenWorldQuestInstantiationPolicyV1
+    initialStatus: 'locked' | 'available'
+    estimatedMinutes: number
+    tags: string[]
   }>
   stages: Array<{
     key: string

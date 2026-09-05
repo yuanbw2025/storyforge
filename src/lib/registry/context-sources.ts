@@ -583,7 +583,7 @@ async function readOpenWorldRuntimeContext(input: AssembleContextInput): Promise
   }
   const state = await readProductRuntimeStateForContext(session.id!)
   if (manifest.textOpenWorldVNext) {
-    const [sessionProjection, modulesModule, actionModule, bindingModule, feedbackModule, skillsModule, lifeModule, inventoryModule] = await Promise.all([
+    const [sessionProjection, modulesModule, actionModule, bindingModule, feedbackModule, skillsModule, lifeModule, inventoryModule, questModule] = await Promise.all([
       import('../open-world/session-projection'),
       import('../open-world/modules'),
       import('../open-world/action-registry'),
@@ -592,6 +592,7 @@ async function readOpenWorldRuntimeContext(input: AssembleContextInput): Promise
       import('../open-world/skills'),
       import('../open-world/life-cycle'),
       import('../open-world/inventory'),
+      import('../open-world/quests'),
     ])
     if (!state.textOpenWorld) return ''
     const binding = await bindingModule.verifyTextOpenWorldVNextSessionBindingV1(session)
@@ -621,18 +622,18 @@ async function readOpenWorldRuntimeContext(input: AssembleContextInput): Promise
     const weather = modules['time-weather'].weather.find(item => item.key === weatherKey)
     const visibleRegions = modules.world.regions.filter(item => runtime.map.regionKnowledgeByKey[item.key] !== 'unknown')
     const visibleLocations = modules.world.locations.filter(item => runtime.map.revealedLocationKeys.includes(item.key))
-    const visibleQuests = modules.quests.quests.filter(quest => runtime.quests.statusByQuestKey[quest.key] !== 'locked')
-    const questLines = visibleQuests.map(quest => {
-      const status = runtime.quests.statusByQuestKey[quest.key]
-      const stageKey = runtime.quests.stageByQuestKey[quest.key]
+    const visibleQuests = questModule.projectTextOpenWorldQuestInstancesV1(modules, runtime.quests).filter(item => item.instance.status !== 'locked')
+    const questLines = visibleQuests.map(({ definition: quest, instance }) => {
+      const status = instance.status
+      const stageKey = instance.currentStageKey
       const stage = stageKey ? modules.quests.stages.find(item => item.key === stageKey) : null
       const objectives = stage
         ? stage.objectiveKeys.map(key => {
             const objective = modules.quests.objectives.find(item => item.key === key)
-            return `${objective?.title ?? key}=${runtime.quests.objectiveStatusByKey[key] ?? 'inactive'}`
+            return `${objective?.title ?? key}=${instance.objectiveStatusByKey[key] ?? 'inactive'}`
           })
         : []
-      return `- ${quest.key}｜${quest.type}｜${status}｜${quest.title}｜${quest.description}${stage ? `｜阶段=${stage.title}` : ''}${objectives.length ? `｜目标=${objectives.join('；')}` : ''}`
+      return `- ${instance.instanceKey}｜定义=${quest.key}｜${quest.type}｜${status}｜${quest.title}｜${quest.description}${stage ? `｜阶段=${stage.title}` : ''}${objectives.length ? `｜目标=${objectives.join('；')}` : ''}`
     })
     const presentActors = modules.actors.actors.filter(actor => {
       const actorState = runtime.actors[actor.key]

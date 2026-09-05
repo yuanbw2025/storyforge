@@ -25,6 +25,10 @@ import {
 } from './inventory'
 import { deriveTextOpenWorldPlayerStatsFromModulesV1 } from './player-stats'
 import { deriveTextOpenWorldProgressionStatusV1 } from './progression'
+import {
+  createInitialTextOpenWorldQuestInstancesV1,
+  deriveTextOpenWorldQuestConditionProjectionV1,
+} from './quests'
 import { createTextOpenWorldRewardCatalogV1 } from './rewards'
 import { parseTextOpenWorldRuntimePackageV1 } from './runtime-package'
 
@@ -57,15 +61,12 @@ function actorInitialState(modules: TextOpenWorldParsedModulesV1, actorKey: stri
   return { alive: true, present: true, locationKey: entry?.locationKey ?? actor.homeLocationKey, scheduleState: entry?.activity ?? '空闲' }
 }
 
-function initialEffectState(modules: TextOpenWorldParsedModulesV1): TextOpenWorldEffectStateV1 {
+function initialEffectState(runtimePackage: ReturnType<typeof parseTextOpenWorldRuntimePackageV1>, modules: TextOpenWorldParsedModulesV1): TextOpenWorldEffectStateV1 {
   const level = modules.actors.player.build.initialLevel; const attributes = structuredClone(modules.actors.player.build.attributes)
   const derivedStats = deriveTextOpenWorldPlayerStatsFromModulesV1({
     modules, level, attributes, equippedItemKeyBySlot: { weapon: null, armor: null, accessory: null },
   })
   const periodKey = timePeriodKey(modules, modules['time-weather'].initialWorldMinute)
-  const firstMainlineStory = modules.narrative.storylines.find(item => item.kind === 'mainline')
-  const firstStoryStage = modules.narrative.stages.filter(item => item.storylineKey === firstMainlineStory?.key).sort((a, b) => a.order - b.order)[0]
-  const firstMainQuestKey = firstStoryStage?.questKeys[0] ?? null
   const regionKnowledgeByKey = Object.fromEntries(modules.world.regions.map(region => [region.key, region.initialKnowledge]))
   const initialRegionKey = modules.world.locations.find(location => location.key === modules.world.initialLocationKey)!.regionKey
   regionKnowledgeByKey[initialRegionKey] = 'visited'
@@ -86,9 +87,7 @@ function initialEffectState(modules: TextOpenWorldParsedModulesV1): TextOpenWorl
       currency: modules.actors.player.build.startingCurrency,
     },
     quests: {
-      statusByQuestKey: Object.fromEntries(modules.quests.quests.map(quest => [quest.key, quest.key === firstMainQuestKey ? 'available' : 'locked'])),
-      stageByQuestKey: Object.fromEntries(modules.quests.quests.map(quest => [quest.key, null])),
-      objectiveStatusByKey: Object.fromEntries(modules.quests.objectives.map(objective => [objective.key, 'inactive'])),
+      instancesByKey: createInitialTextOpenWorldQuestInstancesV1(runtimePackage),
       resultTags: [],
     },
     map: {
@@ -127,7 +126,7 @@ function emptyDirector(): TextOpenWorldDirectorProjectionV1 {
 }
 
 export function createInitialTextOpenWorldSessionProjectionV1(value: unknown): TextOpenWorldSessionProjectionV1 {
-  const runtimePackage = parseTextOpenWorldRuntimePackageV1(value); const modules = parseTextOpenWorldModulesV1(runtimePackage); const state = initialEffectState(modules)
+  const runtimePackage = parseTextOpenWorldRuntimePackageV1(value); const modules = parseTextOpenWorldModulesV1(runtimePackage); const state = initialEffectState(runtimePackage, modules)
   validateTextOpenWorldEffectStateV1(state, modules)
   return {
     schema: 'storyforge.text-open-world.session-projection', version: 1, runtimePackage,
@@ -146,6 +145,7 @@ export function parseTextOpenWorldSessionProjectionV1(value: unknown): TextOpenW
   const ruleset = row(parsed.ruleset, 'ruleset'); exact(ruleset, ['key', 'version'], 'ruleset')
   if (ruleset.key !== runtimePackage.metadata.rulesetKey || ruleset.version !== runtimePackage.metadata.rulesetVersion) fail('ruleset与RuntimePackage不一致')
   const state = structuredClone(parsed.state) as unknown as TextOpenWorldEffectStateV1; validateTextOpenWorldEffectStateV1(state, modules)
+  if (Object.values(state.quests.instancesByKey).some(instance => instance.sourceContentHash !== runtimePackage.modules.quests.contentHash)) fail('任务实例来源Hash与冻结Quest模块不一致')
   const actions = row(parsed.actions, 'actions'); exact(actions, ['completedOnceActionKeys', 'cooldownUntilWorldMinuteByActionKey'], 'actions')
   const completedOnceActionKeys = uniqueTokens(actions.completedOnceActionKeys, 'actions.completedOnceActionKeys'); const actionKeys = new Set(modules.actions.actions.map(action => action.key)); completedOnceActionKeys.forEach(key => { if (!actionKeys.has(key)) fail(`未知once Action:${key}`) })
   const cooldowns = row(actions.cooldownUntilWorldMinuteByActionKey, 'actions.cooldownUntilWorldMinuteByActionKey'); const cooldownUntilWorldMinuteByActionKey: Record<string, number> = {}; for (const [key, value] of Object.entries(cooldowns)) { if (!actionKeys.has(token(key, 'cooldown actionKey'))) fail(`未知cooldown Action:${key}`); cooldownUntilWorldMinuteByActionKey[key] = integer(value, `cooldown.${key}`) }
@@ -162,6 +162,11 @@ export function parseTextOpenWorldSessionProjectionV1(value: unknown): TextOpenW
   const revealedQuestInstanceKeys = uniqueTokens(director.revealedQuestInstanceKeys, 'director.revealedQuestInstanceKeys'); const activeQuestInstanceKeys = uniqueTokens(director.activeQuestInstanceKeys, 'director.activeQuestInstanceKeys')
   const generatedQuestInstanceCount = integer(director.generatedQuestInstanceCount, 'director.generatedQuestInstanceCount'); const highIntensityStreak = integer(director.highIntensityStreak, 'director.highIntensityStreak')
   if (generatedQuestInstanceCount > modules.director.rules.maximumQuestInstances || revealedQuestInstanceKeys.length > modules.director.rules.globalMaximumRevealed || activeQuestInstanceKeys.length > modules.director.rules.globalMaximumActive || highIntensityStreak > modules.director.rules.highIntensityStreakLimit) fail('director投影超过Release预算')
+  const instanceKeys = new Set(Object.keys(state.quests.instancesByKey)); const directorInstanceKeys = new Set(Object.values(state.quests.instancesByKey).filter(instance => instance.sourceKind === 'director').map(instance => instance.instanceKey))
+  if (directorInstanceKeys.size !== generatedQuestInstanceCount) fail('director实例数量与任务实例账本不一致')
+  for (const instanceKey of [...revealedQuestInstanceKeys, ...activeQuestInstanceKeys]) if (!instanceKeys.has(instanceKey) || !directorInstanceKeys.has(instanceKey)) fail(`director引用未知生成任务实例:${instanceKey}`)
+  if (activeQuestInstanceKeys.some(instanceKey => state.quests.instancesByKey[instanceKey].status !== 'active')) fail('director active任务实例状态不一致')
+  if (revealedQuestInstanceKeys.some(instanceKey => state.quests.instancesByKey[instanceKey].status === 'locked')) fail('director revealed任务实例不能处于locked')
   return {
     schema: 'storyforge.text-open-world.session-projection', version: 1, runtimePackage, ruleset: { key: token(ruleset.key, 'ruleset.key'), version: integer(ruleset.version, 'ruleset.version', 1) }, state,
     actions: { completedOnceActionKeys, cooldownUntilWorldMinuteByActionKey },
@@ -222,6 +227,7 @@ export function deriveTextOpenWorldContextsV1(value: TextOpenWorldSessionProject
   })
   const progression = deriveTextOpenWorldProgressionStatusV1(modules, state.player.experience)
   const inventoryQuantities = deriveTextOpenWorldInventoryQuantitiesV1(modules, state.inventory)
+  const questCondition = deriveTextOpenWorldQuestConditionProjectionV1(modules, state.quests)
   const condition: TextOpenWorldConditionEvaluationContextV1 = {
     player: {
       level: state.player.level, experience: state.player.experience,
@@ -230,7 +236,7 @@ export function deriveTextOpenWorldContextsV1(value: TextOpenWorldSessionProject
       morality: state.relationships.morality, attributes: structuredClone(state.player.attributes), statusKeys: [...state.player.statusKeys],
     },
     inventory: { itemQuantities: inventoryQuantities, currency: state.inventory.currency, equippedItemKeys: Object.values(deriveTextOpenWorldEquippedItemKeysV1(modules, state.inventory)).filter((key): key is string => key != null), knownRecipeKeys: [...state.inventory.knownRecipeKeys] },
-    quests: { statusByQuestKey: structuredClone(state.quests.statusByQuestKey), stageByQuestKey: Object.fromEntries(Object.entries(state.quests.stageByQuestKey).filter((entry): entry is [string, string] => entry[1] != null)), objectiveStatusByKey: structuredClone(state.quests.objectiveStatusByKey), resultTags: [...state.quests.resultTags] },
+    quests: { ...questCondition, resultTags: [...state.quests.resultTags] },
     map: { currentLocationKey: state.map.currentLocationKey, regionKnowledgeByKey: structuredClone(state.map.regionKnowledgeByKey), unlockedFastTravelPointKeys: [...state.map.unlockedFastTravelPointKeys], openEdgeKeys: [...state.map.openEdgeKeys] },
     time: { worldMinute: state.time.worldMinute, minutesPerDay: modules['time-weather'].minutesPerDay, timePeriodKey: periodKey, weatherKey: state.time.currentWeatherByRegionKey[regionKey], deadlineWorldMinuteByKey: structuredClone(state.time.deadlineWorldMinuteByKey) },
     relations: { factionAffinityByKey: structuredClone(state.relationships.factionAffinityByKey), attitudeByActorKey, storyModifierByActorKey: structuredClone(state.relationships.storyModifierByActorKey) },
@@ -247,7 +253,7 @@ export function deriveTextOpenWorldContextsV1(value: TextOpenWorldSessionProject
     completedOnceActionKeys: [...projection.actions.completedOnceActionKeys], cooldownUntilWorldMinuteByActionKey: structuredClone(projection.actions.cooldownUntilWorldMinuteByActionKey),
     validTargetKeysByScope: {
       actor: actorTargets, location: [...state.map.revealedLocationKeys], item: Object.keys(inventoryQuantities),
-      quest: Object.entries(state.quests.statusByQuestKey).filter(([, status]) => status === 'available' || status === 'active').map(([key]) => key),
+      quest: Object.values(state.quests.instancesByKey).filter(instance => instance.status === 'available' || instance.status === 'active').map(instance => instance.instanceKey),
       vendor: modules.economy.vendors.filter(vendor => vendor.locationKey === state.map.currentLocationKey && actorTargets.includes(vendor.actorKey)).map(vendor => vendor.key),
       encounter: modules.combat.encounters.filter(encounter => encounter.locationKey === state.map.currentLocationKey).map(encounter => encounter.key),
     },

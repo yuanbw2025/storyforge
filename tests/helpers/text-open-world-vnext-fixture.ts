@@ -123,16 +123,20 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
       version: 1,
       quests: [
         {
-          key: 'quest.main.1', type: 'mainline', ownerKey: 'actor.caretaker', title: '断流的盐渠',
+          key: 'quest.main.1', type: 'mainline', ownerKind: 'actor', ownerKey: 'actor.caretaker', title: '断流的盐渠',
           description: '检查盐港内渠并追查上游。', storylineKey: 'story.main', stageKeys: ['quest-stage.main.1'],
+          regionKeys: ['region.salt-port', 'region.ridge'],
           prerequisiteConditionKeys: [], rewardEffectKeys: ['effect.reward-experience'], lifecyclePolicy: 'protected-wait',
-          expirationMinutes: null, repeatable: false,
+          timePolicy: 'waits', expirationMinutes: null, repeatable: false,
+          instantiationPolicy: 'session-start', initialStatus: 'available', estimatedMinutes: 30, tags: ['mainline', 'water-crisis'],
         },
         {
-          key: 'quest.template.supplies', type: 'template', ownerKey: 'region.salt-port', title: '短缺物资',
+          key: 'quest.template.supplies', type: 'template', ownerKind: 'region', ownerKey: 'region.salt-port', title: '短缺物资',
           description: '为当地居民寻找临时短缺的物资。', storylineKey: null, stageKeys: ['quest-stage.template.supplies'],
+          regionKeys: ['region.salt-port'],
           prerequisiteConditionKeys: [], rewardEffectKeys: ['effect.reward-currency'], lifecyclePolicy: 'abandon-terminal',
-          expirationMinutes: 1440, repeatable: true,
+          timePolicy: 'timed', expirationMinutes: 1440, repeatable: true,
+          instantiationPolicy: 'director', initialStatus: 'locked', estimatedMinutes: 10, tags: ['regional', 'supplies'],
         },
       ],
       stages: [

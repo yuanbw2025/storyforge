@@ -2,6 +2,7 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { commitTextOpenWorldCommandV1 } from '../../src/lib/open-world/commands'
 import { createTextOpenWorldEffectCatalogV1 } from '../../src/lib/open-world/effect-dsl'
+import { createInitialTextOpenWorldQuestInstancesV1 } from '../../src/lib/open-world/quests'
 import {
   parseTextOpenWorldRandomResolvedEventPayloadV1,
   replayTextOpenWorldEventProtocolV1,
