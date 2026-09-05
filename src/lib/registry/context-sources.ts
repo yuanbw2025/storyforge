@@ -645,7 +645,7 @@ async function readOpenWorldRuntimeContext(input: AssembleContextInput): Promise
       return readRumors.map(rumor => `- ${rumor.key}｜传闻｜${rumor.text}`)
     })
     const recentCommandIds = [...new Set((await db.productRuntimeEvents.where('sessionId').equals(session.id!).sortBy('sequence'))
-      .filter(event => event.type === 'textworld.command.committed' && event.commandId)
+      .filter(event => event.type === 'text-open-world.command.committed' && event.commandId)
       .map(event => event.commandId!))].slice(-8)
     const feedback = await Promise.all(recentCommandIds.map(commandId => feedbackModule.readTextOpenWorldFeedbackV1({ sessionId: session.id!, commandId })))
     return [

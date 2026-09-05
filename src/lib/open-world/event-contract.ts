@@ -249,13 +249,13 @@ export async function replayTextOpenWorldEventProtocolV1(events: readonly Produc
     if (event.sequence !== projection.lastSequence + 1) fail(`事件序号不连续:${projection.lastSequence + 1}->${event.sequence}`)
     if (projection.sessionId == null) projection.sessionId = event.sessionId
     else if (projection.sessionId !== event.sessionId) fail('事件流混入其他Session')
-    if (event.type === 'textworld.command.committed') {
+    if (event.type === 'text-open-world.command.committed') {
       if (pending) fail(`上一命令尚未终结:${pending.commandId}`)
       const command = parseTextOpenWorldCommandEventPayloadV1(payload(event))
       if (command.envelope.sessionId !== event.sessionId || command.envelope.commandId !== event.commandId || command.envelope.baseSequence !== projection.lastSequence || command.resultingSequence !== event.sequence) fail('命令事件索引或顺序无效')
       pending = { commandId: command.envelope.commandId, commandSequence: event.sequence, randomEventSequences: [], effectsEventSequence: null, ruleset: null, outcomeFingerprint: null }
       randomRequests.length = 0
-    } else if (event.type === 'textworld.random.resolved') {
+    } else if (event.type === 'text-open-world.random.resolved') {
       if (!pending) fail('随机事件前没有待处理命令')
       const random = parseTextOpenWorldRandomResolvedEventPayloadV1(payload(event))
       if (random.commandId !== pending.commandId || random.commandSequence !== pending.commandSequence || random.evidence.drawIndex !== pending.randomEventSequences.length) fail('随机事件命令归属或drawIndex无效')
@@ -264,7 +264,7 @@ export async function replayTextOpenWorldEventProtocolV1(events: readonly Produc
       const expected = await resolveTextOpenWorldRandomEvidenceV1({ seed, commandId: pending.commandId, commandSequence: pending.commandSequence, drawIndex: random.evidence.drawIndex, request })
       if (canonicalProductProductionJsonV2(expected) !== canonicalProductProductionJsonV2(random.evidence)) fail('随机证据无法由Session seed重放')
       pending.ruleset = random.ruleset; pending.randomEventSequences.push(event.sequence); randomRequests.push(request)
-    } else if (event.type === 'textworld.effects.applied') {
+    } else if (event.type === 'text-open-world.effects.applied') {
       if (!pending) fail('Effect事件前没有待处理命令')
       const effect = parseTextOpenWorldEffectsAppliedEventPayloadV1(payload(event))
       if (effect.commandId !== pending.commandId || effect.commandSequence !== pending.commandSequence || canonicalProductProductionJsonV2(effect.randomEventSequences) !== canonicalProductProductionJsonV2(pending.randomEventSequences)) fail('Effect事件命令归属或随机证据序列无效')

@@ -23,7 +23,7 @@ import { createTextOpenWorldVNextFixture } from '../helpers/text-open-world-vnex
 
 async function createSession(runtimePackage: TextOpenWorldRuntimePackageV1) {
   return (await createGovernedTextOpenWorldSessionFixtureV1({
-    name: `TEXTWORLD vNext投影测试-${crypto.randomUUID()}`,
+    name: `TEXT-OPEN-WORLD vNext投影测试-${crypto.randomUUID()}`,
     textOpenWorldVNext: runtimePackage,
     title: '投影Session', seed: 'projection-seed',
   })).session
@@ -38,7 +38,7 @@ async function command(sessionId: number): Promise<TextOpenWorldCommandEnvelopeV
   }
 }
 
-describe('TEXTWORLD-2 · authoritative Session Projection', () => {
+describe('Text Open World vNext · authoritative Session Projection', () => {
   beforeEach(async () => { await db.delete(); await db.open() })
   afterAll(() => db.close())
 

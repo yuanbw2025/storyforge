@@ -37,12 +37,12 @@ function fixture(): TextOpenWorldRuntimePackageV1 {
     qualityManifest: { version: 1, hardGateIds: ['package.references'], softMetricIds: ['narrative.variety'], waivedMetricIds: [] },
     compatibility: {
       minimumReaderVersion: 1, compatiblePreviousPackageHashes: [],
-      legacyInputKinds: ['open-world-v1', 'adventure-v1', 'narrative-simulation-v1'], migrationPolicy: 'old-release-pinned',
+      legacyInputKinds: ['open-world-v1', 'adventure-v1', 'open-world-evolution-v1'], migrationPolicy: 'old-release-pinned',
     },
   }
 }
 
-describe('TEXTWORLD-2 · product runtime package boundary', () => {
+describe('Text Open World vNext · product runtime package boundary', () => {
   it('严格解析来源、体验、校准、15个模块、媒资、质量和兼容策略', () => {
     const parsed = parseTextOpenWorldRuntimePackageV1(JSON.stringify(fixture()))
     expect(Object.keys(parsed.modules)).toEqual(TEXT_OPEN_WORLD_RUNTIME_MODULE_KEYS_V1)

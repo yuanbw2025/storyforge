@@ -1185,6 +1185,27 @@ export async function readLatestSessionEventSequenceV1(
   return latest?.sequence ?? 0;
 }
 
+/**
+ * Authorized lower boundary for replacing the recoverable runtime-head cache.
+ * Product adapters may compute a head, but they must not write the shared
+ * ProductRuntimeSession record directly.
+ */
+export async function updateProductRuntimeSessionHeadV1(input: {
+  sessionId: number;
+  sequence: number;
+  stateJson: string;
+  stateHash: string;
+  updatedAt: number;
+}): Promise<void> {
+  const updated = await db.productRuntimeSessions.update(input.sessionId, {
+    runtimeHeadSequence: input.sequence,
+    runtimeHeadStateJson: input.stateJson,
+    runtimeHeadStateHash: input.stateHash,
+    updatedAt: input.updatedAt,
+  });
+  if (!updated) throw new Error("运行会话不存在，无法更新运行态缓存。");
+}
+
 export async function readVerifiedProductRuntimeHeadV1(
   session: ProductRuntimeSession,
 ): Promise<ProductRuntimeHeadV1> {
@@ -1317,7 +1338,7 @@ export async function appendProductRuntimeEvent(input: {
   if (input.type.startsWith("world.")) {
     throw new Error("受治理的开放世界事件只能通过对应的专用命令生成。");
   }
-  if (input.type.startsWith("textworld.")) {
+  if (input.type.startsWith("text-open-world.")) {
     throw new Error("受治理的文字开放世界vNext事件只能通过对应的专用命令API生成。");
   }
   if (

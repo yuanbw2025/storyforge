@@ -329,7 +329,7 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
     },
     compatibility: {
       minimumReaderVersion: 1, compatiblePreviousPackageHashes: [],
-      legacyInputKinds: ['open-world-v1', 'adventure-v1', 'narrative-simulation-v1'], migrationPolicy: 'old-release-pinned',
+      legacyInputKinds: ['open-world-v1', 'adventure-v1', 'open-world-evolution-v1'], migrationPolicy: 'old-release-pinned',
     },
   }
 }

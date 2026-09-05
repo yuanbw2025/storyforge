@@ -5,6 +5,7 @@ import {
   hashProductRuntimeStateV1,
   readProductRuntimeState,
   readProductRuntimeStateVersion,
+  updateProductRuntimeSessionHeadV1,
 } from '../product/runtime-core'
 import type {
   ProductRuntimeEvent,
@@ -27,7 +28,7 @@ import {
 function fail(message: string): never { throw new Error(`[text-open-world-command] ${message}`) }
 
 function parseEvent(event: ProductRuntimeEvent): TextOpenWorldCommandEventPayloadV1 {
-  if (event.type !== 'textworld.command.committed') fail('commandId已被非vNext命令占用')
+  if (event.type !== 'text-open-world.command.committed') fail('commandId已被非vNext命令占用')
   let raw: unknown
   try { raw = JSON.parse(event.payloadJson) } catch { fail('正式命令事件不是合法JSON') }
   const payload = parseTextOpenWorldCommandEventPayloadV1(raw)
@@ -138,7 +139,7 @@ export async function commitTextOpenWorldCommandV1(value: unknown): Promise<Text
       worldGroupId: session.worldGroupId ?? null,
       sessionId: envelope.sessionId,
       sequence: resultingSequence,
-      type: 'textworld.command.committed',
+      type: 'text-open-world.command.committed',
       actorKey: envelope.actorKey,
       targetKey: null,
       commandId: envelope.commandId,
@@ -155,10 +156,11 @@ export async function commitTextOpenWorldCommandV1(value: unknown): Promise<Text
     if (await hashProductRuntimeStateV1(replayed) !== resultingStateHash) fail('命令结果预演Hash不一致')
     event.id = (await db.productRuntimeEvents.add(event)) as number
     const stateJson = JSON.stringify(replayed)
-    await db.productRuntimeSessions.update(envelope.sessionId, {
-      runtimeHeadSequence: resultingSequence,
-      runtimeHeadStateJson: stateJson,
-      runtimeHeadStateHash: resultingStateHash,
+    await updateProductRuntimeSessionHeadV1({
+      sessionId: envelope.sessionId,
+      sequence: resultingSequence,
+      stateJson,
+      stateHash: resultingStateHash,
       updatedAt: createdAt,
     })
     return receiptFromEvent(event, false)

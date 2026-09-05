@@ -86,7 +86,7 @@ function withCondition(expression: unknown, failureMessage = '当前尚不满足
   return fixture
 }
 
-describe('TEXTWORLD-2 · typed Condition DSL', () => {
+describe('Text Open World vNext · typed Condition DSL', () => {
   it('覆盖九个状态域并只返回定义中的公共失败原因', () => {
     const catalog = createTextOpenWorldConditionCatalogV1(withCondition(allDomainExpression()))
     expect(catalog.evaluate('condition.all-domains', evaluationContext())).toEqual({

@@ -354,7 +354,7 @@ CommandEnvelope {
 
 G1-03只完成提交边界和空操作投影；G1-04～G1-06已经补齐Action可用性、Condition与Effect
 规划，但尚未把EffectPlan写成可重放Simulation Event。完成G1-07～G1-08之前，
-`textworld.command.committed`仍不得被UI解释成玩法成功。
+`text-open-world.command.committed`仍不得被UI解释成玩法成功。
 
 ### 4.2 GameActionDefinition
 
@@ -485,9 +485,9 @@ AI只能生成候选效果。解析器、引用校验器、规则服务和事务
 `src/lib/open-world/event-contract.ts` 和 `src/lib/open-world/events.ts`。一个命令批次严格遵循：
 
 ```text
-textworld.command.committed
-→ 0..128 × textworld.random.resolved
-→ textworld.effects.applied
+text-open-world.command.committed
+→ 0..128 × text-open-world.random.resolved
+→ text-open-world.effects.applied
 ```
 
 前一批没有Effect终态时不能接受下一命令。随机事件只接收抽样key和整数范围，结果由冻结的

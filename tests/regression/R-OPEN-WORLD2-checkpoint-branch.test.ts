@@ -17,7 +17,7 @@ import { createTextOpenWorldVNextFixture } from '../helpers/text-open-world-vnex
 
 async function createSession(runtimePackage: TextOpenWorldRuntimePackageV1) {
   return (await createGovernedTextOpenWorldSessionFixtureV1({
-    name: `TEXTWORLD 检查点测试-${crypto.randomUUID()}`,
+    name: `TEXT-OPEN-WORLD 检查点测试-${crypto.randomUUID()}`,
     textOpenWorldVNext: runtimePackage,
     title: '检查点Session', seed: 'checkpoint-seed',
   })).session
@@ -35,7 +35,7 @@ async function playReward(runtimePackage: TextOpenWorldRuntimePackageV1, session
   await commitTextOpenWorldOutcomeBatchV1({ sessionId, commandId, ruleset: { key: 'storyforge.standard', version: 1 }, randomRequests: [], plan, receipt, outcome: 'success', reason: null, degradation: null })
 }
 
-describe('TEXTWORLD-2 · checkpoint, replay and child branch', () => {
+describe('Text Open World vNext · checkpoint, replay and child branch', () => {
   beforeEach(async () => { await db.delete(); await db.open() })
   afterAll(() => db.close())
 

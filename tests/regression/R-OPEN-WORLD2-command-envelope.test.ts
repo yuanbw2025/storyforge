@@ -12,7 +12,7 @@ import { createTextOpenWorldVNextFixture } from '../helpers/text-open-world-vnex
 
 async function session(status: ProductRuntimeSession['status'] = 'active'): Promise<ProductRuntimeSession> {
   return (await createGovernedTextOpenWorldSessionFixtureV1({
-    name: `TEXTWORLD vNext命令测试-${crypto.randomUUID()}`,
+    name: `TEXT-OPEN-WORLD vNext命令测试-${crypto.randomUUID()}`,
     textOpenWorldVNext: createTextOpenWorldVNextFixture(),
     title: 'vNext最小Session', seed: 'command-test-seed', status,
   })).session
@@ -28,7 +28,7 @@ async function envelope(sessionId: number, overrides: Partial<TextOpenWorldComma
   }
 }
 
-describe('TEXTWORLD-2 · vNext command envelope and idempotency', () => {
+describe('Text Open World vNext · vNext command envelope and idempotency', () => {
   beforeEach(async () => { await db.delete(); await db.open() })
   afterAll(() => db.close())
 
@@ -87,7 +87,7 @@ describe('TEXTWORLD-2 · vNext command envelope and idempotency', () => {
     const paused = await session('paused')
     await expect(commitTextOpenWorldCommandV1(await envelope(paused.id!))).rejects.toThrow('只有active Session')
     await expect(appendProductRuntimeEvent({
-      sessionId: paused.id!, type: 'textworld.command.committed', payload: {},
+      sessionId: paused.id!, type: 'text-open-world.command.committed', payload: {},
     })).rejects.toThrow('vNext事件只能通过对应的专用命令API')
   })
 })

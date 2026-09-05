@@ -1,12 +1,21 @@
 import { create } from 'zustand'
 import { db } from '../lib/db/schema'
 import { availableAdventureActions } from '../lib/adventure/runtime'
+import { createTextOpenWorldActionRegistryV1 } from '../lib/open-world/action-registry'
+import { executeTextOpenWorldActionV1 } from '../lib/open-world/action-executor'
+import {
+  branchTextOpenWorldSessionFromCheckpointV1,
+  createTextOpenWorldCheckpointV1,
+  inspectTextOpenWorldCheckpointV1,
+} from '../lib/open-world/checkpoints'
 import {
   adoptOpenWorldRuntimeCandidateV1,
   generateOpenWorldRuntimeCandidateV1,
   type OpenWorldRuntimeCandidateV1,
   type OpenWorldRuntimeSkillIdV1,
 } from '../lib/open-world/harness'
+import { verifyTextOpenWorldVNextSessionBindingV1 } from '../lib/open-world/session-binding'
+import { deriveTextOpenWorldContextsV1 } from '../lib/open-world/session-projection'
 import {
   branchProductRuntimeSession,
   commitAdventureAction,
@@ -21,6 +30,7 @@ import {
 } from '../lib/open-world/runtime-api'
 import { verifyProductRuntimeSessionSourceV1 } from '../lib/product-production/preview-source'
 import { assertProductReleaseUnchanged, parseTextOpenWorldProductReleaseManifest } from '../lib/product/releases'
+import { assertInstanceBinding, createTextOpenWorldInstance, readBoundInstances } from '../lib/product/runtime-instances'
 import { EMPTY_PRODUCT_RUNTIME_STATE } from '../lib/types'
 import type {
   AIConfig,
@@ -29,10 +39,10 @@ import type {
   ProductRuntimeEvent,
   ProductRuntimeState,
   ProductRuntimeSession,
+  TextOpenWorldFeedbackReceiptV1,
   TextOpenWorldProductRuntimePackageV1,
   WorkspaceScope,
 } from '../lib/types'
-import { assertInstanceBinding, createTextOpenWorldInstance, readBoundInstances } from '../lib/product/runtime-instances'
 
 export interface TextOpenWorldLibraryItem {
   release: ProductRelease
@@ -50,6 +60,7 @@ interface TextOpenWorldPlayerState {
   checkpoints: ProductRuntimeCheckpoint[]
   runtimeState: ProductRuntimeState
   selectedManifest: TextOpenWorldProductRuntimePackageV1 | null
+  lastFeedback: TextOpenWorldFeedbackReceiptV1 | null
   generatedCandidate: OpenWorldRuntimeCandidateV1 | null
   loading: boolean
   busy: boolean
@@ -60,6 +71,7 @@ interface TextOpenWorldPlayerState {
   command(command: OpenWorldCommand): Promise<void>
   resolveAdventureAction(actionKey: string): Promise<void>
   choose(choiceKey: string): Promise<void>
+  executeVNextAction(actionKey: string, targetKey?: string | null, commandId?: string): Promise<TextOpenWorldFeedbackReceiptV1>
   generatePresentation(skillId: OpenWorldRuntimeSkillIdV1, objective: string, aiConfig: AIConfig): Promise<void>
   saveCheckpoint(name: string): Promise<void>
   forkCheckpoint(checkpointId: number, title?: string): Promise<number>
@@ -106,11 +118,19 @@ async function readDetails(scope: WorkspaceScope, sessionId: number) {
     readProductRuntimeState(sessionId),
     verifyProductRuntimeSessionSourceV1({ scope, session }),
   ])
+  const selectedManifest = playableManifest(playable.runtimePackage)
+  if (runtimeState.textOpenWorld) {
+    const binding = await verifyTextOpenWorldVNextSessionBindingV1(session)
+    if (!selectedManifest.textOpenWorldVNext
+      || binding.runtimePackage.metadata.packageKey !== selectedManifest.textOpenWorldVNext.metadata.packageKey) {
+      throw new Error('[text-open-world] vNext 运行投影与冻结产品来源不一致。')
+    }
+  }
   return {
     events,
     checkpoints: checkpoints.sort((left, right) => right.createdAt - left.createdAt),
     runtimeState,
-    selectedManifest: playableManifest(playable.runtimePackage),
+    selectedManifest,
   }
 }
 
@@ -124,7 +144,7 @@ export const useTextOpenWorldPlayerStore = create<TextOpenWorldPlayerState>((set
   const reload = async (requested?: number | null) => {
     const scope = get().scope
     if (!scope) return
-    if (requested !== undefined) set({ generatedCandidate: null })
+    if (requested !== undefined) set({ generatedCandidate: null, lastFeedback: null })
     const [releases, sessions] = await Promise.all([
       readLibrary(scope),
       readBoundInstances(scope).then(rows => rows.filter(row => row.kind === 'text-open-world'
@@ -134,7 +154,10 @@ export const useTextOpenWorldPlayerStore = create<TextOpenWorldPlayerState>((set
     const selectedSessionId = desired != null && sessions.some(row => row.id === desired) ? desired : sessions[0]?.id ?? null
     set({ releases, sessions, selectedSessionId })
     if (selectedSessionId != null) await refresh()
-    else set({ events: [], checkpoints: [], runtimeState: structuredClone(EMPTY_PRODUCT_RUNTIME_STATE), selectedManifest: null, generatedCandidate: null })
+    else set({
+      events: [], checkpoints: [], runtimeState: structuredClone(EMPTY_PRODUCT_RUNTIME_STATE),
+      selectedManifest: null, generatedCandidate: null, lastFeedback: null,
+    })
   }
   const run = async <T>(operation: () => Promise<T>): Promise<T> => {
     set({ busy: true, error: '' })
@@ -144,21 +167,32 @@ export const useTextOpenWorldPlayerStore = create<TextOpenWorldPlayerState>((set
   }
   return {
     scope: null, worldGroupId: null, releases: [], sessions: [], selectedSessionId: null, events: [], checkpoints: [],
-    runtimeState: structuredClone(EMPTY_PRODUCT_RUNTIME_STATE), selectedManifest: null, generatedCandidate: null, loading: false, busy: false, error: '',
+    runtimeState: structuredClone(EMPTY_PRODUCT_RUNTIME_STATE), selectedManifest: null, lastFeedback: null,
+    generatedCandidate: null, loading: false, busy: false, error: '',
     load: async (scope, worldGroupId) => {
-      set({ scope, worldGroupId, loading: true, error: '', generatedCandidate: null })
+      set({ scope, worldGroupId, loading: true, error: '', generatedCandidate: null, lastFeedback: null })
       try { await reload() } catch (error) { set({ error: error instanceof Error ? error.message : String(error) }) }
       finally { set({ loading: false }) }
     },
     select: async sessionId => {
-      set({ selectedSessionId: sessionId, loading: true, generatedCandidate: null })
-      try { if (sessionId == null) set({ runtimeState: structuredClone(EMPTY_PRODUCT_RUNTIME_STATE), selectedManifest: null, generatedCandidate: null }); else await refresh() }
-      finally { set({ loading: false }) }
+      set({ selectedSessionId: sessionId, loading: true, generatedCandidate: null, lastFeedback: null })
+      try {
+        if (sessionId == null) set({
+          runtimeState: structuredClone(EMPTY_PRODUCT_RUNTIME_STATE), selectedManifest: null,
+          generatedCandidate: null, lastFeedback: null,
+        })
+        else await refresh()
+      } finally { set({ loading: false }) }
     },
     start: async (productReleaseId, title) => run(async () => {
       const item = get().releases.find(row => row.release.id === productReleaseId)
       if (!item?.manifest || !get().scope) throw new Error('[text-open-world] 请选择有效发布。')
-      const session = await createTextOpenWorldInstance({ scope: get().scope!, productReleaseId, title: title?.trim() || `${item.manifest.definition.title} · 新旅程`, worldGroupId: get().worldGroupId })
+      const displayTitle = item.manifest.textOpenWorldVNext?.metadata.title ?? item.manifest.definition.title
+      const session = await createTextOpenWorldInstance({
+        scope: get().scope!, productReleaseId,
+        title: title?.trim() || `${displayTitle} · 新旅程`,
+        worldGroupId: get().worldGroupId,
+      })
       await reload(session.id!)
       return session.id!
     }),
@@ -189,35 +223,60 @@ export const useTextOpenWorldPlayerStore = create<TextOpenWorldPlayerState>((set
       set({ generatedCandidate: null })
       await refresh()
     }),
+    executeVNextAction: async (actionKey, targetKey, commandId) => run(async () => {
+      const sessionId = get().selectedSessionId
+      if (sessionId == null || !get().scope) throw new Error('[text-open-world] 请先开始正式开放世界。')
+      const session = await assertSession(get().scope!, sessionId)
+      if (!(await readProductRuntimeState(session.id!)).textOpenWorld) throw new Error('[text-open-world] 当前存档不是vNext运行包。')
+      const feedback = await executeTextOpenWorldActionV1({ sessionId, actionKey, targetKey, commandId })
+      set({ generatedCandidate: null, lastFeedback: feedback })
+      await refresh()
+      return feedback
+    }),
     generatePresentation: async (skillId, objective, aiConfig) => run(async () => {
       const sessionId = get().selectedSessionId
       if (sessionId == null || !get().scope) throw new Error('[text-open-world] 请先开始正式开放世界。')
       const generated = await generateOpenWorldRuntimeCandidateV1({
-        scope: get().scope!,
-        productRuntimeSessionId: sessionId,
-        skillId,
-        objective,
-        aiConfig,
+        scope: get().scope!, productRuntimeSessionId: sessionId, skillId, objective, aiConfig,
       })
       await adoptOpenWorldRuntimeCandidateV1({ scope: get().scope!, runId: generated.snapshot.run.id })
       set({ generatedCandidate: generated.candidate })
     }),
     saveCheckpoint: async name => run(async () => {
-      if (get().selectedSessionId == null) throw new Error('[text-open-world] 请先开始正式开放世界。')
-      await createProductRuntimeCheckpoint({ sessionId: get().selectedSessionId!, name })
+      const sessionId = get().selectedSessionId
+      if (sessionId == null) throw new Error('[text-open-world] 请先开始正式开放世界。')
+      const state = await readProductRuntimeState(sessionId)
+      if (state.textOpenWorld) await createTextOpenWorldCheckpointV1({ sessionId, name })
+      else await createProductRuntimeCheckpoint({ sessionId, name })
       await refresh()
     }),
     forkCheckpoint: async (checkpointId, title) => run(async () => {
       const checkpoint = get().checkpoints.find(row => row.id === checkpointId)
-      if (!checkpoint || !await verifyProductRuntimeCheckpoint(checkpointId)) throw new Error('[text-open-world] 检查点无效。')
-      const child = await branchProductRuntimeSession({ parentSessionId: checkpoint.sessionId, throughSequence: checkpoint.throughSequence, title: title?.trim() || `世界分支 · ${checkpoint.name}` })
+      if (!checkpoint) throw new Error('[text-open-world] 检查点无效。')
+      const checkpointState = await readProductRuntimeState(checkpoint.sessionId, checkpoint.throughSequence)
+      const child = checkpointState.textOpenWorld
+        ? await (async () => {
+            const inspection = await inspectTextOpenWorldCheckpointV1(checkpointId)
+            if (!inspection.valid) throw new Error(`[text-open-world] 检查点无效:${inspection.detail}`)
+            return branchTextOpenWorldSessionFromCheckpointV1({ checkpointId, title: title?.trim() || `世界分支 · ${checkpoint.name}` })
+          })()
+        : await (async () => {
+            if (!await verifyProductRuntimeCheckpoint(checkpointId)) throw new Error('[text-open-world] 检查点无效。')
+            return branchProductRuntimeSession({ parentSessionId: checkpoint.sessionId, throughSequence: checkpoint.throughSequence, title: title?.trim() || `世界分支 · ${checkpoint.name}` })
+          })()
       await reload(child.id!)
       return child.id!
     }),
     forkCurrent: async title => run(async () => {
-      if (get().selectedSessionId == null) throw new Error('[text-open-world] 请先开始正式开放世界。')
-      const state = await readProductRuntimeState(get().selectedSessionId!)
-      const child = await branchProductRuntimeSession({ parentSessionId: get().selectedSessionId!, throughSequence: state.lastSequence, title: title?.trim() || '开放世界分支' })
+      const sessionId = get().selectedSessionId
+      if (sessionId == null) throw new Error('[text-open-world] 请先开始正式开放世界。')
+      const state = await readProductRuntimeState(sessionId)
+      const child = state.textOpenWorld
+        ? await (async () => {
+            const checkpoint = await createTextOpenWorldCheckpointV1({ sessionId, name: title?.trim() || '开放世界分支点' })
+            return branchTextOpenWorldSessionFromCheckpointV1({ checkpointId: checkpoint.id!, title: title?.trim() || '开放世界分支' })
+          })()
+        : await branchProductRuntimeSession({ parentSessionId: sessionId, throughSequence: state.lastSequence, title: title?.trim() || '开放世界分支' })
       await reload(child.id!)
       return child.id!
     }),
@@ -231,7 +290,14 @@ export const useTextOpenWorldPlayerStore = create<TextOpenWorldPlayerState>((set
 })
 
 export function selectTextOpenWorldAdventureActions(state: TextOpenWorldPlayerState) {
-  if (!state.selectedManifest || !state.runtimeState.adventure) return []
+  if (!state.selectedManifest || state.runtimeState.textOpenWorld || !state.runtimeState.adventure) return []
   return availableAdventureActions(state.selectedManifest.adventure, state.runtimeState.adventure, state.runtimeState.narrative?.variables)
     .filter(item => item.action.kind !== 'move')
+}
+
+export function selectTextOpenWorldVNextActions(state: TextOpenWorldPlayerState) {
+  const runtimePackage = state.selectedManifest?.textOpenWorldVNext
+  if (!state.runtimeState.textOpenWorld || !runtimePackage) return []
+  return createTextOpenWorldActionRegistryV1(runtimePackage)
+    .project(deriveTextOpenWorldContextsV1(state.runtimeState.textOpenWorld).action)
 }

@@ -163,16 +163,16 @@ export function parseTextOpenWorldSessionProjectionV1(value: unknown): TextOpenW
 export function applyTextOpenWorldSessionEventV1(current: TextOpenWorldSessionProjectionV1, event: ProductRuntimeEvent): TextOpenWorldSessionProjectionV1 {
   const projection = parseTextOpenWorldSessionProjectionV1(current)
   if (event.sequence <= projection.lastEventSequence) fail(`Session投影事件序号未前进:${projection.lastEventSequence}->${event.sequence}`)
-  if (event.type === 'textworld.command.committed') {
+  if (event.type === 'text-open-world.command.committed') {
     if (projection.protocol.pendingCommandId) fail('上一命令尚未终结')
     const command = parseTextOpenWorldCommandEventPayloadV1(json(event)); if (command.envelope.commandId !== event.commandId) fail('命令事件索引不一致')
     projection.protocol.pendingCommandId = command.envelope.commandId; projection.protocol.pendingCommandSequence = event.sequence; projection.protocol.pendingActionKey = command.envelope.actionKey; projection.protocol.pendingActorKey = command.envelope.actorKey
-  } else if (event.type === 'textworld.random.resolved') {
+  } else if (event.type === 'text-open-world.random.resolved') {
     const pendingEvidence = projection.protocol.randomEvidence.filter(item => item.eventSequence > (projection.protocol.pendingCommandSequence ?? Number.MAX_SAFE_INTEGER))
     const random = parseTextOpenWorldRandomResolvedEventPayloadV1(json(event)); if (random.commandId !== projection.protocol.pendingCommandId || random.commandSequence !== projection.protocol.pendingCommandSequence || random.evidence.drawIndex !== pendingEvidence.length) fail('随机事件不属于当前命令')
     if (canonicalProductProductionJsonV2(random.ruleset) !== canonicalProductProductionJsonV2(projection.ruleset)) fail('随机事件ruleset不一致')
     projection.protocol.randomEvidence.push({ eventSequence: event.sequence, evidence: random.evidence })
-  } else if (event.type === 'textworld.effects.applied') {
+  } else if (event.type === 'text-open-world.effects.applied') {
     const applied = parseTextOpenWorldEffectsAppliedEventPayloadV1(json(event)); if (applied.commandId !== projection.protocol.pendingCommandId || applied.commandSequence !== projection.protocol.pendingCommandSequence) fail('Effect事件不属于当前命令')
     const pendingRandomSequences = projection.protocol.randomEvidence.filter(item => item.eventSequence > (projection.protocol.pendingCommandSequence ?? Number.MAX_SAFE_INTEGER)).map(item => item.eventSequence)
     if (canonicalProductProductionJsonV2(applied.ruleset) !== canonicalProductProductionJsonV2(projection.ruleset) || canonicalProductProductionJsonV2(applied.randomEventSequences) !== canonicalProductProductionJsonV2(pendingRandomSequences)) fail('Effect事件ruleset或随机序列不一致')

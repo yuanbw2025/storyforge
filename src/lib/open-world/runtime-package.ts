@@ -170,7 +170,7 @@ export function parseTextOpenWorldRuntimePackageV1(value: string | unknown): Tex
     1_000,
     (item, label) => hash(item, label),
   )
-  const allowedLegacy = ['open-world-v1', 'adventure-v1', 'narrative-simulation-v1'] as const
+  const allowedLegacy = ['open-world-v1', 'adventure-v1', 'open-world-evolution-v1'] as const
   const legacyInputKinds = uniqueStrings(
     compatibility.legacyInputKinds,
     'compatibility.legacyInputKinds',

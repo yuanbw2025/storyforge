@@ -24,7 +24,7 @@ import {
 } from '../helpers/text-open-world-product-session'
 import { createTextOpenWorldVNextFixture } from '../helpers/text-open-world-vnext-fixture'
 
-describe('TEXTWORLD-2 · ProductBuild/ProductRelease、InitialState和Session绑定', () => {
+describe('Text Open World vNext · ProductBuild/ProductRelease、InitialState和Session绑定', () => {
   beforeEach(async () => { await db.delete(); await db.open() })
   afterAll(() => db.close())
 
@@ -58,7 +58,7 @@ describe('TEXTWORLD-2 · ProductBuild/ProductRelease、InitialState和Session绑
   it('正式Session由ProductRelease确定性开局，Release被篡改后fail-closed', async () => {
     const textOpenWorldVNext = createTextOpenWorldVNextFixture()
     const created = await createGovernedTextOpenWorldSessionFixtureV1({
-      name: 'TEXTWORLD Release绑定验收', textOpenWorldVNext,
+      name: 'TEXT-OPEN-WORLD Release绑定验收', textOpenWorldVNext,
       title: '盐脊新游戏', seed: 'release-seed',
     })
     const state = await readProductRuntimeState(created.session.id!)
@@ -80,7 +80,7 @@ describe('TEXTWORLD-2 · ProductBuild/ProductRelease、InitialState和Session绑
   it('新ProductRelease不迁移旧存档，投影不能混用另一Release的vNext包', async () => {
     const firstPackage = createTextOpenWorldVNextFixture()
     const created = await createGovernedTextOpenWorldSessionFixtureV1({
-      name: 'TEXTWORLD 多版本验收', textOpenWorldVNext: firstPackage,
+      name: 'TEXT-OPEN-WORLD 多版本验收', textOpenWorldVNext: firstPackage,
       title: 'v1存档', seed: 'release-v1',
     })
     const secondPackage = structuredClone(firstPackage)
@@ -121,7 +121,7 @@ describe('TEXTWORLD-2 · ProductBuild/ProductRelease、InitialState和Session绑
 
   it('命令边界重新核验冻结来源，检查点子分支继续固定父ProductRelease', async () => {
     const created = await createGovernedTextOpenWorldSessionFixtureV1({
-      name: 'TEXTWORLD 命令绑定验收', textOpenWorldVNext: createTextOpenWorldVNextFixture(),
+      name: 'TEXT-OPEN-WORLD 命令绑定验收', textOpenWorldVNext: createTextOpenWorldVNextFixture(),
       title: '绑定测试', seed: 'binding-seed',
     })
     const base = await readProductRuntimeStateVersion(created.session.id!)

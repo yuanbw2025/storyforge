@@ -85,7 +85,7 @@ export async function readTextOpenWorldFeedbackV1(input: { sessionId: number; co
   const binding = await verifyTextOpenWorldVNextSessionBindingV1(session)
   const events = await db.productRuntimeEvents.where('sessionId').equals(input.sessionId).sortBy('sequence')
   await replayTextOpenWorldEventProtocolV1(events, session.seed)
-  const commandEvent = events.find(event => event.type === 'textworld.command.committed' && event.commandId === commandId)
+  const commandEvent = events.find(event => event.type === 'text-open-world.command.committed' && event.commandId === commandId)
     ?? fail('命令不存在')
   if (commandEvent.id == null) fail('命令事件缺少持久化ID')
   const command = parseTextOpenWorldCommandEventPayloadV1(eventPayload(commandEvent))
@@ -95,7 +95,7 @@ export async function readTextOpenWorldFeedbackV1(input: { sessionId: number; co
   const action = parseTextOpenWorldModulesV1(projection.runtimePackage).actions.actions.find(item => item.key === command.envelope.actionKey)
     ?? fail(`命令Action不存在:${command.envelope.actionKey}`)
   const targetKey = typeof command.envelope.payload.targetKey === 'string' ? command.envelope.payload.targetKey : null
-  const terminalEvent = events.find(event => event.type === 'textworld.effects.applied'
+  const terminalEvent = events.find(event => event.type === 'text-open-world.effects.applied'
     && parseTextOpenWorldEffectsAppliedEventPayloadV1(eventPayload(event)).commandId === commandId)
   if (!terminalEvent) {
     const stateHash = await hashProductRuntimeStateV1(commandState)

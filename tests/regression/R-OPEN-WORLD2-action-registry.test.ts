@@ -12,7 +12,7 @@ function context(overrides: Partial<TextOpenWorldActionProjectionContextV1> = {}
   }
 }
 
-describe('TEXTWORLD-2 · unified Action registry and availability projection', () => {
+describe('Text Open World vNext · unified Action registry and availability projection', () => {
   it('同一Action目录向固定选项、任务、随机事件和教程提供稳定引用', () => {
     const registry = createTextOpenWorldActionRegistryV1(createTextOpenWorldVNextFixture())
     const entry = registry.get('action.investigate-channel')

@@ -159,7 +159,7 @@ export interface ProductRuntimePackageV1 {
   openWorldEvolution?: OpenWorldEvolutionContentV1
   openWorld?: OpenWorldContentV1
   /**
-   * TEXTWORLD-2 governed runtime payload. Existing text-open-world releases
+   * TEXT-OPEN-WORLD-2 governed runtime payload. Existing text-open-world releases
    * may omit it; every vNext release/build includes it inside the one shared
    * ProductRuntimePackage instead of creating a parallel release family.
    */

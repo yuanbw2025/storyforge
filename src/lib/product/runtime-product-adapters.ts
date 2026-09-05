@@ -81,7 +81,7 @@ export function applyProductOwnedRuntimeEventV1(
   event: ProductRuntimeEvent,
   payload: ProductRuntimeJsonObjectV1,
 ): ProductRuntimeState | null {
-  if (event.type.startsWith('textworld.')) {
+  if (event.type.startsWith('text-open-world.')) {
     if (state.textOpenWorld) {
       state.textOpenWorld = applyTextOpenWorldSessionEventV1(state.textOpenWorld, event)
     }

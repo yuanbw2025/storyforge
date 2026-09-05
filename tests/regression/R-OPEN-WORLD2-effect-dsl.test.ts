@@ -44,7 +44,7 @@ function addEffects(effects: TextOpenWorldEffectDefinitionV1[]) {
   return fixture
 }
 
-describe('TEXTWORLD-2 · typed Effect DSL and atomic EffectPlan', () => {
+describe('Text Open World vNext · typed Effect DSL and atomic EffectPlan', () => {
   it('预演不改原状态，提交后返回可校验回执并完成跨域奖励', async () => {
     const catalog = createTextOpenWorldEffectCatalogV1(createTextOpenWorldVNextFixture())
     const before = state()

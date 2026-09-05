@@ -6,6 +6,7 @@ import {
   hashProductRuntimeStateV1,
   parseProductRuntimeState,
   replayProductRuntimeEvents,
+  updateProductRuntimeSessionHeadV1,
 } from '../product/runtime-core'
 import type {
   ProductRuntimeCheckpoint,
@@ -49,7 +50,7 @@ export async function inspectTextOpenWorldRuntimeHeadV1(sessionId: number): Prom
   let cached: ProductRuntimeState
   try { cached = parseProductRuntimeState(session.runtimeHeadStateJson) } catch (cause) { return { ...base, code: 'cache-state-invalid', detail: cause instanceof Error ? cause.message : String(cause), repairable: true } }
   const latestTextOpenWorldSequence = [...verified.events].reverse()
-    .find(event => event.type.startsWith('textworld.'))?.sequence ?? 0
+    .find(event => event.type.startsWith('text-open-world.'))?.sequence ?? 0
   if (cached.lastSequence !== verified.state.lastSequence
     || cached.textOpenWorld?.lastEventSequence !== latestTextOpenWorldSequence) {
     return { ...base, code: 'cache-sequence-mismatch', detail: '缓存内部序号与共享事件头不一致。', repairable: true }
@@ -66,7 +67,13 @@ export async function repairTextOpenWorldRuntimeHeadV1(sessionId: number): Promi
     const current = await db.productRuntimeSessions.get(sessionId); if (!current) fail('Session在修复前已删除')
     const latest = await db.productRuntimeEvents.where('sessionId').equals(sessionId).sortBy('sequence')
     if ((latest[latest.length - 1]?.sequence ?? 0) !== verified.state.lastSequence) fail('Session在修复期间已变化，请重试')
-    await db.productRuntimeSessions.update(sessionId, { runtimeHeadSequence: verified.state.lastSequence, runtimeHeadStateJson: verified.stateJson, runtimeHeadStateHash: verified.stateHash, updatedAt: Date.now() })
+    await updateProductRuntimeSessionHeadV1({
+      sessionId,
+      sequence: verified.state.lastSequence,
+      stateJson: verified.stateJson,
+      stateHash: verified.stateHash,
+      updatedAt: Date.now(),
+    })
   })
   return inspectTextOpenWorldRuntimeHeadV1(sessionId)
 }
@@ -86,7 +93,7 @@ export async function inspectTextOpenWorldCheckpointV1(checkpointId: number): Pr
   let verified: Awaited<ReturnType<typeof canonical>>
   try { verified = await canonical(session, checkpoint.throughSequence) } catch (cause) { return { ...base, code: 'event-protocol-invalid', detail: cause instanceof Error ? cause.message : String(cause), valid: false } }
   const latestTextOpenWorldSequence = [...verified.events].reverse()
-    .find(event => event.type.startsWith('textworld.'))?.sequence ?? 0
+    .find(event => event.type.startsWith('text-open-world.'))?.sequence ?? 0
   if (saved.lastSequence !== checkpoint.throughSequence
     || saved.textOpenWorld!.lastEventSequence !== latestTextOpenWorldSequence) {
     return { ...base, code: 'checkpoint-sequence-mismatch', detail: '检查点内部序号与共享事件游标不一致。', valid: false }

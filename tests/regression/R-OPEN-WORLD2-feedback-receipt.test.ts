@@ -18,7 +18,7 @@ import { createTextOpenWorldVNextFixture } from '../helpers/text-open-world-vnex
 async function fixture(suffix: string) {
   const textOpenWorldVNext = createTextOpenWorldVNextFixture()
   const created = await createGovernedTextOpenWorldSessionFixtureV1({
-    name: `TEXTWORLD Feedback验收-${suffix}-${crypto.randomUUID()}`,
+    name: `TEXT-OPEN-WORLD Feedback验收-${suffix}-${crypto.randomUUID()}`,
     textOpenWorldVNext,
     title: `Feedback ${suffix}`,
     seed: `feedback-${suffix}`,
@@ -54,7 +54,7 @@ async function settle(input: {
   })
 }
 
-describe('TEXTWORLD-2 · unified player feedback receipt', () => {
+describe('Text Open World vNext · unified player feedback receipt', () => {
   beforeEach(async () => { await db.delete(); await db.open() })
   afterAll(() => db.close())
 

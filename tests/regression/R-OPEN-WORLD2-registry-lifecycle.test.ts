@@ -29,7 +29,7 @@ async function fixture() {
     initialPlayerVisibility: 'hidden', actorKeys: [],
   })
   const created = await createGovernedTextOpenWorldSessionFixtureV1({
-    name: `TEXTWORLD 注册表生命周期验收-${crypto.randomUUID()}`,
+    name: `TEXT-OPEN-WORLD 注册表生命周期验收-${crypto.randomUUID()}`,
     textOpenWorldVNext,
     title: '盐脊正式存档',
     seed: 'registry-lifecycle',
@@ -56,7 +56,7 @@ async function completeAction(created: Awaited<ReturnType<typeof fixture>>) {
   })
 }
 
-describe('TEXTWORLD-2 · three registries and complete data lifecycle', () => {
+describe('Text Open World vNext · three registries and complete data lifecycle', () => {
   beforeEach(async () => { await db.delete(); await db.open() })
   afterAll(() => db.close())
 
@@ -80,7 +80,7 @@ describe('TEXTWORLD-2 · three registries and complete data lifecycle', () => {
     expect(context.text).not.toContain('schedule.caretaker')
 
     const foreignWorkspace = await createWorkspace({
-      name: `TEXTWORLD 跨项目隔离-${crypto.randomUUID()}`,
+      name: `TEXT-OPEN-WORLD 跨项目隔离-${crypto.randomUUID()}`,
       genres: ['open-world'], status: 'drafting', description: '', targetWordCount: 1,
       enableMultiWorld: false,
     }, { purpose: 'world-engine', kind: 'novel', novelProfile: 'long' })
@@ -113,7 +113,7 @@ describe('TEXTWORLD-2 · three registries and complete data lifecycle', () => {
     expect(backup.productRuntimeSessions[0]._productReleaseExportId).toBe(backup.productReleases[0]._exportId)
     expect(backup.productRuntimeEvents.every(row => row._productRuntimeSessionExportId === backup.productRuntimeSessions[0]._exportId)).toBe(true)
     expect(backup.productRuntimeCheckpoints[0]._productRuntimeSessionExportId).toBe(backup.productRuntimeSessions[0]._exportId)
-    const portableCommandEvent = backup.productRuntimeEvents.find(event => event.type === 'textworld.command.committed') as any
+    const portableCommandEvent = backup.productRuntimeEvents.find(event => event.type === 'text-open-world.command.committed') as any
     expect(portableCommandEvent.payloadJson).toBeUndefined()
     expect(JSON.parse(portableCommandEvent._portablePayloadJson).envelope.sessionId).toBe(backup.productRuntimeSessions[0]._exportId)
 
@@ -134,14 +134,14 @@ describe('TEXTWORLD-2 · three registries and complete data lifecycle', () => {
     expect(importedSession?.id).not.toBe(created.session.id)
     expect(importedEvents).toHaveLength(4)
     expect(importedEvents.every(event => event.sessionId === importedSession?.id)).toBe(true)
-    expect(JSON.parse(importedEvents.find(event => event.type === 'textworld.command.committed')!.payloadJson).envelope.sessionId)
+    expect(JSON.parse(importedEvents.find(event => event.type === 'text-open-world.command.committed')!.payloadJson).envelope.sessionId)
       .toBe(importedSession?.id)
     expect(importedCheckpoint?.sessionId).toBe(importedSession?.id)
     await expect(assertProductReleaseUnchanged(importedRelease!.id!)).resolves.toMatchObject({ contentHash: created.release.contentHash })
     await expect(verifyTextOpenWorldVNextSessionBindingV1(importedSession!)).resolves.toMatchObject({ runtimePackage: created.textOpenWorldVNext })
     const importedInspection = await inspectTextOpenWorldCheckpointV1(importedCheckpoint!.id!)
     expect(importedInspection, importedInspection.detail).toMatchObject({ valid: true, code: 'valid' })
-    const importedCommand = JSON.parse(importedEvents.find(event => event.type === 'textworld.command.committed')!.payloadJson).envelope
+    const importedCommand = JSON.parse(importedEvents.find(event => event.type === 'text-open-world.command.committed')!.payloadJson).envelope
     await expect(commitTextOpenWorldCommandV1({ ...importedCommand, requestedAt: 9_999 }))
       .resolves.toMatchObject({ replayed: true, resultingSequence: 3 })
 

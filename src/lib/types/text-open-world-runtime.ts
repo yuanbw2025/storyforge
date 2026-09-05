@@ -72,7 +72,7 @@ export interface TextOpenWorldRuntimePackageV1 {
   compatibility: {
     minimumReaderVersion: number
     compatiblePreviousPackageHashes: string[]
-    legacyInputKinds: Array<'open-world-v1' | 'adventure-v1' | 'narrative-simulation-v1'>
+    legacyInputKinds: Array<'open-world-v1' | 'adventure-v1' | 'open-world-evolution-v1'>
     migrationPolicy: 'old-release-pinned'
   }
 }

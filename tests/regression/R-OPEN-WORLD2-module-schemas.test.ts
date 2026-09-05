@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { parseTextOpenWorldModulesV1 } from '../../src/lib/open-world/modules'
 import { createTextOpenWorldVNextFixture } from '../helpers/text-open-world-vnext-fixture'
 
-describe('TEXTWORLD-2 · vNext module schemas and reference integrity', () => {
+describe('Text Open World vNext · vNext module schemas and reference integrity', () => {
   it('解析完整的15模块验收包并保留可运行目录', () => {
     const parsed = parseTextOpenWorldModulesV1(JSON.stringify(createTextOpenWorldVNextFixture()))
 

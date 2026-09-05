@@ -5,6 +5,7 @@ import {
   assertFormalRuntimeSourceUnchangedV1,
   hashProductRuntimeStateV1,
   replayProductRuntimeEvents,
+  updateProductRuntimeSessionHeadV1,
 } from '../product/runtime-core'
 import type {
   ProductRuntimeEvent,
@@ -41,7 +42,7 @@ function priorReceipt(input: {
   events: ProductRuntimeEvent[]
   replayed: boolean
 }): TextOpenWorldOutcomeBatchReceiptV1 {
-  const effectEvent = input.events.find(event => event.type === 'textworld.effects.applied' && parseTextOpenWorldEffectsAppliedEventPayloadV1(payload(event)).commandId === input.commandId)
+  const effectEvent = input.events.find(event => event.type === 'text-open-world.effects.applied' && parseTextOpenWorldEffectsAppliedEventPayloadV1(payload(event)).commandId === input.commandId)
   if (!effectEvent?.id) fail('已提交Effect事件缺少持久化ID')
   const effectPayload = parseTextOpenWorldEffectsAppliedEventPayloadV1(payload(effectEvent))
   if (effectPayload.outcomeFingerprint !== input.outcomeFingerprint || effectPayload.commandSequence !== input.commandSequence) fail('相同commandId的结果批次内容不同')
@@ -97,7 +98,7 @@ export async function commitTextOpenWorldOutcomeBatchV1(input: {
       frozen: binding.formal,
     })
     const commandEvent = events.find(event => event.commandId === input.commandId)
-    if (!commandEvent || commandEvent.type !== 'textworld.command.committed') fail('对应命令尚未提交')
+    if (!commandEvent || commandEvent.type !== 'text-open-world.command.committed') fail('对应命令尚未提交')
     const command = parseTextOpenWorldCommandEventPayloadV1(payload(commandEvent))
     if (command.envelope.commandId !== input.commandId) fail('命令索引与payload不一致')
     const outcomeFingerprint = await createTextOpenWorldOutcomeFingerprintV1({
@@ -123,7 +124,7 @@ export async function commitTextOpenWorldOutcomeBatchV1(input: {
       const evidence = await resolveTextOpenWorldRandomEvidenceV1({ seed: session.seed, commandId: input.commandId, commandSequence: commandEvent.sequence, drawIndex: index, request: randomRequests[index] })
       const event: ProductRuntimeEvent = {
         projectId: session.projectId, worldGroupId: session.worldGroupId ?? null, sessionId: input.sessionId, sequence,
-        type: 'textworld.random.resolved', actorKey: command.envelope.actorKey, targetKey: null,
+        type: 'text-open-world.random.resolved', actorKey: command.envelope.actorKey, targetKey: null,
         commandId: null, baseSequence: null, baseStateHash: null,
         payloadJson: JSON.stringify({
           schema: 'storyforge.text-open-world.random-resolved-event', version: 1,
@@ -141,7 +142,7 @@ export async function commitTextOpenWorldOutcomeBatchV1(input: {
     })
     const effectEvent: ProductRuntimeEvent = {
       projectId: session.projectId, worldGroupId: session.worldGroupId ?? null, sessionId: input.sessionId, sequence,
-      type: 'textworld.effects.applied', actorKey: command.envelope.actorKey, targetKey: null,
+      type: 'text-open-world.effects.applied', actorKey: command.envelope.actorKey, targetKey: null,
       commandId: null, baseSequence: null, baseStateHash: null, payloadJson: JSON.stringify(effectPayload), createdAt: now,
     }
     currentState = applyProductRuntimeEvent(currentState, effectEvent); appended.push(effectEvent)
@@ -149,8 +150,12 @@ export async function commitTextOpenWorldOutcomeBatchV1(input: {
     for (const event of appended) event.id = await db.productRuntimeEvents.add(event) as number
     const stateJson = JSON.stringify(currentState)
     const stateHash = await hashProductRuntimeStateV1(currentState)
-    await db.productRuntimeSessions.update(input.sessionId, {
-      runtimeHeadSequence: sequence, runtimeHeadStateJson: stateJson, runtimeHeadStateHash: stateHash, updatedAt: now,
+    await updateProductRuntimeSessionHeadV1({
+      sessionId: input.sessionId,
+      sequence,
+      stateJson,
+      stateHash,
+      updatedAt: now,
     })
     return priorReceipt({ commandId: input.commandId, commandSequence: commandEvent.sequence, outcomeFingerprint, events: [...events, ...appended], replayed: false })
   })

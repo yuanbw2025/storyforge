@@ -24,7 +24,7 @@ const RULESET = { key: 'storyforge.standard', version: 1 } as const
 
 async function createSession() {
   return (await createGovernedTextOpenWorldSessionFixtureV1({
-    name: `TEXTWORLD vNext事件测试-${crypto.randomUUID()}`,
+    name: `TEXT-OPEN-WORLD vNext事件测试-${crypto.randomUUID()}`,
     textOpenWorldVNext: createTextOpenWorldVNextFixture(),
     title: '事件协议Session', seed: 'event-protocol-seed',
   })).session
@@ -48,7 +48,7 @@ async function outcome(sessionId: number, claimKey = 'claim.event.1') {
   return { plan, receipt, outcome: 'success' as const, reason: null, degradation: null }
 }
 
-describe('TEXTWORLD-2 · vNext Simulation Event protocol', () => {
+describe('Text Open World vNext · vNext ProductRuntimeEvent protocol', () => {
   beforeEach(async () => { await db.delete(); await db.open() })
   afterAll(() => db.close())
 
@@ -63,7 +63,7 @@ describe('TEXTWORLD-2 · vNext Simulation Event protocol', () => {
       ], ...result,
     })
     const events = await db.productRuntimeEvents.where('sessionId').equals(session.id!).sortBy('sequence')
-    expect(events.map(event => event.type)).toEqual(['narrative.started', 'narrative.node.entered', 'textworld.command.committed', 'textworld.random.resolved', 'textworld.random.resolved', 'textworld.effects.applied'])
+    expect(events.map(event => event.type)).toEqual(['narrative.started', 'narrative.node.entered', 'text-open-world.command.committed', 'text-open-world.random.resolved', 'text-open-world.random.resolved', 'text-open-world.effects.applied'])
     expect(receipt).toMatchObject({ status: 'committed', commandSequence: 3, randomEventSequences: [4, 5], effectsEventSequence: 6, resultingSequence: 6, replayed: false })
     expect(await readProductRuntimeStateVersion(session.id!)).toMatchObject({ sequence: 6 })
 
@@ -120,7 +120,7 @@ describe('TEXTWORLD-2 · vNext Simulation Event protocol', () => {
     await expect(commitTextOpenWorldOutcomeBatchV1({ sessionId: session.id!, commandId: envelope.commandId, ruleset: RULESET, randomRequests: [{ drawKey: 'draw.encounter', minimumInclusive: 1, maximumInclusive: 6 }], plan: result.plan, receipt: invalidReceipt, outcome: 'success', reason: null, degradation: null }))
       .rejects.toThrow('plan与receipt不一致')
     expect(await db.productRuntimeEvents.where('sessionId').equals(session.id!).count()).toBe(3)
-    await expect(appendProductRuntimeEvent({ sessionId: session.id!, type: 'textworld.effects.applied', payload: {} }))
+    await expect(appendProductRuntimeEvent({ sessionId: session.id!, type: 'text-open-world.effects.applied', payload: {} }))
       .rejects.toThrow('vNext事件只能通过对应的专用命令API')
   })
 })

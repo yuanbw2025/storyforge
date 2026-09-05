@@ -1108,7 +1108,7 @@ export interface ProductRuntimeState {
   openWorldEvolution?: OpenWorldEvolutionState | null;
   /** Text-open-world governed regional, travel and dynamic quest projection. */
   openWorld?: OpenWorldRuntimeState | null;
-  /** TEXTWORLD-2 vNext authoritative product projection; legacy sessions omit it. */
+  /** TEXT-OPEN-WORLD-2 vNext authoritative product projection; legacy sessions omit it. */
   textOpenWorld?: TextOpenWorldSessionProjectionV1 | null;
   lastSequence: number;
 }
@@ -1149,9 +1149,9 @@ export type ProductRuntimeSession = ProductRuntimeSessionBase & (
 );
 
 export const PRODUCT_RUNTIME_EVENT_TYPES = [
-  "textworld.command.committed",
-  "textworld.random.resolved",
-  "textworld.effects.applied",
+  "text-open-world.command.committed",
+  "text-open-world.random.resolved",
+  "text-open-world.effects.applied",
   "time.advanced",
   "entity.upserted",
   "entity.patched",
