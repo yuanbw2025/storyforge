@@ -295,12 +295,25 @@ export async function createProductProductionPlanV3(input: {
     { length: activeAudio ? Math.max(1, audioCalls) : 0 },
     (_, index) => `media.audio.${String(index + 1).padStart(3, '0')}`,
   )
-  // Four model tasks and deterministic package integration each receive a
-  // declared slice. Integration reads the frozen world through Context Gateway.
-  const perInput = Math.floor(brief.productionBudget.maximumInputTokens / 5)
-  const perOutput = Math.floor(brief.productionBudget.maximumOutputTokens / 4)
-  const perDuration = Math.floor(brief.productionBudget.maximumDurationMs / 8)
-  const costTaskCount = 4 + activeMediaLaneCount
+  const textAdventure = brief.intent.productType === 'text-adventure'
+  const modelTaskCount = textAdventure ? 8 : 4
+  const textAdventureOutputWeights: Record<string, number> = {
+    'content.design': 0.04,
+    'content.adventure-architecture': 0.10,
+    'content.narrative': 0.44,
+    'content.product-module': 0.08,
+    'content.adventure-side-quests': 0.10,
+    'content.adventure-ambient-events': 0.07,
+    'content.adventure-quality-review': 0.09,
+    'media.requirements': 0.08,
+  }
+  // Every provider task and deterministic integration receives a declared
+  // slice. Text adventure reserves separate bounded specialists for the
+  // architecture, mainline, side content, ambient events and systems.
+  const perInput = Math.floor(brief.productionBudget.maximumInputTokens / (modelTaskCount + 1))
+  const perOutput = Math.floor(brief.productionBudget.maximumOutputTokens / modelTaskCount)
+  const perDuration = Math.floor(brief.productionBudget.maximumDurationMs / (modelTaskCount + 4 + activeMediaLaneCount))
+  const costTaskCount = modelTaskCount + activeMediaLaneCount
   const perCost = brief.productionBudget.maximumCostUsd == null
     ? null
     : brief.productionBudget.maximumCostUsd / Math.max(1, costTaskCount)
@@ -308,8 +321,11 @@ export async function createProductProductionPlanV3(input: {
     ? 0
     : Math.floor(brief.productionBudget.maximumStorageBytes / activeMediaLaneCount)
 
-  const modelBudget = () => reservation({
-    modelCalls: 1, inputTokens: perInput, outputTokens: perOutput,
+  const modelBudget = (taskKey: string) => reservation({
+    modelCalls: 1, inputTokens: perInput,
+    outputTokens: textAdventure
+      ? Math.floor(brief.productionBudget.maximumOutputTokens * textAdventureOutputWeights[taskKey])
+      : perOutput,
     maximumCostUsd: perCost, durationMs: perDuration,
   })
   const tasks: ProductProductionPlanTaskV3[] = [
@@ -318,38 +334,106 @@ export async function createProductProductionPlanV3(input: {
       skillId: 'product-production.content.v1', executionMode: 'model', dependsOn: [],
       inputArtifactKeys: [], outputArtifactKeys: ['design.game'], requirementKeys: [],
       capabilityRequirementKeys: textCapabilities, concurrencyGroup: 'text-provider',
-      subjectLockKeys: ['design.game'], priority: 100, budgetReservation: modelBudget(),
+      subjectLockKeys: ['design.game'], priority: 100, budgetReservation: modelBudget('content.design'),
       maxAttempts: 2, timeoutMs: 180_000, failurePolicy: 'pause', fallbackTaskKey: null,
       acceptanceGateIds: ['artifact.protocol', 'design.source-anchors'],
     }),
+  ]
+  if (textAdventure) tasks.push(productionTask({
+    taskKey: 'content.adventure-architecture', lane: 'planning', kind: 'text-adventure-architecture',
+    skillId: 'text-adventure.production-architecture.v1', executionMode: 'model', dependsOn: ['content.design'],
+    inputArtifactKeys: ['design.game'], outputArtifactKeys: ['content.adventure-architecture'], requirementKeys: [],
+    capabilityRequirementKeys: textCapabilities, concurrencyGroup: 'text-provider',
+    subjectLockKeys: ['content.adventure-architecture'], priority: 95, budgetReservation: modelBudget('content.adventure-architecture'),
+    maxAttempts: 2, timeoutMs: 240_000, failurePolicy: 'pause', fallbackTaskKey: null,
+    acceptanceGateIds: ['artifact.protocol', 'adventure.architecture'],
+  }))
+  const narrativeDependency = textAdventure ? 'content.adventure-architecture' : 'content.design'
+  const narrativeInput = textAdventure ? 'content.adventure-architecture' : 'design.game'
+  tasks.push(
     productionTask({
       taskKey: 'content.narrative', lane: 'content', kind: 'narrative',
-      skillId: 'product-production.content.v1', executionMode: 'model', dependsOn: ['content.design'],
-      inputArtifactKeys: ['design.game'], outputArtifactKeys: ['content.narrative'], requirementKeys: [],
+      skillId: textAdventure ? 'text-adventure.production-mainline.v1' : 'product-production.content.v1',
+      executionMode: 'model', dependsOn: [narrativeDependency],
+      inputArtifactKeys: [narrativeInput], outputArtifactKeys: ['content.narrative'], requirementKeys: [],
       capabilityRequirementKeys: textCapabilities, concurrencyGroup: 'text-provider',
-      subjectLockKeys: ['content.narrative'], priority: 90, budgetReservation: modelBudget(),
+      subjectLockKeys: ['content.narrative'], priority: 90, budgetReservation: modelBudget('content.narrative'),
       maxAttempts: 2, timeoutMs: 240_000, failurePolicy: 'pause', fallbackTaskKey: null,
       acceptanceGateIds: ['artifact.protocol', 'narrative.graph'],
     }),
     productionTask({
       taskKey: 'content.product-module', lane: 'content', kind: 'product-module',
-      skillId: 'product-production.content.v1', executionMode: 'model', dependsOn: ['content.design'],
-      inputArtifactKeys: ['design.game'], outputArtifactKeys: ['content.product-module'], requirementKeys: [],
+      skillId: textAdventure ? 'text-adventure.production-systems.v1' : 'product-production.content.v1',
+      executionMode: 'model', dependsOn: [narrativeDependency],
+      inputArtifactKeys: [narrativeInput], outputArtifactKeys: ['content.product-module'], requirementKeys: [],
       capabilityRequirementKeys: textCapabilities, concurrencyGroup: 'text-provider',
-      subjectLockKeys: ['content.product-module'], priority: 85, budgetReservation: modelBudget(),
+      subjectLockKeys: ['content.product-module'], priority: 85, budgetReservation: modelBudget('content.product-module'),
       maxAttempts: 2, timeoutMs: 240_000, failurePolicy: 'pause', fallbackTaskKey: null,
       acceptanceGateIds: ['artifact.protocol', 'product.module'],
     }),
+  )
+  if (textAdventure) tasks.push(
+    productionTask({
+      taskKey: 'content.adventure-side-quests', lane: 'content', kind: 'text-adventure-side-quests',
+      skillId: 'text-adventure.production-side-quests.v1', executionMode: 'model',
+      dependsOn: ['content.adventure-architecture', 'content.product-module'],
+      inputArtifactKeys: ['content.adventure-architecture', 'content.product-module'],
+      outputArtifactKeys: ['content.adventure-side-quests'], requirementKeys: [],
+      capabilityRequirementKeys: textCapabilities, concurrencyGroup: 'text-provider',
+      subjectLockKeys: ['content.adventure-side-quests'], priority: 82, budgetReservation: modelBudget('content.adventure-side-quests'),
+      maxAttempts: 2, timeoutMs: 240_000, failurePolicy: 'pause', fallbackTaskKey: null,
+      acceptanceGateIds: ['artifact.protocol', 'adventure.side-quests'],
+    }),
+    productionTask({
+      taskKey: 'content.adventure-ambient-events', lane: 'content', kind: 'text-adventure-ambient-events',
+      skillId: 'text-adventure.production-ambient-events.v1', executionMode: 'model',
+      dependsOn: ['content.adventure-architecture', 'content.product-module'],
+      inputArtifactKeys: ['content.adventure-architecture', 'content.product-module'],
+      outputArtifactKeys: ['content.adventure-ambient-events'], requirementKeys: [],
+      capabilityRequirementKeys: textCapabilities, concurrencyGroup: 'text-provider',
+      subjectLockKeys: ['content.adventure-ambient-events'], priority: 80, budgetReservation: modelBudget('content.adventure-ambient-events'),
+      maxAttempts: 2, timeoutMs: 240_000, failurePolicy: 'pause', fallbackTaskKey: null,
+      acceptanceGateIds: ['artifact.protocol', 'adventure.ambient-events'],
+    }),
+  )
+  if (textAdventure) tasks.push(productionTask({
+    taskKey: 'content.adventure-quality-review', lane: 'qa', kind: 'text-adventure-quality-review',
+    skillId: 'text-adventure.production-quality-review.v1', executionMode: 'model',
+    dependsOn: [
+      'content.adventure-architecture', 'content.narrative', 'content.product-module',
+      'content.adventure-side-quests', 'content.adventure-ambient-events',
+    ],
+    inputArtifactKeys: [
+      'content.adventure-architecture', 'content.narrative', 'content.product-module',
+      'content.adventure-side-quests', 'content.adventure-ambient-events',
+    ],
+    outputArtifactKeys: ['quality.adventure-review'], requirementKeys: [],
+    capabilityRequirementKeys: textCapabilities, concurrencyGroup: 'text-provider',
+    subjectLockKeys: ['quality.adventure-review'], priority: 75,
+    budgetReservation: modelBudget('content.adventure-quality-review'),
+    maxAttempts: 2, timeoutMs: 240_000, failurePolicy: 'pause', fallbackTaskKey: null,
+    acceptanceGateIds: ['artifact.protocol', 'adventure.narrative-quality-review'],
+  }))
+  const mediaDependenciesForContent = textAdventure
+    ? ['content.adventure-quality-review']
+    : ['content.design']
+  const mediaInputsForContent = textAdventure
+    ? [
+        'content.adventure-architecture', 'content.narrative', 'content.product-module',
+        'content.adventure-side-quests', 'content.adventure-ambient-events', 'quality.adventure-review',
+      ]
+    : ['design.game']
+  tasks.push(
     productionTask({
       taskKey: 'media.requirements', lane: 'planning', kind: 'media-requirements',
-      skillId: 'product-production.media-requirements.v1', executionMode: 'model', dependsOn: ['content.design'],
-      inputArtifactKeys: ['design.game'], outputArtifactKeys: ['media.requirements'], requirementKeys: [],
+      skillId: 'product-production.media-requirements.v1', executionMode: 'model', dependsOn: mediaDependenciesForContent,
+      inputArtifactKeys: mediaInputsForContent, outputArtifactKeys: ['media.requirements'], requirementKeys: [],
       capabilityRequirementKeys: textCapabilities, concurrencyGroup: 'text-provider',
-      subjectLockKeys: ['media.requirements'], priority: 88, budgetReservation: modelBudget(),
+      subjectLockKeys: ['media.requirements'], priority: 88, budgetReservation: modelBudget('media.requirements'),
       maxAttempts: 2, timeoutMs: 180_000, failurePolicy: 'pause', fallbackTaskKey: null,
       acceptanceGateIds: ['artifact.protocol', 'media.requirements.coverage'],
     }),
-  ]
+  )
   const mediaDependencies: string[] = []
   if (activeVisual) {
     mediaDependencies.push('media.visual')
@@ -389,9 +473,20 @@ export async function createProductProductionPlanV3(input: {
       fallbackTaskKey: null, acceptanceGateIds: ['media.integrity', 'media.rights'],
     }))
   }
+  const textAdventureDependencies = textAdventure
+    ? [
+        'content.adventure-architecture', 'content.adventure-side-quests',
+        'content.adventure-ambient-events', 'content.adventure-quality-review',
+      ] : []
   const integrationDependencies = [
-    'content.narrative', 'content.product-module', 'media.requirements', ...mediaDependencies,
+    'content.narrative', 'content.product-module', ...textAdventureDependencies,
+    'media.requirements', ...mediaDependencies,
   ]
+  const textAdventureIntegrationArtifactKeys = textAdventure
+    ? [
+        'content.adventure-architecture', 'content.adventure-side-quests',
+        'content.adventure-ambient-events', 'quality.adventure-review',
+      ] : []
   const integrationArtifactKeys = brief.intent.productType === 'ttrpg'
     ? ['ttrpg.rule-pack', 'ttrpg.campaign-pack', 'runtime.package']
     : ['runtime.package']
@@ -399,7 +494,8 @@ export async function createProductProductionPlanV3(input: {
     taskKey: 'integration.package', lane: 'integration', kind: 'runtime-package',
     skillId: null, executionMode: 'deterministic', dependsOn: integrationDependencies,
     inputArtifactKeys: [
-      'content.narrative', 'content.product-module', 'media.requirements',
+      'content.narrative', 'content.product-module', ...textAdventureIntegrationArtifactKeys,
+      'media.requirements',
       ...visualArtifactKeys, ...audioArtifactKeys,
     ],
     outputArtifactKeys: integrationArtifactKeys, requirementKeys: [],

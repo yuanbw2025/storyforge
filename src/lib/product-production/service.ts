@@ -1,6 +1,7 @@
 import { db } from '../db/schema'
 import type {
   ProductBuildRecordV1,
+  ProductBuildArtifactKindV1,
   ProductEvolutionAffectedLaneV1,
   ProductEvolutionBaseV1,
   ProductProductionBriefRecordV1,
@@ -46,6 +47,7 @@ import {
   type ConfiguredAgnesImageReadinessV1,
   type ResolvedProductMediaCapabilityV1,
 } from './media-transport'
+import { readAcceptedBuildArtifacts } from './artifact-store'
 
 export interface ProductProductionDetailsV1 {
   production: ProductProductionRecordV1
@@ -73,6 +75,49 @@ export interface ProductProductionAuthorizationReadinessV1 {
   blockerCode: 'capability-unbound' | null
   blockerMessages: string[]
   requiredMediaRequirementKeys: string[]
+}
+
+export interface ProductProductionReviewArtifactV1 {
+  artifactKey: string
+  kind: ProductBuildArtifactKindV1
+  version: number
+  status: 'accepted' | 'carried-forward'
+  contentHash: string
+  byteSize: number
+  producerRunId: number | null
+  payload: unknown
+  quality: unknown
+}
+
+const AUTHOR_REVIEW_ARTIFACT_KEYS = new Set([
+  'design.game',
+  'content.adventure-architecture',
+  'content.narrative',
+  'content.product-module',
+  'content.adventure-side-quests',
+  'content.adventure-ambient-events',
+  'quality.adventure-review',
+  'media.requirements',
+  'runtime.package',
+  'quality.report',
+])
+
+export async function listProductProductionReviewArtifactsV1(input: {
+  scope: WorkspaceScope
+  buildId: number
+}): Promise<ProductProductionReviewArtifactV1[]> {
+  const rows = await readAcceptedBuildArtifacts(input)
+  return rows.filter(row => AUTHOR_REVIEW_ARTIFACT_KEYS.has(row.artifactKey)).map(row => ({
+    artifactKey: row.artifactKey,
+    kind: row.kind,
+    version: row.version,
+    status: row.status as 'accepted' | 'carried-forward',
+    contentHash: row.contentHash,
+    byteSize: row.byteSize,
+    producerRunId: row.producerRunId,
+    payload: JSON.parse(row.payloadJson) as unknown,
+    quality: JSON.parse(row.qualityJson) as unknown,
+  }))
 }
 
 /** Safe preflight only; never returns a provider credential or performs a call. */

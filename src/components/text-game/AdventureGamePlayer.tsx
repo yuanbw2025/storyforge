@@ -149,6 +149,8 @@ export default function AdventureGamePlayer(props: {
   const [branchTitle, setBranchTitle] = useState('')
   const [localError, setLocalError] = useState('')
   const [catalogReleaseId, setCatalogReleaseId] = useState<number | null>(null)
+  const [mediaUrls, setMediaUrls] = useState<Record<string, string>>({})
+  const [mediaFailures, setMediaFailures] = useState<Array<{ assetKey: string; reason: string }>>([])
   const playbackSessionRef = useRef<number | null>(null)
   const transcriptHydratedRef = useRef(false)
   const knownTranscriptSequencesRef = useRef<Set<number>>(new Set())
@@ -192,6 +194,17 @@ export default function AdventureGamePlayer(props: {
   const currentArea = adventureV2?.areas.find(item => item.key === adventureV2.locations.find(location => location.key === adventure?.currentLocationKey)?.areaKey) ?? null
   const currentRegion = adventureV2?.regions.find(item => item.key === currentArea?.regionKey) ?? null
   const clockValue = adventureV2 && adventure ? adventure.resources[adventureV2.clock.resourceKey] : null
+  const currentNarrativeBeatKeys = new Set((manifest?.narrative.beats ?? [])
+    .filter(beat => beat.nodeKey === store.runtimeState.narrative?.currentNodeKey)
+    .map(beat => beat.beatKey))
+  const currentIllustrationAsset = manifest?.presentation?.cues
+    .filter(cue => currentNarrativeBeatKeys.has(cue.beatKey) && cue.assetKey)
+    .map(cue => manifest.presentation?.assets.find(asset => asset.assetKey === cue.assetKey))
+    .find(asset => asset?.kind === 'background' || asset?.kind === 'cg')
+    ?? manifest?.presentation?.assets.find(asset => asset.kind === 'background' || asset.kind === 'cg')
+  const characterPortraitAsset = manifest?.presentation?.assets.find(asset => (
+    asset.kind === 'character-pose' || asset.kind === 'character-expression'
+  ))
   const visibleAbilities = manifest && adventure
     ? manifest.adventure.abilities.map(definition => ({
         definition,
@@ -212,6 +225,23 @@ export default function AdventureGamePlayer(props: {
   const transcript = useMemo(() => manifest && adventure
     ? projectAdventureTranscript(manifest, adventure.actionHistory, store.events)
     : [], [adventure, manifest, store.events])
+
+  useEffect(() => {
+    let active = true
+    setMediaUrls({})
+    setMediaFailures([])
+    if (!manifest?.presentation?.assets.length || store.selectedSessionId == null) return () => { active = false }
+    void store.preloadMedia().then(result => {
+      if (!active) return
+      setMediaUrls(result.urls)
+      setMediaFailures(result.failures)
+    }).catch(reason => {
+      if (active) setMediaFailures([{ assetKey: 'presentation', reason: reason instanceof Error ? reason.message : String(reason) }])
+    })
+    return () => { active = false }
+  // The store owns resolver disposal; URLs remain valid across action refreshes in the same session.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [store.selectedSessionId, manifest?.presentation?.assets.length])
 
   useLayoutEffect(() => {
     if (playbackSessionRef.current === store.selectedSessionId) return
@@ -419,6 +449,11 @@ export default function AdventureGamePlayer(props: {
     {error && <div role="alert" className="adventure-alert adventure-game-alert">{error}</div>}
     <main className="adventure-console-shell">
       <div className="adventure-console">
+        {currentIllustrationAsset && mediaUrls[currentIllustrationAsset.assetKey] && <figure className="adventure-scene-illustration">
+          <img src={mediaUrls[currentIllustrationAsset.assetKey]} alt={currentIllustrationAsset.altText} />
+          <figcaption>{currentIllustrationAsset.name}</figcaption>
+        </figure>}
+        {!!mediaFailures.length && <details className="adventure-media-fallback"><summary>插图已降级为纯文字</summary><p>{mediaFailures.map(item => `${item.assetKey}：${item.reason}`).join('；')}</p></details>}
         <section className="adventure-console-prologue">
           <small>玩家身份 · {playerIdentity ? `${playerIdentity.name}（由你扮演）` : '你（唯一行动主角）'} · {selected.title}</small>
           <h1>{location.title}</h1>
@@ -494,7 +529,7 @@ export default function AdventureGamePlayer(props: {
     <nav className="adventure-mobile-dock" aria-label="冒险快捷功能"><button onClick={() => setPanel(adventureV2 ? 'character' : 'inventory')}>{adventureV2 ? <CircleDot /> : <Backpack />}<span>{adventureV2 ? '角色' : '背包'}</span></button><button onClick={() => setPanel('inventory')}><Backpack /><span>背包</span></button><button onClick={() => setPanel('skills')}><WandSparkles /><span>技能</span></button><button onClick={() => setPanel('quests')}><ScrollText /><span>任务</span></button><button onClick={() => setPanel('saves')}><Save /><span>存档</span></button></nav>
 
     {panel && <div className="adventure-panel-backdrop" role="presentation"><section className="adventure-panel" aria-label={{ character: '角色状态', world: '区域地图', inventory: '背包', equipment: '装备', skills: '技能', quests: '任务', journal: '冒险记录', saves: '存档与时间线' }[panel]}><header><div><small>ADVENTURER'S JOURNAL</small><h2>{{ character: '角色状态', world: '区域与地点', inventory: '背包与物品', equipment: '装备栏', skills: '角色能力', quests: '任务日志', journal: '冒险记录', saves: '存档与时间线' }[panel]}</h2></div><button aria-label="关闭面板" onClick={() => setPanel(null)}><X /></button></header><div className="adventure-panel-content">
-      {panel === 'character' && adventureV2 && <div className="adventure-system-grid"><article><small>身份与成长</small><strong>{playerIdentity?.name ?? '玩家'} · 等级 {adventure.abilities[adventureV2.progression.levelAbilityKey] ?? 1}</strong><p>{playerIdentity?.description}</p><dl>{adventureV2.resources.filter(item => item.role !== 'clock').map(item => <div key={item.key}><dt>{item.title}</dt><dd>{adventure.resources[item.key]} / {item.maximum}</dd></div>)}</dl></article><article><small>基础属性</small><dl>{visibleAbilities.filter(item => abilityRole(item.definition.key) === 'stat').map(item => <div key={item.definition.key}><dt>{item.definition.title}</dt><dd>{item.effective}{item.effective !== item.base ? `（装备 +${item.effective - item.base}）` : ''}</dd></div>)}</dl></article></div>}
+      {panel === 'character' && adventureV2 && <div className="adventure-system-grid"><article>{characterPortraitAsset && mediaUrls[characterPortraitAsset.assetKey] && <figure className="adventure-panel-portrait"><img src={mediaUrls[characterPortraitAsset.assetKey]} alt={characterPortraitAsset.altText} /></figure>}<small>身份与成长</small><strong>{playerIdentity?.name ?? '玩家'} · 等级 {adventure.abilities[adventureV2.progression.levelAbilityKey] ?? 1}</strong><p>{playerIdentity?.description}</p><dl>{adventureV2.resources.filter(item => item.role !== 'clock').map(item => <div key={item.key}><dt>{item.title}</dt><dd>{adventure.resources[item.key]} / {item.maximum}</dd></div>)}</dl></article><article><small>基础属性</small><dl>{visibleAbilities.filter(item => abilityRole(item.definition.key) === 'stat').map(item => <div key={item.definition.key}><dt>{item.definition.title}</dt><dd>{item.effective}{item.effective !== item.base ? `（装备 +${item.effective - item.base}）` : ''}</dd></div>)}</dl></article></div>}
       {panel === 'world' && adventureV2 && <div className="adventure-system-grid">{adventureV2.regions.map(region => <article key={region.key}><small>{region.key === currentRegion?.key ? '当前大区域' : '大区域'}</small><strong>{region.title}</strong><p>{region.description}</p>{adventureV2.areas.filter(area => area.regionKey === region.key).map(area => <section key={area.key}><b>{area.title}</b><span>{adventureV2.locations.filter(item => item.areaKey === area.key).map(item => `${item.key === adventure.currentLocationKey ? '● ' : adventure.visitedLocationKeys.includes(item.key) ? '○ ' : '◇ '}${item.title}`).join(' · ')}</span></section>)}</article>)}</div>}
       {panel === 'inventory' && <div className="adventure-inventory-grid">{playerItems.map(item => { const definition = manifest.adventure.items.find(value => value.key === item.itemKey); return <article key={`${item.itemKey}:${item.state}`}><i>{itemIcon(definition?.tags ?? [], item.itemKey)}</i><div><small>{item.state === 'equipped' ? '已装备' : definition?.consumable ? '消耗品' : '携带中'}</small><strong>{friendlyName(definition?.title, item.itemKey)}</strong><p>{friendlyDescription(definition?.description, item.itemKey, 'item')}</p></div><b>×{item.quantity}</b></article> })}{!playerItems.length && <div className="adventure-empty">背包还是空的，探索场景会找到可携带的物品。</div>}</div>}
       {panel === 'equipment' && adventureV2 && <div className="adventure-system-grid">{adventureV2.equipmentSlots.map(slot => { const entry = playerItems.find(item => item.state === 'equipped' && adventureV2.items.find(definition => definition.key === item.itemKey)?.equipmentSlotKey === slot.key); const definition = entry ? adventureV2.items.find(item => item.key === entry.itemKey) : null; return <article key={slot.key}><small>{slot.title}</small><strong>{definition?.title ?? '未装备'}</strong><p>{definition?.description ?? `可放置带有 ${slot.acceptsTags.join('、') || '兼容'} 标签的装备。`}</p>{definition?.modifiers.map(modifier => <span key={modifier.abilityKey}>{adventureV2.abilities.find(item => item.key === modifier.abilityKey)?.title ?? modifier.abilityKey} {modifier.delta > 0 ? '+' : ''}{modifier.delta}</span>)}</article> })}</div>}

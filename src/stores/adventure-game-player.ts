@@ -18,13 +18,18 @@ import {
   type AdventureIntentCandidateV1,
   type AdventureNarrationCandidateV1,
 } from '../lib/adventure/harness'
-import { verifyProductRuntimeSessionSourceV1 } from '../lib/product-production/preview-source'
+import {
+  productRuntimeSourceForSessionV1,
+  resolveProductRuntimeSource,
+  verifyProductRuntimeSessionSourceV1,
+} from '../lib/product-production/preview-source'
 import { assertProductReleaseUnchanged, parseAdventureProductReleaseManifest } from '../lib/product/releases'
 import { assertInstanceBinding, createTextAdventureInstance, readBoundInstances } from '../lib/product/runtime-instances'
 import type {
   AdventureProductRuntimePackageV1,
   AIConfig,
   ProductRelease,
+  ProductMediaResolverV1,
   ProductRuntimeCheckpoint,
   ProductRuntimeEvent,
   ProductRuntimeState,
@@ -50,6 +55,8 @@ interface AdventurePlayerState {
   recoverableRunIds: number[]
   runtimeState: ProductRuntimeState
   selectedManifest: AdventureProductRuntimePackageV1 | null
+  selectedMediaResolver: ProductMediaResolverV1 | null
+  selectedSourceSessionId: number | null
   pendingIntent: AdventureIntentCandidateV1 | null
   generatedNarrative: AdventureNarrationCandidateV1 | null
   generatingRunId: number | null
@@ -67,6 +74,7 @@ interface AdventurePlayerState {
   cancelGeneration(): Promise<void>
   resumeRun(runId: number): Promise<void>
   choose(choiceKey: string): Promise<void>
+  preloadMedia(maximumBytes?: number): Promise<{ urls: Record<string, string>; failures: Array<{ assetKey: string; reason: string }> }>
   saveCheckpoint(name: string): Promise<void>
   forkCheckpoint(checkpointId: number, title?: string): Promise<number>
   forkCurrent(title?: string): Promise<number>
@@ -107,15 +115,28 @@ function playableManifest(runtimePackage: Awaited<ReturnType<typeof verifyProduc
   return structuredClone(runtimePackage) as AdventureProductRuntimePackageV1
 }
 
-async function details(scope: WorkspaceScope, sessionId: number) {
+async function details(scope: WorkspaceScope, sessionId: number, current: {
+  sessionId: number | null
+  resolver: ProductMediaResolverV1 | null
+}) {
   const session = await assertAdventureSession(scope, sessionId)
-  const [events, checkpoints, runtimeState, playable, runRows] = await Promise.all([
+  const [events, checkpoints, runtimeState, verified, runRows] = await Promise.all([
     db.productRuntimeEvents.where('sessionId').equals(sessionId).sortBy('sequence'),
     db.productRuntimeCheckpoints.where('sessionId').equals(sessionId).toArray(),
     readProductRuntimeState(sessionId),
     verifyProductRuntimeSessionSourceV1({ scope, session }),
     db.agentRuns.where('productRuntimeSessionId').equals(sessionId).toArray(),
   ])
+  let selectedMediaResolver = current.resolver
+  let playable = verified
+  if (current.sessionId !== sessionId || !selectedMediaResolver) {
+    selectedMediaResolver?.dispose()
+    const resolved = await resolveProductRuntimeSource({
+      scope, source: await productRuntimeSourceForSessionV1(session),
+    })
+    playable = resolved
+    selectedMediaResolver = resolved.mediaResolver
+  }
   checkpoints.sort((left, right) => right.createdAt - left.createdAt)
   const resumableRows = runRows.filter(row => !['completed', 'failed', 'cancelled'].includes(row.status))
   const resumeCheckpoints = resumableRows.length
@@ -126,6 +147,8 @@ async function details(scope: WorkspaceScope, sessionId: number) {
     checkpoints,
     runtimeState,
     selectedManifest: playableManifest(playable.runtimePackage),
+    selectedMediaResolver,
+    selectedSourceSessionId: sessionId,
     recoverableRunIds: resumableRows
       .filter(row => resumeCheckpoints.some(item => item.runId === row.id && item.resumePayloadJson != null))
       .map(row => row.id!),
@@ -149,7 +172,10 @@ export const useAdventureGamePlayerStore = create<AdventurePlayerState>((set, ge
   const refresh = async () => {
     const scope = get().scope; const sessionId = get().selectedSessionId
     if (!scope || sessionId == null) return
-    set(await details(scope, sessionId))
+    set(await details(scope, sessionId, {
+      sessionId: get().selectedSourceSessionId,
+      resolver: get().selectedMediaResolver,
+    }))
   }
   const reload = async (requested?: number | null) => {
     const scope = get().scope
@@ -165,7 +191,13 @@ export const useAdventureGamePlayerStore = create<AdventurePlayerState>((set, ge
       : explicitlySelected ? null : sessions[0]?.id ?? null
     set({ releases, sessions, selectedSessionId })
     if (selectedSessionId != null) await refresh()
-    else set({ events: [], checkpoints: [], recoverableRunIds: [], runtimeState: structuredClone(EMPTY_PRODUCT_RUNTIME_STATE), selectedManifest: null })
+    else {
+      get().selectedMediaResolver?.dispose()
+      set({
+        events: [], checkpoints: [], recoverableRunIds: [], runtimeState: structuredClone(EMPTY_PRODUCT_RUNTIME_STATE),
+        selectedManifest: null, selectedMediaResolver: null, selectedSourceSessionId: null,
+      })
+    }
   }
   const run = async <T>(operation: () => Promise<T>): Promise<T> => {
     set({ busy: true, error: '' })
@@ -176,12 +208,15 @@ export const useAdventureGamePlayerStore = create<AdventurePlayerState>((set, ge
   return {
     scope: null, worldGroupId: null, releases: [], sessions: [], selectedSessionId: null,
     events: [], checkpoints: [], recoverableRunIds: [], runtimeState: structuredClone(EMPTY_PRODUCT_RUNTIME_STATE), selectedManifest: null,
+    selectedMediaResolver: null, selectedSourceSessionId: null,
     pendingIntent: null, generatedNarrative: null, generatingRunId: null,
     loading: false, busy: false, error: '',
     load: async (scope, worldGroupId, openLibrary = false) => {
       const changed = get().scope?.workId !== scope.workId || get().worldGroupId !== worldGroupId
+      if (changed) get().selectedMediaResolver?.dispose()
       set({ scope, worldGroupId, loading: true, error: '', ...(changed ? {
-        selectedSessionId: null, pendingIntent: null, generatedNarrative: null,
+        selectedSessionId: null, selectedMediaResolver: null, selectedSourceSessionId: null,
+        pendingIntent: null, generatedNarrative: null,
       } : {}) })
       try { await reload(openLibrary ? null : undefined) } catch (error) { set({ error: error instanceof Error ? error.message : String(error) }) }
       finally { set({ loading: false }) }
@@ -189,7 +224,13 @@ export const useAdventureGamePlayerStore = create<AdventurePlayerState>((set, ge
     select: async sessionId => {
       set({ selectedSessionId: sessionId, loading: true, error: '', pendingIntent: null, generatedNarrative: null })
       try {
-        if (sessionId == null) set({ events: [], checkpoints: [], recoverableRunIds: [], runtimeState: structuredClone(EMPTY_PRODUCT_RUNTIME_STATE), selectedManifest: null })
+        if (sessionId == null) {
+          get().selectedMediaResolver?.dispose()
+          set({
+            events: [], checkpoints: [], recoverableRunIds: [], runtimeState: structuredClone(EMPTY_PRODUCT_RUNTIME_STATE),
+            selectedManifest: null, selectedMediaResolver: null, selectedSourceSessionId: null,
+          })
+        }
         else await refresh()
       } catch (error) { set({ error: error instanceof Error ? error.message : String(error) }) }
       finally { set({ loading: false }) }
@@ -303,6 +344,15 @@ export const useAdventureGamePlayerStore = create<AdventurePlayerState>((set, ge
       })
       await refresh()
     }),
+    preloadMedia: async (maximumBytes = 64 * 1024 * 1024) => {
+      const resolver = get().selectedMediaResolver
+      const assets = get().selectedManifest?.presentation?.assets ?? []
+      if (!resolver) return {
+        urls: {}, failures: assets.map(asset => ({ assetKey: asset.assetKey, reason: '可玩媒资解析器未就绪' })),
+      }
+      const result = await resolver.preload({ assetKeys: assets.map(asset => asset.assetKey), maximumBytes })
+      return { urls: result.urls, failures: result.failures }
+    },
     saveCheckpoint: name => run(async () => {
       const scope = get().scope; const sessionId = get().selectedSessionId
       if (!scope || sessionId == null) throw new Error('请先选择文字冒险。')

@@ -28,7 +28,12 @@ import {
   recordProductBuildMainRoutePlaythroughV1,
   recordProductMediaRuntimeMeasurementV1,
 } from '../../src/lib/product-production/quality-receipts'
-import { beginProductProductionEvolutionV1, publishProductProductionV1, startProductProductionPreviewV1 } from '../../src/lib/product-production/service'
+import {
+  beginProductProductionEvolutionV1,
+  listProductProductionReviewArtifactsV1,
+  publishProductProductionV1,
+  startProductProductionPreviewV1,
+} from '../../src/lib/product-production/service'
 import {
   commitNarrativeChoice,
   readProductRuntimeState,
@@ -80,17 +85,22 @@ async function fixture(qualityProfile: 'prototype' | 'commercial-candidate' = 'p
   return { ...owned, release, brief, productionId: created.productionId }
 }
 
-async function fixtureForProduct(productType: ProductionProductKindV1) {
+async function fixtureForProduct(productType: ProductionProductKindV1, options?: {
+  scale?: 'scene' | 'short-arc' | 'chapter'
+  visualLevel?: 'none' | 'key-scenes'
+}) {
   const owned = await seedCurrentProductWorld(`formal-${productType}`)
   const release = owned.release
   const suggestions = await suggestProductStartingPoints({ scope: owned.scope, worldReleaseId: release.id! })
   const brief = await draftProductProductionBriefV3({
     scope: owned.scope, worldReleaseId: release.id!, suggestionKey: suggestions.suggestions[0].suggestionKey,
-    productType, qualityProfile: 'prototype', scale: 'scene', visualLevel: 'none', audioLevel: 'none',
+    productType, qualityProfile: 'prototype', scale: options?.scale ?? 'scene',
+    visualLevel: options?.visualLevel ?? (productType === 'text-adventure' ? 'key-scenes' : 'none'), audioLevel: 'none',
     playerRole: `扮演 ${productType} 的冻结世界行动者`,
     openingSituation: `从用户确认的雾港潮门入口开始 ${productType} 体验。`,
     requiredFacts: ['冻结世界事实保持一致'], forbiddenChanges: ['不得写回世界正式表'],
     confirmTtrpgDefaultMappings: productType === 'ttrpg',
+    textAdventure: productType === 'text-adventure' ? { confirmAll: true } : undefined,
   })
   const created = await executeProductProductionCommand({
     scope: owned.scope,
@@ -182,7 +192,34 @@ function modelOutputs(
       invariants: ['冻结世界事实保持一致', '不得写回世界正式表'], tone: ['沉浸', '克制'],
       targetPlayMinutes: 20, targetEndingCount: 2,
     },
-    'content.narrative': {
+    'content.narrative': productType === 'text-adventure' ? {
+      schema: 'storyforge.product-narrative-artifact', version: 1, moduleKind: 'main', moduleTitle: '雾港抉择',
+      entryNodeKey: 'opening',
+      nodes: [
+        { key: 'opening', kind: 'entry', title: '潮门之前', summary: '玩家抵达潮门广场。', condition: {}, effects: [] },
+        { key: 'square', kind: 'scene', title: '广场回声', summary: '玩家先理解封港局势。', condition: {}, effects: [] },
+        { key: 'warehouse', kind: 'scene', title: '旧仓支路', summary: '一条承担额外风险的支路。', condition: {}, effects: [] },
+        { key: 'tower', kind: 'choice', title: '信号塔抉择', summary: '决定公开或封存记录。', condition: {}, effects: [] },
+        { key: 'truth-ending', kind: 'ending', title: '公开真相', summary: '真相改变了港口。', condition: {}, effects: [] },
+        { key: 'shelter-ending', kind: 'ending', title: '守住庇护', summary: '秘密换来短暂安稳。', condition: {}, effects: [] },
+      ],
+      beats: [
+        { beatKey: 'beat.opening', nodeKey: 'opening', kind: 'narration', speakerKey: null, text: '潮声压过了塔顶的警铃。', order: 0 },
+        { beatKey: 'beat.square', nodeKey: 'square', kind: 'narration', speakerKey: null, text: '雾中的人群把恐惧、责任与彼此矛盾的希望交给你。'.repeat(100), order: 0 },
+        { beatKey: 'beat.warehouse', nodeKey: 'warehouse', kind: 'narration', speakerKey: null, text: '旧仓支路让你看见选择之外仍有人在承受代价。'.repeat(30), order: 0 },
+        { beatKey: 'beat.tower', nodeKey: 'tower', kind: 'narration', speakerKey: null, text: '守灯人摊开最后一份信号记录。', order: 0 },
+        { beatKey: 'beat.truth', nodeKey: 'truth-ending', kind: 'narration', speakerKey: null, text: '灯光把所有证词投向海面。', order: 0 },
+        { beatKey: 'beat.shelter', nodeKey: 'shelter-ending', kind: 'narration', speakerKey: null, text: '门重新合拢，秘密仍在呼吸。', order: 0 },
+      ],
+      choices: [
+        { choiceKey: 'choice.enter-square', sourceNodeKey: 'opening', text: '进入广场', description: '先理解局势', unavailableReason: '', targetNodeKey: 'square', displayCondition: {}, availableCondition: {}, effects: [], tags: [], order: 0 },
+        { choiceKey: 'choice.direct-tower', sourceNodeKey: 'square', text: '直接前往信号塔', description: '聚焦主线', unavailableReason: '', targetNodeKey: 'tower', displayCondition: {}, availableCondition: {}, effects: [], tags: [], order: 0 },
+        { choiceKey: 'choice.warehouse', sourceNodeKey: 'square', text: '绕行旧仓街', description: '承担额外风险', unavailableReason: '', targetNodeKey: 'warehouse', displayCondition: {}, availableCondition: {}, effects: [], tags: [], order: 1 },
+        { choiceKey: 'choice.warehouse-tower', sourceNodeKey: 'warehouse', text: '带着新发现前往信号塔', description: '支路汇流', unavailableReason: '', targetNodeKey: 'tower', displayCondition: {}, availableCondition: {}, effects: [], tags: [], order: 0 },
+        { choiceKey: 'choice.truth', sourceNodeKey: 'tower', text: '公开信号记录', description: '承担真相的后果', unavailableReason: '', targetNodeKey: 'truth-ending', displayCondition: {}, availableCondition: {}, effects: [], tags: ['truth'], order: 0 },
+        { choiceKey: 'choice.shelter', sourceNodeKey: 'tower', text: '封存信号记录', description: '保护眼前的人', unavailableReason: '', targetNodeKey: 'shelter-ending', displayCondition: {}, availableCondition: {}, effects: [], tags: ['shelter'], order: 1 },
+      ],
+    } : {
       schema: 'storyforge.product-narrative-artifact', version: 1, moduleKind: 'main', moduleTitle: '雾港抉择',
       entryNodeKey: 'opening',
       nodes: [
@@ -202,10 +239,93 @@ function modelOutputs(
         { choiceKey: 'choice.shelter', sourceNodeKey: 'opening', text: '封存信号记录', description: '保护眼前的人', unavailableReason: '', targetNodeKey: 'shelter-ending', displayCondition: {}, availableCondition: {}, effects: [], tags: ['shelter'], order: 1 },
       ],
     },
-    'content.product-module': {
+    'content.product-module': productType === 'text-adventure' ? {
+      schema: 'storyforge.text-adventure-systems-artifact', version: 1,
+      abilities: [
+        { key: 'ability.attack', title: '攻击', description: '通用攻击能力。', role: 'stat', initial: 3, minimum: 0, maximum: 20 },
+        { key: 'ability.defense', title: '防御', description: '通用防护能力。', role: 'stat', initial: 3, minimum: 0, maximum: 20 },
+        { key: 'ability.perception', title: '感知', description: '发现环境细节。', role: 'skill', initial: 4, minimum: 0, maximum: 20 },
+        { key: 'ability.resolve', title: '意志', description: '面对压力保持行动。', role: 'skill', initial: 4, minimum: 0, maximum: 20 },
+      ],
+      resources: [
+        { key: 'resource.health', title: '生命', description: '承受行动代价。', role: 'health', initial: 10, minimum: 0, maximum: 10 },
+        { key: 'resource.mana', title: '法力', description: '驱动特殊能力。', role: 'mana', initial: 8, minimum: 0, maximum: 8 },
+        { key: 'resource.stamina', title: '体力', description: '持续行动所需。', role: 'stamina', initial: 10, minimum: 0, maximum: 10 },
+        { key: 'resource.experience', title: '经验', description: '记录成长。', role: 'experience', initial: 0, minimum: 0, maximum: 1000 },
+        { key: 'resource.skill-points', title: '技能点', description: '用于能力成长。', role: 'skill-points', initial: 0, minimum: 0, maximum: 100 },
+        { key: 'resource.currency', title: '货币', description: '通用交换资源。', role: 'currency', initial: 2, minimum: 0, maximum: 1000 },
+        { key: 'resource.clock', title: '时间', description: '世界行动时间。', role: 'clock', initial: 0, minimum: 0, maximum: 100000 },
+      ],
+      equipmentSlots: [
+        { key: 'slot.weapon', title: '武器', acceptsTags: ['weapon'] },
+        { key: 'slot.body', title: '身体', acceptsTags: ['armor'] },
+      ],
+      starterEquipment: [{
+        key: 'item.starter-lamp', title: '守灯杖', description: '能照亮雾中标记的旧灯杖。',
+        slotKey: 'slot.weapon', tags: ['weapon'], modifierAbilityKey: 'ability.perception', modifierDelta: 1,
+      }],
+    } : {
       schema: 'storyforge.product-module-artifact', version: 1, productType,
       interfaceStyle: '低饱和雾港舞台，文字保持高对比。', interactionNotes: ['每次选择后明确展示后果。'],
       presentationPolicy: { pacing: 'balanced', transitionMs: 500, backgroundStrategy: 'key-scenes' },
+    },
+    'content.adventure-architecture': {
+      schema: 'storyforge.text-adventure-architecture-artifact', version: 1,
+      title: '雾港抉择', premise: '玩家穿行雾港，在潮门关闭前决定信号记录的去向。',
+      emotionalPromise: '从猜疑走向承担，让每个结局回应玩家的选择。', themes: ['信任', '责任'],
+      regions: [{
+        title: '雾港大区', description: '被潮汐与旧信号塔控制的沿海大区。',
+        areas: [{
+          title: '外港区', description: '商船与守灯人聚集的入口区域。',
+          locations: [
+            { title: '潮门广场', description: '通往各处的石砌广场。', tags: ['hub'] },
+            { title: '旧仓街', description: '堆放航海物资的狭长街区。', tags: ['trade'] },
+          ],
+        }, {
+          title: '灯塔区', description: '掌控港口信号的高地。',
+          locations: [{ title: '信号塔', description: '保存最后一份信号记录的塔楼。', tags: ['climax'] }],
+        }],
+      }],
+      visualBible: {
+        style: '克制的手绘海港奇幻风格。', palette: ['#0d1b2a', '#31506b', '#d8b26e'],
+        compositionRules: ['环境优先于装饰', '关键人物保持轮廓一致'],
+        characterAnchorNotes: ['守灯人使用深蓝制服与铜色灯具'],
+      },
+    },
+    'content.adventure-side-quests': {
+      schema: 'storyforge.text-adventure-quest-bundle-artifact', version: 1, bundleKind: 'side',
+      entries: [{
+        key: 'lost-lamp', title: '失落的引航灯', description: '找回被潮水卷走的引航灯。',
+        hook: '一名船工请求你在潮门关闭前帮忙。', objective: '在旧仓街找回引航灯',
+        locationOrdinal: 2, abilityKey: 'ability.perception', difficulty: 10,
+        successText: '你在木箱夹层找到了引航灯。', costlySuccessText: '你找到了灯，但划伤了手臂。',
+        failureText: '灯被冲远了，但船工给出了另一条通往灯塔的小路。',
+        rewardExperience: 5, rewardCurrency: 2, timeCostMinutes: 10,
+      }],
+    },
+    'content.adventure-ambient-events': {
+      schema: 'storyforge.text-adventure-quest-bundle-artifact', version: 1, bundleKind: 'ambient',
+      entries: [{
+        key: 'tide-warning', title: '潮汐警告', description: '辨认潮门墙上的水位记号。',
+        hook: '海水正漫过旧刻度。', objective: '判断安全通过时间', locationOrdinal: 1,
+        abilityKey: 'ability.perception', difficulty: 8, successText: '你准确读出了潮汐变化。',
+        costlySuccessText: '你读懂刻度，但浪费了一些时间。', failureText: '你判断失误，却因此发现墙后的避险通道。',
+        rewardExperience: 2, rewardCurrency: 0, timeCostMinutes: 5,
+      }, {
+        key: 'warehouse-echo', title: '仓街回声', description: '追查仓街深处反复出现的敲击声。',
+        hook: '雾里传来规律的三次敲击。', objective: '确认敲击声来源', locationOrdinal: 2,
+        abilityKey: 'ability.resolve', difficulty: 9, successText: '你发现那是被困船员的求救信号。',
+        costlySuccessText: '你救出船员，但耽误了赶往灯塔的时间。', failureText: '声音消失了，却留下一张通往灯塔的旧图。',
+        rewardExperience: 3, rewardCurrency: 1, timeCostMinutes: 8,
+      }],
+    },
+    'content.adventure-quality-review': {
+      schema: 'storyforge.text-adventure-quality-review-artifact', version: 1,
+      scores: {
+        causality: 4, playerAgency: 4, routeDifferentiation: 4, pacing: 4,
+        setupPayoff: 4, characterMotivation: 4, emotionalImpact: 4,
+      },
+      issues: [], passed: true,
     },
     'media.requirements': {
       schema: 'storyforge.product-media-requirements-artifact', version: 2,
@@ -221,6 +341,87 @@ function modelOutputs(
       ],
     },
   } as const
+}
+
+function fullLengthTextAdventureOutputs(
+  brief: Awaited<ReturnType<typeof fixtureForProduct>>['brief'],
+) {
+  const base = modelOutputs(
+    brief.source.worldContentHash, 'text-adventure', firstCharacterAnchor(brief), brief.intent.playerRole,
+  )
+  const contract = brief.textAdventure!
+  const regions = Array.from({ length: contract.narrative.targetRegionCount }, (_, regionIndex) => ({
+    title: `雾港大区 ${regionIndex + 1}`,
+    description: `承载主线第 ${regionIndex + 1} 阶段的完整大区域。`,
+    areas: Array.from({ length: contract.narrative.targetAreaCount / contract.narrative.targetRegionCount }, (_, areaIndex) => ({
+      title: `区域 ${regionIndex + 1}-${areaIndex + 1}`,
+      description: '连接主线、支线和环境事件的中层区域。',
+      locations: Array.from({ length: contract.narrative.targetLocationCount / contract.narrative.targetAreaCount }, (_, locationIndex) => ({
+        title: `地点 ${regionIndex + 1}-${areaIndex + 1}-${locationIndex + 1}`,
+        description: '具备独立场景目标、环境反馈与移动出口的可玩地点。', tags: ['adventure'],
+      })),
+    })),
+  }))
+  const nonEndingNodes = Array.from({ length: contract.narrative.targetSceneCount }, (_, index) => ({
+    key: `main.${String(index + 1).padStart(3, '0')}`,
+    kind: index === 0 ? 'entry' as const : index === contract.narrative.targetSceneCount - 1 ? 'choice' as const : 'scene' as const,
+    title: `主线场景 ${index + 1}`,
+    summary: `主线冲突在第 ${index + 1} 个场景继续升级。`, condition: {}, effects: [],
+  }))
+  const endingNodes = Array.from({ length: contract.narrative.targetEndingCount }, (_, index) => ({
+    key: `ending.${index + 1}`, kind: 'ending' as const, title: `因果结局 ${index + 1}`,
+    summary: `结局 ${index + 1} 回应玩家此前承担的行动与代价。`, condition: {}, effects: [],
+  }))
+  const beats = [...nonEndingNodes, ...endingNodes].map((node, index) => ({
+    beatKey: `beat.${node.key}`, nodeKey: node.key, kind: 'narration' as const, speakerKey: null,
+    text: index < nonEndingNodes.length
+      ? `第${index + 1}幕里，玩家观察环境、理解人物动机、作出有代价的选择，并看见此前状态留下的持续回响。`.repeat(30)
+      : `这条结局把一路积累的关系、资源、行动与情绪变化完整收束。`.repeat(8),
+    order: 0,
+  }))
+  const choices = nonEndingNodes.slice(0, -1).map((node, index) => ({
+    choiceKey: `choice.main.${index + 1}`, sourceNodeKey: node.key, text: `推进到场景 ${index + 2}`,
+    description: '推进主线并保留状态回响。', unavailableReason: '', targetNodeKey: nonEndingNodes[index + 1].key,
+    displayCondition: {}, availableCondition: {}, effects: [], tags: ['mainline'], order: 0,
+  }))
+  choices.push(...endingNodes.map((ending, index) => ({
+    choiceKey: `choice.ending.${index + 1}`, sourceNodeKey: nonEndingNodes.at(-1)!.key,
+    text: `选择结局 ${index + 1}`, description: '让此前行动形成不同收束。', unavailableReason: '',
+    targetNodeKey: ending.key, displayCondition: {}, availableCondition: {}, effects: [], tags: ['ending'], order: index,
+  })))
+  const questEntry = (kind: 'side' | 'ambient', index: number) => ({
+    key: `${kind}-${index + 1}`, title: `${kind === 'side' ? '支线' : '区域事件'} ${index + 1}`,
+    description: '与主线主题呼应但拥有独立目标和回响。', hook: '一个可理解的局面邀请玩家介入。',
+    objective: `完成${kind === 'side' ? '支线' : '区域事件'}目标 ${index + 1}`,
+    locationOrdinal: index % contract.narrative.targetLocationCount + 1,
+    abilityKey: index % 2 ? 'ability.resolve' : 'ability.perception', difficulty: 9 + index,
+    successText: '行动成功并改变了局部状态。', costlySuccessText: '目标达成，但玩家付出了明确代价。',
+    failureText: '行动失败，却打开了替代局面并继续推进。', rewardExperience: 3, rewardCurrency: 1,
+    timeCostMinutes: 8,
+  })
+  return {
+    ...base,
+    'content.adventure-architecture': {
+      ...base['content.adventure-architecture'],
+      regions,
+    },
+    'content.narrative': {
+      schema: 'storyforge.product-narrative-artifact' as const, version: 1 as const, moduleKind: 'main' as const,
+      moduleTitle: '雾港一小时冒险', entryNodeKey: nonEndingNodes[0].key,
+      nodes: [...nonEndingNodes, ...endingNodes], beats, choices,
+    },
+    'content.adventure-side-quests': {
+      schema: 'storyforge.text-adventure-quest-bundle-artifact' as const, version: 1 as const, bundleKind: 'side' as const,
+      entries: Array.from({ length: contract.narrative.targetSideQuestCount }, (_, index) => questEntry('side', index)),
+    },
+    'content.adventure-ambient-events': {
+      schema: 'storyforge.text-adventure-quest-bundle-artifact' as const, version: 1 as const, bundleKind: 'ambient' as const,
+      entries: Array.from({ length: contract.narrative.targetAmbientEventCount }, (_, index) => questEntry('ambient', index)),
+    },
+    'media.requirements': {
+      ...base['media.requirements'], visual: [], audio: [],
+    },
+  }
 }
 
 async function relayCapabilities(brief: Awaited<ReturnType<typeof fixture>>['brief'], calls: RedactedMediaTransportRequestV1[]) {
@@ -762,6 +963,114 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     expect(await db.mediaBlobObjects.count()).toBe(6)
   }, 30_000)
 
+  it('60 分钟文字冒险按 Brief 产出足量主线、空间、支线、区域事件并通过内容量硬门', async () => {
+    const owned = await fixtureForProduct('text-adventure', { scale: 'short-arc', visualLevel: 'none' })
+    const textRequirement = owned.brief.capabilityRequirements.find(item => item.mediaClass === 'text')!
+    const bindingHash = await hashProductProductionValueV2({ provider: 'full-length-text-adventure' })
+    const outputs = fullLengthTextAdventureOutputs(owned.brief) as Record<string, unknown>
+    const runText: ProductionTextRunnerV1 = async request => {
+      const taskKey = Object.keys(outputs).find(key => request.system.includes(`任务=${key}。`))
+      if (!taskKey) throw new Error(`unknown full-length task:${request.system}`)
+      return {
+        output: JSON.stringify(outputs[taskKey]), usage: { inputTokens: 400, outputTokens: 2_000 },
+        bindingReceipt: {
+          schema: 'storyforge.provider-binding-receipt', version: 1,
+          requirementKey: textRequirement.requirementKey, adapterId: 'configured-text.v1', adapterVersion: 1,
+          provider: 'fixture', model: 'fixture-long-form', endpointOrigin: 'https://fixture.invalid',
+          executionLocation: 'browser-direct', credentialSource: 'existing-ai-config', credentialPresent: true,
+          capabilityHash: bindingHash, boundAt: 1, receiptHash: 'e'.repeat(64),
+        },
+      }
+    }
+    const projection = await runProductProductionUntilBlockedV1({
+      scope: owned.scope,
+      productionId: owned.productionId,
+      executor: createConfiguredProductProductionExecutorV1({
+        production: (await db.productProductions.get(owned.productionId))!, brief: owned.brief, runText,
+      }),
+      capabilityBindings: [{
+        requirementKey: textRequirement.requirementKey, adapterId: 'configured-text.v1', bindingHash,
+      }],
+    })
+    expect(projection).toMatchObject({ terminal: true, buildStatus: 'release-ready' })
+    const build = (await db.productBuilds.get(projection.buildId))!
+    const quality = JSON.parse(build.qualityReportJson) as {
+      hardGateResults: Array<{ gateId: string; passed: boolean; evidence: string[] }>
+    }
+    expect(quality.hardGateResults).toContainEqual(expect.objectContaining({
+      gateId: 'product.adventure.content-volume', passed: true,
+    }))
+    const runtimeArtifact = await db.productBuildArtifacts
+      .where('[buildId+artifactKey]').equals([build.id!, 'runtime.package']).first()
+    const runtimePackage = parseProductRuntimePackageV1(runtimeArtifact!.payloadJson)
+    expect(runtimePackage.adventure?.version).toBe(2)
+    if (runtimePackage.adventure?.version !== 2) throw new Error('60 分钟夹具没有进入 AdventureContentV2')
+    expect(runtimePackage.adventure.regions).toHaveLength(2)
+    expect(runtimePackage.adventure.areas).toHaveLength(4)
+    expect(runtimePackage.adventure.locations).toHaveLength(8)
+    expect(runtimePackage.adventure.scenes).toHaveLength(12)
+    expect(runtimePackage.adventure.quests.filter(item => item.category === 'side')).toHaveLength(3)
+    expect(runtimePackage.adventure.storylets).toHaveLength(7)
+    expect(runtimePackage.adventure.endings).toHaveLength(3)
+  }, 30_000)
+
+  it('保留独立叙事审查证据，并在存在阻塞问题时拒绝装配可玩包', async () => {
+    const owned = await fixtureForProduct('text-adventure', { visualLevel: 'none' })
+    const textRequirement = owned.brief.capabilityRequirements.find(item => item.mediaClass === 'text')!
+    const bindingHash = await hashProductProductionValueV2({ provider: 'blocking-quality-review' })
+    const outputs = modelOutputs(
+      owned.brief.source.worldContentHash, 'text-adventure', firstCharacterAnchor(owned.brief),
+      owned.brief.intent.playerRole,
+    ) as Record<string, unknown>
+    outputs['media.requirements'] = {
+      ...(outputs['media.requirements'] as Record<string, unknown>), visual: [], audio: [],
+    }
+    outputs['content.adventure-quality-review'] = {
+      schema: 'storyforge.text-adventure-quality-review-artifact', version: 1,
+      scores: {
+        causality: 2, playerAgency: 4, routeDifferentiation: 4, pacing: 4,
+        setupPayoff: 4, characterMotivation: 4, emotionalImpact: 4,
+      },
+      issues: [{
+        severity: 'blocking', artifactKey: 'content.narrative',
+        detail: '主要转折缺少因果铺垫。', recommendation: '补充前置场景与可见状态回响。',
+      }],
+      passed: false,
+    }
+    const runText: ProductionTextRunnerV1 = async request => {
+      const taskKey = Object.keys(outputs).find(key => request.system.includes(`任务=${key}。`))
+      if (!taskKey) throw new Error(`unknown blocking-review task:${request.system}`)
+      return {
+        output: JSON.stringify(outputs[taskKey]), usage: { inputTokens: 100, outputTokens: 100 },
+        bindingReceipt: {
+          schema: 'storyforge.provider-binding-receipt', version: 1,
+          requirementKey: textRequirement.requirementKey, adapterId: 'configured-text.v1', adapterVersion: 1,
+          provider: 'fixture', model: 'fixture-reviewer', endpointOrigin: 'https://fixture.invalid',
+          executionLocation: 'browser-direct', credentialSource: 'existing-ai-config', credentialPresent: true,
+          capabilityHash: bindingHash, boundAt: 1, receiptHash: 'f'.repeat(64),
+        },
+      }
+    }
+    const projection = await runProductProductionUntilBlockedV1({
+      scope: owned.scope, productionId: owned.productionId,
+      executor: createConfiguredProductProductionExecutorV1({
+        production: (await db.productProductions.get(owned.productionId))!, brief: owned.brief, runText,
+      }),
+      capabilityBindings: [{
+        requirementKey: textRequirement.requirementKey, adapterId: 'configured-text.v1', bindingHash,
+      }],
+    })
+    expect(projection).toMatchObject({ terminal: false, buildStatus: 'failed' })
+    const build = (await db.productBuilds.get(projection.buildId))!
+    expect(build.failureJson).toContain('文字冒险叙事质量审查未通过')
+    const review = await db.productBuildArtifacts
+      .where('[buildId+artifactKey]').equals([build.id!, 'quality.adventure-review']).first()
+    expect(review).toMatchObject({ status: 'accepted', kind: 'playtest-report' })
+    expect(JSON.parse(review!.payloadJson)).toMatchObject({ passed: false })
+    expect(await db.productBuildArtifacts
+      .where('[buildId+artifactKey]').equals([build.id!, 'runtime.package']).count()).toBe(0)
+  }, 30_000)
+
   it('五种现行生产产品经过正式生产、可玩 Build Preview 与同包原子发布', async () => {
     const products: ProductionProductKindV1[] = [
       'character-interaction', 'text-adventure', 'avg', 'text-open-world', 'ttrpg',
@@ -769,14 +1078,20 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     for (const productType of products) {
       const owned = await fixtureForProduct(productType)
       const textRequirement = owned.brief.capabilityRequirements.find(item => item.mediaClass === 'text')!
-      expect(owned.brief.capabilityRequirements.filter(item => item.mediaClass !== 'text')).toHaveLength(0)
+      expect(owned.brief.capabilityRequirements.filter(item => item.mediaClass !== 'text'))
+        .toHaveLength(productType === 'text-adventure' ? 1 : 0)
       const bindingHash = await hashProductProductionValueV2({ provider: 'existing-global-config', productType })
-      const outputs = modelOutputs(owned.brief.source.worldContentHash, productType)
+      const outputs = modelOutputs(
+        owned.brief.source.worldContentHash,
+        productType,
+        firstCharacterAnchor(owned.brief),
+        owned.brief.intent.playerRole,
+      )
       const runText: ProductionTextRunnerV1 = async request => {
         const taskKey = Object.keys(outputs).find(key => request.system.includes(`任务=${key}。`)) as keyof typeof outputs
         if (!taskKey) throw new Error(`unknown ${productType} model task`)
         const output = taskKey === 'media.requirements'
-          ? { ...outputs[taskKey], visual: [], audio: [] }
+          ? { ...outputs[taskKey], visual: productType === 'text-adventure' ? outputs[taskKey].visual : [], audio: [] }
           : outputs[taskKey]
         return {
           output: JSON.stringify(output), usage: { inputTokens: 100, outputTokens: 100 },
@@ -794,9 +1109,15 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
         executor: createConfiguredProductProductionExecutorV1({
           production: (await db.productProductions.get(owned.productionId))!, brief: owned.brief, runText,
         }),
-        capabilityBindings: [{
-          requirementKey: textRequirement.requirementKey, adapterId: 'configured-text.v1', bindingHash,
-        }],
+        capabilityBindings: [
+          {
+            requirementKey: textRequirement.requirementKey, adapterId: 'configured-text.v1', bindingHash,
+          },
+          ...(productType === 'text-adventure' ? [await createBuiltInProductionCapabilityBindingV1({
+            requirementKey: owned.brief.capabilityRequirements.find(item => item.mediaClass === 'image')!.requirementKey,
+            adapterId: 'storyforge.procedural-svg.v1',
+          })] : []),
+        ],
       })
       const projectedBuild = await db.productBuilds.get(projection.buildId)
       expect(
@@ -809,6 +1130,27 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
       const runtimePackage = parseProductRuntimePackageV1(packageArtifact!.payloadJson)
       expect(runtimePackage.productType).toBe(productType)
       expect(runtimePackage.sourceWorld.selection).toEqual(owned.brief.source.selection)
+      if (productType === 'text-adventure') {
+        expect(runtimePackage.adventure?.version).toBe(2)
+        expect(runtimePackage.presentation?.assets).toHaveLength(2)
+        expect(runtimePackage.adventure?.media.assetKeys).toEqual(
+          runtimePackage.presentation?.assets.map(asset => asset.assetKey),
+        )
+        expect(runtimePackage.narrative.choices.some(choice => (
+          choice.tags.some(tag => tag.startsWith('adventure-action:'))
+        ))).toBe(true)
+        const reviewArtifacts = await listProductProductionReviewArtifactsV1({
+          scope: owned.scope,
+          buildId: build.id!,
+        })
+        expect(reviewArtifacts.map(artifact => artifact.artifactKey)).toEqual(expect.arrayContaining([
+          'content.adventure-architecture', 'content.narrative', 'content.product-module',
+          'content.adventure-side-quests', 'content.adventure-ambient-events',
+          'quality.adventure-review', 'media.requirements',
+          'runtime.package', 'quality.report',
+        ]))
+        expect(reviewArtifacts.every(artifact => artifact.payload != null && artifact.contentHash.length === 64)).toBe(true)
+      }
       if (productType === 'ttrpg') {
         expect(runtimePackage.ttrpg).toMatchObject({
           rulePack: { contentHash: owned.brief.ttrpg?.rules.effectiveContentHash },

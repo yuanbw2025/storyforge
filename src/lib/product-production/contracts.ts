@@ -19,6 +19,7 @@ import { PRODUCT_MEDIA_KINDS, PRODUCT_PRODUCTION_COMMAND_TYPES, PRODUCTION_PRODU
 import { isSha256Hash } from './hash'
 import { parseProductWorldSourceSelectionV1 } from './runtime-package'
 import { parseTtrpgProductionBriefV2 } from '../ttrpg/production-brief'
+import { parseTextAdventureProductionBriefV1 } from '../adventure/production-brief'
 
 const STABLE_KEY = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/
 
@@ -251,6 +252,7 @@ export function parseProductProductionBriefV3(value: unknown): ProductProduction
     'productionBudget', 'qualityProfile', 'capabilityRequirements', 'externalDataPolicy',
     'fallbackPolicy', 'completionContract', 'unresolvedDecisionKeys',
     ...(Object.prototype.hasOwnProperty.call(row, 'ttrpg') ? ['ttrpg'] : []),
+    ...(Object.prototype.hasOwnProperty.call(row, 'textAdventure') ? ['textAdventure'] : []),
     ...(Object.prototype.hasOwnProperty.call(row, 'authorConfirmations') ? ['authorConfirmations'] : []),
     ...(Object.prototype.hasOwnProperty.call(row, 'evolution') ? ['evolution'] : []),
   ], 'brief')
@@ -301,6 +303,9 @@ export function parseProductProductionBriefV3(value: unknown): ProductProduction
     ...(Object.prototype.hasOwnProperty.call(row, 'ttrpg')
       ? { ttrpg: parseTtrpgProductionBriefV2(row.ttrpg) }
       : {}),
+    ...(Object.prototype.hasOwnProperty.call(row, 'textAdventure')
+      ? { textAdventure: parseTextAdventureProductionBriefV1(row.textAdventure) }
+      : {}),
     ...(Object.prototype.hasOwnProperty.call(row, 'authorConfirmations')
       ? { authorConfirmations: (() => {
         const confirmations = record(row.authorConfirmations, 'authorConfirmations')
@@ -322,6 +327,21 @@ export function parseProductProductionBriefV3(value: unknown): ProductProduction
   }
   if ((parsed.intent.productType === 'ttrpg') !== (parsed.ttrpg != null)) {
     fail('ttrpg 产品与 TtrpgProductionBriefV2 不闭合')
+  }
+  if ((parsed.intent.productType === 'text-adventure') !== (parsed.textAdventure != null)) {
+    fail('text-adventure 产品与 TextAdventureProductionBriefV1 不闭合')
+  }
+  if (parsed.textAdventure) {
+    if (parsed.scale.targetPlayMinutes > 120 || ['multi-chapter', 'campaign'].includes(parsed.scale.scope)) {
+      fail('文字冒险第一阶段只允许 15–120 分钟的有限篇幅')
+    }
+    if (parsed.textAdventure.narrative.targetEndingCount !== parsed.scale.targetEndingCount) {
+      fail('文字冒险结局目标与通用规模不一致')
+    }
+    const confirmationUnresolved = parsed.unresolvedDecisionKeys.includes('text-adventure-boundary-confirmation')
+    if (confirmationUnresolved === Object.values(parsed.textAdventure.confirmations).every(Boolean)) {
+      fail('文字冒险边界确认状态与 unresolvedDecisionKeys 不一致')
+    }
   }
   if (parsed.ttrpg) {
     if (parsed.ttrpg.campaignDesign.sourceWorldContentHash !== parsed.source.worldContentHash) {

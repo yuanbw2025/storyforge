@@ -1,6 +1,6 @@
 # StoryForge 当前能力基线
 
-> 版本：1.6.1 · 基线：2026-09-06 文字冒险 V2 第一批纵切面 · 权威层级：L2
+> 版本：1.7.0 · 基线：2026-09-06 文字冒险 V2 受治理生产与运行纵切面 · 权威层级：L2
 > 本文区分代码存在、纵切面可用和产品完成。旧完成卡不自动恢复权威，但已合入主干并由当前代码/检查器复证的 Phase 5 成果必须保留。
 
 ## 状态定义
@@ -61,7 +61,7 @@
 | E-TTRPG-01 | partial | 已接入中立世界协议、专用需求适配器、统一 Production/Build/ProductRelease v1、AI GM runtime、事件/存档与在线 handoff | 专用生产体验、完整媒资、权限隔离、真实多人体验和产品级 E2E 尚未封板 |
 | E-CHAT-01 | partial | 单/多角色互动已接入专用需求适配器、统一 Production/Build/ProductRelease v1、玩家 runtime 与 runtime Skill | 主 Agent 会谈、多人导演、长期记忆/可见性和完整发布运行体验需验收 |
 | E-TOWN-01 | missing | 有角色互动和通用产品运行时基础能力可复用 | 没有独立 AI 小镇产品的时间、日程、地点、群体与离线演化闭环 |
-| E-TEXTADV-01 | partial | 已有严格 `AdventureContentV2` 通用合同和手工黄金包；复用统一 Build/ProductRelease、事件/检查点、冻结叙事与角色互动权威，离线走通空间、角色属性、装备、物品、任务、时间、storylet、失败推进、分支、两个因果结局、重放和玩家界面刷新恢复；文字开放世界继续隔离在 V1 | AI 主导的 V2 生产 DAG、作者工作台、正式插图生产/审图/装配、60–120 分钟真实黄金内容与浏览器产品 E2E 尚未完成；旧 V1 入口暂不删除 |
+| E-TEXTADV-01 | partial | 严格 `AdventureContentV2` 通用合同已接入冻结 WorldRelease → 作者 Brief → 八任务 AI 生产 DAG → 独立叙事质量审查 → 插图需求/共享媒资 → Build/QA → ProductRelease；60 分钟目标的模拟正式生产、程序化插图装配、浏览器开局/行动/刷新恢复 E2E 已通过。玩家面已覆盖空间、属性/技能、资源、背包、装备、任务、时间、storylet、失败推进、自由输入候选、存档分支、因果结局和纯文字降级；文字开放世界继续隔离在 V1 | 尚未付费调用真实文本/图片 Provider 做 60–120 分钟作者级故事与角色一致性验收；语义审查失败目前由作者发起下一版局部演化，自动有界修复与运行期动态出图后置；旧 V1 只能在文字开放世界迁移后收口 |
 | E-AVG-01 | partial | AVG 已接入专用需求适配器、统一 Production/Build/ProductRelease v1、演出与独立玩家面 | 真实视觉/声音资产、演出绑定和完整体验未验收 |
 | E-OPENWORLD-01 | partial | 文字开放世界已接入专用需求适配器、统一 Production/Build/ProductRelease v1、专用运行 API 和独立玩家面；状态演化仅是该产品的内部能力 | 区域按需演化、角色自治、长期任务演化与性能门未完整 |
 

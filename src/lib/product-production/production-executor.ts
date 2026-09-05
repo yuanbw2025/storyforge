@@ -35,6 +35,14 @@ import { buildProductWorldSourceBundleV1, verifyProductWorldSourceBundleV1 } fro
 import { resolveTtrpgProductionRulePackV2 } from '../ttrpg/production-brief'
 import { bindProductionMediaToTtrpgCampaignV1, compileProductionTtrpgCampaignV2 } from '../ttrpg/production-compiler'
 import { resolveTtrpgCampaignDesignV2 } from '../ttrpg/campaign-proposal'
+import {
+  parseTextAdventureArchitectureArtifactV1,
+  parseTextAdventureQualityReviewArtifactV1,
+  parseTextAdventureQuestBundleArtifactV1,
+  parseTextAdventureSystemsArtifactV1,
+  type TextAdventureSystemsArtifactV1,
+} from '../adventure/production-artifacts'
+import { bindTextAdventureNarrativeActionsV1 } from '../adventure/production-compiler'
 import type {
   ProductProductionCapabilityBindingV1,
   ProductProductionTaskArtifactV1,
@@ -92,6 +100,8 @@ interface ProductModuleArtifactV1 {
     backgroundStrategy: 'none' | 'key-scenes'
   }
 }
+
+type AcceptedProductModuleArtifactV1 = ProductModuleArtifactV1 | TextAdventureSystemsArtifactV1
 
 interface VisualRequirementV1 {
   artifactKey: string
@@ -535,7 +545,12 @@ function parseAcceptedNarrative(value: unknown, brief: ProductProductionBriefV3)
   return parsed
 }
 
-function parseProductModule(value: unknown, brief: ProductProductionBriefV3): ProductModuleArtifactV1 {
+function parseProductModule(value: unknown, brief: ProductProductionBriefV3): AcceptedProductModuleArtifactV1 {
+  if (brief.intent.productType === 'text-adventure'
+    && (value as { schema?: unknown } | null)?.schema === 'storyforge.text-adventure-systems-artifact') {
+    if (!brief.textAdventure) fail('文字冒险 systems Artifact 缺少专用 Brief')
+    return parseTextAdventureSystemsArtifactV1(value, brief.textAdventure)
+  }
   const row = record(value, 'productModule')
   exactKeys(row, [
     'schema', 'version', 'productType', 'interfaceStyle', 'interactionNotes', 'presentationPolicy',
@@ -560,7 +575,7 @@ function parseProductModule(value: unknown, brief: ProductProductionBriefV3): Pr
 }
 
 function expectedVisualKeys(brief: ProductProductionBriefV3): string[] {
-  if (!['avg', 'ttrpg'].includes(brief.intent.productType) || brief.media.imageCount < 1) return []
+  if (!['avg', 'ttrpg', 'text-adventure'].includes(brief.intent.productType) || brief.media.imageCount < 1) return []
   return Array.from({ length: brief.media.imageCount }, (_, index) => `media.visual.${String(index + 1).padStart(3, '0')}`)
 }
 
@@ -656,7 +671,7 @@ export function parseProductMediaRequirementsArtifactV2(
   }
   exactSet(visual.map(item => item.artifactKey), expectedVisualKeys(brief), 'visual')
   exactSet(audio.map(item => item.artifactKey), expectedAudioKeys(brief), 'audio')
-  if (['avg', 'ttrpg'].includes(brief.intent.productType) && visual.length > 0) {
+  if (['avg', 'ttrpg', 'text-adventure'].includes(brief.intent.productType) && visual.length > 0) {
     if (!visual.some(item => item.mediaKind === 'background')) fail(`${brief.intent.productType} 视觉需求缺少 background`)
     if (brief.media.requiredMediaKinds.includes('character-pose')
       && !visual.some(item => item.mediaKind === 'character-pose')) fail(`${brief.intent.productType} 视觉需求缺少 character-pose`)
@@ -685,10 +700,19 @@ function textSystem(taskKey: string, brief: ProductProductionBriefV3): string {
   if (taskKey === 'content.design') return `${common}\n输出字段必须精确为：` +
     '{"schema":"storyforge.product-design-artifact","version":1,"title":"...","logline":"...","playerGoal":"...","coreLoop":["..."],"sourceAnchors":["..."],"invariants":["..."],"tone":["..."],"targetPlayMinutes":1,"targetEndingCount":1}。' +
     `sourceAnchors 只能从 ${JSON.stringify([...brief.source.startingPoint.sourceRefs, `world:${brief.source.worldContentHash}`])} 中选择且至少一个；目标分钟=${brief.scale.targetPlayMinutes}，结局=${brief.scale.targetEndingCount}。`
+  const adventure = brief.textAdventure
+  if (taskKey === 'content.adventure-architecture') {
+    if (!adventure) return `${common}\n缺少文字冒险专用 Brief，停止。`
+    return `${common}\n你是文字冒险项目的文案主管，负责先冻结宏观叙事骨架、四级空间和视觉圣经，不写调查/法庭/生存/恋爱等专用机制。` +
+      '输出字段必须精确为：{"schema":"storyforge.text-adventure-architecture-artifact","version":1,"title":"...","premise":"...","emotionalPromise":"...","themes":["..."],"regions":[{"title":"大区域","description":"...","areas":[{"title":"区域","description":"...","locations":[{"title":"地点","description":"...","tags":["generic-tag"]}]}]}],"visualBible":{"style":"...","palette":["...","...","..."],"compositionRules":["...","..."],"characterAnchorNotes":["..."]}}。' +
+      `至少 ${adventure.narrative.targetRegionCount} 个大区域、${adventure.narrative.targetAreaCount} 个区域、${adventure.narrative.targetLocationCount} 个地点；大区域不是酒馆或广场，区域和地点必须形成合理层级。` +
+      `总体验 ${brief.scale.targetPlayMinutes} 分钟，核心情绪承诺=${adventure.experience.emotionalTarget}；来源处理=${adventure.sourceTreatment}。` +
+      '所有专有题材只出现在内容文字和 tags 中，不得变成底层机制字段。'
+  }
   if (taskKey === 'content.narrative') {
     const ttrpgDesign = brief.intent.productType === 'ttrpg'
       ? resolveTtrpgCampaignDesignV2(brief.ttrpg!.campaignDesign) : null
-    return `${common}\n生成完整可玩的分支叙事。输出字段必须精确为：` +
+    return `${common}\n生成完整可玩的分支叙事。${adventure ? `你是主线负责人；依据已冻结架构生产明确主干、局部分支汇流、状态回响和 ${adventure.narrative.targetEndingCount} 个因果结局。目标 ${brief.scale.targetPlayMinutes} 分钟、约 ${brief.scale.targetWordCount} 个中文内容单位、至少 ${adventure.narrative.targetSceneCount} 个非结局场景；失败应产生代价或新局面。` : ''}输出字段必须精确为：` +
     '{"schema":"storyforge.product-narrative-artifact","version":1,"moduleKind":"main|side|quest|opening|free","moduleTitle":"...","entryNodeKey":"...","nodes":[{"key":"...","kind":"entry|scene|choice|ending","title":"...","summary":"...","condition":{},"effects":[]}],"beats":[{"beatKey":"...","nodeKey":"...","kind":"narration|dialogue|action|system","speakerKey":null,"text":"...","order":0}],"choices":[{"choiceKey":"...","sourceNodeKey":"...","text":"...","description":"","unavailableReason":"","targetNodeKey":"...","displayCondition":{},"availableCondition":{},"effects":[],"tags":[],"order":0}]}。' +
     `所有 key/beatKey/choiceKey/nodeKey 必须匹配 ^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$。` +
     `所有节点必须从入口可达；每个非结局节点至少一个选择；kind=ending 的节点必须恰好 ${Math.min(8, Math.max(1, brief.scale.targetEndingCount))} 个、全部从入口可达且不得再有出边；每个节点至少一个 beat。` +
@@ -696,23 +720,60 @@ function textSystem(taskKey: string, brief: ProductProductionBriefV3): string {
     `dialogue 的 speakerKey 只能从 ${JSON.stringify(productCharacterKeys(brief))} 选择；没有合法角色时只用 narration/action/system。` +
     (ttrpgDesign ? `\n这是作者已比较/混合的跑团战役方向，必须落实且不得改写 lockedSections：${JSON.stringify(ttrpgDesign)}。` : '')
   }
+  if (taskKey === 'content.product-module' && adventure) return `${common}\n你是通用玩法与角色系统负责人。只能设计强类型通用属性、技能、资源、装备槽和初始装备，不得加入嫌疑人、证据盘、法庭、饥饿、政策、恋爱阶段或完整职业战斗循环。` +
+    '输出字段必须精确为：{"schema":"storyforge.text-adventure-systems-artifact","version":1,"abilities":[{"key":"ability.attack","title":"攻击","description":"...","role":"stat|skill","initial":2,"minimum":0,"maximum":20}],"resources":[{"key":"resource.health","title":"生命","description":"...","role":"health|mana|stamina|experience|skill-points|currency|clock","initial":10,"minimum":0,"maximum":100}],"equipmentSlots":[{"key":"slot.weapon","title":"武器","acceptsTags":["weapon"]}],"starterEquipment":[{"key":"item.starter-weapon","title":"...","description":"...","slotKey":"slot.weapon","tags":["weapon"],"modifierAbilityKey":"ability.attack","modifierDelta":1}]}。' +
+    `abilities 必须覆盖 stat 与 skill；建议落实这些作者确认标签：属性=${JSON.stringify(adventure.character.statLabels)}，技能=${JSON.stringify(adventure.character.skillLabels)}。` +
+    'resources 必须且只能各有一个 health、mana、stamina、experience、skill-points、currency、clock；health 初始值必须严格高于下限，以便失败推进安全地产生代价；equipmentSlots 至少两个，starterEquipment 至少一件且标签、槽位、修正能力闭合。'
   if (taskKey === 'content.product-module') return `${common}\n输出字段必须精确为：` +
     `{"schema":"storyforge.product-module-artifact","version":1,"productType":"${PRODUCTION_PRODUCT_KINDS_V1.join('|')}","interfaceStyle":"...","interactionNotes":["..."],"presentationPolicy":{"pacing":"slow|balanced|fast","transitionMs":500,"backgroundStrategy":"none|key-scenes"}}。` +
     `productType 必须为 ${brief.intent.productType}；纯文字使用 none，AVG/TTRPG 按 Brief 视觉目标选择。`
-  const visual = expectedVisualKeys(brief).map((artifactKey, index) => ({
+  if (taskKey === 'content.adventure-side-quests' || taskKey === 'content.adventure-ambient-events') {
+    if (!adventure) return `${common}\n缺少文字冒险专用 Brief，停止。`
+    const side = taskKey === 'content.adventure-side-quests'
+    const kind = side ? 'side' : 'ambient'
+    const count = side ? adventure.narrative.targetSideQuestCount : adventure.narrative.targetAmbientEventCount
+    return `${common}\n你是文字冒险${side ? '支线任务' : '区域与随机事件'}负责人。每个条目都必须独立有钩子、目标、成功/代价成功/失败推进文本，并复用上游 systems Artifact 已登记的 abilityKey。` +
+      `输出字段必须精确为：{"schema":"storyforge.text-adventure-quest-bundle-artifact","version":1,"bundleKind":"${kind}","entries":[{"key":"stable-key","title":"...","description":"...","hook":"...","objective":"...","locationOrdinal":1,"abilityKey":"ability.some-key","difficulty":10,"successText":"...","costlySuccessText":"...","failureText":"...","rewardExperience":5,"rewardCurrency":1,"timeCostMinutes":10}]}。` +
+      `entries 至少 ${count} 个；locationOrdinal 必须在 1–${adventure.narrative.targetLocationCount}；不得把题材专用机制写成字段。${adventure.narrative.failForward ? '失败文本和效果必须开启新局面，而不是死路。' : ''}`
+  }
+  if (taskKey === 'content.adventure-quality-review') {
+    if (!adventure) return `${common}\n缺少文字冒险专用 Brief，停止。`
+    return `${common}\n你是独立于内容生产者的文字冒险叙事质量审查负责人。只能依据登记的架构、主线、系统、支线和区域事件 Artifact 审查，不得擅自改写内容或虚构已通过证据。` +
+      '分别以 1–5 的整数评价因果连续性、玩家能动性、路线差异、节奏、铺垫回收、人物动机和情绪触达；任何一项低于 3，或存在会破坏完整游戏体验的问题，必须登记 blocking。' +
+      '输出字段必须精确为：{"schema":"storyforge.text-adventure-quality-review-artifact","version":1,"scores":{"causality":4,"playerAgency":4,"routeDifferentiation":4,"pacing":4,"setupPayoff":4,"characterMotivation":4,"emotionalImpact":4},"issues":[{"severity":"warning|blocking","artifactKey":"content.adventure-architecture|content.narrative|content.product-module|content.adventure-side-quests|content.adventure-ambient-events","detail":"...","recommendation":"..."}],"passed":true}。' +
+      `审查时必须对照目标 ${brief.scale.targetPlayMinutes} 分钟、约 ${brief.scale.targetWordCount} 个中文内容单位、${adventure.narrative.targetSceneCount} 个场景、${adventure.narrative.targetEndingCount} 个结局，并核查失败是否产生代价或新局面。passed 只能在没有 blocking 且七项分数都不低于 3 时为 true。`
+  }
+  const adventureVisualBlueprints = [
+    { mediaKind: 'background', sceneTag: 'cover-opening', beatKey: 'opening-beat-key', prompt: '封面兼开场的无人物环境主视觉，建立大区域与核心冲突', altText: '游戏开场所在大区域的环境主视觉', width: 1280, height: 720 },
+    { mediaKind: 'character-pose', sceneTag: 'protagonist-anchor', beatKey: 'first-character-beat-key', prompt: '主要角色透明背景全身设定图，严格保持视觉锚点', altText: '主要角色全身设定图', width: 720, height: 1080 },
+    { mediaKind: 'background', sceneTag: 'region-map', beatKey: 'opening-beat-key', prompt: '清晰表达大区域、区域和地点关系的无文字示意地图', altText: '大区域与地点关系地图', width: 1280, height: 720 },
+    { mediaKind: 'cg', sceneTag: 'mainline-turn', beatKey: 'mainline-turn-beat-key', prompt: '主线关键转折的原创叙事插图', altText: '主线关键转折场面', width: 1280, height: 720 },
+    { mediaKind: 'background', sceneTag: 'location-anchor', beatKey: 'location-beat-key', prompt: '关键地点的无人物环境锚点图', altText: '关键地点环境', width: 1280, height: 720 },
+    { mediaKind: 'cg', sceneTag: 'important-item', beatKey: 'item-beat-key', prompt: '重要物品的叙事特写，不含品牌与文字', altText: '重要物品特写', width: 1024, height: 1024 },
+    { mediaKind: 'ui', sceneTag: 'chapter-card', beatKey: 'chapter-beat-key', prompt: '与视觉圣经一致的章节装饰图形，不含文字', altText: '章节装饰图形', width: 1024, height: 1024 },
+    { mediaKind: 'cg', sceneTag: 'ending-echo', beatKey: 'ending-beat-key', prompt: '回应玩家行动后果的结局插图', altText: '结局后果场面', width: 1280, height: 720 },
+  ] as const
+  const visual = expectedVisualKeys(brief).map((artifactKey, index) => {
+    const blueprint = brief.intent.productType === 'text-adventure'
+      ? adventureVisualBlueprints[index % adventureVisualBlueprints.length]
+      : index === 0
+        ? adventureVisualBlueprints[0]
+        : adventureVisualBlueprints[1]
+    const characterAsset = blueprint.mediaKind === 'character-pose'
+    return {
     artifactKey,
-    mediaKind: index === 0 ? 'background' : 'character-pose',
-    sceneTag: index === 0 ? 'opening' : 'protagonist',
-    beatKey: index === 0 ? 'opening-beat-key' : 'first-character-beat-key',
-    prompt: '具体可施工的原创画面描述', altText: '无障碍描述',
-    width: index === 0 ? 1280 : 720, height: index === 0 ? 720 : 1080,
+    mediaKind: blueprint.mediaKind,
+    sceneTag: blueprint.sceneTag,
+    beatKey: blueprint.beatKey,
+    prompt: blueprint.prompt, altText: blueprint.altText,
+    width: blueprint.width, height: blueprint.height,
     palette: ['#112233', '#445566', '#ddeeff'],
-    characterAnchorRefs: index === 0 ? [] : [productCharacterKeys(brief)[0] ?? 'intent:protagonist'],
-    hardConstraints: index === 0 ? [] : [...new Set([
+    characterAnchorRefs: characterAsset ? [productCharacterKeys(brief)[0] ?? 'intent:protagonist'] : [],
+    hardConstraints: characterAsset ? [...new Set([
       '保持角色身份、年龄段与核心视觉特征', `角色定位：${brief.intent.playerRole}`,
       ...brief.intent.forbiddenChanges,
-    ])].sort(),
-  }))
+    ])].sort() : [],
+  }})
   const audio = expectedAudioKeys(brief).map((artifactKey, index) => ({
     artifactKey, mediaKind: index < brief.media.musicTrackCount ? 'bgm' : 'sfx',
     sceneTag: 'opening', beatKey: 'opening-beat-key', prompt: '声音意图', altText: '声音说明', durationMs: 3000,
@@ -762,6 +823,10 @@ async function executeModelTask(input: ProductProductionTaskExecutionInputV1, op
   if (input.task.taskKey === 'content.design') {
     payload = parseDesign(raw, options.brief); kind = 'product-design'
     quality = { sourceAnchorsVerified: true }
+  } else if (input.task.taskKey === 'content.adventure-architecture') {
+    if (!options.brief.textAdventure) fail('文字冒险架构任务缺少专用 Brief')
+    payload = parseTextAdventureArchitectureArtifactV1(raw, options.brief.textAdventure); kind = 'product-design'
+    quality = { fourLevelSpaceVerified: true }
   } else if (input.task.taskKey === 'content.narrative') {
     payload = parseNarrative(raw, options.brief); kind = 'narrative'
     quality = { graphValidated: true }
@@ -771,6 +836,25 @@ async function executeModelTask(input: ProductProductionTaskExecutionInputV1, op
   } else if (input.task.taskKey === 'media.requirements') {
     payload = parseProductMediaRequirementsArtifactV2(raw, options.brief); kind = 'asset-manifest'
     quality = { planKeysVerified: true }
+  } else if (input.task.taskKey === 'content.adventure-side-quests'
+    || input.task.taskKey === 'content.adventure-ambient-events') {
+    if (!options.brief.textAdventure) fail('文字冒险任务束缺少专用 Brief')
+    const side = input.task.taskKey === 'content.adventure-side-quests'
+    payload = parseTextAdventureQuestBundleArtifactV1(
+      raw, side ? 'side' : 'ambient',
+      side
+        ? options.brief.textAdventure.narrative.targetSideQuestCount
+        : options.brief.textAdventure.narrative.targetAmbientEventCount,
+    )
+    kind = 'narrative'; quality = { questBundleVerified: true }
+  } else if (input.task.taskKey === 'content.adventure-quality-review') {
+    const review = parseTextAdventureQualityReviewArtifactV1(raw)
+    payload = review
+    kind = 'playtest-report'; quality = {
+      reviewContractVerified: true,
+      passed: review.passed,
+      blockingIssueCount: review.issues.filter(issue => issue.severity === 'blocking').length,
+    }
   } else fail(`未实现模型任务:${input.task.taskKey}`)
   const inputTokens = response.usage?.inputTokens ?? estimateTokens(input.contextText + textSystem(input.task.taskKey, options.brief))
   const outputTokens = response.usage?.outputTokens ?? estimateTokens(response.output)
@@ -1201,6 +1285,29 @@ async function executeIntegrationTask(input: ProductProductionTaskExecutionInput
   const narrative = parseAcceptedNarrative(artifactPayload(input, 'content.narrative'), options.brief)
   const product = parseProductModule(artifactPayload(input, 'content.product-module'), options.brief)
   parseProductMediaRequirementsArtifactV2(artifactPayload(input, 'media.requirements'), options.brief)
+  const textAdventureProduction = options.brief.intent.productType === 'text-adventure'
+    ? (() => {
+        if (!options.brief.textAdventure) fail('文字冒险集成缺少专用 Brief')
+        const qualityReview = parseTextAdventureQualityReviewArtifactV1(
+          artifactPayload(input, 'quality.adventure-review'),
+        )
+        if (!qualityReview.passed) fail('文字冒险叙事质量审查未通过，必须先修复阻塞问题并重新生产')
+        return {
+          architecture: parseTextAdventureArchitectureArtifactV1(
+            artifactPayload(input, 'content.adventure-architecture'), options.brief.textAdventure,
+          ),
+          systems: parseTextAdventureSystemsArtifactV1(product, options.brief.textAdventure),
+          sideQuests: parseTextAdventureQuestBundleArtifactV1(
+            artifactPayload(input, 'content.adventure-side-quests'), 'side',
+            options.brief.textAdventure.narrative.targetSideQuestCount,
+          ),
+          ambientEvents: parseTextAdventureQuestBundleArtifactV1(
+            artifactPayload(input, 'content.adventure-ambient-events'), 'ambient',
+            options.brief.textAdventure.narrative.targetAmbientEventCount,
+          ),
+        }
+      })()
+    : undefined
   const media = input.inputArtifacts.filter(row => row.blobObjectId != null).map(mediaAsset)
   const assets = media.map(item => item.asset)
   const sourceCatalog = await loadProductProductionWorldSourceCatalogV2({
@@ -1253,8 +1360,11 @@ async function executeIntegrationTask(input: ProductProductionTaskExecutionInput
     }
   }
   const modules = buildUpperProductModulesV1({
-    brief: options.brief, narrative, sourceCatalog, ttrpg,
+    brief: options.brief, narrative, sourceCatalog, ttrpg, textAdventureProduction,
   })
+  const boundNarrative = modules.adventure?.version === 2
+    ? bindTextAdventureNarrativeActionsV1({ narrative, adventure: modules.adventure })
+    : narrative
   const runtimePackage: ProductRuntimePackageV1 = {
     schema: 'storyforge.product-runtime-package', version: 1, productType: options.brief.intent.productType,
     definition: {
@@ -1269,8 +1379,9 @@ async function executeIntegrationTask(input: ProductProductionTaskExecutionInput
     },
     sourceWorld: { contentHash: options.brief.source.worldContentHash, selection: options.brief.source.selection },
     narrative: {
-      moduleKind: narrative.moduleKind, moduleTitle: narrative.moduleTitle,
-      entryNodeKey: narrative.entryNodeKey, nodes: narrative.nodes, beats: narrative.beats, choices: narrative.choices,
+      moduleKind: boundNarrative.moduleKind, moduleTitle: boundNarrative.moduleTitle,
+      entryNodeKey: boundNarrative.entryNodeKey, nodes: boundNarrative.nodes,
+      beats: boundNarrative.beats, choices: boundNarrative.choices,
     },
   }
   if (modules.interaction) runtimePackage.interaction = modules.interaction
@@ -1278,32 +1389,38 @@ async function executeIntegrationTask(input: ProductProductionTaskExecutionInput
   if (modules.openWorldEvolution) runtimePackage.openWorldEvolution = modules.openWorldEvolution
   if (modules.openWorld) runtimePackage.openWorld = modules.openWorld
   if (modules.ttrpg) runtimePackage.ttrpg = modules.ttrpg
-  if (options.brief.intent.productType === 'avg' || options.brief.intent.productType === 'ttrpg') {
+  if (options.brief.intent.productType === 'avg' || options.brief.intent.productType === 'ttrpg'
+    || options.brief.intent.productType === 'text-adventure') {
     const firstBeatKey = narrative.beats[0]?.beatKey
     const knownBeatKeys = new Set(narrative.beats.map(beat => beat.beatKey))
     const cues: NonNullable<ProductRuntimePackageV1['presentation']>['cues'] = []
+    const transitionMs = 'presentationPolicy' in product ? product.presentationPolicy.transitionMs : 500
     media.forEach(({ asset, beatKey: requestedBeatKey }, index) => {
       const beatKey = knownBeatKeys.has(requestedBeatKey) ? requestedBeatKey : firstBeatKey
       if (!beatKey) return
       if (asset.kind === 'background' || asset.kind === 'cg') cues.push({
         cueKey: `cue.${asset.assetKey}`, beatKey, phase: 'before' as const,
         type: asset.kind === 'background' ? 'set-background' as const : 'show-cg' as const,
-        assetKey: asset.assetKey, durationMs: product.presentationPolicy.transitionMs,
+        assetKey: asset.assetKey, durationMs: transitionMs,
         easing: 'ease-in-out' as const, order: index,
       })
       else if (asset.kind === 'character-pose' || asset.kind === 'character-expression') cues.push({
         cueKey: `cue.${asset.assetKey}`, beatKey, phase: 'before' as const, type: 'show-actor' as const,
         assetKey: asset.assetKey, actorKey: 'actor.protagonist', slot: 'center', layer: 'actor-front' as const,
-        x: 0, y: 0, scale: 1, opacity: 1, durationMs: product.presentationPolicy.transitionMs,
+        x: 0, y: 0, scale: 1, opacity: 1, durationMs: transitionMs,
         easing: 'ease-in-out' as const, order: index,
       })
-      else cues.push({
+      else if (asset.kind !== 'ui') cues.push({
         cueKey: `cue.${asset.assetKey}`, beatKey, phase: 'before' as const, type: 'play-audio' as const,
         assetKey: asset.assetKey, durationMs: 0, easing: 'linear' as const,
         volume: .7, loop: asset.kind === 'bgm' || asset.kind === 'ambience', order: index,
       })
     })
     runtimePackage.presentation = { version: 1, cues, assets }
+    if (!runtimePackage.definition.enabledCapabilities.includes('presentation')) {
+      runtimePackage.definition.enabledCapabilities.push('presentation')
+    }
+    if (runtimePackage.adventure?.version === 2) runtimePackage.adventure.media.assetKeys = assets.map(asset => asset.assetKey)
   } else if (assets.length > 0) fail('当前产品 adapter 不能把媒资接入 RuntimePackage')
   const parsed = parseProductRuntimePackageV1(runtimePackage)
   const ttrpgArtifacts: ProductProductionTaskArtifactV1[] = parsed.ttrpg ? [
@@ -1378,6 +1495,12 @@ async function executeQualityTask(input: ProductProductionTaskExecutionInputV1, 
         ? [...assets.map(asset => `${asset.assetKey}:${asset.source}:${asset.license}`), ...productQuality.gates.flatMap(item => item.evidence)]
         : ['no-media-assets', ...productQuality.gates.flatMap(item => item.evidence)],
     },
+  }
+  for (const productGate of productQuality.gates) {
+    hardEvidence[productGate.gateId] = {
+      passed: productGate.passed,
+      evidence: productGate.evidence,
+    }
   }
   const hardGateResults = options.brief.completionContract.requiredGateIds.map(gateId => (
     hardEvidence[gateId] ?? { passed: false, evidence: [`unsupported-gate:${gateId}`] }

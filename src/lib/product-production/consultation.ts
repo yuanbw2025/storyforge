@@ -22,6 +22,11 @@ import {
   type TtrpgProductionBriefDraftInputV2,
   unresolvedTtrpgProductionBriefDecisionsV2,
 } from '../ttrpg/production-brief'
+import {
+  compileTextAdventureProductionBriefV1,
+  type TextAdventureProductionBriefDraftV1,
+  unresolvedTextAdventureProductionBriefDecisionsV1,
+} from '../adventure/production-brief'
 
 type ConsultationSourceV1 = ProductProductionConsultationSourceV2
 
@@ -143,11 +148,12 @@ function mediaProfile(input: {
   visualLevel: ProductProductionMediaProfileV1['visualLevel']
   audioLevel: ProductProductionMediaProfileV1['audioLevel']
 }): ProductProductionMediaProfileV1 {
-  // AVG and the governed TTRPG tabletop both bind presentation assets.
-  const presentationEnabled = input.productType === 'avg' || input.productType === 'ttrpg'
+  // AVG, TTRPG and finite text adventures can bind product-owned presentation assets.
+  const presentationEnabled = ['avg', 'ttrpg', 'text-adventure'].includes(input.productType)
   const images = !presentationEnabled || input.visualLevel === 'none' ? 0 : input.visualLevel === 'key-scenes' ? 2 : 8
-  const music = !presentationEnabled || input.audioLevel === 'none' ? 0 : 1
-  const sfx = !presentationEnabled || input.audioLevel === 'none' ? 0 : input.audioLevel === 'music-sfx' ? 3 : 8
+  const audioEnabled = input.productType === 'avg' || input.productType === 'ttrpg'
+  const music = !audioEnabled || input.audioLevel === 'none' ? 0 : 1
+  const sfx = !audioEnabled || input.audioLevel === 'none' ? 0 : input.audioLevel === 'music-sfx' ? 3 : 8
   const requiredMediaKinds: ProductProductionMediaProfileV1['requiredMediaKinds'] = []
   if (images > 0) requiredMediaKinds.push('background')
   if ((input.productType === 'avg' || input.productType === 'ttrpg') && images > 0) requiredMediaKinds.push('character-pose')
@@ -287,6 +293,7 @@ export async function draftProductProductionBriefV3(input: {
   contentBoundaries?: string[]
   confirmTtrpgDefaultMappings?: boolean
   ttrpg?: TtrpgProductionBriefDraftInputV2
+  textAdventure?: TextAdventureProductionBriefDraftV1
   sourceSelection?: ProductProductionSourceSelectionV1
 }): Promise<ProductProductionBriefV3> {
   const scope = await resolveScope({ scope: input.scope })
@@ -329,6 +336,9 @@ export async function draftProductProductionBriefV3(input: {
     confirmDefaultMappings: input.confirmTtrpgDefaultMappings === true,
     draft: input.ttrpg,
   }) : null
+  const textAdventure = input.productType === 'text-adventure'
+    ? compileTextAdventureProductionBriefV1({ scale, media, draft: input.textAdventure })
+    : null
   const requirements = [await capabilityRequirement({
     // The built-in deterministic compiler provides a no-provider vertical
     // slice. External text generation is an optional quality upgrade and may
@@ -361,6 +371,7 @@ export async function draftProductProductionBriefV3(input: {
     if ((selection.roleBindings.locations?.length ?? 0) === 0) unresolvedDecisionKeys.push('ttrpg-starting-location')
     unresolvedDecisionKeys.push(...unresolvedTtrpgProductionBriefDecisionsV2(ttrpg!))
   }
+  if (textAdventure) unresolvedDecisionKeys.push(...unresolvedTextAdventureProductionBriefDecisionsV1(textAdventure))
   return parseProductProductionBriefV3({
     schema: 'storyforge.product-production-brief', version: 3,
     source: {
@@ -406,7 +417,23 @@ export async function draftProductProductionBriefV3(input: {
     },
     completionContract: {
       requiresPlayablePreview: true,
-      requiredGateIds: ['runtime.package.valid', 'runtime.playable', 'narrative.graph.valid', 'rights.complete'],
+      requiredGateIds: [
+        'runtime.package.valid', 'runtime.playable', 'narrative.graph.valid', 'rights.complete',
+        ...(input.productType === 'text-adventure' ? [
+          'product.adventure.v2-capabilities',
+          'product.adventure.v2-space',
+          'product.adventure.v2-character-system',
+          'product.adventure.v2-equipment',
+          'product.adventure.v2-quest-time-storylets-endings',
+          'product.adventure.v2-offline-fallback',
+          'product.adventure.v2-production-targets',
+          'product.adventure.v2-choice-bridge',
+          'product.adventure.v2-fail-forward',
+          'product.adventure.v2-media-binding',
+          'product.adventure.narrative-depth',
+          'product.adventure.content-volume',
+        ] : []),
+      ],
       minimumMediaCoverage: media.requiredMediaKinds.length
         ? qualityProfile === 'commercial-candidate' ? 1 : 0.5
         : 0,
@@ -414,6 +441,7 @@ export async function draftProductProductionBriefV3(input: {
     },
     unresolvedDecisionKeys,
     ...(ttrpg ? { ttrpg } : {}),
+    ...(textAdventure ? { textAdventure } : {}),
     ...(input.productType === 'ttrpg' ? {
       authorConfirmations: { ttrpgDefaultRuleMappings: input.confirmTtrpgDefaultMappings === true },
     } : {}),

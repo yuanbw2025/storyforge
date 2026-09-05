@@ -404,6 +404,59 @@ export interface TtrpgProductionBriefV2 {
   };
 }
 
+/**
+ * Author-confirmed construction contract for a finite text adventure. It is
+ * stored inside the existing versioned ProductProductionBrief record, so it
+ * does not create a parallel product draft or an ungoverned AI write path.
+ */
+export interface TextAdventureProductionBriefV1 {
+  schema: "storyforge.text-adventure-production-brief";
+  version: 1;
+  creationMode: "quick" | "advanced";
+  sourceTreatment: "expand-sparse" | "adapt-rich" | "author-outline";
+  narrative: {
+    structure: "trunk-convergent-storylets";
+    targetRegionCount: number;
+    targetAreaCount: number;
+    targetLocationCount: number;
+    targetSceneCount: number;
+    mainQuestCount: 1;
+    targetSideQuestCount: number;
+    targetAmbientEventCount: number;
+    targetEndingCount: number;
+    minimumDistinctRoutes: number;
+    choiceDensity: "focused" | "balanced" | "dense";
+    failForward: boolean;
+  };
+  character: {
+    preset: "general-adventure-rpg";
+    statLabels: string[];
+    skillLabels: string[];
+    resourceRoles: Array<"health" | "mana" | "stamina" | "experience" | "skill-points" | "currency" | "clock">;
+    equipmentSlotLabels: string[];
+    progressionEnabled: boolean;
+  };
+  experience: {
+    perspective: "second-person" | "first-person";
+    consequenceVisibility: "explicit" | "partial" | "hidden";
+    contentExpansion: "required" | "preserve-source-depth";
+    emotionalTarget: string;
+    endingCauseRecap: boolean;
+  };
+  media: {
+    mode: "text-only" | "key-illustrations" | "rich-illustrations";
+    characterAnchorsRequired: boolean;
+    reviewBeforePublish: boolean;
+    runtimeGeneration: "disabled";
+  };
+  confirmations: {
+    worldCanonBoundary: boolean;
+    deterministicStateAuthority: boolean;
+    genericCoreBoundary: boolean;
+    mediaRights: boolean;
+  };
+}
+
 export interface ProductProductionBriefV3 {
   schema: "storyforge.product-production-brief";
   version: 3;
@@ -436,6 +489,8 @@ export interface ProductProductionBriefV3 {
   unresolvedDecisionKeys: string[];
   /** Closed TTRPG construction contract; required exactly when productType=ttrpg. */
   ttrpg?: TtrpgProductionBriefV2;
+  /** Closed text-adventure construction contract; required exactly for text-adventure. */
+  textAdventure?: TextAdventureProductionBriefV1;
   /** Explicit author confirmations required by product-specific deterministic compilers. */
   authorConfirmations?: {
     ttrpgDefaultRuleMappings: boolean;
