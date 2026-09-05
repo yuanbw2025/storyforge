@@ -1,0 +1,61 @@
+import type { TextOpenWorldActionModuleV1 } from './text-open-world-modules'
+
+export type TextOpenWorldActionDefinitionV1 = TextOpenWorldActionModuleV1['actions'][number]
+export type TextOpenWorldActionTargetScopeV1 = Exclude<TextOpenWorldActionDefinitionV1['targetScope'], 'none'>
+
+export interface TextOpenWorldActionConsumerRefsV1 {
+  fixedChoiceKeys: string[]
+  questObjectiveKeys: string[]
+  randomEventKeys: string[]
+  tutorialKeys: string[]
+}
+
+export interface TextOpenWorldActionCatalogEntryV1 {
+  action: TextOpenWorldActionDefinitionV1
+  consumers: TextOpenWorldActionConsumerRefsV1
+}
+
+export interface TextOpenWorldConditionResultV1 {
+  satisfied: boolean
+  publicReason: string | null
+}
+
+export interface TextOpenWorldActionProjectionContextV1 {
+  actorKey: 'player' | 'system'
+  currentLocationKey: string
+  worldMinute: number
+  conditionResults: Record<string, TextOpenWorldConditionResultV1>
+  completedOnceActionKeys: string[]
+  cooldownUntilWorldMinuteByActionKey: Record<string, number>
+  validTargetKeysByScope: Partial<Record<TextOpenWorldActionTargetScopeV1, string[]>>
+}
+
+export type TextOpenWorldActionUnavailableCodeV1 =
+  | 'actor-scope'
+  | 'wrong-location'
+  | 'condition-unknown'
+  | 'condition-failed'
+  | 'once-consumed'
+  | 'cooldown'
+  | 'no-valid-target'
+
+export interface TextOpenWorldActionUnavailableReasonV1 {
+  code: TextOpenWorldActionUnavailableCodeV1
+  message: string
+  conditionKey: string | null
+}
+
+export interface TextOpenWorldActionAvailabilityV1 extends TextOpenWorldActionCatalogEntryV1 {
+  available: boolean
+  unavailableReasons: TextOpenWorldActionUnavailableReasonV1[]
+  targetScope: TextOpenWorldActionDefinitionV1['targetScope']
+  validTargetKeys: string[]
+  confirmationRequired: boolean
+  cooldownRemainingMinutes: number
+}
+
+export interface TextOpenWorldResolvedActionV1 {
+  entry: TextOpenWorldActionCatalogEntryV1
+  targetKey: string | null
+  confirmationRequired: boolean
+}

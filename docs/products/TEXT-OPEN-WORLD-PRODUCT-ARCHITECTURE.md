@@ -1,6 +1,6 @@
 # AI 主导文字开放世界游戏 · 整体产品与游戏系统施工规格
 
-> 规格版本：1.1.5
+> 规格版本：1.1.6
 > 生效日期：2026-09-06
 > 文档层级：L2 文字开放世界整体产品施工入口
 > 当前状态：目标架构已冻结并进入分阶段实现；实际完成度以完整开发清单为准
@@ -376,6 +376,16 @@ accept-quest / abandon-quest / quest-action
 start-combat / continue-combat / escape / rest
 read / track / untrack / save / load-branch
 ```
+
+现行统一Action目录与可用性投影实现于 `src/lib/open-world/action-registry.ts`。Release中的
+Action定义是唯一事实源；固定选项、任务Objective、随机事件和教程只保存稳定`actionKey`，
+目录可以反查所有消费者。系统Action、固定选项和自然语言映射得到的Command均通过同一
+`resolveCommand()`解析，不能由AI或UI临时增加Action。
+
+可用性投影统一判断操作者、当前位置、Condition结果、一次性执行、冷却、合法目标和确认
+策略。Condition未提供结果时fail-closed；失败原因只消费Condition返回的公共说明，不从
+秘密状态自行拼接。当前合法目标集合由调用方显式传入，待G1-08 Session Projection完成后由
+权威运行状态派生，不能由页面或模型自报。
 
 ### 4.3 提交事务
 
@@ -2533,6 +2543,7 @@ Session中的高频状态优先作为Event和可重建Projection存在，不建�
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| 1.1.6 | 2026-09-06 | 落地统一Action目录、跨模块消费者反查、可用性与合法目标投影，并统一三种输入命令解析 |
 | 1.1.5 | 2026-09-06 | 落地vNext统一CommandEnvelope、稳定指纹、事务幂等事件、stale保护和未知结果查询边界 |
 | 1.1.4 | 2026-09-06 | 落地15个领域Module Schema与跨模块完整性校验，补齐“类型存在但引用不可运行”的确定性阻断 |
 | 1.1.3 | 2026-09-06 | 落地TextOpenWorldRuntimePackage vNext严格包络、15个逻辑模块依赖、来源Hash、校准、媒资、质量和旧Release兼容策略 |
