@@ -1,4 +1,4 @@
-import { canonicalGameProductionJsonV2, hashGameProductionValueV2, isSha256Hash } from '../game-production/hash'
+import { canonicalProductProductionJsonV2, hashProductProductionValueV2, isSha256Hash } from '../product-production/hash'
 import type {
   TextOpenWorldEffectChangeV1,
   TextOpenWorldEffectDefinitionV1,
@@ -374,9 +374,9 @@ export function createTextOpenWorldEffectCatalogV1(value: TextOpenWorldRuntimePa
   const definitions = modules.actions.effects.map((item, index) => parseDefinition(item, refs, `effects[${index}]`)); const byKey = new Map(definitions.map(item => [item.key, item])); const clone = <T>(item: T): T => structuredClone(item)
   const plan = async (input: { effectKeys: string[]; claimKey: string; state: TextOpenWorldEffectStateV1 }): Promise<TextOpenWorldEffectPlanV1> => {
     const claimKey = key(input.claimKey, 'claimKey', CLAIM_KEY); if (!Array.isArray(input.effectKeys) || new Set(input.effectKeys).size !== input.effectKeys.length) fail('effectKeys必须是无重复数组')
-    const effects = input.effectKeys.map(effectKey => byKey.get(key(effectKey, 'effectKey')) ?? fail(`Effect不存在:${effectKey}`)); const baseStateHash = await hashGameProductionValueV2(input.state); const preview = applyDefinitions(input.state, effects, claimKey, modules); const resultingStateHash = await hashGameProductionValueV2(preview.state); const impactDomains = [...new Set(effects.flatMap(effect => effectDomains(effect.operation)))]
+    const effects = input.effectKeys.map(effectKey => byKey.get(key(effectKey, 'effectKey')) ?? fail(`Effect不存在:${effectKey}`)); const baseStateHash = await hashProductProductionValueV2(input.state); const preview = applyDefinitions(input.state, effects, claimKey, modules); const resultingStateHash = await hashProductProductionValueV2(preview.state); const impactDomains = [...new Set(effects.flatMap(effect => effectDomains(effect.operation)))]
     const body: Omit<TextOpenWorldEffectPlanV1, 'planHash'> = { schema: 'storyforge.text-open-world.effect-plan', version: 1, claimKey, baseStateHash, resultingStateHash, effectKeys: [...input.effectKeys], effects: clone(effects), impactDomains, previewChanges: clone(preview.changes) }
-    return { ...body, planHash: await hashGameProductionValueV2(planBody(body)) }
+    return { ...body, planHash: await hashProductProductionValueV2(planBody(body)) }
   }
   return {
     list: () => clone(definitions),
@@ -384,11 +384,11 @@ export function createTextOpenWorldEffectCatalogV1(value: TextOpenWorldRuntimePa
     plan,
     apply: async input => {
       const { planHash, ...body } = input.plan
-      if (!isSha256Hash(planHash) || await hashGameProductionValueV2(planBody(body)) !== planHash) fail('EffectPlan planHash无效')
-      const baseStateHash = await hashGameProductionValueV2(input.state); if (baseStateHash !== input.plan.baseStateHash) fail('EffectPlan基线状态已变化')
-      const canonicalEffects = input.plan.effectKeys.map(effectKey => byKey.get(effectKey) ?? fail(`Effect不存在:${effectKey}`)); if (canonicalGameProductionJsonV2(canonicalEffects) !== canonicalGameProductionJsonV2(input.plan.effects)) fail('EffectPlan定义与Release不一致')
-      const applied = applyDefinitions(input.state, canonicalEffects, input.plan.claimKey, modules); const resultingStateHash = await hashGameProductionValueV2(applied.state)
-      if (resultingStateHash !== input.plan.resultingStateHash || canonicalGameProductionJsonV2(applied.changes) !== canonicalGameProductionJsonV2(input.plan.previewChanges)) fail('EffectPlan预演与应用结果不一致')
+      if (!isSha256Hash(planHash) || await hashProductProductionValueV2(planBody(body)) !== planHash) fail('EffectPlan planHash无效')
+      const baseStateHash = await hashProductProductionValueV2(input.state); if (baseStateHash !== input.plan.baseStateHash) fail('EffectPlan基线状态已变化')
+      const canonicalEffects = input.plan.effectKeys.map(effectKey => byKey.get(effectKey) ?? fail(`Effect不存在:${effectKey}`)); if (canonicalProductProductionJsonV2(canonicalEffects) !== canonicalProductProductionJsonV2(input.plan.effects)) fail('EffectPlan定义与Release不一致')
+      const applied = applyDefinitions(input.state, canonicalEffects, input.plan.claimKey, modules); const resultingStateHash = await hashProductProductionValueV2(applied.state)
+      if (resultingStateHash !== input.plan.resultingStateHash || canonicalProductProductionJsonV2(applied.changes) !== canonicalProductProductionJsonV2(input.plan.previewChanges)) fail('EffectPlan预演与应用结果不一致')
       return { state: applied.state, receipt: { schema: 'storyforge.text-open-world.effect-receipt', version: 1, claimKey: input.plan.claimKey, planHash: input.plan.planHash, baseStateHash, resultingStateHash, impactDomains: [...input.plan.impactDomains], changes: clone(applied.changes) } }
     },
   }

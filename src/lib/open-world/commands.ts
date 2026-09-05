@@ -16,6 +16,7 @@ import {
   parseTextOpenWorldCommandEventPayloadV1,
   parseTextOpenWorldCommandLookupKeyV1,
 } from './command-contract'
+import { replayTextOpenWorldEventProtocolV1 } from './event-contract'
 
 function fail(message: string): never { throw new Error(`[text-open-world-command] ${message}`) }
 
@@ -97,6 +98,9 @@ export async function commitTextOpenWorldCommandV1(value: unknown): Promise<Text
     if (current.lastSequence !== envelope.baseSequence || currentStateHash !== envelope.baseStateHash) {
       fail('Session状态已变化，请查询命令状态并刷新后重试')
     }
+    const events = await db.productRuntimeEvents.where('sessionId').equals(envelope.sessionId).sortBy('sequence')
+    const protocol = await replayTextOpenWorldEventProtocolV1(events, session.seed)
+    if (protocol.pendingCommandId) fail(`上一命令尚未生成结果批次:${protocol.pendingCommandId}`)
     const resultingSequence = current.lastSequence + 1
     const projected = structuredClone(current)
     projected.lastSequence = resultingSequence

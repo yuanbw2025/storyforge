@@ -1147,6 +1147,8 @@ export type ProductRuntimeSession = ProductRuntimeSessionBase & (
 
 export const PRODUCT_RUNTIME_EVENT_TYPES = [
   "textworld.command.committed",
+  "textworld.random.resolved",
+  "textworld.effects.applied",
   "time.advanced",
   "entity.upserted",
   "entity.patched",

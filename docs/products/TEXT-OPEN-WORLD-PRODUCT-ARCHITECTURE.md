@@ -469,6 +469,21 @@ AI只能生成候选效果。解析器、引用校验器、规则服务和事务
 - 表现正文保存引用或压缩回执，避免事件无限膨胀；
 - 新规则版本不能改变旧Release和旧Event的重放结果。
 
+现行vNext事件协议实现于 `src/lib/types/text-open-world-event.ts`、
+`src/lib/open-world/event-contract.ts` 和 `src/lib/open-world/events.ts`。一个命令批次严格遵循：
+
+```text
+textworld.command.committed
+→ 0..128 × textworld.random.resolved
+→ textworld.effects.applied
+```
+
+前一批没有Effect终态时不能接受下一命令。随机事件只接收抽样key和整数范围，结果由冻结的
+Session seed、命令序号、drawIndex和`sha256-range-v1`算法决定，并保存seed Hash、输入Hash、
+范围和值；重放会重新计算而不是相信事件里的结果。Effect终态保存完整EffectPlan与Receipt，
+并用结果批次指纹绑定命令、规则版本、随机请求和效果结果。同一结果批次重试返回原事件，
+不同内容复用commandId会失败；随机与Effect事件只能通过单一事务专用入口追加。
+
 ---
 
 ## 5. 主角创建与角色身份
