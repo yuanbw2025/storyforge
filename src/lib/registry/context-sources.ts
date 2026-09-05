@@ -605,6 +605,7 @@ async function readOpenWorldRuntimeContext(input: AssembleContextInput): Promise
       .filter(item => item.available)
     const runtime = projection.state
     const inventoryQuantities = inventoryModule.deriveTextOpenWorldInventoryQuantitiesV1(modules, runtime.inventory)
+    const equippedItemKeys = inventoryModule.deriveTextOpenWorldEquippedItemKeysV1(modules, runtime.inventory)
     const location = modules.world.locations.find(item => item.key === runtime.map.currentLocationKey)
     if (!location) throw new Error('文字开放世界当前位置不在冻结ProductRelease/Build中。')
     const region = modules.world.regions.find(item => item.key === location.regionKey)
@@ -681,7 +682,7 @@ async function readOpenWorldRuntimeContext(input: AssembleContextInput): Promise
       '【已学技能】', ...(skillLines.length ? skillLines : ['- 无']),
       '【当前状态】', ...(statusLines.length ? statusLines : ['- 无']),
       `【背包】${Object.entries(inventoryQuantities).filter(([, quantity]) => quantity > 0).map(([key, quantity]) => `${itemByKey.get(key)?.title ?? key}×${quantity}`).join('、') || '空'}｜货币=${runtime.inventory.currency}`,
-      `【装备】${Object.entries(runtime.inventory.equippedItemKeyBySlot).map(([slot, key]) => `${slot}=${key ? itemByKey.get(key)?.title ?? key : '空'}`).join('、')}`,
+      `【装备】${Object.entries(equippedItemKeys).map(([slot, key]) => `${slot}=${key ? itemByKey.get(key)?.title ?? key : '空'}`).join('、')}`,
       `【区域认知】${visibleRegions.map(item => `${item.title}=${runtime.map.regionKnowledgeByKey[item.key]}`).join('、') || '无'}`,
       `【已发现地点】${visibleLocations.map(item => `${item.key}:${item.title}`).join('、') || '无'}`,
       '【当前位置人物】', ...(presentActors.length ? presentActors : ['- 无']),

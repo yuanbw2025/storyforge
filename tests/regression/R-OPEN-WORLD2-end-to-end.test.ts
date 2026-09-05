@@ -8,6 +8,7 @@ import {
   repairTextOpenWorldRuntimeHeadV1,
 } from '../../src/lib/open-world/checkpoints'
 import { readProductRuntimeState } from '../../src/lib/product/runtime-core'
+import { deriveTextOpenWorldContextsV1 } from '../../src/lib/open-world/session-projection'
 import { createGovernedTextOpenWorldSessionFixtureV1 } from '../helpers/text-open-world-product-session'
 import { createTextOpenWorldVNextFixture } from '../helpers/text-open-world-vnext-fixture'
 
@@ -36,14 +37,22 @@ describe('Text Open World vNext · no-AI minimum package end-to-end', () => {
     })
     expect(feedback).toMatchObject({ status: 'succeeded', outcomeCommitted: true, gameplayStateChanged: true, evidenceEventSequences: [3, 4] })
     expect((await readProductRuntimeState(session.id!)).textOpenWorld?.state.inventory.currency).toBe(30)
-    expect(await db.productRuntimeEvents.where('sessionId').equals(session.id!).count()).toBe(4)
+    const equipped = await executeTextOpenWorldActionV1({
+      sessionId: session.id!, actionKey: 'action.equip-rust-sword', targetKey: 'item.rust-sword',
+      commandId: 'command.end-to-end.equip', requestedAt: 1_100,
+    })
+    expect(equipped).toMatchObject({ status: 'succeeded', outcomeCommitted: true, gameplayStateChanged: true, evidenceEventSequences: [5, 6] })
+    const equippedProjection = (await readProductRuntimeState(session.id!)).textOpenWorld!
+    expect(equippedProjection.state.inventory.equippedItemInstanceIdBySlot.weapon).toBe('instance.initial.1.item.rust-sword')
+    expect(deriveTextOpenWorldContextsV1(equippedProjection).playerStats.attack).toBe(8)
+    expect(await db.productRuntimeEvents.where('sessionId').equals(session.id!).count()).toBe(6)
 
     const retry = await executeTextOpenWorldActionV1({
       sessionId: session.id!, actionKey: 'action.investigate-channel', targetKey: 'location.salt-port',
       commandId: 'command.end-to-end.1', requestedAt: 9_999,
     })
     expect(retry.receiptHash).toBe(feedback.receiptHash)
-    expect(await db.productRuntimeEvents.where('sessionId').equals(session.id!).count()).toBe(4)
+    expect(await db.productRuntimeEvents.where('sessionId').equals(session.id!).count()).toBe(6)
 
     const checkpoint = await createTextOpenWorldCheckpointV1({ sessionId: session.id!, name: '调查完成' })
     await db.productRuntimeSessions.update(session.id!, { runtimeHeadSequence: null, runtimeHeadStateJson: null, runtimeHeadStateHash: null })

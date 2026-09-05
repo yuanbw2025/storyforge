@@ -11,7 +11,10 @@ import type {
   TextOpenWorldRuntimePackageV1,
 } from '../types'
 import { parseTextOpenWorldModulesV1 } from './modules'
-import { createTextOpenWorldItemInstanceIdV1, deriveTextOpenWorldInventoryQuantitiesV1 } from './inventory'
+import {
+  createTextOpenWorldItemInstanceIdV1,
+  deriveTextOpenWorldEquippedItemKeysV1,
+} from './inventory'
 import { deriveTextOpenWorldPlayerStatsFromModulesV1 } from './player-stats'
 import { levelForTextOpenWorldExperienceV1 } from './progression'
 
@@ -139,7 +142,7 @@ export function validateTextOpenWorldEffectStateV1(state: TextOpenWorldEffectSta
   if (canonicalProductProductionJsonV2(state.player.attributes) !== canonicalProductProductionJsonV2(expectedAttributes)) fail('player.attributes与自动成长曲线不一致')
   const derivedStats = deriveTextOpenWorldPlayerStatsFromModulesV1({
     modules, level: state.player.level, attributes: state.player.attributes,
-    equippedItemKeyBySlot: state.inventory.equippedItemKeyBySlot,
+    equippedItemKeyBySlot: deriveTextOpenWorldEquippedItemKeysV1(modules, state.inventory),
   })
   if (state.player.maximumHealth !== derivedStats.maximumHealth || state.player.maximumSkillResource !== derivedStats.maximumSkillResource) fail('player资源上限与Release公式不一致')
   assertUniqueKnown(state.player.learnedSkillKeys, refs.skills, 'player.learnedSkillKeys')
@@ -162,12 +165,14 @@ export function validateTextOpenWorldEffectStateV1(state: TextOpenWorldEffectSta
     instanceCountByItemKey[itemKey] = (instanceCountByItemKey[itemKey] ?? 0) + 1
   }
   for (const item of modules.items.items) if (item.unique && (instanceCountByItemKey[item.key] ?? 0) > 1) fail(`唯一物品重复持有:${item.key}`)
-  const inventoryQuantities = deriveTextOpenWorldInventoryQuantitiesV1(modules, state.inventory)
-  for (const [slot, itemKey] of Object.entries(state.inventory.equippedItemKeyBySlot)) {
+  const equippedInstanceIds = Object.values(state.inventory.equippedItemInstanceIdBySlot).filter((value): value is string => value != null)
+  if (new Set(equippedInstanceIds).size !== equippedInstanceIds.length) fail('同一物品实例不能占据多个装备位')
+  for (const [slot, instanceId] of Object.entries(state.inventory.equippedItemInstanceIdBySlot)) {
     if (!['weapon', 'armor', 'accessory'].includes(slot)) fail(`未知装备位:${slot}`)
-    if (itemKey == null) continue
-    const definition = modules.items.items.find(candidate => candidate.key === itemKey)
-    if (!definition || definition.kind !== 'equipment' || definition.equipmentSlotKey !== slot || !inventoryQuantities[itemKey]) fail(`装备状态无效:${slot}`)
+    if (instanceId == null) continue
+    const instance = state.inventory.itemInstances[instanceId]
+    const definition = instance && modules.items.items.find(candidate => candidate.key === instance.itemKey)
+    if (!definition || definition.kind !== 'equipment' || definition.equipmentSlotKey !== slot) fail(`装备状态无效:${slot}`)
   }
   assertUniqueKnown(state.inventory.knownRecipeKeys, refs.recipes, 'inventory.knownRecipeKeys')
   int(state.inventory.currency, 'inventory.currency', 0, 1_000_000_000)
@@ -233,10 +238,21 @@ function synchronizePlayerResourceCaps(state: TextOpenWorldEffectStateV1, module
   const before = { maximumHealth: state.player.maximumHealth, maximumSkillResource: state.player.maximumSkillResource }
   const derived = deriveTextOpenWorldPlayerStatsFromModulesV1({
     modules, level: state.player.level, attributes: state.player.attributes,
-    equippedItemKeyBySlot: state.inventory.equippedItemKeyBySlot,
+    equippedItemKeyBySlot: deriveTextOpenWorldEquippedItemKeysV1(modules, state.inventory),
   })
   state.player.health = Math.min(derived.maximumHealth, Math.max(0, state.player.health + derived.maximumHealth - before.maximumHealth))
   state.player.skillResource = Math.min(derived.maximumSkillResource, Math.max(0, state.player.skillResource + derived.maximumSkillResource - before.maximumSkillResource))
+  state.player.maximumHealth = derived.maximumHealth
+  state.player.maximumSkillResource = derived.maximumSkillResource
+}
+
+function recalculateEquipmentResourceCaps(state: TextOpenWorldEffectStateV1, modules: TextOpenWorldParsedModulesV1) {
+  const derived = deriveTextOpenWorldPlayerStatsFromModulesV1({
+    modules, level: state.player.level, attributes: state.player.attributes,
+    equippedItemKeyBySlot: deriveTextOpenWorldEquippedItemKeysV1(modules, state.inventory),
+  })
+  state.player.health = Math.min(state.player.health, derived.maximumHealth)
+  state.player.skillResource = Math.min(state.player.skillResource, derived.maximumSkillResource)
   state.player.maximumHealth = derived.maximumHealth
   state.player.maximumSkillResource = derived.maximumSkillResource
 }
@@ -312,7 +328,6 @@ function applyDefinitions(stateValue: TextOpenWorldEffectStateV1, effects: TextO
           if (removalReason === 'consume' && !definition.consumable) fail(`${effect.key}目标不是消耗品`)
           if (removalReason === 'drop' && !definition.droppable) fail(`${effect.key}目标不可丢弃`)
           if (removalReason === 'sell' && !definition.sellable) fail(`${effect.key}目标不可出售`)
-          if (Object.values(state.inventory.equippedItemKeyBySlot).includes(payload.itemKey)) fail(`${effect.key}不能移除已装备物品`)
         }
         if (definition.stackPolicy === 'stacked') {
           const before = state.inventory.stackQuantities[payload.itemKey] ?? 0
@@ -331,8 +346,10 @@ function applyDefinitions(stateValue: TextOpenWorldEffectStateV1, effects: TextO
               state.inventory.itemInstances[instanceId] = { itemKey: payload.itemKey, acquiredByClaimKey: claimKey, stateTags: ['new'] }
             }
           } else {
-            if (before.length < payload.quantity) fail(`${effect.key}物品实例数量不足`)
-            before.slice(0, payload.quantity).forEach(instanceId => { delete state.inventory.itemInstances[instanceId] })
+            const equipped = new Set(Object.values(state.inventory.equippedItemInstanceIdBySlot).filter((value): value is string => value != null))
+            const removable = before.filter(instanceId => !equipped.has(instanceId))
+            if (removable.length < payload.quantity) fail(`${effect.key}未装备物品实例数量不足`)
+            removable.slice(0, payload.quantity).forEach(instanceId => { delete state.inventory.itemInstances[instanceId] })
           }
           const after = Object.entries(state.inventory.itemInstances).filter(([, instance]) => instance.itemKey === payload.itemKey).map(([instanceId]) => instanceId).sort()
           record(changes, effect, `${effect.operation}:${payload.itemKey}:${removalReason ?? 'grant'}`, before, after)
@@ -345,21 +362,26 @@ function applyDefinitions(stateValue: TextOpenWorldEffectStateV1, effects: TextO
         const definition = item(payload.itemKey)
         if (definition.kind !== 'equipment' || !definition.equipmentSlotKey) fail(`${effect.key}目标不是装备`)
         const slot = definition.equipmentSlotKey
+        const matchingInstances = Object.entries(state.inventory.itemInstances)
+          .filter(([, instance]) => instance.itemKey === payload.itemKey).map(([instanceId]) => instanceId).sort()
         const before = {
-          itemKey: state.inventory.equippedItemKeyBySlot[slot], health: state.player.health,
+          itemInstanceId: state.inventory.equippedItemInstanceIdBySlot[slot], health: state.player.health,
           maximumHealth: state.player.maximumHealth, skillResource: state.player.skillResource,
           maximumSkillResource: state.player.maximumSkillResource,
         }
         if (effect.operation === 'equip-item') {
-          if ((deriveTextOpenWorldInventoryQuantitiesV1(modules, state.inventory)[payload.itemKey] ?? 0) < 1) fail(`${effect.key}背包没有目标装备`)
-          state.inventory.equippedItemKeyBySlot[slot] = payload.itemKey
+          const alreadyEquipped = new Set(Object.values(state.inventory.equippedItemInstanceIdBySlot).filter((value): value is string => value != null))
+          const instanceId = matchingInstances.find(candidate => !alreadyEquipped.has(candidate))
+          if (!instanceId) fail(`${effect.key}没有未装备的目标物品实例`)
+          state.inventory.equippedItemInstanceIdBySlot[slot] = instanceId
         } else {
-          if (before.itemKey !== payload.itemKey) fail(`${effect.key}目标未装备`)
-          state.inventory.equippedItemKeyBySlot[slot] = null
+          const equippedInstanceId = before.itemInstanceId
+          if (!equippedInstanceId || state.inventory.itemInstances[equippedInstanceId]?.itemKey !== payload.itemKey) fail(`${effect.key}目标未装备`)
+          state.inventory.equippedItemInstanceIdBySlot[slot] = null
         }
-        synchronizePlayerResourceCaps(state, modules)
+        recalculateEquipmentResourceCaps(state, modules)
         record(changes, effect, `${effect.operation}:${payload.itemKey}`, before, {
-          itemKey: state.inventory.equippedItemKeyBySlot[slot], health: state.player.health,
+          itemInstanceId: state.inventory.equippedItemInstanceIdBySlot[slot], health: state.player.health,
           maximumHealth: state.player.maximumHealth, skillResource: state.player.skillResource,
           maximumSkillResource: state.player.maximumSkillResource,
         })

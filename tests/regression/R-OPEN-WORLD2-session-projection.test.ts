@@ -118,8 +118,8 @@ describe('Text Open World vNext · authoritative Session Projection', () => {
 
   it('拒绝装备悬空、Actor缺失、ruleset漂移和不连续投影', () => {
     const projection = createInitialTextOpenWorldSessionProjectionV1(createTextOpenWorldVNextFixture())
-    const missingItem = structuredClone(projection); missingItem.state.inventory.equippedItemKeyBySlot.weapon = 'item.rust-sword'; delete missingItem.state.inventory.itemInstances['instance.initial.1.item.rust-sword']
-    expect(() => parseTextOpenWorldSessionProjectionV1(missingItem)).toThrow('装备状态无效')
+    const missingItem = structuredClone(projection); missingItem.state.inventory.equippedItemInstanceIdBySlot.weapon = 'instance.initial.1.item.rust-sword'; delete missingItem.state.inventory.itemInstances['instance.initial.1.item.rust-sword']
+    expect(() => parseTextOpenWorldSessionProjectionV1(missingItem)).toThrow('装备位引用未知物品实例')
     const missingActor = structuredClone(projection); delete missingActor.state.actors['actor.caretaker']
     expect(() => parseTextOpenWorldSessionProjectionV1(missingActor)).toThrow('Actor运行状态缺失')
     expect(() => parseTextOpenWorldSessionProjectionV1({ ...projection, ruleset: { ...projection.ruleset, version: 2 } })).toThrow('ruleset与RuntimePackage不一致')

@@ -338,7 +338,7 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
 
   const items = versioned(packageValue, 'items')
   exact(items, ['version', 'equipmentSlots', 'items', 'dropTables'], 'items')
-  const slots = catalog(items.equipmentSlots, 'items.equipmentSlots', ['key', 'label']); const itemRows = catalog(items.items, 'items.items', ['key', 'title', 'description', 'tags', 'kind', 'stackPolicy', 'maximumStack', 'unique', 'consumable', 'critical', 'droppable', 'sellable', 'baseValue', 'useActionKey', 'equipmentSlotKey', 'statModifiers', 'effectKeys', 'sourceRefs', 'presentationRefs']); const dropTables = catalog(items.dropTables, 'items.dropTables', ['key', 'entries'])
+  const slots = catalog(items.equipmentSlots, 'items.equipmentSlots', ['key', 'label']); const itemRows = catalog(items.items, 'items.items', ['key', 'title', 'description', 'tags', 'kind', 'stackPolicy', 'maximumStack', 'unique', 'consumable', 'critical', 'droppable', 'sellable', 'baseValue', 'useActionKey', 'equipActionKey', 'unequipActionKey', 'equipConditionKeys', 'equipmentSlotKey', 'statModifiers', 'effectKeys', 'sourceRefs', 'presentationRefs']); const dropTables = catalog(items.dropTables, 'items.dropTables', ['key', 'entries'])
   const slotKeys = keysOf(slots, 'items.equipmentSlots'); if ([...slotKeys].sort().join(',') !== ['accessory', 'armor', 'weapon'].join(',')) fail('首版装备位必须为weapon/armor/accessory')
   slots.forEach((item, index) => text(item.label, `items.equipmentSlots[${index}].label`, 100)); const itemKeys = keysOf(itemRows, 'items.items'); const dropTableKeys = keysOf(dropTables, 'items.dropTables')
   const modifierFields = ['maximumHealth', 'attack', 'defense', 'criticalChance', 'initiative', 'skillPower', 'skillResource']
@@ -351,10 +351,15 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
     const droppable = bool(item.droppable, `items.items[${index}].droppable`); const sellable = bool(item.sellable, `items.items[${index}].sellable`)
     int(item.baseValue, `items.items[${index}].baseValue`, 0, 1_000_000_000)
     const useActionKey = nullableKey(item.useActionKey, `items.items[${index}].useActionKey`); requireRef(useActionKey, actionKeys, 'item use Action')
+    const equipActionKey = nullableKey(item.equipActionKey, `items.items[${index}].equipActionKey`); requireRef(equipActionKey, actionKeys, 'item equip Action')
+    const unequipActionKey = nullableKey(item.unequipActionKey, `items.items[${index}].unequipActionKey`); requireRef(unequipActionKey, actionKeys, 'item unequip Action')
+    requireRefs(strings(item.equipConditionKeys, `items.items[${index}].equipConditionKeys`), conditionKeys, 'item equip condition')
     const slot = nullableKey(item.equipmentSlotKey, `items.items[${index}].equipmentSlotKey`); requireRef(slot, slotKeys, 'item slot')
     if ((stackPolicy === 'stacked') !== (maximumStack != null) || (stackPolicy === 'instanced' && maximumStack != null)) fail(`items.items[${index}] stackPolicy/maximumStack不一致`)
     if (unique && stackPolicy !== 'instanced') fail(`items.items[${index}] 唯一物品必须实例化`)
     if ((kind === 'equipment') !== (slot != null) || (kind === 'equipment' && stackPolicy !== 'instanced')) fail(`items.items[${index}] 装备类型/槽位/实例策略不一致`)
+    if ((kind === 'equipment') !== (equipActionKey != null && unequipActionKey != null)) fail(`items.items[${index}] 装备Action定义不完整`)
+    if (kind !== 'equipment' && strings(item.equipConditionKeys, `items.items[${index}].equipConditionKeys`).length) fail(`items.items[${index}] 非装备不能声明装备条件`)
     if (kind === 'material' && stackPolicy !== 'stacked') fail(`items.items[${index}] 材料必须可堆叠`)
     if (critical && (!unique || consumable || kind !== 'quest' || droppable || sellable)) fail(`items.items[${index}] 关键物品保护策略无效`)
     if (consumable !== (kind === 'consumable') || consumable !== (useActionKey != null)) fail(`items.items[${index}] 消耗品/useAction不一致`)
@@ -370,6 +375,25 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
     if (action.category !== 'use' || action.targetScope !== 'item' || removeEffects.length !== 1
       || row(removeEffects[0].payload, `item ${String(item.key)} consume payload`).itemKey !== item.key) fail(`物品${String(item.key)}的useAction没有消费自身`)
     requireSameKeys(strings(action.successEffectKeys, `item ${String(item.key)} use success effects`), strings(item.effectKeys, `item ${String(item.key)} effects`), `item ${String(item.key)} use effects`)
+  })
+  itemRows.filter(item => item.kind === 'equipment').forEach(item => {
+    for (const [mode, actionKeyField] of [['equip', 'equipActionKey'], ['unequip', 'unequipActionKey']] as const) {
+      const actionKey = key(item[actionKeyField], `item ${String(item.key)} ${mode}ActionKey`)
+      const action = actionRows.find(candidate => candidate.key === actionKey) ?? fail(`装备Action不存在:${actionKey}`)
+      const successEffects = strings(action.successEffectKeys, `item ${String(item.key)} ${mode} success effects`)
+        .map(effectKey => effects.find(effect => effect.key === effectKey)!)
+      const equipmentEffects = successEffects.filter(effect => effect.operation === `${mode}-item`)
+      if (action.category !== mode || action.targetScope !== 'item' || strings(action.costEffectKeys, `item ${String(item.key)} ${mode} costs`).length
+        || strings(action.failureEffectKeys, `item ${String(item.key)} ${mode} failures`).length || successEffects.length !== 1
+        || equipmentEffects.length !== 1 || row(equipmentEffects[0].payload, `item ${String(item.key)} ${mode} payload`).itemKey !== item.key
+        || action.confirmationPolicy !== 'never' || action.repeatPolicy !== 'repeatable') fail(`物品${String(item.key)}的${mode}Action不符合装备事务`)
+      if (mode === 'equip') {
+        const requirements = new Set(strings(action.requirementConditionKeys, `item ${String(item.key)} equip requirements`))
+        strings(item.equipConditionKeys, `item ${String(item.key)} equip conditions`).forEach(conditionKey => {
+          if (!requirements.has(conditionKey)) fail(`物品${String(item.key)}的装备Action缺少条件:${conditionKey}`)
+        })
+      }
+    }
   })
   actionRows.filter(action => ['drop', 'sell'].includes(String(action.category))).forEach(action => {
     const reason = action.category === 'drop' ? 'drop' : 'sell'

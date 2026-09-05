@@ -18,7 +18,11 @@ import {
 } from './event-contract'
 import { parseTextOpenWorldCommandEventPayloadV1 } from './command-contract'
 import { parseTextOpenWorldModulesV1 } from './modules'
-import { createInitialTextOpenWorldInventoryV1, deriveTextOpenWorldInventoryQuantitiesV1 } from './inventory'
+import {
+  createInitialTextOpenWorldInventoryV1,
+  deriveTextOpenWorldEquippedItemKeysV1,
+  deriveTextOpenWorldInventoryQuantitiesV1,
+} from './inventory'
 import { deriveTextOpenWorldPlayerStatsFromModulesV1 } from './player-stats'
 import { deriveTextOpenWorldProgressionStatusV1 } from './progression'
 import { parseTextOpenWorldRuntimePackageV1 } from './runtime-package'
@@ -76,7 +80,7 @@ function initialEffectState(modules: TextOpenWorldParsedModulesV1): TextOpenWorl
     },
     inventory: {
       ...initialInventory,
-      equippedItemKeyBySlot: { weapon: null, armor: null, accessory: null },
+      equippedItemInstanceIdBySlot: { weapon: null, armor: null, accessory: null },
       knownRecipeKeys: modules.crafting.recipes.filter(recipe => recipe.learnedByDefault).map(recipe => recipe.key),
       currency: modules.actors.player.build.startingCurrency,
     },
@@ -203,7 +207,7 @@ export function deriveTextOpenWorldContextsV1(value: TextOpenWorldSessionProject
   })) as Record<string, 'bad' | 'neutral' | 'good'>
   const playerStats = deriveTextOpenWorldPlayerStatsFromModulesV1({
     modules, level: state.player.level, attributes: state.player.attributes,
-    equippedItemKeyBySlot: state.inventory.equippedItemKeyBySlot,
+    equippedItemKeyBySlot: deriveTextOpenWorldEquippedItemKeysV1(modules, state.inventory),
   })
   const progression = deriveTextOpenWorldProgressionStatusV1(modules, state.player.experience)
   const inventoryQuantities = deriveTextOpenWorldInventoryQuantitiesV1(modules, state.inventory)
@@ -214,7 +218,7 @@ export function deriveTextOpenWorldContextsV1(value: TextOpenWorldSessionProject
       skillResource: state.player.skillResource, maximumSkillResource: playerStats.maximumSkillResource,
       morality: state.relationships.morality, attributes: structuredClone(state.player.attributes), statusKeys: [...state.player.statusKeys],
     },
-    inventory: { itemQuantities: inventoryQuantities, currency: state.inventory.currency, equippedItemKeys: Object.values(state.inventory.equippedItemKeyBySlot).filter((key): key is string => key != null), knownRecipeKeys: [...state.inventory.knownRecipeKeys] },
+    inventory: { itemQuantities: inventoryQuantities, currency: state.inventory.currency, equippedItemKeys: Object.values(deriveTextOpenWorldEquippedItemKeysV1(modules, state.inventory)).filter((key): key is string => key != null), knownRecipeKeys: [...state.inventory.knownRecipeKeys] },
     quests: { statusByQuestKey: structuredClone(state.quests.statusByQuestKey), stageByQuestKey: Object.fromEntries(Object.entries(state.quests.stageByQuestKey).filter((entry): entry is [string, string] => entry[1] != null)), objectiveStatusByKey: structuredClone(state.quests.objectiveStatusByKey), resultTags: [...state.quests.resultTags] },
     map: { currentLocationKey: state.map.currentLocationKey, regionKnowledgeByKey: structuredClone(state.map.regionKnowledgeByKey), unlockedFastTravelPointKeys: [...state.map.unlockedFastTravelPointKeys], openEdgeKeys: [...state.map.openEdgeKeys] },
     time: { worldMinute: state.time.worldMinute, minutesPerDay: modules['time-weather'].minutesPerDay, timePeriodKey: periodKey, weatherKey: state.time.currentWeatherByRegionKey[regionKey], deadlineWorldMinuteByKey: structuredClone(state.time.deadlineWorldMinuteByKey) },

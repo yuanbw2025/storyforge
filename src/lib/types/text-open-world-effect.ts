@@ -59,7 +59,7 @@ export interface TextOpenWorldEffectStateV1 {
   inventory: {
     stackQuantities: Record<string, number>
     itemInstances: Record<string, { itemKey: string; acquiredByClaimKey: string; stateTags: string[] }>
-    equippedItemKeyBySlot: { weapon: string | null; armor: string | null; accessory: string | null }
+    equippedItemInstanceIdBySlot: { weapon: string | null; armor: string | null; accessory: string | null }
     knownRecipeKeys: string[]
     currency: number
   }

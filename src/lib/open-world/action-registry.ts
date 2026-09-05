@@ -148,6 +148,13 @@ export function createTextOpenWorldActionRegistryV1(value: TextOpenWorldRuntimeP
           ? validTargetKeys.filter(itemKey => itemKey === removal.payload.itemKey)
           : []
       }
+      if (action.targetScope === 'item' && ['equip', 'unequip'].includes(action.category)) {
+        const equipment = action.successEffectKeys.map(effectKey => effectByKey.get(effectKey))
+          .find(effect => effect?.operation === `${action.category}-item`)
+        validTargetKeys = equipment?.operation === 'equip-item' || equipment?.operation === 'unequip-item'
+          ? validTargetKeys.filter(itemKey => itemKey === equipment.payload.itemKey)
+          : []
+      }
       if (action.targetScope !== 'none' && validTargetKeys.length === 0) unavailableReasons.push({ code: 'no-valid-target', message: '当前没有可作用的目标。', conditionKey: null })
       return {
         ...cloneEntry(entry),

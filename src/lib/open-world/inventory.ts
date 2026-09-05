@@ -7,6 +7,7 @@ import { parseTextOpenWorldModulesV1 } from './modules'
 
 type Inventory = TextOpenWorldEffectStateV1['inventory']
 type Item = TextOpenWorldParsedModulesV1['items']['items'][number]
+type EquipmentSlots = { weapon: string | null; armor: string | null; accessory: string | null }
 
 function fail(message: string): never { throw new Error(`[text-open-world-inventory] ${message}`) }
 
@@ -28,6 +29,19 @@ export function deriveTextOpenWorldInventoryQuantitiesV1(modules: TextOpenWorldP
   return quantities
 }
 
+export function deriveTextOpenWorldEquippedItemKeysV1(modules: TextOpenWorldParsedModulesV1, inventory: Inventory): EquipmentSlots {
+  const slots = inventory.equippedItemInstanceIdBySlot
+  const actual = Object.keys(slots).sort().join(',')
+  if (actual !== ['accessory', 'armor', 'weapon'].sort().join(',')) fail(`装备位字段无效:${actual}`)
+  return Object.fromEntries(Object.entries(slots).map(([slot, instanceId]) => {
+    if (instanceId == null) return [slot, null]
+    const instance = inventory.itemInstances[instanceId] ?? fail(`装备位引用未知物品实例:${slot}:${instanceId}`)
+    const definition = modules.items.items.find(item => item.key === instance.itemKey) ?? fail(`装备位引用未知物品:${instance.itemKey}`)
+    if (definition.kind !== 'equipment' || definition.equipmentSlotKey !== slot) fail(`物品实例不能装备到${slot}:${instanceId}`)
+    return [slot, definition.key]
+  })) as EquipmentSlots
+}
+
 export function createTextOpenWorldInventoryCatalogV1(runtimePackage: TextOpenWorldRuntimePackageV1) {
   const modules = parseTextOpenWorldModulesV1(runtimePackage)
   const itemByKey = new Map(modules.items.items.map(item => [item.key, item]))
@@ -36,7 +50,10 @@ export function createTextOpenWorldInventoryCatalogV1(runtimePackage: TextOpenWo
     return Object.entries(quantities).map(([itemKey, quantity]) => {
       const item = itemByKey.get(itemKey) ?? fail(`库存引用未知物品:${itemKey}`)
       const instances = Object.entries(inventory.itemInstances).filter(([, instance]) => instance.itemKey === itemKey)
-        .map(([itemInstanceId, instance]) => ({ itemInstanceId, ...structuredClone(instance) }))
+        .map(([itemInstanceId, instance]) => ({
+          itemInstanceId, ...structuredClone(instance),
+          equippedSlotKey: Object.entries(inventory.equippedItemInstanceIdBySlot).find(([, equippedId]) => equippedId === itemInstanceId)?.[0] ?? null,
+        }))
       return {
         key: itemKey, item: structuredClone(item), quantity, instances,
         actions: { usable: item.consumable, droppable: item.droppable, sellable: item.sellable, equipable: item.kind === 'equipment' },

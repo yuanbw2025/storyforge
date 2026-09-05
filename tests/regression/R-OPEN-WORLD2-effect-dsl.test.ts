@@ -13,7 +13,7 @@ function state(overrides: Partial<TextOpenWorldEffectStateV1> = {}): TextOpenWor
     inventory: {
       stackQuantities: { 'item.salt-crystal': 2 },
       itemInstances: { 'instance.initial.1.item.rust-sword': { itemKey: 'item.rust-sword', acquiredByClaimKey: 'initial-build', stateTags: ['new'] } },
-      equippedItemKeyBySlot: { weapon: null, armor: null, accessory: null },
+      equippedItemInstanceIdBySlot: { weapon: null, armor: null, accessory: null },
       knownRecipeKeys: ['recipe.brine-tonic'], currency: 20,
     },
     quests: {
@@ -167,9 +167,9 @@ describe('Text Open World vNext · typed Effect DSL and atomic EffectPlan', () =
     ]))
     await expect(catalog.plan({ effectKeys: ['effect.kill-caretaker'], claimKey: 'claim.kill', state: state() }))
       .rejects.toThrow('不能杀死受保护Actor')
-    const equipped = state({ inventory: { ...state().inventory, equippedItemKeyBySlot: { weapon: 'item.rust-sword', armor: null, accessory: null } } })
+    const equipped = state({ inventory: { ...state().inventory, equippedItemInstanceIdBySlot: { weapon: 'instance.initial.1.item.rust-sword', armor: null, accessory: null } } })
     await expect(catalog.plan({ effectKeys: ['effect.remove-sword'], claimKey: 'claim.remove-equipped', state: equipped }))
-      .rejects.toThrow('不能移除已装备物品')
+      .rejects.toThrow('未装备物品实例数量不足')
   })
 
   it('技能学习与状态变化只能执行一次，并拒绝未在Release声明的状态', async () => {

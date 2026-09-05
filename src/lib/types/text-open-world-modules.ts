@@ -328,6 +328,9 @@ export interface TextOpenWorldItemModuleV1 {
     sellable: boolean
     baseValue: number
     useActionKey: string | null
+    equipActionKey: string | null
+    unequipActionKey: string | null
+    equipConditionKeys: string[]
     equipmentSlotKey: 'weapon' | 'armor' | 'accessory' | null
     statModifiers: Partial<Record<'maximumHealth' | 'attack' | 'defense' | 'criticalChance' | 'initiative' | 'skillPower' | 'skillResource', number>>
     effectKeys: string[]
