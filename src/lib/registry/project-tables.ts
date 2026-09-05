@@ -142,6 +142,9 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
       { kind: 'simple', field: 'id', target: 'adaptationSourceFacts[adaptationProjectId]', onDelete: 'cascade' },
       { kind: 'simple', field: 'id', target: 'adaptationCausalEdges[adaptationProjectId]', onDelete: 'cascade' },
       { kind: 'simple', field: 'id', target: 'adaptationDecisions[adaptationProjectId]', onDelete: 'cascade' },
+      { kind: 'simple', field: 'id', target: 'screenplayBeats[adaptationProjectId]', onDelete: 'cascade' },
+      { kind: 'simple', field: 'id', target: 'screenplaySceneCards[adaptationProjectId]', onDelete: 'cascade' },
+      { kind: 'simple', field: 'id', target: 'screenplayReviewIssues[adaptationProjectId]', onDelete: 'cascade' },
       { kind: 'simple', field: 'id', target: 'screenplayScenes[adaptationProjectId]', onDelete: 'cascade' },
       { kind: 'simple', field: 'id', target: 'comicPages[adaptationProjectId]', onDelete: 'cascade' },
       { kind: 'simple', field: 'id', target: 'comicVisualSubjects[adaptationProjectId]', onDelete: 'cascade' },
@@ -200,6 +203,33 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     ],
     defaults: { sourceFactKeys: [], targetKeys: [], authorStatus: 'confirmed' },
     note: 'ADAPT-FOUNDATION-1 作者审定的删改外化决策；add 是唯一可无 sourceFactKeys 的动作' },
+
+  { table: db.screenplayBeats, name: 'screenplayBeats', owner: 'project', exportable: true, exportIdField: true,
+    domainOwner: { allowed: ['work'], defaultOwner: 'work', locator: { kind: 'parent', owner: 'work', table: 'adaptationProjects', field: 'adaptationProjectId' } },
+    exportRemap: [
+      { field: 'workId', remapVia: 'works', exportAs: '_workExportId', onUnmapped: 'require' },
+      { field: 'adaptationProjectId', remapVia: 'adaptationProjects', exportAs: '_adaptationProjectExportId', onUnmapped: 'require' },
+    ],
+    defaults: { causalFactKeys: [], decisionKeys: [], sourceUnitKeys: [], authorStatus: 'confirmed', revision: 1 },
+    note: 'SCREEN-PRO-1 作者确认的幕/序列/分集 Beat；引用当前 manifest 的事实、决定与来源稳定 key' },
+
+  { table: db.screenplaySceneCards, name: 'screenplaySceneCards', owner: 'project', exportable: true, exportIdField: true,
+    domainOwner: { allowed: ['work'], defaultOwner: 'work', locator: { kind: 'parent', owner: 'work', table: 'adaptationProjects', field: 'adaptationProjectId' } },
+    exportRemap: [
+      { field: 'workId', remapVia: 'works', exportAs: '_workExportId', onUnmapped: 'require' },
+      { field: 'adaptationProjectId', remapVia: 'adaptationProjects', exportAs: '_adaptationProjectExportId', onUnmapped: 'require' },
+    ],
+    defaults: { sourceUnitKeys: [], authorStatus: 'confirmed', revision: 1 },
+    note: 'SCREEN-PRO-1 场景写作前的因果和状态合同；不得用 Scene AST 或小说 Chapter 代替' },
+
+  { table: db.screenplayReviewIssues, name: 'screenplayReviewIssues', owner: 'project', exportable: true, exportIdField: true,
+    domainOwner: { allowed: ['work'], defaultOwner: 'work', locator: { kind: 'parent', owner: 'work', table: 'adaptationProjects', field: 'adaptationProjectId' } },
+    exportRemap: [
+      { field: 'workId', remapVia: 'works', exportAs: '_workExportId', onUnmapped: 'require' },
+      { field: 'adaptationProjectId', remapVia: 'adaptationProjects', exportAs: '_adaptationProjectExportId', onUnmapped: 'require' },
+    ],
+    defaults: { blockId: null, sourceUnitKeys: [], status: 'open' },
+    note: 'SCREEN-PRO-1 可定位到 scene/block/revision 的来源、连续性、戏剧性和格式审查问题' },
 
   { table: db.screenplayScenes, name: 'screenplayScenes', owner: 'project', exportable: true, exportIdField: true,
     domainOwner: { allowed: ['work'], defaultOwner: 'work', locator: { kind: 'field', owner: 'work', field: 'workId' } },

@@ -361,16 +361,12 @@ export async function generateAdaptationCandidateV1<K extends AdaptationCandidat
 }): Promise<{ snapshot: AgentRunSnapshotV1; candidate: AdaptationStructuredCandidateV1<K> }> {
   if (!input.aiConfig && !input.runAI) throw new Error('[adaptation-run] 缺少 AI 配置')
   const root = await readRoot(input.scope, input.adaptationProjectId)
+  if (root.medium === 'screenplay') throw new Error('[adaptation-run] 旧的一步式剧本候选入口已停用；请使用十步专业剧本 Pipeline')
+  if (input.artifactKind === 'plan' || input.artifactKind === 'screenplay-scenes') throw new Error('[adaptation-run] 旧的一步式剧本候选入口已停用；请使用十步专业剧本 Pipeline')
   const freshness = await inspectAdaptationFreshness(root.id)
   if (freshness.status !== 'unchanged') throw new Error('[adaptation-run] 来源已变化或缺失，请先重新同步')
   if (input.artifactKind !== 'brief' && (!root.brief || root.briefSourceManifestVersion !== root.activeSourceManifestVersion)) throw new Error('[adaptation-run] 当前来源版本的 Brief 尚未确认')
-  if (input.artifactKind === 'plan' && root.medium !== 'screenplay') throw new Error('[adaptation-run] 剧本 Plan 候选只能用于剧本改编')
   if (input.artifactKind === 'comic-plan' && root.medium !== 'comic') throw new Error('[adaptation-run] 漫画 Plan 候选只能用于漫画改编')
-  if (input.artifactKind === 'screenplay-scenes') {
-    if (root.medium !== 'screenplay') throw new Error('[adaptation-run] 只有剧本改编可生成剧本场景')
-    if (!root.plan || root.planSourceManifestVersion !== root.activeSourceManifestVersion) throw new Error('[adaptation-run] 当前来源版本的 Plan 尚未确认')
-    if (!['producing', 'review'].includes(root.status)) throw new Error('[adaptation-run] 请先进入剧本生产阶段')
-  }
   if (input.artifactKind === 'comic-storyboard') {
     if (root.medium !== 'comic') throw new Error('[adaptation-run] 只有漫画改编可生成漫画分镜')
     if (!root.plan || root.planSourceManifestVersion !== root.activeSourceManifestVersion) throw new Error('[adaptation-run] 当前来源版本的漫画 Plan 尚未确认')

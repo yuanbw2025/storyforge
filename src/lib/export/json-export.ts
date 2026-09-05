@@ -58,6 +58,9 @@ import type {
   AdaptationSourceFactV1,
   AdaptationSourceUnit,
   ScreenplayScene,
+  ScreenplayBeatV1,
+  ScreenplayReviewIssueV1,
+  ScreenplaySceneCardV1,
   ComicPage,
   ComicPanel,
   ComicVisualSubject,
@@ -164,6 +167,18 @@ export interface ProjectExportData {
   )[]
   adaptationDecisions: (
     Omit<AdaptationDecisionV1, 'id' | 'projectId' | 'workId' | 'adaptationProjectId'>
+    & { _exportId: number; _workExportId: number; _adaptationProjectExportId: number }
+  )[]
+  screenplayBeats: (
+    Omit<ScreenplayBeatV1, 'id' | 'projectId' | 'workId' | 'adaptationProjectId'>
+    & { _exportId: number; _workExportId: number; _adaptationProjectExportId: number }
+  )[]
+  screenplaySceneCards: (
+    Omit<ScreenplaySceneCardV1, 'id' | 'projectId' | 'workId' | 'adaptationProjectId'>
+    & { _exportId: number; _workExportId: number; _adaptationProjectExportId: number }
+  )[]
+  screenplayReviewIssues: (
+    Omit<ScreenplayReviewIssueV1, 'id' | 'projectId' | 'workId' | 'adaptationProjectId'>
     & { _exportId: number; _workExportId: number; _adaptationProjectExportId: number }
   )[]
   screenplayScenes: (

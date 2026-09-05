@@ -22,6 +22,12 @@ import {
 } from '../../src/lib/adaptation/source-manifest'
 import { createScreenplayScene } from '../../src/lib/screenplay/service'
 import {
+  adoptScreenplayBeatsV1,
+  adoptScreenplayReviewIssuesV1,
+  adoptScreenplaySceneCardsV1,
+  startScreenplayProductionV1,
+} from '../../src/lib/screenplay/production'
+import {
   adoptAdaptationCausalEdgesV1,
   adoptAdaptationDecisionsV1,
   adoptAdaptationSourceFactsV1,
@@ -153,24 +159,52 @@ async function seedAdaptationProducts(sourceScope: WorkspaceScope) {
   screenplayAnalysisRoot = (await db.adaptationProjects.get(screenplayAnalysisRoot.id!))!
   await adoptAdaptationDecisionsV1({ scope: screenplay.scope, adaptationProjectId: screenplayAnalysisRoot.id!, expectedAdaptationRevision: screenplayAnalysisRoot.revision, sourceManifestVersion: screenplayAnalysisRoot.activeSourceManifestVersion, items: [{ authorStatus: 'confirmed', candidate: { stableKey: 'decision.keep-choice', action: 'keep', sourceFactKeys: ['fact.face-choice'], targetKeys: ['act-1'], rationale: '保留核心选择作为剧本主轴。' } }] })
   screenplayAnalysisRoot = (await db.adaptationProjects.get(screenplayAnalysisRoot.id!))!
-  const screenplayPlan: AdaptationPlanV1 = {
-    version: 1,
-    premise: '林惊羽必须决定复仇还是守护。',
-    sections: [{
-      stableKey: 'act-1',
-      title: '第一幕',
-      summary: '踏入山门并遭遇抉择。',
-      order: 0,
-      episodeNumber: 1,
-      sourceUnitKeys: [screenplayUnit.sourceUnitKey],
-    }],
-    globalAssumptions: [],
-  }
   let screenplayRoot = await saveAdaptationBriefDraft({ adaptationProjectId: screenplay.adaptation.id!, brief: adaptationBrief, expectedRevision: screenplayAnalysisRoot.revision })
   screenplayRoot = await confirmAdaptationBrief({ adaptationProjectId: screenplayRoot.id!, expectedRevision: screenplayRoot.revision })
-  screenplayRoot = await saveAdaptationPlanDraft({ adaptationProjectId: screenplayRoot.id!, plan: screenplayPlan, expectedRevision: screenplayRoot.revision })
-  screenplayRoot = await confirmAdaptationPlan({ adaptationProjectId: screenplayRoot.id!, expectedRevision: screenplayRoot.revision })
-  screenplayRoot = await startAdaptationProduction({ adaptationProjectId: screenplayRoot.id!, expectedRevision: screenplayRoot.revision })
+  await adoptScreenplayBeatsV1({
+    scope: screenplay.scope,
+    expectedAdaptationRevision: screenplayRoot.revision,
+    sourceManifestVersion: screenplayRoot.activeSourceManifestVersion,
+    candidates: [{
+      stableKey: 'beat-1',
+      sectionKey: 'act-1',
+      sectionTitle: '第一幕',
+      scope: 'act',
+      episodeNumber: 1,
+      order: 0,
+      objective: '林惊羽进入山门寻找复仇线索。',
+      conflict: '守护山门会迫使他暂时放下复仇。',
+      turn: '山门危机把抽象选择变成眼前行动。',
+      outcome: '林惊羽选择先守护山门。',
+      causalFactKeys: ['fact.enter-gate', 'fact.face-choice'],
+      decisionKeys: ['decision.keep-choice'],
+      sourceUnitKeys: [screenplayUnit.sourceUnitKey],
+      estimatedSeconds: 45,
+    }],
+  })
+  screenplayRoot = (await db.adaptationProjects.get(screenplayRoot.id!))!
+  await adoptScreenplaySceneCardsV1({
+    scope: screenplay.scope,
+    expectedAdaptationRevision: screenplayRoot.revision,
+    sourceManifestVersion: screenplayRoot.activeSourceManifestVersion,
+    candidates: [{
+      stableKey: 'scene-1',
+      beatKey: 'beat-1',
+      episodeNumber: 1,
+      sceneNumber: 1,
+      order: 0,
+      purpose: '建立山门空间并让选择进入行动。',
+      conflict: '复仇冲动与守护责任正面冲突。',
+      entryState: '林惊羽只关心复仇线索。',
+      exitState: '林惊羽决定先守住山门。',
+      visibleAction: '林惊羽踏上石阶并挡在山门之前。',
+      informationReveal: '山门危机与他的仇敌有关。',
+      sourceUnitKeys: [screenplayUnit.sourceUnitKey],
+      estimatedSeconds: 45,
+    }],
+  })
+  screenplayRoot = (await db.adaptationProjects.get(screenplayRoot.id!))!
+  screenplayRoot = await startScreenplayProductionV1({ scope: screenplay.scope, expectedAdaptationRevision: screenplayRoot.revision })
   const screenplayScene = await createScreenplayScene(screenplay.scope, {
     stableKey: 'scene-1',
     planSectionKey: 'act-1',
@@ -184,6 +218,26 @@ async function seedAdaptationProducts(sourceScope: WorkspaceScope) {
     sourceUnitIds: [screenplayUnit.id],
     blocks: [{ id: 'action-1', type: 'action', text: '云海散开，青云山门出现在林惊羽面前。' }],
   })
+  await adoptScreenplayReviewIssuesV1({
+    scope: screenplay.scope,
+    expectedAdaptationRevision: screenplayRoot.revision,
+    sourceManifestVersion: screenplayRoot.activeSourceManifestVersion,
+    category: 'grounding',
+    targetSceneKeys: ['scene-1'],
+    expectedSceneRevisions: { 'scene-1': screenplayScene.revision },
+    candidates: [{
+      stableKey: 'issue.scene-1.grounding',
+      category: 'grounding',
+      severity: 'minor',
+      sceneKey: 'scene-1',
+      blockId: 'action-1',
+      evidence: '来源写明林惊羽踏入青云山门。',
+      problem: '动作只写山门显现，尚未明确人物踏入。',
+      suggestion: '补入林惊羽踏上石阶的可见动作。',
+      sourceUnitKeys: [screenplayUnit.sourceUnitKey],
+    }],
+  })
+  screenplayRoot = (await db.adaptationProjects.get(screenplayRoot.id!))!
 
   const comic = await createAdaptation({
     sourceScope,

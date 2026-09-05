@@ -142,7 +142,7 @@ describe('ADAPT-FOUNDATION-1 · 共享来源事实、因果边与改编决策', 
     ] })
 
     const backup = await exportProjectJSON(source.scope.projectId)
-    expect(backup.version).toBe(12)
+    expect(backup.version).toBe(13)
     expect(backup.adaptationSourceFacts).toHaveLength(2)
     expect(backup.adaptationCausalEdges).toHaveLength(1)
     expect(backup.adaptationDecisions).toHaveLength(1)

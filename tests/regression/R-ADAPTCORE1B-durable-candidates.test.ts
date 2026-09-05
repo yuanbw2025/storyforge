@@ -1,19 +1,26 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { createWorkspace } from '../../src/lib/workspace/create-workspace'
-import { createAdaptation, listActiveSourceUnits, startAdaptationProduction } from '../../src/lib/adaptation/source-manifest'
-import type { AdaptationBriefV1, ScreenplayTargetSpecV1 } from '../../src/lib/types'
+import { createAdaptation, listActiveSourceUnits } from '../../src/lib/adaptation/source-manifest'
+import type { AdaptationBriefV1, ComicTargetSpecV1, ScreenplayTargetSpecV1 } from '../../src/lib/types'
 import {
   adoptAdaptationCandidateV1,
   generateAdaptationCandidateV1,
   readPendingAdaptationCandidateV1,
 } from '../../src/lib/agent/run/adaptation-durable'
 
-const targetSpec: ScreenplayTargetSpecV1 = {
+const screenplayTargetSpec: ScreenplayTargetSpecV1 = {
   format: 'film', language: 'zh-CN', episodeCount: null, targetMinutesPerEpisode: 95,
   rating: 'PG-13', dialogueDensity: 'balanced', productionScale: 'contained', preserveVoiceOver: false,
   titlePage: { creditLine: '改编', authorDisplayName: '测试作者', contactText: '', copyrightNotice: '', draftLabel: '候选稿' },
   exportDefaults: ['fountain', 'fdx', 'pdf'],
+}
+
+const comicTargetSpec: ComicTargetSpecV1 = {
+  format: 'page-comic', audience: '青年读者', readingDirection: 'ltr', chapterCount: 1, targetPagesPerChapter: 20,
+  pageSize: { width: 1200, height: 1700, unit: 'px', bleed: 30 }, colorMode: 'color', artStyleBrief: '克制写实线稿',
+  renderCandidatesPerPanel: 2,
+  imageCapabilityRequirement: { referenceImage: false, deterministicSeed: false, inpainting: false, commercialUseRequired: false, minimumWidth: 1024, minimumHeight: 1024 },
 }
 
 const brief: AdaptationBriefV1 = {
@@ -21,16 +28,18 @@ const brief: AdaptationBriefV1 = {
   audience: '成年观众', rating: 'PG-13', targetScale: '95 分钟电影', narrativePerspective: '主人公', timeBudget: '95 分钟', costLimit: '有限场景', deviationNotes: '', unresolvedQuestions: [], assumptions: [],
 }
 
-async function fixture() {
+async function fixture(medium: 'comic' | 'screenplay' = 'comic') {
   const source = await createWorkspace({ name: '可恢复来源', genres: ['other'], status: 'drafting', description: '旧站抉择', targetWordCount: 10_000, enableMultiWorld: false }, { kind: 'novel', novelProfile: 'short' })
   const chapter = await db.chapters.where('projectId').equals(source.scope.projectId).filter(row => row.workId === source.scope.workId).first()
   await db.chapters.update(chapter!.id!, { content: '<p>暴雨中，林岚走进旧车站。</p>', summary: '进入旧站', updatedAt: Date.now() })
-  const created = await createAdaptation({ sourceScope: source.scope, sourceWorkId: source.scope.workId, title: '旧站剧本', sourceSelection: { mode: 'entire-work' }, medium: 'screenplay', targetSpec })
+  const created = medium === 'screenplay'
+    ? await createAdaptation({ sourceScope: source.scope, sourceWorkId: source.scope.workId, title: '旧站剧本', sourceSelection: { mode: 'entire-work' }, medium, targetSpec: screenplayTargetSpec })
+    : await createAdaptation({ sourceScope: source.scope, sourceWorkId: source.scope.workId, title: '旧站漫画', sourceSelection: { mode: 'entire-work' }, medium, targetSpec: comicTargetSpec })
   const unit = (await listActiveSourceUnits(created.adaptation.id!)).find(row => row.sourceKind === 'chapter')!
   return { source, created, chapterId: chapter!.id!, unit }
 }
 
-describe('ADAPT-CORE-1B / SCREEN-1B · durable adaptation candidates', () => {
+describe('ADAPT-CORE-1B · durable adaptation candidates 与旧剧本入口退役', () => {
   beforeEach(async () => { await db.delete(); await db.open() })
   afterEach(() => db.close())
 
@@ -64,25 +73,18 @@ describe('ADAPT-CORE-1B / SCREEN-1B · durable adaptation candidates', () => {
     expect(await db.works.get(source.scope.workId)).toBeTruthy()
   })
 
-  it('Plan 与场景批次均需作者确认；非法场景使整批零落库，合法批次保留来源键映射', async () => {
-    const { created, unit } = await fixture()
-    const briefRun = await generateAdaptationCandidateV1({ scope: created.scope, adaptationProjectId: created.adaptation.id!, artifactKind: 'brief', runAI: async () => JSON.stringify(brief) })
-    await adoptAdaptationCandidateV1<'brief'>({ scope: created.scope, runId: briefRun.snapshot.run.id })
-    const plan = { version: 1 as const, premise: '她必须在末班车到来前作出选择。', sections: [{ stableKey: 'act-1', title: '第一幕', summary: '进入困局', order: 0, episodeNumber: 1, sourceUnitKeys: [unit.sourceUnitKey] }], globalAssumptions: [] }
-    const planRun = await generateAdaptationCandidateV1({ scope: created.scope, adaptationProjectId: created.adaptation.id!, artifactKind: 'plan', runAI: async () => JSON.stringify(plan) })
-    await adoptAdaptationCandidateV1<'plan'>({ scope: created.scope, runId: planRun.snapshot.run.id })
-    let root = (await db.adaptationProjects.get(created.adaptation.id!))!
-    root = await startAdaptationProduction({ adaptationProjectId: root.id!, expectedRevision: root.revision })
-    const valid = { stableKey: 'act-1-scene-1', planSectionKey: 'act-1', episodeNumber: 1, sceneNumber: 1, intExt: 'INT' as const, location: '旧车站', timeOfDay: '夜', summary: '林岚进入旧站', estimatedSeconds: 60, sourceUnitKeys: [unit.sourceUnitKey], blocks: [{ id: 'action_1', type: 'action' as const, text: '雨水顺着玻璃落下。' }] }
-    const invalid = { ...valid, stableKey: 'act-1-scene-2', sceneNumber: 2, blocks: [{ id: 'dialogue_1', type: 'dialogue' as const, text: '没有角色提示。' }] }
-    const badRun = await generateAdaptationCandidateV1({ scope: created.scope, adaptationProjectId: root.id!, artifactKind: 'screenplay-scenes', selectedPlanSectionKeys: ['act-1'], runAI: async () => JSON.stringify([valid, invalid]) })
-    await expect(adoptAdaptationCandidateV1<'screenplay-scenes'>({ scope: created.scope, runId: badRun.snapshot.run.id })).rejects.toThrow('对白前必须')
+  it('剧本不能再进入通用 Brief/Plan/场景批次生成器', async () => {
+    const { created } = await fixture('screenplay')
+    for (const artifactKind of ['brief', 'plan', 'screenplay-scenes'] as const) {
+      await expect(generateAdaptationCandidateV1({
+        scope: created.scope,
+        adaptationProjectId: created.adaptation.id!,
+        artifactKind,
+        selectedPlanSectionKeys: artifactKind === 'screenplay-scenes' ? ['act-1'] : undefined,
+        runAI: async () => JSON.stringify(brief),
+      })).rejects.toThrow('十步专业剧本 Pipeline')
+    }
+    expect(await db.agentRuns.count()).toBe(0)
     expect(await db.screenplayScenes.count()).toBe(0)
-
-    const goodRun = await generateAdaptationCandidateV1({ scope: created.scope, adaptationProjectId: root.id!, artifactKind: 'screenplay-scenes', selectedPlanSectionKeys: ['act-1'], runAI: async () => JSON.stringify([valid]) })
-    const adopted = await adoptAdaptationCandidateV1<'screenplay-scenes'>({ scope: created.scope, runId: goodRun.snapshot.run.id })
-    expect(adopted.snapshot.projection.state).toBe('completed')
-    const scene = await db.screenplayScenes.where('adaptationProjectId').equals(root.id!).first()
-    expect(scene).toMatchObject({ stableKey: 'act-1-scene-1', sourceUnitIds: [unit.id], sourceReviewManifestVersion: 1 })
   })
 })

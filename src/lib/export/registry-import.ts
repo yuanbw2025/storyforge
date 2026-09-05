@@ -33,6 +33,12 @@ import {
   assertAdaptationProjectInvariant,
   assertAdaptationSourceFactV1,
 } from '../adaptation/contracts'
+import {
+  assertScreenplayBeatCandidateV1,
+  assertScreenplayReviewIssueCandidateV1,
+  assertScreenplaySceneCardCandidateV1,
+} from '../screenplay/production-contracts'
+import { assertScreenplayReleaseManifestV1 } from '../screenplay/release-contracts'
 import { validateScreenplayBlocksV1 } from '../screenplay/contracts'
 import { assertComicLetteringV1, assertComicMediaAssetV1, assertNormalizedFrameV1, framesOverlap } from '../comic/contracts'
 import type { AdaptationProject, ComicLetteringItemV1, ComicMediaAsset, CreationReleaseV1, ScreenplayBlock, Work } from '../types'
@@ -205,6 +211,10 @@ async function validateIndependentCreationBackup(value: Record<string, any>): Pr
       } as CreationReleaseV1, work.code)
     } catch (error) {
       throw new Error(`[deriveImport] v12 CreationRelease 校验失败：${error instanceof Error ? error.message : String(error)}`)
+    }
+    if (release.productKind === 'screenplay') {
+      assertScreenplayReleaseManifestV1(manifest, work.code, release.sourceRevision)
+      continue
     }
     if (release.productKind !== 'short-novel') {
       throw new Error(`[deriveImport] ${release.productKind} Release codec 尚未随对应产品启用`)
@@ -458,9 +468,47 @@ function validateAdaptationBackup(value: Record<string, any>): void {
 }
 
 function validateScreenplayBackup(value: Record<string, any>): void {
-  if (!Array.isArray(value.screenplayScenes)) throw new Error('[deriveImport] v7 备份缺少 screenplayScenes')
+  if (!Array.isArray(value.screenplayScenes) || !Array.isArray(value.screenplayBeats)
+    || !Array.isArray(value.screenplaySceneCards) || !Array.isArray(value.screenplayReviewIssues)) {
+    throw new Error('[deriveImport] v13 备份缺少剧本生产表')
+  }
   const roots = new Map<number, Record<string, any>>((value.adaptationProjects ?? []).map((row: Record<string, any>) => [row._exportId, row]))
   const units = new Map<number, Record<string, any>>((value.adaptationSourceUnits ?? []).map((row: Record<string, any>) => [row._exportId, row]))
+  const unitKeysByRootVersion = new Map<string, Set<string>>()
+  for (const unit of value.adaptationSourceUnits as Record<string, any>[]) {
+    const group = `${unit._adaptationProjectExportId}:${unit.manifestVersion}`
+    unitKeysByRootVersion.set(group, new Set([...(unitKeysByRootVersion.get(group) ?? []), unit.sourceUnitKey]))
+  }
+  const factKeysByRootVersion = new Map<string, Set<string>>()
+  for (const fact of value.adaptationSourceFacts as Record<string, any>[]) if (fact.authorStatus === 'confirmed') {
+    const group = `${fact._adaptationProjectExportId}:${fact.manifestVersion}`
+    factKeysByRootVersion.set(group, new Set([...(factKeysByRootVersion.get(group) ?? []), fact.stableKey]))
+  }
+  const decisionKeysByRootVersion = new Map<string, Set<string>>()
+  for (const decision of value.adaptationDecisions as Record<string, any>[]) if (decision.authorStatus === 'confirmed') {
+    const group = `${decision._adaptationProjectExportId}:${decision.manifestVersion}`
+    decisionKeysByRootVersion.set(group, new Set([...(decisionKeysByRootVersion.get(group) ?? []), decision.stableKey]))
+  }
+  const beatKeysByRootVersion = new Map<string, Set<string>>()
+  const beatEpisode = new Map<string, number>()
+  const beatIdentity = new Set<string>()
+  for (const row of value.screenplayBeats as Record<string, any>[]) {
+    const root = roots.get(row._adaptationProjectExportId); const group = `${row._adaptationProjectExportId}:${row.manifestVersion}`
+    if (!root || root.medium !== 'screenplay' || row._workExportId !== root._workExportId || row.manifestVersion > root.activeSourceManifestVersion) throw new Error('[deriveImport] v13 Beat owner、媒介或版本越界')
+    assertScreenplayBeatCandidateV1({ stableKey: row.stableKey, sectionKey: row.sectionKey, sectionTitle: row.sectionTitle, scope: row.scope, episodeNumber: row.episodeNumber, order: row.order, objective: row.objective, conflict: row.conflict, turn: row.turn, outcome: row.outcome, causalFactKeys: row.causalFactKeys, decisionKeys: row.decisionKeys, sourceUnitKeys: row.sourceUnitKeys, estimatedSeconds: row.estimatedSeconds })
+    const identity = `${group}:${row.stableKey}`
+    if (beatIdentity.has(identity) || row.sourceUnitKeys.some((key: string) => !unitKeysByRootVersion.get(group)?.has(key)) || row.causalFactKeys.some((key: string) => !factKeysByRootVersion.get(group)?.has(key)) || row.decisionKeys.some((key: string) => !decisionKeysByRootVersion.get(group)?.has(key))) throw new Error('[deriveImport] v13 Beat stableKey 或证据引用非法')
+    beatIdentity.add(identity); beatKeysByRootVersion.set(group, new Set([...(beatKeysByRootVersion.get(group) ?? []), row.stableKey])); beatEpisode.set(identity, row.episodeNumber)
+  }
+  const cardIdentity = new Set<string>(); const cardNumbers = new Set<string>()
+  for (const row of value.screenplaySceneCards as Record<string, any>[]) {
+    const root = roots.get(row._adaptationProjectExportId); const group = `${row._adaptationProjectExportId}:${row.manifestVersion}`
+    if (!root || root.medium !== 'screenplay' || row._workExportId !== root._workExportId) throw new Error('[deriveImport] v13 Scene Card owner 或媒介越界')
+    assertScreenplaySceneCardCandidateV1({ stableKey: row.stableKey, beatKey: row.beatKey, episodeNumber: row.episodeNumber, sceneNumber: row.sceneNumber, order: row.order, purpose: row.purpose, conflict: row.conflict, entryState: row.entryState, exitState: row.exitState, visibleAction: row.visibleAction, informationReveal: row.informationReveal, sourceUnitKeys: row.sourceUnitKeys, estimatedSeconds: row.estimatedSeconds })
+    const identity = `${group}:${row.stableKey}`; const number = `${row._adaptationProjectExportId}:${row.episodeNumber}:${row.sceneNumber}`
+    if (cardIdentity.has(identity) || cardNumbers.has(number) || !beatKeysByRootVersion.get(group)?.has(row.beatKey) || beatEpisode.get(`${group}:${row.beatKey}`) !== row.episodeNumber || row.sourceUnitKeys.some((key: string) => !unitKeysByRootVersion.get(group)?.has(key))) throw new Error('[deriveImport] v13 Scene Card 身份、Beat 或来源引用非法')
+    cardIdentity.add(identity); cardNumbers.add(number)
+  }
   const characterCount = Array.isArray(value.characters) ? value.characters.length : 0
   const ids = new Set<number>()
   const stable = new Set<string>()
@@ -498,6 +546,16 @@ function validateScreenplayBackup(value: Record<string, any>): void {
     })
     const section = root.plan?.sections?.find((item: Record<string, unknown>) => item.stableKey === row.planSectionKey)
     if (!section || root.planSourceManifestVersion !== root.activeSourceManifestVersion) throw new Error('[deriveImport] v7 剧本场景计划引用无效')
+  }
+  const reviewIdentity = new Set<string>()
+  for (const row of value.screenplayReviewIssues as Record<string, any>[]) {
+    const root = roots.get(row._adaptationProjectExportId); const group = `${row._adaptationProjectExportId}:${row.manifestVersion}`
+    const scene = (value.screenplayScenes as Record<string, any>[]).find(item => item._adaptationProjectExportId === row._adaptationProjectExportId && item.stableKey === row.sceneKey)
+    if (!root || root.medium !== 'screenplay' || row._workExportId !== root._workExportId || !scene) throw new Error('[deriveImport] v13 Review Issue owner 或场景越界')
+    assertScreenplayReviewIssueCandidateV1({ stableKey: row.stableKey, category: row.category, severity: row.severity, sceneKey: row.sceneKey, blockId: row.blockId, evidence: row.evidence, problem: row.problem, suggestion: row.suggestion, sourceUnitKeys: row.sourceUnitKeys })
+    const identity = `${group}:${row.stableKey}`
+    if (reviewIdentity.has(identity) || !['open', 'resolved', 'dismissed'].includes(row.status) || !Number.isInteger(row.reviewedSceneRevision) || row.reviewedSceneRevision < 1 || row.sourceUnitKeys.some((key: string) => !unitKeysByRootVersion.get(group)?.has(key)) || (row.blockId && !scene.blocks.some((block: Record<string, unknown>) => block.id === row.blockId))) throw new Error('[deriveImport] v13 Review Issue 身份、版本或证据非法')
+    reviewIdentity.add(identity)
   }
 }
 

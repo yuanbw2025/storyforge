@@ -78,6 +78,9 @@ export const REQUIRED_TABLES = [
   'references',
   'retrievalChunks',
   'screenplayScenes',
+  'screenplayBeats',
+  'screenplayReviewIssues',
+  'screenplaySceneCards',
   'shortNovelProductions',
   'snapshots',
   'stateCards',
@@ -120,8 +123,8 @@ export function assertCurrentSchemaDefinition(): void {
   }
 }
 
-/** Opens the current schema. Dexie preserves v1 and the v2 short-form step,
- * then adds the v3 medium-neutral adaptation analysis stores. */
+/** Opens the current schema. Dexie preserves v1, v2 short-form, and v3 shared
+ * adaptation steps, then adds the v4 screenplay production stores. */
 export async function openCurrentSchema(): Promise<CurrentSchemaState> {
   assertCurrentSchemaDefinition()
   await db.open()

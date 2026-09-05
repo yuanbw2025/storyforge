@@ -20,7 +20,7 @@ import { assertAgentRunArtifactRecordIntegrityV1 } from '../memory/artifact-reco
 import { readVerifiedMediaBlobObjectData } from '../product-production/media-blob-store'
 
 /** 当前完整便携备份契约。 */
-export const CURRENT_EXPORT_VERSION = 12
+export const CURRENT_EXPORT_VERSION = 13
 
 export interface StrictProjectExportSnapshot {
   data: ProjectExportData

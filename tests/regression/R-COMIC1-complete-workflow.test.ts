@@ -209,7 +209,7 @@ describe('COMIC-1/2 · complete comic production workflow', () => {
     expect(svg).toContain('data-storyforge-comic-page="1"'); expect(svg).toContain('你'); expect(svg).toContain('readingDirection')
 
     const backup = await exportProjectJSON(item.scope.projectId)
-    expect(backup.version).toBe(12); expect(backup.comicMediaAssets?.[0].rights.declaration).toContain('测试作者')
+    expect(backup.version).toBe(13); expect(backup.comicMediaAssets?.[0].rights.declaration).toContain('测试作者')
     const cyclic = structuredClone(backup)
     const firstAsset = cyclic.comicMediaAssets![0]
     firstAsset.referenceAssetKeys = ['cycle-copy']

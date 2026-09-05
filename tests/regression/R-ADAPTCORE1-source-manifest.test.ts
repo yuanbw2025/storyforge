@@ -255,7 +255,7 @@ describe('ADAPT-CORE-1A · 来源冻结、stale 与生命周期', () => {
     const source = await sourceWorkspace()
     const result = await createAdaptation({ sourceScope: source.scope, sourceWorkId: source.scope.workId, title: '可移植剧本', sourceSelection: { mode: 'entire-work' }, medium: 'screenplay', targetSpec: screenplaySpec })
     const backup = await exportProjectJSON(source.scope.projectId)
-    expect(backup.version).toBe(12)
+    expect(backup.version).toBe(13)
     expect(backup.adaptationProjects).toHaveLength(1)
     expect(backup.adaptationSourceUnits?.length).toBeGreaterThan(1)
     const importedId = await importProjectJSON(structuredClone(backup))
