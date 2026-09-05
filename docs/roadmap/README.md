@@ -1,6 +1,6 @@
 # StoryForge 当前施工路线
 
-> 版本：1.3.1 · 更新：2026-09-06 · 权威层级：L2
+> 版本：1.3.2 · 更新：2026-09-06 · 权威层级：L2
 > 顺序来自项目总纲 §11。任务只有进入本文件并满足前置，才是当前 backlog；旧阶段号不自动续用。
 
 ## 状态
@@ -55,7 +55,7 @@ Phase 5 已完成世界观/故事/角色/主支线/大纲/细纲/正文、候选
 | E-TOWN-01 | QUEUED | AI 小镇 | 时间、地点、日程、群体关系、自治和离线演化；与聊天分离 |
 | E-TEXTADV-01 | QUEUED | 文字冒险 | 选择/判定/资源/任务/结局和可玩发布 |
 | E-AVG-01 | QUEUED | AVG | 脚本/演出/立绘/背景/声音/UI 绑定与分支存档 |
-| E-OPENWORLD-01 | IN_PROGRESS | [文字开放世界](./TEXT-OPEN-WORLD-IMPLEMENTATION-PLAN.md) | 区域、动态任务、角色自治、按需模拟和持续有限循环；按完整工作包清单施工 |
+| E-OPENWORLD-01 | NEXT | [文字开放世界](./TEXT-OPEN-WORLD-IMPLEMENTATION-PLAN.md) | 用户已于2026-09-06明确启动；按完整清单推进区域、动态任务、角色自治、按需模拟和持续有限循环 |
 
 每项必须能映射 `WorldReference → 产品专用 Brief/SourcePlan → production run ContextManifests → SourceManifest/ProductRelease → runtime` 的共同交接语义，但不要求共用相同配置表、规模单位、Agent 图或运行 schema。
 

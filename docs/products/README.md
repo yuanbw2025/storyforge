@@ -11,6 +11,7 @@
 | [`TEXT-OPEN-WORLD-VISION-AND-EVOLUTION.md`](./TEXT-OPEN-WORLD-VISION-AND-EVOLUTION.md) | 文字开放世界的长期愿景、阶段性决策、方案演进与持续答疑记录 |
 | [`TEXT-OPEN-WORLD-PRODUCT-ARCHITECTURE.md`](./TEXT-OPEN-WORLD-PRODUCT-ARCHITECTURE.md) | 文字开放世界的整体产品、玩法系统、UI、运行、生产、发布与顶层施工入口 |
 | [`TEXT-OPEN-WORLD-NARRATIVE-BASE-ARCHITECTURE.md`](./TEXT-OPEN-WORLD-NARRATIVE-BASE-ARCHITECTURE.md) | AI主导文字开放世界叙事生产子系统的架构、契约与验收 |
+| [`TEXT-OPEN-WORLD-SALT-RIDGE-BRIEF.md`](./TEXT-OPEN-WORLD-SALT-RIDGE-BRIEF.md) | 首个纵向验收世界“盐脊”的内容、玩法、媒资、预算与完整玩家路径 |
 
 实现状态统一看 [`../roadmap/CAPABILITY-BASELINE.md`](../roadmap/CAPABILITY-BASELINE.md)，下一步看
 [`../roadmap/README.md`](../roadmap/README.md)。

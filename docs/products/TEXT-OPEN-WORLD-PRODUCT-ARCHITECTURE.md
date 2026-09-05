@@ -1,12 +1,13 @@
 # AI 主导文字开放世界游戏 · 整体产品与游戏系统施工规格
 
-> 规格版本：1.1.1
+> 规格版本：1.1.2
 > 生效日期：2026-09-06
 > 文档层级：L2 文字开放世界整体产品施工入口
-> 当前状态：目标架构；不代表代码已经实现
+> 当前状态：目标架构已冻结并进入分阶段实现；实际完成度以完整开发清单为准
 > 对应任务：阶段 E / `E-OPENWORLD-01`
 > 完整开发清单：[`TEXT-OPEN-WORLD-IMPLEMENTATION-PLAN.md`](../roadmap/TEXT-OPEN-WORLD-IMPLEMENTATION-PLAN.md)
 > 叙事子系统：`TEXT-OPEN-WORLD-NARRATIVE-BASE-ARCHITECTURE.md`
+> 首个验收世界：[`TEXT-OPEN-WORLD-SALT-RIDGE-BRIEF.md`](./TEXT-OPEN-WORLD-SALT-RIDGE-BRIEF.md)
 > 产品历史：`TEXT-OPEN-WORLD-VISION-AND-EVOLUTION.md`
 > 上位权威：`PROJECT-MASTER-CHARTER.md`、`UPPER-PRODUCTS.md`、`DATA-GOVERNANCE.md`、`HARNESS-QUALITY-STANDARD.md`
 
@@ -22,7 +23,7 @@
 4. 玩家产品：地图、场景、任务日志、角色、背包、战斗、制作、关系、存档和设置；
 5. 创作者产品：来源选择、会谈、生产、审查、修复、试玩、发布和更新；
 6. AI运行层：自由输入理解、叙事导演、场景演绎和安全降级；
-7. 构建发布：Build、质量门、不可变GameRelease、兼容和迁移。
+7. 构建发布：Build、质量门、不可变ProductRelease、兼容和迁移。
 
 《AI主导文字开放世界叙事基座 · StoryForge施工规格》继续负责叙事生产的专业细节。本文负责整个游戏的系统边界、模块装配和顶层施工顺序；当两者在跨系统顺序、运行owner或UI边界上冲突时，以本文为准，并同步修订叙事子系统文档。
 
@@ -145,7 +146,7 @@ PROJECT_TABLES / owner / migration / export / delete
 |---|---|---|
 | WorldRelease/来源 | 可版本化世界语义与原文证据 | 保存玩家状态或产品媒资 |
 | Production Artifact | 候选设计、来源、验证和修复历史 | 冒充已发布规则 |
-| GameRelease | 不可变游戏内容、规则和媒资绑定 | 被运行时原地修改 |
+| ProductRelease | 不可变游戏内容、规则和媒资绑定 | 被运行时原地修改 |
 | Session Event | 玩家命令和正式状态变化 | 修改来源或其他存档 |
 | Projection | 从Release、初态和Event计算出的当前状态 | 成为无法重建的唯一事实 |
 | AI Candidate | 意图、内容、表现和修复建议 | 直接决定数值或写运行状态 |
@@ -201,7 +202,7 @@ O8 SceneScript + ChoiceContract
   ↓
 O9 Balance / Solvability / ContentBudget / SemanticReview
   ↓
-O10 Build Assembly / Replay / Preview / GameRelease
+O10 Build Assembly / Replay / Preview / ProductRelease
 ```
 
 关键拆分：
@@ -236,7 +237,7 @@ O10 Build Assembly / Replay / Preview / GameRelease
 
 ### 3.1 目标运行包
 
-现有 `GameRuntimePackageV2` 可以作为迁移基础，但文字开放世界最终需要产品专属的vNext载荷。逻辑结构如下：
+现有 `TextOpenWorldProductRuntimePackageV1` 可以作为迁移基础，但文字开放世界最终需要产品专属的vNext载荷。逻辑结构如下：
 
 ```text
 TextOpenWorldRuntimePackage {
@@ -945,7 +946,7 @@ RecipeDefinition {
 
 第一阶段使用简单、稳定的游戏经济：
 
-- 每个GameRelease只使用一种通用货币；
+- 每个ProductRelease只使用一种通用货币；
 - 固定基础价格；
 - NPC/地区修正、关系修正和买卖倍率；
 - 普通商品无限供应，特殊商品可以配置有限库存；
@@ -1620,9 +1621,9 @@ FeedbackReceipt {
 ### 22.1 保存模型
 
 ```text
-GameRelease（不可变）
+ProductRelease（不可变）
 + Session InitialState
-+ append-only SimulationEvents
++ append-only ProductRuntimeEvents
 + derived RuntimeHead
 + SimulationCheckpoints
 ```
@@ -1657,7 +1658,7 @@ Checkpoint包含：
 - Checkpoint校验失败时提供重放和明确错误；
 - 不用“删除水位之后的数据”伪装回滚。
 
-### 22.4 GameRelease更新
+### 22.4 ProductRelease更新
 
 发布修复时生成新Release，并形成兼容报告：
 
@@ -1681,12 +1682,12 @@ created → active → paused → active
                    └→ corrupted-needs-recovery
 ```
 
-- 创建时绑定一个且仅一个Build预览或GameRelease；
+- 创建时绑定一个且仅一个Build预览或ProductRelease；
 - 暂停不推进世界时间；
 - 到达结局后标记completed，但允许查看日志、百科和存档；
 - completed存档是否允许继续自由探索由EndingContract声明；
 - corrupted状态不得自动覆盖原数据，先重放、导出诊断或从检查点创建恢复分支；
-- 删除Session时只删除该实例及私域事件，不删除GameRelease和其他分支。
+- 删除Session时只删除该实例及私域事件，不删除ProductRelease和其他分支。
 
 ---
 
@@ -1897,7 +1898,7 @@ MediaSlot {
 
 - 系统UI继续使用项目统一i18n设施；
 - 游戏内容语言在Brief和Release中冻结；
-- 一个首版GameRelease只携带一种游戏内容语言；Schema和稳定ID预留 `locale`，但不要求同一Release同时生产多语言Artifact；
+- 一个首版ProductRelease只携带一种游戏内容语言；Schema和稳定ID预留 `locale`，但不要求同一Release同时生产多语言Artifact；
 - 稳定ID不使用显示文本；
 - 翻译作为新的Artifact版本，保留来源文本和验证证据；
 - 语言切换不能改变规则、任务状态和Event重放；
@@ -2093,16 +2094,16 @@ Combat   Equipment Craft/Economy  Events
 
 | 当前能力 | 复用方式 |
 |---|---|
-| `GameRuntimePackageV2`、GameBuild、GameRelease | 延续不可变包和生产证据模式，扩展文字开放世界产品载荷 |
+| `TextOpenWorldProductRuntimePackageV1`、ProductBuild、ProductRelease | 延续不可变包和生产证据模式，扩展文字开放世界产品载荷 |
 | `gameProductions`、Brief、Command、Build、Artifact、Quality Receipt | 作为完整生产生命周期，不另建平行体系 |
 | `AgentRunContract`、scheduler、checkpoint、stale、receipt | 作为所有生产和运行AI的durable Harness |
-| `SimulationSession/Event/Checkpoint` | 作为事件权威、重放、分支和恢复基础 |
+| `ProductRuntimeSession/Event/Checkpoint` | 作为事件权威、重放、分支和恢复基础 |
 | `AdventureContentV1` 的Action、Requirement、Effect、Item和Quest基础 | 作为统一Action/Effect迁移起点，不直接当最终玩法系统 |
 | `OpenWorldContentV1` 的Region、Edge、Deck、Card、Schedule和Issue | 作为地区导演与世界演化基础 |
 | `NarrativeSimulationContentV1` 的资源、指标、问题、延迟效果 | 借鉴有界地区状态，不让它成为第二份玩家状态 |
 | TTRPG的RulePack、物品账本、战斗事件和效果账本 | 复用协议与实现经验，不把D&D式规则直接复制到本产品 |
 | 三注册表和Context Gateway | 继续治理AI读取、采纳和数据生命周期 |
-| 共享媒资Blob和GameBuildArtifact | 复用存储、Hash、权利和绑定设施 |
+| 共享媒资Blob和ProductBuildArtifact | 复用存储、Hash、权利和绑定设施 |
 
 ### 29.2 当前文字开放世界已有但不完整
 
@@ -2143,7 +2144,7 @@ Combat   Equipment Craft/Economy  Events
 | 旧文字游戏Agent契约 | 不支持文字开放世界的生产体量与系统 | 新产品Skill/Run Contract |
 | Workbench直接编辑多个JSON模块 | 只是维护工具，不是完整生产工作台 | 替换为来源、Brief、计划、内容、规则、QA和发布流程 |
 | 当前Player单页堆叠区域、任务和投影 | 不能容纳完整游戏系统 | 按第23节重构信息架构 |
-| 发布文字开放世界时创建WorldRelease | 违反单向引用 | 只锁定已有WorldRelease并发布GameRelease |
+| 发布文字开放世界时创建WorldRelease | 违反单向引用 | 只锁定已有WorldRelease并发布ProductRelease |
 | 仅按地区/任务数量通过质量门 | 数量不证明玩法和内容完整 | 使用模块消费、状态机、回放和真人路径质量门 |
 
 ### 29.4 不直接复用TTRPG产品规则
@@ -2338,7 +2339,7 @@ Player/Progression
 - UI刷新不改变游戏状态；
 - 模型失败不破坏确定性玩法；
 - 一个Session不能读取或修改另一个Session；
-- 运行不能修改WorldRelease或GameRelease。
+- 运行不能修改WorldRelease或ProductRelease。
 
 ### 32.3 性能门
 
@@ -2478,6 +2479,20 @@ Session中的高频状态优先作为Event和可重建Projection存在，不建�
 | 35 | 首版只使用随玩法逐步出现的教程提示 | 不建设独立教学场景 |
 | 36 | 一个Release只生成一种内容语言，但Schema预留locale | 同Release多语言Artifact后置 |
 
+### 34.7 首批校准参数
+
+五项剩余参数已经以稳定决策ID集中登记在 `src/lib/open-world/product-config.ts`，首版校准起点为：
+
+| 决策ID | 首版值 |
+|---|---|
+| `OW-CAL-001-default-content-scale` | 2地区、8—12地点、6—8主线Stage、2结局、2条重要故事线；主线90—120分钟，总可选内容库存180—300分钟 |
+| `OW-CAL-002-relationship-thresholds` | 道德和阵营亲合度均为-100～100；-25及以下态度差、25及以上态度好；首版不被动衰减 |
+| `OW-CAL-003-protected-quest-ui` | 主线和重要故事线显示禁用的放弃按钮并解释原因，不隐藏规则 |
+| `OW-CAL-004-random-task-expression` | 每个模板Build时预生成3个变体；运行时只允许受治理候选，失败时使用Build变体或不发牌 |
+| `OW-CAL-005-ai-budget-guardrails` | 单Build初始上限160次调用、120万输入token、36万输出token、预估30美元；每游玩小时60次、18万输入、4.5万输出、预估1.5美元；价格或结果未知时停止 |
+
+费用数值是BYOK场景的初始硬保护，不是市场报价。每次运行仍必须取得所选提供商的价格快照并由创作者确认，随后通过“盐脊”真实生产和游玩数据校准。
+
 ---
 
 ## 35. 第一阶段完成定义
@@ -2506,6 +2521,7 @@ Session中的高频状态优先作为Event和可重建Projection存在，不建�
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| 1.1.2 | 2026-09-06 | 冻结五项首批校准参数并登记稳定决策ID、内容规模、关系阈值、保护任务UI、随机任务正文策略和AI预算硬保护 |
 | 1.1.1 | 2026-09-06 | 接入文字开放世界完整开发清单；以121个首版工作包和12个后续能力承接本文施工阶段、依赖、状态和验收进度 |
 | 1.1.0 | 2026-09-06 | 冻结36项首版产品决策；收口三属性、20级上限、逐回合四类战斗操作、单货币、SVG节点地图、无个人亲密度、无友方NPC参战、标准难度、渐进教程、单Release单语言及来源/存档/媒资策略 |
 | 1.0.0 | 2026-09-05 | 建立文字开放世界整体产品施工入口；补齐角色成长、技能、战斗、物品、装备、奖励、制作、经济、任务、地图、时间、NPC关系、知识、反馈、存档、玩家UI、创作者工作台、媒资、AI边界、Build、现有代码映射、实施路线和验收体系 |

@@ -32,7 +32,7 @@
 | 地区规则 | `src/lib/open-world/runtime.ts` | 解析、验证、发牌、旅行、演化和候选引用校验可复用 |
 | 正式命令/Event | `src/lib/product/runtime-core.ts`、`src/lib/open-world/runtime-commands.ts` | 已有 baseSequence/baseStateHash、commandId 幂等、原子 Event 批次和 Checkpoint |
 | 旧通用玩法 | `src/lib/types/adventure.ts` | Action/Requirement/Effect和任务基础可借鉴；类型和状态不足以直接扩建全部系统 |
-| 发布 | `src/lib/product-production/runtime-package.ts`、`src/lib/product/releases.ts` | 保留统一 ProductRuntimePackage/ProductRelease；在其内扩展文字开放世界专属载荷，不恢复 GameRelease |
+| 发布 | `src/lib/product-production/runtime-package.ts`、`src/lib/product/releases.ts` | 保留统一 ProductRuntimePackage/ProductRelease；在其内扩展文字开放世界专属载荷，不恢复 ProductRelease |
 | 世界来源 | `src/lib/context-gateway/world-release-provider.ts`、`src/lib/world-engine/world-reference.ts` | 新主干已具备冻结版本的 describe/search/read/original-evidence 中立出口 |
 | AI上下文 | `CONTEXT_SOURCES.openWorldRuntime` | 已有玩家可见运行上下文；生产期需增加专属注册源 |
 | AI写入 | `FIELD_REGISTRY` / `AdoptionSchema` | `openWorldModules`已有采用边界；新Artifact字段需随生产DAG逐项登记 |
@@ -46,13 +46,13 @@
 |---|---|---|
 | ProductRuntimeSession/Event/Checkpoint | 复用 | 保持唯一运行权威，扩展文字开放世界投影和事件 |
 | ProductProduction/Build/Artifact/Receipt | 复用 | 新增产品专属 Artifact 和 DAG，不另建生产表族 |
-| ProductRuntimePackage/ProductRelease | 复用并扩展 | 新包必须保存来源 Hash、模块版本和兼容信息；不得恢复旧 GameRelease |
+| ProductRuntimePackage/ProductRelease | 复用并扩展 | 新包必须保存来源 Hash、模块版本和兼容信息；不得恢复旧 ProductRelease |
 | Context Gateway/Agent Run Harness | 复用 | 所有生产和运行AI登记Skill、读写范围、预算和终态 |
 | OpenWorld Region/Deck/Schedule/Issue | 改造迁移 | 成为新包world/director模块的一部分 |
 | Adventure Action/Effect/Quest | 改造迁移 | 抽取协议经验，不能继续作为完整产品的玩家状态模型 |
 | NarrativeSimulation区域数值 | 限定复用 | 只服务地区状态，不保存第二份玩家资源、时间或关系 |
 | TTRPG规则实现 | 协议级借鉴 | 只复用随机证据、效果预演、物品事务和战斗回执经验 |
-| 旧 `publishTextOpenWorldGame` / GameRelease 路径 | 禁止恢复 | 新发布只引用已有 WorldRelease 或产品 SourcePin，并产出 ProductRelease |
+| 旧 `publishTextOpenWorldGame` / ProductRelease 路径 | 禁止恢复 | 新发布只引用已有 WorldRelease 或产品 SourcePin，并产出 ProductRelease |
 | 通用节点机械编译 | 退场 | G3专属P0-P10生产DAG可用后删除旧路径 |
 | JSON Workbench | 退场 | G5受治理内容表和局部修复入口完成后删除 |
 | 单页Player | 退场 | G4完整场景壳和一级页面可用后删除旧入口 |

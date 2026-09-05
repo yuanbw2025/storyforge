@@ -1,6 +1,6 @@
 # StoryForge 文档权威与归档规则
 
-> 版本：1.5.2 · 生效：2026-09-06
+> 版本：1.5.3 · 生效：2026-09-06
 > 本文回答“哪些文档仍可指导开发”。未列入现行清单的历史材料，不得作为设计或施工权威。
 
 ## 1. 裁决层级
@@ -40,9 +40,11 @@
 - `docs/products/TEXT-OPEN-WORLD-VISION-AND-EVOLUTION.md`：L2 产品设计参考；仅“当前决策”可指导设计，历史与假设用于追溯。
 - `docs/products/TEXT-OPEN-WORLD-PRODUCT-ARCHITECTURE.md`：L2 文字开放世界整体施工入口；统筹玩法系统、UI、运行、生产、发布、验收和顶层施工顺序。
 - `docs/products/TEXT-OPEN-WORLD-NARRATIVE-BASE-ARCHITECTURE.md`：L2 文字开放世界叙事生产子系统规格；描述故事、地区、任务、Agent/Skill和叙事验收，不冒充当前实现事实。
+- `docs/products/TEXT-OPEN-WORLD-SALT-RIDGE-BRIEF.md`：L2 首个文字开放世界纵向验收Brief；冻结“盐脊”的规模、内容、系统、媒资、预算和完整玩家路径。
 - `docs/ROADMAP.md`
 - `docs/roadmap/README.md`
 - `docs/roadmap/TEXT-OPEN-WORLD-IMPLEMENTATION-PLAN.md`：L2 文字开放世界完整开发清单；以稳定工作包、依赖、状态和完成判据记录实施进度，不自行改变总路线图优先级。
+- `docs/roadmap/TEXT-OPEN-WORLD-WORK-PACKAGE-CARDS.md`：L2 文字开放世界G1/G2开工卡和风险台账；冻结入口、owner、读写、迁移、测试、旧入口与主要风险。
 - `docs/roadmap/CAPABILITY-BASELINE.md`
 - `docs/roadmap/COMPLETED.md`
 

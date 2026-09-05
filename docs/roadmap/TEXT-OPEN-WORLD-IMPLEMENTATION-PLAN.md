@@ -1,12 +1,13 @@
 # AI 主导文字开放世界游戏 · 完整开发清单
 
-> 版本：1.0.1
+> 版本：1.1.0
 > 建立日期：2026-09-06
 > 对应总任务：`E-OPENWORLD-01`
-> 当前状态：`READY_FOR_USER_START`；尚未开始业务代码施工
+> 当前状态：`IN_PROGRESS`；用户已于2026-09-06明确下达完整产品开发指令
 > 产品架构：[`TEXT-OPEN-WORLD-PRODUCT-ARCHITECTURE.md`](../products/TEXT-OPEN-WORLD-PRODUCT-ARCHITECTURE.md)
 > 叙事子系统：[`TEXT-OPEN-WORLD-NARRATIVE-BASE-ARCHITECTURE.md`](../products/TEXT-OPEN-WORLD-NARRATIVE-BASE-ARCHITECTURE.md)
 > 历史与答疑：[`TEXT-OPEN-WORLD-VISION-AND-EVOLUTION.md`](../products/TEXT-OPEN-WORLD-VISION-AND-EVOLUTION.md)
+> G1/G2开工卡：[`TEXT-OPEN-WORLD-WORK-PACKAGE-CARDS.md`](./TEXT-OPEN-WORLD-WORK-PACKAGE-CARDS.md)
 
 ## 0. 用途与进度口径
 
@@ -35,12 +36,13 @@
 | 指标 | 当前值 |
 |---|---|
 | 首版工作包 | 121 |
-| 已完成 | 6（最新主干独立分支、架构文档、36项产品决策、代码关联审计、复用世界来源出口、现有能力处置矩阵） |
-| 产品总进度 | 6 / 121（5.0%） |
-| 业务代码进度 | 0% |
-| 当前阶段 | G0 现状复核与开工冻结 |
-| G0阶段进度 | 6 / 10（60%） |
-| 首个可开工项 | `TOW-G0-07` |
+| 已完成 | 10（G0现状复核与开工冻结全部完成） |
+| 产品总进度 | 10 / 121（8.3%） |
+| G1～G7业务功能进度 | 0 / 111（0%） |
+| 当前阶段 | G1 运行包、Action/Event与数据治理底座 |
+| G0阶段进度 | 10 / 10（100%） |
+| G1阶段进度 | 0 / 13（0%） |
+| 当前工作包 | `TOW-G1-01` |
 | 当前阻塞项 | 无 |
 
 每次状态变化必须同时更新本节汇总、对应任务行、验证证据和变更记录。
@@ -89,10 +91,10 @@ G7 盐脊验收、发布更新与旧入口收口
 | TOW-G0-04 | DONE | 审计当前文字开放世界完整关联闭包 | 用户开始指令 | 入口→服务→类型→三注册表→表→测试→下游已记录在开工能力审计，不把旧文件名当能力事实 |
 | TOW-G0-05 | DONE | 核验并复用世界引擎正式读取出口 | 世界引擎清理/开发结果 | 新主干 `describe/search/read/readOriginal WorldRelease` 已实现，版本、Hash、权限、分页与冻结语义有专项测试；不移植旧重复网关 |
 | TOW-G0-06 | DONE | 建立现有能力复用/改造/删除矩阵 | G0-04、G0-05 | 复用、改造和退场对象、owner、消费者及迁移边界已记录在开工能力审计 |
-| TOW-G0-07 | READY | 冻结首批校准参数登记方式 | G0-04 | 时长默认、关系阈值、不可放弃UI、随机正文时机、AI预算进入配置或决策ID |
-| TOW-G0-08 | QUEUED | 编写“盐脊”验收世界Brief | G0-03、G0-07 | 内容规模、系统覆盖、两个结局、17条路径、媒资和成本范围明确 |
-| TOW-G0-09 | QUEUED | 建立纵切面开工卡与风险台账 | G0-04～G0-08 | 每个G1/G2包有入口、owner、读写、迁移、测试、旧入口和风险 |
-| TOW-G0-10 | QUEUED | G0架构复核与开工回执 | G0-04～G0-09 | 无双重事实源、依赖环和未登记数据；用户确认进入G1 |
+| TOW-G0-07 | DONE | 冻结首批校准参数登记方式 | G0-04 | 五项参数已进入集中配置和稳定决策ID，严格解析和fail-closed预算测试通过 |
+| TOW-G0-08 | DONE | 编写“盐脊”验收世界Brief | G0-03、G0-07 | 世界概念、内容规模、全部系统、两个结局、17条路径、媒资和成本范围已冻结 |
+| TOW-G0-09 | DONE | 建立纵切面开工卡与风险台账 | G0-04～G0-08 | G1/G2每个包的入口、owner、读写、迁移、测试、旧入口和风险已集中登记 |
+| TOW-G0-10 | DONE | G0架构复核与开工回执 | G0-04～G0-09 | 27个相关回归测试、TypeScript、架构、115张表生命周期、文档和路线图检查通过；用户已确认进入G1 |
 
 阶段出口：一份基于当前代码而非旧印象的差距审计，以及可直接实施的第一张功能开工卡。
 
@@ -104,7 +106,7 @@ G7 盐脊验收、发布更新与旧入口收口
 
 | ID | 状态 | 工作包 | 依赖 | 完成判据 |
 |---|---|---|---|---|
-| TOW-G1-01 | QUEUED | 定义 `TextOpenWorldRuntimePackage` vNext | G0-10 | 模块边界、版本、稳定ID、来源Hash和兼容字段可解析 |
+| TOW-G1-01 | READY | 定义 `TextOpenWorldRuntimePackage` vNext | G0-10 | 模块边界、版本、稳定ID、来源Hash和兼容字段可解析 |
 | TOW-G1-02 | QUEUED | 定义各逻辑Module Schema与交叉引用 | G1-01 | narrative/world/actor/quest/action/progression/combat/item/craft/economy/relationship/time/director/knowledge/presentation均有Schema |
 | TOW-G1-03 | QUEUED | 建立 `CommandEnvelope` 与命令幂等 | G1-01 | 重复commandId不产生第二次效果，未知结果可查询 |
 | TOW-G1-04 | QUEUED | 建立统一Action注册与可用行动投影 | G1-02、G1-03 | UI、AI意图和任务都引用同一Action定义与风险策略 |
@@ -113,7 +115,7 @@ G7 盐脊验收、发布更新与旧入口收口
 | TOW-G1-07 | QUEUED | 定义Simulation Event分类和顺序规则 | G1-03、G1-06 | 事件可追加、可重放、包含规则版本和随机证据 |
 | TOW-G1-08 | QUEUED | 建立Session Projection与系统不变量 | G1-07 | 玩家、库存、装备、任务、战斗、地图、时钟、关系、角色、世界、知识、导演均可重建 |
 | TOW-G1-09 | QUEUED | 打通Checkpoint、Replay与子分支 | G1-08 | Hash失败可诊断；读旧检查点创建子Session，不删除后续事件 |
-| TOW-G1-10 | QUEUED | 打通Build、GameRelease、InitialState与Session绑定 | G1-01、G1-09 | Release不可变；Session只绑定一个版本；运行不能改来源和Release |
+| TOW-G1-10 | QUEUED | 打通Build、ProductRelease、InitialState与Session绑定 | G1-01、G1-09 | Release不可变；Session只绑定一个版本；运行不能改来源和Release |
 | TOW-G1-11 | QUEUED | 建立统一成功/失败/降级Receipt | G1-04、G1-06 | UI和AI表现消费同一回执，提交失败前不显示成功 |
 | TOW-G1-12 | QUEUED | 完成三注册表与数据全生命周期 | G1-01～G1-11 | Context、Field/Adoption、Project Tables、迁移、导入导出、删除和引用重映射均有正反例 |
 | TOW-G1-13 | QUEUED | 人工最小包端到端验证 | G1-01～G1-12 | 不调用AI完成发布→启动→行动→保存→刷新→重放→分支，相关测试与E2E通过 |
@@ -243,7 +245,7 @@ G7 盐脊验收、发布更新与旧入口收口
 | TOW-G5-07 | QUEUED | 引用影响、stale、问题定位和局部修复 | G3-17、G5-06 | 修改上游时下游失效可见；修复有界，不默认全量重做 |
 | TOW-G5-08 | QUEUED | 媒资需求、生成/导入、权利和绑定 | G3-17 | 程序地图、头像、背景达到必需覆盖；音频可选且有降级 |
 | TOW-G5-09 | QUEUED | 质量门、灰盒试玩和问题回执 | G3-18、G2-28、G5-07 | 硬门、语义评测、豁免、隔离试玩和问题复现证据完整 |
-| TOW-G5-10 | QUEUED | Build装配、发布和不可变GameRelease | G5-08、G5-09 | 一次授权后可完成生产；发布前验证消费槽、Hash和终态Receipt |
+| TOW-G5-10 | QUEUED | Build装配、发布和不可变ProductRelease | G5-08、G5-09 | 一次授权后可完成生产；发布前验证消费槽、Hash和终态Receipt |
 | TOW-G5-11 | QUEUED | 新Release、兼容报告和存档迁移 | G1-09、G5-10 | 旧档留在旧Release；兼容时可预演迁移并保留原分支 |
 | TOW-G5-12 | QUEUED | 工作台导入导出、删除和真实E2E | G5-01～G5-11、G1-12 | 从来源到发布更新全路径通过，刷新/失败/导入导出和删除不丢数据 |
 
@@ -351,5 +353,9 @@ G7 盐脊验收、发布更新与旧入口收口
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| 1.1.0 | 2026-09-06 | G0全部完成并通过27个相关回归测试及工程检查；用户明确启动完整产品开发，进入G1-01，总进度10/121 |
+| 1.0.4 | 2026-09-06 | 完成G0-09全部G1/G2开工卡和风险台账；总进度更新为9/121 |
+| 1.0.3 | 2026-09-06 | 完成G0-08“盐脊”纵向验收Brief；总进度更新为8/121 |
+| 1.0.2 | 2026-09-06 | 完成G0-07首批校准配置；总进度更新为7/121，明确G1～G7业务功能分母为111 |
 | 1.0.1 | 2026-09-06 | 完成G0-04代码关联闭包审计、G0-05新主干世界来源出口复用核验和G0-06现有能力处置矩阵；总进度更新为6/121 |
 | 1.0.0 | 2026-09-06 | 按G0～G7拆分121个首版工作包和12个后续能力；建立状态、依赖、完成判据、进度口径与首批施工顺序 |

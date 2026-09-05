@@ -1,6 +1,6 @@
 # AI 主导文字开放世界叙事基座 · StoryForge 施工规格
 
-> 规格版本：3.2.0
+> 规格版本：3.2.1
 > 生效日期：2026-09-06
 > 文档层级：L2 产品目标架构与施工规格
 > 当前状态：设计基线；不代表代码已经实现
@@ -55,9 +55,9 @@
 |---|---|
 | 产品 | 独立的文字开放世界上层产品，不是世界引擎页面，也不是文字冒险的模式开关 |
 | 用户入口 | 选择冻结的 `WorldRelease` 或受治理的小说来源，补充游戏设定，与产品主 Agent 完成会谈并授权生产 |
-| 用户结果 | 一个可审查、可修复、可发布、可存档、可持续游玩的不可变 `GameRelease` |
+| 用户结果 | 一个可审查、可修复、可发布、可存档、可持续游玩的不可变 `ProductRelease` |
 | 生产 owner | 游戏 `Production / Build`，不是世界引擎 |
-| 运行 owner | 游戏实例 `SimulationSession` 及其私域事件流 |
+| 运行 owner | 游戏实例 `ProductRuntimeSession` 及其私域事件流 |
 | 世界来源 | 只读锁定来源版本、内容 Hash 与能力画像；运行结果不反写世界引擎 |
 | 媒资 owner | 对应游戏 Build/Release；共享 Blob 只承担存储，不拥有产品语义 |
 | 第一阶段体验 | 有边界的自由演绎：固定内容和确定性规则为主，自由文字负责表达、解释和路径引导 |
@@ -129,7 +129,7 @@
 ┌──────────────────────────────▼─────────────────────────────┐
 │ 验证与采纳层                                               │
 │ Schema / 引用 / 来源 / 可达性 / 预算 / 语义评测 / 修复     │
-│ → adopt() → Build Artifact → 组装 → GameRelease            │
+│ → adopt() → Build Artifact → 组装 → ProductRelease            │
 └──────────────────────────────┬─────────────────────────────┘
                                │ 不可变发布
 ┌──────────────────────────────▼─────────────────────────────┐
@@ -159,20 +159,20 @@
 → CreativeArtifact 候选
 → 验证与作者授权
 → Build Artifact
-→ GameRelease
+→ ProductRelease
 ```
 
 运行流：
 
 ```text
-GameRelease + 玩家命令
+ProductRelease + 玩家命令
 → 确定性 Action/Choice
 → 事件提交
 → 状态投影
 → AI根据已提交结果生成表现
 ```
 
-运行时不得修改 `GameRelease`；生产候选不得直接修改玩家存档；游戏私域结果不得自动回写 `WorldRelease`。
+运行时不得修改 `ProductRelease`；生产候选不得直接修改玩家存档；游戏私域结果不得自动回写 `WorldRelease`。
 
 ---
 
@@ -257,7 +257,7 @@ R1 有界修复 → 回到受影响节点重验
           ↓
 V3 Build组装、回放与发布门
           ↓
-GameRelease
+ProductRelease
 ```
 
 地区被拆成 `RegionSkeleton` 与 `RegionNarrativePackFinalize` 两步。前者给故事线提供稳定空间约束，后者在主线和重要故事线明确后补全地区生态，从而消除“地区包依赖故事线、故事线又依赖地区包”的循环。
@@ -680,9 +680,9 @@ WASD像素移动、逐格碰撞和室内关卡属于后续表现升级。
 运行时采用：
 
 ```text
-不可变 GameRelease
+不可变 ProductRelease
 + InitialState
-+ append-only SimulationEvents
++ append-only ProductRuntimeEvents
 → 可重建 Projection
 + 定期 SimulationCheckpoint（状态快照 + throughSequence + hash）
 ```
@@ -814,7 +814,7 @@ CreativeArtifactEnvelope {
 6. 内容审查：故事弧、地图、主线、重要故事线、任务和系统配置；
 7. 问题修复：按验证回执局部修复，不要求全量重做；
 8. 灰盒试玩：使用当前Build运行验收路径，不污染正式Release；
-9. 发布：通过硬闸门后生成正式GameRelease；
+9. 发布：通过硬闸门后生成正式ProductRelease；
 10. 更新：修复后生成新Build和新Release，显示存档兼容性。
 
 ### 10.2 玩家端
@@ -914,14 +914,14 @@ CreativeArtifactEnvelope {
 
 ### 11.5 正式发布
 
-StoryForge当前没有独立staging。发布前仍需在隔离数据中完成灰盒试玩、自动回放和必要E2E；通过后直接形成正式GameRelease供真人游玩。真人发现问题后：
+StoryForge当前没有独立staging。发布前仍需在隔离数据中完成灰盒试玩、自动回放和必要E2E；通过后直接形成正式ProductRelease供真人游玩。真人发现问题后：
 
 ```text
 问题回执
 → 影响分析
 → 新Build局部修复
 → 回归与兼容检查
-→ 新GameRelease
+→ 新ProductRelease
 → 用户选择继续旧版本或迁移兼容存档
 ```
 
@@ -1007,7 +1007,7 @@ StoryForge当前没有独立staging。发布前仍需在隔离数据中完成灰
 | `NarrativeArtifactV1` | 只有nodes、beats、choices | 升级为StoryArc/Thread/Quest/Scene等分阶段Artifact |
 | `text-game/agent-contract.ts` | 面向普通节点文字游戏 | 文字开放世界使用独立Skill家族与Run Contract |
 | 通用一次性叙事生成Prompt | 一次调用试图生成完整可玩内容 | 分阶段、可恢复、可评审、可局部修复生产 |
-| 文字开放世界发布时反向创建WorldRelease | 违反世界引擎到上层产品的单向引用 | 只锁定已有WorldRelease，发布GameRelease |
+| 文字开放世界发布时反向创建WorldRelease | 违反世界引擎到上层产品的单向引用 | 只锁定已有WorldRelease，发布ProductRelease |
 
 旧入口只有在替代路径、数据迁移、回归和真实UI路径通过后才下线；不得先删除再寻找替代。
 
@@ -1138,15 +1138,15 @@ StoryForge当前没有独立staging。发布前仍需在隔离数据中完成灰
 - 一个主追踪任务加若干钉选，首版HUD最多额外显示3个；
 - 首个验收世界使用“盐脊”。
 
-以下内容不再是产品方向问题，只是进入对应功能开工卡时必须校准的参数或交互细节：
+以下内容已经收口为 `src/lib/open-world/product-config.ts` 中的五个稳定校准决策：
 
-1. 用户不填写目标时长时的默认内容规模；
-2. 道德值和阵营亲合度的范围、阈值、衰减与阵营解释参数；
-3. 主线/重要故事线不可放弃时，UI使用隐藏按钮还是禁用按钮并解释；
-4. 随机任务正文是在Build时预生成变体，还是运行时生成受限候选；
-5. 单Build预算和运行时单位时长费用上限的初始数值。
+1. `OW-CAL-001`：默认采用“盐脊”规模，即90—120分钟主线和180—300分钟可选内容库存；
+2. `OW-CAL-002`：道德/阵营亲合度使用-100～100，三档态度阈值为-25和25，首版不被动衰减；
+3. `OW-CAL-003`：主线/重要故事线显示禁用的放弃按钮和原因；
+4. `OW-CAL-004`：每个模板Build时预生成3个变体，运行时AI只生成受治理候选并保留不发牌降级；
+5. `OW-CAL-005`：Build和每游玩小时都有调用、token和预估费用硬上限，价格或外部结果未知时停止。
 
-这些参数不得散落在Prompt中。进入相关施工阶段时必须形成带ID的配置或产品决策，并通过“盐脊”与真人试玩校准。
+它们仍然是需要“盐脊”和真人试玩校准的初始参数，而不是永久平衡结论；任何调整都必须修改集中配置和决策版本，不得散落在Prompt中。
 
 ---
 
@@ -1165,7 +1165,7 @@ StoryForge当前没有独立staging。发布前仍需在隔离数据中完成灰
 - 三注册表、Schema、迁移、导入导出、删除和引用重映射完整；
 - 模型失败、超预算、stale、非法输出和网络错误具有可见恢复路径；
 - 灰盒自动回放、隔离E2E和真人游玩均有证据；
-- 正式GameRelease不可变，修复通过新Release交付；
+- 正式ProductRelease不可变，修复通过新Release交付；
 - 旧机械编译入口完成下线，运行结果不会污染世界引擎。
 
 ---
@@ -1174,6 +1174,7 @@ StoryForge当前没有独立staging。发布前仍需在隔离数据中完成灰
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| 3.2.1 | 2026-09-06 | 将五项剩余校准收口为集中配置和稳定决策ID，冻结首版内容规模、关系阈值、保护任务UI、随机任务变体和AI预算硬保护 |
 | 3.2.0 | 2026-09-06 | 接入36项首版产品决策；冻结来源、重要故事线等待、快速旅行、战斗输入、地图、媒资、存档与验收世界边界，并把未决项收缩为参数校准 |
 | 3.1.2 | 2026-09-05 | 接入整体玩法规则骨架和Gameplay Catalogs；把任务生产拆成QuestSkeleton/ContentRequirementManifest与QuestFinalize，消除玩法内容后置造成的依赖缺口 |
 | 3.1.1 | 2026-09-05 | 明确本文为叙事子系统规格，并接入文字开放世界整体产品与游戏系统施工入口 |
