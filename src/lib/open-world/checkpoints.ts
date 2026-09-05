@@ -17,6 +17,7 @@ import type {
   TextOpenWorldRuntimeHeadInspectionV1,
 } from '../types'
 import { replayTextOpenWorldEventProtocolV1 } from './event-contract'
+import { parseTextOpenWorldModulesV1 } from './modules'
 
 function fail(message: string): never { throw new Error(`[text-open-world-checkpoint] ${message}`) }
 async function sha256Text(value: string): Promise<string> { const bytes = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))); return [...bytes].map(byte => byte.toString(16).padStart(2, '0')).join('') }
@@ -89,6 +90,16 @@ export async function inspectTextOpenWorldCheckpointV1(checkpointId: number): Pr
   let saved: ProductRuntimeState
   try { saved = parseProductRuntimeState(checkpoint.stateJson) } catch (cause) { return { ...base, code: 'checkpoint-state-invalid', detail: cause instanceof Error ? cause.message : String(cause), valid: false } }
   if (!isVNext(saved)) return { ...base, code: 'not-vnext', detail: '检查点不包含文字开放世界vNext投影。', valid: false }
+  const purpose = checkpoint.purpose ?? 'manual'
+  if (!['manual', 'combat-retry'].includes(purpose) || (purpose === 'combat-retry') !== (checkpoint.subjectKey != null)) return { ...base, code: 'checkpoint-purpose-invalid', detail: '检查点用途与对象不一致。', valid: false }
+  if (purpose === 'combat-retry') {
+    const modules = parseTextOpenWorldModulesV1(saved.textOpenWorld!.runtimePackage)
+    const encounter = modules.combat.encounters.find(item => item.key === checkpoint.subjectKey)
+    if (!encounter || saved.textOpenWorld!.state.combat != null || saved.textOpenWorld!.state.player.health <= 0
+      || saved.textOpenWorld!.state.map.currentLocationKey !== encounter.locationKey) {
+      return { ...base, code: 'checkpoint-purpose-invalid', detail: '战前重试点没有冻结对应遭遇开始前的安全状态。', valid: false }
+    }
+  }
   if (await sha256Text(checkpoint.stateJson) !== checkpoint.stateHash) return { ...base, code: 'checkpoint-hash-mismatch', detail: '检查点正文与Hash不一致。', valid: false }
   let verified: Awaited<ReturnType<typeof canonical>>
   try { verified = await canonical(session, checkpoint.throughSequence) } catch (cause) { return { ...base, code: 'event-protocol-invalid', detail: cause instanceof Error ? cause.message : String(cause), valid: false } }
@@ -103,15 +114,73 @@ export async function inspectTextOpenWorldCheckpointV1(checkpointId: number): Pr
   return { ...base, code: 'valid', detail: '检查点Hash、序号、协议和重放状态一致。', valid: true }
 }
 
-export async function createTextOpenWorldCheckpointV1(input: { sessionId: number; name: string; throughSequence?: number }): Promise<ProductRuntimeCheckpoint> {
+export async function createTextOpenWorldCheckpointV1(input: {
+  sessionId: number
+  name: string
+  throughSequence?: number
+  purpose?: ProductRuntimeCheckpoint['purpose']
+  subjectKey?: string | null
+}): Promise<ProductRuntimeCheckpoint> {
   const session = await db.productRuntimeSessions.get(input.sessionId); if (!session) fail('Session不存在')
   const latestEvents = await eventsFor(session); const throughSequence = input.throughSequence ?? (latestEvents[latestEvents.length - 1]?.sequence ?? 0)
   const verified = await canonical(session, throughSequence)
   if (verified.protocol.pendingCommandId) fail(`不能在未终结命令上创建检查点:${verified.protocol.pendingCommandId}`)
+  const purpose = input.purpose ?? 'manual'
+  if (purpose === 'combat-retry') {
+    const encounterKey = input.subjectKey ?? fail('战前重试点缺少encounterKey')
+    const modules = parseTextOpenWorldModulesV1(verified.state.textOpenWorld!.runtimePackage)
+    const encounter = modules.combat.encounters.find(item => item.key === encounterKey) ?? fail(`战前重试点遭遇不存在:${encounterKey}`)
+    const runtime = verified.state.textOpenWorld!.state
+    if (runtime.combat != null || runtime.player.health <= 0 || runtime.map.currentLocationKey !== encounter.locationKey) fail('只能在对应遭遇开始前建立战前重试点')
+  } else if (input.subjectKey != null) fail('手动检查点不能绑定战斗对象')
   const checkpoint = await createProductRuntimeCheckpoint({ ...input, throughSequence })
   const inspection = await inspectTextOpenWorldCheckpointV1(checkpoint.id!)
   if (!inspection.valid) fail(`新检查点验证失败:${inspection.code}`)
   return checkpoint
+}
+
+/** Idempotently freezes the verified pre-combat state used by encounter retry. */
+export async function ensureTextOpenWorldCombatRetryCheckpointV1(input: {
+  sessionId: number
+  encounterKey: string
+  throughSequence?: number
+}): Promise<ProductRuntimeCheckpoint> {
+  const session = await db.productRuntimeSessions.get(input.sessionId); if (!session) fail('Session不存在')
+  const latestEvents = await eventsFor(session)
+  const throughSequence = input.throughSequence ?? (latestEvents[latestEvents.length - 1]?.sequence ?? 0)
+  const existing = (await db.productRuntimeCheckpoints.where('sessionId').equals(input.sessionId).toArray())
+    .find(item => item.throughSequence === throughSequence && item.purpose === 'combat-retry' && item.subjectKey === input.encounterKey)
+  if (existing) {
+    const inspection = await inspectTextOpenWorldCheckpointV1(existing.id!)
+    if (!inspection.valid) fail(`既有战前重试点无效:${inspection.code}`)
+    return existing
+  }
+  return createTextOpenWorldCheckpointV1({
+    sessionId: input.sessionId, throughSequence, purpose: 'combat-retry', subjectKey: input.encounterKey,
+    name: `战前重试 · ${input.encounterKey}`,
+  })
+}
+
+/** A retry preserves the defeated timeline and starts a child branch from the latest verified pre-combat checkpoint. */
+export async function retryDefeatedTextOpenWorldCombatV1(input: {
+  sessionId: number
+  title?: string
+  seed?: string
+}): Promise<ProductRuntimeSession> {
+  const session = await db.productRuntimeSessions.get(input.sessionId); if (!session) fail('Session不存在')
+  const current = (await canonical(session)).state.textOpenWorld!
+  if (current.state.combat?.status !== 'defeat' || current.state.player.health !== 0) fail('只有战败Session可以从战前重试')
+  const encounterKey = current.state.combat.encounterKey
+  const candidates = (await db.productRuntimeCheckpoints.where('sessionId').equals(input.sessionId).toArray())
+    .filter(item => item.purpose === 'combat-retry' && item.subjectKey === encounterKey)
+    .sort((left, right) => right.throughSequence - left.throughSequence || right.createdAt - left.createdAt)
+  for (const checkpoint of candidates) {
+    const inspection = await inspectTextOpenWorldCheckpointV1(checkpoint.id!)
+    if (inspection.valid) return branchTextOpenWorldSessionFromCheckpointV1({
+      checkpointId: checkpoint.id!, title: input.title?.trim() || `重试 · ${encounterKey}`, seed: input.seed,
+    })
+  }
+  fail(`没有可用的战前重试点:${encounterKey}`)
 }
 
 /** Branches from a verified historical checkpoint; parent events remain untouched and the child begins at sequence zero. */

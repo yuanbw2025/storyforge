@@ -5,7 +5,7 @@ import { createTextOpenWorldVNextFixture } from '../helpers/text-open-world-vnex
 
 function context(overrides: Partial<TextOpenWorldActionProjectionContextV1> = {}): TextOpenWorldActionProjectionContextV1 {
   return {
-    actorKey: 'player', currentLocationKey: 'location.salt-port', worldMinute: 480,
+    actorKey: 'player', currentLocationKey: 'location.salt-port', worldMinute: 480, playerHealth: 37, combatStatus: null,
     conditionResults: {}, completedOnceActionKeys: [], cooldownUntilWorldMinuteByActionKey: {},
     validTargetKeysByScope: { location: ['location.salt-port'] },
     ...overrides,

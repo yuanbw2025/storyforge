@@ -2,10 +2,12 @@ import { db } from '../db/schema'
 import { hashProductRuntimeStateV1, readProductRuntimeState } from '../product/runtime-core'
 import type { TextOpenWorldCommandEnvelopeV1, TextOpenWorldFeedbackReceiptV1 } from '../types'
 import { createTextOpenWorldActionRegistryV1 } from './action-registry'
+import { ensureTextOpenWorldCombatRetryCheckpointV1 } from './checkpoints'
 import { commitTextOpenWorldCommandV1, getTextOpenWorldCommandStatusV1 } from './commands'
 import { createTextOpenWorldEffectCatalogV1 } from './effect-dsl'
 import { commitTextOpenWorldOutcomeBatchV1 } from './events'
 import { createTextOpenWorldPreflightFeedbackV1, readTextOpenWorldFeedbackV1 } from './feedback'
+import { parseTextOpenWorldModulesV1 } from './modules'
 import {
   assertTextOpenWorldVNextProjectionBindingV1,
   verifyTextOpenWorldVNextSessionBindingV1,
@@ -96,7 +98,17 @@ export async function executeTextOpenWorldActionV1(input: {
       confirmed: input.confirmed === true,
     })
   }
-  registry.resolve({ actionKey: input.actionKey, targetKey, context: deriveTextOpenWorldContextsV1(projection).action })
+  const resolved = registry.resolve({ actionKey: input.actionKey, targetKey, context: deriveTextOpenWorldContextsV1(projection).action })
+  if (resolved.entry.action.category === 'start-combat') {
+    const modules = parseTextOpenWorldModulesV1(projection.runtimePackage)
+    const startEffects = resolved.entry.action.successEffectKeys
+      .map(effectKey => modules.actions.effects.find(effect => effect.key === effectKey)!)
+      .filter(effect => effect.operation === 'start-combat')
+    if (startEffects.length !== 1) fail('start-combat Action必须且只能绑定一个开始战斗Effect')
+    const encounterKey = (startEffects[0] as { payload: { encounterKey: string } }).payload.encounterKey
+    if (targetKey !== encounterKey) fail('start-combat Action目标与Effect遭遇不一致')
+    await ensureTextOpenWorldCombatRetryCheckpointV1({ sessionId: input.sessionId, encounterKey, throughSequence: state.lastSequence })
+  }
   const envelope: TextOpenWorldCommandEnvelopeV1 = {
     schema: 'storyforge.text-open-world.command', version: 1, commandId,
     sessionId: input.sessionId, actorKey: 'player', actionKey: input.actionKey,

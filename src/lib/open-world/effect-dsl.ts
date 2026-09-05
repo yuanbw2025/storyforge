@@ -29,6 +29,7 @@ function exact(value: Row, fields: readonly string[], label: string) {
 }
 function key(value: unknown, label: string, pattern = KEY): string { if (typeof value !== 'string' || !pattern.test(value)) fail(`${label}无效`); return value }
 function text(value: unknown, label: string): string { if (typeof value !== 'string' || !value.trim() || value.length > 1000) fail(`${label}无效`); return value.trim() }
+function bool(value: unknown, label: string): boolean { if (typeof value !== 'boolean') fail(`${label}必须是boolean`); return value }
 function boolOrNull(value: unknown, label: string): boolean | null { if (value !== null && typeof value !== 'boolean') fail(`${label}必须是boolean或null`); return value }
 function numberValue(value: unknown, label: string, minimum = -1_000_000_000_000, maximum = 1_000_000_000_000): number { if (typeof value !== 'number' || !Number.isFinite(value) || value < minimum || value > maximum) fail(`${label}数值无效`); return value }
 function int(value: unknown, label: string, minimum = 0, maximum = Number.MAX_SAFE_INTEGER): number { const parsed = numberValue(value, label, minimum, maximum); if (!Number.isSafeInteger(parsed)) fail(`${label}必须是安全整数`); return parsed }
@@ -42,7 +43,8 @@ function references(modules: TextOpenWorldParsedModulesV1) {
   return {
     items: set(modules.items.items), skills: set(modules.progression.skills), statuses: set(modules.progression.statuses), recipes: set(modules.crafting.recipes),
     quests: set(modules.quests.quests), questStages: set(modules.quests.stages), objectives: set(modules.quests.objectives),
-    locations: set(modules.world.locations), travelPoints: set(modules.world.fastTravelPoints), edges: set(modules.world.edges),
+    locations: set(modules.world.locations), travelPoints: set(modules.world.fastTravelPoints),
+    respawnPoints: set(modules.world.fastTravelPoints.filter(point => point.canRespawn)), edges: set(modules.world.edges),
     factions: set(modules.actors.factions), actors: set(modules.actors.actors), regions: set(modules.world.regions),
     encounters: set(modules.combat.encounters), knowledge: set(modules.knowledge.entries), endings: set(modules.narrative.endings),
     rumors: set(modules.knowledge.rumors), achievements: set(modules.knowledge.achievements), weather: set(modules['time-weather'].weather),
@@ -77,7 +79,8 @@ function parseDefinition(value: unknown, refs: Refs, label: string): TextOpenWor
   if (operation === 'advance-time') { exact(payload, ['minutes'], `${label}.payload`); return { key: effectKey, operation, payload: { minutes: int(payload.minutes, `${label}.minutes`, 1, 1_000_000_000) } } }
   if (operation === 'start-combat') { exact(payload, ['encounterKey'], `${label}.payload`); return { key: effectKey, operation, payload: { encounterKey: ref(payload.encounterKey, refs.encounters, `${label}.encounterKey`) } } }
   if (operation === 'resolve-combat') { exact(payload, ['encounterKey', 'outcome'], `${label}.payload`); return { key: effectKey, operation, payload: { encounterKey: ref(payload.encounterKey, refs.encounters, `${label}.encounterKey`), outcome: enumValue(payload.outcome, ['victory', 'defeat', 'escaped'], `${label}.outcome`) } } }
-  if (operation === 'respawn') { exact(payload, ['locationKey', 'healthRatio'], `${label}.payload`); return { key: effectKey, operation, payload: { locationKey: ref(payload.locationKey, refs.locations, `${label}.locationKey`), healthRatio: numberValue(payload.healthRatio, `${label}.healthRatio`, 0.000001, 1) } } }
+  if (operation === 'rest') { exact(payload, ['healthRatio', 'skillResourceRatio', 'clearHarmfulStatuses'], `${label}.payload`); return { key: effectKey, operation, payload: { healthRatio: numberValue(payload.healthRatio, `${label}.healthRatio`, 0.000001, 1), skillResourceRatio: numberValue(payload.skillResourceRatio, `${label}.skillResourceRatio`, 0, 1), clearHarmfulStatuses: bool(payload.clearHarmfulStatuses, `${label}.clearHarmfulStatuses`) } } }
+  if (operation === 'respawn') { exact(payload, ['fastTravelPointKey', 'healthRatio'], `${label}.payload`); return { key: effectKey, operation, payload: { fastTravelPointKey: ref(payload.fastTravelPointKey, refs.respawnPoints, `${label}.fastTravelPointKey`), healthRatio: numberValue(payload.healthRatio, `${label}.healthRatio`, 0.000001, 1) } } }
   if (operation === 'change-actor-state') {
     exact(payload, ['actorKey', 'alive', 'present', 'locationKey'], `${label}.payload`); const alive = boolOrNull(payload.alive, `${label}.alive`); const present = boolOrNull(payload.present, `${label}.present`); const locationKey = nullableRef(payload.locationKey, refs.locations, `${label}.locationKey`)
     if (alive == null && present == null && locationKey == null) fail(`${label}至少改变一个Actor字段`)
@@ -93,13 +96,14 @@ function addUnique(values: string[], value: string) { if (!values.includes(value
 function remove(values: string[], value: string) { const index = values.indexOf(value); if (index >= 0) values.splice(index, 1) }
 function effectDomains(operation: TextOpenWorldEffectDefinitionV1['operation']): TextOpenWorldEffectImpactDomainV1[] {
   if (operation === 'respawn') return ['combat', 'player', 'map']
-  if (['change-player-resource', 'grant-experience', 'apply-status', 'remove-status', 'learn-skill'].includes(operation)) return ['player']
+  if (operation === 'resolve-combat') return ['combat', 'player']
+  if (['change-player-resource', 'grant-experience', 'apply-status', 'remove-status', 'learn-skill', 'rest'].includes(operation)) return ['player']
   if (['grant-item', 'remove-item', 'equip-item', 'unequip-item', 'learn-recipe', 'change-currency'].includes(operation)) return ['inventory']
   if (['transition-quest', 'complete-objective'].includes(operation)) return ['quests']
   if (['reveal-location', 'unlock-fast-travel', 'enter-location', 'start-travel'].includes(operation)) return ['map']
   if (operation === 'advance-time') return ['time']
   if (['change-morality', 'change-faction-affinity', 'set-story-modifier'].includes(operation)) return ['relationships']
-  if (['start-combat', 'resolve-combat'].includes(operation)) return ['combat']
+  if (operation === 'start-combat') return ['combat']
   if (operation === 'change-actor-state') return ['actors']
   if (['change-region-state', 'set-world-flag'].includes(operation)) return ['world']
   if (operation === 'reveal-knowledge') return ['knowledge']
@@ -169,6 +173,8 @@ export function validateTextOpenWorldEffectStateV1(state: TextOpenWorldEffectSta
   for (const [factionKey, value] of Object.entries(state.relationships.factionAffinityByKey)) { ref(factionKey, refs.factions, 'faction affinity key'); numberValue(value, 'faction affinity', modules.relationships.factionAffinity.minimum, modules.relationships.factionAffinity.maximum) }
   for (const [actorKey, value] of Object.entries(state.relationships.storyModifierByActorKey)) { ref(actorKey, refs.actors, 'story modifier actor'); numberValue(value, 'story modifier', -modules.relationships.attitude.explicitStoryModifierCap, modules.relationships.attitude.explicitStoryModifierCap) }
   if (state.combat) ref(state.combat.encounterKey, refs.encounters, 'combat encounterKey')
+  const defeated = state.combat?.status === 'defeat'
+  if ((state.player.health === 0) !== defeated) fail('生命为0与战败状态必须同时成立')
   for (const actorDefinition of modules.actors.actors) if (!state.actors[actorDefinition.key]) fail(`Actor运行状态缺失:${actorDefinition.key}`)
   for (const [actorKey, actor] of Object.entries(state.actors)) { ref(actorKey, refs.actors, 'actors key'); if (typeof actor.alive !== 'boolean' || typeof actor.present !== 'boolean' || (!actor.alive && actor.present)) fail(`actors.${actorKey}生存/在场状态无效`); ref(actor.locationKey, refs.locations, `actors.${actorKey}.locationKey`); text(actor.scheduleState, `actors.${actorKey}.scheduleState`) }
   for (const [regionKey, regionState] of Object.entries(state.world.regionStateByKey)) { ref(regionKey, refs.regions, 'region state key'); text(regionState, `region state:${regionKey}`) }
@@ -394,22 +400,39 @@ function applyDefinitions(stateValue: TextOpenWorldEffectStateV1, effects: TextO
         state.time.worldMinute = after; record(changes, effect, `时间推进${payload.minutes}分钟`, before, after); break
       }
       case 'start-combat': {
-        const { payload } = effect; if (state.combat?.status === 'active') fail(`${effect.key}已有进行中的战斗`)
+        const { payload } = effect; if (state.player.health <= 0) fail(`${effect.key}战败玩家不能开始战斗`); if (state.combat?.status === 'active') fail(`${effect.key}已有进行中的战斗`)
         const before = state.combat; state.combat = { encounterKey: payload.encounterKey, status: 'active' }
         record(changes, effect, `开始战斗:${payload.encounterKey}`, before, state.combat); break
       }
       case 'resolve-combat': {
         const { payload } = effect; if (!state.combat || state.combat.status !== 'active' || state.combat.encounterKey !== payload.encounterKey) fail(`${effect.key}没有对应的active战斗`)
-        const before = state.combat.status; state.combat.status = payload.outcome
-        record(changes, effect, `战斗结果:${payload.outcome}`, before, payload.outcome); break
+        const before = { status: state.combat.status, health: state.player.health }; state.combat.status = payload.outcome
+        if (payload.outcome === 'defeat') state.player.health = 0
+        record(changes, effect, `战斗结果:${payload.outcome}`, before, { status: payload.outcome, health: state.player.health }); break
+      }
+      case 'rest': {
+        const { payload } = effect
+        if (state.player.health <= 0 || state.combat?.status === 'active' || state.combat?.status === 'defeat') fail(`${effect.key}当前不能休息`)
+        const before = { health: state.player.health, skillResource: state.player.skillResource, statusKeys: [...state.player.statusKeys] }
+        state.player.health = Math.max(state.player.health, Math.ceil(state.player.maximumHealth * payload.healthRatio))
+        state.player.skillResource = Math.max(state.player.skillResource, Math.ceil(state.player.maximumSkillResource * payload.skillResourceRatio))
+        if (payload.clearHarmfulStatuses) {
+          const harmful = new Set(modules.progression.statuses.filter(status => status.polarity === 'harmful').map(status => status.key))
+          state.player.statusKeys = state.player.statusKeys.filter(statusKey => !harmful.has(statusKey))
+        }
+        record(changes, effect, '休息恢复玩家状态', before, { health: state.player.health, skillResource: state.player.skillResource, statusKeys: [...state.player.statusKeys] }); break
       }
       case 'respawn': {
         const { payload } = effect; if (state.combat?.status !== 'defeat') fail(`${effect.key}只能在战败后复活`)
+        if (!state.map.unlockedFastTravelPointKeys.includes(payload.fastTravelPointKey)) fail(`${effect.key}复活点尚未解锁`)
+        const point = modules.world.fastTravelPoints.find(candidate => candidate.key === payload.fastTravelPointKey)!
         const before = { health: state.player.health, locationKey: state.map.currentLocationKey, combat: state.combat }
-        state.player.health = Math.max(1, Math.ceil(state.player.maximumHealth * payload.healthRatio)); state.map.currentLocationKey = payload.locationKey; state.map.travel = null; state.combat = null; addUnique(state.map.revealedLocationKeys, payload.locationKey)
-        const regionKey = modules.world.locations.find(location => location.key === payload.locationKey)!.regionKey; state.map.regionKnowledgeByKey[regionKey] = 'visited'
-        modules.world.fastTravelPoints.filter(point => point.locationKey === payload.locationKey).forEach(point => addUnique(state.map.unlockedFastTravelPointKeys, point.key))
-        record(changes, effect, `在${payload.locationKey}复活`, before, { health: state.player.health, locationKey: state.map.currentLocationKey, combat: null }); break
+        state.player.health = Math.max(1, Math.ceil(state.player.maximumHealth * payload.healthRatio)); state.player.skillResource = state.player.maximumSkillResource
+        const harmful = new Set(modules.progression.statuses.filter(status => status.polarity === 'harmful').map(status => status.key))
+        state.player.statusKeys = state.player.statusKeys.filter(statusKey => !harmful.has(statusKey))
+        state.map.currentLocationKey = point.locationKey; state.map.travel = null; state.combat = null; addUnique(state.map.revealedLocationKeys, point.locationKey)
+        const regionKey = modules.world.locations.find(location => location.key === point.locationKey)!.regionKey; state.map.regionKnowledgeByKey[regionKey] = 'visited'
+        record(changes, effect, `在${point.locationKey}复活`, before, { health: state.player.health, skillResource: state.player.skillResource, statusKeys: state.player.statusKeys, locationKey: state.map.currentLocationKey, combat: null }); break
       }
       case 'change-actor-state': {
         const { payload } = effect; const definition = modules.actors.actors.find(candidate => candidate.key === payload.actorKey)!

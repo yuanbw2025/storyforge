@@ -76,6 +76,13 @@ describe('Text Open World vNext · checkpoint, replay and child branch', () => {
     expect(await inspectTextOpenWorldCheckpointV1(checkpoint.id!)).toMatchObject({ code: 'checkpoint-state-invalid', valid: false })
   })
 
+  it('旧检查点缺少用途字段时按手动存档兼容读取', async () => {
+    const runtimePackage = createTextOpenWorldVNextFixture(); const session = await createSession(runtimePackage)
+    const checkpoint = await createTextOpenWorldCheckpointV1({ sessionId: session.id!, name: '旧版手动点' })
+    await db.productRuntimeCheckpoints.update(checkpoint.id!, { purpose: undefined, subjectKey: undefined })
+    await expect(inspectTextOpenWorldCheckpointV1(checkpoint.id!)).resolves.toMatchObject({ valid: true, code: 'valid' })
+  })
+
   it('runtime head损坏可诊断并从规范事件安全修复', async () => {
     const runtimePackage = createTextOpenWorldVNextFixture(); const session = await createSession(runtimePackage)
     await playReward(runtimePackage, session.id!, 'command.head', 'claim.head')

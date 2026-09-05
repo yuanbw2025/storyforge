@@ -136,7 +136,7 @@ describe('Text Open World vNext · typed Effect DSL and atomic EffectPlan', () =
 
   it('复活同时声明战斗、玩家和地图影响域，且只能从战败状态执行', async () => {
     const catalog = createTextOpenWorldEffectCatalogV1(addEffects([
-      { key: 'effect.respawn-port', operation: 'respawn', payload: { locationKey: 'location.salt-port', healthRatio: 0.5 } },
+      { key: 'effect.respawn-port', operation: 'respawn', payload: { fastTravelPointKey: 'fast-travel.salt-port', healthRatio: 0.5 } },
     ]))
     const defeated = state({
       player: { ...state().player, health: 0 },

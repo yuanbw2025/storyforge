@@ -1291,6 +1291,8 @@ export interface ProductRuntimeCheckpoint {
   sessionId: number;
   throughSequence: number;
   name: string;
+  purpose?: "manual" | "combat-retry";
+  subjectKey?: string | null;
   stateJson: string;
   stateHash: string;
   createdAt: number;

@@ -7,6 +7,7 @@ import {
   branchTextOpenWorldSessionFromCheckpointV1,
   createTextOpenWorldCheckpointV1,
   inspectTextOpenWorldCheckpointV1,
+  retryDefeatedTextOpenWorldCombatV1,
 } from '../lib/open-world/checkpoints'
 import {
   adoptOpenWorldRuntimeCandidateV1,
@@ -75,6 +76,7 @@ interface TextOpenWorldPlayerState {
   generatePresentation(skillId: OpenWorldRuntimeSkillIdV1, objective: string, aiConfig: AIConfig): Promise<void>
   saveCheckpoint(name: string): Promise<void>
   forkCheckpoint(checkpointId: number, title?: string): Promise<number>
+  retryDefeatedCombat(title?: string): Promise<number>
   forkCurrent(title?: string): Promise<number>
   remove(sessionId: number): Promise<void>
 }
@@ -264,6 +266,12 @@ export const useTextOpenWorldPlayerStore = create<TextOpenWorldPlayerState>((set
             if (!await verifyProductRuntimeCheckpoint(checkpointId)) throw new Error('[text-open-world] 检查点无效。')
             return branchProductRuntimeSession({ parentSessionId: checkpoint.sessionId, throughSequence: checkpoint.throughSequence, title: title?.trim() || `世界分支 · ${checkpoint.name}` })
           })()
+      await reload(child.id!)
+      return child.id!
+    }),
+    retryDefeatedCombat: async title => run(async () => {
+      if (get().selectedSessionId == null) throw new Error('[text-open-world] 请先开始正式开放世界。')
+      const child = await retryDefeatedTextOpenWorldCombatV1({ sessionId: get().selectedSessionId!, title })
       await reload(child.id!)
       return child.id!
     }),

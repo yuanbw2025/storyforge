@@ -24,6 +24,8 @@ export interface TextOpenWorldActionProjectionContextV1 {
   actorKey: 'player' | 'system'
   currentLocationKey: string
   worldMinute: number
+  playerHealth: number
+  combatStatus: 'active' | 'victory' | 'defeat' | 'escaped' | null
   conditionResults: Record<string, TextOpenWorldConditionResultV1>
   completedOnceActionKeys: string[]
   cooldownUntilWorldMinuteByActionKey: Record<string, number>
@@ -38,6 +40,8 @@ export type TextOpenWorldActionUnavailableCodeV1 =
   | 'once-consumed'
   | 'cooldown'
   | 'no-valid-target'
+  | 'defeated'
+  | 'combat-state'
 
 export interface TextOpenWorldActionUnavailableReasonV1 {
   code: TextOpenWorldActionUnavailableCodeV1

@@ -114,7 +114,7 @@ describe('Text Open World vNext · typed Condition DSL', () => {
     const catalog = createTextOpenWorldConditionCatalogV1(fixture)
     const results = catalog.evaluateMany(['condition.always'], evaluationContext())
     const projection = createTextOpenWorldActionRegistryV1(fixture).project({
-      actorKey: 'player', currentLocationKey: 'location.salt-port', worldMinute: 480,
+      actorKey: 'player', currentLocationKey: 'location.salt-port', worldMinute: 480, playerHealth: 35, combatStatus: null,
       conditionResults: results, completedOnceActionKeys: [], cooldownUntilWorldMinuteByActionKey: {},
       validTargetKeysByScope: { location: ['location.salt-port'] },
     })

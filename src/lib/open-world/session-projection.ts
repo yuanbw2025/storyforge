@@ -219,6 +219,7 @@ export function deriveTextOpenWorldContextsV1(value: TextOpenWorldSessionProject
   const actorTargets = modules.actors.actors.filter(actor => { const runtime = state.actors[actor.key]; return runtime.alive && runtime.present && runtime.locationKey === state.map.currentLocationKey }).map(actor => actor.key)
   const action: TextOpenWorldActionProjectionContextV1 = {
     actorKey: 'player', currentLocationKey: state.map.currentLocationKey, worldMinute: state.time.worldMinute,
+    playerHealth: state.player.health, combatStatus: state.combat?.status ?? null,
     conditionResults: Object.fromEntries(Object.entries(evaluations).map(([key, result]) => [key, { satisfied: result.satisfied, publicReason: result.publicReason }])),
     completedOnceActionKeys: [...projection.actions.completedOnceActionKeys], cooldownUntilWorldMinuteByActionKey: structuredClone(projection.actions.cooldownUntilWorldMinuteByActionKey),
     validTargetKeysByScope: {

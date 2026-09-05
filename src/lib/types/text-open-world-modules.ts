@@ -9,7 +9,7 @@ export type TextOpenWorldActionCategoryV1 =
   | 'move' | 'travel' | 'fast-travel' | 'observe' | 'investigate' | 'talk'
   | 'take' | 'use' | 'equip' | 'unequip' | 'drop' | 'buy' | 'sell' | 'craft'
   | 'accept-quest' | 'abandon-quest' | 'quest-action'
-  | 'start-combat' | 'continue-combat' | 'escape' | 'rest'
+  | 'start-combat' | 'continue-combat' | 'escape' | 'rest' | 'respawn'
   | 'read' | 'track' | 'untrack' | 'save' | 'load-branch'
 
 /**
@@ -119,6 +119,7 @@ export interface TextOpenWorldWorldModuleV1 {
     key: string
     locationKey: string
     unlockedByDefault: boolean
+    canRespawn: boolean
   }>
 }
 

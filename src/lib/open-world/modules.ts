@@ -16,7 +16,7 @@ const KEY = /^[a-z][a-z0-9._:-]{0,199}$/
 const ACTION_CATEGORIES: TextOpenWorldActionCategoryV1[] = [
   'move', 'travel', 'fast-travel', 'observe', 'investigate', 'talk', 'take', 'use', 'equip', 'unequip', 'drop',
   'buy', 'sell', 'craft', 'accept-quest', 'abandon-quest', 'quest-action', 'start-combat', 'continue-combat', 'escape',
-  'rest', 'read', 'track', 'untrack', 'save', 'load-branch',
+  'rest', 'respawn', 'read', 'track', 'untrack', 'save', 'load-branch',
 ]
 const QUEST_TYPES: TextOpenWorldQuestTypeV1[] = ['mainline', 'significant', 'ordinary', 'template']
 const QUEST_POLICIES: TextOpenWorldQuestLifecyclePolicyV1[] = ['protected-wait', 'abandon-restart', 'abandon-terminal']
@@ -170,7 +170,7 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
   const regions = catalog(world.regions, 'world.regions', ['key', 'title', 'description', 'locationKeys', 'initialKnowledge'])
   const locations = catalog(world.locations, 'world.locations', ['key', 'regionKey', 'title', 'description', 'kind', 'tags'])
   const edges = catalog(world.edges, 'world.edges', ['key', 'fromLocationKey', 'toLocationKey', 'bidirectional', 'travelMinutes', 'conditionKeys'])
-  const travelPoints = catalog(world.fastTravelPoints, 'world.fastTravelPoints', ['key', 'locationKey', 'unlockedByDefault'])
+  const travelPoints = catalog(world.fastTravelPoints, 'world.fastTravelPoints', ['key', 'locationKey', 'unlockedByDefault', 'canRespawn'])
   const regionKeys = keysOf(regions, 'world.regions'); const locationKeys = keysOf(locations, 'world.locations'); keysOf(edges, 'world.edges'); const travelPointKeys = keysOf(travelPoints, 'world.fastTravelPoints')
   requireRef(key(world.initialLocationKey, 'world.initialLocationKey'), locationKeys, 'initial location')
   regions.forEach((item, index) => { text(item.title, `world.regions[${index}].title`, 2_000); text(item.description, `world.regions[${index}].description`); requireRefs(strings(item.locationKeys, `world.regions[${index}].locationKeys`), locationKeys, 'region location'); enumValue(item.initialKnowledge, ['unknown', 'heard', 'visited', 'familiar'], `world.regions[${index}].initialKnowledge`) })
@@ -182,7 +182,8 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
     `region ${String(item.key)} locations`,
   ))
   edges.forEach((item, index) => { const from = key(item.fromLocationKey, `world.edges[${index}].fromLocationKey`); const to = key(item.toLocationKey, `world.edges[${index}].toLocationKey`); requireRef(from, locationKeys, 'edge from'); requireRef(to, locationKeys, 'edge to'); if (from === to) fail('edge不能自连'); bool(item.bidirectional, `world.edges[${index}].bidirectional`); int(item.travelMinutes, `world.edges[${index}].travelMinutes`, 1, 1_000_000); strings(item.conditionKeys, `world.edges[${index}].conditionKeys`) })
-  travelPoints.forEach((item, index) => { requireRef(key(item.locationKey, `world.fastTravelPoints[${index}].locationKey`), locationKeys, 'fast travel location'); bool(item.unlockedByDefault, `world.fastTravelPoints[${index}].unlockedByDefault`) })
+  travelPoints.forEach((item, index) => { requireRef(key(item.locationKey, `world.fastTravelPoints[${index}].locationKey`), locationKeys, 'fast travel location'); bool(item.unlockedByDefault, `world.fastTravelPoints[${index}].unlockedByDefault`); bool(item.canRespawn, `world.fastTravelPoints[${index}].canRespawn`) })
+  if (!travelPoints.some(item => item.unlockedByDefault === true && item.canRespawn === true)) fail('至少需要一个默认解锁的复活点')
 
   const actors = versioned(packageValue, 'actors')
   exact(actors, ['version', 'player', 'factions', 'actors', 'schedules'], 'actors')
@@ -314,6 +315,26 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
       if (!rewarded) fail(`技能${String(skill.key)}的任务来源${questKey}没有对应学习Effect奖励`)
     })
   })
+  actionRows.forEach((action, index) => {
+    const category = String(action.category)
+    const costEffectKeys = strings(action.costEffectKeys, `actions.actions[${index}].costEffectKeys`)
+    const successEffectKeys = strings(action.successEffectKeys, `actions.actions[${index}].successEffectKeys`)
+    const failureEffectKeys = strings(action.failureEffectKeys, `actions.actions[${index}].failureEffectKeys`)
+    const successEffects = successEffectKeys.map(effectKey => effects.find(effect => effect.key === effectKey)!)
+    if (category === 'respawn') {
+      if (action.targetScope !== 'none' || costEffectKeys.length || failureEffectKeys.length || successEffects.length !== 1
+        || successEffects[0].operation !== 'respawn' || action.timeCostMinutes !== 0 || action.confirmationPolicy !== 'never'
+        || action.repeatPolicy !== 'repeatable' || action.cooldownMinutes != null) fail(`actions.actions[${index}] 复活Action不符合无代价契约`)
+    }
+    if (category === 'rest') {
+      const restEffects = successEffects.filter(effect => effect.operation === 'rest')
+      const timeEffects = successEffects.filter(effect => effect.operation === 'advance-time')
+      if (action.targetScope !== 'none' || costEffectKeys.length || failureEffectKeys.length || restEffects.length !== 1
+        || timeEffects.length !== 1 || successEffects.length !== 2 || action.confirmationPolicy !== 'never'
+        || action.repeatPolicy !== 'repeatable' || action.cooldownMinutes != null || Number(action.timeCostMinutes) < 1
+        || row(timeEffects[0].payload, `actions.actions[${index}] rest time payload`).minutes !== action.timeCostMinutes) fail(`actions.actions[${index}] 休息Action不符合恢复与时间契约`)
+    }
+  })
 
   const items = versioned(packageValue, 'items')
   exact(items, ['version', 'equipmentSlots', 'items', 'dropTables'], 'items')
@@ -331,6 +352,15 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
   const enemies = catalog(combat.enemies, 'combat.enemies', ['key', 'familyKey', 'title', 'level', 'maximumHealth', 'attack', 'defense', 'criticalChance', 'initiative', 'skillKeys', 'dropTableKey']); const encounters = catalog(combat.encounters, 'combat.encounters', ['key', 'title', 'locationKey', 'enemyKeys', 'recommendedLevel', 'intensity', 'escapeAllowed', 'victoryEffectKeys']); const enemyKeys = keysOf(enemies, 'combat.enemies'); keysOf(encounters, 'combat.encounters')
   enemies.forEach((item, index) => { key(item.familyKey, `combat.enemies[${index}].familyKey`); text(item.title, `combat.enemies[${index}].title`, 2_000); int(item.level, `combat.enemies[${index}].level`, 1, maximumLevel); int(item.maximumHealth, `combat.enemies[${index}].maximumHealth`, 1, 1_000_000_000); int(item.attack, `combat.enemies[${index}].attack`, 0, 1_000_000_000); int(item.defense, `combat.enemies[${index}].defense`, 0, 1_000_000_000); numberValue(item.criticalChance, `combat.enemies[${index}].criticalChance`, 0, 1); numberValue(item.initiative, `combat.enemies[${index}].initiative`, 0, 1_000_000); requireRefs(strings(item.skillKeys, `combat.enemies[${index}].skillKeys`), skillKeys, 'enemy skill'); requireRef(nullableKey(item.dropTableKey, `combat.enemies[${index}].dropTableKey`), dropTableKeys, 'enemy drop table') })
   encounters.forEach((item, index) => { text(item.title, `combat.encounters[${index}].title`, 2_000); requireRef(key(item.locationKey, `combat.encounters[${index}].locationKey`), locationKeys, 'encounter location'); requireRefs(strings(item.enemyKeys, `combat.encounters[${index}].enemyKeys`), enemyKeys, 'encounter enemy'); int(item.recommendedLevel, `combat.encounters[${index}].recommendedLevel`, 1, maximumLevel); enumValue(item.intensity, ['ordinary', 'dangerous', 'boss'], `combat.encounters[${index}].intensity`); bool(item.escapeAllowed, `combat.encounters[${index}].escapeAllowed`); requireRefs(strings(item.victoryEffectKeys, `combat.encounters[${index}].victoryEffectKeys`), effectKeys, 'encounter victory effect') })
+  actionRows.filter(action => action.category === 'start-combat').forEach(action => {
+    const startEffects = strings(action.successEffectKeys, `start-combat ${String(action.key)} success effects`)
+      .map(effectKey => effects.find(effect => effect.key === effectKey)!)
+      .filter(effect => effect.operation === 'start-combat')
+    if (action.targetScope !== 'encounter' || startEffects.length !== 1) fail(`start-combat Action必须绑定唯一遭遇目标:${String(action.key)}`)
+    const encounterKey = key(row(startEffects[0].payload, `start-combat ${String(action.key)} payload`).encounterKey, `start-combat ${String(action.key)} encounterKey`)
+    const encounter = encounters.find(item => item.key === encounterKey) ?? fail(`start-combat Action遭遇不存在:${encounterKey}`)
+    requireSameKeys(strings(action.locationKeys, `start-combat ${String(action.key)} locationKeys`), [String(encounter.locationKey)], `start-combat ${String(action.key)} location`)
+  })
 
   const crafting = versioned(packageValue, 'crafting')
   exact(crafting, ['version', 'recipes'], 'crafting'); const recipes = catalog(crafting.recipes, 'crafting.recipes', ['key', 'title', 'description', 'learnedByDefault', 'stationLocationKeys', 'ingredients', 'outputs', 'timeCostMinutes']); keysOf(recipes, 'crafting.recipes')

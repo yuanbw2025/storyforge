@@ -1717,6 +1717,8 @@ export async function createProductRuntimeCheckpoint(input: {
   sessionId: number;
   name: string;
   throughSequence?: number;
+  purpose?: ProductRuntimeCheckpoint["purpose"];
+  subjectKey?: string | null;
 }): Promise<ProductRuntimeCheckpoint> {
   const session = await db.productRuntimeSessions.get(input.sessionId);
   if (!session) throw new Error("产品运行会话不存在。");
@@ -1741,12 +1743,22 @@ export async function createProductRuntimeCheckpoint(input: {
   const stateJson = JSON.stringify(state);
   const name = input.name.trim() || `检查点 ${throughSequence}`;
   if (name.length > 200) throw new Error("检查点名称不能超过 200 个字符。");
+  const purpose = input.purpose ?? "manual";
+  const subjectKey = input.subjectKey?.trim() || null;
+  if (purpose === "combat-retry") {
+    if (!subjectKey || subjectKey.length > 200)
+      throw new Error("战前重试检查点必须绑定有效对象。");
+  } else if (subjectKey != null) {
+    throw new Error("手动检查点不能绑定对象。");
+  }
   const checkpoint: ProductRuntimeCheckpoint = {
     projectId: session.projectId,
     worldGroupId: session.worldGroupId ?? null,
     sessionId: session.id!,
     throughSequence,
     name,
+    purpose,
+    subjectKey,
     stateJson,
     stateHash: await hashStateJson(stateJson),
     createdAt: Date.now(),

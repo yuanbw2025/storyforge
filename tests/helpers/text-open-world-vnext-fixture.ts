@@ -86,8 +86,8 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
         bidirectional: true, travelMinutes: 60, conditionKeys: [],
       }],
       fastTravelPoints: [
-        { key: 'fast-travel.salt-port', locationKey: 'location.salt-port', unlockedByDefault: true },
-        { key: 'fast-travel.ridge', locationKey: 'location.ridge-channel', unlockedByDefault: false },
+        { key: 'fast-travel.salt-port', locationKey: 'location.salt-port', unlockedByDefault: true, canRespawn: true },
+        { key: 'fast-travel.ridge', locationKey: 'location.ridge-channel', unlockedByDefault: false, canRespawn: true },
       ],
     },
     actors: {
@@ -151,12 +151,31 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
         { key: 'effect.restore-health', operation: 'change-player-resource', payload: { resource: 'health', amount: 10 } },
         { key: 'effect.reward-experience', operation: 'grant-experience', payload: { amount: 100 } },
         { key: 'effect.reward-currency', operation: 'change-currency', payload: { amount: 10 } },
+        { key: 'effect.rest-full', operation: 'rest', payload: { healthRatio: 1, skillResourceRatio: 1, clearHarmfulStatuses: true } },
+        { key: 'effect.rest-time', operation: 'advance-time', payload: { minutes: 480 } },
+        { key: 'effect.respawn-salt-port', operation: 'respawn', payload: { fastTravelPointKey: 'fast-travel.salt-port', healthRatio: 1 } },
+        { key: 'effect.start-ridge-jackal', operation: 'start-combat', payload: { encounterKey: 'encounter.ridge-jackal' } },
       ],
       actions: [{
         key: 'action.investigate-channel', category: 'investigate', label: '检查盐渠',
         description: '检查当前位置的盐渠痕迹。', actorScope: 'player', targetScope: 'location',
         locationKeys: ['location.salt-port', 'location.ridge-channel'], requirementConditionKeys: [], costEffectKeys: [],
         successEffectKeys: [], failureEffectKeys: [], timeCostMinutes: 15,
+        confirmationPolicy: 'never', repeatPolicy: 'repeatable', cooldownMinutes: null,
+      }, {
+        key: 'action.rest', category: 'rest', label: '休息', description: '休息并恢复生命与技能资源。',
+        actorScope: 'player', targetScope: 'none', locationKeys: ['location.salt-port'], requirementConditionKeys: [], costEffectKeys: [],
+        successEffectKeys: ['effect.rest-full', 'effect.rest-time'], failureEffectKeys: [], timeCostMinutes: 480,
+        confirmationPolicy: 'never', repeatPolicy: 'repeatable', cooldownMinutes: null,
+      }, {
+        key: 'action.respawn', category: 'respawn', label: '在盐港复活', description: '保留既有进度，在安全复活点恢复。',
+        actorScope: 'player', targetScope: 'none', locationKeys: [], requirementConditionKeys: [], costEffectKeys: [],
+        successEffectKeys: ['effect.respawn-salt-port'], failureEffectKeys: [], timeCostMinutes: 0,
+        confirmationPolicy: 'never', repeatPolicy: 'repeatable', cooldownMinutes: null,
+      }, {
+        key: 'action.start-ridge-jackal', category: 'start-combat', label: '迎战盐鬣犬', description: '进入盐渠伏兽遭遇。',
+        actorScope: 'player', targetScope: 'encounter', locationKeys: ['location.ridge-channel'], requirementConditionKeys: [], costEffectKeys: [],
+        successEffectKeys: ['effect.start-ridge-jackal'], failureEffectKeys: [], timeCostMinutes: 0,
         confirmationPolicy: 'never', repeatPolicy: 'repeatable', cooldownMinutes: null,
       }],
     },

@@ -8,7 +8,7 @@ export type TextOpenWorldEffectOperationV1 =
   | 'change-morality' | 'change-faction-affinity' | 'set-story-modifier'
   | 'reveal-knowledge' | 'reveal-location' | 'unlock-fast-travel'
   | 'enter-location' | 'start-travel' | 'advance-time'
-  | 'start-combat' | 'resolve-combat' | 'respawn'
+  | 'start-combat' | 'resolve-combat' | 'rest' | 'respawn'
   | 'change-actor-state' | 'change-region-state' | 'set-world-flag'
   | 'unlock-ending' | 'reach-ending'
 
@@ -34,7 +34,8 @@ export type TextOpenWorldEffectDefinitionV1 =
   | { key: string; operation: 'advance-time'; payload: { minutes: number } }
   | { key: string; operation: 'start-combat'; payload: { encounterKey: string } }
   | { key: string; operation: 'resolve-combat'; payload: { encounterKey: string; outcome: 'victory' | 'defeat' | 'escaped' } }
-  | { key: string; operation: 'respawn'; payload: { locationKey: string; healthRatio: number } }
+  | { key: string; operation: 'rest'; payload: { healthRatio: number; skillResourceRatio: number; clearHarmfulStatuses: boolean } }
+  | { key: string; operation: 'respawn'; payload: { fastTravelPointKey: string; healthRatio: number } }
   | { key: string; operation: 'change-actor-state'; payload: { actorKey: string; alive: boolean | null; present: boolean | null; locationKey: string | null } }
   | { key: string; operation: 'change-region-state'; payload: { regionKey: string; state: string } }
   | { key: string; operation: 'set-world-flag'; payload: { flagKey: string; value: string | number | boolean | null } }

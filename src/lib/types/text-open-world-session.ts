@@ -107,6 +107,7 @@ export type TextOpenWorldCheckpointDiagnosticCodeV1 =
   | 'valid' | 'not-vnext' | 'checkpoint-missing' | 'session-missing' | 'scope-mismatch'
   | 'checkpoint-hash-invalid' | 'checkpoint-state-invalid' | 'checkpoint-hash-mismatch'
   | 'checkpoint-sequence-mismatch' | 'event-protocol-invalid' | 'replay-mismatch'
+  | 'checkpoint-purpose-invalid'
 
 export interface TextOpenWorldCheckpointInspectionV1 {
   checkpointId: number
