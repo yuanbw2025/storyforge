@@ -248,7 +248,7 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
   })
 
   const progression = versioned(packageValue, 'progression')
-  exact(progression, ['version', 'rules', 'levels', 'skills'], 'progression')
+  exact(progression, ['version', 'rules', 'levels', 'skills', 'statuses'], 'progression')
   const progressionRules = row(progression.rules, 'progression.rules'); exact(progressionRules, ['maximumLevel', 'automaticAttributeGrowth', 'levelUp', 'attributes', 'formulas'], 'progression.rules'); const maximumLevel = int(progressionRules.maximumLevel, 'progression.rules.maximumLevel', 1, 20); if (maximumLevel !== 20) fail('首版maximumLevel必须为20'); if (progressionRules.automaticAttributeGrowth !== true) fail('首版必须自动属性成长')
   const levelUp = row(progressionRules.levelUp, 'progression.rules.levelUp'); exact(levelUp, ['resourcePolicy', 'maximumLevelExperiencePolicy'], 'progression.rules.levelUp'); if (levelUp.resourcePolicy !== 'increase-by-cap-delta' || levelUp.maximumLevelExperiencePolicy !== 'cap-at-threshold') fail('progression.rules.levelUp不符合首版冻结策略')
   const attributeLabels = row(progressionRules.attributes, 'progression.rules.attributes'); exact(attributeLabels, ['power', 'vitality', 'agility'], 'progression.rules.attributes'); ['power', 'vitality', 'agility'].forEach(field => { const entry = row(attributeLabels[field], `progression.rules.attributes.${field}`); exact(entry, ['label'], `progression.rules.attributes.${field}`); text(entry.label, `progression.rules.attributes.${field}.label`, 100) })
@@ -257,14 +257,63 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
   numberValue(formulas.criticalChancePerAgility, 'progression.rules.formulas.criticalChancePerAgility', 0, 1)
   const criticalChanceCap = numberValue(formulas.criticalChanceCap, 'progression.rules.formulas.criticalChanceCap', 0, 1)
   if (baseCriticalChance > criticalChanceCap) fail('baseCriticalChance不能大于criticalChanceCap')
-  const levels = catalog(progression.levels, 'progression.levels', ['level', 'cumulativeExperience', 'attributeGrowth', 'unlockedSkillKeys']); const skills = catalog(progression.skills, 'progression.skills', ['key', 'title', 'description', 'kind', 'resourceCost', 'cooldownTurns', 'effectKeys']); const skillKeys = keysOf(skills, 'progression.skills')
+  const levels = catalog(progression.levels, 'progression.levels', ['level', 'cumulativeExperience', 'attributeGrowth', 'unlockedSkillKeys']); const skills = catalog(progression.skills, 'progression.skills', ['key', 'title', 'description', 'tags', 'activation', 'kind', 'target', 'scalingAttribute', 'unlockSources', 'useConditionKeys', 'priority', 'resourceCost', 'cooldownTurns', 'effectKeys']); const statuses = catalog(progression.statuses, 'progression.statuses', ['key', 'title', 'description', 'polarity']); const skillKeys = keysOf(skills, 'progression.skills'); keysOf(statuses, 'progression.statuses')
   if (levels.length !== maximumLevel) fail('progression.levels必须覆盖1到maximumLevel')
   let previousExperience = -1
   levels.forEach((item, index) => { if (int(item.level, `progression.levels[${index}].level`, 1, maximumLevel) !== index + 1) fail('progression.levels必须连续有序'); const experience = int(item.cumulativeExperience, `progression.levels[${index}].cumulativeExperience`, 0, 1_000_000_000); if (experience <= previousExperience && index > 0) fail('累计经验必须递增'); previousExperience = experience; const growth = row(item.attributeGrowth, `progression.levels[${index}].attributeGrowth`); exact(growth, ['power', 'vitality', 'agility'], `progression.levels[${index}].attributeGrowth`); ['power', 'vitality', 'agility'].forEach(field => int(growth[field], `progression.levels[${index}].attributeGrowth.${field}`, 0, 10_000)); strings(item.unlockedSkillKeys, `progression.levels[${index}].unlockedSkillKeys`) })
   if (Number(levels[0].cumulativeExperience) !== 0 || canonicalProductProductionJsonV2(levels[0].attributeGrowth) !== canonicalProductProductionJsonV2({ power: 0, vitality: 0, agility: 0 })) fail('1级必须从0经验和零成长增量开始')
-  skills.forEach((item, index) => { text(item.title, `progression.skills[${index}].title`, 2_000); text(item.description, `progression.skills[${index}].description`); enumValue(item.kind, ['attack', 'status', 'resource', 'recovery'], `progression.skills[${index}].kind`); int(item.resourceCost, `progression.skills[${index}].resourceCost`, 0, 1_000_000); int(item.cooldownTurns, `progression.skills[${index}].cooldownTurns`, 0, 10_000); requireRefs(strings(item.effectKeys, `progression.skills[${index}].effectKeys`), effectKeys, 'skill effect') })
+  skills.forEach((item, index) => {
+    text(item.title, `progression.skills[${index}].title`, 2_000); text(item.description, `progression.skills[${index}].description`); strings(item.tags, `progression.skills[${index}].tags`, 'text')
+    const activation = enumValue(item.activation, ['active', 'passive'], `progression.skills[${index}].activation`)
+    enumValue(item.kind, ['attack', 'status', 'resource', 'recovery'], `progression.skills[${index}].kind`)
+    const target = enumValue(item.target, ['self', 'single-enemy', 'all-enemies'], `progression.skills[${index}].target`)
+    if (item.scalingAttribute != null) enumValue(item.scalingAttribute, ['power', 'vitality', 'agility'], `progression.skills[${index}].scalingAttribute`)
+    const unlockSources = array(item.unlockSources, `progression.skills[${index}].unlockSources`, 100)
+    if (!unlockSources.length) fail(`progression.skills[${index}]至少需要一个获得来源`)
+    const sourceFingerprints = unlockSources.map((source, sourceIndex) => {
+      const parsed = row(source, `progression.skills[${index}].unlockSources[${sourceIndex}]`); exact(parsed, ['kind', 'level', 'questKey'], `progression.skills[${index}].unlockSources[${sourceIndex}]`)
+      const kind = enumValue(parsed.kind, ['initial', 'level', 'quest'], `progression.skills[${index}].unlockSources[${sourceIndex}].kind`)
+      const level = parsed.level == null ? null : int(parsed.level, `progression.skills[${index}].unlockSources[${sourceIndex}].level`, 2, maximumLevel)
+      const questKey = nullableKey(parsed.questKey, `progression.skills[${index}].unlockSources[${sourceIndex}].questKey`)
+      if ((kind === 'level') !== (level != null) || (kind === 'quest') !== (questKey != null)) fail(`progression.skills[${index}].unlockSources[${sourceIndex}]字段与kind不一致`)
+      return `${kind}:${level ?? questKey ?? 'initial'}`
+    })
+    if (new Set(sourceFingerprints).size !== sourceFingerprints.length) fail(`progression.skills[${index}].unlockSources不能重复`)
+    requireRefs(strings(item.useConditionKeys, `progression.skills[${index}].useConditionKeys`), conditionKeys, 'skill use condition')
+    int(item.priority, `progression.skills[${index}].priority`, 0, 10_000)
+    const resourceCost = int(item.resourceCost, `progression.skills[${index}].resourceCost`, 0, 1_000_000); const cooldownTurns = int(item.cooldownTurns, `progression.skills[${index}].cooldownTurns`, 0, 10_000)
+    requireRefs(strings(item.effectKeys, `progression.skills[${index}].effectKeys`), effectKeys, 'skill effect')
+    if (activation === 'passive' && (target !== 'self' || resourceCost !== 0 || cooldownTurns !== 0)) fail(`progression.skills[${index}]被动技能不能主动选择或消耗资源`)
+  })
+  statuses.forEach((item, index) => { text(item.title, `progression.statuses[${index}].title`, 2_000); text(item.description, `progression.statuses[${index}].description`); enumValue(item.polarity, ['beneficial', 'harmful', 'neutral'], `progression.statuses[${index}].polarity`) })
   levels.forEach((item, index) => requireRefs(strings(item.unlockedSkillKeys, `progression.levels[${index}].unlockedSkillKeys`), skillKeys, 'level unlocked skill'))
   requireRefs(strings(build.learnedSkillKeys, 'actors.player.build.learnedSkillKeys'), skillKeys, 'player skill'); if (Number(build.initialLevel) > maximumLevel) fail('player initialLevel超过maximumLevel')
+  const skillSources = new Map(skills.map((skill, skillIndex) => [String(skill.key), array(skill.unlockSources, `progression.skills[${skillIndex}].unlockSources`).map(source => row(source, 'skill unlock source'))]))
+  const initialLevel = Number(build.initialLevel)
+  const expectedInitialSkillKeys = skills.filter(skill => (skillSources.get(String(skill.key)) ?? []).some(source => source.kind === 'initial' || (source.kind === 'level' && Number(source.level) <= initialLevel))).map(skill => String(skill.key))
+  requireSameKeys(strings(build.learnedSkillKeys, 'actors.player.build.learnedSkillKeys'), expectedInitialSkillKeys, 'initial player skills')
+  requireSameKeys(strings(levels[0].unlockedSkillKeys, 'progression.levels[0].unlockedSkillKeys'), skills.filter(skill => skillSources.get(String(skill.key))?.some(source => source.kind === 'initial')).map(skill => String(skill.key)), 'level 1 initial skills')
+  for (let level = 2; level <= maximumLevel; level += 1) {
+    for (const skillKey of strings(levels[level - 1].unlockedSkillKeys, `progression.levels[${level - 1}].unlockedSkillKeys`)) {
+      if (!skillSources.get(skillKey)?.some(source => source.kind === 'level' && source.level === level)) fail(`技能${skillKey}缺少level:${level}获得来源`)
+    }
+  }
+  skills.forEach(skill => {
+    const sourceRows = skillSources.get(String(skill.key)) ?? []
+    sourceRows.filter(source => source.kind === 'level').forEach(source => {
+      const level = Number(source.level)
+      if (!strings(levels[level - 1].unlockedSkillKeys, `progression.levels[${level - 1}].unlockedSkillKeys`).includes(String(skill.key))) fail(`技能${String(skill.key)}的level来源没有进入等级曲线`)
+    })
+    sourceRows.filter(source => source.kind === 'quest').forEach(source => {
+      const questKey = key(source.questKey, `skill ${String(skill.key)} quest source`); requireRef(questKey, questKeys, 'skill quest source')
+      const quest = questRows.find(candidate => candidate.key === questKey)!
+      const rewarded = strings(quest.rewardEffectKeys, `quest ${questKey} reward effects`).some(effectKey => {
+        const effect = effects.find(candidate => candidate.key === effectKey)
+        return effect?.operation === 'learn-skill' && row(effect.payload, `effect ${effectKey}.payload`).skillKey === skill.key
+      })
+      if (!rewarded) fail(`技能${String(skill.key)}的任务来源${questKey}没有对应学习Effect奖励`)
+    })
+  })
 
   const items = versioned(packageValue, 'items')
   exact(items, ['version', 'equipmentSlots', 'items', 'dropTables'], 'items')

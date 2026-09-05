@@ -40,7 +40,7 @@ function scalar(value: unknown, label: string): string | number | boolean | null
 function references(modules: TextOpenWorldParsedModulesV1) {
   const set = (items: Array<{ key: string }>) => new Set(items.map(item => item.key))
   return {
-    items: set(modules.items.items), skills: set(modules.progression.skills), recipes: set(modules.crafting.recipes),
+    items: set(modules.items.items), skills: set(modules.progression.skills), statuses: set(modules.progression.statuses), recipes: set(modules.crafting.recipes),
     quests: set(modules.quests.quests), questStages: set(modules.quests.stages), objectives: set(modules.quests.objectives),
     locations: set(modules.world.locations), travelPoints: set(modules.world.fastTravelPoints), edges: set(modules.world.edges),
     factions: set(modules.actors.factions), actors: set(modules.actors.actors), regions: set(modules.world.regions),
@@ -55,7 +55,7 @@ function parseDefinition(value: unknown, refs: Refs, label: string): TextOpenWor
   const effectKey = key(definition.key, `${label}.key`); const operation = typeof definition.operation === 'string' ? definition.operation : fail(`${label}.operation无效`); const payload = row(definition.payload, `${label}.payload`)
   if (operation === 'change-player-resource') { exact(payload, ['resource', 'amount'], `${label}.payload`); return { key: effectKey, operation, payload: { resource: enumValue(payload.resource, ['health', 'skill-resource'], `${label}.resource`), amount: numberValue(payload.amount, `${label}.amount`) } } }
   if (operation === 'grant-experience') { exact(payload, ['amount'], `${label}.payload`); return { key: effectKey, operation, payload: { amount: int(payload.amount, `${label}.amount`, 1) } } }
-  if (operation === 'apply-status' || operation === 'remove-status') { exact(payload, ['statusKey'], `${label}.payload`); return { key: effectKey, operation, payload: { statusKey: key(payload.statusKey, `${label}.statusKey`) } } }
+  if (operation === 'apply-status' || operation === 'remove-status') { exact(payload, ['statusKey'], `${label}.payload`); return { key: effectKey, operation, payload: { statusKey: ref(payload.statusKey, refs.statuses, `${label}.statusKey`) } } }
   if (operation === 'grant-item' || operation === 'remove-item') { exact(payload, ['itemKey', 'quantity'], `${label}.payload`); return { key: effectKey, operation, payload: { itemKey: ref(payload.itemKey, refs.items, `${label}.itemKey`), quantity: int(payload.quantity, `${label}.quantity`, 1, 1_000_000) } } }
   if (operation === 'equip-item' || operation === 'unequip-item') { exact(payload, ['itemKey'], `${label}.payload`); return { key: effectKey, operation, payload: { itemKey: ref(payload.itemKey, refs.items, `${label}.itemKey`) } } }
   if (operation === 'learn-skill') { exact(payload, ['skillKey'], `${label}.payload`); return { key: effectKey, operation, payload: { skillKey: ref(payload.skillKey, refs.skills, `${label}.skillKey`) } } }
@@ -137,7 +137,7 @@ export function validateTextOpenWorldEffectStateV1(state: TextOpenWorldEffectSta
   })
   if (state.player.maximumHealth !== derivedStats.maximumHealth || state.player.maximumSkillResource !== derivedStats.maximumSkillResource) fail('player资源上限与Release公式不一致')
   assertUniqueKnown(state.player.learnedSkillKeys, refs.skills, 'player.learnedSkillKeys')
-  if (new Set(state.player.statusKeys).size !== state.player.statusKeys.length) fail('player.statusKeys不能重复')
+  assertUniqueKnown(state.player.statusKeys, refs.statuses, 'player.statusKeys')
   for (const [itemKey, value] of Object.entries(state.inventory.itemQuantities)) { ref(itemKey, refs.items, 'inventory itemKey'); int(value, 'inventory quantity', 1, 1_000_000) }
   for (const [slot, itemKey] of Object.entries(state.inventory.equippedItemKeyBySlot)) {
     if (!['weapon', 'armor', 'accessory'].includes(slot)) fail(`未知装备位:${slot}`)
@@ -261,8 +261,13 @@ function applyDefinitions(stateValue: TextOpenWorldEffectStateV1, effects: TextO
       case 'remove-status': {
         const { payload } = effect
         const before = state.player.statusKeys.includes(payload.statusKey)
-        if (effect.operation === 'apply-status') addUnique(state.player.statusKeys, payload.statusKey)
-        else remove(state.player.statusKeys, payload.statusKey)
+        if (effect.operation === 'apply-status') {
+          if (before) fail(`${effect.key}不能重复施加已有状态`)
+          addUnique(state.player.statusKeys, payload.statusKey)
+        } else {
+          if (!before) fail(`${effect.key}不能移除不存在的状态`)
+          remove(state.player.statusKeys, payload.statusKey)
+        }
         record(changes, effect, `${effect.operation}:${payload.statusKey}`, before, state.player.statusKeys.includes(payload.statusKey))
         break
       }
@@ -308,6 +313,7 @@ function applyDefinitions(stateValue: TextOpenWorldEffectStateV1, effects: TextO
       }
       case 'learn-skill': {
         const { payload } = effect; const before = state.player.learnedSkillKeys.includes(payload.skillKey)
+        if (before) fail(`${effect.key}不能重复学习已有技能`)
         addUnique(state.player.learnedSkillKeys, payload.skillKey); record(changes, effect, `学习技能:${payload.skillKey}`, before, true); break
       }
       case 'learn-recipe': {

@@ -170,4 +170,47 @@ describe('Text Open World vNext · typed Effect DSL and atomic EffectPlan', () =
     await expect(catalog.plan({ effectKeys: ['effect.remove-sword'], claimKey: 'claim.remove-equipped', state: equipped }))
       .rejects.toThrow('不能移除已装备物品')
   })
+
+  it('技能学习与状态变化只能执行一次，并拒绝未在Release声明的状态', async () => {
+    const fixture = createTextOpenWorldVNextFixture()
+    const progression = fixture.modules.progression.payload as any
+    const actions = fixture.modules.actions.payload as any
+    const quests = fixture.modules.quests.payload as any
+    progression.skills.push({
+      key: 'skill.channel-listening', title: '听渠', description: '从水流中辨认线索。', tags: ['调查'],
+      activation: 'active', kind: 'status', target: 'self', scalingAttribute: null,
+      unlockSources: [{ kind: 'quest', level: null, questKey: 'quest.template.supplies' }], useConditionKeys: [], priority: 40,
+      resourceCost: 1, cooldownTurns: 0, effectKeys: [],
+    })
+    actions.effects.push(
+      { key: 'effect.learn-channel-listening', operation: 'learn-skill', payload: { skillKey: 'skill.channel-listening' } },
+      { key: 'effect.apply-rested', operation: 'apply-status', payload: { statusKey: 'status.rested' } },
+      { key: 'effect.remove-rested', operation: 'remove-status', payload: { statusKey: 'status.rested' } },
+    )
+    quests.quests.find((quest: any) => quest.key === 'quest.template.supplies').rewardEffectKeys.push('effect.learn-channel-listening')
+    const catalog = createTextOpenWorldEffectCatalogV1(fixture)
+
+    const learnedPlan = await catalog.plan({ effectKeys: ['effect.learn-channel-listening'], claimKey: 'claim.learn', state: state() })
+    const learned = await catalog.apply({ plan: learnedPlan, state: state() })
+    expect(learned.state.player.learnedSkillKeys).toContain('skill.channel-listening')
+    await expect(catalog.plan({ effectKeys: ['effect.learn-channel-listening'], claimKey: 'claim.learn-again', state: learned.state }))
+      .rejects.toThrow('不能重复学习已有技能')
+
+    const applyPlan = await catalog.plan({ effectKeys: ['effect.apply-rested'], claimKey: 'claim.status.apply', state: learned.state })
+    const rested = await catalog.apply({ plan: applyPlan, state: learned.state })
+    expect(rested.state.player.statusKeys).toEqual(['status.rested'])
+    await expect(catalog.plan({ effectKeys: ['effect.apply-rested'], claimKey: 'claim.status.apply-again', state: rested.state }))
+      .rejects.toThrow('不能重复施加已有状态')
+    const removePlan = await catalog.plan({ effectKeys: ['effect.remove-rested'], claimKey: 'claim.status.remove', state: rested.state })
+    const clear = await catalog.apply({ plan: removePlan, state: rested.state })
+    expect(clear.state.player.statusKeys).toEqual([])
+    await expect(catalog.plan({ effectKeys: ['effect.remove-rested'], claimKey: 'claim.status.remove-again', state: clear.state }))
+      .rejects.toThrow('不能移除不存在的状态')
+
+    const unknown = createTextOpenWorldVNextFixture()
+    ;(unknown.modules.actions.payload as any).effects.push({
+      key: 'effect.apply-missing', operation: 'apply-status', payload: { statusKey: 'status.missing' },
+    })
+    expect(() => createTextOpenWorldEffectCatalogV1(unknown)).toThrow('statusKey引用不存在')
+  })
 })

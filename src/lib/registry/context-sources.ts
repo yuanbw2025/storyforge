@@ -583,12 +583,13 @@ async function readOpenWorldRuntimeContext(input: AssembleContextInput): Promise
   }
   const state = await readProductRuntimeStateForContext(session.id!)
   if (manifest.textOpenWorldVNext) {
-    const [sessionProjection, modulesModule, actionModule, bindingModule, feedbackModule] = await Promise.all([
+    const [sessionProjection, modulesModule, actionModule, bindingModule, feedbackModule, skillsModule] = await Promise.all([
       import('../open-world/session-projection'),
       import('../open-world/modules'),
       import('../open-world/action-registry'),
       import('../open-world/session-binding'),
       import('../open-world/feedback'),
+      import('../open-world/skills'),
     ])
     if (!state.textOpenWorld) return ''
     const binding = await bindingModule.verifyTextOpenWorldVNextSessionBindingV1(session)
@@ -606,7 +607,6 @@ async function readOpenWorldRuntimeContext(input: AssembleContextInput): Promise
     const region = modules.world.regions.find(item => item.key === location.regionKey)
     if (!region) throw new Error('文字开放世界当前区域不在冻结ProductRelease/Build中。')
     const itemByKey = new Map(modules.items.items.map(item => [item.key, item]))
-    const skillByKey = new Map(modules.progression.skills.map(item => [item.key, item]))
     const factionByKey = new Map(modules.actors.factions.map(item => [item.key, item]))
     const timePeriod = modules['time-weather'].timePeriods.find(period => {
       const minute = runtime.time.worldMinute % modules['time-weather'].minutesPerDay
@@ -644,6 +644,17 @@ async function readOpenWorldRuntimeContext(input: AssembleContextInput): Promise
       const readRumors = modules.knowledge.rumors.filter(rumor => rumor.knowledgeKey === entry.key && runtime.knowledge.readRumorKeys.includes(rumor.key))
       return readRumors.map(rumor => `- ${rumor.key}｜传闻｜${rumor.text}`)
     })
+    const skillCatalog = skillsModule.createTextOpenWorldSkillCatalogV1(runtimePackage)
+    const skillLines = skillCatalog.project({
+      learnedSkillKeys: runtime.player.learnedSkillKeys,
+      skillResource: runtime.player.skillResource,
+      conditionResults: Object.fromEntries(Object.entries(derived.action.conditionResults).map(([key, result]) => [key, result.satisfied])),
+    }).filter(item => item.learned).map(item => {
+      const source = item.skill.unlockSources.map(value => value.kind === 'level' ? `等级${value.level}` : value.kind === 'quest' ? `任务${value.questKey}` : '初始').join('、')
+      return `- ${item.skill.key}:${item.skill.title}｜${item.skill.activation}/${item.skill.kind}｜目标=${item.skill.target}｜消耗=${item.skill.resourceCost}｜冷却=${item.skill.cooldownTurns}回合｜来源=${source}｜${item.available ? '当前可用' : `不可用=${item.unavailableReasons.join('、')}`}`
+    })
+    const statusLines = skillCatalog.projectStatuses(runtime.player.statusKeys).filter(item => item.active)
+      .map(item => `- ${item.status.key}:${item.status.title}｜${item.status.polarity}｜${item.status.description}`)
     const recentCommandIds = [...new Set((await db.productRuntimeEvents.where('sessionId').equals(session.id!).sortBy('sequence'))
       .filter(event => event.type === 'text-open-world.command.committed' && event.commandId)
       .map(event => event.commandId!))].slice(-8)
@@ -659,7 +670,8 @@ async function readOpenWorldRuntimeContext(input: AssembleContextInput): Promise
       `【主角自有知识】公开=${modules.actors.player.identity.publicKnowledge || '无'}｜私密=${modules.actors.player.identity.privateKnowledge || '无'}`,
       `【属性】力量=${runtime.player.attributes.power}｜体质=${runtime.player.attributes.vitality}｜敏捷=${runtime.player.attributes.agility}｜道德=${runtime.relationships.morality}`,
       `【派生战斗值】攻击=${derived.playerStats.attack}｜防御=${derived.playerStats.defense}｜暴击=${Math.round(derived.playerStats.criticalChance * 10_000) / 100}%｜先手=${derived.playerStats.initiative}`,
-      `【技能】${runtime.player.learnedSkillKeys.map(key => skillByKey.get(key)?.title ?? key).join('、') || '无'}`,
+      '【已学技能】', ...(skillLines.length ? skillLines : ['- 无']),
+      '【当前状态】', ...(statusLines.length ? statusLines : ['- 无']),
       `【背包】${Object.entries(runtime.inventory.itemQuantities).filter(([, quantity]) => quantity > 0).map(([key, quantity]) => `${itemByKey.get(key)?.title ?? key}×${quantity}`).join('、') || '空'}｜货币=${runtime.inventory.currency}`,
       `【装备】${Object.entries(runtime.inventory.equippedItemKeyBySlot).map(([slot, key]) => `${slot}=${key ? itemByKey.get(key)?.title ?? key : '空'}`).join('、')}`,
       `【区域认知】${visibleRegions.map(item => `${item.title}=${runtime.map.regionKnowledgeByKey[item.key]}`).join('、') || '无'}`,

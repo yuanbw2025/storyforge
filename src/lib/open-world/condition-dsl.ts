@@ -66,7 +66,7 @@ function references(modules: TextOpenWorldParsedModulesV1) {
     regions: set(modules.world.regions), travelPoints: set(modules.world.fastTravelPoints), edges: set(modules.world.edges),
     timePeriods: set(modules['time-weather'].timePeriods), weather: set(modules['time-weather'].weather),
     factions: set(modules.actors.factions), actors: set(modules.actors.actors), endings: set(modules.narrative.endings),
-    knowledge: set(modules.knowledge.entries), rumors: set(modules.knowledge.rumors), achievements: set(modules.knowledge.achievements),
+    knowledge: set(modules.knowledge.entries), rumors: set(modules.knowledge.rumors), achievements: set(modules.knowledge.achievements), statuses: set(modules.progression.statuses),
     questStageOwner: new Map(modules.quests.stages.map(item => [item.key, item.questKey])),
   }
 }
@@ -92,7 +92,7 @@ function parseExpression(value: unknown, refs: ReferenceCatalog, depth: number, 
   }
   if (op === 'player-status') {
     exact(parsed, ['op', 'statusKey', 'present'], label)
-    return { op, statusKey: key(parsed.statusKey, `${label}.statusKey`), present: bool(parsed.present, `${label}.present`) }
+    return { op, statusKey: ref(parsed.statusKey, refs.statuses, `${label}.statusKey`), present: bool(parsed.present, `${label}.present`) }
   }
   if (op === 'inventory-quantity') {
     exact(parsed, ['op', 'itemKey', 'comparator', 'value'], label)

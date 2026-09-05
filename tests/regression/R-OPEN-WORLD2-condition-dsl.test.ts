@@ -101,6 +101,9 @@ describe('Text Open World vNext · typed Condition DSL', () => {
 
   it('支持all/any/not组合并把评估结果接入统一Action投影', () => {
     const fixture = createTextOpenWorldVNextFixture()
+    ;(fixture.modules.progression.payload as any).statuses.push({
+      key: 'status.wounded', title: '负伤', description: '角色正受到伤势影响。', polarity: 'harmful',
+    })
     ;(fixture.modules.actions.payload as any).conditions[0].expression = {
       op: 'any', conditions: [
         { op: 'not', condition: { op: 'player-status', statusKey: 'status.wounded', present: true } },

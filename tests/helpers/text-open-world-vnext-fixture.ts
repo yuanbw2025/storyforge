@@ -174,9 +174,12 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
       },
       levels: levels(),
       skills: [{
-        key: 'skill.basic-attack', title: '挥击', description: '一次稳定的武器攻击。', kind: 'attack',
+        key: 'skill.basic-attack', title: '挥击', description: '一次稳定的武器攻击。', tags: ['基础', '近战'],
+        activation: 'active', kind: 'attack', target: 'single-enemy', scalingAttribute: 'power',
+        unlockSources: [{ kind: 'initial', level: null, questKey: null }], useConditionKeys: [], priority: 100,
         resourceCost: 0, cooldownTurns: 0, effectKeys: [],
       }],
+      statuses: [{ key: 'status.rested', title: '休整完毕', description: '角色已经充分休息。', polarity: 'beneficial' }],
     },
     combat: {
       version: 1,

@@ -247,10 +247,27 @@ export interface TextOpenWorldProgressionModuleV1 {
     key: string
     title: string
     description: string
+    tags: string[]
+    activation: 'active' | 'passive'
     kind: 'attack' | 'status' | 'resource' | 'recovery'
+    target: 'self' | 'single-enemy' | 'all-enemies'
+    scalingAttribute: 'power' | 'vitality' | 'agility' | null
+    unlockSources: Array<{
+      kind: 'initial' | 'level' | 'quest'
+      level: number | null
+      questKey: string | null
+    }>
+    useConditionKeys: string[]
+    priority: number
     resourceCost: number
     cooldownTurns: number
     effectKeys: string[]
+  }>
+  statuses: Array<{
+    key: string
+    title: string
+    description: string
+    polarity: 'beneficial' | 'harmful' | 'neutral'
   }>
 }
 
