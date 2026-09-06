@@ -12,6 +12,7 @@ import { parseTextOpenWorldModulesV1 } from './modules'
 import { parseTextOpenWorldCommandEnvelopeV1 } from './command-contract'
 import { createTextOpenWorldConditionCatalogV1 } from './condition-dsl'
 import { createTextOpenWorldEffectCatalogV1 } from './effect-dsl'
+import { planTextOpenWorldRouteV1 } from './map-topology'
 
 const STABLE_KEY = /^[a-z][a-z0-9._:-]{0,199}$/
 
@@ -72,6 +73,9 @@ function parseContext(value: TextOpenWorldActionProjectionContextV1, modules: Te
   const edgeKeys = new Set(modules.world.edges.map(item => item.key))
   const openEdgeKeys = uniqueKeys(value.openEdgeKeys ?? [], 'openEdgeKeys')
   openEdgeKeys.forEach(edgeKey => { if (!edgeKeys.has(edgeKey)) fail(`openEdgeKeys引用未知道路:${edgeKey}`) })
+  const fastTravelPointKeys = new Set(modules.world.fastTravelPoints.map(item => item.key))
+  const unlockedFastTravelPointKeys = uniqueKeys(value.unlockedFastTravelPointKeys ?? [], 'unlockedFastTravelPointKeys')
+  unlockedFastTravelPointKeys.forEach(pointKey => { if (!fastTravelPointKeys.has(pointKey)) fail(`unlockedFastTravelPointKeys引用未知快速旅行点:${pointKey}`) })
   const completedOnceActionKeys = uniqueKeys(value.completedOnceActionKeys, 'completedOnceActionKeys')
   const actionKeys = new Set(modules.actions.actions.map(item => item.key))
   completedOnceActionKeys.forEach(actionKey => { if (!actionKeys.has(actionKey)) fail(`completedOnceActionKeys引用未知Action:${actionKey}`) })
@@ -142,6 +146,7 @@ function parseContext(value: TextOpenWorldActionProjectionContextV1, modules: Te
     combatStatus,
     conditionResults,
     openEdgeKeys,
+    unlockedFastTravelPointKeys,
     completedOnceActionKeys,
     cooldownUntilWorldMinuteByActionKey,
     validTargetKeysByScope,
@@ -209,6 +214,19 @@ export function createTextOpenWorldActionRegistryV1(value: TextOpenWorldRuntimeP
           unavailableReasons.push({ code: 'route-closed', message: '这条道路当前不能通行。', conditionKey: null })
           validTargetKeys = []
         } else validTargetKeys = validTargetKeys.filter(locationKey => locationKey === start.payload.destinationLocationKey)
+      } else if (action.targetScope === 'location' && action.category === 'fast-travel') {
+        const unlockedLocationKeys = new Set(modules.world.fastTravelPoints
+          .filter(point => context.unlockedFastTravelPointKeys.includes(point.key))
+          .map(point => point.locationKey)
+          .filter(locationKey => locationKey !== context.currentLocationKey))
+        const eligibleTargetKeys = validTargetKeys.filter(locationKey => unlockedLocationKeys.has(locationKey))
+        validTargetKeys = eligibleTargetKeys.filter(locationKey => planTextOpenWorldRouteV1({
+          runtimePackage: value,
+          fromLocationKey: context.currentLocationKey,
+          destinationLocationKey: locationKey,
+          openEdgeKeys: context.openEdgeKeys,
+        }) != null)
+        if (eligibleTargetKeys.length && !validTargetKeys.length) unavailableReasons.push({ code: 'route-closed', message: '当前没有通往已解锁地点的开放路线。', conditionKey: null })
       } else if (action.targetScope === 'location') {
         validTargetKeys = validTargetKeys.filter(locationKey => locationKey === context.currentLocationKey)
       }

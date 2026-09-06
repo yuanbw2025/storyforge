@@ -164,7 +164,7 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
       ],
     },
     actions: {
-      version: 3,
+      version: 4,
       conditions: [
         { key: 'condition.always', expression: { op: 'all', conditions: [{ op: 'player-number', field: 'level', comparator: 'gte', value: 1 }] }, failureMessage: '角色尚未进入可行动状态。' },
         { key: 'condition.health-not-full', expression: { op: 'player-resource-below-maximum', resource: 'health' }, failureMessage: '生命已经满了。' },
@@ -209,6 +209,7 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
         { key: 'effect.travel-ridge-port-start', operation: 'start-travel', payload: { edgeKey: 'edge.port-ridge', destinationLocationKey: 'location.salt-port' } },
         { key: 'effect.travel-ridge-port-time', operation: 'advance-time', payload: { minutes: 60 } },
         { key: 'effect.travel-ridge-port-enter', operation: 'enter-location', payload: { locationKey: 'location.salt-port' } },
+        { key: 'effect.fast-travel', operation: 'fast-travel', payload: { timeRatioNumerator: 1, timeRatioDenominator: 2, minimumMinutes: 15 } },
       ],
       actions: [{
         key: 'action.investigate-channel', category: 'investigate', label: '检查盐渠',
@@ -225,6 +226,11 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
         key: 'action.travel-ridge-port', category: 'travel', label: '返回盐港广场', description: '沿盐渠维护道返回盐港广场。',
         actorScope: 'player', targetScope: 'location', locationKeys: ['location.ridge-channel'], requirementConditionKeys: [], costEffectKeys: [],
         successEffectKeys: ['effect.travel-ridge-port-start', 'effect.travel-ridge-port-time', 'effect.travel-ridge-port-enter'], failureEffectKeys: [], timeCostMinutes: 60,
+        confirmationPolicy: 'never', repeatPolicy: 'repeatable', cooldownMinutes: null,
+      }, {
+        key: 'action.fast-travel', category: 'fast-travel', label: '快速旅行', description: '立即结算到已到访并解锁的快速旅行点，不触发途中事件。',
+        actorScope: 'player', targetScope: 'location', locationKeys: [], requirementConditionKeys: [], costEffectKeys: [],
+        successEffectKeys: ['effect.fast-travel'], failureEffectKeys: [], timeCostMinutes: 0,
         confirmationPolicy: 'never', repeatPolicy: 'repeatable', cooldownMinutes: null,
       }, {
         key: 'action.accept-main', category: 'accept-quest', label: '接受主线任务', description: '接受并开始调查断流的盐渠。',

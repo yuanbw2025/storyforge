@@ -1,7 +1,7 @@
 import { db } from '../db/schema'
 import { hashProductProductionValueV2 } from '../product-production/hash'
 import { hashProductRuntimeStateV1, readProductRuntimeState } from '../product/runtime-core'
-import type { TextOpenWorldCommandEnvelopeV1, TextOpenWorldEffectDefinitionV1, TextOpenWorldFeedbackReceiptV1 } from '../types'
+import type { TextOpenWorldCommandEnvelopeV1, TextOpenWorldEffectDefinitionV1, TextOpenWorldEffectPlanV1, TextOpenWorldFeedbackReceiptV1 } from '../types'
 import { createTextOpenWorldActionRegistryV1 } from './action-registry'
 import { ensureTextOpenWorldCombatRetryCheckpointV1 } from './checkpoints'
 import { commitTextOpenWorldCommandV1, getTextOpenWorldCommandStatusV1 } from './commands'
@@ -18,6 +18,7 @@ import { createTextOpenWorldObjectiveCatalogV1 } from './objective-state'
 import { createTextOpenWorldQuestTrackingCatalogV1 } from './quest-tracking'
 import { executeTextOpenWorldPendingRewardV1 } from './reward-executor'
 import { deriveTextOpenWorldContextsV1, parseTextOpenWorldSessionProjectionV1 } from './session-projection'
+import { createTextOpenWorldFastTravelCatalogV1 } from './fast-travel'
 
 const COMMAND_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/
 
@@ -57,8 +58,10 @@ async function settleAcceptedCommand(envelope: TextOpenWorldCommandEnvelopeV1): 
     .filter((effect): effect is Extract<TextOpenWorldEffectDefinitionV1, { operation: 'complete-objective' }> => effect.operation === 'complete-objective')
   const trackingEffects = effectKeys.map(effectKey => modules.actions.effects.find(effect => effect.key === effectKey)!)
     .filter((effect): effect is Extract<TextOpenWorldEffectDefinitionV1, { operation: 'track-quest' | 'untrack-quest' }> => effect.operation === 'track-quest' || effect.operation === 'untrack-quest')
-  if ([questTransitions.length > 0, objectiveEffects.length > 0, trackingEffects.length > 0].filter(Boolean).length > 1) fail('同一Action不能混合任务迁移、Objective或追踪状态')
-  const authorization = questTransitions.length
+  const fastTravelEffects = effectKeys.map(effectKey => modules.actions.effects.find(effect => effect.key === effectKey)!)
+    .filter((effect): effect is Extract<TextOpenWorldEffectDefinitionV1, { operation: 'fast-travel' }> => effect.operation === 'fast-travel')
+  if ([questTransitions.length > 0, objectiveEffects.length > 0, trackingEffects.length > 0, fastTravelEffects.length > 0].filter(Boolean).length > 1) fail('同一Action不能混合任务迁移、Objective、追踪或快速旅行状态')
+  const authorization: TextOpenWorldEffectPlanV1['authorization'] = questTransitions.length
     ? createTextOpenWorldQuestTransitionCatalogV1(projection.runtimePackage).prepare({
         instanceKey: targetFrom(envelope) ?? fail('任务状态Action缺少实例目标'),
         state: projection.state,
@@ -77,7 +80,13 @@ async function settleAcceptedCommand(envelope: TextOpenWorldCommandEnvelopeV1): 
             operation: trackingEffects[0].operation === 'track-quest' ? 'track' : 'untrack',
             slot: trackingEffects[0].payload.slot,
           })
-        : null
+        : fastTravelEffects.length === 1
+          ? createTextOpenWorldFastTravelCatalogV1(projection.runtimePackage, modules).prepare({
+              state: projection.state,
+              effect: fastTravelEffects[0],
+              destinationLocationKey: targetFrom(envelope) ?? fail('快速旅行Action缺少地点目标'),
+            })
+          : null
   const catalog = createTextOpenWorldEffectCatalogV1(projection.runtimePackage)
   const plan = await catalog.plan({ effectKeys, claimKey: `claim.${envelope.commandId}`, state: projection.state, authorization })
   const { receipt } = await catalog.apply({ plan, state: projection.state })

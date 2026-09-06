@@ -3,6 +3,7 @@ import { createTextOpenWorldActionRegistryV1 } from './action-registry'
 import { projectTextOpenWorldPlayerMapV1 } from './map-view'
 import { parseTextOpenWorldModulesV1 } from './modules'
 import { deriveTextOpenWorldContextsV1, parseTextOpenWorldSessionProjectionV1 } from './session-projection'
+import { createTextOpenWorldFastTravelCatalogV1 } from './fast-travel'
 
 export interface TextOpenWorldTravelOptionV1 {
   actionKey: string
@@ -14,6 +15,20 @@ export interface TextOpenWorldTravelOptionV1 {
   description: string
   travelMinutes: number
   riskProfile: 'safe' | 'ordinary' | 'dangerous'
+  available: boolean
+  unavailableReasons: TextOpenWorldActionUnavailableReasonV1[]
+}
+
+export interface TextOpenWorldFastTravelOptionV1 {
+  actionKey: string
+  fastTravelPointKey: string
+  originLocationKey: string
+  destinationLocationKey: string
+  destinationTitle: string
+  label: string
+  description: string
+  routeEdgeKeys: string[]
+  travelMinutes: number | null
   available: boolean
   unavailableReasons: TextOpenWorldActionUnavailableReasonV1[]
 }
@@ -57,4 +72,58 @@ export function projectTextOpenWorldTravelOptionsV1(value: TextOpenWorldSessionP
     }).sort((left, right) => left.travelMinutes - right.travelMinutes
       || left.edgeKey.localeCompare(right.edgeKey)
       || left.destinationLocationKey.localeCompare(right.destinationLocationKey))
+}
+
+/** Projects only previously visited, unlocked destinations for atomic fast travel. */
+export function projectTextOpenWorldFastTravelOptionsV1(value: TextOpenWorldSessionProjectionV1): TextOpenWorldFastTravelOptionV1[] {
+  const projection = parseTextOpenWorldSessionProjectionV1(value)
+  const modules = parseTextOpenWorldModulesV1(projection.runtimePackage)
+  const visibleLocations = new Map(projectTextOpenWorldPlayerMapV1({
+    runtimePackage: projection.runtimePackage,
+    state: projection.state,
+  }).locations.map(location => [location.locationKey, location]))
+  const projectedAction = createTextOpenWorldActionRegistryV1(projection.runtimePackage)
+    .project(deriveTextOpenWorldContextsV1(projection).action)
+    .find(entry => entry.action.category === 'fast-travel')
+  if (!projectedAction) return []
+  const effect = projectedAction.action.successEffectKeys.map(effectKey => modules.actions.effects.find(candidate => candidate.key === effectKey)!)
+    .find(candidate => candidate.operation === 'fast-travel')
+  if (!effect || effect.operation !== 'fast-travel') return []
+  const catalog = createTextOpenWorldFastTravelCatalogV1(projection.runtimePackage, modules)
+  return modules.world.fastTravelPoints
+    .filter(point => projection.state.map.unlockedFastTravelPointKeys.includes(point.key)
+      && point.locationKey !== projection.state.map.currentLocationKey
+      && visibleLocations.has(point.locationKey))
+    .sort((left, right) => left.key.localeCompare(right.key))
+    .map(point => {
+      let routeEdgeKeys: string[] = []
+      let travelMinutes: number | null = null
+      let routeAvailable = true
+      try {
+        const authorization = catalog.prepare({ state: projection.state, effect, destinationLocationKey: point.locationKey })
+        routeEdgeKeys = authorization.routeEdgeKeys
+        travelMinutes = authorization.travelMinutes
+      } catch {
+        routeAvailable = false
+      }
+      const available = routeAvailable && projectedAction.available && projectedAction.validTargetKeys.includes(point.locationKey)
+      const unavailableReasons = available
+        ? []
+        : projectedAction.unavailableReasons.length
+          ? structuredClone(projectedAction.unavailableReasons)
+          : [{ code: 'route-closed' as const, message: '当前没有通往该地点的开放路线。', conditionKey: null }]
+      return {
+        actionKey: projectedAction.action.key,
+        fastTravelPointKey: point.key,
+        originLocationKey: projection.state.map.currentLocationKey,
+        destinationLocationKey: point.locationKey,
+        destinationTitle: visibleLocations.get(point.locationKey)!.title,
+        label: projectedAction.action.label,
+        description: projectedAction.action.description,
+        routeEdgeKeys,
+        travelMinutes,
+        available,
+        unavailableReasons,
+      }
+    })
 }

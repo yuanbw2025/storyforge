@@ -8,6 +8,7 @@ function context(overrides: Partial<TextOpenWorldActionProjectionContextV1> = {}
     actorKey: 'player', currentLocationKey: 'location.salt-port', worldMinute: 480, playerHealth: 37, combatStatus: null,
     conditionResults: {}, completedOnceActionKeys: [], cooldownUntilWorldMinuteByActionKey: {},
     openEdgeKeys: ['edge.port-ridge'],
+    unlockedFastTravelPointKeys: ['fast-travel.salt-port'],
     validTargetKeysByScope: { location: ['location.salt-port'] },
     questDefinitionKeyByInstanceKey: {}, questStatusByInstanceKey: {}, questStageKeyByInstanceKey: {},
     questObjectiveStatusByInstanceKey: {}, questRewardClaimKeyByInstanceKey: {}, questDeadlineWorldMinuteByInstanceKey: {},

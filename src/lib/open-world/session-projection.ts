@@ -35,6 +35,7 @@ import {
 } from './quests'
 import { createTextOpenWorldRewardCatalogV1 } from './rewards'
 import { parseTextOpenWorldRuntimePackageV1 } from './runtime-package'
+import { createTextOpenWorldFastTravelCatalogV1 } from './fast-travel'
 
 type Row = Record<string, unknown>
 const STABLE_KEY = /^[a-z][a-z0-9._:-]{0,199}$/
@@ -310,6 +311,17 @@ export function applyTextOpenWorldSessionEventV1(current: TextOpenWorldSessionPr
       if (projection.protocol.pendingTargetKey !== authorization.instanceKey || projection.protocol.pendingActorKey !== 'player'
         || action.category !== expectedCategory || action.actorScope !== 'player' || action.targetScope !== 'quest') fail('任务追踪授权与命令目标不一致')
       createTextOpenWorldQuestTrackingCatalogV1(projection.runtimePackage).assertAuthorization({ state: projection.state, authorization })
+    } else if (applied.plan.authorization?.kind === 'fast-travel') {
+      const authorization = applied.plan.authorization
+      const action = modules.actions.actions.find(item => item.key === projection.protocol.pendingActionKey) ?? fail('命令Action不存在')
+      const expectedEffectKeys = [...new Set([...action.costEffectKeys, ...action.successEffectKeys])]
+      const fastTravelEffect = action.successEffectKeys.map(effectKey => modules.actions.effects.find(effect => effect.key === effectKey)!)
+        .find((effect): effect is Extract<TextOpenWorldEffectDefinitionV1, { operation: 'fast-travel' }> => effect.operation === 'fast-travel')
+        ?? fail('快速旅行Action缺少fast-travel Effect')
+      if (canonicalProductProductionJsonV2(applied.plan.effectKeys) !== canonicalProductProductionJsonV2(expectedEffectKeys)) fail('快速旅行EffectPlan与命令Action不一致')
+      if (projection.protocol.pendingTargetKey !== authorization.destinationLocationKey || projection.protocol.pendingActorKey !== 'player'
+        || action.category !== 'fast-travel' || action.actorScope !== 'player' || action.targetScope !== 'location') fail('快速旅行授权与命令目标不一致')
+      createTextOpenWorldFastTravelCatalogV1(projection.runtimePackage, modules).assertAuthorization({ state: projection.state, effect: fastTravelEffect, authorization })
     } else {
       const action = modules.actions.actions.find(item => item.key === projection.protocol.pendingActionKey) ?? fail('命令Action不存在')
       const outcomeEffectKeys = applied.outcome === 'failure' ? action.failureEffectKeys : action.successEffectKeys
@@ -373,6 +385,7 @@ export function deriveTextOpenWorldContextsV1(value: TextOpenWorldSessionProject
     playerHealth: state.player.health, combatStatus: state.combat?.status ?? null,
     conditionResults: Object.fromEntries(Object.entries(evaluations).map(([key, result]) => [key, { satisfied: result.satisfied, publicReason: result.publicReason }])),
     openEdgeKeys: [...state.map.openEdgeKeys],
+    unlockedFastTravelPointKeys: [...state.map.unlockedFastTravelPointKeys],
     completedOnceActionKeys: [...projection.actions.completedOnceActionKeys], cooldownUntilWorldMinuteByActionKey: structuredClone(projection.actions.cooldownUntilWorldMinuteByActionKey),
     validTargetKeysByScope: {
       actor: actorTargets, location: [...state.map.revealedLocationKeys], item: Object.keys(inventoryQuantities),

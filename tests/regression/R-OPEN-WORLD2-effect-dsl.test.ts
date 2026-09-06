@@ -119,6 +119,8 @@ describe('Text Open World vNext · typed Effect DSL and atomic EffectPlan', () =
     const quests = state().quests
     const mainInstanceKey = Object.keys(quests.instancesByKey)[0]
     const before = state({ quests })
+    before.map.regionKnowledgeByKey['region.ridge'] = 'visited'
+    before.map.locationKnowledgeByKey['location.ridge-channel'] = 'visited'
     const authorization = createTextOpenWorldQuestTransitionCatalogV1(createTextOpenWorldVNextFixture()).prepare({
       instanceKey: mainInstanceKey,
       state: before,

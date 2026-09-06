@@ -7,7 +7,7 @@ export type TextOpenWorldEffectOperationV1 =
   | 'transition-quest' | 'complete-objective' | 'claim-quest-reward' | 'track-quest' | 'untrack-quest'
   | 'change-morality' | 'change-faction-affinity' | 'set-story-modifier'
   | 'reveal-knowledge' | 'reveal-location' | 'unlock-fast-travel'
-  | 'enter-location' | 'start-travel' | 'advance-time'
+  | 'enter-location' | 'start-travel' | 'fast-travel' | 'advance-time'
   | 'start-combat' | 'resolve-combat' | 'rest' | 'respawn'
   | 'change-actor-state' | 'change-region-state' | 'set-world-flag'
   | 'earn-achievement' | 'unlock-ending' | 'reach-ending'
@@ -34,6 +34,7 @@ export type TextOpenWorldEffectDefinitionV1 =
   | { key: string; operation: 'unlock-fast-travel'; payload: { fastTravelPointKey: string } }
   | { key: string; operation: 'enter-location'; payload: { locationKey: string } }
   | { key: string; operation: 'start-travel'; payload: { edgeKey: string; destinationLocationKey: string } }
+  | { key: string; operation: 'fast-travel'; payload: { timeRatioNumerator: number; timeRatioDenominator: number; minimumMinutes: number } }
   | { key: string; operation: 'advance-time'; payload: { minutes: number } }
   | { key: string; operation: 'start-combat'; payload: { encounterKey: string } }
   | { key: string; operation: 'resolve-combat'; payload: { encounterKey: string; outcome: 'victory' | 'defeat' | 'escaped' } }
@@ -190,6 +191,17 @@ export interface TextOpenWorldQuestTrackingAuthorizationV1 {
   beforePinnedInstanceKeys: string[]
 }
 
+export interface TextOpenWorldFastTravelAuthorizationV1 {
+  kind: 'fast-travel'
+  fastTravelPointKey: string
+  originLocationKey: string
+  destinationLocationKey: string
+  routeEdgeKeys: string[]
+  openEdgeKeys: string[]
+  baseWorldMinute: number
+  travelMinutes: number
+}
+
 export interface TextOpenWorldEffectPlanV1 {
   schema: 'storyforge.text-open-world.effect-plan'
   version: 1
@@ -198,7 +210,7 @@ export interface TextOpenWorldEffectPlanV1 {
   resultingStateHash: string
   effectKeys: string[]
   effects: TextOpenWorldEffectDefinitionV1[]
-  authorization: TextOpenWorldRewardAuthorizationV1 | TextOpenWorldQuestTransitionAuthorizationV1 | TextOpenWorldObjectiveAuthorizationV1 | TextOpenWorldQuestTrackingAuthorizationV1 | null
+  authorization: TextOpenWorldRewardAuthorizationV1 | TextOpenWorldQuestTransitionAuthorizationV1 | TextOpenWorldObjectiveAuthorizationV1 | TextOpenWorldQuestTrackingAuthorizationV1 | TextOpenWorldFastTravelAuthorizationV1 | null
   impactDomains: TextOpenWorldEffectImpactDomainV1[]
   previewChanges: TextOpenWorldEffectChangeV1[]
   planHash: string

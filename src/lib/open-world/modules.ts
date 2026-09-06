@@ -237,6 +237,13 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
     }
   })
   travelPoints.forEach((item, index) => { requireRef(key(item.locationKey, `world.fastTravelPoints[${index}].locationKey`), locationKeys, 'fast travel location'); bool(item.unlockedByDefault, `world.fastTravelPoints[${index}].unlockedByDefault`); bool(item.canRespawn, `world.fastTravelPoints[${index}].canRespawn`) })
+  travelPoints.filter(item => item.unlockedByDefault === true).forEach(item => {
+    const location = locations.find(candidate => candidate.key === item.locationKey)!
+    const initiallyVisited = worldHasLocationKnowledge
+      ? location.initialKnowledge === 'visited' || location.initialKnowledge === 'familiar'
+      : location.key === initialLocationKey
+    if (!initiallyVisited) fail(`默认解锁快速旅行点所属地点必须已到访:${String(item.key)}`)
+  })
   if (!travelPoints.some(item => item.unlockedByDefault === true && item.canRespawn === true)) fail('至少需要一个默认解锁的复活点')
   if (!legacyWorldModule) {
     const declaredTravelPointKeys = regions.map((item, index) => key(item.fastTravelPointKey, `world.regions[${index}].fastTravelPointKey`))
@@ -319,9 +326,10 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
     if (actorRows.find(actor => actor.key === item.actorKey)?.scheduleKey !== item.key) fail(`schedule/actor反向引用不一致:${String(item.key)}`)
   })
 
-  const actions = versioned(packageValue, 'actions', [1, 2, 3])
+  const actions = versioned(packageValue, 'actions', [1, 2, 3, 4])
   const modernActionModule = Number(actions.version) >= 2
   const travelActionModule = Number(actions.version) >= 3
+  const fastTravelActionModule = Number(actions.version) >= 4
   exact(actions, ['version', 'conditions', 'effects', 'actions'], 'actions')
   const conditions = catalog(actions.conditions, 'actions.conditions', ['key', 'expression', 'failureMessage']); const effects = catalog(actions.effects, 'actions.effects', ['key', 'operation', 'payload']); const actionRows = catalog(actions.actions, 'actions.actions', ['key', 'category', 'label', 'description', 'actorScope', 'targetScope', 'locationKeys', 'requirementConditionKeys', 'costEffectKeys', 'successEffectKeys', 'failureEffectKeys', 'timeCostMinutes', 'confirmationPolicy', 'repeatPolicy', 'cooldownMinutes'])
   const conditionKeys = keysOf(conditions, 'actions.conditions'); const effectKeys = keysOf(effects, 'actions.effects'); const actionKeys = keysOf(actionRows, 'actions.actions')
@@ -371,6 +379,33 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
       const referenced = [...strings(action.costEffectKeys, `action ${String(action.key)} costs`), ...strings(action.successEffectKeys, `action ${String(action.key)} success`), ...strings(action.failureEffectKeys, `action ${String(action.key)} failures`)]
         .map(effectKey => effects.find(effect => effect.key === effectKey)!)
       if (referenced.some(effect => effect.operation === 'start-travel')) fail(`start-travel只能由普通旅行Action引用:${String(action.key)}`)
+    })
+  }
+
+  if (fastTravelActionModule) {
+    const fastTravelActions = actionRows.filter(action => action.category === 'fast-travel')
+    if (fastTravelActions.length !== 1) fail('Action v4必须且只能定义一个快速旅行Action')
+    const action = fastTravelActions[0]
+    const successEffectKeys = strings(action.successEffectKeys, 'fast travel action.successEffectKeys')
+    const successEffects = successEffectKeys.map(effectKey => effects.find(effect => effect.key === effectKey)!)
+    if (action.actorScope !== 'player' || action.targetScope !== 'location'
+      || strings(action.locationKeys, 'fast travel action.locationKeys').length
+      || strings(action.costEffectKeys, 'fast travel action.costEffectKeys').length
+      || strings(action.failureEffectKeys, 'fast travel action.failureEffectKeys').length
+      || successEffects.length !== 1 || successEffects[0].operation !== 'fast-travel'
+      || action.timeCostMinutes !== 0 || action.confirmationPolicy !== 'never'
+      || action.repeatPolicy !== 'repeatable' || action.cooldownMinutes != null) fail('快速旅行Action合同无效')
+    const payload = row(successEffects[0].payload, 'fast travel effect.payload')
+    exact(payload, ['timeRatioNumerator', 'timeRatioDenominator', 'minimumMinutes'], 'fast travel effect.payload')
+    const numerator = int(payload.timeRatioNumerator, 'fast travel effect.timeRatioNumerator', 1, 1_000_000)
+    const denominator = int(payload.timeRatioDenominator, 'fast travel effect.timeRatioDenominator', 1, 1_000_000)
+    int(payload.minimumMinutes, 'fast travel effect.minimumMinutes', 1, 1_000_000)
+    if (numerator > denominator) fail('快速旅行耗时比例不能高于普通路线')
+    const fastTravelEffects = effects.filter(effect => effect.operation === 'fast-travel')
+    if (fastTravelEffects.length !== 1 || fastTravelEffects[0].key !== successEffects[0].key) fail('快速旅行Effect必须且只能属于快速旅行Action')
+    actionRows.filter(candidate => candidate.key !== action.key).forEach(candidate => {
+      const referenced = [...strings(candidate.costEffectKeys, `action ${String(candidate.key)} costs`), ...strings(candidate.successEffectKeys, `action ${String(candidate.key)} success`), ...strings(candidate.failureEffectKeys, `action ${String(candidate.key)} failures`)]
+      if (referenced.includes(String(successEffects[0].key))) fail(`fast-travel只能由快速旅行Action引用:${String(candidate.key)}`)
     })
   }
 

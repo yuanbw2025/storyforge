@@ -29,6 +29,7 @@ export interface TextOpenWorldActionProjectionContextV1 {
   combatStatus: 'active' | 'victory' | 'defeat' | 'escaped' | null
   conditionResults: Record<string, TextOpenWorldConditionResultV1>
   openEdgeKeys: string[]
+  unlockedFastTravelPointKeys: string[]
   completedOnceActionKeys: string[]
   cooldownUntilWorldMinuteByActionKey: Record<string, number>
   validTargetKeysByScope: Partial<Record<TextOpenWorldActionTargetScopeV1, string[]>>

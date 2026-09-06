@@ -94,6 +94,8 @@ describe('Text Open World vNext · reward contracts, drops and unique claims', (
     const rewards = createTextOpenWorldRewardCatalogV1(fixture)
     const preparation = rewards.prepare({ rewardKey: 'reward.milestone', sourceInstanceKey: 'quest.main.1' })
     const state = createInitialTextOpenWorldSessionProjectionV1(fixture).state
+    state.map.regionKnowledgeByKey['region.ridge'] = 'visited'
+    state.map.locationKnowledgeByKey['location.ridge-channel'] = 'visited'
     const resolved = await rewards.resolve({ preparation, evidence: [], state })
     const applied = await createTextOpenWorldEffectCatalogV1(fixture).apply({ plan: resolved.effectPlan, state })
     expect(applied.state).toMatchObject({

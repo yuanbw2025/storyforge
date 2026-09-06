@@ -20,6 +20,7 @@ import type {
   TextOpenWorldQuestTrackingAuthorizationV1,
   TextOpenWorldRulesetStampV1,
   TextOpenWorldRewardAuthorizationV1,
+  TextOpenWorldFastTravelAuthorizationV1,
 } from '../types'
 import { parseTextOpenWorldCommandEventPayloadV1 } from './command-contract'
 
@@ -120,6 +121,19 @@ function parseAuthorization(value: unknown, label: string): TextOpenWorldEffectP
   if (value == null) return null
   const raw = row(value, label)
   if (raw.kind === 'reward') return parseRewardAuthorization(value, label)
+  if (raw.kind === 'fast-travel') {
+    exact(raw, ['kind', 'fastTravelPointKey', 'originLocationKey', 'destinationLocationKey', 'routeEdgeKeys', 'openEdgeKeys', 'baseWorldMinute', 'travelMinutes'], label)
+    return {
+      kind: 'fast-travel',
+      fastTravelPointKey: token(raw.fastTravelPointKey, `${label}.fastTravelPointKey`),
+      originLocationKey: token(raw.originLocationKey, `${label}.originLocationKey`),
+      destinationLocationKey: token(raw.destinationLocationKey, `${label}.destinationLocationKey`),
+      routeEdgeKeys: uniqueStrings(raw.routeEdgeKeys, `${label}.routeEdgeKeys`),
+      openEdgeKeys: uniqueStrings(raw.openEdgeKeys, `${label}.openEdgeKeys`),
+      baseWorldMinute: integer(raw.baseWorldMinute, `${label}.baseWorldMinute`),
+      travelMinutes: integer(raw.travelMinutes, `${label}.travelMinutes`, 1),
+    } satisfies TextOpenWorldFastTravelAuthorizationV1
+  }
   if (raw.kind === 'quest-objective') {
     exact(raw, ['kind', 'instanceKey', 'definitionKey', 'stageKey', 'objectiveKey', 'worldMinute', 'fromStatus', 'toStatus'], label)
     if (raw.fromStatus !== 'active' || raw.toStatus !== 'completed') fail(`${label}.objective状态边无效`)

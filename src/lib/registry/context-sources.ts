@@ -626,6 +626,7 @@ async function readOpenWorldRuntimeContext(input: AssembleContextInput): Promise
     const visibleRegions = playerMap.regions
     const visibleLocations = playerMap.locations
     const travelOptions = travelModule.projectTextOpenWorldTravelOptionsV1(projection)
+    const fastTravelOptions = travelModule.projectTextOpenWorldFastTravelOptionsV1(projection)
     const visibleConnections = mapModule.projectTextOpenWorldMapConnectionsV1({
       runtimePackage,
       currentLocationKey: location.key,
@@ -701,6 +702,7 @@ async function readOpenWorldRuntimeContext(input: AssembleContextInput): Promise
         const travel = travelOptions.find(option => option.edgeKey === connection.edgeKey && option.destinationLocationKey === connection.destinationLocationKey)
         return `- ${connection.edgeKey}｜前往=${destination.key}:${destination.title}｜${connection.travelMinutes}分钟｜风险=${connection.riskProfile}｜${travel?.available ? `可执行=${travel.actionKey}` : `不可执行=${travel?.unavailableReasons[0]?.message ?? '未开放'}`}`
       }) : ['- 无']),
+      '【已解锁快速旅行】', ...(fastTravelOptions.length ? fastTravelOptions.map(option => `- ${option.fastTravelPointKey}｜目标=${option.destinationLocationKey}:${option.destinationTitle}｜${option.travelMinutes == null ? '路线阻断' : `${option.travelMinutes}分钟`}｜${option.available ? `可执行=${option.actionKey}` : `不可执行=${option.unavailableReasons[0]?.message ?? '当前不可用'}`}`) : ['- 无可前往目标']),
       '【当前位置人物】', ...(presentActors.length ? presentActors : ['- 无']),
       '【可见任务】', ...(questLines.length ? questLines : ['- 无']),
       '【玩家已知事实】', ...(knowledgeLines.length ? knowledgeLines : ['- 无']),

@@ -6,6 +6,7 @@ import type {
   TextOpenWorldEffectPlanV1,
   TextOpenWorldEffectReceiptV1,
   TextOpenWorldEffectStateV1,
+  TextOpenWorldFastTravelAuthorizationV1,
   TextOpenWorldParsedModulesV1,
   TextOpenWorldObjectiveAuthorizationV1,
   TextOpenWorldQuestTransitionAuthorizationV1,
@@ -27,6 +28,7 @@ import {
   type TextOpenWorldQuestTransitionCatalogV1,
 } from './quest-state-machine'
 import { createTextOpenWorldQuestInstanceKeyV1 } from './quests'
+import { createTextOpenWorldFastTravelCatalogV1, type TextOpenWorldFastTravelCatalogV1 } from './fast-travel'
 
 type Row = Record<string, unknown>
 type Refs = ReturnType<typeof references>
@@ -93,6 +95,13 @@ function parseDefinition(value: unknown, refs: Refs, label: string): TextOpenWor
   if (operation === 'reveal-location' || operation === 'enter-location') { exact(payload, ['locationKey'], `${label}.payload`); return { key: effectKey, operation, payload: { locationKey: ref(payload.locationKey, refs.locations, `${label}.locationKey`) } } }
   if (operation === 'unlock-fast-travel') { exact(payload, ['fastTravelPointKey'], `${label}.payload`); return { key: effectKey, operation, payload: { fastTravelPointKey: ref(payload.fastTravelPointKey, refs.travelPoints, `${label}.fastTravelPointKey`) } } }
   if (operation === 'start-travel') { exact(payload, ['edgeKey', 'destinationLocationKey'], `${label}.payload`); return { key: effectKey, operation, payload: { edgeKey: ref(payload.edgeKey, refs.edges, `${label}.edgeKey`), destinationLocationKey: ref(payload.destinationLocationKey, refs.locations, `${label}.destinationLocationKey`) } } }
+  if (operation === 'fast-travel') {
+    exact(payload, ['timeRatioNumerator', 'timeRatioDenominator', 'minimumMinutes'], `${label}.payload`)
+    const timeRatioNumerator = int(payload.timeRatioNumerator, `${label}.timeRatioNumerator`, 1, 1_000_000)
+    const timeRatioDenominator = int(payload.timeRatioDenominator, `${label}.timeRatioDenominator`, 1, 1_000_000)
+    if (timeRatioNumerator > timeRatioDenominator) fail(`${label}耗时比例不能高于普通路线`)
+    return { key: effectKey, operation, payload: { timeRatioNumerator, timeRatioDenominator, minimumMinutes: int(payload.minimumMinutes, `${label}.minimumMinutes`, 1, 1_000_000) } }
+  }
   if (operation === 'advance-time') { exact(payload, ['minutes'], `${label}.payload`); return { key: effectKey, operation, payload: { minutes: int(payload.minutes, `${label}.minutes`, 1, 1_000_000_000) } } }
   if (operation === 'start-combat') { exact(payload, ['encounterKey'], `${label}.payload`); return { key: effectKey, operation, payload: { encounterKey: ref(payload.encounterKey, refs.encounters, `${label}.encounterKey`) } } }
   if (operation === 'resolve-combat') { exact(payload, ['encounterKey', 'outcome'], `${label}.payload`); return { key: effectKey, operation, payload: { encounterKey: ref(payload.encounterKey, refs.encounters, `${label}.encounterKey`), outcome: enumValue(payload.outcome, ['victory', 'defeat', 'escaped'], `${label}.outcome`) } } }
@@ -118,6 +127,7 @@ function effectDomains(operation: TextOpenWorldEffectDefinitionV1['operation']):
   if (['change-player-resource', 'grant-experience', 'apply-status', 'remove-status', 'learn-skill', 'rest'].includes(operation)) return ['player']
   if (['grant-item', 'remove-item', 'equip-item', 'unequip-item', 'learn-recipe', 'change-currency'].includes(operation)) return ['inventory']
   if (['transition-quest', 'complete-objective', 'claim-quest-reward', 'track-quest', 'untrack-quest'].includes(operation)) return ['quests']
+  if (operation === 'fast-travel') return ['map', 'time']
   if (['reveal-location', 'unlock-fast-travel', 'enter-location', 'start-travel'].includes(operation)) return ['map']
   if (operation === 'advance-time') return ['time']
   if (['change-morality', 'change-faction-affinity', 'set-story-modifier'].includes(operation)) return ['relationships']
@@ -289,7 +299,7 @@ export function validateTextOpenWorldEffectStateV1(state: TextOpenWorldEffectSta
   assertUniqueKnown(state.map.unlockedFastTravelPointKeys, refs.travelPoints, 'map.unlockedFastTravelPointKeys')
   for (const pointKey of state.map.unlockedFastTravelPointKeys) {
     const locationKey = modules.world.fastTravelPoints.find(point => point.key === pointKey)!.locationKey
-    if (!state.map.revealedLocationKeys.includes(locationKey)) fail(`快速旅行点所属地点尚未揭示:${pointKey}`)
+    if (knowledgeRank[state.map.locationKnowledgeByKey[locationKey] ?? 'unknown'] < knowledgeRank.visited) fail(`快速旅行点所属地点尚未到访:${pointKey}`)
   }
   assertUniqueKnown(state.map.openEdgeKeys, refs.edges, 'map.openEdgeKeys')
   int(state.time.worldMinute, 'time.worldMinute')
@@ -360,6 +370,7 @@ function applyDefinitions(
   questTransitions: TextOpenWorldQuestTransitionCatalogV1,
   objectives: TextOpenWorldObjectiveCatalogV1,
   tracking: TextOpenWorldQuestTrackingCatalogV1,
+  fastTravel: TextOpenWorldFastTravelCatalogV1,
 ) {
   validateTextOpenWorldEffectStateV1(stateValue, modules)
   if (stateValue.appliedClaimKeys.includes(claimKey)) fail(`claim已应用:${claimKey}`)
@@ -387,6 +398,11 @@ function applyDefinitions(
     const expectedOperation = trackingEffects[0].operation === 'track-quest' ? 'track' : 'untrack'
     if (authorization.operation !== expectedOperation || authorization.slot !== trackingEffects[0].payload.slot) fail('任务追踪Effect与授权不一致')
   } else if (authorization?.kind === 'quest-tracking') fail('任务追踪授权没有对应状态Effect')
+  const fastTravelEffects = effects.filter((effect): effect is Extract<TextOpenWorldEffectDefinitionV1, { operation: 'fast-travel' }> => effect.operation === 'fast-travel')
+  if (fastTravelEffects.length) {
+    if (fastTravelEffects.length !== 1 || effects.length !== 1 || authorization?.kind !== 'fast-travel') fail('快速旅行Effect缺少唯一命令授权')
+    fastTravel.assertAuthorization({ state: stateValue, effect: fastTravelEffects[0], authorization })
+  } else if (authorization?.kind === 'fast-travel') fail('快速旅行授权没有对应Effect')
   let questTransitionsApplied = false
   for (const effect of effects) {
     switch (effect.operation) {
@@ -593,7 +609,8 @@ function applyDefinitions(
       case 'unlock-fast-travel': {
         const { payload } = effect; const before = state.map.unlockedFastTravelPointKeys.includes(payload.fastTravelPointKey)
         const point = modules.world.fastTravelPoints.find(candidate => candidate.key === payload.fastTravelPointKey)!
-        if (!state.map.revealedLocationKeys.includes(point.locationKey)) fail(`${effect.key}不能解锁未揭示地点的快速旅行点`)
+        const knowledge = state.map.locationKnowledgeByKey[point.locationKey] ?? 'unknown'
+        if (knowledge !== 'visited' && knowledge !== 'familiar') fail(`${effect.key}不能解锁尚未到访地点的快速旅行点`)
         addUnique(state.map.unlockedFastTravelPointKeys, payload.fastTravelPointKey); record(changes, effect, `解锁快速旅行:${payload.fastTravelPointKey}`, before, true); break
       }
       case 'enter-location': {
@@ -617,6 +634,22 @@ function applyDefinitions(
         if (!directionAllowed) fail(`${effect.key}旅行端点或方向无效`)
         const before = state.map.travel; state.map.travel = { edgeKey: payload.edgeKey, destinationLocationKey: payload.destinationLocationKey }
         record(changes, effect, `开始旅行:${payload.edgeKey}`, before, state.map.travel); break
+      }
+      case 'fast-travel': {
+        const fastTravelAuthorization = authorization as TextOpenWorldFastTravelAuthorizationV1
+        const before = { locationKey: state.map.currentLocationKey, worldMinute: state.time.worldMinute, travel: state.map.travel }
+        state.map.currentLocationKey = fastTravelAuthorization.destinationLocationKey
+        state.map.travel = null
+        state.time.worldMinute += fastTravelAuthorization.travelMinutes
+        state.map.locationKnowledgeByKey[fastTravelAuthorization.destinationLocationKey] = 'visited'
+        addUnique(state.map.revealedLocationKeys, fastTravelAuthorization.destinationLocationKey)
+        const regionKey = modules.world.locations.find(location => location.key === fastTravelAuthorization.destinationLocationKey)!.regionKey
+        const rank = { unknown: 0, heard: 1, visited: 2, familiar: 3 }
+        if (rank[state.map.regionKnowledgeByKey[regionKey] ?? 'unknown'] < rank.visited) state.map.regionKnowledgeByKey[regionKey] = 'visited'
+        record(changes, effect, `快速旅行到:${fastTravelAuthorization.destinationLocationKey}，耗时${fastTravelAuthorization.travelMinutes}分钟`, before, {
+          locationKey: state.map.currentLocationKey, worldMinute: state.time.worldMinute, travel: state.map.travel,
+        })
+        break
       }
       case 'advance-time': {
         const { payload } = effect; const before = state.time.worldMinute; const after = before + payload.minutes
@@ -708,11 +741,12 @@ export function applyTextOpenWorldEffectPlanForReplayV1(
   const questTransitions = createTextOpenWorldQuestTransitionCatalogV1(value)
   const objectives = createTextOpenWorldObjectiveCatalogV1(value)
   const tracking = createTextOpenWorldQuestTrackingCatalogV1(value)
+  const fastTravel = createTextOpenWorldFastTravelCatalogV1(value, modules)
   const definitions = modules.actions.effects.map((item, index) => parseDefinition(item, refs, `effects[${index}]`))
   const byKey = new Map(definitions.map(item => [item.key, item]))
   const canonical = plan.effectKeys.map(effectKey => byKey.get(effectKey) ?? fail(`Effect不存在:${effectKey}`))
   if (canonicalProductProductionJsonV2(canonical) !== canonicalProductProductionJsonV2(plan.effects)) fail('EffectPlan定义与Release不一致')
-  const applied = applyDefinitions(state, canonical, plan.claimKey, modules, plan.authorization, questTransitions, objectives, tracking)
+  const applied = applyDefinitions(state, canonical, plan.claimKey, modules, plan.authorization, questTransitions, objectives, tracking, fastTravel)
   if (canonicalProductProductionJsonV2(applied.changes) !== canonicalProductProductionJsonV2(plan.previewChanges)) fail('EffectPlan重放变化与预演不一致')
   return applied
 }
@@ -729,10 +763,11 @@ export function createTextOpenWorldEffectCatalogV1(value: TextOpenWorldRuntimePa
   const questTransitions = createTextOpenWorldQuestTransitionCatalogV1(value)
   const objectives = createTextOpenWorldObjectiveCatalogV1(value)
   const tracking = createTextOpenWorldQuestTrackingCatalogV1(value)
+  const fastTravel = createTextOpenWorldFastTravelCatalogV1(value, modules)
   const definitions = modules.actions.effects.map((item, index) => parseDefinition(item, refs, `effects[${index}]`)); const byKey = new Map(definitions.map(item => [item.key, item])); const clone = <T>(item: T): T => structuredClone(item)
   const plan = async (input: { effectKeys: string[]; claimKey: string; state: TextOpenWorldEffectStateV1; authorization?: TextOpenWorldEffectPlanV1['authorization'] }): Promise<TextOpenWorldEffectPlanV1> => {
     const claimKey = key(input.claimKey, 'claimKey', CLAIM_KEY); if (!Array.isArray(input.effectKeys) || new Set(input.effectKeys).size !== input.effectKeys.length) fail('effectKeys必须是无重复数组')
-    const effects = input.effectKeys.map(effectKey => byKey.get(key(effectKey, 'effectKey')) ?? fail(`Effect不存在:${effectKey}`)); const baseStateHash = await hashProductProductionValueV2(input.state); const preview = applyDefinitions(input.state, effects, claimKey, modules, input.authorization ?? null, questTransitions, objectives, tracking); const resultingStateHash = await hashProductProductionValueV2(preview.state); const impactDomains = [...new Set(effects.flatMap(effect => effectDomains(effect.operation)))]
+    const effects = input.effectKeys.map(effectKey => byKey.get(key(effectKey, 'effectKey')) ?? fail(`Effect不存在:${effectKey}`)); const baseStateHash = await hashProductProductionValueV2(input.state); const preview = applyDefinitions(input.state, effects, claimKey, modules, input.authorization ?? null, questTransitions, objectives, tracking, fastTravel); const resultingStateHash = await hashProductProductionValueV2(preview.state); const impactDomains = [...new Set(effects.flatMap(effect => effectDomains(effect.operation)))]
     const body: Omit<TextOpenWorldEffectPlanV1, 'planHash'> = {
       schema: 'storyforge.text-open-world.effect-plan', version: 1, claimKey, baseStateHash, resultingStateHash,
       effectKeys: [...input.effectKeys], effects: clone(effects), authorization: clone(input.authorization ?? null),
@@ -749,7 +784,7 @@ export function createTextOpenWorldEffectCatalogV1(value: TextOpenWorldRuntimePa
       if (!isSha256Hash(planHash) || await hashProductProductionValueV2(planBody(body)) !== planHash) fail('EffectPlan planHash无效')
       const baseStateHash = await hashProductProductionValueV2(input.state); if (baseStateHash !== input.plan.baseStateHash) fail('EffectPlan基线状态已变化')
       const canonicalEffects = input.plan.effectKeys.map(effectKey => byKey.get(effectKey) ?? fail(`Effect不存在:${effectKey}`)); if (canonicalProductProductionJsonV2(canonicalEffects) !== canonicalProductProductionJsonV2(input.plan.effects)) fail('EffectPlan定义与Release不一致')
-      const applied = applyDefinitions(input.state, canonicalEffects, input.plan.claimKey, modules, input.plan.authorization, questTransitions, objectives, tracking); const resultingStateHash = await hashProductProductionValueV2(applied.state)
+      const applied = applyDefinitions(input.state, canonicalEffects, input.plan.claimKey, modules, input.plan.authorization, questTransitions, objectives, tracking, fastTravel); const resultingStateHash = await hashProductProductionValueV2(applied.state)
       if (resultingStateHash !== input.plan.resultingStateHash || canonicalProductProductionJsonV2(applied.changes) !== canonicalProductProductionJsonV2(input.plan.previewChanges)) fail('EffectPlan预演与应用结果不一致')
       return { state: applied.state, receipt: { schema: 'storyforge.text-open-world.effect-receipt', version: 1, claimKey: input.plan.claimKey, planHash: input.plan.planHash, baseStateHash, resultingStateHash, impactDomains: [...input.plan.impactDomains], changes: clone(applied.changes) } }
     },
