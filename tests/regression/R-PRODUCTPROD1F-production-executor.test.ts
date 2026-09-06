@@ -1012,9 +1012,11 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     const textRequirement = owned.brief.capabilityRequirements.find(item => item.mediaClass === 'text')!
     const bindingHash = await hashProductProductionValueV2({ provider: 'full-length-text-adventure' })
     const outputs = fullLengthTextAdventureOutputs(owned.brief) as Record<string, unknown>
+    let narrativeSystem = ''
     const runText: ProductionTextRunnerV1 = async request => {
       const taskKey = Object.keys(outputs).find(key => request.system.includes(`任务=${key}。`))
       if (!taskKey) throw new Error(`unknown full-length task:${request.system}`)
+      if (taskKey === 'content.narrative') narrativeSystem = request.system
       return {
         output: JSON.stringify(outputs[taskKey]), usage: { inputTokens: 400, outputTokens: 2_000 },
         bindingReceipt: {
@@ -1037,6 +1039,9 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
       }],
     })
     expect(projection).toMatchObject({ terminal: true, buildStatus: 'release-ready' })
+    expect(narrativeSystem).toContain('固定图骨架=')
+    expect(narrativeSystem).toContain('"entryNodeKey":"scene.001"')
+    expect(narrativeSystem).toContain('不得增加、删除或改写骨架')
     const build = (await db.productBuilds.get(projection.buildId))!
     const quality = JSON.parse(build.qualityReportJson) as {
       hardGateResults: Array<{ gateId: string; passed: boolean; evidence: string[] }>
