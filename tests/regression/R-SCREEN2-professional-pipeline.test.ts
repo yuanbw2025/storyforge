@@ -128,6 +128,8 @@ describe('SCREEN-2 · professional novel-to-screenplay pipeline', () => {
     expect(systemPrompt).toContain('不得增加 evidence、quote、reasoning、category、id 等字段')
     expect(systemPrompt).toContain('{"stableKey":"fact.key","kind":"event"')
     expect(systemPrompt).toContain('stableKey 必须匹配 ^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$')
+    expect(systemPrompt).toContain('数组内每个 stableKey 必须唯一')
+    expect(systemPrompt).toContain('场景 blocks 内每个 id 也必须唯一')
   })
 
   it('领域事务提交后事件写入中断可以恢复，且不会重复采纳', async () => {
