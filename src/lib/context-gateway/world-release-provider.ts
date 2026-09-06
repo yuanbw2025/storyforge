@@ -1,3 +1,4 @@
+import { WORLDVIEW_GENERATABLE_FIELD_SPECS } from '../registry/field-registry'
 import { estimateTokens } from '../ai/context-budget'
 import { sha256Text } from '../ai/chapter-memory/text-normalization'
 import { canonicalStringify, hashCanonicalValue } from '../agent/run/hash'
@@ -213,6 +214,7 @@ function summaryFor(row: unknown): string {
   const values = [
     record.summary, record.description, record.shortDescription, record.overview,
     record.centralConflict, record.outcome, record.significance, record.globalNote,
+    ...WORLDVIEW_GENERATABLE_FIELD_SPECS.map(spec => record[spec.field]),
   ].filter(item => typeof item === 'string' && item.trim()) as string[]
   return values.join('；').slice(0, 800)
 }

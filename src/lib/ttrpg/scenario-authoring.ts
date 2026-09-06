@@ -19,14 +19,16 @@ function fail(message: string): never { throw new Error(`[ttrpg-scenario] ${mess
 function object(value: unknown, fields: string[], label: string) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) fail(`${label} 必须为对象`)
   const row = value as Record<string, unknown>
-  if (Object.keys(row).length !== fields.length || Object.keys(row).some(key => !fields.includes(key))) fail(`${label} 字段不精确`)
+  const missing = fields.filter(key => !Object.prototype.hasOwnProperty.call(row, key))
+  const unknown = Object.keys(row).filter(key => !fields.includes(key))
+  if (missing.length || unknown.length) fail(`${label} 字段不精确 missing=${missing.join(',')} unknown=${unknown.join(',')}`)
   return row
 }
 function text(value: unknown, label: string, maximum = 2000) {
   if (typeof value !== 'string' || !value.trim() || value.trim().length > maximum) fail(`${label} 文本无效`)
   return value.trim().normalize('NFC')
 }
-function key(value: unknown) { const result = text(value, 'key', 200); if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(result)) fail('key 无效'); return result }
+function key(value: unknown) { const result = text(value, 'key', 200); if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(result)) fail('key 必须是 ASCII 标识：字母、数字、点、下划线、冒号或连字符；中文姓名只放 name'); return result }
 function list(value: unknown, maximum: number, minimum = 1): unknown[] {
   if (!Array.isArray(value) || value.length < minimum || value.length > maximum) fail('内容数量不符合边界')
   return value
@@ -74,8 +76,23 @@ export function parseTtrpgAuthoredScenarioV1(value: unknown): TtrpgAuthoredScena
     fail('至少需要一个不依赖线索的退场结局，避免调查失败后无路可走')
   const secrets = [...characters.map(actor => actor.secret), ...scenes.map(scene => scene.gmTruth),
     ...clues.filter(clue => clue.visibility === 'discoverable').map(clue => clue.description)]
-  for (const publicText of [...characters.map(actor => actor.description), ...scenes.map(scene => scene.description)])
-    assertTtrpgNoRestrictedTextV1(publicText, secrets)
+  const playerSecrets = characters.filter(actor => actor.seatKey != null).map(actor => actor.secret)
+  const checkPublic = (value: string, label: string, authorized: string[] = []) => {
+    try {
+      assertTtrpgNoRestrictedTextV1(value, playerSecrets)
+      assertTtrpgNoRestrictedTextV1(value, secrets, authorized)
+    } catch (error) { fail(`${label}: ${error instanceof Error ? error.message : '私密信息校验失败'}`) }
+  }
+  for (const actor of characters) checkPublic(actor.description, `character:${actor.key}.description`)
+  for (const clue of clues) assertTtrpgNoRestrictedTextV1(clue.description, playerSecrets)
+  for (const scene of scenes) {
+    const ending = endings.find(item => item.nodeKey === scene.nodeKey)
+    // A gated ending may repeat evidence it requires, but never a player's private history.
+    const authorized = ending ? clues.filter(clue => ending.requiredConclusionKeys.includes(clue.conclusionKey))
+      .map(clue => clue.description) : []
+    checkPublic(scene.description, `scene:${scene.nodeKey}.description`, authorized)
+    if (ending) checkPublic(ending.epilogue, `ending:${ending.nodeKey}.epilogue`, authorized)
+  }
   return { schema: 'storyforge.ttrpg-authored-scenario', version: 1, characters, scenes, clues, quests, endings }
 }
 

@@ -284,6 +284,10 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
       '青年守灯人，深蓝制服，手持潮汐纸条；背景为灯塔控制室与风暴海面',
       '守灯人立绘',
     )).toBe('青年守灯人，深蓝制服，手持潮汐纸条')
+    expect(isolateCharacterProviderPromptV1(
+      '沈砚正面角色立绘，背景为纯品红。沈砚为四十岁上下瘦削男性，短发，深色旧工装，黄铜怀表。',
+      '守灯人立绘',
+    )).toBe('沈砚正面角色立绘，沈砚为四十岁上下瘦削男性，短发，深色旧工装，黄铜怀表')
   })
 
   it('接受原始对象、Markdown 围栏和单一说明文字包装，并正确处理字符串内花括号', () => {
@@ -763,6 +767,47 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     ])
     expect(await db.mediaBlobObjects.count()).toBe(6)
   }, 30_000)
+
+  it('作者修订走相同校验和持久回执，不伪造模型调用，并拒绝错任务或无效内容', async () => {
+    const owned = await fixtureForProduct('text-adventure')
+    const requirement = owned.brief.capabilityRequirements.find(item => item.mediaClass === 'text')!
+    const bindingHash = 'a'.repeat(64)
+    const capabilityBindings = [{ requirementKey: requirement.requirementKey, adapterId: 'configured-text.v1', bindingHash }]
+    const outputs = modelOutputs(owned.brief.source.worldContentHash, 'text-adventure')
+    const calls: string[] = []
+    const runText: ProductionTextRunnerV1 = async request => {
+      const taskKey = Object.keys(outputs).find(key => request.system.includes(`任务=${key}。`)) as keyof typeof outputs
+      calls.push(taskKey)
+      return { output: JSON.stringify(taskKey === 'content.product-module' ? {} : taskKey === 'media.requirements' ? { ...outputs[taskKey], visual: [], audio: [] } : outputs[taskKey]),
+        usage: { inputTokens: 100, outputTokens: 100 }, bindingReceipt: {
+          schema: 'storyforge.provider-binding-receipt', version: 1, requirementKey: requirement.requirementKey,
+          adapterId: 'configured-text.v1', adapterVersion: 1, provider: 'fixture', model: 'fixture',
+          endpointOrigin: 'https://fixture.invalid', executionLocation: 'browser-direct', credentialSource: 'existing-ai-config',
+          credentialPresent: true, capabilityHash: bindingHash, boundAt: 1, receiptHash: 'b'.repeat(64),
+        } }
+    }
+    const execute = async () => runProductProductionUntilBlockedV1({ scope: owned.scope, productionId: owned.productionId, capabilityBindings,
+      executor: createConfiguredProductProductionExecutorV1({ production: (await db.productProductions.get(owned.productionId))!, brief: owned.brief, runText }) })
+    const first = await execute()
+    expect(first.buildStatus).toBe('recovery-required')
+    const repair = async (draft: unknown, taskKey = 'content.product-module') => executeProductProductionCommand({ scope: owned.scope, productionId: owned.productionId,
+      command: { type: 'resolve-blocker', commandId: `repair.${crypto.randomUUID()}`, expectedStateRevision: (await db.productProductions.get(owned.productionId))!.stateRevision,
+        blockerKey: taskKey, resolution: { action: 'author-edit', note: '作者校订草稿', authorDraftJson: JSON.stringify(draft) } } })
+    expect((await repair(outputs['content.product-module'], 'content.design')).ok).toBe(false)
+    expect((await repair({})).ok).toBe(true)
+    expect((await execute()).buildStatus).toBe('recovery-required')
+    expect(calls.filter(key => key === 'content.product-module')).toHaveLength(1)
+    expect((await repair(outputs['content.product-module'])).ok).toBe(true)
+    const completed = await execute()
+    expect(completed.buildStatus).toBe('release-ready')
+    expect(calls.filter(key => key === 'content.product-module')).toHaveLength(1)
+    const artifact = await db.productBuildArtifacts.where('buildId').equals(completed.buildId)
+      .filter(row => row.artifactKey === 'content.product-module' && row.controlEpoch === completed.controlEpoch).first()
+    expect(JSON.parse(artifact!.rightsJson).origin).toBe('author-revised-model-draft')
+    const events = await db.agentRunEvents.where('runId').equals(artifact!.producerRunId!).toArray()
+    expect(events.some(row => row.type === 'model.requested')).toBe(false)
+    expect(events.some(row => row.type === 'evidence.artifact.recorded' && JSON.parse(row.payloadJson).artifactKind === 'source-snapshot')).toBe(true)
+  }, 30000)
 
   it('五种现行生产产品经过正式生产、可玩 Build Preview 与同包原子发布', async () => {
     const products: ProductionProductKindV1[] = [

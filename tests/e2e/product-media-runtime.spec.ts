@@ -161,7 +161,7 @@ test('真实 Chromium 解码透明 PNG 与 PCM WAV，并产出可审计媒体指
     mimeType: 'image/png',
     width: 20,
     height: 20,
-    mattingId: 'storyforge.character-alpha.edge-connected.v1',
+    mattingId: 'storyforge.character-alpha.edge-connected.v2',
     cornerAlpha: 0,
     internalWhiteAlpha: 255,
   })

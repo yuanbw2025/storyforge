@@ -169,7 +169,7 @@ export default function TtrpgPlayTable(props: {
   return <section className="sf-ttrpg" data-testid="ttrpg-play-table">
     <header className="sf-ttrpg-banner">
       <div className="sf-ttrpg-beacon" aria-hidden="true" /><span className="sf-ttrpg-eyebrow">STORYFORGE · AI GAME MASTER</span>
-      <h2>{content.campaign.title}</h2><p>{content.campaign.pitch}</p>
+      <h2>{props.session.title}</h2><p>{content.campaign.pitch}</p>
       <div className="sf-ttrpg-meta"><span><Dices size={14} />{content.rulePack.title}</span><span><Users size={14} />{players.length} 位角色</span><span><Compass size={14} />约 {content.campaign.estimatedMinutes} 分钟</span></div>
     </header>
     {!product.sessionZero.completed ? <div className="sf-ttrpg-setup">

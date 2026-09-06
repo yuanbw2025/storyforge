@@ -1,3 +1,4 @@
+import { parseStructuredOutputV1, StructuredOutputPipelineErrorV1 } from '../agent/structured-output-pipeline';
 import { assertTtrpgNoRestrictedTextV1 } from './information-boundary';
 import { assertTtrpgCompleteContextV1 } from './prompt-context';
 import { chat, resolveRequestConfig, type ChatResult } from "../ai/client";
@@ -103,13 +104,17 @@ function exact(
   }
 }
 function parseJson(output: string): Record<string, unknown> {
-  let source = output.trim();
-  const fenced = source.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/);
-  if (fenced) source = fenced[1];
   try {
-    return record(JSON.parse(source), "模型输出");
+    return parseStructuredOutputV1({
+      raw: output,
+      contract: { version: 1, schemaId: 'storyforge.ttrpg-gm-output', target: 'runtime-candidate',
+        root: 'object', maxChars: 100_000, allowedRootFields: ['narration', 'synthesisFrame', 'offeredClueKeys', 'recommendedNextSceneKeys'],
+        requiredRootFields: ['narration', 'synthesisFrame', 'offeredClueKeys', 'recommendedNextSceneKeys'], unknownRootFieldMessage: '模型输出字段不在允许闭集' },
+      parse: value => record(value, '模型输出'),
+    });
   } catch (error) {
-    if (error instanceof SyntaxError) fail("模型输出不是有效 JSON");
+    if (error instanceof StructuredOutputPipelineErrorV1
+      && error.evidence.issues.some(issue => issue.category === 'parse')) fail('模型输出不是有效 JSON');
     throw error;
   }
 }
@@ -135,8 +140,11 @@ function messages(objective: string, context: string): ChatMessage[] {
       role: "system",
       content: [
         "你是 StoryForge 可信 AI GM 的候选叙事生成器。",
+        "使用与场景一致的自然中文，不夹入无意义英文。公开旁白面向全桌，使用实际行动者的姓名，不把 AI 同伴做过的事写成真人玩家的第二人称行动。收尾给玩家一个具体可回应的问题，不能替真人选择。",
         "你只解释已经由 RulePack 结算完成的最近行动；骰点、难度、成功等级、资源、状态、回合、线索可见性和场景推进全部不可修改。",
-        "叙事只依据公开事实，不得猜测未发现线索、角色秘密或创造新证据。offeredClueKeys 只能从 suggestibleClues 选择，它是结构化建议，绝不代表线索已公开。",
+        "narration 控制在 120～260 个汉字，围绕这一项行动和本次已公开的结果。不要重述所有旧线索，也不要用可疑血迹、隐秘符号或物件细节制造新线索。没有新发现时，明确这次未取得额外证据，并提示已知的下一步。",
+        "你是行动结果旁白，不是另一次 NPC 行动。只写在场者可观察的简短反应，不编写其他角色的新台词、承诺、阻拦、交易、任务或证词。不新增人物、地点、证人或完成条件；不能安排玩家去见模组未列出的人。NPC 的实际行动由其独立回合处理。",
+        "叙事只依据公开事实，不得猜测未发现线索、角色秘密或创造新证据。offeredClueKeys 只能从 suggestibleClues 选择；当该数组为空时必须返回 []。knownClues 或已公开的线索只用于叙述，不得重复放入 offeredClueKeys。建议不改变线索可见性。",
         "recommendedNextSceneKeys 只能从 nextScenes 选择，它只是建议，绝不推进场景。遵守 Session Zero 的 lines、veils、暂停信号和内容提醒。",
         "必须以 synthesisTemplate 为基准返回 GmSynthesisFrame：schema、version、actionSequence、mechanicalOutcome、worldUpdate 原样复制；reactions 保留模板中的全部 actorKey 和 responsePolicy。",
         "responsePolicy 必须原样复制。prompt-human 的 text 必须是 null，绝不能替真人玩家说话、做决定或描述其内心；ai-eligible 与 gm-eligible 只可描述基于眼前公开事实的可见反应；不得编造其内心、动机或代替角色行动。",
@@ -252,7 +260,10 @@ function parseDraft(output: string, view: TtrpgGmRuntimeViewV1) {
       view.latestAction?.eventSequence ?? fail("当前没有正式规则行动"),
     narration: source.narration.trim().normalize("NFC"),
     synthesisFrame,
-    offeredClueKeys: uniqueKeys(source.offeredClueKeys, "offeredClueKeys"),
+    // Mentioning an already public clue is not a new disclosure offer. Remove
+    // only proven party-visible references; private and unknown keys still fail.
+    offeredClueKeys: uniqueKeys(source.offeredClueKeys, "offeredClueKeys").filter(key =>
+      !view.discoveredClues.some(clue => clue.clueKey === key && clue.visibility === "party")),
     recommendedNextSceneKeys: uniqueKeys(
       source.recommendedNextSceneKeys,
       "recommendedNextSceneKeys",
@@ -370,7 +381,7 @@ async function append(
 
 function repairableProtocolIssue(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
-  return /不是有效 JSON|字段不在允许闭集|叙事无效|必须是有界数组|不得重复|\[\d+\] 无效/u.test(
+  return /不是有效 JSON|字段不在允许闭集|叙事无效|必须是有界数组|不得重复|\[\d+\] 无效|GmSynthesisFrame schema\/version\/行动绑定无效|候选建议了未授权线索|候选建议了非后继场景/u.test(
     message,
   );
 }

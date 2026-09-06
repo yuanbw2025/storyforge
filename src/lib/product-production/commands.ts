@@ -346,8 +346,14 @@ async function applyCommand(input: {
   if (command.type === 'resolve-blocker') {
     const build = await currentBuild(production)
     if (!['recovery-required', 'paused'].includes(build.status)) reject('invalid-state-transition', '当前 Build 没有待处理 blocker')
-    if (!['retry', 'change-capability', 'cancel'].includes(command.resolution.action)) {
+    if (!['retry', 'author-edit', 'change-capability', 'cancel'].includes(command.resolution.action)) {
       reject('invalid-state-transition', '当前 blocker 只允许重试、更换能力后重试或取消；降级/豁免必须先生成新 Brief')
+    }
+    if (command.resolution.action === 'author-edit') {
+      const failure = JSON.parse(build.failureJson)
+      if (failure.taskKey !== command.blockerKey || !['content.design', 'content.narrative', 'content.product-module', 'media.requirements'].includes(command.blockerKey)) {
+        reject('invalid-state-transition', '作者修订必须对应当前失败的文本任务')
+      }
     }
     const controlEpoch = production.controlEpoch + 1
     const stateRevision = production.stateRevision + 1

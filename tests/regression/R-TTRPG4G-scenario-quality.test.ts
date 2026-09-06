@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { parseTtrpgAuthoredScenarioV1, type TtrpgAuthoredScenarioV1 } from '../../src/lib/ttrpg/scenario-authoring'
 
@@ -32,4 +33,27 @@ describe('R-TTRPG4G · authored module quality constraints', () => {
     const blocked = scenario(); blocked.endings[0].requiredConclusionKeys = ['truth.ledger']
     expect(() => parseTtrpgAuthoredScenarioV1(blocked)).toThrow('退场结局')
   })
+  it('结局可复述其前提证据，不能泄露未要求的线索或玩家秘密', () => {
+    const valid = scenario()
+    valid.scenes.push({ ...valid.scenes[2], nodeKey: 'truth-ending', description: valid.clues[0].description })
+    valid.endings.push({ ...valid.endings[0], nodeKey: 'truth-ending', epilogue: valid.clues[0].description,
+      requiredConclusionKeys: ['truth.ledger'] })
+    expect(parseTtrpgAuthoredScenarioV1(valid)).toEqual(valid)
+    const unknown = structuredClone(valid)
+    unknown.endings[0].epilogue = valid.clues[0].description
+    expect(() => parseTtrpgAuthoredScenarioV1(unknown)).toThrow('ending:ending.epilogue')
+    const secret = structuredClone(valid)
+    secret.endings[1].epilogue += valid.characters[0].secret
+    expect(() => parseTtrpgAuthoredScenarioV1(secret)).toThrow('私密信息')
+  })
+})
+
+it('雾港作者校订正文符合场景、秘密和结局合同', () => {
+  const module = JSON.parse(readFileSync('examples/ttrpg/fog-harbor/author-reviewed-module.json', 'utf8'))
+  const scenario = parseTtrpgAuthoredScenarioV1(module.ttrpgScenario)
+  expect(scenario.characters).toHaveLength(5)
+  expect(scenario.scenes).toHaveLength(7)
+  expect(scenario.clues).toHaveLength(6)
+  const paths = scenario.clues.flatMap(clue => clue.paths.map(path => `${path.nodeKey}:${path.actionKey}`))
+  expect(new Set(paths).size).toBe(12)
 })

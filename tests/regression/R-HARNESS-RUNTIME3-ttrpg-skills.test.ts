@@ -193,17 +193,35 @@ describe('R-HARNESS-RUNTIME3 · current Product Build TTRPG Skills', () => {
       offeredClueKeys: [],
       recommendedNextSceneKeys: [],
     }), view)).toMatchObject({ accepted: false })
+    const knownOutput = JSON.stringify({ narration: '已公开的调查记录仍在桌上。', synthesisFrame: createDeterministicGmSynthesisFrameV2(receipt), offeredClueKeys: ['clue.already-known'], recommendedNextSceneKeys: [] })
+    const escapedTail = JSON.stringify(knownOutput.slice(knownOutput.indexOf('"synthesisFrame"'))).slice(1, -1)
+    const overescaped = knownOutput.slice(0, knownOutput.indexOf('"synthesisFrame"')) + escapedTail
+    const escapedView = { ...view, suggestibleClues: [], discoveredClues: [{ clueKey: 'clue.already-known', title: '记录', description: '公开记录', visibility: 'party' as const, actorKey: view.latestAction!.actorKey, eventSequence: 1 }] }
+    expect(evaluateTtrpgGmCandidateOutputV1('```json\n' + overescaped + '\n```', escapedView))
+      .toMatchObject({ accepted: true, draft: { offeredClueKeys: [] } })
+    expect(evaluateTtrpgGmCandidateOutputV1(overescaped.slice(0, -4), escapedView))
+      .toMatchObject({ accepted: false })
+    const knownClue = { clueKey: 'clue.already-known', title: '公开记录', description: '已公开的调查记录', visibility: 'party' as const, actorKey: view.latestAction!.actorKey, eventSequence: 1 }
+    expect(evaluateTtrpgGmCandidateOutputV1(knownOutput, { ...view, suggestibleClues: [], discoveredClues: [knownClue] }))
+      .toMatchObject({ accepted: true, draft: { offeredClueKeys: [] } })
+    expect(evaluateTtrpgGmCandidateOutputV1(knownOutput, { ...view, suggestibleClues: [], discoveredClues: [{ ...knownClue, visibility: 'private' }] }))
+      .toMatchObject({ accepted: false })
+    expect(evaluateTtrpgGmCandidateOutputV1(knownOutput, { ...view, suggestibleClues: [], discoveredClues: [] }))
+      .toMatchObject({ accepted: false })
+    let narrationCalls = 0
     const generated = await generateTtrpgGmNarrationCandidateV1({
       scope: fixture.scope,
       productRuntimeSessionId: fixture.session.id,
       objective: '只叙述刚才已经结算的调查结果',
-      runAI: async () => JSON.stringify({
+      runAI: async () => { narrationCalls++; return JSON.stringify({
         narration: '潮声之中，已经完成的检查留下了可供下一步判断的明确痕迹。',
-        synthesisFrame: createDeterministicGmSynthesisFrameV2(receipt),
+        synthesisFrame: { ...createDeterministicGmSynthesisFrameV2(receipt), actionSequence: narrationCalls === 1 ? -1 : createDeterministicGmSynthesisFrameV2(receipt).actionSequence },
         offeredClueKeys: [],
         recommendedNextSceneKeys: [],
-      }),
+      }) },
     })
+    expect(narrationCalls).toBe(2)
+    expect(generated.candidate.repairEvidence).toBeDefined()
     const adopted = await adoptTtrpgGmNarrationCandidateV1({
       scope: fixture.scope,
       runId: generated.candidate.runId,
@@ -238,18 +256,21 @@ describe('R-HARNESS-RUNTIME3 · current Product Build TTRPG Skills', () => {
       actors: view.projection.actors,
       actorRole: 'player',
     })
+    let modelCalls = 0
     const generated = await generateTtrpgPlayerActionCandidateV1({
       scope: fixture.scope,
       productRuntimeSessionId: fixture.session.id,
       actorKey: player.actorKey,
       objective: '依据角色目标选择一个合法调查行动',
-      runAI: async () => JSON.stringify({
+      runAI: async () => { modelCalls++; return JSON.stringify({
         actionKey: action.actionKey,
-        targetKey,
+        targetKey: modelCalls === 1 ? 'current-scene-is-not-an-actor' : targetKey,
         approach: '沿着当前可见痕迹逐项核对，寻找彼此矛盾的细节。',
         spokenIntent: null,
-      }),
+      }) },
     })
+    expect(modelCalls).toBe(2)
+    expect(generated.candidate.repairEvidence).toBeDefined()
     const adopted = await adoptTtrpgPlayerActionCandidateV1({
       scope: fixture.scope,
       runId: generated.candidate.runId,

@@ -591,8 +591,10 @@ export interface ProductEvolutionImpactV1 {
 
 export interface ProductProductionBlockerResolutionV1 {
   action:
-    "retry" | "fallback" | "waive-soft-gate" | "change-capability" | "cancel";
+    "retry" | "author-edit" | "fallback" | "waive-soft-gate" | "change-capability" | "cancel";
   note: string;
+  /** Explicit authored replacement; validated by the same task parser before acceptance. */
+  authorDraftJson?: string;
 }
 
 export type ProductBuildCompatibilityLevelV1 =

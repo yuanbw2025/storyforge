@@ -1,7 +1,30 @@
 import { db } from '../db/schema'
 import type { TtrpgProductionBriefV2, WorkspaceScope } from '../types'
-import type { AssembleContextInput } from '../registry/types'
+import type { AssembleContextInput, ContextSourceTransformer } from '../registry/types'
+import { sha256Text } from '../ai/chapter-memory/text-normalization'
 import { assertRecordInScope } from '../workspace/scope'
+import { readAgentRunV1 } from '../agent/run/event-store'
+import { readAgentRunArtifactExactV1 } from '../memory/artifact-store'
+
+export class ProductProductionContextBudgetErrorV1 extends Error {}
+
+/** Structured production contracts must remain exact JSON, including secrets
+ * and late fields. Their registered cap is soft; the task budget is hard. */
+export const preserveProductProductionContextV1: ContextSourceTransformer = async input => {
+  if (!input.source.key.startsWith('product-production.')) return undefined
+  if (input.originalTokens > input.inputBudgetTokens) {
+    throw new ProductProductionContextBudgetErrorV1(`[product-production-context] ${input.source.label} 需要 ${input.originalTokens} tokens，超过本任务输入预算 ${input.inputBudgetTokens}；未调用模型，请缩小制作范围。`)
+  }
+  return {
+    content: input.content, delivery: 'full', allowSourceBudgetOverflow: true,
+    compression: {
+      version: 1, promptVersion: 'agent-context-compression-v1', outcome: 'fallback',
+      fallback: 'full-source', sourceHash: await sha256Text(input.content), attempts: 0,
+      targetTokens: input.sourceBudgetTokens, requiredAnchorCount: 1, coveredAnchorCount: 0,
+      failureCode: 'structured-production-contract-requires-exact-json',
+    },
+  }
+}
 
 function requiredScope(input: AssembleContextInput): WorkspaceScope {
   if (!input.scope) throw new Error('[product-production-context] 缺少已解析 WorkspaceScope')
@@ -77,6 +100,37 @@ export async function readProductProductionQualityFeedback(input: AssembleContex
     buildNumber: build.buildNumber, qualityReportHash: build.qualityReportHash,
     qualityReport: JSON.parse(build.qualityReportJson), artifacts,
   })
+}
+
+/** Last rejected draft for this exact Build/task, never another product or a live world read. */
+export async function readProductProductionRepairFeedback(input: AssembleContextInput): Promise<string> {
+  const { scope, build } = await productionAndBuild(input)
+  if (!build || !input.productProductionTaskKey) throw new Error('[product-production-context] 修复反馈需要 Build 与 task key')
+  const resolution = JSON.parse(build.failureJson).resolution
+  const authorRepairNote = typeof resolution?.note === 'string' ? resolution.note : null
+  const authorDraftJson = resolution?.action === 'author-edit' && typeof resolution.authorDraftJson === 'string' ? resolution.authorDraftJson : null
+  const runs = (await db.agentRuns.where('productBuildId').equals(build.id!).toArray())
+    .filter(run => run.status === 'failed' && run.parentRelation === `task:${input.productProductionTaskKey}`)
+    .sort((a, b) => b.updatedAt - a.updatedAt)
+  if (!runs.length) return JSON.stringify({ schema: 'storyforge.product-production.repair-feedback', version: 1, authorRepairNote, authorDraftJson, previous: null })
+  const snapshot = await readAgentRunV1(scope, runs[0].id!)
+  const boundary = snapshot.contract.scope.productProduction
+  if (!boundary || boundary.productBuildId !== build.id || boundary.taskKey !== input.productProductionTaskKey)
+    throw new Error('[product-production-context] 修复草稿与 Build/task 不一致')
+  const events = snapshot.events.filter(event => event.type === 'evidence.artifact.recorded'
+    && event.payload.stepId === input.productProductionTaskKey
+    && ['raw-response', 'tool-result'].includes(event.payload.artifactKind))
+  const latestAttempt = Math.max(0, ...events.map(event => event.type === 'evidence.artifact.recorded' ? event.payload.attempt ?? 0 : 0))
+  const evidence = []
+  for (const event of events) {
+    if (event.type !== 'evidence.artifact.recorded' || event.payload.attempt !== latestAttempt) continue
+    evidence.push({ kind: event.payload.artifactKind, contentHash: event.payload.contentHash,
+      content: await readAgentRunArtifactExactV1({ projectId: scope.projectId,
+        artifactKind: event.payload.artifactKind, contentHash: event.payload.contentHash }) })
+  }
+  return JSON.stringify({ schema: 'storyforge.product-production.repair-feedback', version: 1,
+    taskKey: input.productProductionTaskKey, authorRepairNote, authorDraftJson, previous: { runId: snapshot.run.id,
+      contractHash: snapshot.run.contractHash, controlEpoch: boundary.controlEpoch, attempt: latestAttempt, evidence } })
 }
 
 export async function readProductProductionEvolutionBase(input: AssembleContextInput): Promise<string> {

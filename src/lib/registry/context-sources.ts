@@ -149,6 +149,10 @@ async function readProductProductionArtifactInputs(input: AssembleContextInput):
 async function readProductProductionQualityFeedback(input: AssembleContextInput): Promise<string> {
   return (await import('../product-production/context')).readProductProductionQualityFeedback(input)
 }
+
+async function readProductProductionRepairFeedback(input: AssembleContextInput): Promise<string> {
+  return (await import('../product-production/context')).readProductProductionRepairFeedback(input)
+}
 async function readProductProductionEvolutionBase(input: AssembleContextInput): Promise<string> {
   return (await import('../product-production/context')).readProductProductionEvolutionBase(input)
 }
@@ -1411,6 +1415,13 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     budgetTokens: 6000,
     enabled: input => Number.isInteger(input.productBuildId),
     read: readProductProductionQualityFeedback,
+  },
+  {
+    key: 'product-production.repair-feedback',
+    label: '当前制作任务的失败草稿与校验意见',
+    scope: 'project', layer: 'L1', ownerFrom: 'work', budgetTokens: 12_000,
+    enabled: input => Number.isInteger(input.productBuildId) && !!input.productProductionTaskKey,
+    read: readProductProductionRepairFeedback,
   },
   {
     key: 'product-production.evolution-base',
