@@ -324,15 +324,18 @@ export async function createProductProductionPlanV3(input: {
   // architecture, mainline, side content, ambient events and systems.
   const perInput = Math.floor(brief.productionBudget.maximumInputTokens / (modelTaskCount + 1))
   const perOutput = Math.floor(brief.productionBudget.maximumOutputTokens / modelTaskCount)
-  const durationSlots = modelTaskCount + (textAdventure ? 5 : 4) + activeMediaLaneCount
+  const activeMediaTaskCount = textAdventure
+    ? visualArtifactKeys.length + audioArtifactKeys.length
+    : activeMediaLaneCount
+  const durationSlots = modelTaskCount + (textAdventure ? 5 : 4) + activeMediaTaskCount
   const perDuration = Math.floor(brief.productionBudget.maximumDurationMs / Math.max(1, durationSlots))
-  const costTaskCount = modelTaskCount + activeMediaLaneCount
+  const costTaskCount = modelTaskCount + activeMediaTaskCount
   const perCost = brief.productionBudget.maximumCostUsd == null
     ? null
     : brief.productionBudget.maximumCostUsd / Math.max(1, costTaskCount)
-  const mediaStorage = activeMediaLaneCount === 0
+  const mediaStorage = activeMediaTaskCount === 0
     ? 0
-    : Math.floor(brief.productionBudget.maximumStorageBytes / activeMediaLaneCount)
+    : Math.floor(brief.productionBudget.maximumStorageBytes / activeMediaTaskCount)
 
   const modelBudget = (taskKey: string) => reservation({
     modelCalls: 1, inputTokens: perInput,
@@ -623,17 +626,18 @@ export async function createProductProductionPlanV3(input: {
   )
   const mediaDependencies: string[] = []
   if (activeVisual) {
-    mediaDependencies.push('media.visual')
-    tasks.push(productionTask({
-      taskKey: 'media.visual', lane: 'visual', kind: 'image-bundle',
+    const taskKeys = textAdventure ? visualArtifactKeys : ['media.visual']
+    mediaDependencies.push(...taskKeys)
+    for (const taskKey of taskKeys) tasks.push(productionTask({
+      taskKey, lane: 'visual', kind: textAdventure ? 'image-asset' : 'image-bundle',
       skillId: 'product-production.media-request.v1', executionMode: 'media-provider',
       dependsOn: ['media.requirements'], inputArtifactKeys: ['media.requirements'],
-      outputArtifactKeys: visualArtifactKeys,
+      outputArtifactKeys: textAdventure ? [taskKey] : visualArtifactKeys,
       requirementKeys: brief.media.requiredMediaKinds.filter(kind => !['bgm', 'sfx', 'voice'].includes(kind)),
       capabilityRequirementKeys: imageCapabilities, concurrencyGroup: 'media-provider',
-      subjectLockKeys: visualArtifactKeys, priority: 70,
+      subjectLockKeys: textAdventure ? [taskKey] : visualArtifactKeys, priority: 70,
       budgetReservation: reservation({
-        mediaCalls: brief.media.imageCount, maximumCostUsd: perCost,
+        mediaCalls: textAdventure ? 1 : brief.media.imageCount, maximumCostUsd: perCost,
         durationMs: perDuration, storageBytes: mediaStorage,
       }),
       maxAttempts: 2, timeoutMs: 600_000,
@@ -642,17 +646,18 @@ export async function createProductProductionPlanV3(input: {
     }))
   }
   if (activeAudio) {
-    mediaDependencies.push('media.audio')
-    tasks.push(productionTask({
-      taskKey: 'media.audio', lane: 'audio', kind: 'audio-bundle',
+    const taskKeys = textAdventure ? audioArtifactKeys : ['media.audio']
+    mediaDependencies.push(...taskKeys)
+    for (const taskKey of taskKeys) tasks.push(productionTask({
+      taskKey, lane: 'audio', kind: textAdventure ? 'audio-asset' : 'audio-bundle',
       skillId: 'product-production.media-request.v1', executionMode: 'media-provider',
       dependsOn: ['media.requirements'], inputArtifactKeys: ['media.requirements'],
-      outputArtifactKeys: audioArtifactKeys,
+      outputArtifactKeys: textAdventure ? [taskKey] : audioArtifactKeys,
       requirementKeys: brief.media.requiredMediaKinds.filter(kind => ['bgm', 'sfx', 'voice'].includes(kind)),
       capabilityRequirementKeys: audioCapabilities, concurrencyGroup: 'media-provider',
-      subjectLockKeys: audioArtifactKeys, priority: 65,
+      subjectLockKeys: textAdventure ? [taskKey] : audioArtifactKeys, priority: 65,
       budgetReservation: reservation({
-        mediaCalls: audioCalls, maximumCostUsd: perCost,
+        mediaCalls: textAdventure ? 1 : audioCalls, maximumCostUsd: perCost,
         durationMs: perDuration, storageBytes: mediaStorage,
       }),
       maxAttempts: 2, timeoutMs: 600_000,

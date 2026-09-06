@@ -5,6 +5,7 @@ import { executeProductProductionCommand } from '../../src/lib/product-productio
 import { draftProductProductionBriefV3, suggestProductStartingPoints } from '../../src/lib/product-production/consultation'
 import { parseProductProductionBriefV3 } from '../../src/lib/product-production/contracts'
 import { hashProductProductionValueV2 } from '../../src/lib/product-production/hash'
+import { createProductProductionPlanV3 } from '../../src/lib/product-production/plan'
 import { PRODUCT_BROWSER_PERFORMANCE_POLICY_V1 } from '../../src/lib/product-production/browser-performance'
 import {
   resolveProductMediaProviderAdapterV1,
@@ -57,7 +58,7 @@ import {
   configureTtrpgSessionParticipantV2,
   readTtrpgSessionParticipantsV2,
 } from '../../src/lib/ttrpg/participants'
-import type { ProductionProductKindV1 } from '../../src/lib/types'
+import type { ProductBuildArtifactRecordV1, ProductionProductKindV1 } from '../../src/lib/types'
 import { seedCurrentProductWorld } from '../helpers/current-product-world'
 
 async function fixture(qualityProfile: 'prototype' | 'commercial-candidate' = 'prototype') {
@@ -921,6 +922,54 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
     ])
     expect(quests.discardedNullEntries).toEqual([])
     expect(quests.discardedUnregisteredStateFields).toEqual([])
+  })
+
+  it('文字冒险单项图片在有界重试耗尽后生成显式纯文字降级工件', async () => {
+    const owned = await fixtureForProduct('text-adventure', { visualLevel: 'key-scenes' })
+    const briefHash = await hashProductProductionValueV2(owned.brief)
+    const plan = await createProductProductionPlanV3({ buildNumber: 1, briefHash, brief: owned.brief })
+    const task = plan.tasks.find(item => item.taskKey === 'media.visual.001')!
+    const mediaRequirements = {
+      ...modelOutputs(
+      owned.brief.source.worldContentHash,
+      'text-adventure',
+      firstCharacterAnchor(owned.brief),
+      owned.brief.intent.playerRole,
+      )['media.requirements'],
+      audio: [],
+    }
+    const requirementArtifact: ProductBuildArtifactRecordV1 = {
+      projectId: owned.scope.projectId, worldId: owned.scope.worldId, workId: owned.scope.workId,
+      buildId: 1, artifactKey: 'media.requirements', requirementKey: null, version: 1,
+      kind: 'asset-manifest', mediaKind: null, status: 'accepted', producerRunId: null,
+      producerReceiptHash: null, controlEpoch: 0, inputHash: 'a'.repeat(64),
+      contentHash: 'b'.repeat(64), payloadJson: JSON.stringify(mediaRequirements),
+      metadataJson: '{}', qualityJson: '{}', rightsJson: '{}', blobObjectId: null,
+      mimeType: null, byteSize: 1, parentArtifactHash: null, carriedFrom: null,
+      createdAt: 1, updatedAt: 1,
+    }
+    const executor = createConfiguredProductProductionExecutorV1({
+      production: (await db.productProductions.get(owned.productionId))!, brief: owned.brief,
+    })
+    const execution = {
+      scope: owned.scope, productionId: owned.productionId, buildId: 1, buildNumber: 1,
+      controlEpoch: 0, planHash: 'c'.repeat(64), task, attempt: 1,
+      idempotencyKey: 'd'.repeat(64), contextText: '', inputArtifacts: [requirementArtifact],
+      capabilityBindings: [{
+        requirementKey: 'media.visual', adapterId: 'missing.fixture', bindingHash: 'e'.repeat(64),
+      }],
+      authorResolution: null, signal: new AbortController().signal,
+    }
+    await expect(executor(execution)).rejects.toThrow('媒资 capability 未按冻结 binding 解析')
+    const fallback = await executor({ ...execution, attempt: task.maxAttempts })
+    expect(fallback.usage).toMatchObject({ mediaCalls: 1, costUsd: null, storageBytes: 0 })
+    expect(fallback.artifacts).toEqual([expect.objectContaining({
+      artifactKey: 'media.visual.001', kind: 'integration-report',
+      payload: expect.objectContaining({
+        schema: 'storyforge.omitted-media-artifact', fallback: 'text-only',
+      }),
+      quality: expect.objectContaining({ providerAttemptsExhausted: task.maxAttempts }),
+    })])
   })
 })
 

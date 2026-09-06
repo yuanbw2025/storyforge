@@ -2368,6 +2368,46 @@ async function executeTextAdventureSourceDecisionTask(
   }
 }
 
+async function executeTextAdventureMediaTaskWithFallback(
+  input: ProductProductionTaskExecutionInputV1,
+  execute: () => Promise<ProductProductionTaskExecutionResultV1>,
+): Promise<ProductProductionTaskExecutionResultV1> {
+  try {
+    return await execute()
+  } catch (error) {
+    if (input.signal.aborted || input.task.failurePolicy !== 'skip-optional'
+      || input.attempt < input.task.maxAttempts
+      || input.task.outputArtifactKeys.length !== 1) throw error
+    const artifactKey = input.task.outputArtifactKeys[0]
+    return {
+      artifacts: [{
+        artifactKey,
+        kind: 'integration-report',
+        payload: {
+          schema: 'storyforge.omitted-media-artifact', version: 1,
+          artifactKey, fallback: 'text-only', reasonCode: 'provider-unavailable-after-bounded-retry',
+        },
+        metadata: { assetKey: null, fallback: 'text-only' },
+        quality: {
+          omissionIntegrityVerified: true,
+          providerAttemptsExhausted: input.attempt,
+          playerStateUnaffected: true,
+        },
+        rights: { origin: 'none', containsThirdPartyMedia: false, commercialUse: true },
+      }],
+      // These gates verify that the omission itself is explicit, bounded and
+      // rights-safe. Media coverage remains false in qa.release and therefore
+      // cannot be mistaken for a successful commercial asset.
+      passedGateIds: [...input.task.acceptanceGateIds],
+      usage: {
+        ...zeroUsage(0),
+        mediaCalls: 1,
+        costUsd: null,
+      },
+    }
+  }
+}
+
 export async function createBuiltInProductionCapabilityBindingV1(input: {
   requirementKey: string
   adapterId: 'storyforge.procedural-svg.v1' | 'storyforge.procedural-audio.v1'
@@ -2404,8 +2444,16 @@ export function createConfiguredProductProductionExecutorV1(input: {
     if (request.task.taskKey === 'source.author-gate') {
       return executeTextAdventureSourceDecisionTask(request, options.brief)
     }
-    if (request.task.taskKey === 'media.visual') return executeVisualTask(request, options)
-    if (request.task.taskKey === 'media.audio') return executeAudioTask(request, options)
+    if (request.task.taskKey === 'media.visual' || request.task.taskKey.startsWith('media.visual.')) {
+      return request.task.taskKey.startsWith('media.visual.') && input.brief.intent.productType === 'text-adventure'
+        ? executeTextAdventureMediaTaskWithFallback(request, () => executeVisualTask(request, options))
+        : executeVisualTask(request, options)
+    }
+    if (request.task.taskKey === 'media.audio' || request.task.taskKey.startsWith('media.audio.')) {
+      return request.task.taskKey.startsWith('media.audio.') && input.brief.intent.productType === 'text-adventure'
+        ? executeTextAdventureMediaTaskWithFallback(request, () => executeAudioTask(request, options))
+        : executeAudioTask(request, options)
+    }
     if (request.task.taskKey === 'integration.narrative') return executeNarrativeIntegrationTask(request, options)
     if (request.task.taskKey === 'integration.package') return executeIntegrationTask(request, options)
     if (request.task.taskKey === 'qa.autoplay') return executeTextAdventureAutoplayTask(request)

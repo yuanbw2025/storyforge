@@ -1,6 +1,6 @@
 # 05 · Durable 生产 DAG 与工件方案
 
-> 层级：L2 · 版本：1.6.0 · 生效：2026-09-07
+> 层级：L2 · 版本：1.7.0 · 生效：2026-09-07
 > 性质：正式生产计划、Run Contract 和候选采纳目标契约。
 
 ## 1. 目标拓扑
@@ -37,6 +37,8 @@ WorldRelease + Confirmed Brief + Frozen SourcePlan
 当前代码已经实现来源作者闸门、分场正文、独立对白审校、确定性叙事装配、独立连续性审校、确定性自动游玩和 Playtest Director：来源审计先经 `source.author-gate`，只有 `content.source-decision` 生效后创意总监才可继续；规划、故事、角色、空间、系统、叙事弧、主线、支线和区域事件分别形成已登记任务，随后由 `text-adventure-quest-scripter` 生成严格的 `content.quest-script`；三幕 Scene Writer 分别生成 `content.scene-script.act-1/2/3`，独立 Dialogue Editor 再按幕产生 `content.dialogue-pass.act-1/2/3`，全部通过严格 parser 后，由 `integration.narrative` 应用表达修订并装配 `content.narrative`。
 
 `qa.autoplay` 以零模型调用运行黄金路线、结局覆盖、替代路线、失败注入、状态往返、分支隔离、AI 离线和媒资离线八类检查，产出绑定 Build/package hash 的 `quality.autoplay`。`qa.release` 消费该证据；商业候选的自动游玩失败会阻断。之后 `text-adventure-playtest-director` 使用独立 Skill/Run Contract 和有界证据投影生成 `quality.playtest-plan`，必须覆盖 15 种路线/生命周期用例和至少两场真人试玩。该模型工件最多只可判为“可进入真人验证”，无权产生 `release-ready`。
+
+文字冒险的图片和预留音频不再藏在一个不可观察的大任务中：`media.visual.001...N` / `media.audio.001...N` 每项拥有自己的 task、subject lock、attempt、预算、checkpoint、Artifact 和 receipt。工作台据此显示“视觉素材 2/8 已签收”等事实进度；单项失败只重试该项。允许纯文字降级时，最终一次失败会生成明确的 omitted-media Artifact，`qa.release` 仍按实际 RuntimePackage 计算媒资覆盖，绝不能把省略回执算作商业素材通过。
 
 真实浏览器刷新、IndexedDB 存读档/分支、损坏恢复、导入导出删除、真人计时和情绪反馈仍必须由后续 E2E 与人工回执完成；`quality.playtest-plan` 不能替代这些证据。
 

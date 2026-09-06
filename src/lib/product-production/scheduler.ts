@@ -599,8 +599,9 @@ function evolutionTaskLane(taskKey: string): 'content' | 'product' | 'visual' | 
     || taskKey === 'content.adventure-ambient-events'
     || taskKey === 'content.adventure-quality-review') return 'content'
   if (taskKey === 'content.product-module') return 'product'
-  if (taskKey === 'media.requirements' || taskKey === 'media.visual') return 'visual'
-  if (taskKey === 'media.audio') return 'audio'
+  if (taskKey === 'media.requirements' || taskKey === 'media.visual'
+    || taskKey.startsWith('media.visual.')) return 'visual'
+  if (taskKey === 'media.audio' || taskKey.startsWith('media.audio.')) return 'audio'
   return null
 }
 
