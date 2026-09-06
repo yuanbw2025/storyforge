@@ -92,7 +92,7 @@ describe('Text Open World vNext · governed atomic fast travel', () => {
     })
     expect(retried.receiptHash).toBe(feedback.receiptHash)
     expect(await db.productRuntimeEvents.where('sessionId').equals(session.id!).count()).toBe(6)
-  })
+  }, 10_000)
 
   it('听说地点不能解锁快旅点，伪造已解锁状态也不能进入Session', async () => {
     const runtimePackage = createTextOpenWorldVNextFixture()

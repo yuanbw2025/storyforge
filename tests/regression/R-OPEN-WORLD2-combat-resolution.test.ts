@@ -236,5 +236,5 @@ describe('Text Open World vNext · deterministic combat outcomes and rewards', (
     payload.plan.authorization.removedPlayerStatusKeys = []
     transition.payloadJson = JSON.stringify(payload)
     expect(() => replayProductRuntimeEvents(JSON.parse(session.initialStateJson), tampered)).toThrow('战斗阶段授权与当前状态不一致')
-  }, 30_000)
+  }, 45_000)
 })

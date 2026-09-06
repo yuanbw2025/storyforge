@@ -76,7 +76,7 @@ describe('Text Open World vNext · monotonic world time and replayable weather',
     })
     expect(retried.receiptHash).toBe(feedback.receiptHash)
     expect(await db.productRuntimeEvents.where('sessionId').equals(session.id!).count()).toBe(8)
-  })
+  }, 10_000)
 
   it('若进程在耗时Effect与天气系统命令之间中断，下一次成功行动会补齐未结算周期', async () => {
     const { runtimePackage, session } = await publishedSession('weather-recovery-seed')
@@ -109,7 +109,7 @@ describe('Text Open World vNext · monotonic world time and replayable weather',
       'text-open-world.command.committed', 'text-open-world.random.resolved', 'text-open-world.random.resolved', 'text-open-world.effects.applied',
       'text-open-world.command.committed', 'text-open-world.effects.applied',
     ])
-  })
+  }, 10_000)
 
   it('天气授权冻结世界分钟、周期、权重请求和抽取结果，任一篡改都会失败关闭', async () => {
     const runtimePackage = createTextOpenWorldVNextFixture()

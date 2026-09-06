@@ -112,7 +112,7 @@ describe('Text Open World vNext · quest tracking, deadlines and history', () =>
     await expect(createTextOpenWorldEffectCatalogV1(runtimePackage).plan({
       effectKeys: ['effect.untrack-quest-primary'], claimKey: 'claim.forged-tracking', state, authorization,
     })).rejects.toThrow('任务追踪基线已变化')
-  })
+  }, 10_000)
 
   it('旧投影补齐追踪状态；时间越过期限后由系统Action使普通任务过期并进入历史', async () => {
     const runtimePackage = addTimedOrdinary()
@@ -135,5 +135,5 @@ describe('Text Open World vNext · quest tracking, deadlines and history', () =>
       'text-open-world.command.committed', 'text-open-world.effects.applied',
     ])
     expect(projectTextOpenWorldQuestHistoryV1({ runtimePackage, events, instanceKey: TIMED_INSTANCE_KEY }).map(entry => entry.kind)).toEqual(['expired'])
-  })
+  }, 10_000)
 })

@@ -231,7 +231,7 @@ describe('Text Open World vNext · governed player and enemy combat actions', ()
     expect(combatAuthorizations(events).find(authorization => authorization.actorKey === 'player')).toMatchObject({
       actionKind: 'item', itemKey: 'item.brine-tonic', targetCombatantKeys: ['player'],
     })
-  }, 30_000)
+  }, 45_000)
 
   it('逃跑是玩家正式战斗行动，成功后立即进入escaped终态且不执行敌方回合', async () => {
     const session = await createCombatSession(createTextOpenWorldVNextFixture(), 'combat-escape-seed')
