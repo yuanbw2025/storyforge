@@ -585,6 +585,8 @@ export interface AssembleContextInput {
   productProductionTaskKey?: string
   productBuildId?: number
   productArtifactKeys?: string[]
+  /** Text-open-world P1: exact SourcePin units authorized for this model batch. */
+  textOpenWorldSourceUnitKeys?: string[]
   /** Character interaction: exactly one viewpoint for the registered reader. */
   interactionParticipantKey?: string
   /** Character interaction: frozen product source + confirmed product Brief. */

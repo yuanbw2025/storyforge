@@ -36,7 +36,14 @@ describe('R-HARNESS13 · Agent Skill 单一事实源', () => {
       'prose.generate',
       'prose.continue',
     ]))
-    expect(new Set(AGENT_SKILLS.map(skill => skill.owner)).size).toBe(5)
+    expect(new Set(AGENT_SKILLS.map(skill => skill.owner))).toEqual(new Set([
+      'world-foundation-agent',
+      'character-agent',
+      'inspiration-agent',
+      'outline-agent',
+      'prose-agent',
+      'text-open-world-production',
+    ]))
   })
 
   it('允许同一 Agent 增加非默认 Skill，但拒绝第二个默认 Skill', () => {

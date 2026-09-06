@@ -80,7 +80,7 @@
 
 ## 二、上下文源清单（CONTEXT_SOURCES · AI 读什么）
 
-共 86 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
+共 87 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
 
 | key | 标签 | 作用域 | 层级 | 预算(token) |
 |---|---|---|---|---|
@@ -93,6 +93,7 @@
 | `ttrpgPlayerRuntime` | 正式 TTRPG 单角色玩家运行视角 | runtime | L0 | 10000 |
 | `product-production.brief` | 已授权上层产品生产 Brief | project | L0 | 8000 |
 | `product-production.artifact-inputs` | 上层产品生产任务依赖 | project | L1 | 10000 |
+| `text-open-world.source-pin` | 文字开放世界冻结来源与本批读取单元 | project | L0 | 100000 |
 | `product-production.quality-feedback` | 上层产品生产质量反馈 | project | L1 | 6000 |
 | `product-production.repair-feedback` | 当前制作任务的失败草稿与校验意见 | project | L1 | 12000 |
 | `product-production.evolution-base` | 游戏持续演化基线 | project | L0 | 12000 |
@@ -397,4 +398,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `24a2e46a`
+生成时间基准:commit `eae539a3`

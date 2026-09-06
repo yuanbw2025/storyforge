@@ -156,6 +156,9 @@ async function readProductProductionRepairFeedback(input: AssembleContextInput):
 async function readProductProductionEvolutionBase(input: AssembleContextInput): Promise<string> {
   return (await import('../product-production/context')).readProductProductionEvolutionBase(input)
 }
+async function readTextOpenWorldSourcePinContextV1(input: AssembleContextInput): Promise<string> {
+  return (await import('../open-world/source-curation')).readTextOpenWorldSourcePinContextV1(input)
+}
 async function readTtrpgGmRuntimeContextV1(input: AssembleContextInput): Promise<string> {
   return (await import('../ttrpg/gm-context')).readTtrpgGmRuntimeContextV1(input)
 }
@@ -1544,6 +1547,17 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     budgetTokens: 10_000,
     enabled: input => Number.isInteger(input.productBuildId) && !!input.productArtifactKeys?.length,
     read: readProductProductionArtifactInputs,
+  },
+  {
+    key: 'text-open-world.source-pin',
+    label: '文字开放世界冻结来源与本批读取单元',
+    scope: 'project',
+    layer: 'L0',
+    ownerFrom: 'work',
+    budgetTokens: 100_000,
+    protectedFromTrim: true,
+    enabled: input => Number.isInteger(input.productBuildId),
+    read: readTextOpenWorldSourcePinContextV1,
   },
   {
     key: 'product-production.quality-feedback',

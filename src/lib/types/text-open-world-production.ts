@@ -210,6 +210,148 @@ export interface TextOpenWorldSourcePinBundleV1 {
   }>
 }
 
+export type TextOpenWorldSourceCurationDepthV1 = 'full' | 'original'
+
+export interface TextOpenWorldSourceManifestUnitV1 {
+  unitKey: string
+  artifactKey: string
+  kind: TextOpenWorldSourcePinUnitKindV1
+  label: string
+  order: number
+  sourceResourceKey: string | null
+  sourceContentHash: string
+  frozenDepth: 'index' | 'full'
+  curationStatus: 'read' | 'unread'
+  curationDepth: TextOpenWorldSourceCurationDepthV1 | null
+  deliveredContentHash: string | null
+  deliveryEvidenceHash: string | null
+  modelBatchKey: string | null
+}
+
+/**
+ * Deterministic read ledger for P1. `read` means the complete unit content was
+ * delivered to one governed model batch; being present in SourcePin alone does
+ * not count as read.
+ */
+export interface TextOpenWorldSourceManifestV1 {
+  schema: 'storyforge.text-open-world-source-manifest'
+  version: 1
+  productType: 'text-open-world'
+  productInstanceKey: string
+  sourceKind: TextOpenWorldSourceKindV1
+  sourcePinHash: string
+  sourceBoundaryHash: string
+  units: TextOpenWorldSourceManifestUnitV1[]
+  readUnitCount: number
+  unreadUnitCount: number
+  readSetHash: string
+  createdAt: number
+  manifestHash: string
+}
+
+export type TextOpenWorldSourceClaimKindV1 =
+  | 'identity'
+  | 'theme'
+  | 'rule'
+  | 'conflict'
+  | 'plot'
+  | 'character'
+  | 'relationship'
+  | 'faction'
+  | 'region'
+  | 'location'
+  | 'event'
+  | 'timeline'
+  | 'resource'
+  | 'constraint'
+
+export type TextOpenWorldSourceCoverageTagV1 =
+  | 'story-core'
+  | 'protagonist'
+  | 'core-conflict'
+  | 'character'
+  | 'faction'
+  | 'place'
+  | 'timeline'
+
+export interface TextOpenWorldSourceEvidenceAnchorV1 {
+  unitKey: string
+  sourceContentHash: string
+  quote: string
+  start: number
+  end: number
+  evidenceHash: string
+}
+
+export interface TextOpenWorldSourceLedgerEntryV1 {
+  claimKey: string
+  claimKind: TextOpenWorldSourceClaimKindV1
+  canonicalName: string
+  statement: string
+  entityKeys: string[]
+  coverageTags: TextOpenWorldSourceCoverageTagV1[]
+  confidence: number
+  evidence: TextOpenWorldSourceEvidenceAnchorV1[]
+  modelBatchKey: string
+  entryHash: string
+}
+
+/** Every model-derived claim is evidence-bearing and points into the read set. */
+export interface TextOpenWorldSourceLedgerV1 {
+  schema: 'storyforge.text-open-world-source-ledger'
+  version: 1
+  productType: 'text-open-world'
+  productInstanceKey: string
+  sourcePinHash: string
+  sourceManifestHash: string
+  readSetHash: string
+  entries: TextOpenWorldSourceLedgerEntryV1[]
+  claimCount: number
+  createdAt: number
+  ledgerHash: string
+}
+
+export type TextOpenWorldSourceGapKindV1 =
+  | 'unread-source'
+  | 'missing-story-core'
+  | 'missing-protagonist'
+  | 'missing-core-conflict'
+  | 'missing-character'
+  | 'missing-faction'
+  | 'missing-region-or-location'
+  | 'missing-timeline'
+  | 'contradiction'
+  | 'ambiguous-source'
+  | 'low-evidence'
+
+export interface TextOpenWorldSourceGapItemV1 {
+  gapKey: string
+  kind: TextOpenWorldSourceGapKindV1
+  severity: 'blocking' | 'warning' | 'info'
+  summary: string
+  relatedUnitKeys: string[]
+  affectedStages: TextOpenWorldProductionStageV1[]
+  resolution: 'read-source' | 'ask-author' | 'design-with-explicit-assumption' | 'none'
+  status: 'open'
+  gapHash: string
+}
+
+export interface TextOpenWorldSourceGapReportV1 {
+  schema: 'storyforge.text-open-world-source-gap-report'
+  version: 1
+  productType: 'text-open-world'
+  productInstanceKey: string
+  sourcePinHash: string
+  sourceManifestHash: string
+  sourceLedgerHash: string
+  unreadUnitCount: number
+  gaps: TextOpenWorldSourceGapItemV1[]
+  blockingGapCount: number
+  warningGapCount: number
+  createdAt: number
+  reportHash: string
+}
+
 export const TEXT_OPEN_WORLD_PRODUCTION_STAGES_V1 = [
   'P0', 'P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8', 'P8F', 'P9', 'P10',
   'V1', 'V2', 'V3', 'QA',

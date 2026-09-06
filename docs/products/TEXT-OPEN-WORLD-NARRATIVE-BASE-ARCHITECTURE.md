@@ -1,6 +1,6 @@
 # AI 主导文字开放世界叙事基座 · StoryForge 施工规格
 
-> 规格版本：3.2.3
+> 规格版本：3.2.4
 > 生效日期：2026-09-06
 > 文档层级：L2 产品目标架构与施工规格
 > 当前状态：设计基线；不代表代码已经实现
@@ -384,7 +384,20 @@ events / checkpoints / terminalReceipt
 - P0复用`productBuildArtifacts`，先写独立SourcePinUnit，最后写SourcePin索引作为闭合标记。相同Pin可安全重试；同一Build试图更换来源会被视为stale并拒绝，必须重新确认Brief并建立新Build；
 - 运行阶段只读取ProductRelease副本，既不回读活动小说，也不直接运行WorldRelease。
 
-这一步没有增加物理表、AI可写字段或第二套Context Source。单元与Pin共享既有Artifact导入、导出、删除、版本和Work作用域生命周期；P1继续通过`product-production.artifact-inputs`消费它们。
+P0本身没有增加物理表、AI可写字段或第二套Context Source。单元与Pin共享既有Artifact导入、导出、删除、版本和Work作用域生命周期；P1在此基础上通过下述产品专属、已登记Context Source按批选择单元。
+
+#### 5.4.3 P1来源整理、实读清单与证据账本落地
+
+`src/lib/open-world/source-curation.ts` 已将“来源存在”“模型实际读过”“模型从来源中得出了什么”拆成三层不可混淆的证据：
+
+- P0 SourcePin继续证明作者授权、冻结版本和选择边界；P1 SourceManifest逐个单元证明它是否被完整送入某个模型批次。Pin中的存在或小说已经私有复制，都不自动等于模型已读；
+- 小说由登记的`text-open-world.source-pin` Context Source只暴露本批选择的完整单元；没有选择器时只返回Pin身份、数量和索引，绝不隐式把整本小说送入模型；
+- WorldRelease由P1根据便携WorldReference重新解析本地冻结版本，只允许读取SourcePin已选资源，并经Context Gateway强制`full`深度；交付内容必须同时匹配冻结目录Hash与SourcePin单元Hash；
+- SourceLedger中的每项事实都必须绑定已读单元、来源内容Hash、逐字引文、UTF-16起止偏移和模型批次。Schema解析器用实际交付正文复核`content.slice(start,end)`，未读引用、错误偏移和伪造引文全部失败关闭；
+- SourceGapReport不由模型自行宣称覆盖率。代码依据SourceManifest的实读集合及Ledger的证据标签，确定性生成未读、故事核心、主角、核心冲突、角色、势力、地点和时间线缺口；模型只能补充矛盾、歧义和低证据缺口；
+- Manifest、Ledger与GapReport依次绑定上游Hash、相同生成时间和受控rights证据，仍只产生`productBuildArtifacts`候选，不写世界引擎、正式ProductRelease或运行Session。
+
+P1已登记专属Skill与Executor，但完整P0～P10线上入口仍保持关闭；直到G3-18完成共享durable scheduler、checkpoint、receipt、恢复与端到端Build证据后，才允许替代旧生产入口。
 
 ### 5.5 正确的验证顺序
 
@@ -1204,6 +1217,7 @@ StoryForge当前没有独立staging。发布前仍需在隔离数据中完成灰
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| 3.2.4 | 2026-09-06 | 落地P1来源整理证据链：登记精确批次Context Source及专属Skill/Executor；小说只交付本批私有冻结单元，WorldRelease只经Context Gateway按SourcePin资源坐标完整读取并复核双重Hash；SourceManifest区分已读与未读，SourceLedger强制逐项事实绑定已读单元、逐字引文、UTF-16偏移和批次，SourceGapReport由代码从实读集和覆盖标签生成未读及关键内容缺口；Pin→Manifest→Ledger→GapReport全链可验，伪造、漂移和未读引用失败关闭，仍不激活完整生产入口 |
 | 3.2.3 | 2026-09-06 | 落地P0双来源SourcePin：WorldRelease冻结便携WorldReference、选择资源Hash与真实index读取证据；小说从受控Work/大纲/规范章序复制故事核心、大纲和正文，以20万字符有界SourcePinUnit自动分片；40种Artifact将Pin索引与单元分离且同属P0唯一owner；版本、选择边界、Brief/开始授权、nonce Hash、rights、读取证据与Pin全链可验，原始nonce和可变小说行ID不落库；相同Pin幂等、同Build换源及篡改失败关闭，不新增表或Context旁路 |
 | 3.2.2 | 2026-09-06 | 落地P0～P10专属生产合同：冻结39种Artifact Kind、26任务DAG、22个模型型durable Run及按Brief分配的22次最低/150次推荐调用预算、唯一owner、六类P8目录并行/P8F最终绑定、确定性预检→平衡与语义双评审→V3唯一装配顺序，以及每项Run的重试、非重试错误、stale传播、候选采纳和完成回执；在全部Skill/Executor齐备前保持合同可验证但不激活线上入口 |
 | 3.2.1 | 2026-09-06 | 将五项剩余校准收口为集中配置和稳定决策ID，冻结首版内容规模、关系阈值、保护任务UI、随机任务变体和AI预算硬保护 |

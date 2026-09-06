@@ -1,6 +1,6 @@
 # AI 主导文字开放世界游戏 · 完整开发清单
 
-> 版本：1.1.43
+> 版本：1.1.44
 > 建立日期：2026-09-06
 > 对应总任务：`E-OPENWORLD-01`
 > 当前状态：`IN_PROGRESS`；用户已于2026-09-06明确下达完整产品开发指令
@@ -36,15 +36,15 @@
 | 指标 | 当前值 |
 |---|---|
 | 首版工作包 | 121 |
-| 已完成 | 53（G0、G1、G2及G3-01～G3-02完成） |
-| 产品总进度 | 53 / 121（43.8%） |
-| G1～G7业务功能进度 | 43 / 111（38.7%） |
+| 已完成 | 54（G0、G1、G2及G3-01～G3-03完成） |
+| 产品总进度 | 54 / 121（44.6%） |
+| G1～G7业务功能进度 | 44 / 111（39.6%） |
 | 当前阶段 | G3 AI内容生产编译器 |
 | G0阶段进度 | 10 / 10（100%） |
 | G1阶段进度 | 13 / 13（100%） |
 | G2阶段进度 | 28 / 28（100%） |
-| G3阶段进度 | 2 / 18（11.1%） |
-| 当前工作包 | `TOW-G3-03` |
+| G3阶段进度 | 3 / 18（16.7%） |
+| 当前工作包 | `TOW-G3-04` |
 | 当前阻塞项 | 无 |
 
 每次状态变化必须同时更新本节汇总、对应任务行、验证证据和变更记录。
@@ -185,8 +185,8 @@ G7 盐脊验收、发布更新与旧入口收口
 |---|---|---|---|---|
 | TOW-G3-01 | DONE | 产品专属Artifact Kind、Run Contract和生产DAG | G1-13、G0-06 | 当前40种产品专属Build Artifact（G3-02将SourcePin索引与大体量冻结单元分开）全部登记到统一Kind边界并拥有唯一任务owner；26个P0～P10/V1～V3/QA合同明确输入、输出、依赖、Context、写目标、22个模型型durable Run及按Brief有界分配的调用预算、重试/不可重试错误、超时、stale传递、验收门和终态回执；Ruleset/表现、六类玩法目录及平衡/语义评审均有独立Skill边界，推荐完整Build预留150次模型调用且最低骨架为22次；P8玩法目录并行、P8F后绑定任务，确定性预检先于双评审，V3是唯一G2包装配点；可选视觉/音频Lane只在P10媒资需求之后加入；专属Plan可通过共享`ProductProductionPlanV3`严格解析，但在G3-02～G3-17的Skill/Executor齐备前保持未激活，现有线上生产入口未被半成品替换；新增5项回归并对Artifact Store补Kind运行时登记校验 |
 | TOW-G3-02 | DONE | WorldRelease/小说SourcePin锁定 | G0-05、G3-01 | P0专属双来源合同统一冻结`sourceVersionHash/sourceBoundaryHash/authorizationHash/readEvidenceHash/pinHash`；WorldRelease入口只保存便携`WorldReference`、作者选定的中立资源坐标和真实index读取证据，不把物理Release行或完整manifest带入产品；小说入口从受控Work/大纲/规范章序读取，把选定故事核心、大纲和正文按20万字符上限完整复制为产品私有、逐单元Hash的Artifact，Pin内不保存可变来源行ID；授权保存Brief/开始revision、nonce Hash、明确rights basis及系统派生permission，原始nonce不落库；P0复用`productBuildArtifacts`，先写单元、最后写Pin闭合索引，相同Pin幂等、同Build换源失败关闭，源小说后续修改不影响冻结内容；新增3项双来源/分片/漂移/越界/篡改回归，无新增表、AI写字段或并行Context来源 |
-| TOW-G3-03 | READY | SourceManifest、Ledger和Gap Report | G3-02 | 未读、缺口、实体和证据可追溯；模型不能声称读取未读内容 |
-| TOW-G3-04 | QUEUED | 主Agent会谈、GameBrief和ExperienceContract | G3-03 | 主角、体验、规模、边界、媒资、成本和完成条件经用户确认 |
+| TOW-G3-03 | DONE | SourceManifest、Ledger和Gap Report | G3-02 | P1以登记的`text-open-world.source-pin`来源和专属Skill/Executor分批读取冻结内容；小说只向模型交付本批产品私有全文单元，WorldRelease只通过Context Gateway按冻结资源坐标完整读取，逐项复核内容Hash并保存交付证据；SourceManifest把每个单元严格区分为已读/未读，SourceLedger要求每项事实绑定已读单元、逐字引文、UTF-16偏移、来源Hash和批次，模型伪造引文、偏移、批次或引用未读单元均失败关闭；代码从实际读集和证据覆盖确定性生成SourceGapReport，未读、故事核心、主角、冲突、角色、势力、地点和时间线缺口显式进入后续阶段；三件产物形成Pin→Manifest→Ledger→GapReport Hash链并复用productBuildArtifacts候选生命周期，不增加业务表或世界引擎写入 |
+| TOW-G3-04 | READY | 主Agent会谈、GameBrief和ExperienceContract | G3-03 | 主角、体验、规模、边界、媒资、成本和完成条件经用户确认 |
 | TOW-G3-05 | QUEUED | GameplayRulesetSkeleton Skill | G3-04、G2接口 | 冻结三属性、20级、战斗、装备位、货币、Effect白名单和标准难度 |
 | TOW-G3-06 | QUEUED | 主角身份与PlayerBuild Skill | G3-04、G3-05 | 来源角色或自建角色形成合法初始属性、技能、物品和货币候选 |
 | TOW-G3-07 | QUEUED | StoryArc、核心冲突、承诺和多结局 | G3-04 | 主线核心目标稳定；至少两个合规结局；伏笔与回收可检查 |
@@ -355,6 +355,7 @@ G7 盐脊验收、发布更新与旧入口收口
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| 1.1.44 | 2026-09-06 | 完成G3-03来源整理证据链：新增登记Context Source与专属Skill/Executor，小说按产品私有冻结单元分批完整交付，WorldRelease通过Context Gateway按冻结资源坐标读取；SourceManifest逐单元记录实读/未读和交付Hash，SourceLedger强制每项模型事实绑定已读单元、逐字引文、UTF-16偏移和内容Hash，SourceGapReport由代码根据实读集与覆盖标签生成显式未读和关键内容缺口；三件Artifact与P0 SourcePin形成可复验Hash链，伪造引文、偏移、未读引用、来源漂移和非法缺口策略失败关闭；不写世界引擎、不增加业务表，仍保持专属DAG未整体激活；总进度54/121，业务功能44/111，下一项G3-04 |
 | 1.1.43 | 2026-09-06 | 完成G3-02双来源SourcePin：WorldRelease以便携WorldReference、资源坐标及真实index读取证据锁定，小说从受控Work/大纲/规范章序完整复制并自动切成不超过20万字符的产品私有单元；40种Artifact Kind新增SourcePinUnit，P0索引+单元由唯一owner生产；版本、来源边界、Brief/开始授权、nonce Hash、rights、实际读取与Pin形成五段Hash链，原始nonce和可变小说行ID不落Artifact；相同Pin幂等，同Build静默换源、跨项目、越界、未明确rights及篡改均失败关闭；复用productBuildArtifacts完整生命周期，不增加表或AI旁路；总进度53/121，业务功能43/111，下一项G3-03 |
 | 1.1.42 | 2026-09-06 | 完成G3-01产品生产合同：新增39种文字开放世界专属Build Artifact Kind及唯一owner定义；以26个任务冻结P0～P10、确定性预检、独立平衡/语义评审、G2包唯一装配与发布QA DAG，22个模型型durable Run分别覆盖来源、体验、Ruleset、表现、故事、地区、主角、任务、六类玩法目录和评审；完整Build按Brief有界分配调用，推荐上限150次、最低骨架22次，区域型Run可在单一预算内分批生产；P8目录并行且任务只在目录完成后最终化；每项Run显式声明上下文、候选写入、重试/非重试错误、超时、stale传播、验收门和终态回执；视觉/音频能力按Brief动态接在P10之后；专属Plan复用共享ProductProductionPlan/AgentRun/Artifact Store且在Skill和Executor齐备前不替换线上旧入口；总进度52/121，业务功能42/111，下一项G3-02 |
 | 1.1.41 | 2026-09-06 | 完成G2-28地区导演闭环并关闭G2阶段：Director v2与Action v14冻结地区演化、触发牌组、任务密度、Blank/权重、等级/条件、来源冷却、结构指纹与强度限制；Session持有地区压力/游标、抽牌和来源历史、动态任务实例及玩家知识历程；玩家Action之后由唯一系统Action把地区演化、固定/模板任务、随机事件/任务升级、传闻与成就通过正式随机证据和原子Effect事件提交，资源事件只可并入安全预制Effect；主线等待玩家，不参与地区自动演化；旧Director v1可读，重试、刷新、重放、防篡改、中断恢复和受控运行上下文已覆盖；49个开放世界回归文件213项测试通过；总进度51/121，业务功能41/111，下一项G3-01 |

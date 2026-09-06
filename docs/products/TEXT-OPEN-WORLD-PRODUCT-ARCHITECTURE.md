@@ -1,6 +1,6 @@
 # AI 主导文字开放世界游戏 · 整体产品与游戏系统施工规格
 
-> 规格版本：1.1.14
+> 规格版本：1.1.15
 > 生效日期：2026-09-06
 > 文档层级：L2 文字开放世界整体产品施工入口
 > 当前状态：目标架构已冻结并进入分阶段实现；实际完成度以完整开发清单为准
@@ -169,6 +169,8 @@ PROJECT_TABLES / owner / migration / export / delete
 来源冻结采用双入口但同一证据契约：世界观来源只读取冻结的 `WorldRelease`；小说允许在本产品内建立不可变 `SourcePin`。两者都必须保存版本、Hash、授权范围和实际读取证据，运行时不得读取仍会变化的原始来源。
 
 当前P0实现进一步明确了两类来源的差异：WorldRelease只把便携引用、作者选择和真实目录读取证据带入产品，全文读取留给后续受控Run；小说没有可复用的不可变Release，因此把选定故事核心、大纲和正文完整复制为产品私有、可分片的SourcePinUnit。两类来源共同绑定来源版本、选择边界、Brief/开始revision、nonce Hash、rights、读取permission和证据Hash；同一Build不得静默换源。SourcePin复用Build Artifact生命周期，不为来源另建平行数据库。
+
+当前P1实现继续区分“已冻结”和“模型已读”：小说只通过登记Context Source向单个模型批次交付精确选择的完整私有单元；WorldRelease只通过Context Gateway读取SourcePin已经授权的冻结资源并校验交付Hash。SourceManifest记录逐单元实读状态，SourceLedger要求每项模型结论绑定可复现的逐字证据和偏移，SourceGapReport由代码从实际读集与证据覆盖生成。三件产物都属于文字开放世界Build候选，不回写世界引擎，也不建立第二套产品数据库。
 
 ### 2.3 跨叙事与玩法的唯一生产 DAG
 
@@ -2680,6 +2682,7 @@ Session中的高频状态优先作为Event和可重建Projection存在，不建�
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| 1.1.15 | 2026-09-06 | 落地P1 SourceManifest/SourceLedger/SourceGapReport：小说由登记Context Source精确分批交付，WorldRelease由Context Gateway按冻结资源坐标完整读取；逐单元实读、内容Hash、批次、逐字引文和偏移形成可复验链，代码确定性披露未读与关键来源缺口；所有产物继续复用Build Artifact候选生命周期，不写世界引擎或运行状态 |
 | 1.1.14 | 2026-09-06 | 落地P0 WorldRelease/小说双来源SourcePin：世界来源冻结便携WorldReference和index实读证据，小说全文复制为20万字符有界的产品私有单元；版本、选择边界、Brief/开始授权、nonce Hash、rights、permission、读取证据和最终Pin形成可验证链；Pin索引最后落库作为闭合标记，相同Pin幂等、同Build换源失败关闭；复用productBuildArtifacts且不新增来源表、AI字段或Context旁路 |
 | 1.1.13 | 2026-09-06 | 接入文字开放世界专属P0～P10生产合同：39种Build Artifact、26任务DAG、22个模型型durable Run及确定性预检/平衡与语义双评审/唯一装配/发布QA全部复用主干ProductProductionPlan、AgentRun和Artifact Store；Ruleset、表现、六类玩法目录各有独立Skill边界，Run可按地区/故事线在冻结预算内多次调用；P8目录可并行、P8F后绑定真实玩法引用，可选媒资Lane从P10需求派生；Skill和Executor未齐备前不切换现有线上入口 |
 | 1.1.12 | 2026-09-06 | 落地Economy v2与Action v13确定性经济闭环：冻结单货币、商人归属/营业条件、交易类别、整数基点价格、普通无限库存和特殊有限库存；价格复用三档关系投影并阻断无风险套利；专用交易授权将货币、物品与Session有限库存原子提交，真实命令、Event与Replay复核完整交易状态并拒绝篡改；Economy v1只读兼容 |
