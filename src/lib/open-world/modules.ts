@@ -203,7 +203,8 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
     if (actorRows.find(actor => actor.key === item.actorKey)?.scheduleKey !== item.key) fail(`schedule/actor反向引用不一致:${String(item.key)}`)
   })
 
-  const actions = versioned(packageValue, 'actions')
+  const actions = versioned(packageValue, 'actions', [1, 2])
+  const modernActionModule = actions.version === 2
   exact(actions, ['version', 'conditions', 'effects', 'actions'], 'actions')
   const conditions = catalog(actions.conditions, 'actions.conditions', ['key', 'expression', 'failureMessage']); const effects = catalog(actions.effects, 'actions.effects', ['key', 'operation', 'payload']); const actionRows = catalog(actions.actions, 'actions.actions', ['key', 'category', 'label', 'description', 'actorScope', 'targetScope', 'locationKeys', 'requirementConditionKeys', 'costEffectKeys', 'successEffectKeys', 'failureEffectKeys', 'timeCostMinutes', 'confirmationPolicy', 'repeatPolicy', 'cooldownMinutes'])
   const conditionKeys = keysOf(conditions, 'actions.conditions'); const effectKeys = keysOf(effects, 'actions.effects'); const actionKeys = keysOf(actionRows, 'actions.actions')
@@ -392,6 +393,62 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
       && targetStatuses.some(status => ['failed', 'expired', 'withdrawn'].includes(status))) fail(`${label}不能破坏受保护故事线`)
     if (targetStatuses.includes('expired') && definition.timePolicy !== 'timed') fail(`${label}不能使非限时任务过期`)
   })
+  const trackingActions = actionRows.filter(action => action.category === 'track' || action.category === 'untrack')
+  trackingActions.forEach(action => {
+    const label = `quest tracking action ${String(action.key)}`
+    const successEffects = strings(action.successEffectKeys, `${label}.successEffectKeys`).map(effectKey => effects.find(effect => effect.key === effectKey)!)
+    const expectedOperation = action.category === 'track' ? 'track-quest' : 'untrack-quest'
+    if (action.actorScope !== 'player' || action.targetScope !== 'quest'
+      || strings(action.requirementConditionKeys, `${label}.requirements`).length
+      || strings(action.costEffectKeys, `${label}.costs`).length
+      || strings(action.failureEffectKeys, `${label}.failures`).length
+      || successEffects.length !== 1 || successEffects[0].operation !== expectedOperation
+      || action.timeCostMinutes !== 0 || action.confirmationPolicy !== 'never'
+      || action.repeatPolicy !== 'repeatable' || action.cooldownMinutes != null) fail(`${label}合同无效`)
+    const payload = row(successEffects[0].payload, `${label}.payload`)
+    exact(payload, ['slot'], `${label}.payload`)
+    enumValue(payload.slot, ['primary', 'pinned'], `${label}.slot`)
+  })
+  effects.filter(effect => effect.operation === 'track-quest' || effect.operation === 'untrack-quest').forEach(effect => {
+    const owners = trackingActions.filter(action => strings(action.successEffectKeys, `tracking action ${String(action.key)} effects`).includes(String(effect.key)))
+    if (owners.length !== 1) fail(`任务追踪Effect必须且只能属于一个追踪Action:${String(effect.key)}`)
+  })
+  actionRows.filter(action => action.category !== 'track' && action.category !== 'untrack').forEach(action => {
+    const referenced = [...strings(action.costEffectKeys, `action ${String(action.key)} costs`), ...strings(action.successEffectKeys, `action ${String(action.key)} success`), ...strings(action.failureEffectKeys, `action ${String(action.key)} failures`)]
+      .map(effectKey => effects.find(effect => effect.key === effectKey)!)
+    if (referenced.some(effect => effect.operation === 'track-quest' || effect.operation === 'untrack-quest')) fail(`任务追踪Effect只能由追踪Action引用:${String(action.key)}`)
+  })
+  if (modernActionModule) {
+    const trackingModes = trackingActions.map(action => {
+      const effect = effects.find(candidate => candidate.key === strings(action.successEffectKeys, `tracking action ${String(action.key)} effects`)[0])!
+      return `${String(action.category)}:${String(row(effect.payload, `tracking action ${String(action.key)} payload`).slot)}`
+    })
+    requireSameKeys(trackingModes, ['track:primary', 'track:pinned', 'untrack:primary', 'untrack:pinned'], '任务追踪Action能力')
+  }
+  if (modernActionModule && !legacyQuestModule) {
+    questRows.filter(quest => quest.timePolicy === 'timed').forEach(quest => {
+      const questKey = String(quest.key)
+      const expirationActions = actionRows.filter(action => {
+        if (action.category !== 'quest-action' || action.actorScope !== 'system') return false
+        const transitions = strings(action.successEffectKeys, `expiration action ${String(action.key)} effects`).map(effectKey => effects.find(effect => effect.key === effectKey)!)
+          .filter(effect => effect.operation === 'transition-quest')
+        if (transitions.length !== 1) return false
+        const payload = row(transitions[0].payload, `expiration action ${String(action.key)} payload`)
+        return payload.questKey === questKey && payload.status === 'expired'
+      })
+      const stageCoverage = expirationActions.map(action => {
+        if (strings(action.requirementConditionKeys, `expiration action ${String(action.key)} requirements`).length
+          || strings(action.costEffectKeys, `expiration action ${String(action.key)} costs`).length
+          || strings(action.failureEffectKeys, `expiration action ${String(action.key)} failures`).length
+          || strings(action.successEffectKeys, `expiration action ${String(action.key)} effects`).length !== 1
+          || action.confirmationPolicy !== 'never' || action.repeatPolicy !== 'repeatable'
+          || action.cooldownMinutes != null || action.timeCostMinutes !== 0) fail(`限时任务过期Action合同无效:${String(action.key)}`)
+        const effect = effects.find(candidate => candidate.key === strings(action.successEffectKeys, `expiration action ${String(action.key)} effects`)[0])!
+        return String(row(effect.payload, `expiration action ${String(action.key)} payload`).stageKey ?? '__unstarted__')
+      })
+      requireSameKeys(stageCoverage, ['__unstarted__', ...strings(quest.stageKeys, `quest ${questKey} stageKeys`)], `限时任务${questKey}过期Stage覆盖`)
+    })
+  }
 
   const progression = versioned(packageValue, 'progression')
   exact(progression, ['version', 'rules', 'levels', 'skills', 'statuses'], 'progression')

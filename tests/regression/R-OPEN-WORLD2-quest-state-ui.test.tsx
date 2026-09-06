@@ -57,6 +57,14 @@ describe('Text Open World vNext · quest lifecycle player UI', () => {
     expect(host.textContent).toContain('进行中')
     expect(host.textContent).toContain('当前阶段：搜集物资')
     expect(host.textContent).toContain('寻找盐晶')
+    expect(host.querySelector('[data-testid="text-open-world-quest-hud"]')?.textContent).toContain('主追踪')
+    expect(host.querySelector(`[data-quest-instance="${ordinary.instanceKey}"]`)?.textContent).toContain('剩余1天')
+
+    const pin = Array.from(host.querySelectorAll('button')).find(button => button.textContent === '钉选到HUD')
+    expect(pin).toBeTruthy()
+    await act(async () => { pin!.click(); await new Promise(resolve => setTimeout(resolve, 0)) })
+    expect(executeVNextAction).toHaveBeenCalledWith('action.track-quest-pinned', ordinary.instanceKey)
+    executeVNextAction.mockClear()
 
     const abandon = Array.from(host.querySelectorAll('button')).find(button => button.textContent?.includes('放弃物资任务'))
     expect(abandon).toBeTruthy()

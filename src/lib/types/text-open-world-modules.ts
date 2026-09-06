@@ -197,7 +197,7 @@ export interface TextOpenWorldQuestModuleV1 {
 }
 
 export interface TextOpenWorldActionModuleV1 {
-  version: 1
+  version: 1 | 2
   conditions: Array<{
     key: string
     expression: TextOpenWorldConditionExpressionV1

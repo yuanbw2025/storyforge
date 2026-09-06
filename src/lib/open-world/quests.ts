@@ -61,7 +61,9 @@ export function createInitialTextOpenWorldQuestInstancesV1(
         createdAtWorldMinute: worldMinute,
         offeredAtWorldMinute: definition.initialStatus === 'revealed' ? worldMinute : null,
         acceptedAtWorldMinute: null,
-        deadlineWorldMinute: null,
+        deadlineWorldMinute: definition.initialStatus === 'revealed' && definition.timePolicy === 'timed'
+          ? worldMinute + definition.expirationMinutes!
+          : null,
         terminalAtWorldMinute: null,
         rewardClaimKey: null,
         resultTag: null,

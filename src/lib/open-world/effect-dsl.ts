@@ -9,11 +9,13 @@ import type {
   TextOpenWorldParsedModulesV1,
   TextOpenWorldObjectiveAuthorizationV1,
   TextOpenWorldQuestTransitionAuthorizationV1,
+  TextOpenWorldQuestTrackingAuthorizationV1,
   TextOpenWorldQuestStatusV1,
   TextOpenWorldRuntimePackageV1,
 } from '../types'
 import { parseTextOpenWorldModulesV1 } from './modules'
 import { createTextOpenWorldObjectiveCatalogV1, type TextOpenWorldObjectiveCatalogV1 } from './objective-state'
+import { createTextOpenWorldQuestTrackingCatalogV1, type TextOpenWorldQuestTrackingCatalogV1 } from './quest-tracking'
 import {
   createTextOpenWorldItemInstanceIdV1,
   deriveTextOpenWorldEquippedItemKeysV1,
@@ -83,6 +85,7 @@ function parseDefinition(value: unknown, refs: Refs, label: string): TextOpenWor
   }
   if (operation === 'complete-objective') { exact(payload, ['objectiveKey'], `${label}.payload`); return { key: effectKey, operation, payload: { objectiveKey: ref(payload.objectiveKey, refs.objectives, `${label}.objectiveKey`) } } }
   if (operation === 'claim-quest-reward') { exact(payload, ['questKey', 'rewardKey'], `${label}.payload`); return { key: effectKey, operation, payload: { questKey: ref(payload.questKey, refs.quests, `${label}.questKey`), rewardKey: ref(payload.rewardKey, refs.rewards, `${label}.rewardKey`) } } }
+  if (operation === 'track-quest' || operation === 'untrack-quest') { exact(payload, ['slot'], `${label}.payload`); return { key: effectKey, operation, payload: { slot: enumValue(payload.slot, ['primary', 'pinned'], `${label}.slot`) } } }
   if (operation === 'change-morality') { exact(payload, ['amount'], `${label}.payload`); return { key: effectKey, operation, payload: { amount: numberValue(payload.amount, `${label}.amount`) } } }
   if (operation === 'change-faction-affinity') { exact(payload, ['factionKey', 'amount'], `${label}.payload`); return { key: effectKey, operation, payload: { factionKey: ref(payload.factionKey, refs.factions, `${label}.factionKey`), amount: numberValue(payload.amount, `${label}.amount`) } } }
   if (operation === 'set-story-modifier') { exact(payload, ['actorKey', 'value'], `${label}.payload`); return { key: effectKey, operation, payload: { actorKey: ref(payload.actorKey, refs.actors, `${label}.actorKey`), value: numberValue(payload.value, `${label}.value`) } } }
@@ -114,7 +117,7 @@ function effectDomains(operation: TextOpenWorldEffectDefinitionV1['operation']):
   if (operation === 'resolve-combat') return ['combat', 'player']
   if (['change-player-resource', 'grant-experience', 'apply-status', 'remove-status', 'learn-skill', 'rest'].includes(operation)) return ['player']
   if (['grant-item', 'remove-item', 'equip-item', 'unequip-item', 'learn-recipe', 'change-currency'].includes(operation)) return ['inventory']
-  if (['transition-quest', 'complete-objective', 'claim-quest-reward'].includes(operation)) return ['quests']
+  if (['transition-quest', 'complete-objective', 'claim-quest-reward', 'track-quest', 'untrack-quest'].includes(operation)) return ['quests']
   if (['reveal-location', 'unlock-fast-travel', 'enter-location', 'start-travel'].includes(operation)) return ['map']
   if (operation === 'advance-time') return ['time']
   if (['change-morality', 'change-faction-affinity', 'set-story-modifier'].includes(operation)) return ['relationships']
@@ -186,7 +189,7 @@ export function validateTextOpenWorldEffectStateV1(state: TextOpenWorldEffectSta
   }
   assertUniqueKnown(state.inventory.knownRecipeKeys, refs.recipes, 'inventory.knownRecipeKeys')
   int(state.inventory.currency, 'inventory.currency', 0, 1_000_000_000)
-  const questState = row(state.quests, 'quests'); exact(questState, ['instancesByKey', 'resultTags'], 'quests')
+  const questState = row(state.quests, 'quests'); exact(questState, ['instancesByKey', 'resultTags', 'tracking'], 'quests')
   const releaseInstanceCountByDefinition = new Map<string, number>()
   const sourceRefs = new Set<string>()
   const questInstances = row(state.quests.instancesByKey, 'quests.instancesByKey')
@@ -261,6 +264,15 @@ export function validateTextOpenWorldEffectStateV1(state: TextOpenWorldEffectSta
     if (releaseInstanceCountByDefinition.get(definition.key) !== 1) fail(`正式任务必须恰好有一个Release实例:${definition.key}`)
   }
   if (new Set(state.quests.resultTags).size !== state.quests.resultTags.length || state.quests.resultTags.some(tag => !KEY.test(tag))) fail('quests.resultTags无效')
+  const tracking = row(state.quests.tracking, 'quests.tracking'); exact(tracking, ['primaryInstanceKey', 'pinnedInstanceKeys'], 'quests.tracking')
+  const primaryInstanceKey = tracking.primaryInstanceKey == null ? null : key(tracking.primaryInstanceKey, 'quests.tracking.primaryInstanceKey')
+  const pinnedInstanceKeys = Array.isArray(tracking.pinnedInstanceKeys)
+    ? tracking.pinnedInstanceKeys.map((value, index) => key(value, `quests.tracking.pinnedInstanceKeys[${index}]`))
+    : fail('quests.tracking.pinnedInstanceKeys必须是数组')
+  if (pinnedInstanceKeys.length > 3 || new Set(pinnedInstanceKeys).size !== pinnedInstanceKeys.length) fail('HUD任务钉选必须唯一且最多3个')
+  if (primaryInstanceKey && !state.quests.instancesByKey[primaryInstanceKey]) fail('主追踪任务实例不存在')
+  if (primaryInstanceKey && pinnedInstanceKeys.includes(primaryInstanceKey)) fail('主追踪任务不能同时钉选')
+  pinnedInstanceKeys.forEach(instanceKey => { if (!state.quests.instancesByKey[instanceKey]) fail(`钉选任务实例不存在:${instanceKey}`) })
   assertUniqueKnown(state.map.revealedLocationKeys, refs.locations, 'map.revealedLocationKeys')
   for (const [regionKey, knowledge] of Object.entries(state.map.regionKnowledgeByKey)) { ref(regionKey, refs.regions, 'region knowledge key'); enumValue(knowledge, ['unknown', 'heard', 'visited', 'familiar'], `region knowledge:${regionKey}`) }
   assertUniqueKnown(state.map.unlockedFastTravelPointKeys, refs.travelPoints, 'map.unlockedFastTravelPointKeys')
@@ -334,6 +346,7 @@ function applyDefinitions(
   authorization: TextOpenWorldEffectPlanV1['authorization'],
   questTransitions: TextOpenWorldQuestTransitionCatalogV1,
   objectives: TextOpenWorldObjectiveCatalogV1,
+  tracking: TextOpenWorldQuestTrackingCatalogV1,
 ) {
   validateTextOpenWorldEffectStateV1(stateValue, modules)
   if (stateValue.appliedClaimKeys.includes(claimKey)) fail(`claim已应用:${claimKey}`)
@@ -355,6 +368,12 @@ function applyDefinitions(
     if (objectiveEffects.length !== 1 || authorization?.kind !== 'quest-objective') fail('Objective状态Effect缺少唯一实例授权')
     if (objectiveEffects[0].payload.objectiveKey !== authorization.objectiveKey) fail('Objective状态Effect与授权不一致')
   } else if (authorization?.kind === 'quest-objective') fail('Objective授权没有对应状态Effect')
+  const trackingEffects = effects.filter((effect): effect is Extract<TextOpenWorldEffectDefinitionV1, { operation: 'track-quest' | 'untrack-quest' }> => effect.operation === 'track-quest' || effect.operation === 'untrack-quest')
+  if (trackingEffects.length) {
+    if (trackingEffects.length !== 1 || authorization?.kind !== 'quest-tracking') fail('任务追踪Effect缺少唯一实例授权')
+    const expectedOperation = trackingEffects[0].operation === 'track-quest' ? 'track' : 'untrack'
+    if (authorization.operation !== expectedOperation || authorization.slot !== trackingEffects[0].payload.slot) fail('任务追踪Effect与授权不一致')
+  } else if (authorization?.kind === 'quest-tracking') fail('任务追踪授权没有对应状态Effect')
   let questTransitionsApplied = false
   for (const effect of effects) {
     switch (effect.operation) {
@@ -523,6 +542,12 @@ function applyDefinitions(
         instance.rewardClaimKey = claimKey
         record(changes, effect, `任务实例奖励已领取:${instance.instanceKey}`, before, claimKey); break
       }
+      case 'track-quest':
+      case 'untrack-quest': {
+        const trackingAuthorization = authorization as TextOpenWorldQuestTrackingAuthorizationV1
+        const change = tracking.apply({ state, authorization: trackingAuthorization })
+        record(changes, effect, `${effect.operation === 'track-quest' ? '追踪' : '取消追踪'}任务实例:${trackingAuthorization.instanceKey}:${trackingAuthorization.slot}`, change.before, change.after); break
+      }
       case 'change-morality': {
         const { payload } = effect; const before = state.relationships.morality; const after = before + payload.amount
         numberValue(after, `${effect.key} morality`, modules.relationships.morality.minimum, modules.relationships.morality.maximum)
@@ -659,11 +684,12 @@ export function applyTextOpenWorldEffectPlanForReplayV1(
   const modules = parseTextOpenWorldModulesV1(value); const refs = references(modules)
   const questTransitions = createTextOpenWorldQuestTransitionCatalogV1(value)
   const objectives = createTextOpenWorldObjectiveCatalogV1(value)
+  const tracking = createTextOpenWorldQuestTrackingCatalogV1(value)
   const definitions = modules.actions.effects.map((item, index) => parseDefinition(item, refs, `effects[${index}]`))
   const byKey = new Map(definitions.map(item => [item.key, item]))
   const canonical = plan.effectKeys.map(effectKey => byKey.get(effectKey) ?? fail(`Effect不存在:${effectKey}`))
   if (canonicalProductProductionJsonV2(canonical) !== canonicalProductProductionJsonV2(plan.effects)) fail('EffectPlan定义与Release不一致')
-  const applied = applyDefinitions(state, canonical, plan.claimKey, modules, plan.authorization, questTransitions, objectives)
+  const applied = applyDefinitions(state, canonical, plan.claimKey, modules, plan.authorization, questTransitions, objectives, tracking)
   if (canonicalProductProductionJsonV2(applied.changes) !== canonicalProductProductionJsonV2(plan.previewChanges)) fail('EffectPlan重放变化与预演不一致')
   return applied
 }
@@ -679,10 +705,11 @@ export function createTextOpenWorldEffectCatalogV1(value: TextOpenWorldRuntimePa
   const modules = parseTextOpenWorldModulesV1(value); const refs = references(modules)
   const questTransitions = createTextOpenWorldQuestTransitionCatalogV1(value)
   const objectives = createTextOpenWorldObjectiveCatalogV1(value)
+  const tracking = createTextOpenWorldQuestTrackingCatalogV1(value)
   const definitions = modules.actions.effects.map((item, index) => parseDefinition(item, refs, `effects[${index}]`)); const byKey = new Map(definitions.map(item => [item.key, item])); const clone = <T>(item: T): T => structuredClone(item)
   const plan = async (input: { effectKeys: string[]; claimKey: string; state: TextOpenWorldEffectStateV1; authorization?: TextOpenWorldEffectPlanV1['authorization'] }): Promise<TextOpenWorldEffectPlanV1> => {
     const claimKey = key(input.claimKey, 'claimKey', CLAIM_KEY); if (!Array.isArray(input.effectKeys) || new Set(input.effectKeys).size !== input.effectKeys.length) fail('effectKeys必须是无重复数组')
-    const effects = input.effectKeys.map(effectKey => byKey.get(key(effectKey, 'effectKey')) ?? fail(`Effect不存在:${effectKey}`)); const baseStateHash = await hashProductProductionValueV2(input.state); const preview = applyDefinitions(input.state, effects, claimKey, modules, input.authorization ?? null, questTransitions, objectives); const resultingStateHash = await hashProductProductionValueV2(preview.state); const impactDomains = [...new Set(effects.flatMap(effect => effectDomains(effect.operation)))]
+    const effects = input.effectKeys.map(effectKey => byKey.get(key(effectKey, 'effectKey')) ?? fail(`Effect不存在:${effectKey}`)); const baseStateHash = await hashProductProductionValueV2(input.state); const preview = applyDefinitions(input.state, effects, claimKey, modules, input.authorization ?? null, questTransitions, objectives, tracking); const resultingStateHash = await hashProductProductionValueV2(preview.state); const impactDomains = [...new Set(effects.flatMap(effect => effectDomains(effect.operation)))]
     const body: Omit<TextOpenWorldEffectPlanV1, 'planHash'> = {
       schema: 'storyforge.text-open-world.effect-plan', version: 1, claimKey, baseStateHash, resultingStateHash,
       effectKeys: [...input.effectKeys], effects: clone(effects), authorization: clone(input.authorization ?? null),
@@ -699,7 +726,7 @@ export function createTextOpenWorldEffectCatalogV1(value: TextOpenWorldRuntimePa
       if (!isSha256Hash(planHash) || await hashProductProductionValueV2(planBody(body)) !== planHash) fail('EffectPlan planHash无效')
       const baseStateHash = await hashProductProductionValueV2(input.state); if (baseStateHash !== input.plan.baseStateHash) fail('EffectPlan基线状态已变化')
       const canonicalEffects = input.plan.effectKeys.map(effectKey => byKey.get(effectKey) ?? fail(`Effect不存在:${effectKey}`)); if (canonicalProductProductionJsonV2(canonicalEffects) !== canonicalProductProductionJsonV2(input.plan.effects)) fail('EffectPlan定义与Release不一致')
-      const applied = applyDefinitions(input.state, canonicalEffects, input.plan.claimKey, modules, input.plan.authorization, questTransitions, objectives); const resultingStateHash = await hashProductProductionValueV2(applied.state)
+      const applied = applyDefinitions(input.state, canonicalEffects, input.plan.claimKey, modules, input.plan.authorization, questTransitions, objectives, tracking); const resultingStateHash = await hashProductProductionValueV2(applied.state)
       if (resultingStateHash !== input.plan.resultingStateHash || canonicalProductProductionJsonV2(applied.changes) !== canonicalProductProductionJsonV2(input.plan.previewChanges)) fail('EffectPlan预演与应用结果不一致')
       return { state: applied.state, receipt: { schema: 'storyforge.text-open-world.effect-receipt', version: 1, claimKey: input.plan.claimKey, planHash: input.plan.planHash, baseStateHash, resultingStateHash, impactDomains: [...input.plan.impactDomains], changes: clone(applied.changes) } }
     },

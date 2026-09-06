@@ -149,7 +149,7 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
       ],
     },
     actions: {
-      version: 1,
+      version: 2,
       conditions: [
         { key: 'condition.always', expression: { op: 'all', conditions: [{ op: 'player-number', field: 'level', comparator: 'gte', value: 1 }] }, failureMessage: '角色尚未进入可行动状态。' },
         { key: 'condition.health-not-full', expression: { op: 'player-resource-below-maximum', resource: 'health' }, failureMessage: '生命已经满了。' },
@@ -180,8 +180,14 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
         { key: 'effect.complete-supplies-objective', operation: 'complete-objective', payload: { objectiveKey: 'objective.template.supplies' } },
         { key: 'effect.complete-main-quest', operation: 'transition-quest', payload: { questKey: 'quest.main.1', status: 'completed', stageKey: 'quest-stage.main.1' } },
         { key: 'effect.complete-supplies-quest', operation: 'transition-quest', payload: { questKey: 'quest.template.supplies', status: 'completed', stageKey: 'quest-stage.template.supplies' } },
+        { key: 'effect.expire-supplies-unstarted', operation: 'transition-quest', payload: { questKey: 'quest.template.supplies', status: 'expired', stageKey: null } },
+        { key: 'effect.expire-supplies-active', operation: 'transition-quest', payload: { questKey: 'quest.template.supplies', status: 'expired', stageKey: 'quest-stage.template.supplies' } },
         { key: 'effect.claim-main-reward', operation: 'claim-quest-reward', payload: { questKey: 'quest.main.1', rewardKey: 'reward.quest-main' } },
         { key: 'effect.claim-supplies-reward', operation: 'claim-quest-reward', payload: { questKey: 'quest.template.supplies', rewardKey: 'reward.quest-supplies' } },
+        { key: 'effect.track-quest-primary', operation: 'track-quest', payload: { slot: 'primary' } },
+        { key: 'effect.track-quest-pinned', operation: 'track-quest', payload: { slot: 'pinned' } },
+        { key: 'effect.untrack-quest-primary', operation: 'untrack-quest', payload: { slot: 'primary' } },
+        { key: 'effect.untrack-quest-pinned', operation: 'untrack-quest', payload: { slot: 'pinned' } },
       ],
       actions: [{
         key: 'action.investigate-channel', category: 'investigate', label: '检查盐渠',
@@ -225,6 +231,16 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
         successEffectKeys: ['effect.complete-supplies-quest'], failureEffectKeys: [], timeCostMinutes: 0,
         confirmationPolicy: 'never', repeatPolicy: 'repeatable', cooldownMinutes: null,
       }, {
+        key: 'action.expire-supplies-unstarted', category: 'quest-action', label: '过期未接物资任务', description: '到期后由系统关闭尚未开始的物资任务。',
+        actorScope: 'system', targetScope: 'quest', locationKeys: [], requirementConditionKeys: [], costEffectKeys: [],
+        successEffectKeys: ['effect.expire-supplies-unstarted'], failureEffectKeys: [], timeCostMinutes: 0,
+        confirmationPolicy: 'never', repeatPolicy: 'repeatable', cooldownMinutes: null,
+      }, {
+        key: 'action.expire-supplies-active', category: 'quest-action', label: '过期进行中物资任务', description: '到期后由系统关闭进行中的物资任务。',
+        actorScope: 'system', targetScope: 'quest', locationKeys: [], requirementConditionKeys: [], costEffectKeys: [],
+        successEffectKeys: ['effect.expire-supplies-active'], failureEffectKeys: [], timeCostMinutes: 0,
+        confirmationPolicy: 'never', repeatPolicy: 'repeatable', cooldownMinutes: null,
+      }, {
         key: 'action.claim-main-reward', category: 'claim-reward', label: '领取主线奖励', description: '领取断流盐渠任务奖励。',
         actorScope: 'player', targetScope: 'quest', locationKeys: [], requirementConditionKeys: [], costEffectKeys: [],
         successEffectKeys: [], failureEffectKeys: [], timeCostMinutes: 0,
@@ -233,6 +249,26 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
         key: 'action.claim-supplies-reward', category: 'claim-reward', label: '领取物资奖励', description: '领取本次物资委托奖励。',
         actorScope: 'player', targetScope: 'quest', locationKeys: [], requirementConditionKeys: [], costEffectKeys: [],
         successEffectKeys: [], failureEffectKeys: [], timeCostMinutes: 0,
+        confirmationPolicy: 'never', repeatPolicy: 'repeatable', cooldownMinutes: null,
+      }, {
+        key: 'action.track-quest-primary', category: 'track', label: '设为主追踪', description: '将任务设为HUD主追踪任务。',
+        actorScope: 'player', targetScope: 'quest', locationKeys: [], requirementConditionKeys: [], costEffectKeys: [],
+        successEffectKeys: ['effect.track-quest-primary'], failureEffectKeys: [], timeCostMinutes: 0,
+        confirmationPolicy: 'never', repeatPolicy: 'repeatable', cooldownMinutes: null,
+      }, {
+        key: 'action.track-quest-pinned', category: 'track', label: '钉选到HUD', description: '将任务加入HUD钉选列表。',
+        actorScope: 'player', targetScope: 'quest', locationKeys: [], requirementConditionKeys: [], costEffectKeys: [],
+        successEffectKeys: ['effect.track-quest-pinned'], failureEffectKeys: [], timeCostMinutes: 0,
+        confirmationPolicy: 'never', repeatPolicy: 'repeatable', cooldownMinutes: null,
+      }, {
+        key: 'action.untrack-quest-primary', category: 'untrack', label: '取消主追踪', description: '取消任务的HUD主追踪，不会放弃任务。',
+        actorScope: 'player', targetScope: 'quest', locationKeys: [], requirementConditionKeys: [], costEffectKeys: [],
+        successEffectKeys: ['effect.untrack-quest-primary'], failureEffectKeys: [], timeCostMinutes: 0,
+        confirmationPolicy: 'never', repeatPolicy: 'repeatable', cooldownMinutes: null,
+      }, {
+        key: 'action.untrack-quest-pinned', category: 'untrack', label: '取消HUD钉选', description: '从HUD钉选列表移除任务，不会放弃任务。',
+        actorScope: 'player', targetScope: 'quest', locationKeys: [], requirementConditionKeys: [], costEffectKeys: [],
+        successEffectKeys: ['effect.untrack-quest-pinned'], failureEffectKeys: [], timeCostMinutes: 0,
         confirmationPolicy: 'never', repeatPolicy: 'repeatable', cooldownMinutes: null,
       }, {
         key: 'action.rest', category: 'rest', label: '休息', description: '休息并恢复生命与技能资源。',

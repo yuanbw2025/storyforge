@@ -27,6 +27,7 @@ import { deriveTextOpenWorldPlayerStatsFromModulesV1 } from './player-stats'
 import { deriveTextOpenWorldProgressionStatusV1 } from './progression'
 import { createTextOpenWorldQuestTransitionCatalogV1 } from './quest-state-machine'
 import { createTextOpenWorldObjectiveCatalogV1 } from './objective-state'
+import { createTextOpenWorldQuestTrackingCatalogV1 } from './quest-tracking'
 import {
   createInitialTextOpenWorldQuestInstancesV1,
   deriveTextOpenWorldQuestConditionProjectionV1,
@@ -91,6 +92,7 @@ function initialEffectState(runtimePackage: ReturnType<typeof parseTextOpenWorld
     quests: {
       instancesByKey: createInitialTextOpenWorldQuestInstancesV1(runtimePackage),
       resultTags: [],
+      tracking: { primaryInstanceKey: null, pinnedInstanceKeys: [] },
     },
     map: {
       currentLocationKey: modules.world.initialLocationKey, revealedLocationKeys: [modules.world.initialLocationKey], regionKnowledgeByKey,
@@ -129,6 +131,9 @@ function emptyDirector(): TextOpenWorldDirectorProjectionV1 {
 
 export function createInitialTextOpenWorldSessionProjectionV1(value: unknown): TextOpenWorldSessionProjectionV1 {
   const runtimePackage = parseTextOpenWorldRuntimePackageV1(value); const modules = parseTextOpenWorldModulesV1(runtimePackage); const state = initialEffectState(runtimePackage, modules)
+  state.quests.tracking.primaryInstanceKey = Object.values(state.quests.instancesByKey)
+    .find(instance => modules.quests.quests.find(definition => definition.key === instance.definitionKey)?.type === 'mainline'
+      && instance.status === 'revealed')?.instanceKey ?? null
   validateTextOpenWorldEffectStateV1(state, modules)
   return {
     schema: 'storyforge.text-open-world.session-projection', version: 1, runtimePackage,
@@ -139,6 +144,25 @@ export function createInitialTextOpenWorldSessionProjectionV1(value: unknown): T
   }
 }
 
+/**
+ * Returns every byte-level InitialState shape that this reader still supports.
+ *
+ * Action module v1 Releases were published before quest tracking became part of
+ * the session projection. Their immutable hash must remain verifiable even
+ * though parsing that state now migrates it to the current in-memory shape.
+ * New Builds always hash the first (current) candidate.
+ */
+export function createTextOpenWorldInitialProjectionCandidatesV1(value: unknown): unknown[] {
+  const current = createInitialTextOpenWorldSessionProjectionV1(value)
+  const modules = parseTextOpenWorldModulesV1(current.runtimePackage)
+  if (modules.actions.version !== 1) return [current]
+  const legacy = structuredClone(current) as unknown as Row
+  const legacyState = row(legacy.state, 'legacy projection.state')
+  const legacyQuests = row(legacyState.quests, 'legacy projection.state.quests')
+  delete legacyQuests.tracking
+  return [current, legacy]
+}
+
 export function parseTextOpenWorldSessionProjectionV1(value: unknown): TextOpenWorldSessionProjectionV1 {
   const parsed = row(value, 'projection'); exact(parsed, ['schema', 'version', 'runtimePackage', 'ruleset', 'state', 'actions', 'director', 'protocol', 'lastEventSequence'], 'projection')
   if (parsed.schema !== 'storyforge.text-open-world.session-projection' || parsed.version !== 1) fail('projection schema/version无效')
@@ -146,7 +170,17 @@ export function parseTextOpenWorldSessionProjectionV1(value: unknown): TextOpenW
   const lastEventSequence = integer(parsed.lastEventSequence, 'lastEventSequence')
   const ruleset = row(parsed.ruleset, 'ruleset'); exact(ruleset, ['key', 'version'], 'ruleset')
   if (ruleset.key !== runtimePackage.metadata.rulesetKey || ruleset.version !== runtimePackage.metadata.rulesetVersion) fail('ruleset与RuntimePackage不一致')
-  const state = structuredClone(parsed.state) as unknown as TextOpenWorldEffectStateV1; validateTextOpenWorldEffectStateV1(state, modules)
+  const state = structuredClone(parsed.state) as unknown as TextOpenWorldEffectStateV1
+  const legacyQuests = state.quests as TextOpenWorldEffectStateV1['quests'] & { tracking?: TextOpenWorldEffectStateV1['quests']['tracking'] }
+  if (!legacyQuests.tracking) {
+    legacyQuests.tracking = {
+      primaryInstanceKey: Object.values(legacyQuests.instancesByKey)
+        .find(instance => modules.quests.quests.find(definition => definition.key === instance.definitionKey)?.type === 'mainline'
+          && ['revealed', 'accepted', 'active', 'suspended'].includes(instance.status))?.instanceKey ?? null,
+      pinnedInstanceKeys: [],
+    }
+  }
+  validateTextOpenWorldEffectStateV1(state, modules)
   if (Object.values(state.quests.instancesByKey).some(instance => instance.sourceContentHash !== runtimePackage.modules.quests.contentHash)) fail('任务实例来源Hash与冻结Quest模块不一致')
   const actions = row(parsed.actions, 'actions'); exact(actions, ['completedOnceActionKeys', 'cooldownUntilWorldMinuteByActionKey'], 'actions')
   const completedOnceActionKeys = uniqueTokens(actions.completedOnceActionKeys, 'actions.completedOnceActionKeys'); const actionKeys = new Set(modules.actions.actions.map(action => action.key)); completedOnceActionKeys.forEach(key => { if (!actionKeys.has(key)) fail(`未知once Action:${key}`) })
@@ -244,6 +278,15 @@ export function applyTextOpenWorldSessionEventV1(current: TextOpenWorldSessionPr
       if (projection.protocol.pendingTargetKey !== authorization.instanceKey || projection.protocol.pendingActorKey !== 'player'
         || action.category !== 'objective-action' || action.actorScope !== 'player' || action.targetScope !== 'quest') fail('Objective授权与命令目标不一致')
       createTextOpenWorldObjectiveCatalogV1(projection.runtimePackage).assertAuthorization({ state: projection.state, authorization })
+    } else if (applied.plan.authorization?.kind === 'quest-tracking') {
+      const authorization = applied.plan.authorization
+      const action = modules.actions.actions.find(item => item.key === projection.protocol.pendingActionKey) ?? fail('命令Action不存在')
+      const expectedEffectKeys = [...new Set([...action.costEffectKeys, ...action.successEffectKeys])]
+      const expectedCategory = authorization.operation === 'track' ? 'track' : 'untrack'
+      if (canonicalProductProductionJsonV2(applied.plan.effectKeys) !== canonicalProductProductionJsonV2(expectedEffectKeys)) fail('任务追踪EffectPlan与命令Action不一致')
+      if (projection.protocol.pendingTargetKey !== authorization.instanceKey || projection.protocol.pendingActorKey !== 'player'
+        || action.category !== expectedCategory || action.actorScope !== 'player' || action.targetScope !== 'quest') fail('任务追踪授权与命令目标不一致')
+      createTextOpenWorldQuestTrackingCatalogV1(projection.runtimePackage).assertAuthorization({ state: projection.state, authorization })
     } else if (applied.plan.effectKeys.some(effectKey => dropEffectKeys.has(effectKey))) fail('掉落Effect缺少RewardContract授权')
     projection.state = applyTextOpenWorldEffectPlanForReplayV1(projection.runtimePackage, projection.state, applied.plan).state
     const action = modules.actions.actions.find(item => item.key === projection.protocol.pendingActionKey) ?? fail('命令Action不存在')
@@ -296,7 +339,7 @@ export function deriveTextOpenWorldContextsV1(value: TextOpenWorldSessionProject
     completedOnceActionKeys: [...projection.actions.completedOnceActionKeys], cooldownUntilWorldMinuteByActionKey: structuredClone(projection.actions.cooldownUntilWorldMinuteByActionKey),
     validTargetKeysByScope: {
       actor: actorTargets, location: [...state.map.revealedLocationKeys], item: Object.keys(inventoryQuantities),
-      quest: Object.values(state.quests.instancesByKey).filter(instance => ['revealed', 'accepted', 'active', 'suspended', 'completed'].includes(instance.status)).map(instance => instance.instanceKey),
+      quest: Object.values(state.quests.instancesByKey).filter(instance => !['locked', 'available'].includes(instance.status)).map(instance => instance.instanceKey),
       vendor: modules.economy.vendors.filter(vendor => vendor.locationKey === state.map.currentLocationKey && actorTargets.includes(vendor.actorKey)).map(vendor => vendor.key),
       encounter: modules.combat.encounters.filter(encounter => encounter.locationKey === state.map.currentLocationKey).map(encounter => encounter.key),
     },
@@ -305,6 +348,9 @@ export function deriveTextOpenWorldContextsV1(value: TextOpenWorldSessionProject
     questStageKeyByInstanceKey: Object.fromEntries(Object.values(state.quests.instancesByKey).map(instance => [instance.instanceKey, instance.currentStageKey])),
     questObjectiveStatusByInstanceKey: Object.fromEntries(Object.values(state.quests.instancesByKey).map(instance => [instance.instanceKey, structuredClone(instance.objectiveStatusByKey)])),
     questRewardClaimKeyByInstanceKey: Object.fromEntries(Object.values(state.quests.instancesByKey).map(instance => [instance.instanceKey, instance.rewardClaimKey])),
+    questDeadlineWorldMinuteByInstanceKey: Object.fromEntries(Object.values(state.quests.instancesByKey).map(instance => [instance.instanceKey, instance.deadlineWorldMinute])),
+    primaryTrackedQuestInstanceKey: state.quests.tracking.primaryInstanceKey,
+    pinnedQuestInstanceKeys: [...state.quests.tracking.pinnedInstanceKeys],
   }
   return { condition, action, playerStats, progression }
 }

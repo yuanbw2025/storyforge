@@ -17,6 +17,7 @@ import type {
   TextOpenWorldRandomResolvedEventPayloadV1,
   TextOpenWorldObjectiveAuthorizationV1,
   TextOpenWorldQuestTransitionAuthorizationV1,
+  TextOpenWorldQuestTrackingAuthorizationV1,
   TextOpenWorldRulesetStampV1,
   TextOpenWorldRewardAuthorizationV1,
 } from '../types'
@@ -128,6 +129,20 @@ function parseAuthorization(value: unknown, label: string): TextOpenWorldEffectP
       objectiveKey: token(raw.objectiveKey, `${label}.objectiveKey`), worldMinute: integer(raw.worldMinute, `${label}.worldMinute`),
       fromStatus: 'active', toStatus: 'completed',
     } satisfies TextOpenWorldObjectiveAuthorizationV1
+  }
+  if (raw.kind === 'quest-tracking') {
+    exact(raw, ['kind', 'instanceKey', 'definitionKey', 'worldMinute', 'operation', 'slot', 'beforePrimaryInstanceKey', 'beforePinnedInstanceKeys'], label)
+    if (!Array.isArray(raw.beforePinnedInstanceKeys) || raw.beforePinnedInstanceKeys.length > 3) fail(`${label}.beforePinnedInstanceKeys无效`)
+    const beforePinnedInstanceKeys = raw.beforePinnedInstanceKeys.map((value, index) => token(value, `${label}.beforePinnedInstanceKeys[${index}]`))
+    if (new Set(beforePinnedInstanceKeys).size !== beforePinnedInstanceKeys.length) fail(`${label}.beforePinnedInstanceKeys不能重复`)
+    const operation = raw.operation === 'track' || raw.operation === 'untrack' ? raw.operation : fail(`${label}.operation无效`)
+    const slot = raw.slot === 'primary' || raw.slot === 'pinned' ? raw.slot : fail(`${label}.slot无效`)
+    return {
+      kind: 'quest-tracking', instanceKey: token(raw.instanceKey, `${label}.instanceKey`),
+      definitionKey: token(raw.definitionKey, `${label}.definitionKey`), worldMinute: integer(raw.worldMinute, `${label}.worldMinute`),
+      operation, slot, beforePrimaryInstanceKey: raw.beforePrimaryInstanceKey == null ? null : token(raw.beforePrimaryInstanceKey, `${label}.beforePrimaryInstanceKey`),
+      beforePinnedInstanceKeys,
+    } satisfies TextOpenWorldQuestTrackingAuthorizationV1
   }
   if (raw.kind !== 'quest-transition') fail(`${label}.kind无效`)
   exact(raw, ['kind', 'instanceKey', 'definitionKey', 'worldMinute', 'transitions'], label)

@@ -118,6 +118,19 @@ function parseContext(value: TextOpenWorldActionProjectionContextV1, modules: Te
     stableKey(instanceKey, 'questRewardClaimKeyByInstanceKey.instanceKey')
     questRewardClaimKeyByInstanceKey[instanceKey] = claimKey == null ? null : stableKey(claimKey, `questRewardClaimKeyByInstanceKey.${instanceKey}`)
   }
+  const questDeadlineWorldMinuteByInstanceKey: Record<string, number | null> = {}
+  for (const [instanceKey, deadline] of Object.entries(value.questDeadlineWorldMinuteByInstanceKey ?? {})) {
+    stableKey(instanceKey, 'questDeadlineWorldMinuteByInstanceKey.instanceKey')
+    questDeadlineWorldMinuteByInstanceKey[instanceKey] = deadline == null ? null : finiteInteger(deadline, `questDeadlineWorldMinuteByInstanceKey.${instanceKey}`)
+  }
+  const primaryTrackedQuestInstanceKey = value.primaryTrackedQuestInstanceKey == null
+    ? null
+    : stableKey(value.primaryTrackedQuestInstanceKey, 'primaryTrackedQuestInstanceKey')
+  const pinnedQuestInstanceKeys = uniqueKeys(value.pinnedQuestInstanceKeys ?? [], 'pinnedQuestInstanceKeys')
+  if (pinnedQuestInstanceKeys.length > 3) fail('pinnedQuestInstanceKeys最多3个')
+  if (primaryTrackedQuestInstanceKey && !questDefinitionKeyByInstanceKey[primaryTrackedQuestInstanceKey]) fail('主追踪任务实例不存在')
+  if (primaryTrackedQuestInstanceKey && pinnedQuestInstanceKeys.includes(primaryTrackedQuestInstanceKey)) fail('主追踪任务不能同时钉选')
+  pinnedQuestInstanceKeys.forEach(instanceKey => { if (!questDefinitionKeyByInstanceKey[instanceKey]) fail(`钉选任务实例不存在:${instanceKey}`) })
   return {
     actorKey: value.actorKey,
     currentLocationKey,
@@ -133,6 +146,9 @@ function parseContext(value: TextOpenWorldActionProjectionContextV1, modules: Te
     questStageKeyByInstanceKey,
     questObjectiveStatusByInstanceKey,
     questRewardClaimKeyByInstanceKey,
+    questDeadlineWorldMinuteByInstanceKey,
+    primaryTrackedQuestInstanceKey,
+    pinnedQuestInstanceKeys,
   }
 }
 
@@ -222,6 +238,17 @@ export function createTextOpenWorldActionRegistryV1(value: TextOpenWorldRuntimeP
               && context.questStageKeyByInstanceKey[instanceKey] === ownerStage.key
               && requiredObjectiveKeys.every(objectiveKey => context.questObjectiveStatusByInstanceKey[instanceKey]?.[objectiveKey] === 'completed')
             ))
+          } else {
+            const expiration = transitionDefinitions.length === 1 && transitionDefinitions[0].payload.status === 'expired'
+              ? transitionDefinitions[0]
+              : null
+            validTargetKeys = expiration
+              ? validTargetKeys.filter(instanceKey => (
+                  ['revealed', 'active', 'suspended'].includes(context.questStatusByInstanceKey[instanceKey])
+                  && context.questStageKeyByInstanceKey[instanceKey] === expiration.payload.stageKey
+                  && context.worldMinute >= (context.questDeadlineWorldMinuteByInstanceKey[instanceKey] ?? Number.MAX_SAFE_INTEGER)
+                ))
+              : []
           }
         }
       }
@@ -248,6 +275,25 @@ export function createTextOpenWorldActionRegistryV1(value: TextOpenWorldRuntimeP
               && context.questRewardClaimKeyByInstanceKey[instanceKey] == null
             ))
           : []
+      }
+      if (action.targetScope === 'quest' && (action.category === 'track' || action.category === 'untrack')) {
+        const trackingEffect = action.successEffectKeys.map(effectKey => effectByKey.get(effectKey))
+          .find((effect): effect is Extract<TextOpenWorldEffectDefinitionV1, { operation: 'track-quest' | 'untrack-quest' }> => effect?.operation === 'track-quest' || effect?.operation === 'untrack-quest')
+        if (!trackingEffect) validTargetKeys = []
+        else if (action.category === 'track' && trackingEffect.payload.slot === 'primary') {
+          validTargetKeys = validTargetKeys.filter(instanceKey => (
+            ['revealed', 'accepted', 'active', 'suspended'].includes(context.questStatusByInstanceKey[instanceKey])
+            && context.primaryTrackedQuestInstanceKey !== instanceKey
+          ))
+        } else if (action.category === 'track') {
+          validTargetKeys = context.pinnedQuestInstanceKeys.length >= 3 ? [] : validTargetKeys.filter(instanceKey => (
+            ['revealed', 'accepted', 'active', 'suspended'].includes(context.questStatusByInstanceKey[instanceKey])
+            && context.primaryTrackedQuestInstanceKey !== instanceKey
+            && !context.pinnedQuestInstanceKeys.includes(instanceKey)
+          ))
+        } else if (trackingEffect.payload.slot === 'primary') {
+          validTargetKeys = context.primaryTrackedQuestInstanceKey ? [context.primaryTrackedQuestInstanceKey] : []
+        } else validTargetKeys = [...context.pinnedQuestInstanceKeys]
       }
       if (action.targetScope !== 'none' && validTargetKeys.length === 0) unavailableReasons.push({ code: 'no-valid-target', message: '当前没有可作用的目标。', conditionKey: null })
       return {

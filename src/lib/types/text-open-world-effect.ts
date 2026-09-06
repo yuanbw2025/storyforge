@@ -4,7 +4,7 @@ export type TextOpenWorldEffectOperationV1 =
   | 'change-player-resource' | 'grant-experience' | 'apply-status' | 'remove-status'
   | 'grant-item' | 'remove-item' | 'equip-item' | 'unequip-item'
   | 'learn-skill' | 'learn-recipe' | 'change-currency'
-  | 'transition-quest' | 'complete-objective' | 'claim-quest-reward'
+  | 'transition-quest' | 'complete-objective' | 'claim-quest-reward' | 'track-quest' | 'untrack-quest'
   | 'change-morality' | 'change-faction-affinity' | 'set-story-modifier'
   | 'reveal-knowledge' | 'reveal-location' | 'unlock-fast-travel'
   | 'enter-location' | 'start-travel' | 'advance-time'
@@ -25,6 +25,7 @@ export type TextOpenWorldEffectDefinitionV1 =
   | { key: string; operation: 'transition-quest'; payload: { questKey: string; status: TextOpenWorldQuestStatusV1; stageKey: string | null } }
   | { key: string; operation: 'complete-objective'; payload: { objectiveKey: string } }
   | { key: string; operation: 'claim-quest-reward'; payload: { questKey: string; rewardKey: string } }
+  | { key: string; operation: 'track-quest' | 'untrack-quest'; payload: { slot: 'primary' | 'pinned' } }
   | { key: string; operation: 'change-morality'; payload: { amount: number } }
   | { key: string; operation: 'change-faction-affinity'; payload: { factionKey: string; amount: number } }
   | { key: string; operation: 'set-story-modifier'; payload: { actorKey: string; value: number } }
@@ -86,6 +87,10 @@ export interface TextOpenWorldEffectStateV1 {
   quests: {
     instancesByKey: Record<string, TextOpenWorldQuestInstanceV1>
     resultTags: string[]
+    tracking: {
+      primaryInstanceKey: string | null
+      pinnedInstanceKeys: string[]
+    }
   }
   map: {
     currentLocationKey: string
@@ -173,6 +178,17 @@ export interface TextOpenWorldObjectiveAuthorizationV1 {
   toStatus: 'completed'
 }
 
+export interface TextOpenWorldQuestTrackingAuthorizationV1 {
+  kind: 'quest-tracking'
+  instanceKey: string
+  definitionKey: string
+  worldMinute: number
+  operation: 'track' | 'untrack'
+  slot: 'primary' | 'pinned'
+  beforePrimaryInstanceKey: string | null
+  beforePinnedInstanceKeys: string[]
+}
+
 export interface TextOpenWorldEffectPlanV1 {
   schema: 'storyforge.text-open-world.effect-plan'
   version: 1
@@ -181,7 +197,7 @@ export interface TextOpenWorldEffectPlanV1 {
   resultingStateHash: string
   effectKeys: string[]
   effects: TextOpenWorldEffectDefinitionV1[]
-  authorization: TextOpenWorldRewardAuthorizationV1 | TextOpenWorldQuestTransitionAuthorizationV1 | TextOpenWorldObjectiveAuthorizationV1 | null
+  authorization: TextOpenWorldRewardAuthorizationV1 | TextOpenWorldQuestTransitionAuthorizationV1 | TextOpenWorldObjectiveAuthorizationV1 | TextOpenWorldQuestTrackingAuthorizationV1 | null
   impactDomains: TextOpenWorldEffectImpactDomainV1[]
   previewChanges: TextOpenWorldEffectChangeV1[]
   planHash: string

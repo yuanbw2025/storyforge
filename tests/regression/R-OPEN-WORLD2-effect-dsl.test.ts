@@ -21,6 +21,7 @@ function state(overrides: Partial<TextOpenWorldEffectStateV1> = {}): TextOpenWor
     quests: {
       instancesByKey: createInitialTextOpenWorldQuestInstancesV1(createTextOpenWorldVNextFixture()),
       resultTags: [],
+      tracking: { primaryInstanceKey: 'quest-instance.12.quest.main.1.release.13.session-start', pinnedInstanceKeys: [] },
     },
     map: {
       currentLocationKey: 'location.salt-port', revealedLocationKeys: ['location.salt-port'],

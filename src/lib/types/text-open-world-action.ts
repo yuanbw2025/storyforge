@@ -36,6 +36,9 @@ export interface TextOpenWorldActionProjectionContextV1 {
   questStageKeyByInstanceKey: Record<string, string | null>
   questObjectiveStatusByInstanceKey: Record<string, Record<string, TextOpenWorldObjectiveStatusV1>>
   questRewardClaimKeyByInstanceKey: Record<string, string | null>
+  questDeadlineWorldMinuteByInstanceKey: Record<string, number | null>
+  primaryTrackedQuestInstanceKey: string | null
+  pinnedQuestInstanceKeys: string[]
 }
 
 export type TextOpenWorldActionUnavailableCodeV1 =

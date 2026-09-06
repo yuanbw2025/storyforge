@@ -89,6 +89,31 @@ export interface TextOpenWorldDerivedContextsV1 {
   progression: TextOpenWorldProgressionStatusV1
 }
 
+export type TextOpenWorldQuestHistoryKindV1 =
+  | 'accepted' | 'activated' | 'suspended' | 'resumed' | 'stage-advanced'
+  | 'completed' | 'failed' | 'abandoned' | 'expired' | 'withdrawn' | 'reoffered'
+  | 'objective-completed' | 'reward-claimed' | 'tracked' | 'untracked'
+
+export interface TextOpenWorldQuestHistoryEntryV1 {
+  sequence: number
+  commandId: string
+  instanceKey: string
+  definitionKey: string
+  kind: TextOpenWorldQuestHistoryKindV1
+  worldMinute: number | null
+  stageKey: string | null
+  objectiveKey: string | null
+  trackingSlot: 'primary' | 'pinned' | null
+  summary: string
+}
+
+export interface TextOpenWorldQuestDeadlineProjectionV1 {
+  deadlineWorldMinute: number | null
+  remainingMinutes: number | null
+  expired: boolean
+  label: string | null
+}
+
 export type TextOpenWorldRuntimeHeadDiagnosticCodeV1 =
   | 'valid' | 'not-vnext' | 'cache-missing' | 'cache-sequence-mismatch' | 'cache-hash-invalid'
   | 'cache-state-invalid' | 'cache-hash-mismatch' | 'cache-replay-mismatch'

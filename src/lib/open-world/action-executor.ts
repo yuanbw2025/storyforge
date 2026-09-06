@@ -15,6 +15,7 @@ import {
 } from './session-binding'
 import { createTextOpenWorldQuestTransitionCatalogV1 } from './quest-state-machine'
 import { createTextOpenWorldObjectiveCatalogV1 } from './objective-state'
+import { createTextOpenWorldQuestTrackingCatalogV1 } from './quest-tracking'
 import { executeTextOpenWorldPendingRewardV1 } from './reward-executor'
 import { deriveTextOpenWorldContextsV1, parseTextOpenWorldSessionProjectionV1 } from './session-projection'
 
@@ -54,7 +55,9 @@ async function settleAcceptedCommand(envelope: TextOpenWorldCommandEnvelopeV1): 
     .filter((effect): effect is Extract<TextOpenWorldEffectDefinitionV1, { operation: 'transition-quest' }> => effect.operation === 'transition-quest')
   const objectiveEffects = effectKeys.map(effectKey => modules.actions.effects.find(effect => effect.key === effectKey)!)
     .filter((effect): effect is Extract<TextOpenWorldEffectDefinitionV1, { operation: 'complete-objective' }> => effect.operation === 'complete-objective')
-  if (questTransitions.length && objectiveEffects.length) fail('同一Action不能同时迁移任务和完成Objective')
+  const trackingEffects = effectKeys.map(effectKey => modules.actions.effects.find(effect => effect.key === effectKey)!)
+    .filter((effect): effect is Extract<TextOpenWorldEffectDefinitionV1, { operation: 'track-quest' | 'untrack-quest' }> => effect.operation === 'track-quest' || effect.operation === 'untrack-quest')
+  if ([questTransitions.length > 0, objectiveEffects.length > 0, trackingEffects.length > 0].filter(Boolean).length > 1) fail('同一Action不能混合任务迁移、Objective或追踪状态')
   const authorization = questTransitions.length
     ? createTextOpenWorldQuestTransitionCatalogV1(projection.runtimePackage).prepare({
         instanceKey: targetFrom(envelope) ?? fail('任务状态Action缺少实例目标'),
@@ -67,7 +70,14 @@ async function settleAcceptedCommand(envelope: TextOpenWorldCommandEnvelopeV1): 
           objectiveKey: objectiveEffects[0].payload.objectiveKey,
           state: projection.state,
         })
-      : null
+      : trackingEffects.length === 1
+        ? createTextOpenWorldQuestTrackingCatalogV1(projection.runtimePackage).prepare({
+            instanceKey: targetFrom(envelope) ?? fail('任务追踪Action缺少任务实例目标'),
+            state: projection.state,
+            operation: trackingEffects[0].operation === 'track-quest' ? 'track' : 'untrack',
+            slot: trackingEffects[0].payload.slot,
+          })
+        : null
   const catalog = createTextOpenWorldEffectCatalogV1(projection.runtimePackage)
   const plan = await catalog.plan({ effectKeys, claimKey: `claim.${envelope.commandId}`, state: projection.state, authorization })
   const { receipt } = await catalog.apply({ plan, state: projection.state })
@@ -165,17 +175,23 @@ async function executeTextOpenWorldActionAsV1(
   return settleAcceptedCommand(envelope)
 }
 
-async function settleReadyQuestStagesV1(sessionId: number, causeCommandId: string): Promise<void> {
+async function settleReadyQuestSystemActionsV1(sessionId: number, causeCommandId: string): Promise<void> {
   for (let index = 0; index < 32; index += 1) {
     const runtime = await readProductRuntimeState(sessionId)
     const projection = parseTextOpenWorldSessionProjectionV1(runtime.textOpenWorld)
     const modules = parseTextOpenWorldModulesV1(projection.runtimePackage)
     const completionActionKeys = new Set(modules.quests.stages.map(stage => stage.completionActionKey).filter((key): key is string => key != null))
+    const expirationActionKeys = new Set(modules.actions.actions.filter(action => action.category === 'quest-action'
+      && action.successEffectKeys.some(effectKey => {
+        const effect = modules.actions.effects.find(candidate => candidate.key === effectKey)
+        return effect?.operation === 'transition-quest' && effect.payload.status === 'expired'
+      })).map(action => action.key))
+    const settlementActionKeys = new Set([...completionActionKeys, ...expirationActionKeys])
     if (projection.protocol.pendingCommandId) {
       const pendingActionKey = projection.protocol.pendingActionKey
       const pendingTargetKey = projection.protocol.pendingTargetKey
-      if (projection.protocol.pendingActorKey !== 'system' || !pendingActionKey || !pendingTargetKey || !completionActionKeys.has(pendingActionKey)) {
-        fail('Stage结算器发现不属于自身的待结算命令')
+      if (projection.protocol.pendingActorKey !== 'system' || !pendingActionKey || !pendingTargetKey || !settlementActionKeys.has(pendingActionKey)) {
+        fail('任务系统结算器发现不属于自身的待结算命令')
       }
       const feedback = await executeTextOpenWorldActionAsV1({
         sessionId, actionKey: pendingActionKey, targetKey: pendingTargetKey,
@@ -187,9 +203,9 @@ async function settleReadyQuestStagesV1(sessionId: number, causeCommandId: strin
     const context = deriveTextOpenWorldContextsV1(projection).action
     context.actorKey = 'system'
     const next = createTextOpenWorldActionRegistryV1(projection.runtimePackage).project(context)
-      .filter(item => item.available && item.action.category === 'quest-action' && completionActionKeys.has(item.action.key))
-      .flatMap(item => item.validTargetKeys.map(targetKey => ({ actionKey: item.action.key, targetKey })))
-      .sort((left, right) => left.actionKey.localeCompare(right.actionKey) || left.targetKey.localeCompare(right.targetKey))[0]
+      .filter(item => item.available && item.action.category === 'quest-action' && settlementActionKeys.has(item.action.key))
+      .flatMap(item => item.validTargetKeys.map(targetKey => ({ actionKey: item.action.key, targetKey, priority: completionActionKeys.has(item.action.key) ? 0 : 1 })))
+      .sort((left, right) => left.priority - right.priority || left.actionKey.localeCompare(right.actionKey) || left.targetKey.localeCompare(right.targetKey))[0]
     if (!next) return
     const commandHash = await hashProductProductionValueV2({ causeCommandId, index, ...next })
     const feedback = await executeTextOpenWorldActionAsV1({
@@ -198,13 +214,13 @@ async function settleReadyQuestStagesV1(sessionId: number, causeCommandId: strin
     }, 'system')
     if (feedback.phase !== 'terminal' || feedback.status !== 'succeeded') fail(`Stage系统结算未成功:${next.actionKey}:${next.targetKey}`)
   }
-  fail('单次玩家行动触发的Stage推进超过32步')
+  fail('单次玩家行动触发的任务系统结算超过32步')
 }
 
 export async function executeTextOpenWorldActionV1(input: ExecuteTextOpenWorldActionInputV1): Promise<TextOpenWorldFeedbackReceiptV1> {
   const feedback = await executeTextOpenWorldActionAsV1(input, 'player')
   if (feedback.phase === 'terminal' && feedback.status === 'succeeded' && feedback.commandId) {
-    await settleReadyQuestStagesV1(input.sessionId, feedback.commandId)
+    await settleReadyQuestSystemActionsV1(input.sessionId, feedback.commandId)
   }
   return feedback
 }

@@ -96,4 +96,28 @@ describe('Text Open World vNext · vNext module schemas and reference integrity'
     expect(parsed.quests.quests.every(quest => quest.rewardContractKey == null && quest.claimActionKey == null)).toBe(true)
     expect(parsed.quests.stages.every(stage => stage.completionActionKey == null)).toBe(true)
   })
+
+  it('Quest v2必须提供完整追踪能力和覆盖每种Stage状态的限时过期Action', () => {
+    const missingTracking = createTextOpenWorldVNextFixture()
+    const trackingActions = missingTracking.modules.actions.payload as any
+    trackingActions.actions = trackingActions.actions.filter((action: any) => !['track', 'untrack'].includes(action.category))
+    trackingActions.effects = trackingActions.effects.filter((effect: any) => !['track-quest', 'untrack-quest'].includes(effect.operation))
+    expect(() => parseTextOpenWorldModulesV1(missingTracking)).toThrow('任务追踪Action能力')
+
+    const incompleteExpiry = createTextOpenWorldVNextFixture()
+    const expiryActions = incompleteExpiry.modules.actions.payload as any
+    expiryActions.actions = expiryActions.actions.filter((action: any) => action.key !== 'action.expire-supplies-active')
+    expiryActions.effects = expiryActions.effects.filter((effect: any) => effect.key !== 'effect.expire-supplies-active')
+    expect(() => parseTextOpenWorldModulesV1(incompleteExpiry)).toThrow('过期Stage覆盖')
+  })
+
+  it('旧Action v1发布没有任务追踪和自动过期能力时仍可按冻结合同读取', () => {
+    const legacy = createTextOpenWorldVNextFixture()
+    const actions = legacy.modules.actions.payload as any
+    actions.version = 1
+    legacy.modules.actions.schemaVersion = 1
+    actions.actions = actions.actions.filter((action: any) => !['track', 'untrack'].includes(action.category) && !action.key.startsWith('action.expire-'))
+    actions.effects = actions.effects.filter((effect: any) => !['track-quest', 'untrack-quest'].includes(effect.operation) && !effect.key.startsWith('effect.expire-'))
+    expect(parseTextOpenWorldModulesV1(legacy).actions.actions.some(action => action.category === 'track')).toBe(false)
+  })
 })
