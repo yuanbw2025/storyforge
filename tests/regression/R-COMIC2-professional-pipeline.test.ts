@@ -58,6 +58,8 @@ describe('COMIC-2 · professional novel-to-comic pipeline', () => {
       return JSON.stringify([causalPayload])
     } })
     expect(causalCalls).toBe(2); expect(causal.snapshot.contract.budget.maxModelCalls).toBe(2); expect(causal.candidate.payload).toHaveLength(1)
+    const adoptedAfterRepair = await adoptComicProfessionalCandidateV1({ scope: item.scope, runId: causal.snapshot.run.id })
+    expect(adoptedAfterRepair.snapshot.projection.state).toBe('completed'); expect(await db.adaptationCausalEdges.count()).toBe(1)
   })
 
   it('十二个岗位各自声明闭集 JSON 协议与漫画专业约束', () => {
