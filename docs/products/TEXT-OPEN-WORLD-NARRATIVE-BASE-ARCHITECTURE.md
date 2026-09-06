@@ -1,6 +1,6 @@
 # AI 主导文字开放世界叙事基座 · StoryForge 施工规格
 
-> 规格版本：3.2.7
+> 规格版本：3.2.8
 > 生效日期：2026-09-06
 > 文档层级：L2 产品目标架构与施工规格
 > 当前状态：设计基线；不代表代码已经实现
@@ -438,6 +438,19 @@ P2已经登记Skill和Executor，但专属生产Plan仍保持未激活。G3-18�
 - 执行器复验完整上下文、上游Artifact、身份来源、属性预算、货币、技能物品键、目录依赖、binding状态、basis和内容Hash；任何模型越权或重算Hash后的篡改都失败关闭。
 
 该步骤仍只写产品Build候选。正式PlayerCharacterDefinition、ProductRelease与运行Session均由后续目录绑定和唯一装配阶段产生。
+
+#### 5.4.7 P3 StoryArchitecture、EndingContracts与NarrativePromises落地
+
+`src/lib/open-world/story-architecture.ts`把世界观或小说的故事材料先编译为全局叙事约束，而不是直接跳到自然语言任务或场景正文：
+
+- 登记的`text-open-world.story-architecture-input`只读取同一Build已验收的GameBrief、ExperienceContract、ProtagonistAsset、SourceLedger和SourceGapReport；优先选择体验、主角、故事核心、冲突、人物、势力、时间与地点证据，并把选择数量、遗漏Hash和全部开放gap纳入`contextSelectionHash`；P3存在阻断缺口时停止；
+- 模型负责故事标题、主题、核心冲突、5～8个宏观节拍、与Brief目标数量精确一致的多结局语义，以及4～12项叙事承诺。每个节拍、结局和承诺都必须引用当前交付的claim；只有已交付、非阻断且标记`design-with-explicit-assumption`的gap才可作为显式设计假设；
+- 代码固定主线严格顺序、长期等待玩家、核心目标不可永久失败、关键流程不以到达地点作为唯一触发。节拍必须从opening单调推进到resolution并覆盖rising、turning-point和convergence；地区在此处仅以`spatialFunctionNeeds`描述未来要承担的戏剧功能，不创建地区或地点实体；
+- 结局数量来自GameBrief，标题和差异轴必须唯一，且所有结局的`coreGoalStatus`固定为`achieved`。差异只能来自代价、价值、关系和局部世界后果；Condition与Effect仍是`condition-unbound`，等待主线和任务最终化；
+- 每项NarrativePromise必须具有建立、1～3次有序中间回响和最终回收，至少覆盖`core-conflict`、`character`、`world`三类，并保证每个结局至少得到一次回收。Promise到Scene的绑定固定为`scene-unbound`，后续场景生产必须逐项兑现；
+- Story、Ending、Promise和Callback稳定键均由代码生成；三个Artifact通过上游Hash、实际claim entry hash、显式假设gap hash、basis和内容Hash闭合。伪造来源、错误节拍、承诺乱序、结局漏回收、模型自造运行绑定以及重算Hash后的确定性字段篡改都会失败关闭。
+
+P3仍只产出Build候选，不写世界引擎、ProductRelease或Session。它给P4地区骨架提供空间戏剧需求，给P5主线与后续场景提供必须兑现的叙事约束，而不是自行承担这些下游职责。
 
 ### 5.5 正确的验证顺序
 
@@ -1257,6 +1270,7 @@ StoryForge当前没有独立staging。发布前仍需在隔离数据中完成灰
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| 3.2.8 | 2026-09-07 | 落地P3 StoryArchitecture：登记只读体验/主角/P1证据的Context与专属Skill/Executor；AI设计核心冲突、长程节拍、多结局差异与叙事承诺，代码固定严格顺序/等待/不可永久失败主线、阶段序列、稳定键、来源与显式假设权限、全结局核心目标达成及建立—回响—回收闭环；Condition/Scene保持unbound供下游兑现，全部上游、引用、顺序、绑定和Hash可复验 |
 | 3.2.7 | 2026-09-07 | 落地P4 PlayerBuild：登记只读已验收体验/主角/Ruleset的Context与专属Skill/Executor；AI只生成身份演绎、非职业玩法风格、主副属性选择及初始技能物品语义，代码固定1级、12点属性预算、100货币、数量、机制和稳定预留键；在后续目录兑现前固定`reserved-unbound/playerDefinitionReady=false`，禁止把需求键伪装成可运行定义；全部上游、预算、键、binding和Hash可复验 |
 | 3.2.6 | 2026-09-07 | 落地P2 GameplayRulesetSkeleton：登记只读已验收体验链与Ledger claim的Context Source及专属Skill/Executor；模型只生成世界化显示语义，代码冻结三属性、20级、1→5验收跨度、自动成长、G2公式、标准难度单人四操作回合战斗、三装备位、单货币、确定性制作交易和模块版本；Effect单一事实源分离模型、编译器与旧版只读权限，全部上游、固定边界、claim和Hash可复验 |
 | 3.2.5 | 2026-09-06 | 落地P2体验设计：复用作者授权Brief终态并登记单一P2 Context Source；完整输入Hash绑定授权、Pin、P1证据、全部缺口与选中claim；代码编译不可由模型改写的GameBrief规模、自由度、主线/重要故事等待、普通世界演化、交互、战斗、媒资、预算和发布边界；模型只补充体验语义和主角小传，来源主角必须引用绑定所选角色单元的Ledger claim；ExperienceContract和ProtagonistAsset以basis/hash链复验，伪造claim、上下文、作者意图或固定边界失败关闭，不重复读取原始来源且不写WorldRelease/Session |

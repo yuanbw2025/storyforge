@@ -760,6 +760,152 @@ export interface TextOpenWorldPlayerBuildV1 {
   playerBuildHash: string
 }
 
+export type TextOpenWorldStoryMacroPhaseV1 =
+  | 'opening'
+  | 'rising'
+  | 'turning-point'
+  | 'convergence'
+  | 'resolution'
+
+export interface TextOpenWorldStoryArcV1 {
+  schema: 'storyforge.text-open-world-story-arc'
+  version: 1
+  productType: 'text-open-world'
+  productInstanceKey: string
+  gameBriefHash: string
+  experienceContractHash: string
+  protagonistAssetHash: string
+  sourceLedgerHash: string
+  sourceGapReportHash: string
+  title: string
+  logline: string
+  themeStatement: string
+  coreConflict: {
+    coreGoal: string
+    protagonistDrive: string
+    opposingForce: string
+    conflictMechanism: string
+    personalStakes: string
+    regionalStakes: string
+    worldStakes: string
+    protectedGoalPolicy: 'must-remain-achievable'
+  }
+  governance: {
+    openingSituation: string
+    requiredFacts: string[]
+    forbiddenChanges: string[]
+    contentBoundaries: string[]
+    mainlineOrder: 'strict-sequential'
+    mainlinePressure: 'wait-for-player'
+    mainlineFailure: 'cannot-permanently-fail'
+    criticalTriggerPolicy: 'never-location-only'
+    targetStageRange: { minimum: number; maximum: number }
+  }
+  macroBeats: Array<{
+    key: string
+    order: number
+    phase: TextOpenWorldStoryMacroPhaseV1
+    title: string
+    dramaticPurpose: string
+    protagonistChange: string
+    requiredReveal: string
+    spatialFunctionNeeds: string[]
+    sourceClaimKeys: string[]
+    promiseSetupKeys: string[]
+    promiseCallbackKeys: string[]
+    promisePayoffKeys: string[]
+  }>
+  endingContractKeys: string[]
+  narrativePromiseKeys: string[]
+  sourceClaimKeys: string[]
+  sourceHandling: {
+    explicitAssumptionGapKeys: string[]
+    unresolvedGapKeys: string[]
+  }
+  basisHash: string
+  createdAt: number
+  storyArcHash: string
+}
+
+export interface TextOpenWorldEndingContractsV1 {
+  schema: 'storyforge.text-open-world-ending-contracts'
+  version: 1
+  productType: 'text-open-world'
+  productInstanceKey: string
+  gameBriefHash: string
+  storyArcHash: string
+  endings: Array<{
+    key: string
+    order: number
+    title: string
+    outcomeSummary: string
+    differentiationAxis: string
+    decisivePlayerValue: string
+    coreGoalResolution: string
+    coreGoalStatus: 'achieved'
+    eligiblePathSummary: string
+    sourceClaimKeys: string[]
+    runtimeBinding: {
+      status: 'condition-unbound'
+      conditionKeys: []
+      unlockEffectKey: null
+      reachEffectKey: null
+    }
+  }>
+  endingCount: number
+  basisHash: string
+  createdAt: number
+  endingContractsHash: string
+}
+
+export type TextOpenWorldNarrativePromiseKindV1 =
+  | 'core-conflict'
+  | 'mystery'
+  | 'character'
+  | 'faction'
+  | 'world'
+  | 'theme'
+
+export interface TextOpenWorldNarrativePromisesV1 {
+  schema: 'storyforge.text-open-world-narrative-promises'
+  version: 1
+  productType: 'text-open-world'
+  productInstanceKey: string
+  gameBriefHash: string
+  storyArcHash: string
+  endingContractsHash: string
+  promises: Array<{
+    key: string
+    order: number
+    kind: TextOpenWorldNarrativePromiseKindV1
+    statement: string
+    setup: { beatKey: string; description: string }
+    callbacks: Array<{
+      key: string
+      order: number
+      beatKey: string
+      function: 'escalate' | 'complicate' | 'recontextualize'
+      description: string
+    }>
+    payoff: {
+      beatKey: string
+      description: string
+      endingKeys: string[]
+    }
+    sourceClaimKeys: string[]
+    binding: {
+      status: 'scene-unbound'
+      setupSceneKey: null
+      callbackSceneKeys: []
+      payoffSceneKey: null
+    }
+  }>
+  promiseCount: number
+  basisHash: string
+  createdAt: number
+  narrativePromisesHash: string
+}
+
 export const TEXT_OPEN_WORLD_PRODUCTION_STAGES_V1 = [
   'P0', 'P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8', 'P8F', 'P9', 'P10',
   'V1', 'V2', 'V3', 'QA',

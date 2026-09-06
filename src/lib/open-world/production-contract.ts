@@ -171,7 +171,9 @@ export const TEXT_OPEN_WORLD_PRODUCTION_TASK_CONTRACTS_V1: TextOpenWorldProducti
     skillId: 'text-open-world.production.story-architecture.v1', recommendedModelCalls: 8,
     dependsOn: ['p2.experience-design'],
     inputArtifactKeys: [
-      'text-open-world.game-brief', 'text-open-world.experience-contract', 'text-open-world.source-ledger',
+      'text-open-world.game-brief', 'text-open-world.experience-contract',
+      'text-open-world.protagonist-asset', 'text-open-world.source-ledger',
+      'text-open-world.source-gap-report',
     ],
     outputArtifactKeys: [
       'text-open-world.story-arc', 'text-open-world.ending-contracts', 'text-open-world.narrative-promises',

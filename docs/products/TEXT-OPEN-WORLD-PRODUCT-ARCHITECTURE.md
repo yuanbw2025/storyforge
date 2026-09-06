@@ -1,6 +1,6 @@
 # AI 主导文字开放世界游戏 · 整体产品与游戏系统施工规格
 
-> 规格版本：1.1.18
+> 规格版本：1.1.19
 > 生效日期：2026-09-06
 > 文档层级：L2 文字开放世界整体产品施工入口
 > 当前状态：目标架构已冻结并进入分阶段实现；实际完成度以完整开发清单为准
@@ -177,6 +177,8 @@ PROJECT_TABLES / owner / migration / export / delete
 当前GameplayRuleset实现继续沿用相同分治：专属Context Source只读取同一Build已验收的体验链和它实际引用的Ledger事实；AI只为规则标题、三属性、技能资源、装备位、货币和标准难度生成符合世界语义的显示文本。代码生成并复验其余全部规则：稳定三属性键、20级和1到5级验收跨度、自动成长与G2公式、四类逐回合战斗、标准难度、有界物理结算、三装备位、单货币、确定性制作/交易上限及当前G2模块版本。Effect白名单直接引用运行时类型事实源，并进一步区分模型可提议、编译器专属和旧Release只读操作，后续内容Agent不能借“创作”生成系统结算标记。
 
 当前PlayerBuild实现把“主角可玩化”拆成语义候选和确定性初始配置：登记Context只读取同一Build已经验收的GameBrief、ExperienceContract、ProtagonistAsset与GameplayRuleset，不回读世界引擎、小说或活动角色表。AI可以完善人物小传式身份、选择描述性玩法风格及不同主副属性，并提出基础攻击、标志技能、初始武器与恢复品语义；它不能改名、改变核心目标、建立职业系统或填写伤害/掉落等运行数值。代码固定1级、主5/副4/其余3的12点属性预算、100初始货币、两项技能和两类物品的稳定键、技能机制映射与初始数量。所有键先作为后续目录生产必须兑现的reservation，Artifact明确保持`reserved-unbound`和`playerDefinitionReady=false`；只有Progression/Item目录真实定义这些键并通过最终绑定后，才能进入G2 PlayerCharacterDefinition和ProductRelease。
+
+当前StoryArchitecture实现把“全局故事设计”限定在任务、地区和场景生产之前：登记Context只读取同一Build已验收的GameBrief、ExperienceContract、ProtagonistAsset以及P1 Ledger/Gap Report，不重新接触活动世界或小说。AI负责核心冲突、长程节拍、多结局差异和叙事承诺的开放式语义；代码固定严格顺序且等待玩家的主线、不可永久失败的核心目标、非地点唯一触发、5～8节拍单调阶段、结局数量与Brief一致、所有结局达成同一核心目标，以及承诺的建立—中间回响—最终回收顺序。地区只在此阶段以`spatialFunctionNeeds`表达戏剧空间需求，不能提前制造地点ID；任务、奖励和运行条件同样不得越级生成。稳定Story/Ending/Promise/Callback键由代码分配，结局Condition与承诺Scene绑定保持显式unbound，由后续主线、地区和场景生产兑现后才可装配。
 
 ### 2.3 跨叙事与玩法的唯一生产 DAG
 
@@ -2688,6 +2690,7 @@ Session中的高频状态优先作为Event和可重建Projection存在，不建�
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| 1.1.19 | 2026-09-07 | 落地P3 StoryArchitecture：从已验收体验、主角与P1来源证据形成全局故事弧、多结局契约和可追踪叙事承诺；AI负责冲突、节拍、结局差异和承诺语义，代码固定严格顺序/等待/不可永久失败主线、5～8阶段序列、全结局核心目标达成、稳定键与建立—回响—回收闭环；地区、任务、场景及运行Condition不提前生成，所有来源、显式假设、绑定占位和Hash可复验 |
 | 1.1.18 | 2026-09-07 | 落地P4 PlayerBuild：从已验收主角/体验/Ruleset形成完整身份与合法初始构筑；AI只负责人物演绎、非职业玩法风格和技能物品语义，代码冻结1级、三属性12点预算、100货币、初始数量、机制及稳定键；未生成的技能/物品目录以`reserved-unbound`显式阻断运行装配，上游、预算、身份、键和Hash均可复验 |
 | 1.1.17 | 2026-09-07 | 落地P2 GameplayRulesetSkeleton：登记专属Context Source和Skill/Executor；AI只生成有Ledger claim依据的世界化规则语义，代码冻结三属性、20级、1→5验收跨度、自动成长、G2数值公式、标准难度单人四操作回合战斗、三装备位、单货币、确定性制作交易及完整模块版本映射；Effect词表与G2类型共享并分为模型可提议、编译器专属和旧版只读权限，固定边界、上游、claim与Hash均可复验 |
 | 1.1.16 | 2026-09-06 | 落地P2 GameBrief/ExperienceContract/ProtagonistAsset：复用作者授权Brief，登记专属Context Source和Skill/Executor；代码冻结首版体验、规模、主线/重要故事保护、世界演化、交互、战斗、媒资、预算和直接发布条件，模型只补充有来源claim约束的体验语义与人物小传；来源角色必须有绑定所选资源单元的P1证据，全部输入、缺口、作者意图和产物形成可复验Hash链；不读取活动来源、不生成提前数值Build、不写世界引擎或运行状态 |
