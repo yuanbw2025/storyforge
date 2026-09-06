@@ -362,7 +362,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 - `src/lib/agent/run/codex-extraction-durable.ts:779 · chat`
 - `src/lib/agent/run/history-agent-durable.ts:514 · chat`
 - `src/lib/agent/run/reference-derived-durable.ts:506 · chat`
-- `src/lib/agent/run/short-novel-durable.ts:183 · chat`
+- `src/lib/agent/run/short-novel-durable.ts:308 · chat`
 - `src/lib/agent/story-arc-copilot.ts:1552 · chat`
 - `src/lib/agent/story-arc-copilot.ts:1604 · chat`
 - `src/lib/agent/story-core-copilot.ts:557 · chat`
@@ -426,4 +426,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `cc32f25d`
+生成时间基准:commit `96ec92c7`

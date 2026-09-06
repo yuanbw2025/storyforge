@@ -69,6 +69,7 @@
 .short-stage-heading p { margin: 0; color: var(--text-muted); font-size: 10px; }
 .short-stage-heading label { display: grid; width: min(430px, 50%); gap: 5px; color: var(--text-muted); font-size: 9px; }
 .short-stage-heading textarea { min-height: 54px; resize: vertical; }
+.short-stage-heading .short-cancel-generation { align-self: flex-end; border-color: color-mix(in srgb, var(--warning) 42%, var(--border)); color: var(--warning); white-space: nowrap; }
 
 .short-studio textarea {
   width: 100%;
@@ -127,6 +128,8 @@
 .short-chapter-run header > span { color: var(--text-muted); font-size: 10px; }
 .short-json-editor > textarea,
 .short-candidate > textarea { min-height: 310px; margin-top: 12px; }
+.short-candidate-check { display: flex; align-items: center; gap: 7px; margin-top: 9px; padding: 9px 10px; border: 1px solid color-mix(in srgb, var(--warning) 38%, var(--border)); border-radius: 6px; background: color-mix(in srgb, var(--warning) 8%, transparent); color: var(--warning); font-size: 10px; }
+.short-candidate-check.ready { border-color: color-mix(in srgb, var(--success) 38%, var(--border)); background: color-mix(in srgb, var(--success) 7%, transparent); color: var(--success); }
 .short-json-editor > footer,
 .short-candidate > footer,
 .short-chapter-run > footer { display: flex; justify-content: flex-end; gap: 7px; margin-top: 11px; }

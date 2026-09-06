@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AlertTriangle, BookOpenText, Check, ChevronRight, Download, FileJson, FileText, Lock, RefreshCw, Sparkles, X } from 'lucide-react'
 import type {
   CreationReleaseV1,
@@ -89,7 +89,22 @@ function designDraft(): ShortNovelStoryDesignV1 {
 
 function planDraft(snapshot: ShortNovelManuscriptSnapshotV1): ShortNovelChapterPlanV1[] {
   const base = Math.floor(snapshot.work.targetWordCount / Math.max(1, snapshot.chapters.length))
-  return snapshot.chapters.map((chapter, index) => ({ stableKey: chapter.stableKey, order: index, title: chapter.title, purpose: '本章必须完成的叙事任务', viewpoint: '保持 Brief 指定视角', openingPressure: '开场立即出现的压力', conflict: '人物在本章采取行动时遇到的阻碍', turn: '改变局势或认知的转折', exitState: '进入下一章时的人物与局势状态', targetWordCount: index === snapshot.chapters.length - 1 ? snapshot.work.targetWordCount - base * index : base }))
+  const valueAfter = (summary: string, label: string) => summary.split('\n').find(line => line.startsWith(`${label}：`))?.slice(label.length + 1).trim() ?? ''
+  return snapshot.chapters.map((chapter, index) => {
+    const saved = {
+      purpose: valueAfter(chapter.summary, '目标'),
+      openingPressure: valueAfter(chapter.summary, '开场压力'),
+      conflict: valueAfter(chapter.summary, '冲突'),
+      turn: valueAfter(chapter.summary, '转折'),
+      exitState: valueAfter(chapter.summary, '离场状态'),
+      viewpoint: valueAfter(chapter.summary, '视角'),
+      targetWordCount: Number(valueAfter(chapter.summary, '字数预算')),
+    }
+    if (saved.purpose && saved.openingPressure && saved.conflict && saved.turn && saved.exitState && saved.viewpoint && Number.isInteger(saved.targetWordCount) && saved.targetWordCount >= 500) {
+      return { stableKey: chapter.stableKey, order: index, title: chapter.title, ...saved }
+    }
+    return { stableKey: chapter.stableKey, order: index, title: chapter.title, purpose: '本章必须完成的叙事任务', viewpoint: '保持 Brief 指定视角', openingPressure: '开场立即出现的压力', conflict: '人物在本章采取行动时遇到的阻碍', turn: '改变局势或认知的转折', exitState: '进入下一章时的人物与局势状态', targetWordCount: index === snapshot.chapters.length - 1 ? snapshot.work.targetWordCount - base * index : base }
+  })
 }
 
 function reviewDraft(): ShortNovelReviewV1 { return { version: 1, summary: '作者完成全篇复核；在此记录结论。', strengths: [], issues: [] } }
@@ -106,7 +121,9 @@ export default function ShortNovelStudio({ project, scope }: Props) {
   const [selectedIssueKey, setSelectedIssueKey] = useState<string | null>(null)
   const [candidate, setCandidate] = useState<{ runId: number; kind: ShortNovelArtifactKindV1; text: string } | null>(null)
   const [busy, setBusy] = useState(false)
+  const [generating, setGenerating] = useState(false)
   const [error, setError] = useState('')
+  const activeGeneration = useRef<AbortController | null>(null)
   const aiConfig = useAIConfigStore(state => state.config)
 
   const reload = useCallback(async (followPhase = false) => {
@@ -145,11 +162,22 @@ export default function ShortNovelStudio({ project, scope }: Props) {
   const generate = async (kind: ShortNovelArtifactKindV1, options: { chapterKey?: string; issueKey?: string } = {}) => {
     if (busy || candidate) return
     if (!isAIConfigReady(aiConfig)) { setError(getAIConfigRequiredMessage(aiConfig)); return }
-    setBusy(true); setError('')
+    const controller = new AbortController()
+    let timedOut = false
+    const timeoutId = window.setTimeout(() => { timedOut = true; controller.abort() }, 90_000)
+    activeGeneration.current = controller
+    setBusy(true); setGenerating(true); setError('')
     try {
-      const generated = await generateShortNovelCandidateV1({ scope, artifactKind: kind, chapterKey: options.chapterKey, issueKey: options.issueKey, authorInstruction: instruction, aiConfig })
+      const generated = await generateShortNovelCandidateV1({ scope, artifactKind: kind, chapterKey: options.chapterKey, issueKey: options.issueKey, authorInstruction: instruction, aiConfig, signal: controller.signal })
       setCandidate({ runId: generated.snapshot.run.id, kind, text: JSON.stringify(generated.candidate.payload, null, 2) })
-    } catch (cause) { setError(cause instanceof Error ? cause.message : 'AI 候选生成失败') } finally { setBusy(false) }
+    } catch (cause) {
+      if (controller.signal.aborted) setError(timedOut ? '本次生成超过 90 秒，已安全停止；没有内容写入正式作品。' : '本次生成已取消；没有内容写入正式作品。')
+      else setError(cause instanceof Error ? cause.message : 'AI 候选生成失败')
+    } finally {
+      window.clearTimeout(timeoutId)
+      if (activeGeneration.current === controller) activeGeneration.current = null
+      setGenerating(false); setBusy(false)
+    }
   }
 
   const acceptCandidate = () => {
@@ -197,6 +225,23 @@ export default function ShortNovelStudio({ project, scope }: Props) {
   const availableStageIndex = production ? STAGES.findIndex(item => item.id === PHASE_STAGE[production.phase]) : 0
   const wordCount = snapshot?.chapters.reduce((sum, chapter) => sum + chapter.wordCount, 0) ?? 0
   const percentage = snapshot ? Math.min(100, Math.round(wordCount / snapshot.work.targetWordCount * 100)) : 0
+  const candidateInspection = useMemo(() => {
+    if (!candidate || !snapshot) return null
+    try {
+      const payload = JSON.parse(candidate.text) as { chapterKey?: unknown; content?: unknown }
+      if (!['chapter-draft', 'targeted-rewrite'].includes(candidate.kind)) return { valid: true, chapter: null }
+      if (typeof payload.chapterKey !== 'string' || typeof payload.content !== 'string') return { valid: false, chapter: null }
+      const chapter = snapshot.chapters.find(item => item.stableKey === payload.chapterKey)
+      const target = Number(chapter?.summary.split('\n').find(line => line.startsWith('字数预算：'))?.slice('字数预算：'.length))
+      const characters = payload.content.replace(/\s+/g, '').length
+      const projectedTotal = wordCount - (chapter?.wordCount ?? 0) + characters
+      const minimum = Number.isFinite(target) ? Math.ceil(target * .9) : null
+      const maximum = Number.isFinite(target) ? Math.floor(target * 1.1) : null
+      return { valid: true, chapter: { characters, target: Number.isFinite(target) ? target : null, minimum, maximum, projectedTotal } }
+    } catch {
+      return { valid: false, chapter: null }
+    }
+  }, [candidate, snapshot, wordCount])
   const selectedOutlineNodeId = useMemo(() => {
     if (!snapshot) return undefined
     const ordinal = Number(selectedChapterKey.split('-')[1])
@@ -215,9 +260,9 @@ export default function ShortNovelStudio({ project, scope }: Props) {
     <div className="short-studio-layout">
       <aside className="short-stage-nav">{STAGES.map((item, index) => <button key={item.id} className={stage === item.id ? 'active' : ''} onClick={() => selectStage(item.id)}><span>{index < availableStageIndex || production.phase === 'complete' ? <Check /> : index === currentIndex ? <ChevronRight /> : index + 1}</span><div><strong>{item.label}</strong><small>{item.note}</small></div></button>)}</aside>
       <main className="short-stage-main">
-        <section className="short-stage-heading"><div><span>STEP {currentIndex + 1}</span><h3>{STAGES[currentIndex].label}</h3><p>{STAGES[currentIndex].note}</p></div>{stage !== 'release' && <label>本步附加要求<textarea value={instruction} onChange={event => setInstruction(event.target.value)} placeholder="可选：语气、人物、禁区或本次修订要求" /></label>}</section>
+        <section className="short-stage-heading"><div><span>STEP {currentIndex + 1}</span><h3>{STAGES[currentIndex].label}</h3><p>{STAGES[currentIndex].note}</p></div>{stage !== 'release' && <label>本步附加要求<textarea value={instruction} onChange={event => setInstruction(event.target.value)} placeholder="可选：语气、人物、禁区或本次修订要求" /></label>}{generating && <button className="short-cancel-generation" onClick={() => activeGeneration.current?.abort()}><X />取消本次生成</button>}</section>
 
-        {candidate && <section className="short-candidate"><header><div><Sparkles /><strong>AI {candidate.kind} 候选</strong></div><span>尚未写入正式作品</span></header><textarea value={candidate.text} onChange={event => setCandidate({ ...candidate, text: event.target.value })} spellCheck={false} /><footer><button onClick={rejectCandidate} disabled={busy}><X />放弃候选</button><button className="primary" onClick={acceptCandidate} disabled={busy}><Check />作者确认并采纳</button></footer></section>}
+        {candidate && <section className="short-candidate"><header><div><Sparkles /><strong>AI {candidate.kind} 候选</strong></div><span>尚未写入正式作品</span></header><textarea value={candidate.text} onChange={event => setCandidate({ ...candidate, text: event.target.value })} spellCheck={false} />{candidateInspection && <div className={`short-candidate-check ${candidateInspection.valid && (!candidateInspection.chapter || (candidateInspection.chapter.minimum != null && candidateInspection.chapter.maximum != null && candidateInspection.chapter.characters >= candidateInspection.chapter.minimum && candidateInspection.chapter.characters <= candidateInspection.chapter.maximum)) ? 'ready' : 'warning'}`}>{!candidateInspection.valid ? <><AlertTriangle /><span>候选 JSON 尚未完成；修正格式后才能采纳。</span></> : candidateInspection.chapter ? <><AlertTriangle /><span>本章 {candidateInspection.chapter.characters.toLocaleString()} 字{candidateInspection.chapter.target ? ` · 章节预算 ${candidateInspection.chapter.target.toLocaleString()}（建议 ${candidateInspection.chapter.minimum?.toLocaleString()}～${candidateInspection.chapter.maximum?.toLocaleString()}）` : ''} · 采纳后全篇约 {candidateInspection.chapter.projectedTotal.toLocaleString()} / {snapshot.work.targetWordCount.toLocaleString()} 字</span></> : <><Check /><span>结构化候选可解析；确认后才会写入正式作品。</span></>}</div>}<footer><button onClick={rejectCandidate} disabled={busy}><X />放弃候选</button><button className="primary" onClick={acceptCandidate} disabled={busy || candidateInspection?.valid === false}><Check />作者确认并采纳</button></footer></section>}
 
         {!candidate && (stage === 'brief' || stage === 'design' || stage === 'plan') && <section className="short-json-editor"><header><div><FileJson /><strong>{stage === 'brief' ? '创作 Brief' : stage === 'design' ? '故事设计' : '章节卡计划'}</strong></div><button onClick={() => void generate(stage === 'brief' ? 'brief' : stage === 'design' ? 'story-design' : 'scene-plan')} disabled={busy}><Sparkles />AI 生成候选</button></header><p>可以手工编辑结构化合同，也可以让短篇专属 Skill 生成；两种路径都要经过同一校验后确认。</p><textarea value={editorText} onChange={event => setEditorText(event.target.value)} spellCheck={false} /><footer><button className="primary" onClick={saveManual} disabled={busy}><Check />校验并确认本步</button></footer></section>}
 

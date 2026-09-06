@@ -4,6 +4,7 @@ import { getAgentSkillV1 } from '../../src/lib/agent/skill-registry'
 import {
   adoptShortNovelCandidateV1,
   generateShortNovelCandidateV1,
+  parseShortNovelModelJsonV1,
 } from '../../src/lib/agent/run/short-novel-durable'
 import {
   buildShortNovelManuscriptSnapshotV1,
@@ -108,6 +109,9 @@ describe('R-SHORT2 · 专业短篇独立生产闭环', () => {
     expect(ids.map(id => getAgentSkillV1(id).executionMode)).toEqual([
       'short-intent-brief', 'short-story-design', 'short-scene-plan', 'short-chapter-draft', 'short-continuity-review', 'short-targeted-rewrite',
     ])
+    expect(ids.map(id => getAgentSkillV1(id).promptVersion)).toEqual([
+      'short-intent-brief-v2', 'short-story-design-v2', 'short-scene-plan-v2', 'short-chapter-draft-v4', 'short-continuity-review-v2', 'short-targeted-rewrite-v2',
+    ])
     expect(() => parseShortNovelBriefV1({ ...brief, hiddenInstruction: '越权' })).toThrow('字段不在允许闭集')
     expect(() => parseShortNovelReviewV1({ ...review, issues: [{ stableKey: 'issue-1', severity: 'critical', category: 'causality', chapterKeys: ['chapter-1'], evidence: '无证据', problem: '问题', suggestion: '建议', status: 'resolved' }] })).toThrow('只能以 open 状态')
 
@@ -176,9 +180,13 @@ describe('R-SHORT2 · 专业短篇独立生产闭环', () => {
     })
     expect(system.content).toContain('version 的字段必须使用 JSON 数字 1')
     expect(system.content).toContain('英文枚举标识必须逐字照抄')
+    expect(system.content).toContain('人名、身份、关系、地点、引爆事件、期限、核心两难与禁区必须保留')
+    expect(system.content).toContain('不能另起一个故事')
     expect(objective.content).toContain('first-person、third-limited、third-omniscient')
     expect(objective.content).toContain('past、present')
     expect(objective.content).toContain('targetWordCount 和 chapterCount 必须是 JSON 数字')
+    expect(objective.content).toContain('premise 必须忠实压缩当前 Work 简介')
+    expect(objective.content).toContain('明确禁区必须进入 forbidden')
 
     const [, planObjective] = buildShortNovelPromptV1({
       kind: 'scene-plan',
@@ -189,6 +197,19 @@ describe('R-SHORT2 · 专业短篇独立生产闭环', () => {
     expect(planObjective.content).toContain('{"stableKey":"chapter-1","order":0')
     expect(planObjective.content).toContain('targetWordCount 使用 JSON 数字')
 
+    const [, draftObjective] = buildShortNovelPromptV1({
+      kind: 'chapter-draft',
+      context: 'chapter-1 字数预算：1250\nchapter-2 揭示幕后真相',
+      authorInstruction: '',
+      chapterKey: 'chapter-1',
+    })
+    expect(draftObjective.content).toContain('后续章节卡属于幕后规划')
+    expect(draftObjective.content).toContain('禁止把后章 turn、真相或高潮结论提前写入')
+    expect(draftObjective.content).toContain('字数预算”的 90%～110%')
+    expect(draftObjective.content).toContain('同一线索、疑问或决定不要换句话重复')
+    expect(draftObjective.content).toContain('段落换行编码为\\n\\n')
+    expect(draftObjective.content).toContain('中文引号“”')
+
     const [, reviewObjective] = buildShortNovelPromptV1({
       kind: 'continuity-review',
       context: '三章正文',
@@ -197,6 +218,21 @@ describe('R-SHORT2 · 专业短篇独立生产闭环', () => {
     expect(reviewObjective.content).toContain('{"version":1,"summary":"非空总结"')
     expect(reviewObjective.content).toContain('{"stableKey":"issue-1","severity":"major"')
     expect(reviewObjective.content).toContain('绝对不要增加 title、location、line、priority、confidence 或 reasoning')
+  })
+
+  it('安全兼容单一 JSON 的 provider 包装与正文原始换行，但拒绝歧义输出', () => {
+    expect(parseShortNovelModelJsonV1(`以下是候选：\n\`\`\`json\n${JSON.stringify(brief)}\n\`\`\``)).toEqual(brief)
+    expect(parseShortNovelModelJsonV1('{"version":1,"chapterKey":"chapter-1","title":"第一章","content":"第一段\n\n第二段"}')).toEqual({
+      version: 1,
+      chapterKey: 'chapter-1',
+      title: '第一章',
+      content: '第一段\n\n第二段',
+    })
+    expect(parseShortNovelModelJsonV1('{"version":1,"chapterKey":"chapter-1","title":"第一章","content":"她说："现在出发"。\n风更大了。"}')).toMatchObject({
+      content: '她说："现在出发"。\n风更大了。',
+    })
+    expect(() => parseShortNovelModelJsonV1('{"version":1}\n{"version":1}')).toThrow('唯一 JSON')
+    expect(() => parseShortNovelModelJsonV1('{"version":1')).toThrow('唯一 JSON')
   })
 
   it('手稿变化后拒绝 stale 候选，且不能跨 Work 采纳', async () => {

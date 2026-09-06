@@ -665,7 +665,7 @@ function comicTargetSpec(input: { readingDirection: ComicTargetSpecV1['readingDi
   return { format: 'page-comic', audience: '青少年及以上', readingDirection: input.readingDirection, chapterCount: input.chapterCount, targetPagesPerChapter: input.pagesPerChapter, pageSize: { width: 1200, height: 1700, unit: 'px', bleed: 0 }, colorMode: input.colorMode, artStyleBrief: input.artStyleBrief.trim() || '清晰叙事、稳定人物设计、适合页漫印刷与屏幕阅读', renderCandidatesPerPanel: 3, imageCapabilityRequirement: { referenceImage: true, deterministicSeed: false, inpainting: false, commercialUseRequired: true, minimumWidth: 512, minimumHeight: 512 } }
 }
 
-function CreatePanel({ projects, onClose, onCreated }: { projects: Project[]; onClose: () => void; onCreated: (kind: 'worlds' | 'novel' | 'screenplay' | 'comic', id: number) => void }) {
+function CreatePanel({ projects, onClose, onCreated }: { projects: Project[]; onClose: () => void; onCreated: (kind: 'worlds' | 'novel' | 'shortform' | 'screenplay' | 'comic', id: number) => void }) {
   const { createWorkspace, loadProjects } = useProjectStore()
   const [kind, setKind] = useState<'choose' | 'worlds' | 'long-novel' | 'short-novel' | 'screenplay' | 'comic'>('choose')
   const [name, setName] = useState('')
@@ -741,7 +741,7 @@ function CreatePanel({ projects, onClose, onCreated }: { projects: Project[]; on
           console.error('[project-storage] 新项目存储位置保存失败', error)
         }
       }
-      onCreated(kind === 'worlds' ? 'worlds' : 'novel', id)
+      onCreated(kind === 'worlds' ? 'worlds' : isShort ? 'shortform' : 'novel', id)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '创建失败')
     } finally { setBusy(false) }
