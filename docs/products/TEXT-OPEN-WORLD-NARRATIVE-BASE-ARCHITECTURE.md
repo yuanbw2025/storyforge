@@ -1,6 +1,6 @@
 # AI 主导文字开放世界叙事基座 · StoryForge 施工规格
 
-> 规格版本：3.2.13
+> 规格版本：3.2.14
 > 生效日期：2026-09-06
 > 文档层级：L2 产品目标架构与施工规格
 > 当前状态：设计基线；不代表代码已经实现
@@ -521,6 +521,19 @@ P3仍只产出Build候选，不写世界引擎、ProductRelease或Session。它�
 - Quest/Stage/Objective的Action、Condition、Reward和运行键，以及Manifest中的正式目录definition key全部为空并标记unbound。P8目录只能兑现自身owner的需求，P8F再把真实定义绑定回任务；模型不得通过额外字段越权提前写引用。
 
 验证器从两件Artifact反向恢复模型草稿，用同一Context重建全部任务来源、生命周期、稳定键、需求合并、消费者覆盖、owner路由、basis和Hash。任务来源漏项、主线保护弱化、无敌人战斗、同名冲突、重复需求、越权目录字段，以及重算Hash后的生命周期或绑定篡改都会失败关闭。P8骨架仍只写Build候选，不新增物理表，不写ProductRelease或Session。
+
+#### 5.4.13 P8成长、遭遇、物品与奖励目录落地
+
+P8前三条Gameplay Catalog Lane把ContentRequirementManifest变成后序任务可以精确绑定的稳定定义，但依然不越权生成跨模块运行引用：
+
+- 三条Lane都正式读取QuestSkeleton。Manifest负责列出需求和消费者，QuestSkeleton补足任务类型、地区、地点、时长与Objective意图；目录Agent不得仅凭需求标题猜测这些上下文；
+- `progression-catalogs-production.ts`从PlayerBuild两项初始技能、6个长期等级解锁点和全部skill需求生成Skill Demand。代码固定20级平方经验曲线、按主副属性自动成长、获得来源、稳定键和主动攻击公式完整性；模型只设计技能/状态语义和有界机制参数；
+- `encounter-catalog-production.ts`把每项enemy/encounter需求及每区基础遭遇变成一个敌人和一个遭遇。模型选择地区候选地点、敌人原型、1～5级推荐难度、强度和表现文本；代码计算生命/攻击/防御/暴击/先攻，绑定已生成基础攻击策略，保证所有战斗Objective和地区均被覆盖，固定标准难度、可逃跑、战败重试或复活，并预留奖励/掉落；
+- `item-reward-catalog-production.ts`兑现PlayerBuild初始武器/恢复品及全部item/equipment/material/reward需求，并为每个任务、每个遭遇生成Reward Contract候选，为每个敌人生成地区材料Drop Table候选。关键任务物品固定不可丢弃/出售；每个物品必须拥有初始、任务奖励或敌人掉落来源；
+- 经验、货币、装备加成、敌人数值和掉落数量由代码拥有。7个主线任务按时长权重精确分配1600经验，保证验收世界从1级达到5级；任务技能自动进入对应Quest奖励计划；模型只能补物品/奖励语义和受限可选物品；
+- 所有Skill Action/Effect/Condition/Quest unlock、Item使用/装备Effect、Enemy DropTable正式键、Encounter Quest/Reward键、Reward Effect与Drop数量Effect仍为空并标记unbound。P8F必须在后续制作经济/NPC/地图目录完成后统一生成并双向校验这些引用。
+
+三条验证器都能从Artifact反向恢复模型草稿并重建确定性目录。需求漏项、主角预留改写、非法技能公式/装备位、战斗地点越界、敌人数值漂移、物品无来源、任务/遭遇漏奖励、主线经验预算不闭合、正式引用提前注入，以及重算Hash后的篡改都会失败关闭。三条Lane不新增物理表，不写ProductRelease或Session。
 
 ### 5.5 正确的验证顺序
 
@@ -1340,6 +1353,7 @@ StoryForge当前没有独立staging。发布前仍需在隔离数据中完成灰
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| 3.2.14 | 2026-09-07 | 落地P8 Progression、Enemy/Encounter和Item/Reward三类目录：共同读取QuestSkeleton与Manifest，分别形成20级成长/技能、地区敌人/遭遇、初始与任务物品、全部任务/遭遇奖励及敌人掉落；模型只负责受约束语义与有限选择，代码固定数值、稳定键、需求/地区/战斗目标覆盖、关键物品保护、来源闭环和主线1→5级1600经验预算；跨模块Action/Effect/Condition/Quest/Reward/Drop引用保持unbound等待P8F |
 | 3.2.13 | 2026-09-07 | 落地P8 QuestSkeleton与ContentRequirementManifest：登记只读Brief/体验/玩法/主线/重要故事/地区生态的Context及专属Skill/Executor；精确把7主线Stage、6重要故事Stage、6普通任务种子和4地区模板编译为23个任务骨架与可执行Objective，代码固定保护任务等待、普通/模板生命周期、非到达触发和全部运行绑定unbound；需求清单覆盖每个Objective及地区角色/势力/地点交互，并向六类目录和QuestFinalize声明唯一owner，同名冲突、来源漏项、弱化保护、无敌人战斗和越权字段失败关闭 |
 | 3.2.12 | 2026-09-07 | 落地P7 RegionNarrativePacks：登记只读Brief/体验/来源/地图/主线/重要故事的Context与专属Skill/Executor；AI为每区设计差异化身份、矛盾/状态轴、全地点生活计划、重要Agent与普通规则NPC分层、势力需求及6普通任务/4模板/12随机事件保底种子和传闻；代码固定全覆盖、owner唯一承接、稳定预留键、普通演化与主线等待隔离、全部正式目录unbound且全链可复验 |
 | 3.2.11 | 2026-09-07 | 落地P6 SignificantThreads：登记只读Brief/来源/故事/结局/承诺/地区/主线的Context与专属Skill/Executor；AI精确设计至少两种owner、多方冲突系统、3～6个可玩Stage、氛围信号和局部后果，代码固定稳定键、owner预留/地区绑定、主线揭示窗口、安全等待、不可放弃过期/永久失败/普通状态阻断、非地点触发及主线不可改写/阻断；全部Quest/Scene/Actor/Faction/Condition/Effect绑定保持unbound且全链可复验 |

@@ -1942,6 +1942,122 @@ export interface TextOpenWorldEnemyEncounterCatalogV1 {
   enemyEncounterCatalogHash: string
 }
 
+export interface TextOpenWorldItemRewardCatalogV1 {
+  schema: 'storyforge.text-open-world-item-reward-catalog'
+  version: 1
+  productType: 'text-open-world'
+  productInstanceKey: string
+  gameplayRulesetHash: string
+  playerBuildHash: string
+  questSkeletonsHash: string
+  contentRequirementManifestHash: string
+  progressionCatalogsHash: string
+  enemyEncounterCatalogHash: string
+  equipmentSlots: TextOpenWorldGameplayRulesetSkeletonV1['inventory']['equipmentSlots']
+  items: Array<{
+    key: string
+    order: number
+    sourceDemandKey: string
+    title: string
+    description: string
+    tags: string[]
+    kind: 'equipment' | 'consumable' | 'material' | 'quest' | 'misc'
+    stackPolicy: 'stacked' | 'instanced'
+    maximumStack: number | null
+    unique: boolean
+    consumable: boolean
+    critical: boolean
+    droppable: boolean
+    sellable: boolean
+    baseValue: number
+    equipmentSlotKey: 'weapon' | 'armor' | 'accessory' | null
+    statModifiers: Partial<Record<'maximumHealth' | 'attack' | 'defense' | 'criticalChance' | 'initiative' | 'skillPower' | 'skillResource', number>>
+    fulfilledRequirementKeys: string[]
+    sourceRefs: string[]
+    runtimeBinding: {
+      status: 'runtime-unbound'
+      useActionKey: null
+      equipActionKey: null
+      unequipActionKey: null
+      equipConditionKeys: []
+      effectKeys: []
+      presentationRefs: []
+    }
+  }>
+  rewardContracts: Array<{
+    key: string
+    order: number
+    sourceDemandKey: string
+    title: string
+    description: string
+    sourceKind: 'quest' | 'combat'
+    sourceSemanticKey: string
+    expectedMinutes: number
+    budgetClass: 'minor' | 'standard' | 'major'
+    grants: {
+      experience: number
+      currency: number
+      items: Array<{ itemKey: string; quantity: number }>
+      skillKeys: string[]
+    }
+    fulfilledRequirementKeys: string[]
+    runtimeBinding: {
+      status: 'runtime-unbound'
+      conditionKeys: []
+      effectKeys: []
+      dropTableKeys: string[]
+      sourceQuestKey: null
+      sourceEncounterKey: string | null
+    }
+  }>
+  dropTables: Array<{
+    key: string
+    order: number
+    sourceEnemyKey: string
+    algorithm: 'weighted-item-then-quantity-v1'
+    rolls: 1
+    entries: Array<{
+      itemKey: string
+      minimum: number
+      maximum: number
+      weight: number
+      uniquePolicy: 'reject'
+      quantityEffectBindings: Array<{ quantity: number; effectKey: null }>
+    }>
+    runtimeBinding: { status: 'effect-unbound'; conditionKeys: [] }
+  }>
+  coverage: {
+    requiredPlayerItemKeys: string[]
+    coveredPlayerItemKeys: string[]
+    requiredItemRequirementKeys: string[]
+    coveredItemRequirementKeys: string[]
+    requiredRewardRequirementKeys: string[]
+    coveredRewardRequirementKeys: string[]
+    questKeys: string[]
+    rewardedQuestKeys: string[]
+    encounterKeys: string[]
+    rewardedEncounterKeys: string[]
+    enemyKeys: string[]
+    enemyKeysWithDropSource: string[]
+    mainlineExperienceTotal: number
+    mainlineTargetExperience: number
+    uncoveredDemandKeys: []
+  }
+  governance: {
+    rewardBudgetOwner: 'deterministic-compiler'
+    itemSemanticsOwner: 'model-validated'
+    singleCurrency: true
+    noAffixesEnhancementDurability: true
+    everyItemHasSourcePlan: true
+    everyQuestAndEncounterRewarded: true
+    allRuntimeBindingsUnbound: true
+    itemModuleReady: false
+  }
+  basisHash: string
+  createdAt: number
+  itemRewardCatalogHash: string
+}
+
 export const TEXT_OPEN_WORLD_PRODUCTION_STAGES_V1 = [
   'P0', 'P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8', 'P8F', 'P9', 'P10',
   'V1', 'V2', 'V3', 'QA',

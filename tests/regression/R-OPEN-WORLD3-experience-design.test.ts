@@ -80,6 +80,12 @@ import {
   type TextOpenWorldEncounterCatalogInputContextV1,
   type TextOpenWorldEncounterCatalogModelRunnerV1,
 } from '../../src/lib/open-world/encounter-catalog-production'
+import {
+  createTextOpenWorldItemRewardCatalogExecutorV1,
+  validateTextOpenWorldItemRewardCatalogV1,
+  type TextOpenWorldItemRewardCatalogInputContextV1,
+  type TextOpenWorldItemRewardCatalogModelRunnerV1,
+} from '../../src/lib/open-world/item-reward-catalog-production'
 import { TEXT_OPEN_WORLD_EFFECT_OPERATIONS_V1 } from '../../src/lib/types/text-open-world-effect'
 import type {
   TextOpenWorldGameplayRulesetSkeletonV1,
@@ -91,6 +97,7 @@ import type {
   TextOpenWorldQuestSkeletonsV1,
   TextOpenWorldProgressionCatalogsV1,
   TextOpenWorldEnemyEncounterCatalogV1,
+  TextOpenWorldItemRewardCatalogV1,
   TextOpenWorldSignificantThreadsV1,
 } from '../../src/lib/types'
 import {
@@ -1514,7 +1521,7 @@ function questSkeletonsRunner(options: {
   return async input => {
     const context = JSON.parse(input.contextText) as TextOpenWorldQuestSkeletonsInputContextV1
     const kindsBySource = {
-      'mainline-stage': ['actor', 'skill', 'faction', 'item', 'encounter', 'faction', 'reward'],
+      'mainline-stage': ['actor', 'skill', 'equipment', 'item', 'encounter', 'faction', 'reward'],
       'significant-stage': ['actor', 'action', 'faction', 'actor', 'faction', 'reward'],
       'ordinary-seed': ['actor', 'item', 'material', 'enemy', 'vendor', 'reward'],
       'template-seed': ['actor', 'item', 'encounter', 'location-interaction'],
@@ -1827,6 +1834,98 @@ async function executeEncounterCatalog(
     attempt: 1,
     idempotencyKey: await hashProductProductionValueV2('p8-encounter-catalog'),
     contextText: input.encounterContextText,
+    inputArtifacts: [],
+    capabilityBindings: input.task.capabilityRequirementKeys.map(requirementKey => ({
+      requirementKey, bindingHash: CAPABILITY_HASH, adapterId: 'configured-text.v1',
+    })),
+    signal: new AbortController().signal,
+  })
+}
+
+function itemRewardCatalogRunner(options: {
+  omitItem?: boolean
+  omitReward?: boolean
+  rewriteStarter?: boolean
+  invalidSlot?: boolean
+  duplicateRewardTitle?: boolean
+} = {}): TextOpenWorldItemRewardCatalogModelRunnerV1 {
+  return async input => {
+    const context = JSON.parse(input.contextText) as TextOpenWorldItemRewardCatalogInputContextV1
+    const items = context.itemDemands.map((demand, index) => ({
+      demandNumber: demand.demandNumber,
+      title: options.rewriteStarter && demand.demandNumber === 1
+        ? '被改写的初始武器'
+        : demand.fixedTitle ?? (demand.demandKind === 'region-drop-material'
+          ? `${demand.regionKey}地区素材`
+          : `${demand.semanticBrief.slice(0, 14)}物品${index + 1}`),
+      description: demand.fixedDescription ?? `${demand.semanticBrief}该物品在世界中拥有明确的获得与使用去向。`,
+      tags: [demand.demandKind, demand.plannedKind],
+      equipmentSlotKey: demand.plannedKind === 'equipment'
+        ? options.invalidSlot && demand.fixedEquipmentSlotKey === null ? null : demand.fixedEquipmentSlotKey ?? 'weapon'
+        : options.invalidSlot && index === context.itemDemands.length - 1 ? 'armor' : null,
+    }))
+    const rewards = context.rewardDemands.map(demand => ({
+      demandNumber: demand.demandNumber,
+      title: options.duplicateRewardTitle ? '重复奖励' : demand.title,
+      description: `${demand.semanticBrief}奖励在完成时给出明确的成长与资源反馈。`,
+      optionalItemDemandNumbers: [],
+    }))
+    return {
+      output: JSON.stringify({
+        schema: 'storyforge.text-open-world-item-reward-catalog-draft',
+        version: 1,
+        items: options.omitItem ? items.slice(0, -1) : items,
+        rewards: options.omitReward ? rewards.slice(0, -1) : rewards,
+      }),
+      bindingReceipt: bindingReceipt(input.requirementKey),
+      usage: null,
+    }
+  }
+}
+
+async function itemRewardCatalogFixture() {
+  const input = await encounterCatalogFixture()
+  const encounterResult = await executeEncounterCatalog(input)
+  await acceptTaskArtifacts(input, encounterResult.artifacts, 'P8-encounter-catalog')
+  const plan = await createTextOpenWorldProductionPlanV1({
+    buildNumber: input.build.buildNumber,
+    controlEpoch: input.build.controlEpoch,
+    briefHash: input.briefRow.briefHash,
+    brief: input.brief,
+  })
+  const task = plan.tasks.find(item => item.taskKey === 'p8.catalog.items-rewards')!
+  const assembled = await assembleContext({
+    projectId: input.scope.projectId,
+    scope: input.scope,
+    sourceKeys: ['text-open-world.item-reward-catalog-input'],
+    productProductionId: input.production.id!,
+    productBuildId: input.build.id!,
+    inputBudgetMaxTokens: task.budgetReservation.inputTokens,
+  })
+  return {
+    ...input,
+    task,
+    itemRewardContextText: assembled.text,
+    itemRewardContext: JSON.parse(assembled.text) as TextOpenWorldItemRewardCatalogInputContextV1,
+    itemRewardContextEvidence: assembled.sourceEvidence,
+  }
+}
+
+async function executeItemRewardCatalog(
+  input: Awaited<ReturnType<typeof itemRewardCatalogFixture>>,
+  runModel: TextOpenWorldItemRewardCatalogModelRunnerV1 = itemRewardCatalogRunner(),
+) {
+  return createTextOpenWorldItemRewardCatalogExecutorV1({ runModel, now: () => NOW + 15 })({
+    scope: input.scope,
+    productionId: input.production.id!,
+    buildId: input.build.id!,
+    buildNumber: input.build.buildNumber,
+    controlEpoch: input.build.controlEpoch,
+    planHash: input.planHash,
+    task: input.task,
+    attempt: 1,
+    idempotencyKey: await hashProductProductionValueV2('p8-item-reward-catalog'),
+    contextText: input.itemRewardContextText,
     inputArtifacts: [],
     capabilityBindings: input.task.capabilityRequirementKeys.map(requirementKey => ({
       requirementKey, bindingHash: CAPABILITY_HASH, adapterId: 'configured-text.v1',
@@ -3008,4 +3107,91 @@ describe('R-OPEN-WORLD3 · P8 EnemyEncounterCatalog', () => {
     await expect(validateTextOpenWorldEnemyEncounterCatalogV1({ artifact, context: input.encounterContext }))
       .rejects.toThrow(/遭遇需求覆盖、敌人数值、稳定键、奖励预留或运行绑定被篡改|Enemy数值不属于确定性archetype/)
   }, 150_000)
+})
+
+describe('R-OPEN-WORLD3 · P8 ItemRewardCatalog', () => {
+  beforeEach(async () => { await db.delete(); await db.open() })
+  afterAll(() => db.close())
+
+  it('闭合初始物品、内容需求、全部任务/遭遇奖励、敌人掉落与主线1到5级经验预算', async () => {
+    const input = await itemRewardCatalogFixture()
+    expect(CONTEXT_SOURCE_BY_KEY.get('text-open-world.item-reward-catalog-input')).toMatchObject({
+      layer: 'L0', ownerFrom: 'work', protectedFromTrim: true,
+    })
+    expect(getAgentSkillV1('text-open-world.production.item-reward-catalog.v1')).toMatchObject({
+      contextSourceKeys: ['text-open-world.item-reward-catalog-input'],
+      writeTargets: [{ table: 'productBuildArtifacts', fields: ['payloadJson'] }],
+    })
+    expect(input.itemRewardContextEvidence).toEqual([
+      expect.objectContaining({ key: 'text-open-world.item-reward-catalog-input', status: 'included', delivery: 'full' }),
+    ])
+    expect(input.itemRewardContext.itemDemands).toHaveLength(9)
+    expect(input.itemRewardContext.rewardDemands).toHaveLength(28)
+
+    const result = await executeItemRewardCatalog(input)
+    const artifact = result.artifacts[0]!.payload as TextOpenWorldItemRewardCatalogV1
+    expect(result.passedGateIds).toEqual(input.task.acceptanceGateIds)
+    expect(result.usage).toMatchObject({ modelCalls: 1, mediaCalls: 0 })
+    expect(artifact.items).toHaveLength(9)
+    expect(artifact.rewardContracts).toHaveLength(28)
+    expect(artifact.dropTables).toHaveLength(5)
+    expect(artifact.coverage).toMatchObject({
+      requiredPlayerItemKeys: ['item.player.starter-weapon', 'item.player.recovery-consumable'],
+      coveredPlayerItemKeys: ['item.player.starter-weapon', 'item.player.recovery-consumable'],
+      mainlineExperienceTotal: 1600,
+      mainlineTargetExperience: 1600,
+      uncoveredDemandKeys: [],
+    })
+    expect(artifact.coverage.requiredItemRequirementKeys).toHaveLength(5)
+    expect(new Set(artifact.coverage.coveredItemRequirementKeys)).toEqual(new Set(artifact.coverage.requiredItemRequirementKeys))
+    expect(artifact.coverage.requiredRewardRequirementKeys).toHaveLength(3)
+    expect(new Set(artifact.coverage.coveredRewardRequirementKeys)).toEqual(new Set(artifact.coverage.requiredRewardRequirementKeys))
+    expect(new Set(artifact.coverage.rewardedQuestKeys)).toEqual(new Set(artifact.coverage.questKeys))
+    expect(new Set(artifact.coverage.rewardedEncounterKeys)).toEqual(new Set(artifact.coverage.encounterKeys))
+    expect(new Set(artifact.coverage.enemyKeysWithDropSource)).toEqual(new Set(artifact.coverage.enemyKeys))
+    expect(artifact.items.find(item => item.key === 'item.player.starter-weapon')).toMatchObject({
+      kind: 'equipment', equipmentSlotKey: 'weapon', stackPolicy: 'instanced',
+      runtimeBinding: { status: 'runtime-unbound', equipActionKey: null },
+    })
+    expect(artifact.items.filter(item => item.kind === 'quest').every(item => item.critical && !item.droppable && !item.sellable)).toBe(true)
+    expect(artifact.rewardContracts.every(reward => reward.runtimeBinding.status === 'runtime-unbound'
+      && reward.grants.experience > 0 && reward.grants.currency > 0)).toBe(true)
+    expect(artifact.dropTables.every(table => table.runtimeBinding.status === 'effect-unbound'
+      && table.entries.every(entry => entry.quantityEffectBindings.every(binding => binding.effectKey === null)))).toBe(true)
+    expect(artifact.governance).toMatchObject({
+      rewardBudgetOwner: 'deterministic-compiler', singleCurrency: true,
+      noAffixesEnhancementDurability: true, everyItemHasSourcePlan: true,
+      everyQuestAndEncounterRewarded: true, allRuntimeBindingsUnbound: true,
+      itemModuleReady: false,
+    })
+    await expect(validateTextOpenWorldItemRewardCatalogV1({ artifact, context: input.itemRewardContext }))
+      .resolves.toEqual(artifact)
+  }, 180_000)
+
+  it('拒绝物品/奖励需求漏项、改写初始物品、非法装备位和同名奖励', async () => {
+    const input = await itemRewardCatalogFixture()
+    await expect(executeItemRewardCatalog(input, itemRewardCatalogRunner({ omitItem: true })))
+      .rejects.toThrow(/items必须与9项需求一一对应/)
+    await expect(executeItemRewardCatalog(input, itemRewardCatalogRunner({ omitReward: true })))
+      .rejects.toThrow(/rewards必须与28项需求一一对应/)
+    await expect(executeItemRewardCatalog(input, itemRewardCatalogRunner({ rewriteStarter: true })))
+      .rejects.toThrow(/固定物品标题不可改写/)
+    await expect(executeItemRewardCatalog(input, itemRewardCatalogRunner({ invalidSlot: true })))
+      .rejects.toThrow(/装备需求与equipmentSlotKey不一致/)
+    await expect(executeItemRewardCatalog(input, itemRewardCatalogRunner({ duplicateRewardTitle: true })))
+      .rejects.toThrow(/奖励标题不得重复/)
+  }, 180_000)
+
+  it('拒绝重算Hash后修改主线经验、关键物品保护、掉落来源或注入运行Effect', async () => {
+    const input = await itemRewardCatalogFixture()
+    const artifact = structuredClone((await executeItemRewardCatalog(input)).artifacts[0]!.payload as TextOpenWorldItemRewardCatalogV1)
+    artifact.rewardContracts[0]!.grants.experience += 99
+    artifact.items.find(item => item.kind === 'quest')!.droppable = true
+    artifact.dropTables[0]!.sourceEnemyKey = 'enemy.forged'
+    artifact.rewardContracts[0]!.runtimeBinding.effectKeys.push('effect.forged')
+    const { itemRewardCatalogHash: _hash, ...body } = artifact
+    artifact.itemRewardCatalogHash = await hashProductProductionValueV2(body)
+    await expect(validateTextOpenWorldItemRewardCatalogV1({ artifact, context: input.itemRewardContext }))
+      .rejects.toThrow(/物品来源、奖励预算、稳定键、掉落映射或未绑定运行槽被篡改/)
+  }, 180_000)
 })

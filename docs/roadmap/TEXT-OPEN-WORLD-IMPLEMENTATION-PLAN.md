@@ -1,6 +1,6 @@
 # AI 主导文字开放世界游戏 · 完整开发清单
 
-> 版本：1.1.55
+> 版本：1.1.56
 > 建立日期：2026-09-06
 > 对应总任务：`E-OPENWORLD-01`
 > 当前状态：`IN_PROGRESS`；用户已于2026-09-06明确下达完整产品开发指令
@@ -36,15 +36,15 @@
 | 指标 | 当前值 |
 |---|---|
 | 首版工作包 | 121 |
-| 已完成 | 63（G0、G1、G2及G3-01～G3-12完成） |
-| 产品总进度 | 63 / 121（52.1%） |
-| G1～G7业务功能进度 | 53 / 111（47.7%） |
+| 已完成 | 64（G0、G1、G2及G3-01～G3-13完成） |
+| 产品总进度 | 64 / 121（52.9%） |
+| G1～G7业务功能进度 | 54 / 111（48.6%） |
 | 当前阶段 | G3 AI内容生产编译器 |
 | G0阶段进度 | 10 / 10（100%） |
 | G1阶段进度 | 13 / 13（100%） |
 | G2阶段进度 | 28 / 28（100%） |
-| G3阶段进度 | 12 / 18（66.7%） |
-| 当前工作包 | `TOW-G3-13` |
+| G3阶段进度 | 13 / 18（72.2%） |
+| 当前工作包 | `TOW-G3-14` |
 | 当前阻塞项 | 无 |
 
 每次状态变化必须同时更新本节汇总、对应任务行、验证证据和变更记录。
@@ -195,8 +195,8 @@ G7 盐脊验收、发布更新与旧入口收口
 | TOW-G3-10 | DONE | 角色/势力/地区重要故事线生产 | G3-07～G3-09 | P6专属Context只读取同一Build已验收的GameBrief、SourceLedger、StoryArc、EndingContracts、NarrativePromises、RegionSkeleton和MainlineThread，优先交付角色/势力/事件/空间claim并保持选择Hash；模型按Brief精确生成重要故事线，至少覆盖角色/势力/地区两种owner，每线形成2～4方目标/资源/压力冲突、3～6个可玩Stage、升级步骤、地区氛围信号、来源/StoryBeat/空间/Promise辅助锚点及局部后果计划；代码生成Thread/Owner预留/冲突方/Stage/Consequence稳定键，地区owner直接绑定、角色势力owner等待目录兑现，固定显式推进、非地点唯一触发、安全等待、不可放弃/过期/永久失败、缺席无压力、普通状态不阻断且不得改写主线核心目标/可达性/结局；Quest/Scene/Action/Reward/Condition/Effect/NPC/Faction绑定全部unbound，owner不足、越界空间、上游或重算Hash篡改失败关闭；不新增表、不写Release/Session |
 | TOW-G3-11 | DONE | RegionNarrativePack与地区生态 | G3-08～G3-10 | P7专属Context只读取同一Build已验收的GameBrief、ExperienceContract、SourceLedger、RegionSkeleton、MainlineThread和SignificantThreads，优先交付体验/地区/重要故事必需claim；模型按地区逐项设计独特幻想、地方冲突/问题、生活基线、2～5条矛盾与状态轴，精确覆盖全部地点的日常活动/NPC需求/传闻/时段表现，并按Brief保底精确提供6个普通任务、4个任务模板、12个随机事件种子及每区至少3条传闻；每区同时提出重要Agent维护角色、规则驱动功能/氛围角色和势力需求，重要角色/势力owner由唯一地区需求承接；代码生成Pack/Tension/StateAxis/LocationPlan/Actor与Faction预留/Quest与Template与Event与Rumor种子稳定键，固定普通世界继续、主线等待、重要故事安全点等待、地区后果不阻断主线和全部目录绑定unbound；地点漏项、地区同质、保底不足、owner缺失及重算Hash篡改失败关闭；不新增表、不写Release/Session |
 | TOW-G3-12 | DONE | QuestSkeleton与ContentRequirementManifest | G3-09～G3-11 | P8专属Context把Brief、体验、玩法、主线、重要故事和地区种子投影为23项确定性Quest Source；模型逐项生成故事动机、1～4 Stage、可执行Objective及语义内容需求，代码保证7主线Stage、6重要故事Stage、6普通任务种子和4地区模板一一覆盖，固定主线/重要故事无限等待不可放弃或永久失败、普通任务放弃可重接、模板由地区导演实例化、到达地点不单独触发；ContentRequirementManifest同时汇总全部Objective及地区角色/势力/地点交互需求，按技能、遭遇、物品奖励、制作经济、NPC、地图交互和QuestFinalize声明唯一后序owner，所有正式目录/Action/Condition/Reward/运行引用保持unbound；遗漏来源、弱化保护、无敌人战斗目标、同名定义冲突、模型越权字段和重算Hash篡改失败关闭 |
-| TOW-G3-13 | IN_PROGRESS | 技能、物品、敌人、遭遇、奖励目录生产 | G3-05、G3-06、G3-12 | 成长/技能Lane已落地：生成20级确定性经验/属性曲线并精确兑现初始、等级和任务技能需求。敌人/遭遇Lane已落地：正式输入补入QuestSkeleton以恢复任务类型/地区/地点闭包，逐项兑现enemy/encounter需求并为每区建立基础遭遇；模型只设计地区化语义、原型和文本，代码固定1～5级验收带内的敌人数值、基础技能策略、战斗Objective/地区覆盖、失败恢复，以及奖励/掉落和Quest运行绑定unbound。仍需完成物品/奖励Lane后关闭本项 |
-| TOW-G3-14 | QUEUED | 配方、商店、NPC运行规则目录生产 | G3-11～G3-13 | 来源/消耗闭环、通用功能替代和经济预算可验证 |
+| TOW-G3-13 | DONE | 技能、物品、敌人、遭遇、奖励目录生产 | G3-05、G3-06、G3-12 | 三条专属Lane均从同一Build已验收QuestSkeleton与Manifest出发：Progression固定20级平方经验、自动属性成长、两项初始/六项等级/任务技能精确需求和主动攻击公式；Encounter逐项兑现enemy/encounter需求、每区基础遭遇、1～5级敌人数值、基础技能策略、战斗Objective/地区覆盖及失败恢复；Item/Reward精确兑现两项初始物品与item/equipment/material/reward需求，为全部23个任务和5个遭遇生成奖励、为5个敌人生成地区材料掉落，并确定性分配主线总计1600经验以支撑1→5级。模型只负责技能/状态/敌人/遭遇/物品/奖励语义和有界选择，代码固定稳定键、数值、保护、来源、预算与消费者；Action/Effect/Condition/Quest/Reward/Drop正式引用保持unbound交给P8F，漏项、越界、无来源、预算不闭合、模型越权及重算Hash篡改失败关闭 |
+| TOW-G3-14 | READY | 配方、商店、NPC运行规则目录生产 | G3-11～G3-13 | 来源/消耗闭环、通用功能替代和经济预算可验证 |
 | TOW-G3-15 | QUEUED | QuestFinalize与EncounterFinalize | G3-12～G3-14 | Stage/Objective/Action/Reward/Failure/Time绑定真实目录且可运行 |
 | TOW-G3-16 | QUEUED | SceneScript、ChoiceContract和三类交互绑定 | G3-15 | 场景文本、固定选项、系统Action和自然语言入口不产生第二套结果 |
 | TOW-G3-17 | QUEUED | UI/媒资需求、内容时长、平衡、语义评审和局部修复 | G3-06～G3-16 | 必需消费槽完整；库存时长与单次时长分离；问题可局部修复并传播stale |
@@ -355,6 +355,7 @@ G7 盐脊验收、发布更新与旧入口收口
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| 1.1.56 | 2026-09-07 | 完成G3-13全部Gameplay Catalog前半段：Item/Reward Lane从PlayerBuild、QuestSkeleton、Manifest、Progression和Encounter生成9个物品、28个任务/战斗奖励及5个敌人掉落表；主角初始物品键和装备位不可改写，关键物品不可丢弃出售，所有item/equipment/material/reward需求均精确兑现，每个物品有初始/任务奖励/地区掉落来源，每个任务与遭遇都有奖励，每个敌人有掉落；代码按主线时长精确分配1600经验达到5级并确定货币、装备加成、地区材料与掉落数量，模型只写语义和可选物品；全部Action/Effect/Condition/Quest运行绑定保持unbound，漏项、非法装备位、同名奖励、来源/预算不闭合及重算Hash篡改失败关闭；总进度64/121，业务功能54/111，下一项G3-14 |
 | 1.1.55 | 2026-09-07 | G3-13完成Enemy/Encounter Catalog Lane，并修正三个玩法目录的输入闭包：Progression、Encounter、Item/Reward正式读取已验收QuestSkeleton，避免仅凭Manifest消费者键猜测任务类型、地区、地点与时长；遭遇Lane逐项兑现enemy/encounter需求并为每区生成基础遭遇，模型只设计敌人/遭遇语义、原型、地点候选序号和表现文本，代码固定验收1～5级数值、基础攻击策略、敌群、标准难度、可逃跑/重试复活、战斗Objective及地区覆盖，并为每个敌人/遭遇预留掉落和奖励；越界地点、漏需求、同质标题及重算Hash改数值/保护策略失败关闭；G3-13下一Lane为Item/Reward |
 | 1.1.54 | 2026-09-07 | 启动G3-13并完成Progression/Skill Catalog Lane：新增只读已验收GameplayRuleset/PlayerBuild/QuestSkeleton/ContentRequirementManifest的Context、专属Skill与Executor；代码从主角两项技能预留、六个长期等级解锁点和全部skill需求形成精确Demand，固定20级平方经验曲线、按主副属性自动成长、稳定Skill/Status键、获得来源和主动攻击公式覆盖；模型只补语义与有界参数，所有Action/Effect/Condition/Quest绑定保持unbound，漏需求、改写初始技能、非法被动、公式缺失和重算Hash篡改失败关闭；G3-13保持进行中，下一Lane为Enemy/Encounter |
 | 1.1.53 | 2026-09-07 | 完成G3-12 QuestSkeleton与ContentRequirementManifest：新增只读已验收Brief/体验/玩法/主线/重要故事/地区生态的Context、专属Skill与Executor；把7主线Stage、6重要故事Stage、6普通任务种子和4地区模板精确编译为23个任务骨架与可执行Objective，代码固定保护任务等待、普通/模板生命周期、非到达触发和全部运行绑定unbound；统一需求清单覆盖任务目标及地区角色/势力/地点交互，声明六类目录与QuestFinalize owner并保持目录unbound，同名冲突、来源遗漏、弱化保护、无敌人战斗和越权绑定失败关闭；总进度63/121，业务功能53/111，下一项G3-13 |
