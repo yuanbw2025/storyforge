@@ -207,6 +207,9 @@ async function readTextOpenWorldMapInteractionInputContextV1(input: AssembleCont
 async function readTextOpenWorldQuestFinalizeInputContextV1(input: AssembleContextInput): Promise<string> {
   return (await import('../open-world/quest-finalize-production')).readTextOpenWorldQuestFinalizeInputContextV1(input)
 }
+async function readTextOpenWorldSceneScriptsInputContextV1(input: AssembleContextInput): Promise<string> {
+  return (await import('../open-world/scene-scripts-production')).readTextOpenWorldSceneScriptsInputContextV1(input)
+}
 async function readTtrpgGmRuntimeContextV1(input: AssembleContextInput): Promise<string> {
   return (await import('../ttrpg/gm-context')).readTtrpgGmRuntimeContextV1(input)
 }
@@ -1799,6 +1802,19 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     enabled: input => Number.isInteger(input.productProductionId)
       && Number.isInteger(input.productBuildId),
     read: readTextOpenWorldQuestFinalizeInputContextV1,
+  },
+  {
+    key: 'text-open-world.scene-scripts-input',
+    label: '文字开放世界场景脚本与三类交互绑定生产输入',
+    scope: 'project',
+    layer: 'L0',
+    ownerFrom: 'work',
+    budgetTokens: 220_000,
+    protectedFromTrim: true,
+    atomic: true,
+    enabled: input => Number.isInteger(input.productProductionId)
+      && Number.isInteger(input.productBuildId),
+    read: readTextOpenWorldSceneScriptsInputContextV1,
   },
   {
     key: 'product-production.quality-feedback',

@@ -1,6 +1,6 @@
 # AI 主导文字开放世界叙事基座 · StoryForge 施工规格
 
-> 规格版本：3.2.18
+> 规格版本：3.2.19
 > 生效日期：2026-09-06
 > 文档层级：L2 产品目标架构与施工规格
 > 当前状态：设计基线；不代表代码已经实现
@@ -549,6 +549,14 @@ P8后半目录已补齐制作经济、NPC运行和地图交互：配方/商店�
 - 所有需求到真实目录定义、再到Condition/Effect/Action的双向覆盖。
 
 `DirectorDecks`按地区从P7种子冻结固定普通任务、可实例化模板和随机事件，并写入显示/活跃并发上限、全局实例上限、冷却、高强度连续限制、历史去重与空白牌。主线和重要故事明确排除于Director压力；普通发牌的运行参数已就绪，场景文字、谣言表现及每个模板的3份文字变体显式留给P9，不在P8F冒充完成。验证器会重建完整Artifact，因此漏Objective、超预算、越权字段、非法任务升级或在重算Hash后篡改生命周期/发牌结果仍会被拒绝。P8F仍只写Build候选，不新增物理表，不写ProductRelease或Session。
+
+#### 5.4.15 P9场景脚本、知识边界与统一交互结果源落地
+
+P9把已经可运行的任务与地区Director结果图转换为玩家可读、可选择的叙事表现，但不允许表现层重新定义玩法结果。`scene-scripts-production.ts`先在代码侧读取并验签SourceLedger、ExperienceContract、StoryArc、RegionNarrativePacks、QuestSkeletons、ContentRequirementManifest、NpcRuntimeCatalog、MapInteractionCatalog、QuestDesignDocuments和DirectorDecks；随后生成去重的Scene Demand、Knowledge Boundary、自然语言Action Demand、模板文字变体和随机事件表现需求。完整上游不会截断，重复且与模型写作无关的Condition/Effect等确定性字段只在代码侧校验，模型接收的是仍可追溯到原Artifact Hash的紧凑投影，因此验收世界能够在P9实际112000 token输入预算内原子交付。
+
+确定性编译器为每个Quest生成委托与收束场景、为每个Objective生成推进场景、为每个NPC生成含`bad/neutral/good`三档态度开场的对话场景、为每个地点交互和随机事件生成入口与表现，并兑现Director为每个模板预留的3份差异化文字。每个Scene只引用当前允许的Source Claim，显式携带禁止提前透露的后续Objective；随机传闻只有存在需求时才能生成且固定为不确定信息。
+
+`ChoiceContracts`中的每个固定选项都精确引用P8F Action Definition Hash，并继承该Action的Condition与确认策略；`ActionBindings`则把系统Action按钮、固定Choice和自然语言候选统一绑定到同一Action结果权威。自然语言只能选择当前投影中已存在的非战斗Action并交回确定性运行校验：高置信度低风险才可执行，高风险/不可逆操作必须确认，低置信度只自然回应并推荐正式Action，无法映射时不得创建Action、任务、地图或写状态。全部战斗Action保持按钮操作，不开放自由描述。模型漏场景、重复自然语言示例、缺少三档态度、无依据传闻、越权输出运行字段，或重算Hash后篡改Action/Choice引用均失败关闭。P9继续只写Build Artifact候选，不新增物理表、不写ProductRelease或Session。
 
 ### 5.5 正确的验证顺序
 
@@ -1368,6 +1376,7 @@ StoryForge当前没有独立staging。发布前仍需在隔离数据中完成灰
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| 3.2.19 | 2026-09-07 | 落地P9 SceneScripts/ChoiceContracts/ActionBindings：代码完整验签10件上游并向模型交付去重紧凑投影，覆盖任务委托/目标/收束、NPC三档态度对话、地点交互、随机事件/传闻及模板三变体；固定Choice与自然语言候选都只引用P8F Action Hash和唯一结果权威，战斗自由输入关闭，低置信度不执行、高风险需确认，模型不能创建运行内容或改状态 |
 | 3.2.18 | 2026-09-07 | 落地P8后半制作经济/NPC运行/地图交互目录及P8F QuestFinalize/EncounterFinalize：11件叙事、任务与玩法Artifact以完整Hash链原子交付，模型只补受约束叙事/发牌语义，代码最终化全部Quest/Stage/Objective生命周期、Condition/Effect/Action、奖励、战斗、物品、制作、商店、NPC、地图、旅行、快旅、复活和世界演化真实引用；地区Director冻结普通任务、模板、随机事件、冷却、并发和空白牌，保护故事排除于发牌压力；表现变体留给P9；同时修正正式调度的Context预算传递并增加atomic JSON超额失败关闭，推荐总调用仍为150次 |
 | 3.2.17 | 2026-09-07 | 落地P8 Map Interaction目录：原样继承完整地区、地点、道路和快旅拓扑，把每项地区生活/任务交互需求编译为地点入口并生成确定性SVG节点；代码确保全图连通、每地点可交互、逐步揭示、提前到达安全、关键故事不靠到达自动触发、快旅到访解锁且首版旅行无资源消耗/不中断，模型只写有界交互语义，全部运行Action/Condition/Effect/Scene/Quest引用留待P8F/P9装配 |
 | 3.2.16 | 2026-09-07 | 落地P8 NPC Runtime目录：以任务消费者和地区需求区分主线/重要Agent角色与普通规则角色，人物小传/演绎保持整体内容资产；代码冻结关键保护、普通死亡、四时段日程、道德与阵营加权三档态度、商店/功能服务连续性及“替代功能但不继承独特内容”，对话与行为运行引用留待P8F/P9绑定 |

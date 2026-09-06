@@ -400,8 +400,11 @@ export const TEXT_OPEN_WORLD_PRODUCTION_TASK_CONTRACTS_V1: TextOpenWorldProducti
     skillId: 'text-open-world.production.scene-scripts.v1', recommendedModelCalls: 14,
     dependsOn: ['p7.region-narrative-packs', 'p8f.quest-finalize'],
     inputArtifactKeys: [
-      'text-open-world.region-narrative-packs', 'text-open-world.quest-design-documents',
-      'text-open-world.director-decks',
+      'text-open-world.source-ledger', 'text-open-world.experience-contract',
+      'text-open-world.story-arc', 'text-open-world.region-narrative-packs',
+      'text-open-world.quest-skeletons', 'text-open-world.content-requirement-manifest',
+      'text-open-world.npc-runtime-catalog', 'text-open-world.map-interaction-catalog',
+      'text-open-world.quest-design-documents', 'text-open-world.director-decks',
     ],
     outputArtifactKeys: [
       'text-open-world.scene-scripts', 'text-open-world.choice-contracts', 'text-open-world.action-bindings',

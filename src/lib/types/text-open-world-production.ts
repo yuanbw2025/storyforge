@@ -2735,6 +2735,248 @@ export interface TextOpenWorldDirectorDecksV1 {
   directorDecksHash: string
 }
 
+export type TextOpenWorldSceneSourceKindV1 =
+  | 'quest-offer'
+  | 'quest-objective'
+  | 'quest-resolution'
+  | 'actor-dialogue'
+  | 'location-interaction'
+  | 'random-event'
+
+/**
+ * P9 authored presentation over the already-finalized P8F result graph.
+ * Scene prose may explain an Action result, but never owns or duplicates it.
+ */
+export interface TextOpenWorldSceneScriptsV1 {
+  schema: 'storyforge.text-open-world-scene-scripts'
+  version: 1
+  productType: 'text-open-world'
+  productInstanceKey: string
+  sourceLedgerHash: string
+  experienceContractHash: string
+  storyArcHash: string
+  regionNarrativePacksHash: string
+  questSkeletonsHash: string
+  npcRuntimeCatalogHash: string
+  mapInteractionCatalogHash: string
+  questDesignDocumentsHash: string
+  directorDecksHash: string
+  scenes: Array<{
+    key: string
+    order: number
+    sourceKind: TextOpenWorldSceneSourceKindV1
+    sourceKey: string
+    title: string
+    purpose: string
+    regionKey: string
+    locationKey: string
+    questKey: string | null
+    stageKey: string | null
+    objectiveKey: string | null
+    actorKey: string | null
+    interactionKey: string | null
+    randomEventKey: string | null
+    participantKeys: string[]
+    openingText: string
+    bodyText: string
+    successText: string
+    failureText: string | null
+    attitudeOpenings: {
+      bad: string
+      neutral: string
+      good: string
+    } | null
+    allowedKnowledgeClaimKeys: string[]
+    forbiddenFutureObjectiveKeys: string[]
+    availabilityConditionKeys: string[]
+    actionKeys: string[]
+    fixedChoiceKeys: string[]
+  }>
+  templateTextVariants: Array<{
+    key: string
+    order: number
+    requirementKey: string
+    templateKey: string
+    title: string
+    description: string
+  }>
+  randomEventPresentations: Array<{
+    key: string
+    order: number
+    randomEventKey: string
+    openingText: string
+    resolutionText: string
+    rumorKey: string | null
+    rumorRequirementKey: string | null
+    rumorText: string | null
+    reliability: 'uncertain' | null
+    sourceClaimKeys: string[]
+  }>
+  coverage: {
+    requiredQuestKeys: string[]
+    questOfferSceneKeys: string[]
+    questResolutionSceneKeys: string[]
+    requiredObjectiveKeys: string[]
+    objectiveSceneKeys: string[]
+    requiredActorKeys: string[]
+    actorSceneKeys: string[]
+    requiredInteractionKeys: string[]
+    interactionSceneKeys: string[]
+    requiredRandomEventKeys: string[]
+    randomEventSceneKeys: string[]
+    requiredTemplateVariantRequirementKeys: string[]
+    fulfilledTemplateVariantRequirementKeys: string[]
+    uncoveredSceneSourceKeys: []
+  }
+  governance: {
+    proseOwner: 'model-validated'
+    referenceOwner: 'deterministic-compiler'
+    currentAndPriorKnowledgeOnly: true
+    futureObjectiveSpoilersForbidden: true
+    everyObjectiveHasScene: true
+    everyActorHasDialogueEntry: true
+    everyLocationInteractionHasScene: true
+    everyDirectorEventHasPresentation: true
+    allTemplateVariantsFulfilled: true
+    actionResultsReferencedNotDuplicated: true
+  }
+  basisHash: string
+  createdAt: number
+  sceneScriptsHash: string
+}
+
+/** Every fixed choice is only a presentation alias for one P8F Action. */
+export interface TextOpenWorldChoiceContractsV1 {
+  schema: 'storyforge.text-open-world-choice-contracts'
+  version: 1
+  productType: 'text-open-world'
+  productInstanceKey: string
+  questDesignDocumentsHash: string
+  sceneScriptsHash: string
+  choices: Array<{
+    key: string
+    sceneKey: string
+    order: number
+    label: string
+    description: string
+    actionKey: string
+    actionDefinitionHash: string
+    targetPolicy: 'none' | 'fixed' | 'runtime-valid-target'
+    targetKey: string | null
+    availabilityConditionKeys: string[]
+    confirmationPolicy: 'never' | 'high-risk' | 'always'
+    executionSource: 'fixed-choice'
+    resultAuthority: 'text-open-world.quest-design-documents.actions'
+  }>
+  coverage: {
+    requiredSceneActionPairs: Array<{ sceneKey: string; actionKey: string }>
+    coveredSceneActionPairs: Array<{ sceneKey: string; actionKey: string }>
+    scenesWithActions: string[]
+    scenesWithChoices: string[]
+    duplicateChoiceKeys: []
+    uncoveredSceneActionPairs: []
+  }
+  governance: {
+    exactActionReferenceOnly: true
+    effectsNeverDuplicated: true
+    availabilityInheritedFromAction: true
+    confirmationInheritedFromAction: true
+    runtimeTargetValidationRequired: true
+  }
+  basisHash: string
+  createdAt: number
+  choiceContractsHash: string
+}
+
+export type TextOpenWorldNaturalLanguageBindingModeV1 =
+  | 'existing-action-candidate'
+  | 'disabled-system-only'
+  | 'disabled-combat-button-only'
+
+/**
+ * P9 binds UI Actions, fixed choices, and natural-language candidates to the
+ * same immutable P8F Action definition. It contains no Effect payloads.
+ */
+export interface TextOpenWorldActionBindingsV1 {
+  schema: 'storyforge.text-open-world-action-bindings'
+  version: 1
+  productType: 'text-open-world'
+  productInstanceKey: string
+  experienceContractHash: string
+  questDesignDocumentsHash: string
+  sceneScriptsHash: string
+  choiceContractsHash: string
+  actions: Array<{
+    key: string
+    order: number
+    actionKey: string
+    actionDefinitionHash: string
+    actorScope: 'player' | 'system'
+    category: TextOpenWorldActionDefinitionV1['category']
+    targetScope: TextOpenWorldActionDefinitionV1['targetScope']
+    systemAction: {
+      enabled: boolean
+      label: string
+      description: string
+      executionSource: 'system-action'
+    }
+    fixedChoiceKeys: string[]
+    naturalLanguage: {
+      mode: TextOpenWorldNaturalLanguageBindingModeV1
+      exampleUtterances: string[]
+      candidateMayOnlySelectThisAction: true
+      targetResolution: 'current-projection-valid-targets-only'
+      highConfidenceLowRisk: 'execute-after-runtime-validation'
+      highRiskOrIrreversible: 'require-explicit-confirmation'
+      lowConfidence: 'respond-and-recommend-formal-actions'
+      mayCreateAction: false
+      mayCreateQuest: false
+      mayCreateMapContent: false
+      mayWriteState: false
+    }
+    resultAuthority: {
+      artifactKey: 'text-open-world.quest-design-documents'
+      collection: 'actions'
+      actionKey: string
+      actionDefinitionHash: string
+    }
+  }>
+  unmatchedNaturalLanguage: {
+    policy: 'natural-response-then-formal-action-redirect'
+    impossibleActionPolicy: 'explicit-decline-with-in-world-alternative'
+    customSolutionPolicy: 'future-extension-disabled'
+    stateMutationAllowed: false
+  }
+  thresholds: {
+    directExecutionMinimumConfidence: 0.9
+    recommendationMinimumConfidence: 0.55
+  }
+  coverage: {
+    requiredActionKeys: string[]
+    boundActionKeys: string[]
+    playerActionKeys: string[]
+    systemActionUiKeys: string[]
+    naturalLanguageEligibleActionKeys: string[]
+    naturalLanguageBoundActionKeys: string[]
+    combatButtonOnlyActionKeys: string[]
+    fixedChoiceActionKeys: string[]
+    duplicateNaturalLanguageExamples: []
+    unboundActionKeys: []
+  }
+  governance: {
+    singleResultSource: true
+    allThreeInputsUseActionRegistry: true
+    modelCannotCreateActionOrResult: true
+    combatFreeTextDisabled: true
+    lowConfidenceNeverExecutes: true
+    irreversibleActionsRequireConfirmation: true
+    runtimeProjectionValidationRequired: true
+  }
+  basisHash: string
+  createdAt: number
+  actionBindingsHash: string
+}
+
 export const TEXT_OPEN_WORLD_PRODUCTION_STAGES_V1 = [
   'P0', 'P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8', 'P8F', 'P9', 'P10',
   'V1', 'V2', 'V3', 'QA',

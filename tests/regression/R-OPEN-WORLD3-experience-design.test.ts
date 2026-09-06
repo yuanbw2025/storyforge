@@ -110,6 +110,12 @@ import {
   type TextOpenWorldQuestFinalizeInputContextV1,
   type TextOpenWorldQuestFinalizeModelRunnerV1,
 } from '../../src/lib/open-world/quest-finalize-production'
+import {
+  createTextOpenWorldSceneScriptsExecutorV1,
+  validateTextOpenWorldSceneScriptsArtifactsV1,
+  type TextOpenWorldSceneScriptsInputContextV1,
+  type TextOpenWorldSceneScriptsModelRunnerV1,
+} from '../../src/lib/open-world/scene-scripts-production'
 import { TEXT_OPEN_WORLD_EFFECT_OPERATIONS_V1 } from '../../src/lib/types/text-open-world-effect'
 import type {
   TextOpenWorldGameplayRulesetSkeletonV1,
@@ -127,6 +133,9 @@ import type {
   TextOpenWorldMapInteractionCatalogV1,
   TextOpenWorldQuestDesignDocumentsV1,
   TextOpenWorldDirectorDecksV1,
+  TextOpenWorldSceneScriptsV1,
+  TextOpenWorldChoiceContractsV1,
+  TextOpenWorldActionBindingsV1,
   TextOpenWorldSignificantThreadsV1,
 } from '../../src/lib/types'
 import {
@@ -2318,6 +2327,112 @@ async function executeQuestFinalize(
   })
 }
 
+function sceneScriptsRunner(options: {
+  omitScene?: boolean
+  duplicateUtterance?: boolean
+  missingAttitude?: boolean
+  missingRumor?: boolean
+  prematureField?: boolean
+  missingChoiceLabel?: boolean
+} = {}): TextOpenWorldSceneScriptsModelRunnerV1 {
+  return async input => {
+    const context = JSON.parse(input.contextText) as TextOpenWorldSceneScriptsInputContextV1
+    const scenes = context.sceneDemands.map((demand, index) => ({
+      sceneNumber: demand.sceneNumber,
+      title: `${demand.suggestedTitle}·场景${index + 1}`,
+      openingText: `${demand.purpose}的开场只呈现当前可知信息。`,
+      bodyText: `玩家在${demand.locationKey}推进${demand.sourceKey}，叙事严格服从已冻结任务与行动结果。`,
+      successText: `行动完成后，场景按照既定结果继续。`,
+      failureText: demand.sourceKind === 'quest-objective' ? '这次尝试没有成功，玩家可以按任务合同继续尝试。' : null,
+      choiceLabels: demand.actionKeys.map((actionKey, actionIndex) => (
+        options.missingChoiceLabel && index === 0 && actionIndex === demand.actionKeys.length - 1
+          ? ''
+          : `执行选项${index + 1}-${actionIndex + 1}:${actionKey}`
+      )),
+      attitudeOpenings: demand.sourceKind === 'actor-dialogue' && !(options.missingAttitude && index === context.sceneDemands.findIndex(item => item.sourceKind === 'actor-dialogue'))
+        ? {
+            bad: `对方警惕地看着玩家，仍只透露当前允许的信息${index + 1}。`,
+            neutral: `对方平静地回应玩家，并保持正常交互${index + 1}。`,
+            good: `对方友善地欢迎玩家，愿意提供当前可用帮助${index + 1}。`,
+          }
+        : null,
+      ...(options.prematureField && index === 0 ? { actionKey: 'action.forged' } : {}),
+    }))
+    const actionUtterances = context.actionLanguageDemands.map((demand, index) => ({
+      actionNumber: demand.actionNumber,
+      examples: options.duplicateUtterance && index === 1
+        ? ['执行自然语言动作1-A', '执行自然语言动作1-B']
+        : [`执行自然语言动作${index + 1}-A`, `执行自然语言动作${index + 1}-B`],
+    }))
+    const rumorIndex = context.randomEventPresentationDemands.findIndex(item => item.rumorRequirementKey !== null)
+    return {
+      output: JSON.stringify({
+        schema: 'storyforge.text-open-world-scene-scripts-draft', version: 1,
+        scenes: options.omitScene ? scenes.slice(0, -1) : scenes,
+        actionUtterances,
+        templateVariants: context.templateVariantDemands.map((demand, index) => ({
+          variantNumber: demand.variantNumber,
+          title: `地区任务变体${index + 1}`,
+          description: `这是模板${demand.templateKey}的第${index + 1}种叙事包装，保持结果合同不变。`,
+        })),
+        randomEvents: context.randomEventPresentationDemands.map((demand, index) => ({
+          eventNumber: demand.eventNumber,
+          openingText: `地区事件${index + 1}从当前环境变化中出现。`,
+          resolutionText: `地区事件${index + 1}按既定结果收束，不改变受保护故事线。`,
+          rumorText: options.missingRumor && rumorIndex < 0 && index === 0
+            ? '这是一条没有需求依据的伪造传闻。'
+            : demand.rumorRequirementKey && !(options.missingRumor && index === rumorIndex)
+              ? `有人声称见过与事件${index + 1}有关的迹象，但消息仍未证实。`
+              : null,
+        })),
+      }),
+      bindingReceipt: bindingReceipt(input.requirementKey), usage: null,
+    }
+  }
+}
+
+async function sceneScriptsFixture() {
+  const input = await questFinalizeFixture()
+  const questResult = await executeQuestFinalize(input)
+  await acceptTaskArtifacts(input, questResult.artifacts, 'P8F-quest-finalize')
+  const plan = await createTextOpenWorldProductionPlanV1({
+    buildNumber: input.build.buildNumber, controlEpoch: input.build.controlEpoch,
+    briefHash: input.briefRow.briefHash, brief: input.brief,
+  })
+  const task = plan.tasks.find(item => item.taskKey === 'p9.scene-scripts')!
+  const assembled = await assembleContext({
+    projectId: input.scope.projectId, scope: input.scope,
+    sourceKeys: ['text-open-world.scene-scripts-input'],
+    productProductionId: input.production.id!, productBuildId: input.build.id!,
+    inputBudgetTokens: task.budgetReservation.inputTokens,
+  })
+  if (assembled.sourceEvidence[0]?.delivery !== 'full') {
+    throw new Error(`SceneScripts Context不得截断:${JSON.stringify(assembled.sourceEvidence[0])};inputBudget=${assembled.inputBudget}`)
+  }
+  return {
+    ...input, task, sceneScriptsContextText: assembled.text,
+    sceneScriptsContext: JSON.parse(assembled.text) as TextOpenWorldSceneScriptsInputContextV1,
+    sceneScriptsContextEvidence: assembled.sourceEvidence,
+  }
+}
+
+async function executeSceneScripts(
+  input: Awaited<ReturnType<typeof sceneScriptsFixture>>,
+  runModel: TextOpenWorldSceneScriptsModelRunnerV1 = sceneScriptsRunner(),
+) {
+  return createTextOpenWorldSceneScriptsExecutorV1({ runModel, now: () => NOW + 20 })({
+    scope: input.scope, productionId: input.production.id!, buildId: input.build.id!,
+    buildNumber: input.build.buildNumber, controlEpoch: input.build.controlEpoch,
+    planHash: input.planHash, task: input.task, attempt: 1,
+    idempotencyKey: await hashProductProductionValueV2('p9-scene-scripts'),
+    contextText: input.sceneScriptsContextText, inputArtifacts: [],
+    capabilityBindings: input.task.capabilityRequirementKeys.map(requirementKey => ({
+      requirementKey, bindingHash: CAPABILITY_HASH, adapterId: 'configured-text.v1',
+    })),
+    signal: new AbortController().signal,
+  })
+}
+
 describe('R-OPEN-WORLD3 · P2 GameBrief / ExperienceContract / ProtagonistAsset', () => {
   beforeEach(async () => { await db.delete(); await db.open() })
   afterAll(() => db.close())
@@ -3914,4 +4029,102 @@ describe('R-OPEN-WORLD3 · P8F QuestFinalize / EncounterFinalize', () => {
       context: input.questFinalizeContext,
     })).rejects.toThrow(/跨Artifact引用未闭合|固定引用、运行定义、预算或Hash被篡改/)
   }, 300_000)
+})
+
+describe('R-OPEN-WORLD3 · P9 SceneScripts / ChoiceContract / ActionBindings', () => {
+  beforeEach(async () => { await db.delete(); await db.open() })
+  afterAll(() => db.close())
+
+  it('生产完整场景表现，并让系统Action、固定选项和自然语言共享同一P8F Action', async () => {
+    const input = await sceneScriptsFixture()
+    expect(CONTEXT_SOURCE_BY_KEY.get('text-open-world.scene-scripts-input')).toMatchObject({
+      layer: 'L0', ownerFrom: 'work', protectedFromTrim: true, atomic: true,
+    })
+    expect(getAgentSkillV1('text-open-world.production.scene-scripts.v1')).toMatchObject({
+      contextSourceKeys: ['text-open-world.scene-scripts-input'],
+      writeTargets: [{ table: 'productBuildArtifacts', fields: ['payloadJson'] }],
+    })
+    expect(input.sceneScriptsContextEvidence).toEqual([
+      expect.objectContaining({ key: 'text-open-world.scene-scripts-input', status: 'included', delivery: 'full' }),
+    ])
+    await expect(assembleContext({
+      projectId: input.scope.projectId, scope: input.scope,
+      sourceKeys: ['text-open-world.scene-scripts-input'],
+      productProductionId: input.production.id!, productBuildId: input.build.id!,
+      inputBudgetTokens: 1_000,
+    })).rejects.toThrow(/原子来源 text-open-world\.scene-scripts-input 超出预算/)
+
+    const result = await executeSceneScripts(input)
+    const sceneScripts = result.artifacts.find(artifact => artifact.artifactKey === 'text-open-world.scene-scripts')!.payload as TextOpenWorldSceneScriptsV1
+    const choices = result.artifacts.find(artifact => artifact.artifactKey === 'text-open-world.choice-contracts')!.payload as TextOpenWorldChoiceContractsV1
+    const bindings = result.artifacts.find(artifact => artifact.artifactKey === 'text-open-world.action-bindings')!.payload as TextOpenWorldActionBindingsV1
+    expect(result.passedGateIds).toEqual(input.task.acceptanceGateIds)
+    expect(result.usage).toMatchObject({ modelCalls: 1, mediaCalls: 0 })
+    expect(sceneScripts.scenes.filter(scene => scene.sourceKind === 'quest-objective'))
+      .toHaveLength(input.sceneScriptsContext.questDesignDocuments.objectives.length)
+    expect(sceneScripts.scenes.filter(scene => scene.sourceKind === 'actor-dialogue'))
+      .toHaveLength(input.sceneScriptsContext.npcRuntimeCatalog.actors.length)
+    expect(sceneScripts.scenes.filter(scene => scene.sourceKind === 'actor-dialogue')
+      .every(scene => scene.attitudeOpenings?.bad && scene.attitudeOpenings.neutral && scene.attitudeOpenings.good)).toBe(true)
+    expect(sceneScripts.randomEventPresentations).toHaveLength(input.sceneScriptsContext.directorDecks.randomEvents.length)
+    expect(sceneScripts.templateTextVariants).toHaveLength(input.sceneScriptsContext.templateVariantDemands.length)
+    expect(choices.coverage.coveredSceneActionPairs).toEqual(choices.coverage.requiredSceneActionPairs)
+    expect(bindings.actions).toHaveLength(input.sceneScriptsContext.questDesignDocuments.actions.length)
+    expect(bindings.coverage.boundActionKeys).toEqual(bindings.coverage.requiredActionKeys)
+    expect(bindings.coverage.naturalLanguageBoundActionKeys).toEqual(bindings.coverage.naturalLanguageEligibleActionKeys)
+    expect(bindings.actions.filter(binding => binding.actorScope === 'player')
+      .every(binding => binding.systemAction.enabled)).toBe(true)
+    expect(bindings.actions.filter(binding => binding.naturalLanguage.mode === 'disabled-combat-button-only')
+      .every(binding => binding.naturalLanguage.exampleUtterances.length === 0)).toBe(true)
+    expect(bindings.actions.filter(binding => binding.naturalLanguage.mode === 'existing-action-candidate')
+      .every(binding => binding.naturalLanguage.exampleUtterances.length === 2)).toBe(true)
+    expect(choices.choices.every(choice => bindings.actions.some(binding => (
+      binding.actionKey === choice.actionKey
+      && binding.actionDefinitionHash === choice.actionDefinitionHash
+      && binding.fixedChoiceKeys.includes(choice.key)
+    )))).toBe(true)
+    expect(JSON.stringify(bindings)).not.toContain('successEffectKeys')
+    await expect(validateTextOpenWorldSceneScriptsArtifactsV1({
+      artifacts: { sceneScripts, choiceContracts: choices, actionBindings: bindings },
+      context: input.sceneScriptsContext,
+    })).resolves.toEqual({ sceneScripts, choiceContracts: choices, actionBindings: bindings })
+  }, 360_000)
+
+  it('拒绝场景漏项、自然语言歧义、三档态度缺失、传闻缺失和模型越权字段', async () => {
+    const input = await sceneScriptsFixture()
+    await expect(executeSceneScripts(input, sceneScriptsRunner({ omitScene: true })))
+      .rejects.toThrow(/scenes必须与\d+项需求一一对应/)
+    await expect(executeSceneScripts(input, sceneScriptsRunner({ duplicateUtterance: true })))
+      .rejects.toThrow(/自然语言示例不得跨Action重复/)
+    await expect(executeSceneScripts(input, sceneScriptsRunner({ missingAttitude: true })))
+      .rejects.toThrow(/只有角色对话场景可拥有三档态度开场/)
+    await expect(executeSceneScripts(input, sceneScriptsRunner({ missingRumor: true })))
+      .rejects.toThrow(/谣言文本必须与线索需求一致/)
+    await expect(executeSceneScripts(input, sceneScriptsRunner({ prematureField: true })))
+      .rejects.toThrow(/字段不精确/)
+    await expect(executeSceneScripts(input, sceneScriptsRunner({ missingChoiceLabel: true })))
+      .rejects.toThrow(/为空或过长/)
+  }, 360_000)
+
+  it('拒绝重算Hash后改写Action引用、战斗自由输入或Choice继承条件', async () => {
+    const input = await sceneScriptsFixture()
+    const result = await executeSceneScripts(input)
+    const sceneScripts = structuredClone(result.artifacts.find(artifact => artifact.artifactKey === 'text-open-world.scene-scripts')!.payload as TextOpenWorldSceneScriptsV1)
+    const choices = structuredClone(result.artifacts.find(artifact => artifact.artifactKey === 'text-open-world.choice-contracts')!.payload as TextOpenWorldChoiceContractsV1)
+    const bindings = structuredClone(result.artifacts.find(artifact => artifact.artifactKey === 'text-open-world.action-bindings')!.payload as TextOpenWorldActionBindingsV1)
+    choices.choices[0]!.availabilityConditionKeys = ['condition.forged']
+    const { choiceContractsHash: _choiceHash, ...choiceBody } = choices
+    choices.choiceContractsHash = await hashProductProductionValueV2(choiceBody)
+    const combatBinding = bindings.actions.find(binding => binding.naturalLanguage.mode === 'disabled-combat-button-only')!
+    combatBinding.naturalLanguage.mode = 'existing-action-candidate'
+    combatBinding.naturalLanguage.exampleUtterances = ['自由挥砍', '随意施法']
+    bindings.choiceContractsHash = choices.choiceContractsHash
+    bindings.actions[0]!.resultAuthority.actionKey = 'action.forged'
+    const { actionBindingsHash: _bindingHash, ...bindingBody } = bindings
+    bindings.actionBindingsHash = await hashProductProductionValueV2(bindingBody)
+    await expect(validateTextOpenWorldSceneScriptsArtifactsV1({
+      artifacts: { sceneScripts, choiceContracts: choices, actionBindings: bindings },
+      context: input.sceneScriptsContext,
+    })).rejects.toThrow(/actionUtterances必须与|场景、Choice、交互绑定或Hash被篡改/)
+  }, 360_000)
 })
