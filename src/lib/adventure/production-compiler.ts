@@ -13,6 +13,11 @@ import type {
   TextAdventureQuestBundleArtifactV1,
   TextAdventureSystemsArtifactV1,
 } from './production-artifacts'
+import type {
+  TextAdventureCastBibleArtifactV1,
+  TextAdventureNarrativeArcPlanArtifactV1,
+  TextAdventureQuestPlanArtifactV1,
+} from './production-artifacts-v2'
 import { planTextAdventureNarrativeLocationsV1 } from './narrative-location-plan'
 
 export interface TextAdventureProductionCompilerInputV1 {
@@ -21,6 +26,9 @@ export interface TextAdventureProductionCompilerInputV1 {
   interaction: FrozenInteractionRuntimeV2
   architecture: TextAdventureArchitectureArtifactV1
   systems: TextAdventureSystemsArtifactV1
+  cast: TextAdventureCastBibleArtifactV1
+  arcPlan: TextAdventureNarrativeArcPlanArtifactV1
+  mainQuestPlan: TextAdventureQuestPlanArtifactV1
   sideQuests: TextAdventureQuestBundleArtifactV1
   ambientEvents: TextAdventureQuestBundleArtifactV1
   sourceCatalog?: Pick<ProductProductionWorldSourceCatalogV2, 'artifacts'>
@@ -32,6 +40,87 @@ function fail(message: string): never {
 
 function pad(value: number): string {
   return String(value + 1).padStart(3, '0')
+}
+
+function participantKeyForCastIndex(index: number): string {
+  return `participant.cast.${pad(index)}`
+}
+
+export function compileTextAdventureInteractionV1(input: {
+  brief: ProductProductionBriefV3
+  narrative: ProductRuntimePackageV1['narrative']
+  cast: TextAdventureCastBibleArtifactV1
+  arcPlan: TextAdventureNarrativeArcPlanArtifactV1
+}): FrozenInteractionRuntimeV2 {
+  const npcs = input.cast.characters.filter(character => character.role !== 'player')
+  if (!npcs.length) fail('角色圣经没有可互动 NPC')
+  const participantByCharacter = new Map(npcs.map((character, index) => (
+    [character.key, participantKeyForCastIndex(index)] as const
+  )))
+  const profiles: FrozenInteractionRuntimeV2['profiles'] = npcs.map((character, index) => ({
+    participantKey: participantKeyForCastIndex(index), characterKey: character.key,
+    name: character.name, roleLabel: character.publicIdentity,
+    voiceRules: `${character.voice}\n动机：${character.motivation}\n不得知晓：${character.forbiddenKnowledge.join('；')}`,
+    initialKnowledge: character.initialKnowledge.map((content, knowledgeIndex) => ({
+      key: `knowledge.cast.${pad(index)}.${pad(knowledgeIndex)}`,
+      content, visibility: 'public' as const, importance: knowledgeIndex === 0 ? 100 : 70,
+    })),
+    relationshipDimensions: [
+      { key: 'trust', label: '信任', minimum: -100, maximum: 100, initial: 0, largeChangeThreshold: 20 },
+      { key: 'respect', label: '尊重', minimum: -100, maximum: 100, initial: 0, largeChangeThreshold: 20 },
+    ],
+    maxMemoryEntries: Math.max(40, Math.min(240, input.brief.scale.targetPlayMinutes * 2)),
+  }))
+  const arcSceneCards = input.arcPlan.acts.flatMap(act => act.sceneCards)
+  const sceneCardByKey = new Map(arcSceneCards.map(scene => [scene.key, scene]))
+  const nonEndingNodes = input.narrative.nodes.filter(node => node.kind !== 'ending')
+  const endings = input.narrative.nodes.filter(node => node.kind === 'ending')
+  const outgoingByNode = new Map<string, typeof input.narrative.choices>()
+  for (const choice of input.narrative.choices) {
+    outgoingByNode.set(choice.sourceNodeKey, [...(outgoingByNode.get(choice.sourceNodeKey) ?? []), choice])
+  }
+  const sceneTemplates: FrozenInteractionRuntimeV2['sceneTemplates'] = nonEndingNodes.map((node, sceneIndex) => {
+    const sceneCard = sceneCardByKey.get(node.key) ?? arcSceneCards[sceneIndex]
+    const castParticipants = sceneCard?.castKeys.flatMap(characterKey => {
+      const participantKey = participantByCharacter.get(characterKey)
+      return participantKey ? [participantKey] : []
+    }) ?? []
+    const participantKeys = [...new Set(castParticipants.length
+      ? castParticipants : profiles.slice(sceneIndex % profiles.length, sceneIndex % profiles.length + 1).map(profile => profile.participantKey))]
+    const outgoing = outgoingByNode.get(node.key) ?? []
+    const endingNode = outgoing.map(choice => endings.find(ending => ending.key === choice.targetNodeKey)).find(Boolean)
+    const relationshipRules = participantKeys.flatMap((participantKey, participantIndex) => {
+      const profile = profiles.find(item => item.participantKey === participantKey)!
+      return [{
+        ruleKey: `relationship.cast.${pad(sceneIndex)}.${pad(participantIndex)}.listen`,
+        label: `倾听${profile.name}`, playerText: `请${profile.name}说清眼前局面，并尊重其知识边界。`,
+        fromParticipantKey: participantKey, toParticipantKey: 'player', dimensionKey: 'trust' as const,
+        delta: 2, reason: '玩家认真倾听并承认对方的处境。', significantEventKey: null,
+      }, {
+        ruleKey: `relationship.cast.${pad(sceneIndex)}.${pad(participantIndex)}.press`,
+        label: `追问${profile.name}`, playerText: `要求${profile.name}立即回应与当前目标直接相关的问题。`,
+        fromParticipantKey: participantKey, toParticipantKey: 'player', dimensionKey: 'respect' as const,
+        delta: -1, reason: '玩家以压力换取即时信息。', significantEventKey: null,
+      }]
+    })
+    return {
+      sceneKey: `scene.${pad(sceneIndex)}`, title: node.title,
+      purpose: sceneCard?.purpose ?? node.summary,
+      location: sceneCard ? `地点编号 ${sceneCard.locationOrdinal}` : `叙事场景：${node.title}`,
+      timeLabel: sceneIndex === 0 ? '故事开始时' : `主线场景 ${sceneIndex + 1}`,
+      participantKeys,
+      publicKnowledgeKeys: participantKeys.flatMap(participantKey => (
+        profiles.find(profile => profile.participantKey === participantKey)?.initialKnowledge.map(item => item.key) ?? []
+      )),
+      goals: [sceneCard?.conflict ?? node.summary, ...outgoing.map(choice => choice.text)].filter(Boolean).slice(0, 8),
+      endingConditions: outgoing.map(choice => `玩家确认选择：${choice.text}`).slice(0, 8),
+      safetyBoundaries: [...input.brief.intent.contentBoundaries, '角色不得知道其 forbiddenKnowledge 中的事实', '不替玩家决定感受或行动'],
+      relationshipRules, openingNodeKey: node.key, endingNodeKey: endingNode?.key ?? endings[0]?.key ?? null,
+      maxTurns: Math.max(8, Math.min(80, Math.ceil(input.brief.scale.targetPlayMinutes / nonEndingNodes.length) * 4)),
+      directorBudget: Math.max(1, Math.min(participantKeys.length * 2, 12)), order: sceneIndex,
+    }
+  })
+  return { playerKey: 'player', profiles, sceneTemplates }
 }
 
 export function compileTextAdventureModuleV2(
@@ -92,6 +181,9 @@ export function compileTextAdventureModuleV2(
   const firstSceneForLocation = new Map<string, string>()
   for (const scene of scenes) if (!firstSceneForLocation.has(scene.locationKey)) firstSceneForLocation.set(scene.locationKey, scene.key)
   const sceneForNode = new Map(narrativeNodes.map((node, index) => [node.key, scenes[index]]))
+  const arcSceneCards = input.arcPlan.acts.flatMap(act => act.sceneCards)
+  const sceneForArcKey = new Map(arcSceneCards.map((sceneCard, index) => [sceneCard.key, scenes[index]]))
+  const narrativeNodeForScene = new Map(narrativeNodes.map((node, index) => [scenes[index].key, node.key]))
   const locationForNode = new Map([...sceneForNode].map(([nodeKey, scene]) => [nodeKey, scene.locationKey]))
   const entryLocationKey = locationForNode.get(input.narrative.entryNodeKey) ?? locations[0].key
 
@@ -154,18 +246,111 @@ export function compileTextAdventureModuleV2(
     actionScene.set(action.key, sceneKey ?? firstSceneForLocation.get(action.locationKey) ?? scenes[0].key)
   }
 
-  const endingNodeKeys = new Set(input.narrative.nodes.filter(node => node.kind === 'ending').map(node => node.key))
-  const endingActionKeys = input.narrative.choices
-    .filter(choice => endingNodeKeys.has(choice.targetNodeKey))
-    .map(choice => `action.choice.${choice.choiceKey}`)
-  const mainStages: AdventureContentV2['quests'][number]['stages'] = [{
-    key: 'stage.main.resolve', title: '完成主线并承担最终选择', objectiveKeys: ['objective.main.resolve'],
-  }]
-  const mainObjectives: AdventureContentV2['quests'][number]['objectives'] = [{
-    key: 'objective.main.resolve', stageKey: 'stage.main.resolve', title: '沿主线推进并抵达一个可解释结局',
-    optional: false, alternativeActionKeys: endingActionKeys,
-  }]
   const conditions: AdventureContentV2['conditions'] = []
+  const arcSceneIndexByKey = new Map(arcSceneCards.map((sceneCard, index) => [sceneCard.key, index]))
+  const arcDecisionByNarrativeNode = new Map(input.arcPlan.decisions.flatMap(decision => {
+    const sceneIndex = arcSceneIndexByKey.get(decision.sceneKey)
+    const narrativeNode = sceneIndex == null ? null : narrativeNodes[sceneIndex]
+    return narrativeNode ? [[narrativeNode.key, decision] as const] : []
+  }))
+  for (const decision of input.arcPlan.decisions) for (const option of decision.options) {
+    if (!conditions.some(condition => condition.key === option.persistentEffectKey)) conditions.push({
+      key: option.persistentEffectKey, title: option.label,
+      description: `决定代价：${option.cost}`, tags: ['narrative-decision'],
+    })
+  }
+  const mainQuest = input.mainQuestPlan.quests[0]
+  if (!mainQuest || input.mainQuestPlan.bundleKind !== 'main') fail('主线任务计划不存在或类型错误')
+  const mainQuestKey = mainQuest.key
+  const objectiveCompletionConditionKey = (objectiveKey: string) => `condition.main.${objectiveKey}.completed`
+  const mainStages: AdventureContentV2['quests'][number]['stages'] = mainQuest.stages.map(stage => ({
+    key: stage.key, title: stage.title, objectiveKeys: [...stage.objectiveKeys],
+  }))
+  const mainObjectives: AdventureContentV2['quests'][number]['objectives'] = mainQuest.objectives.map(objective => ({
+    key: objective.key, stageKey: objective.stageKey, title: objective.title, optional: false,
+    alternativeActionKeys: objective.alternatives.map(alternative => `action.main.${alternative.key}`),
+  }))
+  for (const objective of mainQuest.objectives) {
+    conditions.push({
+      key: objectiveCompletionConditionKey(objective.key), title: `${objective.title}已完成`,
+      description: objective.narrativePurpose, tags: ['main-objective'],
+    })
+    for (const alternative of objective.alternatives) for (const effectKey of alternative.persistentEffectKeys) {
+      if (!conditions.some(condition => condition.key === effectKey)) conditions.push({
+        key: effectKey, title: `${objective.title}的持久后果`,
+        description: alternative.successConsequence, tags: ['mainline-consequence'],
+      })
+    }
+  }
+  const orderedMainObjectives = mainQuest.stages.flatMap(stage => (
+    stage.objectiveKeys.map(objectiveKey => mainQuest.objectives.find(objective => objective.key === objectiveKey)!)
+  ))
+  const npcCharacters = input.cast.characters.filter(character => character.role !== 'player')
+  const mainActionLabel: Record<TextAdventureQuestPlanArtifactV1['quests'][number]['objectives'][number]['alternatives'][number]['actionKind'], string> = {
+    look: '观察', move: '前往', talk: '交谈', take: '取得', give: '交付', use: '使用',
+    inspect: '检查', attempt: '尝试', rest: '休整', 'quest-action': '执行',
+  }
+  orderedMainObjectives.forEach((objective, objectiveIndex) => {
+    const scene = sceneForArcKey.get(objective.sceneKeys[0])
+    if (!scene) fail(`主线目标没有对应 Runtime 场景:${objective.key}`)
+    const expectedLocation = locations[objective.locationOrdinal - 1]
+    if (!expectedLocation || expectedLocation.key !== scene.locationKey) {
+      fail(`主线目标地点与 Runtime 场景不一致:${objective.key}`)
+    }
+    const previousObjective = orderedMainObjectives[objectiveIndex - 1]
+    objective.alternatives.forEach(alternative => {
+      let interaction: AdventureActionDefinition['interaction'] = null
+      if (alternative.actionKind === 'talk') {
+        const npcIndex = npcCharacters.findIndex(character => character.key === alternative.targetCharacterKey)
+        if (npcIndex < 0) fail(`主线 talk 行动未绑定角色圣经 NPC:${alternative.key}`)
+        const participantKey = participantKeyForCastIndex(npcIndex)
+        const interactionScene = input.interaction.sceneTemplates.find(template => (
+          template.sceneKey === scene.key && template.participantKeys.includes(participantKey)
+        ))
+        const relationshipRule = interactionScene?.relationshipRules.find(rule => rule.fromParticipantKey === participantKey)
+        if (!interactionScene || !relationshipRule) fail(`主线 talk 行动缺少场景互动合同:${alternative.key}`)
+        interaction = { participantKey, sceneKey: interactionScene.sceneKey, ruleKey: relationshipRule.ruleKey }
+      }
+      const completionEffects: AdventureEffect[] = [
+        { op: 'complete-objective', questKey: mainQuestKey, objectiveKey: objective.key },
+        { op: 'apply-condition', conditionKey: objectiveCompletionConditionKey(objective.key), duration: null },
+        ...alternative.persistentEffectKeys.map(conditionKey => (
+          { op: 'apply-condition' as const, conditionKey, duration: null }
+        )),
+        { op: 'change-resource', resourceKey: clock.key, delta: Math.max(3, Math.round(input.brief.scale.targetPlayMinutes / mainQuest.objectives.length / 2)) },
+      ]
+      registerAction({
+        key: `action.main.${alternative.key}`, kind: alternative.actionKind,
+        label: `${mainActionLabel[alternative.actionKind]}：${objective.title}`,
+        description: `${objective.narrativePurpose}\n代价：${alternative.cost}`,
+        locationKey: scene.locationKey,
+        targetKey: alternative.actionKind === 'move' ? scene.locationKey : null,
+        requirements: [
+          { questKey: mainQuestKey, questStatus: 'active' },
+          { conditionKey: objectiveCompletionConditionKey(objective.key), conditionPresent: false },
+          ...(previousObjective ? [{
+            conditionKey: objectiveCompletionConditionKey(previousObjective.key), conditionPresent: true,
+          }] : []),
+          { narrativePath: '__storyforge.currentNarrativeNodeKey', narrativeEquals: narrativeNodeForScene.get(scene.key)! },
+        ],
+        rule: alternative.actionKind === 'attempt' || alternative.actionKind === 'inspect'
+          ? { kind: 'random', abilityKey: fallbackAbilityKey, expression: '1d20', difficulty: 10, costlySuccessFloor: 6 }
+          : { kind: 'automatic' },
+        successEffects: completionEffects,
+        costlySuccessEffects: [...completionEffects, { op: 'change-resource', resourceKey: health.key, delta: -1 }],
+        failureEffects: contract.narrative.failForward
+          ? [...completionEffects, { op: 'change-resource', resourceKey: health.key, delta: -1 }]
+          : [{ op: 'change-resource', resourceKey: clock.key, delta: 3 }],
+        successText: alternative.successConsequence,
+        costlySuccessText: `${alternative.successConsequence}\n代价：${alternative.cost}`,
+        failureText: alternative.failureForwardConsequence,
+        unavailableText: '这项目标尚未轮到、已经完成，或当前不在对应场景。',
+        repeatable: false, narrativeChoiceKey: null, interaction,
+      }, scene.key)
+    })
+  })
+
+  const endingNodeKeys = new Set(input.narrative.nodes.filter(node => node.kind === 'ending').map(node => node.key))
   const choiceBySource = new Map<string, typeof input.narrative.choices>()
   for (const choice of input.narrative.choices) {
     choiceBySource.set(choice.sourceNodeKey, [...(choiceBySource.get(choice.sourceNodeKey) ?? []), choice])
@@ -188,8 +373,9 @@ export function compileTextAdventureModuleV2(
       costlySuccessText: `你花费更多时间理解了${node.title}。`, failureText: `你暂时没有看清${node.title}。`,
       unavailableText: '当前无法观察。', repeatable: true, narrativeChoiceKey: null, interaction: null,
     }, sceneKey)
-    outgoing.forEach(choice => {
+    outgoing.forEach((choice, choiceIndex) => {
       const targetLocationKey = locationForNode.get(choice.targetNodeKey)
+      const decisionOption = arcDecisionByNarrativeNode.get(choice.sourceNodeKey)?.options[choiceIndex]
       const endingConditionKey = endingNodeKeys.has(choice.targetNodeKey)
         ? `condition.ending.${choice.targetNodeKey}` : null
       if (endingConditionKey && !conditions.some(item => item.key === endingConditionKey)) conditions.push({
@@ -197,8 +383,12 @@ export function compileTextAdventureModuleV2(
       })
       const effects: AdventureEffect[] = [
         ...(targetLocationKey ? [{ op: 'enter-location' as const, locationKey: targetLocationKey }] : []),
+        ...(decisionOption ? [{
+          op: 'apply-condition' as const,
+          conditionKey: decisionOption.persistentEffectKey,
+          duration: null,
+        }] : []),
         ...(endingConditionKey ? [
-          { op: 'complete-objective' as const, questKey: 'quest.main', objectiveKey: 'objective.main.resolve' },
           { op: 'apply-condition' as const, conditionKey: endingConditionKey, duration: null },
         ] : []),
         { op: 'change-resource', resourceKey: clock.key, delta: Math.max(5, Math.round(60 / Math.max(1, narrativeNodes.length))) } as const,
@@ -207,8 +397,12 @@ export function compileTextAdventureModuleV2(
         key: `action.choice.${choice.choiceKey}`, kind: targetLocationKey ? 'move' : 'quest-action', label: choice.text,
         description: choice.description || `推进主线：${choice.text}`, locationKey,
         targetKey: targetLocationKey ?? null, requirements: [
-          { questKey: 'quest.main', questStatus: 'active' },
           { narrativePath: '__storyforge.currentNarrativeNodeKey', narrativeEquals: choice.sourceNodeKey },
+          ...mainQuest.objectives.filter(objective => objective.sceneKeys.some(sceneKey => (
+            sceneForArcKey.get(sceneKey)?.key === sceneForNode.get(choice.sourceNodeKey)?.key
+          ))).map(objective => ({
+            conditionKey: objectiveCompletionConditionKey(objective.key), conditionPresent: true,
+          })),
         ],
         rule: { kind: 'automatic' }, successEffects: effects, costlySuccessEffects: [], failureEffects: [],
         successText: input.narrative.beats.filter(beat => beat.nodeKey === choice.targetNodeKey).map(beat => beat.text).join('\n') || choice.description || choice.text,
@@ -220,7 +414,7 @@ export function compileTextAdventureModuleV2(
   })
 
   const quests: AdventureContentV2['quests'] = [{
-    key: 'quest.main', title: input.architecture.title, description: input.architecture.premise,
+    key: mainQuestKey, title: mainQuest.title, description: mainQuest.description,
     category: 'main', initialStatus: 'active', prerequisites: [], stages: mainStages, objectives: mainObjectives,
     rewardEffects: [
       { op: 'change-resource', resourceKey: experience.key, delta: 20 },

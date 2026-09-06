@@ -323,7 +323,8 @@ export interface TextAdventureQualityReviewArtifactV1 {
   }
   issues: Array<{
     severity: 'warning' | 'blocking'
-    artifactKey: 'content.adventure-architecture' | 'content.narrative' | 'content.product-module'
+    artifactKey: 'content.story-bible' | 'content.cast-bible' | 'content.adventure-architecture'
+      | 'content.narrative-arc-plan' | 'content.main-quest-plan' | 'content.narrative' | 'content.product-module'
       | 'content.adventure-side-quests' | 'content.adventure-ambient-events'
     detail: string
     recommendation: string
@@ -382,7 +383,8 @@ export function parseTextAdventureQualityReviewArtifactV1(
     scoreKey, integer(scores[scoreKey], `qualityReview.scores.${scoreKey}`, 1, 5),
   ])) as unknown as TextAdventureQualityReviewArtifactV1['scores']
   const artifactKeys: TextAdventureQualityReviewArtifactV1['issues'][number]['artifactKey'][] = [
-    'content.adventure-architecture', 'content.narrative', 'content.product-module',
+    'content.story-bible', 'content.cast-bible', 'content.adventure-architecture',
+    'content.narrative-arc-plan', 'content.main-quest-plan', 'content.narrative', 'content.product-module',
     'content.adventure-side-quests', 'content.adventure-ambient-events',
   ]
   const issues = row.issues.map((value, index) => {

@@ -85,7 +85,8 @@ export async function readTextAdventureQualityInputsV1(input: AssembleContextInp
   const { build } = await productionAndBuild(input)
   if (!build) throw new Error('[product-production-context] 文字冒险质量审查需要 productBuildId')
   const requiredKeys = [
-    'content.adventure-architecture', 'content.narrative', 'content.product-module',
+    'content.story-bible', 'content.cast-bible', 'content.adventure-architecture',
+    'content.narrative-arc-plan', 'content.main-quest-plan', 'content.narrative', 'content.product-module',
     'content.adventure-side-quests', 'content.adventure-ambient-events',
   ]
   const requested = new Set(input.productArtifactKeys ?? [])
@@ -106,6 +107,10 @@ export async function readTextAdventureQualityInputsV1(input: AssembleContextInp
   }
   const payloadByKey = new Map(rows.map(row => [row.artifactKey, contextRecord(JSON.parse(row.payloadJson))]))
   const architecture = payloadByKey.get('content.adventure-architecture') ?? {}
+  const storyBible = payloadByKey.get('content.story-bible') ?? {}
+  const castBible = payloadByKey.get('content.cast-bible') ?? {}
+  const arcPlan = payloadByKey.get('content.narrative-arc-plan') ?? {}
+  const mainQuestPlan = payloadByKey.get('content.main-quest-plan') ?? {}
   const narrative = payloadByKey.get('content.narrative') ?? {}
   const productModule = payloadByKey.get('content.product-module') ?? {}
   const locations = contextRows(architecture.regions).flatMap(region => (
@@ -161,6 +166,66 @@ export async function readTextAdventureQualityInputsV1(input: AssembleContextInp
       themes: Array.isArray(architecture.themes) ? architecture.themes : [],
       locations,
     },
+    storyBible: {
+      title: contextText(storyBible.title, 120), premise: contextText(storyBible.premise, 300),
+      thematicQuestion: contextText(storyBible.thematicQuestion, 200),
+      emotionalPromise: contextText(storyBible.emotionalPromise, 240),
+      centralConflict: contextText(storyBible.centralConflict, 300),
+      setupPayoffs: contextRows(storyBible.setupPayoffs).map(item => ({
+        key: item.key, setup: contextText(item.setup, 160), payoff: contextText(item.payoff, 160),
+        introducedAct: item.introducedAct, resolvedAct: item.resolvedAct,
+      })),
+      endings: contextRows(storyBible.endings).map(item => ({
+        key: item.key, title: contextText(item.title, 80),
+        dramaticAnswer: contextText(item.dramaticAnswer, 180),
+      })),
+    },
+    cast: contextRows(castBible.characters).map(character => ({
+      key: character.key, role: character.role, name: contextText(character.name, 80),
+      desire: contextText(character.desire, 140), fear: contextText(character.fear, 140),
+      motivation: contextText(character.motivation, 120), voice: contextText(character.voice, 100),
+      initialKnowledgeCount: Array.isArray(character.initialKnowledge) ? character.initialKnowledge.length : 0,
+      relationshipArc: Array.isArray(character.relationshipArc) ? character.relationshipArc : [],
+    })),
+    arcPlan: {
+      acts: contextRows(arcPlan.acts).map(act => ({
+        key: act.key, title: contextText(act.title, 80), targetMinutes: act.targetMinutes,
+        goal: contextText(act.goal, 140), irreversibleTurn: contextText(act.irreversibleTurn, 140),
+        sceneCards: contextRows(act.sceneCards).map(scene => ({
+          key: scene.key, title: contextText(scene.title, 80), locationOrdinal: scene.locationOrdinal,
+          castKeys: Array.isArray(scene.castKeys) ? scene.castKeys : [],
+          setupKeys: Array.isArray(scene.setupKeys) ? scene.setupKeys : [],
+          payoffKeys: Array.isArray(scene.payoffKeys) ? scene.payoffKeys : [],
+        })),
+      })),
+      decisions: contextRows(arcPlan.decisions).map(decision => ({
+        key: decision.key, sceneKey: decision.sceneKey, prompt: contextText(decision.prompt, 120),
+        options: contextRows(decision.options).map(option => ({
+          key: option.key, label: contextText(option.label, 80), cost: contextText(option.cost, 100),
+          persistentEffectKey: option.persistentEffectKey,
+          echoSceneKeys: Array.isArray(option.echoSceneKeys) ? option.echoSceneKeys : [],
+        })),
+      })),
+    },
+    mainQuestPlan: contextRows(mainQuestPlan.quests).map(quest => ({
+      key: quest.key, title: contextText(quest.title, 80),
+      stages: contextRows(quest.stages).map(stage => ({
+        key: stage.key, title: contextText(stage.title, 80),
+        objectiveKeys: Array.isArray(stage.objectiveKeys) ? stage.objectiveKeys : [],
+      })),
+      objectives: contextRows(quest.objectives).map(objective => ({
+        key: objective.key, stageKey: objective.stageKey, title: contextText(objective.title, 80),
+        sceneKeys: Array.isArray(objective.sceneKeys) ? objective.sceneKeys : [],
+        locationOrdinal: objective.locationOrdinal,
+        alternatives: contextRows(objective.alternatives).map(alternative => ({
+          key: alternative.key, actionKind: alternative.actionKind,
+          targetCharacterKey: alternative.targetCharacterKey,
+          cost: contextText(alternative.cost, 80),
+          success: contextText(alternative.successConsequence, 90),
+          failureForward: contextText(alternative.failureForwardConsequence, 90),
+        })),
+      })),
+    })),
     narrative: {
       entryNodeKey: contextText(narrative.entryNodeKey, 200),
       nodes,
@@ -186,8 +251,9 @@ export async function readTextAdventureQualityInputsV1(input: AssembleContextInp
     ambientEvents: projectQuestBundle('content.adventure-ambient-events'),
   }
   const serialized = JSON.stringify(packet)
-  if (estimateTokens(serialized) > 11_750) {
-    throw new Error('[product-production-context] 文字冒险质量审查投影超过登记预算，必须拆分生产内容后再审查')
+  const estimatedTokens = estimateTokens(serialized)
+  if (estimatedTokens > 11_750) {
+    throw new Error(`[product-production-context] 文字冒险质量审查投影超过登记预算:${estimatedTokens}/11750，必须拆分生产内容后再审查`)
   }
   return serialized
 }

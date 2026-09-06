@@ -24,7 +24,7 @@ import {
 import { runProductProductionUntilBlockedV1 } from '../../src/lib/product-production/scheduler'
 import { parseProductRuntimePackageV1 } from '../../src/lib/product-production/runtime-package'
 import { adventureNarrativeActionContext, availableAdventureActions } from '../../src/lib/adventure/runtime'
-import { commitAdventureAction } from '../../src/lib/adventure/runtime-api'
+import { commitAdventureAction, commitAdventureNarrativeChoice } from '../../src/lib/adventure/runtime-api'
 import { planTextAdventureNarrativeLocationsV1 } from '../../src/lib/adventure/narrative-location-plan'
 import { resolveProductRuntimeSource } from '../../src/lib/product-production/preview-source'
 import {
@@ -363,6 +363,10 @@ function professionalTextAdventurePlanningOutputs(
   const contract = brief.textAdventure!
   const sceneCount = Math.max(3, contract.narrative.targetSceneCount)
   const sceneKeys = Array.from({ length: sceneCount }, (_, index) => `scene.${String(index + 1).padStart(3, '0')}`)
+  const sceneLocationPlan = planTextAdventureNarrativeLocationsV1(
+    sceneCount,
+    contract.narrative.targetLocationCount,
+  )
   const npcCount = brief.qualityProfile === 'commercial-candidate'
     ? Math.max(5, Math.ceil(brief.scale.targetPlayMinutes / 12)) : 2
   const characters = [{
@@ -403,7 +407,7 @@ function professionalTextAdventurePlanningOutputs(
   const acts = actSceneCounts.map((count, actIndex) => {
     const sceneCards = sceneKeys.slice(sceneOffset, sceneOffset + count).map((sceneKey, localIndex) => ({
       key: sceneKey, title: `第 ${actIndex + 1} 幕场景 ${localIndex + 1}`,
-      locationOrdinal: (sceneOffset + localIndex) % contract.narrative.targetLocationCount + 1,
+      locationOrdinal: sceneLocationPlan[sceneOffset + localIndex].locationOrdinal,
       purpose: '推进主冲突并让玩家获得可行动的信息。', conflict: '公开事实与保护眼前人物无法同时零成本完成。',
       entryState: '玩家带着上一场留下的关系与资源后果进入。', exitState: '局面发生不可忽略的变化并开启下一目标。',
       castKeys: ['character.player', `character.npc.${(sceneOffset + localIndex) % npcCount + 1}`],
@@ -432,9 +436,13 @@ function professionalTextAdventurePlanningOutputs(
   const objectiveCount = brief.qualityProfile === 'commercial-candidate'
     ? Math.max(8, Math.ceil(brief.scale.targetPlayMinutes / 7.5)) : 8
   const objectiveKeys = Array.from({ length: objectiveCount }, (_, index) => `objective.${index + 1}`)
+  const stageIndexForObjective = (objectiveIndex: number) => Math.min(
+    stageCount - 1,
+    Math.floor(objectiveIndex * stageCount / objectiveCount),
+  )
   const stages = Array.from({ length: stageCount }, (_, stageIndex) => ({
     key: `stage.${stageIndex + 1}`, title: `主线阶段 ${stageIndex + 1}`,
-    objectiveKeys: objectiveKeys.filter((_, index) => index % stageCount === stageIndex),
+    objectiveKeys: objectiveKeys.filter((_, index) => stageIndexForObjective(index) === stageIndex),
   }))
   return {
     'content.source-sufficiency': {
@@ -466,19 +474,25 @@ function professionalTextAdventurePlanningOutputs(
       quests: [{
         key: 'quest.main', title: '最后的灯火', description: '调查信号记录、协调港民并决定潮门命运。',
         characterKeys: characters.map(character => character.key), stages,
-        objectives: objectiveKeys.map((objectiveKey, index) => ({
-          key: objectiveKey, stageKey: stages[index % stageCount].key, title: `主线目标 ${index + 1}`,
-          narrativePurpose: '把场景冲突转成玩家可执行且有后果的任务。',
-          sceneKeys: [sceneKeys[index % sceneKeys.length]],
-          locationOrdinal: index % contract.narrative.targetLocationCount + 1,
-          alternatives: Array.from({ length: index < 2 ? 2 : 1 }, (_, alternativeIndex) => ({
-            key: `alternative.${index + 1}.${alternativeIndex + 1}`,
-            actionKind: alternativeIndex === 0 ? 'talk' : 'inspect', cost: '消耗时间或关系信任。',
-            successConsequence: '目标完成并让后续人物态度发生可见变化。',
-            failureForwardConsequence: '目标未按预期完成，但获得替代入口并继续主线。',
-            persistentEffectKeys: [`flag.objective.${index + 1}.${alternativeIndex + 1}`],
-          })),
-        })),
+        objectives: objectiveKeys.map((objectiveKey, index) => {
+          const sceneIndex = Math.min(sceneKeys.length - 1, Math.floor(index * sceneKeys.length / objectiveCount))
+          return {
+            key: objectiveKey, stageKey: stages[stageIndexForObjective(index)].key, title: `主线目标 ${index + 1}`,
+            narrativePurpose: '把场景冲突转成玩家可执行且有后果的任务。',
+            sceneKeys: [sceneKeys[sceneIndex]],
+            locationOrdinal: sceneLocationPlan[sceneIndex].locationOrdinal,
+            alternatives: Array.from({ length: index < 2 ? 2 : 1 }, (_, alternativeIndex) => ({
+              key: `alternative.${index + 1}.${alternativeIndex + 1}`,
+              actionKind: alternativeIndex === 0 ? 'inspect' as const : 'talk' as const,
+              targetCharacterKey: alternativeIndex === 1
+                ? `character.npc.${sceneIndex % npcCount + 1}` : null,
+              cost: '消耗时间或关系信任。',
+              successConsequence: '目标完成并让后续人物态度发生可见变化。',
+              failureForwardConsequence: '目标未按预期完成，但获得替代入口并继续主线。',
+              persistentEffectKeys: [`flag.objective.${index + 1}.${alternativeIndex + 1}`],
+            })),
+          }
+        }),
       }],
     },
   } as const
@@ -1252,6 +1266,11 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     expect(qualityReviewSystem).toContain('只能是 JSON number 1、2、3、4 或 5')
     expect(qualityReviewSystem).toContain('禁止小数、字符串、"4/5"、"4分"、null')
     expect(qualityReviewContext).toContain('storyforge.text-adventure-quality-inputs')
+    expect(qualityReviewContext).toContain('"storyBible"')
+    expect(qualityReviewContext).toContain('"cast"')
+    expect(qualityReviewContext).toContain('"arcPlan"')
+    expect(qualityReviewContext).toContain('"mainQuestPlan"')
+    expect(qualityReviewContext).toContain('"targetCharacterKey"')
     expect(qualityReviewContext).toContain('"artifactKey":"content.narrative"')
     expect(qualityReviewContext).toContain('"openingBeat"')
     expect(qualityReviewContext).toContain('"key":"choice.main.1"')
@@ -1290,6 +1309,12 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     expect(runtimePackage.adventure.actions.some(item => item.key.startsWith('action.travel.'))).toBe(false)
     expect(runtimePackage.adventure.storylets).toHaveLength(7)
     expect(runtimePackage.adventure.endings).toHaveLength(3)
+    const mainQuest = runtimePackage.adventure.quests.find(item => item.category === 'main')!
+    expect(mainQuest.stages).toHaveLength(3)
+    expect(mainQuest.objectives).toHaveLength(8)
+    expect(mainQuest.objectives.filter(item => item.alternativeActionKeys.length >= 2)).toHaveLength(2)
+    expect(runtimePackage.interaction?.profiles).toHaveLength(2)
+    expect(runtimePackage.adventure.actions.filter(item => item.kind === 'talk').length).toBeGreaterThanOrEqual(2)
     expect(runtimePackage.adventure.items).toContainEqual(expect.objectContaining({
       key: 'item.product.field-notes', tags: expect.arrayContaining(['product-private']),
     }))
@@ -1300,8 +1325,23 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
       scope: owned.scope, productionId: owned.productionId,
     })
     const previewState = await readProductRuntimeState(preview.sessionId)
-    const entryActions = availableAdventureActions(
+    const initialCandidates = availableAdventureActions(
       runtimePackage.adventure, previewState.adventure!,
+      adventureNarrativeActionContext({ currentNodeKey: runtimePackage.narrative.entryNodeKey, variables: {} }),
+    )
+    expect(initialCandidates.filter(item => item.available && item.action.narrativeChoiceKey)).toHaveLength(0)
+    const firstObjectiveAction = initialCandidates.find(item => (
+      item.available && item.action.key.startsWith('action.main.') && item.action.kind !== 'talk'
+    ))!
+    const objectiveBase = await readProductRuntimeStateVersion(preview.sessionId)
+    await commitAdventureAction({
+      sessionId: preview.sessionId, actionKey: firstObjectiveAction.action.key,
+      commandId: 'text-adventure:complete-first-main-objective',
+      baseSequence: objectiveBase.sequence, baseStateHash: objectiveBase.stateHash,
+    })
+    const afterObjective = await readProductRuntimeState(preview.sessionId)
+    const entryActions = availableAdventureActions(
+      runtimePackage.adventure, afterObjective.adventure!,
       adventureNarrativeActionContext({ currentNodeKey: runtimePackage.narrative.entryNodeKey, variables: {} }),
     ).filter(item => item.available && item.action.narrativeChoiceKey).map(item => item.action.narrativeChoiceKey)
     expect(entryActions).toEqual([runtimePackage.narrative.choices.find(choice => (
@@ -1326,6 +1366,46 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     })
     expect((await readProductRuntimeState(preview.sessionId)).adventure?.quests
       .find(item => item.questKey === entrySideQuest.key)?.status).toBe('active')
+
+    const mainRoute = await startProductProductionPreviewV1({
+      scope: owned.scope, productionId: owned.productionId,
+    })
+    for (let turn = 0; turn < 50; turn += 1) {
+      const state = await readProductRuntimeState(mainRoute.sessionId)
+      if (state.narrative?.completed) break
+      const currentNodeKey = state.narrative?.currentNodeKey
+      if (!currentNodeKey || !state.adventure) throw new Error('文字冒险主路线缺少当前节点或玩法状态')
+      const available = availableAdventureActions(
+        runtimePackage.adventure, state.adventure,
+        adventureNarrativeActionContext({ currentNodeKey, variables: state.narrative?.variables ?? {} }),
+      ).filter(item => item.available)
+      const objectiveAction = available.find(item => (
+        item.action.key.startsWith('action.main.') && item.action.kind !== 'talk'
+      ))
+      if (objectiveAction) {
+        const base = await readProductRuntimeStateVersion(mainRoute.sessionId)
+        await commitAdventureAction({
+          sessionId: mainRoute.sessionId, actionKey: objectiveAction.action.key,
+          commandId: `text-adventure:main-route:objective:${turn}`,
+          baseSequence: base.sequence, baseStateHash: base.stateHash,
+        })
+        continue
+      }
+      const narrativeAction = available.find(item => item.action.narrativeChoiceKey)
+      if (!narrativeAction?.action.narrativeChoiceKey) {
+        throw new Error(`文字冒险主路线在 ${currentNodeKey} 没有合法主线行动`)
+      }
+      await commitAdventureNarrativeChoice({
+        sessionId: mainRoute.sessionId,
+        choiceKey: narrativeAction.action.narrativeChoiceKey,
+        commandId: `text-adventure:main-route:choice:${turn}`,
+      })
+    }
+    const completedMainRoute = await readProductRuntimeState(mainRoute.sessionId)
+    expect(completedMainRoute.narrative).toMatchObject({ completed: true })
+    expect(completedMainRoute.adventure?.quests.find(item => item.questKey === mainQuest.key)?.status).toBe('completed')
+    expect(completedMainRoute.adventure?.quests.find(item => item.questKey === mainQuest.key)?.objectives
+      .every(objective => objective.completed)).toBe(true)
     const equipActions = runtimePackage.adventure.actions.filter(action => action.key.startsWith('action.equip.'))
     const entrySceneActionKeys = new Set(runtimePackage.adventure.scenes
       .filter(scene => scene.locationKey === runtimePackage.adventure!.initialLocationKey)

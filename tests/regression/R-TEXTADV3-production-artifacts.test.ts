@@ -174,9 +174,9 @@ describe('TEXTADV-3 · 专业生产工件合同', () => {
         stages: [{ key: 'stage.opening', title: '确认局势', objectiveKeys: ['objective.records'] }],
         objectives: [{
           key: 'objective.records', stageKey: 'stage.opening', title: '取得记录',
-          narrativePurpose: '让最后选择拥有事实依据。', sceneKeys: ['scene.1', 'scene.2'], locationOrdinal: 1,
+          narrativePurpose: '让最后选择拥有事实依据。', sceneKeys: ['scene.1'], locationOrdinal: 1,
           alternatives: [{
-            key: 'route.talk', actionKind: 'talk', cost: '关系承压',
+            key: 'route.talk', actionKind: 'talk', targetCharacterKey: 'character.npc.1', cost: '关系承压',
             successConsequence: '同伴交出记录。', failureForwardConsequence: '同伴拒绝，但留下了仓库钥匙。',
             persistentEffectKeys: ['flag.records-known'],
           }],

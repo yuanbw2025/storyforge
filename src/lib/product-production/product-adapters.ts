@@ -3,12 +3,20 @@ import {
   compileInteractionModulesV1,
   compileOpenWorldModulesV1,
 } from './product-module-compilers'
-import { compileTextAdventureModuleV2 } from '../adventure/production-compiler'
+import {
+  compileTextAdventureInteractionV1,
+  compileTextAdventureModuleV2,
+} from '../adventure/production-compiler'
 import type {
   TextAdventureArchitectureArtifactV1,
   TextAdventureQuestBundleArtifactV1,
   TextAdventureSystemsArtifactV1,
 } from '../adventure/production-artifacts'
+import type {
+  TextAdventureCastBibleArtifactV1,
+  TextAdventureNarrativeArcPlanArtifactV1,
+  TextAdventureQuestPlanArtifactV1,
+} from '../adventure/production-artifacts-v2'
 import type {
   AdventureContent,
   ProductionProductKindV1,
@@ -37,6 +45,9 @@ export interface ProductAdapterBuildInputV1 {
   textAdventureProduction?: {
     architecture: TextAdventureArchitectureArtifactV1
     systems: TextAdventureSystemsArtifactV1
+    cast: TextAdventureCastBibleArtifactV1
+    arcPlan: TextAdventureNarrativeArcPlanArtifactV1
+    mainQuestPlan: TextAdventureQuestPlanArtifactV1
     sideQuests: TextAdventureQuestBundleArtifactV1
     ambientEvents: TextAdventureQuestBundleArtifactV1
   }
@@ -70,6 +81,9 @@ function adventureModule(
     interaction,
     architecture: input.textAdventureProduction.architecture,
     systems: input.textAdventureProduction.systems,
+    cast: input.textAdventureProduction.cast,
+    arcPlan: input.textAdventureProduction.arcPlan,
+    mainQuestPlan: input.textAdventureProduction.mainQuestPlan,
     sideQuests: input.textAdventureProduction.sideQuests,
     ambientEvents: input.textAdventureProduction.ambientEvents,
   })
@@ -102,7 +116,14 @@ const ADAPTERS = new Map<ProductionProductKindV1, UpperProductProductionAdapterV
       commercialReady: input.brief.qualityProfile === 'commercial-candidate',
       enabledCapabilities: ['narrative', 'interaction', 'adventure'],
       ...(() => {
-        const interaction = interactionModules(input)
+        const interaction = input.textAdventureProduction
+          ? compileTextAdventureInteractionV1({
+              brief: input.brief,
+              narrative: input.narrative,
+              cast: input.textAdventureProduction.cast,
+              arcPlan: input.textAdventureProduction.arcPlan,
+            })
+          : interactionModules(input)
         return { interaction, adventure: adventureModule(input, interaction) }
       })(),
     }),

@@ -434,12 +434,22 @@ export async function draftProductProductionBriefV3(input: {
           'product.adventure.v2-media-binding',
           'product.adventure.narrative-depth',
           'product.adventure.content-volume',
+          ...(qualityProfile === 'commercial-candidate' ? [
+            'product.adventure.recommendation-analysis-complete',
+            'product.adventure.recommendation-route-volume',
+            'product.adventure.recommendation-total-volume',
+            'product.adventure.recommendation-dialogue-and-cast',
+            'product.adventure.recommendation-decisions',
+            'product.adventure.recommendation-main-quest',
+            'product.adventure.recommendation-endings',
+            'product.adventure.recommendation-copy',
+          ] : []),
         ] : []),
       ],
       minimumMediaCoverage: media.requiredMediaKinds.length
         ? qualityProfile === 'commercial-candidate' ? 1 : 0.5
         : 0,
-      allowSoftWaivers: true,
+      allowSoftWaivers: !(input.productType === 'text-adventure' && qualityProfile === 'commercial-candidate'),
     },
     unresolvedDecisionKeys,
     ...(ttrpg ? { ttrpg } : {}),

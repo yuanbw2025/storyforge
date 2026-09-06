@@ -486,6 +486,7 @@ export interface TextAdventureQuestPlanArtifactV1 {
       alternatives: Array<{
         key: string
         actionKind: 'look' | 'move' | 'talk' | 'take' | 'give' | 'use' | 'inspect' | 'attempt' | 'rest' | 'quest-action'
+        targetCharacterKey: string | null
         cost: string
         successConsequence: string
         failureForwardConsequence: string
@@ -540,16 +541,50 @@ export function parseTextAdventureQuestPlanArtifactV1(input: {
         ], `quests[${questIndex}].objectives[${objectiveIndex}]`)
         const parsedSceneKeys = keyArray(objective.sceneKeys, `objectives[${objectiveIndex}].sceneKeys`, 1, 12)
         if (parsedSceneKeys.some(value => !sceneKeys.has(value))) fail(`objectives[${objectiveIndex}] 引用未知场景`)
+        const locationOrdinal = integer(
+          objective.locationOrdinal,
+          `objectives[${objectiveIndex}].locationOrdinal`,
+          1,
+          input.brief.textAdventure!.narrative.targetLocationCount,
+        )
+        const sceneCards = input.arcPlan.acts.flatMap(act => act.sceneCards)
+          .filter(scene => parsedSceneKeys.includes(scene.key))
+        if (sceneCards.some(scene => scene.locationOrdinal !== locationOrdinal)) {
+          fail(`objectives[${objectiveIndex}] 地点与引用场景不一致`)
+        }
         const alternatives = array(objective.alternatives, `objectives[${objectiveIndex}].alternatives`, 1, 5)
           .map((value, alternativeIndex) => {
             const alternative = record(value, `objectives[${objectiveIndex}].alternatives[${alternativeIndex}]`)
             exactKeys(alternative, [
-              'key', 'actionKind', 'cost', 'successConsequence', 'failureForwardConsequence',
+              'key', 'actionKind', 'targetCharacterKey', 'cost', 'successConsequence', 'failureForwardConsequence',
               'persistentEffectKeys',
             ], `objectives[${objectiveIndex}].alternatives[${alternativeIndex}]`)
+            const actionKind = enumValue(alternative.actionKind, actionKinds, `alternatives[${alternativeIndex}].actionKind`)
+            const targetCharacterKey = nullableText(
+              alternative.targetCharacterKey,
+              `alternatives[${alternativeIndex}].targetCharacterKey`,
+              200,
+            )
+            if (targetCharacterKey && (!STABLE_KEY.test(targetCharacterKey) || !characterKeys.includes(targetCharacterKey))) {
+              fail(`alternatives[${alternativeIndex}].targetCharacterKey 未列入任务角色`)
+            }
+            const targetCharacter = input.cast.characters.find(character => character.key === targetCharacterKey)
+            if (actionKind === 'talk' && (!targetCharacterKey || !targetCharacter || targetCharacter.role === 'player')) {
+              fail(`alternatives[${alternativeIndex}] talk 必须绑定非玩家角色`)
+            }
+            if (actionKind !== 'talk' && targetCharacterKey !== null) {
+              fail(`alternatives[${alternativeIndex}] 非 talk 行动不得绑定角色`)
+            }
+            if (targetCharacterKey) {
+              const availableInScene = parsedSceneKeys.some(sceneKey => input.arcPlan.acts.some(act => (
+                act.sceneCards.some(scene => scene.key === sceneKey && scene.castKeys.includes(targetCharacterKey))
+              )))
+              if (!availableInScene) fail(`alternatives[${alternativeIndex}] talk 角色未出现在目标场景`)
+            }
             return {
               key: key(alternative.key, `alternatives[${alternativeIndex}].key`),
-              actionKind: enumValue(alternative.actionKind, actionKinds, `alternatives[${alternativeIndex}].actionKind`),
+              actionKind,
+              targetCharacterKey,
               cost: text(alternative.cost, `alternatives[${alternativeIndex}].cost`, 1_000),
               successConsequence: text(alternative.successConsequence, `alternatives[${alternativeIndex}].successConsequence`, 2_000),
               failureForwardConsequence: text(alternative.failureForwardConsequence, `alternatives[${alternativeIndex}].failureForwardConsequence`, 2_000),
@@ -563,7 +598,7 @@ export function parseTextAdventureQuestPlanArtifactV1(input: {
           title: text(objective.title, `objectives[${objectiveIndex}].title`, 300),
           narrativePurpose: text(objective.narrativePurpose, `objectives[${objectiveIndex}].narrativePurpose`, 2_000),
           sceneKeys: parsedSceneKeys,
-          locationOrdinal: integer(objective.locationOrdinal, `objectives[${objectiveIndex}].locationOrdinal`, 1, input.brief.textAdventure!.narrative.targetLocationCount),
+          locationOrdinal,
           alternatives,
         }
       })
@@ -575,6 +610,22 @@ export function parseTextAdventureQuestPlanArtifactV1(input: {
     if (new Set(assignedObjectiveKeys).size !== assignedObjectiveKeys.length
       || assignedObjectiveKeys.some(value => !objectiveKeys.has(value))
       || assignedObjectiveKeys.length !== objectives.length) fail('stage.objectiveKeys 未精确覆盖 objectives')
+    for (const stage of stages) for (const objectiveKey of stage.objectiveKeys) {
+      const objective = objectives.find(item => item.key === objectiveKey)!
+      if (objective.stageKey !== stage.key) fail(`objective ${objective.key} 的 stageKey 与阶段顺序不一致`)
+    }
+    if (input.expectedKind === 'main') {
+      const sceneOrder = new Map(input.arcPlan.acts.flatMap(act => act.sceneCards)
+        .map((scene, index) => [scene.key, index] as const))
+      const orderedObjectives = assignedObjectiveKeys.map(objectiveKey => (
+        objectives.find(objective => objective.key === objectiveKey)!
+      ))
+      for (let index = 1; index < orderedObjectives.length; index += 1) {
+        const previousOrder = sceneOrder.get(orderedObjectives[index - 1].sceneKeys[0])!
+        const currentOrder = sceneOrder.get(orderedObjectives[index].sceneKeys[0])!
+        if (currentOrder < previousOrder) fail('主线阶段/目标顺序不得逆穿已结束的叙事场景')
+      }
+    }
     if (input.expectedKind === 'main' && input.brief.qualityProfile === 'commercial-candidate'
       && objectives.filter(objective => objective.alternatives.length >= 2).length < 2) {
       fail('商业主线至少两个目标需要多种通用解法')
