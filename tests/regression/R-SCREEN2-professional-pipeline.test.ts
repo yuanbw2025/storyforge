@@ -272,6 +272,7 @@ describe('SCREEN-2 · professional novel-to-screenplay pipeline', () => {
     expect(prompts.get('adaptation-brief')).toContain('version 必须是 JSON 数字 1，不是字符串')
     expect(prompts.get('adaptation-brief')).toContain('mustKeep、mayCut、mayMerge、mayReorder、allowedAdditions、unresolvedQuestions、assumptions 必须是字符串数组')
     expect(prompts.get('decision-pass')).toContain('sourceFactKeys 与 targetKeys 必须始终是无重复的字符串数组')
+    expect(prompts.get('decision-pass')).toContain('4～8 项高价值改编决定')
     expect(prompts.get('beat-sheet')).toContain('scope 只能是 act、sequence、episode')
     expect(prompts.get('scene-card')).toContain('不得增加 heading、location、characters、shots、id 等字段')
     expect(prompts.get('scene-draft')).toContain('每个 dialogue 前必须先有 character')
