@@ -1533,6 +1533,204 @@ export interface TextOpenWorldRegionNarrativePacksV1 {
   regionNarrativePacksHash: string
 }
 
+export type TextOpenWorldQuestSkeletonSourceKindV1 =
+  | 'mainline-stage'
+  | 'significant-stage'
+  | 'ordinary-seed'
+  | 'template-seed'
+
+export type TextOpenWorldQuestObjectiveIntentV1 =
+  | 'dialogue'
+  | 'investigate'
+  | 'explore'
+  | 'combat'
+  | 'collect'
+  | 'craft'
+  | 'trade'
+  | 'choice'
+  | 'travel'
+  | 'interact'
+
+export type TextOpenWorldContentRequirementKindV1 =
+  | 'actor'
+  | 'faction'
+  | 'enemy'
+  | 'encounter'
+  | 'item'
+  | 'equipment'
+  | 'material'
+  | 'skill'
+  | 'recipe'
+  | 'vendor'
+  | 'reward'
+  | 'action'
+  | 'location-interaction'
+
+export interface TextOpenWorldQuestSkeletonsV1 {
+  schema: 'storyforge.text-open-world-quest-skeletons'
+  version: 1
+  productType: 'text-open-world'
+  productInstanceKey: string
+  gameBriefHash: string
+  experienceContractHash: string
+  gameplayRulesetHash: string
+  mainlineThreadHash: string
+  significantThreadsHash: string
+  regionNarrativePacksHash: string
+  quests: Array<{
+    key: string
+    order: number
+    type: 'mainline' | 'significant' | 'ordinary' | 'template'
+    source: {
+      kind: TextOpenWorldQuestSkeletonSourceKindV1
+      sourceKey: string
+      sourceOrder: number
+    }
+    owner: {
+      kind: 'global' | 'actor' | 'faction' | 'region'
+      semanticKey: string | null
+    }
+    storylineKey: string | null
+    title: string
+    premise: string
+    storyMotivation: string
+    intendedPlayerExperience: string
+    regionKeys: string[]
+    locationKeys: string[]
+    stageKeys: string[]
+    estimatedMinutes: number
+    lifecyclePlan: {
+      lifecyclePolicy: 'protected-wait' | 'abandon-restart' | 'abandon-terminal'
+      timePolicy: 'waits' | 'timed'
+      expirationMinutes: number | null
+      abandonable: boolean
+      mayFailPermanently: boolean
+      repeatable: boolean
+      instantiationPolicy: 'session-start' | 'director'
+      pressureWhileAbsent: 'none' | 'deadline-only'
+    }
+    entryPlan: {
+      mode: 'explicit-action'
+      arrivalAloneNeverStarts: true
+      prerequisiteRequirementKeys: []
+    }
+    runtimeBinding: {
+      status: 'runtime-unbound'
+      questKey: null
+      prerequisiteConditionKeys: []
+      rewardContractKey: null
+      claimActionKey: null
+    }
+  }>
+  stages: Array<{
+    key: string
+    questKey: string
+    order: number
+    previousStageKey: string | null
+    nextStageKey: string | null
+    title: string
+    purpose: string
+    completionIntent: string
+    objectiveKeys: string[]
+    safeWaitBefore: boolean
+    safeWaitAfter: boolean
+    runtimeBinding: {
+      status: 'runtime-unbound'
+      completionConditionKeys: []
+      completionActionKey: null
+    }
+  }>
+  objectives: Array<{
+    key: string
+    questKey: string
+    stageKey: string
+    order: number
+    title: string
+    playerIntent: TextOpenWorldQuestObjectiveIntentV1
+    successDescription: string
+    optional: boolean
+    requirementKeys: string[]
+    runtimeBinding: { status: 'runtime-unbound'; actionKeys: [] }
+  }>
+  coverage: {
+    mainlineStageKeys: string[]
+    significantStageKeys: string[]
+    ordinarySeedKeys: string[]
+    templateSeedKeys: string[]
+    uncoveredSourceKeys: []
+    totalQuestCount: number
+    protectedQuestCount: number
+    ordinaryQuestCount: number
+    templateQuestCount: number
+    totalEstimatedMinutes: number
+  }
+  governance: {
+    sourceCoverage: 'one-skeleton-per-source'
+    noPrematureCatalogReferences: true
+    mainlineAndSignificantProtected: true
+    arrivalNeverSoleTrigger: true
+    allRuntimeBindingsUnbound: true
+  }
+  basisHash: string
+  createdAt: number
+  questSkeletonsHash: string
+}
+
+export interface TextOpenWorldContentRequirementManifestV1 {
+  schema: 'storyforge.text-open-world-content-requirement-manifest'
+  version: 1
+  productType: 'text-open-world'
+  productInstanceKey: string
+  questSkeletonsHash: string
+  regionNarrativePacksHash: string
+  requirements: Array<{
+    key: string
+    order: number
+    kind: TextOpenWorldContentRequirementKindV1
+    title: string
+    description: string
+    requestedTraits: string[]
+    minimumCount: number
+    criticality: 'ordinary' | 'important' | 'protected'
+    sourceReservationKey: string | null
+    consumerRefs: Array<{
+      kind: 'quest-objective' | 'region-character' | 'region-faction' | 'location-plan'
+      consumerKey: string
+    }>
+    ownerTaskKey:
+      | 'p8.catalog.progression'
+      | 'p8.catalog.encounters'
+      | 'p8.catalog.items-rewards'
+      | 'p8.catalog.crafting-economy'
+      | 'p8.catalog.npc-runtime'
+      | 'p8.catalog.map-interactions'
+      | 'p8f.quest-finalize'
+    binding: { status: 'catalog-unbound'; definitionKeys: [] }
+  }>
+  coverage: {
+    questObjectiveKeys: string[]
+    coveredQuestObjectiveKeys: string[]
+    regionCharacterRequirementKeys: string[]
+    coveredRegionCharacterRequirementKeys: string[]
+    regionFactionRequirementKeys: string[]
+    coveredRegionFactionRequirementKeys: string[]
+    locationPlanKeys: string[]
+    coveredLocationPlanKeys: string[]
+    requirementKindCounts: Partial<Record<TextOpenWorldContentRequirementKindV1, number>>
+    unresolvedRequirementKeys: string[]
+  }
+  governance: {
+    everyObjectiveHasRequirement: true
+    everyRegionalCatalogNeedCovered: true
+    duplicateSemanticsRejected: true
+    catalogsOwnDefinitions: true
+    questFinalizeOwnsBindings: true
+  }
+  basisHash: string
+  createdAt: number
+  contentRequirementManifestHash: string
+}
+
 export const TEXT_OPEN_WORLD_PRODUCTION_STAGES_V1 = [
   'P0', 'P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8', 'P8F', 'P9', 'P10',
   'V1', 'V2', 'V3', 'QA',

@@ -266,7 +266,8 @@ export const TEXT_OPEN_WORLD_PRODUCTION_TASK_CONTRACTS_V1: TextOpenWorldProducti
       'p6.significant-threads', 'p7.region-narrative-packs',
     ],
     inputArtifactKeys: [
-      'text-open-world.experience-contract', 'text-open-world.gameplay-ruleset-skeleton',
+      'text-open-world.game-brief', 'text-open-world.experience-contract',
+      'text-open-world.gameplay-ruleset-skeleton',
       'text-open-world.mainline-thread', 'text-open-world.significant-threads',
       'text-open-world.region-narrative-packs',
     ],

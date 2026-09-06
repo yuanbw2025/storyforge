@@ -1,6 +1,6 @@
 # AI 主导文字开放世界叙事基座 · StoryForge 施工规格
 
-> 规格版本：3.2.12
+> 规格版本：3.2.13
 > 生效日期：2026-09-06
 > 文档层级：L2 产品目标架构与施工规格
 > 当前状态：设计基线；不代表代码已经实现
@@ -508,6 +508,19 @@ P3仍只产出Build候选，不写世界引擎、ProductRelease或Session。它�
 - 代码生成Pack、Tension、StateAxis、LocationPlan、Actor/Faction requirement、Quest/Template/Event/Rumor seed全部稳定键。正式Actor、Faction、Quest、Template、Event、Condition、Effect和Reward引用仍为空并标记unbound，由P8～P9逐层兑现。
 
 验证器反向恢复全部模型语义并重建覆盖、owner承接、内容数量、稳定键、NPC运行分层、主线隔离和空绑定。地区或地点漏项、地区同质化、供给不足、跨区地点、重要owner缺失/重复、私自写Quest/Effect，以及重算Hash后的治理篡改都会失败关闭。P7不新增物理表，不写ProductRelease或Session。
+
+#### 5.4.12 P8 QuestSkeleton与ContentRequirementManifest落地
+
+`src/lib/open-world/quest-skeletons-production.ts`把P5～P7的故事结构转换成“玩家究竟能做什么”和“后序目录必须生产什么”，但在目录尚不存在时不伪造正式运行引用：
+
+- `text-open-world.quest-skeletons-input`只读取同一Build已验收的GameBrief、ExperienceContract、GameplayRulesetSkeleton、MainlineThread、SignificantThreads和RegionNarrativePacks；Context复核全部Artifact行Hash、内容Hash、跨Artifact引用和任务保底数量，再从上游确定性投影Quest Source；
+- 每个Mainline Stage、Significant Stage、ordinary quest seed和task template seed必须且只能生成一个Quest骨架。当前“盐脊”验收世界形成7个主线、6个重要故事、6个普通任务和4个模板，共23个Quest；模型不得合并、遗漏或另造来源；
+- 模型为每个Quest设计故事动机、目标体验、1～4个Stage和每Stage 1～5个Objective。Objective使用对话、调查、探索、战斗、收集、制作、交易、选择、旅行、交互闭集表达玩家意图，并通过语义需求说明需要的角色、势力、敌人、遭遇、物品、装备、材料、技能、配方、商人、奖励、Action或地点交互；战斗目标必须提出敌人或遭遇需求；
+- 代码生成Quest、Stage和Objective稳定键及前后关系。主线和重要故事固定`protected-wait`、不可放弃/过期/永久失败且缺席无压力；普通任务可放弃后重接，地区模板由Director实例化并可重复；到达地点永远不是唯一启动条件；
+- `ContentRequirementManifest`不仅汇总Objective需求，也覆盖P7全部角色需求、势力需求和Location Plan。每项需求按照kind明确归属Progression、Encounter、Item/Reward、Crafting/Economy、NPC Runtime、Map Interaction或QuestFinalize任务，同kind同title的冲突定义失败关闭；
+- Quest/Stage/Objective的Action、Condition、Reward和运行键，以及Manifest中的正式目录definition key全部为空并标记unbound。P8目录只能兑现自身owner的需求，P8F再把真实定义绑定回任务；模型不得通过额外字段越权提前写引用。
+
+验证器从两件Artifact反向恢复模型草稿，用同一Context重建全部任务来源、生命周期、稳定键、需求合并、消费者覆盖、owner路由、basis和Hash。任务来源漏项、主线保护弱化、无敌人战斗、同名冲突、重复需求、越权目录字段，以及重算Hash后的生命周期或绑定篡改都会失败关闭。P8骨架仍只写Build候选，不新增物理表，不写ProductRelease或Session。
 
 ### 5.5 正确的验证顺序
 
@@ -1327,6 +1340,7 @@ StoryForge当前没有独立staging。发布前仍需在隔离数据中完成灰
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| 3.2.13 | 2026-09-07 | 落地P8 QuestSkeleton与ContentRequirementManifest：登记只读Brief/体验/玩法/主线/重要故事/地区生态的Context及专属Skill/Executor；精确把7主线Stage、6重要故事Stage、6普通任务种子和4地区模板编译为23个任务骨架与可执行Objective，代码固定保护任务等待、普通/模板生命周期、非到达触发和全部运行绑定unbound；需求清单覆盖每个Objective及地区角色/势力/地点交互，并向六类目录和QuestFinalize声明唯一owner，同名冲突、来源漏项、弱化保护、无敌人战斗和越权字段失败关闭 |
 | 3.2.12 | 2026-09-07 | 落地P7 RegionNarrativePacks：登记只读Brief/体验/来源/地图/主线/重要故事的Context与专属Skill/Executor；AI为每区设计差异化身份、矛盾/状态轴、全地点生活计划、重要Agent与普通规则NPC分层、势力需求及6普通任务/4模板/12随机事件保底种子和传闻；代码固定全覆盖、owner唯一承接、稳定预留键、普通演化与主线等待隔离、全部正式目录unbound且全链可复验 |
 | 3.2.11 | 2026-09-07 | 落地P6 SignificantThreads：登记只读Brief/来源/故事/结局/承诺/地区/主线的Context与专属Skill/Executor；AI精确设计至少两种owner、多方冲突系统、3～6个可玩Stage、氛围信号和局部后果，代码固定稳定键、owner预留/地区绑定、主线揭示窗口、安全等待、不可放弃过期/永久失败/普通状态阻断、非地点触发及主线不可改写/阻断；全部Quest/Scene/Actor/Faction/Condition/Effect绑定保持unbound且全链可复验 |
 | 3.2.10 | 2026-09-07 | 落地P5 MainlineThread：登记只读Brief/玩法/故事/结局/承诺/地区/主角的Context与专属Skill/Executor；AI在冻结规模内编排Stage空间与体验、揭示、保护及恢复，代码固定严格链、起点、StoryBeat与Promise全覆盖、多结局终段分流、90～120分钟和1→5级节奏，以及等待/不可放弃过期/不可永久失败/普通状态不阻断/非地点触发；Quest/Scene/Reward/Condition保持unbound且全链可复验 |

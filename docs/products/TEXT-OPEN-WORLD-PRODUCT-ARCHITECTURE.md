@@ -1,6 +1,6 @@
 # AI 主导文字开放世界游戏 · 整体产品与游戏系统施工规格
 
-> 规格版本：1.1.23
+> 规格版本：1.1.24
 > 生效日期：2026-09-06
 > 文档层级：L2 文字开放世界整体产品施工入口
 > 当前状态：目标架构已冻结并进入分阶段实现；实际完成度以完整开发清单为准
@@ -233,6 +233,8 @@ O10 Build Assembly / Replay / Preview / ProductRelease
 - Gameplay Catalogs把需求解析为稳定定义；
 - `QuestFinalize`再绑定具体Action、敌人、物品、奖励、时间和失败策略；
 - 新需求只能通过有界change request回到O5/O6，不能让下游直接修改上游Artifact。
+
+当前P8任务骨架已按这条边界落地：同一Build中已验收的Brief、体验、玩法规则、主线、重要故事和地区生态被投影为确定性的Quest Source，7个主线Stage、6个重要故事Stage、6个普通任务种子和4个地区模板各生成一个且只能生成一个骨架。模型只负责故事动机、阶段目的、玩家Objective与语义需求；代码固定任务生命周期、显式启动、受保护故事等待，以及任务/Stage/Objective的运行绑定为空。同步生成的`ContentRequirementManifest`覆盖全部Objective和地区角色、势力、地点交互需求，为六类Gameplay Catalog和`QuestFinalize`分配owner；因此后续目录能够按需求生产真实定义，而任务不会引用尚不存在的敌人、物品、奖励、NPC或Action。
 
 ### 2.4 非叙事生产 Skill
 
@@ -2698,6 +2700,7 @@ Session中的高频状态优先作为Event和可重建Projection存在，不建�
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| 1.1.24 | 2026-09-07 | 落地P8 QuestSkeleton与ContentRequirementManifest：把主线/重要故事Stage和地区普通任务/模板种子逐项编译为23个任务骨架、Stage与可执行Objective；代码固定保护任务等待和普通/模板生命周期，并把Objective与地区角色/势力/地点交互需要汇总为有唯一后序owner的内容需求清单，所有正式目录和运行绑定保持unbound，供P8目录和P8F最终化精确兑现 |
 | 1.1.23 | 2026-09-07 | 落地P7 RegionNarrativePacks：从已验收Brief/体验、来源、地图、主线和重要故事形成每区差异化内容生态；AI设计矛盾/状态轴、全地点生活与NPC需求、重要Agent/普通规则角色分层、势力及6普通任务/4模板/12随机事件保底种子和传闻，代码固定完整覆盖、owner唯一承接、稳定预留键、普通演化与主线等待隔离以及全部目录unbound |
 | 1.1.22 | 2026-09-07 | 落地P6 SignificantThreads：从已验收Brief、来源、故事/结局/承诺、地区与主线形成精确数量的重要故事资产；AI设计至少两种角色/势力/地区owner、多方冲突系统、可玩Stage、氛围信号和局部后果，代码固定稳定键、owner预留/地区绑定、揭示窗口、安全等待、不可放弃过期/永久失败、非地点触发和主线不可改写/阻断；任务、场景、目录与运行绑定保持unbound且全链可复验 |
 | 1.1.21 | 2026-09-07 | 落地P5 MainlineThread：从已验收Brief、玩法、故事/结局/承诺、地区和主角形成严格顺序Stage；AI设计玩家体验、空间落点、揭示、保护与恢复语义，代码固定起点、前后链、StoryBeat/Promise/结局覆盖、主线时长与等级节奏、等待/不可永久失败/非地点触发/普通状态不阻断；任务、场景和运行绑定保持unbound且全链可复验 |

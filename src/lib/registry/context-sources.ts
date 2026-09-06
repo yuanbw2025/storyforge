@@ -183,6 +183,9 @@ async function readTextOpenWorldSignificantThreadsInputContextV1(input: Assemble
 async function readTextOpenWorldRegionNarrativePacksInputContextV1(input: AssembleContextInput): Promise<string> {
   return (await import('../open-world/region-narrative-packs-production')).readTextOpenWorldRegionNarrativePacksInputContextV1(input)
 }
+async function readTextOpenWorldQuestSkeletonsInputContextV1(input: AssembleContextInput): Promise<string> {
+  return (await import('../open-world/quest-skeletons-production')).readTextOpenWorldQuestSkeletonsInputContextV1(input)
+}
 async function readTtrpgGmRuntimeContextV1(input: AssembleContextInput): Promise<string> {
   return (await import('../ttrpg/gm-context')).readTtrpgGmRuntimeContextV1(input)
 }
@@ -1678,6 +1681,18 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     enabled: input => Number.isInteger(input.productProductionId)
       && Number.isInteger(input.productBuildId),
     read: readTextOpenWorldRegionNarrativePacksInputContextV1,
+  },
+  {
+    key: 'text-open-world.quest-skeletons-input',
+    label: '文字开放世界任务骨架与内容需求生产输入',
+    scope: 'project',
+    layer: 'L0',
+    ownerFrom: 'work',
+    budgetTokens: 100_000,
+    protectedFromTrim: true,
+    enabled: input => Number.isInteger(input.productProductionId)
+      && Number.isInteger(input.productBuildId),
+    read: readTextOpenWorldQuestSkeletonsInputContextV1,
   },
   {
     key: 'product-production.quality-feedback',

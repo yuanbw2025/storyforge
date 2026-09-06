@@ -1,6 +1,6 @@
 # AI 主导文字开放世界游戏 · 完整开发清单
 
-> 版本：1.1.52
+> 版本：1.1.53
 > 建立日期：2026-09-06
 > 对应总任务：`E-OPENWORLD-01`
 > 当前状态：`IN_PROGRESS`；用户已于2026-09-06明确下达完整产品开发指令
@@ -36,15 +36,15 @@
 | 指标 | 当前值 |
 |---|---|
 | 首版工作包 | 121 |
-| 已完成 | 62（G0、G1、G2及G3-01～G3-11完成） |
-| 产品总进度 | 62 / 121（51.2%） |
-| G1～G7业务功能进度 | 52 / 111（46.8%） |
+| 已完成 | 63（G0、G1、G2及G3-01～G3-12完成） |
+| 产品总进度 | 63 / 121（52.1%） |
+| G1～G7业务功能进度 | 53 / 111（47.7%） |
 | 当前阶段 | G3 AI内容生产编译器 |
 | G0阶段进度 | 10 / 10（100%） |
 | G1阶段进度 | 13 / 13（100%） |
 | G2阶段进度 | 28 / 28（100%） |
-| G3阶段进度 | 11 / 18（61.1%） |
-| 当前工作包 | `TOW-G3-12` |
+| G3阶段进度 | 12 / 18（66.7%） |
+| 当前工作包 | `TOW-G3-13` |
 | 当前阻塞项 | 无 |
 
 每次状态变化必须同时更新本节汇总、对应任务行、验证证据和变更记录。
@@ -194,8 +194,8 @@ G7 盐脊验收、发布更新与旧入口收口
 | TOW-G3-09 | DONE | 严格顺序主线生产 | G3-05～G3-08 | P5专属Context只读取同一Build已验收的GameBrief、GameplayRuleset、StoryArc、EndingContracts、NarrativePromises、RegionSkeleton和PlayerBuild，不重读来源；模型在Brief范围内把每个StoryBeat单调编排为主线Stage，声明地区/地点、对话/调查/探索/战斗/准备/选择体验、玩家目标、揭示、结果、关键资产保护需求和失败恢复说明；代码生成`storyline.main`及Stage稳定键/前后链，保证首Stage来自起点、每个StoryBeat覆盖、全部Promise建立/回响/回收落到Stage、全部合规结局从最终Stage分流，按权重在冻结90～120分钟范围分配时长并从1级推进到5级；主线固定显式Action启动、非地点唯一触发、可无限等待、不可放弃/过期/永久失败、普通状态不得锁死，Quest/Objective/Scene/Reward/Condition/Effect全部保持unbound；完整上游、顺序、空间、节奏、Promise、结局、保护和Hash可重建复验，逆序、未知地点及重算Hash篡改失败关闭；不新增表、不写Release/Session |
 | TOW-G3-10 | DONE | 角色/势力/地区重要故事线生产 | G3-07～G3-09 | P6专属Context只读取同一Build已验收的GameBrief、SourceLedger、StoryArc、EndingContracts、NarrativePromises、RegionSkeleton和MainlineThread，优先交付角色/势力/事件/空间claim并保持选择Hash；模型按Brief精确生成重要故事线，至少覆盖角色/势力/地区两种owner，每线形成2～4方目标/资源/压力冲突、3～6个可玩Stage、升级步骤、地区氛围信号、来源/StoryBeat/空间/Promise辅助锚点及局部后果计划；代码生成Thread/Owner预留/冲突方/Stage/Consequence稳定键，地区owner直接绑定、角色势力owner等待目录兑现，固定显式推进、非地点唯一触发、安全等待、不可放弃/过期/永久失败、缺席无压力、普通状态不阻断且不得改写主线核心目标/可达性/结局；Quest/Scene/Action/Reward/Condition/Effect/NPC/Faction绑定全部unbound，owner不足、越界空间、上游或重算Hash篡改失败关闭；不新增表、不写Release/Session |
 | TOW-G3-11 | DONE | RegionNarrativePack与地区生态 | G3-08～G3-10 | P7专属Context只读取同一Build已验收的GameBrief、ExperienceContract、SourceLedger、RegionSkeleton、MainlineThread和SignificantThreads，优先交付体验/地区/重要故事必需claim；模型按地区逐项设计独特幻想、地方冲突/问题、生活基线、2～5条矛盾与状态轴，精确覆盖全部地点的日常活动/NPC需求/传闻/时段表现，并按Brief保底精确提供6个普通任务、4个任务模板、12个随机事件种子及每区至少3条传闻；每区同时提出重要Agent维护角色、规则驱动功能/氛围角色和势力需求，重要角色/势力owner由唯一地区需求承接；代码生成Pack/Tension/StateAxis/LocationPlan/Actor与Faction预留/Quest与Template与Event与Rumor种子稳定键，固定普通世界继续、主线等待、重要故事安全点等待、地区后果不阻断主线和全部目录绑定unbound；地点漏项、地区同质、保底不足、owner缺失及重算Hash篡改失败关闭；不新增表、不写Release/Session |
-| TOW-G3-12 | READY | QuestSkeleton与ContentRequirementManifest | G3-09～G3-11 | 任务先表达体验和玩法需求，不提前引用不存在的敌人/物品 |
-| TOW-G3-13 | QUEUED | 技能、物品、敌人、遭遇、奖励目录生产 | G3-05、G3-06、G3-12 | 稳定定义满足任务需求、成长曲线和地区语义 |
+| TOW-G3-12 | DONE | QuestSkeleton与ContentRequirementManifest | G3-09～G3-11 | P8专属Context把Brief、体验、玩法、主线、重要故事和地区种子投影为23项确定性Quest Source；模型逐项生成故事动机、1～4 Stage、可执行Objective及语义内容需求，代码保证7主线Stage、6重要故事Stage、6普通任务种子和4地区模板一一覆盖，固定主线/重要故事无限等待不可放弃或永久失败、普通任务放弃可重接、模板由地区导演实例化、到达地点不单独触发；ContentRequirementManifest同时汇总全部Objective及地区角色/势力/地点交互需求，按技能、遭遇、物品奖励、制作经济、NPC、地图交互和QuestFinalize声明唯一后序owner，所有正式目录/Action/Condition/Reward/运行引用保持unbound；遗漏来源、弱化保护、无敌人战斗目标、同名定义冲突、模型越权字段和重算Hash篡改失败关闭 |
+| TOW-G3-13 | READY | 技能、物品、敌人、遭遇、奖励目录生产 | G3-05、G3-06、G3-12 | 稳定定义满足任务需求、成长曲线和地区语义 |
 | TOW-G3-14 | QUEUED | 配方、商店、NPC运行规则目录生产 | G3-11～G3-13 | 来源/消耗闭环、通用功能替代和经济预算可验证 |
 | TOW-G3-15 | QUEUED | QuestFinalize与EncounterFinalize | G3-12～G3-14 | Stage/Objective/Action/Reward/Failure/Time绑定真实目录且可运行 |
 | TOW-G3-16 | QUEUED | SceneScript、ChoiceContract和三类交互绑定 | G3-15 | 场景文本、固定选项、系统Action和自然语言入口不产生第二套结果 |
@@ -355,6 +355,7 @@ G7 盐脊验收、发布更新与旧入口收口
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| 1.1.53 | 2026-09-07 | 完成G3-12 QuestSkeleton与ContentRequirementManifest：新增只读已验收Brief/体验/玩法/主线/重要故事/地区生态的Context、专属Skill与Executor；把7主线Stage、6重要故事Stage、6普通任务种子和4地区模板精确编译为23个任务骨架与可执行Objective，代码固定保护任务等待、普通/模板生命周期、非到达触发和全部运行绑定unbound；统一需求清单覆盖任务目标及地区角色/势力/地点交互，声明六类目录与QuestFinalize owner并保持目录unbound，同名冲突、来源遗漏、弱化保护、无敌人战斗和越权绑定失败关闭；总进度63/121，业务功能53/111，下一项G3-13 |
 | 1.1.52 | 2026-09-07 | 完成G3-11 RegionNarrativePacks：新增只读已验收Brief/体验/来源/地图/主线/重要故事的Context、专属Skill与Executor；AI为每区建立差异化身份、矛盾/状态轴、全地点生活计划、重要Agent与普通规则NPC分层、势力需求，以及按Brief保底的6普通任务/4模板/12随机事件种子和传闻；代码固定全地区地点覆盖、重要owner唯一承接、稳定预留键、普通世界演化与主线/重要故事等待隔离、全部目录绑定unbound，漏覆盖/同质/供给不足/重算Hash篡改失败关闭；总进度62/121，业务功能52/111，下一项G3-12 |
 | 1.1.51 | 2026-09-07 | 完成G3-10 SignificantThreads：新增只读已验收来源/故事/结局/承诺/地图/主线的Context、专属Skill与Executor；AI按Brief精确设计至少两种owner的重要故事线、每线多方冲突系统、3～6个可玩Stage、地区氛围和局部后果，代码固定稳定键、owner预留/地区绑定、主线揭示窗口、安全等待、不可放弃过期/永久失败/普通状态阻断、非地点触发及主线核心目标/可达性/结局不可改写；全部任务/场景/角色/势力/Condition/Effect绑定保持unbound并可重建复验；总进度61/121，业务功能51/111，下一项G3-11 |
 | 1.1.50 | 2026-09-07 | 完成G3-09 MainlineThread：新增只读已验收故事/结局/承诺/地图/玩法/主角的Context、专属Skill与Executor；AI在Brief规模内编排Stage语义、空间落点、核心体验、保护与恢复需求，代码固定严格前后链、起点、StoryBeat全覆盖、Promise落点、多结局终段分流、90～120分钟时长和1→5级节奏，以及等待/不可放弃过期/不可永久失败/非地点触发/普通状态不阻断治理；Quest/Scene/Action/Condition/Reward保持unbound，逆序、未知地点、上游或重算Hash篡改失败关闭；总进度60/121，业务功能50/111，下一项G3-10 |

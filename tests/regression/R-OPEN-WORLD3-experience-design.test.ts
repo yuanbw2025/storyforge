@@ -62,6 +62,12 @@ import {
   type TextOpenWorldRegionNarrativePacksInputContextV1,
   type TextOpenWorldRegionNarrativePacksModelRunnerV1,
 } from '../../src/lib/open-world/region-narrative-packs-production'
+import {
+  createTextOpenWorldQuestSkeletonsExecutorV1,
+  validateTextOpenWorldQuestSkeletonArtifactsV1,
+  type TextOpenWorldQuestSkeletonsInputContextV1,
+  type TextOpenWorldQuestSkeletonsModelRunnerV1,
+} from '../../src/lib/open-world/quest-skeletons-production'
 import { TEXT_OPEN_WORLD_EFFECT_OPERATIONS_V1 } from '../../src/lib/types/text-open-world-effect'
 import type {
   TextOpenWorldGameplayRulesetSkeletonV1,
@@ -69,6 +75,8 @@ import type {
   TextOpenWorldPlayerBuildV1,
   TextOpenWorldRegionSkeletonV1,
   TextOpenWorldRegionNarrativePacksV1,
+  TextOpenWorldContentRequirementManifestV1,
+  TextOpenWorldQuestSkeletonsV1,
   TextOpenWorldSignificantThreadsV1,
 } from '../../src/lib/types'
 import {
@@ -1482,6 +1490,142 @@ async function executeRegionNarrativePacks(
   })
 }
 
+function questSkeletonsRunner(options: {
+  omitSource?: boolean
+  weakProtected?: boolean
+  invalidCombat?: boolean
+  conflictingRequirement?: boolean
+  prematureField?: boolean
+} = {}): TextOpenWorldQuestSkeletonsModelRunnerV1 {
+  return async input => {
+    const context = JSON.parse(input.contextText) as TextOpenWorldQuestSkeletonsInputContextV1
+    const kindsBySource = {
+      'mainline-stage': ['actor', 'encounter', 'faction', 'item', 'encounter', 'faction', 'reward'],
+      'significant-stage': ['actor', 'action', 'faction', 'actor', 'faction', 'reward'],
+      'ordinary-seed': ['actor', 'item', 'material', 'encounter', 'vendor', 'reward'],
+      'template-seed': ['actor', 'item', 'encounter', 'location-interaction'],
+    } as const
+    const intentByKind = {
+      actor: 'dialogue', faction: 'dialogue', enemy: 'combat', encounter: 'combat',
+      item: 'collect', equipment: 'collect', material: 'collect', skill: 'interact',
+      recipe: 'interact', vendor: 'trade', reward: 'interact', action: 'interact',
+      'location-interaction': 'interact',
+    } as const
+    const quests = context.questSources.map(source => {
+      const sameKindSources = context.questSources.filter(candidate => candidate.kind === source.kind)
+      const sourceNumber = sameKindSources.findIndex(candidate => candidate.sourceKey === source.sourceKey) + 1
+      let kind = kindsBySource[source.kind][(sourceNumber - 1) % kindsBySource[source.kind].length]
+      let title = `${source.title}所需${kind}`
+      if (options.conflictingRequirement && source.kind === 'mainline-stage' && sourceNumber <= 2) {
+        kind = 'actor'
+        title = '冲突定义的同名关键角色'
+      }
+      const criticality = source.type === 'mainline'
+        ? options.weakProtected && sourceNumber === 1 ? 'ordinary' : 'protected'
+        : source.type === 'significant' ? 'important' : 'ordinary'
+      const requirement: Record<string, unknown> = {
+        kind,
+        title,
+        description: `为${source.sourceKey}提供能够支持玩家完成目标的${kind}定义。`,
+        requestedTraits: [`关联${source.kind}`, `服务${source.title}`],
+        minimumCount: 1,
+        criticality,
+      }
+      if (options.prematureField && source.kind === 'mainline-stage' && sourceNumber === 1) {
+        requirement.enemyKey = 'enemy.forged'
+      }
+      const timed = (source.type === 'ordinary' && sourceNumber % 3 === 0) || source.type === 'template'
+      const playerIntent = options.invalidCombat && source.kind === 'mainline-stage' && sourceNumber === 1
+        ? 'combat'
+        : intentByKind[kind]
+      return {
+        sourceKind: source.kind,
+        sourceNumber,
+        title: source.title,
+        premise: source.premise,
+        storyMotivation: `让玩家通过可执行行动推进“${source.title}”，并理解它与当前世界局势的关系。`,
+        intendedPlayerExperience: `在${source.regionKeys.join('、')}完成一个有明确起因、过程和反馈的${source.type}任务。`,
+        timePolicy: timed ? 'timed' : 'waits',
+        expirationMinutes: timed ? source.type === 'template' ? 180 : 240 : null,
+        stages: [{
+          title: `${source.title}执行阶段`,
+          purpose: '把故事前提转化为玩家可观察、可选择并可验证完成的行动。',
+          completionIntent: '玩家完成关键行动并获得清晰的叙事与系统反馈。',
+          objectives: [{
+            title: `处理${source.title}的当前目标`,
+            playerIntent,
+            successDescription: `已完成${source.title}要求的关键行动。`,
+            optional: false,
+            requirements: [requirement],
+          }],
+        }],
+      }
+    })
+    return {
+      output: JSON.stringify({
+        schema: 'storyforge.text-open-world-quest-skeletons-draft',
+        version: 1,
+        quests: options.omitSource ? quests.slice(0, -1) : quests,
+      }),
+      bindingReceipt: bindingReceipt(input.requirementKey),
+      usage: null,
+    }
+  }
+}
+
+async function questSkeletonsFixture() {
+  const input = await regionNarrativePacksFixture()
+  const regionPacksResult = await executeRegionNarrativePacks(input)
+  await acceptTaskArtifacts(input, regionPacksResult.artifacts, 'P7-region-packs')
+  const plan = await createTextOpenWorldProductionPlanV1({
+    buildNumber: input.build.buildNumber,
+    controlEpoch: input.build.controlEpoch,
+    briefHash: input.briefRow.briefHash,
+    brief: input.brief,
+  })
+  const task = plan.tasks.find(item => item.taskKey === 'p8.quest-skeletons')!
+  const assembled = await assembleContext({
+    projectId: input.scope.projectId,
+    scope: input.scope,
+    sourceKeys: ['text-open-world.quest-skeletons-input'],
+    productProductionId: input.production.id!,
+    productBuildId: input.build.id!,
+    inputBudgetMaxTokens: task.budgetReservation.inputTokens,
+  })
+  return {
+    ...input,
+    task,
+    questContextText: assembled.text,
+    questContext: JSON.parse(assembled.text) as TextOpenWorldQuestSkeletonsInputContextV1,
+    questContextEvidence: assembled.sourceEvidence,
+  }
+}
+
+async function executeQuestSkeletons(
+  input: Awaited<ReturnType<typeof questSkeletonsFixture>>,
+  runModel: TextOpenWorldQuestSkeletonsModelRunnerV1 = questSkeletonsRunner(),
+) {
+  return createTextOpenWorldQuestSkeletonsExecutorV1({ runModel, now: () => NOW + 12 })({
+    scope: input.scope,
+    productionId: input.production.id!,
+    buildId: input.build.id!,
+    buildNumber: input.build.buildNumber,
+    controlEpoch: input.build.controlEpoch,
+    planHash: input.planHash,
+    task: input.task,
+    attempt: 1,
+    idempotencyKey: await hashProductProductionValueV2('p8-quest-skeletons'),
+    contextText: input.questContextText,
+    inputArtifacts: [],
+    capabilityBindings: input.task.capabilityRequirementKeys.map(requirementKey => ({
+      requirementKey,
+      bindingHash: CAPABILITY_HASH,
+      adapterId: 'configured-text.v1',
+    })),
+    signal: new AbortController().signal,
+  })
+}
+
 describe('R-OPEN-WORLD3 · P2 GameBrief / ExperienceContract / ProtagonistAsset', () => {
   beforeEach(async () => { await db.delete(); await db.open() })
   afterAll(() => db.close())
@@ -2385,4 +2529,117 @@ describe('R-OPEN-WORLD3 · P7 RegionNarrativePacks', () => {
     await expect(validateTextOpenWorldRegionNarrativePacksV1({ artifact: tampered, context: input.regionPacksContext }))
       .rejects.toThrow(/主线保护、稳定键或未绑定槽被篡改/)
   }, 75_000)
+})
+
+describe('R-OPEN-WORLD3 · P8 QuestSkeletons / ContentRequirementManifest', () => {
+  beforeEach(async () => { await db.delete(); await db.open() })
+  afterAll(() => db.close())
+
+  it('逐项编译主线、重要故事、普通种子与地区模板，并把正式目录需求交给后序任务', async () => {
+    const input = await questSkeletonsFixture()
+    expect(CONTEXT_SOURCE_BY_KEY.get('text-open-world.quest-skeletons-input')).toMatchObject({
+      layer: 'L0', ownerFrom: 'work', protectedFromTrim: true,
+    })
+    expect(getAgentSkillV1('text-open-world.production.quest-skeletons.v1')).toMatchObject({
+      contextSourceKeys: ['text-open-world.quest-skeletons-input'],
+      writeTargets: [{ table: 'productBuildArtifacts', fields: ['payloadJson'] }],
+    })
+    expect(input.questContextEvidence).toEqual([
+      expect.objectContaining({ key: 'text-open-world.quest-skeletons-input', status: 'included', delivery: 'full' }),
+    ])
+    expect(input.questContext.questSources).toHaveLength(23)
+
+    const result = await executeQuestSkeletons(input)
+    const questSkeletons = result.artifacts.find(artifact => artifact.artifactKey === 'text-open-world.quest-skeletons')!
+      .payload as TextOpenWorldQuestSkeletonsV1
+    const manifest = result.artifacts.find(artifact => artifact.artifactKey === 'text-open-world.content-requirement-manifest')!
+      .payload as TextOpenWorldContentRequirementManifestV1
+    expect(result.passedGateIds).toEqual(input.task.acceptanceGateIds)
+    expect(result.usage).toMatchObject({ modelCalls: 1, mediaCalls: 0 })
+    expect(questSkeletons.coverage).toMatchObject({
+      totalQuestCount: 23,
+      protectedQuestCount: 13,
+      ordinaryQuestCount: 6,
+      templateQuestCount: 4,
+      uncoveredSourceKeys: [],
+    })
+    expect(questSkeletons.quests).toHaveLength(23)
+    expect(questSkeletons.stages).toHaveLength(23)
+    expect(questSkeletons.objectives).toHaveLength(23)
+    expect(questSkeletons.quests.filter(quest => quest.type === 'mainline' || quest.type === 'significant')
+      .every(quest => quest.lifecyclePlan.lifecyclePolicy === 'protected-wait'
+        && !quest.lifecyclePlan.abandonable
+        && !quest.lifecyclePlan.mayFailPermanently
+        && quest.lifecyclePlan.timePolicy === 'waits')).toBe(true)
+    expect(questSkeletons.quests.filter(quest => quest.type === 'template')
+      .every(quest => quest.lifecyclePlan.instantiationPolicy === 'director'
+        && quest.lifecyclePlan.repeatable
+        && quest.lifecyclePlan.timePolicy === 'timed')).toBe(true)
+    expect(questSkeletons.quests.every(quest => quest.entryPlan.arrivalAloneNeverStarts
+      && quest.runtimeBinding.status === 'runtime-unbound')).toBe(true)
+    expect(questSkeletons.stages.every(stage => stage.runtimeBinding.status === 'runtime-unbound')).toBe(true)
+    expect(questSkeletons.objectives.every(objective => objective.runtimeBinding.status === 'runtime-unbound')).toBe(true)
+
+    const requirementKeys = new Set(manifest.requirements.map(requirement => requirement.key))
+    expect(questSkeletons.objectives.every(objective => objective.requirementKeys.length > 0
+      && objective.requirementKeys.every(key => requirementKeys.has(key)))).toBe(true)
+    expect(manifest.coverage.questObjectiveKeys).toEqual(expect.arrayContaining(manifest.coverage.coveredQuestObjectiveKeys))
+    expect(new Set(manifest.coverage.coveredQuestObjectiveKeys)).toEqual(new Set(manifest.coverage.questObjectiveKeys))
+    expect(manifest.coverage.coveredRegionCharacterRequirementKeys)
+      .toEqual(manifest.coverage.regionCharacterRequirementKeys)
+    expect(manifest.coverage.coveredRegionFactionRequirementKeys)
+      .toEqual(manifest.coverage.regionFactionRequirementKeys)
+    expect(manifest.coverage.coveredLocationPlanKeys).toEqual(manifest.coverage.locationPlanKeys)
+    expect(manifest.requirements).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        kind: 'actor', sourceReservationKey: 'actor.significant.001',
+        ownerTaskKey: 'p8.catalog.npc-runtime', binding: { status: 'catalog-unbound', definitionKeys: [] },
+      }),
+    ]))
+    expect(manifest.coverage.unresolvedRequirementKeys).toHaveLength(manifest.requirements.length)
+    expect(manifest.requirements.every(requirement => requirement.binding.status === 'catalog-unbound')).toBe(true)
+    await expect(validateTextOpenWorldQuestSkeletonArtifactsV1({
+      artifacts: { questSkeletons, contentRequirementManifest: manifest },
+      context: input.questContext,
+    })).resolves.toEqual({ questSkeletons, contentRequirementManifest: manifest })
+  }, 90_000)
+
+  it('拒绝任务来源漏编译、受保护任务弱化以及无法执行的战斗目标', async () => {
+    const input = await questSkeletonsFixture()
+    await expect(executeQuestSkeletons(input, questSkeletonsRunner({ omitSource: true })))
+      .rejects.toThrow(/quests必须与23个上游来源一一对应/)
+    await expect(executeQuestSkeletons(input, questSkeletonsRunner({ weakProtected: true })))
+      .rejects.toThrow(/主线任务必须提出至少一项protected内容需求/)
+    await expect(executeQuestSkeletons(input, questSkeletonsRunner({ invalidCombat: true })))
+      .rejects.toThrow(/战斗Objective必须提出enemy或encounter需求/)
+  }, 90_000)
+
+  it('拒绝同名内容需求冲突、模型越权绑定目录，以及重算Hash后的生命周期篡改', async () => {
+    const input = await questSkeletonsFixture()
+    await expect(executeQuestSkeletons(input, questSkeletonsRunner({ conflictingRequirement: true })))
+      .rejects.toThrow(/同名内容需求定义冲突/)
+    await expect(executeQuestSkeletons(input, questSkeletonsRunner({ prematureField: true })))
+      .rejects.toThrow(/字段不精确/)
+
+    const result = await executeQuestSkeletons(input)
+    const questSkeletons = structuredClone(result.artifacts.find(artifact => artifact.artifactKey === 'text-open-world.quest-skeletons')!
+      .payload as TextOpenWorldQuestSkeletonsV1)
+    const manifest = structuredClone(result.artifacts.find(artifact => artifact.artifactKey === 'text-open-world.content-requirement-manifest')!
+      .payload as TextOpenWorldContentRequirementManifestV1)
+    questSkeletons.quests[0]!.lifecyclePlan.abandonable = true as false
+    const { questSkeletonsHash: _questHash, ...questBody } = questSkeletons
+    questSkeletons.questSkeletonsHash = await hashProductProductionValueV2(questBody)
+    manifest.questSkeletonsHash = questSkeletons.questSkeletonsHash
+    manifest.basisHash = await hashProductProductionValueV2({
+      questSkeletonsHash: questSkeletons.questSkeletonsHash,
+      regionNarrativePacksHash: manifest.regionNarrativePacksHash,
+      requirementKeys: manifest.requirements.map(requirement => requirement.key),
+    })
+    const { contentRequirementManifestHash: _manifestHash, ...manifestBody } = manifest
+    manifest.contentRequirementManifestHash = await hashProductProductionValueV2(manifestBody)
+    await expect(validateTextOpenWorldQuestSkeletonArtifactsV1({
+      artifacts: { questSkeletons, contentRequirementManifest: manifest },
+      context: input.questContext,
+    })).rejects.toThrow(/任务来源覆盖、生命周期、需求清单、稳定键或未绑定运行槽被篡改/)
+  }, 90_000)
 })
