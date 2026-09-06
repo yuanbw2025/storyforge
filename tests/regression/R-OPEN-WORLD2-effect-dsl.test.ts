@@ -181,12 +181,15 @@ describe('Text Open World vNext · typed Effect DSL and atomic EffectPlan', () =
     defeated.combat = combatState.initialize({
       state: defeated, encounterKey: 'encounter.ridge-jackal', instanceKey: 'combat.respawn-test',
     })
-    for (const intent of ['begin-round', 'begin-turn', 'complete-turn', 'finish-defeat'] as const) {
+    for (const intent of ['begin-round', 'begin-turn', 'complete-turn', 'advance-turn', 'complete-turn'] as const) {
       defeated.combat = combatState.applyAuthorization({
         state: defeated, authorization: combatState.prepare({ state: defeated, intent }),
       })
     }
     defeated.player.health = 0
+    defeated.combat = combatState.applyAuthorization({
+      state: defeated, authorization: combatState.prepare({ state: defeated, intent: 'finish-defeat' }),
+    })
     const plan = await catalog.plan({ effectKeys: ['effect.respawn-port'], claimKey: 'claim.respawn', state: defeated })
     expect(plan.impactDomains).toEqual(['combat', 'player', 'map'])
     await expect(catalog.plan({ effectKeys: ['effect.respawn-port'], claimKey: 'claim.invalid-respawn', state: state() }))

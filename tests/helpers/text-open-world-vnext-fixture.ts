@@ -169,7 +169,7 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
       ],
     },
     actions: {
-      version: 10,
+      version: 11,
       conditions: [
         { key: 'condition.always', expression: { op: 'all', conditions: [{ op: 'player-number', field: 'level', comparator: 'gte', value: 1 }] }, failureMessage: '角色尚未进入可行动状态。' },
         { key: 'condition.level-two', expression: { op: 'player-number', field: 'level', comparator: 'gte', value: 2 }, failureMessage: '经验不足，无法让谎言自洽。' },
@@ -361,6 +361,11 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
         successEffectKeys: ['effect.settle-combat-state'], failureEffectKeys: [], timeCostMinutes: 0,
         confirmationPolicy: 'never', repeatPolicy: 'repeatable', cooldownMinutes: null,
       }, {
+        key: 'action.claim-combat-reward', category: 'combat-reward-action', label: '结算战斗奖励', description: '胜利后由系统按冻结奖励合同结算一次。',
+        actorScope: 'system', targetScope: 'encounter', locationKeys: [], requirementConditionKeys: [], costEffectKeys: [],
+        successEffectKeys: [], failureEffectKeys: [], timeCostMinutes: 0,
+        confirmationPolicy: 'never', repeatPolicy: 'repeatable', cooldownMinutes: null,
+      }, {
         key: 'action.combat-basic-attack', category: 'combat-basic-attack', label: '普通攻击', description: '对一名敌人发动稳定的普通攻击。',
         actorScope: 'player', targetScope: 'combatant', locationKeys: [], requirementConditionKeys: [], costEffectKeys: [],
         successEffectKeys: ['effect.combat-basic-attack'], failureEffectKeys: [], timeCostMinutes: 0,
@@ -444,7 +449,7 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
       statuses: [{ key: 'status.rested', title: '休整完毕', description: '角色已经充分休息。', polarity: 'beneficial' }],
     },
     combat: {
-      version: 2,
+      version: 3,
       rules: {
         difficulty: 'standard', defaultAttackHits: true, playerPartyLimit: 1,
         allowFriendlyNpcCombatants: false, allowElements: false, allowEscape: true,
@@ -452,6 +457,17 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
       difficultyProfiles: [{
         key: 'standard', label: '标准', enemyHealthMultiplier: 1, enemyDamageMultiplier: 1, rewardMultiplier: 1,
       }],
+      resolution: {
+        algorithm: 'bounded-physical-v1', criticalRollMaximum: 10_000,
+        criticalChanceCapBasisPoints: 5_000,
+        criticalMultiplierNumerator: 3, criticalMultiplierDenominator: 2,
+        minimumDamage: 1, maximumDamage: 1_000_000_000,
+      },
+      skillResolutions: [
+        { skillKey: 'skill.basic-attack', powerNumerator: 1, powerDenominator: 1, flatDamage: 0 },
+        { skillKey: 'skill.power-strike', powerNumerator: 3, powerDenominator: 2, flatDamage: 0 },
+      ],
+      transientPlayerStatusKeys: [],
       strategyProfiles: [{
         key: 'strategy.salt-jackal', title: '盐鬣犬扑咬', selection: 'ordered-skill-priority',
         prioritySkillKeys: ['skill.basic-attack'], fallbackSkillKey: 'skill.basic-attack',
@@ -744,13 +760,16 @@ export function downgradeTextOpenWorldFixtureCombatV1(
   }))
   delete combat.difficultyProfiles
   delete combat.strategyProfiles
+  delete combat.resolution
+  delete combat.skillResolutions
+  delete combat.transientPlayerStatusKeys
   runtimePackage.modules.combat.schemaVersion = 1
   actions.effects = actions.effects.filter((effect: any) => !['settle-combat-state', 'perform-combat-action'].includes(effect.operation))
   actions.effects.forEach((effect: any) => {
     if (effect.operation === 'initialize-combat') effect.operation = 'start-combat'
   })
   actions.actions = actions.actions.filter((action: any) => ![
-    'combat-state-action', 'combat-basic-attack', 'combat-skill', 'combat-item', 'combat-enemy-skill', 'escape',
+    'combat-state-action', 'combat-basic-attack', 'combat-skill', 'combat-item', 'combat-enemy-skill', 'combat-reward-action', 'escape',
   ].includes(action.category))
   if (actions.version >= 9) {
     actions.version = 8
@@ -764,11 +783,36 @@ export function downgradeTextOpenWorldFixtureCombatActionsV1(
   runtimePackage: TextOpenWorldRuntimePackageV1,
 ): TextOpenWorldRuntimePackageV1 {
   const actions = runtimePackage.modules.actions.payload as any
+  const combat = runtimePackage.modules.combat.payload as any
   actions.effects = actions.effects.filter((effect: any) => effect.operation !== 'perform-combat-action')
   actions.actions = actions.actions.filter((action: any) => ![
-    'combat-basic-attack', 'combat-skill', 'combat-item', 'combat-enemy-skill', 'escape',
+    'combat-basic-attack', 'combat-skill', 'combat-item', 'combat-enemy-skill', 'combat-reward-action', 'escape',
   ].includes(action.category))
+  if (combat.version >= 3) {
+    combat.version = 2
+    delete combat.resolution
+    delete combat.skillResolutions
+    delete combat.transientPlayerStatusKeys
+    runtimePackage.modules.combat.schemaVersion = 2
+  }
   actions.version = 9
   runtimePackage.modules.actions.schemaVersion = 9
+  return runtimePackage
+}
+
+/** Keeps the G2-24 Action v10 / Combat v2 contract without numeric resolution. */
+export function downgradeTextOpenWorldFixtureCombatResolutionV1(
+  runtimePackage: TextOpenWorldRuntimePackageV1,
+): TextOpenWorldRuntimePackageV1 {
+  const actions = runtimePackage.modules.actions.payload as any
+  const combat = runtimePackage.modules.combat.payload as any
+  actions.actions = actions.actions.filter((action: any) => action.category !== 'combat-reward-action')
+  actions.version = 10
+  runtimePackage.modules.actions.schemaVersion = 10
+  combat.version = 2
+  delete combat.resolution
+  delete combat.skillResolutions
+  delete combat.transientPlayerStatusKeys
+  runtimePackage.modules.combat.schemaVersion = 2
   return runtimePackage
 }

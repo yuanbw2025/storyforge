@@ -112,6 +112,24 @@ export function validateTextOpenWorldCombatRuntimeStateV1(input: {
       integer(action.round, 'lastAction.round', 1, combat.round)
       integer(action.turnIndex, 'lastAction.turnIndex', 0, combat.turnOrder.length - 1)
       if (combat.turnOrder[action.turnIndex] !== action.actorCombatantKey) fail('lastAction行动索引漂移')
+      if (input.modules.actions.version >= 11) {
+        if (!Array.isArray(action.targetResolutions)) fail('Action v11战斗lastAction缺少伤害结算')
+        const resolvedTargets = action.targetResolutions.map((resolution, resolutionIndex) => {
+          if (!resolution || typeof resolution !== 'object') fail(`lastAction.targetResolutions[${resolutionIndex}]无效`)
+          integer(resolution.attack, 'lastAction resolution attack', 0, 1_000_000_000)
+          integer(resolution.defense, 'lastAction resolution defense', 0, 1_000_000_000)
+          integer(resolution.beforeHealth, 'lastAction resolution beforeHealth', 1, 1_000_000_000)
+          integer(resolution.afterHealth, 'lastAction resolution afterHealth', 0, resolution.beforeHealth)
+          integer(resolution.appliedDamage, 'lastAction resolution appliedDamage', 0, resolution.beforeHealth)
+          if (resolution.beforeHealth - resolution.appliedDamage !== resolution.afterHealth
+            || resolution.defeated !== (resolution.afterHealth === 0)) fail('lastAction伤害结算不自洽')
+          return resolution.targetCombatantKey
+        })
+        if (canonicalProductProductionJsonV2(resolvedTargets) !== canonicalProductProductionJsonV2(action.targetCombatantKeys.filter(targetCombatantKey => {
+          const skill = action.skillKey ? input.modules.progression.skills.find(item => item.key === action.skillKey) : null
+          return skill?.kind === 'attack' && targetCombatantKey !== action.actorCombatantKey
+        }))) fail('lastAction伤害目标与行动目标不一致')
+      } else if (action.targetResolutions !== undefined) fail('Action v10战斗lastAction不能包含伤害结算')
     }
   } else if (combat.cooldownUntilRoundBySkillKey != null || combat.lastAction !== undefined) fail('旧战斗投影不能包含Action v10字段')
   const expectedOrder = orderFor({ playerInitiative, enemies: combat.enemies })
@@ -186,6 +204,7 @@ export function createTextOpenWorldCombatStateMachineV1(
     let afterRound = combat.round
     let afterTurnIndex = combat.turnIndex
     let afterActiveCombatantKey = combat.activeCombatantKey
+    let removedPlayerStatusKeys: string[] = []
     if (input.intent === 'begin-round') {
       if (!['started', 'round-end'].includes(combat.phase)) fail('只有started或round-end可以开始新回合')
       afterPhase = 'round-start'; afterRound += 1; afterTurnIndex = null; afterActiveCombatantKey = null
@@ -208,6 +227,12 @@ export function createTextOpenWorldCombatStateMachineV1(
     } else {
       if (combat.phase !== 'action-resolved') fail('战斗只能在行动结算后进入终态')
       const outcome = input.intent === 'finish-victory' ? 'victory' : input.intent === 'finish-defeat' ? 'defeat' : 'escaped'
+      if (modules.actions.version >= 11) {
+        if (outcome === 'victory' && (input.state.player.health <= 0 || combat.enemies.some(enemy => !enemy.defeated))) fail('只有击败全部敌人后才能胜利')
+        if (outcome === 'defeat' && input.state.player.health > 0) fail('只有玩家生命归零后才能战败')
+        if (outcome === 'escaped' && combat.lastAction?.kind !== 'escape') fail('只有已结算逃跑行动才能退出战斗')
+        removedPlayerStatusKeys = modules.combat.transientPlayerStatusKeys.filter(statusKey => input.state.player.statusKeys.includes(statusKey))
+      }
       if (outcome === 'escaped') {
         const encounter = modules.combat.encounters.find(item => item.key === combat.encounterKey)!
         if (!encounter.escapePolicy.allowed) fail('该遭遇不允许逃跑')
@@ -219,6 +244,7 @@ export function createTextOpenWorldCombatStateMachineV1(
       beforePhase: combat.phase, beforeRound: combat.round, beforeTurnIndex: combat.turnIndex,
       beforeActiveCombatantKey: combat.activeCombatantKey,
       afterStatus, afterPhase, afterRound, afterTurnIndex, afterActiveCombatantKey,
+      ...(modules.actions.version >= 11 ? { removedPlayerStatusKeys } : {}),
     }
   }
 
@@ -241,6 +267,10 @@ export function createTextOpenWorldCombatStateMachineV1(
     combat.round = input.authorization.afterRound
     combat.turnIndex = input.authorization.afterTurnIndex
     combat.activeCombatantKey = input.authorization.afterActiveCombatantKey
+    if (input.authorization.removedPlayerStatusKeys) {
+      const removed = new Set(input.authorization.removedPlayerStatusKeys)
+      input.state.player.statusKeys = input.state.player.statusKeys.filter(statusKey => !removed.has(statusKey))
+    }
     const state = structuredClone(input.state)
     state.combat = combat
     if (combat.status === 'defeat') state.player.health = 0
@@ -253,7 +283,12 @@ export function createTextOpenWorldCombatStateMachineV1(
     if (!combat || combat.status !== 'active') return null
     if (combat.phase === 'started' || combat.phase === 'round-end') return 'begin-round'
     if (combat.phase === 'round-start') return 'begin-turn'
-    if (combat.phase === 'action-resolved') return combat.lastAction?.kind === 'escape' ? 'finish-escaped' : 'advance-turn'
+    if (combat.phase === 'action-resolved') {
+      if (combat.lastAction?.kind === 'escape') return 'finish-escaped'
+      if (modules.actions.version >= 11 && state.player.health === 0) return 'finish-defeat'
+      if (modules.actions.version >= 11 && combat.enemies.every(enemy => enemy.defeated)) return 'finish-victory'
+      return 'advance-turn'
+    }
     return null
   }
 

@@ -34,12 +34,15 @@ describe('Text Open World vNext · defeated player recovery UI', () => {
     projection.state.combat = combatState.initialize({
       state: projection.state, encounterKey: 'encounter.ridge-jackal', instanceKey: 'combat.ui-defeat',
     })
-    for (const intent of ['begin-round', 'begin-turn', 'complete-turn', 'finish-defeat'] as const) {
+    for (const intent of ['begin-round', 'begin-turn', 'complete-turn', 'advance-turn', 'complete-turn'] as const) {
       projection.state.combat = combatState.applyAuthorization({
         state: projection.state, authorization: combatState.prepare({ state: projection.state, intent }),
       })
     }
     projection.state.player.health = 0
+    projection.state.combat = combatState.applyAuthorization({
+      state: projection.state, authorization: combatState.prepare({ state: projection.state, intent: 'finish-defeat' }),
+    })
     useTextOpenWorldPlayerStore.setState({
       selectedSessionId: 1,
       selectedManifest: productRuntimePackage,

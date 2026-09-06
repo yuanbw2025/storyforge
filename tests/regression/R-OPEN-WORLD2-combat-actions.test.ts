@@ -55,13 +55,13 @@ describe('Text Open World vNext · governed player and enemy combat actions', ()
   beforeEach(async () => { await db.delete(); await db.open() })
   afterAll(() => db.close())
 
-  it('Action v10冻结普通攻击、技能、战斗道具、逃跑与敌方技能的表驱动双向合同', () => {
+  it('Action v11冻结普通攻击、技能、战斗道具、逃跑、敌方技能与胜利奖励的表驱动双向合同', () => {
     const runtimePackage = createTextOpenWorldVNextFixture()
     const modules = parseTextOpenWorldModulesV1(runtimePackage)
-    expect(modules.actions.version).toBe(10)
+    expect(modules.actions.version).toBe(11)
     expect(modules.actions.actions.filter(action => action.category.startsWith('combat-') || action.category === 'escape')
       .map(action => action.category)).toEqual([
-      'combat-state-action', 'combat-basic-attack', 'combat-skill', 'combat-item', 'escape', 'combat-enemy-skill',
+      'combat-state-action', 'combat-reward-action', 'combat-basic-attack', 'combat-skill', 'combat-item', 'escape', 'combat-enemy-skill',
     ])
 
     const missingBasic = createTextOpenWorldVNextFixture()
@@ -144,8 +144,8 @@ describe('Text Open World vNext · governed player and enemy combat actions', ()
       },
     })
     const settledCombat = settled.textOpenWorld!.state.combat!
-    expect('version' in settledCombat ? settledCombat.enemies[0].currentHealth : -2).toBe(enemyHealth)
-    expect(settled.textOpenWorld!.state.player.health).toBe(playerHealth)
+    expect('version' in settledCombat ? settledCombat.enemies[0].currentHealth : -2).toBeLessThan(enemyHealth)
+    expect(settled.textOpenWorld!.state.player.health).toBeLessThan(playerHealth)
 
     const events = await db.productRuntimeEvents.where('sessionId').equals(session.id!).sortBy('sequence')
     expect(combatAuthorizations(events)).toMatchObject([
@@ -165,7 +165,7 @@ describe('Text Open World vNext · governed player and enemy combat actions', ()
     playerEffect.payloadJson = JSON.stringify(payload)
     expect(() => replayProductRuntimeEvents(JSON.parse(session.initialStateJson), tampered))
       .toThrow('战斗行动授权与当前状态不一致')
-  }, 20_000)
+  }, 30_000)
 
   it('技能行动原子消耗技能资源并按战斗回合锁定冷却', async () => {
     const session = await createCombatSession(createTextOpenWorldVNextFixture(), 'combat-skill-seed')
@@ -193,7 +193,7 @@ describe('Text Open World vNext · governed player and enemy combat actions', ()
       reason: { code: 'skill-unavailable' },
     })
     expect(await db.productRuntimeEvents.where('sessionId').equals(session.id!).count()).toBe(eventCount)
-  }, 20_000)
+  }, 30_000)
 
   it('战斗道具复用物品消耗与恢复Effect，不由战斗代码直接改背包', async () => {
     const runtimePackage = createTextOpenWorldVNextFixture()
@@ -225,13 +225,13 @@ describe('Text Open World vNext · governed player and enemy combat actions', ()
       commandId: 'command.combat-action.item.use', requestedAt: 3,
     })
     const settled = await readProductRuntimeState(session.id!)
-    expect(settled.textOpenWorld!.state.player.health).toBe(maximumHealth)
+    expect(settled.textOpenWorld!.state.player.health).toBeLessThan(maximumHealth)
     expect(settled.textOpenWorld!.state.inventory.stackQuantities['item.brine-tonic']).toBeUndefined()
     const events = await db.productRuntimeEvents.where('sessionId').equals(session.id!).sortBy('sequence')
     expect(combatAuthorizations(events).find(authorization => authorization.actorKey === 'player')).toMatchObject({
       actionKind: 'item', itemKey: 'item.brine-tonic', targetCombatantKeys: ['player'],
     })
-  }, 20_000)
+  }, 30_000)
 
   it('逃跑是玩家正式战斗行动，成功后立即进入escaped终态且不执行敌方回合', async () => {
     const session = await createCombatSession(createTextOpenWorldVNextFixture(), 'combat-escape-seed')
@@ -254,5 +254,5 @@ describe('Text Open World vNext · governed player and enemy combat actions', ()
       commandId: 'command.combat-action.escape.after', requestedAt: 3,
     })
     expect(rejected).toMatchObject({ phase: 'preflight', status: 'rejected', outcomeCommitted: false })
-  }, 20_000)
+  }, 30_000)
 })

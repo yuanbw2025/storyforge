@@ -65,6 +65,21 @@ async function settleAcceptedCommand(envelope: TextOpenWorldCommandEnvelopeV1): 
       sourceInstanceKey: instance.instanceKey,
     })
   }
+  if (action.action.category === 'combat-reward-action') {
+    const encounterKey = targetFrom(envelope) ?? fail('战斗奖励Action缺少遭遇目标')
+    const combat = projection.state.combat
+    if (!combat || !('version' in combat) || combat.status !== 'victory' || combat.phase !== 'terminal'
+      || combat.encounterKey !== encounterKey) fail('战斗奖励只能在对应胜利终态结算')
+    const encounter = modules.combat.encounters.find(item => item.key === encounterKey) ?? fail('战斗奖励遭遇不存在')
+    const rewardKey = encounter.rewardContractKey ?? fail('胜利遭遇缺少RewardContract')
+    return executeTextOpenWorldPendingRewardV1({
+      sessionId: envelope.sessionId,
+      commandId: envelope.commandId,
+      rewardKey,
+      sourceKind: 'combat',
+      sourceInstanceKey: combat.instanceKey,
+    })
+  }
   const crimeResolution = ['steal', 'deceive', 'crime'].includes(action.action.category)
     ? createTextOpenWorldCrimeCatalogV1(projection.runtimePackage, modules).prepare({
         actionKey: action.action.key,
@@ -94,11 +109,25 @@ async function settleAcceptedCommand(envelope: TextOpenWorldCommandEnvelopeV1): 
   if ([questTransitions.length > 0, objectiveEffects.length > 0, trackingEffects.length > 0, fastTravelEffects.length > 0, weatherEffects.length > 0, actorScheduleEffects.length > 0, combatSettlementEffects.length > 0, combatActionEffects.length > 0].filter(Boolean).length > 1) fail('同一Action不能混合任务迁移、Objective、追踪、快速旅行、天气、角色日程、战斗阶段或战斗行动状态')
   let randomRequests: TextOpenWorldRandomRequestV1[] = []
   let randomEvidence: TextOpenWorldRandomEvidenceV1[] = []
-  if (weatherEffects.length === 1) {
+  const conditionResults = Object.fromEntries(Object.entries(deriveTextOpenWorldContextsV1(projection).action.conditionResults)
+    .map(([key, result]) => [key, result.satisfied]))
+  const combatActionCatalog = combatActionEffects.length === 1
+    ? createTextOpenWorldCombatActionCatalogV1(projection.runtimePackage, modules)
+    : null
+  const combatActionInput = combatActionCatalog ? {
+    state: projection.state,
+    actionKey: action.action.key,
+    targetKey: targetFrom(envelope),
+    actorKey: envelope.actorKey === 'system' ? 'system' as const : 'player' as const,
+    conditionResults,
+  } : null
+  if (weatherEffects.length === 1 || combatActionInput) {
     const session = await db.productRuntimeSessions.get(envelope.sessionId)
-    if (!session || session.kind !== 'text-open-world') fail('天气结算Session不存在')
-    const commandSequence = projection.protocol.pendingCommandSequence ?? fail('天气结算命令缺少序号')
-    randomRequests = createTextOpenWorldWeatherCatalogV1(projection.runtimePackage, modules).prepare({ state: projection.state })
+    if (!session || session.kind !== 'text-open-world') fail('随机结算Session不存在')
+    const commandSequence = projection.protocol.pendingCommandSequence ?? fail('随机结算命令缺少序号')
+    randomRequests = weatherEffects.length === 1
+      ? createTextOpenWorldWeatherCatalogV1(projection.runtimePackage, modules).prepare({ state: projection.state })
+      : combatActionCatalog!.randomRequestsFor(combatActionInput!)
     randomEvidence = await Promise.all(randomRequests.map((request, drawIndex) => resolveTextOpenWorldRandomEvidenceV1({
       seed: session.seed,
       commandId: envelope.commandId,
@@ -143,14 +172,7 @@ async function settleAcceptedCommand(envelope: TextOpenWorldCommandEnvelopeV1): 
                     intent: combatTransitionIntentFrom(envelope),
                   })
                 : combatActionEffects.length === 1
-                  ? createTextOpenWorldCombatActionCatalogV1(projection.runtimePackage, modules).prepare({
-                      state: projection.state,
-                      actionKey: action.action.key,
-                      targetKey: targetFrom(envelope),
-                      actorKey: envelope.actorKey === 'system' ? 'system' : 'player',
-                      conditionResults: Object.fromEntries(Object.entries(deriveTextOpenWorldContextsV1(projection).action.conditionResults)
-                        .map(([key, result]) => [key, result.satisfied])),
-                    })
+                  ? combatActionCatalog!.prepare({ ...combatActionInput!, evidence: randomEvidence })
               : null)
   const catalog = createTextOpenWorldEffectCatalogV1(projection.runtimePackage)
   const plan = await catalog.plan({ effectKeys, claimKey: `claim.${envelope.commandId}`, state: projection.state, authorization })
@@ -191,7 +213,7 @@ type ExecuteTextOpenWorldActionInternalInputV1 = ExecuteTextOpenWorldActionInput
 async function executeTextOpenWorldActionAsV1(
   input: ExecuteTextOpenWorldActionInternalInputV1,
   actorKey: 'player' | 'system',
-  systemCategory?: 'quest-action' | 'weather-action' | 'actor-schedule-action' | 'actor-state-action' | 'combat-state-action' | 'combat-enemy-skill',
+  systemCategory?: 'quest-action' | 'weather-action' | 'actor-schedule-action' | 'actor-state-action' | 'combat-state-action' | 'combat-enemy-skill' | 'combat-reward-action',
 ): Promise<TextOpenWorldFeedbackReceiptV1> {
   if (!Number.isSafeInteger(input.sessionId) || input.sessionId < 1) fail('sessionId无效')
   const commandId = input.commandId ?? newCommandId()
@@ -353,12 +375,27 @@ async function settleCombatSystemTransitionsV1(sessionId: number): Promise<void>
     const runtime = await readProductRuntimeState(sessionId)
     const projection = parseTextOpenWorldSessionProjectionV1(runtime.textOpenWorld)
     const modules = parseTextOpenWorldModulesV1(projection.runtimePackage)
-    if (modules.actions.version < 9 || modules.combat.sourceVersion !== 2) return
+    if (modules.actions.version < 9 || modules.combat.sourceVersion === 1) return
     const stateMachine = createTextOpenWorldCombatStateMachineV1(projection.runtimePackage, modules)
-    const intent = stateMachine.nextSystemIntent(projection.state)
     const combat = projection.state.combat
     if (!combat) return
     if (!('version' in combat)) fail('新版战斗阶段缺少Combat v2投影')
+    if (combat.status === 'victory' && modules.actions.version >= 11 && modules.combat.sourceVersion === 3) {
+      const encounter = modules.combat.encounters.find(item => item.key === combat.encounterKey) ?? fail('胜利战斗遭遇不存在')
+      const rewardKey = encounter.rewardContractKey ?? fail('胜利战斗缺少RewardContract')
+      const claimKey = `claim.reward.${rewardKey}.${combat.instanceKey}`
+      if (projection.state.appliedClaimKeys.includes(claimKey)) return
+      const rewardAction = modules.actions.actions.find(item => item.category === 'combat-reward-action') ?? fail('新版战斗缺少胜利奖励Action')
+      const commandHash = await hashProductProductionValueV2({ instanceKey: combat.instanceKey, encounterKey: combat.encounterKey, rewardKey })
+      const feedback = await executeTextOpenWorldActionAsV1({
+        sessionId, actionKey: rewardAction.key, targetKey: combat.encounterKey,
+        commandId: `command.system-combat-reward.${commandHash}`, source: 'system-action',
+      }, 'system', 'combat-reward-action')
+      if (feedback.phase !== 'terminal' || feedback.status !== 'succeeded') fail(`战斗胜利奖励未成功:${rewardKey}`)
+      continue
+    }
+    if (combat.status !== 'active') return
+    const intent = stateMachine.nextSystemIntent(projection.state)
     if (!intent) {
       if (modules.actions.version < 10 || combat.status !== 'active' || combat.phase !== 'actor-turn' || combat.activeCombatantKey === 'player') return
       const next = createTextOpenWorldCombatActionCatalogV1(projection.runtimePackage, modules).nextEnemyAction(projection.state)

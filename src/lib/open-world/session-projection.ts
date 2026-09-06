@@ -331,6 +331,15 @@ export function applyTextOpenWorldSessionEventV1(current: TextOpenWorldSessionPr
           || action.category !== 'claim-reward' || action.actorScope !== 'player' || action.targetScope !== 'quest'
           || definition.rewardContractKey !== reward.key || definition.claimActionKey !== action.key
           || instance.status !== 'completed' || instance.rewardClaimKey != null) fail('任务奖励领取授权与命令或任务状态不一致')
+      } else if (reward.sourceKind === 'combat') {
+        const combat = projection.state.combat
+        const encounter = modules.combat.encounters.find(item => item.rewardContractKey === reward.key) ?? fail('战斗奖励没有所属遭遇')
+        if (!combat || !('version' in combat) || combat.status !== 'victory' || combat.phase !== 'terminal'
+          || combat.encounterKey !== encounter.key || authorization.sourceInstanceKey !== combat.instanceKey
+          || projection.protocol.pendingTargetKey !== encounter.key || projection.protocol.pendingActorKey !== 'system'
+          || action.category !== 'combat-reward-action' || action.actorScope !== 'system' || action.targetScope !== 'encounter') {
+          fail('战斗奖励领取授权与命令或胜利状态不一致')
+        }
       }
       const conditionResults = Object.fromEntries(Object.entries(deriveTextOpenWorldContextsV1(projection).action.conditionResults).map(([key, result]) => [key, result.satisfied]))
       createTextOpenWorldRewardCatalogV1(projection.runtimePackage).assertAuthorization({
@@ -429,6 +438,7 @@ export function applyTextOpenWorldSessionEventV1(current: TextOpenWorldSessionPr
       createTextOpenWorldCombatActionCatalogV1(projection.runtimePackage, modules).assertAuthorization({
         state: projection.state,
         authorization,
+        evidence: pendingRandom.map(item => item.evidence),
         conditionResults: Object.fromEntries(Object.entries(deriveTextOpenWorldContextsV1(projection).action.conditionResults)
           .map(([key, result]) => [key, result.satisfied])),
       })

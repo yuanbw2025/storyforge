@@ -214,10 +214,12 @@ function parseAuthorization(value: unknown, label: string): TextOpenWorldEffectP
     } satisfies TextOpenWorldCrimeAuthorizationV1
   }
   if (raw.kind === 'combat-transition') {
+    const includesStatusSettlement = raw.removedPlayerStatusKeys !== undefined
     exact(raw, [
       'kind', 'instanceKey', 'encounterKey', 'intent',
       'beforePhase', 'beforeRound', 'beforeTurnIndex', 'beforeActiveCombatantKey',
       'afterStatus', 'afterPhase', 'afterRound', 'afterTurnIndex', 'afterActiveCombatantKey',
+      ...(includesStatusSettlement ? ['removedPlayerStatusKeys'] : []),
     ], label)
     const intents = new Set(['begin-round', 'begin-turn', 'complete-turn', 'advance-turn', 'finish-victory', 'finish-defeat', 'finish-escaped'])
     const phases = new Set(['started', 'round-start', 'actor-turn', 'action-resolved', 'round-end', 'terminal'])
@@ -241,19 +243,63 @@ function parseAuthorization(value: unknown, label: string): TextOpenWorldEffectP
       afterRound: integer(raw.afterRound, `${label}.afterRound`),
       afterTurnIndex: raw.afterTurnIndex == null ? null : integer(raw.afterTurnIndex, `${label}.afterTurnIndex`),
       afterActiveCombatantKey: raw.afterActiveCombatantKey == null ? null : token(raw.afterActiveCombatantKey, `${label}.afterActiveCombatantKey`),
+      ...(includesStatusSettlement ? { removedPlayerStatusKeys: uniqueStrings(raw.removedPlayerStatusKeys, `${label}.removedPlayerStatusKeys`) } : {}),
     } satisfies TextOpenWorldCombatTransitionAuthorizationV1
   }
   if (raw.kind === 'combat-action') {
+    const includesResolution = raw.resolutionVersion === 1
     exact(raw, [
       'kind', 'instanceKey', 'encounterKey', 'actionKey', 'actorKey', 'actorCombatantKey', 'actionKind',
       'skillKey', 'itemKey', 'targetCombatantKeys', 'beforePhase', 'beforeRound', 'beforeTurnIndex',
       'beforeActiveCombatantKey', 'effectKeys', 'resourceCost', 'cooldownTurns', 'cooldownUntilRound', 'afterSkillResource',
+      ...(includesResolution ? ['resolutionVersion', 'randomRequests', 'targetResolutions', 'statusEffectKeys'] : []),
     ], label)
     const actorKey = raw.actorKey === 'player' || raw.actorKey === 'system' ? raw.actorKey : fail(`${label}.actorKey无效`)
     const actionKind = ['basic-attack', 'skill', 'item', 'escape', 'enemy-skill'].includes(String(raw.actionKind))
       ? raw.actionKind as TextOpenWorldCombatActionAuthorizationV1['actionKind']
       : fail(`${label}.actionKind无效`)
     if (raw.beforePhase !== 'actor-turn') fail(`${label}.beforePhase无效`)
+    const randomRequests = includesResolution
+      ? Array.isArray(raw.randomRequests) && raw.randomRequests.length <= 128
+        ? raw.randomRequests.map((request, index) => parseTextOpenWorldRandomRequestV1(request, `${label}.randomRequests[${index}]`))
+        : fail(`${label}.randomRequests无效`)
+      : undefined
+    const targetResolutions = includesResolution
+      ? Array.isArray(raw.targetResolutions) && raw.targetResolutions.length <= 8
+        ? raw.targetResolutions.map((value, index) => {
+            const resolution = row(value, `${label}.targetResolutions[${index}]`)
+            exact(resolution, [
+              'targetCombatantKey', 'attack', 'defense', 'powerNumerator', 'powerDenominator', 'flatDamage',
+              'damageBeforeDefense', 'damageAfterDefense', 'criticalChanceBasisPoints', 'criticalDrawValue',
+              'critical', 'computedDamage', 'appliedDamage', 'beforeHealth', 'afterHealth', 'defeated',
+            ], `${label}.targetResolutions[${index}]`)
+            if (typeof resolution.critical !== 'boolean' || typeof resolution.defeated !== 'boolean') fail(`${label}.targetResolutions[${index}]布尔字段无效`)
+            const beforeHealth = integer(resolution.beforeHealth, `${label}.targetResolutions[${index}].beforeHealth`, 1, 1_000_000_000)
+            const appliedDamage = integer(resolution.appliedDamage, `${label}.targetResolutions[${index}].appliedDamage`, 0, beforeHealth)
+            const afterHealth = integer(resolution.afterHealth, `${label}.targetResolutions[${index}].afterHealth`, 0, beforeHealth)
+            if (afterHealth !== beforeHealth - appliedDamage || resolution.defeated !== (afterHealth === 0)) fail(`${label}.targetResolutions[${index}]生命变化不自洽`)
+            return {
+              targetCombatantKey: token(resolution.targetCombatantKey, `${label}.targetResolutions[${index}].targetCombatantKey`),
+              attack: integer(resolution.attack, `${label}.targetResolutions[${index}].attack`, 0, 1_000_000_000),
+              defense: integer(resolution.defense, `${label}.targetResolutions[${index}].defense`, 0, 1_000_000_000),
+              powerNumerator: integer(resolution.powerNumerator, `${label}.targetResolutions[${index}].powerNumerator`, 0, 100),
+              powerDenominator: integer(resolution.powerDenominator, `${label}.targetResolutions[${index}].powerDenominator`, 1, 100),
+              flatDamage: integer(resolution.flatDamage, `${label}.targetResolutions[${index}].flatDamage`, 0, 1_000_000_000),
+              damageBeforeDefense: integer(resolution.damageBeforeDefense, `${label}.targetResolutions[${index}].damageBeforeDefense`, 0, 1_000_000_000),
+              damageAfterDefense: integer(resolution.damageAfterDefense, `${label}.targetResolutions[${index}].damageAfterDefense`, 0, 1_000_000_000),
+              criticalChanceBasisPoints: integer(resolution.criticalChanceBasisPoints, `${label}.targetResolutions[${index}].criticalChanceBasisPoints`, 0, 10_000),
+              criticalDrawValue: integer(resolution.criticalDrawValue, `${label}.targetResolutions[${index}].criticalDrawValue`, 1, 10_000),
+              critical: resolution.critical,
+              computedDamage: integer(resolution.computedDamage, `${label}.targetResolutions[${index}].computedDamage`, 0, 1_000_000_000),
+              appliedDamage,
+              beforeHealth,
+              afterHealth,
+              defeated: resolution.defeated,
+            }
+          })
+        : fail(`${label}.targetResolutions无效`)
+      : undefined
+    if (includesResolution && randomRequests!.length !== targetResolutions!.length) fail(`${label}伤害结果与随机请求数量不一致`)
     return {
       kind: 'combat-action',
       instanceKey: token(raw.instanceKey, `${label}.instanceKey`, COMMAND_ID),
@@ -274,6 +320,12 @@ function parseAuthorization(value: unknown, label: string): TextOpenWorldEffectP
       cooldownTurns: integer(raw.cooldownTurns, `${label}.cooldownTurns`),
       cooldownUntilRound: integer(raw.cooldownUntilRound, `${label}.cooldownUntilRound`, 1),
       afterSkillResource: integer(raw.afterSkillResource, `${label}.afterSkillResource`),
+      ...(includesResolution ? {
+        resolutionVersion: 1 as const,
+        randomRequests: randomRequests!,
+        targetResolutions: targetResolutions!,
+        statusEffectKeys: uniqueStrings(raw.statusEffectKeys, `${label}.statusEffectKeys`),
+      } : {}),
     } satisfies TextOpenWorldCombatActionAuthorizationV1
   }
   if (raw.kind === 'quest-objective') {

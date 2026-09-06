@@ -358,7 +358,9 @@ export function validateTextOpenWorldEffectStateV1(state: TextOpenWorldEffectSta
   if (state.combat) ref(state.combat.encounterKey, refs.encounters, 'combat encounterKey')
   validateTextOpenWorldCombatRuntimeStateV1({ modules, state })
   const defeated = state.combat?.status === 'defeat'
-  if ((state.player.health === 0) !== defeated) fail('生命为0与战败状态必须同时成立')
+  const pendingDefeat = state.combat && 'version' in state.combat
+    && state.combat.status === 'active' && state.combat.phase === 'action-resolved' && state.player.health === 0
+  if ((state.player.health === 0) !== (defeated || Boolean(pendingDefeat))) fail('生命为0必须处于战败或待战败结算状态')
   for (const actorDefinition of modules.actors.actors) if (!state.actors[actorDefinition.key]) fail(`Actor运行状态缺失:${actorDefinition.key}`)
   for (const [actorKey, actor] of Object.entries(state.actors)) { ref(actorKey, refs.actors, 'actors key'); if (typeof actor.alive !== 'boolean' || typeof actor.present !== 'boolean' || (!actor.alive && actor.present)) fail(`actors.${actorKey}生存/在场状态无效`); ref(actor.locationKey, refs.locations, `actors.${actorKey}.locationKey`); text(actor.scheduleState, `actors.${actorKey}.scheduleState`) }
   for (const [regionKey, regionState] of Object.entries(state.world.regionStateByKey)) { ref(regionKey, refs.regions, 'region state key'); text(regionState, `region state:${regionKey}`) }
@@ -796,10 +798,10 @@ function applyDefinitions(
       }
       case 'settle-combat-state': {
         if (authorization?.kind !== 'combat-transition') fail(`${effect.key}缺少CombatTransition授权`)
-        const before = { combat: structuredClone(state.combat), health: state.player.health }
+        const before = { combat: structuredClone(state.combat), health: state.player.health, statusKeys: [...state.player.statusKeys] }
         state.combat = combatState.applyAuthorization({ state, authorization })
         if (authorization.afterStatus === 'defeat') state.player.health = 0
-        record(changes, effect, `战斗阶段:${authorization.intent}`, before, { combat: state.combat, health: state.player.health }); break
+        record(changes, effect, `战斗阶段:${authorization.intent}`, before, { combat: state.combat, health: state.player.health, statusKeys: [...state.player.statusKeys] }); break
       }
       case 'perform-combat-action': {
         if (authorization?.kind !== 'combat-action') fail(`${effect.key}缺少CombatAction授权`)

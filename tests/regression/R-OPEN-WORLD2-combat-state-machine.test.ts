@@ -16,6 +16,7 @@ import type {
 import { createGovernedTextOpenWorldSessionFixtureV1 } from '../helpers/text-open-world-product-session'
 import {
   createTextOpenWorldVNextFixture,
+  downgradeTextOpenWorldFixtureCombatResolutionV1,
   downgradeTextOpenWorldFixtureCombatV1,
 } from '../helpers/text-open-world-vnext-fixture'
 
@@ -86,14 +87,14 @@ describe('Text Open World vNext · governed combat phase state machine', () => {
     for (const [intent, status] of [
       ['finish-victory', 'victory'], ['finish-defeat', 'defeat'], ['finish-escaped', 'escaped'],
     ] as const) {
-      const runtimePackage = createTextOpenWorldVNextFixture()
+      const runtimePackage = downgradeTextOpenWorldFixtureCombatResolutionV1(createTextOpenWorldVNextFixture())
       const { state, machine } = actionResolvedState(runtimePackage, `combat.${status}`)
       const authorization = machine.prepare({ state, intent })
       const result = machine.applyAuthorization({ state, authorization })
       expect(result).toMatchObject({ status, phase: 'terminal', round: 1, turnIndex: null, activeCombatantKey: null })
     }
 
-    const runtimePackage = createTextOpenWorldVNextFixture()
+    const runtimePackage = downgradeTextOpenWorldFixtureCombatResolutionV1(createTextOpenWorldVNextFixture())
     const { state, machine } = actionResolvedState(runtimePackage, 'combat.authorization')
     const authorization = machine.prepare({ state, intent: 'finish-victory' })
     await expect(createTextOpenWorldEffectCatalogV1(runtimePackage).plan({
@@ -101,7 +102,7 @@ describe('Text Open World vNext · governed combat phase state machine', () => {
       authorization: { ...authorization, afterStatus: 'defeat' },
     })).rejects.toThrow('战斗阶段授权与当前状态不一致')
 
-    const noEscape = createTextOpenWorldVNextFixture()
+    const noEscape = downgradeTextOpenWorldFixtureCombatResolutionV1(createTextOpenWorldVNextFixture())
     ;(noEscape.modules.combat.payload as any).encounters[0].escapePolicy.allowed = false
     const forbidden = actionResolvedState(noEscape, 'combat.no-escape')
     expect(() => forbidden.machine.prepare({ state: forbidden.state, intent: 'finish-escaped' })).toThrow('该遭遇不允许逃跑')
@@ -144,7 +145,7 @@ describe('Text Open World vNext · governed combat phase state machine', () => {
   }, 20_000)
 
   it('显式系统迁移命令可把首个行动回合确定性结算为可重放终态', async () => {
-    const session = await createCombatSession(createTextOpenWorldVNextFixture(), 'combat-terminal-seed')
+    const session = await createCombatSession(downgradeTextOpenWorldFixtureCombatResolutionV1(createTextOpenWorldVNextFixture()), 'combat-terminal-seed')
     await executeTextOpenWorldActionV1({
       sessionId: session.id!, actionKey: 'action.start-ridge-jackal', targetKey: 'encounter.ridge-jackal',
       commandId: 'command.combat.terminal.initialize', requestedAt: 1,

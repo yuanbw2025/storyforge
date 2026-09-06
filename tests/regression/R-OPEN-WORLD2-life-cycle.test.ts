@@ -26,7 +26,10 @@ import type {
   TextOpenWorldRuntimePackageV1,
 } from '../../src/lib/types'
 import { createGovernedTextOpenWorldSessionFixtureV1 } from '../helpers/text-open-world-product-session'
-import { createTextOpenWorldVNextFixture } from '../helpers/text-open-world-vnext-fixture'
+import {
+  createTextOpenWorldVNextFixture,
+  downgradeTextOpenWorldFixtureCombatResolutionV1,
+} from '../helpers/text-open-world-vnext-fixture'
 
 function withHarmfulStatus() {
   const runtimePackage = createTextOpenWorldVNextFixture()
@@ -37,7 +40,7 @@ function withHarmfulStatus() {
 }
 
 function withDefeatAction() {
-  const runtimePackage = createTextOpenWorldVNextFixture()
+  const runtimePackage = downgradeTextOpenWorldFixtureCombatResolutionV1(createTextOpenWorldVNextFixture())
   const world = runtimePackage.modules.world.payload as any
   const combat = runtimePackage.modules.combat.payload as any
   const actions = runtimePackage.modules.actions.payload as any
@@ -54,7 +57,7 @@ function placeCombatAtActionResolved(
 ) {
   const combatState = createTextOpenWorldCombatStateMachineV1(runtimePackage)
   state.combat = combatState.initialize({ state, encounterKey: 'encounter.ridge-jackal', instanceKey })
-  for (const intent of ['begin-round', 'begin-turn', 'complete-turn'] as const) {
+  for (const intent of ['begin-round', 'begin-turn', 'complete-turn', 'advance-turn', 'complete-turn'] as const) {
     state.combat = combatState.applyAuthorization({
       state, authorization: combatState.prepare({ state, intent }),
     })
@@ -68,10 +71,10 @@ function placeDefeatedCombat(
   instanceKey: string,
 ) {
   const combatState = placeCombatAtActionResolved(runtimePackage, state, instanceKey)
+  state.player.health = 0
   state.combat = combatState.applyAuthorization({
     state, authorization: combatState.prepare({ state, intent: 'finish-defeat' }),
   })
-  state.player.health = 0
 }
 
 async function createSession(runtimePackage: TextOpenWorldRuntimePackageV1): Promise<ProductRuntimeSession> {
@@ -121,6 +124,7 @@ describe('Text Open World vNext · life, rest, defeat and recovery', () => {
     initialProjection.state.player.skillResource = 0
     initialProjection.state.player.statusKeys = ['status.wounded']
     const combatState = placeCombatAtActionResolved(runtimePackage, initialProjection.state, 'combat.defeat-effect')
+    initialProjection.state.player.health = 0
     const defeatAuthorization = combatState.prepare({ state: initialProjection.state, intent: 'finish-defeat' })
     const defeatPlan = await catalog.plan({
       effectKeys: ['effect.settle-combat-state'], claimKey: 'claim.defeat', state: initialProjection.state,

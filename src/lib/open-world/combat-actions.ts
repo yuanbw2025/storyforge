@@ -3,13 +3,18 @@ import type {
   TextOpenWorldCombatActionAuthorizationV1,
   TextOpenWorldCombatActionKindV1,
   TextOpenWorldCombatRuntimeStateV1,
+  TextOpenWorldCombatTargetResolutionV1,
   TextOpenWorldEffectDefinitionV1,
   TextOpenWorldEffectStateV1,
   TextOpenWorldParsedModulesV1,
+  TextOpenWorldRandomEvidenceV1,
+  TextOpenWorldRandomRequestV1,
   TextOpenWorldRuntimePackageV1,
 } from '../types'
-import { deriveTextOpenWorldInventoryQuantitiesV1 } from './inventory'
+import { deriveTextOpenWorldEquippedItemKeysV1, deriveTextOpenWorldInventoryQuantitiesV1 } from './inventory'
+import { parseTextOpenWorldRandomEvidenceV1 } from './event-contract'
 import { parseTextOpenWorldModulesV1 } from './modules'
+import { deriveTextOpenWorldPlayerStatsFromModulesV1 } from './player-stats'
 import { createTextOpenWorldSkillCatalogV1 } from './skills'
 import {
   isTextOpenWorldCombatRuntimeStateV1,
@@ -20,6 +25,15 @@ const PLAYER_ACTION_CATEGORIES = new Set(['combat-basic-attack', 'combat-skill',
 
 function fail(message: string): never { throw new Error(`[text-open-world-combat-action] ${message}`) }
 function unique(values: readonly string[]): string[] { return [...new Set(values)] }
+
+type CombatActionInput = {
+  state: TextOpenWorldEffectStateV1
+  actionKey: string
+  targetKey: string | null
+  actorKey: 'player' | 'system'
+  conditionResults: Record<string, boolean>
+  evidence?: TextOpenWorldRandomEvidenceV1[]
+}
 
 function performEffect(
   modules: TextOpenWorldParsedModulesV1,
@@ -87,13 +101,7 @@ export function createTextOpenWorldCombatActionCatalogV1(
   parsedModules?: TextOpenWorldParsedModulesV1,
 ) {
   const modules = parsedModules ?? parseTextOpenWorldModulesV1(value)
-  const prepare = (input: {
-    state: TextOpenWorldEffectStateV1
-    actionKey: string
-    targetKey: string | null
-    actorKey: 'player' | 'system'
-    conditionResults: Record<string, boolean>
-  }): TextOpenWorldCombatActionAuthorizationV1 => {
+  const prepareBase = (input: CombatActionInput): TextOpenWorldCombatActionAuthorizationV1 => {
     const combat = combatV10({ modules, state: input.state })
     const action = modules.actions.actions.find(item => item.key === input.actionKey) ?? fail(`Action不存在:${input.actionKey}`)
     const effect = performEffect(modules, action.key)
@@ -154,11 +162,146 @@ export function createTextOpenWorldCombatActionCatalogV1(
     }
   }
 
+  const randomRequestsForBase = (authorization: TextOpenWorldCombatActionAuthorizationV1): TextOpenWorldRandomRequestV1[] => {
+    if (modules.actions.version < 11) return []
+    const skill = authorization.skillKey
+      ? modules.progression.skills.find(item => item.key === authorization.skillKey) ?? fail(`战斗技能不存在:${authorization.skillKey}`)
+      : null
+    if (!skill || skill.kind !== 'attack') return []
+    return authorization.targetCombatantKeys.map(targetCombatantKey => ({
+      drawKey: `combat.critical.${authorization.beforeRound}.${authorization.beforeTurnIndex}.${authorization.actorCombatantKey}.${targetCombatantKey}`,
+      minimumInclusive: 1,
+      maximumInclusive: modules.combat.resolution.criticalRollMaximum,
+    }))
+  }
+
+  const randomRequestsFor = (input: Omit<CombatActionInput, 'evidence'>): TextOpenWorldRandomRequestV1[] => (
+    randomRequestsForBase(prepareBase(input))
+  )
+
+  const targetResolutionsFor = (input: {
+    state: TextOpenWorldEffectStateV1
+    authorization: TextOpenWorldCombatActionAuthorizationV1
+    evidence: TextOpenWorldRandomEvidenceV1[]
+  }): TextOpenWorldCombatTargetResolutionV1[] => {
+    const skillKey = input.authorization.skillKey
+    const skill = skillKey ? modules.progression.skills.find(item => item.key === skillKey) ?? fail(`战斗技能不存在:${skillKey}`) : null
+    if (!skill || skill.kind !== 'attack') {
+      if (input.evidence.length) fail('非伤害战斗行动不能包含随机证据')
+      return []
+    }
+    const skillResolution = modules.combat.skillResolutions.find(item => item.skillKey === skill.key)
+      ?? fail(`攻击技能缺少冻结伤害公式:${skill.key}`)
+    const requests = randomRequestsForBase(input.authorization)
+    if (input.evidence.length !== requests.length) fail('战斗随机证据数量不一致')
+    const parsedEvidence = input.evidence.map((item, index) => {
+      const evidence = parseTextOpenWorldRandomEvidenceV1(item, `combat.evidence[${index}]`)
+      const request = requests[index]
+      if (evidence.drawIndex !== index
+        || evidence.drawKey !== request.drawKey
+        || evidence.minimumInclusive !== request.minimumInclusive
+        || evidence.maximumInclusive !== request.maximumInclusive) fail(`战斗随机证据与请求不一致:${index}`)
+      return evidence
+    })
+    const playerStats = deriveTextOpenWorldPlayerStatsFromModulesV1({
+      modules,
+      level: input.state.player.level,
+      attributes: input.state.player.attributes,
+      equippedItemKeyBySlot: deriveTextOpenWorldEquippedItemKeysV1(modules, input.state.inventory),
+    })
+    const actorEnemy = input.authorization.actorCombatantKey === 'player'
+      ? null
+      : input.state.combat && 'version' in input.state.combat
+        ? input.state.combat.enemies.find(enemy => enemy.combatantKey === input.authorization.actorCombatantKey) ?? fail('伤害行动者敌人不存在')
+        : fail('伤害结算缺少新版战斗投影')
+    const actorDefinition = actorEnemy ? modules.combat.enemies.find(enemy => enemy.key === actorEnemy.enemyKey) ?? fail('伤害行动者定义不存在') : null
+    const attack = Math.floor(actorDefinition?.attack ?? playerStats.attack)
+    const criticalChance = actorDefinition?.criticalChance ?? playerStats.criticalChance
+    const criticalChanceBasisPoints = Math.min(
+      modules.combat.resolution.criticalChanceCapBasisPoints,
+      Math.max(0, Math.round(criticalChance * modules.combat.resolution.criticalRollMaximum)),
+    )
+    return input.authorization.targetCombatantKeys.map((targetCombatantKey, index) => {
+      const targetEnemy = targetCombatantKey === 'player'
+        ? null
+        : input.state.combat && 'version' in input.state.combat
+          ? input.state.combat.enemies.find(enemy => enemy.combatantKey === targetCombatantKey) ?? fail(`伤害目标不存在:${targetCombatantKey}`)
+          : fail('伤害结算缺少新版战斗投影')
+      const targetDefinition = targetEnemy ? modules.combat.enemies.find(enemy => enemy.key === targetEnemy.enemyKey) ?? fail('伤害目标定义不存在') : null
+      const defense = Math.floor(targetDefinition?.defense ?? playerStats.defense)
+      const beforeHealth = Math.floor(targetEnemy?.currentHealth ?? input.state.player.health)
+      if (beforeHealth <= 0) fail(`不能伤害已经战败的目标:${targetCombatantKey}`)
+      const damageBeforeDefense = Math.min(
+        modules.combat.resolution.maximumDamage,
+        Math.floor(attack * skillResolution.powerNumerator / skillResolution.powerDenominator) + skillResolution.flatDamage,
+      )
+      const damageAfterDefense = Math.min(
+        modules.combat.resolution.maximumDamage,
+        Math.max(modules.combat.resolution.minimumDamage, damageBeforeDefense - defense),
+      )
+      const criticalDrawValue = parsedEvidence[index].value
+      const critical = criticalChanceBasisPoints > 0 && criticalDrawValue <= criticalChanceBasisPoints
+      const computedDamage = Math.min(
+        modules.combat.resolution.maximumDamage,
+        critical
+          ? Math.floor(damageAfterDefense * modules.combat.resolution.criticalMultiplierNumerator / modules.combat.resolution.criticalMultiplierDenominator)
+          : damageAfterDefense,
+      )
+      const appliedDamage = Math.min(beforeHealth, computedDamage)
+      const afterHealth = beforeHealth - appliedDamage
+      return {
+        targetCombatantKey, attack, defense,
+        powerNumerator: skillResolution.powerNumerator,
+        powerDenominator: skillResolution.powerDenominator,
+        flatDamage: skillResolution.flatDamage,
+        damageBeforeDefense, damageAfterDefense,
+        criticalChanceBasisPoints, criticalDrawValue, critical,
+        computedDamage, appliedDamage, beforeHealth, afterHealth,
+        defeated: afterHealth === 0,
+      }
+    })
+  }
+
+  const prepare = (input: CombatActionInput): TextOpenWorldCombatActionAuthorizationV1 => {
+    const authorization = prepareBase(input)
+    if (modules.actions.version < 11) {
+      if (input.evidence?.length) fail('Action v10战斗不能包含随机证据')
+      return authorization
+    }
+    const randomRequests = randomRequestsForBase(authorization)
+    const evidence = input.evidence ?? fail('Action v11战斗行动缺少随机证据')
+    const targetResolutions = targetResolutionsFor({ state: input.state, authorization, evidence })
+    const statusEffectKeys = authorization.effectKeys.filter(effectKey => {
+      const effect = modules.actions.effects.find(item => item.key === effectKey)!
+      return effect.operation === 'apply-status' || effect.operation === 'remove-status'
+    })
+    return {
+      ...authorization,
+      resolutionVersion: 1,
+      randomRequests,
+      targetResolutions,
+      statusEffectKeys,
+    }
+  }
+
   const assertAuthorization = (input: {
     state: TextOpenWorldEffectStateV1
     authorization: TextOpenWorldCombatActionAuthorizationV1
     conditionResults?: Record<string, boolean>
+    evidence?: TextOpenWorldRandomEvidenceV1[]
   }) => {
+    let evidence = input.evidence
+    if (modules.actions.version >= 11 && !evidence) {
+      if (input.authorization.resolutionVersion !== 1 || !input.authorization.randomRequests || !input.authorization.targetResolutions) fail('Action v11战斗授权缺少结算字段')
+      evidence = input.authorization.randomRequests.map((request, index) => ({
+        ...request,
+        algorithm: 'sha256-range-v1' as const,
+        seedHash: '0'.repeat(64),
+        inputHash: '0'.repeat(64),
+        drawIndex: index,
+        value: input.authorization.targetResolutions?.[index]?.criticalDrawValue ?? fail(`战斗授权缺少随机结果:${index}`),
+      }))
+    }
     const expected = prepare({
       state: input.state,
       actionKey: input.authorization.actionKey,
@@ -169,6 +312,7 @@ export function createTextOpenWorldCombatActionCatalogV1(
           : null,
       actorKey: input.authorization.actorKey,
       conditionResults: input.conditionResults ?? Object.fromEntries(modules.actions.conditions.map(condition => [condition.key, true])),
+      evidence,
     })
     if (canonicalProductProductionJsonV2(expected) !== canonicalProductProductionJsonV2(input.authorization)) fail('战斗行动授权与当前状态不一致')
   }
@@ -195,6 +339,20 @@ export function createTextOpenWorldCombatActionCatalogV1(
       targetCombatantKeys: [...input.authorization.targetCombatantKeys],
       round: input.authorization.beforeRound,
       turnIndex: input.authorization.beforeTurnIndex,
+      ...(input.authorization.resolutionVersion === 1
+        ? { targetResolutions: structuredClone(input.authorization.targetResolutions ?? []) }
+        : {}),
+    }
+    for (const resolution of input.authorization.targetResolutions ?? []) {
+      if (resolution.targetCombatantKey === 'player') {
+        if (input.state.player.health !== resolution.beforeHealth) fail('玩家伤害应用基线已变化')
+        input.state.player.health = resolution.afterHealth
+      } else {
+        const enemy = combat.enemies.find(item => item.combatantKey === resolution.targetCombatantKey) ?? fail('敌人伤害目标不存在')
+        if (enemy.currentHealth !== resolution.beforeHealth) fail('敌人伤害应用基线已变化')
+        enemy.currentHealth = resolution.afterHealth
+        enemy.defeated = resolution.defeated
+      }
     }
     if (input.authorization.skillKey && input.authorization.cooldownTurns > 0) {
       const cooldowns = input.authorization.actorCombatantKey === 'player'
@@ -222,7 +380,7 @@ export function createTextOpenWorldCombatActionCatalogV1(
     return { actionKey: owners[0].key, targetKey: null }
   }
 
-  return { prepare, assertAuthorization, applyAuthorization, nextEnemyAction, remainingCooldowns: (state: TextOpenWorldEffectStateV1) => {
+  return { prepare, randomRequestsFor, assertAuthorization, applyAuthorization, nextEnemyAction, remainingCooldowns: (state: TextOpenWorldEffectStateV1) => {
     const combat = combatV10({ modules, state })
     return remainingCooldowns(modules, combat, 'player')
   } }

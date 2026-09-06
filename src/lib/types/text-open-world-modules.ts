@@ -15,7 +15,7 @@ export type TextOpenWorldActionCategoryV1 =
   | 'take' | 'use' | 'equip' | 'unequip' | 'drop' | 'buy' | 'sell' | 'craft'
   | 'accept-quest' | 'abandon-quest' | 'objective-action' | 'quest-action' | 'weather-action' | 'actor-schedule-action' | 'actor-state-action' | 'claim-reward'
   | 'attack-actor' | 'steal' | 'deceive' | 'crime'
-  | 'start-combat' | 'continue-combat' | 'combat-state-action'
+  | 'start-combat' | 'continue-combat' | 'combat-state-action' | 'combat-reward-action'
   | 'combat-basic-attack' | 'combat-skill' | 'combat-item' | 'combat-enemy-skill' | 'escape'
   | 'rest' | 'respawn'
   | 'read' | 'track' | 'untrack' | 'save' | 'load-branch'
@@ -226,7 +226,7 @@ export interface TextOpenWorldQuestModuleV1 {
 }
 
 export interface TextOpenWorldActionModuleV1 {
-  version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10
+  version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11
   conditions: Array<{
     key: string
     expression: TextOpenWorldConditionExpressionV1
@@ -315,9 +315,9 @@ export interface TextOpenWorldProgressionModuleV1 {
 }
 
 export interface TextOpenWorldCombatModuleV1 {
-  version: 2
+  version: 2 | 3
   /** Parser-only provenance; omitted from the immutable payload itself. */
-  sourceVersion?: 1 | 2
+  sourceVersion?: 1 | 2 | 3
   rules: {
     difficulty: 'standard'
     defaultAttackHits: true
@@ -333,6 +333,22 @@ export interface TextOpenWorldCombatModuleV1 {
     enemyDamageMultiplier: 1
     rewardMultiplier: 1
   }>
+  resolution: {
+    algorithm: 'bounded-physical-v1'
+    criticalRollMaximum: 10_000
+    criticalChanceCapBasisPoints: number
+    criticalMultiplierNumerator: number
+    criticalMultiplierDenominator: number
+    minimumDamage: number
+    maximumDamage: number
+  }
+  skillResolutions: Array<{
+    skillKey: string
+    powerNumerator: number
+    powerDenominator: number
+    flatDamage: number
+  }>
+  transientPlayerStatusKeys: string[]
   strategyProfiles: Array<{
     key: string
     title: string

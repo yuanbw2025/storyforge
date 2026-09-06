@@ -66,7 +66,7 @@ describe('Text Open World vNext · Enemy/Encounter definitions', () => {
     const passive = createTextOpenWorldVNextFixture()
     ;(passive.modules.progression.payload as any).skills[0].activation = 'passive'
     ;(passive.modules.progression.payload as any).skills[0].target = 'self'
-    expect(() => parseTextOpenWorldModulesV1(passive)).toThrow('敌人策略只能选择主动技能')
+    expect(() => parseTextOpenWorldModulesV1(passive)).toThrow('伤害公式只能绑定主动攻击技能')
 
     const dangling = createTextOpenWorldVNextFixture()
     combatOf(dangling).enemies[0].strategyProfileKey = 'strategy.missing'

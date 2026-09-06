@@ -119,6 +119,27 @@ export interface TextOpenWorldCombatActionRecordV1 {
   targetCombatantKeys: string[]
   round: number
   turnIndex: number
+  /** Added by Action v11; absent in immutable Action v10 event history. */
+  targetResolutions?: TextOpenWorldCombatTargetResolutionV1[]
+}
+
+export interface TextOpenWorldCombatTargetResolutionV1 {
+  targetCombatantKey: string
+  attack: number
+  defense: number
+  powerNumerator: number
+  powerDenominator: number
+  flatDamage: number
+  damageBeforeDefense: number
+  damageAfterDefense: number
+  criticalChanceBasisPoints: number
+  criticalDrawValue: number
+  critical: boolean
+  computedDamage: number
+  appliedDamage: number
+  beforeHealth: number
+  afterHealth: number
+  defeated: boolean
 }
 
 export interface TextOpenWorldLegacyCombatStateV1 {
@@ -326,6 +347,8 @@ export interface TextOpenWorldCombatTransitionAuthorizationV1 {
   afterRound: number
   afterTurnIndex: number | null
   afterActiveCombatantKey: string | null
+  /** Added by Action v11 / Combat v3; absent in older immutable history. */
+  removedPlayerStatusKeys?: string[]
 }
 
 export interface TextOpenWorldCombatActionAuthorizationV1 {
@@ -348,6 +371,14 @@ export interface TextOpenWorldCombatActionAuthorizationV1 {
   cooldownTurns: number
   cooldownUntilRound: number
   afterSkillResource: number
+  /** Added by Action v11 / Combat v3; absent in older immutable history. */
+  resolutionVersion?: 1
+  /** Frozen random requests whose resolved events prove every critical draw. */
+  randomRequests?: Array<{ drawKey: string; minimumInclusive: number; maximumInclusive: number }>
+  /** Deterministic numeric outcomes applied by perform-combat-action. */
+  targetResolutions?: TextOpenWorldCombatTargetResolutionV1[]
+  /** Predeclared status Effects included in the same atomic Action plan. */
+  statusEffectKeys?: string[]
 }
 
 export interface TextOpenWorldEffectPlanV1 {
