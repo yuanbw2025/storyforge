@@ -274,7 +274,13 @@ export async function generateComicProfessionalCandidateV1(input: { scope: Works
     return output
   }
   const parseForRun = (output: string): ComicProfessionalPayloadV1 => {
-    const parsed = parseComicProfessionalPayloadV1(input.stage, parseJson(output))
+    let parsed = parseComicProfessionalPayloadV1(input.stage, parseJson(output))
+    if (['image-request', 'targeted-repair'].includes(input.stage) && selected.targetPanels[0]) {
+      parsed = { ...(parsed as ComicImageRequestCandidateV1 | ComicRepairRequestCandidateV1), panelKey: selected.targetPanels[0].stableKey, expectedPanelRevision: selected.targetPanels[0].revision, protectedAreas: structuredClone(selected.targetPanels[0].protectedAreas ?? []) }
+    }
+    if (['visual-continuity-review', 'page-review'].includes(input.stage) && selected.targetPages.length === 1) {
+      parsed = (parsed as ComicReviewIssueCandidateV1[]).map(row => ({ ...row, pageKey: selected.targetPages[0].stableKey }))
+    }
     const allowedSources = new Set(selected.sourceUnitKeys)
     const invalidSources = (rows: Array<{ sourceUnitKeys: string[] }>) => [...new Set(rows.flatMap(row => row.sourceUnitKeys.filter(key => !allowedSources.has(key))))]
     if (input.stage === 'source-analysis') {
