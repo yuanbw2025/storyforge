@@ -34,6 +34,9 @@ const entrypoints = [
   // TTRPG's durable host loop is a headless product API; its independent foundation
   // is validated before the playing table is integrated and can be driven by replay tooling.
   'src/lib/ttrpg/kp-coordinator.ts',
+  // G3 content production is a headless contract boundary until all product
+  // Skills/executors are registered and the creator route activates it.
+  'src/lib/open-world/production-contract.ts',
   // FLOW-3 public domain-node boundary is exercised by regression tests and external tooling.
   'src/lib/node-authoring/index.ts',
   // HARNESS-26 is a headless offline release-evaluation boundary; production routing must not import it.

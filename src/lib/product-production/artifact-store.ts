@@ -4,6 +4,7 @@ import type {
   ProductBuildArtifactRecordV1,
   WorkspaceScope,
 } from '../types'
+import { isProductBuildArtifactKindV1 } from '../types/product-production'
 import { assertRecordInScope, resolveScope, scopeTransactionTables, stampNewRecord } from '../workspace/scope'
 import { canonicalProductProductionJsonV2, hashProductProductionValueV2, isSha256Hash } from './hash'
 
@@ -49,6 +50,9 @@ export async function acceptProductBuildArtifact(input: {
   const scope = await resolveScope({ scope: input.scope })
   const artifactKey = stableKey(input.artifactKey, 'artifactKey')
   const requirementKey = input.requirementKey == null ? null : stableKey(input.requirementKey, 'requirementKey')
+  if (!isProductBuildArtifactKindV1(input.kind)) {
+    throw new Error('[product-production-artifact] kind 未登记')
+  }
   if (!isSha256Hash(input.inputHash)) throw new Error('[product-production-artifact] inputHash 无效')
   if (input.producerReceiptHash != null && !isSha256Hash(input.producerReceiptHash)) {
     throw new Error('[product-production-artifact] producerReceiptHash 无效')

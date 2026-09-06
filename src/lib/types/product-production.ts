@@ -5,6 +5,7 @@ import type {
   TtrpgHouseRuleDiffV2,
   TtrpgHouseRuleOverlayV2,
 } from "./ttrpg-product";
+import { TEXT_OPEN_WORLD_PRODUCTION_ARTIFACT_KINDS_V1 } from "./text-open-world-production";
 
 export const STORYFORGE_CANONICAL_JSON_VERSION = 2 as const;
 
@@ -96,22 +97,38 @@ export type ProductBuildArtifactStatusV1 =
   | "orphaned"
   | "invalid";
 
+export const GENERIC_PRODUCT_BUILD_ARTIFACT_KINDS_V1 = [
+  "consultation-evidence",
+  "product-design",
+  "narrative",
+  "product-module",
+  "visual-bible",
+  "audio-bible",
+  "asset-manifest",
+  "image",
+  "audio",
+  "rule-pack",
+  "campaign-pack",
+  "presentation",
+  "quality-report",
+  "playtest-report",
+  "integration-report",
+] as const;
+
+export const PRODUCT_BUILD_ARTIFACT_KINDS_V1 = [
+  ...GENERIC_PRODUCT_BUILD_ARTIFACT_KINDS_V1,
+  ...TEXT_OPEN_WORLD_PRODUCTION_ARTIFACT_KINDS_V1,
+] as const;
+
 export type ProductBuildArtifactKindV1 =
-  | "consultation-evidence"
-  | "product-design"
-  | "narrative"
-  | "product-module"
-  | "visual-bible"
-  | "audio-bible"
-  | "asset-manifest"
-  | "image"
-  | "audio"
-  | "rule-pack"
-  | "campaign-pack"
-  | "presentation"
-  | "quality-report"
-  | "playtest-report"
-  | "integration-report";
+  (typeof PRODUCT_BUILD_ARTIFACT_KINDS_V1)[number];
+
+export function isProductBuildArtifactKindV1(
+  value: unknown,
+): value is ProductBuildArtifactKindV1 {
+  return typeof value === "string"
+    && (PRODUCT_BUILD_ARTIFACT_KINDS_V1 as readonly string[]).includes(value);
+}
 
 export const PRODUCT_PRODUCTION_COMMAND_TYPES = [
   "create-intent",
