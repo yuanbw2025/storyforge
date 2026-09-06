@@ -1,6 +1,6 @@
 # AI 主导文字开放世界叙事基座 · StoryForge 施工规格
 
-> 规格版本：3.2.17
+> 规格版本：3.2.18
 > 生效日期：2026-09-06
 > 文档层级：L2 产品目标架构与施工规格
 > 当前状态：设计基线；不代表代码已经实现
@@ -534,6 +534,21 @@ P8前三条Gameplay Catalog Lane把ContentRequirementManifest变成后序任务�
 - 所有Skill Action/Effect/Condition/Quest unlock、Item使用/装备Effect、Enemy DropTable正式键、Encounter Quest/Reward键、Reward Effect与Drop数量Effect仍为空并标记unbound。P8F必须在后续制作经济/NPC/地图目录完成后统一生成并双向校验这些引用。
 
 三条验证器都能从Artifact反向恢复模型草稿并重建确定性目录。需求漏项、主角预留改写、非法技能公式/装备位、战斗地点越界、敌人数值漂移、物品无来源、任务/遭遇漏奖励、主线经验预算不闭合、正式引用提前注入，以及重算Hash后的篡改都会失败关闭。三条Lane不新增物理表，不写ProductRelease或Session。
+
+#### 5.4.14 P8后半目录与P8F任务/发牌最终化落地
+
+P8后半目录已补齐制作经济、NPC运行和地图交互：配方/商店保证物品来源、消耗、定价、库存和反套利闭环；NPC保留整体人物小传，区分重要Agent与普通规则角色，冻结关键保护、四时段日程、三档态度与功能替代；地图目录原样保持Region/Location/Edge/FastTravel拓扑，覆盖每个地点入口，并固定逐步揭示、提前到达安全、旅行推进时间、快旅到访解锁和程序SVG布局。这三类目录与前三类一样，在P8只交付稳定定义，运行引用保持unbound。
+
+`quest-finalize-production.ts`现以不可切分的原子Context读取Mainline、SignificantThreads、RegionNarrativePacks、QuestSkeletons、ContentRequirementManifest和六类Gameplay Catalog，对11件Artifact逐一校验行Hash、内容Hash、产品实例及精确上游来源。任意一件超出任务输入预算时失败关闭，不会把JSON从中间截断后交给模型；生产调度器传入实际任务预算，P8F在推荐150次总调用不变的前提下使用11次预留。
+
+模型在P8F只能提交任务/Objective描述、Objective成功语义、发牌预算/触发类型、模板类别/强度/权重/冷却及随机事件语义；任务键、目录键、条件、效果、行动、数值、生命周期和引用均属于代码。确定性编译器完成：
+
+- 23个Quest、全部Stage/Objective及其前置、完成、奖励领取、放弃、过期和时间定义；
+- 遭遇启动/结算/奖励、玩家与敌人技能、战斗道具、逃跑、复活和休息行动；
+- 物品使用/装备/卸下、配方学习/制作、商店买卖、NPC对话、地点交互、普通/快速旅行、天气和角色日程结算；
+- 所有需求到真实目录定义、再到Condition/Effect/Action的双向覆盖。
+
+`DirectorDecks`按地区从P7种子冻结固定普通任务、可实例化模板和随机事件，并写入显示/活跃并发上限、全局实例上限、冷却、高强度连续限制、历史去重与空白牌。主线和重要故事明确排除于Director压力；普通发牌的运行参数已就绪，场景文字、谣言表现及每个模板的3份文字变体显式留给P9，不在P8F冒充完成。验证器会重建完整Artifact，因此漏Objective、超预算、越权字段、非法任务升级或在重算Hash后篡改生命周期/发牌结果仍会被拒绝。P8F仍只写Build候选，不新增物理表，不写ProductRelease或Session。
 
 ### 5.5 正确的验证顺序
 
@@ -1353,6 +1368,7 @@ StoryForge当前没有独立staging。发布前仍需在隔离数据中完成灰
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| 3.2.18 | 2026-09-07 | 落地P8后半制作经济/NPC运行/地图交互目录及P8F QuestFinalize/EncounterFinalize：11件叙事、任务与玩法Artifact以完整Hash链原子交付，模型只补受约束叙事/发牌语义，代码最终化全部Quest/Stage/Objective生命周期、Condition/Effect/Action、奖励、战斗、物品、制作、商店、NPC、地图、旅行、快旅、复活和世界演化真实引用；地区Director冻结普通任务、模板、随机事件、冷却、并发和空白牌，保护故事排除于发牌压力；表现变体留给P9；同时修正正式调度的Context预算传递并增加atomic JSON超额失败关闭，推荐总调用仍为150次 |
 | 3.2.17 | 2026-09-07 | 落地P8 Map Interaction目录：原样继承完整地区、地点、道路和快旅拓扑，把每项地区生活/任务交互需求编译为地点入口并生成确定性SVG节点；代码确保全图连通、每地点可交互、逐步揭示、提前到达安全、关键故事不靠到达自动触发、快旅到访解锁且首版旅行无资源消耗/不中断，模型只写有界交互语义，全部运行Action/Condition/Effect/Scene/Quest引用留待P8F/P9装配 |
 | 3.2.16 | 2026-09-07 | 落地P8 NPC Runtime目录：以任务消费者和地区需求区分主线/重要Agent角色与普通规则角色，人物小传/演绎保持整体内容资产；代码冻结关键保护、普通死亡、四时段日程、道德与阵营加权三档态度、商店/功能服务连续性及“替代功能但不继承独特内容”，对话与行为运行引用留待P8F/P9绑定 |
 | 3.2.15 | 2026-09-07 | 落地P8 Crafting/Economy目录：任务recipe/vendor需求与每区基础供给共同生成可验证配方和商店，任务骨架保留消费者语境；模型仅从已登记来源物品与地点中选择并写语义，代码负责数量、价格、库存、服务Actor预留、来源/消耗闭环、反套利及全部未绑定运行槽，为后续NPC目录和P8F真实引用装配提供稳定输入 |

@@ -1,6 +1,6 @@
 # AI 主导文字开放世界游戏 · 完整开发清单
 
-> 版本：1.1.59
+> 版本：1.1.60
 > 建立日期：2026-09-06
 > 对应总任务：`E-OPENWORLD-01`
 > 当前状态：`IN_PROGRESS`；用户已于2026-09-06明确下达完整产品开发指令
@@ -36,15 +36,15 @@
 | 指标 | 当前值 |
 |---|---|
 | 首版工作包 | 121 |
-| 已完成 | 65（G0、G1、G2及G3-01～G3-14完成） |
-| 产品总进度 | 65 / 121（53.7%） |
-| G1～G7业务功能进度 | 55 / 111（49.5%） |
+| 已完成 | 66（G0、G1、G2及G3-01～G3-15完成） |
+| 产品总进度 | 66 / 121（54.5%） |
+| G1～G7业务功能进度 | 56 / 111（50.5%） |
 | 当前阶段 | G3 AI内容生产编译器 |
 | G0阶段进度 | 10 / 10（100%） |
 | G1阶段进度 | 13 / 13（100%） |
 | G2阶段进度 | 28 / 28（100%） |
-| G3阶段进度 | 14 / 18（77.8%） |
-| 当前工作包 | `TOW-G3-15` |
+| G3阶段进度 | 15 / 18（83.3%） |
+| 当前工作包 | `TOW-G3-16` |
 | 当前阻塞项 | 无 |
 
 每次状态变化必须同时更新本节汇总、对应任务行、验证证据和变更记录。
@@ -197,8 +197,8 @@ G7 盐脊验收、发布更新与旧入口收口
 | TOW-G3-12 | DONE | QuestSkeleton与ContentRequirementManifest | G3-09～G3-11 | P8专属Context把Brief、体验、玩法、主线、重要故事和地区种子投影为23项确定性Quest Source；模型逐项生成故事动机、1～4 Stage、可执行Objective及语义内容需求，代码保证7主线Stage、6重要故事Stage、6普通任务种子和4地区模板一一覆盖，固定主线/重要故事无限等待不可放弃或永久失败、普通任务放弃可重接、模板由地区导演实例化、到达地点不单独触发；ContentRequirementManifest同时汇总全部Objective及地区角色/势力/地点交互需求，按技能、遭遇、物品奖励、制作经济、NPC、地图交互和QuestFinalize声明唯一后序owner，所有正式目录/Action/Condition/Reward/运行引用保持unbound；遗漏来源、弱化保护、无敌人战斗目标、同名定义冲突、模型越权字段和重算Hash篡改失败关闭 |
 | TOW-G3-13 | DONE | 技能、物品、敌人、遭遇、奖励目录生产 | G3-05、G3-06、G3-12 | 三条专属Lane均从同一Build已验收QuestSkeleton与Manifest出发：Progression固定20级平方经验、自动属性成长、两项初始/六项等级/任务技能精确需求和主动攻击公式；Encounter逐项兑现enemy/encounter需求、每区基础遭遇、1～5级敌人数值、基础技能策略、战斗Objective/地区覆盖及失败恢复；Item/Reward精确兑现两项初始物品与item/equipment/material/reward需求，为全部23个任务和5个遭遇生成奖励、为5个敌人生成地区材料掉落，并确定性分配主线总计1600经验以支撑1→5级。模型只负责技能/状态/敌人/遭遇/物品/奖励语义和有界选择，代码固定稳定键、数值、保护、来源、预算与消费者；Action/Effect/Condition/Quest/Reward/Drop正式引用保持unbound交给P8F，漏项、越界、无来源、预算不闭合、模型越权及重算Hash篡改失败关闭 |
 | TOW-G3-14 | DONE | 配方、商店、NPC运行规则目录生产 | G3-11～G3-13 | Crafting/Economy、NPC Runtime与Map Interaction三条Lane完成：配方/商店闭合来源消耗、库存、价格、服务Actor预留和反套利；NPC目录保留整体小传并固定关键保护、普通四时段规则、三档道德/阵营态度及功能替代；地图目录原样继承完整Region/Location/Edge/FastTravel拓扑，为每个地点和任务需求生成提前到达安全交互与确定性SVG坐标，固定逐步揭示、旅行推进时间、首版快旅不中断且不消耗资源。所有Action/Condition/Effect/Scene/Quest运行引用仍为unbound，留待P8F/P9装配 |
-| TOW-G3-15 | READY | QuestFinalize与EncounterFinalize | G3-12～G3-14 | Stage/Objective/Action/Reward/Failure/Time绑定真实目录且可运行 |
-| TOW-G3-16 | QUEUED | SceneScript、ChoiceContract和三类交互绑定 | G3-15 | 场景文本、固定选项、系统Action和自然语言入口不产生第二套结果 |
+| TOW-G3-15 | DONE | QuestFinalize与EncounterFinalize | G3-12～G3-14 | 11件已验收叙事/任务/玩法目录以完整Hash链原子交付；模型只补任务与区域发牌语义，代码生成Quest/Stage/Objective、奖励、失败/过期/时间、战斗/物品/制作/商店/NPC/地图/旅行/复活/世界演化的Condition/Effect/Action及双向真实引用；主线和重要故事继续受保护等待，普通任务可放弃/过期；Director按区域冻结固定任务、模板、随机事件、冷却、并发与空白牌预算，P9只待补场景和模板变体文字 |
+| TOW-G3-16 | READY | SceneScript、ChoiceContract和三类交互绑定 | G3-15 | 场景文本、固定选项、系统Action和自然语言入口不产生第二套结果 |
 | TOW-G3-17 | QUEUED | UI/媒资需求、内容时长、平衡、语义评审和局部修复 | G3-06～G3-16 | 必需消费槽完整；库存时长与单次时长分离；问题可局部修复并传播stale |
 | TOW-G3-18 | QUEUED | AI生产Build装配端到端验证 | G3-01～G3-17、G2-28 | 同一来源可恢复生产并生成G2可直接运行的Build，无需人工改JSON |
 
@@ -355,6 +355,7 @@ G7 盐脊验收、发布更新与旧入口收口
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| 1.1.60 | 2026-09-07 | 完成G3-15 QuestFinalize/EncounterFinalize：正式Skill和原子Context一次读取11件已验收Artifact，全链校验行Hash、内容Hash、产品实例与跨目录来源；模型只写任务/Objective描述、发牌类别/强度/权重和随机事件语义，代码确定性生成Quest、Stage、Objective、Condition、Effect、Action、奖励领取、战斗开始/结算、技能/道具、制作/商店、NPC交互、地图/旅行/快旅/复活及Director结算全部运行定义和双向引用；主线/重要故事保持等待与不可永久失败，普通任务支持放弃重接和限时过期；地区Director冻结固定任务、模板、随机事件、冷却、并发上限、高强度连续限制与空白牌，保护故事不进入发牌压力；同时修复生产调度器未向Context Gateway传递实际任务输入预算的旧上限，为不可切分JSON来源增加atomic失败关闭；在150次推荐总调用不变下，P8F调整为11次、表现轮廓调整为1次；总进度66/121，业务功能56/111，下一项G3-16 |
 | 1.1.59 | 2026-09-07 | 完成G3-14 Map Interaction Catalog Lane及整个后半目录包：Context只读取已验收完整地图、地区生态、任务消费者和地点交互需求；模型只写交互语义并从候选类型/地点中选择，代码保持Region/Location/Edge/FastTravel完整拓扑，生成稳定Interaction键、每地点至少一个可点击入口和1000×700确定性SVG节点布局，固定完整地图Build、知识逐步揭示、普通/快速旅行推进时间、首版不中断且无旅行资源消耗、快旅到访解锁及复活点覆盖；提前到达只能看到地点常态，主线/重要故事不得由抵达自动启动；全部Action/Condition/Effect/Scene/Quest绑定保持unbound；漏项、越界、重复语义、断图、改写道路/坐标/快旅/到达触发及注入运行Action均失败关闭；总进度65/121，业务功能55/111，下一项G3-15 |
 | 1.1.58 | 2026-09-07 | G3-14完成NPC Runtime Catalog Lane并将其显式接到Crafting/Economy之后：Context投影已验收Quest消费者和商店Actor预留，同时完整读取地区角色/势力需求；模型只写势力目标、道德方向、角色姓名/小传/演绎、普通日常和三档招呼语气，人物身份信息保持一个整体文本资产；代码固定Faction/Actor/Service/Schedule稳定键、主线/重要角色Agent维护与protected、普通角色rule-driven/mortal、四时段日程、道德/阵营加权三档态度、商店与普通功能服务替代者，替代者只继承功能不继承独特故事；全部角色/势力/商店预留、地区居民、关键保护和死亡替代精确闭合，对话/Action/Scene仍未绑定；漏项、同名、越界阵营、错误日程、越权保护字段及重算Hash篡改失败关闭；下一Lane为Map Interaction |
 | 1.1.57 | 2026-09-07 | 启动G3-14并完成Crafting/Economy Catalog Lane：修正P8任务闭包，三个后半目录均读取QuestSkeleton以保留消费者语境；配方经济Context只读取同Build已验收玩法、地区、任务、需求和物品奖励目录，逐项兑现recipe/vendor需求并为每区提供基础配方与商店；模型只写地区化语义并从有来源非关键物品及合法地点中选取，代码固定稳定键、配方学习、制作数量/时长、单货币整数基点价格、普通无限/装备限量库存、商店Actor预留、物品来源/消耗投影和反套利；关键物品禁售、同物转换、类别错配、漏项/越界及重算Hash改价格/库存/数量/Action失败关闭；G3-14继续进行，下一Lane为NPC Runtime |

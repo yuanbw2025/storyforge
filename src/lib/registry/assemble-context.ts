@@ -194,6 +194,9 @@ export async function assembleContext(input: AssembleContextInput): Promise<Asse
     const scaledSourceBudget = Math.max(64, Math.floor(source.budgetTokens * sourceBudgetScale))
     const sourceBudgetTokens = Math.min(scaledSourceBudget, inputBudget)
     const originalTokens = estimateTokens(content)
+    if (source.atomic && originalTokens > sourceBudgetTokens) {
+      throw new Error(`[assembleContext] 原子来源 ${source.key} 超出预算:${originalTokens}>${sourceBudgetTokens}`)
+    }
     const transformed = originalTokens > sourceBudgetTokens && input.sourceTransformer
       ? await input.sourceTransformer({
           source: {

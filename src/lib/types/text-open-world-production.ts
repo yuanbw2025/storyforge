@@ -5,7 +5,9 @@ import type {
 } from './product-production'
 import type { WorldReferenceV1 } from './world-product-contracts'
 import type { WorldCapabilityArea } from '../registry/types'
-import type { TextOpenWorldEffectOperationV1 } from './text-open-world-effect'
+import type { TextOpenWorldActionDefinitionV1 } from './text-open-world-action'
+import type { TextOpenWorldConditionDefinitionV1 } from './text-open-world-condition'
+import type { TextOpenWorldEffectDefinitionV1, TextOpenWorldEffectOperationV1 } from './text-open-world-effect'
 
 /**
  * Stable, product-owned artifacts in the text-open-world production compiler.
@@ -2438,6 +2440,299 @@ export interface TextOpenWorldMapInteractionCatalogV1 {
   basisHash: string
   createdAt: number
   mapInteractionCatalogHash: string
+}
+
+export type TextOpenWorldQuestBindingDefinitionKindV1 =
+  | 'actor' | 'faction' | 'enemy' | 'encounter' | 'item' | 'skill'
+  | 'recipe' | 'vendor' | 'reward' | 'interaction' | 'action'
+
+/**
+ * P8F quest and gameplay binding document. It owns the exact cross-catalog
+ * references plus deterministic Action/Condition/Effect definitions. P9 may
+ * add scene-facing actions, but must not replace these gameplay results.
+ */
+export interface TextOpenWorldQuestDesignDocumentsV1 {
+  schema: 'storyforge.text-open-world-quest-design-documents'
+  version: 1
+  productType: 'text-open-world'
+  productInstanceKey: string
+  mainlineThreadHash: string
+  significantThreadsHash: string
+  regionNarrativePacksHash: string
+  questSkeletonsHash: string
+  contentRequirementManifestHash: string
+  progressionCatalogsHash: string
+  enemyEncounterCatalogHash: string
+  itemRewardCatalogHash: string
+  craftingEconomyCatalogHash: string
+  npcRuntimeCatalogHash: string
+  mapInteractionCatalogHash: string
+  requirementBindings: Array<{
+    requirementKey: string
+    kind: TextOpenWorldContentRequirementKindV1
+    consumerObjectiveKeys: string[]
+    definitionKind: TextOpenWorldQuestBindingDefinitionKindV1
+    definitionKeys: string[]
+  }>
+  quests: Array<{
+    key: string
+    order: number
+    type: 'mainline' | 'significant' | 'ordinary' | 'template'
+    ownerKind: 'global' | 'actor' | 'faction' | 'region' | 'location'
+    ownerKey: string | null
+    title: string
+    description: string
+    storylineKey: string | null
+    regionKeys: string[]
+    stageKeys: string[]
+    prerequisiteConditionKeys: string[]
+    rewardEffectKeys: string[]
+    rewardContractKey: string
+    claimActionKey: string
+    acceptActionKey: string
+    abandonActionKey: string | null
+    expirationActionKeys: string[]
+    lifecyclePolicy: 'protected-wait' | 'abandon-restart' | 'abandon-terminal'
+    timePolicy: 'waits' | 'timed'
+    expirationMinutes: number | null
+    repeatable: boolean
+    instantiationPolicy: 'session-start' | 'director'
+    initialStatus: 'locked' | 'available' | 'revealed'
+    estimatedMinutes: number
+    tags: string[]
+  }>
+  stages: Array<{
+    key: string
+    questKey: string
+    order: number
+    title: string
+    objectiveKeys: string[]
+    completionConditionKeys: string[]
+    completionActionKey: string
+  }>
+  objectives: Array<{
+    key: string
+    questKey: string
+    stageKey: string
+    order: number
+    title: string
+    description: string
+    successDescription: string
+    optional: boolean
+    requirementKeys: string[]
+    boundDefinitionKeys: string[]
+    supportActionKeys: string[]
+    interactionTimeCostMinutes: number
+    completionConditionKeys: string[]
+    completionActionKey: string
+  }>
+  conditions: TextOpenWorldConditionDefinitionV1[]
+  effects: TextOpenWorldEffectDefinitionV1[]
+  actions: TextOpenWorldActionDefinitionV1[]
+  catalogBindings: {
+    skills: Array<{
+      skillKey: string
+      useConditionKeys: string[]
+      effectKeys: string[]
+      actionKey: string | null
+      unlockQuestKey: string | null
+    }>
+    enemies: Array<{ enemyKey: string; dropTableKey: string }>
+    encounters: Array<{
+      encounterKey: string
+      questKeys: string[]
+      rewardContractKey: string
+      startActionKey: string
+      completionFlagKey: string
+    }>
+    items: Array<{
+      itemKey: string
+      useActionKey: string | null
+      equipActionKey: string | null
+      unequipActionKey: string | null
+      equipConditionKeys: string[]
+      effectKeys: string[]
+    }>
+    rewards: Array<{
+      rewardContractKey: string
+      conditionKeys: string[]
+      effectKeys: string[]
+      dropTableKeys: string[]
+      sourceQuestKey: string | null
+      sourceEncounterKey: string | null
+    }>
+    dropTables: Array<{
+      dropTableKey: string
+      conditionKeys: string[]
+      quantityEffectBindings: Array<{ itemKey: string; quantity: number; effectKey: string }>
+    }>
+    recipes: Array<{
+      recipeKey: string
+      requirementConditionKeys: string[]
+      craftActionKey: string
+      learnActionKey: string | null
+      learnQuestKey: string | null
+      consumeEffectKeys: string[]
+      outputEffectKeys: string[]
+    }>
+    vendors: Array<{
+      vendorKey: string
+      actorKey: string
+      factionKey: string | null
+      availabilityConditionKeys: string[]
+      buyActionKey: string
+      sellActionKey: string
+    }>
+    actors: Array<{ actorKey: string; questKeys: string[]; actionKeys: string[] }>
+    interactions: Array<{
+      interactionKey: string
+      actionKey: string
+      conditionKeys: string[]
+      effectKeys: string[]
+      questKeys: string[]
+    }>
+    edges: Array<{
+      edgeKey: string
+      forwardActionKey: string
+      reverseActionKey: string | null
+      conditionKeys: string[]
+      effectKeys: string[]
+    }>
+    fastTravelPoints: Array<{
+      fastTravelPointKey: string
+      unlockEffectKey: string | null
+      respawnActionKey: string
+    }>
+  }
+  coverage: {
+    requiredQuestKeys: string[]
+    finalizedQuestKeys: string[]
+    requiredObjectiveKeys: string[]
+    finalizedObjectiveKeys: string[]
+    requiredRequirementKeys: string[]
+    boundRequirementKeys: string[]
+    encounterKeys: string[]
+    encounterKeysWithRewardAndAction: string[]
+    catalogDefinitionKeys: string[]
+    referencedCatalogDefinitionKeys: string[]
+    orphanActionKeys: string[]
+    orphanEffectKeys: string[]
+    uncoveredRequirementKeys: []
+  }
+  governance: {
+    referenceOwner: 'deterministic-compiler'
+    objectiveSemanticsOwner: 'model-validated'
+    protectedStoriesWait: true
+    ordinaryFailureAllowed: true
+    criticalArrivalNeverSoleTrigger: true
+    allObjectivesHaveActions: true
+    allRewardsClaimableOnce: true
+    allTimedQuestsHaveExpirationCoverage: true
+    allCatalogBindingsResolved: true
+    sceneBindingsDeferred: true
+    questAndEncounterBindingsReady: true
+  }
+  basisHash: string
+  createdAt: number
+  questDesignDocumentsHash: string
+}
+
+/** P8F build-time regional director inventory. Presentation variants and
+ * scene prose are reserved for P9, while deck eligibility and budgets are
+ * already frozen and executable. */
+export interface TextOpenWorldDirectorDecksV1 {
+  schema: 'storyforge.text-open-world-director-decks'
+  version: 1
+  productType: 'text-open-world'
+  productInstanceKey: string
+  regionNarrativePacksHash: string
+  questDesignDocumentsHash: string
+  mapInteractionCatalogHash: string
+  rules: {
+    globalMaximumRevealed: number
+    globalMaximumActive: number
+    maximumQuestInstances: number
+    highIntensityStreakLimit: number
+    historyLimit: number
+    maximumSettlementIntervals: number
+    systemActionKey: string
+  }
+  decks: Array<{
+    regionKey: string
+    fixedQuestKeys: string[]
+    templateKeys: string[]
+    randomEventKeys: string[]
+    triggerKinds: Array<'arrival' | 'explore' | 'talk' | 'rest' | 'quest-complete' | 'time-batch' | 'activity'>
+    maximumRevealed: number
+    maximumActive: number
+    cooldownMinutes: number
+    blankWeight: number
+  }>
+  templates: Array<{
+    key: string
+    questKey: string
+    regionKeys: string[]
+    variantTextRequirementKeys: [string, string, string]
+    fingerprint: string
+    cooldownMinutes: number
+    conditionKeys: string[]
+    levelBand: { minimum: number; maximum: number }
+    category: 'help' | 'resource' | 'exploration' | 'conflict' | 'mystery'
+    intensity: number
+    weight: number
+    presentationBinding: { status: 'variant-text-unbound'; variantTextKeys: [] }
+  }>
+  randomEvents: Array<{
+    key: string
+    sourceSeedKey: string
+    title: string
+    description: string
+    kind: 'atmosphere' | 'resource' | 'encounter' | 'clue' | 'quest-upgrade'
+    regionKeys: string[]
+    locationKeys: string[]
+    actionKeys: string[]
+    effectKeys: string[]
+    conditionKeys: string[]
+    fingerprint: string
+    rumorRequirementKey: string | null
+    upgradeTemplateKey: string | null
+    intensity: number
+    weight: number
+    cooldownMinutes: number
+  }>
+  regionRules: Array<{
+    regionKey: string
+    settlementIntervalMinutes: number
+    initialPressure: number
+    minimumPressure: number
+    maximumPressure: number
+    driftPerInterval: number
+    stateBands: Array<{ key: string; minimumPressure: number }>
+  }>
+  coverage: {
+    requiredRegionKeys: string[]
+    coveredRegionKeys: string[]
+    ordinaryQuestKeys: string[]
+    fixedQuestKeys: string[]
+    templateQuestKeys: string[]
+    coveredTemplateQuestKeys: string[]
+    randomEventSeedKeys: string[]
+    coveredRandomEventSeedKeys: string[]
+    emptyPlayableDeckRegionKeys: []
+  }
+  governance: {
+    regionalBudgetsBounded: true
+    protectedStoriesExcluded: true
+    mainlinePressureDisabled: true
+    duplicateFingerprintsRejected: true
+    highIntensityStreakBounded: true
+    runtimeHistorySessionOwned: true
+    presentationVariantsDeferred: true
+    directorRuntimeReadyExceptPresentation: true
+  }
+  basisHash: string
+  createdAt: number
+  directorDecksHash: string
 }
 
 export const TEXT_OPEN_WORLD_PRODUCTION_STAGES_V1 = [

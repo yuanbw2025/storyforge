@@ -928,6 +928,8 @@ export interface ContextSource {
   budgetTokens: number
   /** NS-1: assembleContext 总预算裁剪时不得整段删除。 */
   protectedFromTrim?: boolean
+  /** Structured contract sources must remain byte-complete; overflow fails instead of slicing invalid JSON. */
+  atomic?: boolean
   /** Source can use a caller-provided continuity snapshot without reading a Chapter row. */
   acceptsDetachedContinuitySnapshot?: boolean
   requiresWorldGroupId?: boolean

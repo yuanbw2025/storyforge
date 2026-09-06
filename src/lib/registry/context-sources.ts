@@ -204,6 +204,9 @@ async function readTextOpenWorldNpcRuntimeInputContextV1(input: AssembleContextI
 async function readTextOpenWorldMapInteractionInputContextV1(input: AssembleContextInput): Promise<string> {
   return (await import('../open-world/map-interaction-catalog-production')).readTextOpenWorldMapInteractionInputContextV1(input)
 }
+async function readTextOpenWorldQuestFinalizeInputContextV1(input: AssembleContextInput): Promise<string> {
+  return (await import('../open-world/quest-finalize-production')).readTextOpenWorldQuestFinalizeInputContextV1(input)
+}
 async function readTtrpgGmRuntimeContextV1(input: AssembleContextInput): Promise<string> {
   return (await import('../ttrpg/gm-context')).readTtrpgGmRuntimeContextV1(input)
 }
@@ -1783,6 +1786,19 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     enabled: input => Number.isInteger(input.productProductionId)
       && Number.isInteger(input.productBuildId),
     read: readTextOpenWorldMapInteractionInputContextV1,
+  },
+  {
+    key: 'text-open-world.quest-finalize-input',
+    label: '文字开放世界任务最终化与地区导演生产输入',
+    scope: 'project',
+    layer: 'L0',
+    ownerFrom: 'work',
+    budgetTokens: 180_000,
+    protectedFromTrim: true,
+    atomic: true,
+    enabled: input => Number.isInteger(input.productProductionId)
+      && Number.isInteger(input.productBuildId),
+    read: readTextOpenWorldQuestFinalizeInputContextV1,
   },
   {
     key: 'product-production.quality-feedback',

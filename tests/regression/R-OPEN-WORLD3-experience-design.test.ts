@@ -104,6 +104,12 @@ import {
   type TextOpenWorldMapInteractionInputContextV1,
   type TextOpenWorldMapInteractionModelRunnerV1,
 } from '../../src/lib/open-world/map-interaction-catalog-production'
+import {
+  createTextOpenWorldQuestFinalizeExecutorV1,
+  validateTextOpenWorldQuestFinalizeArtifactsV1,
+  type TextOpenWorldQuestFinalizeInputContextV1,
+  type TextOpenWorldQuestFinalizeModelRunnerV1,
+} from '../../src/lib/open-world/quest-finalize-production'
 import { TEXT_OPEN_WORLD_EFFECT_OPERATIONS_V1 } from '../../src/lib/types/text-open-world-effect'
 import type {
   TextOpenWorldGameplayRulesetSkeletonV1,
@@ -119,6 +125,8 @@ import type {
   TextOpenWorldCraftingEconomyCatalogV1,
   TextOpenWorldNpcRuntimeCatalogV1,
   TextOpenWorldMapInteractionCatalogV1,
+  TextOpenWorldQuestDesignDocumentsV1,
+  TextOpenWorldDirectorDecksV1,
   TextOpenWorldSignificantThreadsV1,
 } from '../../src/lib/types'
 import {
@@ -2204,6 +2212,112 @@ async function executeMapInteraction(
   })
 }
 
+function questFinalizeRunner(options: {
+  omitObjective?: boolean
+  excessiveDeckBudget?: boolean
+  invalidEventUpgrade?: boolean
+  prematureField?: boolean
+} = {}): TextOpenWorldQuestFinalizeModelRunnerV1 {
+  return async input => {
+    const context = JSON.parse(input.contextText) as TextOpenWorldQuestFinalizeInputContextV1
+    const templates = context.questSkeletons.quests.filter(quest => quest.type === 'template')
+    const randomSeeds = context.regionNarrativePacks.packs.flatMap(pack => pack.randomEventSeeds.map(seed => ({ pack, seed })))
+    const objectives = context.objectiveBindingDemands.map((demand, index) => ({
+      objectiveNumber: demand.objectiveNumber,
+      description: `通过${context.questSkeletons.objectives[index]!.title}完成可验证的玩家行动，并保留来自既定目录的结果。`,
+      successDescription: `${context.questSkeletons.objectives[index]!.successDescription}，系统已经记录这一结果。`,
+      timeCostMinutes: index % 3 === 0 ? 10 : 0,
+      ...(options.prematureField && index === 0 ? { actionKey: 'action.forged' } : {}),
+    }))
+    return {
+      output: JSON.stringify({
+        schema: 'storyforge.text-open-world-quest-finalize-draft', version: 1,
+        quests: context.questSkeletons.quests.map((quest, index) => ({
+          questNumber: index + 1,
+          description: `${quest.title}围绕既定故事来源展开，并通过连续目标形成可游玩的任务体验。`,
+          tags: [quest.type, `region-count-${quest.regionKeys.length}`],
+        })),
+        objectives: options.omitObjective ? objectives.slice(0, -1) : objectives,
+        decks: context.mapInteractionCatalog.regions.map((_region, index) => ({
+          regionNumber: index + 1,
+          triggerKinds: ['explore', 'talk', 'quest-complete'],
+          maximumRevealed: 3,
+          maximumActive: options.excessiveDeckBudget && index === 0 ? 4 : 2,
+          cooldownMinutes: 240,
+          blankWeight: 20,
+        })),
+        templates: templates.map((_template, index) => ({
+          templateNumber: index + 1, category: index % 2 === 0 ? 'help' : 'exploration',
+          intensity: 2, weight: 40, cooldownMinutes: 720,
+        })),
+        randomEvents: randomSeeds.map((_source, index) => ({
+          seedNumber: index + 1,
+          description: `地区事件${index + 1}根据当地生活与冲突提供一次不阻断主线的短反馈。`,
+          kind: options.invalidEventUpgrade && index === 0 ? 'quest-upgrade' : index === 0 ? 'resource' : 'atmosphere',
+          intensity: 2, weight: 30, cooldownMinutes: 360,
+          upgradeTemplateNumber: null,
+        })),
+      }),
+      bindingReceipt: bindingReceipt(input.requirementKey), usage: null,
+    }
+  }
+}
+
+async function questFinalizeFixture() {
+  const input = await npcRuntimeFixture()
+  const npcResult = await executeNpcRuntime(input)
+  await acceptTaskArtifacts(input, npcResult.artifacts, 'P8-npc-runtime')
+  const plan = await createTextOpenWorldProductionPlanV1({
+    buildNumber: input.build.buildNumber, controlEpoch: input.build.controlEpoch,
+    briefHash: input.briefRow.briefHash, brief: input.brief,
+  })
+  const mapTask = plan.tasks.find(item => item.taskKey === 'p8.catalog.map-interactions')!
+  const mapAssembled = await assembleContext({
+    projectId: input.scope.projectId, scope: input.scope,
+    sourceKeys: ['text-open-world.map-interaction-input'],
+    productProductionId: input.production.id!, productBuildId: input.build.id!,
+    inputBudgetMaxTokens: mapTask.budgetReservation.inputTokens,
+  })
+  const mapResult = await executeMapInteraction({
+    ...input, task: mapTask, mapInteractionContextText: mapAssembled.text,
+    mapInteractionContext: JSON.parse(mapAssembled.text) as TextOpenWorldMapInteractionInputContextV1,
+    mapInteractionContextEvidence: mapAssembled.sourceEvidence,
+  })
+  await acceptTaskArtifacts(input, mapResult.artifacts, 'P8-map-interaction')
+  const task = plan.tasks.find(item => item.taskKey === 'p8f.quest-finalize')!
+  const assembled = await assembleContext({
+    projectId: input.scope.projectId, scope: input.scope,
+    sourceKeys: ['text-open-world.quest-finalize-input'],
+    productProductionId: input.production.id!, productBuildId: input.build.id!,
+    inputBudgetTokens: task.budgetReservation.inputTokens,
+  })
+  if (assembled.sourceEvidence[0]?.delivery !== 'full') {
+    throw new Error(`QuestFinalize Context不得截断:${JSON.stringify(assembled.sourceEvidence[0])};inputBudget=${assembled.inputBudget}`)
+  }
+  return {
+    ...input, task, questFinalizeContextText: assembled.text,
+    questFinalizeContext: JSON.parse(assembled.text) as TextOpenWorldQuestFinalizeInputContextV1,
+    questFinalizeContextEvidence: assembled.sourceEvidence,
+  }
+}
+
+async function executeQuestFinalize(
+  input: Awaited<ReturnType<typeof questFinalizeFixture>>,
+  runModel: TextOpenWorldQuestFinalizeModelRunnerV1 = questFinalizeRunner(),
+) {
+  return createTextOpenWorldQuestFinalizeExecutorV1({ runModel, now: () => NOW + 19 })({
+    scope: input.scope, productionId: input.production.id!, buildId: input.build.id!,
+    buildNumber: input.build.buildNumber, controlEpoch: input.build.controlEpoch,
+    planHash: input.planHash, task: input.task, attempt: 1,
+    idempotencyKey: await hashProductProductionValueV2('p8f-quest-finalize'),
+    contextText: input.questFinalizeContextText, inputArtifacts: [],
+    capabilityBindings: input.task.capabilityRequirementKeys.map(requirementKey => ({
+      requirementKey, bindingHash: CAPABILITY_HASH, adapterId: 'configured-text.v1',
+    })),
+    signal: new AbortController().signal,
+  })
+}
+
 describe('R-OPEN-WORLD3 · P2 GameBrief / ExperienceContract / ProtagonistAsset', () => {
   beforeEach(async () => { await db.delete(); await db.open() })
   afterAll(() => db.close())
@@ -3708,4 +3822,96 @@ describe('R-OPEN-WORLD3 · P8 MapInteractionCatalog', () => {
     await expect(validateTextOpenWorldMapInteractionCatalogV1({ artifact, context: input.mapInteractionContext }))
       .rejects.toThrow(/拓扑、坐标、交互、旅行、快旅或提前到达保护被篡改/)
   }, 180_000)
+})
+
+describe('R-OPEN-WORLD3 · P8F QuestFinalize / EncounterFinalize', () => {
+  beforeEach(async () => { await db.delete(); await db.open() })
+  afterAll(() => db.close())
+
+  it('把任务骨架、地区牌组和全部玩法目录闭合为可运行任务/遭遇绑定', async () => {
+    const input = await questFinalizeFixture()
+    expect(CONTEXT_SOURCE_BY_KEY.get('text-open-world.quest-finalize-input')).toMatchObject({
+      layer: 'L0', ownerFrom: 'work', protectedFromTrim: true,
+    })
+    expect(getAgentSkillV1('text-open-world.production.quest-finalize.v1')).toMatchObject({
+      contextSourceKeys: ['text-open-world.quest-finalize-input'],
+      writeTargets: [{ table: 'productBuildArtifacts', fields: ['payloadJson'] }],
+    })
+    expect(input.questFinalizeContextEvidence).toEqual([
+      expect.objectContaining({ key: 'text-open-world.quest-finalize-input', status: 'included', delivery: 'full' }),
+    ])
+    await expect(assembleContext({
+      projectId: input.scope.projectId, scope: input.scope,
+      sourceKeys: ['text-open-world.quest-finalize-input'],
+      productProductionId: input.production.id!, productBuildId: input.build.id!,
+      inputBudgetTokens: 1_000,
+    })).rejects.toThrow(/原子来源 text-open-world\.quest-finalize-input 超出预算/)
+    expect(input.questFinalizeContext.objectiveBindingDemands).toHaveLength(input.questFinalizeContext.questSkeletons.objectives.length)
+
+    const result = await executeQuestFinalize(input)
+    const questArtifact = result.artifacts.find(artifact => artifact.artifactKey === 'text-open-world.quest-design-documents')!.payload as TextOpenWorldQuestDesignDocumentsV1
+    const directorArtifact = result.artifacts.find(artifact => artifact.artifactKey === 'text-open-world.director-decks')!.payload as TextOpenWorldDirectorDecksV1
+    expect(result.passedGateIds).toEqual(input.task.acceptanceGateIds)
+    expect(result.usage).toMatchObject({ modelCalls: 1, mediaCalls: 0 })
+    expect(questArtifact.coverage.finalizedQuestKeys).toEqual(questArtifact.coverage.requiredQuestKeys)
+    expect(questArtifact.coverage.finalizedObjectiveKeys).toEqual(questArtifact.coverage.requiredObjectiveKeys)
+    expect(questArtifact.coverage.boundRequirementKeys).toEqual(questArtifact.coverage.requiredRequirementKeys)
+    expect(questArtifact.requirementBindings.every(binding => binding.definitionKeys.length > 0)).toBe(true)
+    expect(questArtifact.objectives.every(objective => objective.completionActionKey
+      && objective.completionConditionKeys.length > 0
+      && objective.supportActionKeys.every(key => questArtifact.actions.some(action => action.key === key)))).toBe(true)
+    expect(questArtifact.quests.filter(quest => quest.type === 'mainline' || quest.type === 'significant')
+      .every(quest => quest.lifecyclePolicy === 'protected-wait' && quest.timePolicy === 'waits' && quest.abandonActionKey === null)).toBe(true)
+    expect(questArtifact.quests.filter(quest => quest.timePolicy === 'timed')
+      .every(quest => quest.expirationActionKeys.length === quest.stageKeys.length + 1)).toBe(true)
+    expect(questArtifact.catalogBindings.encounters.every(binding => binding.startActionKey && binding.rewardContractKey)).toBe(true)
+    expect(questArtifact.actions.filter(action => action.category === 'combat-basic-attack')).toHaveLength(1)
+    expect(questArtifact.actions.filter(action => action.category === 'combat-reward-action')).toHaveLength(1)
+    expect(questArtifact.actions.filter(action => action.category === 'respawn')).toHaveLength(2)
+    expect(questArtifact.actions.find(action => action.category === 'craft')).toMatchObject({ timeCostMinutes: 0 })
+    expect(questArtifact.actions.filter(action => action.category === 'objective-action')
+      .every(action => action.timeCostMinutes === 0 && action.successEffectKeys.length === 1)).toBe(true)
+    expect(directorArtifact.coverage.coveredRegionKeys).toEqual(directorArtifact.coverage.requiredRegionKeys)
+    expect(new Set(directorArtifact.coverage.coveredTemplateQuestKeys)).toEqual(new Set(directorArtifact.coverage.templateQuestKeys))
+    expect(new Set(directorArtifact.coverage.coveredRandomEventSeedKeys)).toEqual(new Set(directorArtifact.coverage.randomEventSeedKeys))
+    expect(directorArtifact.templates.every(template => template.variantTextRequirementKeys.length === 3
+      && template.presentationBinding.status === 'variant-text-unbound')).toBe(true)
+    expect(directorArtifact.decks.every(deck => deck.maximumActive <= deck.maximumRevealed)).toBe(true)
+    await expect(validateTextOpenWorldQuestFinalizeArtifactsV1({
+      artifacts: { questDesignDocuments: questArtifact, directorDecks: directorArtifact },
+      context: input.questFinalizeContext,
+    })).resolves.toEqual({ questDesignDocuments: questArtifact, directorDecks: directorArtifact })
+  }, 300_000)
+
+  it('拒绝目标漏项、越界牌组预算、非法模板升级和模型越权Action字段', async () => {
+    const input = await questFinalizeFixture()
+    await expect(executeQuestFinalize(input, questFinalizeRunner({ omitObjective: true })))
+      .rejects.toThrow(/objectives必须与\d+项目标一一对应/)
+    await expect(executeQuestFinalize(input, questFinalizeRunner({ excessiveDeckBudget: true })))
+      .rejects.toThrow(/maximumActive必须是1到3之间的整数/)
+    await expect(executeQuestFinalize(input, questFinalizeRunner({ invalidEventUpgrade: true })))
+      .rejects.toThrow(/升级模板与地区或类型不一致/)
+    await expect(executeQuestFinalize(input, questFinalizeRunner({ prematureField: true })))
+      .rejects.toThrow(/字段不精确/)
+  }, 300_000)
+
+  it('拒绝重算Hash后改写任务保护、目录绑定、Director预算或注入伪造Action', async () => {
+    const input = await questFinalizeFixture()
+    const result = await executeQuestFinalize(input)
+    const questArtifact = structuredClone(result.artifacts.find(artifact => artifact.artifactKey === 'text-open-world.quest-design-documents')!.payload as TextOpenWorldQuestDesignDocumentsV1)
+    const directorArtifact = structuredClone(result.artifacts.find(artifact => artifact.artifactKey === 'text-open-world.director-decks')!.payload as TextOpenWorldDirectorDecksV1)
+    questArtifact.quests.find(quest => quest.type === 'mainline')!.lifecyclePolicy = 'abandon-terminal'
+    questArtifact.requirementBindings[0]!.definitionKeys = ['definition.forged']
+    questArtifact.actions.push({ ...questArtifact.actions[0]!, key: 'action.forged' })
+    const { questDesignDocumentsHash: _questHash, ...questBody } = questArtifact
+    questArtifact.questDesignDocumentsHash = await hashProductProductionValueV2(questBody)
+    directorArtifact.rules.globalMaximumActive = 999
+    directorArtifact.questDesignDocumentsHash = questArtifact.questDesignDocumentsHash
+    const { directorDecksHash: _directorHash, ...directorBody } = directorArtifact
+    directorArtifact.directorDecksHash = await hashProductProductionValueV2(directorBody)
+    await expect(validateTextOpenWorldQuestFinalizeArtifactsV1({
+      artifacts: { questDesignDocuments: questArtifact, directorDecks: directorArtifact },
+      context: input.questFinalizeContext,
+    })).rejects.toThrow(/跨Artifact引用未闭合|固定引用、运行定义、预算或Hash被篡改/)
+  }, 300_000)
 })

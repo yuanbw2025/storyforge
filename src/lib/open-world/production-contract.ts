@@ -157,7 +157,7 @@ export const TEXT_OPEN_WORLD_PRODUCTION_TASK_CONTRACTS_V1: TextOpenWorldProducti
   }),
   modelTask({
     stage: 'P2', taskKey: 'p2.presentation-profile', objective: '冻结UI主题、消费槽、媒资层级和文字降级表现口径。',
-    skillId: 'text-open-world.production.presentation-profile.v1', recommendedModelCalls: 2,
+    skillId: 'text-open-world.production.presentation-profile.v1', recommendedModelCalls: 1,
     dependsOn: ['p2.experience-design'],
     inputArtifactKeys: ['text-open-world.game-brief', 'text-open-world.experience-contract'],
     outputArtifactKeys: ['text-open-world.presentation-profile'],
@@ -375,14 +375,15 @@ export const TEXT_OPEN_WORLD_PRODUCTION_TASK_CONTRACTS_V1: TextOpenWorldProducti
   }),
   modelTask({
     stage: 'P8F', taskKey: 'p8f.quest-finalize', objective: '把任务骨架绑定到真实Action、目录、奖励、失败和时间合同。',
-    skillId: 'text-open-world.production.quest-finalize.v1', recommendedModelCalls: 10,
+    skillId: 'text-open-world.production.quest-finalize.v1', recommendedModelCalls: 11,
     dependsOn: [
-      'p5.mainline', 'p6.significant-threads', 'p8.quest-skeletons',
+      'p5.mainline', 'p6.significant-threads', 'p7.region-narrative-packs', 'p8.quest-skeletons',
       'p8.catalog.progression', 'p8.catalog.encounters', 'p8.catalog.items-rewards',
       'p8.catalog.crafting-economy', 'p8.catalog.npc-runtime', 'p8.catalog.map-interactions',
     ],
     inputArtifactKeys: [
       'text-open-world.mainline-thread', 'text-open-world.significant-threads',
+      'text-open-world.region-narrative-packs',
       'text-open-world.quest-skeletons', 'text-open-world.content-requirement-manifest',
       'text-open-world.progression-catalogs', 'text-open-world.enemy-encounter-catalog',
       'text-open-world.item-reward-catalog', 'text-open-world.crafting-economy-catalog',

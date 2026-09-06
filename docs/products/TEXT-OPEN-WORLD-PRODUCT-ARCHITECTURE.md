@@ -1,6 +1,6 @@
 # AI 主导文字开放世界游戏 · 整体产品与游戏系统施工规格
 
-> 规格版本：1.1.28
+> 规格版本：1.1.29
 > 生效日期：2026-09-06
 > 文档层级：L2 文字开放世界整体产品施工入口
 > 当前状态：目标架构已冻结并进入分阶段实现；实际完成度以完整开发清单为准
@@ -236,7 +236,9 @@ O10 Build Assembly / Replay / Preview / ProductRelease
 
 当前P8任务骨架已按这条边界落地：同一Build中已验收的Brief、体验、玩法规则、主线、重要故事和地区生态被投影为确定性的Quest Source，7个主线Stage、6个重要故事Stage、6个普通任务种子和4个地区模板各生成一个且只能生成一个骨架。模型只负责故事动机、阶段目的、玩家Objective与语义需求；代码固定任务生命周期、显式启动、受保护故事等待，以及任务/Stage/Objective的运行绑定为空。同步生成的`ContentRequirementManifest`覆盖全部Objective和地区角色、势力、地点交互需求，为六类Gameplay Catalog和`QuestFinalize`分配owner；因此后续目录能够按需求生产真实定义，而任务不会引用尚不存在的敌人、物品、奖励、NPC或Action。
 
-P8前三类Gameplay Catalog也已落地，并共享已验收QuestSkeleton而不是仅凭需求标题猜测。Progression Catalog形成完整20级经验/属性曲线、初始/等级/任务技能及攻击公式计划；Enemy/Encounter Catalog把所有战斗Objective和地区基础供给转换成有稳定键、确定性等级数值与失败恢复策略的敌人和遭遇；Item/Reward Catalog兑现初始物品及任务物品需求，为每个任务、遭遇和敌人建立奖励或掉落来源，并把7段主线奖励精确分配到1→5级所需的1600经验。三类目录仍不创建Action、Effect、Condition或正式Quest绑定，这些跨模块引用只能在P8F一次性最终化后进入G2运行包。
+P8六类Gameplay Catalog均已落地，并共享已验收QuestSkeleton而不是仅凭需求标题猜测。Progression形成20级曲线、技能及公式；Enemy/Encounter兑现战斗Objective与地区基础遭遇；Item/Reward形成任务/遭遇奖励、掉落与主线1→5级1600经验闭环；Crafting/Economy形成配方、商店、定价、库存与反套利约束；NPC Runtime形成角色/势力、重要Agent和普通规则角色、日程、态度与功能替代；Map Interaction形成完整拓扑、地点交互、旅行、快旅和程序SVG布局。六类目录在P8均保持运行引用unbound，避免各目录自建一套Action或伪造跨模块键。
+
+P8F现已把上述目录与23个任务骨架一次性最终化为`QuestDesignDocuments`和`DirectorDecks`。模型不能编造运行键、公式或结算结果，只负责任务/Objective可读语义、模板类别/强度/权重和随机事件包装；代码从已验收目录生成所有Condition、Effect、Action，并建立任务、目标、奖励、战斗、技能、道具、配方、商店、NPC、地图、旅行、快旅、复活和地区演化的双向真实引用。主线/重要故事仍为受保护等待，不进入区域发牌压力；普通任务可放弃重接或按时限过期。Director在Build时冻结每个地区的固定任务、模板、随机事件、冷却、并发、强度连续限制和空白牌；P9只需补三类交互的场景表现与模板文字变体，不得另建第二套结果。
 
 ### 2.4 非叙事生产 Skill
 
@@ -2702,6 +2704,7 @@ Session中的高频状态优先作为Event和可重建Projection存在，不建�
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| 1.1.29 | 2026-09-07 | 落地P8F QuestFinalize/EncounterFinalize与地区Director冻结：11件已验收上游以完整Hash链原子输入，模型只写受约束的任务/目标/发牌语义，代码生成全部Quest/Stage/Objective生命周期、Condition/Effect/Action、奖励、战斗、物品、制作、商店、NPC、地图、旅行、快旅、复活和世界演化定义及双向引用；Director按区域冻结固定任务、模板、随机事件、冷却、并发上限和空白牌，保护故事排除于发牌压力；同时修复正式生产任务实际输入预算传递，为不可切分JSON Context增加atomic超额失败关闭，保持完整Build推荐总调用150次不变 |
 | 1.1.28 | 2026-09-07 | 落地P8 Map Interaction Catalog：从完整Region/Location/Edge/FastTravel骨架、地区生活计划和任务地点交互需求生成全地点可点击目录与确定性SVG布局；模型只负责提前到达安全的交互语义和候选选择，代码保持拓扑、知识披露、旅行时间、快旅解锁/复活点和不靠抵达推进关键故事的规则，所有Action/Condition/Effect/Scene/Quest运行引用继续留待P8F/P9真实绑定 |
 | 1.1.27 | 2026-09-07 | 落地P8 NPC Runtime Catalog：把地区/任务角色势力需求及商店服务预留编译为Actor/Faction候选，人物小传保持整体文本，代码确定主线/重要Agent维护和保护、普通NPC四时段规则运行与可死亡、功能服务替代但独特内容不继承，以及道德+阵营亲合度三档态度；对话、Scene和Action继续留待后序真实绑定 |
 | 1.1.26 | 2026-09-07 | 落地P8 Crafting/Economy Catalog：从已验收玩法、地区、任务、需求与物品奖励目录生成任务所需及每区保底的配方/商店；模型只负责语义和候选选择，代码固定单货币、制作数量、整数基点价格、普通无限/装备限量库存、Actor服务预留、全地区覆盖、物品来源/消耗闭环与无风险套利阻断，全部Action/Effect/Condition/Actor正式引用保持unbound等待后序装配 |
