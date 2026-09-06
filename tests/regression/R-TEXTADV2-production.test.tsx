@@ -8,6 +8,10 @@ import {
   parseTextAdventureQualityReviewArtifactV1,
   parseTextAdventureSystemsArtifactV1,
 } from '../../src/lib/adventure/production-artifacts'
+import {
+  planTextAdventureNarrativeLocationsV1,
+  validateTextAdventureNarrativeLocationPlanV1,
+} from '../../src/lib/adventure/narrative-location-plan'
 import { db } from '../../src/lib/db/schema'
 import { draftProductProductionBriefV3, suggestProductStartingPoints } from '../../src/lib/product-production/consultation'
 import { hashProductProductionValueV2 } from '../../src/lib/product-production/hash'
@@ -66,6 +70,9 @@ describe('R-TEXTADV2-production · 文字冒险正式生产契约与工作台', 
       story: expect.any(Array), characters: expect.any(Array), locations: expect.any(Array),
       items: expect.any(Array), quests: expect.any(Array), lore: expect.any(Array),
     })
+    expect(brief.completionContract.requiredGateIds).toEqual(expect.arrayContaining([
+      'product.adventure.world-actions', 'product.adventure.progression',
+    ]))
     const briefHash = await hashProductProductionValueV2(brief)
     const plan = await createProductProductionPlanV3({ buildNumber: 1, briefHash, brief })
     const taskByKey = new Map(plan.tasks.map(task => [task.taskKey, task]))
@@ -93,6 +100,8 @@ describe('R-TEXTADV2-production · 文字冒险正式生产契约与工作台', 
       outputArtifactKeys: ['quality.adventure-review'],
     })
     expect(taskByKey.get('media.requirements')?.dependsOn).toEqual(['content.adventure-quality-review'])
+    expect(taskByKey.get('integration.package')?.failurePolicy).toBe('pause')
+    expect(taskByKey.get('qa.release')?.failurePolicy).toBe('pause')
     expect(taskByKey.get('integration.package')?.inputArtifactKeys).toEqual(expect.arrayContaining([
       'content.adventure-architecture', 'content.adventure-side-quests',
       'content.adventure-ambient-events', 'quality.adventure-review',
@@ -143,6 +152,32 @@ describe('R-TEXTADV2-production · 文字冒险正式生产契约与工作台', 
       },
       issues: [], passed: true,
     })).toThrow(/passed 与分数\/阻塞问题不一致/)
+  })
+
+  it('把主线场景单调分布到地点，并拒绝选项、正文与运行地点互相错位', () => {
+    expect(planTextAdventureNarrativeLocationsV1(12, 8).map(item => item.locationIndex)).toEqual([
+      0, 0, 1, 2, 2, 3, 4, 4, 5, 6, 6, 7,
+    ])
+    const nodes = [
+      { key: 'scene.001', kind: 'entry' as const, title: '北港开场', summary: '你仍在北港渔村。', conditionJson: '{}', effectsJson: '[]', successorKeys: ['scene.002'] },
+      { key: 'scene.002', kind: 'scene' as const, title: '北港告别', summary: '北港渔村的灯火逐一亮起。', conditionJson: '{}', effectsJson: '[]', successorKeys: ['scene.003'] },
+      { key: 'scene.003', kind: 'scene' as const, title: '工坊遗迹', summary: '你抵达坍塌工坊。', conditionJson: '{}', effectsJson: '[]', successorKeys: ['ending.001'] },
+      { key: 'ending.001', kind: 'ending' as const, title: '结局', summary: '旅程结束。', conditionJson: '{}', effectsJson: '[]', successorKeys: [] },
+    ]
+    const beats = nodes.map((node, index) => ({
+      beatKey: `beat.${index}`, nodeKey: node.key, kind: 'narration' as const,
+      speakerKey: null, text: node.summary, order: 0,
+    }))
+    const choices = [
+      { choiceKey: 'choice.001', sourceNodeKey: 'scene.001', text: '前往坍塌工坊确认记录', description: '', unavailableReason: '', targetNodeKey: 'scene.002', displayConditionJson: '{}', availableConditionJson: '{}', effectsJson: '[]', tags: [], order: 0 },
+      { choiceKey: 'choice.002', sourceNodeKey: 'scene.002', text: '进入坍塌工坊', description: '', unavailableReason: '', targetNodeKey: 'scene.003', displayConditionJson: '{}', availableConditionJson: '{}', effectsJson: '[]', tags: [], order: 0 },
+      { choiceKey: 'choice.003', sourceNodeKey: 'scene.003', text: '接受结局', description: '', unavailableReason: '', targetNodeKey: 'ending.001', displayConditionJson: '{}', availableConditionJson: '{}', effectsJson: '[]', tags: [], order: 0 },
+    ]
+    expect(validateTextAdventureNarrativeLocationPlanV1({
+      nodes, beats, choices, locationTitles: ['北港渔村', '坍塌工坊'],
+    })).toEqual([
+      'choice.001 提到「坍塌工坊」但目标节点位于「北港渔村」',
+    ])
   })
 
   it('向非技术作者渐进展示空间、任务、系统和边界确认', async () => {

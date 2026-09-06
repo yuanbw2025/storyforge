@@ -502,7 +502,7 @@ export async function createProductProductionPlanV3(input: {
     capabilityRequirementKeys: transcodeCapabilities, concurrencyGroup: 'deterministic',
     subjectLockKeys: integrationArtifactKeys, priority: 50,
     budgetReservation: reservation({ inputTokens: perInput, durationMs: perDuration }), maxAttempts: 1,
-    timeoutMs: 120_000, failurePolicy: 'fail-build', fallbackTaskKey: null,
+    timeoutMs: 120_000, failurePolicy: 'pause', fallbackTaskKey: null,
     acceptanceGateIds: ['package.protocol', 'package.graph', 'package.media-bindings'],
   }))
   tasks.push(productionTask({
@@ -512,7 +512,7 @@ export async function createProductProductionPlanV3(input: {
     requirementKeys: [], capabilityRequirementKeys: [], concurrencyGroup: 'deterministic',
     subjectLockKeys: ['quality.report'], priority: 10,
     budgetReservation: reservation({ durationMs: perDuration }), maxAttempts: 1,
-    timeoutMs: 120_000, failurePolicy: 'fail-build', fallbackTaskKey: null,
+    timeoutMs: 120_000, failurePolicy: 'pause', fallbackTaskKey: null,
     acceptanceGateIds: brief.completionContract.requiredGateIds,
   }))
   return parseProductProductionPlanV3({

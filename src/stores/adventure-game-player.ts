@@ -10,7 +10,7 @@ import {
   readProductRuntimeStateVersion,
   verifyProductRuntimeCheckpoint,
 } from '../lib/adventure/runtime-api'
-import { availableAdventureActions } from '../lib/adventure/runtime'
+import { adventureNarrativeActionContext, availableAdventureActions } from '../lib/adventure/runtime'
 import {
   adoptAdventureRuntimeCandidateV1,
   cancelAdventureRuntimeRunV1,
@@ -189,11 +189,19 @@ export const useAdventureGamePlayerStore = create<AdventurePlayerState>((set, ge
     const selectedSessionId = desired != null && sessions.some(item => item.id === desired)
       ? desired
       : explicitlySelected ? null : sessions[0]?.id ?? null
-    set({ releases, sessions, selectedSessionId })
-    if (selectedSessionId != null) await refresh()
-    else {
+    if (selectedSessionId != null) {
+      const resolved = await details(scope, selectedSessionId, {
+        sessionId: get().selectedSourceSessionId,
+        resolver: get().selectedMediaResolver,
+      })
+      // Publish the new session and its matching resolver together. Exposing
+      // the next sessionId with the previous session's resolver lets React
+      // start a stale preload between these two states.
+      set({ releases, sessions, selectedSessionId, ...resolved })
+    } else {
       get().selectedMediaResolver?.dispose()
       set({
+        releases, sessions, selectedSessionId: null,
         events: [], checkpoints: [], recoverableRunIds: [], runtimeState: structuredClone(EMPTY_PRODUCT_RUNTIME_STATE),
         selectedManifest: null, selectedMediaResolver: null, selectedSourceSessionId: null,
       })
@@ -222,16 +230,25 @@ export const useAdventureGamePlayerStore = create<AdventurePlayerState>((set, ge
       finally { set({ loading: false }) }
     },
     select: async sessionId => {
-      set({ selectedSessionId: sessionId, loading: true, error: '', pendingIntent: null, generatedNarrative: null })
+      set({ loading: true, error: '', pendingIntent: null, generatedNarrative: null })
       try {
         if (sessionId == null) {
           get().selectedMediaResolver?.dispose()
           set({
+            selectedSessionId: null,
             events: [], checkpoints: [], recoverableRunIds: [], runtimeState: structuredClone(EMPTY_PRODUCT_RUNTIME_STATE),
             selectedManifest: null, selectedMediaResolver: null, selectedSourceSessionId: null,
           })
         }
-        else await refresh()
+        else {
+          const scope = get().scope
+          if (!scope) throw new Error('当前 World/Work 尚未就绪。')
+          const resolved = await details(scope, sessionId, {
+            sessionId: get().selectedSourceSessionId,
+            resolver: get().selectedMediaResolver,
+          })
+          set({ selectedSessionId: sessionId, ...resolved })
+        }
       } catch (error) { set({ error: error instanceof Error ? error.message : String(error) }) }
       finally { set({ loading: false }) }
     },
@@ -394,6 +411,6 @@ export function selectAdventureActions(state: AdventurePlayerState) {
   return availableAdventureActions(
     state.selectedManifest.adventure,
     state.runtimeState.adventure,
-    state.runtimeState.narrative?.variables,
+    adventureNarrativeActionContext(state.runtimeState.narrative),
   )
 }

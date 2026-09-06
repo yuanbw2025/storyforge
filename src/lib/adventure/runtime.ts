@@ -943,6 +943,20 @@ export function adventureEffectiveAbilityValue(
       .reduce((sum, modifier) => sum + modifier.delta, 0) ?? 0), base)
 }
 
+/**
+ * Adds runtime-owned narrative position to the read-only condition context.
+ * Product content cannot override this namespace; callers that omit the
+ * narrative state fail closed for actions bound to a Narrative Choice.
+ */
+export function adventureNarrativeActionContext(
+  narrative?: { currentNodeKey?: string | null; variables?: Record<string, unknown> } | null,
+): Record<string, unknown> {
+  return {
+    ...(narrative?.variables ?? {}),
+    __storyforge: { currentNarrativeNodeKey: narrative?.currentNodeKey ?? null },
+  }
+}
+
 export function availableAdventureActions(content: AdventureContent, state: AdventureRuntimeState, narrativeVariables: Record<string, unknown> = {}): Array<{ action: AdventureActionDefinition; available: boolean; reason: string }> {
   return content.actions.filter(action => action.locationKey === state.currentLocationKey).map(action => {
     const available = (action.repeatable || !state.completedActionKeys.includes(action.key)) && action.requirements.every(item => adventureRequirementSatisfied(item, state, narrativeVariables, content))

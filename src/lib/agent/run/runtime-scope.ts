@@ -145,6 +145,7 @@ export async function captureAdventureRuntimeHarnessBoundaryV1(input: {
     fail("实例冻结 RuntimePackage 缺少冒险模块");
   }
   const {
+    adventureNarrativeActionContext,
     adventureNarrativeProjection,
     availableAdventureActions,
   } = await import("../../adventure/runtime");
@@ -153,7 +154,7 @@ export async function captureAdventureRuntimeHarnessBoundaryV1(input: {
     actions: availableAdventureActions(
       frozen.runtimePackage.adventure,
       state.adventure,
-      state.narrative?.variables,
+      adventureNarrativeActionContext(state.narrative),
     ).map((item) => ({
       key: item.action.key,
       available: item.available,

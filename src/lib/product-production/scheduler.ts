@@ -575,7 +575,11 @@ async function currentProductionBuild(scope: WorkspaceScope, productionId: numbe
 }
 
 function evolutionTaskLane(taskKey: string): 'content' | 'product' | 'visual' | 'audio' | null {
-  if (taskKey === 'content.design' || taskKey === 'content.narrative') return 'content'
+  if (taskKey === 'content.design' || taskKey === 'content.narrative'
+    || taskKey === 'content.adventure-architecture'
+    || taskKey === 'content.adventure-side-quests'
+    || taskKey === 'content.adventure-ambient-events'
+    || taskKey === 'content.adventure-quality-review') return 'content'
   if (taskKey === 'content.product-module') return 'product'
   if (taskKey === 'media.requirements' || taskKey === 'media.visual') return 'visual'
   if (taskKey === 'media.audio') return 'audio'
@@ -1436,11 +1440,14 @@ async function compileTerminalBuild(input: {
     if (!parentBuild?.id || !parentBuild.packageHash) {
       throw new Error('[product-production-scheduler] compatibility parent Build 缺失')
     }
-    const parentArtifact = await db.productBuildArtifacts
-      .where('[buildId+artifactKey]').equals([parentBuild.id, 'runtime.package']).first()
-    if (!parentArtifact || !['accepted', 'carried-forward'].includes(parentArtifact.status)) {
+    const parentArtifacts = (await db.productBuildArtifacts
+      .where('[buildId+artifactKey]').equals([parentBuild.id, 'runtime.package']).toArray())
+      .filter(row => row.controlEpoch === parentBuild.controlEpoch
+        && (row.status === 'accepted' || row.status === 'carried-forward'))
+    if (parentArtifacts.length !== 1) {
       throw new Error('[product-production-scheduler] compatibility parent package Artifact 缺失')
     }
+    const parentArtifact = parentArtifacts[0]
     const parentRuntimePackage = parseProductRuntimePackageV1(parentArtifact.payloadJson)
     if (await hashProductProductionValueV2(parentRuntimePackage) !== parentBuild.packageHash) {
       throw new Error('[product-production-scheduler] compatibility parent package hash 不一致')

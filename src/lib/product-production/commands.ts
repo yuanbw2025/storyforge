@@ -75,6 +75,18 @@ function readResult(value: string): Record<string, unknown> {
   } catch { return {} }
 }
 
+/** Compatibility path for Builds made before deterministic assembly failures became recoverable blockers. */
+export function isRepairRetryableFailedProductBuildV1(
+  build: Pick<ProductBuildRecordV1, 'status' | 'failureJson'>,
+): boolean {
+  if (build.status !== 'failed') return false
+  try {
+    const failure = JSON.parse(build.failureJson) as { taskKey?: unknown; code?: unknown }
+    return (failure.taskKey === 'integration.package' || failure.taskKey === 'qa.release')
+      && (failure.code === 'task-executor-failed' || failure.code === 'task-timeout')
+  } catch { return false }
+}
+
 async function productionInScope(scope: WorkspaceScope, productionId: number): Promise<ProductProductionRecordV1 & { id: number }> {
   const production = await db.productProductions.get(productionId)
   if (!production || !await assertRecordInScope(scope, 'productProductions', production, { owner: 'work' })) {
@@ -345,7 +357,13 @@ async function applyCommand(input: {
 
   if (command.type === 'resolve-blocker') {
     const build = await currentBuild(production)
-    if (!['recovery-required', 'paused'].includes(build.status)) reject('invalid-state-transition', '当前 Build 没有待处理 blocker')
+    const repairingLegacyFailure = isRepairRetryableFailedProductBuildV1(build)
+    if (!['recovery-required', 'paused'].includes(build.status) && !repairingLegacyFailure) {
+      reject('invalid-state-transition', '当前 Build 没有待处理 blocker')
+    }
+    if (repairingLegacyFailure && command.resolution.action === 'change-capability') {
+      reject('invalid-state-transition', '确定性装配失败不能用更换模型能力修复')
+    }
     if (!['retry', 'change-capability', 'cancel'].includes(command.resolution.action)) {
       reject('invalid-state-transition', '当前 blocker 只允许重试、更换能力后重试或取消；降级/豁免必须先生成新 Brief')
     }
@@ -365,7 +383,7 @@ async function applyCommand(input: {
       await db.productBuilds.update(build.id, {
         status: 'building', resumeState: null, controlEpoch,
         failureJson: safeJson({ blockerKey: command.blockerKey, resolution: command.resolution, resolvedAt: now }),
-        stateRevision: build.stateRevision + 1, updatedAt: now,
+        stateRevision: build.stateRevision + 1, completedAt: null, updatedAt: now,
       })
       await db.productProductions.update(production.id, {
         status: 'producing', controlEpoch, stateRevision, updatedAt: now,

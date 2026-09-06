@@ -34,8 +34,9 @@ describe('R-PRODUCTPROD-1E · trusted media relay transport', () => {
       credentialPresent: true, issue: null,
     })
     const fetcher = vi.fn(async () => new Response(JSON.stringify({
-      created: 1, data: [{ url: null, b64_json: 'iVBORw0KGgo=', revised_prompt: null }],
-    }), { status: 200, headers: { 'content-type': 'application/json', 'x-request-id': 'agnes.request.1' } }))
+      created: 1, task_id: 'agnes.task.1',
+      data: [{ url: null, b64_json: 'iVBORw0KGgo=', revised_prompt: null }],
+    }), { status: 200, headers: { 'content-type': 'application/json' } }))
     const resolved = await resolveConfiguredAgnesImageCapabilityV1({
       projectId: 1, requirement: requirement('image'), config, fetcher, now: 10,
     })
@@ -63,7 +64,7 @@ describe('R-PRODUCTPROD-1E · trusted media relay transport', () => {
     expect(init.credentials).toBe('omit')
     expect((init.headers as Record<string, string>).authorization).toBe(`Bearer ${config.apiKey}`)
     expect(String(init.body)).not.toContain(config.apiKey)
-    expect(response).toMatchObject({ status: 200, providerRequestId: 'agnes.request.1', costUsd: null })
+    expect(response).toMatchObject({ status: 200, providerRequestId: 'agnes.task.1', costUsd: null })
   })
 
   it('授权前区分未配置、安全配置和无效部署地址，且只暴露 origin', () => {

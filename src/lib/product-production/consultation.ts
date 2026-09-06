@@ -420,6 +420,8 @@ export async function draftProductProductionBriefV3(input: {
       requiredGateIds: [
         'runtime.package.valid', 'runtime.playable', 'narrative.graph.valid', 'rights.complete',
         ...(input.productType === 'text-adventure' ? [
+          'product.adventure.world-actions',
+          'product.adventure.progression',
           'product.adventure.v2-capabilities',
           'product.adventure.v2-space',
           'product.adventure.v2-character-system',

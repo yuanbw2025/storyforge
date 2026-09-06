@@ -236,4 +236,57 @@ describe('PRODUCTPROD-1B · user command control plane', () => {
       status: 'failed', lastErrorJson: failureEvidence,
     })
   })
+
+  it('允许升级前已终止的确定性装配失败在修复后进入新 epoch，仍拒绝无关终态失败', async () => {
+    const f = await fixture()
+    const created = await executeProductProductionCommand({
+      scope: f.scope,
+      command: {
+        type: 'create-intent', commandId: 'repair.intent', productionKey: 'repair-terminal-build',
+        productType: 'avg', worldReleaseId: f.worldReleaseId, userText: '修复装配失败',
+      },
+    })
+    const saved = await executeProductProductionCommand({
+      scope: f.scope, productionId: created.productionId,
+      command: {
+        type: 'save-brief-revision', commandId: 'repair.brief', expectedStateRevision: 0,
+        parentRevision: null, brief: f.brief,
+      },
+    })
+    await executeProductProductionCommand({
+      scope: f.scope, productionId: created.productionId,
+      command: {
+        type: 'authorize-start', commandId: 'repair.start', expectedStateRevision: 1,
+        briefRevision: 1, briefHash: saved.result.briefHash as string, authorizationNonce: 'repair.click',
+      },
+    })
+    const build = (await db.productBuilds.where('productionId').equals(created.productionId).first())!
+    await db.productProductions.update(created.productionId, { status: 'failed' })
+    await db.productBuilds.update(build.id!, {
+      status: 'failed', failureJson: JSON.stringify({
+        taskKey: 'integration.package', code: 'task-executor-failed', attempt: 1,
+      }),
+    })
+    await expect(executeProductProductionCommand({
+      scope: f.scope, productionId: created.productionId,
+      command: {
+        type: 'resolve-blocker', commandId: 'repair.retry', expectedStateRevision: 2,
+        blockerKey: 'integration.package', resolution: { action: 'retry', note: '代码修复后重试装配' },
+      },
+    })).resolves.toMatchObject({ ok: true, stateRevision: 3, result: { controlEpoch: 1 } })
+    expect(await db.productProductions.get(created.productionId)).toMatchObject({ status: 'producing', controlEpoch: 1 })
+    expect(await db.productBuilds.get(build.id!)).toMatchObject({ status: 'building', controlEpoch: 1, completedAt: null })
+
+    await db.productProductions.update(created.productionId, { status: 'failed', stateRevision: 4 })
+    await db.productBuilds.update(build.id!, {
+      status: 'failed', failureJson: JSON.stringify({ taskKey: 'media.visual', code: 'task-executor-failed' }),
+    })
+    await expect(executeProductProductionCommand({
+      scope: f.scope, productionId: created.productionId,
+      command: {
+        type: 'resolve-blocker', commandId: 'repair.reject', expectedStateRevision: 4,
+        blockerKey: 'media.visual', resolution: { action: 'retry', note: '不应复活普通终态失败' },
+      },
+    })).resolves.toMatchObject({ ok: false, errorCode: 'invalid-state-transition' })
+  })
 })

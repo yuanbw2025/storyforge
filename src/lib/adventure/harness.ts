@@ -21,6 +21,7 @@ import { verifyProductRuntimeSessionSourceV1 } from '../product-production/previ
 import { assembleContext } from '../registry/assemble-context'
 import {
   commitAdventureAction,
+  commitAdventureNarrativeChoice,
   readProductRuntimeState,
   readProductRuntimeStateVersion,
 } from './runtime-api'
@@ -31,7 +32,7 @@ import type {
   ProductRuntimeEvent,
   WorkspaceScope,
 } from '../types'
-import { availableAdventureActions } from './runtime'
+import { adventureNarrativeActionContext, availableAdventureActions } from './runtime'
 
 export const ADVENTURE_RUNTIME_STEP_ID_V1 = 'adventure:runtime-candidate' as const
 export const ADVENTURE_RUNTIME_VERIFIER_SET_V1 = 'adventure-runtime-terminal-v1' as const
@@ -88,12 +89,104 @@ function stableKey(value: unknown, label: string): string {
   if (!/^[a-zA-Z0-9._:-]+$/.test(result)) fail(`${label}不是稳定 key`)
   return result
 }
+function escapeRawJsonStringControls(source: string): string {
+  let normalized = ''
+  let inString = false
+  let escaped = false
+  for (const character of source) {
+    if (!inString) {
+      normalized += character
+      if (character === '"') inString = true
+      continue
+    }
+    if (escaped) {
+      normalized += character
+      escaped = false
+      continue
+    }
+    if (character === '\\') {
+      normalized += character
+      escaped = true
+      continue
+    }
+    if (character === '"') {
+      normalized += character
+      inString = false
+      continue
+    }
+    if (character === '\n') normalized += '\\n'
+    else if (character === '\r') normalized += '\\r'
+    else if (character === '\t') normalized += '\\t'
+    else if (character.charCodeAt(0) < 0x20) normalized += `\\u${character.charCodeAt(0).toString(16).padStart(4, '0')}`
+    else normalized += character
+  }
+  return normalized
+}
 function parseJson(output: string): Record<string, unknown> {
-  let source = output.trim()
-  const fenced = source.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/)
-  if (fenced) source = fenced[1]
-  try { return record(JSON.parse(source), '模型输出') }
-  catch (error) { if (error instanceof SyntaxError) fail('模型输出不是有效 JSON'); throw error }
+  const source = output.trim().replace(/^\uFEFF/, '')
+  if (!source || source.length > 100_000) fail('模型输出为空或过长')
+  try { return record(JSON.parse(source), '模型输出') } catch (error) {
+    if (!(error instanceof SyntaxError)) throw error
+  }
+
+  // Compatible providers sometimes wrap the requested object in a Markdown
+  // fence or one short explanatory sentence. Recover only one unambiguous,
+  // balanced object; the closed-schema checks below still reject extra fields.
+  const spans: Array<{ start: number; end: number }> = []
+  let start = -1
+  let objectDepth = 0
+  let arrayDepth = 0
+  let inString = false
+  let escaped = false
+  let malformed = false
+  for (let index = 0; index < source.length; index += 1) {
+    const character = source[index]
+    if (inString) {
+      if (escaped) escaped = false
+      else if (character === '\\') escaped = true
+      else if (character === '"') inString = false
+      continue
+    }
+    if ((objectDepth > 0 || arrayDepth > 0) && character === '"') {
+      inString = true
+      continue
+    }
+    if (character === '[') { arrayDepth += 1; continue }
+    if (character === ']') {
+      if (arrayDepth === 0) malformed = true
+      else arrayDepth -= 1
+      continue
+    }
+    if (character === '{') {
+      if (objectDepth === 0 && arrayDepth === 0) start = index
+      objectDepth += 1
+      continue
+    }
+    if (character !== '}') continue
+    if (objectDepth === 0) { malformed = true; continue }
+    objectDepth -= 1
+    if (objectDepth === 0 && start >= 0) {
+      spans.push({ start, end: index + 1 })
+      start = -1
+    }
+  }
+  if (inString || objectDepth !== 0 || arrayDepth !== 0 || malformed || spans.length !== 1) {
+    fail('模型输出必须只包含一个完整 JSON 对象')
+  }
+  const candidate = source.slice(spans[0].start, spans[0].end)
+  try { return record(JSON.parse(candidate), '模型输出') } catch (error) {
+    if (!(error instanceof SyntaxError)) throw error
+  }
+  // A few OpenAI-compatible transports stream literal line breaks inside an
+  // otherwise valid JSON string. Escaping JSON control characters preserves
+  // the exact prose while keeping structural recovery deliberately narrow.
+  const controlsEscaped = escapeRawJsonStringControls(candidate)
+  if (controlsEscaped !== candidate) {
+    try { return record(JSON.parse(controlsEscaped), '模型输出') } catch (error) {
+      if (!(error instanceof SyntaxError)) throw error
+    }
+  }
+  fail('模型输出不是有效 JSON')
 }
 
 function messages(skillId: AdventureRuntimeSkillIdV1, objective: string, context: string): ChatMessage[] {
@@ -105,11 +198,55 @@ function messages(skillId: AdventureRuntimeSkillIdV1, objective: string, context
     content: [
       '你是 StoryForge 受治理的文字冒险运行时候选生成器。',
       skillId === 'prose.adventure-intent-parser'
-        ? '只能把玩家文字映射到上下文中标记为可执行的一个 action key；不得创造行动或结果。'
-        : '只能润色最近已发生行动的结果；不得改变判定、物品、资源、任务、地点或 Narrative 状态。',
+        ? '只能从上下文的【允许输出的 actionKey JSON】数组中逐字复制一个 actionKey；数组外的 Narrative choice、地点、物品或推测 key 均不得输出。不得创造行动或结果。'
+        : '只能润色最近已发生行动的结果；evidenceEventSequences 只能从上下文的【允许引用的冒险事件序号 JSON】数组中逐字复制至少一个整数；不得改变判定、物品、资源、任务、地点或 Narrative 状态。',
       `只输出严格 JSON，不要 Markdown、解释或额外字段：${schema}`,
     ].join('\n'),
   }, { role: 'user', content: `【目标】${objective}\n\n${context}` }]
+}
+
+async function resolveIntentRuntimeBindingV1(candidate: AdventureIntentCandidateV1): Promise<{
+  narrativeChoiceKey: string | null
+}> {
+  const session = await db.productRuntimeSessions.get(candidate.productRuntimeSessionId)
+  if (!session || session.worldId == null || session.workId == null) fail('自由输入候选的运行实例已失效')
+  const playable = await verifyProductRuntimeSessionSourceV1({
+    scope: { projectId: session.projectId, worldId: session.worldId, workId: session.workId },
+    session,
+  })
+  if ((playable.runtimePackage.productType !== 'text-adventure'
+      && playable.runtimePackage.productType !== 'text-open-world')
+    || !playable.runtimePackage.adventure) fail('自由输入候选的冻结冒险包已失效')
+  const action = playable.runtimePackage.adventure.actions.find(item => item.key === candidate.actionKey)
+  if (!action) fail('自由输入候选引用了未登记行动')
+  const narrativeChoiceKey = action.narrativeChoiceKey
+    && playable.runtimePackage.narrative.choices.some(choice => (
+      choice.choiceKey === action.narrativeChoiceKey
+      && choice.tags.includes(`adventure-action:${action.key}`)
+    ))
+    ? action.narrativeChoiceKey
+    : null
+  return { narrativeChoiceKey }
+}
+
+function eventCommitsNarrativeChoiceV1(event: ProductRuntimeEvent, choiceKey: string): boolean {
+  if (event.type !== 'narrative.choice.committed') return false
+  try {
+    const payload = JSON.parse(event.payloadJson) as { choiceKey?: unknown }
+    return payload.choiceKey === choiceKey
+  } catch { return false }
+}
+
+async function findPersistedCandidateRuntimeEventV1(
+  candidate: AdventureRuntimeCandidateV1,
+  intentBinding: { narrativeChoiceKey: string | null } | null,
+): Promise<ProductRuntimeEvent | null> {
+  if (candidate.commandId == null) return null
+  const events = await db.productRuntimeEvents.where('sessionId').equals(candidate.productRuntimeSessionId).toArray()
+  if (intentBinding?.narrativeChoiceKey) {
+    return events.find(event => eventCommitsNarrativeChoiceV1(event, intentBinding.narrativeChoiceKey!)) ?? null
+  }
+  return events.find(event => event.commandId === candidate.commandId) ?? null
 }
 
 function parseDraft(skillId: AdventureRuntimeSkillIdV1, output: string):
@@ -271,12 +408,16 @@ export async function generateAdventureRuntimeCandidateV1(input: {
       const available = availableAdventureActions(
         playable.runtimePackage.adventure,
         state.adventure,
-        state.narrative?.variables,
+        adventureNarrativeActionContext(state.narrative),
       ).some(item => item.action.key === draft.actionKey && item.available)
       if (!available) fail('模型映射了未登记行动')
     } else {
       const events = await db.productRuntimeEvents.where('sessionId').equals(input.productRuntimeSessionId).toArray()
       const evidence = new Map(events.map(event => [event.sequence, event]))
+      const allowedEvidence = new Set(state.adventure.actionHistory.slice(-1).map(item => item.eventSequence))
+      if (!allowedEvidence.size || draft.evidenceEventSequences.some(sequence => !allowedEvidence.has(sequence))) {
+        fail('结果叙述引用了允许闭集外的事件')
+      }
       if (draft.evidenceEventSequences.some(sequence => !evidence.get(sequence)?.type.startsWith('adventure.'))) {
         fail('结果叙述引用了非冒险或不存在事件')
       }
@@ -353,16 +494,15 @@ export async function adoptAdventureRuntimeCandidateV1(input: {
   const loaded = await readCandidate(input.scope, input.runId)
   let { snapshot } = loaded
   const { candidate } = loaded
+  const intentBinding = candidate.kind === 'adventure-intent-candidate'
+    ? await resolveIntentRuntimeBindingV1(candidate)
+    : null
   let adopted = snapshot.events.find(event => event.type === 'runtime.candidate.adopted')
   if (adopted?.type === 'runtime.candidate.adopted' && snapshot.projection.state === 'completed') {
-    const event = candidate.commandId == null ? null
-      : (await db.productRuntimeEvents.where('sessionId').equals(candidate.productRuntimeSessionId).toArray())
-          .find(item => item.commandId === candidate.commandId) ?? null
+    const event = await findPersistedCandidateRuntimeEventV1(candidate, intentBinding)
     return { snapshot, event, candidate, receiptHash: snapshot.projection.terminalReceiptHash ?? fail('已采用运行缺少终验回执') }
   }
-  const prior = candidate.commandId == null ? null
-    : (await db.productRuntimeEvents.where('sessionId').equals(candidate.productRuntimeSessionId).toArray())
-        .find(item => item.commandId === candidate.commandId) ?? null
+  const prior = await findPersistedCandidateRuntimeEventV1(candidate, intentBinding)
   if (!adopted && !prior) {
     try {
       await assertAdventureRuntimeHarnessFreshV1({ scope: input.scope, contractScope: snapshot.contract.scope })
@@ -375,11 +515,17 @@ export async function adoptAdventureRuntimeCandidateV1(input: {
     }
   }
   const event = prior ?? (candidate.kind === 'adventure-intent-candidate'
-    ? await commitAdventureAction({
-        sessionId: candidate.productRuntimeSessionId, commandId: candidate.commandId!,
-        baseSequence: candidate.baseSequence, baseStateHash: candidate.stateHash,
-        actionKey: candidate.actionKey,
-      })
+    ? intentBinding?.narrativeChoiceKey
+      ? await commitAdventureNarrativeChoice({
+          sessionId: candidate.productRuntimeSessionId,
+          choiceKey: intentBinding.narrativeChoiceKey,
+          commandId: candidate.commandId!,
+        })
+      : await commitAdventureAction({
+          sessionId: candidate.productRuntimeSessionId, commandId: candidate.commandId!,
+          baseSequence: candidate.baseSequence, baseStateHash: candidate.stateHash,
+          actionKey: candidate.actionKey,
+        })
     : null)
   let version = await readProductRuntimeStateVersion(candidate.productRuntimeSessionId)
   if (!adopted) {
@@ -393,7 +539,7 @@ export async function adoptAdventureRuntimeCandidateV1(input: {
       expectedLastSequence: snapshot.projection.lastSequence,
       payload: {
         stepId: ADVENTURE_RUNTIME_STEP_ID_V1, candidateHash: candidate.candidateHash,
-        adoptionHash, commandIds: candidate.commandId == null ? [] : [candidate.commandId],
+        adoptionHash, commandIds: event?.commandId ? [event.commandId] : [],
         baseSequence: candidate.baseSequence, resultingSequence: version.sequence,
       },
     })

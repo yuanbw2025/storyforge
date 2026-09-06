@@ -13,6 +13,7 @@ import type {
   TextAdventureQuestBundleArtifactV1,
   TextAdventureSystemsArtifactV1,
 } from './production-artifacts'
+import { planTextAdventureNarrativeLocationsV1 } from './narrative-location-plan'
 
 export interface TextAdventureProductionCompilerInputV1 {
   brief: ProductProductionBriefV3
@@ -63,10 +64,22 @@ export function compileTextAdventureModuleV2(
   if (!locations.length) fail('空间编译后没有地点')
 
   const narrativeNodes = input.narrative.nodes.filter(node => node.kind !== 'ending')
-  const desiredSceneCount = Math.max(locations.length, contract.narrative.targetSceneCount)
+  const desiredSceneCount = Math.max(locations.length, narrativeNodes.length, contract.narrative.targetSceneCount)
+  const narrativeLocationPlan = planTextAdventureNarrativeLocationsV1(narrativeNodes.length, locations.length)
+  const narrativeLocationIndexes = new Set(narrativeLocationPlan.map(item => item.locationIndex))
+  const remainingLocationIndexes = locations
+    .map((_, locationIndex) => locationIndex)
+    .filter(locationIndex => !narrativeLocationIndexes.has(locationIndex))
   const scenes: AdventureContentV2['scenes'] = Array.from({ length: desiredSceneCount }, (_, index) => {
-    const location = locations[index % locations.length]
-    const narrativeNode = narrativeNodes[index % Math.max(1, narrativeNodes.length)]
+    // Mainline scenes move monotonically through the authored location spine.
+    // Fine-grained scenes are spread across locations without ever wrapping a
+    // late-game action back into an earlier location.
+    const narrativeNode = narrativeNodes[index]
+    const fallbackLocationIndex = remainingLocationIndexes[index - narrativeNodes.length]
+      ?? Math.min(locations.length - 1, index)
+    const location = locations[narrativeNode
+      ? narrativeLocationPlan[index].locationIndex
+      : fallbackLocationIndex]
     const sceneKey = `scene.${pad(index)}`
     location.sceneKeys.push(sceneKey)
     return {
@@ -78,7 +91,7 @@ export function compileTextAdventureModuleV2(
   })
   const firstSceneForLocation = new Map<string, string>()
   for (const scene of scenes) if (!firstSceneForLocation.has(scene.locationKey)) firstSceneForLocation.set(scene.locationKey, scene.key)
-  const sceneForNode = new Map(narrativeNodes.map((node, index) => [node.key, scenes[index % scenes.length]]))
+  const sceneForNode = new Map(narrativeNodes.map((node, index) => [node.key, scenes[index]]))
   const locationForNode = new Map([...sceneForNode].map(([nodeKey, scene]) => [nodeKey, scene.locationKey]))
   const entryLocationKey = locationForNode.get(input.narrative.entryNodeKey) ?? locations[0].key
 
@@ -126,6 +139,12 @@ export function compileTextAdventureModuleV2(
       title: artifact.name, description: artifact.description || `来自冻结世界的物品：${artifact.name}`,
       tags: ['world-artifact', `source:${artifact.resourceKey}`],
     })
+  })
+  if (sourceArtifacts.length === 0) items.push({
+    key: 'item.product.field-notes', title: '现场记录页',
+    description: `一页由本次冒险整理出的${locations[0].title}现场记录；它只属于当前产品，不会被当作冻结世界事实。`,
+    tags: ['product-private', 'journal'], stackable: false, consumable: false,
+    category: 'key', equipmentSlotKey: null, modifiers: [], usableActionKey: null,
   })
 
   const actions: AdventureActionDefinition[] = []
@@ -176,7 +195,8 @@ export function compileTextAdventureModuleV2(
     registerAction({
       key: `action.look.${node.key}`, kind: 'look', label: `观察：${node.title}`,
       description: node.summary || `重新确认${node.title}的局面。`, locationKey, targetKey: null,
-      requirements: [], rule: { kind: 'automatic' }, successEffects: [{ op: 'change-resource', resourceKey: clock.key, delta: 2 }],
+      requirements: [{ narrativePath: '__storyforge.currentNarrativeNodeKey', narrativeEquals: node.key }],
+      rule: { kind: 'automatic' }, successEffects: [{ op: 'change-resource', resourceKey: clock.key, delta: 2 }],
       costlySuccessEffects: [], failureEffects: [],
       successText: input.narrative.beats.filter(beat => beat.nodeKey === node.key).map(beat => beat.text).join('\n') || node.summary,
       costlySuccessText: `你花费更多时间理解了${node.title}。`, failureText: `你暂时没有看清${node.title}。`,
@@ -200,7 +220,10 @@ export function compileTextAdventureModuleV2(
       registerAction({
         key: `action.choice.${choice.choiceKey}`, kind: targetLocationKey ? 'move' : 'quest-action', label: choice.text,
         description: choice.description || `推进主线：${choice.text}`, locationKey,
-        targetKey: targetLocationKey ?? null, requirements: [{ questKey: 'quest.main', questStatus: 'active' }],
+        targetKey: targetLocationKey ?? null, requirements: [
+          { questKey: 'quest.main', questStatus: 'active' },
+          { narrativePath: '__storyforge.currentNarrativeNodeKey', narrativeEquals: choice.sourceNodeKey },
+        ],
         rule: { kind: 'automatic' }, successEffects: effects, costlySuccessEffects: [], failureEffects: [],
         successText: input.narrative.beats.filter(beat => beat.nodeKey === choice.targetNodeKey).map(beat => beat.text).join('\n') || choice.description || choice.text,
         costlySuccessText: `你付出代价后决定${choice.text}。`, failureText: `你暂时无法${choice.text}。`,
@@ -283,7 +306,19 @@ export function compileTextAdventureModuleV2(
       unavailableText: `${artifact.name}已经被取走。`, repeatable: false, narrativeChoiceKey: null, interaction: null,
     })
   })
-  input.systems.starterEquipment.forEach((equipment, index) => registerAction({
+  if (sourceArtifacts.length === 0) registerAction({
+    key: 'action.take.product.field-notes', kind: 'take', label: '取得：现场记录页',
+    description: `把${locations[0].title}的现场记录页收入背包。`, locationKey: entryLocationKey,
+    targetKey: 'object.journal.001', requirements: [], rule: { kind: 'automatic' },
+    successEffects: [{
+      op: 'gain-item', itemKey: 'item.product.field-notes', quantity: 1,
+      claimKey: 'claim.product.field-notes',
+    }],
+    costlySuccessEffects: [], failureEffects: [], successText: '你把现场记录页收入了背包。',
+    costlySuccessText: '你费了些功夫才收好现场记录页。', failureText: '现场记录页暂时无法取得。',
+    unavailableText: '现场记录页已经被取走。', repeatable: false, narrativeChoiceKey: null, interaction: null,
+  }, firstSceneForLocation.get(entryLocationKey))
+  input.systems.starterEquipment.forEach(equipment => registerAction({
     key: `action.equip.${equipment.key}`, kind: 'use', label: `装备：${equipment.title}`,
     description: equipment.description, locationKey: entryLocationKey, targetKey: equipment.key,
     requirements: [{ itemKey: equipment.key, itemQuantity: 1 }], rule: { kind: 'automatic' },
@@ -291,7 +326,7 @@ export function compileTextAdventureModuleV2(
     costlySuccessEffects: [], failureEffects: [], successText: `你装备了${equipment.title}。`,
     costlySuccessText: `你勉强装备了${equipment.title}。`, failureText: `你暂时无法装备${equipment.title}。`,
     unavailableText: '装备不在背包中或槽位已被占用。', repeatable: true, narrativeChoiceKey: null, interaction: null,
-  }, scenes[index % scenes.length]?.key))
+  }, firstSceneForLocation.get(entryLocationKey)))
 
   const interactionScene = input.interaction.sceneTemplates[0]
   const interactionRule = interactionScene?.relationshipRules[0]

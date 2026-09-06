@@ -634,7 +634,7 @@ export type ProductEvolutionBaseV1 =
   | { kind: "release"; productReleaseId: number; contentHash: string };
 
 export type ProductEvolutionAffectedLaneV1 =
-  "content" | "product" | "visual" | "audio" | "world-source";
+  "content" | "product" | "visual" | "audio" | "runtime" | "world-source";
 
 export interface ProductEvolutionImpactV1 {
   schema: "storyforge.product-evolution-impact";

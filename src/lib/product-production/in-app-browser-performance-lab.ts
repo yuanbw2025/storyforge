@@ -208,7 +208,8 @@ export async function runInAppBrowserPerformanceLabV1(input: {
   const catalog = await resolver.preload({ assetKeys, maximumBytes })
   if (catalog.failures.length) {
     resolver.dispose()
-    throw new Error(`[product-browser-performance-lab] 媒资预加载失败:${catalog.failures.map(row => row.assetKey).join(',')}`)
+    throw new Error(`[product-browser-performance-lab] 媒资预加载失败:${catalog.failures
+      .map(row => `${row.assetKey}:${row.reason}`).join(',')}`)
   }
   const surface = document.createElement('section')
   surface.setAttribute('aria-label', '当前 Build 浏览器性能采样舞台')

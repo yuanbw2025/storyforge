@@ -1,5 +1,5 @@
 /** Product-owned deterministic runtime commands: adventure. */
-import { availableAdventureActions, applyAdventureEffects, adventureEffectiveAbilityValue, adventureNarrativeProjection, adventureProgressionLevel } from "./runtime";
+import { adventureNarrativeActionContext, availableAdventureActions, applyAdventureEffects, adventureEffectiveAbilityValue, adventureNarrativeProjection, adventureProgressionLevel } from "./runtime";
 import { db } from "../db/schema";
 import { applyProductRuntimeEvent, assertFormalRuntimeSourceUnchangedV1, commitNarrativeChoice, hashStateJson, normalizeCommandId, parseEventPayload, parseProductRuntimeState, readProductRuntimeState, readSessionEvents, replayProductRuntimeEvents, verifyFormalRuntimeSourceV1 } from "../product/runtime-core";
 import { buildProductRuntimeDiceResolutionV1, parseProductRuntimeDiceExpressionV1 } from "../product/runtime-dice";
@@ -339,7 +339,7 @@ export async function commitAdventureAction(
   const previewAvailable = availableAdventureActions(
     adventureContent,
     previewState.adventure,
-    previewState.narrative?.variables,
+    adventureNarrativeActionContext(previewState.narrative),
   ).find((item) => item.action.key === actionKey);
   if (!previewAvailable?.available) {
     throw new Error(
@@ -418,7 +418,7 @@ export async function commitAdventureAction(
       const available = availableAdventureActions(
         adventureContent,
         projected.adventure,
-        projected.narrative?.variables,
+        adventureNarrativeActionContext(projected.narrative),
       ).find((item) => item.action.key === actionKey);
       if (!available?.available)
         throw new Error(

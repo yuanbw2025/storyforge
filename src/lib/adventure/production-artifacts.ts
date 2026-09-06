@@ -45,7 +45,10 @@ function bool(value: unknown, label: string): boolean {
 }
 
 function enumValue<T extends string>(value: unknown, allowed: readonly T[], label: string): T {
-  if (typeof value !== 'string' || !allowed.includes(value as T)) fail(`${label} 枚举无效`)
+  if (typeof value !== 'string' || !allowed.includes(value as T)) {
+    const received = typeof value === 'string' ? JSON.stringify(value.slice(0, 200)) : typeof value
+    fail(`${label} 枚举无效 received=${received} allowed=${allowed.join(',')}`)
+  }
   return value as T
 }
 

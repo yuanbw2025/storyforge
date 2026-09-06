@@ -13,7 +13,7 @@ import {
 } from '../../src/lib/product-production/product-adapters'
 import { parseProductRuntimePackageV1 } from '../../src/lib/product-production/runtime-package'
 import { createInitialInteractionState } from '../../src/lib/character-interaction/runtime'
-import { applyAdventureEffects, availableAdventureActions, createInitialAdventureState } from '../../src/lib/adventure/runtime'
+import { adventureNarrativeActionContext, applyAdventureEffects, availableAdventureActions, createInitialAdventureState } from '../../src/lib/adventure/runtime'
 import {
   availableOpenWorldEvolutionActions,
   createInitialOpenWorldEvolutionState,
@@ -271,7 +271,9 @@ describe('R-PRODUCTPROD-1G · five-product adapter registry', () => {
         const initial = createInitialAdventureState(parsed.adventure, worldContentHash)
         expect(initial.currentLocationKey).toBe(parsed.adventure.initialLocationKey)
         if (productType === 'text-adventure') {
-          const first = availableAdventureActions(parsed.adventure, initial)
+          const first = availableAdventureActions(parsed.adventure, initial, adventureNarrativeActionContext({
+            currentNodeKey: parsed.narrative.entryNodeKey, variables: {},
+          }))
             .find(item => item.available && item.action.narrativeChoiceKey != null)!.action
           const moved = applyAdventureEffects(parsed.adventure, initial, first.successEffects, 1)
           expect(moved.currentLocationKey).not.toBe(initial.currentLocationKey)

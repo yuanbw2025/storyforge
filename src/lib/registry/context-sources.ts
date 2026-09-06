@@ -464,7 +464,7 @@ async function readAdventureRuntimeContext(input: AssembleContextInput): Promise
     || (session.productReleaseId == null && session.productBuildId == null)) return ''
   if (input.worldGroupId !== undefined && (session.worldGroupId ?? null) !== (input.worldGroupId ?? null)) return ''
   if (session.worldId == null || session.workId == null) throw new Error('正式文字冒险实例缺少工作区作用域。')
-  const [playable, { availableAdventureActions }] = await Promise.all([
+  const [playable, { adventureNarrativeActionContext, availableAdventureActions }] = await Promise.all([
     verifyPlayableRuntimeSession({
       scope: { projectId: session.projectId, worldId: session.worldId, workId: session.workId },
       session,
@@ -481,7 +481,9 @@ async function readAdventureRuntimeContext(input: AssembleContextInput): Promise
   if (!state.adventure) return ''
   const location = adventure.locations.find(item => item.key === state.adventure!.currentLocationKey)
   if (!location) throw new Error('文字冒险当前位置不在冻结发布中。')
-  const actions = availableAdventureActions(adventure, state.adventure, state.narrative?.variables)
+  const actions = availableAdventureActions(
+    adventure, state.adventure, adventureNarrativeActionContext(state.narrative),
+  )
   const inventory = state.adventure.inventory
     .filter(item => item.ownerKey === 'player' && item.state !== 'transferred')
     .map(item => `${item.itemKey}×${item.quantity}`)
@@ -495,6 +497,7 @@ async function readAdventureRuntimeContext(input: AssembleContextInput): Promise
   })
   const actionLines = actions.map(item => `- ${item.action.key}｜${item.action.kind}｜${item.action.label}｜${item.available ? '可执行' : `不可执行:${item.reason}`}`)
   const recent = state.adventure.actionHistory.slice(-12).map(item => `- #${item.eventSequence} ${item.actionKey}｜${item.outcome}｜${item.narrative}`)
+  const latestActionEvidence = state.adventure.actionHistory.slice(-1).map(item => item.eventSequence)
   return [
     `【文字冒险运行时】${session.title}｜事件序号=${state.lastSequence}｜运行源=${playable.packageHash.slice(0, 16)}`,
     `【当前位置】${location.title}｜key=${location.key}｜${location.description}`,
@@ -505,9 +508,11 @@ async function readAdventureRuntimeContext(input: AssembleContextInput): Promise
     `【状态】${state.adventure.conditions.map(item => `${item.conditionKey}${item.duration == null ? '' : `(${item.duration})`}`).join('、') || '无'}`,
     '【任务】', ...(quests.length ? quests : ['- 无']),
     '【当前位置行动闭集】', ...(actionLines.length ? actionLines : ['- 无']),
+    `【允许输出的 actionKey JSON】${JSON.stringify(actions.filter(item => item.available).map(item => item.action.key))}`,
+    `【允许引用的冒险事件序号 JSON】${JSON.stringify(latestActionEvidence)}`,
     `【Narrative】节点=${state.narrative?.currentNodeKey ?? '无'}｜可用选择=${state.narrative?.availableChoiceKeys?.join('、') || '无'}`,
     '【最近行动结果】', ...(recent.length ? recent : ['- 无']),
-    '自由输入只能映射到“可执行”的 action key；不得创造新地点、物品、任务、判定结果或状态变化。',
+    '自由输入只能映射到“可执行”的 action key；结果叙述只能引用允许序号；不得创造新地点、物品、任务、判定结果或状态变化。',
   ].join('\n')
 }
 

@@ -103,6 +103,27 @@ describe('TEXTADV-2 · 玩家界面纵切面', () => {
     expect(world?.textContent).toContain('回声盐沼')
     await closePanel()
 
+    const parentResolver = useAdventureGamePlayerStore.getState().selectedMediaResolver
+    expect(parentResolver).not.toBeNull()
+    await act(async () => {
+      await useAdventureGamePlayerStore.getState().saveCheckpoint('切换分支前')
+    })
+    const checkpoint = useAdventureGamePlayerStore.getState().checkpoints[0]
+    let childSessionId = 0
+    await act(async () => {
+      childSessionId = await useAdventureGamePlayerStore.getState().forkCheckpoint(checkpoint.id!, '原子媒资分支')
+    })
+    const branchState = useAdventureGamePlayerStore.getState()
+    expect(branchState).toMatchObject({
+      selectedSessionId: childSessionId,
+      selectedSourceSessionId: childSessionId,
+    })
+    expect(branchState.selectedMediaResolver).not.toBeNull()
+    expect(branchState.selectedMediaResolver).not.toBe(parentResolver)
+    await expect(branchState.selectedMediaResolver!.preload({ assetKeys: [], maximumBytes: 1024 }))
+      .resolves.toMatchObject({ failures: [], usedBytes: 0 })
+    await act(async () => useAdventureGamePlayerStore.getState().select(built.session.id!))
+
     await act(async () => root.unmount())
     const base = await readProductRuntimeStateVersion(built.session.id!)
     await commitAdventureAction({

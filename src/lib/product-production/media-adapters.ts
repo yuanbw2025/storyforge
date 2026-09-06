@@ -352,15 +352,17 @@ export const agnesImage21FlashAdapterV1: ProductMediaProviderAdapterV1 = {
       body: {
         model: 'agnes-image-2.1-flash', prompt, size: '1K', ratio, return_base64: true,
         extra_body: { response_format: 'b64_json' },
-        ...(requiresAlpha ? { background: 'transparent', output_format: 'png' } : {}),
       },
     }, signal)
     assertProviderResponse(response, 'Agnes 图片')
     const root = row(response.json, 'Agnes image response')
     allowedKeys(root, [
-      'created', 'data', 'usage',
+      'created', 'data', 'usage', 'task_id',
       'background', 'output_format', 'quality', 'size',
     ], 'Agnes image response')
+    if (root.task_id != null && (typeof root.task_id !== 'string' || !KEY.test(root.task_id))) {
+      fail('Agnes image response.task_id 元数据无效')
+    }
     for (const metadataKey of ['background', 'output_format', 'quality', 'size'] as const) {
       const value = root[metadataKey]
       if (value != null && (typeof value !== 'string' || value.length > 100)) {

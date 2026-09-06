@@ -35,6 +35,8 @@ import {
   type AdventureSystemCommand,
 } from '../../lib/adventure/player-experience'
 import { adventureEffectiveAbilityValue } from '../../lib/adventure/runtime'
+import { verifyProductMediaRuntimeUrlsV1 } from '../../lib/product-production/media-runtime-verifier'
+import { recordProductMediaRuntimeMeasurementV1 } from '../../lib/product-production/quality-receipts'
 import { currentPlayerReleases } from '../../lib/text-game/player-library'
 import type { AdventureProductRuntimePackageV1, Project, WorkspaceScope } from '../../lib/types'
 import { useAdventureGamePlayerStore, selectAdventureActions } from '../../stores/adventure-game-player'
@@ -103,6 +105,20 @@ function formatTime(value: number): string {
   return new Intl.DateTimeFormat('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).format(value)
 }
 
+function currentBrowserEnvironment() {
+  const userAgent = navigator.userAgent || 'unknown-browser'
+  const browserName = /Edg\//.test(userAgent) ? 'edge'
+    : /Chrome\//.test(userAgent) ? 'chromium'
+      : /Firefox\//.test(userAgent) ? 'firefox'
+        : /Safari\//.test(userAgent) ? 'safari' : 'browser'
+  return {
+    browserName,
+    browserVersion: userAgent,
+    platform: navigator.platform || 'desktop',
+    viewport: { width: Math.max(1, window.innerWidth), height: Math.max(1, window.innerHeight) },
+  }
+}
+
 function adventureNpcCount(manifest: AdventureProductRuntimePackageV1): number {
   const player = resolveAdventurePlayerIdentity(manifest)
   return manifest.interaction.profiles.filter(profile => profile.participantKey !== player?.participantKey).length
@@ -155,6 +171,7 @@ export default function AdventureGamePlayer(props: {
   const transcriptHydratedRef = useRef(false)
   const knownTranscriptSequencesRef = useRef<Set<number>>(new Set())
   const generatedNarrativeRef = useRef('')
+  const mediaVerificationKeys = useRef(new Set<string>())
 
   useEffect(() => {
     setCatalogReleaseId(null)
@@ -177,6 +194,9 @@ export default function AdventureGamePlayer(props: {
     !playerIdentity?.participantKey || item.action.interaction?.participantKey !== playerIdentity.participantKey
   ))
   const availableActions = actions.filter(item => item.available)
+  const narrativeActionByChoice = new globalThis.Map(actions
+    .filter(item => item.action.narrativeChoiceKey)
+    .map(item => [item.action.narrativeChoiceKey!, item]))
   const endingKeys = new Set((store.runtimeState.narrative?.nodes ?? []).filter(node => node.kind === 'ending').map(node => node.key))
   const narrativeChoices = (store.runtimeState.narrative?.choices ?? []).filter(choice => (
     choice.sourceNodeKey === store.runtimeState.narrative?.currentNodeKey
@@ -225,23 +245,48 @@ export default function AdventureGamePlayer(props: {
   const transcript = useMemo(() => manifest && adventure
     ? projectAdventureTranscript(manifest, adventure.actionHistory, store.events)
     : [], [adventure, manifest, store.events])
+  const mediaCacheKey = `${store.selectedSessionId ?? 'title'}:${manifest?.presentation?.assets
+    .map(asset => `${asset.assetKey}@${asset.version}:${asset.contentHash}`).join('|') ?? ''}`
 
   useEffect(() => {
     let active = true
     setMediaUrls({})
     setMediaFailures([])
-    if (!manifest?.presentation?.assets.length || store.selectedSessionId == null) return () => { active = false }
+    const assets = manifest?.presentation?.assets ?? []
+    if (!assets.length || store.selectedSessionId == null) return () => { active = false }
     void store.preloadMedia().then(result => {
-      if (!active) return
-      setMediaUrls(result.urls)
-      setMediaFailures(result.failures)
+      if (active) {
+        setMediaUrls(result.urls)
+        setMediaFailures(result.failures)
+      }
+      if (selected?.productBuildId == null) return
+      const verificationKey = `${selected.productBuildId}:${assets
+        .map(asset => `${asset.assetKey}:${asset.contentHash}`).sort().join('|')}`
+      if (mediaVerificationKeys.current.has(verificationKey)) return
+      mediaVerificationKeys.current.add(verificationKey)
+      void verifyProductMediaRuntimeUrlsV1({
+        assets: assets.map(asset => ({
+          assetKey: asset.assetKey, contentHash: asset.contentHash, mimeType: asset.mimeType,
+          width: asset.width, height: asset.height, durationMs: asset.durationMs,
+        })),
+        urls: result.urls,
+        environment: currentBrowserEnvironment(),
+      }).then(measurement => recordProductMediaRuntimeMeasurementV1({
+        scope: props.scope, productBuildId: selected.productBuildId!, measurement,
+      })).then(verified => {
+        if (!verified.evidence.passed) mediaVerificationKeys.current.delete(verificationKey)
+      }).catch(() => {
+        // The visible pure-text fallback remains authoritative. A failed or
+        // interrupted measurement may be retried when this Preview is reopened.
+        mediaVerificationKeys.current.delete(verificationKey)
+      })
     }).catch(reason => {
       if (active) setMediaFailures([{ assetKey: 'presentation', reason: reason instanceof Error ? reason.message : String(reason) }])
     })
     return () => { active = false }
   // The store owns resolver disposal; URLs remain valid across action refreshes in the same session.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [store.selectedSessionId, manifest?.presentation?.assets.length])
+  }, [mediaCacheKey, props.scope.projectId, props.scope.worldId, props.scope.workId])
 
   useLayoutEffect(() => {
     if (playbackSessionRef.current === store.selectedSessionId) return
@@ -510,8 +555,8 @@ export default function AdventureGamePlayer(props: {
           {!!store.recoverableRunIds.length && <details className="adventure-console-recovery"><summary>恢复未完成的主 Agent 行动</summary><p>候选已经保存在统一 Harness 中，可以从原检查点继续，不会重复调用模型。</p>{store.recoverableRunIds.map(runId => <button key={runId} disabled={store.busy || generating} onClick={() => void run(() => store.resumeRun(runId))}>恢复行动 #{runId}</button>)}</details>}
         </section>
 
-        {!!progressionChoices.length && !store.runtimeState.narrative?.completed && <section className="adventure-console-choices"><small>关键推进已经解锁</small>{progressionChoices.map(choice => <button key={choice.choiceKey} disabled={store.busy || narrativeReading} onClick={() => void run(() => store.choose(choice.choiceKey))}>{choice.text}<ChevronRight /></button>)}</section>}
-        {!!endingChoices.length && !store.runtimeState.narrative?.completed && <section className="adventure-console-choices"><small>最终抉择已经解锁</small>{endingChoices.map(choice => <button key={choice.choiceKey} disabled={store.busy || narrativeReading} onClick={() => void run(() => store.choose(choice.choiceKey))}>{choice.text}<ChevronRight /></button>)}</section>}
+        {!!progressionChoices.length && !store.runtimeState.narrative?.completed && <section className="adventure-console-choices"><small>关键推进已经解锁</small>{progressionChoices.map(choice => { const action = narrativeActionByChoice.get(choice.choiceKey); return <button key={choice.choiceKey} title={action && !action.available ? action.reason : undefined} disabled={store.busy || narrativeReading || (action != null && !action.available)} onClick={() => void run(() => store.choose(choice.choiceKey))}>{choice.text}<ChevronRight /></button> })}</section>}
+        {!!endingChoices.length && !store.runtimeState.narrative?.completed && <section className="adventure-console-choices"><small>最终抉择已经解锁</small>{endingChoices.map(choice => { const action = narrativeActionByChoice.get(choice.choiceKey); return <button key={choice.choiceKey} title={action && !action.available ? action.reason : undefined} disabled={store.busy || narrativeReading || (action != null && !action.available)} onClick={() => void run(() => store.choose(choice.choiceKey))}>{choice.text}<ChevronRight /></button> })}</section>}
         {store.runtimeState.narrative?.completed && <section className="adventure-console-ending"><BookOpenCheck /><div><small>冒险结束</small><h2>{store.runtimeState.narrative.nodes.find(item => item.key === store.runtimeState.narrative?.endingKey)?.title}</h2><p>这条时间线已经完整保存。你可以从检查点探索另一种结果。</p></div><button onClick={() => setPanel('saves')}><GitBranch />查看时间线</button></section>}
 
         {!store.runtimeState.narrative?.completed && <section className={`adventure-command-center${narrativeReading ? ' is-reading' : ''}`} aria-label="冒险指令台" aria-busy={narrativeReading}>

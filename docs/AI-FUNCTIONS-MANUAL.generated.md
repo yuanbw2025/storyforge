@@ -312,7 +312,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 ### 动态 category 调用
 
 - `src/components/editor/ReviewPanel.tsx:160 · ai.start`
-- `src/lib/adventure/harness.ts:245 · chat`
+- `src/lib/adventure/harness.ts:382 · chat`
 - `src/lib/agent/character-copilot.ts:515 · chat`
 - `src/lib/agent/character-driven-copilot.ts:505 · chat`
 - `src/lib/agent/character-lifecycle-copilot.ts:448 · chat`
@@ -391,4 +391,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `4c6ac46f`
+生成时间基准:commit `3360d40d`

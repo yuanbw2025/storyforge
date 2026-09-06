@@ -23,6 +23,8 @@ import {
 } from '../../src/lib/product-production/production-executor'
 import { runProductProductionUntilBlockedV1 } from '../../src/lib/product-production/scheduler'
 import { parseProductRuntimePackageV1 } from '../../src/lib/product-production/runtime-package'
+import { adventureNarrativeActionContext, availableAdventureActions } from '../../src/lib/adventure/runtime'
+import { planTextAdventureNarrativeLocationsV1 } from '../../src/lib/adventure/narrative-location-plan'
 import { resolveProductRuntimeSource } from '../../src/lib/product-production/preview-source'
 import {
   recordProductBrowserPerformanceMeasurementV1,
@@ -89,6 +91,7 @@ async function fixture(qualityProfile: 'prototype' | 'commercial-candidate' = 'p
 async function fixtureForProduct(productType: ProductionProductKindV1, options?: {
   scale?: 'scene' | 'short-arc' | 'chapter'
   visualLevel?: 'none' | 'key-scenes'
+  omitWorldArtifacts?: boolean
 }) {
   const owned = await seedCurrentProductWorld(`formal-${productType}`)
   const release = owned.release
@@ -103,6 +106,12 @@ async function fixtureForProduct(productType: ProductionProductKindV1, options?:
     confirmTtrpgDefaultMappings: productType === 'ttrpg',
     textAdventure: productType === 'text-adventure' ? { confirmAll: true } : undefined,
   })
+  if (options?.omitWorldArtifacts) {
+    const artifactKeys = new Set(brief.source.selection.roleBindings.items ?? [])
+    brief.source.selection.resourceKeys = brief.source.selection.resourceKeys
+      .filter(resourceKey => !artifactKeys.has(resourceKey))
+    brief.source.selection.roleBindings.items = []
+  }
   const created = await executeProductProductionCommand({
     scope: owned.scope,
     command: {
@@ -198,8 +207,8 @@ function modelOutputs(
       entryNodeKey: 'opening',
       nodes: [
         { key: 'opening', kind: 'entry', title: '潮门之前', summary: '玩家抵达潮门广场。', condition: {}, effects: [] },
-        { key: 'square', kind: 'scene', title: '广场回声', summary: '玩家先理解封港局势。', condition: {}, effects: [] },
-        { key: 'warehouse', kind: 'scene', title: '旧仓支路', summary: '一条承担额外风险的支路。', condition: {}, effects: [] },
+        { key: 'square', kind: 'scene', title: '广场回声', summary: '玩家在潮门广场先理解封港局势。', condition: {}, effects: [] },
+        { key: 'warehouse', kind: 'scene', title: '旧仓支路', summary: '旧仓街是一条承担额外风险的支路。', condition: {}, effects: [] },
         { key: 'tower', kind: 'choice', title: '信号塔抉择', summary: '决定公开或封存记录。', condition: {}, effects: [] },
         { key: 'truth-ending', kind: 'ending', title: '公开真相', summary: '真相改变了港口。', condition: {}, effects: [] },
         { key: 'shelter-ending', kind: 'ending', title: '守住庇护', summary: '秘密换来短暂安稳。', condition: {}, effects: [] },
@@ -264,6 +273,9 @@ function modelOutputs(
       starterEquipment: [{
         key: 'item.starter-lamp', title: '守灯杖', description: '能照亮雾中标记的旧灯杖。',
         slotKey: 'slot.weapon', tags: ['weapon'], modifierAbilityKey: 'ability.perception', modifierDelta: 1,
+      }, {
+        key: 'item.starter-cloak', title: '守灯披风', description: '能抵御潮雾侵蚀的旧披风。',
+        slotKey: 'slot.body', tags: ['armor'], modifierAbilityKey: 'ability.resolve', modifierDelta: 1,
       }],
     } : {
       schema: 'storyforge.product-module-artifact', version: 1, productType,
@@ -363,11 +375,18 @@ function fullLengthTextAdventureOutputs(
       })),
     })),
   }))
+  const locationTitles = regions.flatMap(region => region.areas.flatMap(area => (
+    area.locations.map(location => location.title)
+  )))
+  const locationPlan = planTextAdventureNarrativeLocationsV1(
+    contract.narrative.targetSceneCount,
+    locationTitles.length,
+  )
   const nonEndingNodes = Array.from({ length: contract.narrative.targetSceneCount }, (_, index) => ({
     key: `main.${String(index + 1).padStart(3, '0')}`,
     kind: index === 0 ? 'entry' as const : index === contract.narrative.targetSceneCount - 1 ? 'choice' as const : 'scene' as const,
     title: `主线场景 ${index + 1}`,
-    summary: `主线冲突在第 ${index + 1} 个场景继续升级。`, condition: {}, effects: [],
+    summary: `${locationTitles[locationPlan[index].locationIndex]}内，主线冲突在第 ${index + 1} 个场景继续升级。`, condition: {}, effects: [],
   }))
   const endingNodes = Array.from({ length: contract.narrative.targetEndingCount }, (_, index) => ({
     key: `ending.${index + 1}`, kind: 'ending' as const, title: `因果结局 ${index + 1}`,
@@ -1005,15 +1024,51 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
       'content.product-module', 'quality.report', 'runtime.package',
     ])
     expect(await db.mediaBlobObjects.count()).toBe(6)
+
+    calls.length = 0
+    const reassembly = await beginProductProductionEvolutionV1({
+      scope: owned.scope, productionId: owned.productionId,
+      userText: '保留全部内容与媒资，只用当前编译器重新装配并复验运行包。',
+      affectedLanes: ['runtime'],
+    })
+    const reassemblyBriefRow = await db.productProductionBriefs
+      .where('[productionId+revision]').equals([owned.productionId, reassembly.briefRevision]).first()
+    const reassemblyProduction = (await db.productProductions.get(owned.productionId))!
+    await executeProductProductionCommand({
+      scope: owned.scope, productionId: owned.productionId,
+      command: {
+        type: 'authorize-start', commandId: 'formal.runtime-only.authorize',
+        expectedStateRevision: reassemblyProduction.stateRevision,
+        briefRevision: reassembly.briefRevision, briefHash: reassemblyBriefRow!.briefHash,
+        authorizationNonce: 'formal.runtime-only.click',
+      },
+    })
+    const reassembled = await runProductProductionUntilBlockedV1({
+      scope: owned.scope, productionId: owned.productionId,
+      executor: createConfiguredProductProductionExecutorV1({
+        production: (await db.productProductions.get(owned.productionId))!,
+        brief: parseProductProductionBriefV3(reassemblyBriefRow!.briefJson), runText,
+      }), capabilityBindings,
+    })
+    expect(reassembled).toMatchObject({ terminal: true, buildStatus: 'release-ready' })
+    expect(calls).toEqual([])
+    const reassembledArtifacts = await db.productBuildArtifacts.where('buildId').equals(reassembled.buildId).toArray()
+    expect(reassembledArtifacts.filter(item => item.status === 'accepted').map(item => item.artifactKey).sort()).toEqual([
+      'quality.report', 'runtime.package',
+    ])
   }, 30_000)
 
   it('60 分钟文字冒险按 Brief 产出足量主线、空间、支线、区域事件并通过内容量硬门', async () => {
-    const owned = await fixtureForProduct('text-adventure', { scale: 'short-arc', visualLevel: 'none' })
+    const owned = await fixtureForProduct('text-adventure', {
+      scale: 'short-arc', visualLevel: 'none', omitWorldArtifacts: true,
+    })
     const textRequirement = owned.brief.capabilityRequirements.find(item => item.mediaClass === 'text')!
     const bindingHash = await hashProductProductionValueV2({ provider: 'full-length-text-adventure' })
     const outputs = fullLengthTextAdventureOutputs(owned.brief) as Record<string, unknown>
     let narrativeSystem = ''
+    let modelCallCount = 0
     const runText: ProductionTextRunnerV1 = async request => {
+      modelCallCount += 1
       const taskKey = Object.keys(outputs).find(key => request.system.includes(`任务=${key}。`))
       if (!taskKey) throw new Error(`unknown full-length task:${request.system}`)
       if (taskKey === 'content.narrative') narrativeSystem = request.system
@@ -1041,7 +1096,10 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     expect(projection).toMatchObject({ terminal: true, buildStatus: 'release-ready' })
     expect(narrativeSystem).toContain('固定图骨架=')
     expect(narrativeSystem).toContain('"entryNodeKey":"scene.001"')
+    expect(narrativeSystem).toContain('"locationOrdinal":1')
+    expect(narrativeSystem).toContain('"locationTitle":"地点 1-1-1"')
     expect(narrativeSystem).toContain('不得增加、删除或改写骨架')
+    expect(narrativeSystem).toContain('必须就是 targetNodeKey 标注的 locationTitle')
     const build = (await db.productBuilds.get(projection.buildId))!
     const quality = JSON.parse(build.qualityReportJson) as {
       hardGateResults: Array<{ gateId: string; passed: boolean; evidence: string[] }>
@@ -1058,9 +1116,76 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     expect(runtimePackage.adventure.areas).toHaveLength(4)
     expect(runtimePackage.adventure.locations).toHaveLength(8)
     expect(runtimePackage.adventure.scenes).toHaveLength(12)
+    const locationIndexByKey = new Map(runtimePackage.adventure.locations.map((location, index) => [location.key, index]))
+    expect(runtimePackage.adventure.scenes.map(scene => locationIndexByKey.get(scene.locationKey))).toEqual([
+      0, 0, 1, 2, 2, 3, 4, 4, 5, 6, 6, 7,
+    ])
     expect(runtimePackage.adventure.quests.filter(item => item.category === 'side')).toHaveLength(3)
     expect(runtimePackage.adventure.storylets).toHaveLength(7)
     expect(runtimePackage.adventure.endings).toHaveLength(3)
+    expect(runtimePackage.adventure.items).toContainEqual(expect.objectContaining({
+      key: 'item.product.field-notes', tags: expect.arrayContaining(['product-private']),
+    }))
+    expect(runtimePackage.adventure.actions).toContainEqual(expect.objectContaining({
+      key: 'action.take.product.field-notes', kind: 'take', locationKey: runtimePackage.adventure.initialLocationKey,
+    }))
+    const preview = await startProductProductionPreviewV1({
+      scope: owned.scope, productionId: owned.productionId,
+    })
+    const previewState = await readProductRuntimeState(preview.sessionId)
+    const entryActions = availableAdventureActions(
+      runtimePackage.adventure, previewState.adventure!,
+      adventureNarrativeActionContext({ currentNodeKey: runtimePackage.narrative.entryNodeKey, variables: {} }),
+    ).filter(item => item.available && item.action.narrativeChoiceKey).map(item => item.action.narrativeChoiceKey)
+    expect(entryActions).toEqual([runtimePackage.narrative.choices.find(choice => (
+      choice.sourceNodeKey === runtimePackage.narrative.entryNodeKey
+    ))!.choiceKey])
+    const equipActions = runtimePackage.adventure.actions.filter(action => action.key.startsWith('action.equip.'))
+    const entrySceneActionKeys = new Set(runtimePackage.adventure.scenes
+      .filter(scene => scene.locationKey === runtimePackage.adventure!.initialLocationKey)
+      .flatMap(scene => scene.actionKeys))
+    expect(equipActions).toHaveLength(2)
+    expect(equipActions.every(action => action.locationKey === runtimePackage.adventure!.initialLocationKey)).toBe(true)
+    expect(equipActions.every(action => entrySceneActionKeys.has(action.key))).toBe(true)
+
+    await db.productBuildArtifacts.update(runtimeArtifact!.id!, { status: 'invalid' })
+    await db.productBuildArtifacts.add({
+      ...runtimeArtifact!, id: undefined, version: runtimeArtifact!.version + 1,
+      status: 'accepted', createdAt: Date.now(), updatedAt: Date.now(),
+    })
+    const modelCallCountBeforeReassembly = modelCallCount
+    const reassembly = await beginProductProductionEvolutionV1({
+      scope: owned.scope, productionId: owned.productionId,
+      userText: '保留全部文字冒险内容与媒资，只重新装配和复验运行包。',
+      affectedLanes: ['runtime'],
+    })
+    const reassemblyBriefRow = await db.productProductionBriefs
+      .where('[productionId+revision]').equals([owned.productionId, reassembly.briefRevision]).first()
+    const reassemblyProduction = (await db.productProductions.get(owned.productionId))!
+    await executeProductProductionCommand({
+      scope: owned.scope, productionId: owned.productionId,
+      command: {
+        type: 'authorize-start', commandId: 'text-adventure.runtime-only.authorize',
+        expectedStateRevision: reassemblyProduction.stateRevision,
+        briefRevision: reassembly.briefRevision, briefHash: reassemblyBriefRow!.briefHash,
+        authorizationNonce: 'text-adventure.runtime-only.click',
+      },
+    })
+    const reassembled = await runProductProductionUntilBlockedV1({
+      scope: owned.scope, productionId: owned.productionId,
+      executor: createConfiguredProductProductionExecutorV1({
+        production: (await db.productProductions.get(owned.productionId))!,
+        brief: parseProductProductionBriefV3(reassemblyBriefRow!.briefJson), runText,
+      }), capabilityBindings: [{
+        requirementKey: textRequirement.requirementKey, adapterId: 'configured-text.v1', bindingHash,
+      }],
+    })
+    expect(reassembled).toMatchObject({ terminal: true, buildStatus: 'release-ready' })
+    expect(modelCallCount).toBe(modelCallCountBeforeReassembly)
+    const reassemblyArtifacts = await db.productBuildArtifacts.where('buildId').equals(reassembled.buildId).toArray()
+    expect(reassemblyArtifacts.filter(item => item.status === 'accepted').map(item => item.artifactKey).sort()).toEqual([
+      'quality.report', 'runtime.package',
+    ])
   }, 30_000)
 
   it('保留独立叙事审查证据，并在存在阻塞问题时拒绝装配可玩包', async () => {
@@ -1109,7 +1234,7 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
         requirementKey: textRequirement.requirementKey, adapterId: 'configured-text.v1', bindingHash,
       }],
     })
-    expect(projection).toMatchObject({ terminal: false, buildStatus: 'failed' })
+    expect(projection).toMatchObject({ terminal: false, buildStatus: 'recovery-required' })
     const build = (await db.productBuilds.get(projection.buildId))!
     expect(build.failureJson).toContain('文字冒险叙事质量审查未通过')
     const review = await db.productBuildArtifacts

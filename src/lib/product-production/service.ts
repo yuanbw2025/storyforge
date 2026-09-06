@@ -15,7 +15,7 @@ import type {
 import { assertRecordInScope, resolveScope } from '../workspace/scope'
 import { listWorldReferenceCatalogV1 } from '../product/source'
 import { prepareProductProductionAdoption, publishProductProductionBuild } from './adoption'
-import { executeProductProductionCommand } from './commands'
+import { executeProductProductionCommand, isRepairRetryableFailedProductBuildV1 } from './commands'
 import { draftProductProductionBriefV3, suggestProductStartingPoints } from './consultation'
 import { parseProductProductionBriefV3 } from './contracts'
 import {
@@ -87,6 +87,11 @@ export interface ProductProductionReviewArtifactV1 {
   producerRunId: number | null
   payload: unknown
   quality: unknown
+}
+
+export function canRetryProductProductionBlockerV1(details: ProductProductionDetailsV1): boolean {
+  return details.build?.status === 'recovery-required'
+    || !!details.build && isRepairRetryableFailedProductBuildV1(details.build)
 }
 
 const AUTHOR_REVIEW_ARTIFACT_KEYS = new Set([
@@ -403,7 +408,7 @@ export async function retryProductProductionBlockerV1(input: {
   details: ProductProductionDetailsV1
   afterCapabilityChange?: boolean
 }): Promise<void> {
-  if (!input.details.build || input.details.build.status !== 'recovery-required') {
+  if (!input.details.build || !canRetryProductProductionBlockerV1(input.details)) {
     throw new Error('[product-production-service] 当前 Build 没有可重试 blocker')
   }
   let blockerKey = 'build-recovery'
