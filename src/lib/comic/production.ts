@@ -258,7 +258,10 @@ export async function adoptComicReviewIssuesV1(input: { scope: WorkspaceScope; e
     const pageKeys = new Set(targetPages.map(row => row.stableKey)); const panelByKey = new Map(panels.map(row => [row.stableKey, row])); const subjectKeys = new Set(subjects.map(row => row.stableKey)); const assetKeys = new Set(assets.map(row => row.stableKey))
     const now = Date.now(); const rows = input.candidates.map(candidate => {
       const panel = candidate.panelKey ? panelByKey.get(candidate.panelKey) : null
-      if (!pageKeys.has(candidate.pageKey) || (candidate.panelKey && !panel) || (candidate.subjectKey && !subjectKeys.has(candidate.subjectKey)) || (candidate.assetKey && !assetKeys.has(candidate.assetKey))) throw new Error(`[comic-production] issue ${candidate.stableKey} 定位越界`)
+      if (!pageKeys.has(candidate.pageKey)) throw new Error(`[comic-production] issue ${candidate.stableKey} pageKey 越界：${candidate.pageKey}；允许 ${[...pageKeys].join('、')}`)
+      if (candidate.panelKey && !panel) throw new Error(`[comic-production] issue ${candidate.stableKey} panelKey 越界：${candidate.panelKey}；允许 ${[...panelByKey.keys()].join('、')}`)
+      if (candidate.subjectKey && !subjectKeys.has(candidate.subjectKey)) throw new Error(`[comic-production] issue ${candidate.stableKey} subjectKey 越界：${candidate.subjectKey}`)
+      if (candidate.assetKey && !assetKeys.has(candidate.assetKey)) throw new Error(`[comic-production] issue ${candidate.stableKey} assetKey 越界：${candidate.assetKey}`)
       if (input.reviewKind === 'page' && !['narrative', 'reading-order', 'lettering'].includes(candidate.category)) throw new Error('[comic-production] page review 不能写视觉类问题')
       if (input.reviewKind === 'visual' && !['continuity', 'rights', 'media-integrity'].includes(candidate.category)) throw new Error('[comic-production] visual review 不能写叙事类问题')
       return stampNewRecord(scope, 'comicReviewIssues', { ...structuredClone(candidate), projectId: scope.projectId, workId: scope.workId, adaptationProjectId: root.id, manifestVersion: input.sourceManifestVersion, reviewedPanelRevision: panel?.revision ?? null, status: 'open' as const, createdAt: now, updatedAt: now }, { owner: 'work' }) as ComicReviewIssueV1
