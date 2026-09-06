@@ -246,8 +246,9 @@ export const TEXT_OPEN_WORLD_PRODUCTION_TASK_CONTRACTS_V1: TextOpenWorldProducti
   modelTask({
     stage: 'P7', taskKey: 'p7.region-narrative-packs', objective: '为每个地区补齐矛盾、角色层级、任务母题、传闻和事件供给。',
     skillId: 'text-open-world.production.region-narrative-packs.v1', recommendedModelCalls: 16,
-    dependsOn: ['p1.source-curation', 'p4.region-skeleton', 'p5.mainline', 'p6.significant-threads'],
+    dependsOn: ['p1.source-curation', 'p2.experience-design', 'p4.region-skeleton', 'p5.mainline', 'p6.significant-threads'],
     inputArtifactKeys: [
+      'text-open-world.game-brief', 'text-open-world.experience-contract',
       'text-open-world.source-ledger', 'text-open-world.region-skeleton',
       'text-open-world.mainline-thread', 'text-open-world.significant-threads',
     ],

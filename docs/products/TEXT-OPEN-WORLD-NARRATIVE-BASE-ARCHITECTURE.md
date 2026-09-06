@@ -1,6 +1,6 @@
 # AI 主导文字开放世界叙事基座 · StoryForge 施工规格
 
-> 规格版本：3.2.11
+> 规格版本：3.2.12
 > 生效日期：2026-09-06
 > 文档层级：L2 产品目标架构与施工规格
 > 当前状态：设计基线；不代表代码已经实现
@@ -494,6 +494,20 @@ P3仍只产出Build候选，不写世界引擎、ProductRelease或Session。它�
 - Quest、Objective、Scene、Action、Reward、Condition、Effect、Actor和Faction绑定全部为null/空数组及显式unbound，P7地区生态、P8任务/目录和P8F最终化必须逐项兑现后才能装配运行包。
 
 验证器从Artifact反向还原模型草稿，再重建owner、空间、冲突方、Stage链、时长、局部后果目标、主线兼容、全部空绑定和Hash。owner类型不足、未知claim、越界地点、阶段空间越权、主线阻断、解除等待保护、注入Effect键，以及重算Hash后的篡改都会失败关闭。P6不新增物理表，不写ProductRelease或Session。
+
+#### 5.4.11 P7 RegionNarrativePacks与地区内容生态落地
+
+`src/lib/open-world/region-narrative-packs-production.ts`把RegionSkeleton的“有地点”推进为每个地点都具备生活和内容供给理由的地区生态，但不越级生产正式任务或NPC目录：
+
+- `text-open-world.region-narrative-packs-input`只读取同一Build已验收的GameBrief、ExperienceContract、SourceLedger、RegionSkeleton、MainlineThread和SignificantThreads，并优先选择体验、地区和重要故事实际引用的claim；所有Artifact行Hash、内容Hash、claim条目Hash和选择Hash均需复验；
+- 每个Region必须且只能拥有一个Pack，并具有独特幻想、地方冲突、地区问题、生活基线和辨识度；模型为每区设计2～5条双方矛盾、2～5条可演化状态轴，代码固定这些状态永远不能阻断主线；
+- 每个Location必须且只能拥有一项生活计划，计划继承RegionSkeleton冻结的功能，并补充日常、玩家活动、NPC角色需求、传闻钩子、时段/天气表现和风险。提前到达始终只看到安全的地区常态，不自动触发关键主线或泄露未来结果；
+- 角色需求分为important、recurring、functional、ambient四级。important固定由Agent维护、受保护且不能被普通死亡关闭内容；其余固定为按日程、服务和问候规则运行。每区至少有一名重要角色和一名功能或氛围角色，同时至少有一个势力需求；
+- SignificantThreads中的character/faction owner reservation必须由且仅由一个所在地区角色/势力需求承接，代码直接复用该稳定owner key；其他需求获得新的全局稳定预留键。这样P8 NPC目录可以精确兑现，而不是依赖名称模糊匹配；
+- 普通内容供给按GameBrief首版保底规模冻结：全世界精确6个ordinary quest seed、4个task template seed和12个random event seed，每区至少3条rumor。任务种子写故事包装、实际玩家活动、地点、矛盾、奖励需要与时长；模板写变化轴/资格/冷却；事件写类别、机会和重复策略；
+- 代码生成Pack、Tension、StateAxis、LocationPlan、Actor/Faction requirement、Quest/Template/Event/Rumor seed全部稳定键。正式Actor、Faction、Quest、Template、Event、Condition、Effect和Reward引用仍为空并标记unbound，由P8～P9逐层兑现。
+
+验证器反向恢复全部模型语义并重建覆盖、owner承接、内容数量、稳定键、NPC运行分层、主线隔离和空绑定。地区或地点漏项、地区同质化、供给不足、跨区地点、重要owner缺失/重复、私自写Quest/Effect，以及重算Hash后的治理篡改都会失败关闭。P7不新增物理表，不写ProductRelease或Session。
 
 ### 5.5 正确的验证顺序
 
@@ -1313,6 +1327,7 @@ StoryForge当前没有独立staging。发布前仍需在隔离数据中完成灰
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| 3.2.12 | 2026-09-07 | 落地P7 RegionNarrativePacks：登记只读Brief/体验/来源/地图/主线/重要故事的Context与专属Skill/Executor；AI为每区设计差异化身份、矛盾/状态轴、全地点生活计划、重要Agent与普通规则NPC分层、势力需求及6普通任务/4模板/12随机事件保底种子和传闻；代码固定全覆盖、owner唯一承接、稳定预留键、普通演化与主线等待隔离、全部正式目录unbound且全链可复验 |
 | 3.2.11 | 2026-09-07 | 落地P6 SignificantThreads：登记只读Brief/来源/故事/结局/承诺/地区/主线的Context与专属Skill/Executor；AI精确设计至少两种owner、多方冲突系统、3～6个可玩Stage、氛围信号和局部后果，代码固定稳定键、owner预留/地区绑定、主线揭示窗口、安全等待、不可放弃过期/永久失败/普通状态阻断、非地点触发及主线不可改写/阻断；全部Quest/Scene/Actor/Faction/Condition/Effect绑定保持unbound且全链可复验 |
 | 3.2.10 | 2026-09-07 | 落地P5 MainlineThread：登记只读Brief/玩法/故事/结局/承诺/地区/主角的Context与专属Skill/Executor；AI在冻结规模内编排Stage空间与体验、揭示、保护及恢复，代码固定严格链、起点、StoryBeat与Promise全覆盖、多结局终段分流、90～120分钟和1→5级节奏，以及等待/不可放弃过期/不可永久失败/普通状态不阻断/非地点触发；Quest/Scene/Reward/Condition保持unbound且全链可复验 |
 | 3.2.9 | 2026-09-07 | 落地P4 RegionSkeleton：登记只读Brief/P1/体验/StoryArc的Context与专属Skill/Executor；AI把来源claim和全部故事空间需求编排为精确规模的地区、地点、功能、提前到达常态及连线，代码固定稳定键、全图/跨区连通、每区快旅复活点、渐进知识、距离耗时及非地点唯一主线触发；Scene/Quest/NPC/遭遇/商店/媒资和主线绑定保持unbound，全部规模、来源、需求、连通、治理和Hash可复验 |

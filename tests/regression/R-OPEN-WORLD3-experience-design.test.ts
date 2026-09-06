@@ -56,12 +56,19 @@ import {
   type TextOpenWorldSignificantThreadsInputContextV1,
   type TextOpenWorldSignificantThreadsModelRunnerV1,
 } from '../../src/lib/open-world/significant-threads-production'
+import {
+  createTextOpenWorldRegionNarrativePacksExecutorV1,
+  validateTextOpenWorldRegionNarrativePacksV1,
+  type TextOpenWorldRegionNarrativePacksInputContextV1,
+  type TextOpenWorldRegionNarrativePacksModelRunnerV1,
+} from '../../src/lib/open-world/region-narrative-packs-production'
 import { TEXT_OPEN_WORLD_EFFECT_OPERATIONS_V1 } from '../../src/lib/types/text-open-world-effect'
 import type {
   TextOpenWorldGameplayRulesetSkeletonV1,
   TextOpenWorldMainlineThreadV1,
   TextOpenWorldPlayerBuildV1,
   TextOpenWorldRegionSkeletonV1,
+  TextOpenWorldRegionNarrativePacksV1,
   TextOpenWorldSignificantThreadsV1,
 } from '../../src/lib/types'
 import {
@@ -1285,6 +1292,196 @@ async function executeSignificantThreads(
   })
 }
 
+function regionNarrativePacksRunner(options: {
+  wrongSupply?: boolean
+  omitLocation?: boolean
+  duplicateDistinctiveness?: boolean
+  missingOwner?: boolean
+} = {}): TextOpenWorldRegionNarrativePacksModelRunnerV1 {
+  return async input => {
+    const context = JSON.parse(input.contextText) as TextOpenWorldRegionNarrativePacksInputContextV1
+    const claimKey = context.sourceLedger.selectedClaims[0]!.claimKey
+    const eventKinds = ['ambient', 'opportunity', 'danger', 'discovery', 'social', 'ambient']
+    const packs = context.regionSkeleton.regions.map((region, regionIndex) => {
+      const ownedLocations = context.regionSkeleton.locations.filter(location => location.regionKey === region.key)
+      const locationNumber = (index: number) => ownedLocations[index % ownedLocations.length]!.order
+      const tensionTitle = (index: number) => `${region.title}矛盾${index + 1}`
+      return {
+        regionNumber: region.order,
+        title: `${region.title}地区生态`,
+        fantasy: regionIndex === 0
+          ? '在潮雾港口的日常职责中追查危机留下的细小裂痕。'
+          : '在盐路、旧约和多方利益之间参与一场持续变化的沿岸生活。',
+        localConflict: regionIndex === 0
+          ? '维持港口日常秩序的人们对公开危机真相的代价存在分歧。'
+          : '依赖盐路的群体无法就收益、风险和旧约责任达成共同规则。',
+        regionalQuestion: regionIndex === 0 ? '安全是否必须依赖沉默？' : '共同体如何分担一条危险道路的代价？',
+        dailyLifeBaseline: '居民按清晨、白天和夜晚执行劳作、服务、交换消息与休息规则，主线等待时日常仍继续。',
+        distinctivenessStatement: options.duplicateDistinctiveness
+          ? '重复的地区体验。'
+          : regionIndex === 0 ? '紧凑港口中的职责调查与熟人社会反馈。' : '开阔沿岸中的路线选择、多方议事与资源流动。',
+        sourceClaimKeys: [claimKey],
+        tensions: [0, 1].map(index => ({
+          title: tensionTitle(index),
+          sideA: index === 0 ? '依靠现有秩序维持生计的人' : '要求立即处理危险的人',
+          sideB: index === 0 ? '要求公开旧问题的人' : '担忧行动破坏日常供给的人',
+          stakes: '局部信任、物资流动和地区生活面貌会变化，但主线入口始终保留。',
+          pressureAxis: index === 0 ? '保密与公开' : '安全与生计',
+        })),
+        stateAxes: [
+          { title: '地方信任', lowExpression: '居民回避交谈并减少互助。', middleExpression: '居民维持礼貌但观望。', highExpression: '居民主动分享公开消息并提供普通协助。' },
+          { title: '日常稳定', lowExpression: '服务和公共活动出现明显中断。', middleExpression: '生活勉强维持且争论增多。', highExpression: '公共活动恢复并出现新的协作习惯。' },
+        ],
+        locations: ownedLocations.slice(0, options.omitLocation && regionIndex === 1 ? -1 : undefined).map((location, index) => ({
+          locationNumber: location.order,
+          dailyLife: `${location.title}在非任务时仍有与其${location.functions.join('、')}功能相符的日常活动。`,
+          activityPatterns: [`观察${location.title}的日常变化`, `与当地功能角色进行普通交互`],
+          npcRoleNeeds: ['提供日常问候的居民', `维持${location.functions[0]}功能的角色`],
+          rumorHooks: [`关于${tensionTitle(index % 2)}的一条局部传闻`],
+          timeExpressions: ['清晨开始劳作，白天开放主要功能，夜晚减少服务并改变问候。'],
+          contentRisk: location.functions.includes('combat') ? 'dangerous' : index % 2 ? 'ordinary' : 'safe',
+        })),
+        characters: [
+          {
+            tier: 'important',
+            roleTitle: regionIndex === 0 ? '守灯学徒阿澜' : '沿岸议事记录人',
+            narrativeFunction: '持续保持地区冲突、重要故事进度和玩家已知后果的一致表达。',
+            homeLocationNumber: locationNumber(0),
+            routine: '在安全等待点按地区时段出现在固定公共地点，不因玩家缺席推进关键结果。',
+            serviceNeeds: [],
+            significantThreadNumbers: regionIndex === 0 && !options.missingOwner ? [1] : regionIndex === 1 ? [2] : [],
+            sourceClaimKeys: [claimKey],
+          },
+          {
+            tier: 'functional',
+            roleTitle: regionIndex === 0 ? '盐雾工匠' : '脊湾行商',
+            narrativeFunction: '通过服务、价格、问候和普通委托表现地区状态。',
+            homeLocationNumber: locationNumber(1),
+            routine: '日出后提供功能，夜晚休息；只按规则读取道德、阵营和地区状态。',
+            serviceNeeds: ['基础交易', '地区普通委托入口'],
+            significantThreadNumbers: [],
+            sourceClaimKeys: [],
+          },
+          {
+            tier: 'ambient',
+            roleTitle: regionIndex === 0 ? '港务居民' : '沿岸搬运者',
+            narrativeFunction: '用短问候和日常行动建立人口与劳动氛围。',
+            homeLocationNumber: locationNumber(0),
+            routine: '日出而作、日落而息，危险时移动到安全地点。',
+            serviceNeeds: [],
+            significantThreadNumbers: [],
+            sourceClaimKeys: [],
+          },
+        ],
+        factions: [{
+          title: regionIndex === 0 ? '雾港守灯会' : '脊湾行商联合',
+          publicGoal: '维持地区生活所依赖的公共功能，同时争取对风险处置的话语权。',
+          localResource: regionIndex === 0 ? '灯塔记录、工坊和居民信任' : '货运网络、价格消息和盐路节点',
+          visiblePresence: '通过服饰、工作地点、问候和地区事件中的立场被玩家识别。',
+          significantThreadNumbers: regionIndex === 1 ? [2] : [],
+          sourceClaimKeys: [claimKey],
+        }],
+        ordinaryQuestSeeds: Array.from({ length: regionIndex === 0 && options.wrongSupply ? 2 : 3 }, (_, index) => ({
+          title: `${region.title}普通委托${index + 1}`,
+          premise: `一名处在${tensionTitle(index % 2)}中的普通居民遇到具体而局部的问题。`,
+          playerActivity: ['调查公开痕迹并核对说法', '探索指定地点并带回资源', '在冲突双方之间传递可验证信息'][index % 3],
+          locationNumbers: [locationNumber(index)],
+          tensionNumber: index % 2 + 1,
+          rewardNeeds: index % 2 ? ['经验', '货币'] : ['经验', '制作材料'],
+          estimatedMinutes: 12 + index * 3,
+          sourceClaimKeys: [],
+        })),
+        taskTemplateSeeds: Array.from({ length: 2 }, (_, index) => ({
+          title: `${region.title}需求模板${index + 1}`,
+          storyFrame: index === 0 ? '功能NPC因地区状态产生一项可替换目标的资源需求。' : '居民听到传闻后请求玩家核实一个可替换地点的异常。',
+          locationNumbers: [locationNumber(index)],
+          variationAxes: ['委托人身份', '目标地点', '所需资源', '地区当前压力'],
+          eligibilitySummary: '只在地点已知、玩家等级合适且同结构近期未出现时进入地区牌组。',
+          cooldownIntent: '同一结构冷却若干次地区抽牌，并优先更换委托人、地点和叙事包装。',
+          sourceClaimKeys: [],
+        })),
+        randomEventSeeds: Array.from({ length: 6 }, (_, index) => ({
+          kind: eventKinds[index],
+          title: `${region.title}地区事件${index + 1}`,
+          setup: `地区状态与${tensionTitle(index % 2)}在${ownedLocations[index % ownedLocations.length]!.title}形成一个短时可见场面。`,
+          playerOpportunity: '玩家可以观察、交谈、提供普通帮助或离开；忽略不会阻断主线或重要故事。',
+          locationNumbers: [locationNumber(index)],
+          repeatability: index < 2 ? 'repeatable-variant' : 'one-shot',
+          sourceClaimKeys: [],
+        })),
+        rumors: [0, 1, 2].map(index => ({
+          text: `${region.title}居民最近在谈论第${index + 1}件与地方生活有关的小事。`,
+          pointsTo: ['tension', 'location', 'event'][index],
+          spoilerBoundary: '只透露玩家当前可知道的地点名称、公开冲突或事件迹象，不披露隐藏任务结果。',
+          sourceClaimKeys: [],
+        })),
+      }
+    })
+    return {
+      output: JSON.stringify({
+        schema: 'storyforge.text-open-world-region-narrative-packs-draft',
+        version: 1,
+        packs,
+      }),
+      bindingReceipt: bindingReceipt(input.requirementKey),
+      usage: null,
+    }
+  }
+}
+
+async function regionNarrativePacksFixture() {
+  const input = await significantThreadsFixture()
+  const significantResult = await executeSignificantThreads(input)
+  await acceptTaskArtifacts(input, significantResult.artifacts, 'P6-significant')
+  const plan = await createTextOpenWorldProductionPlanV1({
+    buildNumber: input.build.buildNumber,
+    controlEpoch: input.build.controlEpoch,
+    briefHash: input.briefRow.briefHash,
+    brief: input.brief,
+  })
+  const task = plan.tasks.find(item => item.taskKey === 'p7.region-narrative-packs')!
+  const assembled = await assembleContext({
+    projectId: input.scope.projectId,
+    scope: input.scope,
+    sourceKeys: ['text-open-world.region-narrative-packs-input'],
+    productProductionId: input.production.id!,
+    productBuildId: input.build.id!,
+    inputBudgetMaxTokens: task.budgetReservation.inputTokens,
+  })
+  return {
+    ...input,
+    task,
+    regionPacksContextText: assembled.text,
+    regionPacksContext: JSON.parse(assembled.text) as TextOpenWorldRegionNarrativePacksInputContextV1,
+    regionPacksContextEvidence: assembled.sourceEvidence,
+  }
+}
+
+async function executeRegionNarrativePacks(
+  input: Awaited<ReturnType<typeof regionNarrativePacksFixture>>,
+  runModel: TextOpenWorldRegionNarrativePacksModelRunnerV1 = regionNarrativePacksRunner(),
+) {
+  return createTextOpenWorldRegionNarrativePacksExecutorV1({ runModel, now: () => NOW + 11 })({
+    scope: input.scope,
+    productionId: input.production.id!,
+    buildId: input.build.id!,
+    buildNumber: input.build.buildNumber,
+    controlEpoch: input.build.controlEpoch,
+    planHash: input.planHash,
+    task: input.task,
+    attempt: 1,
+    idempotencyKey: await hashProductProductionValueV2('p7-region-narrative-packs'),
+    contextText: input.regionPacksContextText,
+    inputArtifacts: [],
+    capabilityBindings: input.task.capabilityRequirementKeys.map(requirementKey => ({
+      requirementKey,
+      bindingHash: CAPABILITY_HASH,
+      adapterId: 'configured-text.v1',
+    })),
+    signal: new AbortController().signal,
+  })
+}
+
 describe('R-OPEN-WORLD3 · P2 GameBrief / ExperienceContract / ProtagonistAsset', () => {
   beforeEach(async () => { await db.delete(); await db.open() })
   afterAll(() => db.close())
@@ -2092,4 +2289,100 @@ describe('R-OPEN-WORLD3 · P6 SignificantThreads', () => {
       signal: new AbortController().signal,
     })).rejects.toThrow(/MainlineThread Hash不匹配|选择Hash不匹配/)
   }, 60_000)
+})
+
+describe('R-OPEN-WORLD3 · P7 RegionNarrativePacks', () => {
+  beforeEach(async () => { await db.delete(); await db.open() })
+  afterAll(() => db.close())
+
+  it('为每个地区和地点建立差异化生活、NPC层级与保底任务/模板/事件供给', async () => {
+    const input = await regionNarrativePacksFixture()
+    expect(CONTEXT_SOURCE_BY_KEY.get('text-open-world.region-narrative-packs-input')).toMatchObject({
+      layer: 'L0', ownerFrom: 'work', protectedFromTrim: true,
+    })
+    expect(getAgentSkillV1('text-open-world.production.region-narrative-packs.v1')).toMatchObject({
+      contextSourceKeys: ['text-open-world.region-narrative-packs-input'],
+      writeTargets: [{ table: 'productBuildArtifacts', fields: ['payloadJson'] }],
+    })
+    expect(input.regionPacksContextEvidence).toEqual([
+      expect.objectContaining({ key: 'text-open-world.region-narrative-packs-input', status: 'included', delivery: 'full' }),
+    ])
+    const result = await executeRegionNarrativePacks(input)
+    const artifact = result.artifacts[0]!.payload as TextOpenWorldRegionNarrativePacksV1
+    expect(result.passedGateIds).toEqual(input.task.acceptanceGateIds)
+    expect(result.usage).toMatchObject({ modelCalls: 1, mediaCalls: 0 })
+    expect(artifact.coverage).toMatchObject({
+      requiredRegionCount: 2,
+      actualRegionCount: 2,
+      ordinaryQuestSeedCount: 6,
+      requiredOrdinaryQuestSeedCount: 6,
+      taskTemplateSeedCount: 4,
+      requiredTaskTemplateSeedCount: 4,
+      randomEventSeedCount: 12,
+      requiredRandomEventSeedCount: 12,
+      importantCharacterRequirementCount: 2,
+    })
+    expect(artifact.coverage.coveredLocationKeys).toEqual(artifact.coverage.requiredLocationKeys)
+    expect(artifact.governance).toEqual({
+      everyLocationHasPlan: true,
+      everyRegionDistinct: true,
+      ordinaryWorldContinues: true,
+      mainlineWaits: true,
+      importantStoriesWaitAtSafePoints: true,
+      regionalConsequencesCannotBlockMainline: true,
+      npcRuntimeSplit: 'important-agent-ordinary-rules',
+      contentSupply: 'build-seeds-before-runtime-deck',
+    })
+    expect(artifact.packs[0]!.characterRequirements).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'actor.significant.001',
+        tier: 'important',
+        runtimeMode: 'agent-maintained',
+        protectionRequirement: 'protected-nonlethal',
+        catalogBinding: { status: 'actor-unbound', actorKey: null },
+      }),
+      expect.objectContaining({
+        tier: 'functional',
+        runtimeMode: 'rule-driven',
+        protectionRequirement: 'ordinary-lifecycle',
+      }),
+    ]))
+    expect(artifact.packs.every(pack => (
+      pack.locationPlans.length > 0
+      && pack.locationPlans.every(plan => plan.catalogBindingStatus === 'unbound')
+      && pack.tensions.every(tension => !tension.mainlineMayBlock)
+      && pack.stateAxes.every(axis => !axis.mainlineMayBlock && axis.runtimeBinding.status === 'effect-unbound')
+      && pack.ordinaryQuestSeeds.every(seed => seed.binding.status === 'quest-unbound')
+      && pack.taskTemplateSeeds.every(seed => seed.binding.status === 'template-unbound')
+      && pack.randomEventSeeds.every(seed => seed.binding.status === 'event-unbound')
+    ))).toBe(true)
+    expect(artifact.downstreamBinding).toMatchObject({ status: 'requirements-unbound', runtimeReady: false })
+    await expect(validateTextOpenWorldRegionNarrativePacksV1({ artifact, context: input.regionPacksContext }))
+      .resolves.toEqual(artifact)
+  }, 75_000)
+
+  it('拒绝地点漏覆盖、保底供给不足和重复地区体验', async () => {
+    const input = await regionNarrativePacksFixture()
+    await expect(executeRegionNarrativePacks(input, regionNarrativePacksRunner({ omitLocation: true })))
+      .rejects.toThrow(/locations必须覆盖本地区全部地点/)
+    await expect(executeRegionNarrativePacks(input, regionNarrativePacksRunner({ wrongSupply: true })))
+      .rejects.toThrow(/普通任务种子总数/)
+    await expect(executeRegionNarrativePacks(input, regionNarrativePacksRunner({ duplicateDistinctiveness: true })))
+      .rejects.toThrow(/不同的体验辨识度/)
+  }, 75_000)
+
+  it('拒绝遗漏重要故事owner承接，也拒绝重算Hash后解除主线保护或私自绑定Quest', async () => {
+    const input = await regionNarrativePacksFixture()
+    await expect(executeRegionNarrativePacks(input, regionNarrativePacksRunner({ missingOwner: true })))
+      .rejects.toThrow(/owner必须由唯一地区目录需求兑现/)
+    const artifact = (await executeRegionNarrativePacks(input)).artifacts[0]!.payload as TextOpenWorldRegionNarrativePacksV1
+    const tampered = structuredClone(artifact)
+    tampered.governance.regionalConsequencesCannotBlockMainline = false as true
+    tampered.packs[0]!.tensions[0]!.mainlineMayBlock = true as false
+    tampered.packs[0]!.ordinaryQuestSeeds[0]!.binding.questKey = 'quest.forged' as null
+    const { regionNarrativePacksHash: _hash, ...body } = tampered
+    tampered.regionNarrativePacksHash = await hashProductProductionValueV2(body)
+    await expect(validateTextOpenWorldRegionNarrativePacksV1({ artifact: tampered, context: input.regionPacksContext }))
+      .rejects.toThrow(/主线保护、稳定键或未绑定槽被篡改/)
+  }, 75_000)
 })

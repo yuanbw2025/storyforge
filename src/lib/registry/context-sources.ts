@@ -180,6 +180,9 @@ async function readTextOpenWorldMainlineInputContextV1(input: AssembleContextInp
 async function readTextOpenWorldSignificantThreadsInputContextV1(input: AssembleContextInput): Promise<string> {
   return (await import('../open-world/significant-threads-production')).readTextOpenWorldSignificantThreadsInputContextV1(input)
 }
+async function readTextOpenWorldRegionNarrativePacksInputContextV1(input: AssembleContextInput): Promise<string> {
+  return (await import('../open-world/region-narrative-packs-production')).readTextOpenWorldRegionNarrativePacksInputContextV1(input)
+}
 async function readTtrpgGmRuntimeContextV1(input: AssembleContextInput): Promise<string> {
   return (await import('../ttrpg/gm-context')).readTtrpgGmRuntimeContextV1(input)
 }
@@ -1663,6 +1666,18 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     enabled: input => Number.isInteger(input.productProductionId)
       && Number.isInteger(input.productBuildId),
     read: readTextOpenWorldSignificantThreadsInputContextV1,
+  },
+  {
+    key: 'text-open-world.region-narrative-packs-input',
+    label: '文字开放世界地区叙事生态生产输入',
+    scope: 'project',
+    layer: 'L0',
+    ownerFrom: 'work',
+    budgetTokens: 100_000,
+    protectedFromTrim: true,
+    enabled: input => Number.isInteger(input.productProductionId)
+      && Number.isInteger(input.productBuildId),
+    read: readTextOpenWorldRegionNarrativePacksInputContextV1,
   },
   {
     key: 'product-production.quality-feedback',

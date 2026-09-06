@@ -1347,6 +1347,192 @@ export interface TextOpenWorldSignificantThreadsV1 {
   significantThreadsHash: string
 }
 
+export type TextOpenWorldRegionalCharacterTierV1 =
+  | 'important'
+  | 'recurring'
+  | 'functional'
+  | 'ambient'
+
+export type TextOpenWorldRegionalEventKindV1 =
+  | 'ambient'
+  | 'opportunity'
+  | 'danger'
+  | 'discovery'
+  | 'social'
+
+/** P7 per-region content ecology and downstream catalog requirements. */
+export interface TextOpenWorldRegionNarrativePacksV1 {
+  schema: 'storyforge.text-open-world-region-narrative-packs'
+  version: 1
+  productType: 'text-open-world'
+  productInstanceKey: string
+  gameBriefHash: string
+  experienceContractHash: string
+  sourceLedgerHash: string
+  regionSkeletonHash: string
+  mainlineThreadHash: string
+  significantThreadsHash: string
+  packs: Array<{
+    key: string
+    order: number
+    regionKey: string
+    identity: {
+      title: string
+      fantasy: string
+      localConflict: string
+      regionalQuestion: string
+      dailyLifeBaseline: string
+      distinctivenessStatement: string
+    }
+    sourceClaimKeys: string[]
+    mainlineStageKeys: string[]
+    significantThreadKeys: string[]
+    tensions: Array<{
+      key: string
+      order: number
+      title: string
+      sideA: string
+      sideB: string
+      stakes: string
+      pressureAxis: string
+      mainlineMayBlock: false
+    }>
+    stateAxes: Array<{
+      key: string
+      order: number
+      title: string
+      lowExpression: string
+      middleExpression: string
+      highExpression: string
+      mainlineMayBlock: false
+      runtimeBinding: { status: 'effect-unbound'; conditionKeys: []; effectKeys: [] }
+    }>
+    locationPlans: Array<{
+      key: string
+      locationKey: string
+      requiredFunctions: TextOpenWorldLocationFunctionV1[]
+      dailyLife: string
+      activityPatterns: string[]
+      npcRoleNeeds: string[]
+      rumorHooks: string[]
+      timeExpressions: string[]
+      contentRisk: 'safe' | 'ordinary' | 'dangerous'
+      catalogBindingStatus: 'unbound'
+    }>
+    characterRequirements: Array<{
+      key: string
+      order: number
+      tier: TextOpenWorldRegionalCharacterTierV1
+      roleTitle: string
+      narrativeFunction: string
+      homeLocationKey: string
+      routine: string
+      serviceNeeds: string[]
+      significantThreadKeys: string[]
+      sourceClaimKeys: string[]
+      runtimeMode: 'agent-maintained' | 'rule-driven'
+      protectionRequirement: 'protected-nonlethal' | 'ordinary-lifecycle'
+      catalogBinding: { status: 'actor-unbound'; actorKey: null }
+    }>
+    factionRequirements: Array<{
+      key: string
+      order: number
+      title: string
+      publicGoal: string
+      localResource: string
+      visiblePresence: string
+      significantThreadKeys: string[]
+      sourceClaimKeys: string[]
+      catalogBinding: { status: 'faction-unbound'; factionKey: null }
+    }>
+    ordinaryQuestSeeds: Array<{
+      key: string
+      order: number
+      title: string
+      premise: string
+      playerActivity: string
+      locationKeys: string[]
+      tensionKey: string
+      rewardNeeds: string[]
+      estimatedMinutes: number
+      sourceClaimKeys: string[]
+      binding: { status: 'quest-unbound'; questKey: null }
+    }>
+    taskTemplateSeeds: Array<{
+      key: string
+      order: number
+      title: string
+      storyFrame: string
+      locationKeys: string[]
+      variationAxes: string[]
+      eligibilitySummary: string
+      cooldownIntent: string
+      sourceClaimKeys: string[]
+      binding: { status: 'template-unbound'; questTemplateKey: null }
+    }>
+    randomEventSeeds: Array<{
+      key: string
+      order: number
+      kind: TextOpenWorldRegionalEventKindV1
+      title: string
+      setup: string
+      playerOpportunity: string
+      locationKeys: string[]
+      repeatability: 'one-shot' | 'repeatable-variant'
+      sourceClaimKeys: string[]
+      binding: { status: 'event-unbound'; eventKey: null; effectKeys: [] }
+    }>
+    rumors: Array<{
+      key: string
+      order: number
+      text: string
+      pointsTo: 'location' | 'quest' | 'event' | 'tension' | 'character'
+      spoilerBoundary: string
+      sourceClaimKeys: string[]
+      bindingStatus: 'unbound'
+    }>
+  }>
+  coverage: {
+    requiredRegionCount: number
+    actualRegionCount: number
+    requiredLocationKeys: string[]
+    coveredLocationKeys: string[]
+    ordinaryQuestSeedCount: number
+    requiredOrdinaryQuestSeedCount: number
+    taskTemplateSeedCount: number
+    requiredTaskTemplateSeedCount: number
+    randomEventSeedCount: number
+    requiredRandomEventSeedCount: number
+    importantCharacterRequirementCount: number
+    sourceClaimKeys: string[]
+  }
+  governance: {
+    everyLocationHasPlan: true
+    everyRegionDistinct: true
+    ordinaryWorldContinues: true
+    mainlineWaits: true
+    importantStoriesWaitAtSafePoints: true
+    regionalConsequencesCannotBlockMainline: true
+    npcRuntimeSplit: 'important-agent-ordinary-rules'
+    contentSupply: 'build-seeds-before-runtime-deck'
+  }
+  downstreamBinding: {
+    status: 'requirements-unbound'
+    requiredArtifactKeys: [
+      'text-open-world.quest-skeletons',
+      'text-open-world.content-requirement-manifest',
+      'text-open-world.npc-runtime-catalog',
+      'text-open-world.map-interaction-catalog',
+      'text-open-world.quest-design-documents',
+      'text-open-world.director-decks',
+    ]
+    runtimeReady: false
+  }
+  basisHash: string
+  createdAt: number
+  regionNarrativePacksHash: string
+}
+
 export const TEXT_OPEN_WORLD_PRODUCTION_STAGES_V1 = [
   'P0', 'P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8', 'P8F', 'P9', 'P10',
   'V1', 'V2', 'V3', 'QA',
