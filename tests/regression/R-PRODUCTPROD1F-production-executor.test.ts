@@ -444,6 +444,45 @@ function professionalTextAdventurePlanningOutputs(
     key: `stage.${stageIndex + 1}`, title: `主线阶段 ${stageIndex + 1}`,
     objectiveKeys: objectiveKeys.filter((_, index) => stageIndexForObjective(index) === stageIndex),
   }))
+  const mainQuestPlan = {
+    schema: 'storyforge.text-adventure-quest-plan-artifact' as const, version: 1 as const, bundleKind: 'main' as const,
+    quests: [{
+      key: 'quest.main', title: '最后的灯火', description: '调查信号记录、协调港民并决定潮门命运。',
+      characterKeys: characters.map(character => character.key), stages,
+      objectives: objectiveKeys.map((objectiveKey, index) => {
+        const sceneIndex = Math.min(sceneKeys.length - 1, Math.floor(index * sceneKeys.length / objectiveCount))
+        return {
+          key: objectiveKey, stageKey: stages[stageIndexForObjective(index)].key, title: `主线目标 ${index + 1}`,
+          narrativePurpose: '把场景冲突转成玩家可执行且有后果的任务。',
+          sceneKeys: [sceneKeys[sceneIndex]],
+          locationOrdinal: sceneLocationPlan[sceneIndex].locationOrdinal,
+          alternatives: Array.from({ length: index < 2 ? 2 : 1 }, (_, alternativeIndex) => ({
+            key: `alternative.${index + 1}.${alternativeIndex + 1}`,
+            actionKind: alternativeIndex === 0 ? 'inspect' as const : 'talk' as const,
+            targetCharacterKey: alternativeIndex === 1
+              ? `character.npc.${sceneIndex % npcCount + 1}` : null,
+            cost: '消耗时间或关系信任。',
+            successConsequence: '目标完成并让后续人物态度发生可见变化。',
+            failureForwardConsequence: '目标未按预期完成，但获得替代入口并继续主线。',
+            persistentEffectKeys: [`flag.objective.${index + 1}.${alternativeIndex + 1}`],
+          })),
+        }
+      }),
+    }],
+  }
+  const mainObjectiveScripts = mainQuestPlan.quests[0].objectives.map(objective => ({
+    objectiveKey: objective.key, sceneKey: objective.sceneKeys[0],
+    alternatives: objective.alternatives.map(alternative => ({
+      alternativeKey: alternative.key,
+      resolution: alternative.actionKind === 'talk'
+        ? { mode: 'automatic' as const, abilityKey: null, difficulty: null, costlySuccessFloor: null }
+        : { mode: 'check' as const, abilityKey: 'ability.perception', difficulty: 10, costlySuccessFloor: 6 },
+      timeCostMinutes: 5,
+      successText: `你完成了${objective.title}，局面沿可验证的行动继续推进。`,
+      costlySuccessText: `你完成了${objective.title}，但时间和身体状态付出了明确代价。`,
+      failureForwardText: `你没有按预期完成${objective.title}，却获得替代入口并继续主线。`,
+    })),
+  }))
   return {
     'content.source-sufficiency': {
       schema: 'storyforge.text-adventure-source-sufficiency-artifact', version: 1,
@@ -469,30 +508,27 @@ function professionalTextAdventurePlanningOutputs(
         endingKey: ending.key, sceneKey: sceneKeys[Math.max(0, sceneKeys.length - 1 - index)],
       })),
     },
-    'content.main-quest-plan': {
-      schema: 'storyforge.text-adventure-quest-plan-artifact', version: 1, bundleKind: 'main',
-      quests: [{
-        key: 'quest.main', title: '最后的灯火', description: '调查信号记录、协调港民并决定潮门命运。',
-        characterKeys: characters.map(character => character.key), stages,
-        objectives: objectiveKeys.map((objectiveKey, index) => {
-          const sceneIndex = Math.min(sceneKeys.length - 1, Math.floor(index * sceneKeys.length / objectiveCount))
-          return {
-            key: objectiveKey, stageKey: stages[stageIndexForObjective(index)].key, title: `主线目标 ${index + 1}`,
-            narrativePurpose: '把场景冲突转成玩家可执行且有后果的任务。',
-            sceneKeys: [sceneKeys[sceneIndex]],
-            locationOrdinal: sceneLocationPlan[sceneIndex].locationOrdinal,
-            alternatives: Array.from({ length: index < 2 ? 2 : 1 }, (_, alternativeIndex) => ({
-              key: `alternative.${index + 1}.${alternativeIndex + 1}`,
-              actionKind: alternativeIndex === 0 ? 'inspect' as const : 'talk' as const,
-              targetCharacterKey: alternativeIndex === 1
-                ? `character.npc.${sceneIndex % npcCount + 1}` : null,
-              cost: '消耗时间或关系信任。',
-              successConsequence: '目标完成并让后续人物态度发生可见变化。',
-              failureForwardConsequence: '目标未按预期完成，但获得替代入口并继续主线。',
-              persistentEffectKeys: [`flag.objective.${index + 1}.${alternativeIndex + 1}`],
-            })),
-          }
-        }),
+    'content.main-quest-plan': mainQuestPlan,
+    'content.quest-script': {
+      schema: 'storyforge.text-adventure-quest-script-artifact', version: 1,
+      mainObjectiveScripts,
+      sideQuestScripts: [{
+        entryKey: 'lost-lamp', actionKind: 'quest-action', abilityKey: 'ability.perception',
+        difficulty: 10, costlySuccessFloor: 6, timeCostMinutes: 10,
+        successText: '你在旧仓街木箱夹层找到了引航灯。',
+        costlySuccessText: '你找到了引航灯，但手臂受伤并耽误了时间。',
+        failureForwardText: '灯被冲远了，但船工给出另一条通往灯塔的路线。',
+      }],
+      ambientEventScripts: [{
+        entryKey: 'tide-warning', actionKind: 'inspect', abilityKey: 'ability.perception',
+        difficulty: 8, costlySuccessFloor: 4, timeCostMinutes: 5,
+        successText: '你准确读出了潮汐变化。', costlySuccessText: '你读懂刻度，但浪费了一些时间。',
+        failureForwardText: '你判断失误，却因此发现墙后的避险通道。',
+      }, {
+        entryKey: 'warehouse-echo', actionKind: 'attempt', abilityKey: 'ability.resolve',
+        difficulty: 9, costlySuccessFloor: 5, timeCostMinutes: 8,
+        successText: '你发现那是被困船员的求救信号。', costlySuccessText: '你救出船员，但耽误了赶往灯塔的时间。',
+        failureForwardText: '声音消失了，却留下一张通往灯塔的旧图。',
       }],
     },
   } as const
@@ -562,9 +598,26 @@ function fullLengthTextAdventureOutputs(
     failureText: '行动失败，却打开了替代局面并继续推进。', rewardExperience: 3, rewardCurrency: 1,
     timeCostMinutes: 8,
   })
+  const professional = professionalTextAdventurePlanningOutputs(brief)
+  const sideEntries = Array.from(
+    { length: contract.narrative.targetSideQuestCount }, (_, index) => questEntry('side', index),
+  )
+  const ambientEntries = Array.from(
+    { length: contract.narrative.targetAmbientEventCount }, (_, index) => questEntry('ambient', index),
+  )
+  const mainPlan = professional['content.main-quest-plan']
+  const scriptedSupplemental = (entries: typeof sideEntries, actionKind: 'quest-action' | 'inspect') => (
+    entries.map(entry => ({
+      entryKey: entry.key, actionKind, abilityKey: entry.abilityKey,
+      difficulty: entry.difficulty, costlySuccessFloor: Math.max(1, entry.difficulty - 4),
+      timeCostMinutes: entry.timeCostMinutes,
+      successText: entry.successText, costlySuccessText: entry.costlySuccessText,
+      failureForwardText: entry.failureText,
+    }))
+  )
   return {
     ...base,
-    ...professionalTextAdventurePlanningOutputs(brief),
+    ...professional,
     'content.adventure-architecture': {
       ...base['content.adventure-architecture'],
       regions,
@@ -576,11 +629,29 @@ function fullLengthTextAdventureOutputs(
     },
     'content.adventure-side-quests': {
       schema: 'storyforge.text-adventure-quest-bundle-artifact' as const, version: 1 as const, bundleKind: 'side' as const,
-      entries: Array.from({ length: contract.narrative.targetSideQuestCount }, (_, index) => questEntry('side', index)),
+      entries: sideEntries,
     },
     'content.adventure-ambient-events': {
       schema: 'storyforge.text-adventure-quest-bundle-artifact' as const, version: 1 as const, bundleKind: 'ambient' as const,
-      entries: Array.from({ length: contract.narrative.targetAmbientEventCount }, (_, index) => questEntry('ambient', index)),
+      entries: ambientEntries,
+    },
+    'content.quest-script': {
+      schema: 'storyforge.text-adventure-quest-script-artifact' as const, version: 1 as const,
+      mainObjectiveScripts: mainPlan.quests[0].objectives.map(objective => ({
+        objectiveKey: objective.key, sceneKey: objective.sceneKeys[0],
+        alternatives: objective.alternatives.map(alternative => ({
+          alternativeKey: alternative.key,
+          resolution: alternative.actionKind === 'talk'
+            ? { mode: 'automatic' as const, abilityKey: null, difficulty: null, costlySuccessFloor: null }
+            : { mode: 'check' as const, abilityKey: 'ability.perception', difficulty: 10, costlySuccessFloor: 6 },
+          timeCostMinutes: 5,
+          successText: `你完成了${objective.title}，主线获得清晰进展。`,
+          costlySuccessText: `你完成了${objective.title}，但付出了时间和体力。`,
+          failureForwardText: `你没有按预期完成${objective.title}，却找到替代推进方式。`,
+        })),
+      })),
+      sideQuestScripts: scriptedSupplemental(sideEntries, 'quest-action'),
+      ambientEventScripts: scriptedSupplemental(ambientEntries, 'inspect'),
     },
     'media.requirements': {
       ...base['media.requirements'], visual: [], audio: [],
@@ -1315,6 +1386,10 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     expect(mainQuest.objectives.filter(item => item.alternativeActionKeys.length >= 2)).toHaveLength(2)
     expect(runtimePackage.interaction?.profiles).toHaveLength(2)
     expect(runtimePackage.adventure.actions.filter(item => item.kind === 'talk').length).toBeGreaterThanOrEqual(2)
+    expect(runtimePackage.adventure.actions.find(item => item.key === 'action.main.alternative.1.1')).toMatchObject({
+      rule: { kind: 'random', abilityKey: 'ability.perception', difficulty: 10, costlySuccessFloor: 6 },
+      successText: expect.stringContaining('主线获得清晰进展'),
+    })
     expect(runtimePackage.adventure.items).toContainEqual(expect.objectContaining({
       key: 'item.product.field-notes', tags: expect.arrayContaining(['product-private']),
     }))
@@ -1588,7 +1663,7 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
       ['content.source-sufficiency', 1], ['content.design', 1], ['content.story-bible', 1],
       ['content.cast-bible', 1], ['content.adventure-architecture', 1],
       ['content.narrative-arc-plan', 1], ['content.main-quest-plan', 1], ['content.narrative', 4],
-      ['content.product-module', 1], ['content.adventure-side-quests', 2],
+      ['content.product-module', 1], ['content.adventure-side-quests', 2], ['content.quest-script', 2],
       ['content.adventure-ambient-events', 1], ['content.adventure-quality-review', 2],
       ['media.requirements', 2],
     ])
@@ -1691,7 +1766,7 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
         })
         expect(reviewArtifacts.map(artifact => artifact.artifactKey)).toEqual(expect.arrayContaining([
           'content.adventure-architecture', 'content.narrative', 'content.product-module',
-          'content.adventure-side-quests', 'content.adventure-ambient-events',
+          'content.adventure-side-quests', 'content.adventure-ambient-events', 'content.quest-script',
           'quality.adventure-review', 'media.requirements',
           'runtime.package', 'quality.report',
         ]))

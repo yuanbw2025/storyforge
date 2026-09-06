@@ -88,8 +88,8 @@
 | `ttrpgRuntime` | 正式 TTRPG 主持人运行视角 | runtime | L0 | 10000 |
 | `ttrpgPlayerRuntime` | 正式 TTRPG 单角色玩家运行视角 | runtime | L0 | 10000 |
 | `product-production.brief` | 已授权上层产品生产 Brief | project | L0 | 8000 |
-| `product-production.artifact-inputs` | 上层产品生产任务依赖 | project | L1 | 10000 |
-| `product-production.adventure-quality-inputs` | 文字冒险叙事质量审查投影 | project | L0 | 12000 |
+| `product-production.artifact-inputs` | 上层产品生产任务依赖 | project | L1 | 24000 |
+| `product-production.adventure-quality-inputs` | 文字冒险叙事质量审查投影 | project | L0 | 16000 |
 | `product-production.adventure-repair-feedback` | 文字冒险上一轮质量修复反馈 | project | L0 | 3000 |
 | `product-production.quality-feedback` | 上层产品生产质量反馈 | project | L1 | 6000 |
 | `product-production.evolution-base` | 游戏持续演化基线 | project | L0 | 12000 |
@@ -393,4 +393,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `66efdb3f`
+生成时间基准:commit `4f7c1969`

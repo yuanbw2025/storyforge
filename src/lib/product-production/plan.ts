@@ -296,7 +296,7 @@ export async function createProductProductionPlanV3(input: {
     (_, index) => `media.audio.${String(index + 1).padStart(3, '0')}`,
   )
   const textAdventure = brief.intent.productType === 'text-adventure'
-  const modelTaskCount = textAdventure ? 13 : 4
+  const modelTaskCount = textAdventure ? 14 : 4
   const textAdventureOutputWeights: Record<string, number> = {
     'content.source-sufficiency': 0.05,
     'content.design': 0.04,
@@ -306,7 +306,8 @@ export async function createProductProductionPlanV3(input: {
     'content.product-module': 0.07,
     'content.narrative-arc-plan': 0.07,
     'content.main-quest-plan': 0.08,
-    'content.narrative': 0.23,
+    'content.quest-script': 0.05,
+    'content.narrative': 0.18,
     'content.adventure-side-quests': 0.06,
     'content.adventure-ambient-events': 0.04,
     'content.adventure-quality-review': 0.06,
@@ -480,15 +481,36 @@ export async function createProductProductionPlanV3(input: {
     }),
   )
   if (textAdventure) tasks.push(productionTask({
+    taskKey: 'content.quest-script', lane: 'content', kind: 'text-adventure-quest-script',
+    skillId: 'text-adventure.quest-script.v1', executionMode: 'model',
+    dependsOn: [
+      'content.story-bible', 'content.cast-bible', 'content.product-module',
+      'content.narrative-arc-plan', 'content.main-quest-plan',
+      'content.adventure-side-quests', 'content.adventure-ambient-events',
+    ],
+    inputArtifactKeys: [
+      'content.story-bible', 'content.cast-bible', 'content.product-module',
+      'content.narrative-arc-plan', 'content.main-quest-plan',
+      'content.adventure-side-quests', 'content.adventure-ambient-events',
+    ],
+    outputArtifactKeys: ['content.quest-script'], requirementKeys: [],
+    capabilityRequirementKeys: textCapabilities, concurrencyGroup: 'text-provider',
+    subjectLockKeys: ['content.quest-script'], priority: 78, budgetReservation: modelBudget('content.quest-script'),
+    maxAttempts: 2, timeoutMs: 300_000, failurePolicy: 'pause', fallbackTaskKey: null,
+    acceptanceGateIds: ['artifact.protocol', 'adventure.quest-script'],
+  }))
+  if (textAdventure) tasks.push(productionTask({
     taskKey: 'content.narrative', lane: 'content', kind: 'narrative',
     skillId: 'text-adventure.scene-script.v1', executionMode: 'model',
     dependsOn: [
       'content.cast-bible', 'content.adventure-architecture', 'content.narrative-arc-plan',
       'content.main-quest-plan', 'content.adventure-side-quests', 'content.adventure-ambient-events',
+      'content.quest-script',
     ],
     inputArtifactKeys: [
       'content.cast-bible', 'content.adventure-architecture', 'content.narrative-arc-plan',
       'content.main-quest-plan', 'content.adventure-side-quests', 'content.adventure-ambient-events',
+      'content.quest-script',
     ],
     outputArtifactKeys: ['content.narrative'], requirementKeys: [],
     capabilityRequirementKeys: textCapabilities, concurrencyGroup: 'text-provider',
@@ -502,12 +524,12 @@ export async function createProductProductionPlanV3(input: {
     dependsOn: [
       'content.story-bible', 'content.cast-bible', 'content.adventure-architecture',
       'content.product-module', 'content.narrative-arc-plan', 'content.main-quest-plan',
-      'content.adventure-side-quests', 'content.adventure-ambient-events', 'content.narrative',
+      'content.adventure-side-quests', 'content.adventure-ambient-events', 'content.quest-script', 'content.narrative',
     ],
     inputArtifactKeys: [
       'content.story-bible', 'content.cast-bible', 'content.adventure-architecture',
       'content.product-module', 'content.narrative-arc-plan', 'content.main-quest-plan',
-      'content.adventure-side-quests', 'content.adventure-ambient-events', 'content.narrative',
+      'content.adventure-side-quests', 'content.adventure-ambient-events', 'content.quest-script', 'content.narrative',
     ],
     outputArtifactKeys: ['quality.adventure-review'], requirementKeys: [],
     capabilityRequirementKeys: textCapabilities, concurrencyGroup: 'text-provider',
@@ -523,7 +545,7 @@ export async function createProductProductionPlanV3(input: {
     ? [
         'content.story-bible', 'content.cast-bible', 'content.adventure-architecture',
         'content.product-module', 'content.narrative-arc-plan', 'content.main-quest-plan',
-        'content.adventure-side-quests', 'content.adventure-ambient-events',
+        'content.adventure-side-quests', 'content.adventure-ambient-events', 'content.quest-script',
         'content.narrative', 'quality.adventure-review',
       ]
     : ['design.game']
@@ -582,7 +604,7 @@ export async function createProductProductionPlanV3(input: {
     ? [
         'content.story-bible', 'content.cast-bible', 'content.adventure-architecture',
         'content.narrative-arc-plan', 'content.main-quest-plan', 'content.adventure-side-quests',
-        'content.adventure-ambient-events', 'content.adventure-quality-review',
+        'content.adventure-ambient-events', 'content.quest-script', 'content.adventure-quality-review',
       ] : []
   const integrationDependencies = [
     'content.narrative', 'content.product-module', ...textAdventureDependencies,
@@ -592,7 +614,7 @@ export async function createProductProductionPlanV3(input: {
     ? [
         'content.story-bible', 'content.cast-bible', 'content.adventure-architecture',
         'content.narrative-arc-plan', 'content.main-quest-plan', 'content.adventure-side-quests',
-        'content.adventure-ambient-events', 'quality.adventure-review',
+        'content.adventure-ambient-events', 'content.quest-script', 'quality.adventure-review',
       ] : []
   const integrationArtifactKeys = brief.intent.productType === 'ttrpg'
     ? ['ttrpg.rule-pack', 'ttrpg.campaign-pack', 'runtime.package']

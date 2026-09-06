@@ -4,6 +4,7 @@ import {
   parseTextAdventureCastBibleArtifactV1,
   parseTextAdventureNarrativeArcPlanArtifactV1,
   parseTextAdventureQuestPlanArtifactV1,
+  parseTextAdventureQuestScriptArtifactV1,
   parseTextAdventureSourceSufficiencyArtifactV1,
   parseTextAdventureStoryBibleArtifactV1,
 } from '../../src/lib/adventure/production-artifacts-v2'
@@ -192,5 +193,35 @@ describe('TEXTADV-3 · 专业生产工件合同', () => {
     expect(() => parseTextAdventureQuestPlanArtifactV1({
       value: broken, brief: brief(), arcPlan: arc, cast, expectedKind: 'main', expectedQuestCount: 1,
     })).toThrow('未精确覆盖')
+
+    const questScriptValue = {
+      schema: 'storyforge.text-adventure-quest-script-artifact', version: 1,
+      mainObjectiveScripts: [{
+        objectiveKey: 'objective.records', sceneKey: 'scene.1',
+        alternatives: [{
+          alternativeKey: 'route.talk',
+          resolution: { mode: 'automatic', abilityKey: null, difficulty: null, costlySuccessFloor: null },
+          timeCostMinutes: 5, successText: '同伴最终交出了记录。',
+          costlySuccessText: '同伴交出记录，但关系明显承压。',
+          failureForwardText: '同伴拒绝交付，却留下了通往仓库的钥匙。',
+        }],
+      }],
+      sideQuestScripts: [], ambientEventScripts: [],
+    }
+    const script = parseTextAdventureQuestScriptArtifactV1({
+      value: questScriptValue, brief: brief(), mainQuestPlan: parsed,
+      systems: { abilities: [{ key: 'ability.perception' }] } as never,
+      sideQuests: { entries: [] } as never, ambientEvents: { entries: [] } as never,
+    })
+    expect(script.mainObjectiveScripts[0].alternatives[0].resolution.mode).toBe('automatic')
+    const illegalCheck = JSON.parse(JSON.stringify(questScriptValue))
+    illegalCheck.mainObjectiveScripts[0].alternatives[0].resolution = {
+      mode: 'check', abilityKey: 'ability.unknown', difficulty: 10, costlySuccessFloor: 6,
+    }
+    expect(() => parseTextAdventureQuestScriptArtifactV1({
+      value: illegalCheck, brief: brief(), mainQuestPlan: parsed,
+      systems: { abilities: [{ key: 'ability.perception' }] } as never,
+      sideQuests: { entries: [] } as never, ambientEvents: { entries: [] } as never,
+    })).toThrow('已登记能力')
   })
 })

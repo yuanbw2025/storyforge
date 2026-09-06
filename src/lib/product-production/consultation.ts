@@ -372,6 +372,15 @@ export async function draftProductProductionBriefV3(input: {
     unresolvedDecisionKeys.push(...unresolvedTtrpgProductionBriefDecisionsV2(ttrpg!))
   }
   if (textAdventure) unresolvedDecisionKeys.push(...unresolvedTextAdventureProductionBriefDecisionsV1(textAdventure))
+  const productionModelCalls = textAdventure
+    ? Math.max(24, 16 + textAdventure.narrative.targetSceneCount + scale.targetEndingCount)
+    : 16
+  const productionInputTokens = textAdventure
+    ? Math.max(300_000, productionModelCalls * 16_000)
+    : 180_000
+  const productionOutputTokens = textAdventure
+    ? Math.max(100_000, scale.targetWordCount * 6 + 40_000)
+    : 60_000
   return parseProductProductionBriefV3({
     schema: 'storyforge.product-production-brief', version: 3,
     source: {
@@ -400,9 +409,11 @@ export async function draftProductProductionBriefV3(input: {
       maximumModelCalls: 3, maximumInputTokens: 30_000, maximumOutputTokens: 8_000, maximumCostUsd: null,
     },
     productionBudget: {
-      maximumModelCalls: 16, maximumInputTokens: 180_000, maximumOutputTokens: 60_000,
+      maximumModelCalls: productionModelCalls,
+      maximumInputTokens: productionInputTokens,
+      maximumOutputTokens: productionOutputTokens,
       maximumCostUsd: null, maximumMediaCalls: Math.max(1, media.imageCount + media.musicTrackCount + media.sfxCount),
-      maximumDurationMs: 3_600_000, maximumStorageBytes: 200_000_000,
+      maximumDurationMs: textAdventure ? 14_400_000 : 3_600_000, maximumStorageBytes: 200_000_000,
     },
     qualityProfile,
     capabilityRequirements: requirements,

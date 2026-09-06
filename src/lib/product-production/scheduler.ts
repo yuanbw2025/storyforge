@@ -583,6 +583,7 @@ function evolutionTaskLane(taskKey: string): 'content' | 'product' | 'visual' | 
     || taskKey === 'content.adventure-architecture'
     || taskKey === 'content.narrative-arc-plan'
     || taskKey === 'content.main-quest-plan'
+    || taskKey === 'content.quest-script'
     || taskKey === 'content.adventure-side-quests'
     || taskKey === 'content.adventure-ambient-events'
     || taskKey === 'content.adventure-quality-review') return 'content'

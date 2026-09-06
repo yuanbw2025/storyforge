@@ -17,6 +17,7 @@ import type {
   TextAdventureCastBibleArtifactV1,
   TextAdventureNarrativeArcPlanArtifactV1,
   TextAdventureQuestPlanArtifactV1,
+  TextAdventureQuestScriptArtifactV1,
 } from './production-artifacts-v2'
 import { planTextAdventureNarrativeLocationsV1 } from './narrative-location-plan'
 
@@ -29,6 +30,7 @@ export interface TextAdventureProductionCompilerInputV1 {
   cast: TextAdventureCastBibleArtifactV1
   arcPlan: TextAdventureNarrativeArcPlanArtifactV1
   mainQuestPlan: TextAdventureQuestPlanArtifactV1
+  questScript: TextAdventureQuestScriptArtifactV1
   sideQuests: TextAdventureQuestBundleArtifactV1
   ambientEvents: TextAdventureQuestBundleArtifactV1
   sourceCatalog?: Pick<ProductProductionWorldSourceCatalogV2, 'artifacts'>
@@ -285,6 +287,7 @@ export function compileTextAdventureModuleV2(
   const orderedMainObjectives = mainQuest.stages.flatMap(stage => (
     stage.objectiveKeys.map(objectiveKey => mainQuest.objectives.find(objective => objective.key === objectiveKey)!)
   ))
+  const mainScriptByObjective = new Map(input.questScript.mainObjectiveScripts.map(script => [script.objectiveKey, script]))
   const npcCharacters = input.cast.characters.filter(character => character.role !== 'player')
   const mainActionLabel: Record<TextAdventureQuestPlanArtifactV1['quests'][number]['objectives'][number]['alternatives'][number]['actionKind'], string> = {
     look: '观察', move: '前往', talk: '交谈', take: '取得', give: '交付', use: '使用',
@@ -299,6 +302,9 @@ export function compileTextAdventureModuleV2(
     }
     const previousObjective = orderedMainObjectives[objectiveIndex - 1]
     objective.alternatives.forEach(alternative => {
+      const script = mainScriptByObjective.get(objective.key)?.alternatives
+        .find(candidate => candidate.alternativeKey === alternative.key)
+      if (!script) fail(`主线解法缺少 Quest Script:${alternative.key}`)
       let interaction: AdventureActionDefinition['interaction'] = null
       if (alternative.actionKind === 'talk') {
         const npcIndex = npcCharacters.findIndex(character => character.key === alternative.targetCharacterKey)
@@ -317,7 +323,7 @@ export function compileTextAdventureModuleV2(
         ...alternative.persistentEffectKeys.map(conditionKey => (
           { op: 'apply-condition' as const, conditionKey, duration: null }
         )),
-        { op: 'change-resource', resourceKey: clock.key, delta: Math.max(3, Math.round(input.brief.scale.targetPlayMinutes / mainQuest.objectives.length / 2)) },
+        { op: 'change-resource', resourceKey: clock.key, delta: script.timeCostMinutes },
       ]
       registerAction({
         key: `action.main.${alternative.key}`, kind: alternative.actionKind,
@@ -333,17 +339,20 @@ export function compileTextAdventureModuleV2(
           }] : []),
           { narrativePath: '__storyforge.currentNarrativeNodeKey', narrativeEquals: narrativeNodeForScene.get(scene.key)! },
         ],
-        rule: alternative.actionKind === 'attempt' || alternative.actionKind === 'inspect'
-          ? { kind: 'random', abilityKey: fallbackAbilityKey, expression: '1d20', difficulty: 10, costlySuccessFloor: 6 }
+        rule: script.resolution.mode === 'check'
+          ? {
+              kind: 'random', abilityKey: script.resolution.abilityKey!, expression: '1d20',
+              difficulty: script.resolution.difficulty!, costlySuccessFloor: script.resolution.costlySuccessFloor!,
+            }
           : { kind: 'automatic' },
         successEffects: completionEffects,
         costlySuccessEffects: [...completionEffects, { op: 'change-resource', resourceKey: health.key, delta: -1 }],
         failureEffects: contract.narrative.failForward
           ? [...completionEffects, { op: 'change-resource', resourceKey: health.key, delta: -1 }]
           : [{ op: 'change-resource', resourceKey: clock.key, delta: 3 }],
-        successText: alternative.successConsequence,
-        costlySuccessText: `${alternative.successConsequence}\n代价：${alternative.cost}`,
-        failureText: alternative.failureForwardConsequence,
+        successText: script.successText,
+        costlySuccessText: script.costlySuccessText,
+        failureText: script.failureForwardText,
         unavailableText: '这项目标尚未轮到、已经完成，或当前不在对应场景。',
         repeatable: false, narrativeChoiceKey: null, interaction,
       }, scene.key)
@@ -424,7 +433,12 @@ export function compileTextAdventureModuleV2(
 
   const storylets: AdventureContentV2['storylets'] = []
   const compileBundle = (bundle: TextAdventureQuestBundleArtifactV1) => {
+    const scripts = bundle.bundleKind === 'side'
+      ? input.questScript.sideQuestScripts : input.questScript.ambientEventScripts
+    const scriptByEntry = new Map(scripts.map(script => [script.entryKey, script]))
     bundle.entries.forEach((entry, index) => {
+      const script = scriptByEntry.get(entry.key)
+      if (!script) fail(`${bundle.bundleKind} 条目缺少 Quest Script:${entry.key}`)
       const location = locations[(entry.locationOrdinal - 1) % locations.length]
       const questKey = `quest.${bundle.bundleKind}.${entry.key}`
       const stageKey = `stage.${bundle.bundleKind}.${entry.key}`
@@ -458,26 +472,29 @@ export function compileTextAdventureModuleV2(
         failureText: `你暂时无法接取${entry.title}。`, unavailableText: '这项支线已经接取或结束。',
         repeatable: false, narrativeChoiceKey: null, interaction: null,
       })
-      const abilityKey = abilityKeys.has(entry.abilityKey) ? entry.abilityKey : fallbackAbilityKey
+      const abilityKey = abilityKeys.has(script.abilityKey) ? script.abilityKey : fallbackAbilityKey
       const completionEffects: AdventureEffect[] = [
         { op: 'complete-objective', questKey, objectiveKey },
-        { op: 'change-resource', resourceKey: clock.key, delta: entry.timeCostMinutes },
+        { op: 'change-resource', resourceKey: clock.key, delta: script.timeCostMinutes },
         { op: 'apply-condition', conditionKey, duration: null },
       ]
       registerAction({
-        key: actionKey, kind: bundle.bundleKind === 'side' ? 'quest-action' : 'inspect',
+        key: actionKey, kind: script.actionKind,
         label: `${bundle.bundleKind === 'side' ? '执行' : '处理'}：${entry.title}`,
         description: `${entry.objective}\n${entry.description}`, locationKey: location.key, targetKey: null,
         requirements: [{ questKey, questStatus: 'active' }],
-        rule: { kind: 'random', abilityKey, expression: '1d20', difficulty: entry.difficulty, costlySuccessFloor: Math.max(1, entry.difficulty - 4) },
+        rule: {
+          kind: 'random', abilityKey, expression: '1d20', difficulty: script.difficulty,
+          costlySuccessFloor: script.costlySuccessFloor,
+        },
         successEffects: completionEffects, costlySuccessEffects: [
           ...completionEffects, { op: 'change-resource', resourceKey: health.key, delta: -1 },
         ],
         failureEffects: contract.narrative.failForward ? [
           ...completionEffects, { op: 'change-resource', resourceKey: health.key, delta: -1 },
-        ] : [{ op: 'change-resource', resourceKey: clock.key, delta: entry.timeCostMinutes }],
-        successText: entry.successText, costlySuccessText: entry.costlySuccessText,
-        failureText: entry.failureText, unavailableText: '这段内容当前尚未满足条件。',
+        ] : [{ op: 'change-resource', resourceKey: clock.key, delta: script.timeCostMinutes }],
+        successText: script.successText, costlySuccessText: script.costlySuccessText,
+        failureText: script.failureForwardText, unavailableText: '这段内容当前尚未满足条件。',
         repeatable: false, narrativeChoiceKey: null, interaction: null,
       })
       storylets.push({

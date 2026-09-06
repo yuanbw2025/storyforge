@@ -16,6 +16,7 @@ import type {
   TextAdventureCastBibleArtifactV1,
   TextAdventureNarrativeArcPlanArtifactV1,
   TextAdventureQuestPlanArtifactV1,
+  TextAdventureQuestScriptArtifactV1,
 } from '../adventure/production-artifacts-v2'
 import type {
   AdventureContent,
@@ -48,6 +49,7 @@ export interface ProductAdapterBuildInputV1 {
     cast: TextAdventureCastBibleArtifactV1
     arcPlan: TextAdventureNarrativeArcPlanArtifactV1
     mainQuestPlan: TextAdventureQuestPlanArtifactV1
+    questScript: TextAdventureQuestScriptArtifactV1
     sideQuests: TextAdventureQuestBundleArtifactV1
     ambientEvents: TextAdventureQuestBundleArtifactV1
   }
@@ -84,6 +86,7 @@ function adventureModule(
     cast: input.textAdventureProduction.cast,
     arcPlan: input.textAdventureProduction.arcPlan,
     mainQuestPlan: input.textAdventureProduction.mainQuestPlan,
+    questScript: input.textAdventureProduction.questScript,
     sideQuests: input.textAdventureProduction.sideQuests,
     ambientEvents: input.textAdventureProduction.ambientEvents,
   })

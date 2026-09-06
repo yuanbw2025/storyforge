@@ -46,6 +46,7 @@ import {
   parseTextAdventureCastBibleArtifactV1,
   parseTextAdventureNarrativeArcPlanArtifactV1,
   parseTextAdventureQuestPlanArtifactV1,
+  parseTextAdventureQuestScriptArtifactV1,
   parseTextAdventureSourceSufficiencyArtifactV1,
   parseTextAdventureStoryBibleArtifactV1,
 } from '../adventure/production-artifacts-v2'
@@ -995,12 +996,19 @@ function textSystem(
       '每项的 title、description、hook、objective 至少一处必须逐字写出所绑定的 locationTitle，并且不得把另一个登记地点写成该行动的发生地；当前单条任务只编译为一个地点的一次行动，不得伪装成尚未实现的跨地点多阶段任务。' +
       `不得把题材专用机制写成字段。${adventure.narrative.failForward ? '失败文本和效果必须开启新局面，而不是死路。' : ''}`
   }
+  if (taskKey === 'content.quest-script') {
+    if (!adventure) return `${common}\n缺少文字冒险专用 Brief，停止。`
+    return `${common}\n你是任务脚本工程师。你不设计新故事、不修改上游阶段或目标，也不直接写运行状态；你的职责是把已采纳的主线、支线和区域事件计划逐项翻译为受控的检查参数、时间成本与三档结算文本。` +
+      '输出字段必须精确为：{"schema":"storyforge.text-adventure-quest-script-artifact","version":1,"mainObjectiveScripts":[{"objectiveKey":"objective.some-key","sceneKey":"scene.001","alternatives":[{"alternativeKey":"alternative.some-key","resolution":{"mode":"automatic|check","abilityKey":null,"difficulty":null,"costlySuccessFloor":null},"timeCostMinutes":5,"successText":"...","costlySuccessText":"...","failureForwardText":"..."}]}],"sideQuestScripts":[{"entryKey":"side-key","actionKind":"inspect|attempt|use|quest-action","abilityKey":"ability.some-key","difficulty":10,"costlySuccessFloor":6,"timeCostMinutes":8,"successText":"...","costlySuccessText":"...","failureForwardText":"..."}],"ambientEventScripts":[]}。' +
+      'mainObjectiveScripts 必须按主线 stage.objectiveKeys 的顺序不重不漏覆盖全部目标，sceneKey 必须等于该目标首个 sceneKey，每个 alternatives 必须不重不漏覆盖计划解法。automatic 的三个检查参数必须全为 null；check 必须复用 systems.abilities 的 key，difficulty 为 2–30，costlySuccessFloor 为 1–29 且严格小于 difficulty。' +
+      'sideQuestScripts 与 ambientEventScripts 必须分别精确覆盖上游条目，abilityKey 必须逐字沿用条目并存在于 systems，失败文本必须产生代价、新信息或替代推进，不得写“失败了，请重试”。所有玩家可见结算文本必须具体落实对应人物、地点、目标和后果。'
+  }
   if (taskKey === 'content.adventure-quality-review') {
     if (!adventure) return `${common}\n缺少文字冒险专用 Brief，停止。`
     return `${common}\n你是独立于内容生产者的文字冒险叙事质量审查负责人。只能依据登记的架构、主线、系统、支线和区域事件 Artifact 审查，不得擅自改写内容或虚构已通过证据。` +
       '分别以 1–5 的整数评价因果连续性、玩家能动性、路线差异、节奏、铺垫回收、人物动机和情绪触达；scores 的七个值只能是 JSON number 1、2、3、4 或 5，禁止小数、字符串、"4/5"、"4分"、null 和任何解释性对象。任何一项低于 3，或存在会破坏完整游戏体验的问题，必须登记 blocking。必须逐条列出主线 choice 的 sourceNodeKey、选择文案、targetNodeKey 与目标节点开场内容并交叉核对；选择表达的立即行动、目标地点或决定与目标节点不一致时必须登记 blocking，不能只检查图可达性。' +
       `还必须按地点清单 ${JSON.stringify(textAdventureLocationTitles)} 核对每个支线和区域事件的 locationOrdinal 与玩家可见钩子/目标；发生地错位或无法在绑定地点成立的行动必须登记 blocking。玩家身份和占位角色泄漏由后续确定性 RuntimePackage 门检负责，不得伪造本审查投影中不存在的身份证据。` +
-      '输出字段必须精确为：{"schema":"storyforge.text-adventure-quality-review-artifact","version":1,"scores":{"causality":1,"playerAgency":1,"routeDifferentiation":1,"pacing":1,"setupPayoff":1,"characterMotivation":1,"emotionalImpact":1},"issues":[{"severity":"warning|blocking","artifactKey":"content.story-bible|content.cast-bible|content.adventure-architecture|content.narrative-arc-plan|content.main-quest-plan|content.narrative|content.product-module|content.adventure-side-quests|content.adventure-ambient-events","detail":"...","recommendation":"..."}],"passed":false}。示例中的 1 和 false 是保守占位，不是目标分数；必须依据证据逐项改写，禁止复制成批量高分。' +
+      '输出字段必须精确为：{"schema":"storyforge.text-adventure-quality-review-artifact","version":1,"scores":{"causality":1,"playerAgency":1,"routeDifferentiation":1,"pacing":1,"setupPayoff":1,"characterMotivation":1,"emotionalImpact":1},"issues":[{"severity":"warning|blocking","artifactKey":"content.story-bible|content.cast-bible|content.adventure-architecture|content.narrative-arc-plan|content.main-quest-plan|content.quest-script|content.narrative|content.product-module|content.adventure-side-quests|content.adventure-ambient-events","detail":"...","recommendation":"..."}],"passed":false}。示例中的 1 和 false 是保守占位，不是目标分数；必须依据证据逐项改写，禁止复制成批量高分。' +
       `审查时必须对照目标 ${brief.scale.targetPlayMinutes} 分钟、约 ${brief.scale.targetWordCount} 个中文内容单位、${adventure.narrative.targetSceneCount} 个场景、${adventure.narrative.targetEndingCount} 个结局，并核查失败是否产生代价或新局面。passed 是确定性派生字段：最终 issues 和 scores 写完后必须重新计算；仅当没有 blocking 且七项分数都不低于 3 时为 true，否则必须为 false。`
   }
   const adventureVisualBlueprints = [
@@ -1202,6 +1210,42 @@ async function executeModelTask(input: ProductProductionTaskExecutionInputV1, op
       mainQuestPlanVerified: true,
       stageCount: mainQuestPlan.quests[0].stages.length,
       objectiveCount: mainQuestPlan.quests[0].objectives.length,
+    }
+  } else if (input.task.taskKey === 'content.quest-script') {
+    if (!options.brief.textAdventure) fail('文字冒险任务脚本缺少专用 Brief')
+    const systems = parseTextAdventureSystemsArtifactV1(
+      artifactPayload(input, 'content.product-module'), options.brief.textAdventure,
+    )
+    const cast = parseTextAdventureCastBibleArtifactV1({
+      value: artifactPayload(input, 'content.cast-bible'), brief: options.brief,
+      allowedResourceKeys: options.brief.source.selection.resourceKeys,
+    })
+    const storyBible = parseTextAdventureStoryBibleArtifactV1(
+      artifactPayload(input, 'content.story-bible'), options.brief,
+    )
+    const arcPlan = parseTextAdventureNarrativeArcPlanArtifactV1({
+      value: artifactPayload(input, 'content.narrative-arc-plan'), brief: options.brief, cast, storyBible,
+    })
+    const mainQuestPlan = parseTextAdventureQuestPlanArtifactV1({
+      value: artifactPayload(input, 'content.main-quest-plan'), brief: options.brief,
+      arcPlan, cast, expectedKind: 'main', expectedQuestCount: 1,
+    })
+    const sideQuests = parseTextAdventureQuestBundleArtifactV1(
+      artifactPayload(input, 'content.adventure-side-quests'), 'side',
+      options.brief.textAdventure.narrative.targetSideQuestCount,
+    )
+    const ambientEvents = parseTextAdventureQuestBundleArtifactV1(
+      artifactPayload(input, 'content.adventure-ambient-events'), 'ambient',
+      options.brief.textAdventure.narrative.targetAmbientEventCount,
+    )
+    const questScript = parseTextAdventureQuestScriptArtifactV1({
+      value: raw, brief: options.brief, systems, mainQuestPlan, sideQuests, ambientEvents,
+    })
+    payload = questScript
+    kind = 'narrative'; quality = {
+      questScriptVerified: true,
+      mainObjectiveScriptCount: questScript.mainObjectiveScripts.length,
+      supplementalScriptCount: questScript.sideQuestScripts.length + questScript.ambientEventScripts.length,
     }
   } else if (input.task.taskKey === 'content.narrative') {
     payload = parseNarrative(raw, options.brief, textAdventureLocationTitles, textAdventureCastKeys); kind = 'narrative'
@@ -1722,22 +1766,29 @@ async function executeIntegrationTask(input: ProductProductionTaskExecutionInput
           artifactPayload(input, 'quality.adventure-review'),
         )
         if (!qualityReview.passed) fail('文字冒险叙事质量审查未通过，必须先修复阻塞问题并重新生产')
+        const systems = parseTextAdventureSystemsArtifactV1(product, options.brief.textAdventure)
+        const sideQuests = parseTextAdventureQuestBundleArtifactV1(
+          artifactPayload(input, 'content.adventure-side-quests'), 'side',
+          options.brief.textAdventure.narrative.targetSideQuestCount,
+          textAdventureLocationTitlesFromArchitectureV1(textAdventureArchitecture),
+        )
+        const ambientEvents = parseTextAdventureQuestBundleArtifactV1(
+          artifactPayload(input, 'content.adventure-ambient-events'), 'ambient',
+          options.brief.textAdventure.narrative.targetAmbientEventCount,
+          textAdventureLocationTitlesFromArchitectureV1(textAdventureArchitecture),
+        )
         return {
           architecture: textAdventureArchitecture,
-          systems: parseTextAdventureSystemsArtifactV1(product, options.brief.textAdventure),
+          systems,
           cast: textAdventureCast,
           arcPlan: textAdventureArcPlan,
           mainQuestPlan: textAdventureMainQuestPlan,
-          sideQuests: parseTextAdventureQuestBundleArtifactV1(
-            artifactPayload(input, 'content.adventure-side-quests'), 'side',
-            options.brief.textAdventure.narrative.targetSideQuestCount,
-            textAdventureLocationTitlesFromArchitectureV1(textAdventureArchitecture),
-          ),
-          ambientEvents: parseTextAdventureQuestBundleArtifactV1(
-            artifactPayload(input, 'content.adventure-ambient-events'), 'ambient',
-            options.brief.textAdventure.narrative.targetAmbientEventCount,
-            textAdventureLocationTitlesFromArchitectureV1(textAdventureArchitecture),
-          ),
+          questScript: parseTextAdventureQuestScriptArtifactV1({
+            value: artifactPayload(input, 'content.quest-script'), brief: options.brief,
+            systems, mainQuestPlan: textAdventureMainQuestPlan, sideQuests, ambientEvents,
+          }),
+          sideQuests,
+          ambientEvents,
         }
       })()
     : undefined

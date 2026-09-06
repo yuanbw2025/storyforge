@@ -96,7 +96,13 @@ export function canRetryProductProductionBlockerV1(details: ProductProductionDet
 
 const AUTHOR_REVIEW_ARTIFACT_KEYS = new Set([
   'design.game',
+  'content.source-sufficiency',
+  'content.story-bible',
+  'content.cast-bible',
   'content.adventure-architecture',
+  'content.narrative-arc-plan',
+  'content.main-quest-plan',
+  'content.quest-script',
   'content.narrative',
   'content.product-module',
   'content.adventure-side-quests',

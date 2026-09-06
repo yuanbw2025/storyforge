@@ -139,7 +139,13 @@ function statusLabel(value: string): string {
 function reviewArtifactLabel(key: string): string {
   return ({
     'design.game': '产品与核心循环设计',
+    'content.source-sufficiency': '来源充分性与改编审计',
+    'content.story-bible': '故事圣经',
+    'content.cast-bible': '角色圣经与关系弧',
     'content.adventure-architecture': '世界空间与叙事架构',
+    'content.narrative-arc-plan': '分幕叙事弧与选择回响',
+    'content.main-quest-plan': '主线阶段与任务计划',
+    'content.quest-script': '任务脚本与结算规则',
     'content.narrative': '主线与分支叙事',
     'content.product-module': '角色属性、资源与装备系统',
     'content.adventure-side-quests': '支线任务包',
@@ -149,6 +155,30 @@ function reviewArtifactLabel(key: string): string {
     'runtime.package': '装配后的可玩运行包',
     'quality.report': '静态检查与自动质量报告',
   } as Record<string, string>)[key] ?? key
+}
+
+function productionTaskPresentation(taskKey: string): { label: string; owner: string } {
+  const exact = ({
+    'content.source-sufficiency': ['来源充分性审查', '来源与改编编辑'],
+    'content.design': ['产品设计与生产约束', '制作主管'],
+    'content.story-bible': ['故事圣经', '故事架构师'],
+    'content.cast-bible': ['角色圣经与关系弧', '角色总监'],
+    'content.adventure-architecture': ['空间与叙事架构', '通用玩法设计师'],
+    'content.product-module': ['属性、资源与装备系统', '通用玩法设计师'],
+    'content.narrative-arc-plan': ['分幕叙事弧与选择回响', '故事架构师'],
+    'content.main-quest-plan': ['主线阶段与目标拆分', '主线任务设计师'],
+    'content.adventure-side-quests': ['支线任务设计', '支线内容设计师'],
+    'content.adventure-ambient-events': ['区域与随机事件设计', '支线内容设计师'],
+    'content.quest-script': ['任务脚本与结算规则', '任务脚本工程师'],
+    'content.narrative': ['分场正文与玩家选择', '分场叙事作者'],
+    'content.adventure-quality-review': ['叙事连续性独立审查', '连续性与内容审校'],
+    'media.requirements': ['视觉圣经与美术需求', '美术总监'],
+    'media.visual': ['受控图片生成与验收', '媒资 Provider'],
+    'media.audio': ['受控音频生成与验收', '媒资 Provider'],
+    'integration.package': ['确定性游戏装配', '运行包编译器'],
+    'qa.release': ['静态检查与发布质量门', '确定性质量系统'],
+  } as Record<string, [string, string]>)[taskKey]
+  return exact ? { label: exact[0], owner: exact[1] } : { label: taskKey, owner: '已登记生产岗位' }
 }
 
 function buildFailureSummary(value: string): string {
@@ -880,7 +910,10 @@ export default function ProductProductionStudio(props: {
             <article className="rounded bg-bg-base p-3 text-[10px]"><span className="text-text-muted">成本</span><strong className="mt-1 block">{progress.budget.usage.costUsd == null ? '供应商未回传' : `$${progress.budget.usage.costUsd.toFixed(4)}`} / {progress.budget.limits.maximumCostUsd == null ? '未设金额上限' : `$${progress.budget.limits.maximumCostUsd.toFixed(2)}`}</strong></article>
             <article className="rounded bg-bg-base p-3 text-[10px]"><span className="text-text-muted">持久化媒资</span><strong className="mt-1 block">{formatBytes(progress.budget.usage.storageBytes)} / {formatBytes(progress.budget.limits.maximumStorageBytes)}</strong></article>
           </div>
-          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">{progress.tasks.map(task => <article key={task.taskKey} className="rounded border border-border bg-bg-base p-3"><span className="flex items-center justify-between gap-2"><strong className="text-[10px]">{task.taskKey}</strong><em className={`not-italic text-[9px] ${task.status === 'completed' ? 'text-success' : task.status === 'blocked' ? 'text-error' : 'text-accent'}`}>{statusLabel(task.status)}</em></span><p className="mt-2 text-[9px] text-text-muted">{task.lane} · attempt {task.attempt || '—'}{task.blocker ? ` · ${task.blocker}` : ''}</p></article>)}</div>
+          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">{progress.tasks.map(task => {
+            const presentation = productionTaskPresentation(task.taskKey)
+            return <article key={task.taskKey} className="rounded border border-border bg-bg-base p-3"><span className="flex items-center justify-between gap-2"><strong className="text-[10px]">{presentation.label}</strong><em className={`not-italic text-[9px] ${task.status === 'completed' ? 'text-success' : task.status === 'blocked' ? 'text-error' : 'text-accent'}`}>{statusLabel(task.status)}</em></span><p className="mt-1 text-[9px] text-text-muted">{presentation.owner}</p><code className="mt-1 block text-[8px] text-text-muted">{task.taskKey}</code><p className="mt-2 text-[9px] text-text-muted">{task.lane} · attempt {task.attempt || '—'}{task.blocker ? ` · ${task.blocker}` : ''}</p></article>
+          })}</div>
         </section>}
         {details?.production.productType === 'text-adventure' && reviewArtifacts.length > 0 && <section className="mt-5 rounded border border-border bg-bg-elevated p-5" data-testid="text-adventure-author-workbench">
           <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-sm font-semibold">文字冒险工件审查台</h2><p className="mt-1 text-[10px] leading-5 text-text-muted">每项均来自当前 Build 的已采纳或跨版本复用工件。展开可核对内容和来源 hash；试玩与发布仍是显式作者闸门。</p></div><span className="rounded bg-accent/10 px-2 py-1 text-[9px] text-accent">{reviewArtifacts.length} 项 · Build #{details.build?.buildNumber}</span></div>

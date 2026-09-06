@@ -86,7 +86,8 @@ export async function readTextAdventureQualityInputsV1(input: AssembleContextInp
   if (!build) throw new Error('[product-production-context] 文字冒险质量审查需要 productBuildId')
   const requiredKeys = [
     'content.story-bible', 'content.cast-bible', 'content.adventure-architecture',
-    'content.narrative-arc-plan', 'content.main-quest-plan', 'content.narrative', 'content.product-module',
+    'content.narrative-arc-plan', 'content.main-quest-plan', 'content.quest-script',
+    'content.narrative', 'content.product-module',
     'content.adventure-side-quests', 'content.adventure-ambient-events',
   ]
   const requested = new Set(input.productArtifactKeys ?? [])
@@ -111,6 +112,7 @@ export async function readTextAdventureQualityInputsV1(input: AssembleContextInp
   const castBible = payloadByKey.get('content.cast-bible') ?? {}
   const arcPlan = payloadByKey.get('content.narrative-arc-plan') ?? {}
   const mainQuestPlan = payloadByKey.get('content.main-quest-plan') ?? {}
+  const questScript = payloadByKey.get('content.quest-script') ?? {}
   const narrative = payloadByKey.get('content.narrative') ?? {}
   const productModule = payloadByKey.get('content.product-module') ?? {}
   const locations = contextRows(architecture.regions).flatMap(region => (
@@ -226,6 +228,25 @@ export async function readTextAdventureQualityInputsV1(input: AssembleContextInp
         })),
       })),
     })),
+    questScript: {
+      mainObjectives: contextRows(questScript.mainObjectiveScripts).map(script => ({
+        objectiveKey: script.objectiveKey, sceneKey: script.sceneKey,
+        alternatives: contextRows(script.alternatives).map(alternative => ({
+          alternativeKey: alternative.alternativeKey,
+          resolution: alternative.resolution,
+          timeCostMinutes: alternative.timeCostMinutes,
+          failureForward: contextText(alternative.failureForwardText, 60),
+        })),
+      })),
+      side: contextRows(questScript.sideQuestScripts).map(script => ({
+        entryKey: script.entryKey, actionKind: script.actionKind, abilityKey: script.abilityKey,
+        difficulty: script.difficulty, timeCostMinutes: script.timeCostMinutes,
+      })),
+      ambient: contextRows(questScript.ambientEventScripts).map(script => ({
+        entryKey: script.entryKey, actionKind: script.actionKind, abilityKey: script.abilityKey,
+        difficulty: script.difficulty, timeCostMinutes: script.timeCostMinutes,
+      })),
+    },
     narrative: {
       entryNodeKey: contextText(narrative.entryNodeKey, 200),
       nodes,
@@ -252,8 +273,8 @@ export async function readTextAdventureQualityInputsV1(input: AssembleContextInp
   }
   const serialized = JSON.stringify(packet)
   const estimatedTokens = estimateTokens(serialized)
-  if (estimatedTokens > 11_750) {
-    throw new Error(`[product-production-context] 文字冒险质量审查投影超过登记预算:${estimatedTokens}/11750，必须拆分生产内容后再审查`)
+  if (estimatedTokens > 15_750) {
+    throw new Error(`[product-production-context] 文字冒险质量审查投影超过登记预算:${estimatedTokens}/15750，必须拆分生产内容后再审查`)
   }
   return serialized
 }

@@ -1,6 +1,6 @@
 # 05 · Durable 生产 DAG 与工件方案
 
-> 层级：L2 · 版本：1.0.0 · 生效：2026-09-06
+> 层级：L2 · 版本：1.1.0 · 生效：2026-09-07
 > 性质：正式生产计划、Run Contract 和候选采纳目标契约。
 
 ## 1. 目标拓扑
@@ -29,6 +29,8 @@ WorldRelease + Confirmed Brief + Frozen SourcePlan
 ```
 
 关键依赖不可省略：系统设计读取故事/角色；主线任务读取故事弧、角色和系统；支线读取主线；任务脚本读取全部任务与系统；场景正文读取任务脚本；美术清单读取定稿场景和角色锚点。旧 DAG 中“主线与系统并行、支线不读主线”的结构必须下线。
+
+当前代码已实现到 `quest.scripts`：规划、故事、角色、空间、系统、叙事弧、主线、支线和区域事件分别形成已登记任务，随后由 `text-adventure-quest-scripter` 生成严格的 `content.quest-script`，场景正文和确定性装配都把它列为必需依赖。作者工作台显示岗位名称、任务 key、attempt、状态和阻塞，并可展开审查上述专业工件。`scene.script.*`、对白 pass 和试玩策略仍按下述两段计划继续施工，未完成前不能宣称专业 DAG 全部完成。
 
 ## 2. 计划版本
 
@@ -61,4 +63,3 @@ WorldRelease + Confirmed Brief + Frozen SourcePlan
 ## 6. 可观察性
 
 生产事件至少包含 `planned/ready/running/progress/candidate/validating/awaiting-author/accepted/stale/paused/failed/completed`。进度不是虚构百分比：每个阶段按已冻结子任务和权重计算，并显示事实，如“场景正文 4/12 完成”“角色锚点 2/5 已审”。刷新后从 durable ledger 恢复同一状态。
-
