@@ -62,6 +62,10 @@ describe('R-TEXTADV2-production · 文字冒险正式生产契约与工作台', 
       character: { preset: 'general-adventure-rpg', progressionEnabled: true },
       media: { mode: 'key-illustrations', runtimeGeneration: 'disabled' },
     })
+    expect(brief.source.selection.roleBindings).toMatchObject({
+      story: expect.any(Array), characters: expect.any(Array), locations: expect.any(Array),
+      items: expect.any(Array), quests: expect.any(Array), lore: expect.any(Array),
+    })
     const briefHash = await hashProductProductionValueV2(brief)
     const plan = await createProductProductionPlanV3({ buildNumber: 1, briefHash, brief })
     const taskByKey = new Map(plan.tasks.map(task => [task.taskKey, task]))

@@ -25,6 +25,14 @@ describe('R-PRODUCTPROD-1B · consultation and reviewable Brief', () => {
     expect(first.worldContentHash).toBe(owned.release.contentHash)
     expect(first.suggestions.some(item => item.kind === 'mainline')).toBe(true)
     expect(first.suggestions.at(-1)).toMatchObject({ kind: 'custom' })
+    const custom = first.suggestions.at(-1)!
+    const customSelection = first.selectionDefaults[custom.suggestionKey]
+    expect(first.sourceOptions.storySources.some(item => item.kind === 'world-foundation')).toBe(true)
+    expect(customSelection.storyResourceKeys).toEqual(expect.arrayContaining(
+      first.sourceOptions.storySources
+        .filter(item => item.kind === 'world-foundation')
+        .map(item => item.resourceKey),
+    ))
     expect(new Set(first.suggestions.map(item => item.suggestionKey)).size).toBe(first.suggestions.length)
     expect(await db.productProductions.count()).toBe(0)
     expect(await db.productBuilds.count()).toBe(0)

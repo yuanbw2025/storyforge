@@ -16,6 +16,7 @@ import {
   createBuiltInProductionCapabilityBindingV1,
   createConfiguredProductProductionExecutorV1,
   isolateCharacterProviderPromptV1,
+  legalizeProductionModelProtocolDefaultsV1,
   parseProductMediaRequirementsArtifactV2,
   parseProductionModelJsonObjectV1,
   type ProductionTextRunnerV1,
@@ -499,6 +500,38 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
     expect(() => parseProductionModelJsonObjectV1('{"a":1}\n{"b":2}', 'multiple')).toThrow('必须只包含一个完整 JSON 对象')
     expect(() => parseProductionModelJsonObjectV1('```json\n{"a":"unterminated}\n```', 'broken')).toThrow('必须只包含一个完整 JSON 对象')
     expect(() => parseProductionModelJsonObjectV1('x'.repeat(2_000_001), 'large')).toThrow('模型输出为空或过长')
+  })
+
+  it('仅补全有确定空语义的叙事协议字段，并保留未知字段供严格解析器拒绝', () => {
+    const narrative = legalizeProductionModelProtocolDefaultsV1('content.narrative', {
+      nodes: [{ key: 'entry', kind: 'entry', title: '入口', summary: '开始。' }],
+      beats: [{ beatKey: 'beat.entry', nodeKey: 'entry', kind: 'narration', text: '雾散了。' }],
+      choices: [{
+        choiceKey: 'choice.leave', sourceNodeKey: 'entry', text: '离开',
+        targetNodeKey: 'ending', leaked: true,
+      }],
+    })
+    expect(narrative.payload).toMatchObject({
+      nodes: [{ condition: {}, effects: [] }],
+      beats: [{ speakerKey: null, order: 0 }],
+      choices: [{
+        description: '', unavailableReason: '', displayCondition: {}, availableCondition: {},
+        effects: [], tags: [], order: 0, leaked: true,
+      }],
+    })
+    expect(narrative.defaultedFields).toContain('choices[0].availableCondition')
+
+    const quests = legalizeProductionModelProtocolDefaultsV1('content.adventure-ambient-events', {
+      entries: [{ key: 'tide-warning', title: '潮汐警告', leaked: true }],
+    })
+    expect(quests.payload).toMatchObject({
+      entries: [{
+        rewardExperience: 2, rewardCurrency: 0, timeCostMinutes: 5, leaked: true,
+      }],
+    })
+    expect(quests.defaultedFields).toEqual([
+      'entries[0].rewardExperience', 'entries[0].rewardCurrency', 'entries[0].timeCostMinutes',
+    ])
   })
 })
 

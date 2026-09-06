@@ -170,8 +170,15 @@ export async function loadProductProductionConsultationSourceV2(input: {
     .filter(item => item.worldSemantic!.resourceKind === resourceKind)
   const characters = byKind('character')
   const locations = byKind('location')
-  const storySources = descriptors.filter(resource => [
+  const narrativeStorySources = descriptors.filter(resource => [
     'story-core', 'outline-node', 'detailed-outline', 'chapter', 'storyline-progress',
+  ].includes(resource.worldSemantic!.resourceKind))
+  // A custom start may use a frozen world as its setting foundation even when
+  // there is no story core, outline or chapter yet. Keep those resources in
+  // the explicit author selection instead of relying on a hidden world-wide
+  // fallback during production.
+  const foundationSources = descriptors.filter(resource => [
+    'worldview', 'power-system', 'cultivation-system', 'geography', 'history', 'world-rules',
   ].includes(resource.worldSemantic!.resourceKind))
   const storyArcs = byKind('story-arc')
   const historicalEvents = byKind('historical-event')
@@ -213,7 +220,10 @@ export async function loadProductProductionConsultationSourceV2(input: {
     }]
   })
   const options: ProductProductionSourceOptionsV1 = {
-    storySources: storySources.map(resource => descriptorOption(resource, 'story-source')),
+    storySources: [
+      ...narrativeStorySources.map(resource => descriptorOption(resource, 'story-source')),
+      ...foundationSources.map(resource => descriptorOption(resource, 'world-foundation')),
+    ],
     characters: characters.map(resource => descriptorOption(resource, 'character')),
     importantLocations: locations.map(resource => descriptorOption(resource, 'location')),
     artifacts,
@@ -230,7 +240,8 @@ export async function loadProductProductionConsultationSourceV2(input: {
       contentHash: opened.description.identity.releaseHash,
     },
     opportunities: {
-      storySources: options.storySources.slice(0, 30),
+      storySources: narrativeStorySources.slice(0, 30)
+        .map(resource => descriptorOption(resource, 'story-source')),
       characters: options.characters.slice(0, 30),
       storyArcs: options.storyArcs.slice(0, 30),
       historicalTimelineEvents: historicalEvents.slice(0, 30)
