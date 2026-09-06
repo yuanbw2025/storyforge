@@ -72,6 +72,8 @@ describe('Text Open World vNext · release map definition and deterministic topo
       key: 'edge.market-ridge', fromLocationKey: 'location.salt-market', toLocationKey: 'location.ridge-channel', bidirectional: true,
       travelMinutes: 20, conditionKeys: [], description: '盐市通往断脊的山道。', riskProfile: 'ordinary', sourceRefs: ['world-release:route:market-ridge'],
     })
+    ;(alternate.runtimePackage.modules.actions.payload as any).version = 2
+    alternate.runtimePackage.modules.actions.schemaVersion = 2
     expect(planTextOpenWorldRouteV1({
       runtimePackage: alternate.runtimePackage, fromLocationKey: 'location.salt-port', destinationLocationKey: 'location.ridge-channel',
     })).toEqual(expect.objectContaining({ edgeKeys: ['edge.port-market', 'edge.market-ridge'], totalTravelMinutes: 35 }))

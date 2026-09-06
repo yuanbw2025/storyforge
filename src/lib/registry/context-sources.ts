@@ -583,7 +583,7 @@ async function readOpenWorldRuntimeContext(input: AssembleContextInput): Promise
   }
   const state = await readProductRuntimeStateForContext(session.id!)
   if (manifest.textOpenWorldVNext) {
-    const [sessionProjection, modulesModule, actionModule, bindingModule, feedbackModule, skillsModule, lifeModule, inventoryModule, questModule, mapModule, mapViewModule] = await Promise.all([
+    const [sessionProjection, modulesModule, actionModule, bindingModule, feedbackModule, skillsModule, lifeModule, inventoryModule, questModule, mapModule, mapViewModule, travelModule] = await Promise.all([
       import('../open-world/session-projection'),
       import('../open-world/modules'),
       import('../open-world/action-registry'),
@@ -595,6 +595,7 @@ async function readOpenWorldRuntimeContext(input: AssembleContextInput): Promise
       import('../open-world/quests'),
       import('../open-world/map-topology'),
       import('../open-world/map-view'),
+      import('../open-world/travel'),
     ])
     if (!state.textOpenWorld) return ''
     const binding = await bindingModule.verifyTextOpenWorldVNextSessionBindingV1(session)
@@ -603,9 +604,8 @@ async function readOpenWorldRuntimeContext(input: AssembleContextInput): Promise
     bindingModule.assertTextOpenWorldVNextProjectionBindingV1(projection, binding)
     const modules = modulesModule.parseTextOpenWorldModulesV1(runtimePackage)
     const derived = sessionProjection.deriveTextOpenWorldContextsV1(projection)
-    const availableActions = actionModule.createTextOpenWorldActionRegistryV1(runtimePackage)
-      .project(derived.action)
-      .filter(item => item.available)
+    const projectedActions = actionModule.createTextOpenWorldActionRegistryV1(runtimePackage).project(derived.action)
+    const availableActions = projectedActions.filter(item => item.available)
     const runtime = projection.state
     const inventoryQuantities = inventoryModule.deriveTextOpenWorldInventoryQuantitiesV1(modules, runtime.inventory)
     const equippedItemKeys = inventoryModule.deriveTextOpenWorldEquippedItemKeysV1(modules, runtime.inventory)
@@ -625,6 +625,7 @@ async function readOpenWorldRuntimeContext(input: AssembleContextInput): Promise
     const playerMap = mapViewModule.projectTextOpenWorldPlayerMapV1({ runtimePackage, state: runtime })
     const visibleRegions = playerMap.regions
     const visibleLocations = playerMap.locations
+    const travelOptions = travelModule.projectTextOpenWorldTravelOptionsV1(projection)
     const visibleConnections = mapModule.projectTextOpenWorldMapConnectionsV1({
       runtimePackage,
       currentLocationKey: location.key,
@@ -697,7 +698,8 @@ async function readOpenWorldRuntimeContext(input: AssembleContextInput): Promise
       `【已发现地点】${visibleLocations.map(item => `${item.locationKey}:${item.title}=${item.knowledge}`).join('、') || '无'}｜布局=${playerMap.layoutSource}`,
       '【玩家可知相邻道路】', ...(visibleConnections.length ? visibleConnections.map(connection => {
         const destination = modules.world.locations.find(item => item.key === connection.destinationLocationKey)!
-        return `- ${connection.edgeKey}｜前往=${destination.key}:${destination.title}｜${connection.travelMinutes}分钟｜风险=${connection.riskProfile}｜${connection.currentlyOpen ? '可通行' : '未开放'}`
+        const travel = travelOptions.find(option => option.edgeKey === connection.edgeKey && option.destinationLocationKey === connection.destinationLocationKey)
+        return `- ${connection.edgeKey}｜前往=${destination.key}:${destination.title}｜${connection.travelMinutes}分钟｜风险=${connection.riskProfile}｜${travel?.available ? `可执行=${travel.actionKey}` : `不可执行=${travel?.unavailableReasons[0]?.message ?? '未开放'}`}`
       }) : ['- 无']),
       '【当前位置人物】', ...(presentActors.length ? presentActors : ['- 无']),
       '【可见任务】', ...(questLines.length ? questLines : ['- 无']),

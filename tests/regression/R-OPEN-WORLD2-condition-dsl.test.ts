@@ -119,6 +119,7 @@ describe('Text Open World vNext · typed Condition DSL', () => {
       actorKey: 'player', currentLocationKey: 'location.salt-port', worldMinute: 480, playerHealth: 35, combatStatus: null,
       conditionResults: results, completedOnceActionKeys: [], cooldownUntilWorldMinuteByActionKey: {},
       validTargetKeysByScope: { location: ['location.salt-port'] },
+      openEdgeKeys: ['edge.port-ridge'],
     })
     expect(projection[0]).toMatchObject({ available: true, unavailableReasons: [] })
   })

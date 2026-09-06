@@ -69,6 +69,9 @@ function parseContext(value: TextOpenWorldActionProjectionContextV1, modules: Te
     }
     conditionResults[conditionKey] = { satisfied: result.satisfied, publicReason: result.publicReason?.trim() || null }
   }
+  const edgeKeys = new Set(modules.world.edges.map(item => item.key))
+  const openEdgeKeys = uniqueKeys(value.openEdgeKeys ?? [], 'openEdgeKeys')
+  openEdgeKeys.forEach(edgeKey => { if (!edgeKeys.has(edgeKey)) fail(`openEdgeKeys引用未知道路:${edgeKey}`) })
   const completedOnceActionKeys = uniqueKeys(value.completedOnceActionKeys, 'completedOnceActionKeys')
   const actionKeys = new Set(modules.actions.actions.map(item => item.key))
   completedOnceActionKeys.forEach(actionKey => { if (!actionKeys.has(actionKey)) fail(`completedOnceActionKeys引用未知Action:${actionKey}`) })
@@ -138,6 +141,7 @@ function parseContext(value: TextOpenWorldActionProjectionContextV1, modules: Te
     playerHealth,
     combatStatus,
     conditionResults,
+    openEdgeKeys,
     completedOnceActionKeys,
     cooldownUntilWorldMinuteByActionKey,
     validTargetKeysByScope,
@@ -198,6 +202,16 @@ export function createTextOpenWorldActionRegistryV1(value: TextOpenWorldRuntimeP
       const cooldownRemainingMinutes = Math.max(0, cooldownUntil - context.worldMinute)
       if (action.repeatPolicy === 'cooldown' && cooldownRemainingMinutes > 0) unavailableReasons.push({ code: 'cooldown', message: `该行动还需等待${cooldownRemainingMinutes}分钟。`, conditionKey: null })
       let validTargetKeys = action.targetScope === 'none' ? [] : [...(context.validTargetKeysByScope[action.targetScope] ?? [])]
+      if (action.targetScope === 'location' && action.category === 'travel') {
+        const start = action.successEffectKeys.map(effectKey => effectByKey.get(effectKey))
+          .find((effect): effect is Extract<TextOpenWorldEffectDefinitionV1, { operation: 'start-travel' }> => effect?.operation === 'start-travel')
+        if (!start || !context.openEdgeKeys.includes(start.payload.edgeKey)) {
+          unavailableReasons.push({ code: 'route-closed', message: '这条道路当前不能通行。', conditionKey: null })
+          validTargetKeys = []
+        } else validTargetKeys = validTargetKeys.filter(locationKey => locationKey === start.payload.destinationLocationKey)
+      } else if (action.targetScope === 'location') {
+        validTargetKeys = validTargetKeys.filter(locationKey => locationKey === context.currentLocationKey)
+      }
       if (action.targetScope === 'item' && ['use', 'drop', 'sell'].includes(action.category)) {
         const reason = action.category === 'use' ? 'consume' : action.category
         const removal = action.costEffectKeys.map(effectKey => effectByKey.get(effectKey))

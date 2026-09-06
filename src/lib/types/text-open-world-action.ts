@@ -28,6 +28,7 @@ export interface TextOpenWorldActionProjectionContextV1 {
   playerHealth: number
   combatStatus: 'active' | 'victory' | 'defeat' | 'escaped' | null
   conditionResults: Record<string, TextOpenWorldConditionResultV1>
+  openEdgeKeys: string[]
   completedOnceActionKeys: string[]
   cooldownUntilWorldMinuteByActionKey: Record<string, number>
   validTargetKeysByScope: Partial<Record<TextOpenWorldActionTargetScopeV1, string[]>>
@@ -51,6 +52,7 @@ export type TextOpenWorldActionUnavailableCodeV1 =
   | 'no-valid-target'
   | 'defeated'
   | 'combat-state'
+  | 'route-closed'
 
 export interface TextOpenWorldActionUnavailableReasonV1 {
   code: TextOpenWorldActionUnavailableCodeV1

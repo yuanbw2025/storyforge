@@ -68,7 +68,9 @@ describe('Text Open World vNext · authoritative Session Projection', () => {
   })
 
   it('同一事件日志可重建中间态与最终态，Effect真正更新权威投影', async () => {
-    const runtimePackage = createTextOpenWorldVNextFixture(); const session = await createSession(runtimePackage)
+    const runtimePackage = createTextOpenWorldVNextFixture()
+    ;(runtimePackage.modules.actions.payload as any).actions.find((action: any) => action.key === 'action.investigate-channel').successEffectKeys = ['effect.reward-currency']
+    const session = await createSession(runtimePackage)
     const envelope = await command(session.id!); await commitTextOpenWorldCommandV1(envelope)
     const afterCommand = await readProductRuntimeState(session.id!, 3)
     expect(afterCommand.textOpenWorld).toMatchObject({
@@ -96,7 +98,7 @@ describe('Text Open World vNext · authoritative Session Projection', () => {
     })
     expect(contexts.action.conditionResults['condition.always']).toEqual({ satisfied: true, publicReason: null })
     expect(contexts.action.validTargetKeysByScope).toMatchObject({
-      actor: ['actor.caretaker'], location: ['location.salt-port'], vendor: ['vendor.caretaker'], quest: ['quest-instance.12.quest.main.1.release.13.session-start'],
+      actor: ['actor.caretaker'], location: ['location.salt-port', 'location.ridge-channel'], vendor: ['vendor.caretaker'], quest: ['quest-instance.12.quest.main.1.release.13.session-start'],
     })
     expect(createTextOpenWorldActionRegistryV1(runtimePackage).project(contexts.action)[0]).toMatchObject({ available: true, validTargetKeys: ['location.salt-port'] })
 

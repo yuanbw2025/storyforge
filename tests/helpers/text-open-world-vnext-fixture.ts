@@ -164,7 +164,7 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
       ],
     },
     actions: {
-      version: 2,
+      version: 3,
       conditions: [
         { key: 'condition.always', expression: { op: 'all', conditions: [{ op: 'player-number', field: 'level', comparator: 'gte', value: 1 }] }, failureMessage: '角色尚未进入可行动状态。' },
         { key: 'condition.health-not-full', expression: { op: 'player-resource-below-maximum', resource: 'health' }, failureMessage: '生命已经满了。' },
@@ -203,12 +203,28 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
         { key: 'effect.track-quest-pinned', operation: 'track-quest', payload: { slot: 'pinned' } },
         { key: 'effect.untrack-quest-primary', operation: 'untrack-quest', payload: { slot: 'primary' } },
         { key: 'effect.untrack-quest-pinned', operation: 'untrack-quest', payload: { slot: 'pinned' } },
+        { key: 'effect.travel-port-ridge-start', operation: 'start-travel', payload: { edgeKey: 'edge.port-ridge', destinationLocationKey: 'location.ridge-channel' } },
+        { key: 'effect.travel-port-ridge-time', operation: 'advance-time', payload: { minutes: 60 } },
+        { key: 'effect.travel-port-ridge-enter', operation: 'enter-location', payload: { locationKey: 'location.ridge-channel' } },
+        { key: 'effect.travel-ridge-port-start', operation: 'start-travel', payload: { edgeKey: 'edge.port-ridge', destinationLocationKey: 'location.salt-port' } },
+        { key: 'effect.travel-ridge-port-time', operation: 'advance-time', payload: { minutes: 60 } },
+        { key: 'effect.travel-ridge-port-enter', operation: 'enter-location', payload: { locationKey: 'location.salt-port' } },
       ],
       actions: [{
         key: 'action.investigate-channel', category: 'investigate', label: '检查盐渠',
         description: '检查当前位置的盐渠痕迹。', actorScope: 'player', targetScope: 'location',
         locationKeys: ['location.salt-port', 'location.ridge-channel'], requirementConditionKeys: [], costEffectKeys: [],
         successEffectKeys: [], failureEffectKeys: [], timeCostMinutes: 15,
+        confirmationPolicy: 'never', repeatPolicy: 'repeatable', cooldownMinutes: null,
+      }, {
+        key: 'action.travel-port-ridge', category: 'travel', label: '前往断脊渠口', description: '沿盐渠维护道前往断脊渠口。',
+        actorScope: 'player', targetScope: 'location', locationKeys: ['location.salt-port'], requirementConditionKeys: [], costEffectKeys: [],
+        successEffectKeys: ['effect.travel-port-ridge-start', 'effect.travel-port-ridge-time', 'effect.travel-port-ridge-enter'], failureEffectKeys: [], timeCostMinutes: 60,
+        confirmationPolicy: 'never', repeatPolicy: 'repeatable', cooldownMinutes: null,
+      }, {
+        key: 'action.travel-ridge-port', category: 'travel', label: '返回盐港广场', description: '沿盐渠维护道返回盐港广场。',
+        actorScope: 'player', targetScope: 'location', locationKeys: ['location.ridge-channel'], requirementConditionKeys: [], costEffectKeys: [],
+        successEffectKeys: ['effect.travel-ridge-port-start', 'effect.travel-ridge-port-time', 'effect.travel-ridge-port-enter'], failureEffectKeys: [], timeCostMinutes: 60,
         confirmationPolicy: 'never', repeatPolicy: 'repeatable', cooldownMinutes: null,
       }, {
         key: 'action.accept-main', category: 'accept-quest', label: '接受主线任务', description: '接受并开始调查断流的盐渠。',

@@ -31,6 +31,7 @@ export interface TextOpenWorldMapEdgeViewV1 {
   edgeKey: string
   fromLocationKey: string
   toLocationKey: string
+  bidirectional: boolean
   travelMinutes: number
   riskProfile: TextOpenWorldParsedModulesV1['world']['edges'][number]['riskProfile']
   open: boolean
@@ -102,6 +103,7 @@ export function projectTextOpenWorldPlayerMapV1(input: {
       edgeKey: edge.key,
       fromLocationKey: edge.fromLocationKey,
       toLocationKey: edge.toLocationKey,
+      bidirectional: edge.bidirectional,
       travelMinutes: edge.travelMinutes,
       riskProfile: edge.riskProfile,
       open: input.state.map.openEdgeKeys.includes(edge.key),

@@ -7,6 +7,7 @@ function context(overrides: Partial<TextOpenWorldActionProjectionContextV1> = {}
   return {
     actorKey: 'player', currentLocationKey: 'location.salt-port', worldMinute: 480, playerHealth: 37, combatStatus: null,
     conditionResults: {}, completedOnceActionKeys: [], cooldownUntilWorldMinuteByActionKey: {},
+    openEdgeKeys: ['edge.port-ridge'],
     validTargetKeysByScope: { location: ['location.salt-port'] },
     questDefinitionKeyByInstanceKey: {}, questStatusByInstanceKey: {}, questStageKeyByInstanceKey: {},
     questObjectiveStatusByInstanceKey: {}, questRewardClaimKeyByInstanceKey: {}, questDeadlineWorldMinuteByInstanceKey: {},
@@ -85,6 +86,7 @@ describe('Text Open World vNext · unified Action registry and availability proj
     const registry = createTextOpenWorldActionRegistryV1(fixture)
     const blocked = registry.project(context({
       actorKey: 'system', currentLocationKey: 'location.ridge-channel',
+      validTargetKeysByScope: { location: ['location.ridge-channel'] },
       completedOnceActionKeys: ['action.investigate-channel'],
     }))[0]
     expect(blocked.unavailableReasons.map(item => item.code)).toEqual(['actor-scope', 'wrong-location', 'once-consumed'])
@@ -119,6 +121,19 @@ describe('Text Open World vNext · unified Action registry and availability proj
       .toMatchObject({ available: true, validTargetKeys: ['item.salt-crystal'], confirmationRequired: true })
     expect(() => registry.resolve({ actionKey: 'action.use-brine-tonic', targetKey: 'item.rust-sword', context: itemContext }))
       .toThrow('targetKey不在Action可用目标中')
+  })
+
+  it('普通旅行Action只接受道路声明的可见相邻目标，并服从道路开放状态', () => {
+    const registry = createTextOpenWorldActionRegistryV1(createTextOpenWorldVNextFixture())
+    const travelContext = context({ validTargetKeysByScope: { location: ['location.salt-port', 'location.ridge-channel'] } })
+    expect(registry.project(travelContext).find(item => item.action.key === 'action.travel-port-ridge'))
+      .toMatchObject({ available: true, validTargetKeys: ['location.ridge-channel'] })
+    expect(() => registry.resolve({ actionKey: 'action.travel-port-ridge', targetKey: 'location.salt-port', context: travelContext }))
+      .toThrow('targetKey不在Action可用目标中')
+    expect(registry.project(context({
+      validTargetKeysByScope: { location: ['location.salt-port', 'location.ridge-channel'] }, openEdgeKeys: [],
+    })).find(item => item.action.key === 'action.travel-port-ridge'))
+      .toMatchObject({ available: false, validTargetKeys: [], unavailableReasons: expect.arrayContaining([expect.objectContaining({ code: 'route-closed' })]) })
   })
 
   it('任务Action同时按定义、状态和当前Stage收窄到合法实例', () => {

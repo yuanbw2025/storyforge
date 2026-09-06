@@ -15,6 +15,12 @@ import type { TextOpenWorldCommandEnvelopeV1, TextOpenWorldRuntimePackageV1 } fr
 import { createGovernedTextOpenWorldSessionFixtureV1 } from '../helpers/text-open-world-product-session'
 import { createTextOpenWorldVNextFixture } from '../helpers/text-open-world-vnext-fixture'
 
+function rewardRuntimePackage(): TextOpenWorldRuntimePackageV1 {
+  const runtimePackage = createTextOpenWorldVNextFixture()
+  ;(runtimePackage.modules.actions.payload as any).actions.find((action: any) => action.key === 'action.investigate-channel').successEffectKeys = ['effect.reward-currency']
+  return runtimePackage
+}
+
 async function createSession(runtimePackage: TextOpenWorldRuntimePackageV1) {
   return (await createGovernedTextOpenWorldSessionFixtureV1({
     name: `TEXT-OPEN-WORLD 检查点测试-${crypto.randomUUID()}`,
@@ -40,7 +46,7 @@ describe('Text Open World vNext · checkpoint, replay and child branch', () => {
   afterAll(() => db.close())
 
   it('从已验证历史检查点建立序号归零的子Session，不删除父分支未来事件', async () => {
-    const runtimePackage = createTextOpenWorldVNextFixture(); const parent = await createSession(runtimePackage)
+    const runtimePackage = rewardRuntimePackage(); const parent = await createSession(runtimePackage)
     await playReward(runtimePackage, parent.id!, 'command.parent.1', 'claim.parent.1')
     const checkpoint = await createTextOpenWorldCheckpointV1({ sessionId: parent.id!, name: '第一次奖励后' })
     expect(await inspectTextOpenWorldCheckpointV1(checkpoint.id!)).toMatchObject({ valid: true, code: 'valid', throughSequence: 4 })
@@ -57,14 +63,14 @@ describe('Text Open World vNext · checkpoint, replay and child branch', () => {
   })
 
   it('不能在只有Command而没有Effect终态的位置创建检查点', async () => {
-    const runtimePackage = createTextOpenWorldVNextFixture(); const session = await createSession(runtimePackage)
+    const runtimePackage = rewardRuntimePackage(); const session = await createSession(runtimePackage)
     await commitTextOpenWorldCommandV1(await command(session.id!, 'command.pending'))
     await expect(createTextOpenWorldCheckpointV1({ sessionId: session.id!, name: '非法中间点' })).rejects.toThrow('不能在未终结命令上创建检查点')
     expect(await db.productRuntimeCheckpoints.where('sessionId').equals(session.id!).count()).toBe(0)
   })
 
   it('检查点诊断区分正文损坏、Hash不匹配和重放不一致', async () => {
-    const runtimePackage = createTextOpenWorldVNextFixture(); const session = await createSession(runtimePackage)
+    const runtimePackage = rewardRuntimePackage(); const session = await createSession(runtimePackage)
     await playReward(runtimePackage, session.id!, 'command.checkpoint', 'claim.checkpoint')
     const checkpoint = await createTextOpenWorldCheckpointV1({ sessionId: session.id!, name: '诊断点' })
     await db.productRuntimeCheckpoints.update(checkpoint.id!, { stateHash: 'f'.repeat(64) })
@@ -77,14 +83,14 @@ describe('Text Open World vNext · checkpoint, replay and child branch', () => {
   })
 
   it('旧检查点缺少用途字段时按手动存档兼容读取', async () => {
-    const runtimePackage = createTextOpenWorldVNextFixture(); const session = await createSession(runtimePackage)
+    const runtimePackage = rewardRuntimePackage(); const session = await createSession(runtimePackage)
     const checkpoint = await createTextOpenWorldCheckpointV1({ sessionId: session.id!, name: '旧版手动点' })
     await db.productRuntimeCheckpoints.update(checkpoint.id!, { purpose: undefined, subjectKey: undefined })
     await expect(inspectTextOpenWorldCheckpointV1(checkpoint.id!)).resolves.toMatchObject({ valid: true, code: 'valid' })
   })
 
   it('runtime head损坏可诊断并从规范事件安全修复', async () => {
-    const runtimePackage = createTextOpenWorldVNextFixture(); const session = await createSession(runtimePackage)
+    const runtimePackage = rewardRuntimePackage(); const session = await createSession(runtimePackage)
     await playReward(runtimePackage, session.id!, 'command.head', 'claim.head')
     expect(await inspectTextOpenWorldRuntimeHeadV1(session.id!)).toMatchObject({ code: 'valid', repairable: false, latestSequence: 4 })
     await db.productRuntimeSessions.update(session.id!, { runtimeHeadStateHash: 'f'.repeat(64) })

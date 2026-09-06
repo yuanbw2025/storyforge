@@ -212,7 +212,7 @@ export interface TextOpenWorldQuestModuleV1 {
 }
 
 export interface TextOpenWorldActionModuleV1 {
-  version: 1 | 2
+  version: 1 | 2 | 3
   conditions: Array<{
     key: string
     expression: TextOpenWorldConditionExpressionV1

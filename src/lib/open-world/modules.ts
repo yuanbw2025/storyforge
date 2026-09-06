@@ -319,8 +319,9 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
     if (actorRows.find(actor => actor.key === item.actorKey)?.scheduleKey !== item.key) fail(`schedule/actor反向引用不一致:${String(item.key)}`)
   })
 
-  const actions = versioned(packageValue, 'actions', [1, 2])
-  const modernActionModule = actions.version === 2
+  const actions = versioned(packageValue, 'actions', [1, 2, 3])
+  const modernActionModule = Number(actions.version) >= 2
+  const travelActionModule = Number(actions.version) >= 3
   exact(actions, ['version', 'conditions', 'effects', 'actions'], 'actions')
   const conditions = catalog(actions.conditions, 'actions.conditions', ['key', 'expression', 'failureMessage']); const effects = catalog(actions.effects, 'actions.effects', ['key', 'operation', 'payload']); const actionRows = catalog(actions.actions, 'actions.actions', ['key', 'category', 'label', 'description', 'actorScope', 'targetScope', 'locationKeys', 'requirementConditionKeys', 'costEffectKeys', 'successEffectKeys', 'failureEffectKeys', 'timeCostMinutes', 'confirmationPolicy', 'repeatPolicy', 'cooldownMinutes'])
   const conditionKeys = keysOf(conditions, 'actions.conditions'); const effectKeys = keysOf(effects, 'actions.effects'); const actionKeys = keysOf(actionRows, 'actions.actions')
@@ -328,6 +329,50 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
   normalizedWorld.edges.forEach((item, index) => requireRefs(item.conditionKeys, conditionKeys, `world.edges[${index}].conditionKeys`))
   effects.forEach((item, index) => { key(item.operation, `actions.effects[${index}].operation`); canonicalProductProductionJsonV2(item.payload) })
   actionRows.forEach((item, index) => { enumValue(item.category, ACTION_CATEGORIES, `actions.actions[${index}].category`); text(item.label, `actions.actions[${index}].label`, 2_000); text(item.description, `actions.actions[${index}].description`); enumValue(item.actorScope, ['player', 'system'], `actions.actions[${index}].actorScope`); enumValue(item.targetScope, ['none', 'actor', 'location', 'item', 'quest', 'vendor', 'encounter'], `actions.actions[${index}].targetScope`); requireRefs(strings(item.locationKeys, `actions.actions[${index}].locationKeys`), locationKeys, 'action location'); requireRefs(strings(item.requirementConditionKeys, `actions.actions[${index}].requirementConditionKeys`), conditionKeys, 'action condition'); requireRefs(strings(item.costEffectKeys, `actions.actions[${index}].costEffectKeys`), effectKeys, 'action cost effect'); requireRefs(strings(item.successEffectKeys, `actions.actions[${index}].successEffectKeys`), effectKeys, 'action success effect'); requireRefs(strings(item.failureEffectKeys, `actions.actions[${index}].failureEffectKeys`), effectKeys, 'action failure effect'); int(item.timeCostMinutes, `actions.actions[${index}].timeCostMinutes`, 0, 1_000_000); enumValue(item.confirmationPolicy, ['never', 'high-risk', 'always'], `actions.actions[${index}].confirmationPolicy`); const repeatPolicy = enumValue(item.repeatPolicy, ['once', 'repeatable', 'cooldown'], `actions.actions[${index}].repeatPolicy`); const cooldown = item.cooldownMinutes == null ? null : int(item.cooldownMinutes, `actions.actions[${index}].cooldownMinutes`, 1, 1_000_000); if ((repeatPolicy === 'cooldown') !== (cooldown != null)) fail(`actions.actions[${index}] cooldown策略不一致`) })
+
+  if (travelActionModule) {
+    const travelActions = actionRows.filter(action => action.category === 'travel')
+    const routeKeys = travelActions.map(action => {
+      const label = `travel action ${String(action.key)}`
+      const origins = strings(action.locationKeys, `${label}.locationKeys`)
+      const successEffectKeys = strings(action.successEffectKeys, `${label}.successEffectKeys`)
+      const successEffects = successEffectKeys.map(effectKey => effects.find(effect => effect.key === effectKey)!)
+      const operations = successEffects.map(effect => String(effect.operation))
+      if (action.actorScope !== 'player' || action.targetScope !== 'location' || origins.length !== 1
+        || strings(action.costEffectKeys, `${label}.costEffectKeys`).length
+        || strings(action.failureEffectKeys, `${label}.failureEffectKeys`).length
+        || operations.join(',') !== 'start-travel,advance-time,enter-location'
+        || action.confirmationPolicy !== 'never' || action.repeatPolicy !== 'repeatable'
+        || action.cooldownMinutes != null) fail(`${label}合同无效`)
+      const startPayload = row(successEffects[0].payload, `${label}.start-travel`)
+      const timePayload = row(successEffects[1].payload, `${label}.advance-time`)
+      const enterPayload = row(successEffects[2].payload, `${label}.enter-location`)
+      const edgeKey = key(startPayload.edgeKey, `${label}.edgeKey`)
+      const edge = normalizedWorld.edges.find(candidate => candidate.key === edgeKey) ?? fail(`${label}道路不存在`)
+      const originLocationKey = origins[0]
+      const destinationLocationKey = key(startPayload.destinationLocationKey, `${label}.destinationLocationKey`)
+      const directionAllowed = edge.fromLocationKey === originLocationKey && edge.toLocationKey === destinationLocationKey
+        || edge.bidirectional && edge.toLocationKey === originLocationKey && edge.fromLocationKey === destinationLocationKey
+      if (!directionAllowed || enterPayload.locationKey !== destinationLocationKey
+        || timePayload.minutes !== edge.travelMinutes || action.timeCostMinutes !== edge.travelMinutes) fail(`${label}道路方向、目标或耗时不一致`)
+      requireSameKeys(strings(action.requirementConditionKeys, `${label}.requirements`), edge.conditionKeys, `${label}道路条件`)
+      return `${edgeKey}:${originLocationKey}->${destinationLocationKey}`
+    })
+    const expectedRouteKeys = normalizedWorld.edges.flatMap(edge => [
+      `${edge.key}:${edge.fromLocationKey}->${edge.toLocationKey}`,
+      ...(edge.bidirectional ? [`${edge.key}:${edge.toLocationKey}->${edge.fromLocationKey}`] : []),
+    ])
+    requireSameKeys(routeKeys, expectedRouteKeys, '普通旅行Action路线覆盖')
+    effects.filter(effect => effect.operation === 'start-travel').forEach(effect => {
+      const owners = travelActions.filter(action => strings(action.successEffectKeys, `travel action ${String(action.key)} effects`).includes(String(effect.key)))
+      if (owners.length !== 1) fail(`start-travel Effect必须且只能属于一个普通旅行Action:${String(effect.key)}`)
+    })
+    actionRows.filter(action => action.category !== 'travel').forEach(action => {
+      const referenced = [...strings(action.costEffectKeys, `action ${String(action.key)} costs`), ...strings(action.successEffectKeys, `action ${String(action.key)} success`), ...strings(action.failureEffectKeys, `action ${String(action.key)} failures`)]
+        .map(effectKey => effects.find(effect => effect.key === effectKey)!)
+      if (referenced.some(effect => effect.operation === 'start-travel')) fail(`start-travel只能由普通旅行Action引用:${String(action.key)}`)
+    })
+  }
 
   const quests = versioned(packageValue, 'quests', [1, 2])
   exact(quests, ['version', 'quests', 'stages', 'objectives'], 'quests')

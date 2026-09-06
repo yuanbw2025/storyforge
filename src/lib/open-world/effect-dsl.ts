@@ -322,7 +322,9 @@ export function validateTextOpenWorldEffectStateV1(state: TextOpenWorldEffectSta
   if (knowledgeRank[state.map.locationKnowledgeByKey[state.map.currentLocationKey] ?? 'unknown'] < knowledgeRank.visited) fail('当前位置必须已经到访')
   if (state.map.travel) {
     const edge = modules.world.edges.find(candidate => candidate.key === state.map.travel!.edgeKey) ?? fail('travel edgeKey不存在')
-    if (![edge.fromLocationKey, edge.toLocationKey].includes(state.map.currentLocationKey) || ![edge.fromLocationKey, edge.toLocationKey].includes(state.map.travel.destinationLocationKey) || state.map.currentLocationKey === state.map.travel.destinationLocationKey) fail('travel状态端点无效')
+    const directionAllowed = edge.fromLocationKey === state.map.currentLocationKey && edge.toLocationKey === state.map.travel.destinationLocationKey
+      || edge.bidirectional && edge.toLocationKey === state.map.currentLocationKey && edge.fromLocationKey === state.map.travel.destinationLocationKey
+    if (!directionAllowed) fail('travel状态端点或方向无效')
   }
 }
 
@@ -596,6 +598,7 @@ function applyDefinitions(
       }
       case 'enter-location': {
         const { payload } = effect; const before = state.map.currentLocationKey
+        if (state.map.travel && state.map.travel.destinationLocationKey !== payload.locationKey) fail(`${effect.key}到达地点与进行中旅行不一致`)
         state.map.currentLocationKey = payload.locationKey; state.map.travel = null; addUnique(state.map.revealedLocationKeys, payload.locationKey)
         state.map.locationKnowledgeByKey[payload.locationKey] = 'visited'
         const regionKey = modules.world.locations.find(location => location.key === payload.locationKey)!.regionKey
@@ -609,7 +612,9 @@ function applyDefinitions(
         if (state.map.travel) fail(`${effect.key}已有进行中的旅行`)
         const edge = modules.world.edges.find(candidate => candidate.key === payload.edgeKey)!
         if (!state.map.openEdgeKeys.includes(payload.edgeKey)) fail(`${effect.key}道路当前未开放`)
-        if (![edge.fromLocationKey, edge.toLocationKey].includes(state.map.currentLocationKey) || ![edge.fromLocationKey, edge.toLocationKey].includes(payload.destinationLocationKey) || payload.destinationLocationKey === state.map.currentLocationKey) fail(`${effect.key}旅行端点无效`)
+        const directionAllowed = edge.fromLocationKey === state.map.currentLocationKey && edge.toLocationKey === payload.destinationLocationKey
+          || edge.bidirectional && edge.toLocationKey === state.map.currentLocationKey && edge.fromLocationKey === payload.destinationLocationKey
+        if (!directionAllowed) fail(`${effect.key}旅行端点或方向无效`)
         const before = state.map.travel; state.map.travel = { edgeKey: payload.edgeKey, destinationLocationKey: payload.destinationLocationKey }
         record(changes, effect, `开始旅行:${payload.edgeKey}`, before, state.map.travel); break
       }

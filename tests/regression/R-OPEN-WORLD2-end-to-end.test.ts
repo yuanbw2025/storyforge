@@ -114,7 +114,7 @@ describe('Text Open World vNext · no-AI minimum package end-to-end', () => {
     await expect(commitTextOpenWorldOutcomeBatchV1({
       sessionId: session.id!, commandId: 'command.end-to-end.unauthorized-drop', ruleset: current.ruleset,
       randomRequests: [], plan: unauthorizedPlan, receipt: unauthorizedReceipt, outcome: 'success', reason: null, degradation: null,
-    })).rejects.toThrow('掉落Effect缺少RewardContract授权')
+    })).rejects.toThrow('EffectPlan与命令Action不一致')
     expect(await db.productRuntimeEvents.where('sessionId').equals(session.id!).count()).toBe(parentEventCount + 1)
   }, 20_000)
 })

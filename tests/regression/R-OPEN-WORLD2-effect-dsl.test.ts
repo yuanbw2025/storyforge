@@ -106,9 +106,6 @@ describe('Text Open World vNext · typed Effect DSL and atomic EffectPlan', () =
       { key: 'effect.story-modifier', operation: 'set-story-modifier', payload: { actorKey: 'actor.caretaker', value: 5 } },
       { key: 'effect.reveal-ridge', operation: 'reveal-location', payload: { locationKey: 'location.ridge-channel' } },
       { key: 'effect.fast-ridge', operation: 'unlock-fast-travel', payload: { fastTravelPointKey: 'fast-travel.ridge' } },
-      { key: 'effect.travel-ridge', operation: 'start-travel', payload: { edgeKey: 'edge.port-ridge', destinationLocationKey: 'location.ridge-channel' } },
-      { key: 'effect.enter-ridge', operation: 'enter-location', payload: { locationKey: 'location.ridge-channel' } },
-      { key: 'effect.advance', operation: 'advance-time', payload: { minutes: 60 } },
       { key: 'effect.start-fight', operation: 'start-combat', payload: { encounterKey: 'encounter.ridge-jackal' } },
       { key: 'effect.win-fight', operation: 'resolve-combat', payload: { encounterKey: 'encounter.ridge-jackal', outcome: 'victory' } },
       { key: 'effect.move-caretaker', operation: 'change-actor-state', payload: { actorKey: 'actor.caretaker', alive: null, present: true, locationKey: 'location.ridge-channel' } },
@@ -131,7 +128,12 @@ describe('Text Open World vNext · typed Effect DSL and atomic EffectPlan', () =
       ],
     })
     const plan = await catalog.plan({
-      effectKeys: ['effect.accept-main', 'effect.activate-main', ...effects.map(effect => effect.key)],
+      effectKeys: [
+        'effect.accept-main', 'effect.activate-main',
+        ...effects.slice(0, 5).map(effect => effect.key),
+        'effect.travel-port-ridge-start', 'effect.travel-port-ridge-time', 'effect.travel-port-ridge-enter',
+        ...effects.slice(5).map(effect => effect.key),
+      ],
       claimKey: 'claim.story-beat',
       state: before,
       authorization,

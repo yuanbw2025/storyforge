@@ -23,6 +23,7 @@ import { createTextOpenWorldVNextFixture } from '../helpers/text-open-world-vnex
 
 async function fixture() {
   const textOpenWorldVNext = createTextOpenWorldVNextFixture()
+  ;(textOpenWorldVNext.modules.actions.payload as any).actions.find((action: any) => action.key === 'action.investigate-channel').successEffectKeys = ['effect.reward-currency']
   ;(textOpenWorldVNext.modules.knowledge.payload as any).entries.push({
     key: 'knowledge.hidden-origin', kind: 'lore', title: '不应看见的真相',
     content: '渠水断流由尚未登场的幕后人物造成。', sourceRefs: ['world-release:hidden'],
@@ -78,7 +79,7 @@ describe('Text Open World vNext · three registries and complete data lifecycle'
     expect(context.text).toContain('【生命状态】healthy')
     expect(context.text).toContain('存在目的=承载开场、主线委托、交易和安全复活。')
     expect(context.text).toContain('【玩家可知相邻道路】')
-    expect(context.text).toContain('edge.port-ridge｜前往=location.ridge-channel:断脊渠口｜60分钟｜风险=ordinary｜可通行')
+    expect(context.text).toContain('edge.port-ridge｜前往=location.ridge-channel:断脊渠口｜60分钟｜风险=ordinary｜可执行=action.travel-port-ridge')
     expect(context.text).not.toContain('盐港最后一位老守渠人')
     expect(context.text).not.toContain('不应看见的真相')
     expect(context.text).not.toContain('渠水断流由尚未登场')

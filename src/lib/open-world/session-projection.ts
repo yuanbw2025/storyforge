@@ -5,6 +5,7 @@ import type {
   TextOpenWorldConditionEvaluationContextV1,
   TextOpenWorldDerivedContextsV1,
   TextOpenWorldDirectorProjectionV1,
+  TextOpenWorldEffectDefinitionV1,
   TextOpenWorldEffectStateV1,
   TextOpenWorldParsedModulesV1,
   TextOpenWorldSessionProjectionV1,
@@ -309,7 +310,20 @@ export function applyTextOpenWorldSessionEventV1(current: TextOpenWorldSessionPr
       if (projection.protocol.pendingTargetKey !== authorization.instanceKey || projection.protocol.pendingActorKey !== 'player'
         || action.category !== expectedCategory || action.actorScope !== 'player' || action.targetScope !== 'quest') fail('任务追踪授权与命令目标不一致')
       createTextOpenWorldQuestTrackingCatalogV1(projection.runtimePackage).assertAuthorization({ state: projection.state, authorization })
-    } else if (applied.plan.effectKeys.some(effectKey => dropEffectKeys.has(effectKey))) fail('掉落Effect缺少RewardContract授权')
+    } else {
+      const action = modules.actions.actions.find(item => item.key === projection.protocol.pendingActionKey) ?? fail('命令Action不存在')
+      const outcomeEffectKeys = applied.outcome === 'failure' ? action.failureEffectKeys : action.successEffectKeys
+      const expectedEffectKeys = [...new Set([...action.costEffectKeys, ...outcomeEffectKeys])]
+      if (canonicalProductProductionJsonV2(applied.plan.effectKeys) !== canonicalProductProductionJsonV2(expectedEffectKeys)) fail('EffectPlan与命令Action不一致')
+      if (applied.plan.effectKeys.some(effectKey => dropEffectKeys.has(effectKey))) fail('掉落Effect缺少RewardContract授权')
+      if (action.category === 'travel') {
+        const start = action.successEffectKeys.map(effectKey => modules.actions.effects.find(effect => effect.key === effectKey)!)
+          .find((effect): effect is Extract<TextOpenWorldEffectDefinitionV1, { operation: 'start-travel' }> => effect.operation === 'start-travel')
+          ?? fail('普通旅行Action缺少start-travel Effect')
+        if (projection.protocol.pendingActorKey !== 'player' || projection.protocol.pendingTargetKey !== start.payload.destinationLocationKey
+          || !action.locationKeys.includes(projection.state.map.currentLocationKey)) fail('普通旅行命令与当前地点或目标不一致')
+      }
+    }
     projection.state = applyTextOpenWorldEffectPlanForReplayV1(projection.runtimePackage, projection.state, applied.plan).state
     const action = modules.actions.actions.find(item => item.key === projection.protocol.pendingActionKey) ?? fail('命令Action不存在')
     if (action.repeatPolicy === 'once' && !projection.actions.completedOnceActionKeys.includes(action.key)) projection.actions.completedOnceActionKeys.push(action.key)
@@ -358,9 +372,10 @@ export function deriveTextOpenWorldContextsV1(value: TextOpenWorldSessionProject
     actorKey: 'player', currentLocationKey: state.map.currentLocationKey, worldMinute: state.time.worldMinute,
     playerHealth: state.player.health, combatStatus: state.combat?.status ?? null,
     conditionResults: Object.fromEntries(Object.entries(evaluations).map(([key, result]) => [key, { satisfied: result.satisfied, publicReason: result.publicReason }])),
+    openEdgeKeys: [...state.map.openEdgeKeys],
     completedOnceActionKeys: [...projection.actions.completedOnceActionKeys], cooldownUntilWorldMinuteByActionKey: structuredClone(projection.actions.cooldownUntilWorldMinuteByActionKey),
     validTargetKeysByScope: {
-      actor: actorTargets, location: [state.map.currentLocationKey], item: Object.keys(inventoryQuantities),
+      actor: actorTargets, location: [...state.map.revealedLocationKeys], item: Object.keys(inventoryQuantities),
       quest: Object.values(state.quests.instancesByKey).filter(instance => !['locked', 'available'].includes(instance.status)).map(instance => instance.instanceKey),
       vendor: modules.economy.vendors.filter(vendor => vendor.locationKey === state.map.currentLocationKey && actorTargets.includes(vendor.actorKey)).map(vendor => vendor.key),
       encounter: modules.combat.encounters.filter(encounter => encounter.locationKey === state.map.currentLocationKey).map(encounter => encounter.key),

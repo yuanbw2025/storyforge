@@ -17,6 +17,9 @@ import { createTextOpenWorldVNextFixture } from '../helpers/text-open-world-vnex
 
 async function fixture(suffix: string) {
   const textOpenWorldVNext = createTextOpenWorldVNextFixture()
+  if (suffix === 'success') {
+    ;(textOpenWorldVNext.modules.actions.payload as any).actions.find((action: any) => action.key === 'action.investigate-channel').successEffectKeys = ['effect.reward-currency']
+  }
   const created = await createGovernedTextOpenWorldSessionFixtureV1({
     name: `TEXT-OPEN-WORLD Feedback验收-${suffix}-${crypto.randomUUID()}`,
     textOpenWorldVNext,
