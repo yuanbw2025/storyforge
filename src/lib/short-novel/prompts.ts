@@ -44,7 +44,7 @@ export function buildShortNovelPromptV1(input: {
   } else if (input.kind === 'chapter-draft') {
     objective = `为 ${input.chapterKey} 生成 ShortNovelChapterDraftV1，字段严格且仅为：${SHORT_NOVEL_CONTRACT_KEYS.DRAFT_KEYS.join(', ')}。version 必须是数字 1，chapterKey 必须精确等于 ${input.chapterKey}。content 使用纯文本自然段，不要 Markdown 标题；严格执行该章结构卡、承接前章离场状态并把下一章所需状态交代清楚；不提前兑现后续高潮。`
   } else if (input.kind === 'continuity-review') {
-    objective = `生成 ShortNovelReviewV1。version 必须是数字 1；顶层字段严格且仅为：${SHORT_NOVEL_CONTRACT_KEYS.REVIEW_KEYS.join(', ')}；每个 issue 字段严格且仅为：${SHORT_NOVEL_CONTRACT_KEYS.ISSUE_KEYS.join(', ')}。severity 仅逐字使用 critical/major/minor；category 仅逐字使用 causality/character/continuity/pacing/point-of-view/promise-payoff/prose；status 固定为英文 open。evidence 必须引用短小的实际文本或结构事实；没有问题时 issues=[]，不得为凑数发明问题。`
+    objective = `生成 ShortNovelReviewV1。顶层必须精确采用这个 JSON 形状：{"version":1,"summary":"非空总结","strengths":["非空优点"],"issues":[]}，不得增加 score、verdict、recommendations 等键。每个 issue 必须精确采用这个 JSON 形状：{"stableKey":"issue-1","severity":"major","category":"continuity","chapterKeys":["chapter-1"],"evidence":"实际短引文或结构事实","problem":"非空问题","suggestion":"非空建议","status":"open"}，字段严格且仅为：${SHORT_NOVEL_CONTRACT_KEYS.ISSUE_KEYS.join(', ')}；绝对不要增加 title、location、line、priority、confidence 或 reasoning。version 必须是数字 1；severity 仅逐字使用 critical/major/minor；category 仅逐字使用 causality/character/continuity/pacing/point-of-view/promise-payoff/prose；status 固定为英文 open。evidence 必须引用短小的实际文本或结构事实；没有问题时 issues=[]，不得为凑数发明问题。`
   } else {
     objective = `只修复下列问题，并为 ${input.chapterKey} 返回 ShortNovelChapterDraftV1，字段严格且仅为：${SHORT_NOVEL_CONTRACT_KEYS.DRAFT_KEYS.join(', ')}。version 必须是数字 1，chapterKey 必须精确等于 ${input.chapterKey}。保持未涉及的情节事实、视角、语气和长度，不改其他章节。问题：${JSON.stringify(input.issue)}`
   }

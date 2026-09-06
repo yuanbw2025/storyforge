@@ -188,6 +188,15 @@ describe('R-SHORT2 · 专业短篇独立生产闭环', () => {
     expect(planObjective.content).toContain('数组元素没有 version 字段')
     expect(planObjective.content).toContain('{"stableKey":"chapter-1","order":0')
     expect(planObjective.content).toContain('targetWordCount 使用 JSON 数字')
+
+    const [, reviewObjective] = buildShortNovelPromptV1({
+      kind: 'continuity-review',
+      context: '三章正文',
+      authorInstruction: '',
+    })
+    expect(reviewObjective.content).toContain('{"version":1,"summary":"非空总结"')
+    expect(reviewObjective.content).toContain('{"stableKey":"issue-1","severity":"major"')
+    expect(reviewObjective.content).toContain('绝对不要增加 title、location、line、priority、confidence 或 reasoning')
   })
 
   it('手稿变化后拒绝 stale 候选，且不能跨 Work 采纳', async () => {
