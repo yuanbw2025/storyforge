@@ -402,20 +402,37 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
       statuses: [{ key: 'status.rested', title: '休整完毕', description: '角色已经充分休息。', polarity: 'beneficial' }],
     },
     combat: {
-      version: 1,
+      version: 2,
       rules: {
         difficulty: 'standard', defaultAttackHits: true, playerPartyLimit: 1,
         allowFriendlyNpcCombatants: false, allowElements: false, allowEscape: true,
       },
+      difficultyProfiles: [{
+        key: 'standard', label: '标准', enemyHealthMultiplier: 1, enemyDamageMultiplier: 1, rewardMultiplier: 1,
+      }],
+      strategyProfiles: [{
+        key: 'strategy.salt-jackal', title: '盐鬣犬扑咬', selection: 'ordered-skill-priority',
+        prioritySkillKeys: ['skill.basic-attack'], fallbackSkillKey: 'skill.basic-attack',
+      }],
       enemies: [{
-        key: 'enemy.salt-jackal', familyKey: 'enemy-family.jackal', title: '盐鬣犬', level: 1,
+        key: 'enemy.salt-jackal', familyKey: 'enemy-family.jackal', title: '盐鬣犬',
+        description: '盘踞在断流渠口、会结群扑咬来客的荒野兽类。', tags: ['野兽', '近战'], level: 1,
         maximumHealth: 16, attack: 4, defense: 1, criticalChance: 0.05, initiative: 3,
-        skillKeys: ['skill.basic-attack'], dropTableKey: 'drop.salt-jackal',
+        skillKeys: ['skill.basic-attack'], strategyProfileKey: 'strategy.salt-jackal', dropTableKey: 'drop.salt-jackal',
+        sourceRefs: ['world-release:creature:salt-jackal'], presentationRefs: [],
       }],
       encounters: [{
-        key: 'encounter.ridge-jackal', title: '渠口伏兽', locationKey: 'location.ridge-channel',
-        enemyKeys: ['enemy.salt-jackal'], recommendedLevel: 1, intensity: 'ordinary', escapeAllowed: true,
-        victoryEffectKeys: ['effect.reward-experience'],
+        key: 'encounter.ridge-jackal', title: '渠口伏兽', description: '盐鬣犬堵住了通往断流点的渠岸。',
+        locationKey: 'location.ridge-channel', questKeys: [],
+        enemyGroups: [{ key: 'group.ridge-jackal.1', enemyKey: 'enemy.salt-jackal', count: 1, order: 1 }],
+        recommendedLevel: 1, levelBand: { minimum: 1, maximum: 2 }, difficultyProfileKey: 'standard', intensity: 'ordinary',
+        escapePolicy: { allowed: true, failureConsumesTurn: true },
+        defeatPolicy: { kind: 'retry-or-respawn', preservesWorldProgress: true },
+        rewardContractKey: 'reward.ridge-jackal',
+        openingText: '碎盐滚下渠坡，一只盐鬣犬从断墙后压低身体。',
+        victoryText: '盐鬣犬倒在渠口，通向断流点的道路恢复安静。',
+        defeatText: '你没能突破渠口，可以从战前重试，或返回盐港复活点。',
+        sourceRefs: ['world-release:encounter:ridge-jackal'], presentationRefs: [],
       }],
     },
     items: {
@@ -649,5 +666,40 @@ export function downgradeTextOpenWorldFixtureWithoutCrimeV1(
   relationships.version = Math.min(Number(relationships.version), 2)
   runtimePackage.modules.relationships.schemaVersion = relationships.version
   delete relationships.crimeActions
+  return runtimePackage
+}
+
+/** Re-encodes the modern combat fixture as the former v1 Release payload. */
+export function downgradeTextOpenWorldFixtureCombatV1(
+  runtimePackage: TextOpenWorldRuntimePackageV1,
+): TextOpenWorldRuntimePackageV1 {
+  const combat = runtimePackage.modules.combat.payload as any
+  combat.version = 1
+  combat.enemies = combat.enemies.map((enemy: any) => ({
+    key: enemy.key,
+    familyKey: enemy.familyKey,
+    title: enemy.title,
+    level: enemy.level,
+    maximumHealth: enemy.maximumHealth,
+    attack: enemy.attack,
+    defense: enemy.defense,
+    criticalChance: enemy.criticalChance,
+    initiative: enemy.initiative,
+    skillKeys: enemy.skillKeys,
+    dropTableKey: enemy.dropTableKey,
+  }))
+  combat.encounters = combat.encounters.map((encounter: any) => ({
+    key: encounter.key,
+    title: encounter.title,
+    locationKey: encounter.locationKey,
+    enemyKeys: encounter.enemyGroups.map((group: any) => group.enemyKey),
+    recommendedLevel: encounter.recommendedLevel,
+    intensity: encounter.intensity,
+    escapeAllowed: encounter.escapePolicy.allowed,
+    victoryEffectKeys: ['effect.reward-experience'],
+  }))
+  delete combat.difficultyProfiles
+  delete combat.strategyProfiles
+  runtimePackage.modules.combat.schemaVersion = 1
   return runtimePackage
 }

@@ -313,7 +313,7 @@ export interface TextOpenWorldProgressionModuleV1 {
 }
 
 export interface TextOpenWorldCombatModuleV1 {
-  version: 1
+  version: 2
   rules: {
     difficulty: 'standard'
     defaultAttackHits: true
@@ -322,10 +322,26 @@ export interface TextOpenWorldCombatModuleV1 {
     allowElements: false
     allowEscape: true
   }
+  difficultyProfiles: Array<{
+    key: 'standard'
+    label: string
+    enemyHealthMultiplier: 1
+    enemyDamageMultiplier: 1
+    rewardMultiplier: 1
+  }>
+  strategyProfiles: Array<{
+    key: string
+    title: string
+    selection: 'ordered-skill-priority'
+    prioritySkillKeys: string[]
+    fallbackSkillKey: string
+  }>
   enemies: Array<{
     key: string
     familyKey: string
     title: string
+    description: string
+    tags: string[]
     level: number
     maximumHealth: number
     attack: number
@@ -333,17 +349,41 @@ export interface TextOpenWorldCombatModuleV1 {
     criticalChance: number
     initiative: number
     skillKeys: string[]
+    strategyProfileKey: string
     dropTableKey: string | null
+    sourceRefs: string[]
+    presentationRefs: string[]
   }>
   encounters: Array<{
     key: string
     title: string
+    description: string
     locationKey: string
-    enemyKeys: string[]
+    questKeys: string[]
+    enemyGroups: Array<{
+      key: string
+      enemyKey: string
+      count: number
+      order: number
+    }>
     recommendedLevel: number
+    levelBand: { minimum: number; maximum: number }
+    difficultyProfileKey: 'standard'
     intensity: 'ordinary' | 'dangerous' | 'boss'
-    escapeAllowed: boolean
-    victoryEffectKeys: string[]
+    escapePolicy: {
+      allowed: boolean
+      failureConsumesTurn: true
+    }
+    defeatPolicy: {
+      kind: 'retry-or-respawn'
+      preservesWorldProgress: true
+    }
+    rewardContractKey: string | null
+    openingText: string
+    victoryText: string
+    defeatText: string
+    sourceRefs: string[]
+    presentationRefs: string[]
   }>
 }
 

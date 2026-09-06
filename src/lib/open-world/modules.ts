@@ -1055,21 +1055,185 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
     if ((reason === 'drop' && definition.droppable !== true) || (reason === 'sell' && definition.sellable !== true)) fail(`物品Action违反${reason}保护:${itemKey}`)
   })
 
-  const combat = versioned(packageValue, 'combat')
-  exact(combat, ['version', 'rules', 'enemies', 'encounters'], 'combat')
+  const combat = versioned(packageValue, 'combat', [1, 2])
+  const legacyCombatModule = combat.version === 1
+  exact(combat, legacyCombatModule
+    ? ['version', 'rules', 'enemies', 'encounters']
+    : ['version', 'rules', 'difficultyProfiles', 'strategyProfiles', 'enemies', 'encounters'], 'combat')
   const combatRules = row(combat.rules, 'combat.rules'); exact(combatRules, ['difficulty', 'defaultAttackHits', 'playerPartyLimit', 'allowFriendlyNpcCombatants', 'allowElements', 'allowEscape'], 'combat.rules'); if (combatRules.difficulty !== 'standard' || combatRules.defaultAttackHits !== true || combatRules.playerPartyLimit !== 1 || combatRules.allowFriendlyNpcCombatants !== false || combatRules.allowElements !== false || combatRules.allowEscape !== true) fail('combat.rules不符合首版冻结边界')
-  const enemies = catalog(combat.enemies, 'combat.enemies', ['key', 'familyKey', 'title', 'level', 'maximumHealth', 'attack', 'defense', 'criticalChance', 'initiative', 'skillKeys', 'dropTableKey']); const encounters = catalog(combat.encounters, 'combat.encounters', ['key', 'title', 'locationKey', 'enemyKeys', 'recommendedLevel', 'intensity', 'escapeAllowed', 'victoryEffectKeys']); const enemyKeys = keysOf(enemies, 'combat.enemies'); keysOf(encounters, 'combat.encounters')
-  enemies.forEach((item, index) => { key(item.familyKey, `combat.enemies[${index}].familyKey`); text(item.title, `combat.enemies[${index}].title`, 2_000); int(item.level, `combat.enemies[${index}].level`, 1, maximumLevel); int(item.maximumHealth, `combat.enemies[${index}].maximumHealth`, 1, 1_000_000_000); int(item.attack, `combat.enemies[${index}].attack`, 0, 1_000_000_000); int(item.defense, `combat.enemies[${index}].defense`, 0, 1_000_000_000); numberValue(item.criticalChance, `combat.enemies[${index}].criticalChance`, 0, 1); numberValue(item.initiative, `combat.enemies[${index}].initiative`, 0, 1_000_000); requireRefs(strings(item.skillKeys, `combat.enemies[${index}].skillKeys`), skillKeys, 'enemy skill'); requireRef(nullableKey(item.dropTableKey, `combat.enemies[${index}].dropTableKey`), dropTableKeys, 'enemy drop table') })
-  encounters.forEach((item, index) => { text(item.title, `combat.encounters[${index}].title`, 2_000); requireRef(key(item.locationKey, `combat.encounters[${index}].locationKey`), locationKeys, 'encounter location'); requireRefs(strings(item.enemyKeys, `combat.encounters[${index}].enemyKeys`), enemyKeys, 'encounter enemy'); int(item.recommendedLevel, `combat.encounters[${index}].recommendedLevel`, 1, maximumLevel); enumValue(item.intensity, ['ordinary', 'dangerous', 'boss'], `combat.encounters[${index}].intensity`); bool(item.escapeAllowed, `combat.encounters[${index}].escapeAllowed`); requireRefs(strings(item.victoryEffectKeys, `combat.encounters[${index}].victoryEffectKeys`), effectKeys, 'encounter victory effect') })
-  actionRows.filter(action => action.category === 'start-combat').forEach(action => {
+  const difficultyProfiles = legacyCombatModule ? [{
+    key: 'standard', label: '标准', enemyHealthMultiplier: 1, enemyDamageMultiplier: 1, rewardMultiplier: 1,
+  }] : catalog(combat.difficultyProfiles, 'combat.difficultyProfiles', [
+    'key', 'label', 'enemyHealthMultiplier', 'enemyDamageMultiplier', 'rewardMultiplier',
+  ])
+  const difficultyProfileKeys = keysOf(difficultyProfiles, 'combat.difficultyProfiles')
+  if (difficultyProfiles.length !== 1 || !difficultyProfileKeys.has('standard')) fail('首版必须且只能定义standard难度')
+  difficultyProfiles.forEach((item, index) => {
+    if (item.key !== 'standard') fail(`combat.difficultyProfiles[${index}].key只能为standard`)
+    text(item.label, `combat.difficultyProfiles[${index}].label`, 100)
+    if (item.enemyHealthMultiplier !== 1 || item.enemyDamageMultiplier !== 1 || item.rewardMultiplier !== 1) {
+      fail('standard难度倍率必须固定为1')
+    }
+  })
+  const legacyEnemies = legacyCombatModule
+    ? catalog(combat.enemies, 'combat.enemies', ['key', 'familyKey', 'title', 'level', 'maximumHealth', 'attack', 'defense', 'criticalChance', 'initiative', 'skillKeys', 'dropTableKey'])
+    : []
+  const strategyProfiles = legacyCombatModule ? legacyEnemies.map(item => ({
+    key: `strategy.legacy.${String(item.key)}`, title: `${String(item.title)}旧版策略`, selection: 'ordered-skill-priority',
+    prioritySkillKeys: strings(item.skillKeys, `combat enemy ${String(item.key)} skillKeys`),
+    fallbackSkillKey: strings(item.skillKeys, `combat enemy ${String(item.key)} skillKeys`)[0],
+  })) : catalog(combat.strategyProfiles, 'combat.strategyProfiles', ['key', 'title', 'selection', 'prioritySkillKeys', 'fallbackSkillKey'])
+  const strategyProfileKeys = keysOf(strategyProfiles, 'combat.strategyProfiles')
+  strategyProfiles.forEach((item, index) => {
+    text(item.title, `combat.strategyProfiles[${index}].title`, 2_000)
+    if (item.selection !== 'ordered-skill-priority') fail(`combat.strategyProfiles[${index}].selection无效`)
+    const prioritySkillKeys = strings(item.prioritySkillKeys, `combat.strategyProfiles[${index}].prioritySkillKeys`)
+    if (!prioritySkillKeys.length) fail(`combat.strategyProfiles[${index}]必须配置技能优先级`)
+    requireRefs(prioritySkillKeys, skillKeys, 'combat strategy skill')
+    const fallbackSkillKey = key(item.fallbackSkillKey, `combat.strategyProfiles[${index}].fallbackSkillKey`)
+    if (!prioritySkillKeys.includes(fallbackSkillKey)) fail(`combat.strategyProfiles[${index}].fallbackSkillKey必须包含在优先级中`)
+    prioritySkillKeys.forEach(skillKey => {
+      if (skills.find(skill => skill.key === skillKey)?.activation !== 'active') fail(`敌人策略只能选择主动技能:${skillKey}`)
+    })
+  })
+  const enemies: Row[] = legacyCombatModule ? legacyEnemies.map(item => ({
+    ...structuredClone(item), description: String(item.title), tags: [],
+    strategyProfileKey: `strategy.legacy.${String(item.key)}`,
+    sourceRefs: [`legacy:combat:${String(item.key)}`], presentationRefs: [],
+  })) : catalog(combat.enemies, 'combat.enemies', [
+    'key', 'familyKey', 'title', 'description', 'tags', 'level', 'maximumHealth', 'attack', 'defense', 'criticalChance',
+    'initiative', 'skillKeys', 'strategyProfileKey', 'dropTableKey', 'sourceRefs', 'presentationRefs',
+  ])
+  const enemyKeys = keysOf(enemies, 'combat.enemies')
+  if (!enemyKeys.size) fail('首版至少需要一个敌人定义')
+  const combatMediaSlotKeys = new Set(packageValue.mediaManifest.slotKeys)
+  enemies.forEach((item, index) => {
+    key(item.familyKey, `combat.enemies[${index}].familyKey`); text(item.title, `combat.enemies[${index}].title`, 2_000)
+    text(item.description, `combat.enemies[${index}].description`); strings(item.tags, `combat.enemies[${index}].tags`, 'text')
+    int(item.level, `combat.enemies[${index}].level`, 1, maximumLevel); int(item.maximumHealth, `combat.enemies[${index}].maximumHealth`, 1, 1_000_000_000)
+    int(item.attack, `combat.enemies[${index}].attack`, 0, 1_000_000_000); int(item.defense, `combat.enemies[${index}].defense`, 0, 1_000_000_000)
+    numberValue(item.criticalChance, `combat.enemies[${index}].criticalChance`, 0, 1)
+    numberValue(item.initiative, `combat.enemies[${index}].initiative`, 0, 1_000_000)
+    const enemySkillKeys = strings(item.skillKeys, `combat.enemies[${index}].skillKeys`)
+    if (!enemySkillKeys.length) fail(`combat.enemies[${index}]必须配置至少一个技能`)
+    requireRefs(enemySkillKeys, skillKeys, 'enemy skill')
+    const strategyProfileKey = key(item.strategyProfileKey, `combat.enemies[${index}].strategyProfileKey`)
+    requireRef(strategyProfileKey, strategyProfileKeys, 'enemy strategy profile')
+    const strategy = strategyProfiles.find(profile => profile.key === strategyProfileKey)!
+    requireRefs(strings(strategy.prioritySkillKeys, `enemy ${String(item.key)} strategy skills`), new Set(enemySkillKeys), `enemy ${String(item.key)} strategy skill`)
+    requireRef(nullableKey(item.dropTableKey, `combat.enemies[${index}].dropTableKey`), dropTableKeys, 'enemy drop table')
+    const sourceRefs = strings(item.sourceRefs, `combat.enemies[${index}].sourceRefs`, 'text')
+    if (!sourceRefs.length) fail(`combat.enemies[${index}]必须说明来源`)
+    requireRefs(strings(item.presentationRefs, `combat.enemies[${index}].presentationRefs`), combatMediaSlotKeys, 'enemy presentation slot')
+  })
+  if (!legacyCombatModule) strategyProfiles.forEach(profile => {
+    if (!enemies.some(enemy => enemy.strategyProfileKey === profile.key)) fail(`敌人策略没有使用者:${String(profile.key)}`)
+  })
+  const legacyEncounters = legacyCombatModule
+    ? catalog(combat.encounters, 'combat.encounters', ['key', 'title', 'locationKey', 'enemyKeys', 'recommendedLevel', 'intensity', 'escapeAllowed', 'victoryEffectKeys'])
+    : []
+  legacyEncounters.forEach((item, index) => requireRefs(strings(item.victoryEffectKeys, `combat.encounters[${index}].victoryEffectKeys`), effectKeys, 'legacy encounter victory effect'))
+  const encounters: Row[] = legacyCombatModule ? legacyEncounters.map(item => ({
+    key: item.key, title: item.title, description: String(item.title), locationKey: item.locationKey, questKeys: [],
+    enemyGroups: strings(item.enemyKeys, `combat encounter ${String(item.key)} enemyKeys`).map((enemyKey, index) => ({
+      key: `group.legacy.${String(item.key)}.${index + 1}`, enemyKey, count: 1, order: index + 1,
+    })),
+    recommendedLevel: item.recommendedLevel,
+    levelBand: { minimum: item.recommendedLevel, maximum: item.recommendedLevel }, difficultyProfileKey: 'standard',
+    intensity: item.intensity,
+    escapePolicy: { allowed: item.escapeAllowed, failureConsumesTurn: true },
+    defeatPolicy: { kind: 'retry-or-respawn', preservesWorldProgress: true }, rewardContractKey: null,
+    openingText: String(item.title), victoryText: '你赢得了这场战斗。', defeatText: '你战败了，可以重试或返回复活点。',
+    sourceRefs: [`legacy:combat:${String(item.key)}`], presentationRefs: [],
+  })) : catalog(combat.encounters, 'combat.encounters', [
+    'key', 'title', 'description', 'locationKey', 'questKeys', 'enemyGroups', 'recommendedLevel', 'levelBand',
+    'difficultyProfileKey', 'intensity', 'escapePolicy', 'defeatPolicy', 'rewardContractKey', 'openingText', 'victoryText',
+    'defeatText', 'sourceRefs', 'presentationRefs',
+  ])
+  const encounterKeys = keysOf(encounters, 'combat.encounters')
+  if (!encounterKeys.size) fail('首版至少需要一个遭遇定义')
+  const combatRewardOwners = new Map<string, string>()
+  encounters.forEach((item, index) => {
+    const label = `combat.encounters[${index}]`
+    text(item.title, `${label}.title`, 2_000); text(item.description, `${label}.description`)
+    requireRef(key(item.locationKey, `${label}.locationKey`), locationKeys, 'encounter location')
+    requireRefs(strings(item.questKeys, `${label}.questKeys`), questKeys, 'encounter quest')
+    const groups = catalog(item.enemyGroups, `${label}.enemyGroups`, ['key', 'enemyKey', 'count', 'order'])
+    keysOf(groups, `${label}.enemyGroups`)
+    if (!groups.length) fail(`${label}必须配置至少一个敌人组`)
+    let totalEnemies = 0
+    groups.forEach((group, groupIndex) => {
+      requireRef(key(group.enemyKey, `${label}.enemyGroups[${groupIndex}].enemyKey`), enemyKeys, 'encounter enemy')
+      totalEnemies += int(group.count, `${label}.enemyGroups[${groupIndex}].count`, 1, 8)
+      const order = int(group.order, `${label}.enemyGroups[${groupIndex}].order`, 1, groups.length)
+      if (order !== groupIndex + 1) fail(`${label}.enemyGroups.order必须按数组顺序从1连续递增`)
+    })
+    if (totalEnemies > 8) fail(`${label}首版敌人数不能超过8`)
+    const recommendedLevel = int(item.recommendedLevel, `${label}.recommendedLevel`, 1, maximumLevel)
+    const levelBand = row(item.levelBand, `${label}.levelBand`); exact(levelBand, ['minimum', 'maximum'], `${label}.levelBand`)
+    const minimum = int(levelBand.minimum, `${label}.levelBand.minimum`, 1, maximumLevel)
+    const maximum = int(levelBand.maximum, `${label}.levelBand.maximum`, 1, maximumLevel)
+    if (minimum > maximum || recommendedLevel < minimum || recommendedLevel > maximum) fail(`${label}.levelBand与推荐等级不一致`)
+    if (key(item.difficultyProfileKey, `${label}.difficultyProfileKey`) !== 'standard') fail(`${label}首版只能使用standard难度`)
+    enumValue(item.intensity, ['ordinary', 'dangerous', 'boss'], `${label}.intensity`)
+    const escapePolicy = row(item.escapePolicy, `${label}.escapePolicy`); exact(escapePolicy, ['allowed', 'failureConsumesTurn'], `${label}.escapePolicy`)
+    const escapeAllowed = bool(escapePolicy.allowed, `${label}.escapePolicy.allowed`)
+    if (escapePolicy.failureConsumesTurn !== true || (escapeAllowed && combatRules.allowEscape !== true)) fail(`${label}.escapePolicy不符合首版规则`)
+    const defeatPolicy = row(item.defeatPolicy, `${label}.defeatPolicy`); exact(defeatPolicy, ['kind', 'preservesWorldProgress'], `${label}.defeatPolicy`)
+    if (defeatPolicy.kind !== 'retry-or-respawn' || defeatPolicy.preservesWorldProgress !== true) fail(`${label}.defeatPolicy不符合首版失败恢复边界`)
+    const rewardContractKey = nullableKey(item.rewardContractKey, `${label}.rewardContractKey`)
+    const encounterDropTableKeys = [...new Set(groups.flatMap(group => {
+      const enemy = enemies.find(candidate => candidate.key === group.enemyKey)!
+      const dropTableKey = nullableKey(enemy.dropTableKey, `encounter ${String(item.key)} enemy drop table`)
+      return dropTableKey ? [dropTableKey] : []
+    }))]
+    if (!legacyCombatModule) {
+      if (!rewardContractKey) fail(`${label}必须绑定战斗RewardContract`)
+      requireRef(rewardContractKey, rewardContractKeys, 'encounter reward contract')
+      const priorOwner = combatRewardOwners.get(rewardContractKey)
+      if (priorOwner) fail(`战斗RewardContract不能跨遭遇共享:${rewardContractKey}:${priorOwner}:${String(item.key)}`)
+      combatRewardOwners.set(rewardContractKey, String(item.key))
+      const reward = rewardContracts.find(candidate => candidate.key === rewardContractKey)!
+      if (reward.sourceKind !== 'combat') fail(`遭遇RewardContract来源必须为combat:${rewardContractKey}`)
+      requireSameKeys(strings(reward.dropTableKeys, `reward ${rewardContractKey} dropTableKeys`), encounterDropTableKeys, `encounter ${String(item.key)} drop tables`)
+    }
+    text(item.openingText, `${label}.openingText`); text(item.victoryText, `${label}.victoryText`); text(item.defeatText, `${label}.defeatText`)
+    const sourceRefs = strings(item.sourceRefs, `${label}.sourceRefs`, 'text')
+    if (!sourceRefs.length) fail(`${label}必须说明来源`)
+    requireRefs(strings(item.presentationRefs, `${label}.presentationRefs`), combatMediaSlotKeys, 'encounter presentation slot')
+  })
+  if (!legacyCombatModule) rewardContracts.filter(reward => reward.sourceKind === 'combat').forEach(reward => {
+    if (!combatRewardOwners.has(String(reward.key))) fail(`combat来源RewardContract必须绑定一个遭遇:${String(reward.key)}`)
+  })
+  const startCombatActions = actionRows.filter(action => action.category === 'start-combat')
+  startCombatActions.forEach(action => {
     const startEffects = strings(action.successEffectKeys, `start-combat ${String(action.key)} success effects`)
       .map(effectKey => effects.find(effect => effect.key === effectKey)!)
       .filter(effect => effect.operation === 'start-combat')
-    if (action.targetScope !== 'encounter' || startEffects.length !== 1) fail(`start-combat Action必须绑定唯一遭遇目标:${String(action.key)}`)
+    if (action.actorScope !== 'player' || action.targetScope !== 'encounter' || startEffects.length !== 1
+      || strings(action.successEffectKeys, `start-combat ${String(action.key)} success effects`).length !== 1
+      || strings(action.costEffectKeys, `start-combat ${String(action.key)} costs`).length
+      || strings(action.failureEffectKeys, `start-combat ${String(action.key)} failures`).length
+      || action.confirmationPolicy !== 'never' || action.timeCostMinutes !== 0) fail(`start-combat Action必须绑定唯一遭遇目标:${String(action.key)}`)
     const encounterKey = key(row(startEffects[0].payload, `start-combat ${String(action.key)} payload`).encounterKey, `start-combat ${String(action.key)} encounterKey`)
     const encounter = encounters.find(item => item.key === encounterKey) ?? fail(`start-combat Action遭遇不存在:${encounterKey}`)
     requireSameKeys(strings(action.locationKeys, `start-combat ${String(action.key)} locationKeys`), [String(encounter.locationKey)], `start-combat ${String(action.key)} location`)
   })
+  if (!legacyCombatModule) encounters.forEach(encounter => {
+    const owners = startCombatActions.filter(action => strings(action.successEffectKeys, `start-combat ${String(action.key)} effects`).some(effectKey => {
+      const effect = effects.find(candidate => candidate.key === effectKey)!
+      return effect.operation === 'start-combat' && row(effect.payload, `start-combat effect ${effectKey}`).encounterKey === encounter.key
+    }))
+    if (owners.length !== 1) fail(`每个遭遇必须且只能由一个start-combat Action进入:${String(encounter.key)}`)
+  })
+  const normalizedCombat: TextOpenWorldParsedModulesV1['combat'] = {
+    version: 2,
+    rules: structuredClone(combatRules) as unknown as TextOpenWorldParsedModulesV1['combat']['rules'],
+    difficultyProfiles: structuredClone(difficultyProfiles) as unknown as TextOpenWorldParsedModulesV1['combat']['difficultyProfiles'],
+    strategyProfiles: structuredClone(strategyProfiles) as unknown as TextOpenWorldParsedModulesV1['combat']['strategyProfiles'],
+    enemies: structuredClone(enemies) as unknown as TextOpenWorldParsedModulesV1['combat']['enemies'],
+    encounters: structuredClone(encounters) as unknown as TextOpenWorldParsedModulesV1['combat']['encounters'],
+  }
 
   const crafting = versioned(packageValue, 'crafting')
   exact(crafting, ['version', 'recipes'], 'crafting'); const recipes = catalog(crafting.recipes, 'crafting.recipes', ['key', 'title', 'description', 'learnedByDefault', 'stationLocationKeys', 'ingredients', 'outputs', 'timeCostMinutes']); keysOf(recipes, 'crafting.recipes')
@@ -1421,7 +1585,7 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
     quests: { ...structuredClone(quests), version: 2, quests: structuredClone(questRows), stages: structuredClone(questStages) } as unknown as TextOpenWorldParsedModulesV1['quests'],
     actions: structuredClone(actions) as unknown as TextOpenWorldParsedModulesV1['actions'],
     progression: structuredClone(progression) as unknown as TextOpenWorldParsedModulesV1['progression'],
-    combat: structuredClone(combat) as unknown as TextOpenWorldParsedModulesV1['combat'],
+    combat: normalizedCombat,
     items: structuredClone(items) as unknown as TextOpenWorldParsedModulesV1['items'],
     crafting: structuredClone(crafting) as unknown as TextOpenWorldParsedModulesV1['crafting'],
     economy: structuredClone(economy) as unknown as TextOpenWorldParsedModulesV1['economy'],
