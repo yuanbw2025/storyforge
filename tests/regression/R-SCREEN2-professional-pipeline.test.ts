@@ -111,6 +111,24 @@ describe('SCREEN-2 · professional novel-to-screenplay pipeline', () => {
     expect(() => parseScreenplayProfessionalPayloadV1('scene-card', [{ stableKey: 'card.bad', systemId: 1 }] as never)).toThrow('字段不在闭集')
   })
 
+  it('来源事实提示明确闭集形状和 kind 枚举，避免兼容模型返回近义字段', async () => {
+    const item = await fixture()
+    let systemPrompt = ''
+    await generateScreenplayProfessionalCandidateV1({
+      scope: item.scope,
+      adaptationProjectId: item.adaptation.id!,
+      stage: 'source-analysis',
+      sourceUnitKeys: [item.unit.sourceUnitKey],
+      runAI: async messages => {
+        systemPrompt = messages.map(message => message.content).join('\n')
+        return JSON.stringify([{ stableKey: 'fact.arrival', kind: 'event', statement: '林岚赶到旧车站。', subjectKeys: ['character.linlan'], sourceUnitKeys: [item.unit.sourceUnitKey], confidence: 1 }])
+      },
+    })
+    expect(systemPrompt).toContain('kind 只能是 event、character-state、relationship、location、object、motif 之一')
+    expect(systemPrompt).toContain('不得增加 evidence、quote、reasoning、category、id 等字段')
+    expect(systemPrompt).toContain('{"stableKey":"fact.key","kind":"event"')
+  })
+
   it('领域事务提交后事件写入中断可以恢复，且不会重复采纳', async () => {
     const item = await fixture()
     const payload = [
