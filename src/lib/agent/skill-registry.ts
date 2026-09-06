@@ -2965,7 +2965,10 @@ export const AGENT_SKILLS = [
       allowedResourceKinds: [...WORLD_RELEASE_RESOURCE_KINDS_V1],
       allowedDepths: ['index', 'summary', 'focused', 'full', 'original'],
       maxReadCalls: 20_000,
-      maxRetrievedTokens: 500_000,
+      // P1 opens one bounded Gateway session per model batch. Keep each
+      // session inside the WorldRelease provider's exact per-read ceiling;
+      // the durable task budget still governs the sum across batches.
+      maxRetrievedTokens: 100_000,
       maxPlanningSteps: 8,
       maxPlanningModelTokens: 24_000,
       allowOriginalRead: true,
@@ -2984,6 +2987,37 @@ export const AGENT_SKILLS = [
     }],
     lastVerifiedAt: '2026-09-06',
     regressionTests: ['R-OPEN-WORLD3-source-curation'],
+  },
+  {
+    version: 1,
+    id: 'text-open-world.production.experience-design.v1',
+    agentId: 'outline',
+    defaultForAgent: false,
+    label: '文字开放世界体验契约与主角身份设计',
+    owner: 'text-open-world-production',
+    promptVersion: 'text-open-world-experience-design-v1',
+    executionMode: 'product-production',
+    contextTaskKind: 'agent-outline',
+    readToolNames: [],
+    contextSourceKeys: ['text-open-world.experience-input'],
+    optionalContextSourceKeys: [],
+    inputPolicy: {
+      sourceKeys: ['text-open-world.experience-input'],
+      states: {
+        empty: { handling: 'require-upstream', instruction: '缺少作者授权Brief或已验收P1证据时停止，不得自行补写产品边界。' },
+        partial: { handling: 'require-upstream', instruction: '体验输入授权链、来源Hash或缺口闭包不完整时停止，不得绕过P1读取原始来源。' },
+        complete: { handling: 'grounded-transform', instruction: '只在确定性GameBrief边界内提炼体验语义和主角身份；来源事实只能引用已交付claimKey。' },
+      },
+    },
+    contextCompression: compressionPolicy(['text-open-world.experience-input']),
+    maxOutputTokens: 16_000,
+    writeTargets: [{
+      table: 'productBuildArtifacts',
+      fields: ['payloadJson'],
+      adoptionExtension: 'product-production-artifacts',
+    }],
+    lastVerifiedAt: '2026-09-06',
+    regressionTests: ['R-OPEN-WORLD3-experience-design'],
   },
   {
     version: 1,

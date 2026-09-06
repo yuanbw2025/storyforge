@@ -352,6 +352,170 @@ export interface TextOpenWorldSourceGapReportV1 {
   reportHash: string
 }
 
+export interface TextOpenWorldGameBriefV1 {
+  schema: 'storyforge.text-open-world-game-brief'
+  version: 1
+  productType: 'text-open-world'
+  productInstanceKey: string
+  title: string
+  authorization: {
+    productBriefRevision: number
+    productBriefHash: string
+    confirmedBriefHash: string
+    authorStartRevision: number
+    confirmedAt: number
+  }
+  source: {
+    kind: TextOpenWorldSourceKindV1
+    sourcePinHash: string
+    sourceManifestHash: string
+    sourceLedgerHash: string
+    sourceGapReportHash: string
+    readUnitCount: number
+    unreadUnitCount: number
+    openGapKeys: string[]
+  }
+  authorIntent: {
+    playerRole: string
+    protagonistMode: 'source-character' | 'author-defined'
+    protagonistSourceRefs: string[]
+    openingSituation: string
+    coreExperience: string[]
+    tone: string[]
+    requiredFacts: string[]
+    forbiddenChanges: string[]
+    contentBoundaries: string[]
+  }
+  scale: {
+    scope: 'scene' | 'short-arc' | 'chapter' | 'multi-chapter' | 'campaign'
+    requestedPlayMinutes: number
+    requestedNarrativeWords: number
+    endingCount: number
+    regionCount: number
+    namedLocationRange: { minimum: number; maximum: number }
+    mainlineStageRange: { minimum: number; maximum: number }
+    significantStorylineCount: number
+    ordinaryQuestRange: { minimum: number; maximum: number }
+    taskTemplateRange: { minimum: number; maximum: number }
+    randomEventRange: { minimum: number; maximum: number }
+    requiredPlayMinuteRange: { minimum: number; maximum: number }
+    optionalInventoryMinuteRange: { minimum: number; maximum: number }
+  }
+  fixedProductBoundary: {
+    freedomMode: 'bounded-guided'
+    interactionModes: ['system-action', 'fixed-choice', 'natural-language']
+    mainlineOrder: 'strict-sequential'
+    mainlinePressure: 'wait-for-player'
+    importantStorylinePressure: 'safe-wait-point'
+    ordinaryWorldEvolution: 'continues-with-time'
+    criticalArrivalTriggerPolicy: 'never-location-only'
+    customSolutionPolicy: 'decline-or-redirect-in-v1'
+    combatInput: ['fight', 'escape', 'skill', 'item']
+    combatMode: 'turn-based'
+    difficulty: 'standard'
+  }
+  media: {
+    visualLevel: 'none' | 'key-scenes' | 'illustrated'
+    audioLevel: 'none' | 'music-sfx' | 'full'
+    requiredVisualKinds: ['procedural-map', 'character-portrait', 'scene-background']
+    textFallbackRequired: true
+  }
+  effectiveProductionBudget: {
+    maximumModelCalls: number
+    maximumInputTokens: number
+    maximumOutputTokens: number
+    maximumMediaCalls: number
+    maximumCostUsd: number
+    maximumDurationMs: number
+    maximumStorageBytes: number
+  }
+  completion: {
+    requiresPlayablePreview: true
+    requiredGateIds: string[]
+    minimumMediaCoverage: number
+    allowSoftWaivers: boolean
+    releaseMode: 'direct-after-gates'
+  }
+  createdAt: number
+  gameBriefHash: string
+}
+
+export interface TextOpenWorldExperienceContractV1 {
+  schema: 'storyforge.text-open-world-experience-contract'
+  version: 1
+  productType: 'text-open-world'
+  productInstanceKey: string
+  gameBriefHash: string
+  sourceLedgerHash: string
+  title: string
+  pitch: string
+  playerFantasy: string
+  narrativePillars: string[]
+  regionalVarietyPromise: string
+  growthPromise: string
+  toneGuide: string[]
+  coreLoop: [
+    'observe-scene', 'choose-or-describe', 'resolve-system-action',
+    'receive-consequence', 'grow-and-explore',
+  ]
+  freedom: {
+    mode: 'bounded-guided'
+    acceptedInputs: ['system-action', 'fixed-choice', 'natural-language']
+    offTrackHandling: 'natural-response-then-mainline-redirect'
+    impossibleActionHandling: 'explicit-decline-with-in-world-alternative'
+    customSolutionPolicy: 'future-extension'
+  }
+  narrative: {
+    mainline: 'strict-sequential-protected'
+    endings: 'multiple-core-goal-compatible'
+    importantStorylines: 'persistent-safe-wait'
+    ordinaryContent: 'regional-deck-and-fixed-quests'
+    mainlinePressure: 'none-while-absent'
+  }
+  worldEvolution: {
+    mainlineWaits: true
+    importantStorylinesWaitAtSafePoints: true
+    ordinaryQuestsMayExpireOrFail: true
+    ordinaryNpcsMayDie: true
+    timeWeatherAndRegionsContinue: true
+  }
+  failure: {
+    combat: 'retry-or-respawn'
+    mainlineGoal: 'cannot-permanently-fail'
+    importantStoryline: 'cannot-abandon'
+    ordinaryQuest: 'may-abandon-expire-or-fail'
+  }
+  sourceClaimKeys: string[]
+  basisHash: string
+  createdAt: number
+  experienceContractHash: string
+}
+
+export interface TextOpenWorldProtagonistAssetV1 {
+  schema: 'storyforge.text-open-world-protagonist-asset'
+  version: 1
+  productType: 'text-open-world'
+  productInstanceKey: string
+  gameBriefHash: string
+  experienceContractHash: string
+  origin: 'source-character' | 'author-defined'
+  sourceRefs: string[]
+  displayName: string
+  playerRole: string
+  identitySummary: string
+  motivations: string[]
+  personalStakes: string[]
+  sourceClaimKeys: string[]
+  protection: {
+    criticalRole: true
+    playerMayAbandonMainline: false
+    initialBuildDeferredToP4: true
+  }
+  basisHash: string
+  createdAt: number
+  protagonistAssetHash: string
+}
+
 export const TEXT_OPEN_WORLD_PRODUCTION_STAGES_V1 = [
   'P0', 'P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8', 'P8F', 'P9', 'P10',
   'V1', 'V2', 'V3', 'QA',

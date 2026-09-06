@@ -159,6 +159,9 @@ async function readProductProductionEvolutionBase(input: AssembleContextInput): 
 async function readTextOpenWorldSourcePinContextV1(input: AssembleContextInput): Promise<string> {
   return (await import('../open-world/source-curation')).readTextOpenWorldSourcePinContextV1(input)
 }
+async function readTextOpenWorldExperienceInputContextV1(input: AssembleContextInput): Promise<string> {
+  return (await import('../open-world/experience-design')).readTextOpenWorldExperienceInputContextV1(input)
+}
 async function readTtrpgGmRuntimeContextV1(input: AssembleContextInput): Promise<string> {
   return (await import('../ttrpg/gm-context')).readTtrpgGmRuntimeContextV1(input)
 }
@@ -1558,6 +1561,18 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     protectedFromTrim: true,
     enabled: input => Number.isInteger(input.productBuildId),
     read: readTextOpenWorldSourcePinContextV1,
+  },
+  {
+    key: 'text-open-world.experience-input',
+    label: '文字开放世界作者授权体验设计输入',
+    scope: 'project',
+    layer: 'L0',
+    ownerFrom: 'work',
+    budgetTokens: 100_000,
+    protectedFromTrim: true,
+    enabled: input => Number.isInteger(input.productProductionId)
+      && Number.isInteger(input.productBuildId),
+    read: readTextOpenWorldExperienceInputContextV1,
   },
   {
     key: 'product-production.quality-feedback',

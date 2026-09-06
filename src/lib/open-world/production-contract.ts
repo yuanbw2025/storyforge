@@ -129,7 +129,8 @@ export const TEXT_OPEN_WORLD_PRODUCTION_TASK_CONTRACTS_V1: TextOpenWorldProducti
     skillId: 'text-open-world.production.experience-design.v1', recommendedModelCalls: 4,
     dependsOn: ['p1.source-curation'],
     inputArtifactKeys: [
-      'text-open-world.source-manifest', 'text-open-world.source-ledger', 'text-open-world.source-gap-report',
+      'text-open-world.source-pin', 'text-open-world.source-manifest',
+      'text-open-world.source-ledger', 'text-open-world.source-gap-report',
     ],
     outputArtifactKeys: [
       'text-open-world.game-brief', 'text-open-world.experience-contract',
