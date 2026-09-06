@@ -340,8 +340,8 @@ export default function ComicStudio({ scope }: Props) {
     return (
       <div className="comic-studio">
         <header className="comic-top">
-          <div>
-            <span>COMIC STUDIO</span>
+          <div className="comic-title-block">
+            <span>STORYFORGE · COMIC DEVELOPMENT</span>
             <h2>{work.title}</h2>
             <p>先冻结 Brief、章页计划与视觉圣经，再进入页格生产。</p>
           </div>

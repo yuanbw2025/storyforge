@@ -216,7 +216,7 @@ Storyboard Release 要求脚本、分页、页格、阅读顺序、视觉圣经�
 
 ## 14. 施工顺序与分支
 
-唯一功能分支：`feat/comic-production`；从剧本完成并审定后的独立创作集成基线创建独立 worktree。不得沿用剧本 worktree 或包含其未提交改动。
+唯一功能分支原则：任何施工阶段只在一个漫画专属 worktree 中进行。基础实现分支为 `feat/comic-production`，视觉体验复审分支为 `feat/comic-visual-experience`；两者都从已审定的独立创作集成基线创建，不得沿用剧本 worktree 或包含其未提交改动，复审通过后才按顺序合入集成分支。
 
 1. 共享来源分析契约只从 foundation/集成基线同步。
 2. 漫画脚本、page plan、review issue、release asset pinning 与三注册表。
