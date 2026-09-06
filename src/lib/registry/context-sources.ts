@@ -162,6 +162,9 @@ async function readTextOpenWorldSourcePinContextV1(input: AssembleContextInput):
 async function readTextOpenWorldExperienceInputContextV1(input: AssembleContextInput): Promise<string> {
   return (await import('../open-world/experience-design')).readTextOpenWorldExperienceInputContextV1(input)
 }
+async function readTextOpenWorldGameplayRulesetInputContextV1(input: AssembleContextInput): Promise<string> {
+  return (await import('../open-world/gameplay-ruleset')).readTextOpenWorldGameplayRulesetInputContextV1(input)
+}
 async function readTtrpgGmRuntimeContextV1(input: AssembleContextInput): Promise<string> {
   return (await import('../ttrpg/gm-context')).readTtrpgGmRuntimeContextV1(input)
 }
@@ -1573,6 +1576,18 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     enabled: input => Number.isInteger(input.productProductionId)
       && Number.isInteger(input.productBuildId),
     read: readTextOpenWorldExperienceInputContextV1,
+  },
+  {
+    key: 'text-open-world.gameplay-ruleset-input',
+    label: '文字开放世界已确认体验与玩法规则输入',
+    scope: 'project',
+    layer: 'L0',
+    ownerFrom: 'work',
+    budgetTokens: 40_000,
+    protectedFromTrim: true,
+    enabled: input => Number.isInteger(input.productProductionId)
+      && Number.isInteger(input.productBuildId),
+    read: readTextOpenWorldGameplayRulesetInputContextV1,
   },
   {
     key: 'product-production.quality-feedback',

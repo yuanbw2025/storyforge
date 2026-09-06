@@ -1,18 +1,27 @@
 import type { TextOpenWorldObjectiveStatusV1, TextOpenWorldQuestStatusV1 } from './text-open-world-condition'
 import type { TextOpenWorldDirectorTriggerV1 } from './text-open-world-modules'
 
+/**
+ * Complete operation vocabulary understood by the current deterministic G2
+ * runtime. Production artifacts import this same list so an AI prompt cannot
+ * become a second, drifting Effect whitelist.
+ */
+export const TEXT_OPEN_WORLD_EFFECT_OPERATIONS_V1 = [
+  'change-player-resource', 'grant-experience', 'apply-status', 'remove-status',
+  'grant-item', 'remove-item', 'equip-item', 'unequip-item',
+  'learn-skill', 'learn-recipe', 'change-currency',
+  'transition-quest', 'complete-objective', 'claim-quest-reward', 'track-quest', 'untrack-quest',
+  'change-morality', 'change-faction-affinity', 'set-story-modifier',
+  'reveal-knowledge', 'reveal-location', 'unlock-fast-travel',
+  'enter-location', 'start-travel', 'fast-travel', 'advance-time', 'settle-weather', 'settle-actor-schedules',
+  'start-combat', 'resolve-combat', 'initialize-combat', 'settle-combat-state', 'perform-combat-action', 'rest', 'respawn',
+  'perform-crafting', 'perform-transaction', 'settle-director',
+  'change-actor-state', 'change-region-state', 'set-world-flag',
+  'earn-achievement', 'unlock-ending', 'reach-ending',
+] as const
+
 export type TextOpenWorldEffectOperationV1 =
-  | 'change-player-resource' | 'grant-experience' | 'apply-status' | 'remove-status'
-  | 'grant-item' | 'remove-item' | 'equip-item' | 'unequip-item'
-  | 'learn-skill' | 'learn-recipe' | 'change-currency'
-  | 'transition-quest' | 'complete-objective' | 'claim-quest-reward' | 'track-quest' | 'untrack-quest'
-  | 'change-morality' | 'change-faction-affinity' | 'set-story-modifier'
-  | 'reveal-knowledge' | 'reveal-location' | 'unlock-fast-travel'
-  | 'enter-location' | 'start-travel' | 'fast-travel' | 'advance-time' | 'settle-weather' | 'settle-actor-schedules'
-  | 'start-combat' | 'resolve-combat' | 'initialize-combat' | 'settle-combat-state' | 'perform-combat-action' | 'rest' | 'respawn'
-  | 'perform-crafting' | 'perform-transaction' | 'settle-director'
-  | 'change-actor-state' | 'change-region-state' | 'set-world-flag'
-  | 'earn-achievement' | 'unlock-ending' | 'reach-ending'
+  (typeof TEXT_OPEN_WORLD_EFFECT_OPERATIONS_V1)[number]
 
 export type TextOpenWorldEffectDefinitionV1 =
   | { key: string; operation: 'change-player-resource'; payload: { resource: 'health' | 'skill-resource'; amount: number } }

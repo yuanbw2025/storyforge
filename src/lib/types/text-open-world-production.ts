@@ -5,6 +5,7 @@ import type {
 } from './product-production'
 import type { WorldReferenceV1 } from './world-product-contracts'
 import type { WorldCapabilityArea } from '../registry/types'
+import type { TextOpenWorldEffectOperationV1 } from './text-open-world-effect'
 
 /**
  * Stable, product-owned artifacts in the text-open-world production compiler.
@@ -514,6 +515,138 @@ export interface TextOpenWorldProtagonistAssetV1 {
   basisHash: string
   createdAt: number
   protagonistAssetHash: string
+}
+
+export interface TextOpenWorldGameplayRulesetSkeletonV1 {
+  schema: 'storyforge.text-open-world-gameplay-ruleset-skeleton'
+  version: 1
+  productType: 'text-open-world'
+  productInstanceKey: string
+  gameBriefHash: string
+  experienceContractHash: string
+  sourceLedgerHash: string
+  ruleset: {
+    key: 'storyforge.standard'
+    version: 1
+    title: string
+    summary: string
+    sourceClaimKeys: string[]
+  }
+  characterModel: {
+    professionSystem: 'none'
+    playerAttributeAllocation: 'automatic-no-player-points'
+    attributes: [
+      { key: 'power'; label: string; meaning: string; runtimeOutputs: ['attack'] },
+      { key: 'vitality'; label: string; meaning: string; runtimeOutputs: ['maximum-health', 'defense'] },
+      { key: 'agility'; label: string; meaning: string; runtimeOutputs: ['critical-chance', 'initiative'] },
+    ]
+  }
+  progression: {
+    moduleVersion: 1
+    maximumLevel: 20
+    acceptanceLevelRange: { minimum: 1; maximum: 5 }
+    automaticAttributeGrowth: true
+    levelTablePolicy: 'explicit-cumulative-experience-and-growth'
+    levelUpResourcePolicy: 'increase-by-cap-delta'
+    maximumLevelExperiencePolicy: 'cap-at-threshold'
+    skillAcquisition: ['initial', 'level', 'quest']
+    deferredSkillAcquisition: ['exploration', 'item']
+    formulas: {
+      baseHealth: number
+      healthPerVitality: number
+      healthPerLevel: number
+      attackPerPower: number
+      defensePerVitality: number
+      baseCriticalChance: number
+      criticalChancePerAgility: number
+      criticalChanceCap: number
+      initiativePerAgility: number
+      baseSkillResource: number
+      skillResourcePerLevel: number
+    }
+    skillResourceLabel: string
+  }
+  combat: {
+    moduleVersion: 3
+    mode: 'turn-based-player-choice'
+    playerActions: ['basic-attack', 'skill', 'item', 'escape']
+    freeTextActions: false
+    defaultAttackHits: true
+    playerPartyLimit: 1
+    allowFriendlyNpcCombatants: false
+    allowElements: false
+    allowEscape: true
+    difficultyProfiles: [{
+      key: 'standard'
+      label: string
+      enemyHealthMultiplier: 1
+      enemyDamageMultiplier: 1
+      rewardMultiplier: 1
+    }]
+    resolution: {
+      algorithm: 'bounded-physical-v1'
+      criticalRollMaximum: 10_000
+      criticalChanceCapBasisPoints: number
+      criticalMultiplierNumerator: number
+      criticalMultiplierDenominator: number
+      minimumDamage: number
+      maximumDamage: number
+    }
+    defeatPolicy: 'retry-or-respawn'
+    respawnCost: 'none-v1'
+  }
+  inventory: {
+    itemModuleVersion: 1
+    capacityPolicy: 'unlimited'
+    equipmentSlots: [
+      { key: 'weapon'; label: string },
+      { key: 'armor'; label: string },
+      { key: 'accessory'; label: string },
+    ]
+    randomAffixes: false
+    enhancement: false
+    durability: false
+    criticalItems: 'non-droppable-non-sellable'
+  }
+  crafting: {
+    moduleVersion: 2
+    successPolicy: 'guaranteed'
+    recipeKnowledgeRequired: true
+    maximumBatchQuantity: number
+    maximumTotalItemUnitsPerAction: number
+  }
+  economy: {
+    moduleVersion: 2
+    currency: { key: 'currency'; label: string }
+    currencyModel: 'single'
+    ordinaryStockPolicy: 'unlimited'
+    specialStockPolicy: 'limited'
+    maximumTransactionQuantity: number
+    maximumTransactionTotal: number
+  }
+  effects: {
+    actionModuleVersion: 14
+    runtimeSupportedOperations: TextOpenWorldEffectOperationV1[]
+    newBuildAllowedOperations: TextOpenWorldEffectOperationV1[]
+    modelProposableOperations: TextOpenWorldEffectOperationV1[]
+    compilerOwnedOperations: TextOpenWorldEffectOperationV1[]
+    legacyReadOnlyOperations: ['start-combat', 'resolve-combat']
+    definitionPolicy: 'release-predeclared-only'
+    runtimeModelAuthority: 'none'
+    executionPolicy: 'deterministic-validated-atomic-event'
+  }
+  g2Compatibility: {
+    progressionModuleVersion: 1
+    combatModuleVersion: 3
+    itemModuleVersion: 1
+    craftingModuleVersion: 2
+    economyModuleVersion: 2
+    actionModuleVersion: 14
+    runtimePackageVersion: 1
+  }
+  basisHash: string
+  createdAt: number
+  gameplayRulesetHash: string
 }
 
 export const TEXT_OPEN_WORLD_PRODUCTION_STAGES_V1 = [

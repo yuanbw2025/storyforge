@@ -147,7 +147,7 @@ export const TEXT_OPEN_WORLD_PRODUCTION_TASK_CONTRACTS_V1: TextOpenWorldProducti
     dependsOn: ['p1.source-curation', 'p2.experience-design'],
     inputArtifactKeys: [
       'text-open-world.source-ledger', 'text-open-world.game-brief',
-      'text-open-world.experience-contract',
+      'text-open-world.experience-contract', 'text-open-world.protagonist-asset',
     ],
     outputArtifactKeys: ['text-open-world.gameplay-ruleset-skeleton'],
     completion: {

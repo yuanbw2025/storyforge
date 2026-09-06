@@ -1,6 +1,6 @@
 # AI 主导文字开放世界游戏 · 完整开发清单
 
-> 版本：1.1.45
+> 版本：1.1.46
 > 建立日期：2026-09-06
 > 对应总任务：`E-OPENWORLD-01`
 > 当前状态：`IN_PROGRESS`；用户已于2026-09-06明确下达完整产品开发指令
@@ -36,15 +36,15 @@
 | 指标 | 当前值 |
 |---|---|
 | 首版工作包 | 121 |
-| 已完成 | 55（G0、G1、G2及G3-01～G3-04完成） |
-| 产品总进度 | 55 / 121（45.5%） |
-| G1～G7业务功能进度 | 45 / 111（40.5%） |
+| 已完成 | 56（G0、G1、G2及G3-01～G3-05完成） |
+| 产品总进度 | 56 / 121（46.3%） |
+| G1～G7业务功能进度 | 46 / 111（41.4%） |
 | 当前阶段 | G3 AI内容生产编译器 |
 | G0阶段进度 | 10 / 10（100%） |
 | G1阶段进度 | 13 / 13（100%） |
 | G2阶段进度 | 28 / 28（100%） |
-| G3阶段进度 | 4 / 18（22.2%） |
-| 当前工作包 | `TOW-G3-05` |
+| G3阶段进度 | 5 / 18（27.8%） |
+| 当前工作包 | `TOW-G3-06` |
 | 当前阻塞项 | 无 |
 
 每次状态变化必须同时更新本节汇总、对应任务行、验证证据和变更记录。
@@ -187,8 +187,8 @@ G7 盐脊验收、发布更新与旧入口收口
 | TOW-G3-02 | DONE | WorldRelease/小说SourcePin锁定 | G0-05、G3-01 | P0专属双来源合同统一冻结`sourceVersionHash/sourceBoundaryHash/authorizationHash/readEvidenceHash/pinHash`；WorldRelease入口只保存便携`WorldReference`、作者选定的中立资源坐标和真实index读取证据，不把物理Release行或完整manifest带入产品；小说入口从受控Work/大纲/规范章序读取，把选定故事核心、大纲和正文按20万字符上限完整复制为产品私有、逐单元Hash的Artifact，Pin内不保存可变来源行ID；授权保存Brief/开始revision、nonce Hash、明确rights basis及系统派生permission，原始nonce不落库；P0复用`productBuildArtifacts`，先写单元、最后写Pin闭合索引，相同Pin幂等、同Build换源失败关闭，源小说后续修改不影响冻结内容；新增3项双来源/分片/漂移/越界/篡改回归，无新增表、AI写字段或并行Context来源 |
 | TOW-G3-03 | DONE | SourceManifest、Ledger和Gap Report | G3-02 | P1以登记的`text-open-world.source-pin`来源和专属Skill/Executor分批读取冻结内容；小说只向模型交付本批产品私有全文单元，WorldRelease只通过Context Gateway按冻结资源坐标完整读取，逐项复核内容Hash并保存交付证据；SourceManifest把每个单元严格区分为已读/未读，SourceLedger要求每项事实绑定已读单元、逐字引文、UTF-16偏移、来源Hash和批次，模型伪造引文、偏移、批次或引用未读单元均失败关闭；代码从实际读集和证据覆盖确定性生成SourceGapReport，未读、故事核心、主角、冲突、角色、势力、地点和时间线缺口显式进入后续阶段；三件产物形成Pin→Manifest→Ledger→GapReport Hash链并复用productBuildArtifacts候选生命周期，不增加业务表或世界引擎写入 |
 | TOW-G3-04 | DONE | 主Agent会谈、GameBrief和ExperienceContract | G3-03 | 复用现有作者授权Brief作为会谈终态，以登记的单一P2 Context Source完整交付授权、SourcePin和已验收P1证据；代码确定性编译GameBrief中的主角模式、规模、严格顺序主线、有边界自由、三种输入、回合战斗、世界演化、关键到达策略、媒资、预算和直接发布完成条件；模型只补充体验语义与主角小传，并只能引用已交付claimKey；来源型主角必须引用绑定所选角色单元的证据；GameBrief、ExperienceContract和ProtagonistAsset形成Hash/basis链，任何作者意图、来源缺口、固定边界或capability偷换均失败关闭；仍只写Build Artifact候选，不读取活动来源、不写世界引擎或运行状态 |
-| TOW-G3-05 | READY | GameplayRulesetSkeleton Skill | G3-04、G2接口 | 冻结三属性、20级、战斗、装备位、货币、Effect白名单和标准难度 |
-| TOW-G3-06 | QUEUED | 主角身份与PlayerBuild Skill | G3-04、G3-05 | 来源角色或自建角色形成合法初始属性、技能、物品和货币候选 |
+| TOW-G3-05 | DONE | GameplayRulesetSkeleton Skill | G3-04、G2接口 | 登记的P2 Context Source只读取同一Build已验收的GameBrief、ExperienceContract、ProtagonistAsset和SourceLedger引用事实；模型只能生成世界化规则标题、说明、三属性/技能资源/装备位/货币/标准难度显示语义并引用已交付claim；代码冻结无职业/无配点、三语义属性、20级与1→5验收跨度、自动成长、G2公式、逐回合四操作、单人无元素战斗、有界物理结算、无代价复活、无限背包、三装备位、无词缀/强化/耐久、确定性制作、单货币与库存策略；唯一Effect词表直接复用G2类型事实源，并分为模型可提议、编译器专属和旧Release只读三类无重叠权限；Artifact精确声明Progression v1、Combat v3、Items v1、Crafting v2、Economy v2、Action v14及RuntimePackage v1映射，固定值、上游、claim、basis和内容Hash篡改均失败关闭；不新增表、不写Release/Session |
+| TOW-G3-06 | READY | 主角身份与PlayerBuild Skill | G3-04、G3-05 | 来源角色或自建角色形成合法初始属性、技能、物品和货币候选 |
 | TOW-G3-07 | QUEUED | StoryArc、核心冲突、承诺和多结局 | G3-04 | 主线核心目标稳定；至少两个合规结局；伏笔与回收可检查 |
 | TOW-G3-08 | QUEUED | RegionSkeleton与世界级空间规划 | G3-03、G3-07 | 地区来自来源和故事需求；先建稳定骨架，不凭空铺地图 |
 | TOW-G3-09 | QUEUED | 严格顺序主线生产 | G3-05～G3-08 | 主线Stage顺序、保护、成长节奏和结局条件结构化 |
@@ -355,6 +355,7 @@ G7 盐脊验收、发布更新与旧入口收口
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| 1.1.46 | 2026-09-07 | 完成G3-05 GameplayRulesetSkeleton：新增登记的P2规则Context、Skill与Executor，输入只来自同一Build已验收体验链和Ledger claim；模型只负责世界化显示语义，代码冻结三属性/20级/1→5验收跨度/自动成长、G2公式、标准难度四操作单人回合战斗、三装备位、单货币、确定性制作交易及当前模块版本；Effect词表改为与G2共享单一常量，并分离模型可提议、编译器专属和旧版只读操作，伪造claim、固定值、权限分区、上下文或Hash全部失败关闭；总进度56/121，业务功能46/111，下一项G3-06 |
 | 1.1.45 | 2026-09-06 | 完成G3-04体验设计编译：新增登记的P2 Context Source、专属Skill与Executor，将作者已授权Product Brief、SourcePin及P1 Manifest/Ledger/Gap Report收口为一个全体字段Hash保护的输入；GameBrief由代码冻结主角模式、规模、主线/重要故事等待、有边界自由、三种输入、回合战斗、世界演化、媒资、成本和直接发布门，模型仅生成体验语义与主角叙事候选；来源型主角必须引用绑定所选角色来源单元的P1 claim，伪造claim、上下文、缺口、作者意图或固定边界失败关闭；三件Artifact绑定Brief、Pin、Ledger、context selection与各自basis hash；P1单批Gateway额度同步收口到WorldRelease 10万token读取上限；不新增表、不写世界引擎或Session，完整DAG仍未激活；总进度55/121，业务功能45/111，下一项G3-05 |
 | 1.1.44 | 2026-09-06 | 完成G3-03来源整理证据链：新增登记Context Source与专属Skill/Executor，小说按产品私有冻结单元分批完整交付，WorldRelease通过Context Gateway按冻结资源坐标读取；SourceManifest逐单元记录实读/未读和交付Hash，SourceLedger强制每项模型事实绑定已读单元、逐字引文、UTF-16偏移和内容Hash，SourceGapReport由代码根据实读集与覆盖标签生成显式未读和关键内容缺口；三件Artifact与P0 SourcePin形成可复验Hash链，伪造引文、偏移、未读引用、来源漂移和非法缺口策略失败关闭；不写世界引擎、不增加业务表，仍保持专属DAG未整体激活；总进度54/121，业务功能44/111，下一项G3-04 |
 | 1.1.43 | 2026-09-06 | 完成G3-02双来源SourcePin：WorldRelease以便携WorldReference、资源坐标及真实index读取证据锁定，小说从受控Work/大纲/规范章序完整复制并自动切成不超过20万字符的产品私有单元；40种Artifact Kind新增SourcePinUnit，P0索引+单元由唯一owner生产；版本、来源边界、Brief/开始授权、nonce Hash、rights、实际读取与Pin形成五段Hash链，原始nonce和可变小说行ID不落Artifact；相同Pin幂等，同Build静默换源、跨项目、越界、未明确rights及篡改均失败关闭；复用productBuildArtifacts完整生命周期，不增加表或AI旁路；总进度53/121，业务功能43/111，下一项G3-03 |

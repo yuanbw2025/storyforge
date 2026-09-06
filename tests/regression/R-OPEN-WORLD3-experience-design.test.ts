@@ -17,6 +17,17 @@ import {
   type TextOpenWorldExperienceModelRunnerV1,
 } from '../../src/lib/open-world/experience-design'
 import {
+  createTextOpenWorldGameplayRulesetExecutorV1,
+  TEXT_OPEN_WORLD_COMPILER_OWNED_EFFECT_OPERATIONS_V1,
+  TEXT_OPEN_WORLD_LEGACY_EFFECT_OPERATIONS_V1,
+  TEXT_OPEN_WORLD_MODEL_PROPOSABLE_EFFECT_OPERATIONS_V1,
+  validateTextOpenWorldGameplayRulesetSkeletonV1,
+  type TextOpenWorldGameplayRulesetInputContextV1,
+  type TextOpenWorldGameplayRulesetModelRunnerV1,
+} from '../../src/lib/open-world/gameplay-ruleset'
+import { TEXT_OPEN_WORLD_EFFECT_OPERATIONS_V1 } from '../../src/lib/types/text-open-world-effect'
+import type { TextOpenWorldGameplayRulesetSkeletonV1 } from '../../src/lib/types'
+import {
   createTextOpenWorldProductionPlanV1,
 } from '../../src/lib/open-world/production-contract'
 import {
@@ -338,6 +349,97 @@ function resultArtifacts(result: Awaited<ReturnType<typeof executeP2>>): TextOpe
   }
 }
 
+function rulesetRunner(options: { forgedClaim?: boolean } = {}): TextOpenWorldGameplayRulesetModelRunnerV1 {
+  return async input => {
+    const context = JSON.parse(input.contextText) as TextOpenWorldGameplayRulesetInputContextV1
+    return {
+      output: JSON.stringify({
+        schema: 'storyforge.text-open-world-gameplay-ruleset-draft',
+        version: 1,
+        rulesetTitle: '雾港标准冒险规则',
+        summary: '用简洁的成长、回合战斗、装备、制作和经济规则支撑以叙事为核心的地区冒险。',
+        attributes: {
+          power: { label: '腕力', meaning: '决定武器攻击的基础能力。' },
+          vitality: { label: '坚韧', meaning: '决定生命上限与防御能力。' },
+          agility: { label: '身法', meaning: '决定先手与暴击倾向。' },
+        },
+        skillResourceLabel: '战技点',
+        equipmentSlotLabels: { weapon: '武器', armor: '护具', accessory: '信物' },
+        currencyLabel: '港票',
+        difficultyLabel: '标准',
+        sourceClaimKeys: [options.forgedClaim ? 'source.claim.forged' : context.sourceLedger.claims[0]!.claimKey],
+      }),
+      bindingReceipt: bindingReceipt(input.requirementKey),
+      usage: null,
+    }
+  }
+}
+
+async function rulesetFixture() {
+  const input = await fixture()
+  const p2Result = await executeP2(input)
+  for (const artifact of p2Result.artifacts) {
+    await acceptProductBuildArtifact({
+      scope: input.scope,
+      buildId: input.build.id!,
+      controlEpoch: input.build.controlEpoch,
+      artifactKey: artifact.artifactKey,
+      kind: artifact.kind,
+      payload: artifact.payload,
+      quality: artifact.quality,
+      rights: artifact.rights,
+      inputHash: await hashProductProductionValueV2({ stage: 'P2', artifactKey: artifact.artifactKey }),
+    })
+  }
+  const plan = await createTextOpenWorldProductionPlanV1({
+    buildNumber: input.build.buildNumber,
+    controlEpoch: input.build.controlEpoch,
+    briefHash: input.briefRow.briefHash,
+    brief: input.brief,
+  })
+  const task = plan.tasks.find(item => item.taskKey === 'p2.gameplay-ruleset')!
+  const assembled = await assembleContext({
+    projectId: input.scope.projectId,
+    scope: input.scope,
+    sourceKeys: ['text-open-world.gameplay-ruleset-input'],
+    productProductionId: input.production.id!,
+    productBuildId: input.build.id!,
+    inputBudgetMaxTokens: task.budgetReservation.inputTokens,
+  })
+  return {
+    ...input,
+    task,
+    rulesetContextText: assembled.text,
+    rulesetContext: JSON.parse(assembled.text) as TextOpenWorldGameplayRulesetInputContextV1,
+    rulesetContextEvidence: assembled.sourceEvidence,
+  }
+}
+
+async function executeRuleset(
+  input: Awaited<ReturnType<typeof rulesetFixture>>,
+  runModel: TextOpenWorldGameplayRulesetModelRunnerV1 = rulesetRunner(),
+) {
+  return createTextOpenWorldGameplayRulesetExecutorV1({ runModel, now: () => NOW + 5 })({
+    scope: input.scope,
+    productionId: input.production.id!,
+    buildId: input.build.id!,
+    buildNumber: input.build.buildNumber,
+    controlEpoch: input.build.controlEpoch,
+    planHash: input.planHash,
+    task: input.task,
+    attempt: 1,
+    idempotencyKey: await hashProductProductionValueV2('p2-gameplay-ruleset'),
+    contextText: input.rulesetContextText,
+    inputArtifacts: [],
+    capabilityBindings: input.task.capabilityRequirementKeys.map(requirementKey => ({
+      requirementKey,
+      bindingHash: CAPABILITY_HASH,
+      adapterId: 'configured-text.v1',
+    })),
+    signal: new AbortController().signal,
+  })
+}
+
 describe('R-OPEN-WORLD3 · P2 GameBrief / ExperienceContract / ProtagonistAsset', () => {
   beforeEach(async () => { await db.delete(); await db.open() })
   afterAll(() => db.close())
@@ -457,5 +559,142 @@ describe('R-OPEN-WORLD3 · P2 GameBrief / ExperienceContract / ProtagonistAsset'
       })),
       signal: new AbortController().signal,
     })).rejects.toThrow(/数量闭包无效|选择Hash不匹配/)
+  }, 30_000)
+})
+
+describe('R-OPEN-WORLD3 · P2 GameplayRulesetSkeleton', () => {
+  beforeEach(async () => { await db.delete(); await db.open() })
+  afterAll(() => db.close())
+
+  it('把AI限定在世界化语义层，并冻结可直接映射G2运行模块的完整规则骨架', async () => {
+    const input = await rulesetFixture()
+    expect(CONTEXT_SOURCE_BY_KEY.get('text-open-world.gameplay-ruleset-input')).toMatchObject({
+      layer: 'L0', ownerFrom: 'work', protectedFromTrim: true,
+    })
+    expect(getAgentSkillV1('text-open-world.production.gameplay-ruleset.v1')).toMatchObject({
+      contextSourceKeys: ['text-open-world.gameplay-ruleset-input'],
+      writeTargets: [{ table: 'productBuildArtifacts', fields: ['payloadJson'] }],
+    })
+    expect(input.rulesetContextEvidence).toEqual([
+      expect.objectContaining({
+        key: 'text-open-world.gameplay-ruleset-input', status: 'included', delivery: 'full',
+      }),
+    ])
+    expect(input.rulesetContext.gameBrief.gameBriefHash).toBe(input.rulesetContext.experienceContract.gameBriefHash)
+    expect(input.rulesetContext.sourceLedger.claims.length).toBeGreaterThan(0)
+
+    const result = await executeRuleset(input)
+    const artifact = result.artifacts[0]!.payload as TextOpenWorldGameplayRulesetSkeletonV1
+    expect(result.passedGateIds).toEqual(input.task.acceptanceGateIds)
+    expect(result.usage).toMatchObject({ modelCalls: 1, mediaCalls: 0 })
+    expect(result.usage.inputTokens).toBeGreaterThan(0)
+    expect(artifact).toMatchObject({
+      productInstanceKey: input.production.productionKey,
+      ruleset: { key: 'storyforge.standard', version: 1, title: '雾港标准冒险规则' },
+      characterModel: {
+        professionSystem: 'none',
+        playerAttributeAllocation: 'automatic-no-player-points',
+      },
+      progression: {
+        moduleVersion: 1,
+        maximumLevel: 20,
+        acceptanceLevelRange: { minimum: 1, maximum: 5 },
+        automaticAttributeGrowth: true,
+        skillAcquisition: ['initial', 'level', 'quest'],
+      },
+      combat: {
+        moduleVersion: 3,
+        mode: 'turn-based-player-choice',
+        playerActions: ['basic-attack', 'skill', 'item', 'escape'],
+        freeTextActions: false,
+        defaultAttackHits: true,
+        playerPartyLimit: 1,
+        allowFriendlyNpcCombatants: false,
+        allowElements: false,
+        defeatPolicy: 'retry-or-respawn',
+        respawnCost: 'none-v1',
+      },
+      inventory: {
+        capacityPolicy: 'unlimited',
+        randomAffixes: false,
+        enhancement: false,
+        durability: false,
+      },
+      crafting: { moduleVersion: 2, successPolicy: 'guaranteed', recipeKnowledgeRequired: true },
+      economy: {
+        moduleVersion: 2,
+        currency: { key: 'currency', label: '港票' },
+        currencyModel: 'single',
+        ordinaryStockPolicy: 'unlimited',
+        specialStockPolicy: 'limited',
+      },
+      g2Compatibility: {
+        progressionModuleVersion: 1,
+        combatModuleVersion: 3,
+        itemModuleVersion: 1,
+        craftingModuleVersion: 2,
+        economyModuleVersion: 2,
+        actionModuleVersion: 14,
+        runtimePackageVersion: 1,
+      },
+    })
+    expect(artifact.characterModel.attributes.map(item => item.key)).toEqual(['power', 'vitality', 'agility'])
+    expect(artifact.inventory.equipmentSlots.map(item => item.key)).toEqual(['weapon', 'armor', 'accessory'])
+    expect(artifact.effects.runtimeSupportedOperations).toEqual(TEXT_OPEN_WORLD_EFFECT_OPERATIONS_V1)
+    expect(new Set([
+      ...artifact.effects.modelProposableOperations,
+      ...artifact.effects.compilerOwnedOperations,
+    ])).toEqual(new Set(artifact.effects.newBuildAllowedOperations))
+    expect(artifact.effects.modelProposableOperations).toEqual(TEXT_OPEN_WORLD_MODEL_PROPOSABLE_EFFECT_OPERATIONS_V1)
+    expect(artifact.effects.compilerOwnedOperations).toEqual(TEXT_OPEN_WORLD_COMPILER_OWNED_EFFECT_OPERATIONS_V1)
+    expect(artifact.effects.legacyReadOnlyOperations).toEqual(TEXT_OPEN_WORLD_LEGACY_EFFECT_OPERATIONS_V1)
+    await expect(validateTextOpenWorldGameplayRulesetSkeletonV1({
+      artifact,
+      context: input.rulesetContext,
+    })).resolves.toEqual(artifact)
+  }, 30_000)
+
+  it('拒绝AI引用未交付来源事实，不允许模型自行补写世界化规则依据', async () => {
+    const input = await rulesetFixture()
+    await expect(executeRuleset(input, rulesetRunner({ forgedClaim: true })))
+      .rejects.toThrow(/必须引用已交付的SourceLedger claim/)
+  }, 30_000)
+
+  it('即使重算产物Hash，也拒绝篡改20级、战斗、三装备位和Effect权限分区', async () => {
+    const input = await rulesetFixture()
+    const artifact = (await executeRuleset(input)).artifacts[0]!.payload as TextOpenWorldGameplayRulesetSkeletonV1
+    const tampered = structuredClone(artifact)
+    tampered.progression.formulas.baseHealth = 999
+    tampered.effects.modelProposableOperations.push('perform-transaction')
+    const { gameplayRulesetHash: _oldHash, ...body } = tampered
+    tampered.gameplayRulesetHash = await hashProductProductionValueV2(body)
+    await expect(validateTextOpenWorldGameplayRulesetSkeletonV1({
+      artifact: tampered,
+      context: input.rulesetContext,
+    })).rejects.toThrow(/固定边界或G2映射被篡改/)
+
+    const forgedContext = structuredClone(input.rulesetContext)
+    forgedContext.gameBrief.fixedProductBoundary.combatMode = 'turn-based'
+    forgedContext.gameBrief.fixedProductBoundary.combatInput = ['escape', 'fight', 'skill', 'item']
+    const executor = createTextOpenWorldGameplayRulesetExecutorV1({ runModel: rulesetRunner() })
+    await expect(executor({
+      scope: input.scope,
+      productionId: input.production.id!,
+      buildId: input.build.id!,
+      buildNumber: input.build.buildNumber,
+      controlEpoch: input.build.controlEpoch,
+      planHash: input.planHash,
+      task: input.task,
+      attempt: 1,
+      idempotencyKey: await hashProductProductionValueV2('forged-ruleset-context'),
+      contextText: JSON.stringify(forgedContext),
+      inputArtifacts: [],
+      capabilityBindings: input.task.capabilityRequirementKeys.map(requirementKey => ({
+        requirementKey,
+        bindingHash: CAPABILITY_HASH,
+        adapterId: 'configured-text.v1',
+      })),
+      signal: new AbortController().signal,
+    })).rejects.toThrow(/战斗输入不精确|选择Hash不匹配/)
   }, 30_000)
 })

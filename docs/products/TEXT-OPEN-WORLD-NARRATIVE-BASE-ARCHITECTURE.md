@@ -1,6 +1,6 @@
 # AI 主导文字开放世界叙事基座 · StoryForge 施工规格
 
-> 规格版本：3.2.5
+> 规格版本：3.2.6
 > 生效日期：2026-09-06
 > 文档层级：L2 产品目标架构与施工规格
 > 当前状态：设计基线；不代表代码已经实现
@@ -412,6 +412,19 @@ P1已登记专属Skill与Executor，但完整P0～P10线上入口仍保持关闭
 - P2不再读取WorldRelease/小说原文，P1是唯一来源证据入口；输出仍是`productBuildArtifacts`候选，不写世界引擎、正式Release或Session。一次P2模型请求对应一个durable任务尝试，隐藏多轮重试不在Executor内部发生。
 
 P2已经登记Skill和Executor，但专属生产Plan仍保持未激活。G3-18之前，线上通用产品生产不会误调半套P0～P10流程。
+
+#### 5.4.5 P2 GameplayRulesetSkeleton落地
+
+`src/lib/open-world/gameplay-ruleset.ts`已经把叙事生产使用的“玩法语言”绑定到G2确定性运行合同，任务与场景Agent不再自行假设游戏支持什么：
+
+- 登记的`text-open-world.gameplay-ruleset-input`只读取同一Work/Production/Build内已验收的GameBrief、ExperienceContract、ProtagonistAsset和它们实际引用的SourceLedger claim，不重读WorldRelease或小说原文；
+- 模型只负责规则标题、摘要，以及`power/vitality/agility`、技能资源、三个装备位、单一货币和标准难度的世界化显示语义；每次输出至少引用一项已交付claim，不能提交公式、技能、物品、敌人或任务；
+- 确定性编译器冻结无职业/无手动配点、三属性、20级上限、1到5级验收跨度、自动成长、资源上限策略、现行G2公式、单人逐回合四操作、普通攻击必中、无元素/友军参战、标准难度和有界物理结算；
+- 背包固定无限容量，装备位固定为weapon/armor/accessory，不启用词缀、强化或耐久；制作固定100%成功且要求学习配方；经济固定单货币、普通无限库存、特殊有限库存和G2事务上限；
+- Effect词表直接来自`TEXT_OPEN_WORLD_EFFECT_OPERATIONS_V1`，不再在生产Prompt另抄一份；当前新Build操作进一步无重叠地分为模型可提议内容效果与编译器专属协议效果，旧`start-combat/resolve-combat`只用于旧Release读取；
+- Artifact精确冻结Progression v1、Combat v3、Items v1、Crafting v2、Economy v2、Action v14和RuntimePackage v1。后续PlayerBuild、任务、目录及最终V3装配可以直接消费这些字段；任何固定数值、模块版本、权限分区、上游Hash、claim或basis变化都会失败关闭。
+
+该Artifact仍只进入`productBuildArtifacts`候选，不写ProductRelease、Session或世界引擎。完整生产Plan继续等G3-18才激活。
 
 ### 5.5 正确的验证顺序
 
@@ -1231,6 +1244,7 @@ StoryForge当前没有独立staging。发布前仍需在隔离数据中完成灰
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| 3.2.6 | 2026-09-07 | 落地P2 GameplayRulesetSkeleton：登记只读已验收体验链与Ledger claim的Context Source及专属Skill/Executor；模型只生成世界化显示语义，代码冻结三属性、20级、1→5验收跨度、自动成长、G2公式、标准难度单人四操作回合战斗、三装备位、单货币、确定性制作交易和模块版本；Effect单一事实源分离模型、编译器与旧版只读权限，全部上游、固定边界、claim和Hash可复验 |
 | 3.2.5 | 2026-09-06 | 落地P2体验设计：复用作者授权Brief终态并登记单一P2 Context Source；完整输入Hash绑定授权、Pin、P1证据、全部缺口与选中claim；代码编译不可由模型改写的GameBrief规模、自由度、主线/重要故事等待、普通世界演化、交互、战斗、媒资、预算和发布边界；模型只补充体验语义和主角小传，来源主角必须引用绑定所选角色单元的Ledger claim；ExperienceContract和ProtagonistAsset以basis/hash链复验，伪造claim、上下文、作者意图或固定边界失败关闭，不重复读取原始来源且不写WorldRelease/Session |
 | 3.2.4 | 2026-09-06 | 落地P1来源整理证据链：登记精确批次Context Source及专属Skill/Executor；小说只交付本批私有冻结单元，WorldRelease只经Context Gateway按SourcePin资源坐标完整读取并复核双重Hash；SourceManifest区分已读与未读，SourceLedger强制逐项事实绑定已读单元、逐字引文、UTF-16偏移和批次，SourceGapReport由代码从实读集和覆盖标签生成未读及关键内容缺口；Pin→Manifest→Ledger→GapReport全链可验，伪造、漂移和未读引用失败关闭，仍不激活完整生产入口 |
 | 3.2.3 | 2026-09-06 | 落地P0双来源SourcePin：WorldRelease冻结便携WorldReference、选择资源Hash与真实index读取证据；小说从受控Work/大纲/规范章序复制故事核心、大纲和正文，以20万字符有界SourcePinUnit自动分片；40种Artifact将Pin索引与单元分离且同属P0唯一owner；版本、选择边界、Brief/开始授权、nonce Hash、rights、读取证据与Pin全链可验，原始nonce和可变小说行ID不落库；相同Pin幂等、同Build换源及篡改失败关闭，不新增表或Context旁路 |
