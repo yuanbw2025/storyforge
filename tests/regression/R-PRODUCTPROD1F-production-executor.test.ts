@@ -974,12 +974,17 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
       'content.source-sufficiency',
       {
         decision: 'ready-with-private-additions',
+        authorDecisionRequired: false,
         coverage: [{ domain: 'world-premise', status: 'sufficient', resourceKeys: [], ratione: '来源充分。' }],
         gaps: [
           { key: 'gap.items', severity: 'warning' },
           { key: '缺少视觉锚点', severity: 'warning' },
+          { key: 'gap.items', severity: 'warning' },
         ],
-        privateAdditions: [{ key: '补充规则细节', kind: 'rule-detail' }],
+        privateAdditions: [
+          { key: '补充规则细节', kind: 'rule-detail' },
+          { key: 'gap.items', kind: 'item' },
+        ],
       },
       { allowedSourceResourceKeys: ['story.world-rules'] },
     )
@@ -990,14 +995,20 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
       gaps: [
         { key: 'gap.items', severity: 'warning' },
         { key: 'gap.generated.002', severity: 'warning' },
+        { key: 'gap.generated.003', severity: 'warning' },
       ],
-      privateAdditions: [{ key: 'private-addition.generated.001', kind: 'rule-detail' }],
+      privateAdditions: [
+        { key: 'private-addition.generated.001', kind: 'rule-detail' },
+        { key: 'private-addition.generated.002', kind: 'item' },
+      ],
     })
     expect(sourceSufficiency.defaultedFields).toEqual([
       'authorDecisionRequired<-decision',
       'coverage[0].rationale<-ratione',
       'gaps[1].key',
+      'gaps[2].key',
       'privateAdditions[0].key',
+      'privateAdditions[1].key',
     ])
 
     const sourceReferences = legalizeProductionModelProtocolDefaultsV1(
@@ -2071,10 +2082,16 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
       `full-length text-adventure projection:\n${JSON.stringify(projection, null, 2)}\nfailure=${projectedBuild?.failureJson}`,
     ).toMatchObject({ terminal: true, buildStatus: 'release-ready' })
     expect(sceneScriptSystems).toHaveLength(3)
-    expect(sceneScriptSystems[0]).toContain('你是第 1 幕的专职分场叙事作者')
-    expect(sceneScriptSystems[0]).toContain('"sceneKey":"scene.001","locationTitle":"地点 1-1-1"')
-    expect(sceneScriptSystems[0]).toContain('一律不得改写')
-    expect(sceneScriptSystems[2]).toContain('"endings":["ending.001","ending.002","ending.003"]')
+    const actOneSceneSystem = sceneScriptSystems.find(system => (
+      system.includes('任务=content.scene-script.act-1')
+    ))
+    const actThreeSceneSystem = sceneScriptSystems.find(system => (
+      system.includes('任务=content.scene-script.act-3')
+    ))
+    expect(actOneSceneSystem).toContain('你是第 1 幕的专职分场叙事作者')
+    expect(actOneSceneSystem).toContain('"sceneKey":"scene.001","locationTitle":"地点 1-1-1"')
+    expect(actOneSceneSystem).toContain('一律不得改写')
+    expect(actThreeSceneSystem).toContain('"endings":["ending.001","ending.002","ending.003"]')
     expect(sceneScriptContexts).toHaveLength(3)
     expect(sceneScriptContexts[0]).toContain('storyforge.text-adventure-scene-script-inputs')
     expect(sceneScriptContexts[0]).toContain('"taskKey":"content.scene-script.act-1"')

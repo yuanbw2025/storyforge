@@ -501,10 +501,12 @@ export function legalizeProductionModelProtocolDefaultsV1(
   }
   if (taskKey === 'content.source-sufficiency') {
     const next: JsonRecord = { ...payload }
-    if (!Object.prototype.hasOwnProperty.call(next, 'authorDecisionRequired')
-      && typeof next.decision === 'string') {
-      next.authorDecisionRequired = next.decision !== 'ready'
-      defaultedFields.push('authorDecisionRequired<-decision')
+    if (typeof next.decision === 'string') {
+      const expectedAuthorDecisionRequired = next.decision !== 'ready'
+      if (next.authorDecisionRequired !== expectedAuthorDecisionRequired) {
+        next.authorDecisionRequired = expectedAuthorDecisionRequired
+        defaultedFields.push('authorDecisionRequired<-decision')
+      }
     }
     if (Array.isArray(payload.coverage)) next.coverage = payload.coverage.map((entry, index) => {
       if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return entry
@@ -525,6 +527,17 @@ export function legalizeProductionModelProtocolDefaultsV1(
       }
       return item
     })
+    const rawBookkeepingKeys = [payload.gaps, payload.privateAdditions].flatMap(value => (
+      Array.isArray(value) ? value.map(entry => {
+        if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return null
+        const rawKey = (entry as JsonRecord).key
+        return typeof rawKey === 'string' ? rawKey.trim().normalize('NFC') : null
+      }) : []
+    ))
+    const reservedBookkeepingKeys = new Set(
+      rawBookkeepingKeys.filter((candidate): candidate is string => candidate != null && KEY.test(candidate)),
+    )
+    const usedBookkeepingKeys = new Set<string>()
     const stabilizeBookkeepingKeys = (
       value: unknown,
       field: 'gaps' | 'privateAdditions',
@@ -537,11 +550,21 @@ export function legalizeProductionModelProtocolDefaultsV1(
         return typeof rawKey === 'string' ? rawKey.trim().normalize('NFC') : null
       })
       if (candidates.some(candidate => candidate === null)) return value
-      const stableKeys = canonicalModelKeys(candidates as string[], prefix, `${field}.key`)
       return value.map((entry, index) => {
         const item = { ...(entry as JsonRecord) }
-        if (item.key !== stableKeys[index]) {
-          item.key = stableKeys[index]
+        const candidate = candidates[index] as string
+        let stableKey = candidate
+        if (!KEY.test(candidate) || usedBookkeepingKeys.has(candidate)) {
+          let suffix = index + 1
+          stableKey = `${prefix}.generated.${String(suffix).padStart(3, '0')}`
+          while (reservedBookkeepingKeys.has(stableKey) || usedBookkeepingKeys.has(stableKey)) {
+            suffix++
+            stableKey = `${prefix}.generated.${String(suffix).padStart(3, '0')}`
+          }
+        }
+        usedBookkeepingKeys.add(stableKey)
+        if (item.key !== stableKey) {
+          item.key = stableKey
           defaultedFields.push(`${field}[${index}].key`)
         }
         return item
