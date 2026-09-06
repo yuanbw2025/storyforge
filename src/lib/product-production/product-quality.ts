@@ -1,4 +1,5 @@
 import type { ProductProductionBriefV3, ProductRuntimePackageV1 } from '../types'
+import { analyzeTextAdventureRouteQualityV1 } from '../adventure/quality-analysis'
 import { validateTtrpgCampaignForPublicationV1 } from '../ttrpg/campaign'
 
 export interface ProductQualityGateV1 {
@@ -41,9 +42,8 @@ export function evaluateProductRuntimeProductQualityV1(input: {
   const endingCount = narrative.nodes.filter(node => node.kind === 'ending').length
   const nonEndingCount = narrative.nodes.length - endingCount
   const gates: ProductQualityGateV1[] = [
-    gate('product.narrative.play-loop', nonEndingCount >= (brief.scale.targetPlayMinutes >= 45 ? 2 : 1)
-      && narrative.choices.length >= 2,
-    [`nonEndingNodes=${nonEndingCount}`, `choices=${narrative.choices.length}`, `minutes=${brief.scale.targetPlayMinutes}`]),
+    gate('product.narrative.play-loop', nonEndingCount >= 1 && narrative.choices.length >= 1,
+      [`nonEndingNodes=${nonEndingCount}`, `choices=${narrative.choices.length}`]),
     gate('product.narrative.endings', endingCount >= (runtimePackage.productType === 'ttrpg'
       ? 2 : Math.max(1, Math.min(8, brief.scale.targetEndingCount))),
       [`endings=${endingCount}`, `target=${brief.scale.targetEndingCount}`]),
@@ -175,23 +175,11 @@ export function evaluateProductRuntimeProductQualityV1(input: {
         if (!location) return true
         return ![quest.title, quest.description, action.label, action.description].join('\n').includes(location.title)
       })
-      const textUnits = estimatedTextUnits([
-        ...narrative.nodes.flatMap(item => [item.title, item.summary]),
+      const routeQuality = analyzeTextAdventureRouteQualityV1(runtimePackage)
+      const descriptiveTextUnits = estimatedTextUnits([
         ...narrative.beats.map(item => item.text),
-        ...adventure.regions.flatMap(item => [item.title, item.description]),
-        ...adventure.areas.flatMap(item => [item.title, item.description]),
-        ...adventure.locations.flatMap(item => [item.title, item.description]),
-        ...adventure.scenes.flatMap(item => [item.title, item.description]),
-        ...adventure.objects.flatMap(item => [item.title, item.description]),
-        ...adventure.items.flatMap(item => [item.title, item.description]),
-        ...adventure.quests.flatMap(item => [
-          item.title, item.description,
-          ...item.stages.map(stage => stage.title),
-          ...item.objectives.map(objective => objective.title),
-        ]),
         ...adventure.actions.flatMap(item => [
-          item.label, item.description, item.successText, item.costlySuccessText,
-          item.failureText, item.unavailableText,
+          item.successText, item.costlySuccessText, item.failureText,
         ]),
       ])
       gates.push(
@@ -257,9 +245,50 @@ export function evaluateProductRuntimeProductQualityV1(input: {
           `nonEndingBeats=${narrativeNonEndingBeatCount}`,
           `minimumNodes=${Math.min(4, productionContract?.narrative.targetSceneCount ?? 1)}`,
         ]),
-        gate('product.adventure.content-volume', textUnits >= Math.floor(brief.scale.targetWordCount * 0.6),
-          [`estimatedUnits=${textUnits}`, `minimum=${Math.floor(brief.scale.targetWordCount * 0.6)}`, `target=${brief.scale.targetWordCount}`]),
+        gate('product.adventure.content-volume', descriptiveTextUnits >= Math.min(500, Math.floor(brief.scale.targetWordCount * 0.2)),
+          [`playerFacingUnits=${descriptiveTextUnits}`, `minimum=${Math.min(500, Math.floor(brief.scale.targetWordCount * 0.2))}`, `target=${brief.scale.targetWordCount}`]),
       )
+      if (brief.qualityProfile === 'commercial-candidate' && productionContract) {
+        const minimumRouteUnits = Math.max(
+          brief.scale.targetWordCount,
+          Math.ceil(brief.scale.targetPlayMinutes * 200),
+        )
+        const minimumTotalUnits = Math.max(
+          Math.ceil(brief.scale.targetWordCount * 1.5),
+          Math.ceil(brief.scale.targetPlayMinutes * (20_000 / 60)),
+        )
+        const minimumNpcCount = Math.max(1, Math.min(5, Math.ceil(brief.scale.targetPlayMinutes / 12)))
+        const minimumDialogueTurns = Math.max(4, Math.ceil(brief.scale.targetPlayMinutes / 2))
+        const minimumDecisions = Math.max(2, Math.ceil(brief.scale.targetPlayMinutes / 10))
+        const minimumMainStages = Math.max(2, Math.ceil(brief.scale.targetPlayMinutes / 20))
+        const minimumMainObjectives = Math.max(3, Math.ceil(brief.scale.targetPlayMinutes / 7.5))
+        const minimumMainActions = Math.max(6, Math.ceil(brief.scale.targetPlayMinutes / 3))
+        const minimumEndingUnits = Math.max(80, Math.min(400, Math.ceil(brief.scale.targetPlayMinutes * 4)))
+        gates.push(
+          gate('product.adventure.recommendation-analysis-complete', !routeQuality.truncated
+            && routeQuality.routes.length >= productionContract.narrative.minimumDistinctRoutes
+            && routeQuality.reachableEndingKeys.length >= productionContract.narrative.targetEndingCount,
+          [`routes=${routeQuality.routes.length}`, `truncated=${routeQuality.truncated}`, `reachableEndings=${routeQuality.reachableEndingKeys.length}`]),
+          gate('product.adventure.recommendation-route-volume', routeQuality.minimumRouteTextUnits >= minimumRouteUnits,
+            [`minimumRouteUnits=${routeQuality.minimumRouteTextUnits}`, `required=${minimumRouteUnits}`, `estimatedMinutes=${routeQuality.estimatedMinimumRouteMinutes}`, `targetMinutes=${brief.scale.targetPlayMinutes}`]),
+          gate('product.adventure.recommendation-total-volume', routeQuality.totalPlayableTextUnits >= minimumTotalUnits,
+            [`playableUnits=${routeQuality.totalPlayableTextUnits}`, `required=${minimumTotalUnits}`]),
+          gate('product.adventure.recommendation-dialogue-and-cast', routeQuality.authoredNpcCount >= minimumNpcCount
+            && routeQuality.talkActionCount >= 1 && routeQuality.minimumRouteDialogueTurns >= minimumDialogueTurns,
+          [`authoredNpcs=${routeQuality.authoredNpcCount}/${minimumNpcCount}`, `talkActions=${routeQuality.talkActionCount}`, `minimumRouteDialogueTurns=${routeQuality.minimumRouteDialogueTurns}/${minimumDialogueTurns}`]),
+          gate('product.adventure.recommendation-decisions', routeQuality.minimumRouteStatefulDecisions >= minimumDecisions,
+            [`minimumRouteStatefulDecisions=${routeQuality.minimumRouteStatefulDecisions}/${minimumDecisions}`]),
+          gate('product.adventure.recommendation-main-quest', routeQuality.mainQuestStageCount >= minimumMainStages
+            && routeQuality.mainQuestObjectiveCount >= minimumMainObjectives
+            && routeQuality.minimumMainProgressActions >= minimumMainActions,
+          [`mainStages=${routeQuality.mainQuestStageCount}/${minimumMainStages}`, `mainObjectives=${routeQuality.mainQuestObjectiveCount}/${minimumMainObjectives}`, `minimumMainProgressActions=${routeQuality.minimumMainProgressActions}/${minimumMainActions}`]),
+          gate('product.adventure.recommendation-endings', routeQuality.endingTextUnits.length >= productionContract.narrative.targetEndingCount
+            && routeQuality.endingTextUnits.every(item => item.textUnits >= minimumEndingUnits),
+          [`requiredUnitsPerEnding=${minimumEndingUnits}`, ...routeQuality.endingTextUnits.map(item => `${item.nodeKey}=${item.textUnits}`)]),
+          gate('product.adventure.recommendation-copy', routeQuality.copyIssues.length === 0,
+            routeQuality.copyIssues.length === 0 ? ['issues=none'] : routeQuality.copyIssues.map(issue => `${issue.kind}:${issue.surfaceKey}`)),
+        )
+      }
     }
   } else if (runtimePackage.productType === 'avg') {
     const presentation = runtimePackage.presentation

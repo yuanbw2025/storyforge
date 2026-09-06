@@ -9,6 +9,7 @@ import {
   qualifiedAdventureEndings,
   validateAdventureContent,
 } from '../../src/lib/adventure/runtime'
+import { analyzeTextAdventureRouteQualityV1 } from '../../src/lib/adventure/quality-analysis'
 import {
   branchProductRuntimeSession,
   commitAdventureAction,
@@ -135,6 +136,45 @@ describe('TEXTADV-2 · 通用文字冒险基座纵切面', () => {
     expect(report.gates).toContainEqual(expect.objectContaining({
       gateId: 'product.adventure.v2-character-presence', passed: false,
     }))
+  })
+
+  it('按可达路线计算玩家真实可见内容，不再用 Brief 目标分钟或系统描述冒充剧情量', async () => {
+    const seeded = await fixture()
+    const analysis = analyzeTextAdventureRouteQualityV1(seeded.runtimePackage)
+    expect(analysis).toMatchObject({
+      truncated: false,
+      reachableEndingKeys: ['ending.rescue', 'ending.seal'],
+      mainQuestStageCount: 2,
+      mainQuestObjectiveCount: 2,
+    })
+    expect(analysis.routes).toHaveLength(2)
+    expect(analysis.minimumRouteTextUnits).toBeLessThan(500)
+    expect(analysis.minimumRouteDialogueTurns).toBe(0)
+    expect(analysis.minimumRouteStatefulDecisions).toBe(0)
+    expect(analysis.endingTextUnits.every(item => item.textUnits < 80)).toBe(true)
+  })
+
+  it('商业推荐质量门拒绝短主线、浅任务、无对白和无持续状态决定的工程夹具', async () => {
+    const seeded = await fixture()
+    const commercialBrief = createCurrentProductBriefFixture({
+      productType: 'text-adventure',
+      worldRelease: seeded.release as typeof seeded.release & { id: number },
+      sourceCatalog: seeded.sourceCatalog,
+    })
+    commercialBrief.qualityProfile = 'commercial-candidate'
+    const report = evaluateProductRuntimeProductQualityV1({
+      runtimePackage: seeded.runtimePackage,
+      brief: commercialBrief,
+    })
+    expect(report.passed).toBe(false)
+    expect(report.gates.filter(gate => gate.gateId.startsWith('product.adventure.recommendation-')))
+      .toEqual(expect.arrayContaining([
+        expect.objectContaining({ gateId: 'product.adventure.recommendation-route-volume', passed: false }),
+        expect.objectContaining({ gateId: 'product.adventure.recommendation-dialogue-and-cast', passed: false }),
+        expect.objectContaining({ gateId: 'product.adventure.recommendation-decisions', passed: false }),
+        expect.objectContaining({ gateId: 'product.adventure.recommendation-main-quest', passed: false }),
+        expect.objectContaining({ gateId: 'product.adventure.recommendation-endings', passed: false }),
+      ]))
   })
 
   it('文字开放世界不能误用文字冒险 V2 私域契约', async () => {

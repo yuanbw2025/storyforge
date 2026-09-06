@@ -1,6 +1,6 @@
 # StoryForge 文档权威与归档规则
 
-> 版本：1.5.1 · 生效：2026-09-06
+> 版本：1.6.0 · 生效：2026-09-06
 > 本文回答“哪些文档仍可指导开发”。未列入现行清单的历史材料，不得作为设计或施工权威。
 
 ## 1. 裁决层级
@@ -37,6 +37,15 @@
 - `docs/products/WORLD-ENGINE.md`
 - `docs/products/UPPER-PRODUCTS.md`
 - `docs/products/TEXT-ADVENTURE.md`
+- `docs/products/text-adventure-production/README.md`：文字冒险专业生产与旗舰交付的单一现行方案包入口。
+- `docs/products/text-adventure-production/01-DELIVERY-CONTRACT.md`
+- `docs/products/text-adventure-production/02-AGENT-TEAM-AND-SKILLS.md`
+- `docs/products/text-adventure-production/03-SOURCE-SUFFICIENCY-AND-ADAPTATION.md`
+- `docs/products/text-adventure-production/04-STORY-TO-QUEST-AND-SCENE.md`
+- `docs/products/text-adventure-production/05-PRODUCTION-DAG-AND-ARTIFACTS.md`
+- `docs/products/text-adventure-production/06-RUNTIME-MEDIA-PLAYER-AND-DISTRIBUTION.md`
+- `docs/products/text-adventure-production/07-QUALITY-EVAL-AND-ACCEPTANCE.md`
+- `docs/products/text-adventure-production/08-IMPLEMENTATION-AND-DELIVERY-PLAN.md`
 - `docs/ROADMAP.md`
 - `docs/roadmap/README.md`
 - `docs/roadmap/CAPABILITY-BASELINE.md`

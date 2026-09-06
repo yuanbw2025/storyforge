@@ -1,6 +1,6 @@
 # StoryForge 当前能力基线
 
-> 版本：1.8.0 · 基线：2026-09-06 文字冒险 V2 真实生产与玩家体验收口 · 权威层级：L2
+> 版本：1.9.0 · 基线：2026-09-06 文字冒险专业生产重建审计 · 权威层级：L2
 > 本文区分代码存在、纵切面可用和产品完成。旧完成卡不自动恢复权威，但已合入主干并由当前代码/检查器复证的 Phase 5 成果必须保留。
 
 ## 状态定义
@@ -61,7 +61,7 @@
 | E-TTRPG-01 | partial | 已接入中立世界协议、专用需求适配器、统一 Production/Build/ProductRelease v1、AI GM runtime、事件/存档与在线 handoff | 专用生产体验、完整媒资、权限隔离、真实多人体验和产品级 E2E 尚未封板 |
 | E-CHAT-01 | partial | 单/多角色互动已接入专用需求适配器、统一 Production/Build/ProductRelease v1、玩家 runtime 与 runtime Skill | 主 Agent 会谈、多人导演、长期记忆/可见性和完整发布运行体验需验收 |
 | E-TOWN-01 | missing | 有角色互动和通用产品运行时基础能力可复用 | 没有独立 AI 小镇产品的时间、日程、地点、群体与离线演化闭环 |
-| E-TEXTADV-01 | partial | 严格 `AdventureContentV2` 通用合同已接入冻结 WorldRelease → 作者 Brief → 八任务 AI 生产 DAG → 独立叙事质量审查 → 插图需求/共享媒资 → Build/QA → ProductRelease；模拟正式生产与自动 E2E 之外，作者配置的真实 Agnes 文本/图片 Provider 已完成约 60 分钟目标内容、2/2 媒资、不可变发布、11 次选择到结局、刷新恢复和 30 分钟浏览器验收。玩家面覆盖空间、属性/技能、资源、背包、装备、任务、时间、storylet、失败推进、自由输入候选、存档分支、因果结局和纯文字降级；支线具备可接取→进行中→完成事件生命周期，地点错位、占位 NPC 和无条件越过主线的移动已收口；独立质量 Agent 使用登记的紧凑审查投影，避免 Brief/世界读取挤掉上游工件；作者确认重试后按 blocking Artifact 依赖闭包定向重生成并读取冻结修复反馈；文字开放世界继续隔离在 V1 | 仍需不同题材/世界的多样本叙事质量验收、同角色多图一致性、作者侧逐工件修复差异预览与选择性采纳；运行期动态出图后置，旧 V1 只能在文字开放世界迁移后收口 |
+| E-TEXTADV-01 | partial | `AdventureContentV2`、确定性行动/事件/RNG、会话/存档、Build/ProductRelease、共享媒资适配器、基础工作台和玩家 UI 已有代码与回归，可作为工程基座。真实 Provider 证明了调用、媒资装配和浏览器恢复链路，但当前《潮钟群岛》Build #4 单条主线仅约 3,200–3,300 可见内容单位、11 次必选、3 个对白 beat、无正式可交互 NPC，属于工程夹具 | 当前文字冒险 Skills 全归 `outline` Agent，DAG、故事→任务→脚本→分场正文链和质量门均需按 `docs/products/text-adventure-production/README.md` 重建；旧门把 Brief 目标分钟和混合描述总量误当完成证据。必须完成专业 Agent/工件/任务脚本、路线级字量与决定回响、完整 UI、媒资一致性、导入导出和一小时真人试玩旗舰后才能称为推荐候选；运行期动态出图后置，V1 待开放世界迁移后收口 |
 | E-AVG-01 | partial | AVG 已接入专用需求适配器、统一 Production/Build/ProductRelease v1、演出与独立玩家面 | 真实视觉/声音资产、演出绑定和完整体验未验收 |
 | E-OPENWORLD-01 | partial | 文字开放世界已接入专用需求适配器、统一 Production/Build/ProductRelease v1、专用运行 API 和独立玩家面；状态演化仅是该产品的内部能力 | 区域按需演化、角色自治、长期任务演化与性能门未完整 |
 
