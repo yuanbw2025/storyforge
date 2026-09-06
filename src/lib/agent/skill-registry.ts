@@ -3299,8 +3299,8 @@ export const AGENT_SKILLS = [
     inputPolicy: productProductionInputPolicy(['product-production.brief']),
     contextCompression: compressionPolicy(['product-production.brief', 'product-production.artifact-inputs']),
     maxOutputTokens: 12_000,
-    writeTargets: [{ table: 'productBuildArtifacts', fields: ['metadataJson'], adoptionExtension: 'product-production-artifacts' }],
-    lastVerifiedAt: '2026-09-06',
+    writeTargets: [{ table: 'productBuildArtifacts', fields: ['payloadJson'], adoptionExtension: 'product-production-artifacts' }],
+    lastVerifiedAt: '2026-09-07',
     regressionTests: ['R-TEXTADV3-agent-team'],
   },
   {

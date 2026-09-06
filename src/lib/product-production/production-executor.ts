@@ -45,11 +45,15 @@ import {
 import {
   parseTextAdventureCastBibleArtifactV1,
   parseTextAdventureNarrativeArcPlanArtifactV1,
+  parseTextAdventureMediaAnchorDecisionArtifactV1,
   parseTextAdventureQuestPlanArtifactV1,
   parseTextAdventureQuestScriptArtifactV1,
   parseTextAdventureSourceDecisionArtifactV1,
   parseTextAdventureSourceSufficiencyArtifactV1,
   parseTextAdventureStoryBibleArtifactV1,
+  parseTextAdventureVisualBibleArtifactV1,
+  type TextAdventureCastBibleArtifactV1,
+  type TextAdventureVisualBibleArtifactV1,
 } from '../adventure/production-artifacts-v2'
 import { bindTextAdventureNarrativeActionsV1 } from '../adventure/production-compiler'
 import {
@@ -162,6 +166,15 @@ interface MediaRequirementsArtifactV1 {
   version: 2
   visual: VisualRequirementV1[]
   audio: AudioRequirementV1[]
+}
+
+interface ProductMediaCharacterAnchorV1 {
+  characterKey: string
+  sourceResourceKey: string | null
+  name: string
+  role: 'player' | 'major-npc' | 'supporting-npc'
+  publicIdentity: string
+  visualAnchor: string
 }
 
 export interface ProductionTextExecutionV1 {
@@ -751,6 +764,7 @@ export function isolateCharacterProviderPromptV1(prompt: string, fallback: strin
 export function parseProductMediaRequirementsArtifactV2(
   value: unknown,
   brief: ProductProductionBriefV3,
+  characterAnchors: readonly ProductMediaCharacterAnchorV1[] = [],
 ): MediaRequirementsArtifactV1 {
   const row = record(value, 'mediaRequirements')
   exactKeys(row, ['schema', 'version', 'visual', 'audio'], 'mediaRequirements')
@@ -759,12 +773,8 @@ export function parseProductMediaRequirementsArtifactV2(
   const allowedCharacterAnchors = new Set([
     'intent:protagonist',
     ...productCharacterKeys(brief),
+    ...characterAnchors.flatMap(anchor => [anchor.characterKey, ...(anchor.sourceResourceKey ? [anchor.sourceResourceKey] : [])]),
   ])
-  const requiredCharacterConstraints = [...new Set([
-    '保持角色身份、年龄段与核心视觉特征',
-    `角色定位：${brief.intent.playerRole}`,
-    ...brief.intent.forbiddenChanges,
-  ])].sort()
   const visual: VisualRequirementV1[] = row.visual.map((value, index) => {
     const item = record(value, `visual[${index}]`)
     exactKeys(item, [
@@ -791,6 +801,20 @@ export function parseProductMediaRequirementsArtifactV2(
     // Character constraints are authority-owned data derived from the frozen
     // Brief. The planning model may suggest them, but cannot weaken, expand or
     // reorder the contract that is sent to providers and frozen in proof.
+    const anchoredCharacters = characterAnchorRefs.flatMap(anchorRef => characterAnchors.filter(character => (
+      character.characterKey === anchorRef || character.sourceResourceKey === anchorRef
+      || anchorRef === 'intent:protagonist' && character.role === 'player'
+    )))
+    const requiredCharacterConstraints = [...new Set([
+      '保持角色身份、年龄段与核心视觉特征',
+      ...(anchoredCharacters.length > 0
+        ? anchoredCharacters.flatMap(character => [
+            `角色身份：${character.name} · ${character.role} · ${character.publicIdentity}`,
+            `视觉锚点：${character.visualAnchor}`,
+          ])
+        : [`角色定位：${brief.intent.playerRole}`]),
+      ...brief.intent.forbiddenChanges,
+    ])].sort()
     const hardConstraints = hasCharacterContract ? requiredCharacterConstraints : []
     return {
       artifactKey: key(item.artifactKey, `visual[${index}].artifactKey`),
@@ -834,10 +858,87 @@ export function parseProductMediaRequirementsArtifactV2(
   return { schema: 'storyforge.product-media-requirements-artifact', version: 2, visual, audio }
 }
 
+function textAdventureCharacterAnchors(
+  cast: TextAdventureCastBibleArtifactV1,
+): ProductMediaCharacterAnchorV1[] {
+  return cast.characters.map(character => ({
+    characterKey: character.key,
+    sourceResourceKey: character.sourceResourceKey,
+    name: character.name,
+    role: character.role,
+    publicIdentity: character.publicIdentity,
+    visualAnchor: character.visualAnchor,
+  }))
+}
+
+function compileTextAdventureVisualBibleV1(input: {
+  architecture: ReturnType<typeof parseTextAdventureArchitectureArtifactV1>
+  cast: TextAdventureCastBibleArtifactV1
+  mediaRequirements: MediaRequirementsArtifactV1
+}): TextAdventureVisualBibleArtifactV1 {
+  const requirementKeys = input.mediaRequirements.visual.map(item => item.artifactKey)
+  const mediaPalette = [...new Set(input.mediaRequirements.visual.flatMap(requirement => requirement.palette))]
+  const architecturePalette = input.architecture.visualBible.palette
+    .filter(color => /^#[0-9a-fA-F]{6}$/.test(color))
+  const globalPalette = [...new Set([...mediaPalette, ...architecturePalette, '#172033', '#52647A', '#D8C6A0'])]
+    .slice(0, 8)
+  const payload = {
+    schema: 'storyforge.text-adventure-visual-bible-artifact', version: 1,
+    style: input.architecture.visualBible.style,
+    palette: globalPalette,
+    compositionRules: input.architecture.visualBible.compositionRules,
+    continuityRules: [
+      '同一角色跨场景保持身份、年龄段、体型、面部结构、服装层级与标志物一致。',
+      '地点的时代、材质、气候与光照必须服从冻结世界和场景发生时刻。',
+      '关键物品的形状、尺度、颜色和损伤状态随已结算事件连续变化。',
+    ],
+    characterAnchors: input.cast.characters.map(character => {
+      const matchingRequirements = input.mediaRequirements.visual.filter(requirement => (
+        requirement.characterAnchorRefs.some(reference => reference === character.key
+          || reference === character.sourceResourceKey
+          || reference === 'intent:protagonist' && character.role === 'player')
+      ))
+      const palette = [...new Set(matchingRequirements.flatMap(requirement => requirement.palette))]
+      const hardConstraints = [...new Set([
+        '保持角色身份、年龄段与核心视觉特征',
+        `角色身份：${character.name} · ${character.role} · ${character.publicIdentity}`,
+        `视觉锚点：${character.visualAnchor}`,
+        ...matchingRequirements.flatMap(requirement => requirement.hardConstraints),
+      ])].sort()
+      return {
+        characterKey: character.key,
+        name: character.name,
+        role: character.role,
+        identity: character.publicIdentity,
+        visualAnchor: character.visualAnchor,
+        requirementArtifactKeys: matchingRequirements.map(requirement => requirement.artifactKey).sort(),
+        palette: palette.length >= 3 ? palette : globalPalette,
+        hardConstraints,
+      }
+    }),
+    assetRequirements: input.mediaRequirements.visual.map(requirement => ({
+      artifactKey: requirement.artifactKey,
+      mediaKind: requirement.mediaKind,
+      sceneTag: requirement.sceneTag,
+      beatKey: requirement.beatKey,
+    })),
+  }
+  return parseTextAdventureVisualBibleArtifactV1({
+    value: payload,
+    cast: input.cast,
+    expectedAssetKeys: requirementKeys,
+  })
+}
+
 function artifactPayload(input: ProductProductionTaskExecutionInputV1, artifactKey: string): unknown {
+  const artifact = artifactRecord(input, artifactKey)
+  try { return JSON.parse(artifact.payloadJson) } catch { fail(`输入 Artifact JSON 损坏:${artifactKey}`) }
+}
+
+function artifactRecord(input: ProductProductionTaskExecutionInputV1, artifactKey: string) {
   const artifact = input.inputArtifacts.find(row => row.artifactKey === artifactKey)
   if (!artifact) fail(`输入 Artifact 缺失:${artifactKey}`)
-  try { return JSON.parse(artifact.payloadJson) } catch { fail(`输入 Artifact JSON 损坏:${artifactKey}`) }
+  return artifact
 }
 
 function textAdventureLocationTitlesFromArchitectureV1(
@@ -1134,7 +1235,11 @@ function textSystem(
     prompt: blueprint.prompt, altText: blueprint.altText,
     width: blueprint.width, height: blueprint.height,
     palette: ['#112233', '#445566', '#ddeeff'],
-    characterAnchorRefs: characterAsset ? [productCharacterKeys(brief)[0] ?? 'intent:protagonist'] : [],
+    characterAnchorRefs: characterAsset
+      ? [brief.textAdventure
+          ? textAdventureCastKeys[0] ?? 'intent:protagonist'
+          : productCharacterKeys(brief)[0] ?? 'intent:protagonist']
+      : [],
     hardConstraints: characterAsset ? [...new Set([
       '保持角色身份、年龄段与核心视觉特征', `角色定位：${brief.intent.playerRole}`,
       ...brief.intent.forbiddenChanges,
@@ -1425,7 +1530,18 @@ async function executeModelTask(input: ProductProductionTaskExecutionInputV1, op
     payload = parseProductModule(raw, options.brief); kind = 'product-module'
     quality = { productTypeVerified: true }
   } else if (input.task.taskKey === 'media.requirements') {
-    payload = parseProductMediaRequirementsArtifactV2(raw, options.brief); kind = 'asset-manifest'
+    const cast = options.brief.textAdventure
+      ? parseTextAdventureCastBibleArtifactV1({
+          value: artifactPayload(input, 'content.cast-bible'),
+          brief: options.brief,
+          allowedResourceKeys: options.brief.source.selection.resourceKeys,
+        })
+      : null
+    payload = parseProductMediaRequirementsArtifactV2(
+      raw,
+      options.brief,
+      cast ? textAdventureCharacterAnchors(cast) : [],
+    ); kind = 'asset-manifest'
     quality = { planKeysVerified: true }
   } else if (input.task.taskKey === 'content.adventure-side-quests'
     || input.task.taskKey === 'content.adventure-ambient-events') {
@@ -1640,7 +1756,32 @@ async function executeVisualTask(input: ProductProductionTaskExecutionInputV1, o
   mediaCapabilities: ReadonlyMap<string, ResolvedProductMediaCapabilityV1>
 }): Promise<ProductProductionTaskExecutionResultV1> {
   const startedAt = performance.now()
-  const requirements = parseProductMediaRequirementsArtifactV2(artifactPayload(input, 'media.requirements'), options.brief)
+  const cast = options.brief.textAdventure
+    ? parseTextAdventureCastBibleArtifactV1({
+        value: artifactPayload(input, 'content.cast-bible'),
+        brief: options.brief,
+        allowedResourceKeys: options.brief.source.selection.resourceKeys,
+      })
+    : null
+  const requirements = parseProductMediaRequirementsArtifactV2(
+    artifactPayload(input, 'media.requirements'),
+    options.brief,
+    cast ? textAdventureCharacterAnchors(cast) : [],
+  )
+  if (cast) {
+    const visualBibleArtifact = artifactRecord(input, 'media.visual-bible')
+    const visualBible = parseTextAdventureVisualBibleArtifactV1({
+      value: artifactPayload(input, 'media.visual-bible'),
+      cast,
+      expectedAssetKeys: requirements.visual.map(requirement => requirement.artifactKey),
+    })
+    parseTextAdventureMediaAnchorDecisionArtifactV1({
+      value: artifactPayload(input, 'media.anchor-decision'),
+      visualBible,
+      visualBibleHash: visualBibleArtifact.contentHash,
+      confirmationRequired: options.brief.qualityProfile === 'commercial-candidate',
+    })
+  }
   const hasStandaloneCharacterArt = requirements.visual.some(item => (
     item.mediaKind === 'character-pose' || item.mediaKind === 'character-expression'
   ))
@@ -1995,7 +2136,25 @@ async function executeIntegrationTask(input: ProductProductionTaskExecutionInput
     textAdventureCast?.characters.map(character => character.key) ?? [],
   )
   const product = parseProductModule(artifactPayload(input, 'content.product-module'), options.brief)
-  parseProductMediaRequirementsArtifactV2(artifactPayload(input, 'media.requirements'), options.brief)
+  const mediaRequirements = parseProductMediaRequirementsArtifactV2(
+    artifactPayload(input, 'media.requirements'),
+    options.brief,
+    textAdventureCast ? textAdventureCharacterAnchors(textAdventureCast) : [],
+  )
+  if (textAdventureCast) {
+    const visualBibleArtifact = artifactRecord(input, 'media.visual-bible')
+    const visualBible = parseTextAdventureVisualBibleArtifactV1({
+      value: artifactPayload(input, 'media.visual-bible'),
+      cast: textAdventureCast,
+      expectedAssetKeys: mediaRequirements.visual.map(requirement => requirement.artifactKey),
+    })
+    if (mediaRequirements.visual.length > 0) parseTextAdventureMediaAnchorDecisionArtifactV1({
+      value: artifactPayload(input, 'media.anchor-decision'),
+      visualBible,
+      visualBibleHash: visualBibleArtifact.contentHash,
+      confirmationRequired: options.brief.qualityProfile === 'commercial-candidate',
+    })
+  }
   const textAdventureProduction = options.brief.intent.productType === 'text-adventure'
     ? (() => {
         if (!options.brief.textAdventure || !textAdventureArchitecture || !textAdventureCast
@@ -2368,6 +2527,92 @@ async function executeTextAdventureSourceDecisionTask(
   }
 }
 
+async function executeTextAdventureVisualBibleTask(
+  input: ProductProductionTaskExecutionInputV1,
+  brief: ProductProductionBriefV3,
+): Promise<ProductProductionTaskExecutionResultV1> {
+  const startedAt = performance.now()
+  if (!brief.textAdventure) fail('视觉圣经编译缺少文字冒险 Brief')
+  const architecture = parseTextAdventureArchitectureArtifactV1(
+    artifactPayload(input, 'content.adventure-architecture'), brief.textAdventure,
+  )
+  const cast = parseTextAdventureCastBibleArtifactV1({
+    value: artifactPayload(input, 'content.cast-bible'), brief,
+    allowedResourceKeys: brief.source.selection.resourceKeys,
+  })
+  const requirements = parseProductMediaRequirementsArtifactV2(
+    artifactPayload(input, 'media.requirements'), brief, textAdventureCharacterAnchors(cast),
+  )
+  const visualBible = compileTextAdventureVisualBibleV1({ architecture, cast, mediaRequirements: requirements })
+  return {
+    artifacts: [{
+      artifactKey: 'media.visual-bible', kind: 'visual-bible', payload: visualBible,
+      quality: {
+        castCoverageVerified: true,
+        characterAnchorCount: visualBible.characterAnchors.length,
+        assetRequirementCount: visualBible.assetRequirements.length,
+      },
+      rights: { origin: 'compiled-from-accepted-product-artifacts', containsThirdPartyMedia: false },
+    }],
+    passedGateIds: [...input.task.acceptanceGateIds],
+    usage: zeroUsage(elapsed(startedAt)),
+  }
+}
+
+async function executeTextAdventureMediaAnchorGateTask(
+  input: ProductProductionTaskExecutionInputV1,
+  brief: ProductProductionBriefV3,
+): Promise<ProductProductionTaskExecutionResultV1> {
+  const startedAt = performance.now()
+  const cast = parseTextAdventureCastBibleArtifactV1({
+    value: artifactPayload(input, 'content.cast-bible'), brief,
+    allowedResourceKeys: brief.source.selection.resourceKeys,
+  })
+  const visualBibleArtifact = artifactRecord(input, 'media.visual-bible')
+  const visualBible = parseTextAdventureVisualBibleArtifactV1({
+    value: artifactPayload(input, 'media.visual-bible'), cast,
+    expectedAssetKeys: expectedVisualKeys(brief),
+  })
+  const confirmationRequired = brief.qualityProfile === 'commercial-candidate'
+  const authorResolution = input.authorResolution
+  if (confirmationRequired && (authorResolution?.blockerKey !== input.task.taskKey
+    || authorResolution.resolution.action !== 'confirm-character-anchors')) {
+    fail('商业候选生成图片前需要作者明确确认角色视觉锚点')
+  }
+  const payload = confirmationRequired ? {
+    schema: 'storyforge.text-adventure-media-anchor-decision-artifact', version: 1,
+    visualBibleHash: visualBibleArtifact.contentHash,
+    decision: 'confirm-character-anchors' as const,
+    confirmedCharacterKeys: visualBible.characterAnchors.map(anchor => anchor.characterKey),
+    authorCommandId: authorResolution?.commandId ?? null,
+    authorNote: authorResolution?.resolution.note ?? null,
+  } : {
+    schema: 'storyforge.text-adventure-media-anchor-decision-artifact', version: 1,
+    visualBibleHash: visualBibleArtifact.contentHash,
+    decision: 'not-required-noncommercial' as const,
+    confirmedCharacterKeys: [],
+    authorCommandId: null,
+    authorNote: null,
+  }
+  const verified = parseTextAdventureMediaAnchorDecisionArtifactV1({
+    value: payload, visualBible, visualBibleHash: visualBibleArtifact.contentHash,
+    confirmationRequired,
+  })
+  return {
+    artifacts: [{
+      artifactKey: 'media.anchor-decision', kind: 'visual-bible', payload: verified,
+      quality: {
+        characterAnchorsAuthorized: true,
+        confirmationRequired,
+        confirmedCharacterCount: verified.confirmedCharacterKeys.length,
+      },
+      rights: {},
+    }],
+    passedGateIds: [...input.task.acceptanceGateIds],
+    usage: zeroUsage(elapsed(startedAt)),
+  }
+}
+
 async function executeTextAdventureMediaTaskWithFallback(
   input: ProductProductionTaskExecutionInputV1,
   execute: () => Promise<ProductProductionTaskExecutionResultV1>,
@@ -2443,6 +2688,12 @@ export function createConfiguredProductProductionExecutorV1(input: {
     if (request.task.executionMode === 'model') return executeModelTask(request, options)
     if (request.task.taskKey === 'source.author-gate') {
       return executeTextAdventureSourceDecisionTask(request, options.brief)
+    }
+    if (request.task.taskKey === 'media.visual-bible.compile') {
+      return executeTextAdventureVisualBibleTask(request, options.brief)
+    }
+    if (request.task.taskKey === 'media.anchor-author-gate') {
+      return executeTextAdventureMediaAnchorGateTask(request, options.brief)
     }
     if (request.task.taskKey === 'media.visual' || request.task.taskKey.startsWith('media.visual.')) {
       return request.task.taskKey.startsWith('media.visual.') && input.brief.intent.productType === 'text-adventure'

@@ -354,4 +354,66 @@ describe('PRODUCTPROD-1B · user command control plane', () => {
       },
     })).resolves.toMatchObject({ ok: false, errorCode: 'invalid-state-transition' })
   })
+
+  it('只允许文字冒险美术作者闸门确认角色锚点，并把确认写入新 epoch 证据', async () => {
+    const f = await fixture('text-adventure')
+    const created = await executeProductProductionCommand({
+      scope: f.scope,
+      command: {
+        type: 'create-intent', commandId: 'media-anchor.intent', productionKey: 'media-anchor-story',
+        productType: 'text-adventure', worldReleaseId: f.worldReleaseId, userText: '制作带插图的文字冒险',
+      },
+    })
+    const saved = await executeProductProductionCommand({
+      scope: f.scope, productionId: created.productionId,
+      command: {
+        type: 'save-brief-revision', commandId: 'media-anchor.brief', expectedStateRevision: 0,
+        parentRevision: null, brief: f.brief,
+      },
+    })
+    await executeProductProductionCommand({
+      scope: f.scope, productionId: created.productionId,
+      command: {
+        type: 'authorize-start', commandId: 'media-anchor.start', expectedStateRevision: 1,
+        briefRevision: 1, briefHash: saved.result.briefHash as string,
+        authorizationNonce: 'media-anchor.click',
+      },
+    })
+    const build = (await db.productBuilds.where('productionId').equals(created.productionId).first())!
+    await db.productBuilds.update(build.id!, {
+      status: 'recovery-required',
+      failureJson: JSON.stringify({
+        taskKey: 'media.anchor-author-gate', code: 'task-executor-failed', attempt: 1,
+        detail: '商业候选生成图片前需要作者明确确认角色视觉锚点',
+      }),
+    })
+    const accepted = await executeProductProductionCommand({
+      scope: f.scope, productionId: created.productionId,
+      command: {
+        type: 'resolve-blocker', commandId: 'media-anchor.confirm', expectedStateRevision: 2,
+        blockerKey: 'media.anchor-author-gate',
+        resolution: { action: 'confirm-character-anchors', note: '已逐项核对并确认角色视觉锚点' },
+      },
+    })
+    expect(accepted).toMatchObject({ ok: true, stateRevision: 3, result: { controlEpoch: 1 } })
+    const resumed = (await db.productBuilds.get(build.id!))!
+    expect(JSON.parse(resumed.failureJson)).toMatchObject({
+      commandId: 'media-anchor.confirm', blockerKey: 'media.anchor-author-gate',
+      resolution: { action: 'confirm-character-anchors' },
+      previousFailure: { taskKey: 'media.anchor-author-gate' },
+    })
+    await db.productBuilds.update(build.id!, {
+      status: 'recovery-required',
+      failureJson: JSON.stringify({ taskKey: 'media.visual.001', code: 'task-executor-failed' }),
+    })
+    await db.productProductions.update(created.productionId, { stateRevision: 4 })
+    await expect(executeProductProductionCommand({
+      scope: f.scope, productionId: created.productionId,
+      command: {
+        type: 'resolve-blocker', commandId: 'media-anchor.reject', expectedStateRevision: 4,
+        blockerKey: 'media.visual.001',
+        resolution: { action: 'confirm-character-anchors', note: '不能用于普通图片任务' },
+      },
+    })).resolves.toMatchObject({ ok: false, errorCode: 'invalid-state-transition' })
+  })
 })

@@ -379,7 +379,7 @@ function parseResolution(value: unknown): ProductProductionBlockerResolutionV1 {
   return {
     action: enumValue(row.action, [
       'retry', 'fallback', 'waive-soft-gate', 'change-capability',
-      'accept-product-private-expansion', 'cancel',
+      'accept-product-private-expansion', 'confirm-character-anchors', 'cancel',
     ], 'resolution.action'),
     note: text(row.note, 'resolution.note', 4000),
   }

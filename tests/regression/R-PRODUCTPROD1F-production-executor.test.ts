@@ -98,13 +98,14 @@ async function fixtureForProduct(productType: ProductionProductKindV1, options?:
   scale?: 'scene' | 'short-arc' | 'chapter'
   visualLevel?: 'none' | 'key-scenes'
   omitWorldArtifacts?: boolean
+  qualityProfile?: 'prototype' | 'commercial-candidate'
 }) {
   const owned = await seedCurrentProductWorld(`formal-${productType}`)
   const release = owned.release
   const suggestions = await suggestProductStartingPoints({ scope: owned.scope, worldReleaseId: release.id! })
   const brief = await draftProductProductionBriefV3({
     scope: owned.scope, worldReleaseId: release.id!, suggestionKey: suggestions.suggestions[0].suggestionKey,
-    productType, qualityProfile: 'prototype', scale: options?.scale ?? 'scene',
+    productType, qualityProfile: options?.qualityProfile ?? 'prototype', scale: options?.scale ?? 'scene',
     visualLevel: options?.visualLevel ?? (productType === 'text-adventure' ? 'key-scenes' : 'none'), audioLevel: 'none',
     playerRole: `扮演 ${productType} 的冻结世界行动者`,
     openingSituation: `从用户确认的雾港潮门入口开始 ${productType} 体验。`,
@@ -938,23 +939,62 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
       )['media.requirements'],
       audio: [],
     }
-    const requirementArtifact: ProductBuildArtifactRecordV1 = {
+    const professional = professionalTextAdventurePlanningOutputs(owned.brief)
+    const cast = professional['content.cast-bible'] as {
+      characters: Array<{
+        key: string; name: string; role: 'player' | 'major-npc' | 'supporting-npc'
+        publicIdentity: string; visualAnchor: string
+      }>
+    }
+    const visualBibleHash = 'f'.repeat(64)
+    const visualBible = {
+      schema: 'storyforge.text-adventure-visual-bible-artifact', version: 1,
+      style: '雾港写实插画', palette: ['#172033', '#52647A', '#D8C6A0'],
+      compositionRules: ['保留文字安全区', '人物关系优先'],
+      continuityRules: ['角色身份连续', '服装标志物连续', '场景光照连续'],
+      characterAnchors: cast.characters.map(character => ({
+        characterKey: character.key, name: character.name, role: character.role,
+        identity: character.publicIdentity, visualAnchor: character.visualAnchor,
+        requirementArtifactKeys: [], palette: ['#172033', '#52647A', '#D8C6A0'],
+        hardConstraints: ['保持身份年龄', `身份:${character.publicIdentity}`, `锚点:${character.visualAnchor}`],
+      })),
+      assetRequirements: mediaRequirements.visual.map(requirement => ({
+        artifactKey: requirement.artifactKey, mediaKind: requirement.mediaKind,
+        sceneTag: requirement.sceneTag, beatKey: requirement.beatKey,
+      })),
+    }
+    const artifact = (
+      artifactKey: string,
+      kind: ProductBuildArtifactRecordV1['kind'],
+      payload: unknown,
+      contentHash: string,
+    ): ProductBuildArtifactRecordV1 => ({
       projectId: owned.scope.projectId, worldId: owned.scope.worldId, workId: owned.scope.workId,
-      buildId: 1, artifactKey: 'media.requirements', requirementKey: null, version: 1,
-      kind: 'asset-manifest', mediaKind: null, status: 'accepted', producerRunId: null,
+      buildId: 1, artifactKey, requirementKey: null, version: 1,
+      kind, mediaKind: null, status: 'accepted', producerRunId: null,
       producerReceiptHash: null, controlEpoch: 0, inputHash: 'a'.repeat(64),
-      contentHash: 'b'.repeat(64), payloadJson: JSON.stringify(mediaRequirements),
+      contentHash, payloadJson: JSON.stringify(payload),
       metadataJson: '{}', qualityJson: '{}', rightsJson: '{}', blobObjectId: null,
       mimeType: null, byteSize: 1, parentArtifactHash: null, carriedFrom: null,
       createdAt: 1, updatedAt: 1,
-    }
+    })
+    const inputArtifacts = [
+      artifact('media.requirements', 'asset-manifest', mediaRequirements, 'b'.repeat(64)),
+      artifact('content.cast-bible', 'product-design', professional['content.cast-bible'], 'a'.repeat(64)),
+      artifact('media.visual-bible', 'visual-bible', visualBible, visualBibleHash),
+      artifact('media.anchor-decision', 'visual-bible', {
+        schema: 'storyforge.text-adventure-media-anchor-decision-artifact', version: 1,
+        visualBibleHash, decision: 'not-required-noncommercial', confirmedCharacterKeys: [],
+        authorCommandId: null, authorNote: null,
+      }, '9'.repeat(64)),
+    ]
     const executor = createConfiguredProductProductionExecutorV1({
       production: (await db.productProductions.get(owned.productionId))!, brief: owned.brief,
     })
     const execution = {
       scope: owned.scope, productionId: owned.productionId, buildId: 1, buildNumber: 1,
       controlEpoch: 0, planHash: 'c'.repeat(64), task, attempt: 1,
-      idempotencyKey: 'd'.repeat(64), contextText: '', inputArtifacts: [requirementArtifact],
+      idempotencyKey: 'd'.repeat(64), contextText: '', inputArtifacts,
       capabilityBindings: [{
         requirementKey: 'media.visual', adapterId: 'missing.fixture', bindingHash: 'e'.repeat(64),
       }],
@@ -970,6 +1010,90 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
       }),
       quality: expect.objectContaining({ providerAttemptsExhausted: task.maxAttempts }),
     })])
+  })
+
+  it('商业文字冒险先编译独立视觉圣经，未确认角色锚点时绝不允许开始出图', async () => {
+    const owned = await fixtureForProduct('text-adventure', {
+      scale: 'short-arc', visualLevel: 'key-scenes', qualityProfile: 'commercial-candidate',
+    })
+    const briefHash = await hashProductProductionValueV2(owned.brief)
+    const plan = await createProductProductionPlanV3({ buildNumber: 1, briefHash, brief: owned.brief })
+    const compileTask = plan.tasks.find(item => item.taskKey === 'media.visual-bible.compile')!
+    const anchorGateTask = plan.tasks.find(item => item.taskKey === 'media.anchor-author-gate')!
+    const visualKeys = plan.tasks.filter(item => /^media\.visual\.\d{3}$/.test(item.taskKey))
+      .map(item => item.taskKey)
+    const professional = fullLengthTextAdventureOutputs(owned.brief) as Record<string, unknown>
+    const mediaRequirements = {
+      schema: 'storyforge.product-media-requirements-artifact', version: 2,
+      visual: visualKeys.map((artifactKey, index) => ({
+        artifactKey, mediaKind: index === 1 ? 'character-pose' : index === 0 ? 'background' : 'cg',
+        sceneTag: `scene.${String(index + 1).padStart(3, '0')}`,
+        beatKey: `beat.${String(index + 1).padStart(3, '0')}`,
+        prompt: index === 1 ? '守灯人深蓝制服与铜色灯杖的角色定稿。' : `雾港关键场景插图 ${index + 1}。`,
+        altText: index === 1 ? '手持铜色灯杖的守灯人。' : `雾港关键场景 ${index + 1}。`,
+        width: index === 1 ? 720 : 1280, height: index === 1 ? 1080 : 720,
+        palette: ['#172033', '#52647A', '#D8C6A0'],
+        characterAnchorRefs: index === 1 ? ['character.player'] : [],
+        hardConstraints: [],
+      })),
+      audio: [],
+    }
+    const artifact = async (
+      artifactKey: string,
+      kind: ProductBuildArtifactRecordV1['kind'],
+      payload: unknown,
+    ): Promise<ProductBuildArtifactRecordV1> => ({
+      projectId: owned.scope.projectId, worldId: owned.scope.worldId, workId: owned.scope.workId,
+      buildId: 1, artifactKey, requirementKey: null, version: 1, kind,
+      mediaKind: null, status: 'accepted', producerRunId: null, producerReceiptHash: null,
+      controlEpoch: 0, inputHash: 'a'.repeat(64),
+      contentHash: await hashProductProductionValueV2(payload), payloadJson: JSON.stringify(payload),
+      metadataJson: '{}', qualityJson: '{}', rightsJson: '{}', blobObjectId: null,
+      mimeType: null, byteSize: 1, parentArtifactHash: null, carriedFrom: null,
+      createdAt: 1, updatedAt: 1,
+    })
+    const production = (await db.productProductions.get(owned.productionId))!
+    const executor = createConfiguredProductProductionExecutorV1({ production, brief: owned.brief })
+    const compileResult = await executor({
+      scope: owned.scope, productionId: owned.productionId, buildId: 1, buildNumber: 1,
+      controlEpoch: 0, planHash: 'b'.repeat(64), task: compileTask, attempt: 1,
+      idempotencyKey: 'c'.repeat(64), contextText: '', capabilityBindings: [],
+      inputArtifacts: [
+        await artifact('content.cast-bible', 'product-design', professional['content.cast-bible']),
+        await artifact('content.adventure-architecture', 'product-design', professional['content.adventure-architecture']),
+        await artifact('media.requirements', 'asset-manifest', mediaRequirements),
+      ],
+      authorResolution: null, signal: new AbortController().signal,
+    })
+    const visualBiblePayload = compileResult.artifacts[0].payload
+    const visualBibleArtifact = await artifact('media.visual-bible', 'visual-bible', visualBiblePayload)
+    const gateInput = {
+      scope: owned.scope, productionId: owned.productionId, buildId: 1, buildNumber: 1,
+      controlEpoch: 0, planHash: 'b'.repeat(64), task: anchorGateTask, attempt: 1,
+      idempotencyKey: 'd'.repeat(64), contextText: '', capabilityBindings: [],
+      inputArtifacts: [
+        await artifact('content.cast-bible', 'product-design', professional['content.cast-bible']),
+        visualBibleArtifact,
+      ],
+      authorResolution: null, signal: new AbortController().signal,
+    }
+    await expect(executor(gateInput)).rejects.toThrow('需要作者明确确认角色视觉锚点')
+    const confirmed = await executor({
+      ...gateInput,
+      authorResolution: {
+        commandId: 'author.confirm-character-anchors', blockerKey: 'media.anchor-author-gate',
+        resolution: { action: 'confirm-character-anchors' as const, note: '已逐项审查并确认全部角色锚点。' },
+        resolvedAt: 2,
+      },
+    })
+    expect(confirmed.artifacts[0]).toMatchObject({
+      artifactKey: 'media.anchor-decision',
+      payload: {
+        decision: 'confirm-character-anchors',
+        authorCommandId: 'author.confirm-character-anchors',
+        confirmedCharacterKeys: expect.arrayContaining(['character.player']),
+      },
+    })
   })
 })
 
@@ -1876,7 +2000,7 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     expect(modelCallCount).toBe(modelCallCountBeforeReassembly + 1)
     const reassemblyArtifacts = await db.productBuildArtifacts.where('buildId').equals(reassembled.buildId).toArray()
     expect(reassemblyArtifacts.filter(item => item.status === 'accepted').map(item => item.artifactKey).sort()).toEqual([
-      'content.narrative', 'quality.autoplay', 'quality.playtest-plan', 'quality.report', 'runtime.package',
+      'content.narrative', 'media.visual-bible', 'quality.autoplay', 'quality.playtest-plan', 'quality.report', 'runtime.package',
     ])
   }, 30_000)
 

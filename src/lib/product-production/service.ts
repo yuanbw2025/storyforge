@@ -103,8 +103,16 @@ export function isTextAdventureSourceDecisionBlockerV1(details: ProductProductio
     && productProductionFailureTaskKey(details.build) === 'source.author-gate'
 }
 
+export function isTextAdventureMediaAnchorBlockerV1(details: ProductProductionDetailsV1): boolean {
+  return details.production.productType === 'text-adventure'
+    && details.build?.status === 'recovery-required'
+    && productProductionFailureTaskKey(details.build) === 'media.anchor-author-gate'
+}
+
 export function canRetryProductProductionBlockerV1(details: ProductProductionDetailsV1): boolean {
-  return details.build?.status === 'recovery-required' && !isTextAdventureSourceDecisionBlockerV1(details)
+  return (details.build?.status === 'recovery-required'
+      && !isTextAdventureSourceDecisionBlockerV1(details)
+      && !isTextAdventureMediaAnchorBlockerV1(details))
     || !!details.build && isRepairRetryableFailedProductBuildV1(details.build)
 }
 
@@ -130,6 +138,8 @@ const AUTHOR_REVIEW_ARTIFACT_KEYS = new Set([
   'content.adventure-ambient-events',
   'quality.adventure-review',
   'media.requirements',
+  'media.visual-bible',
+  'media.anchor-decision',
   'runtime.package',
   'quality.autoplay',
   'quality.report',
@@ -481,6 +491,28 @@ export async function resolveTextAdventureSourceDecisionV1(input: {
     },
   })
   if (!receipt.ok) throw new Error(String(receipt.result.message ?? receipt.errorCode ?? '来源决策失败'))
+}
+
+export async function resolveTextAdventureMediaAnchorDecisionV1(input: {
+  scope: WorkspaceScope
+  details: ProductProductionDetailsV1
+  action: 'confirm-character-anchors' | 'cancel'
+  note: string
+}): Promise<void> {
+  if (!input.details.build || !isTextAdventureMediaAnchorBlockerV1(input.details)) {
+    throw new Error('[product-production-service] 当前 Build 没有待作者处理的角色视觉锚点')
+  }
+  const receipt = await executeProductProductionCommand({
+    scope: input.scope,
+    productionId: input.details.production.id!,
+    command: {
+      type: 'resolve-blocker', commandId: commandId('media-anchor-decision'),
+      expectedStateRevision: input.details.production.stateRevision,
+      blockerKey: 'media.anchor-author-gate',
+      resolution: { action: input.action, note: input.note.trim() },
+    },
+  })
+  if (!receipt.ok) throw new Error(String(receipt.result.message ?? receipt.errorCode ?? '角色视觉锚点决策失败'))
 }
 
 export async function readProductProductionProgressV1(input: {

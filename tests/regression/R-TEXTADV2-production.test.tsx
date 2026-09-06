@@ -84,7 +84,8 @@ describe('R-TEXTADV2-production · 文字冒险正式生产契约与工作台', 
       'content.quest-script', 'content.scene-script.act-1', 'content.scene-script.act-2',
       'content.scene-script.act-3', 'content.dialogue-pass.act-1',
       'content.dialogue-pass.act-2', 'content.dialogue-pass.act-3', 'integration.narrative',
-      'content.adventure-quality-review', 'media.requirements', 'media.visual.001', 'media.visual.002',
+      'content.adventure-quality-review', 'media.requirements', 'media.visual-bible.compile',
+      'media.anchor-author-gate', 'media.visual.001', 'media.visual.002',
       'integration.package', 'qa.autoplay', 'qa.release', 'qa.playtest-strategy',
     ]))
     expect(taskByKey.get('content.source-sufficiency')).toMatchObject({
@@ -155,18 +156,29 @@ describe('R-TEXTADV2-production · 文字冒险正式生产契约与工作台', 
       outputArtifactKeys: ['quality.adventure-review'],
     })
     expect(taskByKey.get('media.requirements')?.dependsOn).toEqual(['content.adventure-quality-review'])
+    expect(taskByKey.get('media.visual-bible.compile')).toMatchObject({
+      executionMode: 'deterministic', skillId: null, dependsOn: ['media.requirements'],
+      inputArtifactKeys: ['content.cast-bible', 'content.adventure-architecture', 'media.requirements'],
+      outputArtifactKeys: ['media.visual-bible'],
+    })
+    expect(taskByKey.get('media.anchor-author-gate')).toMatchObject({
+      executionMode: 'deterministic', skillId: null, dependsOn: ['media.visual-bible.compile'],
+      inputArtifactKeys: ['content.cast-bible', 'media.visual-bible'],
+      outputArtifactKeys: ['media.anchor-decision'], failurePolicy: 'pause',
+    })
     expect(taskByKey.get('integration.package')?.failurePolicy).toBe('pause')
     expect(taskByKey.get('qa.autoplay')).toMatchObject({
       executionMode: 'deterministic', dependsOn: ['integration.package'],
       inputArtifactKeys: ['runtime.package'], outputArtifactKeys: ['quality.autoplay'],
     })
     expect(taskByKey.get('media.visual.001')).toMatchObject({
-      executionMode: 'media-provider', dependsOn: ['media.requirements'],
+      executionMode: 'media-provider', dependsOn: ['media.anchor-author-gate'],
+      inputArtifactKeys: ['media.requirements', 'content.cast-bible', 'media.visual-bible', 'media.anchor-decision'],
       outputArtifactKeys: ['media.visual.001'],
       budgetReservation: expect.objectContaining({ mediaCalls: 1 }),
     })
     expect(taskByKey.get('media.visual.002')).toMatchObject({
-      executionMode: 'media-provider', dependsOn: ['media.requirements'],
+      executionMode: 'media-provider', dependsOn: ['media.anchor-author-gate'],
       outputArtifactKeys: ['media.visual.002'],
       budgetReservation: expect.objectContaining({ mediaCalls: 1 }),
     })
@@ -184,7 +196,7 @@ describe('R-TEXTADV2-production · 文字冒险正式生产契约与工作台', 
       'content.narrative-arc-plan', 'content.main-quest-plan', 'content.adventure-side-quests',
       'content.adventure-ambient-events', 'content.dialogue-pass.act-1',
       'content.dialogue-pass.act-2', 'content.dialogue-pass.act-3', 'quality.adventure-review',
-      'media.visual.001', 'media.visual.002',
+      'media.visual-bible', 'media.anchor-decision', 'media.visual.001', 'media.visual.002',
     ]))
   })
 

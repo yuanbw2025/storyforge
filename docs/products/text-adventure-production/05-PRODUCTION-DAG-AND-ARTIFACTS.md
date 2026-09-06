@@ -1,6 +1,6 @@
 # 05 · Durable 生产 DAG 与工件方案
 
-> 层级：L2 · 版本：1.7.0 · 生效：2026-09-07
+> 层级：L2 · 版本：1.8.0 · 生效：2026-09-07
 > 性质：正式生产计划、Run Contract 和候选采纳目标契约。
 
 ## 1. 目标拓扑
@@ -21,7 +21,9 @@ WorldRelease + Confirmed Brief + Frozen SourcePlan
   → scene.script.act-* (同岗有界并行)
   → dialogue.pass
   → continuity/literary review
-  → visual.bible + media.requirements
+  → media.requirements（美术总监候选）
+  → media.visual-bible（确定性编译角色/空间/需求闭包）
+  → media.anchor-author-gate（商业候选作者确认）
   → media assets + media review
   → deterministic integration
   → qa.autoplay（确定性路线/状态证据）
@@ -38,7 +40,9 @@ WorldRelease + Confirmed Brief + Frozen SourcePlan
 
 `qa.autoplay` 以零模型调用运行黄金路线、结局覆盖、替代路线、失败注入、状态往返、分支隔离、AI 离线和媒资离线八类检查，产出绑定 Build/package hash 的 `quality.autoplay`。`qa.release` 消费该证据；商业候选的自动游玩失败会阻断。之后 `text-adventure-playtest-director` 使用独立 Skill/Run Contract 和有界证据投影生成 `quality.playtest-plan`，必须覆盖 15 种路线/生命周期用例和至少两场真人试玩。该模型工件最多只可判为“可进入真人验证”，无权产生 `release-ready`。
 
-文字冒险的图片和预留音频不再藏在一个不可观察的大任务中：`media.visual.001...N` / `media.audio.001...N` 每项拥有自己的 task、subject lock、attempt、预算、checkpoint、Artifact 和 receipt。工作台据此显示“视觉素材 2/8 已签收”等事实进度；单项失败只重试该项。允许纯文字降级时，最终一次失败会生成明确的 omitted-media Artifact，`qa.release` 仍按实际 RuntimePackage 计算媒资覆盖，绝不能把省略回执算作商业素材通过。
+文字冒险的美术链已经拆成三个权威阶段。Art Director 的模型 Run 只产出 `media.requirements` 候选；`media.visual-bible.compile` 以零模型调用把该清单与 `content.cast-bible`、`content.adventure-architecture` 逐字闭合，冻结整体风格、色板、构图规则、连续性规则、每个角色的身份/视觉锚点和素材引用；商业候选随后停在 `media.anchor-author-gate`，作者未确认前任何图片 Provider 任务都不是 ready。确认回执绑定视觉圣经 hash、全量角色 key、命令与说明。
+
+图片和预留音频也不再藏在一个不可观察的大任务中：`media.visual.001...N` / `media.audio.001...N` 每项拥有自己的 task、subject lock、attempt、预算、checkpoint、Artifact 和 receipt。工作台据此显示“视觉素材 2/8 已签收”等事实进度；单项失败只重试该项。允许纯文字降级时，最终一次失败会生成明确的 omitted-media Artifact，`qa.release` 仍按实际 RuntimePackage 计算媒资覆盖，绝不能把省略回执算作商业素材通过。
 
 真实浏览器刷新、IndexedDB 存读档/分支、损坏恢复、导入导出删除、真人计时和情绪反馈仍必须由后续 E2E 与人工回执完成；`quality.playtest-plan` 不能替代这些证据。
 

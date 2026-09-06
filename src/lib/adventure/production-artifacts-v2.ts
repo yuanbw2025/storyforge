@@ -395,6 +395,174 @@ export function parseTextAdventureCastBibleArtifactV1(input: {
   return { schema: 'storyforge.text-adventure-cast-bible-artifact', version: 1, characters }
 }
 
+export interface TextAdventureVisualBibleArtifactV1 {
+  schema: 'storyforge.text-adventure-visual-bible-artifact'
+  version: 1
+  style: string
+  palette: string[]
+  compositionRules: string[]
+  continuityRules: string[]
+  characterAnchors: Array<{
+    characterKey: string
+    name: string
+    role: TextAdventureCastBibleArtifactV1['characters'][number]['role']
+    identity: string
+    visualAnchor: string
+    requirementArtifactKeys: string[]
+    palette: string[]
+    hardConstraints: string[]
+  }>
+  assetRequirements: Array<{
+    artifactKey: string
+    mediaKind: 'background' | 'character-pose' | 'character-expression' | 'cg' | 'ui'
+    sceneTag: string
+    beatKey: string
+  }>
+}
+
+export function parseTextAdventureVisualBibleArtifactV1(input: {
+  value: unknown
+  cast: TextAdventureCastBibleArtifactV1
+  expectedAssetKeys: readonly string[]
+}): TextAdventureVisualBibleArtifactV1 {
+  const row = record(input.value, 'visualBible')
+  exactKeys(row, [
+    'schema', 'version', 'style', 'palette', 'compositionRules', 'continuityRules',
+    'characterAnchors', 'assetRequirements',
+  ], 'visualBible')
+  if (row.schema !== 'storyforge.text-adventure-visual-bible-artifact' || row.version !== 1) {
+    fail('visualBible schema/version 无效')
+  }
+  const palette = textArray(row.palette, 'visualBible.palette', 3, 8)
+  if (palette.some(color => !/^#[0-9a-fA-F]{6}$/.test(color))) fail('visualBible.palette 颜色无效')
+  const castByKey = new Map(input.cast.characters.map(character => [character.key, character]))
+  const characterAnchors = array(
+    row.characterAnchors, 'visualBible.characterAnchors', input.cast.characters.length, input.cast.characters.length,
+  ).map((value, index) => {
+    const item = record(value, `visualBible.characterAnchors[${index}]`)
+    exactKeys(item, [
+      'characterKey', 'name', 'role', 'identity', 'visualAnchor', 'requirementArtifactKeys',
+      'palette', 'hardConstraints',
+    ], `visualBible.characterAnchors[${index}]`)
+    const characterKey = key(item.characterKey, `visualBible.characterAnchors[${index}].characterKey`)
+    const character = castByKey.get(characterKey)
+    if (!character || item.name !== character.name || item.role !== character.role
+      || item.identity !== character.publicIdentity || item.visualAnchor !== character.visualAnchor) {
+      fail(`visualBible 角色锚点未逐字绑定角色圣经:${characterKey}`)
+    }
+    const anchorPalette = textArray(item.palette, `visualBible.characterAnchors[${index}].palette`, 3, 8)
+    if (anchorPalette.some(color => !/^#[0-9a-fA-F]{6}$/.test(color))) fail('visualBible 角色色板无效')
+    return {
+      characterKey, name: character.name, role: character.role,
+      identity: character.publicIdentity, visualAnchor: character.visualAnchor,
+      requirementArtifactKeys: keyArray(
+        item.requirementArtifactKeys,
+        `visualBible.characterAnchors[${index}].requirementArtifactKeys`,
+        0,
+        input.expectedAssetKeys.length,
+      ),
+      palette: anchorPalette,
+      hardConstraints: textArray(
+        item.hardConstraints,
+        `visualBible.characterAnchors[${index}].hardConstraints`,
+        3,
+        30,
+      ),
+    }
+  })
+  if (new Set(characterAnchors.map(item => item.characterKey)).size !== input.cast.characters.length) {
+    fail('visualBible 未不重不漏覆盖角色圣经')
+  }
+  const assetRequirements = array(
+    row.assetRequirements, 'visualBible.assetRequirements',
+    input.expectedAssetKeys.length, input.expectedAssetKeys.length,
+  ).map((value, index) => {
+    const item = record(value, `visualBible.assetRequirements[${index}]`)
+    exactKeys(item, ['artifactKey', 'mediaKind', 'sceneTag', 'beatKey'], `visualBible.assetRequirements[${index}]`)
+    return {
+      artifactKey: key(item.artifactKey, `visualBible.assetRequirements[${index}].artifactKey`),
+      mediaKind: enumValue(
+        item.mediaKind,
+        ['background', 'character-pose', 'character-expression', 'cg', 'ui'],
+        `visualBible.assetRequirements[${index}].mediaKind`,
+      ),
+      sceneTag: key(item.sceneTag, `visualBible.assetRequirements[${index}].sceneTag`),
+      beatKey: key(item.beatKey, `visualBible.assetRequirements[${index}].beatKey`),
+    }
+  })
+  const actualAssetKeys = assetRequirements.map(item => item.artifactKey).sort()
+  const expectedAssetKeys = [...input.expectedAssetKeys].sort()
+  if (actualAssetKeys.some((value, index) => value !== expectedAssetKeys[index])) {
+    fail('visualBible 素材需求未精确绑定当前 Plan')
+  }
+  const assetKeySet = new Set(expectedAssetKeys)
+  if (characterAnchors.some(anchor => anchor.requirementArtifactKeys.some(value => !assetKeySet.has(value)))) {
+    fail('visualBible 角色锚点引用未知素材')
+  }
+  return {
+    schema: 'storyforge.text-adventure-visual-bible-artifact', version: 1,
+    style: text(row.style, 'visualBible.style', 2_000), palette,
+    compositionRules: textArray(row.compositionRules, 'visualBible.compositionRules', 2, 20),
+    continuityRules: textArray(row.continuityRules, 'visualBible.continuityRules', 3, 30),
+    characterAnchors, assetRequirements,
+  }
+}
+
+export interface TextAdventureMediaAnchorDecisionArtifactV1 {
+  schema: 'storyforge.text-adventure-media-anchor-decision-artifact'
+  version: 1
+  visualBibleHash: string
+  decision: 'not-required-noncommercial' | 'confirm-character-anchors'
+  confirmedCharacterKeys: string[]
+  authorCommandId: string | null
+  authorNote: string | null
+}
+
+export function parseTextAdventureMediaAnchorDecisionArtifactV1(input: {
+  value: unknown
+  visualBible: TextAdventureVisualBibleArtifactV1
+  visualBibleHash: string
+  confirmationRequired: boolean
+}): TextAdventureMediaAnchorDecisionArtifactV1 {
+  const row = record(input.value, 'mediaAnchorDecision')
+  exactKeys(row, [
+    'schema', 'version', 'visualBibleHash', 'decision', 'confirmedCharacterKeys',
+    'authorCommandId', 'authorNote',
+  ], 'mediaAnchorDecision')
+  if (row.schema !== 'storyforge.text-adventure-media-anchor-decision-artifact' || row.version !== 1
+    || row.visualBibleHash !== input.visualBibleHash) fail('mediaAnchorDecision schema/version/hash 无效')
+  const decision = enumValue(
+    row.decision,
+    ['not-required-noncommercial', 'confirm-character-anchors'],
+    'mediaAnchorDecision.decision',
+  )
+  const confirmedCharacterKeys = keyArray(
+    row.confirmedCharacterKeys,
+    'mediaAnchorDecision.confirmedCharacterKeys',
+    0,
+    input.visualBible.characterAnchors.length,
+  )
+  const expectedKeys = input.visualBible.characterAnchors.map(anchor => anchor.characterKey).sort()
+  if (input.confirmationRequired) {
+    if (decision !== 'confirm-character-anchors'
+      || confirmedCharacterKeys.length !== expectedKeys.length
+      || confirmedCharacterKeys.slice().sort().some((value, index) => value !== expectedKeys[index])
+      || typeof row.authorCommandId !== 'string' || !row.authorCommandId.trim()
+      || typeof row.authorNote !== 'string' || !row.authorNote.trim()) {
+      fail('mediaAnchorDecision 缺少完整作者确认')
+    }
+  } else if (decision !== 'not-required-noncommercial' || confirmedCharacterKeys.length > 0
+    || row.authorCommandId !== null || row.authorNote !== null) {
+    fail('mediaAnchorDecision 非商业自动回执无效')
+  }
+  return {
+    schema: 'storyforge.text-adventure-media-anchor-decision-artifact', version: 1,
+    visualBibleHash: row.visualBibleHash as string, decision, confirmedCharacterKeys,
+    authorCommandId: row.authorCommandId as string | null,
+    authorNote: row.authorNote as string | null,
+  }
+}
+
 export interface TextAdventureNarrativeArcPlanArtifactV1 {
   schema: 'storyforge.text-adventure-narrative-arc-plan-artifact'
   version: 1

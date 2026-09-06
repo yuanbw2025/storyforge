@@ -327,7 +327,8 @@ export async function createProductProductionPlanV3(input: {
   const activeMediaTaskCount = textAdventure
     ? visualArtifactKeys.length + audioArtifactKeys.length
     : activeMediaLaneCount
-  const durationSlots = modelTaskCount + (textAdventure ? 5 : 4) + activeMediaTaskCount
+  const textAdventureDeterministicTaskCount = textAdventure ? 6 + Number(activeVisual) : 4
+  const durationSlots = modelTaskCount + textAdventureDeterministicTaskCount + activeMediaTaskCount
   const perDuration = Math.floor(brief.productionBudget.maximumDurationMs / Math.max(1, durationSlots))
   const costTaskCount = modelTaskCount + activeMediaTaskCount
   const perCost = brief.productionBudget.maximumCostUsd == null
@@ -624,6 +625,26 @@ export async function createProductProductionPlanV3(input: {
       acceptanceGateIds: ['artifact.protocol', 'media.requirements.coverage'],
     }),
   )
+  if (textAdventure) tasks.push(productionTask({
+    taskKey: 'media.visual-bible.compile', lane: 'planning', kind: 'text-adventure-visual-bible',
+    skillId: null, executionMode: 'deterministic', dependsOn: ['media.requirements'],
+    inputArtifactKeys: ['content.cast-bible', 'content.adventure-architecture', 'media.requirements'],
+    outputArtifactKeys: ['media.visual-bible'], requirementKeys: [], capabilityRequirementKeys: [],
+    concurrencyGroup: 'deterministic', subjectLockKeys: ['media.visual-bible'], priority: 75,
+    budgetReservation: reservation({ durationMs: perDuration }), maxAttempts: 1,
+    timeoutMs: 30_000, failurePolicy: 'pause', fallbackTaskKey: null,
+    acceptanceGateIds: ['artifact.protocol', 'media.visual-bible'],
+  }))
+  if (textAdventure && activeVisual) tasks.push(productionTask({
+    taskKey: 'media.anchor-author-gate', lane: 'planning', kind: 'text-adventure-media-anchor-decision',
+    skillId: null, executionMode: 'deterministic', dependsOn: ['media.visual-bible.compile'],
+    inputArtifactKeys: ['content.cast-bible', 'media.visual-bible'],
+    outputArtifactKeys: ['media.anchor-decision'], requirementKeys: [], capabilityRequirementKeys: [],
+    concurrencyGroup: 'deterministic', subjectLockKeys: ['media.anchor-decision'], priority: 74,
+    budgetReservation: reservation({ durationMs: perDuration }), maxAttempts: 1,
+    timeoutMs: 30_000, failurePolicy: 'pause', fallbackTaskKey: null,
+    acceptanceGateIds: ['artifact.protocol', 'media.character-anchors-authorized'],
+  }))
   const mediaDependencies: string[] = []
   if (activeVisual) {
     const taskKeys = textAdventure ? visualArtifactKeys : ['media.visual']
@@ -631,7 +652,10 @@ export async function createProductProductionPlanV3(input: {
     for (const taskKey of taskKeys) tasks.push(productionTask({
       taskKey, lane: 'visual', kind: textAdventure ? 'image-asset' : 'image-bundle',
       skillId: 'product-production.media-request.v1', executionMode: 'media-provider',
-      dependsOn: ['media.requirements'], inputArtifactKeys: ['media.requirements'],
+      dependsOn: textAdventure ? ['media.anchor-author-gate'] : ['media.requirements'],
+      inputArtifactKeys: textAdventure
+        ? ['media.requirements', 'content.cast-bible', 'media.visual-bible', 'media.anchor-decision']
+        : ['media.requirements'],
       outputArtifactKeys: textAdventure ? [taskKey] : visualArtifactKeys,
       requirementKeys: brief.media.requiredMediaKinds.filter(kind => !['bgm', 'sfx', 'voice'].includes(kind)),
       capabilityRequirementKeys: imageCapabilities, concurrencyGroup: 'media-provider',
@@ -675,7 +699,8 @@ export async function createProductProductionPlanV3(input: {
       ] : []
   const integrationDependencies = [
     textAdventure ? 'integration.narrative' : 'content.narrative', 'content.product-module', ...textAdventureDependencies,
-    'media.requirements', ...mediaDependencies,
+    'media.requirements', ...(textAdventure ? ['media.visual-bible.compile'] : []),
+    ...(textAdventure && activeVisual ? ['media.anchor-author-gate'] : []), ...mediaDependencies,
   ]
   const textAdventureIntegrationArtifactKeys = textAdventure
     ? [
@@ -693,7 +718,8 @@ export async function createProductProductionPlanV3(input: {
     skillId: null, executionMode: 'deterministic', dependsOn: integrationDependencies,
     inputArtifactKeys: [
       'content.narrative', 'content.product-module', ...textAdventureIntegrationArtifactKeys,
-      'media.requirements',
+      'media.requirements', ...(textAdventure ? ['media.visual-bible'] : []),
+      ...(textAdventure && activeVisual ? ['media.anchor-decision'] : []),
       ...visualArtifactKeys, ...audioArtifactKeys,
     ],
     outputArtifactKeys: integrationArtifactKeys, requirementKeys: [],

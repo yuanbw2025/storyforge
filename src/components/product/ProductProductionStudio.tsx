@@ -13,6 +13,7 @@ import {
   createProductProductionWithBriefV1,
   evaluateProductProductionAuthorizationReadinessV1,
   inspectProductProductionCapabilityReadinessV1,
+  isTextAdventureMediaAnchorBlockerV1,
   isTextAdventureSourceDecisionBlockerV1,
   listProductProductionReviewArtifactsV1,
   listProductProductionWorkspaceV1,
@@ -20,6 +21,7 @@ import {
   readProductProductionDetailsV1,
   readProductProductionProgressV1,
   retryProductProductionBlockerV1,
+  resolveTextAdventureMediaAnchorDecisionV1,
   resolveTextAdventureSourceDecisionV1,
   restoreArchivedProductProductionV1,
   runAuthorizedProductProductionV1,
@@ -160,7 +162,9 @@ function reviewArtifactLabel(key: string): string {
     'content.adventure-side-quests': '支线任务包',
     'content.adventure-ambient-events': '区域与随机事件包',
     'quality.adventure-review': '独立叙事质量审查',
-    'media.requirements': '视觉圣经与美术需求',
+    'media.requirements': '美术需求清单',
+    'media.visual-bible': '冻结视觉圣经与角色锚点',
+    'media.anchor-decision': '角色视觉锚点作者确认回执',
     'runtime.package': '装配后的可玩运行包',
     'quality.autoplay': '确定性自动游玩报告',
     'quality.report': '静态检查与自动质量报告',
@@ -199,7 +203,9 @@ function productionTaskPresentation(taskKey: string): { label: string; owner: st
     'integration.narrative': ['三幕叙事确定性装配', '叙事装配器'],
     'content.narrative': ['装配后的主线与分支叙事', '叙事装配器'],
     'content.adventure-quality-review': ['叙事连续性独立审查', '连续性与内容审校'],
-    'media.requirements': ['视觉圣经与美术需求', '美术总监'],
+    'media.requirements': ['美术需求清单', '美术总监'],
+    'media.visual-bible.compile': ['冻结视觉圣经与角色锚点', '确定性视觉圣经编译器'],
+    'media.anchor-author-gate': ['角色视觉锚点作者确认', '确定性治理系统'],
     'media.visual': ['受控图片生成与验收', '媒资 Provider'],
     'media.audio': ['受控音频生成与验收', '媒资 Provider'],
     'integration.package': ['确定性游戏装配', '运行包编译器'],
@@ -246,6 +252,49 @@ function sourceDecisionDisplay(
       : []
   }) : []
   return { decision: row.decision, gaps, privateAdditions }
+}
+
+interface MediaAnchorDisplayV1 {
+  style: string
+  palette: string[]
+  characterAnchors: Array<{
+    characterKey: string
+    name: string
+    role: string
+    identity: string
+    visualAnchor: string
+    palette: string[]
+  }>
+}
+
+function mediaAnchorDisplay(
+  artifacts: ProductProductionReviewArtifactV1[],
+): MediaAnchorDisplayV1 | null {
+  const artifact = artifacts.find(item => item.artifactKey === 'media.visual-bible')
+  if (!artifact?.payload || typeof artifact.payload !== 'object' || Array.isArray(artifact.payload)) return null
+  const row = artifact.payload as Record<string, unknown>
+  if (typeof row.style !== 'string' || !Array.isArray(row.palette) || !Array.isArray(row.characterAnchors)) return null
+  const characterAnchors = row.characterAnchors.flatMap(value => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return []
+    const anchor = value as Record<string, unknown>
+    return typeof anchor.characterKey === 'string' && typeof anchor.name === 'string'
+      && typeof anchor.role === 'string' && typeof anchor.identity === 'string'
+      && typeof anchor.visualAnchor === 'string' && Array.isArray(anchor.palette)
+      ? [{
+          characterKey: anchor.characterKey,
+          name: anchor.name,
+          role: anchor.role,
+          identity: anchor.identity,
+          visualAnchor: anchor.visualAnchor,
+          palette: anchor.palette.filter((color): color is string => typeof color === 'string'),
+        }]
+      : []
+  })
+  return {
+    style: row.style,
+    palette: row.palette.filter((color): color is string => typeof color === 'string'),
+    characterAnchors,
+  }
 }
 
 function compatibilityReport(value: string | undefined): ProductBuildCompatibilityReportV1 | null {
@@ -809,6 +858,25 @@ export default function ProductProductionStudio(props: {
       : '当前 Build 已取消；世界版本、旧 Build 与已发布内容未被修改。')
   }, '处理来源作者决策')
 
+  const resolveMediaAnchorDecision = (
+    action: 'confirm-character-anchors' | 'cancel',
+  ) => run(async () => {
+    if (!details) throw new Error('缺少 Production。')
+    const productionId = details.production.id!
+    await resolveTextAdventureMediaAnchorDecisionV1({
+      scope: props.scope,
+      details,
+      action,
+      note: action === 'confirm-character-anchors'
+        ? '作者已在制作工作台检查当前 Build 的视觉风格、角色身份与角色视觉锚点，同意按此冻结基线开始逐项出图。'
+        : '作者拒绝当前角色视觉锚点并取消 Build；修改视觉方向后再创建新 Build。',
+    })
+    await refresh(productionId)
+    setMessage(action === 'confirm-character-anchors'
+      ? '角色视觉锚点已由作者确认并冻结为决策证据；逐项图片生产将从新 epoch 继续。'
+      : '当前 Build 已取消；已发布版本、世界版本和已有媒资未被修改。')
+  }, '处理角色视觉锚点决策')
+
   const selectedSuggestion = suggestions.find(item => item.suggestionKey === suggestionKey) ?? null
   const canPause = details && ['producing', 'preview-ready'].includes(details.production.status)
     && details.build && !['released', 'cancelled', 'failed', 'archived', 'paused', 'recovery-required'].includes(details.build.status)
@@ -817,6 +885,11 @@ export default function ProductProductionStudio(props: {
   const sourceDecision = useMemo(
     () => sourceDecisionBlocker ? sourceDecisionDisplay(reviewArtifacts) : null,
     [reviewArtifacts, sourceDecisionBlocker],
+  )
+  const mediaAnchorBlocker = !!details && isTextAdventureMediaAnchorBlockerV1(details)
+  const mediaAnchor = useMemo(
+    () => mediaAnchorBlocker ? mediaAnchorDisplay(reviewArtifacts) : null,
+    [mediaAnchorBlocker, reviewArtifacts],
   )
   const canEvolve = details && !['brief-ready', 'consulting', 'producing', 'paused'].includes(details.production.status)
     && (details.production.status === 'released'
@@ -991,7 +1064,31 @@ export default function ProductProductionStudio(props: {
           </div>
         </header>
         <section className="mt-5 grid gap-3 md:grid-cols-4"><article className="rounded border border-border bg-bg-elevated p-4"><small className="text-[9px] text-text-muted">BRIEF</small><strong className="mt-1 block text-sm">{details.brief ? `r${details.brief.revision} · ${statusLabel(details.brief.status)}` : '未建立'}</strong></article><article className="rounded border border-border bg-bg-elevated p-4"><small className="text-[9px] text-text-muted">BUILD</small><strong className="mt-1 block text-sm">{details.build ? `#${details.build.buildNumber} · ${statusLabel(details.build.status)}` : '等待授权'}</strong></article><article className="rounded border border-border bg-bg-elevated p-4"><small className="text-[9px] text-text-muted">ARTIFACTS</small><strong className="mt-1 block text-sm">{details.artifactCount} 个版本</strong></article><article className="rounded border border-border bg-bg-elevated p-4"><small className="text-[9px] text-text-muted">RELEASE</small><strong className="mt-1 block text-sm">{details.production.currentProductReleaseId ? `#${details.production.currentProductReleaseId}` : '未发布'}</strong></article></section>
-        <section className="mt-5 rounded border border-border bg-bg-elevated p-5"><h2 className="text-sm font-semibold">下一步</h2><p className="mt-2 text-[10px] leading-5 text-text-muted">一次作者授权会启动整套自动制作；正式文本任务直接复用“设置”里的全局 AI 配置，不另收 API Key。每一步都有 CAS、scope、epoch 和 hash 复验。</p>{details.production.status === 'brief-ready' && authorizationReadiness && !authorizationReadiness.ready && <div className="mt-3 rounded border border-error/30 bg-error/5 p-3 text-[10px] text-error" data-testid="product-production-authorization-blocker"><strong className="block">能力未绑定，尚未创建 Build</strong><span className="mt-1 block">{authorizationReadiness.blockerMessages.join('；')}</span></div>}{sourceDecisionBlocker && <div className="mt-3 rounded border border-accent/40 bg-accent/5 p-4 text-[10px] text-text-primary" data-testid="text-adventure-source-decision-blocker"><strong className="block text-xs">来源编辑已完成审查，等待作者决策</strong>{sourceDecision?.decision === 'ready-with-private-additions' ? <><p className="mt-2 leading-5 text-text-muted">冻结世界资料可以支撑主线，但需要以下内容仅作为本游戏私域事实补充。接受后不会回写或改变 WorldRelease。</p><ul className="mt-2 grid gap-2">{sourceDecision.privateAdditions.map(item => <li key={item.key} className="rounded bg-bg-base p-2"><strong>{item.title}</strong><span className="ml-2 text-text-muted">{item.rationale}</span></li>)}</ul></> : <><p className="mt-2 leading-5 text-error">来源中存在阻断缺口或事实冲突，系统禁止用 AI 私自补写来绕过。</p><ul className="mt-2 grid gap-1 text-text-muted">{sourceDecision?.gaps.map(gap => <li key={gap}>· {gap}</li>)}</ul></>}<p className="mt-3 text-text-muted">若不接受，请取消本 Build，返回来源选择或缩小产品范围后重新授权；系统不会原地改写已授权 Brief。</p></div>}{canRetryBlocker && <div className="mt-3 rounded border border-error/30 bg-error/5 p-3 text-[10px] text-error"><strong className="block">自动制作停在可恢复边界</strong><span className="mt-1 block">{blockerSummary || '执行能力返回失败；可检查全局 AI 配置后重试。'}</span></div>}<div className="mt-4 flex flex-wrap gap-2">{details.production.status === 'brief-ready' && <button disabled={busy || productionRunning || authorizationReadiness?.ready !== true} onClick={authorize} className="flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white disabled:opacity-40"><ShieldCheck className="h-3.5 w-3.5" />作者授权并开始自动制作</button>}{details.build && ['authorized', 'building'].includes(details.build.status) && !productionRunning && <button disabled={busy} onClick={build} className="flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white"><PackageCheck className="h-3.5 w-3.5" />继续自动制作</button>}{sourceDecision?.decision === 'ready-with-private-additions' && <button disabled={busy || productionRunning} onClick={() => resolveSourceDecision('accept-product-private-expansion')} className="flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white disabled:opacity-40"><ShieldCheck className="h-3.5 w-3.5" />接受私域补充并继续</button>}{sourceDecisionBlocker && <button disabled={busy || productionRunning} onClick={() => resolveSourceDecision('cancel')} className="flex items-center gap-2 rounded border border-error/40 px-4 py-2 text-xs text-error disabled:opacity-40"><Square className="h-3.5 w-3.5" />取消本次 Build</button>}{canRetryBlocker && <button disabled={busy || productionRunning} onClick={retryBlocker} className="flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white"><RefreshCw className="h-3.5 w-3.5" />修正后重试</button>}{details.build && ['preview-ready', 'release-ready', 'released'].includes(details.build.status) && <button disabled={busy || productionRunning} onClick={preview} className="flex items-center gap-2 rounded border border-accent/40 bg-accent/10 px-4 py-2 text-xs text-accent"><Play className="h-3.5 w-3.5" />{details.build.status === 'released' ? '试玩此 Build' : '试玩未发布 Build'}</button>}{details.build?.status === 'release-ready' && <button disabled={busy || productionRunning || (commercialPerformanceRequired && !commercialQualityPassed)} onClick={publish} className="flex items-center gap-2 rounded bg-success px-4 py-2 text-xs text-white disabled:opacity-40"><Rocket className="h-3.5 w-3.5" />复验并原子发布</button>}{details.production.status === 'released' && <button disabled={busy} onClick={() => props.onPublished?.(details.production.productType)} className="flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white"><Gamepad2 className="h-3.5 w-3.5" />进入玩家模式</button>}</div></section>
+        <section className="mt-5 rounded border border-border bg-bg-elevated p-5">
+          <h2 className="text-sm font-semibold">下一步</h2>
+          <p className="mt-2 text-[10px] leading-5 text-text-muted">一次作者授权会启动整套自动制作；正式文本任务直接复用“设置”里的全局 AI 配置，不另收 API Key。每一步都有 CAS、scope、epoch 和 hash 复验。</p>
+          {details.production.status === 'brief-ready' && authorizationReadiness && !authorizationReadiness.ready && <div className="mt-3 rounded border border-error/30 bg-error/5 p-3 text-[10px] text-error" data-testid="product-production-authorization-blocker"><strong className="block">能力未绑定，尚未创建 Build</strong><span className="mt-1 block">{authorizationReadiness.blockerMessages.join('；')}</span></div>}
+          {sourceDecisionBlocker && <div className="mt-3 rounded border border-accent/40 bg-accent/5 p-4 text-[10px] text-text-primary" data-testid="text-adventure-source-decision-blocker"><strong className="block text-xs">来源编辑已完成审查，等待作者决策</strong>{sourceDecision?.decision === 'ready-with-private-additions' ? <><p className="mt-2 leading-5 text-text-muted">冻结世界资料可以支撑主线，但需要以下内容仅作为本游戏私域事实补充。接受后不会回写或改变 WorldRelease。</p><ul className="mt-2 grid gap-2">{sourceDecision.privateAdditions.map(item => <li key={item.key} className="rounded bg-bg-base p-2"><strong>{item.title}</strong><span className="ml-2 text-text-muted">{item.rationale}</span></li>)}</ul></> : <><p className="mt-2 leading-5 text-error">来源中存在阻断缺口或事实冲突，系统禁止用 AI 私自补写来绕过。</p><ul className="mt-2 grid gap-1 text-text-muted">{sourceDecision?.gaps.map(gap => <li key={gap}>· {gap}</li>)}</ul></>}<p className="mt-3 text-text-muted">若不接受，请取消本 Build，返回来源选择或缩小产品范围后重新授权；系统不会原地改写已授权 Brief。</p></div>}
+          {mediaAnchorBlocker && <div className="mt-3 rounded border border-accent/40 bg-accent/5 p-4 text-[10px] text-text-primary" data-testid="text-adventure-media-anchor-blocker">
+            <strong className="block text-xs">美术总监已完成视觉圣经，等待作者确认角色锚点</strong>
+            <p className="mt-2 leading-5 text-text-muted">确认后，每张插图会把下列身份、视觉特征和色板作为不可弱化约束；未经确认不会调用图片 Provider。</p>
+            {mediaAnchor ? <><p className="mt-2 rounded bg-bg-base p-2"><strong>整体风格：</strong>{mediaAnchor.style}</p><ul className="mt-2 grid gap-2">{mediaAnchor.characterAnchors.map(anchor => <li key={anchor.characterKey} className="rounded border border-border bg-bg-base p-3"><span className="flex flex-wrap items-center gap-2"><strong>{anchor.name}</strong><em className="not-italic text-accent">{anchor.role}</em><span className="text-text-muted">{anchor.identity}</span></span><p className="mt-1 leading-5 text-text-muted">{anchor.visualAnchor}</p><span className="mt-2 flex gap-1" aria-label={`${anchor.name} 色板`}>{anchor.palette.map(color => <i key={color} title={color} className="h-4 w-4 rounded border border-border" style={{ backgroundColor: color }} />)}</span></li>)}</ul></> : <p className="mt-2 text-error">视觉圣经读取失败；请保留当前 Build 并检查工件。</p>}
+            <p className="mt-3 text-text-muted">若不接受，请取消本 Build，再以“视觉”演化目标创建新版。确认只对当前冻结视觉圣经 hash 有效。</p>
+          </div>}
+          {canRetryBlocker && <div className="mt-3 rounded border border-error/30 bg-error/5 p-3 text-[10px] text-error"><strong className="block">自动制作停在可恢复边界</strong><span className="mt-1 block">{blockerSummary || '执行能力返回失败；可检查全局 AI 配置后重试。'}</span></div>}
+          <div className="mt-4 flex flex-wrap gap-2">
+            {details.production.status === 'brief-ready' && <button disabled={busy || productionRunning || authorizationReadiness?.ready !== true} onClick={authorize} className="flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white disabled:opacity-40"><ShieldCheck className="h-3.5 w-3.5" />作者授权并开始自动制作</button>}
+            {details.build && ['authorized', 'building'].includes(details.build.status) && !productionRunning && <button disabled={busy} onClick={build} className="flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white"><PackageCheck className="h-3.5 w-3.5" />继续自动制作</button>}
+            {sourceDecision?.decision === 'ready-with-private-additions' && <button disabled={busy || productionRunning} onClick={() => resolveSourceDecision('accept-product-private-expansion')} className="flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white disabled:opacity-40"><ShieldCheck className="h-3.5 w-3.5" />接受私域补充并继续</button>}
+            {sourceDecisionBlocker && <button disabled={busy || productionRunning} onClick={() => resolveSourceDecision('cancel')} className="flex items-center gap-2 rounded border border-error/40 px-4 py-2 text-xs text-error disabled:opacity-40"><Square className="h-3.5 w-3.5" />取消本次 Build</button>}
+            {mediaAnchorBlocker && mediaAnchor && <button disabled={busy || productionRunning} onClick={() => resolveMediaAnchorDecision('confirm-character-anchors')} className="flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white disabled:opacity-40"><ShieldCheck className="h-3.5 w-3.5" />确认角色锚点并开始出图</button>}
+            {mediaAnchorBlocker && <button disabled={busy || productionRunning} onClick={() => resolveMediaAnchorDecision('cancel')} className="flex items-center gap-2 rounded border border-error/40 px-4 py-2 text-xs text-error disabled:opacity-40"><Square className="h-3.5 w-3.5" />拒绝并取消 Build</button>}
+            {canRetryBlocker && <button disabled={busy || productionRunning} onClick={retryBlocker} className="flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white"><RefreshCw className="h-3.5 w-3.5" />修正后重试</button>}
+            {details.build && ['preview-ready', 'release-ready', 'released'].includes(details.build.status) && <button disabled={busy || productionRunning} onClick={preview} className="flex items-center gap-2 rounded border border-accent/40 bg-accent/10 px-4 py-2 text-xs text-accent"><Play className="h-3.5 w-3.5" />{details.build.status === 'released' ? '试玩此 Build' : '试玩未发布 Build'}</button>}
+            {details.build?.status === 'release-ready' && <button disabled={busy || productionRunning || (commercialPerformanceRequired && !commercialQualityPassed)} onClick={publish} className="flex items-center gap-2 rounded bg-success px-4 py-2 text-xs text-white disabled:opacity-40"><Rocket className="h-3.5 w-3.5" />复验并原子发布</button>}
+            {details.production.status === 'released' && <button disabled={busy} onClick={() => props.onPublished?.(details.production.productType)} className="flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white"><Gamepad2 className="h-3.5 w-3.5" />进入玩家模式</button>}
+          </div>
+        </section>
         {progress && progress.tasks.length > 0 && <section aria-live="polite" className="mt-5 rounded border border-border bg-bg-elevated p-5">
           <div className="flex items-center justify-between gap-3"><h2 className="text-sm font-semibold">自动制作任务</h2><code className="text-[9px] text-text-muted">Build #{progress.buildNumber} · epoch {progress.controlEpoch}</code></div>
           <div className="mt-4 rounded border border-border bg-bg-base p-3" data-testid="product-production-overall-progress"><span className="flex items-center justify-between gap-3 text-[10px]"><strong>总任务进度 {overallTaskProgress.percent}%</strong><span className="text-text-muted">{overallTaskProgress.completed}/{overallTaskProgress.total} 个 durable task 已签收</span></span><progress aria-label="文字冒险总任务进度" className="mt-2 w-full" max={100} value={overallTaskProgress.percent}>{overallTaskProgress.percent}%</progress><p className="mt-2 text-[9px] text-text-muted">{overallTaskProgress.active.length > 0 ? `正在执行：${overallTaskProgress.active.join('、')}` : progress.terminal ? '全部计划任务已完成，等待后续人工发布门。' : '等待依赖或作者处理当前闸门。'}{overallTaskProgress.totalVisual > 0 ? ` · 视觉素材 ${overallTaskProgress.completedVisual}/${overallTaskProgress.totalVisual} 已生成并签收` : ''}</p></div>

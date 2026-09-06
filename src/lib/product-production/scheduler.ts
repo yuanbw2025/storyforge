@@ -599,7 +599,8 @@ function evolutionTaskLane(taskKey: string): 'content' | 'product' | 'visual' | 
     || taskKey === 'content.adventure-ambient-events'
     || taskKey === 'content.adventure-quality-review') return 'content'
   if (taskKey === 'content.product-module') return 'product'
-  if (taskKey === 'media.requirements' || taskKey === 'media.visual'
+  if (taskKey === 'media.requirements' || taskKey === 'media.visual-bible.compile'
+    || taskKey === 'media.anchor-author-gate' || taskKey === 'media.visual'
     || taskKey.startsWith('media.visual.')) return 'visual'
   if (taskKey === 'media.audio' || taskKey.startsWith('media.audio.')) return 'audio'
   return null
@@ -706,6 +707,41 @@ async function applyCrossBuildEvolutionReuse(input: {
       // media plan downstream to be carried once this fresh receipt exists.
       reusableTasks.add(task.taskKey)
       tasks.push(task)
+      continue
+    }
+    if (task.taskKey === 'media.visual-bible.compile' && !affected.has('visual')
+      && !affected.has('content') && !affected.has('world-source')
+      && !!parentTask && task.dependsOn.every(dependency => reusableTasks.has(dependency))) {
+      // The compiler is deterministic and cheap. Re-run it in the target Build
+      // so the visual Bible is proven against this Build's carried inputs.
+      reusableTasks.add(task.taskKey)
+      tasks.push(task)
+      continue
+    }
+    if (task.taskKey === 'media.anchor-author-gate' && !affected.has('visual')
+      && !affected.has('content') && !affected.has('world-source')
+      && !!parentTask && task.dependsOn.every(dependency => reusableTasks.has(dependency))
+      && outputs.every(Boolean)) {
+      const artifacts = outputs as Array<NonNullable<(typeof outputs)[number]>>
+      const reuseKey = await hashProductProductionValueV2({
+        schema: 'storyforge.product-production-cross-build-reuse', version: 1,
+        sourceBuildNumber: parentBuild.buildNumber, targetBuildNumber: input.build.buildNumber,
+        taskKey: task.taskKey, userImpact: evolution.affectedLanes,
+        artifacts: artifacts.map(row => ({ artifactKey: row.artifactKey, contentHash: row.contentHash })),
+      })
+      reusableTasks.add(task.taskKey)
+      reusableArtifactKeys.push(...task.outputArtifactKeys)
+      tasks.push({
+        ...task,
+        reuse: {
+          sourceBuildNumber: parentBuild.buildNumber,
+          sourceArtifactKey: artifacts[0].artifactKey,
+          sourceContentHash: artifacts[0].contentHash,
+          reuseKey,
+          requiresRevalidation: true,
+          reason: '作者 impact 未包含 visual/content/world-source，角色锚点及其视觉圣经依赖闭包未变化',
+        },
+      })
       continue
     }
     const canReuse = task.executionMode !== 'deterministic' && lane != null && !affected.has(lane)
@@ -839,7 +875,7 @@ function authorResolutionEvidence(
   const candidate = resolution as Record<string, unknown>
   const actions: ProductProductionBlockerResolutionV1['action'][] = [
     'retry', 'fallback', 'waive-soft-gate', 'change-capability',
-    'accept-product-private-expansion', 'cancel',
+    'accept-product-private-expansion', 'confirm-character-anchors', 'cancel',
   ]
   if (typeof candidate.action !== 'string'
     || !actions.includes(candidate.action as ProductProductionBlockerResolutionV1['action'])

@@ -8,6 +8,8 @@ import {
   parseTextAdventureSourceDecisionArtifactV1,
   parseTextAdventureSourceSufficiencyArtifactV1,
   parseTextAdventureStoryBibleArtifactV1,
+  parseTextAdventureMediaAnchorDecisionArtifactV1,
+  parseTextAdventureVisualBibleArtifactV1,
 } from '../../src/lib/adventure/production-artifacts-v2'
 import {
   assembleTextAdventureNarrativeFromSceneScriptsV1,
@@ -179,6 +181,55 @@ describe('TEXTADV-3 · 专业生产工件合同', () => {
     expect(() => parseTextAdventureSourceDecisionArtifactV1({
       value, sourceAudit, sourceAuditHash: 'b'.repeat(64),
     })).toThrow('未绑定当前来源审计')
+  })
+
+  it('视觉圣经逐字绑定角色圣经，商业出图回执必须确认全部角色且绑定当前 hash', () => {
+    const cast = castBible('commercial-candidate')
+    const visualBible = parseTextAdventureVisualBibleArtifactV1({
+      value: {
+        schema: 'storyforge.text-adventure-visual-bible-artifact', version: 1,
+        style: '克制的雾港写实插画，角色先于环境统一定稿。',
+        palette: ['#172033', '#52647A', '#D8C6A0'],
+        compositionRules: ['正文留出稳定文字安全区', '关键抉择使用近景强化人物关系'],
+        continuityRules: ['角色跨场景保持身份和年龄段', '服装与标志物保持一致', '环境光照服从场景时刻'],
+        characterAnchors: cast.characters.map(character => ({
+          characterKey: character.key, name: character.name, role: character.role,
+          identity: character.publicIdentity, visualAnchor: character.visualAnchor,
+          requirementArtifactKeys: character.role === 'player' ? ['media.visual.001'] : [],
+          palette: ['#172033', '#52647A', '#D8C6A0'],
+          hardConstraints: ['保持角色身份和年龄段', `身份:${character.publicIdentity}`, `锚点:${character.visualAnchor}`],
+        })),
+        assetRequirements: [{
+          artifactKey: 'media.visual.001', mediaKind: 'character-pose',
+          sceneTag: 'scene.opening', beatKey: 'beat.opening',
+        }],
+      },
+      cast,
+      expectedAssetKeys: ['media.visual.001'],
+    })
+    const visualBibleHash = 'a'.repeat(64)
+    const decision = {
+      schema: 'storyforge.text-adventure-media-anchor-decision-artifact', version: 1,
+      visualBibleHash, decision: 'confirm-character-anchors',
+      confirmedCharacterKeys: cast.characters.map(character => character.key),
+      authorCommandId: 'author.confirm-anchors', authorNote: '已逐项核对并确认。',
+    }
+    expect(parseTextAdventureMediaAnchorDecisionArtifactV1({
+      value: decision, visualBible, visualBibleHash, confirmationRequired: true,
+    }).confirmedCharacterKeys).toHaveLength(6)
+    expect(() => parseTextAdventureMediaAnchorDecisionArtifactV1({
+      value: { ...decision, confirmedCharacterKeys: decision.confirmedCharacterKeys.slice(1) },
+      visualBible, visualBibleHash, confirmationRequired: true,
+    })).toThrow('缺少完整作者确认')
+    expect(() => parseTextAdventureVisualBibleArtifactV1({
+      value: {
+        ...visualBible,
+        characterAnchors: visualBible.characterAnchors.map((anchor, index) => index === 0
+          ? { ...anchor, visualAnchor: '模型擅自改写的视觉身份' } : anchor),
+      },
+      cast,
+      expectedAssetKeys: ['media.visual.001'],
+    })).toThrow('未逐字绑定角色圣经')
   })
 
   it('故事与角色圣经冻结铺垫回收、结局、知识边界和独立角色身份', () => {

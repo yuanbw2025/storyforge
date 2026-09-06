@@ -1,6 +1,6 @@
 # 02 · 专业 Agent 团队与岗位 Skill 方案
 
-> 层级：L2 · 版本：1.1.0 · 生效：2026-09-07
+> 层级：L2 · 版本：1.2.0 · 生效：2026-09-07
 > 性质：目标 Agent/Skill/Run Contract 设计；代码注册、执行回执和测试同时存在后才算实现。
 
 ## 1. 核心裁决
@@ -27,7 +27,7 @@ Agent 是有稳定职责、权限、上下文边界和最终责任的岗位主�
 | `text-adventure-quest-scripter` | 任务脚本工程师 | `quest-script-compile.v1` | 主支线/事件计划、系统设计、状态注册表 | `quest.scripts` 候选；把设计编译为条件、命令、检查、效果、阶段和结局条件 |
 | `text-adventure-scene-writer` | 分场叙事作者 | `scene-script.v1` | 指定场景卡、角色圣经、任务脚本、前后场摘要 | 分批 `scene.script.*`；写玩家可见正文、对话、选择措辞和失败推进文本 |
 | `text-adventure-dialogue-editor` | 独立对白编辑 | `dialogue-pass.v1` | 角色圣经、三幕分场候选 | `dialogue.pass`；逐条审校声音、知识边界、潜台词与玩家选择措辞，只能修订表达文本 |
-| `text-adventure-art-director` | 美术总监 | `visual-bible-and-asset-plan.v1` | 故事/角色/场景定稿与媒资档位 | `visual.bible`、`media.requirements`、审图结果；不直接拥有 provider transport |
+| `text-adventure-art-director` | 美术总监 | `visual-direction.v1` | 故事/角色/场景定稿与媒资档位 | `media.requirements` 候选；确定性编译器再与角色/空间圣经闭合为 `media.visual-bible`，本 Agent 不直接拥有 provider transport |
 | `text-adventure-continuity-editor` | 连续性与内容审校 | `continuity-and-literary-review.v1` | 所有定稿候选和确定性投影 | `quality.continuity`、有证据的问题清单；不能修改原工件或自报通过 |
 | `text-adventure-playtest-director` | 试玩与发布验证 | `playtest-strategy.v1` | RuntimePackage、静态报告、自动游玩证据 | 路线矩阵、真人试玩清单、推荐候选意见；正式状态仍由确定性系统执行 |
 
@@ -41,7 +41,7 @@ Agent 是有稳定职责、权限、上下文边界和最终责任的岗位主�
 - Scene Writer 和 Dialogue Editor 可写表达文本，不能直接改变正式条件、资源、任务阶段或结局规则。
 - Continuity Editor 与 Playtest Director 必须独立于被审查工件的 producer，不得复用同一个 Run receipt 自审。
 - Art Director 只形成视觉圣经、需求和审查；Provider Adapter 持有 transport 与凭据，模型上下文永不包含 API Key。
-- 作者独占来源范围、主要角色锚点、高影响重生成、最终推荐候选和 ProductRelease 的采纳权。
+- 作者独占来源范围、商业候选的角色锚点、高影响重生成、最终推荐候选和 ProductRelease 的采纳权。角色锚点确认只对当前 `media.visual-bible` hash 生效，不能跨变化后的视觉方向静默沿用。
 
 ## 4. 每个 Skill 的最低合同
 

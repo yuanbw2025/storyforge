@@ -371,8 +371,17 @@ async function applyCommand(input: {
       || previousFailure.taskKey !== 'source.author-gate')) {
       reject('invalid-state-transition', '产品私域补充只能用于文字冒险来源作者闸门')
     }
-    if (!['retry', 'change-capability', 'accept-product-private-expansion', 'cancel'].includes(command.resolution.action)) {
-      reject('invalid-state-transition', '当前 blocker 只允许重试、更换能力后重试或取消；降级/豁免必须先生成新 Brief')
+    const mediaAnchorDecision = command.resolution.action === 'confirm-character-anchors'
+    if (mediaAnchorDecision && (production.productType !== 'text-adventure'
+      || command.blockerKey !== 'media.anchor-author-gate'
+      || previousFailure.taskKey !== 'media.anchor-author-gate')) {
+      reject('invalid-state-transition', '角色视觉锚点确认只能用于文字冒险商业美术作者闸门')
+    }
+    if (![
+      'retry', 'change-capability', 'accept-product-private-expansion',
+      'confirm-character-anchors', 'cancel',
+    ].includes(command.resolution.action)) {
+      reject('invalid-state-transition', '当前 blocker 只允许重试、更换能力、处理已登记作者闸门或取消；降级/豁免必须先生成新 Brief')
     }
     const controlEpoch = production.controlEpoch + 1
     const stateRevision = production.stateRevision + 1
