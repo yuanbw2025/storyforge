@@ -1,5 +1,6 @@
 import { AIError } from '../../types'
 import { isProviderQuotaRejectionV1 } from '../../ai/provider-rejection'
+import { AICompletionResponseErrorV1 } from '../../ai/completion-response'
 import { AgentTeamBudgetExceededError } from '../team-budget'
 import {
   StructuredOutputPipelineErrorV1,
@@ -97,6 +98,9 @@ function decide(
     ))
     const failureClass = classForStructuredIssues(categories)
     return { failureClass, code: `structured_output_repair_${failureClass}`, retryable: false }
+  }
+  if (error instanceof AICompletionResponseErrorV1) {
+    return { failureClass: 'provider', code: `provider_response_${error.problem}`, retryable: false }
   }
   if (error instanceof AIError) {
     const quotaRejected = isProviderQuotaRejectionV1({

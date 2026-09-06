@@ -5,6 +5,7 @@ import { createLog, updateLog } from '../lib/ai/logger'
 import { nanoid } from '../lib/utils/id'
 import { buildOpenAIEndpoint, normalizeOpenAIBaseUrl } from '../lib/ai/openai-endpoint'
 import { isProviderQuotaRejectionV1 } from '../lib/ai/provider-rejection'
+import { AICompletionResponseErrorV1, inspectCompletionResponseV1, requireCompletionTextV1 } from '../lib/ai/completion-response'
 import {
   sanitizeAITaskRoutes,
   type AITaskKind,
@@ -485,7 +486,9 @@ export const useAIConfigStore = create<AIConfigStore>((set, get) => ({
         body: JSON.stringify({
           model: config.model,
           messages: [{ role: 'user', content: '请回复"连接成功"' }],
-          max_tokens: 32,
+          // Agnes may emit reasoning before its answer. A 32-token cap can
+          // produce HTTP 200 + empty content + finish_reason=length.
+          max_tokens: config.provider === 'agnes' ? 1024 : 32,
         }),
       })
 
@@ -493,7 +496,14 @@ export const useAIConfigStore = create<AIConfigStore>((set, get) => ({
       const bodyText = await response.text()
 
       if (response.ok) {
-        updateLog(log.id, { status: 'success', statusCode: response.status, duration, responseBody: bodyText.slice(0, 200) })
+        let completion
+        try { completion = JSON.parse(bodyText) } catch {
+          throw new AICompletionResponseErrorV1('invalid-json', '连接测试收到 HTTP 200，但响应不是 JSON。')
+        }
+        const responseSummary = inspectCompletionResponseV1(completion).summary
+        updateLog(log.id, { statusCode: response.status, responseSummary })
+        requireCompletionTextV1(completion)
+        updateLog(log.id, { status: 'success', statusCode: response.status, duration })
         const prefix = normalized.warnings.length ? `${normalized.warnings.join(' ')} ` : ''
         return {
           ok: true,
