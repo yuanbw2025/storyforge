@@ -583,7 +583,7 @@ async function readOpenWorldRuntimeContext(input: AssembleContextInput): Promise
   }
   const state = await readProductRuntimeStateForContext(session.id!)
   if (manifest.textOpenWorldVNext) {
-    const [sessionProjection, modulesModule, actionModule, bindingModule, feedbackModule, skillsModule, lifeModule, inventoryModule, questModule] = await Promise.all([
+    const [sessionProjection, modulesModule, actionModule, bindingModule, feedbackModule, skillsModule, lifeModule, inventoryModule, questModule, mapModule] = await Promise.all([
       import('../open-world/session-projection'),
       import('../open-world/modules'),
       import('../open-world/action-registry'),
@@ -593,6 +593,7 @@ async function readOpenWorldRuntimeContext(input: AssembleContextInput): Promise
       import('../open-world/life-cycle'),
       import('../open-world/inventory'),
       import('../open-world/quests'),
+      import('../open-world/map-topology'),
     ])
     if (!state.textOpenWorld) return ''
     const binding = await bindingModule.verifyTextOpenWorldVNextSessionBindingV1(session)
@@ -622,6 +623,11 @@ async function readOpenWorldRuntimeContext(input: AssembleContextInput): Promise
     const weather = modules['time-weather'].weather.find(item => item.key === weatherKey)
     const visibleRegions = modules.world.regions.filter(item => runtime.map.regionKnowledgeByKey[item.key] !== 'unknown')
     const visibleLocations = modules.world.locations.filter(item => runtime.map.revealedLocationKeys.includes(item.key))
+    const visibleConnections = mapModule.projectTextOpenWorldMapConnectionsV1({
+      runtimePackage,
+      currentLocationKey: location.key,
+      openEdgeKeys: runtime.map.openEdgeKeys,
+    }).filter(connection => runtime.map.regionKnowledgeByKey[connection.destinationRegionKey] !== 'unknown')
     const visibleQuests = questModule.projectTextOpenWorldQuestInstancesV1(modules, runtime.quests)
       .filter(item => !['locked', 'available'].includes(item.instance.status))
     const questLines = visibleQuests.map(({ definition: quest, instance }) => {
@@ -672,7 +678,7 @@ async function readOpenWorldRuntimeContext(input: AssembleContextInput): Promise
     return [
       `【文字开放世界vNext玩家视角】${session.title}｜事件序号=${projection.lastEventSequence}｜运行源=${playable.packageHash.slice(0, 16)}`,
       `【体验边界】${runtimePackage.experienceContract.freedomBoundary}`,
-      `【当前位置】${region.title}／${location.title}｜${location.description}`,
+      `【当前位置】${region.title}／${location.title}｜${location.description}｜存在目的=${location.purpose}｜提前到达=${location.earlyArrivalDescription}`,
       `【时间与天气】第${day}天｜${timePeriod?.label ?? '未知时段'}｜${weather?.label ?? weatherKey ?? '未知天气'}`,
       `【主角】${modules.actors.player.identity.name}｜等级=${runtime.player.level}/${derived.progression.maximumLevel}｜经验=${runtime.player.experience}${derived.progression.nextLevelThreshold == null ? '（满级）' : `/${derived.progression.nextLevelThreshold}`}｜生命=${runtime.player.health}/${derived.playerStats.maximumHealth}｜技能资源=${runtime.player.skillResource}/${derived.playerStats.maximumSkillResource}`,
       `【生命状态】${life.phase}｜生命比例=${Math.round(life.healthRatio * 100)}%｜休息=${life.rest.available ? '可用' : life.rest.reason}｜复活点=${life.respawnPoints.map(point => `${point.fastTravelPointKey}:${point.title}`).join('、') || '无'}｜战前重试=${life.combatRetryCheckpointIds.length ? '可用' : '不可用'}`,
@@ -687,6 +693,10 @@ async function readOpenWorldRuntimeContext(input: AssembleContextInput): Promise
       `【装备】${Object.entries(equippedItemKeys).map(([slot, key]) => `${slot}=${key ? itemByKey.get(key)?.title ?? key : '空'}`).join('、')}`,
       `【区域认知】${visibleRegions.map(item => `${item.title}=${runtime.map.regionKnowledgeByKey[item.key]}`).join('、') || '无'}`,
       `【已发现地点】${visibleLocations.map(item => `${item.key}:${item.title}`).join('、') || '无'}`,
+      '【玩家可知相邻道路】', ...(visibleConnections.length ? visibleConnections.map(connection => {
+        const destination = modules.world.locations.find(item => item.key === connection.destinationLocationKey)!
+        return `- ${connection.edgeKey}｜前往=${destination.key}:${destination.title}｜${connection.travelMinutes}分钟｜风险=${connection.riskProfile}｜${connection.currentlyOpen ? '可通行' : '未开放'}`
+      }) : ['- 无']),
       '【当前位置人物】', ...(presentActors.length ? presentActors : ['- 无']),
       '【可见任务】', ...(questLines.length ? questLines : ['- 无']),
       '【玩家已知事实】', ...(knowledgeLines.length ? knowledgeLines : ['- 无']),

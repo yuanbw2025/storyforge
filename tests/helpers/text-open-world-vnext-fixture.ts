@@ -65,25 +65,40 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
       }],
     },
     world: {
-      version: 1,
+      version: 2,
       initialLocationKey: 'location.salt-port',
       regions: [
         {
           key: 'region.salt-port', title: '盐港', description: '依靠盐渠生存的海港聚落。',
-          locationKeys: ['location.salt-port'], initialKnowledge: 'visited',
+          theme: '资源匮乏中的互助与控制', levelBand: { minimum: 1, maximum: 3 }, knowledgePolicy: 'always-visible',
+          locationKeys: ['location.salt-port'], fastTravelPointKey: 'fast-travel.salt-port', initialKnowledge: 'visited',
+          sourceRefs: ['world-release:region:salt-port'], presentationRefs: ['map.world'],
         },
         {
           key: 'region.ridge', title: '断脊', description: '盐渠上游的荒凉山脊。',
-          locationKeys: ['location.ridge-channel'], initialKnowledge: 'heard',
+          theme: '荒野危险与断流真相', levelBand: { minimum: 2, maximum: 5 }, knowledgePolicy: 'title-on-heard',
+          locationKeys: ['location.ridge-channel'], fastTravelPointKey: 'fast-travel.ridge', initialKnowledge: 'heard',
+          sourceRefs: ['world-release:region:ridge'], presentationRefs: ['map.world'],
         },
       ],
       locations: [
-        { key: 'location.salt-port', regionKey: 'region.salt-port', title: '盐港广场', description: '盐商和守渠人汇集之处。', kind: 'settlement', tags: ['港口', '商店'] },
-        { key: 'location.ridge-channel', regionKey: 'region.ridge', title: '断脊渠口', description: '被碎石阻塞的上游渠口。', kind: 'wilderness', tags: ['盐渠', '危险'] },
+        {
+          key: 'location.salt-port', regionKey: 'region.salt-port', title: '盐港广场', description: '盐商和守渠人汇集之处。', kind: 'settlement', tags: ['港口', '商店'],
+          purpose: '承载开场、主线委托、交易和安全复活。', functions: ['narrative', 'service', 'travel'],
+          earlyArrivalDescription: '广场照常运转，守渠人只会谈论玩家当前已经获知的断流信息。',
+          sourceRefs: ['world-release:location:salt-port'], presentationRefs: ['map.world'],
+        },
+        {
+          key: 'location.ridge-channel', regionKey: 'region.ridge', title: '断脊渠口', description: '被碎石阻塞的上游渠口。', kind: 'wilderness', tags: ['盐渠', '危险'],
+          purpose: '承载上游探索、战斗和盐渠主线后续。', functions: ['narrative', 'exploration', 'combat', 'travel'],
+          earlyArrivalDescription: '玩家可以检查荒废渠口和周边野兽痕迹，但主线真相场景仍等待对应任务阶段。',
+          sourceRefs: ['world-release:location:ridge-channel'], presentationRefs: ['map.world'],
+        },
       ],
       edges: [{
         key: 'edge.port-ridge', fromLocationKey: 'location.salt-port', toLocationKey: 'location.ridge-channel',
-        bidirectional: true, travelMinutes: 60, conditionKeys: [],
+        bidirectional: true, travelMinutes: 60, conditionKeys: [], description: '沿盐渠维护道连接港口与断脊渠口。',
+        riskProfile: 'ordinary', sourceRefs: ['world-release:route:salt-channel'],
       }],
       fastTravelPoints: [
         { key: 'fast-travel.salt-port', locationKey: 'location.salt-port', unlockedByDefault: true, canRespawn: true },

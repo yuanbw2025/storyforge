@@ -93,14 +93,20 @@ export interface TextOpenWorldNarrativeModuleV1 {
 }
 
 export interface TextOpenWorldWorldModuleV1 {
-  version: 1
+  version: 2
   initialLocationKey: string
   regions: Array<{
     key: string
     title: string
     description: string
+    theme: string
+    levelBand: { minimum: number; maximum: number }
+    knowledgePolicy: 'hidden-until-heard' | 'title-on-heard' | 'always-visible'
     locationKeys: string[]
+    fastTravelPointKey: string | null
     initialKnowledge: 'unknown' | 'heard' | 'visited' | 'familiar'
+    sourceRefs: string[]
+    presentationRefs: string[]
   }>
   locations: Array<{
     key: string
@@ -109,6 +115,11 @@ export interface TextOpenWorldWorldModuleV1 {
     description: string
     kind: 'settlement' | 'interior' | 'wilderness' | 'dungeon' | 'landmark'
     tags: string[]
+    purpose: string
+    functions: Array<'narrative' | 'service' | 'exploration' | 'combat' | 'crafting' | 'travel'>
+    earlyArrivalDescription: string
+    sourceRefs: string[]
+    presentationRefs: string[]
   }>
   edges: Array<{
     key: string
@@ -117,6 +128,9 @@ export interface TextOpenWorldWorldModuleV1 {
     bidirectional: boolean
     travelMinutes: number
     conditionKeys: string[]
+    description: string
+    riskProfile: 'safe' | 'ordinary' | 'dangerous'
+    sourceRefs: string[]
   }>
   fastTravelPoints: Array<{
     key: string

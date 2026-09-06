@@ -166,25 +166,119 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
   scenes.forEach((item, index) => { text(item.title, `narrative.scenes[${index}].title`, 2_000); text(item.purpose, `narrative.scenes[${index}].purpose`); key(item.locationKey, `narrative.scenes[${index}].locationKey`); strings(item.participantKeys, `narrative.scenes[${index}].participantKeys`); strings(item.actionKeys, `narrative.scenes[${index}].actionKeys`); requireRefs(strings(item.fixedChoiceKeys, `narrative.scenes[${index}].fixedChoiceKeys`), choiceKeys, 'scene choice') })
   fixedChoices.forEach((item, index) => { requireRef(key(item.sceneKey, `narrative.fixedChoices[${index}].sceneKey`), sceneKeys, 'choice scene'); text(item.label, `narrative.fixedChoices[${index}].label`, 2_000); text(item.description, `narrative.fixedChoices[${index}].description`); key(item.actionKey, `narrative.fixedChoices[${index}].actionKey`) })
 
-  const world = versioned(packageValue, 'world')
+  const world = versioned(packageValue, 'world', [1, 2])
+  const legacyWorldModule = world.version === 1
   exact(world, ['version', 'initialLocationKey', 'regions', 'locations', 'edges', 'fastTravelPoints'], 'world')
-  const regions = catalog(world.regions, 'world.regions', ['key', 'title', 'description', 'locationKeys', 'initialKnowledge'])
-  const locations = catalog(world.locations, 'world.locations', ['key', 'regionKey', 'title', 'description', 'kind', 'tags'])
-  const edges = catalog(world.edges, 'world.edges', ['key', 'fromLocationKey', 'toLocationKey', 'bidirectional', 'travelMinutes', 'conditionKeys'])
+  const regions = catalog(world.regions, 'world.regions', legacyWorldModule
+    ? ['key', 'title', 'description', 'locationKeys', 'initialKnowledge']
+    : ['key', 'title', 'description', 'theme', 'levelBand', 'knowledgePolicy', 'locationKeys', 'fastTravelPointKey', 'initialKnowledge', 'sourceRefs', 'presentationRefs'])
+  const locations = catalog(world.locations, 'world.locations', legacyWorldModule
+    ? ['key', 'regionKey', 'title', 'description', 'kind', 'tags']
+    : ['key', 'regionKey', 'title', 'description', 'kind', 'tags', 'purpose', 'functions', 'earlyArrivalDescription', 'sourceRefs', 'presentationRefs'])
+  const edges = catalog(world.edges, 'world.edges', legacyWorldModule
+    ? ['key', 'fromLocationKey', 'toLocationKey', 'bidirectional', 'travelMinutes', 'conditionKeys']
+    : ['key', 'fromLocationKey', 'toLocationKey', 'bidirectional', 'travelMinutes', 'conditionKeys', 'description', 'riskProfile', 'sourceRefs'])
   const travelPoints = catalog(world.fastTravelPoints, 'world.fastTravelPoints', ['key', 'locationKey', 'unlockedByDefault', 'canRespawn'])
   const regionKeys = keysOf(regions, 'world.regions'); const locationKeys = keysOf(locations, 'world.locations'); keysOf(edges, 'world.edges'); const travelPointKeys = keysOf(travelPoints, 'world.fastTravelPoints')
-  requireRef(key(world.initialLocationKey, 'world.initialLocationKey'), locationKeys, 'initial location')
-  regions.forEach((item, index) => { text(item.title, `world.regions[${index}].title`, 2_000); text(item.description, `world.regions[${index}].description`); requireRefs(strings(item.locationKeys, `world.regions[${index}].locationKeys`), locationKeys, 'region location'); enumValue(item.initialKnowledge, ['unknown', 'heard', 'visited', 'familiar'], `world.regions[${index}].initialKnowledge`) })
-  locations.forEach((item, index) => { requireRef(key(item.regionKey, `world.locations[${index}].regionKey`), regionKeys, 'location region'); text(item.title, `world.locations[${index}].title`, 2_000); text(item.description, `world.locations[${index}].description`); enumValue(item.kind, ['settlement', 'interior', 'wilderness', 'dungeon', 'landmark'], `world.locations[${index}].kind`); strings(item.tags, `world.locations[${index}].tags`, 'text') })
+  const initialLocationKey = key(world.initialLocationKey, 'world.initialLocationKey')
+  requireRef(initialLocationKey, locationKeys, 'initial location')
+  regions.forEach((item, index) => {
+    text(item.title, `world.regions[${index}].title`, 2_000); text(item.description, `world.regions[${index}].description`)
+    const ownedLocations = strings(item.locationKeys, `world.regions[${index}].locationKeys`)
+    requireRefs(ownedLocations, locationKeys, 'region location')
+    enumValue(item.initialKnowledge, ['unknown', 'heard', 'visited', 'familiar'], `world.regions[${index}].initialKnowledge`)
+    if (!legacyWorldModule) {
+      text(item.theme, `world.regions[${index}].theme`)
+      const levelBand = row(item.levelBand, `world.regions[${index}].levelBand`); exact(levelBand, ['minimum', 'maximum'], `world.regions[${index}].levelBand`)
+      const minimum = int(levelBand.minimum, `world.regions[${index}].levelBand.minimum`, 1, 20)
+      const maximum = int(levelBand.maximum, `world.regions[${index}].levelBand.maximum`, 1, 20)
+      if (minimum > maximum) fail(`world.regions[${index}].levelBand范围倒置`)
+      enumValue(item.knowledgePolicy, ['hidden-until-heard', 'title-on-heard', 'always-visible'], `world.regions[${index}].knowledgePolicy`)
+      requireRef(key(item.fastTravelPointKey, `world.regions[${index}].fastTravelPointKey`), travelPointKeys, 'region fast travel point')
+      if (!strings(item.sourceRefs, `world.regions[${index}].sourceRefs`, 'text').length) fail(`world.regions[${index}] 必须说明来源`)
+      strings(item.presentationRefs, `world.regions[${index}].presentationRefs`)
+    }
+  })
+  locations.forEach((item, index) => {
+    requireRef(key(item.regionKey, `world.locations[${index}].regionKey`), regionKeys, 'location region')
+    text(item.title, `world.locations[${index}].title`, 2_000); text(item.description, `world.locations[${index}].description`)
+    enumValue(item.kind, ['settlement', 'interior', 'wilderness', 'dungeon', 'landmark'], `world.locations[${index}].kind`)
+    strings(item.tags, `world.locations[${index}].tags`, 'text')
+    if (!legacyWorldModule) {
+      text(item.purpose, `world.locations[${index}].purpose`)
+      if (!strings(item.functions, `world.locations[${index}].functions`, 'text').length) fail(`world.locations[${index}] 必须声明至少一种功能`)
+      strings(item.functions, `world.locations[${index}].functions`, 'text').forEach((value, functionIndex) => enumValue(value, ['narrative', 'service', 'exploration', 'combat', 'crafting', 'travel'], `world.locations[${index}].functions[${functionIndex}]`))
+      text(item.earlyArrivalDescription, `world.locations[${index}].earlyArrivalDescription`)
+      if (!strings(item.sourceRefs, `world.locations[${index}].sourceRefs`, 'text').length) fail(`world.locations[${index}] 必须说明来源`)
+      strings(item.presentationRefs, `world.locations[${index}].presentationRefs`)
+    }
+  })
   for (const region of regions) for (const locationKey of strings(region.locationKeys, 'region.locationKeys')) if (locations.find(item => item.key === locationKey)?.regionKey !== region.key) fail(`region/location反向引用不一致:${region.key}:${locationKey}`)
   regions.forEach((item, index) => requireSameKeys(
     strings(item.locationKeys, `world.regions[${index}].locationKeys`),
     locations.filter(location => location.regionKey === item.key).map(location => String(location.key)),
     `region ${String(item.key)} locations`,
   ))
-  edges.forEach((item, index) => { const from = key(item.fromLocationKey, `world.edges[${index}].fromLocationKey`); const to = key(item.toLocationKey, `world.edges[${index}].toLocationKey`); requireRef(from, locationKeys, 'edge from'); requireRef(to, locationKeys, 'edge to'); if (from === to) fail('edge不能自连'); bool(item.bidirectional, `world.edges[${index}].bidirectional`); int(item.travelMinutes, `world.edges[${index}].travelMinutes`, 1, 1_000_000); strings(item.conditionKeys, `world.edges[${index}].conditionKeys`) })
+  regions.forEach((item, index) => {
+    if (!strings(item.locationKeys, `world.regions[${index}].locationKeys`).length) fail(`world.regions[${index}] 至少需要一个地点`)
+  })
+  edges.forEach((item, index) => {
+    const from = key(item.fromLocationKey, `world.edges[${index}].fromLocationKey`); const to = key(item.toLocationKey, `world.edges[${index}].toLocationKey`)
+    requireRef(from, locationKeys, 'edge from'); requireRef(to, locationKeys, 'edge to'); if (from === to) fail('edge不能自连')
+    bool(item.bidirectional, `world.edges[${index}].bidirectional`); int(item.travelMinutes, `world.edges[${index}].travelMinutes`, 1, 1_000_000); strings(item.conditionKeys, `world.edges[${index}].conditionKeys`)
+    if (!legacyWorldModule) {
+      text(item.description, `world.edges[${index}].description`)
+      enumValue(item.riskProfile, ['safe', 'ordinary', 'dangerous'], `world.edges[${index}].riskProfile`)
+      if (!strings(item.sourceRefs, `world.edges[${index}].sourceRefs`, 'text').length) fail(`world.edges[${index}] 必须说明来源`)
+    }
+  })
   travelPoints.forEach((item, index) => { requireRef(key(item.locationKey, `world.fastTravelPoints[${index}].locationKey`), locationKeys, 'fast travel location'); bool(item.unlockedByDefault, `world.fastTravelPoints[${index}].unlockedByDefault`); bool(item.canRespawn, `world.fastTravelPoints[${index}].canRespawn`) })
   if (!travelPoints.some(item => item.unlockedByDefault === true && item.canRespawn === true)) fail('至少需要一个默认解锁的复活点')
+  if (!legacyWorldModule) {
+    const declaredTravelPointKeys = regions.map((item, index) => key(item.fastTravelPointKey, `world.regions[${index}].fastTravelPointKey`))
+    requireSameKeys(declaredTravelPointKeys, [...travelPointKeys], 'region fast travel points')
+    regions.forEach((item, index) => {
+      const point = travelPoints.find(candidate => candidate.key === item.fastTravelPointKey)!
+      const pointRegionKey = locations.find(location => location.key === point.locationKey)?.regionKey
+      if (pointRegionKey !== item.key) fail(`world.regions[${index}].fastTravelPointKey不在本地区`)
+    })
+  }
+  const structurallyReachable = new Set<string>([initialLocationKey])
+  const frontier = [initialLocationKey]
+  while (frontier.length) {
+    const current = frontier.shift()!
+    for (const edge of edges) {
+      const destination = edge.fromLocationKey === current
+        ? String(edge.toLocationKey)
+        : edge.bidirectional === true && edge.toLocationKey === current ? String(edge.fromLocationKey) : null
+      if (destination && !structurallyReachable.has(destination)) { structurallyReachable.add(destination); frontier.push(destination) }
+    }
+  }
+  const unreachableLocationKeys = [...locationKeys].filter(locationKey => !structurallyReachable.has(locationKey))
+  if (unreachableLocationKeys.length) fail(`存在从初始地点结构不可达的地点:${unreachableLocationKeys.sort().join(',')}`)
+
+  const normalizedWorld: TextOpenWorldParsedModulesV1['world'] = {
+    version: 2,
+    initialLocationKey,
+    regions: regions.map(item => legacyWorldModule ? {
+      key: String(item.key), title: String(item.title), description: String(item.description), theme: String(item.description),
+      levelBand: { minimum: 1, maximum: 20 }, knowledgePolicy: 'title-on-heard',
+      locationKeys: structuredClone(item.locationKeys) as string[],
+      fastTravelPointKey: travelPoints.find(point => locations.find(location => location.key === point.locationKey)?.regionKey === item.key)?.key as string | undefined ?? null,
+      initialKnowledge: item.initialKnowledge as TextOpenWorldParsedModulesV1['world']['regions'][number]['initialKnowledge'], sourceRefs: [], presentationRefs: [],
+    } : structuredClone(item) as unknown as TextOpenWorldParsedModulesV1['world']['regions'][number]),
+    locations: locations.map(item => legacyWorldModule ? {
+      key: String(item.key), regionKey: String(item.regionKey), title: String(item.title), description: String(item.description),
+      kind: item.kind as TextOpenWorldParsedModulesV1['world']['locations'][number]['kind'], tags: structuredClone(item.tags) as string[],
+      purpose: String(item.description), functions: ['exploration'], earlyArrivalDescription: String(item.description), sourceRefs: [], presentationRefs: [],
+    } : structuredClone(item) as unknown as TextOpenWorldParsedModulesV1['world']['locations'][number]),
+    edges: edges.map(item => legacyWorldModule ? {
+      key: String(item.key), fromLocationKey: String(item.fromLocationKey), toLocationKey: String(item.toLocationKey),
+      bidirectional: Boolean(item.bidirectional), travelMinutes: Number(item.travelMinutes), conditionKeys: structuredClone(item.conditionKeys) as string[],
+      description: '由旧版地图迁移的道路。', riskProfile: 'ordinary', sourceRefs: [],
+    } : structuredClone(item) as unknown as TextOpenWorldParsedModulesV1['world']['edges'][number]),
+    fastTravelPoints: structuredClone(travelPoints) as unknown as TextOpenWorldParsedModulesV1['world']['fastTravelPoints'],
+  }
 
   const actors = versioned(packageValue, 'actors')
   exact(actors, ['version', 'player', 'factions', 'actors', 'schedules'], 'actors')
@@ -209,6 +303,7 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
   const conditions = catalog(actions.conditions, 'actions.conditions', ['key', 'expression', 'failureMessage']); const effects = catalog(actions.effects, 'actions.effects', ['key', 'operation', 'payload']); const actionRows = catalog(actions.actions, 'actions.actions', ['key', 'category', 'label', 'description', 'actorScope', 'targetScope', 'locationKeys', 'requirementConditionKeys', 'costEffectKeys', 'successEffectKeys', 'failureEffectKeys', 'timeCostMinutes', 'confirmationPolicy', 'repeatPolicy', 'cooldownMinutes'])
   const conditionKeys = keysOf(conditions, 'actions.conditions'); const effectKeys = keysOf(effects, 'actions.effects'); const actionKeys = keysOf(actionRows, 'actions.actions')
   conditions.forEach((item, index) => { canonicalProductProductionJsonV2(item.expression); text(item.failureMessage, `actions.conditions[${index}].failureMessage`, 1_000) })
+  normalizedWorld.edges.forEach((item, index) => requireRefs(item.conditionKeys, conditionKeys, `world.edges[${index}].conditionKeys`))
   effects.forEach((item, index) => { key(item.operation, `actions.effects[${index}].operation`); canonicalProductProductionJsonV2(item.payload) })
   actionRows.forEach((item, index) => { enumValue(item.category, ACTION_CATEGORIES, `actions.actions[${index}].category`); text(item.label, `actions.actions[${index}].label`, 2_000); text(item.description, `actions.actions[${index}].description`); enumValue(item.actorScope, ['player', 'system'], `actions.actions[${index}].actorScope`); enumValue(item.targetScope, ['none', 'actor', 'location', 'item', 'quest', 'vendor', 'encounter'], `actions.actions[${index}].targetScope`); requireRefs(strings(item.locationKeys, `actions.actions[${index}].locationKeys`), locationKeys, 'action location'); requireRefs(strings(item.requirementConditionKeys, `actions.actions[${index}].requirementConditionKeys`), conditionKeys, 'action condition'); requireRefs(strings(item.costEffectKeys, `actions.actions[${index}].costEffectKeys`), effectKeys, 'action cost effect'); requireRefs(strings(item.successEffectKeys, `actions.actions[${index}].successEffectKeys`), effectKeys, 'action success effect'); requireRefs(strings(item.failureEffectKeys, `actions.actions[${index}].failureEffectKeys`), effectKeys, 'action failure effect'); int(item.timeCostMinutes, `actions.actions[${index}].timeCostMinutes`, 0, 1_000_000); enumValue(item.confirmationPolicy, ['never', 'high-risk', 'always'], `actions.actions[${index}].confirmationPolicy`); const repeatPolicy = enumValue(item.repeatPolicy, ['once', 'repeatable', 'cooldown'], `actions.actions[${index}].repeatPolicy`); const cooldown = item.cooldownMinutes == null ? null : int(item.cooldownMinutes, `actions.actions[${index}].cooldownMinutes`, 1, 1_000_000); if ((repeatPolicy === 'cooldown') !== (cooldown != null)) fail(`actions.actions[${index}] cooldown策略不一致`) })
 
@@ -765,6 +860,8 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
   const mediaSlots = catalog(presentation.mediaSlots, 'presentation.mediaSlots', ['key', 'kind', 'consumerRef', 'required', 'assetKey', 'fallbackText', 'altText']); const variants = catalog(presentation.taskTextVariants, 'presentation.taskTextVariants', ['key', 'templateKey', 'title', 'description']); const tutorials = catalog(presentation.tutorials, 'presentation.tutorials', ['key', 'triggerActionKey', 'targetUiKey', 'title', 'body']); const mediaSlotKeys = keysOf(mediaSlots, 'presentation.mediaSlots'); const variantKeys = keysOf(variants, 'presentation.taskTextVariants'); keysOf(tutorials, 'presentation.tutorials')
   if ([...mediaSlotKeys].sort().join(',') !== [...packageValue.mediaManifest.slotKeys].sort().join(',')) fail('presentation.mediaSlots与根mediaManifest.slotKeys不一致')
   mediaSlots.forEach((item, index) => { enumValue(item.kind, ['map', 'portrait', 'background', 'item-icon', 'enemy-icon', 'audio'], `presentation.mediaSlots[${index}].kind`); text(item.consumerRef, `presentation.mediaSlots[${index}].consumerRef`, 1_000); const required = bool(item.required, `presentation.mediaSlots[${index}].required`); nullableKey(item.assetKey, `presentation.mediaSlots[${index}].assetKey`); text(item.fallbackText, `presentation.mediaSlots[${index}].fallbackText`, 5_000); text(item.altText, `presentation.mediaSlots[${index}].altText`, 2_000); if (required !== packageValue.mediaManifest.requiredSlotKeys.includes(String(item.key))) fail(`presentation.mediaSlots[${index}].required与根manifest不一致`) })
+  normalizedWorld.regions.forEach((item, index) => requireRefs(item.presentationRefs, mediaSlotKeys, `world.regions[${index}].presentationRefs`))
+  normalizedWorld.locations.forEach((item, index) => requireRefs(item.presentationRefs, mediaSlotKeys, `world.locations[${index}].presentationRefs`))
   variants.forEach((item, index) => { requireRef(key(item.templateKey, `presentation.taskTextVariants[${index}].templateKey`), templateKeys, 'task text template'); text(item.title, `presentation.taskTextVariants[${index}].title`, 2_000); text(item.description, `presentation.taskTextVariants[${index}].description`) })
   templates.forEach((item, index) => requireRefs(strings(item.variantTextKeys, `director.templates[${index}].variantTextKeys`), variantKeys, 'template text variant'))
   templates.forEach((item, index) => {
@@ -799,7 +896,7 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
 
   return {
     narrative: structuredClone(narrative) as unknown as TextOpenWorldParsedModulesV1['narrative'],
-    world: structuredClone(world) as unknown as TextOpenWorldParsedModulesV1['world'],
+    world: normalizedWorld,
     actors: structuredClone(actors) as unknown as TextOpenWorldParsedModulesV1['actors'],
     quests: { ...structuredClone(quests), version: 2, quests: structuredClone(questRows), stages: structuredClone(questStages) } as unknown as TextOpenWorldParsedModulesV1['quests'],
     actions: structuredClone(actions) as unknown as TextOpenWorldParsedModulesV1['actions'],
