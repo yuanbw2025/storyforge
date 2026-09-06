@@ -37,8 +37,8 @@ describe('Text Open World vNext · actor tiers, schedules and service availabili
     const runtimePackage = createTextOpenWorldVNextFixture()
     const actors = runtimePackage.modules.actors.payload as any
     actors.actors.push(
-      { key: 'actor.resident', tier: 'resident', name: '盐商', biography: '经营盐货多年。', portrayal: '健谈但谨慎。', factionKey: null, homeLocationKey: 'location.salt-port', protected: false, serviceKeys: [], scheduleKey: null },
-      { key: 'actor.transient', tier: 'transient', name: '路人', biography: '短暂停留。', portrayal: '匆忙。', factionKey: null, homeLocationKey: 'location.salt-port', protected: false, serviceKeys: [], scheduleKey: null },
+      { key: 'actor.resident', tier: 'resident', name: '盐商', biography: '经营盐货多年。', portrayal: '健谈但谨慎。', factionKey: null, homeLocationKey: 'location.salt-port', protected: false, mortalityPolicy: 'mortal', serviceKeys: [], scheduleKey: null },
+      { key: 'actor.transient', tier: 'transient', name: '路人', biography: '短暂停留。', portrayal: '匆忙。', factionKey: null, homeLocationKey: 'location.salt-port', protected: false, mortalityPolicy: 'despawn-on-resolution', serviceKeys: [], scheduleKey: null },
     )
     const projection = createInitialTextOpenWorldSessionProjectionV1(runtimePackage)
     const projected = projectTextOpenWorldActorsV1({ runtimePackage, state: projection.state })
@@ -115,6 +115,8 @@ describe('Text Open World vNext · actor tiers, schedules and service availabili
     const actors = legacy.modules.actors.payload as any
     actors.version = 1
     legacy.modules.actors.schemaVersion = 1
+    delete actors.serviceContinuity
+    actors.actors.forEach((actor: any) => { delete actor.mortalityPolicy })
     actors.schedules.flatMap((schedule: any) => schedule.entries).forEach((entry: any) => { delete entry.availableServiceKeys })
     const actions = legacy.modules.actions.payload as any
     actions.version = 5
@@ -122,7 +124,8 @@ describe('Text Open World vNext · actor tiers, schedules and service availabili
     actions.actions = actions.actions.filter((action: any) => action.category !== 'actor-schedule-action')
     actions.effects = actions.effects.filter((effect: any) => effect.operation !== 'settle-actor-schedules')
     const parsed = parseTextOpenWorldModulesV1(legacy)
-    expect(parsed.actors).toMatchObject({ version: 2 })
+    expect(parsed.actors).toMatchObject({ version: 3 })
+    expect(parsed.actors.actors[0]).toMatchObject({ mortalityPolicy: 'protected' })
     expect(parsed.actors.schedules[0].entries[0].availableServiceKeys).toEqual(['vendor.caretaker'])
     expect(createTextOpenWorldInitialProjectionCandidatesV1(legacy).some((candidate: any) => candidate.state.time.lastActorScheduleSettlementWorldMinute === undefined)).toBe(true)
 

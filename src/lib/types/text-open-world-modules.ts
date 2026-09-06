@@ -8,10 +8,13 @@ export type TextOpenWorldQuestLifecyclePolicyV1 = 'protected-wait' | 'abandon-re
 export type TextOpenWorldQuestOwnerKindV1 = 'global' | 'actor' | 'faction' | 'region' | 'location'
 export type TextOpenWorldQuestInstantiationPolicyV1 = 'session-start' | 'director'
 export type TextOpenWorldQuestTimePolicyV1 = 'waits' | 'timed'
+export type TextOpenWorldActorMortalityPolicyV1 = 'protected' | 'story-only' | 'mortal' | 'despawn-on-resolution'
+export type TextOpenWorldServiceContinuityPolicyV1 = 'replace-on-owner-death' | 'disappear-on-owner-death'
 export type TextOpenWorldActionCategoryV1 =
   | 'move' | 'travel' | 'fast-travel' | 'observe' | 'investigate' | 'talk'
   | 'take' | 'use' | 'equip' | 'unequip' | 'drop' | 'buy' | 'sell' | 'craft'
-  | 'accept-quest' | 'abandon-quest' | 'objective-action' | 'quest-action' | 'weather-action' | 'actor-schedule-action' | 'claim-reward'
+  | 'accept-quest' | 'abandon-quest' | 'objective-action' | 'quest-action' | 'weather-action' | 'actor-schedule-action' | 'actor-state-action' | 'claim-reward'
+  | 'attack-actor'
   | 'start-combat' | 'continue-combat' | 'escape' | 'rest' | 'respawn'
   | 'read' | 'track' | 'untrack' | 'save' | 'load-branch'
 
@@ -142,7 +145,7 @@ export interface TextOpenWorldWorldModuleV1 {
 }
 
 export interface TextOpenWorldActorModuleV1 {
-  version: 1 | 2
+  version: 1 | 2 | 3
   player: TextOpenWorldPlayerCharacterDefinitionV1
   factions: Array<{
     key: string
@@ -158,6 +161,7 @@ export interface TextOpenWorldActorModuleV1 {
     factionKey: string | null
     homeLocationKey: string
     protected: boolean
+    mortalityPolicy: TextOpenWorldActorMortalityPolicyV1
     serviceKeys: string[]
     scheduleKey: string | null
   }>
@@ -165,6 +169,14 @@ export interface TextOpenWorldActorModuleV1 {
     key: string
     actorKey: string
     entries: Array<{ timePeriodKey: string; locationKey: string; activity: string; availableServiceKeys: string[] }>
+  }>
+  serviceContinuity: Array<{
+    key: string
+    ownerActorKey: string
+    serviceKey: string
+    policy: TextOpenWorldServiceContinuityPolicyV1
+    replacementActorKey: string | null
+    replacementServiceKey: string | null
   }>
 }
 
@@ -212,7 +224,7 @@ export interface TextOpenWorldQuestModuleV1 {
 }
 
 export interface TextOpenWorldActionModuleV1 {
-  version: 1 | 2 | 3 | 4 | 5 | 6
+  version: 1 | 2 | 3 | 4 | 5 | 6 | 7
   conditions: Array<{
     key: string
     expression: TextOpenWorldConditionExpressionV1

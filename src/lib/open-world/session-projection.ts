@@ -382,6 +382,15 @@ export function applyTextOpenWorldSessionEventV1(current: TextOpenWorldSessionPr
       const expectedEffectKeys = [...new Set([...action.costEffectKeys, ...outcomeEffectKeys])]
       if (canonicalProductProductionJsonV2(applied.plan.effectKeys) !== canonicalProductProductionJsonV2(expectedEffectKeys)) fail('EffectPlan与命令Action不一致')
       if (applied.plan.effectKeys.some(effectKey => dropEffectKeys.has(effectKey))) fail('掉落Effect缺少RewardContract授权')
+      const actorStateEffect = applied.plan.effects.find((effect): effect is Extract<TextOpenWorldEffectDefinitionV1, { operation: 'change-actor-state' }> => effect.operation === 'change-actor-state')
+      if (actorStateEffect) {
+        if (projection.protocol.pendingTargetKey !== actorStateEffect.payload.actorKey || action.targetScope !== 'actor') fail('Actor状态Effect与命令目标不一致')
+        if (actorStateEffect.payload.cause === 'player-attack') {
+          if (projection.protocol.pendingActorKey !== 'player' || action.actorScope !== 'player' || action.category !== 'attack-actor') fail('玩家攻击Actor结果必须来自受治理攻击Action')
+        } else if (projection.protocol.pendingActorKey !== 'system' || action.actorScope !== 'system' || action.category !== 'actor-state-action') {
+          fail('剧情或事件Actor结果必须来自受治理系统Action')
+        }
+      }
       if (action.category === 'travel') {
         const start = action.successEffectKeys.map(effectKey => modules.actions.effects.find(effect => effect.key === effectKey)!)
           .find((effect): effect is Extract<TextOpenWorldEffectDefinitionV1, { operation: 'start-travel' }> => effect.operation === 'start-travel')

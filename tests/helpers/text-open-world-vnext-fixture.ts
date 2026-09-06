@@ -106,7 +106,7 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
       ],
     },
     actors: {
-      version: 2,
+      version: 3,
       player: {
         key: 'player',
         identity: {
@@ -124,7 +124,7 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
       actors: [{
         key: 'actor.caretaker', tier: 'mainline', name: '岑阿婆', biography: '盐港最后一位老守渠人。',
         portrayal: '说话简短，重视可验证的行动。', factionKey: 'faction.canal-keepers',
-        homeLocationKey: 'location.salt-port', protected: true, serviceKeys: ['vendor.caretaker'], scheduleKey: 'schedule.caretaker',
+        homeLocationKey: 'location.salt-port', protected: true, mortalityPolicy: 'protected', serviceKeys: ['vendor.caretaker'], scheduleKey: 'schedule.caretaker',
       }],
       schedules: [{
         key: 'schedule.caretaker', actorKey: 'actor.caretaker',
@@ -133,6 +133,10 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
           { timePeriodKey: 'time.day', locationKey: 'location.salt-port', activity: '检查内渠', availableServiceKeys: ['vendor.caretaker'] },
           { timePeriodKey: 'time.night', locationKey: 'location.salt-port', activity: '整理渠图', availableServiceKeys: [] },
         ],
+      }],
+      serviceContinuity: [{
+        key: 'service-continuity.caretaker', ownerActorKey: 'actor.caretaker', serviceKey: 'vendor.caretaker',
+        policy: 'disappear-on-owner-death', replacementActorKey: null, replacementServiceKey: null,
       }],
     },
     quests: {
@@ -165,7 +169,7 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
       ],
     },
     actions: {
-      version: 6,
+      version: 7,
       conditions: [
         { key: 'condition.always', expression: { op: 'all', conditions: [{ op: 'player-number', field: 'level', comparator: 'gte', value: 1 }] }, failureMessage: '角色尚未进入可行动状态。' },
         { key: 'condition.health-not-full', expression: { op: 'player-resource-below-maximum', resource: 'health' }, failureMessage: '生命已经满了。' },

@@ -1,6 +1,7 @@
 import { canonicalProductProductionJsonV2 } from '../product-production/hash'
 import type {
   TextOpenWorldActorScheduleSettlementAuthorizationV1,
+  TextOpenWorldEffectDefinitionV1,
   TextOpenWorldEffectStateV1,
   TextOpenWorldParsedModulesV1,
   TextOpenWorldRuntimePackageV1,
@@ -8,6 +9,43 @@ import type {
 import { parseTextOpenWorldModulesV1 } from './modules'
 
 function fail(message: string): never { throw new Error(`[text-open-world-actors] ${message}`) }
+
+type ActorStateEffect = Extract<TextOpenWorldEffectDefinitionV1, { operation: 'change-actor-state' }>
+
+function expectedActorState(
+  modules: TextOpenWorldParsedModulesV1,
+  state: TextOpenWorldEffectStateV1,
+  effect: ActorStateEffect,
+) {
+  const definition = modules.actors.actors.find(actor => actor.key === effect.payload.actorKey)
+    ?? fail(`角色定义不存在:${effect.payload.actorKey}`)
+  const before = state.actors[effect.payload.actorKey] ?? fail(`角色运行状态不存在:${effect.payload.actorKey}`)
+  const { cause } = effect.payload
+  if (!before.alive && effect.payload.alive === true) fail(`首版不允许复活已死亡角色:${definition.key}`)
+  if (!before.alive && (effect.payload.present === true || effect.payload.locationKey != null)) fail(`已死亡角色不能重新出现或移动:${definition.key}`)
+
+  const killing = before.alive && effect.payload.alive === false
+  if (killing) {
+    if (definition.mortalityPolicy === 'protected') fail(`不能杀死受保护Actor:${definition.key}`)
+    if (definition.mortalityPolicy === 'story-only' && cause !== 'story') fail(`Actor只允许由正式剧情结果致死:${definition.key}`)
+    if (definition.mortalityPolicy === 'mortal' && !['player-attack', 'story', 'random-event', 'legacy-system'].includes(cause)) fail(`Actor死亡原因不符合mortal策略:${definition.key}`)
+    if (definition.mortalityPolicy === 'despawn-on-resolution') fail(`临时Actor只能在事件解决时退场，不能写入死亡:${definition.key}`)
+  }
+
+  const hidesLivingActor = before.alive && effect.payload.alive !== false && effect.payload.present === false
+  if (hidesLivingActor) {
+    if (definition.mortalityPolicy === 'protected') fail(`受保护Actor不能从运行世界退场:${definition.key}`)
+    if (definition.mortalityPolicy === 'despawn-on-resolution' && cause !== 'resolution') fail(`临时Actor只能由事件解决结果退场:${definition.key}`)
+    if (definition.mortalityPolicy !== 'despawn-on-resolution' && !['story', 'random-event', 'legacy-system'].includes(cause)) fail(`常驻Actor退场原因无效:${definition.key}`)
+  }
+
+  const after = structuredClone(before)
+  if (effect.payload.alive != null) after.alive = effect.payload.alive
+  if (!after.alive) after.present = false
+  else if (effect.payload.present != null) after.present = effect.payload.present
+  if (effect.payload.locationKey != null) after.locationKey = effect.payload.locationKey
+  return { definition, before: structuredClone(before), after }
+}
 
 function currentPeriod(
   modules: TextOpenWorldParsedModulesV1,
@@ -90,7 +128,9 @@ export function projectTextOpenWorldActorsV1(input: {
         : actor.serviceKeys
     const availableServices = availableServiceKeys.flatMap(serviceKey => {
       const vendor = modules.economy.vendors.find(item => item.key === serviceKey)
-      return vendor?.actorKey === actor.key && vendor.locationKey === runtime.locationKey
+      const takeover = modules.actors.serviceContinuity.find(rule => rule.replacementServiceKey === serviceKey)
+      const activated = !takeover || input.state.actors[takeover.ownerActorKey]?.alive === false
+      return activated && vendor?.actorKey === actor.key && vendor.locationKey === runtime.locationKey
         ? [{ key: vendor.key, title: vendor.title }]
         : []
     })
@@ -124,3 +164,22 @@ export function createTextOpenWorldActorScheduleCatalogV1(
 }
 
 export type TextOpenWorldActorScheduleCatalogV1 = ReturnType<typeof createTextOpenWorldActorScheduleCatalogV1>
+
+/**
+ * Deterministic lifecycle boundary shared by player attacks, story outcomes and
+ * regional event resolution. The model may select a frozen Action, but it
+ * cannot override mortality policy or revive a dead actor in prose.
+ */
+export function createTextOpenWorldActorLifecycleCatalogV1(
+  value: TextOpenWorldRuntimePackageV1 | string | unknown,
+  parsedModules?: TextOpenWorldParsedModulesV1,
+) {
+  const modules = parsedModules ?? parseTextOpenWorldModulesV1(value)
+  return {
+    preview(input: { state: TextOpenWorldEffectStateV1; effect: ActorStateEffect }) {
+      return expectedActorState(modules, input.state, input.effect)
+    },
+  }
+}
+
+export type TextOpenWorldActorLifecycleCatalogV1 = ReturnType<typeof createTextOpenWorldActorLifecycleCatalogV1>

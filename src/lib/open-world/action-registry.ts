@@ -245,6 +245,13 @@ export function createTextOpenWorldActionRegistryV1(value: TextOpenWorldRuntimeP
           ? validTargetKeys.filter(itemKey => itemKey === equipment.payload.itemKey)
           : []
       }
+      if (action.targetScope === 'actor' && (action.category === 'attack-actor' || action.category === 'actor-state-action')) {
+        const actorStateEffect = action.successEffectKeys.map(effectKey => effectByKey.get(effectKey))
+          .find((effect): effect is Extract<TextOpenWorldEffectDefinitionV1, { operation: 'change-actor-state' }> => effect?.operation === 'change-actor-state')
+        validTargetKeys = actorStateEffect
+          ? validTargetKeys.filter(actorKey => actorKey === actorStateEffect.payload.actorKey)
+          : []
+      }
       if (action.targetScope === 'quest' && ['accept-quest', 'abandon-quest', 'quest-action'].includes(action.category)) {
         const transitionDefinitions = [...action.costEffectKeys, ...action.successEffectKeys]
           .map(effectKey => effectByKey.get(effectKey))

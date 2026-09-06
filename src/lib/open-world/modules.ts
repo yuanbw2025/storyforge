@@ -15,7 +15,7 @@ type Row = Record<string, unknown>
 const KEY = /^[a-z][a-z0-9._:-]{0,199}$/
 const ACTION_CATEGORIES: TextOpenWorldActionCategoryV1[] = [
   'move', 'travel', 'fast-travel', 'observe', 'investigate', 'talk', 'take', 'use', 'equip', 'unequip', 'drop',
-  'buy', 'sell', 'craft', 'accept-quest', 'abandon-quest', 'objective-action', 'quest-action', 'weather-action', 'actor-schedule-action', 'claim-reward', 'start-combat', 'continue-combat', 'escape',
+  'buy', 'sell', 'craft', 'accept-quest', 'abandon-quest', 'objective-action', 'quest-action', 'weather-action', 'actor-schedule-action', 'actor-state-action', 'claim-reward', 'attack-actor', 'start-combat', 'continue-combat', 'escape',
   'rest', 'respawn', 'read', 'track', 'untrack', 'save', 'load-branch',
 ]
 const QUEST_TYPES: TextOpenWorldQuestTypeV1[] = ['mainline', 'significant', 'ordinary', 'template']
@@ -309,12 +309,30 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
     fastTravelPoints: structuredClone(travelPoints) as unknown as TextOpenWorldParsedModulesV1['world']['fastTravelPoints'],
   }
 
-  const actors = versioned(packageValue, 'actors', [1, 2])
+  const actors = versioned(packageValue, 'actors', [1, 2, 3])
   const legacyActorModule = Number(actors.version) < 2
-  exact(actors, ['version', 'player', 'factions', 'actors', 'schedules'], 'actors')
+  const actorLifecycleModule = Number(actors.version) >= 3
+  exact(actors, actorLifecycleModule
+    ? ['version', 'player', 'factions', 'actors', 'schedules', 'serviceContinuity']
+    : ['version', 'player', 'factions', 'actors', 'schedules'], 'actors')
   const player = playerDefinition(actors.player)
   const build = row(player.build, 'actors.player.build')
-  const factions = catalog(actors.factions, 'actors.factions', ['key', 'title', 'description']); const actorRows = catalog(actors.actors, 'actors.actors', ['key', 'tier', 'name', 'biography', 'portrayal', 'factionKey', 'homeLocationKey', 'protected', 'serviceKeys', 'scheduleKey']); const scheduleRows = catalog(actors.schedules, 'actors.schedules', ['key', 'actorKey', 'entries'])
+  const factions = catalog(actors.factions, 'actors.factions', ['key', 'title', 'description'])
+  const actorRows = catalog(actors.actors, 'actors.actors', actorLifecycleModule
+    ? ['key', 'tier', 'name', 'biography', 'portrayal', 'factionKey', 'homeLocationKey', 'protected', 'mortalityPolicy', 'serviceKeys', 'scheduleKey']
+    : ['key', 'tier', 'name', 'biography', 'portrayal', 'factionKey', 'homeLocationKey', 'protected', 'serviceKeys', 'scheduleKey'])
+    .map(item => actorLifecycleModule ? item : { ...item, mortalityPolicy: item.protected ? 'protected' : 'mortal' })
+  const scheduleRows = catalog(actors.schedules, 'actors.schedules', ['key', 'actorKey', 'entries'])
+  const serviceContinuityRows = actorLifecycleModule
+    ? catalog(actors.serviceContinuity, 'actors.serviceContinuity', ['key', 'ownerActorKey', 'serviceKey', 'policy', 'replacementActorKey', 'replacementServiceKey'])
+    : actorRows.flatMap(actor => strings(actor.serviceKeys, `actor ${String(actor.key)} serviceKeys`).map(serviceKey => ({
+        key: `service-continuity.${serviceKey}`,
+        ownerActorKey: actor.key,
+        serviceKey,
+        policy: 'disappear-on-owner-death',
+        replacementActorKey: null,
+        replacementServiceKey: null,
+      })))
   const schedules: Row[] = scheduleRows.map((item, index) => ({
     ...item,
     entries: array(item.entries, `actors.schedules[${index}].entries`, 100).map((entry, entryIndex) => {
@@ -326,8 +344,18 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
     }),
   }))
   const factionKeys = keysOf(factions, 'actors.factions'); const actorKeys = keysOf(actorRows, 'actors.actors'); const scheduleKeys = keysOf(schedules, 'actors.schedules')
+  keysOf(serviceContinuityRows, 'actors.serviceContinuity')
   factions.forEach((item, index) => { text(item.title, `actors.factions[${index}].title`, 2_000); text(item.description, `actors.factions[${index}].description`) })
-  actorRows.forEach((item, index) => { enumValue(item.tier, ['mainline', 'significant', 'resident', 'transient'], `actors.actors[${index}].tier`); text(item.name, `actors.actors[${index}].name`, 2_000); text(item.biography, `actors.actors[${index}].biography`); text(item.portrayal, `actors.actors[${index}].portrayal`); requireRef(nullableKey(item.factionKey, `actors.actors[${index}].factionKey`), factionKeys, 'actor faction'); requireRef(key(item.homeLocationKey, `actors.actors[${index}].homeLocationKey`), locationKeys, 'actor home'); bool(item.protected, `actors.actors[${index}].protected`); strings(item.serviceKeys, `actors.actors[${index}].serviceKeys`); requireRef(nullableKey(item.scheduleKey, `actors.actors[${index}].scheduleKey`), scheduleKeys, 'actor schedule') })
+  actorRows.forEach((item, index) => {
+    const tier = enumValue(item.tier, ['mainline', 'significant', 'resident', 'transient'], `actors.actors[${index}].tier`)
+    text(item.name, `actors.actors[${index}].name`, 2_000); text(item.biography, `actors.actors[${index}].biography`); text(item.portrayal, `actors.actors[${index}].portrayal`)
+    requireRef(nullableKey(item.factionKey, `actors.actors[${index}].factionKey`), factionKeys, 'actor faction'); requireRef(key(item.homeLocationKey, `actors.actors[${index}].homeLocationKey`), locationKeys, 'actor home')
+    const protectedActor = bool(item.protected, `actors.actors[${index}].protected`)
+    const mortalityPolicy = enumValue(item.mortalityPolicy, ['protected', 'story-only', 'mortal', 'despawn-on-resolution'], `actors.actors[${index}].mortalityPolicy`)
+    if (protectedActor !== (mortalityPolicy === 'protected')) fail(`actors.actors[${index}] protected与mortalityPolicy不一致`)
+    if (tier === 'mainline' && mortalityPolicy !== 'protected') fail(`主线关键Actor必须使用protected死亡策略:${String(item.key)}`)
+    strings(item.serviceKeys, `actors.actors[${index}].serviceKeys`); requireRef(nullableKey(item.scheduleKey, `actors.actors[${index}].scheduleKey`), scheduleKeys, 'actor schedule')
+  })
   schedules.forEach((item, index) => { requireRef(key(item.actorKey, `actors.schedules[${index}].actorKey`), actorKeys, 'schedule actor'); array(item.entries, `actors.schedules[${index}].entries`, 100).forEach((entry, entryIndex) => { const parsed = row(entry, `actors.schedules[${index}].entries[${entryIndex}]`); key(parsed.timePeriodKey, 'schedule timePeriodKey'); requireRef(key(parsed.locationKey, 'schedule locationKey'), locationKeys, 'schedule location'); text(parsed.activity, 'schedule activity', 2_000); strings(parsed.availableServiceKeys, `actors.schedules[${index}].entries[${entryIndex}].availableServiceKeys`) }) })
   actorRows.forEach((item, index) => {
     const scheduleKey = nullableKey(item.scheduleKey, `actors.actors[${index}].scheduleKey`)
@@ -337,13 +365,15 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
     if (actorRows.find(actor => actor.key === item.actorKey)?.scheduleKey !== item.key) fail(`schedule/actor反向引用不一致:${String(item.key)}`)
   })
 
-  const actions = versioned(packageValue, 'actions', [1, 2, 3, 4, 5, 6])
+  const actions = versioned(packageValue, 'actions', [1, 2, 3, 4, 5, 6, 7])
   const modernActionModule = Number(actions.version) >= 2
   const travelActionModule = Number(actions.version) >= 3
   const fastTravelActionModule = Number(actions.version) >= 4
   const timeWeatherActionModule = Number(actions.version) >= 5
   const actorScheduleActionModule = Number(actions.version) >= 6
+  const actorLifecycleActionModule = Number(actions.version) >= 7
   if (actorScheduleActionModule && legacyActorModule) fail('Action v6必须搭配Actor v2')
+  if (actorLifecycleActionModule && !actorLifecycleModule) fail('Action v7必须搭配Actor v3')
   exact(actions, ['version', 'conditions', 'effects', 'actions'], 'actions')
   const conditions = catalog(actions.conditions, 'actions.conditions', ['key', 'expression', 'failureMessage']); const effects = catalog(actions.effects, 'actions.effects', ['key', 'operation', 'payload']); const actionRows = catalog(actions.actions, 'actions.actions', ['key', 'category', 'label', 'description', 'actorScope', 'targetScope', 'locationKeys', 'requirementConditionKeys', 'costEffectKeys', 'successEffectKeys', 'failureEffectKeys', 'timeCostMinutes', 'confirmationPolicy', 'repeatPolicy', 'cooldownMinutes'])
   const conditionKeys = keysOf(conditions, 'actions.conditions'); const effectKeys = keysOf(effects, 'actions.effects'); const actionKeys = keysOf(actionRows, 'actions.actions')
@@ -480,6 +510,59 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
     actionRows.filter(candidate => candidate.key !== action.key).forEach(candidate => {
       const referenced = [...strings(candidate.costEffectKeys, `action ${String(candidate.key)} costs`), ...strings(candidate.successEffectKeys, `action ${String(candidate.key)} success`), ...strings(candidate.failureEffectKeys, `action ${String(candidate.key)} failures`)]
       if (referenced.includes(String(successEffects[0].key))) fail(`settle-actor-schedules只能由角色日程结算Action引用:${String(candidate.key)}`)
+    })
+  }
+
+  if (actorLifecycleActionModule) {
+    const lifecycleEffects = effects.filter(effect => effect.operation === 'change-actor-state')
+    lifecycleEffects.forEach(effect => {
+      const payload = row(effect.payload, `actor lifecycle effect ${String(effect.key)}.payload`)
+      exact(payload, ['actorKey', 'alive', 'present', 'locationKey', 'cause'], `actor lifecycle effect ${String(effect.key)}.payload`)
+      const actorKey = key(payload.actorKey, `actor lifecycle effect ${String(effect.key)}.actorKey`)
+      requireRef(actorKey, actorKeys, 'actor lifecycle effect actor')
+      if (payload.alive !== null) bool(payload.alive, `actor lifecycle effect ${String(effect.key)}.alive`)
+      if (payload.present !== null) bool(payload.present, `actor lifecycle effect ${String(effect.key)}.present`)
+      requireRef(nullableKey(payload.locationKey, `actor lifecycle effect ${String(effect.key)}.locationKey`), locationKeys, 'actor lifecycle effect location')
+      const cause = enumValue(payload.cause, ['player-attack', 'story', 'random-event', 'resolution'], `actor lifecycle effect ${String(effect.key)}.cause`)
+      const definition = actorRows.find(actor => actor.key === actorKey)!
+      if (payload.alive === false) {
+        if (definition.mortalityPolicy === 'protected') fail(`受保护Actor不能配置死亡Effect:${actorKey}`)
+        if (definition.mortalityPolicy === 'story-only' && cause !== 'story') fail(`story-only Actor只能配置正式剧情死亡Effect:${actorKey}`)
+        if (definition.mortalityPolicy === 'despawn-on-resolution') fail(`临时Actor不能配置死亡Effect:${actorKey}`)
+        if (definition.mortalityPolicy === 'mortal' && cause === 'resolution') fail(`mortal Actor不能以事件退场原因写入死亡:${actorKey}`)
+      }
+      if (payload.alive !== false && payload.present === false) {
+        if (definition.mortalityPolicy === 'protected') fail(`受保护Actor不能配置退场Effect:${actorKey}`)
+        if (definition.mortalityPolicy === 'despawn-on-resolution' && cause !== 'resolution') fail(`临时Actor只能配置事件解决退场Effect:${actorKey}`)
+        if (definition.mortalityPolicy !== 'despawn-on-resolution' && !['story', 'random-event'].includes(cause)) fail(`常驻Actor退场Effect原因无效:${actorKey}`)
+      }
+    })
+    actionRows.forEach(action => {
+      const referencedEffectKeys = [
+        ...strings(action.costEffectKeys, `action ${String(action.key)} costs`),
+        ...strings(action.successEffectKeys, `action ${String(action.key)} success`),
+        ...strings(action.failureEffectKeys, `action ${String(action.key)} failures`),
+      ]
+      const referenced = referencedEffectKeys.map(effectKey => effects.find(effect => effect.key === effectKey)!)
+      const lifecycle = referenced.filter(effect => effect.operation === 'change-actor-state')
+      if (!lifecycle.length) {
+        if (action.category === 'attack-actor' || action.category === 'actor-state-action') fail(`角色状态Action缺少change-actor-state Effect:${String(action.key)}`)
+        return
+      }
+      if (lifecycle.length !== 1 || referenced.length !== 1 || !strings(action.successEffectKeys, `action ${String(action.key)} success`).includes(String(lifecycle[0].key))) {
+        fail(`角色状态Action必须只在成功分支绑定唯一change-actor-state Effect:${String(action.key)}`)
+      }
+      const payload = row(lifecycle[0].payload, `action ${String(action.key)} actor state payload`)
+      const actorKey = key(payload.actorKey, `action ${String(action.key)} actorKey`)
+      const definition = actorRows.find(actor => actor.key === actorKey)!
+      if (payload.cause === 'player-attack') {
+        if (action.category !== 'attack-actor' || action.actorScope !== 'player' || action.targetScope !== 'actor'
+          || action.confirmationPolicy !== 'always' || action.repeatPolicy !== 'repeatable' || action.cooldownMinutes != null
+          || definition.mortalityPolicy !== 'mortal' || payload.alive !== false) fail(`玩家攻击Actor Action合同无效:${String(action.key)}`)
+      } else if (action.category !== 'actor-state-action' || action.actorScope !== 'system' || action.targetScope !== 'actor'
+        || action.confirmationPolicy !== 'never' || action.repeatPolicy !== 'repeatable' || action.cooldownMinutes != null) {
+        fail(`剧情或事件Actor状态Action合同无效:${String(action.key)}`)
+      }
     })
   }
 
@@ -994,6 +1077,35 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
       if (owners.length !== 1 || owners[0].key !== vendor.actorKey) fail(`vendor必须由actorKey对应角色唯一持有:${String(vendor.key)}`)
     })
   }
+  if (actorLifecycleModule) {
+    serviceContinuityRows.forEach((item, index) => {
+      const label = `actors.serviceContinuity[${index}]`
+      const ownerActorKey = key(item.ownerActorKey, `${label}.ownerActorKey`)
+      const serviceKey = key(item.serviceKey, `${label}.serviceKey`)
+      const owner = actorRows.find(actor => actor.key === ownerActorKey) ?? fail(`${label} ownerActorKey不存在`)
+      const service = vendors.find(vendor => vendor.key === serviceKey) ?? fail(`${label} serviceKey不存在`)
+      if (service.actorKey !== ownerActorKey || !strings(owner.serviceKeys, `actor ${ownerActorKey} serviceKeys`).includes(serviceKey)) fail(`${label}服务所有权不一致`)
+      const policy = enumValue(item.policy, ['replace-on-owner-death', 'disappear-on-owner-death'], `${label}.policy`)
+      const replacementActorKey = nullableKey(item.replacementActorKey, `${label}.replacementActorKey`)
+      const replacementServiceKey = nullableKey(item.replacementServiceKey, `${label}.replacementServiceKey`)
+      if (policy === 'disappear-on-owner-death') {
+        if (replacementActorKey != null || replacementServiceKey != null) fail(`${label}消失策略不能配置替代者`)
+        return
+      }
+      if (replacementActorKey == null || replacementServiceKey == null) fail(`${label}接管策略必须配置替代角色和服务`)
+      if (replacementActorKey === ownerActorKey || replacementServiceKey === serviceKey) fail(`${label}替代关系不能指回原角色或原服务`)
+      const replacementActor = actorRows.find(actor => actor.key === replacementActorKey) ?? fail(`${label} replacementActorKey不存在`)
+      const replacementService = vendors.find(vendor => vendor.key === replacementServiceKey) ?? fail(`${label} replacementServiceKey不存在`)
+      if (replacementService.actorKey !== replacementActorKey || !strings(replacementActor.serviceKeys, `actor ${replacementActorKey} serviceKeys`).includes(replacementServiceKey)) fail(`${label}替代服务所有权不一致`)
+    })
+    const ownedServiceKeys = actorRows.flatMap(actor => strings(actor.serviceKeys, `actor ${String(actor.key)} serviceKeys`)).sort()
+    requireSameKeys(serviceContinuityRows.map(item => String(item.serviceKey)), ownedServiceKeys, 'Actor服务连续性规则覆盖')
+    const replacementServiceKeys = serviceContinuityRows.flatMap(item => item.policy === 'replace-on-owner-death' ? [String(item.replacementServiceKey)] : [])
+    if (new Set(replacementServiceKeys).size !== replacementServiceKeys.length) fail('同一替代服务不能接管多个原服务')
+    const replacementTargets = new Set(replacementServiceKeys)
+    serviceContinuityRows.filter(item => replacementTargets.has(String(item.serviceKey)) && item.policy === 'replace-on-owner-death')
+      .forEach(item => fail(`首版不允许服务替代链:${String(item.serviceKey)}`))
+  }
 
   const relationships = versioned(packageValue, 'relationships')
   exact(relationships, ['version', 'morality', 'factionAffinity', 'attitude', 'storyModifiers'], 'relationships')
@@ -1140,7 +1252,10 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
   return {
     narrative: structuredClone(narrative) as unknown as TextOpenWorldParsedModulesV1['narrative'],
     world: normalizedWorld,
-    actors: { ...structuredClone(actors), version: 2, schedules: structuredClone(schedules) } as unknown as TextOpenWorldParsedModulesV1['actors'],
+    actors: {
+      ...structuredClone(actors), version: 3,
+      actors: structuredClone(actorRows), schedules: structuredClone(schedules), serviceContinuity: structuredClone(serviceContinuityRows),
+    } as unknown as TextOpenWorldParsedModulesV1['actors'],
     quests: { ...structuredClone(quests), version: 2, quests: structuredClone(questRows), stages: structuredClone(questStages) } as unknown as TextOpenWorldParsedModulesV1['quests'],
     actions: structuredClone(actions) as unknown as TextOpenWorldParsedModulesV1['actions'],
     progression: structuredClone(progression) as unknown as TextOpenWorldParsedModulesV1['progression'],

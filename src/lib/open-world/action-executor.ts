@@ -149,7 +149,7 @@ type ExecuteTextOpenWorldActionInputV1 = {
 async function executeTextOpenWorldActionAsV1(
   input: ExecuteTextOpenWorldActionInputV1,
   actorKey: 'player' | 'system',
-  systemCategory?: 'quest-action' | 'weather-action' | 'actor-schedule-action',
+  systemCategory?: 'quest-action' | 'weather-action' | 'actor-schedule-action' | 'actor-state-action',
 ): Promise<TextOpenWorldFeedbackReceiptV1> {
   if (!Number.isSafeInteger(input.sessionId) || input.sessionId < 1) fail('sessionId无效')
   const commandId = input.commandId ?? newCommandId()
@@ -176,6 +176,11 @@ async function executeTextOpenWorldActionAsV1(
   const registry = createTextOpenWorldActionRegistryV1(projection.runtimePackage)
   const actionContext = deriveTextOpenWorldContextsV1(projection).action
   actionContext.actorKey = actorKey
+  if (actorKey === 'system') {
+    actionContext.validTargetKeysByScope.actor = parseTextOpenWorldModulesV1(projection.runtimePackage).actors.actors
+      .filter(actor => projection.state.actors[actor.key]?.alive && projection.state.actors[actor.key]?.present)
+      .map(actor => actor.key)
+  }
   const availability = registry.project(actionContext)
     .find(item => item.action.key === input.actionKey)
     ?? fail(`Release不存在Action:${input.actionKey}`)
@@ -304,4 +309,9 @@ export async function executeTextOpenWorldActionV1(input: ExecuteTextOpenWorldAc
 /** Runs a governed Stage completion/quest lifecycle action owned by deterministic code. */
 export async function executeTextOpenWorldSystemQuestActionV1(input: ExecuteTextOpenWorldActionInputV1): Promise<TextOpenWorldFeedbackReceiptV1> {
   return executeTextOpenWorldActionAsV1(input, 'system', 'quest-action')
+}
+
+/** Runs a frozen story, regional-event or transient-resolution Actor outcome. */
+export async function executeTextOpenWorldSystemActorStateActionV1(input: ExecuteTextOpenWorldActionInputV1): Promise<TextOpenWorldFeedbackReceiptV1> {
+  return executeTextOpenWorldActionAsV1(input, 'system', 'actor-state-action')
 }

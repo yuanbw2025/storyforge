@@ -114,7 +114,7 @@ describe('Text Open World vNext · typed Effect DSL and atomic EffectPlan', () =
       { key: 'effect.fast-ridge', operation: 'unlock-fast-travel', payload: { fastTravelPointKey: 'fast-travel.ridge' } },
       { key: 'effect.start-fight', operation: 'start-combat', payload: { encounterKey: 'encounter.ridge-jackal' } },
       { key: 'effect.win-fight', operation: 'resolve-combat', payload: { encounterKey: 'encounter.ridge-jackal', outcome: 'victory' } },
-      { key: 'effect.move-caretaker', operation: 'change-actor-state', payload: { actorKey: 'actor.caretaker', alive: null, present: true, locationKey: 'location.ridge-channel' } },
+      { key: 'effect.move-caretaker', operation: 'change-actor-state', payload: { actorKey: 'actor.caretaker', alive: null, present: true, locationKey: 'location.ridge-channel', cause: 'story' } },
       { key: 'effect.region-state', operation: 'change-region-state', payload: { regionKey: 'region.ridge', state: 'channel-open' } },
       { key: 'effect.world-flag', operation: 'set-world-flag', payload: { flagKey: 'flag.channel-open', value: true } },
       { key: 'effect.reveal-knowledge', operation: 'reveal-knowledge', payload: { knowledgeKey: 'knowledge.caretaker', visibility: 'known' } },
@@ -190,12 +190,13 @@ describe('Text Open World vNext · typed Effect DSL and atomic EffectPlan', () =
     ;(unknownReference.modules.actions.payload as any).effects.push({ key: 'effect.missing-item', operation: 'grant-item', payload: { itemKey: 'item.missing', quantity: 1 } })
     expect(() => createTextOpenWorldEffectCatalogV1(unknownReference)).toThrow('itemKey引用不存在')
 
+    expect(() => createTextOpenWorldEffectCatalogV1(addEffects([
+      { key: 'effect.kill-caretaker', operation: 'change-actor-state', payload: { actorKey: 'actor.caretaker', alive: false, present: false, locationKey: null, cause: 'story' } },
+    ]))).toThrow('受保护Actor不能配置死亡Effect')
+
     const catalog = createTextOpenWorldEffectCatalogV1(addEffects([
-      { key: 'effect.kill-caretaker', operation: 'change-actor-state', payload: { actorKey: 'actor.caretaker', alive: false, present: false, locationKey: null } },
       { key: 'effect.remove-sword', operation: 'remove-item', payload: { itemKey: 'item.rust-sword', quantity: 1, reason: 'drop' } },
     ]))
-    await expect(catalog.plan({ effectKeys: ['effect.kill-caretaker'], claimKey: 'claim.kill', state: state() }))
-      .rejects.toThrow('不能杀死受保护Actor')
     const equipped = state({ inventory: { ...state().inventory, equippedItemInstanceIdBySlot: { weapon: 'instance.initial.1.item.rust-sword', armor: null, accessory: null } } })
     await expect(catalog.plan({ effectKeys: ['effect.remove-sword'], claimKey: 'claim.remove-equipped', state: equipped }))
       .rejects.toThrow('未装备物品实例数量不足')

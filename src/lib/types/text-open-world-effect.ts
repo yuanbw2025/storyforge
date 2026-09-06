@@ -42,7 +42,13 @@ export type TextOpenWorldEffectDefinitionV1 =
   | { key: string; operation: 'resolve-combat'; payload: { encounterKey: string; outcome: 'victory' | 'defeat' | 'escaped' } }
   | { key: string; operation: 'rest'; payload: { healthRatio: number; skillResourceRatio: number; clearHarmfulStatuses: boolean } }
   | { key: string; operation: 'respawn'; payload: { fastTravelPointKey: string; healthRatio: number } }
-  | { key: string; operation: 'change-actor-state'; payload: { actorKey: string; alive: boolean | null; present: boolean | null; locationKey: string | null } }
+  | { key: string; operation: 'change-actor-state'; payload: {
+      actorKey: string
+      alive: boolean | null
+      present: boolean | null
+      locationKey: string | null
+      cause: 'player-attack' | 'story' | 'random-event' | 'resolution' | 'legacy-system'
+    } }
   | { key: string; operation: 'change-region-state'; payload: { regionKey: string; state: string } }
   | { key: string; operation: 'set-world-flag'; payload: { flagKey: string; value: string | number | boolean | null } }
   | { key: string; operation: 'earn-achievement'; payload: { achievementKey: string } }
