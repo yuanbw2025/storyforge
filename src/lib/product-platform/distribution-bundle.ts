@@ -5,6 +5,7 @@ import {
   isSha256Hash,
 } from '../product-production/hash'
 import {
+  discardUnreferencedMediaBlobObjectsV1,
   putMediaBlobObject,
   sha256MediaData,
 } from '../product-production/media-blob-store'
@@ -16,6 +17,8 @@ import type {
   ProductReleaseManifestV1,
   ProductMediaAsset,
   ProductMediaBlob,
+  ProductReleaseMarketplaceProvenanceV1,
+  ProductReleaseLocalFileProvenanceV1,
   WorkspaceScope,
 } from '../types'
 import { assertProductReleaseUnchanged } from '../product/releases'
@@ -51,10 +54,16 @@ export interface MarketplaceImportProvenanceV2 {
   listingId: string
   orderId: string | null
   entitlementId: string | null
-  license: NonNullable<ProductRelease['distributionProvenance']>['license']
+  license: ProductReleaseMarketplaceProvenanceV1['license']
   attribution: string[]
   localCopyPreserved: boolean
   acquiredAt: number
+}
+
+export interface LocalFileImportProvenanceV1 {
+  candidatePackageHash: string
+  originalReleaseHash: string
+  candidateStatus: 'eligible-for-community-submission'
 }
 
 const MAXIMUM_DISTRIBUTION_BYTES = 256 * 1024 * 1024
@@ -275,25 +284,94 @@ export async function importMarketplaceProductDistributionV2(input: {
   provenance: MarketplaceImportProvenanceV2
 }): Promise<ProductRelease> {
   const scope = await resolveScope({ scope: input.scope })
-  const { bundle, decodedMedia } = await verifiedBundle(input.bundle)
+  const verified = await verifiedBundle(input.bundle)
   const provenance = validateProvenance(input.provenance)
-  const blobObjects = await Promise.all(decodedMedia.map(item => putMediaBlobObject({
+  return importVerifiedProductDistributionV2({
     scope,
-    data: item.data,
-    mimeType: item.asset.mimeType,
-    expectedContentHash: item.asset.blobContentHash,
-  })))
+    verified,
+    productionKeyPrefix: 'marketplace',
+    labelSuffix: '市场副本',
+    distributionProvenance: {
+      source: 'marketplace',
+      ...provenance,
+      importedAt: Date.now(),
+    },
+  })
+}
 
-  return db.transaction('rw', scopeTransactionTables(
-    db.productReleases,
-    db.productMediaAssets,
-    db.productMediaBlobs,
-    db.mediaBlobObjects,
-  ), async () => {
+export async function importLocalProductDistributionV2(input: {
+  scope: WorkspaceScope
+  bundle: unknown
+  provenance: LocalFileImportProvenanceV1
+}): Promise<ProductRelease> {
+  const scope = await resolveScope({ scope: input.scope })
+  const verified = await verifiedBundle(input.bundle)
+  if (!isSha256Hash(input.provenance?.candidatePackageHash)
+    || input.provenance?.originalReleaseHash !== verified.bundle.productRelease.contentHash
+    || input.provenance?.candidateStatus !== 'eligible-for-community-submission') {
+    throw new Error('[distribution] 本地文字冒险候选包来源无效')
+  }
+  return importVerifiedProductDistributionV2({
+    scope,
+    verified,
+    productionKeyPrefix: 'local-file',
+    labelSuffix: '本地导入副本',
+    distributionProvenance: {
+      source: 'local-file',
+      candidatePackageHash: input.provenance.candidatePackageHash,
+      originalReleaseHash: input.provenance.originalReleaseHash,
+      candidateStatus: input.provenance.candidateStatus,
+      remoteCreatorIdentityVerified: false,
+      localCopyPreserved: true,
+      importedAt: Date.now(),
+    },
+  })
+}
+
+async function importVerifiedProductDistributionV2(input: {
+  scope: WorkspaceScope
+  verified: Awaited<ReturnType<typeof verifiedBundle>>
+  productionKeyPrefix: 'marketplace' | 'local-file'
+  labelSuffix: string
+  distributionProvenance: ProductReleaseMarketplaceProvenanceV1 | ProductReleaseLocalFileProvenanceV1
+}): Promise<ProductRelease> {
+  const { scope, verified, distributionProvenance } = input
+  const { bundle, decodedMedia } = verified
+  const stagedIds: number[] = []
+  const blobObjects: Array<Awaited<ReturnType<typeof putMediaBlobObject>>> = []
+
+  try {
+    // Stage sequentially so a failure cannot race the scoped rollback while
+    // sibling writes are still completing in the background.
+    for (const item of decodedMedia) {
+      const existed = await db.mediaBlobObjects
+        .where('[workId+contentHash]').equals([scope.workId, item.asset.blobContentHash]).first()
+      try {
+        const row = await putMediaBlobObject({
+          scope,
+          data: item.data,
+          mimeType: item.asset.mimeType,
+          expectedContentHash: item.asset.blobContentHash,
+        })
+        if (!existed && row.id != null) stagedIds.push(row.id)
+        blobObjects.push(row)
+      } catch (cause) {
+        const failed = !existed ? await db.mediaBlobObjects
+          .where('[workId+contentHash]').equals([scope.workId, item.asset.blobContentHash]).first() : null
+        if (failed?.id != null) stagedIds.push(failed.id)
+        throw cause
+      }
+    }
+    return await db.transaction('rw', scopeTransactionTables(
+      db.productReleases,
+      db.productMediaAssets,
+      db.productMediaBlobs,
+      db.mediaBlobObjects,
+    ), async () => {
     const manifest = bundle.productRelease.manifest
     const productKey = manifest.runtimePackage.definition.productKey
     const productionKey = manifest.productionProvenance?.productionKey
-      ?? `marketplace:${productKey}:${bundle.productRelease.contentHash.slice(0, 16)}`
+      ?? `${input.productionKeyPrefix}:${productKey}:${bundle.productRelease.contentHash.slice(0, 16)}`
     let release = await db.productReleases.where('contentHash')
       .equals(bundle.productRelease.contentHash)
       .filter(row => row.workId === scope.workId)
@@ -306,7 +384,7 @@ export async function importMarketplaceProductDistributionV2(input: {
     } else {
       const prior = (await db.productReleases.where('workId').equals(scope.workId).toArray())
         .filter(row => row.productionKey === productionKey)
-      const importedAt = Date.now()
+      const importedAt = distributionProvenance.importedAt
       const releaseRow = stampNewRecord(scope, 'productReleases', {
         projectId: scope.projectId,
         worldId: scope.worldId,
@@ -315,15 +393,11 @@ export async function importMarketplaceProductDistributionV2(input: {
         productType: manifest.productType,
         worldReleaseId: null,
         version: Math.max(0, ...prior.map(candidate => candidate.version)) + 1,
-        label: `${manifest.runtimePackage.definition.title} · 市场副本`,
+        label: `${manifest.runtimePackage.definition.title} · ${input.labelSuffix}`,
         manifestJson: canonicalProductProductionJsonV2(manifest),
         contentHash: bundle.productRelease.contentHash,
         createdAt: importedAt,
-        distributionProvenance: {
-          source: 'marketplace' as const,
-          ...provenance,
-          importedAt,
-        },
+        distributionProvenance,
       } satisfies ProductRelease, { owner: 'work' })
       const id = await db.productReleases.add(releaseRow) as number
       release = { ...releaseRow, id }
@@ -382,6 +456,10 @@ export async function importMarketplaceProductDistributionV2(input: {
       }
     }
 
-    return release
-  })
+      return release
+    })
+  } catch (cause) {
+    await discardUnreferencedMediaBlobObjectsV1({ scope, blobObjectIds: stagedIds }).catch(() => undefined)
+    throw cause
+  }
 }

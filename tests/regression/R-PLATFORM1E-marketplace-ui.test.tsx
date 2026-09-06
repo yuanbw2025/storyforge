@@ -5,6 +5,7 @@ import MarketplacePanel from '../../src/components/community/MarketplacePanel'
 import { db } from '../../src/lib/db/schema'
 import type { CommercialListingV1 } from '../../src/lib/commercial/authority'
 import type { ProductDistributionBundleV1 } from '../../src/lib/product-platform/distribution-bundle'
+import type { TextAdventureCommunityPackageV1 } from '../../src/lib/adventure/community-package'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
@@ -19,6 +20,39 @@ const listing: CommercialListingV1 = {
   },
   currency: 'CNY', amountMinor: 2_900, creatorShareBps: 8_000,
   status: 'published', rightsConfirmed: true, reviewedBy: 'user.publisher', reviewReasonCode: null, createdAt: 1, updatedAt: 1,
+}
+
+function textAdventureCandidate(bundle: ProductDistributionBundleV1): TextAdventureCommunityPackageV1 {
+  return {
+    schema: 'storyforge.text-adventure-community-package', version: 1,
+    distributionBundle: bundle as never,
+    dossier: {
+      schema: 'storyforge.text-adventure-community-candidate-dossier', version: 1,
+      status: 'eligible-for-community-submission', title: '潮钟群岛',
+      releaseContentHash: RELEASE, releaseIdentityHash: 'c'.repeat(64), runtimePackageHash: 'd'.repeat(64),
+      distributionBundleHash: 'b'.repeat(64), sourceWorldHash: 'e'.repeat(64), buildNumber: 1,
+      metrics: {
+        routeCount: 6, reachableEndingCount: 3, minimumRouteTextUnits: 12_000,
+        maximumRouteTextUnits: 15_000, totalPlayableTextUnits: 26_000,
+        estimatedMinimumRouteMinutes: 60, minimumRouteDialogueTurns: 30,
+        minimumRouteNarrativeChoices: 12, minimumRouteStatefulDecisions: 6,
+        authoredNpcCount: 5, talkActionCount: 8, mainQuestStageCount: 4,
+        mainQuestObjectiveCount: 8, minimumMainProgressActions: 20,
+      },
+      systems: {
+        regions: 2, areas: 8, locations: 16, scenes: 24, mainQuests: 1, sideQuests: 4,
+        storylets: 8, items: 12, equipmentItems: 4, abilities: 8, resources: 6, mediaAssets: 9,
+      },
+      evidence: {
+        buildManifestHash: 'f'.repeat(64), qualityReportHash: '1'.repeat(64),
+        autoplayArtifactHash: '2'.repeat(64), gateReceiptHashes: ['3'.repeat(64)],
+        mediaAuditHash: '4'.repeat(64), visualReviewHash: '5'.repeat(64),
+        authorMainRouteEndingKey: 'ending.home', authorMainRouteChoiceCount: 12,
+      },
+      offlineFallback: 'text-only',
+    },
+    evidence: {} as never, candidatePackageHash: '6'.repeat(64),
+  }
 }
 
 function client() {
@@ -150,6 +184,41 @@ describe('PLATFORM-1E · Marketplace product UI', () => {
     expect(fake.registerRelease).toHaveBeenCalledWith(expect.objectContaining({ bundle }))
     expect(fake.submitListing).toHaveBeenCalledWith(expect.objectContaining({ listingId: listing.listingId }))
     expect(host.textContent).toContain('submitted')
+  })
+
+  it('文字冒险必须先通过专属候选档案复验，才允许上传通用发行内层', async () => {
+    await db.productReleases.add({
+      projectId: 1, worldId: 1, workId: 1, worldReleaseId: 1,
+      productionKey: 'market-ui-adventure', productType: 'text-adventure', version: 1,
+      label: '潮钟群岛 v1', manifestJson: JSON.stringify({
+        productType: 'text-adventure',
+        runtimePackage: { productType: 'text-adventure', definition: { title: '潮钟群岛' } },
+      }), contentHash: RELEASE, createdAt: 2,
+    })
+    const fake = client()
+    const bundle = {
+      productRelease: { contentHash: RELEASE }, bundleHash: 'b'.repeat(64),
+    } as unknown as ProductDistributionBundleV1
+    const exportTextAdventureCandidate = vi.fn().mockResolvedValue(textAdventureCandidate(bundle))
+    await act(async () => {
+      root.render(createElement(MarketplacePanel, {
+        client: fake as never, scope: { projectId: 1, worldId: 1, workId: 1 },
+        exportTextAdventureCandidate,
+      }))
+      await settle()
+    })
+    await act(async () => setInput(host.querySelector<HTMLInputElement>('input[type="password"]')!, 'token-creator-123456789'))
+    await act(async () => { button(host, '创作者提交').click(); await settle() })
+    await waitFor(() => expect(host.textContent).toContain('文字冒险需先完成本地候选复验'))
+    expect(button(host, '冻结、上传并提交审核').disabled).toBe(true)
+    await act(async () => { button(host, '复验社区候选资格').click(); await settle() })
+    await waitFor(() => expect(host.textContent).toContain('文字冒险社区候选资格已通过'))
+    expect(host.textContent).toContain('60.0 分钟')
+    expect(button(host, '冻结、上传并提交审核').disabled).toBe(false)
+    await act(async () => { button(host, '冻结、上传并提交审核').click(); await settle() })
+    await waitFor(() => expect(fake.submitListing).toHaveBeenCalledOnce())
+    expect(exportTextAdventureCandidate).toHaveBeenCalledTimes(2)
+    expect(fake.registerRelease).toHaveBeenCalledWith(expect.objectContaining({ bundle }))
   })
 
   it('有权限的发行审核员读取 submitted 队列并显式批准发布', async () => {

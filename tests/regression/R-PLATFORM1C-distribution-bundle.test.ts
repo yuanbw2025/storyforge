@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import {
   exportProductDistributionBundleV2,
+  importLocalProductDistributionV2,
   importMarketplaceProductDistributionV2,
   verifyProductDistributionBundleV2,
   type MarketplaceImportProvenanceV2,
@@ -181,6 +182,70 @@ describe('PLATFORM-1C · Marketplace ProductDistributionBundle', () => {
     })).rejects.toThrow(/归因/)
     expect(await db.productReleases.where('workId').equals(target.scope.workId).count()).toBe(0)
     expect(await db.worldReleases.where('worldId').equals(target.scope.worldId).count()).toBe(0)
+    expect(await db.mediaBlobObjects.where('workId').equals(target.scope.workId).count()).toBe(0)
+  }, 40_000)
+
+  it('本地文件导入使用独立来源语义，重复导入幂等且不伪造市场权益', async () => {
+    const source = await workspace('本地包来源')
+    const fixture = await publishedFixture(source.scope)
+    const bundle = await exportProductDistributionBundleV2({ scope: source.scope, productReleaseId: fixture.releaseId })
+    const target = await workspace('本地包目标')
+    const candidatePackageHash = 'c'.repeat(64)
+
+    const imported = await importLocalProductDistributionV2({
+      scope: target.scope,
+      bundle,
+      provenance: {
+        candidatePackageHash,
+        originalReleaseHash: bundle.productRelease.contentHash,
+        candidateStatus: 'eligible-for-community-submission',
+      },
+    })
+    expect(imported.distributionProvenance).toEqual(expect.objectContaining({
+      source: 'local-file', candidatePackageHash,
+      originalReleaseHash: bundle.productRelease.contentHash,
+      remoteCreatorIdentityVerified: false, localCopyPreserved: true,
+    }))
+    expect(imported.distributionProvenance).not.toHaveProperty('listingId')
+    expect(imported.distributionProvenance).not.toHaveProperty('entitlementId')
+
+    const repeated = await importLocalProductDistributionV2({
+      scope: target.scope,
+      bundle,
+      provenance: {
+        candidatePackageHash,
+        originalReleaseHash: bundle.productRelease.contentHash,
+        candidateStatus: 'eligible-for-community-submission',
+      },
+    })
+    expect(repeated.id).toBe(imported.id)
+    expect(await db.productReleases.where('workId').equals(target.scope.workId).count()).toBe(1)
+    expect(await db.mediaBlobObjects.where('workId').equals(target.scope.workId).count()).toBe(1)
+  }, 40_000)
+
+  it('本地导入在 Release 身份冲突后回收本次暂存 Blob，不留下半成品', async () => {
+    const source = await workspace('冲突包来源')
+    const fixture = await publishedFixture(source.scope)
+    const bundle = await exportProductDistributionBundleV2({ scope: source.scope, productReleaseId: fixture.releaseId })
+    const target = await workspace('冲突包目标')
+    await db.productReleases.add({
+      projectId: target.scope.projectId, worldId: target.scope.worldId, workId: target.scope.workId,
+      productionKey: 'conflicting.production', productType: 'avg', worldReleaseId: null,
+      version: 1, label: '冲突占位', manifestJson: '{}',
+      contentHash: bundle.productRelease.contentHash, createdAt: Date.now(),
+    })
+
+    await expect(importLocalProductDistributionV2({
+      scope: target.scope,
+      bundle,
+      provenance: {
+        candidatePackageHash: 'd'.repeat(64),
+        originalReleaseHash: bundle.productRelease.contentHash,
+        candidateStatus: 'eligible-for-community-submission',
+      },
+    })).rejects.toThrow(/身份.*冲突/)
+    expect(await db.productReleases.where('workId').equals(target.scope.workId).count()).toBe(1)
+    expect(await db.productMediaAssets.where('workId').equals(target.scope.workId).count()).toBe(0)
     expect(await db.mediaBlobObjects.where('workId').equals(target.scope.workId).count()).toBe(0)
   }, 40_000)
 })

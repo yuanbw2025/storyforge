@@ -255,6 +255,7 @@ function simulateRoute(input: {
   let failureInjected = false
   let sequence = 0
   const evidence: string[] = []
+  const prerequisiteActionKeys = new Set<string>()
   const executeAction = (action: AdventureActionDefinition) => {
     sequence += 1
     let outcome = actionOutcome({ action, content, state: adventure, seed: input.seed, sequence })
@@ -277,34 +278,73 @@ function simulateRoute(input: {
   input.choiceKeys.forEach((choiceKey, index) => {
     const choice = narrative.choices.find(item => item.choiceKey === choiceKey)
       ?? fail(`路线引用不存在 Choice:${choiceKey}`)
-    if (choice.sourceNodeKey !== narrative.currentNodeKey || !narrative.availableChoiceKeys.includes(choiceKey)) {
+    if (choice.sourceNodeKey !== narrative.currentNodeKey) {
       fail(`路线 Choice 当前不可用:${choiceKey}@${narrative.currentNodeKey ?? 'none'}`)
     }
     const actionTags = choice.tags.filter(tag => tag.startsWith('adventure-action:'))
     if (actionTags.length > 1) fail(`Choice 绑定多个 Adventure 行动:${choiceKey}`)
-    if (actionTags.length === 1) {
-      const actionKey = actionTags[0].slice('adventure-action:'.length)
-      let available = availableAdventureActions(
+    const taggedActionKey = actionTags.length === 1 ? actionTags[0].slice('adventure-action:'.length) : null
+    const taggedActionIsReady = () => !taggedActionKey || availableAdventureActions(
+      content, adventure, adventureNarrativeActionContext(narrative),
+    ).some(item => item.action.key === taggedActionKey && item.available)
+    // A route edge can be gated by a chain of deterministic product actions:
+    // movement -> main objective -> item/condition -> mapped choice action.
+    // Resolve that chain before checking the Narrative Choice or attempting its
+    // mapped product action. Narrative visibility alone does not prove the
+    // quest and inventory requirements of that action are satisfied.
+    for (let prerequisiteCount = 0;
+      (!narrative.availableChoiceKeys.includes(choiceKey) || !taggedActionIsReady())
+        && prerequisiteCount < content.actions.length * 2;
+      prerequisiteCount += 1) {
+      const available = availableAdventureActions(
         content, adventure, adventureNarrativeActionContext(narrative),
-      ).find(item => item.action.key === actionKey)
-      // The player normally resolves the current main-quest objectives before
-      // the corresponding Narrative Choice becomes legal. Exercise those
-      // product actions through the same pure requirement/effect functions
-      // instead of pretending every graph edge is immediately clickable.
-      for (let prerequisiteCount = 0; !available?.available && prerequisiteCount < content.actions.length; prerequisiteCount += 1) {
-        const prerequisite = availableAdventureActions(
-          content, adventure, adventureNarrativeActionContext(narrative),
-        ).find(item => item.available
-          && item.action.narrativeChoiceKey == null
-          && item.action.key.startsWith('action.main.'))
-        if (!prerequisite) break
-        executeAction(prerequisite.action)
-        available = availableAdventureActions(
-          content, adventure, adventureNarrativeActionContext(narrative),
-        ).find(item => item.action.key === actionKey)
+      ).filter(item => item.available && !prerequisiteActionKeys.has(item.action.key))
+      const tagged = taggedActionKey
+        ? available.find(item => item.action.key === taggedActionKey)
+        : null
+      const unlocksChoice = (candidate: AdventureActionDefinition) => {
+        const outcome = actionOutcome({ action: candidate, content, state: adventure, seed: input.seed, sequence: sequence + 1 })
+        if (outcome === 'not-attempted') return false
+        const projected = applyAdventureEffects(content, adventure, actionEffects(candidate, outcome), sequence + 1)
+        if (!candidate.repeatable) projected.completedActionKeys.push(candidate.key)
+        return syncAdventureProjection(narrative, projected).availableChoiceKeys.includes(choiceKey)
       }
-      if (!available?.available) fail(`路线公共行动不可用:${choiceKey}->${actionKey}`)
-      executeAction(available.action)
+      const directUnlock = available.find(item => unlocksChoice(item.action))
+      const incompleteMainObjectiveActions = new Set(content.quests
+        .filter(quest => quest.category === 'main')
+        .flatMap(quest => {
+          const state = adventure.quests.find(item => item.questKey === quest.key)
+          return quest.objectives.flatMap(objective => (
+            state?.objectives.find(item => item.objectiveKey === objective.key)?.completed
+              ? [] : objective.alternativeActionKeys
+          ))
+        }))
+      const objectiveAction = available.find(item => incompleteMainObjectiveActions.has(item.action.key))
+      const objectiveLocations = new Set(content.actions
+        .filter(action => incompleteMainObjectiveActions.has(action.key))
+        .map(action => action.locationKey))
+      const objectiveMove = available.find(item => item.action.kind === 'move'
+        && item.action.targetKey != null && objectiveLocations.has(item.action.targetKey))
+      const unvisitedMove = available.find(item => item.action.kind === 'move'
+        && item.action.targetKey != null && !adventure.visitedLocationKeys.includes(item.action.targetKey))
+      const fallback = available.find(item => item.action.narrativeChoiceKey == null && !item.action.repeatable)
+      const selected = tagged ?? directUnlock ?? objectiveAction ?? objectiveMove ?? unvisitedMove ?? fallback
+      if (!selected) break
+      prerequisiteActionKeys.add(selected.action.key)
+      executeAction(selected.action)
+    }
+    if (!narrative.availableChoiceKeys.includes(choiceKey)) {
+      fail(`路线 Choice 当前不可用:${choiceKey}@${narrative.currentNodeKey ?? 'none'}`)
+    }
+    if (
+      taggedActionKey
+      && !adventure.actionHistory.some(item => item.actionKey === taggedActionKey)
+    ) {
+      const tagged = availableAdventureActions(
+        content, adventure, adventureNarrativeActionContext(narrative),
+      ).find(item => item.action.key === taggedActionKey)
+      if (!tagged?.available) fail(`路线公共行动不可用:${choiceKey}->${taggedActionKey}`)
+      executeAction(tagged.action)
     }
     narrative = advanceFrozenNarrativeChoice(narrative, choiceKey, index + 1)
   })
@@ -354,8 +394,12 @@ export function runTextAdventureAutoplayV1(input: {
   const endingRoutes = quality.reachableEndingKeys.map(endingKey => (
     routes.find(route => route.endingNodeKey === endingKey)
   )).filter((route): route is NonNullable<typeof route> => !!route)
+  const mainObjectiveActionKeys = new Set(content.quests
+    .filter(quest => quest.category === 'main')
+    .flatMap(quest => quest.objectives.flatMap(objective => objective.alternativeActionKeys)))
   const failedCandidate = content.actions.some(action => (
-    action.key.startsWith('action.main.') && action.rule.kind !== 'automatic'
+    mainObjectiveActionKeys.has(action.key) && action.rule.kind !== 'automatic'
+      && action.failureEffects.length > 0
   )) ? routes[0] : undefined
   const cases: TextAdventureAutoplayCaseV1[] = [
     caseResult('golden-route', () => {

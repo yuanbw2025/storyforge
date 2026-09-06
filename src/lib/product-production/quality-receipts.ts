@@ -189,6 +189,33 @@ export interface CompletedProductBuildPlaythroughV1 {
   completedAt: number
 }
 
+export interface PortableProductQualityGateBindingV1 {
+  buildNumber: number
+  packageHash: string
+  previewHash: string
+  briefHash: string
+  humanVisual?: {
+    mediaAuditHash: string
+    visualReviewHash: string
+    assets: Array<{
+      assetKey: string
+      artifactKey: string
+      contentHash: string
+      blobContentHash: string
+      mimeType: string
+      byteSize: number
+    }>
+  }
+}
+
+export interface VerifiedPortableProductQualityGateV1 {
+  gateReceipt: ProductQualityGateReceiptV1
+  evidence: ProductBrowserPerformanceEvidenceV1
+    | ProductMainRoutePlaythroughEvidenceV1
+    | ProductMediaRuntimeEvidenceV1
+    | TextAdventureHumanVisualReviewEvidenceV1
+}
+
 function fail(message: string): never {
   throw new Error(`[product-quality-receipt] ${message}`)
 }
@@ -525,6 +552,64 @@ export function parseProductQualityGateReceiptV1(value: string | unknown): Produ
 async function verifyGateReceiptHash(receipt: ProductQualityGateReceiptV1): Promise<void> {
   const { receiptHash, ...body } = receipt
   if (await hashProductProductionValueV2(body) !== receiptHash) fail('receiptHash 校验失败')
+}
+
+/**
+ * Replays the same verifier-specific checks used by local Build adoption, but
+ * without Dexie ids. Community packages use this to prove their receipts in a
+ * fresh browser before any import write occurs.
+ */
+export async function verifyPortableProductQualityGateReceiptV1(input: {
+  receipt: string | unknown
+  binding: PortableProductQualityGateBindingV1
+}): Promise<VerifiedPortableProductQualityGateV1> {
+  const gateReceipt = parseProductQualityGateReceiptV1(input.receipt)
+  await verifyGateReceiptHash(gateReceipt)
+  if (gateReceipt.status !== 'passed') fail(`候选包质量回执未通过:${gateReceipt.gateId}`)
+  const row = {
+    projectId: 0, worldId: 0, workId: 0, buildId: 0,
+    gateId: gateReceipt.gateId, gateVersion: gateReceipt.gateVersion,
+    verifierId: gateReceipt.verifierId, verifierVersion: gateReceipt.verifierVersion,
+    status: gateReceipt.status, receiptJson: canonicalProductProductionJsonV2(gateReceipt),
+    receiptHash: gateReceipt.receiptHash, createdAt: gateReceipt.createdAt,
+  } satisfies ProductQualityGateReceiptRecordV1
+  if (gateReceipt.gateId === PRODUCT_BROWSER_PERFORMANCE_GATE_ID_V1) {
+    const verified = await verifyBrowserGateReceipt(row, {
+      buildId: 0, packageHash: input.binding.packageHash, previewHash: input.binding.previewHash,
+    })
+    return { gateReceipt, evidence: verified.evidence }
+  }
+  if (gateReceipt.gateId === PRODUCT_MAIN_ROUTE_PLAYTHROUGH_GATE_ID_V1) {
+    const verified = await verifyPlaythroughGateReceipt(row, {
+      buildId: 0, packageHash: input.binding.packageHash, previewHash: input.binding.previewHash,
+    })
+    return { gateReceipt, evidence: verified.evidence }
+  }
+  if (gateReceipt.gateId === PRODUCT_MEDIA_RUNTIME_GATE_ID_V1) {
+    const verified = await verifyMediaRuntimeGateReceipt(row, {
+      buildId: 0, packageHash: input.binding.packageHash,
+      previewHash: input.binding.previewHash, briefHash: input.binding.briefHash,
+    })
+    return { gateReceipt, evidence: verified.evidence }
+  }
+  if (gateReceipt.gateId === TEXT_ADVENTURE_HUMAN_VISUAL_REVIEW_GATE_ID_V1) {
+    const visual = input.binding.humanVisual
+    if (!visual) fail('候选包逐图人工回执缺少媒资审查绑定')
+    const resolved: ResolvedTextAdventureHumanVisualInputsV1 = {
+      build: { id: 0, buildNumber: input.binding.buildNumber } as ProductBuildRecordV1,
+      briefHash: input.binding.briefHash,
+      packageHash: input.binding.packageHash,
+      previewHash: input.binding.previewHash,
+      mediaAuditHash: visual.mediaAuditHash,
+      visualReviewHash: visual.visualReviewHash,
+      assets: visual.assets.map((asset, index) => ({
+        ...asset, artifactId: index + 1, blobObjectId: index + 1,
+      })),
+    }
+    const verified = await verifyTextAdventureHumanVisualReviewGateV1(row, resolved)
+    return { gateReceipt, evidence: verified.evidence }
+  }
+  fail(`候选包包含未登记的 portable gate:${gateReceipt.gateId}`)
 }
 
 function parseBrowserEvidence(value: string): ProductBrowserPerformanceEvidenceV1 {

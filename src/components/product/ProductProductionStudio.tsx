@@ -81,6 +81,7 @@ interface CommandActivityV1 {
 const loadProductQualityReceiptsV1 = () => import('../../lib/product-production/quality-receipts')
 const loadTtrpgProductionWizardV2 = () => import('../ttrpg/TtrpgProductionWizard')
 const TtrpgProductionWizard = lazy(loadTtrpgProductionWizardV2)
+const TextAdventurePackagePanel = lazy(() => import('./TextAdventurePackagePanel'))
 
 const SOURCE_SELECTION_FACETS = [
   ['storySources', 'storyResourceKeys', '故事来源'],
@@ -1138,6 +1139,12 @@ export default function ProductProductionStudio(props: {
       {(message || error) && <div role={error ? 'alert' : 'status'} aria-live={error ? 'assertive' : 'polite'} className={`mb-5 flex items-start gap-2 rounded border p-3 text-xs ${error ? 'border-error/30 bg-error/5 text-error' : 'border-success/30 bg-success/5 text-success'}`}>{error ? <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /> : <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />}<span>{error || message}</span></div>}
       {commandActivity && <div role="status" aria-live="polite" data-testid="product-production-command-activity" className={`mb-5 rounded border p-3 text-[10px] ${commandActivity.status === 'succeeded' ? 'border-success/30 bg-success/5 text-success' : commandActivity.status === 'conflict' ? 'border-error/30 bg-error/5 text-error' : 'border-accent/30 bg-accent/5 text-accent'}`}><strong>{commandActivity.label} · {commandActivity.status === 'pending' ? 'pending' : commandActivity.status === 'succeeded' ? 'succeeded' : 'conflict / failed'}</strong><span className="mt-1 block">{commandActivity.detail}</span></div>}
       {(busy || productionRunning) && <div role="status" aria-live="polite" aria-busy="true" className="mb-5 flex items-center gap-2 text-xs text-accent"><Loader2 className="h-4 w-4 animate-spin" />{productionRunning ? '内容、视觉、音频、装配与质检正在按 DAG 自动推进…' : '正在执行受治理的制作步骤…'}</div>}
+      {(details?.production.productType ?? productType) === 'text-adventure' && <Suspense fallback={<section className="mb-5 rounded border border-border bg-bg-elevated p-5 text-xs text-text-muted">正在载入文字冒险产品包校验器…</section>}><TextAdventurePackagePanel
+        scope={props.scope}
+        productReleaseId={details?.production.productType === 'text-adventure'
+          ? details.production.currentProductReleaseId : null}
+        onImported={() => props.onPublished?.('text-adventure')}
+      /></Suspense>}
       {!details ? <>
         <header className="mb-6 border-b border-border pb-5"><small className="font-mono text-[9px] tracking-widest text-accent">CONSULT → BRIEF → AUTHORIZE</small><h1 className="mt-2 font-serif text-2xl">从冻结世界版本开始制作</h1><p className="mt-2 max-w-3xl text-xs leading-6 text-text-muted">先选择来源和起点，系统生成可审查 Brief。只有点击“保存 Brief”并再次“授权开始”后，才会创建 Build。</p></header>
         <section className="grid gap-4 rounded border border-border bg-bg-elevated p-5 md:grid-cols-2">

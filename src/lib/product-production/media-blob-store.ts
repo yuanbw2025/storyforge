@@ -267,6 +267,48 @@ export interface MediaBlobGcReceiptV1 {
   deleted: number[]
 }
 
+/**
+ * Best-effort rollback for physical objects staged by one failed import. It is
+ * deliberately id-scoped so a failed package cannot sweep unrelated author
+ * uploads that merely happen to be unreferenced at that moment.
+ */
+export async function discardUnreferencedMediaBlobObjectsV1(input: {
+  scope: WorkspaceScope
+  blobObjectIds: number[]
+}): Promise<number[]> {
+  const scope = await resolveScope({ scope: input.scope })
+  const ids = [...new Set(input.blobObjectIds.filter(id => Number.isInteger(id) && id > 0))]
+  const deleted: number[] = []
+  for (const id of ids) {
+    const claimed = await db.transaction(
+      'rw',
+      [db.mediaBlobObjects, db.productBuildArtifacts, db.productMediaBlobs],
+      async () => {
+        const current = await db.mediaBlobObjects.get(id)
+        if (!current || !await assertRecordInScope(scope, 'mediaBlobObjects', current, { owner: 'work' })
+          || current.storageState === 'pending-write' || (current.leaseExpiresAt ?? 0) > Date.now()) return null
+        const [artifactRef, productRef] = await Promise.all([
+          db.productBuildArtifacts.where('blobObjectId').equals(id)
+            .filter(row => row.status === 'accepted' || row.status === 'carried-forward').first(),
+          db.productMediaBlobs.where('blobObjectId').equals(id).first(),
+        ])
+        if (artifactRef || productRef) return null
+        await db.mediaBlobObjects.update(id, { storageState: 'pending-delete', updatedAt: Date.now() })
+        return current
+      },
+    )
+    if (!claimed) continue
+    try {
+      if (claimed.backend === 'opfs' && claimed.opfsPath) await deleteOpfsData(claimed.opfsPath)
+      await db.mediaBlobObjects.delete(id)
+      deleted.push(id)
+    } catch {
+      await db.mediaBlobObjects.update(id, { storageState: 'corrupt', updatedAt: Date.now() }).catch(() => undefined)
+    }
+  }
+  return deleted
+}
+
 export async function collectUnreferencedMediaBlobObjects(input: {
   scope: WorkspaceScope
   now?: number

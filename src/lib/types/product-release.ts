@@ -207,6 +207,40 @@ export type TextOpenWorldProductRuntimePackageV1 = ProductRuntimePackageV1 & {
 
 export type AnyProductReleaseManifest = ProductReleaseManifestV1
 
+export interface ProductReleaseMarketplaceProvenanceV1 {
+  source: 'marketplace'
+  listingId: string
+  orderId: string | null
+  entitlementId: string | null
+  license: {
+    licenseId: string
+    licenseVersion: string
+    allowOfflineExport: boolean
+    allowRemix: boolean
+    commercialReuse: boolean
+    requiresAttribution: boolean
+    termsUrl: string
+  }
+  attribution: string[]
+  localCopyPreserved: boolean
+  acquiredAt: number
+  importedAt: number
+}
+
+export interface ProductReleaseLocalFileProvenanceV1 {
+  source: 'local-file'
+  candidatePackageHash: string
+  originalReleaseHash: string
+  candidateStatus: 'eligible-for-community-submission'
+  remoteCreatorIdentityVerified: false
+  localCopyPreserved: true
+  importedAt: number
+}
+
+export type ProductReleaseDistributionProvenanceV1 =
+  | ProductReleaseMarketplaceProvenanceV1
+  | ProductReleaseLocalFileProvenanceV1
+
 export interface ProductRelease {
   id?: number
   projectId: number
@@ -221,23 +255,5 @@ export interface ProductRelease {
   manifestJson: string
   contentHash: string
   createdAt: number
-  distributionProvenance?: {
-    source: 'marketplace'
-    listingId: string
-    orderId: string | null
-    entitlementId: string | null
-    license: {
-      licenseId: string
-      licenseVersion: string
-      allowOfflineExport: boolean
-      allowRemix: boolean
-      commercialReuse: boolean
-      requiresAttribution: boolean
-      termsUrl: string
-    }
-    attribution: string[]
-    localCopyPreserved: boolean
-    acquiredAt: number
-    importedAt: number
-  }
+  distributionProvenance?: ProductReleaseDistributionProvenanceV1
 }

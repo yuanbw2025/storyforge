@@ -14,6 +14,11 @@ import type { CommunitySocialEdgeV1 } from '../../lib/community/authority'
 import { exportProductDistributionBundleV2, importMarketplaceProductDistributionV2 } from '../../lib/product-platform/distribution-bundle'
 import type { ProductDistributionBundleV2, MarketplaceImportProvenanceV2 } from '../../lib/product-platform/distribution-bundle'
 import {
+  exportTextAdventureCommunityPackageV1,
+  type TextAdventureCommunityCandidateDossierV1,
+  type TextAdventureCommunityPackageV1,
+} from '../../lib/adventure/community-package'
+import {
   isProductionProductKindV1,
   type ProductionProductKindV1,
   type ProductRelease,
@@ -86,6 +91,10 @@ export default function MarketplacePanel(props: {
   onImported?: (release: ProductRelease) => void | Promise<void>
   onRoomHandoff?: (handoff: OnlineRoomJoinHandoffV1) => void | Promise<void>
   exportBundle?: (input: { scope: WorkspaceScope; productReleaseId: number }) => Promise<ProductDistributionBundleV2>
+  exportTextAdventureCandidate?: (input: {
+    scope: WorkspaceScope
+    productReleaseId: number
+  }) => Promise<TextAdventureCommunityPackageV1>
   importBundle?: (input: {
     scope: WorkspaceScope
     bundle: unknown
@@ -115,6 +124,7 @@ export default function MarketplacePanel(props: {
   const [reviewQueue, setReviewQueue] = useState<CommercialListingV1[]>([])
   const [reviewReasonCode, setReviewReasonCode] = useState('catalog.changes-required')
   const [revisionListingId, setRevisionListingId] = useState<string | null>(null)
+  const [textAdventureCandidate, setTextAdventureCandidate] = useState<TextAdventureCommunityCandidateDossierV1 | null>(null)
   const acquisitionIds = useRef(new Map<string, string>())
   const socialRequestIds = useRef(new Map<string, string>())
   const operationRequestIds = useRef(new Map<string, string>())
@@ -157,6 +167,7 @@ export default function MarketplacePanel(props: {
   useEffect(() => {
     const selected = localReleases.find(item => item.row.id === selectedReleaseId)
     if (!selected) return
+    setTextAdventureCandidate(null)
     setCreatorTitle(selected.title)
     setCreatorSummary(`${selected.title} · StoryForge 不可变发行版本`)
     submission.current = null
@@ -247,7 +258,13 @@ export default function MarketplacePanel(props: {
       }
     }
     const ids = submission.current
-    const bundle = await (props.exportBundle ?? exportProductDistributionBundleV2)({
+    const candidate = selected.productType === 'text-adventure'
+      ? await (props.exportTextAdventureCandidate ?? exportTextAdventureCommunityPackageV1)({
+          scope: props.scope, productReleaseId: selectedReleaseId,
+        })
+      : null
+    if (candidate) setTextAdventureCandidate(candidate.dossier)
+    const bundle = candidate?.distributionBundle ?? await (props.exportBundle ?? exportProductDistributionBundleV2)({
       scope: props.scope, productReleaseId: selectedReleaseId,
     })
     const listingInput = {
@@ -276,6 +293,17 @@ export default function MarketplacePanel(props: {
     setCreatorListings(await client.myListings(accessToken.trim()))
     setRevisionListingId(null)
     setMessage(`《${listing.title}》及完整发行物已提交审核；审核通过后才会出现在公开发现页。`)
+  })
+
+  const verifyTextAdventureCandidate = () => run('text-adventure-candidate', async () => {
+    if (!props.scope || selectedReleaseId == null) throw new Error('请先选择正式文字冒险 Release。')
+    const selected = localReleases.find(item => item.row.id === selectedReleaseId)
+    if (selected?.productType !== 'text-adventure') throw new Error('当前选择不是文字冒险 Release。')
+    const candidate = await (props.exportTextAdventureCandidate ?? exportTextAdventureCommunityPackageV1)({
+      scope: props.scope, productReleaseId: selectedReleaseId,
+    })
+    setTextAdventureCandidate(candidate.dossier)
+    setMessage('本地社区候选资格已通过；远程提交后仍需人工审核。')
   })
 
   const loadCreatorListings = () => run('creator-listings', async () => {
@@ -328,6 +356,9 @@ export default function MarketplacePanel(props: {
     environment: currentProductPlatformEnvironmentV1(), experimentalProject: false, authorOptIn: false,
     onlineServiceConfigured: client != null, aiGmBetaGatePassed: false,
   })
+  const selectedLocalRelease = localReleases.find(item => item.row.id === selectedReleaseId) ?? null
+  const textAdventureCandidateReady = selectedLocalRelease?.productType !== 'text-adventure'
+    || textAdventureCandidate?.releaseContentHash === selectedLocalRelease.row.contentHash
   const rolloutBlockers = catalogDecision.blockers.filter(blocker => blocker !== '在线服务未配置')
   if (rolloutBlockers.length > 0) {
     return <section className="m-5 rounded-lg border border-warning/40 bg-warning/5 p-6" data-testid="marketplace-rollout-blocked">
@@ -378,10 +409,17 @@ export default function MarketplacePanel(props: {
     </section> : mode === 'safety' ? <CommunitySafetyPanel client={communityClient} accessToken={accessToken} /> : mode === 'operations' ? <CommercialOperationsPanel client={operationsClient} accessToken={accessToken} /> : <>
     <section className="rounded-lg border border-border bg-bg-elevated p-5">
       <div className="flex items-center gap-2"><Send className="h-4 w-4 text-accent" /><h3 className="text-sm font-semibold text-text-primary">{revisionListingId ? '修订并重新提交发行物' : '提交当前 Work 的正式发行物'}</h3>{revisionListingId && <button onClick={() => { setRevisionListingId(null); submission.current = null }} className="ml-auto rounded border border-border px-2 py-1 text-[10px] text-text-muted">取消修订</button>}</div>
-      <div className="mt-4 grid gap-3 md:grid-cols-2"><label className="grid gap-2 text-[10px] text-text-muted">本地 ProductRelease<select value={selectedReleaseId ?? ''} onChange={event => { setSelectedReleaseId(Number(event.target.value) || null); submission.current = null }} className="rounded border border-border bg-bg-base p-2 text-xs text-text-primary"><option value="">请选择正式发布</option>{localReleases.map(item => <option key={item.row.id} value={item.row.id}>{item.title} · v{item.row.version} · {item.productType}</option>)}</select></label><label className="grid gap-2 text-[10px] text-text-muted">售价（分）<input type="number" min={0} step={1} value={amountMinor} onChange={event => { setAmountMinor(Math.max(0, Number(event.target.value) || 0)); submission.current = null }} className="rounded border border-border bg-bg-base p-2 text-xs text-text-primary" /></label><label className="grid gap-2 text-[10px] text-text-muted">公开标题<input value={creatorTitle} onChange={event => { setCreatorTitle(event.target.value); submission.current = null }} className="rounded border border-border bg-bg-base p-2 text-xs text-text-primary" /></label><label className="grid gap-2 text-[10px] text-text-muted">简介<input value={creatorSummary} onChange={event => { setCreatorSummary(event.target.value); submission.current = null }} className="rounded border border-border bg-bg-base p-2 text-xs text-text-primary" /></label></div>
+      <div className="mt-4 grid gap-3 md:grid-cols-2"><label className="grid gap-2 text-[10px] text-text-muted">本地 ProductRelease<select value={selectedReleaseId ?? ''} onChange={event => { setSelectedReleaseId(Number(event.target.value) || null); setTextAdventureCandidate(null); submission.current = null }} className="rounded border border-border bg-bg-base p-2 text-xs text-text-primary"><option value="">请选择正式发布</option>{localReleases.map(item => <option key={item.row.id} value={item.row.id}>{item.title} · v{item.row.version} · {item.productType}</option>)}</select></label><label className="grid gap-2 text-[10px] text-text-muted">售价（分）<input type="number" min={0} step={1} value={amountMinor} onChange={event => { setAmountMinor(Math.max(0, Number(event.target.value) || 0)); submission.current = null }} className="rounded border border-border bg-bg-base p-2 text-xs text-text-primary" /></label><label className="grid gap-2 text-[10px] text-text-muted">公开标题<input value={creatorTitle} onChange={event => { setCreatorTitle(event.target.value); submission.current = null }} className="rounded border border-border bg-bg-base p-2 text-xs text-text-primary" /></label><label className="grid gap-2 text-[10px] text-text-muted">简介<input value={creatorSummary} onChange={event => { setCreatorSummary(event.target.value); submission.current = null }} className="rounded border border-border bg-bg-base p-2 text-xs text-text-primary" /></label></div>
       <div className="mt-4 flex flex-wrap gap-4 text-xs text-text-secondary"><label className="flex items-center gap-2"><input type="checkbox" checked={allowRemix} onChange={event => { setAllowRemix(event.target.checked); submission.current = null }} />允许合规派生</label><label className="flex items-center gap-2"><input type="checkbox" checked={requiresAttribution} onChange={event => { setRequiresAttribution(event.target.checked); submission.current = null }} />要求署名</label></div>
       <p className="mt-4 text-xs leading-5 text-text-muted">提交时会本地冻结完整分发包、上传内容寻址媒资并确认权利；目录先进入 submitted，审核通过后才公开。相同表单重试沿用请求 ID，不会重复建单。</p>
-      <button disabled={busy != null || !client || selectedReleaseId == null || !creatorTitle.trim() || !creatorSummary.trim()} onClick={() => void submitRelease()} className="mt-4 flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white disabled:opacity-40"><Upload className="h-4 w-4" />{revisionListingId ? '上传修订版并重新提交' : '冻结、上传并提交审核'}</button>
+      {selectedLocalRelease?.productType === 'text-adventure' && <div className={`mt-4 rounded border p-4 text-[10px] ${textAdventureCandidateReady ? 'border-success/30 bg-success/5 text-success' : 'border-warning/40 bg-warning/5 text-warning'}`} data-testid="marketplace-text-adventure-candidate-gate">
+        <strong className="block text-xs">{textAdventureCandidateReady ? '文字冒险社区候选资格已通过' : '文字冒险需先完成本地候选复验'}</strong>
+        {textAdventureCandidateReady && textAdventureCandidate
+          ? <span className="mt-1 block">最短路线 {textAdventureCandidate.metrics.estimatedMinimumRouteMinutes.toFixed(1)} 分钟 · {textAdventureCandidate.metrics.minimumRouteDialogueTurns} 轮对白 · {textAdventureCandidate.metrics.minimumRouteStatefulDecisions} 次持久决定 · {textAdventureCandidate.metrics.reachableEndingCount} 个结局。</span>
+          : <span className="mt-1 block">将重新计算冻结内容规模并核验自动游玩、作者主路线、浏览器性能和媒资证据；通用分发包通过不等于内容达到推荐标准。</span>}
+        <button disabled={busy != null || selectedReleaseId == null} onClick={() => void verifyTextAdventureCandidate()} className="mt-3 rounded border border-current px-3 py-2 text-xs disabled:opacity-40">{textAdventureCandidateReady ? '重新复验候选资格' : '复验社区候选资格'}</button>
+      </div>}
+      <button disabled={busy != null || !client || selectedReleaseId == null || !creatorTitle.trim() || !creatorSummary.trim() || !textAdventureCandidateReady} onClick={() => void submitRelease()} className="mt-4 flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white disabled:opacity-40"><Upload className="h-4 w-4" />{revisionListingId ? '上传修订版并重新提交' : '冻结、上传并提交审核'}</button>
     </section>
     <section className="rounded-lg border border-border bg-bg-elevated p-5"><div className="flex flex-wrap items-center gap-2"><h3 className="text-sm font-semibold text-text-primary">我的远程发行状态</h3><button disabled={busy != null || !client || !accessToken.trim()} onClick={() => void loadCreatorListings()} className="ml-auto flex items-center gap-1 rounded border border-border px-3 py-2 text-xs text-text-primary disabled:opacity-40"><RefreshCw className="h-3.5 w-3.5" />同步状态</button></div><div className="mt-4 space-y-2">{creatorListings.map(listing => <article key={listing.listingId} className="flex flex-wrap items-center gap-3 rounded border border-border bg-bg-base p-3"><div className="min-w-0 flex-1"><strong className="text-xs text-text-primary">{listing.title}</strong><p className="mt-1 font-mono text-[9px] text-text-muted">{listing.listingId} · {listing.status}{listing.reviewedBy ? ` · reviewer ${listing.reviewedBy}` : ''}</p>{listing.reviewReasonCode && <p className="mt-1 text-[10px] text-warning">修改理由：{listing.reviewReasonCode}</p>}</div>{listing.status === 'changes-requested' && <button disabled={busy != null} onClick={() => beginRevision(listing)} className="rounded border border-accent/50 px-3 py-1.5 text-xs text-accent">开始修订</button>}{!['withdrawn', 'suspended'].includes(listing.status) && <button disabled={busy != null} onClick={() => void withdrawRemoteListing(listing.listingId)} className="rounded border border-warning/40 px-3 py-1.5 text-xs text-warning">撤回发行</button>}</article>)}{creatorListings.length === 0 && <p className="text-xs text-text-muted">点击同步读取当前账号的草稿、审核中、要求修改、已发布、暂停和撤回状态。</p>}</div></section>
     </>}

@@ -26,7 +26,7 @@
 
 1. 上述通用分发包；
 2. 从冻结 RuntimePackage 确定性重算的候选档案；
-3. 同一 Build 的完整质量报告；
+3. 原始、已确认的 `commercial-candidate` Brief 快照，以及同一 Build 的完整质量报告；
 4. 自动游玩报告、媒资三向审计、独立 Visual QA 等必要 Artifact 快照及其内容哈希；
 5. 浏览器性能、作者主路线试玩、媒资真实解码和逐图作者确认等不可变 gate receipt；
 6. 覆盖全部内容的 `packageHash`。
@@ -52,7 +52,7 @@
 - 真人主路线达到的结局和选择次数、真实浏览器性能、媒资解码与逐图作者判断回执；
 - 文本降级是否完整、媒资权利字段和来源归因是否闭合。
 
-所有可从 RuntimePackage 计算的指标都必须在导入时重算并逐字段比对，不能信任包内声明。所有携带 Artifact 的 `contentHash` 必须由 payload 重算，并存在于 Release 所冻结的 Build manifest receipt 集合。所有 gate receipt 必须重算 receiptHash，状态为 passed，并存在于 Release lineage 的 `quality.receiptHashes`。
+所有可从 RuntimePackage 计算的指标都必须在导入时重算并逐字段比对，不能信任包内声明。导入器还必须用包内原始 Brief 对冻结 RuntimePackage 重新执行商业产品质量门，并把每个门的结果和 Build 报告逐项比对；因此不能用短内容、篡改目标时长或伪造的 `passed` 报告冒充推荐候选。所有携带 Artifact 的 `contentHash` 必须由 payload 重算，并存在于 Release 所冻结的 Build manifest receipt 集合。所有 gate receipt 必须重算 receiptHash，状态为 passed，并存在于 Release lineage 的 `quality.receiptHashes`。作者主路线事件中的每个 Choice 还必须逐边匹配冻结 Narrative 图，不能只验证一条自洽但不存在于游戏里的字符串链。
 
 ## 4. 导出规则
 
