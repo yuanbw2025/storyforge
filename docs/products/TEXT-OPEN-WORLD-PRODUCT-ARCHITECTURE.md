@@ -1,6 +1,6 @@
 # AI 主导文字开放世界游戏 · 整体产品与游戏系统施工规格
 
-> 规格版本：1.1.20
+> 规格版本：1.1.21
 > 生效日期：2026-09-06
 > 文档层级：L2 文字开放世界整体产品施工入口
 > 当前状态：目标架构已冻结并进入分阶段实现；实际完成度以完整开发清单为准
@@ -181,6 +181,8 @@ PROJECT_TABLES / owner / migration / export / delete
 当前StoryArchitecture实现把“全局故事设计”限定在任务、地区和场景生产之前：登记Context只读取同一Build已验收的GameBrief、ExperienceContract、ProtagonistAsset以及P1 Ledger/Gap Report，不重新接触活动世界或小说。AI负责核心冲突、长程节拍、多结局差异和叙事承诺的开放式语义；代码固定严格顺序且等待玩家的主线、不可永久失败的核心目标、非地点唯一触发、5～8节拍单调阶段、结局数量与Brief一致、所有结局达成同一核心目标，以及承诺的建立—中间回响—最终回收顺序。地区只在此阶段以`spatialFunctionNeeds`表达戏剧空间需求，不能提前制造地点ID；任务、奖励和运行条件同样不得越级生成。稳定Story/Ending/Promise/Callback键由代码分配，结局Condition与承诺Scene绑定保持显式unbound，由后续主线、地区和场景生产兑现后才可装配。
 
 当前RegionSkeleton实现随后把来源与故事空间需求转成稳定世界坐标，而不是让地图Agent自由扩写世界：登记Context只读取同一Build已验收的GameBrief、SourceManifest/Ledger、ExperienceContract和StoryArc，地区数精确服从Brief、地点总量服从命名地点范围。AI为地区、地点和道路设计名称、用途、空间功能及提前到达时的安全常态，每项都必须引用已交付来源claim或StoryArc空间需求，并覆盖全部需求；代码生成Region/Location/Edge/FastTravel稳定键，保证全部地点和地区双向连通、每区一个快旅/复活点、只有起点默认解锁、完整世界Build时存在但知识逐步揭示、道路在骨架期无剧情Condition且关键主线绝不因到达地点自动触发。主线、Scene、Quest、Actor、Encounter、Vendor和媒资引用继续保持unbound，等待对应生产阶段真实兑现。
+
+当前MainlineThread实现再把宏观故事变成可施工的主线阶段，而不越级伪造任务目录：登记Context只读取同一Build已验收的GameBrief、玩法骨架、StoryArc、EndingContracts、NarrativePromises、RegionSkeleton与PlayerBuild。AI在Brief的Stage范围内设计阶段标题、玩家目标、空间落点、对话/调查/探索/战斗/选择体验、必要揭示、结果、关键资产保护需求和失败恢复；代码生成唯一`storyline.main`与稳定Stage前后链，要求从初始地点开始、按StoryBeat单调推进且全部覆盖，把每项Promise的建立/回响/回收投影到具体Stage，并让所有合规结局只从最终Stage分流。主线时长按模型权重确定性分配到Brief范围，推荐等级从1推进到首版验收5级；所有Stage固定可等待、不可放弃/过期/永久失败、不被普通世界状态阻断且只能由显式主线Action推进。Quest、Objective、Scene、Reward、Condition和Effect继续显式unbound。
 
 ### 2.3 跨叙事与玩法的唯一生产 DAG
 
@@ -2692,6 +2694,7 @@ Session中的高频状态优先作为Event和可重建Projection存在，不建�
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| 1.1.21 | 2026-09-07 | 落地P5 MainlineThread：从已验收Brief、玩法、故事/结局/承诺、地区和主角形成严格顺序Stage；AI设计玩家体验、空间落点、揭示、保护与恢复语义，代码固定起点、前后链、StoryBeat/Promise/结局覆盖、主线时长与等级节奏、等待/不可永久失败/非地点触发/普通状态不阻断；任务、场景和运行绑定保持unbound且全链可复验 |
 | 1.1.20 | 2026-09-07 | 落地P4 RegionSkeleton：从已验收Brief、P1来源、体验和StoryArc编译精确规模的完整世界骨架；AI设计有来源或故事需要的地区/地点/道路语义与提前到达常态，代码固定稳定键、全图/跨区连通、每区快旅复活点、渐进知识、旅行耗时及非到达触发；所有内容、主线与媒资绑定保持unbound，来源、需求、规模、连通和Hash可复验 |
 | 1.1.19 | 2026-09-07 | 落地P3 StoryArchitecture：从已验收体验、主角与P1来源证据形成全局故事弧、多结局契约和可追踪叙事承诺；AI负责冲突、节拍、结局差异和承诺语义，代码固定严格顺序/等待/不可永久失败主线、5～8阶段序列、全结局核心目标达成、稳定键与建立—回响—回收闭环；地区、任务、场景及运行Condition不提前生成，所有来源、显式假设、绑定占位和Hash可复验 |
 | 1.1.18 | 2026-09-07 | 落地P4 PlayerBuild：从已验收主角/体验/Ruleset形成完整身份与合法初始构筑；AI只负责人物演绎、非职业玩法风格和技能物品语义，代码冻结1级、三属性12点预算、100货币、初始数量、机制及稳定键；未生成的技能/物品目录以`reserved-unbound`显式阻断运行装配，上游、预算、身份、键和Hash均可复验 |

@@ -44,9 +44,16 @@ import {
   type TextOpenWorldRegionSkeletonInputContextV1,
   type TextOpenWorldRegionSkeletonModelRunnerV1,
 } from '../../src/lib/open-world/region-skeleton'
+import {
+  createTextOpenWorldMainlineExecutorV1,
+  validateTextOpenWorldMainlineThreadV1,
+  type TextOpenWorldMainlineInputContextV1,
+  type TextOpenWorldMainlineModelRunnerV1,
+} from '../../src/lib/open-world/mainline-production'
 import { TEXT_OPEN_WORLD_EFFECT_OPERATIONS_V1 } from '../../src/lib/types/text-open-world-effect'
 import type {
   TextOpenWorldGameplayRulesetSkeletonV1,
+  TextOpenWorldMainlineThreadV1,
   TextOpenWorldPlayerBuildV1,
   TextOpenWorldRegionSkeletonV1,
 } from '../../src/lib/types'
@@ -938,6 +945,190 @@ async function executeRegionSkeleton(
   })
 }
 
+function mainlineRunner(options: {
+  badBeatOrder?: boolean
+  invalidLocation?: boolean
+} = {}): TextOpenWorldMainlineModelRunnerV1 {
+  return async input => {
+    const context = JSON.parse(input.contextText) as TextOpenWorldMainlineInputContextV1
+    const stage = (
+      title: string,
+      storyBeatNumber: number,
+      regionNumbers: number[],
+      locationNumbers: number[],
+      gameplayFocus: string[],
+      requiredReveal: string,
+      stageOutcome: string,
+      durationWeight: number,
+    ) => ({
+      title,
+      summary: `${title}把故事宏观节拍转成玩家可调查、对话、探索或战斗完成的阶段。`,
+      dramaticQuestion: `玩家如何在${title}中继续守住核心目标？`,
+      storyBeatNumber,
+      regionNumbers,
+      locationNumbers,
+      gameplayFocus,
+      playerGoals: ['收集当前阶段的可靠信息', '通过明确行动解决本阶段核心阻力'],
+      requiredReveal,
+      stageOutcome,
+      protectionNeeds: ['关键线索必须可重新获取', '承担主线信息的角色或替代入口必须受保护'],
+      recoveryDescription: '战斗失败可从战前重试或复活后再次进入；拒绝、资源不足或普通世界状态不会永久关闭调查入口。',
+      durationWeight,
+    })
+    const stages = [
+      stage('潮门失序', 1, [1], [options.invalidLocation ? 99 : 1, 2], ['dialogue', 'investigation'], '确认潮门危机并非偶发事故。', '林舟正式承担调查责任并获得下一阶段明确入口。', 1),
+      stage('退潮痕迹', 2, [1], [3, 4], ['exploration', 'combat'], '局部异常正沿地区依赖扩散。', '玩家获得进入脊湾调查所需的公开线索与成长准备。', 1),
+      stage('分裂的沿岸', 2, [2], [5], ['dialogue', 'exploration'], '不同地区掌握互相矛盾但真实的线索。', '玩家理解两地利益冲突，并建立继续查证的路径。', 1),
+      stage('旧约真相', options.badBeatOrder ? 1 : 3, [2], [6], ['investigation', 'choice'], '旧盟约曾以边缘地区代价维持核心区稳定。', '旧约真相被确认，核心冲突从寻找敌人转向修复失衡秩序。', 2),
+      stage('裂潮试炼', 4, [2], [7], ['combat', 'preparation'], '危机可被终止，但最终行动需要可恢复的战斗准备。', '关键危险被清除，终局所需的行动窗口被建立。', 1),
+      stage('沿岸集结', 4, [1, 2], [1, 5, 8], ['dialogue', 'choice', 'preparation'], '地区关系和长期选择将影响解决方案的代价。', '多个地区后果汇入最终行动，两个合规方案同时保持可达。', 2),
+      stage('新灯亮起', 5, [1, 2], [2, 8], ['choice', 'investigation'], '新的安全边界取决于此前建立的信任与代价。', '核心危机被终止，并按玩家长期价值选择进入合规结局。', 1),
+    ]
+    return {
+      output: JSON.stringify({
+        schema: 'storyforge.text-open-world-mainline-draft',
+        version: 1,
+        title: '雾港潮门主线',
+        summary: '林舟从雾港危机出发，调查两地裂痕、揭露旧约并以不同代价终止潮门危机。',
+        stages,
+        endingRoutes: context.endingContracts.endings.map(ending => ({
+          endingNumber: ending.order,
+          routeSummary: `最终Stage根据玩家长期选择表达“${ending.title}”，但都完成终止潮门危机的核心目标。`,
+        })),
+      }),
+      bindingReceipt: bindingReceipt(input.requirementKey),
+      usage: null,
+    }
+  }
+}
+
+async function acceptTaskArtifacts(
+  input: Awaited<ReturnType<typeof regionSkeletonFixture>>,
+  artifacts: Array<{
+    artifactKey: string
+    kind: string
+    payload: unknown
+    quality: Record<string, unknown>
+    rights: Record<string, unknown>
+  }>,
+  stage: string,
+) {
+  for (const artifact of artifacts) {
+    await acceptProductBuildArtifact({
+      scope: input.scope,
+      buildId: input.build.id!,
+      controlEpoch: input.build.controlEpoch,
+      artifactKey: artifact.artifactKey,
+      kind: artifact.kind,
+      payload: artifact.payload,
+      quality: artifact.quality,
+      rights: artifact.rights,
+      inputHash: await hashProductProductionValueV2({ stage, artifactKey: artifact.artifactKey }),
+    })
+  }
+}
+
+async function mainlineFixture() {
+  const input = await regionSkeletonFixture()
+  const plan = await createTextOpenWorldProductionPlanV1({
+    buildNumber: input.build.buildNumber,
+    controlEpoch: input.build.controlEpoch,
+    briefHash: input.briefRow.briefHash,
+    brief: input.brief,
+  })
+  const rulesetTask = plan.tasks.find(item => item.taskKey === 'p2.gameplay-ruleset')!
+  const rulesetContext = await assembleContext({
+    projectId: input.scope.projectId,
+    scope: input.scope,
+    sourceKeys: ['text-open-world.gameplay-ruleset-input'],
+    productProductionId: input.production.id!,
+    productBuildId: input.build.id!,
+    inputBudgetMaxTokens: rulesetTask.budgetReservation.inputTokens,
+  })
+  const rulesetResult = await createTextOpenWorldGameplayRulesetExecutorV1({
+    runModel: rulesetRunner(), now: () => NOW + 5,
+  })({
+    scope: input.scope, productionId: input.production.id!, buildId: input.build.id!,
+    buildNumber: input.build.buildNumber, controlEpoch: input.build.controlEpoch,
+    planHash: input.planHash, task: rulesetTask, attempt: 1,
+    idempotencyKey: await hashProductProductionValueV2('mainline-ruleset'),
+    contextText: rulesetContext.text, inputArtifacts: [],
+    capabilityBindings: rulesetTask.capabilityRequirementKeys.map(requirementKey => ({
+      requirementKey, bindingHash: CAPABILITY_HASH, adapterId: 'configured-text.v1',
+    })),
+    signal: new AbortController().signal,
+  })
+  await acceptTaskArtifacts(input, rulesetResult.artifacts, 'P2-ruleset')
+
+  const playerTask = plan.tasks.find(item => item.taskKey === 'p4.player-build')!
+  const playerContext = await assembleContext({
+    projectId: input.scope.projectId,
+    scope: input.scope,
+    sourceKeys: ['text-open-world.player-build-input'],
+    productProductionId: input.production.id!,
+    productBuildId: input.build.id!,
+    inputBudgetMaxTokens: playerTask.budgetReservation.inputTokens,
+  })
+  const playerResult = await createTextOpenWorldPlayerBuildExecutorV1({
+    runModel: playerBuildRunner(), now: () => NOW + 6,
+  })({
+    scope: input.scope, productionId: input.production.id!, buildId: input.build.id!,
+    buildNumber: input.build.buildNumber, controlEpoch: input.build.controlEpoch,
+    planHash: input.planHash, task: playerTask, attempt: 1,
+    idempotencyKey: await hashProductProductionValueV2('mainline-player'),
+    contextText: playerContext.text, inputArtifacts: [],
+    capabilityBindings: playerTask.capabilityRequirementKeys.map(requirementKey => ({
+      requirementKey, bindingHash: CAPABILITY_HASH, adapterId: 'configured-text.v1',
+    })),
+    signal: new AbortController().signal,
+  })
+  await acceptTaskArtifacts(input, playerResult.artifacts, 'P4-player')
+
+  const regionResult = await executeRegionSkeleton(input)
+  await acceptTaskArtifacts(input, regionResult.artifacts, 'P4-region')
+  const task = plan.tasks.find(item => item.taskKey === 'p5.mainline')!
+  const assembled = await assembleContext({
+    projectId: input.scope.projectId,
+    scope: input.scope,
+    sourceKeys: ['text-open-world.mainline-input'],
+    productProductionId: input.production.id!,
+    productBuildId: input.build.id!,
+    inputBudgetMaxTokens: task.budgetReservation.inputTokens,
+  })
+  return {
+    ...input,
+    task,
+    mainlineContextText: assembled.text,
+    mainlineContext: JSON.parse(assembled.text) as TextOpenWorldMainlineInputContextV1,
+    mainlineContextEvidence: assembled.sourceEvidence,
+  }
+}
+
+async function executeMainline(
+  input: Awaited<ReturnType<typeof mainlineFixture>>,
+  runModel: TextOpenWorldMainlineModelRunnerV1 = mainlineRunner(),
+) {
+  return createTextOpenWorldMainlineExecutorV1({ runModel, now: () => NOW + 9 })({
+    scope: input.scope,
+    productionId: input.production.id!,
+    buildId: input.build.id!,
+    buildNumber: input.build.buildNumber,
+    controlEpoch: input.build.controlEpoch,
+    planHash: input.planHash,
+    task: input.task,
+    attempt: 1,
+    idempotencyKey: await hashProductProductionValueV2('p5-mainline'),
+    contextText: input.mainlineContextText,
+    inputArtifacts: [],
+    capabilityBindings: input.task.capabilityRequirementKeys.map(requirementKey => ({
+      requirementKey,
+      bindingHash: CAPABILITY_HASH,
+      adapterId: 'configured-text.v1',
+    })),
+    signal: new AbortController().signal,
+  })
+}
+
 describe('R-OPEN-WORLD3 · P2 GameBrief / ExperienceContract / ProtagonistAsset', () => {
   beforeEach(async () => { await db.delete(); await db.open() })
   afterAll(() => db.close())
@@ -1516,4 +1707,118 @@ describe('R-OPEN-WORLD3 · P4 RegionSkeleton', () => {
       signal: new AbortController().signal,
     })).rejects.toThrow(/StoryArc Hash不匹配|storyNeeds与StoryArc不一致|选择Hash不匹配/)
   }, 30_000)
+})
+
+describe('R-OPEN-WORLD3 · P5 MainlineThread', () => {
+  beforeEach(async () => { await db.delete(); await db.open() })
+  afterAll(() => db.close())
+
+  it('把故事节拍、地区骨架和玩法边界编译为严格顺序、可等待、可恢复的主线', async () => {
+    const input = await mainlineFixture()
+    expect(CONTEXT_SOURCE_BY_KEY.get('text-open-world.mainline-input')).toMatchObject({
+      layer: 'L0', ownerFrom: 'work', protectedFromTrim: true,
+    })
+    expect(getAgentSkillV1('text-open-world.production.mainline.v1')).toMatchObject({
+      contextSourceKeys: ['text-open-world.mainline-input'],
+      writeTargets: [{ table: 'productBuildArtifacts', fields: ['payloadJson'] }],
+    })
+    expect(input.mainlineContextEvidence).toEqual([
+      expect.objectContaining({ key: 'text-open-world.mainline-input', status: 'included', delivery: 'full' }),
+    ])
+    const result = await executeMainline(input)
+    const artifact = result.artifacts[0]!.payload as TextOpenWorldMainlineThreadV1
+    expect(result.passedGateIds).toEqual(input.task.acceptanceGateIds)
+    expect(result.usage).toMatchObject({ modelCalls: 1, mediaCalls: 0 })
+    expect(artifact).toMatchObject({
+      thread: {
+        key: 'storyline.main', kind: 'mainline', ownerKind: 'core', ownerKey: null,
+        coreGoal: input.mainlineContext.storyArc.coreConflict.coreGoal,
+      },
+      governance: {
+        order: 'strict-sequential', pressure: 'wait-for-player', failure: 'cannot-permanently-fail',
+        criticalTrigger: 'never-location-only', allStagesReachable: true,
+        allStagesProtectedWait: true, ordinaryStateCannotBlock: true,
+      },
+      pacing: {
+        stageCount: 7,
+        initialLevel: 1,
+        finalRecommendedLevel: 5,
+      },
+      downstreamBinding: { status: 'requirements-unbound', runtimeReady: false },
+    })
+    expect(artifact.stages.map(stage => stage.key)).toEqual(
+      Array.from({ length: 7 }, (_, index) => `mainline.stage.${String(index + 1).padStart(3, '0')}`),
+    )
+    expect(artifact.stages.map(stage => stage.storyBeatKey)).toEqual([
+      'story.beat.001', 'story.beat.002', 'story.beat.002', 'story.beat.003',
+      'story.beat.004', 'story.beat.004', 'story.beat.005',
+    ])
+    expect(artifact.stages[0]).toMatchObject({
+      previousStageKey: null,
+      nextStageKey: 'mainline.stage.002',
+      locationKeys: expect.arrayContaining(['location.001']),
+      safeWaitBefore: true,
+      safeWaitAfter: true,
+      entryPolicy: { mode: 'explicit-mainline-advance', arrivalAloneNeverStarts: true, previousStageCompletionRequired: false },
+      failurePolicy: { abandonable: false, expirable: false, ordinaryStateMayBlock: false },
+      questBinding: { status: 'quest-unbound', questKey: null },
+      sceneBinding: { status: 'scene-unbound', sceneKeys: [] },
+      rewardBinding: { status: 'reward-unbound', rewardContractKey: null },
+    })
+    expect(artifact.stages[6]).toMatchObject({ previousStageKey: 'mainline.stage.006', nextStageKey: null })
+    expect(artifact.pacing.totalEstimatedMinutes).toBeGreaterThanOrEqual(artifact.pacing.requiredPlayMinuteRange.minimum)
+    expect(artifact.pacing.totalEstimatedMinutes).toBeLessThanOrEqual(artifact.pacing.requiredPlayMinuteRange.maximum)
+    expect(artifact.promisePlan).toHaveLength(input.mainlineContext.narrativePromises.promiseCount)
+    expect(artifact.endingRoutes.map(route => route.endingKey)).toEqual(
+      input.mainlineContext.endingContracts.endings.map(ending => ending.key),
+    )
+    expect(artifact.endingRoutes.every(route => (
+      route.finalStageKey === 'mainline.stage.007'
+      && route.coreGoalStatus === 'achieved'
+      && route.runtimeBinding.status === 'condition-unbound'
+    ))).toBe(true)
+    await expect(validateTextOpenWorldMainlineThreadV1({ artifact, context: input.mainlineContext }))
+      .resolves.toEqual(artifact)
+  }, 45_000)
+
+  it('拒绝逆序或漏掉StoryBeat，也拒绝引用不存在的地点', async () => {
+    const input = await mainlineFixture()
+    await expect(executeMainline(input, mainlineRunner({ badBeatOrder: true })))
+      .rejects.toThrow(/单调推进|没有承载StoryBeat/)
+    await expect(executeMainline(input, mainlineRunner({ invalidLocation: true })))
+      .rejects.toThrow(/locationNumbers/)
+  }, 45_000)
+
+  it('即使重算Hash也拒绝篡改等待保护、阶段链和下游运行绑定', async () => {
+    const input = await mainlineFixture()
+    const artifact = (await executeMainline(input)).artifacts[0]!.payload as TextOpenWorldMainlineThreadV1
+    const tampered = structuredClone(artifact)
+    tampered.governance.pressure = 'pressured' as 'wait-for-player'
+    tampered.stages[1]!.previousStageKey = null
+    tampered.stages[0]!.questBinding.questKey = 'quest.main.001' as null
+    const { mainlineThreadHash: _hash, ...body } = tampered
+    tampered.mainlineThreadHash = await hashProductProductionValueV2(body)
+    await expect(validateTextOpenWorldMainlineThreadV1({ artifact: tampered, context: input.mainlineContext }))
+      .rejects.toThrow(/固定顺序、保护、节奏、Promise或下游绑定被篡改/)
+
+    const forgedContext = structuredClone(input.mainlineContext)
+    forgedContext.regionSkeleton.initialLocationKey = 'location.forged'
+    await expect(createTextOpenWorldMainlineExecutorV1({ runModel: mainlineRunner() })({
+      scope: input.scope,
+      productionId: input.production.id!,
+      buildId: input.build.id!,
+      buildNumber: input.build.buildNumber,
+      controlEpoch: input.build.controlEpoch,
+      planHash: input.planHash,
+      task: input.task,
+      attempt: 1,
+      idempotencyKey: await hashProductProductionValueV2('forged-mainline-context'),
+      contextText: JSON.stringify(forgedContext),
+      inputArtifacts: [],
+      capabilityBindings: input.task.capabilityRequirementKeys.map(requirementKey => ({
+        requirementKey, bindingHash: CAPABILITY_HASH, adapterId: 'configured-text.v1',
+      })),
+      signal: new AbortController().signal,
+    })).rejects.toThrow(/RegionSkeleton Hash不匹配|选择Hash不匹配/)
+  }, 45_000)
 })

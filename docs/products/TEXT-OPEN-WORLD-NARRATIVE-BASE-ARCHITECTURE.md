@@ -1,6 +1,6 @@
 # AI 主导文字开放世界叙事基座 · StoryForge 施工规格
 
-> 规格版本：3.2.9
+> 规格版本：3.2.10
 > 生效日期：2026-09-06
 > 文档层级：L2 产品目标架构与施工规格
 > 当前状态：设计基线；不代表代码已经实现
@@ -465,6 +465,21 @@ P3仍只产出Build候选，不写世界引擎、ProductRelease或Session。它�
 - 所有Location的Scene、Quest、Actor、Encounter、Vendor绑定以及地区/地点媒资绑定保持空数组和显式unbound；P5主线、P7地区生态、P8任务与后续目录必须引用这些稳定坐标后再逐项兑现，P4不得冒充完整可玩地图模块。
 
 验证器从Artifact反向还原模型草稿，再用同一Context重新生成全部键、知识状态、连接、快旅、空绑定、治理、coverage、basis和内容Hash做规范比较。伪造claim、漏接空间需求、断开地点或地区、重复道路、错误起点、缺功能、私自绑定Scene/Quest、提前解锁异区快旅，以及重算Hash后的治理篡改都会失败关闭。P4仍只写Build候选，不新增物理表，不写WorldRelease、ProductRelease或Session。
+
+#### 5.4.9 P5 MainlineThread与受保护主线Stage落地
+
+`src/lib/open-world/mainline-production.ts`把StoryArc从宏观叙事约束推进为可供任务工程消费的主线阶段，但仍不把自然语言目标伪装成已经可运行的Quest：
+
+- 登记的`text-open-world.mainline-input`只读取同一Build已验收的GameBrief、GameplayRulesetSkeleton、StoryArc、EndingContracts、NarrativePromises、RegionSkeleton和PlayerBuild。Context复核每件Artifact内容Hash、行Hash、相互引用和固定治理，不重新读取WorldRelease、小说、活动表或Session；
+- GameBrief与NarrativePromises补入P5正式输入：前者提供冻结Stage数量和必需游玩时长，后者让主线真正安排每项叙事承诺的建立、回响与回收，避免只输入StoryArc标题却遗漏承诺生命周期；
+- 模型在6～8 Stage范围内设计标题、摘要、戏剧问题、StoryBeat编号、地区/地点编号、核心玩法体验、玩家目标、必要揭示、阶段结果、关键资产保护需求、失败恢复说明和时长权重。它不能生成Quest、Objective、Scene、Actor、敌人、物品、奖励、Action、Condition或Effect键；
+- Stage必须从第一个StoryBeat单调推进到最后一个并覆盖每个Beat，首Stage必须包含RegionSkeleton初始地点，所有地点必须属于声明地区。整条主线至少覆盖对话、调查、探索、战斗和选择，确保“叙事主线”不是只有文本摘要；
+- 代码生成唯一`storyline.main`、`mainline.stage.*`稳定键及严格previous/next链。每个Promise的setup绑定该Beat首个Stage、callback绑定对应Beat首个Stage、payoff绑定对应Beat最后Stage；全部Ending只从最终Stage分流并继续保持`condition-unbound`，所有结局固定完成同一核心目标；
+- 代码按Stage权重把主线总时长分配到GameBrief的90～120分钟区间，并把推荐等级从PlayerBuild初始1级确定性推进到GameplayRuleset验收5级。时长和等级只是后序Quest/Encounter/Reward的预算，不是模型可随意填写的运行数值；
+- 每个Stage固定由`explicit-mainline-advance`进入，地点到达本身不启动；前置只允许严格前一Stage完成，普通任务、道德、阵营、NPC死亡和资源耗尽不得锁死主线。主线始终可等待、不可放弃、不可过期、不可永久失败，战斗失败通过重试或复活恢复；
+- Quest、QuestStage、Objective、Scene与Reward绑定均保持空数组/null和显式unbound，完整运行还依赖QuestSkeleton、ContentRequirementManifest、QuestDesignDocuments、SceneScripts和ActionBindings。
+
+验证器从Artifact反向恢复模型语义，再重新分配稳定键、Stage链、等级/时长、Promise落点、Ending路径、保护策略和全部空绑定做规范比较。StoryBeat逆序或遗漏、未知地点、核心体验缺失、结局漏项、私自绑定任务/场景/奖励、改变等待/失败治理，以及重算Hash后的篡改都会失败关闭。P5仍只写Build候选，不新增物理表，不写ProductRelease或Session。
 
 ### 5.5 正确的验证顺序
 
@@ -1284,6 +1299,7 @@ StoryForge当前没有独立staging。发布前仍需在隔离数据中完成灰
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| 3.2.10 | 2026-09-07 | 落地P5 MainlineThread：登记只读Brief/玩法/故事/结局/承诺/地区/主角的Context与专属Skill/Executor；AI在冻结规模内编排Stage空间与体验、揭示、保护及恢复，代码固定严格链、起点、StoryBeat与Promise全覆盖、多结局终段分流、90～120分钟和1→5级节奏，以及等待/不可放弃过期/不可永久失败/普通状态不阻断/非地点触发；Quest/Scene/Reward/Condition保持unbound且全链可复验 |
 | 3.2.9 | 2026-09-07 | 落地P4 RegionSkeleton：登记只读Brief/P1/体验/StoryArc的Context与专属Skill/Executor；AI把来源claim和全部故事空间需求编排为精确规模的地区、地点、功能、提前到达常态及连线，代码固定稳定键、全图/跨区连通、每区快旅复活点、渐进知识、距离耗时及非地点唯一主线触发；Scene/Quest/NPC/遭遇/商店/媒资和主线绑定保持unbound，全部规模、来源、需求、连通、治理和Hash可复验 |
 | 3.2.8 | 2026-09-07 | 落地P3 StoryArchitecture：登记只读体验/主角/P1证据的Context与专属Skill/Executor；AI设计核心冲突、长程节拍、多结局差异与叙事承诺，代码固定严格顺序/等待/不可永久失败主线、阶段序列、稳定键、来源与显式假设权限、全结局核心目标达成及建立—回响—回收闭环；Condition/Scene保持unbound供下游兑现，全部上游、引用、顺序、绑定和Hash可复验 |
 | 3.2.7 | 2026-09-07 | 落地P4 PlayerBuild：登记只读已验收体验/主角/Ruleset的Context与专属Skill/Executor；AI只生成身份演绎、非职业玩法风格、主副属性选择及初始技能物品语义，代码固定1级、12点属性预算、100货币、数量、机制和稳定预留键；在后续目录兑现前固定`reserved-unbound/playerDefinitionReady=false`，禁止把需求键伪装成可运行定义；全部上游、预算、键、binding和Hash可复验 |

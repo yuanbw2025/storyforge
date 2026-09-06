@@ -1044,6 +1044,143 @@ export interface TextOpenWorldRegionSkeletonV1 {
   regionSkeletonHash: string
 }
 
+export type TextOpenWorldMainlineGameplayFocusV1 =
+  | 'dialogue'
+  | 'investigation'
+  | 'exploration'
+  | 'combat'
+  | 'preparation'
+  | 'choice'
+
+export interface TextOpenWorldMainlineThreadV1 {
+  schema: 'storyforge.text-open-world-mainline-thread'
+  version: 1
+  productType: 'text-open-world'
+  productInstanceKey: string
+  gameBriefHash: string
+  gameplayRulesetHash: string
+  storyArcHash: string
+  endingContractsHash: string
+  narrativePromisesHash: string
+  regionSkeletonHash: string
+  playerBuildHash: string
+  thread: {
+    key: 'storyline.main'
+    kind: 'mainline'
+    ownerKind: 'core'
+    ownerKey: null
+    title: string
+    summary: string
+    coreGoal: string
+    stageKeys: string[]
+    endingKeys: string[]
+  }
+  stages: Array<{
+    key: string
+    order: number
+    previousStageKey: string | null
+    nextStageKey: string | null
+    storyBeatKey: string
+    title: string
+    summary: string
+    dramaticQuestion: string
+    regionKeys: string[]
+    locationKeys: string[]
+    gameplayFocus: TextOpenWorldMainlineGameplayFocusV1[]
+    playerGoals: string[]
+    requiredReveal: string
+    stageOutcome: string
+    protectionNeeds: string[]
+    recoveryDescription: string
+    recommendedLevelBand: { minimum: number; maximum: number }
+    pacingWeight: number
+    estimatedMinutes: number
+    safeWaitBefore: true
+    safeWaitAfter: true
+    entryPolicy: {
+      mode: 'explicit-mainline-advance'
+      arrivalAloneNeverStarts: true
+      previousStageCompletionRequired: boolean
+      prerequisiteConditionKeys: []
+    }
+    failurePolicy: {
+      combat: 'retry-or-respawn'
+      story: 'cannot-permanently-fail'
+      abandonable: false
+      expirable: false
+      ordinaryStateMayBlock: false
+    }
+    narrativePromiseMomentKeys: string[]
+    questBinding: {
+      status: 'quest-unbound'
+      questKey: null
+      questStageKeys: []
+      objectiveKeys: []
+    }
+    sceneBinding: {
+      status: 'scene-unbound'
+      sceneKeys: []
+    }
+    rewardBinding: {
+      status: 'reward-unbound'
+      rewardContractKey: null
+      rewardEffectKeys: []
+    }
+  }>
+  endingRoutes: Array<{
+    endingKey: string
+    finalStageKey: string
+    routeSummary: string
+    decisivePlayerValue: string
+    coreGoalStatus: 'achieved'
+    runtimeBinding: {
+      status: 'condition-unbound'
+      conditionKeys: []
+      endingSceneKey: null
+      unlockEffectKey: null
+    }
+  }>
+  promisePlan: Array<{
+    promiseKey: string
+    setupStageKey: string
+    callbackStageKeys: string[]
+    payoffStageKey: string
+    endingKeys: string[]
+    sceneBindingStatus: 'scene-unbound'
+  }>
+  governance: {
+    order: 'strict-sequential'
+    pressure: 'wait-for-player'
+    failure: 'cannot-permanently-fail'
+    criticalTrigger: 'never-location-only'
+    allStagesReachable: true
+    allStagesProtectedWait: true
+    ordinaryStateCannotBlock: true
+    criticalAssets: 'protected-by-downstream-requirements'
+  }
+  pacing: {
+    stageCount: number
+    totalEstimatedMinutes: number
+    requiredPlayMinuteRange: { minimum: number; maximum: number }
+    initialLevel: number
+    finalRecommendedLevel: number
+  }
+  downstreamBinding: {
+    status: 'requirements-unbound'
+    requiredArtifactKeys: [
+      'text-open-world.quest-skeletons',
+      'text-open-world.content-requirement-manifest',
+      'text-open-world.quest-design-documents',
+      'text-open-world.scene-scripts',
+      'text-open-world.action-bindings',
+    ]
+    runtimeReady: false
+  }
+  basisHash: string
+  createdAt: number
+  mainlineThreadHash: string
+}
+
 export const TEXT_OPEN_WORLD_PRODUCTION_STAGES_V1 = [
   'P0', 'P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8', 'P8F', 'P9', 'P10',
   'V1', 'V2', 'V3', 'QA',

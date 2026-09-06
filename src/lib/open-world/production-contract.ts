@@ -216,8 +216,10 @@ export const TEXT_OPEN_WORLD_PRODUCTION_TASK_CONTRACTS_V1: TextOpenWorldProducti
     skillId: 'text-open-world.production.mainline.v1', recommendedModelCalls: 12,
     dependsOn: ['p2.gameplay-ruleset', 'p3.story-architecture', 'p4.region-skeleton', 'p4.player-build'],
     inputArtifactKeys: [
-      'text-open-world.gameplay-ruleset-skeleton', 'text-open-world.story-arc',
-      'text-open-world.ending-contracts', 'text-open-world.region-skeleton', 'text-open-world.player-build',
+      'text-open-world.game-brief', 'text-open-world.gameplay-ruleset-skeleton',
+      'text-open-world.story-arc', 'text-open-world.ending-contracts',
+      'text-open-world.narrative-promises', 'text-open-world.region-skeleton',
+      'text-open-world.player-build',
     ],
     outputArtifactKeys: ['text-open-world.mainline-thread'],
     completion: {
