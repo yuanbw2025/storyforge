@@ -374,7 +374,7 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
     if (actorRows.find(actor => actor.key === item.actorKey)?.scheduleKey !== item.key) fail(`schedule/actor反向引用不一致:${String(item.key)}`)
   })
 
-  const actions = versioned(packageValue, 'actions', [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])
+  const actions = versioned(packageValue, 'actions', [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13])
   const modernActionModule = Number(actions.version) >= 2
   const travelActionModule = Number(actions.version) >= 3
   const fastTravelActionModule = Number(actions.version) >= 4
@@ -386,6 +386,7 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
   const combatOperationActionModule = Number(actions.version) >= 10
   const combatResolutionActionModule = Number(actions.version) >= 11
   const craftingActionModule = Number(actions.version) >= 12
+  const economyActionModule = Number(actions.version) >= 13
   if (actorScheduleActionModule && legacyActorModule) fail('Action v6必须搭配Actor v2')
   if (actorLifecycleActionModule && !actorLifecycleModule) fail('Action v7必须搭配Actor v3')
   if (combatStateActionModule !== (packageValue.modules.combat.schemaVersion >= 2)) fail('Action v9+必须与Combat v2+一起发布')
@@ -1052,7 +1053,7 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
       }
     }
   })
-  actionRows.filter(action => ['drop', 'sell'].includes(String(action.category))).forEach(action => {
+  actionRows.filter(action => action.category === 'drop' || (!economyActionModule && action.category === 'sell')).forEach(action => {
     const reason = action.category === 'drop' ? 'drop' : 'sell'
     const removal = strings(action.costEffectKeys, `item action ${String(action.key)} cost effects`).map(effectKey => effects.find(effect => effect.key === effectKey)!)
       .filter(effect => effect.operation === 'remove-item' && row(effect.payload, `item action ${String(action.key)} payload`).reason === reason)
@@ -1510,13 +1511,136 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
     recipes: normalizedRecipes,
   }
 
-  const economy = versioned(packageValue, 'economy')
-  exact(economy, ['version', 'currency', 'vendors'], 'economy'); const currency = row(economy.currency, 'economy.currency'); exact(currency, ['key', 'label'], 'economy.currency'); if (currency.key !== 'currency') fail('首版只允许currency单货币'); text(currency.label, 'economy.currency.label', 100)
-  const vendors = catalog(economy.vendors, 'economy.vendors', ['key', 'title', 'actorKey', 'locationKey', 'factionKey', 'buyPriceMultiplier', 'sellPriceMultiplier', 'stock']); const vendorKeys = keysOf(vendors, 'economy.vendors')
-  vendors.forEach((item, index) => { text(item.title, `economy.vendors[${index}].title`, 2_000); requireRef(key(item.actorKey, `economy.vendors[${index}].actorKey`), actorKeys, 'vendor actor'); requireRef(key(item.locationKey, `economy.vendors[${index}].locationKey`), locationKeys, 'vendor location'); requireRef(nullableKey(item.factionKey, `economy.vendors[${index}].factionKey`), factionKeys, 'vendor faction'); numberValue(item.buyPriceMultiplier, `economy.vendors[${index}].buyPriceMultiplier`, 0.01, 100); numberValue(item.sellPriceMultiplier, `economy.vendors[${index}].sellPriceMultiplier`, 0.01, 100); array(item.stock, `economy.vendors[${index}].stock`).forEach((entry, entryIndex) => { const parsed = row(entry, `economy.vendors[${index}].stock[${entryIndex}]`); exact(parsed, ['itemKey', 'quantity'], `economy.vendors[${index}].stock[${entryIndex}]`); requireRef(key(parsed.itemKey, 'vendor stock item'), itemKeys, 'vendor stock item'); if (parsed.quantity != null) int(parsed.quantity, 'vendor stock quantity', 0, 1_000_000) }) })
+  const economy = versioned(packageValue, 'economy', [1, 2])
+  const modernEconomy = Number(economy.version) >= 2
+  if (economyActionModule !== modernEconomy) fail('Action v13与Economy v2必须成对发布')
+  exact(economy, modernEconomy ? ['version', 'currency', 'rules', 'vendors'] : ['version', 'currency', 'vendors'], 'economy')
+  const currency = row(economy.currency, 'economy.currency'); exact(currency, ['key', 'label'], 'economy.currency')
+  if (currency.key !== 'currency') fail('首版只允许currency单货币')
+  text(currency.label, 'economy.currency.label', 100)
+  const economyRules = modernEconomy ? row(economy.rules, 'economy.rules') : null
+  if (economyRules) exact(economyRules, ['maximumTransactionQuantity', 'maximumTransactionTotal'], 'economy.rules')
+  const maximumTransactionQuantity = modernEconomy
+    ? int(economyRules!.maximumTransactionQuantity, 'economy.rules.maximumTransactionQuantity', 1, 1_000_000)
+    : 100
+  const maximumTransactionTotal = modernEconomy
+    ? int(economyRules!.maximumTransactionTotal, 'economy.rules.maximumTransactionTotal', 1, 1_000_000_000)
+    : 1_000_000_000
+  const vendorRows = catalog(economy.vendors, 'economy.vendors', modernEconomy
+    ? ['key', 'title', 'actorKey', 'locationKey', 'factionKey', 'buyPriceMultiplierBasisPoints', 'sellPriceMultiplierBasisPoints', 'buyCategories', 'sellCategories', 'inventoryEntries', 'availabilityConditionKeys', 'buyActionKey', 'sellActionKey']
+    : ['key', 'title', 'actorKey', 'locationKey', 'factionKey', 'buyPriceMultiplier', 'sellPriceMultiplier', 'stock'])
+  const vendorKeys = keysOf(vendorRows, 'economy.vendors')
+  const tradeCategories = ['equipment', 'consumable', 'material', 'misc'] as const
+  const normalizedVendors: TextOpenWorldParsedModulesV1['economy']['vendors'] = vendorRows.map((item, index) => {
+    const label = `economy.vendors[${index}]`
+    text(item.title, `${label}.title`, 2_000)
+    const actorKey = key(item.actorKey, `${label}.actorKey`); requireRef(actorKey, actorKeys, 'vendor actor')
+    const locationKey = key(item.locationKey, `${label}.locationKey`); requireRef(locationKey, locationKeys, 'vendor location')
+    const factionKey = nullableKey(item.factionKey, `${label}.factionKey`); requireRef(factionKey, factionKeys, 'vendor faction')
+    const actor = actorRows.find(candidate => candidate.key === actorKey) ?? fail(`${label}.actorKey不存在`)
+    if (factionKey !== actor.factionKey) fail(`${label}.factionKey必须与商店角色阵营一致`)
+    const buyPriceMultiplierBasisPoints = modernEconomy
+      ? int(item.buyPriceMultiplierBasisPoints, `${label}.buyPriceMultiplierBasisPoints`, 100, 1_000_000)
+      : Math.round(numberValue(item.buyPriceMultiplier, `${label}.buyPriceMultiplier`, 0.01, 100) * 10_000)
+    const sellPriceMultiplierBasisPoints = modernEconomy
+      ? int(item.sellPriceMultiplierBasisPoints, `${label}.sellPriceMultiplierBasisPoints`, 100, 1_000_000)
+      : Math.round(numberValue(item.sellPriceMultiplier, `${label}.sellPriceMultiplier`, 0.01, 100) * 10_000)
+    const legacyStock = modernEconomy ? [] : array(item.stock, `${label}.stock`)
+    const buyCategories = modernEconomy
+      ? strings(item.buyCategories, `${label}.buyCategories`).map(value => enumValue(value, tradeCategories, `${label}.buyCategory`))
+      : [...new Set(legacyStock.map(entry => {
+          const itemKey = key(row(entry, `${label}.stock entry`).itemKey, `${label}.stock itemKey`)
+          return itemRows.find(candidate => candidate.key === itemKey)?.kind
+        }).filter((value): value is typeof tradeCategories[number] => tradeCategories.includes(value as typeof tradeCategories[number])))]
+    const sellCategories = modernEconomy
+      ? strings(item.sellCategories, `${label}.sellCategories`).map(value => enumValue(value, tradeCategories, `${label}.sellCategory`))
+      : [...new Set(itemRows.filter(candidate => candidate.sellable && candidate.kind !== 'quest').map(candidate => candidate.kind as typeof tradeCategories[number]))]
+    if (!buyCategories.length || !sellCategories.length) fail(`${label}买卖类别不能为空`)
+    if (modernEconomy) sellCategories.forEach(category => { if (!buyCategories.includes(category)) fail(`${label}首版只允许收购可重新出售的类别:${category}`) })
+    const inventoryRows = modernEconomy
+      ? catalog(item.inventoryEntries, `${label}.inventoryEntries`, ['itemKey', 'stockPolicy', 'initialQuantity'])
+      : legacyStock.map((entry, entryIndex) => {
+          const parsed = row(entry, `${label}.stock[${entryIndex}]`); exact(parsed, ['itemKey', 'quantity'], `${label}.stock[${entryIndex}]`)
+          return { itemKey: parsed.itemKey, stockPolicy: parsed.quantity == null ? 'unlimited' : 'limited', initialQuantity: parsed.quantity }
+        })
+    if (!inventoryRows.length) fail(`${label}库存目录不能为空`)
+    const inventoryKeys = inventoryRows.map((entry, entryIndex) => {
+      const entryLabel = `${label}.inventoryEntries[${entryIndex}]`
+      const itemKey = key(entry.itemKey, `${entryLabel}.itemKey`); requireRef(itemKey, itemKeys, 'vendor stock item')
+      const definition = itemRows.find(candidate => candidate.key === itemKey)!
+      const stockPolicy = enumValue(entry.stockPolicy, ['unlimited', 'limited'], `${entryLabel}.stockPolicy`)
+      const initialQuantity = entry.initialQuantity == null ? null : int(entry.initialQuantity, `${entryLabel}.initialQuantity`, 0, 1_000_000)
+      if ((stockPolicy === 'unlimited') !== (initialQuantity == null)) fail(`${entryLabel}库存策略与初始数量不一致`)
+      if (definition.critical || definition.kind === 'quest' || Number(definition.baseValue) < 1) fail(`${entryLabel}不能出售关键、任务或零价值物品`)
+      if (!buyCategories.includes(definition.kind as typeof tradeCategories[number])) fail(`${entryLabel}物品类别不在buyCategories中`)
+      if (stockPolicy === 'unlimited' && definition.unique) fail(`${entryLabel}唯一物品不能无限供应`)
+      return itemKey
+    })
+    if (new Set(inventoryKeys).size !== inventoryKeys.length) fail(`${label}.inventoryEntries物品不能重复`)
+    const availabilityConditionKeys = modernEconomy ? strings(item.availabilityConditionKeys, `${label}.availabilityConditionKeys`) : []
+    requireRefs(availabilityConditionKeys, conditionKeys, 'vendor availability condition')
+    const buyActionKey = modernEconomy ? key(item.buyActionKey, `${label}.buyActionKey`) : null
+    const sellActionKey = modernEconomy ? key(item.sellActionKey, `${label}.sellActionKey`) : null
+    requireRef(buyActionKey, actionKeys, 'vendor buy Action'); requireRef(sellActionKey, actionKeys, 'vendor sell Action')
+    return {
+      key: key(item.key, `${label}.key`), title: String(item.title), actorKey, locationKey, factionKey,
+      buyPriceMultiplierBasisPoints, sellPriceMultiplierBasisPoints,
+      buyCategories, sellCategories,
+      inventoryEntries: inventoryRows.map(entry => ({
+        itemKey: String(entry.itemKey), stockPolicy: entry.stockPolicy as 'unlimited' | 'limited',
+        initialQuantity: entry.initialQuantity == null ? null : Number(entry.initialQuantity),
+      })),
+      availabilityConditionKeys, buyActionKey, sellActionKey,
+    }
+  })
+  const performTransactionEffects = effects.filter(effect => effect.operation === 'perform-transaction')
+  if (modernEconomy) {
+    const ownedActionKeys: string[] = []
+    const ownedEffectKeys: string[] = []
+    normalizedVendors.forEach(vendor => {
+      for (const transactionKind of ['buy', 'sell'] as const) {
+        const actionKey = transactionKind === 'buy' ? vendor.buyActionKey : vendor.sellActionKey
+        const action = actionRows.find(candidate => candidate.key === actionKey) ?? fail(`商店交易Action不存在:${vendor.key}:${transactionKind}`)
+        const successEffectKeys = strings(action.successEffectKeys, `vendor ${vendor.key} ${transactionKind} success effects`)
+        const markers = successEffectKeys.map(effectKey => effects.find(effect => effect.key === effectKey)!)
+          .filter(effect => effect.operation === 'perform-transaction')
+        if (action.category !== transactionKind || action.actorScope !== 'player' || action.targetScope !== 'vendor'
+          || strings(action.costEffectKeys, `vendor ${vendor.key} ${transactionKind} costs`).length
+          || strings(action.failureEffectKeys, `vendor ${vendor.key} ${transactionKind} failures`).length
+          || successEffectKeys.length !== 1 || markers.length !== 1 || Number(action.timeCostMinutes) !== 0
+          || action.confirmationPolicy !== 'never' || action.repeatPolicy !== 'repeatable' || action.cooldownMinutes != null) {
+          fail(`商店交易Action合同无效:${vendor.key}:${transactionKind}`)
+        }
+        requireSameKeys(strings(action.locationKeys, `vendor ${vendor.key} ${transactionKind} locations`), [vendor.locationKey], `vendor ${vendor.key} ${transactionKind}地点`)
+        requireSameKeys(strings(action.requirementConditionKeys, `vendor ${vendor.key} ${transactionKind} conditions`), vendor.availabilityConditionKeys, `vendor ${vendor.key} ${transactionKind}条件`)
+        const marker = row(markers[0].payload, `vendor ${vendor.key} ${transactionKind} marker`)
+        exact(marker, ['kind', 'vendorKey'], `vendor ${vendor.key} ${transactionKind} marker`)
+        if (marker.kind !== transactionKind || marker.vendorKey !== vendor.key) fail(`商店交易Effect与Vendor不一致:${vendor.key}:${transactionKind}`)
+        ownedActionKeys.push(String(actionKey))
+        ownedEffectKeys.push(String(markers[0].key))
+      }
+    })
+    if (new Set(ownedActionKeys).size !== ownedActionKeys.length) fail('同一交易Action不能属于多个商店或交易方向')
+    requireSameKeys(ownedActionKeys, actionRows.filter(action => action.category === 'buy' || action.category === 'sell').map(action => String(action.key)), '商店交易Action覆盖')
+    requireSameKeys(ownedEffectKeys, performTransactionEffects.map(effect => String(effect.key)), '商店交易Effect覆盖')
+    performTransactionEffects.forEach(effect => {
+      const owners = actionRows.filter(action => [
+        ...strings(action.costEffectKeys, `action ${String(action.key)} cost effects`),
+        ...strings(action.successEffectKeys, `action ${String(action.key)} success effects`),
+        ...strings(action.failureEffectKeys, `action ${String(action.key)} failure effects`),
+      ].includes(String(effect.key)))
+      if (owners.length !== 1) fail(`perform-transaction Effect必须且只能属于一个交易Action:${String(effect.key)}`)
+    })
+  } else if (performTransactionEffects.length) fail('旧Economy模块不能包含正式交易Effect')
+  const normalizedEconomy: TextOpenWorldParsedModulesV1['economy'] = {
+    version: 2, sourceVersion: modernEconomy ? 2 : 1,
+    currency: { key: 'currency', label: String(currency.label) },
+    rules: { maximumTransactionQuantity, maximumTransactionTotal },
+    vendors: normalizedVendors,
+  }
   actorRows.forEach((item, index) => requireRefs(strings(item.serviceKeys, `actors.actors[${index}].serviceKeys`), vendorKeys, 'actor service'))
   if (!legacyActorModule) {
-    vendors.forEach(vendor => {
+    normalizedVendors.forEach(vendor => {
       const owners = actorRows.filter(actor => strings(actor.serviceKeys, `actor ${String(actor.key)} serviceKeys`).includes(String(vendor.key)))
       if (owners.length !== 1 || owners[0].key !== vendor.actorKey) fail(`vendor必须由actorKey对应角色唯一持有:${String(vendor.key)}`)
     })
@@ -1527,7 +1651,7 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
       const ownerActorKey = key(item.ownerActorKey, `${label}.ownerActorKey`)
       const serviceKey = key(item.serviceKey, `${label}.serviceKey`)
       const owner = actorRows.find(actor => actor.key === ownerActorKey) ?? fail(`${label} ownerActorKey不存在`)
-      const service = vendors.find(vendor => vendor.key === serviceKey) ?? fail(`${label} serviceKey不存在`)
+      const service = normalizedVendors.find(vendor => vendor.key === serviceKey) ?? fail(`${label} serviceKey不存在`)
       if (service.actorKey !== ownerActorKey || !strings(owner.serviceKeys, `actor ${ownerActorKey} serviceKeys`).includes(serviceKey)) fail(`${label}服务所有权不一致`)
       const policy = enumValue(item.policy, ['replace-on-owner-death', 'disappear-on-owner-death'], `${label}.policy`)
       const replacementActorKey = nullableKey(item.replacementActorKey, `${label}.replacementActorKey`)
@@ -1539,7 +1663,7 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
       if (replacementActorKey == null || replacementServiceKey == null) fail(`${label}接管策略必须配置替代角色和服务`)
       if (replacementActorKey === ownerActorKey || replacementServiceKey === serviceKey) fail(`${label}替代关系不能指回原角色或原服务`)
       const replacementActor = actorRows.find(actor => actor.key === replacementActorKey) ?? fail(`${label} replacementActorKey不存在`)
-      const replacementService = vendors.find(vendor => vendor.key === replacementServiceKey) ?? fail(`${label} replacementServiceKey不存在`)
+      const replacementService = normalizedVendors.find(vendor => vendor.key === replacementServiceKey) ?? fail(`${label} replacementServiceKey不存在`)
       if (replacementService.actorKey !== replacementActorKey || !strings(replacementActor.serviceKeys, `actor ${replacementActorKey} serviceKeys`).includes(replacementServiceKey)) fail(`${label}替代服务所有权不一致`)
     })
     const ownedServiceKeys = actorRows.flatMap(actor => strings(actor.serviceKeys, `actor ${String(actor.key)} serviceKeys`)).sort()
@@ -1590,6 +1714,27 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
     enumValue(item.optionalInteractionPolicy, ['available', 'may-refuse'], `relationships.attitudeBands[${index}].optionalInteractionPolicy`)
   })
   requireSameKeys(attitudeBands.map(item => String(item.attitude)), ['bad', 'neutral', 'good'], '三档态度定义覆盖')
+  if (modernEconomy) {
+    const roundedPrice = (baseValue: number, vendorBasisPoints: number, relationshipMultiplier: number, rounding: 'ceil' | 'floor') => {
+      const relationshipBasisPoints = Math.round(relationshipMultiplier * 10_000)
+      const numerator = BigInt(baseValue) * BigInt(vendorBasisPoints) * BigInt(relationshipBasisPoints)
+      const denominator = 100_000_000n
+      const result = rounding === 'ceil' ? (numerator + denominator - 1n) / denominator : numerator / denominator
+      const positive = baseValue > 0 && result < 1n ? 1n : result
+      if (positive > BigInt(maximumTransactionTotal)) fail('商店单价超过单次交易总额上限')
+      return Number(positive)
+    }
+    normalizedVendors.forEach(vendor => {
+      const offeredKeys = new Set(vendor.inventoryEntries.map(entry => entry.itemKey))
+      itemRows.filter(item => (offeredKeys.has(String(item.key)) || vendor.sellCategories.includes(item.kind as never)) && item.sellable && vendor.sellCategories.includes(item.kind as never)).forEach(item => {
+        attitudeBands.forEach(band => {
+          const buyPrice = roundedPrice(Number(item.baseValue), vendor.buyPriceMultiplierBasisPoints, Number(band.buyPriceMultiplier), 'ceil')
+          const sellPrice = roundedPrice(Number(item.baseValue), vendor.sellPriceMultiplierBasisPoints, Number(band.sellPriceMultiplier), 'floor')
+          if (sellPrice > buyPrice) fail(`商店关系价格会形成无风险套利:${vendor.key}:${String(item.key)}:${String(band.attitude)}`)
+        })
+      })
+    })
+  }
   const crimeActions = crimeRelationships
     ? catalog(relationships.crimeActions, 'relationships.crimeActions', [
         'key', 'actionKey', 'kind', 'targetActorKey', 'locationKey', 'successConditionKeys',
@@ -1647,7 +1792,7 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
       const locationKey = key(parsed.locationKey, `actors.schedules[${index}].entries[${entryIndex}].locationKey`)
       strings(parsed.availableServiceKeys, `actors.schedules[${index}].entries[${entryIndex}].availableServiceKeys`).forEach(serviceKey => {
         if (!actorServiceKeys.has(serviceKey)) fail(`日程开放了不属于角色的服务:${String(actor.key)}:${serviceKey}`)
-        if (vendors.find(vendor => vendor.key === serviceKey)?.locationKey !== locationKey) fail(`日程服务地点与vendor地点不一致:${serviceKey}`)
+        if (normalizedVendors.find(vendor => vendor.key === serviceKey)?.locationKey !== locationKey) fail(`日程服务地点与vendor地点不一致:${serviceKey}`)
       })
     })
     if (!legacyActorModule) requireSameKeys(entries.map(entry => String(row(entry, 'schedule entry').timePeriodKey)), [...periodKeys], `schedule ${String(item.key)} time period coverage`)
@@ -1742,7 +1887,7 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
     if (ownerKey && !actorKeys.has(ownerKey) && !factionKeys.has(ownerKey) && !regionKeys.has(ownerKey) && !locationKeys.has(ownerKey)) fail(`quest owner不存在:${ownerKey}`)
   })
   actionRows.forEach((item, index) => {
-    if (item.targetScope === 'vendor' && vendors.length === 0) fail(`actions.actions[${index}] 需要vendor但目录为空`)
+    if (item.targetScope === 'vendor' && normalizedVendors.length === 0) fail(`actions.actions[${index}] 需要vendor但目录为空`)
   })
   effects.filter(effect => effect.operation === 'set-story-modifier').forEach(effect => {
     const payload = row(effect.payload, `story modifier effect ${String(effect.key)}.payload`)
@@ -1859,7 +2004,7 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
     combat: normalizedCombat,
     items: structuredClone(items) as unknown as TextOpenWorldParsedModulesV1['items'],
     crafting: normalizedCrafting,
-    economy: structuredClone(economy) as unknown as TextOpenWorldParsedModulesV1['economy'],
+    economy: structuredClone(normalizedEconomy),
     relationships: {
       ...structuredClone(relationships), version: crimeRelationships ? 3 : 2, unaffiliatedMoralityMultiplier,
       factionMorality: structuredClone(factionMorality), attitudeBands: structuredClone(attitudeBands), crimeActions: structuredClone(crimeActions),

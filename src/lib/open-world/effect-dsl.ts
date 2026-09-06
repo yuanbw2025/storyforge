@@ -45,6 +45,7 @@ import {
 } from './combat-state-machine'
 import { createTextOpenWorldCombatActionCatalogV1 } from './combat-actions'
 import { createTextOpenWorldCraftingCatalogV1 } from './crafting'
+import { createTextOpenWorldEconomyCatalogV1 } from './economy'
 
 type Row = Record<string, unknown>
 type Refs = ReturnType<typeof references>
@@ -78,7 +79,7 @@ function references(modules: TextOpenWorldParsedModulesV1) {
     locations: set(modules.world.locations), travelPoints: set(modules.world.fastTravelPoints),
     respawnPoints: set(modules.world.fastTravelPoints.filter(point => point.canRespawn)), edges: set(modules.world.edges),
     factions: set(modules.actors.factions), actors: set(modules.actors.actors), regions: set(modules.world.regions),
-    encounters: set(modules.combat.encounters), knowledge: set(modules.knowledge.entries), endings: set(modules.narrative.endings), rewards: set(modules.items.rewardContracts),
+    encounters: set(modules.combat.encounters), knowledge: set(modules.knowledge.entries), endings: set(modules.narrative.endings), rewards: set(modules.items.rewardContracts), vendors: set(modules.economy.vendors),
     rumors: set(modules.knowledge.rumors), achievements: set(modules.knowledge.achievements), weather: set(modules['time-weather'].weather),
     questStageOwner: new Map(modules.quests.stages.map(item => [item.key, item.questKey])),
     actorLifecycle: modules.actions.version >= 7,
@@ -135,6 +136,7 @@ function parseDefinition(value: unknown, refs: Refs, label: string): TextOpenWor
     return { key: effectKey, operation, payload: { kind, skillKey, itemKey } }
   }
   if (operation === 'perform-crafting') { exact(payload, ['recipeKey'], `${label}.payload`); return { key: effectKey, operation, payload: { recipeKey: ref(payload.recipeKey, refs.recipes, `${label}.recipeKey`) } } }
+  if (operation === 'perform-transaction') { exact(payload, ['kind', 'vendorKey'], `${label}.payload`); return { key: effectKey, operation, payload: { kind: enumValue(payload.kind, ['buy', 'sell'], `${label}.kind`), vendorKey: ref(payload.vendorKey, refs.vendors, `${label}.vendorKey`) } } }
   if (operation === 'rest') { exact(payload, ['healthRatio', 'skillResourceRatio', 'clearHarmfulStatuses'], `${label}.payload`); return { key: effectKey, operation, payload: { healthRatio: numberValue(payload.healthRatio, `${label}.healthRatio`, 0.000001, 1), skillResourceRatio: numberValue(payload.skillResourceRatio, `${label}.skillResourceRatio`, 0, 1), clearHarmfulStatuses: bool(payload.clearHarmfulStatuses, `${label}.clearHarmfulStatuses`) } } }
   if (operation === 'respawn') { exact(payload, ['fastTravelPointKey', 'healthRatio'], `${label}.payload`); return { key: effectKey, operation, payload: { fastTravelPointKey: ref(payload.fastTravelPointKey, refs.respawnPoints, `${label}.fastTravelPointKey`), healthRatio: numberValue(payload.healthRatio, `${label}.healthRatio`, 0.000001, 1) } } }
   if (operation === 'change-actor-state') {
@@ -159,6 +161,7 @@ function addUnique(values: string[], value: string) { if (!values.includes(value
 function remove(values: string[], value: string) { const index = values.indexOf(value); if (index >= 0) values.splice(index, 1) }
 function effectDomains(operation: TextOpenWorldEffectDefinitionV1['operation']): TextOpenWorldEffectImpactDomainV1[] {
   if (operation === 'perform-crafting') return ['inventory', 'time']
+  if (operation === 'perform-transaction') return ['inventory', 'economy']
   if (operation === 'respawn') return ['combat', 'player', 'map']
   if (operation === 'resolve-combat' || operation === 'settle-combat-state' || operation === 'perform-combat-action') return ['combat', 'player']
   if (['change-player-resource', 'grant-experience', 'apply-status', 'remove-status', 'learn-skill', 'rest'].includes(operation)) return ['player']
@@ -237,6 +240,25 @@ export function validateTextOpenWorldEffectStateV1(state: TextOpenWorldEffectSta
   }
   assertUniqueKnown(state.inventory.knownRecipeKeys, refs.recipes, 'inventory.knownRecipeKeys')
   int(state.inventory.currency, 'inventory.currency', 0, 1_000_000_000)
+  const economyState = row(state.economy, 'economy')
+  exact(economyState, ['limitedStockQuantitiesByVendorKey'], 'economy')
+  const limitedStockByVendor = row(state.economy.limitedStockQuantitiesByVendorKey, 'economy.limitedStockQuantitiesByVendorKey')
+  if (canonicalProductProductionJsonV2(Object.keys(limitedStockByVendor).sort()) !== canonicalProductProductionJsonV2(modules.economy.vendors.map(vendor => vendor.key).sort())) fail('有限库存状态必须覆盖全部商店')
+  modules.economy.vendors.forEach(vendor => {
+    const vendorStock = row(limitedStockByVendor[vendor.key], `economy.${vendor.key}`)
+    const requiredFiniteKeys = vendor.inventoryEntries.filter(entry => entry.stockPolicy === 'limited').map(entry => entry.itemKey)
+    requiredFiniteKeys.forEach(itemKey => {
+      if (!Object.prototype.hasOwnProperty.call(vendorStock, itemKey)) fail(`商店有限库存状态缺失:${vendor.key}:${itemKey}`)
+    })
+    for (const [itemKey, quantity] of Object.entries(vendorStock)) {
+      ref(itemKey, refs.items, `economy.${vendor.key}.itemKey`)
+      int(quantity, `economy.${vendor.key}.${itemKey}`, 0, 1_000_000)
+      const item = modules.items.items.find(candidate => candidate.key === itemKey)!
+      const entry = vendor.inventoryEntries.find(candidate => candidate.itemKey === itemKey)
+      if (entry?.stockPolicy === 'unlimited') fail(`无限供应商品不能写入有限库存状态:${vendor.key}:${itemKey}`)
+      if (!entry && (!item.sellable || item.critical || item.kind === 'quest' || !vendor.sellCategories.includes(item.kind as never))) fail(`商店运行库存包含不可收购物品:${vendor.key}:${itemKey}`)
+    }
+  })
   const questState = row(state.quests, 'quests'); exact(questState, ['instancesByKey', 'resultTags', 'tracking'], 'quests')
   const releaseInstanceCountByDefinition = new Map<string, number>()
   const sourceRefs = new Set<string>()
@@ -431,6 +453,7 @@ function applyDefinitions(
   combatState: ReturnType<typeof createTextOpenWorldCombatStateMachineV1>,
   combatActions: ReturnType<typeof createTextOpenWorldCombatActionCatalogV1>,
   crafting: ReturnType<typeof createTextOpenWorldCraftingCatalogV1>,
+  economy: ReturnType<typeof createTextOpenWorldEconomyCatalogV1>,
 ) {
   validateTextOpenWorldEffectStateV1(stateValue, modules)
   if (stateValue.appliedClaimKeys.includes(claimKey)) fail(`claim已应用:${claimKey}`)
@@ -501,6 +524,12 @@ function applyDefinitions(
     if (craftingEffects[0].payload.recipeKey !== authorization.recipeKey) fail('制作Effect与配方授权不一致')
     crafting.assertAuthorization({ state: stateValue, authorization })
   } else if (authorization?.kind === 'crafting') fail('Crafting授权没有对应Effect')
+  const transactionEffects = effects.filter((effect): effect is Extract<TextOpenWorldEffectDefinitionV1, { operation: 'perform-transaction' }> => effect.operation === 'perform-transaction')
+  if (transactionEffects.length) {
+    if (transactionEffects.length !== 1 || effects.length !== 1 || authorization?.kind !== 'transaction') fail('交易Effect缺少唯一Transaction授权')
+    if (transactionEffects[0].payload.kind !== authorization.transactionKind || transactionEffects[0].payload.vendorKey !== authorization.vendorKey) fail('交易Effect与授权不一致')
+    economy.assertAuthorization({ state: stateValue, authorization })
+  } else if (authorization?.kind === 'transaction') fail('Transaction授权没有对应Effect')
   let questTransitionsApplied = false
   for (const effect of effects) {
     switch (effect.operation) {
@@ -834,6 +863,17 @@ function applyDefinitions(
         })
         break
       }
+      case 'perform-transaction': {
+        if (authorization?.kind !== 'transaction') fail(`${effect.key}缺少Transaction授权`)
+        const before = {
+          currency: authorization.before.currency,
+          playerItemQuantity: authorization.before.playerItemQuantity,
+          vendorStockQuantity: authorization.before.vendorStockQuantity,
+        }
+        economy.applyAuthorization({ beforeState: stateValue, state, authorization, claimKey, effectKey: effect.key })
+        record(changes, effect, `${authorization.transactionKind === 'buy' ? '购买' : '出售'}:${authorization.itemKey}×${authorization.quantity}`, before, structuredClone(authorization.after))
+        break
+      }
       case 'rest': {
         const { payload } = effect
         if (state.player.health <= 0 || state.combat?.status === 'active' || state.combat?.status === 'defeat') fail(`${effect.key}当前不能休息`)
@@ -914,11 +954,12 @@ export function applyTextOpenWorldEffectPlanForReplayV1(
   const combatState = createTextOpenWorldCombatStateMachineV1(value, modules)
   const combatActions = createTextOpenWorldCombatActionCatalogV1(value, modules)
   const crafting = createTextOpenWorldCraftingCatalogV1(value, modules)
+  const economy = createTextOpenWorldEconomyCatalogV1(value, modules)
   const definitions = modules.actions.effects.map((item, index) => parseDefinition(item, refs, `effects[${index}]`))
   const byKey = new Map(definitions.map(item => [item.key, item]))
   const canonical = plan.effectKeys.map(effectKey => byKey.get(effectKey) ?? fail(`Effect不存在:${effectKey}`))
   if (canonicalProductProductionJsonV2(canonical) !== canonicalProductProductionJsonV2(plan.effects)) fail('EffectPlan定义与Release不一致')
-  const applied = applyDefinitions(state, canonical, plan.claimKey, modules, plan.authorization, questTransitions, objectives, tracking, fastTravel, weather, actorSchedules, actorLifecycle, crime, combatState, combatActions, crafting)
+  const applied = applyDefinitions(state, canonical, plan.claimKey, modules, plan.authorization, questTransitions, objectives, tracking, fastTravel, weather, actorSchedules, actorLifecycle, crime, combatState, combatActions, crafting, economy)
   if (canonicalProductProductionJsonV2(applied.changes) !== canonicalProductProductionJsonV2(plan.previewChanges)) fail('EffectPlan重放变化与预演不一致')
   return applied
 }
@@ -943,10 +984,11 @@ export function createTextOpenWorldEffectCatalogV1(value: TextOpenWorldRuntimePa
   const combatState = createTextOpenWorldCombatStateMachineV1(value, modules)
   const combatActions = createTextOpenWorldCombatActionCatalogV1(value, modules)
   const crafting = createTextOpenWorldCraftingCatalogV1(value, modules)
+  const economy = createTextOpenWorldEconomyCatalogV1(value, modules)
   const definitions = modules.actions.effects.map((item, index) => parseDefinition(item, refs, `effects[${index}]`)); const byKey = new Map(definitions.map(item => [item.key, item])); const clone = <T>(item: T): T => structuredClone(item)
   const plan = async (input: { effectKeys: string[]; claimKey: string; state: TextOpenWorldEffectStateV1; authorization?: TextOpenWorldEffectPlanV1['authorization'] }): Promise<TextOpenWorldEffectPlanV1> => {
     const claimKey = key(input.claimKey, 'claimKey', CLAIM_KEY); if (!Array.isArray(input.effectKeys) || new Set(input.effectKeys).size !== input.effectKeys.length) fail('effectKeys必须是无重复数组')
-    const effects = input.effectKeys.map(effectKey => byKey.get(key(effectKey, 'effectKey')) ?? fail(`Effect不存在:${effectKey}`)); const baseStateHash = await hashProductProductionValueV2(input.state); const preview = applyDefinitions(input.state, effects, claimKey, modules, input.authorization ?? null, questTransitions, objectives, tracking, fastTravel, weather, actorSchedules, actorLifecycle, crime, combatState, combatActions, crafting); const resultingStateHash = await hashProductProductionValueV2(preview.state); const impactDomains = [...new Set(effects.flatMap(effect => effectDomains(effect.operation)))]
+    const effects = input.effectKeys.map(effectKey => byKey.get(key(effectKey, 'effectKey')) ?? fail(`Effect不存在:${effectKey}`)); const baseStateHash = await hashProductProductionValueV2(input.state); const preview = applyDefinitions(input.state, effects, claimKey, modules, input.authorization ?? null, questTransitions, objectives, tracking, fastTravel, weather, actorSchedules, actorLifecycle, crime, combatState, combatActions, crafting, economy); const resultingStateHash = await hashProductProductionValueV2(preview.state); const impactDomains = [...new Set(effects.flatMap(effect => effectDomains(effect.operation)))]
     const body: Omit<TextOpenWorldEffectPlanV1, 'planHash'> = {
       schema: 'storyforge.text-open-world.effect-plan', version: 1, claimKey, baseStateHash, resultingStateHash,
       effectKeys: [...input.effectKeys], effects: clone(effects), authorization: clone(input.authorization ?? null),
@@ -963,7 +1005,7 @@ export function createTextOpenWorldEffectCatalogV1(value: TextOpenWorldRuntimePa
       if (!isSha256Hash(planHash) || await hashProductProductionValueV2(planBody(body)) !== planHash) fail('EffectPlan planHash无效')
       const baseStateHash = await hashProductProductionValueV2(input.state); if (baseStateHash !== input.plan.baseStateHash) fail('EffectPlan基线状态已变化')
       const canonicalEffects = input.plan.effectKeys.map(effectKey => byKey.get(effectKey) ?? fail(`Effect不存在:${effectKey}`)); if (canonicalProductProductionJsonV2(canonicalEffects) !== canonicalProductProductionJsonV2(input.plan.effects)) fail('EffectPlan定义与Release不一致')
-      const applied = applyDefinitions(input.state, canonicalEffects, input.plan.claimKey, modules, input.plan.authorization, questTransitions, objectives, tracking, fastTravel, weather, actorSchedules, actorLifecycle, crime, combatState, combatActions, crafting); const resultingStateHash = await hashProductProductionValueV2(applied.state)
+      const applied = applyDefinitions(input.state, canonicalEffects, input.plan.claimKey, modules, input.plan.authorization, questTransitions, objectives, tracking, fastTravel, weather, actorSchedules, actorLifecycle, crime, combatState, combatActions, crafting, economy); const resultingStateHash = await hashProductProductionValueV2(applied.state)
       if (resultingStateHash !== input.plan.resultingStateHash || canonicalProductProductionJsonV2(applied.changes) !== canonicalProductProductionJsonV2(input.plan.previewChanges)) fail('EffectPlan预演与应用结果不一致')
       return { state: applied.state, receipt: { schema: 'storyforge.text-open-world.effect-receipt', version: 1, claimKey: input.plan.claimKey, planHash: input.plan.planHash, baseStateHash, resultingStateHash, impactDomains: [...input.plan.impactDomains], changes: clone(applied.changes) } }
     },

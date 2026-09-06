@@ -226,7 +226,7 @@ export interface TextOpenWorldQuestModuleV1 {
 }
 
 export interface TextOpenWorldActionModuleV1 {
-  version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12
+  version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13
   conditions: Array<{
     key: string
     expression: TextOpenWorldConditionExpressionV1
@@ -502,6 +502,7 @@ export interface TextOpenWorldCraftingModuleV2 {
   }>
 }
 
+/** Legacy data-only economy contract. */
 export interface TextOpenWorldEconomyModuleV1 {
   version: 1
   currency: { key: 'currency'; label: string }
@@ -514,6 +515,36 @@ export interface TextOpenWorldEconomyModuleV1 {
     buyPriceMultiplier: number
     sellPriceMultiplier: number
     stock: Array<{ itemKey: string; quantity: number | null }>
+  }>
+}
+
+/** Current normalized economy contract. Legacy v1 payloads are upgraded to this shape in memory. */
+export interface TextOpenWorldEconomyModuleV2 {
+  version: 2
+  sourceVersion: 1 | 2
+  currency: { key: 'currency'; label: string }
+  rules: {
+    maximumTransactionQuantity: number
+    maximumTransactionTotal: number
+  }
+  vendors: Array<{
+    key: string
+    title: string
+    actorKey: string
+    locationKey: string
+    factionKey: string | null
+    buyPriceMultiplierBasisPoints: number
+    sellPriceMultiplierBasisPoints: number
+    buyCategories: Array<'equipment' | 'consumable' | 'material' | 'misc'>
+    sellCategories: Array<'equipment' | 'consumable' | 'material' | 'misc'>
+    inventoryEntries: Array<{
+      itemKey: string
+      stockPolicy: 'unlimited' | 'limited'
+      initialQuantity: number | null
+    }>
+    availabilityConditionKeys: string[]
+    buyActionKey: string | null
+    sellActionKey: string | null
   }>
 }
 
@@ -699,7 +730,7 @@ export interface TextOpenWorldParsedModulesV1 {
   combat: TextOpenWorldCombatModuleV1
   items: TextOpenWorldItemModuleV1
   crafting: TextOpenWorldCraftingModuleV2
-  economy: TextOpenWorldEconomyModuleV1
+  economy: TextOpenWorldEconomyModuleV2
   relationships: TextOpenWorldRelationshipModuleV1
   'time-weather': TextOpenWorldTimeWeatherModuleV1
   director: TextOpenWorldDirectorModuleV1

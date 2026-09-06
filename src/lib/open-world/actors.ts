@@ -109,10 +109,11 @@ export interface TextOpenWorldProjectedActorV1 {
 export function projectTextOpenWorldActorsV1(input: {
   runtimePackage: TextOpenWorldRuntimePackageV1 | string | unknown
   state: TextOpenWorldEffectStateV1
+  parsedModules?: TextOpenWorldParsedModulesV1
   attitudeByActorKey?: Record<string, 'bad' | 'neutral' | 'good'>
   locationKey?: string
 }): TextOpenWorldProjectedActorV1[] {
-  const modules = parseTextOpenWorldModulesV1(input.runtimePackage)
+  const modules = input.parsedModules ?? parseTextOpenWorldModulesV1(input.runtimePackage)
   const locationKey = input.locationKey ?? input.state.map.currentLocationKey
   const period = currentPeriod(modules, input.state.time.worldMinute)
   const scheduleSettlementCurrent = modules.actions.version < 6

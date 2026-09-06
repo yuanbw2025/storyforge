@@ -169,7 +169,7 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
       ],
     },
     actions: {
-      version: 12,
+      version: 13,
       conditions: [
         { key: 'condition.always', expression: { op: 'all', conditions: [{ op: 'player-number', field: 'level', comparator: 'gte', value: 1 }] }, failureMessage: '角色尚未进入可行动状态。' },
         { key: 'condition.level-two', expression: { op: 'player-number', field: 'level', comparator: 'gte', value: 2 }, failureMessage: '经验不足，无法让谎言自洽。' },
@@ -195,6 +195,8 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
         { key: 'effect.combat-escape', operation: 'perform-combat-action', payload: { kind: 'escape', skillKey: null, itemKey: null } },
         { key: 'effect.combat-enemy-basic-attack', operation: 'perform-combat-action', payload: { kind: 'enemy-skill', skillKey: 'skill.basic-attack', itemKey: null } },
         { key: 'effect.craft-brine-tonic', operation: 'perform-crafting', payload: { recipeKey: 'recipe.brine-tonic' } },
+        { key: 'effect.buy-caretaker', operation: 'perform-transaction', payload: { kind: 'buy', vendorKey: 'vendor.caretaker' } },
+        { key: 'effect.sell-caretaker', operation: 'perform-transaction', payload: { kind: 'sell', vendorKey: 'vendor.caretaker' } },
         { key: 'effect.combat-power-strike-cost', operation: 'change-player-resource', payload: { resource: 'skill-resource', amount: -2 } },
         { key: 'effect.consume-brine-tonic', operation: 'remove-item', payload: { itemKey: 'item.brine-tonic', quantity: 1, reason: 'consume' } },
         { key: 'effect.drop-salt-crystal', operation: 'remove-item', payload: { itemKey: 'item.salt-crystal', quantity: 1, reason: 'drop' } },
@@ -397,6 +399,16 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
         successEffectKeys: ['effect.craft-brine-tonic'], failureEffectKeys: [], timeCostMinutes: 0,
         confirmationPolicy: 'never', repeatPolicy: 'repeatable', cooldownMinutes: null,
       }, {
+        key: 'action.buy-caretaker', category: 'buy', label: '购买商品', description: '从守渠补给选择商品和数量并原子结算。',
+        actorScope: 'player', targetScope: 'vendor', locationKeys: ['location.salt-port'], requirementConditionKeys: [], costEffectKeys: [],
+        successEffectKeys: ['effect.buy-caretaker'], failureEffectKeys: [], timeCostMinutes: 0,
+        confirmationPolicy: 'never', repeatPolicy: 'repeatable', cooldownMinutes: null,
+      }, {
+        key: 'action.sell-caretaker', category: 'sell', label: '出售物品', description: '向守渠补给选择可出售物品和数量并原子结算。',
+        actorScope: 'player', targetScope: 'vendor', locationKeys: ['location.salt-port'], requirementConditionKeys: [], costEffectKeys: [],
+        successEffectKeys: ['effect.sell-caretaker'], failureEffectKeys: [], timeCostMinutes: 0,
+        confirmationPolicy: 'never', repeatPolicy: 'repeatable', cooldownMinutes: null,
+      }, {
         key: 'action.use-brine-tonic', category: 'use', label: '使用盐露药剂', description: '消耗一瓶盐露药剂并恢复生命。',
         actorScope: 'player', targetScope: 'item', locationKeys: [], requirementConditionKeys: ['condition.health-not-full'], costEffectKeys: ['effect.consume-brine-tonic'],
         successEffectKeys: ['effect.restore-health'], failureEffectKeys: [], timeCostMinutes: 0,
@@ -562,12 +574,18 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
       }],
     },
     economy: {
-      version: 1,
+      version: 2,
       currency: { key: 'currency', label: '盐票' },
+      rules: { maximumTransactionQuantity: 100, maximumTransactionTotal: 1_000_000_000 },
       vendors: [{
         key: 'vendor.caretaker', title: '守渠补给', actorKey: 'actor.caretaker', locationKey: 'location.salt-port',
-        factionKey: 'faction.canal-keepers', buyPriceMultiplier: 1, sellPriceMultiplier: 0.5,
-        stock: [{ itemKey: 'item.brine-tonic', quantity: null }],
+        factionKey: 'faction.canal-keepers', buyPriceMultiplierBasisPoints: 10_000, sellPriceMultiplierBasisPoints: 5_000,
+        buyCategories: ['equipment', 'consumable', 'material'], sellCategories: ['equipment', 'consumable', 'material'],
+        inventoryEntries: [
+          { itemKey: 'item.brine-tonic', stockPolicy: 'unlimited', initialQuantity: null },
+          { itemKey: 'item.salt-crystal', stockPolicy: 'limited', initialQuantity: 3 },
+        ],
+        availabilityConditionKeys: [], buyActionKey: 'action.buy-caretaker', sellActionKey: 'action.sell-caretaker',
       }],
     },
     relationships: {
@@ -701,10 +719,44 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
   }
 }
 
+/** Re-encodes Economy v2 and its Action v13 bindings as the legacy data-only v1 module. */
+export function downgradeTextOpenWorldFixtureEconomyV1(
+  runtimePackage: TextOpenWorldRuntimePackageV1,
+): TextOpenWorldRuntimePackageV1 {
+  const actions = runtimePackage.modules.actions.payload as any
+  const economy = runtimePackage.modules.economy.payload as any
+  actions.effects = actions.effects.filter((effect: any) => effect.operation !== 'perform-transaction')
+  actions.actions = actions.actions.filter((action: any) => !['buy', 'sell'].includes(action.category) || action.targetScope !== 'vendor')
+  if (actions.version >= 13) {
+    actions.version = 12
+    runtimePackage.modules.actions.schemaVersion = 12
+  }
+  if (economy.version >= 2) {
+    economy.vendors = economy.vendors.map((vendor: any) => ({
+      key: vendor.key,
+      title: vendor.title,
+      actorKey: vendor.actorKey,
+      locationKey: vendor.locationKey,
+      factionKey: vendor.factionKey,
+      buyPriceMultiplier: vendor.buyPriceMultiplierBasisPoints / 10_000,
+      sellPriceMultiplier: vendor.sellPriceMultiplierBasisPoints / 10_000,
+      stock: vendor.inventoryEntries.map((entry: any) => ({
+        itemKey: entry.itemKey,
+        quantity: entry.stockPolicy === 'unlimited' ? null : entry.initialQuantity,
+      })),
+    }))
+    economy.version = 1
+    delete economy.rules
+    runtimePackage.modules.economy.schemaVersion = 1
+  }
+  return runtimePackage
+}
+
 /** Re-encodes Crafting v2 and its Action v12 bindings as the legacy data-only v1 module. */
 export function downgradeTextOpenWorldFixtureCraftingV1(
   runtimePackage: TextOpenWorldRuntimePackageV1,
 ): TextOpenWorldRuntimePackageV1 {
+  downgradeTextOpenWorldFixtureEconomyV1(runtimePackage)
   const actions = runtimePackage.modules.actions.payload as any
   const crafting = runtimePackage.modules.crafting.payload as any
   actions.effects = actions.effects.filter((effect: any) => effect.operation !== 'perform-crafting')

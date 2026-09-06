@@ -44,6 +44,7 @@ import { createTextOpenWorldCrimeCatalogV1 } from './crime'
 import { createTextOpenWorldCombatStateMachineV1 } from './combat-state-machine'
 import { createTextOpenWorldCombatActionCatalogV1 } from './combat-actions'
 import { createTextOpenWorldCraftingCatalogV1 } from './crafting'
+import { createInitialTextOpenWorldEconomyStateV1, createTextOpenWorldEconomyCatalogV1 } from './economy'
 
 type Row = Record<string, unknown>
 const STABLE_KEY = /^[a-z][a-z0-9._:-]{0,199}$/
@@ -104,6 +105,7 @@ function initialEffectState(runtimePackage: ReturnType<typeof parseTextOpenWorld
       knownRecipeKeys: modules.crafting.recipes.filter(recipe => recipe.learnedByDefault).map(recipe => recipe.key),
       currency: modules.actors.player.build.startingCurrency,
     },
+    economy: createInitialTextOpenWorldEconomyStateV1(modules),
     quests: {
       instancesByKey: createInitialTextOpenWorldQuestInstancesV1(runtimePackage),
       resultTags: [],
@@ -158,7 +160,7 @@ export function createInitialTextOpenWorldSessionProjectionV1(value: unknown): T
     schema: 'storyforge.text-open-world.session-projection', version: 1, runtimePackage,
     ruleset: { key: runtimePackage.metadata.rulesetKey, version: runtimePackage.metadata.rulesetVersion }, state,
     actions: { completedOnceActionKeys: [], cooldownUntilWorldMinuteByActionKey: {} }, director: emptyDirector(),
-    protocol: { pendingCommandId: null, pendingCommandSequence: null, pendingActionKey: null, pendingActorKey: null, pendingTargetKey: null, pendingCombatTransitionIntent: null, pendingActionQuantity: null, randomEvidence: [], lastCompletedCommandId: null, lastOutcomeFingerprint: null },
+    protocol: { pendingCommandId: null, pendingCommandSequence: null, pendingActionKey: null, pendingActorKey: null, pendingTargetKey: null, pendingCombatTransitionIntent: null, pendingActionQuantity: null, pendingActionItemKey: null, randomEvidence: [], lastCompletedCommandId: null, lastOutcomeFingerprint: null },
     lastEventSequence: 0,
   }
 }
@@ -225,6 +227,16 @@ export function createTextOpenWorldInitialProjectionCandidatesV1(value: unknown)
       candidates.push(legacy)
     }
   }
+  if (modules.actions.version < 13 || modules.economy.sourceVersion < 2) {
+    for (const candidate of [...candidates]) {
+      const legacy = structuredClone(candidate) as Row
+      const legacyState = row(legacy.state, 'legacy projection.state')
+      delete legacyState.economy
+      const legacyProtocol = row(legacy.protocol, 'legacy projection.protocol')
+      delete legacyProtocol.pendingActionItemKey
+      candidates.push(legacy)
+    }
+  }
   return candidates
 }
 
@@ -236,6 +248,11 @@ export function parseTextOpenWorldSessionProjectionV1(value: unknown): TextOpenW
   const ruleset = row(parsed.ruleset, 'ruleset'); exact(ruleset, ['key', 'version'], 'ruleset')
   if (ruleset.key !== runtimePackage.metadata.rulesetKey || ruleset.version !== runtimePackage.metadata.rulesetVersion) fail('ruleset与RuntimePackage不一致')
   const state = structuredClone(parsed.state) as unknown as TextOpenWorldEffectStateV1
+  const legacyEconomyState = state as TextOpenWorldEffectStateV1 & { economy?: TextOpenWorldEffectStateV1['economy'] }
+  if (!legacyEconomyState.economy) {
+    if (modules.actions.version >= 13 && modules.economy.sourceVersion >= 2) fail('新版Session缺少经济运行状态')
+    legacyEconomyState.economy = createInitialTextOpenWorldEconomyStateV1(modules)
+  }
   const legacyTime = state.time as TextOpenWorldEffectStateV1['time'] & { lastWeatherSettlementEpoch?: number }
   if (legacyTime.lastWeatherSettlementEpoch == null) {
     if (modules.actions.version >= 5 && modules['time-weather'].version >= 2) fail('新版Session缺少天气结算周期游标')
@@ -273,13 +290,16 @@ export function parseTextOpenWorldSessionProjectionV1(value: unknown): TextOpenW
   const legacyProtocol = !Object.prototype.hasOwnProperty.call(protocol, 'pendingTargetKey')
   const legacyCombatProtocol = !Object.prototype.hasOwnProperty.call(protocol, 'pendingCombatTransitionIntent')
   const legacyCraftingProtocol = !Object.prototype.hasOwnProperty.call(protocol, 'pendingActionQuantity')
+  const legacyEconomyProtocol = !Object.prototype.hasOwnProperty.call(protocol, 'pendingActionItemKey')
   if (legacyCombatProtocol && modules.actions.version >= 9) fail('新版Session缺少战斗阶段命令游标')
   if (legacyCraftingProtocol && modules.actions.version >= 12) fail('新版Session缺少Action数量游标')
+  if (legacyEconomyProtocol && modules.actions.version >= 13) fail('新版Session缺少交易物品游标')
   exact(protocol, [
     'pendingCommandId', 'pendingCommandSequence', 'pendingActionKey', 'pendingActorKey',
     ...legacyProtocol ? [] : ['pendingTargetKey'],
     ...legacyCombatProtocol ? [] : ['pendingCombatTransitionIntent'],
     ...legacyCraftingProtocol ? [] : ['pendingActionQuantity'],
+    ...legacyEconomyProtocol ? [] : ['pendingActionItemKey'],
     'randomEvidence', 'lastCompletedCommandId', 'lastOutcomeFingerprint',
   ], 'protocol')
   const pendingCommandId = nullableToken(protocol.pendingCommandId, 'protocol.pendingCommandId', COMMAND_ID); const pendingCommandSequence = protocol.pendingCommandSequence == null ? null : integer(protocol.pendingCommandSequence, 'protocol.pendingCommandSequence', 1); const pendingActionKey = nullableToken(protocol.pendingActionKey, 'protocol.pendingActionKey'); const pendingActorKey = nullableToken(protocol.pendingActorKey, 'protocol.pendingActorKey'); const pendingTargetKey = legacyProtocol ? null : nullableToken(protocol.pendingTargetKey, 'protocol.pendingTargetKey')
@@ -289,9 +309,11 @@ export function parseTextOpenWorldSessionProjectionV1(value: unknown): TextOpenW
   const pendingActionQuantity = legacyCraftingProtocol || protocol.pendingActionQuantity == null
     ? null
     : integer(protocol.pendingActionQuantity, 'protocol.pendingActionQuantity', 1)
+  const pendingActionItemKey = legacyEconomyProtocol ? null : nullableToken(protocol.pendingActionItemKey, 'protocol.pendingActionItemKey')
   if ((pendingCommandId == null) !== (pendingCommandSequence == null) || (pendingCommandId == null) !== (pendingActionKey == null) || (pendingCommandId == null) !== (pendingActorKey == null)) fail('pending command字段必须同时存在或为空')
   if (pendingCombatTransitionIntent != null && pendingCommandId == null) fail('战斗阶段intent不能脱离pending command')
   if (pendingActionQuantity != null && pendingCommandId == null) fail('Action数量不能脱离pending command')
+  if (pendingActionItemKey != null && pendingCommandId == null) fail('交易物品不能脱离pending command')
   if (pendingActionKey && !actionKeys.has(pendingActionKey)) fail('pendingActionKey不存在')
   const randomEvidence = Array.isArray(protocol.randomEvidence) ? protocol.randomEvidence.map((value, index) => { const item = row(value, `protocol.randomEvidence[${index}]`); exact(item, ['eventSequence', 'evidence'], `protocol.randomEvidence[${index}]`); return { eventSequence: integer(item.eventSequence, `protocol.randomEvidence[${index}].eventSequence`, 1), evidence: parseTextOpenWorldRandomEvidenceV1(item.evidence) } }) : fail('protocol.randomEvidence必须是数组')
   if (new Set(randomEvidence.map(item => item.eventSequence)).size !== randomEvidence.length || randomEvidence.some((item, index) => item.eventSequence > lastEventSequence || (index > 0 && randomEvidence[index - 1].eventSequence >= item.eventSequence))) fail('protocol.randomEvidence序号无效')
@@ -308,7 +330,7 @@ export function parseTextOpenWorldSessionProjectionV1(value: unknown): TextOpenW
     schema: 'storyforge.text-open-world.session-projection', version: 1, runtimePackage, ruleset: { key: token(ruleset.key, 'ruleset.key'), version: integer(ruleset.version, 'ruleset.version', 1) }, state,
     actions: { completedOnceActionKeys, cooldownUntilWorldMinuteByActionKey },
     director: { drawCount: integer(director.drawCount, 'director.drawCount'), generatedQuestInstanceCount, revealedQuestInstanceKeys, activeQuestInstanceKeys, recentFingerprints: recent, lastDrawWorldMinuteByRegionKey, highIntensityStreak },
-    protocol: { pendingCommandId, pendingCommandSequence, pendingActionKey, pendingActorKey, pendingTargetKey, pendingCombatTransitionIntent, pendingActionQuantity, randomEvidence, lastCompletedCommandId: nullableToken(protocol.lastCompletedCommandId, 'protocol.lastCompletedCommandId', COMMAND_ID), lastOutcomeFingerprint: nullableToken(protocol.lastOutcomeFingerprint, 'protocol.lastOutcomeFingerprint', /^[a-f0-9]{64}$/) },
+    protocol: { pendingCommandId, pendingCommandSequence, pendingActionKey, pendingActorKey, pendingTargetKey, pendingCombatTransitionIntent, pendingActionQuantity, pendingActionItemKey, randomEvidence, lastCompletedCommandId: nullableToken(protocol.lastCompletedCommandId, 'protocol.lastCompletedCommandId', COMMAND_ID), lastOutcomeFingerprint: nullableToken(protocol.lastOutcomeFingerprint, 'protocol.lastOutcomeFingerprint', /^[a-f0-9]{64}$/) },
     lastEventSequence,
   }
 }
@@ -324,10 +346,17 @@ export function applyTextOpenWorldSessionEventV1(current: TextOpenWorldSessionPr
       ? enumToken<TextOpenWorldCombatTransitionIntentV1>(command.envelope.payload.combatTransitionIntent, ['begin-round', 'begin-turn', 'complete-turn', 'advance-turn', 'finish-victory', 'finish-defeat', 'finish-escaped'], 'command combatTransitionIntent')
       : null
     const commandAction = parseTextOpenWorldModulesV1(projection.runtimePackage).actions.actions.find(action => action.key === command.envelope.actionKey) ?? fail('命令Action不存在')
-    if (commandAction.category === 'craft') projection.protocol.pendingActionQuantity = integer(command.envelope.payload.quantity, 'command quantity', 1)
-    else {
-      if (command.envelope.payload.quantity != null) fail('非制作Action不能提交quantity')
+    if (commandAction.category === 'craft') {
+      projection.protocol.pendingActionQuantity = integer(command.envelope.payload.quantity, 'command quantity', 1)
+      if (command.envelope.payload.itemKey != null) fail('制作Action不能提交交易itemKey')
+      projection.protocol.pendingActionItemKey = null
+    } else if (commandAction.category === 'buy' || commandAction.category === 'sell') {
+      projection.protocol.pendingActionQuantity = integer(command.envelope.payload.quantity, 'command quantity', 1)
+      projection.protocol.pendingActionItemKey = token(command.envelope.payload.itemKey, 'command itemKey')
+    } else {
+      if (command.envelope.payload.quantity != null || command.envelope.payload.itemKey != null) fail('非制作或交易Action不能提交quantity/itemKey')
       projection.protocol.pendingActionQuantity = null
+      projection.protocol.pendingActionItemKey = null
     }
   } else if (event.type === 'text-open-world.random.resolved') {
     const pendingEvidence = projection.protocol.randomEvidence.filter(item => item.eventSequence > (projection.protocol.pendingCommandSequence ?? Number.MAX_SAFE_INTEGER))
@@ -468,13 +497,26 @@ export function applyTextOpenWorldSessionEventV1(current: TextOpenWorldSessionPr
       const authorization = applied.plan.authorization
       const action = modules.actions.actions.find(item => item.key === projection.protocol.pendingActionKey) ?? fail('命令Action不存在')
       if (projection.protocol.pendingActorKey !== 'player' || projection.protocol.pendingTargetKey !== authorization.recipeKey
-        || projection.protocol.pendingActionQuantity !== authorization.quantity
+        || projection.protocol.pendingActionQuantity !== authorization.quantity || projection.protocol.pendingActionItemKey !== null
         || action.category !== 'craft' || action.actorScope !== 'player' || action.targetScope !== 'recipe'
         || applied.plan.effectKeys.length !== 1 || applied.plan.effectKeys[0] !== action.successEffectKeys[0]
         || applied.outcome !== 'success' || applied.reason != null || applied.degradation != null) fail('制作授权与命令或Action不一致')
       const conditionResults = deriveTextOpenWorldContextsV1(projection).action.conditionResults
       if (action.requirementConditionKeys.some(conditionKey => conditionResults[conditionKey]?.satisfied !== true)) fail('制作Action条件未满足')
       createTextOpenWorldCraftingCatalogV1(projection.runtimePackage, modules).assertAuthorization({ state: projection.state, authorization })
+    } else if (applied.plan.authorization?.kind === 'transaction') {
+      const authorization = applied.plan.authorization
+      const action = modules.actions.actions.find(item => item.key === projection.protocol.pendingActionKey) ?? fail('命令Action不存在')
+      if (projection.protocol.pendingActorKey !== 'player' || projection.protocol.pendingTargetKey !== authorization.vendorKey
+        || projection.protocol.pendingActionQuantity !== authorization.quantity || projection.protocol.pendingActionItemKey !== authorization.itemKey
+        || action.category !== authorization.transactionKind || action.actorScope !== 'player' || action.targetScope !== 'vendor'
+        || applied.plan.effectKeys.length !== 1 || applied.plan.effectKeys[0] !== action.successEffectKeys[0]
+        || applied.outcome !== 'success' || applied.reason != null || applied.degradation != null) fail('交易授权与命令或Action不一致')
+      const marker = applied.plan.effects[0]
+      if (marker.operation !== 'perform-transaction' || marker.payload.kind !== authorization.transactionKind || marker.payload.vendorKey !== authorization.vendorKey) fail('交易Effect与授权不一致')
+      const conditionResults = deriveTextOpenWorldContextsV1(projection).action.conditionResults
+      if (action.requirementConditionKeys.some(conditionKey => conditionResults[conditionKey]?.satisfied !== true)) fail('交易Action条件未满足')
+      createTextOpenWorldEconomyCatalogV1(projection.runtimePackage, modules).assertAuthorization({ state: projection.state, authorization })
     } else if (applied.plan.authorization?.kind === 'crime') {
       const authorization = applied.plan.authorization
       const action = modules.actions.actions.find(item => item.key === projection.protocol.pendingActionKey) ?? fail('命令Action不存在')
@@ -519,7 +561,7 @@ export function applyTextOpenWorldSessionEventV1(current: TextOpenWorldSessionPr
     if (action.repeatPolicy === 'once' && !projection.actions.completedOnceActionKeys.includes(action.key)) projection.actions.completedOnceActionKeys.push(action.key)
     if (action.repeatPolicy === 'cooldown') projection.actions.cooldownUntilWorldMinuteByActionKey[action.key] = projection.state.time.worldMinute + (action.cooldownMinutes ?? 0)
     projection.protocol.lastCompletedCommandId = applied.commandId; projection.protocol.lastOutcomeFingerprint = applied.outcomeFingerprint
-    projection.protocol.pendingCommandId = null; projection.protocol.pendingCommandSequence = null; projection.protocol.pendingActionKey = null; projection.protocol.pendingActorKey = null; projection.protocol.pendingTargetKey = null; projection.protocol.pendingCombatTransitionIntent = null; projection.protocol.pendingActionQuantity = null
+    projection.protocol.pendingCommandId = null; projection.protocol.pendingCommandSequence = null; projection.protocol.pendingActionKey = null; projection.protocol.pendingActorKey = null; projection.protocol.pendingTargetKey = null; projection.protocol.pendingCombatTransitionIntent = null; projection.protocol.pendingActionQuantity = null; projection.protocol.pendingActionItemKey = null
   } else fail(`事件类型不属于vNext Session投影:${event.type}`)
   projection.lastEventSequence = event.sequence
   return parseTextOpenWorldSessionProjectionV1(projection)
@@ -611,7 +653,7 @@ export function rebaseTextOpenWorldSessionProjectionForBranchV1(value: TextOpenW
   const projection = parseTextOpenWorldSessionProjectionV1(value)
   if (projection.protocol.pendingCommandId) fail('不能从尚未终结的命令批次创建分支')
   projection.protocol = {
-    pendingCommandId: null, pendingCommandSequence: null, pendingActionKey: null, pendingActorKey: null, pendingTargetKey: null, pendingCombatTransitionIntent: null, pendingActionQuantity: null,
+    pendingCommandId: null, pendingCommandSequence: null, pendingActionKey: null, pendingActorKey: null, pendingTargetKey: null, pendingCombatTransitionIntent: null, pendingActionQuantity: null, pendingActionItemKey: null,
     randomEvidence: [], lastCompletedCommandId: null, lastOutcomeFingerprint: null,
   }
   projection.lastEventSequence = 0

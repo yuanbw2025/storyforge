@@ -9,7 +9,7 @@ export type TextOpenWorldEffectOperationV1 =
   | 'reveal-knowledge' | 'reveal-location' | 'unlock-fast-travel'
   | 'enter-location' | 'start-travel' | 'fast-travel' | 'advance-time' | 'settle-weather' | 'settle-actor-schedules'
   | 'start-combat' | 'resolve-combat' | 'initialize-combat' | 'settle-combat-state' | 'perform-combat-action' | 'rest' | 'respawn'
-  | 'perform-crafting'
+  | 'perform-crafting' | 'perform-transaction'
   | 'change-actor-state' | 'change-region-state' | 'set-world-flag'
   | 'earn-achievement' | 'unlock-ending' | 'reach-ending'
 
@@ -49,6 +49,7 @@ export type TextOpenWorldEffectDefinitionV1 =
       itemKey: string | null
     } }
   | { key: string; operation: 'perform-crafting'; payload: { recipeKey: string } }
+  | { key: string; operation: 'perform-transaction'; payload: { kind: 'buy' | 'sell'; vendorKey: string } }
   | { key: string; operation: 'rest'; payload: { healthRatio: number; skillResourceRatio: number; clearHarmfulStatuses: boolean } }
   | { key: string; operation: 'respawn'; payload: { fastTravelPointKey: string; healthRatio: number } }
   | { key: string; operation: 'change-actor-state'; payload: {
@@ -169,6 +170,10 @@ export interface TextOpenWorldEffectStateV1 {
     knownRecipeKeys: string[]
     currency: number
   }
+  economy: {
+    /** Only finite or player-sold stock is stored here; unlimited stock remains Release-owned. */
+    limitedStockQuantitiesByVendorKey: Record<string, Record<string, number>>
+  }
   quests: {
     instancesByKey: Record<string, TextOpenWorldQuestInstanceV1>
     resultTags: string[]
@@ -218,7 +223,7 @@ export interface TextOpenWorldEffectStateV1 {
 
 export type TextOpenWorldEffectImpactDomainV1 =
   | 'player' | 'inventory' | 'quests' | 'map' | 'time' | 'relationships'
-  | 'combat' | 'actors' | 'world' | 'knowledge' | 'endings'
+  | 'combat' | 'actors' | 'world' | 'knowledge' | 'endings' | 'economy'
 
 export interface TextOpenWorldEffectChangeV1 {
   effectKey: string
@@ -404,6 +409,37 @@ export interface TextOpenWorldCraftingAuthorizationV1 {
   }>
 }
 
+export interface TextOpenWorldTransactionAuthorizationV1 {
+  kind: 'transaction'
+  transactionKind: 'buy' | 'sell'
+  vendorKey: string
+  vendorActorKey: string
+  itemKey: string
+  quantity: number
+  currencyKey: 'currency'
+  locationKey: string
+  worldMinute: number
+  attitude: 'bad' | 'neutral' | 'good'
+  price: {
+    baseValue: number
+    vendorMultiplierBasisPoints: number
+    relationshipMultiplierBasisPoints: number
+    rounding: 'ceil' | 'floor'
+    unitPrice: number
+    totalPrice: number
+  }
+  before: {
+    currency: number
+    playerItemQuantity: number
+    vendorStockQuantity: number | null
+  }
+  after: {
+    currency: number
+    playerItemQuantity: number
+    vendorStockQuantity: number | null
+  }
+}
+
 export interface TextOpenWorldEffectPlanV1 {
   schema: 'storyforge.text-open-world.effect-plan'
   version: 1
@@ -412,7 +448,7 @@ export interface TextOpenWorldEffectPlanV1 {
   resultingStateHash: string
   effectKeys: string[]
   effects: TextOpenWorldEffectDefinitionV1[]
-  authorization: TextOpenWorldRewardAuthorizationV1 | TextOpenWorldQuestTransitionAuthorizationV1 | TextOpenWorldObjectiveAuthorizationV1 | TextOpenWorldQuestTrackingAuthorizationV1 | TextOpenWorldFastTravelAuthorizationV1 | TextOpenWorldWeatherSettlementAuthorizationV1 | TextOpenWorldActorScheduleSettlementAuthorizationV1 | TextOpenWorldCrimeAuthorizationV1 | TextOpenWorldCombatTransitionAuthorizationV1 | TextOpenWorldCombatActionAuthorizationV1 | TextOpenWorldCraftingAuthorizationV1 | null
+  authorization: TextOpenWorldRewardAuthorizationV1 | TextOpenWorldQuestTransitionAuthorizationV1 | TextOpenWorldObjectiveAuthorizationV1 | TextOpenWorldQuestTrackingAuthorizationV1 | TextOpenWorldFastTravelAuthorizationV1 | TextOpenWorldWeatherSettlementAuthorizationV1 | TextOpenWorldActorScheduleSettlementAuthorizationV1 | TextOpenWorldCrimeAuthorizationV1 | TextOpenWorldCombatTransitionAuthorizationV1 | TextOpenWorldCombatActionAuthorizationV1 | TextOpenWorldCraftingAuthorizationV1 | TextOpenWorldTransactionAuthorizationV1 | null
   impactDomains: TextOpenWorldEffectImpactDomainV1[]
   previewChanges: TextOpenWorldEffectChangeV1[]
   planHash: string

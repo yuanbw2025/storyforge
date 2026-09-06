@@ -12,10 +12,11 @@ import { deriveTextOpenWorldContextsV1 } from '../../src/lib/open-world/session-
 import { readProductRuntimeState } from '../../src/lib/product/runtime-core'
 import type { TextOpenWorldEffectDefinitionV1 } from '../../src/lib/types'
 import { createGovernedTextOpenWorldSessionFixtureV1 } from '../helpers/text-open-world-product-session'
-import { createTextOpenWorldVNextFixture } from '../helpers/text-open-world-vnext-fixture'
+import { createTextOpenWorldVNextFixture, downgradeTextOpenWorldFixtureEconomyV1 } from '../helpers/text-open-world-vnext-fixture'
 
 function lifecycleFixture() {
   const runtimePackage = createTextOpenWorldVNextFixture()
+  downgradeTextOpenWorldFixtureEconomyV1(runtimePackage)
   const actors = runtimePackage.modules.actors.payload as any
   actors.actors.push(
     {

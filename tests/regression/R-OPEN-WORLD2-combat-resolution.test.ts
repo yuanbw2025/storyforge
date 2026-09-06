@@ -55,7 +55,7 @@ describe('Text Open World vNext · deterministic combat outcomes and rewards', (
   it('Combat v3冻结伤害算法、暴击上限与每个主动攻击技能的整数倍率，旧v2不被静默升级', () => {
     const modern = createTextOpenWorldVNextFixture()
     const parsed = parseTextOpenWorldModulesV1(modern)
-    expect(parsed.actions.version).toBe(12)
+    expect(parsed.actions.version).toBe(13)
     expect(parsed.combat).toMatchObject({
       version: 3,
       sourceVersion: 3,

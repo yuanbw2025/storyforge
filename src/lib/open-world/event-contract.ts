@@ -26,6 +26,7 @@ import type {
   TextOpenWorldCombatTransitionAuthorizationV1,
   TextOpenWorldCombatActionAuthorizationV1,
   TextOpenWorldCraftingAuthorizationV1,
+  TextOpenWorldTransactionAuthorizationV1,
   TextOpenWorldCrimeAuthorizationV1,
 } from '../types'
 import { parseTextOpenWorldCommandEventPayloadV1 } from './command-contract'
@@ -34,7 +35,7 @@ type Row = Record<string, unknown>
 
 const COMMAND_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/
 const STABLE_KEY = /^[a-z][a-z0-9._:-]{0,199}$/
-const IMPACT_DOMAINS: TextOpenWorldEffectImpactDomainV1[] = ['player', 'inventory', 'quests', 'map', 'time', 'relationships', 'combat', 'actors', 'world', 'knowledge', 'endings']
+const IMPACT_DOMAINS: TextOpenWorldEffectImpactDomainV1[] = ['player', 'inventory', 'quests', 'map', 'time', 'relationships', 'combat', 'actors', 'world', 'knowledge', 'endings', 'economy']
 
 function fail(message: string): never { throw new Error(`[text-open-world-event] ${message}`) }
 function row(value: unknown, label: string): Row { if (!value || typeof value !== 'object' || Array.isArray(value)) fail(`${label}必须是对象`); return value as Row }
@@ -358,6 +359,57 @@ function parseAuthorization(value: unknown, label: string): TextOpenWorldEffectP
       timeCostMinutes: integer(raw.timeCostMinutes, `${label}.timeCostMinutes`),
       ingredients, outputs,
     } satisfies TextOpenWorldCraftingAuthorizationV1
+  }
+  if (raw.kind === 'transaction') {
+    exact(raw, ['kind', 'transactionKind', 'vendorKey', 'vendorActorKey', 'itemKey', 'quantity', 'currencyKey', 'locationKey', 'worldMinute', 'attitude', 'price', 'before', 'after'], label)
+    const transactionKind = raw.transactionKind === 'buy' || raw.transactionKind === 'sell'
+      ? raw.transactionKind
+      : fail(`${label}.transactionKind无效`)
+    if (raw.currencyKey !== 'currency') fail(`${label}.currencyKey无效`)
+    const attitude = raw.attitude === 'bad' || raw.attitude === 'neutral' || raw.attitude === 'good'
+      ? raw.attitude
+      : fail(`${label}.attitude无效`)
+    const price = row(raw.price, `${label}.price`)
+    exact(price, ['baseValue', 'vendorMultiplierBasisPoints', 'relationshipMultiplierBasisPoints', 'rounding', 'unitPrice', 'totalPrice'], `${label}.price`)
+    const rounding = price.rounding === 'ceil' || price.rounding === 'floor' ? price.rounding : fail(`${label}.price.rounding无效`)
+    if ((transactionKind === 'buy' ? 'ceil' : 'floor') !== rounding) fail(`${label}.price.rounding与交易方向不一致`)
+    const quantity = integer(raw.quantity, `${label}.quantity`, 1, 1_000_000)
+    const unitPrice = integer(price.unitPrice, `${label}.price.unitPrice`, 1, 1_000_000_000)
+    const totalPrice = integer(price.totalPrice, `${label}.price.totalPrice`, 1, 1_000_000_000)
+    if (unitPrice * quantity !== totalPrice || !Number.isSafeInteger(unitPrice * quantity)) fail(`${label}.price总价不自洽`)
+    const parseBalance = (value: unknown, field: 'before' | 'after') => {
+      const balance = row(value, `${label}.${field}`)
+      exact(balance, ['currency', 'playerItemQuantity', 'vendorStockQuantity'], `${label}.${field}`)
+      return {
+        currency: integer(balance.currency, `${label}.${field}.currency`, 0, 1_000_000_000),
+        playerItemQuantity: integer(balance.playerItemQuantity, `${label}.${field}.playerItemQuantity`, 0, 1_000_000_000),
+        vendorStockQuantity: balance.vendorStockQuantity == null ? null : integer(balance.vendorStockQuantity, `${label}.${field}.vendorStockQuantity`, 0, 1_000_000),
+      }
+    }
+    const before = parseBalance(raw.before, 'before')
+    const after = parseBalance(raw.after, 'after')
+    const direction = transactionKind === 'buy' ? 1 : -1
+    if (after.playerItemQuantity !== before.playerItemQuantity + direction * quantity
+      || after.currency !== before.currency - direction * totalPrice
+      || (before.vendorStockQuantity == null) !== (after.vendorStockQuantity == null)
+      || (before.vendorStockQuantity != null && after.vendorStockQuantity !== before.vendorStockQuantity - direction * quantity)) {
+      fail(`${label}交易余额变化不自洽`)
+    }
+    return {
+      kind: 'transaction', transactionKind,
+      vendorKey: token(raw.vendorKey, `${label}.vendorKey`),
+      vendorActorKey: token(raw.vendorActorKey, `${label}.vendorActorKey`),
+      itemKey: token(raw.itemKey, `${label}.itemKey`), quantity, currencyKey: 'currency',
+      locationKey: token(raw.locationKey, `${label}.locationKey`),
+      worldMinute: integer(raw.worldMinute, `${label}.worldMinute`), attitude,
+      price: {
+        baseValue: integer(price.baseValue, `${label}.price.baseValue`, 1, 1_000_000_000),
+        vendorMultiplierBasisPoints: integer(price.vendorMultiplierBasisPoints, `${label}.price.vendorMultiplierBasisPoints`, 100, 1_000_000),
+        relationshipMultiplierBasisPoints: integer(price.relationshipMultiplierBasisPoints, `${label}.price.relationshipMultiplierBasisPoints`, 100, 1_000_000),
+        rounding, unitPrice, totalPrice,
+      },
+      before, after,
+    } satisfies TextOpenWorldTransactionAuthorizationV1
   }
   if (raw.kind === 'quest-objective') {
     exact(raw, ['kind', 'instanceKey', 'definitionKey', 'stageKey', 'objectiveKey', 'worldMinute', 'fromStatus', 'toStatus'], label)

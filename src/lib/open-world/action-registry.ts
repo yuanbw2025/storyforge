@@ -271,12 +271,19 @@ export function createTextOpenWorldActionRegistryV1(value: TextOpenWorldRuntimeP
       } else if (action.targetScope === 'location') {
         validTargetKeys = validTargetKeys.filter(locationKey => locationKey === context.currentLocationKey)
       }
-      if (action.targetScope === 'item' && ['use', 'drop', 'sell'].includes(action.category)) {
+      if (action.targetScope === 'item' && ['use', 'drop', 'sell'].includes(action.category) && !(modules.actions.version >= 13 && action.category === 'sell')) {
         const reason = action.category === 'use' ? 'consume' : action.category
         const removal = action.costEffectKeys.map(effectKey => effectByKey.get(effectKey))
           .find(effect => effect?.operation === 'remove-item' && effect.payload.reason === reason)
         validTargetKeys = removal?.operation === 'remove-item'
           ? validTargetKeys.filter(itemKey => itemKey === removal.payload.itemKey)
+          : []
+      }
+      if (action.targetScope === 'vendor' && ['buy', 'sell'].includes(action.category) && modules.actions.version >= 13) {
+        const marker = action.successEffectKeys.map(effectKey => effectByKey.get(effectKey))
+          .find((effect): effect is Extract<TextOpenWorldEffectDefinitionV1, { operation: 'perform-transaction' }> => effect?.operation === 'perform-transaction')
+        validTargetKeys = marker?.operation === 'perform-transaction' && marker.payload.kind === action.category
+          ? validTargetKeys.filter(vendorKey => vendorKey === marker.payload.vendorKey)
           : []
       }
       if (action.targetScope === 'recipe' && action.category === 'craft') {

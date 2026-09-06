@@ -22,6 +22,7 @@ function state(overrides: Partial<TextOpenWorldEffectStateV1> = {}): TextOpenWor
       equippedItemInstanceIdBySlot: { weapon: null, armor: null, accessory: null },
       knownRecipeKeys: ['recipe.brine-tonic'], currency: 20,
     },
+    economy: { limitedStockQuantitiesByVendorKey: { 'vendor.caretaker': { 'item.salt-crystal': 3 } } },
     quests: {
       instancesByKey: createInitialTextOpenWorldQuestInstancesV1(createTextOpenWorldVNextFixture()),
       resultTags: [],

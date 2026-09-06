@@ -26,6 +26,7 @@ import { createTextOpenWorldCrimeCatalogV1 } from './crime'
 import { createTextOpenWorldCombatStateMachineV1 } from './combat-state-machine'
 import { createTextOpenWorldCombatActionCatalogV1 } from './combat-actions'
 import { createTextOpenWorldCraftingCatalogV1 } from './crafting'
+import { createTextOpenWorldEconomyCatalogV1 } from './economy'
 
 const COMMAND_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/
 
@@ -43,10 +44,15 @@ function combatTransitionIntentFrom(envelope: TextOpenWorldCommandEnvelopeV1): T
   if (typeof value !== 'string' || !allowed.includes(value as TextOpenWorldCombatTransitionIntentV1)) fail('战斗阶段命令缺少合法transition intent')
   return value as TextOpenWorldCombatTransitionIntentV1
 }
-function craftingQuantityFrom(envelope: TextOpenWorldCommandEnvelopeV1): number {
+function actionQuantityFrom(envelope: TextOpenWorldCommandEnvelopeV1): number {
   const value = envelope.payload.quantity
-  if (!Number.isSafeInteger(value) || Number(value) < 1) fail('制作命令缺少合法quantity')
+  if (!Number.isSafeInteger(value) || Number(value) < 1) fail('命令缺少合法quantity')
   return Number(value)
+}
+function itemKeyFrom(envelope: TextOpenWorldCommandEnvelopeV1): string {
+  const value = envelope.payload.itemKey
+  if (typeof value !== 'string') fail('交易命令缺少合法itemKey')
+  return value
 }
 
 async function settleAcceptedCommand(envelope: TextOpenWorldCommandEnvelopeV1): Promise<TextOpenWorldFeedbackReceiptV1> {
@@ -114,7 +120,9 @@ async function settleAcceptedCommand(envelope: TextOpenWorldCommandEnvelopeV1): 
     .filter((effect): effect is Extract<TextOpenWorldEffectDefinitionV1, { operation: 'perform-combat-action' }> => effect.operation === 'perform-combat-action')
   const craftingEffects = effectKeys.map(effectKey => modules.actions.effects.find(effect => effect.key === effectKey)!)
     .filter((effect): effect is Extract<TextOpenWorldEffectDefinitionV1, { operation: 'perform-crafting' }> => effect.operation === 'perform-crafting')
-  if ([questTransitions.length > 0, objectiveEffects.length > 0, trackingEffects.length > 0, fastTravelEffects.length > 0, weatherEffects.length > 0, actorScheduleEffects.length > 0, combatSettlementEffects.length > 0, combatActionEffects.length > 0, craftingEffects.length > 0].filter(Boolean).length > 1) fail('同一Action不能混合任务迁移、Objective、追踪、快速旅行、天气、角色日程、战斗阶段、战斗行动或制作状态')
+  const transactionEffects = effectKeys.map(effectKey => modules.actions.effects.find(effect => effect.key === effectKey)!)
+    .filter((effect): effect is Extract<TextOpenWorldEffectDefinitionV1, { operation: 'perform-transaction' }> => effect.operation === 'perform-transaction')
+  if ([questTransitions.length > 0, objectiveEffects.length > 0, trackingEffects.length > 0, fastTravelEffects.length > 0, weatherEffects.length > 0, actorScheduleEffects.length > 0, combatSettlementEffects.length > 0, combatActionEffects.length > 0, craftingEffects.length > 0, transactionEffects.length > 0].filter(Boolean).length > 1) fail('同一Action不能混合任务迁移、Objective、追踪、快速旅行、天气、角色日程、战斗阶段、战斗行动、制作或交易状态')
   let randomRequests: TextOpenWorldRandomRequestV1[] = []
   let randomEvidence: TextOpenWorldRandomEvidenceV1[] = []
   const conditionResults = Object.fromEntries(Object.entries(deriveTextOpenWorldContextsV1(projection).action.conditionResults)
@@ -185,9 +193,17 @@ async function settleAcceptedCommand(envelope: TextOpenWorldCommandEnvelopeV1): 
                   ? createTextOpenWorldCraftingCatalogV1(projection.runtimePackage, modules).prepare({
                       state: projection.state,
                       recipeKey: craftingEffects[0].payload.recipeKey,
-                      quantity: craftingQuantityFrom(envelope),
+                      quantity: actionQuantityFrom(envelope),
                       locationKey: projection.state.map.currentLocationKey,
                     })
+                    : transactionEffects.length === 1
+                      ? createTextOpenWorldEconomyCatalogV1(projection.runtimePackage, modules).prepare({
+                          state: projection.state,
+                          transactionKind: transactionEffects[0].payload.kind,
+                          vendorKey: transactionEffects[0].payload.vendorKey,
+                          itemKey: itemKeyFrom(envelope),
+                          quantity: actionQuantityFrom(envelope),
+                        })
               : null)
   const catalog = createTextOpenWorldEffectCatalogV1(projection.runtimePackage)
   const plan = await catalog.plan({ effectKeys, claimKey: `claim.${envelope.commandId}`, state: projection.state, authorization })
@@ -217,6 +233,7 @@ type ExecuteTextOpenWorldActionInputV1 = {
   actionKey: string
   targetKey?: string | null
   quantity?: number
+  itemKey?: string
   source?: TextOpenWorldCommandEnvelopeV1['source']
   confirmed?: boolean
   commandId?: string
@@ -247,6 +264,7 @@ async function executeTextOpenWorldActionAsV1(
   const commandPayload: Record<string, unknown> = {
     ...(targetKey == null ? {} : { targetKey }),
     ...(input.quantity == null ? {} : { quantity: input.quantity }),
+    ...(input.itemKey == null ? {} : { itemKey: input.itemKey }),
     ...(input.combatTransitionIntent == null ? {} : { combatTransitionIntent: input.combatTransitionIntent }),
   }
 
@@ -290,13 +308,23 @@ async function executeTextOpenWorldActionAsV1(
   if (actorKey === 'system' && resolved.entry.action.category !== systemCategory) fail('系统入口只能执行指定类别的受治理系统Action')
   if (resolved.entry.action.category === 'craft') {
     if (!Number.isSafeInteger(input.quantity) || Number(input.quantity) < 1) fail('制作Action必须提交正整数quantity')
+    if (input.itemKey != null) fail('制作Action不能提交交易itemKey')
     createTextOpenWorldCraftingCatalogV1(projection.runtimePackage).prepare({
       state: projection.state,
       recipeKey: targetKey ?? fail('制作Action缺少配方目标'),
       quantity: Number(input.quantity),
       locationKey: projection.state.map.currentLocationKey,
     })
-  } else if (input.quantity != null) fail('非制作Action不能提交quantity')
+  } else if (resolved.entry.action.category === 'buy' || resolved.entry.action.category === 'sell') {
+    if (!Number.isSafeInteger(input.quantity) || Number(input.quantity) < 1 || typeof input.itemKey !== 'string') fail('交易Action必须提交itemKey和正整数quantity')
+    createTextOpenWorldEconomyCatalogV1(projection.runtimePackage).prepare({
+      state: projection.state,
+      transactionKind: resolved.entry.action.category,
+      vendorKey: targetKey ?? fail('交易Action缺少商店目标'),
+      itemKey: input.itemKey,
+      quantity: Number(input.quantity),
+    })
+  } else if (input.quantity != null || input.itemKey != null) fail('非制作或交易Action不能提交quantity/itemKey')
   if (resolved.entry.action.category === 'start-combat') {
     const modules = parseTextOpenWorldModulesV1(projection.runtimePackage)
     const startEffects = resolved.entry.action.successEffectKeys
