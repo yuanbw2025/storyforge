@@ -11,7 +11,7 @@ export type TextOpenWorldQuestTimePolicyV1 = 'waits' | 'timed'
 export type TextOpenWorldActionCategoryV1 =
   | 'move' | 'travel' | 'fast-travel' | 'observe' | 'investigate' | 'talk'
   | 'take' | 'use' | 'equip' | 'unequip' | 'drop' | 'buy' | 'sell' | 'craft'
-  | 'accept-quest' | 'abandon-quest' | 'quest-action'
+  | 'accept-quest' | 'abandon-quest' | 'objective-action' | 'quest-action' | 'claim-reward'
   | 'start-combat' | 'continue-combat' | 'escape' | 'rest' | 'respawn'
   | 'read' | 'track' | 'untrack' | 'save' | 'load-branch'
 
@@ -154,7 +154,7 @@ export interface TextOpenWorldActorModuleV1 {
 }
 
 export interface TextOpenWorldQuestModuleV1 {
-  version: 1
+  version: 2
   quests: Array<{
     key: string
     type: TextOpenWorldQuestTypeV1
@@ -167,6 +167,8 @@ export interface TextOpenWorldQuestModuleV1 {
     stageKeys: string[]
     prerequisiteConditionKeys: string[]
     rewardEffectKeys: string[]
+    rewardContractKey: string | null
+    claimActionKey: string | null
     lifecyclePolicy: TextOpenWorldQuestLifecyclePolicyV1
     timePolicy: TextOpenWorldQuestTimePolicyV1
     expirationMinutes: number | null
@@ -183,6 +185,7 @@ export interface TextOpenWorldQuestModuleV1 {
     title: string
     objectiveKeys: string[]
     completionConditionKeys: string[]
+    completionActionKey: string | null
   }>
   objectives: Array<{
     key: string

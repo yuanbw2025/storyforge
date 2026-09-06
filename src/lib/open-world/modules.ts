@@ -15,7 +15,7 @@ type Row = Record<string, unknown>
 const KEY = /^[a-z][a-z0-9._:-]{0,199}$/
 const ACTION_CATEGORIES: TextOpenWorldActionCategoryV1[] = [
   'move', 'travel', 'fast-travel', 'observe', 'investigate', 'talk', 'take', 'use', 'equip', 'unequip', 'drop',
-  'buy', 'sell', 'craft', 'accept-quest', 'abandon-quest', 'quest-action', 'start-combat', 'continue-combat', 'escape',
+  'buy', 'sell', 'craft', 'accept-quest', 'abandon-quest', 'objective-action', 'quest-action', 'claim-reward', 'start-combat', 'continue-combat', 'escape',
   'rest', 'respawn', 'read', 'track', 'untrack', 'save', 'load-branch',
 ]
 const QUEST_TYPES: TextOpenWorldQuestTypeV1[] = ['mainline', 'significant', 'ordinary', 'template']
@@ -80,9 +80,10 @@ function requireSameKeys(declared: readonly string[], actual: readonly string[],
     fail(`${label} 双向引用不一致:declared=${left.join(',')};actual=${right.join(',')}`)
   }
 }
-function versioned(packageValue: TextOpenWorldRuntimePackageV1, moduleKey: TextOpenWorldRuntimeModuleKeyV1): Row {
+function versioned(packageValue: TextOpenWorldRuntimePackageV1, moduleKey: TextOpenWorldRuntimeModuleKeyV1, allowedVersions: number[] = [1]): Row {
   const payload = row(packageValue.modules[moduleKey].payload, `${moduleKey}.payload`)
-  if (payload.version !== 1) fail(`${moduleKey}.payload.version 无效`)
+  if (!allowedVersions.includes(Number(payload.version))) fail(`${moduleKey}.payload.version 无效`)
+  if (packageValue.modules[moduleKey].schemaVersion !== payload.version) fail(`${moduleKey}.schemaVersion与payload.version不一致`)
   return payload
 }
 
@@ -210,9 +211,18 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
   effects.forEach((item, index) => { key(item.operation, `actions.effects[${index}].operation`); canonicalProductProductionJsonV2(item.payload) })
   actionRows.forEach((item, index) => { enumValue(item.category, ACTION_CATEGORIES, `actions.actions[${index}].category`); text(item.label, `actions.actions[${index}].label`, 2_000); text(item.description, `actions.actions[${index}].description`); enumValue(item.actorScope, ['player', 'system'], `actions.actions[${index}].actorScope`); enumValue(item.targetScope, ['none', 'actor', 'location', 'item', 'quest', 'vendor', 'encounter'], `actions.actions[${index}].targetScope`); requireRefs(strings(item.locationKeys, `actions.actions[${index}].locationKeys`), locationKeys, 'action location'); requireRefs(strings(item.requirementConditionKeys, `actions.actions[${index}].requirementConditionKeys`), conditionKeys, 'action condition'); requireRefs(strings(item.costEffectKeys, `actions.actions[${index}].costEffectKeys`), effectKeys, 'action cost effect'); requireRefs(strings(item.successEffectKeys, `actions.actions[${index}].successEffectKeys`), effectKeys, 'action success effect'); requireRefs(strings(item.failureEffectKeys, `actions.actions[${index}].failureEffectKeys`), effectKeys, 'action failure effect'); int(item.timeCostMinutes, `actions.actions[${index}].timeCostMinutes`, 0, 1_000_000); enumValue(item.confirmationPolicy, ['never', 'high-risk', 'always'], `actions.actions[${index}].confirmationPolicy`); const repeatPolicy = enumValue(item.repeatPolicy, ['once', 'repeatable', 'cooldown'], `actions.actions[${index}].repeatPolicy`); const cooldown = item.cooldownMinutes == null ? null : int(item.cooldownMinutes, `actions.actions[${index}].cooldownMinutes`, 1, 1_000_000); if ((repeatPolicy === 'cooldown') !== (cooldown != null)) fail(`actions.actions[${index}] cooldown策略不一致`) })
 
-  const quests = versioned(packageValue, 'quests')
+  const quests = versioned(packageValue, 'quests', [1, 2])
   exact(quests, ['version', 'quests', 'stages', 'objectives'], 'quests')
-  const questRows = catalog(quests.quests, 'quests.quests', ['key', 'type', 'ownerKind', 'ownerKey', 'title', 'description', 'storylineKey', 'regionKeys', 'stageKeys', 'prerequisiteConditionKeys', 'rewardEffectKeys', 'lifecyclePolicy', 'timePolicy', 'expirationMinutes', 'repeatable', 'instantiationPolicy', 'initialStatus', 'estimatedMinutes', 'tags']); const questStages = catalog(quests.stages, 'quests.stages', ['key', 'questKey', 'order', 'title', 'objectiveKeys', 'completionConditionKeys']); const objectives = catalog(quests.objectives, 'quests.objectives', ['key', 'stageKey', 'title', 'optional', 'actionKeys'])
+  const legacyQuestModule = quests.version === 1
+  const questRows = catalog(quests.quests, 'quests.quests', legacyQuestModule
+    ? ['key', 'type', 'ownerKind', 'ownerKey', 'title', 'description', 'storylineKey', 'regionKeys', 'stageKeys', 'prerequisiteConditionKeys', 'rewardEffectKeys', 'lifecyclePolicy', 'timePolicy', 'expirationMinutes', 'repeatable', 'instantiationPolicy', 'initialStatus', 'estimatedMinutes', 'tags']
+    : ['key', 'type', 'ownerKind', 'ownerKey', 'title', 'description', 'storylineKey', 'regionKeys', 'stageKeys', 'prerequisiteConditionKeys', 'rewardEffectKeys', 'rewardContractKey', 'claimActionKey', 'lifecyclePolicy', 'timePolicy', 'expirationMinutes', 'repeatable', 'instantiationPolicy', 'initialStatus', 'estimatedMinutes', 'tags'])
+    .map(item => legacyQuestModule ? { ...item, rewardContractKey: null, claimActionKey: null } : item)
+  const questStages = catalog(quests.stages, 'quests.stages', legacyQuestModule
+    ? ['key', 'questKey', 'order', 'title', 'objectiveKeys', 'completionConditionKeys']
+    : ['key', 'questKey', 'order', 'title', 'objectiveKeys', 'completionConditionKeys', 'completionActionKey'])
+    .map(item => legacyQuestModule ? { ...item, completionActionKey: null } : item)
+  const objectives = catalog(quests.objectives, 'quests.objectives', ['key', 'stageKey', 'title', 'optional', 'actionKeys'])
   const questKeys = keysOf(questRows, 'quests.quests'); const questStageKeys = keysOf(questStages, 'quests.stages'); const objectiveKeys = keysOf(objectives, 'quests.objectives')
   questRows.forEach((item, index) => {
     const label = `quests.quests[${index}]`
@@ -232,6 +242,8 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
     requireRefs(strings(item.stageKeys, `${label}.stageKeys`), questStageKeys, 'quest stage')
     requireRefs(strings(item.prerequisiteConditionKeys, `${label}.prerequisiteConditionKeys`), conditionKeys, 'quest condition')
     requireRefs(strings(item.rewardEffectKeys, `${label}.rewardEffectKeys`), effectKeys, 'quest reward')
+    nullableKey(item.rewardContractKey, `${label}.rewardContractKey`)
+    requireRef(nullableKey(item.claimActionKey, `${label}.claimActionKey`), actionKeys, 'quest claim Action')
     const policy = enumValue(item.lifecyclePolicy, QUEST_POLICIES, `${label}.lifecyclePolicy`)
     const timePolicy = enumValue(item.timePolicy, ['waits', 'timed'], `${label}.timePolicy`)
     const expiration = item.expirationMinutes == null ? null : int(item.expirationMinutes, `${label}.expirationMinutes`, 1, 1_000_000_000)
@@ -247,7 +259,7 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
     int(item.estimatedMinutes, `${label}.estimatedMinutes`, 1, 100_000)
     strings(item.tags, `${label}.tags`)
   })
-  questStages.forEach((item, index) => { requireRef(key(item.questKey, `quests.stages[${index}].questKey`), questKeys, 'quest stage owner'); int(item.order, `quests.stages[${index}].order`, 0, 10_000); text(item.title, `quests.stages[${index}].title`, 2_000); requireRefs(strings(item.objectiveKeys, `quests.stages[${index}].objectiveKeys`), objectiveKeys, 'quest objective'); requireRefs(strings(item.completionConditionKeys, `quests.stages[${index}].completionConditionKeys`), conditionKeys, 'quest completion condition') })
+  questStages.forEach((item, index) => { requireRef(key(item.questKey, `quests.stages[${index}].questKey`), questKeys, 'quest stage owner'); int(item.order, `quests.stages[${index}].order`, 0, 10_000); text(item.title, `quests.stages[${index}].title`, 2_000); requireRefs(strings(item.objectiveKeys, `quests.stages[${index}].objectiveKeys`), objectiveKeys, 'quest objective'); requireRefs(strings(item.completionConditionKeys, `quests.stages[${index}].completionConditionKeys`), conditionKeys, 'quest completion condition'); requireRef(nullableKey(item.completionActionKey, `quests.stages[${index}].completionActionKey`), actionKeys, 'quest stage completion Action') })
   objectives.forEach((item, index) => { requireRef(key(item.stageKey, `quests.objectives[${index}].stageKey`), questStageKeys, 'objective stage'); text(item.title, `quests.objectives[${index}].title`, 2_000); bool(item.optional, `quests.objectives[${index}].optional`); requireRefs(strings(item.actionKeys, `quests.objectives[${index}].actionKeys`), actionKeys, 'objective action') })
   questRows.forEach((item, index) => requireSameKeys(
     strings(item.stageKeys, `quests.quests[${index}].stageKeys`),
@@ -285,6 +297,54 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
   const initiallyRevealedMainQuestKeys = questRows.filter(item => item.type === 'mainline' && item.initialStatus === 'revealed').map(item => String(item.key))
   if (orderedMainQuestKeys.length && (initiallyRevealedMainQuestKeys.length !== 1 || initiallyRevealedMainQuestKeys[0] !== orderedMainQuestKeys[0])) {
     fail('严格顺序主线必须只揭示第一个任务定义')
+  }
+  if (!legacyQuestModule) {
+    objectives.forEach(objective => {
+      const completers = strings(objective.actionKeys, `objective ${String(objective.key)} actionKeys`).map(actionKey => actionRows.find(action => action.key === actionKey)!)
+        .filter(action => action.category === 'objective-action')
+      if (!completers.length) fail(`Objective必须至少绑定一个完成Action:${String(objective.key)}`)
+      completers.forEach(action => {
+        const successEffects = strings(action.successEffectKeys, `objective action ${String(action.key)} successEffectKeys`).map(effectKey => effects.find(effect => effect.key === effectKey)!)
+        const completionEffects = successEffects.filter(effect => effect.operation === 'complete-objective')
+        if (action.actorScope !== 'player' || action.targetScope !== 'quest'
+          || strings(action.costEffectKeys, `objective action ${String(action.key)} costEffectKeys`).length
+          || strings(action.failureEffectKeys, `objective action ${String(action.key)} failureEffectKeys`).length
+          || successEffects.length !== 1 || completionEffects.length !== 1
+          || row(completionEffects[0].payload, `objective action ${String(action.key)} payload`).objectiveKey !== objective.key
+          || action.confirmationPolicy !== 'never' || action.repeatPolicy !== 'repeatable') fail(`Objective完成Action合同无效:${String(action.key)}`)
+      })
+    })
+    actionRows.filter(action => action.category === 'objective-action').forEach(action => {
+      const owners = objectives.filter(objective => strings(objective.actionKeys, `objective ${String(objective.key)} actionKeys`).includes(String(action.key)))
+      if (owners.length !== 1) fail(`Objective Action必须且只能属于一个Objective:${String(action.key)}`)
+    })
+    effects.filter(effect => effect.operation === 'complete-objective').forEach(effect => {
+      const actionOwners = actionRows.filter(action => action.category === 'objective-action'
+        && strings(action.successEffectKeys, `objective action ${String(action.key)} success effects`).includes(String(effect.key)))
+      if (actionOwners.length !== 1) fail(`complete-objective Effect必须且只能属于一个Objective Action:${String(effect.key)}`)
+    })
+    actionRows.forEach(action => {
+      const referencedEffects = [...strings(action.costEffectKeys, `action ${String(action.key)} costs`), ...strings(action.successEffectKeys, `action ${String(action.key)} success`), ...strings(action.failureEffectKeys, `action ${String(action.key)} failures`)]
+        .map(effectKey => effects.find(effect => effect.key === effectKey)!)
+      if (referencedEffects.some(effect => effect.operation === 'complete-objective') && action.category !== 'objective-action') fail(`complete-objective只能由Objective Action引用:${String(action.key)}`)
+    })
+    questStages.forEach(stage => {
+      const completionActionKey = key(stage.completionActionKey, `quest stage ${String(stage.key)} completionActionKey`)
+      const action = actionRows.find(candidate => candidate.key === completionActionKey) ?? fail(`Stage完成Action不存在:${completionActionKey}`)
+      const quest = questRows.find(candidate => candidate.key === stage.questKey)!
+      const orderedStages = strings(quest.stageKeys, `quest ${String(quest.key)} stageKeys`).map(stageKey => questStages.find(candidate => candidate.key === stageKey)!)
+        .sort((left, right) => Number(left.order) - Number(right.order))
+      const stageIndex = orderedStages.findIndex(candidate => candidate.key === stage.key)
+      const expectedStatus = stageIndex === orderedStages.length - 1 ? 'completed' : 'active'
+      const expectedStageKey = stageIndex === orderedStages.length - 1 ? stage.key : orderedStages[stageIndex + 1].key
+      const successEffects = strings(action.successEffectKeys, `stage action ${completionActionKey} successEffectKeys`).map(effectKey => effects.find(effect => effect.key === effectKey)!)
+      const transitions = successEffects.filter(effect => effect.operation === 'transition-quest')
+      const payload = transitions.length === 1 ? row(transitions[0].payload, `stage action ${completionActionKey} payload`) : null
+      if (!payload || action.category !== 'quest-action' || action.actorScope !== 'system' || action.targetScope !== 'quest'
+        || successEffects.length !== 1 || transitions.length !== 1 || payload?.questKey !== quest.key
+        || payload.status !== expectedStatus || payload.stageKey !== expectedStageKey) fail(`Stage完成Action没有推进相邻Stage或完成任务:${completionActionKey}`)
+      requireSameKeys(strings(action.requirementConditionKeys, `stage action ${completionActionKey} requirements`), strings(stage.completionConditionKeys, `stage ${String(stage.key)} completion conditions`), `stage ${String(stage.key)} completion conditions`)
+    })
   }
   actionRows.filter(action => ['accept-quest', 'abandon-quest'].includes(String(action.category))).forEach(action => {
     const label = `quest action ${String(action.key)}`
@@ -425,7 +485,7 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
   exact(items, ['version', 'equipmentSlots', 'items', 'rewardContracts', 'dropTables'], 'items')
   const slots = catalog(items.equipmentSlots, 'items.equipmentSlots', ['key', 'label']); const itemRows = catalog(items.items, 'items.items', ['key', 'title', 'description', 'tags', 'kind', 'stackPolicy', 'maximumStack', 'unique', 'consumable', 'critical', 'droppable', 'sellable', 'baseValue', 'useActionKey', 'equipActionKey', 'unequipActionKey', 'equipConditionKeys', 'equipmentSlotKey', 'statModifiers', 'effectKeys', 'sourceRefs', 'presentationRefs']); const rewardContracts = catalog(items.rewardContracts, 'items.rewardContracts', ['key', 'title', 'sourceKind', 'claimPolicy', 'expectedMinutes', 'budgetClass', 'conditionKeys', 'effectKeys', 'dropTableKeys']); const dropTables = catalog(items.dropTables, 'items.dropTables', ['key', 'algorithm', 'rolls', 'conditionKeys', 'entries'])
   const slotKeys = keysOf(slots, 'items.equipmentSlots'); if ([...slotKeys].sort().join(',') !== ['accessory', 'armor', 'weapon'].join(',')) fail('首版装备位必须为weapon/armor/accessory')
-  slots.forEach((item, index) => text(item.label, `items.equipmentSlots[${index}].label`, 100)); const itemKeys = keysOf(itemRows, 'items.items'); const dropTableKeys = keysOf(dropTables, 'items.dropTables')
+  slots.forEach((item, index) => text(item.label, `items.equipmentSlots[${index}].label`, 100)); const itemKeys = keysOf(itemRows, 'items.items'); const rewardContractKeys = keysOf(rewardContracts, 'items.rewardContracts'); const dropTableKeys = keysOf(dropTables, 'items.dropTables')
   const modifierFields = ['maximumHealth', 'attack', 'defense', 'criticalChance', 'initiative', 'skillPower', 'skillResource']
   itemRows.forEach((item, index) => {
     text(item.title, `items.items[${index}].title`, 2_000); text(item.description, `items.items[${index}].description`); strings(item.tags, `items.items[${index}].tags`, 'text')
@@ -479,7 +539,7 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
       requireSameKeys(quantities.map(String), expected.map(String), `drop ${itemKey} quantity coverage`)
     })
   })
-  const rewardAllowed = new Set(['grant-experience', 'grant-item', 'learn-skill', 'learn-recipe', 'change-currency', 'change-morality', 'change-faction-affinity', 'reveal-knowledge', 'reveal-location', 'unlock-fast-travel', 'set-world-flag', 'earn-achievement'])
+  const rewardAllowed = new Set(['claim-quest-reward', 'grant-experience', 'grant-item', 'learn-skill', 'learn-recipe', 'change-currency', 'change-morality', 'change-faction-affinity', 'reveal-knowledge', 'reveal-location', 'unlock-fast-travel', 'set-world-flag', 'earn-achievement'])
   rewardContracts.forEach((reward, index) => {
     text(reward.title, `items.rewardContracts[${index}].title`, 2_000)
     enumValue(reward.sourceKind, ['quest', 'combat', 'exploration', 'crafting', 'system'], `items.rewardContracts[${index}].sourceKind`)
@@ -492,6 +552,51 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
     requireRefs(strings(reward.dropTableKeys, `items.rewardContracts[${index}].dropTableKeys`), dropTableKeys, 'reward drop table')
     if (!directEffects.length && !array(reward.dropTableKeys, `items.rewardContracts[${index}].dropTableKeys`).length) fail(`reward不能为空:${String(reward.key)}`)
   })
+  if (!legacyQuestModule) {
+    const questRewardOwners = new Map<string, string>()
+    questRows.forEach(quest => {
+      const questKey = String(quest.key)
+      const rewardEffectKeys = strings(quest.rewardEffectKeys, `quest ${questKey} rewardEffectKeys`)
+      const rewardContractKey = nullableKey(quest.rewardContractKey, `quest ${questKey} rewardContractKey`)
+      const claimActionKey = nullableKey(quest.claimActionKey, `quest ${questKey} claimActionKey`)
+      if (!rewardEffectKeys.length) {
+        if (rewardContractKey != null || claimActionKey != null) fail(`无奖励任务不能声明RewardContract或领取Action:${questKey}`)
+        return
+      }
+      if (!rewardContractKey || !claimActionKey) fail(`有奖励任务必须同时声明RewardContract与领取Action:${questKey}`)
+      requireRef(rewardContractKey, rewardContractKeys, 'quest reward contract')
+      const priorOwner = questRewardOwners.get(rewardContractKey)
+      if (priorOwner) fail(`Quest RewardContract不能跨任务共享:${rewardContractKey}:${priorOwner}:${questKey}`)
+      questRewardOwners.set(rewardContractKey, questKey)
+      const reward = rewardContracts.find(candidate => candidate.key === rewardContractKey)!
+      if (reward.sourceKind !== 'quest') fail(`任务RewardContract来源必须为quest:${rewardContractKey}`)
+      requireSameKeys(strings(reward.effectKeys, `reward ${rewardContractKey} effectKeys`), rewardEffectKeys, `quest ${questKey} reward effects`)
+      const claimEffects = rewardEffectKeys.map(effectKey => effects.find(effect => effect.key === effectKey)!)
+        .filter(effect => effect.operation === 'claim-quest-reward')
+      const claimPayload = claimEffects.length === 1 ? row(claimEffects[0].payload, `quest ${questKey} claim reward payload`) : null
+      if (!claimPayload || claimPayload.questKey !== questKey || claimPayload.rewardKey !== rewardContractKey) fail(`任务奖励必须包含唯一且自洽的领取标记Effect:${questKey}`)
+      const claimAction = actionRows.find(action => action.key === claimActionKey) ?? fail(`任务领取Action不存在:${claimActionKey}`)
+      if (claimAction.category !== 'claim-reward' || claimAction.actorScope !== 'player' || claimAction.targetScope !== 'quest'
+        || strings(claimAction.requirementConditionKeys, `claim action ${claimActionKey} requirements`).length
+        || strings(claimAction.costEffectKeys, `claim action ${claimActionKey} costs`).length
+        || strings(claimAction.successEffectKeys, `claim action ${claimActionKey} success`).length
+        || strings(claimAction.failureEffectKeys, `claim action ${claimActionKey} failures`).length
+        || claimAction.confirmationPolicy !== 'never' || claimAction.repeatPolicy !== 'repeatable'
+        || claimAction.cooldownMinutes != null || claimAction.timeCostMinutes !== 0) fail(`任务领取Action合同无效:${claimActionKey}`)
+    })
+    rewardContracts.filter(reward => reward.sourceKind === 'quest').forEach(reward => {
+      if (!questRewardOwners.has(String(reward.key))) fail(`quest来源RewardContract必须绑定一个任务:${String(reward.key)}`)
+    })
+    actionRows.filter(action => action.category === 'claim-reward').forEach(action => {
+      const owners = questRows.filter(quest => quest.claimActionKey === action.key)
+      if (owners.length !== 1) fail(`领取Action必须且只能属于一个任务:${String(action.key)}`)
+    })
+    effects.filter(effect => effect.operation === 'claim-quest-reward').forEach(effect => {
+      const owners = rewardContracts.filter(reward => reward.sourceKind === 'quest'
+        && strings(reward.effectKeys, `reward ${String(reward.key)} effects`).includes(String(effect.key)))
+      if (owners.length !== 1) fail(`任务奖励领取标记Effect必须且只能属于一个RewardContract:${String(effect.key)}`)
+    })
+  }
   requireRefs(strings(build.startingItemKeys, 'actors.player.build.startingItemKeys'), itemKeys, 'player starting item')
   itemRows.filter(item => item.useActionKey != null).forEach(item => {
     const action = actionRows.find(candidate => candidate.key === item.useActionKey) ?? fail(`物品useAction不存在:${String(item.key)}`)
@@ -639,7 +744,7 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
     narrative: structuredClone(narrative) as unknown as TextOpenWorldParsedModulesV1['narrative'],
     world: structuredClone(world) as unknown as TextOpenWorldParsedModulesV1['world'],
     actors: structuredClone(actors) as unknown as TextOpenWorldParsedModulesV1['actors'],
-    quests: structuredClone(quests) as unknown as TextOpenWorldParsedModulesV1['quests'],
+    quests: { ...structuredClone(quests), version: 2, quests: structuredClone(questRows), stages: structuredClone(questStages) } as unknown as TextOpenWorldParsedModulesV1['quests'],
     actions: structuredClone(actions) as unknown as TextOpenWorldParsedModulesV1['actions'],
     progression: structuredClone(progression) as unknown as TextOpenWorldParsedModulesV1['progression'],
     combat: structuredClone(combat) as unknown as TextOpenWorldParsedModulesV1['combat'],

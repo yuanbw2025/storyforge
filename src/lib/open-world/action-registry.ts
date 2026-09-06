@@ -102,6 +102,22 @@ function parseContext(value: TextOpenWorldActionProjectionContextV1, modules: Te
     if (stageKey != null && !questStageKeys.has(stableKey(stageKey, `questStageKeyByInstanceKey.${instanceKey}`))) fail(`任务实例Stage映射引用未知定义:${stageKey}`)
     questStageKeyByInstanceKey[instanceKey] = stageKey
   }
+  const questObjectiveStatusByInstanceKey: TextOpenWorldActionProjectionContextV1['questObjectiveStatusByInstanceKey'] = {}
+  for (const [instanceKey, statuses] of Object.entries(value.questObjectiveStatusByInstanceKey ?? {})) {
+    stableKey(instanceKey, 'questObjectiveStatusByInstanceKey.instanceKey')
+    const parsed: Record<string, 'inactive' | 'active' | 'completed' | 'failed'> = {}
+    for (const [objectiveKey, status] of Object.entries(statuses ?? {})) {
+      if (!modules.quests.objectives.some(item => item.key === stableKey(objectiveKey, `questObjectiveStatusByInstanceKey.${instanceKey}.objectiveKey`))) fail(`任务目标状态引用未知Objective:${objectiveKey}`)
+      if (!['inactive', 'active', 'completed', 'failed'].includes(status)) fail(`任务目标状态无效:${instanceKey}:${objectiveKey}`)
+      parsed[objectiveKey] = status
+    }
+    questObjectiveStatusByInstanceKey[instanceKey] = parsed
+  }
+  const questRewardClaimKeyByInstanceKey: Record<string, string | null> = {}
+  for (const [instanceKey, claimKey] of Object.entries(value.questRewardClaimKeyByInstanceKey ?? {})) {
+    stableKey(instanceKey, 'questRewardClaimKeyByInstanceKey.instanceKey')
+    questRewardClaimKeyByInstanceKey[instanceKey] = claimKey == null ? null : stableKey(claimKey, `questRewardClaimKeyByInstanceKey.${instanceKey}`)
+  }
   return {
     actorKey: value.actorKey,
     currentLocationKey,
@@ -115,6 +131,8 @@ function parseContext(value: TextOpenWorldActionProjectionContextV1, modules: Te
     questDefinitionKeyByInstanceKey,
     questStatusByInstanceKey,
     questStageKeyByInstanceKey,
+    questObjectiveStatusByInstanceKey,
+    questRewardClaimKeyByInstanceKey,
   }
 }
 
@@ -195,6 +213,41 @@ export function createTextOpenWorldActionRegistryV1(value: TextOpenWorldRuntimeP
             && context.questStageKeyByInstanceKey[instanceKey] === abandonedStageKey
           ))
         }
+        if (action.category === 'quest-action') {
+          const ownerStage = modules.quests.stages.find(stage => stage.completionActionKey === action.key)
+          if (ownerStage) {
+            const requiredObjectiveKeys = ownerStage.objectiveKeys.filter(objectiveKey => !modules.quests.objectives.find(objective => objective.key === objectiveKey)!.optional)
+            validTargetKeys = validTargetKeys.filter(instanceKey => (
+              context.questStatusByInstanceKey[instanceKey] === 'active'
+              && context.questStageKeyByInstanceKey[instanceKey] === ownerStage.key
+              && requiredObjectiveKeys.every(objectiveKey => context.questObjectiveStatusByInstanceKey[instanceKey]?.[objectiveKey] === 'completed')
+            ))
+          }
+        }
+      }
+      if (action.targetScope === 'quest' && action.category === 'objective-action') {
+        const completion = action.successEffectKeys.map(effectKey => effectByKey.get(effectKey))
+          .find((effect): effect is Extract<TextOpenWorldEffectDefinitionV1, { operation: 'complete-objective' }> => effect?.operation === 'complete-objective')
+        const objective = completion ? modules.quests.objectives.find(item => item.key === completion.payload.objectiveKey) : null
+        const stage = objective ? modules.quests.stages.find(item => item.key === objective.stageKey) : null
+        validTargetKeys = objective && stage
+          ? validTargetKeys.filter(instanceKey => (
+              context.questDefinitionKeyByInstanceKey[instanceKey] === stage.questKey
+              && context.questStatusByInstanceKey[instanceKey] === 'active'
+              && context.questStageKeyByInstanceKey[instanceKey] === stage.key
+              && context.questObjectiveStatusByInstanceKey[instanceKey]?.[objective.key] === 'active'
+            ))
+          : []
+      }
+      if (action.targetScope === 'quest' && action.category === 'claim-reward') {
+        const quest = modules.quests.quests.find(item => item.claimActionKey === action.key)
+        validTargetKeys = quest
+          ? validTargetKeys.filter(instanceKey => (
+              context.questDefinitionKeyByInstanceKey[instanceKey] === quest.key
+              && context.questStatusByInstanceKey[instanceKey] === 'completed'
+              && context.questRewardClaimKeyByInstanceKey[instanceKey] == null
+            ))
+          : []
       }
       if (action.targetScope !== 'none' && validTargetKeys.length === 0) unavailableReasons.push({ code: 'no-valid-target', message: '当前没有可作用的目标。', conditionKey: null })
       return {

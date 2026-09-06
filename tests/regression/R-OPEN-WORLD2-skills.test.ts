@@ -29,6 +29,7 @@ function addQuestSkill() {
   })
   actions.effects.push({ key: 'effect.learn-channel-listening', operation: 'learn-skill', payload: { skillKey: 'skill.channel-listening' } })
   quests.quests.find((quest: any) => quest.key === 'quest.template.supplies').rewardEffectKeys.push('effect.learn-channel-listening')
+  ;(fixture.modules.items.payload as any).rewardContracts.find((reward: any) => reward.key === 'reward.quest-supplies').effectKeys.push('effect.learn-channel-listening')
   return fixture
 }
 
@@ -69,8 +70,12 @@ describe('Text Open World vNext · governed skills and statuses', () => {
     expect(() => parseTextOpenWorldModulesV1(missingLevelCurve)).toThrow('level来源没有进入等级曲线')
 
     const missingQuestReward = addQuestSkill()
-    ;(missingQuestReward.modules.quests.payload as any).quests
-      .find((quest: any) => quest.key === 'quest.template.supplies').rewardEffectKeys = []
+    const missingQuest = (missingQuestReward.modules.quests.payload as any).quests
+      .find((quest: any) => quest.key === 'quest.template.supplies')
+    missingQuest.rewardEffectKeys = missingQuest.rewardEffectKeys.filter((effectKey: string) => effectKey !== 'effect.learn-channel-listening')
+    const missingReward = (missingQuestReward.modules.items.payload as any).rewardContracts
+      .find((reward: any) => reward.key === 'reward.quest-supplies')
+    missingReward.effectKeys = missingReward.effectKeys.filter((effectKey: string) => effectKey !== 'effect.learn-channel-listening')
     expect(() => parseTextOpenWorldModulesV1(missingQuestReward)).toThrow('没有对应学习Effect奖励')
   })
 

@@ -26,6 +26,7 @@ import {
 import { deriveTextOpenWorldPlayerStatsFromModulesV1 } from './player-stats'
 import { deriveTextOpenWorldProgressionStatusV1 } from './progression'
 import { createTextOpenWorldQuestTransitionCatalogV1 } from './quest-state-machine'
+import { createTextOpenWorldObjectiveCatalogV1 } from './objective-state'
 import {
   createInitialTextOpenWorldQuestInstancesV1,
   deriveTextOpenWorldQuestConditionProjectionV1,
@@ -201,14 +202,27 @@ export function applyTextOpenWorldSessionEventV1(current: TextOpenWorldSessionPr
     const modules = parseTextOpenWorldModulesV1(projection.runtimePackage)
     const dropEffectKeys = new Set(modules.items.dropTables.flatMap(table => table.entries.flatMap(entry => entry.quantityEffects.map(mapping => mapping.effectKey))))
     if (applied.plan.authorization?.kind === 'reward') {
+      const authorization = applied.plan.authorization
+      const action = modules.actions.actions.find(item => item.key === projection.protocol.pendingActionKey) ?? fail('命令Action不存在')
+      const reward = modules.items.rewardContracts.find(item => item.key === authorization.rewardKey) ?? fail('奖励合同不存在')
+      if (reward.sourceKind === 'quest') {
+        const instance = projection.state.quests.instancesByKey[authorization.sourceInstanceKey] ?? fail('奖励任务实例不存在')
+        const definition = modules.quests.quests.find(item => item.key === instance.definitionKey) ?? fail('奖励任务定义不存在')
+        if (projection.protocol.pendingTargetKey !== instance.instanceKey || projection.protocol.pendingActorKey !== 'player'
+          || action.category !== 'claim-reward' || action.actorScope !== 'player' || action.targetScope !== 'quest'
+          || definition.rewardContractKey !== reward.key || definition.claimActionKey !== action.key
+          || instance.status !== 'completed' || instance.rewardClaimKey != null) fail('任务奖励领取授权与命令或任务状态不一致')
+      }
       const conditionResults = Object.fromEntries(Object.entries(deriveTextOpenWorldContextsV1(projection).action.conditionResults).map(([key, result]) => [key, result.satisfied]))
       createTextOpenWorldRewardCatalogV1(projection.runtimePackage).assertAuthorization({
-        claimKey: applied.plan.claimKey, effectKeys: applied.plan.effectKeys, authorization: applied.plan.authorization,
+        claimKey: applied.plan.claimKey, effectKeys: applied.plan.effectKeys, authorization,
         evidence: pendingRandom.map(item => item.evidence), conditionResults,
       })
     } else if (applied.plan.authorization?.kind === 'quest-transition') {
       const authorization = applied.plan.authorization
       const action = modules.actions.actions.find(item => item.key === projection.protocol.pendingActionKey) ?? fail('命令Action不存在')
+      const expectedEffectKeys = [...new Set([...action.costEffectKeys, ...action.successEffectKeys])]
+      if (canonicalProductProductionJsonV2(applied.plan.effectKeys) !== canonicalProductProductionJsonV2(expectedEffectKeys)) fail('任务迁移EffectPlan与命令Action不一致')
       if (projection.protocol.pendingTargetKey !== authorization.instanceKey || action.targetScope !== 'quest') fail('任务迁移授权与命令目标不一致')
       if (action.actorScope !== projection.protocol.pendingActorKey) fail('任务迁移Action操作者不一致')
       const intents = authorization.transitions.map(step => step.intent)
@@ -217,7 +231,19 @@ export function applyTextOpenWorldSessionEventV1(current: TextOpenWorldSessionPr
       } else if (action.category === 'abandon-quest') {
         if (intents.length !== 1 || intents[0] !== 'abandon') fail('放弃任务Action只能执行abandon')
       } else if (action.category !== 'quest-action' || action.actorScope !== 'system') fail('任务系统迁移必须使用system quest-action')
+      if (action.category === 'quest-action') {
+        const conditionResults = deriveTextOpenWorldContextsV1(projection).action.conditionResults
+        if (action.requirementConditionKeys.some(conditionKey => conditionResults[conditionKey]?.satisfied !== true)) fail('任务系统迁移条件未满足')
+      }
       createTextOpenWorldQuestTransitionCatalogV1(projection.runtimePackage).assertAuthorization({ state: projection.state, authorization })
+    } else if (applied.plan.authorization?.kind === 'quest-objective') {
+      const authorization = applied.plan.authorization
+      const action = modules.actions.actions.find(item => item.key === projection.protocol.pendingActionKey) ?? fail('命令Action不存在')
+      const expectedEffectKeys = [...new Set([...action.costEffectKeys, ...action.successEffectKeys])]
+      if (canonicalProductProductionJsonV2(applied.plan.effectKeys) !== canonicalProductProductionJsonV2(expectedEffectKeys)) fail('Objective EffectPlan与命令Action不一致')
+      if (projection.protocol.pendingTargetKey !== authorization.instanceKey || projection.protocol.pendingActorKey !== 'player'
+        || action.category !== 'objective-action' || action.actorScope !== 'player' || action.targetScope !== 'quest') fail('Objective授权与命令目标不一致')
+      createTextOpenWorldObjectiveCatalogV1(projection.runtimePackage).assertAuthorization({ state: projection.state, authorization })
     } else if (applied.plan.effectKeys.some(effectKey => dropEffectKeys.has(effectKey))) fail('掉落Effect缺少RewardContract授权')
     projection.state = applyTextOpenWorldEffectPlanForReplayV1(projection.runtimePackage, projection.state, applied.plan).state
     const action = modules.actions.actions.find(item => item.key === projection.protocol.pendingActionKey) ?? fail('命令Action不存在')
@@ -270,13 +296,15 @@ export function deriveTextOpenWorldContextsV1(value: TextOpenWorldSessionProject
     completedOnceActionKeys: [...projection.actions.completedOnceActionKeys], cooldownUntilWorldMinuteByActionKey: structuredClone(projection.actions.cooldownUntilWorldMinuteByActionKey),
     validTargetKeysByScope: {
       actor: actorTargets, location: [...state.map.revealedLocationKeys], item: Object.keys(inventoryQuantities),
-      quest: Object.values(state.quests.instancesByKey).filter(instance => ['revealed', 'accepted', 'active', 'suspended'].includes(instance.status)).map(instance => instance.instanceKey),
+      quest: Object.values(state.quests.instancesByKey).filter(instance => ['revealed', 'accepted', 'active', 'suspended', 'completed'].includes(instance.status)).map(instance => instance.instanceKey),
       vendor: modules.economy.vendors.filter(vendor => vendor.locationKey === state.map.currentLocationKey && actorTargets.includes(vendor.actorKey)).map(vendor => vendor.key),
       encounter: modules.combat.encounters.filter(encounter => encounter.locationKey === state.map.currentLocationKey).map(encounter => encounter.key),
     },
     questDefinitionKeyByInstanceKey: Object.fromEntries(Object.values(state.quests.instancesByKey).map(instance => [instance.instanceKey, instance.definitionKey])),
     questStatusByInstanceKey: Object.fromEntries(Object.values(state.quests.instancesByKey).map(instance => [instance.instanceKey, instance.status])),
     questStageKeyByInstanceKey: Object.fromEntries(Object.values(state.quests.instancesByKey).map(instance => [instance.instanceKey, instance.currentStageKey])),
+    questObjectiveStatusByInstanceKey: Object.fromEntries(Object.values(state.quests.instancesByKey).map(instance => [instance.instanceKey, structuredClone(instance.objectiveStatusByKey)])),
+    questRewardClaimKeyByInstanceKey: Object.fromEntries(Object.values(state.quests.instancesByKey).map(instance => [instance.instanceKey, instance.rewardClaimKey])),
   }
   return { condition, action, playerStats, progression }
 }

@@ -3,6 +3,7 @@ import { db } from '../../src/lib/db/schema'
 import { executeTextOpenWorldActionV1 } from '../../src/lib/open-world/action-executor'
 import { createTextOpenWorldEffectCatalogV1 } from '../../src/lib/open-world/effect-dsl'
 import { parseTextOpenWorldModulesV1 } from '../../src/lib/open-world/modules'
+import { createTextOpenWorldObjectiveCatalogV1 } from '../../src/lib/open-world/objective-state'
 import { createTextOpenWorldQuestTransitionCatalogV1 } from '../../src/lib/open-world/quest-state-machine'
 import { createTextOpenWorldDirectorQuestInstanceV1 } from '../../src/lib/open-world/quests'
 import { createInitialTextOpenWorldSessionProjectionV1 } from '../../src/lib/open-world/session-projection'
@@ -19,17 +20,33 @@ function addRestartableOrdinaryQuest(runtimePackage = createTextOpenWorldVNextFi
   quests.quests.push({
     key: 'quest.ordinary.1', type: 'ordinary', ownerKind: 'location', ownerKey: 'location.salt-port',
     title: '遗失的渠尺', description: '寻找工匠遗失的渠尺。', storylineKey: null,
-    regionKeys: ['region.salt-port'], stageKeys: ['quest-stage.ordinary.1'], prerequisiteConditionKeys: [], rewardEffectKeys: [],
+    regionKeys: ['region.salt-port'], stageKeys: ['quest-stage.ordinary.1'], prerequisiteConditionKeys: [], rewardEffectKeys: [], rewardContractKey: null, claimActionKey: null,
     lifecyclePolicy: 'abandon-restart', timePolicy: 'waits', expirationMinutes: null, repeatable: false,
     instantiationPolicy: 'session-start', initialStatus: 'revealed', estimatedMinutes: 10, tags: ['local'],
   })
   quests.stages.push({
     key: 'quest-stage.ordinary.1', questKey: 'quest.ordinary.1', order: 1, title: '寻找渠尺',
-    objectiveKeys: ['objective.ordinary.1'], completionConditionKeys: ['condition.always'],
+    objectiveKeys: ['objective.ordinary.1'], completionConditionKeys: ['condition.always'], completionActionKey: 'action.complete-ordinary-quest',
   })
   quests.objectives.push({
     key: 'objective.ordinary.1', stageKey: 'quest-stage.ordinary.1', title: '询问盐港工匠', optional: false,
-    actionKeys: ['action.investigate-channel'],
+    actionKeys: ['action.investigate-channel', 'action.complete-ordinary-objective'],
+  })
+  const actions = runtimePackage.modules.actions.payload as any
+  actions.effects.push(
+    { key: 'effect.complete-ordinary-objective', operation: 'complete-objective', payload: { objectiveKey: 'objective.ordinary.1' } },
+    { key: 'effect.complete-ordinary-quest', operation: 'transition-quest', payload: { questKey: 'quest.ordinary.1', status: 'completed', stageKey: 'quest-stage.ordinary.1' } },
+  )
+  actions.actions.push({
+    key: 'action.complete-ordinary-objective', category: 'objective-action', label: '完成渠尺询问', description: '完成普通任务目标。',
+    actorScope: 'player', targetScope: 'quest', locationKeys: [], requirementConditionKeys: [], costEffectKeys: [],
+    successEffectKeys: ['effect.complete-ordinary-objective'], failureEffectKeys: [], timeCostMinutes: 0,
+    confirmationPolicy: 'never', repeatPolicy: 'repeatable', cooldownMinutes: null,
+  }, {
+    key: 'action.complete-ordinary-quest', category: 'quest-action', label: '结算渠尺任务', description: '由系统结算普通任务。',
+    actorScope: 'system', targetScope: 'quest', locationKeys: [], requirementConditionKeys: ['condition.always'], costEffectKeys: [],
+    successEffectKeys: ['effect.complete-ordinary-quest'], failureEffectKeys: [], timeCostMinutes: 0,
+    confirmationPolicy: 'never', repeatPolicy: 'repeatable', cooldownMinutes: null,
   })
   return runtimePackage
 }
@@ -88,6 +105,8 @@ describe('Text Open World vNext · governed Quest lifecycle', () => {
     catalog.apply({ state, authorization: suspended })
     const resumed = catalog.prepare({ instanceKey: MAIN_INSTANCE_KEY, state, transitions: [{ toStatus: 'active', stageKey: 'quest-stage.main.1' }] })
     catalog.apply({ state, authorization: resumed })
+    const objective = createTextOpenWorldObjectiveCatalogV1(runtimePackage)
+    objective.apply({ state, authorization: objective.prepare({ instanceKey: MAIN_INSTANCE_KEY, objectiveKey: 'objective.main.1', state }) })
     const completed = catalog.prepare({ instanceKey: MAIN_INSTANCE_KEY, state, transitions: [{ toStatus: 'completed', stageKey: 'quest-stage.main.1' }] })
     catalog.apply({ state, authorization: completed })
     expect(state.quests.instancesByKey[MAIN_INSTANCE_KEY]).toMatchObject({ status: 'completed', terminalAtWorldMinute: 480 })
@@ -150,6 +169,85 @@ describe('Text Open World vNext · governed Quest lifecycle', () => {
     })).rejects.toThrow('缺少QuestTransition授权')
   })
 
+  it('同一模板的多个任务实例分别完成Objective，不会按定义串改另一实例', () => {
+    const runtimePackage = createTextOpenWorldVNextFixture()
+    const state = createInitialTextOpenWorldSessionProjectionV1(runtimePackage).state
+    state.time.worldMinute = 600
+    const first = createTextOpenWorldDirectorQuestInstanceV1(runtimePackage, {
+      definitionKey: 'quest.template.supplies', sourceInstanceKey: 'multi.1', worldMinute: 600,
+    })
+    const second = createTextOpenWorldDirectorQuestInstanceV1(runtimePackage, {
+      definitionKey: 'quest.template.supplies', sourceInstanceKey: 'multi.2', worldMinute: 600,
+    })
+    state.quests.instancesByKey[first.instanceKey] = first
+    state.quests.instancesByKey[second.instanceKey] = second
+    const quests = createTextOpenWorldQuestTransitionCatalogV1(runtimePackage)
+    for (const instanceKey of [first.instanceKey, second.instanceKey]) {
+      quests.apply({ state, authorization: quests.prepare({
+        instanceKey, state,
+        transitions: [{ toStatus: 'accepted', stageKey: null }, { toStatus: 'active', stageKey: 'quest-stage.template.supplies' }],
+      }) })
+    }
+    const objectives = createTextOpenWorldObjectiveCatalogV1(runtimePackage)
+    objectives.apply({ state, authorization: objectives.prepare({
+      instanceKey: first.instanceKey, objectiveKey: 'objective.template.supplies', state,
+    }) })
+    expect(state.quests.instancesByKey[first.instanceKey].objectiveStatusByKey['objective.template.supplies']).toBe('completed')
+    expect(state.quests.instancesByKey[second.instanceKey].objectiveStatusByKey['objective.template.supplies']).toBe('active')
+  })
+
+  it('多Stage任务只能在必需目标完成后按相邻顺序推进，最终Stage完成后才终结', () => {
+    const runtimePackage = createTextOpenWorldVNextFixture()
+    const questsModule = runtimePackage.modules.quests.payload as any
+    const actions = runtimePackage.modules.actions.payload as any
+    questsModule.quests.find((quest: any) => quest.key === 'quest.main.1').stageKeys.push('quest-stage.main.2')
+    questsModule.stages.push({
+      key: 'quest-stage.main.2', questKey: 'quest.main.1', order: 2, title: '追查上游',
+      objectiveKeys: ['objective.main.2'], completionConditionKeys: ['condition.always'], completionActionKey: 'action.complete-main-final',
+    })
+    questsModule.objectives.push({
+      key: 'objective.main.2', stageKey: 'quest-stage.main.2', title: '确认断脊渠口', optional: false,
+      actionKeys: ['action.complete-main-objective-2'],
+    })
+    actions.effects.find((effect: any) => effect.key === 'effect.complete-main-quest').payload = {
+      questKey: 'quest.main.1', status: 'active', stageKey: 'quest-stage.main.2',
+    }
+    actions.effects.push(
+      { key: 'effect.complete-main-objective-2', operation: 'complete-objective', payload: { objectiveKey: 'objective.main.2' } },
+      { key: 'effect.complete-main-final', operation: 'transition-quest', payload: { questKey: 'quest.main.1', status: 'completed', stageKey: 'quest-stage.main.2' } },
+    )
+    actions.actions.push({
+      key: 'action.complete-main-objective-2', category: 'objective-action', label: '确认渠口', description: '完成第二阶段目标。',
+      actorScope: 'player', targetScope: 'quest', locationKeys: [], requirementConditionKeys: [], costEffectKeys: [],
+      successEffectKeys: ['effect.complete-main-objective-2'], failureEffectKeys: [], timeCostMinutes: 0,
+      confirmationPolicy: 'never', repeatPolicy: 'repeatable', cooldownMinutes: null,
+    }, {
+      key: 'action.complete-main-final', category: 'quest-action', label: '结算最终阶段', description: '由系统完成主线任务。',
+      actorScope: 'system', targetScope: 'quest', locationKeys: [], requirementConditionKeys: ['condition.always'], costEffectKeys: [],
+      successEffectKeys: ['effect.complete-main-final'], failureEffectKeys: [], timeCostMinutes: 0,
+      confirmationPolicy: 'never', repeatPolicy: 'repeatable', cooldownMinutes: null,
+    })
+    parseTextOpenWorldModulesV1(runtimePackage)
+    const state = createInitialTextOpenWorldSessionProjectionV1(runtimePackage).state
+    const transitions = createTextOpenWorldQuestTransitionCatalogV1(runtimePackage)
+    const objectives = createTextOpenWorldObjectiveCatalogV1(runtimePackage)
+    transitions.apply({ state, authorization: transitions.prepare({
+      instanceKey: MAIN_INSTANCE_KEY, state,
+      transitions: [{ toStatus: 'accepted', stageKey: null }, { toStatus: 'active', stageKey: 'quest-stage.main.1' }],
+    }) })
+    expect(() => transitions.prepare({ instanceKey: MAIN_INSTANCE_KEY, state, transitions: [{ toStatus: 'active', stageKey: 'quest-stage.main.2' }] }))
+      .toThrow('必需目标完成后')
+    objectives.apply({ state, authorization: objectives.prepare({ instanceKey: MAIN_INSTANCE_KEY, objectiveKey: 'objective.main.1', state }) })
+    transitions.apply({ state, authorization: transitions.prepare({ instanceKey: MAIN_INSTANCE_KEY, state, transitions: [{ toStatus: 'active', stageKey: 'quest-stage.main.2' }] }) })
+    expect(state.quests.instancesByKey[MAIN_INSTANCE_KEY]).toMatchObject({
+      status: 'active', currentStageKey: 'quest-stage.main.2',
+      objectiveStatusByKey: { 'objective.main.1': 'completed', 'objective.main.2': 'active' },
+    })
+    objectives.apply({ state, authorization: objectives.prepare({ instanceKey: MAIN_INSTANCE_KEY, objectiveKey: 'objective.main.2', state }) })
+    transitions.apply({ state, authorization: transitions.prepare({ instanceKey: MAIN_INSTANCE_KEY, state, transitions: [{ toStatus: 'completed', stageKey: 'quest-stage.main.2' }] }) })
+    expect(state.quests.instancesByKey[MAIN_INSTANCE_KEY].status).toBe('completed')
+  })
+
   it('发布时拒绝给受保护主线配置玩家放弃Action', () => {
     const runtimePackage = createTextOpenWorldVNextFixture()
     const actions = runtimePackage.modules.actions.payload as any
@@ -198,6 +296,49 @@ describe('Text Open World vNext · governed Quest lifecycle', () => {
     })
     expect(retry.receiptHash).toBe(feedback.receiptHash)
     expect(await db.productRuntimeEvents.where('sessionId').equals(session.id!).count()).toBe(4)
+  })
+
+  it('目标、任务完成和奖励领取分成可重放的三次结算且不能重复领取', async () => {
+    const session = await createSession(createTextOpenWorldVNextFixture(), 'quest-progress-reward')
+    await executeTextOpenWorldActionV1({
+      sessionId: session.id!, actionKey: 'action.accept-main', targetKey: MAIN_INSTANCE_KEY,
+      commandId: 'command.quest-progress.accept', requestedAt: 1_000,
+    })
+    expect((await readProductRuntimeState(session.id!)).textOpenWorld?.state.quests.instancesByKey[MAIN_INSTANCE_KEY])
+      .toMatchObject({ status: 'active', objectiveStatusByKey: { 'objective.main.1': 'active' }, rewardClaimKey: null })
+
+    const objective = await executeTextOpenWorldActionV1({
+      sessionId: session.id!, actionKey: 'action.complete-main-objective', targetKey: MAIN_INSTANCE_KEY,
+      commandId: 'command.quest-progress.objective', requestedAt: 1_100,
+    })
+    expect(objective).toMatchObject({ status: 'succeeded', evidenceEventSequences: [5, 6] })
+    expect((await readProductRuntimeState(session.id!, 6)).textOpenWorld?.state.quests.instancesByKey[MAIN_INSTANCE_KEY])
+      .toMatchObject({ status: 'active', objectiveStatusByKey: { 'objective.main.1': 'completed' }, rewardClaimKey: null })
+    expect((await readProductRuntimeState(session.id!, 8)).textOpenWorld?.state.quests.instancesByKey[MAIN_INSTANCE_KEY])
+      .toMatchObject({ status: 'completed', rewardClaimKey: null })
+
+    const reward = await executeTextOpenWorldActionV1({
+      sessionId: session.id!, actionKey: 'action.claim-main-reward', targetKey: MAIN_INSTANCE_KEY,
+      commandId: 'command.quest-progress.reward', requestedAt: 1_300,
+    })
+    expect(reward).toMatchObject({ status: 'succeeded', evidenceEventSequences: [9, 10] })
+    expect(reward.changes.map(change => change.operation)).toEqual(['claim-quest-reward', 'grant-experience'])
+    const final = (await readProductRuntimeState(session.id!)).textOpenWorld!.state
+    expect(final.player).toMatchObject({ level: 2, experience: 100 })
+    expect(final.quests.instancesByKey[MAIN_INSTANCE_KEY].rewardClaimKey).toBe(`claim.reward.reward.quest-main.${MAIN_INSTANCE_KEY}`)
+
+    const retry = await executeTextOpenWorldActionV1({
+      sessionId: session.id!, actionKey: 'action.claim-main-reward', targetKey: MAIN_INSTANCE_KEY,
+      commandId: 'command.quest-progress.reward', requestedAt: 9_999,
+    })
+    expect(retry.receiptHash).toBe(reward.receiptHash)
+    expect(await db.productRuntimeEvents.where('sessionId').equals(session.id!).count()).toBe(10)
+    const rejected = await executeTextOpenWorldActionV1({
+      sessionId: session.id!, actionKey: 'action.claim-main-reward', targetKey: MAIN_INSTANCE_KEY,
+      commandId: 'command.quest-progress.reward-again', requestedAt: 10_000,
+    })
+    expect(rejected).toMatchObject({ phase: 'preflight', status: 'rejected', outcomeCommitted: false })
+    expect(await db.productRuntimeEvents.where('sessionId').equals(session.id!).count()).toBe(10)
   })
 
   it('普通任务放弃先返回确认回执，明确确认后才产生正式终态事件', async () => {

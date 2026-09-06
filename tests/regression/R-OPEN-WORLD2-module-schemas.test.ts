@@ -67,4 +67,33 @@ describe('Text Open World vNext · vNext module schemas and reference integrity'
     ;(relationshipDrift.modules.relationships.payload as any).attitude.goodMinimum = 30
     expect(() => parseTextOpenWorldModulesV1(relationshipDrift)).toThrow('relationships模块与根calibration不一致')
   })
+
+  it('Quest v2拒绝没有完成Action的Objective、错误Stage推进和漂移的奖励绑定', () => {
+    const missingObjectiveAction = createTextOpenWorldVNextFixture()
+    ;(missingObjectiveAction.modules.quests.payload as any).objectives[0].actionKeys = ['action.investigate-channel']
+    expect(() => parseTextOpenWorldModulesV1(missingObjectiveAction)).toThrow('Objective必须至少绑定一个完成Action')
+
+    const wrongStageTransition = createTextOpenWorldVNextFixture()
+    ;(wrongStageTransition.modules.actions.payload as any).effects
+      .find((effect: any) => effect.key === 'effect.complete-main-quest').payload.status = 'failed'
+    expect(() => parseTextOpenWorldModulesV1(wrongStageTransition)).toThrow('Stage完成Action没有推进相邻Stage或完成任务')
+
+    const driftedReward = createTextOpenWorldVNextFixture()
+    ;(driftedReward.modules.items.payload as any).rewardContracts
+      .find((reward: any) => reward.key === 'reward.quest-main').effectKeys = ['effect.claim-main-reward']
+    expect(() => parseTextOpenWorldModulesV1(driftedReward)).toThrow('reward effects 双向引用不一致')
+  })
+
+  it('旧Quest v1模块可读取并规范化为无新绑定的v2读模型', () => {
+    const legacy = createTextOpenWorldVNextFixture()
+    const quests = legacy.modules.quests.payload as any
+    quests.version = 1
+    legacy.modules.quests.schemaVersion = 1
+    quests.quests.forEach((quest: any) => { delete quest.rewardContractKey; delete quest.claimActionKey })
+    quests.stages.forEach((stage: any) => { delete stage.completionActionKey })
+    const parsed = parseTextOpenWorldModulesV1(legacy)
+    expect(parsed.quests.version).toBe(2)
+    expect(parsed.quests.quests.every(quest => quest.rewardContractKey == null && quest.claimActionKey == null)).toBe(true)
+    expect(parsed.quests.stages.every(stage => stage.completionActionKey == null)).toBe(true)
+  })
 })

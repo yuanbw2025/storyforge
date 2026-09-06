@@ -14,13 +14,15 @@ const PLAYER_INTENTS = new Set<TextOpenWorldQuestTransitionIntentV1>(['accept', 
 
 function fail(message: string): never { throw new Error(`[text-open-world-quest-state] ${message}`) }
 
-function intentFor(fromStatus: TextOpenWorldQuestStatusV1, toStatus: TextOpenWorldQuestStatusV1): TextOpenWorldQuestTransitionIntentV1 {
+function intentFor(instance: TextOpenWorldQuestInstanceV1, toStatus: TextOpenWorldQuestStatusV1, stageKey: string | null): TextOpenWorldQuestTransitionIntentV1 {
+  const fromStatus = instance.status
   if (fromStatus === 'locked' && toStatus === 'available') return 'unlock'
   if (fromStatus === 'available' && toStatus === 'revealed') return 'reveal'
   if (fromStatus === 'revealed' && toStatus === 'accepted') return 'accept'
   if (fromStatus === 'accepted' && toStatus === 'active') return 'activate'
   if (fromStatus === 'active' && toStatus === 'suspended') return 'suspend'
   if (fromStatus === 'suspended' && toStatus === 'active') return 'resume'
+  if (fromStatus === 'active' && toStatus === 'active' && stageKey != null && stageKey !== instance.currentStageKey) return 'advance-stage'
   if (fromStatus === 'active' && toStatus === 'completed') return 'complete'
   if (fromStatus === 'active' && toStatus === 'failed') return 'fail'
   if (['revealed', 'accepted', 'active', 'suspended'].includes(fromStatus) && toStatus === 'abandoned') return 'abandon'
@@ -31,6 +33,7 @@ function intentFor(fromStatus: TextOpenWorldQuestStatusV1, toStatus: TextOpenWor
 }
 
 function assertPolicy(
+  modules: TextOpenWorldParsedModulesV1,
   definition: TextOpenWorldParsedModulesV1['quests']['quests'][number],
   instance: TextOpenWorldQuestInstanceV1,
   intent: TextOpenWorldQuestTransitionIntentV1,
@@ -48,25 +51,39 @@ function assertPolicy(
     if (definition.timePolicy !== 'timed' || instance.deadlineWorldMinute == null) fail('非限时任务不能过期')
     if (worldMinute < instance.deadlineWorldMinute) fail('任务尚未到期')
   }
+  const orderedStages = definition.stageKeys.map(stageKey => modules.quests.stages.find(stage => stage.key === stageKey)!)
+    .sort((left, right) => left.order - right.order)
+  const currentStage = instance.currentStageKey ? modules.quests.stages.find(stage => stage.key === instance.currentStageKey)! : null
+  const requiredObjectivesComplete = (stage: TextOpenWorldParsedModulesV1['quests']['stages'][number]) => stage.objectiveKeys
+    .map(objectiveKey => modules.quests.objectives.find(objective => objective.key === objectiveKey)!)
+    .filter(objective => !objective.optional)
+    .every(objective => instance.objectiveStatusByKey[objective.key] === 'completed')
   if (intent === 'activate') {
-    if (stageKey == null || !definition.stageKeys.includes(stageKey)) fail('激活任务必须指定本定义的Stage')
+    if (stageKey == null || stageKey !== orderedStages[0]?.key) fail('激活任务必须从第一个Stage开始')
   } else if (intent === 'resume') {
     if (stageKey == null || stageKey !== instance.currentStageKey) fail('恢复任务必须保留暂停前Stage')
+  } else if (intent === 'advance-stage') {
+    const currentIndex = orderedStages.findIndex(stage => stage.key === instance.currentStageKey)
+    if (!currentStage || !requiredObjectivesComplete(currentStage) || currentIndex < 0 || stageKey !== orderedStages[currentIndex + 1]?.key) fail('只能在必需目标完成后推进到相邻Stage')
+  } else if (intent === 'complete') {
+    if (!currentStage || currentStage.key !== orderedStages[orderedStages.length - 1]?.key || !requiredObjectivesComplete(currentStage)) fail('只能在最终Stage必需目标完成后完成任务')
+    if (stageKey !== instance.currentStageKey) fail('complete必须保留当前Stage引用')
   } else if (['suspend', 'complete', 'fail', 'abandon', 'expire'].includes(intent)) {
     if (stageKey !== instance.currentStageKey) fail(`${intent}必须保留当前Stage引用`)
   } else if (stageKey != null) fail(`${intent}不能提前写入Stage`)
 }
 
 function applyStep(
+  modules: TextOpenWorldParsedModulesV1,
   definition: TextOpenWorldParsedModulesV1['quests']['quests'][number],
   instance: TextOpenWorldQuestInstanceV1,
   step: TextOpenWorldQuestTransitionAuthorizationV1['transitions'][number],
   worldMinute: number,
 ) {
   if (instance.status !== step.fromStatus) fail(`迁移基线状态漂移:${instance.status}!=${step.fromStatus}`)
-  const intent = intentFor(instance.status, step.toStatus)
+  const intent = intentFor(instance, step.toStatus, step.stageKey)
   if (intent !== step.intent) fail(`迁移意图与状态边不一致:${step.intent}`)
-  assertPolicy(definition, instance, intent, step.actorKind, worldMinute, step.stageKey)
+  assertPolicy(modules, definition, instance, intent, step.actorKind, worldMinute, step.stageKey)
   if (intent === 'reoffer') {
     instance.currentStageKey = null
     Object.keys(instance.objectiveStatusByKey).forEach(key => { instance.objectiveStatusByKey[key] = 'inactive' })
@@ -82,7 +99,23 @@ function applyStep(
     instance.deadlineWorldMinute = definition.timePolicy === 'timed' ? worldMinute + definition.expirationMinutes! : null
   }
   if (intent === 'accept') instance.acceptedAtWorldMinute = worldMinute
-  if (intent === 'activate' || intent === 'resume') instance.currentStageKey = step.stageKey
+  if (intent === 'activate' || intent === 'advance-stage') {
+    if (intent === 'advance-stage') {
+      Object.keys(instance.objectiveStatusByKey).forEach(objectiveKey => {
+        const objective = modules.quests.objectives.find(candidate => candidate.key === objectiveKey)!
+        if (objective.stageKey === instance.currentStageKey && instance.objectiveStatusByKey[objectiveKey] === 'active') instance.objectiveStatusByKey[objectiveKey] = 'failed'
+      })
+    }
+    instance.currentStageKey = step.stageKey
+    const stage = modules.quests.stages.find(candidate => candidate.key === step.stageKey)!
+    stage.objectiveKeys.forEach(objectiveKey => { instance.objectiveStatusByKey[objectiveKey] = 'active' })
+  }
+  if (intent === 'resume') instance.currentStageKey = step.stageKey
+  if (['complete', 'fail', 'abandon', 'expire'].includes(intent)) {
+    Object.keys(instance.objectiveStatusByKey).forEach(objectiveKey => {
+      if (instance.objectiveStatusByKey[objectiveKey] === 'active') instance.objectiveStatusByKey[objectiveKey] = 'failed'
+    })
+  }
   if (['complete', 'fail', 'abandon', 'expire', 'withdraw'].includes(intent)) instance.terminalAtWorldMinute = worldMinute
   instance.status = step.toStatus
 }
@@ -121,7 +154,7 @@ export function createTextOpenWorldQuestTransitionCatalogV1(
     const changes: Array<{ before: TextOpenWorldQuestInstanceV1; after: TextOpenWorldQuestInstanceV1 }> = []
     authorization.transitions.forEach(step => {
       const before = clone(instance)
-      applyStep(definition, instance, step, authorization.worldMinute)
+      applyStep(modules, definition, instance, step, authorization.worldMinute)
       changes.push({ before, after: clone(instance) })
     })
     return changes
@@ -133,7 +166,7 @@ export function createTextOpenWorldQuestTransitionCatalogV1(
     const transitions: TextOpenWorldQuestTransitionAuthorizationV1['transitions'] = []
     for (const request of input.transitions) {
       const current = simulatedState.quests.instancesByKey[input.instanceKey]
-      const intent = intentFor(current.status, request.toStatus)
+      const intent = intentFor(current, request.toStatus, request.stageKey)
       const step = {
         intent,
         actorKind: (PLAYER_INTENTS.has(intent) ? 'player' : 'system') as 'player' | 'system',

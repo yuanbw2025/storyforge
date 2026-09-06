@@ -9,6 +9,7 @@ function context(overrides: Partial<TextOpenWorldActionProjectionContextV1> = {}
     conditionResults: {}, completedOnceActionKeys: [], cooldownUntilWorldMinuteByActionKey: {},
     validTargetKeysByScope: { location: ['location.salt-port'] },
     questDefinitionKeyByInstanceKey: {}, questStatusByInstanceKey: {}, questStageKeyByInstanceKey: {},
+    questObjectiveStatusByInstanceKey: {}, questRewardClaimKeyByInstanceKey: {},
     ...overrides,
   }
 }

@@ -1,4 +1,5 @@
 import { db } from '../db/schema'
+import { hashProductProductionValueV2 } from '../product-production/hash'
 import { hashProductRuntimeStateV1, readProductRuntimeState } from '../product/runtime-core'
 import type { TextOpenWorldCommandEnvelopeV1, TextOpenWorldEffectDefinitionV1, TextOpenWorldFeedbackReceiptV1 } from '../types'
 import { createTextOpenWorldActionRegistryV1 } from './action-registry'
@@ -13,6 +14,8 @@ import {
   verifyTextOpenWorldVNextSessionBindingV1,
 } from './session-binding'
 import { createTextOpenWorldQuestTransitionCatalogV1 } from './quest-state-machine'
+import { createTextOpenWorldObjectiveCatalogV1 } from './objective-state'
+import { executeTextOpenWorldPendingRewardV1 } from './reward-executor'
 import { deriveTextOpenWorldContextsV1, parseTextOpenWorldSessionProjectionV1 } from './session-projection'
 
 const COMMAND_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/
@@ -32,17 +35,39 @@ async function settleAcceptedCommand(envelope: TextOpenWorldCommandEnvelopeV1): 
   }
   const action = createTextOpenWorldActionRegistryV1(projection.runtimePackage).get(envelope.actionKey)
     ?? fail(`Release不存在Action:${envelope.actionKey}`)
-  const effectKeys = [...new Set([...action.action.costEffectKeys, ...action.action.successEffectKeys])]
   const modules = parseTextOpenWorldModulesV1(projection.runtimePackage)
+  if (action.action.category === 'claim-reward') {
+    const instanceKey = targetFrom(envelope) ?? fail('领取奖励Action缺少任务实例目标')
+    const instance = projection.state.quests.instancesByKey[instanceKey] ?? fail('领取奖励任务实例不存在')
+    const definition = modules.quests.quests.find(item => item.key === instance.definitionKey) ?? fail('领取奖励任务定义不存在')
+    if (definition.claimActionKey !== action.action.key || !definition.rewardContractKey) fail('领取奖励Action与任务定义不一致')
+    return executeTextOpenWorldPendingRewardV1({
+      sessionId: envelope.sessionId,
+      commandId: envelope.commandId,
+      rewardKey: definition.rewardContractKey,
+      sourceKind: 'quest',
+      sourceInstanceKey: instance.instanceKey,
+    })
+  }
+  const effectKeys = [...new Set([...action.action.costEffectKeys, ...action.action.successEffectKeys])]
   const questTransitions = effectKeys.map(effectKey => modules.actions.effects.find(effect => effect.key === effectKey)!)
     .filter((effect): effect is Extract<TextOpenWorldEffectDefinitionV1, { operation: 'transition-quest' }> => effect.operation === 'transition-quest')
+  const objectiveEffects = effectKeys.map(effectKey => modules.actions.effects.find(effect => effect.key === effectKey)!)
+    .filter((effect): effect is Extract<TextOpenWorldEffectDefinitionV1, { operation: 'complete-objective' }> => effect.operation === 'complete-objective')
+  if (questTransitions.length && objectiveEffects.length) fail('同一Action不能同时迁移任务和完成Objective')
   const authorization = questTransitions.length
     ? createTextOpenWorldQuestTransitionCatalogV1(projection.runtimePackage).prepare({
         instanceKey: targetFrom(envelope) ?? fail('任务状态Action缺少实例目标'),
         state: projection.state,
         transitions: questTransitions.map(effect => ({ toStatus: effect.payload.status, stageKey: effect.payload.stageKey })),
       })
-    : null
+    : objectiveEffects.length === 1
+      ? createTextOpenWorldObjectiveCatalogV1(projection.runtimePackage).prepare({
+          instanceKey: targetFrom(envelope) ?? fail('Objective Action缺少任务实例目标'),
+          objectiveKey: objectiveEffects[0].payload.objectiveKey,
+          state: projection.state,
+        })
+      : null
   const catalog = createTextOpenWorldEffectCatalogV1(projection.runtimePackage)
   const plan = await catalog.plan({ effectKeys, claimKey: `claim.${envelope.commandId}`, state: projection.state, authorization })
   const { receipt } = await catalog.apply({ plan, state: projection.state })
@@ -66,7 +91,7 @@ async function settleAcceptedCommand(envelope: TextOpenWorldCommandEnvelopeV1): 
  * Product systems added in G2 extend the Action/Effect definitions consumed
  * here; UI code never writes Session state directly.
  */
-export async function executeTextOpenWorldActionV1(input: {
+type ExecuteTextOpenWorldActionInputV1 = {
   sessionId: number
   actionKey: string
   targetKey?: string | null
@@ -74,7 +99,12 @@ export async function executeTextOpenWorldActionV1(input: {
   confirmed?: boolean
   commandId?: string
   requestedAt?: number
-}): Promise<TextOpenWorldFeedbackReceiptV1> {
+}
+
+async function executeTextOpenWorldActionAsV1(
+  input: ExecuteTextOpenWorldActionInputV1,
+  actorKey: 'player' | 'system',
+): Promise<TextOpenWorldFeedbackReceiptV1> {
   if (!Number.isSafeInteger(input.sessionId) || input.sessionId < 1) fail('sessionId无效')
   const commandId = input.commandId ?? newCommandId()
   if (!COMMAND_ID.test(commandId)) fail('commandId无效')
@@ -85,7 +115,8 @@ export async function executeTextOpenWorldActionV1(input: {
   if (prior.status === 'committed') {
     if (prior.envelope.actionKey !== input.actionKey
       || targetFrom(prior.envelope) !== targetKey
-      || prior.envelope.source !== source) fail('相同commandId对应另一项Action请求')
+      || prior.envelope.source !== source
+      || prior.envelope.actorKey !== actorKey) fail('相同commandId对应另一项Action请求')
     const feedback = await readTextOpenWorldFeedbackV1({ sessionId: input.sessionId, commandId })
     return feedback.phase === 'terminal' ? feedback : settleAcceptedCommand(prior.envelope)
   }
@@ -97,7 +128,9 @@ export async function executeTextOpenWorldActionV1(input: {
   const projection = parseTextOpenWorldSessionProjectionV1(state.textOpenWorld)
   assertTextOpenWorldVNextProjectionBindingV1(projection, binding)
   const registry = createTextOpenWorldActionRegistryV1(projection.runtimePackage)
-  const availability = registry.project(deriveTextOpenWorldContextsV1(projection).action)
+  const actionContext = deriveTextOpenWorldContextsV1(projection).action
+  actionContext.actorKey = actorKey
+  const availability = registry.project(actionContext)
     .find(item => item.action.key === input.actionKey)
     ?? fail(`Release不存在Action:${input.actionKey}`)
   if (!availability.available || (availability.confirmationRequired && !input.confirmed)) {
@@ -109,7 +142,8 @@ export async function executeTextOpenWorldActionV1(input: {
       confirmed: input.confirmed === true,
     })
   }
-  const resolved = registry.resolve({ actionKey: input.actionKey, targetKey, context: deriveTextOpenWorldContextsV1(projection).action })
+  const resolved = registry.resolve({ actionKey: input.actionKey, targetKey, context: actionContext })
+  if (actorKey === 'system' && resolved.entry.action.category !== 'quest-action') fail('系统入口只能执行quest-action')
   if (resolved.entry.action.category === 'start-combat') {
     const modules = parseTextOpenWorldModulesV1(projection.runtimePackage)
     const startEffects = resolved.entry.action.successEffectKeys
@@ -122,11 +156,60 @@ export async function executeTextOpenWorldActionV1(input: {
   }
   const envelope: TextOpenWorldCommandEnvelopeV1 = {
     schema: 'storyforge.text-open-world.command', version: 1, commandId,
-    sessionId: input.sessionId, actorKey: 'player', actionKey: input.actionKey,
+    sessionId: input.sessionId, actorKey, actionKey: input.actionKey,
     payload: targetKey == null ? {} : { targetKey }, baseSequence: state.lastSequence,
     baseStateHash: await hashProductRuntimeStateV1(state), source,
     requestedAt: input.requestedAt ?? Date.now(),
   }
   await commitTextOpenWorldCommandV1(envelope)
   return settleAcceptedCommand(envelope)
+}
+
+async function settleReadyQuestStagesV1(sessionId: number, causeCommandId: string): Promise<void> {
+  for (let index = 0; index < 32; index += 1) {
+    const runtime = await readProductRuntimeState(sessionId)
+    const projection = parseTextOpenWorldSessionProjectionV1(runtime.textOpenWorld)
+    const modules = parseTextOpenWorldModulesV1(projection.runtimePackage)
+    const completionActionKeys = new Set(modules.quests.stages.map(stage => stage.completionActionKey).filter((key): key is string => key != null))
+    if (projection.protocol.pendingCommandId) {
+      const pendingActionKey = projection.protocol.pendingActionKey
+      const pendingTargetKey = projection.protocol.pendingTargetKey
+      if (projection.protocol.pendingActorKey !== 'system' || !pendingActionKey || !pendingTargetKey || !completionActionKeys.has(pendingActionKey)) {
+        fail('Stage结算器发现不属于自身的待结算命令')
+      }
+      const feedback = await executeTextOpenWorldActionAsV1({
+        sessionId, actionKey: pendingActionKey, targetKey: pendingTargetKey,
+        commandId: projection.protocol.pendingCommandId, source: 'system-action',
+      }, 'system')
+      if (feedback.phase !== 'terminal' || feedback.status !== 'succeeded') fail(`Stage待结算命令未成功:${pendingActionKey}:${pendingTargetKey}`)
+      continue
+    }
+    const context = deriveTextOpenWorldContextsV1(projection).action
+    context.actorKey = 'system'
+    const next = createTextOpenWorldActionRegistryV1(projection.runtimePackage).project(context)
+      .filter(item => item.available && item.action.category === 'quest-action' && completionActionKeys.has(item.action.key))
+      .flatMap(item => item.validTargetKeys.map(targetKey => ({ actionKey: item.action.key, targetKey })))
+      .sort((left, right) => left.actionKey.localeCompare(right.actionKey) || left.targetKey.localeCompare(right.targetKey))[0]
+    if (!next) return
+    const commandHash = await hashProductProductionValueV2({ causeCommandId, index, ...next })
+    const feedback = await executeTextOpenWorldActionAsV1({
+      sessionId, actionKey: next.actionKey, targetKey: next.targetKey,
+      commandId: `command.system-quest.${commandHash}`, source: 'system-action',
+    }, 'system')
+    if (feedback.phase !== 'terminal' || feedback.status !== 'succeeded') fail(`Stage系统结算未成功:${next.actionKey}:${next.targetKey}`)
+  }
+  fail('单次玩家行动触发的Stage推进超过32步')
+}
+
+export async function executeTextOpenWorldActionV1(input: ExecuteTextOpenWorldActionInputV1): Promise<TextOpenWorldFeedbackReceiptV1> {
+  const feedback = await executeTextOpenWorldActionAsV1(input, 'player')
+  if (feedback.phase === 'terminal' && feedback.status === 'succeeded' && feedback.commandId) {
+    await settleReadyQuestStagesV1(input.sessionId, feedback.commandId)
+  }
+  return feedback
+}
+
+/** Runs a governed Stage completion/quest lifecycle action owned by deterministic code. */
+export async function executeTextOpenWorldSystemQuestActionV1(input: ExecuteTextOpenWorldActionInputV1): Promise<TextOpenWorldFeedbackReceiptV1> {
+  return executeTextOpenWorldActionAsV1(input, 'system')
 }

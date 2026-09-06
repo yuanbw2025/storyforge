@@ -7,11 +7,13 @@ import type {
   TextOpenWorldEffectReceiptV1,
   TextOpenWorldEffectStateV1,
   TextOpenWorldParsedModulesV1,
+  TextOpenWorldObjectiveAuthorizationV1,
   TextOpenWorldQuestTransitionAuthorizationV1,
   TextOpenWorldQuestStatusV1,
   TextOpenWorldRuntimePackageV1,
 } from '../types'
 import { parseTextOpenWorldModulesV1 } from './modules'
+import { createTextOpenWorldObjectiveCatalogV1, type TextOpenWorldObjectiveCatalogV1 } from './objective-state'
 import {
   createTextOpenWorldItemInstanceIdV1,
   deriveTextOpenWorldEquippedItemKeysV1,
@@ -56,7 +58,7 @@ function references(modules: TextOpenWorldParsedModulesV1) {
     locations: set(modules.world.locations), travelPoints: set(modules.world.fastTravelPoints),
     respawnPoints: set(modules.world.fastTravelPoints.filter(point => point.canRespawn)), edges: set(modules.world.edges),
     factions: set(modules.actors.factions), actors: set(modules.actors.actors), regions: set(modules.world.regions),
-    encounters: set(modules.combat.encounters), knowledge: set(modules.knowledge.entries), endings: set(modules.narrative.endings),
+    encounters: set(modules.combat.encounters), knowledge: set(modules.knowledge.entries), endings: set(modules.narrative.endings), rewards: set(modules.items.rewardContracts),
     rumors: set(modules.knowledge.rumors), achievements: set(modules.knowledge.achievements), weather: set(modules['time-weather'].weather),
     questStageOwner: new Map(modules.quests.stages.map(item => [item.key, item.questKey])),
   }
@@ -80,6 +82,7 @@ function parseDefinition(value: unknown, refs: Refs, label: string): TextOpenWor
     return { key: effectKey, operation, payload: { questKey, status: enumValue(payload.status, QUEST_STATUSES, `${label}.status`), stageKey } }
   }
   if (operation === 'complete-objective') { exact(payload, ['objectiveKey'], `${label}.payload`); return { key: effectKey, operation, payload: { objectiveKey: ref(payload.objectiveKey, refs.objectives, `${label}.objectiveKey`) } } }
+  if (operation === 'claim-quest-reward') { exact(payload, ['questKey', 'rewardKey'], `${label}.payload`); return { key: effectKey, operation, payload: { questKey: ref(payload.questKey, refs.quests, `${label}.questKey`), rewardKey: ref(payload.rewardKey, refs.rewards, `${label}.rewardKey`) } } }
   if (operation === 'change-morality') { exact(payload, ['amount'], `${label}.payload`); return { key: effectKey, operation, payload: { amount: numberValue(payload.amount, `${label}.amount`) } } }
   if (operation === 'change-faction-affinity') { exact(payload, ['factionKey', 'amount'], `${label}.payload`); return { key: effectKey, operation, payload: { factionKey: ref(payload.factionKey, refs.factions, `${label}.factionKey`), amount: numberValue(payload.amount, `${label}.amount`) } } }
   if (operation === 'set-story-modifier') { exact(payload, ['actorKey', 'value'], `${label}.payload`); return { key: effectKey, operation, payload: { actorKey: ref(payload.actorKey, refs.actors, `${label}.actorKey`), value: numberValue(payload.value, `${label}.value`) } } }
@@ -111,7 +114,7 @@ function effectDomains(operation: TextOpenWorldEffectDefinitionV1['operation']):
   if (operation === 'resolve-combat') return ['combat', 'player']
   if (['change-player-resource', 'grant-experience', 'apply-status', 'remove-status', 'learn-skill', 'rest'].includes(operation)) return ['player']
   if (['grant-item', 'remove-item', 'equip-item', 'unequip-item', 'learn-recipe', 'change-currency'].includes(operation)) return ['inventory']
-  if (['transition-quest', 'complete-objective'].includes(operation)) return ['quests']
+  if (['transition-quest', 'complete-objective', 'claim-quest-reward'].includes(operation)) return ['quests']
   if (['reveal-location', 'unlock-fast-travel', 'enter-location', 'start-travel'].includes(operation)) return ['map']
   if (operation === 'advance-time') return ['time']
   if (['change-morality', 'change-faction-affinity', 'set-story-modifier'].includes(operation)) return ['relationships']
@@ -211,6 +214,24 @@ export function validateTextOpenWorldEffectStateV1(state: TextOpenWorldEffectSta
     const expectedObjectiveKeys = definition.stageKeys.flatMap(stageKey => modules.quests.stages.find(stage => stage.key === stageKey)!.objectiveKeys)
     if (canonicalProductProductionJsonV2(Object.keys(objectiveStates).sort()) !== canonicalProductProductionJsonV2([...expectedObjectiveKeys].sort())) fail(`任务实例Objective闭集不一致:${instanceKey}`)
     for (const [objectiveKey, objectiveStatus] of Object.entries(objectiveStates)) enumValue(objectiveStatus, ['inactive', 'active', 'completed', 'failed'], `quests.${instanceKey}.objective:${objectiveKey}`)
+    const orderedStages = definition.stageKeys.map(stageKey => modules.quests.stages.find(stage => stage.key === stageKey)!).sort((left, right) => left.order - right.order)
+    const currentStageIndex = currentStageKey == null ? -1 : orderedStages.findIndex(stage => stage.key === currentStageKey)
+    if (currentStageKey != null && currentStageIndex < 0) fail(`任务实例currentStage不属于定义:${instanceKey}`)
+    if (['locked', 'available', 'revealed', 'accepted'].includes(status)
+      && Object.values(objectiveStates).some(objectiveStatus => objectiveStatus !== 'inactive')) fail(`未激活任务的Objective必须全部inactive:${instanceKey}`)
+    orderedStages.forEach((stage, stageIndex) => {
+      stage.objectiveKeys.forEach(objectiveKey => {
+        const objectiveStatus = objectiveStates[objectiveKey]
+        if (currentStageIndex >= 0 && stageIndex > currentStageIndex && objectiveStatus !== 'inactive') fail(`未来Stage的Objective必须inactive:${instanceKey}:${objectiveKey}`)
+        if (['active', 'suspended'].includes(status) && stageIndex === currentStageIndex && objectiveStatus === 'inactive') fail(`当前Stage的Objective不能inactive:${instanceKey}:${objectiveKey}`)
+        if (currentStageIndex >= 0 && stageIndex < currentStageIndex && !['completed', 'failed'].includes(String(objectiveStatus))) fail(`已通过Stage的Objective必须终结:${instanceKey}:${objectiveKey}`)
+      })
+    })
+    if (status === 'completed') {
+      if (currentStageIndex !== orderedStages.length - 1) fail(`completed任务必须停在最终Stage:${instanceKey}`)
+      const required = orderedStages[currentStageIndex].objectiveKeys.filter(objectiveKey => !modules.quests.objectives.find(objective => objective.key === objectiveKey)!.optional)
+      if (required.some(objectiveKey => objectiveStates[objectiveKey] !== 'completed')) fail(`completed任务仍有未完成必需Objective:${instanceKey}`)
+    }
     const createdAt = int(instance.createdAtWorldMinute, `quests.${instanceKey}.createdAtWorldMinute`)
     const nullableMinute = (value: unknown, label: string) => value == null ? null : int(value, label)
     const offeredAt = nullableMinute(instance.offeredAtWorldMinute, `quests.${instanceKey}.offeredAtWorldMinute`)
@@ -230,7 +251,10 @@ export function validateTextOpenWorldEffectStateV1(state: TextOpenWorldEffectSta
     if (['completed', 'failed'].includes(status) && (offeredAt == null || acceptedAt == null || currentStageKey == null)) fail(`${status}任务缺少完整进行记录:${instanceKey}`)
     if (definition.timePolicy === 'waits' && deadline != null) fail(`等待玩家任务不能设置deadline:${instanceKey}`)
     if (definition.timePolicy === 'timed' && offeredAt != null && deadline == null) fail(`已揭示限时任务缺少deadline:${instanceKey}`)
-    if (instance.rewardClaimKey != null) key(instance.rewardClaimKey, `quests.${instanceKey}.rewardClaimKey`, CLAIM_KEY)
+    if (instance.rewardClaimKey != null) {
+      key(instance.rewardClaimKey, `quests.${instanceKey}.rewardClaimKey`, CLAIM_KEY)
+      if (status !== 'completed' || definition.rewardContractKey == null) fail(`只有完成且有奖励的任务能够记录领取凭证:${instanceKey}`)
+    }
     if (instance.resultTag != null) key(instance.resultTag, `quests.${instanceKey}.resultTag`)
   }
   for (const definition of modules.quests.quests.filter(item => item.instantiationPolicy === 'session-start')) {
@@ -309,6 +333,7 @@ function applyDefinitions(
   modules: TextOpenWorldParsedModulesV1,
   authorization: TextOpenWorldEffectPlanV1['authorization'],
   questTransitions: TextOpenWorldQuestTransitionCatalogV1,
+  objectives: TextOpenWorldObjectiveCatalogV1,
 ) {
   validateTextOpenWorldEffectStateV1(stateValue, modules)
   if (stateValue.appliedClaimKeys.includes(claimKey)) fail(`claim已应用:${claimKey}`)
@@ -325,6 +350,11 @@ function applyDefinitions(
       if (effect.payload.questKey !== authorization.definitionKey || effect.payload.status !== step.toStatus || effect.payload.stageKey !== step.stageKey) fail(`任务状态Effect与授权不一致:${effect.key}`)
     })
   } else if (authorization?.kind === 'quest-transition') fail('QuestTransition授权没有对应任务状态Effect')
+  const objectiveEffects = effects.filter((effect): effect is Extract<TextOpenWorldEffectDefinitionV1, { operation: 'complete-objective' }> => effect.operation === 'complete-objective')
+  if (objectiveEffects.length) {
+    if (objectiveEffects.length !== 1 || authorization?.kind !== 'quest-objective') fail('Objective状态Effect缺少唯一实例授权')
+    if (objectiveEffects[0].payload.objectiveKey !== authorization.objectiveKey) fail('Objective状态Effect与授权不一致')
+  } else if (authorization?.kind === 'quest-objective') fail('Objective授权没有对应状态Effect')
   let questTransitionsApplied = false
   for (const effect of effects) {
     switch (effect.operation) {
@@ -480,26 +510,18 @@ function applyDefinitions(
         break
       }
       case 'complete-objective': {
+        const objectiveAuthorization = authorization as TextOpenWorldObjectiveAuthorizationV1
+        const change = objectives.apply({ state, authorization: objectiveAuthorization })
+        record(changes, effect, `完成任务实例目标:${objectiveAuthorization.instanceKey}:${objectiveAuthorization.objectiveKey}`, change.before, change.after); break
+      }
+      case 'claim-quest-reward': {
         const { payload } = effect
-        const stage = modules.quests.stages.find(candidate => candidate.objectiveKeys.includes(payload.objectiveKey))!
-        const authorizedInstance = authorization?.kind === 'quest-transition'
-          ? state.quests.instancesByKey[authorization.instanceKey]
-          : null
-        const candidates = Object.values(state.quests.instancesByKey).filter(candidate => (
-          candidate.definitionKey === stage.questKey
-          && candidate.currentStageKey === stage.key
-          && ['active', 'suspended'].includes(candidate.status)
-        ))
-        const instance = authorizedInstance?.definitionKey === stage.questKey
-          && authorizedInstance.currentStageKey === stage.key
-          && ['active', 'suspended'].includes(authorizedInstance.status)
-          ? authorizedInstance
-          : candidates.length === 1
-            ? candidates[0]
-            : fail(`${effect.key}无法唯一定位任务实例`)
-        const before = instance.objectiveStatusByKey[payload.objectiveKey] ?? 'inactive'
-        if (before !== 'active') fail(`${effect.key}只能完成active目标`)
-        instance.objectiveStatusByKey[payload.objectiveKey] = 'completed'; record(changes, effect, `完成任务实例目标:${instance.instanceKey}:${payload.objectiveKey}`, before, 'completed'); break
+        if (authorization?.kind !== 'reward' || authorization.rewardKey !== payload.rewardKey) fail(`${effect.key}缺少对应Reward授权`)
+        const instance = state.quests.instancesByKey[authorization.sourceInstanceKey] ?? fail(`${effect.key}任务实例不存在`)
+        if (instance.definitionKey !== payload.questKey || instance.status !== 'completed' || instance.rewardClaimKey != null) fail(`${effect.key}任务奖励当前不可领取`)
+        const before = instance.rewardClaimKey
+        instance.rewardClaimKey = claimKey
+        record(changes, effect, `任务实例奖励已领取:${instance.instanceKey}`, before, claimKey); break
       }
       case 'change-morality': {
         const { payload } = effect; const before = state.relationships.morality; const after = before + payload.amount
@@ -636,11 +658,12 @@ export function applyTextOpenWorldEffectPlanForReplayV1(
   if (plan.schema !== 'storyforge.text-open-world.effect-plan' || plan.version !== 1) fail('EffectPlan schema/version无效')
   const modules = parseTextOpenWorldModulesV1(value); const refs = references(modules)
   const questTransitions = createTextOpenWorldQuestTransitionCatalogV1(value)
+  const objectives = createTextOpenWorldObjectiveCatalogV1(value)
   const definitions = modules.actions.effects.map((item, index) => parseDefinition(item, refs, `effects[${index}]`))
   const byKey = new Map(definitions.map(item => [item.key, item]))
   const canonical = plan.effectKeys.map(effectKey => byKey.get(effectKey) ?? fail(`Effect不存在:${effectKey}`))
   if (canonicalProductProductionJsonV2(canonical) !== canonicalProductProductionJsonV2(plan.effects)) fail('EffectPlan定义与Release不一致')
-  const applied = applyDefinitions(state, canonical, plan.claimKey, modules, plan.authorization, questTransitions)
+  const applied = applyDefinitions(state, canonical, plan.claimKey, modules, plan.authorization, questTransitions, objectives)
   if (canonicalProductProductionJsonV2(applied.changes) !== canonicalProductProductionJsonV2(plan.previewChanges)) fail('EffectPlan重放变化与预演不一致')
   return applied
 }
@@ -655,10 +678,11 @@ export interface TextOpenWorldEffectCatalogV1 {
 export function createTextOpenWorldEffectCatalogV1(value: TextOpenWorldRuntimePackageV1 | string | unknown): TextOpenWorldEffectCatalogV1 {
   const modules = parseTextOpenWorldModulesV1(value); const refs = references(modules)
   const questTransitions = createTextOpenWorldQuestTransitionCatalogV1(value)
+  const objectives = createTextOpenWorldObjectiveCatalogV1(value)
   const definitions = modules.actions.effects.map((item, index) => parseDefinition(item, refs, `effects[${index}]`)); const byKey = new Map(definitions.map(item => [item.key, item])); const clone = <T>(item: T): T => structuredClone(item)
   const plan = async (input: { effectKeys: string[]; claimKey: string; state: TextOpenWorldEffectStateV1; authorization?: TextOpenWorldEffectPlanV1['authorization'] }): Promise<TextOpenWorldEffectPlanV1> => {
     const claimKey = key(input.claimKey, 'claimKey', CLAIM_KEY); if (!Array.isArray(input.effectKeys) || new Set(input.effectKeys).size !== input.effectKeys.length) fail('effectKeys必须是无重复数组')
-    const effects = input.effectKeys.map(effectKey => byKey.get(key(effectKey, 'effectKey')) ?? fail(`Effect不存在:${effectKey}`)); const baseStateHash = await hashProductProductionValueV2(input.state); const preview = applyDefinitions(input.state, effects, claimKey, modules, input.authorization ?? null, questTransitions); const resultingStateHash = await hashProductProductionValueV2(preview.state); const impactDomains = [...new Set(effects.flatMap(effect => effectDomains(effect.operation)))]
+    const effects = input.effectKeys.map(effectKey => byKey.get(key(effectKey, 'effectKey')) ?? fail(`Effect不存在:${effectKey}`)); const baseStateHash = await hashProductProductionValueV2(input.state); const preview = applyDefinitions(input.state, effects, claimKey, modules, input.authorization ?? null, questTransitions, objectives); const resultingStateHash = await hashProductProductionValueV2(preview.state); const impactDomains = [...new Set(effects.flatMap(effect => effectDomains(effect.operation)))]
     const body: Omit<TextOpenWorldEffectPlanV1, 'planHash'> = {
       schema: 'storyforge.text-open-world.effect-plan', version: 1, claimKey, baseStateHash, resultingStateHash,
       effectKeys: [...input.effectKeys], effects: clone(effects), authorization: clone(input.authorization ?? null),
@@ -675,7 +699,7 @@ export function createTextOpenWorldEffectCatalogV1(value: TextOpenWorldRuntimePa
       if (!isSha256Hash(planHash) || await hashProductProductionValueV2(planBody(body)) !== planHash) fail('EffectPlan planHash无效')
       const baseStateHash = await hashProductProductionValueV2(input.state); if (baseStateHash !== input.plan.baseStateHash) fail('EffectPlan基线状态已变化')
       const canonicalEffects = input.plan.effectKeys.map(effectKey => byKey.get(effectKey) ?? fail(`Effect不存在:${effectKey}`)); if (canonicalProductProductionJsonV2(canonicalEffects) !== canonicalProductProductionJsonV2(input.plan.effects)) fail('EffectPlan定义与Release不一致')
-      const applied = applyDefinitions(input.state, canonicalEffects, input.plan.claimKey, modules, input.plan.authorization, questTransitions); const resultingStateHash = await hashProductProductionValueV2(applied.state)
+      const applied = applyDefinitions(input.state, canonicalEffects, input.plan.claimKey, modules, input.plan.authorization, questTransitions, objectives); const resultingStateHash = await hashProductProductionValueV2(applied.state)
       if (resultingStateHash !== input.plan.resultingStateHash || canonicalProductProductionJsonV2(applied.changes) !== canonicalProductProductionJsonV2(input.plan.previewChanges)) fail('EffectPlan预演与应用结果不一致')
       return { state: applied.state, receipt: { schema: 'storyforge.text-open-world.effect-receipt', version: 1, claimKey: input.plan.claimKey, planHash: input.plan.planHash, baseStateHash, resultingStateHash, impactDomains: [...input.plan.impactDomains], changes: clone(applied.changes) } }
     },

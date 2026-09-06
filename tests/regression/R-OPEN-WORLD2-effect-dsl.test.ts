@@ -99,7 +99,6 @@ describe('Text Open World vNext · typed Effect DSL and atomic EffectPlan', () =
 
   it('一个EffectPlan可以原子推进任务、地图、关系、战斗、世界与结局', async () => {
     const effects: TextOpenWorldEffectDefinitionV1[] = [
-      { key: 'effect.complete-main-objective', operation: 'complete-objective', payload: { objectiveKey: 'objective.main.1' } },
       { key: 'effect.morality', operation: 'change-morality', payload: { amount: 5 } },
       { key: 'effect.affinity', operation: 'change-faction-affinity', payload: { factionKey: 'faction.canal-keepers', amount: 10 } },
       { key: 'effect.story-modifier', operation: 'set-story-modifier', payload: { actorKey: 'actor.caretaker', value: 5 } },
@@ -120,7 +119,6 @@ describe('Text Open World vNext · typed Effect DSL and atomic EffectPlan', () =
     const catalog = createTextOpenWorldEffectCatalogV1(addEffects(effects))
     const quests = state().quests
     const mainInstanceKey = Object.keys(quests.instancesByKey)[0]
-    quests.instancesByKey[mainInstanceKey].objectiveStatusByKey['objective.main.1'] = 'active'
     const before = state({ quests })
     const authorization = createTextOpenWorldQuestTransitionCatalogV1(createTextOpenWorldVNextFixture()).prepare({
       instanceKey: mainInstanceKey,
@@ -140,7 +138,7 @@ describe('Text Open World vNext · typed Effect DSL and atomic EffectPlan', () =
 
     expect(plan.impactDomains).toEqual(expect.arrayContaining(['quests', 'map', 'time', 'relationships', 'combat', 'actors', 'world', 'knowledge', 'endings']))
     expect(after).toMatchObject({
-      quests: { instancesByKey: { [mainInstanceKey]: { definitionKey: 'quest.main.1', status: 'active', objectiveStatusByKey: { 'objective.main.1': 'completed' } } } },
+      quests: { instancesByKey: { [mainInstanceKey]: { definitionKey: 'quest.main.1', status: 'active', objectiveStatusByKey: { 'objective.main.1': 'active' } } } },
       map: { currentLocationKey: 'location.ridge-channel', travel: null }, time: { worldMinute: 540 },
       relationships: { morality: 5, factionAffinityByKey: { 'faction.canal-keepers': 10 }, storyModifierByActorKey: { 'actor.caretaker': 5 } },
       combat: { encounterKey: 'encounter.ridge-jackal', status: 'victory' },
@@ -204,6 +202,7 @@ describe('Text Open World vNext · typed Effect DSL and atomic EffectPlan', () =
       { key: 'effect.remove-rested', operation: 'remove-status', payload: { statusKey: 'status.rested' } },
     )
     quests.quests.find((quest: any) => quest.key === 'quest.template.supplies').rewardEffectKeys.push('effect.learn-channel-listening')
+    ;(fixture.modules.items.payload as any).rewardContracts.find((reward: any) => reward.key === 'reward.quest-supplies').effectKeys.push('effect.learn-channel-listening')
     const catalog = createTextOpenWorldEffectCatalogV1(fixture)
 
     const learnedPlan = await catalog.plan({ effectKeys: ['effect.learn-channel-listening'], claimKey: 'claim.learn', state: state() })

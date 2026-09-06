@@ -1,5 +1,5 @@
 import type { TextOpenWorldActionModuleV1 } from './text-open-world-modules'
-import type { TextOpenWorldQuestStatusV1 } from './text-open-world-condition'
+import type { TextOpenWorldObjectiveStatusV1, TextOpenWorldQuestStatusV1 } from './text-open-world-condition'
 
 export type TextOpenWorldActionDefinitionV1 = TextOpenWorldActionModuleV1['actions'][number]
 export type TextOpenWorldActionTargetScopeV1 = Exclude<TextOpenWorldActionDefinitionV1['targetScope'], 'none'>
@@ -34,6 +34,8 @@ export interface TextOpenWorldActionProjectionContextV1 {
   questDefinitionKeyByInstanceKey: Record<string, string>
   questStatusByInstanceKey: Record<string, TextOpenWorldQuestStatusV1>
   questStageKeyByInstanceKey: Record<string, string | null>
+  questObjectiveStatusByInstanceKey: Record<string, Record<string, TextOpenWorldObjectiveStatusV1>>
+  questRewardClaimKeyByInstanceKey: Record<string, string | null>
 }
 
 export type TextOpenWorldActionUnavailableCodeV1 =

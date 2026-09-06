@@ -36,6 +36,7 @@ describe('Text Open World vNext · quest lifecycle player UI', () => {
     ordinary.status = 'active'
     ordinary.acceptedAtWorldMinute = 480
     ordinary.currentStageKey = 'quest-stage.template.supplies'
+    ordinary.objectiveStatusByKey['objective.template.supplies'] = 'active'
     projection.state.quests.instancesByKey[ordinary.instanceKey] = ordinary
     projection.director.generatedQuestInstanceCount = 1
     projection.director.revealedQuestInstanceKeys = [ordinary.instanceKey]
@@ -54,6 +55,8 @@ describe('Text Open World vNext · quest lifecycle player UI', () => {
     expect(host.textContent).toContain('断流的盐渠')
     expect(host.textContent).toContain('短缺物资')
     expect(host.textContent).toContain('进行中')
+    expect(host.textContent).toContain('当前阶段：搜集物资')
+    expect(host.textContent).toContain('寻找盐晶')
 
     const abandon = Array.from(host.querySelectorAll('button')).find(button => button.textContent?.includes('放弃物资任务'))
     expect(abandon).toBeTruthy()
@@ -63,6 +66,21 @@ describe('Text Open World vNext · quest lifecycle player UI', () => {
     const confirm = Array.from(host.querySelectorAll('button')).find(button => button.textContent === '确认执行')
     await act(async () => { confirm!.click(); await new Promise(resolve => setTimeout(resolve, 0)) })
     expect(executeVNextAction).toHaveBeenCalledWith('action.abandon-supplies', ordinary.instanceKey, undefined, true)
+
+    executeVNextAction.mockClear()
+    ordinary.status = 'completed'
+    ordinary.terminalAtWorldMinute = 480
+    ordinary.objectiveStatusByKey['objective.template.supplies'] = 'completed'
+    projection.director.activeQuestInstanceKeys = []
+    await act(async () => {
+      useTextOpenWorldPlayerStore.setState({ runtimeState: { ...structuredClone(EMPTY_PRODUCT_RUNTIME_STATE), textOpenWorld: projection } })
+      await new Promise(resolve => setTimeout(resolve, 0))
+    })
+    expect(host.textContent).toContain('奖励待领取')
+    const claim = Array.from(host.querySelectorAll('button')).find(button => button.textContent?.includes('领取物资奖励'))
+    expect(claim).toBeTruthy()
+    await act(async () => { claim!.click(); await new Promise(resolve => setTimeout(resolve, 0)) })
+    expect(executeVNextAction).toHaveBeenCalledWith('action.claim-supplies-reward', ordinary.instanceKey)
 
     projection.state.quests.instancesByKey['quest-instance.12.quest.main.1.release.13.session-start'].status = 'available'
     projection.state.quests.instancesByKey['quest-instance.12.quest.main.1.release.13.session-start'].offeredAtWorldMinute = null

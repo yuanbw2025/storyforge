@@ -120,13 +120,13 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
       }],
     },
     quests: {
-      version: 1,
+      version: 2,
       quests: [
         {
           key: 'quest.main.1', type: 'mainline', ownerKind: 'actor', ownerKey: 'actor.caretaker', title: '断流的盐渠',
           description: '检查盐港内渠并追查上游。', storylineKey: 'story.main', stageKeys: ['quest-stage.main.1'],
           regionKeys: ['region.salt-port', 'region.ridge'],
-          prerequisiteConditionKeys: [], rewardEffectKeys: ['effect.reward-experience'], lifecyclePolicy: 'protected-wait',
+          prerequisiteConditionKeys: [], rewardEffectKeys: ['effect.claim-main-reward', 'effect.reward-experience'], rewardContractKey: 'reward.quest-main', claimActionKey: 'action.claim-main-reward', lifecyclePolicy: 'protected-wait',
           timePolicy: 'waits', expirationMinutes: null, repeatable: false,
           instantiationPolicy: 'session-start', initialStatus: 'revealed', estimatedMinutes: 30, tags: ['mainline', 'water-crisis'],
         },
@@ -134,18 +134,18 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
           key: 'quest.template.supplies', type: 'template', ownerKind: 'region', ownerKey: 'region.salt-port', title: '短缺物资',
           description: '为当地居民寻找临时短缺的物资。', storylineKey: null, stageKeys: ['quest-stage.template.supplies'],
           regionKeys: ['region.salt-port'],
-          prerequisiteConditionKeys: [], rewardEffectKeys: ['effect.reward-currency'], lifecyclePolicy: 'abandon-terminal',
+          prerequisiteConditionKeys: [], rewardEffectKeys: ['effect.claim-supplies-reward', 'effect.reward-currency'], rewardContractKey: 'reward.quest-supplies', claimActionKey: 'action.claim-supplies-reward', lifecyclePolicy: 'abandon-terminal',
           timePolicy: 'timed', expirationMinutes: 1440, repeatable: true,
           instantiationPolicy: 'director', initialStatus: 'locked', estimatedMinutes: 10, tags: ['regional', 'supplies'],
         },
       ],
       stages: [
-        { key: 'quest-stage.main.1', questKey: 'quest.main.1', order: 1, title: '检查内渠', objectiveKeys: ['objective.main.1'], completionConditionKeys: ['condition.always'] },
-        { key: 'quest-stage.template.supplies', questKey: 'quest.template.supplies', order: 1, title: '搜集物资', objectiveKeys: ['objective.template.supplies'], completionConditionKeys: ['condition.always'] },
+        { key: 'quest-stage.main.1', questKey: 'quest.main.1', order: 1, title: '检查内渠', objectiveKeys: ['objective.main.1'], completionConditionKeys: ['condition.always'], completionActionKey: 'action.complete-main-quest' },
+        { key: 'quest-stage.template.supplies', questKey: 'quest.template.supplies', order: 1, title: '搜集物资', objectiveKeys: ['objective.template.supplies'], completionConditionKeys: ['condition.always'], completionActionKey: 'action.complete-supplies-quest' },
       ],
       objectives: [
-        { key: 'objective.main.1', stageKey: 'quest-stage.main.1', title: '检查盐港内渠', optional: false, actionKeys: ['action.investigate-channel'] },
-        { key: 'objective.template.supplies', stageKey: 'quest-stage.template.supplies', title: '寻找盐晶', optional: false, actionKeys: ['action.investigate-channel'] },
+        { key: 'objective.main.1', stageKey: 'quest-stage.main.1', title: '检查盐港内渠', optional: false, actionKeys: ['action.investigate-channel', 'action.complete-main-objective'] },
+        { key: 'objective.template.supplies', stageKey: 'quest-stage.template.supplies', title: '寻找盐晶', optional: false, actionKeys: ['action.investigate-channel', 'action.complete-supplies-objective'] },
       ],
     },
     actions: {
@@ -176,6 +176,12 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
         { key: 'effect.accept-supplies', operation: 'transition-quest', payload: { questKey: 'quest.template.supplies', status: 'accepted', stageKey: null } },
         { key: 'effect.activate-supplies', operation: 'transition-quest', payload: { questKey: 'quest.template.supplies', status: 'active', stageKey: 'quest-stage.template.supplies' } },
         { key: 'effect.abandon-supplies', operation: 'transition-quest', payload: { questKey: 'quest.template.supplies', status: 'abandoned', stageKey: 'quest-stage.template.supplies' } },
+        { key: 'effect.complete-main-objective', operation: 'complete-objective', payload: { objectiveKey: 'objective.main.1' } },
+        { key: 'effect.complete-supplies-objective', operation: 'complete-objective', payload: { objectiveKey: 'objective.template.supplies' } },
+        { key: 'effect.complete-main-quest', operation: 'transition-quest', payload: { questKey: 'quest.main.1', status: 'completed', stageKey: 'quest-stage.main.1' } },
+        { key: 'effect.complete-supplies-quest', operation: 'transition-quest', payload: { questKey: 'quest.template.supplies', status: 'completed', stageKey: 'quest-stage.template.supplies' } },
+        { key: 'effect.claim-main-reward', operation: 'claim-quest-reward', payload: { questKey: 'quest.main.1', rewardKey: 'reward.quest-main' } },
+        { key: 'effect.claim-supplies-reward', operation: 'claim-quest-reward', payload: { questKey: 'quest.template.supplies', rewardKey: 'reward.quest-supplies' } },
       ],
       actions: [{
         key: 'action.investigate-channel', category: 'investigate', label: '检查盐渠',
@@ -198,6 +204,36 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
         actorScope: 'player', targetScope: 'quest', locationKeys: [], requirementConditionKeys: [], costEffectKeys: [],
         successEffectKeys: ['effect.abandon-supplies'], failureEffectKeys: [], timeCostMinutes: 0,
         confirmationPolicy: 'always', repeatPolicy: 'repeatable', cooldownMinutes: null,
+      }, {
+        key: 'action.complete-main-objective', category: 'objective-action', label: '完成盐渠检查', description: '提交盐渠检查结果。',
+        actorScope: 'player', targetScope: 'quest', locationKeys: ['location.salt-port'], requirementConditionKeys: [], costEffectKeys: [],
+        successEffectKeys: ['effect.complete-main-objective'], failureEffectKeys: [], timeCostMinutes: 0,
+        confirmationPolicy: 'never', repeatPolicy: 'repeatable', cooldownMinutes: null,
+      }, {
+        key: 'action.complete-supplies-objective', category: 'objective-action', label: '交付短缺物资', description: '提交本次物资委托所需的盐晶。',
+        actorScope: 'player', targetScope: 'quest', locationKeys: ['location.salt-port'], requirementConditionKeys: [], costEffectKeys: [],
+        successEffectKeys: ['effect.complete-supplies-objective'], failureEffectKeys: [], timeCostMinutes: 0,
+        confirmationPolicy: 'never', repeatPolicy: 'repeatable', cooldownMinutes: null,
+      }, {
+        key: 'action.complete-main-quest', category: 'quest-action', label: '结算主线阶段', description: '在目标满足后由系统完成主线任务。',
+        actorScope: 'system', targetScope: 'quest', locationKeys: [], requirementConditionKeys: ['condition.always'], costEffectKeys: [],
+        successEffectKeys: ['effect.complete-main-quest'], failureEffectKeys: [], timeCostMinutes: 0,
+        confirmationPolicy: 'never', repeatPolicy: 'repeatable', cooldownMinutes: null,
+      }, {
+        key: 'action.complete-supplies-quest', category: 'quest-action', label: '结算物资任务', description: '在目标满足后由系统完成物资任务。',
+        actorScope: 'system', targetScope: 'quest', locationKeys: [], requirementConditionKeys: ['condition.always'], costEffectKeys: [],
+        successEffectKeys: ['effect.complete-supplies-quest'], failureEffectKeys: [], timeCostMinutes: 0,
+        confirmationPolicy: 'never', repeatPolicy: 'repeatable', cooldownMinutes: null,
+      }, {
+        key: 'action.claim-main-reward', category: 'claim-reward', label: '领取主线奖励', description: '领取断流盐渠任务奖励。',
+        actorScope: 'player', targetScope: 'quest', locationKeys: [], requirementConditionKeys: [], costEffectKeys: [],
+        successEffectKeys: [], failureEffectKeys: [], timeCostMinutes: 0,
+        confirmationPolicy: 'never', repeatPolicy: 'repeatable', cooldownMinutes: null,
+      }, {
+        key: 'action.claim-supplies-reward', category: 'claim-reward', label: '领取物资奖励', description: '领取本次物资委托奖励。',
+        actorScope: 'player', targetScope: 'quest', locationKeys: [], requirementConditionKeys: [], costEffectKeys: [],
+        successEffectKeys: [], failureEffectKeys: [], timeCostMinutes: 0,
+        confirmationPolicy: 'never', repeatPolicy: 'repeatable', cooldownMinutes: null,
       }, {
         key: 'action.rest', category: 'rest', label: '休息', description: '休息并恢复生命与技能资源。',
         actorScope: 'player', targetScope: 'none', locationKeys: ['location.salt-port'], requirementConditionKeys: [], costEffectKeys: [],
@@ -309,6 +345,12 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
         },
       ],
       rewardContracts: [{
+        key: 'reward.quest-main', title: '断流盐渠任务奖励', sourceKind: 'quest', claimPolicy: 'once-per-source',
+        expectedMinutes: 30, budgetClass: 'standard', conditionKeys: [], effectKeys: ['effect.claim-main-reward', 'effect.reward-experience'], dropTableKeys: [],
+      }, {
+        key: 'reward.quest-supplies', title: '短缺物资任务奖励', sourceKind: 'quest', claimPolicy: 'once-per-source',
+        expectedMinutes: 10, budgetClass: 'minor', conditionKeys: [], effectKeys: ['effect.claim-supplies-reward', 'effect.reward-currency'], dropTableKeys: [],
+      }, {
         key: 'reward.ridge-jackal', title: '渠口伏兽奖励', sourceKind: 'combat', claimPolicy: 'once-per-source',
         expectedMinutes: 10, budgetClass: 'minor', conditionKeys: [], effectKeys: ['effect.reward-experience'], dropTableKeys: ['drop.salt-jackal'],
       }],
@@ -424,7 +466,7 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
     },
     calibration: structuredClone(DEFAULT_TEXT_OPEN_WORLD_CALIBRATION_V1),
     modules: Object.fromEntries(TEXT_OPEN_WORLD_RUNTIME_MODULE_KEYS_V1.map(moduleKey => [moduleKey, {
-      moduleKey, schemaVersion: 1, contentHash: SOURCE_HASH,
+      moduleKey, schemaVersion: payloads[moduleKey].version, contentHash: SOURCE_HASH,
       dependencies: MODULE_DEPENDENCIES[moduleKey] ?? [], payload: payloads[moduleKey],
     }])) as TextOpenWorldRuntimePackageV1['modules'],
     mediaManifest: { version: 1, slotKeys: ['map.world'], requiredSlotKeys: ['map.world'] },

@@ -43,7 +43,7 @@ describe('Text Open World vNext · reward contracts, drops and unique claims', (
 
   it('任一奖励越界会使经验、货币和掉落全部不结算', async () => {
     const fixture = createTextOpenWorldVNextFixture()
-    const reward = (fixture.modules.items.payload as any).rewardContracts[0]
+    const reward = (fixture.modules.items.payload as any).rewardContracts.find((item: any) => item.sourceKind === 'combat')
     reward.effectKeys.push('effect.reward-currency')
     const rewards = createTextOpenWorldRewardCatalogV1(fixture)
     const preparation = rewards.prepare({ rewardKey: reward.key, sourceInstanceKey: 'encounter.atomic.1' })
@@ -76,13 +76,14 @@ describe('Text Open World vNext · reward contracts, drops and unique claims', (
       resourceCost: 1, cooldownTurns: 0, effectKeys: [],
     })
     quests.quests.find((quest: any) => quest.key === 'quest.template.supplies').rewardEffectKeys.push('effect.reward-learn-channel')
+    ;(fixture.modules.items.payload as any).rewardContracts.find((reward: any) => reward.key === 'reward.quest-supplies').effectKeys.push('effect.reward-learn-channel')
     crafting.recipes.push({
       key: 'recipe.salt-poultice', title: '盐敷剂', description: '以盐晶制作的外敷剂。', learnedByDefault: false,
       stationLocationKeys: ['location.salt-port'], ingredients: [{ itemKey: 'item.salt-crystal', quantity: 1 }],
       outputs: [{ itemKey: 'item.brine-tonic', quantity: 1 }], timeCostMinutes: 15,
     })
     ;(fixture.modules.items.payload as any).rewardContracts.push({
-      key: 'reward.milestone', title: '里程碑综合奖励', sourceKind: 'quest', claimPolicy: 'once-per-source',
+      key: 'reward.milestone', title: '里程碑综合奖励', sourceKind: 'system', claimPolicy: 'once-per-source',
       expectedMinutes: 60, budgetClass: 'major', conditionKeys: [], dropTableKeys: [],
       effectKeys: [
         'effect.reward-experience', 'effect.reward-currency', 'effect.reward-seal', 'effect.reward-learn-channel',
@@ -109,7 +110,7 @@ describe('Text Open World vNext · reward contracts, drops and unique claims', (
     const duplicate = createTextOpenWorldVNextFixture()
     ;(duplicate.modules.actions.payload as any).effects.push({ key: 'effect.reward-seal', operation: 'grant-item', payload: { itemKey: 'item.canal-seal', quantity: 1 } })
     ;(duplicate.modules.items.payload as any).rewardContracts.push({
-      key: 'reward.seal', title: '守渠印奖励', sourceKind: 'quest', claimPolicy: 'once-per-source', expectedMinutes: 10,
+      key: 'reward.seal', title: '守渠印奖励', sourceKind: 'system', claimPolicy: 'once-per-source', expectedMinutes: 10,
       budgetClass: 'standard', conditionKeys: [], effectKeys: ['effect.reward-seal'], dropTableKeys: [],
     })
     const rewards = createTextOpenWorldRewardCatalogV1(duplicate)
@@ -119,12 +120,12 @@ describe('Text Open World vNext · reward contracts, drops and unique claims', (
     await expect(rewards.resolve({ preparation, evidence: [], state })).rejects.toThrow('重复授予唯一物品')
 
     const conditioned = createTextOpenWorldVNextFixture()
-    ;(conditioned.modules.items.payload as any).rewardContracts[0].conditionKeys = ['condition.always']
+    ;(conditioned.modules.items.payload as any).rewardContracts.find((reward: any) => reward.key === 'reward.ridge-jackal').conditionKeys = ['condition.always']
     expect(() => createTextOpenWorldRewardCatalogV1(conditioned).prepare({ rewardKey: 'reward.ridge-jackal', sourceInstanceKey: 'encounter.condition.1' }))
       .toThrow('条件未满足')
 
     const illegal = createTextOpenWorldVNextFixture()
-    ;(illegal.modules.items.payload as any).rewardContracts[0].effectKeys = ['effect.consume-brine-tonic']
+    ;(illegal.modules.items.payload as any).rewardContracts.find((reward: any) => reward.key === 'reward.ridge-jackal').effectKeys = ['effect.consume-brine-tonic']
     expect(() => createTextOpenWorldRewardCatalogV1(illegal)).toThrow('非奖励Effect')
 
     const mismatchedDrop = createTextOpenWorldVNextFixture()

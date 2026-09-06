@@ -15,6 +15,7 @@ import type {
   TextOpenWorldRandomEvidenceV1,
   TextOpenWorldRandomRequestV1,
   TextOpenWorldRandomResolvedEventPayloadV1,
+  TextOpenWorldObjectiveAuthorizationV1,
   TextOpenWorldQuestTransitionAuthorizationV1,
   TextOpenWorldRulesetStampV1,
   TextOpenWorldRewardAuthorizationV1,
@@ -118,11 +119,21 @@ function parseAuthorization(value: unknown, label: string): TextOpenWorldEffectP
   if (value == null) return null
   const raw = row(value, label)
   if (raw.kind === 'reward') return parseRewardAuthorization(value, label)
+  if (raw.kind === 'quest-objective') {
+    exact(raw, ['kind', 'instanceKey', 'definitionKey', 'stageKey', 'objectiveKey', 'worldMinute', 'fromStatus', 'toStatus'], label)
+    if (raw.fromStatus !== 'active' || raw.toStatus !== 'completed') fail(`${label}.objective状态边无效`)
+    return {
+      kind: 'quest-objective', instanceKey: token(raw.instanceKey, `${label}.instanceKey`),
+      definitionKey: token(raw.definitionKey, `${label}.definitionKey`), stageKey: token(raw.stageKey, `${label}.stageKey`),
+      objectiveKey: token(raw.objectiveKey, `${label}.objectiveKey`), worldMinute: integer(raw.worldMinute, `${label}.worldMinute`),
+      fromStatus: 'active', toStatus: 'completed',
+    } satisfies TextOpenWorldObjectiveAuthorizationV1
+  }
   if (raw.kind !== 'quest-transition') fail(`${label}.kind无效`)
   exact(raw, ['kind', 'instanceKey', 'definitionKey', 'worldMinute', 'transitions'], label)
   if (!Array.isArray(raw.transitions) || raw.transitions.length < 1 || raw.transitions.length > 8) fail(`${label}.transitions无效`)
   const statuses = new Set(['locked', 'available', 'revealed', 'accepted', 'active', 'suspended', 'completed', 'failed', 'expired', 'abandoned', 'withdrawn'])
-  const intents = new Set(['unlock', 'reveal', 'accept', 'activate', 'suspend', 'resume', 'complete', 'fail', 'abandon', 'expire', 'withdraw', 'reoffer'])
+  const intents = new Set(['unlock', 'reveal', 'accept', 'activate', 'suspend', 'resume', 'advance-stage', 'complete', 'fail', 'abandon', 'expire', 'withdraw', 'reoffer'])
   return {
     kind: 'quest-transition',
     instanceKey: token(raw.instanceKey, `${label}.instanceKey`),
