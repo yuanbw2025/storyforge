@@ -1,3 +1,4 @@
+import { Link } from 'react-router'
 import { useEffect, useMemo, useState } from 'react'
 import { Dices, ShieldCheck, Trash2 } from 'lucide-react'
 import type { OnlineRoomJoinHandoffV1 } from '../../lib/online/http-transport'
@@ -5,6 +6,7 @@ import type { Project, WorkspaceScope } from '../../lib/types'
 import { useTtrpgRuntimePlayerStore } from '../../stores/ttrpg-runtime-player'
 import { useDialog } from '../shared/Dialog'
 import TtrpgCampaignGuide from './TtrpgCampaignGuide'
+import TtrpgPlayTable from './TtrpgPlayTable'
 
 /**
  * Product-owned TTRPG runtime surface.
@@ -24,6 +26,7 @@ export default function TtrpgRuntimePanel(props: {
   const store = useTtrpgRuntimePlayerStore()
   const dialog = useDialog()
   const [actionError, setActionError] = useState('')
+  const [toolsOpen, setToolsOpen] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -72,11 +75,11 @@ export default function TtrpgRuntimePanel(props: {
     <aside className="max-h-[28rem] w-full shrink-0 overflow-y-auto border-b border-border bg-bg-surface p-4 lg:max-h-none lg:w-72 lg:border-b-0 lg:border-r">
       <div className="mb-4">
         <div className="mb-1 flex items-center gap-2"><Dices className="h-4 w-4 text-accent" /><h2 className="font-semibold text-text-primary">跑团存档</h2></div>
-        <p className="text-xs leading-relaxed text-text-muted">这里只显示从 ProductRelease 或 Build Preview 创建的跑团实例。世界草稿不能在这里直接运行。</p>
+        <p className="text-xs leading-relaxed text-text-muted">选择一个存档，继续你的冒险。每个存档独立保存角色、线索与选择。</p>
       </div>
       <div className="mb-4 rounded-lg border border-accent/30 bg-accent/5 p-3 text-xs leading-5 text-text-secondary" data-testid="formal-runtime-release-only">
         <div className="flex items-center gap-2 font-medium text-text-primary"><ShieldCheck className="h-3.5 w-3.5 text-accent" />产品来源已锁定</div>
-        <p className="mt-1">运行只读冻结产品包；会话、媒资状态和后续演化归跑团产品实例，不回写世界引擎。</p>
+        <p className="mt-1">游戏内容已固定，冒险进度自动保存在当前设备。</p>
       </div>
       <div className="space-y-1">
         {sessions.map(session => <button key={session.id} onClick={() => void store.select(session.id!)} className={`w-full rounded px-3 py-2 text-left ${session.id === store.selectedSessionId ? 'bg-accent/10 text-accent' : 'text-text-secondary hover:bg-bg-hover'}`}>
@@ -93,7 +96,11 @@ export default function TtrpgRuntimePanel(props: {
           <button onClick={() => void remove()} className="rounded p-2 text-danger hover:bg-danger/10" title="删除跑团存档" aria-label={`删除跑团存档 ${selected.title}`}><Trash2 className="h-4 w-4" /></button>
         </header>
         {(store.error || actionError) && <div className="rounded border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">{actionError || store.error}</div>}
-        <TtrpgCampaignGuide
+        {!props.initialOnlineHandoff && <TtrpgPlayTable key={selected.id} session={selected} state={store.runtimeState}
+          scope={props.workspaceScope} onChanged={() => store.select(selected.id!)} onCheckpoint={name => store.checkpoint(name)} />}
+        <Link to={`/play/session/${selected.id}`} className="inline-flex text-sm text-accent">打开沉浸游玩页面 →</Link>
+        <button className="text-xs text-text-muted underline underline-offset-4" onClick={() => setToolsOpen(value => !value)}>{toolsOpen ? '收起主持工具' : '主持、联机与存档工具'}</button>
+        {(toolsOpen || props.initialOnlineHandoff) && <TtrpgCampaignGuide
           session={selected}
           state={store.runtimeState}
           workspaceScope={props.workspaceScope}
@@ -104,7 +111,7 @@ export default function TtrpgRuntimePanel(props: {
           onChanged={() => store.select(selected.id!)}
           initialOnlineHandoff={props.initialOnlineHandoff}
           onOnlineHandoffConsumed={props.onOnlineHandoffConsumed}
-        />
+        />}
       </div> : <div className="rounded border border-danger/30 bg-danger/10 p-4 text-sm text-danger">该存档缺少正式跑团产品状态，已被拒绝进入运行界面。请从 ProductRelease 重新创建实例。</div>}
     </main>
   </div>

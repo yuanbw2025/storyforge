@@ -36,6 +36,7 @@
 - `docs/products/INDEPENDENT-CREATION.md`
 - `docs/products/WORLD-ENGINE.md`
 - `docs/products/UPPER-PRODUCTS.md`
+- `docs/products/TTRPG-AI-KP.md`：跑团 AI KP 专项产品契约。
 - `docs/ROADMAP.md`
 - `docs/roadmap/README.md`
 - `docs/roadmap/CAPABILITY-BASELINE.md`
