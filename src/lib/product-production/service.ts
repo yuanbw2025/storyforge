@@ -633,6 +633,29 @@ export async function resolveTextAdventureSourceDecisionV1(input: {
   if (!receipt.ok) throw new Error(String(receipt.result.message ?? receipt.errorCode ?? '来源决策失败'))
 }
 
+export async function retryTextAdventureSourceReviewV1(input: {
+  scope: WorkspaceScope
+  details: ProductProductionDetailsV1
+}): Promise<void> {
+  if (!input.details.build || !isTextAdventureSourceDecisionBlockerV1(input.details)) {
+    throw new Error('[product-production-service] 当前 Build 没有可重新审查的来源结论')
+  }
+  const receipt = await executeProductProductionCommand({
+    scope: input.scope,
+    productionId: input.details.production.id!,
+    command: {
+      type: 'resolve-blocker', commandId: commandId('source-review-retry'),
+      expectedStateRevision: input.details.production.stateRevision,
+      blockerKey: 'content.source-sufficiency',
+      resolution: {
+        action: 'retry',
+        note: '作者拒绝当前来源编辑的阻断归因；保持 WorldRelease 与 Brief 不变，要求按产品私域边界重新审查。',
+      },
+    },
+  })
+  if (!receipt.ok) throw new Error(String(receipt.result.message ?? receipt.errorCode ?? '来源重新审查失败'))
+}
+
 export async function resolveTextAdventureMediaAnchorDecisionV1(input: {
   scope: WorkspaceScope
   details: ProductProductionDetailsV1

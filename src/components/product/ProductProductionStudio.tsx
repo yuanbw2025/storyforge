@@ -23,6 +23,7 @@ import {
   readProductProductionProgressV1,
   readTextAdventureMediaAssetBytesV1,
   reviseTextAdventureMediaAssetV1,
+  retryTextAdventureSourceReviewV1,
   retryProductProductionBlockerV1,
   resolveTextAdventureMediaAnchorDecisionV1,
   resolveTextAdventureSourceDecisionV1,
@@ -999,6 +1000,14 @@ export default function ProductProductionStudio(props: {
       : '当前 Build 已取消；世界版本、旧 Build 与已发布内容未被修改。')
   }, '处理来源作者决策')
 
+  const retrySourceReview = () => run(async () => {
+    if (!details) throw new Error('缺少 Production。')
+    const productionId = details.production.id!
+    await retryTextAdventureSourceReviewV1({ scope: props.scope, details })
+    await refresh(productionId)
+    setMessage('当前阻断归因已被作者退回；来源编辑将按世界/产品私域边界重新审查，原 WorldRelease 与 Brief 保持不变。')
+  }, '重新审查来源判断')
+
   const resolveMediaAnchorDecision = (
     action: 'confirm-character-anchors' | 'cancel',
   ) => run(async () => {
@@ -1244,6 +1253,7 @@ export default function ProductProductionStudio(props: {
             {details.production.status === 'brief-ready' && <button disabled={busy || productionRunning || authorizationReadiness?.ready !== true} onClick={authorize} className="flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white disabled:opacity-40"><ShieldCheck className="h-3.5 w-3.5" />作者授权并开始自动制作</button>}
             {details.build && ['authorized', 'building'].includes(details.build.status) && !productionRunning && <button disabled={busy} onClick={build} className="flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white"><PackageCheck className="h-3.5 w-3.5" />继续自动制作</button>}
             {sourceDecision?.decision === 'ready-with-private-additions' && <button disabled={busy || productionRunning} onClick={() => resolveSourceDecision('accept-product-private-expansion')} className="flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white disabled:opacity-40"><ShieldCheck className="h-3.5 w-3.5" />接受私域补充并继续</button>}
+            {sourceDecision?.decision === 'blocked' && <button disabled={busy || productionRunning} onClick={retrySourceReview} className="flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white disabled:opacity-40"><RefreshCw className="h-3.5 w-3.5" />按产品边界重新审查</button>}
             {sourceDecisionBlocker && <button disabled={busy || productionRunning} onClick={() => resolveSourceDecision('cancel')} className="flex items-center gap-2 rounded border border-error/40 px-4 py-2 text-xs text-error disabled:opacity-40"><Square className="h-3.5 w-3.5" />取消本次 Build</button>}
             {mediaAnchorBlocker && mediaAnchor && <button disabled={busy || productionRunning} onClick={() => resolveMediaAnchorDecision('confirm-character-anchors')} className="flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white disabled:opacity-40"><ShieldCheck className="h-3.5 w-3.5" />确认角色锚点并开始出图</button>}
             {mediaAnchorBlocker && <button disabled={busy || productionRunning} onClick={() => resolveMediaAnchorDecision('cancel')} className="flex items-center gap-2 rounded border border-error/40 px-4 py-2 text-xs text-error disabled:opacity-40"><Square className="h-3.5 w-3.5" />拒绝并取消 Build</button>}

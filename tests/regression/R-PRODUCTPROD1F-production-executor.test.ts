@@ -1863,7 +1863,7 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     ])
   }, 30_000)
 
-  it('来源不足时暂停在独立作者闸门，接受私域补充后才允许专业团队继续生产', async () => {
+  it('来源审查可被退回重做，接受私域补充后才允许专业团队继续生产', async () => {
     const owned = await fixtureForProduct('text-adventure', { visualLevel: 'none' })
     const textRequirement = owned.brief.capabilityRequirements.find(item => item.mediaClass === 'text')!
     const bindingHash = await hashProductProductionValueV2({ provider: 'source-decision-fixture' })
@@ -1878,7 +1878,7 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
         owned.brief, professional, ['潮门广场', '旧仓街', '信号塔'],
       ),
     } as Record<string, unknown>
-    outputs['content.source-sufficiency'] = {
+    const readySourceAudit = {
       schema: 'storyforge.text-adventure-source-sufficiency-artifact', version: 1,
       decision: 'ready-with-private-additions', adaptationStrategy: 'expand-sparse',
       coverage: [{
@@ -1894,6 +1894,19 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
         rationale: '只存在于本游戏 Build，不写回冻结世界。',
       }],
       authorDecisionRequired: true,
+    }
+    outputs['content.source-sufficiency'] = {
+      schema: 'storyforge.text-adventure-source-sufficiency-artifact', version: 1,
+      decision: 'blocked', adaptationStrategy: 'expand-sparse',
+      coverage: [{
+        domain: 'characters', status: 'partial', resourceKeys: [],
+        rationale: '第一次审查错误地把产品私域角色弧当成世界来源缺失。',
+      }],
+      gaps: [{
+        key: 'gap.character-arc', severity: 'blocking',
+        description: '缺少产品运行期的角色关系弧。', affectedStages: ['content.cast-bible'],
+      }],
+      privateAdditions: [], authorDecisionRequired: true,
     }
     outputs['media.requirements'] = {
       ...(outputs['media.requirements'] as Record<string, unknown>), visual: [], audio: [],
@@ -1928,10 +1941,37 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     expect(taskCalls).toEqual(['production.supervision', 'content.source-sufficiency'])
     const blockedBuild = (await db.productBuilds.get(first.buildId))!
     expect(JSON.parse(blockedBuild.failureJson)).toMatchObject({
-      taskKey: 'source.author-gate', detail: expect.stringContaining('作者明确接受'),
+      taskKey: 'source.author-gate', detail: expect.stringContaining('来源存在阻断'),
     })
     expect(await db.productBuildArtifacts
       .where('[buildId+artifactKey]').equals([first.buildId, 'content.design']).count()).toBe(0)
+
+    const firstBlockedProduction = (await db.productProductions.get(owned.productionId))!
+    await executeProductProductionCommand({
+      scope: owned.scope, productionId: owned.productionId,
+      command: {
+        type: 'resolve-blocker', commandId: 'source-review.retry',
+        expectedStateRevision: firstBlockedProduction.stateRevision,
+        blockerKey: 'content.source-sufficiency',
+        resolution: {
+          action: 'retry',
+          note: '作者指出角色弧属于产品私域，要求保持来源和 Brief 不变重新审查。',
+        },
+      },
+    })
+    outputs['content.source-sufficiency'] = readySourceAudit
+    const reviewed = await runProductProductionUntilBlockedV1({
+      scope: owned.scope, productionId: owned.productionId,
+      executor: createConfiguredProductProductionExecutorV1({
+        production: (await db.productProductions.get(owned.productionId))!, brief: owned.brief, runText,
+      }),
+      capabilityBindings,
+    })
+    expect(reviewed).toMatchObject({ terminal: false, buildStatus: 'recovery-required' })
+    expect(taskCalls.filter(taskKey => taskKey === 'content.source-sufficiency')).toHaveLength(2)
+    expect(JSON.parse((await db.productBuilds.get(reviewed.buildId))!.failureJson)).toMatchObject({
+      taskKey: 'source.author-gate', detail: expect.stringContaining('作者明确接受'),
+    })
 
     const blockedProduction = (await db.productProductions.get(owned.productionId))!
     await executeProductProductionCommand({
@@ -1953,7 +1993,7 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
       capabilityBindings,
     })
     expect(completed).toMatchObject({ terminal: true, buildStatus: 'release-ready' })
-    expect(taskCalls.filter(taskKey => taskKey === 'content.source-sufficiency')).toHaveLength(1)
+    expect(taskCalls.filter(taskKey => taskKey === 'content.source-sufficiency')).toHaveLength(2)
     const decision = await db.productBuildArtifacts
       .where('[buildId+artifactKey]').equals([completed.buildId, 'content.source-decision'])
       .filter(row => row.status === 'accepted').first()

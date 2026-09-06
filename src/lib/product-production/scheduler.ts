@@ -965,6 +965,31 @@ async function recoveryInvalidatedTaskKeys(input: {
   plan: ProductProductionPlanV3
 }): Promise<Set<string>> {
   if (input.plan.productType !== 'text-adventure') return new Set()
+  const recovery = parsedObject(input.failureJson)
+  const recoveryResolution = recovery.resolution && typeof recovery.resolution === 'object'
+    && !Array.isArray(recovery.resolution)
+    ? recovery.resolution as Record<string, unknown> : null
+  const previousFailure = recovery.previousFailure && typeof recovery.previousFailure === 'object'
+    && !Array.isArray(recovery.previousFailure)
+    ? recovery.previousFailure as Record<string, unknown> : null
+  if (recovery.blockerKey === 'content.source-sufficiency'
+    && recoveryResolution?.action === 'retry'
+    && previousFailure?.taskKey === 'source.author-gate') {
+    // The author is challenging the model review, not accepting its proposed
+    // source additions. Re-run the source editor and invalidate every
+    // descendant; never carry the disputed audit into the new epoch.
+    const invalidated = new Set<string>(['content.source-sufficiency'])
+    let expanded = true
+    while (expanded) {
+      expanded = false
+      for (const task of input.plan.tasks) {
+        if (invalidated.has(task.taskKey) || !task.dependsOn.some(key => invalidated.has(key))) continue
+        invalidated.add(task.taskKey)
+        expanded = true
+      }
+    }
+    return invalidated
+  }
   const failure = textAdventureQualityRepairCause(input.failureJson)
   if (!failure) return new Set()
   const reviewRows = (await db.productBuildArtifacts.where('buildId').equals(input.buildId).toArray())
