@@ -47,6 +47,11 @@ describe('COMIC-2 · professional novel-to-comic pipeline', () => {
     expect(await db.adaptationSourceFacts.count()).toBe(2)
     const resumed = await adoptComicProfessionalCandidateV1({ scope: item.scope, runId: generated.snapshot.run.id })
     expect(resumed.snapshot.projection.state).toBe('completed'); expect(await db.adaptationSourceFacts.count()).toBe(2)
+    const causal = await generateComicProfessionalCandidateV1({ scope: item.scope, adaptationProjectId: item.adaptation.id!, stage: 'causal-graph', runAI: async messages => {
+      expect(messages[0].content).toContain('允许 fact stableKey 闭集：fact_arrival, fact_choice')
+      return JSON.stringify([{ stableKey: 'edge_choice', fromFactKey: 'fact_arrival', toFactKey: 'fact_choice', relation: 'enables', rationale: '到站使选择成为可能。', sourceUnitKeys: [item.unit.sourceUnitKey] }])
+    } })
+    expect(causal.candidate.payload).toHaveLength(1)
   })
 
   it('十二个岗位各自声明闭集 JSON 协议与漫画专业约束', () => {

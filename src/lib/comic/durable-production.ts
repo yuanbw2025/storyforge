@@ -229,14 +229,14 @@ export async function generateComicProfessionalCandidateV1(input: { scope: Works
   if (!input.aiConfig && !input.runAI) throw new Error('[comic-run] 缺少 AI 配置')
   const selected = await selectTargets(input); if ((await inspectAdaptationFreshness(selected.root.id!)).status !== 'unchanged') throw new Error('[comic-run] 来源已变化或缺失，请先同步')
   const key = [selected.root.id!, selected.root.activeSourceManifestVersion] as [number, number]
-  const [facts, edges, decisions, beats, plans, pages, subjects] = await Promise.all([
-    db.adaptationSourceFacts.where('[adaptationProjectId+manifestVersion]').equals(key).filter(row => row.authorStatus === 'confirmed').count(),
-    db.adaptationCausalEdges.where('[adaptationProjectId+manifestVersion]').equals(key).filter(row => row.authorStatus === 'confirmed').count(),
-    db.adaptationDecisions.where('[adaptationProjectId+manifestVersion]').equals(key).filter(row => row.authorStatus === 'confirmed').count(),
-    db.comicScriptBeats.where('[adaptationProjectId+manifestVersion]').equals(key).count(), db.comicPagePlans.where('[adaptationProjectId+manifestVersion]').equals(key).count(),
-    db.comicPages.where('adaptationProjectId').equals(selected.root.id!).count(), db.comicVisualSubjects.where('adaptationProjectId').equals(selected.root.id!).count(),
+  const [factRows, edgeRows, decisionRows, beatRows, planRows, pageCount, subjectRows] = await Promise.all([
+    db.adaptationSourceFacts.where('[adaptationProjectId+manifestVersion]').equals(key).filter(row => row.authorStatus === 'confirmed').toArray(),
+    db.adaptationCausalEdges.where('[adaptationProjectId+manifestVersion]').equals(key).filter(row => row.authorStatus === 'confirmed').toArray(),
+    db.adaptationDecisions.where('[adaptationProjectId+manifestVersion]').equals(key).filter(row => row.authorStatus === 'confirmed').toArray(),
+    db.comicScriptBeats.where('[adaptationProjectId+manifestVersion]').equals(key).toArray(), db.comicPagePlans.where('[adaptationProjectId+manifestVersion]').equals(key).toArray(),
+    db.comicPages.where('adaptationProjectId').equals(selected.root.id!).count(), db.comicVisualSubjects.where('adaptationProjectId').equals(selected.root.id!).toArray(),
   ])
-  requireStage(input.stage, selected.root, { facts, edges, decisions, beats, plans, pages, subjects }, { pages: selected.targetPages.length, panels: selected.targetPanels.length, issues: selected.targetIssues.length })
+  requireStage(input.stage, selected.root, { facts: factRows.length, edges: edgeRows.length, decisions: decisionRows.length, beats: beatRows.length, plans: planRows.length, pages: pageCount, subjects: subjectRows.length }, { pages: selected.targetPages.length, panels: selected.targetPanels.length, issues: selected.targetIssues.length })
   const config = STAGES[input.stage]; const skill = getAgentSkillV1(config.skillId); const stepId = `comic-professional:${input.stage}`
   let snapshot = await createAgentRunV1({ scope: input.scope, worldGroupId: null, contract: runContract(input.scope, input.stage) })
   snapshot = await append(input.scope, snapshot, 'step.scheduled', { stepId }); snapshot = await append(input.scope, snapshot, 'step.started', { stepId, attempt: 1 })
@@ -245,7 +245,16 @@ export async function generateComicProfessionalCandidateV1(input: { scope: Works
   const contextManifest = await createContextManifestFromAssemblyV1({ runId: snapshot.run.id, stepId, attempt: 1, projectId: input.scope.projectId, worldGroupId: null, declaredSourceKeys: [...skill.contextSourceKeys], assembled, readerVersion: `comic-${input.stage}-context-v1` })
   snapshot = await append(input.scope, snapshot, 'context.assembled', { stepId, attempt: 1, manifestHash: contextManifest.manifestHash })
   const targetKeys = [...selected.targetPages.map(row => row.stableKey), ...selected.targetPanels.map(row => row.stableKey), ...selected.targetIssues.map(row => row.stableKey)]
-  const system = [`你是${config.role}。只完成当前职责，不替后续岗位生成或采纳。`, '严格区分来源事实、作者确认决定与提案；不得把新增桥接伪装成原文。', '只输出一个严格 JSON 值，不要 Markdown、解释、注释或代码围栏。候选自身新建的 stableKey 必须全批次唯一并匹配 ^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$；所有引用字段只能逐字使用登记上下文中的 key 或当前批次明确创建的目标 key。数组不得含重复项；数字必须是 JSON number；可空定位字段必须显式写 null，绝不输出 undefined；不得输出数据库数字 ID。', `目标漫画画像：${JSON.stringify(selected.root.targetSpec)}`, input.stage === 'source-analysis' ? `唯一来源单元：${selected.sourceUnitKeys.join(', ')}` : '', targetKeys.length ? `唯一目标：${targetKeys.join(', ')}` : '', input.authorInstruction?.trim() ? `作者附加要求：${input.authorInstruction.trim()}` : '', `登记上下文：\n${assembled.text}`].filter(Boolean).join('\n\n')
+  const panelSubjectKeys = [...new Set(selected.panels.flatMap(panel => [...(panel.subjectStates ?? []), ...(panel.continuityRefs ?? [])].map(row => row.subjectKey)))]
+  const referenceClosure = [
+    ['causal-graph', 'decision-pass', 'script-adaptation'].includes(input.stage) ? `允许 fact stableKey 闭集：${factRows.map(row => row.stableKey).join(', ')}` : '',
+    input.stage === 'script-adaptation' ? `允许 decision stableKey 闭集：${decisionRows.map(row => row.stableKey).join(', ')}` : '',
+    input.stage === 'page-rhythm' ? `允许 beat stableKey 闭集：${beatRows.map(row => row.stableKey).join(', ')}` : '',
+    input.stage === 'panel-plan' ? `PagePlan 闭集与目标格数：${planRows.map(row => `${row.stableKey}=${row.expectedPanelCount}`).join(', ')}` : '',
+    input.stage === 'visual-bible' ? `必须逐字覆盖的 panel subjectKey 闭集：${panelSubjectKeys.join(', ')}` : '',
+    ['image-request', 'targeted-repair'].includes(input.stage) ? `允许 visual subject stableKey 闭集：${subjectRows.map(row => row.stableKey).join(', ')}` : '',
+  ].filter(Boolean).join('\n')
+  const system = [`你是${config.role}。只完成当前职责，不替后续岗位生成或采纳。`, '严格区分来源事实、作者确认决定与提案；不得把新增桥接伪装成原文。', '只输出一个严格 JSON 值，不要 Markdown、解释、注释或代码围栏。候选自身新建的 stableKey 必须全批次唯一并匹配 ^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$；所有引用字段只能逐字使用登记上下文中的 key 或当前批次明确创建的目标 key。数组不得含重复项；数字必须是 JSON number；可空定位字段必须显式写 null，绝不输出 undefined；不得输出数据库数字 ID。', `目标漫画画像：${JSON.stringify(selected.root.targetSpec)}`, input.stage === 'source-analysis' ? `唯一来源单元：${selected.sourceUnitKeys.join(', ')}` : '', referenceClosure, targetKeys.length ? `唯一目标：${targetKeys.join(', ')}` : '', input.authorInstruction?.trim() ? `作者附加要求：${input.authorInstruction.trim()}` : '', `登记上下文：\n${assembled.text}`].filter(Boolean).join('\n\n')
   const messages: ChatMessage[] = [{ role: 'system', content: system }, { role: 'user', content: comicProfessionalInstructionV1(input.stage) }]
   snapshot = await append(input.scope, snapshot, 'model.requested', { stepId, attempt: 1, bindingHash: await hashCanonicalValue(snapshot.contract.executionBindings?.[0]) })
   let raw: string
