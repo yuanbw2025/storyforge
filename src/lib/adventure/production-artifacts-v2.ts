@@ -462,3 +462,134 @@ export function parseTextAdventureNarrativeArcPlanArtifactV1(input: {
   }
 }
 
+export interface TextAdventureQuestPlanArtifactV1 {
+  schema: 'storyforge.text-adventure-quest-plan-artifact'
+  version: 1
+  bundleKind: 'main' | 'side' | 'ambient'
+  quests: Array<{
+    key: string
+    title: string
+    description: string
+    characterKeys: string[]
+    stages: Array<{
+      key: string
+      title: string
+      objectiveKeys: string[]
+    }>
+    objectives: Array<{
+      key: string
+      stageKey: string
+      title: string
+      narrativePurpose: string
+      sceneKeys: string[]
+      locationOrdinal: number
+      alternatives: Array<{
+        key: string
+        actionKind: 'look' | 'move' | 'talk' | 'take' | 'give' | 'use' | 'inspect' | 'attempt' | 'rest' | 'quest-action'
+        cost: string
+        successConsequence: string
+        failureForwardConsequence: string
+        persistentEffectKeys: string[]
+      }>
+    }>
+  }>
+}
+
+export function parseTextAdventureQuestPlanArtifactV1(input: {
+  value: unknown
+  brief: ProductProductionBriefV3
+  arcPlan: TextAdventureNarrativeArcPlanArtifactV1
+  cast: TextAdventureCastBibleArtifactV1
+  expectedKind: TextAdventureQuestPlanArtifactV1['bundleKind']
+  expectedQuestCount: number
+}): TextAdventureQuestPlanArtifactV1 {
+  if (!input.brief.textAdventure) fail('任务计划缺少文字冒险 Brief')
+  const row = record(input.value, `${input.expectedKind}QuestPlan`)
+  exactKeys(row, ['schema', 'version', 'bundleKind', 'quests'], `${input.expectedKind}QuestPlan`)
+  if (row.schema !== 'storyforge.text-adventure-quest-plan-artifact' || row.version !== 1
+    || row.bundleKind !== input.expectedKind) fail('任务计划 schema/version/kind 无效')
+  const minimumQuestCount = input.expectedKind === 'main' ? 1 : input.expectedQuestCount
+  const sceneKeys = new Set(input.arcPlan.acts.flatMap(act => act.sceneCards.map(scene => scene.key)))
+  const castKeys = new Set(input.cast.characters.map(character => character.key))
+  const actionKinds = ['look', 'move', 'talk', 'take', 'give', 'use', 'inspect', 'attempt', 'rest', 'quest-action'] as const
+  const quests = array(row.quests, 'quests', minimumQuestCount, 40).map((value, questIndex) => {
+    const quest = record(value, `quests[${questIndex}]`)
+    exactKeys(quest, ['key', 'title', 'description', 'characterKeys', 'stages', 'objectives'], `quests[${questIndex}]`)
+    const characterKeys = keyArray(quest.characterKeys, `quests[${questIndex}].characterKeys`, 1, 20)
+    if (characterKeys.some(value => !castKeys.has(value))) fail(`quests[${questIndex}] 引用未知角色`)
+    const minimumStages = input.expectedKind === 'main' && input.brief.qualityProfile === 'commercial-candidate'
+      ? Math.max(3, Math.ceil(input.brief.scale.targetPlayMinutes / 20))
+      : input.expectedKind === 'side' && input.brief.qualityProfile === 'commercial-candidate' ? 2 : 1
+    const stages = array(quest.stages, `quests[${questIndex}].stages`, minimumStages, 20).map((value, stageIndex) => {
+      const stage = record(value, `quests[${questIndex}].stages[${stageIndex}]`)
+      exactKeys(stage, ['key', 'title', 'objectiveKeys'], `quests[${questIndex}].stages[${stageIndex}]`)
+      return {
+        key: key(stage.key, `quests[${questIndex}].stages[${stageIndex}].key`),
+        title: text(stage.title, `quests[${questIndex}].stages[${stageIndex}].title`, 300),
+        objectiveKeys: keyArray(stage.objectiveKeys, `quests[${questIndex}].stages[${stageIndex}].objectiveKeys`, 1, 20),
+      }
+    })
+    const minimumObjectives = input.expectedKind === 'main' && input.brief.qualityProfile === 'commercial-candidate'
+      ? Math.max(8, Math.ceil(input.brief.scale.targetPlayMinutes / 7.5))
+      : input.expectedKind === 'side' && input.brief.qualityProfile === 'commercial-candidate' ? 3 : 1
+    const objectives = array(quest.objectives, `quests[${questIndex}].objectives`, minimumObjectives, 80)
+      .map((value, objectiveIndex) => {
+        const objective = record(value, `quests[${questIndex}].objectives[${objectiveIndex}]`)
+        exactKeys(objective, [
+          'key', 'stageKey', 'title', 'narrativePurpose', 'sceneKeys', 'locationOrdinal', 'alternatives',
+        ], `quests[${questIndex}].objectives[${objectiveIndex}]`)
+        const parsedSceneKeys = keyArray(objective.sceneKeys, `objectives[${objectiveIndex}].sceneKeys`, 1, 12)
+        if (parsedSceneKeys.some(value => !sceneKeys.has(value))) fail(`objectives[${objectiveIndex}] 引用未知场景`)
+        const alternatives = array(objective.alternatives, `objectives[${objectiveIndex}].alternatives`, 1, 5)
+          .map((value, alternativeIndex) => {
+            const alternative = record(value, `objectives[${objectiveIndex}].alternatives[${alternativeIndex}]`)
+            exactKeys(alternative, [
+              'key', 'actionKind', 'cost', 'successConsequence', 'failureForwardConsequence',
+              'persistentEffectKeys',
+            ], `objectives[${objectiveIndex}].alternatives[${alternativeIndex}]`)
+            return {
+              key: key(alternative.key, `alternatives[${alternativeIndex}].key`),
+              actionKind: enumValue(alternative.actionKind, actionKinds, `alternatives[${alternativeIndex}].actionKind`),
+              cost: text(alternative.cost, `alternatives[${alternativeIndex}].cost`, 1_000),
+              successConsequence: text(alternative.successConsequence, `alternatives[${alternativeIndex}].successConsequence`, 2_000),
+              failureForwardConsequence: text(alternative.failureForwardConsequence, `alternatives[${alternativeIndex}].failureForwardConsequence`, 2_000),
+              persistentEffectKeys: keyArray(alternative.persistentEffectKeys, `alternatives[${alternativeIndex}].persistentEffectKeys`, 1, 12),
+            }
+          })
+        if (new Set(alternatives.map(item => item.key)).size !== alternatives.length) fail('alternative key 重复')
+        return {
+          key: key(objective.key, `objectives[${objectiveIndex}].key`),
+          stageKey: key(objective.stageKey, `objectives[${objectiveIndex}].stageKey`),
+          title: text(objective.title, `objectives[${objectiveIndex}].title`, 300),
+          narrativePurpose: text(objective.narrativePurpose, `objectives[${objectiveIndex}].narrativePurpose`, 2_000),
+          sceneKeys: parsedSceneKeys,
+          locationOrdinal: integer(objective.locationOrdinal, `objectives[${objectiveIndex}].locationOrdinal`, 1, input.brief.textAdventure!.narrative.targetLocationCount),
+          alternatives,
+        }
+      })
+    const stageKeys = new Set(stages.map(stage => stage.key))
+    const objectiveKeys = new Set(objectives.map(objective => objective.key))
+    if (stageKeys.size !== stages.length || objectiveKeys.size !== objectives.length) fail('stage/objective key 重复')
+    if (objectives.some(objective => !stageKeys.has(objective.stageKey))) fail('objective 引用未知 stage')
+    const assignedObjectiveKeys = stages.flatMap(stage => stage.objectiveKeys)
+    if (new Set(assignedObjectiveKeys).size !== assignedObjectiveKeys.length
+      || assignedObjectiveKeys.some(value => !objectiveKeys.has(value))
+      || assignedObjectiveKeys.length !== objectives.length) fail('stage.objectiveKeys 未精确覆盖 objectives')
+    if (input.expectedKind === 'main' && input.brief.qualityProfile === 'commercial-candidate'
+      && objectives.filter(objective => objective.alternatives.length >= 2).length < 2) {
+      fail('商业主线至少两个目标需要多种通用解法')
+    }
+    return {
+      key: key(quest.key, `quests[${questIndex}].key`),
+      title: text(quest.title, `quests[${questIndex}].title`, 300),
+      description: text(quest.description, `quests[${questIndex}].description`, 2_000),
+      characterKeys, stages, objectives,
+    }
+  })
+  if (input.expectedKind === 'main' && quests.length !== 1) fail('主线任务计划必须恰好一条主线')
+  if (new Set(quests.map(quest => quest.key)).size !== quests.length) fail('quest key 重复')
+  return {
+    schema: 'storyforge.text-adventure-quest-plan-artifact', version: 1,
+    bundleKind: input.expectedKind, quests,
+  }
+}

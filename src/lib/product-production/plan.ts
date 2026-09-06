@@ -296,16 +296,21 @@ export async function createProductProductionPlanV3(input: {
     (_, index) => `media.audio.${String(index + 1).padStart(3, '0')}`,
   )
   const textAdventure = brief.intent.productType === 'text-adventure'
-  const modelTaskCount = textAdventure ? 8 : 4
+  const modelTaskCount = textAdventure ? 13 : 4
   const textAdventureOutputWeights: Record<string, number> = {
+    'content.source-sufficiency': 0.05,
     'content.design': 0.04,
-    'content.adventure-architecture': 0.10,
-    'content.narrative': 0.44,
-    'content.product-module': 0.08,
-    'content.adventure-side-quests': 0.10,
-    'content.adventure-ambient-events': 0.07,
-    'content.adventure-quality-review': 0.09,
-    'media.requirements': 0.08,
+    'content.story-bible': 0.08,
+    'content.cast-bible': 0.09,
+    'content.adventure-architecture': 0.07,
+    'content.product-module': 0.07,
+    'content.narrative-arc-plan': 0.07,
+    'content.main-quest-plan': 0.08,
+    'content.narrative': 0.23,
+    'content.adventure-side-quests': 0.06,
+    'content.adventure-ambient-events': 0.04,
+    'content.adventure-quality-review': 0.06,
+    'media.requirements': 0.06,
   }
   // Every provider task and deterministic integration receives a declared
   // slice. Text adventure reserves separate bounded specialists for the
@@ -341,45 +346,109 @@ export async function createProductProductionPlanV3(input: {
     durationMs: textAdventure && taskKey === 'content.narrative'
       ? textAdventureNarrativeDuration : perDuration,
   })
-  const tasks: ProductProductionPlanTaskV3[] = [
-    productionTask({
-      taskKey: 'content.design', lane: 'content', kind: 'product-design',
-      skillId: 'product-production.content.v1', executionMode: 'model', dependsOn: [],
-      inputArtifactKeys: [], outputArtifactKeys: ['design.game'], requirementKeys: [],
-      capabilityRequirementKeys: textCapabilities, concurrencyGroup: 'text-provider',
-      subjectLockKeys: ['design.game'], priority: 100, budgetReservation: modelBudget('content.design'),
-      maxAttempts: 2, timeoutMs: 180_000, failurePolicy: 'pause', fallbackTaskKey: null,
-      acceptanceGateIds: ['artifact.protocol', 'design.source-anchors'],
-    }),
-  ]
+  const tasks: ProductProductionPlanTaskV3[] = []
   if (textAdventure) tasks.push(productionTask({
-    taskKey: 'content.adventure-architecture', lane: 'planning', kind: 'text-adventure-architecture',
-    skillId: 'text-adventure.production-architecture.v1', executionMode: 'model', dependsOn: ['content.design'],
-    inputArtifactKeys: ['design.game'], outputArtifactKeys: ['content.adventure-architecture'], requirementKeys: [],
+    taskKey: 'content.source-sufficiency', lane: 'planning', kind: 'text-adventure-source-sufficiency',
+    skillId: 'text-adventure.source-sufficiency.v1', executionMode: 'model', dependsOn: [],
+    inputArtifactKeys: [], outputArtifactKeys: ['content.source-sufficiency'], requirementKeys: [],
     capabilityRequirementKeys: textCapabilities, concurrencyGroup: 'text-provider',
-    subjectLockKeys: ['content.adventure-architecture'], priority: 95, budgetReservation: modelBudget('content.adventure-architecture'),
-    maxAttempts: 2, timeoutMs: 240_000, failurePolicy: 'pause', fallbackTaskKey: null,
-    acceptanceGateIds: ['artifact.protocol', 'adventure.architecture'],
+    subjectLockKeys: ['content.source-sufficiency'], priority: 110, budgetReservation: modelBudget('content.source-sufficiency'),
+    maxAttempts: 2, timeoutMs: 180_000, failurePolicy: 'pause', fallbackTaskKey: null,
+    acceptanceGateIds: ['artifact.protocol', 'adventure.source-sufficiency-assessed'],
   }))
-  const narrativeDependency = textAdventure ? 'content.adventure-architecture' : 'content.design'
-  const narrativeInput = textAdventure ? 'content.adventure-architecture' : 'design.game'
-  tasks.push(
+  tasks.push(productionTask({
+    taskKey: 'content.design', lane: 'content', kind: 'product-design',
+    skillId: textAdventure ? 'text-adventure.production-supervision.v1' : 'product-production.content.v1',
+    executionMode: 'model', dependsOn: textAdventure ? ['content.source-sufficiency'] : [],
+    inputArtifactKeys: textAdventure ? ['content.source-sufficiency'] : [],
+    outputArtifactKeys: ['design.game'], requirementKeys: [],
+    capabilityRequirementKeys: textCapabilities, concurrencyGroup: 'text-provider',
+    subjectLockKeys: ['design.game'], priority: 100, budgetReservation: modelBudget('content.design'),
+    maxAttempts: 2, timeoutMs: 180_000, failurePolicy: 'pause', fallbackTaskKey: null,
+    acceptanceGateIds: ['artifact.protocol', 'design.source-anchors'],
+  }))
+  if (textAdventure) tasks.push(
+    productionTask({
+      taskKey: 'content.story-bible', lane: 'planning', kind: 'text-adventure-story-bible',
+      skillId: 'text-adventure.story-bible.v1', executionMode: 'model',
+      dependsOn: ['content.source-sufficiency', 'content.design'],
+      inputArtifactKeys: ['content.source-sufficiency', 'design.game'],
+      outputArtifactKeys: ['content.story-bible'], requirementKeys: [],
+      capabilityRequirementKeys: textCapabilities, concurrencyGroup: 'text-provider',
+      subjectLockKeys: ['content.story-bible'], priority: 98, budgetReservation: modelBudget('content.story-bible'),
+      maxAttempts: 2, timeoutMs: 240_000, failurePolicy: 'pause', fallbackTaskKey: null,
+      acceptanceGateIds: ['artifact.protocol', 'adventure.story-bible'],
+    }),
+    productionTask({
+      taskKey: 'content.cast-bible', lane: 'planning', kind: 'text-adventure-cast-bible',
+      skillId: 'text-adventure.cast-bible.v1', executionMode: 'model',
+      dependsOn: ['content.source-sufficiency', 'content.story-bible'],
+      inputArtifactKeys: ['content.source-sufficiency', 'content.story-bible'],
+      outputArtifactKeys: ['content.cast-bible'], requirementKeys: [],
+      capabilityRequirementKeys: textCapabilities, concurrencyGroup: 'text-provider',
+      subjectLockKeys: ['content.cast-bible'], priority: 97, budgetReservation: modelBudget('content.cast-bible'),
+      maxAttempts: 2, timeoutMs: 240_000, failurePolicy: 'pause', fallbackTaskKey: null,
+      acceptanceGateIds: ['artifact.protocol', 'adventure.cast-bible'],
+    }),
+    productionTask({
+      taskKey: 'content.adventure-architecture', lane: 'planning', kind: 'text-adventure-architecture',
+      skillId: 'text-adventure.production-architecture.v1', executionMode: 'model',
+      dependsOn: ['content.story-bible', 'content.cast-bible'],
+      inputArtifactKeys: ['content.story-bible', 'content.cast-bible'],
+      outputArtifactKeys: ['content.adventure-architecture'], requirementKeys: [],
+      capabilityRequirementKeys: textCapabilities, concurrencyGroup: 'text-provider',
+      subjectLockKeys: ['content.adventure-architecture'], priority: 95, budgetReservation: modelBudget('content.adventure-architecture'),
+      maxAttempts: 2, timeoutMs: 240_000, failurePolicy: 'pause', fallbackTaskKey: null,
+      acceptanceGateIds: ['artifact.protocol', 'adventure.architecture'],
+    }),
+    productionTask({
+      taskKey: 'content.product-module', lane: 'content', kind: 'product-module',
+      skillId: 'text-adventure.production-systems.v1', executionMode: 'model',
+      dependsOn: ['content.story-bible', 'content.cast-bible', 'content.adventure-architecture'],
+      inputArtifactKeys: ['content.story-bible', 'content.cast-bible', 'content.adventure-architecture'],
+      outputArtifactKeys: ['content.product-module'], requirementKeys: [],
+      capabilityRequirementKeys: textCapabilities, concurrencyGroup: 'text-provider',
+      subjectLockKeys: ['content.product-module'], priority: 92, budgetReservation: modelBudget('content.product-module'),
+      maxAttempts: 2, timeoutMs: 240_000, failurePolicy: 'pause', fallbackTaskKey: null,
+      acceptanceGateIds: ['artifact.protocol', 'product.module'],
+    }),
+    productionTask({
+      taskKey: 'content.narrative-arc-plan', lane: 'planning', kind: 'text-adventure-narrative-arc-plan',
+      skillId: 'text-adventure.narrative-arc-plan.v1', executionMode: 'model',
+      dependsOn: ['content.story-bible', 'content.cast-bible', 'content.adventure-architecture', 'content.product-module'],
+      inputArtifactKeys: ['content.story-bible', 'content.cast-bible', 'content.adventure-architecture', 'content.product-module'],
+      outputArtifactKeys: ['content.narrative-arc-plan'], requirementKeys: [],
+      capabilityRequirementKeys: textCapabilities, concurrencyGroup: 'text-provider',
+      subjectLockKeys: ['content.narrative-arc-plan'], priority: 90, budgetReservation: modelBudget('content.narrative-arc-plan'),
+      maxAttempts: 2, timeoutMs: 300_000, failurePolicy: 'pause', fallbackTaskKey: null,
+      acceptanceGateIds: ['artifact.protocol', 'adventure.narrative-arc-plan'],
+    }),
+    productionTask({
+      taskKey: 'content.main-quest-plan', lane: 'planning', kind: 'text-adventure-main-quest-plan',
+      skillId: 'text-adventure.production-mainline.v1', executionMode: 'model',
+      dependsOn: ['content.story-bible', 'content.cast-bible', 'content.product-module', 'content.narrative-arc-plan'],
+      inputArtifactKeys: ['content.story-bible', 'content.cast-bible', 'content.product-module', 'content.narrative-arc-plan'],
+      outputArtifactKeys: ['content.main-quest-plan'], requirementKeys: [],
+      capabilityRequirementKeys: textCapabilities, concurrencyGroup: 'text-provider',
+      subjectLockKeys: ['content.main-quest-plan'], priority: 88, budgetReservation: modelBudget('content.main-quest-plan'),
+      maxAttempts: 2, timeoutMs: 300_000, failurePolicy: 'pause', fallbackTaskKey: null,
+      acceptanceGateIds: ['artifact.protocol', 'adventure.main-quest-plan'],
+    }),
+  )
+  if (!textAdventure) tasks.push(
     productionTask({
       taskKey: 'content.narrative', lane: 'content', kind: 'narrative',
-      skillId: textAdventure ? 'text-adventure.production-mainline.v1' : 'product-production.content.v1',
-      executionMode: 'model', dependsOn: [narrativeDependency],
-      inputArtifactKeys: [narrativeInput], outputArtifactKeys: ['content.narrative'], requirementKeys: [],
+      skillId: 'product-production.content.v1', executionMode: 'model', dependsOn: ['content.design'],
+      inputArtifactKeys: ['design.game'], outputArtifactKeys: ['content.narrative'], requirementKeys: [],
       capabilityRequirementKeys: textCapabilities, concurrencyGroup: 'text-provider',
       subjectLockKeys: ['content.narrative'], priority: 90, budgetReservation: modelBudget('content.narrative'),
-      maxAttempts: 2, timeoutMs: textAdventure ? 600_000 : 240_000,
-      failurePolicy: 'pause', fallbackTaskKey: null,
+      maxAttempts: 2, timeoutMs: 240_000, failurePolicy: 'pause', fallbackTaskKey: null,
       acceptanceGateIds: ['artifact.protocol', 'narrative.graph'],
     }),
     productionTask({
       taskKey: 'content.product-module', lane: 'content', kind: 'product-module',
-      skillId: textAdventure ? 'text-adventure.production-systems.v1' : 'product-production.content.v1',
-      executionMode: 'model', dependsOn: [narrativeDependency],
-      inputArtifactKeys: [narrativeInput], outputArtifactKeys: ['content.product-module'], requirementKeys: [],
+      skillId: 'product-production.content.v1', executionMode: 'model', dependsOn: ['content.design'],
+      inputArtifactKeys: ['design.game'], outputArtifactKeys: ['content.product-module'], requirementKeys: [],
       capabilityRequirementKeys: textCapabilities, concurrencyGroup: 'text-provider',
       subjectLockKeys: ['content.product-module'], priority: 85, budgetReservation: modelBudget('content.product-module'),
       maxAttempts: 2, timeoutMs: 240_000, failurePolicy: 'pause', fallbackTaskKey: null,
@@ -390,8 +459,8 @@ export async function createProductProductionPlanV3(input: {
     productionTask({
       taskKey: 'content.adventure-side-quests', lane: 'content', kind: 'text-adventure-side-quests',
       skillId: 'text-adventure.production-side-quests.v1', executionMode: 'model',
-      dependsOn: ['content.adventure-architecture', 'content.product-module'],
-      inputArtifactKeys: ['content.adventure-architecture', 'content.product-module'],
+      dependsOn: ['content.adventure-architecture', 'content.product-module', 'content.main-quest-plan'],
+      inputArtifactKeys: ['content.adventure-architecture', 'content.product-module', 'content.main-quest-plan'],
       outputArtifactKeys: ['content.adventure-side-quests'], requirementKeys: [],
       capabilityRequirementKeys: textCapabilities, concurrencyGroup: 'text-provider',
       subjectLockKeys: ['content.adventure-side-quests'], priority: 82, budgetReservation: modelBudget('content.adventure-side-quests'),
@@ -401,8 +470,8 @@ export async function createProductProductionPlanV3(input: {
     productionTask({
       taskKey: 'content.adventure-ambient-events', lane: 'content', kind: 'text-adventure-ambient-events',
       skillId: 'text-adventure.production-ambient-events.v1', executionMode: 'model',
-      dependsOn: ['content.adventure-architecture', 'content.product-module'],
-      inputArtifactKeys: ['content.adventure-architecture', 'content.product-module'],
+      dependsOn: ['content.adventure-architecture', 'content.product-module', 'content.main-quest-plan'],
+      inputArtifactKeys: ['content.adventure-architecture', 'content.product-module', 'content.main-quest-plan'],
       outputArtifactKeys: ['content.adventure-ambient-events'], requirementKeys: [],
       capabilityRequirementKeys: textCapabilities, concurrencyGroup: 'text-provider',
       subjectLockKeys: ['content.adventure-ambient-events'], priority: 80, budgetReservation: modelBudget('content.adventure-ambient-events'),
@@ -411,15 +480,34 @@ export async function createProductProductionPlanV3(input: {
     }),
   )
   if (textAdventure) tasks.push(productionTask({
+    taskKey: 'content.narrative', lane: 'content', kind: 'narrative',
+    skillId: 'text-adventure.scene-script.v1', executionMode: 'model',
+    dependsOn: [
+      'content.cast-bible', 'content.adventure-architecture', 'content.narrative-arc-plan',
+      'content.main-quest-plan', 'content.adventure-side-quests', 'content.adventure-ambient-events',
+    ],
+    inputArtifactKeys: [
+      'content.cast-bible', 'content.adventure-architecture', 'content.narrative-arc-plan',
+      'content.main-quest-plan', 'content.adventure-side-quests', 'content.adventure-ambient-events',
+    ],
+    outputArtifactKeys: ['content.narrative'], requirementKeys: [],
+    capabilityRequirementKeys: textCapabilities, concurrencyGroup: 'text-provider',
+    subjectLockKeys: ['content.narrative'], priority: 76, budgetReservation: modelBudget('content.narrative'),
+    maxAttempts: 2, timeoutMs: 600_000, failurePolicy: 'pause', fallbackTaskKey: null,
+    acceptanceGateIds: ['artifact.protocol', 'narrative.graph'],
+  }))
+  if (textAdventure) tasks.push(productionTask({
     taskKey: 'content.adventure-quality-review', lane: 'qa', kind: 'text-adventure-quality-review',
     skillId: 'text-adventure.production-quality-review.v1', executionMode: 'model',
     dependsOn: [
-      'content.adventure-architecture', 'content.narrative', 'content.product-module',
-      'content.adventure-side-quests', 'content.adventure-ambient-events',
+      'content.story-bible', 'content.cast-bible', 'content.adventure-architecture',
+      'content.product-module', 'content.narrative-arc-plan', 'content.main-quest-plan',
+      'content.adventure-side-quests', 'content.adventure-ambient-events', 'content.narrative',
     ],
     inputArtifactKeys: [
-      'content.adventure-architecture', 'content.narrative', 'content.product-module',
-      'content.adventure-side-quests', 'content.adventure-ambient-events',
+      'content.story-bible', 'content.cast-bible', 'content.adventure-architecture',
+      'content.product-module', 'content.narrative-arc-plan', 'content.main-quest-plan',
+      'content.adventure-side-quests', 'content.adventure-ambient-events', 'content.narrative',
     ],
     outputArtifactKeys: ['quality.adventure-review'], requirementKeys: [],
     capabilityRequirementKeys: textCapabilities, concurrencyGroup: 'text-provider',
@@ -433,14 +521,17 @@ export async function createProductProductionPlanV3(input: {
     : ['content.design']
   const mediaInputsForContent = textAdventure
     ? [
-        'content.adventure-architecture', 'content.narrative', 'content.product-module',
-        'content.adventure-side-quests', 'content.adventure-ambient-events', 'quality.adventure-review',
+        'content.story-bible', 'content.cast-bible', 'content.adventure-architecture',
+        'content.product-module', 'content.narrative-arc-plan', 'content.main-quest-plan',
+        'content.adventure-side-quests', 'content.adventure-ambient-events',
+        'content.narrative', 'quality.adventure-review',
       ]
     : ['design.game']
   tasks.push(
     productionTask({
       taskKey: 'media.requirements', lane: 'planning', kind: 'media-requirements',
-      skillId: 'product-production.media-requirements.v1', executionMode: 'model', dependsOn: mediaDependenciesForContent,
+      skillId: textAdventure ? 'text-adventure.visual-direction.v1' : 'product-production.media-requirements.v1',
+      executionMode: 'model', dependsOn: mediaDependenciesForContent,
       inputArtifactKeys: mediaInputsForContent, outputArtifactKeys: ['media.requirements'], requirementKeys: [],
       capabilityRequirementKeys: textCapabilities, concurrencyGroup: 'text-provider',
       subjectLockKeys: ['media.requirements'], priority: 88, budgetReservation: modelBudget('media.requirements'),
@@ -489,7 +580,8 @@ export async function createProductProductionPlanV3(input: {
   }
   const textAdventureDependencies = textAdventure
     ? [
-        'content.adventure-architecture', 'content.adventure-side-quests',
+        'content.story-bible', 'content.cast-bible', 'content.adventure-architecture',
+        'content.narrative-arc-plan', 'content.main-quest-plan', 'content.adventure-side-quests',
         'content.adventure-ambient-events', 'content.adventure-quality-review',
       ] : []
   const integrationDependencies = [
@@ -498,7 +590,8 @@ export async function createProductProductionPlanV3(input: {
   ]
   const textAdventureIntegrationArtifactKeys = textAdventure
     ? [
-        'content.adventure-architecture', 'content.adventure-side-quests',
+        'content.story-bible', 'content.cast-bible', 'content.adventure-architecture',
+        'content.narrative-arc-plan', 'content.main-quest-plan', 'content.adventure-side-quests',
         'content.adventure-ambient-events', 'quality.adventure-review',
       ] : []
   const integrationArtifactKeys = brief.intent.productType === 'ttrpg'

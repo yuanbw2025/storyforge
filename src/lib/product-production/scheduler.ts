@@ -575,8 +575,14 @@ async function currentProductionBuild(scope: WorkspaceScope, productionId: numbe
 }
 
 function evolutionTaskLane(taskKey: string): 'content' | 'product' | 'visual' | 'audio' | null {
-  if (taskKey === 'content.design' || taskKey === 'content.narrative'
+  if (taskKey === 'content.source-sufficiency'
+    || taskKey === 'content.design'
+    || taskKey === 'content.story-bible'
+    || taskKey === 'content.cast-bible'
+    || taskKey === 'content.narrative'
     || taskKey === 'content.adventure-architecture'
+    || taskKey === 'content.narrative-arc-plan'
+    || taskKey === 'content.main-quest-plan'
     || taskKey === 'content.adventure-side-quests'
     || taskKey === 'content.adventure-ambient-events'
     || taskKey === 'content.adventure-quality-review') return 'content'

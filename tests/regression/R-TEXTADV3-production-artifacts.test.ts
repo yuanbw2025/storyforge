@@ -3,6 +3,7 @@ import type { ProductProductionBriefV3 } from '../../src/lib/types'
 import {
   parseTextAdventureCastBibleArtifactV1,
   parseTextAdventureNarrativeArcPlanArtifactV1,
+  parseTextAdventureQuestPlanArtifactV1,
   parseTextAdventureSourceSufficiencyArtifactV1,
   parseTextAdventureStoryBibleArtifactV1,
 } from '../../src/lib/adventure/production-artifacts-v2'
@@ -137,5 +138,59 @@ describe('TEXTADV-3 · 专业生产工件合同', () => {
     expect(() => parseTextAdventureNarrativeArcPlanArtifactV1({ value: broken, brief: brief(), cast, storyBible: story }))
       .toThrow('数量无效')
   })
-})
 
+  it('主线任务计划把阶段、目标、场景、通用解法与持久后果精确闭合', () => {
+    const cast = castBible()
+    const story = storyBible()
+    const arc = parseTextAdventureNarrativeArcPlanArtifactV1({
+      value: {
+        schema: 'storyforge.text-adventure-narrative-arc-plan-artifact', version: 1,
+        acts: [1, 2, 3].map(index => ({
+          key: `act.${index}`, title: `第${index}幕`, targetMinutes: 5, goal: '推进主线', irreversibleTurn: '形成不可逆后果',
+          sceneCards: [{
+            key: `scene.${index}`, title: `场景${index}`, locationOrdinal: Math.min(index, 2),
+            purpose: '推进冲突', conflict: '公开或隐瞒', entryState: '进入', exitState: '离开',
+            castKeys: ['character.player', 'character.npc.1'], setupKeys: [], payoffKeys: [],
+          }],
+        })),
+        decisions: [{
+          key: 'decision.1', sceneKey: 'scene.1', prompt: '怎么做？', options: [
+            { key: 'option.a', label: '公开', cost: '关系受损', persistentEffectKey: 'flag.truth', echoSceneKeys: ['scene.2', 'scene.3'] },
+            { key: 'option.b', label: '隐瞒', cost: '风险延续', persistentEffectKey: 'flag.hide', echoSceneKeys: ['scene.2', 'scene.3'] },
+          ],
+        }],
+        endings: [
+          { endingKey: 'ending.truth', sceneKey: 'scene.3' },
+          { endingKey: 'ending.shelter', sceneKey: 'scene.3' },
+        ],
+      },
+      brief: brief(), cast, storyBible: story,
+    })
+    const value = {
+      schema: 'storyforge.text-adventure-quest-plan-artifact', version: 1, bundleKind: 'main',
+      quests: [{
+        key: 'quest.main', title: '守住潮门', description: '完成一次有代价的选择。',
+        characterKeys: ['character.player', 'character.npc.1'],
+        stages: [{ key: 'stage.opening', title: '确认局势', objectiveKeys: ['objective.records'] }],
+        objectives: [{
+          key: 'objective.records', stageKey: 'stage.opening', title: '取得记录',
+          narrativePurpose: '让最后选择拥有事实依据。', sceneKeys: ['scene.1', 'scene.2'], locationOrdinal: 1,
+          alternatives: [{
+            key: 'route.talk', actionKind: 'talk', cost: '关系承压',
+            successConsequence: '同伴交出记录。', failureForwardConsequence: '同伴拒绝，但留下了仓库钥匙。',
+            persistentEffectKeys: ['flag.records-known'],
+          }],
+        }],
+      }],
+    }
+    const parsed = parseTextAdventureQuestPlanArtifactV1({
+      value, brief: brief(), arcPlan: arc, cast, expectedKind: 'main', expectedQuestCount: 1,
+    })
+    expect(parsed.quests[0].objectives[0].alternatives[0]).toMatchObject({ actionKind: 'talk' })
+    const broken = structuredClone(value)
+    broken.quests[0].stages[0].objectiveKeys = ['objective.missing']
+    expect(() => parseTextAdventureQuestPlanArtifactV1({
+      value: broken, brief: brief(), arcPlan: arc, cast, expectedKind: 'main', expectedQuestCount: 1,
+    })).toThrow('未精确覆盖')
+  })
+})

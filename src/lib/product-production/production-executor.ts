@@ -42,6 +42,13 @@ import {
   parseTextAdventureSystemsArtifactV1,
   type TextAdventureSystemsArtifactV1,
 } from '../adventure/production-artifacts'
+import {
+  parseTextAdventureCastBibleArtifactV1,
+  parseTextAdventureNarrativeArcPlanArtifactV1,
+  parseTextAdventureQuestPlanArtifactV1,
+  parseTextAdventureSourceSufficiencyArtifactV1,
+  parseTextAdventureStoryBibleArtifactV1,
+} from '../adventure/production-artifacts-v2'
 import { bindTextAdventureNarrativeActionsV1 } from '../adventure/production-compiler'
 import {
   planTextAdventureNarrativeLocationsV1,
@@ -900,10 +907,28 @@ function textSystem(
     (attempt > 1
       ? `这是第 ${attempt} 次有界尝试；上一次候选未通过协议检查。请逐层核对每个对象的全部必填字段，不得省略空对象、空数组、空字符串、null 或数值字段。`
       : '')
-  if (taskKey === 'content.design') return `${common}\n输出字段必须精确为：` +
+  if (taskKey === 'content.source-sufficiency') return `${common}\n你是来源编辑，只审查冻结 SourcePlan 能否支撑这次文字冒险生产，不创作剧情正文。` +
+    '逐域标记充分、部分、缺失或冲突；resourceKeys 只能引用授权清单。缺少但可在产品私域补齐的内容登记 privateAdditions，影响世界核心事实、玩家身份或主冲突的缺口必须 blocking。' +
+    '输出字段必须精确为：{"schema":"storyforge.text-adventure-source-sufficiency-artifact","version":1,"decision":"ready|ready-with-private-additions|blocked","adaptationStrategy":"adapt-rich|expand-sparse|author-outline","coverage":[{"domain":"world-premise|time-and-era|space|characters|organizations|conflicts|history|rules-and-abilities|items|visual-anchors|boundaries","status":"sufficient|partial|missing|conflicting","resourceKeys":[],"rationale":"..."}],"gaps":[{"key":"stable-key","severity":"warning|blocking","description":"...","affectedStages":["content.story-bible"]}],"privateAdditions":[{"key":"stable-key","kind":"character|location-detail|event|item|rule-detail","title":"...","rationale":"..."}],"authorDecisionRequired":false}。' +
+    `授权 resourceKeys=${JSON.stringify(brief.source.selection.resourceKeys)}。decision=blocked 当且仅当存在 blocking gap 或 conflicting coverage；decision 不是 ready 时 authorDecisionRequired 必须为 true。`
+  if (taskKey === 'content.design') return `${common}\n${brief.textAdventure ? '你是文字冒险制作人/主协调 Agent，只负责冻结产品设计、核心循环与跨部门约束，不替代故事、角色、任务或场景专员。' : ''}输出字段必须精确为：` +
     '{"schema":"storyforge.product-design-artifact","version":1,"title":"...","logline":"...","playerGoal":"...","coreLoop":["..."],"sourceAnchors":["..."],"invariants":["..."],"tone":["..."],"targetPlayMinutes":1,"targetEndingCount":1}。' +
     `sourceAnchors 只能从 ${JSON.stringify([...brief.source.startingPoint.sourceRefs, `world:${brief.source.worldContentHash}`])} 中选择且至少一个；目标分钟=${brief.scale.targetPlayMinutes}，结局=${brief.scale.targetEndingCount}。`
   const adventure = brief.textAdventure
+  if (taskKey === 'content.story-bible') {
+    if (!adventure) return `${common}\n缺少文字冒险专用 Brief，停止。`
+    return `${common}\n你是故事架构师。把冻结来源、来源审查与产品设计凝结成故事圣经；只允许把补充事实登记为 productPrivateFacts，不得伪装成 WorldRelease 事实。` +
+      '输出字段必须精确为：{"schema":"storyforge.text-adventure-story-bible-artifact","version":1,"title":"...","premise":"...","playerFantasy":"...","thematicQuestion":"...","emotionalPromise":"...","centralConflict":"...","canonFacts":["..."],"productPrivateFacts":[],"prohibitions":["..."],"setupPayoffs":[{"key":"setup.some-key","setup":"...","payoff":"...","introducedAct":1,"resolvedAct":3}],"endings":[{"key":"ending.some-key","title":"...","dramaticAnswer":"...","requiredConsequences":["...","..."]}]}。' +
+      `canonFacts 至少 3 项、prohibitions 至少 1 项、setupPayoffs 至少 2 项、endings 至少 ${brief.scale.targetEndingCount} 项；结局必须回答主题问题并要求至少两个前序后果。`
+  }
+  if (taskKey === 'content.cast-bible') {
+    if (!adventure) return `${common}\n缺少文字冒险专用 Brief，停止。`
+    const minimumNpcs = brief.qualityProfile === 'commercial-candidate'
+      ? Math.max(5, Math.ceil(brief.scale.targetPlayMinutes / 12)) : 1
+    return `${common}\n你是角色总监。必须创建恰好一个 player 和至少 ${minimumNpcs} 个有独立欲望、恐惧、秘密、动机、声音、知识边界、关系变化与视觉锚点的 NPC。` +
+      '输出字段必须精确为：{"schema":"storyforge.text-adventure-cast-bible-artifact","version":1,"characters":[{"key":"character.some-key","role":"player|major-npc|supporting-npc","sourceResourceKey":null,"name":"...","publicIdentity":"...","desire":"...","fear":"...","secret":"...","motivation":"...","voice":"...","initialKnowledge":["..."],"forbiddenKnowledge":["..."],"relationshipArc":["初始关系","变化结果"],"visualAnchor":"..."}]}。' +
+      `sourceResourceKey 只能为 null 或以下授权 key：${JSON.stringify(brief.source.selection.resourceKeys)}；null 表示产品私域角色。不得使用“某人”“NPC”“待定”作为正式姓名。`
+  }
   if (taskKey === 'content.adventure-architecture') {
     if (!adventure) return `${common}\n缺少文字冒险专用 Brief，停止。`
     return `${common}\n你是文字冒险项目的文案主管，负责先冻结宏观叙事骨架、四级空间和视觉圣经，不写调查/法庭/生存/恋爱等专用机制。` +
@@ -911,6 +936,24 @@ function textSystem(
       `至少 ${adventure.narrative.targetRegionCount} 个大区域、${adventure.narrative.targetAreaCount} 个区域、${adventure.narrative.targetLocationCount} 个地点；大区域不是酒馆或广场，区域和地点必须形成合理层级。` +
       `总体验 ${brief.scale.targetPlayMinutes} 分钟，核心情绪承诺=${adventure.experience.emotionalTarget}；来源处理=${adventure.sourceTreatment}。` +
       '所有专有题材只出现在内容文字和 tags 中，不得变成底层机制字段。'
+  }
+  if (taskKey === 'content.narrative-arc-plan') {
+    if (!adventure) return `${common}\n缺少文字冒险专用 Brief，停止。`
+    const minimumDecisions = brief.qualityProfile === 'commercial-candidate'
+      ? Math.max(2, Math.ceil(brief.scale.targetPlayMinutes / 10)) : 1
+    return `${common}\n你是故事架构师，负责把故事圣经、角色圣经、空间架构与系统约束拆成可执行的分幕叙事弧。` +
+      '输出字段必须精确为：{"schema":"storyforge.text-adventure-narrative-arc-plan-artifact","version":1,"acts":[{"key":"act.1","title":"...","targetMinutes":20,"goal":"...","irreversibleTurn":"...","sceneCards":[{"key":"scene.001","title":"...","locationOrdinal":1,"purpose":"...","conflict":"...","entryState":"...","exitState":"...","castKeys":["character.some-key"],"setupKeys":[],"payoffKeys":[]}]}],"decisions":[{"key":"decision.some-key","sceneKey":"scene.001","prompt":"...","options":[{"key":"option.some-key","label":"...","cost":"...","persistentEffectKey":"flag.some-key","echoSceneKeys":["scene.002","scene.003"]}]}],"endings":[{"endingKey":"ending.some-key","sceneKey":"scene.012"}]}。' +
+      `必须有 3–8 幕、至少 ${adventure.narrative.targetSceneCount} 张唯一场景卡，targetMinutes 合计约 ${brief.scale.targetPlayMinutes} 分钟；至少 ${minimumDecisions} 个有意义决定，每个决定至少 2 个选项，每个选项至少在两个后续场景回响；角色、铺垫、回收和 endingKey 必须逐字复用上游稳定 key。locationOrdinal 为 1–${adventure.narrative.targetLocationCount}。`
+  }
+  if (taskKey === 'content.main-quest-plan') {
+    if (!adventure) return `${common}\n缺少文字冒险专用 Brief，停止。`
+    const minimumStages = brief.qualityProfile === 'commercial-candidate'
+      ? Math.max(3, Math.ceil(brief.scale.targetPlayMinutes / 20)) : 1
+    const minimumObjectives = brief.qualityProfile === 'commercial-candidate'
+      ? Math.max(8, Math.ceil(brief.scale.targetPlayMinutes / 7.5)) : 1
+    return `${common}\n你是主线任务设计师。把叙事弧拆成恰好一条主线任务；这不是一句任务摘要，而是可供脚本编译的阶段、目标与通用解法合同。` +
+      '输出字段必须精确为：{"schema":"storyforge.text-adventure-quest-plan-artifact","version":1,"bundleKind":"main","quests":[{"key":"quest.main","title":"...","description":"...","characterKeys":["character.some-key"],"stages":[{"key":"stage.1","title":"...","objectiveKeys":["objective.1"]}],"objectives":[{"key":"objective.1","stageKey":"stage.1","title":"...","narrativePurpose":"...","sceneKeys":["scene.001"],"locationOrdinal":1,"alternatives":[{"key":"alternative.1","actionKind":"look|move|talk|take|give|use|inspect|attempt|rest|quest-action","cost":"...","successConsequence":"...","failureForwardConsequence":"...","persistentEffectKeys":["flag.some-key"]}]}]}]}。' +
+      `商业候选至少 ${minimumStages} 阶段、${minimumObjectives} 目标，至少两个目标有 2 种通用解法；prototype 也必须至少一阶段一目标。stage.objectiveKeys 必须不重不漏精确覆盖 objectives；sceneKeys、characterKeys 只能复用叙事弧和角色圣经稳定 key；locationOrdinal 为 1–${adventure.narrative.targetLocationCount}。每种失败结果都必须推进到可继续的新局面。`
   }
   if (taskKey === 'content.narrative') {
     const ttrpgDesign = brief.intent.productType === 'ttrpg'
@@ -1047,13 +1090,98 @@ async function executeModelTask(input: ProductProductionTaskExecutionInputV1, op
   let payload: unknown
   let kind: ProductProductionTaskArtifactV1['kind']
   let quality: unknown
-  if (input.task.taskKey === 'content.design') {
+  if (input.task.taskKey === 'content.source-sufficiency') {
+    const sourceAudit = parseTextAdventureSourceSufficiencyArtifactV1({
+      value: raw,
+      brief: options.brief,
+      allowedResourceKeys: options.brief.source.selection.resourceKeys,
+    })
+    payload = sourceAudit
+    kind = 'product-design'
+    quality = {
+      sourceSufficiencyAssessed: true,
+      decision: sourceAudit.decision,
+      blockingGapCount: sourceAudit.gaps.filter(gap => gap.severity === 'blocking').length,
+    }
+  } else if (input.task.taskKey === 'content.design') {
+    if (options.brief.textAdventure) {
+      const sourceAudit = parseTextAdventureSourceSufficiencyArtifactV1({
+        value: artifactPayload(input, 'content.source-sufficiency'),
+        brief: options.brief,
+        allowedResourceKeys: options.brief.source.selection.resourceKeys,
+      })
+      if (sourceAudit.authorDecisionRequired) {
+        fail(`文字冒险来源审查需要作者决策:${sourceAudit.decision}`)
+      }
+    }
     payload = parseDesign(raw, options.brief); kind = 'product-design'
     quality = { sourceAnchorsVerified: true }
+  } else if (input.task.taskKey === 'content.story-bible') {
+    payload = parseTextAdventureStoryBibleArtifactV1(raw, options.brief)
+    kind = 'product-design'; quality = { storyBibleVerified: true }
+  } else if (input.task.taskKey === 'content.cast-bible') {
+    const castBible = parseTextAdventureCastBibleArtifactV1({
+      value: raw,
+      brief: options.brief,
+      allowedResourceKeys: options.brief.source.selection.resourceKeys,
+    })
+    payload = castBible
+    kind = 'product-design'; quality = {
+      castBibleVerified: true,
+      characterCount: castBible.characters.length,
+      npcCount: castBible.characters.filter(character => character.role !== 'player').length,
+    }
   } else if (input.task.taskKey === 'content.adventure-architecture') {
     if (!options.brief.textAdventure) fail('文字冒险架构任务缺少专用 Brief')
     payload = parseTextAdventureArchitectureArtifactV1(raw, options.brief.textAdventure); kind = 'product-design'
     quality = { fourLevelSpaceVerified: true }
+  } else if (input.task.taskKey === 'content.narrative-arc-plan') {
+    const storyBible = parseTextAdventureStoryBibleArtifactV1(
+      artifactPayload(input, 'content.story-bible'), options.brief,
+    )
+    const cast = parseTextAdventureCastBibleArtifactV1({
+      value: artifactPayload(input, 'content.cast-bible'),
+      brief: options.brief,
+      allowedResourceKeys: options.brief.source.selection.resourceKeys,
+    })
+    const arcPlan = parseTextAdventureNarrativeArcPlanArtifactV1({
+      value: raw, brief: options.brief, cast, storyBible,
+    })
+    payload = arcPlan
+    kind = 'product-design'; quality = {
+      narrativeArcPlanVerified: true,
+      sceneCardCount: arcPlan.acts.flatMap(act => act.sceneCards).length,
+      meaningfulDecisionCount: arcPlan.decisions.length,
+    }
+  } else if (input.task.taskKey === 'content.main-quest-plan') {
+    const cast = parseTextAdventureCastBibleArtifactV1({
+      value: artifactPayload(input, 'content.cast-bible'),
+      brief: options.brief,
+      allowedResourceKeys: options.brief.source.selection.resourceKeys,
+    })
+    const storyBible = parseTextAdventureStoryBibleArtifactV1(
+      artifactPayload(input, 'content.story-bible'), options.brief,
+    )
+    const arcPlan = parseTextAdventureNarrativeArcPlanArtifactV1({
+      value: artifactPayload(input, 'content.narrative-arc-plan'),
+      brief: options.brief,
+      cast,
+      storyBible,
+    })
+    const mainQuestPlan = parseTextAdventureQuestPlanArtifactV1({
+      value: raw,
+      brief: options.brief,
+      arcPlan,
+      cast,
+      expectedKind: 'main',
+      expectedQuestCount: 1,
+    })
+    payload = mainQuestPlan
+    kind = 'narrative'; quality = {
+      mainQuestPlanVerified: true,
+      stageCount: mainQuestPlan.quests[0].stages.length,
+      objectiveCount: mainQuestPlan.quests[0].objectives.length,
+    }
   } else if (input.task.taskKey === 'content.narrative') {
     payload = parseNarrative(raw, options.brief, textAdventureLocationTitles); kind = 'narrative'
     quality = {

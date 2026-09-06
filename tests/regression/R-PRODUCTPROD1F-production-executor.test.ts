@@ -357,6 +357,133 @@ function modelOutputs(
   } as const
 }
 
+function professionalTextAdventurePlanningOutputs(
+  brief: Awaited<ReturnType<typeof fixtureForProduct>>['brief'],
+) {
+  const contract = brief.textAdventure!
+  const sceneCount = Math.max(3, contract.narrative.targetSceneCount)
+  const sceneKeys = Array.from({ length: sceneCount }, (_, index) => `scene.${String(index + 1).padStart(3, '0')}`)
+  const npcCount = brief.qualityProfile === 'commercial-candidate'
+    ? Math.max(5, Math.ceil(brief.scale.targetPlayMinutes / 12)) : 2
+  const characters = [{
+    key: 'character.player', role: 'player' as const, sourceResourceKey: null, name: '守灯人',
+    publicIdentity: '负责维护潮门信号的年轻守灯人。', desire: '让港口在风暴中活下来。',
+    fear: '自己的选择会牺牲无辜者。', secret: '曾经隐瞒一次错误警报。', motivation: '弥补旧错并守住共同体。',
+    voice: '简短、克制，面对责任时不回避。', initialKnowledge: ['潮门即将关闭'],
+    forbiddenKnowledge: ['不知道议会密封记录的完整内容'], relationshipArc: ['被居民怀疑', '以行动赢得或失去信任'],
+    visualAnchor: '深蓝守灯制服、铜色灯杖、被海风磨白的披风边缘。',
+  }, ...Array.from({ length: npcCount }, (_, index) => ({
+    key: `character.npc.${index + 1}`, role: index < 2 ? 'major-npc' as const : 'supporting-npc' as const,
+    sourceResourceKey: null, name: `港民 ${index + 1}`, publicIdentity: `掌握第 ${index + 1} 段港口生活线索的居民。`,
+    desire: `保护自己负责的港口群体 ${index + 1}。`, fear: '真相引发无法控制的报复。',
+    secret: `隐瞒与第 ${index + 1} 次潮汐事故有关的一项选择。`, motivation: '在公共责任与私人牵挂之间寻找出路。',
+    voice: `说话具体，常以第 ${index + 1} 号灯标比喻风险。`, initialKnowledge: [`知道线索 ${index + 1}`],
+    forbiddenKnowledge: ['不知道其他角色未公开的秘密'], relationshipArc: ['试探守灯人', '根据玩家行动选择协助或疏远'],
+    visualAnchor: `海港工作服，携带能辨认身份的 ${index + 1} 号铜制工具。`,
+  }))]
+  const storyEndings = Array.from({ length: Math.max(brief.scale.targetEndingCount, 4) }, (_, index) => ({
+    key: `ending.story.${index + 1}`, title: `潮声之后 ${index + 1}`,
+    dramaticAnswer: `玩家以第 ${index + 1} 种代价回答公开真相与保护共同体能否共存。`,
+    requiredConsequences: [`承认选择 ${index + 1} 的代价`, `兑现人物关系 ${index + 1} 的变化`],
+  }))
+  const setupPayoffs = [{
+    key: 'setup.warning-bell', setup: '第一幕异常警铃总比潮汐早三分钟响起。',
+    payoff: '第三幕证实警铃被某人提前校准，用来为撤离争取时间。', introducedAct: 1, resolvedAct: 3,
+  }, {
+    key: 'setup.copper-mark', setup: '铜制灯标背面刻着被磨损的共同誓言。',
+    payoff: '终局时誓言成为居民是否相信玩家的情感证据。', introducedAct: 1, resolvedAct: 3,
+  }]
+  const actSceneCounts = [0, 1, 2].map(actIndex => (
+    Math.floor(sceneCount / 3) + (actIndex < sceneCount % 3 ? 1 : 0)
+  ))
+  const minuteCounts = [0, 1, 2].map(actIndex => (
+    Math.floor(brief.scale.targetPlayMinutes / 3) + (actIndex < brief.scale.targetPlayMinutes % 3 ? 1 : 0)
+  ))
+  let sceneOffset = 0
+  const acts = actSceneCounts.map((count, actIndex) => {
+    const sceneCards = sceneKeys.slice(sceneOffset, sceneOffset + count).map((sceneKey, localIndex) => ({
+      key: sceneKey, title: `第 ${actIndex + 1} 幕场景 ${localIndex + 1}`,
+      locationOrdinal: (sceneOffset + localIndex) % contract.narrative.targetLocationCount + 1,
+      purpose: '推进主冲突并让玩家获得可行动的信息。', conflict: '公开事实与保护眼前人物无法同时零成本完成。',
+      entryState: '玩家带着上一场留下的关系与资源后果进入。', exitState: '局面发生不可忽略的变化并开启下一目标。',
+      castKeys: ['character.player', `character.npc.${(sceneOffset + localIndex) % npcCount + 1}`],
+      setupKeys: actIndex === 0 ? [setupPayoffs[localIndex % setupPayoffs.length].key] : [],
+      payoffKeys: actIndex === 2 ? [setupPayoffs[localIndex % setupPayoffs.length].key] : [],
+    }))
+    sceneOffset += count
+    return {
+      key: `act.${actIndex + 1}`, title: `第 ${actIndex + 1} 幕`, targetMinutes: minuteCounts[actIndex],
+      goal: '完成本幕可验证目标并提高风险。', irreversibleTurn: '玩家的选择改变后续人物立场与可用资源。', sceneCards,
+    }
+  })
+  const decisionCount = brief.qualityProfile === 'commercial-candidate'
+    ? Math.max(2, Math.ceil(brief.scale.targetPlayMinutes / 10)) : 1
+  const decisions = Array.from({ length: decisionCount }, (_, index) => ({
+    key: `decision.${index + 1}`, sceneKey: sceneKeys[index % Math.max(1, sceneKeys.length - 2)],
+    prompt: `第 ${index + 1} 次关键决定要承担什么代价？`, options: [0, 1].map(optionIndex => ({
+      key: `option.${index + 1}.${optionIndex + 1}`, label: optionIndex === 0 ? '公开承担' : '暂时保护',
+      cost: optionIndex === 0 ? '失去一名角色的信任' : '消耗有限的撤离时间',
+      persistentEffectKey: `flag.decision.${index + 1}.${optionIndex + 1}`,
+      echoSceneKeys: [sceneKeys[(index + 1) % sceneKeys.length], sceneKeys[(index + 2) % sceneKeys.length]],
+    })),
+  }))
+  const stageCount = brief.qualityProfile === 'commercial-candidate'
+    ? Math.max(3, Math.ceil(brief.scale.targetPlayMinutes / 20)) : 3
+  const objectiveCount = brief.qualityProfile === 'commercial-candidate'
+    ? Math.max(8, Math.ceil(brief.scale.targetPlayMinutes / 7.5)) : 8
+  const objectiveKeys = Array.from({ length: objectiveCount }, (_, index) => `objective.${index + 1}`)
+  const stages = Array.from({ length: stageCount }, (_, stageIndex) => ({
+    key: `stage.${stageIndex + 1}`, title: `主线阶段 ${stageIndex + 1}`,
+    objectiveKeys: objectiveKeys.filter((_, index) => index % stageCount === stageIndex),
+  }))
+  return {
+    'content.source-sufficiency': {
+      schema: 'storyforge.text-adventure-source-sufficiency-artifact', version: 1,
+      decision: 'ready', adaptationStrategy: 'adapt-rich',
+      coverage: [{ domain: 'world-premise', status: 'sufficient', resourceKeys: [], rationale: '冻结世界前提足以建立产品私域冒险。' }],
+      gaps: [], privateAdditions: [], authorDecisionRequired: false,
+    },
+    'content.story-bible': {
+      schema: 'storyforge.text-adventure-story-bible-artifact', version: 1, title: '雾港抉择',
+      premise: '潮门关闭前，守灯人必须决定如何处理会改变港口秩序的信号记录。',
+      playerFantasy: '以有限资源承担共同体守护者的艰难选择。', thematicQuestion: '真相与保护能否在责任中共存？',
+      emotionalPromise: '让玩家从被怀疑走向承担，并在结局看见关系回响。', centralConflict: '公开记录会引发冲突，封存记录会延续伤害。',
+      canonFacts: ['潮门按冻结规则关闭', '信号塔保存港口记录', '玩家不能改写世界引擎事实'],
+      productPrivateFacts: [], prohibitions: ['不得临时制造推翻冻结世界的幕后设定'], setupPayoffs, endings: storyEndings,
+    },
+    'content.cast-bible': {
+      schema: 'storyforge.text-adventure-cast-bible-artifact', version: 1, characters,
+    },
+    'content.narrative-arc-plan': {
+      schema: 'storyforge.text-adventure-narrative-arc-plan-artifact', version: 1,
+      acts, decisions,
+      endings: storyEndings.slice(0, brief.scale.targetEndingCount).map((ending, index) => ({
+        endingKey: ending.key, sceneKey: sceneKeys[Math.max(0, sceneKeys.length - 1 - index)],
+      })),
+    },
+    'content.main-quest-plan': {
+      schema: 'storyforge.text-adventure-quest-plan-artifact', version: 1, bundleKind: 'main',
+      quests: [{
+        key: 'quest.main', title: '最后的灯火', description: '调查信号记录、协调港民并决定潮门命运。',
+        characterKeys: characters.map(character => character.key), stages,
+        objectives: objectiveKeys.map((objectiveKey, index) => ({
+          key: objectiveKey, stageKey: stages[index % stageCount].key, title: `主线目标 ${index + 1}`,
+          narrativePurpose: '把场景冲突转成玩家可执行且有后果的任务。',
+          sceneKeys: [sceneKeys[index % sceneKeys.length]],
+          locationOrdinal: index % contract.narrative.targetLocationCount + 1,
+          alternatives: Array.from({ length: index < 2 ? 2 : 1 }, (_, alternativeIndex) => ({
+            key: `alternative.${index + 1}.${alternativeIndex + 1}`,
+            actionKind: alternativeIndex === 0 ? 'talk' : 'inspect', cost: '消耗时间或关系信任。',
+            successConsequence: '目标完成并让后续人物态度发生可见变化。',
+            failureForwardConsequence: '目标未按预期完成，但获得替代入口并继续主线。',
+            persistentEffectKeys: [`flag.objective.${index + 1}.${alternativeIndex + 1}`],
+          })),
+        })),
+      }],
+    },
+  } as const
+}
+
 function fullLengthTextAdventureOutputs(
   brief: Awaited<ReturnType<typeof fixtureForProduct>>['brief'],
 ) {
@@ -423,6 +550,7 @@ function fullLengthTextAdventureOutputs(
   })
   return {
     ...base,
+    ...professionalTextAdventurePlanningOutputs(brief),
     'content.adventure-architecture': {
       ...base['content.adventure-architecture'],
       regions,
@@ -1105,7 +1233,11 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
         requirementKey: textRequirement.requirementKey, adapterId: 'configured-text.v1', bindingHash,
       }],
     })
-    expect(projection).toMatchObject({ terminal: true, buildStatus: 'release-ready' })
+    const projectedBuild = await db.productBuilds.get(projection.buildId)
+    expect(
+      projection,
+      `full-length text-adventure projection:\n${JSON.stringify(projection, null, 2)}\nfailure=${projectedBuild?.failureJson}`,
+    ).toMatchObject({ terminal: true, buildStatus: 'release-ready' })
     expect(narrativeSystem).toContain('固定图骨架=')
     expect(narrativeSystem).toContain('"entryNodeKey":"scene.001"')
     expect(narrativeSystem).toContain('"locationOrdinal":1')
@@ -1250,6 +1382,7 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
       owned.brief.source.worldContentHash, 'text-adventure', firstCharacterAnchor(owned.brief),
       owned.brief.intent.playerRole,
     ) as Record<string, unknown>
+    Object.assign(outputs, professionalTextAdventurePlanningOutputs(owned.brief))
     outputs['media.requirements'] = {
       ...(outputs['media.requirements'] as Record<string, unknown>), visual: [], audio: [],
     }
@@ -1372,7 +1505,9 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     })
     expect(repaired).toMatchObject({ terminal: true, buildStatus: 'release-ready' })
     const expectedCalls = new Map([
-      ['content.design', 1], ['content.adventure-architecture', 1], ['content.narrative', 4],
+      ['content.source-sufficiency', 1], ['content.design', 1], ['content.story-bible', 1],
+      ['content.cast-bible', 1], ['content.adventure-architecture', 1],
+      ['content.narrative-arc-plan', 1], ['content.main-quest-plan', 1], ['content.narrative', 4],
       ['content.product-module', 1], ['content.adventure-side-quests', 2],
       ['content.adventure-ambient-events', 1], ['content.adventure-quality-review', 2],
       ['media.requirements', 2],
@@ -1409,12 +1544,15 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
       expect(owned.brief.capabilityRequirements.filter(item => item.mediaClass !== 'text'))
         .toHaveLength(productType === 'text-adventure' ? 1 : 0)
       const bindingHash = await hashProductProductionValueV2({ provider: 'existing-global-config', productType })
-      const outputs = modelOutputs(
+      const outputs = {
+        ...modelOutputs(
         owned.brief.source.worldContentHash,
         productType,
         firstCharacterAnchor(owned.brief),
         owned.brief.intent.playerRole,
-      )
+        ),
+        ...(productType === 'text-adventure' ? professionalTextAdventurePlanningOutputs(owned.brief) : {}),
+      }
       const runText: ProductionTextRunnerV1 = async request => {
         const taskKey = Object.keys(outputs).find(key => request.system.includes(`任务=${key}。`)) as keyof typeof outputs
         if (!taskKey) throw new Error(`unknown ${productType} model task`)

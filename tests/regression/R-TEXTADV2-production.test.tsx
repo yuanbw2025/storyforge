@@ -39,7 +39,7 @@ describe('R-TEXTADV2-production · 文字冒险正式生产契约与工作台', 
     db.close()
   })
 
-  it('把文案主管、主线、系统、支线、区域事件、美术与装配编成有界 DAG', async () => {
+  it('把专业多 Agent 团队的来源、故事、角色、空间、系统、任务、场景、美术与装配编成有界 DAG', async () => {
     const owned = await seedCurrentProductWorld('TEXTADV-2 正式生产计划')
     const consultation = await suggestProductStartingPoints({
       scope: owned.scope,
@@ -78,14 +78,35 @@ describe('R-TEXTADV2-production · 文字冒险正式生产契约与工作台', 
     const plan = await createProductProductionPlanV3({ buildNumber: 1, briefHash, brief })
     const taskByKey = new Map(plan.tasks.map(task => [task.taskKey, task]))
     expect([...taskByKey.keys()]).toEqual(expect.arrayContaining([
-      'content.design', 'content.adventure-architecture', 'content.narrative',
-      'content.product-module', 'content.adventure-side-quests', 'content.adventure-ambient-events',
+      'content.source-sufficiency', 'content.design', 'content.story-bible', 'content.cast-bible',
+      'content.adventure-architecture', 'content.product-module', 'content.narrative-arc-plan',
+      'content.main-quest-plan', 'content.adventure-side-quests', 'content.adventure-ambient-events',
+      'content.narrative',
       'content.adventure-quality-review', 'media.requirements', 'media.visual',
       'integration.package', 'qa.release',
     ]))
+    expect(taskByKey.get('content.source-sufficiency')).toMatchObject({
+      skillId: 'text-adventure.source-sufficiency.v1', dependsOn: [],
+      outputArtifactKeys: ['content.source-sufficiency'],
+    })
+    expect(taskByKey.get('content.story-bible')?.dependsOn).toEqual([
+      'content.source-sufficiency', 'content.design',
+    ])
+    expect(taskByKey.get('content.cast-bible')?.dependsOn).toEqual([
+      'content.source-sufficiency', 'content.story-bible',
+    ])
+    expect(taskByKey.get('content.narrative-arc-plan')?.dependsOn).toEqual([
+      'content.story-bible', 'content.cast-bible', 'content.adventure-architecture', 'content.product-module',
+    ])
+    expect(taskByKey.get('content.main-quest-plan')?.dependsOn).toEqual([
+      'content.story-bible', 'content.cast-bible', 'content.product-module', 'content.narrative-arc-plan',
+    ])
     expect(taskByKey.get('content.narrative')).toMatchObject({
-      skillId: 'text-adventure.production-mainline.v1',
-      dependsOn: ['content.adventure-architecture'],
+      skillId: 'text-adventure.scene-script.v1',
+      dependsOn: [
+        'content.cast-bible', 'content.adventure-architecture', 'content.narrative-arc-plan',
+        'content.main-quest-plan', 'content.adventure-side-quests', 'content.adventure-ambient-events',
+      ],
       timeoutMs: 600_000,
     })
     expect(taskByKey.get('content.narrative')!.budgetReservation.durationMs)
@@ -93,13 +114,14 @@ describe('R-TEXTADV2-production · 文字冒险正式生产契约与工作台', 
     expect(taskByKey.get('content.narrative')!.budgetReservation.outputTokens)
       .toBeGreaterThan(taskByKey.get('content.product-module')!.budgetReservation.outputTokens)
     expect(taskByKey.get('content.adventure-side-quests')?.dependsOn).toEqual([
-      'content.adventure-architecture', 'content.product-module',
+      'content.adventure-architecture', 'content.product-module', 'content.main-quest-plan',
     ])
     expect(taskByKey.get('content.adventure-quality-review')).toMatchObject({
       skillId: 'text-adventure.production-quality-review.v1',
       dependsOn: [
-        'content.adventure-architecture', 'content.narrative', 'content.product-module',
-        'content.adventure-side-quests', 'content.adventure-ambient-events',
+        'content.story-bible', 'content.cast-bible', 'content.adventure-architecture',
+        'content.product-module', 'content.narrative-arc-plan', 'content.main-quest-plan',
+        'content.adventure-side-quests', 'content.adventure-ambient-events', 'content.narrative',
       ],
       outputArtifactKeys: ['quality.adventure-review'],
     })
@@ -107,7 +129,8 @@ describe('R-TEXTADV2-production · 文字冒险正式生产契约与工作台', 
     expect(taskByKey.get('integration.package')?.failurePolicy).toBe('pause')
     expect(taskByKey.get('qa.release')?.failurePolicy).toBe('pause')
     expect(taskByKey.get('integration.package')?.inputArtifactKeys).toEqual(expect.arrayContaining([
-      'content.adventure-architecture', 'content.adventure-side-quests',
+      'content.story-bible', 'content.cast-bible', 'content.adventure-architecture',
+      'content.narrative-arc-plan', 'content.main-quest-plan', 'content.adventure-side-quests',
       'content.adventure-ambient-events', 'quality.adventure-review',
       'media.visual.001', 'media.visual.002',
     ]))
