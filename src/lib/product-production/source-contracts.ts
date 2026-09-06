@@ -46,6 +46,7 @@ function requirementGoal(input: {
 }): UpperProductWorldRequirementGoalV1 {
   const participantKeys = input.brief.source.selection.roleBindings.participants
     ?? input.brief.source.selection.roleBindings.characters
+    ?? input.brief.source.selection.roleBindings.residents
     ?? []
   const selectedKinds = new Set(input.descriptors.map(item => item.worldSemantic!.resourceKind))
   const selectedAreas = unique(input.descriptors.map(item => item.worldSemantic!.area))

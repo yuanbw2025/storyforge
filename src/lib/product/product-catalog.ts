@@ -57,6 +57,7 @@ export type ProductSurfaceIdV1 =
   | 'node-authoring'
   | 'ttrpg'
   | 'character-interaction'
+  | 'ai-town'
   | 'text-games'
   | 'marketplace'
 
@@ -84,7 +85,7 @@ export const PRODUCT_CATALOG_V1: readonly ProductCatalogEntryV1[] = Object.freez
   entry({ id: 'authoring.nodes', label: '节点创作', family: 'authoring-view', status: 'preview', charterPhase: 'B', requiresWorldReference: false, ownsRuntime: false, ownsMedia: false, maturityNote: '已与分步骤领域后端同源；完整跨模式真实 UI 验收仍持续。' }),
   entry({ id: 'upper.ttrpg', label: '跑团', family: 'upper-product', status: 'preview', charterPhase: 'E', requiresWorldReference: true, ownsRuntime: true, ownsMedia: true, maturityNote: '架构入口与既有功能可预览，玩法和多人体验尚未专项封板。' }),
   entry({ id: 'upper.character-interaction', label: '角色聊天', family: 'upper-product', status: 'preview', charterPhase: 'E', requiresWorldReference: true, ownsRuntime: true, ownsMedia: true, maturityNote: '冻结来源生产与运行纵切面可预览，完整长期体验待专项验收。' }),
-  entry({ id: 'upper.ai-town', label: 'AI 小镇', family: 'upper-product', status: 'experimental', charterPhase: 'E', requiresWorldReference: true, ownsRuntime: true, ownsMedia: true, maturityNote: '尚未形成独立产品闭环，默认隐藏。' }),
+  entry({ id: 'upper.ai-town', label: '后日谈 AI 小镇', family: 'upper-product', status: 'preview', charterPhase: 'E', requiresWorldReference: true, ownsRuntime: true, ownsMedia: true, maturityNote: '冻结来源生产、发布、单机运行与私域演化纵切面可预览；长期内容量与商业化媒资仍待专项验收。' }),
   entry({ id: 'upper.text-adventure', label: '文字冒险', family: 'upper-product', status: 'preview', charterPhase: 'E', requiresWorldReference: true, ownsRuntime: true, ownsMedia: true, maturityNote: '制作与运行基础可预览，完整产品体验待专项验收。' }),
   entry({ id: 'upper.avg', label: 'AVG', family: 'upper-product', status: 'preview', charterPhase: 'E', requiresWorldReference: true, ownsRuntime: true, ownsMedia: true, maturityNote: '制作与运行基础可预览，真实视听资产和演出交付待专项验收。' }),
   entry({ id: 'upper.text-open-world', label: '文字开放世界', family: 'upper-product', status: 'preview', charterPhase: 'E', requiresWorldReference: true, ownsRuntime: true, ownsMedia: true, maturityNote: '生产与运行能力可预览，区域自治、长期任务演化和性能门待专项验收。' }),
@@ -103,6 +104,7 @@ export const PRODUCT_SURFACES_V1: readonly ProductSurfaceEntryV1[] = Object.free
   surface({ id: 'node-authoring', label: '节点创作', productIds: ['authoring.nodes'] }),
   surface({ id: 'ttrpg', label: '跑团', productIds: ['upper.ttrpg'] }),
   surface({ id: 'character-interaction', label: '角色互动', productIds: ['upper.character-interaction'] }),
+  surface({ id: 'ai-town', label: '后日谈 AI 小镇', productIds: ['upper.ai-town'] }),
   surface({ id: 'text-games', label: '文字游戏', productIds: [
     'upper.text-adventure', 'upper.avg', 'upper.text-open-world',
   ] }),
@@ -229,7 +231,6 @@ function validateProductCatalogV1(): void {
     }
   }
   for (const item of PRODUCT_CATALOG_V1) {
-    if (item.id === 'upper.ai-town') continue
     if (!covered.has(item.id)) throw new Error(`[product-catalog] 产品没有界面归属：${item.id}`)
   }
 }

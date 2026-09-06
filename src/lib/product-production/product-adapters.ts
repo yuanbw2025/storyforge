@@ -2,6 +2,7 @@ import {
   compileAdventureModuleV1,
   compileInteractionModulesV1,
   compileOpenWorldModulesV1,
+  compileAiTownModuleV1,
 } from './product-module-compilers'
 import type {
   AdventureContentV1,
@@ -26,7 +27,7 @@ export interface ProductAdapterBuildInputV1 {
   narrative: ProductRuntimePackageV1['narrative']
   /** Frozen, verified labels/details for the portable IDs in Brief.selection. */
   sourceCatalog?: Pick<ProductWorldSourceCatalog,
-    'characters' | 'locations' | 'artifacts' | 'loreEntries' | 'storyArcs'>
+    'storySources' | 'characters' | 'relationships' | 'locations' | 'artifacts' | 'loreEntries' | 'storyArcs'>
   ttrpg?: TtrpgRuntimeContentV1
 }
 
@@ -39,6 +40,7 @@ export interface ProductAdapterBuildResultV1 {
   openWorldEvolution?: NonNullable<ProductRuntimePackageV1['openWorldEvolution']>
   openWorld?: NonNullable<ProductRuntimePackageV1['openWorld']>
   ttrpg?: NonNullable<ProductRuntimePackageV1['ttrpg']>
+  town?: NonNullable<ProductRuntimePackageV1['town']>
 }
 
 function fail(message: string): never {
@@ -69,6 +71,17 @@ const ADAPTERS = new Map<ProductionProductKindV1, UpperProductProductionAdapterV
       adapterId: 'storyforge.product.character-interaction.v1',
       commercialReady: input.brief.qualityProfile === 'commercial-candidate',
       enabledCapabilities: ['narrative', 'interaction'], interaction: interactionModules(input),
+    }),
+  }),
+  adapter({
+    id: 'storyforge.product.ai-town.v1', productType: 'ai-town',
+    enabledCapabilities: ['narrative', 'interaction', 'town'], commercialReady: true,
+    buildModules: input => ({
+      adapterId: 'storyforge.product.ai-town.v1',
+      commercialReady: input.brief.qualityProfile === 'commercial-candidate',
+      enabledCapabilities: ['narrative', 'interaction', 'town'],
+      interaction: interactionModules(input),
+      town: compileAiTownModuleV1(input),
     }),
   }),
   adapter({

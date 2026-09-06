@@ -14,6 +14,7 @@ import type { OpenWorldContentV1 } from './open-world'
 import type { RagDocumentMetadata } from './rag-library'
 import type { TtrpgRuntimeContentV1 } from './ttrpg-product'
 import type { ProductionProductKindV1 } from './product-identity'
+import type { AiTownRuntimeContentV1 } from './ai-town'
 
 /** Product-owned selection over the neutral WorldRelease resource protocol. */
 export interface ProductWorldSourceSelectionV1 {
@@ -158,6 +159,7 @@ export interface ProductRuntimePackageV1 {
   openWorldEvolution?: OpenWorldEvolutionContentV1
   openWorld?: OpenWorldContentV1
   ttrpg?: TtrpgRuntimeContentV1
+  town?: AiTownRuntimeContentV1
 }
 
 export interface ProductReleaseManifestV1 {
@@ -202,6 +204,11 @@ export type TextOpenWorldProductRuntimePackageV1 = ProductRuntimePackageV1 & {
   adventure: AdventureContentV1
   openWorldEvolution: OpenWorldEvolutionContentV1
   openWorld: OpenWorldContentV1
+}
+export type AiTownProductRuntimePackageV1 = ProductRuntimePackageV1 & {
+  productType: 'ai-town'
+  interaction: FrozenInteractionRuntimeV2
+  town: AiTownRuntimeContentV1
 }
 
 export type AnyProductReleaseManifest = ProductReleaseManifestV1

@@ -1,6 +1,7 @@
 import type { ProductRuntimePackageV1 } from "./product-release";
 import type { ProductMediaKind } from "./product-media";
 import type { ProductionProductKindV1 } from "./product-identity";
+import type { AiTownProductionBriefV1 } from "./ai-town";
 import type {
   TtrpgHouseRuleDiffV2,
   TtrpgHouseRuleOverlayV2,
@@ -436,6 +437,8 @@ export interface ProductProductionBriefV3 {
   unresolvedDecisionKeys: string[];
   /** Closed TTRPG construction contract; required exactly when productType=ttrpg. */
   ttrpg?: TtrpgProductionBriefV2;
+  /** Closed AI Town construction contract; required exactly when productType=ai-town. */
+  aiTown?: AiTownProductionBriefV1;
   /** Explicit author confirmations required by product-specific deterministic compilers. */
   authorConfirmations?: {
     ttrpgDefaultRuleMappings: boolean;

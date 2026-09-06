@@ -35,8 +35,7 @@ flowchart TB
   end
 
   subgraph D["具体上层产品的用户定向阶段"]
-    PI["跑团 / 角色互动 / 文字冒险 / AVG / 文字开放世界"]
-    AI["AI 小镇\n仅登记边界，尚未接入生产运行"]
+    PI["跑团 / 角色互动 / AI 小镇 / 文字冒险 / AVG / 文字开放世界"]
     RF["WorldReference"] --> RA["本产品 Requirement Adapter"]
     RA --> GW["中立世界网关\ndescribe / search / read / original evidence"]
     GW --> BP["ConfirmedProductBrief + 冻结 ProductSourcePlan"]
@@ -82,11 +81,11 @@ flowchart TB
 | 当前事实 | 数值 | 单一事实源 |
 |---|---:|---|
 | 应用语义版本 | `3.9.1` | `package.json` |
-| TypeScript 生产源码 | 971 个文件 / 326453 行 | `tsconfig.json` |
+| TypeScript 生产源码 | 979 个文件 / 329346 行 | `tsconfig.json` |
 | IndexedDB schema | v1 / 94 张 required tables | `schema.ts` / `REQUIRED_TABLES` |
 | PROJECT_TABLES | 94 张表 | `project-tables.ts` |
 | Prompt 主线 | 65 个 moduleKey / 210 条内置模板 | `PromptModuleKey` / `prompt-seeds*.ts` |
-| CONTEXT_SOURCES | 81 个上下文源 | `context-sources.ts` |
+| CONTEXT_SOURCES | 82 个上下文源 | `context-sources.ts` |
 | 写回治理 | 38 个通用 adopt target / 34 个领域扩展 | `adoption-schema.ts` |
 <!-- project-metrics:end -->
 
@@ -156,13 +155,13 @@ Field Registry 决定 AI 可写字段；Adoption Schema/Extension 决定集合�
 
 世界领域提供显式 world-draft、按 `World/Work` scope 隔离的语义能力投影、稳定 world code、revision/release、显式作品派生、多世界关系以及不可变资源目录。`WorldRelease` 只从 `PROJECT_TABLES.worldSemantic` 派生确认 Canon，并记录选入/遗漏、候选、冲突、证据和 hash；不含媒资、production、build、可执行蓝图或 runtime。
 
-上层产品先通过 `listWorldReferenceCatalogV1` 取得只读、中立的可选世界来源，不获取物理 `WorldRelease` 行、manifest 或 Provider。资源出口由 `describeWorldReleaseV1`、`searchWorldReleaseV1`、`readWorldResourceV1` 和 `readWorldOriginalEvidenceV1` 构成；产品侧只依赖 `world-release-client` / Context Gateway 的中立接口。目录按稳定 resource UID、release/hash 和关系导航；有界缓存只缓存已校验 release 投影，千级资源规模回归阻止逐行 IndexedDB 游标退化。跑团、角色互动、文字冒险、AVG、文字开放世界分别拥有需求适配器，证明统一协议不等于统一 payload；AI 小镇在专项契约完成前不进入生产注册表。
+上层产品先通过 `listWorldReferenceCatalogV1` 取得只读、中立的可选世界来源，不获取物理 `WorldRelease` 行、manifest 或 Provider。资源出口由 `describeWorldReleaseV1`、`searchWorldReleaseV1`、`readWorldResourceV1` 和 `readWorldOriginalEvidenceV1` 构成；产品侧只依赖 `world-release-client` / Context Gateway 的中立接口。目录按稳定 resource UID、release/hash 和关系导航；有界缓存只缓存已校验 release 投影，千级资源规模回归阻止逐行 IndexedDB 游标退化。跑团、角色互动、AI 小镇、文字冒险、AVG、文字开放世界分别拥有需求适配器，证明统一协议不等于统一 payload。
 
 ### 7.5 上层产品
 
 上层产品生产使用 consultation、brief、command、build、artifact、media、release 与质量证据。Production 和 Release 根记录都以索引化 `productType` 冻结产品身份；工作台、查询、Build、Release 和 Session 按该身份隔离。`ProductRuntimeSession` 及事件/checkpoint 保存私域运行。媒资通过共享设施存储：发布媒资绑定 `ProductRelease`，运行中新生成的媒资绑定 `ProductRuntimeSession`，二者均不归 `WorldRelease`。
 
-这些数据逻辑上分成两个产品阶段：用户引用世界、配置并确认方向形成 product draft/Brief；用户明确开始后进入 production/build/release/runtime。两阶段都属于上层产品，不属于世界引擎。通用 runtime 内核拒绝从世界草稿或 WorldRelease 直接启动正式上层产品；正式运行必须从产品自己的不可变 ProductRelease 或同一生产链的可验证 Build Preview 启动，并在 session 中持久化来源 hash。当前生产身份闭集为跑团、角色互动、文字冒险、AVG、文字开放世界；AI 小镇只有产品目录边界，未接入时不能借其他身份运行。共享工厂不改变各产品分别拥有需求适配器、生产模块、质量门和玩家运行面的事实。
+这些数据逻辑上分成两个产品阶段：用户引用世界、配置并确认方向形成 product draft/Brief；用户明确开始后进入 production/build/release/runtime。两阶段都属于上层产品，不属于世界引擎。通用 runtime 内核拒绝从世界草稿或 WorldRelease 直接启动正式上层产品；正式运行必须从产品自己的不可变 ProductRelease 或同一生产链的可验证 Build Preview 启动，并在 session 中持久化来源 hash。当前生产身份闭集为跑团、角色互动、AI 小镇、文字冒险、AVG、文字开放世界。共享工厂不改变各产品分别拥有需求适配器、生产模块、质量门和玩家运行面的事实；AI 小镇另有时间、语义地图、日程、知识、关系、轻经营和离线演化合同。
 
 ## 8. 世界到产品的单向流
 

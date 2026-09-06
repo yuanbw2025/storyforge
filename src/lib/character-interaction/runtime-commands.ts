@@ -35,6 +35,7 @@ async function appendInteractionCommand(
       if (!session) throw new Error("角色互动会话不存在。");
       if (
         session.kind !== "character-interaction" &&
+        session.kind !== "ai-town" &&
         session.kind !== "text-adventure" &&
         session.kind !== "text-open-world"
       ) {

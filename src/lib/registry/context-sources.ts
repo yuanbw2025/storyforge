@@ -419,7 +419,7 @@ async function readInteractionRuntimeContext(input: AssembleContextInput): Promi
   if (!participantKey) return ''
   const session = await db.productRuntimeSessions.get(input.productRuntimeSessionId)
   if (!session || session.projectId !== input.projectId
-    || !['character-interaction', 'text-adventure', 'text-open-world'].includes(session.kind)) return ''
+    || !['character-interaction', 'ai-town', 'text-adventure', 'text-open-world'].includes(session.kind)) return ''
   if (input.worldGroupId !== undefined && (session.worldGroupId ?? null) !== (input.worldGroupId ?? null)) return ''
   if (session.worldId == null || session.workId == null || !session.runtimeSourceHash) {
     throw new Error('正式角色互动实例缺少产品运行源。')
@@ -440,6 +440,28 @@ async function readInteractionRuntimeContext(input: AssembleContextInput): Promi
     maxCharacters: 24_000,
     maxRecentMessages: 32,
   })
+  const town = state.town
+  const townResident = town?.content.residents.find(item => {
+    const profileIndex = state.interaction?.profiles.findIndex(profile => profile.participantKey === participantKey) ?? -1
+    return town.content.residents[profileIndex]?.residentKey === item.residentKey
+  })
+  const townResidentState = townResident ? town?.residents[townResident.residentKey] : null
+  if (session.kind === 'ai-town' && townResidentState?.residencyStatus !== 'resident') return ''
+  const townKnowledge = town && townResident ? Object.values(town.knowledge).filter(fact => (
+    fact.visibility === 'public' || fact.holders[townResident.residentKey] != null
+  )).slice(-40) : []
+  const townMemories = town && townResident ? town.memories.filter(memory => (
+    memory.ownerResidentKey === townResident.residentKey || memory.visibility === 'public'
+  )).slice(-20) : []
+  const townLines = town && townResident ? [
+    `【小镇当下】第${town.day}日｜${town.slot}｜你在${townResidentState?.locationKey ?? '未知地点'}｜玩家在${town.player.locationKey}`,
+    `【自己的日程与目标】${townResidentState?.activity ?? ''}｜${townResidentState?.activeGoal ?? ''}`,
+    '【自己可知的小镇事实】',
+    ...(townKnowledge.length ? townKnowledge.map(fact => `- ${fact.factKey}｜${fact.statement}`) : ['- 无']),
+    '【自己的后日谈记忆】',
+    ...(townMemories.length ? townMemories.map(memory => `- ${memory.summary}｜证据=${memory.sourceSequences.join(',') || '初始'}`) : ['- 无']),
+    '【小镇行为边界】你拥有自己的生活和立场；只能谈论自己知道的事实；不得替玩家决定行动；不得把私密想法当作玩家已知信息。',
+  ] : []
   return [
     `【角色互动视角】${profile.name}｜key=${profile.participantKey}｜身份=${profile.roleLabel}`,
     `【说话约束】${profile.voiceRules}`,
@@ -453,7 +475,19 @@ async function readInteractionRuntimeContext(input: AssembleContextInput): Promi
     '【该角色可见对话】',
     ...(view.messages.length ? view.messages.map(message => `- #${message.eventSequence}｜${message.speakerKey}｜${message.text}`) : ['- 无']),
     `【预算证据】省略早期消息=${view.omittedMessageCount}｜字符=${view.characterCount}`,
+    ...townLines,
   ].join('\n')
+}
+
+async function readAiTownRuntimeContext(input: AssembleContextInput): Promise<string> {
+  if (input.productRuntimeSessionId == null) return ''
+  const session = await db.productRuntimeSessions.get(input.productRuntimeSessionId)
+  if (!session || session.projectId !== input.projectId || session.kind !== 'ai-town') return ''
+  const context = await readInteractionRuntimeContext(input)
+  return context ? [
+    '【后日谈 AI 小镇专属运行上下文】以下内容来自冻结 ProductRelease 与当前小镇事件投影；原世界在运行期只读。',
+    context,
+  ].join('\n') : ''
 }
 
 async function readAdventureRuntimeContext(input: AssembleContextInput): Promise<string> {
@@ -1513,6 +1547,18 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     requiresProductRuntimeSessionId: true,
     enabled: input => !!input.interactionParticipantKey?.trim(),
     read: readInteractionRuntimeContext,
+  },
+  {
+    key: 'aiTownRuntime',
+    label: '后日谈 AI 小镇居民单一视角',
+    scope: 'runtime',
+    ownerFrom: 'instance',
+    layer: 'L0',
+    budgetTokens: 8000,
+    protectedFromTrim: true,
+    requiresProductRuntimeSessionId: true,
+    enabled: input => !!input.interactionParticipantKey?.trim(),
+    read: readAiTownRuntimeContext,
   },
   {
     // ProductRuntime 只读不可变产品来源、当前事件投影，不读取可变世界草稿。

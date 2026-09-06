@@ -110,7 +110,7 @@ export async function loadCurrentProductWorldSourceCatalogV1(input: {
  * Minimal semanticContract=3 world used by upper-product architecture tests.
  * It deliberately contains no executable product graph or product media.
  */
-export async function seedCurrentProductWorld(name: string) {
+export async function seedCurrentProductWorld(name: string, options: { minimumCharacters?: number } = {}) {
   const created = await createWorkspace({
     name,
     genres: ['interactive-fiction'],
@@ -152,7 +152,7 @@ export async function seedCurrentProductWorld(name: string) {
     concept: '潮汐规则约束下的港口悬疑', mainPlot: '追查信号、修复潮汐钟并决定真相是否公开。',
     subPlots: '航海公会与守潮人的信任冲突。', createdAt: now, updatedAt: now,
   } as never, { owner: 'work' })) as number
-  const characterIds = await db.characters.bulkAdd([
+  const characterRows = [
     stampNewRecord(created.scope, 'characters', {
       projectId: created.scope.projectId, name: '林舟', roleWeight: 'main', moralAxis: 'good', orderAxis: 'lawful',
       identity: '谨慎的守灯调查者', shortDescription: '负责雾港灯塔的年轻守灯人。',
@@ -163,7 +163,18 @@ export async function seedCurrentProductWorld(name: string) {
       identity: '掌握旧港秘密的向导', shortDescription: '知道失踪船队真相。',
       background: '来自旧港议会。', personality: '克制而多疑', createdAt: now + 1, updatedAt: now + 1,
     } as never, { owner: 'world' }),
-  ], { allKeys: true }) as number[]
+  ]
+  const extraNames = ['岑雨', '闻澜', '白榆', '唐砚', '苏荷', '程野']
+  for (let index = characterRows.length; index < Math.max(2, options.minimumCharacters ?? 2); index += 1) {
+    characterRows.push(stampNewRecord(created.scope, 'characters', {
+      projectId: created.scope.projectId, name: extraNames[index - 2] ?? `雾港居民 ${index + 1}`,
+      roleWeight: 'secondary', moralAxis: 'neutral', orderAxis: 'neutral',
+      identity: '在原作结局后寻找新生活的港口居民', shortDescription: '保留旧港经历并拥有独立生活目标。',
+      background: '亲历潮门危机并承担了自己的后果。', personality: index % 2 ? '温和而坚定' : '开朗而谨慎',
+      createdAt: now + index, updatedAt: now + index,
+    } as never, { owner: 'world' }))
+  }
+  const characterIds = await db.characters.bulkAdd(characterRows, { allKeys: true }) as number[]
   await db.characterRelations.add(stampNewRecord(created.scope, 'characterRelations', {
     projectId: created.scope.projectId,
     fromCharacterId: characterIds[0], toCharacterId: characterIds[1], relationType: 'ally',

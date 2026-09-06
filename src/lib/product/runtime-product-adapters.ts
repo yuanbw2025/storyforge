@@ -18,6 +18,7 @@ import { assertInitialTtrpgProductStateV1 } from '../ttrpg/runtime'
 import { applyTtrpgRuntimeEventV1 } from '../ttrpg/runtime-event-reducer'
 import { cloneTtrpgRuntimeBranchExtensionsV1 } from '../ttrpg/runtime-branch'
 import { parseTtrpgState } from '../ttrpg/runtime-state'
+import { applyAiTownEventV1, createInitialAiTownStateV1, parseAiTownStateV1, rebaseAiTownStateForBranchV1 } from '../ai-town/runtime'
 import type {
   ProductRuntimeEvent,
   ProductRuntimePackageV1,
@@ -35,7 +36,7 @@ export function parseProductOwnedRuntimeStateV1(
   value: ProductRuntimeState,
 ): Pick<
   ProductRuntimeState,
-  'ttrpg' | 'interaction' | 'adventure' | 'presentation' | 'openWorldEvolution' | 'openWorld'
+  'ttrpg' | 'interaction' | 'adventure' | 'presentation' | 'openWorldEvolution' | 'openWorld' | 'town'
 > {
   return {
     ttrpg: parseTtrpgState(value.ttrpg),
@@ -44,6 +45,7 @@ export function parseProductOwnedRuntimeStateV1(
     presentation: parseAvgPresentationState(value.presentation),
     openWorldEvolution: parseOpenWorldEvolutionState(value.openWorldEvolution),
     openWorld: parseOpenWorldState(value.openWorld),
+    town: parseAiTownStateV1(value.town),
   }
 }
 
@@ -74,6 +76,11 @@ export function applyProductOwnedRuntimeEventV1(
 ): ProductRuntimeState | null {
   if (event.type.startsWith('ttrpg.')) {
     return applyTtrpgRuntimeEventV1(state, event, payload)
+  }
+  if (event.type.startsWith('town.')) {
+    state.town = applyAiTownEventV1(state.town ?? null, event, payload)
+    state.lastSequence = event.sequence
+    return state
   }
   if (event.type.startsWith('world.')) {
     state.openWorld = applyOpenWorldEvent(state.openWorld ?? null, event)
@@ -244,6 +251,31 @@ export function assertFrozenProductRuntimeStateV1(input: {
     return
   }
 
+  if (runtimePackage.productType === 'ai-town') {
+    const expectedInteraction = createInitialInteractionState({
+      playerKey: runtimePackage.interaction!.playerKey,
+      profiles: runtimePackage.interaction!.profiles,
+      sceneTemplates: runtimePackage.interaction!.sceneTemplates,
+    })
+    const expected = createInitialAiTownStateV1(
+      runtimePackage.town!,
+      runtimeSourceHash,
+    )
+    const frozenMismatch = !initial.town
+      || !initial.interaction
+      || initial.town.contentHash !== runtimeSourceHash
+      || stableProductRuntimeJsonV1(initial.town.content) !== stableProductRuntimeJsonV1(expected.content)
+      || stableProductRuntimeJsonV1(initial.interaction.profiles) !== stableProductRuntimeJsonV1(expectedInteraction.profiles)
+      || stableProductRuntimeJsonV1(initial.interaction.sceneTemplates) !== stableProductRuntimeJsonV1(expectedInteraction.sceneTemplates)
+    const entryStateMismatch = input.origin !== 'branch'
+      && (stableProductRuntimeJsonV1(initial.town) !== stableProductRuntimeJsonV1(expected)
+        || stableProductRuntimeJsonV1(initial.interaction) !== stableProductRuntimeJsonV1(expectedInteraction))
+    if (frozenMismatch || entryStateMismatch) {
+      throw new Error('ai-town 初始状态必须来自绑定 RuntimePackage 的冻结小镇内容。')
+    }
+    return
+  }
+
   if (runtimePackage.productType === 'text-adventure') {
     const adventure = initial.adventure
     const expected = createInitialAdventureState(runtimePackage.adventure!, runtimeSourceHash)
@@ -331,6 +363,7 @@ export function rebaseProductRuntimeStateForBranchV1(
     state.openWorldEvolution = rebaseOpenWorldEvolutionStateForBranch(state.openWorldEvolution)
   }
   if (state.openWorld) state.openWorld = rebaseOpenWorldStateForBranch(state.openWorld)
+  if (state.town) state.town = rebaseAiTownStateForBranchV1(state.town)
   return state
 }
 

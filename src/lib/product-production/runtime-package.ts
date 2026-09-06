@@ -6,6 +6,7 @@ import { parseOpenWorldContent, validateOpenWorldContent } from '../open-world/r
 import { validateNarrativeContentGraph } from '../product/narrative-content'
 import { parseTtrpgCampaignContentV1 } from '../ttrpg/campaign'
 import { parseRulePackV1 } from '../ttrpg/rule-pack'
+import { parseAiTownRuntimeContentV1 } from '../ai-town/runtime'
 import {
   NARRATIVE_BEAT_KINDS,
   NARRATIVE_MODULE_KINDS,
@@ -38,6 +39,7 @@ const PRODUCT_TYPES = new Set<ProductionProductKindV1>(PRODUCTION_PRODUCT_KINDS_
 
 const CAPABILITIES: Record<ProductionProductKindV1, string[]> = {
   'character-interaction': ['narrative', 'interaction'],
+  'ai-town': ['narrative', 'interaction', 'town'],
   'text-adventure': ['narrative', 'interaction', 'adventure'],
   avg: ['narrative', 'presentation'],
   'text-open-world': ['narrative', 'interaction', 'adventure', 'openWorldEvolution', 'open-world'],
@@ -46,6 +48,7 @@ const CAPABILITIES: Record<ProductionProductKindV1, string[]> = {
 
 const PRODUCT_MODULE_KEYS: Record<ProductionProductKindV1, string[]> = {
   'character-interaction': ['interaction'],
+  'ai-town': ['interaction', 'town'],
   'text-adventure': ['interaction', 'adventure'],
   avg: ['presentation'],
   'text-open-world': ['interaction', 'adventure', 'openWorldEvolution', 'openWorld'],
@@ -321,7 +324,7 @@ export function parseProductRuntimePackageV1(value: string | unknown): ProductRu
     narrative: structuredClone(narrative),
   }
 
-  if (selectedProduct === 'character-interaction' || selectedProduct === 'text-adventure'
+  if (selectedProduct === 'character-interaction' || selectedProduct === 'ai-town' || selectedProduct === 'text-adventure'
     || selectedProduct === 'text-open-world') parsed.interaction = validateInteraction(pkg.interaction)
   if (selectedProduct === 'text-adventure' || selectedProduct === 'text-open-world') {
     parsed.adventure = parseAdventureContent(pkg.adventure as never)
@@ -365,6 +368,7 @@ export function parseProductRuntimePackageV1(value: string | unknown): ProductRu
     parsed.openWorld = openWorld
   }
   if (selectedProduct === 'ttrpg') parsed.ttrpg = validateTtrpg(pkg.ttrpg, sourceWorld.contentHash)
+  if (selectedProduct === 'ai-town') parsed.town = parseAiTownRuntimeContentV1(pkg.town)
   return parsed
 }
 

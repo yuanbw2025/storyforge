@@ -44,7 +44,7 @@ import {
   configureTtrpgSessionParticipantV2,
   readTtrpgSessionParticipantsV2,
 } from '../../src/lib/ttrpg/participants'
-import type { ProductionProductKindV1 } from '../../src/lib/types'
+import { AI_TOWN_DAY_SLOTS, type ProductionProductKindV1 } from '../../src/lib/types'
 import { seedCurrentProductWorld } from '../helpers/current-product-world'
 
 async function fixture(qualityProfile: 'prototype' | 'commercial-candidate' = 'prototype') {
@@ -81,7 +81,10 @@ async function fixture(qualityProfile: 'prototype' | 'commercial-candidate' = 'p
 }
 
 async function fixtureForProduct(productType: ProductionProductKindV1) {
-  const owned = await seedCurrentProductWorld(`formal-${productType}`)
+  const owned = await seedCurrentProductWorld(
+    `formal-${productType}`,
+    productType === 'ai-town' ? { minimumCharacters: 4 } : {},
+  )
   const release = owned.release
   const suggestions = await suggestProductStartingPoints({ scope: owned.scope, worldReleaseId: release.id! })
   const brief = await draftProductProductionBriefV3({
@@ -762,9 +765,9 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     expect(await db.mediaBlobObjects.count()).toBe(6)
   }, 30_000)
 
-  it('五种现行生产产品经过正式生产、可玩 Build Preview 与同包原子发布', async () => {
+  it('六种现行生产产品经过正式生产、可玩 Build Preview 与同包原子发布', async () => {
     const products: ProductionProductKindV1[] = [
-      'character-interaction', 'text-adventure', 'avg', 'text-open-world', 'ttrpg',
+      'character-interaction', 'ai-town', 'text-adventure', 'avg', 'text-open-world', 'ttrpg',
     ]
     for (const productType of products) {
       const owned = await fixtureForProduct(productType)
@@ -809,6 +812,14 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
       const runtimePackage = parseProductRuntimePackageV1(packageArtifact!.payloadJson)
       expect(runtimePackage.productType).toBe(productType)
       expect(runtimePackage.sourceWorld.selection).toEqual(owned.brief.source.selection)
+      if (productType === 'ai-town') {
+        expect(runtimePackage.town).toMatchObject({
+          schema: 'storyforge.ai-town-runtime-content',
+          clock: { slots: [...AI_TOWN_DAY_SLOTS] },
+          offline: { maximumDays: 3 },
+        })
+        expect(runtimePackage.town?.residents).toHaveLength(4)
+      }
       if (productType === 'ttrpg') {
         expect(runtimePackage.ttrpg).toMatchObject({
           rulePack: { contentHash: owned.brief.ttrpg?.rules.effectiveContentHash },

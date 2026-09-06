@@ -51,7 +51,8 @@ type JsonRecord = Record<string, unknown>
 
 function productCharacterKeys(brief: ProductProductionBriefV3): string[] {
   const resources = brief.source.selection.roleBindings.characters
-    ?? brief.source.selection.roleBindings.participants ?? []
+    ?? brief.source.selection.roleBindings.participants
+    ?? brief.source.selection.roleBindings.residents ?? []
   return resources.slice(0, 100).map((_, index) => `character:${index + 1}`)
 }
 
@@ -694,7 +695,10 @@ function textSystem(taskKey: string, brief: ProductProductionBriefV3): string {
     `所有节点必须从入口可达；每个非结局节点至少一个选择；kind=ending 的节点必须恰好 ${Math.min(8, Math.max(1, brief.scale.targetEndingCount))} 个、全部从入口可达且不得再有出边；每个节点至少一个 beat。` +
     `输出前必须自行逐项检查：入口存在、无孤岛、无非结局死路、可达 ending 数量恰好为 ${Math.min(8, Math.max(1, brief.scale.targetEndingCount))}。` +
     `dialogue 的 speakerKey 只能从 ${JSON.stringify(productCharacterKeys(brief))} 选择；没有合法角色时只用 narration/action/system。` +
-    (ttrpgDesign ? `\n这是作者已比较/混合的跑团战役方向，必须落实且不得改写 lockedSections：${JSON.stringify(ttrpgDesign)}。` : '')
+    (ttrpgDesign ? `\n这是作者已比较/混合的跑团战役方向，必须落实且不得改写 lockedSections：${JSON.stringify(ttrpgDesign)}。` : '') +
+    (brief.intent.productType === 'ai-town'
+      ? '\n这是无限后日谈生活模拟的开场内容种子，不得写成要求玩家通关的主线；ending 仅表示本次生产片段结束，不结束小镇运行。'
+      : '')
   }
   if (taskKey === 'content.product-module') return `${common}\n输出字段必须精确为：` +
     `{"schema":"storyforge.product-module-artifact","version":1,"productType":"${PRODUCTION_PRODUCT_KINDS_V1.join('|')}","interfaceStyle":"...","interactionNotes":["..."],"presentationPolicy":{"pacing":"slow|balanced|fast","transitionMs":500,"backgroundStrategy":"none|key-scenes"}}。` +
@@ -1278,6 +1282,7 @@ async function executeIntegrationTask(input: ProductProductionTaskExecutionInput
   if (modules.openWorldEvolution) runtimePackage.openWorldEvolution = modules.openWorldEvolution
   if (modules.openWorld) runtimePackage.openWorld = modules.openWorld
   if (modules.ttrpg) runtimePackage.ttrpg = modules.ttrpg
+  if (modules.town) runtimePackage.town = modules.town
   if (options.brief.intent.productType === 'avg' || options.brief.intent.productType === 'ttrpg') {
     const firstBeatKey = narrative.beats[0]?.beatKey
     const knownBeatKeys = new Set(narrative.beats.map(beat => beat.beatKey))

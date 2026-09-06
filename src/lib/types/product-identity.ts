@@ -17,12 +17,11 @@ export const UPPER_PRODUCT_KINDS_V1 = [
 
 export type UpperProductKindV1 = typeof UPPER_PRODUCT_KINDS_V1[number]
 
-/** Products currently connected to the shared production Harness. AI Town is
- * registered as a product boundary, but remains unavailable until its own
- * production and runtime contracts exist. */
+/** Products currently connected to the shared production Harness. */
 export const PRODUCTION_PRODUCT_KINDS_V1 = [
   'ttrpg',
   'character-interaction',
+  'ai-town',
   'text-adventure',
   'avg',
   'text-open-world',

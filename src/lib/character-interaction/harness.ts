@@ -37,6 +37,7 @@ export const INTERACTION_RUNTIME_VERIFIER_SET_V1 = 'interaction-runtime-terminal
 
 export type InteractionRuntimeSkillIdV1 = Extract<AgentSkillId,
   | 'character.interaction-reply'
+  | 'character.ai-town-reply'
   | 'prose.interaction-scene-director'
   | 'character.interaction-memory-curator'
 >
@@ -167,7 +168,7 @@ function parseModelDraft(input: {
   output: string
 }): InteractionRuntimeCandidateDraftV1 {
   const row = parseJson(input.output)
-  if (input.skillId === 'character.interaction-reply') {
+  if (input.skillId === 'character.interaction-reply' || input.skillId === 'character.ai-town-reply') {
     exact(row, ['kind', 'text', 'replyToSequence', 'audienceKeys', 'budgetCost', 'disclosures'], '角色回复')
     if (row.kind !== 'character-reply') fail('角色回复 kind 无效')
     return {
@@ -225,7 +226,7 @@ function parseModelDraft(input: {
 }
 
 function schemaInstruction(skillId: InteractionRuntimeSkillIdV1): string {
-  if (skillId === 'character.interaction-reply') {
+  if (skillId === 'character.interaction-reply' || skillId === 'character.ai-town-reply') {
     return '{"kind":"character-reply","text":"...","replyToSequence":1,"audienceKeys":null,"budgetCost":0,"disclosures":[]}'
   }
   if (skillId === 'prose.interaction-scene-director') {
@@ -239,11 +240,15 @@ function prompt(input: {
   skillId: InteractionRuntimeSkillIdV1
   context: string
 }): ChatMessage[] {
+  const townRule = input.skillId === 'character.ai-town-reply'
+    ? '你是结局后继续生活的自主居民。回应当下但保留自己的日程、目标和拒绝权；不得把其他居民的私密状态当作已知事实。'
+    : ''
   return [{
     role: 'system',
     content: [
       '你是 StoryForge 受治理的运行时候选生成器。只依据给出的单一角色可见上下文。',
       '不得假装写入状态，不得泄露未出现的秘密，不得输出解释、Markdown 或额外字段。',
+      townRule,
       `严格输出 JSON：${schemaInstruction(input.skillId)}`,
     ].join('\n'),
   }, {
@@ -259,12 +264,13 @@ function buildContract(input: {
   runtimeBindingHash: string
 }) {
   const skill = getAgentSkillV1(input.skillId)
+  const sourceKey = input.skillId === 'character.ai-town-reply' ? 'aiTownRuntime' : 'interactionRuntime'
   return {
     version: 1 as const,
     objective: input.objective,
     workflowKind: 'direct-generation' as const,
     scope: input.boundary.scope,
-    permissions: { contextSourceKeys: ['interactionRuntime'], writeTargets: [] },
+    permissions: { contextSourceKeys: [sourceKey], writeTargets: [] },
     runtimeBindingHash: input.runtimeBindingHash,
     executionBindings: [{
       stepId: INTERACTION_RUNTIME_STEP_ID_V1,
@@ -332,6 +338,7 @@ export async function generateInteractionRuntimeCandidateV1(input: {
   const participantKey = stringValue(input.participantKey, 'participantKey', 160)
   const objective = stringValue(input.objective, 'objective', 4_000)
   const skill = getAgentSkillV1(input.skillId)
+  const sourceKey = input.skillId === 'character.ai-town-reply' ? 'aiTownRuntime' : 'interactionRuntime'
   const boundary = await captureRuntimeHarnessBoundaryV1({
     scope: input.scope,
     productRuntimeSessionId: input.productRuntimeSessionId,
@@ -359,12 +366,12 @@ export async function generateInteractionRuntimeCandidateV1(input: {
       worldGroupId: boundary.scope.worldGroupId,
       productRuntimeSessionId: input.productRuntimeSessionId,
       interactionParticipantKey: participantKey,
-      sourceKeys: ['interactionRuntime'],
+      sourceKeys: [sourceKey],
       provider: input.aiConfig?.provider,
       model: input.aiConfig?.model,
       inputBudgetMaxTokens: 16_000,
     })
-    if (!assembled.included.includes('interactionRuntime')) fail('角色运行时上下文为空')
+    if (!assembled.included.includes(sourceKey)) fail('角色运行时上下文为空')
     await assertRuntimeHarnessFreshV1({
       scope: input.scope,
       contractScope: snapshot.contract.scope,
@@ -376,9 +383,9 @@ export async function generateInteractionRuntimeCandidateV1(input: {
       attempt: 1,
       projectId: input.scope.projectId,
       worldGroupId: boundary.scope.worldGroupId,
-      declaredSourceKeys: ['interactionRuntime'],
+      declaredSourceKeys: [sourceKey],
       assembled,
-      readerVersion: 'interaction-runtime-view-v1',
+      readerVersion: sourceKey === 'aiTownRuntime' ? 'ai-town-runtime-view-v1' : 'interaction-runtime-view-v1',
     })
     snapshot = await append(input.scope, snapshot, 'context.assembled', {
       stepId: INTERACTION_RUNTIME_STEP_ID_V1,

@@ -54,6 +54,12 @@ function stableValues(pkg: ProductRuntimePackageV1): Map<string, string> {
   for (const channel of pkg.openWorld?.discoveryChannels ?? []) add('open-world.channel', channel.key, channel)
   for (const card of pkg.openWorld?.fixedTaskCards ?? []) add('open-world.card', card.key, card)
   for (const template of pkg.openWorld?.taskTemplates ?? []) add('open-world.template', template.key, template)
+  for (const resident of pkg.town?.residents ?? []) add('ai-town.resident', resident.residentKey, resident)
+  for (const location of pkg.town?.map.locations ?? []) add('ai-town.location', location.key, location)
+  for (const route of pkg.town?.map.routes ?? []) add('ai-town.route', route.key, route)
+  for (const thread of pkg.town?.lifeThreads ?? []) add('ai-town.thread', thread.key, thread)
+  for (const seed of pkg.town?.eventSeeds ?? []) add('ai-town.event-seed', seed.key, seed)
+  if (pkg.town) add('ai-town.economy', pkg.town.economy.sharedProject.key, pkg.town.economy)
   return values
 }
 

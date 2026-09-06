@@ -1495,6 +1495,7 @@ if (!productSourcePublicSource.includes("from './source-contracts'")
 for (const token of [
   'TTRPG_WORLD_REQUIREMENT_ADAPTER_V1',
   'CHARACTER_INTERACTION_WORLD_REQUIREMENT_ADAPTER_V1',
+  'AI_TOWN_WORLD_REQUIREMENT_ADAPTER_V1',
   'TEXT_ADVENTURE_WORLD_REQUIREMENT_ADAPTER_V1',
   'AVG_WORLD_REQUIREMENT_ADAPTER_V1',
   'TEXT_OPEN_WORLD_REQUIREMENT_ADAPTER_V1',
@@ -1525,8 +1526,8 @@ for (const token of [
 if (!/TEXT_GAME_PRODUCT_KINDS_V1\s*=\s*\[\s*'text-adventure',\s*'avg',\s*'text-open-world',?\s*\]\s*as const/.test(productIdentitySource)) {
   violations.push('[㉝B文字游戏三分类] 用户可见文字游戏必须且只能是文字冒险、AVG、文字开放世界')
 }
-if (!/PRODUCTION_PRODUCT_KINDS_V1\s*=\s*\[\s*'ttrpg',\s*'character-interaction',\s*'text-adventure',\s*'avg',\s*'text-open-world',?\s*\]\s*as const/.test(productIdentitySource)) {
-  violations.push('[㉝B正式生产身份] 共享生产 Harness 必须且只能接入五种现行上层产品；AI 小镇未完成契约前不得混入')
+if (!/PRODUCTION_PRODUCT_KINDS_V1\s*=\s*\[\s*'ttrpg',\s*'character-interaction',\s*'ai-town',\s*'text-adventure',\s*'avg',\s*'text-open-world',?\s*\]\s*as const/.test(productIdentitySource)) {
+  violations.push('[㉝B正式生产身份] 共享生产 Harness 必须且只能接入六种现行上层产品')
 }
 if (!productProductionTypesSource.includes('productType: ProductionProductKindV1')
   || !productReleaseTypesSource.includes('productType: ProductionProductKindV1')
@@ -1743,6 +1744,7 @@ const PRODUCT_RUNTIME_SESSION_WRITERS = new Set([
   'src/lib/ttrpg/runtime-media.ts',
   'src/lib/ttrpg/runtime-commands.ts',
   'src/lib/character-interaction/runtime-commands.ts',
+  'src/lib/ai-town/runtime-commands.ts',
   'src/lib/adventure/runtime-commands.ts',
   'src/lib/avg/runtime-commands.ts',
   'src/lib/open-world/runtime-commands.ts',

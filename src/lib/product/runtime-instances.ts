@@ -40,6 +40,7 @@ import { createInitialAvgPresentationState } from '../avg/runtime'
 import { createInitialOpenWorldEvolutionState } from '../open-world/evolution-runtime'
 import { createInitialOpenWorldState } from '../open-world/runtime'
 import { createInitialTtrpgProductStateV1 } from '../ttrpg/runtime'
+import { createInitialAiTownStateV1 } from '../ai-town/runtime'
 import { verifyProductRuntimeSource } from '../product-production/preview-source'
 import {
   carryTtrpgContinuationParticipantsV2,
@@ -181,6 +182,17 @@ function createProductInitialState(input: {
       profiles: runtimePackage.interaction!.profiles,
       sceneTemplates: runtimePackage.interaction!.sceneTemplates,
     })
+  }
+  if (runtimePackage.productType === 'ai-town') {
+    state.interaction = createInitialInteractionState({
+      playerKey: runtimePackage.interaction!.playerKey,
+      profiles: runtimePackage.interaction!.profiles,
+      sceneTemplates: runtimePackage.interaction!.sceneTemplates,
+    })
+    state.town = createInitialAiTownStateV1(
+      runtimePackage.town!,
+      input.runtimeSourceHash,
+    )
   }
   if (runtimePackage.productType === 'text-adventure') {
     state.interaction = createInitialInteractionState({
@@ -560,6 +572,16 @@ export async function createCharacterInteractionInstance(input: {
   seed?: string
 }): Promise<ProductRuntimeSession> {
   return createProductRuntimeInstance({ ...input, kind: 'character-interaction', productSource: releaseSource(input.productReleaseId) })
+}
+
+export async function createAiTownInstance(input: {
+  scope: WorkspaceScope
+  productReleaseId: number
+  title: string
+  worldGroupId?: number | null
+  seed?: string
+}): Promise<ProductRuntimeSession> {
+  return createProductRuntimeInstance({ ...input, kind: 'ai-town', productSource: releaseSource(input.productReleaseId) })
 }
 
 export async function createTextAdventureInstance(input: {

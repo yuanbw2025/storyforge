@@ -1084,6 +1084,15 @@ const INTERACTION_RUNTIME_INPUT_POLICY: AgentSkillInputPolicyV1 = {
   },
 }
 const INTERACTION_RUNTIME_COMPRESSION_POLICY = compressionPolicy(['interactionRuntime'])
+const AI_TOWN_RUNTIME_INPUT_POLICY: AgentSkillInputPolicyV1 = {
+  sourceKeys: ['aiTownRuntime'],
+  states: {
+    empty: { handling: 'require-upstream', instruction: '缺少后日谈小镇居民可见上下文时停止，不得臆造日程、知识、关系或原作事实。' },
+    partial: { handling: 'require-upstream', instruction: '后日谈小镇运行时上下文不完整时停止，等待重新装配。' },
+    complete: { handling: 'grounded-transform', instruction: '只能依据该居民可见的小镇状态生成候选；保持角色自主性，不得泄露其他居民私密事实。' },
+  },
+}
+const AI_TOWN_RUNTIME_COMPRESSION_POLICY = compressionPolicy(['aiTownRuntime'])
 const ADVENTURE_RUNTIME_INPUT_POLICY: AgentSkillInputPolicyV1 = {
   sourceKeys: ['adventureRuntime'],
   states: {
@@ -2655,6 +2664,26 @@ export const AGENT_SKILLS = [
     writeTargets: [],
     lastVerifiedAt: '2026-08-14',
     regressionTests: ['R-HARNESS-RUNTIME1-instance-ledger'],
+  },
+  {
+    version: 1,
+    id: 'character.ai-town-reply',
+    agentId: 'character',
+    defaultForAgent: false,
+    label: '后日谈 AI 小镇居民回复候选',
+    owner: 'ai-town-product',
+    promptVersion: 'ai-town-character-reply-v1',
+    executionMode: 'character-reply',
+    contextTaskKind: 'agent-character',
+    readToolNames: [],
+    contextSourceKeys: ['aiTownRuntime'],
+    optionalContextSourceKeys: [],
+    inputPolicy: AI_TOWN_RUNTIME_INPUT_POLICY,
+    contextCompression: AI_TOWN_RUNTIME_COMPRESSION_POLICY,
+    maxOutputTokens: 2_000,
+    writeTargets: [],
+    lastVerifiedAt: '2026-08-17',
+    regressionTests: ['R-AITOWN1-runtime'],
   },
   {
     version: 1,

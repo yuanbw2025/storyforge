@@ -22,6 +22,21 @@ function checkbox(host: ParentNode, label: string): HTMLInputElement {
   return result
 }
 
+function inputByLabel(host: ParentNode, label: string): HTMLInputElement {
+  const wrapper = [...host.querySelectorAll('label')].find(item => item.textContent?.includes(label))
+  const result = wrapper?.querySelector<HTMLInputElement>('input')
+  if (!result) throw new Error(`找不到输入框:${label}`)
+  return result
+}
+
+async function setInputValue(input: HTMLInputElement, value: string): Promise<void> {
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, value)
+    input.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: value }))
+    input.dispatchEvent(new Event('change', { bubbles: true }))
+  })
+}
+
 async function waitFor(assertion: () => void | Promise<void>): Promise<void> {
   const started = Date.now(); let last: unknown
   while (Date.now() - started < 5_000) {
@@ -87,5 +102,32 @@ describe('PRODUCT-PROD-1B · frozen source selector UI', () => {
       expect(summary?.textContent).toContain('地点 0')
     })
     expect(host.textContent).toContain('严格 Brief 已生成')
+  }, 15_000)
+
+  it('后日谈小镇在授权前显示专属设置并把作者输入冻结进 Brief 摘要', async () => {
+    const owned = await seedCurrentProductWorld('AI 小镇设置 UI', { minimumCharacters: 5 })
+    await act(async () => {
+      root.render(createElement(ProductProductionStudio, {
+        scope: owned.scope,
+        worldGroupId: owned.world.worldGroupId,
+        initialProduct: 'ai-town',
+        allowedProducts: ['ai-town'],
+      }))
+    })
+    await waitFor(() => expect(host.querySelector('[data-testid="ai-town-production-settings"]')).not.toBeNull())
+    await waitFor(() => expect(button(host, '分析可玩起点').disabled).toBe(false))
+    await setInputValue(inputByLabel(host, '居民数量'), '4')
+    await setInputValue(inputByLabel(host, '距原作结局'), '365')
+    await setInputValue(inputByLabel(host, '每日主动行动'), '5')
+    await act(async () => { button(host, '分析可玩起点').click() })
+    await waitFor(() => expect(host.textContent).toContain('编辑本次进入游戏的冻结素材'))
+    await act(async () => { button(host, '生成严格 Brief').click() })
+    await waitFor(() => {
+      const summary = host.querySelector('[data-testid="ai-town-brief-summary"]')
+      expect(summary?.textContent).toContain('结局后 365 天')
+      expect(summary?.textContent).toContain('5 次行动/日')
+      expect(host.textContent).toContain('4 位居民')
+      expect(summary?.textContent).toContain('重大变化人工确认')
+    })
   }, 15_000)
 })

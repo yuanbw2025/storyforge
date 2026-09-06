@@ -80,7 +80,7 @@
 
 ## 二、上下文源清单（CONTEXT_SOURCES · AI 读什么）
 
-共 81 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
+共 82 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
 
 | key | 标签 | 作用域 | 层级 | 预算(token) |
 |---|---|---|---|---|
@@ -102,6 +102,7 @@
 | `textOpenWorldEvolutionRuntime` | 文字开放世界·内部状态演化玩家视角 | runtime | L0 | 8000 |
 | `openWorldRuntime` | 文字开放世界玩家视角 | runtime | L0 | 8000 |
 | `interactionRuntime` | 角色互动单一视角 | runtime | L0 | 8000 |
+| `aiTownRuntime` | 后日谈 AI 小镇居民单一视角 | runtime | L0 | 8000 |
 | `productRuntime` | 冻结运行时状态 | runtime | L0 | 8000 |
 | `workStatus` | 作品概况 | project | L2 | 1200 |
 | `worldGroups` | 世界组目录 | project | L2 | 1500 |
@@ -335,7 +336,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 - `src/lib/agent/story-core-copilot.ts:557 · chat`
 - `src/lib/agent/storyline-progress-copilot.ts:366 · chat`
 - `src/lib/agent/worldview-field-copilot.ts:890 · chat`
-- `src/lib/character-interaction/harness.ts:396 · chat`
+- `src/lib/character-interaction/harness.ts:403 · chat`
 - `src/lib/evals/agent-harness/story-arc-main-path-browser.ts:98 · chat`
 - `src/lib/evals/creative-reliability/browser.ts:89 · chat`
 - `src/lib/generation/workflow-generation-node.ts:23 · ai.start`
@@ -391,4 +392,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `4c6ac46f`
+生成时间基准:commit `b1706281`

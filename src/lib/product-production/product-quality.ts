@@ -90,6 +90,28 @@ export function evaluateProductRuntimeProductQualityV1(input: {
           ]
         : ['campaignValidation=missing']),
     )
+  } else if (runtimePackage.productType === 'ai-town') {
+    const town = runtimePackage.town
+    const residentKeys = new Set(town?.residents.map(resident => resident.residentKey) ?? [])
+    const locationKeys = new Set(town?.map.locations.map(location => location.key) ?? [])
+    gates.push(
+      gate('product.ai-town.community', !!town && town.residents.length >= 4 && town.residents.length <= 8
+        && town.lifeThreads.length >= town.residents.length,
+      [`residents=${town?.residents.length ?? 0}`, `lifeThreads=${town?.lifeThreads.length ?? 0}`]),
+      gate('product.ai-town.map-schedules', !!town && town.map.locations.length >= 4
+        && town.map.routes.length >= 3 && town.residents.every(resident => resident.schedule.length === 6
+          && resident.schedule.every(entry => locationKeys.has(entry.locationKey))),
+      [`locations=${town?.map.locations.length ?? 0}`, `routes=${town?.map.routes.length ?? 0}`]),
+      gate('product.ai-town.knowledge-relationships', !!town
+        && town.residents.every(resident => resident.startingKnowledge.length > 0)
+        && town.relationships.every(relationship => (relationship.fromResidentKey === 'player' || residentKeys.has(relationship.fromResidentKey))
+          && (relationship.toResidentKey === 'player' || residentKeys.has(relationship.toResidentKey))),
+      [`relationships=${town?.relationships.length ?? 0}`, 'requires=bounded-per-resident-knowledge']),
+      gate('product.ai-town.cadence-management', !!town && town.eventSeeds.length >= 3
+        && town.economy.resources.length >= 1 && town.economy.resources.length <= 3
+        && town.economy.sharedProject.targetProgress > 0,
+      [`eventSeeds=${town?.eventSeeds.length ?? 0}`, `resources=${town?.economy.resources.length ?? 0}`]),
+    )
   } else if (runtimePackage.productType === 'character-interaction') {
     const interaction = runtimePackage.interaction
     gates.push(

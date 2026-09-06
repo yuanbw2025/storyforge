@@ -23,7 +23,7 @@ describe('ARCH-03 · 世界/作者草稿不得绕过产品生产直启正式运�
     }, { purpose: 'world-engine', kind: 'novel', novelProfile: 'long' })
 
     expect([...PRODUCT_RUNTIME_KINDS].sort()).toEqual([
-      'avg', 'character-interaction', 'text-adventure', 'text-open-world', 'ttrpg',
+      'ai-town', 'avg', 'character-interaction', 'text-adventure', 'text-open-world', 'ttrpg',
     ])
     expect(productRuntime).not.toHaveProperty('createProductRuntimeSession')
     expect(useTtrpgRuntimePlayerStore.getState()).not.toHaveProperty('createSession')

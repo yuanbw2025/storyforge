@@ -63,6 +63,7 @@ export async function captureRuntimeHarnessBoundaryV1(input: {
   );
   if (
     session.kind !== "character-interaction" &&
+    session.kind !== "ai-town" &&
     session.kind !== "text-adventure" &&
     session.kind !== "text-open-world"
   ) {
