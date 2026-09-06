@@ -38,6 +38,7 @@ import { parseTextOpenWorldRuntimePackageV1 } from './runtime-package'
 import { createTextOpenWorldFastTravelCatalogV1 } from './fast-travel'
 import { createTextOpenWorldWeatherCatalogV1, projectTextOpenWorldClockWeatherV1 } from './weather'
 import { createTextOpenWorldActorScheduleCatalogV1, projectTextOpenWorldActorsV1 } from './actors'
+import { deriveTextOpenWorldAttitudeByActorKeyV1 } from './relationships'
 
 type Row = Record<string, unknown>
 const STABLE_KEY = /^[a-z][a-z0-9._:-]{0,199}$/
@@ -414,11 +415,11 @@ export function deriveTextOpenWorldContextsV1(value: TextOpenWorldSessionProject
   const projection = parseTextOpenWorldSessionProjectionV1(value); const modules = parseTextOpenWorldModulesV1(projection.runtimePackage); const state = projection.state
   const clockWeather = projectTextOpenWorldClockWeatherV1({ runtimePackage: projection.runtimePackage, state, parsedModules: modules })
   const regionKey = clockWeather.regionKey; const periodKey = clockWeather.timePeriodKey
-  const attitudeByActorKey = Object.fromEntries(modules.actors.actors.map(actor => {
-    const affinity = actor.factionKey ? state.relationships.factionAffinityByKey[actor.factionKey] ?? modules.relationships.factionAffinity.initial : 0
-    const score = state.relationships.morality * modules.relationships.attitude.moralityWeight + affinity * modules.relationships.attitude.factionWeight + (state.relationships.storyModifierByActorKey[actor.key] ?? 0)
-    return [actor.key, score <= modules.relationships.attitude.badMaximum ? 'bad' : score >= modules.relationships.attitude.goodMinimum ? 'good' : 'neutral']
-  })) as Record<string, 'bad' | 'neutral' | 'good'>
+  const attitudeByActorKey = deriveTextOpenWorldAttitudeByActorKeyV1({
+    runtimePackage: projection.runtimePackage,
+    state,
+    parsedModules: modules,
+  })
   const playerStats = deriveTextOpenWorldPlayerStatsFromModulesV1({
     modules, level: state.player.level, attributes: state.player.attributes,
     equippedItemKeyBySlot: deriveTextOpenWorldEquippedItemKeysV1(modules, state.inventory),

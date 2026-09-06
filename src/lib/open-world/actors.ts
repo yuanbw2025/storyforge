@@ -98,6 +98,10 @@ export interface TextOpenWorldProjectedActorV1 {
   locationKey: string
   activity: string
   attitude: 'bad' | 'neutral' | 'good'
+  greetingTone: string
+  optionalInteractionPolicy: 'available' | 'may-refuse'
+  buyPriceMultiplier: number
+  sellPriceMultiplier: number
   portrayal: string | null
   availableServices: Array<{ key: string; title: string }>
 }
@@ -134,6 +138,8 @@ export function projectTextOpenWorldActorsV1(input: {
         ? [{ key: vendor.key, title: vendor.title }]
         : []
     })
+    const attitude = input.attitudeByActorKey?.[actor.key] ?? 'neutral'
+    const attitudeBand = modules.relationships.attitudeBands.find(item => item.attitude === attitude)!
     return [{
       key: actor.key,
       name: actor.name,
@@ -141,7 +147,11 @@ export function projectTextOpenWorldActorsV1(input: {
       factionKey: actor.factionKey,
       locationKey: runtime.locationKey,
       activity: runtime.scheduleState,
-      attitude: input.attitudeByActorKey?.[actor.key] ?? 'neutral',
+      attitude,
+      greetingTone: attitudeBand.greetingTone,
+      optionalInteractionPolicy: actor.tier === 'mainline' ? 'available' : attitudeBand.optionalInteractionPolicy,
+      buyPriceMultiplier: attitudeBand.buyPriceMultiplier,
+      sellPriceMultiplier: attitudeBand.sellPriceMultiplier,
       portrayal: actor.tier === 'mainline' || actor.tier === 'significant' ? actor.portrayal : null,
       availableServices,
     }]

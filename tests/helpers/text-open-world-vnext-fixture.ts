@@ -471,11 +471,18 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
       }],
     },
     relationships: {
-      version: 1,
+      version: 2,
       morality: { minimum: -100, maximum: 100, initial: 0 },
       factionAffinity: { minimum: -100, maximum: 100, initial: 0 },
       attitude: { badMaximum: -25, goodMinimum: 25, moralityWeight: 0.4, factionWeight: 0.6, explicitStoryModifierCap: 20 },
       storyModifiers: [{ key: 'story-modifier.caretaker-trust', actorKey: 'actor.caretaker', value: 10, sourceQuestKey: 'quest.main.1' }],
+      unaffiliatedMoralityMultiplier: 1,
+      factionMorality: [{ factionKey: 'faction.canal-keepers', moralityMultiplier: 1 }],
+      attitudeBands: [
+        { attitude: 'bad', label: '差', greetingTone: '冷淡而克制', buyPriceMultiplier: 1.15, sellPriceMultiplier: 0.85, optionalInteractionPolicy: 'may-refuse' },
+        { attitude: 'neutral', label: '一般', greetingTone: '礼貌而保留', buyPriceMultiplier: 1, sellPriceMultiplier: 1, optionalInteractionPolicy: 'available' },
+        { attitude: 'good', label: '好', greetingTone: '友善且愿意帮助', buyPriceMultiplier: 0.9, sellPriceMultiplier: 1.1, optionalInteractionPolicy: 'available' },
+      ],
     },
     'time-weather': {
       version: 2,

@@ -24,6 +24,7 @@ describe('Text Open World vNext · actor UI projection', () => {
     expect(container.textContent).toContain('主线角色')
     expect(container.textContent).toContain('检查内渠')
     expect(container.textContent).toContain('友好')
+    expect(container.textContent).toContain('问候语气：友善且愿意帮助')
     expect(container.textContent).toContain('守渠补给（营业中）')
     expect(container.textContent).not.toContain('盐港最后一位老守渠人')
     root.unmount()

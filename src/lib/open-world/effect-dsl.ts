@@ -334,7 +334,9 @@ export function validateTextOpenWorldEffectStateV1(state: TextOpenWorldEffectSta
   if (canonicalProductProductionJsonV2(Object.keys(state.time.currentWeatherByRegionKey).sort()) !== canonicalProductProductionJsonV2(modules.world.regions.map(region => region.key).sort())) fail('currentWeatherByRegionKey必须覆盖全部冻结地区')
   for (const [regionKey, weatherKey] of Object.entries(state.time.currentWeatherByRegionKey)) { ref(regionKey, refs.regions, 'weather region key'); ref(weatherKey, refs.weather, 'weather key') }
   for (const [deadlineKey, deadline] of Object.entries(state.time.deadlineWorldMinuteByKey)) { key(deadlineKey, 'deadline key'); int(deadline, `deadline:${deadlineKey}`) }
+  exact(row(state.relationships, 'relationships'), ['morality', 'factionAffinityByKey', 'storyModifierByActorKey'], 'relationships')
   numberValue(state.relationships.morality, 'relationships.morality', modules.relationships.morality.minimum, modules.relationships.morality.maximum)
+  if (canonicalProductProductionJsonV2(Object.keys(state.relationships.factionAffinityByKey).sort()) !== canonicalProductProductionJsonV2(modules.actors.factions.map(faction => faction.key).sort())) fail('factionAffinityByKey必须覆盖全部冻结阵营')
   for (const [factionKey, value] of Object.entries(state.relationships.factionAffinityByKey)) { ref(factionKey, refs.factions, 'faction affinity key'); numberValue(value, 'faction affinity', modules.relationships.factionAffinity.minimum, modules.relationships.factionAffinity.maximum) }
   for (const [actorKey, value] of Object.entries(state.relationships.storyModifierByActorKey)) { ref(actorKey, refs.actors, 'story modifier actor'); numberValue(value, 'story modifier', -modules.relationships.attitude.explicitStoryModifierCap, modules.relationships.attitude.explicitStoryModifierCap) }
   if (state.combat) ref(state.combat.encounterKey, refs.encounters, 'combat encounterKey')

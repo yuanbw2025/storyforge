@@ -41,6 +41,14 @@ function key(value: unknown, label: string): string {
 }
 function nullableKey(value: unknown, label: string): string | null { return value == null ? null : key(value, label) }
 function bool(value: unknown, label: string): boolean { if (typeof value !== 'boolean') fail(`${label} 必须是boolean`); return value }
+function usesRelationshipCondition(value: unknown): boolean {
+  if (Array.isArray(value)) return value.some(usesRelationshipCondition)
+  if (!value || typeof value !== 'object') return false
+  const parsed = value as Record<string, unknown>
+  if (['relation-faction-affinity', 'relation-attitude', 'relation-story-modifier'].includes(String(parsed.op))) return true
+  if (parsed.op === 'player-number' && parsed.field === 'morality') return true
+  return Object.values(parsed).some(usesRelationshipCondition)
+}
 function numberValue(value: unknown, label: string, minimum: number, maximum: number): number {
   if (typeof value !== 'number' || !Number.isFinite(value) || value < minimum || value > maximum) fail(`${label} 必须在${minimum}到${maximum}之间`)
   return value
@@ -1107,11 +1115,42 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
       .forEach(item => fail(`首版不允许服务替代链:${String(item.serviceKey)}`))
   }
 
-  const relationships = versioned(packageValue, 'relationships')
-  exact(relationships, ['version', 'morality', 'factionAffinity', 'attitude', 'storyModifiers'], 'relationships')
+  const relationships = versioned(packageValue, 'relationships', [1, 2])
+  const modernRelationships = Number(relationships.version) >= 2
+  exact(relationships, modernRelationships
+    ? ['version', 'morality', 'factionAffinity', 'attitude', 'storyModifiers', 'unaffiliatedMoralityMultiplier', 'factionMorality', 'attitudeBands']
+    : ['version', 'morality', 'factionAffinity', 'attitude', 'storyModifiers'], 'relationships')
   for (const field of ['morality', 'factionAffinity']) { const meter = row(relationships[field], `relationships.${field}`); exact(meter, ['minimum', 'maximum', 'initial'], `relationships.${field}`); const minimum = numberValue(meter.minimum, `${field}.minimum`, -10_000, 10_000); const maximum = numberValue(meter.maximum, `${field}.maximum`, -10_000, 10_000); const initial = numberValue(meter.initial, `${field}.initial`, -10_000, 10_000); if (minimum >= maximum || initial < minimum || initial > maximum) fail(`${field}范围无效`) }
   const attitude = row(relationships.attitude, 'relationships.attitude'); exact(attitude, ['badMaximum', 'goodMinimum', 'moralityWeight', 'factionWeight', 'explicitStoryModifierCap'], 'relationships.attitude'); const bad = numberValue(attitude.badMaximum, 'attitude.badMaximum', -10_000, 10_000); const good = numberValue(attitude.goodMinimum, 'attitude.goodMinimum', -10_000, 10_000); const mw = numberValue(attitude.moralityWeight, 'attitude.moralityWeight', 0, 1); const fw = numberValue(attitude.factionWeight, 'attitude.factionWeight', 0, 1); if (bad >= good || Math.abs(mw + fw - 1) > 0.000001) fail('attitude阈值或权重无效'); numberValue(attitude.explicitStoryModifierCap, 'attitude.explicitStoryModifierCap', 0, 10_000)
   const storyModifiers = catalog(relationships.storyModifiers, 'relationships.storyModifiers', ['key', 'actorKey', 'value', 'sourceQuestKey']); keysOf(storyModifiers, 'relationships.storyModifiers'); storyModifiers.forEach((item, index) => { requireRef(key(item.actorKey, `relationships.storyModifiers[${index}].actorKey`), actorKeys, 'story modifier actor'); numberValue(item.value, `relationships.storyModifiers[${index}].value`, -10_000, 10_000); requireRef(key(item.sourceQuestKey, `relationships.storyModifiers[${index}].sourceQuestKey`), questKeys, 'story modifier quest') })
+  const unaffiliatedMoralityMultiplier = modernRelationships
+    ? numberValue(relationships.unaffiliatedMoralityMultiplier, 'relationships.unaffiliatedMoralityMultiplier', -1, 1)
+    : 1
+  if (![-1, 0, 1].includes(unaffiliatedMoralityMultiplier)) fail('unaffiliatedMoralityMultiplier只能是-1、0或1')
+  const factionMorality = modernRelationships
+    ? catalog(relationships.factionMorality, 'relationships.factionMorality', ['factionKey', 'moralityMultiplier'])
+    : factions.map(faction => ({ factionKey: faction.key, moralityMultiplier: 1 }))
+  factionMorality.forEach((item, index) => {
+    requireRef(key(item.factionKey, `relationships.factionMorality[${index}].factionKey`), factionKeys, 'faction morality')
+    const multiplier = numberValue(item.moralityMultiplier, `relationships.factionMorality[${index}].moralityMultiplier`, -1, 1)
+    if (![-1, 0, 1].includes(multiplier)) fail(`relationships.factionMorality[${index}].moralityMultiplier只能是-1、0或1`)
+  })
+  requireSameKeys(factionMorality.map(item => String(item.factionKey)), [...factionKeys], '阵营道德解释覆盖')
+  const attitudeBands = modernRelationships
+    ? catalog(relationships.attitudeBands, 'relationships.attitudeBands', ['attitude', 'label', 'greetingTone', 'buyPriceMultiplier', 'sellPriceMultiplier', 'optionalInteractionPolicy'])
+    : [
+        { attitude: 'bad', label: '差', greetingTone: '冷淡而克制', buyPriceMultiplier: 1.15, sellPriceMultiplier: 0.85, optionalInteractionPolicy: 'may-refuse' },
+        { attitude: 'neutral', label: '一般', greetingTone: '礼貌而保留', buyPriceMultiplier: 1, sellPriceMultiplier: 1, optionalInteractionPolicy: 'available' },
+        { attitude: 'good', label: '好', greetingTone: '友善且愿意帮助', buyPriceMultiplier: 0.9, sellPriceMultiplier: 1.1, optionalInteractionPolicy: 'available' },
+      ]
+  attitudeBands.forEach((item, index) => {
+    enumValue(item.attitude, ['bad', 'neutral', 'good'], `relationships.attitudeBands[${index}].attitude`)
+    text(item.label, `relationships.attitudeBands[${index}].label`, 100); text(item.greetingTone, `relationships.attitudeBands[${index}].greetingTone`, 500)
+    numberValue(item.buyPriceMultiplier, `relationships.attitudeBands[${index}].buyPriceMultiplier`, 0.01, 100)
+    numberValue(item.sellPriceMultiplier, `relationships.attitudeBands[${index}].sellPriceMultiplier`, 0.01, 100)
+    enumValue(item.optionalInteractionPolicy, ['available', 'may-refuse'], `relationships.attitudeBands[${index}].optionalInteractionPolicy`)
+  })
+  requireSameKeys(attitudeBands.map(item => String(item.attitude)), ['bad', 'neutral', 'good'], '三档态度定义覆盖')
   if (canonicalProductProductionJsonV2({ morality: relationships.morality, factionAffinity: relationships.factionAffinity, attitude: relationships.attitude })
     !== canonicalProductProductionJsonV2({ morality: packageValue.calibration.relationships.morality, factionAffinity: packageValue.calibration.relationships.factionAffinity, attitude: packageValue.calibration.relationships.attitude })) {
     fail('relationships模块与根calibration不一致')
@@ -1247,6 +1286,42 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
   actionRows.forEach((item, index) => {
     if (item.targetScope === 'vendor' && vendors.length === 0) fail(`actions.actions[${index}] 需要vendor但目录为空`)
   })
+  effects.filter(effect => effect.operation === 'set-story-modifier').forEach(effect => {
+    const payload = row(effect.payload, `story modifier effect ${String(effect.key)}.payload`)
+    const actorKey = key(payload.actorKey, `story modifier effect ${String(effect.key)}.actorKey`)
+    const value = numberValue(payload.value, `story modifier effect ${String(effect.key)}.value`, -10_000, 10_000)
+    if (!storyModifiers.some(modifier => modifier.actorKey === actorKey && modifier.value === value)) {
+      fail(`故事修正Effect必须匹配Release预制修正:${String(effect.key)}`)
+    }
+  })
+  const relationshipConditionKeys = new Set(conditions.filter(condition => usesRelationshipCondition(condition.expression)).map(condition => String(condition.key)))
+  const mainlineQuestKeys = new Set(questRows.filter(quest => quest.type === 'mainline').map(quest => String(quest.key)))
+  questRows.filter(quest => mainlineQuestKeys.has(String(quest.key))).forEach(quest => {
+    if (strings(quest.prerequisiteConditionKeys, `mainline quest ${String(quest.key)} prerequisites`).some(conditionKey => relationshipConditionKeys.has(conditionKey))) {
+      fail(`主线任务不能由道德、阵营或态度条件锁定:${String(quest.key)}`)
+    }
+  })
+  questStages.filter(stage => mainlineQuestKeys.has(String(stage.questKey))).forEach(stage => {
+    if (strings(stage.completionConditionKeys, `mainline stage ${String(stage.key)} completion conditions`).some(conditionKey => relationshipConditionKeys.has(conditionKey))) {
+      fail(`主线Stage不能由道德、阵营或态度条件锁定:${String(stage.key)}`)
+    }
+    array(stage.objectiveKeys, `mainline stage ${String(stage.key)} objectiveKeys`).forEach(objectiveKey => {
+      const objective = objectives.find(item => item.key === objectiveKey)!
+      if (objective.optional === true) return
+      const objectiveActions = strings(objective.actionKeys, `mainline objective ${String(objective.key)} actionKeys`).map(actionKey => actionRows.find(action => action.key === actionKey)!)
+      if (!objectiveActions.some(action => !strings(action.requirementConditionKeys, `mainline objective action ${String(action.key)} requirements`).some(conditionKey => relationshipConditionKeys.has(conditionKey)))) {
+        fail(`主线必需Objective至少需要一条不受关系数值阻断的Action:${String(objective.key)}`)
+      }
+    })
+  })
+  actionRows.filter(action => ['accept-quest', 'quest-action'].includes(String(action.category))).forEach(action => {
+    const touchesMainline = strings(action.successEffectKeys, `mainline lifecycle action ${String(action.key)} effects`)
+      .map(effectKey => effects.find(effect => effect.key === effectKey)!)
+      .some(effect => effect.operation === 'transition-quest' && mainlineQuestKeys.has(String(row(effect.payload, `mainline lifecycle effect ${String(effect.key)}.payload`).questKey)))
+    if (touchesMainline && strings(action.requirementConditionKeys, `mainline lifecycle action ${String(action.key)} requirements`).some(conditionKey => relationshipConditionKeys.has(conditionKey))) {
+      fail(`主线生命周期Action不能由道德、阵营或态度条件锁定:${String(action.key)}`)
+    }
+  })
   if (!travelPointKeys.size) fail('首版至少需要一个快速旅行点')
 
   return {
@@ -1263,7 +1338,10 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
     items: structuredClone(items) as unknown as TextOpenWorldParsedModulesV1['items'],
     crafting: structuredClone(crafting) as unknown as TextOpenWorldParsedModulesV1['crafting'],
     economy: structuredClone(economy) as unknown as TextOpenWorldParsedModulesV1['economy'],
-    relationships: structuredClone(relationships) as unknown as TextOpenWorldParsedModulesV1['relationships'],
+    relationships: {
+      ...structuredClone(relationships), version: 2, unaffiliatedMoralityMultiplier,
+      factionMorality: structuredClone(factionMorality), attitudeBands: structuredClone(attitudeBands),
+    } as unknown as TextOpenWorldParsedModulesV1['relationships'],
     'time-weather': { ...structuredClone(timeWeather), weatherUpdateIntervalMinutes } as unknown as TextOpenWorldParsedModulesV1['time-weather'],
     director: structuredClone(director) as unknown as TextOpenWorldParsedModulesV1['director'],
     knowledge: structuredClone(knowledge) as unknown as TextOpenWorldParsedModulesV1['knowledge'],

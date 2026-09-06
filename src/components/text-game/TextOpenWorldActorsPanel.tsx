@@ -30,6 +30,7 @@ export default function TextOpenWorldActorsPanel(props: {
       return <div key={actor.key} className="rounded bg-bg-base p-2 text-xs" data-actor-key={actor.key}>
         <span className="flex flex-wrap items-center justify-between gap-2"><strong>{actor.name}</strong><small className="text-text-muted">{TIER_LABELS[actor.tier]}</small></span>
         <p className="mt-1 text-text-muted">{actor.activity} · {faction} · {ATTITUDE_LABELS[actor.attitude]}</p>
+        <p className="mt-1 text-[10px] text-text-muted">问候语气：{actor.greetingTone}{actor.optionalInteractionPolicy === 'may-refuse' ? ' · 可能拒绝非关键互动' : ''}</p>
         {actor.availableServices.map(service => <p key={service.key} className="mt-1 flex items-center gap-1 text-accent"><Store className="h-3 w-3" />{service.title}（营业中）</p>)}
       </div>
     })}{!actors.length && <p className="text-xs text-text-muted">当前没有可交互人物。</p>}</div>

@@ -434,7 +434,7 @@ export interface TextOpenWorldEconomyModuleV1 {
 }
 
 export interface TextOpenWorldRelationshipModuleV1 {
-  version: 1
+  version: 1 | 2
   morality: { minimum: number; maximum: number; initial: number }
   factionAffinity: { minimum: number; maximum: number; initial: number }
   attitude: {
@@ -449,6 +449,19 @@ export interface TextOpenWorldRelationshipModuleV1 {
     actorKey: string
     value: number
     sourceQuestKey: string
+  }>
+  unaffiliatedMoralityMultiplier: -1 | 0 | 1
+  factionMorality: Array<{
+    factionKey: string
+    moralityMultiplier: -1 | 0 | 1
+  }>
+  attitudeBands: Array<{
+    attitude: 'bad' | 'neutral' | 'good'
+    label: string
+    greetingTone: string
+    buyPriceMultiplier: number
+    sellPriceMultiplier: number
+    optionalInteractionPolicy: 'available' | 'may-refuse'
   }>
 }
 

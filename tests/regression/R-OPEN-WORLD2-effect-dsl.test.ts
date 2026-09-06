@@ -109,7 +109,7 @@ describe('Text Open World vNext · typed Effect DSL and atomic EffectPlan', () =
     const effects: TextOpenWorldEffectDefinitionV1[] = [
       { key: 'effect.morality', operation: 'change-morality', payload: { amount: 5 } },
       { key: 'effect.affinity', operation: 'change-faction-affinity', payload: { factionKey: 'faction.canal-keepers', amount: 10 } },
-      { key: 'effect.story-modifier', operation: 'set-story-modifier', payload: { actorKey: 'actor.caretaker', value: 5 } },
+      { key: 'effect.story-modifier', operation: 'set-story-modifier', payload: { actorKey: 'actor.caretaker', value: 10 } },
       { key: 'effect.reveal-ridge', operation: 'reveal-location', payload: { locationKey: 'location.ridge-channel' } },
       { key: 'effect.fast-ridge', operation: 'unlock-fast-travel', payload: { fastTravelPointKey: 'fast-travel.ridge' } },
       { key: 'effect.start-fight', operation: 'start-combat', payload: { encounterKey: 'encounter.ridge-jackal' } },
@@ -152,7 +152,7 @@ describe('Text Open World vNext · typed Effect DSL and atomic EffectPlan', () =
     expect(after).toMatchObject({
       quests: { instancesByKey: { [mainInstanceKey]: { definitionKey: 'quest.main.1', status: 'active', objectiveStatusByKey: { 'objective.main.1': 'active' } } } },
       map: { currentLocationKey: 'location.ridge-channel', travel: null }, time: { worldMinute: 540 },
-      relationships: { morality: 5, factionAffinityByKey: { 'faction.canal-keepers': 10 }, storyModifierByActorKey: { 'actor.caretaker': 5 } },
+      relationships: { morality: 5, factionAffinityByKey: { 'faction.canal-keepers': 10 }, storyModifierByActorKey: { 'actor.caretaker': 10 } },
       combat: { encounterKey: 'encounter.ridge-jackal', status: 'victory' },
       actors: { 'actor.caretaker': { locationKey: 'location.ridge-channel' } },
       world: { regionStateByKey: { 'region.ridge': 'channel-open' }, flags: { 'flag.channel-open': true } },
