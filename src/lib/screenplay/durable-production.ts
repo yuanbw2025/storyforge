@@ -197,6 +197,7 @@ function prompt(stage: ScreenplayProfessionalStageV1, context: string, targetKey
     `你是${config.role}。只完成当前职责，不替后续岗位写作或采纳。`,
     '严格区分 source fact、作者 confirmed decision 与 proposal。新增桥接内容必须用 add 决策标明，不得伪装成原文。',
     '只输出一个严格 JSON 值，不要 Markdown、解释、注释或代码围栏。稳定引用只用上下文提供的 key，不输出数据库数字 ID。',
+    '所有新建 stableKey 必须匹配 ^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$：只用 ASCII 字母、数字、点、下划线或连字符；禁止中文、空格、冒号、斜杠与井号。引用型 key 必须逐字复制上下文原值。',
     '证据不足时少写或输出空审查数组，不得虚构。先在内部静默核对字段闭集、来源引用和目标边界。',
     `目标剧本画像：${JSON.stringify(targetSpec)}`,
     targetKeys.length ? `本步唯一目标：${targetKeys.join(', ')}` : '',
