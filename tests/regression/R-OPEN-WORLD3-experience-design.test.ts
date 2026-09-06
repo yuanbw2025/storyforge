@@ -68,6 +68,12 @@ import {
   type TextOpenWorldQuestSkeletonsInputContextV1,
   type TextOpenWorldQuestSkeletonsModelRunnerV1,
 } from '../../src/lib/open-world/quest-skeletons-production'
+import {
+  createTextOpenWorldProgressionCatalogsExecutorV1,
+  validateTextOpenWorldProgressionCatalogsV1,
+  type TextOpenWorldProgressionCatalogsInputContextV1,
+  type TextOpenWorldProgressionCatalogsModelRunnerV1,
+} from '../../src/lib/open-world/progression-catalogs-production'
 import { TEXT_OPEN_WORLD_EFFECT_OPERATIONS_V1 } from '../../src/lib/types/text-open-world-effect'
 import type {
   TextOpenWorldGameplayRulesetSkeletonV1,
@@ -77,6 +83,7 @@ import type {
   TextOpenWorldRegionNarrativePacksV1,
   TextOpenWorldContentRequirementManifestV1,
   TextOpenWorldQuestSkeletonsV1,
+  TextOpenWorldProgressionCatalogsV1,
   TextOpenWorldSignificantThreadsV1,
 } from '../../src/lib/types'
 import {
@@ -1500,7 +1507,7 @@ function questSkeletonsRunner(options: {
   return async input => {
     const context = JSON.parse(input.contextText) as TextOpenWorldQuestSkeletonsInputContextV1
     const kindsBySource = {
-      'mainline-stage': ['actor', 'encounter', 'faction', 'item', 'encounter', 'faction', 'reward'],
+      'mainline-stage': ['actor', 'skill', 'faction', 'item', 'encounter', 'faction', 'reward'],
       'significant-stage': ['actor', 'action', 'faction', 'actor', 'faction', 'reward'],
       'ordinary-seed': ['actor', 'item', 'material', 'encounter', 'vendor', 'reward'],
       'template-seed': ['actor', 'item', 'encounter', 'location-interaction'],
@@ -1621,6 +1628,115 @@ async function executeQuestSkeletons(
       requirementKey,
       bindingHash: CAPABILITY_HASH,
       adapterId: 'configured-text.v1',
+    })),
+    signal: new AbortController().signal,
+  })
+}
+
+function progressionCatalogsRunner(options: {
+  omitDemand?: boolean
+  rewriteInitial?: boolean
+  invalidPassive?: boolean
+  missingCombatFormula?: boolean
+} = {}): TextOpenWorldProgressionCatalogsModelRunnerV1 {
+  return async input => {
+    const context = JSON.parse(input.contextText) as TextOpenWorldProgressionCatalogsInputContextV1
+    const skills = context.skillDemands.map((demand, index) => {
+      const fixed = demand.fixedMechanics
+      let activation = fixed?.activation ?? (index % 3 === 0 ? 'passive' : 'active')
+      let kind = fixed?.kind ?? (index % 3 === 0 ? 'status' : index % 3 === 1 ? 'attack' : 'recovery')
+      let target = fixed?.target ?? (activation === 'passive' || kind !== 'attack' ? 'self' : 'single-enemy')
+      const scalingAttribute = fixed?.scalingAttribute ?? (kind === 'attack' ? 'power' : kind === 'recovery' ? 'vitality' : null)
+      let resourceCost = fixed?.resourceCost ?? (activation === 'passive' ? 0 : 2)
+      let cooldownTurns = fixed?.cooldownTurns ?? (activation === 'passive' ? 0 : 1)
+      if (options.invalidPassive && demand.demandKind === 'level-progression' && demand.unlockPlan.level === 2) {
+        activation = 'passive'; kind = 'status'; target = 'single-enemy'; resourceCost = 1; cooldownTurns = 1
+      }
+      const combatRequired = activation === 'active' && kind === 'attack'
+      return {
+        demandNumber: demand.demandNumber,
+        title: options.rewriteInitial && demand.demandNumber === 1
+          ? '篡改后的基础攻击'
+          : demand.fixedTitle ?? (demand.demandKind === 'level-progression'
+            ? `${demand.unlockPlan.level}级守灯技`
+            : `${demand.semanticBrief.slice(0, 12)}技${index + 1}`),
+        description: demand.fixedDescription ?? `${demand.semanticBrief}该能力以明确的系统效果支持角色成长。`,
+        tags: [demand.demandKind, demand.requestedTraits[0] ?? '成长'],
+        activation,
+        kind,
+        target,
+        scalingAttribute,
+        priority: Math.max(10, 100 - index),
+        resourceCost,
+        cooldownTurns,
+        combatPowerNumerator: combatRequired && !(options.missingCombatFormula && demand.demandNumber === 1)
+          ? demand.demandNumber === 1 ? 1 : 3 : null,
+        combatPowerDenominator: combatRequired ? demand.demandNumber === 1 ? 1 : 2 : null,
+        flatDamage: combatRequired ? 0 : null,
+      }
+    })
+    return {
+      output: JSON.stringify({
+        schema: 'storyforge.text-open-world-progression-catalogs-draft',
+        version: 1,
+        skills: options.omitDemand ? skills.slice(0, -1) : skills,
+        statuses: [
+          { title: '守势', description: '角色暂时采取更谨慎的防御姿态。', polarity: 'beneficial' },
+          { title: '破绽', description: '角色短暂暴露出容易被利用的行动破绽。', polarity: 'harmful' },
+        ],
+      }),
+      bindingReceipt: bindingReceipt(input.requirementKey),
+      usage: null,
+    }
+  }
+}
+
+async function progressionCatalogsFixture() {
+  const input = await questSkeletonsFixture()
+  const questResult = await executeQuestSkeletons(input)
+  await acceptTaskArtifacts(input, questResult.artifacts, 'P8-quest-skeletons')
+  const plan = await createTextOpenWorldProductionPlanV1({
+    buildNumber: input.build.buildNumber,
+    controlEpoch: input.build.controlEpoch,
+    briefHash: input.briefRow.briefHash,
+    brief: input.brief,
+  })
+  const task = plan.tasks.find(item => item.taskKey === 'p8.catalog.progression')!
+  const assembled = await assembleContext({
+    projectId: input.scope.projectId,
+    scope: input.scope,
+    sourceKeys: ['text-open-world.progression-catalogs-input'],
+    productProductionId: input.production.id!,
+    productBuildId: input.build.id!,
+    inputBudgetMaxTokens: task.budgetReservation.inputTokens,
+  })
+  return {
+    ...input,
+    task,
+    progressionContextText: assembled.text,
+    progressionContext: JSON.parse(assembled.text) as TextOpenWorldProgressionCatalogsInputContextV1,
+    progressionContextEvidence: assembled.sourceEvidence,
+  }
+}
+
+async function executeProgressionCatalogs(
+  input: Awaited<ReturnType<typeof progressionCatalogsFixture>>,
+  runModel: TextOpenWorldProgressionCatalogsModelRunnerV1 = progressionCatalogsRunner(),
+) {
+  return createTextOpenWorldProgressionCatalogsExecutorV1({ runModel, now: () => NOW + 13 })({
+    scope: input.scope,
+    productionId: input.production.id!,
+    buildId: input.build.id!,
+    buildNumber: input.build.buildNumber,
+    controlEpoch: input.build.controlEpoch,
+    planHash: input.planHash,
+    task: input.task,
+    attempt: 1,
+    idempotencyKey: await hashProductProductionValueV2('p8-progression-catalogs'),
+    contextText: input.progressionContextText,
+    inputArtifacts: [],
+    capabilityBindings: input.task.capabilityRequirementKeys.map(requirementKey => ({
+      requirementKey, bindingHash: CAPABILITY_HASH, adapterId: 'configured-text.v1',
     })),
     signal: new AbortController().signal,
   })
@@ -2642,4 +2758,87 @@ describe('R-OPEN-WORLD3 · P8 QuestSkeletons / ContentRequirementManifest', () =
       context: input.questContext,
     })).rejects.toThrow(/任务来源覆盖、生命周期、需求清单、稳定键或未绑定运行槽被篡改/)
   }, 90_000)
+})
+
+describe('R-OPEN-WORLD3 · P8 ProgressionCatalogs', () => {
+  beforeEach(async () => { await db.delete(); await db.open() })
+  afterAll(() => db.close())
+
+  it('兑现主角预留与任务技能需求，并形成可供G2装配的20级确定性成长目录候选', async () => {
+    const input = await progressionCatalogsFixture()
+    expect(CONTEXT_SOURCE_BY_KEY.get('text-open-world.progression-catalogs-input')).toMatchObject({
+      layer: 'L0', ownerFrom: 'work', protectedFromTrim: true,
+    })
+    expect(getAgentSkillV1('text-open-world.production.progression-catalogs.v1')).toMatchObject({
+      contextSourceKeys: ['text-open-world.progression-catalogs-input'],
+      writeTargets: [{ table: 'productBuildArtifacts', fields: ['payloadJson'] }],
+    })
+    expect(input.progressionContextEvidence).toEqual([
+      expect.objectContaining({ key: 'text-open-world.progression-catalogs-input', status: 'included', delivery: 'full' }),
+    ])
+    expect(input.progressionContext.skillDemands).toHaveLength(9)
+
+    const result = await executeProgressionCatalogs(input)
+    const artifact = result.artifacts[0]!.payload as TextOpenWorldProgressionCatalogsV1
+    expect(result.passedGateIds).toEqual(input.task.acceptanceGateIds)
+    expect(result.usage).toMatchObject({ modelCalls: 1, mediaCalls: 0 })
+    expect(artifact.levels).toHaveLength(20)
+    expect(artifact.levels.map(level => level.cumulativeExperience)).toEqual(
+      Array.from({ length: 20 }, (_, index) => index * index * 100),
+    )
+    expect(artifact.levels[0]).toMatchObject({
+      level: 1,
+      attributeGrowth: { power: 0, vitality: 0, agility: 0 },
+      unlockedSkillKeys: ['skill.player.basic-attack', 'skill.player.signature'],
+    })
+    expect(artifact.levels[1]!.unlockedSkillKeys).toEqual(['skill.level.002'])
+    expect(artifact.coverage).toMatchObject({
+      requiredPlayerSkillKeys: ['skill.player.basic-attack', 'skill.player.signature'],
+      coveredPlayerSkillKeys: ['skill.player.basic-attack', 'skill.player.signature'],
+      fullLevelCount: 20,
+      uncoveredDemandKeys: [],
+    })
+    expect(artifact.coverage.requiredSkillRequirementKeys).toHaveLength(1)
+    expect(artifact.coverage.coveredSkillRequirementKeys).toEqual(artifact.coverage.requiredSkillRequirementKeys)
+    expect(artifact.coverage.acceptanceRangeUnlockSkillKeys).toEqual([
+      'skill.player.basic-attack', 'skill.player.signature', 'skill.level.002', 'skill.level.004',
+    ])
+    expect(artifact.skills).toHaveLength(9)
+    expect(artifact.skills.find(skill => skill.demandKind === 'quest-requirement')).toMatchObject({
+      unlockPlan: { kind: 'quest-requirement', level: null },
+      runtimeBinding: { status: 'runtime-unbound', unlockQuestKey: null, actionKey: null },
+    })
+    expect(artifact.skills.every(skill => skill.runtimeBinding.status === 'runtime-unbound')).toBe(true)
+    expect(artifact.governance).toMatchObject({
+      professionSystem: 'none', attributeGrowthOwner: 'deterministic-compiler',
+      experienceCurveOwner: 'deterministic-compiler', allRuntimeBindingsUnbound: true,
+      progressionModuleReady: false,
+    })
+    await expect(validateTextOpenWorldProgressionCatalogsV1({ artifact, context: input.progressionContext }))
+      .resolves.toEqual(artifact)
+  }, 120_000)
+
+  it('拒绝技能需求漏项、篡改主角初始能力和不完整的主动攻击公式', async () => {
+    const input = await progressionCatalogsFixture()
+    await expect(executeProgressionCatalogs(input, progressionCatalogsRunner({ omitDemand: true })))
+      .rejects.toThrow(/skills必须与9项skillDemands一一对应/)
+    await expect(executeProgressionCatalogs(input, progressionCatalogsRunner({ rewriteInitial: true })))
+      .rejects.toThrow(/PlayerBuild技能标题不可改写/)
+    await expect(executeProgressionCatalogs(input, progressionCatalogsRunner({ missingCombatFormula: true })))
+      .rejects.toThrow(/主动攻击技能必须且只能声明完整战斗公式/)
+  }, 120_000)
+
+  it('拒绝非法被动技能，也拒绝重算Hash后改写经验曲线或注入运行绑定', async () => {
+    const input = await progressionCatalogsFixture()
+    await expect(executeProgressionCatalogs(input, progressionCatalogsRunner({ invalidPassive: true })))
+      .rejects.toThrow(/被动技能必须以自身为目标且无主动消耗/)
+
+    const artifact = structuredClone((await executeProgressionCatalogs(input)).artifacts[0]!.payload as TextOpenWorldProgressionCatalogsV1)
+    artifact.levels[1]!.cumulativeExperience = 101
+    artifact.skills[0]!.runtimeBinding.actionKey = 'action.forged' as null
+    const { progressionCatalogsHash: _hash, ...body } = artifact
+    artifact.progressionCatalogsHash = await hashProductProductionValueV2(body)
+    await expect(validateTextOpenWorldProgressionCatalogsV1({ artifact, context: input.progressionContext }))
+      .rejects.toThrow(/成长曲线、需求覆盖、技能稳定键或未绑定运行槽被篡改/)
+  }, 120_000)
 })

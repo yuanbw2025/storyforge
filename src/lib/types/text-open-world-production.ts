@@ -1731,6 +1731,109 @@ export interface TextOpenWorldContentRequirementManifestV1 {
   contentRequirementManifestHash: string
 }
 
+export type TextOpenWorldProgressionSkillDemandKindV1 =
+  | 'player-initial'
+  | 'level-progression'
+  | 'quest-requirement'
+
+/**
+ * P8 progression/skill catalog candidate. Stable definitions and balance
+ * numbers are frozen here; Action/Effect/Condition and quest unlock bindings
+ * remain explicitly unresolved until P8F.
+ */
+export interface TextOpenWorldProgressionCatalogsV1 {
+  schema: 'storyforge.text-open-world-progression-catalogs'
+  version: 1
+  productType: 'text-open-world'
+  productInstanceKey: string
+  gameplayRulesetHash: string
+  playerBuildHash: string
+  contentRequirementManifestHash: string
+  rules: {
+    maximumLevel: 20
+    automaticAttributeGrowth: true
+    levelUp: {
+      resourcePolicy: 'increase-by-cap-delta'
+      maximumLevelExperiencePolicy: 'cap-at-threshold'
+    }
+    attributes: {
+      power: { label: string }
+      vitality: { label: string }
+      agility: { label: string }
+    }
+    formulas: TextOpenWorldGameplayRulesetSkeletonV1['progression']['formulas']
+  }
+  levels: Array<{
+    level: number
+    cumulativeExperience: number
+    attributeGrowth: { power: number; vitality: number; agility: number }
+    unlockedSkillKeys: string[]
+  }>
+  skills: Array<{
+    key: string
+    order: number
+    sourceDemandKey: string
+    demandKind: TextOpenWorldProgressionSkillDemandKindV1
+    title: string
+    description: string
+    tags: string[]
+    activation: 'active' | 'passive'
+    kind: 'attack' | 'status' | 'resource' | 'recovery'
+    target: 'self' | 'single-enemy' | 'all-enemies'
+    scalingAttribute: 'power' | 'vitality' | 'agility' | null
+    unlockPlan:
+      | { kind: 'initial'; level: null; requirementKey: null }
+      | { kind: 'level'; level: number; requirementKey: null }
+      | { kind: 'quest-requirement'; level: null; requirementKey: string }
+    priority: number
+    resourceCost: number
+    cooldownTurns: number
+    combatResolutionPlan: {
+      required: boolean
+      powerNumerator: number | null
+      powerDenominator: number | null
+      flatDamage: number | null
+    }
+    fulfilledRequirementKeys: string[]
+    runtimeBinding: {
+      status: 'runtime-unbound'
+      useConditionKeys: []
+      effectKeys: []
+      actionKey: null
+      unlockQuestKey: null
+    }
+  }>
+  statuses: Array<{
+    key: string
+    order: number
+    title: string
+    description: string
+    polarity: 'beneficial' | 'harmful' | 'neutral'
+  }>
+  coverage: {
+    requiredPlayerSkillKeys: string[]
+    coveredPlayerSkillKeys: string[]
+    requiredSkillRequirementKeys: string[]
+    coveredSkillRequirementKeys: string[]
+    acceptanceLevelRange: { minimum: 1; maximum: 5 }
+    acceptanceRangeUnlockSkillKeys: string[]
+    fullLevelCount: 20
+    uncoveredDemandKeys: []
+  }
+  governance: {
+    professionSystem: 'none'
+    attributeGrowthOwner: 'deterministic-compiler'
+    experienceCurveOwner: 'deterministic-compiler'
+    skillSemanticsOwner: 'model-validated'
+    actionEffectBindingOwner: 'p8f.quest-finalize'
+    allRuntimeBindingsUnbound: true
+    progressionModuleReady: false
+  }
+  basisHash: string
+  createdAt: number
+  progressionCatalogsHash: string
+}
+
 export const TEXT_OPEN_WORLD_PRODUCTION_STAGES_V1 = [
   'P0', 'P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8', 'P8F', 'P9', 'P10',
   'V1', 'V2', 'V3', 'QA',

@@ -186,6 +186,9 @@ async function readTextOpenWorldRegionNarrativePacksInputContextV1(input: Assemb
 async function readTextOpenWorldQuestSkeletonsInputContextV1(input: AssembleContextInput): Promise<string> {
   return (await import('../open-world/quest-skeletons-production')).readTextOpenWorldQuestSkeletonsInputContextV1(input)
 }
+async function readTextOpenWorldProgressionCatalogsInputContextV1(input: AssembleContextInput): Promise<string> {
+  return (await import('../open-world/progression-catalogs-production')).readTextOpenWorldProgressionCatalogsInputContextV1(input)
+}
 async function readTtrpgGmRuntimeContextV1(input: AssembleContextInput): Promise<string> {
   return (await import('../ttrpg/gm-context')).readTtrpgGmRuntimeContextV1(input)
 }
@@ -1693,6 +1696,18 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     enabled: input => Number.isInteger(input.productProductionId)
       && Number.isInteger(input.productBuildId),
     read: readTextOpenWorldQuestSkeletonsInputContextV1,
+  },
+  {
+    key: 'text-open-world.progression-catalogs-input',
+    label: '文字开放世界成长与技能目录生产输入',
+    scope: 'project',
+    layer: 'L0',
+    ownerFrom: 'work',
+    budgetTokens: 80_000,
+    protectedFromTrim: true,
+    enabled: input => Number.isInteger(input.productProductionId)
+      && Number.isInteger(input.productBuildId),
+    read: readTextOpenWorldProgressionCatalogsInputContextV1,
   },
   {
     key: 'product-production.quality-feedback',
