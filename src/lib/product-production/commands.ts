@@ -641,6 +641,13 @@ async function applyCommand(input: {
       const oldPayload = objectJson(targetArtifact.payloadJson, `${targetArtifact.artifactKey}.payload`)
       const oldMetadata = objectJson(targetArtifact.metadataJson, `${targetArtifact.artifactKey}.metadata`)
       const oldRights = objectJson(targetArtifact.rightsJson, `${targetArtifact.artifactKey}.rights`)
+      const frozenRequirement = oldPayload.request && typeof oldPayload.request === 'object'
+        && !Array.isArray(oldPayload.request) ? oldPayload.request as Record<string, unknown> : null
+      if (!frozenRequirement) reject('media-revision-invalid', '目标图片缺少冻结需求合同')
+      if (command.replacement && (command.replacement.width !== frozenRequirement.width
+        || command.replacement.height !== frozenRequirement.height)) {
+        reject('media-revision-invalid', '作者替换图片尺寸必须与冻结媒资需求一致')
+      }
       const nextLocked = command.action === 'lock'
         ? true
         : command.action === 'unlock' ? false : locked

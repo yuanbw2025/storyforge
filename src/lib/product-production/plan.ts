@@ -327,7 +327,7 @@ export async function createProductProductionPlanV3(input: {
   const activeMediaTaskCount = textAdventure
     ? visualArtifactKeys.length + audioArtifactKeys.length
     : activeMediaLaneCount
-  const textAdventureDeterministicTaskCount = textAdventure ? 6 + Number(activeVisual) : 4
+  const textAdventureDeterministicTaskCount = textAdventure ? 7 + Number(activeVisual) : 4
   const durationSlots = modelTaskCount + textAdventureDeterministicTaskCount + activeMediaTaskCount
   const perDuration = Math.floor(brief.productionBudget.maximumDurationMs / Math.max(1, durationSlots))
   const costTaskCount = modelTaskCount + activeMediaTaskCount
@@ -689,6 +689,16 @@ export async function createProductProductionPlanV3(input: {
       fallbackTaskKey: null, acceptanceGateIds: ['media.integrity', 'media.rights'],
     }))
   }
+  if (textAdventure && activeVisual) tasks.push(productionTask({
+    taskKey: 'media.audit', lane: 'qa', kind: 'text-adventure-media-audit',
+    skillId: null, executionMode: 'deterministic', dependsOn: [...visualArtifactKeys],
+    inputArtifactKeys: ['media.requirements', 'content.cast-bible', 'media.visual-bible', ...visualArtifactKeys],
+    outputArtifactKeys: ['media.audit'], requirementKeys: [], capabilityRequirementKeys: [],
+    concurrencyGroup: 'deterministic', subjectLockKeys: ['media.audit'], priority: 60,
+    budgetReservation: reservation({ durationMs: perDuration }), maxAttempts: 1,
+    timeoutMs: 60_000, failurePolicy: 'pause', fallbackTaskKey: null,
+    acceptanceGateIds: ['artifact.protocol', 'media.requirement-artifact-audit'],
+  }))
   const textAdventureDependencies = textAdventure
     ? [
         'content.story-bible', 'content.cast-bible', 'content.adventure-architecture',
@@ -701,6 +711,7 @@ export async function createProductProductionPlanV3(input: {
     textAdventure ? 'integration.narrative' : 'content.narrative', 'content.product-module', ...textAdventureDependencies,
     'media.requirements', ...(textAdventure ? ['media.visual-bible.compile'] : []),
     ...(textAdventure && activeVisual ? ['media.anchor-author-gate'] : []), ...mediaDependencies,
+    ...(textAdventure && activeVisual ? ['media.audit'] : []),
   ]
   const textAdventureIntegrationArtifactKeys = textAdventure
     ? [
@@ -720,6 +731,7 @@ export async function createProductProductionPlanV3(input: {
       'content.narrative', 'content.product-module', ...textAdventureIntegrationArtifactKeys,
       'media.requirements', ...(textAdventure ? ['media.visual-bible'] : []),
       ...(textAdventure && activeVisual ? ['media.anchor-decision'] : []),
+      ...(textAdventure && activeVisual ? ['media.audit'] : []),
       ...visualArtifactKeys, ...audioArtifactKeys,
     ],
     outputArtifactKeys: integrationArtifactKeys, requirementKeys: [],

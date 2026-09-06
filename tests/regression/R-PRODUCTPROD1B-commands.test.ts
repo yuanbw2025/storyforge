@@ -76,7 +76,7 @@ async function completedTextAdventureMediaFixture() {
       const payload = image ? {
         schema: 'storyforge.generated-media-artifact', version: 1,
         assetKey: `media-revision-story.build-1.${artifactKey}`,
-        request: { beatKey: 'beat.opening' },
+        request: { beatKey: 'beat.opening', width: 1280, height: 720 },
       } : { schema: 'test-artifact', version: 1, artifactKey }
       const payloadJson = canonicalProductProductionJsonV2(payload)
       const contentHash = image ? blob.contentHash : await hashProductProductionValueV2(payload)
@@ -89,7 +89,7 @@ async function completedTextAdventureMediaFixture() {
         contentHash, payloadJson,
         metadataJson: canonicalProductProductionJsonV2(image ? {
           assetKey: `media-revision-story.build-1.${artifactKey}`,
-          name: artifactKey, width: 1024, height: 576, durationMs: null,
+          name: artifactKey, width: 1280, height: 720, durationMs: null,
           source: 'test-provider', license: 'CC0-1.0', altText: '潮门前的关键场景',
           characterTag: '', sceneTag: 'beat.opening',
         } : {}),
@@ -525,6 +525,7 @@ describe('PRODUCTPROD-1B · user command control plane', () => {
       budgetReservation: expect.objectContaining({ mediaCalls: 0, storageBytes: 0 }),
     })
     expect(childPlan.tasks.find(task => task.taskKey === 'media.visual.002')?.reuse).not.toBeNull()
+    expect(childPlan.tasks.find(task => task.taskKey === 'media.audit')?.reuse).toBeNull()
     expect(childPlan.tasks.find(task => task.taskKey === 'integration.package')?.reuse).toBeNull()
     expect(childPlan.tasks.find(task => task.taskKey === 'qa.autoplay')?.reuse).toBeNull()
     expect(childPlan.tasks.find(task => task.taskKey === 'qa.release')?.reuse).toBeNull()
@@ -551,7 +552,7 @@ describe('PRODUCTPROD-1B · user command control plane', () => {
         throw new Error('fixture stops after zero-provider human-import receipt')
       },
     })
-    expect(executorCalls).toEqual(['integration.package'])
+    expect(executorCalls).toEqual(['media.audit'])
     const targetRun = (await db.agentRuns.where('productBuildId').equals(child!.id!).toArray())
       .find(row => JSON.parse(row.contractJson).scope?.productProduction?.taskKey === 'media.visual.001')
     expect(targetRun).toMatchObject({ status: 'completed', terminalReceiptHash: expect.stringMatching(/^[a-f0-9]{64}$/) })
@@ -593,6 +594,21 @@ describe('PRODUCTPROD-1B · user command control plane', () => {
         },
       },
     })).rejects.toThrow(/mimeType|枚举/)
+    expect(await db.productBuilds.where('productionId').equals(f.productionId).count()).toBe(1)
+
+    await expect(executeProductProductionCommand({
+      scope: f.scope, productionId: f.productionId,
+      command: {
+        type: 'revise-media-asset', commandId: 'media-revision.bad-dimensions', expectedStateRevision: 2,
+        buildNumber: 1, artifactKey: target.artifactKey, expectedArtifactHash: target.contentHash,
+        action: 'upload-replacement', replacement: {
+          blobObjectId: replacementBlob.id!, contentHash: replacementBlob.contentHash,
+          mimeType: 'image/webp', byteSize: replacementBlob.byteSize, width: 1024, height: 576,
+          altText: '作者替换图', license: 'author-license', commercialUse: true,
+          redistribution: true, declaration: '拥有完整权利', attribution: '无需署名',
+        },
+      },
+    })).resolves.toMatchObject({ ok: false, errorCode: 'media-revision-invalid' })
     expect(await db.productBuilds.where('productionId').equals(f.productionId).count()).toBe(1)
 
     const receipt = await executeProductProductionCommand({

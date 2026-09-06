@@ -1010,6 +1010,44 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
       }),
       quality: expect.objectContaining({ providerAttemptsExhausted: task.maxAttempts }),
     })])
+
+    const fallbackRows: ProductBuildArtifactRecordV1[] = []
+    for (const visualTask of plan.tasks.filter(item => /^media\.visual\.\d{3}$/.test(item.taskKey))) {
+      const result = visualTask.taskKey === task.taskKey
+        ? fallback
+        : await executor({ ...execution, task: visualTask, attempt: visualTask.maxAttempts })
+      const candidate = result.artifacts[0]
+      const row = artifact(
+        candidate.artifactKey,
+        'integration-report',
+        candidate.payload,
+        await hashProductProductionValueV2(candidate.payload),
+      )
+      row.metadataJson = JSON.stringify(candidate.metadata ?? {})
+      row.qualityJson = JSON.stringify(candidate.quality ?? {})
+      row.rightsJson = JSON.stringify(candidate.rights ?? {})
+      fallbackRows.push(row)
+    }
+    const auditTask = plan.tasks.find(item => item.taskKey === 'media.audit')!
+    const audit = await executor({
+      ...execution, task: auditTask, attempt: 1,
+      inputArtifacts: [
+        artifact('media.requirements', 'asset-manifest', mediaRequirements, 'b'.repeat(64)),
+        artifact('content.cast-bible', 'product-design', professional['content.cast-bible'], 'a'.repeat(64)),
+        artifact('media.visual-bible', 'visual-bible', visualBible, visualBibleHash),
+        ...fallbackRows,
+      ],
+    })
+    expect(audit.artifacts[0]).toMatchObject({
+      artifactKey: 'media.audit', kind: 'integration-report',
+      payload: {
+        schema: 'storyforge.text-adventure-media-audit-artifact', passed: true,
+        assets: mediaRequirements.visual.map((requirement: { artifactKey: string }) => ({
+          artifactKey: requirement.artifactKey, status: 'text-fallback', assetKey: null,
+          rightsComplete: true, fallbackReason: 'provider-unavailable-after-bounded-retry',
+        })),
+      },
+    })
   })
 
   it('商业文字冒险先编译独立视觉圣经，未确认角色锚点时绝不允许开始出图', async () => {

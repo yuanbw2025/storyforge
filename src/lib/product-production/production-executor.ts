@@ -168,6 +168,29 @@ interface MediaRequirementsArtifactV1 {
   audio: AudioRequirementV1[]
 }
 
+export interface TextAdventureMediaAuditArtifactV1 {
+  schema: 'storyforge.text-adventure-media-audit-artifact'
+  version: 1
+  buildNumber: number
+  requirementsHash: string
+  visualBibleHash: string
+  assets: Array<{
+    artifactKey: string
+    status: 'fulfilled' | 'text-fallback'
+    assetKey: string | null
+    requirementHash: string
+    contentHash: string
+    mimeType: string | null
+    width: number | null
+    height: number | null
+    source: string | null
+    license: string | null
+    rightsComplete: boolean
+    fallbackReason: string | null
+  }>
+  passed: true
+}
+
 interface ProductMediaCharacterAnchorV1 {
   characterKey: string
   sourceResourceKey: string | null
@@ -2035,6 +2058,162 @@ function mediaAsset(row: ProductProductionTaskExecutionInputV1['inputArtifacts']
   }
 }
 
+export function parseTextAdventureMediaAuditArtifactV1(
+  value: unknown,
+  expected?: { buildNumber: number; requirementsHash: string; visualBibleHash: string; artifactKeys: string[] },
+): TextAdventureMediaAuditArtifactV1 {
+  const row = record(value, 'mediaAudit')
+  exactKeys(row, ['schema', 'version', 'buildNumber', 'requirementsHash', 'visualBibleHash', 'assets', 'passed'], 'mediaAudit')
+  if (row.schema !== 'storyforge.text-adventure-media-audit-artifact' || row.version !== 1 || row.passed !== true
+    || typeof row.requirementsHash !== 'string' || !/^[a-f0-9]{64}$/.test(row.requirementsHash)
+    || typeof row.visualBibleHash !== 'string' || !/^[a-f0-9]{64}$/.test(row.visualBibleHash)
+    || !Array.isArray(row.assets) || row.assets.length > 200) fail('mediaAudit 基础合同无效')
+  const assets = row.assets.map((value, index) => {
+    const item = record(value, `mediaAudit.assets[${index}]`)
+    exactKeys(item, [
+      'artifactKey', 'status', 'assetKey', 'requirementHash', 'contentHash', 'mimeType', 'width', 'height',
+      'source', 'license', 'rightsComplete', 'fallbackReason',
+    ], `mediaAudit.assets[${index}]`)
+    if (typeof item.requirementHash !== 'string' || !/^[a-f0-9]{64}$/.test(item.requirementHash)
+      || typeof item.contentHash !== 'string' || !/^[a-f0-9]{64}$/.test(item.contentHash)
+      || item.rightsComplete !== true) fail(`mediaAudit.assets[${index}] 无效`)
+    const status = item.status as 'fulfilled' | 'text-fallback'
+    if (status !== 'fulfilled' && status !== 'text-fallback') {
+      fail(`mediaAudit.assets[${index}].status 无效`)
+    }
+    const fulfilled = status === 'fulfilled'
+    if (fulfilled
+      ? (typeof item.assetKey !== 'string' || !item.assetKey.trim()
+        || typeof item.mimeType !== 'string' || !item.mimeType.startsWith('image/')
+        || typeof item.source !== 'string' || !item.source.trim()
+        || typeof item.license !== 'string' || !item.license.trim()
+        || item.fallbackReason !== null)
+      : (item.assetKey !== null || item.mimeType !== null || item.width !== null || item.height !== null
+        || item.source !== null || item.license !== null
+        || typeof item.fallbackReason !== 'string' || !item.fallbackReason.trim())) {
+      fail(`mediaAudit.assets[${index}] ${fulfilled ? '图片' : '纯文字降级'}合同无效`)
+    }
+    return {
+      artifactKey: key(item.artifactKey, `mediaAudit.assets[${index}].artifactKey`),
+      status,
+      assetKey: fulfilled ? key(item.assetKey, `mediaAudit.assets[${index}].assetKey`) : null,
+      requirementHash: item.requirementHash,
+      contentHash: item.contentHash,
+      mimeType: fulfilled ? item.mimeType as string : null,
+      width: fulfilled ? integer(item.width, `mediaAudit.assets[${index}].width`, 1, 10_000) : null,
+      height: fulfilled ? integer(item.height, `mediaAudit.assets[${index}].height`, 1, 10_000) : null,
+      source: fulfilled ? text(item.source, `mediaAudit.assets[${index}].source`, 500) : null,
+      license: fulfilled ? text(item.license, `mediaAudit.assets[${index}].license`, 500) : null,
+      rightsComplete: true as const,
+      fallbackReason: fulfilled ? null : text(item.fallbackReason, `mediaAudit.assets[${index}].fallbackReason`, 500),
+    }
+  })
+  if (new Set(assets.map(item => item.artifactKey)).size !== assets.length
+    || new Set(assets.flatMap(item => item.assetKey ? [item.assetKey] : [])).size
+      !== assets.filter(item => item.assetKey).length) fail('mediaAudit asset key 重复')
+  const parsed: TextAdventureMediaAuditArtifactV1 = {
+    schema: 'storyforge.text-adventure-media-audit-artifact', version: 1,
+    buildNumber: integer(row.buildNumber, 'mediaAudit.buildNumber', 1, Number.MAX_SAFE_INTEGER),
+    requirementsHash: row.requirementsHash, visualBibleHash: row.visualBibleHash,
+    assets, passed: true,
+  }
+  if (expected && (parsed.buildNumber !== expected.buildNumber
+    || parsed.requirementsHash !== expected.requirementsHash
+    || parsed.visualBibleHash !== expected.visualBibleHash
+    || canonicalProductProductionJsonV2(parsed.assets.map(item => item.artifactKey).sort())
+      !== canonicalProductProductionJsonV2([...expected.artifactKeys].sort()))) {
+    fail('mediaAudit 与当前 Build/需求/视觉圣经不一致')
+  }
+  return parsed
+}
+
+async function executeTextAdventureMediaAuditTask(
+  input: ProductProductionTaskExecutionInputV1,
+  options: { production: ProductProductionRecordV1; brief: ProductProductionBriefV3 },
+): Promise<ProductProductionTaskExecutionResultV1> {
+  const startedAt = performance.now()
+  const requirementsArtifact = artifactRecord(input, 'media.requirements')
+  const visualBibleArtifact = artifactRecord(input, 'media.visual-bible')
+  const cast = parseTextAdventureCastBibleArtifactV1({
+    value: artifactPayload(input, 'content.cast-bible'), brief: options.brief,
+    allowedResourceKeys: options.brief.source.selection.resourceKeys,
+  })
+  const requirements = parseProductMediaRequirementsArtifactV2(
+    artifactPayload(input, 'media.requirements'), options.brief, textAdventureCharacterAnchors(cast),
+  )
+  parseTextAdventureVisualBibleArtifactV1({
+    value: artifactPayload(input, 'media.visual-bible'), cast,
+    expectedAssetKeys: requirements.visual.map(item => item.artifactKey),
+  })
+  const assets: TextAdventureMediaAuditArtifactV1['assets'] = []
+  for (const requirement of requirements.visual) {
+    const matches = input.inputArtifacts.filter(row => row.artifactKey === requirement.artifactKey)
+    if (matches.length !== 1) fail(`媒资审计目标缺失或重复:${requirement.artifactKey}`)
+    const artifact = matches[0]
+    const payload = record(artifactPayload(input, requirement.artifactKey), `${requirement.artifactKey}.payload`)
+    const metadata = record(JSON.parse(artifact.metadataJson), `${requirement.artifactKey}.metadata`)
+    const rights = record(JSON.parse(artifact.rightsJson), `${requirement.artifactKey}.rights`)
+    const expectedAssetKey = `${options.production.productionKey}.build-${input.buildNumber}.${requirement.artifactKey}`
+    const requirementHash = await hashProductProductionValueV2(requirement)
+    if (payload.schema === 'storyforge.omitted-media-artifact' && payload.version === 1) {
+      if (!options.brief.fallbackPolicy.allowTextOnly
+        || payload.artifactKey !== requirement.artifactKey || payload.fallback !== 'text-only'
+        || payload.reasonCode !== 'provider-unavailable-after-bounded-retry'
+        || artifact.kind !== 'integration-report' || artifact.blobObjectId !== null
+        || artifact.mimeType !== null || artifact.mediaKind !== null
+        || metadata.assetKey !== null || metadata.fallback !== 'text-only'
+        || rights.origin !== 'none' || rights.containsThirdPartyMedia !== false
+        || rights.commercialUse !== true) {
+        fail(`需求—纯文字降级审计失败:${requirement.artifactKey}`)
+      }
+      assets.push({
+        artifactKey: requirement.artifactKey, status: 'text-fallback', assetKey: null,
+        requirementHash, contentHash: artifact.contentHash, mimeType: null, width: null, height: null,
+        source: null, license: null, rightsComplete: true,
+        fallbackReason: 'provider-unavailable-after-bounded-retry',
+      })
+      continue
+    }
+    const rightsComplete = typeof rights.origin === 'string' && rights.origin.trim().length > 0
+      && typeof rights.license === 'string' && rights.license.trim().length > 0
+      && (options.brief.qualityProfile !== 'commercial-candidate' || rights.commercialUse === true)
+    if (payload.schema !== 'storyforge.generated-media-artifact' || payload.version !== 1
+      || canonicalProductProductionJsonV2(payload.request) !== canonicalProductProductionJsonV2(requirement)
+      || metadata.assetKey !== expectedAssetKey || artifact.kind !== 'image'
+      || artifact.mediaKind !== requirement.mediaKind || artifact.blobObjectId == null
+      || !artifact.mimeType?.startsWith('image/')
+      || metadata.width !== requirement.width || metadata.height !== requirement.height
+      || typeof metadata.source !== 'string' || !metadata.source.trim()
+      || typeof metadata.license !== 'string' || !metadata.license.trim()
+      || metadata.license !== rights.license || !rightsComplete) {
+      fail(`需求—图片 Artifact 审计失败:${requirement.artifactKey}`)
+    }
+    assets.push({
+      artifactKey: requirement.artifactKey, status: 'fulfilled', assetKey: expectedAssetKey,
+      requirementHash, contentHash: artifact.contentHash,
+      mimeType: artifact.mimeType, width: requirement.width, height: requirement.height,
+      source: metadata.source.trim(), license: metadata.license.trim(), rightsComplete: true, fallbackReason: null,
+    })
+  }
+  const report = parseTextAdventureMediaAuditArtifactV1({
+    schema: 'storyforge.text-adventure-media-audit-artifact', version: 1,
+    buildNumber: input.buildNumber, requirementsHash: requirementsArtifact.contentHash,
+    visualBibleHash: visualBibleArtifact.contentHash, assets, passed: true,
+  }, {
+    buildNumber: input.buildNumber, requirementsHash: requirementsArtifact.contentHash,
+    visualBibleHash: visualBibleArtifact.contentHash,
+    artifactKeys: requirements.visual.map(item => item.artifactKey),
+  })
+  return {
+    artifacts: [{
+      artifactKey: 'media.audit', kind: 'integration-report', payload: report,
+      quality: { requirementArtifactAudit: true, auditedAssetCount: report.assets.length },
+      rights: {},
+    }],
+    passedGateIds: [...input.task.acceptanceGateIds], usage: zeroUsage(elapsed(startedAt)),
+  }
+}
+
 async function executeNarrativeIntegrationTask(
   input: ProductProductionTaskExecutionInputV1,
   options: { brief: ProductProductionBriefV3 },
@@ -2141,6 +2320,7 @@ async function executeIntegrationTask(input: ProductProductionTaskExecutionInput
     options.brief,
     textAdventureCast ? textAdventureCharacterAnchors(textAdventureCast) : [],
   )
+  let textAdventureMediaAuditHash = ''
   if (textAdventureCast) {
     const visualBibleArtifact = artifactRecord(input, 'media.visual-bible')
     const visualBible = parseTextAdventureVisualBibleArtifactV1({
@@ -2148,12 +2328,22 @@ async function executeIntegrationTask(input: ProductProductionTaskExecutionInput
       cast: textAdventureCast,
       expectedAssetKeys: mediaRequirements.visual.map(requirement => requirement.artifactKey),
     })
-    if (mediaRequirements.visual.length > 0) parseTextAdventureMediaAnchorDecisionArtifactV1({
-      value: artifactPayload(input, 'media.anchor-decision'),
-      visualBible,
-      visualBibleHash: visualBibleArtifact.contentHash,
-      confirmationRequired: options.brief.qualityProfile === 'commercial-candidate',
-    })
+    if (mediaRequirements.visual.length > 0) {
+      parseTextAdventureMediaAnchorDecisionArtifactV1({
+        value: artifactPayload(input, 'media.anchor-decision'),
+        visualBible,
+        visualBibleHash: visualBibleArtifact.contentHash,
+        confirmationRequired: options.brief.qualityProfile === 'commercial-candidate',
+      })
+      const auditArtifact = artifactRecord(input, 'media.audit')
+      parseTextAdventureMediaAuditArtifactV1(artifactPayload(input, 'media.audit'), {
+        buildNumber: input.buildNumber,
+        requirementsHash: artifactRecord(input, 'media.requirements').contentHash,
+        visualBibleHash: visualBibleArtifact.contentHash,
+        artifactKeys: mediaRequirements.visual.map(requirement => requirement.artifactKey),
+      })
+      textAdventureMediaAuditHash = auditArtifact.contentHash
+    }
   }
   const textAdventureProduction = options.brief.intent.productType === 'text-adventure'
     ? (() => {
@@ -2256,6 +2446,10 @@ async function executeIntegrationTask(input: ProductProductionTaskExecutionInput
       initialVariables: {
         productAdapterId: modules.adapterId,
         productAdapterCommercialReady: modules.commercialReady,
+        ...(options.brief.intent.productType === 'text-adventure' ? {
+          mediaAuditPassed: mediaRequirements.visual.length === 0 || !!textAdventureMediaAuditHash,
+          mediaAuditHash: textAdventureMediaAuditHash || 'no-visual-assets',
+        } : {}),
       },
     },
     sourceWorld: { contentHash: options.brief.source.worldContentHash, selection: options.brief.source.selection },
@@ -2394,6 +2588,12 @@ async function executeQualityTask(input: ProductProductionTaskExecutionInputV1, 
         evidence: autoplay.cases.map(item => `${item.caseKey}=${item.passed}`),
       },
     } : {}),
+    ...(runtimePackage.productType === 'text-adventure' ? {
+      'product.adventure.media-audit': {
+        passed: runtimePackage.definition.initialVariables.mediaAuditPassed === true,
+        evidence: [String(runtimePackage.definition.initialVariables.mediaAuditHash ?? 'missing')],
+      },
+    } : {}),
   }
   for (const productGate of productQuality.gates) {
     hardEvidence[productGate.gateId] = {
@@ -2409,6 +2609,7 @@ async function executeQualityTask(input: ProductProductionTaskExecutionInputV1, 
     ...(options.brief.qualityProfile === 'commercial-candidate' && autoplay
       ? ['product.adventure.autoplay']
       : []),
+    ...(runtimePackage.productType === 'text-adventure' ? ['product.adventure.media-audit'] : []),
   ])]
   const hardGateResults = requiredGateIds.map(gateId => (
     hardEvidence[gateId] ?? { passed: false, evidence: [`unsupported-gate:${gateId}`] }
@@ -2694,6 +2895,9 @@ export function createConfiguredProductProductionExecutorV1(input: {
     }
     if (request.task.taskKey === 'media.anchor-author-gate') {
       return executeTextAdventureMediaAnchorGateTask(request, options.brief)
+    }
+    if (request.task.taskKey === 'media.audit') {
+      return executeTextAdventureMediaAuditTask(request, options)
     }
     if (request.task.taskKey === 'media.visual' || request.task.taskKey.startsWith('media.visual.')) {
       return request.task.taskKey.startsWith('media.visual.') && input.brief.intent.productType === 'text-adventure'
