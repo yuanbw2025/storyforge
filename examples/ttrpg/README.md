@@ -1,8 +1,8 @@
 # StoryForge 原创跑团作品
 
-首个作品为《雾港：最后一盏灯》，使用 StoryForge 自有的叙事 2d6 规则。创作输入在 [creative-brief.md](fog-harbor/creative-brief.md)，封面生成记录在 [cover-generation.md](fog-harbor/cover-generation.md)。这些创作资料不等于已经发布的游戏包。
+首个作品为《雾港：最后一盏灯》，使用 StoryForge 自有的叙事 2d6 规则。创作输入在 [creative-brief.md](fog-harbor/creative-brief.md)，封面生成记录在 [cover-generation.md](fog-harbor/cover-generation.md)。正式分发包保存在 `public/games/fog-harbor/game.json`，目录绑定实际哈希。
 
-当前验证结果、真实 API 阻塞与恢复条件见 [作品交付状态](fog-harbor/production-status.md)。
+当前验证结果、真实 API 验证与已知边界见 [作品交付状态](fog-harbor/production-status.md)。
 
 ## 运行玩家入口
 
@@ -13,7 +13,7 @@ npm ci
 npm run dev -- --host 127.0.0.1
 ```
 
-打开开发服务显示的地址，加上 `/storyforge/play`。正式作品进入 `public/games/catalog.json` 后，玩家可以直接选择作品、配置自己的模型 API、选择角色并开始游戏。没有目录条目时，页面只展示已有存档。
+打开开发服务显示的地址，加上 `/storyforge/play`。《雾港：最后一盏灯》已进入社区目录。玩家直接选择作品、配置自己的模型 API、选择角色并开始游戏。
 
 单人模式由 AI 扮演 KP、其余玩家角色及 NPC；本地多人模式在一台设备上轮流交接角色。私密资料默认收起。设备拥有者能够访问本地原始数据，因此本地交接不提供针对设备拥有者的密码学保密。
 
@@ -33,4 +33,4 @@ npm run dev -- --host 127.0.0.1
 
 社区条目必须指向经过 `verifyProductDistributionBundleV2` 校验的原始分发包，并记录实际 `bundleHash`。游戏代码不接受未校验 JSON 直接创建运行实例。仓库中现有测试夹具仅用于测试，禁止将其改名作为正式社区作品。
 
-首发作品交接应包括：冻结世界来源、正式分发包、封面与必要媒资、来源/许可说明、从生产到结局的真实试玩记录，以及已知问题和实测调用统计。当前分支未完成真实 provider 的整条验证，不能据此发布“商业化已完成”的说明。
+首发作品交接应包括：冻结世界来源、正式分发包、封面与必要媒资、来源/许可说明、从生产到结局的真实试玩记录，以及已知问题和实测调用统计。本作已通过真实 provider 完成世界到产品、游玩到结局的验证；作为社区预览交付，仍不能据此发布“商业化已完成”的说明。
