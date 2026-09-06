@@ -256,6 +256,7 @@ export async function generateComicProfessionalCandidateV1(input: { scope: Works
     input.stage === 'panel-plan' ? `PagePlan 闭集与目标格数：${planRows.map(row => `${row.stableKey}=${row.expectedPanelCount}`).join(', ')}` : '',
     input.stage === 'visual-bible' ? `必须逐字覆盖的 panel subjectKey 闭集：${panelSubjectKeys.join(', ')}` : '',
     ['image-request', 'targeted-repair'].includes(input.stage) ? `允许 visual subject stableKey 闭集：${subjectRows.map(row => row.stableKey).join(', ')}` : '',
+    ['image-request', 'targeted-repair'].includes(input.stage) && selected.targetPanels[0] ? `目标格当前 revision=${selected.targetPanels[0].revision}；必须逐字保留 protectedAreas=${JSON.stringify(selected.targetPanels[0].protectedAreas ?? [])}；必须覆盖本格 subjectKey=${[...new Set([...(selected.targetPanels[0].subjectStates ?? []), ...(selected.targetPanels[0].continuityRefs ?? [])].map(row => row.subjectKey))].join(', ')}` : '',
   ].filter(Boolean).join('\n')
   const system = [`你是${config.role}。只完成当前职责，不替后续岗位生成或采纳。`, '严格区分来源事实、作者确认决定与提案；不得把新增桥接伪装成原文。', '只输出一个严格 JSON 值，不要 Markdown、解释、注释或代码围栏。候选自身新建的 stableKey 必须全批次唯一并匹配 ^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$；所有引用字段只能逐字使用登记上下文中的 key 或当前批次明确创建的目标 key。数组不得含重复项；数字必须是 JSON number；可空定位字段必须显式写 null，绝不输出 undefined；不得输出数据库数字 ID。', `目标漫画画像：${JSON.stringify(selected.root.targetSpec)}`, input.stage === 'source-analysis' ? `唯一来源单元：${selected.sourceUnitKeys.join(', ')}` : '', referenceClosure, targetKeys.length ? `唯一目标：${targetKeys.join(', ')}` : '', input.authorInstruction?.trim() ? `作者附加要求：${input.authorInstruction.trim()}` : '', `登记上下文：\n${assembled.text}`].filter(Boolean).join('\n\n')
   const messages: ChatMessage[] = [{ role: 'system', content: system }, { role: 'user', content: comicProfessionalInstructionV1(input.stage) }]
@@ -274,10 +275,52 @@ export async function generateComicProfessionalCandidateV1(input: { scope: Works
   }
   const parseForRun = (output: string): ComicProfessionalPayloadV1 => {
     const parsed = parseComicProfessionalPayloadV1(input.stage, parseJson(output))
+    const allowedSources = new Set(selected.sourceUnitKeys)
+    const invalidSources = (rows: Array<{ sourceUnitKeys: string[] }>) => [...new Set(rows.flatMap(row => row.sourceUnitKeys.filter(key => !allowedSources.has(key))))]
     if (input.stage === 'source-analysis') {
-      const allowed = new Set(selected.sourceUnitKeys)
-      const invalid = (parsed as AdaptationSourceFactCandidateV1[]).flatMap(row => row.sourceUnitKeys.filter(key => !allowed.has(key)))
-      if (invalid.length) throw new Error(`[comic-run] SourceFact 引用了未选择的来源单元：${[...new Set(invalid)].join('、')}`)
+      const invalid = invalidSources(parsed as AdaptationSourceFactCandidateV1[])
+      if (invalid.length) throw new Error(`[comic-run] SourceFact 引用了未选择的来源单元：${invalid.join('、')}`)
+    }
+    if (input.stage === 'causal-graph') {
+      const allowedFacts = new Set(factRows.map(row => row.stableKey)); const rows = parsed as AdaptationCausalEdgeCandidateV1[]
+      const invalid = [...new Set(rows.flatMap(row => [row.fromFactKey, row.toFactKey].filter(key => !allowedFacts.has(key))))]
+      if (invalid.length) throw new Error(`[comic-run] CausalEdge 引用了闭集外 fact：${invalid.join('、')}`)
+      const invalidSourceKeys = invalidSources(rows); if (invalidSourceKeys.length) throw new Error(`[comic-run] CausalEdge 引用了闭集外来源：${invalidSourceKeys.join('、')}`)
+    }
+    if (input.stage === 'script-adaptation') {
+      const allowedFacts = new Set(factRows.map(row => row.stableKey)); const allowedDecisions = new Set(decisionRows.map(row => row.stableKey)); const rows = parsed as ComicScriptBeatCandidateV1[]
+      const invalidFacts = [...new Set(rows.flatMap(row => row.causalFactKeys.filter(key => !allowedFacts.has(key))))]; const invalidDecisions = [...new Set(rows.flatMap(row => row.decisionKeys.filter(key => !allowedDecisions.has(key))))]
+      if (invalidFacts.length || invalidDecisions.length) throw new Error(`[comic-run] ScriptBeat 引用了闭集外 key：${[...invalidFacts, ...invalidDecisions].join('、')}`)
+      const invalidSourceKeys = invalidSources(rows); if (invalidSourceKeys.length) throw new Error(`[comic-run] ScriptBeat 引用了闭集外来源：${invalidSourceKeys.join('、')}`)
+    }
+    if (input.stage === 'page-rhythm') {
+      const allowedBeats = new Set(beatRows.map(row => row.stableKey)); const invalid = [...new Set((parsed as ComicPagePlanCandidateV1[]).flatMap(row => row.beatKeys.filter(key => !allowedBeats.has(key))))]
+      if (invalid.length) throw new Error(`[comic-run] PagePlan 引用了闭集外 beat：${invalid.join('、')}`)
+    }
+    if (input.stage === 'panel-plan') {
+      const allowedPlans = new Set(planRows.map(row => row.stableKey)); const allowedSubjects = new Set(factRows.flatMap(row => row.subjectKeys)); const rows = parsed as ComicPanelPlanCandidateV1[]
+      const invalidPlans = [...new Set(rows.map(row => row.pagePlanKey).filter(key => !allowedPlans.has(key)))]; const invalidSubjects = [...new Set(rows.flatMap(row => [...row.subjectStates, ...row.continuityRefs].map(ref => ref.subjectKey).filter(key => !allowedSubjects.has(key))))]
+      if (invalidPlans.length || invalidSubjects.length) throw new Error(`[comic-run] PanelPlan 引用了闭集外 key：${[...invalidPlans, ...invalidSubjects].join('、')}`)
+      const invalidSourceKeys = invalidSources(rows); if (invalidSourceKeys.length) throw new Error(`[comic-run] PanelPlan 引用了闭集外来源：${invalidSourceKeys.join('、')}`)
+    }
+    if (input.stage === 'visual-bible') {
+      const body = parsed as ComicVisualBibleCandidateV1; const actual = new Set(body.subjects.map(row => row.stableKey)); const missing = panelSubjectKeys.filter(key => !actual.has(key)); const invalidSourceKeys = invalidSources(body.subjects)
+      if (missing.length) throw new Error(`[comic-run] VisualBible 缺少 panel subject：${missing.join('、')}`)
+      if (invalidSourceKeys.length) throw new Error(`[comic-run] VisualBible 引用了闭集外来源：${invalidSourceKeys.join('、')}`)
+    }
+    if (['image-request', 'targeted-repair'].includes(input.stage)) {
+      const body = parsed as ComicImageRequestCandidateV1 | ComicRepairRequestCandidateV1; const panel = selected.targetPanels[0]; const allowedSubjects = new Set(subjectRows.map(row => row.stableKey)); const requiredSubjects = [...new Set([...(panel?.subjectStates ?? []), ...(panel?.continuityRefs ?? [])].map(row => row.subjectKey))]
+      const invalidSubjects = body.referenceSubjectKeys.filter(key => !allowedSubjects.has(key)); const missingSubjects = requiredSubjects.filter(key => !body.referenceSubjectKeys.includes(key)); const expectedFrames = (panel?.protectedAreas ?? []).map(row => [row.x, row.y, row.width, row.height]); const actualFrames = body.protectedAreas.map(row => [row.x, row.y, row.width, row.height])
+      if (!panel || body.panelKey !== panel.stableKey || body.expectedPanelRevision !== panel.revision) throw new Error('[comic-run] 图片请求目标格或 revision 不匹配')
+      if (invalidSubjects.length || missingSubjects.length) throw new Error(`[comic-run] 图片请求 Subject 闭集不匹配：${[...invalidSubjects, ...missingSubjects].join('、')}`)
+      if (JSON.stringify(actualFrames) !== JSON.stringify(expectedFrames)) throw new Error('[comic-run] 图片请求必须逐字保留目标格 protectedAreas')
+      if (input.stage === 'targeted-repair') { const issueKeys = (body as ComicRepairRequestCandidateV1).issueKeys; const expectedIssueKeys = selected.targetIssues.map(row => row.stableKey); if (issueKeys.length !== expectedIssueKeys.length || expectedIssueKeys.some(key => !issueKeys.includes(key))) throw new Error('[comic-run] 修复请求 issueKeys 与目标问题不匹配') }
+    }
+    if (['visual-continuity-review', 'page-review'].includes(input.stage)) {
+      const rows = parsed as ComicReviewIssueCandidateV1[]; const allowedPages = new Set(selected.targetPages.map(row => row.stableKey)); const targetPageIds = new Set(selected.targetPages.flatMap(row => row.id == null ? [] : [row.id])); const allowedPanels = new Set(selected.panels.filter(row => targetPageIds.has(row.pageId)).map(row => row.stableKey))
+      const invalidTargets = rows.flatMap(row => [!allowedPages.has(row.pageKey) ? row.pageKey : '', row.panelKey && !allowedPanels.has(row.panelKey) ? row.panelKey : ''].filter(Boolean)); const invalidSourceKeys = invalidSources(rows)
+      if (invalidTargets.length) throw new Error(`[comic-run] ReviewIssue 引用了目标页闭集外 key：${[...new Set(invalidTargets)].join('、')}`)
+      if (invalidSourceKeys.length) throw new Error(`[comic-run] ReviewIssue 引用了闭集外来源：${invalidSourceKeys.join('、')}`)
     }
     return parsed
   }
