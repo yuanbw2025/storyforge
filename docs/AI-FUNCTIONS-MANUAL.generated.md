@@ -80,7 +80,7 @@
 
 ## 二、上下文源清单（CONTEXT_SOURCES · AI 读什么）
 
-共 104 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
+共 108 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
 
 | key | 标签 | 作用域 | 层级 | 预算(token) |
 |---|---|---|---|---|
@@ -96,6 +96,7 @@
 | `text-open-world.source-pin` | 文字开放世界冻结来源与本批读取单元 | project | L0 | 100000 |
 | `text-open-world.experience-input` | 文字开放世界作者授权体验设计输入 | project | L0 | 100000 |
 | `text-open-world.gameplay-ruleset-input` | 文字开放世界已确认体验与玩法规则输入 | project | L0 | 40000 |
+| `text-open-world.presentation-profile-input` | 文字开放世界界面表现与文字降级输入 | project | L0 | 40000 |
 | `text-open-world.player-build-input` | 文字开放世界已确认主角与玩法构筑输入 | project | L0 | 40000 |
 | `text-open-world.story-architecture-input` | 文字开放世界全局故事架构输入 | project | L0 | 100000 |
 | `text-open-world.region-skeleton-input` | 文字开放世界来源与故事空间骨架输入 | project | L0 | 100000 |
@@ -111,6 +112,9 @@
 | `text-open-world.map-interaction-input` | 文字开放世界地图交互目录生产输入 | project | L0 | 100000 |
 | `text-open-world.quest-finalize-input` | 文字开放世界任务最终化与地区导演生产输入 | project | L0 | 180000 |
 | `text-open-world.scene-scripts-input` | 文字开放世界场景脚本与三类交互绑定生产输入 | project | L0 | 220000 |
+| `text-open-world.system-finalize-input` | 文字开放世界系统配置、媒资槽与内容预算收口输入 | project | L0 | 180000 |
+| `text-open-world.balance-review-input` | 文字开放世界平衡评审输入 | project | L0 | 120000 |
+| `text-open-world.semantic-review-input` | 文字开放世界叙事语义评审输入 | project | L0 | 220000 |
 | `product-production.quality-feedback` | 上层产品生产质量反馈 | project | L1 | 6000 |
 | `product-production.repair-feedback` | 当前制作任务的失败草稿与校验意见 | project | L1 | 12000 |
 | `product-production.evolution-base` | 游戏持续演化基线 | project | L0 | 12000 |
@@ -415,4 +419,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `b1c5e8fc`
+生成时间基准:commit `223e0d30`

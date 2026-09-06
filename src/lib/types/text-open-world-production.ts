@@ -8,6 +8,7 @@ import type { WorldCapabilityArea } from '../registry/types'
 import type { TextOpenWorldActionDefinitionV1 } from './text-open-world-action'
 import type { TextOpenWorldConditionDefinitionV1 } from './text-open-world-condition'
 import type { TextOpenWorldEffectDefinitionV1, TextOpenWorldEffectOperationV1 } from './text-open-world-effect'
+import type { TextOpenWorldRuntimeModuleKeyV1 } from './text-open-world-runtime'
 
 /**
  * Stable, product-owned artifacts in the text-open-world production compiler.
@@ -2975,6 +2976,384 @@ export interface TextOpenWorldActionBindingsV1 {
   basisHash: string
   createdAt: number
   actionBindingsHash: string
+}
+
+/** P2 presentation intent. It defines consumer-facing language and fallbacks,
+ * not concrete media files or runtime state. */
+export interface TextOpenWorldPresentationProfileV1 {
+  schema: 'storyforge.text-open-world-presentation-profile'
+  version: 1
+  productType: 'text-open-world'
+  productInstanceKey: string
+  gameBriefHash: string
+  experienceContractHash: string
+  theme: {
+    title: string
+    designIntent: string
+    colorMood: string
+    typographyTone: string
+    informationDensity: 'comfortable'
+    mapStyle: 'svg-terrain-with-interactive-nodes'
+  }
+  consumerSlots: Array<{
+    key: string
+    surface: 'creation' | 'play' | 'overlay' | 'system'
+    purpose: string
+    required: true
+    textFallback: string
+  }>
+  interactionPresentation: {
+    acceptedInputs: ['system-action', 'fixed-choice', 'natural-language']
+    combatControls: ['fight', 'escape', 'skill', 'item']
+    impossibleActionPolicy: 'explicit-decline-with-in-world-alternative'
+    offTrackPolicy: 'natural-response-then-mainline-redirect'
+    modelFailurePolicy: 'show-formal-actions-and-safe-template'
+  }
+  mediaPolicy: {
+    visualLevel: 'none' | 'key-scenes' | 'illustrated'
+    audioLevel: 'none' | 'music-sfx' | 'full'
+    requiredVisualKinds: ['procedural-map', 'character-portrait', 'scene-background']
+    textFallbackRequired: true
+    missingMediaPolicy: 'placeholder-with-text-playable'
+    authorizedMaximumMediaCalls: number
+  }
+  contentLanguage: string
+  governance: {
+    allRequiredConsumersDeclared: true
+    gameplayResultNeverOwnedByPresentation: true
+    stableIdsNeverUseDisplayText: true
+    textOnlyReleasePlayable: true
+  }
+  basisHash: string
+  createdAt: number
+  presentationProfileHash: string
+}
+
+export interface TextOpenWorldSystemConfigsV1 {
+  schema: 'storyforge.text-open-world-system-configs'
+  version: 1
+  productType: 'text-open-world'
+  productInstanceKey: string
+  gameBriefHash: string
+  experienceContractHash: string
+  presentationProfileHash: string
+  gameplayRulesetHash: string
+  playerBuildHash: string
+  regionNarrativePacksHash: string
+  progressionCatalogsHash: string
+  enemyEncounterCatalogHash: string
+  itemRewardCatalogHash: string
+  craftingEconomyCatalogHash: string
+  npcRuntimeCatalogHash: string
+  mapInteractionCatalogHash: string
+  questDesignDocumentsHash: string
+  directorDecksHash: string
+  sceneScriptsHash: string
+  choiceContractsHash: string
+  actionBindingsHash: string
+  runtimeModules: Array<{
+    moduleKey: TextOpenWorldRuntimeModuleKeyV1
+    schemaVersion: number
+    sourceArtifactKeys: TextOpenWorldProductionArtifactKindV1[]
+    status: 'ready-for-v3-assembly'
+  }>
+  uiConsumers: Array<{
+    key: string
+    sourceArtifactKeys: TextOpenWorldProductionArtifactKindV1[]
+    requiredRuntimeModuleKeys: TextOpenWorldRuntimeModuleKeyV1[]
+    status: 'ready'
+  }>
+  runtimePolicies: {
+    difficulty: 'standard'
+    maximumLevel: 20
+    initialLevel: 1
+    acceptanceFinalLevel: 5
+    professionSystem: 'none'
+    manualAttributeAllocation: false
+    combatMode: 'turn-based-four-action'
+    combatNaturalLanguage: false
+    inventoryCapacity: 'unlimited'
+    equipmentSlots: ['weapon', 'armor', 'accessory']
+    craftingSuccess: 'guaranteed-known-recipes-only'
+    currencyCount: 1
+    mapMode: 'svg-terrain-with-interactive-nodes'
+    quickTravel: 'visited-region-points-no-interruption'
+    worldClockDisplay: 'day-and-period'
+    questTracking: 'one-primary-and-multiple-pinned'
+    savePolicy: 'bounded-manual-list-with-branches'
+    tutorial: 'progressive-hints'
+    releaseLanguageCount: 1
+  }
+  coverage: {
+    requiredRuntimeModuleKeys: TextOpenWorldRuntimeModuleKeyV1[]
+    readyRuntimeModuleKeys: TextOpenWorldRuntimeModuleKeyV1[]
+    requiredConsumerKeys: string[]
+    readyConsumerKeys: string[]
+    missingRuntimeModuleKeys: []
+    missingConsumerKeys: []
+  }
+  governance: {
+    everyRuntimeModuleHasOneAssemblySourceSet: true
+    allPlayerSurfacesHaveConsumers: true
+    presentationCannotMutateState: true
+    runtimeStateSessionOwned: true
+    readyForDeterministicPreflight: true
+  }
+  basisHash: string
+  createdAt: number
+  systemConfigsHash: string
+}
+
+export type TextOpenWorldMediaSlotKindV1 =
+  | 'procedural-map' | 'character-portrait' | 'scene-background' | 'ui-skin'
+  | 'music' | 'ambient-sound' | 'sound-effect' | 'voice'
+
+export interface TextOpenWorldMediaRequirementsV1 {
+  schema: 'storyforge.text-open-world-media-requirements'
+  version: 1
+  productType: 'text-open-world'
+  productInstanceKey: string
+  presentationProfileHash: string
+  npcRuntimeCatalogHash: string
+  mapInteractionCatalogHash: string
+  sceneScriptsHash: string
+  slots: Array<{
+    key: string
+    order: number
+    kind: TextOpenWorldMediaSlotKindV1
+    subjectKind: 'world' | 'region' | 'actor' | 'scene' | 'ui'
+    subjectKey: string
+    title: string
+    creativeBrief: string
+    required: boolean
+    productionMode: 'procedural-code' | 'generate-or-import' | 'optional-generate-or-import'
+    fallback: 'procedural-svg' | 'generated-placeholder' | 'text-description' | 'silent'
+    sourceArtifactKey: TextOpenWorldProductionArtifactKindV1
+    sourceEntityKey: string
+    consumerKeys: string[]
+  }>
+  coverage: {
+    requiredVisualKinds: ['procedural-map', 'character-portrait', 'scene-background']
+    coveredRequiredVisualKinds: ['procedural-map', 'character-portrait', 'scene-background']
+    requiredActorKeys: string[]
+    coveredActorKeys: string[]
+    requiredRegionKeys: string[]
+    coveredRegionKeys: string[]
+    requiredSlotKeys: string[]
+    fallbackReadySlotKeys: string[]
+    missingRequiredSlotKeys: []
+  }
+  productionBudget: {
+    requestedGeneratedSlotCount: number
+    authorizedMaximumMediaCalls: number
+    fitsAuthorizedMediaCalls: boolean
+    overflowSlotKeys: string[]
+  }
+  governance: {
+    requirementsDerivedAfterContent: true
+    mediaNeverBlocksTextFallback: true
+    proceduralMapRequiresNoModelCall: true
+    everyRequiredSlotHasFallback: true
+    rightsCheckedAtAssetAcceptance: true
+  }
+  basisHash: string
+  createdAt: number
+  mediaRequirementsHash: string
+}
+
+export interface TextOpenWorldContentBudgetV1 {
+  schema: 'storyforge.text-open-world-content-budget'
+  version: 1
+  productType: 'text-open-world'
+  productInstanceKey: string
+  experienceContractHash: string
+  regionNarrativePacksHash: string
+  questDesignDocumentsHash: string
+  directorDecksHash: string
+  sceneScriptsHash: string
+  inventory: {
+    mainlineMinutes: number
+    significantMinutes: number
+    ordinaryFixedMinutes: number
+    templateVariantMinutes: number
+    randomEventMinutes: number
+    totalAuthoredMinutes: number
+    questCounts: { mainline: number; significant: number; ordinary: number; template: number }
+    templateVariantCount: number
+    randomEventCount: number
+    regionCount: number
+    sceneCount: number
+  }
+  singlePlaythrough: {
+    requiredMainlineMinutes: number
+    minimumOptionalMinutes: number
+    maximumOptionalMinutes: number
+    minimumTotalMinutes: number
+    typicalTotalMinutes: number
+    maximumTotalMinutes: number
+    assumptions: string[]
+  }
+  requested: {
+    requiredPlayMinuteRange: { minimum: number; maximum: number }
+    optionalInventoryMinuteRange: { minimum: number; maximum: number }
+  }
+  fit: {
+    requiredPlayMinutesInRange: boolean
+    optionalInventoryMinutesInRange: boolean
+    inventoryAtLeastSinglePlaythrough: boolean
+    everyRegionHasOrdinarySupply: boolean
+  }
+  perRegion: Array<{
+    regionKey: string
+    fixedQuestMinutes: number
+    templateVariantMinutes: number
+    randomEventMinutes: number
+    authoredInventoryMinutes: number
+  }>
+  governance: {
+    inventoryAndSingleRunSeparated: true
+    repeatedProceduralPlayNotCountedAsAuthoredInventory: true
+    durationIsEstimateUntilHumanCalibration: true
+    humanPlaytimeSampleCount: 0
+  }
+  basisHash: string
+  createdAt: number
+  contentBudgetHash: string
+}
+
+export type TextOpenWorldPreflightCheckCategoryV1 =
+  | 'schema' | 'hash-chain' | 'reference' | 'solvability' | 'budget' | 'consumer-slot'
+
+export interface TextOpenWorldDeterministicPreflightV1 {
+  schema: 'storyforge.text-open-world-deterministic-preflight'
+  version: 1
+  productType: 'text-open-world'
+  productInstanceKey: string
+  systemConfigsHash: string
+  contentBudgetHash: string
+  questDesignDocumentsHash: string
+  actionBindingsHash: string
+  checks: Array<{
+    key: string
+    category: TextOpenWorldPreflightCheckCategoryV1
+    status: 'pass' | 'block'
+    summary: string
+    evidenceRefs: string[]
+    targetArtifactKeys: TextOpenWorldProductionArtifactKindV1[]
+  }>
+  reachability: {
+    mainlineQuestKeys: string[]
+    reachableMainlineQuestKeys: string[]
+    protectedWaitQuestKeys: string[]
+    ordinaryContentMayBlockMainline: false
+    unknownConditionKeys: []
+    unknownEffectKeys: []
+    unknownActionKeys: []
+  }
+  result: {
+    passedCheckKeys: string[]
+    blockingCheckKeys: []
+    readyForModelReviews: true
+  }
+  governance: {
+    codeOnly: true
+    noSemanticQualityClaims: true
+    boundedAbstractReachability: true
+    exactInputHashesVerified: true
+  }
+  basisHash: string
+  createdAt: number
+  deterministicPreflightHash: string
+}
+
+export type TextOpenWorldReviewVerdictV1 = 'pass' | 'repair-required'
+export type TextOpenWorldReviewSeverityV1 = 'advisory' | 'blocking'
+
+export interface TextOpenWorldReviewFindingV1 {
+  key: string
+  metricKey: string
+  severity: TextOpenWorldReviewSeverityV1
+  score: number
+  summary: string
+  evidence: string
+  targetArtifactKey: TextOpenWorldProductionArtifactKindV1
+  targetEntityKeys: string[]
+  repair: {
+    targetTaskKey: string
+    mode: 'new-build-bounded-local-repair'
+    instruction: string
+    staleTaskKeys: string[]
+    mutatesAcceptedArtifact: false
+  }
+}
+
+export interface TextOpenWorldBalanceReviewV1 {
+  schema: 'storyforge.text-open-world-balance-review'
+  version: 1
+  productType: 'text-open-world'
+  productInstanceKey: string
+  progressionCatalogsHash: string
+  enemyEncounterCatalogHash: string
+  itemRewardCatalogHash: string
+  craftingEconomyCatalogHash: string
+  questDesignDocumentsHash: string
+  contentBudgetHash: string
+  deterministicPreflightHash: string
+  scores: Array<{
+    metricKey: 'progression' | 'encounters' | 'rewards' | 'economy' | 'solvability' | 'content-supply'
+    score: number
+    rationale: string
+  }>
+  findings: TextOpenWorldReviewFindingV1[]
+  verdict: TextOpenWorldReviewVerdictV1
+  threshold: 70
+  minimumScore: number
+  governance: {
+    modelReviewsSemanticsOnly: true
+    deterministicFactsNotOverridden: true
+    acceptedArtifactsNeverMutated: true
+    repairCreatesNewBuild: true
+    impactClosureCodeOwned: true
+  }
+  basisHash: string
+  createdAt: number
+  balanceReviewHash: string
+}
+
+export interface TextOpenWorldSemanticReviewV1 {
+  schema: 'storyforge.text-open-world-semantic-review'
+  version: 1
+  productType: 'text-open-world'
+  productInstanceKey: string
+  storyArcHash: string
+  mainlineThreadHash: string
+  significantThreadsHash: string
+  regionNarrativePacksHash: string
+  questDesignDocumentsHash: string
+  sceneScriptsHash: string
+  contentBudgetHash: string
+  deterministicPreflightHash: string
+  scores: Array<{
+    metricKey: 'source-fidelity' | 'mainline-arc' | 'significant-stories' | 'regional-identity'
+      | 'quest-experience' | 'dialogue-and-knowledge' | 'repetition' | 'duration-and-guidance'
+    score: number
+    rationale: string
+  }>
+  findings: TextOpenWorldReviewFindingV1[]
+  verdict: TextOpenWorldReviewVerdictV1
+  threshold: 70
+  minimumScore: number
+  governance: {
+    modelReviewsSemanticsOnly: true
+    deterministicFactsNotOverridden: true
+    acceptedArtifactsNeverMutated: true
+    repairCreatesNewBuild: true
+    impactClosureCodeOwned: true
+    humanPlaytimeCalibrationStillRequired: true
+  }
+  basisHash: string
+  createdAt: number
+  semanticReviewHash: string
 }
 
 export const TEXT_OPEN_WORLD_PRODUCTION_STAGES_V1 = [

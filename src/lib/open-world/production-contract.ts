@@ -425,7 +425,8 @@ export const TEXT_OPEN_WORLD_PRODUCTION_TASK_CONTRACTS_V1: TextOpenWorldProducti
       'p8f.quest-finalize', 'p9.scene-scripts',
     ],
     inputArtifactKeys: [
-      'text-open-world.experience-contract', 'text-open-world.presentation-profile',
+      'text-open-world.game-brief', 'text-open-world.experience-contract',
+      'text-open-world.gameplay-ruleset-skeleton', 'text-open-world.presentation-profile',
       'text-open-world.player-build', 'text-open-world.region-narrative-packs',
       'text-open-world.progression-catalogs', 'text-open-world.enemy-encounter-catalog',
       'text-open-world.item-reward-catalog', 'text-open-world.crafting-economy-catalog',
@@ -446,7 +447,7 @@ export const TEXT_OPEN_WORLD_PRODUCTION_TASK_CONTRACTS_V1: TextOpenWorldProducti
     stage: 'V1', taskKey: 'v1.deterministic-preflight', objective: '执行Schema、引用、预算、可解性和G2运行模块预检。',
     lane: 'qa', dependsOn: ['p10.system-finalize'],
     inputArtifactKeys: [
-      'text-open-world.system-configs', 'text-open-world.content-budget',
+      'text-open-world.system-configs', 'text-open-world.media-requirements', 'text-open-world.content-budget',
       'text-open-world.quest-design-documents', 'text-open-world.action-bindings',
     ],
     outputArtifactKeys: ['text-open-world.deterministic-preflight'],
@@ -479,9 +480,10 @@ export const TEXT_OPEN_WORLD_PRODUCTION_TASK_CONTRACTS_V1: TextOpenWorldProducti
     lane: 'qa', skillId: 'text-open-world.production.semantic-review.v1', recommendedModelCalls: 6,
     dependsOn: ['p3.story-architecture', 'p5.mainline', 'p6.significant-threads', 'p7.region-narrative-packs', 'p9.scene-scripts', 'v1.deterministic-preflight'],
     inputArtifactKeys: [
-      'text-open-world.story-arc', 'text-open-world.mainline-thread',
+      'text-open-world.source-ledger', 'text-open-world.experience-contract',
+      'text-open-world.story-arc', 'text-open-world.narrative-promises', 'text-open-world.mainline-thread',
       'text-open-world.significant-threads', 'text-open-world.region-narrative-packs',
-      'text-open-world.quest-design-documents', 'text-open-world.scene-scripts',
+      'text-open-world.quest-design-documents', 'text-open-world.scene-scripts', 'text-open-world.action-bindings',
       'text-open-world.content-budget', 'text-open-world.deterministic-preflight',
     ],
     outputArtifactKeys: ['text-open-world.semantic-review'],

@@ -210,6 +210,18 @@ async function readTextOpenWorldQuestFinalizeInputContextV1(input: AssembleConte
 async function readTextOpenWorldSceneScriptsInputContextV1(input: AssembleContextInput): Promise<string> {
   return (await import('../open-world/scene-scripts-production')).readTextOpenWorldSceneScriptsInputContextV1(input)
 }
+async function readTextOpenWorldPresentationProfileInputContextV1(input: AssembleContextInput): Promise<string> {
+  return (await import('../open-world/presentation-profile')).readTextOpenWorldPresentationProfileInputContextV1(input)
+}
+async function readTextOpenWorldSystemFinalizeInputContextV1(input: AssembleContextInput): Promise<string> {
+  return (await import('../open-world/system-finalize-production')).readTextOpenWorldSystemFinalizeInputContextV1(input)
+}
+async function readTextOpenWorldBalanceReviewInputContextV1(input: AssembleContextInput): Promise<string> {
+  return (await import('../open-world/quality-review-production')).readTextOpenWorldBalanceReviewInputContextV1(input)
+}
+async function readTextOpenWorldSemanticReviewInputContextV1(input: AssembleContextInput): Promise<string> {
+  return (await import('../open-world/quality-review-production')).readTextOpenWorldSemanticReviewInputContextV1(input)
+}
 async function readTtrpgGmRuntimeContextV1(input: AssembleContextInput): Promise<string> {
   return (await import('../ttrpg/gm-context')).readTtrpgGmRuntimeContextV1(input)
 }
@@ -1635,6 +1647,19 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     read: readTextOpenWorldGameplayRulesetInputContextV1,
   },
   {
+    key: 'text-open-world.presentation-profile-input',
+    label: '文字开放世界界面表现与文字降级输入',
+    scope: 'project',
+    layer: 'L0',
+    ownerFrom: 'work',
+    budgetTokens: 40_000,
+    protectedFromTrim: true,
+    atomic: true,
+    enabled: input => Number.isInteger(input.productProductionId)
+      && Number.isInteger(input.productBuildId),
+    read: readTextOpenWorldPresentationProfileInputContextV1,
+  },
+  {
     key: 'text-open-world.player-build-input',
     label: '文字开放世界已确认主角与玩法构筑输入',
     scope: 'project',
@@ -1815,6 +1840,45 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     enabled: input => Number.isInteger(input.productProductionId)
       && Number.isInteger(input.productBuildId),
     read: readTextOpenWorldSceneScriptsInputContextV1,
+  },
+  {
+    key: 'text-open-world.system-finalize-input',
+    label: '文字开放世界系统配置、媒资槽与内容预算收口输入',
+    scope: 'project',
+    layer: 'L0',
+    ownerFrom: 'work',
+    budgetTokens: 180_000,
+    protectedFromTrim: true,
+    atomic: true,
+    enabled: input => Number.isInteger(input.productProductionId)
+      && Number.isInteger(input.productBuildId),
+    read: readTextOpenWorldSystemFinalizeInputContextV1,
+  },
+  {
+    key: 'text-open-world.balance-review-input',
+    label: '文字开放世界平衡评审输入',
+    scope: 'project',
+    layer: 'L0',
+    ownerFrom: 'work',
+    budgetTokens: 120_000,
+    protectedFromTrim: true,
+    atomic: true,
+    enabled: input => Number.isInteger(input.productProductionId)
+      && Number.isInteger(input.productBuildId),
+    read: readTextOpenWorldBalanceReviewInputContextV1,
+  },
+  {
+    key: 'text-open-world.semantic-review-input',
+    label: '文字开放世界叙事语义评审输入',
+    scope: 'project',
+    layer: 'L0',
+    ownerFrom: 'work',
+    budgetTokens: 220_000,
+    protectedFromTrim: true,
+    atomic: true,
+    enabled: input => Number.isInteger(input.productProductionId)
+      && Number.isInteger(input.productBuildId),
+    read: readTextOpenWorldSemanticReviewInputContextV1,
   },
   {
     key: 'product-production.quality-feedback',

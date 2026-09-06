@@ -3,7 +3,7 @@ import { db } from '../../src/lib/db/schema'
 import { assembleContext } from '../../src/lib/registry/assemble-context'
 import { CONTEXT_SOURCE_BY_KEY } from '../../src/lib/registry/context-sources'
 import { getAgentSkillV1 } from '../../src/lib/agent/skill-registry'
-import { acceptProductBuildArtifact } from '../../src/lib/product-production/artifact-store'
+import { acceptProductBuildArtifact, readAcceptedBuildArtifacts } from '../../src/lib/product-production/artifact-store'
 import { executeProductProductionCommand } from '../../src/lib/product-production/commands'
 import { draftProductProductionBriefV3, suggestProductStartingPoints } from '../../src/lib/product-production/consultation'
 import { parseProductProductionBriefV3 } from '../../src/lib/product-production/contracts'
@@ -116,6 +116,29 @@ import {
   type TextOpenWorldSceneScriptsInputContextV1,
   type TextOpenWorldSceneScriptsModelRunnerV1,
 } from '../../src/lib/open-world/scene-scripts-production'
+import {
+  createTextOpenWorldPresentationProfileExecutorV1,
+  validateTextOpenWorldPresentationProfileV1,
+  type TextOpenWorldPresentationProfileInputContextV1,
+  type TextOpenWorldPresentationProfileModelRunnerV1,
+} from '../../src/lib/open-world/presentation-profile'
+import {
+  createTextOpenWorldDeterministicPreflightExecutorV1,
+  createTextOpenWorldSystemFinalizeExecutorV1,
+  validateTextOpenWorldDeterministicPreflightV1,
+  validateTextOpenWorldSystemFinalizeArtifactsV1,
+  type TextOpenWorldSystemFinalizeInputContextV1,
+  type TextOpenWorldSystemFinalizeModelRunnerV1,
+} from '../../src/lib/open-world/system-finalize-production'
+import {
+  createTextOpenWorldBalanceReviewExecutorV1,
+  createTextOpenWorldSemanticReviewExecutorV1,
+  validateTextOpenWorldBalanceReviewV1,
+  validateTextOpenWorldSemanticReviewV1,
+  type TextOpenWorldBalanceReviewInputContextV1,
+  type TextOpenWorldQualityReviewModelRunnerV1,
+  type TextOpenWorldSemanticReviewInputContextV1,
+} from '../../src/lib/open-world/quality-review-production'
 import { TEXT_OPEN_WORLD_EFFECT_OPERATIONS_V1 } from '../../src/lib/types/text-open-world-effect'
 import type {
   TextOpenWorldGameplayRulesetSkeletonV1,
@@ -136,6 +159,13 @@ import type {
   TextOpenWorldSceneScriptsV1,
   TextOpenWorldChoiceContractsV1,
   TextOpenWorldActionBindingsV1,
+  TextOpenWorldPresentationProfileV1,
+  TextOpenWorldSystemConfigsV1,
+  TextOpenWorldMediaRequirementsV1,
+  TextOpenWorldContentBudgetV1,
+  TextOpenWorldDeterministicPreflightV1,
+  TextOpenWorldBalanceReviewV1,
+  TextOpenWorldSemanticReviewV1,
   TextOpenWorldSignificantThreadsV1,
 } from '../../src/lib/types'
 import {
@@ -2433,6 +2463,195 @@ async function executeSceneScripts(
   })
 }
 
+function presentationProfileRunner(): TextOpenWorldPresentationProfileModelRunnerV1 {
+  return async input => ({
+    output: JSON.stringify({
+      schema: 'storyforge.text-open-world-presentation-profile-draft', version: 1,
+      title: '潮灯边境叙事界面',
+      designIntent: '以克制的航海档案感承载长程任务、地区探索与清晰的系统反馈。',
+      colorMood: '深海蓝、旧铜与雾白构成低饱和层次，危险状态使用有限暖色。',
+      typographyTone: '正文强调长时间阅读舒适度，系统数字与行动标签保持清晰紧凑。',
+      contentLanguage: 'zh-CN',
+      fallbackTexts: Array.from({ length: 18 }, (_, index) => ({
+        slotNumber: index + 1,
+        text: `界面槽${index + 1}在媒资或模型不可用时显示可操作的文字说明与正式系统选项。`,
+      })),
+    }),
+    bindingReceipt: bindingReceipt(input.requirementKey), usage: null,
+  })
+}
+
+async function executePresentationProfile(input: Awaited<ReturnType<typeof sceneScriptsFixture>>) {
+  const plan = await createTextOpenWorldProductionPlanV1({
+    buildNumber: input.build.buildNumber, controlEpoch: input.build.controlEpoch,
+    briefHash: input.briefRow.briefHash, brief: input.brief,
+  })
+  const task = plan.tasks.find(item => item.taskKey === 'p2.presentation-profile')!
+  const assembled = await assembleContext({
+    projectId: input.scope.projectId, scope: input.scope,
+    sourceKeys: ['text-open-world.presentation-profile-input'],
+    productProductionId: input.production.id!, productBuildId: input.build.id!,
+    inputBudgetTokens: task.budgetReservation.inputTokens,
+  })
+  const context = JSON.parse(assembled.text) as TextOpenWorldPresentationProfileInputContextV1
+  const result = await createTextOpenWorldPresentationProfileExecutorV1({
+    runModel: presentationProfileRunner(), now: () => NOW + 21,
+  })({
+    scope: input.scope, productionId: input.production.id!, buildId: input.build.id!, buildNumber: input.build.buildNumber,
+    controlEpoch: input.build.controlEpoch, planHash: input.planHash, task, attempt: 1,
+    idempotencyKey: await hashProductProductionValueV2('p2-presentation-profile'), contextText: assembled.text,
+    inputArtifacts: [], capabilityBindings: task.capabilityRequirementKeys.map(requirementKey => ({
+      requirementKey, bindingHash: CAPABILITY_HASH, adapterId: 'configured-text.v1',
+    })), signal: new AbortController().signal,
+  })
+  return { task, assembled, context, result }
+}
+
+function systemFinalizeRunner(): TextOpenWorldSystemFinalizeModelRunnerV1 {
+  return async input => {
+    const context = JSON.parse(input.contextText) as TextOpenWorldSystemFinalizeInputContextV1
+    return {
+      output: JSON.stringify({
+        schema: 'storyforge.text-open-world-system-finalize-draft', version: 1,
+        mediaSlots: context.mediaSlotDemands.map(demand => ({
+          slotNumber: demand.slotNumber,
+          creativeBrief: `${demand.title}：${demand.semanticContext.slice(0, 160)}。保持潮灯边境统一视觉语言，并服务${demand.consumerKeys.join('、')}。`,
+        })),
+      }),
+      bindingReceipt: bindingReceipt(input.requirementKey), usage: null,
+    }
+  }
+}
+
+async function systemFinalizeFixture() {
+  const input = await sceneScriptsFixture()
+  const sceneResult = await executeSceneScripts(input)
+  await acceptTaskArtifacts(input, sceneResult.artifacts, 'P9-scene-scripts')
+  const presentation = await executePresentationProfile(input)
+  await acceptTaskArtifacts(input, presentation.result.artifacts, 'P2-presentation-profile')
+  const plan = await createTextOpenWorldProductionPlanV1({
+    buildNumber: input.build.buildNumber, controlEpoch: input.build.controlEpoch,
+    briefHash: input.briefRow.briefHash, brief: input.brief,
+  })
+  const task = plan.tasks.find(item => item.taskKey === 'p10.system-finalize')!
+  const assembled = await assembleContext({
+    projectId: input.scope.projectId, scope: input.scope,
+    sourceKeys: ['text-open-world.system-finalize-input'],
+    productProductionId: input.production.id!, productBuildId: input.build.id!,
+    inputBudgetTokens: task.budgetReservation.inputTokens,
+  })
+  return {
+    ...input, presentation, task, systemFinalizeContextText: assembled.text,
+    systemFinalizeContext: JSON.parse(assembled.text) as TextOpenWorldSystemFinalizeInputContextV1,
+    systemFinalizeContextEvidence: assembled.sourceEvidence,
+  }
+}
+
+async function executeSystemFinalize(input: Awaited<ReturnType<typeof systemFinalizeFixture>>) {
+  return createTextOpenWorldSystemFinalizeExecutorV1({ runModel: systemFinalizeRunner(), now: () => NOW + 22 })({
+    scope: input.scope, productionId: input.production.id!, buildId: input.build.id!, buildNumber: input.build.buildNumber,
+    controlEpoch: input.build.controlEpoch, planHash: input.planHash, task: input.task, attempt: 1,
+    idempotencyKey: await hashProductProductionValueV2('p10-system-finalize'), contextText: input.systemFinalizeContextText,
+    inputArtifacts: [], capabilityBindings: input.task.capabilityRequirementKeys.map(requirementKey => ({
+      requirementKey, bindingHash: CAPABILITY_HASH, adapterId: 'configured-text.v1',
+    })), signal: new AbortController().signal,
+  })
+}
+
+async function preflightFixture() {
+  const input = await systemFinalizeFixture()
+  const systemResult = await executeSystemFinalize(input)
+  await acceptTaskArtifacts(input, systemResult.artifacts, 'P10-system-finalize')
+  const plan = await createTextOpenWorldProductionPlanV1({
+    buildNumber: input.build.buildNumber, controlEpoch: input.build.controlEpoch,
+    briefHash: input.briefRow.briefHash, brief: input.brief,
+  })
+  const task = plan.tasks.find(item => item.taskKey === 'v1.deterministic-preflight')!
+  const accepted = await readAcceptedBuildArtifacts({ scope: input.scope, buildId: input.build.id! })
+  const inputArtifacts = task.inputArtifactKeys.map(key => accepted.find(row => row.artifactKey === key)!)
+  const result = await createTextOpenWorldDeterministicPreflightExecutorV1({ now: () => NOW + 23 })({
+    scope: input.scope, productionId: input.production.id!, buildId: input.build.id!, buildNumber: input.build.buildNumber,
+    controlEpoch: input.build.controlEpoch, planHash: input.planHash, task, attempt: 1,
+    idempotencyKey: await hashProductProductionValueV2('v1-preflight'), contextText: '', inputArtifacts,
+    capabilityBindings: [], signal: new AbortController().signal,
+  })
+  return { ...input, task, inputArtifacts, systemResult, preflightResult: result }
+}
+
+function qualityReviewRunner(options: { lowMetricNumber?: number; invalidEntity?: boolean } = {}): TextOpenWorldQualityReviewModelRunnerV1 {
+  return async input => {
+    const context = JSON.parse(input.contextText) as TextOpenWorldBalanceReviewInputContextV1 | TextOpenWorldSemanticReviewInputContextV1
+    const scores = context.metricDemands.map(demand => ({
+      metricNumber: demand.metricNumber,
+      score: demand.metricNumber === options.lowMetricNumber ? 60 : demand.metricNumber === 1 ? 82 : 88,
+      rationale: `指标${demand.metricKey}已根据当前结构、内容和预检证据逐项评估。`,
+    }))
+    const findings = scores.filter(score => score.score < 85).map(score => {
+      const demand = context.metricDemands[score.metricNumber - 1]!
+      return {
+        metricNumber: score.metricNumber,
+        summary: `${demand.metricKey}仍有一个可局部提高的具体点。`,
+        evidence: `当前实体${demand.eligibleEntityKeys[0]}在该指标上的差异或反馈密度不足。`,
+        targetEntityKeys: [options.invalidEntity ? 'entity.forged' : demand.eligibleEntityKeys[0]],
+        instruction: `只调整${demand.eligibleEntityKeys[0]}及同一局部消费者，保持稳定键和其他已验收内容不变。`,
+      }
+    })
+    const kind = context.schema.includes('balance') ? 'balance' : 'semantic'
+    return {
+      output: JSON.stringify({ schema: `storyforge.text-open-world-${kind}-review-draft`, version: 1, scores, findings }),
+      bindingReceipt: bindingReceipt(input.requirementKey), usage: null,
+    }
+  }
+}
+
+async function qualityReviewFixture() {
+  const input = await preflightFixture()
+  await acceptTaskArtifacts(input, input.preflightResult.artifacts, 'V1-preflight')
+  const plan = await createTextOpenWorldProductionPlanV1({
+    buildNumber: input.build.buildNumber, controlEpoch: input.build.controlEpoch,
+    briefHash: input.briefRow.briefHash, brief: input.brief,
+  })
+  const balanceTask = plan.tasks.find(item => item.taskKey === 'v2.balance-review')!
+  const semanticTask = plan.tasks.find(item => item.taskKey === 'v2.semantic-review')!
+  const [balanceAssembled, semanticAssembled] = await Promise.all([
+    assembleContext({
+      projectId: input.scope.projectId, scope: input.scope, sourceKeys: ['text-open-world.balance-review-input'],
+      productProductionId: input.production.id!, productBuildId: input.build.id!, inputBudgetTokens: balanceTask.budgetReservation.inputTokens,
+    }),
+    assembleContext({
+      projectId: input.scope.projectId, scope: input.scope, sourceKeys: ['text-open-world.semantic-review-input'],
+      productProductionId: input.production.id!, productBuildId: input.build.id!, inputBudgetTokens: semanticTask.budgetReservation.inputTokens,
+    }),
+  ])
+  return {
+    ...input, balanceTask, semanticTask,
+    balanceContextText: balanceAssembled.text, semanticContextText: semanticAssembled.text,
+    balanceContext: JSON.parse(balanceAssembled.text) as TextOpenWorldBalanceReviewInputContextV1,
+    semanticContext: JSON.parse(semanticAssembled.text) as TextOpenWorldSemanticReviewInputContextV1,
+    balanceEvidence: balanceAssembled.sourceEvidence, semanticEvidence: semanticAssembled.sourceEvidence,
+  }
+}
+
+async function executeQualityReview(
+  input: Awaited<ReturnType<typeof qualityReviewFixture>>,
+  kind: 'balance' | 'semantic',
+  runModel: TextOpenWorldQualityReviewModelRunnerV1 = qualityReviewRunner(),
+) {
+  const task = kind === 'balance' ? input.balanceTask : input.semanticTask
+  const contextText = kind === 'balance' ? input.balanceContextText : input.semanticContextText
+  const executor = kind === 'balance'
+    ? createTextOpenWorldBalanceReviewExecutorV1({ runModel, now: () => NOW + 24 })
+    : createTextOpenWorldSemanticReviewExecutorV1({ runModel, now: () => NOW + 25 })
+  return executor({
+    scope: input.scope, productionId: input.production.id!, buildId: input.build.id!, buildNumber: input.build.buildNumber,
+    controlEpoch: input.build.controlEpoch, planHash: input.planHash, task, attempt: 1,
+    idempotencyKey: await hashProductProductionValueV2(`v2-${kind}-review`), contextText, inputArtifacts: [],
+    capabilityBindings: task.capabilityRequirementKeys.map(requirementKey => ({
+      requirementKey, bindingHash: CAPABILITY_HASH, adapterId: 'configured-text.v1',
+    })), signal: new AbortController().signal,
+  })
+}
+
 describe('R-OPEN-WORLD3 · P2 GameBrief / ExperienceContract / ProtagonistAsset', () => {
   beforeEach(async () => { await db.delete(); await db.open() })
   afterAll(() => db.close())
@@ -4127,4 +4346,151 @@ describe('R-OPEN-WORLD3 · P9 SceneScripts / ChoiceContract / ActionBindings', (
       context: input.sceneScriptsContext,
     })).rejects.toThrow(/actionUtterances必须与|场景、Choice、交互绑定或Hash被篡改/)
   }, 360_000)
+})
+
+describe('R-OPEN-WORLD3 · P2表现 / P10系统收口 / V1确定性预检', () => {
+  beforeEach(async () => { await db.delete(); await db.open() })
+  afterAll(() => db.close())
+
+  it('补齐表现入口并把系统、UI、媒资、时长与可解性收成可验证闭环', async () => {
+    const input = await preflightFixture()
+    expect(CONTEXT_SOURCE_BY_KEY.get('text-open-world.presentation-profile-input')).toMatchObject({
+      layer: 'L0', ownerFrom: 'work', protectedFromTrim: true, atomic: true,
+    })
+    expect(CONTEXT_SOURCE_BY_KEY.get('text-open-world.system-finalize-input')).toMatchObject({
+      layer: 'L0', ownerFrom: 'work', protectedFromTrim: true, atomic: true,
+    })
+    expect(getAgentSkillV1('text-open-world.production.presentation-profile.v1')).toMatchObject({
+      contextSourceKeys: ['text-open-world.presentation-profile-input'],
+      writeTargets: [{ table: 'productBuildArtifacts', fields: ['payloadJson'] }],
+    })
+    expect(getAgentSkillV1('text-open-world.production.system-finalize.v1')).toMatchObject({
+      contextSourceKeys: ['text-open-world.system-finalize-input'],
+      writeTargets: [{ table: 'productBuildArtifacts', fields: ['payloadJson'] }],
+    })
+    const profile = input.presentation.result.artifacts[0]!.payload as TextOpenWorldPresentationProfileV1
+    expect(profile.consumerSlots).toHaveLength(18)
+    expect(profile.interactionPresentation.acceptedInputs).toEqual(['system-action', 'fixed-choice', 'natural-language'])
+    expect(profile.interactionPresentation.combatControls).toEqual(['fight', 'escape', 'skill', 'item'])
+    expect(profile.mediaPolicy).toMatchObject({ textFallbackRequired: true, missingMediaPolicy: 'placeholder-with-text-playable' })
+    await expect(validateTextOpenWorldPresentationProfileV1({ artifact: profile, context: input.presentation.context })).resolves.toEqual(profile)
+    const tamperedProfile = structuredClone(profile)
+    tamperedProfile.interactionPresentation.combatControls = ['fight', 'escape', 'skill', 'item']
+    tamperedProfile.theme.mapStyle = 'svg-terrain-with-interactive-nodes'
+    tamperedProfile.consumerSlots[0]!.key = 'creation.forged'
+    const { presentationProfileHash: _profileHash, ...profileBody } = tamperedProfile
+    tamperedProfile.presentationProfileHash = await hashProductProductionValueV2(profileBody)
+    await expect(validateTextOpenWorldPresentationProfileV1({ artifact: tamperedProfile, context: input.presentation.context }))
+      .rejects.toThrow(/内容或固定边界被篡改/)
+
+    const system = input.systemResult.artifacts.find(item => item.artifactKey === 'text-open-world.system-configs')!.payload as TextOpenWorldSystemConfigsV1
+    const media = input.systemResult.artifacts.find(item => item.artifactKey === 'text-open-world.media-requirements')!.payload as TextOpenWorldMediaRequirementsV1
+    const budget = input.systemResult.artifacts.find(item => item.artifactKey === 'text-open-world.content-budget')!.payload as TextOpenWorldContentBudgetV1
+    expect(system.coverage.missingRuntimeModuleKeys).toEqual([])
+    expect(system.coverage.missingConsumerKeys).toEqual([])
+    expect(system.runtimeModules).toHaveLength(15)
+    expect(system.uiConsumers.map(item => item.key)).toEqual(profile.consumerSlots.map(item => item.key))
+    expect(system.runtimePolicies).toMatchObject({
+      combatMode: 'turn-based-four-action', combatNaturalLanguage: false, inventoryCapacity: 'unlimited',
+      equipmentSlots: ['weapon', 'armor', 'accessory'], mapMode: 'svg-terrain-with-interactive-nodes',
+    })
+    expect(media.coverage.missingRequiredSlotKeys).toEqual([])
+    expect(media.coverage.coveredActorKeys).toEqual(media.coverage.requiredActorKeys)
+    expect(media.coverage.coveredRegionKeys).toEqual(media.coverage.requiredRegionKeys)
+    expect(media.slots.find(slot => slot.kind === 'procedural-map')).toMatchObject({ productionMode: 'procedural-code', fallback: 'procedural-svg' })
+    expect(media.slots.filter(slot => slot.required).every(slot => slot.fallback !== 'silent')).toBe(true)
+    expect(budget.governance.inventoryAndSingleRunSeparated).toBe(true)
+    expect(budget.inventory.totalAuthoredMinutes).toBeGreaterThanOrEqual(budget.singlePlaythrough.maximumTotalMinutes)
+    expect(Object.values(budget.fit).every(Boolean)).toBe(true)
+    await expect(validateTextOpenWorldSystemFinalizeArtifactsV1({
+      artifacts: { systemConfigs: system, mediaRequirements: media, contentBudget: budget },
+      context: input.systemFinalizeContext,
+    })).resolves.toEqual({ systemConfigs: system, mediaRequirements: media, contentBudget: budget })
+    const tamperedMedia = structuredClone(media)
+    tamperedMedia.slots[0]!.productionMode = 'generate-or-import'
+    const { mediaRequirementsHash: _mediaHash, ...mediaBody } = tamperedMedia
+    tamperedMedia.mediaRequirementsHash = await hashProductProductionValueV2(mediaBody)
+    await expect(validateTextOpenWorldSystemFinalizeArtifactsV1({
+      artifacts: { systemConfigs: system, mediaRequirements: tamperedMedia, contentBudget: budget },
+      context: input.systemFinalizeContext,
+    })).rejects.toThrow(/系统、媒资、预算或Hash被篡改/)
+
+    const preflight = input.preflightResult.artifacts[0]!.payload as TextOpenWorldDeterministicPreflightV1
+    expect(preflight.checks.map(check => check.category)).toEqual([
+      'schema', 'hash-chain', 'reference', 'solvability', 'budget', 'consumer-slot',
+    ])
+    expect(preflight.checks.every(check => check.status === 'pass')).toBe(true)
+    expect(preflight.result).toMatchObject({ blockingCheckKeys: [], readyForModelReviews: true })
+    expect(preflight.reachability.reachableMainlineQuestKeys).toEqual(preflight.reachability.mainlineQuestKeys)
+    await expect(validateTextOpenWorldDeterministicPreflightV1({ artifact: preflight, rows: input.inputArtifacts })).resolves.toEqual(preflight)
+
+    const tampered = structuredClone(preflight)
+    tampered.reachability.protectedWaitQuestKeys = []
+    const { deterministicPreflightHash: _hash, ...body } = tampered
+    tampered.deterministicPreflightHash = await hashProductProductionValueV2(body)
+    await expect(validateTextOpenWorldDeterministicPreflightV1({ artifact: tampered, rows: input.inputArtifacts }))
+      .rejects.toThrow(/预检结果或Hash被篡改/)
+  }, 420_000)
+})
+
+describe('R-OPEN-WORLD3 · V2平衡与叙事语义评审 / 局部修复影响闭包', () => {
+  beforeEach(async () => { await db.delete(); await db.open() })
+  afterAll(() => db.close())
+
+  it('只在确定性预检之后评审，低于优秀线的问题定位到新Build局部修复并传播stale', async () => {
+    const input = await qualityReviewFixture()
+    expect(CONTEXT_SOURCE_BY_KEY.get('text-open-world.balance-review-input')).toMatchObject({ atomic: true, protectedFromTrim: true })
+    expect(CONTEXT_SOURCE_BY_KEY.get('text-open-world.semantic-review-input')).toMatchObject({ atomic: true, protectedFromTrim: true })
+    expect(getAgentSkillV1('text-open-world.production.balance-review.v1')).toMatchObject({
+      contextSourceKeys: ['text-open-world.balance-review-input'],
+      writeTargets: [{ table: 'productBuildArtifacts', fields: ['payloadJson', 'qualityJson'] }],
+    })
+    expect(getAgentSkillV1('text-open-world.production.semantic-review.v1')).toMatchObject({
+      contextSourceKeys: ['text-open-world.semantic-review-input'],
+      writeTargets: [{ table: 'productBuildArtifacts', fields: ['payloadJson', 'qualityJson'] }],
+    })
+    expect(input.balanceContext.preflight.result.readyForModelReviews).toBe(true)
+    expect(input.semanticContext.preflight.result.readyForModelReviews).toBe(true)
+    expect(input.balanceEvidence).toEqual([
+      expect.objectContaining({ key: 'text-open-world.balance-review-input', status: 'included', delivery: 'full' }),
+    ])
+    expect(input.semanticEvidence).toEqual([
+      expect.objectContaining({ key: 'text-open-world.semantic-review-input', status: 'included', delivery: 'full' }),
+    ])
+    const [balanceResult, semanticResult] = await Promise.all([
+      executeQualityReview(input, 'balance'), executeQualityReview(input, 'semantic'),
+    ])
+    const balance = balanceResult.artifacts[0]!.payload as TextOpenWorldBalanceReviewV1
+    const semantic = semanticResult.artifacts[0]!.payload as TextOpenWorldSemanticReviewV1
+    expect(balance).toMatchObject({ verdict: 'pass', threshold: 70, minimumScore: 82 })
+    expect(semantic).toMatchObject({ verdict: 'pass', threshold: 70, minimumScore: 82 })
+    for (const review of [balance, semantic]) {
+      expect(review.findings).toHaveLength(1)
+      const repair = review.findings[0]!.repair
+      expect(repair).toMatchObject({ mode: 'new-build-bounded-local-repair', mutatesAcceptedArtifact: false })
+      expect(repair.staleTaskKeys).toContain(repair.targetTaskKey)
+      expect(repair.staleTaskKeys).toContain('p10.system-finalize')
+      expect(repair.staleTaskKeys).toContain('v1.deterministic-preflight')
+      expect(repair.staleTaskKeys).toContain('v3.runtime-package')
+      expect(repair.staleTaskKeys).toContain('qa.release')
+    }
+    expect(semantic.governance.humanPlaytimeCalibrationStillRequired).toBe(true)
+    await expect(validateTextOpenWorldBalanceReviewV1({ artifact: balance, context: input.balanceContext })).resolves.toEqual(balance)
+    await expect(validateTextOpenWorldSemanticReviewV1({ artifact: semantic, context: input.semanticContext })).resolves.toEqual(semantic)
+
+    const tampered = structuredClone(semantic)
+    tampered.findings[0]!.repair.staleTaskKeys = ['p9.scene-scripts']
+    const { semanticReviewHash: _hash, ...body } = tampered
+    tampered.semanticReviewHash = await hashProductProductionValueV2(body)
+    await expect(validateTextOpenWorldSemanticReviewV1({ artifact: tampered, context: input.semanticContext }))
+      .rejects.toThrow(/影响闭包或Hash被篡改/)
+  }, 480_000)
+
+  it('阻断低分不会伪装通过，伪造实体也不能生成修复指令', async () => {
+    const input = await qualityReviewFixture()
+    await expect(executeQualityReview(input, 'balance', qualityReviewRunner({ lowMetricNumber: 2 })))
+      .rejects.toThrow(/评审要求新Build局部修复/)
+    await expect(executeQualityReview(input, 'semantic', qualityReviewRunner({ invalidEntity: true })))
+      .rejects.toThrow(/引用未知或重复实体/)
+  }, 480_000)
 })
