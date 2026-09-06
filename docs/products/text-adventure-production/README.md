@@ -13,7 +13,7 @@
 - 只有 3 个标记为对白的 beat，没有可交互的正式 NPC 与交谈行动。
 - 两处实际分叉中一处立即汇流，另一处直接进入三种一句话结局；选择没有正式条件或效果。
 - 质量门把 Brief 目标分钟当作实际时长，把地点、物品、任务与动作描述计入主线字量，并允许零 NPC，因此错误放行。
-- 当时生产注册中的文字冒险岗位全部归属 `outline` Agent；该旧结构现已由 17 个单一核心 Skill 的独立岗位和专业依赖 DAG 取代，但 Build #4 不因底座升级而自动获得推荐资格。
+- 当时生产注册中的文字冒险岗位全部归属 `outline` Agent；该旧结构现已由 18 个单一核心 Skill 的独立岗位和专业依赖 DAG 取代，但 Build #4 不因底座升级而自动获得推荐资格。
 
 旧 Build 失败证据和新底座的代码锚点是 `src/lib/product-production/product-quality.ts`、`src/lib/product-production/plan.ts`、`src/lib/product-production/production-executor.ts`、`src/lib/adventure/production-compiler.ts`、`src/lib/adventure/autoplay.ts` 和 `src/lib/agent/skill-registry.ts`。工作台必须继续把旧 Build 标为“工程夹具/不具备推荐资格”；专业生产链、自动游玩和试玩计划已经接通不等于首个社区推荐成品已经交付。
 

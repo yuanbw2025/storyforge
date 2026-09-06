@@ -55,4 +55,4 @@
 
 ## 6. 当前施工状态
 
-已实现确定性 `media.audit`、合法纯文字降级审计、RuntimePackage 审计 hash 绑定和发布硬门；既有 adoption 与浏览器媒资校验继续承担运行引用和物理字节验证。独立多模态审图 Agent/Skill、逐图真人确认回执及其真实 E2E 属于下一批，未闭合前不宣称旗舰媒资质量完成。
+已实现确定性 `media.audit`、合法纯文字降级审计、RuntimePackage 审计 hash 绑定和发布硬门；既有 adoption 与浏览器媒资校验继续承担运行引用和物理字节验证。独立 Visual QA Director、受治理多模态图片输入和逐项 key/hash 审查工件已经进入正式生产 DAG；逐图真人确认回执及其真实 E2E 仍属后续施工项，未闭合前不宣称旗舰媒资质量完成。

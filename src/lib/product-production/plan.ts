@@ -296,13 +296,13 @@ export async function createProductProductionPlanV3(input: {
     (_, index) => `media.audio.${String(index + 1).padStart(3, '0')}`,
   )
   const textAdventure = brief.intent.productType === 'text-adventure'
-  const modelTaskCount = textAdventure ? 20 : 4
+  const modelTaskCount = textAdventure ? 20 + Number(activeVisual) : 4
   const textAdventureOutputWeights: Record<string, number> = {
     'content.source-sufficiency': 0.05,
     'content.design': 0.04,
     'content.story-bible': 0.07,
-    'content.cast-bible': 0.09,
-    'content.adventure-architecture': 0.07,
+    'content.cast-bible': 0.08,
+    'content.adventure-architecture': 0.06,
     'content.product-module': 0.07,
     'content.narrative-arc-plan': 0.07,
     'content.main-quest-plan': 0.08,
@@ -317,6 +317,7 @@ export async function createProductProductionPlanV3(input: {
     'content.adventure-ambient-events': 0.04,
     'content.adventure-quality-review': 0.04,
     'media.requirements': 0.04,
+    'media.visual-quality-review': 0.02,
     'qa.playtest-strategy': 0.02,
   }
   // Every provider task and deterministic integration receives a declared
@@ -699,6 +700,21 @@ export async function createProductProductionPlanV3(input: {
     timeoutMs: 60_000, failurePolicy: 'pause', fallbackTaskKey: null,
     acceptanceGateIds: ['artifact.protocol', 'media.requirement-artifact-audit'],
   }))
+  if (textAdventure && activeVisual) tasks.push(productionTask({
+    taskKey: 'media.visual-quality-review', lane: 'qa', kind: 'text-adventure-visual-quality-review',
+    skillId: 'text-adventure.visual-quality-review.v1', executionMode: 'model', dependsOn: ['media.audit'],
+    inputArtifactKeys: [
+      'content.cast-bible', 'media.requirements', 'media.visual-bible', 'media.audit', ...visualArtifactKeys,
+    ],
+    outputArtifactKeys: ['quality.visual-review'], requirementKeys: [],
+    capabilityRequirementKeys: textCapabilities,
+    concurrencyGroup: 'text-provider', subjectLockKeys: ['quality.visual-review'], priority: 55,
+    budgetReservation: modelBudget('media.visual-quality-review'), maxAttempts: 2,
+    timeoutMs: 300_000,
+    failurePolicy: brief.qualityProfile === 'commercial-candidate' ? 'pause' : 'skip-optional',
+    fallbackTaskKey: null,
+    acceptanceGateIds: ['artifact.protocol', 'media.visual-semantic-review-executed'],
+  }))
   const textAdventureDependencies = textAdventure
     ? [
         'content.story-bible', 'content.cast-bible', 'content.adventure-architecture',
@@ -712,6 +728,7 @@ export async function createProductProductionPlanV3(input: {
     'media.requirements', ...(textAdventure ? ['media.visual-bible.compile'] : []),
     ...(textAdventure && activeVisual ? ['media.anchor-author-gate'] : []), ...mediaDependencies,
     ...(textAdventure && activeVisual ? ['media.audit'] : []),
+    ...(textAdventure && activeVisual ? ['media.visual-quality-review'] : []),
   ]
   const textAdventureIntegrationArtifactKeys = textAdventure
     ? [
@@ -732,6 +749,7 @@ export async function createProductProductionPlanV3(input: {
       'media.requirements', ...(textAdventure ? ['media.visual-bible'] : []),
       ...(textAdventure && activeVisual ? ['media.anchor-decision'] : []),
       ...(textAdventure && activeVisual ? ['media.audit'] : []),
+      ...(textAdventure && activeVisual ? ['quality.visual-review'] : []),
       ...visualArtifactKeys, ...audioArtifactKeys,
     ],
     outputArtifactKeys: integrationArtifactKeys, requirementKeys: [],

@@ -1,5 +1,10 @@
 import { useAIConfigStore } from '../../stores/ai-config'
-import { chat, resolveRequestConfig, type ChatResult } from '../ai/client'
+import {
+  chat,
+  chatWithImagesV1,
+  resolveRequestConfig,
+  type ChatResult,
+} from '../ai/client'
 import { getAIConfigRequiredMessage, isAIConfigReady } from '../ai/config-readiness'
 import type { AIConfig, ChatMessage } from '../types'
 import { hashProductProductionValueV2 } from './hash'
@@ -161,5 +166,73 @@ export async function runConfiguredProductionTextV1(input: {
         configOverrides: { maxTokens: input.maximumOutputTokens },
         contextOverflowPolicy: 'reject',
       }, input.signal, input.result, input.responseFormat ? { responseFormat: input.responseFormat } : undefined)
+  return { output, bindingReceipt: resolved.receipt }
+}
+
+export interface ConfiguredProductionVisionImageV1 {
+  artifactKey: string
+  contentHash: string
+  mimeType: 'image/png' | 'image/jpeg' | 'image/webp'
+  data: ArrayBuffer
+  detail: 'low' | 'high'
+}
+
+function mediaDataUrlV1(image: ConfiguredProductionVisionImageV1): string {
+  if (!/^[a-f0-9]{64}$/.test(image.contentHash) || image.data.byteLength < 1 || image.data.byteLength > 16_000_000) {
+    throw new Error(`[product-production-capability] 视觉审查图片无效:${image.artifactKey}`)
+  }
+  const bytes = new Uint8Array(image.data)
+  const chunks: string[] = []
+  for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+    chunks.push(String.fromCharCode(...bytes.subarray(offset, Math.min(bytes.length, offset + 0x8000))))
+  }
+  return `data:${image.mimeType};base64,${btoa(chunks.join(''))}`
+}
+
+/**
+ * Uses the already-authorized configured model through a bounded image-input
+ * request. The returned binding receipt is still the frozen configured-text
+ * identity; the task Run Contract and input Artifact hashes prove which
+ * product-owned images were disclosed.
+ */
+export async function runConfiguredProductionVisionV1(input: {
+  projectId: number
+  category: string
+  requirementKey: string
+  expectedCapabilityHash?: string
+  messages: ChatMessage[]
+  images: ConfiguredProductionVisionImageV1[]
+  maximumOutputTokens: number
+  signal?: AbortSignal
+  result?: ChatResult
+  responseFormat?: 'json_object'
+}, dependencies: CapabilityDependenciesV1 = {}): Promise<{
+  output: string
+  bindingReceipt: ProviderBindingReceiptV1
+}> {
+  if (!Number.isInteger(input.maximumOutputTokens) || input.maximumOutputTokens < 1) {
+    throw new Error('[product-production-capability] maximumOutputTokens 无效')
+  }
+  if (!input.images.length || input.images.length > 12
+    || input.images.reduce((sum, image) => sum + image.data.byteLength, 0) > 32_000_000
+    || new Set(input.images.map(image => image.artifactKey)).size !== input.images.length) {
+    throw new Error('[product-production-capability] 视觉审查图片集合无效')
+  }
+  const resolved = await resolveConfiguredTextCapabilityV1(input, dependencies)
+  const output = await chatWithImagesV1(
+    input.messages,
+    input.images.map(image => ({
+      label: `${image.artifactKey} / sha256:${image.contentHash}`,
+      dataUrl: mediaDataUrlV1(image), detail: image.detail,
+    })),
+    resolved.config,
+    {
+      category: input.category, projectId: input.projectId,
+      configOverrides: { maxTokens: input.maximumOutputTokens }, contextOverflowPolicy: 'reject',
+    },
+    input.signal,
+    input.result,
+    input.responseFormat ? { responseFormat: input.responseFormat } : undefined,
+  )
   return { output, bindingReceipt: resolved.receipt }
 }

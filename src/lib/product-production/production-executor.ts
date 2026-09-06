@@ -19,9 +19,13 @@ import {
   NARRATIVE_NODE_KINDS,
   PRODUCTION_PRODUCT_KINDS_V1,
 } from '../types'
-import { runConfiguredProductionTextV1, type ProviderBindingReceiptV1 } from './capabilities'
+import {
+  runConfiguredProductionTextV1,
+  runConfiguredProductionVisionV1,
+  type ProviderBindingReceiptV1,
+} from './capabilities'
 import { canonicalProductProductionJsonV2, hashProductProductionValueV2 } from './hash'
-import { putMediaBlobObject, sha256MediaData } from './media-blob-store'
+import { putMediaBlobObject, readMediaBlobObjectData, sha256MediaData } from './media-blob-store'
 import { detectProductImageDimensionsV1, type ProductMediaClassV1, type ProductMediaRequestV1 } from './media-adapters'
 import { ensureGeneratedCharacterAlphaV1 } from './character-alpha-matting'
 import type { ResolvedProductMediaCapabilityV1 } from './media-transport'
@@ -191,6 +195,35 @@ export interface TextAdventureMediaAuditArtifactV1 {
   passed: true
 }
 
+export interface TextAdventureVisualQualityReviewArtifactV1 {
+  schema: 'storyforge.text-adventure-visual-quality-review-artifact'
+  version: 1
+  buildNumber: number
+  mediaAuditHash: string
+  status: 'passed' | 'revision-required' | 'human-review-required'
+  reviews: Array<{
+    artifactKey: string
+    contentHash: string
+    verdict: 'accept' | 'revise' | 'replace' | 'human-review' | 'not-applicable-text-fallback'
+    scores: {
+      requirementFit: number
+      identityContinuity: number
+      styleContinuity: number
+      composition: number
+      technicalCleanliness: number
+    } | null
+    issues: Array<{
+      severity: 'warning' | 'blocking'
+      category: 'identity' | 'setting' | 'style' | 'composition' | 'spoiler' | 'artifact' | 'text' | 'accessibility'
+      detail: string
+      recommendation: string
+    }>
+    reviewSource: 'multimodal-model' | 'deterministic-fallback'
+  }>
+  blockingIssueCount: number
+  providerReviewCompleted: boolean
+}
+
 interface ProductMediaCharacterAnchorV1 {
   characterKey: string
   sourceResourceKey: string | null
@@ -216,11 +249,29 @@ export type ProductionTextRunnerV1 = (input: {
   signal: AbortSignal
 }) => Promise<ProductionTextExecutionV1>
 
+export type ProductionVisionRunnerV1 = (input: {
+  projectId: number
+  requirementKey: string
+  category: string
+  system: string
+  contextText: string
+  images: Array<{
+    artifactKey: string
+    contentHash: string
+    mimeType: 'image/png' | 'image/jpeg' | 'image/webp'
+    data: ArrayBuffer
+    detail: 'low' | 'high'
+  }>
+  maximumOutputTokens: number
+  signal: AbortSignal
+}) => Promise<ProductionTextExecutionV1>
+
 type ProductionExecutorOptionsV1 = {
   production: ProductProductionRecordV1
   brief: ProductProductionBriefV3
   category: string
   runText: ProductionTextRunnerV1
+  runVision: ProductionVisionRunnerV1
   mediaCapabilities: ReadonlyMap<string, ResolvedProductMediaCapabilityV1>
 }
 
@@ -1295,6 +1346,21 @@ async function defaultTextRunner(input: Parameters<ProductionTextRunnerV1>[0]): 
   return { output: response.output, bindingReceipt: response.bindingReceipt, usage: result.usage ?? null }
 }
 
+async function defaultVisionRunner(input: Parameters<ProductionVisionRunnerV1>[0]): Promise<ProductionTextExecutionV1> {
+  const result: ChatResult = {}
+  const response = await runConfiguredProductionVisionV1({
+    projectId: input.projectId, category: input.category, requirementKey: input.requirementKey,
+    messages: [
+      { role: 'system', content: input.system },
+      { role: 'user', content: `以下是登记的文字审查上下文，随后图片按 Artifact key/hash 标注：\n<registered-context>\n${input.contextText}\n</registered-context>` },
+    ],
+    images: input.images,
+    maximumOutputTokens: input.maximumOutputTokens, signal: input.signal, result,
+    responseFormat: 'json_object',
+  })
+  return { output: response.output, bindingReceipt: response.bindingReceipt, usage: result.usage ?? null }
+}
+
 async function executeModelTask(input: ProductProductionTaskExecutionInputV1, options: {
   brief: ProductProductionBriefV3
   category: string
@@ -2214,6 +2280,295 @@ async function executeTextAdventureMediaAuditTask(
   }
 }
 
+const VISUAL_REVIEW_CATEGORIES = [
+  'identity', 'setting', 'style', 'composition', 'spoiler', 'artifact', 'text', 'accessibility',
+] as const
+
+function visualReviewScore(value: unknown, label: string): number {
+  if (!Number.isInteger(value) || Number(value) < 1 || Number(value) > 5) fail(`${label} 必须是 1–5 整数`)
+  return Number(value)
+}
+
+function parseVisualReviewIssuesV1(value: unknown, label: string) {
+  if (!Array.isArray(value) || value.length > 12) fail(`${label} 必须是有界数组`)
+  return value.map((entry, index) => {
+    const issue = record(entry, `${label}[${index}]`)
+    exactKeys(issue, ['severity', 'category', 'detail', 'recommendation'], `${label}[${index}]`)
+    return {
+      severity: enumValue(issue.severity, ['warning', 'blocking'], `${label}[${index}].severity`),
+      category: enumValue(issue.category, VISUAL_REVIEW_CATEGORIES, `${label}[${index}].category`),
+      detail: text(issue.detail, `${label}[${index}].detail`, 1_000),
+      recommendation: text(issue.recommendation, `${label}[${index}].recommendation`, 1_000),
+    }
+  })
+}
+
+function parseMultimodalVisualReviewsV1(value: unknown, expected: Map<string, string>) {
+  const row = record(value, 'visualReviewModelOutput')
+  exactKeys(row, ['schema', 'version', 'reviews'], 'visualReviewModelOutput')
+  if (row.schema !== 'storyforge.text-adventure-visual-quality-model-output' || row.version !== 1
+    || !Array.isArray(row.reviews) || row.reviews.length !== expected.size) {
+    fail('visualReviewModelOutput 基础合同无效')
+  }
+  const reviews = row.reviews.map((value, index) => {
+    const review = record(value, `visualReviewModelOutput.reviews[${index}]`)
+    exactKeys(review, ['artifactKey', 'contentHash', 'verdict', 'scores', 'issues'], `visualReviewModelOutput.reviews[${index}]`)
+    const artifactKey = key(review.artifactKey, `visualReviewModelOutput.reviews[${index}].artifactKey`)
+    if (expected.get(artifactKey) !== review.contentHash) fail(`视觉审查 key/hash 越界:${artifactKey}`)
+    const scores = record(review.scores, `visualReviewModelOutput.reviews[${index}].scores`)
+    exactKeys(scores, [
+      'requirementFit', 'identityContinuity', 'styleContinuity', 'composition', 'technicalCleanliness',
+    ], `visualReviewModelOutput.reviews[${index}].scores`)
+    return {
+      artifactKey, contentHash: review.contentHash as string,
+      verdict: enumValue(review.verdict, ['accept', 'revise', 'replace', 'human-review'], `visualReviewModelOutput.reviews[${index}].verdict`),
+      scores: {
+        requirementFit: visualReviewScore(scores.requirementFit, `${artifactKey}.requirementFit`),
+        identityContinuity: visualReviewScore(scores.identityContinuity, `${artifactKey}.identityContinuity`),
+        styleContinuity: visualReviewScore(scores.styleContinuity, `${artifactKey}.styleContinuity`),
+        composition: visualReviewScore(scores.composition, `${artifactKey}.composition`),
+        technicalCleanliness: visualReviewScore(scores.technicalCleanliness, `${artifactKey}.technicalCleanliness`),
+      },
+      issues: parseVisualReviewIssuesV1(review.issues, `${artifactKey}.issues`),
+      reviewSource: 'multimodal-model' as const,
+    }
+  })
+  if (new Set(reviews.map(review => review.artifactKey)).size !== expected.size) {
+    fail('视觉审查漏项或重复')
+  }
+  return reviews
+}
+
+export function parseTextAdventureVisualQualityReviewArtifactV1(
+  value: unknown,
+  expected?: { buildNumber: number; mediaAuditHash: string; assets: Array<{ artifactKey: string; contentHash: string }> },
+): TextAdventureVisualQualityReviewArtifactV1 {
+  const row = record(value, 'visualQualityReview')
+  exactKeys(row, [
+    'schema', 'version', 'buildNumber', 'mediaAuditHash', 'status', 'reviews',
+    'blockingIssueCount', 'providerReviewCompleted',
+  ], 'visualQualityReview')
+  if (row.schema !== 'storyforge.text-adventure-visual-quality-review-artifact' || row.version !== 1
+    || typeof row.mediaAuditHash !== 'string' || !/^[a-f0-9]{64}$/.test(row.mediaAuditHash)
+    || !Array.isArray(row.reviews) || row.reviews.length > 200
+    || typeof row.providerReviewCompleted !== 'boolean') fail('visualQualityReview 基础合同无效')
+  const reviews: TextAdventureVisualQualityReviewArtifactV1['reviews'] = row.reviews.map((value, index) => {
+    const review = record(value, `visualQualityReview.reviews[${index}]`)
+    exactKeys(review, [
+      'artifactKey', 'contentHash', 'verdict', 'scores', 'issues', 'reviewSource',
+    ], `visualQualityReview.reviews[${index}]`)
+    if (typeof review.contentHash !== 'string' || !/^[a-f0-9]{64}$/.test(review.contentHash)) {
+      fail(`visualQualityReview.reviews[${index}].contentHash 无效`)
+    }
+    const verdict = enumValue(review.verdict, [
+      'accept', 'revise', 'replace', 'human-review', 'not-applicable-text-fallback',
+    ], `visualQualityReview.reviews[${index}].verdict`)
+    const reviewSource = enumValue(review.reviewSource, [
+      'multimodal-model', 'deterministic-fallback',
+    ], `visualQualityReview.reviews[${index}].reviewSource`)
+    let scores: TextAdventureVisualQualityReviewArtifactV1['reviews'][number]['scores'] = null
+    if (review.scores !== null) {
+      const scoreRow = record(review.scores, `visualQualityReview.reviews[${index}].scores`)
+      exactKeys(scoreRow, [
+        'requirementFit', 'identityContinuity', 'styleContinuity', 'composition', 'technicalCleanliness',
+      ], `visualQualityReview.reviews[${index}].scores`)
+      scores = {
+        requirementFit: visualReviewScore(scoreRow.requirementFit, `${index}.requirementFit`),
+        identityContinuity: visualReviewScore(scoreRow.identityContinuity, `${index}.identityContinuity`),
+        styleContinuity: visualReviewScore(scoreRow.styleContinuity, `${index}.styleContinuity`),
+        composition: visualReviewScore(scoreRow.composition, `${index}.composition`),
+        technicalCleanliness: visualReviewScore(scoreRow.technicalCleanliness, `${index}.technicalCleanliness`),
+      }
+    }
+    if ((reviewSource === 'multimodal-model' && scores === null)
+      || (verdict === 'not-applicable-text-fallback'
+        && (reviewSource !== 'deterministic-fallback' || scores !== null))) {
+      fail(`visualQualityReview.reviews[${index}] 来源与评分不一致`)
+    }
+    return {
+      artifactKey: key(review.artifactKey, `visualQualityReview.reviews[${index}].artifactKey`),
+      contentHash: review.contentHash,
+      verdict,
+      scores,
+      issues: parseVisualReviewIssuesV1(review.issues, `visualQualityReview.reviews[${index}].issues`),
+      reviewSource,
+    }
+  })
+  if (new Set(reviews.map(review => review.artifactKey)).size !== reviews.length) fail('视觉审查 Artifact 重复')
+  const blockingIssueCount = reviews.reduce((sum, review) => (
+    sum + review.issues.filter(issue => issue.severity === 'blocking').length
+  ), 0)
+  const derivedStatus = reviews.some(review => (
+    review.verdict === 'revise' || review.verdict === 'replace'
+  )) || blockingIssueCount > 0
+    ? 'revision-required' as const
+    : reviews.some(review => review.verdict === 'human-review')
+      ? 'human-review-required' as const
+      : 'passed' as const
+  const providerReviewCompleted = reviews.every(review => (
+    review.reviewSource === 'multimodal-model' || review.verdict === 'not-applicable-text-fallback'
+  ))
+  const parsed: TextAdventureVisualQualityReviewArtifactV1 = {
+    schema: 'storyforge.text-adventure-visual-quality-review-artifact', version: 1,
+    buildNumber: integer(row.buildNumber, 'visualQualityReview.buildNumber', 1, Number.MAX_SAFE_INTEGER),
+    mediaAuditHash: row.mediaAuditHash,
+    status: enumValue(row.status, ['passed', 'revision-required', 'human-review-required'], 'visualQualityReview.status'),
+    reviews, blockingIssueCount: integer(row.blockingIssueCount, 'visualQualityReview.blockingIssueCount', 0, 10_000),
+    providerReviewCompleted: row.providerReviewCompleted,
+  }
+  if (parsed.status !== derivedStatus || parsed.blockingIssueCount !== blockingIssueCount
+    || parsed.providerReviewCompleted !== providerReviewCompleted) {
+    fail('视觉审查汇总结论不是由逐项证据确定性派生')
+  }
+  if (expected) {
+    const expectedMap = new Map(expected.assets.map(asset => [asset.artifactKey, asset.contentHash]))
+    if (parsed.buildNumber !== expected.buildNumber || parsed.mediaAuditHash !== expected.mediaAuditHash
+      || expectedMap.size !== expected.assets.length || reviews.length !== expected.assets.length
+      || reviews.some(review => expectedMap.get(review.artifactKey) !== review.contentHash)) {
+      fail('视觉审查与当前 Build/media.audit 不一致')
+    }
+  }
+  return parsed
+}
+
+async function executeTextAdventureVisualQualityReviewTask(
+  input: ProductProductionTaskExecutionInputV1,
+  options: Pick<ProductionExecutorOptionsV1, 'brief' | 'category' | 'runVision'>,
+): Promise<ProductProductionTaskExecutionResultV1> {
+  const startedAt = performance.now()
+  const mediaAuditArtifact = artifactRecord(input, 'media.audit')
+  const mediaAudit = parseTextAdventureMediaAuditArtifactV1(artifactPayload(input, 'media.audit'))
+  const deterministicReviews: TextAdventureVisualQualityReviewArtifactV1['reviews'] = []
+  const visionImages: Parameters<ProductionVisionRunnerV1>[0]['images'] = []
+  for (const audited of mediaAudit.assets) {
+    if (audited.status === 'text-fallback') {
+      deterministicReviews.push({
+        artifactKey: audited.artifactKey, contentHash: audited.contentHash,
+        verdict: 'not-applicable-text-fallback', scores: null, issues: [],
+        reviewSource: 'deterministic-fallback',
+      })
+      continue
+    }
+    const artifact = artifactRecord(input, audited.artifactKey)
+    if (!['image/png', 'image/jpeg', 'image/webp'].includes(artifact.mimeType ?? '')) {
+      deterministicReviews.push({
+        artifactKey: audited.artifactKey, contentHash: audited.contentHash,
+        verdict: 'human-review', scores: null,
+        issues: [{
+          severity: 'warning', category: 'artifact',
+          detail: `当前多模态审查协议不接收 ${artifact.mimeType ?? 'unknown'}；必须由真人逐图确认。`,
+          recommendation: '使用受支持的 PNG/JPEG/WebP 替换，或完成真人审图回执。',
+        }],
+        reviewSource: 'deterministic-fallback',
+      })
+      continue
+    }
+    if (artifact.blobObjectId == null || artifact.contentHash !== audited.contentHash
+      || artifact.byteSize < 1) fail(`视觉审查图片引用不完整:${audited.artifactKey}`)
+    visionImages.push({
+      artifactKey: audited.artifactKey, contentHash: audited.contentHash,
+      mimeType: artifact.mimeType as 'image/png' | 'image/jpeg' | 'image/webp',
+      data: await readMediaBlobObjectData({
+        scope: input.scope, blobObjectId: artifact.blobObjectId,
+        expected: {
+          contentHash: artifact.contentHash, byteSize: artifact.byteSize,
+          mimeType: artifact.mimeType as 'image/png' | 'image/jpeg' | 'image/webp',
+        },
+      }),
+      detail: 'high',
+    })
+  }
+  let modelReviews: TextAdventureVisualQualityReviewArtifactV1['reviews'] = []
+  let usage = zeroUsage(0)
+  if (visionImages.length > 0) {
+    const requirementKey = input.task.capabilityRequirementKeys[0]
+    const binding = input.capabilityBindings.find(item => item.requirementKey === requirementKey)
+    if (!requirementKey || !binding) fail('独立视觉审查缺少已冻结 AI capability binding')
+    const expected = new Map(visionImages.map(image => [image.artifactKey, image.contentHash]))
+    const system = '你是独立于美术总监和图片生成 Provider 的文字冒险 Visual QA Director。' +
+      '你必须实际观察随请求附带的每张图片，并依据登记上下文逐项检查：需求匹配、角色身份连续、整体风格连续、构图可读性、明显畸形或伪影、文字水印、剧情剧透和替代文本。' +
+      '不得修改图片、世界事实、视觉圣经、权利或发布状态；不确定时使用 human-review。' +
+      '输出只能是一个 JSON 对象，字段精确为：' +
+      '{"schema":"storyforge.text-adventure-visual-quality-model-output","version":1,"reviews":[{' +
+      '"artifactKey":"media.visual.001","contentHash":"64位hash","verdict":"accept|revise|replace|human-review",' +
+      '"scores":{"requirementFit":1,"identityContinuity":1,"styleContinuity":1,"composition":1,"technicalCleanliness":1},' +
+      '"issues":[{"severity":"warning|blocking","category":"identity|setting|style|composition|spoiler|artifact|text|accessibility","detail":"...","recommendation":"..."}]}]}。' +
+      `必须恰好覆盖这些图片 key/hash，不能漏项、重复或改写：${JSON.stringify([...expected])}。` +
+      '评分只能是 1–5 整数；存在明显身份错误、需求错位、严重畸形、不可接受剧透或伪文字时不得 verdict=accept。'
+    try {
+      const response = await options.runVision({
+        projectId: input.scope.projectId, requirementKey, category: options.category,
+        system, contextText: input.contextText, images: visionImages,
+        maximumOutputTokens: input.task.budgetReservation.outputTokens, signal: input.signal,
+      })
+      if (response.bindingReceipt.capabilityHash !== binding.bindingHash) {
+        fail('执行时视觉审查 capability 与 Plan binding 不一致')
+      }
+      modelReviews = parseMultimodalVisualReviewsV1(
+        parseProductionModelJsonObjectV1(response.output, input.task.taskKey), expected,
+      )
+      usage = {
+        modelCalls: 1,
+        inputTokens: response.usage?.inputTokens ?? estimateTokens(input.contextText + system),
+        outputTokens: response.usage?.outputTokens ?? estimateTokens(response.output),
+        mediaCalls: 0, costUsd: null, durationMs: 0, storageBytes: 0,
+      }
+    } catch (error) {
+      if (input.signal.aborted || input.attempt < input.task.maxAttempts
+        || options.brief.qualityProfile === 'commercial-candidate') throw error
+      modelReviews = visionImages.map(image => ({
+        artifactKey: image.artifactKey, contentHash: image.contentHash,
+        verdict: 'human-review' as const, scores: null,
+        issues: [{
+          severity: 'warning' as const, category: 'artifact' as const,
+          detail: '多模态 Provider 在有界重试后仍未返回可验证审图结果。',
+          recommendation: '完成人工逐图审查，或更换支持图片输入的已登记模型后重试。',
+        }],
+        reviewSource: 'deterministic-fallback' as const,
+      }))
+      usage = {
+        modelCalls: 1, inputTokens: estimateTokens(input.contextText + system), outputTokens: 0,
+        mediaCalls: 0, costUsd: null, durationMs: 0, storageBytes: 0,
+      }
+    }
+  }
+  const reviews = [...deterministicReviews, ...modelReviews]
+    .sort((left, right) => left.artifactKey.localeCompare(right.artifactKey))
+  const blockingIssueCount = reviews.reduce((sum, review) => (
+    sum + review.issues.filter(issue => issue.severity === 'blocking').length
+  ), 0)
+  const status = reviews.some(review => review.verdict === 'revise' || review.verdict === 'replace')
+    || blockingIssueCount > 0
+    ? 'revision-required' as const
+    : reviews.some(review => review.verdict === 'human-review')
+      ? 'human-review-required' as const
+      : 'passed' as const
+  const providerReviewCompleted = reviews.every(review => (
+    review.reviewSource === 'multimodal-model' || review.verdict === 'not-applicable-text-fallback'
+  ))
+  const report = parseTextAdventureVisualQualityReviewArtifactV1({
+    schema: 'storyforge.text-adventure-visual-quality-review-artifact', version: 1,
+    buildNumber: input.buildNumber, mediaAuditHash: mediaAuditArtifact.contentHash,
+    status, reviews, blockingIssueCount, providerReviewCompleted,
+  }, {
+    buildNumber: input.buildNumber, mediaAuditHash: mediaAuditArtifact.contentHash,
+    assets: mediaAudit.assets.map(asset => ({ artifactKey: asset.artifactKey, contentHash: asset.contentHash })),
+  })
+  return {
+    artifacts: [{
+      artifactKey: 'quality.visual-review', kind: 'playtest-report', payload: report,
+      quality: {
+        visualSemanticReviewExecuted: true, status: report.status,
+        providerReviewCompleted: report.providerReviewCompleted,
+        blockingIssueCount: report.blockingIssueCount,
+      },
+      rights: { origin: 'configured-vision-review', containsThirdPartyMedia: false },
+    }],
+    passedGateIds: [...input.task.acceptanceGateIds],
+    usage: { ...usage, durationMs: elapsed(startedAt) },
+  }
+}
+
 async function executeNarrativeIntegrationTask(
   input: ProductProductionTaskExecutionInputV1,
   options: { brief: ProductProductionBriefV3 },
@@ -2321,6 +2676,8 @@ async function executeIntegrationTask(input: ProductProductionTaskExecutionInput
     textAdventureCast ? textAdventureCharacterAnchors(textAdventureCast) : [],
   )
   let textAdventureMediaAuditHash = ''
+  let textAdventureVisualReviewHash = ''
+  let textAdventureVisualReviewStatus: 'not-required' | TextAdventureVisualQualityReviewArtifactV1['status'] = 'not-required'
   if (textAdventureCast) {
     const visualBibleArtifact = artifactRecord(input, 'media.visual-bible')
     const visualBible = parseTextAdventureVisualBibleArtifactV1({
@@ -2336,13 +2693,26 @@ async function executeIntegrationTask(input: ProductProductionTaskExecutionInput
         confirmationRequired: options.brief.qualityProfile === 'commercial-candidate',
       })
       const auditArtifact = artifactRecord(input, 'media.audit')
-      parseTextAdventureMediaAuditArtifactV1(artifactPayload(input, 'media.audit'), {
+      const mediaAudit = parseTextAdventureMediaAuditArtifactV1(artifactPayload(input, 'media.audit'), {
         buildNumber: input.buildNumber,
         requirementsHash: artifactRecord(input, 'media.requirements').contentHash,
         visualBibleHash: visualBibleArtifact.contentHash,
         artifactKeys: mediaRequirements.visual.map(requirement => requirement.artifactKey),
       })
       textAdventureMediaAuditHash = auditArtifact.contentHash
+      const visualReviewArtifact = artifactRecord(input, 'quality.visual-review')
+      const visualReview = parseTextAdventureVisualQualityReviewArtifactV1(
+        artifactPayload(input, 'quality.visual-review'),
+        {
+          buildNumber: input.buildNumber, mediaAuditHash: auditArtifact.contentHash,
+          assets: mediaAudit.assets.map(asset => ({ artifactKey: asset.artifactKey, contentHash: asset.contentHash })),
+        },
+      )
+      textAdventureVisualReviewHash = visualReviewArtifact.contentHash
+      textAdventureVisualReviewStatus = visualReview.status
+      if (options.brief.qualityProfile === 'commercial-candidate' && visualReview.status !== 'passed') {
+        fail(`商业候选的独立图片审查未通过:${visualReview.status}`)
+      }
     }
   }
   const textAdventureProduction = options.brief.intent.productType === 'text-adventure'
@@ -2449,6 +2819,10 @@ async function executeIntegrationTask(input: ProductProductionTaskExecutionInput
         ...(options.brief.intent.productType === 'text-adventure' ? {
           mediaAuditPassed: mediaRequirements.visual.length === 0 || !!textAdventureMediaAuditHash,
           mediaAuditHash: textAdventureMediaAuditHash || 'no-visual-assets',
+          visualQualityReviewStatus: textAdventureVisualReviewStatus,
+          visualQualityReviewHash: textAdventureVisualReviewHash || 'no-visual-assets',
+          visualQualityReviewRequired: options.brief.qualityProfile === 'commercial-candidate'
+            && mediaRequirements.visual.length > 0,
         } : {}),
       },
     },
@@ -2593,6 +2967,14 @@ async function executeQualityTask(input: ProductProductionTaskExecutionInputV1, 
         passed: runtimePackage.definition.initialVariables.mediaAuditPassed === true,
         evidence: [String(runtimePackage.definition.initialVariables.mediaAuditHash ?? 'missing')],
       },
+      'product.adventure.visual-quality-review': {
+        passed: runtimePackage.definition.initialVariables.visualQualityReviewStatus === 'passed'
+          || runtimePackage.definition.initialVariables.visualQualityReviewRequired !== true,
+        evidence: [
+          String(runtimePackage.definition.initialVariables.visualQualityReviewStatus ?? 'missing'),
+          String(runtimePackage.definition.initialVariables.visualQualityReviewHash ?? 'missing'),
+        ],
+      },
     } : {}),
   }
   for (const productGate of productQuality.gates) {
@@ -2610,6 +2992,9 @@ async function executeQualityTask(input: ProductProductionTaskExecutionInputV1, 
       ? ['product.adventure.autoplay']
       : []),
     ...(runtimePackage.productType === 'text-adventure' ? ['product.adventure.media-audit'] : []),
+    ...(runtimePackage.productType === 'text-adventure'
+      && runtimePackage.definition.initialVariables.visualQualityReviewRequired === true
+      ? ['product.adventure.visual-quality-review'] : []),
   ])]
   const hardGateResults = requiredGateIds.map(gateId => (
     hardEvidence[gateId] ?? { passed: false, evidence: [`unsupported-gate:${gateId}`] }
@@ -2624,6 +3009,9 @@ async function executeQualityTask(input: ProductProductionTaskExecutionInputV1, 
     ...(!commercialMediaValid ? ['商业候选不得使用程序化占位素材，且必须绑定可追溯权利策略。'] : []),
     ...(!commercialAdapterValid ? ['当前产品 adapter 仅达到内部基线，不能作为商业候选发布。'] : []),
     ...(autoplay && !autoplay.passed ? ['确定性自动游玩存在失败；prototype 可预览，但不得进入社区推荐验收。'] : []),
+    ...(runtimePackage.productType === 'text-adventure'
+      && runtimePackage.definition.initialVariables.visualQualityReviewStatus === 'human-review-required'
+      ? ['图片尚未完成独立多模态审查；必须完成人工逐图确认后才能作为社区推荐候选。'] : []),
     ...(options.brief.qualityProfile === 'commercial-candidate' ? [] : productQuality.warnings),
   ]
   const quality: ProductBuildQualityReportV1 = {
@@ -2873,6 +3261,7 @@ export function createConfiguredProductProductionExecutorV1(input: {
   brief: ProductProductionBriefV3
   category?: string
   runText?: ProductionTextRunnerV1
+  runVision?: ProductionVisionRunnerV1
   mediaCapabilities?: ReadonlyMap<string, ResolvedProductMediaCapabilityV1>
 }): ProductProductionTaskExecutorV1 {
   const supportedProducts = new Set<ProductionProductKindV1>(PRODUCTION_PRODUCT_KINDS_V1)
@@ -2882,10 +3271,14 @@ export function createConfiguredProductProductionExecutorV1(input: {
   const options = {
     production: structuredClone(input.production), brief: structuredClone(input.brief),
     category: input.category ?? 'product-production', runText: input.runText ?? defaultTextRunner,
+    runVision: input.runVision ?? defaultVisionRunner,
     mediaCapabilities: input.mediaCapabilities ?? new Map<string, ResolvedProductMediaCapabilityV1>(),
   }
   return async request => {
     if (request.signal.aborted) throw new DOMException('Aborted', 'AbortError')
+    if (request.task.taskKey === 'media.visual-quality-review') {
+      return executeTextAdventureVisualQualityReviewTask(request, options)
+    }
     if (request.task.executionMode === 'model') return executeModelTask(request, options)
     if (request.task.taskKey === 'source.author-gate') {
       return executeTextAdventureSourceDecisionTask(request, options.brief)

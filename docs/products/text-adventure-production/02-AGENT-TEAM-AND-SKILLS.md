@@ -28,10 +28,11 @@ Agent 是有稳定职责、权限、上下文边界和最终责任的岗位主�
 | `text-adventure-scene-writer` | 分场叙事作者 | `scene-script.v1` | 指定场景卡、角色圣经、任务脚本、前后场摘要 | 分批 `scene.script.*`；写玩家可见正文、对话、选择措辞和失败推进文本 |
 | `text-adventure-dialogue-editor` | 独立对白编辑 | `dialogue-pass.v1` | 角色圣经、三幕分场候选 | `dialogue.pass`；逐条审校声音、知识边界、潜台词与玩家选择措辞，只能修订表达文本 |
 | `text-adventure-art-director` | 美术总监 | `visual-direction.v1` | 故事/角色/场景定稿与媒资档位 | `media.requirements` 候选；确定性编译器再与角色/空间圣经闭合为 `media.visual-bible`，本 Agent 不直接拥有 provider transport |
+| `text-adventure-visual-qa-director` | 独立视觉质检总监 | `visual-quality-review.v1` | 冻结需求、视觉圣经、角色锚点、逐项图片与最小剧情上下文 | `quality.visual-review`；实际观察图片并提出接受、修订、替换或真人复核意见，无权改图或发布 |
 | `text-adventure-continuity-editor` | 连续性与内容审校 | `continuity-and-literary-review.v1` | 所有定稿候选和确定性投影 | `quality.continuity`、有证据的问题清单；不能修改原工件或自报通过 |
 | `text-adventure-playtest-director` | 试玩与发布验证 | `playtest-strategy.v1` | RuntimePackage、静态报告、自动游玩证据 | 路线矩阵、真人试玩清单、推荐候选意见；正式状态仍由确定性系统执行 |
 
-同一个 `text-adventure-scene-writer` 可以按 Act/场景启动多个独立 Run，因为它们属于同一核心 Skill 的同类工作；每个 Run 仍有单独输入、预算、checkpoint 和 receipt。这不同于让一个 Agent 兼任多个生产步骤。当前登记的 17 个岗位各自只有一个核心 Skill；测试会拒绝任何岗位出现第二个 Skill。
+同一个 `text-adventure-scene-writer` 可以按 Act/场景启动多个独立 Run，因为它们属于同一核心 Skill 的同类工作；每个 Run 仍有单独输入、预算、checkpoint 和 receipt。这不同于让一个 Agent 兼任多个生产步骤。当前登记的 18 个岗位各自只有一个核心 Skill；测试会拒绝任何岗位出现第二个 Skill。
 
 ## 3. 权限矩阵
 
@@ -40,7 +41,7 @@ Agent 是有稳定职责、权限、上下文边界和最终责任的岗位主�
 - Quest Scripter 只能生成已注册通用状态与命令的候选；确定性编译器负责拒绝未登记字段和执行语义。
 - Scene Writer 和 Dialogue Editor 可写表达文本，不能直接改变正式条件、资源、任务阶段或结局规则。
 - Continuity Editor 与 Playtest Director 必须独立于被审查工件的 producer，不得复用同一个 Run receipt 自审。
-- Art Director 只形成视觉圣经、需求和审查；Provider Adapter 持有 transport 与凭据，模型上下文永不包含 API Key。
+- Art Director 只形成视觉圣经和需求；Provider Adapter 持有 transport 与凭据，Visual QA Director 独立审图，任何模型上下文都不得包含 API Key。
 - 作者独占来源范围、商业候选的角色锚点、高影响重生成、最终推荐候选和 ProductRelease 的采纳权。角色锚点确认只对当前 `media.visual-bible` hash 生效，不能跨变化后的视觉方向静默沿用。
 
 ## 4. 每个 Skill 的最低合同

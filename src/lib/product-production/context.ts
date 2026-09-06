@@ -269,6 +269,70 @@ export async function readTextAdventureDialogueInputsV1(input: AssembleContextIn
 }
 
 /**
+ * Text-only companion packet for the independent visual QA request. Actual
+ * image bytes are attached by the governed vision capability after this
+ * registered projection and the Build Artifact hashes have been frozen.
+ */
+export async function readTextAdventureVisualQualityInputsV1(input: AssembleContextInput): Promise<string> {
+  if (input.productProductionTaskKey !== 'media.visual-quality-review') {
+    throw new Error('[product-production-context] 视觉审查投影缺少精确 taskKey')
+  }
+  const requested = [...new Set(input.productArtifactKeys ?? [])]
+  const visualKeys = requested.filter(key => /^media\.visual\.\d{3}$/.test(key)).sort()
+  if (!visualKeys.length) throw new Error('[product-production-context] 视觉审查缺少图片 Artifact')
+  const requiredKeys = [
+    'content.cast-bible', 'media.requirements', 'media.visual-bible', 'media.audit', ...visualKeys,
+  ]
+  const { build, rows, payloadByKey } = await requiredContextArtifactsV1(input, {
+    label: '文字冒险视觉质量审查投影', requiredKeys,
+  })
+  const rowByKey = new Map(rows.map(row => [row.artifactKey, row]))
+  const mediaRequirements = payloadByKey.get('media.requirements') ?? {}
+  const visualBible = payloadByKey.get('media.visual-bible') ?? {}
+  const cast = payloadByKey.get('content.cast-bible') ?? {}
+  const audit = payloadByKey.get('media.audit') ?? {}
+  const packet = {
+    schema: 'storyforge.text-adventure-visual-quality-inputs', version: 1,
+    buildNumber: build.buildNumber,
+    sources: rows.map(row => ({ artifactKey: row.artifactKey, contentHash: row.contentHash }))
+      .sort((left, right) => left.artifactKey.localeCompare(right.artifactKey)),
+    visualBible: {
+      style: visualBible.style, palette: visualBible.palette,
+      compositionRules: visualBible.compositionRules, continuityRules: visualBible.continuityRules,
+      characterAnchors: visualBible.characterAnchors,
+    },
+    cast: contextRows(cast.characters).map(character => ({
+      key: character.key, name: character.name, role: character.role,
+      publicIdentity: character.publicIdentity, visualAnchor: character.visualAnchor,
+    })),
+    requirements: contextRows(mediaRequirements.visual),
+    audit: {
+      requirementsHash: audit.requirementsHash, visualBibleHash: audit.visualBibleHash,
+      assets: audit.assets,
+    },
+    images: visualKeys.map(artifactKey => {
+      const row = rowByKey.get(artifactKey)!
+      const metadata = contextRecord(JSON.parse(row.metadataJson))
+      return {
+        artifactKey, contentHash: row.contentHash, kind: row.kind, mediaKind: row.mediaKind,
+        mimeType: row.mimeType, byteSize: row.byteSize, width: metadata.width, height: metadata.height,
+        source: metadata.source, license: metadata.license, altText: metadata.altText,
+      }
+    }),
+    authorityBoundary: {
+      modelMay: ['identify visual issues', 'recommend accept revise replace or human review'],
+      modelMayNot: ['change blob bytes', 'change world facts', 'change visual bible', 'approve rights', 'publish build'],
+    },
+  }
+  const serialized = JSON.stringify(packet)
+  const estimatedTokens = estimateTokens(serialized)
+  if (estimatedTokens > 12_000) {
+    throw new Error(`[product-production-context] 视觉审查投影超过登记预算:${estimatedTokens}/12000`)
+  }
+  return serialized
+}
+
+/**
  * Registered, deterministic review projection for the text-adventure quality
  * Agent. The full accepted Artifacts stay authoritative in IndexedDB; this
  * packet keeps every graph edge, target opening and quest location visible

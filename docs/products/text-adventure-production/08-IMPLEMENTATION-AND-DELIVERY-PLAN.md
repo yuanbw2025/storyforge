@@ -30,7 +30,7 @@
 
 ## 批次 C · Agent 身份、Skill 与工件合同
 
-状态：17 个独立 Agent 均只有一个核心 Skill；专业规划、分场、对白、连续性审校和 Playtest Director 工件均有独立 parser/Run Contract/receipt。
+状态：18 个独立 Agent 均只有一个核心 Skill；专业规划、分场、对白、连续性审校、Visual QA Director 和 Playtest Director 工件均有独立 parser/Run Contract/receipt。
 
 - 扩展 Domain Agent Registry，登记专业 Agent、owner、UI 标签和最小权限。
 - 新增来源审计、故事/角色圣经、弧计划、主支线计划、任务脚本、场景、对白、连续性、美术与试玩策略的严格 schema/parser。
@@ -61,12 +61,13 @@
 
 ## 批次 F · 媒资、导入导出和推荐候选
 
-状态：部分实现。独立视觉圣经 Artifact、角色锚点 hash 绑定作者确认、逐项媒资 durable task，以及作者上传/替换/锁定/解锁/单项重生成的新 Build 派生链已闭合；需求—Artifact—Runtime 的确定性三向审计已经进入正式 DAG 和发布硬门。独立自动审图和完整生命周期 E2E 尚未闭合。
+状态：部分实现。独立视觉圣经 Artifact、角色锚点 hash 绑定作者确认、逐项媒资 durable task，以及作者上传/替换/锁定/解锁/单项重生成的新 Build 派生链已闭合；需求—Artifact—Runtime 的确定性三向审计和独立 Visual QA Director 多模态审图已进入正式 DAG。逐图真人确认和完整生命周期 E2E 尚未闭合。
 
 - 已实现：确定性视觉圣经编译、商业候选角色锚点作者闸门、稳定计划内 assetKey 和逐项生成/有界纯文字降级。
 - 已实现：作者上传/替换/锁定/解锁/单项重生成，旧 Build 不变，未受影响图片零 Provider 调用复用，装配与 QA 定向重跑。
 - 已实现：确定性清单—素材—Runtime 引用三向核查；合法纯文字降级也留下不可冒充图片覆盖的审计证据。
-- 待实现：登记多模态输入能力和独立 Visual QA Director；能力缺失时由真人逐图确认，不伪造自动审图通过。
+- 已登记：独立 Visual QA Director、受治理图片输入、逐项 key/hash 审查合同和 prototype 真人复核降级；商业候选审图失败或不确定时必须阻断。
+- 待实现：逐图真人确认回执与视觉缺陷专用评测图集；不以模型返回 JSON 冒充审美正确。
 - 完成产品包导出、原子导入、引用重映射、删除和迁移正反例。
 - 创建隔离的来源充分旗舰世界；不得修改作者当前项目或用稀疏测试世界硬撑生产。
 

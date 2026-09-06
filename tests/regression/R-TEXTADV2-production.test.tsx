@@ -86,7 +86,7 @@ describe('R-TEXTADV2-production · 文字冒险正式生产契约与工作台', 
       'content.dialogue-pass.act-2', 'content.dialogue-pass.act-3', 'integration.narrative',
       'content.adventure-quality-review', 'media.requirements', 'media.visual-bible.compile',
       'media.anchor-author-gate', 'media.visual.001', 'media.visual.002',
-      'media.audit',
+      'media.audit', 'media.visual-quality-review',
       'integration.package', 'qa.autoplay', 'qa.release', 'qa.playtest-strategy',
     ]))
     expect(taskByKey.get('content.source-sufficiency')).toMatchObject({
@@ -192,6 +192,15 @@ describe('R-TEXTADV2-production · 文字冒险正式生产契约与工作台', 
       ],
       outputArtifactKeys: ['media.audit'],
     })
+    expect(taskByKey.get('media.visual-quality-review')).toMatchObject({
+      executionMode: 'model', skillId: 'text-adventure.visual-quality-review.v1',
+      dependsOn: ['media.audit'],
+      inputArtifactKeys: [
+        'content.cast-bible', 'media.requirements', 'media.visual-bible', 'media.audit',
+        'media.visual.001', 'media.visual.002',
+      ],
+      outputArtifactKeys: ['quality.visual-review'],
+    })
     expect(taskByKey.get('qa.release')?.failurePolicy).toBe('pause')
     expect(taskByKey.get('qa.release')?.dependsOn).toEqual(['integration.package', 'qa.autoplay'])
     expect(taskByKey.get('qa.playtest-strategy')).toMatchObject({
@@ -207,7 +216,7 @@ describe('R-TEXTADV2-production · 文字冒险正式生产契约与工作台', 
       'content.adventure-ambient-events', 'content.dialogue-pass.act-1',
       'content.dialogue-pass.act-2', 'content.dialogue-pass.act-3', 'quality.adventure-review',
       'media.visual-bible', 'media.anchor-decision', 'media.audit',
-      'media.visual.001', 'media.visual.002',
+      'quality.visual-review', 'media.visual.001', 'media.visual.002',
     ]))
   })
 

@@ -122,7 +122,7 @@ export function estimateChatRequestOptionsTokens(options?: ChatRequestOptions): 
  */
 function buildRequest(
   config: AIConfig,
-  messages: ChatMessage[],
+  messages: ReadonlyArray<{ role: ChatMessage['role']; content: unknown }>,
   stream: boolean,
   options?: ChatRequestOptions,
 ) {
@@ -199,6 +199,95 @@ function buildRequest(
     },
     body: JSON.stringify(body),
   }
+}
+
+export interface ChatImageInputV1 {
+  label: string
+  dataUrl: string
+  detail: 'low' | 'high'
+}
+
+function parseChatImageInputV1(input: ChatImageInputV1, index: number): ChatImageInputV1 {
+  if (!input.label.trim() || input.label.length > 500) {
+    throw new Error(`[AI] images[${index}].label 无效`)
+  }
+  if (!/^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(input.dataUrl)
+    || input.dataUrl.length > 24_000_000) {
+    throw new Error(`[AI] images[${index}].dataUrl 不是受支持且有界的图片`)
+  }
+  if (input.detail !== 'low' && input.detail !== 'high') {
+    throw new Error(`[AI] images[${index}].detail 无效`)
+  }
+  return { label: input.label.trim(), dataUrl: input.dataUrl, detail: input.detail }
+}
+
+/**
+ * Non-streaming OpenAI-compatible vision request. Text is budgeted and trimmed
+ * before image parts are attached; image bytes are never written to request
+ * logs or returned in receipts.
+ */
+export async function chatWithImagesV1(
+  messages: ChatMessage[],
+  images: ChatImageInputV1[],
+  config: AIConfig,
+  meta?: AICallMeta,
+  signal?: AbortSignal,
+  result?: ChatResult,
+  options?: ChatRequestOptions,
+  frozenResolution?: AIRequestConfigResolution,
+): Promise<string> {
+  if (!images.length || images.length > 12) throw new Error('[AI] 多模态请求必须包含 1–12 张图片')
+  const parsedImages = images.map(parseChatImageInputV1)
+  const resolved = frozenResolution ?? resolveRequestConfig(config, meta)
+  warnRouteFallback(resolved, meta)
+  config = resolved.config
+  const imageTokenReserve = parsedImages.reduce((sum, image) => sum + (image.detail === 'high' ? 1_200 : 300), 0)
+  const trimmed = trimMessagesToFit(
+    messages, config.provider, config.model, config.maxTokens, config.contextWindow,
+    estimateChatRequestOptionsTokens(options) + imageTokenReserve,
+  )
+  if (trimmed.trimmed && meta?.contextOverflowPolicy === 'reject') {
+    throw new Error(
+      `当前模型上下文窗口不足以容纳完整多模态请求（${trimmed.totalInputTokens}/${trimmed.inputBudget} tokens）；已拒绝静默裁剪。`,
+    )
+  }
+  if (!trimmed.protectedEnvelopePreserved) {
+    throw new Error('当前模型上下文窗口无法容纳最低多模态审查保护块。')
+  }
+  let userIndex = -1
+  for (let index = trimmed.messages.length - 1; index >= 0; index--) {
+    if (trimmed.messages[index].role === 'user') { userIndex = index; break }
+  }
+  if (userIndex < 0) throw new Error('[AI] 多模态请求缺少 user 消息')
+  const requestMessages: Array<{ role: ChatMessage['role']; content: unknown }> = trimmed.messages.map(message => ({ ...message }))
+  requestMessages[userIndex] = {
+    role: 'user',
+    content: [
+      { type: 'text', text: trimmed.messages[userIndex].content },
+      ...parsedImages.flatMap(image => [
+        { type: 'text', text: `图片标签：${image.label}` },
+        { type: 'image_url', image_url: { url: image.dataUrl, detail: image.detail } },
+      ]),
+    ],
+  }
+  const req = buildRequest(config, requestMessages, false, options)
+  const response = await fetch(req.url, {
+    method: 'POST', headers: req.headers, body: req.body, signal,
+  })
+  if (!response.ok) throw new AIError(response.status, await response.text())
+  const json = await response.json()
+  if (json.usage) {
+    const usage = {
+      inputTokens: json.usage.prompt_tokens ?? 0,
+      outputTokens: json.usage.completion_tokens ?? 0,
+      totalTokens: json.usage.total_tokens ?? 0,
+    }
+    if (result) result.usage = usage
+    void recordUsage(usageEntry(meta, config, resolved.taskKind, usage))
+  }
+  const choice = json.choices?.[0]
+  if (result && typeof choice?.finish_reason === 'string') result.finishReason = choice.finish_reason
+  return typeof choice?.message?.content === 'string' ? choice.message.content : ''
 }
 
 /**

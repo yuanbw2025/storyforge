@@ -170,6 +170,7 @@ async function capabilityRequirement(input: {
   requirementKey: string
   mediaClass: 'text' | 'image' | 'music' | 'sfx'
   required: boolean
+  allowedDataClasses?: string[]
 }) {
   const basis = {
     requirementKey: input.requirementKey,
@@ -177,7 +178,7 @@ async function capabilityRequirement(input: {
     operation: 'generate',
     adapterFamily: input.mediaClass === 'text' ? 'configured-text' : 'configured-media',
     minimumCapabilityVersion: '1',
-    allowedDataClasses: ['world-selection'],
+    allowedDataClasses: input.allowedDataClasses ?? ['world-selection'],
     maximumRequestCost: null,
     maximumTotalCost: null,
     rightsPolicyVersion: 'storyforge-rights-v1',
@@ -344,6 +345,10 @@ export async function draftProductProductionBriefV3(input: {
     // slice. External text generation is an optional quality upgrade and may
     // never become an implicit prerequisite for an authorized local Build.
     requirementKey: 'text.runtime-package', mediaClass: 'text', required: false,
+    allowedDataClasses: [
+      'world-selection',
+      ...(input.productType === 'text-adventure' && media.imageCount > 0 ? ['product-owned-media'] : []),
+    ],
   })]
   if (media.imageCount > 0) requirements.push(await capabilityRequirement({
     requirementKey: 'media.visual', mediaClass: 'image', required: qualityProfile === 'commercial-candidate',

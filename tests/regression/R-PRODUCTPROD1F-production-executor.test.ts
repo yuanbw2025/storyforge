@@ -21,7 +21,9 @@ import {
   parseProductMediaRequirementsArtifactV2,
   parseProductionModelJsonObjectV1,
   type ProductionTextRunnerV1,
+  type ProductionVisionRunnerV1,
 } from '../../src/lib/product-production/production-executor'
+import { putMediaBlobObject } from '../../src/lib/product-production/media-blob-store'
 import { runProductProductionUntilBlockedV1 } from '../../src/lib/product-production/scheduler'
 import { parseProductRuntimePackageV1 } from '../../src/lib/product-production/runtime-package'
 import { adventureNarrativeActionContext, availableAdventureActions } from '../../src/lib/adventure/runtime'
@@ -1131,6 +1133,103 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
         authorCommandId: 'author.confirm-character-anchors',
         confirmedCharacterKeys: expect.arrayContaining(['character.player']),
       },
+    })
+  })
+
+  it('独立 Visual QA Director 实际接收冻结图片 key/hash，并由逐项证据派生审图结论', async () => {
+    const owned = await fixtureForProduct('text-adventure', { visualLevel: 'key-scenes' })
+    const briefHash = await hashProductProductionValueV2(owned.brief)
+    const plan = await createProductProductionPlanV3({ buildNumber: 1, briefHash, brief: owned.brief })
+    const task = plan.tasks.find(item => item.taskKey === 'media.visual-quality-review')!
+    const imageKeys = plan.tasks.filter(item => /^media\.visual\.\d{3}$/.test(item.taskKey))
+      .map(item => item.taskKey)
+    const blob = await putMediaBlobObject({
+      scope: owned.scope,
+      data: new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]).buffer,
+      mimeType: 'image/png',
+    })
+    const auditPayload = {
+      schema: 'storyforge.text-adventure-media-audit-artifact', version: 1,
+      buildNumber: 1, requirementsHash: 'a'.repeat(64), visualBibleHash: 'b'.repeat(64),
+      assets: imageKeys.map((artifactKey, index) => ({
+        artifactKey, status: 'fulfilled', assetKey: `current.text-adventure.build-1.${artifactKey}`,
+        requirementHash: String(index + 1).repeat(64).slice(0, 64), contentHash: blob.contentHash,
+        mimeType: 'image/png', width: 1280, height: 720,
+        source: 'fixture-provider', license: 'fixture-license', rightsComplete: true, fallbackReason: null,
+      })),
+      passed: true,
+    }
+    const auditHash = await hashProductProductionValueV2(auditPayload)
+    const artifact = (artifactKey: string, options: Partial<ProductBuildArtifactRecordV1> = {}): ProductBuildArtifactRecordV1 => ({
+      projectId: owned.scope.projectId, worldId: owned.scope.worldId, workId: owned.scope.workId,
+      buildId: 1, artifactKey, requirementKey: null, version: 1, kind: 'image', mediaKind: 'background',
+      status: 'accepted', producerRunId: null, producerReceiptHash: null, controlEpoch: 0,
+      inputHash: 'c'.repeat(64), contentHash: blob.contentHash, payloadJson: '{}',
+      metadataJson: '{}', qualityJson: '{}', rightsJson: '{}', blobObjectId: blob.id!,
+      mimeType: 'image/png', byteSize: blob.byteSize, parentArtifactHash: null, carriedFrom: null,
+      createdAt: 1, updatedAt: 1, ...options,
+    })
+    const textRequirement = owned.brief.capabilityRequirements.find(item => item.mediaClass === 'text')!
+    const bindingHash = 'd'.repeat(64)
+    const seen: Array<{ artifactKey: string; contentHash: string; byteLength: number }> = []
+    const runVision: ProductionVisionRunnerV1 = async request => {
+      seen.push(...request.images.map(image => ({
+        artifactKey: image.artifactKey, contentHash: image.contentHash, byteLength: image.data.byteLength,
+      })))
+      return {
+        output: JSON.stringify({
+          schema: 'storyforge.text-adventure-visual-quality-model-output', version: 1,
+          reviews: request.images.map(image => ({
+            artifactKey: image.artifactKey, contentHash: image.contentHash, verdict: 'accept',
+            scores: {
+              requirementFit: 5, identityContinuity: 5, styleContinuity: 4,
+              composition: 4, technicalCleanliness: 5,
+            },
+            issues: [],
+          })),
+        }),
+        usage: { inputTokens: 200, outputTokens: 100 },
+        bindingReceipt: {
+          schema: 'storyforge.provider-binding-receipt', version: 1,
+          requirementKey: textRequirement.requirementKey,
+          adapterId: 'configured-text.v1', adapterVersion: 1,
+          provider: 'fixture', model: 'fixture-vision', endpointOrigin: 'https://fixture.invalid',
+          executionLocation: 'browser-direct', credentialSource: 'existing-ai-config', credentialPresent: true,
+          capabilityHash: bindingHash, boundAt: 1, receiptHash: 'e'.repeat(64),
+        },
+      }
+    }
+    const executor = createConfiguredProductProductionExecutorV1({
+      production: (await db.productProductions.get(owned.productionId))!, brief: owned.brief, runVision,
+    })
+    const result = await executor({
+      scope: owned.scope, productionId: owned.productionId, buildId: 1, buildNumber: 1,
+      controlEpoch: 0, planHash: 'f'.repeat(64), task, attempt: 1,
+      idempotencyKey: '1'.repeat(64), contextText: '{"registered":true}',
+      capabilityBindings: [{
+        requirementKey: textRequirement.requirementKey, adapterId: 'configured-text.v1', bindingHash,
+      }],
+      inputArtifacts: [
+        artifact('media.audit', {
+          kind: 'integration-report', mediaKind: null, blobObjectId: null, mimeType: null,
+          contentHash: auditHash, payloadJson: JSON.stringify(auditPayload), byteSize: 1,
+        }),
+        ...imageKeys.map(artifactKey => artifact(artifactKey)),
+      ],
+      authorResolution: null, signal: new AbortController().signal,
+    })
+    expect(seen).toEqual(imageKeys.map(artifactKey => ({
+      artifactKey, contentHash: blob.contentHash, byteLength: blob.byteSize,
+    })))
+    expect(result).toMatchObject({
+      usage: { modelCalls: 1, inputTokens: 200, outputTokens: 100 },
+      artifacts: [{
+        artifactKey: 'quality.visual-review', kind: 'playtest-report',
+        payload: {
+          status: 'passed', providerReviewCompleted: true, blockingIssueCount: 0,
+          mediaAuditHash: auditHash,
+        },
+      }],
     })
   })
 })

@@ -17,8 +17,8 @@ const LEGACY_TEXT_ADVENTURE_SKILLS = [
 ] as const
 
 describe('TEXTADV-3 · 专业生产 Agent 团队', () => {
-  it('把十七个专业岗位登记为独立 Agent 身份，每个岗位拥有自己的默认 Skill 与 owner', () => {
-    expect(TEXT_ADVENTURE_PRODUCTION_AGENT_IDS).toHaveLength(17)
+  it('把十八个专业岗位登记为独立 Agent 身份，每个岗位拥有自己的默认 Skill 与 owner', () => {
+    expect(TEXT_ADVENTURE_PRODUCTION_AGENT_IDS).toHaveLength(18)
     const defaults = TEXT_ADVENTURE_PRODUCTION_AGENT_IDS.map(agentId => getDefaultAgentSkillV1(agentId))
     expect(new Set(defaults.map(skill => skill.agentId))).toEqual(new Set(TEXT_ADVENTURE_PRODUCTION_AGENT_IDS))
     expect(defaults.every(skill => skill.owner === skill.agentId)).toBe(true)
@@ -48,6 +48,7 @@ describe('TEXTADV-3 · 专业生产 Agent 团队', () => {
     expect(counts.get('text-adventure-side-quest-designer')).toBe(1)
     expect(counts.get('text-adventure-storylet-designer')).toBe(1)
     expect(counts.get('text-adventure-dialogue-editor')).toBe(1)
+    expect(counts.get('text-adventure-visual-qa-director')).toBe(1)
     expect(counts.get('text-adventure-showrunner')).toBe(1)
     expect(counts.get('text-adventure-scene-writer')).toBe(1)
   })
@@ -66,6 +67,10 @@ describe('TEXTADV-3 · 专业生产 Agent 团队', () => {
     expect(getAgentSkillV1('text-adventure.playtest-strategy.v1').optionalContextSourceKeys)
       .toEqual([])
     expect(CONTEXT_SOURCE_BY_KEY.get('product-production.adventure-playtest-inputs'))
+      .toMatchObject({ ownerFrom: 'work', protectedFromTrim: true })
+    expect(getAgentSkillV1('text-adventure.visual-quality-review.v1').optionalContextSourceKeys)
+      .toEqual(['product-production.adventure-visual-quality-inputs'])
+    expect(CONTEXT_SOURCE_BY_KEY.get('product-production.adventure-visual-quality-inputs'))
       .toMatchObject({ ownerFrom: 'work', protectedFromTrim: true })
   })
 })
