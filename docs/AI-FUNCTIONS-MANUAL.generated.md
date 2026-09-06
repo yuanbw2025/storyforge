@@ -377,7 +377,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 - `src/lib/open-world/evolution-harness.ts:246 · chat`
 - `src/lib/open-world/harness.ts:139 · chat`
 - `src/lib/product-production/capabilities.ts:158 · chat`
-- `src/lib/screenplay/durable-production.ts:331 · chat`
+- `src/lib/screenplay/durable-production.ts:446 · chat`
 - `src/lib/ttrpg/gm-actor-harness.ts:468 · chat`
 - `src/lib/ttrpg/gm-harness.ts:534 · chat`
 
@@ -426,4 +426,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `cc32f25d`
+生成时间基准:commit `b35f9280`

@@ -120,6 +120,9 @@ export async function adoptAdaptationSourceFactsV1(
     const rows = input.items.map(({ candidate, authorStatus }) => {
       assertKnownSourceUnits(candidate.sourceUnitKeys, unitKeys, `来源事实 ${candidate.stableKey}`)
       const previous = existingByKey.get(candidate.stableKey)
+      if (input.replaceExisting === false && previous && previous.sourceUnitKeys.some(key => !candidate.sourceUnitKeys.includes(key))) {
+        throw new Error(`[adaptation-analysis] 来源事实 stableKey 跨单元重复：${candidate.stableKey}`)
+      }
       const row: AdaptationSourceFactV1 = stampNewRecord(scope, 'adaptationSourceFacts', {
         ...(previous ?? {}),
         projectId: scope.projectId,
