@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   AGENT_SKILLS,
   getDefaultAgentSkillV1,
+  REGISTERED_AGENT_IDS,
   resolveAgentSkillContextSourceKeysV1,
   validateAgentSkillDefinitionsV1,
   type AgentSkillDefinitionV1,
@@ -27,7 +28,7 @@ function contractFor(tasks: Parameters<typeof buildMasterAgentRunContractV1>[0][
 describe('R-HARNESS13 · Agent Skill 单一事实源', () => {
   it('每个领域 Agent 有且仅有一个默认 Skill，全部读写都能通过三注册表校验', () => {
     expect(() => validateAgentSkillDefinitionsV1(AGENT_SKILLS)).not.toThrow()
-    expect(AGENT_SKILLS.filter(skill => skill.defaultForAgent)).toHaveLength(5)
+    expect(AGENT_SKILLS.filter(skill => skill.defaultForAgent)).toHaveLength(REGISTERED_AGENT_IDS.length)
     expect(AGENT_SKILLS.map(skill => skill.id)).toEqual(expect.arrayContaining([
       'outline.volumes',
       'outline.chapters',
@@ -36,7 +37,9 @@ describe('R-HARNESS13 · Agent Skill 单一事实源', () => {
       'prose.generate',
       'prose.continue',
     ]))
-    expect(new Set(AGENT_SKILLS.map(skill => skill.owner)).size).toBe(5)
+    expect(new Set(AGENT_SKILLS.map(skill => skill.owner)).size).toBe(REGISTERED_AGENT_IDS.length)
+    expect(REGISTERED_AGENT_IDS.map(agentId => getDefaultAgentSkillV1(agentId).defaultForAgent))
+      .toEqual(REGISTERED_AGENT_IDS.map(() => true))
   })
 
   it('允许同一 Agent 增加非默认 Skill，但拒绝第二个默认 Skill', () => {

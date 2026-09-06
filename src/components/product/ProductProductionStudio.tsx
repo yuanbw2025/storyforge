@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle, Archive, ArchiveRestore, CheckCircle2, CirclePause, FileCheck2, Gamepad2, Loader2,
   GitBranch, Lock, PackageCheck, Play, Plus, RefreshCw, Rocket, ShieldCheck, Sparkles, Square, Unlock, Upload,
@@ -43,30 +43,17 @@ import type {
   ProductProductionHandoffV1, WorldReferenceCatalogEntryV1,
 } from '../../lib/types'
 import { PRODUCT_BROWSER_PERFORMANCE_POLICY_V1 } from '../../lib/product-production/browser-performance'
-import {
-  listCompletedProductBuildPlaythroughsV1,
-  readLatestProductBuildMainRouteGateV1,
-  readLatestProductBrowserPerformanceGateV1,
-  readLatestProductMediaRuntimeGateV1,
-  recordProductBrowserPerformanceMeasurementV1,
-  recordProductBuildMainRoutePlaythroughV1,
-  type CompletedProductBuildPlaythroughV1,
-  type VerifiedProductBrowserPerformanceGateV1,
-  type VerifiedProductMainRoutePlaythroughGateV1,
-  type VerifiedProductMediaRuntimeGateV1,
+import type {
+  CompletedProductBuildPlaythroughV1,
+  VerifiedProductBrowserPerformanceGateV1,
+  VerifiedProductMainRoutePlaythroughGateV1,
+  VerifiedProductMediaRuntimeGateV1,
+  VerifiedTextAdventureHumanVisualReviewGateV1,
 } from '../../lib/product-production/quality-receipts'
-import {
-  runInAppBrowserPerformanceLabV1,
-  type InAppBrowserPerformanceLabProgressV1,
-} from '../../lib/product-production/in-app-browser-performance-lab'
+import type { InAppBrowserPerformanceLabProgressV1 } from '../../lib/product-production/in-app-browser-performance-lab'
 import { parseProductProductionHandoffV1 } from '../../lib/product-production/handoff'
-import TtrpgProductionWizard, {
-  createDefaultTtrpgProductionWizardValueV2,
-  toTtrpgProductionBriefDraftInputV2,
-  type TtrpgProductionWizardValueV2,
-} from '../ttrpg/TtrpgProductionWizard'
+import type { TtrpgProductionWizardValueV2 } from '../ttrpg/TtrpgProductionWizard'
 import TtrpgCampaignProposalSelector from '../ttrpg/TtrpgCampaignProposalSelector'
-import { generateTtrpgCampaignProposalCandidateV2 } from '../../lib/ttrpg/campaign-proposal-harness'
 import TextAdventureProductionWizard, {
   createDefaultTextAdventureProductionWizardValueV1,
   toTextAdventureProductionBriefDraftV1,
@@ -90,6 +77,10 @@ interface CommandActivityV1 {
   status: 'pending' | 'succeeded' | 'conflict'
   detail: string
 }
+
+const loadProductQualityReceiptsV1 = () => import('../../lib/product-production/quality-receipts')
+const loadTtrpgProductionWizardV2 = () => import('../ttrpg/TtrpgProductionWizard')
+const TtrpgProductionWizard = lazy(loadTtrpgProductionWizardV2)
 
 const SOURCE_SELECTION_FACETS = [
   ['storySources', 'storyResourceKeys', '故事来源'],
@@ -192,8 +183,10 @@ function reviewArtifactLabel(key: string): string {
     'media.requirements': '美术需求清单',
     'media.visual-bible': '冻结视觉圣经与角色锚点',
     'media.anchor-decision': '角色视觉锚点作者确认回执',
+    'media.audit': '美术需求、素材与运行引用审计',
     'runtime.package': '装配后的可玩运行包',
     'quality.autoplay': '确定性自动游玩报告',
+    'quality.visual-review': '独立多模态视觉质量审查',
     'quality.report': '静态检查与自动质量报告',
     'quality.playtest-plan': '真人试玩与发布验证计划',
   } as Record<string, string>)[key] ?? key
@@ -384,9 +377,7 @@ export default function ProductProductionStudio(props: {
   )
   const [audioLevel, setAudioLevel] = useState<'none' | 'music-sfx'>(initialProduct === 'avg' ? 'music-sfx' : 'none')
   const [confirmTtrpgDefaultMappings, setConfirmTtrpgDefaultMappings] = useState(false)
-  const [ttrpgWizard, setTtrpgWizard] = useState<TtrpgProductionWizardValueV2>(
-    createDefaultTtrpgProductionWizardValueV2,
-  )
+  const [ttrpgWizard, setTtrpgWizard] = useState<TtrpgProductionWizardValueV2 | null>(null)
   const [textAdventureWizard, setTextAdventureWizard] = useState<TextAdventureProductionWizardValueV1>(
     () => createDefaultTextAdventureProductionWizardValueV1(initialProduct === 'text-adventure' ? 'short-arc' : 'scene'),
   )
@@ -403,6 +394,10 @@ export default function ProductProductionStudio(props: {
   const [playthroughGateError, setPlaythroughGateError] = useState('')
   const [mediaRuntimeGate, setMediaRuntimeGate] = useState<VerifiedProductMediaRuntimeGateV1 | null>(null)
   const [mediaRuntimeGateError, setMediaRuntimeGateError] = useState('')
+  const [humanVisualGate, setHumanVisualGate] = useState<VerifiedTextAdventureHumanVisualReviewGateV1 | null>(null)
+  const [humanVisualGateError, setHumanVisualGateError] = useState('')
+  const [humanVisualDecisions, setHumanVisualDecisions] = useState<Record<string, 'approved' | 'rejected' | null>>({})
+  const [humanVisualNotes, setHumanVisualNotes] = useState<Record<string, string>>({})
   const [completedPlaythroughs, setCompletedPlaythroughs] = useState<CompletedProductBuildPlaythroughV1[]>([])
   const [reviewArtifacts, setReviewArtifacts] = useState<ProductProductionReviewArtifactV1[]>([])
   const [mediaAssets, setMediaAssets] = useState<TextAdventureMediaAssetV1[]>([])
@@ -466,6 +461,10 @@ export default function ProductProductionStudio(props: {
       setPlaythroughGateError('')
       setMediaRuntimeGate(null)
       setMediaRuntimeGateError('')
+      setHumanVisualGate(null)
+      setHumanVisualGateError('')
+      setHumanVisualDecisions({})
+      setHumanVisualNotes({})
       setCompletedPlaythroughs([])
       setReviewArtifacts([])
       setMediaAssets([])
@@ -479,15 +478,17 @@ export default function ProductProductionStudio(props: {
       ? await readProductProductionProgressV1({ scope, productionId: desired })
       : null)
     if (nextDetails.build) {
+      const qualityReceipts = await loadProductQualityReceiptsV1()
       setReviewArtifacts(await listProductProductionReviewArtifactsV1({
         scope,
         buildId: nextDetails.build.id!,
       }))
-      setMediaAssets(nextDetails.production.productType === 'text-adventure'
+      const nextMediaAssets = nextDetails.production.productType === 'text-adventure'
         ? await listTextAdventureMediaAssetsV1({ scope, buildId: nextDetails.build.id! })
-        : [])
+        : []
+      setMediaAssets(nextMediaAssets)
       try {
-        setPerformanceGate(await readLatestProductBrowserPerformanceGateV1({
+        setPerformanceGate(await qualityReceipts.readLatestProductBrowserPerformanceGateV1({
           scope, productBuildId: nextDetails.build.id!,
         }))
         setPerformanceGateError('')
@@ -496,7 +497,7 @@ export default function ProductProductionStudio(props: {
         setPerformanceGateError(cause instanceof Error ? cause.message : String(cause))
       }
       try {
-        setMediaRuntimeGate(await readLatestProductMediaRuntimeGateV1({
+        setMediaRuntimeGate(await qualityReceipts.readLatestProductMediaRuntimeGateV1({
           scope, productBuildId: nextDetails.build.id!,
         }))
         setMediaRuntimeGateError('')
@@ -506,7 +507,7 @@ export default function ProductProductionStudio(props: {
       }
       let nextPlaythroughError = ''
       try {
-        setPlaythroughGate(await readLatestProductBuildMainRouteGateV1({
+        setPlaythroughGate(await qualityReceipts.readLatestProductBuildMainRouteGateV1({
           scope, productBuildId: nextDetails.build.id!,
         }))
       } catch (cause) {
@@ -514,7 +515,7 @@ export default function ProductProductionStudio(props: {
         nextPlaythroughError = cause instanceof Error ? cause.message : String(cause)
       }
       try {
-        setCompletedPlaythroughs(await listCompletedProductBuildPlaythroughsV1({
+        setCompletedPlaythroughs(await qualityReceipts.listCompletedProductBuildPlaythroughsV1({
           scope, productBuildId: nextDetails.build.id!,
         }))
       } catch (cause) {
@@ -523,6 +524,40 @@ export default function ProductProductionStudio(props: {
         nextPlaythroughError = [nextPlaythroughError, message].filter(Boolean).join('；')
       }
       setPlaythroughGateError(nextPlaythroughError)
+      let nextBrief: ProductProductionBriefV3 | null = null
+      try { nextBrief = nextDetails.brief ? JSON.parse(nextDetails.brief.briefJson) as ProductProductionBriefV3 : null }
+      catch { nextBrief = null }
+      const humanVisualRequired = nextDetails.production.productType === 'text-adventure'
+        && nextBrief?.qualityProfile === 'commercial-candidate'
+        && nextMediaAssets.length > 0
+        && ['preview-ready', 'release-ready'].includes(nextDetails.build.status)
+      if (humanVisualRequired) {
+        try {
+          const nextHumanVisualGate = await qualityReceipts.readLatestTextAdventureHumanVisualReviewGateV1({
+            scope, productBuildId: nextDetails.build.id!,
+          })
+          setHumanVisualGate(nextHumanVisualGate)
+          setHumanVisualGateError('')
+          setHumanVisualDecisions(Object.fromEntries(nextMediaAssets.map(asset => [
+            asset.artifactKey,
+            nextHumanVisualGate?.evidence.assets.find(item => item.artifactKey === asset.artifactKey)?.decision ?? null,
+          ])))
+          setHumanVisualNotes(Object.fromEntries(nextMediaAssets.map(asset => [
+            asset.artifactKey,
+            nextHumanVisualGate?.evidence.assets.find(item => item.artifactKey === asset.artifactKey)?.note ?? '',
+          ])))
+        } catch (cause) {
+          setHumanVisualGate(null)
+          setHumanVisualGateError(cause instanceof Error ? cause.message : String(cause))
+          setHumanVisualDecisions(Object.fromEntries(nextMediaAssets.map(asset => [asset.artifactKey, null])))
+          setHumanVisualNotes(Object.fromEntries(nextMediaAssets.map(asset => [asset.artifactKey, ''])))
+        }
+      } else {
+        setHumanVisualGate(null)
+        setHumanVisualGateError('')
+        setHumanVisualDecisions(Object.fromEntries(nextMediaAssets.map(asset => [asset.artifactKey, null])))
+        setHumanVisualNotes(Object.fromEntries(nextMediaAssets.map(asset => [asset.artifactKey, ''])))
+      }
     } else {
       setPerformanceGate(null)
       setPerformanceGateError('')
@@ -530,6 +565,10 @@ export default function ProductProductionStudio(props: {
       setPlaythroughGateError('')
       setMediaRuntimeGate(null)
       setMediaRuntimeGateError('')
+      setHumanVisualGate(null)
+      setHumanVisualGateError('')
+      setHumanVisualDecisions({})
+      setHumanVisualNotes({})
       setCompletedPlaythroughs([])
       setReviewArtifacts([])
       setMediaAssets([])
@@ -537,6 +576,13 @@ export default function ProductProductionStudio(props: {
   }, [allowedProducts, initialSource, onProductSelected, scope, selectedProductionId])
 
   useEffect(() => { void refresh() }, [props.scope.projectId, props.scope.worldId, props.scope.workId]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    let active = true
+    void loadTtrpgProductionWizardV2().then(module => {
+      if (active) setTtrpgWizard(current => current ?? module.createDefaultTtrpgProductionWizardValueV2())
+    })
+    return () => { active = false }
+  }, [])
   useEffect(() => () => {
     queuedProductionIdRef.current = null
     productionAbort.current?.abort('product-production-studio-unmounted')
@@ -585,6 +631,8 @@ export default function ProductProductionStudio(props: {
 
   const compileBrief = () => run(async () => {
     if (worldReleaseId == null || !suggestionKey) throw new Error('请选择 WorldRelease 与游戏起点。')
+    if (productType === 'ttrpg' && !ttrpgWizard) throw new Error('跑团创建向导仍在载入，请稍后重试。')
+    const ttrpgWizardModule = productType === 'ttrpg' ? await loadTtrpgProductionWizardV2() : null
     const next = await compileProductProductionBriefV3({
       scope: props.scope, worldReleaseId, suggestionKey, productType, qualityProfile,
       scale, visualLevel, audioLevel, playerRole, openingSituation,
@@ -593,7 +641,7 @@ export default function ProductProductionStudio(props: {
       forbiddenChanges: nonEmptyLines(forbiddenChangesText),
       contentBoundaries: nonEmptyLines(contentBoundariesText),
       confirmTtrpgDefaultMappings: productType === 'ttrpg' && confirmTtrpgDefaultMappings,
-      ttrpg: productType === 'ttrpg' ? toTtrpgProductionBriefDraftInputV2({
+      ttrpg: productType === 'ttrpg' && ttrpgWizard && ttrpgWizardModule ? ttrpgWizardModule.toTtrpgProductionBriefDraftInputV2({
         value: ttrpgWizard,
         sourceOptions,
         sourceSelection,
@@ -615,6 +663,7 @@ export default function ProductProductionStudio(props: {
     const sourceHash = draft.source.worldContentHash
     setCampaignProposalRunning(true)
     try {
+      const { generateTtrpgCampaignProposalCandidateV2 } = await import('../../lib/ttrpg/campaign-proposal-harness')
       const result = await generateTtrpgCampaignProposalCandidateV2({
         scope: props.scope,
         worldReleaseId: draft.source.worldReleaseId,
@@ -681,7 +730,7 @@ export default function ProductProductionStudio(props: {
         setMessage(result.buildStatus === 'release-ready'
           ? '自动制作完成：Build 已通过硬门与媒资覆盖门，可以预览并原子发布。'
           : result.buildStatus === 'preview-ready'
-            ? '自动制作完成：Build 已可试玩；商业候选需完成真实浏览器性能、主路线试玩以及所需媒资自动解码回执后才可发布。'
+            ? '自动制作完成：Build 已可试玩；商业候选还需完成真实浏览器性能、主路线试玩、媒资自动解码，并在有图时完成独立 Visual QA 与作者逐图确认后才可发布。'
             : '调度已停在可恢复边界；请查看任务状态和阻塞原因。')
       }
     } catch (cause) {
@@ -790,7 +839,8 @@ export default function ProductProductionStudio(props: {
       : /Chrome\//.test(userAgent) ? 'chromium'
         : /Firefox\//.test(userAgent) ? 'firefox'
           : /Safari\//.test(userAgent) ? 'safari' : 'browser'
-    await recordProductBuildMainRoutePlaythroughV1({
+    const qualityReceipts = await loadProductQualityReceiptsV1()
+    await qualityReceipts.recordProductBuildMainRoutePlaythroughV1({
       scope: props.scope,
       productBuildId: details.build.id!,
       productRuntimeSessionId: candidate.sessionId,
@@ -809,6 +859,32 @@ export default function ProductProductionStudio(props: {
     setMessage(`已确认主路线试玩：${candidate.choiceCount} 次选择到达结局 ${candidate.endingKey}，事件流与 Build hash 已冻结。`)
   }, '确认主路线试玩')
 
+  const confirmHumanVisualReview = () => run(async () => {
+    if (!details?.build || details.production.productType !== 'text-adventure') {
+      throw new Error('缺少当前文字冒险 Build。')
+    }
+    const decisions = mediaAssets.map(asset => ({
+      assetKey: asset.assetKey,
+      decision: humanVisualDecisions[asset.artifactKey],
+      note: humanVisualNotes[asset.artifactKey] ?? '',
+    }))
+    if (decisions.some(item => item.decision == null)) throw new Error('请先逐张接受或退回当前 Build 的全部图片。')
+    const qualityReceipts = await loadProductQualityReceiptsV1()
+    const verified = await qualityReceipts.recordTextAdventureHumanVisualReviewV1({
+      scope: props.scope,
+      productBuildId: details.build.id!,
+      decisions: decisions.map(item => ({
+        assetKey: item.assetKey,
+        decision: item.decision as 'approved' | 'rejected',
+        note: item.note,
+      })),
+    })
+    await refresh(details.production.id)
+    setMessage(verified.evidence.passed
+      ? `作者已逐图确认 ${verified.evidence.assets.length} 张冻结图片；审美决定和每图 hash 已写入不可变回执。`
+      : `作者退回了 ${verified.evidence.assets.filter(asset => asset.decision === 'rejected').length} 张图片；当前 Build 保留用于审计，但不能发布。`)
+  }, '冻结逐图审查回执')
+
   const startBrowserPerformanceLab = async () => {
     if (!details?.build || !performanceLabHost.current) {
       setError('缺少当前 Build 或性能采样舞台。')
@@ -822,11 +898,13 @@ export default function ProductProductionStudio(props: {
     setPerformanceLabRunning(true); setPerformanceLabProgress(null); setError(''); setMessage('')
     setCommandActivity({ label: '30 分钟浏览器性能验收', status: 'pending', detail: '正在预热真实 Build 媒资与浏览器渲染舞台…' })
     try {
+      const { runInAppBrowserPerformanceLabV1 } = await import('../../lib/product-production/in-app-browser-performance-lab')
       const measurement = await runInAppBrowserPerformanceLabV1({
         scope: props.scope, productBuildId: buildId, host: performanceLabHost.current,
         signal: controller.signal, onProgress: setPerformanceLabProgress,
       })
-      const verified = await recordProductBrowserPerformanceMeasurementV1({
+      const qualityReceipts = await loadProductQualityReceiptsV1()
+      const verified = await qualityReceipts.recordProductBrowserPerformanceMeasurementV1({
         scope: props.scope, productBuildId: buildId, measurement,
       })
       await refresh(productionId)
@@ -1007,14 +1085,31 @@ export default function ProductProductionStudio(props: {
     && (selectedBrief?.media.requiredMediaKinds.length ?? 0) > 0
   const commercialMediaRuntimePassed = !commercialMediaRuntimeRequired
     || mediaRuntimeGate?.gateReceipt.status === 'passed' && mediaRuntimeGate.evidence.passed
+  const visualReviewArtifact = reviewArtifacts.find(artifact => artifact.artifactKey === 'quality.visual-review')
+  const mediaAuditArtifact = reviewArtifacts.find(artifact => artifact.artifactKey === 'media.audit')
+  const visualReviewStatus = visualReviewArtifact?.payload && typeof visualReviewArtifact.payload === 'object'
+    && !Array.isArray(visualReviewArtifact.payload)
+    ? String((visualReviewArtifact.payload as Record<string, unknown>).status ?? '')
+    : ''
+  const mediaAuditPassed = !!mediaAuditArtifact?.payload && typeof mediaAuditArtifact.payload === 'object'
+    && !Array.isArray(mediaAuditArtifact.payload)
+    && (mediaAuditArtifact.payload as Record<string, unknown>).passed === true
+  const commercialHumanVisualRequired = commercialPerformanceRequired
+    && selectedBrief?.intent.productType === 'text-adventure' && mediaAssets.length > 0
+  const commercialHumanVisualPassed = !commercialHumanVisualRequired
+    || humanVisualGate?.gateReceipt.status === 'passed' && humanVisualGate.evidence.passed
+  const humanVisualDecisionsComplete = mediaAssets.length > 0 && mediaAssets.every(asset => {
+    const decision = humanVisualDecisions[asset.artifactKey]
+    return decision === 'approved' || decision === 'rejected' && !!humanVisualNotes[asset.artifactKey]?.trim()
+  })
   const commercialQualityPassed = commercialPerformancePassed
-    && commercialPlaythroughPassed && commercialMediaRuntimePassed
+    && commercialPlaythroughPassed && commercialMediaRuntimePassed && commercialHumanVisualPassed
   const capabilityReadiness = inspectProductProductionCapabilityReadinessV1({
     projectId: props.scope.projectId,
   })
   const requestedCommercialImageReady = qualityProfile !== 'commercial-candidate'
     || !['avg', 'ttrpg', 'text-adventure'].includes(productType)
-    || (productType === 'ttrpg' ? ttrpgWizard.maximumGeneratedAssets === 0 : visualLevel === 'none')
+    || (productType === 'ttrpg' ? ttrpgWizard?.maximumGeneratedAssets === 0 : visualLevel === 'none')
     || capabilityReadiness.image.ready || capabilityReadiness.mediaRelayReady
   const requestedCommercialAudioReady = qualityProfile !== 'commercial-candidate'
     || productType !== 'avg' || audioLevel === 'none' || capabilityReadiness.mediaRelayReady
@@ -1047,16 +1142,16 @@ export default function ProductProductionStudio(props: {
         <header className="mb-6 border-b border-border pb-5"><small className="font-mono text-[9px] tracking-widest text-accent">CONSULT → BRIEF → AUTHORIZE</small><h1 className="mt-2 font-serif text-2xl">从冻结世界版本开始制作</h1><p className="mt-2 max-w-3xl text-xs leading-6 text-text-muted">先选择来源和起点，系统生成可审查 Brief。只有点击“保存 Brief”并再次“授权开始”后，才会创建 Build。</p></header>
         <section className="grid gap-4 rounded border border-border bg-bg-elevated p-5 md:grid-cols-2">
           <label className="grid gap-2 text-[10px] text-text-muted">冻结 WorldRelease<select aria-label="冻结 WorldRelease" value={worldReleaseId ?? ''} onChange={event => { setWorldReleaseId(Number(event.target.value) || null); setSuggestions([]); setSourceOptions(null); setSelectionDefaults({}); setSourceSelection(null); setDraft(null) }} className="rounded border border-border bg-bg-base p-2 text-xs text-text-primary">{releases.map(release => <option key={release.reference.releaseUid} value={release.reference.localReleaseRecordId}>v{release.reference.releaseVersion} · {release.label}</option>)}</select></label>
-          <label className="grid gap-2 text-[10px] text-text-muted">产品形态<select aria-label="产品形态" disabled={props.allowedProducts.length === 1} value={productType} onChange={event => { const next = event.target.value as SupportedProduct; if (!props.allowedProducts.includes(next)) return; const nextScale = next === 'text-adventure' ? 'short-arc' : 'scene'; setProductType(next); setScale(nextScale); setTextAdventureWizard(createDefaultTextAdventureProductionWizardValueV1(nextScale)); props.onProductSelected?.(next); setVisualLevel(next === 'avg' || next === 'ttrpg' || next === 'text-adventure' ? 'key-scenes' : 'none'); setAudioLevel(next === 'avg' ? 'music-sfx' : 'none'); setConfirmTtrpgDefaultMappings(false); setTtrpgWizard(createDefaultTtrpgProductionWizardValueV2()); setDraft(null) }} className="rounded border border-border bg-bg-base p-2 text-xs text-text-primary disabled:opacity-70">{props.allowedProducts.map(kind => <option key={kind} value={kind}>{PRODUCT_LABELS[kind]}</option>)}</select><span>{productType === 'ttrpg' ? '跑团使用自己的需求适配器、规则、战役、媒资和运行协议；世界事实只从冻结 WorldRelease 渐进读取。' : productType === 'text-adventure' ? '文字冒险拥有独立的叙事、规则、媒资、Build、Release 与运行状态；只读引用冻结 WorldRelease。' : '每种产品使用自己的需求适配器和生产图，共享中立世界协议但不共享业务表。'}</span></label>
+          <label className="grid gap-2 text-[10px] text-text-muted">产品形态<select aria-label="产品形态" disabled={props.allowedProducts.length === 1} value={productType} onChange={event => { const next = event.target.value as SupportedProduct; if (!props.allowedProducts.includes(next)) return; const nextScale = next === 'text-adventure' ? 'short-arc' : 'scene'; setProductType(next); setScale(nextScale); setTextAdventureWizard(createDefaultTextAdventureProductionWizardValueV1(nextScale)); props.onProductSelected?.(next); setVisualLevel(next === 'avg' || next === 'ttrpg' || next === 'text-adventure' ? 'key-scenes' : 'none'); setAudioLevel(next === 'avg' ? 'music-sfx' : 'none'); setConfirmTtrpgDefaultMappings(false); void loadTtrpgProductionWizardV2().then(module => setTtrpgWizard(module.createDefaultTtrpgProductionWizardValueV2())); setDraft(null) }} className="rounded border border-border bg-bg-base p-2 text-xs text-text-primary disabled:opacity-70">{props.allowedProducts.map(kind => <option key={kind} value={kind}>{PRODUCT_LABELS[kind]}</option>)}</select><span>{productType === 'ttrpg' ? '跑团使用自己的需求适配器、规则、战役、媒资和运行协议；世界事实只从冻结 WorldRelease 渐进读取。' : productType === 'text-adventure' ? '文字冒险拥有独立的叙事、规则、媒资、Build、Release 与运行状态；只读引用冻结 WorldRelease。' : '每种产品使用自己的需求适配器和生产图，共享中立世界协议但不共享业务表。'}</span></label>
           <label className="grid gap-2 text-[10px] text-text-muted">制作质量<select value={qualityProfile} onChange={event => { setQualityProfile(event.target.value as ProductProductionBriefV3['qualityProfile']); setDraft(null) }} className="rounded border border-border bg-bg-base p-2 text-xs text-text-primary"><option value="prototype">原型 · 内置占位素材</option><option value="internal">内部评审 · Agnes 就绪则生成图片</option><option value="commercial-candidate">商业候选 · 生成正式图片并完成质量门</option></select><span>始终复用“设置”中的全局 AI 配置。Agnes 文字与图片共用同一个 API Key，图片自动切换到专用模型，不会要求你再次填写。</span></label>
           <label className="grid gap-2 text-[10px] text-text-muted">游戏标题<input value={title} onChange={event => setTitle(event.target.value)} className="rounded border border-border bg-bg-base p-2 text-xs text-text-primary" placeholder="会谈后可修改" /></label>
-          <div className={`rounded border p-3 text-[10px] leading-5 md:col-span-2 ${capabilityReadiness.text.ready && requestedCommercialImageReady && requestedCommercialAudioReady ? 'border-success/30 bg-success/5 text-success' : 'border-error/30 bg-error/5 text-error'}`} data-testid="product-production-capability-readiness"><strong className="block text-xs">{capabilityReadiness.text.ready ? '文本生成能力已就绪' : '文本生成能力未就绪'}</strong><span>{capabilityReadiness.text.ready ? `将直接复用 ${capabilityReadiness.text.provider} / ${capabilityReadiness.text.model}，无需再次填写 API Key。` : capabilityReadiness.text.issue}</span>{['avg', 'ttrpg', 'text-adventure'].includes(productType) && (productType === 'ttrpg' ? ttrpgWizard.maximumGeneratedAssets > 0 : visualLevel !== 'none') && <span className="block">{capabilityReadiness.image.ready ? `图片能力已就绪：复用同一 Agnes Key，自动调用 ${capabilityReadiness.image.model}。` : capabilityReadiness.mediaRelayReady ? `Agnes 图片不可用，将使用已绑定媒体中继${capabilityReadiness.mediaRelayOrigin ? `：${capabilityReadiness.mediaRelayOrigin}` : ''}。` : capabilityReadiness.image.issue}</span>}{productType === 'avg' && audioLevel !== 'none' && <span className="block">{capabilityReadiness.mediaRelayReady ? `音乐与音效能力已绑定${capabilityReadiness.mediaRelayOrigin ? `：${capabilityReadiness.mediaRelayOrigin}` : ''}。` : 'Agnes 当前公开接口未提供独立音乐/SFX 生成；选择商业音频时仍需绑定音频能力，或改为静音。'}</span>}</div>
+          <div className={`rounded border p-3 text-[10px] leading-5 md:col-span-2 ${capabilityReadiness.text.ready && requestedCommercialImageReady && requestedCommercialAudioReady ? 'border-success/30 bg-success/5 text-success' : 'border-error/30 bg-error/5 text-error'}`} data-testid="product-production-capability-readiness"><strong className="block text-xs">{capabilityReadiness.text.ready ? '文本生成能力已就绪' : '文本生成能力未就绪'}</strong><span>{capabilityReadiness.text.ready ? `将直接复用 ${capabilityReadiness.text.provider} / ${capabilityReadiness.text.model}，无需再次填写 API Key。` : capabilityReadiness.text.issue}</span>{['avg', 'ttrpg', 'text-adventure'].includes(productType) && (productType === 'ttrpg' ? (ttrpgWizard?.maximumGeneratedAssets ?? 1) > 0 : visualLevel !== 'none') && <span className="block">{capabilityReadiness.image.ready ? `图片能力已就绪：复用同一 Agnes Key，自动调用 ${capabilityReadiness.image.model}。` : capabilityReadiness.mediaRelayReady ? `Agnes 图片不可用，将使用已绑定媒体中继${capabilityReadiness.mediaRelayOrigin ? `：${capabilityReadiness.mediaRelayOrigin}` : ''}。` : capabilityReadiness.image.issue}</span>}{productType === 'avg' && audioLevel !== 'none' && <span className="block">{capabilityReadiness.mediaRelayReady ? `音乐与音效能力已绑定${capabilityReadiness.mediaRelayOrigin ? `：${capabilityReadiness.mediaRelayOrigin}` : ''}。` : 'Agnes 当前公开接口未提供独立音乐/SFX 生成；选择商业音频时仍需绑定音频能力，或改为静音。'}</span>}</div>
           <label className="grid gap-2 text-[10px] text-text-muted">玩家身份 / 主角<input value={playerRole} maxLength={300} onChange={event => { setPlayerRole(event.target.value); setDraft(null) }} className="rounded border border-border bg-bg-base p-2 text-xs text-text-primary" placeholder="例如：扮演港口守灯人；或与某角色同行" /></label>
           <label className="grid gap-2 text-[10px] text-text-muted">游戏规模<select aria-label="游戏规模" value={scale} onChange={event => { const next = event.target.value as ProductProductionScaleV1['scope']; setScale(next); if (productType === 'text-adventure') setTextAdventureWizard(createDefaultTextAdventureProductionWizardValueV1(next)); setDraft(null) }} className="rounded border border-border bg-bg-base p-2 text-xs text-text-primary"><option value="scene">体验切片 · 约 20 分钟</option><option value="short-arc">完整短篇 · 约 60 分钟</option><option value="chapter">完整章节 · 约 120 分钟</option>{productType !== 'text-adventure' && <><option value="multi-chapter">多章节</option><option value="campaign">长线战役</option></>}</select><span>{productType === 'text-adventure' ? '当前正式生产限定 20–120 分钟，优先保证一条完整主线、可解释分支和足量内容。' : '规模会冻结到 Brief 并约束预算和内容量。'}</span></label>
           <label className="grid gap-2 text-[10px] text-text-muted md:col-span-2">你想玩的第一幕与核心目标<textarea value={openingSituation} maxLength={2000} rows={4} onChange={event => { setOpeningSituation(event.target.value); setDraft(null) }} className="rounded border border-border bg-bg-base p-3 text-xs text-text-primary" placeholder="例如：主角在港口封锁前收到失踪导师的信号，必须决定先救人还是公开真相。" /><span>这是后续内容、美术和音频拆分共同遵守的用户目标，不会被 Agent 自行替换。</span></label>
           <label className="grid gap-2 text-[10px] text-text-muted">视觉目标<select disabled={!['avg', 'ttrpg', 'text-adventure'].includes(productType)} value={visualLevel} onChange={event => { setVisualLevel(event.target.value as 'none' | 'key-scenes' | 'illustrated'); setDraft(null) }} className="rounded border border-border bg-bg-base p-2 text-xs text-text-primary disabled:opacity-50"><option value="none">纯文字</option><option value="key-scenes">关键插图</option>{productType === 'text-adventure' && <option value="illustrated">丰富插图</option>}</select><span>{productType === 'text-adventure' ? qualityProfile === 'prototype' ? '主支线拆分后生成视觉圣经和需求清单；占位素材失败时完整降级为纯文字。' : '生产期生成并冻结产品自有插图，玩家界面按叙事节拍加载；首版不在运行期动态出图。' : productType === 'avg' || productType === 'ttrpg' ? qualityProfile === 'prototype' ? '内容会自主拆分美术需求；原型档使用明确标记的安全占位素材。' : '内容拆分需求后，直接复用全局图片能力并行制作并接入玩家界面。' : '当前产品以专用文字舞台为主。'}</span></label>
           <label className="grid gap-2 text-[10px] text-text-muted">音频目标<select disabled={productType !== 'avg'} value={audioLevel} onChange={event => { setAudioLevel(event.target.value as 'none' | 'music-sfx'); setDraft(null) }} className="rounded border border-border bg-bg-base p-2 text-xs text-text-primary disabled:opacity-50"><option value="none">静音</option><option value="music-sfx">主题音 + 关键音效</option></select><span>{audioLevel === 'music-sfx' ? qualityProfile === 'commercial-candidate' ? '音乐与音效需要独立音频能力，并和内容、美术并行，完成后自动接入 Cue。' : '音频与内容、美术并行；未绑定外部音频时使用明确标记的程序化 WAV。' : '不制作音频，游戏仍可完整通关。'}</span></label>
-          {productType === 'ttrpg' && <><TtrpgProductionWizard scope={props.scope} value={ttrpgWizard} sourceOptions={sourceOptions} sourceSelection={sourceSelection} onChange={next => { setTtrpgWizard(next); setConfirmTtrpgDefaultMappings(next.confirmAll); setDraft(null) }} /><label className="flex items-start gap-2 rounded border border-border bg-bg-base p-3 text-[10px] leading-5 text-text-muted md:col-span-2"><input type="checkbox" checked={confirmTtrpgDefaultMappings} onChange={event => { setConfirmTtrpgDefaultMappings(event.target.checked); setTtrpgWizard(current => ({ ...current, confirmAll: event.target.checked })); setDraft(null) }} className="mt-1" /><span><strong className="block text-xs text-text-primary">确认第一方规则默认映射</strong>同时确认九步向导末页列出的世界边界、规则许可、AI 身份披露和媒资权利；未确认时 Brief 保持阻塞。</span></label></>}
+          {productType === 'ttrpg' && <>{ttrpgWizard ? <Suspense fallback={<div className="rounded border border-border bg-bg-base p-4 text-xs text-text-muted md:col-span-2">正在载入跑团九步向导…</div>}><TtrpgProductionWizard scope={props.scope} value={ttrpgWizard} sourceOptions={sourceOptions} sourceSelection={sourceSelection} onChange={next => { setTtrpgWizard(next); setConfirmTtrpgDefaultMappings(next.confirmAll); setDraft(null) }} /></Suspense> : <div className="rounded border border-border bg-bg-base p-4 text-xs text-text-muted md:col-span-2">正在载入跑团九步向导…</div>}<label className="flex items-start gap-2 rounded border border-border bg-bg-base p-3 text-[10px] leading-5 text-text-muted md:col-span-2"><input type="checkbox" checked={confirmTtrpgDefaultMappings} disabled={!ttrpgWizard} onChange={event => { setConfirmTtrpgDefaultMappings(event.target.checked); setTtrpgWizard(current => current ? ({ ...current, confirmAll: event.target.checked }) : current); setDraft(null) }} className="mt-1" /><span><strong className="block text-xs text-text-primary">确认第一方规则默认映射</strong>同时确认九步向导末页列出的世界边界、规则许可、AI 身份披露和媒资权利；未确认时 Brief 保持阻塞。</span></label></>}
           {productType === 'text-adventure' && <TextAdventureProductionWizard value={textAdventureWizard} onChange={next => { setTextAdventureWizard(next); setDraft(null) }} />}
           <details className="rounded border border-border bg-bg-base p-3 text-[10px] text-text-muted md:col-span-2"><summary className="cursor-pointer text-xs text-text-primary">内容边界与世界约束（可选）</summary><div className="mt-3 grid gap-3 md:grid-cols-3"><label className="grid gap-1">必须保留的事实<textarea rows={3} value={requiredFactsText} onChange={event => { setRequiredFactsText(event.target.value); setDraft(null) }} placeholder="每行一项" className="rounded border border-border bg-bg-elevated p-2" /></label><label className="grid gap-1">禁止改变<textarea rows={3} value={forbiddenChangesText} onChange={event => { setForbiddenChangesText(event.target.value); setDraft(null) }} placeholder="每行一项" className="rounded border border-border bg-bg-elevated p-2" /></label><label className="grid gap-1">内容边界<textarea rows={3} value={contentBoundariesText} onChange={event => { setContentBoundariesText(event.target.value); setDraft(null) }} placeholder="每行一项" className="rounded border border-border bg-bg-elevated p-2" /></label></div></details>
           <div className="flex flex-wrap gap-2 md:col-span-2"><button disabled={busy || worldReleaseId == null} onClick={consult} className="flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white disabled:opacity-40"><Sparkles className="h-3.5 w-3.5" />分析可玩起点</button>{suggestionKey && <button disabled={busy || !openingSituation.trim() || !playerRole.trim()} onClick={compileBrief} className="flex items-center gap-2 rounded border border-accent/40 bg-accent/10 px-4 py-2 text-xs text-accent disabled:opacity-40"><FileCheck2 className="h-3.5 w-3.5" />生成严格 Brief</button>}{draft && <button disabled={busy || !title.trim()} onClick={saveBrief} className="flex items-center gap-2 rounded border border-success/40 bg-success/10 px-4 py-2 text-xs text-success"><ShieldCheck className="h-3.5 w-3.5" />保存 Brief revision</button>}</div>
@@ -1182,7 +1277,12 @@ export default function ProductProductionStudio(props: {
           <p className="mt-3 text-[10px] leading-5 text-text-muted">需要修改时，在下方“继续演化下一版”描述局部目标并只勾选受影响泳道；依赖 hash 未变化的工件会保留，旧 Build 与存档不会被覆盖。</p>
         </section>}
         {details?.production.productType === 'text-adventure' && mediaAssets.length > 0 && <section className="mt-5 rounded border border-border bg-bg-elevated p-5" data-testid="text-adventure-media-authoring">
-          <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-sm font-semibold">插图素材与作者修订</h2><p className="mt-1 max-w-3xl text-[10px] leading-5 text-text-muted">每次替换、锁定、解锁或单项重生成都会派生新 Build；旧 Preview、Release 与存档不会被覆盖。新 Build 只重做目标图片的下游装配、自动游玩和质量门。</p></div><span className="rounded bg-accent/10 px-2 py-1 text-[9px] text-accent">{mediaAssets.length} 张冻结图片</span></div>
+          <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-sm font-semibold">插图素材、独立质检与作者逐图验收</h2><p className="mt-1 max-w-3xl text-[10px] leading-5 text-text-muted">每次替换、锁定、解锁或单项重生成都会派生新 Build；旧 Preview、Release 与存档不会被覆盖。商业候选必须依次通过需求绑定审计、独立多模态 Visual QA 和作者逐图确认，任何一层都不能替代另一层。</p></div><span className="rounded bg-accent/10 px-2 py-1 text-[9px] text-accent">{mediaAssets.length} 张冻结图片</span></div>
+          {commercialHumanVisualRequired && <div className="mt-4 grid gap-2 text-[10px] md:grid-cols-3" data-testid="text-adventure-visual-review-layers">
+            <div className={`rounded border p-3 ${mediaAuditPassed ? 'border-success/30 bg-success/5 text-success' : 'border-error/30 bg-error/5 text-error'}`}><strong>① 需求与绑定审计</strong><span className="mt-1 block">{mediaAuditPassed ? '已通过' : '未通过或缺失'}</span></div>
+            <div className={`rounded border p-3 ${visualReviewStatus === 'passed' ? 'border-success/30 bg-success/5 text-success' : 'border-error/30 bg-error/5 text-error'}`}><strong>② 独立 Visual QA</strong><span className="mt-1 block">{visualReviewStatus === 'passed' ? '已实际观察并通过' : visualReviewStatus || '未通过或缺失'}</span></div>
+            <div className={`rounded border p-3 ${commercialHumanVisualPassed ? 'border-success/30 bg-success/5 text-success' : 'border-accent/30 bg-accent/5 text-accent'}`}><strong>③ 作者逐图确认</strong><span className="mt-1 block">{commercialHumanVisualPassed ? '已冻结不可变回执' : '等待逐张判断'}</span></div>
+          </div>}
           <div className="mt-4 grid gap-3 rounded border border-border bg-bg-base p-3 text-[10px] md:grid-cols-2">
             <label className="grid gap-1"><span>作者图片许可</span><input value={mediaLicense} onChange={event => setMediaLicense(event.target.value)} maxLength={500} className="rounded border border-border bg-bg-surface px-3 py-2" /></label>
             <label className="grid gap-1"><span>权利声明</span><input value={mediaDeclaration} onChange={event => setMediaDeclaration(event.target.value)} maxLength={4000} className="rounded border border-border bg-bg-surface px-3 py-2" /></label>
@@ -1191,10 +1291,12 @@ export default function ProductProductionStudio(props: {
           </div>
           <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">{mediaAssets.map(asset => <article key={`${asset.artifactKey}:${asset.version}`} className="overflow-hidden rounded border border-border bg-bg-base">
             <TextAdventureMediaThumbnail scope={props.scope} asset={asset} />
-            <div className="p-3 text-[10px]"><span className="flex items-center justify-between gap-2"><strong className="text-xs">{String(asset.metadata.name ?? asset.artifactKey)}</strong><em className={`not-italic ${asset.locked ? 'text-accent' : 'text-text-muted'}`}>{asset.locked ? '已锁定' : '可重生成'}</em></span><p className="mt-1 text-text-muted">{asset.artifactKey} · {asset.mimeType} · {formatBytes(asset.byteSize)}</p><p className="mt-1 text-text-muted">{String(asset.metadata.source ?? 'unknown')} · {String(asset.metadata.license ?? asset.rights.license ?? '未声明许可')}</p><code className="mt-1 block text-[9px]" title={asset.contentHash}>{compactHash(asset.contentHash)}</code>
+            <div className="p-3 text-[10px]"><span className="flex items-center justify-between gap-2"><strong className="text-xs">{String(asset.metadata.name ?? asset.artifactKey)}</strong><em className={`not-italic ${asset.locked ? 'text-accent' : 'text-text-muted'}`}>{asset.locked ? '已锁定' : '可重生成'}</em></span><p className="mt-1 text-text-muted">{asset.assetKey} · {asset.artifactKey} · {asset.mimeType} · {formatBytes(asset.byteSize)}</p><p className="mt-1 text-text-muted">{String(asset.metadata.source ?? 'unknown')} · {String(asset.metadata.license ?? asset.rights.license ?? '未声明许可')}</p><code className="mt-1 block text-[9px]" title={asset.contentHash}>{compactHash(asset.contentHash)}</code>
               <div className="mt-3 flex flex-wrap gap-2"><label className={`flex cursor-pointer items-center gap-1 rounded border border-accent/40 px-2 py-1 text-accent ${(busy || productionRunning) ? 'pointer-events-none opacity-40' : ''}`}><Upload className="h-3 w-3" />上传替换<input type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" disabled={busy || productionRunning} onChange={event => { const file = event.target.files?.[0]; event.currentTarget.value = ''; if (file) void reviseMediaAsset(asset, 'upload-replacement', file) }} /></label>{asset.locked ? <button disabled={busy || productionRunning} onClick={() => reviseMediaAsset(asset, 'unlock')} className="flex items-center gap-1 rounded border border-border px-2 py-1 disabled:opacity-40"><Unlock className="h-3 w-3" />解锁</button> : <><button disabled={busy || productionRunning} onClick={() => reviseMediaAsset(asset, 'lock')} className="flex items-center gap-1 rounded border border-border px-2 py-1 disabled:opacity-40"><Lock className="h-3 w-3" />锁定</button><button disabled={busy || productionRunning} onClick={() => reviseMediaAsset(asset, 'regenerate')} className="flex items-center gap-1 rounded border border-border px-2 py-1 disabled:opacity-40"><RefreshCw className="h-3 w-3" />重生成此图</button></>}</div>
+              {commercialHumanVisualRequired && <fieldset className="mt-3 rounded border border-border bg-bg-surface p-3" data-testid={`text-adventure-human-visual-${asset.artifactKey}`}><legend className="px-1 font-semibold">作者对当前冻结图片的判断</legend><div className="flex gap-2"><button type="button" aria-pressed={humanVisualDecisions[asset.artifactKey] === 'approved'} onClick={() => setHumanVisualDecisions(current => ({ ...current, [asset.artifactKey]: 'approved' }))} className={`rounded border px-3 py-1 ${humanVisualDecisions[asset.artifactKey] === 'approved' ? 'border-success bg-success/10 text-success' : 'border-border'}`}>接受此图</button><button type="button" aria-pressed={humanVisualDecisions[asset.artifactKey] === 'rejected'} onClick={() => setHumanVisualDecisions(current => ({ ...current, [asset.artifactKey]: 'rejected' }))} className={`rounded border px-3 py-1 ${humanVisualDecisions[asset.artifactKey] === 'rejected' ? 'border-error bg-error/10 text-error' : 'border-border'}`}>退回修改</button></div><label className="mt-2 grid gap-1"><span>审查备注{humanVisualDecisions[asset.artifactKey] === 'rejected' ? '（退回必填）' : '（可选）'}</span><textarea value={humanVisualNotes[asset.artifactKey] ?? ''} onChange={event => setHumanVisualNotes(current => ({ ...current, [asset.artifactKey]: event.target.value }))} maxLength={2000} rows={2} placeholder="说明构图、角色一致性、剧透、文字伪影或其他问题" className="rounded border border-border bg-bg-base p-2" /></label></fieldset>}
             </div>
           </article>)}</div>
+          {commercialHumanVisualRequired && <div className="mt-4 rounded border border-border bg-bg-base p-4 text-[10px]" data-testid="text-adventure-human-visual-review"><strong className="block">冻结作者逐图审查</strong><p className="mt-1 leading-5 text-text-muted">回执绑定当前 Build、Preview、需求审计、独立 Visual QA、每张 Artifact/Blob hash。任何图片修订都会使旧回执失效。退回决定也会保存，但不会解锁发布。</p>{humanVisualGateError && <p className="mt-2 text-error">当前回执无法复验：{humanVisualGateError}</p>}{humanVisualGate && <p className={`mt-2 ${humanVisualGate.evidence.passed ? 'text-success' : 'text-error'}`}>最新回执：{humanVisualGate.evidence.passed ? '全部接受' : `${humanVisualGate.evidence.assets.filter(asset => asset.decision === 'rejected').length} 张退回`} · {compactHash(humanVisualGate.gateReceipt.receiptHash)}</p>}<button disabled={busy || productionRunning || visualReviewStatus !== 'passed' || !mediaAuditPassed || !humanVisualDecisionsComplete} onClick={confirmHumanVisualReview} className="mt-3 rounded bg-accent px-4 py-2 text-xs text-white disabled:opacity-40">冻结本次逐图审查回执</button></div>}
         </section>}
         {canEvolve && <section className="mt-5 rounded border border-border bg-bg-elevated p-5"><div className="flex items-center gap-2"><GitBranch className="h-4 w-4 text-accent" /><h2 className="text-sm font-semibold">继续演化下一版</h2></div><p className="mt-2 text-[10px] leading-5 text-text-muted">描述希望增加、延续或改变的体验。旧 Build、Release 和存档不会被改写；提交后先生成新的可审查 Brief，不会直接调用模型。</p><textarea value={evolutionGoal} onChange={event => setEvolutionGoal(event.target.value)} maxLength={2000} rows={4} placeholder="例如：从当前结局继续，让配角成为新主角，增加一条调查旧港失踪案的支线，并保留已经发生的选择后果。" className="mt-4 w-full rounded border border-border bg-bg-base p-3 text-xs text-text-primary" /><fieldset className="mt-3 flex flex-wrap gap-3 text-[10px] text-text-muted"><legend className="mb-2">本轮影响范围（未勾选且依赖未变化的产物可复用）</legend>{([['content', '剧情内容'], ['product', '玩法模块'], ['visual', '美术'], ['audio', '音乐/音效'], ['runtime', '装配/运行时']] as const).map(([lane, label]) => <label key={lane} className="flex items-center gap-1.5"><input type="checkbox" checked={evolutionLanes.includes(lane)} onChange={event => setEvolutionLanes(current => event.target.checked ? [...new Set([...current, lane])] : current.filter(item => item !== lane))} />{label}</label>)}</fieldset><button disabled={busy || productionRunning || !evolutionGoal.trim() || evolutionLanes.length === 0} onClick={evolve} className="mt-3 flex items-center gap-2 rounded border border-accent/40 bg-accent/10 px-4 py-2 text-xs text-accent disabled:opacity-40"><GitBranch className="h-3.5 w-3.5" />生成下一轮 Brief</button></section>}
         {compatibility && <section className="mt-5 rounded border border-border bg-bg-elevated p-5" data-testid="product-production-compatibility"><div className="flex items-center justify-between gap-3"><h2 className="text-sm font-semibold">存档兼容报告</h2><strong className={`text-[10px] ${compatibility.level === 'compatible' ? 'text-success' : compatibility.level === 'breaking' ? 'text-error' : 'text-accent'}`}>{compatibility.level === 'compatible' ? '可兼容' : compatibility.level === 'breaking' ? '破坏性变化' : '建议重开'}</strong></div><p className="mt-2 text-[10px] leading-5 text-text-muted">{compatibility.fromBuildNumber == null ? '首个 Build，无旧存档需要迁移。' : `Build #${compatibility.fromBuildNumber} → #${compatibility.toBuildNumber} · ${compatibility.migrationPolicy}`}</p><ul className="mt-3 grid gap-1 text-[10px] text-text-muted">{compatibility.reasons.map(reason => <li key={reason}>· {reason}</li>)}</ul>{compatibility.level === 'breaking' && <p className="mt-3 rounded border border-error/30 bg-error/5 p-3 text-[10px] text-error">旧存档继续固定在旧 packageHash；系统不会静默迁移或覆盖。</p>}</section>}
@@ -1222,7 +1324,8 @@ export default function ProductProductionStudio(props: {
             : <button disabled={busy || productionRunning} onClick={() => void startBrowserPerformanceLab()} className="rounded bg-error px-4 py-2 text-xs text-white disabled:opacity-40">开始 30 分钟商业性能验收</button>}</div>
         </section>}
         {commercialPerformanceRequired && details.build?.status === 'preview-ready' && !commercialPlaythroughPassed && <section className="mt-5 rounded border border-error/30 bg-error/5 p-4 text-[10px] text-error" data-testid="product-production-playthrough-blocker"><strong className="block">商业发布等待作者完成主路线试玩</strong><span className="mt-1 block">{playthroughGateError || (completedPlaythroughs.length > 0 ? `最新完整试玩已到达结局 ${completedPlaythroughs[0].endingKey}；确认后将冻结事件流回执。` : '请点击“试玩未发布 Build”，实际选择到达一个结局，再回到制作页。')}</span>{completedPlaythroughs.length > 0 && !playthroughGateError && <button disabled={busy || productionRunning} onClick={confirmMainRoutePlaythrough} className="mt-3 rounded bg-error px-4 py-2 text-xs text-white disabled:opacity-40">确认本次主路线试玩并冻结回执</button>}</section>}
-        {commercialMediaRuntimeRequired && details.build && <section className="mt-5 rounded border border-border bg-bg-elevated p-5" data-testid="product-production-media-runtime-receipt"><h2 className="text-sm font-semibold">真实浏览器媒资验收</h2><p className="mt-2 text-[10px] leading-5 text-text-muted">打开当前 Build 预览时，系统会自动解码每个冻结图片和音频对象，核对 hash/尺寸/透明度，并从 WebAudio PCM 计算声道、采样率、LUFS、true peak 与循环接缝；不需要作者手工逐张批准。</p>{mediaRuntimeGateError ? <p className="mt-3 rounded border border-error/30 bg-error/5 p-3 text-[10px] text-error">媒资回执无法验证：{mediaRuntimeGateError}</p> : mediaRuntimeGate ? <div className={`mt-3 rounded border p-3 text-[10px] ${mediaRuntimeGate.evidence.passed ? 'border-success/30 bg-success/5 text-success' : 'border-error/30 bg-error/5 text-error'}`}><strong className="block">{mediaRuntimeGate.evidence.passed ? '全部冻结媒资已解码并通过商业规格' : '最新媒资解码或商业规格存在失败'}</strong><span className="mt-1 block">通过 {mediaRuntimeGate.evidence.assets.filter(asset => asset.status === 'decoded' && asset.policyFailures.length === 0).length}/{mediaRuntimeGate.evidence.assets.length} · receipt {compactHash(mediaRuntimeGate.gateReceipt.receiptHash)}</span>{!mediaRuntimeGate.evidence.passed && <span className="mt-1 block">失败：{mediaRuntimeGate.evidence.assets.filter(asset => asset.status === 'failed' || asset.policyFailures.length > 0).map(asset => `${asset.assetKey}:${asset.failureCode ?? asset.policyFailures.join('+')}`).join('、')}</span>}</div> : <p className="mt-3 rounded border border-error/30 bg-error/5 p-3 text-[10px] text-error">商业发布等待媒资浏览器验收。请点击“试玩未发布 Build”；进入{PRODUCT_LABELS[selectedBrief.intent.productType]}后会自动检查，无需额外操作。</p>}</section>}
+        {commercialHumanVisualRequired && details.build?.status === 'preview-ready' && !commercialHumanVisualPassed && <section className="mt-5 rounded border border-error/30 bg-error/5 p-4 text-[10px] text-error" data-testid="text-adventure-human-visual-blocker"><strong className="block">商业发布等待作者逐图确认</strong><span className="mt-1 block">{humanVisualGateError || (humanVisualGate ? `最新回执退回了 ${humanVisualGate.evidence.assets.filter(asset => asset.decision === 'rejected').length} 张图片；请修订后在新 Build 重新审查。` : '请在“插图素材、独立质检与作者逐图验收”中检查每张实际图片并冻结回执。')}</span></section>}
+        {commercialMediaRuntimeRequired && details.build && <section className="mt-5 rounded border border-border bg-bg-elevated p-5" data-testid="product-production-media-runtime-receipt"><h2 className="text-sm font-semibold">真实浏览器媒资验收</h2><p className="mt-2 text-[10px] leading-5 text-text-muted">打开当前 Build 预览时，系统会自动解码每个冻结图片和音频对象，核对 hash/尺寸/透明度，并从 WebAudio PCM 计算声道、采样率、LUFS、true peak 与循环接缝。这里验证的是技术可显示性；逐图审美与内容确认在插图素材区独立完成。</p>{mediaRuntimeGateError ? <p className="mt-3 rounded border border-error/30 bg-error/5 p-3 text-[10px] text-error">媒资回执无法验证：{mediaRuntimeGateError}</p> : mediaRuntimeGate ? <div className={`mt-3 rounded border p-3 text-[10px] ${mediaRuntimeGate.evidence.passed ? 'border-success/30 bg-success/5 text-success' : 'border-error/30 bg-error/5 text-error'}`}><strong className="block">{mediaRuntimeGate.evidence.passed ? '全部冻结媒资已解码并通过商业规格' : '最新媒资解码或商业规格存在失败'}</strong><span className="mt-1 block">通过 {mediaRuntimeGate.evidence.assets.filter(asset => asset.status === 'decoded' && asset.policyFailures.length === 0).length}/{mediaRuntimeGate.evidence.assets.length} · receipt {compactHash(mediaRuntimeGate.gateReceipt.receiptHash)}</span>{!mediaRuntimeGate.evidence.passed && <span className="mt-1 block">失败：{mediaRuntimeGate.evidence.assets.filter(asset => asset.status === 'failed' || asset.policyFailures.length > 0).map(asset => `${asset.assetKey}:${asset.failureCode ?? asset.policyFailures.join('+')}`).join('、')}</span>}</div> : <p className="mt-3 rounded border border-error/30 bg-error/5 p-3 text-[10px] text-error">商业发布等待媒资浏览器验收。请点击“试玩未发布 Build”；进入{PRODUCT_LABELS[selectedBrief.intent.productType]}后会自动检查，无需额外操作。</p>}</section>}
       </>}
     </main>
   </div>

@@ -550,7 +550,7 @@ function professionalTextAdventurePlanningOutputs(
     'content.narrative-arc-plan': {
       schema: 'storyforge.text-adventure-narrative-arc-plan-artifact', version: 1,
       acts, decisions,
-      endings: storyEndings.slice(0, brief.scale.targetEndingCount).map((ending, index) => ({
+      endings: storyEndings.slice(0, brief.scale.targetEndingCount).map(ending => ({
         endingKey: ending.key, sceneKey: sceneKeys[sceneKeys.length - 1],
       })),
     },

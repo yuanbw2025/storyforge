@@ -92,6 +92,7 @@ export interface ProductProductionReviewArtifactV1 {
 }
 
 export interface TextAdventureMediaAssetV1 {
+  assetKey: string
   artifactKey: string
   version: number
   status: 'accepted' | 'carried-forward'
@@ -157,8 +158,10 @@ const AUTHOR_REVIEW_ARTIFACT_KEYS = new Set([
   'media.requirements',
   'media.visual-bible',
   'media.anchor-decision',
+  'media.audit',
   'runtime.package',
   'quality.autoplay',
+  'quality.visual-review',
   'quality.report',
   'quality.playtest-plan',
 ])
@@ -190,9 +193,12 @@ export async function listTextAdventureMediaAssetsV1(input: {
     && row.blobObjectId != null && row.mimeType != null && row.artifactKey.startsWith('media.visual.'))
     .map(row => {
       const metadata = JSON.parse(row.metadataJson) as Record<string, unknown>
+      if (typeof metadata.assetKey !== 'string' || !metadata.assetKey.trim()) {
+        throw new Error(`[product-production-service] 图片缺少稳定 assetKey:${row.artifactKey}`)
+      }
       const revision = metadata.authorRevision
       return {
-        artifactKey: row.artifactKey, version: row.version,
+        assetKey: metadata.assetKey, artifactKey: row.artifactKey, version: row.version,
         status: row.status as 'accepted' | 'carried-forward', contentHash: row.contentHash,
         blobObjectId: row.blobObjectId!, mediaKind: row.mediaKind!, mimeType: row.mimeType!,
         byteSize: row.byteSize, metadata, quality: JSON.parse(row.qualityJson) as Record<string, unknown>,
