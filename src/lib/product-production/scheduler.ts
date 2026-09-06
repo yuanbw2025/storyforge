@@ -576,6 +576,7 @@ async function currentProductionBuild(scope: WorkspaceScope, productionId: numbe
 
 function evolutionTaskLane(taskKey: string): 'content' | 'product' | 'visual' | 'audio' | null {
   if (taskKey.startsWith('content.scene-script.act-')
+    || taskKey === 'content.dialogue-pass'
     || taskKey === 'content.source-sufficiency'
     || taskKey === 'content.design'
     || taskKey === 'content.story-bible'
@@ -896,10 +897,10 @@ async function recoveryInvalidatedTaskKeys(input: {
   ]
   const invalidated = new Set<string>(unresolvedFailureTaskKeys.length > 0
     ? unresolvedFailureTaskKeys.flatMap(taskKey => (
-        taskKey === 'integration.narrative' ? sceneScriptTaskKeys : [taskKey]
+        taskKey === 'integration.narrative' ? [...sceneScriptTaskKeys, 'content.dialogue-pass'] : [taskKey]
       ))
     : blockingArtifactKeys.flatMap(artifactKey => {
-        if (artifactKey === 'content.narrative') return sceneScriptTaskKeys
+        if (artifactKey === 'content.narrative') return [...sceneScriptTaskKeys, 'content.dialogue-pass']
         const taskKey = taskByArtifactKey.get(artifactKey)
         return taskKey ? [taskKey] : []
       }))

@@ -106,6 +106,7 @@ const AUTHOR_REVIEW_ARTIFACT_KEYS = new Set([
   'content.scene-script.act-1',
   'content.scene-script.act-2',
   'content.scene-script.act-3',
+  'content.dialogue-pass',
   'content.narrative',
   'content.product-module',
   'content.adventure-side-quests',

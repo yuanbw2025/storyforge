@@ -1,6 +1,6 @@
 # 05 · Durable 生产 DAG 与工件方案
 
-> 层级：L2 · 版本：1.2.0 · 生效：2026-09-07
+> 层级：L2 · 版本：1.3.0 · 生效：2026-09-07
 > 性质：正式生产计划、Run Contract 和候选采纳目标契约。
 
 ## 1. 目标拓扑
@@ -30,9 +30,9 @@ WorldRelease + Confirmed Brief + Frozen SourcePlan
 
 关键依赖不可省略：系统设计读取故事/角色；主线任务读取故事弧、角色和系统；支线读取主线；任务脚本读取全部任务与系统；场景正文读取任务脚本；美术清单读取定稿场景和角色锚点。旧 DAG 中“主线与系统并行、支线不读主线”的结构必须下线。
 
-当前代码已经实现到分场正文的独立 Run 与确定性叙事装配：规划、故事、角色、空间、系统、叙事弧、主线、支线和区域事件分别形成已登记任务，随后由 `text-adventure-quest-scripter` 生成严格的 `content.quest-script`；三幕 Scene Writer 分别生成 `content.scene-script.act-1/2/3`，全部通过严格 parser 后，由 `integration.narrative` 装配 `content.narrative`。作者工作台显示岗位名称、任务 key、attempt、状态和阻塞，并可展开审查这些专业工件。
+当前代码已经实现到分场正文、独立对白审校与确定性叙事装配：规划、故事、角色、空间、系统、叙事弧、主线、支线和区域事件分别形成已登记任务，随后由 `text-adventure-quest-scripter` 生成严格的 `content.quest-script`；三幕 Scene Writer 分别生成 `content.scene-script.act-1/2/3`，独立 Dialogue Editor 对全量对白和选择产生 `content.dialogue-pass`，全部通过严格 parser 后，由 `integration.narrative` 应用表达修订并装配 `content.narrative`。作者工作台显示岗位名称、任务 key、attempt、状态和阻塞，并可展开审查这些专业工件。
 
-对白 pass、连续性审校的独立问题工件与 Playtest Director 的试玩策略/推荐意见仍是后续施工单元；它们未形成各自 Agent、Skill、Artifact、receipt 和真实下游消费证据前，不能宣称专业 DAG 全部完成。
+连续性审校的独立问题工件与 Playtest Director 的试玩策略/推荐意见仍是后续施工单元；它们未形成各自 Agent、Skill、Artifact、receipt 和真实下游消费证据前，不能宣称专业 DAG 全部完成。
 
 ## 2. 计划版本
 
@@ -40,7 +40,7 @@ WorldRelease + Confirmed Brief + Frozen SourcePlan
 
 V1.2 的一小时纵切面固定为三幕，因此计划创建时已经冻结三个 Scene Writer 任务，不在运行中动态追加 provider 调用。每幕包含哪些场景、选择和结局由 Brief 规模与确定性骨架计算，并由已采纳 `narrative.arc-plan` 精确覆盖；三个任务各自拥有独立的 Run Contract、预算、attempt、receipt 和输出 Artifact。未来支持任意幕数时，必须通过显式 plan revision 与作者预算确认扩展，不能让执行器根据模型输出偷偷追加任务。
 
-`integration.narrative` 是纯确定性装配任务：它读取三幕候选、故事/角色/叙事弧和位置投影，验证跨幕不变量，再生成统一叙事工件。它不持有模型预算。某一幕的局部缺陷只重跑对应 Scene Writer 及其后代；无法定位的跨幕缺陷会使三幕候选全部 stale 后重跑。装配本身失败时同样回到原始分场 owner，不能在集成层编造修复正文。
+`integration.narrative` 是纯确定性装配任务：它读取三幕候选、对白审校、故事/角色/叙事弧和位置投影，验证跨幕不变量，应用只限表达文本的对白修订，再生成统一叙事工件。它不持有模型预算。某一幕的局部缺陷只重跑对应 Scene Writer 及其后代；对白缺陷只回到 Dialogue Editor；无法定位的跨幕缺陷会使三幕候选与对白审校全部 stale 后重跑。装配本身失败时同样回到原始内容 owner，不能在集成层编造修复正文。
 
 ## 3. 工件规则
 

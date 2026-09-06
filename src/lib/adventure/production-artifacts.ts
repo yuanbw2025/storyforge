@@ -326,6 +326,7 @@ export interface TextAdventureQualityReviewArtifactV1 {
     artifactKey: 'content.story-bible' | 'content.cast-bible' | 'content.adventure-architecture'
       | 'content.narrative-arc-plan' | 'content.main-quest-plan' | 'content.quest-script'
       | 'content.scene-script.act-1' | 'content.scene-script.act-2' | 'content.scene-script.act-3'
+      | 'content.dialogue-pass'
       | 'content.narrative' | 'content.product-module'
       | 'content.adventure-side-quests' | 'content.adventure-ambient-events'
     detail: string
@@ -388,6 +389,7 @@ export function parseTextAdventureQualityReviewArtifactV1(
     'content.story-bible', 'content.cast-bible', 'content.adventure-architecture',
     'content.narrative-arc-plan', 'content.main-quest-plan', 'content.quest-script',
     'content.scene-script.act-1', 'content.scene-script.act-2', 'content.scene-script.act-3',
+    'content.dialogue-pass',
     'content.narrative', 'content.product-module',
     'content.adventure-side-quests', 'content.adventure-ambient-events',
   ]

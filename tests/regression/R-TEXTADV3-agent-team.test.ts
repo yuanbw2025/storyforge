@@ -16,8 +16,8 @@ const LEGACY_TEXT_ADVENTURE_SKILLS = [
 ] as const
 
 describe('TEXTADV-3 · 专业生产 Agent 团队', () => {
-  it('把十二个专业岗位登记为独立 Agent 身份，每个岗位拥有自己的默认 Skill 与 owner', () => {
-    expect(TEXT_ADVENTURE_PRODUCTION_AGENT_IDS).toHaveLength(12)
+  it('把十七个专业岗位登记为独立 Agent 身份，每个岗位拥有自己的默认 Skill 与 owner', () => {
+    expect(TEXT_ADVENTURE_PRODUCTION_AGENT_IDS).toHaveLength(17)
     const defaults = TEXT_ADVENTURE_PRODUCTION_AGENT_IDS.map(agentId => getDefaultAgentSkillV1(agentId))
     expect(new Set(defaults.map(skill => skill.agentId))).toEqual(new Set(TEXT_ADVENTURE_PRODUCTION_AGENT_IDS))
     expect(defaults.every(skill => skill.owner === skill.agentId)).toBe(true)
@@ -37,16 +37,17 @@ describe('TEXTADV-3 · 专业生产 Agent 团队', () => {
     )).toThrow('不属于 Agent')
   })
 
-  it('一个专业 Agent 最多持有两个同域 Skill，不再由单一 Agent 承担整条生产链', () => {
+  it('每个专业 Agent 只持有一个核心 Skill，不再由单一 Agent 兼任多个生产步骤', () => {
     const textAdventureSkills = AGENT_SKILLS.filter(skill => (
       TEXT_ADVENTURE_PRODUCTION_AGENT_IDS.includes(skill.agentId as never)
     ))
     const counts = new Map<string, number>()
     for (const skill of textAdventureSkills) counts.set(skill.agentId, (counts.get(skill.agentId) ?? 0) + 1)
-    expect(Math.max(...counts.values())).toBeLessThanOrEqual(2)
-    expect(counts.get('text-adventure-side-content-designer')).toBe(2)
+    expect(Math.max(...counts.values())).toBe(1)
+    expect(counts.get('text-adventure-side-quest-designer')).toBe(1)
+    expect(counts.get('text-adventure-storylet-designer')).toBe(1)
+    expect(counts.get('text-adventure-dialogue-editor')).toBe(1)
     expect(counts.get('text-adventure-showrunner')).toBe(1)
     expect(counts.get('text-adventure-scene-writer')).toBe(1)
   })
 })
-

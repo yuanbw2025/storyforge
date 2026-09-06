@@ -87,7 +87,7 @@ export async function readTextAdventureQualityInputsV1(input: AssembleContextInp
   const requiredKeys = [
     'content.story-bible', 'content.cast-bible', 'content.adventure-architecture',
     'content.narrative-arc-plan', 'content.main-quest-plan', 'content.quest-script',
-    'content.narrative', 'content.product-module',
+    'content.dialogue-pass', 'content.narrative', 'content.product-module',
     'content.adventure-side-quests', 'content.adventure-ambient-events',
   ]
   const requested = new Set(input.productArtifactKeys ?? [])
@@ -113,6 +113,7 @@ export async function readTextAdventureQualityInputsV1(input: AssembleContextInp
   const arcPlan = payloadByKey.get('content.narrative-arc-plan') ?? {}
   const mainQuestPlan = payloadByKey.get('content.main-quest-plan') ?? {}
   const questScript = payloadByKey.get('content.quest-script') ?? {}
+  const dialoguePass = payloadByKey.get('content.dialogue-pass') ?? {}
   const narrative = payloadByKey.get('content.narrative') ?? {}
   const productModule = payloadByKey.get('content.product-module') ?? {}
   const locations = contextRows(architecture.regions).flatMap(region => (
@@ -246,6 +247,21 @@ export async function readTextAdventureQualityInputsV1(input: AssembleContextInp
         entryKey: script.entryKey, actionKind: script.actionKind, abilityKey: script.abilityKey,
         difficulty: script.difficulty, timeCostMinutes: script.timeCostMinutes,
       })),
+    },
+    dialoguePass: {
+      summary: contextText(dialoguePass.summary, 300),
+      characterAssessments: contextRows(dialoguePass.characterAssessments).map(assessment => ({
+        characterKey: assessment.characterKey,
+        voiceDistinctness: assessment.voiceDistinctness,
+        knowledgeBoundary: assessment.knowledgeBoundary,
+        notes: contextText(assessment.notes, 120),
+      })),
+      dialogueTurnCount: contextRows(dialoguePass.beatReviews).length,
+      revisedDialogueCount: contextRows(dialoguePass.beatReviews)
+        .filter(review => review.verdict === 'revise').length,
+      reviewedChoiceCount: contextRows(dialoguePass.choiceReviews).length,
+      revisedChoiceCount: contextRows(dialoguePass.choiceReviews)
+        .filter(review => review.verdict === 'revise').length,
     },
     narrative: {
       entryNodeKey: contextText(narrative.entryNodeKey, 200),

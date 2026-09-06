@@ -554,7 +554,7 @@ function professionalTextAdventureSceneScriptOutputs(
   const npcKeys = castBible.characters.filter(character => character.role !== 'player').map(character => character.key)
   const endingByKey = new Map(storyBible.endings.map(ending => [ending.key, ending]))
   const targetUnitsPerScene = Math.max(240, Math.ceil(brief.scale.targetWordCount / skeleton.sceneKeys.length) + 80)
-  return Object.fromEntries([0, 1, 2].map(actIndex => {
+  const sceneScriptOutputs = Object.fromEntries([0, 1, 2].map(actIndex => {
     const sceneKeys = textAdventureActSceneKeysV1(brief, actIndex)
     const scenes = sceneKeys.map(sceneKey => {
       const sceneIndex = skeleton.sceneKeys.indexOf(sceneKey)
@@ -616,7 +616,60 @@ function professionalTextAdventureSceneScriptOutputs(
       choices,
       endings,
     }]
-  }))
+  })) as Record<string, {
+    schema: 'storyforge.text-adventure-scene-script-bundle-artifact'
+    version: 1
+    actKey: string
+    moduleTitle: string
+    scenes: Array<{ sceneKey: string; title: string; summary: string; beats: Array<{
+      beatKey: string; kind: 'narration' | 'dialogue' | 'action'; speakerKey: string | null; text: string; order: number
+    }> }>
+    choices: Array<{
+      choiceKey: string; sourceNodeKey: string; targetNodeKey: string; text: string
+      description: string; unavailableReason: string; order: number
+    }>
+    endings: Array<{ endingKey: string; title: string; summary: string; beats: Array<{
+      beatKey: string; kind: 'narration' | 'dialogue'; speakerKey: string | null; text: string; order: number
+    }> }>
+  }>
+  const bundles = Object.values(sceneScriptOutputs)
+  const dialogueBeats = bundles.flatMap(bundle => [
+    ...bundle.scenes.flatMap(scene => scene.beats),
+    ...bundle.endings.flatMap(ending => ending.beats),
+  ]).filter(beat => beat.kind === 'dialogue').sort((left, right) => left.beatKey.localeCompare(right.beatKey))
+  const choices = bundles.flatMap(bundle => bundle.choices)
+    .sort((left, right) => left.choiceKey.localeCompare(right.choiceKey))
+  const usedSpeakerKeys = [...new Set(dialogueBeats.map(beat => beat.speakerKey!))].sort()
+  return {
+    ...sceneScriptOutputs,
+    'content.dialogue-pass': {
+      schema: 'storyforge.text-adventure-dialogue-pass-artifact' as const,
+      version: 1 as const,
+      characterAssessments: usedSpeakerKeys.map(characterKey => ({
+        characterKey,
+        voiceDistinctness: 'adequate' as const,
+        knowledgeBoundary: 'passed' as const,
+        notes: '审校后说话方式与角色圣经一致，未越过已知事实边界。',
+      })),
+      beatReviews: dialogueBeats.map(beat => ({
+        beatKey: beat.beatKey,
+        speakerKey: beat.speakerKey!,
+        verdict: 'keep' as const,
+        issueTags: ['none'] as const,
+        rationale: '声音、目的和知识边界均符合角色圣经。',
+        revisedText: beat.text,
+      })),
+      choiceReviews: choices.map(choice => ({
+        choiceKey: choice.choiceKey,
+        verdict: 'keep' as const,
+        issueTags: ['none'] as const,
+        rationale: '选择措辞表达了可理解的玩家意图与差异化代价。',
+        revisedText: choice.text,
+        revisedDescription: choice.description,
+      })),
+      summary: '已逐条覆盖全部对白与玩家选择文案，角色声音、知识边界和玩家意图均可进入确定性装配。',
+    },
+  }
 }
 
 function fullLengthTextAdventureOutputs(
@@ -1334,6 +1387,7 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     const sceneScriptSystems: string[] = []
     let productModuleSystem = ''
     let sideQuestSystem = ''
+    let dialoguePassSystem = ''
     let qualityReviewSystem = ''
     let qualityReviewContext = ''
     let modelCallCount = 0
@@ -1344,6 +1398,7 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
       if (taskKey.startsWith('content.scene-script.act-')) sceneScriptSystems.push(request.system)
       if (taskKey === 'content.product-module') productModuleSystem = request.system
       if (taskKey === 'content.adventure-side-quests') sideQuestSystem = request.system
+      if (taskKey === 'content.dialogue-pass') dialoguePassSystem = request.system
       if (taskKey === 'content.adventure-quality-review') {
         qualityReviewSystem = request.system
         qualityReviewContext = request.contextText
@@ -1382,6 +1437,8 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     expect(sideQuestSystem).toContain('地点编号与标题的唯一映射=')
     expect(sideQuestSystem).toContain('"locationOrdinal":1,"locationTitle":"地点 1-1-1"')
     expect(sideQuestSystem).toContain('不得伪装成尚未实现的跨地点多阶段任务')
+    expect(dialoguePassSystem).toContain('你是独立对白编辑，不是分场作者')
+    expect(dialoguePassSystem).toContain('每个 dialogue beat 和 choice 必须恰好审校一次')
     expect(productModuleSystem).toContain('clock 表示开局后累计经过的分钟数')
     expect(productModuleSystem).toContain('initial 和 minimum 必须同时为 0')
     expect(qualityReviewSystem).toContain('只能是 JSON number 1、2、3、4 或 5')
@@ -1391,6 +1448,7 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     expect(qualityReviewContext).toContain('"cast"')
     expect(qualityReviewContext).toContain('"arcPlan"')
     expect(qualityReviewContext).toContain('"mainQuestPlan"')
+    expect(qualityReviewContext).toContain('"dialoguePass"')
     expect(qualityReviewContext).toContain('"targetCharacterKey"')
     expect(qualityReviewContext).toContain('"artifactKey":"content.narrative"')
     expect(qualityReviewContext).toContain('"openingBeat"')
@@ -1723,6 +1781,7 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
       ['content.cast-bible', 1], ['content.adventure-architecture', 1],
       ['content.narrative-arc-plan', 1], ['content.main-quest-plan', 1],
       ['content.scene-script.act-1', 4], ['content.scene-script.act-2', 2], ['content.scene-script.act-3', 2],
+      ['content.dialogue-pass', 2],
       ['content.product-module', 1], ['content.adventure-side-quests', 2], ['content.quest-script', 2],
       ['content.adventure-ambient-events', 1], ['content.adventure-quality-review', 2],
       ['media.requirements', 2],

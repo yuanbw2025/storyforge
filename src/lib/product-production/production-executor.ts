@@ -61,6 +61,10 @@ import {
   textAdventureActSceneKeysV1,
   textAdventureNarrativeSkeletonV1,
 } from '../adventure/scene-script'
+import {
+  applyTextAdventureDialoguePassV1,
+  parseTextAdventureDialoguePassArtifactV1,
+} from '../adventure/dialogue-pass'
 import type {
   ProductProductionCapabilityBindingV1,
   ProductProductionTaskArtifactV1,
@@ -838,6 +842,52 @@ function textAdventureLocationTitlesFromArchitectureV1(
   ))
 }
 
+function parseTextAdventureSceneInputsV1(
+  input: ProductProductionTaskExecutionInputV1,
+  brief: ProductProductionBriefV3,
+) {
+  if (!brief.textAdventure || brief.intent.productType !== 'text-adventure') {
+    fail('分场工件只允许文字冒险产品')
+  }
+  const architecture = parseTextAdventureArchitectureArtifactV1(
+    artifactPayload(input, 'content.adventure-architecture'),
+    brief.textAdventure,
+  )
+  const locationTitles = textAdventureLocationTitlesFromArchitectureV1(architecture)
+  const storyBible = parseTextAdventureStoryBibleArtifactV1(
+    artifactPayload(input, 'content.story-bible'),
+    brief,
+  )
+  const cast = parseTextAdventureCastBibleArtifactV1({
+    value: artifactPayload(input, 'content.cast-bible'),
+    brief,
+    allowedResourceKeys: brief.source.selection.resourceKeys,
+  })
+  const arcPlan = parseTextAdventureNarrativeArcPlanArtifactV1({
+    value: artifactPayload(input, 'content.narrative-arc-plan'),
+    brief,
+    cast,
+    storyBible,
+  })
+  const sceneTitles = Object.fromEntries(
+    arcPlan.acts.flatMap(act => act.sceneCards.map(scene => [scene.key, scene.title])),
+  )
+  const endingTitles = Object.fromEntries(
+    storyBible.endings.map(ending => [ending.key, ending.title]),
+  )
+  const bundles = [0, 1, 2].map(actIndex => parseTextAdventureSceneScriptBundleArtifactV1({
+    value: artifactPayload(input, `content.scene-script.act-${actIndex + 1}`),
+    brief,
+    actIndex,
+    allowedSpeakerKeys: cast.characters.map(character => character.key),
+    locationTitles,
+    expectedModuleTitle: storyBible.title,
+    sceneTitles,
+    endingTitles,
+  }))
+  return { architecture, locationTitles, storyBible, cast, arcPlan, bundles }
+}
+
 function elapsed(startedAt: number): number {
   return Math.max(0, Math.round(performance.now() - startedAt))
 }
@@ -957,6 +1007,13 @@ function textSystem(
       `必须恰好三幕 act.1/act.2/act.3；三幕 sceneCards 必须依次精确使用 ${JSON.stringify(actSceneKeys)}，总计 ${adventure.narrative.targetSceneCount} 张，不得增删；targetMinutes 合计约 ${brief.scale.targetPlayMinutes} 分钟。` +
       `decisions 必须按顺序恰好落在 ${JSON.stringify(decisionSceneKeys)}，每个决定恰好 2 个选项且至少在两个后续场景回响；endings 必须依次复用 ${JSON.stringify(skeleton.endingKeys)} 且全部从 ${skeleton.sceneKeys[skeleton.sceneKeys.length - 1]} 汇出；角色、铺垫和回收必须逐字复用上游稳定 key。locationOrdinal 为 1–${adventure.narrative.targetLocationCount}。`
   }
+  if (taskKey === 'content.dialogue-pass') {
+    return `${common}\n你是独立对白编辑，不是分场作者。逐条审校三幕全部 dialogue beat 和玩家选择文案，确保角色声音可区分、信息不越过角色知识边界、台词服务当下目的并含自然回应；删去互相朗读背景、情绪直说、同声同气、说明书腔、混合语言残片和无意义重复。` +
+      '你只能修订 dialogue beat 的 text，以及 choice 的 text/description；不得改 beat/choice/speaker/场景/结局 key，不得增删条目，不得改叙事、任务、条件、效果、资源或状态。所有条目按稳定 key 字典序输出。' +
+      '每个实际说话角色必须有一条 characterAssessment；修订后的 voiceDistinctness 只能为 strong|adequate，knowledgeBoundary 必须为 passed。每个 dialogue beat 和 choice 必须恰好审校一次。verdict=keep 时文案必须逐字不变且 issueTags 只能是 ["none"]；verdict=revise 时文案必须实际变化且 issueTags 不得含 none。' +
+      'issueTags 只能使用 none|voice-collapse|knowledge-breach|exposition|no-subtext|emotion-label|unnatural|mixed-language|continuity|player-intent。' +
+      '输出字段必须精确为：{"schema":"storyforge.text-adventure-dialogue-pass-artifact","version":1,"characterAssessments":[{"characterKey":"character.some-key","voiceDistinctness":"strong|adequate","knowledgeBoundary":"passed","notes":"..."}],"beatReviews":[{"beatKey":"beat.some-key","speakerKey":"character.some-key","verdict":"keep|revise","issueTags":["none"],"rationale":"...","revisedText":"..."}],"choiceReviews":[{"choiceKey":"choice.001","verdict":"keep|revise","issueTags":["none"],"rationale":"...","revisedText":"...","revisedDescription":"..."}],"summary":"..."}。'
+  }
   if (taskKey === 'content.main-quest-plan') {
     if (!adventure) return `${common}\n缺少文字冒险专用 Brief，停止。`
     const minimumStages = brief.qualityProfile === 'commercial-candidate'
@@ -1024,7 +1081,7 @@ function textSystem(
     return `${common}\n你是独立于内容生产者的文字冒险叙事质量审查负责人。只能依据登记的架构、主线、系统、支线和区域事件 Artifact 审查，不得擅自改写内容或虚构已通过证据。` +
       '分别以 1–5 的整数评价因果连续性、玩家能动性、路线差异、节奏、铺垫回收、人物动机和情绪触达；scores 的七个值只能是 JSON number 1、2、3、4 或 5，禁止小数、字符串、"4/5"、"4分"、null 和任何解释性对象。任何一项低于 3，或存在会破坏完整游戏体验的问题，必须登记 blocking。必须逐条列出主线 choice 的 sourceNodeKey、选择文案、targetNodeKey 与目标节点开场内容并交叉核对；选择表达的立即行动、目标地点或决定与目标节点不一致时必须登记 blocking，不能只检查图可达性。' +
       `还必须按地点清单 ${JSON.stringify(textAdventureLocationTitles)} 核对每个支线和区域事件的 locationOrdinal 与玩家可见钩子/目标；发生地错位或无法在绑定地点成立的行动必须登记 blocking。玩家身份和占位角色泄漏由后续确定性 RuntimePackage 门检负责，不得伪造本审查投影中不存在的身份证据。` +
-      '输出字段必须精确为：{"schema":"storyforge.text-adventure-quality-review-artifact","version":1,"scores":{"causality":1,"playerAgency":1,"routeDifferentiation":1,"pacing":1,"setupPayoff":1,"characterMotivation":1,"emotionalImpact":1},"issues":[{"severity":"warning|blocking","artifactKey":"content.story-bible|content.cast-bible|content.adventure-architecture|content.narrative-arc-plan|content.main-quest-plan|content.quest-script|content.scene-script.act-1|content.scene-script.act-2|content.scene-script.act-3|content.narrative|content.product-module|content.adventure-side-quests|content.adventure-ambient-events","detail":"...","recommendation":"..."}],"passed":false}。场景正文问题应尽量定位到具体 act；只有跨幕装配或无法定位的全局问题才使用 content.narrative。示例中的 1 和 false 是保守占位，不是目标分数；必须依据证据逐项改写，禁止复制成批量高分。' +
+      '输出字段必须精确为：{"schema":"storyforge.text-adventure-quality-review-artifact","version":1,"scores":{"causality":1,"playerAgency":1,"routeDifferentiation":1,"pacing":1,"setupPayoff":1,"characterMotivation":1,"emotionalImpact":1},"issues":[{"severity":"warning|blocking","artifactKey":"content.story-bible|content.cast-bible|content.adventure-architecture|content.narrative-arc-plan|content.main-quest-plan|content.quest-script|content.scene-script.act-1|content.scene-script.act-2|content.scene-script.act-3|content.dialogue-pass|content.narrative|content.product-module|content.adventure-side-quests|content.adventure-ambient-events","detail":"...","recommendation":"..."}],"passed":false}。场景正文问题应尽量定位到具体 act；对白声音、知识越界与玩家选择措辞问题应定位到 content.dialogue-pass；只有跨幕装配或无法定位的全局问题才使用 content.narrative。示例中的 1 和 false 是保守占位，不是目标分数；必须依据证据逐项改写，禁止复制成批量高分。' +
       `审查时必须对照目标 ${brief.scale.targetPlayMinutes} 分钟、约 ${brief.scale.targetWordCount} 个中文内容单位、${adventure.narrative.targetSceneCount} 个场景、${adventure.narrative.targetEndingCount} 个结局，并核查失败是否产生代价或新局面。passed 是确定性派生字段：最终 issues 和 scores 写完后必须重新计算；仅当没有 blocking 且七项分数都不低于 3 时为 true，否则必须为 false。`
   }
   const adventureVisualBlueprints = [
@@ -1304,6 +1361,24 @@ async function executeModelTask(input: ProductProductionTaskExecutionInputV1, op
       sceneCount: bundle.scenes.length,
       beatCount: bundle.scenes.reduce((sum, scene) => sum + scene.beats.length, 0),
       endingCount: bundle.endings.length,
+    }
+  } else if (input.task.taskKey === 'content.dialogue-pass') {
+    const sceneInputs = parseTextAdventureSceneInputsV1(input, options.brief)
+    const dialoguePass = parseTextAdventureDialoguePassArtifactV1({
+      value: raw,
+      brief: options.brief,
+      cast: sceneInputs.cast,
+      bundles: sceneInputs.bundles,
+    })
+    payload = dialoguePass
+    kind = 'narrative'
+    quality = {
+      dialoguePassVerified: true,
+      speakerCount: dialoguePass.characterAssessments.length,
+      dialogueTurnCount: dialoguePass.beatReviews.length,
+      revisedDialogueCount: dialoguePass.beatReviews.filter(review => review.verdict === 'revise').length,
+      reviewedChoiceCount: dialoguePass.choiceReviews.length,
+      revisedChoiceCount: dialoguePass.choiceReviews.filter(review => review.verdict === 'revise').length,
     }
   } else if (input.task.taskKey === 'content.narrative') {
     payload = parseNarrative(raw, options.brief, textAdventureLocationTitles, textAdventureCastKeys); kind = 'narrative'
@@ -1772,54 +1847,26 @@ async function executeNarrativeIntegrationTask(
   options: { brief: ProductProductionBriefV3 },
 ): Promise<ProductProductionTaskExecutionResultV1> {
   const startedAt = performance.now()
-  if (!options.brief.textAdventure || options.brief.intent.productType !== 'text-adventure') {
-    fail('分幕叙事装配只允许文字冒险产品')
-  }
-  const architecture = parseTextAdventureArchitectureArtifactV1(
-    artifactPayload(input, 'content.adventure-architecture'),
-    options.brief.textAdventure,
-  )
-  const locationTitles = textAdventureLocationTitlesFromArchitectureV1(architecture)
-  const storyBible = parseTextAdventureStoryBibleArtifactV1(
-    artifactPayload(input, 'content.story-bible'),
-    options.brief,
-  )
-  const cast = parseTextAdventureCastBibleArtifactV1({
-    value: artifactPayload(input, 'content.cast-bible'),
+  const sceneInputs = parseTextAdventureSceneInputsV1(input, options.brief)
+  const dialoguePass = parseTextAdventureDialoguePassArtifactV1({
+    value: artifactPayload(input, 'content.dialogue-pass'),
     brief: options.brief,
-    allowedResourceKeys: options.brief.source.selection.resourceKeys,
+    cast: sceneInputs.cast,
+    bundles: sceneInputs.bundles,
   })
-  const arcPlan = parseTextAdventureNarrativeArcPlanArtifactV1({
-    value: artifactPayload(input, 'content.narrative-arc-plan'),
-    brief: options.brief,
-    cast,
-    storyBible,
+  const revisedBundles = applyTextAdventureDialoguePassV1({
+    bundles: sceneInputs.bundles,
+    dialoguePass,
   })
-  const sceneTitles = Object.fromEntries(
-    arcPlan.acts.flatMap(act => act.sceneCards.map(scene => [scene.key, scene.title])),
-  )
-  const endingTitles = Object.fromEntries(
-    storyBible.endings.map(ending => [ending.key, ending.title]),
-  )
-  const bundles = [0, 1, 2].map(actIndex => parseTextAdventureSceneScriptBundleArtifactV1({
-    value: artifactPayload(input, `content.scene-script.act-${actIndex + 1}`),
-    brief: options.brief,
-    actIndex,
-    allowedSpeakerKeys: cast.characters.map(character => character.key),
-    locationTitles,
-    expectedModuleTitle: storyBible.title,
-    sceneTitles,
-    endingTitles,
-  }))
   const assembled = assembleTextAdventureNarrativeFromSceneScriptsV1({
     brief: options.brief,
-    bundles,
+    bundles: revisedBundles,
   })
   const narrative = parseAcceptedNarrative(
     assembled,
     options.brief,
-    locationTitles,
-    cast.characters.map(character => character.key),
+    sceneInputs.locationTitles,
+    sceneInputs.cast.characters.map(character => character.key),
   )
   return {
     artifacts: [{
@@ -1828,11 +1875,14 @@ async function executeNarrativeIntegrationTask(
       payload: narrative,
       quality: {
         deterministicActAssembly: true,
-        actCount: bundles.length,
-        sceneCount: bundles.reduce((sum, bundle) => sum + bundle.scenes.length, 0),
-        endingCount: bundles.reduce((sum, bundle) => sum + bundle.endings.length, 0),
+        dialoguePassApplied: true,
+        actCount: revisedBundles.length,
+        sceneCount: revisedBundles.reduce((sum, bundle) => sum + bundle.scenes.length, 0),
+        endingCount: revisedBundles.reduce((sum, bundle) => sum + bundle.endings.length, 0),
+        revisedDialogueCount: dialoguePass.beatReviews.filter(review => review.verdict === 'revise').length,
+        revisedChoiceCount: dialoguePass.choiceReviews.filter(review => review.verdict === 'revise').length,
       },
-      rights: { origin: 'accepted-scene-script-bundles', containsThirdPartyMedia: false },
+      rights: { origin: 'accepted-scene-script-bundles-and-dialogue-pass', containsThirdPartyMedia: false },
     }],
     passedGateIds: [...input.task.acceptanceGateIds],
     usage: zeroUsage(elapsed(startedAt)),

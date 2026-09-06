@@ -13,10 +13,15 @@ import {
   parseTextAdventureSceneScriptBundleArtifactV1,
   textAdventureNarrativeSkeletonV1,
 } from '../../src/lib/adventure/scene-script'
+import {
+  applyTextAdventureDialoguePassV1,
+  parseTextAdventureDialoguePassArtifactV1,
+} from '../../src/lib/adventure/dialogue-pass'
 
 function brief(qualityProfile: ProductProductionBriefV3['qualityProfile'] = 'internal') {
   return {
     qualityProfile,
+    intent: { productType: 'text-adventure' },
     scale: { targetPlayMinutes: 15, targetWordCount: 2_500, targetEndingCount: 2 },
     textAdventure: {
       narrative: { targetLocationCount: 2, targetSceneCount: 3 },
@@ -276,12 +281,49 @@ describe('TEXTADV-3 · 专业生产工件合同', () => {
       allowedSpeakerKeys: cast.characters.map(character => character.key),
       locationTitles, expectedModuleTitle: story.title, sceneTitles, endingTitles,
     }))
-    const assembled = assembleTextAdventureNarrativeFromSceneScriptsV1({ brief: inputBrief, bundles })
+    const dialogueBeats = bundles.flatMap(bundle => [
+      ...bundle.scenes.flatMap(scene => scene.beats),
+      ...bundle.endings.flatMap(ending => ending.beats),
+    ]).filter(beat => beat.kind === 'dialogue').sort((left, right) => left.beatKey.localeCompare(right.beatKey))
+    const choices = bundles.flatMap(bundle => bundle.choices)
+      .sort((left, right) => left.choiceKey.localeCompare(right.choiceKey))
+    const dialoguePassValue = {
+      schema: 'storyforge.text-adventure-dialogue-pass-artifact', version: 1,
+      characterAssessments: [{
+        characterKey: 'character.npc.1', voiceDistinctness: 'strong', knowledgeBoundary: 'passed',
+        notes: '同伴说话克制而具体，修订后没有提前知道最终选择。',
+      }],
+      beatReviews: dialogueBeats.map((beat, index) => ({
+        beatKey: beat.beatKey, speakerKey: beat.speakerKey,
+        verdict: index === 0 ? 'revise' : 'keep',
+        issueTags: index === 0 ? ['exposition'] : ['none'],
+        rationale: index === 0 ? '删去角色互相朗读背景的说明书语气。' : '声音与知识边界符合角色圣经。',
+        revisedText: index === 0 ? '“钟只剩三响，”同伴压住灯罩，“你要真相，还是要他们先活过今晚？”' : beat.text,
+      })),
+      choiceReviews: choices.map(choice => ({
+        choiceKey: choice.choiceKey, verdict: 'keep', issueTags: ['none'],
+        rationale: '玩家意图和代价表达清楚。', revisedText: choice.text,
+        revisedDescription: choice.description,
+      })),
+      summary: '已逐条检查全部对白和选择措辞，并修复一处说明书式对白。',
+    }
+    const dialoguePass = parseTextAdventureDialoguePassArtifactV1({
+      value: dialoguePassValue, brief: inputBrief, cast, bundles,
+    })
+    const revisedBundles = applyTextAdventureDialoguePassV1({ bundles, dialoguePass })
+    const assembled = assembleTextAdventureNarrativeFromSceneScriptsV1({ brief: inputBrief, bundles: revisedBundles })
     expect(assembled.nodes.map(node => node.key)).toEqual([
       'scene.001', 'scene.002', 'scene.003', 'ending.001', 'ending.002',
     ])
     expect(assembled.choices.map(choice => choice.choiceKey)).toEqual(skeleton.edges.map(edge => edge.choiceKey))
     expect(assembled.nodes.every(node => node.conditionJson === '{}' && node.effectsJson === '[]')).toBe(true)
+    expect(assembled.beats.find(beat => beat.beatKey === dialogueBeats[0].beatKey)?.text)
+      .toContain('钟只剩三响')
+    const incompleteDialoguePass = structuredClone(dialoguePassValue)
+    incompleteDialoguePass.beatReviews.pop()
+    expect(() => parseTextAdventureDialoguePassArtifactV1({
+      value: incompleteDialoguePass, brief: inputBrief, cast, bundles,
+    })).toThrow('beatReviews 数量无效')
     const changed = bundleValue(0)
     changed.choices[0].targetNodeKey = 'scene.003'
     expect(() => parseTextAdventureSceneScriptBundleArtifactV1({
