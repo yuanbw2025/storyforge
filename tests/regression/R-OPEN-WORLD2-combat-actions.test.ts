@@ -58,7 +58,7 @@ describe('Text Open World vNext · governed player and enemy combat actions', ()
   it('Action v11冻结普通攻击、技能、战斗道具、逃跑、敌方技能与胜利奖励的表驱动双向合同', () => {
     const runtimePackage = createTextOpenWorldVNextFixture()
     const modules = parseTextOpenWorldModulesV1(runtimePackage)
-    expect(modules.actions.version).toBe(13)
+    expect(modules.actions.version).toBe(14)
     expect(modules.actions.actions.filter(action => action.category.startsWith('combat-') || action.category === 'escape')
       .map(action => action.category)).toEqual([
       'combat-state-action', 'combat-reward-action', 'combat-basic-attack', 'combat-skill', 'combat-item', 'escape', 'combat-enemy-skill',

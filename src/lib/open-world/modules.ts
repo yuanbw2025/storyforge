@@ -16,6 +16,7 @@ const KEY = /^[a-z][a-z0-9._:-]{0,199}$/
 const ACTION_CATEGORIES: TextOpenWorldActionCategoryV1[] = [
   'move', 'travel', 'fast-travel', 'observe', 'investigate', 'talk', 'take', 'use', 'equip', 'unequip', 'drop',
   'buy', 'sell', 'craft', 'accept-quest', 'abandon-quest', 'objective-action', 'quest-action', 'weather-action', 'actor-schedule-action', 'actor-state-action', 'claim-reward', 'attack-actor', 'steal', 'deceive', 'crime', 'start-combat', 'continue-combat', 'combat-state-action', 'escape',
+  'director-action',
   'combat-basic-attack', 'combat-skill', 'combat-item', 'combat-enemy-skill', 'combat-reward-action',
   'rest', 'respawn', 'read', 'track', 'untrack', 'save', 'load-branch',
 ]
@@ -374,7 +375,7 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
     if (actorRows.find(actor => actor.key === item.actorKey)?.scheduleKey !== item.key) fail(`schedule/actor反向引用不一致:${String(item.key)}`)
   })
 
-  const actions = versioned(packageValue, 'actions', [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13])
+  const actions = versioned(packageValue, 'actions', [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14])
   const modernActionModule = Number(actions.version) >= 2
   const travelActionModule = Number(actions.version) >= 3
   const fastTravelActionModule = Number(actions.version) >= 4
@@ -387,6 +388,7 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
   const combatResolutionActionModule = Number(actions.version) >= 11
   const craftingActionModule = Number(actions.version) >= 12
   const economyActionModule = Number(actions.version) >= 13
+  const directorActionModule = Number(actions.version) >= 14
   if (actorScheduleActionModule && legacyActorModule) fail('Action v6必须搭配Actor v2')
   if (actorLifecycleActionModule && !actorLifecycleModule) fail('Action v7必须搭配Actor v3')
   if (combatStateActionModule !== (packageValue.modules.combat.schemaVersion >= 2)) fail('Action v9+必须与Combat v2+一起发布')
@@ -1798,23 +1800,194 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
     if (!legacyActorModule) requireSameKeys(entries.map(entry => String(row(entry, 'schedule entry').timePeriodKey)), [...periodKeys], `schedule ${String(item.key)} time period coverage`)
   })
 
-  const director = versioned(packageValue, 'director')
-  exact(director, ['version', 'rules', 'decks', 'templates', 'randomEvents'], 'director'); const directorRules = row(director.rules, 'director.rules'); exact(directorRules, ['globalMaximumRevealed', 'globalMaximumActive', 'maximumQuestInstances', 'highIntensityStreakLimit'], 'director.rules'); ['globalMaximumRevealed', 'globalMaximumActive', 'maximumQuestInstances', 'highIntensityStreakLimit'].forEach(field => int(directorRules[field], `director.rules.${field}`, 1, 1_000_000))
-  const decks = catalog(director.decks, 'director.decks', ['regionKey', 'questKeys', 'templateKeys', 'randomEventKeys', 'maximumRevealed', 'maximumActive', 'cooldownMinutes', 'blankWeight']); const templates = catalog(director.templates, 'director.templates', ['key', 'questKey', 'regionKeys', 'variantTextKeys', 'fingerprint', 'cooldownMinutes']); const randomEvents = catalog(director.randomEvents, 'director.randomEvents', ['key', 'title', 'regionKeys', 'actionKeys', 'effectKeys', 'intensity', 'cooldownMinutes']); const templateKeys = keysOf(templates, 'director.templates'); const randomEventKeys = keysOf(randomEvents, 'director.randomEvents')
+  const director = versioned(packageValue, 'director', [1, 2])
+  const legacyDirector = director.version === 1
+  exact(director, legacyDirector
+    ? ['version', 'rules', 'decks', 'templates', 'randomEvents']
+    : ['version', 'rules', 'decks', 'templates', 'randomEvents', 'regionRules'], 'director')
+  const rawDirectorRules = row(director.rules, 'director.rules')
+  exact(rawDirectorRules, legacyDirector
+    ? ['globalMaximumRevealed', 'globalMaximumActive', 'maximumQuestInstances', 'highIntensityStreakLimit']
+    : ['globalMaximumRevealed', 'globalMaximumActive', 'maximumQuestInstances', 'highIntensityStreakLimit', 'historyLimit', 'maximumSettlementIntervals', 'systemActionKey'], 'director.rules')
+  const baseDirectorRules = {
+    globalMaximumRevealed: int(rawDirectorRules.globalMaximumRevealed, 'director.rules.globalMaximumRevealed', 1, 1_000),
+    globalMaximumActive: int(rawDirectorRules.globalMaximumActive, 'director.rules.globalMaximumActive', 1, 1_000),
+    maximumQuestInstances: int(rawDirectorRules.maximumQuestInstances, 'director.rules.maximumQuestInstances', 1, 10_000),
+    highIntensityStreakLimit: int(rawDirectorRules.highIntensityStreakLimit, 'director.rules.highIntensityStreakLimit', 1, 20),
+  }
+  if (baseDirectorRules.globalMaximumActive > baseDirectorRules.globalMaximumRevealed) fail('director全局maximumActive不能大于maximumRevealed')
+  const directorRules = {
+    ...baseDirectorRules,
+    historyLimit: legacyDirector ? 128 : int(rawDirectorRules.historyLimit, 'director.rules.historyLimit', 16, 1_000),
+    maximumSettlementIntervals: legacyDirector ? 128 : int(rawDirectorRules.maximumSettlementIntervals, 'director.rules.maximumSettlementIntervals', 1, 1_000),
+    systemActionKey: legacyDirector ? null : nullableKey(rawDirectorRules.systemActionKey, 'director.rules.systemActionKey'),
+  }
+  const rawDecks = catalog(director.decks, 'director.decks', legacyDirector
+    ? ['regionKey', 'questKeys', 'templateKeys', 'randomEventKeys', 'maximumRevealed', 'maximumActive', 'cooldownMinutes', 'blankWeight']
+    : ['regionKey', 'questKeys', 'templateKeys', 'randomEventKeys', 'triggerKinds', 'maximumRevealed', 'maximumActive', 'cooldownMinutes', 'blankWeight'])
+  const decks: TextOpenWorldParsedModulesV1['director']['decks'] = rawDecks.map((item, index) => ({
+    regionKey: key(item.regionKey, `director.decks[${index}].regionKey`),
+    questKeys: strings(item.questKeys, `director.decks[${index}].questKeys`),
+    templateKeys: strings(item.templateKeys, `director.decks[${index}].templateKeys`),
+    randomEventKeys: strings(item.randomEventKeys, `director.decks[${index}].randomEventKeys`),
+    triggerKinds: legacyDirector
+      ? ['arrival', 'explore', 'talk', 'rest', 'quest-complete', 'time-batch', 'activity']
+      : strings(item.triggerKinds, `director.decks[${index}].triggerKinds`, 'key').map(trigger => enumValue(trigger, ['arrival', 'explore', 'talk', 'rest', 'quest-complete', 'time-batch', 'activity'], `director.decks[${index}].triggerKinds`)),
+    maximumRevealed: int(item.maximumRevealed, `director.decks[${index}].maximumRevealed`, 1, 1_000),
+    maximumActive: int(item.maximumActive, `director.decks[${index}].maximumActive`, 1, 1_000),
+    cooldownMinutes: int(item.cooldownMinutes, `director.decks[${index}].cooldownMinutes`, 0, 1_000_000),
+    blankWeight: int(item.blankWeight, `director.decks[${index}].blankWeight`, 0, 1_000_000),
+  }))
+  const rawTemplates = catalog(director.templates, 'director.templates', legacyDirector
+    ? ['key', 'questKey', 'regionKeys', 'variantTextKeys', 'fingerprint', 'cooldownMinutes']
+    : ['key', 'questKey', 'regionKeys', 'variantTextKeys', 'fingerprint', 'cooldownMinutes', 'conditionKeys', 'levelBand', 'category', 'intensity', 'weight'])
+  const templates: TextOpenWorldParsedModulesV1['director']['templates'] = rawTemplates.map((item, index) => ({
+    key: key(item.key, `director.templates[${index}].key`),
+    questKey: key(item.questKey, `director.templates[${index}].questKey`),
+    regionKeys: strings(item.regionKeys, `director.templates[${index}].regionKeys`),
+    variantTextKeys: strings(item.variantTextKeys, `director.templates[${index}].variantTextKeys`),
+    fingerprint: legacyDirector ? key(item.fingerprint, `director.templates[${index}].fingerprint`) : key(item.fingerprint, `director.templates[${index}].fingerprint`),
+    cooldownMinutes: int(item.cooldownMinutes, `director.templates[${index}].cooldownMinutes`, 0, 1_000_000),
+    conditionKeys: legacyDirector ? [] : strings(item.conditionKeys, `director.templates[${index}].conditionKeys`),
+    levelBand: legacyDirector ? { minimum: 1, maximum: maximumLevel } : (() => {
+      const band = row(item.levelBand, `director.templates[${index}].levelBand`); exact(band, ['minimum', 'maximum'], `director.templates[${index}].levelBand`)
+      const minimum = int(band.minimum, `director.templates[${index}].levelBand.minimum`, 1, maximumLevel)
+      const maximum = int(band.maximum, `director.templates[${index}].levelBand.maximum`, minimum, maximumLevel)
+      return { minimum, maximum }
+    })(),
+    category: legacyDirector ? 'help' : enumValue(item.category, ['help', 'resource', 'exploration', 'conflict', 'mystery'], `director.templates[${index}].category`),
+    intensity: legacyDirector ? 1 : int(item.intensity, `director.templates[${index}].intensity`, 1, 10),
+    weight: legacyDirector ? 100 : int(item.weight, `director.templates[${index}].weight`, 1, 1_000_000),
+  }))
+  const rawRandomEvents = catalog(director.randomEvents, 'director.randomEvents', legacyDirector
+    ? ['key', 'title', 'regionKeys', 'actionKeys', 'effectKeys', 'intensity', 'cooldownMinutes']
+    : ['key', 'title', 'kind', 'regionKeys', 'actionKeys', 'effectKeys', 'conditionKeys', 'fingerprint', 'rumorKey', 'upgradeTemplateKey', 'intensity', 'weight', 'cooldownMinutes'])
+  const randomEvents: TextOpenWorldParsedModulesV1['director']['randomEvents'] = rawRandomEvents.map((item, index) => ({
+    key: key(item.key, `director.randomEvents[${index}].key`),
+    title: text(item.title, `director.randomEvents[${index}].title`, 2_000),
+    regionKeys: strings(item.regionKeys, `director.randomEvents[${index}].regionKeys`),
+    actionKeys: strings(item.actionKeys, `director.randomEvents[${index}].actionKeys`),
+    effectKeys: strings(item.effectKeys, `director.randomEvents[${index}].effectKeys`),
+    intensity: int(item.intensity, `director.randomEvents[${index}].intensity`, 1, 10),
+    cooldownMinutes: int(item.cooldownMinutes, `director.randomEvents[${index}].cooldownMinutes`, 0, 1_000_000),
+    kind: legacyDirector ? 'atmosphere' : enumValue(item.kind, ['atmosphere', 'resource', 'encounter', 'clue', 'quest-upgrade'], `director.randomEvents[${index}].kind`),
+    conditionKeys: legacyDirector ? [] : strings(item.conditionKeys, `director.randomEvents[${index}].conditionKeys`),
+    fingerprint: legacyDirector ? `fingerprint.${String(item.key)}` : key(item.fingerprint, `director.randomEvents[${index}].fingerprint`),
+    rumorKey: legacyDirector ? null : nullableKey(item.rumorKey, `director.randomEvents[${index}].rumorKey`),
+    upgradeTemplateKey: legacyDirector ? null : nullableKey(item.upgradeTemplateKey, `director.randomEvents[${index}].upgradeTemplateKey`),
+    weight: legacyDirector ? 100 : int(item.weight, `director.randomEvents[${index}].weight`, 1, 1_000_000),
+  }))
+  const regionRules = legacyDirector
+    ? normalizedWorld.regions.map(region => ({ regionKey: region.key, settlementIntervalMinutes: 1440, initialPressure: 0, minimumPressure: 0, maximumPressure: 100, driftPerInterval: 0, stateBands: [{ key: 'stable', minimumPressure: 0 }] }))
+    : catalog(director.regionRules, 'director.regionRules', ['regionKey', 'settlementIntervalMinutes', 'initialPressure', 'minimumPressure', 'maximumPressure', 'driftPerInterval', 'stateBands']).map((item, index) => {
+        const minimumPressure = int(item.minimumPressure, `director.regionRules[${index}].minimumPressure`, -1_000_000, 1_000_000)
+        const maximumPressure = int(item.maximumPressure, `director.regionRules[${index}].maximumPressure`, minimumPressure, 1_000_000)
+        const stateBands = catalog(item.stateBands, `director.regionRules[${index}].stateBands`, ['key', 'minimumPressure'])
+          .map((band, bandIndex) => ({ key: key(band.key, `director.regionRules[${index}].stateBands[${bandIndex}].key`), minimumPressure: int(band.minimumPressure, `director.regionRules[${index}].stateBands[${bandIndex}].minimumPressure`, minimumPressure, maximumPressure) }))
+          .sort((left, right) => left.minimumPressure - right.minimumPressure)
+        if (!stateBands.length || stateBands[0].minimumPressure !== minimumPressure || new Set(stateBands.map(band => band.key)).size !== stateBands.length || new Set(stateBands.map(band => band.minimumPressure)).size !== stateBands.length) fail(`director.regionRules[${index}]状态档位必须唯一并从minimumPressure开始`)
+        return {
+          regionKey: key(item.regionKey, `director.regionRules[${index}].regionKey`),
+          settlementIntervalMinutes: int(item.settlementIntervalMinutes, `director.regionRules[${index}].settlementIntervalMinutes`, 1, 1_000_000),
+          initialPressure: int(item.initialPressure, `director.regionRules[${index}].initialPressure`, minimumPressure, maximumPressure),
+          minimumPressure, maximumPressure,
+          driftPerInterval: int(item.driftPerInterval, `director.regionRules[${index}].driftPerInterval`, -1_000_000, 1_000_000),
+          stateBands,
+        }
+      })
+  const templateKeys = keysOf(templates, 'director.templates'); const randomEventKeys = keysOf(randomEvents, 'director.randomEvents')
   const deckRegions = decks.map((item, index) => key(item.regionKey, `director.decks[${index}].regionKey`)); if (new Set(deckRegions).size !== deckRegions.length) fail('director.decks.regionKey重复'); requireRefs(deckRegions, regionKeys, 'deck region')
   requireSameKeys(deckRegions, [...regionKeys], 'region director decks')
-  templates.forEach((item, index) => { const questKey = key(item.questKey, `director.templates[${index}].questKey`); requireRef(questKey, questKeys, 'template quest'); if (questRows.find(quest => quest.key === questKey)?.type !== 'template') fail(`director template必须引用template任务:${questKey}`); requireRefs(strings(item.regionKeys, `director.templates[${index}].regionKeys`), regionKeys, 'template region'); strings(item.variantTextKeys, `director.templates[${index}].variantTextKeys`); key(item.fingerprint, `director.templates[${index}].fingerprint`); int(item.cooldownMinutes, `director.templates[${index}].cooldownMinutes`, 0, 1_000_000) })
+  requireSameKeys(regionRules.map(rule => rule.regionKey), [...regionKeys], 'region director rules')
+  templates.forEach((item, index) => {
+    const questKey = key(item.questKey, `director.templates[${index}].questKey`); requireRef(questKey, questKeys, 'template quest')
+    if (questRows.find(quest => quest.key === questKey)?.type !== 'template') fail(`director template必须引用template任务:${questKey}`)
+    requireRefs(strings(item.regionKeys, `director.templates[${index}].regionKeys`), regionKeys, 'template region')
+    strings(item.variantTextKeys, `director.templates[${index}].variantTextKeys`); key(item.fingerprint, `director.templates[${index}].fingerprint`)
+    int(item.cooldownMinutes, `director.templates[${index}].cooldownMinutes`, 0, 1_000_000)
+    requireRefs(item.conditionKeys as string[], conditionKeys, 'director template condition')
+  })
   questRows.filter(item => item.type === 'template').forEach(item => {
     if (templates.filter(template => template.questKey === item.key).length !== 1) fail(`模板任务必须且只能绑定一个Director模板:${String(item.key)}`)
   })
-  randomEvents.forEach((item, index) => { text(item.title, `director.randomEvents[${index}].title`, 2_000); requireRefs(strings(item.regionKeys, `director.randomEvents[${index}].regionKeys`), regionKeys, 'random event region'); requireRefs(strings(item.actionKeys, `director.randomEvents[${index}].actionKeys`), actionKeys, 'random event action'); requireRefs(strings(item.effectKeys, `director.randomEvents[${index}].effectKeys`), effectKeys, 'random event effect'); int(item.intensity, `director.randomEvents[${index}].intensity`, 1, 10); int(item.cooldownMinutes, `director.randomEvents[${index}].cooldownMinutes`, 0, 1_000_000) })
-  decks.forEach((item, index) => { requireRefs(strings(item.questKeys, `director.decks[${index}].questKeys`), questKeys, 'deck quest'); requireRefs(strings(item.templateKeys, `director.decks[${index}].templateKeys`), templateKeys, 'deck template'); requireRefs(strings(item.randomEventKeys, `director.decks[${index}].randomEventKeys`), randomEventKeys, 'deck event'); const maxRevealed = int(item.maximumRevealed, `director.decks[${index}].maximumRevealed`, 1, 1_000); const maxActive = int(item.maximumActive, `director.decks[${index}].maximumActive`, 1, 1_000); if (maxActive > maxRevealed) fail('deck maximumActive不能大于maximumRevealed'); int(item.cooldownMinutes, `director.decks[${index}].cooldownMinutes`, 0, 1_000_000); numberValue(item.blankWeight, `director.decks[${index}].blankWeight`, 0, 1_000_000) })
+  randomEvents.forEach((item, index) => {
+    text(item.title, `director.randomEvents[${index}].title`, 2_000)
+    requireRefs(strings(item.regionKeys, `director.randomEvents[${index}].regionKeys`), regionKeys, 'random event region')
+    requireRefs(strings(item.actionKeys, `director.randomEvents[${index}].actionKeys`), actionKeys, 'random event action')
+    requireRefs(strings(item.effectKeys, `director.randomEvents[${index}].effectKeys`), effectKeys, 'random event effect')
+    requireRefs(item.conditionKeys as string[], conditionKeys, 'random event condition')
+    int(item.intensity, `director.randomEvents[${index}].intensity`, 1, 10); int(item.cooldownMinutes, `director.randomEvents[${index}].cooldownMinutes`, 0, 1_000_000)
+    if (item.effectKeys.some(effectKey => effects.find(effect => effect.key === effectKey)?.operation === 'settle-director')) fail(`随机事件不能嵌套Director结算:${String(item.key)}`)
+    const directorSafeOperations = new Set([
+      'change-player-resource', 'grant-experience', 'apply-status', 'remove-status', 'grant-item', 'remove-item',
+      'learn-skill', 'learn-recipe', 'change-currency', 'change-morality', 'change-faction-affinity',
+      'set-story-modifier', 'reveal-knowledge', 'reveal-location', 'unlock-fast-travel', 'change-actor-state',
+      'change-region-state', 'set-world-flag', 'earn-achievement', 'unlock-ending',
+    ])
+    item.effectKeys.forEach(effectKey => {
+      const effect = effects.find(candidate => candidate.key === effectKey)!
+      if (!directorSafeOperations.has(String(effect.operation))) fail(`随机事件Effect需要独立授权或会破坏受保护流程:${String(item.key)}:${effectKey}`)
+    })
+  })
+  const fingerprints = [...templates.map(item => String(item.fingerprint)), ...randomEvents.map(item => String(item.fingerprint))]
+  if (new Set(fingerprints).size !== fingerprints.length) fail('Director模板与随机事件fingerprint不能重复')
+  decks.forEach((item, index) => {
+    const fixedQuestKeys = strings(item.questKeys, `director.decks[${index}].questKeys`); requireRefs(fixedQuestKeys, questKeys, 'deck quest')
+    fixedQuestKeys.forEach(questKey => {
+      const quest = questRows.find(candidate => candidate.key === questKey)!
+      if (quest.type !== 'ordinary' || quest.instantiationPolicy !== 'session-start' || quest.initialStatus !== 'available' || !strings(quest.regionKeys, `director fixed quest ${questKey}.regionKeys`).includes(String(item.regionKey))) fail(`固定牌只能引用本地区available普通任务:${questKey}`)
+    })
+    const deckTemplateKeys = strings(item.templateKeys, `director.decks[${index}].templateKeys`); requireRefs(deckTemplateKeys, templateKeys, 'deck template')
+    deckTemplateKeys.forEach(templateKey => { if (!templates.find(template => template.key === templateKey)!.regionKeys.includes(String(item.regionKey))) fail(`牌组模板不属于地区:${templateKey}`) })
+    const deckEventKeys = strings(item.randomEventKeys, `director.decks[${index}].randomEventKeys`); requireRefs(deckEventKeys, randomEventKeys, 'deck event')
+    deckEventKeys.forEach(eventKey => { if (!randomEvents.find(event => event.key === eventKey)!.regionKeys.includes(String(item.regionKey))) fail(`牌组随机事件不属于地区:${eventKey}`) })
+    const maxRevealed = int(item.maximumRevealed, `director.decks[${index}].maximumRevealed`, 1, 1_000)
+    const maxActive = int(item.maximumActive, `director.decks[${index}].maximumActive`, 1, 1_000)
+    if (maxActive > maxRevealed || maxRevealed > directorRules.globalMaximumRevealed || maxActive > directorRules.globalMaximumActive) fail('deck任务预算不能超过局部或全局上限')
+    int(item.cooldownMinutes, `director.decks[${index}].cooldownMinutes`, 0, 1_000_000); int(item.blankWeight, `director.decks[${index}].blankWeight`, 0, 1_000_000)
+    if (!(item.triggerKinds as unknown[]).length) fail(`director.decks[${index}]至少需要一个触发类型`)
+  })
+  const normalizedDirector = {
+    version: 2 as const, sourceVersion: legacyDirector ? 1 as const : 2 as const,
+    rules: directorRules, decks, templates, randomEvents, regionRules,
+  }
+  if (directorActionModule !== !legacyDirector) fail('Action v14必须与Director v2一起发布')
+  if (directorActionModule) {
+    requireRef(directorRules.systemActionKey, actionKeys, 'director system Action')
+    const action = actionRows.find(candidate => candidate.key === directorRules.systemActionKey) ?? fail('Director系统Action不存在')
+    const successEffectKeys = strings(action.successEffectKeys, 'director system Action.successEffectKeys')
+    const successEffects = successEffectKeys.map(effectKey => effects.find(effect => effect.key === effectKey)!)
+    if (action.category !== 'director-action' || action.actorScope !== 'system' || action.targetScope !== 'none'
+      || strings(action.locationKeys, 'director system Action.locationKeys').length
+      || strings(action.requirementConditionKeys, 'director system Action.requirementConditionKeys').length
+      || strings(action.costEffectKeys, 'director system Action.costEffectKeys').length
+      || strings(action.failureEffectKeys, 'director system Action.failureEffectKeys').length
+      || successEffects.length !== 1 || successEffects[0].operation !== 'settle-director'
+      || action.timeCostMinutes !== 0 || action.confirmationPolicy !== 'never'
+      || action.repeatPolicy !== 'repeatable' || action.cooldownMinutes != null) fail('Director系统Action合同无效')
+    const settlementEffects = effects.filter(effect => effect.operation === 'settle-director')
+    if (settlementEffects.length !== 1 || settlementEffects[0].key !== successEffects[0].key) fail('settle-director Effect必须且只能属于Director系统Action')
+    exact(row(settlementEffects[0].payload, 'director settlement effect.payload'), [], 'director settlement effect.payload')
+    actionRows.filter(candidate => candidate.key !== action.key).forEach(candidate => {
+      const referenced = [...strings(candidate.costEffectKeys, `action ${String(candidate.key)} costs`), ...strings(candidate.successEffectKeys, `action ${String(candidate.key)} success`), ...strings(candidate.failureEffectKeys, `action ${String(candidate.key)} failures`)]
+      if (referenced.includes(String(settlementEffects[0].key))) fail(`settle-director只能由Director系统Action引用:${String(candidate.key)}`)
+    })
+  }
 
   const knowledge = versioned(packageValue, 'knowledge')
-  exact(knowledge, ['version', 'entries', 'rumors', 'achievements'], 'knowledge'); const entries = catalog(knowledge.entries, 'knowledge.entries', ['key', 'kind', 'title', 'content', 'sourceRefs', 'initialPlayerVisibility', 'actorKeys']); const rumors = catalog(knowledge.rumors, 'knowledge.rumors', ['key', 'knowledgeKey', 'text', 'reliability']); const achievements = catalog(knowledge.achievements, 'knowledge.achievements', ['key', 'title', 'description', 'conditionKeys']); const knowledgeKeys = keysOf(entries, 'knowledge.entries'); keysOf(rumors, 'knowledge.rumors'); keysOf(achievements, 'knowledge.achievements')
+  exact(knowledge, ['version', 'entries', 'rumors', 'achievements'], 'knowledge'); const entries = catalog(knowledge.entries, 'knowledge.entries', ['key', 'kind', 'title', 'content', 'sourceRefs', 'initialPlayerVisibility', 'actorKeys']); const rumors = catalog(knowledge.rumors, 'knowledge.rumors', ['key', 'knowledgeKey', 'text', 'reliability']); const achievements = catalog(knowledge.achievements, 'knowledge.achievements', ['key', 'title', 'description', 'conditionKeys']); const knowledgeKeys = keysOf(entries, 'knowledge.entries'); const rumorKeys = keysOf(rumors, 'knowledge.rumors'); keysOf(achievements, 'knowledge.achievements')
   entries.forEach((item, index) => { enumValue(item.kind, ['location', 'actor', 'faction', 'enemy', 'lore', 'quest-clue'], `knowledge.entries[${index}].kind`); text(item.title, `knowledge.entries[${index}].title`, 2_000); text(item.content, `knowledge.entries[${index}].content`); strings(item.sourceRefs, `knowledge.entries[${index}].sourceRefs`, 'text'); enumValue(item.initialPlayerVisibility, ['hidden', 'rumor', 'known'], `knowledge.entries[${index}].initialPlayerVisibility`); requireRefs(strings(item.actorKeys, `knowledge.entries[${index}].actorKeys`), actorKeys, 'knowledge actor') })
   rumors.forEach((item, index) => { requireRef(key(item.knowledgeKey, `knowledge.rumors[${index}].knowledgeKey`), knowledgeKeys, 'rumor knowledge'); text(item.text, `knowledge.rumors[${index}].text`); enumValue(item.reliability, ['uncertain', 'likely', 'confirmed'], `knowledge.rumors[${index}].reliability`) })
   achievements.forEach((item, index) => { text(item.title, `knowledge.achievements[${index}].title`, 2_000); text(item.description, `knowledge.achievements[${index}].description`); requireRefs(strings(item.conditionKeys, `knowledge.achievements[${index}].conditionKeys`), conditionKeys, 'achievement condition') })
+  randomEvents.forEach((item, index) => {
+    requireRef(item.rumorKey as string | null, rumorKeys, `director.randomEvents[${index}].rumorKey`)
+    requireRef(item.upgradeTemplateKey as string | null, templateKeys, `director.randomEvents[${index}].upgradeTemplateKey`)
+    if (item.kind === 'atmosphere' && ((item.effectKeys as string[]).length || item.rumorKey != null || item.upgradeTemplateKey != null)) fail(`氛围事件只能留下已见历程:${String(item.key)}`)
+    if (item.kind === 'clue' && (item.rumorKey == null || item.upgradeTemplateKey != null)) fail(`线索事件必须且只能绑定一条传闻:${String(item.key)}`)
+    if (item.kind === 'quest-upgrade' && item.upgradeTemplateKey == null) fail(`升级事件必须绑定任务模板:${String(item.key)}`)
+    if (item.kind !== 'quest-upgrade' && item.upgradeTemplateKey != null) fail(`非升级事件不能绑定任务模板:${String(item.key)}`)
+    if (!['atmosphere', 'clue', 'quest-upgrade'].includes(String(item.kind)) && !(item.effectKeys as string[]).length && !(item.actionKeys as string[]).length) fail(`资源或遭遇事件必须包含Action或Effect:${String(item.key)}`)
+  })
 
   const presentation = versioned(packageValue, 'presentation', [1, 2])
   const legacyPresentationModule = presentation.version === 1
@@ -2010,7 +2183,7 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
       factionMorality: structuredClone(factionMorality), attitudeBands: structuredClone(attitudeBands), crimeActions: structuredClone(crimeActions),
     } as unknown as TextOpenWorldParsedModulesV1['relationships'],
     'time-weather': { ...structuredClone(timeWeather), weatherUpdateIntervalMinutes } as unknown as TextOpenWorldParsedModulesV1['time-weather'],
-    director: structuredClone(director) as unknown as TextOpenWorldParsedModulesV1['director'],
+    director: structuredClone(normalizedDirector),
     knowledge: structuredClone(knowledge) as unknown as TextOpenWorldParsedModulesV1['knowledge'],
     presentation: {
       ...structuredClone(presentation), version: 2, mapLayout,

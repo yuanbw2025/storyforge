@@ -13,7 +13,7 @@ export type TextOpenWorldServiceContinuityPolicyV1 = 'replace-on-owner-death' | 
 export type TextOpenWorldActionCategoryV1 =
   | 'move' | 'travel' | 'fast-travel' | 'observe' | 'investigate' | 'talk'
   | 'take' | 'use' | 'equip' | 'unequip' | 'drop' | 'buy' | 'sell' | 'craft'
-  | 'accept-quest' | 'abandon-quest' | 'objective-action' | 'quest-action' | 'weather-action' | 'actor-schedule-action' | 'actor-state-action' | 'claim-reward'
+  | 'accept-quest' | 'abandon-quest' | 'objective-action' | 'quest-action' | 'weather-action' | 'actor-schedule-action' | 'actor-state-action' | 'director-action' | 'claim-reward'
   | 'attack-actor' | 'steal' | 'deceive' | 'crime'
   | 'start-combat' | 'continue-combat' | 'combat-state-action' | 'combat-reward-action'
   | 'combat-basic-attack' | 'combat-skill' | 'combat-item' | 'combat-enemy-skill' | 'escape'
@@ -226,7 +226,7 @@ export interface TextOpenWorldQuestModuleV1 {
 }
 
 export interface TextOpenWorldActionModuleV1 {
-  version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13
+  version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14
   conditions: Array<{
     key: string
     expression: TextOpenWorldConditionExpressionV1
@@ -652,6 +652,75 @@ export interface TextOpenWorldDirectorModuleV1 {
   }>
 }
 
+export type TextOpenWorldDirectorTriggerV1 =
+  | 'arrival' | 'explore' | 'talk' | 'rest' | 'quest-complete' | 'time-batch' | 'activity'
+
+/**
+ * ProductRelease-owned bounded world director. Runtime history, cooldowns and
+ * regional pressure live only in the Session state.
+ */
+export interface TextOpenWorldDirectorModuleV2 {
+  version: 2
+  sourceVersion: 1 | 2
+  rules: {
+    globalMaximumRevealed: number
+    globalMaximumActive: number
+    maximumQuestInstances: number
+    highIntensityStreakLimit: number
+    historyLimit: number
+    maximumSettlementIntervals: number
+    systemActionKey: string | null
+  }
+  decks: Array<{
+    regionKey: string
+    questKeys: string[]
+    templateKeys: string[]
+    randomEventKeys: string[]
+    triggerKinds: TextOpenWorldDirectorTriggerV1[]
+    maximumRevealed: number
+    maximumActive: number
+    cooldownMinutes: number
+    blankWeight: number
+  }>
+  templates: Array<{
+    key: string
+    questKey: string
+    regionKeys: string[]
+    variantTextKeys: string[]
+    fingerprint: string
+    cooldownMinutes: number
+    conditionKeys: string[]
+    levelBand: { minimum: number; maximum: number }
+    category: 'help' | 'resource' | 'exploration' | 'conflict' | 'mystery'
+    intensity: number
+    weight: number
+  }>
+  randomEvents: Array<{
+    key: string
+    title: string
+    kind: 'atmosphere' | 'resource' | 'encounter' | 'clue' | 'quest-upgrade'
+    regionKeys: string[]
+    actionKeys: string[]
+    effectKeys: string[]
+    conditionKeys: string[]
+    fingerprint: string
+    rumorKey: string | null
+    upgradeTemplateKey: string | null
+    intensity: number
+    weight: number
+    cooldownMinutes: number
+  }>
+  regionRules: Array<{
+    regionKey: string
+    settlementIntervalMinutes: number
+    initialPressure: number
+    minimumPressure: number
+    maximumPressure: number
+    driftPerInterval: number
+    stateBands: Array<{ key: string; minimumPressure: number }>
+  }>
+}
+
 export interface TextOpenWorldKnowledgeModuleV1 {
   version: 1
   entries: Array<{
@@ -733,7 +802,7 @@ export interface TextOpenWorldParsedModulesV1 {
   economy: TextOpenWorldEconomyModuleV2
   relationships: TextOpenWorldRelationshipModuleV1
   'time-weather': TextOpenWorldTimeWeatherModuleV1
-  director: TextOpenWorldDirectorModuleV1
+  director: TextOpenWorldDirectorModuleV2
   knowledge: TextOpenWorldKnowledgeModuleV1
   presentation: TextOpenWorldPresentationModuleV1
 }

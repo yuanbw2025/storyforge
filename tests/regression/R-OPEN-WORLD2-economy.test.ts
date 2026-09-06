@@ -23,7 +23,7 @@ describe('Text Open World vNext · single-currency vendors and atomic transactio
   it('Economy v2冻结单货币、整数价格、普通/特殊库存和每商店唯一买卖Action，旧v1保持只读', () => {
     const modern = createTextOpenWorldVNextFixture()
     expect(parseTextOpenWorldModulesV1(modern)).toMatchObject({
-      actions: { version: 13 },
+      actions: { version: 14 },
       economy: {
         version: 2, sourceVersion: 2,
         currency: { key: 'currency', label: '盐票' },

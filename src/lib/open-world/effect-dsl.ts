@@ -15,6 +15,7 @@ import type {
   TextOpenWorldQuestStatusV1,
   TextOpenWorldRuntimePackageV1,
   TextOpenWorldWeatherSettlementAuthorizationV1,
+  TextOpenWorldDirectorSettlementAuthorizationV1,
 } from '../types'
 import { parseTextOpenWorldModulesV1 } from './modules'
 import { createTextOpenWorldObjectiveCatalogV1, type TextOpenWorldObjectiveCatalogV1 } from './objective-state'
@@ -46,6 +47,7 @@ import {
 import { createTextOpenWorldCombatActionCatalogV1 } from './combat-actions'
 import { createTextOpenWorldCraftingCatalogV1 } from './crafting'
 import { createTextOpenWorldEconomyCatalogV1 } from './economy'
+import { createTextOpenWorldDirectorCatalogV1 } from './director'
 
 type Row = Record<string, unknown>
 type Refs = ReturnType<typeof references>
@@ -137,6 +139,7 @@ function parseDefinition(value: unknown, refs: Refs, label: string): TextOpenWor
   }
   if (operation === 'perform-crafting') { exact(payload, ['recipeKey'], `${label}.payload`); return { key: effectKey, operation, payload: { recipeKey: ref(payload.recipeKey, refs.recipes, `${label}.recipeKey`) } } }
   if (operation === 'perform-transaction') { exact(payload, ['kind', 'vendorKey'], `${label}.payload`); return { key: effectKey, operation, payload: { kind: enumValue(payload.kind, ['buy', 'sell'], `${label}.kind`), vendorKey: ref(payload.vendorKey, refs.vendors, `${label}.vendorKey`) } } }
+  if (operation === 'settle-director') { exact(payload, [], `${label}.payload`); return { key: effectKey, operation, payload: {} } }
   if (operation === 'rest') { exact(payload, ['healthRatio', 'skillResourceRatio', 'clearHarmfulStatuses'], `${label}.payload`); return { key: effectKey, operation, payload: { healthRatio: numberValue(payload.healthRatio, `${label}.healthRatio`, 0.000001, 1), skillResourceRatio: numberValue(payload.skillResourceRatio, `${label}.skillResourceRatio`, 0, 1), clearHarmfulStatuses: bool(payload.clearHarmfulStatuses, `${label}.clearHarmfulStatuses`) } } }
   if (operation === 'respawn') { exact(payload, ['fastTravelPointKey', 'healthRatio'], `${label}.payload`); return { key: effectKey, operation, payload: { fastTravelPointKey: ref(payload.fastTravelPointKey, refs.respawnPoints, `${label}.fastTravelPointKey`), healthRatio: numberValue(payload.healthRatio, `${label}.healthRatio`, 0.000001, 1) } } }
   if (operation === 'change-actor-state') {
@@ -162,6 +165,7 @@ function remove(values: string[], value: string) { const index = values.indexOf(
 function effectDomains(operation: TextOpenWorldEffectDefinitionV1['operation']): TextOpenWorldEffectImpactDomainV1[] {
   if (operation === 'perform-crafting') return ['inventory', 'time']
   if (operation === 'perform-transaction') return ['inventory', 'economy']
+  if (operation === 'settle-director') return ['director', 'quests', 'world', 'knowledge']
   if (operation === 'respawn') return ['combat', 'player', 'map']
   if (operation === 'resolve-combat' || operation === 'settle-combat-state' || operation === 'perform-combat-action') return ['combat', 'player']
   if (['change-player-resource', 'grant-experience', 'apply-status', 'remove-status', 'learn-skill', 'rest'].includes(operation)) return ['player']
@@ -258,6 +262,37 @@ export function validateTextOpenWorldEffectStateV1(state: TextOpenWorldEffectSta
       if (entry?.stockPolicy === 'unlimited') fail(`无限供应商品不能写入有限库存状态:${vendor.key}:${itemKey}`)
       if (!entry && (!item.sellable || item.critical || item.kind === 'quest' || !vendor.sellCategories.includes(item.kind as never))) fail(`商店运行库存包含不可收购物品:${vendor.key}:${itemKey}`)
     }
+  })
+  const directorState = row(state.director, 'director')
+  exact(directorState, ['drawCount', 'generatedQuestInstanceCount', 'revealedQuestInstanceKeys', 'activeQuestInstanceKeys', 'recentFingerprints', 'lastDrawWorldMinuteByRegionKey', 'highIntensityStreak', 'lastResolvedWorldMinuteBySourceKey', 'lastRegionSettlementWorldMinuteByRegionKey', 'history'], 'director')
+  int(state.director.drawCount, 'director.drawCount')
+  int(state.director.generatedQuestInstanceCount, 'director.generatedQuestInstanceCount', 0, modules.director.rules.maximumQuestInstances)
+  if (state.director.revealedQuestInstanceKeys.length > modules.director.rules.globalMaximumRevealed
+    || state.director.activeQuestInstanceKeys.length > modules.director.rules.globalMaximumActive
+    || state.director.highIntensityStreak > modules.director.rules.highIntensityStreakLimit
+    || state.director.history.length > modules.director.rules.historyLimit) fail('Director运行状态超过Release预算')
+  const directorSourceKeys = new Set([...modules.director.templates.map(item => item.key), ...modules.director.randomEvents.map(item => item.key), ...modules.director.decks.flatMap(item => item.questKeys)])
+  state.director.recentFingerprints.forEach((item, index) => {
+    exact(row(item, `director.recentFingerprints[${index}]`), ['fingerprint', 'worldMinute'], `director.recentFingerprints[${index}]`)
+    key(item.fingerprint, `director.recentFingerprints[${index}].fingerprint`); int(item.worldMinute, `director.recentFingerprints[${index}].worldMinute`, 0, state.time.worldMinute)
+  })
+  for (const [regionKey, minute] of Object.entries(state.director.lastDrawWorldMinuteByRegionKey)) { ref(regionKey, refs.regions, 'director lastDraw region'); int(minute, `director.lastDraw.${regionKey}`, 0, state.time.worldMinute) }
+  for (const [sourceKey, minute] of Object.entries(state.director.lastResolvedWorldMinuteBySourceKey)) { if (!directorSourceKeys.has(sourceKey)) fail(`未知Director来源:${sourceKey}`); int(minute, `director.lastResolved.${sourceKey}`, 0, state.time.worldMinute) }
+  if (canonicalProductProductionJsonV2(Object.keys(state.director.lastRegionSettlementWorldMinuteByRegionKey).sort()) !== canonicalProductProductionJsonV2(modules.world.regions.map(region => region.key).sort())) fail('Director地区结算游标必须覆盖全部地区')
+  for (const [regionKey, minute] of Object.entries(state.director.lastRegionSettlementWorldMinuteByRegionKey)) { ref(regionKey, refs.regions, 'director settlement region'); int(minute, `director.lastRegionSettlement.${regionKey}`, 0, state.time.worldMinute) }
+  state.director.history.forEach((item, index) => {
+    exact(row(item, `director.history[${index}]`), ['drawNumber', 'worldMinute', 'regionKey', 'trigger', 'outcomeKind', 'sourceKey', 'questInstanceKey', 'variantTextKey', 'fingerprint', 'intensity'], `director.history[${index}]`)
+    int(item.drawNumber, `director.history[${index}].drawNumber`, 1, state.director.drawCount)
+    int(item.worldMinute, `director.history[${index}].worldMinute`, 0, state.time.worldMinute)
+    ref(item.regionKey, refs.regions, `director.history[${index}].regionKey`)
+    enumValue(item.trigger, ['arrival', 'explore', 'talk', 'rest', 'quest-complete', 'time-batch', 'activity'], `director.history[${index}].trigger`)
+    enumValue(item.outcomeKind, ['blank', 'fixed-quest', 'template-quest', 'random-event'], `director.history[${index}].outcomeKind`)
+    if (item.sourceKey != null && !directorSourceKeys.has(item.sourceKey)) fail(`Director历史来源不存在:${item.sourceKey}`)
+    if (item.questInstanceKey != null && !state.quests.instancesByKey[item.questInstanceKey]) fail(`Director历史任务实例不存在:${item.questInstanceKey}`)
+    if (item.variantTextKey != null) key(item.variantTextKey, `director.history[${index}].variantTextKey`)
+    if (item.fingerprint != null) key(item.fingerprint, `director.history[${index}].fingerprint`)
+    int(item.intensity, `director.history[${index}].intensity`, 0, 10)
+    if (index > 0 && state.director.history[index - 1].drawNumber >= item.drawNumber) fail('Director历史drawNumber必须递增')
   })
   const questState = row(state.quests, 'quests'); exact(questState, ['instancesByKey', 'resultTags', 'tracking'], 'quests')
   const releaseInstanceCountByDefinition = new Map<string, number>()
@@ -395,6 +430,14 @@ export function validateTextOpenWorldEffectStateV1(state: TextOpenWorldEffectSta
   for (const [knowledgeKey, visibility] of Object.entries(state.knowledge.visibilityByKey)) { ref(knowledgeKey, refs.knowledge, 'knowledge key'); enumValue(visibility, ['hidden', 'rumor', 'known'], `knowledge visibility:${knowledgeKey}`) }
   assertUniqueKnown(state.knowledge.readRumorKeys, refs.rumors, 'knowledge.readRumorKeys')
   assertUniqueKnown(state.knowledge.earnedAchievementKeys, refs.achievements, 'knowledge.earnedAchievementKeys')
+  assertUniqueKnown(state.knowledge.seenRandomEventKeys, new Set(modules.director.randomEvents.map(item => item.key)), 'knowledge.seenRandomEventKeys')
+  if (state.knowledge.history.length > modules.director.rules.historyLimit) fail('玩家知识历程超过Release预算')
+  state.knowledge.history.forEach((item, index) => {
+    exact(row(item, `knowledge.history[${index}]`), ['kind', 'targetKey', 'sourceKey', 'regionKey', 'worldMinute'], `knowledge.history[${index}]`)
+    enumValue(item.kind, ['knowledge-revealed', 'rumor-read', 'achievement-earned', 'random-event-seen'], `knowledge.history[${index}].kind`)
+    key(item.targetKey, `knowledge.history[${index}].targetKey`); key(item.sourceKey, `knowledge.history[${index}].sourceKey`)
+    ref(item.regionKey, refs.regions, `knowledge.history[${index}].regionKey`); int(item.worldMinute, `knowledge.history[${index}].worldMinute`, 0, state.time.worldMinute)
+  })
   assertUniqueKnown(state.endings.unlockedKeys, refs.endings, 'endings.unlockedKeys')
   if (state.endings.reachedKey != null && (!refs.endings.has(state.endings.reachedKey) || !state.endings.unlockedKeys.includes(state.endings.reachedKey))) fail('reached ending无效')
   if (new Set(state.appliedClaimKeys).size !== state.appliedClaimKeys.length || state.appliedClaimKeys.some(item => !CLAIM_KEY.test(item))) fail('appliedClaimKeys无效')
@@ -454,6 +497,7 @@ function applyDefinitions(
   combatActions: ReturnType<typeof createTextOpenWorldCombatActionCatalogV1>,
   crafting: ReturnType<typeof createTextOpenWorldCraftingCatalogV1>,
   economy: ReturnType<typeof createTextOpenWorldEconomyCatalogV1>,
+  director: ReturnType<typeof createTextOpenWorldDirectorCatalogV1>,
 ) {
   validateTextOpenWorldEffectStateV1(stateValue, modules)
   if (stateValue.appliedClaimKeys.includes(claimKey)) fail(`claim已应用:${claimKey}`)
@@ -530,6 +574,13 @@ function applyDefinitions(
     if (transactionEffects[0].payload.kind !== authorization.transactionKind || transactionEffects[0].payload.vendorKey !== authorization.vendorKey) fail('交易Effect与授权不一致')
     economy.assertAuthorization({ state: stateValue, authorization })
   } else if (authorization?.kind === 'transaction') fail('Transaction授权没有对应Effect')
+  const directorEffects = effects.filter((effect): effect is Extract<TextOpenWorldEffectDefinitionV1, { operation: 'settle-director' }> => effect.operation === 'settle-director')
+  if (directorEffects.length) {
+    if (directorEffects.length !== 1 || authorization?.kind !== 'director-settlement') fail('Director结算Effect缺少唯一Director授权')
+    const dynamicEffectKeys = effects.filter(effect => effect.operation !== 'settle-director').map(effect => effect.key)
+    if (canonicalProductProductionJsonV2(dynamicEffectKeys) !== canonicalProductProductionJsonV2(authorization.selection.effectKeys)) fail('Director动态Effect集合与授权不一致')
+    director.assertAuthorization({ state: stateValue, authorization })
+  } else if (authorization?.kind === 'director-settlement') fail('Director授权没有对应结算Effect')
   let questTransitionsApplied = false
   for (const effect of effects) {
     switch (effect.operation) {
@@ -728,7 +779,11 @@ function applyDefinitions(
       case 'reveal-knowledge': {
         const { payload } = effect; const rank = { hidden: 0, rumor: 1, known: 2 }; const before = state.knowledge.visibilityByKey[payload.knowledgeKey] ?? 'hidden'
         if (rank[payload.visibility] < rank[before]) fail(`${effect.key}不能降低知识可见性`)
-        state.knowledge.visibilityByKey[payload.knowledgeKey] = payload.visibility; record(changes, effect, `揭示知识:${payload.knowledgeKey}`, before, payload.visibility); break
+        state.knowledge.visibilityByKey[payload.knowledgeKey] = payload.visibility
+        const regionKey = modules.world.locations.find(location => location.key === state.map.currentLocationKey)!.regionKey
+        state.knowledge.history.push({ kind: 'knowledge-revealed', targetKey: payload.knowledgeKey, sourceKey: effect.key, regionKey, worldMinute: state.time.worldMinute })
+        state.knowledge.history = state.knowledge.history.slice(-modules.director.rules.historyLimit)
+        record(changes, effect, `揭示知识:${payload.knowledgeKey}`, before, payload.visibility); break
       }
       case 'reveal-location': {
         const { payload } = effect; const before = state.map.locationKnowledgeByKey[payload.locationKey] ?? 'unknown'
@@ -874,6 +929,15 @@ function applyDefinitions(
         record(changes, effect, `${authorization.transactionKind === 'buy' ? '购买' : '出售'}:${authorization.itemKey}×${authorization.quantity}`, before, structuredClone(authorization.after))
         break
       }
+      case 'settle-director': {
+        if (authorization?.kind !== 'director-settlement') fail(`${effect.key}缺少Director授权`)
+        const before = { director: structuredClone(state.director), world: structuredClone(state.world), quests: structuredClone(state.quests), knowledge: structuredClone(state.knowledge) }
+        director.applyAuthorization({ state, authorization: authorization as TextOpenWorldDirectorSettlementAuthorizationV1 })
+        record(changes, effect, `Director结算:${authorization.trigger}:${authorization.selection.outcomeKind}`, before, {
+          director: state.director, world: state.world, quests: state.quests, knowledge: state.knowledge,
+        })
+        break
+      }
       case 'rest': {
         const { payload } = effect
         if (state.player.health <= 0 || state.combat?.status === 'active' || state.combat?.status === 'defeat') fail(`${effect.key}当前不能休息`)
@@ -916,6 +980,9 @@ function applyDefinitions(
         const { payload } = effect; const before = state.knowledge.earnedAchievementKeys.includes(payload.achievementKey)
         if (before) fail(`${effect.key}不能重复获得已有成就`)
         addUnique(state.knowledge.earnedAchievementKeys, payload.achievementKey)
+        const regionKey = modules.world.locations.find(location => location.key === state.map.currentLocationKey)!.regionKey
+        state.knowledge.history.push({ kind: 'achievement-earned', targetKey: payload.achievementKey, sourceKey: effect.key, regionKey, worldMinute: state.time.worldMinute })
+        state.knowledge.history = state.knowledge.history.slice(-modules.director.rules.historyLimit)
         record(changes, effect, `获得成就:${payload.achievementKey}`, before, true); break
       }
       case 'unlock-ending': {
@@ -955,11 +1022,12 @@ export function applyTextOpenWorldEffectPlanForReplayV1(
   const combatActions = createTextOpenWorldCombatActionCatalogV1(value, modules)
   const crafting = createTextOpenWorldCraftingCatalogV1(value, modules)
   const economy = createTextOpenWorldEconomyCatalogV1(value, modules)
+  const director = createTextOpenWorldDirectorCatalogV1(value, modules)
   const definitions = modules.actions.effects.map((item, index) => parseDefinition(item, refs, `effects[${index}]`))
   const byKey = new Map(definitions.map(item => [item.key, item]))
   const canonical = plan.effectKeys.map(effectKey => byKey.get(effectKey) ?? fail(`Effect不存在:${effectKey}`))
   if (canonicalProductProductionJsonV2(canonical) !== canonicalProductProductionJsonV2(plan.effects)) fail('EffectPlan定义与Release不一致')
-  const applied = applyDefinitions(state, canonical, plan.claimKey, modules, plan.authorization, questTransitions, objectives, tracking, fastTravel, weather, actorSchedules, actorLifecycle, crime, combatState, combatActions, crafting, economy)
+  const applied = applyDefinitions(state, canonical, plan.claimKey, modules, plan.authorization, questTransitions, objectives, tracking, fastTravel, weather, actorSchedules, actorLifecycle, crime, combatState, combatActions, crafting, economy, director)
   if (canonicalProductProductionJsonV2(applied.changes) !== canonicalProductProductionJsonV2(plan.previewChanges)) fail('EffectPlan重放变化与预演不一致')
   return applied
 }
@@ -985,10 +1053,11 @@ export function createTextOpenWorldEffectCatalogV1(value: TextOpenWorldRuntimePa
   const combatActions = createTextOpenWorldCombatActionCatalogV1(value, modules)
   const crafting = createTextOpenWorldCraftingCatalogV1(value, modules)
   const economy = createTextOpenWorldEconomyCatalogV1(value, modules)
+  const director = createTextOpenWorldDirectorCatalogV1(value, modules)
   const definitions = modules.actions.effects.map((item, index) => parseDefinition(item, refs, `effects[${index}]`)); const byKey = new Map(definitions.map(item => [item.key, item])); const clone = <T>(item: T): T => structuredClone(item)
   const plan = async (input: { effectKeys: string[]; claimKey: string; state: TextOpenWorldEffectStateV1; authorization?: TextOpenWorldEffectPlanV1['authorization'] }): Promise<TextOpenWorldEffectPlanV1> => {
     const claimKey = key(input.claimKey, 'claimKey', CLAIM_KEY); if (!Array.isArray(input.effectKeys) || new Set(input.effectKeys).size !== input.effectKeys.length) fail('effectKeys必须是无重复数组')
-    const effects = input.effectKeys.map(effectKey => byKey.get(key(effectKey, 'effectKey')) ?? fail(`Effect不存在:${effectKey}`)); const baseStateHash = await hashProductProductionValueV2(input.state); const preview = applyDefinitions(input.state, effects, claimKey, modules, input.authorization ?? null, questTransitions, objectives, tracking, fastTravel, weather, actorSchedules, actorLifecycle, crime, combatState, combatActions, crafting, economy); const resultingStateHash = await hashProductProductionValueV2(preview.state); const impactDomains = [...new Set(effects.flatMap(effect => effectDomains(effect.operation)))]
+    const effects = input.effectKeys.map(effectKey => byKey.get(key(effectKey, 'effectKey')) ?? fail(`Effect不存在:${effectKey}`)); const baseStateHash = await hashProductProductionValueV2(input.state); const preview = applyDefinitions(input.state, effects, claimKey, modules, input.authorization ?? null, questTransitions, objectives, tracking, fastTravel, weather, actorSchedules, actorLifecycle, crime, combatState, combatActions, crafting, economy, director); const resultingStateHash = await hashProductProductionValueV2(preview.state); const impactDomains = [...new Set(effects.flatMap(effect => effectDomains(effect.operation)))]
     const body: Omit<TextOpenWorldEffectPlanV1, 'planHash'> = {
       schema: 'storyforge.text-open-world.effect-plan', version: 1, claimKey, baseStateHash, resultingStateHash,
       effectKeys: [...input.effectKeys], effects: clone(effects), authorization: clone(input.authorization ?? null),
@@ -1005,7 +1074,7 @@ export function createTextOpenWorldEffectCatalogV1(value: TextOpenWorldRuntimePa
       if (!isSha256Hash(planHash) || await hashProductProductionValueV2(planBody(body)) !== planHash) fail('EffectPlan planHash无效')
       const baseStateHash = await hashProductProductionValueV2(input.state); if (baseStateHash !== input.plan.baseStateHash) fail('EffectPlan基线状态已变化')
       const canonicalEffects = input.plan.effectKeys.map(effectKey => byKey.get(effectKey) ?? fail(`Effect不存在:${effectKey}`)); if (canonicalProductProductionJsonV2(canonicalEffects) !== canonicalProductProductionJsonV2(input.plan.effects)) fail('EffectPlan定义与Release不一致')
-      const applied = applyDefinitions(input.state, canonicalEffects, input.plan.claimKey, modules, input.plan.authorization, questTransitions, objectives, tracking, fastTravel, weather, actorSchedules, actorLifecycle, crime, combatState, combatActions, crafting, economy); const resultingStateHash = await hashProductProductionValueV2(applied.state)
+      const applied = applyDefinitions(input.state, canonicalEffects, input.plan.claimKey, modules, input.plan.authorization, questTransitions, objectives, tracking, fastTravel, weather, actorSchedules, actorLifecycle, crime, combatState, combatActions, crafting, economy, director); const resultingStateHash = await hashProductProductionValueV2(applied.state)
       if (resultingStateHash !== input.plan.resultingStateHash || canonicalProductProductionJsonV2(applied.changes) !== canonicalProductProductionJsonV2(input.plan.previewChanges)) fail('EffectPlan预演与应用结果不一致')
       return { state: applied.state, receipt: { schema: 'storyforge.text-open-world.effect-receipt', version: 1, claimKey: input.plan.claimKey, planHash: input.plan.planHash, baseStateHash, resultingStateHash, impactDomains: [...input.plan.impactDomains], changes: clone(applied.changes) } }
     },

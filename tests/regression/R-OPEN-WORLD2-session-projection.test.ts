@@ -58,7 +58,7 @@ describe('Text Open World vNext · authoritative Session Projection', () => {
         time: { worldMinute: 480, currentWeatherByRegionKey: { 'region.salt-port': 'weather.clear', 'region.ridge': 'weather.clear' } },
         relationships: { morality: 0, factionAffinityByKey: { 'faction.canal-keepers': 0 } },
         actors: { 'actor.caretaker': { alive: true, present: true, locationKey: 'location.salt-port', scheduleState: '检查内渠' } },
-        world: { regionPressureByKey: { 'region.salt-port': 0, 'region.ridge': 0 }, factionStateByKey: { 'faction.canal-keepers': 'neutral' } },
+        world: { regionPressureByKey: { 'region.salt-port': 10, 'region.ridge': 20 }, factionStateByKey: { 'faction.canal-keepers': 'neutral' } },
         knowledge: { visibilityByKey: { 'knowledge.caretaker': 'known' } }, endings: { unlockedKeys: [], reachedKey: null },
       },
       director: { drawCount: 0, generatedQuestInstanceCount: 0, revealedQuestInstanceKeys: [], activeQuestInstanceKeys: [] },

@@ -45,15 +45,8 @@ export interface TextOpenWorldProgressionStatusV1 {
   atMaximumLevel: boolean
 }
 
-export interface TextOpenWorldDirectorProjectionV1 {
-  drawCount: number
-  generatedQuestInstanceCount: number
-  revealedQuestInstanceKeys: string[]
-  activeQuestInstanceKeys: string[]
-  recentFingerprints: Array<{ fingerprint: string; worldMinute: number }>
-  lastDrawWorldMinuteByRegionKey: Record<string, number>
-  highIntensityStreak: number
-}
+/** Compatibility mirror of the Effect-state Director ledger. */
+export type TextOpenWorldDirectorProjectionV1 = TextOpenWorldEffectStateV1['director']
 
 export interface TextOpenWorldActionRuntimeProjectionV1 {
   completedOnceActionKeys: string[]
@@ -69,6 +62,7 @@ export interface TextOpenWorldSessionProtocolProjectionV1 {
   pendingCombatTransitionIntent: TextOpenWorldCombatTransitionIntentV1 | null
   pendingActionQuantity: number | null
   pendingActionItemKey: string | null
+  pendingDirectorTrigger: import('./text-open-world-modules').TextOpenWorldDirectorTriggerV1 | null
   randomEvidence: Array<{ eventSequence: number; evidence: TextOpenWorldRandomEvidenceV1 }>
   lastCompletedCommandId: string | null
   lastOutcomeFingerprint: string | null

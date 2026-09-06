@@ -1,6 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
+import { executeTextOpenWorldActionV1 } from '../../src/lib/open-world/action-executor'
 import { createTextOpenWorldCheckpointV1, inspectTextOpenWorldCheckpointV1 } from '../../src/lib/open-world/checkpoints'
 import { commitTextOpenWorldCommandV1 } from '../../src/lib/open-world/commands'
 import { createTextOpenWorldEffectCatalogV1 } from '../../src/lib/open-world/effect-dsl'
@@ -64,6 +65,10 @@ describe('Text Open World vNext · three registries and complete data lifecycle'
   it('openWorldRuntime只装配vNext玩家可见状态、Action闭集和正式结果', async () => {
     const created = await fixture()
     await completeAction(created)
+    await executeTextOpenWorldActionV1({
+      sessionId: created.session.id!, actionKey: 'action.talk-caretaker', targetKey: 'actor.caretaker',
+      commandId: 'command.registry-lifecycle.director', requestedAt: 2_000,
+    })
     const context = await assembleContext({
       projectId: created.scope.projectId, scope: created.scope,
       productRuntimeSessionId: created.session.id!, sourceKeys: ['openWorldRuntime'],
@@ -79,6 +84,9 @@ describe('Text Open World vNext · three registries and complete data lifecycle'
     expect(context.text).toContain('【生命状态】healthy')
     expect(context.text).toContain('【时间与天气】第1天｜白天｜晴朗｜干燥而明亮。')
     expect(context.text).toContain('存在目的=承载开场、主线委托、交易和安全复活。')
+    expect(context.text).toContain('【地区状态】盐港｜状态=stable｜压力=10')
+    expect(context.text).toContain('【近期区域内容】')
+    expect(context.text).toContain('【已获成就】\n- achievement.first-clue:第一道水痕')
     expect(context.text).toContain('【玩家可知相邻道路】')
     expect(context.text).toContain('edge.port-ridge｜前往=location.ridge-channel:断脊渠口｜60分钟｜风险=ordinary｜可执行=action.travel-port-ridge')
     expect(context.text).not.toContain('盐港最后一位老守渠人')

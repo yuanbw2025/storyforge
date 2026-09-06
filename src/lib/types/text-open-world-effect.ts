@@ -1,4 +1,5 @@
 import type { TextOpenWorldObjectiveStatusV1, TextOpenWorldQuestStatusV1 } from './text-open-world-condition'
+import type { TextOpenWorldDirectorTriggerV1 } from './text-open-world-modules'
 
 export type TextOpenWorldEffectOperationV1 =
   | 'change-player-resource' | 'grant-experience' | 'apply-status' | 'remove-status'
@@ -9,7 +10,7 @@ export type TextOpenWorldEffectOperationV1 =
   | 'reveal-knowledge' | 'reveal-location' | 'unlock-fast-travel'
   | 'enter-location' | 'start-travel' | 'fast-travel' | 'advance-time' | 'settle-weather' | 'settle-actor-schedules'
   | 'start-combat' | 'resolve-combat' | 'initialize-combat' | 'settle-combat-state' | 'perform-combat-action' | 'rest' | 'respawn'
-  | 'perform-crafting' | 'perform-transaction'
+  | 'perform-crafting' | 'perform-transaction' | 'settle-director'
   | 'change-actor-state' | 'change-region-state' | 'set-world-flag'
   | 'earn-achievement' | 'unlock-ending' | 'reach-ending'
 
@@ -50,6 +51,7 @@ export type TextOpenWorldEffectDefinitionV1 =
     } }
   | { key: string; operation: 'perform-crafting'; payload: { recipeKey: string } }
   | { key: string; operation: 'perform-transaction'; payload: { kind: 'buy' | 'sell'; vendorKey: string } }
+  | { key: string; operation: 'settle-director'; payload: Record<string, never> }
   | { key: string; operation: 'rest'; payload: { healthRatio: number; skillResourceRatio: number; clearHarmfulStatuses: boolean } }
   | { key: string; operation: 'respawn'; payload: { fastTravelPointKey: string; healthRatio: number } }
   | { key: string; operation: 'change-actor-state'; payload: {
@@ -150,6 +152,40 @@ export interface TextOpenWorldLegacyCombatStateV1 {
   status: 'active' | 'victory' | 'defeat' | 'escaped'
 }
 
+export interface TextOpenWorldDirectorHistoryEntryV1 {
+  drawNumber: number
+  worldMinute: number
+  regionKey: string
+  trigger: TextOpenWorldDirectorTriggerV1
+  outcomeKind: 'blank' | 'fixed-quest' | 'template-quest' | 'random-event'
+  sourceKey: string | null
+  questInstanceKey: string | null
+  variantTextKey: string | null
+  fingerprint: string | null
+  intensity: number
+}
+
+export interface TextOpenWorldDirectorRuntimeStateV1 {
+  drawCount: number
+  generatedQuestInstanceCount: number
+  revealedQuestInstanceKeys: string[]
+  activeQuestInstanceKeys: string[]
+  recentFingerprints: Array<{ fingerprint: string; worldMinute: number }>
+  lastDrawWorldMinuteByRegionKey: Record<string, number>
+  highIntensityStreak: number
+  lastResolvedWorldMinuteBySourceKey: Record<string, number>
+  lastRegionSettlementWorldMinuteByRegionKey: Record<string, number>
+  history: TextOpenWorldDirectorHistoryEntryV1[]
+}
+
+export interface TextOpenWorldKnowledgeHistoryEntryV1 {
+  kind: 'knowledge-revealed' | 'rumor-read' | 'achievement-earned' | 'random-event-seen'
+  targetKey: string
+  sourceKey: string
+  regionKey: string
+  worldMinute: number
+}
+
 export interface TextOpenWorldEffectStateV1 {
   version: 1
   player: {
@@ -174,6 +210,7 @@ export interface TextOpenWorldEffectStateV1 {
     /** Only finite or player-sold stock is stored here; unlimited stock remains Release-owned. */
     limitedStockQuantitiesByVendorKey: Record<string, Record<string, number>>
   }
+  director: TextOpenWorldDirectorRuntimeStateV1
   quests: {
     instancesByKey: Record<string, TextOpenWorldQuestInstanceV1>
     resultTags: string[]
@@ -216,6 +253,8 @@ export interface TextOpenWorldEffectStateV1 {
     visibilityByKey: Record<string, 'hidden' | 'rumor' | 'known'>
     readRumorKeys: string[]
     earnedAchievementKeys: string[]
+    seenRandomEventKeys: string[]
+    history: TextOpenWorldKnowledgeHistoryEntryV1[]
   }
   endings: { unlockedKeys: string[]; reachedKey: string | null }
   appliedClaimKeys: string[]
@@ -223,7 +262,7 @@ export interface TextOpenWorldEffectStateV1 {
 
 export type TextOpenWorldEffectImpactDomainV1 =
   | 'player' | 'inventory' | 'quests' | 'map' | 'time' | 'relationships'
-  | 'combat' | 'actors' | 'world' | 'knowledge' | 'endings' | 'economy'
+  | 'combat' | 'actors' | 'world' | 'knowledge' | 'endings' | 'economy' | 'director'
 
 export interface TextOpenWorldEffectChangeV1 {
   effectKey: string
@@ -440,6 +479,38 @@ export interface TextOpenWorldTransactionAuthorizationV1 {
   }
 }
 
+export interface TextOpenWorldDirectorSettlementAuthorizationV1 {
+  kind: 'director-settlement'
+  trigger: TextOpenWorldDirectorTriggerV1
+  regionKey: string
+  worldMinute: number
+  randomRequests: Array<{ drawKey: string; minimumInclusive: number; maximumInclusive: number }>
+  regionChanges: Array<{
+    regionKey: string
+    settledIntervals: number
+    fromSettlementWorldMinute: number
+    toSettlementWorldMinute: number
+    fromPressure: number
+    toPressure: number
+    fromState: string
+    toState: string
+  }>
+  selection: {
+    outcomeKind: 'blank' | 'fixed-quest' | 'template-quest' | 'random-event'
+    sourceKey: string | null
+    definitionKey: string | null
+    sourceInstanceKey: string | null
+    questInstanceKey: string | null
+    variantTextKey: string | null
+    fingerprint: string | null
+    intensity: number
+    effectKeys: string[]
+    rumorKey: string | null
+    reason: string
+  }
+  earnedAchievementKeys: string[]
+}
+
 export interface TextOpenWorldEffectPlanV1 {
   schema: 'storyforge.text-open-world.effect-plan'
   version: 1
@@ -448,7 +519,7 @@ export interface TextOpenWorldEffectPlanV1 {
   resultingStateHash: string
   effectKeys: string[]
   effects: TextOpenWorldEffectDefinitionV1[]
-  authorization: TextOpenWorldRewardAuthorizationV1 | TextOpenWorldQuestTransitionAuthorizationV1 | TextOpenWorldObjectiveAuthorizationV1 | TextOpenWorldQuestTrackingAuthorizationV1 | TextOpenWorldFastTravelAuthorizationV1 | TextOpenWorldWeatherSettlementAuthorizationV1 | TextOpenWorldActorScheduleSettlementAuthorizationV1 | TextOpenWorldCrimeAuthorizationV1 | TextOpenWorldCombatTransitionAuthorizationV1 | TextOpenWorldCombatActionAuthorizationV1 | TextOpenWorldCraftingAuthorizationV1 | TextOpenWorldTransactionAuthorizationV1 | null
+  authorization: TextOpenWorldRewardAuthorizationV1 | TextOpenWorldQuestTransitionAuthorizationV1 | TextOpenWorldObjectiveAuthorizationV1 | TextOpenWorldQuestTrackingAuthorizationV1 | TextOpenWorldFastTravelAuthorizationV1 | TextOpenWorldWeatherSettlementAuthorizationV1 | TextOpenWorldActorScheduleSettlementAuthorizationV1 | TextOpenWorldCrimeAuthorizationV1 | TextOpenWorldCombatTransitionAuthorizationV1 | TextOpenWorldCombatActionAuthorizationV1 | TextOpenWorldCraftingAuthorizationV1 | TextOpenWorldTransactionAuthorizationV1 | TextOpenWorldDirectorSettlementAuthorizationV1 | null
   impactDomains: TextOpenWorldEffectImpactDomainV1[]
   previewChanges: TextOpenWorldEffectChangeV1[]
   planHash: string

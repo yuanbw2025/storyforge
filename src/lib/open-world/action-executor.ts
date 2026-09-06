@@ -1,7 +1,7 @@
 import { db } from '../db/schema'
 import { canonicalProductProductionJsonV2, hashProductProductionValueV2 } from '../product-production/hash'
 import { hashProductRuntimeStateV1, readProductRuntimeState } from '../product/runtime-core'
-import type { TextOpenWorldCombatTransitionIntentV1, TextOpenWorldCommandEnvelopeV1, TextOpenWorldEffectDefinitionV1, TextOpenWorldEffectPlanV1, TextOpenWorldFeedbackReceiptV1, TextOpenWorldRandomEvidenceV1, TextOpenWorldRandomRequestV1 } from '../types'
+import type { TextOpenWorldCombatTransitionIntentV1, TextOpenWorldCommandEnvelopeV1, TextOpenWorldDirectorTriggerV1, TextOpenWorldEffectDefinitionV1, TextOpenWorldEffectPlanV1, TextOpenWorldFeedbackReceiptV1, TextOpenWorldRandomEvidenceV1, TextOpenWorldRandomRequestV1 } from '../types'
 import { createTextOpenWorldActionRegistryV1 } from './action-registry'
 import { ensureTextOpenWorldCombatRetryCheckpointV1 } from './checkpoints'
 import { commitTextOpenWorldCommandV1, getTextOpenWorldCommandStatusV1 } from './commands'
@@ -27,6 +27,7 @@ import { createTextOpenWorldCombatStateMachineV1 } from './combat-state-machine'
 import { createTextOpenWorldCombatActionCatalogV1 } from './combat-actions'
 import { createTextOpenWorldCraftingCatalogV1 } from './crafting'
 import { createTextOpenWorldEconomyCatalogV1 } from './economy'
+import { createTextOpenWorldDirectorCatalogV1 } from './director'
 
 const COMMAND_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/
 
@@ -53,6 +54,12 @@ function itemKeyFrom(envelope: TextOpenWorldCommandEnvelopeV1): string {
   const value = envelope.payload.itemKey
   if (typeof value !== 'string') fail('交易命令缺少合法itemKey')
   return value
+}
+function directorTriggerFrom(envelope: TextOpenWorldCommandEnvelopeV1): TextOpenWorldDirectorTriggerV1 {
+  const value = envelope.payload.directorTrigger
+  const allowed: TextOpenWorldDirectorTriggerV1[] = ['arrival', 'explore', 'talk', 'rest', 'quest-complete', 'time-batch', 'activity']
+  if (typeof value !== 'string' || !allowed.includes(value as TextOpenWorldDirectorTriggerV1)) fail('Director命令缺少合法触发类型')
+  return value as TextOpenWorldDirectorTriggerV1
 }
 
 async function settleAcceptedCommand(envelope: TextOpenWorldCommandEnvelopeV1): Promise<TextOpenWorldFeedbackReceiptV1> {
@@ -100,7 +107,7 @@ async function settleAcceptedCommand(envelope: TextOpenWorldCommandEnvelopeV1): 
         conditionResults: deriveTextOpenWorldContextsV1(projection).action.conditionResults,
       })
     : null
-  const effectKeys = crimeResolution?.authorization.effectKeys
+  let effectKeys = crimeResolution?.authorization.effectKeys
     ?? [...new Set([...action.action.costEffectKeys, ...action.action.successEffectKeys])]
   const questTransitions = effectKeys.map(effectKey => modules.actions.effects.find(effect => effect.key === effectKey)!)
     .filter((effect): effect is Extract<TextOpenWorldEffectDefinitionV1, { operation: 'transition-quest' }> => effect.operation === 'transition-quest')
@@ -122,7 +129,9 @@ async function settleAcceptedCommand(envelope: TextOpenWorldCommandEnvelopeV1): 
     .filter((effect): effect is Extract<TextOpenWorldEffectDefinitionV1, { operation: 'perform-crafting' }> => effect.operation === 'perform-crafting')
   const transactionEffects = effectKeys.map(effectKey => modules.actions.effects.find(effect => effect.key === effectKey)!)
     .filter((effect): effect is Extract<TextOpenWorldEffectDefinitionV1, { operation: 'perform-transaction' }> => effect.operation === 'perform-transaction')
-  if ([questTransitions.length > 0, objectiveEffects.length > 0, trackingEffects.length > 0, fastTravelEffects.length > 0, weatherEffects.length > 0, actorScheduleEffects.length > 0, combatSettlementEffects.length > 0, combatActionEffects.length > 0, craftingEffects.length > 0, transactionEffects.length > 0].filter(Boolean).length > 1) fail('同一Action不能混合任务迁移、Objective、追踪、快速旅行、天气、角色日程、战斗阶段、战斗行动、制作或交易状态')
+  const directorEffects = effectKeys.map(effectKey => modules.actions.effects.find(effect => effect.key === effectKey)!)
+    .filter((effect): effect is Extract<TextOpenWorldEffectDefinitionV1, { operation: 'settle-director' }> => effect.operation === 'settle-director')
+  if ([questTransitions.length > 0, objectiveEffects.length > 0, trackingEffects.length > 0, fastTravelEffects.length > 0, weatherEffects.length > 0, actorScheduleEffects.length > 0, combatSettlementEffects.length > 0, combatActionEffects.length > 0, craftingEffects.length > 0, transactionEffects.length > 0, directorEffects.length > 0].filter(Boolean).length > 1) fail('同一Action不能混合任务迁移、Objective、追踪、快速旅行、天气、角色日程、战斗阶段、战斗行动、制作、交易或Director状态')
   let randomRequests: TextOpenWorldRandomRequestV1[] = []
   let randomEvidence: TextOpenWorldRandomEvidenceV1[] = []
   const conditionResults = Object.fromEntries(Object.entries(deriveTextOpenWorldContextsV1(projection).action.conditionResults)
@@ -137,13 +146,23 @@ async function settleAcceptedCommand(envelope: TextOpenWorldCommandEnvelopeV1): 
     actorKey: envelope.actorKey === 'system' ? 'system' as const : 'player' as const,
     conditionResults,
   } : null
-  if (weatherEffects.length === 1 || combatActionInput) {
+  const directorCatalog = directorEffects.length === 1
+    ? createTextOpenWorldDirectorCatalogV1(projection.runtimePackage, modules)
+    : null
+  const directorInput = directorCatalog ? {
+    state: projection.state,
+    trigger: directorTriggerFrom(envelope),
+    conditionResults,
+  } : null
+  if (weatherEffects.length === 1 || combatActionInput || directorInput) {
     const session = await db.productRuntimeSessions.get(envelope.sessionId)
     if (!session || session.kind !== 'text-open-world') fail('随机结算Session不存在')
     const commandSequence = projection.protocol.pendingCommandSequence ?? fail('随机结算命令缺少序号')
     randomRequests = weatherEffects.length === 1
       ? createTextOpenWorldWeatherCatalogV1(projection.runtimePackage, modules).prepare({ state: projection.state })
-      : combatActionCatalog!.randomRequestsFor(combatActionInput!)
+      : combatActionInput
+        ? combatActionCatalog!.randomRequestsFor(combatActionInput)
+        : directorCatalog!.randomRequestsFor(directorInput!)
     randomEvidence = await Promise.all(randomRequests.map((request, drawIndex) => resolveTextOpenWorldRandomEvidenceV1({
       seed: session.seed,
       commandId: envelope.commandId,
@@ -204,7 +223,12 @@ async function settleAcceptedCommand(envelope: TextOpenWorldCommandEnvelopeV1): 
                           itemKey: itemKeyFrom(envelope),
                           quantity: actionQuantityFrom(envelope),
                         })
+                      : directorEffects.length === 1
+                        ? directorCatalog!.resolve({ ...directorInput!, evidence: randomEvidence })
               : null)
+  if (authorization?.kind === 'director-settlement') {
+    effectKeys = [...effectKeys, ...authorization.selection.effectKeys]
+  }
   const catalog = createTextOpenWorldEffectCatalogV1(projection.runtimePackage)
   const plan = await catalog.plan({ effectKeys, claimKey: `claim.${envelope.commandId}`, state: projection.state, authorization })
   const { receipt } = await catalog.apply({ plan, state: projection.state })
@@ -241,12 +265,13 @@ type ExecuteTextOpenWorldActionInputV1 = {
 }
 type ExecuteTextOpenWorldActionInternalInputV1 = ExecuteTextOpenWorldActionInputV1 & {
   combatTransitionIntent?: TextOpenWorldCombatTransitionIntentV1
+  directorTrigger?: TextOpenWorldDirectorTriggerV1
 }
 
 async function executeTextOpenWorldActionAsV1(
   input: ExecuteTextOpenWorldActionInternalInputV1,
   actorKey: 'player' | 'system',
-  systemCategory?: 'quest-action' | 'weather-action' | 'actor-schedule-action' | 'actor-state-action' | 'combat-state-action' | 'combat-enemy-skill' | 'combat-reward-action',
+  systemCategory?: 'quest-action' | 'weather-action' | 'actor-schedule-action' | 'actor-state-action' | 'combat-state-action' | 'combat-enemy-skill' | 'combat-reward-action' | 'director-action',
 ): Promise<TextOpenWorldFeedbackReceiptV1> {
   if (!Number.isSafeInteger(input.sessionId) || input.sessionId < 1) fail('sessionId无效')
   const commandId = input.commandId ?? newCommandId()
@@ -261,11 +286,14 @@ async function executeTextOpenWorldActionAsV1(
     ]
     if (!allowed.includes(input.combatTransitionIntent!)) fail('战斗阶段命令缺少合法transition intent')
   }
+  const hasDirectorTrigger = input.directorTrigger != null
+  if (hasDirectorTrigger !== (systemCategory === 'director-action')) fail('Director触发只能由Director系统Action提交')
   const commandPayload: Record<string, unknown> = {
     ...(targetKey == null ? {} : { targetKey }),
     ...(input.quantity == null ? {} : { quantity: input.quantity }),
     ...(input.itemKey == null ? {} : { itemKey: input.itemKey }),
     ...(input.combatTransitionIntent == null ? {} : { combatTransitionIntent: input.combatTransitionIntent }),
+    ...(input.directorTrigger == null ? {} : { directorTrigger: input.directorTrigger }),
   }
 
   const prior = await getTextOpenWorldCommandStatusV1({ sessionId: input.sessionId, commandId })
@@ -424,6 +452,66 @@ async function settleActorSchedulesForCurrentPeriodV1(sessionId: number): Promis
   if (feedback.phase !== 'terminal' || feedback.status !== 'succeeded') fail(`角色日程系统结算未成功:${currentPeriod.settlementWorldMinute}`)
 }
 
+function directorTriggerForActionCategory(category: string): TextOpenWorldDirectorTriggerV1 {
+  if (['move', 'travel', 'fast-travel'].includes(category)) return 'arrival'
+  if (['observe', 'investigate', 'read'].includes(category)) return 'explore'
+  if (category === 'talk') return 'talk'
+  if (category === 'rest') return 'rest'
+  if (category === 'objective-action') return 'quest-complete'
+  return 'activity'
+}
+
+async function settleDirectorAfterActionV1(sessionId: number, causeCommandId: string, causeActionKey: string): Promise<void> {
+  const runtime = await readProductRuntimeState(sessionId)
+  const projection = parseTextOpenWorldSessionProjectionV1(runtime.textOpenWorld)
+  const modules = parseTextOpenWorldModulesV1(projection.runtimePackage)
+  if (modules.actions.version < 14 || modules.director.sourceVersion < 2 || !modules.director.rules.systemActionKey) return
+  const action = modules.actions.actions.find(item => item.key === causeActionKey) ?? fail(`Director触发来源Action不存在:${causeActionKey}`)
+  const trigger = directorTriggerForActionCategory(action.category)
+  const conditionResults = Object.fromEntries(Object.entries(deriveTextOpenWorldContextsV1(projection).action.conditionResults)
+    .map(([key, result]) => [key, result.satisfied]))
+  const director = createTextOpenWorldDirectorCatalogV1(projection.runtimePackage, modules)
+  if (!director.shouldSettle({ state: projection.state, trigger, conditionResults })) return
+  const commandHash = await hashProductProductionValueV2({
+    causeCommandId, causeActionKey, trigger, worldMinute: projection.state.time.worldMinute,
+    drawCount: projection.state.director.drawCount,
+    regionSettlement: projection.state.director.lastRegionSettlementWorldMinuteByRegionKey,
+  })
+  const feedback = await executeTextOpenWorldActionAsV1({
+    sessionId,
+    actionKey: modules.director.rules.systemActionKey,
+    directorTrigger: trigger,
+    commandId: `command.system-director.${commandHash}`,
+    source: 'system-action',
+  }, 'system', 'director-action')
+  if (feedback.phase !== 'terminal' || feedback.status !== 'succeeded') fail(`Director系统结算未成功:${trigger}`)
+}
+
+/**
+ * A Director command can already be durable while its Effect batch is still
+ * pending (for example after a browser/process interruption). Recover that
+ * exact committed envelope before accepting another player action so the
+ * draw is neither lost nor repeated with a newly derived trigger.
+ */
+async function recoverPendingDirectorSettlementV1(sessionId: number): Promise<void> {
+  const runtime = await readProductRuntimeState(sessionId)
+  const projection = parseTextOpenWorldSessionProjectionV1(runtime.textOpenWorld)
+  const commandId = projection.protocol.pendingCommandId
+  if (!commandId) return
+  const actionKey = projection.protocol.pendingActionKey
+  if (!actionKey) fail('待结算命令缺少Action')
+  const modules = parseTextOpenWorldModulesV1(projection.runtimePackage)
+  const action = modules.actions.actions.find(item => item.key === actionKey) ?? fail(`待结算Action不存在:${actionKey}`)
+  if (action.category !== 'director-action') return
+  if (projection.protocol.pendingActorKey !== 'system' || !projection.protocol.pendingDirectorTrigger) {
+    fail('Director待结算命令缺少系统Actor或触发类型')
+  }
+  const status = await getTextOpenWorldCommandStatusV1({ sessionId, commandId })
+  if (status.status !== 'committed') fail(`Director待结算命令不存在:${commandId}`)
+  const feedback = await settleAcceptedCommand(status.envelope)
+  if (feedback.phase !== 'terminal' || feedback.status !== 'succeeded') fail(`Director待结算命令恢复失败:${commandId}`)
+}
+
 async function settleCombatSystemTransitionsV1(sessionId: number): Promise<void> {
   for (let index = 0; index < 32; index += 1) {
     const runtime = await readProductRuntimeState(sessionId)
@@ -487,6 +575,7 @@ async function settleCombatSystemTransitionsV1(sessionId: number): Promise<void>
 }
 
 export async function executeTextOpenWorldActionV1(input: ExecuteTextOpenWorldActionInputV1): Promise<TextOpenWorldFeedbackReceiptV1> {
+  await recoverPendingDirectorSettlementV1(input.sessionId)
   await settleCombatSystemTransitionsV1(input.sessionId)
   await settleWeatherForCurrentEpochV1(input.sessionId)
   await settleActorSchedulesForCurrentPeriodV1(input.sessionId)
@@ -496,6 +585,7 @@ export async function executeTextOpenWorldActionV1(input: ExecuteTextOpenWorldAc
     await settleWeatherForCurrentEpochV1(input.sessionId)
     await settleActorSchedulesForCurrentPeriodV1(input.sessionId)
     await settleReadyQuestSystemActionsV1(input.sessionId, feedback.commandId)
+    await settleDirectorAfterActionV1(input.sessionId, feedback.commandId, input.actionKey)
   }
   return feedback
 }

@@ -41,6 +41,7 @@ describe('Text Open World vNext · quest lifecycle player UI', () => {
     projection.director.generatedQuestInstanceCount = 1
     projection.director.revealedQuestInstanceKeys = [ordinary.instanceKey]
     projection.director.activeQuestInstanceKeys = [ordinary.instanceKey]
+    projection.state.director = structuredClone(projection.director)
     const executeVNextAction = vi.fn(async () => ({}) as any)
     useTextOpenWorldPlayerStore.setState({
       selectedSessionId: 1, selectedManifest: productRuntimePackage,
@@ -91,6 +92,8 @@ describe('Text Open World vNext · quest lifecycle player UI', () => {
     ordinary.terminalAtWorldMinute = 480
     ordinary.objectiveStatusByKey['objective.template.supplies'] = 'completed'
     projection.director.activeQuestInstanceKeys = []
+    projection.director.revealedQuestInstanceKeys = []
+    projection.state.director = structuredClone(projection.director)
     await act(async () => {
       useTextOpenWorldPlayerStore.setState({ runtimeState: { ...structuredClone(EMPTY_PRODUCT_RUNTIME_STATE), textOpenWorld: projection } })
       await new Promise(resolve => setTimeout(resolve, 0))

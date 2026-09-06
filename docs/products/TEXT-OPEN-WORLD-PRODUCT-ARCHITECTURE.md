@@ -299,6 +299,12 @@ TextOpenWorldSessionProjection {
 Director预算的完整初态；命令、随机与Effect事件会更新同一投影，并保留中间序号读取能力。
 运行包快照随初态冻结，事件重放用Release内Effect定义重新执行计划，不能相信UI提交的after值。
 
+截至G2-28，Director已经从预算占位扩展为正式Release/Session合同：Release冻结逐地区演化规则、
+触发牌组、固定任务、任务模板、五类随机事件、权重、Blank、等级/条件、冷却、指纹和强度限制；
+Session保存地区压力与结算游标、来源冷却、抽牌历史、动态任务实例和玩家知识历程。玩家成功Action
+之后只能由唯一系统Director Action签发授权，以正式随机证据和Effect Receipt原子提交；模板和任务升级
+创建独立实例，不改写冻结定义。主线不进入这套自动演化，仍在安全等待点等待玩家。
+
 Condition上下文和Action投影上下文现在由Session Projection统一派生，包括时间段、当前地区
 天气、三档NPC态度、合法Actor/地点/物品/任务/商店/遭遇目标、一次性行动和冷却。UI与AI只
 消费这份派生结果，不再负责传入自报状态。当前Projection随Session初态保存完整运行包是为了

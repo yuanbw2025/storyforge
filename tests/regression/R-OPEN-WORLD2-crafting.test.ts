@@ -36,7 +36,7 @@ describe('Text Open World vNext · learned recipes and deterministic crafting', 
   it('Crafting v2冻结100%成功、批量预算与每配方唯一Action，旧v1只读兼容且不被静默升级为可执行', () => {
     const modern = createTextOpenWorldVNextFixture()
     expect(parseTextOpenWorldModulesV1(modern)).toMatchObject({
-      actions: { version: 13 },
+      actions: { version: 14 },
       crafting: {
         version: 2, sourceVersion: 2,
         rules: { successPolicy: 'guaranteed', maximumBatchQuantity: 100, maximumTotalItemUnitsPerAction: 100_000 },

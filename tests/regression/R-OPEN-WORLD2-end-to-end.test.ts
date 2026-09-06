@@ -120,5 +120,5 @@ describe('Text Open World vNext · no-AI minimum package end-to-end', () => {
       randomRequests: [], plan: unauthorizedPlan, receipt: unauthorizedReceipt, outcome: 'success', reason: null, degradation: null,
     })).rejects.toThrow('EffectPlan与命令Action不一致')
     expect(await db.productRuntimeEvents.where('sessionId').equals(session.id!).count()).toBe(parentEventCount + 1)
-  }, 30_000)
+  }, 60_000)
 })

@@ -63,7 +63,7 @@
 | E-TOWN-01 | missing | 有角色互动和通用产品运行时基础能力可复用 | 没有独立 AI 小镇产品的时间、日程、地点、群体与离线演化闭环 |
 | E-TEXTADV-01 | partial | 文字冒险已接入专用需求适配器、统一 Production/Build/ProductRelease v1 和独立玩家面 | 可玩内容、规则、媒资、结局和真实 E2E 仍需专项封板 |
 | E-AVG-01 | partial | AVG 已接入专用需求适配器、统一 Production/Build/ProductRelease v1、演出与独立玩家面 | 真实视觉/声音资产、演出绑定和完整体验未验收 |
-| E-OPENWORLD-01 | partial | 文字开放世界已接入专用需求适配器、统一 Production/Build/ProductRelease v1、专用运行 API 和独立玩家面；状态演化仅是该产品的内部能力 | 区域按需演化、角色自治、长期任务演化与性能门未完整 |
+| E-OPENWORLD-01 | partial | 已在统一Production/Build/ProductRelease和ProductRuntime事件底座上完成vNext人工包及G2确定性玩法闭环：成长、任务、地图/快旅、时间天气、NPC日程/生死/关系、战斗、制作、经济、地区演化、受限发牌、动态任务、随机事件与知识历程均可重放；只读旧Release兼容 | AI内容生产编译链、创作者工作台、完整玩家信息架构、运行时有边界自由演绎、媒资/质量门、盐脊真人验收和旧入口收口仍未完成 |
 
 ## F · 平台与商业化
 

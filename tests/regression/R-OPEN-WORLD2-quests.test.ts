@@ -112,6 +112,7 @@ describe('Text Open World vNext · QuestDefinition and QuestInstance boundary', 
     expect(() => parseTextOpenWorldSessionProjectionV1(projection)).toThrow('director实例数量与任务实例账本不一致')
     projection.director.generatedQuestInstanceCount = 1
     projection.director.revealedQuestInstanceKeys = [generated.instanceKey]
+    projection.state.director = structuredClone(projection.director)
     expect(() => parseTextOpenWorldSessionProjectionV1(projection)).not.toThrow()
   })
 })

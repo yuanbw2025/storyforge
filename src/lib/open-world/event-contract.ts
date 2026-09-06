@@ -28,6 +28,7 @@ import type {
   TextOpenWorldCraftingAuthorizationV1,
   TextOpenWorldTransactionAuthorizationV1,
   TextOpenWorldCrimeAuthorizationV1,
+  TextOpenWorldDirectorSettlementAuthorizationV1,
 } from '../types'
 import { parseTextOpenWorldCommandEventPayloadV1 } from './command-contract'
 
@@ -35,7 +36,7 @@ type Row = Record<string, unknown>
 
 const COMMAND_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/
 const STABLE_KEY = /^[a-z][a-z0-9._:-]{0,199}$/
-const IMPACT_DOMAINS: TextOpenWorldEffectImpactDomainV1[] = ['player', 'inventory', 'quests', 'map', 'time', 'relationships', 'combat', 'actors', 'world', 'knowledge', 'endings', 'economy']
+const IMPACT_DOMAINS: TextOpenWorldEffectImpactDomainV1[] = ['player', 'inventory', 'quests', 'map', 'time', 'relationships', 'combat', 'actors', 'world', 'knowledge', 'endings', 'economy', 'director']
 
 function fail(message: string): never { throw new Error(`[text-open-world-event] ${message}`) }
 function row(value: unknown, label: string): Row { if (!value || typeof value !== 'object' || Array.isArray(value)) fail(`${label}必须是对象`); return value as Row }
@@ -128,6 +129,63 @@ function parseAuthorization(value: unknown, label: string): TextOpenWorldEffectP
   if (value == null) return null
   const raw = row(value, label)
   if (raw.kind === 'reward') return parseRewardAuthorization(value, label)
+  if (raw.kind === 'director-settlement') {
+    exact(raw, ['kind', 'trigger', 'regionKey', 'worldMinute', 'randomRequests', 'regionChanges', 'selection', 'earnedAchievementKeys'], label)
+    if (!Array.isArray(raw.randomRequests) || raw.randomRequests.length > 2) fail(`${label}.randomRequests无效`)
+    const randomRequests = raw.randomRequests.map((request, index) => parseTextOpenWorldRandomRequestV1(request, `${label}.randomRequests[${index}]`))
+    if (!Array.isArray(raw.regionChanges) || raw.regionChanges.length > 10_000) fail(`${label}.regionChanges无效`)
+    const regionChanges = raw.regionChanges.map((change, index) => {
+      const item = row(change, `${label}.regionChanges[${index}]`)
+      exact(item, ['regionKey', 'settledIntervals', 'fromSettlementWorldMinute', 'toSettlementWorldMinute', 'fromPressure', 'toPressure', 'fromState', 'toState'], `${label}.regionChanges[${index}]`)
+      const fromSettlementWorldMinute = integer(item.fromSettlementWorldMinute, `${label}.regionChanges[${index}].fromSettlementWorldMinute`)
+      const toSettlementWorldMinute = integer(item.toSettlementWorldMinute, `${label}.regionChanges[${index}].toSettlementWorldMinute`)
+      if (toSettlementWorldMinute <= fromSettlementWorldMinute) fail(`${label}.regionChanges[${index}]结算时间无效`)
+      return {
+        regionKey: token(item.regionKey, `${label}.regionChanges[${index}].regionKey`),
+        settledIntervals: integer(item.settledIntervals, `${label}.regionChanges[${index}].settledIntervals`, 1),
+        fromSettlementWorldMinute,
+        toSettlementWorldMinute,
+        fromPressure: integer(item.fromPressure, `${label}.regionChanges[${index}].fromPressure`, -1_000_000, 1_000_000),
+        toPressure: integer(item.toPressure, `${label}.regionChanges[${index}].toPressure`, -1_000_000, 1_000_000),
+        fromState: token(item.fromState, `${label}.regionChanges[${index}].fromState`),
+        toState: token(item.toState, `${label}.regionChanges[${index}].toState`),
+      }
+    })
+    if (new Set(regionChanges.map(change => change.regionKey)).size !== regionChanges.length) fail(`${label}.regionChanges地区不能重复`)
+    const selection = row(raw.selection, `${label}.selection`)
+    exact(selection, ['outcomeKind', 'sourceKey', 'definitionKey', 'sourceInstanceKey', 'questInstanceKey', 'variantTextKey', 'fingerprint', 'intensity', 'effectKeys', 'rumorKey', 'reason'], `${label}.selection`)
+    const outcomeKind = ['blank', 'fixed-quest', 'template-quest', 'random-event'].includes(String(selection.outcomeKind))
+      ? selection.outcomeKind as TextOpenWorldDirectorSettlementAuthorizationV1['selection']['outcomeKind']
+      : fail(`${label}.selection.outcomeKind无效`)
+    const nullable = (rawValue: unknown, childLabel: string, pattern = STABLE_KEY) => rawValue == null ? null : token(rawValue, childLabel, pattern)
+    const parsedSelection = {
+      outcomeKind,
+      sourceKey: nullable(selection.sourceKey, `${label}.selection.sourceKey`),
+      definitionKey: nullable(selection.definitionKey, `${label}.selection.definitionKey`),
+      sourceInstanceKey: nullable(selection.sourceInstanceKey, `${label}.selection.sourceInstanceKey`, COMMAND_ID),
+      questInstanceKey: nullable(selection.questInstanceKey, `${label}.selection.questInstanceKey`),
+      variantTextKey: nullable(selection.variantTextKey, `${label}.selection.variantTextKey`),
+      fingerprint: nullable(selection.fingerprint, `${label}.selection.fingerprint`),
+      intensity: integer(selection.intensity, `${label}.selection.intensity`, 0, 10),
+      effectKeys: uniqueStrings(selection.effectKeys, `${label}.selection.effectKeys`),
+      rumorKey: nullable(selection.rumorKey, `${label}.selection.rumorKey`),
+      reason: text(selection.reason, `${label}.selection.reason`),
+    }
+    if ((outcomeKind === 'blank') !== (parsedSelection.sourceKey == null)
+      || outcomeKind === 'blank' && (parsedSelection.definitionKey != null || parsedSelection.questInstanceKey != null || parsedSelection.effectKeys.length > 0 || parsedSelection.rumorKey != null || parsedSelection.intensity !== 0)) fail(`${label}.selection空结果字段不自洽`)
+    return {
+      kind: 'director-settlement',
+      trigger: ['arrival', 'explore', 'talk', 'rest', 'quest-complete', 'time-batch', 'activity'].includes(String(raw.trigger))
+        ? raw.trigger as TextOpenWorldDirectorSettlementAuthorizationV1['trigger']
+        : fail(`${label}.trigger无效`),
+      regionKey: token(raw.regionKey, `${label}.regionKey`),
+      worldMinute: integer(raw.worldMinute, `${label}.worldMinute`),
+      randomRequests,
+      regionChanges,
+      selection: parsedSelection,
+      earnedAchievementKeys: uniqueStrings(raw.earnedAchievementKeys, `${label}.earnedAchievementKeys`),
+    } satisfies TextOpenWorldDirectorSettlementAuthorizationV1
+  }
   if (raw.kind === 'fast-travel') {
     exact(raw, ['kind', 'fastTravelPointKey', 'originLocationKey', 'destinationLocationKey', 'routeEdgeKeys', 'openEdgeKeys', 'baseWorldMinute', 'travelMinutes'], label)
     return {

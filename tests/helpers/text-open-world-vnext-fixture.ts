@@ -169,7 +169,7 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
       ],
     },
     actions: {
-      version: 13,
+      version: 14,
       conditions: [
         { key: 'condition.always', expression: { op: 'all', conditions: [{ op: 'player-number', field: 'level', comparator: 'gte', value: 1 }] }, failureMessage: '角色尚未进入可行动状态。' },
         { key: 'condition.level-two', expression: { op: 'player-number', field: 'level', comparator: 'gte', value: 2 }, failureMessage: '经验不足，无法让谎言自洽。' },
@@ -197,6 +197,7 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
         { key: 'effect.craft-brine-tonic', operation: 'perform-crafting', payload: { recipeKey: 'recipe.brine-tonic' } },
         { key: 'effect.buy-caretaker', operation: 'perform-transaction', payload: { kind: 'buy', vendorKey: 'vendor.caretaker' } },
         { key: 'effect.sell-caretaker', operation: 'perform-transaction', payload: { kind: 'sell', vendorKey: 'vendor.caretaker' } },
+        { key: 'effect.settle-director', operation: 'settle-director', payload: {} },
         { key: 'effect.combat-power-strike-cost', operation: 'change-player-resource', payload: { resource: 'skill-resource', amount: -2 } },
         { key: 'effect.consume-brine-tonic', operation: 'remove-item', payload: { itemKey: 'item.brine-tonic', quantity: 1, reason: 'consume' } },
         { key: 'effect.drop-salt-crystal', operation: 'remove-item', payload: { itemKey: 'item.salt-crystal', quantity: 1, reason: 'drop' } },
@@ -244,6 +245,11 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
         successEffectKeys: ['effect.investigate-time'], failureEffectKeys: [], timeCostMinutes: 15,
         confirmationPolicy: 'never', repeatPolicy: 'repeatable', cooldownMinutes: null,
       }, {
+        key: 'action.talk-caretaker', category: 'talk', label: '与岑阿婆交谈', description: '询问盐港近来的传闻和委托。',
+        actorScope: 'player', targetScope: 'actor', locationKeys: ['location.salt-port'], requirementConditionKeys: [], costEffectKeys: [],
+        successEffectKeys: [], failureEffectKeys: [], timeCostMinutes: 0,
+        confirmationPolicy: 'never', repeatPolicy: 'repeatable', cooldownMinutes: null,
+      }, {
         key: 'action.travel-port-ridge', category: 'travel', label: '前往断脊渠口', description: '沿盐渠维护道前往断脊渠口。',
         actorScope: 'player', targetScope: 'location', locationKeys: ['location.salt-port'], requirementConditionKeys: [], costEffectKeys: [],
         successEffectKeys: ['effect.travel-port-ridge-start', 'effect.travel-port-ridge-time', 'effect.travel-port-ridge-enter'], failureEffectKeys: [], timeCostMinutes: 60,
@@ -267,6 +273,11 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
         key: 'action.settle-actor-schedules', category: 'actor-schedule-action', label: '结算角色日程', description: '按冻结日程把常驻角色投影到当前时间段。',
         actorScope: 'system', targetScope: 'none', locationKeys: [], requirementConditionKeys: [], costEffectKeys: [],
         successEffectKeys: ['effect.settle-actor-schedules'], failureEffectKeys: [], timeCostMinutes: 0,
+        confirmationPolicy: 'never', repeatPolicy: 'repeatable', cooldownMinutes: null,
+      }, {
+        key: 'action.settle-director', category: 'director-action', label: '结算地区叙事牌组', description: '按冻结地区规则推进世界状态并结算一次受限发牌。',
+        actorScope: 'system', targetScope: 'none', locationKeys: [], requirementConditionKeys: [], costEffectKeys: [],
+        successEffectKeys: ['effect.settle-director'], failureEffectKeys: [], timeCostMinutes: 0,
         confirmationPolicy: 'never', repeatPolicy: 'repeatable', cooldownMinutes: null,
       }, {
         key: 'action.accept-main', category: 'accept-quest', label: '接受主线任务', description: '接受并开始调查断流的盐渠。',
@@ -633,23 +644,32 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
       ],
     },
     director: {
-      version: 1,
-      rules: { globalMaximumRevealed: 4, globalMaximumActive: 8, maximumQuestInstances: 20, highIntensityStreakLimit: 2 },
+      version: 2,
+      rules: { globalMaximumRevealed: 8, globalMaximumActive: 4, maximumQuestInstances: 20, highIntensityStreakLimit: 2, historyLimit: 64, maximumSettlementIntervals: 32, systemActionKey: 'action.settle-director' },
       decks: [{
         regionKey: 'region.salt-port', questKeys: [], templateKeys: ['template.supplies'], randomEventKeys: ['event.channel-rumor'],
-        maximumRevealed: 3, maximumActive: 2, cooldownMinutes: 180, blankWeight: 1,
+        triggerKinds: ['talk'], maximumRevealed: 3, maximumActive: 2, cooldownMinutes: 180, blankWeight: 1,
       }, {
         regionKey: 'region.ridge', questKeys: [], templateKeys: [], randomEventKeys: [],
-        maximumRevealed: 2, maximumActive: 1, cooldownMinutes: 180, blankWeight: 2,
+        triggerKinds: ['talk'], maximumRevealed: 2, maximumActive: 1, cooldownMinutes: 180, blankWeight: 2,
       }],
       templates: [{
         key: 'template.supplies', questKey: 'quest.template.supplies', regionKeys: ['region.salt-port'],
         variantTextKeys: ['task-text.supplies.1', 'task-text.supplies.2', 'task-text.supplies.3'],
-        fingerprint: 'fingerprint.supplies', cooldownMinutes: 720,
+        fingerprint: 'fingerprint.supplies', cooldownMinutes: 720, conditionKeys: [], levelBand: { minimum: 1, maximum: 5 },
+        category: 'resource', intensity: 2, weight: 10,
       }],
       randomEvents: [{
-        key: 'event.channel-rumor', title: '渠边传闻', regionKeys: ['region.salt-port'],
-        actionKeys: ['action.investigate-channel'], effectKeys: [], intensity: 1, cooldownMinutes: 240,
+        key: 'event.channel-rumor', title: '渠边传闻', kind: 'clue', regionKeys: ['region.salt-port'],
+        actionKeys: ['action.investigate-channel'], effectKeys: [], conditionKeys: [], fingerprint: 'fingerprint.channel-rumor',
+        rumorKey: 'rumor.channel', upgradeTemplateKey: null, intensity: 1, weight: 10, cooldownMinutes: 240,
+      }],
+      regionRules: [{
+        regionKey: 'region.salt-port', settlementIntervalMinutes: 1440, initialPressure: 10, minimumPressure: 0, maximumPressure: 100,
+        driftPerInterval: 5, stateBands: [{ key: 'stable', minimumPressure: 0 }, { key: 'strained', minimumPressure: 30 }, { key: 'crisis', minimumPressure: 70 }],
+      }, {
+        regionKey: 'region.ridge', settlementIntervalMinutes: 1440, initialPressure: 20, minimumPressure: 0, maximumPressure: 100,
+        driftPerInterval: 3, stateBands: [{ key: 'stable', minimumPressure: 0 }, { key: 'strained', minimumPressure: 30 }, { key: 'crisis', minimumPressure: 70 }],
       }],
     },
     knowledge: {
@@ -719,10 +739,43 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
   }
 }
 
+/** Removes Director v2 and its Action v14 settlement binding. */
+export function downgradeTextOpenWorldFixtureDirectorV1(
+  runtimePackage: TextOpenWorldRuntimePackageV1,
+): TextOpenWorldRuntimePackageV1 {
+  const actions = runtimePackage.modules.actions.payload as any
+  const director = runtimePackage.modules.director.payload as any
+  actions.effects = actions.effects.filter((effect: any) => effect.operation !== 'settle-director')
+  actions.actions = actions.actions.filter((action: any) => action.category !== 'director-action')
+  if (actions.version >= 14) {
+    actions.version = 13
+    runtimePackage.modules.actions.schemaVersion = 13
+  }
+  if (director.version >= 2) {
+    director.rules = {
+      globalMaximumRevealed: director.rules.globalMaximumRevealed,
+      globalMaximumActive: director.rules.globalMaximumActive,
+      maximumQuestInstances: director.rules.maximumQuestInstances,
+      highIntensityStreakLimit: director.rules.highIntensityStreakLimit,
+    }
+    director.decks = director.decks.map(({ triggerKinds: _triggerKinds, ...deck }: any) => deck)
+    director.templates = director.templates.map(({ conditionKeys: _conditionKeys, levelBand: _levelBand, category: _category, intensity: _intensity, weight: _weight, ...template }: any) => template)
+    director.randomEvents = director.randomEvents.map((event: any) => ({
+      key: event.key, title: event.title, regionKeys: event.regionKeys, actionKeys: event.actionKeys,
+      effectKeys: event.effectKeys, intensity: event.intensity, cooldownMinutes: event.cooldownMinutes,
+    }))
+    delete director.regionRules
+    director.version = 1
+    runtimePackage.modules.director.schemaVersion = 1
+  }
+  return runtimePackage
+}
+
 /** Re-encodes Economy v2 and its Action v13 bindings as the legacy data-only v1 module. */
 export function downgradeTextOpenWorldFixtureEconomyV1(
   runtimePackage: TextOpenWorldRuntimePackageV1,
 ): TextOpenWorldRuntimePackageV1 {
+  downgradeTextOpenWorldFixtureDirectorV1(runtimePackage)
   const actions = runtimePackage.modules.actions.payload as any
   const economy = runtimePackage.modules.economy.payload as any
   actions.effects = actions.effects.filter((effect: any) => effect.operation !== 'perform-transaction')

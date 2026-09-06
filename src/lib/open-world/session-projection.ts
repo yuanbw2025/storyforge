@@ -6,6 +6,7 @@ import type {
   TextOpenWorldCombatTransitionIntentV1,
   TextOpenWorldDerivedContextsV1,
   TextOpenWorldDirectorProjectionV1,
+  TextOpenWorldDirectorTriggerV1,
   TextOpenWorldEffectDefinitionV1,
   TextOpenWorldEffectStateV1,
   TextOpenWorldParsedModulesV1,
@@ -45,6 +46,7 @@ import { createTextOpenWorldCombatStateMachineV1 } from './combat-state-machine'
 import { createTextOpenWorldCombatActionCatalogV1 } from './combat-actions'
 import { createTextOpenWorldCraftingCatalogV1 } from './crafting'
 import { createInitialTextOpenWorldEconomyStateV1, createTextOpenWorldEconomyCatalogV1 } from './economy'
+import { createTextOpenWorldDirectorCatalogV1 } from './director'
 
 type Row = Record<string, unknown>
 const STABLE_KEY = /^[a-z][a-z0-9._:-]{0,199}$/
@@ -106,6 +108,7 @@ function initialEffectState(runtimePackage: ReturnType<typeof parseTextOpenWorld
       currency: modules.actors.player.build.startingCurrency,
     },
     economy: createInitialTextOpenWorldEconomyStateV1(modules),
+    director: emptyDirector(modules),
     quests: {
       instancesByKey: createInitialTextOpenWorldQuestInstancesV1(runtimePackage),
       resultTags: [],
@@ -133,21 +136,111 @@ function initialEffectState(runtimePackage: ReturnType<typeof parseTextOpenWorld
     combat: null,
     actors: Object.fromEntries(modules.actors.actors.map(actor => [actor.key, actorInitialState(modules, actor.key, periodKey)])),
     world: {
-      regionStateByKey: Object.fromEntries(modules.world.regions.map(region => [region.key, 'stable'])),
-      regionPressureByKey: Object.fromEntries(modules.world.regions.map(region => [region.key, 0])),
+      regionStateByKey: Object.fromEntries(modules.director.regionRules.map(rule => [rule.regionKey, [...rule.stateBands].sort((left, right) => right.minimumPressure - left.minimumPressure).find(band => rule.initialPressure >= band.minimumPressure)!.key])),
+      regionPressureByKey: Object.fromEntries(modules.director.regionRules.map(rule => [rule.regionKey, rule.initialPressure])),
       factionStateByKey: Object.fromEntries(modules.actors.factions.map(faction => [faction.key, 'neutral'])),
       endingEligibleByKey: Object.fromEntries(modules.narrative.endings.map(ending => [ending.key, false])), flags: {},
     },
     knowledge: {
       visibilityByKey: Object.fromEntries(modules.knowledge.entries.map(entry => [entry.key, entry.initialPlayerVisibility])),
-      readRumorKeys: [], earnedAchievementKeys: [],
+      readRumorKeys: [], earnedAchievementKeys: [], seenRandomEventKeys: [], history: [],
     },
     endings: { unlockedKeys: [], reachedKey: null }, appliedClaimKeys: [],
   }
 }
 
-function emptyDirector(): TextOpenWorldDirectorProjectionV1 {
-  return { drawCount: 0, generatedQuestInstanceCount: 0, revealedQuestInstanceKeys: [], activeQuestInstanceKeys: [], recentFingerprints: [], lastDrawWorldMinuteByRegionKey: {}, highIntensityStreak: 0 }
+function emptyDirector(modules: TextOpenWorldParsedModulesV1): TextOpenWorldDirectorProjectionV1 {
+  return {
+    drawCount: 0, generatedQuestInstanceCount: 0, revealedQuestInstanceKeys: [], activeQuestInstanceKeys: [],
+    recentFingerprints: [], lastDrawWorldMinuteByRegionKey: {}, highIntensityStreak: 0,
+    lastResolvedWorldMinuteBySourceKey: {},
+    lastRegionSettlementWorldMinuteByRegionKey: Object.fromEntries(modules.world.regions.map(region => [region.key, modules['time-weather'].initialWorldMinute])),
+    history: [],
+  }
+}
+
+function parseDirectorRuntime(
+  value: unknown,
+  modules: TextOpenWorldParsedModulesV1,
+  label: string,
+  legacy: boolean,
+): TextOpenWorldDirectorProjectionV1 {
+  const director = row(value, label)
+  exact(director, [
+    'drawCount', 'generatedQuestInstanceCount', 'revealedQuestInstanceKeys', 'activeQuestInstanceKeys',
+    'recentFingerprints', 'lastDrawWorldMinuteByRegionKey', 'highIntensityStreak',
+    ...legacy ? [] : ['lastResolvedWorldMinuteBySourceKey', 'lastRegionSettlementWorldMinuteByRegionKey', 'history'],
+  ], label)
+  const recentFingerprints = Array.isArray(director.recentFingerprints)
+    ? director.recentFingerprints.map((value, index) => {
+        const item = row(value, `${label}.recentFingerprints[${index}]`)
+        exact(item, ['fingerprint', 'worldMinute'], `${label}.recentFingerprints[${index}]`)
+        return {
+          fingerprint: token(item.fingerprint, `${label}.recentFingerprints[${index}].fingerprint`),
+          worldMinute: integer(item.worldMinute, `${label}.recentFingerprints[${index}].worldMinute`),
+        }
+      })
+    : fail(`${label}.recentFingerprints必须是数组`)
+  const parseRegionMinuteMap = (rawValue: unknown, childLabel: string, complete: boolean) => {
+    const raw = row(rawValue, childLabel); const result: Record<string, number> = {}
+    for (const [regionKey, minute] of Object.entries(raw)) {
+      if (!modules.world.regions.some(region => region.key === regionKey)) fail(`未知Director地区:${regionKey}`)
+      result[regionKey] = integer(minute, `${childLabel}.${regionKey}`)
+    }
+    if (complete && canonicalProductProductionJsonV2(Object.keys(result).sort()) !== canonicalProductProductionJsonV2(modules.world.regions.map(region => region.key).sort())) fail(`${childLabel}必须覆盖全部地区`)
+    return result
+  }
+  const lastDrawWorldMinuteByRegionKey = parseRegionMinuteMap(director.lastDrawWorldMinuteByRegionKey, `${label}.lastDrawWorldMinuteByRegionKey`, false)
+  const sourceKeys = new Set([
+    ...modules.director.templates.map(item => item.key),
+    ...modules.director.randomEvents.map(item => item.key),
+    ...modules.director.decks.flatMap(item => item.questKeys),
+  ])
+  const lastResolvedWorldMinuteBySourceKey: Record<string, number> = {}
+  if (!legacy) {
+    const raw = row(director.lastResolvedWorldMinuteBySourceKey, `${label}.lastResolvedWorldMinuteBySourceKey`)
+    for (const [sourceKey, minute] of Object.entries(raw)) {
+      if (!sourceKeys.has(sourceKey)) fail(`未知Director来源:${sourceKey}`)
+      lastResolvedWorldMinuteBySourceKey[sourceKey] = integer(minute, `${label}.lastResolvedWorldMinuteBySourceKey.${sourceKey}`)
+    }
+  }
+  const history = legacy ? [] : Array.isArray(director.history)
+    ? director.history.map((value, index) => {
+        const item = row(value, `${label}.history[${index}]`)
+        exact(item, ['drawNumber', 'worldMinute', 'regionKey', 'trigger', 'outcomeKind', 'sourceKey', 'questInstanceKey', 'variantTextKey', 'fingerprint', 'intensity'], `${label}.history[${index}]`)
+        const outcomeKind = enumToken(item.outcomeKind, ['blank', 'fixed-quest', 'template-quest', 'random-event'], `${label}.history[${index}].outcomeKind`)
+        const sourceKey = nullableToken(item.sourceKey, `${label}.history[${index}].sourceKey`)
+        if ((outcomeKind === 'blank') !== (sourceKey == null)) fail(`${label}.history[${index}]来源与结果不一致`)
+        if (sourceKey && !sourceKeys.has(sourceKey)) fail(`${label}.history[${index}]引用未知来源:${sourceKey}`)
+        return {
+          drawNumber: integer(item.drawNumber, `${label}.history[${index}].drawNumber`, 1),
+          worldMinute: integer(item.worldMinute, `${label}.history[${index}].worldMinute`),
+          regionKey: token(item.regionKey, `${label}.history[${index}].regionKey`),
+          trigger: enumToken(item.trigger, ['arrival', 'explore', 'talk', 'rest', 'quest-complete', 'time-batch', 'activity'], `${label}.history[${index}].trigger`),
+          outcomeKind,
+          sourceKey,
+          questInstanceKey: nullableToken(item.questInstanceKey, `${label}.history[${index}].questInstanceKey`),
+          variantTextKey: nullableToken(item.variantTextKey, `${label}.history[${index}].variantTextKey`),
+          fingerprint: nullableToken(item.fingerprint, `${label}.history[${index}].fingerprint`),
+          intensity: integer(item.intensity, `${label}.history[${index}].intensity`, 0, 10),
+        }
+      })
+    : fail(`${label}.history必须是数组`)
+  const lastRegionSettlementWorldMinuteByRegionKey = legacy
+    ? Object.fromEntries(modules.world.regions.map(region => [region.key, modules['time-weather'].initialWorldMinute]))
+    : parseRegionMinuteMap(director.lastRegionSettlementWorldMinuteByRegionKey, `${label}.lastRegionSettlementWorldMinuteByRegionKey`, true)
+  return {
+    drawCount: integer(director.drawCount, `${label}.drawCount`),
+    generatedQuestInstanceCount: integer(director.generatedQuestInstanceCount, `${label}.generatedQuestInstanceCount`),
+    revealedQuestInstanceKeys: uniqueTokens(director.revealedQuestInstanceKeys, `${label}.revealedQuestInstanceKeys`),
+    activeQuestInstanceKeys: uniqueTokens(director.activeQuestInstanceKeys, `${label}.activeQuestInstanceKeys`),
+    recentFingerprints,
+    lastDrawWorldMinuteByRegionKey,
+    highIntensityStreak: integer(director.highIntensityStreak, `${label}.highIntensityStreak`),
+    lastResolvedWorldMinuteBySourceKey,
+    lastRegionSettlementWorldMinuteByRegionKey,
+    history,
+  }
 }
 
 export function createInitialTextOpenWorldSessionProjectionV1(value: unknown): TextOpenWorldSessionProjectionV1 {
@@ -159,8 +252,8 @@ export function createInitialTextOpenWorldSessionProjectionV1(value: unknown): T
   return {
     schema: 'storyforge.text-open-world.session-projection', version: 1, runtimePackage,
     ruleset: { key: runtimePackage.metadata.rulesetKey, version: runtimePackage.metadata.rulesetVersion }, state,
-    actions: { completedOnceActionKeys: [], cooldownUntilWorldMinuteByActionKey: {} }, director: emptyDirector(),
-    protocol: { pendingCommandId: null, pendingCommandSequence: null, pendingActionKey: null, pendingActorKey: null, pendingTargetKey: null, pendingCombatTransitionIntent: null, pendingActionQuantity: null, pendingActionItemKey: null, randomEvidence: [], lastCompletedCommandId: null, lastOutcomeFingerprint: null },
+    actions: { completedOnceActionKeys: [], cooldownUntilWorldMinuteByActionKey: {} }, director: structuredClone(state.director),
+    protocol: { pendingCommandId: null, pendingCommandSequence: null, pendingActionKey: null, pendingActorKey: null, pendingTargetKey: null, pendingCombatTransitionIntent: null, pendingActionQuantity: null, pendingActionItemKey: null, pendingDirectorTrigger: null, randomEvidence: [], lastCompletedCommandId: null, lastOutcomeFingerprint: null },
     lastEventSequence: 0,
   }
 }
@@ -237,6 +330,23 @@ export function createTextOpenWorldInitialProjectionCandidatesV1(value: unknown)
       candidates.push(legacy)
     }
   }
+  if (modules.actions.version < 14 || modules.director.sourceVersion < 2) {
+    for (const candidate of [...candidates]) {
+      const legacy = structuredClone(candidate) as Row
+      const legacyState = row(legacy.state, 'legacy projection.state')
+      delete legacyState.director
+      const legacyKnowledge = row(legacyState.knowledge, 'legacy projection.state.knowledge')
+      delete legacyKnowledge.seenRandomEventKeys
+      delete legacyKnowledge.history
+      const legacyDirector = row(legacy.director, 'legacy projection.director')
+      delete legacyDirector.lastResolvedWorldMinuteBySourceKey
+      delete legacyDirector.lastRegionSettlementWorldMinuteByRegionKey
+      delete legacyDirector.history
+      const legacyProtocol = row(legacy.protocol, 'legacy projection.protocol')
+      delete legacyProtocol.pendingDirectorTrigger
+      candidates.push(legacy)
+    }
+  }
   return candidates
 }
 
@@ -278,28 +388,49 @@ export function parseTextOpenWorldSessionProjectionV1(value: unknown): TextOpenW
     legacyMap.revealedLocationKeys.forEach(locationKey => { legacyMap.locationKnowledgeByKey![locationKey] = 'heard' })
     legacyMap.locationKnowledgeByKey[legacyMap.currentLocationKey] = 'visited'
   }
+  const currentDirectorContract = modules.actions.version >= 14 && modules.director.sourceVersion >= 2
+  const topLevelDirectorRow = row(parsed.director, 'director')
+  const legacyTopLevelDirector = !Object.prototype.hasOwnProperty.call(topLevelDirectorRow, 'lastResolvedWorldMinuteBySourceKey')
+  if (legacyTopLevelDirector && currentDirectorContract) fail('新版Session缺少完整Director镜像')
+  const stateWithLegacyDirector = state as TextOpenWorldEffectStateV1 & { director?: TextOpenWorldEffectStateV1['director'] }
+  if (!stateWithLegacyDirector.director) {
+    if (currentDirectorContract) fail('新版Session缺少Director运行状态')
+    stateWithLegacyDirector.director = parseDirectorRuntime(parsed.director, modules, 'director', legacyTopLevelDirector)
+  }
+  const legacyKnowledge = state.knowledge as TextOpenWorldEffectStateV1['knowledge'] & {
+    seenRandomEventKeys?: string[]
+    history?: TextOpenWorldEffectStateV1['knowledge']['history']
+  }
+  if (!legacyKnowledge.seenRandomEventKeys || !legacyKnowledge.history) {
+    if (currentDirectorContract) fail('新版Session缺少玩家知识历程')
+    legacyKnowledge.seenRandomEventKeys ??= []
+    legacyKnowledge.history ??= []
+  }
   validateTextOpenWorldEffectStateV1(state, modules)
   if (Object.values(state.quests.instancesByKey).some(instance => instance.sourceContentHash !== runtimePackage.modules.quests.contentHash)) fail('任务实例来源Hash与冻结Quest模块不一致')
   const actions = row(parsed.actions, 'actions'); exact(actions, ['completedOnceActionKeys', 'cooldownUntilWorldMinuteByActionKey'], 'actions')
   const completedOnceActionKeys = uniqueTokens(actions.completedOnceActionKeys, 'actions.completedOnceActionKeys'); const actionKeys = new Set(modules.actions.actions.map(action => action.key)); completedOnceActionKeys.forEach(key => { if (!actionKeys.has(key)) fail(`未知once Action:${key}`) })
   const cooldowns = row(actions.cooldownUntilWorldMinuteByActionKey, 'actions.cooldownUntilWorldMinuteByActionKey'); const cooldownUntilWorldMinuteByActionKey: Record<string, number> = {}; for (const [key, value] of Object.entries(cooldowns)) { if (!actionKeys.has(token(key, 'cooldown actionKey'))) fail(`未知cooldown Action:${key}`); cooldownUntilWorldMinuteByActionKey[key] = integer(value, `cooldown.${key}`) }
-  const director = row(parsed.director, 'director'); exact(director, ['drawCount', 'generatedQuestInstanceCount', 'revealedQuestInstanceKeys', 'activeQuestInstanceKeys', 'recentFingerprints', 'lastDrawWorldMinuteByRegionKey', 'highIntensityStreak'], 'director')
-  const recent = Array.isArray(director.recentFingerprints) ? director.recentFingerprints.map((value, index) => { const item = row(value, `director.recentFingerprints[${index}]`); exact(item, ['fingerprint', 'worldMinute'], `director.recentFingerprints[${index}]`); return { fingerprint: token(item.fingerprint, `director.recentFingerprints[${index}].fingerprint`), worldMinute: integer(item.worldMinute, `director.recentFingerprints[${index}].worldMinute`) } }) : fail('director.recentFingerprints必须是数组')
-  const lastDraws = row(director.lastDrawWorldMinuteByRegionKey, 'director.lastDrawWorldMinuteByRegionKey'); const lastDrawWorldMinuteByRegionKey: Record<string, number> = {}; for (const [key, minute] of Object.entries(lastDraws)) { if (!modules.world.regions.some(region => region.key === key)) fail(`未知director地区:${key}`); lastDrawWorldMinuteByRegionKey[key] = integer(minute, `director.lastDraw.${key}`) }
+  const director = parseDirectorRuntime(parsed.director, modules, 'director', legacyTopLevelDirector)
+  if (currentDirectorContract && canonicalProductProductionJsonV2(state.director) !== canonicalProductProductionJsonV2(director)) fail('EffectState与顶层Director镜像不一致')
+  state.director = structuredClone(director)
   const protocol = row(parsed.protocol, 'protocol')
   const legacyProtocol = !Object.prototype.hasOwnProperty.call(protocol, 'pendingTargetKey')
   const legacyCombatProtocol = !Object.prototype.hasOwnProperty.call(protocol, 'pendingCombatTransitionIntent')
   const legacyCraftingProtocol = !Object.prototype.hasOwnProperty.call(protocol, 'pendingActionQuantity')
   const legacyEconomyProtocol = !Object.prototype.hasOwnProperty.call(protocol, 'pendingActionItemKey')
+  const legacyDirectorProtocol = !Object.prototype.hasOwnProperty.call(protocol, 'pendingDirectorTrigger')
   if (legacyCombatProtocol && modules.actions.version >= 9) fail('新版Session缺少战斗阶段命令游标')
   if (legacyCraftingProtocol && modules.actions.version >= 12) fail('新版Session缺少Action数量游标')
   if (legacyEconomyProtocol && modules.actions.version >= 13) fail('新版Session缺少交易物品游标')
+  if (legacyDirectorProtocol && currentDirectorContract) fail('新版Session缺少Director触发游标')
   exact(protocol, [
     'pendingCommandId', 'pendingCommandSequence', 'pendingActionKey', 'pendingActorKey',
     ...legacyProtocol ? [] : ['pendingTargetKey'],
     ...legacyCombatProtocol ? [] : ['pendingCombatTransitionIntent'],
     ...legacyCraftingProtocol ? [] : ['pendingActionQuantity'],
     ...legacyEconomyProtocol ? [] : ['pendingActionItemKey'],
+    ...legacyDirectorProtocol ? [] : ['pendingDirectorTrigger'],
     'randomEvidence', 'lastCompletedCommandId', 'lastOutcomeFingerprint',
   ], 'protocol')
   const pendingCommandId = nullableToken(protocol.pendingCommandId, 'protocol.pendingCommandId', COMMAND_ID); const pendingCommandSequence = protocol.pendingCommandSequence == null ? null : integer(protocol.pendingCommandSequence, 'protocol.pendingCommandSequence', 1); const pendingActionKey = nullableToken(protocol.pendingActionKey, 'protocol.pendingActionKey'); const pendingActorKey = nullableToken(protocol.pendingActorKey, 'protocol.pendingActorKey'); const pendingTargetKey = legacyProtocol ? null : nullableToken(protocol.pendingTargetKey, 'protocol.pendingTargetKey')
@@ -310,27 +441,43 @@ export function parseTextOpenWorldSessionProjectionV1(value: unknown): TextOpenW
     ? null
     : integer(protocol.pendingActionQuantity, 'protocol.pendingActionQuantity', 1)
   const pendingActionItemKey = legacyEconomyProtocol ? null : nullableToken(protocol.pendingActionItemKey, 'protocol.pendingActionItemKey')
+  const pendingDirectorTrigger = legacyDirectorProtocol || protocol.pendingDirectorTrigger == null
+    ? null
+    : enumToken<TextOpenWorldDirectorTriggerV1>(protocol.pendingDirectorTrigger, ['arrival', 'explore', 'talk', 'rest', 'quest-complete', 'time-batch', 'activity'], 'protocol.pendingDirectorTrigger')
   if ((pendingCommandId == null) !== (pendingCommandSequence == null) || (pendingCommandId == null) !== (pendingActionKey == null) || (pendingCommandId == null) !== (pendingActorKey == null)) fail('pending command字段必须同时存在或为空')
   if (pendingCombatTransitionIntent != null && pendingCommandId == null) fail('战斗阶段intent不能脱离pending command')
   if (pendingActionQuantity != null && pendingCommandId == null) fail('Action数量不能脱离pending command')
   if (pendingActionItemKey != null && pendingCommandId == null) fail('交易物品不能脱离pending command')
+  if (pendingDirectorTrigger != null && pendingCommandId == null) fail('Director触发不能脱离pending command')
   if (pendingActionKey && !actionKeys.has(pendingActionKey)) fail('pendingActionKey不存在')
+  if (pendingDirectorTrigger != null) {
+    const pendingAction = modules.actions.actions.find(action => action.key === pendingActionKey)
+    if (pendingAction?.category !== 'director-action') fail('Director触发只能属于Director系统Action')
+  }
   const randomEvidence = Array.isArray(protocol.randomEvidence) ? protocol.randomEvidence.map((value, index) => { const item = row(value, `protocol.randomEvidence[${index}]`); exact(item, ['eventSequence', 'evidence'], `protocol.randomEvidence[${index}]`); return { eventSequence: integer(item.eventSequence, `protocol.randomEvidence[${index}].eventSequence`, 1), evidence: parseTextOpenWorldRandomEvidenceV1(item.evidence) } }) : fail('protocol.randomEvidence必须是数组')
   if (new Set(randomEvidence.map(item => item.eventSequence)).size !== randomEvidence.length || randomEvidence.some((item, index) => item.eventSequence > lastEventSequence || (index > 0 && randomEvidence[index - 1].eventSequence >= item.eventSequence))) fail('protocol.randomEvidence序号无效')
   if (pendingCommandSequence != null && pendingCommandSequence > lastEventSequence) fail('pendingCommandSequence超过投影序号')
-  const revealedQuestInstanceKeys = uniqueTokens(director.revealedQuestInstanceKeys, 'director.revealedQuestInstanceKeys'); const activeQuestInstanceKeys = uniqueTokens(director.activeQuestInstanceKeys, 'director.activeQuestInstanceKeys')
-  const generatedQuestInstanceCount = integer(director.generatedQuestInstanceCount, 'director.generatedQuestInstanceCount'); const highIntensityStreak = integer(director.highIntensityStreak, 'director.highIntensityStreak')
-  if (generatedQuestInstanceCount > modules.director.rules.maximumQuestInstances || revealedQuestInstanceKeys.length > modules.director.rules.globalMaximumRevealed || activeQuestInstanceKeys.length > modules.director.rules.globalMaximumActive || highIntensityStreak > modules.director.rules.highIntensityStreakLimit) fail('director投影超过Release预算')
-  const instanceKeys = new Set(Object.keys(state.quests.instancesByKey)); const directorInstanceKeys = new Set(Object.values(state.quests.instancesByKey).filter(instance => instance.sourceKind === 'director').map(instance => instance.instanceKey))
+  const { revealedQuestInstanceKeys, activeQuestInstanceKeys, generatedQuestInstanceCount, highIntensityStreak } = director
+  if (generatedQuestInstanceCount > modules.director.rules.maximumQuestInstances || revealedQuestInstanceKeys.length > modules.director.rules.globalMaximumRevealed || activeQuestInstanceKeys.length > modules.director.rules.globalMaximumActive || highIntensityStreak > modules.director.rules.highIntensityStreakLimit || director.history.length > modules.director.rules.historyLimit) fail('director投影超过Release预算')
+  const directorInstanceKeys = new Set(Object.values(state.quests.instancesByKey).filter(instance => instance.sourceKind === 'director').map(instance => instance.instanceKey))
+  const fixedQuestDefinitionKeys = new Set(modules.director.decks.flatMap(deck => deck.questKeys))
+  const managedInstanceKeys = new Set(Object.values(state.quests.instancesByKey).filter(instance => instance.sourceKind === 'director' || fixedQuestDefinitionKeys.has(instance.definitionKey)).map(instance => instance.instanceKey))
   if (directorInstanceKeys.size !== generatedQuestInstanceCount) fail('director实例数量与任务实例账本不一致')
-  for (const instanceKey of [...revealedQuestInstanceKeys, ...activeQuestInstanceKeys]) if (!instanceKeys.has(instanceKey) || !directorInstanceKeys.has(instanceKey)) fail(`director引用未知生成任务实例:${instanceKey}`)
-  if (activeQuestInstanceKeys.some(instanceKey => state.quests.instancesByKey[instanceKey].status !== 'active')) fail('director active任务实例状态不一致')
-  if (revealedQuestInstanceKeys.some(instanceKey => state.quests.instancesByKey[instanceKey].status === 'locked')) fail('director revealed任务实例不能处于locked')
+  for (const instanceKey of [...revealedQuestInstanceKeys, ...activeQuestInstanceKeys]) if (!managedInstanceKeys.has(instanceKey)) fail(`director引用未知管理任务实例:${instanceKey}`)
+  const expectedRevealed = [...managedInstanceKeys].filter(instanceKey => ['revealed', 'accepted', 'active', 'suspended'].includes(state.quests.instancesByKey[instanceKey].status)).sort()
+  const expectedActive = [...managedInstanceKeys].filter(instanceKey => ['accepted', 'active', 'suspended'].includes(state.quests.instancesByKey[instanceKey].status)).sort()
+  if (canonicalProductProductionJsonV2([...revealedQuestInstanceKeys].sort()) !== canonicalProductProductionJsonV2(expectedRevealed)
+    || canonicalProductProductionJsonV2([...activeQuestInstanceKeys].sort()) !== canonicalProductProductionJsonV2(expectedActive)) fail('director任务预算镜像与任务状态不一致')
+  director.history.forEach((entry, index) => {
+    if (!modules.world.regions.some(region => region.key === entry.regionKey) || entry.worldMinute > state.time.worldMinute || entry.drawNumber > director.drawCount || (index > 0 && director.history[index - 1].drawNumber >= entry.drawNumber)) fail('director历史顺序或引用无效')
+    if (entry.questInstanceKey != null && !state.quests.instancesByKey[entry.questInstanceKey]) fail(`director历史引用未知任务实例:${entry.questInstanceKey}`)
+  })
+  Object.values(director.lastRegionSettlementWorldMinuteByRegionKey).forEach(minute => { if (minute > state.time.worldMinute) fail('Director地区结算游标不能晚于世界时间') })
   return {
     schema: 'storyforge.text-open-world.session-projection', version: 1, runtimePackage, ruleset: { key: token(ruleset.key, 'ruleset.key'), version: integer(ruleset.version, 'ruleset.version', 1) }, state,
     actions: { completedOnceActionKeys, cooldownUntilWorldMinuteByActionKey },
-    director: { drawCount: integer(director.drawCount, 'director.drawCount'), generatedQuestInstanceCount, revealedQuestInstanceKeys, activeQuestInstanceKeys, recentFingerprints: recent, lastDrawWorldMinuteByRegionKey, highIntensityStreak },
-    protocol: { pendingCommandId, pendingCommandSequence, pendingActionKey, pendingActorKey, pendingTargetKey, pendingCombatTransitionIntent, pendingActionQuantity, pendingActionItemKey, randomEvidence, lastCompletedCommandId: nullableToken(protocol.lastCompletedCommandId, 'protocol.lastCompletedCommandId', COMMAND_ID), lastOutcomeFingerprint: nullableToken(protocol.lastOutcomeFingerprint, 'protocol.lastOutcomeFingerprint', /^[a-f0-9]{64}$/) },
+    director: structuredClone(director),
+    protocol: { pendingCommandId, pendingCommandSequence, pendingActionKey, pendingActorKey, pendingTargetKey, pendingCombatTransitionIntent, pendingActionQuantity, pendingActionItemKey, pendingDirectorTrigger, randomEvidence, lastCompletedCommandId: nullableToken(protocol.lastCompletedCommandId, 'protocol.lastCompletedCommandId', COMMAND_ID), lastOutcomeFingerprint: nullableToken(protocol.lastOutcomeFingerprint, 'protocol.lastOutcomeFingerprint', /^[a-f0-9]{64}$/) },
     lastEventSequence,
   }
 }
@@ -346,6 +493,12 @@ export function applyTextOpenWorldSessionEventV1(current: TextOpenWorldSessionPr
       ? enumToken<TextOpenWorldCombatTransitionIntentV1>(command.envelope.payload.combatTransitionIntent, ['begin-round', 'begin-turn', 'complete-turn', 'advance-turn', 'finish-victory', 'finish-defeat', 'finish-escaped'], 'command combatTransitionIntent')
       : null
     const commandAction = parseTextOpenWorldModulesV1(projection.runtimePackage).actions.actions.find(action => action.key === command.envelope.actionKey) ?? fail('命令Action不存在')
+    if (commandAction.category === 'director-action') {
+      projection.protocol.pendingDirectorTrigger = enumToken<TextOpenWorldDirectorTriggerV1>(command.envelope.payload.directorTrigger, ['arrival', 'explore', 'talk', 'rest', 'quest-complete', 'time-batch', 'activity'], 'command directorTrigger')
+    } else {
+      if (command.envelope.payload.directorTrigger != null) fail('非Director Action不能提交directorTrigger')
+      projection.protocol.pendingDirectorTrigger = null
+    }
     if (commandAction.category === 'craft') {
       projection.protocol.pendingActionQuantity = integer(command.envelope.payload.quantity, 'command quantity', 1)
       if (command.envelope.payload.itemKey != null) fail('制作Action不能提交交易itemKey')
@@ -517,6 +670,24 @@ export function applyTextOpenWorldSessionEventV1(current: TextOpenWorldSessionPr
       const conditionResults = deriveTextOpenWorldContextsV1(projection).action.conditionResults
       if (action.requirementConditionKeys.some(conditionKey => conditionResults[conditionKey]?.satisfied !== true)) fail('交易Action条件未满足')
       createTextOpenWorldEconomyCatalogV1(projection.runtimePackage, modules).assertAuthorization({ state: projection.state, authorization })
+    } else if (applied.plan.authorization?.kind === 'director-settlement') {
+      const authorization = applied.plan.authorization
+      const action = modules.actions.actions.find(item => item.key === projection.protocol.pendingActionKey) ?? fail('命令Action不存在')
+      const markerEffectKeys = [...new Set([...action.costEffectKeys, ...action.successEffectKeys])]
+      const expectedEffectKeys = [...markerEffectKeys, ...authorization.selection.effectKeys]
+      if (canonicalProductProductionJsonV2(applied.plan.effectKeys) !== canonicalProductProductionJsonV2(expectedEffectKeys)
+        || projection.protocol.pendingActorKey !== 'system' || projection.protocol.pendingTargetKey !== null
+        || projection.protocol.pendingDirectorTrigger !== authorization.trigger
+        || action.category !== 'director-action' || action.actorScope !== 'system' || action.targetScope !== 'none'
+        || applied.outcome !== 'success' || applied.reason != null || applied.degradation != null) fail('Director授权与系统命令不一致')
+      const conditionResults = Object.fromEntries(Object.entries(deriveTextOpenWorldContextsV1(projection).action.conditionResults)
+        .map(([key, result]) => [key, result.satisfied]))
+      createTextOpenWorldDirectorCatalogV1(projection.runtimePackage, modules).assertAuthorization({
+        state: projection.state,
+        authorization,
+        conditionResults,
+        evidence: pendingRandom.map(item => item.evidence),
+      })
     } else if (applied.plan.authorization?.kind === 'crime') {
       const authorization = applied.plan.authorization
       const action = modules.actions.actions.find(item => item.key === projection.protocol.pendingActionKey) ?? fail('命令Action不存在')
@@ -561,7 +732,8 @@ export function applyTextOpenWorldSessionEventV1(current: TextOpenWorldSessionPr
     if (action.repeatPolicy === 'once' && !projection.actions.completedOnceActionKeys.includes(action.key)) projection.actions.completedOnceActionKeys.push(action.key)
     if (action.repeatPolicy === 'cooldown') projection.actions.cooldownUntilWorldMinuteByActionKey[action.key] = projection.state.time.worldMinute + (action.cooldownMinutes ?? 0)
     projection.protocol.lastCompletedCommandId = applied.commandId; projection.protocol.lastOutcomeFingerprint = applied.outcomeFingerprint
-    projection.protocol.pendingCommandId = null; projection.protocol.pendingCommandSequence = null; projection.protocol.pendingActionKey = null; projection.protocol.pendingActorKey = null; projection.protocol.pendingTargetKey = null; projection.protocol.pendingCombatTransitionIntent = null; projection.protocol.pendingActionQuantity = null; projection.protocol.pendingActionItemKey = null
+    projection.director = structuredClone(projection.state.director)
+    projection.protocol.pendingCommandId = null; projection.protocol.pendingCommandSequence = null; projection.protocol.pendingActionKey = null; projection.protocol.pendingActorKey = null; projection.protocol.pendingTargetKey = null; projection.protocol.pendingCombatTransitionIntent = null; projection.protocol.pendingActionQuantity = null; projection.protocol.pendingActionItemKey = null; projection.protocol.pendingDirectorTrigger = null
   } else fail(`事件类型不属于vNext Session投影:${event.type}`)
   projection.lastEventSequence = event.sequence
   return parseTextOpenWorldSessionProjectionV1(projection)
@@ -654,7 +826,7 @@ export function rebaseTextOpenWorldSessionProjectionForBranchV1(value: TextOpenW
   if (projection.protocol.pendingCommandId) fail('不能从尚未终结的命令批次创建分支')
   projection.protocol = {
     pendingCommandId: null, pendingCommandSequence: null, pendingActionKey: null, pendingActorKey: null, pendingTargetKey: null, pendingCombatTransitionIntent: null, pendingActionQuantity: null, pendingActionItemKey: null,
-    randomEvidence: [], lastCompletedCommandId: null, lastOutcomeFingerprint: null,
+    pendingDirectorTrigger: null, randomEvidence: [], lastCompletedCommandId: null, lastOutcomeFingerprint: null,
   }
   projection.lastEventSequence = 0
   return parseTextOpenWorldSessionProjectionV1(projection)

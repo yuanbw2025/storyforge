@@ -23,6 +23,13 @@ function state(overrides: Partial<TextOpenWorldEffectStateV1> = {}): TextOpenWor
       knownRecipeKeys: ['recipe.brine-tonic'], currency: 20,
     },
     economy: { limitedStockQuantitiesByVendorKey: { 'vendor.caretaker': { 'item.salt-crystal': 3 } } },
+    director: {
+      drawCount: 0, generatedQuestInstanceCount: 0, revealedQuestInstanceKeys: [], activeQuestInstanceKeys: [],
+      recentFingerprints: [], lastDrawWorldMinuteByRegionKey: {}, highIntensityStreak: 0,
+      lastResolvedWorldMinuteBySourceKey: {},
+      lastRegionSettlementWorldMinuteByRegionKey: { 'region.salt-port': 480, 'region.ridge': 480 },
+      history: [],
+    },
     quests: {
       instancesByKey: createInitialTextOpenWorldQuestInstancesV1(createTextOpenWorldVNextFixture()),
       resultTags: [],
@@ -44,8 +51,8 @@ function state(overrides: Partial<TextOpenWorldEffectStateV1> = {}): TextOpenWor
     relationships: { morality: 0, factionAffinityByKey: { 'faction.canal-keepers': 0 }, storyModifierByActorKey: {} },
     combat: null,
     actors: { 'actor.caretaker': { alive: true, present: true, locationKey: 'location.salt-port', scheduleState: '检查内渠' } },
-    world: { regionStateByKey: {}, regionPressureByKey: {}, factionStateByKey: {}, endingEligibleByKey: {}, flags: {} },
-    knowledge: { visibilityByKey: { 'knowledge.caretaker': 'known' }, readRumorKeys: [], earnedAchievementKeys: [] },
+    world: { regionStateByKey: { 'region.salt-port': 'stable', 'region.ridge': 'stable' }, regionPressureByKey: { 'region.salt-port': 10, 'region.ridge': 20 }, factionStateByKey: {}, endingEligibleByKey: {}, flags: {} },
+    knowledge: { visibilityByKey: { 'knowledge.caretaker': 'known' }, readRumorKeys: [], earnedAchievementKeys: [], seenRandomEventKeys: [], history: [] },
     endings: { unlockedKeys: [], reachedKey: null },
     appliedClaimKeys: [],
   }

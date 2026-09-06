@@ -583,7 +583,7 @@ async function readOpenWorldRuntimeContext(input: AssembleContextInput): Promise
   }
   const state = await readProductRuntimeStateForContext(session.id!)
   if (manifest.textOpenWorldVNext) {
-    const [sessionProjection, modulesModule, actionModule, bindingModule, feedbackModule, skillsModule, lifeModule, inventoryModule, questModule, mapModule, mapViewModule, travelModule, weatherModule, actorsModule] = await Promise.all([
+    const [sessionProjection, modulesModule, actionModule, bindingModule, feedbackModule, skillsModule, lifeModule, inventoryModule, questModule, mapModule, mapViewModule, travelModule, weatherModule, actorsModule, directorContextModule] = await Promise.all([
       import('../open-world/session-projection'),
       import('../open-world/modules'),
       import('../open-world/action-registry'),
@@ -598,6 +598,7 @@ async function readOpenWorldRuntimeContext(input: AssembleContextInput): Promise
       import('../open-world/travel'),
       import('../open-world/weather'),
       import('../open-world/actors'),
+      import('../open-world/director-context'),
     ])
     if (!state.textOpenWorld) return ''
     const binding = await bindingModule.verifyTextOpenWorldVNextSessionBindingV1(session)
@@ -658,6 +659,9 @@ async function readOpenWorldRuntimeContext(input: AssembleContextInput): Promise
       const readRumors = modules.knowledge.rumors.filter(rumor => rumor.knowledgeKey === entry.key && runtime.knowledge.readRumorKeys.includes(rumor.key))
       return readRumors.map(rumor => `- ${rumor.key}｜传闻｜${rumor.text}`)
     })
+    const directorContext = directorContextModule.projectTextOpenWorldDirectorContextV1({
+      modules, state: runtime, regionKey: region.key, regionTitle: region.title,
+    })
     const skillCatalog = skillsModule.createTextOpenWorldSkillCatalogV1(runtimePackage)
     const skillLines = skillCatalog.project({
       learnedSkillKeys: runtime.player.learnedSkillKeys,
@@ -694,6 +698,7 @@ async function readOpenWorldRuntimeContext(input: AssembleContextInput): Promise
       `【背包】${Object.entries(inventoryQuantities).filter(([, quantity]) => quantity > 0).map(([key, quantity]) => `${itemByKey.get(key)?.title ?? key}×${quantity}`).join('、') || '空'}｜货币=${runtime.inventory.currency}`,
       `【装备】${Object.entries(equippedItemKeys).map(([slot, key]) => `${slot}=${key ? itemByKey.get(key)?.title ?? key : '空'}`).join('、')}`,
       `【区域认知】${visibleRegions.map(item => `${item.title}=${item.knowledge}`).join('、') || '无'}`,
+      directorContext.regionStatus,
       `【已发现地点】${visibleLocations.map(item => `${item.locationKey}:${item.title}=${item.knowledge}`).join('、') || '无'}｜布局=${playerMap.layoutSource}`,
       '【玩家可知相邻道路】', ...(visibleConnections.length ? visibleConnections.map(connection => {
         const destination = modules.world.locations.find(item => item.key === connection.destinationLocationKey)!
@@ -704,6 +709,8 @@ async function readOpenWorldRuntimeContext(input: AssembleContextInput): Promise
       '【当前位置人物】', ...(presentActors.length ? presentActors : ['- 无']),
       '【可见任务】', ...(questLines.length ? questLines : ['- 无']),
       '【玩家已知事实】', ...(knowledgeLines.length ? knowledgeLines : ['- 无']),
+      '【近期区域内容】', ...(directorContext.recentContent.length ? directorContext.recentContent : ['- 暂无新发放或随机事件']),
+      '【已获成就】', ...(directorContext.achievements.length ? directorContext.achievements : ['- 无']),
       '【当前可执行Action闭集】', ...(availableActions.length ? availableActions.map(item => `- ${item.action.key}｜${item.action.category}｜${item.action.label}｜目标=${item.validTargetKeys.join('、') || '无'}`) : ['- 无']),
       '【最近正式结果】', ...(feedback.length ? feedback.map(item => `- ${item.commandId}｜${item.status}｜${item.presentation.headline}${item.presentation.details.length ? `｜${item.presentation.details.join('；')}` : ''}`) : ['- 无']),
       '自由输入只能映射到当前可执行Action；模型只能叙述正式Feedback Receipt已经提交的结果。不得创造地点、任务、人物、物品、随机结果或状态变化，也不得透露未发现地点、锁定任务、隐藏知识、NPC小传、保护状态、完整日程表或未来行踪。',
