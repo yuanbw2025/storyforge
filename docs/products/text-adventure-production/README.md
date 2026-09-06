@@ -1,6 +1,6 @@
 # StoryForge 文字冒险专业生产与旗舰交付方案
 
-> 层级：L2 · 版本：1.8.0 · 生效：2026-09-07
+> 层级：L2 · 版本：1.8.1 · 生效：2026-09-07
 > 状态：目标契约、施工入口与当前事实的唯一现行方案包；当前实现与目标有差距时，以本文标出的缺口为施工项，不得用目标描述冒充完成事实。
 
 本方案包把 [`../TEXT-ADVENTURE.md`](../TEXT-ADVENTURE.md) 的产品契约落实为可以逐步实现和验收的专业生产体系。目标不是生成一个能打开的工程夹具，而是从来源充分的冻结 `WorldRelease` 出发，交付一款作者可审查、可导入导出、可发布、可完整游玩，并有资格提交社区推荐的有限篇幅文字冒险。
@@ -16,6 +16,8 @@
 - 当时生产注册中的文字冒险岗位全部归属 `outline` Agent；该旧结构现已由 18 个单一核心 Skill 的独立岗位和专业依赖 DAG 取代，但 Build #4 不因底座升级而自动获得推荐资格。
 
 旧 Build 失败证据和新底座的代码锚点是 `src/lib/product-production/product-quality.ts`、`src/lib/product-production/plan.ts`、`src/lib/product-production/production-executor.ts`、`src/lib/adventure/production-compiler.ts`、`src/lib/adventure/autoplay.ts` 和 `src/lib/agent/skill-registry.ts`。工作台必须继续把旧 Build 标为“工程夹具/不具备推荐资格”；专业生产链、自动游玩和试玩计划已经接通不等于首个社区推荐成品已经交付。
+
+首款旗舰已经进入真实生产，但尚未完成：`潮钟群岛：最后的灯火` 已绑定来源充分性经作者裁决的 `潮钟群岛旗舰来源世界 v4`，并产出制作监督、来源审计、产品设计、故事圣经、角色圣经、空间架构和通用系统工件。最近一次可见断点停在叙事弧输出预算不足；预算按时长与交付物重算的修复已经通过全仓 CI，仍需在浏览器恢复该断点后继续生成全部下游内容。这个事实只证明批次 G 已开工，不证明旗舰、Release 或社区候选已经完成。
 
 ## 开工卡
 
