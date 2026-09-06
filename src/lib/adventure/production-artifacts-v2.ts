@@ -3,6 +3,10 @@ import type {
   TextAdventureQuestBundleArtifactV1,
   TextAdventureSystemsArtifactV1,
 } from './production-artifacts'
+import {
+  textAdventureActSceneKeysV1,
+  textAdventureNarrativeSkeletonV1,
+} from './scene-script'
 
 const STABLE_KEY = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/
 
@@ -227,11 +231,14 @@ export function parseTextAdventureStoryBibleArtifactV1(
       introducedAct, resolvedAct,
     }
   })
-  const endings = array(row.endings, 'endings', brief.scale.targetEndingCount, 8).map((value, index) => {
+  const endingKeys = textAdventureNarrativeSkeletonV1(brief).endingKeys
+  const endings = array(row.endings, 'endings', endingKeys.length, endingKeys.length).map((value, index) => {
     const item = record(value, `endings[${index}]`)
     exactKeys(item, ['key', 'title', 'dramaticAnswer', 'requiredConsequences'], `endings[${index}]`)
+    const endingKey = key(item.key, `endings[${index}].key`)
+    if (endingKey !== endingKeys[index]) fail(`endings[${index}].key 必须为 ${endingKeys[index]}`)
     return {
-      key: key(item.key, `endings[${index}].key`),
+      key: endingKey,
       title: text(item.title, `endings[${index}].title`, 300),
       dramaticAnswer: text(item.dramaticAnswer, `endings[${index}].dramaticAnswer`, 2_000),
       requiredConsequences: textArray(item.requiredConsequences, `endings[${index}].requiredConsequences`, 2, 12),
@@ -376,10 +383,17 @@ export function parseTextAdventureNarrativeArcPlanArtifactV1(input: {
   }
   const castKeys = new Set(input.cast.characters.map(item => item.key))
   const setupKeys = new Set(input.storyBible.setupPayoffs.map(item => item.key))
-  const acts = array(row.acts, 'acts', 3, 8).map((value, actIndex) => {
+  const skeleton = textAdventureNarrativeSkeletonV1(input.brief)
+  const acts = array(row.acts, 'acts', 3, 3).map((value, actIndex) => {
     const item = record(value, `acts[${actIndex}]`)
     exactKeys(item, ['key', 'title', 'targetMinutes', 'goal', 'irreversibleTurn', 'sceneCards'], `acts[${actIndex}]`)
-    const sceneCards = array(item.sceneCards, `acts[${actIndex}].sceneCards`, 1, 40).map((value, sceneIndex) => {
+    const expectedSceneKeys = textAdventureActSceneKeysV1(input.brief, actIndex)
+    const sceneCards = array(
+      item.sceneCards,
+      `acts[${actIndex}].sceneCards`,
+      expectedSceneKeys.length,
+      expectedSceneKeys.length,
+    ).map((value, sceneIndex) => {
       const scene = record(value, `acts[${actIndex}].sceneCards[${sceneIndex}]`)
       exactKeys(scene, [
         'key', 'title', 'locationOrdinal', 'purpose', 'conflict', 'entryState', 'exitState',
@@ -392,8 +406,12 @@ export function parseTextAdventureNarrativeArcPlanArtifactV1(input: {
       if ([...parsedSetupKeys, ...parsedPayoffKeys].some(value => !setupKeys.has(value))) {
         fail(`sceneCards[${sceneIndex}] 引用未知铺垫回收`)
       }
+      const sceneKey = key(scene.key, `sceneCards[${sceneIndex}].key`)
+      if (sceneKey !== expectedSceneKeys[sceneIndex]) {
+        fail(`acts[${actIndex}].sceneCards[${sceneIndex}].key 必须为 ${expectedSceneKeys[sceneIndex]}`)
+      }
       return {
-        key: key(scene.key, `sceneCards[${sceneIndex}].key`),
+        key: sceneKey,
         title: text(scene.title, `sceneCards[${sceneIndex}].title`, 300),
         locationOrdinal: integer(scene.locationOrdinal, `sceneCards[${sceneIndex}].locationOrdinal`, 1, input.brief.textAdventure!.narrative.targetLocationCount),
         purpose: text(scene.purpose, `sceneCards[${sceneIndex}].purpose`, 2_000),
@@ -403,8 +421,10 @@ export function parseTextAdventureNarrativeArcPlanArtifactV1(input: {
         castKeys: parsedCastKeys, setupKeys: parsedSetupKeys, payoffKeys: parsedPayoffKeys,
       }
     })
+    const actKey = key(item.key, `acts[${actIndex}].key`)
+    if (actKey !== `act.${actIndex + 1}`) fail(`acts[${actIndex}].key 必须为 act.${actIndex + 1}`)
     return {
-      key: key(item.key, `acts[${actIndex}].key`),
+      key: actKey,
       title: text(item.title, `acts[${actIndex}].title`, 300),
       targetMinutes: integer(item.targetMinutes, `acts[${actIndex}].targetMinutes`, 1, 120),
       goal: text(item.goal, `acts[${actIndex}].goal`, 2_000),
@@ -414,19 +434,25 @@ export function parseTextAdventureNarrativeArcPlanArtifactV1(input: {
   })
   const sceneKeys = new Set(acts.flatMap(act => act.sceneCards.map(scene => scene.key)))
   if (sceneKeys.size !== acts.reduce((sum, act) => sum + act.sceneCards.length, 0)) fail('scene key 重复')
-  if (sceneKeys.size < input.brief.textAdventure.narrative.targetSceneCount) fail('叙事弧场景卡少于 Brief 目标')
+  if (sceneKeys.size !== skeleton.sceneKeys.length) fail('叙事弧场景卡没有精确覆盖 Brief 目标')
   const totalMinutes = acts.reduce((sum, act) => sum + act.targetMinutes, 0)
   if (Math.abs(totalMinutes - input.brief.scale.targetPlayMinutes) > Math.max(5, input.brief.scale.targetPlayMinutes * 0.15)) {
     fail('叙事弧各幕目标分钟与 Brief 不闭合')
   }
-  const minimumDecisions = input.brief.qualityProfile === 'commercial-candidate'
-    ? Math.max(2, Math.ceil(input.brief.scale.targetPlayMinutes / 10)) : 1
-  const decisions = array(row.decisions, 'decisions', minimumDecisions, 40).map((value, index) => {
+  const decisionSceneKeys = skeleton.sceneKeys.slice(0, skeleton.statefulDecisionSceneCount)
+  const decisions = array(
+    row.decisions,
+    'decisions',
+    decisionSceneKeys.length,
+    decisionSceneKeys.length,
+  ).map((value, index) => {
     const item = record(value, `decisions[${index}]`)
     exactKeys(item, ['key', 'sceneKey', 'prompt', 'options'], `decisions[${index}]`)
     const sceneKey = key(item.sceneKey, `decisions[${index}].sceneKey`)
-    if (!sceneKeys.has(sceneKey)) fail(`decisions[${index}] 引用未知场景`)
-    const options = array(item.options, `decisions[${index}].options`, 2, 5).map((value, optionIndex) => {
+    if (sceneKey !== decisionSceneKeys[index]) {
+      fail(`decisions[${index}].sceneKey 必须为 ${decisionSceneKeys[index]}`)
+    }
+    const options = array(item.options, `decisions[${index}].options`, 2, 2).map((value, optionIndex) => {
       const option = record(value, `decisions[${index}].options[${optionIndex}]`)
       exactKeys(option, ['key', 'label', 'cost', 'persistentEffectKey', 'echoSceneKeys'], `decisions[${index}].options[${optionIndex}]`)
       const echoSceneKeys = keyArray(option.echoSceneKeys, `decisions[${index}].options[${optionIndex}].echoSceneKeys`, 2, 20)
@@ -449,12 +475,17 @@ export function parseTextAdventureNarrativeArcPlanArtifactV1(input: {
     }
   })
   const storyEndingKeys = new Set(input.storyBible.endings.map(item => item.key))
-  const endings = array(row.endings, 'endings', input.brief.scale.targetEndingCount, 8).map((value, index) => {
+  const endings = array(row.endings, 'endings', skeleton.endingKeys.length, skeleton.endingKeys.length).map((value, index) => {
     const item = record(value, `endings[${index}]`)
     exactKeys(item, ['endingKey', 'sceneKey'], `endings[${index}]`)
     const endingKey = key(item.endingKey, `endings[${index}].endingKey`)
     const sceneKey = key(item.sceneKey, `endings[${index}].sceneKey`)
-    if (!storyEndingKeys.has(endingKey) || !sceneKeys.has(sceneKey)) fail(`endings[${index}] 引用未知结局或场景`)
+    if (endingKey !== skeleton.endingKeys[index] || !storyEndingKeys.has(endingKey)) {
+      fail(`endings[${index}] 必须复用冻结结局 ${skeleton.endingKeys[index]}`)
+    }
+    if (sceneKey !== skeleton.sceneKeys[skeleton.sceneKeys.length - 1]) {
+      fail(`endings[${index}] 必须从终幕最后场景汇出`)
+    }
     return { endingKey, sceneKey }
   })
   if (new Set(acts.map(item => item.key)).size !== acts.length

@@ -575,7 +575,8 @@ async function currentProductionBuild(scope: WorkspaceScope, productionId: numbe
 }
 
 function evolutionTaskLane(taskKey: string): 'content' | 'product' | 'visual' | 'audio' | null {
-  if (taskKey === 'content.source-sufficiency'
+  if (taskKey.startsWith('content.scene-script.act-')
+    || taskKey === 'content.source-sufficiency'
     || taskKey === 'content.design'
     || taskKey === 'content.story-bible'
     || taskKey === 'content.cast-bible'
@@ -659,6 +660,15 @@ async function applyCrossBuildEvolutionReuse(input: {
       task.capabilityRequirementKeys.map(key => input.brief.capabilityRequirements.find(item => item.requirementKey === key)),
     )
     const outputs = task.outputArtifactKeys.map(key => artifactByKey.get(key))
+    if (task.taskKey === 'integration.narrative' && !affected.has('content') && !affected.has('world-source')
+      && !!parentTask && task.dependsOn.every(dependency => reusableTasks.has(dependency))) {
+      // The deterministic narrative assembler still runs in the new Build,
+      // but its stable upstream closure allows the accepted model review and
+      // media plan downstream to be carried once this fresh receipt exists.
+      reusableTasks.add(task.taskKey)
+      tasks.push(task)
+      continue
+    }
     const canReuse = task.executionMode !== 'deterministic' && lane != null && !affected.has(lane)
       && !(task.taskKey === 'media.requirements' && affected.has('audio'))
       && !!parentTask && requirementsUnchanged
@@ -800,7 +810,8 @@ function textAdventureTaskFailures(value: string | Record<string, unknown>): Map
   const pending: Record<string, unknown>[] = [typeof value === 'string' ? parsedObject(value) : value]
   for (let depth = 0; depth < 12 && pending.length > 0; depth++) {
     const current = pending.shift()!
-    if (typeof current.taskKey === 'string' && current.taskKey.startsWith('content.')
+    if (typeof current.taskKey === 'string'
+      && (current.taskKey.startsWith('content.') || current.taskKey === 'integration.narrative')
       && typeof current.detail === 'string' && current.detail.trim()) {
       result.set(current.taskKey, current)
     }
@@ -880,9 +891,15 @@ async function recoveryInvalidatedTaskKeys(input: {
           ? [issue.artifactKey] : []
       })
     : []
+  const sceneScriptTaskKeys = [
+    'content.scene-script.act-1', 'content.scene-script.act-2', 'content.scene-script.act-3',
+  ]
   const invalidated = new Set<string>(unresolvedFailureTaskKeys.length > 0
-    ? unresolvedFailureTaskKeys
+    ? unresolvedFailureTaskKeys.flatMap(taskKey => (
+        taskKey === 'integration.narrative' ? sceneScriptTaskKeys : [taskKey]
+      ))
     : blockingArtifactKeys.flatMap(artifactKey => {
+        if (artifactKey === 'content.narrative') return sceneScriptTaskKeys
         const taskKey = taskByArtifactKey.get(artifactKey)
         return taskKey ? [taskKey] : []
       }))

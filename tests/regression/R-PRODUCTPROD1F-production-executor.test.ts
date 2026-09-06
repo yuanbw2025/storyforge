@@ -26,6 +26,10 @@ import { parseProductRuntimePackageV1 } from '../../src/lib/product-production/r
 import { adventureNarrativeActionContext, availableAdventureActions } from '../../src/lib/adventure/runtime'
 import { commitAdventureAction, commitAdventureNarrativeChoice } from '../../src/lib/adventure/runtime-api'
 import { planTextAdventureNarrativeLocationsV1 } from '../../src/lib/adventure/narrative-location-plan'
+import {
+  textAdventureActSceneKeysV1,
+  textAdventureNarrativeSkeletonV1,
+} from '../../src/lib/adventure/scene-script'
 import { resolveProductRuntimeSource } from '../../src/lib/product-production/preview-source'
 import {
   recordProductBrowserPerformanceMeasurementV1,
@@ -386,7 +390,7 @@ function professionalTextAdventurePlanningOutputs(
     visualAnchor: `海港工作服，携带能辨认身份的 ${index + 1} 号铜制工具。`,
   }))]
   const storyEndings = Array.from({ length: Math.max(brief.scale.targetEndingCount, 4) }, (_, index) => ({
-    key: `ending.story.${index + 1}`, title: `潮声之后 ${index + 1}`,
+    key: `ending.${String(index + 1).padStart(3, '0')}`, title: `潮声之后 ${index + 1}`,
     dramaticAnswer: `玩家以第 ${index + 1} 种代价回答公开真相与保护共同体能否共存。`,
     requiredConsequences: [`承认选择 ${index + 1} 的代价`, `兑现人物关系 ${index + 1} 的变化`],
   }))
@@ -496,7 +500,8 @@ function professionalTextAdventurePlanningOutputs(
       playerFantasy: '以有限资源承担共同体守护者的艰难选择。', thematicQuestion: '真相与保护能否在责任中共存？',
       emotionalPromise: '让玩家从被怀疑走向承担，并在结局看见关系回响。', centralConflict: '公开记录会引发冲突，封存记录会延续伤害。',
       canonFacts: ['潮门按冻结规则关闭', '信号塔保存港口记录', '玩家不能改写世界引擎事实'],
-      productPrivateFacts: [], prohibitions: ['不得临时制造推翻冻结世界的幕后设定'], setupPayoffs, endings: storyEndings,
+      productPrivateFacts: [], prohibitions: ['不得临时制造推翻冻结世界的幕后设定'], setupPayoffs,
+      endings: storyEndings.slice(0, brief.scale.targetEndingCount),
     },
     'content.cast-bible': {
       schema: 'storyforge.text-adventure-cast-bible-artifact', version: 1, characters,
@@ -505,7 +510,7 @@ function professionalTextAdventurePlanningOutputs(
       schema: 'storyforge.text-adventure-narrative-arc-plan-artifact', version: 1,
       acts, decisions,
       endings: storyEndings.slice(0, brief.scale.targetEndingCount).map((ending, index) => ({
-        endingKey: ending.key, sceneKey: sceneKeys[Math.max(0, sceneKeys.length - 1 - index)],
+        endingKey: ending.key, sceneKey: sceneKeys[sceneKeys.length - 1],
       })),
     },
     'content.main-quest-plan': mainQuestPlan,
@@ -534,6 +539,86 @@ function professionalTextAdventurePlanningOutputs(
   } as const
 }
 
+function professionalTextAdventureSceneScriptOutputs(
+  brief: Awaited<ReturnType<typeof fixtureForProduct>>['brief'],
+  planning: ReturnType<typeof professionalTextAdventurePlanningOutputs>,
+  locationTitles: string[],
+) {
+  const storyBible = planning['content.story-bible']
+  const arcPlan = planning['content.narrative-arc-plan']
+  const castBible = planning['content.cast-bible']
+  const skeleton = textAdventureNarrativeSkeletonV1(brief)
+  const locations = planTextAdventureNarrativeLocationsV1(skeleton.sceneKeys.length, locationTitles.length)
+  const sceneCards = arcPlan.acts.flatMap(act => act.sceneCards)
+  const sceneCardByKey = new Map(sceneCards.map(scene => [scene.key, scene]))
+  const npcKeys = castBible.characters.filter(character => character.role !== 'player').map(character => character.key)
+  const endingByKey = new Map(storyBible.endings.map(ending => [ending.key, ending]))
+  const targetUnitsPerScene = Math.max(240, Math.ceil(brief.scale.targetWordCount / skeleton.sceneKeys.length) + 80)
+  return Object.fromEntries([0, 1, 2].map(actIndex => {
+    const sceneKeys = textAdventureActSceneKeysV1(brief, actIndex)
+    const scenes = sceneKeys.map(sceneKey => {
+      const sceneIndex = skeleton.sceneKeys.indexOf(sceneKey)
+      const sceneCard = sceneCardByKey.get(sceneKey)!
+      const locationTitle = locationTitles[locations[sceneIndex].locationIndex]
+      const beatCount = Math.max(5, Math.ceil(targetUnitsPerScene / 75))
+      const beats = Array.from({ length: beatCount }, (_, beatIndex) => {
+        const dialogue = beatIndex % 2 === 1
+        const turningPoint = ['确认风险', '交换条件', '承担代价', '发现回响'][beatIndex % 4]
+        return {
+          beatKey: `beat.act-${actIndex + 1}.${String(sceneIndex + 1).padStart(3, '0')}.${String(beatIndex + 1).padStart(3, '0')}`,
+          kind: dialogue ? 'dialogue' as const : beatIndex % 4 === 2 ? 'action' as const : 'narration' as const,
+          speakerKey: dialogue ? npcKeys[(sceneIndex + beatIndex) % npcKeys.length] : null,
+          text: dialogue
+            ? `${locationTitle}的第${sceneIndex + 1}场对话推进到第${beatIndex + 1}个回合。角色不再复述已知事实，而是围绕${turningPoint}提出具体条件，逼迫守灯人把责任、关系和有限时间放在同一个选择里衡量。`
+            : `${locationTitle}的潮声在第${sceneIndex + 1}场发生了新的变化。第${beatIndex + 1}段行动让${sceneCard.conflict}从抽象矛盾变成眼前可见的后果，也把${sceneCard.purpose}所需的信息交到玩家手中。`,
+          order: beatIndex,
+        }
+      })
+      return {
+        sceneKey,
+        title: sceneCard.title,
+        summary: `${locationTitle}内，${sceneCard.purpose}；玩家进入时${sceneCard.entryState}，离开时${sceneCard.exitState}。`,
+        beats,
+      }
+    })
+    const choices = skeleton.edges.filter(edge => sceneKeys.includes(edge.sourceNodeKey)).map(edge => ({
+      choiceKey: edge.choiceKey,
+      sourceNodeKey: edge.sourceNodeKey,
+      targetNodeKey: edge.targetNodeKey,
+      text: edge.targetNodeKey.startsWith('ending.')
+        ? `接受${endingByKey.get(edge.targetNodeKey)!.title}的结局`
+        : edge.order === 0 ? `以公开承担的方式进入${edge.targetNodeKey}` : `以保护同伴的方式进入${edge.targetNodeKey}`,
+      description: edge.order === 0
+        ? '把事实公开给相关角色，以关系压力换取共同决策。'
+        : '先保护眼前的人，以有限时间和后续信任承担代价。',
+      unavailableReason: '必须先完成当前场景的主线目标。',
+      order: edge.order,
+    }))
+    const endings = actIndex === 2 ? skeleton.endingKeys.map((endingKey, endingIndex) => ({
+      endingKey,
+      title: endingByKey.get(endingKey)!.title,
+      summary: endingByKey.get(endingKey)!.dramaticAnswer,
+      beats: Array.from({ length: 4 }, (_, beatIndex) => ({
+        beatKey: `beat.act-3.ending-${String(endingIndex + 1).padStart(3, '0')}.${String(beatIndex + 1).padStart(3, '0')}`,
+        kind: beatIndex === 1 ? 'dialogue' as const : 'narration' as const,
+        speakerKey: beatIndex === 1 ? npcKeys[endingIndex % npcKeys.length] : null,
+        text: `结局${endingIndex + 1}的第${beatIndex + 1}个回响明确交代此前的选择如何改变港城、同行者和守灯人的责任，并让${endingByKey.get(endingKey)!.requiredConsequences.join('与')}成为可以理解的结果。`,
+        order: beatIndex,
+      })),
+    })) : []
+    const taskKey = `content.scene-script.act-${actIndex + 1}`
+    return [taskKey, {
+      schema: 'storyforge.text-adventure-scene-script-bundle-artifact' as const,
+      version: 1 as const,
+      actKey: `act.${actIndex + 1}`,
+      moduleTitle: storyBible.title,
+      scenes,
+      choices,
+      endings,
+    }]
+  }))
+}
+
 function fullLengthTextAdventureOutputs(
   brief: Awaited<ReturnType<typeof fixtureForProduct>>['brief'],
 ) {
@@ -556,37 +641,6 @@ function fullLengthTextAdventureOutputs(
   const locationTitles = regions.flatMap(region => region.areas.flatMap(area => (
     area.locations.map(location => location.title)
   )))
-  const locationPlan = planTextAdventureNarrativeLocationsV1(
-    contract.narrative.targetSceneCount,
-    locationTitles.length,
-  )
-  const nonEndingNodes = Array.from({ length: contract.narrative.targetSceneCount }, (_, index) => ({
-    key: `main.${String(index + 1).padStart(3, '0')}`,
-    kind: index === 0 ? 'entry' as const : index === contract.narrative.targetSceneCount - 1 ? 'choice' as const : 'scene' as const,
-    title: `主线场景 ${index + 1}`,
-    summary: `${locationTitles[locationPlan[index].locationIndex]}内，主线冲突在第 ${index + 1} 个场景继续升级。`, condition: {}, effects: [],
-  }))
-  const endingNodes = Array.from({ length: contract.narrative.targetEndingCount }, (_, index) => ({
-    key: `ending.${index + 1}`, kind: 'ending' as const, title: `因果结局 ${index + 1}`,
-    summary: `结局 ${index + 1} 回应玩家此前承担的行动与代价。`, condition: {}, effects: [],
-  }))
-  const beats = [...nonEndingNodes, ...endingNodes].map((node, index) => ({
-    beatKey: `beat.${node.key}`, nodeKey: node.key, kind: 'narration' as const, speakerKey: null,
-    text: index < nonEndingNodes.length
-      ? `第${index + 1}幕里，玩家观察环境、理解人物动机、作出有代价的选择，并看见此前状态留下的持续回响。`.repeat(30)
-      : `这条结局把一路积累的关系、资源、行动与情绪变化完整收束。`.repeat(8),
-    order: 0,
-  }))
-  const choices = nonEndingNodes.slice(0, -1).map((node, index) => ({
-    choiceKey: `choice.main.${index + 1}`, sourceNodeKey: node.key, text: `推进到场景 ${index + 2}`,
-    description: '推进主线并保留状态回响。', unavailableReason: '', targetNodeKey: nonEndingNodes[index + 1].key,
-    displayCondition: {}, availableCondition: {}, effects: [], tags: ['mainline'], order: 0,
-  }))
-  choices.push(...endingNodes.map((ending, index) => ({
-    choiceKey: `choice.ending.${index + 1}`, sourceNodeKey: nonEndingNodes.at(-1)!.key,
-    text: `选择结局 ${index + 1}`, description: '让此前行动形成不同收束。', unavailableReason: '',
-    targetNodeKey: ending.key, displayCondition: {}, availableCondition: {}, effects: [], tags: ['ending'], order: index,
-  })))
   const questEntry = (kind: 'side' | 'ambient', index: number) => ({
     key: `${kind}-${index + 1}`, title: `${kind === 'side' ? '支线' : '区域事件'} ${index + 1}`,
     description: `${locationTitles[index % locationTitles.length]}里，与主线主题呼应但拥有独立目标和回响。`,
@@ -599,6 +653,7 @@ function fullLengthTextAdventureOutputs(
     timeCostMinutes: 8,
   })
   const professional = professionalTextAdventurePlanningOutputs(brief)
+  const sceneScripts = professionalTextAdventureSceneScriptOutputs(brief, professional, locationTitles)
   const sideEntries = Array.from(
     { length: contract.narrative.targetSideQuestCount }, (_, index) => questEntry('side', index),
   )
@@ -618,14 +673,10 @@ function fullLengthTextAdventureOutputs(
   return {
     ...base,
     ...professional,
+    ...sceneScripts,
     'content.adventure-architecture': {
       ...base['content.adventure-architecture'],
       regions,
-    },
-    'content.narrative': {
-      schema: 'storyforge.product-narrative-artifact' as const, version: 1 as const, moduleKind: 'main' as const,
-      moduleTitle: '雾港一小时冒险', entryNodeKey: nonEndingNodes[0].key,
-      nodes: [...nonEndingNodes, ...endingNodes], beats, choices,
     },
     'content.adventure-side-quests': {
       schema: 'storyforge.text-adventure-quest-bundle-artifact' as const, version: 1 as const, bundleKind: 'side' as const,
@@ -1280,7 +1331,7 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     const textRequirement = owned.brief.capabilityRequirements.find(item => item.mediaClass === 'text')!
     const bindingHash = await hashProductProductionValueV2({ provider: 'full-length-text-adventure' })
     const outputs = fullLengthTextAdventureOutputs(owned.brief) as Record<string, unknown>
-    let narrativeSystem = ''
+    const sceneScriptSystems: string[] = []
     let productModuleSystem = ''
     let sideQuestSystem = ''
     let qualityReviewSystem = ''
@@ -1290,7 +1341,7 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
       modelCallCount += 1
       const taskKey = Object.keys(outputs).find(key => request.system.includes(`任务=${key}。`))
       if (!taskKey) throw new Error(`unknown full-length task:${request.system}`)
-      if (taskKey === 'content.narrative') narrativeSystem = request.system
+      if (taskKey.startsWith('content.scene-script.act-')) sceneScriptSystems.push(request.system)
       if (taskKey === 'content.product-module') productModuleSystem = request.system
       if (taskKey === 'content.adventure-side-quests') sideQuestSystem = request.system
       if (taskKey === 'content.adventure-quality-review') {
@@ -1323,12 +1374,11 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
       projection,
       `full-length text-adventure projection:\n${JSON.stringify(projection, null, 2)}\nfailure=${projectedBuild?.failureJson}`,
     ).toMatchObject({ terminal: true, buildStatus: 'release-ready' })
-    expect(narrativeSystem).toContain('固定图骨架=')
-    expect(narrativeSystem).toContain('"entryNodeKey":"scene.001"')
-    expect(narrativeSystem).toContain('"locationOrdinal":1')
-    expect(narrativeSystem).toContain('"locationTitle":"地点 1-1-1"')
-    expect(narrativeSystem).toContain('不得增加、删除或改写骨架')
-    expect(narrativeSystem).toContain('必须就是 targetNodeKey 标注的 locationTitle')
+    expect(sceneScriptSystems).toHaveLength(3)
+    expect(sceneScriptSystems[0]).toContain('你是第 1 幕的专职分场叙事作者')
+    expect(sceneScriptSystems[0]).toContain('"sceneKey":"scene.001","locationTitle":"地点 1-1-1"')
+    expect(sceneScriptSystems[0]).toContain('一律不得改写')
+    expect(sceneScriptSystems[2]).toContain('"endings":["ending.001","ending.002","ending.003"]')
     expect(sideQuestSystem).toContain('地点编号与标题的唯一映射=')
     expect(sideQuestSystem).toContain('"locationOrdinal":1,"locationTitle":"地点 1-1-1"')
     expect(sideQuestSystem).toContain('不得伪装成尚未实现的跨地点多阶段任务')
@@ -1344,7 +1394,7 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     expect(qualityReviewContext).toContain('"targetCharacterKey"')
     expect(qualityReviewContext).toContain('"artifactKey":"content.narrative"')
     expect(qualityReviewContext).toContain('"openingBeat"')
-    expect(qualityReviewContext).toContain('"key":"choice.main.1"')
+    expect(qualityReviewContext).toContain('"key":"choice.001"')
     expect(qualityReviewContext).toMatch(/"label":"[^"]+"/)
     expect(qualityReviewContext).toContain('"title":"攻击","role":"stat","initial":3')
     expect(qualityReviewContext).toContain('"timeCostMinutes":')
@@ -1419,9 +1469,9 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
       runtimePackage.adventure, afterObjective.adventure!,
       adventureNarrativeActionContext({ currentNodeKey: runtimePackage.narrative.entryNodeKey, variables: {} }),
     ).filter(item => item.available && item.action.narrativeChoiceKey).map(item => item.action.narrativeChoiceKey)
-    expect(entryActions).toEqual([runtimePackage.narrative.choices.find(choice => (
+    expect(entryActions).toEqual(runtimePackage.narrative.choices.filter(choice => (
       choice.sourceNodeKey === runtimePackage.narrative.entryNodeKey
-    ))!.choiceKey])
+    )).map(choice => choice.choiceKey))
     const entrySideQuest = runtimePackage.adventure.quests.find(item => (
       item.category === 'side'
       && runtimePackage.adventure!.actions.find(action => action.key === `action.accept.side.${item.key.split('.').at(-1)}`)
@@ -1525,7 +1575,7 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     expect(modelCallCount).toBe(modelCallCountBeforeReassembly)
     const reassemblyArtifacts = await db.productBuildArtifacts.where('buildId').equals(reassembled.buildId).toArray()
     expect(reassemblyArtifacts.filter(item => item.status === 'accepted').map(item => item.artifactKey).sort()).toEqual([
-      'quality.report', 'runtime.package',
+      'content.narrative', 'quality.report', 'runtime.package',
     ])
   }, 30_000)
 
@@ -1537,7 +1587,16 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
       owned.brief.source.worldContentHash, 'text-adventure', firstCharacterAnchor(owned.brief),
       owned.brief.intent.playerRole,
     ) as Record<string, unknown>
-    Object.assign(outputs, professionalTextAdventurePlanningOutputs(owned.brief))
+    const professional = professionalTextAdventurePlanningOutputs(owned.brief)
+    Object.assign(
+      outputs,
+      professional,
+      professionalTextAdventureSceneScriptOutputs(
+        owned.brief,
+        professional,
+        ['潮门广场', '旧仓街', '信号塔'],
+      ),
+    )
     outputs['media.requirements'] = {
       ...(outputs['media.requirements'] as Record<string, unknown>), visual: [], audio: [],
     }
@@ -1557,16 +1616,16 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
       passed: false,
     }
     const taskCalls = new Map<string, number>()
-    const repairedNarrativeContexts: string[] = []
-    const repairedNarrativeSystems: string[] = []
+    const repairedSceneContexts: string[] = []
+    const repairedSceneSystems: string[] = []
     let failFirstRepairEpoch = true
     const runText: ProductionTextRunnerV1 = async request => {
       const taskKey = Object.keys(outputs).find(key => request.system.includes(`任务=${key}。`))
       if (!taskKey) throw new Error(`unknown blocking-review task:${request.system}`)
       taskCalls.set(taskKey, (taskCalls.get(taskKey) ?? 0) + 1)
-      if (taskKey === 'content.narrative' && (taskCalls.get(taskKey) ?? 0) >= 2) {
-        repairedNarrativeContexts.push(request.contextText)
-        repairedNarrativeSystems.push(request.system)
+      if (taskKey === 'content.scene-script.act-1' && (taskCalls.get(taskKey) ?? 0) >= 2) {
+        repairedSceneContexts.push(request.contextText)
+        repairedSceneSystems.push(request.system)
         if (failFirstRepairEpoch) throw new Error('fixture repair provider timeout')
       }
       return {
@@ -1634,7 +1693,7 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     expect(interruptedRepair).toMatchObject({ terminal: false, buildStatus: 'recovery-required' })
     const interruptedBuild = (await db.productBuilds.get(build.id!))!
     expect(JSON.parse(interruptedBuild.failureJson)).toMatchObject({
-      taskKey: 'content.narrative',
+      taskKey: 'content.scene-script.act-1',
       repairCause: {
         taskKey: 'integration.package', detail: expect.stringContaining('文字冒险叙事质量审查未通过'),
       },
@@ -1645,7 +1704,7 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
       scope: owned.scope, productionId: owned.productionId,
       command: {
         type: 'resolve-blocker', commandId: 'text-adventure.quality-repair.retry-after-timeout',
-        expectedStateRevision: interruptedProduction.stateRevision, blockerKey: 'content.narrative',
+        expectedStateRevision: interruptedProduction.stateRevision, blockerKey: 'content.scene-script.act-1',
         resolution: { action: 'retry', note: '保留原质量反馈并重试超时的主线修复' },
       },
     })
@@ -1662,24 +1721,25 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     const expectedCalls = new Map([
       ['content.source-sufficiency', 1], ['content.design', 1], ['content.story-bible', 1],
       ['content.cast-bible', 1], ['content.adventure-architecture', 1],
-      ['content.narrative-arc-plan', 1], ['content.main-quest-plan', 1], ['content.narrative', 4],
+      ['content.narrative-arc-plan', 1], ['content.main-quest-plan', 1],
+      ['content.scene-script.act-1', 4], ['content.scene-script.act-2', 2], ['content.scene-script.act-3', 2],
       ['content.product-module', 1], ['content.adventure-side-quests', 2], ['content.quest-script', 2],
       ['content.adventure-ambient-events', 1], ['content.adventure-quality-review', 2],
       ['media.requirements', 2],
     ])
     expect(taskCalls).toEqual(expectedCalls)
-    expect(repairedNarrativeContexts).toHaveLength(3)
-    for (const repairedNarrativeContext of repairedNarrativeContexts) {
-      expect(repairedNarrativeContext).toContain('storyforge.text-adventure-repair-feedback')
-      expect(repairedNarrativeContext).toContain('主要转折缺少因果铺垫')
+    expect(repairedSceneContexts).toHaveLength(3)
+    for (const repairedSceneContext of repairedSceneContexts) {
+      expect(repairedSceneContext).toContain('storyforge.text-adventure-repair-feedback')
+      expect(repairedSceneContext).toContain('主要转折缺少因果铺垫')
     }
-    expect(repairedNarrativeContexts[1]).toContain('lastTaskFailures')
-    expect(repairedNarrativeContexts[1]).toContain('fixture repair provider timeout')
-    expect(repairedNarrativeContexts[2]).toContain('lastTaskFailures')
-    expect(repairedNarrativeContexts[2]).toContain('fixture repair provider timeout')
-    expect(repairedNarrativeSystems).toHaveLength(3)
-    expect(repairedNarrativeSystems[0]).toContain('detail 是需要消除的缺陷证据，recommendation 只是建议')
-    expect(repairedNarrativeSystems[0]).toContain('优先重写错位的钩子与结果文本')
+    expect(repairedSceneContexts[1]).toContain('lastTaskFailures')
+    expect(repairedSceneContexts[1]).toContain('fixture repair provider timeout')
+    expect(repairedSceneContexts[2]).toContain('lastTaskFailures')
+    expect(repairedSceneContexts[2]).toContain('fixture repair provider timeout')
+    expect(repairedSceneSystems).toHaveLength(3)
+    expect(repairedSceneSystems[0]).toContain('detail 是需要消除的缺陷证据，recommendation 只是建议')
+    expect(repairedSceneSystems[0]).toContain('优先重写错位的钩子与结果文本')
     const repairedReviewRows = await db.productBuildArtifacts
       .where('[buildId+artifactKey]').equals([build.id!, 'quality.adventure-review']).toArray()
     expect(repairedReviewRows.filter(row => row.status === 'accepted')).toHaveLength(1)
@@ -1699,14 +1759,22 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
       expect(owned.brief.capabilityRequirements.filter(item => item.mediaClass !== 'text'))
         .toHaveLength(productType === 'text-adventure' ? 1 : 0)
       const bindingHash = await hashProductProductionValueV2({ provider: 'existing-global-config', productType })
-      const outputs = {
-        ...modelOutputs(
+      const baseOutputs = modelOutputs(
         owned.brief.source.worldContentHash,
         productType,
         firstCharacterAnchor(owned.brief),
         owned.brief.intent.playerRole,
-        ),
-        ...(productType === 'text-adventure' ? professionalTextAdventurePlanningOutputs(owned.brief) : {}),
+      )
+      const professional = productType === 'text-adventure'
+        ? professionalTextAdventurePlanningOutputs(owned.brief) : null
+      const outputs = {
+        ...baseOutputs,
+        ...(professional ?? {}),
+        ...(professional ? professionalTextAdventureSceneScriptOutputs(
+          owned.brief,
+          professional,
+          ['潮门广场', '旧仓街', '信号塔'],
+        ) : {}),
       }
       const runText: ProductionTextRunnerV1 = async request => {
         const taskKey = Object.keys(outputs).find(key => request.system.includes(`任务=${key}。`)) as keyof typeof outputs

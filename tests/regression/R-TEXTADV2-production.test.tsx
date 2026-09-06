@@ -81,7 +81,8 @@ describe('R-TEXTADV2-production · 文字冒险正式生产契约与工作台', 
       'content.source-sufficiency', 'content.design', 'content.story-bible', 'content.cast-bible',
       'content.adventure-architecture', 'content.product-module', 'content.narrative-arc-plan',
       'content.main-quest-plan', 'content.adventure-side-quests', 'content.adventure-ambient-events',
-      'content.narrative',
+      'content.quest-script', 'content.scene-script.act-1', 'content.scene-script.act-2',
+      'content.scene-script.act-3', 'integration.narrative',
       'content.adventure-quality-review', 'media.requirements', 'media.visual',
       'integration.package', 'qa.release',
     ]))
@@ -101,18 +102,25 @@ describe('R-TEXTADV2-production · 文字冒险正式生产契约与工作台', 
     expect(taskByKey.get('content.main-quest-plan')?.dependsOn).toEqual([
       'content.story-bible', 'content.cast-bible', 'content.product-module', 'content.narrative-arc-plan',
     ])
-    expect(taskByKey.get('content.narrative')).toMatchObject({
+    expect(taskByKey.get('content.scene-script.act-1')).toMatchObject({
       skillId: 'text-adventure.scene-script.v1',
       dependsOn: [
-        'content.cast-bible', 'content.adventure-architecture', 'content.narrative-arc-plan',
+        'content.story-bible', 'content.cast-bible', 'content.adventure-architecture',
+        'content.product-module', 'content.narrative-arc-plan',
         'content.main-quest-plan', 'content.adventure-side-quests', 'content.adventure-ambient-events',
+        'content.quest-script',
       ],
       timeoutMs: 600_000,
     })
-    expect(taskByKey.get('content.narrative')!.budgetReservation.durationMs)
-      .toBeGreaterThan(taskByKey.get('content.product-module')!.budgetReservation.durationMs)
-    expect(taskByKey.get('content.narrative')!.budgetReservation.outputTokens)
-      .toBeGreaterThan(taskByKey.get('content.product-module')!.budgetReservation.outputTokens)
+    expect(taskByKey.get('content.scene-script.act-1')!.budgetReservation.outputTokens)
+      .toBeGreaterThan(0)
+    expect(taskByKey.get('integration.narrative')).toMatchObject({
+      executionMode: 'deterministic',
+      dependsOn: expect.arrayContaining([
+        'content.scene-script.act-1', 'content.scene-script.act-2', 'content.scene-script.act-3',
+      ]),
+      outputArtifactKeys: ['content.narrative'],
+    })
     expect(taskByKey.get('content.adventure-side-quests')?.dependsOn).toEqual([
       'content.adventure-architecture', 'content.product-module', 'content.main-quest-plan',
     ])
@@ -121,7 +129,8 @@ describe('R-TEXTADV2-production · 文字冒险正式生产契约与工作台', 
       dependsOn: [
         'content.story-bible', 'content.cast-bible', 'content.adventure-architecture',
         'content.product-module', 'content.narrative-arc-plan', 'content.main-quest-plan',
-        'content.adventure-side-quests', 'content.adventure-ambient-events', 'content.narrative',
+        'content.adventure-side-quests', 'content.adventure-ambient-events', 'content.quest-script',
+        'integration.narrative',
       ],
       outputArtifactKeys: ['quality.adventure-review'],
     })

@@ -296,7 +296,7 @@ export async function createProductProductionPlanV3(input: {
     (_, index) => `media.audio.${String(index + 1).padStart(3, '0')}`,
   )
   const textAdventure = brief.intent.productType === 'text-adventure'
-  const modelTaskCount = textAdventure ? 14 : 4
+  const modelTaskCount = textAdventure ? 16 : 4
   const textAdventureOutputWeights: Record<string, number> = {
     'content.source-sufficiency': 0.05,
     'content.design': 0.04,
@@ -307,7 +307,9 @@ export async function createProductProductionPlanV3(input: {
     'content.narrative-arc-plan': 0.07,
     'content.main-quest-plan': 0.08,
     'content.quest-script': 0.05,
-    'content.narrative': 0.18,
+    'content.scene-script.act-1': 0.06,
+    'content.scene-script.act-2': 0.06,
+    'content.scene-script.act-3': 0.06,
     'content.adventure-side-quests': 0.06,
     'content.adventure-ambient-events': 0.04,
     'content.adventure-quality-review': 0.06,
@@ -319,17 +321,7 @@ export async function createProductProductionPlanV3(input: {
   const perInput = Math.floor(brief.productionBudget.maximumInputTokens / (modelTaskCount + 1))
   const perOutput = Math.floor(brief.productionBudget.maximumOutputTokens / modelTaskCount)
   const durationSlots = modelTaskCount + 4 + activeMediaLaneCount
-  // A one-hour text adventure can legitimately ask the mainline specialist for
-  // tens of thousands of output tokens. Give that single long-running task a
-  // larger, still-authorized reservation instead of applying the same timeout
-  // as the much smaller system/quest tasks.
-  const textAdventureNarrativeDuration = textAdventure
-    ? Math.min(600_000, Math.floor(brief.productionBudget.maximumDurationMs * 0.2))
-    : 0
-  const perDuration = Math.floor(
-    (brief.productionBudget.maximumDurationMs - textAdventureNarrativeDuration)
-      / Math.max(1, durationSlots - (textAdventure ? 1 : 0)),
-  )
+  const perDuration = Math.floor(brief.productionBudget.maximumDurationMs / Math.max(1, durationSlots))
   const costTaskCount = modelTaskCount + activeMediaLaneCount
   const perCost = brief.productionBudget.maximumCostUsd == null
     ? null
@@ -344,8 +336,7 @@ export async function createProductProductionPlanV3(input: {
       ? Math.floor(brief.productionBudget.maximumOutputTokens * textAdventureOutputWeights[taskKey])
       : perOutput,
     maximumCostUsd: perCost,
-    durationMs: textAdventure && taskKey === 'content.narrative'
-      ? textAdventureNarrativeDuration : perDuration,
+    durationMs: perDuration,
   })
   const tasks: ProductProductionPlanTaskV3[] = []
   if (textAdventure) tasks.push(productionTask({
@@ -499,32 +490,55 @@ export async function createProductProductionPlanV3(input: {
     maxAttempts: 2, timeoutMs: 300_000, failurePolicy: 'pause', fallbackTaskKey: null,
     acceptanceGateIds: ['artifact.protocol', 'adventure.quest-script'],
   }))
-  if (textAdventure) tasks.push(productionTask({
-    taskKey: 'content.narrative', lane: 'content', kind: 'narrative',
-    skillId: 'text-adventure.scene-script.v1', executionMode: 'model',
-    dependsOn: [
-      'content.cast-bible', 'content.adventure-architecture', 'content.narrative-arc-plan',
+  if (textAdventure) {
+    const sceneScriptDependencies = [
+      'content.story-bible', 'content.cast-bible', 'content.adventure-architecture',
+      'content.product-module', 'content.narrative-arc-plan',
       'content.main-quest-plan', 'content.adventure-side-quests', 'content.adventure-ambient-events',
       'content.quest-script',
-    ],
-    inputArtifactKeys: [
-      'content.cast-bible', 'content.adventure-architecture', 'content.narrative-arc-plan',
-      'content.main-quest-plan', 'content.adventure-side-quests', 'content.adventure-ambient-events',
-      'content.quest-script',
-    ],
-    outputArtifactKeys: ['content.narrative'], requirementKeys: [],
-    capabilityRequirementKeys: textCapabilities, concurrencyGroup: 'text-provider',
-    subjectLockKeys: ['content.narrative'], priority: 76, budgetReservation: modelBudget('content.narrative'),
-    maxAttempts: 2, timeoutMs: 600_000, failurePolicy: 'pause', fallbackTaskKey: null,
-    acceptanceGateIds: ['artifact.protocol', 'narrative.graph'],
-  }))
+    ]
+    for (let act = 1; act <= 3; act += 1) {
+      const taskKey = `content.scene-script.act-${act}`
+      tasks.push(productionTask({
+        taskKey, lane: 'content', kind: 'text-adventure-scene-script-bundle',
+        skillId: 'text-adventure.scene-script.v1', executionMode: 'model',
+        dependsOn: sceneScriptDependencies,
+        inputArtifactKeys: sceneScriptDependencies,
+        outputArtifactKeys: [taskKey], requirementKeys: [],
+        capabilityRequirementKeys: textCapabilities, concurrencyGroup: 'text-provider',
+        subjectLockKeys: [taskKey], priority: 77 - act, budgetReservation: modelBudget(taskKey),
+        maxAttempts: 2, timeoutMs: 600_000, failurePolicy: 'pause', fallbackTaskKey: null,
+        acceptanceGateIds: ['artifact.protocol', 'adventure.scene-script-bundle'],
+      }))
+    }
+    tasks.push(productionTask({
+      taskKey: 'integration.narrative', lane: 'integration', kind: 'narrative-assembly',
+      skillId: null, executionMode: 'deterministic',
+      dependsOn: [
+        'content.story-bible', 'content.cast-bible', 'content.adventure-architecture',
+        'content.narrative-arc-plan',
+        'content.scene-script.act-1', 'content.scene-script.act-2', 'content.scene-script.act-3',
+      ],
+      inputArtifactKeys: [
+        'content.story-bible', 'content.cast-bible', 'content.adventure-architecture',
+        'content.narrative-arc-plan',
+        'content.scene-script.act-1', 'content.scene-script.act-2', 'content.scene-script.act-3',
+      ],
+      outputArtifactKeys: ['content.narrative'], requirementKeys: [],
+      capabilityRequirementKeys: [], concurrencyGroup: 'deterministic',
+      subjectLockKeys: ['content.narrative'], priority: 73,
+      budgetReservation: reservation({ durationMs: perDuration }),
+      maxAttempts: 1, timeoutMs: 120_000, failurePolicy: 'pause', fallbackTaskKey: null,
+      acceptanceGateIds: ['artifact.protocol', 'narrative.graph'],
+    }))
+  }
   if (textAdventure) tasks.push(productionTask({
     taskKey: 'content.adventure-quality-review', lane: 'qa', kind: 'text-adventure-quality-review',
     skillId: 'text-adventure.production-quality-review.v1', executionMode: 'model',
     dependsOn: [
       'content.story-bible', 'content.cast-bible', 'content.adventure-architecture',
       'content.product-module', 'content.narrative-arc-plan', 'content.main-quest-plan',
-      'content.adventure-side-quests', 'content.adventure-ambient-events', 'content.quest-script', 'content.narrative',
+      'content.adventure-side-quests', 'content.adventure-ambient-events', 'content.quest-script', 'integration.narrative',
     ],
     inputArtifactKeys: [
       'content.story-bible', 'content.cast-bible', 'content.adventure-architecture',
@@ -607,7 +621,7 @@ export async function createProductProductionPlanV3(input: {
         'content.adventure-ambient-events', 'content.quest-script', 'content.adventure-quality-review',
       ] : []
   const integrationDependencies = [
-    'content.narrative', 'content.product-module', ...textAdventureDependencies,
+    textAdventure ? 'integration.narrative' : 'content.narrative', 'content.product-module', ...textAdventureDependencies,
     'media.requirements', ...mediaDependencies,
   ]
   const textAdventureIntegrationArtifactKeys = textAdventure

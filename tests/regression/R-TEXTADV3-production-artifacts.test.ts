@@ -8,6 +8,11 @@ import {
   parseTextAdventureSourceSufficiencyArtifactV1,
   parseTextAdventureStoryBibleArtifactV1,
 } from '../../src/lib/adventure/production-artifacts-v2'
+import {
+  assembleTextAdventureNarrativeFromSceneScriptsV1,
+  parseTextAdventureSceneScriptBundleArtifactV1,
+  textAdventureNarrativeSkeletonV1,
+} from '../../src/lib/adventure/scene-script'
 
 function brief(qualityProfile: ProductProductionBriefV3['qualityProfile'] = 'internal') {
   return {
@@ -32,8 +37,8 @@ function storyBible() {
       { key: 'setup.letter', setup: '信使藏起一封信。', payoff: '信揭示同伴的动机。', introducedAct: 1, resolvedAct: 2 },
     ],
     endings: [
-      { key: 'ending.truth', title: '真相', dramaticAnswer: '公开事实并承担代价。', requiredConsequences: ['港城知情', '同伴离开'] },
-      { key: 'ending.shelter', title: '庇护', dramaticAnswer: '保护同伴但留下风险。', requiredConsequences: ['同伴留下', '风险延续'] },
+      { key: 'ending.001', title: '真相', dramaticAnswer: '公开事实并承担代价。', requiredConsequences: ['港城知情', '同伴离开'] },
+      { key: 'ending.002', title: '庇护', dramaticAnswer: '保护同伴但留下风险。', requiredConsequences: ['同伴留下', '风险延续'] },
     ],
   }, brief())
 }
@@ -88,7 +93,7 @@ describe('TEXTADV-3 · 专业生产工件合同', () => {
     const story = storyBible()
     const cast = castBible()
     expect(story.setupPayoffs).toHaveLength(2)
-    expect(story.endings.map(item => item.key)).toEqual(['ending.truth', 'ending.shelter'])
+    expect(story.endings.map(item => item.key)).toEqual(['ending.001', 'ending.002'])
     expect(cast.characters).toHaveLength(2)
     expect(cast.characters[1]).toMatchObject({ role: 'major-npc', sourceResourceKey: 'world.character.1' })
   })
@@ -114,7 +119,7 @@ describe('TEXTADV-3 · 专业生产工件合同', () => {
         key: `act.${index}`, title: `第${index}幕`, targetMinutes: 5,
         goal: `完成第${index}幕目标`, irreversibleTurn: `第${index}幕不可逆转折`,
         sceneCards: [{
-          key: `scene.${index}`, title: `场景${index}`, locationOrdinal: Math.min(index, 2),
+          key: `scene.${String(index).padStart(3, '0')}`, title: `场景${index}`, locationOrdinal: Math.min(index, 2),
           purpose: '推进冲突', conflict: '保护与公开冲突', entryState: '进入状态', exitState: '退出状态',
           castKeys: ['character.player', 'character.npc.1'],
           setupKeys: index === 1 ? ['setup.bell', 'setup.letter'] : [],
@@ -122,20 +127,20 @@ describe('TEXTADV-3 · 专业生产工件合同', () => {
         }],
       })),
       decisions: [{
-        key: 'decision.first', sceneKey: 'scene.1', prompt: '是否公开记录？', options: [
-          { key: 'option.publish', label: '公开', cost: '同伴离开', persistentEffectKey: 'flag.truth', echoSceneKeys: ['scene.2', 'scene.3'] },
-          { key: 'option.hide', label: '隐瞒', cost: '风险延续', persistentEffectKey: 'flag.shelter', echoSceneKeys: ['scene.2', 'scene.3'] },
+        key: 'decision.first', sceneKey: 'scene.001', prompt: '是否公开记录？', options: [
+          { key: 'option.publish', label: '公开', cost: '同伴离开', persistentEffectKey: 'flag.truth', echoSceneKeys: ['scene.002', 'scene.003'] },
+          { key: 'option.hide', label: '隐瞒', cost: '风险延续', persistentEffectKey: 'flag.shelter', echoSceneKeys: ['scene.002', 'scene.003'] },
         ],
       }],
       endings: [
-        { endingKey: 'ending.truth', sceneKey: 'scene.3' },
-        { endingKey: 'ending.shelter', sceneKey: 'scene.3' },
+        { endingKey: 'ending.001', sceneKey: 'scene.003' },
+        { endingKey: 'ending.002', sceneKey: 'scene.003' },
       ],
     }
     const parsed = parseTextAdventureNarrativeArcPlanArtifactV1({ value, brief: brief(), cast, storyBible: story })
     expect(parsed.acts.flatMap(act => act.sceneCards)).toHaveLength(3)
     const broken = structuredClone(value)
-    broken.decisions[0].options[0].echoSceneKeys = ['scene.2']
+    broken.decisions[0].options[0].echoSceneKeys = ['scene.002']
     expect(() => parseTextAdventureNarrativeArcPlanArtifactV1({ value: broken, brief: brief(), cast, storyBible: story }))
       .toThrow('数量无效')
   })
@@ -149,20 +154,20 @@ describe('TEXTADV-3 · 专业生产工件合同', () => {
         acts: [1, 2, 3].map(index => ({
           key: `act.${index}`, title: `第${index}幕`, targetMinutes: 5, goal: '推进主线', irreversibleTurn: '形成不可逆后果',
           sceneCards: [{
-            key: `scene.${index}`, title: `场景${index}`, locationOrdinal: Math.min(index, 2),
+            key: `scene.${String(index).padStart(3, '0')}`, title: `场景${index}`, locationOrdinal: Math.min(index, 2),
             purpose: '推进冲突', conflict: '公开或隐瞒', entryState: '进入', exitState: '离开',
             castKeys: ['character.player', 'character.npc.1'], setupKeys: [], payoffKeys: [],
           }],
         })),
         decisions: [{
-          key: 'decision.1', sceneKey: 'scene.1', prompt: '怎么做？', options: [
-            { key: 'option.a', label: '公开', cost: '关系受损', persistentEffectKey: 'flag.truth', echoSceneKeys: ['scene.2', 'scene.3'] },
-            { key: 'option.b', label: '隐瞒', cost: '风险延续', persistentEffectKey: 'flag.hide', echoSceneKeys: ['scene.2', 'scene.3'] },
+          key: 'decision.1', sceneKey: 'scene.001', prompt: '怎么做？', options: [
+            { key: 'option.a', label: '公开', cost: '关系受损', persistentEffectKey: 'flag.truth', echoSceneKeys: ['scene.002', 'scene.003'] },
+            { key: 'option.b', label: '隐瞒', cost: '风险延续', persistentEffectKey: 'flag.hide', echoSceneKeys: ['scene.002', 'scene.003'] },
           ],
         }],
         endings: [
-          { endingKey: 'ending.truth', sceneKey: 'scene.3' },
-          { endingKey: 'ending.shelter', sceneKey: 'scene.3' },
+          { endingKey: 'ending.001', sceneKey: 'scene.003' },
+          { endingKey: 'ending.002', sceneKey: 'scene.003' },
         ],
       },
       brief: brief(), cast, storyBible: story,
@@ -175,7 +180,7 @@ describe('TEXTADV-3 · 专业生产工件合同', () => {
         stages: [{ key: 'stage.opening', title: '确认局势', objectiveKeys: ['objective.records'] }],
         objectives: [{
           key: 'objective.records', stageKey: 'stage.opening', title: '取得记录',
-          narrativePurpose: '让最后选择拥有事实依据。', sceneKeys: ['scene.1'], locationOrdinal: 1,
+          narrativePurpose: '让最后选择拥有事实依据。', sceneKeys: ['scene.001'], locationOrdinal: 1,
           alternatives: [{
             key: 'route.talk', actionKind: 'talk', targetCharacterKey: 'character.npc.1', cost: '关系承压',
             successConsequence: '同伴交出记录。', failureForwardConsequence: '同伴拒绝，但留下了仓库钥匙。',
@@ -197,7 +202,7 @@ describe('TEXTADV-3 · 专业生产工件合同', () => {
     const questScriptValue = {
       schema: 'storyforge.text-adventure-quest-script-artifact', version: 1,
       mainObjectiveScripts: [{
-        objectiveKey: 'objective.records', sceneKey: 'scene.1',
+        objectiveKey: 'objective.records', sceneKey: 'scene.001',
         alternatives: [{
           alternativeKey: 'route.talk',
           resolution: { mode: 'automatic', abilityKey: null, difficulty: null, costlySuccessFloor: null },
@@ -223,5 +228,66 @@ describe('TEXTADV-3 · 专业生产工件合同', () => {
       systems: { abilities: [{ key: 'ability.perception' }] } as never,
       sideQuests: { entries: [] } as never, ambientEvents: { entries: [] } as never,
     })).toThrow('已登记能力')
+  })
+
+  it('三幕 Scene Writer 只能填写冻结槽位，并由确定性装配器生成唯一叙事图', () => {
+    const inputBrief = brief()
+    const story = storyBible()
+    const cast = castBible()
+    const sceneTitles = {
+      'scene.001': '潮门警铃',
+      'scene.002': '旧仓来信',
+      'scene.003': '灯塔抉择',
+    }
+    const endingTitles = Object.fromEntries(story.endings.map(ending => [ending.key, ending.title]))
+    const skeleton = textAdventureNarrativeSkeletonV1(inputBrief)
+    const locationTitles = ['潮门广场', '信号塔']
+    const bundleValue = (actIndex: number) => {
+      const sceneKey = `scene.00${actIndex + 1}`
+      const endingKeys = actIndex === 2 ? skeleton.endingKeys : []
+      return {
+        schema: 'storyforge.text-adventure-scene-script-bundle-artifact', version: 1,
+        actKey: `act.${actIndex + 1}`, moduleTitle: story.title,
+        scenes: [{
+          sceneKey, title: sceneTitles[sceneKey as keyof typeof sceneTitles],
+          summary: `${actIndex < 2 ? '潮门广场' : '信号塔'}内，局势进入第${actIndex + 1}幕。`,
+          beats: [{
+            beatKey: `beat.act-${actIndex + 1}.001`, kind: 'dialogue', speakerKey: 'character.npc.1',
+            text: '同伴把自己的条件、恐惧和能承担的代价说清楚，让玩家获得足以行动的信息。', order: 0,
+          }],
+        }],
+        choices: skeleton.edges.filter(edge => edge.sourceNodeKey === sceneKey).map(edge => ({
+          ...edge,
+          text: `行动方案${edge.order + 1}`,
+          description: `以第${edge.order + 1}种代价推进。`,
+          unavailableReason: '需要先完成当前目标。',
+        })),
+        endings: endingKeys.map((endingKey, index) => ({
+          endingKey, title: endingTitles[endingKey], summary: '这个结局回应了玩家此前承担的责任。',
+          beats: [{
+            beatKey: `beat.ending.${index + 1}`, kind: 'narration', speakerKey: null,
+            text: '港城记住了守门人的决定，同伴关系与未被逃避的代价也在最后的潮声中得到清楚交代。', order: 0,
+          }],
+        })),
+      }
+    }
+    const bundles = [0, 1, 2].map(actIndex => parseTextAdventureSceneScriptBundleArtifactV1({
+      value: bundleValue(actIndex), brief: inputBrief, actIndex,
+      allowedSpeakerKeys: cast.characters.map(character => character.key),
+      locationTitles, expectedModuleTitle: story.title, sceneTitles, endingTitles,
+    }))
+    const assembled = assembleTextAdventureNarrativeFromSceneScriptsV1({ brief: inputBrief, bundles })
+    expect(assembled.nodes.map(node => node.key)).toEqual([
+      'scene.001', 'scene.002', 'scene.003', 'ending.001', 'ending.002',
+    ])
+    expect(assembled.choices.map(choice => choice.choiceKey)).toEqual(skeleton.edges.map(edge => edge.choiceKey))
+    expect(assembled.nodes.every(node => node.conditionJson === '{}' && node.effectsJson === '[]')).toBe(true)
+    const changed = bundleValue(0)
+    changed.choices[0].targetNodeKey = 'scene.003'
+    expect(() => parseTextAdventureSceneScriptBundleArtifactV1({
+      value: changed, brief: inputBrief, actIndex: 0,
+      allowedSpeakerKeys: cast.characters.map(character => character.key),
+      locationTitles, expectedModuleTitle: story.title, sceneTitles, endingTitles,
+    })).toThrow('改写了冻结图骨架')
   })
 })

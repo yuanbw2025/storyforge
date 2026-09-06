@@ -325,6 +325,7 @@ export interface TextAdventureQualityReviewArtifactV1 {
     severity: 'warning' | 'blocking'
     artifactKey: 'content.story-bible' | 'content.cast-bible' | 'content.adventure-architecture'
       | 'content.narrative-arc-plan' | 'content.main-quest-plan' | 'content.quest-script'
+      | 'content.scene-script.act-1' | 'content.scene-script.act-2' | 'content.scene-script.act-3'
       | 'content.narrative' | 'content.product-module'
       | 'content.adventure-side-quests' | 'content.adventure-ambient-events'
     detail: string
@@ -386,6 +387,7 @@ export function parseTextAdventureQualityReviewArtifactV1(
   const artifactKeys: TextAdventureQualityReviewArtifactV1['issues'][number]['artifactKey'][] = [
     'content.story-bible', 'content.cast-bible', 'content.adventure-architecture',
     'content.narrative-arc-plan', 'content.main-quest-plan', 'content.quest-script',
+    'content.scene-script.act-1', 'content.scene-script.act-2', 'content.scene-script.act-3',
     'content.narrative', 'content.product-module',
     'content.adventure-side-quests', 'content.adventure-ambient-events',
   ]

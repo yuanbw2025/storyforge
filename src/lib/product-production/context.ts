@@ -292,7 +292,8 @@ export async function readTextAdventureRepairFeedbackV1(input: AssembleContextIn
   const taskFailures = new Map<string, { taskKey: string; code: string; attempt: number | null; detail: string }>()
   for (let depth = 0; depth < 8 && pending.length > 0; depth++) {
     const current = pending.shift()!
-    if (typeof current.taskKey === 'string' && current.taskKey.startsWith('content.')
+    if (typeof current.taskKey === 'string'
+      && (current.taskKey.startsWith('content.') || current.taskKey === 'integration.narrative')
       && typeof current.detail === 'string' && current.detail.trim()) {
       taskFailures.set(current.taskKey, {
         taskKey: contextText(current.taskKey, 120), code: contextText(current.code, 80),
