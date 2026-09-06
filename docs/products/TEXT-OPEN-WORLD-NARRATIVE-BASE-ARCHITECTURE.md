@@ -1,6 +1,6 @@
 # AI 主导文字开放世界叙事基座 · StoryForge 施工规格
 
-> 规格版本：3.2.6
+> 规格版本：3.2.7
 > 生效日期：2026-09-06
 > 文档层级：L2 产品目标架构与施工规格
 > 当前状态：设计基线；不代表代码已经实现
@@ -425,6 +425,19 @@ P2已经登记Skill和Executor，但专属生产Plan仍保持未激活。G3-18�
 - Artifact精确冻结Progression v1、Combat v3、Items v1、Crafting v2、Economy v2、Action v14和RuntimePackage v1。后续PlayerBuild、任务、目录及最终V3装配可以直接消费这些字段；任何固定数值、模块版本、权限分区、上游Hash、claim或basis变化都会失败关闭。
 
 该Artifact仍只进入`productBuildArtifacts`候选，不写ProductRelease、Session或世界引擎。完整生产Plan继续等G3-18才激活。
+
+#### 5.4.6 P4 PlayerBuild与目录预留落地
+
+`src/lib/open-world/player-build.ts`把已确认主角从叙事身份推进为受玩法骨架约束的初始构筑，同时避免提前伪造尚未生成的技能和物品目录：
+
+- 登记的`text-open-world.player-build-input`只读取同一Build已验收的GameBrief、ExperienceContract、ProtagonistAsset和GameplayRulesetSkeleton；完整Artifact内容与Hash链进入`contextSelectionHash`，不重新读取WorldRelease、小说、活动角色行或任何Session状态；
+- 模型可以完善人物小传式身份、描述性玩法风格、不同的主/副属性选择，以及基础攻击、标志技能、初始武器和恢复品的名称与用途；不得改主角名、核心目标，建立职业系统，或输出伤害、掉落、Effect和运行时状态；
+- 代码固定1级开局、`progression.default`、主属性5/副属性4/其余3的12点预算、100初始货币、两项初始技能及一件武器/三份恢复品；标志技能的类别和目标由闭集combatPurpose确定性映射，基础攻击始终依赖power；
+- `skill.player.basic-attack`、`skill.player.signature`、`item.player.starter-weapon`和`item.player.recovery-consumable`是后续目录必须兑现的稳定reservation，不是当前已经存在的运行定义；Artifact同时保存语义需求和未来PlayerDefinition所需的Build字段；
+- 在Progression Catalog与Item/Reward Catalog精确生成这些键之前，`catalogBinding`固定为`reserved-unbound`且`playerDefinitionReady=false`。任何下游不得据此直接发布；最终装配必须先证明所有预留键、数量、获得来源和机制都有真实定义；
+- 执行器复验完整上下文、上游Artifact、身份来源、属性预算、货币、技能物品键、目录依赖、binding状态、basis和内容Hash；任何模型越权或重算Hash后的篡改都失败关闭。
+
+该步骤仍只写产品Build候选。正式PlayerCharacterDefinition、ProductRelease与运行Session均由后续目录绑定和唯一装配阶段产生。
 
 ### 5.5 正确的验证顺序
 
@@ -1244,6 +1257,7 @@ StoryForge当前没有独立staging。发布前仍需在隔离数据中完成灰
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| 3.2.7 | 2026-09-07 | 落地P4 PlayerBuild：登记只读已验收体验/主角/Ruleset的Context与专属Skill/Executor；AI只生成身份演绎、非职业玩法风格、主副属性选择及初始技能物品语义，代码固定1级、12点属性预算、100货币、数量、机制和稳定预留键；在后续目录兑现前固定`reserved-unbound/playerDefinitionReady=false`，禁止把需求键伪装成可运行定义；全部上游、预算、键、binding和Hash可复验 |
 | 3.2.6 | 2026-09-07 | 落地P2 GameplayRulesetSkeleton：登记只读已验收体验链与Ledger claim的Context Source及专属Skill/Executor；模型只生成世界化显示语义，代码冻结三属性、20级、1→5验收跨度、自动成长、G2公式、标准难度单人四操作回合战斗、三装备位、单货币、确定性制作交易和模块版本；Effect单一事实源分离模型、编译器与旧版只读权限，全部上游、固定边界、claim和Hash可复验 |
 | 3.2.5 | 2026-09-06 | 落地P2体验设计：复用作者授权Brief终态并登记单一P2 Context Source；完整输入Hash绑定授权、Pin、P1证据、全部缺口与选中claim；代码编译不可由模型改写的GameBrief规模、自由度、主线/重要故事等待、普通世界演化、交互、战斗、媒资、预算和发布边界；模型只补充体验语义和主角小传，来源主角必须引用绑定所选角色单元的Ledger claim；ExperienceContract和ProtagonistAsset以basis/hash链复验，伪造claim、上下文、作者意图或固定边界失败关闭，不重复读取原始来源且不写WorldRelease/Session |
 | 3.2.4 | 2026-09-06 | 落地P1来源整理证据链：登记精确批次Context Source及专属Skill/Executor；小说只交付本批私有冻结单元，WorldRelease只经Context Gateway按SourcePin资源坐标完整读取并复核双重Hash；SourceManifest区分已读与未读，SourceLedger强制逐项事实绑定已读单元、逐字引文、UTF-16偏移和批次，SourceGapReport由代码从实读集和覆盖标签生成未读及关键内容缺口；Pin→Manifest→Ledger→GapReport全链可验，伪造、漂移和未读引用失败关闭，仍不激活完整生产入口 |

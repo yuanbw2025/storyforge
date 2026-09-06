@@ -25,8 +25,17 @@ import {
   type TextOpenWorldGameplayRulesetInputContextV1,
   type TextOpenWorldGameplayRulesetModelRunnerV1,
 } from '../../src/lib/open-world/gameplay-ruleset'
+import {
+  createTextOpenWorldPlayerBuildExecutorV1,
+  validateTextOpenWorldPlayerBuildV1,
+  type TextOpenWorldPlayerBuildInputContextV1,
+  type TextOpenWorldPlayerBuildModelRunnerV1,
+} from '../../src/lib/open-world/player-build'
 import { TEXT_OPEN_WORLD_EFFECT_OPERATIONS_V1 } from '../../src/lib/types/text-open-world-effect'
-import type { TextOpenWorldGameplayRulesetSkeletonV1 } from '../../src/lib/types'
+import type {
+  TextOpenWorldGameplayRulesetSkeletonV1,
+  TextOpenWorldPlayerBuildV1,
+} from '../../src/lib/types'
 import {
   createTextOpenWorldProductionPlanV1,
 } from '../../src/lib/open-world/production-contract'
@@ -440,6 +449,105 @@ async function executeRuleset(
   })
 }
 
+function playerBuildRunner(options: { sameAttributes?: boolean } = {}): TextOpenWorldPlayerBuildModelRunnerV1 {
+  return async input => ({
+    output: JSON.stringify({
+      schema: 'storyforge.text-open-world-player-build-draft',
+      version: 1,
+      identity: {
+        pronouns: '他',
+        appearance: '披着受潮的守灯人短斗篷，随身带有旧港区留下的盐迹。',
+        background: '林舟熟悉雾港规则，并因潮门危机承担起调查与守护责任。',
+        personality: '谨慎、坚韧，对陌生线索保持克制的好奇。',
+        publicKnowledge: '港区居民知道他是参与调查的守灯人。',
+        privateKnowledge: '他担心自己无法同时守住港口秩序和身边的人。',
+        shortGoal: '查清潮门附近的首批异常。',
+        longGoal: '在地区冒险与成长中阻止危机吞没雾港。',
+        portrayal: '用简短观察和务实判断回应世界，对危机保持警惕但不冷漠。',
+      },
+      playstyleTitle: '敏锐的守灯调查者',
+      playstyleSummary: '以观察后的迅速出手为主，同时保留正面解决危险的能力。',
+      primaryAttribute: 'agility',
+      secondaryAttribute: options.sameAttributes ? 'agility' : 'power',
+      basicAttack: { title: '灯钩挥击', description: '用守灯短钩进行可靠的普通攻击。' },
+      signatureSkill: {
+        title: '潮隙突袭',
+        description: '抓住敌人动作间隙快速突进，形成一次高压攻击。',
+        combatPurpose: 'burst-damage',
+      },
+      starterWeapon: { title: '旧守灯短钩', description: '便于在潮湿狭窄环境中挥动的基础武器。' },
+      recoveryConsumable: { title: '盐草敷包', description: '用于战斗中稳定伤势的基础恢复用品。' },
+    }),
+    bindingReceipt: bindingReceipt(input.requirementKey),
+    usage: null,
+  })
+}
+
+async function playerBuildFixture() {
+  const input = await rulesetFixture()
+  const rulesetResult = await executeRuleset(input)
+  for (const artifact of rulesetResult.artifacts) {
+    await acceptProductBuildArtifact({
+      scope: input.scope,
+      buildId: input.build.id!,
+      controlEpoch: input.build.controlEpoch,
+      artifactKey: artifact.artifactKey,
+      kind: artifact.kind,
+      payload: artifact.payload,
+      quality: artifact.quality,
+      rights: artifact.rights,
+      inputHash: await hashProductProductionValueV2({ stage: 'P2', artifactKey: artifact.artifactKey }),
+    })
+  }
+  const plan = await createTextOpenWorldProductionPlanV1({
+    buildNumber: input.build.buildNumber,
+    controlEpoch: input.build.controlEpoch,
+    briefHash: input.briefRow.briefHash,
+    brief: input.brief,
+  })
+  const task = plan.tasks.find(item => item.taskKey === 'p4.player-build')!
+  const assembled = await assembleContext({
+    projectId: input.scope.projectId,
+    scope: input.scope,
+    sourceKeys: ['text-open-world.player-build-input'],
+    productProductionId: input.production.id!,
+    productBuildId: input.build.id!,
+    inputBudgetMaxTokens: task.budgetReservation.inputTokens,
+  })
+  return {
+    ...input,
+    task,
+    playerBuildContextText: assembled.text,
+    playerBuildContext: JSON.parse(assembled.text) as TextOpenWorldPlayerBuildInputContextV1,
+    playerBuildContextEvidence: assembled.sourceEvidence,
+  }
+}
+
+async function executePlayerBuild(
+  input: Awaited<ReturnType<typeof playerBuildFixture>>,
+  runModel: TextOpenWorldPlayerBuildModelRunnerV1 = playerBuildRunner(),
+) {
+  return createTextOpenWorldPlayerBuildExecutorV1({ runModel, now: () => NOW + 6 })({
+    scope: input.scope,
+    productionId: input.production.id!,
+    buildId: input.build.id!,
+    buildNumber: input.build.buildNumber,
+    controlEpoch: input.build.controlEpoch,
+    planHash: input.planHash,
+    task: input.task,
+    attempt: 1,
+    idempotencyKey: await hashProductProductionValueV2('p4-player-build'),
+    contextText: input.playerBuildContextText,
+    inputArtifacts: [],
+    capabilityBindings: input.task.capabilityRequirementKeys.map(requirementKey => ({
+      requirementKey,
+      bindingHash: CAPABILITY_HASH,
+      adapterId: 'configured-text.v1',
+    })),
+    signal: new AbortController().signal,
+  })
+}
+
 describe('R-OPEN-WORLD3 · P2 GameBrief / ExperienceContract / ProtagonistAsset', () => {
   beforeEach(async () => { await db.delete(); await db.open() })
   afterAll(() => db.close())
@@ -696,5 +804,106 @@ describe('R-OPEN-WORLD3 · P2 GameplayRulesetSkeleton', () => {
       })),
       signal: new AbortController().signal,
     })).rejects.toThrow(/战斗输入不精确|选择Hash不匹配/)
+  }, 30_000)
+})
+
+describe('R-OPEN-WORLD3 · P4 PlayerBuild', () => {
+  beforeEach(async () => { await db.delete(); await db.open() })
+  afterAll(() => db.close())
+
+  it('从已确认主角与规则骨架形成合法构筑，并为后续目录预留而不伪造运行定义', async () => {
+    const input = await playerBuildFixture()
+    expect(input.playerBuildContextEvidence).toEqual([
+      expect.objectContaining({
+        key: 'text-open-world.player-build-input', status: 'included', delivery: 'full',
+      }),
+    ])
+    expect(input.playerBuildContext.protagonistAsset.protagonistAssetHash).toBeTruthy()
+    expect(input.playerBuildContext.gameplayRuleset.gameplayRulesetHash).toBeTruthy()
+
+    const result = await executePlayerBuild(input)
+    const artifact = result.artifacts[0]!.payload as TextOpenWorldPlayerBuildV1
+    expect(result.passedGateIds).toEqual(input.task.acceptanceGateIds)
+    expect(result.usage).toMatchObject({ modelCalls: 1, mediaCalls: 0 })
+    expect(artifact).toMatchObject({
+      productInstanceKey: input.production.productionKey,
+      identity: { name: input.playerBuildContext.protagonistAsset.displayName },
+      playstyle: {
+        title: '敏锐的守灯调查者',
+        professionKey: null,
+        primaryAttribute: 'agility',
+        secondaryAttribute: 'power',
+      },
+      buildCandidate: {
+        progressionProfileKey: 'progression.default',
+        initialLevel: 1,
+        attributes: { power: 4, vitality: 3, agility: 5 },
+        learnedSkillKeys: ['skill.player.basic-attack', 'skill.player.signature'],
+        startingItemKeys: ['item.player.starter-weapon', 'item.player.recovery-consumable'],
+        startingCurrency: 100,
+      },
+      catalogBinding: {
+        status: 'reserved-unbound',
+        playerDefinitionReady: false,
+        bindingPolicy: 'exact-reserved-keys-before-runtime-assembly',
+      },
+    })
+    expect(artifact.catalogRequirements.skills[1]).toMatchObject({
+      key: 'skill.player.signature',
+      combatPurpose: 'burst-damage',
+      kind: 'attack',
+      target: 'single-enemy',
+      scalingAttribute: 'agility',
+      resourceCost: 1,
+      cooldownTurns: 1,
+    })
+    expect(artifact.catalogRequirements.items.map(item => item.initialQuantity)).toEqual([1, 3])
+    await expect(validateTextOpenWorldPlayerBuildV1({
+      artifact,
+      context: input.playerBuildContext,
+    })).resolves.toEqual(artifact)
+  }, 30_000)
+
+  it('拒绝相同主副属性，防止模型突破确定性分配规则', async () => {
+    const input = await playerBuildFixture()
+    await expect(executePlayerBuild(input, playerBuildRunner({ sameAttributes: true })))
+      .rejects.toThrow(/主副属性不能相同/)
+  }, 30_000)
+
+  it('即使重算Hash也拒绝篡改属性预算、预留键、货币与目录绑定状态', async () => {
+    const input = await playerBuildFixture()
+    const artifact = (await executePlayerBuild(input)).artifacts[0]!.payload as TextOpenWorldPlayerBuildV1
+    const tampered = structuredClone(artifact)
+    tampered.buildCandidate.attributes.agility = 9
+    tampered.buildCandidate.startingCurrency = 999
+    tampered.catalogBinding.playerDefinitionReady = true as false
+    const { playerBuildHash: _oldHash, ...body } = tampered
+    tampered.playerBuildHash = await hashProductProductionValueV2(body)
+    await expect(validateTextOpenWorldPlayerBuildV1({
+      artifact: tampered,
+      context: input.playerBuildContext,
+    })).rejects.toThrow(/固定预算、身份、目录预留或上游绑定被篡改/)
+
+    const forgedContext = structuredClone(input.playerBuildContext)
+    forgedContext.protagonistAsset.displayName = '被篡改的主角'
+    await expect(createTextOpenWorldPlayerBuildExecutorV1({ runModel: playerBuildRunner() })({
+      scope: input.scope,
+      productionId: input.production.id!,
+      buildId: input.build.id!,
+      buildNumber: input.build.buildNumber,
+      controlEpoch: input.build.controlEpoch,
+      planHash: input.planHash,
+      task: input.task,
+      attempt: 1,
+      idempotencyKey: await hashProductProductionValueV2('forged-player-build-context'),
+      contextText: JSON.stringify(forgedContext),
+      inputArtifacts: [],
+      capabilityBindings: input.task.capabilityRequirementKeys.map(requirementKey => ({
+        requirementKey,
+        bindingHash: CAPABILITY_HASH,
+        adapterId: 'configured-text.v1',
+      })),
+      signal: new AbortController().signal,
+    })).rejects.toThrow(/ProtagonistAsset Hash不匹配|选择Hash不匹配/)
   }, 30_000)
 })

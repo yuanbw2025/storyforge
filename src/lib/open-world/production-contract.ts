@@ -200,7 +200,7 @@ export const TEXT_OPEN_WORLD_PRODUCTION_TASK_CONTRACTS_V1: TextOpenWorldProducti
     skillId: 'text-open-world.production.player-build.v1', recommendedModelCalls: 3,
     dependsOn: ['p2.experience-design', 'p2.gameplay-ruleset'],
     inputArtifactKeys: [
-      'text-open-world.protagonist-asset', 'text-open-world.experience-contract',
+      'text-open-world.game-brief', 'text-open-world.protagonist-asset', 'text-open-world.experience-contract',
       'text-open-world.gameplay-ruleset-skeleton',
     ],
     outputArtifactKeys: ['text-open-world.player-build'],

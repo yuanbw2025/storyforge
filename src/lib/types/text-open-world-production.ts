@@ -649,6 +649,117 @@ export interface TextOpenWorldGameplayRulesetSkeletonV1 {
   gameplayRulesetHash: string
 }
 
+/**
+ * P4 protagonist identity and initial build candidate.
+ *
+ * The stable skill/item keys are reservations consumed by later catalog
+ * producers. They are not runnable definitions until `catalogBinding.status`
+ * becomes `bound` during deterministic final assembly.
+ */
+export interface TextOpenWorldPlayerBuildV1 {
+  schema: 'storyforge.text-open-world-player-build'
+  version: 1
+  productType: 'text-open-world'
+  productInstanceKey: string
+  gameBriefHash: string
+  experienceContractHash: string
+  protagonistAssetHash: string
+  gameplayRulesetHash: string
+  identity: {
+    name: string
+    pronouns: string
+    appearance: string
+    background: string
+    personality: string
+    publicKnowledge: string
+    privateKnowledge: string
+    shortGoal: string
+    longGoal: string
+    portrayal: string
+    sourceRefs: string[]
+  }
+  playstyle: {
+    title: string
+    summary: string
+    /** Descriptive playstyle only; v1 has no profession/class system. */
+    professionKey: null
+    primaryAttribute: 'power' | 'vitality' | 'agility'
+    secondaryAttribute: 'power' | 'vitality' | 'agility'
+    sourceClaimKeys: string[]
+  }
+  buildCandidate: {
+    progressionProfileKey: 'progression.default'
+    initialLevel: 1
+    attributes: { power: number; vitality: number; agility: number }
+    learnedSkillKeys: ['skill.player.basic-attack', 'skill.player.signature']
+    startingItemKeys: ['item.player.starter-weapon', 'item.player.recovery-consumable']
+    startingCurrency: 100
+  }
+  catalogRequirements: {
+    skills: [
+      {
+        key: 'skill.player.basic-attack'
+        role: 'basic-attack'
+        title: string
+        description: string
+        acquisition: 'initial'
+        activation: 'active'
+        kind: 'attack'
+        target: 'single-enemy'
+        scalingAttribute: 'power'
+        resourceCost: 0
+        cooldownTurns: 0
+      },
+      {
+        key: 'skill.player.signature'
+        role: 'signature'
+        title: string
+        description: string
+        combatPurpose: 'burst-damage' | 'sustained-damage' | 'guard' | 'tempo' | 'recovery' | 'resource-control'
+        acquisition: 'initial'
+        activation: 'active'
+        kind: 'attack' | 'status' | 'recovery' | 'resource'
+        target: 'self' | 'single-enemy'
+        scalingAttribute: 'power' | 'vitality' | 'agility'
+        resourceCost: 1
+        cooldownTurns: 1
+      },
+    ]
+    items: [
+      {
+        key: 'item.player.starter-weapon'
+        role: 'starter-weapon'
+        title: string
+        description: string
+        kind: 'equipment'
+        equipmentSlotKey: 'weapon'
+        initialQuantity: 1
+      },
+      {
+        key: 'item.player.recovery-consumable'
+        role: 'recovery-consumable'
+        title: string
+        description: string
+        kind: 'consumable'
+        equipmentSlotKey: null
+        initialQuantity: 3
+      },
+    ]
+  }
+  catalogBinding: {
+    status: 'reserved-unbound'
+    requiredArtifactKeys: [
+      'text-open-world.progression-catalogs',
+      'text-open-world.item-reward-catalog',
+    ]
+    playerDefinitionReady: false
+    bindingPolicy: 'exact-reserved-keys-before-runtime-assembly'
+  }
+  basisHash: string
+  createdAt: number
+  playerBuildHash: string
+}
+
 export const TEXT_OPEN_WORLD_PRODUCTION_STAGES_V1 = [
   'P0', 'P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8', 'P8F', 'P9', 'P10',
   'V1', 'V2', 'V3', 'QA',

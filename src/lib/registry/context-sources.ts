@@ -165,6 +165,9 @@ async function readTextOpenWorldExperienceInputContextV1(input: AssembleContextI
 async function readTextOpenWorldGameplayRulesetInputContextV1(input: AssembleContextInput): Promise<string> {
   return (await import('../open-world/gameplay-ruleset')).readTextOpenWorldGameplayRulesetInputContextV1(input)
 }
+async function readTextOpenWorldPlayerBuildInputContextV1(input: AssembleContextInput): Promise<string> {
+  return (await import('../open-world/player-build')).readTextOpenWorldPlayerBuildInputContextV1(input)
+}
 async function readTtrpgGmRuntimeContextV1(input: AssembleContextInput): Promise<string> {
   return (await import('../ttrpg/gm-context')).readTtrpgGmRuntimeContextV1(input)
 }
@@ -1588,6 +1591,18 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     enabled: input => Number.isInteger(input.productProductionId)
       && Number.isInteger(input.productBuildId),
     read: readTextOpenWorldGameplayRulesetInputContextV1,
+  },
+  {
+    key: 'text-open-world.player-build-input',
+    label: '文字开放世界已确认主角与玩法构筑输入',
+    scope: 'project',
+    layer: 'L0',
+    ownerFrom: 'work',
+    budgetTokens: 40_000,
+    protectedFromTrim: true,
+    enabled: input => Number.isInteger(input.productProductionId)
+      && Number.isInteger(input.productBuildId),
+    read: readTextOpenWorldPlayerBuildInputContextV1,
   },
   {
     key: 'product-production.quality-feedback',
