@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { parseTextOpenWorldModulesV1 } from '../../src/lib/open-world/modules'
-import { createTextOpenWorldVNextFixture } from '../helpers/text-open-world-vnext-fixture'
+import { createTextOpenWorldVNextFixture, downgradeTextOpenWorldFixtureWithoutCrimeV1 } from '../helpers/text-open-world-vnext-fixture'
 
 describe('Text Open World vNext · vNext module schemas and reference integrity', () => {
   it('解析完整的15模块验收包并保留可运行目录', () => {
@@ -86,6 +86,7 @@ describe('Text Open World vNext · vNext module schemas and reference integrity'
 
   it('旧Quest v1模块可读取并规范化为无新绑定的v2读模型', () => {
     const legacy = createTextOpenWorldVNextFixture()
+    downgradeTextOpenWorldFixtureWithoutCrimeV1(legacy)
     const quests = legacy.modules.quests.payload as any
     quests.version = 1
     legacy.modules.quests.schemaVersion = 1
@@ -113,6 +114,7 @@ describe('Text Open World vNext · vNext module schemas and reference integrity'
 
   it('旧Action v1发布没有任务追踪和自动过期能力时仍可按冻结合同读取', () => {
     const legacy = createTextOpenWorldVNextFixture()
+    downgradeTextOpenWorldFixtureWithoutCrimeV1(legacy)
     const actions = legacy.modules.actions.payload as any
     actions.version = 1
     legacy.modules.actions.schemaVersion = 1

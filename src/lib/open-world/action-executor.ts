@@ -22,6 +22,7 @@ import { createTextOpenWorldFastTravelCatalogV1 } from './fast-travel'
 import { resolveTextOpenWorldRandomEvidenceV1 } from './event-contract'
 import { createTextOpenWorldWeatherCatalogV1 } from './weather'
 import { createTextOpenWorldActorScheduleCatalogV1 } from './actors'
+import { createTextOpenWorldCrimeCatalogV1 } from './crime'
 
 const COMMAND_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/
 
@@ -54,7 +55,16 @@ async function settleAcceptedCommand(envelope: TextOpenWorldCommandEnvelopeV1): 
       sourceInstanceKey: instance.instanceKey,
     })
   }
-  const effectKeys = [...new Set([...action.action.costEffectKeys, ...action.action.successEffectKeys])]
+  const crimeResolution = ['steal', 'deceive', 'crime'].includes(action.action.category)
+    ? createTextOpenWorldCrimeCatalogV1(projection.runtimePackage, modules).prepare({
+        actionKey: action.action.key,
+        targetActorKey: targetFrom(envelope) ?? fail('犯罪Action缺少Actor目标'),
+        state: projection.state,
+        conditionResults: deriveTextOpenWorldContextsV1(projection).action.conditionResults,
+      })
+    : null
+  const effectKeys = crimeResolution?.authorization.effectKeys
+    ?? [...new Set([...action.action.costEffectKeys, ...action.action.successEffectKeys])]
   const questTransitions = effectKeys.map(effectKey => modules.actions.effects.find(effect => effect.key === effectKey)!)
     .filter((effect): effect is Extract<TextOpenWorldEffectDefinitionV1, { operation: 'transition-quest' }> => effect.operation === 'transition-quest')
   const objectiveEffects = effectKeys.map(effectKey => modules.actions.effects.find(effect => effect.key === effectKey)!)
@@ -83,8 +93,9 @@ async function settleAcceptedCommand(envelope: TextOpenWorldCommandEnvelopeV1): 
       request,
     })))
   }
-  const authorization: TextOpenWorldEffectPlanV1['authorization'] = questTransitions.length
-    ? createTextOpenWorldQuestTransitionCatalogV1(projection.runtimePackage).prepare({
+  const authorization: TextOpenWorldEffectPlanV1['authorization'] = crimeResolution?.authorization
+    ?? (questTransitions.length
+      ? createTextOpenWorldQuestTransitionCatalogV1(projection.runtimePackage).prepare({
         instanceKey: targetFrom(envelope) ?? fail('任务状态Action缺少实例目标'),
         state: projection.state,
         transitions: questTransitions.map(effect => ({ toStatus: effect.payload.status, stageKey: effect.payload.stageKey })),
@@ -112,7 +123,7 @@ async function settleAcceptedCommand(envelope: TextOpenWorldCommandEnvelopeV1): 
             ? createTextOpenWorldWeatherCatalogV1(projection.runtimePackage, modules).resolve({ state: projection.state, evidence: randomEvidence })
             : actorScheduleEffects.length === 1
               ? createTextOpenWorldActorScheduleCatalogV1(projection.runtimePackage, modules).prepare(projection.state)
-              : null
+              : null)
   const catalog = createTextOpenWorldEffectCatalogV1(projection.runtimePackage)
   const plan = await catalog.plan({ effectKeys, claimKey: `claim.${envelope.commandId}`, state: projection.state, authorization })
   const { receipt } = await catalog.apply({ plan, state: projection.state })
@@ -123,8 +134,8 @@ async function settleAcceptedCommand(envelope: TextOpenWorldCommandEnvelopeV1): 
     randomRequests,
     plan,
     receipt,
-    outcome: 'success',
-    reason: null,
+    outcome: crimeResolution?.outcome ?? 'success',
+    reason: crimeResolution?.failureReason ?? null,
     degradation: null,
   })
   return readTextOpenWorldFeedbackV1({ sessionId: envelope.sessionId, commandId: envelope.commandId })

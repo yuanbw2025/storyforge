@@ -38,6 +38,7 @@ import {
   type TextOpenWorldActorLifecycleCatalogV1,
   type TextOpenWorldActorScheduleCatalogV1,
 } from './actors'
+import { createTextOpenWorldCrimeCatalogV1 } from './crime'
 
 type Row = Record<string, unknown>
 type Refs = ReturnType<typeof references>
@@ -405,6 +406,7 @@ function applyDefinitions(
   weather: TextOpenWorldWeatherCatalogV1,
   actorSchedules: TextOpenWorldActorScheduleCatalogV1,
   actorLifecycle: TextOpenWorldActorLifecycleCatalogV1,
+  crime: ReturnType<typeof createTextOpenWorldCrimeCatalogV1>,
 ) {
   validateTextOpenWorldEffectStateV1(stateValue, modules)
   if (stateValue.appliedClaimKeys.includes(claimKey)) fail(`claim已应用:${claimKey}`)
@@ -447,6 +449,17 @@ function applyDefinitions(
     if (actorScheduleEffects.length !== 1 || effects.length !== 1 || authorization?.kind !== 'actor-schedule-settlement') fail('角色日程结算Effect缺少唯一命令授权')
     actorSchedules.assertAuthorization({ state: stateValue, authorization })
   } else if (authorization?.kind === 'actor-schedule-settlement') fail('角色日程结算授权没有对应Effect')
+  const crimeEffectKeys = new Set(modules.relationships.crimeActions.flatMap(crimeDefinition => {
+    const action = modules.actions.actions.find(candidate => candidate.key === crimeDefinition.actionKey)!
+    return [...action.costEffectKeys, ...action.successEffectKeys, ...action.failureEffectKeys, ...crimeDefinition.witnessedEffectKeys]
+  }))
+  const includesCrimeEffect = effects.some(effect => crimeEffectKeys.has(effect.key))
+  if (authorization?.kind === 'crime') {
+    if (!includesCrimeEffect || canonicalProductProductionJsonV2(authorization.effectKeys) !== canonicalProductProductionJsonV2(effects.map(effect => effect.key))) {
+      fail('犯罪授权与Effect集合不一致')
+    }
+    crime.assertAuthorization({ authorization, state: stateValue })
+  } else if (includesCrimeEffect) fail('犯罪Effect缺少犯罪授权')
   let questTransitionsApplied = false
   for (const effect of effects) {
     switch (effect.operation) {
@@ -622,14 +635,20 @@ function applyDefinitions(
         record(changes, effect, `${effect.operation === 'track-quest' ? '追踪' : '取消追踪'}任务实例:${trackingAuthorization.instanceKey}:${trackingAuthorization.slot}`, change.before, change.after); break
       }
       case 'change-morality': {
-        const { payload } = effect; const before = state.relationships.morality; const after = before + payload.amount
+        const { payload } = effect; const before = state.relationships.morality; const rawAfter = before + payload.amount
+        const after = authorization?.kind === 'crime' && authorization.effectKeys.includes(effect.key)
+          ? Math.max(modules.relationships.morality.minimum, Math.min(modules.relationships.morality.maximum, rawAfter))
+          : rawAfter
         numberValue(after, `${effect.key} morality`, modules.relationships.morality.minimum, modules.relationships.morality.maximum)
-        state.relationships.morality = after; record(changes, effect, `道德变化${payload.amount}`, before, after); break
+        state.relationships.morality = after; record(changes, effect, `道德变化${after - before}`, before, after); break
       }
       case 'change-faction-affinity': {
-        const { payload } = effect; const before = state.relationships.factionAffinityByKey[payload.factionKey] ?? modules.relationships.factionAffinity.initial; const after = before + payload.amount
+        const { payload } = effect; const before = state.relationships.factionAffinityByKey[payload.factionKey] ?? modules.relationships.factionAffinity.initial; const rawAfter = before + payload.amount
+        const after = authorization?.kind === 'crime' && authorization.effectKeys.includes(effect.key)
+          ? Math.max(modules.relationships.factionAffinity.minimum, Math.min(modules.relationships.factionAffinity.maximum, rawAfter))
+          : rawAfter
         numberValue(after, `${effect.key} affinity`, modules.relationships.factionAffinity.minimum, modules.relationships.factionAffinity.maximum)
-        state.relationships.factionAffinityByKey[payload.factionKey] = after; record(changes, effect, `阵营亲合度变化${payload.amount}`, before, after); break
+        state.relationships.factionAffinityByKey[payload.factionKey] = after; record(changes, effect, `阵营亲合度变化${after - before}`, before, after); break
       }
       case 'set-story-modifier': {
         const { payload } = effect; const before = state.relationships.storyModifierByActorKey[payload.actorKey] ?? 0
@@ -816,11 +835,12 @@ export function applyTextOpenWorldEffectPlanForReplayV1(
   const weather = createTextOpenWorldWeatherCatalogV1(value, modules)
   const actorSchedules = createTextOpenWorldActorScheduleCatalogV1(value, modules)
   const actorLifecycle = createTextOpenWorldActorLifecycleCatalogV1(value, modules)
+  const crime = createTextOpenWorldCrimeCatalogV1(value, modules)
   const definitions = modules.actions.effects.map((item, index) => parseDefinition(item, refs, `effects[${index}]`))
   const byKey = new Map(definitions.map(item => [item.key, item]))
   const canonical = plan.effectKeys.map(effectKey => byKey.get(effectKey) ?? fail(`Effect不存在:${effectKey}`))
   if (canonicalProductProductionJsonV2(canonical) !== canonicalProductProductionJsonV2(plan.effects)) fail('EffectPlan定义与Release不一致')
-  const applied = applyDefinitions(state, canonical, plan.claimKey, modules, plan.authorization, questTransitions, objectives, tracking, fastTravel, weather, actorSchedules, actorLifecycle)
+  const applied = applyDefinitions(state, canonical, plan.claimKey, modules, plan.authorization, questTransitions, objectives, tracking, fastTravel, weather, actorSchedules, actorLifecycle, crime)
   if (canonicalProductProductionJsonV2(applied.changes) !== canonicalProductProductionJsonV2(plan.previewChanges)) fail('EffectPlan重放变化与预演不一致')
   return applied
 }
@@ -841,10 +861,11 @@ export function createTextOpenWorldEffectCatalogV1(value: TextOpenWorldRuntimePa
   const weather = createTextOpenWorldWeatherCatalogV1(value, modules)
   const actorSchedules = createTextOpenWorldActorScheduleCatalogV1(value, modules)
   const actorLifecycle = createTextOpenWorldActorLifecycleCatalogV1(value, modules)
+  const crime = createTextOpenWorldCrimeCatalogV1(value, modules)
   const definitions = modules.actions.effects.map((item, index) => parseDefinition(item, refs, `effects[${index}]`)); const byKey = new Map(definitions.map(item => [item.key, item])); const clone = <T>(item: T): T => structuredClone(item)
   const plan = async (input: { effectKeys: string[]; claimKey: string; state: TextOpenWorldEffectStateV1; authorization?: TextOpenWorldEffectPlanV1['authorization'] }): Promise<TextOpenWorldEffectPlanV1> => {
     const claimKey = key(input.claimKey, 'claimKey', CLAIM_KEY); if (!Array.isArray(input.effectKeys) || new Set(input.effectKeys).size !== input.effectKeys.length) fail('effectKeys必须是无重复数组')
-    const effects = input.effectKeys.map(effectKey => byKey.get(key(effectKey, 'effectKey')) ?? fail(`Effect不存在:${effectKey}`)); const baseStateHash = await hashProductProductionValueV2(input.state); const preview = applyDefinitions(input.state, effects, claimKey, modules, input.authorization ?? null, questTransitions, objectives, tracking, fastTravel, weather, actorSchedules, actorLifecycle); const resultingStateHash = await hashProductProductionValueV2(preview.state); const impactDomains = [...new Set(effects.flatMap(effect => effectDomains(effect.operation)))]
+    const effects = input.effectKeys.map(effectKey => byKey.get(key(effectKey, 'effectKey')) ?? fail(`Effect不存在:${effectKey}`)); const baseStateHash = await hashProductProductionValueV2(input.state); const preview = applyDefinitions(input.state, effects, claimKey, modules, input.authorization ?? null, questTransitions, objectives, tracking, fastTravel, weather, actorSchedules, actorLifecycle, crime); const resultingStateHash = await hashProductProductionValueV2(preview.state); const impactDomains = [...new Set(effects.flatMap(effect => effectDomains(effect.operation)))]
     const body: Omit<TextOpenWorldEffectPlanV1, 'planHash'> = {
       schema: 'storyforge.text-open-world.effect-plan', version: 1, claimKey, baseStateHash, resultingStateHash,
       effectKeys: [...input.effectKeys], effects: clone(effects), authorization: clone(input.authorization ?? null),
@@ -861,7 +882,7 @@ export function createTextOpenWorldEffectCatalogV1(value: TextOpenWorldRuntimePa
       if (!isSha256Hash(planHash) || await hashProductProductionValueV2(planBody(body)) !== planHash) fail('EffectPlan planHash无效')
       const baseStateHash = await hashProductProductionValueV2(input.state); if (baseStateHash !== input.plan.baseStateHash) fail('EffectPlan基线状态已变化')
       const canonicalEffects = input.plan.effectKeys.map(effectKey => byKey.get(effectKey) ?? fail(`Effect不存在:${effectKey}`)); if (canonicalProductProductionJsonV2(canonicalEffects) !== canonicalProductProductionJsonV2(input.plan.effects)) fail('EffectPlan定义与Release不一致')
-      const applied = applyDefinitions(input.state, canonicalEffects, input.plan.claimKey, modules, input.plan.authorization, questTransitions, objectives, tracking, fastTravel, weather, actorSchedules, actorLifecycle); const resultingStateHash = await hashProductProductionValueV2(applied.state)
+      const applied = applyDefinitions(input.state, canonicalEffects, input.plan.claimKey, modules, input.plan.authorization, questTransitions, objectives, tracking, fastTravel, weather, actorSchedules, actorLifecycle, crime); const resultingStateHash = await hashProductProductionValueV2(applied.state)
       if (resultingStateHash !== input.plan.resultingStateHash || canonicalProductProductionJsonV2(applied.changes) !== canonicalProductProductionJsonV2(input.plan.previewChanges)) fail('EffectPlan预演与应用结果不一致')
       return { state: applied.state, receipt: { schema: 'storyforge.text-open-world.effect-receipt', version: 1, claimKey: input.plan.claimKey, planHash: input.plan.planHash, baseStateHash, resultingStateHash, impactDomains: [...input.plan.impactDomains], changes: clone(applied.changes) } }
     },

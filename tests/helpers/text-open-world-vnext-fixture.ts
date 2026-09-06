@@ -169,9 +169,10 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
       ],
     },
     actions: {
-      version: 7,
+      version: 8,
       conditions: [
         { key: 'condition.always', expression: { op: 'all', conditions: [{ op: 'player-number', field: 'level', comparator: 'gte', value: 1 }] }, failureMessage: '角色尚未进入可行动状态。' },
+        { key: 'condition.level-two', expression: { op: 'player-number', field: 'level', comparator: 'gte', value: 2 }, failureMessage: '经验不足，无法让谎言自洽。' },
         { key: 'condition.health-not-full', expression: { op: 'player-resource-below-maximum', resource: 'health' }, failureMessage: '生命已经满了。' },
         { key: 'condition.rust-sword-not-equipped', expression: { op: 'inventory-equipped', itemKey: 'item.rust-sword', equipped: false }, failureMessage: '旧盐刀已经装备。' },
         { key: 'condition.rust-sword-equipped', expression: { op: 'inventory-equipped', itemKey: 'item.rust-sword', equipped: true }, failureMessage: '旧盐刀尚未装备。' },
@@ -218,6 +219,13 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
         { key: 'effect.travel-ridge-port-time', operation: 'advance-time', payload: { minutes: 60 } },
         { key: 'effect.travel-ridge-port-enter', operation: 'enter-location', payload: { locationKey: 'location.salt-port' } },
         { key: 'effect.fast-travel', operation: 'fast-travel', payload: { timeRatioNumerator: 1, timeRatioDenominator: 2, minimumMinutes: 15 } },
+        { key: 'effect.steal-morality-success', operation: 'change-morality', payload: { amount: -5 } },
+        { key: 'effect.steal-morality-failure', operation: 'change-morality', payload: { amount: -2 } },
+        { key: 'effect.steal-item', operation: 'grant-item', payload: { itemKey: 'item.brine-tonic', quantity: 1 } },
+        { key: 'effect.steal-witnessed-affinity', operation: 'change-faction-affinity', payload: { factionKey: 'faction.canal-keepers', amount: -10 } },
+        { key: 'effect.deceive-morality-success', operation: 'change-morality', payload: { amount: -3 } },
+        { key: 'effect.deceive-morality-failure', operation: 'change-morality', payload: { amount: -4 } },
+        { key: 'effect.deceive-witnessed-affinity', operation: 'change-faction-affinity', payload: { factionKey: 'faction.canal-keepers', amount: -8 } },
       ],
       actions: [{
         key: 'action.investigate-channel', category: 'investigate', label: '检查盐渠',
@@ -360,6 +368,16 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
         actorScope: 'player', targetScope: 'item', locationKeys: [], requirementConditionKeys: ['condition.rust-sword-equipped'], costEffectKeys: [],
         successEffectKeys: ['effect.unequip-rust-sword'], failureEffectKeys: [], timeCostMinutes: 0,
         confirmationPolicy: 'never', repeatPolicy: 'repeatable', cooldownMinutes: null,
+      }, {
+        key: 'action.steal-tonic', category: 'steal', label: '偷取盐露药剂', description: '趁岑阿婆整理渠图时偷走一瓶盐露药剂。',
+        actorScope: 'player', targetScope: 'actor', locationKeys: ['location.salt-port'], requirementConditionKeys: [], costEffectKeys: [],
+        successEffectKeys: ['effect.steal-morality-success', 'effect.steal-item'], failureEffectKeys: ['effect.steal-morality-failure'], timeCostMinutes: 0,
+        confirmationPolicy: 'always', repeatPolicy: 'once', cooldownMinutes: null,
+      }, {
+        key: 'action.deceive-caretaker', category: 'deceive', label: '欺骗岑阿婆', description: '谎称自己已经查明盐渠故障，以换取她的信任。',
+        actorScope: 'player', targetScope: 'actor', locationKeys: ['location.salt-port'], requirementConditionKeys: [], costEffectKeys: [],
+        successEffectKeys: ['effect.deceive-morality-success'], failureEffectKeys: ['effect.deceive-morality-failure'], timeCostMinutes: 0,
+        confirmationPolicy: 'always', repeatPolicy: 'once', cooldownMinutes: null,
       }],
     },
     progression: {
@@ -471,7 +489,7 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
       }],
     },
     relationships: {
-      version: 2,
+      version: 3,
       morality: { minimum: -100, maximum: 100, initial: 0 },
       factionAffinity: { minimum: -100, maximum: 100, initial: 0 },
       attitude: { badMaximum: -25, goodMinimum: 25, moralityWeight: 0.4, factionWeight: 0.6, explicitStoryModifierCap: 20 },
@@ -482,6 +500,18 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
         { attitude: 'bad', label: '差', greetingTone: '冷淡而克制', buyPriceMultiplier: 1.15, sellPriceMultiplier: 0.85, optionalInteractionPolicy: 'may-refuse' },
         { attitude: 'neutral', label: '一般', greetingTone: '礼貌而保留', buyPriceMultiplier: 1, sellPriceMultiplier: 1, optionalInteractionPolicy: 'available' },
         { attitude: 'good', label: '好', greetingTone: '友善且愿意帮助', buyPriceMultiplier: 0.9, sellPriceMultiplier: 1.1, optionalInteractionPolicy: 'available' },
+      ],
+      crimeActions: [
+        {
+          key: 'crime.steal-tonic', actionKey: 'action.steal-tonic', kind: 'steal', targetActorKey: 'actor.caretaker', locationKey: 'location.salt-port',
+          successConditionKeys: ['condition.always'], witnessActorKeysOnSuccess: [], witnessActorKeysOnFailure: ['actor.caretaker'],
+          witnessedEffectKeys: ['effect.steal-witnessed-affinity'], failureMessage: '岑阿婆及时按住了药剂箱。',
+        },
+        {
+          key: 'crime.deceive-caretaker', actionKey: 'action.deceive-caretaker', kind: 'deceive', targetActorKey: 'actor.caretaker', locationKey: 'location.salt-port',
+          successConditionKeys: ['condition.level-two'], witnessActorKeysOnSuccess: ['actor.caretaker'], witnessActorKeysOnFailure: ['actor.caretaker'],
+          witnessedEffectKeys: ['effect.deceive-witnessed-affinity'], failureMessage: '谎言中的细节无法自洽，岑阿婆没有相信。',
+        },
       ],
     },
     'time-weather': {
@@ -587,4 +617,37 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
       legacyInputKinds: ['open-world-v1', 'adventure-v1', 'open-world-evolution-v1'], migrationPolicy: 'old-release-pinned',
     },
   }
+}
+
+/**
+ * Removes the latest crime extension before a test intentionally downgrades an
+ * older Action/Relationship module. Keeping this in one fixture helper avoids
+ * constructing impossible mixed-version Releases in compatibility tests.
+ */
+export function downgradeTextOpenWorldFixtureWithoutCrimeV1(
+  runtimePackage: TextOpenWorldRuntimePackageV1,
+): TextOpenWorldRuntimePackageV1 {
+  const actions = runtimePackage.modules.actions.payload as any
+  const relationships = runtimePackage.modules.relationships.payload as any
+  const crimeDefinitions = Array.isArray(relationships.crimeActions) ? relationships.crimeActions : []
+  const crimeActionKeys = new Set(crimeDefinitions.map((definition: any) => definition.actionKey))
+  const crimeActionRows = actions.actions.filter((action: any) => crimeActionKeys.has(action.key))
+  const crimeEffectKeys = new Set([
+    ...crimeActionRows.flatMap((action: any) => [
+      ...action.costEffectKeys,
+      ...action.successEffectKeys,
+      ...action.failureEffectKeys,
+    ]),
+    ...crimeDefinitions.flatMap((definition: any) => definition.witnessedEffectKeys),
+  ])
+  actions.actions = actions.actions.filter((action: any) => !crimeActionKeys.has(action.key))
+  actions.effects = actions.effects.filter((effect: any) => !crimeEffectKeys.has(effect.key))
+  if (actions.version >= 8) {
+    actions.version = 7
+    runtimePackage.modules.actions.schemaVersion = 7
+  }
+  relationships.version = Math.min(Number(relationships.version), 2)
+  runtimePackage.modules.relationships.schemaVersion = relationships.version
+  delete relationships.crimeActions
+  return runtimePackage
 }

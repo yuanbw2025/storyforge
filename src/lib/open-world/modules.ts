@@ -15,7 +15,7 @@ type Row = Record<string, unknown>
 const KEY = /^[a-z][a-z0-9._:-]{0,199}$/
 const ACTION_CATEGORIES: TextOpenWorldActionCategoryV1[] = [
   'move', 'travel', 'fast-travel', 'observe', 'investigate', 'talk', 'take', 'use', 'equip', 'unequip', 'drop',
-  'buy', 'sell', 'craft', 'accept-quest', 'abandon-quest', 'objective-action', 'quest-action', 'weather-action', 'actor-schedule-action', 'actor-state-action', 'claim-reward', 'attack-actor', 'start-combat', 'continue-combat', 'escape',
+  'buy', 'sell', 'craft', 'accept-quest', 'abandon-quest', 'objective-action', 'quest-action', 'weather-action', 'actor-schedule-action', 'actor-state-action', 'claim-reward', 'attack-actor', 'steal', 'deceive', 'crime', 'start-combat', 'continue-combat', 'escape',
   'rest', 'respawn', 'read', 'track', 'untrack', 'save', 'load-branch',
 ]
 const QUEST_TYPES: TextOpenWorldQuestTypeV1[] = ['mainline', 'significant', 'ordinary', 'template']
@@ -373,13 +373,14 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
     if (actorRows.find(actor => actor.key === item.actorKey)?.scheduleKey !== item.key) fail(`schedule/actor反向引用不一致:${String(item.key)}`)
   })
 
-  const actions = versioned(packageValue, 'actions', [1, 2, 3, 4, 5, 6, 7])
+  const actions = versioned(packageValue, 'actions', [1, 2, 3, 4, 5, 6, 7, 8])
   const modernActionModule = Number(actions.version) >= 2
   const travelActionModule = Number(actions.version) >= 3
   const fastTravelActionModule = Number(actions.version) >= 4
   const timeWeatherActionModule = Number(actions.version) >= 5
   const actorScheduleActionModule = Number(actions.version) >= 6
   const actorLifecycleActionModule = Number(actions.version) >= 7
+  const crimeActionModule = Number(actions.version) >= 8
   if (actorScheduleActionModule && legacyActorModule) fail('Action v6必须搭配Actor v2')
   if (actorLifecycleActionModule && !actorLifecycleModule) fail('Action v7必须搭配Actor v3')
   exact(actions, ['version', 'conditions', 'effects', 'actions'], 'actions')
@@ -1115,11 +1116,14 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
       .forEach(item => fail(`首版不允许服务替代链:${String(item.serviceKey)}`))
   }
 
-  const relationships = versioned(packageValue, 'relationships', [1, 2])
+  const relationships = versioned(packageValue, 'relationships', [1, 2, 3])
   const modernRelationships = Number(relationships.version) >= 2
-  exact(relationships, modernRelationships
-    ? ['version', 'morality', 'factionAffinity', 'attitude', 'storyModifiers', 'unaffiliatedMoralityMultiplier', 'factionMorality', 'attitudeBands']
-    : ['version', 'morality', 'factionAffinity', 'attitude', 'storyModifiers'], 'relationships')
+  const crimeRelationships = Number(relationships.version) >= 3
+  exact(relationships, crimeRelationships
+    ? ['version', 'morality', 'factionAffinity', 'attitude', 'storyModifiers', 'unaffiliatedMoralityMultiplier', 'factionMorality', 'attitudeBands', 'crimeActions']
+    : modernRelationships
+      ? ['version', 'morality', 'factionAffinity', 'attitude', 'storyModifiers', 'unaffiliatedMoralityMultiplier', 'factionMorality', 'attitudeBands']
+      : ['version', 'morality', 'factionAffinity', 'attitude', 'storyModifiers'], 'relationships')
   for (const field of ['morality', 'factionAffinity']) { const meter = row(relationships[field], `relationships.${field}`); exact(meter, ['minimum', 'maximum', 'initial'], `relationships.${field}`); const minimum = numberValue(meter.minimum, `${field}.minimum`, -10_000, 10_000); const maximum = numberValue(meter.maximum, `${field}.maximum`, -10_000, 10_000); const initial = numberValue(meter.initial, `${field}.initial`, -10_000, 10_000); if (minimum >= maximum || initial < minimum || initial > maximum) fail(`${field}范围无效`) }
   const attitude = row(relationships.attitude, 'relationships.attitude'); exact(attitude, ['badMaximum', 'goodMinimum', 'moralityWeight', 'factionWeight', 'explicitStoryModifierCap'], 'relationships.attitude'); const bad = numberValue(attitude.badMaximum, 'attitude.badMaximum', -10_000, 10_000); const good = numberValue(attitude.goodMinimum, 'attitude.goodMinimum', -10_000, 10_000); const mw = numberValue(attitude.moralityWeight, 'attitude.moralityWeight', 0, 1); const fw = numberValue(attitude.factionWeight, 'attitude.factionWeight', 0, 1); if (bad >= good || Math.abs(mw + fw - 1) > 0.000001) fail('attitude阈值或权重无效'); numberValue(attitude.explicitStoryModifierCap, 'attitude.explicitStoryModifierCap', 0, 10_000)
   const storyModifiers = catalog(relationships.storyModifiers, 'relationships.storyModifiers', ['key', 'actorKey', 'value', 'sourceQuestKey']); keysOf(storyModifiers, 'relationships.storyModifiers'); storyModifiers.forEach((item, index) => { requireRef(key(item.actorKey, `relationships.storyModifiers[${index}].actorKey`), actorKeys, 'story modifier actor'); numberValue(item.value, `relationships.storyModifiers[${index}].value`, -10_000, 10_000); requireRef(key(item.sourceQuestKey, `relationships.storyModifiers[${index}].sourceQuestKey`), questKeys, 'story modifier quest') })
@@ -1151,6 +1155,25 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
     enumValue(item.optionalInteractionPolicy, ['available', 'may-refuse'], `relationships.attitudeBands[${index}].optionalInteractionPolicy`)
   })
   requireSameKeys(attitudeBands.map(item => String(item.attitude)), ['bad', 'neutral', 'good'], '三档态度定义覆盖')
+  const crimeActions = crimeRelationships
+    ? catalog(relationships.crimeActions, 'relationships.crimeActions', [
+        'key', 'actionKey', 'kind', 'targetActorKey', 'locationKey', 'successConditionKeys',
+        'witnessActorKeysOnSuccess', 'witnessActorKeysOnFailure', 'witnessedEffectKeys', 'failureMessage',
+      ])
+    : []
+  keysOf(crimeActions, 'relationships.crimeActions')
+  crimeActions.forEach((item, index) => {
+    const label = `relationships.crimeActions[${index}]`
+    requireRef(key(item.actionKey, `${label}.actionKey`), actionKeys, 'crime Action')
+    enumValue(item.kind, ['steal', 'deceive', 'crime'], `${label}.kind`)
+    requireRef(key(item.targetActorKey, `${label}.targetActorKey`), actorKeys, 'crime target Actor')
+    requireRef(key(item.locationKey, `${label}.locationKey`), locationKeys, 'crime location')
+    requireRefs(strings(item.successConditionKeys, `${label}.successConditionKeys`), conditionKeys, 'crime success condition')
+    requireRefs(strings(item.witnessActorKeysOnSuccess, `${label}.witnessActorKeysOnSuccess`), actorKeys, 'crime success witness')
+    requireRefs(strings(item.witnessActorKeysOnFailure, `${label}.witnessActorKeysOnFailure`), actorKeys, 'crime failure witness')
+    requireRefs(strings(item.witnessedEffectKeys, `${label}.witnessedEffectKeys`), effectKeys, 'crime witnessed Effect')
+    text(item.failureMessage, `${label}.failureMessage`, 2_000)
+  })
   if (canonicalProductProductionJsonV2({ morality: relationships.morality, factionAffinity: relationships.factionAffinity, attitude: relationships.attitude })
     !== canonicalProductProductionJsonV2({ morality: packageValue.calibration.relationships.morality, factionAffinity: packageValue.calibration.relationships.factionAffinity, attitude: packageValue.calibration.relationships.attitude })) {
     fail('relationships模块与根calibration不一致')
@@ -1322,6 +1345,70 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
       fail(`主线生命周期Action不能由道德、阵营或态度条件锁定:${String(action.key)}`)
     }
   })
+  if (crimeActionModule !== crimeRelationships) fail('Action v8必须与Relationship v3一起发布')
+  if (crimeActionModule) {
+    const actionCrimeRows = actionRows.filter(action => ['steal', 'deceive', 'crime'].includes(String(action.category)))
+    requireSameKeys(crimeActions.map(item => String(item.actionKey)), actionCrimeRows.map(item => String(item.key)), '犯罪定义与Action覆盖')
+    const crimeActionKeys = new Set(actionCrimeRows.map(action => String(action.key)))
+    const crimeEffectKeys = new Set(crimeActions.flatMap(crime => {
+      const action = actionRows.find(item => item.key === crime.actionKey)!
+      return [
+        ...strings(action.costEffectKeys, `crime action ${String(crime.key)} costEffectKeys`),
+        ...strings(action.successEffectKeys, `crime action ${String(crime.key)} successEffectKeys`),
+        ...strings(action.failureEffectKeys, `crime action ${String(crime.key)} failureEffectKeys`),
+        ...strings(crime.witnessedEffectKeys, `crime action ${String(crime.key)} witnessedEffectKeys`),
+      ]
+    }))
+    actionRows.filter(action => !crimeActionKeys.has(String(action.key))).forEach(action => {
+      const referencedEffectKeys = [
+        ...strings(action.costEffectKeys, `action ${String(action.key)} costEffectKeys`),
+        ...strings(action.successEffectKeys, `action ${String(action.key)} successEffectKeys`),
+        ...strings(action.failureEffectKeys, `action ${String(action.key)} failureEffectKeys`),
+      ]
+      if (referencedEffectKeys.some(effectKey => crimeEffectKeys.has(effectKey))) {
+        fail(`犯罪专用Effect不能被非犯罪Action引用:${String(action.key)}`)
+      }
+    })
+    const witnessedEffectOwners = new Map<string, string>()
+    crimeActions.forEach(crime => {
+      const action = actionRows.find(item => item.key === crime.actionKey)!
+      const label = `crime action ${String(crime.key)}`
+      const locationKeys = strings(action.locationKeys, `${label}.locationKeys`)
+      const costEffectKeys = strings(action.costEffectKeys, `${label}.costEffectKeys`)
+      const successEffectKeys = strings(action.successEffectKeys, `${label}.successEffectKeys`)
+      const failureEffectKeys = strings(action.failureEffectKeys, `${label}.failureEffectKeys`)
+      const witnessedEffectKeys = strings(crime.witnessedEffectKeys, `${label}.witnessedEffectKeys`)
+      if (action.category !== crime.kind || action.actorScope !== 'player' || action.targetScope !== 'actor'
+        || locationKeys.length !== 1 || locationKeys[0] !== crime.locationKey
+        || action.confirmationPolicy === 'never' || action.repeatPolicy !== 'once'
+        || action.cooldownMinutes != null || action.timeCostMinutes !== 0
+        || !successEffectKeys.length || !failureEffectKeys.length || !witnessedEffectKeys.length) fail(`${label}合同无效`)
+      const allEffectKeys = [...costEffectKeys, ...successEffectKeys, ...failureEffectKeys, ...witnessedEffectKeys]
+      if (new Set(allEffectKeys).size !== allEffectKeys.length) fail(`${label}各分支Effect不能重复`)
+      const allowedOperations = new Set(['change-morality', 'change-faction-affinity', 'grant-item', 'set-world-flag', 'reveal-knowledge'])
+      allEffectKeys.map(effectKey => effects.find(effect => effect.key === effectKey)!).forEach(effect => {
+        if (!allowedOperations.has(String(effect.operation))) fail(`${label}包含首版犯罪边界外Effect:${String(effect.key)}`)
+        if (effect.operation === 'change-morality' && Number(row(effect.payload, `${label}.${String(effect.key)}.payload`).amount) >= 0) {
+          fail(`${label}不能通过犯罪提高或刷取道德:${String(effect.key)}`)
+        }
+      })
+      for (const branch of [successEffectKeys, failureEffectKeys]) {
+        if (!branch.map(effectKey => effects.find(effect => effect.key === effectKey)!).some(effect => effect.operation === 'change-morality')) {
+          fail(`${label}成功和失败分支都必须记录负向道德后果`)
+        }
+      }
+      if (crime.kind === 'steal' && !successEffectKeys.map(effectKey => effects.find(effect => effect.key === effectKey)!).some(effect => effect.operation === 'grant-item')) {
+        fail(`${label}偷窃成功分支必须产生预制物品结果`)
+      }
+      witnessedEffectKeys.forEach(effectKey => {
+        if (witnessedEffectOwners.has(effectKey)) fail(`目击后果Effect不能被多个犯罪定义共享:${effectKey}`)
+        witnessedEffectOwners.set(effectKey, String(crime.key))
+        if (actionRows.some(candidate => [...strings(candidate.costEffectKeys, `action ${String(candidate.key)} costs`), ...strings(candidate.successEffectKeys, `action ${String(candidate.key)} success`), ...strings(candidate.failureEffectKeys, `action ${String(candidate.key)} failure`)].includes(effectKey))) {
+          fail(`目击后果Effect不能静态绑定到Action分支:${effectKey}`)
+        }
+      })
+    })
+  }
   if (!travelPointKeys.size) fail('首版至少需要一个快速旅行点')
 
   return {
@@ -1339,8 +1426,8 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
     crafting: structuredClone(crafting) as unknown as TextOpenWorldParsedModulesV1['crafting'],
     economy: structuredClone(economy) as unknown as TextOpenWorldParsedModulesV1['economy'],
     relationships: {
-      ...structuredClone(relationships), version: 2, unaffiliatedMoralityMultiplier,
-      factionMorality: structuredClone(factionMorality), attitudeBands: structuredClone(attitudeBands),
+      ...structuredClone(relationships), version: crimeRelationships ? 3 : 2, unaffiliatedMoralityMultiplier,
+      factionMorality: structuredClone(factionMorality), attitudeBands: structuredClone(attitudeBands), crimeActions: structuredClone(crimeActions),
     } as unknown as TextOpenWorldParsedModulesV1['relationships'],
     'time-weather': { ...structuredClone(timeWeather), weatherUpdateIntervalMinutes } as unknown as TextOpenWorldParsedModulesV1['time-weather'],
     director: structuredClone(director) as unknown as TextOpenWorldParsedModulesV1['director'],

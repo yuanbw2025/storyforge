@@ -7,7 +7,7 @@ import { createInitialTextOpenWorldSessionProjectionV1 } from '../../src/lib/ope
 import { projectTextOpenWorldTravelOptionsV1 } from '../../src/lib/open-world/travel'
 import { readProductRuntimeState } from '../../src/lib/product/runtime-core'
 import { createGovernedTextOpenWorldSessionFixtureV1 } from '../helpers/text-open-world-product-session'
-import { createTextOpenWorldVNextFixture } from '../helpers/text-open-world-vnext-fixture'
+import { createTextOpenWorldVNextFixture, downgradeTextOpenWorldFixtureWithoutCrimeV1 } from '../helpers/text-open-world-vnext-fixture'
 
 async function publishedSession() {
   const runtimePackage = createTextOpenWorldVNextFixture()
@@ -93,6 +93,7 @@ describe('Text Open World vNext · governed ordinary travel and early arrival', 
     expect(() => parseTextOpenWorldModulesV1(smuggled)).toThrow('start-travel只能由普通旅行Action引用')
 
     const legacy = createTextOpenWorldVNextFixture()
+    downgradeTextOpenWorldFixtureWithoutCrimeV1(legacy)
     const legacyActions = legacy.modules.actions.payload as any
     legacyActions.version = 2
     legacy.modules.actions.schemaVersion = 2
@@ -110,6 +111,7 @@ describe('Text Open World vNext · governed ordinary travel and early arrival', 
     })).rejects.toThrow('道路当前未开放')
 
     const oneWay = createTextOpenWorldVNextFixture()
+    downgradeTextOpenWorldFixtureWithoutCrimeV1(oneWay)
     ;(oneWay.modules.actions.payload as any).version = 2
     oneWay.modules.actions.schemaVersion = 2
     ;(oneWay.modules.world.payload as any).edges[0].bidirectional = false

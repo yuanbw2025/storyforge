@@ -107,6 +107,16 @@ describe('Text Open World vNext · morality, faction affinity and three-band att
     delete relationships.unaffiliatedMoralityMultiplier
     delete relationships.factionMorality
     delete relationships.attitudeBands
+    delete relationships.crimeActions
+    const actions = legacy.modules.actions.payload as any
+    actions.version = 7
+    legacy.modules.actions.schemaVersion = 7
+    actions.actions = actions.actions.filter((action: any) => !['steal', 'deceive', 'crime'].includes(action.category))
+    const crimeEffectKeys = new Set([
+      'effect.steal-morality-success', 'effect.steal-morality-failure', 'effect.steal-item', 'effect.steal-witnessed-affinity',
+      'effect.deceive-morality-success', 'effect.deceive-morality-failure', 'effect.deceive-witnessed-affinity',
+    ])
+    actions.effects = actions.effects.filter((effect: any) => !crimeEffectKeys.has(effect.key))
     const parsed = parseTextOpenWorldModulesV1(legacy)
     expect(parsed.relationships).toMatchObject({
       version: 2,

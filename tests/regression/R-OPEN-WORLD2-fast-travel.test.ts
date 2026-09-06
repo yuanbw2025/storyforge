@@ -8,7 +8,7 @@ import { createInitialTextOpenWorldSessionProjectionV1 } from '../../src/lib/ope
 import { projectTextOpenWorldFastTravelOptionsV1 } from '../../src/lib/open-world/travel'
 import { readProductRuntimeState } from '../../src/lib/product/runtime-core'
 import { createGovernedTextOpenWorldSessionFixtureV1 } from '../helpers/text-open-world-product-session'
-import { createTextOpenWorldVNextFixture } from '../helpers/text-open-world-vnext-fixture'
+import { createTextOpenWorldVNextFixture, downgradeTextOpenWorldFixtureWithoutCrimeV1 } from '../helpers/text-open-world-vnext-fixture'
 
 async function publishedSession() {
   const runtimePackage = createTextOpenWorldVNextFixture()
@@ -150,6 +150,7 @@ describe('Text Open World vNext · governed atomic fast travel', () => {
 
   it('Action v3旧Release无需快旅Action即可继续读取', () => {
     const legacy = createTextOpenWorldVNextFixture()
+    downgradeTextOpenWorldFixtureWithoutCrimeV1(legacy)
     const actions = legacy.modules.actions.payload as any
     actions.version = 3
     legacy.modules.actions.schemaVersion = 3

@@ -13,7 +13,7 @@ import {
 } from '../../src/lib/open-world/session-projection'
 import { readProductRuntimeState } from '../../src/lib/product/runtime-core'
 import { createGovernedTextOpenWorldSessionFixtureV1 } from '../helpers/text-open-world-product-session'
-import { createTextOpenWorldVNextFixture } from '../helpers/text-open-world-vnext-fixture'
+import { createTextOpenWorldVNextFixture, downgradeTextOpenWorldFixtureWithoutCrimeV1 } from '../helpers/text-open-world-vnext-fixture'
 
 async function publishedNightSession() {
   const runtimePackage = createTextOpenWorldVNextFixture()
@@ -112,6 +112,7 @@ describe('Text Open World vNext · actor tiers, schedules and service availabili
 
   it('旧Actor v1可规范化读取，新Session则必须带有角色日程游标', () => {
     const legacy = createTextOpenWorldVNextFixture()
+    downgradeTextOpenWorldFixtureWithoutCrimeV1(legacy)
     const actors = legacy.modules.actors.payload as any
     actors.version = 1
     legacy.modules.actors.schemaVersion = 1

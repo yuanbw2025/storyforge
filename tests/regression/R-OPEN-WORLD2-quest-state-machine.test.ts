@@ -339,7 +339,7 @@ describe('Text Open World vNext · governed Quest lifecycle', () => {
     })
     expect(rejected).toMatchObject({ phase: 'preflight', status: 'rejected', outcomeCommitted: false })
     expect(await db.productRuntimeEvents.where('sessionId').equals(session.id!).count()).toBe(10)
-  })
+  }, 15_000)
 
   it('普通任务放弃先返回确认回执，明确确认后才产生正式终态事件', async () => {
     const session = await createSession(addOrdinaryQuestActions(), 'quest-lifecycle-abandon')

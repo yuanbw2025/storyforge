@@ -45,7 +45,7 @@ async function waitFor(assertion: () => void | Promise<void>) {
 
 async function fixture() {
   const textOpenWorldVNext = createTextOpenWorldVNextFixture()
-  ;(textOpenWorldVNext.modules.actions.payload as any).actions[0].successEffectKeys = ['effect.reward-currency']
+  ;(textOpenWorldVNext.modules.actions.payload as any).actions[0].successEffectKeys = ['effect.reward-currency', 'effect.investigate-time']
   return createGovernedTextOpenWorldSessionFixtureV1({
     name: `TEXT-OPEN-WORLD vNext 玩家 UI-${crypto.randomUUID()}`,
     textOpenWorldVNext,

@@ -14,7 +14,7 @@ export type TextOpenWorldActionCategoryV1 =
   | 'move' | 'travel' | 'fast-travel' | 'observe' | 'investigate' | 'talk'
   | 'take' | 'use' | 'equip' | 'unequip' | 'drop' | 'buy' | 'sell' | 'craft'
   | 'accept-quest' | 'abandon-quest' | 'objective-action' | 'quest-action' | 'weather-action' | 'actor-schedule-action' | 'actor-state-action' | 'claim-reward'
-  | 'attack-actor'
+  | 'attack-actor' | 'steal' | 'deceive' | 'crime'
   | 'start-combat' | 'continue-combat' | 'escape' | 'rest' | 'respawn'
   | 'read' | 'track' | 'untrack' | 'save' | 'load-branch'
 
@@ -224,7 +224,7 @@ export interface TextOpenWorldQuestModuleV1 {
 }
 
 export interface TextOpenWorldActionModuleV1 {
-  version: 1 | 2 | 3 | 4 | 5 | 6 | 7
+  version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8
   conditions: Array<{
     key: string
     expression: TextOpenWorldConditionExpressionV1
@@ -434,7 +434,7 @@ export interface TextOpenWorldEconomyModuleV1 {
 }
 
 export interface TextOpenWorldRelationshipModuleV1 {
-  version: 1 | 2
+  version: 1 | 2 | 3
   morality: { minimum: number; maximum: number; initial: number }
   factionAffinity: { minimum: number; maximum: number; initial: number }
   attitude: {
@@ -462,6 +462,18 @@ export interface TextOpenWorldRelationshipModuleV1 {
     buyPriceMultiplier: number
     sellPriceMultiplier: number
     optionalInteractionPolicy: 'available' | 'may-refuse'
+  }>
+  crimeActions: Array<{
+    key: string
+    actionKey: string
+    kind: 'steal' | 'deceive' | 'crime'
+    targetActorKey: string
+    locationKey: string
+    successConditionKeys: string[]
+    witnessActorKeysOnSuccess: string[]
+    witnessActorKeysOnFailure: string[]
+    witnessedEffectKeys: string[]
+    failureMessage: string
   }>
 }
 

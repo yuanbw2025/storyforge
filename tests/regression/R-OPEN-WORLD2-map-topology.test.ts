@@ -6,7 +6,7 @@ import {
   projectTextOpenWorldMapConnectionsV1,
 } from '../../src/lib/open-world/map-topology'
 import { parseTextOpenWorldModulesV1 } from '../../src/lib/open-world/modules'
-import { createTextOpenWorldVNextFixture } from '../helpers/text-open-world-vnext-fixture'
+import { createTextOpenWorldVNextFixture, downgradeTextOpenWorldFixtureWithoutCrimeV1 } from '../helpers/text-open-world-vnext-fixture'
 
 function worldPayload() {
   const runtimePackage = createTextOpenWorldVNextFixture()
@@ -72,6 +72,7 @@ describe('Text Open World vNext · release map definition and deterministic topo
       key: 'edge.market-ridge', fromLocationKey: 'location.salt-market', toLocationKey: 'location.ridge-channel', bidirectional: true,
       travelMinutes: 20, conditionKeys: [], description: '盐市通往断脊的山道。', riskProfile: 'ordinary', sourceRefs: ['world-release:route:market-ridge'],
     })
+    downgradeTextOpenWorldFixtureWithoutCrimeV1(alternate.runtimePackage)
     ;(alternate.runtimePackage.modules.actions.payload as any).version = 2
     alternate.runtimePackage.modules.actions.schemaVersion = 2
     expect(planTextOpenWorldRouteV1({

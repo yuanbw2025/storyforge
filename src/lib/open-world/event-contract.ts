@@ -23,6 +23,7 @@ import type {
   TextOpenWorldFastTravelAuthorizationV1,
   TextOpenWorldWeatherSettlementAuthorizationV1,
   TextOpenWorldActorScheduleSettlementAuthorizationV1,
+  TextOpenWorldCrimeAuthorizationV1,
 } from '../types'
 import { parseTextOpenWorldCommandEventPayloadV1 } from './command-contract'
 
@@ -187,6 +188,28 @@ function parseAuthorization(value: unknown, label: string): TextOpenWorldEffectP
       kind: 'actor-schedule-settlement', worldMinute, fromSettlementWorldMinute, toSettlementWorldMinute,
       timePeriodKey: token(raw.timePeriodKey, `${label}.timePeriodKey`), changes,
     } satisfies TextOpenWorldActorScheduleSettlementAuthorizationV1
+  }
+  if (raw.kind === 'crime') {
+    exact(raw, ['kind', 'crimeKey', 'actionKey', 'crimeKind', 'targetActorKey', 'locationKey', 'worldMinute', 'outcome', 'successConditionResults', 'witnessActorKeys', 'effectKeys'], label)
+    const crimeKind = raw.crimeKind === 'steal' || raw.crimeKind === 'deceive' || raw.crimeKind === 'crime'
+      ? raw.crimeKind
+      : fail(`${label}.crimeKind无效`)
+    const outcome = raw.outcome === 'success' || raw.outcome === 'failure' ? raw.outcome : fail(`${label}.outcome无效`)
+    if (!Array.isArray(raw.successConditionResults) || raw.successConditionResults.length > 64) fail(`${label}.successConditionResults无效`)
+    const successConditionResults = raw.successConditionResults.map((item, index) => {
+      const parsed = row(item, `${label}.successConditionResults[${index}]`)
+      exact(parsed, ['conditionKey', 'satisfied'], `${label}.successConditionResults[${index}]`)
+      if (typeof parsed.satisfied !== 'boolean') fail(`${label}.successConditionResults[${index}].satisfied无效`)
+      return { conditionKey: token(parsed.conditionKey, `${label}.successConditionResults[${index}].conditionKey`), satisfied: parsed.satisfied }
+    })
+    if (new Set(successConditionResults.map(item => item.conditionKey)).size !== successConditionResults.length) fail(`${label}.successConditionResults不能重复`)
+    return {
+      kind: 'crime', crimeKey: token(raw.crimeKey, `${label}.crimeKey`), actionKey: token(raw.actionKey, `${label}.actionKey`),
+      crimeKind, targetActorKey: token(raw.targetActorKey, `${label}.targetActorKey`), locationKey: token(raw.locationKey, `${label}.locationKey`),
+      worldMinute: integer(raw.worldMinute, `${label}.worldMinute`), outcome, successConditionResults,
+      witnessActorKeys: uniqueStrings(raw.witnessActorKeys, `${label}.witnessActorKeys`),
+      effectKeys: uniqueStrings(raw.effectKeys, `${label}.effectKeys`),
+    } satisfies TextOpenWorldCrimeAuthorizationV1
   }
   if (raw.kind === 'quest-objective') {
     exact(raw, ['kind', 'instanceKey', 'definitionKey', 'stageKey', 'objectiveKey', 'worldMinute', 'fromStatus', 'toStatus'], label)

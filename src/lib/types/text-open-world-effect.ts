@@ -241,6 +241,20 @@ export interface TextOpenWorldActorScheduleSettlementAuthorizationV1 {
   }>
 }
 
+export interface TextOpenWorldCrimeAuthorizationV1 {
+  kind: 'crime'
+  crimeKey: string
+  actionKey: string
+  crimeKind: 'steal' | 'deceive' | 'crime'
+  targetActorKey: string
+  locationKey: string
+  worldMinute: number
+  outcome: 'success' | 'failure'
+  successConditionResults: Array<{ conditionKey: string; satisfied: boolean }>
+  witnessActorKeys: string[]
+  effectKeys: string[]
+}
+
 export interface TextOpenWorldEffectPlanV1 {
   schema: 'storyforge.text-open-world.effect-plan'
   version: 1
@@ -249,7 +263,7 @@ export interface TextOpenWorldEffectPlanV1 {
   resultingStateHash: string
   effectKeys: string[]
   effects: TextOpenWorldEffectDefinitionV1[]
-  authorization: TextOpenWorldRewardAuthorizationV1 | TextOpenWorldQuestTransitionAuthorizationV1 | TextOpenWorldObjectiveAuthorizationV1 | TextOpenWorldQuestTrackingAuthorizationV1 | TextOpenWorldFastTravelAuthorizationV1 | TextOpenWorldWeatherSettlementAuthorizationV1 | TextOpenWorldActorScheduleSettlementAuthorizationV1 | null
+  authorization: TextOpenWorldRewardAuthorizationV1 | TextOpenWorldQuestTransitionAuthorizationV1 | TextOpenWorldObjectiveAuthorizationV1 | TextOpenWorldQuestTrackingAuthorizationV1 | TextOpenWorldFastTravelAuthorizationV1 | TextOpenWorldWeatherSettlementAuthorizationV1 | TextOpenWorldActorScheduleSettlementAuthorizationV1 | TextOpenWorldCrimeAuthorizationV1 | null
   impactDomains: TextOpenWorldEffectImpactDomainV1[]
   previewChanges: TextOpenWorldEffectChangeV1[]
   planHash: string

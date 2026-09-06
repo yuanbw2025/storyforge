@@ -252,6 +252,10 @@ export function createTextOpenWorldActionRegistryV1(value: TextOpenWorldRuntimeP
           ? validTargetKeys.filter(actorKey => actorKey === actorStateEffect.payload.actorKey)
           : []
       }
+      if (action.targetScope === 'actor' && ['steal', 'deceive', 'crime'].includes(action.category)) {
+        const crime = modules.relationships.crimeActions.find(item => item.actionKey === action.key)
+        validTargetKeys = crime ? validTargetKeys.filter(actorKey => actorKey === crime.targetActorKey) : []
+      }
       if (action.targetScope === 'quest' && ['accept-quest', 'abandon-quest', 'quest-action'].includes(action.category)) {
         const transitionDefinitions = [...action.costEffectKeys, ...action.successEffectKeys]
           .map(effectKey => effectByKey.get(effectKey))

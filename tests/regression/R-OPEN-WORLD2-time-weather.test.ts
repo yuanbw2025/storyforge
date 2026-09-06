@@ -10,7 +10,7 @@ import { createInitialTextOpenWorldSessionProjectionV1, parseTextOpenWorldSessio
 import { createTextOpenWorldWeatherCatalogV1, projectTextOpenWorldClockWeatherV1 } from '../../src/lib/open-world/weather'
 import { readProductRuntimeState, readProductRuntimeStateVersion } from '../../src/lib/product/runtime-core'
 import { createGovernedTextOpenWorldSessionFixtureV1 } from '../helpers/text-open-world-product-session'
-import { createTextOpenWorldVNextFixture } from '../helpers/text-open-world-vnext-fixture'
+import { createTextOpenWorldVNextFixture, downgradeTextOpenWorldFixtureWithoutCrimeV1 } from '../helpers/text-open-world-vnext-fixture'
 
 async function publishedSession(seed = 'weather-seed') {
   const runtimePackage = createTextOpenWorldVNextFixture()
@@ -154,6 +154,7 @@ describe('Text Open World vNext · monotonic world time and replayable weather',
     expect(() => parseTextOpenWorldSessionProjectionV1(missingSettlementCursor)).toThrow('新版Session缺少天气结算周期游标')
 
     const legacy = createTextOpenWorldVNextFixture()
+    downgradeTextOpenWorldFixtureWithoutCrimeV1(legacy)
     const legacyTime = legacy.modules['time-weather'].payload as any
     legacyTime.version = 1
     delete legacyTime.weatherUpdateIntervalMinutes

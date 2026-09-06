@@ -39,6 +39,7 @@ import { createTextOpenWorldFastTravelCatalogV1 } from './fast-travel'
 import { createTextOpenWorldWeatherCatalogV1, projectTextOpenWorldClockWeatherV1 } from './weather'
 import { createTextOpenWorldActorScheduleCatalogV1, projectTextOpenWorldActorsV1 } from './actors'
 import { deriveTextOpenWorldAttitudeByActorKeyV1 } from './relationships'
+import { createTextOpenWorldCrimeCatalogV1 } from './crime'
 
 type Row = Record<string, unknown>
 const STABLE_KEY = /^[a-z][a-z0-9._:-]{0,199}$/
@@ -377,6 +378,22 @@ export function applyTextOpenWorldSessionEventV1(current: TextOpenWorldSessionPr
       if (projection.protocol.pendingActorKey !== 'system' || projection.protocol.pendingTargetKey !== null
         || action.category !== 'actor-schedule-action' || action.actorScope !== 'system' || action.targetScope !== 'none') fail('角色日程结算授权与系统命令不一致')
       createTextOpenWorldActorScheduleCatalogV1(projection.runtimePackage, modules).assertAuthorization({ state: projection.state, authorization })
+    } else if (applied.plan.authorization?.kind === 'crime') {
+      const authorization = applied.plan.authorization
+      const action = modules.actions.actions.find(item => item.key === projection.protocol.pendingActionKey) ?? fail('命令Action不存在')
+      if (projection.protocol.pendingActorKey !== 'player' || projection.protocol.pendingTargetKey !== authorization.targetActorKey
+        || action.actorScope !== 'player' || action.targetScope !== 'actor' || action.key !== authorization.actionKey
+        || action.category !== authorization.crimeKind || applied.outcome !== authorization.outcome
+        || canonicalProductProductionJsonV2(applied.plan.effectKeys) !== canonicalProductProductionJsonV2(authorization.effectKeys)) {
+        fail('犯罪结果与命令、Action或Effect授权不一致')
+      }
+      if (applied.outcome === 'failure' ? applied.reason?.code !== 'crime-attempt-failed' : applied.reason != null) fail('犯罪结果原因与成败不一致')
+      const conditionResults = deriveTextOpenWorldContextsV1(projection).action.conditionResults
+      createTextOpenWorldCrimeCatalogV1(projection.runtimePackage, modules).assertAuthorization({
+        state: projection.state,
+        authorization,
+        conditionResults,
+      })
     } else {
       const action = modules.actions.actions.find(item => item.key === projection.protocol.pendingActionKey) ?? fail('命令Action不存在')
       const outcomeEffectKeys = applied.outcome === 'failure' ? action.failureEffectKeys : action.successEffectKeys
