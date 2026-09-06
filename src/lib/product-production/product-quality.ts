@@ -114,12 +114,24 @@ export function evaluateProductRuntimeProductQualityV1(input: {
     )
   } else if (runtimePackage.productType === 'text-adventure') {
     const adventure = runtimePackage.adventure
+    const interactionProfiles = runtimePackage.interaction?.profiles ?? []
     const kinds = new Set(adventure?.actions.map(action => action.kind) ?? [])
+    const placeholderPattern = /产品角色\s*\d+/u
+    const playerParticipantKey = adventure?.playerIdentity
+      ? interactionProfiles.find(profile => profile.name === adventure.playerIdentity?.name)?.participantKey
+      : null
+    const authoredNpcProfiles = interactionProfiles.filter(profile => (
+      profile.participantKey !== playerParticipantKey
+      && !profile.characterKey.startsWith('generated:')
+      && !placeholderPattern.test(profile.name)
+    ))
+    const talkActions = adventure?.actions.filter(action => action.kind === 'talk') ?? []
     gates.push(
       gate('product.adventure.world-actions', !!adventure && adventure.locations.length >= 2
         && adventure.objects.length >= 1 && adventure.items.length >= 1
-        && kinds.has('look') && kinds.has('move') && kinds.has('take') && kinds.has('talk'),
-      [`locations=${adventure?.locations.length ?? 0}`, `objects=${adventure?.objects.length ?? 0}`, `items=${adventure?.items.length ?? 0}`, `actionKinds=${[...kinds].sort().join(',')}`]),
+        && kinds.has('look') && kinds.has('move') && kinds.has('take')
+        && (adventure.version !== 2 || authoredNpcProfiles.length === 0 || kinds.has('talk')),
+      [`locations=${adventure?.locations.length ?? 0}`, `objects=${adventure?.objects.length ?? 0}`, `items=${adventure?.items.length ?? 0}`, `authoredNpcProfiles=${authoredNpcProfiles.length}`, `actionKinds=${[...kinds].sort().join(',')}`]),
       gate('product.adventure.progression', !!adventure && adventure.quests.length >= 1
         && adventure.abilities.length >= 1 && adventure.resources.length >= 1,
       [`quests=${adventure?.quests.length ?? 0}`, `abilities=${adventure?.abilities.length ?? 0}`, `resources=${adventure?.resources.length ?? 0}`]),
@@ -140,6 +152,29 @@ export function evaluateProductRuntimeProductQualityV1(input: {
       const narrativeNonEnding = narrative.nodes.filter(node => node.kind !== 'ending')
       const narrativeNonEndingKeys = new Set(narrativeNonEnding.map(node => node.key))
       const narrativeNonEndingBeatCount = narrative.beats.filter(beat => narrativeNonEndingKeys.has(beat.nodeKey)).length
+      const profileByParticipant = new Map(interactionProfiles.map(profile => [profile.participantKey, profile]))
+      const invalidTalkActions = talkActions.filter(action => {
+        const profile = action.interaction ? profileByParticipant.get(action.interaction.participantKey) : null
+        return !profile || profile.participantKey === playerParticipantKey
+          || profile.characterKey.startsWith('generated:') || placeholderPattern.test(profile.name)
+      })
+      const placeholderSurfaces = [
+        ...adventure.locations.flatMap(item => [item.title, item.description]),
+        ...adventure.quests.flatMap(item => [item.title, item.description, ...item.objectives.map(objective => objective.title)]),
+        ...adventure.actions.flatMap(item => [item.label, item.description, item.successText, item.costlySuccessText, item.failureText]),
+      ].filter(value => placeholderPattern.test(value))
+      const questByKey = new Map(adventure.quests.map(quest => [quest.key, quest]))
+      const locationByKey = new Map(adventure.locations.map(location => [location.key, location]))
+      const locationBoundQuestActions = adventure.actions.flatMap(action => {
+        const completion = action.successEffects.find(effect => effect.op === 'complete-objective')
+        const quest = completion ? questByKey.get(completion.questKey) : null
+        return quest && quest.category !== 'main' ? [{ action, quest }] : []
+      })
+      const incoherentQuestActions = locationBoundQuestActions.filter(({ action, quest }) => {
+        const location = locationByKey.get(action.locationKey)
+        if (!location) return true
+        return ![quest.title, quest.description, action.label, action.description].join('\n').includes(location.title)
+      })
       const textUnits = estimatedTextUnits([
         ...narrative.nodes.flatMap(item => [item.title, item.summary]),
         ...narrative.beats.map(item => item.text),
@@ -199,6 +234,16 @@ export function evaluateProductRuntimeProductQualityV1(input: {
         gate('product.adventure.v2-choice-bridge', mappedNarrativeActions.length >= 1
           && bridgedNarrativeActions.length === mappedNarrativeActions.length,
         [`mapped=${mappedNarrativeActions.length}`, `bridged=${bridgedNarrativeActions.length}`]),
+        gate('product.adventure.v2-character-presence', invalidTalkActions.length === 0
+          && placeholderSurfaces.length === 0
+          && (authoredNpcProfiles.length === 0 || talkActions.length >= 1), [
+          `authoredNpcProfiles=${authoredNpcProfiles.length}`,
+          `talkActions=${talkActions.length}`,
+          `invalidTalkActions=${invalidTalkActions.map(item => item.key).join(',') || 'none'}`,
+          `placeholderSurfaces=${placeholderSurfaces.length}`,
+        ]),
+        gate('product.adventure.v2-location-action-coherence', incoherentQuestActions.length === 0,
+          [`checked=${locationBoundQuestActions.length}`, `invalid=${incoherentQuestActions.map(item => item.action.key).join(',') || 'none'}`]),
         gate('product.adventure.v2-fail-forward', failForwardActions.length >= 1,
           [`actions=${failForwardActions.map(item => item.key).join(',') || 'none'}`]),
         gate('product.adventure.v2-media-binding', adventure.media.assetKeys.every(key => presentationKeys.has(key))

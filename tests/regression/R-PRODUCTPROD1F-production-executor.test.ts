@@ -24,6 +24,7 @@ import {
 import { runProductProductionUntilBlockedV1 } from '../../src/lib/product-production/scheduler'
 import { parseProductRuntimePackageV1 } from '../../src/lib/product-production/runtime-package'
 import { adventureNarrativeActionContext, availableAdventureActions } from '../../src/lib/adventure/runtime'
+import { commitAdventureAction } from '../../src/lib/adventure/runtime-api'
 import { planTextAdventureNarrativeLocationsV1 } from '../../src/lib/adventure/narrative-location-plan'
 import { resolveProductRuntimeSource } from '../../src/lib/product-production/preview-source'
 import {
@@ -309,7 +310,7 @@ function modelOutputs(
       schema: 'storyforge.text-adventure-quest-bundle-artifact', version: 1, bundleKind: 'side',
       entries: [{
         key: 'lost-lamp', title: '失落的引航灯', description: '找回被潮水卷走的引航灯。',
-        hook: '一名船工请求你在潮门关闭前帮忙。', objective: '在旧仓街找回引航灯',
+        hook: '旧仓街的一名船工请求你在潮门关闭前帮忙。', objective: '在旧仓街找回引航灯',
         locationOrdinal: 2, abilityKey: 'ability.perception', difficulty: 10,
         successText: '你在木箱夹层找到了引航灯。', costlySuccessText: '你找到了灯，但划伤了手臂。',
         failureText: '灯被冲远了，但船工给出了另一条通往灯塔的小路。',
@@ -320,13 +321,13 @@ function modelOutputs(
       schema: 'storyforge.text-adventure-quest-bundle-artifact', version: 1, bundleKind: 'ambient',
       entries: [{
         key: 'tide-warning', title: '潮汐警告', description: '辨认潮门墙上的水位记号。',
-        hook: '海水正漫过旧刻度。', objective: '判断安全通过时间', locationOrdinal: 1,
+        hook: '潮门广场的海水正漫过旧刻度。', objective: '判断安全通过时间', locationOrdinal: 1,
         abilityKey: 'ability.perception', difficulty: 8, successText: '你准确读出了潮汐变化。',
         costlySuccessText: '你读懂刻度，但浪费了一些时间。', failureText: '你判断失误，却因此发现墙后的避险通道。',
         rewardExperience: 2, rewardCurrency: 0, timeCostMinutes: 5,
       }, {
         key: 'warehouse-echo', title: '仓街回声', description: '追查仓街深处反复出现的敲击声。',
-        hook: '雾里传来规律的三次敲击。', objective: '确认敲击声来源', locationOrdinal: 2,
+        hook: '旧仓街的雾里传来规律的三次敲击。', objective: '确认敲击声来源', locationOrdinal: 2,
         abilityKey: 'ability.resolve', difficulty: 9, successText: '你发现那是被困船员的求救信号。',
         costlySuccessText: '你救出船员，但耽误了赶往灯塔的时间。', failureText: '声音消失了，却留下一张通往灯塔的旧图。',
         rewardExperience: 3, rewardCurrency: 1, timeCostMinutes: 8,
@@ -411,7 +412,8 @@ function fullLengthTextAdventureOutputs(
   })))
   const questEntry = (kind: 'side' | 'ambient', index: number) => ({
     key: `${kind}-${index + 1}`, title: `${kind === 'side' ? '支线' : '区域事件'} ${index + 1}`,
-    description: '与主线主题呼应但拥有独立目标和回响。', hook: '一个可理解的局面邀请玩家介入。',
+    description: `${locationTitles[index % locationTitles.length]}里，与主线主题呼应但拥有独立目标和回响。`,
+    hook: '一个可理解的局面邀请玩家介入。',
     objective: `完成${kind === 'side' ? '支线' : '区域事件'}目标 ${index + 1}`,
     locationOrdinal: index % contract.narrative.targetLocationCount + 1,
     abilityKey: index % 2 ? 'ability.resolve' : 'ability.perception', difficulty: 9 + index,
@@ -1066,12 +1068,14 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     const bindingHash = await hashProductProductionValueV2({ provider: 'full-length-text-adventure' })
     const outputs = fullLengthTextAdventureOutputs(owned.brief) as Record<string, unknown>
     let narrativeSystem = ''
+    let sideQuestSystem = ''
     let modelCallCount = 0
     const runText: ProductionTextRunnerV1 = async request => {
       modelCallCount += 1
       const taskKey = Object.keys(outputs).find(key => request.system.includes(`任务=${key}。`))
       if (!taskKey) throw new Error(`unknown full-length task:${request.system}`)
       if (taskKey === 'content.narrative') narrativeSystem = request.system
+      if (taskKey === 'content.adventure-side-quests') sideQuestSystem = request.system
       return {
         output: JSON.stringify(outputs[taskKey]), usage: { inputTokens: 400, outputTokens: 2_000 },
         bindingReceipt: {
@@ -1100,6 +1104,9 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     expect(narrativeSystem).toContain('"locationTitle":"地点 1-1-1"')
     expect(narrativeSystem).toContain('不得增加、删除或改写骨架')
     expect(narrativeSystem).toContain('必须就是 targetNodeKey 标注的 locationTitle')
+    expect(sideQuestSystem).toContain('地点编号与标题的唯一映射=')
+    expect(sideQuestSystem).toContain('"locationOrdinal":1,"locationTitle":"地点 1-1-1"')
+    expect(sideQuestSystem).toContain('不得伪装成尚未实现的跨地点多阶段任务')
     const build = (await db.productBuilds.get(projection.buildId))!
     const quality = JSON.parse(build.qualityReportJson) as {
       hardGateResults: Array<{ gateId: string; passed: boolean; evidence: string[] }>
@@ -1121,6 +1128,10 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
       0, 0, 1, 2, 2, 3, 4, 4, 5, 6, 6, 7,
     ])
     expect(runtimePackage.adventure.quests.filter(item => item.category === 'side')).toHaveLength(3)
+    expect(runtimePackage.adventure.quests.filter(item => item.category === 'side')
+      .every(item => item.initialStatus === 'available')).toBe(true)
+    expect(runtimePackage.adventure.actions.filter(item => item.key.startsWith('action.accept.side.'))).toHaveLength(3)
+    expect(runtimePackage.adventure.actions.some(item => item.key.startsWith('action.travel.'))).toBe(false)
     expect(runtimePackage.adventure.storylets).toHaveLength(7)
     expect(runtimePackage.adventure.endings).toHaveLength(3)
     expect(runtimePackage.adventure.items).toContainEqual(expect.objectContaining({
@@ -1140,6 +1151,25 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     expect(entryActions).toEqual([runtimePackage.narrative.choices.find(choice => (
       choice.sourceNodeKey === runtimePackage.narrative.entryNodeKey
     ))!.choiceKey])
+    const entrySideQuest = runtimePackage.adventure.quests.find(item => (
+      item.category === 'side'
+      && runtimePackage.adventure!.actions.find(action => action.key === `action.accept.side.${item.key.split('.').at(-1)}`)
+        ?.locationKey === runtimePackage.adventure!.initialLocationKey
+    ))!
+    const entryAcceptAction = `action.accept.side.${entrySideQuest.key.split('.').at(-1)}`
+    expect(availableAdventureActions(
+      runtimePackage.adventure, previewState.adventure!,
+      adventureNarrativeActionContext({ currentNodeKey: runtimePackage.narrative.entryNodeKey, variables: {} }),
+    ).find(item => item.action.key === entryAcceptAction)?.available).toBe(true)
+    const acceptBase = await readProductRuntimeStateVersion(preview.sessionId)
+    await commitAdventureAction({
+      sessionId: preview.sessionId, actionKey: entryAcceptAction,
+      commandId: 'text-adventure:accept-side-quest',
+      baseSequence: acceptBase.sequence,
+      baseStateHash: acceptBase.stateHash,
+    })
+    expect((await readProductRuntimeState(preview.sessionId)).adventure?.quests
+      .find(item => item.questKey === entrySideQuest.key)?.status).toBe('active')
     const equipActions = runtimePackage.adventure.actions.filter(action => action.key.startsWith('action.equip.'))
     const entrySceneActionKeys = new Set(runtimePackage.adventure.scenes
       .filter(scene => scene.locationKey === runtimePackage.adventure!.initialLocationKey)

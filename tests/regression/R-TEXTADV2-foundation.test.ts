@@ -115,6 +115,28 @@ describe('TEXTADV-2 · 通用文字冒险基座纵切面', () => {
     expect(() => parseAdventureContent({ ...content, suspectEvidenceBoard: [] } as never)).toThrow('字段不符合合同')
   })
 
+  it('发布质量门拒绝把内部占位角色暴露为可交谈人物', async () => {
+    const seeded = await fixture()
+    const broken = structuredClone(seeded.runtimePackage)
+    const talk = broken.adventure!.actions.find(action => action.kind === 'talk')!
+    const profile = broken.interaction.profiles.find(item => (
+      item.participantKey === talk.interaction?.participantKey
+    ))!
+    profile.characterKey = `generated:${profile.participantKey}`
+    profile.name = '产品角色 1'
+    const report = evaluateProductRuntimeProductQualityV1({
+      runtimePackage: broken,
+      brief: createCurrentProductBriefFixture({
+        productType: 'text-adventure',
+        worldRelease: seeded.release as typeof seeded.release & { id: number },
+        sourceCatalog: seeded.sourceCatalog,
+      }),
+    })
+    expect(report.gates).toContainEqual(expect.objectContaining({
+      gateId: 'product.adventure.v2-character-presence', passed: false,
+    }))
+  })
+
   it('文字开放世界不能误用文字冒险 V2 私域契约', async () => {
     const owned = await seedCurrentProductWorld('TEXTADV-2 产品隔离反例')
     const sourceCatalog = await loadCurrentProductWorldSourceCatalogV1({
@@ -217,7 +239,7 @@ describe('TEXTADV-2 · 通用文字冒险基座纵切面', () => {
         sourceCatalog: seeded.sourceCatalog,
       }),
     })
-    expect(quality.gates.filter(gate => gate.gateId.startsWith('product.adventure.v2-')).every(gate => gate.passed)).toBe(true)
+    expect(quality.gates.filter(gate => gate.gateId.startsWith('product.adventure.v2-') && !gate.passed)).toEqual([])
     let state = await readProductRuntimeState(seeded.sessionId)
     expect(state.adventure).toMatchObject({ version: 2, currentLocationKey: 'location.harbor' })
     expect(state.narrative).toMatchObject({ currentNodeKey: 'opening', completed: false })

@@ -170,24 +170,10 @@ export function compileTextAdventureModuleV2(
   for (const choice of input.narrative.choices) {
     choiceBySource.set(choice.sourceNodeKey, [...(choiceBySource.get(choice.sourceNodeKey) ?? []), choice])
   }
-  locations.forEach((location, index) => {
-    const nextLocation = locations[index + 1]
-    if (!nextLocation) return
-    const travel = (from: typeof location, to: typeof location, direction: 'forward' | 'return') => registerAction({
-      key: `action.travel.${pad(index)}.${direction}`, kind: 'move', label: `前往：${to.title}`,
-      description: `从${from.title}移动到${to.title}。`, locationKey: from.key, targetKey: to.key,
-      requirements: [], rule: { kind: 'automatic' },
-      successEffects: [
-        { op: 'enter-location', locationKey: to.key },
-        { op: 'change-resource', resourceKey: clock.key, delta: 5 },
-      ],
-      costlySuccessEffects: [], failureEffects: [], successText: `你抵达了${to.title}。`,
-      costlySuccessText: `你绕路抵达了${to.title}。`, failureText: `通往${to.title}的道路暂时受阻。`,
-      unavailableText: '当前无法移动。', repeatable: true, narrativeChoiceKey: null, interaction: null,
-    })
-    travel(location, nextLocation, 'forward')
-    travel(nextLocation, location, 'return')
-  })
+  // The current general-adventure recipe is route-driven: narrative choices
+  // own forward movement. Unconditional adjacent travel would let a player
+  // leave the authoritative narrative node behind and either skip scenes or
+  // strand the session in a location with no legal mainline action.
   narrativeNodes.forEach(node => {
     const outgoing = choiceBySource.get(node.key) ?? []
     const locationKey = locationForNode.get(node.key) ?? entryLocationKey
@@ -250,6 +236,7 @@ export function compileTextAdventureModuleV2(
       const stageKey = `stage.${bundle.bundleKind}.${entry.key}`
       const objectiveKey = `objective.${bundle.bundleKind}.${entry.key}`
       const actionKey = `action.${bundle.bundleKind}.${entry.key}`
+      const acceptActionKey = `action.accept.${bundle.bundleKind}.${entry.key}`
       const conditionKey = `condition.${bundle.bundleKind}.${entry.key}.resolved`
       conditions.push({ key: conditionKey, title: `${entry.title}已回应`, description: entry.failureText, tags: [bundle.bundleKind] })
       const rewardEffects: AdventureEffect[] = [
@@ -258,10 +245,24 @@ export function compileTextAdventureModuleV2(
       ]
       quests.push({
         key: questKey, title: entry.title, description: `${entry.hook}\n${entry.description}`,
-        category: bundle.bundleKind, initialStatus: 'active', prerequisites: [],
+        category: bundle.bundleKind, initialStatus: bundle.bundleKind === 'side' ? 'available' : 'active', prerequisites: [],
         stages: [{ key: stageKey, title: entry.title, objectiveKeys: [objectiveKey] }],
         objectives: [{ key: objectiveKey, stageKey, title: entry.objective, optional: bundle.bundleKind === 'ambient', alternativeActionKeys: [actionKey] }],
         rewardEffects, completionNodeKey: null, failureNodeKey: null,
+      })
+      if (bundle.bundleKind === 'side') registerAction({
+        key: acceptActionKey, kind: 'quest-action', label: `接取：${entry.title}`,
+        description: entry.hook, locationKey: location.key, targetKey: null,
+        requirements: [{ questKey, questStatus: 'available' }], rule: { kind: 'automatic' },
+        successEffects: [
+          { op: 'accept-quest', questKey },
+          { op: 'change-resource', resourceKey: clock.key, delta: 1 },
+        ],
+        costlySuccessEffects: [], failureEffects: [],
+        successText: `${entry.hook}\n【系统】新任务：${entry.title}`,
+        costlySuccessText: `你接下了${entry.title}，但需要重新安排时间。`,
+        failureText: `你暂时无法接取${entry.title}。`, unavailableText: '这项支线已经接取或结束。',
+        repeatable: false, narrativeChoiceKey: null, interaction: null,
       })
       const abilityKey = abilityKeys.has(entry.abilityKey) ? entry.abilityKey : fallbackAbilityKey
       const completionEffects: AdventureEffect[] = [
@@ -286,7 +287,8 @@ export function compileTextAdventureModuleV2(
       })
       storylets.push({
         key: `storylet.${bundle.bundleKind}.${entry.key}`, title: entry.title,
-        actionKeys: [actionKey], requirements: [{ questKey, questStatus: 'active' }], once: true,
+        actionKeys: bundle.bundleKind === 'side' ? [acceptActionKey, actionKey] : [actionKey],
+        requirements: [], once: true,
         priority: bundle.bundleKind === 'side' ? 60 - index : 30 - index,
       })
     })
@@ -332,15 +334,19 @@ export function compileTextAdventureModuleV2(
   const interactionRule = interactionScene?.relationshipRules[0]
   const interactionProfile = input.interaction.profiles.find(profile => profile.participantKey === interactionRule?.fromParticipantKey)
     ?? input.interaction.profiles[0]
-  if (interactionScene && interactionRule && interactionProfile) registerAction({
-    key: 'action.talk.opening', kind: 'talk', label: `交谈：${interactionProfile.name}`,
+  const authoredInteractionProfile = interactionProfile
+    && !interactionProfile.characterKey.startsWith('generated:')
+    && !/^产品角色\s*\d+$/u.test(interactionProfile.name.trim())
+    ? interactionProfile : null
+  if (interactionScene && interactionRule && authoredInteractionProfile) registerAction({
+    key: 'action.talk.opening', kind: 'talk', label: `交谈：${authoredInteractionProfile.name}`,
     description: '在冻结角色事实和知识边界内推进关系与当前目标。', locationKey: entryLocationKey,
     targetKey: null, requirements: [], rule: { kind: 'automatic' },
     successEffects: [{ op: 'change-resource', resourceKey: clock.key, delta: 3 }], costlySuccessEffects: [], failureEffects: [],
     successText: '这段对话留下了可回放的关系与知识证据。', costlySuccessText: '对话推进，但关系付出代价。',
     failureText: '对方暂时拒绝继续。', unavailableText: '当前无法开始这段对话。', repeatable: true,
     narrativeChoiceKey: null, interaction: {
-      participantKey: interactionProfile.participantKey, sceneKey: interactionScene.sceneKey, ruleKey: interactionRule.ruleKey,
+      participantKey: authoredInteractionProfile.participantKey, sceneKey: interactionScene.sceneKey, ruleKey: interactionRule.ruleKey,
     },
   })
 

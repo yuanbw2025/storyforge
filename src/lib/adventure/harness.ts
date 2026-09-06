@@ -33,6 +33,7 @@ import type {
   WorkspaceScope,
 } from '../types'
 import { adventureNarrativeActionContext, availableAdventureActions } from './runtime'
+import { isAdventureActionPlayerVisible } from './player-experience'
 
 export const ADVENTURE_RUNTIME_STEP_ID_V1 = 'adventure:runtime-candidate' as const
 export const ADVENTURE_RUNTIME_VERIFIER_SET_V1 = 'adventure-runtime-terminal-v1' as const
@@ -409,7 +410,9 @@ export async function generateAdventureRuntimeCandidateV1(input: {
         playable.runtimePackage.adventure,
         state.adventure,
         adventureNarrativeActionContext(state.narrative),
-      ).some(item => item.action.key === draft.actionKey && item.available)
+      ).filter(item => playable.runtimePackage.productType !== 'text-adventure'
+        || isAdventureActionPlayerVisible(playable.runtimePackage, item.action))
+        .some(item => item.action.key === draft.actionKey && item.available)
       if (!available) fail('模型映射了未登记行动')
     } else {
       const events = await db.productRuntimeEvents.where('sessionId').equals(input.productRuntimeSessionId).toArray()

@@ -46,6 +46,9 @@ describe('TEXTADV-2 · 玩家界面纵切面', () => {
       worldRelease: owned.release as typeof owned.release & { id: number },
       sourceCatalog,
     })
+    runtimePackage.interaction.profiles = runtimePackage.interaction.profiles.map((profile, index) => ({
+      ...profile, characterKey: `generated:participant.${index + 1}`, name: `产品角色 ${index + 1}`,
+    }))
     const built = await seedCurrentProductBuild({
       scope: owned.scope,
       worldRelease: owned.release as typeof owned.release & { id: number },
@@ -87,6 +90,9 @@ describe('TEXTADV-2 · 玩家界面纵切面', () => {
     await renderPlayer()
     expect(host.textContent).toContain('离线确定性模式')
     expect(host.textContent).toContain('雾港 · 内港区')
+    expect(host.textContent).toContain('没有可交谈的人')
+    expect(host.textContent).not.toContain('产品角色 1')
+    expect(host.textContent).not.toContain('交谈：守钟人')
 
     await clickNavigation('角色')
     const character = host.querySelector('[aria-label="角色状态"]')

@@ -11,6 +11,7 @@ import {
   verifyProductRuntimeCheckpoint,
 } from '../lib/adventure/runtime-api'
 import { adventureNarrativeActionContext, availableAdventureActions } from '../lib/adventure/runtime'
+import { isAdventureActionPlayerVisible } from '../lib/adventure/player-experience'
 import {
   adoptAdventureRuntimeCandidateV1,
   cancelAdventureRuntimeRunV1,
@@ -412,5 +413,5 @@ export function selectAdventureActions(state: AdventurePlayerState) {
     state.selectedManifest.adventure,
     state.runtimeState.adventure,
     adventureNarrativeActionContext(state.runtimeState.narrative),
-  )
+  ).filter(item => isAdventureActionPlayerVisible(state.selectedManifest!, item.action))
 }

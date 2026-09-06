@@ -5,6 +5,7 @@
  * 组件、Prompt 和产品适配器不得自行维护来源清单。
  */
 import { db } from '../db/schema'
+import { isAdventureActionPlayerVisible } from '../adventure/player-experience'
 import { resolveCanonicalChapterSequence } from '../ai/chapter-memory/canonical-chapter-sequence'
 import { walkOutlineChaptersInCanonicalOrder } from '../outline/canonical-outline-walk'
 import { getFactPredicate } from './fact-predicate-registry'
@@ -483,7 +484,8 @@ async function readAdventureRuntimeContext(input: AssembleContextInput): Promise
   if (!location) throw new Error('文字冒险当前位置不在冻结发布中。')
   const actions = availableAdventureActions(
     adventure, state.adventure, adventureNarrativeActionContext(state.narrative),
-  )
+  ).filter(item => runtimePackage.productType !== 'text-adventure'
+    || isAdventureActionPlayerVisible(runtimePackage, item.action))
   const inventory = state.adventure.inventory
     .filter(item => item.ownerKey === 'player' && item.state !== 'transferred')
     .map(item => `${item.itemKey}×${item.quantity}`)

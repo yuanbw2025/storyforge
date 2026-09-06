@@ -227,6 +227,7 @@ export function createTextAdventureFoundationRuntimePackageV2(input: {
   const profile = base.interaction?.profiles[0]
   const relationshipRule = scene?.relationshipRules[0]
   if (scene && profile && relationshipRule) {
+    if (/^产品角色\s*\d+$/u.test(profile.name.trim())) profile.name = '守钟人'
     adventure.actions.push({
       key: 'action.talk.keeper', kind: 'talk', label: `与${profile.name}交谈`,
       description: '通过共享角色互动协议结算关系变化。', locationKey: 'location.harbor',

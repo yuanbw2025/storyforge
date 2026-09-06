@@ -30,6 +30,7 @@ import {
   parseAdventureNarrativeBlocks,
   parseAdventurePlayerCommand,
   projectAdventureTranscript,
+  isAdventureActionPlayerVisible,
   resolveAdventurePlayerIdentity,
   type AdventureNarrativeBlock,
   type AdventureSystemCommand,
@@ -121,7 +122,16 @@ function currentBrowserEnvironment() {
 
 function adventureNpcCount(manifest: AdventureProductRuntimePackageV1): number {
   const player = resolveAdventurePlayerIdentity(manifest)
-  return manifest.interaction.profiles.filter(profile => profile.participantKey !== player?.participantKey).length
+  const talkableKeys = new Set(manifest.adventure.actions.flatMap(action => (
+    action.kind === 'talk' && action.interaction && isAdventureActionPlayerVisible(manifest, action)
+      ? [action.interaction.participantKey] : []
+  )))
+  return manifest.interaction.profiles.filter(profile => (
+    talkableKeys.has(profile.participantKey)
+    && profile.participantKey !== player?.participantKey
+    && !profile.characterKey.startsWith('generated:')
+    && !/^产品角色\s*\d+$/u.test(profile.name.trim())
+  )).length
 }
 
 function splitNarrativeSentences(value: string): string[] {
@@ -190,10 +200,9 @@ export default function AdventureGamePlayer(props: {
   const playerIdentity = useMemo(() => manifest ? resolveAdventurePlayerIdentity(manifest) : null, [manifest])
   const location = manifest?.adventure.locations.find(item => item.key === adventure?.currentLocationKey) ?? null
   const objects = useMemo(() => manifest?.adventure.objects.filter(item => item.locationKey === location?.key) ?? [], [manifest, location?.key])
-  const actions = selectAdventureActions(store).filter(item => (
-    !playerIdentity?.participantKey || item.action.interaction?.participantKey !== playerIdentity.participantKey
-  ))
+  const actions = selectAdventureActions(store)
   const availableActions = actions.filter(item => item.available)
+  const commandSuggestions = availableActions.filter(item => item.action.narrativeChoiceKey == null).slice(0, 8)
   const narrativeActionByChoice = new globalThis.Map(actions
     .filter(item => item.action.narrativeChoiceKey)
     .map(item => [item.action.narrativeChoiceKey!, item]))
@@ -238,9 +247,12 @@ export default function AdventureGamePlayer(props: {
     .map(item => item.action.interaction!.participantKey)), [actions, location?.key])
   const currentProfiles = useMemo(() => {
     const profiles = manifest?.interaction.profiles ?? []
-    const nonPlayers = profiles.filter(profile => profile.participantKey !== playerIdentity?.participantKey)
-    const present = nonPlayers.filter(profile => currentParticipantKeys.has(profile.participantKey))
-    return present.length ? present : nonPlayers
+    return profiles.filter(profile => (
+      currentParticipantKeys.has(profile.participantKey)
+      && profile.participantKey !== playerIdentity?.participantKey
+      && !profile.characterKey.startsWith('generated:')
+      && !/^产品角色\s*\d+$/u.test(profile.name.trim())
+    ))
   }, [currentParticipantKeys, manifest?.interaction.profiles, playerIdentity?.participantKey])
   const transcript = useMemo(() => manifest && adventure
     ? projectAdventureTranscript(manifest, adventure.actionHistory, store.events)
@@ -388,7 +400,7 @@ export default function AdventureGamePlayer(props: {
     setCommandHistory(current => [...current.filter(item => item !== value), value].slice(-30))
     setHistoryCursor(-1)
     setCommandText('')
-    const parsed = parseAdventurePlayerCommand(value, actions)
+    const parsed = parseAdventurePlayerCommand(value, /^\d+$/.test(value) ? commandSuggestions : actions)
     if (parsed.kind === 'system') {
       setConsoleResponse({ command: value, text: systemResponse(parsed.command) })
       return
@@ -561,7 +573,7 @@ export default function AdventureGamePlayer(props: {
 
         {!store.runtimeState.narrative?.completed && <section className={`adventure-command-center${narrativeReading ? ' is-reading' : ''}`} aria-label="冒险指令台" aria-busy={narrativeReading}>
           <header><div><small>{narrativeReading ? '故事正在继续…' : '你要做什么？'}</small><p>{narrativeReading ? '读完当前行动结果后，下一轮指令会重新开放。' : '输入自然语言命令，或选择当前可执行的文字指令。'}</p></div><span>{narrativeReading ? '正在逐句呈现' : aiReady ? '自由表达已连接主 Agent' : '离线确定性模式'}</span></header>
-          <div className="adventure-command-suggestions">{availableActions.slice(0, 8).map((item, index) => <button key={item.action.key} disabled={store.busy || generating || narrativeReading} title={item.action.description} onClick={() => void executeAction(item.action.key)}><kbd>{index + 1}</kbd>{item.action.label}</button>)}</div>
+          <div className="adventure-command-suggestions">{commandSuggestions.map((item, index) => <button key={item.action.key} disabled={store.busy || generating || narrativeReading} title={item.action.description} onClick={() => void executeAction(item.action.key)}><kbd>{index + 1}</kbd>{item.action.label}</button>)}</div>
           <form onSubmit={(event) => void submitCommand(event)}>
             <span>&gt;</span>
             <input aria-label="输入冒险指令" value={commandText} onChange={event => setCommandText(event.target.value)} onKeyDown={navigateCommandHistory} disabled={store.busy || generating || narrativeReading} autoComplete="off" placeholder={narrativeReading ? '请先读完当前行动结果' : `例如：观察${location.title}，或输入“帮助”`} />

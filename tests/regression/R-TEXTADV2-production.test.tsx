@@ -5,6 +5,7 @@ import TextAdventureProductionWizard, {
   createDefaultTextAdventureProductionWizardValueV1,
 } from '../../src/components/text-game/TextAdventureProductionWizard'
 import {
+  parseTextAdventureQuestBundleArtifactV1,
   parseTextAdventureQualityReviewArtifactV1,
   parseTextAdventureSystemsArtifactV1,
 } from '../../src/lib/adventure/production-artifacts'
@@ -178,6 +179,27 @@ describe('R-TEXTADV2-production · 文字冒险正式生产契约与工作台', 
     })).toEqual([
       'choice.001 提到「坍塌工坊」但目标节点位于「北港渔村」',
     ])
+  })
+
+  it('拒绝把一个地点的支线行动错误地显示在另一个地点', () => {
+    const bundle = {
+      schema: 'storyforge.text-adventure-quest-bundle-artifact', version: 1,
+      bundleKind: 'side', entries: [{
+        key: 'repair-lamp', title: '修好引航灯', description: '在旧仓街修好受潮的灯芯。',
+        hook: '旧仓街的船工正在等待帮助。', objective: '修好引航灯', locationOrdinal: 2,
+        abilityKey: 'ability.craft', difficulty: 10,
+        successText: '灯重新亮起。', costlySuccessText: '灯亮了，但耗掉了备用燃料。',
+        failureText: '灯仍未亮，但船工指出了另一条路。', rewardExperience: 5,
+        rewardCurrency: 1, timeCostMinutes: 10,
+      }],
+    }
+    expect(parseTextAdventureQuestBundleArtifactV1(
+      bundle, 'side', 1, ['潮门广场', '旧仓街'],
+    ).entries[0].locationOrdinal).toBe(2)
+    expect(() => parseTextAdventureQuestBundleArtifactV1(
+      { ...bundle, entries: [{ ...bundle.entries[0], locationOrdinal: 1 }] },
+      'side', 1, ['潮门广场', '旧仓街'],
+    )).toThrow(/地点锚点无效.*绑定「潮门广场」却把行动写在「旧仓街」/)
   })
 
   it('向非技术作者渐进展示空间、任务、系统和边界确认', async () => {

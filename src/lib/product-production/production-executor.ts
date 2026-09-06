@@ -933,14 +933,20 @@ function textSystem(
     const side = taskKey === 'content.adventure-side-quests'
     const kind = side ? 'side' : 'ambient'
     const count = side ? adventure.narrative.targetSideQuestCount : adventure.narrative.targetAmbientEventCount
+    const locationIndex = textAdventureLocationTitles.map((title, index) => ({
+      locationOrdinal: index + 1, locationTitle: title,
+    }))
     return `${common}\n你是文字冒险${side ? '支线任务' : '区域与随机事件'}负责人。每个条目都必须独立有钩子、目标、成功/代价成功/失败推进文本，并复用上游 systems Artifact 已登记的 abilityKey。` +
       `输出字段必须精确为：{"schema":"storyforge.text-adventure-quest-bundle-artifact","version":1,"bundleKind":"${kind}","entries":[{"key":"stable-key","title":"...","description":"...","hook":"...","objective":"...","locationOrdinal":1,"abilityKey":"ability.some-key","difficulty":10,"successText":"...","costlySuccessText":"...","failureText":"...","rewardExperience":5,"rewardCurrency":1,"timeCostMinutes":10}]}。` +
-      `entries 至少 ${count} 个；每项必须恰好包含示例中的 14 个字段，尤其不得省略 rewardExperience、rewardCurrency、timeCostMinutes；locationOrdinal 必须在 1–${adventure.narrative.targetLocationCount}；不得把题材专用机制写成字段。${adventure.narrative.failForward ? '失败文本和效果必须开启新局面，而不是死路。' : ''}`
+      `地点编号与标题的唯一映射=${JSON.stringify(locationIndex)}。entries 至少 ${count} 个；每项必须恰好包含示例中的 14 个字段，尤其不得省略 rewardExperience、rewardCurrency、timeCostMinutes；locationOrdinal 必须在 1–${textAdventureLocationTitles.length || adventure.narrative.targetLocationCount}。` +
+      '每项的 title、description、hook、objective 至少一处必须逐字写出所绑定的 locationTitle，并且不得把另一个登记地点写成该行动的发生地；当前单条任务只编译为一个地点的一次行动，不得伪装成尚未实现的跨地点多阶段任务。' +
+      `不得把题材专用机制写成字段。${adventure.narrative.failForward ? '失败文本和效果必须开启新局面，而不是死路。' : ''}`
   }
   if (taskKey === 'content.adventure-quality-review') {
     if (!adventure) return `${common}\n缺少文字冒险专用 Brief，停止。`
     return `${common}\n你是独立于内容生产者的文字冒险叙事质量审查负责人。只能依据登记的架构、主线、系统、支线和区域事件 Artifact 审查，不得擅自改写内容或虚构已通过证据。` +
       '分别以 1–5 的整数评价因果连续性、玩家能动性、路线差异、节奏、铺垫回收、人物动机和情绪触达；任何一项低于 3，或存在会破坏完整游戏体验的问题，必须登记 blocking。必须逐条列出主线 choice 的 sourceNodeKey、选择文案、targetNodeKey 与目标节点开场内容并交叉核对；选择表达的立即行动、目标地点或决定与目标节点不一致时必须登记 blocking，不能只检查图可达性。' +
+      `还必须按地点清单 ${JSON.stringify(textAdventureLocationTitles)} 核对每个支线和区域事件的 locationOrdinal 与玩家可见钩子/目标；发生地错位、无法在绑定地点成立的行动、暴露“产品角色 1”一类占位身份，均必须登记 blocking。` +
       '输出字段必须精确为：{"schema":"storyforge.text-adventure-quality-review-artifact","version":1,"scores":{"causality":4,"playerAgency":4,"routeDifferentiation":4,"pacing":4,"setupPayoff":4,"characterMotivation":4,"emotionalImpact":4},"issues":[{"severity":"warning|blocking","artifactKey":"content.adventure-architecture|content.narrative|content.product-module|content.adventure-side-quests|content.adventure-ambient-events","detail":"...","recommendation":"..."}],"passed":true}。' +
       `审查时必须对照目标 ${brief.scale.targetPlayMinutes} 分钟、约 ${brief.scale.targetWordCount} 个中文内容单位、${adventure.narrative.targetSceneCount} 个场景、${adventure.narrative.targetEndingCount} 个结局，并核查失败是否产生代价或新局面。passed 只能在没有 blocking 且七项分数都不低于 3 时为 true。`
   }
@@ -1011,10 +1017,14 @@ async function executeModelTask(input: ProductProductionTaskExecutionInputV1, op
   const binding = input.capabilityBindings.find(item => item.requirementKey === requirementKey)
   if (!requirementKey || !binding) fail(`${input.task.taskKey} 缺少已冻结文本 capability binding`)
   const startedAt = performance.now()
-  const textAdventureLocationTitles = input.task.taskKey === 'content.narrative' && options.brief.textAdventure
+  const usesTextAdventureArchitecture = options.brief.textAdventure && [
+    'content.narrative', 'content.adventure-side-quests', 'content.adventure-ambient-events',
+    'content.adventure-quality-review',
+  ].includes(input.task.taskKey)
+  const textAdventureLocationTitles = usesTextAdventureArchitecture
     ? textAdventureLocationTitlesFromArchitectureV1(parseTextAdventureArchitectureArtifactV1(
         artifactPayload(input, 'content.adventure-architecture'),
-        options.brief.textAdventure,
+        options.brief.textAdventure!,
       ))
     : []
   const system = textSystem(input.task.taskKey, options.brief, input.attempt, textAdventureLocationTitles)
@@ -1064,6 +1074,7 @@ async function executeModelTask(input: ProductProductionTaskExecutionInputV1, op
       side
         ? options.brief.textAdventure.narrative.targetSideQuestCount
         : options.brief.textAdventure.narrative.targetAmbientEventCount,
+      textAdventureLocationTitles,
     )
     kind = 'narrative'; quality = {
       questBundleVerified: true,
@@ -1535,10 +1546,12 @@ async function executeIntegrationTask(input: ProductProductionTaskExecutionInput
           sideQuests: parseTextAdventureQuestBundleArtifactV1(
             artifactPayload(input, 'content.adventure-side-quests'), 'side',
             options.brief.textAdventure.narrative.targetSideQuestCount,
+            textAdventureLocationTitlesFromArchitectureV1(textAdventureArchitecture),
           ),
           ambientEvents: parseTextAdventureQuestBundleArtifactV1(
             artifactPayload(input, 'content.adventure-ambient-events'), 'ambient',
             options.brief.textAdventure.narrative.targetAmbientEventCount,
+            textAdventureLocationTitlesFromArchitectureV1(textAdventureArchitecture),
           ),
         }
       })()

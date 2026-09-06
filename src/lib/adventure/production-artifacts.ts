@@ -327,6 +327,40 @@ export interface TextAdventureQualityReviewArtifactV1 {
   passed: boolean
 }
 
+/**
+ * A V1 quest bundle compiles every entry into one action at one location. Keep
+ * the player-facing hook aligned with that deterministic location instead of
+ * allowing prose about one place to surface as an action somewhere else.
+ */
+export function validateTextAdventureQuestBundleLocationAnchorsV1(
+  bundle: TextAdventureQuestBundleArtifactV1,
+  locationTitles: readonly string[],
+): string[] {
+  if (!locationTitles.length) return ['地点清单为空，无法核验任务发生地']
+  const issues: string[] = []
+  bundle.entries.forEach((entry, index) => {
+    const assignedTitle = locationTitles[entry.locationOrdinal - 1]
+    if (!assignedTitle) {
+      issues.push(`${bundle.bundleKind}[${index}] locationOrdinal=${entry.locationOrdinal} 超出地点清单上限 ${locationTitles.length}`)
+      return
+    }
+    const actionSurface = [entry.title, entry.description, entry.hook, entry.objective].join('\n')
+    if (!actionSurface.includes(assignedTitle)) {
+      issues.push(`${bundle.bundleKind}[${index}] 未在标题、描述、钩子或目标中明确发生地「${assignedTitle}」`)
+    }
+    const conflictingTitles = locationTitles.filter((title, titleIndex) => (
+      titleIndex !== entry.locationOrdinal - 1
+      && title !== assignedTitle
+      && !assignedTitle.includes(title)
+      && actionSurface.includes(title)
+    ))
+    if (conflictingTitles.length) {
+      issues.push(`${bundle.bundleKind}[${index}] 绑定「${assignedTitle}」却把行动写在「${[...new Set(conflictingTitles)].join('、')}」`)
+    }
+  })
+  return issues
+}
+
 export function parseTextAdventureQualityReviewArtifactV1(
   value: unknown,
 ): TextAdventureQualityReviewArtifactV1 {
@@ -372,6 +406,7 @@ export function parseTextAdventureQuestBundleArtifactV1(
   value: unknown,
   expectedKind: TextAdventureQuestBundleArtifactV1['bundleKind'],
   expectedCount: number,
+  locationTitles: readonly string[] = [],
 ): TextAdventureQuestBundleArtifactV1 {
   const row = record(value, `${expectedKind}Bundle`)
   exactKeys(row, ['schema', 'version', 'bundleKind', 'entries'], `${expectedKind}Bundle`)
@@ -403,5 +438,12 @@ export function parseTextAdventureQuestBundleArtifactV1(
     }
   })
   if (new Set(entries.map(item => item.key)).size !== entries.length) fail(`${expectedKind}Bundle key 重复`)
-  return { schema: 'storyforge.text-adventure-quest-bundle-artifact', version: 1, bundleKind: expectedKind, entries }
+  const result: TextAdventureQuestBundleArtifactV1 = {
+    schema: 'storyforge.text-adventure-quest-bundle-artifact', version: 1, bundleKind: expectedKind, entries,
+  }
+  if (locationTitles.length) {
+    const locationIssues = validateTextAdventureQuestBundleLocationAnchorsV1(result, locationTitles)
+    if (locationIssues.length) fail(`${expectedKind}Bundle 地点锚点无效:${locationIssues.join('；')}`)
+  }
+  return result
 }
