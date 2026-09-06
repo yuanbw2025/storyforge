@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../../src/lib/db/schema'
+import { TEXT_ADVENTURE_PRODUCTION_AGENT_IDS } from '../../src/lib/agent/skill-registry'
 import { prepareProductProductionAdoption } from '../../src/lib/product-production/adoption'
 import { executeProductProductionCommand } from '../../src/lib/product-production/commands'
 import { draftProductProductionBriefV3, suggestProductStartingPoints } from '../../src/lib/product-production/consultation'
@@ -233,6 +234,62 @@ function playtestStrategyOutput() {
   }
 }
 
+function productionSupervisionOutput() {
+  const agents = [...TEXT_ADVENTURE_PRODUCTION_AGENT_IDS]
+  const assignments = [
+    agents.slice(0, 3),
+    agents.slice(3, 8),
+    agents.slice(8, 14),
+    agents.slice(14, 16),
+    agents.slice(16, 17),
+    agents.slice(17),
+  ]
+  const stageKeys = [
+    'g1-source-and-direction',
+    'g2-architecture-and-quests',
+    'g3-scripts-and-dialogue',
+    'g4-quality-and-media',
+    'g5-assembly-and-automation',
+    'g6-human-validation-and-release',
+  ] as const
+  return {
+    schema: 'storyforge.text-adventure-production-supervision-artifact' as const,
+    version: 1 as const,
+    productionPromise: '以冻结来源、专业分工、确定性状态权威和可验证质量门交付完整文字冒险。',
+    stages: stageKeys.map((key, index) => ({
+      key,
+      objective: `完成 G${index + 1} 的专业工件并冻结可验证交接。`,
+      responsibleAgentIds: assignments[index],
+      exitCriteria: [`G${index + 1} 所有必需工件有 accepted receipt`],
+      stopConditions: [`G${index + 1} 任一协议或质量硬门失败时暂停`],
+    })),
+    risks: [{
+      key: 'risk.source-gap', severity: 'blocking' as const,
+      ownerAgentId: 'text-adventure-source-editor', evidence: '来源可能不足以支撑目标时长。',
+      mitigation: '先审计来源并通过作者闸门冻结私域补充。',
+    }, {
+      key: 'risk-content-shortage', severity: 'blocking' as const,
+      ownerAgentId: 'text-adventure-scene-writer', evidence: '场景正文可能低于商业候选硬门。',
+      mitigation: '按幕预算、内容量检查和有界修复闭环处理。',
+    }, {
+      key: 'risk-route-causality', severity: 'warning' as const,
+      ownerAgentId: 'text-adventure-continuity-editor', evidence: '分支可能汇流后失去持续回响。',
+      mitigation: '审查决定、状态效果、后续回响和结局条件。',
+    }],
+    authorGates: [{
+      key: 'gate.source-scope', afterStageKey: 'g1-source-and-direction' as const,
+      decision: '确认来源范围和产品私域补充。',
+    }, {
+      key: 'gate.visual-anchors', afterStageKey: 'g4-quality-and-media' as const,
+      decision: '确认主要角色视觉锚点和媒资清单。',
+    }, {
+      key: 'gate.release', afterStageKey: 'g6-human-validation-and-release' as const,
+      decision: '完成真人试玩后由作者确认发布。',
+    }],
+    nonGoals: ['不写回 WorldRelease', '不实现 AVG 连续舞台演出', '不把专用调查机制放入通用内核'],
+  }
+}
+
 function modelOutputs(
   worldHash: string,
   productType: ProductionProductKindV1 = 'avg',
@@ -240,6 +297,7 @@ function modelOutputs(
   playerRole = '扮演冻结 Brief 主角',
 ) {
   return {
+    'production.supervision': productionSupervisionOutput(),
     'content.design': {
       schema: 'storyforge.product-design-artifact', version: 1, title: '雾港抉择',
       logline: '玩家必须在潮汐封锁前选择真相或庇护。', playerGoal: '调查港口信号并决定公开何种事实。',
@@ -1792,7 +1850,7 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
       capabilityBindings,
     })
     expect(first).toMatchObject({ terminal: false, buildStatus: 'recovery-required' })
-    expect(taskCalls).toEqual(['content.source-sufficiency'])
+    expect(taskCalls).toEqual(['production.supervision', 'content.source-sufficiency'])
     const blockedBuild = (await db.productBuilds.get(first.buildId))!
     expect(JSON.parse(blockedBuild.failureJson)).toMatchObject({
       taskKey: 'source.author-gate', detail: expect.stringContaining('作者明确接受'),
@@ -2316,7 +2374,7 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     })
     expect(repaired).toMatchObject({ terminal: true, buildStatus: 'release-ready' })
     const expectedCalls = new Map([
-      ['content.source-sufficiency', 1], ['content.design', 1], ['content.story-bible', 1],
+      ['production.supervision', 1], ['content.source-sufficiency', 1], ['content.design', 1], ['content.story-bible', 1],
       ['content.cast-bible', 1], ['content.adventure-architecture', 1],
       ['content.narrative-arc-plan', 1], ['content.main-quest-plan', 1],
       ['content.scene-script.act-1', 4], ['content.scene-script.act-2', 2], ['content.scene-script.act-3', 2],

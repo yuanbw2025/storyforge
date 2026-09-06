@@ -1,6 +1,6 @@
 # 13 · 首款旗舰游戏生产、实测与展示方案
 
-> 层级：L2 · 版本：1.0.0 · 生效：2026-09-07  
+> 层级：L2 · 版本：1.1.0 · 生效：2026-09-07
 > 性质：从来源世界到社区候选的首次真实生产执行合同；不得以夹具、伪造回执或人工拼包替代。
 
 ## 1. 目标与边界
@@ -47,30 +47,32 @@
 6. 可用于任务和物品的至少六个世界实体；
 7. 世界 Constitution、来源版本、内容哈希和冻结时间。
 
-`Source Sufficiency Analyst` 必须对实际 `describe/search/read` 结果判定充分性。若不足，只能暂停等待来源补全，或由作者显式接受产品私域补充候选；不得让下游 Agent 在没有证据时自行发明权威世界事实。
+`text-adventure-source-editor` 必须对实际 `describe/search/read` 结果判定充分性。若不足，只能暂停等待来源补全，或由作者显式接受产品私域补充候选；不得让下游 Agent 在没有证据时自行发明权威世界事实。
 
 ## 4. 专业团队实际生产顺序
 
 每个岗位只运行登记的单一核心 Skill，模型调用分别留存 Run Contract、输入 manifest、候选、验证和 receipt。
 
-1. **Production Director**：建立生产、冻结 Brief、预算、人工闸门和 DAG，不写具体故事。
-2. **Source Sufficiency Analyst**：核对 WorldRelease 覆盖与风险，形成来源决定。
-3. **Adaptation Director**：把世界材料裁成有限战役，确定玩家承诺和改编边界。
-4. **Game Director**：确定核心循环、信息反馈、属性/资源/背包/任务如何共同服务体验。
-5. **Story Architect**：产出三幕叙事骨架、主要转折、汇流点、结局条件和情感曲线。
-6. **Character Director**：冻结角色动机、声音、关系变化和知识边界。
-7. **Main Quest Designer**：把叙事骨架拆成主线阶段、目标、条件、替代行动和失败推进。
-8. **Side Quest Designer**：分别制作支线，必须回响主线主题但不阻断通关。
-9. **Regional Event Designer**：制作地点相关 storylet 和区域事件，不把随机事件伪装成主线。
-10. **Quest Script Designer**：把任务设计编译为场景入口、行动、状态效果、反馈和任务日志。
-11. **Scene Writer**：按幕分批写作可见场景正文，不能重写已冻结结构。
-12. **Dialogue Editor**：独立审校每个对白 beat 和 choice，保证人物声音、潜台词和玩家意图清楚。
-13. **Continuity Editor**：审查因果、知识、时间、物品、状态、铺垫回收和重复，阻塞问题必须修复。
-14. **Visual Director**：独立建立视觉圣经、角色锚点和完整素材清单。
-15. **Media Producer**：逐项生成或接收上传素材，记录 provider、权利、hash、失败与降级。
-16. **Visual QA Director**：独立多模态检查需求匹配、角色一致性、构图、文本安全和运行适配，不得与 Media Producer 合并。
-17. **Quality Director**：运行结构、内容量、复制/占位、路线、状态与媒资硬门。
-18. **Playtest Director**：基于冻结包制定并执行黄金、替代、失败、恢复、离线和生命周期路线，不修改游戏内容。
+1. **`text-adventure-showrunner` / 制作主管**：产出 `production.supervision`，冻结六阶段目标、18 岗位分配、退出证据、停机条件、风险和作者闸门；不写具体故事，也不代替确定性 Scheduler。
+2. **`text-adventure-source-editor` / 来源与改编编辑**：核对 WorldRelease 覆盖与风险，形成来源审计；产品私域补充必须经过作者闸门。
+3. **`text-adventure-creative-director` / 创意总监**：把来源裁成有限战役，冻结玩家承诺、核心循环、基调和跨部门不变量。
+4. **`text-adventure-story-architect` / 故事架构师**：冻结主题、中心冲突、铺垫回收和结局候选。
+5. **`text-adventure-cast-director` / 角色总监**：冻结玩家与 NPC 的动机、声音、关系变化、知识边界和视觉锚点。
+6. **`text-adventure-space-designer` / 空间设计师**：建立大区、区域、地点、场景空间锚点与移动层级。
+7. **`text-adventure-game-designer` / 通用玩法系统设计师**：确定属性、技能、资源、背包、装备、关系、时间和检查语义。
+8. **`text-adventure-narrative-designer` / 叙事设计师**：把故事、角色、空间和系统拆成三幕、场景卡、持久决定与后续回响。
+9. **`text-adventure-main-quest-designer` / 主线任务设计师**：把叙事弧拆成阶段、目标、条件、替代行动和失败推进。
+10. **`text-adventure-side-quest-designer` / 支线任务设计师**：制作映照主线且有独立人物诉求的支线，不阻断主线通关。
+11. **`text-adventure-storylet-designer` / 区域事件设计师**：制作有地点、条件、时效和状态回响的 storylet。
+12. **`text-adventure-quest-scripter` / 任务脚本工程师**：把主支线和事件设计编译为受控条件、检查、时间成本和结算文本候选。
+13. **`text-adventure-scene-writer` / 分场叙事作者**：按三幕启动同 Skill 的三个有界 Run，写玩家可见正文、对白和选择措辞，不能重写冻结结构。
+14. **`text-adventure-dialogue-editor` / 独立对白编辑**：按幕逐条审校对白与选择，保证人物声音、潜台词、知识边界和玩家意图清楚。
+15. **`text-adventure-continuity-editor` / 连续性与内容审校**：审查因果、知识、时间、物品、状态、铺垫回收、重复和情绪触达；只提交问题，不改原工件。
+16. **`text-adventure-art-director` / 美术总监**：建立媒资需求候选；确定性编译器再与角色/空间锚点闭合为视觉圣经。
+17. **`text-adventure-visual-qa-director` / 独立视觉质检总监**：检查实际图片的需求匹配、身份一致、风格、构图和技术质量，不改图、不发布。
+18. **`text-adventure-playtest-director` / 试玩与发布验证**：基于冻结包生成黄金、替代、失败、恢复、离线和生命周期试玩矩阵，不修改游戏内容。
+
+图片生成或上传由登记的 Provider Adapter / author-import 执行，不伪装成第十九个内容 Agent；结构门、运行状态、自动游玩、装配、调度、暂停和发布判定由确定性系统执行，也不冒充模型岗位。注册表岗位、计划任务、实际 Run 和本清单必须一一对应。
 
 上游工件变化只让依赖图中的下游变 stale；返工必须形成新 revision，禁止原地覆盖已经验收的 Build 或媒资。
 

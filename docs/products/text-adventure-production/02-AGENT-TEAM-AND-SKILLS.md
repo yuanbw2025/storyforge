@@ -1,6 +1,6 @@
 # 02 · 专业 Agent 团队与岗位 Skill 方案
 
-> 层级：L2 · 版本：1.2.0 · 生效：2026-09-07
+> 层级：L2 · 版本：1.3.0 · 生效：2026-09-07
 > 性质：目标 Agent/Skill/Run Contract 设计；代码注册、执行回执和测试同时存在后才算实现。
 
 ## 1. 核心裁决
@@ -13,7 +13,7 @@ Agent 是有稳定职责、权限、上下文边界和最终责任的岗位主�
 
 | Agent ID | 岗位 | 核心 Skill | 读取 | 产出与责任 |
 |---|---|---|---|---|
-| `text-adventure-showrunner` | 制作主管 | `production-supervision.v1` | Brief、计划、所有工件状态与质量回执摘要 | 冻结计划、调度、暂停、风险与作者闸门；不代写专业工件 |
+| `text-adventure-showrunner` | 制作主管 | `production-supervision.v1` | Brief、固定六阶段和已登记岗位清单 | `production.supervision`；冻结阶段目标、退出证据、停机条件、风险 owner 和作者闸门，不代写专业工件 |
 | `text-adventure-creative-director` | 创意总监 | `creative-direction.v1` | Brief、来源审计 | `design.game`；冻结玩家幻想、核心循环、基调和跨部门不变量 |
 | `text-adventure-source-editor` | 来源与改编编辑 | `source-sufficiency.v1` | 冻结 SourcePlan、Context Manifest、WorldRelease 资源 | `source.sufficiency`、`adaptation.brief`；不得把产品补充写回世界 |
 | `text-adventure-story-architect` | 故事架构师 | `story-bible.v1` | Brief、来源审计、产品方向 | `story.bible`；负责主题、冲突、铺垫回收和结局候选 |
@@ -32,11 +32,13 @@ Agent 是有稳定职责、权限、上下文边界和最终责任的岗位主�
 | `text-adventure-continuity-editor` | 连续性与内容审校 | `continuity-and-literary-review.v1` | 所有定稿候选和确定性投影 | `quality.continuity`、有证据的问题清单；不能修改原工件或自报通过 |
 | `text-adventure-playtest-director` | 试玩与发布验证 | `playtest-strategy.v1` | RuntimePackage、静态报告、自动游玩证据 | 路线矩阵、真人试玩清单、推荐候选意见；正式状态仍由确定性系统执行 |
 
-同一个 `text-adventure-scene-writer` 可以按 Act/场景启动多个独立 Run，因为它们属于同一核心 Skill 的同类工作；每个 Run 仍有单独输入、预算、checkpoint 和 receipt。这不同于让一个 Agent 兼任多个生产步骤。当前登记的 18 个岗位各自只有一个核心 Skill；测试会拒绝任何岗位出现第二个 Skill。
+同一个 `text-adventure-scene-writer` 可以按 Act/场景启动多个独立 Run，因为它们属于同一核心 Skill 的同类工作；每个 Run 仍有单独输入、预算、checkpoint 和 receipt。这不同于让一个 Agent 兼任多个生产步骤。当前登记的 18 个岗位各自只有一个核心 Skill；计划回归会进一步验证 18 个岗位全部真实出现在模型任务中，而不只验证“注册过”。
+
+`production.supervision` 现在是专业 DAG 的第一个真实模型任务，不再是纸面 Skill。其严格 parser 要求固定 G1–G6 顺序、18 个已登记 Agent 不重不漏且每个只分配一次、至少三项风险、三项作者闸门和三项非目标。来源审计必须读取这份监督工件；内容质量审查和最终装配也把它纳入输入与发布证据。纯运行包演化可携带该工件，来源或内容变化会使它与下游闭包一起重新生产。
 
 ## 3. 权限矩阵
 
-- Showrunner 可创建已登记任务、读取状态与提交暂停/恢复/重跑候选；不能绕过计划新增模型调用，也不能把工件直接标为通过。
+- Showrunner 只能产出阶段监督候选；任务创建、依赖、预算、调度、暂停和恢复由冻结 Plan 与确定性 Scheduler 执行。Showrunner 不能动态追加调用、改变依赖或把任何工件标为通过。
 - 专业 Agent 只读登记上下文和上游已采纳工件，只能写自己的候选 Artifact key。
 - Quest Scripter 只能生成已注册通用状态与命令的候选；确定性编译器负责拒绝未登记字段和执行语义。
 - Scene Writer 和 Dialogue Editor 可写表达文本，不能直接改变正式条件、资源、任务阶段或结局规则。

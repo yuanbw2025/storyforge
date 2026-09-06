@@ -135,6 +135,7 @@ export function canRetryProductProductionBlockerV1(details: ProductProductionDet
 }
 
 const AUTHOR_REVIEW_ARTIFACT_KEYS = new Set([
+  'production.supervision',
   'design.game',
   'content.source-sufficiency',
   'content.source-decision',

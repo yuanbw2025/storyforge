@@ -76,6 +76,135 @@ export const TEXT_ADVENTURE_SOURCE_DOMAINS_V1 = [
 ] as const
 export type TextAdventureSourceDomainV1 = typeof TEXT_ADVENTURE_SOURCE_DOMAINS_V1[number]
 
+export const TEXT_ADVENTURE_SUPERVISION_STAGE_KEYS_V1 = [
+  'g1-source-and-direction',
+  'g2-architecture-and-quests',
+  'g3-scripts-and-dialogue',
+  'g4-quality-and-media',
+  'g5-assembly-and-automation',
+  'g6-human-validation-and-release',
+] as const
+
+export interface TextAdventureProductionSupervisionArtifactV1 {
+  schema: 'storyforge.text-adventure-production-supervision-artifact'
+  version: 1
+  productionPromise: string
+  stages: Array<{
+    key: typeof TEXT_ADVENTURE_SUPERVISION_STAGE_KEYS_V1[number]
+    objective: string
+    responsibleAgentIds: string[]
+    exitCriteria: string[]
+    stopConditions: string[]
+  }>
+  risks: Array<{
+    key: string
+    severity: 'warning' | 'blocking'
+    ownerAgentId: string
+    evidence: string
+    mitigation: string
+  }>
+  authorGates: Array<{
+    key: string
+    afterStageKey: typeof TEXT_ADVENTURE_SUPERVISION_STAGE_KEYS_V1[number]
+    decision: string
+  }>
+  nonGoals: string[]
+}
+
+export function parseTextAdventureProductionSupervisionArtifactV1(input: {
+  value: unknown
+  allowedAgentIds: readonly string[]
+}): TextAdventureProductionSupervisionArtifactV1 {
+  const row = record(input.value, 'productionSupervision')
+  exactKeys(row, [
+    'schema', 'version', 'productionPromise', 'stages', 'risks', 'authorGates', 'nonGoals',
+  ], 'productionSupervision')
+  if (row.schema !== 'storyforge.text-adventure-production-supervision-artifact' || row.version !== 1) {
+    fail('productionSupervision schema/version 无效')
+  }
+  const allowedAgents = new Set(input.allowedAgentIds)
+  const stages = array(
+    row.stages,
+    'productionSupervision.stages',
+    TEXT_ADVENTURE_SUPERVISION_STAGE_KEYS_V1.length,
+    TEXT_ADVENTURE_SUPERVISION_STAGE_KEYS_V1.length,
+  ).map((value, index) => {
+    const item = record(value, `productionSupervision.stages[${index}]`)
+    exactKeys(item, [
+      'key', 'objective', 'responsibleAgentIds', 'exitCriteria', 'stopConditions',
+    ], `productionSupervision.stages[${index}]`)
+    const stageKey = enumValue(
+      item.key,
+      TEXT_ADVENTURE_SUPERVISION_STAGE_KEYS_V1,
+      `productionSupervision.stages[${index}].key`,
+    )
+    if (stageKey !== TEXT_ADVENTURE_SUPERVISION_STAGE_KEYS_V1[index]) {
+      fail('productionSupervision.stages 必须按 G1-G6 固定顺序')
+    }
+    const responsibleAgentIds = keyArray(
+      item.responsibleAgentIds,
+      `productionSupervision.stages[${index}].responsibleAgentIds`,
+      1,
+      input.allowedAgentIds.length,
+    )
+    if (responsibleAgentIds.some(agentId => !allowedAgents.has(agentId))) {
+      fail(`productionSupervision.stages[${index}] 引用未登记 Agent`)
+    }
+    return {
+      key: stageKey,
+      objective: text(item.objective, `productionSupervision.stages[${index}].objective`, 2_000),
+      responsibleAgentIds,
+      exitCriteria: textArray(item.exitCriteria, `productionSupervision.stages[${index}].exitCriteria`, 1, 12),
+      stopConditions: textArray(item.stopConditions, `productionSupervision.stages[${index}].stopConditions`, 1, 12),
+    }
+  })
+  const assignedAgents = stages.flatMap(stage => stage.responsibleAgentIds)
+  if (assignedAgents.length !== input.allowedAgentIds.length
+    || new Set(assignedAgents).size !== input.allowedAgentIds.length
+    || input.allowedAgentIds.some(agentId => !assignedAgents.includes(agentId))) {
+    fail('productionSupervision.stages 必须且只能覆盖全部专业 Agent 一次')
+  }
+  const risks = array(row.risks, 'productionSupervision.risks', 3, 20).map((value, index) => {
+    const item = record(value, `productionSupervision.risks[${index}]`)
+    exactKeys(item, ['key', 'severity', 'ownerAgentId', 'evidence', 'mitigation'], `productionSupervision.risks[${index}]`)
+    const ownerAgentId = key(item.ownerAgentId, `productionSupervision.risks[${index}].ownerAgentId`)
+    if (!allowedAgents.has(ownerAgentId)) fail(`productionSupervision.risks[${index}] 引用未登记 Agent`)
+    return {
+      key: key(item.key, `productionSupervision.risks[${index}].key`),
+      severity: enumValue(item.severity, ['warning', 'blocking'], `productionSupervision.risks[${index}].severity`),
+      ownerAgentId,
+      evidence: text(item.evidence, `productionSupervision.risks[${index}].evidence`, 2_000),
+      mitigation: text(item.mitigation, `productionSupervision.risks[${index}].mitigation`, 2_000),
+    }
+  })
+  if (new Set(risks.map(risk => risk.key)).size !== risks.length) fail('productionSupervision.risks key 重复')
+  const authorGates = array(row.authorGates, 'productionSupervision.authorGates', 3, 12).map((value, index) => {
+    const item = record(value, `productionSupervision.authorGates[${index}]`)
+    exactKeys(item, ['key', 'afterStageKey', 'decision'], `productionSupervision.authorGates[${index}]`)
+    return {
+      key: key(item.key, `productionSupervision.authorGates[${index}].key`),
+      afterStageKey: enumValue(
+        item.afterStageKey,
+        TEXT_ADVENTURE_SUPERVISION_STAGE_KEYS_V1,
+        `productionSupervision.authorGates[${index}].afterStageKey`,
+      ),
+      decision: text(item.decision, `productionSupervision.authorGates[${index}].decision`, 2_000),
+    }
+  })
+  if (new Set(authorGates.map(gate => gate.key)).size !== authorGates.length) {
+    fail('productionSupervision.authorGates key 重复')
+  }
+  return {
+    schema: 'storyforge.text-adventure-production-supervision-artifact',
+    version: 1,
+    productionPromise: text(row.productionPromise, 'productionSupervision.productionPromise', 2_000),
+    stages,
+    risks,
+    authorGates,
+    nonGoals: textArray(row.nonGoals, 'productionSupervision.nonGoals', 3, 20),
+  }
+}
+
 export interface TextAdventureSourceSufficiencyArtifactV1 {
   schema: 'storyforge.text-adventure-source-sufficiency-artifact'
   version: 1

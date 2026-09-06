@@ -14,6 +14,10 @@ import {
   validateTextAdventureNarrativeLocationPlanV1,
 } from '../../src/lib/adventure/narrative-location-plan'
 import { db } from '../../src/lib/db/schema'
+import {
+  getAgentSkillV1,
+  TEXT_ADVENTURE_PRODUCTION_AGENT_IDS,
+} from '../../src/lib/agent/skill-registry'
 import { draftProductProductionBriefV3, suggestProductStartingPoints } from '../../src/lib/product-production/consultation'
 import { hashProductProductionValueV2 } from '../../src/lib/product-production/hash'
 import { createProductProductionPlanV3 } from '../../src/lib/product-production/plan'
@@ -78,6 +82,7 @@ describe('R-TEXTADV2-production · 文字冒险正式生产契约与工作台', 
     const plan = await createProductProductionPlanV3({ buildNumber: 1, briefHash, brief })
     const taskByKey = new Map(plan.tasks.map(task => [task.taskKey, task]))
     expect([...taskByKey.keys()]).toEqual(expect.arrayContaining([
+      'production.supervision',
       'content.source-sufficiency', 'source.author-gate', 'content.design', 'content.story-bible', 'content.cast-bible',
       'content.adventure-architecture', 'content.product-module', 'content.narrative-arc-plan',
       'content.main-quest-plan', 'content.adventure-side-quests', 'content.adventure-ambient-events',
@@ -89,8 +94,14 @@ describe('R-TEXTADV2-production · 文字冒险正式生产契约与工作台', 
       'media.audit', 'media.visual-quality-review',
       'integration.package', 'qa.autoplay', 'qa.release', 'qa.playtest-strategy',
     ]))
+    expect(taskByKey.get('production.supervision')).toMatchObject({
+      skillId: 'text-adventure.production-supervision.v1', dependsOn: [],
+      inputArtifactKeys: [], outputArtifactKeys: ['production.supervision'],
+      acceptanceGateIds: ['artifact.protocol', 'adventure.production-supervision'],
+    })
     expect(taskByKey.get('content.source-sufficiency')).toMatchObject({
-      skillId: 'text-adventure.source-sufficiency.v1', dependsOn: [],
+      skillId: 'text-adventure.source-sufficiency.v1', dependsOn: ['production.supervision'],
+      inputArtifactKeys: ['production.supervision'],
       outputArtifactKeys: ['content.source-sufficiency'],
     })
     expect(taskByKey.get('source.author-gate')).toMatchObject({
@@ -100,8 +111,8 @@ describe('R-TEXTADV2-production · 文字冒险正式生产契约与工作台', 
       outputArtifactKeys: ['content.source-decision'],
     })
     expect(taskByKey.get('content.design')).toMatchObject({
-      dependsOn: ['source.author-gate'],
-      inputArtifactKeys: ['content.source-sufficiency', 'content.source-decision'],
+      dependsOn: ['source.author-gate', 'production.supervision'],
+      inputArtifactKeys: ['production.supervision', 'content.source-sufficiency', 'content.source-decision'],
     })
     expect(taskByKey.get('content.story-bible')?.dependsOn).toEqual([
       'source.author-gate', 'content.design',
@@ -148,6 +159,7 @@ describe('R-TEXTADV2-production · 文字冒险正式生产契约与工作台', 
     expect(taskByKey.get('content.adventure-quality-review')).toMatchObject({
       skillId: 'text-adventure.production-quality-review.v1',
       dependsOn: [
+        'production.supervision',
         'content.story-bible', 'content.cast-bible', 'content.adventure-architecture',
         'content.product-module', 'content.narrative-arc-plan', 'content.main-quest-plan',
         'content.adventure-side-quests', 'content.adventure-ambient-events', 'content.quest-script',
@@ -209,6 +221,12 @@ describe('R-TEXTADV2-production · 文字冒险正式生产契约与工作台', 
       inputArtifactKeys: ['runtime.package', 'quality.autoplay', 'quality.report'],
       outputArtifactKeys: ['quality.playtest-plan'],
     })
+    const activeAgentIds = new Set(plan.tasks.flatMap(task => {
+      if (!task.skillId) return []
+      const agentId = getAgentSkillV1(task.skillId).agentId
+      return TEXT_ADVENTURE_PRODUCTION_AGENT_IDS.includes(agentId as never) ? [agentId] : []
+    }))
+    expect(activeAgentIds).toEqual(new Set(TEXT_ADVENTURE_PRODUCTION_AGENT_IDS))
     expect(plan.terminalTaskKey).toBe('qa.playtest-strategy')
     expect(taskByKey.get('integration.package')?.inputArtifactKeys).toEqual(expect.arrayContaining([
       'content.story-bible', 'content.cast-bible', 'content.adventure-architecture',

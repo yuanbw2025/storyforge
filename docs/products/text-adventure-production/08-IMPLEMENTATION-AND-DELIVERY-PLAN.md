@@ -1,6 +1,6 @@
 # 08 · 实现、迁移与旗舰交付计划
 
-> 层级：L2 · 版本：1.7.0 · 生效：2026-09-07
+> 层级：L2 · 版本：1.8.0 · 生效：2026-09-07
 > 性质：当前施工顺序；每批必须留下代码、测试、文档和提交证据。
 
 ## 总原则
@@ -30,7 +30,7 @@
 
 ## 批次 C · Agent 身份、Skill 与工件合同
 
-状态：18 个独立 Agent 均只有一个核心 Skill；专业规划、分场、对白、连续性审校、Visual QA Director 和 Playtest Director 工件均有独立 parser/Run Contract/receipt。
+状态：18 个独立 Agent 均只有一个核心 Skill；计划测试验证 18 个岗位全部进入真实模型任务。Showrunner 的 `production.supervision`、专业规划、分场、对白、连续性审校、Visual QA Director 和 Playtest Director 工件均有独立 parser/Run Contract/receipt。
 
 - 扩展 Domain Agent Registry，登记专业 Agent、owner、UI 标签和最小权限。
 - 新增来源审计、故事/角色圣经、弧计划、主支线计划、任务脚本、场景、对白、连续性、美术与试玩策略的严格 schema/parser。
@@ -41,7 +41,7 @@
 
 ## 批次 D · 新 Durable DAG 与执行器
 
-状态：专业依赖拓扑、来源决策专用闸门、三幕有界 Scene Writer、三幕 Dialogue Editor、确定性装配、连续性审校、自动游玩、质量门和试玩策略已接通。工作台已区分来源可接受补充与阻断冲突，并保存作者命令证据；总任务与各泳道展示真实 receipt 进度，文字冒险媒资已经按单项 task 显示生成数。图片级锁定、替换和局部重跑已实现；通用文本工件 diff/锁定仍需后续批次评估。
+状态：`production.supervision` 已成为 DAG 首个真实任务，并被来源、质量和装配链消费；专业依赖拓扑、来源决策专用闸门、三幕有界 Scene Writer、三幕 Dialogue Editor、确定性装配、连续性审校、自动游玩、质量门和试玩策略已接通。工作台已区分来源可接受补充与阻断冲突，并保存作者命令证据；总任务与各泳道展示真实 receipt 进度，文字冒险媒资已经按单项 task 显示生成数。图片级锁定、替换和局部重跑已实现；通用文本工件 diff/锁定仍需后续批次评估。
 
 - 实现两段式计划和专业依赖拓扑；正文按 Act/场景包有界生成。
 - 构建每任务上下文投影、prompt、严格解析、candidate/adopt、checkpoint、stale 和最小修复闭包。

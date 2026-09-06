@@ -586,6 +586,7 @@ async function currentProductionBuild(scope: WorkspaceScope, productionId: numbe
 function evolutionTaskLane(taskKey: string): 'content' | 'product' | 'visual' | 'audio' | null {
   if (taskKey.startsWith('content.scene-script.act-')
     || taskKey.startsWith('content.dialogue-pass.act-')
+    || taskKey === 'production.supervision'
     || taskKey === 'content.source-sufficiency'
     || taskKey === 'content.design'
     || taskKey === 'content.story-bible'

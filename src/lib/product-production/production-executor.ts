@@ -47,6 +47,7 @@ import {
   type TextAdventureSystemsArtifactV1,
 } from '../adventure/production-artifacts'
 import {
+  parseTextAdventureProductionSupervisionArtifactV1,
   parseTextAdventureCastBibleArtifactV1,
   parseTextAdventureNarrativeArcPlanArtifactV1,
   parseTextAdventureMediaAnchorDecisionArtifactV1,
@@ -59,6 +60,7 @@ import {
   type TextAdventureCastBibleArtifactV1,
   type TextAdventureVisualBibleArtifactV1,
 } from '../adventure/production-artifacts-v2'
+import { TEXT_ADVENTURE_PRODUCTION_AGENT_IDS } from '../agent/skill-registry'
 import { bindTextAdventureNarrativeActionsV1 } from '../adventure/production-compiler'
 import {
   planTextAdventureNarrativeLocationsV1,
@@ -1157,6 +1159,10 @@ function textSystem(
     (attempt > 1
       ? `这是第 ${attempt} 次有界尝试；上一次候选未通过协议检查。请逐层核对每个对象的全部必填字段，不得省略空对象、空数组、空字符串、null 或数值字段。`
       : '')
+  if (taskKey === 'production.supervision') return `${common}\n你是文字冒险制作主管（Showrunner）。你不代写故事、角色、任务、场景、对白、规则或美术，只把冻结 Brief 转换为可审计的六阶段执行约束、风险登记和作者闸门。` +
+    'stages 必须严格按 G1 到 G6 输出；全部十八个专业 Agent 必须且只能被分配一次，不得把多个专业职责改挂到同一个 Agent。exitCriteria 必须是可观察证据，stopConditions 必须说明何时暂停，不得写空泛口号。' +
+    `登记 Agent=${JSON.stringify(TEXT_ADVENTURE_PRODUCTION_AGENT_IDS)}。` +
+    '输出字段必须精确为：{"schema":"storyforge.text-adventure-production-supervision-artifact","version":1,"productionPromise":"...","stages":[{"key":"g1-source-and-direction|g2-architecture-and-quests|g3-scripts-and-dialogue|g4-quality-and-media|g5-assembly-and-automation|g6-human-validation-and-release","objective":"...","responsibleAgentIds":["text-adventure-showrunner"],"exitCriteria":["..."],"stopConditions":["..."]}],"risks":[{"key":"risk.some-key","severity":"warning|blocking","ownerAgentId":"text-adventure-showrunner","evidence":"...","mitigation":"..."}],"authorGates":[{"key":"gate.some-key","afterStageKey":"g1-source-and-direction","decision":"..."}],"nonGoals":["..."]}。stages 必须恰好六项且 key 顺序与枚举顺序一致；risks 至少三项，authorGates 至少三项，nonGoals 至少三项。'
   if (taskKey === 'content.source-sufficiency') return `${common}\n你是来源编辑，只审查冻结 SourcePlan 能否支撑这次文字冒险生产，不创作剧情正文。` +
     '逐域标记充分、部分、缺失或冲突；resourceKeys 只能引用授权清单。缺少但可在产品私域补齐的内容登记 privateAdditions，影响世界核心事实、玩家身份或主冲突的缺口必须 blocking。' +
     '输出字段必须精确为：{"schema":"storyforge.text-adventure-source-sufficiency-artifact","version":1,"decision":"ready|ready-with-private-additions|blocked","adaptationStrategy":"adapt-rich|expand-sparse|author-outline","coverage":[{"domain":"world-premise|time-and-era|space|characters|organizations|conflicts|history|rules-and-abilities|items|visual-anchors|boundaries","status":"sufficient|partial|missing|conflicting","resourceKeys":[],"rationale":"..."}],"gaps":[{"key":"stable-key","severity":"warning|blocking","description":"...","affectedStages":["content.story-bible"]}],"privateAdditions":[{"key":"stable-key","kind":"character|location-detail|event|item|rule-detail","title":"...","rationale":"..."}],"authorDecisionRequired":false}。' +
@@ -1413,7 +1419,21 @@ async function executeModelTask(input: ProductProductionTaskExecutionInputV1, op
   let payload: unknown
   let kind: ProductProductionTaskArtifactV1['kind']
   let quality: unknown
-  if (input.task.taskKey === 'content.source-sufficiency') {
+  if (input.task.taskKey === 'production.supervision') {
+    const supervision = parseTextAdventureProductionSupervisionArtifactV1({
+      value: raw,
+      allowedAgentIds: TEXT_ADVENTURE_PRODUCTION_AGENT_IDS,
+    })
+    payload = supervision
+    kind = 'product-design'
+    quality = {
+      productionSupervisionVerified: true,
+      stageCount: supervision.stages.length,
+      coveredAgentCount: new Set(supervision.stages.flatMap(stage => stage.responsibleAgentIds)).size,
+      riskCount: supervision.risks.length,
+      authorGateCount: supervision.authorGates.length,
+    }
+  } else if (input.task.taskKey === 'content.source-sufficiency') {
     const sourceAudit = parseTextAdventureSourceSufficiencyArtifactV1({
       value: raw,
       brief: options.brief,

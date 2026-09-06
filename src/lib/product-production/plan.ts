@@ -296,9 +296,10 @@ export async function createProductProductionPlanV3(input: {
     (_, index) => `media.audio.${String(index + 1).padStart(3, '0')}`,
   )
   const textAdventure = brief.intent.productType === 'text-adventure'
-  const modelTaskCount = textAdventure ? 20 + Number(activeVisual) : 4
+  const modelTaskCount = textAdventure ? 21 + Number(activeVisual) : 4
   const textAdventureOutputWeights: Record<string, number> = {
-    'content.source-sufficiency': 0.05,
+    'production.supervision': 0.02,
+    'content.source-sufficiency': 0.04,
     'content.design': 0.04,
     'content.story-bible': 0.07,
     'content.cast-bible': 0.08,
@@ -315,7 +316,7 @@ export async function createProductProductionPlanV3(input: {
     'content.dialogue-pass.act-3': 0.02,
     'content.adventure-side-quests': 0.06,
     'content.adventure-ambient-events': 0.04,
-    'content.adventure-quality-review': 0.04,
+    'content.adventure-quality-review': 0.03,
     'media.requirements': 0.04,
     'media.visual-quality-review': 0.02,
     'qa.playtest-strategy': 0.02,
@@ -349,9 +350,19 @@ export async function createProductProductionPlanV3(input: {
   })
   const tasks: ProductProductionPlanTaskV3[] = []
   if (textAdventure) tasks.push(productionTask({
+    taskKey: 'production.supervision', lane: 'planning', kind: 'text-adventure-production-supervision',
+    skillId: 'text-adventure.production-supervision.v1', executionMode: 'model', dependsOn: [],
+    inputArtifactKeys: [], outputArtifactKeys: ['production.supervision'], requirementKeys: [],
+    capabilityRequirementKeys: textCapabilities, concurrencyGroup: 'text-provider',
+    subjectLockKeys: ['production.supervision'], priority: 120,
+    budgetReservation: modelBudget('production.supervision'),
+    maxAttempts: 2, timeoutMs: 180_000, failurePolicy: 'pause', fallbackTaskKey: null,
+    acceptanceGateIds: ['artifact.protocol', 'adventure.production-supervision'],
+  }))
+  if (textAdventure) tasks.push(productionTask({
     taskKey: 'content.source-sufficiency', lane: 'planning', kind: 'text-adventure-source-sufficiency',
-    skillId: 'text-adventure.source-sufficiency.v1', executionMode: 'model', dependsOn: [],
-    inputArtifactKeys: [], outputArtifactKeys: ['content.source-sufficiency'], requirementKeys: [],
+    skillId: 'text-adventure.source-sufficiency.v1', executionMode: 'model', dependsOn: ['production.supervision'],
+    inputArtifactKeys: ['production.supervision'], outputArtifactKeys: ['content.source-sufficiency'], requirementKeys: [],
     capabilityRequirementKeys: textCapabilities, concurrencyGroup: 'text-provider',
     subjectLockKeys: ['content.source-sufficiency'], priority: 110, budgetReservation: modelBudget('content.source-sufficiency'),
     maxAttempts: 2, timeoutMs: 180_000, failurePolicy: 'pause', fallbackTaskKey: null,
@@ -370,8 +381,9 @@ export async function createProductProductionPlanV3(input: {
   tasks.push(productionTask({
     taskKey: 'content.design', lane: 'content', kind: 'product-design',
     skillId: textAdventure ? 'text-adventure.creative-direction.v1' : 'product-production.content.v1',
-    executionMode: 'model', dependsOn: textAdventure ? ['source.author-gate'] : [],
-    inputArtifactKeys: textAdventure ? ['content.source-sufficiency', 'content.source-decision'] : [],
+    executionMode: 'model', dependsOn: textAdventure ? ['source.author-gate', 'production.supervision'] : [],
+    inputArtifactKeys: textAdventure
+      ? ['production.supervision', 'content.source-sufficiency', 'content.source-decision'] : [],
     outputArtifactKeys: ['design.game'], requirementKeys: [],
     capabilityRequirementKeys: textCapabilities, concurrencyGroup: 'text-provider',
     subjectLockKeys: ['design.game'], priority: 100, budgetReservation: modelBudget('content.design'),
@@ -582,6 +594,7 @@ export async function createProductProductionPlanV3(input: {
     taskKey: 'content.adventure-quality-review', lane: 'qa', kind: 'text-adventure-quality-review',
     skillId: 'text-adventure.production-quality-review.v1', executionMode: 'model',
     dependsOn: [
+      'production.supervision',
       'content.story-bible', 'content.cast-bible', 'content.adventure-architecture',
       'content.product-module', 'content.narrative-arc-plan', 'content.main-quest-plan',
       'content.adventure-side-quests', 'content.adventure-ambient-events', 'content.quest-script',
@@ -589,6 +602,7 @@ export async function createProductProductionPlanV3(input: {
       'content.dialogue-pass.act-3', 'integration.narrative',
     ],
     inputArtifactKeys: [
+      'production.supervision',
       'content.story-bible', 'content.cast-bible', 'content.adventure-architecture',
       'content.product-module', 'content.narrative-arc-plan', 'content.main-quest-plan',
       'content.adventure-side-quests', 'content.adventure-ambient-events', 'content.quest-script',
@@ -717,6 +731,7 @@ export async function createProductProductionPlanV3(input: {
   }))
   const textAdventureDependencies = textAdventure
     ? [
+        'production.supervision',
         'content.story-bible', 'content.cast-bible', 'content.adventure-architecture',
         'content.narrative-arc-plan', 'content.main-quest-plan', 'content.adventure-side-quests',
         'content.adventure-ambient-events', 'content.quest-script',
@@ -732,6 +747,7 @@ export async function createProductProductionPlanV3(input: {
   ]
   const textAdventureIntegrationArtifactKeys = textAdventure
     ? [
+        'production.supervision',
         'content.story-bible', 'content.cast-bible', 'content.adventure-architecture',
         'content.narrative-arc-plan', 'content.main-quest-plan', 'content.adventure-side-quests',
         'content.adventure-ambient-events', 'content.quest-script',
