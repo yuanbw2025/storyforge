@@ -17,7 +17,7 @@ const MODULE_DEPENDENCIES: Partial<Record<TextOpenWorldRuntimeModuleKeyV1, TextO
   progression: ['actions'],
   items: ['actions'],
   combat: ['progression', 'items'],
-  crafting: ['items'],
+  crafting: ['actions', 'items', 'world'],
   relationships: ['actors', 'quests'],
   economy: ['actors', 'items', 'relationships'],
   'time-weather': ['world'],
@@ -169,7 +169,7 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
       ],
     },
     actions: {
-      version: 11,
+      version: 12,
       conditions: [
         { key: 'condition.always', expression: { op: 'all', conditions: [{ op: 'player-number', field: 'level', comparator: 'gte', value: 1 }] }, failureMessage: '角色尚未进入可行动状态。' },
         { key: 'condition.level-two', expression: { op: 'player-number', field: 'level', comparator: 'gte', value: 2 }, failureMessage: '经验不足，无法让谎言自洽。' },
@@ -194,6 +194,7 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
         { key: 'effect.combat-brine-tonic', operation: 'perform-combat-action', payload: { kind: 'item', skillKey: null, itemKey: 'item.brine-tonic' } },
         { key: 'effect.combat-escape', operation: 'perform-combat-action', payload: { kind: 'escape', skillKey: null, itemKey: null } },
         { key: 'effect.combat-enemy-basic-attack', operation: 'perform-combat-action', payload: { kind: 'enemy-skill', skillKey: 'skill.basic-attack', itemKey: null } },
+        { key: 'effect.craft-brine-tonic', operation: 'perform-crafting', payload: { recipeKey: 'recipe.brine-tonic' } },
         { key: 'effect.combat-power-strike-cost', operation: 'change-player-resource', payload: { resource: 'skill-resource', amount: -2 } },
         { key: 'effect.consume-brine-tonic', operation: 'remove-item', payload: { itemKey: 'item.brine-tonic', quantity: 1, reason: 'consume' } },
         { key: 'effect.drop-salt-crystal', operation: 'remove-item', payload: { itemKey: 'item.salt-crystal', quantity: 1, reason: 'drop' } },
@@ -391,6 +392,11 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
         successEffectKeys: ['effect.combat-enemy-basic-attack'], failureEffectKeys: [], timeCostMinutes: 0,
         confirmationPolicy: 'never', repeatPolicy: 'repeatable', cooldownMinutes: null,
       }, {
+        key: 'action.craft-brine-tonic', category: 'craft', label: '制作盐露药剂', description: '消耗盐晶，在盐港制作一瓶或多瓶盐露药剂。',
+        actorScope: 'player', targetScope: 'recipe', locationKeys: ['location.salt-port'], requirementConditionKeys: [], costEffectKeys: [],
+        successEffectKeys: ['effect.craft-brine-tonic'], failureEffectKeys: [], timeCostMinutes: 0,
+        confirmationPolicy: 'never', repeatPolicy: 'repeatable', cooldownMinutes: null,
+      }, {
         key: 'action.use-brine-tonic', category: 'use', label: '使用盐露药剂', description: '消耗一瓶盐露药剂并恢复生命。',
         actorScope: 'player', targetScope: 'item', locationKeys: [], requirementConditionKeys: ['condition.health-not-full'], costEffectKeys: ['effect.consume-brine-tonic'],
         successEffectKeys: ['effect.restore-health'], failureEffectKeys: [], timeCostMinutes: 0,
@@ -547,11 +553,12 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
       }],
     },
     crafting: {
-      version: 1,
+      version: 2,
+      rules: { successPolicy: 'guaranteed', maximumBatchQuantity: 100, maximumTotalItemUnitsPerAction: 100_000 },
       recipes: [{
-        key: 'recipe.brine-tonic', title: '盐露药剂', description: '将盐晶加工成简易药剂。', learnedByDefault: true,
-        stationLocationKeys: ['location.salt-port'], ingredients: [{ itemKey: 'item.salt-crystal', quantity: 2 }],
-        outputs: [{ itemKey: 'item.brine-tonic', quantity: 1 }], timeCostMinutes: 15,
+        key: 'recipe.brine-tonic', title: '盐露药剂', description: '将盐晶加工成简易药剂。', category: 'consumable', learnedByDefault: true,
+        stationLocationKeys: ['location.salt-port'], requirementConditionKeys: [], ingredients: [{ itemKey: 'item.salt-crystal', quantity: 2 }],
+        outputs: [{ itemKey: 'item.brine-tonic', quantity: 1 }], timeCostMinutes: 15, presentationRefs: [],
       }],
     },
     economy: {
@@ -694,6 +701,36 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
   }
 }
 
+/** Re-encodes Crafting v2 and its Action v12 bindings as the legacy data-only v1 module. */
+export function downgradeTextOpenWorldFixtureCraftingV1(
+  runtimePackage: TextOpenWorldRuntimePackageV1,
+): TextOpenWorldRuntimePackageV1 {
+  const actions = runtimePackage.modules.actions.payload as any
+  const crafting = runtimePackage.modules.crafting.payload as any
+  actions.effects = actions.effects.filter((effect: any) => effect.operation !== 'perform-crafting')
+  actions.actions = actions.actions.filter((action: any) => action.category !== 'craft' && action.targetScope !== 'recipe')
+  if (actions.version >= 12) {
+    actions.version = 11
+    runtimePackage.modules.actions.schemaVersion = 11
+  }
+  if (crafting.version >= 2) {
+    crafting.recipes = crafting.recipes.map((recipe: any) => ({
+      key: recipe.key,
+      title: recipe.title,
+      description: recipe.description,
+      learnedByDefault: recipe.learnedByDefault,
+      stationLocationKeys: recipe.stationLocationKeys,
+      ingredients: recipe.ingredients,
+      outputs: recipe.outputs,
+      timeCostMinutes: recipe.timeCostMinutes,
+    }))
+    crafting.version = 1
+    delete crafting.rules
+    runtimePackage.modules.crafting.schemaVersion = 1
+  }
+  return runtimePackage
+}
+
 /**
  * Removes the latest crime extension before a test intentionally downgrades an
  * older Action/Relationship module. Keeping this in one fixture helper avoids
@@ -732,6 +769,7 @@ export function downgradeTextOpenWorldFixtureWithoutCrimeV1(
 export function downgradeTextOpenWorldFixtureCombatV1(
   runtimePackage: TextOpenWorldRuntimePackageV1,
 ): TextOpenWorldRuntimePackageV1 {
+  downgradeTextOpenWorldFixtureCraftingV1(runtimePackage)
   const combat = runtimePackage.modules.combat.payload as any
   const actions = runtimePackage.modules.actions.payload as any
   combat.version = 1
@@ -782,6 +820,7 @@ export function downgradeTextOpenWorldFixtureCombatV1(
 export function downgradeTextOpenWorldFixtureCombatActionsV1(
   runtimePackage: TextOpenWorldRuntimePackageV1,
 ): TextOpenWorldRuntimePackageV1 {
+  downgradeTextOpenWorldFixtureCraftingV1(runtimePackage)
   const actions = runtimePackage.modules.actions.payload as any
   const combat = runtimePackage.modules.combat.payload as any
   actions.effects = actions.effects.filter((effect: any) => effect.operation !== 'perform-combat-action')
@@ -804,6 +843,7 @@ export function downgradeTextOpenWorldFixtureCombatActionsV1(
 export function downgradeTextOpenWorldFixtureCombatResolutionV1(
   runtimePackage: TextOpenWorldRuntimePackageV1,
 ): TextOpenWorldRuntimePackageV1 {
+  downgradeTextOpenWorldFixtureCraftingV1(runtimePackage)
   const actions = runtimePackage.modules.actions.payload as any
   const combat = runtimePackage.modules.combat.payload as any
   actions.actions = actions.actions.filter((action: any) => action.category !== 'combat-reward-action')

@@ -226,7 +226,7 @@ export interface TextOpenWorldQuestModuleV1 {
 }
 
 export interface TextOpenWorldActionModuleV1 {
-  version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11
+  version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12
   conditions: Array<{
     key: string
     expression: TextOpenWorldConditionExpressionV1
@@ -239,7 +239,7 @@ export interface TextOpenWorldActionModuleV1 {
     label: string
     description: string
     actorScope: 'player' | 'system'
-    targetScope: 'none' | 'actor' | 'location' | 'item' | 'quest' | 'vendor' | 'encounter' | 'combatant'
+    targetScope: 'none' | 'actor' | 'location' | 'item' | 'quest' | 'vendor' | 'encounter' | 'combatant' | 'recipe'
     locationKeys: string[]
     requirementConditionKeys: string[]
     costEffectKeys: string[]
@@ -478,6 +478,30 @@ export interface TextOpenWorldCraftingModuleV1 {
   }>
 }
 
+/** Current normalized crafting contract. Legacy v1 payloads are upgraded to this shape in memory. */
+export interface TextOpenWorldCraftingModuleV2 {
+  version: 2
+  sourceVersion: 1 | 2
+  rules: {
+    successPolicy: 'guaranteed'
+    maximumBatchQuantity: number
+    maximumTotalItemUnitsPerAction: number
+  }
+  recipes: Array<{
+    key: string
+    title: string
+    description: string
+    category: 'consumable' | 'equipment' | 'tool' | 'material'
+    learnedByDefault: boolean
+    stationLocationKeys: string[]
+    requirementConditionKeys: string[]
+    ingredients: Array<{ itemKey: string; quantity: number }>
+    outputs: Array<{ itemKey: string; quantity: number }>
+    timeCostMinutes: number
+    presentationRefs: string[]
+  }>
+}
+
 export interface TextOpenWorldEconomyModuleV1 {
   version: 1
   currency: { key: 'currency'; label: string }
@@ -674,7 +698,7 @@ export interface TextOpenWorldParsedModulesV1 {
   progression: TextOpenWorldProgressionModuleV1
   combat: TextOpenWorldCombatModuleV1
   items: TextOpenWorldItemModuleV1
-  crafting: TextOpenWorldCraftingModuleV1
+  crafting: TextOpenWorldCraftingModuleV2
   economy: TextOpenWorldEconomyModuleV1
   relationships: TextOpenWorldRelationshipModuleV1
   'time-weather': TextOpenWorldTimeWeatherModuleV1

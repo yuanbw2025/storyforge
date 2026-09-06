@@ -374,7 +374,7 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
     if (actorRows.find(actor => actor.key === item.actorKey)?.scheduleKey !== item.key) fail(`schedule/actor反向引用不一致:${String(item.key)}`)
   })
 
-  const actions = versioned(packageValue, 'actions', [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])
+  const actions = versioned(packageValue, 'actions', [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])
   const modernActionModule = Number(actions.version) >= 2
   const travelActionModule = Number(actions.version) >= 3
   const fastTravelActionModule = Number(actions.version) >= 4
@@ -385,6 +385,7 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
   const combatStateActionModule = Number(actions.version) >= 9
   const combatOperationActionModule = Number(actions.version) >= 10
   const combatResolutionActionModule = Number(actions.version) >= 11
+  const craftingActionModule = Number(actions.version) >= 12
   if (actorScheduleActionModule && legacyActorModule) fail('Action v6必须搭配Actor v2')
   if (actorLifecycleActionModule && !actorLifecycleModule) fail('Action v7必须搭配Actor v3')
   if (combatStateActionModule !== (packageValue.modules.combat.schemaVersion >= 2)) fail('Action v9+必须与Combat v2+一起发布')
@@ -394,7 +395,7 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
   conditions.forEach((item, index) => { canonicalProductProductionJsonV2(item.expression); text(item.failureMessage, `actions.conditions[${index}].failureMessage`, 1_000) })
   normalizedWorld.edges.forEach((item, index) => requireRefs(item.conditionKeys, conditionKeys, `world.edges[${index}].conditionKeys`))
   effects.forEach((item, index) => { key(item.operation, `actions.effects[${index}].operation`); canonicalProductProductionJsonV2(item.payload) })
-  actionRows.forEach((item, index) => { enumValue(item.category, ACTION_CATEGORIES, `actions.actions[${index}].category`); text(item.label, `actions.actions[${index}].label`, 2_000); text(item.description, `actions.actions[${index}].description`); enumValue(item.actorScope, ['player', 'system'], `actions.actions[${index}].actorScope`); enumValue(item.targetScope, ['none', 'actor', 'location', 'item', 'quest', 'vendor', 'encounter', 'combatant'], `actions.actions[${index}].targetScope`); requireRefs(strings(item.locationKeys, `actions.actions[${index}].locationKeys`), locationKeys, 'action location'); requireRefs(strings(item.requirementConditionKeys, `actions.actions[${index}].requirementConditionKeys`), conditionKeys, 'action condition'); requireRefs(strings(item.costEffectKeys, `actions.actions[${index}].costEffectKeys`), effectKeys, 'action cost effect'); requireRefs(strings(item.successEffectKeys, `actions.actions[${index}].successEffectKeys`), effectKeys, 'action success effect'); requireRefs(strings(item.failureEffectKeys, `actions.actions[${index}].failureEffectKeys`), effectKeys, 'action failure effect'); int(item.timeCostMinutes, `actions.actions[${index}].timeCostMinutes`, 0, 1_000_000); enumValue(item.confirmationPolicy, ['never', 'high-risk', 'always'], `actions.actions[${index}].confirmationPolicy`); const repeatPolicy = enumValue(item.repeatPolicy, ['once', 'repeatable', 'cooldown'], `actions.actions[${index}].repeatPolicy`); const cooldown = item.cooldownMinutes == null ? null : int(item.cooldownMinutes, `actions.actions[${index}].cooldownMinutes`, 1, 1_000_000); if ((repeatPolicy === 'cooldown') !== (cooldown != null)) fail(`actions.actions[${index}] cooldown策略不一致`) })
+  actionRows.forEach((item, index) => { enumValue(item.category, ACTION_CATEGORIES, `actions.actions[${index}].category`); text(item.label, `actions.actions[${index}].label`, 2_000); text(item.description, `actions.actions[${index}].description`); enumValue(item.actorScope, ['player', 'system'], `actions.actions[${index}].actorScope`); enumValue(item.targetScope, ['none', 'actor', 'location', 'item', 'quest', 'vendor', 'encounter', 'combatant', 'recipe'], `actions.actions[${index}].targetScope`); requireRefs(strings(item.locationKeys, `actions.actions[${index}].locationKeys`), locationKeys, 'action location'); requireRefs(strings(item.requirementConditionKeys, `actions.actions[${index}].requirementConditionKeys`), conditionKeys, 'action condition'); requireRefs(strings(item.costEffectKeys, `actions.actions[${index}].costEffectKeys`), effectKeys, 'action cost effect'); requireRefs(strings(item.successEffectKeys, `actions.actions[${index}].successEffectKeys`), effectKeys, 'action success effect'); requireRefs(strings(item.failureEffectKeys, `actions.actions[${index}].failureEffectKeys`), effectKeys, 'action failure effect'); int(item.timeCostMinutes, `actions.actions[${index}].timeCostMinutes`, 0, 1_000_000); enumValue(item.confirmationPolicy, ['never', 'high-risk', 'always'], `actions.actions[${index}].confirmationPolicy`); const repeatPolicy = enumValue(item.repeatPolicy, ['once', 'repeatable', 'cooldown'], `actions.actions[${index}].repeatPolicy`); const cooldown = item.cooldownMinutes == null ? null : int(item.cooldownMinutes, `actions.actions[${index}].cooldownMinutes`, 1, 1_000_000); if ((repeatPolicy === 'cooldown') !== (cooldown != null)) fail(`actions.actions[${index}] cooldown策略不一致`) })
 
   if (travelActionModule) {
     const travelActions = actionRows.filter(action => action.category === 'travel')
@@ -1396,9 +1397,118 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
     encounters: structuredClone(encounters) as unknown as TextOpenWorldParsedModulesV1['combat']['encounters'],
   }
 
-  const crafting = versioned(packageValue, 'crafting')
-  exact(crafting, ['version', 'recipes'], 'crafting'); const recipes = catalog(crafting.recipes, 'crafting.recipes', ['key', 'title', 'description', 'learnedByDefault', 'stationLocationKeys', 'ingredients', 'outputs', 'timeCostMinutes']); keysOf(recipes, 'crafting.recipes')
-  recipes.forEach((item, index) => { text(item.title, `crafting.recipes[${index}].title`, 2_000); text(item.description, `crafting.recipes[${index}].description`); bool(item.learnedByDefault, `crafting.recipes[${index}].learnedByDefault`); requireRefs(strings(item.stationLocationKeys, `crafting.recipes[${index}].stationLocationKeys`), locationKeys, 'recipe station'); for (const field of ['ingredients', 'outputs']) array(item[field], `crafting.recipes[${index}].${field}`).forEach((entry, entryIndex) => { const parsed = row(entry, `crafting.recipes[${index}].${field}[${entryIndex}]`); exact(parsed, ['itemKey', 'quantity'], `crafting.recipes[${index}].${field}[${entryIndex}]`); requireRef(key(parsed.itemKey, 'recipe item'), itemKeys, 'recipe item'); int(parsed.quantity, 'recipe quantity', 1, 1_000_000) }); int(item.timeCostMinutes, `crafting.recipes[${index}].timeCostMinutes`, 0, 1_000_000) })
+  const crafting = versioned(packageValue, 'crafting', [1, 2])
+  const modernCrafting = Number(crafting.version) >= 2
+  if (craftingActionModule !== modernCrafting) fail('Action v12与Crafting v2必须成对发布')
+  exact(crafting, modernCrafting ? ['version', 'rules', 'recipes'] : ['version', 'recipes'], 'crafting')
+  const craftingRules = modernCrafting ? row(crafting.rules, 'crafting.rules') : null
+  if (craftingRules) {
+    exact(craftingRules, ['successPolicy', 'maximumBatchQuantity', 'maximumTotalItemUnitsPerAction'], 'crafting.rules')
+    if (craftingRules.successPolicy !== 'guaranteed') fail('首版制作只能100%成功')
+    int(craftingRules.maximumBatchQuantity, 'crafting.rules.maximumBatchQuantity', 1, 1_000)
+    int(craftingRules.maximumTotalItemUnitsPerAction, 'crafting.rules.maximumTotalItemUnitsPerAction', 1, 1_000_000)
+  }
+  const recipeFields = modernCrafting
+    ? ['key', 'title', 'description', 'category', 'learnedByDefault', 'stationLocationKeys', 'requirementConditionKeys', 'ingredients', 'outputs', 'timeCostMinutes', 'presentationRefs']
+    : ['key', 'title', 'description', 'learnedByDefault', 'stationLocationKeys', 'ingredients', 'outputs', 'timeCostMinutes']
+  const recipes = catalog(crafting.recipes, 'crafting.recipes', recipeFields); const recipeKeys = keysOf(recipes, 'crafting.recipes')
+  const normalizedRecipes = recipes.map((item, index) => {
+    const label = `crafting.recipes[${index}]`
+    text(item.title, `${label}.title`, 2_000); text(item.description, `${label}.description`); bool(item.learnedByDefault, `${label}.learnedByDefault`)
+    const stationLocationKeys = strings(item.stationLocationKeys, `${label}.stationLocationKeys`); requireRefs(stationLocationKeys, locationKeys, 'recipe station')
+    const requirementConditionKeys = modernCrafting ? strings(item.requirementConditionKeys, `${label}.requirementConditionKeys`) : []
+    requireRefs(requirementConditionKeys, conditionKeys, 'recipe condition')
+    const parseItems = (field: 'ingredients' | 'outputs') => {
+      const entries = array(item[field], `${label}.${field}`, modernCrafting ? 128 : 20_000).map((entry, entryIndex) => {
+        const parsed = row(entry, `${label}.${field}[${entryIndex}]`); exact(parsed, ['itemKey', 'quantity'], `${label}.${field}[${entryIndex}]`)
+        const itemKey = key(parsed.itemKey, `${label}.${field}[${entryIndex}].itemKey`); requireRef(itemKey, itemKeys, 'recipe item')
+        return { itemKey, quantity: int(parsed.quantity, `${label}.${field}[${entryIndex}].quantity`, 1, 1_000_000) }
+      })
+      if (modernCrafting && (!entries.length || new Set(entries.map(entry => entry.itemKey)).size !== entries.length)) fail(`${label}.${field}必须非空且物品不能重复`)
+      return entries
+    }
+    const ingredients = parseItems('ingredients'); const outputs = parseItems('outputs')
+    if (modernCrafting) {
+      if (ingredients.some(entry => outputs.some(output => output.itemKey === entry.itemKey))) fail(`${label}输入与输出物品不能重叠`)
+      ingredients.forEach(entry => {
+        const definition = itemRows.find(candidate => candidate.key === entry.itemKey)!
+        if (definition.critical) fail(`${label}不能消耗关键物品:${entry.itemKey}`)
+        if (definition.stackPolicy !== 'stacked') fail(`${label}首版只能消耗可堆叠材料:${entry.itemKey}`)
+      })
+      outputs.forEach(entry => {
+        const definition = itemRows.find(candidate => candidate.key === entry.itemKey)!
+        if (definition.unique && entry.quantity !== 1) fail(`${label}唯一物品单次产出必须为1:${entry.itemKey}`)
+      })
+    }
+    const timeCostMinutes = int(item.timeCostMinutes, `${label}.timeCostMinutes`, 0, 1_000_000)
+    return {
+      key: String(item.key), title: String(item.title), description: String(item.description),
+      category: modernCrafting ? enumValue(item.category, ['consumable', 'equipment', 'tool', 'material'], `${label}.category`) : 'consumable' as const,
+      learnedByDefault: Boolean(item.learnedByDefault), stationLocationKeys, requirementConditionKeys,
+      ingredients, outputs, timeCostMinutes,
+      presentationRefs: modernCrafting ? strings(item.presentationRefs, `${label}.presentationRefs`, 'text') : [],
+    }
+  })
+  const performCraftEffects = effects.filter(effect => effect.operation === 'perform-crafting')
+  if (craftingActionModule) {
+    const maximumUnits = Number(craftingRules!.maximumTotalItemUnitsPerAction)
+    normalizedRecipes.forEach(recipe => {
+      const units = [...recipe.ingredients, ...recipe.outputs].reduce((sum, entry) => sum + entry.quantity, 0)
+      if (units > maximumUnits) fail(`配方单份物品单位数超过事件上限:${recipe.key}`)
+      recipe.outputs.forEach(output => {
+        const definition = itemRows.find(candidate => candidate.key === output.itemKey)!
+        if (definition.stackPolicy === 'stacked' && output.quantity > Number(definition.maximumStack)) fail(`配方单份产出超过物品堆叠上限:${recipe.key}:${output.itemKey}`)
+      })
+    })
+    const reachableEffectKeys = new Set([
+      ...actionRows.flatMap(action => [
+        ...strings(action.costEffectKeys, `action ${String(action.key)} cost effects`),
+        ...strings(action.successEffectKeys, `action ${String(action.key)} success effects`),
+        ...strings(action.failureEffectKeys, `action ${String(action.key)} failure effects`),
+      ]),
+      ...rewardContracts.flatMap(reward => strings(reward.effectKeys, `reward ${String(reward.key)} effects`)),
+    ])
+    const learnedRecipeKeys = effects.filter(effect => effect.operation === 'learn-recipe' && reachableEffectKeys.has(String(effect.key))).map(effect => {
+      const payload = row(effect.payload, `learn recipe effect ${String(effect.key)} payload`)
+      exact(payload, ['recipeKey'], `learn recipe effect ${String(effect.key)} payload`)
+      const recipeKey = key(payload.recipeKey, `learn recipe effect ${String(effect.key)} recipeKey`)
+      requireRef(recipeKey, recipeKeys, 'learn recipe effect recipe')
+      return recipeKey
+    })
+    normalizedRecipes.filter(recipe => !recipe.learnedByDefault).forEach(recipe => {
+      if (!learnedRecipeKeys.includes(recipe.key)) fail(`非默认配方缺少learn-recipe解锁Effect:${recipe.key}`)
+    })
+    const craftActions = actionRows.filter(action => action.category === 'craft')
+    if (craftActions.length !== normalizedRecipes.length) fail('Crafting v2必须为每个配方定义唯一制作Action')
+    const ownedRecipeKeys = craftActions.map(action => {
+      const label = `craft action ${String(action.key)}`
+      const successEffectKeys = strings(action.successEffectKeys, `${label}.successEffectKeys`)
+      const markers = successEffectKeys.map(effectKey => effects.find(effect => effect.key === effectKey)!)
+        .filter(effect => effect.operation === 'perform-crafting')
+      if (action.actorScope !== 'player' || action.targetScope !== 'recipe'
+        || strings(action.costEffectKeys, `${label}.costEffectKeys`).length || strings(action.failureEffectKeys, `${label}.failureEffectKeys`).length
+        || markers.length !== 1 || successEffectKeys.length !== 1 || action.timeCostMinutes !== 0
+        || action.confirmationPolicy !== 'never' || action.repeatPolicy !== 'repeatable' || action.cooldownMinutes != null) fail(`${label}合同无效`)
+      const markerPayload = row(markers[0].payload, `${label}.marker.payload`); exact(markerPayload, ['recipeKey'], `${label}.marker.payload`)
+      const recipeKey = key(markerPayload.recipeKey, `${label}.recipeKey`); requireRef(recipeKey, recipeKeys, 'craft action recipe')
+      const recipe = normalizedRecipes.find(candidate => candidate.key === recipeKey)!
+      requireSameKeys(strings(action.locationKeys, `${label}.locationKeys`), recipe.stationLocationKeys, `${label}制作地点`)
+      requireSameKeys(strings(action.requirementConditionKeys, `${label}.requirementConditionKeys`), recipe.requirementConditionKeys, `${label}制作条件`)
+      return recipeKey
+    })
+    requireSameKeys(ownedRecipeKeys, normalizedRecipes.map(recipe => recipe.key), '制作Action配方覆盖')
+    if (performCraftEffects.length !== normalizedRecipes.length) fail('每个配方必须且只能拥有一个perform-crafting Effect')
+  } else if (performCraftEffects.length || actionRows.some(action => action.targetScope === 'recipe')) fail('旧Action模块不能包含正式制作操作')
+  const normalizedCrafting: TextOpenWorldParsedModulesV1['crafting'] = {
+    version: 2,
+    sourceVersion: modernCrafting ? 2 : 1,
+    rules: modernCrafting ? {
+      successPolicy: 'guaranteed',
+      maximumBatchQuantity: Number(craftingRules!.maximumBatchQuantity),
+      maximumTotalItemUnitsPerAction: Number(craftingRules!.maximumTotalItemUnitsPerAction),
+    } : { successPolicy: 'guaranteed', maximumBatchQuantity: 100, maximumTotalItemUnitsPerAction: 100_000 },
+    recipes: normalizedRecipes,
+  }
 
   const economy = versioned(packageValue, 'economy')
   exact(economy, ['version', 'currency', 'vendors'], 'economy'); const currency = row(economy.currency, 'economy.currency'); exact(currency, ['key', 'label'], 'economy.currency'); if (currency.key !== 'currency') fail('首版只允许currency单货币'); text(currency.label, 'economy.currency.label', 100)
@@ -1748,7 +1858,7 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
     progression: structuredClone(progression) as unknown as TextOpenWorldParsedModulesV1['progression'],
     combat: normalizedCombat,
     items: structuredClone(items) as unknown as TextOpenWorldParsedModulesV1['items'],
-    crafting: structuredClone(crafting) as unknown as TextOpenWorldParsedModulesV1['crafting'],
+    crafting: normalizedCrafting,
     economy: structuredClone(economy) as unknown as TextOpenWorldParsedModulesV1['economy'],
     relationships: {
       ...structuredClone(relationships), version: crimeRelationships ? 3 : 2, unaffiliatedMoralityMultiplier,

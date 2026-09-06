@@ -74,6 +74,15 @@ function parseContext(value: TextOpenWorldActionProjectionContextV1, modules: Te
     if (!skillKeys.has(stableKey(skillKey, 'combat skill cooldown key'))) fail(`战斗冷却引用未知技能:${skillKey}`)
     combatSkillCooldownRemainingTurnsBySkillKey[skillKey] = finiteInteger(turns, `combat skill cooldown.${skillKey}`)
   }
+  const knownRecipeKeys = uniqueKeys(value.knownRecipeKeys ?? [], 'knownRecipeKeys')
+  const recipeKeys = new Set(modules.crafting.recipes.map(recipe => recipe.key))
+  knownRecipeKeys.forEach(recipeKey => { if (!recipeKeys.has(recipeKey)) fail(`knownRecipeKeys引用未知配方:${recipeKey}`) })
+  const inventoryQuantities: Record<string, number> = {}
+  const itemKeys = new Set(modules.items.items.map(item => item.key))
+  for (const [itemKey, itemQuantity] of Object.entries(value.inventoryQuantities ?? {})) {
+    if (!itemKeys.has(stableKey(itemKey, 'inventoryQuantities itemKey'))) fail(`inventoryQuantities引用未知物品:${itemKey}`)
+    inventoryQuantities[itemKey] = finiteInteger(itemQuantity, `inventoryQuantities.${itemKey}`)
+  }
   const conditionKeys = new Set(modules.actions.conditions.map(item => item.key))
   const conditionResults: TextOpenWorldActionProjectionContextV1['conditionResults'] = {}
   for (const [conditionKey, result] of Object.entries(value.conditionResults ?? {})) {
@@ -101,7 +110,7 @@ function parseContext(value: TextOpenWorldActionProjectionContextV1, modules: Te
     cooldownUntilWorldMinuteByActionKey[actionKey] = finiteInteger(until, `cooldown.${actionKey}`)
   }
   const validTargetKeysByScope: TextOpenWorldActionProjectionContextV1['validTargetKeysByScope'] = {}
-  for (const scope of ['actor', 'location', 'item', 'quest', 'vendor', 'encounter', 'combatant'] as const) {
+  for (const scope of ['actor', 'location', 'item', 'quest', 'vendor', 'encounter', 'combatant', 'recipe'] as const) {
     if (value.validTargetKeysByScope?.[scope] != null) validTargetKeysByScope[scope] = uniqueKeys(value.validTargetKeysByScope[scope], `validTargetKeysByScope.${scope}`)
   }
   const questDefinitionKeyByInstanceKey: Record<string, string> = {}
@@ -165,6 +174,8 @@ function parseContext(value: TextOpenWorldActionProjectionContextV1, modules: Te
     learnedSkillKeys,
     skillResource,
     combatSkillCooldownRemainingTurnsBySkillKey,
+    knownRecipeKeys,
+    inventoryQuantities,
     conditionResults,
     openEdgeKeys,
     unlockedFastTravelPointKeys,
@@ -267,6 +278,28 @@ export function createTextOpenWorldActionRegistryV1(value: TextOpenWorldRuntimeP
         validTargetKeys = removal?.operation === 'remove-item'
           ? validTargetKeys.filter(itemKey => itemKey === removal.payload.itemKey)
           : []
+      }
+      if (action.targetScope === 'recipe' && action.category === 'craft') {
+        const marker = action.successEffectKeys.map(effectKey => effectByKey.get(effectKey))
+          .find((effect): effect is Extract<TextOpenWorldEffectDefinitionV1, { operation: 'perform-crafting' }> => effect?.operation === 'perform-crafting')
+        const recipe = marker ? modules.crafting.recipes.find(item => item.key === marker.payload.recipeKey) : null
+        validTargetKeys = recipe ? validTargetKeys.filter(recipeKey => recipeKey === recipe.key) : []
+        if (recipe && !context.knownRecipeKeys.includes(recipe.key)) {
+          unavailableReasons.push({ code: 'recipe-unavailable', message: '该配方尚未学习。', conditionKey: null })
+          validTargetKeys = []
+        }
+        if (recipe && recipe.ingredients.some(ingredient => (context.inventoryQuantities[ingredient.itemKey] ?? 0) < ingredient.quantity)) {
+          unavailableReasons.push({ code: 'materials-insufficient', message: '当前材料不足以制作该配方。', conditionKey: null })
+          validTargetKeys = []
+        }
+        if (recipe && recipe.outputs.some(output => {
+          const item = modules.items.items.find(candidate => candidate.key === output.itemKey)!
+          const before = context.inventoryQuantities[output.itemKey] ?? 0
+          return item.stackPolicy === 'stacked' ? before + output.quantity > item.maximumStack! : item.unique && before > 0
+        })) {
+          unavailableReasons.push({ code: 'item-unavailable', message: '背包无法容纳该配方的产物。', conditionKey: null })
+          validTargetKeys = []
+        }
       }
       if (action.targetScope === 'item' && action.category === 'combat-item') {
         const marker = action.successEffectKeys.map(effectKey => effectByKey.get(effectKey))

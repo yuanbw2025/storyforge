@@ -33,6 +33,8 @@ export interface TextOpenWorldActionProjectionContextV1 {
   learnedSkillKeys?: string[]
   skillResource?: number
   combatSkillCooldownRemainingTurnsBySkillKey?: Record<string, number>
+  knownRecipeKeys: string[]
+  inventoryQuantities: Record<string, number>
   conditionResults: Record<string, TextOpenWorldConditionResultV1>
   openEdgeKeys: string[]
   unlockedFastTravelPointKeys: string[]
@@ -61,6 +63,8 @@ export type TextOpenWorldActionUnavailableCodeV1 =
   | 'combat-state'
   | 'skill-unavailable'
   | 'item-unavailable'
+  | 'recipe-unavailable'
+  | 'materials-insufficient'
   | 'route-closed'
 
 export interface TextOpenWorldActionUnavailableReasonV1 {

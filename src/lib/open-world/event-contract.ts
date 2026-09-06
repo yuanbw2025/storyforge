@@ -25,6 +25,7 @@ import type {
   TextOpenWorldActorScheduleSettlementAuthorizationV1,
   TextOpenWorldCombatTransitionAuthorizationV1,
   TextOpenWorldCombatActionAuthorizationV1,
+  TextOpenWorldCraftingAuthorizationV1,
   TextOpenWorldCrimeAuthorizationV1,
 } from '../types'
 import { parseTextOpenWorldCommandEventPayloadV1 } from './command-contract'
@@ -327,6 +328,36 @@ function parseAuthorization(value: unknown, label: string): TextOpenWorldEffectP
         statusEffectKeys: uniqueStrings(raw.statusEffectKeys, `${label}.statusEffectKeys`),
       } : {}),
     } satisfies TextOpenWorldCombatActionAuthorizationV1
+  }
+  if (raw.kind === 'crafting') {
+    exact(raw, ['kind', 'recipeKey', 'quantity', 'locationKey', 'baseWorldMinute', 'timeCostMinutes', 'ingredients', 'outputs'], label)
+    const parseItems = (value: unknown, field: 'ingredients' | 'outputs') => {
+      if (!Array.isArray(value) || value.length < 1 || value.length > 128) fail(`${label}.${field}无效`)
+      const items = value.map((entry, index) => {
+        const parsed = row(entry, `${label}.${field}[${index}]`)
+        exact(parsed, ['itemKey', 'quantity', 'beforeQuantity', 'afterQuantity'], `${label}.${field}[${index}]`)
+        const itemQuantity = integer(parsed.quantity, `${label}.${field}[${index}].quantity`, 1, 1_000_000)
+        const beforeQuantity = integer(parsed.beforeQuantity, `${label}.${field}[${index}].beforeQuantity`, 0, 1_000_000_000)
+        const afterQuantity = integer(parsed.afterQuantity, `${label}.${field}[${index}].afterQuantity`, 0, 1_000_000_000)
+        if (field === 'ingredients' ? afterQuantity !== beforeQuantity - itemQuantity : afterQuantity !== beforeQuantity + itemQuantity) {
+          fail(`${label}.${field}[${index}]数量变化不自洽`)
+        }
+        return { itemKey: token(parsed.itemKey, `${label}.${field}[${index}].itemKey`), quantity: itemQuantity, beforeQuantity, afterQuantity }
+      })
+      if (new Set(items.map(item => item.itemKey)).size !== items.length) fail(`${label}.${field}物品不能重复`)
+      return items
+    }
+    const ingredients = parseItems(raw.ingredients, 'ingredients')
+    const outputs = parseItems(raw.outputs, 'outputs')
+    if (ingredients.some(ingredient => outputs.some(output => output.itemKey === ingredient.itemKey))) fail(`${label}输入与输出物品不能重叠`)
+    return {
+      kind: 'crafting', recipeKey: token(raw.recipeKey, `${label}.recipeKey`),
+      quantity: integer(raw.quantity, `${label}.quantity`, 1, 1_000),
+      locationKey: token(raw.locationKey, `${label}.locationKey`),
+      baseWorldMinute: integer(raw.baseWorldMinute, `${label}.baseWorldMinute`),
+      timeCostMinutes: integer(raw.timeCostMinutes, `${label}.timeCostMinutes`),
+      ingredients, outputs,
+    } satisfies TextOpenWorldCraftingAuthorizationV1
   }
   if (raw.kind === 'quest-objective') {
     exact(raw, ['kind', 'instanceKey', 'definitionKey', 'stageKey', 'objectiveKey', 'worldMinute', 'fromStatus', 'toStatus'], label)

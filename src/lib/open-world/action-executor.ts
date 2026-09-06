@@ -25,6 +25,7 @@ import { createTextOpenWorldActorScheduleCatalogV1 } from './actors'
 import { createTextOpenWorldCrimeCatalogV1 } from './crime'
 import { createTextOpenWorldCombatStateMachineV1 } from './combat-state-machine'
 import { createTextOpenWorldCombatActionCatalogV1 } from './combat-actions'
+import { createTextOpenWorldCraftingCatalogV1 } from './crafting'
 
 const COMMAND_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/
 
@@ -41,6 +42,11 @@ function combatTransitionIntentFrom(envelope: TextOpenWorldCommandEnvelopeV1): T
   ]
   if (typeof value !== 'string' || !allowed.includes(value as TextOpenWorldCombatTransitionIntentV1)) fail('战斗阶段命令缺少合法transition intent')
   return value as TextOpenWorldCombatTransitionIntentV1
+}
+function craftingQuantityFrom(envelope: TextOpenWorldCommandEnvelopeV1): number {
+  const value = envelope.payload.quantity
+  if (!Number.isSafeInteger(value) || Number(value) < 1) fail('制作命令缺少合法quantity')
+  return Number(value)
 }
 
 async function settleAcceptedCommand(envelope: TextOpenWorldCommandEnvelopeV1): Promise<TextOpenWorldFeedbackReceiptV1> {
@@ -106,7 +112,9 @@ async function settleAcceptedCommand(envelope: TextOpenWorldCommandEnvelopeV1): 
     .filter((effect): effect is Extract<TextOpenWorldEffectDefinitionV1, { operation: 'settle-combat-state' }> => effect.operation === 'settle-combat-state')
   const combatActionEffects = effectKeys.map(effectKey => modules.actions.effects.find(effect => effect.key === effectKey)!)
     .filter((effect): effect is Extract<TextOpenWorldEffectDefinitionV1, { operation: 'perform-combat-action' }> => effect.operation === 'perform-combat-action')
-  if ([questTransitions.length > 0, objectiveEffects.length > 0, trackingEffects.length > 0, fastTravelEffects.length > 0, weatherEffects.length > 0, actorScheduleEffects.length > 0, combatSettlementEffects.length > 0, combatActionEffects.length > 0].filter(Boolean).length > 1) fail('同一Action不能混合任务迁移、Objective、追踪、快速旅行、天气、角色日程、战斗阶段或战斗行动状态')
+  const craftingEffects = effectKeys.map(effectKey => modules.actions.effects.find(effect => effect.key === effectKey)!)
+    .filter((effect): effect is Extract<TextOpenWorldEffectDefinitionV1, { operation: 'perform-crafting' }> => effect.operation === 'perform-crafting')
+  if ([questTransitions.length > 0, objectiveEffects.length > 0, trackingEffects.length > 0, fastTravelEffects.length > 0, weatherEffects.length > 0, actorScheduleEffects.length > 0, combatSettlementEffects.length > 0, combatActionEffects.length > 0, craftingEffects.length > 0].filter(Boolean).length > 1) fail('同一Action不能混合任务迁移、Objective、追踪、快速旅行、天气、角色日程、战斗阶段、战斗行动或制作状态')
   let randomRequests: TextOpenWorldRandomRequestV1[] = []
   let randomEvidence: TextOpenWorldRandomEvidenceV1[] = []
   const conditionResults = Object.fromEntries(Object.entries(deriveTextOpenWorldContextsV1(projection).action.conditionResults)
@@ -173,6 +181,13 @@ async function settleAcceptedCommand(envelope: TextOpenWorldCommandEnvelopeV1): 
                   })
                 : combatActionEffects.length === 1
                   ? combatActionCatalog!.prepare({ ...combatActionInput!, evidence: randomEvidence })
+                : craftingEffects.length === 1
+                  ? createTextOpenWorldCraftingCatalogV1(projection.runtimePackage, modules).prepare({
+                      state: projection.state,
+                      recipeKey: craftingEffects[0].payload.recipeKey,
+                      quantity: craftingQuantityFrom(envelope),
+                      locationKey: projection.state.map.currentLocationKey,
+                    })
               : null)
   const catalog = createTextOpenWorldEffectCatalogV1(projection.runtimePackage)
   const plan = await catalog.plan({ effectKeys, claimKey: `claim.${envelope.commandId}`, state: projection.state, authorization })
@@ -201,6 +216,7 @@ type ExecuteTextOpenWorldActionInputV1 = {
   sessionId: number
   actionKey: string
   targetKey?: string | null
+  quantity?: number
   source?: TextOpenWorldCommandEnvelopeV1['source']
   confirmed?: boolean
   commandId?: string
@@ -230,6 +246,7 @@ async function executeTextOpenWorldActionAsV1(
   }
   const commandPayload: Record<string, unknown> = {
     ...(targetKey == null ? {} : { targetKey }),
+    ...(input.quantity == null ? {} : { quantity: input.quantity }),
     ...(input.combatTransitionIntent == null ? {} : { combatTransitionIntent: input.combatTransitionIntent }),
   }
 
@@ -271,6 +288,15 @@ async function executeTextOpenWorldActionAsV1(
   }
   const resolved = registry.resolve({ actionKey: input.actionKey, targetKey, context: actionContext })
   if (actorKey === 'system' && resolved.entry.action.category !== systemCategory) fail('系统入口只能执行指定类别的受治理系统Action')
+  if (resolved.entry.action.category === 'craft') {
+    if (!Number.isSafeInteger(input.quantity) || Number(input.quantity) < 1) fail('制作Action必须提交正整数quantity')
+    createTextOpenWorldCraftingCatalogV1(projection.runtimePackage).prepare({
+      state: projection.state,
+      recipeKey: targetKey ?? fail('制作Action缺少配方目标'),
+      quantity: Number(input.quantity),
+      locationKey: projection.state.map.currentLocationKey,
+    })
+  } else if (input.quantity != null) fail('非制作Action不能提交quantity')
   if (resolved.entry.action.category === 'start-combat') {
     const modules = parseTextOpenWorldModulesV1(projection.runtimePackage)
     const startEffects = resolved.entry.action.successEffectKeys

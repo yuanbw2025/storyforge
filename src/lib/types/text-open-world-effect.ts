@@ -9,6 +9,7 @@ export type TextOpenWorldEffectOperationV1 =
   | 'reveal-knowledge' | 'reveal-location' | 'unlock-fast-travel'
   | 'enter-location' | 'start-travel' | 'fast-travel' | 'advance-time' | 'settle-weather' | 'settle-actor-schedules'
   | 'start-combat' | 'resolve-combat' | 'initialize-combat' | 'settle-combat-state' | 'perform-combat-action' | 'rest' | 'respawn'
+  | 'perform-crafting'
   | 'change-actor-state' | 'change-region-state' | 'set-world-flag'
   | 'earn-achievement' | 'unlock-ending' | 'reach-ending'
 
@@ -47,6 +48,7 @@ export type TextOpenWorldEffectDefinitionV1 =
       skillKey: string | null
       itemKey: string | null
     } }
+  | { key: string; operation: 'perform-crafting'; payload: { recipeKey: string } }
   | { key: string; operation: 'rest'; payload: { healthRatio: number; skillResourceRatio: number; clearHarmfulStatuses: boolean } }
   | { key: string; operation: 'respawn'; payload: { fastTravelPointKey: string; healthRatio: number } }
   | { key: string; operation: 'change-actor-state'; payload: {
@@ -381,6 +383,27 @@ export interface TextOpenWorldCombatActionAuthorizationV1 {
   statusEffectKeys?: string[]
 }
 
+export interface TextOpenWorldCraftingAuthorizationV1 {
+  kind: 'crafting'
+  recipeKey: string
+  quantity: number
+  locationKey: string
+  baseWorldMinute: number
+  timeCostMinutes: number
+  ingredients: Array<{
+    itemKey: string
+    quantity: number
+    beforeQuantity: number
+    afterQuantity: number
+  }>
+  outputs: Array<{
+    itemKey: string
+    quantity: number
+    beforeQuantity: number
+    afterQuantity: number
+  }>
+}
+
 export interface TextOpenWorldEffectPlanV1 {
   schema: 'storyforge.text-open-world.effect-plan'
   version: 1
@@ -389,7 +412,7 @@ export interface TextOpenWorldEffectPlanV1 {
   resultingStateHash: string
   effectKeys: string[]
   effects: TextOpenWorldEffectDefinitionV1[]
-  authorization: TextOpenWorldRewardAuthorizationV1 | TextOpenWorldQuestTransitionAuthorizationV1 | TextOpenWorldObjectiveAuthorizationV1 | TextOpenWorldQuestTrackingAuthorizationV1 | TextOpenWorldFastTravelAuthorizationV1 | TextOpenWorldWeatherSettlementAuthorizationV1 | TextOpenWorldActorScheduleSettlementAuthorizationV1 | TextOpenWorldCrimeAuthorizationV1 | TextOpenWorldCombatTransitionAuthorizationV1 | TextOpenWorldCombatActionAuthorizationV1 | null
+  authorization: TextOpenWorldRewardAuthorizationV1 | TextOpenWorldQuestTransitionAuthorizationV1 | TextOpenWorldObjectiveAuthorizationV1 | TextOpenWorldQuestTrackingAuthorizationV1 | TextOpenWorldFastTravelAuthorizationV1 | TextOpenWorldWeatherSettlementAuthorizationV1 | TextOpenWorldActorScheduleSettlementAuthorizationV1 | TextOpenWorldCrimeAuthorizationV1 | TextOpenWorldCombatTransitionAuthorizationV1 | TextOpenWorldCombatActionAuthorizationV1 | TextOpenWorldCraftingAuthorizationV1 | null
   impactDomains: TextOpenWorldEffectImpactDomainV1[]
   previewChanges: TextOpenWorldEffectChangeV1[]
   planHash: string
