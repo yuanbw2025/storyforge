@@ -179,6 +179,15 @@ describe('R-SHORT2 · 专业短篇独立生产闭环', () => {
     expect(objective.content).toContain('first-person、third-limited、third-omniscient')
     expect(objective.content).toContain('past、present')
     expect(objective.content).toContain('targetWordCount 和 chapterCount 必须是 JSON 数字')
+
+    const [, planObjective] = buildShortNovelPromptV1({
+      kind: 'scene-plan',
+      context: '目标字数：5000\n章节数：3',
+      authorInstruction: '',
+    })
+    expect(planObjective.content).toContain('数组元素没有 version 字段')
+    expect(planObjective.content).toContain('{"stableKey":"chapter-1","order":0')
+    expect(planObjective.content).toContain('targetWordCount 使用 JSON 数字')
   })
 
   it('手稿变化后拒绝 stale 候选，且不能跨 Work 采纳', async () => {
