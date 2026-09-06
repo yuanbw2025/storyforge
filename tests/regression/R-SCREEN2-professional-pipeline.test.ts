@@ -283,6 +283,7 @@ describe('SCREEN-2 · professional novel-to-screenplay pipeline', () => {
     expect(prompts.get('dramaturgy-review')).toContain('sourceUnitKeys 必须是数组且允许 []')
     expect(prompts.get('targeted-rewrite')).toContain('只修复作者选中的开放问题')
     expect(prompts.get('targeted-rewrite')).toContain('blocks 必须给出修订后的整场合法 AST')
+    expect(prompts.get('targeted-rewrite')).toContain('expectedSceneRevision 必须是大于 0 的 JSON 整数')
 
     const backup = await exportProjectJSON(item.source.scope.projectId)
     expect(backup).toMatchObject({ version: 14 })
