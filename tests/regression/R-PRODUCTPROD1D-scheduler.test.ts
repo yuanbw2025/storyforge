@@ -5,6 +5,7 @@ import { openWorldSemanticResourceCatalogV1 } from '../../src/lib/context-gatewa
 import { executeProductProductionCommand } from '../../src/lib/product-production/commands'
 import { draftProductProductionBriefV3, suggestProductStartingPoints } from '../../src/lib/product-production/consultation'
 import { hashProductProductionValueV2 } from '../../src/lib/product-production/hash'
+import { createProductProductionPlanV3 } from '../../src/lib/product-production/plan'
 import {
   assertProductProductionBudgetLedgerV1,
   runProductProductionSchedulerCycleV1,
@@ -356,6 +357,46 @@ describe('R-PRODUCTPROD-1D · durable bounded DAG scheduler', () => {
     expect(blocked.tasks.find(task => task.taskKey === 'content.design')).toMatchObject({ status: 'blocked' })
     expect((await db.productBuilds.get(blocked.buildId))?.failureJson).toContain('provider-safety-refusal')
   }, 30_000)
+
+  it('按任务合同真实中止超时 provider，并保存 task-timeout 恢复证据', async () => {
+    const owned = await fixture('scheduler-task-timeout')
+    const basePlan = await createProductProductionPlanV3({
+      buildNumber: 1,
+      briefHash: await hashProductProductionValueV2(owned.brief),
+      brief: owned.brief,
+    })
+    const plan = {
+      ...basePlan,
+      tasks: basePlan.tasks.map(task => task.taskKey === 'content.design'
+        ? { ...task, maxAttempts: 1, timeoutMs: 10 }
+        : task),
+    }
+    let aborted = false
+    const executor: ProductProductionTaskExecutorV1 = async request => {
+      if (request.task.taskKey !== 'content.design') throw new Error('超时后不应领取下游任务')
+      return await new Promise<ProductProductionTaskExecutionResultV1>((_resolve, reject) => {
+        request.signal.addEventListener('abort', () => {
+          aborted = true
+          reject(request.signal.reason)
+        }, { once: true })
+      })
+    }
+    const textRequirement = owned.brief.capabilityRequirements.find(item => item.mediaClass === 'text')!
+    const blocked = await runProductProductionUntilBlockedV1({
+      scope: owned.scope,
+      productionId: owned.productionId,
+      executor,
+      suppliedPlan: plan,
+      capabilityBindings: [{
+        requirementKey: textRequirement.requirementKey,
+        adapterId: 'configured-text-provider.v1',
+        bindingHash: await hashProductProductionValueV2({ provider: 'configured' }),
+      }],
+    })
+    expect(aborted).toBe(true)
+    expect(blocked.buildStatus).toBe('recovery-required')
+    expect((await db.productBuilds.get(blocked.buildId))?.failureJson).toContain('task-timeout')
+  })
 
   it('拒绝带未知字段或伪造结算数据的 budget ledger', () => {
     const emptyLedger = {

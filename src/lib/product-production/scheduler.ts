@@ -1253,17 +1253,31 @@ async function runClaimedTask(input: {
   }
   await input.onDurableBoundary?.('provider.requested', snapshot)
   let result: ProductProductionTaskExecutionResultV1
+  let timedOut = false
+  const executionController = new AbortController()
+  const abortFromParent = () => executionController.abort(input.signal.reason)
+  if (input.signal.aborted) abortFromParent()
+  else input.signal.addEventListener('abort', abortFromParent, { once: true })
+  const timeoutHandle = globalThis.setTimeout(() => {
+    timedOut = true
+    const timeoutError = new Error(
+      `[product-production-scheduler] ${input.task.taskKey} 超过任务合同 ${input.task.timeoutMs}ms`,
+    )
+    timeoutError.name = 'TimeoutError'
+    executionController.abort(timeoutError)
+  }, input.task.timeoutMs)
   try {
     result = await input.executor({
       scope: input.scope, productionId: input.productionId, buildId: input.build.id,
       buildNumber: input.build.buildNumber, controlEpoch: input.build.controlEpoch,
       planHash: input.build.planHash, task: input.task, attempt,
       idempotencyKey: inputHash, contextText: assembled.text,
-      inputArtifacts: artifacts, capabilityBindings: bindings, signal: input.signal,
+      inputArtifacts: artifacts, capabilityBindings: bindings, signal: executionController.signal,
     })
     validateExecutionResult(input.task, result)
   } catch (error) {
-    const code = error instanceof Error && error.name === 'AbortError' ? 'task-aborted'
+    const code = timedOut || (error instanceof Error && error.name === 'TimeoutError') ? 'task-timeout'
+      : error instanceof Error && error.name === 'AbortError' ? 'task-aborted'
       : error instanceof Error && error.message.includes('provider-safety-refusal')
         ? 'provider-safety-refusal' : 'task-executor-failed'
     const retryable = code !== 'task-aborted' && code !== 'provider-safety-refusal'
@@ -1272,6 +1286,7 @@ async function runClaimedTask(input: {
       stepId: input.task.taskKey, attempt, code,
       retryable,
       category: code === 'task-aborted' ? 'cancelled'
+        : code === 'task-timeout' ? 'transient'
         : code === 'provider-safety-refusal' ? 'deterministic' : 'unknown',
       action: retryable ? 'retry' : 'fail',
     })
@@ -1311,6 +1326,9 @@ async function runClaimedTask(input: {
       })
     }
     return
+  } finally {
+    globalThis.clearTimeout(timeoutHandle)
+    input.signal.removeEventListener('abort', abortFromParent)
   }
   const candidateHash = await hashProductProductionValueV2(result)
   if (input.task.executionMode === 'model') {
