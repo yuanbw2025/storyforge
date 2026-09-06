@@ -1,6 +1,6 @@
 # AI 主导文字开放世界叙事基座 · StoryForge 施工规格
 
-> 规格版本：3.2.10
+> 规格版本：3.2.11
 > 生效日期：2026-09-06
 > 文档层级：L2 产品目标架构与施工规格
 > 当前状态：设计基线；不代表代码已经实现
@@ -480,6 +480,20 @@ P3仍只产出Build候选，不写世界引擎、ProductRelease或Session。它�
 - Quest、QuestStage、Objective、Scene与Reward绑定均保持空数组/null和显式unbound，完整运行还依赖QuestSkeleton、ContentRequirementManifest、QuestDesignDocuments、SceneScripts和ActionBindings。
 
 验证器从Artifact反向恢复模型语义，再重新分配稳定键、Stage链、等级/时长、Promise落点、Ending路径、保护策略和全部空绑定做规范比较。StoryBeat逆序或遗漏、未知地点、核心体验缺失、结局漏项、私自绑定任务/场景/奖励、改变等待/失败治理，以及重算Hash后的篡改都会失败关闭。P5仍只写Build候选，不新增物理表，不写ProductRelease或Session。
+
+#### 5.4.10 P6 SignificantThreads与重要故事生态落地
+
+`src/lib/open-world/significant-threads-production.ts`把重要故事生产从“给配角写小传”提升为角色、势力和地区可共同承载的可玩结构，同时不把尚不存在的NPC、任务或Effect目录伪装成运行资产：
+
+- 登记的`text-open-world.significant-threads-input`只读取同一Build已验收的GameBrief、SourceLedger、StoryArc、EndingContracts、NarrativePromises、RegionSkeleton和MainlineThread；Context优先选择角色、势力、事件、剧情与空间claim，完整核验Artifact行Hash、内容Hash、来源条目Hash和选择Hash，不重读活动来源或Session；
+- P6正式依赖P5并读取MainlineThread。模型用`availableAfterMainlineStageNumber`描述何时可揭示重要故事，但不能要求修改任何主线Stage、核心目标、可达性或结局；重要故事对NarrativePromise只能提供辅助回响，不能取代主线既有的建立与回收；
+- 重要故事数量精确服从GameBrief，owner必须来自character、faction、region且至少覆盖两种。地区owner直接绑定RegionSkeleton稳定键；角色和势力owner由代码分配稳定reservation，等P8 NPC运行目录生产真实Actor/Faction后再兑现，不能在P6自造目录引用；
+- 每条故事必须绑定来源claim或StoryBeat，落到有效地区和地点，并拥有2～4方冲突参与者。每方分别声明目标、可调动资源与当前压力，另以升级步骤和氛围信号说明传闻、环境、功能NPC与地方事件如何持续表现群体冲突，而不是为每个群体成员启动常驻Agent；
+- 每条故事形成3～6个有序Stage，整线至少包含对话和调查/探索/选择之一；Stage必须声明玩家目标、阶段结果和1～4项局部后果。局部后果只允许道德、阵营亲合、地区状态、NPC态度和资源五类语义计划，真实Condition/Effect仍保持空绑定；
+- 代码生成`significant-thread.*`、owner reservation、conflict side、stage和consequence稳定键，按权重给每线形成至少30分钟的可玩时长预算；所有Stage固定显式推进、非地点唯一触发、前后安全等待、不可放弃/过期/永久失败、普通状态不阻断，玩家缺席时不施加压力；
+- Quest、Objective、Scene、Action、Reward、Condition、Effect、Actor和Faction绑定全部为null/空数组及显式unbound，P7地区生态、P8任务/目录和P8F最终化必须逐项兑现后才能装配运行包。
+
+验证器从Artifact反向还原模型草稿，再重建owner、空间、冲突方、Stage链、时长、局部后果目标、主线兼容、全部空绑定和Hash。owner类型不足、未知claim、越界地点、阶段空间越权、主线阻断、解除等待保护、注入Effect键，以及重算Hash后的篡改都会失败关闭。P6不新增物理表，不写ProductRelease或Session。
 
 ### 5.5 正确的验证顺序
 
@@ -1299,6 +1313,7 @@ StoryForge当前没有独立staging。发布前仍需在隔离数据中完成灰
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| 3.2.11 | 2026-09-07 | 落地P6 SignificantThreads：登记只读Brief/来源/故事/结局/承诺/地区/主线的Context与专属Skill/Executor；AI精确设计至少两种owner、多方冲突系统、3～6个可玩Stage、氛围信号和局部后果，代码固定稳定键、owner预留/地区绑定、主线揭示窗口、安全等待、不可放弃过期/永久失败/普通状态阻断、非地点触发及主线不可改写/阻断；全部Quest/Scene/Actor/Faction/Condition/Effect绑定保持unbound且全链可复验 |
 | 3.2.10 | 2026-09-07 | 落地P5 MainlineThread：登记只读Brief/玩法/故事/结局/承诺/地区/主角的Context与专属Skill/Executor；AI在冻结规模内编排Stage空间与体验、揭示、保护及恢复，代码固定严格链、起点、StoryBeat与Promise全覆盖、多结局终段分流、90～120分钟和1→5级节奏，以及等待/不可放弃过期/不可永久失败/普通状态不阻断/非地点触发；Quest/Scene/Reward/Condition保持unbound且全链可复验 |
 | 3.2.9 | 2026-09-07 | 落地P4 RegionSkeleton：登记只读Brief/P1/体验/StoryArc的Context与专属Skill/Executor；AI把来源claim和全部故事空间需求编排为精确规模的地区、地点、功能、提前到达常态及连线，代码固定稳定键、全图/跨区连通、每区快旅复活点、渐进知识、距离耗时及非地点唯一主线触发；Scene/Quest/NPC/遭遇/商店/媒资和主线绑定保持unbound，全部规模、来源、需求、连通、治理和Hash可复验 |
 | 3.2.8 | 2026-09-07 | 落地P3 StoryArchitecture：登记只读体验/主角/P1证据的Context与专属Skill/Executor；AI设计核心冲突、长程节拍、多结局差异与叙事承诺，代码固定严格顺序/等待/不可永久失败主线、阶段序列、稳定键、来源与显式假设权限、全结局核心目标达成及建立—回响—回收闭环；Condition/Scene保持unbound供下游兑现，全部上游、引用、顺序、绑定和Hash可复验 |

@@ -1181,6 +1181,172 @@ export interface TextOpenWorldMainlineThreadV1 {
   mainlineThreadHash: string
 }
 
+export type TextOpenWorldSignificantThreadOwnerKindV1 =
+  | 'character'
+  | 'faction'
+  | 'region'
+
+export type TextOpenWorldSignificantConsequenceKindV1 =
+  | 'morality'
+  | 'faction-affinity'
+  | 'regional-state'
+  | 'npc-attitude'
+  | 'resource'
+
+/**
+ * P6 important-story architecture. Character and faction owners are stable
+ * reservations until the NPC catalog is compiled; region owners bind to the
+ * already frozen map. Runtime Quest, Scene, Condition, Effect, Reward, Actor,
+ * and Faction rows remain explicitly unbound.
+ */
+export interface TextOpenWorldSignificantThreadsV1 {
+  schema: 'storyforge.text-open-world-significant-threads'
+  version: 1
+  productType: 'text-open-world'
+  productInstanceKey: string
+  gameBriefHash: string
+  sourceLedgerHash: string
+  storyArcHash: string
+  endingContractsHash: string
+  narrativePromisesHash: string
+  regionSkeletonHash: string
+  mainlineThreadHash: string
+  threads: Array<{
+    key: string
+    order: number
+    ownerKind: TextOpenWorldSignificantThreadOwnerKindV1
+    ownerKey: string
+    ownerTitle: string
+    ownerBinding: {
+      status: 'catalog-unbound' | 'region-bound'
+      actorKey: null
+      factionKey: null
+      regionKey: string | null
+    }
+    title: string
+    summary: string
+    centralConflict: string
+    theme: string
+    sourceClaimKeys: string[]
+    storyBeatKeys: string[]
+    regionKeys: string[]
+    locationKeys: string[]
+    supportingPromiseKeys: string[]
+    mainlineCompatibility: {
+      availableAfterStageKey: string
+      lastSafeStartStageKey: null
+      requiredMainlineMutationKeys: []
+      mayChangeCoreGoal: false
+      mayBlockMainline: false
+      mayDetermineEndingAlone: false
+    }
+    conflictSystem: {
+      sides: Array<{
+        key: string
+        order: number
+        name: string
+        goal: string
+        resource: string
+        pressure: string
+        catalogBindingStatus: 'unbound'
+      }>
+      escalationSteps: string[]
+      atmosphereSignals: string[]
+    }
+    stageKeys: string[]
+    estimatedMinutes: number
+  }>
+  stages: Array<{
+    key: string
+    threadKey: string
+    order: number
+    previousStageKey: string | null
+    nextStageKey: string | null
+    title: string
+    summary: string
+    dramaticQuestion: string
+    regionKeys: string[]
+    locationKeys: string[]
+    gameplayFocus: TextOpenWorldMainlineGameplayFocusV1[]
+    playerGoals: string[]
+    stageOutcome: string
+    safeWaitBefore: true
+    safeWaitAfter: true
+    pacingWeight: number
+    estimatedMinutes: number
+    localConsequencePlans: Array<{
+      key: string
+      order: number
+      kind: TextOpenWorldSignificantConsequenceKindV1
+      targetSemanticKey: string
+      direction: 'increase' | 'decrease' | 'change'
+      magnitude: 'minor' | 'moderate' | 'major'
+      description: string
+      runtimeBinding: {
+        status: 'effect-unbound'
+        conditionKeys: []
+        effectKeys: []
+      }
+    }>
+    entryPolicy: {
+      mode: 'explicit-important-story-advance'
+      arrivalAloneNeverStarts: true
+      previousStageCompletionRequired: boolean
+      prerequisiteConditionKeys: []
+    }
+    failurePolicy: {
+      combat: 'retry-or-respawn'
+      story: 'cannot-permanently-fail'
+      abandonable: false
+      expirable: false
+      ordinaryStateMayBlock: false
+    }
+    contentBinding: {
+      status: 'content-unbound'
+      questKey: null
+      questStageKeys: []
+      objectiveKeys: []
+      sceneKeys: []
+      actionKeys: []
+      rewardContractKey: null
+    }
+  }>
+  coverage: {
+    requiredThreadCount: number
+    actualThreadCount: number
+    ownerKinds: TextOpenWorldSignificantThreadOwnerKindV1[]
+    minimumOwnerKindCount: 2
+    regionKeys: string[]
+    sourceClaimKeys: string[]
+  }
+  governance: {
+    lifecycle: 'persistent-safe-wait'
+    failure: 'cannot-permanently-fail'
+    abandonable: false
+    expirable: false
+    pressureWhileAbsent: 'none'
+    consequences: 'local-only'
+    mainlineCompatibility: 'cannot-block-or-rewrite'
+    criticalTrigger: 'never-location-only'
+    criticalAssets: 'protected-by-downstream-requirements'
+  }
+  downstreamBinding: {
+    status: 'requirements-unbound'
+    requiredArtifactKeys: [
+      'text-open-world.quest-skeletons',
+      'text-open-world.content-requirement-manifest',
+      'text-open-world.npc-runtime-catalog',
+      'text-open-world.quest-design-documents',
+      'text-open-world.scene-scripts',
+      'text-open-world.action-bindings',
+    ]
+    runtimeReady: false
+  }
+  basisHash: string
+  createdAt: number
+  significantThreadsHash: string
+}
+
 export const TEXT_OPEN_WORLD_PRODUCTION_STAGES_V1 = [
   'P0', 'P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8', 'P8F', 'P9', 'P10',
   'V1', 'V2', 'V3', 'QA',

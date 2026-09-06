@@ -50,12 +50,19 @@ import {
   type TextOpenWorldMainlineInputContextV1,
   type TextOpenWorldMainlineModelRunnerV1,
 } from '../../src/lib/open-world/mainline-production'
+import {
+  createTextOpenWorldSignificantThreadsExecutorV1,
+  validateTextOpenWorldSignificantThreadsV1,
+  type TextOpenWorldSignificantThreadsInputContextV1,
+  type TextOpenWorldSignificantThreadsModelRunnerV1,
+} from '../../src/lib/open-world/significant-threads-production'
 import { TEXT_OPEN_WORLD_EFFECT_OPERATIONS_V1 } from '../../src/lib/types/text-open-world-effect'
 import type {
   TextOpenWorldGameplayRulesetSkeletonV1,
   TextOpenWorldMainlineThreadV1,
   TextOpenWorldPlayerBuildV1,
   TextOpenWorldRegionSkeletonV1,
+  TextOpenWorldSignificantThreadsV1,
 } from '../../src/lib/types'
 import {
   createTextOpenWorldProductionPlanV1,
@@ -1129,6 +1136,155 @@ async function executeMainline(
   })
 }
 
+function significantThreadsRunner(options: {
+  insufficientOwnerCoverage?: boolean
+  invalidLocation?: boolean
+} = {}): TextOpenWorldSignificantThreadsModelRunnerV1 {
+  return async input => {
+    const context = JSON.parse(input.contextText) as TextOpenWorldSignificantThreadsInputContextV1
+    const claimKey = context.sourceLedger.selectedClaims[0]!.claimKey
+    const stage = (
+      title: string,
+      regionNumber: number,
+      locationNumber: number,
+      gameplayFocus: string[],
+      consequenceKind: string,
+      index: number,
+    ) => ({
+      title,
+      summary: `${title}通过可执行目标推进重要故事，但不会改写或阻断主线。`,
+      dramaticQuestion: `玩家愿意以怎样的局部代价处理${title}？`,
+      regionNumbers: [regionNumber],
+      locationNumbers: [locationNumber],
+      gameplayFocus,
+      playerGoals: ['与冲突参与者交谈并确认其真实诉求', '完成一个可验证的地方行动'],
+      stageOutcome: `第${index}阶段在安全等待点收束，并留下可见但不阻断主线的地区后果。`,
+      durationWeight: index,
+      localConsequences: [{
+        kind: consequenceKind,
+        direction: index % 2 ? 'increase' : 'change',
+        magnitude: index === 3 ? 'moderate' : 'minor',
+        description: '改变当地人对玩家的态度或地区日常表现，不改变主线核心目标和可达性。',
+      }],
+    })
+    const threads = [
+      {
+        ownerKind: 'character',
+        ownerTitle: '守灯学徒阿澜',
+        title: '失落的守灯誓言',
+        summary: '阿澜试图在家族责任、个人真相与雾港公共安全之间找到能够承担的选择。',
+        centralConflict: '阿澜必须决定继承一套有缺陷的守灯传统，还是公开真相并重建自己的责任。',
+        theme: '继承不是服从，而是理解代价之后重新作出承诺。',
+        sourceClaimKeys: [claimKey],
+        storyBeatNumbers: [1, 2],
+        regionNumbers: [1],
+        locationNumbers: [1, 2, 3],
+        supportingPromiseNumbers: [1],
+        availableAfterMainlineStageNumber: 1,
+        conflictSides: [
+          { name: '阿澜', goal: '查明导师隐瞒的誓言代价', resource: '守灯训练与导师留下的私人物件', pressure: '既害怕背叛传统，也无法继续假装无事发生' },
+          { name: '守灯旧规维护者', goal: '维持雾港对守灯制度的信任', resource: '公开记录、职业权威与居民支持', pressure: '潮门异变让任何质疑都可能引发恐慌' },
+        ],
+        escalationSteps: ['私人物件暴露记录矛盾', '公开职责与个人真相发生冲突', '阿澜必须在保密与重建承诺之间选择'],
+        atmosphereSignals: ['塔下学徒压低声音议论旧誓', '工坊拒绝修复来历不明的灯具', '居民对守灯人的问候随调查阶段变化'],
+        stages: [
+          stage('塔下旧物', 1, 2, ['dialogue', 'investigation'], 'npc-attitude', 1),
+          stage('工坊证言', 1, 3, ['dialogue', 'exploration'], 'morality', 2),
+          stage('重立誓言', 1, 1, ['dialogue', 'choice'], 'npc-attitude', 3),
+        ],
+      },
+      {
+        ownerKind: options.insufficientOwnerCoverage ? 'character' : 'region',
+        ownerTitle: '脊湾沿岸共同体',
+        title: '盐路与旧约',
+        summary: '脊湾各聚落围绕盐路收益、危险治理和旧约责任展开一场可被玩家介入的地区纷争。',
+        centralConflict: '依赖同一条盐路的群体无法就风险、收益和历史责任达成一致。',
+        theme: '共同体不是没有冲突，而是能否建立承担冲突的规则。',
+        sourceClaimKeys: [claimKey],
+        storyBeatNumbers: [2, 3, 4],
+        regionNumbers: [2],
+        locationNumbers: [5, 6, options.invalidLocation ? 99 : 8],
+        supportingPromiseNumbers: [2],
+        availableAfterMainlineStageNumber: 3,
+        conflictSides: [
+          { name: '集市行商', goal: '保持盐路开放并降低通行成本', resource: '物资网络、价格和跨地消息', pressure: '持续封路会让普通家庭先破产' },
+          { name: '沿岸守望者', goal: '在危险查明前限制通行', resource: '地形知识、巡逻队和居民信任', pressure: '近期伤亡迫使他们采取更激进的封锁' },
+          { name: '旧约见证人', goal: '让各聚落承认被掩盖的历史责任', resource: '档案索引、仪式权威和幸存者证词', pressure: '主线调查让旧约争议重新公开' },
+        ],
+        escalationSteps: ['盐路检查引发价格冲突', '伤亡证据使双方拒绝妥协', '议事台必须形成新的共同治理办法'],
+        atmosphereSignals: ['集市货架价格与货量发生变化', '道路旁增加守望者和受困行商', '功能NPC用不同问候表达对争议的立场'],
+        stages: [
+          stage('盐路争执', 2, 5, ['dialogue', 'investigation'], 'faction-affinity', 1),
+          stage('旧约证词', 2, 6, ['dialogue', 'exploration'], 'regional-state', 2),
+          stage('议事台新规', 2, 8, ['dialogue', 'choice'], 'regional-state', 3),
+        ],
+      },
+    ]
+    return {
+      output: JSON.stringify({
+        schema: 'storyforge.text-open-world-significant-threads-draft',
+        version: 1,
+        threads,
+      }),
+      bindingReceipt: bindingReceipt(input.requirementKey),
+      usage: null,
+    }
+  }
+}
+
+async function significantThreadsFixture() {
+  const input = await mainlineFixture()
+  const mainlineResult = await executeMainline(input)
+  await acceptTaskArtifacts(input, mainlineResult.artifacts, 'P5-mainline')
+  const plan = await createTextOpenWorldProductionPlanV1({
+    buildNumber: input.build.buildNumber,
+    controlEpoch: input.build.controlEpoch,
+    briefHash: input.briefRow.briefHash,
+    brief: input.brief,
+  })
+  const task = plan.tasks.find(item => item.taskKey === 'p6.significant-threads')!
+  const assembled = await assembleContext({
+    projectId: input.scope.projectId,
+    scope: input.scope,
+    sourceKeys: ['text-open-world.significant-threads-input'],
+    productProductionId: input.production.id!,
+    productBuildId: input.build.id!,
+    inputBudgetMaxTokens: task.budgetReservation.inputTokens,
+  })
+  return {
+    ...input,
+    task,
+    significantContextText: assembled.text,
+    significantContext: JSON.parse(assembled.text) as TextOpenWorldSignificantThreadsInputContextV1,
+    significantContextEvidence: assembled.sourceEvidence,
+  }
+}
+
+async function executeSignificantThreads(
+  input: Awaited<ReturnType<typeof significantThreadsFixture>>,
+  runModel: TextOpenWorldSignificantThreadsModelRunnerV1 = significantThreadsRunner(),
+) {
+  return createTextOpenWorldSignificantThreadsExecutorV1({ runModel, now: () => NOW + 10 })({
+    scope: input.scope,
+    productionId: input.production.id!,
+    buildId: input.build.id!,
+    buildNumber: input.build.buildNumber,
+    controlEpoch: input.build.controlEpoch,
+    planHash: input.planHash,
+    task: input.task,
+    attempt: 1,
+    idempotencyKey: await hashProductProductionValueV2('p6-significant-threads'),
+    contextText: input.significantContextText,
+    inputArtifacts: [],
+    capabilityBindings: input.task.capabilityRequirementKeys.map(requirementKey => ({
+      requirementKey,
+      bindingHash: CAPABILITY_HASH,
+      adapterId: 'configured-text.v1',
+    })),
+    signal: new AbortController().signal,
+  })
+}
+
 describe('R-OPEN-WORLD3 · P2 GameBrief / ExperienceContract / ProtagonistAsset', () => {
   beforeEach(async () => { await db.delete(); await db.open() })
   afterAll(() => db.close())
@@ -1821,4 +1977,119 @@ describe('R-OPEN-WORLD3 · P5 MainlineThread', () => {
       signal: new AbortController().signal,
     })).rejects.toThrow(/RegionSkeleton Hash不匹配|选择Hash不匹配/)
   }, 45_000)
+})
+
+describe('R-OPEN-WORLD3 · P6 SignificantThreads', () => {
+  beforeEach(async () => { await db.delete(); await db.open() })
+  afterAll(() => db.close())
+
+  it('把角色个人线与地区群像线编译成可等待、局部后果且不阻断主线的重要故事', async () => {
+    const input = await significantThreadsFixture()
+    expect(CONTEXT_SOURCE_BY_KEY.get('text-open-world.significant-threads-input')).toMatchObject({
+      layer: 'L0', ownerFrom: 'work', protectedFromTrim: true,
+    })
+    expect(getAgentSkillV1('text-open-world.production.significant-threads.v1')).toMatchObject({
+      contextSourceKeys: ['text-open-world.significant-threads-input'],
+      writeTargets: [{ table: 'productBuildArtifacts', fields: ['payloadJson'] }],
+    })
+    expect(input.significantContextEvidence).toEqual([
+      expect.objectContaining({ key: 'text-open-world.significant-threads-input', status: 'included', delivery: 'full' }),
+    ])
+    const result = await executeSignificantThreads(input)
+    const artifact = result.artifacts[0]!.payload as TextOpenWorldSignificantThreadsV1
+    expect(result.passedGateIds).toEqual(input.task.acceptanceGateIds)
+    expect(result.usage).toMatchObject({ modelCalls: 1, mediaCalls: 0 })
+    expect(artifact.coverage).toMatchObject({
+      requiredThreadCount: 2,
+      actualThreadCount: 2,
+      ownerKinds: ['character', 'region'],
+      minimumOwnerKindCount: 2,
+    })
+    expect(artifact.governance).toEqual({
+      lifecycle: 'persistent-safe-wait',
+      failure: 'cannot-permanently-fail',
+      abandonable: false,
+      expirable: false,
+      pressureWhileAbsent: 'none',
+      consequences: 'local-only',
+      mainlineCompatibility: 'cannot-block-or-rewrite',
+      criticalTrigger: 'never-location-only',
+      criticalAssets: 'protected-by-downstream-requirements',
+    })
+    expect(artifact.threads[0]).toMatchObject({
+      key: 'significant-thread.001',
+      ownerKind: 'character',
+      ownerKey: 'actor.significant.001',
+      ownerBinding: { status: 'catalog-unbound', actorKey: null, factionKey: null, regionKey: null },
+      mainlineCompatibility: {
+        availableAfterStageKey: 'mainline.stage.001',
+        lastSafeStartStageKey: null,
+        requiredMainlineMutationKeys: [],
+        mayChangeCoreGoal: false,
+        mayBlockMainline: false,
+        mayDetermineEndingAlone: false,
+      },
+    })
+    expect(artifact.threads[1]).toMatchObject({
+      key: 'significant-thread.002',
+      ownerKind: 'region',
+      ownerKey: 'region.002',
+      ownerBinding: { status: 'region-bound', regionKey: 'region.002' },
+    })
+    expect(artifact.threads.every(thread => thread.conflictSystem.sides.length >= 2)).toBe(true)
+    expect(artifact.stages).toHaveLength(6)
+    expect(artifact.stages.every(stage => (
+      stage.safeWaitBefore && stage.safeWaitAfter
+      && stage.entryPolicy.arrivalAloneNeverStarts
+      && !stage.failurePolicy.abandonable
+      && !stage.failurePolicy.expirable
+      && !stage.failurePolicy.ordinaryStateMayBlock
+      && stage.localConsequencePlans.every(plan => plan.runtimeBinding.status === 'effect-unbound')
+      && stage.contentBinding.status === 'content-unbound'
+    ))).toBe(true)
+    expect(artifact.downstreamBinding).toMatchObject({ status: 'requirements-unbound', runtimeReady: false })
+    await expect(validateTextOpenWorldSignificantThreadsV1({ artifact, context: input.significantContext }))
+      .resolves.toEqual(artifact)
+  }, 60_000)
+
+  it('拒绝owner种类不足和越界地点，不能把同类人物小传冒充完整重要故事生态', async () => {
+    const input = await significantThreadsFixture()
+    await expect(executeSignificantThreads(input, significantThreadsRunner({ insufficientOwnerCoverage: true })))
+      .rejects.toThrow(/至少覆盖两种owner/)
+    await expect(executeSignificantThreads(input, significantThreadsRunner({ invalidLocation: true })))
+      .rejects.toThrow(/locationNumbers|地点/)
+  }, 60_000)
+
+  it('即使重算Hash也拒绝解除等待保护、写入运行Effect或改成可阻断主线', async () => {
+    const input = await significantThreadsFixture()
+    const artifact = (await executeSignificantThreads(input)).artifacts[0]!.payload as TextOpenWorldSignificantThreadsV1
+    const tampered = structuredClone(artifact)
+    tampered.governance.abandonable = true as false
+    tampered.threads[0]!.mainlineCompatibility.mayBlockMainline = true as false
+    tampered.stages[0]!.localConsequencePlans[0]!.runtimeBinding.effectKeys.push('effect.forged' as never)
+    const { significantThreadsHash: _hash, ...body } = tampered
+    tampered.significantThreadsHash = await hashProductProductionValueV2(body)
+    await expect(validateTextOpenWorldSignificantThreadsV1({ artifact: tampered, context: input.significantContext }))
+      .rejects.toThrow(/主线兼容、局部后果、等待保护|被篡改/)
+
+    const forgedContext = structuredClone(input.significantContext)
+    forgedContext.mainlineThread.thread.coreGoal = '伪造的新核心目标'
+    await expect(createTextOpenWorldSignificantThreadsExecutorV1({ runModel: significantThreadsRunner() })({
+      scope: input.scope,
+      productionId: input.production.id!,
+      buildId: input.build.id!,
+      buildNumber: input.build.buildNumber,
+      controlEpoch: input.build.controlEpoch,
+      planHash: input.planHash,
+      task: input.task,
+      attempt: 1,
+      idempotencyKey: await hashProductProductionValueV2('forged-significant-context'),
+      contextText: JSON.stringify(forgedContext),
+      inputArtifacts: [],
+      capabilityBindings: input.task.capabilityRequirementKeys.map(requirementKey => ({
+        requirementKey, bindingHash: CAPABILITY_HASH, adapterId: 'configured-text.v1',
+      })),
+      signal: new AbortController().signal,
+    })).rejects.toThrow(/MainlineThread Hash不匹配|选择Hash不匹配/)
+  }, 60_000)
 })

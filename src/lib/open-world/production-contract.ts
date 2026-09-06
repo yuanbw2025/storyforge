@@ -230,10 +230,12 @@ export const TEXT_OPEN_WORLD_PRODUCTION_TASK_CONTRACTS_V1: TextOpenWorldProducti
   modelTask({
     stage: 'P6', taskKey: 'p6.significant-threads', objective: '生产角色、势力与地区拥有的重要故事线及其局部后果。',
     skillId: 'text-open-world.production.significant-threads.v1', recommendedModelCalls: 12,
-    dependsOn: ['p1.source-curation', 'p3.story-architecture', 'p4.region-skeleton'],
+    dependsOn: ['p1.source-curation', 'p3.story-architecture', 'p4.region-skeleton', 'p5.mainline'],
     inputArtifactKeys: [
-      'text-open-world.source-ledger', 'text-open-world.story-arc',
-      'text-open-world.ending-contracts', 'text-open-world.region-skeleton',
+      'text-open-world.game-brief', 'text-open-world.source-ledger',
+      'text-open-world.story-arc', 'text-open-world.ending-contracts',
+      'text-open-world.narrative-promises', 'text-open-world.region-skeleton',
+      'text-open-world.mainline-thread',
     ],
     outputArtifactKeys: ['text-open-world.significant-threads'],
     completion: {
