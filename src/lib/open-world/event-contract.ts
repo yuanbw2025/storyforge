@@ -23,6 +23,7 @@ import type {
   TextOpenWorldFastTravelAuthorizationV1,
   TextOpenWorldWeatherSettlementAuthorizationV1,
   TextOpenWorldActorScheduleSettlementAuthorizationV1,
+  TextOpenWorldCombatTransitionAuthorizationV1,
   TextOpenWorldCrimeAuthorizationV1,
 } from '../types'
 import { parseTextOpenWorldCommandEventPayloadV1 } from './command-contract'
@@ -210,6 +211,36 @@ function parseAuthorization(value: unknown, label: string): TextOpenWorldEffectP
       witnessActorKeys: uniqueStrings(raw.witnessActorKeys, `${label}.witnessActorKeys`),
       effectKeys: uniqueStrings(raw.effectKeys, `${label}.effectKeys`),
     } satisfies TextOpenWorldCrimeAuthorizationV1
+  }
+  if (raw.kind === 'combat-transition') {
+    exact(raw, [
+      'kind', 'instanceKey', 'encounterKey', 'intent',
+      'beforePhase', 'beforeRound', 'beforeTurnIndex', 'beforeActiveCombatantKey',
+      'afterStatus', 'afterPhase', 'afterRound', 'afterTurnIndex', 'afterActiveCombatantKey',
+    ], label)
+    const intents = new Set(['begin-round', 'begin-turn', 'complete-turn', 'advance-turn', 'finish-victory', 'finish-defeat', 'finish-escaped'])
+    const phases = new Set(['started', 'round-start', 'actor-turn', 'action-resolved', 'round-end', 'terminal'])
+    const statuses = new Set(['active', 'victory', 'defeat', 'escaped'])
+    const intent = token(raw.intent, `${label}.intent`) as TextOpenWorldCombatTransitionAuthorizationV1['intent']
+    const beforePhase = token(raw.beforePhase, `${label}.beforePhase`) as TextOpenWorldCombatTransitionAuthorizationV1['beforePhase']
+    const afterPhase = token(raw.afterPhase, `${label}.afterPhase`) as TextOpenWorldCombatTransitionAuthorizationV1['afterPhase']
+    const afterStatus = token(raw.afterStatus, `${label}.afterStatus`) as TextOpenWorldCombatTransitionAuthorizationV1['afterStatus']
+    if (!intents.has(intent) || !phases.has(beforePhase) || !phases.has(afterPhase) || !statuses.has(afterStatus)) fail(`${label}枚举无效`)
+    return {
+      kind: 'combat-transition',
+      instanceKey: token(raw.instanceKey, `${label}.instanceKey`, COMMAND_ID),
+      encounterKey: token(raw.encounterKey, `${label}.encounterKey`),
+      intent,
+      beforePhase,
+      beforeRound: integer(raw.beforeRound, `${label}.beforeRound`),
+      beforeTurnIndex: raw.beforeTurnIndex == null ? null : integer(raw.beforeTurnIndex, `${label}.beforeTurnIndex`),
+      beforeActiveCombatantKey: raw.beforeActiveCombatantKey == null ? null : token(raw.beforeActiveCombatantKey, `${label}.beforeActiveCombatantKey`),
+      afterStatus,
+      afterPhase,
+      afterRound: integer(raw.afterRound, `${label}.afterRound`),
+      afterTurnIndex: raw.afterTurnIndex == null ? null : integer(raw.afterTurnIndex, `${label}.afterTurnIndex`),
+      afterActiveCombatantKey: raw.afterActiveCombatantKey == null ? null : token(raw.afterActiveCombatantKey, `${label}.afterActiveCombatantKey`),
+    } satisfies TextOpenWorldCombatTransitionAuthorizationV1
   }
   if (raw.kind === 'quest-objective') {
     exact(raw, ['kind', 'instanceKey', 'definitionKey', 'stageKey', 'objectiveKey', 'worldMinute', 'fromStatus', 'toStatus'], label)

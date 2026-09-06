@@ -3,6 +3,7 @@ import type {
   ProductRuntimeEvent,
   TextOpenWorldActionProjectionContextV1,
   TextOpenWorldConditionEvaluationContextV1,
+  TextOpenWorldCombatTransitionIntentV1,
   TextOpenWorldDerivedContextsV1,
   TextOpenWorldDirectorProjectionV1,
   TextOpenWorldEffectDefinitionV1,
@@ -40,6 +41,7 @@ import { createTextOpenWorldWeatherCatalogV1, projectTextOpenWorldClockWeatherV1
 import { createTextOpenWorldActorScheduleCatalogV1, projectTextOpenWorldActorsV1 } from './actors'
 import { deriveTextOpenWorldAttitudeByActorKeyV1 } from './relationships'
 import { createTextOpenWorldCrimeCatalogV1 } from './crime'
+import { createTextOpenWorldCombatStateMachineV1 } from './combat-state-machine'
 
 type Row = Record<string, unknown>
 const STABLE_KEY = /^[a-z][a-z0-9._:-]{0,199}$/
@@ -50,6 +52,7 @@ function row(value: unknown, label: string): Row { if (!value || typeof value !=
 function exact(value: Row, fields: readonly string[], label: string) { const expected = [...fields].sort(); const actual = Object.keys(value).sort(); if (expected.length !== actual.length || expected.some((field, index) => field !== actual[index])) fail(`${label}字段不符合合同:${actual.join(',')}`) }
 function integer(value: unknown, label: string, minimum = 0, maximum = Number.MAX_SAFE_INTEGER): number { if (!Number.isSafeInteger(value) || Number(value) < minimum || Number(value) > maximum) fail(`${label}无效`); return Number(value) }
 function token(value: unknown, label: string, pattern = STABLE_KEY): string { if (typeof value !== 'string' || !pattern.test(value)) fail(`${label}无效`); return value }
+function enumToken<T extends string>(value: unknown, allowed: readonly T[], label: string): T { if (typeof value !== 'string' || !allowed.includes(value as T)) fail(`${label}无效`); return value as T }
 function nullableToken(value: unknown, label: string, pattern = STABLE_KEY): string | null { return value == null ? null : token(value, label, pattern) }
 function uniqueTokens(value: unknown, label: string, pattern = STABLE_KEY): string[] { if (!Array.isArray(value)) fail(`${label}必须是数组`); const parsed = value.map((item, index) => token(item, `${label}[${index}]`, pattern)); if (new Set(parsed).size !== parsed.length) fail(`${label}不能重复`); return parsed }
 function json(event: ProductRuntimeEvent): unknown { try { return JSON.parse(event.payloadJson) } catch { fail(`事件${event.sequence}不是合法JSON`) } }
@@ -153,7 +156,7 @@ export function createInitialTextOpenWorldSessionProjectionV1(value: unknown): T
     schema: 'storyforge.text-open-world.session-projection', version: 1, runtimePackage,
     ruleset: { key: runtimePackage.metadata.rulesetKey, version: runtimePackage.metadata.rulesetVersion }, state,
     actions: { completedOnceActionKeys: [], cooldownUntilWorldMinuteByActionKey: {} }, director: emptyDirector(),
-    protocol: { pendingCommandId: null, pendingCommandSequence: null, pendingActionKey: null, pendingActorKey: null, pendingTargetKey: null, randomEvidence: [], lastCompletedCommandId: null, lastOutcomeFingerprint: null },
+    protocol: { pendingCommandId: null, pendingCommandSequence: null, pendingActionKey: null, pendingActorKey: null, pendingTargetKey: null, pendingCombatTransitionIntent: null, randomEvidence: [], lastCompletedCommandId: null, lastOutcomeFingerprint: null },
     lastEventSequence: 0,
   }
 }
@@ -204,6 +207,14 @@ export function createTextOpenWorldInitialProjectionCandidatesV1(value: unknown)
       candidates.push(legacy)
     }
   }
+  if (modules.actions.version < 9) {
+    for (const candidate of [...candidates]) {
+      const legacy = structuredClone(candidate) as Row
+      const legacyProtocol = row(legacy.protocol, 'legacy projection.protocol')
+      delete legacyProtocol.pendingCombatTransitionIntent
+      candidates.push(legacy)
+    }
+  }
   return candidates
 }
 
@@ -250,11 +261,20 @@ export function parseTextOpenWorldSessionProjectionV1(value: unknown): TextOpenW
   const lastDraws = row(director.lastDrawWorldMinuteByRegionKey, 'director.lastDrawWorldMinuteByRegionKey'); const lastDrawWorldMinuteByRegionKey: Record<string, number> = {}; for (const [key, minute] of Object.entries(lastDraws)) { if (!modules.world.regions.some(region => region.key === key)) fail(`未知director地区:${key}`); lastDrawWorldMinuteByRegionKey[key] = integer(minute, `director.lastDraw.${key}`) }
   const protocol = row(parsed.protocol, 'protocol')
   const legacyProtocol = !Object.prototype.hasOwnProperty.call(protocol, 'pendingTargetKey')
-  exact(protocol, legacyProtocol
-    ? ['pendingCommandId', 'pendingCommandSequence', 'pendingActionKey', 'pendingActorKey', 'randomEvidence', 'lastCompletedCommandId', 'lastOutcomeFingerprint']
-    : ['pendingCommandId', 'pendingCommandSequence', 'pendingActionKey', 'pendingActorKey', 'pendingTargetKey', 'randomEvidence', 'lastCompletedCommandId', 'lastOutcomeFingerprint'], 'protocol')
+  const legacyCombatProtocol = !Object.prototype.hasOwnProperty.call(protocol, 'pendingCombatTransitionIntent')
+  if (legacyCombatProtocol && modules.actions.version >= 9) fail('新版Session缺少战斗阶段命令游标')
+  exact(protocol, [
+    'pendingCommandId', 'pendingCommandSequence', 'pendingActionKey', 'pendingActorKey',
+    ...legacyProtocol ? [] : ['pendingTargetKey'],
+    ...legacyCombatProtocol ? [] : ['pendingCombatTransitionIntent'],
+    'randomEvidence', 'lastCompletedCommandId', 'lastOutcomeFingerprint',
+  ], 'protocol')
   const pendingCommandId = nullableToken(protocol.pendingCommandId, 'protocol.pendingCommandId', COMMAND_ID); const pendingCommandSequence = protocol.pendingCommandSequence == null ? null : integer(protocol.pendingCommandSequence, 'protocol.pendingCommandSequence', 1); const pendingActionKey = nullableToken(protocol.pendingActionKey, 'protocol.pendingActionKey'); const pendingActorKey = nullableToken(protocol.pendingActorKey, 'protocol.pendingActorKey'); const pendingTargetKey = legacyProtocol ? null : nullableToken(protocol.pendingTargetKey, 'protocol.pendingTargetKey')
+  const pendingCombatTransitionIntent = legacyCombatProtocol || protocol.pendingCombatTransitionIntent == null
+    ? null
+    : enumToken(protocol.pendingCombatTransitionIntent, ['begin-round', 'begin-turn', 'complete-turn', 'advance-turn', 'finish-victory', 'finish-defeat', 'finish-escaped'], 'protocol.pendingCombatTransitionIntent')
   if ((pendingCommandId == null) !== (pendingCommandSequence == null) || (pendingCommandId == null) !== (pendingActionKey == null) || (pendingCommandId == null) !== (pendingActorKey == null)) fail('pending command字段必须同时存在或为空')
+  if (pendingCombatTransitionIntent != null && pendingCommandId == null) fail('战斗阶段intent不能脱离pending command')
   if (pendingActionKey && !actionKeys.has(pendingActionKey)) fail('pendingActionKey不存在')
   const randomEvidence = Array.isArray(protocol.randomEvidence) ? protocol.randomEvidence.map((value, index) => { const item = row(value, `protocol.randomEvidence[${index}]`); exact(item, ['eventSequence', 'evidence'], `protocol.randomEvidence[${index}]`); return { eventSequence: integer(item.eventSequence, `protocol.randomEvidence[${index}].eventSequence`, 1), evidence: parseTextOpenWorldRandomEvidenceV1(item.evidence) } }) : fail('protocol.randomEvidence必须是数组')
   if (new Set(randomEvidence.map(item => item.eventSequence)).size !== randomEvidence.length || randomEvidence.some((item, index) => item.eventSequence > lastEventSequence || (index > 0 && randomEvidence[index - 1].eventSequence >= item.eventSequence))) fail('protocol.randomEvidence序号无效')
@@ -271,7 +291,7 @@ export function parseTextOpenWorldSessionProjectionV1(value: unknown): TextOpenW
     schema: 'storyforge.text-open-world.session-projection', version: 1, runtimePackage, ruleset: { key: token(ruleset.key, 'ruleset.key'), version: integer(ruleset.version, 'ruleset.version', 1) }, state,
     actions: { completedOnceActionKeys, cooldownUntilWorldMinuteByActionKey },
     director: { drawCount: integer(director.drawCount, 'director.drawCount'), generatedQuestInstanceCount, revealedQuestInstanceKeys, activeQuestInstanceKeys, recentFingerprints: recent, lastDrawWorldMinuteByRegionKey, highIntensityStreak },
-    protocol: { pendingCommandId, pendingCommandSequence, pendingActionKey, pendingActorKey, pendingTargetKey, randomEvidence, lastCompletedCommandId: nullableToken(protocol.lastCompletedCommandId, 'protocol.lastCompletedCommandId', COMMAND_ID), lastOutcomeFingerprint: nullableToken(protocol.lastOutcomeFingerprint, 'protocol.lastOutcomeFingerprint', /^[a-f0-9]{64}$/) },
+    protocol: { pendingCommandId, pendingCommandSequence, pendingActionKey, pendingActorKey, pendingTargetKey, pendingCombatTransitionIntent, randomEvidence, lastCompletedCommandId: nullableToken(protocol.lastCompletedCommandId, 'protocol.lastCompletedCommandId', COMMAND_ID), lastOutcomeFingerprint: nullableToken(protocol.lastOutcomeFingerprint, 'protocol.lastOutcomeFingerprint', /^[a-f0-9]{64}$/) },
     lastEventSequence,
   }
 }
@@ -283,6 +303,9 @@ export function applyTextOpenWorldSessionEventV1(current: TextOpenWorldSessionPr
     if (projection.protocol.pendingCommandId) fail('上一命令尚未终结')
     const command = parseTextOpenWorldCommandEventPayloadV1(json(event)); if (command.envelope.commandId !== event.commandId) fail('命令事件索引不一致')
     projection.protocol.pendingCommandId = command.envelope.commandId; projection.protocol.pendingCommandSequence = event.sequence; projection.protocol.pendingActionKey = command.envelope.actionKey; projection.protocol.pendingActorKey = command.envelope.actorKey; projection.protocol.pendingTargetKey = typeof command.envelope.payload.targetKey === 'string' ? command.envelope.payload.targetKey : null
+    projection.protocol.pendingCombatTransitionIntent = typeof command.envelope.payload.combatTransitionIntent === 'string'
+      ? enumToken<TextOpenWorldCombatTransitionIntentV1>(command.envelope.payload.combatTransitionIntent, ['begin-round', 'begin-turn', 'complete-turn', 'advance-turn', 'finish-victory', 'finish-defeat', 'finish-escaped'], 'command combatTransitionIntent')
+      : null
   } else if (event.type === 'text-open-world.random.resolved') {
     const pendingEvidence = projection.protocol.randomEvidence.filter(item => item.eventSequence > (projection.protocol.pendingCommandSequence ?? Number.MAX_SAFE_INTEGER))
     const random = parseTextOpenWorldRandomResolvedEventPayloadV1(json(event)); if (random.commandId !== projection.protocol.pendingCommandId || random.commandSequence !== projection.protocol.pendingCommandSequence || random.evidence.drawIndex !== pendingEvidence.length) fail('随机事件不属于当前命令')
@@ -295,6 +318,7 @@ export function applyTextOpenWorldSessionEventV1(current: TextOpenWorldSessionPr
     if (canonicalProductProductionJsonV2(applied.ruleset) !== canonicalProductProductionJsonV2(projection.ruleset) || canonicalProductProductionJsonV2(applied.randomEventSequences) !== canonicalProductProductionJsonV2(pendingRandomSequences)) fail('Effect事件ruleset或随机序列不一致')
     const modules = parseTextOpenWorldModulesV1(projection.runtimePackage)
     const dropEffectKeys = new Set(modules.items.dropTables.flatMap(table => table.entries.flatMap(entry => entry.quantityEffects.map(mapping => mapping.effectKey))))
+    if (projection.protocol.pendingCombatTransitionIntent != null && applied.plan.authorization?.kind !== 'combat-transition') fail('战斗阶段命令缺少CombatTransition授权')
     if (applied.plan.authorization?.kind === 'reward') {
       const authorization = applied.plan.authorization
       const action = modules.actions.actions.find(item => item.key === projection.protocol.pendingActionKey) ?? fail('命令Action不存在')
@@ -378,6 +402,16 @@ export function applyTextOpenWorldSessionEventV1(current: TextOpenWorldSessionPr
       if (projection.protocol.pendingActorKey !== 'system' || projection.protocol.pendingTargetKey !== null
         || action.category !== 'actor-schedule-action' || action.actorScope !== 'system' || action.targetScope !== 'none') fail('角色日程结算授权与系统命令不一致')
       createTextOpenWorldActorScheduleCatalogV1(projection.runtimePackage, modules).assertAuthorization({ state: projection.state, authorization })
+    } else if (applied.plan.authorization?.kind === 'combat-transition') {
+      const authorization = applied.plan.authorization
+      const action = modules.actions.actions.find(item => item.key === projection.protocol.pendingActionKey) ?? fail('命令Action不存在')
+      const expectedEffectKeys = [...new Set([...action.costEffectKeys, ...action.successEffectKeys])]
+      if (canonicalProductProductionJsonV2(applied.plan.effectKeys) !== canonicalProductProductionJsonV2(expectedEffectKeys)) fail('战斗阶段EffectPlan与命令Action不一致')
+      if (projection.protocol.pendingActorKey !== 'system' || projection.protocol.pendingTargetKey !== authorization.encounterKey
+        || projection.protocol.pendingCombatTransitionIntent !== authorization.intent
+        || action.category !== 'combat-state-action' || action.actorScope !== 'system' || action.targetScope !== 'encounter'
+        || applied.outcome !== 'success' || applied.reason != null || applied.degradation != null) fail('战斗阶段授权与系统命令不一致')
+      createTextOpenWorldCombatStateMachineV1(projection.runtimePackage, modules).assertAuthorization({ state: projection.state, authorization })
     } else if (applied.plan.authorization?.kind === 'crime') {
       const authorization = applied.plan.authorization
       const action = modules.actions.actions.find(item => item.key === projection.protocol.pendingActionKey) ?? fail('命令Action不存在')
@@ -422,7 +456,7 @@ export function applyTextOpenWorldSessionEventV1(current: TextOpenWorldSessionPr
     if (action.repeatPolicy === 'once' && !projection.actions.completedOnceActionKeys.includes(action.key)) projection.actions.completedOnceActionKeys.push(action.key)
     if (action.repeatPolicy === 'cooldown') projection.actions.cooldownUntilWorldMinuteByActionKey[action.key] = projection.state.time.worldMinute + (action.cooldownMinutes ?? 0)
     projection.protocol.lastCompletedCommandId = applied.commandId; projection.protocol.lastOutcomeFingerprint = applied.outcomeFingerprint
-    projection.protocol.pendingCommandId = null; projection.protocol.pendingCommandSequence = null; projection.protocol.pendingActionKey = null; projection.protocol.pendingActorKey = null; projection.protocol.pendingTargetKey = null
+    projection.protocol.pendingCommandId = null; projection.protocol.pendingCommandSequence = null; projection.protocol.pendingActionKey = null; projection.protocol.pendingActorKey = null; projection.protocol.pendingTargetKey = null; projection.protocol.pendingCombatTransitionIntent = null
   } else fail(`事件类型不属于vNext Session投影:${event.type}`)
   projection.lastEventSequence = event.sequence
   return parseTextOpenWorldSessionProjectionV1(projection)
@@ -496,7 +530,7 @@ export function rebaseTextOpenWorldSessionProjectionForBranchV1(value: TextOpenW
   const projection = parseTextOpenWorldSessionProjectionV1(value)
   if (projection.protocol.pendingCommandId) fail('不能从尚未终结的命令批次创建分支')
   projection.protocol = {
-    pendingCommandId: null, pendingCommandSequence: null, pendingActionKey: null, pendingActorKey: null, pendingTargetKey: null,
+    pendingCommandId: null, pendingCommandSequence: null, pendingActionKey: null, pendingActorKey: null, pendingTargetKey: null, pendingCombatTransitionIntent: null,
     randomEvidence: [], lastCompletedCommandId: null, lastOutcomeFingerprint: null,
   }
   projection.lastEventSequence = 0

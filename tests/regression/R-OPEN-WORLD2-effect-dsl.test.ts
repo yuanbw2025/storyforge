@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createTextOpenWorldEffectCatalogV1 } from '../../src/lib/open-world/effect-dsl'
+import { createTextOpenWorldCombatStateMachineV1 } from '../../src/lib/open-world/combat-state-machine'
 import { createTextOpenWorldQuestTransitionCatalogV1 } from '../../src/lib/open-world/quest-state-machine'
 import { createInitialTextOpenWorldQuestInstancesV1 } from '../../src/lib/open-world/quests'
 import type { TextOpenWorldEffectDefinitionV1, TextOpenWorldEffectStateV1 } from '../../src/lib/types'
@@ -112,8 +113,7 @@ describe('Text Open World vNext · typed Effect DSL and atomic EffectPlan', () =
       { key: 'effect.story-modifier', operation: 'set-story-modifier', payload: { actorKey: 'actor.caretaker', value: 10 } },
       { key: 'effect.reveal-ridge', operation: 'reveal-location', payload: { locationKey: 'location.ridge-channel' } },
       { key: 'effect.fast-ridge', operation: 'unlock-fast-travel', payload: { fastTravelPointKey: 'fast-travel.ridge' } },
-      { key: 'effect.start-fight', operation: 'start-combat', payload: { encounterKey: 'encounter.ridge-jackal' } },
-      { key: 'effect.win-fight', operation: 'resolve-combat', payload: { encounterKey: 'encounter.ridge-jackal', outcome: 'victory' } },
+      { key: 'effect.start-fight', operation: 'initialize-combat', payload: { encounterKey: 'encounter.ridge-jackal' } },
       { key: 'effect.move-caretaker', operation: 'change-actor-state', payload: { actorKey: 'actor.caretaker', alive: null, present: true, locationKey: 'location.ridge-channel', cause: 'story' } },
       { key: 'effect.region-state', operation: 'change-region-state', payload: { regionKey: 'region.ridge', state: 'channel-open' } },
       { key: 'effect.world-flag', operation: 'set-world-flag', payload: { flagKey: 'flag.channel-open', value: true } },
@@ -153,7 +153,7 @@ describe('Text Open World vNext · typed Effect DSL and atomic EffectPlan', () =
       quests: { instancesByKey: { [mainInstanceKey]: { definitionKey: 'quest.main.1', status: 'active', objectiveStatusByKey: { 'objective.main.1': 'active' } } } },
       map: { currentLocationKey: 'location.ridge-channel', travel: null }, time: { worldMinute: 540 },
       relationships: { morality: 5, factionAffinityByKey: { 'faction.canal-keepers': 10 }, storyModifierByActorKey: { 'actor.caretaker': 10 } },
-      combat: { encounterKey: 'encounter.ridge-jackal', status: 'victory' },
+      combat: { encounterKey: 'encounter.ridge-jackal', status: 'active', phase: 'started', round: 0 },
       actors: { 'actor.caretaker': { locationKey: 'location.ridge-channel' } },
       world: { regionStateByKey: { 'region.ridge': 'channel-open' }, flags: { 'flag.channel-open': true } },
       endings: { unlockedKeys: ['ending.cooperate'], reachedKey: 'ending.cooperate' },
@@ -161,9 +161,10 @@ describe('Text Open World vNext · typed Effect DSL and atomic EffectPlan', () =
   })
 
   it('复活同时声明战斗、玩家和地图影响域，且只能从战败状态执行', async () => {
-    const catalog = createTextOpenWorldEffectCatalogV1(addEffects([
+    const runtimePackage = addEffects([
       { key: 'effect.respawn-port', operation: 'respawn', payload: { fastTravelPointKey: 'fast-travel.salt-port', healthRatio: 0.5 } },
-    ]))
+    ])
+    const catalog = createTextOpenWorldEffectCatalogV1(runtimePackage)
     const defeated = state({
       player: { ...state().player, health: 0 },
       map: {
@@ -171,8 +172,18 @@ describe('Text Open World vNext · typed Effect DSL and atomic EffectPlan', () =
         regionKnowledgeByKey: { 'region.salt-port': 'visited', 'region.ridge': 'visited' },
         locationKnowledgeByKey: { 'location.salt-port': 'visited', 'location.ridge-channel': 'visited' },
       },
-      combat: { encounterKey: 'encounter.ridge-jackal', status: 'defeat' },
     })
+    const combatState = createTextOpenWorldCombatStateMachineV1(runtimePackage)
+    defeated.player.health = 37
+    defeated.combat = combatState.initialize({
+      state: defeated, encounterKey: 'encounter.ridge-jackal', instanceKey: 'combat.respawn-test',
+    })
+    for (const intent of ['begin-round', 'begin-turn', 'complete-turn', 'finish-defeat'] as const) {
+      defeated.combat = combatState.applyAuthorization({
+        state: defeated, authorization: combatState.prepare({ state: defeated, intent }),
+      })
+    }
+    defeated.player.health = 0
     const plan = await catalog.plan({ effectKeys: ['effect.respawn-port'], claimKey: 'claim.respawn', state: defeated })
     expect(plan.impactDomains).toEqual(['combat', 'player', 'map'])
     await expect(catalog.plan({ effectKeys: ['effect.respawn-port'], claimKey: 'claim.invalid-respawn', state: state() }))

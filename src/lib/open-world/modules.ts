@@ -15,7 +15,7 @@ type Row = Record<string, unknown>
 const KEY = /^[a-z][a-z0-9._:-]{0,199}$/
 const ACTION_CATEGORIES: TextOpenWorldActionCategoryV1[] = [
   'move', 'travel', 'fast-travel', 'observe', 'investigate', 'talk', 'take', 'use', 'equip', 'unequip', 'drop',
-  'buy', 'sell', 'craft', 'accept-quest', 'abandon-quest', 'objective-action', 'quest-action', 'weather-action', 'actor-schedule-action', 'actor-state-action', 'claim-reward', 'attack-actor', 'steal', 'deceive', 'crime', 'start-combat', 'continue-combat', 'escape',
+  'buy', 'sell', 'craft', 'accept-quest', 'abandon-quest', 'objective-action', 'quest-action', 'weather-action', 'actor-schedule-action', 'actor-state-action', 'claim-reward', 'attack-actor', 'steal', 'deceive', 'crime', 'start-combat', 'continue-combat', 'combat-state-action', 'escape',
   'rest', 'respawn', 'read', 'track', 'untrack', 'save', 'load-branch',
 ]
 const QUEST_TYPES: TextOpenWorldQuestTypeV1[] = ['mainline', 'significant', 'ordinary', 'template']
@@ -373,7 +373,7 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
     if (actorRows.find(actor => actor.key === item.actorKey)?.scheduleKey !== item.key) fail(`schedule/actor反向引用不一致:${String(item.key)}`)
   })
 
-  const actions = versioned(packageValue, 'actions', [1, 2, 3, 4, 5, 6, 7, 8])
+  const actions = versioned(packageValue, 'actions', [1, 2, 3, 4, 5, 6, 7, 8, 9])
   const modernActionModule = Number(actions.version) >= 2
   const travelActionModule = Number(actions.version) >= 3
   const fastTravelActionModule = Number(actions.version) >= 4
@@ -381,8 +381,10 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
   const actorScheduleActionModule = Number(actions.version) >= 6
   const actorLifecycleActionModule = Number(actions.version) >= 7
   const crimeActionModule = Number(actions.version) >= 8
+  const combatStateActionModule = Number(actions.version) >= 9
   if (actorScheduleActionModule && legacyActorModule) fail('Action v6必须搭配Actor v2')
   if (actorLifecycleActionModule && !actorLifecycleModule) fail('Action v7必须搭配Actor v3')
+  if (combatStateActionModule !== (packageValue.modules.combat.schemaVersion >= 2)) fail('Action v9必须与Combat v2一起发布')
   exact(actions, ['version', 'conditions', 'effects', 'actions'], 'actions')
   const conditions = catalog(actions.conditions, 'actions.conditions', ['key', 'expression', 'failureMessage']); const effects = catalog(actions.effects, 'actions.effects', ['key', 'operation', 'payload']); const actionRows = catalog(actions.actions, 'actions.actions', ['key', 'category', 'label', 'description', 'actorScope', 'targetScope', 'locationKeys', 'requirementConditionKeys', 'costEffectKeys', 'successEffectKeys', 'failureEffectKeys', 'timeCostMinutes', 'confirmationPolicy', 'repeatPolicy', 'cooldownMinutes'])
   const conditionKeys = keysOf(conditions, 'actions.conditions'); const effectKeys = keysOf(effects, 'actions.effects'); const actionKeys = keysOf(actionRows, 'actions.actions')
@@ -1206,10 +1208,11 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
     if (!combatRewardOwners.has(String(reward.key))) fail(`combat来源RewardContract必须绑定一个遭遇:${String(reward.key)}`)
   })
   const startCombatActions = actionRows.filter(action => action.category === 'start-combat')
+  const expectedStartOperation = legacyCombatModule ? 'start-combat' : 'initialize-combat'
   startCombatActions.forEach(action => {
     const startEffects = strings(action.successEffectKeys, `start-combat ${String(action.key)} success effects`)
       .map(effectKey => effects.find(effect => effect.key === effectKey)!)
-      .filter(effect => effect.operation === 'start-combat')
+      .filter(effect => effect.operation === expectedStartOperation)
     if (action.actorScope !== 'player' || action.targetScope !== 'encounter' || startEffects.length !== 1
       || strings(action.successEffectKeys, `start-combat ${String(action.key)} success effects`).length !== 1
       || strings(action.costEffectKeys, `start-combat ${String(action.key)} costs`).length
@@ -1222,12 +1225,33 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
   if (!legacyCombatModule) encounters.forEach(encounter => {
     const owners = startCombatActions.filter(action => strings(action.successEffectKeys, `start-combat ${String(action.key)} effects`).some(effectKey => {
       const effect = effects.find(candidate => candidate.key === effectKey)!
-      return effect.operation === 'start-combat' && row(effect.payload, `start-combat effect ${effectKey}`).encounterKey === encounter.key
+      return effect.operation === 'initialize-combat' && row(effect.payload, `start-combat effect ${effectKey}`).encounterKey === encounter.key
     }))
     if (owners.length !== 1) fail(`每个遭遇必须且只能由一个start-combat Action进入:${String(encounter.key)}`)
   })
+  if (combatStateActionModule) {
+    const settlementActions = actionRows.filter(action => action.category === 'combat-state-action')
+    const settlementEffects = effects.filter(effect => effect.operation === 'settle-combat-state')
+    if (settlementActions.length !== 1 || settlementEffects.length !== 1) fail('Action v9必须且只能定义一个战斗阶段Action/Effect')
+    const action = settlementActions[0]
+    const settlementActionEffectKeys = strings(action.successEffectKeys, 'combat state action success effects')
+    if (action.actorScope !== 'system' || action.targetScope !== 'encounter'
+      || strings(action.locationKeys, 'combat state action locations').length
+      || strings(action.requirementConditionKeys, 'combat state action requirements').length
+      || strings(action.costEffectKeys, 'combat state action costs').length
+      || strings(action.failureEffectKeys, 'combat state action failures').length
+      || settlementActionEffectKeys.length !== 1
+      || settlementActionEffectKeys[0] !== settlementEffects[0].key
+      || action.timeCostMinutes !== 0 || action.confirmationPolicy !== 'never'
+      || action.repeatPolicy !== 'repeatable' || action.cooldownMinutes != null) fail('战斗阶段Action合同无效')
+    const forbiddenLegacyEffects = effects.filter(effect => ['start-combat', 'resolve-combat'].includes(String(effect.operation)))
+    if (forbiddenLegacyEffects.length) fail('Combat v2不能包含旧start-combat/resolve-combat Effect')
+  } else if (effects.some(effect => ['initialize-combat', 'settle-combat-state'].includes(String(effect.operation)))) {
+    fail('旧Action/Combat版本不能包含v2战斗Effect')
+  }
   const normalizedCombat: TextOpenWorldParsedModulesV1['combat'] = {
     version: 2,
+    sourceVersion: legacyCombatModule ? 1 : 2,
     rules: structuredClone(combatRules) as unknown as TextOpenWorldParsedModulesV1['combat']['rules'],
     difficultyProfiles: structuredClone(difficultyProfiles) as unknown as TextOpenWorldParsedModulesV1['combat']['difficultyProfiles'],
     strategyProfiles: structuredClone(strategyProfiles) as unknown as TextOpenWorldParsedModulesV1['combat']['strategyProfiles'],

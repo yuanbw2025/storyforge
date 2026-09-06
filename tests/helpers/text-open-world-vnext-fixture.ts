@@ -169,7 +169,7 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
       ],
     },
     actions: {
-      version: 8,
+      version: 9,
       conditions: [
         { key: 'condition.always', expression: { op: 'all', conditions: [{ op: 'player-number', field: 'level', comparator: 'gte', value: 1 }] }, failureMessage: '角色尚未进入可行动状态。' },
         { key: 'condition.level-two', expression: { op: 'player-number', field: 'level', comparator: 'gte', value: 2 }, failureMessage: '经验不足，无法让谎言自洽。' },
@@ -187,7 +187,8 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
         { key: 'effect.settle-weather', operation: 'settle-weather', payload: {} },
         { key: 'effect.settle-actor-schedules', operation: 'settle-actor-schedules', payload: {} },
         { key: 'effect.respawn-salt-port', operation: 'respawn', payload: { fastTravelPointKey: 'fast-travel.salt-port', healthRatio: 1 } },
-        { key: 'effect.start-ridge-jackal', operation: 'start-combat', payload: { encounterKey: 'encounter.ridge-jackal' } },
+        { key: 'effect.start-ridge-jackal', operation: 'initialize-combat', payload: { encounterKey: 'encounter.ridge-jackal' } },
+        { key: 'effect.settle-combat-state', operation: 'settle-combat-state', payload: {} },
         { key: 'effect.consume-brine-tonic', operation: 'remove-item', payload: { itemKey: 'item.brine-tonic', quantity: 1, reason: 'consume' } },
         { key: 'effect.drop-salt-crystal', operation: 'remove-item', payload: { itemKey: 'item.salt-crystal', quantity: 1, reason: 'drop' } },
         { key: 'effect.equip-rust-sword', operation: 'equip-item', payload: { itemKey: 'item.rust-sword' } },
@@ -347,6 +348,11 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
         key: 'action.start-ridge-jackal', category: 'start-combat', label: '迎战盐鬣犬', description: '进入盐渠伏兽遭遇。',
         actorScope: 'player', targetScope: 'encounter', locationKeys: ['location.ridge-channel'], requirementConditionKeys: [], costEffectKeys: [],
         successEffectKeys: ['effect.start-ridge-jackal'], failureEffectKeys: [], timeCostMinutes: 0,
+        confirmationPolicy: 'never', repeatPolicy: 'repeatable', cooldownMinutes: null,
+      }, {
+        key: 'action.settle-combat-state', category: 'combat-state-action', label: '结算战斗阶段', description: '按冻结回合规则推进战斗阶段。',
+        actorScope: 'system', targetScope: 'encounter', locationKeys: [], requirementConditionKeys: [], costEffectKeys: [],
+        successEffectKeys: ['effect.settle-combat-state'], failureEffectKeys: [], timeCostMinutes: 0,
         confirmationPolicy: 'never', repeatPolicy: 'repeatable', cooldownMinutes: null,
       }, {
         key: 'action.use-brine-tonic', category: 'use', label: '使用盐露药剂', description: '消耗一瓶盐露药剂并恢复生命。',
@@ -644,6 +650,7 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
 export function downgradeTextOpenWorldFixtureWithoutCrimeV1(
   runtimePackage: TextOpenWorldRuntimePackageV1,
 ): TextOpenWorldRuntimePackageV1 {
+  if (runtimePackage.modules.combat.schemaVersion >= 2) downgradeTextOpenWorldFixtureCombatV1(runtimePackage)
   const actions = runtimePackage.modules.actions.payload as any
   const relationships = runtimePackage.modules.relationships.payload as any
   const crimeDefinitions = Array.isArray(relationships.crimeActions) ? relationships.crimeActions : []
@@ -674,6 +681,7 @@ export function downgradeTextOpenWorldFixtureCombatV1(
   runtimePackage: TextOpenWorldRuntimePackageV1,
 ): TextOpenWorldRuntimePackageV1 {
   const combat = runtimePackage.modules.combat.payload as any
+  const actions = runtimePackage.modules.actions.payload as any
   combat.version = 1
   combat.enemies = combat.enemies.map((enemy: any) => ({
     key: enemy.key,
@@ -701,5 +709,14 @@ export function downgradeTextOpenWorldFixtureCombatV1(
   delete combat.difficultyProfiles
   delete combat.strategyProfiles
   runtimePackage.modules.combat.schemaVersion = 1
+  actions.effects = actions.effects.filter((effect: any) => effect.operation !== 'settle-combat-state')
+  actions.effects.forEach((effect: any) => {
+    if (effect.operation === 'initialize-combat') effect.operation = 'start-combat'
+  })
+  actions.actions = actions.actions.filter((action: any) => action.category !== 'combat-state-action')
+  if (actions.version >= 9) {
+    actions.version = 8
+    runtimePackage.modules.actions.schemaVersion = 8
+  }
   return runtimePackage
 }

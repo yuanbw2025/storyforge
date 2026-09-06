@@ -2,6 +2,7 @@ import { act, createElement } from 'react'
 import { createRoot } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import TextOpenWorldVNextPlayer from '../../src/components/text-game/TextOpenWorldVNextPlayer'
+import { createTextOpenWorldCombatStateMachineV1 } from '../../src/lib/open-world/combat-state-machine'
 import { createInitialTextOpenWorldSessionProjectionV1 } from '../../src/lib/open-world/session-projection'
 import { EMPTY_PRODUCT_RUNTIME_STATE } from '../../src/lib/types'
 import { useTextOpenWorldPlayerStore } from '../../src/stores/text-open-world-player'
@@ -29,8 +30,16 @@ describe('Text Open World vNext · defeated player recovery UI', () => {
     const runtimePackage = createTextOpenWorldVNextFixture()
     const productRuntimePackage = createTextOpenWorldProductRuntimePackageFixtureV1(runtimePackage)
     const projection = createInitialTextOpenWorldSessionProjectionV1(runtimePackage)
+    const combatState = createTextOpenWorldCombatStateMachineV1(runtimePackage)
+    projection.state.combat = combatState.initialize({
+      state: projection.state, encounterKey: 'encounter.ridge-jackal', instanceKey: 'combat.ui-defeat',
+    })
+    for (const intent of ['begin-round', 'begin-turn', 'complete-turn', 'finish-defeat'] as const) {
+      projection.state.combat = combatState.applyAuthorization({
+        state: projection.state, authorization: combatState.prepare({ state: projection.state, intent }),
+      })
+    }
     projection.state.player.health = 0
-    projection.state.combat = { encounterKey: 'encounter.ridge-jackal', status: 'defeat' }
     useTextOpenWorldPlayerStore.setState({
       selectedSessionId: 1,
       selectedManifest: productRuntimePackage,

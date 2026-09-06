@@ -8,7 +8,7 @@ export type TextOpenWorldEffectOperationV1 =
   | 'change-morality' | 'change-faction-affinity' | 'set-story-modifier'
   | 'reveal-knowledge' | 'reveal-location' | 'unlock-fast-travel'
   | 'enter-location' | 'start-travel' | 'fast-travel' | 'advance-time' | 'settle-weather' | 'settle-actor-schedules'
-  | 'start-combat' | 'resolve-combat' | 'rest' | 'respawn'
+  | 'start-combat' | 'resolve-combat' | 'initialize-combat' | 'settle-combat-state' | 'rest' | 'respawn'
   | 'change-actor-state' | 'change-region-state' | 'set-world-flag'
   | 'earn-achievement' | 'unlock-ending' | 'reach-ending'
 
@@ -40,6 +40,8 @@ export type TextOpenWorldEffectDefinitionV1 =
   | { key: string; operation: 'settle-actor-schedules'; payload: Record<string, never> }
   | { key: string; operation: 'start-combat'; payload: { encounterKey: string } }
   | { key: string; operation: 'resolve-combat'; payload: { encounterKey: string; outcome: 'victory' | 'defeat' | 'escaped' } }
+  | { key: string; operation: 'initialize-combat'; payload: { encounterKey: string } }
+  | { key: string; operation: 'settle-combat-state'; payload: Record<string, never> }
   | { key: string; operation: 'rest'; payload: { healthRatio: number; skillResourceRatio: number; clearHarmfulStatuses: boolean } }
   | { key: string; operation: 'respawn'; payload: { fastTravelPointKey: string; healthRatio: number } }
   | { key: string; operation: 'change-actor-state'; payload: {
@@ -71,6 +73,33 @@ export interface TextOpenWorldQuestInstanceV1 {
   terminalAtWorldMinute: number | null
   rewardClaimKey: string | null
   resultTag: string | null
+}
+
+export interface TextOpenWorldCombatRuntimeStateV1 {
+  version: 1
+  instanceKey: string
+  encounterKey: string
+  status: 'active' | 'victory' | 'defeat' | 'escaped'
+  phase: 'started' | 'round-start' | 'actor-turn' | 'action-resolved' | 'round-end' | 'terminal'
+  round: number
+  turnIndex: number | null
+  activeCombatantKey: string | null
+  playerInitiative: number
+  turnOrder: string[]
+  enemies: Array<{
+    combatantKey: string
+    groupKey: string
+    enemyKey: string
+    currentHealth: number
+    maximumHealth: number
+    initiative: number
+    defeated: boolean
+  }>
+}
+
+export interface TextOpenWorldLegacyCombatStateV1 {
+  encounterKey: string
+  status: 'active' | 'victory' | 'defeat' | 'escaped'
 }
 
 export interface TextOpenWorldEffectStateV1 {
@@ -122,7 +151,7 @@ export interface TextOpenWorldEffectStateV1 {
     factionAffinityByKey: Record<string, number>
     storyModifierByActorKey: Record<string, number>
   }
-  combat: { encounterKey: string; status: 'active' | 'victory' | 'defeat' | 'escaped' } | null
+  combat: TextOpenWorldCombatRuntimeStateV1 | TextOpenWorldLegacyCombatStateV1 | null
   actors: Record<string, { alive: boolean; present: boolean; locationKey: string; scheduleState: string }>
   world: {
     regionStateByKey: Record<string, string>
@@ -255,6 +284,26 @@ export interface TextOpenWorldCrimeAuthorizationV1 {
   effectKeys: string[]
 }
 
+export type TextOpenWorldCombatTransitionIntentV1 =
+  | 'begin-round' | 'begin-turn' | 'complete-turn' | 'advance-turn'
+  | 'finish-victory' | 'finish-defeat' | 'finish-escaped'
+
+export interface TextOpenWorldCombatTransitionAuthorizationV1 {
+  kind: 'combat-transition'
+  instanceKey: string
+  encounterKey: string
+  intent: TextOpenWorldCombatTransitionIntentV1
+  beforePhase: TextOpenWorldCombatRuntimeStateV1['phase']
+  beforeRound: number
+  beforeTurnIndex: number | null
+  beforeActiveCombatantKey: string | null
+  afterStatus: TextOpenWorldCombatRuntimeStateV1['status']
+  afterPhase: TextOpenWorldCombatRuntimeStateV1['phase']
+  afterRound: number
+  afterTurnIndex: number | null
+  afterActiveCombatantKey: string | null
+}
+
 export interface TextOpenWorldEffectPlanV1 {
   schema: 'storyforge.text-open-world.effect-plan'
   version: 1
@@ -263,7 +312,7 @@ export interface TextOpenWorldEffectPlanV1 {
   resultingStateHash: string
   effectKeys: string[]
   effects: TextOpenWorldEffectDefinitionV1[]
-  authorization: TextOpenWorldRewardAuthorizationV1 | TextOpenWorldQuestTransitionAuthorizationV1 | TextOpenWorldObjectiveAuthorizationV1 | TextOpenWorldQuestTrackingAuthorizationV1 | TextOpenWorldFastTravelAuthorizationV1 | TextOpenWorldWeatherSettlementAuthorizationV1 | TextOpenWorldActorScheduleSettlementAuthorizationV1 | TextOpenWorldCrimeAuthorizationV1 | null
+  authorization: TextOpenWorldRewardAuthorizationV1 | TextOpenWorldQuestTransitionAuthorizationV1 | TextOpenWorldObjectiveAuthorizationV1 | TextOpenWorldQuestTrackingAuthorizationV1 | TextOpenWorldFastTravelAuthorizationV1 | TextOpenWorldWeatherSettlementAuthorizationV1 | TextOpenWorldActorScheduleSettlementAuthorizationV1 | TextOpenWorldCrimeAuthorizationV1 | TextOpenWorldCombatTransitionAuthorizationV1 | null
   impactDomains: TextOpenWorldEffectImpactDomainV1[]
   previewChanges: TextOpenWorldEffectChangeV1[]
   planHash: string

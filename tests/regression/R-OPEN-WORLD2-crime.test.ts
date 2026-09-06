@@ -11,7 +11,10 @@ import {
 } from '../../src/lib/open-world/session-projection'
 import { readProductRuntimeState } from '../../src/lib/product/runtime-core'
 import { createGovernedTextOpenWorldSessionFixtureV1 } from '../helpers/text-open-world-product-session'
-import { createTextOpenWorldVNextFixture } from '../helpers/text-open-world-vnext-fixture'
+import {
+  createTextOpenWorldVNextFixture,
+  downgradeTextOpenWorldFixtureCombatV1,
+} from '../helpers/text-open-world-vnext-fixture'
 
 async function publishedCrimeSession(name: string) {
   return (await createGovernedTextOpenWorldSessionFixtureV1({
@@ -143,6 +146,7 @@ describe('Text Open World vNext · governed theft, deception and local crime', (
 
   it('Build约束版本配对、犯罪边界、专用Effect和旧Release兼容', () => {
     const mismatched = createTextOpenWorldVNextFixture()
+    downgradeTextOpenWorldFixtureCombatV1(mismatched)
     ;(mismatched.modules.actions.payload as any).version = 7
     mismatched.modules.actions.schemaVersion = 7
     expect(() => parseTextOpenWorldModulesV1(mismatched)).toThrow('Action v8必须与Relationship v3一起发布')
@@ -158,6 +162,7 @@ describe('Text Open World vNext · governed theft, deception and local crime', (
     expect(() => parseTextOpenWorldModulesV1(sharedWithOrdinaryAction)).toThrow('犯罪专用Effect不能被非犯罪Action引用')
 
     const legacy = createTextOpenWorldVNextFixture()
+    downgradeTextOpenWorldFixtureCombatV1(legacy)
     ;(legacy.modules.actions.payload as any).version = 7
     legacy.modules.actions.schemaVersion = 7
     ;(legacy.modules.actions.payload as any).actions = (legacy.modules.actions.payload as any).actions

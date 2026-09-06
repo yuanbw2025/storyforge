@@ -1,7 +1,7 @@
 import { db } from '../db/schema'
-import { hashProductProductionValueV2 } from '../product-production/hash'
+import { canonicalProductProductionJsonV2, hashProductProductionValueV2 } from '../product-production/hash'
 import { hashProductRuntimeStateV1, readProductRuntimeState } from '../product/runtime-core'
-import type { TextOpenWorldCommandEnvelopeV1, TextOpenWorldEffectDefinitionV1, TextOpenWorldEffectPlanV1, TextOpenWorldFeedbackReceiptV1, TextOpenWorldRandomEvidenceV1, TextOpenWorldRandomRequestV1 } from '../types'
+import type { TextOpenWorldCombatTransitionIntentV1, TextOpenWorldCommandEnvelopeV1, TextOpenWorldEffectDefinitionV1, TextOpenWorldEffectPlanV1, TextOpenWorldFeedbackReceiptV1, TextOpenWorldRandomEvidenceV1, TextOpenWorldRandomRequestV1 } from '../types'
 import { createTextOpenWorldActionRegistryV1 } from './action-registry'
 import { ensureTextOpenWorldCombatRetryCheckpointV1 } from './checkpoints'
 import { commitTextOpenWorldCommandV1, getTextOpenWorldCommandStatusV1 } from './commands'
@@ -23,6 +23,7 @@ import { resolveTextOpenWorldRandomEvidenceV1 } from './event-contract'
 import { createTextOpenWorldWeatherCatalogV1 } from './weather'
 import { createTextOpenWorldActorScheduleCatalogV1 } from './actors'
 import { createTextOpenWorldCrimeCatalogV1 } from './crime'
+import { createTextOpenWorldCombatStateMachineV1 } from './combat-state-machine'
 
 const COMMAND_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/
 
@@ -32,6 +33,14 @@ function targetFrom(envelope: TextOpenWorldCommandEnvelopeV1): string | null {
   return typeof value === 'string' ? value : null
 }
 function newCommandId(): string { return `command.action.${crypto.randomUUID()}` }
+function combatTransitionIntentFrom(envelope: TextOpenWorldCommandEnvelopeV1): TextOpenWorldCombatTransitionIntentV1 {
+  const value = envelope.payload.combatTransitionIntent
+  const allowed: TextOpenWorldCombatTransitionIntentV1[] = [
+    'begin-round', 'begin-turn', 'complete-turn', 'advance-turn', 'finish-victory', 'finish-defeat', 'finish-escaped',
+  ]
+  if (typeof value !== 'string' || !allowed.includes(value as TextOpenWorldCombatTransitionIntentV1)) fail('战斗阶段命令缺少合法transition intent')
+  return value as TextOpenWorldCombatTransitionIntentV1
+}
 
 async function settleAcceptedCommand(envelope: TextOpenWorldCommandEnvelopeV1): Promise<TextOpenWorldFeedbackReceiptV1> {
   const state = await readProductRuntimeState(envelope.sessionId)
@@ -77,7 +86,9 @@ async function settleAcceptedCommand(envelope: TextOpenWorldCommandEnvelopeV1): 
     .filter((effect): effect is Extract<TextOpenWorldEffectDefinitionV1, { operation: 'settle-weather' }> => effect.operation === 'settle-weather')
   const actorScheduleEffects = effectKeys.map(effectKey => modules.actions.effects.find(effect => effect.key === effectKey)!)
     .filter((effect): effect is Extract<TextOpenWorldEffectDefinitionV1, { operation: 'settle-actor-schedules' }> => effect.operation === 'settle-actor-schedules')
-  if ([questTransitions.length > 0, objectiveEffects.length > 0, trackingEffects.length > 0, fastTravelEffects.length > 0, weatherEffects.length > 0, actorScheduleEffects.length > 0].filter(Boolean).length > 1) fail('同一Action不能混合任务迁移、Objective、追踪、快速旅行、天气或角色日程状态')
+  const combatSettlementEffects = effectKeys.map(effectKey => modules.actions.effects.find(effect => effect.key === effectKey)!)
+    .filter((effect): effect is Extract<TextOpenWorldEffectDefinitionV1, { operation: 'settle-combat-state' }> => effect.operation === 'settle-combat-state')
+  if ([questTransitions.length > 0, objectiveEffects.length > 0, trackingEffects.length > 0, fastTravelEffects.length > 0, weatherEffects.length > 0, actorScheduleEffects.length > 0, combatSettlementEffects.length > 0].filter(Boolean).length > 1) fail('同一Action不能混合任务迁移、Objective、追踪、快速旅行、天气、角色日程或战斗阶段状态')
   let randomRequests: TextOpenWorldRandomRequestV1[] = []
   let randomEvidence: TextOpenWorldRandomEvidenceV1[] = []
   if (weatherEffects.length === 1) {
@@ -123,6 +134,11 @@ async function settleAcceptedCommand(envelope: TextOpenWorldCommandEnvelopeV1): 
             ? createTextOpenWorldWeatherCatalogV1(projection.runtimePackage, modules).resolve({ state: projection.state, evidence: randomEvidence })
             : actorScheduleEffects.length === 1
               ? createTextOpenWorldActorScheduleCatalogV1(projection.runtimePackage, modules).prepare(projection.state)
+              : combatSettlementEffects.length === 1
+                ? createTextOpenWorldCombatStateMachineV1(projection.runtimePackage, modules).prepare({
+                    state: projection.state,
+                    intent: combatTransitionIntentFrom(envelope),
+                  })
               : null)
   const catalog = createTextOpenWorldEffectCatalogV1(projection.runtimePackage)
   const plan = await catalog.plan({ effectKeys, claimKey: `claim.${envelope.commandId}`, state: projection.state, authorization })
@@ -156,22 +172,37 @@ type ExecuteTextOpenWorldActionInputV1 = {
   commandId?: string
   requestedAt?: number
 }
+type ExecuteTextOpenWorldActionInternalInputV1 = ExecuteTextOpenWorldActionInputV1 & {
+  combatTransitionIntent?: TextOpenWorldCombatTransitionIntentV1
+}
 
 async function executeTextOpenWorldActionAsV1(
-  input: ExecuteTextOpenWorldActionInputV1,
+  input: ExecuteTextOpenWorldActionInternalInputV1,
   actorKey: 'player' | 'system',
-  systemCategory?: 'quest-action' | 'weather-action' | 'actor-schedule-action' | 'actor-state-action',
+  systemCategory?: 'quest-action' | 'weather-action' | 'actor-schedule-action' | 'actor-state-action' | 'combat-state-action',
 ): Promise<TextOpenWorldFeedbackReceiptV1> {
   if (!Number.isSafeInteger(input.sessionId) || input.sessionId < 1) fail('sessionId无效')
   const commandId = input.commandId ?? newCommandId()
   if (!COMMAND_ID.test(commandId)) fail('commandId无效')
   const targetKey = input.targetKey ?? null
   const source = input.source ?? 'system-action'
+  const hasCombatTransitionIntent = input.combatTransitionIntent != null
+  if (hasCombatTransitionIntent !== (systemCategory === 'combat-state-action')) fail('战斗阶段intent只能由战斗系统Action提交')
+  if (hasCombatTransitionIntent) {
+    const allowed: TextOpenWorldCombatTransitionIntentV1[] = [
+      'begin-round', 'begin-turn', 'complete-turn', 'advance-turn', 'finish-victory', 'finish-defeat', 'finish-escaped',
+    ]
+    if (!allowed.includes(input.combatTransitionIntent!)) fail('战斗阶段命令缺少合法transition intent')
+  }
+  const commandPayload: Record<string, unknown> = {
+    ...(targetKey == null ? {} : { targetKey }),
+    ...(input.combatTransitionIntent == null ? {} : { combatTransitionIntent: input.combatTransitionIntent }),
+  }
 
   const prior = await getTextOpenWorldCommandStatusV1({ sessionId: input.sessionId, commandId })
   if (prior.status === 'committed') {
     if (prior.envelope.actionKey !== input.actionKey
-      || targetFrom(prior.envelope) !== targetKey
+      || canonicalProductProductionJsonV2(prior.envelope.payload) !== canonicalProductProductionJsonV2(commandPayload)
       || prior.envelope.source !== source
       || prior.envelope.actorKey !== actorKey) fail('相同commandId对应另一项Action请求')
     const feedback = await readTextOpenWorldFeedbackV1({ sessionId: input.sessionId, commandId })
@@ -210,7 +241,7 @@ async function executeTextOpenWorldActionAsV1(
     const modules = parseTextOpenWorldModulesV1(projection.runtimePackage)
     const startEffects = resolved.entry.action.successEffectKeys
       .map(effectKey => modules.actions.effects.find(effect => effect.key === effectKey)!)
-      .filter(effect => effect.operation === 'start-combat')
+      .filter(effect => effect.operation === 'start-combat' || effect.operation === 'initialize-combat')
     if (startEffects.length !== 1) fail('start-combat Action必须且只能绑定一个开始战斗Effect')
     const encounterKey = (startEffects[0] as { payload: { encounterKey: string } }).payload.encounterKey
     if (targetKey !== encounterKey) fail('start-combat Action目标与Effect遭遇不一致')
@@ -219,7 +250,7 @@ async function executeTextOpenWorldActionAsV1(
   const envelope: TextOpenWorldCommandEnvelopeV1 = {
     schema: 'storyforge.text-open-world.command', version: 1, commandId,
     sessionId: input.sessionId, actorKey, actionKey: input.actionKey,
-    payload: targetKey == null ? {} : { targetKey }, baseSequence: state.lastSequence,
+    payload: commandPayload, baseSequence: state.lastSequence,
     baseStateHash: await hashProductRuntimeStateV1(state), source,
     requestedAt: input.requestedAt ?? Date.now(),
   }
@@ -305,11 +336,45 @@ async function settleActorSchedulesForCurrentPeriodV1(sessionId: number): Promis
   if (feedback.phase !== 'terminal' || feedback.status !== 'succeeded') fail(`角色日程系统结算未成功:${currentPeriod.settlementWorldMinute}`)
 }
 
+async function settleCombatSystemTransitionsV1(sessionId: number): Promise<void> {
+  for (let index = 0; index < 8; index += 1) {
+    const runtime = await readProductRuntimeState(sessionId)
+    const projection = parseTextOpenWorldSessionProjectionV1(runtime.textOpenWorld)
+    const modules = parseTextOpenWorldModulesV1(projection.runtimePackage)
+    if (modules.actions.version < 9 || modules.combat.sourceVersion !== 2) return
+    const stateMachine = createTextOpenWorldCombatStateMachineV1(projection.runtimePackage, modules)
+    const intent = stateMachine.nextSystemIntent(projection.state)
+    if (!intent) return
+    const combat = projection.state.combat
+    if (!combat || !('version' in combat)) fail('新版战斗阶段缺少Combat v2投影')
+    const action = modules.actions.actions.find(item => item.category === 'combat-state-action') ?? fail('新版战斗缺少阶段结算Action')
+    const commandHash = await hashProductProductionValueV2({
+      instanceKey: combat.instanceKey,
+      phase: combat.phase,
+      round: combat.round,
+      turnIndex: combat.turnIndex,
+      intent,
+    })
+    const feedback = await executeTextOpenWorldActionAsV1({
+      sessionId,
+      actionKey: action.key,
+      targetKey: combat.encounterKey,
+      combatTransitionIntent: intent,
+      commandId: `command.system-combat.${commandHash}`,
+      source: 'system-action',
+    }, 'system', 'combat-state-action')
+    if (feedback.phase !== 'terminal' || feedback.status !== 'succeeded') fail(`战斗阶段系统结算未成功:${intent}`)
+  }
+  fail('单次行动触发的战斗阶段结算超过8步')
+}
+
 export async function executeTextOpenWorldActionV1(input: ExecuteTextOpenWorldActionInputV1): Promise<TextOpenWorldFeedbackReceiptV1> {
+  await settleCombatSystemTransitionsV1(input.sessionId)
   await settleWeatherForCurrentEpochV1(input.sessionId)
   await settleActorSchedulesForCurrentPeriodV1(input.sessionId)
   const feedback = await executeTextOpenWorldActionAsV1(input, 'player')
   if (feedback.phase === 'terminal' && feedback.status === 'succeeded' && feedback.commandId) {
+    await settleCombatSystemTransitionsV1(input.sessionId)
     await settleWeatherForCurrentEpochV1(input.sessionId)
     await settleActorSchedulesForCurrentPeriodV1(input.sessionId)
     await settleReadyQuestSystemActionsV1(input.sessionId, feedback.commandId)
@@ -325,4 +390,11 @@ export async function executeTextOpenWorldSystemQuestActionV1(input: ExecuteText
 /** Runs a frozen story, regional-event or transient-resolution Actor outcome. */
 export async function executeTextOpenWorldSystemActorStateActionV1(input: ExecuteTextOpenWorldActionInputV1): Promise<TextOpenWorldFeedbackReceiptV1> {
   return executeTextOpenWorldActionAsV1(input, 'system', 'actor-state-action')
+}
+
+/** Runs one authorized combat phase transition through the shared ProductRuntime event stream. */
+export async function executeTextOpenWorldSystemCombatTransitionV1(
+  input: ExecuteTextOpenWorldActionInputV1 & { combatTransitionIntent: TextOpenWorldCombatTransitionIntentV1 },
+): Promise<TextOpenWorldFeedbackReceiptV1> {
+  return executeTextOpenWorldActionAsV1(input, 'system', 'combat-state-action')
 }

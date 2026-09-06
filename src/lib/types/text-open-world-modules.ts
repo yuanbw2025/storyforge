@@ -15,7 +15,7 @@ export type TextOpenWorldActionCategoryV1 =
   | 'take' | 'use' | 'equip' | 'unequip' | 'drop' | 'buy' | 'sell' | 'craft'
   | 'accept-quest' | 'abandon-quest' | 'objective-action' | 'quest-action' | 'weather-action' | 'actor-schedule-action' | 'actor-state-action' | 'claim-reward'
   | 'attack-actor' | 'steal' | 'deceive' | 'crime'
-  | 'start-combat' | 'continue-combat' | 'escape' | 'rest' | 'respawn'
+  | 'start-combat' | 'continue-combat' | 'combat-state-action' | 'escape' | 'rest' | 'respawn'
   | 'read' | 'track' | 'untrack' | 'save' | 'load-branch'
 
 /**
@@ -224,7 +224,7 @@ export interface TextOpenWorldQuestModuleV1 {
 }
 
 export interface TextOpenWorldActionModuleV1 {
-  version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8
+  version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9
   conditions: Array<{
     key: string
     expression: TextOpenWorldConditionExpressionV1
@@ -314,6 +314,8 @@ export interface TextOpenWorldProgressionModuleV1 {
 
 export interface TextOpenWorldCombatModuleV1 {
   version: 2
+  /** Parser-only provenance; omitted from the immutable payload itself. */
+  sourceVersion?: 1 | 2
   rules: {
     difficulty: 'standard'
     defaultAttackHits: true

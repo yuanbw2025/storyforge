@@ -3,7 +3,10 @@ import { createTextOpenWorldEffectCatalogV1 } from '../../src/lib/open-world/eff
 import { parseTextOpenWorldModulesV1 } from '../../src/lib/open-world/modules'
 import { projectTextOpenWorldRelationshipsV1 } from '../../src/lib/open-world/relationships'
 import { createInitialTextOpenWorldSessionProjectionV1, deriveTextOpenWorldContextsV1 } from '../../src/lib/open-world/session-projection'
-import { createTextOpenWorldVNextFixture } from '../helpers/text-open-world-vnext-fixture'
+import {
+  createTextOpenWorldVNextFixture,
+  downgradeTextOpenWorldFixtureCombatV1,
+} from '../helpers/text-open-world-vnext-fixture'
 
 describe('Text Open World vNext · morality, faction affinity and three-band attitudes', () => {
   it('按阈值稳定派生差、一般、好三档，不保存独立NPC亲密度', async () => {
@@ -101,6 +104,7 @@ describe('Text Open World vNext · morality, faction affinity and three-band att
 
   it('旧Relationship v1可确定性补齐阵营解释和三档表现', () => {
     const legacy = createTextOpenWorldVNextFixture()
+    downgradeTextOpenWorldFixtureCombatV1(legacy)
     const relationships = legacy.modules.relationships.payload as any
     relationships.version = 1
     legacy.modules.relationships.schemaVersion = 1

@@ -2,6 +2,7 @@ import type { TextOpenWorldActionProjectionContextV1 } from './text-open-world-a
 import type { TextOpenWorldConditionEvaluationContextV1 } from './text-open-world-condition'
 import type { TextOpenWorldEffectStateV1 } from './text-open-world-effect'
 import type { TextOpenWorldRandomEvidenceV1, TextOpenWorldRulesetStampV1 } from './text-open-world-event'
+import type { TextOpenWorldCombatTransitionIntentV1 } from './text-open-world-effect'
 import type { TextOpenWorldRuntimePackageV1 } from './text-open-world-runtime'
 
 export type TextOpenWorldDerivedPlayerStatKeyV1 =
@@ -65,6 +66,7 @@ export interface TextOpenWorldSessionProtocolProjectionV1 {
   pendingActionKey: string | null
   pendingActorKey: string | null
   pendingTargetKey: string | null
+  pendingCombatTransitionIntent: TextOpenWorldCombatTransitionIntentV1 | null
   randomEvidence: Array<{ eventSequence: number; evidence: TextOpenWorldRandomEvidenceV1 }>
   lastCompletedCommandId: string | null
   lastOutcomeFingerprint: string | null

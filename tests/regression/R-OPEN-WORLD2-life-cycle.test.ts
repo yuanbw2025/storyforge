@@ -1,13 +1,17 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { createTextOpenWorldActionRegistryV1 } from '../../src/lib/open-world/action-registry'
-import { executeTextOpenWorldActionV1 } from '../../src/lib/open-world/action-executor'
+import {
+  executeTextOpenWorldActionV1,
+  executeTextOpenWorldSystemCombatTransitionV1,
+} from '../../src/lib/open-world/action-executor'
 import {
   ensureTextOpenWorldCombatRetryCheckpointV1,
   inspectTextOpenWorldCheckpointV1,
   retryDefeatedTextOpenWorldCombatV1,
 } from '../../src/lib/open-world/checkpoints'
 import { createTextOpenWorldEffectCatalogV1 } from '../../src/lib/open-world/effect-dsl'
+import { createTextOpenWorldCombatStateMachineV1 } from '../../src/lib/open-world/combat-state-machine'
 import { deriveTextOpenWorldLifeProjectionV1 } from '../../src/lib/open-world/life-cycle'
 import {
   createInitialTextOpenWorldSessionProjectionV1,
@@ -18,6 +22,7 @@ import {
 } from '../../src/lib/product/runtime-core'
 import type {
   ProductRuntimeSession,
+  TextOpenWorldEffectStateV1,
   TextOpenWorldRuntimePackageV1,
 } from '../../src/lib/types'
 import { createGovernedTextOpenWorldSessionFixtureV1 } from '../helpers/text-open-world-product-session'
@@ -38,18 +43,35 @@ function withDefeatAction() {
   const actions = runtimePackage.modules.actions.payload as any
   combat.encounters[0].locationKey = 'location.salt-port'
   actions.actions.find((action: any) => action.key === 'action.start-ridge-jackal').locationKeys = ['location.salt-port']
-  actions.effects.push({
-    key: 'effect.resolve-ridge-defeat', operation: 'resolve-combat',
-    payload: { encounterKey: 'encounter.ridge-jackal', outcome: 'defeat' },
-  })
-  actions.actions.push({
-    key: 'action.accept-defeat', category: 'continue-combat', label: '承受失败', description: '验收战斗失败状态。',
-    actorScope: 'player', targetScope: 'none', locationKeys: ['location.salt-port'], requirementConditionKeys: [], costEffectKeys: [],
-    successEffectKeys: ['effect.resolve-ridge-defeat'], failureEffectKeys: [], timeCostMinutes: 0,
-    confirmationPolicy: 'never', repeatPolicy: 'repeatable', cooldownMinutes: null,
-  })
   world.fastTravelPoints[0].canRespawn = true
   return runtimePackage
+}
+
+function placeCombatAtActionResolved(
+  runtimePackage: TextOpenWorldRuntimePackageV1,
+  state: TextOpenWorldEffectStateV1,
+  instanceKey: string,
+) {
+  const combatState = createTextOpenWorldCombatStateMachineV1(runtimePackage)
+  state.combat = combatState.initialize({ state, encounterKey: 'encounter.ridge-jackal', instanceKey })
+  for (const intent of ['begin-round', 'begin-turn', 'complete-turn'] as const) {
+    state.combat = combatState.applyAuthorization({
+      state, authorization: combatState.prepare({ state, intent }),
+    })
+  }
+  return combatState
+}
+
+function placeDefeatedCombat(
+  runtimePackage: TextOpenWorldRuntimePackageV1,
+  state: TextOpenWorldEffectStateV1,
+  instanceKey: string,
+) {
+  const combatState = placeCombatAtActionResolved(runtimePackage, state, instanceKey)
+  state.combat = combatState.applyAuthorization({
+    state, authorization: combatState.prepare({ state, intent: 'finish-defeat' }),
+  })
+  state.player.health = 0
 }
 
 async function createSession(runtimePackage: TextOpenWorldRuntimePackageV1): Promise<ProductRuntimeSession> {
@@ -84,25 +106,26 @@ describe('Text Open World vNext · life, rest, defeat and recovery', () => {
     expect(plan.impactDomains).toEqual(['player', 'time'])
 
     const activeCombat = structuredClone(initial)
-    activeCombat.combat = { encounterKey: 'encounter.ridge-jackal', status: 'active' }
+    activeCombat.combat = createTextOpenWorldCombatStateMachineV1(runtimePackage).initialize({
+      state: activeCombat, encounterKey: 'encounter.ridge-jackal', instanceKey: 'combat.rest-guard',
+    })
     await expect(catalog.plan({ effectKeys: ['effect.rest-full'], claimKey: 'claim.rest.in-combat', state: activeCombat }))
       .rejects.toThrow('当前不能休息')
   })
 
   it('战败把生命归零并屏蔽普通行动；复活恢复安全状态但不回滚任务、物品和时间', async () => {
     const runtimePackage = withHarmfulStatus()
-    const actions = runtimePackage.modules.actions.payload as any
-    actions.effects.push({
-      key: 'effect.resolve-defeat', operation: 'resolve-combat',
-      payload: { encounterKey: 'encounter.ridge-jackal', outcome: 'defeat' },
-    })
     const catalog = createTextOpenWorldEffectCatalogV1(runtimePackage)
     const initialProjection = createInitialTextOpenWorldSessionProjectionV1(runtimePackage)
     initialProjection.state.player.health = 7
     initialProjection.state.player.skillResource = 0
     initialProjection.state.player.statusKeys = ['status.wounded']
-    initialProjection.state.combat = { encounterKey: 'encounter.ridge-jackal', status: 'active' }
-    const defeatPlan = await catalog.plan({ effectKeys: ['effect.resolve-defeat'], claimKey: 'claim.defeat', state: initialProjection.state })
+    const combatState = placeCombatAtActionResolved(runtimePackage, initialProjection.state, 'combat.defeat-effect')
+    const defeatAuthorization = combatState.prepare({ state: initialProjection.state, intent: 'finish-defeat' })
+    const defeatPlan = await catalog.plan({
+      effectKeys: ['effect.settle-combat-state'], claimKey: 'claim.defeat', state: initialProjection.state,
+      authorization: defeatAuthorization,
+    })
     const defeated = (await catalog.apply({ plan: defeatPlan, state: initialProjection.state })).state
     expect(defeated).toMatchObject({ player: { health: 0 }, combat: { status: 'defeat' } })
 
@@ -134,8 +157,7 @@ describe('Text Open World vNext · life, rest, defeat and recovery', () => {
     const actions = runtimePackage.modules.actions.payload as any
     actions.effects.push({ key: 'effect.respawn-ridge', operation: 'respawn', payload: { fastTravelPointKey: 'fast-travel.ridge', healthRatio: 1 } })
     const initial = createInitialTextOpenWorldSessionProjectionV1(runtimePackage).state
-    initial.player.health = 0
-    initial.combat = { encounterKey: 'encounter.ridge-jackal', status: 'defeat' }
+    placeDefeatedCombat(runtimePackage, initial, 'combat.locked-respawn')
     await expect(createTextOpenWorldEffectCatalogV1(runtimePackage).plan({
       effectKeys: ['effect.respawn-ridge'], claimKey: 'claim.locked-respawn', state: initial,
     })).rejects.toThrow('复活点尚未解锁')
@@ -164,8 +186,13 @@ describe('Text Open World vNext · life, rest, defeat and recovery', () => {
     const invalidId = await db.productRuntimeCheckpoints.add({ ...invalidCheckpoint, subjectKey: 'encounter.missing' }) as number
     await expect(inspectTextOpenWorldCheckpointV1(invalidId)).resolves.toMatchObject({ valid: false, code: 'checkpoint-purpose-invalid' })
 
-    await executeTextOpenWorldActionV1({
-      sessionId: session.id!, actionKey: 'action.accept-defeat', commandId: 'command.combat.defeat', requestedAt: 2,
+    await executeTextOpenWorldSystemCombatTransitionV1({
+      sessionId: session.id!, actionKey: 'action.settle-combat-state', targetKey: 'encounter.ridge-jackal',
+      combatTransitionIntent: 'complete-turn', commandId: 'command.combat.complete-turn', requestedAt: 2,
+    })
+    await executeTextOpenWorldSystemCombatTransitionV1({
+      sessionId: session.id!, actionKey: 'action.settle-combat-state', targetKey: 'encounter.ridge-jackal',
+      combatTransitionIntent: 'finish-defeat', commandId: 'command.combat.defeat', requestedAt: 3,
     })
     const parentBeforeRetry = await readProductRuntimeState(session.id!)
     expect(parentBeforeRetry.textOpenWorld).toMatchObject({ state: { player: { health: 0 }, combat: { status: 'defeat' } } })
