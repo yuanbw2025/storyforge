@@ -204,7 +204,7 @@ function prompt(stage: ScreenplayProfessionalStageV1, context: string, targetKey
     `登记上下文：\n${context}`,
   ].filter(Boolean).join('\n\n')
   const instructions: Record<ScreenplayProfessionalStageV1, string> = {
-    'source-analysis': `按冻结来源逐项提取可核对事实。输出数组，每项仅含 ${FACT_KEYS.join(', ')}。statement 只陈述原文事实；subjectKeys 用可移植语义键；sourceUnitKeys 必须有证据；confidence 为 0～1。`,
+    'source-analysis': `按冻结来源逐项提取可核对事实。输出 JSON 数组；每项字段严格且仅为 ${FACT_KEYS.join(', ')}。每项形状必须是 {"stableKey":"fact.key","kind":"event","statement":"原文事实","subjectKeys":["character.key"],"sourceUnitKeys":["上下文给出的 sourceUnitKey"],"confidence":1}。kind 只能是 event、character-state、relationship、location、object、motif 之一，禁止输出 action、character、plot、setting、theme 等近义词；confidence 必须是 0～1 的数字。statement 只陈述原文事实；subjectKeys 用可移植语义键；sourceUnitKeys 必须逐字使用上下文提供的 key 且至少一个。不得增加 evidence、quote、reasoning、category、id 等字段。`,
     'causal-graph': `建立有证据的有向因果图。输出数组，每项仅含 ${EDGE_KEYS.join(', ')}。只引用已确认 fact key；区分 cause/enables/motivates/reveals/prevents；禁止自环和仅有时间相邻的伪因果。`,
     'adaptation-brief': `提出改编合同。输出对象，字段严格仅为 ${BRIEF_KEYS.join(', ')}。锁定主题、受众、长度、禁改项与自由度；假设和未决问题不得伪装成事实。`,
     'decision-pass': `对来源事件逐项作改编决定。输出数组，每项仅含 ${DECISION_KEYS.join(', ')}。action 仅 keep/cut/merge/reorder/externalize/add；除 add 外必须引用 sourceFactKeys；内心活动优先 externalize 为行动、选择、对白、声音或已批准旁白。`,
