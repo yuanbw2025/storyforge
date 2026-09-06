@@ -193,6 +193,42 @@ async function completeAvgBuildPreviewMainRoute(input: {
   throw new Error('商业 AVG 主路线在 30 次选择内未到达结局')
 }
 
+function playtestStrategyOutput() {
+  const kinds = [
+    'golden-route', 'alternate-route', 'failure-forward', 'each-ending', 'random-long-run',
+    'resource-edge', 'side-quest-skip', 'side-quest-complete', 'refresh-resume',
+    'save-load-branch', 'ai-offline', 'media-offline', 'corruption-recovery',
+    'export-import', 'delete-lifecycle',
+  ] as const
+  const browserKinds = new Set([
+    'random-long-run', 'resource-edge', 'side-quest-skip', 'side-quest-complete',
+    'refresh-resume', 'save-load-branch', 'corruption-recovery', 'export-import', 'delete-lifecycle',
+  ])
+  return {
+    schema: 'storyforge.text-adventure-playtest-strategy-artifact' as const, version: 1 as const,
+    routeCases: kinds.map(kind => ({
+      caseKey: `playtest.${kind}`, kind,
+      executionMode: browserKinds.has(kind) ? 'real-browser' as const : 'deterministic-autoplay' as const,
+      objective: `验证 ${kind} 的可执行结果与状态证据。`,
+      steps: ['从当前 Build 的固定入口开始', '按登记路线执行并保留状态与界面证据'],
+      expectedAssertions: ['没有软锁或越权写入', '结果绑定当前 Build 与 package hash'],
+      evidenceRefs: [`quality.autoplay#autoplay.${kind}`], required: true,
+    })),
+    humanSessions: [{
+      sessionKey: 'human.independent-golden', participantRole: 'independent-player' as const,
+      routeKind: 'golden-route' as const, timingRequired: true,
+      prompts: ['记录理解障碍、无聊点、选择感与情绪变化'],
+      passCriteria: ['完整抵达结局', '实际时长达到 Brief 验收区间'],
+    }, {
+      sessionKey: 'human.author-alternate', participantRole: 'author' as const,
+      routeKind: 'alternate-route' as const, timingRequired: false,
+      prompts: ['核对替代路线与主线因果差异'],
+      passCriteria: ['替代路线可完成且具有持续回响'],
+    }],
+    blockingRisks: [], recommendation: 'eligible-for-human-validation' as const,
+  }
+}
+
 function modelOutputs(
   worldHash: string,
   productType: ProductionProductKindV1 = 'avg',
@@ -345,6 +381,7 @@ function modelOutputs(
       },
       issues: [], passed: true,
     },
+    'qa.playtest-strategy': playtestStrategyOutput(),
     'media.requirements': {
       schema: 'storyforge.product-media-requirements-artifact', version: 2,
       visual: [
@@ -1395,6 +1432,8 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     const dialoguePassContexts: string[] = []
     let qualityReviewSystem = ''
     let qualityReviewContext = ''
+    let playtestSystem = ''
+    let playtestContext = ''
     let modelCallCount = 0
     const runText: ProductionTextRunnerV1 = async request => {
       modelCallCount += 1
@@ -1413,6 +1452,10 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
       if (taskKey === 'content.adventure-quality-review') {
         qualityReviewSystem = request.system
         qualityReviewContext = request.contextText
+      }
+      if (taskKey === 'qa.playtest-strategy') {
+        playtestSystem = request.system
+        playtestContext = request.contextText
       }
       return {
         output: JSON.stringify(outputs[taskKey]), usage: { inputTokens: 400, outputTokens: 2_000 },
@@ -1480,6 +1523,11 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     expect(qualityReviewContext).toContain('"title":"攻击","role":"stat","initial":3')
     expect(qualityReviewContext).toContain('"timeCostMinutes":')
     expect(qualityReviewContext).not.toContain('该上下文源已按预算截断')
+    expect(playtestSystem).toContain('独立 Playtest Director')
+    expect(playtestSystem).toContain('不重不漏各覆盖一次上述 15 种 kind')
+    expect(playtestContext).toContain('storyforge.text-adventure-playtest-inputs')
+    expect(playtestContext).toContain('"deterministicEvidence":["quality.autoplay","quality.report"]')
+    expect(playtestContext).not.toContain('storyforge.product-production.artifact-inputs')
     const build = (await db.productBuilds.get(projection.buildId))!
     const quality = JSON.parse(build.qualityReportJson) as {
       hardGateResults: Array<{ gateId: string; passed: boolean; evidence: string[] }>
@@ -1487,6 +1535,28 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     expect(quality.hardGateResults).toContainEqual(expect.objectContaining({
       gateId: 'product.adventure.content-volume', passed: true,
     }))
+    const autoplayArtifact = await db.productBuildArtifacts
+      .where('[buildId+artifactKey]').equals([build.id!, 'quality.autoplay']).first()
+    expect(autoplayArtifact).toMatchObject({ status: 'accepted', kind: 'playtest-report' })
+    expect(JSON.parse(autoplayArtifact!.payloadJson)).toMatchObject({
+      schema: 'storyforge.text-adventure-autoplay-report', passed: true,
+      cases: expect.arrayContaining([
+        expect.objectContaining({ kind: 'golden-route', passed: true }),
+        expect.objectContaining({ kind: 'ending-coverage', passed: true }),
+        expect.objectContaining({ kind: 'failure-forward', passed: true }),
+        expect.objectContaining({ kind: 'state-roundtrip', passed: true }),
+      ]),
+    })
+    const playtestArtifact = await db.productBuildArtifacts
+      .where('[buildId+artifactKey]').equals([build.id!, 'quality.playtest-plan']).first()
+    expect(playtestArtifact).toMatchObject({ status: 'accepted', kind: 'playtest-report' })
+    expect(JSON.parse(playtestArtifact!.payloadJson)).toMatchObject({
+      buildNumber: build.buildNumber,
+      recommendation: 'eligible-for-human-validation',
+      routeCases: expect.arrayContaining([
+        expect.objectContaining({ kind: 'export-import', executionMode: 'real-browser', required: true }),
+      ]),
+    })
     const runtimeArtifact = await db.productBuildArtifacts
       .where('[buildId+artifactKey]').equals([build.id!, 'runtime.package']).first()
     const runtimePackage = parseProductRuntimePackageV1(runtimeArtifact!.payloadJson)
@@ -1653,10 +1723,10 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
       }],
     })
     expect(reassembled).toMatchObject({ terminal: true, buildStatus: 'release-ready' })
-    expect(modelCallCount).toBe(modelCallCountBeforeReassembly)
+    expect(modelCallCount).toBe(modelCallCountBeforeReassembly + 1)
     const reassemblyArtifacts = await db.productBuildArtifacts.where('buildId').equals(reassembled.buildId).toArray()
     expect(reassemblyArtifacts.filter(item => item.status === 'accepted').map(item => item.artifactKey).sort()).toEqual([
-      'content.narrative', 'quality.report', 'runtime.package',
+      'content.narrative', 'quality.autoplay', 'quality.playtest-plan', 'quality.report', 'runtime.package',
     ])
   }, 30_000)
 
@@ -1808,7 +1878,7 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
       ['content.dialogue-pass.act-3', 2],
       ['content.product-module', 1], ['content.adventure-side-quests', 2], ['content.quest-script', 2],
       ['content.adventure-ambient-events', 1], ['content.adventure-quality-review', 2],
-      ['media.requirements', 2],
+      ['media.requirements', 2], ['qa.playtest-strategy', 1],
     ])
     expect(taskCalls).toEqual(expectedCalls)
     expect(repairedSceneContexts).toHaveLength(3)

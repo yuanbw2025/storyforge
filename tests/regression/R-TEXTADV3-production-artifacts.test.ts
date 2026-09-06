@@ -17,6 +17,11 @@ import {
   applyTextAdventureDialoguePassV1,
   parseTextAdventureDialoguePassArtifactV1,
 } from '../../src/lib/adventure/dialogue-pass'
+import {
+  parseTextAdventureAutoplayReportV1,
+  parseTextAdventurePlaytestStrategyArtifactV1,
+  TEXT_ADVENTURE_PLAYTEST_ROUTE_KINDS_V1,
+} from '../../src/lib/adventure/autoplay'
 
 function brief(qualityProfile: ProductProductionBriefV3['qualityProfile'] = 'internal') {
   return {
@@ -71,6 +76,57 @@ function castBible(qualityProfile: ProductProductionBriefV3['qualityProfile'] = 
 }
 
 describe('TEXTADV-3 · 专业生产工件合同', () => {
+  it('自动游玩报告必须绑定当前 Build/package，试玩总监不能自行批准发布', () => {
+    const packageHash = 'a'.repeat(64)
+    const autoplay = {
+      schema: 'storyforge.text-adventure-autoplay-report', version: 1,
+      buildNumber: 3, packageHash, seed: `storyforge-autoplay-v1:${packageHash}`, passed: true,
+      cases: [
+        'golden-route', 'ending-coverage', 'alternate-route', 'failure-forward',
+        'state-roundtrip', 'branch-isolation', 'ai-offline', 'media-offline',
+      ].map(kind => ({
+        caseKey: `autoplay.${kind}`, kind, passed: true, endingKeys: ['ending.001'],
+        choiceCount: 3, actionCount: 3, evidence: ['passed'],
+      })),
+      routeSummary: {
+        enumeratedRouteCount: 2, reachableEndingKeys: ['ending.001'], truncated: false,
+        minimumRouteTextUnits: 3_000, estimatedMinimumRouteMinutes: 20,
+      },
+      manualRequiredKinds: ['refresh-resume'],
+    }
+    expect(parseTextAdventureAutoplayReportV1(autoplay, { buildNumber: 3, packageHash })).toMatchObject({
+      passed: true, buildNumber: 3,
+    })
+    expect(() => parseTextAdventureAutoplayReportV1(autoplay, {
+      buildNumber: 4, packageHash,
+    })).toThrow('未绑定当前 Build/package')
+
+    const strategy = {
+      schema: 'storyforge.text-adventure-playtest-strategy-artifact', version: 1,
+      routeCases: TEXT_ADVENTURE_PLAYTEST_ROUTE_KINDS_V1.map(kind => ({
+        caseKey: `playtest.${kind}`, kind,
+        executionMode: 'real-browser', objective: `验证 ${kind}`,
+        steps: ['执行用例'], expectedAssertions: ['保留证据'], evidenceRefs: ['quality.autoplay'], required: true,
+      })),
+      humanSessions: [{
+        sessionKey: 'human.golden', participantRole: 'independent-player', routeKind: 'golden-route',
+        timingRequired: true, prompts: ['记录体验'], passCriteria: ['完整通关'],
+      }, {
+        sessionKey: 'human.failure', participantRole: 'author', routeKind: 'failure-forward',
+        timingRequired: false, prompts: ['检查失败推进'], passCriteria: ['没有死路'],
+      }],
+      blockingRisks: [], recommendation: 'eligible-for-human-validation',
+    }
+    expect(parseTextAdventurePlaytestStrategyArtifactV1({
+      value: strategy, buildNumber: 3, autoplayPassed: false, qualityReleaseReady: true,
+    })).toMatchObject({ buildNumber: 3, recommendation: 'blocked' })
+    const missingRoute = structuredClone(strategy)
+    missingRoute.routeCases.pop()
+    expect(() => parseTextAdventurePlaytestStrategyArtifactV1({
+      value: missingRoute, buildNumber: 3, autoplayPassed: true, qualityReleaseReady: true,
+    })).toThrow('全部必需路线类型')
+  })
+
   it('来源充分性只接受冻结范围内的 resource key，并由 blocking 证据派生暂停', () => {
     const parsed = parseTextAdventureSourceSufficiencyArtifactV1({
       value: {

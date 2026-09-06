@@ -296,7 +296,7 @@ export async function createProductProductionPlanV3(input: {
     (_, index) => `media.audio.${String(index + 1).padStart(3, '0')}`,
   )
   const textAdventure = brief.intent.productType === 'text-adventure'
-  const modelTaskCount = textAdventure ? 19 : 4
+  const modelTaskCount = textAdventure ? 20 : 4
   const textAdventureOutputWeights: Record<string, number> = {
     'content.source-sufficiency': 0.05,
     'content.design': 0.04,
@@ -315,8 +315,9 @@ export async function createProductProductionPlanV3(input: {
     'content.dialogue-pass.act-3': 0.02,
     'content.adventure-side-quests': 0.06,
     'content.adventure-ambient-events': 0.04,
-    'content.adventure-quality-review': 0.05,
-    'media.requirements': 0.05,
+    'content.adventure-quality-review': 0.04,
+    'media.requirements': 0.04,
+    'qa.playtest-strategy': 0.02,
   }
   // Every provider task and deterministic integration receives a declared
   // slice. Text adventure reserves separate bounded specialists for the
@@ -687,15 +688,41 @@ export async function createProductProductionPlanV3(input: {
     timeoutMs: 120_000, failurePolicy: 'pause', fallbackTaskKey: null,
     acceptanceGateIds: ['package.protocol', 'package.graph', 'package.media-bindings'],
   }))
+  if (textAdventure) tasks.push(productionTask({
+    taskKey: 'qa.autoplay', lane: 'qa', kind: 'text-adventure-autoplay', skillId: null,
+    executionMode: 'deterministic', dependsOn: ['integration.package'],
+    inputArtifactKeys: ['runtime.package'], outputArtifactKeys: ['quality.autoplay'],
+    requirementKeys: [], capabilityRequirementKeys: [], concurrencyGroup: 'deterministic',
+    subjectLockKeys: ['quality.autoplay'], priority: 20,
+    budgetReservation: reservation({ durationMs: perDuration }), maxAttempts: 1,
+    timeoutMs: 120_000, failurePolicy: 'pause', fallbackTaskKey: null,
+    acceptanceGateIds: ['artifact.protocol', 'adventure.autoplay.executed'],
+  }))
   tasks.push(productionTask({
     taskKey: 'qa.release', lane: 'qa', kind: 'quality-review', skillId: null,
-    executionMode: 'deterministic', dependsOn: ['integration.package'],
-    inputArtifactKeys: integrationArtifactKeys, outputArtifactKeys: ['quality.report'],
+    executionMode: 'deterministic', dependsOn: [
+      'integration.package', ...(textAdventure ? ['qa.autoplay'] : []),
+    ],
+    inputArtifactKeys: [
+      ...integrationArtifactKeys, ...(textAdventure ? ['quality.autoplay'] : []),
+    ], outputArtifactKeys: ['quality.report'],
     requirementKeys: [], capabilityRequirementKeys: [], concurrencyGroup: 'deterministic',
     subjectLockKeys: ['quality.report'], priority: 10,
     budgetReservation: reservation({ durationMs: perDuration }), maxAttempts: 1,
     timeoutMs: 120_000, failurePolicy: 'pause', fallbackTaskKey: null,
     acceptanceGateIds: brief.completionContract.requiredGateIds,
+  }))
+  if (textAdventure) tasks.push(productionTask({
+    taskKey: 'qa.playtest-strategy', lane: 'qa', kind: 'text-adventure-playtest-strategy',
+    skillId: 'text-adventure.playtest-strategy.v1', executionMode: 'model',
+    dependsOn: ['qa.autoplay', 'qa.release'],
+    inputArtifactKeys: ['runtime.package', 'quality.autoplay', 'quality.report'],
+    outputArtifactKeys: ['quality.playtest-plan'], requirementKeys: [],
+    capabilityRequirementKeys: textCapabilities, concurrencyGroup: 'text-provider',
+    subjectLockKeys: ['quality.playtest-plan'], priority: 5,
+    budgetReservation: modelBudget('qa.playtest-strategy'), maxAttempts: 2,
+    timeoutMs: 240_000, failurePolicy: 'pause', fallbackTaskKey: null,
+    acceptanceGateIds: ['artifact.protocol', 'adventure.playtest-strategy'],
   }))
   return parseProductProductionPlanV3({
     schema: 'storyforge.product-production-plan', version: 3,
@@ -706,6 +733,6 @@ export async function createProductProductionPlanV3(input: {
       maximumTextProviderTasks: 2,
       maximumMediaProviderTasks: 1,
     },
-    tasks, terminalTaskKey: 'qa.release',
+    tasks, terminalTaskKey: textAdventure ? 'qa.playtest-strategy' : 'qa.release',
   }, brief, input.briefHash)
 }

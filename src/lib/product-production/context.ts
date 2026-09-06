@@ -491,6 +491,66 @@ export async function readTextAdventureQualityInputsV1(input: AssembleContextInp
 }
 
 /**
+ * Evidence packet for the independent Playtest Director. Runtime content is
+ * projected to measurable surfaces; the full package remains authoritative in
+ * the accepted Artifact and is never copied into the model prompt wholesale.
+ */
+export async function readTextAdventurePlaytestInputsV1(input: AssembleContextInput): Promise<string> {
+  if (input.productProductionTaskKey !== 'qa.playtest-strategy') {
+    throw new Error('[product-production-context] 试玩策略投影缺少精确 taskKey')
+  }
+  const requiredKeys = ['runtime.package', 'quality.autoplay', 'quality.report']
+  const { build, rows, payloadByKey } = await requiredContextArtifactsV1(input, {
+    label: '文字冒险试玩策略投影', requiredKeys,
+  })
+  const runtimePackage = payloadByKey.get('runtime.package') ?? {}
+  const narrative = contextRecord(runtimePackage.narrative)
+  const adventure = contextRecord(runtimePackage.adventure)
+  const interaction = contextRecord(runtimePackage.interaction)
+  const presentation = contextRecord(runtimePackage.presentation)
+  const autoplay = payloadByKey.get('quality.autoplay') ?? {}
+  const quality = payloadByKey.get('quality.report') ?? {}
+  const packet = {
+    schema: 'storyforge.text-adventure-playtest-inputs', version: 1,
+    buildNumber: build.buildNumber,
+    sources: rows.map(row => ({ artifactKey: row.artifactKey, contentHash: row.contentHash }))
+      .sort((left, right) => left.artifactKey.localeCompare(right.artifactKey)),
+    package: {
+      productType: runtimePackage.productType,
+      title: contextRecord(runtimePackage.definition).title,
+      nodeCount: contextRows(narrative.nodes).length,
+      beatCount: contextRows(narrative.beats).length,
+      dialogueTurnCount: contextRows(narrative.beats).filter(beat => beat.kind === 'dialogue').length,
+      choiceCount: contextRows(narrative.choices).length,
+      locationCount: contextRows(adventure.locations).length,
+      actionCount: contextRows(adventure.actions).length,
+      questCount: contextRows(adventure.quests).length,
+      endingCount: contextRows(adventure.endings).length,
+      npcCount: contextRows(interaction.profiles).filter(profile => profile.participantKey !== 'player').length,
+      mediaAssetCount: contextRows(presentation.assets).length,
+      textFallback: contextRecord(adventure.media).fallback,
+    },
+    autoplay,
+    quality,
+    authorityBoundary: {
+      deterministicEvidence: ['quality.autoplay', 'quality.report'],
+      stillRequired: [
+        'real browser performance receipt', 'author-confirmed main route playthrough receipt',
+        'media runtime receipt when media exists', 'independent player timed playthrough',
+        'export/import/delete lifecycle E2E',
+      ],
+      prohibition: 'Playtest Director 不得把模型意见写成 release-ready，也不得伪造尚未执行的回执。',
+    },
+  }
+  const serialized = JSON.stringify(packet)
+  const estimatedTokens = estimateTokens(serialized)
+  if (estimatedTokens > 8_000) {
+    throw new Error(`[product-production-context] 试玩策略投影超过登记预算:${estimatedTokens}/8000`)
+  }
+  return serialized
+}
+
+/**
  * Exact, bounded feedback from the previous failed quality gate. It is exposed
  * only while resolving that blocker and remains a read-only historical input;
  * the repaired Artifact must still pass its normal parser and quality gate.

@@ -3314,11 +3314,13 @@ export const AGENT_SKILLS = [
     executionMode: 'product-production',
     contextTaskKind: 'agent-outline',
     readToolNames: [],
-    contextSourceKeys: ['product-production.brief', 'product-production.quality-feedback'],
-    optionalContextSourceKeys: ['product-production.artifact-inputs'],
-    inputPolicy: productProductionInputPolicy(['product-production.brief', 'product-production.quality-feedback']),
+    contextSourceKeys: ['product-production.brief', 'product-production.adventure-playtest-inputs'],
+    optionalContextSourceKeys: [],
+    inputPolicy: productProductionInputPolicy([
+      'product-production.brief', 'product-production.adventure-playtest-inputs',
+    ]),
     contextCompression: compressionPolicy([
-      'product-production.brief', 'product-production.quality-feedback', 'product-production.artifact-inputs',
+      'product-production.brief', 'product-production.adventure-playtest-inputs',
     ]),
     maxOutputTokens: 8_000,
     writeTargets: [{ table: 'productBuildArtifacts', fields: ['payloadJson'], adoptionExtension: 'product-production-artifacts' }],

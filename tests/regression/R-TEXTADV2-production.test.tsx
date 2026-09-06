@@ -85,7 +85,7 @@ describe('R-TEXTADV2-production · 文字冒险正式生产契约与工作台', 
       'content.scene-script.act-3', 'content.dialogue-pass.act-1',
       'content.dialogue-pass.act-2', 'content.dialogue-pass.act-3', 'integration.narrative',
       'content.adventure-quality-review', 'media.requirements', 'media.visual',
-      'integration.package', 'qa.release',
+      'integration.package', 'qa.autoplay', 'qa.release', 'qa.playtest-strategy',
     ]))
     expect(taskByKey.get('content.source-sufficiency')).toMatchObject({
       skillId: 'text-adventure.source-sufficiency.v1', dependsOn: [],
@@ -146,7 +146,19 @@ describe('R-TEXTADV2-production · 文字冒险正式生产契约与工作台', 
     })
     expect(taskByKey.get('media.requirements')?.dependsOn).toEqual(['content.adventure-quality-review'])
     expect(taskByKey.get('integration.package')?.failurePolicy).toBe('pause')
+    expect(taskByKey.get('qa.autoplay')).toMatchObject({
+      executionMode: 'deterministic', dependsOn: ['integration.package'],
+      inputArtifactKeys: ['runtime.package'], outputArtifactKeys: ['quality.autoplay'],
+    })
     expect(taskByKey.get('qa.release')?.failurePolicy).toBe('pause')
+    expect(taskByKey.get('qa.release')?.dependsOn).toEqual(['integration.package', 'qa.autoplay'])
+    expect(taskByKey.get('qa.playtest-strategy')).toMatchObject({
+      skillId: 'text-adventure.playtest-strategy.v1',
+      dependsOn: ['qa.autoplay', 'qa.release'],
+      inputArtifactKeys: ['runtime.package', 'quality.autoplay', 'quality.report'],
+      outputArtifactKeys: ['quality.playtest-plan'],
+    })
+    expect(plan.terminalTaskKey).toBe('qa.playtest-strategy')
     expect(taskByKey.get('integration.package')?.inputArtifactKeys).toEqual(expect.arrayContaining([
       'content.story-bible', 'content.cast-bible', 'content.adventure-architecture',
       'content.narrative-arc-plan', 'content.main-quest-plan', 'content.adventure-side-quests',

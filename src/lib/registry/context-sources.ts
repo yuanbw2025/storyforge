@@ -156,6 +156,9 @@ async function readTextAdventureDialogueInputsV1(input: AssembleContextInput): P
 async function readTextAdventureQualityInputsV1(input: AssembleContextInput): Promise<string> {
   return (await import('../product-production/context')).readTextAdventureQualityInputsV1(input)
 }
+async function readTextAdventurePlaytestInputsV1(input: AssembleContextInput): Promise<string> {
+  return (await import('../product-production/context')).readTextAdventurePlaytestInputsV1(input)
+}
 async function readTextAdventureRepairFeedbackV1(input: AssembleContextInput): Promise<string> {
   return (await import('../product-production/context')).readTextAdventureRepairFeedbackV1(input)
 }
@@ -1423,6 +1426,19 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     protectedFromTrim: true,
     enabled: input => Number.isInteger(input.productBuildId) && !!input.productArtifactKeys?.length,
     read: readTextAdventureQualityInputsV1,
+  },
+  {
+    key: 'product-production.adventure-playtest-inputs',
+    label: '文字冒险试玩总监验收证据投影',
+    scope: 'project',
+    layer: 'L0',
+    ownerFrom: 'work',
+    budgetTokens: 8_500,
+    protectedFromTrim: true,
+    enabled: input => Number.isInteger(input.productBuildId)
+      && input.productProductionTaskKey === 'qa.playtest-strategy'
+      && !!input.productArtifactKeys?.length,
+    read: readTextAdventurePlaytestInputsV1,
   },
   {
     key: 'product-production.adventure-repair-feedback',

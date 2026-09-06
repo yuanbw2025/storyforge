@@ -116,7 +116,9 @@ const AUTHOR_REVIEW_ARTIFACT_KEYS = new Set([
   'quality.adventure-review',
   'media.requirements',
   'runtime.package',
+  'quality.autoplay',
   'quality.report',
+  'quality.playtest-plan',
 ])
 
 export async function listProductProductionReviewArtifactsV1(input: {

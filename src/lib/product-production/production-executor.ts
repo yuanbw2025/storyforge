@@ -65,6 +65,11 @@ import {
   applyTextAdventureDialoguePassV1,
   parseTextAdventureDialoguePassArtifactV1,
 } from '../adventure/dialogue-pass'
+import {
+  parseTextAdventureAutoplayReportV1,
+  parseTextAdventurePlaytestStrategyArtifactV1,
+  runTextAdventureAutoplayV1,
+} from '../adventure/autoplay'
 import type {
   ProductProductionCapabilityBindingV1,
   ProductProductionTaskArtifactV1,
@@ -1095,6 +1100,14 @@ function textSystem(
       '输出字段必须精确为：{"schema":"storyforge.text-adventure-quality-review-artifact","version":1,"scores":{"causality":1,"playerAgency":1,"routeDifferentiation":1,"pacing":1,"setupPayoff":1,"characterMotivation":1,"emotionalImpact":1},"issues":[{"severity":"warning|blocking","artifactKey":"content.story-bible|content.cast-bible|content.adventure-architecture|content.narrative-arc-plan|content.main-quest-plan|content.quest-script|content.scene-script.act-1|content.scene-script.act-2|content.scene-script.act-3|content.dialogue-pass.act-1|content.dialogue-pass.act-2|content.dialogue-pass.act-3|content.narrative|content.product-module|content.adventure-side-quests|content.adventure-ambient-events","detail":"...","recommendation":"..."}],"passed":false}。场景正文问题应尽量定位到具体 act；对白声音、知识越界与玩家选择措辞问题应定位到对应幕的 content.dialogue-pass.act-*；只有跨幕装配或无法定位的全局问题才使用 content.narrative。示例中的 1 和 false 是保守占位，不是目标分数；必须依据证据逐项改写，禁止复制成批量高分。' +
       `审查时必须对照目标 ${brief.scale.targetPlayMinutes} 分钟、约 ${brief.scale.targetWordCount} 个中文内容单位、${adventure.narrative.targetSceneCount} 个场景、${adventure.narrative.targetEndingCount} 个结局，并核查失败是否产生代价或新局面。passed 是确定性派生字段：最终 issues 和 scores 写完后必须重新计算；仅当没有 blocking 且七项分数都不低于 3 时为 true，否则必须为 false。`
   }
+  if (taskKey === 'qa.playtest-strategy') {
+    if (!adventure) return `${common}\n缺少文字冒险专用 Brief，停止。`
+    return `${common}\n你是独立 Playtest Director。你不生产或改写剧情，不执行运行状态，也无权批准发布；只能基于当前 RuntimePackage、确定性自动游玩报告和质量报告，制定可执行的真人/浏览器验收矩阵，并指出阻塞风险。` +
+      '输出字段必须精确为：{"schema":"storyforge.text-adventure-playtest-strategy-artifact","version":1,"routeCases":[{"caseKey":"playtest.golden","kind":"golden-route|alternate-route|failure-forward|each-ending|random-long-run|resource-edge|side-quest-skip|side-quest-complete|refresh-resume|save-load-branch|ai-offline|media-offline|corruption-recovery|export-import|delete-lifecycle","executionMode":"deterministic-autoplay|real-browser|human-playtest","objective":"...","steps":["..."],"expectedAssertions":["..."],"evidenceRefs":["quality.autoplay#autoplay.golden-route"],"required":true}],"humanSessions":[{"sessionKey":"human.independent-golden","participantRole":"author|independent-player","routeKind":"golden-route|alternate-route|failure-forward","timingRequired":true,"prompts":["..."],"passCriteria":["..."]}],"blockingRisks":[{"riskKey":"risk.some-key","evidenceRef":"quality.report#gate-id","detail":"...","requiredResolution":"..."}],"recommendation":"eligible-for-human-validation|blocked"}。' +
+      'Build 身份由确定性系统从 Run Contract 写入，模型不得输出 buildNumber；routeCases 必须不重不漏各覆盖一次上述 15 种 kind，全部 required=true，每项包含具体操作步骤、预期状态/界面断言与真实证据引用。' +
+      '至少安排两场 humanSessions：一名未参与生产的玩家完整计时黄金路线，以及作者或独立玩家验证替代路线/失败推进。自动游玩已经覆盖的项目引用 quality.autoplay；刷新、存读档、损坏恢复、导入导出和删除必须使用 real-browser；真实时长、理解、无聊点、选择感与情绪反馈必须使用 human-playtest。' +
+      '若确定性自动游玩或质量报告未通过，或你发现无法由现有证据关闭的风险，必须写入 blockingRisks 并输出 blocked；即使输出 eligible，也只表示可以进入真人验证，绝不表示 release-ready。'
+  }
   const adventureVisualBlueprints = [
     { mediaKind: 'background', sceneTag: 'cover-opening', beatKey: 'opening-beat-key', prompt: '封面兼开场的无人物环境主视觉，建立大区域与核心冲突', altText: '游戏开场所在大区域的环境主视觉', width: 1280, height: 720 },
     { mediaKind: 'character-pose', sceneTag: 'protagonist-anchor', beatKey: 'first-character-beat-key', prompt: '主要角色透明背景全身设定图，严格保持视觉锚点', altText: '主要角色全身设定图', width: 720, height: 1080 },
@@ -1431,6 +1444,25 @@ async function executeModelTask(input: ProductProductionTaskExecutionInputV1, op
       reviewContractVerified: true,
       passed: review.passed,
       blockingIssueCount: review.issues.filter(issue => issue.severity === 'blocking').length,
+    }
+  } else if (input.task.taskKey === 'qa.playtest-strategy') {
+    const autoplay = parseTextAdventureAutoplayReportV1(
+      artifactPayload(input, 'quality.autoplay'),
+    )
+    const qualityReport = artifactPayload(input, 'quality.report') as ProductBuildQualityReportV1
+    const strategy = parseTextAdventurePlaytestStrategyArtifactV1({
+      value: raw,
+      buildNumber: input.buildNumber,
+      autoplayPassed: autoplay.passed,
+      qualityReleaseReady: qualityReport.releaseReady === true,
+    })
+    payload = strategy
+    kind = 'playtest-report'; quality = {
+      playtestStrategyVerified: true,
+      routeCaseCount: strategy.routeCases.length,
+      humanSessionCount: strategy.humanSessions.length,
+      blockingRiskCount: strategy.blockingRisks.length,
+      recommendation: strategy.recommendation,
     }
   } else fail(`未实现模型任务:${input.task.taskKey}`)
   const inputTokens = response.usage?.inputTokens
@@ -2149,6 +2181,11 @@ async function executeQualityTask(input: ProductProductionTaskExecutionInputV1, 
     }
   }
   const packageHash = await hashProductProductionValueV2(runtimePackage)
+  const autoplay = runtimePackage.productType === 'text-adventure' && runtimePackage.adventure?.version === 2
+    ? parseTextAdventureAutoplayReportV1(artifactPayload(input, 'quality.autoplay'), {
+        buildNumber: input.buildNumber, packageHash,
+      })
+    : null
   const runtimeSpeakerKeys = runtimePackage.interaction?.profiles.map(profile => profile.characterKey) ?? []
   const graph = validateNarrativeContentGraph({
     entryNodeKey: runtimePackage.narrative.entryNodeKey,
@@ -2185,6 +2222,12 @@ async function executeQualityTask(input: ProductProductionTaskExecutionInputV1, 
             `adapterCommercialReady=${runtimePackage.definition.initialVariables.productAdapterCommercialReady === true}`,
           ],
     },
+    ...(autoplay ? {
+      'product.adventure.autoplay': {
+        passed: autoplay.passed,
+        evidence: autoplay.cases.map(item => `${item.caseKey}=${item.passed}`),
+      },
+    } : {}),
   }
   for (const productGate of productQuality.gates) {
     hardEvidence[productGate.gateId] = {
@@ -2196,6 +2239,9 @@ async function executeQualityTask(input: ProductProductionTaskExecutionInputV1, 
     ...options.brief.completionContract.requiredGateIds,
     ...(options.brief.qualityProfile === 'commercial-candidate'
       ? productQuality.gates.map(gate => gate.gateId)
+      : []),
+    ...(options.brief.qualityProfile === 'commercial-candidate' && autoplay
+      ? ['product.adventure.autoplay']
       : []),
   ])]
   const hardGateResults = requiredGateIds.map(gateId => (
@@ -2210,6 +2256,7 @@ async function executeQualityTask(input: ProductProductionTaskExecutionInputV1, 
     ...(options.brief.qualityProfile === 'prototype' ? ['当前为 prototype 质量档，正式商业发布前应升级质量档并复验。'] : []),
     ...(!commercialMediaValid ? ['商业候选不得使用程序化占位素材，且必须绑定可追溯权利策略。'] : []),
     ...(!commercialAdapterValid ? ['当前产品 adapter 仅达到内部基线，不能作为商业候选发布。'] : []),
+    ...(autoplay && !autoplay.passed ? ['确定性自动游玩存在失败；prototype 可预览，但不得进入社区推荐验收。'] : []),
     ...(options.brief.qualityProfile === 'commercial-candidate' ? [] : productQuality.warnings),
   ]
   const quality: ProductBuildQualityReportV1 = {
@@ -2225,6 +2272,31 @@ async function executeQualityTask(input: ProductProductionTaskExecutionInputV1, 
     artifacts: [{
       artifactKey: 'quality.report', kind: 'quality-report', payload: quality,
       quality: { hardGatesPassed: true, releaseReady }, rights: {},
+    }],
+    passedGateIds: [...input.task.acceptanceGateIds],
+    usage: zeroUsage(elapsed(startedAt)),
+  }
+}
+
+async function executeTextAdventureAutoplayTask(
+  input: ProductProductionTaskExecutionInputV1,
+): Promise<ProductProductionTaskExecutionResultV1> {
+  const startedAt = performance.now()
+  const runtimePackage = parseProductRuntimePackageV1(artifactPayload(input, 'runtime.package'))
+  const packageHash = await hashProductProductionValueV2(runtimePackage)
+  const report = runTextAdventureAutoplayV1({
+    runtimePackage, buildNumber: input.buildNumber, packageHash,
+  })
+  return {
+    artifacts: [{
+      artifactKey: 'quality.autoplay', kind: 'playtest-report', payload: report,
+      quality: {
+        deterministicAutoplay: true,
+        passed: report.passed,
+        passedCaseCount: report.cases.filter(item => item.passed).length,
+        caseCount: report.cases.length,
+      },
+      rights: {},
     }],
     passedGateIds: [...input.task.acceptanceGateIds],
     usage: zeroUsage(elapsed(startedAt)),
@@ -2268,6 +2340,7 @@ export function createConfiguredProductProductionExecutorV1(input: {
     if (request.task.taskKey === 'media.audio') return executeAudioTask(request, options)
     if (request.task.taskKey === 'integration.narrative') return executeNarrativeIntegrationTask(request, options)
     if (request.task.taskKey === 'integration.package') return executeIntegrationTask(request, options)
+    if (request.task.taskKey === 'qa.autoplay') return executeTextAdventureAutoplayTask(request)
     if (request.task.taskKey === 'qa.release') return executeQualityTask(request, options)
     fail(`没有正式 executor:${request.task.taskKey}`)
   }

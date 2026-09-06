@@ -1,6 +1,6 @@
 # 05 · Durable 生产 DAG 与工件方案
 
-> 层级：L2 · 版本：1.4.0 · 生效：2026-09-07
+> 层级：L2 · 版本：1.5.0 · 生效：2026-09-07
 > 性质：正式生产计划、Run Contract 和候选采纳目标契约。
 
 ## 1. 目标拓扑
@@ -22,21 +22,25 @@ WorldRelease + Confirmed Brief + Frozen SourcePlan
   → visual.bible + media.requirements
   → media assets + media review
   → deterministic integration
-  → static quality + autoplay routes
-  → author playtest receipts
+  → qa.autoplay（确定性路线/状态证据）
+  → qa.release（确定性发布质量门）
+  → qa.playtest-strategy（独立试玩总监）
+  → real-browser + author/independent-player receipts
   → recommendation candidate
   → author adopt → immutable ProductRelease
 ```
 
 关键依赖不可省略：系统设计读取故事/角色；主线任务读取故事弧、角色和系统；支线读取主线；任务脚本读取全部任务与系统；场景正文读取任务脚本；美术清单读取定稿场景和角色锚点。旧 DAG 中“主线与系统并行、支线不读主线”的结构必须下线。
 
-当前代码已经实现到分场正文、独立对白审校与确定性叙事装配：规划、故事、角色、空间、系统、叙事弧、主线、支线和区域事件分别形成已登记任务，随后由 `text-adventure-quest-scripter` 生成严格的 `content.quest-script`；三幕 Scene Writer 分别生成 `content.scene-script.act-1/2/3`，独立 Dialogue Editor 再按幕产生 `content.dialogue-pass.act-1/2/3`，全部通过严格 parser 后，由 `integration.narrative` 应用表达修订并装配 `content.narrative`。作者工作台显示岗位名称、任务 key、attempt、状态和阻塞，并可展开审查这些专业工件。
+当前代码已经实现到分场正文、独立对白审校、确定性叙事装配、独立连续性审校、确定性自动游玩和 Playtest Director：规划、故事、角色、空间、系统、叙事弧、主线、支线和区域事件分别形成已登记任务，随后由 `text-adventure-quest-scripter` 生成严格的 `content.quest-script`；三幕 Scene Writer 分别生成 `content.scene-script.act-1/2/3`，独立 Dialogue Editor 再按幕产生 `content.dialogue-pass.act-1/2/3`，全部通过严格 parser 后，由 `integration.narrative` 应用表达修订并装配 `content.narrative`。
 
-连续性审校的独立问题工件与 Playtest Director 的试玩策略/推荐意见仍是后续施工单元；它们未形成各自 Agent、Skill、Artifact、receipt 和真实下游消费证据前，不能宣称专业 DAG 全部完成。
+`qa.autoplay` 以零模型调用运行黄金路线、结局覆盖、替代路线、失败注入、状态往返、分支隔离、AI 离线和媒资离线八类检查，产出绑定 Build/package hash 的 `quality.autoplay`。`qa.release` 消费该证据；商业候选的自动游玩失败会阻断。之后 `text-adventure-playtest-director` 使用独立 Skill/Run Contract 和有界证据投影生成 `quality.playtest-plan`，必须覆盖 15 种路线/生命周期用例和至少两场真人试玩。该模型工件最多只可判为“可进入真人验证”，无权产生 `release-ready`。
+
+真实浏览器刷新、IndexedDB 存读档/分支、损坏恢复、导入导出删除、真人计时和情绪反馈仍必须由后续 E2E 与人工回执完成；`quality.playtest-plan` 不能替代这些证据。
 
 ## 2. 计划版本
 
-新专业链路使用 `storyforge.product-production-plan` 的新版本，旧 V3 只用于已有 Build 回放，不可继续创建文字冒险推荐候选。计划在开始前冻结：任务 key、Agent/Skill、依赖、输入/输出 Artifact、required receipt、预算、并发组、锁、attempt、timeout、failure policy 和 acceptance gate。
+当前专业链路继续使用已受治理的 `storyforge.product-production-plan` V3，不为产品私域另造计划底座；文字冒险通过新增登记任务和依赖拓扑扩展 V3。计划在开始前冻结：任务 key、Agent/Skill、依赖、输入/输出 Artifact、required receipt、预算、并发组、锁、attempt、timeout、failure policy 和 acceptance gate。若未来字段语义发生不兼容变化，才升级计划版本并保留旧 Build 回放 parser。
 
 V1.2 的一小时纵切面固定为三幕，因此计划创建时已经冻结三个 Scene Writer 任务，不在运行中动态追加 provider 调用。每幕包含哪些场景、选择和结局由 Brief 规模与确定性骨架计算，并由已采纳 `narrative.arc-plan` 精确覆盖；三个任务各自拥有独立的 Run Contract、预算、attempt、receipt 和输出 Artifact。未来支持任意幕数时，必须通过显式 plan revision 与作者预算确认扩展，不能让执行器根据模型输出偷偷追加任务。
 

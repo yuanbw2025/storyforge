@@ -1,6 +1,6 @@
 # StoryForge 文字冒险专业生产与旗舰交付方案
 
-> 层级：L2 · 版本：1.0.0 · 生效：2026-09-06
+> 层级：L2 · 版本：1.1.0 · 生效：2026-09-07
 > 状态：目标契约、施工入口与当前事实的唯一现行方案包；当前实现与目标有差距时，以本文标出的缺口为施工项，不得用目标描述冒充完成事实。
 
 本方案包把 [`../TEXT-ADVENTURE.md`](../TEXT-ADVENTURE.md) 的产品契约落实为可以逐步实现和验收的专业生产体系。目标不是生成一个能打开的工程夹具，而是从来源充分的冻结 `WorldRelease` 出发，交付一款作者可审查、可导入导出、可发布、可完整游玩，并有资格提交社区推荐的有限篇幅文字冒险。
@@ -13,9 +13,9 @@
 - 只有 3 个标记为对白的 beat，没有可交互的正式 NPC 与交谈行动。
 - 两处实际分叉中一处立即汇流，另一处直接进入三种一句话结局；选择没有正式条件或效果。
 - 质量门把 Brief 目标分钟当作实际时长，把地点、物品、任务与动作描述计入主线字量，并允许零 NPC，因此错误放行。
-- 生产注册中的文字冒险岗位全部归属 `outline` Agent；主线与玩法系统并行，支线和区域事件不读取主线，未形成故事到任务脚本的专业依赖链。
+- 当时生产注册中的文字冒险岗位全部归属 `outline` Agent；该旧结构现已由 17 个单一核心 Skill 的独立岗位和专业依赖 DAG 取代，但 Build #4 不因底座升级而自动获得推荐资格。
 
-这些事实的代码锚点是 `src/lib/product-production/product-quality.ts`、`src/lib/product-production/plan.ts`、`src/lib/product-production/production-executor.ts`、`src/lib/adventure/production-compiler.ts` 和 `src/lib/agent/skill-registry.ts`。修复完成前，工作台必须把旧 Build 标为“工程夹具/不具备推荐资格”，不得继续宣称产品完成。
+旧 Build 失败证据和新底座的代码锚点是 `src/lib/product-production/product-quality.ts`、`src/lib/product-production/plan.ts`、`src/lib/product-production/production-executor.ts`、`src/lib/adventure/production-compiler.ts`、`src/lib/adventure/autoplay.ts` 和 `src/lib/agent/skill-registry.ts`。工作台必须继续把旧 Build 标为“工程夹具/不具备推荐资格”；专业生产链、自动游玩和试玩计划已经接通不等于首个社区推荐成品已经交付。
 
 ## 开工卡
 
@@ -48,4 +48,3 @@
 3. 一条主路线的可见正文、对白轮次、必需行动、有效决定和实测时长均由发布包与试玩回执计算，不从 Brief 目标反推。
 4. 从冻结 WorldRelease 到导入/导出、Build、ProductRelease、刷新恢复和结局的真实链路通过自动化与人类完整试玩。
 5. 最终游戏达到 [`07-QUALITY-EVAL-AND-ACCEPTANCE.md`](./07-QUALITY-EVAL-AND-ACCEPTANCE.md) 的“社区推荐候选”标准，并由作者显式确认；外部社区发布仍需单独授权。
-

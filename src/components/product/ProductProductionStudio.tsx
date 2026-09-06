@@ -159,7 +159,9 @@ function reviewArtifactLabel(key: string): string {
     'quality.adventure-review': '独立叙事质量审查',
     'media.requirements': '视觉圣经与美术需求',
     'runtime.package': '装配后的可玩运行包',
+    'quality.autoplay': '确定性自动游玩报告',
     'quality.report': '静态检查与自动质量报告',
+    'quality.playtest-plan': '真人试玩与发布验证计划',
   } as Record<string, string>)[key] ?? key
 }
 
@@ -189,7 +191,9 @@ function productionTaskPresentation(taskKey: string): { label: string; owner: st
     'media.visual': ['受控图片生成与验收', '媒资 Provider'],
     'media.audio': ['受控音频生成与验收', '媒资 Provider'],
     'integration.package': ['确定性游戏装配', '运行包编译器'],
+    'qa.autoplay': ['确定性路线与状态自动游玩', '自动游玩执行器'],
     'qa.release': ['静态检查与发布质量门', '确定性质量系统'],
+    'qa.playtest-strategy': ['真人试玩与发布验证计划', '独立试玩总监'],
   } as Record<string, [string, string]>)[taskKey]
   return exact ? { label: exact[0], owner: exact[1] } : { label: taskKey, owner: '已登记生产岗位' }
 }
