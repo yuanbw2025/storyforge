@@ -232,12 +232,13 @@ export async function generateComicProfessionalCandidateV1(input: { scope: Works
   if (!input.aiConfig && !input.runAI) throw new Error('[comic-run] 缺少 AI 配置')
   const selected = await selectTargets(input); if ((await inspectAdaptationFreshness(selected.root.id!)).status !== 'unchanged') throw new Error('[comic-run] 来源已变化或缺失，请先同步')
   const key = [selected.root.id!, selected.root.activeSourceManifestVersion] as [number, number]
-  const [factRows, edgeRows, decisionRows, beatRows, planRows, pageCount, subjectRows] = await Promise.all([
+  const [factRows, edgeRows, decisionRows, beatRows, planRows, pageCount, subjectRows, assetRows] = await Promise.all([
     db.adaptationSourceFacts.where('[adaptationProjectId+manifestVersion]').equals(key).filter(row => row.authorStatus === 'confirmed').toArray(),
     db.adaptationCausalEdges.where('[adaptationProjectId+manifestVersion]').equals(key).filter(row => row.authorStatus === 'confirmed').toArray(),
     db.adaptationDecisions.where('[adaptationProjectId+manifestVersion]').equals(key).filter(row => row.authorStatus === 'confirmed').toArray(),
     db.comicScriptBeats.where('[adaptationProjectId+manifestVersion]').equals(key).toArray(), db.comicPagePlans.where('[adaptationProjectId+manifestVersion]').equals(key).toArray(),
     db.comicPages.where('adaptationProjectId').equals(selected.root.id!).count(), db.comicVisualSubjects.where('adaptationProjectId').equals(selected.root.id!).toArray(),
+    db.comicMediaAssets.where('adaptationProjectId').equals(selected.root.id!).toArray(),
   ])
   requireStage(input.stage, selected.root, { facts: factRows.length, edges: edgeRows.length, decisions: decisionRows.length, beats: beatRows.length, plans: planRows.length, pages: pageCount, subjects: subjectRows.length }, { pages: selected.targetPages.length, panels: selected.targetPanels.length, issues: selected.targetIssues.length })
   const config = STAGES[input.stage]; const skill = getAgentSkillV1(config.skillId); const stepId = `comic-professional:${input.stage}`
@@ -257,6 +258,7 @@ export async function generateComicProfessionalCandidateV1(input: { scope: Works
     input.stage === 'visual-bible' ? `必须逐字覆盖的 panel subjectKey 闭集：${panelSubjectKeys.join(', ')}` : '',
     ['image-request', 'targeted-repair'].includes(input.stage) ? `允许 visual subject stableKey 闭集：${subjectRows.map(row => row.stableKey).join(', ')}` : '',
     ['image-request', 'targeted-repair'].includes(input.stage) && selected.targetPanels[0] ? `目标格当前 revision=${selected.targetPanels[0].revision}；必须逐字保留 protectedAreas=${JSON.stringify(selected.targetPanels[0].protectedAreas ?? [])}；必须覆盖本格 subjectKey=${[...new Set([...(selected.targetPanels[0].subjectStates ?? []), ...(selected.targetPanels[0].continuityRefs ?? [])].map(row => row.subjectKey))].join(', ')}` : '',
+    ['visual-continuity-review', 'page-review'].includes(input.stage) ? `ReviewIssue 可引用的 subjectKey 闭集：${subjectRows.map(row => row.stableKey).join(', ') || '(空，只能为 null)'}；可引用的 assetKey 闭集：${assetRows.map(row => row.stableKey).join(', ') || '(空，只能为 null)'}` : '',
   ].filter(Boolean).join('\n')
   const system = [`你是${config.role}。只完成当前职责，不替后续岗位生成或采纳。`, '严格区分来源事实、作者确认决定与提案；不得把新增桥接伪装成原文。', '只输出一个严格 JSON 值，不要 Markdown、解释、注释或代码围栏。候选自身新建的 stableKey 必须全批次唯一并匹配 ^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$；所有引用字段只能逐字使用登记上下文中的 key 或当前批次明确创建的目标 key。数组不得含重复项；数字必须是 JSON number；可空定位字段必须显式写 null，绝不输出 undefined；不得输出数据库数字 ID。', `目标漫画画像：${JSON.stringify(selected.root.targetSpec)}`, input.stage === 'source-analysis' ? `唯一来源单元：${selected.sourceUnitKeys.join(', ')}` : '', referenceClosure, targetKeys.length ? `唯一目标：${targetKeys.join(', ')}` : '', input.authorInstruction?.trim() ? `作者附加要求：${input.authorInstruction.trim()}` : '', `登记上下文：\n${assembled.text}`].filter(Boolean).join('\n\n')
   const messages: ChatMessage[] = [{ role: 'system', content: system }, { role: 'user', content: comicProfessionalInstructionV1(input.stage) }]
@@ -323,8 +325,8 @@ export async function generateComicProfessionalCandidateV1(input: { scope: Works
       if (input.stage === 'targeted-repair') { const issueKeys = (body as ComicRepairRequestCandidateV1).issueKeys; const expectedIssueKeys = selected.targetIssues.map(row => row.stableKey); if (issueKeys.length !== expectedIssueKeys.length || expectedIssueKeys.some(key => !issueKeys.includes(key))) throw new Error('[comic-run] 修复请求 issueKeys 与目标问题不匹配') }
     }
     if (['visual-continuity-review', 'page-review'].includes(input.stage)) {
-      const rows = parsed as ComicReviewIssueCandidateV1[]; const allowedPages = new Set(selected.targetPages.map(row => row.stableKey)); const targetPageIds = new Set(selected.targetPages.flatMap(row => row.id == null ? [] : [row.id])); const allowedPanels = new Set(selected.panels.filter(row => targetPageIds.has(row.pageId)).map(row => row.stableKey))
-      const invalidTargets = rows.flatMap(row => [!allowedPages.has(row.pageKey) ? row.pageKey : '', row.panelKey && !allowedPanels.has(row.panelKey) ? row.panelKey : ''].filter(Boolean)); const invalidSourceKeys = invalidSources(rows)
+      const rows = parsed as ComicReviewIssueCandidateV1[]; const allowedPages = new Set(selected.targetPages.map(row => row.stableKey)); const targetPageIds = new Set(selected.targetPages.flatMap(row => row.id == null ? [] : [row.id])); const allowedPanels = new Set(selected.panels.filter(row => targetPageIds.has(row.pageId)).map(row => row.stableKey)); const allowedSubjects = new Set(subjectRows.map(row => row.stableKey)); const allowedAssets = new Set(assetRows.map(row => row.stableKey))
+      const invalidTargets = rows.flatMap(row => [!allowedPages.has(row.pageKey) ? row.pageKey : '', row.panelKey && !allowedPanels.has(row.panelKey) ? row.panelKey : '', row.subjectKey && !allowedSubjects.has(row.subjectKey) ? row.subjectKey : '', row.assetKey && !allowedAssets.has(row.assetKey) ? row.assetKey : ''].filter(Boolean)); const invalidSourceKeys = invalidSources(rows)
       if (invalidTargets.length) throw new Error(`[comic-run] ReviewIssue 引用了目标页闭集外 key：${[...new Set(invalidTargets)].join('、')}`)
       if (invalidSourceKeys.length) throw new Error(`[comic-run] ReviewIssue 引用了闭集外来源：${invalidSourceKeys.join('、')}`)
     }
