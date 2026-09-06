@@ -1,6 +1,6 @@
 # StoryForge 文档权威与归档规则
 
-> 版本：1.7.0 · 生效：2026-09-07
+> 版本：1.8.0 · 生效：2026-09-07
 > 本文回答“哪些文档仍可指导开发”。未列入现行清单的历史材料，不得作为设计或施工权威。
 
 ## 1. 裁决层级
@@ -49,6 +49,7 @@
 - `docs/products/text-adventure-production/09-MEDIA-AUTHORING-AND-REVISION.md`
 - `docs/products/text-adventure-production/10-MEDIA-QUALITY-AND-BINDING.md`
 - `docs/products/text-adventure-production/11-HUMAN-VISUAL-REVIEW-AND-RECOMMENDATION.md`
+- `docs/products/text-adventure-production/12-PRODUCT-PACKAGE-IMPORT-AND-COMMUNITY-CANDIDATE.md`
 - `docs/ROADMAP.md`
 - `docs/roadmap/README.md`
 - `docs/roadmap/CAPABILITY-BASELINE.md`

@@ -49,6 +49,7 @@ const activeDocs = [
   'docs/products/text-adventure-production/09-MEDIA-AUTHORING-AND-REVISION.md',
   'docs/products/text-adventure-production/10-MEDIA-QUALITY-AND-BINDING.md',
   'docs/products/text-adventure-production/11-HUMAN-VISUAL-REVIEW-AND-RECOMMENDATION.md',
+  'docs/products/text-adventure-production/12-PRODUCT-PACKAGE-IMPORT-AND-COMMUNITY-CANDIDATE.md',
   'docs/roadmap/README.md',
   'docs/roadmap/CAPABILITY-BASELINE.md',
   'docs/roadmap/COMPLETED.md',
