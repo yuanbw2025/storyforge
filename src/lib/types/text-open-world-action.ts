@@ -27,6 +27,12 @@ export interface TextOpenWorldActionProjectionContextV1 {
   worldMinute: number
   playerHealth: number
   combatStatus: 'active' | 'victory' | 'defeat' | 'escaped' | null
+  combatEncounterKey?: string | null
+  combatPhase?: 'started' | 'round-start' | 'actor-turn' | 'action-resolved' | 'round-end' | 'terminal' | null
+  activeCombatantKey?: string | null
+  learnedSkillKeys?: string[]
+  skillResource?: number
+  combatSkillCooldownRemainingTurnsBySkillKey?: Record<string, number>
   conditionResults: Record<string, TextOpenWorldConditionResultV1>
   openEdgeKeys: string[]
   unlockedFastTravelPointKeys: string[]
@@ -53,6 +59,8 @@ export type TextOpenWorldActionUnavailableCodeV1 =
   | 'no-valid-target'
   | 'defeated'
   | 'combat-state'
+  | 'skill-unavailable'
+  | 'item-unavailable'
   | 'route-closed'
 
 export interface TextOpenWorldActionUnavailableReasonV1 {

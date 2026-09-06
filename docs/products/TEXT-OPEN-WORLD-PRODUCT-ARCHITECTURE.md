@@ -805,13 +805,22 @@ G2-23已经把其中“进入战斗到战斗终态”的确定性骨架落入正
 
 - Combat v2 Session中的每次战斗具有稳定`instanceKey`，并保存遭遇、战斗状态、阶段、轮次、行动索引、当前行动者、玩家先攻、冻结回合顺序及逐个敌人实例；敌人实例由Release遭遇组按稳定键展开，不能由演绎正文临时增删；
 - 当前阶段合同为`started → round-start → actor-turn → action-resolved → actor-turn/round-end → ...`，仅`action-resolved`可以进入`victory / defeat / escaped`；死亡、终态和游标不一致会在状态验证时失败关闭；
-- 平局按“高先攻优先、玩家优先、稳定参与者键”决定，回放不依赖对象遍历顺序或AI描述；跳过已战败参与者，但具体伤害与战败标记由G2-24～G2-25负责；
+- 平局按“高先攻优先、玩家优先、稳定参与者键”决定，回放不依赖对象遍历顺序或AI描述；跳过已战败参与者，具体伤害与战败标记由G2-25负责；
 - 开战仍是玩家`start-combat` Action与`initialize-combat` Effect；它先建立既有战前重试点，再把`started`状态写入正式事件；代码随后用唯一系统`combat-state-action`和`settle-combat-state` Effect自动推进到首个可行动者；
 - 每次阶段迁移都由代码针对当前状态生成`CombatTransitionAuthorization`，冻结迁移意图及前后阶段、轮次和行动者快照。Effect计划、系统命令、Session待处理游标与Replay会交叉核验，普通Action不能借用该Effect；
 - 战斗不创建第二事件流，所有迁移继续使用ProductRuntime的`text-open-world.command.committed`与`text-open-world.effects.applied`事件，因此刷新、检查点和分支沿用同一恢复路径；
 - Action v9必须与Combat v2成对发布。旧Combat v1/Action v8 Release仍按`{encounterKey,status}`旧投影执行和重放，不被悄悄升级为缺少证据的新战斗实例。
 
-图中的`prepared`目前由战前检查、确认和重试检查点表达，不另存一个可漂移的战斗阶段；`aborted-by-recovery`、实际回合操作、数值、随机证据和胜利领奖仍分别归G2-24、G2-25及既有复活/奖励生命周期完成。
+图中的`prepared`目前由战前检查、确认和重试检查点表达，不另存一个可漂移的战斗阶段；`aborted-by-recovery`仍由既有复活/分支生命周期表达，实际回合操作已由G2-24完成，数值、随机证据和胜利领奖归G2-25。
+
+G2-24在阶段机之上完成了“选择一项行动并把回合交还玩家”的确定性闭环：
+
+- Action v10要求普通攻击、每项玩家战斗技能、每种可消耗道具、逃跑和敌方技能都有唯一静态Action与`perform-combat-action` Effect，Build同时校验技能/道具双向覆盖、资源cost、条件、目标范围和Effect闭集；
+- Session只增加必要的回合冷却和`lastAction`投影；Action可用性直接复用已学技能、技能资源、Condition、背包和存活敌人投影，不在战斗页建第二份临时状态；
+- 玩家行动签发`CombatActionAuthorization`，冻结行动者、目标、资源、冷却、Effect闭集及行动前阶段；通用EffectPlan原子处理技能消耗和物品消耗，战斗行动代码只记录行动并推进阶段；
+- 玩家回合后，系统根据Release冻结的`StrategyProfile`按优先级选取非冷却技能，必要时使用零冷却回退技能，并以正式系统命令执行；所有敌人行动后再回到下一玩家回合；
+- 逃跑也是一项玩家行动，成功记录后状态机直接进入`escaped`终态，不再执行敌方回合；未学、资源不足、冷却中、无道具、非当前行动者、非存活目标和授权篡改均失败关闭；
+- Action v9与旧Combat v1均保持原投影可读可重放，不会在旧Release中凭空补齐新行动证据。
 
 ### 9.4 确定性结算
 

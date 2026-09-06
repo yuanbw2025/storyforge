@@ -10,6 +10,7 @@ import type {
 import { deriveTextOpenWorldEquippedItemKeysV1 } from './inventory'
 import { parseTextOpenWorldModulesV1 } from './modules'
 import { deriveTextOpenWorldPlayerStatsFromModulesV1 } from './player-stats'
+import { createTextOpenWorldCombatDefinitionCatalogV1 } from './combat-definitions'
 
 function fail(message: string): never { throw new Error(`[text-open-world-combat-state] ${message}`) }
 function integer(value: unknown, label: string, minimum = 0, maximum = Number.MAX_SAFE_INTEGER): number {
@@ -36,6 +37,7 @@ function expectedEnemies(
       maximumHealth: definition.maximumHealth,
       initiative: definition.initiative,
       defeated: false,
+      ...(modules.actions.version >= 10 ? { cooldownUntilRoundBySkillKey: {} } : {}),
     }))
   })
 }
@@ -83,7 +85,35 @@ export function validateTextOpenWorldCombatRuntimeStateV1(input: {
       || enemy.maximumHealth !== definition.maximumHealth || enemy.initiative !== definition.initiative) fail(`战斗敌人实例定义漂移:${enemy.combatantKey}`)
     const currentHealth = integer(enemy.currentHealth, `combat.enemies[${index}].currentHealth`, 0, enemy.maximumHealth)
     if (enemy.defeated !== (currentHealth === 0)) fail(`战斗敌人生命与战败标记不一致:${enemy.combatantKey}`)
+    if (input.modules.actions.version >= 10) {
+      if (!enemy.cooldownUntilRoundBySkillKey || typeof enemy.cooldownUntilRoundBySkillKey !== 'object' || Array.isArray(enemy.cooldownUntilRoundBySkillKey)) fail(`敌人技能冷却投影缺失:${enemy.combatantKey}`)
+      for (const [skillKey, readyRound] of Object.entries(enemy.cooldownUntilRoundBySkillKey)) {
+        if (!input.modules.progression.skills.some(skill => skill.key === skillKey)) fail(`敌人冷却引用未知技能:${skillKey}`)
+        integer(readyRound, `enemy cooldown ${enemy.combatantKey}.${skillKey}`, 1, 100_000)
+      }
+    } else if (enemy.cooldownUntilRoundBySkillKey != null) fail(`旧战斗投影不能包含敌人技能冷却:${enemy.combatantKey}`)
   })
+  if (input.modules.actions.version >= 10) {
+    if (!combat.cooldownUntilRoundBySkillKey || typeof combat.cooldownUntilRoundBySkillKey !== 'object' || Array.isArray(combat.cooldownUntilRoundBySkillKey)) fail('玩家技能冷却投影缺失')
+    for (const [skillKey, readyRound] of Object.entries(combat.cooldownUntilRoundBySkillKey)) {
+      if (!input.modules.progression.skills.some(skill => skill.key === skillKey)) fail(`玩家冷却引用未知技能:${skillKey}`)
+      integer(readyRound, `player cooldown ${skillKey}`, 1, 100_000)
+    }
+    if (combat.lastAction === undefined) fail('战斗lastAction投影缺失')
+    if (combat.lastAction != null) {
+      const action = combat.lastAction
+      if (!input.modules.actions.actions.some(item => item.key === action.actionKey)) fail('lastAction引用未知Action')
+      if (!['player', ...combat.enemies.map(enemy => enemy.combatantKey)].includes(action.actorCombatantKey)) fail('lastAction行动者不存在')
+      if (!['basic-attack', 'skill', 'item', 'escape', 'enemy-skill'].includes(action.kind)) fail('lastAction.kind无效')
+      if (action.skillKey != null && !input.modules.progression.skills.some(skill => skill.key === action.skillKey)) fail('lastAction技能不存在')
+      if (action.itemKey != null && !input.modules.items.items.some(item => item.key === action.itemKey)) fail('lastAction道具不存在')
+      if (!Array.isArray(action.targetCombatantKeys) || new Set(action.targetCombatantKeys).size !== action.targetCombatantKeys.length
+        || action.targetCombatantKeys.some(key => !['player', ...combat.enemies.map(enemy => enemy.combatantKey)].includes(key))) fail('lastAction目标无效')
+      integer(action.round, 'lastAction.round', 1, combat.round)
+      integer(action.turnIndex, 'lastAction.turnIndex', 0, combat.turnOrder.length - 1)
+      if (combat.turnOrder[action.turnIndex] !== action.actorCombatantKey) fail('lastAction行动索引漂移')
+    }
+  } else if (combat.cooldownUntilRoundBySkillKey != null || combat.lastAction !== undefined) fail('旧战斗投影不能包含Action v10字段')
   const expectedOrder = orderFor({ playerInitiative, enemies: combat.enemies })
   if (!Array.isArray(combat.turnOrder) || canonicalProductProductionJsonV2(combat.turnOrder) !== canonicalProductProductionJsonV2(expectedOrder)) fail('战斗回合顺序漂移')
   const round = integer(combat.round, 'combat.round', 0, 100_000)
@@ -108,6 +138,7 @@ export function createTextOpenWorldCombatStateMachineV1(
   parsedModules?: TextOpenWorldParsedModulesV1,
 ) {
   const modules = parsedModules ?? parseTextOpenWorldModulesV1(value)
+  const definitions = createTextOpenWorldCombatDefinitionCatalogV1(value, modules)
   const initialize = (input: {
     state: TextOpenWorldEffectStateV1
     encounterKey: string
@@ -115,7 +146,7 @@ export function createTextOpenWorldCombatStateMachineV1(
   }): TextOpenWorldCombatRuntimeStateV1 => {
     if (input.state.player.health <= 0 || input.state.combat?.status === 'active') fail('当前不能开始新战斗')
     if (typeof input.instanceKey !== 'string' || !input.instanceKey || input.instanceKey.length > 200) fail('combat instanceKey无效')
-    const encounter = modules.combat.encounters.find(item => item.key === input.encounterKey) ?? fail(`遭遇不存在:${input.encounterKey}`)
+    const encounter = definitions.getEncounter(input.encounterKey) ?? fail(`遭遇不存在:${input.encounterKey}`)
     const playerStats = deriveTextOpenWorldPlayerStatsFromModulesV1({
       modules,
       level: input.state.player.level,
@@ -134,6 +165,7 @@ export function createTextOpenWorldCombatStateMachineV1(
       activeCombatantKey: null,
       playerInitiative: playerStats.initiative,
       turnOrder: [],
+      ...(modules.actions.version >= 10 ? { cooldownUntilRoundBySkillKey: {}, lastAction: null } : {}),
       enemies,
     }
     combat.turnOrder = orderFor(combat)
@@ -221,7 +253,7 @@ export function createTextOpenWorldCombatStateMachineV1(
     if (!combat || combat.status !== 'active') return null
     if (combat.phase === 'started' || combat.phase === 'round-end') return 'begin-round'
     if (combat.phase === 'round-start') return 'begin-turn'
-    if (combat.phase === 'action-resolved') return 'advance-turn'
+    if (combat.phase === 'action-resolved') return combat.lastAction?.kind === 'escape' ? 'finish-escaped' : 'advance-turn'
     return null
   }
 

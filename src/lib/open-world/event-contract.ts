@@ -24,6 +24,7 @@ import type {
   TextOpenWorldWeatherSettlementAuthorizationV1,
   TextOpenWorldActorScheduleSettlementAuthorizationV1,
   TextOpenWorldCombatTransitionAuthorizationV1,
+  TextOpenWorldCombatActionAuthorizationV1,
   TextOpenWorldCrimeAuthorizationV1,
 } from '../types'
 import { parseTextOpenWorldCommandEventPayloadV1 } from './command-contract'
@@ -241,6 +242,39 @@ function parseAuthorization(value: unknown, label: string): TextOpenWorldEffectP
       afterTurnIndex: raw.afterTurnIndex == null ? null : integer(raw.afterTurnIndex, `${label}.afterTurnIndex`),
       afterActiveCombatantKey: raw.afterActiveCombatantKey == null ? null : token(raw.afterActiveCombatantKey, `${label}.afterActiveCombatantKey`),
     } satisfies TextOpenWorldCombatTransitionAuthorizationV1
+  }
+  if (raw.kind === 'combat-action') {
+    exact(raw, [
+      'kind', 'instanceKey', 'encounterKey', 'actionKey', 'actorKey', 'actorCombatantKey', 'actionKind',
+      'skillKey', 'itemKey', 'targetCombatantKeys', 'beforePhase', 'beforeRound', 'beforeTurnIndex',
+      'beforeActiveCombatantKey', 'effectKeys', 'resourceCost', 'cooldownTurns', 'cooldownUntilRound', 'afterSkillResource',
+    ], label)
+    const actorKey = raw.actorKey === 'player' || raw.actorKey === 'system' ? raw.actorKey : fail(`${label}.actorKey无效`)
+    const actionKind = ['basic-attack', 'skill', 'item', 'escape', 'enemy-skill'].includes(String(raw.actionKind))
+      ? raw.actionKind as TextOpenWorldCombatActionAuthorizationV1['actionKind']
+      : fail(`${label}.actionKind无效`)
+    if (raw.beforePhase !== 'actor-turn') fail(`${label}.beforePhase无效`)
+    return {
+      kind: 'combat-action',
+      instanceKey: token(raw.instanceKey, `${label}.instanceKey`, COMMAND_ID),
+      encounterKey: token(raw.encounterKey, `${label}.encounterKey`),
+      actionKey: token(raw.actionKey, `${label}.actionKey`),
+      actorKey,
+      actorCombatantKey: token(raw.actorCombatantKey, `${label}.actorCombatantKey`),
+      actionKind,
+      skillKey: raw.skillKey == null ? null : token(raw.skillKey, `${label}.skillKey`),
+      itemKey: raw.itemKey == null ? null : token(raw.itemKey, `${label}.itemKey`),
+      targetCombatantKeys: uniqueStrings(raw.targetCombatantKeys, `${label}.targetCombatantKeys`),
+      beforePhase: 'actor-turn',
+      beforeRound: integer(raw.beforeRound, `${label}.beforeRound`, 1),
+      beforeTurnIndex: integer(raw.beforeTurnIndex, `${label}.beforeTurnIndex`),
+      beforeActiveCombatantKey: token(raw.beforeActiveCombatantKey, `${label}.beforeActiveCombatantKey`),
+      effectKeys: uniqueStrings(raw.effectKeys, `${label}.effectKeys`),
+      resourceCost: integer(raw.resourceCost, `${label}.resourceCost`),
+      cooldownTurns: integer(raw.cooldownTurns, `${label}.cooldownTurns`),
+      cooldownUntilRound: integer(raw.cooldownUntilRound, `${label}.cooldownUntilRound`, 1),
+      afterSkillResource: integer(raw.afterSkillResource, `${label}.afterSkillResource`),
+    } satisfies TextOpenWorldCombatActionAuthorizationV1
   }
   if (raw.kind === 'quest-objective') {
     exact(raw, ['kind', 'instanceKey', 'definitionKey', 'stageKey', 'objectiveKey', 'worldMinute', 'fromStatus', 'toStatus'], label)

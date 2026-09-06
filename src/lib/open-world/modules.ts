@@ -16,6 +16,7 @@ const KEY = /^[a-z][a-z0-9._:-]{0,199}$/
 const ACTION_CATEGORIES: TextOpenWorldActionCategoryV1[] = [
   'move', 'travel', 'fast-travel', 'observe', 'investigate', 'talk', 'take', 'use', 'equip', 'unequip', 'drop',
   'buy', 'sell', 'craft', 'accept-quest', 'abandon-quest', 'objective-action', 'quest-action', 'weather-action', 'actor-schedule-action', 'actor-state-action', 'claim-reward', 'attack-actor', 'steal', 'deceive', 'crime', 'start-combat', 'continue-combat', 'combat-state-action', 'escape',
+  'combat-basic-attack', 'combat-skill', 'combat-item', 'combat-enemy-skill',
   'rest', 'respawn', 'read', 'track', 'untrack', 'save', 'load-branch',
 ]
 const QUEST_TYPES: TextOpenWorldQuestTypeV1[] = ['mainline', 'significant', 'ordinary', 'template']
@@ -373,7 +374,7 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
     if (actorRows.find(actor => actor.key === item.actorKey)?.scheduleKey !== item.key) fail(`schedule/actor反向引用不一致:${String(item.key)}`)
   })
 
-  const actions = versioned(packageValue, 'actions', [1, 2, 3, 4, 5, 6, 7, 8, 9])
+  const actions = versioned(packageValue, 'actions', [1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
   const modernActionModule = Number(actions.version) >= 2
   const travelActionModule = Number(actions.version) >= 3
   const fastTravelActionModule = Number(actions.version) >= 4
@@ -382,6 +383,7 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
   const actorLifecycleActionModule = Number(actions.version) >= 7
   const crimeActionModule = Number(actions.version) >= 8
   const combatStateActionModule = Number(actions.version) >= 9
+  const combatOperationActionModule = Number(actions.version) >= 10
   if (actorScheduleActionModule && legacyActorModule) fail('Action v6必须搭配Actor v2')
   if (actorLifecycleActionModule && !actorLifecycleModule) fail('Action v7必须搭配Actor v3')
   if (combatStateActionModule !== (packageValue.modules.combat.schemaVersion >= 2)) fail('Action v9必须与Combat v2一起发布')
@@ -391,7 +393,7 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
   conditions.forEach((item, index) => { canonicalProductProductionJsonV2(item.expression); text(item.failureMessage, `actions.conditions[${index}].failureMessage`, 1_000) })
   normalizedWorld.edges.forEach((item, index) => requireRefs(item.conditionKeys, conditionKeys, `world.edges[${index}].conditionKeys`))
   effects.forEach((item, index) => { key(item.operation, `actions.effects[${index}].operation`); canonicalProductProductionJsonV2(item.payload) })
-  actionRows.forEach((item, index) => { enumValue(item.category, ACTION_CATEGORIES, `actions.actions[${index}].category`); text(item.label, `actions.actions[${index}].label`, 2_000); text(item.description, `actions.actions[${index}].description`); enumValue(item.actorScope, ['player', 'system'], `actions.actions[${index}].actorScope`); enumValue(item.targetScope, ['none', 'actor', 'location', 'item', 'quest', 'vendor', 'encounter'], `actions.actions[${index}].targetScope`); requireRefs(strings(item.locationKeys, `actions.actions[${index}].locationKeys`), locationKeys, 'action location'); requireRefs(strings(item.requirementConditionKeys, `actions.actions[${index}].requirementConditionKeys`), conditionKeys, 'action condition'); requireRefs(strings(item.costEffectKeys, `actions.actions[${index}].costEffectKeys`), effectKeys, 'action cost effect'); requireRefs(strings(item.successEffectKeys, `actions.actions[${index}].successEffectKeys`), effectKeys, 'action success effect'); requireRefs(strings(item.failureEffectKeys, `actions.actions[${index}].failureEffectKeys`), effectKeys, 'action failure effect'); int(item.timeCostMinutes, `actions.actions[${index}].timeCostMinutes`, 0, 1_000_000); enumValue(item.confirmationPolicy, ['never', 'high-risk', 'always'], `actions.actions[${index}].confirmationPolicy`); const repeatPolicy = enumValue(item.repeatPolicy, ['once', 'repeatable', 'cooldown'], `actions.actions[${index}].repeatPolicy`); const cooldown = item.cooldownMinutes == null ? null : int(item.cooldownMinutes, `actions.actions[${index}].cooldownMinutes`, 1, 1_000_000); if ((repeatPolicy === 'cooldown') !== (cooldown != null)) fail(`actions.actions[${index}] cooldown策略不一致`) })
+  actionRows.forEach((item, index) => { enumValue(item.category, ACTION_CATEGORIES, `actions.actions[${index}].category`); text(item.label, `actions.actions[${index}].label`, 2_000); text(item.description, `actions.actions[${index}].description`); enumValue(item.actorScope, ['player', 'system'], `actions.actions[${index}].actorScope`); enumValue(item.targetScope, ['none', 'actor', 'location', 'item', 'quest', 'vendor', 'encounter', 'combatant'], `actions.actions[${index}].targetScope`); requireRefs(strings(item.locationKeys, `actions.actions[${index}].locationKeys`), locationKeys, 'action location'); requireRefs(strings(item.requirementConditionKeys, `actions.actions[${index}].requirementConditionKeys`), conditionKeys, 'action condition'); requireRefs(strings(item.costEffectKeys, `actions.actions[${index}].costEffectKeys`), effectKeys, 'action cost effect'); requireRefs(strings(item.successEffectKeys, `actions.actions[${index}].successEffectKeys`), effectKeys, 'action success effect'); requireRefs(strings(item.failureEffectKeys, `actions.actions[${index}].failureEffectKeys`), effectKeys, 'action failure effect'); int(item.timeCostMinutes, `actions.actions[${index}].timeCostMinutes`, 0, 1_000_000); enumValue(item.confirmationPolicy, ['never', 'high-risk', 'always'], `actions.actions[${index}].confirmationPolicy`); const repeatPolicy = enumValue(item.repeatPolicy, ['once', 'repeatable', 'cooldown'], `actions.actions[${index}].repeatPolicy`); const cooldown = item.cooldownMinutes == null ? null : int(item.cooldownMinutes, `actions.actions[${index}].cooldownMinutes`, 1, 1_000_000); if ((repeatPolicy === 'cooldown') !== (cooldown != null)) fail(`actions.actions[${index}] cooldown策略不一致`) })
 
   if (travelActionModule) {
     const travelActions = actionRows.filter(action => action.category === 'travel')
@@ -1248,6 +1250,86 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
     if (forbiddenLegacyEffects.length) fail('Combat v2不能包含旧start-combat/resolve-combat Effect')
   } else if (effects.some(effect => ['initialize-combat', 'settle-combat-state'].includes(String(effect.operation)))) {
     fail('旧Action/Combat版本不能包含v2战斗Effect')
+  }
+  const performCombatEffects = effects.filter(effect => effect.operation === 'perform-combat-action')
+  if (combatOperationActionModule) {
+    const combatActionCategories = new Set(['combat-basic-attack', 'combat-skill', 'combat-item', 'combat-enemy-skill', 'escape'])
+    const combatActions = actionRows.filter(action => combatActionCategories.has(String(action.category)))
+    const markerOwner = new Map<string, string>()
+    const markerFor = (action: Row) => {
+      const markerKeys = [...strings(action.costEffectKeys, `combat action ${String(action.key)} costs`), ...strings(action.successEffectKeys, `combat action ${String(action.key)} success`)]
+        .filter(effectKey => effects.find(effect => effect.key === effectKey)?.operation === 'perform-combat-action')
+      if (markerKeys.length !== 1) fail(`战斗操作必须绑定唯一perform-combat-action Effect:${String(action.key)}`)
+      if (!strings(action.successEffectKeys, `combat action ${String(action.key)} success`).includes(markerKeys[0])) fail(`perform-combat-action必须属于成功Effect:${String(action.key)}`)
+      const prior = markerOwner.get(markerKeys[0]); if (prior) fail(`perform-combat-action不能跨Action共享:${markerKeys[0]}:${prior}:${String(action.key)}`)
+      markerOwner.set(markerKeys[0], String(action.key))
+      const effect = effects.find(candidate => candidate.key === markerKeys[0])!
+      const payload = row(effect.payload, `combat action ${String(action.key)} marker payload`)
+      exact(payload, ['kind', 'skillKey', 'itemKey'], `combat action ${String(action.key)} marker payload`)
+      return { effect, payload }
+    }
+    combatActions.forEach(action => {
+      const actionKey = String(action.key); const category = String(action.category); const { effect, payload } = markerFor(action)
+      const kind = enumValue(payload.kind, ['basic-attack', 'skill', 'item', 'escape', 'enemy-skill'], `combat action ${actionKey} kind`)
+      const expectedCategory = kind === 'basic-attack' ? 'combat-basic-attack' : kind === 'skill' ? 'combat-skill' : kind === 'item' ? 'combat-item' : kind === 'enemy-skill' ? 'combat-enemy-skill' : 'escape'
+      if (category !== expectedCategory || strings(action.locationKeys, `combat action ${actionKey} locations`).length
+        || strings(action.failureEffectKeys, `combat action ${actionKey} failures`).length || action.timeCostMinutes !== 0
+        || action.confirmationPolicy !== 'never' || action.repeatPolicy !== 'repeatable' || action.cooldownMinutes != null) fail(`战斗操作Action基础合同无效:${actionKey}`)
+      const costEffectKeys = strings(action.costEffectKeys, `combat action ${actionKey} costs`)
+      const successEffectKeys = strings(action.successEffectKeys, `combat action ${actionKey} success`)
+      if (kind === 'basic-attack' || kind === 'skill' || kind === 'enemy-skill') {
+        const skillKey = key(payload.skillKey, `combat action ${actionKey} skillKey`); requireRef(skillKey, skillKeys, 'combat action skill')
+        if (payload.itemKey != null) fail(`技能战斗Action不能绑定itemKey:${actionKey}`)
+        const skill = skills.find(candidate => candidate.key === skillKey)!
+        if (skill.activation !== 'active') fail(`战斗Action不能绑定被动技能:${actionKey}`)
+        const systemEnemy = kind === 'enemy-skill'
+        if (action.actorScope !== (systemEnemy ? 'system' : 'player')) fail(`战斗技能Action actorScope无效:${actionKey}`)
+        const expectedTargetScope = systemEnemy || skill.target !== 'single-enemy' ? 'none' : 'combatant'
+        if (action.targetScope !== expectedTargetScope) fail(`战斗技能Action targetScope无效:${actionKey}`)
+        requireSameKeys(strings(action.requirementConditionKeys, `combat action ${actionKey} requirements`), systemEnemy ? [] : strings(skill.useConditionKeys, `skill ${skillKey} use conditions`), `combat action ${actionKey} conditions`)
+        if (systemEnemy && Number(skill.resourceCost) !== 0) fail(`敌人首版不能使用消耗技能资源的技能:${skillKey}`)
+        const resourceCosts = costEffectKeys.map(effectKey => effects.find(effect => effect.key === effectKey)!)
+          .filter(effect => effect.operation === 'change-player-resource' && row(effect.payload, `combat skill cost ${effect.key}`).resource === 'skill-resource')
+        if (systemEnemy || Number(skill.resourceCost) === 0) {
+          if (costEffectKeys.length) fail(`无资源消耗的战斗技能不能声明cost:${actionKey}`)
+        } else {
+          if (costEffectKeys.length !== 1 || resourceCosts.length !== 1 || row(resourceCosts[0].payload, `combat skill cost ${resourceCosts[0].key}`).amount !== -Number(skill.resourceCost)) fail(`战斗技能资源cost不匹配:${actionKey}`)
+        }
+        requireSameKeys(successEffectKeys, [...strings(skill.effectKeys, `skill ${skillKey} effects`), String(effect.key)], `combat skill ${actionKey} success effects`)
+        if (kind === 'basic-attack' && (skillKey !== 'skill.basic-attack' || Number(skill.resourceCost) !== 0 || Number(skill.cooldownTurns) !== 0)) fail('普通攻击必须绑定零消耗零冷却skill.basic-attack')
+        if (kind === 'skill' && skillKey === 'skill.basic-attack') fail('技能面板Action不能重复普通攻击')
+      } else if (kind === 'item') {
+        const itemKey = key(payload.itemKey, `combat item ${actionKey} itemKey`); requireRef(itemKey, itemKeys, 'combat item')
+        if (payload.skillKey != null || action.actorScope !== 'player' || action.targetScope !== 'item') fail(`战斗道具Action范围无效:${actionKey}`)
+        const item = itemRows.find(candidate => candidate.key === itemKey)!
+        if (item.consumable !== true) fail(`战斗道具必须是消耗品:${itemKey}`)
+        const ordinaryUseAction = actionRows.find(candidate => candidate.key === item.useActionKey) ?? fail(`战斗道具缺少普通useAction:${itemKey}`)
+        requireSameKeys(strings(action.requirementConditionKeys, `combat item ${actionKey} requirements`), strings(ordinaryUseAction.requirementConditionKeys, `item ${itemKey} use requirements`), `combat item ${actionKey} conditions`)
+        const removals = costEffectKeys.map(effectKey => effects.find(effect => effect.key === effectKey)!)
+          .filter(candidate => candidate.operation === 'remove-item' && row(candidate.payload, `combat item removal ${candidate.key}`).reason === 'consume')
+        if (costEffectKeys.length !== 1 || removals.length !== 1 || row(removals[0].payload, `combat item removal ${removals[0].key}`).itemKey !== itemKey
+          || row(removals[0].payload, `combat item removal ${removals[0].key}`).quantity !== 1) fail(`战斗道具必须精确消耗一个自身物品:${actionKey}`)
+        requireSameKeys(successEffectKeys, [...strings(item.effectKeys, `item ${itemKey} effects`), String(effect.key)], `combat item ${actionKey} success effects`)
+      } else {
+        if (payload.skillKey != null || payload.itemKey != null || action.actorScope !== 'player' || action.targetScope !== 'none'
+          || strings(action.requirementConditionKeys, `escape action ${actionKey} requirements`).length || costEffectKeys.length
+          || successEffectKeys.length !== 1 || successEffectKeys[0] !== effect.key) fail(`逃跑Action合同无效:${actionKey}`)
+      }
+    })
+    performCombatEffects.forEach(effect => { if (!markerOwner.has(String(effect.key))) fail(`perform-combat-action Effect没有唯一战斗Action owner:${String(effect.key)}`) })
+    const markerRows = combatActions.map(action => ({ action, payload: row(effects.find(effect => markerOwner.get(String(effect.key)) === action.key)!.payload, `combat marker ${String(action.key)}`) }))
+    if (markerRows.filter(row => row.payload.kind === 'basic-attack').length !== 1 || markerRows.filter(row => row.payload.kind === 'escape').length !== 1) fail('Action v10必须各有一个普通攻击和逃跑Action')
+    const activePlayerSkillKeys = skills.filter(skill => skill.activation === 'active' && skill.key !== 'skill.basic-attack').map(skill => String(skill.key))
+    requireSameKeys(markerRows.filter(row => row.payload.kind === 'skill').map(row => String(row.payload.skillKey)), activePlayerSkillKeys, '玩家战斗技能Action覆盖')
+    requireSameKeys(markerRows.filter(row => row.payload.kind === 'item').map(row => String(row.payload.itemKey)), itemRows.filter(item => item.consumable === true).map(item => String(item.key)), '玩家战斗道具Action覆盖')
+    const enemySkillKeys = [...new Set(enemies.flatMap(enemy => strings(enemy.skillKeys, `enemy ${String(enemy.key)} skillKeys`)))]
+    requireSameKeys(markerRows.filter(row => row.payload.kind === 'enemy-skill').map(row => String(row.payload.skillKey)), enemySkillKeys, '敌人战斗技能Action覆盖')
+    strategyProfiles.forEach(strategy => {
+      const fallbackSkill = skills.find(skill => skill.key === strategy.fallbackSkillKey)!
+      if (Number(fallbackSkill.cooldownTurns) !== 0) fail(`敌人策略fallback技能必须零冷却:${String(strategy.key)}`)
+    })
+  } else if (performCombatEffects.length || actionRows.some(action => ['combat-basic-attack', 'combat-skill', 'combat-item', 'combat-enemy-skill'].includes(String(action.category)))) {
+    fail('Action v1～v9不能包含正式战斗操作')
   }
   const normalizedCombat: TextOpenWorldParsedModulesV1['combat'] = {
     version: 2,

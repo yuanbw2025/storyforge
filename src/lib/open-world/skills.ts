@@ -31,7 +31,7 @@ export interface TextOpenWorldPreparedSkillUseV1 {
 function fail(message: string): never { throw new Error(`[text-open-world-skills] ${message}`) }
 function clone<T>(value: T): T { return structuredClone(value) }
 
-export function createTextOpenWorldSkillCatalogV1(runtimePackage: TextOpenWorldRuntimePackageV1) {
+export function createTextOpenWorldSkillCatalogV1(runtimePackage: TextOpenWorldRuntimePackageV1 | string | unknown) {
   const modules = parseTextOpenWorldModulesV1(runtimePackage)
   const skills = modules.progression.skills
   const statuses = modules.progression.statuses

@@ -22,7 +22,7 @@ const build: TextOpenWorldPlayerCharacterDefinitionV1['build'] = {
   progressionProfileKey: 'progression.default',
   initialLevel: 1,
   attributes: { power: 4, vitality: 3, agility: 2 },
-  learnedSkillKeys: ['skill.basic-attack'],
+  learnedSkillKeys: ['skill.basic-attack', 'skill.power-strike'],
   startingItemKeys: ['item.rust-sword'],
   startingCurrency: 12,
 }

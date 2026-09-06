@@ -13,6 +13,7 @@ import { parseTextOpenWorldCommandEnvelopeV1 } from './command-contract'
 import { createTextOpenWorldConditionCatalogV1 } from './condition-dsl'
 import { createTextOpenWorldEffectCatalogV1 } from './effect-dsl'
 import { planTextOpenWorldRouteV1 } from './map-topology'
+import { createTextOpenWorldSkillCatalogV1 } from './skills'
 
 const STABLE_KEY = /^[a-z][a-z0-9._:-]{0,199}$/
 
@@ -59,6 +60,20 @@ function parseContext(value: TextOpenWorldActionProjectionContextV1, modules: Te
   const playerHealth = finiteNumber(value.playerHealth, 'playerHealth')
   const combatStatus = value.combatStatus == null ? null : value.combatStatus
   if (combatStatus != null && !['active', 'victory', 'defeat', 'escaped'].includes(combatStatus)) fail('combatStatus无效')
+  const combatEncounterKey = value.combatEncounterKey == null ? null : stableKey(value.combatEncounterKey, 'combatEncounterKey')
+  if (combatEncounterKey != null && !modules.combat.encounters.some(encounter => encounter.key === combatEncounterKey)) fail('combatEncounterKey不在Release中')
+  const combatPhase = value.combatPhase == null ? null : value.combatPhase
+  if (combatPhase != null && !['started', 'round-start', 'actor-turn', 'action-resolved', 'round-end', 'terminal'].includes(combatPhase)) fail('combatPhase无效')
+  const activeCombatantKey = value.activeCombatantKey == null ? null : stableKey(value.activeCombatantKey, 'activeCombatantKey')
+  const learnedSkillKeys = uniqueKeys(value.learnedSkillKeys ?? [], 'learnedSkillKeys')
+  const skillKeys = new Set(modules.progression.skills.map(skill => skill.key))
+  learnedSkillKeys.forEach(skillKey => { if (!skillKeys.has(skillKey)) fail(`learnedSkillKeys引用未知技能:${skillKey}`) })
+  const skillResource = finiteNumber(value.skillResource ?? 0, 'skillResource')
+  const combatSkillCooldownRemainingTurnsBySkillKey: Record<string, number> = {}
+  for (const [skillKey, turns] of Object.entries(value.combatSkillCooldownRemainingTurnsBySkillKey ?? {})) {
+    if (!skillKeys.has(stableKey(skillKey, 'combat skill cooldown key'))) fail(`战斗冷却引用未知技能:${skillKey}`)
+    combatSkillCooldownRemainingTurnsBySkillKey[skillKey] = finiteInteger(turns, `combat skill cooldown.${skillKey}`)
+  }
   const conditionKeys = new Set(modules.actions.conditions.map(item => item.key))
   const conditionResults: TextOpenWorldActionProjectionContextV1['conditionResults'] = {}
   for (const [conditionKey, result] of Object.entries(value.conditionResults ?? {})) {
@@ -86,7 +101,7 @@ function parseContext(value: TextOpenWorldActionProjectionContextV1, modules: Te
     cooldownUntilWorldMinuteByActionKey[actionKey] = finiteInteger(until, `cooldown.${actionKey}`)
   }
   const validTargetKeysByScope: TextOpenWorldActionProjectionContextV1['validTargetKeysByScope'] = {}
-  for (const scope of ['actor', 'location', 'item', 'quest', 'vendor', 'encounter'] as const) {
+  for (const scope of ['actor', 'location', 'item', 'quest', 'vendor', 'encounter', 'combatant'] as const) {
     if (value.validTargetKeysByScope?.[scope] != null) validTargetKeysByScope[scope] = uniqueKeys(value.validTargetKeysByScope[scope], `validTargetKeysByScope.${scope}`)
   }
   const questDefinitionKeyByInstanceKey: Record<string, string> = {}
@@ -144,6 +159,12 @@ function parseContext(value: TextOpenWorldActionProjectionContextV1, modules: Te
     worldMinute: finiteInteger(value.worldMinute, 'worldMinute'),
     playerHealth,
     combatStatus,
+    combatEncounterKey,
+    combatPhase,
+    activeCombatantKey,
+    learnedSkillKeys,
+    skillResource,
+    combatSkillCooldownRemainingTurnsBySkillKey,
     conditionResults,
     openEdgeKeys,
     unlockedFastTravelPointKeys,
@@ -183,6 +204,7 @@ export function createTextOpenWorldActionRegistryV1(value: TextOpenWorldRuntimeP
   const entries = buildEntries(modules)
   const byKey = new Map(entries.map(entry => [entry.action.key, entry]))
   const effectByKey = new Map(modules.actions.effects.map(effect => [effect.key, effect]))
+  const skillCatalog = createTextOpenWorldSkillCatalogV1(value)
   const cloneEntry = (entry: TextOpenWorldActionCatalogEntryV1) => structuredClone(entry)
 
   const project = (rawContext: TextOpenWorldActionProjectionContextV1): TextOpenWorldActionAvailabilityV1[] => {
@@ -191,10 +213,18 @@ export function createTextOpenWorldActionRegistryV1(value: TextOpenWorldRuntimeP
       const action = entry.action
       const unavailableReasons: TextOpenWorldActionAvailabilityV1['unavailableReasons'] = []
       const defeated = context.playerHealth === 0 || context.combatStatus === 'defeat'
+      const modernCombatAction = modules.actions.version >= 10
+        && ['combat-basic-attack', 'combat-skill', 'combat-item', 'escape'].includes(action.category)
+      const legacyCombatAction = modules.actions.version < 10 && ['continue-combat', 'escape'].includes(action.category)
       if (context.actorKey === 'player' && defeated && !['respawn', 'load-branch'].includes(action.category)) unavailableReasons.push({ code: 'defeated', message: '战败后只能选择战前重试、读档或复活点恢复。', conditionKey: null })
       if (action.category === 'respawn' && context.combatStatus !== 'defeat') unavailableReasons.push({ code: 'combat-state', message: '只有战败后才能在复活点恢复。', conditionKey: null })
-      if (context.actorKey === 'player' && !defeated && context.combatStatus === 'active' && !['continue-combat', 'escape', 'use'].includes(action.category)) unavailableReasons.push({ code: 'combat-state', message: '战斗中只能选择战斗、技能、道具或逃跑。', conditionKey: null })
-      if (['continue-combat', 'escape'].includes(action.category) && context.combatStatus !== 'active') unavailableReasons.push({ code: 'combat-state', message: '当前没有进行中的战斗。', conditionKey: null })
+      const allowedDuringCombat = modules.actions.version >= 10
+        ? ['combat-basic-attack', 'combat-skill', 'combat-item', 'escape']
+        : ['continue-combat', 'escape', 'use']
+      if (context.actorKey === 'player' && !defeated && context.combatStatus === 'active' && !allowedDuringCombat.includes(action.category)) unavailableReasons.push({ code: 'combat-state', message: '战斗中只能选择普通攻击、技能、战斗道具或逃跑。', conditionKey: null })
+      if ((modernCombatAction || legacyCombatAction) && context.combatStatus !== 'active') unavailableReasons.push({ code: 'combat-state', message: '当前没有进行中的战斗。', conditionKey: null })
+      if (modernCombatAction && (context.combatPhase !== 'actor-turn' || context.activeCombatantKey !== 'player')) unavailableReasons.push({ code: 'combat-state', message: '当前不是玩家的行动回合。', conditionKey: null })
+      if (action.category === 'combat-enemy-skill' && (context.combatStatus !== 'active' || context.combatPhase !== 'actor-turn' || context.activeCombatantKey === 'player')) unavailableReasons.push({ code: 'combat-state', message: '当前不是敌人的行动回合。', conditionKey: null })
       if (action.actorScope !== context.actorKey) unavailableReasons.push({ code: 'actor-scope', message: '当前操作者不能执行该行动。', conditionKey: null })
       if (action.locationKeys.length && !action.locationKeys.includes(context.currentLocationKey)) unavailableReasons.push({ code: 'wrong-location', message: '该行动不能在当前位置执行。', conditionKey: null })
       for (const conditionKey of action.requirementConditionKeys) {
@@ -237,6 +267,32 @@ export function createTextOpenWorldActionRegistryV1(value: TextOpenWorldRuntimeP
         validTargetKeys = removal?.operation === 'remove-item'
           ? validTargetKeys.filter(itemKey => itemKey === removal.payload.itemKey)
           : []
+      }
+      if (action.targetScope === 'item' && action.category === 'combat-item') {
+        const marker = action.successEffectKeys.map(effectKey => effectByKey.get(effectKey))
+          .find((effect): effect is Extract<TextOpenWorldEffectDefinitionV1, { operation: 'perform-combat-action' }> => effect?.operation === 'perform-combat-action')
+        const removal = action.costEffectKeys.map(effectKey => effectByKey.get(effectKey))
+          .find(effect => effect?.operation === 'remove-item' && effect.payload.reason === 'consume')
+        validTargetKeys = marker?.operation === 'perform-combat-action' && marker.payload.itemKey && removal?.operation === 'remove-item'
+          ? validTargetKeys.filter(itemKey => itemKey === marker.payload.itemKey && itemKey === removal.payload.itemKey)
+          : []
+        if (!validTargetKeys.length) unavailableReasons.push({ code: 'item-unavailable', message: '当前没有可使用的该战斗道具。', conditionKey: null })
+      }
+      if (['combat-basic-attack', 'combat-skill'].includes(action.category)) {
+        const marker = action.successEffectKeys.map(effectKey => effectByKey.get(effectKey))
+          .find((effect): effect is Extract<TextOpenWorldEffectDefinitionV1, { operation: 'perform-combat-action' }> => effect?.operation === 'perform-combat-action')
+        const skillKey = marker?.operation === 'perform-combat-action' ? marker.payload.skillKey : null
+        const skill = skillKey ? skillCatalog.project({
+          learnedSkillKeys: context.learnedSkillKeys ?? [],
+          skillResource: context.skillResource ?? 0,
+          cooldownRemainingTurnsBySkillKey: context.combatSkillCooldownRemainingTurnsBySkillKey,
+          conditionResults: Object.fromEntries(Object.entries(context.conditionResults).map(([key, result]) => [key, result.satisfied])),
+        }).find(item => item.skill.key === skillKey) : null
+        if (!skill?.available) unavailableReasons.push({ code: 'skill-unavailable', message: `技能当前不可用：${skill?.unavailableReasons.join('、') || '定义无效'}`, conditionKey: null })
+      }
+      if (action.category === 'escape' && context.combatEncounterKey) {
+        const encounter = modules.combat.encounters.find(item => item.key === context.combatEncounterKey)
+        if (!encounter?.escapePolicy.allowed) unavailableReasons.push({ code: 'combat-state', message: '该遭遇不允许逃跑。', conditionKey: null })
       }
       if (action.targetScope === 'item' && ['equip', 'unequip'].includes(action.category)) {
         const equipment = action.successEffectKeys.map(effectKey => effectByKey.get(effectKey))

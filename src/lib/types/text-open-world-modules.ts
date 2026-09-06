@@ -15,7 +15,9 @@ export type TextOpenWorldActionCategoryV1 =
   | 'take' | 'use' | 'equip' | 'unequip' | 'drop' | 'buy' | 'sell' | 'craft'
   | 'accept-quest' | 'abandon-quest' | 'objective-action' | 'quest-action' | 'weather-action' | 'actor-schedule-action' | 'actor-state-action' | 'claim-reward'
   | 'attack-actor' | 'steal' | 'deceive' | 'crime'
-  | 'start-combat' | 'continue-combat' | 'combat-state-action' | 'escape' | 'rest' | 'respawn'
+  | 'start-combat' | 'continue-combat' | 'combat-state-action'
+  | 'combat-basic-attack' | 'combat-skill' | 'combat-item' | 'combat-enemy-skill' | 'escape'
+  | 'rest' | 'respawn'
   | 'read' | 'track' | 'untrack' | 'save' | 'load-branch'
 
 /**
@@ -224,7 +226,7 @@ export interface TextOpenWorldQuestModuleV1 {
 }
 
 export interface TextOpenWorldActionModuleV1 {
-  version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9
+  version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10
   conditions: Array<{
     key: string
     expression: TextOpenWorldConditionExpressionV1
@@ -237,7 +239,7 @@ export interface TextOpenWorldActionModuleV1 {
     label: string
     description: string
     actorScope: 'player' | 'system'
-    targetScope: 'none' | 'actor' | 'location' | 'item' | 'quest' | 'vendor' | 'encounter'
+    targetScope: 'none' | 'actor' | 'location' | 'item' | 'quest' | 'vendor' | 'encounter' | 'combatant'
     locationKeys: string[]
     requirementConditionKeys: string[]
     costEffectKeys: string[]

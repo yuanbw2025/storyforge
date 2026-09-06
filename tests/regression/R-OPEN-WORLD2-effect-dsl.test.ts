@@ -4,7 +4,10 @@ import { createTextOpenWorldCombatStateMachineV1 } from '../../src/lib/open-worl
 import { createTextOpenWorldQuestTransitionCatalogV1 } from '../../src/lib/open-world/quest-state-machine'
 import { createInitialTextOpenWorldQuestInstancesV1 } from '../../src/lib/open-world/quests'
 import type { TextOpenWorldEffectDefinitionV1, TextOpenWorldEffectStateV1 } from '../../src/lib/types'
-import { createTextOpenWorldVNextFixture } from '../helpers/text-open-world-vnext-fixture'
+import {
+  createTextOpenWorldVNextFixture,
+  downgradeTextOpenWorldFixtureCombatActionsV1,
+} from '../helpers/text-open-world-vnext-fixture'
 
 function state(overrides: Partial<TextOpenWorldEffectStateV1> = {}): TextOpenWorldEffectStateV1 {
   const initial: TextOpenWorldEffectStateV1 = {
@@ -214,7 +217,7 @@ describe('Text Open World vNext · typed Effect DSL and atomic EffectPlan', () =
   })
 
   it('技能学习与状态变化只能执行一次，并拒绝未在Release声明的状态', async () => {
-    const fixture = createTextOpenWorldVNextFixture()
+    const fixture = downgradeTextOpenWorldFixtureCombatActionsV1(createTextOpenWorldVNextFixture())
     const progression = fixture.modules.progression.payload as any
     const actions = fixture.modules.actions.payload as any
     const quests = fixture.modules.quests.payload as any

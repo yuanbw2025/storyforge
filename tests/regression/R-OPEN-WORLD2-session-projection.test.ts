@@ -10,7 +10,6 @@ import {
   parseTextOpenWorldSessionProjectionV1,
 } from '../../src/lib/open-world/session-projection'
 import {
-  hashProductRuntimeStateV1,
   readProductRuntimeState,
   readProductRuntimeStateVersion,
 } from '../../src/lib/product/runtime-core'

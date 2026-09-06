@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { createTextOpenWorldSkillCatalogV1 } from '../../src/lib/open-world/skills'
 import { parseTextOpenWorldModulesV1 } from '../../src/lib/open-world/modules'
-import { createTextOpenWorldVNextFixture } from '../helpers/text-open-world-vnext-fixture'
+import {
+  createTextOpenWorldVNextFixture,
+  downgradeTextOpenWorldFixtureCombatActionsV1,
+} from '../helpers/text-open-world-vnext-fixture'
 
 function addLevelSkill() {
-  const fixture = createTextOpenWorldVNextFixture()
+  const fixture = downgradeTextOpenWorldFixtureCombatActionsV1(createTextOpenWorldVNextFixture())
   const progression = fixture.modules.progression.payload as any
   progression.skills.push({
     key: 'skill.brine-cut', title: '盐痕斩', description: '消耗技巧资源发动的强力斩击。', tags: ['近战', '技巧'],
@@ -17,7 +20,7 @@ function addLevelSkill() {
 }
 
 function addQuestSkill() {
-  const fixture = createTextOpenWorldVNextFixture()
+  const fixture = downgradeTextOpenWorldFixtureCombatActionsV1(createTextOpenWorldVNextFixture())
   const progression = fixture.modules.progression.payload as any
   const actions = fixture.modules.actions.payload as any
   const quests = fixture.modules.quests.payload as any
@@ -62,8 +65,8 @@ describe('Text Open World vNext · governed skills and statuses', () => {
   })
 
   it('等级来源进入同级曲线，任务来源必须由同一任务的学习Effect兑现', () => {
-    expect(parseTextOpenWorldModulesV1(addLevelSkill()).progression.skills).toHaveLength(2)
-    expect(parseTextOpenWorldModulesV1(addQuestSkill()).progression.skills).toHaveLength(2)
+    expect(parseTextOpenWorldModulesV1(addLevelSkill()).progression.skills).toHaveLength(3)
+    expect(parseTextOpenWorldModulesV1(addQuestSkill()).progression.skills).toHaveLength(3)
 
     const missingLevelCurve = addLevelSkill()
     ;(missingLevelCurve.modules.progression.payload as any).levels[1].unlockedSkillKeys = []
@@ -81,16 +84,18 @@ describe('Text Open World vNext · governed skills and statuses', () => {
 
   it('只允许首版冻结的主动/被动规则和获得来源组合', () => {
     const passiveCost = addLevelSkill()
-    const skill = (passiveCost.modules.progression.payload as any).skills[1]
+    const skill = (passiveCost.modules.progression.payload as any).skills.find((item: any) => item.key === 'skill.brine-cut')
     Object.assign(skill, { activation: 'passive', target: 'self', resourceCost: 1, cooldownTurns: 0 })
     expect(() => parseTextOpenWorldModulesV1(passiveCost)).toThrow('被动技能不能主动选择或消耗资源')
 
     const duplicateSource = addLevelSkill()
-    ;(duplicateSource.modules.progression.payload as any).skills[1].unlockSources.push({ kind: 'level', level: 2, questKey: null })
+    ;(duplicateSource.modules.progression.payload as any).skills.find((item: any) => item.key === 'skill.brine-cut')
+      .unlockSources.push({ kind: 'level', level: 2, questKey: null })
     expect(() => parseTextOpenWorldModulesV1(duplicateSource)).toThrow('unlockSources不能重复')
 
     const unknownCondition = addLevelSkill()
-    ;(unknownCondition.modules.progression.payload as any).skills[1].useConditionKeys = ['condition.missing']
+    ;(unknownCondition.modules.progression.payload as any).skills.find((item: any) => item.key === 'skill.brine-cut')
+      .useConditionKeys = ['condition.missing']
     expect(() => parseTextOpenWorldModulesV1(unknownCondition)).toThrow('skill use condition 引用不存在')
   })
 

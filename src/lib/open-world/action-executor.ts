@@ -24,6 +24,7 @@ import { createTextOpenWorldWeatherCatalogV1 } from './weather'
 import { createTextOpenWorldActorScheduleCatalogV1 } from './actors'
 import { createTextOpenWorldCrimeCatalogV1 } from './crime'
 import { createTextOpenWorldCombatStateMachineV1 } from './combat-state-machine'
+import { createTextOpenWorldCombatActionCatalogV1 } from './combat-actions'
 
 const COMMAND_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/
 
@@ -88,7 +89,9 @@ async function settleAcceptedCommand(envelope: TextOpenWorldCommandEnvelopeV1): 
     .filter((effect): effect is Extract<TextOpenWorldEffectDefinitionV1, { operation: 'settle-actor-schedules' }> => effect.operation === 'settle-actor-schedules')
   const combatSettlementEffects = effectKeys.map(effectKey => modules.actions.effects.find(effect => effect.key === effectKey)!)
     .filter((effect): effect is Extract<TextOpenWorldEffectDefinitionV1, { operation: 'settle-combat-state' }> => effect.operation === 'settle-combat-state')
-  if ([questTransitions.length > 0, objectiveEffects.length > 0, trackingEffects.length > 0, fastTravelEffects.length > 0, weatherEffects.length > 0, actorScheduleEffects.length > 0, combatSettlementEffects.length > 0].filter(Boolean).length > 1) fail('同一Action不能混合任务迁移、Objective、追踪、快速旅行、天气、角色日程或战斗阶段状态')
+  const combatActionEffects = effectKeys.map(effectKey => modules.actions.effects.find(effect => effect.key === effectKey)!)
+    .filter((effect): effect is Extract<TextOpenWorldEffectDefinitionV1, { operation: 'perform-combat-action' }> => effect.operation === 'perform-combat-action')
+  if ([questTransitions.length > 0, objectiveEffects.length > 0, trackingEffects.length > 0, fastTravelEffects.length > 0, weatherEffects.length > 0, actorScheduleEffects.length > 0, combatSettlementEffects.length > 0, combatActionEffects.length > 0].filter(Boolean).length > 1) fail('同一Action不能混合任务迁移、Objective、追踪、快速旅行、天气、角色日程、战斗阶段或战斗行动状态')
   let randomRequests: TextOpenWorldRandomRequestV1[] = []
   let randomEvidence: TextOpenWorldRandomEvidenceV1[] = []
   if (weatherEffects.length === 1) {
@@ -139,6 +142,15 @@ async function settleAcceptedCommand(envelope: TextOpenWorldCommandEnvelopeV1): 
                     state: projection.state,
                     intent: combatTransitionIntentFrom(envelope),
                   })
+                : combatActionEffects.length === 1
+                  ? createTextOpenWorldCombatActionCatalogV1(projection.runtimePackage, modules).prepare({
+                      state: projection.state,
+                      actionKey: action.action.key,
+                      targetKey: targetFrom(envelope),
+                      actorKey: envelope.actorKey === 'system' ? 'system' : 'player',
+                      conditionResults: Object.fromEntries(Object.entries(deriveTextOpenWorldContextsV1(projection).action.conditionResults)
+                        .map(([key, result]) => [key, result.satisfied])),
+                    })
               : null)
   const catalog = createTextOpenWorldEffectCatalogV1(projection.runtimePackage)
   const plan = await catalog.plan({ effectKeys, claimKey: `claim.${envelope.commandId}`, state: projection.state, authorization })
@@ -179,7 +191,7 @@ type ExecuteTextOpenWorldActionInternalInputV1 = ExecuteTextOpenWorldActionInput
 async function executeTextOpenWorldActionAsV1(
   input: ExecuteTextOpenWorldActionInternalInputV1,
   actorKey: 'player' | 'system',
-  systemCategory?: 'quest-action' | 'weather-action' | 'actor-schedule-action' | 'actor-state-action' | 'combat-state-action',
+  systemCategory?: 'quest-action' | 'weather-action' | 'actor-schedule-action' | 'actor-state-action' | 'combat-state-action' | 'combat-enemy-skill',
 ): Promise<TextOpenWorldFeedbackReceiptV1> {
   if (!Number.isSafeInteger(input.sessionId) || input.sessionId < 1) fail('sessionId无效')
   const commandId = input.commandId ?? newCommandId()
@@ -337,16 +349,31 @@ async function settleActorSchedulesForCurrentPeriodV1(sessionId: number): Promis
 }
 
 async function settleCombatSystemTransitionsV1(sessionId: number): Promise<void> {
-  for (let index = 0; index < 8; index += 1) {
+  for (let index = 0; index < 32; index += 1) {
     const runtime = await readProductRuntimeState(sessionId)
     const projection = parseTextOpenWorldSessionProjectionV1(runtime.textOpenWorld)
     const modules = parseTextOpenWorldModulesV1(projection.runtimePackage)
     if (modules.actions.version < 9 || modules.combat.sourceVersion !== 2) return
     const stateMachine = createTextOpenWorldCombatStateMachineV1(projection.runtimePackage, modules)
     const intent = stateMachine.nextSystemIntent(projection.state)
-    if (!intent) return
     const combat = projection.state.combat
-    if (!combat || !('version' in combat)) fail('新版战斗阶段缺少Combat v2投影')
+    if (!combat) return
+    if (!('version' in combat)) fail('新版战斗阶段缺少Combat v2投影')
+    if (!intent) {
+      if (modules.actions.version < 10 || combat.status !== 'active' || combat.phase !== 'actor-turn' || combat.activeCombatantKey === 'player') return
+      const next = createTextOpenWorldCombatActionCatalogV1(projection.runtimePackage, modules).nextEnemyAction(projection.state)
+        ?? fail('敌人回合缺少冻结策略Action')
+      const commandHash = await hashProductProductionValueV2({
+        instanceKey: combat.instanceKey, phase: combat.phase, round: combat.round,
+        turnIndex: combat.turnIndex, activeCombatantKey: combat.activeCombatantKey, actionKey: next.actionKey,
+      })
+      const feedback = await executeTextOpenWorldActionAsV1({
+        sessionId, actionKey: next.actionKey, targetKey: next.targetKey,
+        commandId: `command.system-combat-action.${commandHash}`, source: 'system-action',
+      }, 'system', 'combat-enemy-skill')
+      if (feedback.phase !== 'terminal' || feedback.status !== 'succeeded') fail(`敌人战斗Action未成功:${next.actionKey}`)
+      continue
+    }
     const action = modules.actions.actions.find(item => item.category === 'combat-state-action') ?? fail('新版战斗缺少阶段结算Action')
     const commandHash = await hashProductProductionValueV2({
       instanceKey: combat.instanceKey,
@@ -365,7 +392,7 @@ async function settleCombatSystemTransitionsV1(sessionId: number): Promise<void>
     }, 'system', 'combat-state-action')
     if (feedback.phase !== 'terminal' || feedback.status !== 'succeeded') fail(`战斗阶段系统结算未成功:${intent}`)
   }
-  fail('单次行动触发的战斗阶段结算超过8步')
+  fail('单次行动触发的战斗阶段结算超过32步')
 }
 
 export async function executeTextOpenWorldActionV1(input: ExecuteTextOpenWorldActionInputV1): Promise<TextOpenWorldFeedbackReceiptV1> {

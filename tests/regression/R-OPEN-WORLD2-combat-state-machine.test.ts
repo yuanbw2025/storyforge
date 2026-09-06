@@ -11,7 +11,6 @@ import { createInitialTextOpenWorldSessionProjectionV1 } from '../../src/lib/ope
 import { readProductRuntimeState, replayProductRuntimeEvents } from '../../src/lib/product/runtime-core'
 import type {
   ProductRuntimeEvent,
-  TextOpenWorldEffectStateV1,
   TextOpenWorldRuntimePackageV1,
 } from '../../src/lib/types'
 import { createGovernedTextOpenWorldSessionFixtureV1 } from '../helpers/text-open-world-product-session'

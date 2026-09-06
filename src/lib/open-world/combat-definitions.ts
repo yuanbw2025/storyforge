@@ -55,8 +55,9 @@ function relativeChallenge(encounter: EncounterDefinition, playerLevel: number):
 /** Query-only catalog over the immutable Enemy/Encounter definitions in a ProductRelease. */
 export function createTextOpenWorldCombatDefinitionCatalogV1(
   value: TextOpenWorldRuntimePackageV1 | string | unknown,
+  parsedModules?: TextOpenWorldParsedModulesV1,
 ) {
-  const modules = parseTextOpenWorldModulesV1(value)
+  const modules = parsedModules ?? parseTextOpenWorldModulesV1(value)
   const enemyByKey = new Map(modules.combat.enemies.map(enemy => [enemy.key, enemy]))
   const encounterByKey = new Map(modules.combat.encounters.map(encounter => [encounter.key, encounter]))
 

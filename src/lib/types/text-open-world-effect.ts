@@ -8,7 +8,7 @@ export type TextOpenWorldEffectOperationV1 =
   | 'change-morality' | 'change-faction-affinity' | 'set-story-modifier'
   | 'reveal-knowledge' | 'reveal-location' | 'unlock-fast-travel'
   | 'enter-location' | 'start-travel' | 'fast-travel' | 'advance-time' | 'settle-weather' | 'settle-actor-schedules'
-  | 'start-combat' | 'resolve-combat' | 'initialize-combat' | 'settle-combat-state' | 'rest' | 'respawn'
+  | 'start-combat' | 'resolve-combat' | 'initialize-combat' | 'settle-combat-state' | 'perform-combat-action' | 'rest' | 'respawn'
   | 'change-actor-state' | 'change-region-state' | 'set-world-flag'
   | 'earn-achievement' | 'unlock-ending' | 'reach-ending'
 
@@ -42,6 +42,11 @@ export type TextOpenWorldEffectDefinitionV1 =
   | { key: string; operation: 'resolve-combat'; payload: { encounterKey: string; outcome: 'victory' | 'defeat' | 'escaped' } }
   | { key: string; operation: 'initialize-combat'; payload: { encounterKey: string } }
   | { key: string; operation: 'settle-combat-state'; payload: Record<string, never> }
+  | { key: string; operation: 'perform-combat-action'; payload: {
+      kind: TextOpenWorldCombatActionKindV1
+      skillKey: string | null
+      itemKey: string | null
+    } }
   | { key: string; operation: 'rest'; payload: { healthRatio: number; skillResourceRatio: number; clearHarmfulStatuses: boolean } }
   | { key: string; operation: 'respawn'; payload: { fastTravelPointKey: string; healthRatio: number } }
   | { key: string; operation: 'change-actor-state'; payload: {
@@ -86,6 +91,10 @@ export interface TextOpenWorldCombatRuntimeStateV1 {
   activeCombatantKey: string | null
   playerInitiative: number
   turnOrder: string[]
+  /** Added by Action v10; absent in immutable Action v9 event history. */
+  cooldownUntilRoundBySkillKey?: Record<string, number>
+  /** Added by Action v10; absent in immutable Action v9 event history. */
+  lastAction?: TextOpenWorldCombatActionRecordV1 | null
   enemies: Array<{
     combatantKey: string
     groupKey: string
@@ -94,7 +103,22 @@ export interface TextOpenWorldCombatRuntimeStateV1 {
     maximumHealth: number
     initiative: number
     defeated: boolean
+    /** Added by Action v10; absent in immutable Action v9 event history. */
+    cooldownUntilRoundBySkillKey?: Record<string, number>
   }>
+}
+
+export type TextOpenWorldCombatActionKindV1 = 'basic-attack' | 'skill' | 'item' | 'escape' | 'enemy-skill'
+
+export interface TextOpenWorldCombatActionRecordV1 {
+  actionKey: string
+  actorCombatantKey: string
+  kind: TextOpenWorldCombatActionKindV1
+  skillKey: string | null
+  itemKey: string | null
+  targetCombatantKeys: string[]
+  round: number
+  turnIndex: number
 }
 
 export interface TextOpenWorldLegacyCombatStateV1 {
@@ -304,6 +328,28 @@ export interface TextOpenWorldCombatTransitionAuthorizationV1 {
   afterActiveCombatantKey: string | null
 }
 
+export interface TextOpenWorldCombatActionAuthorizationV1 {
+  kind: 'combat-action'
+  instanceKey: string
+  encounterKey: string
+  actionKey: string
+  actorKey: 'player' | 'system'
+  actorCombatantKey: string
+  actionKind: TextOpenWorldCombatActionKindV1
+  skillKey: string | null
+  itemKey: string | null
+  targetCombatantKeys: string[]
+  beforePhase: 'actor-turn'
+  beforeRound: number
+  beforeTurnIndex: number
+  beforeActiveCombatantKey: string
+  effectKeys: string[]
+  resourceCost: number
+  cooldownTurns: number
+  cooldownUntilRound: number
+  afterSkillResource: number
+}
+
 export interface TextOpenWorldEffectPlanV1 {
   schema: 'storyforge.text-open-world.effect-plan'
   version: 1
@@ -312,7 +358,7 @@ export interface TextOpenWorldEffectPlanV1 {
   resultingStateHash: string
   effectKeys: string[]
   effects: TextOpenWorldEffectDefinitionV1[]
-  authorization: TextOpenWorldRewardAuthorizationV1 | TextOpenWorldQuestTransitionAuthorizationV1 | TextOpenWorldObjectiveAuthorizationV1 | TextOpenWorldQuestTrackingAuthorizationV1 | TextOpenWorldFastTravelAuthorizationV1 | TextOpenWorldWeatherSettlementAuthorizationV1 | TextOpenWorldActorScheduleSettlementAuthorizationV1 | TextOpenWorldCrimeAuthorizationV1 | TextOpenWorldCombatTransitionAuthorizationV1 | null
+  authorization: TextOpenWorldRewardAuthorizationV1 | TextOpenWorldQuestTransitionAuthorizationV1 | TextOpenWorldObjectiveAuthorizationV1 | TextOpenWorldQuestTrackingAuthorizationV1 | TextOpenWorldFastTravelAuthorizationV1 | TextOpenWorldWeatherSettlementAuthorizationV1 | TextOpenWorldActorScheduleSettlementAuthorizationV1 | TextOpenWorldCrimeAuthorizationV1 | TextOpenWorldCombatTransitionAuthorizationV1 | TextOpenWorldCombatActionAuthorizationV1 | null
   impactDomains: TextOpenWorldEffectImpactDomainV1[]
   previewChanges: TextOpenWorldEffectChangeV1[]
   planHash: string

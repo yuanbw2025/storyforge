@@ -42,6 +42,7 @@ import { createTextOpenWorldActorScheduleCatalogV1, projectTextOpenWorldActorsV1
 import { deriveTextOpenWorldAttitudeByActorKeyV1 } from './relationships'
 import { createTextOpenWorldCrimeCatalogV1 } from './crime'
 import { createTextOpenWorldCombatStateMachineV1 } from './combat-state-machine'
+import { createTextOpenWorldCombatActionCatalogV1 } from './combat-actions'
 
 type Row = Record<string, unknown>
 const STABLE_KEY = /^[a-z][a-z0-9._:-]{0,199}$/
@@ -412,6 +413,25 @@ export function applyTextOpenWorldSessionEventV1(current: TextOpenWorldSessionPr
         || action.category !== 'combat-state-action' || action.actorScope !== 'system' || action.targetScope !== 'encounter'
         || applied.outcome !== 'success' || applied.reason != null || applied.degradation != null) fail('战斗阶段授权与系统命令不一致')
       createTextOpenWorldCombatStateMachineV1(projection.runtimePackage, modules).assertAuthorization({ state: projection.state, authorization })
+    } else if (applied.plan.authorization?.kind === 'combat-action') {
+      const authorization = applied.plan.authorization
+      const action = modules.actions.actions.find(item => item.key === projection.protocol.pendingActionKey) ?? fail('命令Action不存在')
+      const expectedTargetKey = authorization.actionKind === 'item'
+        ? authorization.itemKey
+        : authorization.targetCombatantKeys.length === 1 && authorization.targetCombatantKeys[0] !== 'player'
+          ? authorization.targetCombatantKeys[0]
+          : null
+      if (canonicalProductProductionJsonV2(applied.plan.effectKeys) !== canonicalProductProductionJsonV2(authorization.effectKeys)
+        || action.key !== authorization.actionKey || projection.protocol.pendingActorKey !== authorization.actorKey
+        || projection.protocol.pendingTargetKey !== expectedTargetKey
+        || !['combat-basic-attack', 'combat-skill', 'combat-item', 'combat-enemy-skill', 'escape'].includes(action.category)
+        || applied.outcome !== 'success' || applied.reason != null || applied.degradation != null) fail('战斗行动授权与命令或Action不一致')
+      createTextOpenWorldCombatActionCatalogV1(projection.runtimePackage, modules).assertAuthorization({
+        state: projection.state,
+        authorization,
+        conditionResults: Object.fromEntries(Object.entries(deriveTextOpenWorldContextsV1(projection).action.conditionResults)
+          .map(([key, result]) => [key, result.satisfied])),
+      })
     } else if (applied.plan.authorization?.kind === 'crime') {
       const authorization = applied.plan.authorization
       const action = modules.actions.actions.find(item => item.key === projection.protocol.pendingActionKey) ?? fail('命令Action不存在')
@@ -501,9 +521,21 @@ export function deriveTextOpenWorldContextsV1(value: TextOpenWorldSessionProject
     attitudeByActorKey,
   })
   const actorTargets = projectedActors.map(actor => actor.key)
+  const activeCombat = state.combat && 'version' in state.combat ? state.combat : null
   const action: TextOpenWorldActionProjectionContextV1 = {
     actorKey: 'player', currentLocationKey: state.map.currentLocationKey, worldMinute: state.time.worldMinute,
     playerHealth: state.player.health, combatStatus: state.combat?.status ?? null,
+    combatEncounterKey: state.combat?.encounterKey ?? null,
+    combatPhase: activeCombat?.phase ?? null,
+    activeCombatantKey: activeCombat?.activeCombatantKey ?? null,
+    learnedSkillKeys: [...state.player.learnedSkillKeys],
+    skillResource: state.player.skillResource,
+    combatSkillCooldownRemainingTurnsBySkillKey: activeCombat
+      ? Object.fromEntries(modules.progression.skills.map(skill => [
+          skill.key,
+          Math.max(0, (activeCombat.cooldownUntilRoundBySkillKey?.[skill.key] ?? 0) - activeCombat.round),
+        ]))
+      : {},
     conditionResults: Object.fromEntries(Object.entries(evaluations).map(([key, result]) => [key, { satisfied: result.satisfied, publicReason: result.publicReason }])),
     openEdgeKeys: [...state.map.openEdgeKeys],
     unlockedFastTravelPointKeys: [...state.map.unlockedFastTravelPointKeys],
@@ -513,6 +545,9 @@ export function deriveTextOpenWorldContextsV1(value: TextOpenWorldSessionProject
       quest: Object.values(state.quests.instancesByKey).filter(instance => !['locked', 'available'].includes(instance.status)).map(instance => instance.instanceKey),
       vendor: projectedActors.flatMap(actor => actor.availableServices.map(service => service.key)),
       encounter: modules.combat.encounters.filter(encounter => encounter.locationKey === state.map.currentLocationKey).map(encounter => encounter.key),
+      combatant: state.combat && 'version' in state.combat
+        ? state.combat.enemies.filter(enemy => !enemy.defeated).map(enemy => enemy.combatantKey)
+        : [],
     },
     questDefinitionKeyByInstanceKey: Object.fromEntries(Object.values(state.quests.instancesByKey).map(instance => [instance.instanceKey, instance.definitionKey])),
     questStatusByInstanceKey: Object.fromEntries(Object.values(state.quests.instancesByKey).map(instance => [instance.instanceKey, instance.status])),

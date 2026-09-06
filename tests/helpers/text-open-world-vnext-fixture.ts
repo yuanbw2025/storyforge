@@ -33,7 +33,7 @@ function levels(): TextOpenWorldParsedModulesV1['progression']['levels'] {
     attributeGrowth: index === 0
       ? { power: 0, vitality: 0, agility: 0 }
       : { power: 1, vitality: 1, agility: index % 2 },
-    unlockedSkillKeys: index === 0 ? ['skill.basic-attack'] : [],
+    unlockedSkillKeys: index === 0 ? ['skill.basic-attack', 'skill.power-strike'] : [],
   }))
 }
 
@@ -117,7 +117,7 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
         build: {
           progressionProfileKey: 'progression.default',
           initialLevel: 1, attributes: { power: 3, vitality: 3, agility: 3 },
-          learnedSkillKeys: ['skill.basic-attack'], startingItemKeys: ['item.rust-sword'], startingCurrency: 20,
+          learnedSkillKeys: ['skill.basic-attack', 'skill.power-strike'], startingItemKeys: ['item.rust-sword'], startingCurrency: 20,
         },
       },
       factions: [{ key: 'faction.canal-keepers', title: '守渠会', description: '负责维护盐渠的民间组织。' }],
@@ -169,7 +169,7 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
       ],
     },
     actions: {
-      version: 9,
+      version: 10,
       conditions: [
         { key: 'condition.always', expression: { op: 'all', conditions: [{ op: 'player-number', field: 'level', comparator: 'gte', value: 1 }] }, failureMessage: '角色尚未进入可行动状态。' },
         { key: 'condition.level-two', expression: { op: 'player-number', field: 'level', comparator: 'gte', value: 2 }, failureMessage: '经验不足，无法让谎言自洽。' },
@@ -189,6 +189,12 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
         { key: 'effect.respawn-salt-port', operation: 'respawn', payload: { fastTravelPointKey: 'fast-travel.salt-port', healthRatio: 1 } },
         { key: 'effect.start-ridge-jackal', operation: 'initialize-combat', payload: { encounterKey: 'encounter.ridge-jackal' } },
         { key: 'effect.settle-combat-state', operation: 'settle-combat-state', payload: {} },
+        { key: 'effect.combat-basic-attack', operation: 'perform-combat-action', payload: { kind: 'basic-attack', skillKey: 'skill.basic-attack', itemKey: null } },
+        { key: 'effect.combat-power-strike', operation: 'perform-combat-action', payload: { kind: 'skill', skillKey: 'skill.power-strike', itemKey: null } },
+        { key: 'effect.combat-brine-tonic', operation: 'perform-combat-action', payload: { kind: 'item', skillKey: null, itemKey: 'item.brine-tonic' } },
+        { key: 'effect.combat-escape', operation: 'perform-combat-action', payload: { kind: 'escape', skillKey: null, itemKey: null } },
+        { key: 'effect.combat-enemy-basic-attack', operation: 'perform-combat-action', payload: { kind: 'enemy-skill', skillKey: 'skill.basic-attack', itemKey: null } },
+        { key: 'effect.combat-power-strike-cost', operation: 'change-player-resource', payload: { resource: 'skill-resource', amount: -2 } },
         { key: 'effect.consume-brine-tonic', operation: 'remove-item', payload: { itemKey: 'item.brine-tonic', quantity: 1, reason: 'consume' } },
         { key: 'effect.drop-salt-crystal', operation: 'remove-item', payload: { itemKey: 'item.salt-crystal', quantity: 1, reason: 'drop' } },
         { key: 'effect.equip-rust-sword', operation: 'equip-item', payload: { itemKey: 'item.rust-sword' } },
@@ -355,6 +361,31 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
         successEffectKeys: ['effect.settle-combat-state'], failureEffectKeys: [], timeCostMinutes: 0,
         confirmationPolicy: 'never', repeatPolicy: 'repeatable', cooldownMinutes: null,
       }, {
+        key: 'action.combat-basic-attack', category: 'combat-basic-attack', label: '普通攻击', description: '对一名敌人发动稳定的普通攻击。',
+        actorScope: 'player', targetScope: 'combatant', locationKeys: [], requirementConditionKeys: [], costEffectKeys: [],
+        successEffectKeys: ['effect.combat-basic-attack'], failureEffectKeys: [], timeCostMinutes: 0,
+        confirmationPolicy: 'never', repeatPolicy: 'repeatable', cooldownMinutes: null,
+      }, {
+        key: 'action.combat-power-strike', category: 'combat-skill', label: '重击', description: '消耗技能资源，对一名敌人发动重击。',
+        actorScope: 'player', targetScope: 'combatant', locationKeys: [], requirementConditionKeys: [], costEffectKeys: ['effect.combat-power-strike-cost'],
+        successEffectKeys: ['effect.combat-power-strike'], failureEffectKeys: [], timeCostMinutes: 0,
+        confirmationPolicy: 'never', repeatPolicy: 'repeatable', cooldownMinutes: null,
+      }, {
+        key: 'action.combat-brine-tonic', category: 'combat-item', label: '使用盐露药剂', description: '在战斗中消耗一瓶盐露药剂。',
+        actorScope: 'player', targetScope: 'item', locationKeys: [], requirementConditionKeys: ['condition.health-not-full'], costEffectKeys: ['effect.consume-brine-tonic'],
+        successEffectKeys: ['effect.restore-health', 'effect.combat-brine-tonic'], failureEffectKeys: [], timeCostMinutes: 0,
+        confirmationPolicy: 'never', repeatPolicy: 'repeatable', cooldownMinutes: null,
+      }, {
+        key: 'action.combat-escape', category: 'escape', label: '逃跑', description: '尝试退出当前遭遇。',
+        actorScope: 'player', targetScope: 'none', locationKeys: [], requirementConditionKeys: [], costEffectKeys: [],
+        successEffectKeys: ['effect.combat-escape'], failureEffectKeys: [], timeCostMinutes: 0,
+        confirmationPolicy: 'never', repeatPolicy: 'repeatable', cooldownMinutes: null,
+      }, {
+        key: 'action.combat-enemy-basic-attack', category: 'combat-enemy-skill', label: '敌人普通攻击', description: '由冻结策略为当前敌人执行普通攻击。',
+        actorScope: 'system', targetScope: 'none', locationKeys: [], requirementConditionKeys: [], costEffectKeys: [],
+        successEffectKeys: ['effect.combat-enemy-basic-attack'], failureEffectKeys: [], timeCostMinutes: 0,
+        confirmationPolicy: 'never', repeatPolicy: 'repeatable', cooldownMinutes: null,
+      }, {
         key: 'action.use-brine-tonic', category: 'use', label: '使用盐露药剂', description: '消耗一瓶盐露药剂并恢复生命。',
         actorScope: 'player', targetScope: 'item', locationKeys: [], requirementConditionKeys: ['condition.health-not-full'], costEffectKeys: ['effect.consume-brine-tonic'],
         successEffectKeys: ['effect.restore-health'], failureEffectKeys: [], timeCostMinutes: 0,
@@ -404,6 +435,11 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
         activation: 'active', kind: 'attack', target: 'single-enemy', scalingAttribute: 'power',
         unlockSources: [{ kind: 'initial', level: null, questKey: null }], useConditionKeys: [], priority: 100,
         resourceCost: 0, cooldownTurns: 0, effectKeys: [],
+      }, {
+        key: 'skill.power-strike', title: '重击', description: '蓄力后进行一次强力打击。', tags: ['技能', '近战'],
+        activation: 'active', kind: 'attack', target: 'single-enemy', scalingAttribute: 'power',
+        unlockSources: [{ kind: 'initial', level: null, questKey: null }], useConditionKeys: [], priority: 80,
+        resourceCost: 2, cooldownTurns: 2, effectKeys: [],
       }],
       statuses: [{ key: 'status.rested', title: '休整完毕', description: '角色已经充分休息。', polarity: 'beneficial' }],
     },
@@ -709,14 +745,30 @@ export function downgradeTextOpenWorldFixtureCombatV1(
   delete combat.difficultyProfiles
   delete combat.strategyProfiles
   runtimePackage.modules.combat.schemaVersion = 1
-  actions.effects = actions.effects.filter((effect: any) => effect.operation !== 'settle-combat-state')
+  actions.effects = actions.effects.filter((effect: any) => !['settle-combat-state', 'perform-combat-action'].includes(effect.operation))
   actions.effects.forEach((effect: any) => {
     if (effect.operation === 'initialize-combat') effect.operation = 'start-combat'
   })
-  actions.actions = actions.actions.filter((action: any) => action.category !== 'combat-state-action')
+  actions.actions = actions.actions.filter((action: any) => ![
+    'combat-state-action', 'combat-basic-attack', 'combat-skill', 'combat-item', 'combat-enemy-skill', 'escape',
+  ].includes(action.category))
   if (actions.version >= 9) {
     actions.version = 8
     runtimePackage.modules.actions.schemaVersion = 8
   }
+  return runtimePackage
+}
+
+/** Keeps Combat v2 but re-encodes Actions as the pre-combat-action v9 contract. */
+export function downgradeTextOpenWorldFixtureCombatActionsV1(
+  runtimePackage: TextOpenWorldRuntimePackageV1,
+): TextOpenWorldRuntimePackageV1 {
+  const actions = runtimePackage.modules.actions.payload as any
+  actions.effects = actions.effects.filter((effect: any) => effect.operation !== 'perform-combat-action')
+  actions.actions = actions.actions.filter((action: any) => ![
+    'combat-basic-attack', 'combat-skill', 'combat-item', 'combat-enemy-skill', 'escape',
+  ].includes(action.category))
+  actions.version = 9
+  runtimePackage.modules.actions.schemaVersion = 9
   return runtimePackage
 }

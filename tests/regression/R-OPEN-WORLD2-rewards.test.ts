@@ -3,7 +3,10 @@ import { createTextOpenWorldEffectCatalogV1 } from '../../src/lib/open-world/eff
 import { resolveTextOpenWorldRandomEvidenceV1 } from '../../src/lib/open-world/event-contract'
 import { createTextOpenWorldRewardCatalogV1 } from '../../src/lib/open-world/rewards'
 import { createInitialTextOpenWorldSessionProjectionV1 } from '../../src/lib/open-world/session-projection'
-import { createTextOpenWorldVNextFixture } from '../helpers/text-open-world-vnext-fixture'
+import {
+  createTextOpenWorldVNextFixture,
+  downgradeTextOpenWorldFixtureCombatActionsV1,
+} from '../helpers/text-open-world-vnext-fixture'
 
 async function evidence(preparation: ReturnType<ReturnType<typeof createTextOpenWorldRewardCatalogV1>['prepare']>) {
   return Promise.all(preparation.randomRequests.map((request, drawIndex) => resolveTextOpenWorldRandomEvidenceV1({
@@ -55,7 +58,7 @@ describe('Text Open World vNext · reward contracts, drops and unique claims', (
   })
 
   it('经验、货币、物品、技能、配方、道德、阵营与解锁可原子结算', async () => {
-    const fixture = createTextOpenWorldVNextFixture()
+    const fixture = downgradeTextOpenWorldFixtureCombatActionsV1(createTextOpenWorldVNextFixture())
     const actions = fixture.modules.actions.payload as any
     const progression = fixture.modules.progression.payload as any
     const quests = fixture.modules.quests.payload as any
