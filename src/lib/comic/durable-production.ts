@@ -113,7 +113,8 @@ const BRIEF_KEYS = ['version', 'coreTheme', 'dominantEmotion', 'mustKeep', 'mayC
 function exact(value: unknown, keys: readonly string[], label: string): asserts value is Record<string, any> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`[comic-run] ${label} 必须是对象`)
   const actual = Object.keys(value)
-  if (actual.length !== keys.length || actual.some(key => !keys.includes(key))) throw new Error(`[comic-run] ${label} 字段不在闭集`)
+  const unknown = actual.filter(key => !keys.includes(key)); const missing = keys.filter(key => !actual.includes(key))
+  if (unknown.length || missing.length) throw new Error(`[comic-run] ${label} 字段不在闭集（未知：${unknown.join('、') || '无'}；缺少：${missing.join('、') || '无'}）`)
 }
 function stable(value: unknown, label: string): asserts value is string {
   if (typeof value !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$/.test(value)) throw new Error(`[comic-run] ${label} 非法`)
@@ -215,10 +216,10 @@ function runContract(scope: WorkspaceScope, stage: ComicProfessionalStageV1) {
     scope: { projectId: scope.projectId, worldGroupId: null },
     permissions: { contextSourceKeys: [...skill.contextSourceKeys], writeTargets: skill.writeTargets.map(row => ({ table: row.table, fields: [...row.fields], mode: 'author-confirmed' as const })) },
     executionBindings: [{ stepId, ...createAgentSkillExecutionBindingV1(skill) }],
-    budget: { maxModelCalls: 1, maxToolCalls: 0, maxInputTokens: 48_000, maxOutputTokens: skill.maxOutputTokens, maxAttemptsPerStep: 1, maxProtocolErrors: 0 },
+    budget: { maxModelCalls: 2, maxToolCalls: 0, maxInputTokens: 48_000, maxOutputTokens: skill.maxOutputTokens, maxAttemptsPerStep: 2, maxProtocolErrors: 1 },
     acceptance: [{ id: `${stepId}.candidate`, kind: 'output-present' as const, required: true }, { id: `${stepId}.author`, kind: 'author-confirmed' as const, required: true }, { id: `${stepId}.post-state`, kind: 'post-state-matches' as const, required: true }],
     verificationPlan: [{ id: `${stepId}.terminal`, kind: 'terminal' as const, verifier: `comic-${stage}-terminal-v1`, criterionIds: [`${stepId}.candidate`, `${stepId}.author`, `${stepId}.post-state`] }],
-    failurePolicy: { onProtocolError: 'fail' as const, onVerificationFailure: 'fail' as const, onStaleInput: 'pause-for-author' as const },
+    failurePolicy: { onProtocolError: 'retry' as const, onVerificationFailure: 'fail' as const, onStaleInput: 'pause-for-author' as const },
   }
 }
 async function append(scope: WorkspaceScope, snapshot: AgentRunSnapshotV1, type: Parameters<typeof appendAgentRunEventV1>[0]['type'], payload: any) {
@@ -242,8 +243,8 @@ export async function generateComicProfessionalCandidateV1(input: { scope: Works
   snapshot = await append(input.scope, snapshot, 'step.scheduled', { stepId }); snapshot = await append(input.scope, snapshot, 'step.started', { stepId, attempt: 1 })
   const inferredTargetPages = selected.targetPages.length ? selected.targetPages : selected.targetPanels.length ? selected.pages.filter(page => selected.targetPanels.some(panel => panel.pageId === page.id)) : ['visual-bible', 'image-request', 'visual-continuity-review', 'targeted-repair', 'page-review'].includes(input.stage) ? selected.pages : []
   const assembled = await assembleContext({ projectId: input.scope.projectId, scope: input.scope, sourceKeys: [...skill.contextSourceKeys], adaptationProjectId: selected.root.id!, adaptationSourceManifestVersion: selected.root.activeSourceManifestVersion, adaptationSourceUnitKeys: selected.sourceUnitKeys, comicPageIds: inferredTargetPages.flatMap(row => row.id == null ? [] : [row.id]), provider: input.aiConfig?.provider, model: input.aiConfig?.model, inputBudgetMaxTokens: 48_000 })
-  const contextManifest = await createContextManifestFromAssemblyV1({ runId: snapshot.run.id, stepId, attempt: 1, projectId: input.scope.projectId, worldGroupId: null, declaredSourceKeys: [...skill.contextSourceKeys], assembled, readerVersion: `comic-${input.stage}-context-v1` })
-  snapshot = await append(input.scope, snapshot, 'context.assembled', { stepId, attempt: 1, manifestHash: contextManifest.manifestHash })
+  let activeContextManifest = await createContextManifestFromAssemblyV1({ runId: snapshot.run.id, stepId, attempt: 1, projectId: input.scope.projectId, worldGroupId: null, declaredSourceKeys: [...skill.contextSourceKeys], assembled, readerVersion: `comic-${input.stage}-context-v1` })
+  snapshot = await append(input.scope, snapshot, 'context.assembled', { stepId, attempt: 1, manifestHash: activeContextManifest.manifestHash })
   const targetKeys = [...selected.targetPages.map(row => row.stableKey), ...selected.targetPanels.map(row => row.stableKey), ...selected.targetIssues.map(row => row.stableKey)]
   const panelSubjectKeys = [...new Set(selected.panels.flatMap(panel => [...(panel.subjectStates ?? []), ...(panel.continuityRefs ?? [])].map(row => row.subjectKey)))]
   const referenceClosure = [
@@ -256,25 +257,44 @@ export async function generateComicProfessionalCandidateV1(input: { scope: Works
   ].filter(Boolean).join('\n')
   const system = [`你是${config.role}。只完成当前职责，不替后续岗位生成或采纳。`, '严格区分来源事实、作者确认决定与提案；不得把新增桥接伪装成原文。', '只输出一个严格 JSON 值，不要 Markdown、解释、注释或代码围栏。候选自身新建的 stableKey 必须全批次唯一并匹配 ^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$；所有引用字段只能逐字使用登记上下文中的 key 或当前批次明确创建的目标 key。数组不得含重复项；数字必须是 JSON number；可空定位字段必须显式写 null，绝不输出 undefined；不得输出数据库数字 ID。', `目标漫画画像：${JSON.stringify(selected.root.targetSpec)}`, input.stage === 'source-analysis' ? `唯一来源单元：${selected.sourceUnitKeys.join(', ')}` : '', referenceClosure, targetKeys.length ? `唯一目标：${targetKeys.join(', ')}` : '', input.authorInstruction?.trim() ? `作者附加要求：${input.authorInstruction.trim()}` : '', `登记上下文：\n${assembled.text}`].filter(Boolean).join('\n\n')
   const messages: ChatMessage[] = [{ role: 'system', content: system }, { role: 'user', content: comicProfessionalInstructionV1(input.stage) }]
-  snapshot = await append(input.scope, snapshot, 'model.requested', { stepId, attempt: 1, bindingHash: await hashCanonicalValue(snapshot.contract.executionBindings?.[0]) })
-  let raw: string
-  try { raw = await (input.runAI ? input.runAI(messages) : chat(messages, input.aiConfig!, { category: `comic.${input.stage}`, projectId: input.scope.projectId, configOverrides: { maxTokens: skill.maxOutputTokens }, contextOverflowPolicy: 'reject' })) }
-  catch (error) { await append(input.scope, snapshot, 'run.paused', { reason: `comic-${input.stage}-model-outcome-unknown`, recoverable: false }); throw error }
-  snapshot = await append(input.scope, snapshot, 'model.responded', { stepId, attempt: 1, outputHash: await hashCanonicalValue({ raw }) })
-  let payload: ComicProfessionalPayloadV1
-  try {
-    payload = parseComicProfessionalPayloadV1(input.stage, parseJson(raw))
+  const attemptedMessages: ChatMessage[][] = [messages]
+  const invoke = async (attemptMessages: ChatMessage[], attempt: number): Promise<string> => {
+    snapshot = await append(input.scope, snapshot, 'model.requested', { stepId, attempt, bindingHash: await hashCanonicalValue(snapshot.contract.executionBindings?.[0]) })
+    let output: string
+    try { output = await (input.runAI ? input.runAI(attemptMessages) : chat(attemptMessages, input.aiConfig!, { category: `comic.${input.stage}`, projectId: input.scope.projectId, configOverrides: { maxTokens: skill.maxOutputTokens }, contextOverflowPolicy: 'reject' })) }
+    catch (error) { await append(input.scope, snapshot, 'run.paused', { reason: `comic-${input.stage}-model-outcome-unknown`, recoverable: false }); throw error }
+    snapshot = await append(input.scope, snapshot, 'model.responded', { stepId, attempt, outputHash: await hashCanonicalValue({ raw: output }) })
+    return output
+  }
+  const parseForRun = (output: string): ComicProfessionalPayloadV1 => {
+    const parsed = parseComicProfessionalPayloadV1(input.stage, parseJson(output))
     if (input.stage === 'source-analysis') {
       const allowed = new Set(selected.sourceUnitKeys)
-      const invalid = (payload as AdaptationSourceFactCandidateV1[]).flatMap(row => row.sourceUnitKeys.filter(key => !allowed.has(key)))
+      const invalid = (parsed as AdaptationSourceFactCandidateV1[]).flatMap(row => row.sourceUnitKeys.filter(key => !allowed.has(key)))
       if (invalid.length) throw new Error(`[comic-run] SourceFact 引用了未选择的来源单元：${[...new Set(invalid)].join('、')}`)
     }
-  } catch (error) { snapshot = await append(input.scope, snapshot, 'step.failed', { stepId, attempt: 1, code: `comic-${input.stage}-protocol-failed`, retryable: false, category: 'protocol', action: 'fail' }); await append(input.scope, snapshot, 'run.failed', { code: `comic-${input.stage}-protocol-failed`, retryable: false }); throw error }
+    return parsed
+  }
+  let attempt = 1; let raw = await invoke(messages, attempt); let payload: ComicProfessionalPayloadV1
+  try { payload = parseForRun(raw) }
+  catch (firstError) {
+    snapshot = await append(input.scope, snapshot, 'step.failed', { stepId, attempt, code: `comic-${input.stage}-protocol-failed`, retryable: true, category: 'protocol', action: 'retry' })
+    attempt = 2; snapshot = await append(input.scope, snapshot, 'step.started', { stepId, attempt })
+    activeContextManifest = await createContextManifestFromAssemblyV1({ runId: snapshot.run.id, stepId, attempt, projectId: input.scope.projectId, worldGroupId: null, declaredSourceKeys: [...skill.contextSourceKeys], assembled, readerVersion: `comic-${input.stage}-context-v1` })
+    snapshot = await append(input.scope, snapshot, 'context.assembled', { stepId, attempt, manifestHash: activeContextManifest.manifestHash })
+    const repairMessages: ChatMessage[] = [
+      { role: 'system', content: '你是 JSON 协议修复器。只修复上次候选的结构、字段、类型、枚举和引用格式；保留原有创作含义，不增加新事实，不解释。只输出一个修复后的严格 JSON 值。' },
+      { role: 'user', content: `目标阶段：${input.stage}\n协议：${comicProfessionalInstructionV1(input.stage)}\n解析错误：${firstError instanceof Error ? firstError.message : String(firstError)}\n上次输出：\n${raw.slice(0, 160_000)}` },
+    ]
+    attemptedMessages.push(repairMessages); raw = await invoke(repairMessages, attempt)
+    try { payload = parseForRun(raw) }
+    catch (error) { snapshot = await append(input.scope, snapshot, 'step.failed', { stepId, attempt, code: `comic-${input.stage}-protocol-failed`, retryable: false, category: 'protocol', action: 'fail' }); await append(input.scope, snapshot, 'run.failed', { code: `comic-${input.stage}-protocol-failed`, retryable: false }); throw error }
+  }
   const revisionTargets = ['visual-continuity-review', 'page-review'].includes(input.stage) ? selected.panels.filter(panel => selected.targetPages.some(page => page.id === panel.pageId)) : selected.targetPanels
-  const body = { version: 1 as const, kind: 'comic-professional-candidate' as const, portable: false as const, stage: input.stage, projectId: input.scope.projectId, worldId: input.scope.worldId, workId: input.scope.workId, adaptationProjectId: selected.root.id!, adaptationRevision: selected.root.revision, sourceManifestVersion: selected.root.activeSourceManifestVersion, sourceManifestHash: selected.root.activeSourceManifestHash, sourceUnitKeys: selected.sourceUnitKeys, targetPageKeys: selected.targetPages.map(row => row.stableKey), targetPanelKeys: revisionTargets.map(row => row.stableKey), targetIssueKeys: selected.targetIssues.map(row => row.stableKey), targetPanelRevisions: Object.fromEntries(revisionTargets.map(row => [row.stableKey, row.revision])), contextManifestHash: contextManifest.manifestHash, promptHash: await hashCanonicalValue(messages), modelOutputHash: await hashCanonicalValue({ raw }), payload, payloadHash: await hashCanonicalValue(payload) }
+  const body = { version: 1 as const, kind: 'comic-professional-candidate' as const, portable: false as const, stage: input.stage, projectId: input.scope.projectId, worldId: input.scope.worldId, workId: input.scope.workId, adaptationProjectId: selected.root.id!, adaptationRevision: selected.root.revision, sourceManifestVersion: selected.root.activeSourceManifestVersion, sourceManifestHash: selected.root.activeSourceManifestHash, sourceUnitKeys: selected.sourceUnitKeys, targetPageKeys: selected.targetPages.map(row => row.stableKey), targetPanelKeys: revisionTargets.map(row => row.stableKey), targetIssueKeys: selected.targetIssues.map(row => row.stableKey), targetPanelRevisions: Object.fromEntries(revisionTargets.map(row => [row.stableKey, row.revision])), contextManifestHash: activeContextManifest.manifestHash, promptHash: await hashCanonicalValue(attemptedMessages), modelOutputHash: await hashCanonicalValue({ raw }), payload, payloadHash: await hashCanonicalValue(payload) }
   const candidate = { ...body, candidateHash: await hashCanonicalValue(body) }
   const saved = await createAgentRunCheckpointV1({ scope: input.scope, runId: snapshot.run.id, resumePayload: candidate }); snapshot = saved.snapshot
-  snapshot = await append(input.scope, snapshot, 'candidate.persisted', { stepId, attempt: 1, candidateHash: candidate.candidateHash, requiresConfirmation: true })
+  snapshot = await append(input.scope, snapshot, 'candidate.persisted', { stepId, attempt, candidateHash: candidate.candidateHash, requiresConfirmation: true })
   return { snapshot, candidate }
 }
 
