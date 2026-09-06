@@ -1,6 +1,6 @@
 # StoryForge 文字冒险专业生产与旗舰交付方案
 
-> 层级：L2 · 版本：1.7.0 · 生效：2026-09-07
+> 层级：L2 · 版本：1.8.0 · 生效：2026-09-07
 > 状态：目标契约、施工入口与当前事实的唯一现行方案包；当前实现与目标有差距时，以本文标出的缺口为施工项，不得用目标描述冒充完成事实。
 
 本方案包把 [`../TEXT-ADVENTURE.md`](../TEXT-ADVENTURE.md) 的产品契约落实为可以逐步实现和验收的专业生产体系。目标不是生成一个能打开的工程夹具，而是从来源充分的冻结 `WorldRelease` 出发，交付一款作者可审查、可导入导出、可发布、可完整游玩，并有资格提交社区推荐的有限篇幅文字冒险。
@@ -42,6 +42,7 @@
 10. [`10-MEDIA-QUALITY-AND-BINDING.md`](./10-MEDIA-QUALITY-AND-BINDING.md)：媒资需求、实际 Artifact、运行引用、物理字节与独立审图的分层质量合同。
 11. [`11-HUMAN-VISUAL-REVIEW-AND-RECOMMENDATION.md`](./11-HUMAN-VISUAL-REVIEW-AND-RECOMMENDATION.md)：商业候选的逐图作者决定、不可变人工回执与发布阻断合同。
 12. [`12-PRODUCT-PACKAGE-IMPORT-AND-COMMUNITY-CANDIDATE.md`](./12-PRODUCT-PACKAGE-IMPORT-AND-COMMUNITY-CANDIDATE.md)：可离线复验的文字冒险候选包、本地上传导入、原子生命周期与社区提交资格合同。
+13. [`13-FIRST-FLAGSHIP-PRODUCTION-AND-SHOWCASE.md`](./13-FIRST-FLAGSHIP-PRODUCTION-AND-SHOWCASE.md)：首款约一小时旗舰游戏从实际 WorldRelease、专业团队生产、实测返工到候选包和展示入口的执行合同。
 
 ## 完成定义
 
