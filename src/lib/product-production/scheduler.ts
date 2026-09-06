@@ -26,6 +26,7 @@ import type {
   ContextManifestV2,
   ProductBuildArtifactKindV1,
   ProductBuildArtifactRecordV1,
+  ProductProductionBlockerResolutionV1,
   ProductProductionBriefV3,
   ProductProductionPlanTaskV3,
   ProductProductionPlanV3,
@@ -109,7 +110,15 @@ export interface ProductProductionTaskExecutionInputV1 {
   contextText: string
   inputArtifacts: ProductBuildArtifactRecordV1[]
   capabilityBindings: ProductProductionCapabilityBindingV1[]
+  authorResolution: ProductProductionAuthorResolutionEvidenceV1 | null
   signal: AbortSignal
+}
+
+export interface ProductProductionAuthorResolutionEvidenceV1 {
+  commandId: string
+  blockerKey: string
+  resolution: ProductProductionBlockerResolutionV1
+  resolvedAt: number
 }
 
 export type ProductProductionTaskExecutorV1 = (
@@ -661,6 +670,34 @@ async function applyCrossBuildEvolutionReuse(input: {
       task.capabilityRequirementKeys.map(key => input.brief.capabilityRequirements.find(item => item.requirementKey === key)),
     )
     const outputs = task.outputArtifactKeys.map(key => artifactByKey.get(key))
+    if (task.taskKey === 'source.author-gate' && !affected.has('content') && !affected.has('world-source')
+      && !!parentTask && task.dependsOn.every(dependency => reusableTasks.has(dependency))
+      && outputs.every(Boolean)) {
+      // An author decision may cross Builds only when the frozen source
+      // envelope and all content dependencies are proven unchanged. The copy
+      // is still a Build-local carried-forward Artifact with explicit lineage.
+      const artifacts = outputs as Array<NonNullable<(typeof outputs)[number]>>
+      const reuseKey = await hashProductProductionValueV2({
+        schema: 'storyforge.product-production-cross-build-reuse', version: 1,
+        sourceBuildNumber: parentBuild.buildNumber, targetBuildNumber: input.build.buildNumber,
+        taskKey: task.taskKey, userImpact: evolution.affectedLanes,
+        artifacts: artifacts.map(row => ({ artifactKey: row.artifactKey, contentHash: row.contentHash })),
+      })
+      reusableTasks.add(task.taskKey)
+      reusableArtifactKeys.push(...task.outputArtifactKeys)
+      tasks.push({
+        ...task,
+        reuse: {
+          sourceBuildNumber: parentBuild.buildNumber,
+          sourceArtifactKey: artifacts[0].artifactKey,
+          sourceContentHash: artifacts[0].contentHash,
+          reuseKey,
+          requiresRevalidation: true,
+          reason: '作者 impact 未包含 content/world-source，来源审计与私域补充决策闭包未变化',
+        },
+      })
+      continue
+    }
     if (task.taskKey === 'integration.narrative' && !affected.has('content') && !affected.has('world-source')
       && !!parentTask && task.dependsOn.every(dependency => reusableTasks.has(dependency))) {
       // The deterministic narrative assembler still runs in the new Build,
@@ -787,6 +824,34 @@ function parsedObject(value: string): Record<string, unknown> {
     return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
       ? parsed as Record<string, unknown> : {}
   } catch { return {} }
+}
+
+function authorResolutionEvidence(
+  failureJson: string,
+  taskKey: string,
+): ProductProductionAuthorResolutionEvidenceV1 | null {
+  const row = parsedObject(failureJson)
+  const resolution = row.resolution
+  if (row.blockerKey !== taskKey || typeof row.commandId !== 'string'
+    || !resolution || typeof resolution !== 'object' || Array.isArray(resolution)
+    || typeof row.resolvedAt !== 'number' || !Number.isFinite(row.resolvedAt)) return null
+  const candidate = resolution as Record<string, unknown>
+  const actions: ProductProductionBlockerResolutionV1['action'][] = [
+    'retry', 'fallback', 'waive-soft-gate', 'change-capability',
+    'accept-product-private-expansion', 'cancel',
+  ]
+  if (typeof candidate.action !== 'string'
+    || !actions.includes(candidate.action as ProductProductionBlockerResolutionV1['action'])
+    || typeof candidate.note !== 'string' || !candidate.note.trim()) return null
+  return {
+    commandId: row.commandId,
+    blockerKey: row.blockerKey,
+    resolution: {
+      action: candidate.action as ProductProductionBlockerResolutionV1['action'],
+      note: candidate.note,
+    },
+    resolvedAt: row.resolvedAt,
+  }
 }
 
 function textAdventureQualityRepairCause(value: string | Record<string, unknown>): Record<string, unknown> | null {
@@ -1048,7 +1113,7 @@ async function ensureCarriedForwardTaskRuns(input: {
     const artifacts = (await db.productBuildArtifacts.where('buildId').equals(input.build.id).toArray())
       .filter(row => row.controlEpoch === input.build.controlEpoch && row.status === 'carried-forward')
     for (const task of input.plan.tasks) {
-      if (task.executionMode === 'deterministic') continue
+      if (task.executionMode === 'deterministic' && task.reuse == null) continue
       const outputs = artifacts.filter(row => task.outputArtifactKeys.includes(row.artifactKey))
       if (outputs.length !== task.outputArtifactKeys.length
         || task.dependsOn.some(dependency => !completed.has(dependency))) continue
@@ -1267,7 +1332,7 @@ async function recoverCompletedOrCheckpointed(input: {
 async function runClaimedTask(input: {
   scope: WorkspaceScope
   productionId: number
-  build: { id: number; buildNumber: number; controlEpoch: number; planHash: string }
+  build: { id: number; buildNumber: number; controlEpoch: number; planHash: string; failureJson: string }
   task: ProductProductionPlanTaskV3
   snapshot: AgentRunSnapshotV1
   executor: ProductProductionTaskExecutorV1
@@ -1282,6 +1347,7 @@ async function runClaimedTask(input: {
   snapshot = await append(input.scope, snapshot, 'step.started', { stepId: input.task.taskKey, attempt })
   const artifacts = await acceptedInputs(input.build.id, input.build.controlEpoch, input.task.inputArtifactKeys)
   const bindings = normalizedBindings(input.task, input.capabilityBindings)
+  const authorResolution = authorResolutionEvidence(input.build.failureJson, input.task.taskKey)
   const dependencyRuns = await Promise.all(input.task.dependsOn.map(async taskKey => {
     const row = await db.agentRuns.where('[parentRunId+parentRelation]')
       .equals([snapshot.run.parentRunId!, `task:${taskKey}`]).first()
@@ -1292,6 +1358,7 @@ async function runClaimedTask(input: {
     planHash: input.build.planHash, taskKey: input.task.taskKey, controlEpoch: input.build.controlEpoch,
     dependencies: dependencyRuns, artifacts: artifacts.map(row => ({ artifactKey: row.artifactKey, contentHash: row.contentHash })),
     capabilityBindings: bindings,
+    authorResolution,
   }
   const normalSourceKeys = taskContextSourceKeys(input.task)
   const contractSourceKeys = taskContractContextSourceKeys(input.task)
@@ -1438,7 +1505,8 @@ async function runClaimedTask(input: {
       buildNumber: input.build.buildNumber, controlEpoch: input.build.controlEpoch,
       planHash: input.build.planHash, task: input.task, attempt,
       idempotencyKey: inputHash, contextText: assembled.text,
-      inputArtifacts: artifacts, capabilityBindings: bindings, signal: executionController.signal,
+      inputArtifacts: artifacts, capabilityBindings: bindings, authorResolution,
+      signal: executionController.signal,
     })
     validateExecutionResult(input.task, result)
   } catch (error) {
@@ -1918,6 +1986,7 @@ export async function runProductProductionSchedulerCycleV1(input: {
       build: {
         id: state.build.id!, buildNumber: state.build.buildNumber,
         controlEpoch: state.build.controlEpoch, planHash: state.build.planHash,
+        failureJson: state.build.failureJson,
       },
       task, snapshot, executor: input.executor,
       capabilityBindings: input.capabilityBindings ?? [], signal: controller.signal,

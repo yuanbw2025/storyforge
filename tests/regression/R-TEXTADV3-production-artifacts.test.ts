@@ -5,6 +5,7 @@ import {
   parseTextAdventureNarrativeArcPlanArtifactV1,
   parseTextAdventureQuestPlanArtifactV1,
   parseTextAdventureQuestScriptArtifactV1,
+  parseTextAdventureSourceDecisionArtifactV1,
   parseTextAdventureSourceSufficiencyArtifactV1,
   parseTextAdventureStoryBibleArtifactV1,
 } from '../../src/lib/adventure/production-artifacts-v2'
@@ -148,6 +149,36 @@ describe('TEXTADV-3 · 专业生产工件合同', () => {
       },
       brief: brief(), allowedResourceKeys: ['world.character.0'],
     })).toThrow('未授权世界资源')
+  })
+
+  it('来源决策回执必须绑定审计 hash，并完整接受当次私域补充清单', () => {
+    const sourceAudit = parseTextAdventureSourceSufficiencyArtifactV1({
+      value: {
+        schema: 'storyforge.text-adventure-source-sufficiency-artifact', version: 1,
+        decision: 'ready-with-private-additions', adaptationStrategy: 'expand-sparse',
+        coverage: [{ domain: 'characters', status: 'partial', resourceKeys: ['world.character.0'], rationale: '主角充分，配角需要产品私域补充。' }],
+        gaps: [{ key: 'gap.supporting-cast', severity: 'warning', description: '缺少两个支线配角。', affectedStages: ['content.cast-bible'] }],
+        privateAdditions: [{ key: 'addition.supporting-cast', kind: 'character', title: '补充支线配角', rationale: '仅服务本游戏任务，不改变世界事实。' }],
+        authorDecisionRequired: true,
+      },
+      brief: brief(), allowedResourceKeys: ['world.character.0'],
+    })
+    const value = {
+      schema: 'storyforge.text-adventure-source-decision-artifact', version: 1,
+      sourceAuditHash: 'a'.repeat(64), decision: 'accept-product-private-expansion',
+      acceptedPrivateAdditionKeys: ['addition.supporting-cast'],
+      authorCommandId: 'author.accept-source-expansion', authorNote: '已审查并接受。',
+    }
+    expect(parseTextAdventureSourceDecisionArtifactV1({
+      value, sourceAudit, sourceAuditHash: 'a'.repeat(64),
+    })).toMatchObject({ decision: 'accept-product-private-expansion' })
+    expect(() => parseTextAdventureSourceDecisionArtifactV1({
+      value: { ...value, acceptedPrivateAdditionKeys: [] },
+      sourceAudit, sourceAuditHash: 'a'.repeat(64),
+    })).toThrow('未完整接受')
+    expect(() => parseTextAdventureSourceDecisionArtifactV1({
+      value, sourceAudit, sourceAuditHash: 'b'.repeat(64),
+    })).toThrow('未绑定当前来源审计')
   })
 
   it('故事与角色圣经冻结铺垫回收、结局、知识边界和独立角色身份', () => {

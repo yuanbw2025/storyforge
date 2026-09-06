@@ -324,7 +324,7 @@ export async function createProductProductionPlanV3(input: {
   // architecture, mainline, side content, ambient events and systems.
   const perInput = Math.floor(brief.productionBudget.maximumInputTokens / (modelTaskCount + 1))
   const perOutput = Math.floor(brief.productionBudget.maximumOutputTokens / modelTaskCount)
-  const durationSlots = modelTaskCount + 4 + activeMediaLaneCount
+  const durationSlots = modelTaskCount + (textAdventure ? 5 : 4) + activeMediaLaneCount
   const perDuration = Math.floor(brief.productionBudget.maximumDurationMs / Math.max(1, durationSlots))
   const costTaskCount = modelTaskCount + activeMediaLaneCount
   const perCost = brief.productionBudget.maximumCostUsd == null
@@ -352,11 +352,21 @@ export async function createProductProductionPlanV3(input: {
     maxAttempts: 2, timeoutMs: 180_000, failurePolicy: 'pause', fallbackTaskKey: null,
     acceptanceGateIds: ['artifact.protocol', 'adventure.source-sufficiency-assessed'],
   }))
+  if (textAdventure) tasks.push(productionTask({
+    taskKey: 'source.author-gate', lane: 'planning', kind: 'text-adventure-source-decision',
+    skillId: null, executionMode: 'deterministic', dependsOn: ['content.source-sufficiency'],
+    inputArtifactKeys: ['content.source-sufficiency'], outputArtifactKeys: ['content.source-decision'],
+    requirementKeys: [], capabilityRequirementKeys: [], concurrencyGroup: 'deterministic',
+    subjectLockKeys: ['content.source-decision'], priority: 105,
+    budgetReservation: reservation({ durationMs: perDuration }),
+    maxAttempts: 1, timeoutMs: 30_000, failurePolicy: 'pause', fallbackTaskKey: null,
+    acceptanceGateIds: ['artifact.protocol', 'adventure.source-decision-authorized'],
+  }))
   tasks.push(productionTask({
     taskKey: 'content.design', lane: 'content', kind: 'product-design',
     skillId: textAdventure ? 'text-adventure.creative-direction.v1' : 'product-production.content.v1',
-    executionMode: 'model', dependsOn: textAdventure ? ['content.source-sufficiency'] : [],
-    inputArtifactKeys: textAdventure ? ['content.source-sufficiency'] : [],
+    executionMode: 'model', dependsOn: textAdventure ? ['source.author-gate'] : [],
+    inputArtifactKeys: textAdventure ? ['content.source-sufficiency', 'content.source-decision'] : [],
     outputArtifactKeys: ['design.game'], requirementKeys: [],
     capabilityRequirementKeys: textCapabilities, concurrencyGroup: 'text-provider',
     subjectLockKeys: ['design.game'], priority: 100, budgetReservation: modelBudget('content.design'),
@@ -367,8 +377,8 @@ export async function createProductProductionPlanV3(input: {
     productionTask({
       taskKey: 'content.story-bible', lane: 'planning', kind: 'text-adventure-story-bible',
       skillId: 'text-adventure.story-bible.v1', executionMode: 'model',
-      dependsOn: ['content.source-sufficiency', 'content.design'],
-      inputArtifactKeys: ['content.source-sufficiency', 'design.game'],
+      dependsOn: ['source.author-gate', 'content.design'],
+      inputArtifactKeys: ['content.source-sufficiency', 'content.source-decision', 'design.game'],
       outputArtifactKeys: ['content.story-bible'], requirementKeys: [],
       capabilityRequirementKeys: textCapabilities, concurrencyGroup: 'text-provider',
       subjectLockKeys: ['content.story-bible'], priority: 98, budgetReservation: modelBudget('content.story-bible'),

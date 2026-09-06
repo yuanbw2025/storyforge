@@ -377,7 +377,10 @@ function parseResolution(value: unknown): ProductProductionBlockerResolutionV1 {
   const row = record(value, 'resolution')
   exactKeys(row, ['action', 'note'], 'resolution')
   return {
-    action: enumValue(row.action, ['retry', 'fallback', 'waive-soft-gate', 'change-capability', 'cancel'], 'resolution.action'),
+    action: enumValue(row.action, [
+      'retry', 'fallback', 'waive-soft-gate', 'change-capability',
+      'accept-product-private-expansion', 'cancel',
+    ], 'resolution.action'),
     note: text(row.note, 'resolution.note', 4000),
   }
 }

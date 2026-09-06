@@ -1,13 +1,13 @@
 # 03 · 来源充分性与改编方案
 
-> 层级：L2 · 版本：1.0.0 · 生效：2026-09-06
+> 层级：L2 · 版本：1.1.0 · 生效：2026-09-07
 > 性质：生产入口与来源闸门目标契约。
 
 ## 1. 为什么必须先审来源
 
 冻结 WorldRelease 只是版本可靠，不代表内容足以支撑一小时游戏。世界只有地点而缺角色、冲突和事件时，生产链不能偷偷生成占位 NPC，再把“产品角色 1”隐藏后继续发布。它必须给作者看见缺口并取得明确决策。
 
-## 2. `source.sufficiency` 工件
+## 2. `content.source-sufficiency` 工件
 
 来源编辑 Agent 基于冻结 SourcePlan 和真实 Context Manifest 产出候选；确定性系统复核计数、引用与 hash。工件至少包含：
 
@@ -41,10 +41,13 @@
 
 默认不替作者选择第三项。作者若导入大纲或完整文本，保留原件及 hash，AI 只生成可比较候选；丰富长篇直接抽取叙事骨架，短或稀疏内容先扩充冲突、角色、事件与节奏材料，不能直接压成几个场景。
 
+当前实现由确定性的 `source.author-gate` 消费来源审计。`ready` 自动签发绑定审计 content hash 的 `content.source-decision`；`ready-with-private-additions` 暂停 Build，并在工作台逐项展示补充清单，只有作者执行 `accept-product-private-expansion` 命令后才签发回执并进入创意总监；`blocked` 不提供接受按钮，只能取消本 Build、调整来源或范围后重新授权。通用“重试”不得冒充作者决策。
+
+作者决策回执至少冻结来源审计 hash、完整补充 key 集、命令 ID 和作者说明。相同来源和未受影响的内容闭包可在后续 Build 中以显式 `carried-forward` lineage 复用；一旦 `content` 或 `world-source` 被声明受影响，旧决策不得沿用。
+
 ## 5. 上下文与 stale
 
 - 每个 Agent 从 SourcePlan 声明必读、选读、条件读取和禁止读取；渐进读取由 Context Gateway 留 manifest。
 - 固定条数裁剪只作最终预算保护；摘要与正式来源冲突时摘要失效并重建。
 - SourcePlan、WorldRelease/hash、Brief 或已采纳上游工件变化时，由依赖图计算 stale；只重跑受影响闭包。
 - 来源改变必须重新确认受影响的故事圣经、角色圣经与视觉锚点，不能用旧 receipt 给新 Build 背书。
-

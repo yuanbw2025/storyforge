@@ -5,7 +5,7 @@ import { draftProductProductionBriefV3, suggestProductStartingPoints } from '../
 import { readProductProductionDetailsV1 } from '../../src/lib/product-production/service'
 import { seedCurrentProductWorld } from '../helpers/current-product-world'
 
-async function fixture() {
+async function fixture(productType: 'avg' | 'text-adventure' = 'avg') {
   const owned = await seedCurrentProductWorld('PRODUCTPROD commands')
   const worldReleaseId = owned.release.id!
   const suggestions = await suggestProductStartingPoints({ scope: owned.scope, worldReleaseId })
@@ -13,8 +13,9 @@ async function fixture() {
     scope: owned.scope,
     worldReleaseId,
     suggestionKey: suggestions.suggestions[0].suggestionKey,
-    productType: 'avg',
-    scale: 'scene',
+    productType,
+    qualityProfile: 'prototype',
+    scale: productType === 'text-adventure' ? 'short-arc' : 'scene',
     visualLevel: 'none',
     audioLevel: 'none',
     playerRole: '扮演林舟',
@@ -24,6 +25,7 @@ async function fixture() {
     forbiddenChanges: ['不得改写冻结世界'],
     contentBoundaries: ['不含露骨内容'],
     tone: ['克制', '紧张'],
+    ...(productType === 'text-adventure' ? { textAdventure: { confirmAll: true } } : {}),
   })
   return { ...owned, worldReleaseId, brief }
 }
@@ -286,6 +288,69 @@ describe('PRODUCTPROD-1B · user command control plane', () => {
       command: {
         type: 'resolve-blocker', commandId: 'repair.reject', expectedStateRevision: 4,
         blockerKey: 'media.visual', resolution: { action: 'retry', note: '不应复活普通终态失败' },
+      },
+    })).resolves.toMatchObject({ ok: false, errorCode: 'invalid-state-transition' })
+  })
+
+  it('只允许文字冒险来源作者闸门接受产品私域补充，并冻结命令证据', async () => {
+    const f = await fixture('text-adventure')
+    const created = await executeProductProductionCommand({
+      scope: f.scope,
+      command: {
+        type: 'create-intent', commandId: 'source-gate.intent', productionKey: 'source-gate-story',
+        productType: 'text-adventure', worldReleaseId: f.worldReleaseId, userText: '制作完整文字冒险',
+      },
+    })
+    const saved = await executeProductProductionCommand({
+      scope: f.scope, productionId: created.productionId,
+      command: {
+        type: 'save-brief-revision', commandId: 'source-gate.brief', expectedStateRevision: 0,
+        parentRevision: null, brief: f.brief,
+      },
+    })
+    await executeProductProductionCommand({
+      scope: f.scope, productionId: created.productionId,
+      command: {
+        type: 'authorize-start', commandId: 'source-gate.start', expectedStateRevision: 1,
+        briefRevision: 1, briefHash: saved.result.briefHash as string, authorizationNonce: 'source-gate.click',
+      },
+    })
+    const build = (await db.productBuilds.where('productionId').equals(created.productionId).first())!
+    await db.productBuilds.update(build.id!, {
+      status: 'recovery-required',
+      failureJson: JSON.stringify({
+        taskKey: 'source.author-gate', code: 'task-executor-failed', attempt: 1,
+        detail: '文字冒险来源需要作者明确接受产品私域补充清单',
+      }),
+    })
+    const accepted = await executeProductProductionCommand({
+      scope: f.scope, productionId: created.productionId,
+      command: {
+        type: 'resolve-blocker', commandId: 'source-gate.accept', expectedStateRevision: 2,
+        blockerKey: 'source.author-gate',
+        resolution: { action: 'accept-product-private-expansion', note: '接受当前私域补充清单' },
+      },
+    })
+    expect(accepted).toMatchObject({ ok: true, stateRevision: 3, result: { controlEpoch: 1 } })
+    const resumed = (await db.productBuilds.get(build.id!))!
+    expect(resumed).toMatchObject({ status: 'building', controlEpoch: 1 })
+    expect(JSON.parse(resumed.failureJson)).toMatchObject({
+      commandId: 'source-gate.accept', blockerKey: 'source.author-gate',
+      resolution: { action: 'accept-product-private-expansion' },
+      previousFailure: { taskKey: 'source.author-gate' },
+    })
+
+    await db.productBuilds.update(build.id!, {
+      status: 'recovery-required',
+      failureJson: JSON.stringify({ taskKey: 'content.design', code: 'task-executor-failed' }),
+    })
+    await db.productProductions.update(created.productionId, { stateRevision: 4 })
+    await expect(executeProductProductionCommand({
+      scope: f.scope, productionId: created.productionId,
+      command: {
+        type: 'resolve-blocker', commandId: 'source-gate.reject', expectedStateRevision: 4,
+        blockerKey: 'content.design',
+        resolution: { action: 'accept-product-private-expansion', note: '不得用于普通 blocker' },
       },
     })).resolves.toMatchObject({ ok: false, errorCode: 'invalid-state-transition' })
   })

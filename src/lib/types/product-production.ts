@@ -646,7 +646,8 @@ export interface ProductEvolutionImpactV1 {
 
 export interface ProductProductionBlockerResolutionV1 {
   action:
-    "retry" | "fallback" | "waive-soft-gate" | "change-capability" | "cancel";
+    "retry" | "fallback" | "waive-soft-gate" | "change-capability"
+    | "accept-product-private-expansion" | "cancel";
   note: string;
 }
 

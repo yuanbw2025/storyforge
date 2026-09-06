@@ -1417,6 +1417,107 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     ])
   }, 30_000)
 
+  it('来源不足时暂停在独立作者闸门，接受私域补充后才允许专业团队继续生产', async () => {
+    const owned = await fixtureForProduct('text-adventure', { visualLevel: 'none' })
+    const textRequirement = owned.brief.capabilityRequirements.find(item => item.mediaClass === 'text')!
+    const bindingHash = await hashProductProductionValueV2({ provider: 'source-decision-fixture' })
+    const professional = professionalTextAdventurePlanningOutputs(owned.brief)
+    const outputs = {
+      ...modelOutputs(
+        owned.brief.source.worldContentHash, 'text-adventure',
+        firstCharacterAnchor(owned.brief), owned.brief.intent.playerRole,
+      ),
+      ...professional,
+      ...professionalTextAdventureSceneScriptOutputs(
+        owned.brief, professional, ['潮门广场', '旧仓街', '信号塔'],
+      ),
+    } as Record<string, unknown>
+    outputs['content.source-sufficiency'] = {
+      schema: 'storyforge.text-adventure-source-sufficiency-artifact', version: 1,
+      decision: 'ready-with-private-additions', adaptationStrategy: 'expand-sparse',
+      coverage: [{
+        domain: 'characters', status: 'partial', resourceKeys: [],
+        rationale: '冻结来源足以支撑主线，但支线需要一个产品私域引路人。',
+      }],
+      gaps: [{
+        key: 'gap.supporting-guide', severity: 'warning',
+        description: '缺少承接支线的引路角色。', affectedStages: ['content.cast-bible'],
+      }],
+      privateAdditions: [{
+        key: 'addition.supporting-guide', kind: 'character', title: '雾港引路人',
+        rationale: '只存在于本游戏 Build，不写回冻结世界。',
+      }],
+      authorDecisionRequired: true,
+    }
+    outputs['media.requirements'] = {
+      ...(outputs['media.requirements'] as Record<string, unknown>), visual: [], audio: [],
+    }
+    const taskCalls: string[] = []
+    const runText: ProductionTextRunnerV1 = async request => {
+      const taskKey = Object.keys(outputs).find(key => request.system.includes(`任务=${key}。`))
+      if (!taskKey) throw new Error(`unknown source-decision task:${request.system}`)
+      taskCalls.push(taskKey)
+      return {
+        output: JSON.stringify(outputs[taskKey]), usage: { inputTokens: 100, outputTokens: 100 },
+        bindingReceipt: {
+          schema: 'storyforge.provider-binding-receipt', version: 1,
+          requirementKey: textRequirement.requirementKey, adapterId: 'configured-text.v1', adapterVersion: 1,
+          provider: 'fixture', model: 'fixture-source-editor', endpointOrigin: 'https://fixture.invalid',
+          executionLocation: 'browser-direct', credentialSource: 'existing-ai-config', credentialPresent: true,
+          capabilityHash: bindingHash, boundAt: 1, receiptHash: 'c'.repeat(64),
+        },
+      }
+    }
+    const capabilityBindings = [{
+      requirementKey: textRequirement.requirementKey, adapterId: 'configured-text.v1', bindingHash,
+    }]
+    const first = await runProductProductionUntilBlockedV1({
+      scope: owned.scope, productionId: owned.productionId,
+      executor: createConfiguredProductProductionExecutorV1({
+        production: (await db.productProductions.get(owned.productionId))!, brief: owned.brief, runText,
+      }),
+      capabilityBindings,
+    })
+    expect(first).toMatchObject({ terminal: false, buildStatus: 'recovery-required' })
+    expect(taskCalls).toEqual(['content.source-sufficiency'])
+    const blockedBuild = (await db.productBuilds.get(first.buildId))!
+    expect(JSON.parse(blockedBuild.failureJson)).toMatchObject({
+      taskKey: 'source.author-gate', detail: expect.stringContaining('作者明确接受'),
+    })
+    expect(await db.productBuildArtifacts
+      .where('[buildId+artifactKey]').equals([first.buildId, 'content.design']).count()).toBe(0)
+
+    const blockedProduction = (await db.productProductions.get(owned.productionId))!
+    await executeProductProductionCommand({
+      scope: owned.scope, productionId: owned.productionId,
+      command: {
+        type: 'resolve-blocker', commandId: 'source-decision.accept',
+        expectedStateRevision: blockedProduction.stateRevision, blockerKey: 'source.author-gate',
+        resolution: {
+          action: 'accept-product-private-expansion',
+          note: '作者查看清单后接受产品私域引路人，不回写 WorldRelease。',
+        },
+      },
+    })
+    const completed = await runProductProductionUntilBlockedV1({
+      scope: owned.scope, productionId: owned.productionId,
+      executor: createConfiguredProductProductionExecutorV1({
+        production: (await db.productProductions.get(owned.productionId))!, brief: owned.brief, runText,
+      }),
+      capabilityBindings,
+    })
+    expect(completed).toMatchObject({ terminal: true, buildStatus: 'release-ready' })
+    expect(taskCalls.filter(taskKey => taskKey === 'content.source-sufficiency')).toHaveLength(1)
+    const decision = await db.productBuildArtifacts
+      .where('[buildId+artifactKey]').equals([completed.buildId, 'content.source-decision'])
+      .filter(row => row.status === 'accepted').first()
+    expect(JSON.parse(decision!.payloadJson)).toMatchObject({
+      decision: 'accept-product-private-expansion',
+      acceptedPrivateAdditionKeys: ['addition.supporting-guide'],
+      authorCommandId: 'source-decision.accept',
+    })
+  }, 30_000)
+
   it('60 分钟文字冒险按 Brief 产出足量主线、空间、支线、区域事件并通过内容量硬门', async () => {
     const owned = await fixtureForProduct('text-adventure', {
       scale: 'short-arc', visualLevel: 'none', omitWorldArtifacts: true,

@@ -365,7 +365,13 @@ async function applyCommand(input: {
     if (repairingLegacyFailure && command.resolution.action === 'change-capability') {
       reject('invalid-state-transition', '确定性装配失败不能用更换模型能力修复')
     }
-    if (!['retry', 'change-capability', 'cancel'].includes(command.resolution.action)) {
+    const sourceExpansionDecision = command.resolution.action === 'accept-product-private-expansion'
+    if (sourceExpansionDecision && (production.productType !== 'text-adventure'
+      || command.blockerKey !== 'source.author-gate'
+      || previousFailure.taskKey !== 'source.author-gate')) {
+      reject('invalid-state-transition', '产品私域补充只能用于文字冒险来源作者闸门')
+    }
+    if (!['retry', 'change-capability', 'accept-product-private-expansion', 'cancel'].includes(command.resolution.action)) {
       reject('invalid-state-transition', '当前 blocker 只允许重试、更换能力后重试或取消；降级/豁免必须先生成新 Brief')
     }
     const controlEpoch = production.controlEpoch + 1
@@ -374,7 +380,8 @@ async function applyCommand(input: {
       await db.productBuilds.update(build.id, {
         status: 'cancelled', resumeState: null, controlEpoch,
         failureJson: safeJson({
-          blockerKey: command.blockerKey, resolution: command.resolution, previousFailure,
+          commandId: command.commandId, blockerKey: command.blockerKey,
+          resolution: command.resolution, previousFailure,
         }),
         stateRevision: build.stateRevision + 1, completedAt: now, updatedAt: now,
       })
@@ -386,7 +393,7 @@ async function applyCommand(input: {
       await db.productBuilds.update(build.id, {
         status: 'building', resumeState: null, controlEpoch,
         failureJson: safeJson({
-          blockerKey: command.blockerKey, resolution: command.resolution,
+          commandId: command.commandId, blockerKey: command.blockerKey, resolution: command.resolution,
           previousFailure, resolvedAt: now,
         }),
         stateRevision: build.stateRevision + 1, completedAt: null, updatedAt: now,

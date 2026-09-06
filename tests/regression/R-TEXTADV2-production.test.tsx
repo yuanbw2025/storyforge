@@ -78,7 +78,7 @@ describe('R-TEXTADV2-production · 文字冒险正式生产契约与工作台', 
     const plan = await createProductProductionPlanV3({ buildNumber: 1, briefHash, brief })
     const taskByKey = new Map(plan.tasks.map(task => [task.taskKey, task]))
     expect([...taskByKey.keys()]).toEqual(expect.arrayContaining([
-      'content.source-sufficiency', 'content.design', 'content.story-bible', 'content.cast-bible',
+      'content.source-sufficiency', 'source.author-gate', 'content.design', 'content.story-bible', 'content.cast-bible',
       'content.adventure-architecture', 'content.product-module', 'content.narrative-arc-plan',
       'content.main-quest-plan', 'content.adventure-side-quests', 'content.adventure-ambient-events',
       'content.quest-script', 'content.scene-script.act-1', 'content.scene-script.act-2',
@@ -91,8 +91,18 @@ describe('R-TEXTADV2-production · 文字冒险正式生产契约与工作台', 
       skillId: 'text-adventure.source-sufficiency.v1', dependsOn: [],
       outputArtifactKeys: ['content.source-sufficiency'],
     })
+    expect(taskByKey.get('source.author-gate')).toMatchObject({
+      executionMode: 'deterministic', skillId: null,
+      dependsOn: ['content.source-sufficiency'],
+      inputArtifactKeys: ['content.source-sufficiency'],
+      outputArtifactKeys: ['content.source-decision'],
+    })
+    expect(taskByKey.get('content.design')).toMatchObject({
+      dependsOn: ['source.author-gate'],
+      inputArtifactKeys: ['content.source-sufficiency', 'content.source-decision'],
+    })
     expect(taskByKey.get('content.story-bible')?.dependsOn).toEqual([
-      'content.source-sufficiency', 'content.design',
+      'source.author-gate', 'content.design',
     ])
     expect(taskByKey.get('content.cast-bible')?.dependsOn).toEqual([
       'content.source-sufficiency', 'content.story-bible',

@@ -205,6 +205,69 @@ export interface TextAdventureStoryBibleArtifactV1 {
   }>
 }
 
+export interface TextAdventureSourceDecisionArtifactV1 {
+  schema: 'storyforge.text-adventure-source-decision-artifact'
+  version: 1
+  sourceAuditHash: string
+  decision: 'not-required' | 'accept-product-private-expansion'
+  acceptedPrivateAdditionKeys: string[]
+  authorCommandId: string | null
+  authorNote: string | null
+}
+
+export function parseTextAdventureSourceDecisionArtifactV1(input: {
+  value: unknown
+  sourceAudit: TextAdventureSourceSufficiencyArtifactV1
+  sourceAuditHash: string
+}): TextAdventureSourceDecisionArtifactV1 {
+  const row = record(input.value, 'sourceDecision')
+  exactKeys(row, [
+    'schema', 'version', 'sourceAuditHash', 'decision', 'acceptedPrivateAdditionKeys',
+    'authorCommandId', 'authorNote',
+  ], 'sourceDecision')
+  if (row.schema !== 'storyforge.text-adventure-source-decision-artifact' || row.version !== 1) {
+    fail('sourceDecision schema/version 无效')
+  }
+  if (row.sourceAuditHash !== input.sourceAuditHash) fail('sourceDecision 未绑定当前来源审计')
+  const decision = enumValue(
+    row.decision,
+    ['not-required', 'accept-product-private-expansion'],
+    'sourceDecision.decision',
+  )
+  const acceptedPrivateAdditionKeys = keyArray(
+    row.acceptedPrivateAdditionKeys,
+    'sourceDecision.acceptedPrivateAdditionKeys',
+    0,
+    100,
+  )
+  const proposedKeys = input.sourceAudit.privateAdditions.map(item => item.key).sort()
+  if (decision === 'not-required') {
+    if (input.sourceAudit.decision !== 'ready' || input.sourceAudit.authorDecisionRequired
+      || acceptedPrivateAdditionKeys.length > 0 || row.authorCommandId !== null || row.authorNote !== null) {
+      fail('sourceDecision.not-required 与来源审计不一致')
+    }
+  } else {
+    if (input.sourceAudit.decision !== 'ready-with-private-additions'
+      || !input.sourceAudit.authorDecisionRequired
+      || acceptedPrivateAdditionKeys.length !== proposedKeys.length
+      || acceptedPrivateAdditionKeys.slice().sort().some((value, index) => value !== proposedKeys[index])) {
+      fail('sourceDecision 未完整接受当前产品私域补充清单')
+    }
+    if (typeof row.authorCommandId !== 'string' || !row.authorCommandId.trim()
+      || typeof row.authorNote !== 'string' || !row.authorNote.trim()) {
+      fail('sourceDecision 缺少作者命令证据')
+    }
+  }
+  return {
+    schema: 'storyforge.text-adventure-source-decision-artifact', version: 1,
+    sourceAuditHash: row.sourceAuditHash as string,
+    decision,
+    acceptedPrivateAdditionKeys,
+    authorCommandId: row.authorCommandId as string | null,
+    authorNote: row.authorNote as string | null,
+  }
+}
+
 export function parseTextAdventureStoryBibleArtifactV1(
   value: unknown,
   brief: ProductProductionBriefV3,

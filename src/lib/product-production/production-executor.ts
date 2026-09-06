@@ -47,6 +47,7 @@ import {
   parseTextAdventureNarrativeArcPlanArtifactV1,
   parseTextAdventureQuestPlanArtifactV1,
   parseTextAdventureQuestScriptArtifactV1,
+  parseTextAdventureSourceDecisionArtifactV1,
   parseTextAdventureSourceSufficiencyArtifactV1,
   parseTextAdventureStoryBibleArtifactV1,
 } from '../adventure/production-artifacts-v2'
@@ -1233,14 +1234,20 @@ async function executeModelTask(input: ProductProductionTaskExecutionInputV1, op
     }
   } else if (input.task.taskKey === 'content.design') {
     if (options.brief.textAdventure) {
+      const sourceAuditArtifact = input.inputArtifacts.find(
+        artifact => artifact.artifactKey === 'content.source-sufficiency',
+      )
+      if (!sourceAuditArtifact) fail('文字冒险产品设计缺少来源审计')
       const sourceAudit = parseTextAdventureSourceSufficiencyArtifactV1({
         value: artifactPayload(input, 'content.source-sufficiency'),
         brief: options.brief,
         allowedResourceKeys: options.brief.source.selection.resourceKeys,
       })
-      if (sourceAudit.authorDecisionRequired) {
-        fail(`文字冒险来源审查需要作者决策:${sourceAudit.decision}`)
-      }
+      parseTextAdventureSourceDecisionArtifactV1({
+        value: artifactPayload(input, 'content.source-decision'),
+        sourceAudit,
+        sourceAuditHash: sourceAuditArtifact.contentHash,
+      })
     }
     payload = parseDesign(raw, options.brief); kind = 'product-design'
     quality = { sourceAnchorsVerified: true }
@@ -2303,6 +2310,64 @@ async function executeTextAdventureAutoplayTask(
   }
 }
 
+async function executeTextAdventureSourceDecisionTask(
+  input: ProductProductionTaskExecutionInputV1,
+  brief: ProductProductionBriefV3,
+): Promise<ProductProductionTaskExecutionResultV1> {
+  const startedAt = performance.now()
+  const sourceAuditArtifact = input.inputArtifacts.find(
+    artifact => artifact.artifactKey === 'content.source-sufficiency',
+  )
+  if (!sourceAuditArtifact) fail('来源作者闸门缺少来源审计 Artifact')
+  const sourceAudit = parseTextAdventureSourceSufficiencyArtifactV1({
+    value: artifactPayload(input, 'content.source-sufficiency'),
+    brief,
+    allowedResourceKeys: brief.source.selection.resourceKeys,
+  })
+  if (sourceAudit.decision === 'blocked') {
+    fail('文字冒险来源存在阻断或冲突；不得用产品私域补充绕过，必须修改来源或范围后创建新 Build')
+  }
+  const authorResolution = input.authorResolution
+  const payload = sourceAudit.decision === 'ready' ? {
+    schema: 'storyforge.text-adventure-source-decision-artifact', version: 1,
+    sourceAuditHash: sourceAuditArtifact.contentHash,
+    decision: 'not-required' as const,
+    acceptedPrivateAdditionKeys: [],
+    authorCommandId: null,
+    authorNote: null,
+  } : {
+    schema: 'storyforge.text-adventure-source-decision-artifact', version: 1,
+    sourceAuditHash: sourceAuditArtifact.contentHash,
+    decision: 'accept-product-private-expansion' as const,
+    acceptedPrivateAdditionKeys: sourceAudit.privateAdditions.map(item => item.key),
+    authorCommandId: authorResolution?.commandId ?? null,
+    authorNote: authorResolution?.resolution.note ?? null,
+  }
+  if (sourceAudit.decision === 'ready-with-private-additions'
+    && (authorResolution?.blockerKey !== input.task.taskKey
+      || authorResolution.resolution.action !== 'accept-product-private-expansion')) {
+    fail('文字冒险来源需要作者明确接受产品私域补充清单')
+  }
+  const verified = parseTextAdventureSourceDecisionArtifactV1({
+    value: payload,
+    sourceAudit,
+    sourceAuditHash: sourceAuditArtifact.contentHash,
+  })
+  return {
+    artifacts: [{
+      artifactKey: 'content.source-decision', kind: 'product-design', payload: verified,
+      quality: {
+        sourceDecisionAuthorized: true,
+        authorDecisionRequired: sourceAudit.authorDecisionRequired,
+        acceptedPrivateAdditionCount: verified.acceptedPrivateAdditionKeys.length,
+      },
+      rights: {},
+    }],
+    passedGateIds: [...input.task.acceptanceGateIds],
+    usage: zeroUsage(elapsed(startedAt)),
+  }
+}
+
 export async function createBuiltInProductionCapabilityBindingV1(input: {
   requirementKey: string
   adapterId: 'storyforge.procedural-svg.v1' | 'storyforge.procedural-audio.v1'
@@ -2336,6 +2401,9 @@ export function createConfiguredProductProductionExecutorV1(input: {
   return async request => {
     if (request.signal.aborted) throw new DOMException('Aborted', 'AbortError')
     if (request.task.executionMode === 'model') return executeModelTask(request, options)
+    if (request.task.taskKey === 'source.author-gate') {
+      return executeTextAdventureSourceDecisionTask(request, options.brief)
+    }
     if (request.task.taskKey === 'media.visual') return executeVisualTask(request, options)
     if (request.task.taskKey === 'media.audio') return executeAudioTask(request, options)
     if (request.task.taskKey === 'integration.narrative') return executeNarrativeIntegrationTask(request, options)

@@ -89,14 +89,29 @@ export interface ProductProductionReviewArtifactV1 {
   quality: unknown
 }
 
+function productProductionFailureTaskKey(build: ProductBuildRecordV1 | null): string | null {
+  if (!build) return null
+  try {
+    const failure = JSON.parse(build.failureJson) as { taskKey?: unknown }
+    return typeof failure.taskKey === 'string' ? failure.taskKey : null
+  } catch { return null }
+}
+
+export function isTextAdventureSourceDecisionBlockerV1(details: ProductProductionDetailsV1): boolean {
+  return details.production.productType === 'text-adventure'
+    && details.build?.status === 'recovery-required'
+    && productProductionFailureTaskKey(details.build) === 'source.author-gate'
+}
+
 export function canRetryProductProductionBlockerV1(details: ProductProductionDetailsV1): boolean {
-  return details.build?.status === 'recovery-required'
+  return details.build?.status === 'recovery-required' && !isTextAdventureSourceDecisionBlockerV1(details)
     || !!details.build && isRepairRetryableFailedProductBuildV1(details.build)
 }
 
 const AUTHOR_REVIEW_ARTIFACT_KEYS = new Set([
   'design.game',
   'content.source-sufficiency',
+  'content.source-decision',
   'content.story-bible',
   'content.cast-bible',
   'content.adventure-architecture',
@@ -444,6 +459,28 @@ export async function retryProductProductionBlockerV1(input: {
     },
   })
   if (!receipt.ok) throw new Error(String(receipt.result.message ?? receipt.errorCode ?? 'blocker 重试失败'))
+}
+
+export async function resolveTextAdventureSourceDecisionV1(input: {
+  scope: WorkspaceScope
+  details: ProductProductionDetailsV1
+  action: 'accept-product-private-expansion' | 'cancel'
+  note: string
+}): Promise<void> {
+  if (!input.details.build || !isTextAdventureSourceDecisionBlockerV1(input.details)) {
+    throw new Error('[product-production-service] 当前 Build 没有待作者处理的来源决策')
+  }
+  const receipt = await executeProductProductionCommand({
+    scope: input.scope,
+    productionId: input.details.production.id!,
+    command: {
+      type: 'resolve-blocker', commandId: commandId('source-decision'),
+      expectedStateRevision: input.details.production.stateRevision,
+      blockerKey: 'source.author-gate',
+      resolution: { action: input.action, note: input.note.trim() },
+    },
+  })
+  if (!receipt.ok) throw new Error(String(receipt.result.message ?? receipt.errorCode ?? '来源决策失败'))
 }
 
 export async function readProductProductionProgressV1(input: {
