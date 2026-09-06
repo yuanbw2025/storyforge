@@ -4,7 +4,7 @@ import { createWorkspace } from '../../src/lib/workspace/create-workspace'
 import { createAdaptation, listActiveSourceUnits, saveAdaptationBriefDraft, confirmAdaptationBrief } from '../../src/lib/adaptation/source-manifest'
 import { adoptAdaptationCausalEdgesV1, adoptAdaptationDecisionsV1 } from '../../src/lib/adaptation/analysis'
 import type { AdaptationBriefV1, ComicTargetSpecV1, MediaRightsV1, ScreenplayTargetSpecV1 } from '../../src/lib/types'
-import { adoptComicProfessionalCandidateV1, comicProfessionalInstructionV1, generateComicProfessionalCandidateV1 } from '../../src/lib/comic/durable-production'
+import { adoptComicProfessionalCandidateV1, comicProfessionalInstructionV1, generateComicProfessionalCandidateV1, parseComicProfessionalPayloadV1 } from '../../src/lib/comic/durable-production'
 import { adoptComicPagePlansV1, adoptComicPanelPlansV1, adoptComicReviewIssuesV1, adoptComicScriptBeatsV1, adoptComicVisualBibleV1, startComicProductionV1 } from '../../src/lib/comic/production'
 import { commitUploadedComicAssetV1, removeComicMediaAssetV1, selectComicMediaAssetV1 } from '../../src/lib/comic/media-service'
 import { inspectComicQualityV1 } from '../../src/lib/comic/qa'
@@ -32,8 +32,11 @@ describe('COMIC-2 · professional novel-to-comic pipeline', () => {
 
   it('候选确认前零写入，formal.written 中断后幂等恢复', async () => {
     const item = await fixture(); const payload = [{ stableKey: 'fact_arrival', kind: 'event', statement: '林岚在暴雨中走进旧车站。', subjectKeys: ['hero'], sourceUnitKeys: [item.unit.sourceUnitKey], confidence: 1 }, { stableKey: 'fact_choice', kind: 'character-state', statement: '林岚在黎明前决定留下。', subjectKeys: ['hero'], sourceUnitKeys: [item.unit.sourceUnitKey], confidence: 1 }]
+    expect(() => parseComicProfessionalPayloadV1('source-analysis', [{ ...payload[0], subjectKeys: ['林岚'] }])).toThrow('SourceFact.subjectKeys[0] 非法')
+    await expect(generateComicProfessionalCandidateV1({ scope: item.scope, adaptationProjectId: item.adaptation.id!, stage: 'source-analysis', sourceUnitKeys: [item.unit.sourceUnitKey], runAI: async () => JSON.stringify([{ ...payload[0], sourceUnitKeys: ['asu_other'] }]) })).rejects.toThrow('SourceFact 引用了未选择的来源单元')
     const generated = await generateComicProfessionalCandidateV1({ scope: item.scope, adaptationProjectId: item.adaptation.id!, stage: 'source-analysis', sourceUnitKeys: [item.unit.sourceUnitKey], runAI: async messages => {
       expect(messages[0].content).toContain('候选自身新建的 stableKey 必须全批次唯一')
+      expect(messages[0].content).toContain(`唯一来源单元：${item.unit.sourceUnitKey}`)
       expect(messages[0].content).toContain('可空定位字段必须显式写 null')
       expect(messages[1].content).toContain('kind 只能是 event/character-state/relationship/location/object/motif')
       expect(messages[1].content).toContain('不要输出 certainty、timeAnchor、database id 或其它字段')
@@ -47,7 +50,7 @@ describe('COMIC-2 · professional novel-to-comic pipeline', () => {
   })
 
   it('十二个岗位各自声明闭集 JSON 协议与漫画专业约束', () => {
-    expect(comicProfessionalInstructionV1('causal-graph')).toContain('relation 只能是 cause/enables/motivates/reveals/prevents')
+    expect(comicProfessionalInstructionV1('causal-graph')).toContain('relation 必须逐字取 cause/enables/motivates/reveals/prevents')
     expect(comicProfessionalInstructionV1('adaptation-brief')).toContain('version 必须是 JSON 数字 1')
     expect(comicProfessionalInstructionV1('decision-pass')).toContain('只有 action=add 时可为空')
     expect(comicProfessionalInstructionV1('script-adaptation')).toContain('order 从 0 全局连续')

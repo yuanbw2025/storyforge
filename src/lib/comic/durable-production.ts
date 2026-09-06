@@ -121,16 +121,22 @@ function stable(value: unknown, label: string): asserts value is string {
 function strings(value: unknown, label: string, empty = false): asserts value is string[] {
   if (!Array.isArray(value) || (!empty && !value.length) || new Set(value).size !== value.length || value.some(row => typeof row !== 'string' || !row.trim())) throw new Error(`[comic-run] ${label} 非法`)
 }
+function stableStrings(value: unknown, label: string, empty = false): asserts value is string[] {
+  strings(value, label, empty)
+  value.forEach((row, index) => stable(row, `${label}[${index}]`))
+}
 function parseFact(value: unknown): asserts value is AdaptationSourceFactCandidateV1 {
-  exact(value, FACT_KEYS, 'SourceFact'); stable(value.stableKey, 'SourceFact.stableKey'); strings(value.subjectKeys, 'SourceFact.subjectKeys', true); strings(value.sourceUnitKeys, 'SourceFact.sourceUnitKeys')
+  exact(value, FACT_KEYS, 'SourceFact'); stable(value.stableKey, 'SourceFact.stableKey'); stableStrings(value.subjectKeys, 'SourceFact.subjectKeys', true); stableStrings(value.sourceUnitKeys, 'SourceFact.sourceUnitKeys')
   if (!['event', 'character-state', 'relationship', 'location', 'object', 'motif'].includes(value.kind) || typeof value.statement !== 'string' || !value.statement.trim() || typeof value.confidence !== 'number' || value.confidence < 0 || value.confidence > 1) throw new Error('[comic-run] SourceFact 非法')
 }
 function parseEdge(value: unknown): asserts value is AdaptationCausalEdgeCandidateV1 {
-  exact(value, EDGE_KEYS, 'CausalEdge'); stable(value.stableKey, 'CausalEdge.stableKey'); stable(value.fromFactKey, 'fromFactKey'); stable(value.toFactKey, 'toFactKey'); strings(value.sourceUnitKeys, 'sourceUnitKeys')
-  if (value.fromFactKey === value.toFactKey || !['cause', 'enables', 'motivates', 'reveals', 'prevents'].includes(value.relation) || typeof value.rationale !== 'string' || !value.rationale.trim()) throw new Error('[comic-run] CausalEdge 非法')
+  exact(value, EDGE_KEYS, 'CausalEdge'); stable(value.stableKey, 'CausalEdge.stableKey'); stable(value.fromFactKey, 'fromFactKey'); stable(value.toFactKey, 'toFactKey'); stableStrings(value.sourceUnitKeys, 'sourceUnitKeys')
+  if (value.fromFactKey === value.toFactKey) throw new Error('[comic-run] CausalEdge 不得自环')
+  if (!['cause', 'enables', 'motivates', 'reveals', 'prevents'].includes(value.relation)) throw new Error('[comic-run] CausalEdge.relation 必须使用登记枚举')
+  if (typeof value.rationale !== 'string' || !value.rationale.trim()) throw new Error('[comic-run] CausalEdge.rationale 必须是非空字符串')
 }
 function parseDecision(value: unknown): asserts value is AdaptationDecisionCandidateV1 {
-  exact(value, DECISION_KEYS, 'Decision'); stable(value.stableKey, 'Decision.stableKey'); strings(value.sourceFactKeys, 'sourceFactKeys', value.action === 'add'); strings(value.targetKeys, 'targetKeys', true)
+  exact(value, DECISION_KEYS, 'Decision'); stable(value.stableKey, 'Decision.stableKey'); stableStrings(value.sourceFactKeys, 'sourceFactKeys', value.action === 'add'); stableStrings(value.targetKeys, 'targetKeys', true)
   if (!['keep', 'cut', 'merge', 'reorder', 'externalize', 'add'].includes(value.action) || typeof value.rationale !== 'string' || !value.rationale.trim()) throw new Error('[comic-run] Decision 非法')
 }
 function parseJson(raw: string): unknown {
@@ -154,8 +160,8 @@ export function parseComicProfessionalPayloadV1(stage: ComicProfessionalStageV1,
 
 export function comicProfessionalInstructionV1(stage: ComicProfessionalStageV1): string {
   const byStage: Record<ComicProfessionalStageV1, string> = {
-    'source-analysis': `逐项提取冻结来源事实，输出非空 JSON 数组。每项字段严格且仅为 ${FACT_KEYS.join(', ')}。stableKey 是本候选新建且全数组唯一；kind 只能是 event/character-state/relationship/location/object/motif；statement 是非空字符串；subjectKeys 是不重复的稳定语义 key 数组，可为空；sourceUnitKeys 是不重复的登记来源 key 数组且不得为空；confidence 是 0 到 1 的 JSON 数字。不要输出 certainty、timeAnchor、database id 或其它字段。`,
-    'causal-graph': `只为上下文中已确认事实建立有向因果边，输出非空 JSON 数组。每项字段严格且仅为 ${EDGE_KEYS.join(', ')}。stableKey 是本候选新建且全数组唯一；fromFactKey/toFactKey 必须逐字复制两个不同的已确认 fact stableKey；relation 只能是 cause/enables/motivates/reveals/prevents；rationale 是非空字符串；sourceUnitKeys 是不重复的登记来源 key 数组且不得为空。禁止自环、时间相邻伪因果和不存在的 fact key。`,
+    'source-analysis': `逐项提取冻结来源事实，输出非空 JSON 数组。每项字段严格且仅为 ${FACT_KEYS.join(', ')}。stableKey 是本候选新建且全数组唯一；kind 只能是 event/character-state/relationship/location/object/motif；statement 是非空字符串；subjectKeys 是不重复的稳定语义 key 数组，可为空，每个 key 必须匹配 ^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$，中文人物名要转换为如 linxi 的 ASCII key；sourceUnitKeys 是不重复且非空的数组，只能逐字复制本次“唯一来源单元”，不得引用其它章节、标题或摘要 key；confidence 是 0 到 1 的 JSON 数字。不要输出 certainty、timeAnchor、database id 或其它字段。`,
+    'causal-graph': `只为上下文中已确认事实建立有向因果边，输出非空 JSON 数组。每项字段严格且仅为 ${EDGE_KEYS.join(', ')}。stableKey 是本候选新建且全数组唯一；fromFactKey/toFactKey 必须逐字复制两个不同的已确认 fact stableKey；relation 必须逐字取 cause/enables/motivates/reveals/prevents 之一，禁止 causes/caused-by/leads-to 等近义词；rationale 是非空字符串；sourceUnitKeys 是不重复的登记来源 key 数组且不得为空。形状示意为 [{"stableKey":"edge_001","fromFactKey":"fact_a","toFactKey":"fact_b","relation":"cause","rationale":"明确因果理由","sourceUnitKeys":["asu_context_key"]}]，示意 key 必须替换为上下文真实 key。禁止自环、时间相邻伪因果和不存在的 fact key。`,
     'adaptation-brief': `输出一个漫画改编合同 JSON 对象，字段严格且仅为 ${BRIEF_KEYS.join(', ')}。version 必须是 JSON 数字 1；mustKeep/mayCut/mayMerge/mayReorder/allowedAdditions/unresolvedQuestions/assumptions 必须是字符串数组，可为空；其余字段必须是字符串，可用空字符串表示暂缺。锁定主题、读者、目标页数、禁改项、可新增桥接和制作限制，不得增加 fidelity、format、notes 等字段。`,
     'decision-pass': `输出非空改编决定 JSON 数组，每项字段严格且仅为 ${DECISION_KEYS.join(', ')}。stableKey 是本候选新建且全数组唯一；action 只能是 keep/cut/merge/reorder/externalize/add；sourceFactKeys 必须是不重复的已确认 fact stableKey 数组，只有 action=add 时可为空；targetKeys 必须是稳定 key 字符串数组，可为空；rationale 是非空字符串。用少量完整决定覆盖核心因果链，不要逐句机械生成或重复 stableKey。`,
     'script-adaptation': '把已确认决定转成可画的视觉节拍，输出非空 JSON 数组。每项字段严格且仅为 stableKey, sectionKey, chapterNumber, order, narrativeFunction, visualAction, dialogueIntent, emotion, causalFactKeys, decisionKeys, sourceUnitKeys, estimatedPanels。stableKey/sectionKey 是合法稳定 key；stableKey 全数组唯一；chapterNumber 是 1 到目标章节数的整数；order 从 0 全局连续；narrativeFunction 只能是 establish/develop/reveal/reaction/turn/climax/resolution/transition；visualAction 与 emotion 是非空字符串，dialogueIntent 是字符串；causalFactKeys、decisionKeys、sourceUnitKeys 都是不重复且非空的上下文 key 数组；estimatedPanels 是 1 到 30 的整数。每个节拍只描述可画动作和状态变化，不写图片 Prompt。',
@@ -239,7 +245,7 @@ export async function generateComicProfessionalCandidateV1(input: { scope: Works
   const contextManifest = await createContextManifestFromAssemblyV1({ runId: snapshot.run.id, stepId, attempt: 1, projectId: input.scope.projectId, worldGroupId: null, declaredSourceKeys: [...skill.contextSourceKeys], assembled, readerVersion: `comic-${input.stage}-context-v1` })
   snapshot = await append(input.scope, snapshot, 'context.assembled', { stepId, attempt: 1, manifestHash: contextManifest.manifestHash })
   const targetKeys = [...selected.targetPages.map(row => row.stableKey), ...selected.targetPanels.map(row => row.stableKey), ...selected.targetIssues.map(row => row.stableKey)]
-  const system = [`你是${config.role}。只完成当前职责，不替后续岗位生成或采纳。`, '严格区分来源事实、作者确认决定与提案；不得把新增桥接伪装成原文。', '只输出一个严格 JSON 值，不要 Markdown、解释、注释或代码围栏。候选自身新建的 stableKey 必须全批次唯一并匹配 ^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$；所有引用字段只能逐字使用登记上下文中的 key 或当前批次明确创建的目标 key。数组不得含重复项；数字必须是 JSON number；可空定位字段必须显式写 null，绝不输出 undefined；不得输出数据库数字 ID。', `目标漫画画像：${JSON.stringify(selected.root.targetSpec)}`, targetKeys.length ? `唯一目标：${targetKeys.join(', ')}` : '', input.authorInstruction?.trim() ? `作者附加要求：${input.authorInstruction.trim()}` : '', `登记上下文：\n${assembled.text}`].filter(Boolean).join('\n\n')
+  const system = [`你是${config.role}。只完成当前职责，不替后续岗位生成或采纳。`, '严格区分来源事实、作者确认决定与提案；不得把新增桥接伪装成原文。', '只输出一个严格 JSON 值，不要 Markdown、解释、注释或代码围栏。候选自身新建的 stableKey 必须全批次唯一并匹配 ^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$；所有引用字段只能逐字使用登记上下文中的 key 或当前批次明确创建的目标 key。数组不得含重复项；数字必须是 JSON number；可空定位字段必须显式写 null，绝不输出 undefined；不得输出数据库数字 ID。', `目标漫画画像：${JSON.stringify(selected.root.targetSpec)}`, input.stage === 'source-analysis' ? `唯一来源单元：${selected.sourceUnitKeys.join(', ')}` : '', targetKeys.length ? `唯一目标：${targetKeys.join(', ')}` : '', input.authorInstruction?.trim() ? `作者附加要求：${input.authorInstruction.trim()}` : '', `登记上下文：\n${assembled.text}`].filter(Boolean).join('\n\n')
   const messages: ChatMessage[] = [{ role: 'system', content: system }, { role: 'user', content: comicProfessionalInstructionV1(input.stage) }]
   snapshot = await append(input.scope, snapshot, 'model.requested', { stepId, attempt: 1, bindingHash: await hashCanonicalValue(snapshot.contract.executionBindings?.[0]) })
   let raw: string
@@ -247,7 +253,14 @@ export async function generateComicProfessionalCandidateV1(input: { scope: Works
   catch (error) { await append(input.scope, snapshot, 'run.paused', { reason: `comic-${input.stage}-model-outcome-unknown`, recoverable: false }); throw error }
   snapshot = await append(input.scope, snapshot, 'model.responded', { stepId, attempt: 1, outputHash: await hashCanonicalValue({ raw }) })
   let payload: ComicProfessionalPayloadV1
-  try { payload = parseComicProfessionalPayloadV1(input.stage, parseJson(raw)) } catch (error) { snapshot = await append(input.scope, snapshot, 'step.failed', { stepId, attempt: 1, code: `comic-${input.stage}-protocol-failed`, retryable: false, category: 'protocol', action: 'fail' }); await append(input.scope, snapshot, 'run.failed', { code: `comic-${input.stage}-protocol-failed`, retryable: false }); throw error }
+  try {
+    payload = parseComicProfessionalPayloadV1(input.stage, parseJson(raw))
+    if (input.stage === 'source-analysis') {
+      const allowed = new Set(selected.sourceUnitKeys)
+      const invalid = (payload as AdaptationSourceFactCandidateV1[]).flatMap(row => row.sourceUnitKeys.filter(key => !allowed.has(key)))
+      if (invalid.length) throw new Error(`[comic-run] SourceFact 引用了未选择的来源单元：${[...new Set(invalid)].join('、')}`)
+    }
+  } catch (error) { snapshot = await append(input.scope, snapshot, 'step.failed', { stepId, attempt: 1, code: `comic-${input.stage}-protocol-failed`, retryable: false, category: 'protocol', action: 'fail' }); await append(input.scope, snapshot, 'run.failed', { code: `comic-${input.stage}-protocol-failed`, retryable: false }); throw error }
   const revisionTargets = ['visual-continuity-review', 'page-review'].includes(input.stage) ? selected.panels.filter(panel => selected.targetPages.some(page => page.id === panel.pageId)) : selected.targetPanels
   const body = { version: 1 as const, kind: 'comic-professional-candidate' as const, portable: false as const, stage: input.stage, projectId: input.scope.projectId, worldId: input.scope.worldId, workId: input.scope.workId, adaptationProjectId: selected.root.id!, adaptationRevision: selected.root.revision, sourceManifestVersion: selected.root.activeSourceManifestVersion, sourceManifestHash: selected.root.activeSourceManifestHash, sourceUnitKeys: selected.sourceUnitKeys, targetPageKeys: selected.targetPages.map(row => row.stableKey), targetPanelKeys: revisionTargets.map(row => row.stableKey), targetIssueKeys: selected.targetIssues.map(row => row.stableKey), targetPanelRevisions: Object.fromEntries(revisionTargets.map(row => [row.stableKey, row.revision])), contextManifestHash: contextManifest.manifestHash, promptHash: await hashCanonicalValue(messages), modelOutputHash: await hashCanonicalValue({ raw }), payload, payloadHash: await hashCanonicalValue(payload) }
   const candidate = { ...body, candidateHash: await hashCanonicalValue(body) }
