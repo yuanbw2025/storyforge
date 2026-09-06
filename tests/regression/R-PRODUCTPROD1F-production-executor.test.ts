@@ -504,13 +504,17 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
 
   it('仅补全有确定空语义的叙事协议字段，并保留未知字段供严格解析器拒绝', () => {
     const narrative = legalizeProductionModelProtocolDefaultsV1('content.narrative', {
-      nodes: [{ key: 'entry', kind: 'entry', title: '入口', summary: '开始。' }],
+      nodes: [{
+        key: 'entry', kind: 'entry', title: '入口', summary: '开始。',
+        condition: { path: '', eq: true }, effects: ['invented-state-change'],
+      }],
       beats: [{ beatKey: 'beat.entry', nodeKey: 'entry', kind: 'narration', text: '雾散了。' }],
       choices: [{
         choiceKey: 'choice.leave', sourceNodeKey: 'entry', text: '离开',
-        targetNodeKey: 'ending', leaked: true,
+        targetNodeKey: 'ending', availableCondition: { all: [], leaked: true },
+        effects: ['invented-choice-effect'], leaked: true,
       }, null],
-    })
+    }, { narrativeStatePolicy: 'empty-unregistered' })
     expect(narrative.payload).toMatchObject({
       nodes: [{ condition: {}, effects: [] }],
       beats: [{ speakerKey: null, order: 0 }],
@@ -519,8 +523,12 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
         effects: [], tags: [], order: 0, leaked: true,
       }],
     })
-    expect(narrative.defaultedFields).toContain('choices[0].availableCondition')
+    expect(narrative.defaultedFields).toContain('choices[0].description')
     expect(narrative.discardedNullEntries).toEqual(['choices[1]'])
+    expect(narrative.discardedUnregisteredStateFields).toEqual([
+      'nodes[0].condition', 'nodes[0].effects',
+      'choices[0].availableCondition', 'choices[0].effects',
+    ])
 
     const quests = legalizeProductionModelProtocolDefaultsV1('content.adventure-ambient-events', {
       entries: [{ key: 'tide-warning', title: '潮汐警告', leaked: true }],
@@ -534,6 +542,7 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
       'entries[0].rewardExperience', 'entries[0].rewardCurrency', 'entries[0].timeCostMinutes',
     ])
     expect(quests.discardedNullEntries).toEqual([])
+    expect(quests.discardedUnregisteredStateFields).toEqual([])
   })
 })
 

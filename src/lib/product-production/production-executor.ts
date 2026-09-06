@@ -305,6 +305,7 @@ export interface ProductionModelProtocolLegalizationV1 {
   payload: JsonRecord
   defaultedFields: string[]
   discardedNullEntries: string[]
+  discardedUnregisteredStateFields: string[]
 }
 
 function compactProtocolArray(value: unknown, path: string, discardedNullEntries: string[]): unknown {
@@ -341,9 +342,11 @@ function protocolObjectWithDefaults(
 export function legalizeProductionModelProtocolDefaultsV1(
   taskKey: string,
   payload: JsonRecord,
+  options: { narrativeStatePolicy?: 'preserve-validated' | 'empty-unregistered' } = {},
 ): ProductionModelProtocolLegalizationV1 {
   const defaultedFields: string[] = []
   const discardedNullEntries: string[] = []
+  const discardedUnregisteredStateFields: string[] = []
   if (taskKey === 'content.narrative') {
     const next: JsonRecord = { ...payload }
     const nodes = compactProtocolArray(payload.nodes, 'nodes', discardedNullEntries)
@@ -361,7 +364,30 @@ export function legalizeProductionModelProtocolDefaultsV1(
         effects: [], tags: [], order: index,
       }, defaultedFields)
     ))
-    return { payload: next, defaultedFields, discardedNullEntries }
+    if (options.narrativeStatePolicy === 'empty-unregistered') {
+      const clear = (value: unknown, path: string, field: string, empty: JsonRecord | unknown[]) => {
+        if (!value || typeof value !== 'object' || Array.isArray(value)) return value
+        const item = { ...(value as JsonRecord) }
+        const current = item[field]
+        const alreadyEmpty = Array.isArray(empty)
+          ? Array.isArray(current) && current.length === 0
+          : !!current && typeof current === 'object' && !Array.isArray(current)
+            && Object.keys(current as JsonRecord).length === 0
+        if (!alreadyEmpty) discardedUnregisteredStateFields.push(`${path}.${field}`)
+        item[field] = empty
+        return item
+      }
+      if (Array.isArray(next.nodes)) next.nodes = next.nodes.map((node, index) => {
+        const withoutCondition = clear(node, `nodes[${index}]`, 'condition', {})
+        return clear(withoutCondition, `nodes[${index}]`, 'effects', [])
+      })
+      if (Array.isArray(next.choices)) next.choices = next.choices.map((choice, index) => {
+        let item = clear(choice, `choices[${index}]`, 'displayCondition', {})
+        item = clear(item, `choices[${index}]`, 'availableCondition', {})
+        return clear(item, `choices[${index}]`, 'effects', [])
+      })
+    }
+    return { payload: next, defaultedFields, discardedNullEntries, discardedUnregisteredStateFields }
   }
   if (taskKey === 'content.adventure-side-quests'
     || taskKey === 'content.adventure-ambient-events') {
@@ -375,9 +401,9 @@ export function legalizeProductionModelProtocolDefaultsV1(
         timeCostMinutes: side ? 10 : 5,
       }, defaultedFields)
     ))
-    return { payload: next, defaultedFields, discardedNullEntries }
+    return { payload: next, defaultedFields, discardedNullEntries, discardedUnregisteredStateFields }
   }
-  return { payload, defaultedFields, discardedNullEntries }
+  return { payload, defaultedFields, discardedNullEntries, discardedUnregisteredStateFields }
 }
 
 function parseDesign(value: unknown, brief: ProductProductionBriefV3): ProductDesignArtifactV1 {
@@ -796,7 +822,7 @@ function textSystem(taskKey: string, brief: ProductProductionBriefV3, attempt = 
   if (taskKey === 'content.narrative') {
     const ttrpgDesign = brief.intent.productType === 'ttrpg'
       ? resolveTtrpgCampaignDesignV2(brief.ttrpg!.campaignDesign) : null
-    return `${common}\n生成完整可玩的分支叙事。${adventure ? `你是主线负责人；依据已冻结架构生产明确主干、局部分支汇流、状态回响和 ${adventure.narrative.targetEndingCount} 个因果结局。目标 ${brief.scale.targetPlayMinutes} 分钟、约 ${brief.scale.targetWordCount} 个中文内容单位、至少 ${adventure.narrative.targetSceneCount} 个非结局场景；失败应产生代价或新局面。` : ''}输出字段必须精确为：` +
+    return `${common}\n生成完整可玩的分支叙事。${adventure ? `你是主线负责人；依据已冻结架构生产明确主干、局部分支汇流、状态回响和 ${adventure.narrative.targetEndingCount} 个因果结局。目标 ${brief.scale.targetPlayMinutes} 分钟、约 ${brief.scale.targetWordCount} 个中文内容单位、至少 ${adventure.narrative.targetSceneCount} 个非结局场景；失败应产生代价或新局面。本任务没有获准登记新的运行状态字段，因此所有 node.condition、node.effects、choice.displayCondition、choice.availableCondition、choice.effects 必须分别保持空对象或空数组；状态与资源变化由后续确定性玩法编译器产生。` : ''}输出字段必须精确为：` +
     '{"schema":"storyforge.product-narrative-artifact","version":1,"moduleKind":"main","moduleTitle":"...","entryNodeKey":"...","nodes":[{"key":"...","kind":"entry|scene|choice|ending","title":"...","summary":"...","condition":{},"effects":[]}],"beats":[{"beatKey":"...","nodeKey":"...","kind":"narration|dialogue|action|system","speakerKey":null,"text":"...","order":0}],"choices":[{"choiceKey":"...","sourceNodeKey":"...","text":"...","description":"","unavailableReason":"","targetNodeKey":"...","displayCondition":{},"availableCondition":{},"effects":[],"tags":[],"order":0}]}。' +
     'moduleKind 使用 main；示例中的联合类型只表示枚举范围，不得原样输出竖线字符串。nodes、beats、choices 中的每一项都必须保留示例列出的全部字段，即使值为空也不得省略。' +
     `所有 key/beatKey/choiceKey/nodeKey 必须匹配 ^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$。` +
@@ -902,7 +928,11 @@ async function executeModelTask(input: ProductProductionTaskExecutionInputV1, op
   })
   if (response.bindingReceipt.capabilityHash !== binding.bindingHash) fail('执行时文本 capability 与 Plan binding 不一致')
   const parsedRaw = parseProductionModelJsonObjectV1(response.output, input.task.taskKey)
-  const legalized = legalizeProductionModelProtocolDefaultsV1(input.task.taskKey, parsedRaw)
+  const legalized = legalizeProductionModelProtocolDefaultsV1(input.task.taskKey, parsedRaw, {
+    narrativeStatePolicy: options.brief.intent.productType === 'text-adventure'
+      ? 'empty-unregistered'
+      : 'preserve-validated',
+  })
   const raw = legalized.payload
   let payload: unknown
   let kind: ProductProductionTaskArtifactV1['kind']
@@ -920,6 +950,7 @@ async function executeModelTask(input: ProductProductionTaskExecutionInputV1, op
       graphValidated: true,
       protocolDefaultsApplied: legalized.defaultedFields,
       protocolNullEntriesDiscarded: legalized.discardedNullEntries,
+      unregisteredStateFieldsDiscarded: legalized.discardedUnregisteredStateFields,
     }
   } else if (input.task.taskKey === 'content.product-module') {
     payload = parseProductModule(raw, options.brief); kind = 'product-module'
@@ -941,6 +972,7 @@ async function executeModelTask(input: ProductProductionTaskExecutionInputV1, op
       questBundleVerified: true,
       protocolDefaultsApplied: legalized.defaultedFields,
       protocolNullEntriesDiscarded: legalized.discardedNullEntries,
+      unregisteredStateFieldsDiscarded: legalized.discardedUnregisteredStateFields,
     }
   } else if (input.task.taskKey === 'content.adventure-quality-review') {
     const review = parseTextAdventureQualityReviewArtifactV1(raw)
