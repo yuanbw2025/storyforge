@@ -465,8 +465,11 @@ function professionalTextAdventurePlanningOutputs(
       goal: '完成本幕可验证目标并提高风险。', irreversibleTurn: '玩家的选择改变后续人物立场与可用资源。', sceneCards,
     }
   })
-  const decisionCount = brief.qualityProfile === 'commercial-candidate'
-    ? Math.max(2, Math.ceil(brief.scale.targetPlayMinutes / 10)) : 1
+  const decisionCount = Math.max(
+    brief.scale.targetEndingCount - 1,
+    brief.qualityProfile === 'commercial-candidate'
+      ? Math.max(2, Math.ceil(brief.scale.targetPlayMinutes / 10)) : 1,
+  )
   const decisions = Array.from({ length: decisionCount }, (_, index) => ({
     key: `decision.${index + 1}`, sceneKey: sceneKeys[index % Math.max(1, sceneKeys.length - 2)],
     prompt: `第 ${index + 1} 次关键决定要承担什么代价？`, options: [0, 1].map(optionIndex => ({
@@ -1992,6 +1995,38 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     expect(runtimePackage.adventure.actions.some(item => item.key.startsWith('action.travel.'))).toBe(false)
     expect(runtimePackage.adventure.storylets).toHaveLength(7)
     expect(runtimePackage.adventure.endings).toHaveLength(3)
+    const echoActions = runtimePackage.adventure.actions.filter(item => item.key.startsWith('action.echo.'))
+    const arcDecisionCount = (outputs['content.narrative-arc-plan'] as {
+      decisions: Array<{ options: Array<{ echoSceneKeys: string[] }> }>
+    }).decisions.reduce((total, decision) => (
+      total + decision.options.reduce((optionTotal, option) => optionTotal + option.echoSceneKeys.length, 0)
+    ), 0)
+    expect(echoActions).toHaveLength(arcDecisionCount)
+    expect(echoActions.every(action => action.requirements.some(requirement => (
+      'conditionKey' in requirement && requirement.conditionPresent === true
+    )))).toBe(true)
+    const firstDecisionChoices = runtimePackage.narrative.choices.filter(choice => (
+      choice.sourceNodeKey === runtimePackage.narrative.entryNodeKey
+    ))
+    const firstDecisionConditionKeys = firstDecisionChoices.map(choice => {
+      const actionKey = choice.tags.find(tag => tag.startsWith('adventure-action:'))!.slice('adventure-action:'.length)
+      const action = runtimePackage.adventure!.actions.find(item => item.key === actionKey)!
+      return action.successEffects.find(effect => effect.op === 'apply-condition')!.conditionKey
+    })
+    const endingChoiceActions = runtimePackage.narrative.choices.filter(choice => choice.targetNodeKey.startsWith('ending.'))
+      .map(choice => {
+        const actionKey = choice.tags.find(tag => tag.startsWith('adventure-action:'))!.slice('adventure-action:'.length)
+        return runtimePackage.adventure!.actions.find(item => item.key === actionKey)!
+      })
+    expect(endingChoiceActions[0].requirements).toContainEqual({
+      conditionKey: firstDecisionConditionKeys[0], conditionPresent: true,
+    })
+    expect(endingChoiceActions[1].requirements).toContainEqual({
+      conditionKey: firstDecisionConditionKeys[1], conditionPresent: true,
+    })
+    expect(endingChoiceActions[2].requirements).toContainEqual({
+      conditionKey: firstDecisionConditionKeys[1], conditionPresent: true,
+    })
     const mainQuest = runtimePackage.adventure.quests.find(item => item.category === 'main')!
     expect(mainQuest.stages).toHaveLength(3)
     expect(mainQuest.objectives).toHaveLength(8)

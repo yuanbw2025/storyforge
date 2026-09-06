@@ -255,9 +255,9 @@ export function analyzeTextAdventureRouteQualityV1(
     && !PLACEHOLDER_PATTERN.test(profile.name)
   )).length
   const mainQuests = adventure.quests.filter(quest => quest.category === 'main')
-  const mainObjectiveActionKeys = new Set(mainQuests.flatMap(quest => (
-    quest.objectives.flatMap(objective => objective.optional ? [] : objective.alternativeActionKeys)
-  )))
+  const requiredMainObjectiveCount = mainQuests.reduce((total, quest) => (
+    total + quest.objectives.filter(objective => !objective.optional).length
+  ), 0)
   const minimumNarrativeChoices = minimum(routeValues('narrativeChoices'))
   return {
     schema: 'storyforge.text-adventure-route-quality-analysis', version: 1,
@@ -274,9 +274,8 @@ export function analyzeTextAdventureRouteQualityV1(
     talkActionCount: adventure.actions.filter(action => action.kind === 'talk').length,
     mainQuestStageCount: mainQuests.reduce((total, quest) => total + quest.stages.length, 0),
     mainQuestObjectiveCount: mainQuests.reduce((total, quest) => total + quest.objectives.filter(objective => !objective.optional).length, 0),
-    minimumMainProgressActions: mainObjectiveActionKeys.size + minimumNarrativeChoices,
+    minimumMainProgressActions: requiredMainObjectiveCount + minimumNarrativeChoices,
     endingTextUnits,
     copyIssues: collectCopyIssues(runtimePackage),
   }
 }
-

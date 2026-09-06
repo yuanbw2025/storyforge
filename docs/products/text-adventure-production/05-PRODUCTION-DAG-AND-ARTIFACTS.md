@@ -38,7 +38,7 @@ WorldRelease + Confirmed Brief + Frozen SourcePlan
 
 当前代码已经实现来源作者闸门、分场正文、独立对白审校、确定性叙事装配、独立连续性审校、确定性自动游玩和 Playtest Director：来源审计先经 `source.author-gate`，只有 `content.source-decision` 生效后创意总监才可继续；规划、故事、角色、空间、系统、叙事弧、主线、支线和区域事件分别形成已登记任务，随后由 `text-adventure-quest-scripter` 生成严格的 `content.quest-script`；三幕 Scene Writer 分别生成 `content.scene-script.act-1/2/3`，独立 Dialogue Editor 再按幕产生 `content.dialogue-pass.act-1/2/3`，全部通过严格 parser 后，由 `integration.narrative` 应用表达修订并装配 `content.narrative`。
 
-`qa.autoplay` 以零模型调用运行黄金路线、结局覆盖、替代路线、失败注入、状态往返、分支隔离、AI 离线和媒资离线八类检查，产出绑定 Build/package hash 的 `quality.autoplay`。`qa.release` 消费该证据；商业候选的自动游玩失败会阻断。之后 `text-adventure-playtest-director` 使用独立 Skill/Run Contract 和有界证据投影生成 `quality.playtest-plan`，必须覆盖 15 种路线/生命周期用例和至少两场真人试玩。该模型工件最多只可判为“可进入真人验证”，无权产生 `release-ready`。
+`qa.autoplay` 以零模型调用运行黄金路线、结局覆盖、替代路线、失败注入、状态往返、分支隔离、AI 离线和媒资离线八类检查，产出绑定 Build/package hash 的 `quality.autoplay`。路线选择会实际执行任务前置链、持久决定条件和结局条件；同一终点的第一条图路径不可执行时继续检查其余候选，禁止把结构可达冒充规则可达。`qa.release` 消费该证据；商业候选的自动游玩失败会阻断。之后 `text-adventure-playtest-director` 使用独立 Skill/Run Contract 和有界证据投影生成 `quality.playtest-plan`，必须覆盖 15 种路线/生命周期用例和至少两场真人试玩。该模型工件最多只可判为“可进入真人验证”，无权产生 `release-ready`。
 
 文字冒险的美术链已经拆成三个权威阶段。Art Director 的模型 Run 只产出 `media.requirements` 候选；`media.visual-bible.compile` 以零模型调用把该清单与 `content.cast-bible`、`content.adventure-architecture` 逐字闭合，冻结整体风格、色板、构图规则、连续性规则、每个角色的身份/视觉锚点和素材引用；商业候选随后停在 `media.anchor-author-gate`，作者未确认前任何图片 Provider 任务都不是 ready。确认回执绑定视觉圣经 hash、全量角色 key、命令与说明。
 

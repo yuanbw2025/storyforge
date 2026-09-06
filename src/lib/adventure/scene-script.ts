@@ -99,8 +99,11 @@ export function textAdventureNarrativeSkeletonV1(
   const endingKeys = Array.from({ length: brief.scale.targetEndingCount }, (_, index) => (
     `ending.${String(index + 1).padStart(3, '0')}`
   ))
-  const requiredStatefulDecisions = brief.qualityProfile === 'commercial-candidate'
-    ? Math.max(2, Math.ceil(brief.scale.targetPlayMinutes / 10)) : 1
+  const requiredStatefulDecisions = Math.max(
+    brief.scale.targetEndingCount - 1,
+    brief.qualityProfile === 'commercial-candidate'
+      ? Math.max(2, Math.ceil(brief.scale.targetPlayMinutes / 10)) : 1,
+  )
   const statefulDecisionSceneCount = Math.min(requiredStatefulDecisions, Math.max(0, sceneKeys.length - 1))
   const edges: TextAdventureNarrativeSkeletonEdgeV1[] = []
   let choiceIndex = 0

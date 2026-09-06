@@ -27,7 +27,10 @@ import {
   buildProductRuntimeDiceResolutionV1,
   parseProductRuntimeDiceExpressionV1,
 } from '../product/runtime-dice'
-import { analyzeTextAdventureRouteQualityV1 } from './quality-analysis'
+import {
+  analyzeTextAdventureRouteQualityV1,
+  type TextAdventureRouteEvidenceV1,
+} from './quality-analysis'
 
 export const TEXT_ADVENTURE_AUTOPLAY_CASE_KINDS_V1 = [
   'golden-route',
@@ -387,20 +390,32 @@ export function runTextAdventureAutoplayV1(input: {
   const quality = analyzeTextAdventureRouteQualityV1(input.runtimePackage)
   const routes = quality.routes
   const seed = `storyforge-autoplay-v1:${input.packageHash}`
+  const routeExecutes = (route: TextAdventureRouteEvidenceV1, forceFirstFailure = false) => {
+    try {
+      simulateRoute({ ...input, seed, choiceKeys: route.choiceKeys, forceFirstFailure })
+      return true
+    } catch {
+      return false
+    }
+  }
   const golden = [...routes].sort((left, right) => (
     right.visibleTextUnits - left.visibleTextUnits || left.endingNodeKey.localeCompare(right.endingNodeKey)
-  ))[0]
-  const alternate = routes.find(route => golden && route.choiceKeys.join('\n') !== golden.choiceKeys.join('\n'))
+  )).find(route => routeExecutes(route))
+  const alternate = routes.find(route => golden
+    && route.choiceKeys.join('\n') !== golden.choiceKeys.join('\n')
+    && routeExecutes(route))
   const endingRoutes = quality.reachableEndingKeys.map(endingKey => (
-    routes.find(route => route.endingNodeKey === endingKey)
+    routes.find(route => route.endingNodeKey === endingKey && routeExecutes(route))
   )).filter((route): route is NonNullable<typeof route> => !!route)
   const mainObjectiveActionKeys = new Set(content.quests
     .filter(quest => quest.category === 'main')
     .flatMap(quest => quest.objectives.flatMap(objective => objective.alternativeActionKeys)))
-  const failedCandidate = content.actions.some(action => (
+  const hasFailureForwardAction = content.actions.some(action => (
     mainObjectiveActionKeys.has(action.key) && action.rule.kind !== 'automatic'
       && action.failureEffects.length > 0
-  )) ? routes[0] : undefined
+  ))
+  const failedCandidate = hasFailureForwardAction
+    ? routes.find(route => routeExecutes(route, true)) : undefined
   const cases: TextAdventureAutoplayCaseV1[] = [
     caseResult('golden-route', () => {
       if (!golden) fail('没有可达路线')

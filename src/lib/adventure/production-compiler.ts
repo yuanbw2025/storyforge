@@ -48,6 +48,28 @@ function participantKeyForCastIndex(index: number): string {
   return `participant.cast.${pad(index)}`
 }
 
+/**
+ * Partition the ending space with a deterministic prefix tree. This makes the
+ * route's earlier decisions authoritative: the final menu cannot silently
+ * replace them with an unrelated ending.
+ */
+function endingDecisionRequirementKeysV1(
+  arcPlan: TextAdventureNarrativeArcPlanArtifactV1,
+  endingKeys: readonly string[],
+): Map<string, string[]> {
+  const result = new Map<string, string[]>()
+  if (endingKeys.length <= 1 || arcPlan.decisions.length < endingKeys.length - 1) return result
+  endingKeys.forEach((endingKey, endingIndex) => {
+    const conditionKeys = arcPlan.decisions.slice(0, endingIndex)
+      .map(decision => decision.options[1].persistentEffectKey)
+    if (endingIndex < endingKeys.length - 1) {
+      conditionKeys.push(arcPlan.decisions[endingIndex].options[0].persistentEffectKey)
+    }
+    result.set(endingKey, conditionKeys)
+  })
+  return result
+}
+
 export function compileTextAdventureInteractionV1(input: {
   brief: ProductProductionBriefV3
   narrative: ProductRuntimePackageV1['narrative']
@@ -359,7 +381,9 @@ export function compileTextAdventureModuleV2(
     })
   })
 
-  const endingNodeKeys = new Set(input.narrative.nodes.filter(node => node.kind === 'ending').map(node => node.key))
+  const orderedEndingNodeKeys = input.narrative.nodes.filter(node => node.kind === 'ending').map(node => node.key)
+  const endingNodeKeys = new Set(orderedEndingNodeKeys)
+  const endingDecisionRequirements = endingDecisionRequirementKeysV1(input.arcPlan, orderedEndingNodeKeys)
   const choiceBySource = new Map<string, typeof input.narrative.choices>()
   for (const choice of input.narrative.choices) {
     choiceBySource.set(choice.sourceNodeKey, [...(choiceBySource.get(choice.sourceNodeKey) ?? []), choice])
@@ -412,6 +436,9 @@ export function compileTextAdventureModuleV2(
           ))).map(objective => ({
             conditionKey: objectiveCompletionConditionKey(objective.key), conditionPresent: true,
           })),
+          ...(endingDecisionRequirements.get(choice.targetNodeKey) ?? []).map(conditionKey => ({
+            conditionKey, conditionPresent: true,
+          })),
         ],
         rule: { kind: 'automatic' }, successEffects: effects, costlySuccessEffects: [], failureEffects: [],
         successText: input.narrative.beats.filter(beat => beat.nodeKey === choice.targetNodeKey).map(beat => beat.text).join('\n') || choice.description || choice.text,
@@ -421,6 +448,36 @@ export function compileTextAdventureModuleV2(
       }, sceneKey)
     })
   })
+
+  // Re-surface each authored decision only on the route that caused it. The
+  // immutable scene body remains shared, while these condition-gated actions
+  // give later scenes explicit, replayable evidence of route consequences.
+  for (const decision of input.arcPlan.decisions) for (const option of decision.options) {
+    for (const echoSceneKey of option.echoSceneKeys) {
+      const scene = sceneForArcKey.get(echoSceneKey)
+      const narrativeNodeKey = scene ? narrativeNodeForScene.get(scene.key) : null
+      if (!scene || !narrativeNodeKey) fail(`决定回响没有 Runtime 场景:${decision.key}->${echoSceneKey}`)
+      registerAction({
+        key: `action.echo.${decision.key}.${option.key}.${echoSceneKey}`,
+        kind: 'look',
+        label: `回响：${option.label}`,
+        description: `此前的选择正在影响${scene.title}。`,
+        locationKey: scene.locationKey,
+        targetKey: null,
+        requirements: [
+          { narrativePath: '__storyforge.currentNarrativeNodeKey', narrativeEquals: narrativeNodeKey },
+          { conditionKey: option.persistentEffectKey, conditionPresent: true },
+        ],
+        rule: { kind: 'automatic' },
+        successEffects: [], costlySuccessEffects: [], failureEffects: [],
+        successText: `你曾面对“${decision.prompt}”，并选择了“${option.label}”。${option.cost}。这个决定已经改变眼前人物的立场与可用道路。`,
+        costlySuccessText: `你再次感到“${option.label}”留下的代价。`,
+        failureText: '这段回响没有发生。',
+        unavailableText: '只有作出对应决定后，才能看见这段回响。',
+        repeatable: true, narrativeChoiceKey: null, interaction: null,
+      }, scene.key)
+    }
+  }
 
   const quests: AdventureContentV2['quests'] = [{
     key: mainQuestKey, title: mainQuest.title, description: mainQuest.description,
