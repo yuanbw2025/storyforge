@@ -1,6 +1,6 @@
 # StoryForge 文字冒险专业生产与旗舰交付方案
 
-> 层级：L2 · 版本：1.2.0 · 生效：2026-09-07
+> 层级：L2 · 版本：1.3.0 · 生效：2026-09-07
 > 状态：目标契约、施工入口与当前事实的唯一现行方案包；当前实现与目标有差距时，以本文标出的缺口为施工项，不得用目标描述冒充完成事实。
 
 本方案包把 [`../TEXT-ADVENTURE.md`](../TEXT-ADVENTURE.md) 的产品契约落实为可以逐步实现和验收的专业生产体系。目标不是生成一个能打开的工程夹具，而是从来源充分的冻结 `WorldRelease` 出发，交付一款作者可审查、可导入导出、可发布、可完整游玩，并有资格提交社区推荐的有限篇幅文字冒险。
@@ -38,6 +38,7 @@
 6. [`06-RUNTIME-MEDIA-PLAYER-AND-DISTRIBUTION.md`](./06-RUNTIME-MEDIA-PLAYER-AND-DISTRIBUTION.md)：确定性运行、系统 UI、媒资、导入导出与发布体验。
 7. [`07-QUALITY-EVAL-AND-ACCEPTANCE.md`](./07-QUALITY-EVAL-AND-ACCEPTANCE.md)：结构、内容、路线、真人试玩和社区推荐质量门。
 8. [`08-IMPLEMENTATION-AND-DELIVERY-PLAN.md`](./08-IMPLEMENTATION-AND-DELIVERY-PLAN.md)：按依赖施工、迁移、回归和最终旗舰交付计划。
+9. [`09-MEDIA-AUTHORING-AND-REVISION.md`](./09-MEDIA-AUTHORING-AND-REVISION.md)：作者上传/替换/锁定/重生成的不可变 Build 修订与权利合同。
 
 ## 完成定义
 

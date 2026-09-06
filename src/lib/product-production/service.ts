@@ -1,6 +1,7 @@
 import { db } from '../db/schema'
 import type {
   ProductBuildRecordV1,
+  ProductMediaKind,
   ProductBuildArtifactKindV1,
   ProductEvolutionAffectedLaneV1,
   ProductEvolutionBaseV1,
@@ -48,6 +49,7 @@ import {
   type ResolvedProductMediaCapabilityV1,
 } from './media-transport'
 import { readAcceptedBuildArtifacts } from './artifact-store'
+import { putMediaBlobObject, readMediaBlobObjectData } from './media-blob-store'
 
 export interface ProductProductionDetailsV1 {
   production: ProductProductionRecordV1
@@ -87,6 +89,21 @@ export interface ProductProductionReviewArtifactV1 {
   producerRunId: number | null
   payload: unknown
   quality: unknown
+}
+
+export interface TextAdventureMediaAssetV1 {
+  artifactKey: string
+  version: number
+  status: 'accepted' | 'carried-forward'
+  contentHash: string
+  blobObjectId: number
+  mediaKind: ProductMediaKind
+  mimeType: string
+  byteSize: number
+  metadata: Record<string, unknown>
+  quality: Record<string, unknown>
+  rights: Record<string, unknown>
+  locked: boolean
 }
 
 function productProductionFailureTaskKey(build: ProductBuildRecordV1 | null): string | null {
@@ -162,6 +179,122 @@ export async function listProductProductionReviewArtifactsV1(input: {
     payload: JSON.parse(row.payloadJson) as unknown,
     quality: JSON.parse(row.qualityJson) as unknown,
   }))
+}
+
+export async function listTextAdventureMediaAssetsV1(input: {
+  scope: WorkspaceScope
+  buildId: number
+}): Promise<TextAdventureMediaAssetV1[]> {
+  const rows = await readAcceptedBuildArtifacts(input)
+  return rows.filter(row => row.kind === 'image' && row.mediaKind != null
+    && row.blobObjectId != null && row.mimeType != null && row.artifactKey.startsWith('media.visual.'))
+    .map(row => {
+      const metadata = JSON.parse(row.metadataJson) as Record<string, unknown>
+      const revision = metadata.authorRevision
+      return {
+        artifactKey: row.artifactKey, version: row.version,
+        status: row.status as 'accepted' | 'carried-forward', contentHash: row.contentHash,
+        blobObjectId: row.blobObjectId!, mediaKind: row.mediaKind!, mimeType: row.mimeType!,
+        byteSize: row.byteSize, metadata, quality: JSON.parse(row.qualityJson) as Record<string, unknown>,
+        rights: JSON.parse(row.rightsJson) as Record<string, unknown>,
+        locked: !!revision && typeof revision === 'object' && !Array.isArray(revision)
+          && (revision as Record<string, unknown>).locked === true,
+      }
+    }).sort((left, right) => left.artifactKey.localeCompare(right.artifactKey))
+}
+
+export async function readTextAdventureMediaAssetBytesV1(input: {
+  scope: WorkspaceScope
+  asset: TextAdventureMediaAssetV1
+}): Promise<ArrayBuffer> {
+  return readMediaBlobObjectData({
+    scope: input.scope, blobObjectId: input.asset.blobObjectId,
+    expected: {
+      contentHash: input.asset.contentHash,
+      byteSize: input.asset.byteSize,
+      mimeType: input.asset.mimeType,
+    },
+  })
+}
+
+async function decodeUploadedImageSize(file: File): Promise<{ width: number; height: number }> {
+  if (typeof createImageBitmap === 'function') {
+    const bitmap = await createImageBitmap(file)
+    try { return { width: bitmap.width, height: bitmap.height } }
+    finally { bitmap.close() }
+  }
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file)
+    const image = new Image()
+    image.onload = () => {
+      URL.revokeObjectURL(url)
+      resolve({ width: image.naturalWidth, height: image.naturalHeight })
+    }
+    image.onerror = () => {
+      URL.revokeObjectURL(url)
+      reject(new Error('[product-production-service] 无法解码作者上传的图片'))
+    }
+    image.src = url
+  })
+}
+
+export async function reviseTextAdventureMediaAssetV1(input: {
+  scope: WorkspaceScope
+  details: ProductProductionDetailsV1
+  asset: TextAdventureMediaAssetV1
+  action: 'upload-replacement' | 'regenerate' | 'lock' | 'unlock'
+  upload?: {
+    file: File
+    altText: string
+    license: string
+    commercialUse: boolean
+    redistribution: boolean
+    declaration: string
+    attribution: string
+  }
+}): Promise<{ parentBuildNumber: number; buildNumber: number }> {
+  const build = input.details.build
+  if (!build || input.details.production.productType !== 'text-adventure') {
+    throw new Error('[product-production-service] 缺少可修订的文字冒险 Build')
+  }
+  let uploadContract: Extract<import('../types').ProductProductionCommandV1, {
+    type: 'revise-media-asset'
+  }>['replacement'] = null
+  if (input.action === 'upload-replacement') {
+    if (!input.upload) throw new Error('[product-production-service] 上传替换缺少图片与权利声明')
+    const mimeType = input.upload.file.type.trim().toLowerCase()
+    if (!['image/png', 'image/jpeg', 'image/webp'].includes(mimeType)) {
+      throw new Error('[product-production-service] 只允许 PNG、JPEG 或 WebP 图片')
+    }
+    const data = await input.upload.file.arrayBuffer()
+    const size = await decodeUploadedImageSize(input.upload.file)
+    const blob = await putMediaBlobObject({ scope: input.scope, data, mimeType })
+    uploadContract = {
+      blobObjectId: blob.id!, contentHash: blob.contentHash,
+      mimeType: mimeType as 'image/png' | 'image/jpeg' | 'image/webp', byteSize: blob.byteSize,
+      width: size.width, height: size.height,
+      altText: input.upload.altText.trim(), license: input.upload.license.trim(),
+      commercialUse: input.upload.commercialUse, redistribution: input.upload.redistribution,
+      declaration: input.upload.declaration.trim(), attribution: input.upload.attribution.trim() || '无需署名',
+    }
+  } else if (input.upload) {
+    throw new Error('[product-production-service] 非上传操作不能携带图片')
+  }
+  const receipt = await executeProductProductionCommand({
+    scope: input.scope, productionId: input.details.production.id!,
+    command: {
+      type: 'revise-media-asset', commandId: commandId(`media-${input.action}`),
+      expectedStateRevision: input.details.production.stateRevision,
+      buildNumber: build.buildNumber, artifactKey: input.asset.artifactKey,
+      expectedArtifactHash: input.asset.contentHash, action: input.action,
+      replacement: uploadContract,
+    },
+  })
+  if (!receipt.ok) throw new Error(String(receipt.result.message ?? receipt.errorCode ?? '媒资修订失败'))
+  return {
+    parentBuildNumber: Number(receipt.result.parentBuildNumber),
+    buildNumber: Number(receipt.result.buildNumber),
+  }
 }
 
 /** Safe preflight only; never returns a provider credential or performs a call. */

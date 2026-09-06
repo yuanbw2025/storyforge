@@ -1110,7 +1110,9 @@ async function settleCarriedTask(input: {
     }
     const artifacts = (await db.productBuildArtifacts.where('buildId').equals(build.id!).toArray())
       .filter(row => row.controlEpoch === input.controlEpoch
-        && row.status === 'carried-forward' && input.task.outputArtifactKeys.includes(row.artifactKey))
+        && (row.status === 'carried-forward'
+          || (input.task.executionMode === 'human-import' && row.status === 'accepted'))
+        && input.task.outputArtifactKeys.includes(row.artifactKey))
     if (artifacts.length !== input.task.outputArtifactKeys.length) {
       throw new Error(`[product-production-scheduler] carried task 输出不完整:${input.task.taskKey}`)
     }
@@ -1148,10 +1150,13 @@ async function ensureCarriedForwardTaskRuns(input: {
         ? [[taskKey, snapshot.projection.terminalReceiptHash] as const] : []
     )))
     const artifacts = (await db.productBuildArtifacts.where('buildId').equals(input.build.id).toArray())
-      .filter(row => row.controlEpoch === input.build.controlEpoch && row.status === 'carried-forward')
+      .filter(row => row.controlEpoch === input.build.controlEpoch
+        && (row.status === 'carried-forward' || row.status === 'accepted'))
     for (const task of input.plan.tasks) {
       if (task.executionMode === 'deterministic' && task.reuse == null) continue
-      const outputs = artifacts.filter(row => task.outputArtifactKeys.includes(row.artifactKey))
+      const outputs = artifacts.filter(row => task.outputArtifactKeys.includes(row.artifactKey)
+        && (row.status === 'carried-forward'
+          || (task.executionMode === 'human-import' && row.status === 'accepted')))
       if (outputs.length !== task.outputArtifactKeys.length
         || task.dependsOn.some(dependency => !completed.has(dependency))) continue
       const dependencies = task.dependsOn.map(taskKey => ({ taskKey, receiptHash: completed.get(taskKey)! }))

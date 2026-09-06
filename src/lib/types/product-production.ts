@@ -122,6 +122,7 @@ export const PRODUCT_PRODUCTION_COMMAND_TYPES = [
   "stop",
   "resolve-blocker",
   "request-preview",
+  "revise-media-asset",
   "publish",
   "evolve",
   "archive",
@@ -720,6 +721,29 @@ export type ProductProductionCommandV1 =
       commandId: string;
       expectedStateRevision: number;
       buildNumber: number;
+    }
+  | {
+      type: "revise-media-asset";
+      commandId: string;
+      expectedStateRevision: number;
+      buildNumber: number;
+      artifactKey: string;
+      expectedArtifactHash: string;
+      action: "upload-replacement" | "regenerate" | "lock" | "unlock";
+      replacement: {
+        blobObjectId: number;
+        contentHash: string;
+        mimeType: "image/png" | "image/jpeg" | "image/webp";
+        byteSize: number;
+        width: number;
+        height: number;
+        altText: string;
+        license: string;
+        commercialUse: boolean;
+        redistribution: boolean;
+        declaration: string;
+        attribution: string;
+      } | null;
     }
   | {
       type: "publish";

@@ -412,6 +412,51 @@ export function parseProductProductionCommandV1(value: unknown): ProductProducti
   if (type === 'restore') return { type, commandId: commandHeader(row, type, ['expectedStateRevision']), expectedStateRevision: expectedRevision(row.expectedStateRevision) }
   if (type === 'resolve-blocker') return { type, commandId: commandHeader(row, type, ['expectedStateRevision', 'blockerKey', 'resolution']), expectedStateRevision: expectedRevision(row.expectedStateRevision), blockerKey: stableKey(row.blockerKey, 'blockerKey'), resolution: parseResolution(row.resolution) }
   if (type === 'request-preview') return { type, commandId: commandHeader(row, type, ['expectedStateRevision', 'buildNumber']), expectedStateRevision: expectedRevision(row.expectedStateRevision), buildNumber: positiveId(row.buildNumber, 'buildNumber') }
+  if (type === 'revise-media-asset') {
+    const commandId = commandHeader(row, type, [
+      'expectedStateRevision', 'buildNumber', 'artifactKey', 'expectedArtifactHash', 'action', 'replacement',
+    ])
+    if (!isSha256Hash(row.expectedArtifactHash)) fail('expectedArtifactHash 无效')
+    const action = enumValue(row.action, ['upload-replacement', 'regenerate', 'lock', 'unlock'], 'action')
+    let replacement: Extract<ProductProductionCommandV1, { type: 'revise-media-asset' }>['replacement'] = null
+    if (row.replacement != null) {
+      const item = record(row.replacement, 'replacement')
+      exactKeys(item, [
+        'blobObjectId', 'contentHash', 'mimeType', 'byteSize', 'width', 'height', 'altText',
+        'license', 'commercialUse', 'redistribution', 'declaration', 'attribution',
+      ], 'replacement')
+      if (!isSha256Hash(item.contentHash)) fail('replacement.contentHash 无效')
+      if (typeof item.commercialUse !== 'boolean' || typeof item.redistribution !== 'boolean') {
+        fail('replacement 权利布尔值无效')
+      }
+      const byteSize = finite(item.byteSize, 'replacement.byteSize', 100 * 1024 * 1024, true)
+      const width = finite(item.width, 'replacement.width', 10_000, true)
+      const height = finite(item.height, 'replacement.height', 10_000, true)
+      if (byteSize < 1 || width < 1 || height < 1) fail('replacement 大小与尺寸必须为正整数')
+      replacement = {
+        blobObjectId: positiveId(item.blobObjectId, 'replacement.blobObjectId'),
+        contentHash: item.contentHash,
+        mimeType: enumValue(item.mimeType, ['image/png', 'image/jpeg', 'image/webp'], 'replacement.mimeType'),
+        byteSize, width, height,
+        altText: text(item.altText, 'replacement.altText', 1_000),
+        license: text(item.license, 'replacement.license', 500),
+        commercialUse: item.commercialUse,
+        redistribution: item.redistribution,
+        declaration: text(item.declaration, 'replacement.declaration', 4_000),
+        attribution: text(item.attribution, 'replacement.attribution', 1_000),
+      }
+    }
+    if ((action === 'upload-replacement') !== (replacement != null)) {
+      fail('仅 upload-replacement 必须携带 replacement')
+    }
+    return {
+      type, commandId, expectedStateRevision: expectedRevision(row.expectedStateRevision),
+      buildNumber: positiveId(row.buildNumber, 'buildNumber'),
+      artifactKey: stableKey(row.artifactKey, 'artifactKey'),
+      expectedArtifactHash: row.expectedArtifactHash,
+      action, replacement,
+    }
+  }
   if (type === 'publish') {
     const commandId = commandHeader(row, type, ['expectedStateRevision', 'buildNumber', 'expectedManifestHash', 'adoptionIntentHash'])
     if (!isSha256Hash(row.expectedManifestHash) || !isSha256Hash(row.adoptionIntentHash)) fail('publish hash 无效')

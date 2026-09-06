@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle, Archive, ArchiveRestore, CheckCircle2, CirclePause, FileCheck2, Gamepad2, Loader2,
-  GitBranch, PackageCheck, Play, Plus, RefreshCw, Rocket, ShieldCheck, Sparkles, Square,
+  GitBranch, Lock, PackageCheck, Play, Plus, RefreshCw, Rocket, ShieldCheck, Sparkles, Square, Unlock, Upload,
 } from 'lucide-react'
 import {
   authorizeProductProductionStartV1,
@@ -16,10 +16,13 @@ import {
   isTextAdventureMediaAnchorBlockerV1,
   isTextAdventureSourceDecisionBlockerV1,
   listProductProductionReviewArtifactsV1,
+  listTextAdventureMediaAssetsV1,
   listProductProductionWorkspaceV1,
   publishProductProductionV1,
   readProductProductionDetailsV1,
   readProductProductionProgressV1,
+  readTextAdventureMediaAssetBytesV1,
+  reviseTextAdventureMediaAssetV1,
   retryProductProductionBlockerV1,
   resolveTextAdventureMediaAnchorDecisionV1,
   resolveTextAdventureSourceDecisionV1,
@@ -31,6 +34,7 @@ import {
   type ProductProductionDetailsV1,
   type ProductProductionProgressV1,
   type ProductProductionReviewArtifactV1,
+  type TextAdventureMediaAssetV1,
 } from '../../lib/product-production/service'
 import type {
   ProductBuildCompatibilityReportV1, ProductEvolutionAffectedLaneV1, ProductProductionBriefV3, ProductProductionRecordV1,
@@ -112,6 +116,29 @@ function formatBytes(value: number): string {
 function formatDurationMs(value: number): string {
   const totalSeconds = Math.max(0, Math.floor(value / 1000))
   return `${String(Math.floor(totalSeconds / 60)).padStart(2, '0')}:${String(totalSeconds % 60).padStart(2, '0')}`
+}
+
+function TextAdventureMediaThumbnail(props: { scope: WorkspaceScope; asset: TextAdventureMediaAssetV1 }) {
+  const [url, setUrl] = useState('')
+  const [failed, setFailed] = useState(false)
+  useEffect(() => {
+    let active = true
+    let objectUrl = ''
+    void readTextAdventureMediaAssetBytesV1({ scope: props.scope, asset: props.asset })
+      .then(data => {
+        if (!active) return
+        objectUrl = URL.createObjectURL(new Blob([data], { type: props.asset.mimeType }))
+        setUrl(objectUrl)
+      })
+      .catch(() => { if (active) setFailed(true) })
+    return () => {
+      active = false
+      if (objectUrl) URL.revokeObjectURL(objectUrl)
+    }
+  }, [props.asset, props.scope])
+  if (failed) return <div className="flex aspect-video items-center justify-center bg-error/5 text-[10px] text-error">图片校验失败</div>
+  if (!url) return <div className="flex aspect-video items-center justify-center bg-bg-surface text-[10px] text-text-muted">正在校验图片…</div>
+  return <img src={url} alt={String(props.asset.metadata.altText ?? '')} className="aspect-video w-full object-cover" />
 }
 
 function nonEmptyLines(value: string): string[] {
@@ -378,6 +405,11 @@ export default function ProductProductionStudio(props: {
   const [mediaRuntimeGateError, setMediaRuntimeGateError] = useState('')
   const [completedPlaythroughs, setCompletedPlaythroughs] = useState<CompletedProductBuildPlaythroughV1[]>([])
   const [reviewArtifacts, setReviewArtifacts] = useState<ProductProductionReviewArtifactV1[]>([])
+  const [mediaAssets, setMediaAssets] = useState<TextAdventureMediaAssetV1[]>([])
+  const [mediaLicense, setMediaLicense] = useState('作者原创并授权随本产品分发')
+  const [mediaDeclaration, setMediaDeclaration] = useState('我确认拥有该图片的必要权利，并对本声明负责。')
+  const [mediaCommercialUse, setMediaCommercialUse] = useState(false)
+  const [mediaRedistribution, setMediaRedistribution] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const [commandActivity, setCommandActivity] = useState<CommandActivityV1 | null>(null)
@@ -436,6 +468,7 @@ export default function ProductProductionStudio(props: {
       setMediaRuntimeGateError('')
       setCompletedPlaythroughs([])
       setReviewArtifacts([])
+      setMediaAssets([])
       return
     }
     const nextDetails = await readProductProductionDetailsV1(scope, desired, allowedProducts)
@@ -450,6 +483,9 @@ export default function ProductProductionStudio(props: {
         scope,
         buildId: nextDetails.build.id!,
       }))
+      setMediaAssets(nextDetails.production.productType === 'text-adventure'
+        ? await listTextAdventureMediaAssetsV1({ scope, buildId: nextDetails.build.id! })
+        : [])
       try {
         setPerformanceGate(await readLatestProductBrowserPerformanceGateV1({
           scope, productBuildId: nextDetails.build.id!,
@@ -496,6 +532,7 @@ export default function ProductProductionStudio(props: {
       setMediaRuntimeGateError('')
       setCompletedPlaythroughs([])
       setReviewArtifacts([])
+      setMediaAssets([])
     }
   }, [allowedProducts, initialSource, onProductSelected, scope, selectedProductionId])
 
@@ -831,6 +868,31 @@ export default function ProductProductionStudio(props: {
     setMessage(`演化目标已编译为 Brief r${created.briefRevision}；请审查后再次授权，系统会创建新 Build 并复用可证明未变的基础。`)
   }, '创建演化 Brief')
 
+  const reviseMediaAsset = (
+    asset: TextAdventureMediaAssetV1,
+    action: 'upload-replacement' | 'regenerate' | 'lock' | 'unlock',
+    file?: File,
+  ) => run(async () => {
+    if (!details) throw new Error('缺少当前文字冒险 Production。')
+    if (action === 'upload-replacement' && (!mediaLicense.trim() || !mediaDeclaration.trim())) {
+      throw new Error('上传图片前必须填写许可与权利声明。')
+    }
+    const result = await reviseTextAdventureMediaAssetV1({
+      scope: props.scope, details, asset, action,
+      upload: file ? {
+        file,
+        altText: String(asset.metadata.altText ?? asset.metadata.name ?? file.name),
+        license: mediaLicense,
+        commercialUse: mediaCommercialUse,
+        redistribution: mediaRedistribution,
+        declaration: mediaDeclaration,
+        attribution: '无需署名',
+      } : undefined,
+    })
+    await refresh(details.production.id)
+    setMessage(`图片 ${asset.artifactKey} 已执行 ${action}：Build #${result.parentBuildNumber} 保持不可变，新 Build #${result.buildNumber} 将自动重新装配和质检。`)
+  }, `修订图片 · ${action}`)
+
   const retryBlocker = () => run(async () => {
     if (!details) throw new Error('缺少 Production。')
     const productionId = details.production.id!
@@ -1118,6 +1180,21 @@ export default function ProductProductionStudio(props: {
             <pre className="mt-3 max-h-80 overflow-auto whitespace-pre-wrap rounded border border-border bg-bg-surface p-3 text-[9px] leading-5 text-text-muted">{JSON.stringify(artifact.payload, null, 2)}</pre>
           </details>)}</div>
           <p className="mt-3 text-[10px] leading-5 text-text-muted">需要修改时，在下方“继续演化下一版”描述局部目标并只勾选受影响泳道；依赖 hash 未变化的工件会保留，旧 Build 与存档不会被覆盖。</p>
+        </section>}
+        {details?.production.productType === 'text-adventure' && mediaAssets.length > 0 && <section className="mt-5 rounded border border-border bg-bg-elevated p-5" data-testid="text-adventure-media-authoring">
+          <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-sm font-semibold">插图素材与作者修订</h2><p className="mt-1 max-w-3xl text-[10px] leading-5 text-text-muted">每次替换、锁定、解锁或单项重生成都会派生新 Build；旧 Preview、Release 与存档不会被覆盖。新 Build 只重做目标图片的下游装配、自动游玩和质量门。</p></div><span className="rounded bg-accent/10 px-2 py-1 text-[9px] text-accent">{mediaAssets.length} 张冻结图片</span></div>
+          <div className="mt-4 grid gap-3 rounded border border-border bg-bg-base p-3 text-[10px] md:grid-cols-2">
+            <label className="grid gap-1"><span>作者图片许可</span><input value={mediaLicense} onChange={event => setMediaLicense(event.target.value)} maxLength={500} className="rounded border border-border bg-bg-surface px-3 py-2" /></label>
+            <label className="grid gap-1"><span>权利声明</span><input value={mediaDeclaration} onChange={event => setMediaDeclaration(event.target.value)} maxLength={4000} className="rounded border border-border bg-bg-surface px-3 py-2" /></label>
+            <label className="flex items-center gap-2"><input type="checkbox" checked={mediaCommercialUse} onChange={event => setMediaCommercialUse(event.target.checked)} />我确认允许商业使用</label>
+            <label className="flex items-center gap-2"><input type="checkbox" checked={mediaRedistribution} onChange={event => setMediaRedistribution(event.target.checked)} />我确认允许随导出包与社区作品再分发</label>
+          </div>
+          <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">{mediaAssets.map(asset => <article key={`${asset.artifactKey}:${asset.version}`} className="overflow-hidden rounded border border-border bg-bg-base">
+            <TextAdventureMediaThumbnail scope={props.scope} asset={asset} />
+            <div className="p-3 text-[10px]"><span className="flex items-center justify-between gap-2"><strong className="text-xs">{String(asset.metadata.name ?? asset.artifactKey)}</strong><em className={`not-italic ${asset.locked ? 'text-accent' : 'text-text-muted'}`}>{asset.locked ? '已锁定' : '可重生成'}</em></span><p className="mt-1 text-text-muted">{asset.artifactKey} · {asset.mimeType} · {formatBytes(asset.byteSize)}</p><p className="mt-1 text-text-muted">{String(asset.metadata.source ?? 'unknown')} · {String(asset.metadata.license ?? asset.rights.license ?? '未声明许可')}</p><code className="mt-1 block text-[9px]" title={asset.contentHash}>{compactHash(asset.contentHash)}</code>
+              <div className="mt-3 flex flex-wrap gap-2"><label className={`flex cursor-pointer items-center gap-1 rounded border border-accent/40 px-2 py-1 text-accent ${(busy || productionRunning) ? 'pointer-events-none opacity-40' : ''}`}><Upload className="h-3 w-3" />上传替换<input type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" disabled={busy || productionRunning} onChange={event => { const file = event.target.files?.[0]; event.currentTarget.value = ''; if (file) void reviseMediaAsset(asset, 'upload-replacement', file) }} /></label>{asset.locked ? <button disabled={busy || productionRunning} onClick={() => reviseMediaAsset(asset, 'unlock')} className="flex items-center gap-1 rounded border border-border px-2 py-1 disabled:opacity-40"><Unlock className="h-3 w-3" />解锁</button> : <><button disabled={busy || productionRunning} onClick={() => reviseMediaAsset(asset, 'lock')} className="flex items-center gap-1 rounded border border-border px-2 py-1 disabled:opacity-40"><Lock className="h-3 w-3" />锁定</button><button disabled={busy || productionRunning} onClick={() => reviseMediaAsset(asset, 'regenerate')} className="flex items-center gap-1 rounded border border-border px-2 py-1 disabled:opacity-40"><RefreshCw className="h-3 w-3" />重生成此图</button></>}</div>
+            </div>
+          </article>)}</div>
         </section>}
         {canEvolve && <section className="mt-5 rounded border border-border bg-bg-elevated p-5"><div className="flex items-center gap-2"><GitBranch className="h-4 w-4 text-accent" /><h2 className="text-sm font-semibold">继续演化下一版</h2></div><p className="mt-2 text-[10px] leading-5 text-text-muted">描述希望增加、延续或改变的体验。旧 Build、Release 和存档不会被改写；提交后先生成新的可审查 Brief，不会直接调用模型。</p><textarea value={evolutionGoal} onChange={event => setEvolutionGoal(event.target.value)} maxLength={2000} rows={4} placeholder="例如：从当前结局继续，让配角成为新主角，增加一条调查旧港失踪案的支线，并保留已经发生的选择后果。" className="mt-4 w-full rounded border border-border bg-bg-base p-3 text-xs text-text-primary" /><fieldset className="mt-3 flex flex-wrap gap-3 text-[10px] text-text-muted"><legend className="mb-2">本轮影响范围（未勾选且依赖未变化的产物可复用）</legend>{([['content', '剧情内容'], ['product', '玩法模块'], ['visual', '美术'], ['audio', '音乐/音效'], ['runtime', '装配/运行时']] as const).map(([lane, label]) => <label key={lane} className="flex items-center gap-1.5"><input type="checkbox" checked={evolutionLanes.includes(lane)} onChange={event => setEvolutionLanes(current => event.target.checked ? [...new Set([...current, lane])] : current.filter(item => item !== lane))} />{label}</label>)}</fieldset><button disabled={busy || productionRunning || !evolutionGoal.trim() || evolutionLanes.length === 0} onClick={evolve} className="mt-3 flex items-center gap-2 rounded border border-accent/40 bg-accent/10 px-4 py-2 text-xs text-accent disabled:opacity-40"><GitBranch className="h-3.5 w-3.5" />生成下一轮 Brief</button></section>}
         {compatibility && <section className="mt-5 rounded border border-border bg-bg-elevated p-5" data-testid="product-production-compatibility"><div className="flex items-center justify-between gap-3"><h2 className="text-sm font-semibold">存档兼容报告</h2><strong className={`text-[10px] ${compatibility.level === 'compatible' ? 'text-success' : compatibility.level === 'breaking' ? 'text-error' : 'text-accent'}`}>{compatibility.level === 'compatible' ? '可兼容' : compatibility.level === 'breaking' ? '破坏性变化' : '建议重开'}</strong></div><p className="mt-2 text-[10px] leading-5 text-text-muted">{compatibility.fromBuildNumber == null ? '首个 Build，无旧存档需要迁移。' : `Build #${compatibility.fromBuildNumber} → #${compatibility.toBuildNumber} · ${compatibility.migrationPolicy}`}</p><ul className="mt-3 grid gap-1 text-[10px] text-text-muted">{compatibility.reasons.map(reason => <li key={reason}>· {reason}</li>)}</ul>{compatibility.level === 'breaking' && <p className="mt-3 rounded border border-error/30 bg-error/5 p-3 text-[10px] text-error">旧存档继续固定在旧 packageHash；系统不会静默迁移或覆盖。</p>}</section>}
