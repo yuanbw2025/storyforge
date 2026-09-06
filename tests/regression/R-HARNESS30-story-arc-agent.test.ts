@@ -368,7 +368,15 @@ describe.sequential('R-HARNESS30 · 故事线 Agent Skill 与受治理采纳', (
       ...generated.output[0],
       description: '作者确认后的主线描述。',
     }]
-    const adopted = await adoptGenerationNodeOutput(prepared.node, edited)
+    // WebCrypto may finish after IndexedDB's idle transaction auto-commit.
+    const digest = crypto.subtle.digest.bind(crypto.subtle)
+    const slowDigest = vi.spyOn(crypto.subtle, 'digest').mockImplementation(async (algorithm, data) => {
+      await new Promise(resolve => setTimeout(resolve, 20))
+      return digest(algorithm, data)
+    })
+    let adopted: Awaited<ReturnType<typeof adoptGenerationNodeOutput>>
+    try { adopted = await adoptGenerationNodeOutput(prepared.node, edited) }
+    finally { slowDigest.mockRestore() }
 
     expect(adopted.adopted).toBe(true)
     expect(runAI).toHaveBeenCalledOnce()

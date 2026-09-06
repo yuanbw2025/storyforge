@@ -1,4 +1,5 @@
 import { hashCanonicalValue } from '../agent/run/hash'
+import Dexie from 'dexie'
 import type { StoryArc, StoryCore } from '../types'
 import { readOwnedRows, resolveScopeLike, type WorkspaceScopeLike } from '../workspace/scope'
 
@@ -37,7 +38,9 @@ export async function storyCoreIntentSnapshotV1(
     storyCoreId: row?.id ?? null,
     ragDocumentId: row?.ragDocumentId ?? null,
     revision: row?.updatedAt ?? null,
-    hash: await hashCanonicalValue(values),
+    // This reader is also used inside atomic StoryArc adoption. Keep that
+    // transaction alive while native WebCrypto yields outside IndexedDB.
+    hash: await Dexie.waitFor(hashCanonicalValue(values)),
     values,
   }
 }
