@@ -221,7 +221,7 @@ export interface ProductRelease {
   contentHash: string
   createdAt: number
   distributionProvenance?: {
-    source: 'marketplace'
+    source: 'marketplace' | 'community-bundle'
     listingId: string
     orderId: string | null
     entitlementId: string | null

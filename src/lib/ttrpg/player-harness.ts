@@ -1,5 +1,6 @@
 import { chat, resolveRequestConfig, type ChatResult } from '../ai/client'
 import { estimateTokens } from '../ai/context-budget'
+import { assertTtrpgCompleteContextV1 } from './prompt-context'
 import { computeKnownCostUsd } from '../ai/usage-log'
 import { createAgentSkillExecutionBindingV1 } from '../agent/execution-binding'
 import { getAgentSkillV1 } from '../agent/skill-registry'
@@ -273,6 +274,7 @@ export async function generateTtrpgPlayerActionCandidateV1(input: {
       inputBudgetMaxTokens: 15_000,
     })
     if (!assembled.included.includes('ttrpgPlayerRuntime')) fail('正式 TTRPG 玩家上下文为空')
+    assertTtrpgCompleteContextV1(assembled, 'ttrpgPlayerRuntime')
     await assertTtrpgPlayerRuntimeHarnessFreshV1({
       scope: input.scope, contractScope: snapshot.contract.scope, actorKey: view.seat.actorKey,
     })
@@ -280,7 +282,7 @@ export async function generateTtrpgPlayerActionCandidateV1(input: {
       runId: snapshot.run.id, stepId: TTRPG_PLAYER_RUNTIME_STEP_ID_V1, attempt: 1,
       projectId: input.scope.projectId, worldGroupId: boundary.scope.worldGroupId,
       declaredSourceKeys: ['ttrpgPlayerRuntime'], assembled,
-      readerVersion: 'ttrpg-player-runtime-view-v1',
+      readerVersion: 'ttrpg-player-runtime-view-v2',
     })
     snapshot = await append(input.scope, snapshot, 'context.assembled', {
       stepId: TTRPG_PLAYER_RUNTIME_STEP_ID_V1, attempt: 1, manifestHash: manifest.manifestHash,

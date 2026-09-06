@@ -1,5 +1,5 @@
 import { db } from '../db/schema'
-import type { WorkspaceScope } from '../types'
+import type { TtrpgProductionBriefV2, WorkspaceScope } from '../types'
 import type { AssembleContextInput } from '../registry/types'
 import { assertRecordInScope } from '../workspace/scope'
 
@@ -30,12 +30,18 @@ async function productionAndBuild(input: AssembleContextInput) {
 }
 
 export async function readProductProductionBriefContext(input: AssembleContextInput): Promise<string> {
-  const { production } = await productionAndBuild(input)
+  const { production, scope } = await productionAndBuild(input)
   if (production.currentBriefRevision == null) throw new Error('[product-production-context] Production 尚无当前 Brief')
   const brief = await db.productProductionBriefs
     .where('[productionId+revision]').equals([production.id!, production.currentBriefRevision]).first()
   if (!brief || brief.status !== 'authorized') throw new Error('[product-production-context] 当前 Brief 未授权')
+  const content = JSON.parse(brief.briefJson)
+  const ttrpgRules = content.intent?.productType === 'ttrpg' && content.ttrpg
+    ? await (await import('../ttrpg/production-brief')).resolveTtrpgProductionRulePackV2({ scope, brief: content.ttrpg as TtrpgProductionBriefV2 })
+    : null
   return JSON.stringify({
+    ...(ttrpgRules ? { ttrpgRules: { contentHash: content.ttrpg.rules.effectiveContentHash,
+      attributes: ttrpgRules.attributes, actions: ttrpgRules.actions.map(action => ({ key: action.key, name: action.name, description: action.description, target: action.target })) } } : {}),
     schema: 'storyforge.product-production.brief-context', version: 1,
     productionKey: production.productionKey, briefRevision: brief.revision, briefHash: brief.briefHash,
     sourceWorldContentHash: brief.sourceWorldContentHash, userIntentSummary: brief.userIntentSummary,

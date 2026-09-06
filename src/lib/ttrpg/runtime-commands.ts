@@ -38,6 +38,8 @@ type FormalTtrpgEventType = Extract<
   | "ttrpg.rule.action.resolved"
   | "ttrpg.rest.completed"
   | "ttrpg.gm.response.recorded"
+  | "ttrpg.director.committed"
+  | "ttrpg.private-guidance.recorded"
   | "ttrpg.item.changed"
   | "ttrpg.effects.choice.proposed"
   | "ttrpg.effects.applied"
@@ -3759,7 +3761,7 @@ export async function commitTtrpgGmActorActionFromHarnessV1(input: {
     expectedCandidateHash !== input.candidateHash ||
     run.run.productRuntimeSessionId !== input.sessionId ||
     run.contract.permissions.contextSourceKeys.length !== 1 ||
-    run.contract.permissions.contextSourceKeys[0] !== "ttrpgRuntime" ||
+    run.contract.permissions.contextSourceKeys[0] !== "ttrpgNpcRuntime" ||
     run.contract.scope.runtime?.productRuntimeSessionId !== input.sessionId ||
     run.contract.scope.runtime.baseSequence !== candidate.baseSequence ||
     run.contract.scope.runtime.stateHash !== candidate.stateHash
@@ -3878,11 +3880,17 @@ export async function commitTtrpgGmNarrationFromHarnessV1(
   ) {
     throw new Error("[ttrpg] AI GM RunContract 与当前战役基线不一致。");
   }
+  const gm = (await db.ttrpgSessionParticipants.where('sessionId').equals(input.sessionId).toArray()).find(seat => seat.role === 'gm');
+  const automatic = run.contract.acceptance.some(item => item.id === 'runtime.ai-gm-authorized' && item.kind === 'deterministic-check');
+  if (automatic && (gm?.controller !== 'ai' || !gm.consent.aiIdentityDisclosed || !gm.consent.safetyBoundariesAccepted))
+    throw new Error('[ttrpg] AI KP 自动主持授权已失效。');
+  if (!run.contract.permissions.contextSourceKeys.includes('ttrpgPublicNarration'))
+    throw new Error('[ttrpg] AI KP 叙述未绑定公开信息边界。');
   const persisted = run.events.some(
     (event) =>
       event.type === "candidate.persisted" &&
       event.payload.candidateHash === candidateHash &&
-      event.payload.requiresConfirmation,
+      event.payload.requiresConfirmation === !automatic,
   );
   const confirmed = run.events.some(
     (event) =>
@@ -3890,7 +3898,7 @@ export async function commitTtrpgGmNarrationFromHarnessV1(
       event.payload.candidateHash === candidateHash &&
       event.payload.decision === "adopt",
   );
-  if (!persisted || !confirmed)
+  if (!persisted || (!automatic && !confirmed))
     throw new Error("[ttrpg] AI GM 候选尚未获得作者确认。");
   const { readLatestVerifiedAgentRunCheckpointV1 } =
     await import("../agent/run/checkpoint");
@@ -3913,11 +3921,15 @@ export async function commitTtrpgGmNarrationFromHarnessV1(
     frozenCandidate.stateHash !== input.baseStateHash ||
     frozenCandidate.actionSequence !== actionSequence ||
     frozenCandidate.narration !== narration ||
+    (frozenCandidate.requiresHumanConfirmation === false) !== automatic ||
     stableJson(frozenCandidate.synthesisFrame) !==
       stableJson(input.synthesisFrame)
   ) {
     throw new Error("[ttrpg] AI GM 提交内容与已确认候选不一致。");
   }
+  const { assertTtrpgGmRuntimeHarnessFreshV1 } = await import('../agent/run/runtime-scope');
+  const existingNarration = await db.productRuntimeEvents.where('[sessionId+commandId]').equals([input.sessionId, input.commandId]).first();
+  if (!existingNarration) await assertTtrpgGmRuntimeHarnessFreshV1({ scope: { projectId: session.projectId, worldId: session.worldId, workId: session.workId }, contractScope: run.contract.scope });
   const modelEvidence = parseTtrpgModelEvidenceV1(
     frozenCandidate.modelEvidence,
   );
@@ -4266,6 +4278,64 @@ export async function completeTtrpgCampaignEnding(
           awardedMilestones,
         },
       };
+    },
+  });
+}
+
+/** Commit a typed AI KP decision atomically; opaque keys never become public prose. */
+export async function commitTtrpgDirectorFromHarnessV1(input: { scope: import('../types').WorkspaceScope; runId: number; candidateHash: string }): Promise<ProductRuntimeEvent> {
+  const { readAuthorizedTtrpgDecisionV1, ttrpgDecisionCommandIdV1 } = await import('./decision-harness');
+  const { captureTtrpgDirectorViewV1, parseTtrpgDirectorOutputV1, assertTtrpgDirectorAuthorityV1, ttrpgDirectorOptionsV1 } = await import('./director-context');
+  const { candidate } = await readAuthorizedTtrpgDecisionV1<import('./director-model').TtrpgDirectorPlanV1>({ ...input,
+    kind: 'director', sourceKey: 'ttrpgDirector', skillId: 'prose.ttrpg-director' });
+  const candidateHash = candidate.candidateHash;
+  const commandId = ttrpgDecisionCommandIdV1(candidate);
+  const prior = await db.productRuntimeEvents.where('[sessionId+commandId]').equals([candidate.productRuntimeSessionId, commandId]).first();
+  if (!prior) {
+    const current = await captureTtrpgDirectorViewV1({ scope: input.scope, productRuntimeSessionId: candidate.productRuntimeSessionId });
+    if (current.visibilityHash !== candidate.visibilityHash || current.releaseHash !== candidate.releaseHash
+      || current.requiresHumanConfirmation !== candidate.requiresHumanConfirmation) throw new Error('[ttrpg] 主持边界已变化');
+    parseTtrpgDirectorOutputV1(JSON.stringify(candidate.payload), current.view);
+  }
+  return appendFormalTtrpgCommand({ sessionId: candidate.productRuntimeSessionId, commandId,
+    baseSequence: candidate.baseSequence, baseStateHash: candidate.stateHash, type: 'ttrpg.director.committed',
+    intent: { runId: input.runId, candidateHash },
+    build: async ({ state, sequence, campaign, participants }) => {
+      assertTtrpgDirectorAuthorityV1(participants);
+      const options = ttrpgDirectorOptionsV1(state, campaign);
+      const reveals = candidate.payload.revealClueKeys.map(key => {
+        const allowed = options.eligibleReveals.find(item => item.clueKey === key);
+        if (!allowed) throw new Error('[ttrpg] 线索尚未满足发现路径');
+        return { clueKey: key, actorKey: allowed.actorKey, visibility: allowed.visibility, pathKey: allowed.pathKey, failForward: allowed.failForward };
+      });
+      return { actorKey: options.actorKey, targetKey: options.sceneKey, payload: {
+        runId: candidate.runId, candidateHash, modelCalls: candidate.modelCalls,
+        decision: { ...candidate.payload, eventSequence: sequence, basisActionSequence: options.basisActionSequence,
+          actorKey: options.actorKey, sceneKey: options.sceneKey, runId: candidate.runId, candidateHash, reveals },
+      } };
+    },
+  });
+}
+
+export async function commitTtrpgPrivateGuidanceFromHarnessV1(input: { scope: import('../types').WorkspaceScope; runId: number; candidateHash: string }): Promise<ProductRuntimeEvent> {
+  const { readAuthorizedTtrpgDecisionV1, ttrpgDecisionCommandIdV1 } = await import('./decision-harness');
+  const { captureTtrpgPrivateGuidanceViewV1, parseTtrpgPrivateGuidanceOutputV1 } = await import('./private-guidance');
+  const { candidate, snapshot } = await readAuthorizedTtrpgDecisionV1<import('./private-guidance-model').TtrpgPrivateGuidanceV1>({ ...input,
+    kind: 'private-guidance', sourceKey: 'ttrpgPrivateGuidance', skillId: 'prose.ttrpg-private-guidance' });
+  const commandId = ttrpgDecisionCommandIdV1(candidate);
+  const prior = await db.productRuntimeEvents.where('[sessionId+commandId]').equals([candidate.productRuntimeSessionId, commandId]).first();
+  if (!prior) {
+    const boundary = await captureTtrpgPrivateGuidanceViewV1({ scope: input.scope, productRuntimeSessionId: candidate.productRuntimeSessionId, actorKey: candidate.payload.actorKey });
+    if (boundary.visibilityHash !== candidate.visibilityHash || boundary.releaseHash !== candidate.releaseHash) throw new Error('[ttrpg] 角色知情范围已变化');
+    parseTtrpgPrivateGuidanceOutputV1(JSON.stringify(candidate.payload), boundary.view);
+  }
+  return appendFormalTtrpgCommand({ sessionId: candidate.productRuntimeSessionId, commandId, baseSequence: candidate.baseSequence, baseStateHash: candidate.stateHash,
+    type: 'ttrpg.private-guidance.recorded', intent: { runId: input.runId, candidateHash: input.candidateHash },
+    build: async ({ sequence, participants }) => {
+      const seat = participants.find(seat => seat.actorKey === candidate.payload.actorKey && seat.role === 'player');
+      if (!seat?.consent.aiAdviceAllowed || !['human', 'hybrid'].includes(seat.controller)) throw new Error('[ttrpg] 未授权这个角色接受私密指引');
+      return { actorKey: candidate.payload.actorKey, targetKey: null, payload: { runId: input.runId, candidateHash: input.candidateHash, modelCalls: candidate.modelCalls,
+        guidance: { ...candidate.payload, question: snapshot.contract.objective, runId: input.runId, candidateHash: input.candidateHash, eventSequence: sequence } } };
     },
   });
 }

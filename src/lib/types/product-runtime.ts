@@ -323,6 +323,9 @@ export interface TtrpgRuntimeProductStateV1 {
   restHistory: TtrpgRuntimeRestReceiptV2[];
   /** Author-confirmed AI/human GM prose bound to one already-resolved rule action. */
   gmNarrations: TtrpgRuntimeGmNarrationV1[];
+  /** AI KP decisions are product-owned and replayable; absent only in pre-director snapshots. */
+  privateGuidance?: import("../ttrpg/private-guidance-model").TtrpgPrivateGuidanceReceiptV1[];
+  directorDecisions?: import("../ttrpg/director-model").TtrpgDirectorReceiptV1[];
   questProgress: Array<{
     questKey: string;
     requiredConclusionKeys: string[];
@@ -1156,6 +1159,8 @@ export const PRODUCT_RUNTIME_EVENT_TYPES = [
   "ttrpg.scene.opened",
   "ttrpg.check.resolved",
   "ttrpg.gm.response.recorded",
+  "ttrpg.director.committed",
+  "ttrpg.private-guidance.recorded",
   "ttrpg.campaign.session.started",
   "ttrpg.campaign.session.completed",
   "ttrpg.campaign.roster.changed",

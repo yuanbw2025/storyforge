@@ -1,3 +1,5 @@
+import { assertTtrpgNoRestrictedTextV1 } from './information-boundary';
+import { assertTtrpgCompleteContextV1 } from './prompt-context';
 import { chat, resolveRequestConfig, type ChatResult } from "../ai/client";
 import { estimateTokens } from "../ai/context-budget";
 import { computeKnownCostUsd } from "../ai/usage-log";
@@ -22,6 +24,7 @@ import {
 } from "../agent/run/runtime-scope";
 import { createVerificationReceiptV1 } from "../agent/run/verification-receipt";
 import { db } from "../db/schema";
+import { readTtrpgSessionParticipantsV2 } from "./participants";
 import { assembleContext } from "../registry/assemble-context";
 import {
   commitTtrpgGmNarrationFromHarnessV1,
@@ -62,6 +65,7 @@ export interface TtrpgGmNarrationCandidateV1 {
   contextManifestHash: string;
   sceneKey: string;
   actionSequence: number;
+  requiresHumanConfirmation: boolean;
   narration: string;
   synthesisFrame: TtrpgRuntimeGmSynthesisFrameV2;
   offeredClueKeys: string[];
@@ -132,17 +136,17 @@ function messages(objective: string, context: string): ChatMessage[] {
       content: [
         "你是 StoryForge 可信 AI GM 的候选叙事生成器。",
         "你只解释已经由 RulePack 结算完成的最近行动；骰点、难度、成功等级、资源、状态、回合、线索可见性和场景推进全部不可修改。",
-        "叙事不得泄露 gmSecret 或未发现线索内容。offeredClueKeys 只能从 suggestibleClues 选择，它只是给真人 GM 的建议，绝不代表线索已公开。",
+        "叙事只依据公开事实，不得猜测未发现线索、角色秘密或创造新证据。offeredClueKeys 只能从 suggestibleClues 选择，它是结构化建议，绝不代表线索已公开。",
         "recommendedNextSceneKeys 只能从 nextScenes 选择，它只是建议，绝不推进场景。遵守 Session Zero 的 lines、veils、暂停信号和内容提醒。",
-        "必须返回 GmSynthesisFrame：mechanicalOutcome 原样复制 latestAction.receipt.mechanicalSummary；worldUpdate 原样复制 receipt.worldConsequence。reactions 只覆盖 receipt 中 relevant/primary 且非行动者的观察者。",
-        "responsePolicy 必须原样复制。prompt-human 的 text 必须是 null，绝不能替真人玩家说话、做决定或描述其内心；ai-eligible 与 gm-eligible 必须给出符合该角色目标、已知信息和当前场景的反应。",
+        "必须以 synthesisTemplate 为基准返回 GmSynthesisFrame：schema、version、actionSequence、mechanicalOutcome、worldUpdate 原样复制；reactions 保留模板中的全部 actorKey 和 responsePolicy。",
+        "responsePolicy 必须原样复制。prompt-human 的 text 必须是 null，绝不能替真人玩家说话、做决定或描述其内心；ai-eligible 与 gm-eligible 只可描述基于眼前公开事实的可见反应；不得编造其内心、动机或代替角色行动。",
         "只输出严格 JSON，不要 Markdown、解释或额外字段：",
         '{"narration":"面向玩家的行动结果叙事","synthesisFrame":{"schema":"storyforge.ttrpg-gm-synthesis-frame","version":2,"actionSequence":1,"mechanicalOutcome":"原样复制机械摘要","actorFeedback":"行动者后果","reactions":[],"sceneUpdate":"当前场景如何响应","worldUpdate":"原样复制世界后果边界","nextPrompts":[]},"offeredClueKeys":[],"recommendedNextSceneKeys":[]}',
       ].join("\n"),
     },
     {
       role: "user",
-      content: `【主持目标】${objective}\n\n【冻结主持上下文】\n${context}`,
+      content: `【主持目标】${objective}\n\n【已授权公开叙述素材】\n${context}`,
     },
   ];
 }
@@ -208,26 +212,12 @@ function validateDraftAgainstView(input: {
   const normalizedNarration = combinedNarration
     .normalize("NFC")
     .toLocaleLowerCase();
-  const compact = (value: string) =>
-    value
-      .normalize("NFC")
-      .toLocaleLowerCase()
-      .replace(/[\s\p{P}\p{S}]/gu, "");
-  const compactNarration = compact(combinedNarration);
-  const leaksSecret = view.forbiddenSecretPhrases.some((phrase) => {
-    const compactPhrase = compact(phrase);
-    if (!compactPhrase) return false;
-    if (compactNarration.includes(compactPhrase)) return true;
-    if (compactPhrase.length < 12) return false;
-    for (let index = 0; index <= compactPhrase.length - 10; index += 1) {
-      if (compactNarration.includes(compactPhrase.slice(index, index + 10)))
-        return true;
-    }
-    return false;
-  });
-  if (leaksSecret) {
-    fail("候选叙事直接泄露 GM 私密提示或未发现线索");
-  }
+  const publicFacts = [view.scene?.description ?? '', ...view.discoveredClues.filter(clue => clue.visibility === 'party')
+    .flatMap(clue => [clue.title, clue.description])];
+  try {
+    assertTtrpgNoRestrictedTextV1(combinedNarration, [...view.forbiddenSecretPhrases,
+      ...view.participants.flatMap(item => item.privateProfile?.secret ? [item.privateProfile.secret] : [])], publicFacts);
+  } catch { fail("候选叙事直接泄露 GM 私密提示或未发现线索"); }
   assertTtrpgFeedbackOutcomeConsistentV2(
     normalizedNarration,
     view.latestAction.outcome,
@@ -293,6 +283,7 @@ export function evaluateTtrpgGmCandidateOutputV1(
 
 function contract(input: {
   objective: string;
+  requiresHumanConfirmation: boolean;
   boundary: Awaited<ReturnType<typeof captureTtrpgGmRuntimeHarnessBoundaryV1>>;
   runtimeBindingHash: string;
 }) {
@@ -302,7 +293,7 @@ function contract(input: {
     objective: input.objective,
     workflowKind: "direct-generation" as const,
     scope: input.boundary.scope,
-    permissions: { contextSourceKeys: ["ttrpgRuntime"], writeTargets: [] },
+    permissions: { contextSourceKeys: ["ttrpgPublicNarration"], writeTargets: [] },
     runtimeBindingHash: input.runtimeBindingHash,
     executionBindings: [
       {
@@ -329,8 +320,8 @@ function contract(input: {
         required: true,
       },
       {
-        id: "runtime.author-confirmed",
-        kind: "author-confirmed" as const,
+        id: input.requiresHumanConfirmation ? "runtime.author-confirmed" : "runtime.ai-gm-authorized",
+        kind: input.requiresHumanConfirmation ? "author-confirmed" as const : "deterministic-check" as const,
         required: true,
       },
       {
@@ -347,7 +338,7 @@ function contract(input: {
         criterionIds: [
           "runtime.candidate",
           "runtime.freshness",
-          "runtime.author-confirmed",
+          input.requiresHumanConfirmation ? "runtime.author-confirmed" : "runtime.ai-gm-authorized",
           "runtime.prose-only",
         ],
       },
@@ -444,6 +435,11 @@ export async function generateTtrpgGmNarrationCandidateV1(input: {
   const preflightView = await loadTtrpgGmRuntimeViewV1(input);
   if (preflightView.safety.status !== "active")
     fail("战役已由安全工具暂停，禁止调用模型");
+  const gmSeat = (await readTtrpgSessionParticipantsV2(input.productRuntimeSessionId)).find(seat => seat.role === 'gm')
+    ?? fail('会话缺少 GM 席位');
+  const requiresHumanConfirmation = gmSeat.controller !== 'ai';
+  if (!requiresHumanConfirmation && (!gmSeat.consent.aiIdentityDisclosed || !gmSeat.consent.safetyBoundariesAccepted))
+    fail('AI KP 尚未获得 Session Zero 授权');
   const skill = getAgentSkillV1("prose.ttrpg-gm-narrator");
   const boundary = await captureTtrpgGmRuntimeHarnessBoundaryV1(input);
   const callMeta = {
@@ -470,7 +466,7 @@ export async function generateTtrpgGmNarrationCandidateV1(input: {
     scope: input.scope,
     productRuntimeSessionId: input.productRuntimeSessionId,
     worldGroupId: boundary.scope.worldGroupId,
-    contract: contract({ objective, boundary, runtimeBindingHash }),
+    contract: contract({ objective, boundary, runtimeBindingHash, requiresHumanConfirmation }),
   });
   let activeAttempt: 1 | 2 = 1;
   await input.onRunCreated?.(snapshot.run.id);
@@ -487,13 +483,14 @@ export async function generateTtrpgGmNarrationCandidateV1(input: {
       scope: input.scope,
       worldGroupId: boundary.scope.worldGroupId,
       productRuntimeSessionId: input.productRuntimeSessionId,
-      sourceKeys: ["ttrpgRuntime"],
+      sourceKeys: ["ttrpgPublicNarration"],
       provider: input.aiConfig?.provider,
       model: input.aiConfig?.model,
       inputBudgetMaxTokens: 18_000,
     });
-    if (!assembled.included.includes("ttrpgRuntime"))
+    if (!assembled.included.includes("ttrpgPublicNarration"))
       fail("正式 TTRPG 主持人上下文为空");
+    assertTtrpgCompleteContextV1(assembled, 'ttrpgPublicNarration');
     await assertTtrpgGmRuntimeHarnessFreshV1({
       scope: input.scope,
       contractScope: snapshot.contract.scope,
@@ -504,7 +501,7 @@ export async function generateTtrpgGmNarrationCandidateV1(input: {
       attempt: 1,
       projectId: input.scope.projectId,
       worldGroupId: boundary.scope.worldGroupId,
-      declaredSourceKeys: ["ttrpgRuntime"],
+      declaredSourceKeys: ["ttrpgPublicNarration"],
       assembled,
       readerVersion: "ttrpg-gm-runtime-view-v1",
     });
@@ -622,6 +619,7 @@ export async function generateTtrpgGmNarrationCandidateV1(input: {
       runId: snapshot.run.id,
       ...boundary.scope.runtime,
       contextManifestHash: manifest.manifestHash,
+      requiresHumanConfirmation,
       modelEvidence,
       modelCalls,
       ...(repairEvidence ? { repairEvidence } : {}),
@@ -636,7 +634,7 @@ export async function generateTtrpgGmNarrationCandidateV1(input: {
       stepId: TTRPG_GM_RUNTIME_STEP_ID_V1,
       attempt: repairEvidence ? 2 : 1,
       candidateHash: candidate.candidateHash,
-      requiresConfirmation: true,
+      requiresConfirmation: requiresHumanConfirmation,
     });
     const saved = await createAgentRunCheckpointV1({
       scope: input.scope,
@@ -787,15 +785,13 @@ export async function adoptTtrpgGmNarrationCandidateV1(input: {
       );
     }
     const step = snapshot.projection.steps[TTRPG_GM_RUNTIME_STEP_ID_V1];
-    if (step?.status === "awaiting_confirmation") {
-      snapshot = await append(input.scope, snapshot, "confirmation.recorded", {
-        stepId: TTRPG_GM_RUNTIME_STEP_ID_V1,
-        candidateHash: candidate.candidateHash,
-        decision: "adopt",
-      });
-    } else if (step?.confirmation !== "adopt") {
-      fail("AI GM 候选当前不等待作者确认");
-    }
+    if (candidate.requiresHumanConfirmation !== false) {
+      if (step?.status === "awaiting_confirmation") {
+        snapshot = await append(input.scope, snapshot, "confirmation.recorded", {
+          stepId: TTRPG_GM_RUNTIME_STEP_ID_V1, candidateHash: candidate.candidateHash, decision: "adopt",
+        });
+      } else if (step?.confirmation !== "adopt") fail("AI GM 候选当前不等待作者确认");
+    } else if (step?.status !== 'running') fail('AI KP 自动叙述候选状态无效');
     committed = await commitTtrpgGmNarrationFromHarnessV1({
       sessionId: candidate.productRuntimeSessionId,
       commandId: stableCommandId,
@@ -911,9 +907,9 @@ export async function adoptTtrpgGmNarrationCandidateV1(input: {
         evidenceRefs: [`base:${candidate.baseSequence}:${candidate.stateHash}`],
       },
       {
-        id: "runtime.author-confirmed",
+        id: candidate.requiresHumanConfirmation !== false ? "runtime.author-confirmed" : "runtime.ai-gm-authorized",
         status: "passed",
-        evidenceRefs: [`run:${candidate.runId}:confirmation`],
+        evidenceRefs: [candidate.requiresHumanConfirmation !== false ? `run:${candidate.runId}:confirmation` : `run:${candidate.runId}:session-zero-ai-authority`],
       },
       {
         id: "runtime.prose-only",

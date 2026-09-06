@@ -1,3 +1,4 @@
+import { applyTtrpgAuthoredScenarioV1, type TtrpgAuthoredScenarioV1 } from './scenario-authoring'
 import type {
   FrozenRuntimeMediaAssetV2,
   ProductRuntimePackageV1,
@@ -234,6 +235,7 @@ function npcTemplate(input: {
  */
 export function compileProductionTtrpgCampaignV2(input: {
   productionKey: string
+  authoredScenario?: TtrpgAuthoredScenarioV1
   brief: TtrpgProductionBriefV2
   selection: ProductWorldSourceSelectionV1
   narrative: Narrative
@@ -564,7 +566,8 @@ export function compileProductionTtrpgCampaignV2(input: {
     visualBible, mediaManifest,
     sourceWorld: { contentHash: input.worldContentHash, bundleHash: input.worldSourceBundleHash },
   }
-  const parsed = parseTtrpgCampaignContentV1(campaign, rulePack)
+  const authored = input.authoredScenario ? applyTtrpgAuthoredScenarioV1(campaign, input.authoredScenario, rulePack, brief) : campaign
+  const parsed = parseTtrpgCampaignContentV1(authored, rulePack)
   const report = validateTtrpgCampaignForPublicationV1(parsed, rulePack)
   if (!report.valid) fail(`CampaignPack 发布预检失败:${report.errors.join('；')}`)
   const lockErrors = validateTtrpgCampaignDesignLocksV2({ design: brief.campaignDesign, campaign: parsed })

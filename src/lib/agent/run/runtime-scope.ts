@@ -382,7 +382,10 @@ export async function captureTtrpgGmRuntimeHarnessBoundaryV1(input: {
   ) {
     fail("最近正式规则行动已经变化或已有 GM 叙事");
   }
-  const visibilityHash = await hashCanonicalValue(view);
+  const { projectTtrpgPublicNarrationViewV1 } = await import("../../ttrpg/narrator-context");
+  const { readTtrpgSessionParticipantsV2 } = await import("../../ttrpg/participants");
+  const gmAuthority = (await readTtrpgSessionParticipantsV2(view.session.id)).find(seat => seat.role === 'gm');
+  const visibilityHash = await hashCanonicalValue({ publicView: projectTtrpgPublicNarrationViewV1(view), gmAuthority });
   const runtime = {
     productRuntimeSessionId: view.session.id,
     baseSequence: version.sequence,
@@ -436,7 +439,8 @@ export async function captureTtrpgGmActorRuntimeHarnessBoundaryV1(input: {
   const version = await readRuntimeStateVersion(view.session.id);
   if (version.sequence !== view.session.eventSequence)
     fail("AI KP 角色行动上下文已经变化");
-  const visibilityHash = await hashCanonicalValue(view);
+  const visible = (await import("../../ttrpg/npc-context")).projectTtrpgNpcDecisionViewV1(view);
+  const visibilityHash = await hashCanonicalValue(visible);
   const runtime = {
     productRuntimeSessionId: view.session.id,
     baseSequence: version.sequence,

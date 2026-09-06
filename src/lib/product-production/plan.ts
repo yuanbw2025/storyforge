@@ -333,8 +333,8 @@ export async function createProductProductionPlanV3(input: {
     }),
     productionTask({
       taskKey: 'content.product-module', lane: 'content', kind: 'product-module',
-      skillId: 'product-production.content.v1', executionMode: 'model', dependsOn: ['content.design'],
-      inputArtifactKeys: ['design.game'], outputArtifactKeys: ['content.product-module'], requirementKeys: [],
+      skillId: 'product-production.content.v1', executionMode: 'model', dependsOn: brief.intent.productType === 'ttrpg' ? ['content.design', 'content.narrative'] : ['content.design'],
+      inputArtifactKeys: brief.intent.productType === 'ttrpg' ? ['design.game', 'content.narrative'] : ['design.game'], outputArtifactKeys: ['content.product-module'], requirementKeys: [],
       capabilityRequirementKeys: textCapabilities, concurrencyGroup: 'text-provider',
       subjectLockKeys: ['content.product-module'], priority: 85, budgetReservation: modelBudget(),
       maxAttempts: 2, timeoutMs: 240_000, failurePolicy: 'pause', fallbackTaskKey: null,

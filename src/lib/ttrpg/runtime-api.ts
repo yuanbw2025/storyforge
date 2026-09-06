@@ -9,6 +9,8 @@ export {
   commitTtrpgEffectPlanV2,
   commitTtrpgGmActorActionFromHarnessV1,
   commitTtrpgGmNarrationFromHarnessV1,
+  commitTtrpgDirectorFromHarnessV1,
+  commitTtrpgPrivateGuidanceFromHarnessV1,
   commitTtrpgHumanGmNarrationV1,
   commitTtrpgIntentDispositionV2,
   commitTtrpgItemCommandV2,

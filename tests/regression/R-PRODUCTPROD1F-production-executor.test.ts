@@ -1,3 +1,5 @@
+import { authoredScenarioFixture } from '../helpers/ttrpg-authored-scenario'
+import { resolveTtrpgProductionRulePackV2 } from '../../src/lib/ttrpg/production-brief'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { prepareProductProductionAdoption } from '../../src/lib/product-production/adoption'
@@ -775,9 +777,17 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
       const runText: ProductionTextRunnerV1 = async request => {
         const taskKey = Object.keys(outputs).find(key => request.system.includes(`任务=${key}。`)) as keyof typeof outputs
         if (!taskKey) throw new Error(`unknown ${productType} model task`)
-        const output = taskKey === 'media.requirements'
+        let output: unknown = taskKey === 'media.requirements'
           ? { ...outputs[taskKey], visual: [], audio: [] }
           : outputs[taskKey]
+        if (productType === 'ttrpg' && taskKey === 'content.product-module') {
+          const currentBuild = await db.productBuilds.where('productionId').equals(owned.productionId).last()
+          const narrative = await db.productBuildArtifacts.where('buildId').equals(currentBuild!.id!)
+            .filter(row => row.artifactKey === 'content.narrative' && row.status === 'accepted').first()
+          const rulePack = await resolveTtrpgProductionRulePackV2({ scope: owned.scope, brief: owned.brief.ttrpg! })
+          output = { ...outputs[taskKey], ttrpgScenario: authoredScenarioFixture({ brief: owned.brief.ttrpg!, rulePack,
+            nodes: JSON.parse(narrative!.payloadJson).nodes }) }
+        }
         return {
           output: JSON.stringify(output), usage: { inputTokens: 100, outputTokens: 100 },
           bindingReceipt: {

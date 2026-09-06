@@ -7,6 +7,7 @@ import { assertProductReleaseUnchanged } from "../product/releases";
 import type { ProductRuntimePackageV1, WorkspaceScope } from "../types";
 import { assertInstanceBinding } from "../product/runtime-instances";
 import { resolveScope } from "../workspace/scope";
+import { projectTtrpgObservedActionsV1 } from './prompt-context';
 import { parseTtrpgCampaignContentV1 } from "./campaign";
 import { readTtrpgSessionParticipantsV2 } from "./participants";
 import { parseRulePackV1 } from "./rule-pack";
@@ -217,5 +218,14 @@ export async function readTtrpgPlayerRuntimeContextV1(
     view.session.worldGroupId !== (input.worldGroupId ?? null)
   )
     return "";
-  return JSON.stringify(view);
+  const projection = view.projection;
+  return JSON.stringify({ schema: view.schema, version: view.version, session: view.session, seat: view.seat, projection: {
+    safety: projection.safety, turn: projection.turn,
+    actors: projection.actors.map(actor => ({ actorKey: actor.actorKey, name: actor.name, role: actor.role, controller: actor.controller,
+      privateProfile: actor.privateProfile, attributes: actor.attributes, resources: actor.resources, conditions: actor.conditions })),
+    scenes: projection.scenes.filter(scene => scene.status === 'current'), availableActions: projection.availableActions,
+    visibleClues: projection.visibleClues, inventory: projection.inventory, quests: projection.quests,
+    observations: projectTtrpgObservedActionsV1(projection.recentActions), publicNarrations: projection.recentNarrations,
+    humanResponses: projection.humanResponses, ruleReference: projection.ruleReference,
+  } });
 }

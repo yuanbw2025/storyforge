@@ -1,3 +1,5 @@
+import { TTRPG_SCENARIO_PROMPT_V1 } from '../ttrpg/scenario-prompt'
+import { parseTtrpgAuthoredScenarioV1, type TtrpgAuthoredScenarioV1 } from '../ttrpg/scenario-authoring'
 import type { ChatResult } from '../ai/client'
 import { estimateTokens } from '../ai/context-budget'
 import { validateNarrativeContentGraph } from '../product/narrative-content'
@@ -81,6 +83,7 @@ interface NarrativeArtifactV1 {
 }
 
 interface ProductModuleArtifactV1 {
+  ttrpgScenario?: TtrpgAuthoredScenarioV1
   schema: 'storyforge.product-module-artifact'
   version: 1
   productType: ProductionProductKindV1
@@ -539,6 +542,7 @@ function parseProductModule(value: unknown, brief: ProductProductionBriefV3): Pr
   const row = record(value, 'productModule')
   exactKeys(row, [
     'schema', 'version', 'productType', 'interfaceStyle', 'interactionNotes', 'presentationPolicy',
+    ...(brief.intent.productType === 'ttrpg' ? ['ttrpgScenario'] : []),
   ], 'productModule')
   if (row.schema !== 'storyforge.product-module-artifact' || row.version !== 1) {
     fail('productModule schema/product 无效')
@@ -549,6 +553,7 @@ function parseProductModule(value: unknown, brief: ProductProductionBriefV3): Pr
   if (productType !== brief.intent.productType) fail('productModule productType 与 Brief 不一致')
   return {
     schema: 'storyforge.product-module-artifact', version: 1, productType,
+    ...(productType === 'ttrpg' ? { ttrpgScenario: parseTtrpgAuthoredScenarioV1(row.ttrpgScenario) } : {}),
     interfaceStyle: text(row.interfaceStyle, 'productModule.interfaceStyle', 2_000),
     interactionNotes: textArray(row.interactionNotes, 'productModule.interactionNotes', 30),
     presentationPolicy: {
@@ -696,6 +701,7 @@ function textSystem(taskKey: string, brief: ProductProductionBriefV3): string {
     `dialogue 的 speakerKey 只能从 ${JSON.stringify(productCharacterKeys(brief))} 选择；没有合法角色时只用 narration/action/system。` +
     (ttrpgDesign ? `\n这是作者已比较/混合的跑团战役方向，必须落实且不得改写 lockedSections：${JSON.stringify(ttrpgDesign)}。` : '')
   }
+  if (taskKey === 'content.product-module' && brief.intent.productType === 'ttrpg') return `${common}\n${TTRPG_SCENARIO_PROMPT_V1}`
   if (taskKey === 'content.product-module') return `${common}\n输出字段必须精确为：` +
     `{"schema":"storyforge.product-module-artifact","version":1,"productType":"${PRODUCTION_PRODUCT_KINDS_V1.join('|')}","interfaceStyle":"...","interactionNotes":["..."],"presentationPolicy":{"pacing":"slow|balanced|fast","transitionMs":500,"backgroundStrategy":"none|key-scenes"}}。` +
     `productType 必须为 ${brief.intent.productType}；纯文字使用 none，AVG/TTRPG 按 Brief 视觉目标选择。`
@@ -1243,6 +1249,7 @@ async function executeIntegrationTask(input: ProductProductionTaskExecutionInput
     const compiledCampaign = compileProductionTtrpgCampaignV2({
       productionKey: options.production.productionKey, brief: options.brief.ttrpg,
       selection: options.brief.source.selection, narrative, sourceCatalog, rulePack,
+      authoredScenario: product.ttrpgScenario ?? fail('正式跑团生产缺少模型创作的场景与角色'),
       worldContentHash: options.brief.source.worldContentHash,
       worldSourceBundleHash: worldSourceBundle.bundleHash,
     })
