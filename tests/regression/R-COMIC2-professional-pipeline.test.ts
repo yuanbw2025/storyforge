@@ -33,7 +33,9 @@ describe('COMIC-2 · professional novel-to-comic pipeline', () => {
   it('候选确认前零写入，formal.written 中断后幂等恢复', async () => {
     const item = await fixture(); const payload = [{ stableKey: 'fact_arrival', kind: 'event', statement: '林岚在暴雨中走进旧车站。', subjectKeys: ['hero'], sourceUnitKeys: [item.unit.sourceUnitKey], confidence: 1 }, { stableKey: 'fact_choice', kind: 'character-state', statement: '林岚在黎明前决定留下。', subjectKeys: ['hero'], sourceUnitKeys: [item.unit.sourceUnitKey], confidence: 1 }]
     expect(() => parseComicProfessionalPayloadV1('source-analysis', [{ ...payload[0], subjectKeys: ['林岚'] }])).toThrow('SourceFact.subjectKeys[0] 非法')
-    await expect(generateComicProfessionalCandidateV1({ scope: item.scope, adaptationProjectId: item.adaptation.id!, stage: 'source-analysis', sourceUnitKeys: [item.unit.sourceUnitKey], runAI: async () => JSON.stringify([{ ...payload[0], sourceUnitKeys: ['asu_other'] }]) })).rejects.toThrow('SourceFact 引用了未选择的来源单元')
+    let sourceRepairCalls = 0
+    await expect(generateComicProfessionalCandidateV1({ scope: item.scope, adaptationProjectId: item.adaptation.id!, stage: 'source-analysis', sourceUnitKeys: [item.unit.sourceUnitKey], runAI: async () => { sourceRepairCalls += 1; return JSON.stringify([{ ...payload[0], sourceUnitKeys: ['asu_other'] }]) } })).rejects.toThrow('SourceFact 引用了未选择的来源单元')
+    expect(sourceRepairCalls).toBe(2)
     const generated = await generateComicProfessionalCandidateV1({ scope: item.scope, adaptationProjectId: item.adaptation.id!, stage: 'source-analysis', sourceUnitKeys: [item.unit.sourceUnitKey], runAI: async messages => {
       expect(messages[0].content).toContain('候选自身新建的 stableKey 必须全批次唯一')
       expect(messages[0].content).toContain(`唯一来源单元：${item.unit.sourceUnitKey}`)
@@ -47,11 +49,15 @@ describe('COMIC-2 · professional novel-to-comic pipeline', () => {
     expect(await db.adaptationSourceFacts.count()).toBe(2)
     const resumed = await adoptComicProfessionalCandidateV1({ scope: item.scope, runId: generated.snapshot.run.id })
     expect(resumed.snapshot.projection.state).toBe('completed'); expect(await db.adaptationSourceFacts.count()).toBe(2)
+    let causalCalls = 0
+    const causalPayload = { stableKey: 'edge_choice', fromFactKey: 'fact_arrival', toFactKey: 'fact_choice', relation: 'enables', rationale: '到站使选择成为可能。', sourceUnitKeys: [item.unit.sourceUnitKey] }
     const causal = await generateComicProfessionalCandidateV1({ scope: item.scope, adaptationProjectId: item.adaptation.id!, stage: 'causal-graph', runAI: async messages => {
-      expect(messages[0].content).toContain('允许 fact stableKey 闭集：fact_arrival, fact_choice')
-      return JSON.stringify([{ stableKey: 'edge_choice', fromFactKey: 'fact_arrival', toFactKey: 'fact_choice', relation: 'enables', rationale: '到站使选择成为可能。', sourceUnitKeys: [item.unit.sourceUnitKey] }])
+      causalCalls += 1
+      if (causalCalls === 1) { expect(messages[0].content).toContain('允许 fact stableKey 闭集：fact_arrival, fact_choice'); return JSON.stringify([{ ...causalPayload, explanation: '闭集外字段' }]) }
+      expect(messages[0].content).toContain('JSON 协议修复器'); expect(messages[1].content).toContain('未知：explanation')
+      return JSON.stringify([causalPayload])
     } })
-    expect(causal.candidate.payload).toHaveLength(1)
+    expect(causalCalls).toBe(2); expect(causal.snapshot.contract.budget.maxModelCalls).toBe(2); expect(causal.candidate.payload).toHaveLength(1)
   })
 
   it('十二个岗位各自声明闭集 JSON 协议与漫画专业约束', () => {
