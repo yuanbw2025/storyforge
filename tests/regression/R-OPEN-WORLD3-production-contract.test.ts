@@ -210,6 +210,8 @@ describe('R-OPEN-WORLD3 · product production contract and P0-P10 DAG', () => {
     })
     expect(textOpenWorldProductionArtifactKindForKeyV1('text-open-world.media.visual.001')).toBe('image')
     expect(textOpenWorldProductionArtifactKindForKeyV1('text-open-world.media.audio.001')).toBe('audio')
+    expect(textOpenWorldProductionArtifactKindForKeyV1('text-open-world.source-pin-unit.00002'))
+      .toBe('text-open-world.source-pin-unit')
   })
 
   it('拒绝错误产品、未授权预算、stale缺口和非上游Artifact读取', async () => {

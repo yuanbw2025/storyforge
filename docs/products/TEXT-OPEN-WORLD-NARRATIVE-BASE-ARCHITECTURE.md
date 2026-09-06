@@ -1,6 +1,6 @@
 # AI 主导文字开放世界叙事基座 · StoryForge 施工规格
 
-> 规格版本：3.2.2
+> 规格版本：3.2.3
 > 生效日期：2026-09-06
 > 文档层级：L2 产品目标架构与施工规格
 > 当前状态：设计基线；不代表代码已经实现
@@ -361,7 +361,7 @@ events / checkpoints / terminalReceipt
 
 `src/lib/open-world/production-contract.ts` 已把本节落实为文字开放世界专属、共享Harness可解析的生产合同：
 
-- 39种专属Artifact Kind分别保存来源、体验、故事、地区、任务、玩法目录、场景、系统整合和质量证据；每种Kind只有一个任务owner；
+- 40种专属Artifact Kind分别保存来源、体验、故事、地区、任务、玩法目录、场景、系统整合和质量证据；每种Kind只有一个任务owner；其中SourcePin索引与大体量来源单元分开；
 - P0～P10连同V1确定性预检、V2平衡/语义双评审、V3装配和QA共26个任务，全部进入`qa.release`终态汇合；
 - 22个模型型durable Run分别承担来源、体验、Ruleset、表现、故事、地区、主角、任务、六类玩法目录和评审；每个Run可以在自己的冻结预算中分批调用模型，例如按地区或重要故事线逐项生产；
 - 完整Build的推荐预留为150次模型调用，低预算骨架最低为22次；最终预留不超过Brief授权，不能把“任务数”误当成“一任务只调用一次模型”；
@@ -372,6 +372,19 @@ events / checkpoints / terminalReceipt
 - V3是唯一把已验收产物装配为G2运行包的节点，AI不得直接写正式Release或Session状态。
 
 这套合同当前标记为`contract-only-until-skills-and-executors-registered`。G3-02～G3-17逐项补齐Schema、Skill和Executor，G3-18完成端到端证据后才替换现有通用生产入口，避免半套新DAG进入正式创建流程。
+
+#### 5.4.2 P0双来源SourcePin落地
+
+`src/lib/open-world/source-pin.ts` 已将世界观与小说来源收口为同一种可验证的P0交接物，但不伪造两类来源相同的物理读取方式：
+
+- WorldRelease入口通过中立Gateway读取冻结目录，Pin只保存便携`WorldReference`、作者授权的资源坐标、各资源content hash和`index`级实读证据；本地Release记录ID被置零，产品不接触物理Release行或完整manifest；
+- 小说入口只接受同项目内受控的小说Work，按作者选择解析故事核心、大纲和规范章序，把真实文本完整复制到产品私有SourcePinUnit；单元最多20万字符，超长章节自动分片，Pin不保存来源Work/Chapter/Outline的可变本地主键；
+- 两类来源都冻结`sourceVersionHash`、包含选择边界的`sourceBoundaryHash`、Brief/开始revision、原始nonce的hash、明确rights basis、系统派生读取permission、实际读取证据hash和最终`pinHash`；
+- WorldRelease在P0只声称实际读取了目录。全文/原文是否读取必须由P1的Context Manifest和SourceLedger证明；小说则因已完成私有全文复制，单元明确标记为`full`；
+- P0复用`productBuildArtifacts`，先写独立SourcePinUnit，最后写SourcePin索引作为闭合标记。相同Pin可安全重试；同一Build试图更换来源会被视为stale并拒绝，必须重新确认Brief并建立新Build；
+- 运行阶段只读取ProductRelease副本，既不回读活动小说，也不直接运行WorldRelease。
+
+这一步没有增加物理表、AI可写字段或第二套Context Source。单元与Pin共享既有Artifact导入、导出、删除、版本和Work作用域生命周期；P1继续通过`product-production.artifact-inputs`消费它们。
 
 ### 5.5 正确的验证顺序
 
@@ -1191,6 +1204,7 @@ StoryForge当前没有独立staging。发布前仍需在隔离数据中完成灰
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| 3.2.3 | 2026-09-06 | 落地P0双来源SourcePin：WorldRelease冻结便携WorldReference、选择资源Hash与真实index读取证据；小说从受控Work/大纲/规范章序复制故事核心、大纲和正文，以20万字符有界SourcePinUnit自动分片；40种Artifact将Pin索引与单元分离且同属P0唯一owner；版本、选择边界、Brief/开始授权、nonce Hash、rights、读取证据与Pin全链可验，原始nonce和可变小说行ID不落库；相同Pin幂等、同Build换源及篡改失败关闭，不新增表或Context旁路 |
 | 3.2.2 | 2026-09-06 | 落地P0～P10专属生产合同：冻结39种Artifact Kind、26任务DAG、22个模型型durable Run及按Brief分配的22次最低/150次推荐调用预算、唯一owner、六类P8目录并行/P8F最终绑定、确定性预检→平衡与语义双评审→V3唯一装配顺序，以及每项Run的重试、非重试错误、stale传播、候选采纳和完成回执；在全部Skill/Executor齐备前保持合同可验证但不激活线上入口 |
 | 3.2.1 | 2026-09-06 | 将五项剩余校准收口为集中配置和稳定决策ID，冻结首版内容规模、关系阈值、保护任务UI、随机任务变体和AI预算硬保护 |
 | 3.2.0 | 2026-09-06 | 接入36项首版产品决策；冻结来源、重要故事线等待、快速旅行、战斗输入、地图、媒资、存档与验收世界边界，并把未决项收缩为参数校准 |

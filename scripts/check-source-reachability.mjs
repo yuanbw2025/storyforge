@@ -37,6 +37,9 @@ const entrypoints = [
   // G3 content production is a headless contract boundary until all product
   // Skills/executors are registered and the creator route activates it.
   'src/lib/open-world/production-contract.ts',
+  // P0 dual-source freezing is independently testable authoring code. Runtime
+  // must not import mutable novel or WorldRelease source readers.
+  'src/lib/open-world/source-pin.ts',
   // FLOW-3 public domain-node boundary is exercised by regression tests and external tooling.
   'src/lib/node-authoring/index.ts',
   // HARNESS-26 is a headless offline release-evaluation boundary; production routing must not import it.

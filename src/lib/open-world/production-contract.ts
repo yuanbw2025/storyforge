@@ -104,7 +104,8 @@ function deterministicTask(input: Omit<TextOpenWorldProductionTaskContractV1,
 export const TEXT_OPEN_WORLD_PRODUCTION_TASK_CONTRACTS_V1: TextOpenWorldProductionTaskContractV1[] = [
   deterministicTask({
     stage: 'P0', taskKey: 'p0.source-lock', objective: '把已授权世界版本或小说来源冻结为可验证 SourcePin。',
-    dependsOn: [], inputArtifactKeys: [], outputArtifactKeys: ['text-open-world.source-pin'],
+    dependsOn: [], inputArtifactKeys: [],
+    outputArtifactKeys: ['text-open-world.source-pin', 'text-open-world.source-pin-unit'],
     completion: {
       requiresAcceptedOutputs: true, terminalEvidence: 'task-receipt',
       requiredGateIds: ['tow.source-pin.schema', 'tow.source-pin.hash', 'tow.source-pin.authorization'],
@@ -114,7 +115,7 @@ export const TEXT_OPEN_WORLD_PRODUCTION_TASK_CONTRACTS_V1: TextOpenWorldProducti
     stage: 'P1', taskKey: 'p1.source-curation', objective: '渐进读取来源并形成清单、证据账本和显式缺口。',
     skillId: 'text-open-world.production.source-curation.v1', recommendedModelCalls: 6,
     dependsOn: ['p0.source-lock'],
-    inputArtifactKeys: ['text-open-world.source-pin'],
+    inputArtifactKeys: ['text-open-world.source-pin', 'text-open-world.source-pin-unit'],
     outputArtifactKeys: [
       'text-open-world.source-manifest', 'text-open-world.source-ledger', 'text-open-world.source-gap-report',
     ],
@@ -828,6 +829,9 @@ export function textOpenWorldProductionArtifactKindForKeyV1(
 ): ProductBuildArtifactKindV1 {
   if ((TEXT_OPEN_WORLD_PRODUCTION_ARTIFACT_KINDS_V1 as readonly string[]).includes(artifactKey)) {
     return artifactKey as TextOpenWorldProductionArtifactKindV1
+  }
+  if (/^text-open-world\.source-pin-unit\.\d{5}$/.test(artifactKey)) {
+    return 'text-open-world.source-pin-unit'
   }
   if (/^text-open-world\.media\.visual\.\d{3}$/.test(artifactKey)) return 'image'
   if (/^text-open-world\.media\.audio\.\d{3}$/.test(artifactKey)) return 'audio'

@@ -3,6 +3,8 @@ import type {
   ProductProductionTaskLaneV1,
   ProductTaskBudgetReservationV1,
 } from './product-production'
+import type { WorldReferenceV1 } from './world-product-contracts'
+import type { WorldCapabilityArea } from '../registry/types'
 
 /**
  * Stable, product-owned artifacts in the text-open-world production compiler.
@@ -13,6 +15,7 @@ import type {
  */
 export const TEXT_OPEN_WORLD_PRODUCTION_ARTIFACT_KINDS_V1 = [
   'text-open-world.source-pin',
+  'text-open-world.source-pin-unit',
   'text-open-world.source-manifest',
   'text-open-world.source-ledger',
   'text-open-world.source-gap-report',
@@ -55,6 +58,157 @@ export const TEXT_OPEN_WORLD_PRODUCTION_ARTIFACT_KINDS_V1 = [
 
 export type TextOpenWorldProductionArtifactKindV1 =
   (typeof TEXT_OPEN_WORLD_PRODUCTION_ARTIFACT_KINDS_V1)[number]
+
+export type TextOpenWorldSourceKindV1 = 'world-release' | 'novel'
+
+export type TextOpenWorldSourceRightsBasisV1 =
+  | 'author-owned'
+  | 'licensed'
+  | 'public-domain'
+
+export type TextOpenWorldSourcePermissionV1 =
+  | 'derive-text-open-world'
+  | 'read-world-release-catalog'
+  | 'read-world-release-original'
+  | 'freeze-product-private-novel'
+  | 'read-frozen-novel'
+
+/**
+ * Author authority bound to one exact source version. The raw authorization
+ * nonce is never persisted; changing either the Brief or the source requires a
+ * new authorization hash and therefore a new Build.
+ */
+export interface TextOpenWorldSourceAuthorizationV1 {
+  schema: 'storyforge.text-open-world-source-authorization'
+  version: 1
+  productInstanceKey: string
+  sourceKind: TextOpenWorldSourceKindV1
+  sourceVersionHash: string
+  sourceBoundaryHash: string
+  briefRevision: number
+  briefHash: string
+  authorStartRevision: number
+  authorizationNonceHash: string
+  rightsBasis: TextOpenWorldSourceRightsBasisV1
+  rightsNote: string
+  permissions: TextOpenWorldSourcePermissionV1[]
+  authorizedAt: number
+  authorizationHash: string
+}
+
+export type TextOpenWorldSourcePinUnitKindV1 =
+  | 'world-resource'
+  | 'work-metadata'
+  | 'story-core'
+  | 'outline-node'
+  | 'chapter'
+
+/** One bounded, immutable unit. Novel content is copied into `contentText`;
+ * WorldRelease units retain only neutral coordinates because the release is
+ * already immutable and full reads must go through Context Gateway. */
+export interface TextOpenWorldSourcePinUnitV1 {
+  schema: 'storyforge.text-open-world-source-pin-unit'
+  version: 1
+  productInstanceKey: string
+  sourceKind: TextOpenWorldSourceKindV1
+  unitKey: string
+  artifactKey: string
+  kind: TextOpenWorldSourcePinUnitKindV1
+  label: string
+  order: number
+  partIndex: number
+  partCount: number
+  readDepth: 'index' | 'full'
+  sourceResourceKey: string | null
+  sourceArea: WorldCapabilityArea | null
+  sourceResourceKind: string | null
+  sourceContentHash: string
+  contentText: string | null
+  charCount: number
+  wordCount: number
+  capturedAt: number
+}
+
+export interface TextOpenWorldSourcePinUnitRefV1 {
+  unitKey: string
+  artifactKey: string
+  artifactContentHash: string
+  kind: TextOpenWorldSourcePinUnitKindV1
+  label: string
+  order: number
+  partIndex: number
+  partCount: number
+  readDepth: 'index' | 'full'
+  sourceResourceKey: string | null
+  sourceContentHash: string
+  charCount: number
+  wordCount: number
+}
+
+export type TextOpenWorldSourcePinSourceV1 =
+  | {
+      kind: 'world-release'
+      /** Portable form: `localReleaseRecordId` is always zero. */
+      worldReference: WorldReferenceV1
+      releaseUid: string
+      releaseVersion: number
+      releaseHash: string
+      sourceManifestHash: string
+      catalogHash: string
+      selection: {
+        mode: 'entire-release' | 'selected-resources'
+        selectedResourceKeys: string[]
+      }
+    }
+  | {
+      kind: 'novel'
+      workCode: string
+      workTitle: string
+      snapshotVersion: 1
+      sourceUpdatedAt: number
+      sourceContentHash: string
+      coverage: 'full-text' | 'outline-only'
+      selection: {
+        mode: 'entire-work' | 'outline-subtree' | 'chapter-range' | 'chapters'
+        label: string
+        selectedChapterCount: number
+        selectedOutlineCount: number
+      }
+    }
+
+/** P0 closure marker. It contains no mutable novel row id and no raw nonce. */
+export interface TextOpenWorldSourcePinV1 {
+  schema: 'storyforge.text-open-world-source-pin'
+  version: 1
+  canonicalJsonVersion: 2
+  productType: 'text-open-world'
+  productInstanceKey: string
+  sourceKind: TextOpenWorldSourceKindV1
+  sourceVersionHash: string
+  sourceBoundaryHash: string
+  source: TextOpenWorldSourcePinSourceV1
+  authorization: TextOpenWorldSourceAuthorizationV1
+  units: TextOpenWorldSourcePinUnitRefV1[]
+  readEvidence: {
+    method: 'world-release-index' | 'novel-private-full-copy'
+    readDepth: 'index' | 'full'
+    unitCount: number
+    totalChars: number
+    totalWords: number
+    evidenceHash: string
+    capturedAt: number
+  }
+  createdAt: number
+  pinHash: string
+}
+
+export interface TextOpenWorldSourcePinBundleV1 {
+  pin: TextOpenWorldSourcePinV1
+  units: Array<{
+    payload: TextOpenWorldSourcePinUnitV1
+    artifactContentHash: string
+  }>
+}
 
 export const TEXT_OPEN_WORLD_PRODUCTION_STAGES_V1 = [
   'P0', 'P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8', 'P8F', 'P9', 'P10',
