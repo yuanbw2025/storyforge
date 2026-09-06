@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ComicInfo xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <Title>借火</Title>
+  <Series>StoryForge 网站展示漫画</Series>
+  <Number>1</Number>
+  <Count>1</Count>
+  <Volume>1</Volume>
+  <Summary>拆除前夜，十九岁的叶澄唤醒一只纸兔灯，必须在日出前把借来的火送过石桥。</Summary>
+  <Writer>StoryForge Showcase</Writer>
+  <Penciller>StoryForge Showcase</Penciller>
+  <Colorist>StoryForge Showcase</Colorist>
+  <Letterer>StoryForge Showcase</Letterer>
+  <Genre>Urban Fantasy, Family, Folklore</Genre>
+  <Year>2026</Year>
+  <Month>9</Month>
+  <LanguageISO>zh-CN</LanguageISO>
+  <PageCount>6</PageCount>
+  <Manga>No</Manga>
+  <AgeRating>Everyone</AgeRating>
+</ComicInfo>
