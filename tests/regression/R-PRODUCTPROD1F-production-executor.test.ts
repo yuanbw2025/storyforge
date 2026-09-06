@@ -1036,7 +1036,7 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
       'content.narrative-arc-plan',
       {
         acts: [
-          { key: 'act.1', sceneCards: [{ key: 'scene.001', title: '一' }] },
+          { key: 'act.1', targetMinutes: '20', sceneCards: [{ key: 'scene.001', title: '一', locationOrdinal: '1' }] },
           { key: 'act.2', sceneCards: [{ key: 'scene.003', title: '三' }, { key: 'scene.002', title: '二' }] },
           { key: 'act.3', sceneCards: [{ key: 'scene.004', title: '四' }] },
         ],
@@ -1046,7 +1046,15 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
     expect((arcGrouping.payload.acts as Array<{ sceneCards: Array<{ key: string }> }>).map(
       act => act.sceneCards.map(card => card.key),
     )).toEqual([['scene.001', 'scene.002'], ['scene.003'], ['scene.004']])
+    const legalizedArcActs = arcGrouping.payload.acts as Array<{
+      targetMinutes?: unknown
+      sceneCards: Array<{ key: string; locationOrdinal?: unknown }>
+    }>
+    expect(legalizedArcActs[0].targetMinutes).toBe(20)
+    expect(legalizedArcActs[0].sceneCards[0].locationOrdinal).toBe(1)
     expect(arcGrouping.defaultedFields).toEqual([
+      'acts[0].targetMinutes<-decimal-string',
+      'acts[0].sceneCards[0].locationOrdinal<-decimal-string',
       'acts[0].sceneCards<-frozen-scene-key-group',
       'acts[1].sceneCards<-frozen-scene-key-group',
     ])

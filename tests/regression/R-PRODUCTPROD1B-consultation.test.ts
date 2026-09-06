@@ -100,10 +100,12 @@ describe('R-PRODUCTPROD-1B · consultation and reviewable Brief', () => {
     const resolvedAdventure = await draftProductProductionBriefV3({
       scope: owned.scope, worldReleaseId: owned.release.id!, suggestionKey: mainline.suggestionKey,
       productType: 'text-adventure', visualLevel: 'none', audioLevel: 'none',
+      scale: 'short-arc',
       playerRole: '扮演调查信号的守灯人',
       openingSituation: '从用户确认的潮门信号塔入口开始调查。',
     })
     expect(resolvedAdventure.unresolvedDecisionKeys).not.toContain('adventure-starting-location')
+    expect(resolvedAdventure.productionBudget.maximumOutputTokens).toBe(160_000)
 
     const ttrpgWithoutConfirmation = await draftProductProductionBriefV3({
       scope: owned.scope, worldReleaseId: owned.release.id!, suggestionKey: mainline.suggestionKey,

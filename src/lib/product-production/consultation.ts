@@ -384,7 +384,11 @@ export async function draftProductProductionBriefV3(input: {
     ? Math.max(300_000, productionModelCalls * 16_000)
     : 180_000
   const productionOutputTokens = textAdventure
-    ? Math.max(100_000, scale.targetWordCount * 6 + 40_000)
+    ? Math.max(
+        100_000,
+        scale.targetWordCount * 8 + 60_000,
+        scale.targetPlayMinutes * 2_000 + 40_000,
+      )
     : 60_000
   return parseProductProductionBriefV3({
     schema: 'storyforge.product-production-brief', version: 3,

@@ -582,7 +582,28 @@ export function legalizeProductionModelProtocolDefaultsV1(
   if (taskKey === 'content.narrative-arc-plan' && options.narrativeArcSceneKeys?.length === 3) {
     const next: JsonRecord = { ...payload }
     if (Array.isArray(payload.acts) && payload.acts.length === 3) {
-      const acts = payload.acts
+      const acts = payload.acts.map((act, actIndex) => {
+        if (!act || typeof act !== 'object' || Array.isArray(act)) return act
+        const item = { ...(act as JsonRecord) }
+        if (typeof item.targetMinutes === 'string' && /^[1-9][0-9]*$/.test(item.targetMinutes)) {
+          item.targetMinutes = Number(item.targetMinutes)
+          defaultedFields.push(`acts[${actIndex}].targetMinutes<-decimal-string`)
+        }
+        if (Array.isArray(item.sceneCards)) item.sceneCards = item.sceneCards.map((card, sceneIndex) => {
+          if (!card || typeof card !== 'object' || Array.isArray(card)) return card
+          const scene = { ...(card as JsonRecord) }
+          if (typeof scene.locationOrdinal === 'string'
+            && /^[1-9][0-9]*$/.test(scene.locationOrdinal)) {
+            scene.locationOrdinal = Number(scene.locationOrdinal)
+            defaultedFields.push(
+              `acts[${actIndex}].sceneCards[${sceneIndex}].locationOrdinal<-decimal-string`,
+            )
+          }
+          return scene
+        })
+        return item
+      })
+      next.acts = acts
       const sceneCards = acts.flatMap(act => {
         if (!act || typeof act !== 'object' || Array.isArray(act)) return []
         return Array.isArray((act as JsonRecord).sceneCards)
@@ -1362,7 +1383,7 @@ function textSystem(
     return `${common}\n你是故事架构师，负责把故事圣经、角色圣经、空间架构与系统约束拆成可执行的分幕叙事弧。` +
       '输出字段必须精确为：{"schema":"storyforge.text-adventure-narrative-arc-plan-artifact","version":1,"acts":[{"key":"act.1","title":"...","targetMinutes":20,"goal":"...","irreversibleTurn":"...","sceneCards":[{"key":"scene.001","title":"...","locationOrdinal":1,"purpose":"...","conflict":"...","entryState":"...","exitState":"...","castKeys":["character.some-key"],"setupKeys":[],"payoffKeys":[]}]}],"decisions":[{"key":"decision.some-key","sceneKey":"scene.001","prompt":"...","options":[{"key":"option.some-key","label":"...","cost":"...","persistentEffectKey":"flag.some-key","echoSceneKeys":["scene.002","scene.003"]}]}],"endings":[{"endingKey":"ending.some-key","sceneKey":"scene.012"}]}。' +
       `必须恰好三幕 act.1/act.2/act.3；各幕 sceneCards 数量必须依次为 ${JSON.stringify(actSceneKeys.map(keys => keys.length))}，并依次精确使用 ${JSON.stringify(actSceneKeys)}，总计 ${adventure.narrative.targetSceneCount} 张，不得增删。先逐字复制全部 scene key 槽位并按幕核对数量，再填写每张卡内容；不得把某幕的卡放入另一幕。targetMinutes 合计约 ${brief.scale.targetPlayMinutes} 分钟。` +
-      `decisions 必须恰好 ${decisionSceneKeys.length} 项，数组索引与 sceneKey 的冻结映射=${JSON.stringify(decisionSceneKeys.map((sceneKey, index) => ({ index, sceneKey })))}；不得从 scene.002 起步、错位、跳号或自行选择其他场景。每个决定恰好 2 个选项且至少在两个后续场景回响；endings 必须依次复用 ${JSON.stringify(skeleton.endingKeys)} 且全部从 ${skeleton.sceneKeys[skeleton.sceneKeys.length - 1]} 汇出；角色、铺垫和回收必须逐字复用上游稳定 key。locationOrdinal 为 1–${adventure.narrative.targetLocationCount}。`
+      `decisions 必须恰好 ${decisionSceneKeys.length} 项，数组索引与 sceneKey 的冻结映射=${JSON.stringify(decisionSceneKeys.map((sceneKey, index) => ({ index, sceneKey })))}；不得从 scene.002 起步、错位、跳号或自行选择其他场景。每个决定恰好 2 个选项且至少在两个后续场景回响；endings 必须依次复用 ${JSON.stringify(skeleton.endingKeys)} 且全部从 ${skeleton.sceneKeys[skeleton.sceneKeys.length - 1]} 汇出；角色、铺垫和回收必须逐字复用上游稳定 key。每张场景卡的 locationOrdinal 必须是 1 到 ${adventure.narrative.targetLocationCount} 的 JSON 整数，不得为 0、字符串、区间或地点标题。`
   }
   const dialoguePassActIndex = textAdventureDialoguePassActIndex(taskKey)
   if (dialoguePassActIndex != null) {

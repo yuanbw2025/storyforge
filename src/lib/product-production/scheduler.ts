@@ -328,16 +328,23 @@ function safeExecutorError(error: unknown): string {
 
 function boundedUsage(usage: ProductProductionTaskUsageV1, reservation: ProductTaskBudgetReservationV1): void {
   const integers = [usage.modelCalls, usage.inputTokens, usage.outputTokens, usage.mediaCalls, usage.durationMs, usage.storageBytes]
-  if (integers.some(value => !Number.isInteger(value) || value < 0)
+  const invalid = integers.some(value => !Number.isInteger(value) || value < 0)
     || (usage.costUsd != null && (!Number.isFinite(usage.costUsd) || usage.costUsd < 0))
-    || usage.modelCalls > reservation.modelCalls
-    || usage.inputTokens > reservation.inputTokens
-    || usage.outputTokens > reservation.outputTokens
-    || usage.mediaCalls > reservation.mediaCalls
-    || usage.durationMs > reservation.durationMs
-    || usage.storageBytes > reservation.storageBytes
-    || (reservation.maximumCostUsd != null && (usage.costUsd ?? 0) > reservation.maximumCostUsd)) {
-    throw new Error('[product-production-scheduler] task usage 超出 Plan 预算预留')
+  const exceeded = [
+    ['modelCalls', usage.modelCalls, reservation.modelCalls],
+    ['inputTokens', usage.inputTokens, reservation.inputTokens],
+    ['outputTokens', usage.outputTokens, reservation.outputTokens],
+    ['mediaCalls', usage.mediaCalls, reservation.mediaCalls],
+    ['durationMs', usage.durationMs, reservation.durationMs],
+    ['storageBytes', usage.storageBytes, reservation.storageBytes],
+    ...(reservation.maximumCostUsd == null
+      ? [] : [['costUsd', usage.costUsd ?? 0, reservation.maximumCostUsd] as const]),
+  ].filter(([, actual, maximum]) => actual > maximum)
+    .map(([field, actual, maximum]) => `${field}=${actual}/${maximum}`)
+  if (invalid || exceeded.length > 0) {
+    throw new Error(`[product-production-scheduler] task usage 超出 Plan 预算预留${
+      invalid ? ':usage-invalid' : `:${exceeded.join(',')}`
+    }`)
   }
 }
 
