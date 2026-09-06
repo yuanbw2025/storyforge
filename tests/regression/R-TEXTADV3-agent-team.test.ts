@@ -5,6 +5,7 @@ import {
   getDefaultAgentSkillV1,
   TEXT_ADVENTURE_PRODUCTION_AGENT_IDS,
 } from '../../src/lib/agent/skill-registry'
+import { CONTEXT_SOURCE_BY_KEY } from '../../src/lib/registry/context-sources'
 
 const LEGACY_TEXT_ADVENTURE_SKILLS = [
   'text-adventure.production-architecture.v1',
@@ -49,5 +50,16 @@ describe('TEXTADV-3 · 专业生产 Agent 团队', () => {
     expect(counts.get('text-adventure-dialogue-editor')).toBe(1)
     expect(counts.get('text-adventure-showrunner')).toBe(1)
     expect(counts.get('text-adventure-scene-writer')).toBe(1)
+  })
+
+  it('分场作者和对白编辑只读取各自登记的有界投影', () => {
+    expect(getAgentSkillV1('text-adventure.scene-script.v1').optionalContextSourceKeys)
+      .toContain('product-production.adventure-scene-script-inputs')
+    expect(getAgentSkillV1('text-adventure.dialogue-pass.v1').optionalContextSourceKeys)
+      .toContain('product-production.adventure-dialogue-inputs')
+    expect(CONTEXT_SOURCE_BY_KEY.get('product-production.adventure-scene-script-inputs'))
+      .toMatchObject({ ownerFrom: 'work', protectedFromTrim: true })
+    expect(CONTEXT_SOURCE_BY_KEY.get('product-production.adventure-dialogue-inputs'))
+      .toMatchObject({ ownerFrom: 'work', protectedFromTrim: true })
   })
 })

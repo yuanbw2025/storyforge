@@ -632,19 +632,18 @@ function professionalTextAdventureSceneScriptOutputs(
       beatKey: string; kind: 'narration' | 'dialogue'; speakerKey: string | null; text: string; order: number
     }> }>
   }>
-  const bundles = Object.values(sceneScriptOutputs)
-  const dialogueBeats = bundles.flatMap(bundle => [
-    ...bundle.scenes.flatMap(scene => scene.beats),
-    ...bundle.endings.flatMap(ending => ending.beats),
-  ]).filter(beat => beat.kind === 'dialogue').sort((left, right) => left.beatKey.localeCompare(right.beatKey))
-  const choices = bundles.flatMap(bundle => bundle.choices)
-    .sort((left, right) => left.choiceKey.localeCompare(right.choiceKey))
-  const usedSpeakerKeys = [...new Set(dialogueBeats.map(beat => beat.speakerKey!))].sort()
-  return {
-    ...sceneScriptOutputs,
-    'content.dialogue-pass': {
+  const dialoguePassOutputs = Object.fromEntries(Object.values(sceneScriptOutputs).map(bundle => {
+    const dialogueBeats = [
+      ...bundle.scenes.flatMap(scene => scene.beats),
+      ...bundle.endings.flatMap(ending => ending.beats),
+    ].filter(beat => beat.kind === 'dialogue').sort((left, right) => left.beatKey.localeCompare(right.beatKey))
+    const choices = [...bundle.choices].sort((left, right) => left.choiceKey.localeCompare(right.choiceKey))
+    const usedSpeakerKeys = [...new Set(dialogueBeats.map(beat => beat.speakerKey!))].sort()
+    const taskKey = `content.dialogue-pass.act-${bundle.actKey.slice('act.'.length)}`
+    return [taskKey, {
       schema: 'storyforge.text-adventure-dialogue-pass-artifact' as const,
       version: 1 as const,
+      actKey: bundle.actKey,
       characterAssessments: usedSpeakerKeys.map(characterKey => ({
         characterKey,
         voiceDistinctness: 'adequate' as const,
@@ -667,8 +666,12 @@ function professionalTextAdventureSceneScriptOutputs(
         revisedText: choice.text,
         revisedDescription: choice.description,
       })),
-      summary: '已逐条覆盖全部对白与玩家选择文案，角色声音、知识边界和玩家意图均可进入确定性装配。',
-    },
+      summary: '已逐条覆盖本幕全部对白与玩家选择文案，角色声音、知识边界和玩家意图均可进入确定性装配。',
+    }]
+  }))
+  return {
+    ...sceneScriptOutputs,
+    ...dialoguePassOutputs,
   }
 }
 
@@ -1385,9 +1388,11 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     const bindingHash = await hashProductProductionValueV2({ provider: 'full-length-text-adventure' })
     const outputs = fullLengthTextAdventureOutputs(owned.brief) as Record<string, unknown>
     const sceneScriptSystems: string[] = []
+    const sceneScriptContexts: string[] = []
     let productModuleSystem = ''
     let sideQuestSystem = ''
-    let dialoguePassSystem = ''
+    const dialoguePassSystems: string[] = []
+    const dialoguePassContexts: string[] = []
     let qualityReviewSystem = ''
     let qualityReviewContext = ''
     let modelCallCount = 0
@@ -1395,10 +1400,16 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
       modelCallCount += 1
       const taskKey = Object.keys(outputs).find(key => request.system.includes(`任务=${key}。`))
       if (!taskKey) throw new Error(`unknown full-length task:${request.system}`)
-      if (taskKey.startsWith('content.scene-script.act-')) sceneScriptSystems.push(request.system)
+      if (taskKey.startsWith('content.scene-script.act-')) {
+        sceneScriptSystems.push(request.system)
+        sceneScriptContexts.push(request.contextText)
+      }
       if (taskKey === 'content.product-module') productModuleSystem = request.system
       if (taskKey === 'content.adventure-side-quests') sideQuestSystem = request.system
-      if (taskKey === 'content.dialogue-pass') dialoguePassSystem = request.system
+      if (taskKey.startsWith('content.dialogue-pass.act-')) {
+        dialoguePassSystems.push(request.system)
+        dialoguePassContexts.push(request.contextText)
+      }
       if (taskKey === 'content.adventure-quality-review') {
         qualityReviewSystem = request.system
         qualityReviewContext = request.contextText
@@ -1434,11 +1445,23 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     expect(sceneScriptSystems[0]).toContain('"sceneKey":"scene.001","locationTitle":"地点 1-1-1"')
     expect(sceneScriptSystems[0]).toContain('一律不得改写')
     expect(sceneScriptSystems[2]).toContain('"endings":["ending.001","ending.002","ending.003"]')
+    expect(sceneScriptContexts).toHaveLength(3)
+    expect(sceneScriptContexts[0]).toContain('storyforge.text-adventure-scene-script-inputs')
+    expect(sceneScriptContexts[0]).toContain('"taskKey":"content.scene-script.act-1"')
+    expect(sceneScriptContexts[0]).not.toContain('storyforge.product-production.artifact-inputs')
+    expect(sceneScriptContexts[0]).not.toContain('"key":"scene.012"')
     expect(sideQuestSystem).toContain('地点编号与标题的唯一映射=')
     expect(sideQuestSystem).toContain('"locationOrdinal":1,"locationTitle":"地点 1-1-1"')
     expect(sideQuestSystem).toContain('不得伪装成尚未实现的跨地点多阶段任务')
-    expect(dialoguePassSystem).toContain('你是独立对白编辑，不是分场作者')
-    expect(dialoguePassSystem).toContain('每个 dialogue beat 和 choice 必须恰好审校一次')
+    expect(dialoguePassSystems).toHaveLength(3)
+    expect(dialoguePassSystems[0]).toContain('独立对白编辑，不是分场作者')
+    expect(dialoguePassSystems[0]).toContain('每个 dialogue beat 和 choice 必须恰好审校一次')
+    expect(dialoguePassContexts).toHaveLength(3)
+    const firstActDialogueContext = dialoguePassContexts.find(context => (
+      context.includes('"taskKey":"content.dialogue-pass.act-1"')
+    ))!
+    expect(firstActDialogueContext).toContain('storyforge.text-adventure-dialogue-inputs')
+    expect(firstActDialogueContext).not.toContain('storyforge.product-production.artifact-inputs')
     expect(productModuleSystem).toContain('clock 表示开局后累计经过的分钟数')
     expect(productModuleSystem).toContain('initial 和 minimum 必须同时为 0')
     expect(qualityReviewSystem).toContain('只能是 JSON number 1、2、3、4 或 5')
@@ -1448,7 +1471,7 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     expect(qualityReviewContext).toContain('"cast"')
     expect(qualityReviewContext).toContain('"arcPlan"')
     expect(qualityReviewContext).toContain('"mainQuestPlan"')
-    expect(qualityReviewContext).toContain('"dialoguePass"')
+    expect(qualityReviewContext).toContain('"dialoguePasses"')
     expect(qualityReviewContext).toContain('"targetCharacterKey"')
     expect(qualityReviewContext).toContain('"artifactKey":"content.narrative"')
     expect(qualityReviewContext).toContain('"openingBeat"')
@@ -1781,7 +1804,8 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
       ['content.cast-bible', 1], ['content.adventure-architecture', 1],
       ['content.narrative-arc-plan', 1], ['content.main-quest-plan', 1],
       ['content.scene-script.act-1', 4], ['content.scene-script.act-2', 2], ['content.scene-script.act-3', 2],
-      ['content.dialogue-pass', 2],
+      ['content.dialogue-pass.act-1', 2], ['content.dialogue-pass.act-2', 2],
+      ['content.dialogue-pass.act-3', 2],
       ['content.product-module', 1], ['content.adventure-side-quests', 2], ['content.quest-script', 2],
       ['content.adventure-ambient-events', 1], ['content.adventure-quality-review', 2],
       ['media.requirements', 2],

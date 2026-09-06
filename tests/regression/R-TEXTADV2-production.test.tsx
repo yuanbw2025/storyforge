@@ -82,7 +82,8 @@ describe('R-TEXTADV2-production · 文字冒险正式生产契约与工作台', 
       'content.adventure-architecture', 'content.product-module', 'content.narrative-arc-plan',
       'content.main-quest-plan', 'content.adventure-side-quests', 'content.adventure-ambient-events',
       'content.quest-script', 'content.scene-script.act-1', 'content.scene-script.act-2',
-      'content.scene-script.act-3', 'content.dialogue-pass', 'integration.narrative',
+      'content.scene-script.act-3', 'content.dialogue-pass.act-1',
+      'content.dialogue-pass.act-2', 'content.dialogue-pass.act-3', 'integration.narrative',
       'content.adventure-quality-review', 'media.requirements', 'media.visual',
       'integration.package', 'qa.release',
     ]))
@@ -118,17 +119,16 @@ describe('R-TEXTADV2-production · 文字冒险正式生产契约与工作台', 
       executionMode: 'deterministic',
       dependsOn: expect.arrayContaining([
         'content.scene-script.act-1', 'content.scene-script.act-2', 'content.scene-script.act-3',
-        'content.dialogue-pass',
+        'content.dialogue-pass.act-1', 'content.dialogue-pass.act-2', 'content.dialogue-pass.act-3',
       ]),
       outputArtifactKeys: ['content.narrative'],
     })
-    expect(taskByKey.get('content.dialogue-pass')).toMatchObject({
+    expect(taskByKey.get('content.dialogue-pass.act-1')).toMatchObject({
       skillId: 'text-adventure.dialogue-pass.v1',
       dependsOn: expect.arrayContaining([
         'content.cast-bible', 'content.scene-script.act-1',
-        'content.scene-script.act-2', 'content.scene-script.act-3',
       ]),
-      outputArtifactKeys: ['content.dialogue-pass'],
+      outputArtifactKeys: ['content.dialogue-pass.act-1'],
     })
     expect(taskByKey.get('content.adventure-side-quests')?.dependsOn).toEqual([
       'content.adventure-architecture', 'content.product-module', 'content.main-quest-plan',
@@ -139,7 +139,7 @@ describe('R-TEXTADV2-production · 文字冒险正式生产契约与工作台', 
         'content.story-bible', 'content.cast-bible', 'content.adventure-architecture',
         'content.product-module', 'content.narrative-arc-plan', 'content.main-quest-plan',
         'content.adventure-side-quests', 'content.adventure-ambient-events', 'content.quest-script',
-        'content.dialogue-pass',
+        'content.dialogue-pass.act-1', 'content.dialogue-pass.act-2', 'content.dialogue-pass.act-3',
         'integration.narrative',
       ],
       outputArtifactKeys: ['quality.adventure-review'],
@@ -150,7 +150,8 @@ describe('R-TEXTADV2-production · 文字冒险正式生产契约与工作台', 
     expect(taskByKey.get('integration.package')?.inputArtifactKeys).toEqual(expect.arrayContaining([
       'content.story-bible', 'content.cast-bible', 'content.adventure-architecture',
       'content.narrative-arc-plan', 'content.main-quest-plan', 'content.adventure-side-quests',
-      'content.adventure-ambient-events', 'content.dialogue-pass', 'quality.adventure-review',
+      'content.adventure-ambient-events', 'content.dialogue-pass.act-1',
+      'content.dialogue-pass.act-2', 'content.dialogue-pass.act-3', 'quality.adventure-review',
       'media.visual.001', 'media.visual.002',
     ]))
   })

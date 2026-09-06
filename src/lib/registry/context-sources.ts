@@ -147,6 +147,12 @@ async function readProductProductionBriefContext(input: AssembleContextInput): P
 async function readProductProductionArtifactInputs(input: AssembleContextInput): Promise<string> {
   return (await import('../product-production/context')).readProductProductionArtifactInputs(input)
 }
+async function readTextAdventureSceneScriptInputsV1(input: AssembleContextInput): Promise<string> {
+  return (await import('../product-production/context')).readTextAdventureSceneScriptInputsV1(input)
+}
+async function readTextAdventureDialogueInputsV1(input: AssembleContextInput): Promise<string> {
+  return (await import('../product-production/context')).readTextAdventureDialogueInputsV1(input)
+}
 async function readTextAdventureQualityInputsV1(input: AssembleContextInput): Promise<string> {
   return (await import('../product-production/context')).readTextAdventureQualityInputsV1(input)
 }
@@ -1380,6 +1386,32 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     budgetTokens: 24_000,
     enabled: input => Number.isInteger(input.productBuildId) && !!input.productArtifactKeys?.length,
     read: readProductProductionArtifactInputs,
+  },
+  {
+    key: 'product-production.adventure-scene-script-inputs',
+    label: '文字冒险单幕分场写作投影',
+    scope: 'project',
+    layer: 'L0',
+    ownerFrom: 'work',
+    budgetTokens: 19_000,
+    protectedFromTrim: true,
+    enabled: input => Number.isInteger(input.productBuildId)
+      && /^content\.scene-script\.act-[123]$/.test(input.productProductionTaskKey ?? '')
+      && !!input.productArtifactKeys?.length,
+    read: readTextAdventureSceneScriptInputsV1,
+  },
+  {
+    key: 'product-production.adventure-dialogue-inputs',
+    label: '文字冒险独立对白审校投影',
+    scope: 'project',
+    layer: 'L0',
+    ownerFrom: 'work',
+    budgetTokens: 12_500,
+    protectedFromTrim: true,
+    enabled: input => Number.isInteger(input.productBuildId)
+      && /^content\.dialogue-pass\.act-[123]$/.test(input.productProductionTaskKey ?? '')
+      && !!input.productArtifactKeys?.length,
+    read: readTextAdventureDialogueInputsV1,
   },
   {
     key: 'product-production.adventure-quality-inputs',

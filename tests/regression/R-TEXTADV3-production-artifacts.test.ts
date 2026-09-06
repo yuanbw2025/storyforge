@@ -281,14 +281,13 @@ describe('TEXTADV-3 · 专业生产工件合同', () => {
       allowedSpeakerKeys: cast.characters.map(character => character.key),
       locationTitles, expectedModuleTitle: story.title, sceneTitles, endingTitles,
     }))
-    const dialogueBeats = bundles.flatMap(bundle => [
-      ...bundle.scenes.flatMap(scene => scene.beats),
-      ...bundle.endings.flatMap(ending => ending.beats),
-    ]).filter(beat => beat.kind === 'dialogue').sort((left, right) => left.beatKey.localeCompare(right.beatKey))
-    const choices = bundles.flatMap(bundle => bundle.choices)
+    const dialogueBeats = bundles[0].scenes.flatMap(scene => scene.beats)
+      .filter(beat => beat.kind === 'dialogue').sort((left, right) => left.beatKey.localeCompare(right.beatKey))
+    const choices = bundles[0].choices
       .sort((left, right) => left.choiceKey.localeCompare(right.choiceKey))
     const dialoguePassValue = {
       schema: 'storyforge.text-adventure-dialogue-pass-artifact', version: 1,
+      actKey: 'act.1',
       characterAssessments: [{
         characterKey: 'character.npc.1', voiceDistinctness: 'strong', knowledgeBoundary: 'passed',
         notes: '同伴说话克制而具体，修订后没有提前知道最终选择。',
@@ -308,9 +307,12 @@ describe('TEXTADV-3 · 专业生产工件合同', () => {
       summary: '已逐条检查全部对白和选择措辞，并修复一处说明书式对白。',
     }
     const dialoguePass = parseTextAdventureDialoguePassArtifactV1({
-      value: dialoguePassValue, brief: inputBrief, cast, bundles,
+      value: dialoguePassValue, brief: inputBrief, cast, bundles: [bundles[0]],
     })
-    const revisedBundles = applyTextAdventureDialoguePassV1({ bundles, dialoguePass })
+    const revisedBundles = [
+      ...applyTextAdventureDialoguePassV1({ bundles: [bundles[0]], dialoguePass }),
+      bundles[1], bundles[2],
+    ]
     const assembled = assembleTextAdventureNarrativeFromSceneScriptsV1({ brief: inputBrief, bundles: revisedBundles })
     expect(assembled.nodes.map(node => node.key)).toEqual([
       'scene.001', 'scene.002', 'scene.003', 'ending.001', 'ending.002',
@@ -322,7 +324,7 @@ describe('TEXTADV-3 · 专业生产工件合同', () => {
     const incompleteDialoguePass = structuredClone(dialoguePassValue)
     incompleteDialoguePass.beatReviews.pop()
     expect(() => parseTextAdventureDialoguePassArtifactV1({
-      value: incompleteDialoguePass, brief: inputBrief, cast, bundles,
+      value: incompleteDialoguePass, brief: inputBrief, cast, bundles: [bundles[0]],
     })).toThrow('beatReviews 数量无效')
     const changed = bundleValue(0)
     changed.choices[0].targetNodeKey = 'scene.003'

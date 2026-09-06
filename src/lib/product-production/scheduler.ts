@@ -576,7 +576,7 @@ async function currentProductionBuild(scope: WorkspaceScope, productionId: numbe
 
 function evolutionTaskLane(taskKey: string): 'content' | 'product' | 'visual' | 'audio' | null {
   if (taskKey.startsWith('content.scene-script.act-')
-    || taskKey === 'content.dialogue-pass'
+    || taskKey.startsWith('content.dialogue-pass.act-')
     || taskKey === 'content.source-sufficiency'
     || taskKey === 'content.design'
     || taskKey === 'content.story-bible'
@@ -895,12 +895,15 @@ async function recoveryInvalidatedTaskKeys(input: {
   const sceneScriptTaskKeys = [
     'content.scene-script.act-1', 'content.scene-script.act-2', 'content.scene-script.act-3',
   ]
+  const dialoguePassTaskKeys = [
+    'content.dialogue-pass.act-1', 'content.dialogue-pass.act-2', 'content.dialogue-pass.act-3',
+  ]
   const invalidated = new Set<string>(unresolvedFailureTaskKeys.length > 0
     ? unresolvedFailureTaskKeys.flatMap(taskKey => (
-        taskKey === 'integration.narrative' ? [...sceneScriptTaskKeys, 'content.dialogue-pass'] : [taskKey]
+        taskKey === 'integration.narrative' ? [...sceneScriptTaskKeys, ...dialoguePassTaskKeys] : [taskKey]
       ))
     : blockingArtifactKeys.flatMap(artifactKey => {
-        if (artifactKey === 'content.narrative') return [...sceneScriptTaskKeys, 'content.dialogue-pass']
+        if (artifactKey === 'content.narrative') return [...sceneScriptTaskKeys, ...dialoguePassTaskKeys]
         const taskKey = taskByArtifactKey.get(artifactKey)
         return taskKey ? [taskKey] : []
       }))
@@ -1301,6 +1304,7 @@ async function runClaimedTask(input: {
     projectId: input.scope.projectId, scope: input.scope, sourceKeys: normalSourceKeys,
     productProductionId: input.productionId, productBuildId: input.build.id,
     productArtifactKeys: input.task.inputArtifactKeys,
+    productProductionTaskKey: input.task.taskKey,
     inputBudgetMaxTokens: normalInputBudget,
   })
   let assembled = normalAssembled

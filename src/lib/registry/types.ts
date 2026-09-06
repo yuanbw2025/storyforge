@@ -583,6 +583,8 @@ export interface AssembleContextInput {
   productProductionId?: number
   productBuildId?: number
   productArtifactKeys?: string[]
+  /** Exact durable production task whose registered reader may project only its bounded work packet. */
+  productProductionTaskKey?: string
   /** Character interaction: exactly one viewpoint for the registered reader. */
   interactionParticipantKey?: string
   /** Character interaction: frozen product source + confirmed product Brief. */

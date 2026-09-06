@@ -51,6 +51,7 @@ export type TextAdventureDialogueIssueV1 = typeof TEXT_ADVENTURE_DIALOGUE_ISSUES
 export interface TextAdventureDialoguePassArtifactV1 {
   schema: 'storyforge.text-adventure-dialogue-pass-artifact'
   version: 1
+  actKey: string
   characterAssessments: Array<{
     characterKey: string
     voiceDistinctness: 'strong' | 'adequate'
@@ -133,12 +134,15 @@ export function parseTextAdventureDialoguePassArtifactV1(input: {
   }
   const row = record(input.value, 'dialoguePass')
   exactKeys(row, [
-    'schema', 'version', 'characterAssessments', 'beatReviews', 'choiceReviews', 'summary',
+    'schema', 'version', 'actKey', 'characterAssessments', 'beatReviews', 'choiceReviews', 'summary',
   ], 'dialoguePass')
   if (row.schema !== 'storyforge.text-adventure-dialogue-pass-artifact' || row.version !== 1) {
     fail('dialoguePass schema/version 无效')
   }
   const source = collectDialogueInputs(input.bundles)
+  if (input.bundles.length !== 1) fail('单次对白审校必须精确绑定一个幕')
+  const actKey = key(row.actKey, 'actKey')
+  if (actKey !== input.bundles[0].actKey) fail(`actKey 必须为 ${input.bundles[0].actKey}`)
   const castByKey = new Map(input.cast.characters.map(character => [character.key, character]))
   const usedSpeakerKeys = [...new Set(source.beats.map(beat => beat.speakerKey))].sort()
   if (usedSpeakerKeys.some(characterKey => !castByKey.has(characterKey))) fail('输入对白引用未知角色')
@@ -230,6 +234,7 @@ export function parseTextAdventureDialoguePassArtifactV1(input: {
   return {
     schema: 'storyforge.text-adventure-dialogue-pass-artifact',
     version: 1,
+    actKey,
     characterAssessments,
     beatReviews,
     choiceReviews,

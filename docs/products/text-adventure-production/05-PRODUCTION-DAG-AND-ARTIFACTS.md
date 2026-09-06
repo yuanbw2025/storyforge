@@ -1,6 +1,6 @@
 # 05 · Durable 生产 DAG 与工件方案
 
-> 层级：L2 · 版本：1.3.0 · 生效：2026-09-07
+> 层级：L2 · 版本：1.4.0 · 生效：2026-09-07
 > 性质：正式生产计划、Run Contract 和候选采纳目标契约。
 
 ## 1. 目标拓扑
@@ -30,7 +30,7 @@ WorldRelease + Confirmed Brief + Frozen SourcePlan
 
 关键依赖不可省略：系统设计读取故事/角色；主线任务读取故事弧、角色和系统；支线读取主线；任务脚本读取全部任务与系统；场景正文读取任务脚本；美术清单读取定稿场景和角色锚点。旧 DAG 中“主线与系统并行、支线不读主线”的结构必须下线。
 
-当前代码已经实现到分场正文、独立对白审校与确定性叙事装配：规划、故事、角色、空间、系统、叙事弧、主线、支线和区域事件分别形成已登记任务，随后由 `text-adventure-quest-scripter` 生成严格的 `content.quest-script`；三幕 Scene Writer 分别生成 `content.scene-script.act-1/2/3`，独立 Dialogue Editor 对全量对白和选择产生 `content.dialogue-pass`，全部通过严格 parser 后，由 `integration.narrative` 应用表达修订并装配 `content.narrative`。作者工作台显示岗位名称、任务 key、attempt、状态和阻塞，并可展开审查这些专业工件。
+当前代码已经实现到分场正文、独立对白审校与确定性叙事装配：规划、故事、角色、空间、系统、叙事弧、主线、支线和区域事件分别形成已登记任务，随后由 `text-adventure-quest-scripter` 生成严格的 `content.quest-script`；三幕 Scene Writer 分别生成 `content.scene-script.act-1/2/3`，独立 Dialogue Editor 再按幕产生 `content.dialogue-pass.act-1/2/3`，全部通过严格 parser 后，由 `integration.narrative` 应用表达修订并装配 `content.narrative`。作者工作台显示岗位名称、任务 key、attempt、状态和阻塞，并可展开审查这些专业工件。
 
 连续性审校的独立问题工件与 Playtest Director 的试玩策略/推荐意见仍是后续施工单元；它们未形成各自 Agent、Skill、Artifact、receipt 和真实下游消费证据前，不能宣称专业 DAG 全部完成。
 

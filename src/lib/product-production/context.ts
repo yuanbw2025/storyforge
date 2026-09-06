@@ -75,6 +75,199 @@ function contextText(value: unknown, maximum: number): string {
   return normalized.length <= maximum ? normalized : `${normalized.slice(0, maximum)}…`
 }
 
+async function requiredContextArtifactsV1(input: AssembleContextInput, options: {
+  label: string
+  requiredKeys: readonly string[]
+}) {
+  const { build } = await productionAndBuild(input)
+  if (!build) throw new Error(`[product-production-context] ${options.label} 需要 productBuildId`)
+  const requested = new Set(input.productArtifactKeys ?? [])
+  if (options.requiredKeys.some(key => !requested.has(key))) {
+    throw new Error(`[product-production-context] ${options.label} Artifact 选择不完整`)
+  }
+  const candidateRows = (await db.productBuildArtifacts.where('buildId').equals(build.id!).toArray())
+    .filter(row => options.requiredKeys.includes(row.artifactKey)
+      && (row.status === 'accepted' || row.status === 'carried-forward'))
+    .sort((left, right) => left.version - right.version)
+  const rowByKey = new Map(candidateRows.map(row => [row.artifactKey, row]))
+  const rows = options.requiredKeys.flatMap(key => {
+    const row = rowByKey.get(key)
+    return row ? [row] : []
+  })
+  if (rows.length !== options.requiredKeys.length) {
+    throw new Error(`[product-production-context] ${options.label} Artifact 缺失或未验收`)
+  }
+  return {
+    build,
+    rows,
+    payloadByKey: new Map(rows.map(row => [row.artifactKey, contextRecord(JSON.parse(row.payloadJson))])),
+  }
+}
+
+/**
+ * One-act work packet for the Scene Writer. It intentionally projects the
+ * accepted source closure instead of dumping every upstream Artifact into all
+ * three Runs. Exact task identity is supplied by the durable scheduler.
+ */
+export async function readTextAdventureSceneScriptInputsV1(input: AssembleContextInput): Promise<string> {
+  const match = /^content\.scene-script\.act-([123])$/.exec(input.productProductionTaskKey ?? '')
+  if (!match) throw new Error('[product-production-context] 分场投影缺少精确 act taskKey')
+  const actIndex = Number(match[1]) - 1
+  const requiredKeys = [
+    'content.story-bible', 'content.cast-bible', 'content.adventure-architecture',
+    'content.product-module', 'content.narrative-arc-plan', 'content.main-quest-plan',
+    'content.adventure-side-quests', 'content.adventure-ambient-events', 'content.quest-script',
+  ]
+  const { build, rows, payloadByKey } = await requiredContextArtifactsV1(input, {
+    label: `第 ${actIndex + 1} 幕分场投影`, requiredKeys,
+  })
+  const story = payloadByKey.get('content.story-bible') ?? {}
+  const cast = payloadByKey.get('content.cast-bible') ?? {}
+  const architecture = payloadByKey.get('content.adventure-architecture') ?? {}
+  const systems = payloadByKey.get('content.product-module') ?? {}
+  const arc = payloadByKey.get('content.narrative-arc-plan') ?? {}
+  const mainPlan = payloadByKey.get('content.main-quest-plan') ?? {}
+  const questScript = payloadByKey.get('content.quest-script') ?? {}
+  const acts = contextRows(arc.acts)
+  const currentAct = acts[actIndex]
+  if (!currentAct) throw new Error(`[product-production-context] 第 ${actIndex + 1} 幕叙事弧缺失`)
+  const sceneCards = contextRows(currentAct.sceneCards)
+  const sceneKeys = new Set(sceneCards.map(scene => contextText(scene.key, 200)).filter(Boolean))
+  const castKeys = new Set(sceneCards.flatMap(scene => (
+    Array.isArray(scene.castKeys) ? scene.castKeys.filter((value): value is string => typeof value === 'string') : []
+  )))
+  const locationOrdinals = new Set(sceneCards.flatMap(scene => (
+    Number.isSafeInteger(scene.locationOrdinal) ? [Number(scene.locationOrdinal)] : []
+  )))
+  const locationCatalog = contextRows(architecture.regions).flatMap((region, regionIndex) => (
+    contextRows(region.areas).flatMap((area, areaIndex) => (
+      contextRows(area.locations).map(location => ({
+        regionIndex, areaIndex,
+        regionTitle: contextText(region.title, 120),
+        areaTitle: contextText(area.title, 120),
+        title: contextText(location.title, 120),
+        description: contextText(location.description, 500),
+        tags: Array.isArray(location.tags) ? location.tags : [],
+      }))
+    ))
+  )).map((location, index) => ({ ordinal: index + 1, ...location }))
+  const relevantLocations = locationCatalog.filter(location => locationOrdinals.has(location.ordinal))
+  const mainQuest = contextRows(mainPlan.quests)[0] ?? {}
+  const objectives = contextRows(mainQuest.objectives).filter(objective => (
+    Array.isArray(objective.sceneKeys)
+      && objective.sceneKeys.some(sceneKey => typeof sceneKey === 'string' && sceneKeys.has(sceneKey))
+  ))
+  const objectiveKeys = new Set(objectives.map(objective => contextText(objective.key, 200)).filter(Boolean))
+  const supplemental = (artifactKey: string) => contextRows(payloadByKey.get(artifactKey)?.entries)
+    .filter(entry => Number.isSafeInteger(entry.locationOrdinal) && locationOrdinals.has(Number(entry.locationOrdinal)))
+  const sideEntries = supplemental('content.adventure-side-quests')
+  const ambientEntries = supplemental('content.adventure-ambient-events')
+  const sideKeys = new Set(sideEntries.map(entry => contextText(entry.key, 200)).filter(Boolean))
+  const ambientKeys = new Set(ambientEntries.map(entry => contextText(entry.key, 200)).filter(Boolean))
+  const currentDecisions = contextRows(arc.decisions).filter(decision => sceneKeys.has(contextText(decision.sceneKey, 200)))
+  const previousAct = acts[actIndex - 1]
+  const nextAct = acts[actIndex + 1]
+  const previousCards = contextRows(previousAct?.sceneCards)
+  const nextCards = contextRows(nextAct?.sceneCards)
+  const packet = {
+    schema: 'storyforge.text-adventure-scene-script-inputs', version: 1,
+    buildNumber: build.buildNumber,
+    taskKey: input.productProductionTaskKey,
+    sources: rows.map(row => ({ artifactKey: row.artifactKey, contentHash: row.contentHash }))
+      .sort((left, right) => left.artifactKey.localeCompare(right.artifactKey)),
+    story: {
+      title: story.title, premise: story.premise, playerFantasy: story.playerFantasy,
+      thematicQuestion: story.thematicQuestion, emotionalPromise: story.emotionalPromise,
+      centralConflict: story.centralConflict,
+      canonFacts: story.canonFacts, productPrivateFacts: story.productPrivateFacts,
+      prohibitions: story.prohibitions,
+      setupPayoffs: contextRows(story.setupPayoffs).filter(item => (
+        item.introducedAct === actIndex + 1 || item.resolvedAct === actIndex + 1
+      )),
+      endings: actIndex === 2 ? story.endings : [],
+    },
+    act: currentAct,
+    handoff: {
+      previousExit: previousCards.length ? previousCards[previousCards.length - 1].exitState : null,
+      nextEntry: nextCards.length ? nextCards[0].entryState : null,
+    },
+    decisions: currentDecisions,
+    cast: contextRows(cast.characters).filter(character => castKeys.has(contextText(character.key, 200))),
+    locations: relevantLocations,
+    systems: {
+      abilities: systems.abilities, resources: systems.resources,
+      equipmentSlots: systems.equipmentSlots, starterEquipment: systems.starterEquipment,
+    },
+    mainQuest: {
+      key: mainQuest.key, title: mainQuest.title,
+      objectives,
+      scripts: contextRows(questScript.mainObjectiveScripts)
+        .filter(script => objectiveKeys.has(contextText(script.objectiveKey, 200))),
+    },
+    sideContent: sideEntries,
+    sideScripts: contextRows(questScript.sideQuestScripts)
+      .filter(script => sideKeys.has(contextText(script.entryKey, 200))),
+    ambientContent: ambientEntries,
+    ambientScripts: contextRows(questScript.ambientEventScripts)
+      .filter(script => ambientKeys.has(contextText(script.entryKey, 200))),
+  }
+  const serialized = JSON.stringify(packet)
+  const estimatedTokens = estimateTokens(serialized)
+  if (estimatedTokens > 18_500) {
+    throw new Error(`[product-production-context] 第 ${actIndex + 1} 幕分场投影超过登记预算:${estimatedTokens}/18500`)
+  }
+  return serialized
+}
+
+/** Full-text but role-specific packet for the independent Dialogue Editor. */
+export async function readTextAdventureDialogueInputsV1(input: AssembleContextInput): Promise<string> {
+  const match = /^content\.dialogue-pass\.act-([123])$/.exec(input.productProductionTaskKey ?? '')
+  if (!match) throw new Error('[product-production-context] 对白投影缺少精确 act taskKey')
+  const act = Number(match[1])
+  const requiredKeys = [
+    'content.story-bible', 'content.cast-bible', 'content.adventure-architecture',
+    'content.narrative-arc-plan',
+    `content.scene-script.act-${act}`,
+  ]
+  const { build, rows, payloadByKey } = await requiredContextArtifactsV1(input, {
+    label: '对白审校投影', requiredKeys,
+  })
+  const story = payloadByKey.get('content.story-bible') ?? {}
+  const cast = payloadByKey.get('content.cast-bible') ?? {}
+  const arc = payloadByKey.get('content.narrative-arc-plan') ?? {}
+  const sceneScript = payloadByKey.get(`content.scene-script.act-${act}`) ?? {}
+  const packet = {
+    schema: 'storyforge.text-adventure-dialogue-inputs', version: 1,
+    buildNumber: build.buildNumber,
+    taskKey: input.productProductionTaskKey,
+    sources: rows.map(row => ({ artifactKey: row.artifactKey, contentHash: row.contentHash }))
+      .sort((left, right) => left.artifactKey.localeCompare(right.artifactKey)),
+    storyBoundary: {
+      title: story.title, thematicQuestion: story.thematicQuestion,
+      centralConflict: story.centralConflict, prohibitions: story.prohibitions,
+    },
+    cast: cast.characters,
+    sceneKnowledgeBoundaries: contextRows(contextRows(arc.acts)[act - 1]?.sceneCards).map(scene => ({
+      sceneKey: scene.key, title: scene.title, entryState: scene.entryState, exitState: scene.exitState,
+      castKeys: scene.castKeys, setupKeys: scene.setupKeys, payoffKeys: scene.payoffKeys,
+    })),
+    act: {
+      actKey: sceneScript.actKey, moduleTitle: sceneScript.moduleTitle,
+      scenes: contextRows(sceneScript.scenes).map(scene => ({
+        sceneKey: scene.sceneKey, title: scene.title, summary: scene.summary, beats: scene.beats,
+      })),
+      choices: sceneScript.choices,
+      endings: sceneScript.endings,
+    },
+  }
+  const serialized = JSON.stringify(packet)
+  const estimatedTokens = estimateTokens(serialized)
+  if (estimatedTokens > 12_000) {
+    throw new Error(`[product-production-context] 第 ${act} 幕对白审校投影超过登记预算:${estimatedTokens}/12000，必须增加更小的有界对白分包计划`)
+  }
+  return serialized
+}
+
 /**
  * Registered, deterministic review projection for the text-adventure quality
  * Agent. The full accepted Artifacts stay authoritative in IndexedDB; this
@@ -87,7 +280,8 @@ export async function readTextAdventureQualityInputsV1(input: AssembleContextInp
   const requiredKeys = [
     'content.story-bible', 'content.cast-bible', 'content.adventure-architecture',
     'content.narrative-arc-plan', 'content.main-quest-plan', 'content.quest-script',
-    'content.dialogue-pass', 'content.narrative', 'content.product-module',
+    'content.dialogue-pass.act-1', 'content.dialogue-pass.act-2',
+    'content.dialogue-pass.act-3', 'content.narrative', 'content.product-module',
     'content.adventure-side-quests', 'content.adventure-ambient-events',
   ]
   const requested = new Set(input.productArtifactKeys ?? [])
@@ -113,7 +307,7 @@ export async function readTextAdventureQualityInputsV1(input: AssembleContextInp
   const arcPlan = payloadByKey.get('content.narrative-arc-plan') ?? {}
   const mainQuestPlan = payloadByKey.get('content.main-quest-plan') ?? {}
   const questScript = payloadByKey.get('content.quest-script') ?? {}
-  const dialoguePass = payloadByKey.get('content.dialogue-pass') ?? {}
+  const dialoguePasses = [1, 2, 3].map(act => payloadByKey.get(`content.dialogue-pass.act-${act}`) ?? {})
   const narrative = payloadByKey.get('content.narrative') ?? {}
   const productModule = payloadByKey.get('content.product-module') ?? {}
   const locations = contextRows(architecture.regions).flatMap(region => (
@@ -248,7 +442,8 @@ export async function readTextAdventureQualityInputsV1(input: AssembleContextInp
         difficulty: script.difficulty, timeCostMinutes: script.timeCostMinutes,
       })),
     },
-    dialoguePass: {
+    dialoguePasses: dialoguePasses.map(dialoguePass => ({
+      actKey: dialoguePass.actKey,
       summary: contextText(dialoguePass.summary, 300),
       characterAssessments: contextRows(dialoguePass.characterAssessments).map(assessment => ({
         characterKey: assessment.characterKey,
@@ -262,7 +457,7 @@ export async function readTextAdventureQualityInputsV1(input: AssembleContextInp
       reviewedChoiceCount: contextRows(dialoguePass.choiceReviews).length,
       revisedChoiceCount: contextRows(dialoguePass.choiceReviews)
         .filter(review => review.verdict === 'revise').length,
-    },
+    })),
     narrative: {
       entryNodeKey: contextText(narrative.entryNodeKey, 200),
       nodes,
