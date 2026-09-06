@@ -8,6 +8,7 @@ import {
 } from '../../src/lib/agent/run/short-novel-durable'
 import {
   buildShortNovelManuscriptSnapshotV1,
+  assertShortNovelReviewEvidenceV1,
   ensureShortNovelProductionV1,
   inspectShortNovelCompletionV1,
   publishShortNovelReleaseV1,
@@ -78,7 +79,7 @@ const reviewWithIssue: ShortNovelReviewV1 = {
   strengths: ['压力建立清楚'],
   issues: [{
     stableKey: 'issue-chapter-1-action', severity: 'major', category: 'causality', chapterKeys: ['chapter-1'],
-    evidence: '结尾只有“她决定把灯烧得更亮”', problem: '决定没有通过动作落地，第二章开场会显得跳跃。',
+    evidence: '第一章结构卡写道：“离场状态：阿遥决定把灯烧得更亮”', problem: '决定没有通过动作落地，第二章开场会显得跳跃。',
     suggestion: '增加她加油、剪灯芯并锁上灯室门的动作。', status: 'open',
   }],
 }
@@ -110,7 +111,7 @@ describe('R-SHORT2 · 专业短篇独立生产闭环', () => {
       'short-intent-brief', 'short-story-design', 'short-scene-plan', 'short-chapter-draft', 'short-continuity-review', 'short-targeted-rewrite',
     ])
     expect(ids.map(id => getAgentSkillV1(id).promptVersion)).toEqual([
-      'short-intent-brief-v2', 'short-story-design-v2', 'short-scene-plan-v2', 'short-chapter-draft-v4', 'short-continuity-review-v2', 'short-targeted-rewrite-v2',
+      'short-intent-brief-v2', 'short-story-design-v2', 'short-scene-plan-v2', 'short-chapter-draft-v4', 'short-continuity-review-v3', 'short-targeted-rewrite-v2',
     ])
     expect(() => parseShortNovelBriefV1({ ...brief, hiddenInstruction: '越权' })).toThrow('字段不在允许闭集')
     expect(() => parseShortNovelReviewV1({ ...review, issues: [{ stableKey: 'issue-1', severity: 'critical', category: 'causality', chapterKeys: ['chapter-1'], evidence: '无证据', problem: '问题', suggestion: '建议', status: 'resolved' }] })).toThrow('只能以 open 状态')
@@ -217,7 +218,29 @@ describe('R-SHORT2 · 专业短篇独立生产闭环', () => {
     })
     expect(reviewObjective.content).toContain('{"version":1,"summary":"非空总结"')
     expect(reviewObjective.content).toContain('{"stableKey":"issue-1","severity":"major"')
+    expect(reviewObjective.content).toContain('逐字存在于 chapterKeys 对应正文或结构卡')
     expect(reviewObjective.content).toContain('绝对不要增加 title、location、line、priority、confidence 或 reasoning')
+  })
+
+  it('拒绝引用正文中不存在句子的审校问题，并让 Markdown 恢复段落空行', () => {
+    const chapters = [{
+      stableKey: 'chapter-1', order: 0, title: '潮位阈值', summary: '时间跨度为十年。',
+      contentHtml: '<p>潮水替她迟到了十年。</p><p>我按下确认键。</p>', wordCount: 18, contentHash: 'hash',
+    }]
+    expect(() => assertShortNovelReviewEvidenceV1({
+      ...review,
+      issues: [{
+        stableKey: 'issue-hallucinated', severity: 'minor', category: 'continuity', chapterKeys: ['chapter-1'],
+        evidence: '第三章正文写道：“两年后才读取缓存”', problem: '时间线冲突。', suggestion: '改成十年。', status: 'open',
+      }],
+    }, chapters)).toThrow('证据引文不在目标章节')
+
+    expect(renderShortNovelReleaseMarkdownV1({
+      schema: 'storyforge.short-novel-release', version: 1, productKind: 'short-novel',
+      work: { code: 'short-demo', title: '段落样例', description: '', genres: [], targetWordCount: 5_000 },
+      production: { revision: 1, brief, storyDesign: design, review, reviewedManuscriptHash: 'manuscript' },
+      chapters, manuscriptHash: 'manuscript', createdAt: 1,
+    })).toContain('潮水替她迟到了十年。\n\n我按下确认键。')
   })
 
   it('安全兼容单一 JSON 的 provider 包装与正文原始换行，但拒绝歧义输出', () => {

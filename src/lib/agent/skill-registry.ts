@@ -2432,7 +2432,7 @@ export const AGENT_SKILLS = [
     defaultForAgent: false,
     label: '短篇全篇连续性审校',
     owner: 'short-novel-production-agent',
-    promptVersion: 'short-continuity-review-v2',
+    promptVersion: 'short-continuity-review-v3',
     executionMode: 'short-continuity-review',
     contextTaskKind: 'agent-outline',
     readToolNames: [],

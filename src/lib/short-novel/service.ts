@@ -246,8 +246,41 @@ export async function adoptShortNovelReviewV1(input: { scope: WorkspaceScope; ex
   const review = parseShortNovelReviewV1(input.review)
   const current = await buildShortNovelManuscriptSnapshotV1(input.scope)
   if (current.manuscriptHash !== input.expectedManuscriptHash) throw new Error('[short-novel] 手稿已变化，审校候选已 stale')
+  assertShortNovelReviewEvidenceV1(review, current.chapters)
   const phase = review.issues.some(issue => issue.severity === 'critical' && issue.status === 'open') ? 'review' : 'release-ready'
   return updateProductionV1({ scope: input.scope, expectedRevision: input.expectedRevision, patch: { latestReview: review, reviewedManuscriptHash: current.manuscriptHash, phase } })
+}
+
+function quotedEvidenceSpansV1(evidence: string): string[] {
+  const spans: string[] = []
+  const pattern = /(?:“([^”\n]{4,120})”|「([^」\n]{4,120})」|『([^』\n]{4,120})』|"([^"\n]{4,120})")/g
+  for (const match of evidence.matchAll(pattern)) {
+    const span = match.slice(1).find(value => value != null)?.trim()
+    if (span) spans.push(span)
+  }
+  return spans
+}
+
+/**
+ * 审校问题不能只靠模型声称“见过”正文。每个问题都必须引用目标章节中
+ * 实际存在的短文本；这样伪造时间线、人物或事件的 critic 候选会在采纳前失败。
+ */
+export function assertShortNovelReviewEvidenceV1(
+  review: ShortNovelReviewV1,
+  chapters: ShortNovelFrozenChapterV1[],
+): void {
+  const chapterByKey = new Map(chapters.map(chapter => [chapter.stableKey, chapter]))
+  for (const issue of review.issues) {
+    const targets = issue.chapterKeys.map(key => chapterByKey.get(key))
+    if (targets.some(chapter => !chapter)) throw new Error(`[short-novel] 审校问题 ${issue.stableKey} 引用了不存在的章节`)
+    const quotes = quotedEvidenceSpansV1(issue.evidence)
+    if (!quotes.length) throw new Error(`[short-novel] 审校问题 ${issue.stableKey} 的 evidence 必须包含带引号的实际短引文`)
+    const corpus = targets
+      .map(chapter => `${chapter!.title}\n${chapter!.summary}\n${htmlToPlainText(chapter!.contentHtml)}`)
+      .join('\n')
+    const missing = quotes.find(quote => !corpus.includes(quote))
+    if (missing) throw new Error(`[short-novel] 审校问题 ${issue.stableKey} 的证据引文不在目标章节：${missing}`)
+  }
 }
 
 export async function resolveShortNovelReviewIssueV1(input: { scope: WorkspaceScope; expectedRevision: number; issueKey: string; decision: 'resolved' | 'dismissed' }): Promise<ShortNovelProductionV1 & { id: number }> {
@@ -346,7 +379,9 @@ export async function readShortNovelReleaseManifestV1(scope: WorkspaceScope, rel
 }
 
 function htmlToMarkdown(html: string): string {
-  return htmlToPlainText(html).split(/\n{2,}/).map(paragraph => paragraph.trim()).filter(Boolean).join('\n\n')
+  // 富文本正文把每个作者段落保存为独立块；无论原始模型使用单换行还是
+  // 空行分段，Markdown 都必须恢复为空行分隔的可读段落。
+  return htmlToPlainText(html).split(/\n+/).map(paragraph => paragraph.trim()).filter(Boolean).join('\n\n')
 }
 
 export function renderShortNovelReleaseMarkdownV1(manifest: ShortNovelReleaseManifestV1): string {
