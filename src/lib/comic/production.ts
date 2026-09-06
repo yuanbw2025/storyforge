@@ -222,6 +222,8 @@ async function applyImageRequest(scopeInput: WorkspaceScope, expectedAdaptationR
   return db.transaction('rw', db.comicPanels, db.comicVisualSubjects, async () => {
     const panel = await db.comicPanels.where('[workId+stableKey]').equals([scope.workId, candidate.panelKey]).first()
     if (!panel || panel.revision !== candidate.expectedPanelRevision || panel.status === 'locked') throw new Error('[comic-production] 图片请求目标格不存在、已变化或已锁定')
+    const expectedFrames = (panel.protectedAreas ?? []).map(row => [row.x, row.y, row.width, row.height]); const actualFrames = candidate.protectedAreas.map(row => [row.x, row.y, row.width, row.height])
+    if (JSON.stringify(actualFrames) !== JSON.stringify(expectedFrames)) throw new Error('[comic-production] 图片请求不得改写目标格 protectedAreas')
     const subjects = await db.comicVisualSubjects.where('adaptationProjectId').equals(root.id).toArray(); const subjectKeys = new Set(subjects.map(row => row.stableKey))
     if (candidate.referenceSubjectKeys.some(key => !subjectKeys.has(key))) throw new Error('[comic-production] 图片请求引用未知 visual subject')
     const refs = candidate.referenceSubjectKeys.map(subjectKey => ({ subjectKey, note: '图片请求必须实际使用已选参考图；缺失能力时阻断 visual release。' }))
