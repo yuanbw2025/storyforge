@@ -1032,6 +1032,25 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
       'coverage[0].resourceKeys[2]<-discarded-unauthorized',
     ])
 
+    const arcGrouping = legalizeProductionModelProtocolDefaultsV1(
+      'content.narrative-arc-plan',
+      {
+        acts: [
+          { key: 'act.1', sceneCards: [{ key: 'scene.001', title: '一' }] },
+          { key: 'act.2', sceneCards: [{ key: 'scene.003', title: '三' }, { key: 'scene.002', title: '二' }] },
+          { key: 'act.3', sceneCards: [{ key: 'scene.004', title: '四' }] },
+        ],
+      },
+      { narrativeArcSceneKeys: [['scene.001', 'scene.002'], ['scene.003'], ['scene.004']] },
+    )
+    expect((arcGrouping.payload.acts as Array<{ sceneCards: Array<{ key: string }> }>).map(
+      act => act.sceneCards.map(card => card.key),
+    )).toEqual([['scene.001', 'scene.002'], ['scene.003'], ['scene.004']])
+    expect(arcGrouping.defaultedFields).toEqual([
+      'acts[0].sceneCards<-frozen-scene-key-group',
+      'acts[1].sceneCards<-frozen-scene-key-group',
+    ])
+
     const narrative = legalizeProductionModelProtocolDefaultsV1('content.narrative', {
       nodes: [{
         key: 'entry', kind: 'entry', title: '入口', summary: '开始。',
@@ -1996,6 +2015,38 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
         },
       },
     })
+    const validArcPlan = outputs['content.narrative-arc-plan']
+    const invalidArcPlan = structuredClone(validArcPlan) as {
+      acts: Array<{ sceneCards: unknown[] }>
+    }
+    invalidArcPlan.acts[0].sceneCards = invalidArcPlan.acts[0].sceneCards.slice(1)
+    outputs['content.narrative-arc-plan'] = invalidArcPlan
+    const arcBlocked = await runProductProductionUntilBlockedV1({
+      scope: owned.scope, productionId: owned.productionId,
+      executor: createConfiguredProductProductionExecutorV1({
+        production: (await db.productProductions.get(owned.productionId))!, brief: owned.brief, runText,
+      }),
+      capabilityBindings,
+    })
+    expect(arcBlocked).toMatchObject({ terminal: false, buildStatus: 'recovery-required' })
+    expect(JSON.parse((await db.productBuilds.get(arcBlocked.buildId))!.failureJson)).toMatchObject({
+      taskKey: 'content.narrative-arc-plan', detail: expect.stringContaining('sceneCards 数量无效'),
+    })
+    const decisionBeforeArcRetry = await db.productBuildArtifacts
+      .where('[buildId+artifactKey]').equals([arcBlocked.buildId, 'content.source-decision'])
+      .filter(row => row.controlEpoch === arcBlocked.controlEpoch && row.status === 'accepted').first()
+    expect(decisionBeforeArcRetry).toBeDefined()
+    const arcBlockedProduction = (await db.productProductions.get(owned.productionId))!
+    await executeProductProductionCommand({
+      scope: owned.scope, productionId: owned.productionId,
+      command: {
+        type: 'resolve-blocker', commandId: 'narrative-arc.retry',
+        expectedStateRevision: arcBlockedProduction.stateRevision,
+        blockerKey: 'content.narrative-arc-plan',
+        resolution: { action: 'retry', note: '修正三幕冻结场景槽位后继续。' },
+      },
+    })
+    outputs['content.narrative-arc-plan'] = validArcPlan
     const completed = await runProductProductionUntilBlockedV1({
       scope: owned.scope, productionId: owned.productionId,
       executor: createConfiguredProductProductionExecutorV1({
@@ -2003,11 +2054,16 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
       }),
       capabilityBindings,
     })
-    expect(completed).toMatchObject({ terminal: true, buildStatus: 'release-ready' })
+    const postRetryArtifacts = await db.productBuildArtifacts.where('buildId').equals(completed.buildId).toArray()
+    expect(
+      completed,
+      `post-arc-retry projection=${JSON.stringify(completed)} failure=${(await db.productBuilds.get(completed.buildId))?.failureJson} artifacts=${JSON.stringify(postRetryArtifacts.map(row => ({ key: row.artifactKey, epoch: row.controlEpoch, status: row.status })))}`,
+    ).toMatchObject({ terminal: true, buildStatus: 'release-ready' })
     expect(taskCalls.filter(taskKey => taskKey === 'content.source-sufficiency')).toHaveLength(2)
+    expect(taskCalls.filter(taskKey => taskKey === 'source.author-gate')).toHaveLength(0)
     const decision = await db.productBuildArtifacts
       .where('[buildId+artifactKey]').equals([completed.buildId, 'content.source-decision'])
-      .filter(row => row.status === 'accepted').first()
+      .filter(row => row.status === 'carried-forward').first()
     expect(JSON.parse(decision!.payloadJson)).toMatchObject({
       decision: 'accept-product-private-expansion',
       acceptedPrivateAdditionKeys: ['addition.supporting-guide'],
@@ -2093,10 +2149,12 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     expect(actOneSceneSystem).toContain('一律不得改写')
     expect(actThreeSceneSystem).toContain('"endings":["ending.001","ending.002","ending.003"]')
     expect(sceneScriptContexts).toHaveLength(3)
-    expect(sceneScriptContexts[0]).toContain('storyforge.text-adventure-scene-script-inputs')
-    expect(sceneScriptContexts[0]).toContain('"taskKey":"content.scene-script.act-1"')
-    expect(sceneScriptContexts[0]).not.toContain('storyforge.product-production.artifact-inputs')
-    expect(sceneScriptContexts[0]).not.toContain('"key":"scene.012"')
+    const actOneSceneContext = sceneScriptContexts.find(context => (
+      context.includes('"taskKey":"content.scene-script.act-1"')
+    ))
+    expect(actOneSceneContext).toContain('storyforge.text-adventure-scene-script-inputs')
+    expect(actOneSceneContext).not.toContain('storyforge.product-production.artifact-inputs')
+    expect(actOneSceneContext).not.toContain('"key":"scene.012"')
     expect(sideQuestSystem).toContain('地点编号与标题的唯一映射=')
     expect(sideQuestSystem).toContain('"locationOrdinal":1,"locationTitle":"地点 1-1-1"')
     expect(sideQuestSystem).toContain('不得伪装成尚未实现的跨地点多阶段任务')

@@ -828,7 +828,10 @@ async function ensurePlan(input: {
     const previousTasks = new Map(currentPlan.tasks.map(task => [task.taskKey, task]))
     const reusableArtifactKeys = plan.tasks.flatMap(task => {
       const previous = previousTasks.get(task.taskKey)
-      return task.executionMode !== 'deterministic' && !invalidatedTaskKeys.has(task.taskKey) && previous
+      const carriesExplicitAuthorDecision = task.taskKey === 'source.author-gate'
+        || task.taskKey === 'media.anchor-author-gate'
+      return (task.executionMode !== 'deterministic' || carriesExplicitAuthorDecision)
+        && !invalidatedTaskKeys.has(task.taskKey) && previous
         && canonicalProductProductionJsonV2(previous.outputArtifactKeys) === canonicalProductProductionJsonV2(task.outputArtifactKeys)
         ? task.outputArtifactKeys : []
     })
@@ -1179,7 +1182,10 @@ async function ensureCarriedForwardTaskRuns(input: {
       .filter(row => row.controlEpoch === input.build.controlEpoch
         && (row.status === 'carried-forward' || row.status === 'accepted'))
     for (const task of input.plan.tasks) {
-      if (task.executionMode === 'deterministic' && task.reuse == null) continue
+      const carriesExplicitAuthorDecision = task.taskKey === 'source.author-gate'
+        || task.taskKey === 'media.anchor-author-gate'
+      if (task.executionMode === 'deterministic' && task.reuse == null
+        && !carriesExplicitAuthorDecision) continue
       const outputs = artifacts.filter(row => task.outputArtifactKeys.includes(row.artifactKey)
         && (row.status === 'carried-forward'
           || (task.executionMode === 'human-import' && row.status === 'accepted')))
