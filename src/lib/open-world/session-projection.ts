@@ -74,6 +74,8 @@ function initialEffectState(runtimePackage: ReturnType<typeof parseTextOpenWorld
   const initialRegionKey = modules.world.locations.find(location => location.key === modules.world.initialLocationKey)!.regionKey
   regionKnowledgeByKey[initialRegionKey] = 'visited'
   const initialInventory = createInitialTextOpenWorldInventoryV1(modules)
+  const locationKnowledgeByKey = Object.fromEntries(modules.world.locations.map(location => [location.key, location.initialKnowledge]))
+  locationKnowledgeByKey[modules.world.initialLocationKey] = 'visited'
   return {
     version: 1,
     player: {
@@ -95,7 +97,9 @@ function initialEffectState(runtimePackage: ReturnType<typeof parseTextOpenWorld
       tracking: { primaryInstanceKey: null, pinnedInstanceKeys: [] },
     },
     map: {
-      currentLocationKey: modules.world.initialLocationKey, revealedLocationKeys: [modules.world.initialLocationKey], regionKnowledgeByKey,
+      currentLocationKey: modules.world.initialLocationKey,
+      revealedLocationKeys: modules.world.locations.filter(location => locationKnowledgeByKey[location.key] !== 'unknown').map(location => location.key),
+      regionKnowledgeByKey, locationKnowledgeByKey,
       unlockedFastTravelPointKeys: modules.world.fastTravelPoints.filter(point => point.unlockedByDefault).map(point => point.key),
       openEdgeKeys: modules.world.edges.filter(edge => edge.conditionKeys.length === 0).map(edge => edge.key), travel: null,
     },
@@ -155,12 +159,24 @@ export function createInitialTextOpenWorldSessionProjectionV1(value: unknown): T
 export function createTextOpenWorldInitialProjectionCandidatesV1(value: unknown): unknown[] {
   const current = createInitialTextOpenWorldSessionProjectionV1(value)
   const modules = parseTextOpenWorldModulesV1(current.runtimePackage)
-  if (modules.actions.version !== 1) return [current]
-  const legacy = structuredClone(current) as unknown as Row
-  const legacyState = row(legacy.state, 'legacy projection.state')
-  const legacyQuests = row(legacyState.quests, 'legacy projection.state.quests')
-  delete legacyQuests.tracking
-  return [current, legacy]
+  const candidates: unknown[] = [current]
+  if (modules.actions.version === 1) {
+    const legacy = structuredClone(current) as unknown as Row
+    const legacyState = row(legacy.state, 'legacy projection.state')
+    const legacyQuests = row(legacyState.quests, 'legacy projection.state.quests')
+    delete legacyQuests.tracking
+    candidates.push(legacy)
+  }
+  if (current.runtimePackage.modules.world.schemaVersion < 3) {
+    for (const candidate of [...candidates]) {
+      const legacy = structuredClone(candidate) as Row
+      const legacyState = row(legacy.state, 'legacy projection.state')
+      const legacyMap = row(legacyState.map, 'legacy projection.state.map')
+      delete legacyMap.locationKnowledgeByKey
+      candidates.push(legacy)
+    }
+  }
+  return candidates
 }
 
 export function parseTextOpenWorldSessionProjectionV1(value: unknown): TextOpenWorldSessionProjectionV1 {
@@ -179,6 +195,12 @@ export function parseTextOpenWorldSessionProjectionV1(value: unknown): TextOpenW
           && ['revealed', 'accepted', 'active', 'suspended'].includes(instance.status))?.instanceKey ?? null,
       pinnedInstanceKeys: [],
     }
+  }
+  const legacyMap = state.map as TextOpenWorldEffectStateV1['map'] & { locationKnowledgeByKey?: TextOpenWorldEffectStateV1['map']['locationKnowledgeByKey'] }
+  if (!legacyMap.locationKnowledgeByKey) {
+    legacyMap.locationKnowledgeByKey = Object.fromEntries(modules.world.locations.map(location => [location.key, 'unknown']))
+    legacyMap.revealedLocationKeys.forEach(locationKey => { legacyMap.locationKnowledgeByKey![locationKey] = 'heard' })
+    legacyMap.locationKnowledgeByKey[legacyMap.currentLocationKey] = 'visited'
   }
   validateTextOpenWorldEffectStateV1(state, modules)
   if (Object.values(state.quests.instancesByKey).some(instance => instance.sourceContentHash !== runtimePackage.modules.quests.contentHash)) fail('任务实例来源Hash与冻结Quest模块不一致')
@@ -323,7 +345,7 @@ export function deriveTextOpenWorldContextsV1(value: TextOpenWorldSessionProject
     },
     inventory: { itemQuantities: inventoryQuantities, currency: state.inventory.currency, equippedItemKeys: Object.values(deriveTextOpenWorldEquippedItemKeysV1(modules, state.inventory)).filter((key): key is string => key != null), knownRecipeKeys: [...state.inventory.knownRecipeKeys] },
     quests: { ...questCondition, resultTags: [...state.quests.resultTags] },
-    map: { currentLocationKey: state.map.currentLocationKey, regionKnowledgeByKey: structuredClone(state.map.regionKnowledgeByKey), unlockedFastTravelPointKeys: [...state.map.unlockedFastTravelPointKeys], openEdgeKeys: [...state.map.openEdgeKeys] },
+    map: { currentLocationKey: state.map.currentLocationKey, regionKnowledgeByKey: structuredClone(state.map.regionKnowledgeByKey), locationKnowledgeByKey: structuredClone(state.map.locationKnowledgeByKey), unlockedFastTravelPointKeys: [...state.map.unlockedFastTravelPointKeys], openEdgeKeys: [...state.map.openEdgeKeys] },
     time: { worldMinute: state.time.worldMinute, minutesPerDay: modules['time-weather'].minutesPerDay, timePeriodKey: periodKey, weatherKey: state.time.currentWeatherByRegionKey[regionKey], deadlineWorldMinuteByKey: structuredClone(state.time.deadlineWorldMinuteByKey) },
     relations: { factionAffinityByKey: structuredClone(state.relationships.factionAffinityByKey), attitudeByActorKey, storyModifierByActorKey: structuredClone(state.relationships.storyModifierByActorKey) },
     actors: Object.fromEntries(modules.actors.actors.map(actor => [actor.key, { ...state.actors[actor.key], protected: actor.protected }])),
@@ -338,7 +360,7 @@ export function deriveTextOpenWorldContextsV1(value: TextOpenWorldSessionProject
     conditionResults: Object.fromEntries(Object.entries(evaluations).map(([key, result]) => [key, { satisfied: result.satisfied, publicReason: result.publicReason }])),
     completedOnceActionKeys: [...projection.actions.completedOnceActionKeys], cooldownUntilWorldMinuteByActionKey: structuredClone(projection.actions.cooldownUntilWorldMinuteByActionKey),
     validTargetKeysByScope: {
-      actor: actorTargets, location: [...state.map.revealedLocationKeys], item: Object.keys(inventoryQuantities),
+      actor: actorTargets, location: [state.map.currentLocationKey], item: Object.keys(inventoryQuantities),
       quest: Object.values(state.quests.instancesByKey).filter(instance => !['locked', 'available'].includes(instance.status)).map(instance => instance.instanceKey),
       vendor: modules.economy.vendors.filter(vendor => vendor.locationKey === state.map.currentLocationKey && actorTargets.includes(vendor.actorKey)).map(vendor => vendor.key),
       encounter: modules.combat.encounters.filter(encounter => encounter.locationKey === state.map.currentLocationKey).map(encounter => encounter.key),

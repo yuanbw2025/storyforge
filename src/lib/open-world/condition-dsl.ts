@@ -150,6 +150,10 @@ function parseExpression(value: unknown, refs: ReferenceCatalog, depth: number, 
     exact(parsed, ['op', 'locationKey'], label)
     return { op, locationKey: ref(parsed.locationKey, refs.locations, `${label}.locationKey`) }
   }
+  if (op === 'map-location-knowledge') {
+    exact(parsed, ['op', 'locationKey', 'minimum'], label)
+    return { op, locationKey: ref(parsed.locationKey, refs.locations, `${label}.locationKey`), minimum: enumValue(parsed.minimum, ['unknown', 'heard', 'visited', 'familiar'], `${label}.minimum`) }
+  }
   if (op === 'map-region-knowledge') {
     exact(parsed, ['op', 'regionKey', 'minimum'], label)
     return { op, regionKey: ref(parsed.regionKey, refs.regions, `${label}.regionKey`), minimum: enumValue(parsed.minimum, ['unknown', 'heard', 'visited', 'familiar'], `${label}.minimum`) }
@@ -265,6 +269,10 @@ function evaluate(expression: TextOpenWorldConditionExpressionV1, context: TextO
     case 'quest-objective': return (context.quests.objectiveStatusByKey[expression.objectiveKey] ?? 'inactive') === expression.status
     case 'quest-result-tag': return context.quests.resultTags.includes(expression.tag) === expression.present
     case 'map-location': return context.map.currentLocationKey === expression.locationKey
+    case 'map-location-knowledge': {
+      const rank = { unknown: 0, heard: 1, visited: 2, familiar: 3 }
+      return rank[context.map.locationKnowledgeByKey[expression.locationKey] ?? 'unknown'] >= rank[expression.minimum]
+    }
     case 'map-region-knowledge': {
       const rank = { unknown: 0, heard: 1, visited: 2, familiar: 3 }
       return rank[context.map.regionKnowledgeByKey[expression.regionKey] ?? 'unknown'] >= rank[expression.minimum]

@@ -61,8 +61,10 @@ describe('Text Open World vNext · release map definition and deterministic topo
     alternate.world.locations.push({
       key: 'location.salt-market', regionKey: 'region.salt-port', title: '盐市', description: '连接港口和山道的集市。',
       kind: 'settlement', tags: ['集市'], purpose: '提供另一条可玩的上山路线。', functions: ['service', 'travel'],
-      earlyArrivalDescription: '盐市正常交易，不触发任何关键剧情。', sourceRefs: ['world-release:location:salt-market'], presentationRefs: ['map.world'],
+      earlyArrivalDescription: '盐市正常交易，不触发任何关键剧情。', initialKnowledge: 'heard',
+      sourceRefs: ['world-release:location:salt-market'], presentationRefs: ['map.world'],
     })
+    ;(alternate.runtimePackage.modules.presentation.payload as any).mapLayout.locationNodes.push({ locationKey: 'location.salt-market', x: 420, y: 360 })
     alternate.world.edges.push({
       key: 'edge.port-market', fromLocationKey: 'location.salt-port', toLocationKey: 'location.salt-market', bidirectional: true,
       travelMinutes: 15, conditionKeys: [], description: '港口到盐市的短路。', riskProfile: 'safe', sourceRefs: ['world-release:route:port-market'],
@@ -120,7 +122,7 @@ describe('Text Open World vNext · release map definition and deterministic topo
       key, fromLocationKey, toLocationKey, bidirectional, travelMinutes, conditionKeys,
     }))
     const parsed = parseTextOpenWorldModulesV1(runtimePackage)
-    expect(parsed.world.version).toBe(2)
+    expect(parsed.world.version).toBe(3)
     expect(parsed.world.locations[0]).toMatchObject({
       purpose: '盐商和守渠人汇集之处。', functions: ['exploration'], sourceRefs: [],
     })

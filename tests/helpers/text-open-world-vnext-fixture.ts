@@ -65,7 +65,7 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
       }],
     },
     world: {
-      version: 2,
+      version: 3,
       initialLocationKey: 'location.salt-port',
       regions: [
         {
@@ -86,13 +86,13 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
           key: 'location.salt-port', regionKey: 'region.salt-port', title: '盐港广场', description: '盐商和守渠人汇集之处。', kind: 'settlement', tags: ['港口', '商店'],
           purpose: '承载开场、主线委托、交易和安全复活。', functions: ['narrative', 'service', 'travel'],
           earlyArrivalDescription: '广场照常运转，守渠人只会谈论玩家当前已经获知的断流信息。',
-          sourceRefs: ['world-release:location:salt-port'], presentationRefs: ['map.world'],
+          initialKnowledge: 'visited', sourceRefs: ['world-release:location:salt-port'], presentationRefs: ['map.world'],
         },
         {
           key: 'location.ridge-channel', regionKey: 'region.ridge', title: '断脊渠口', description: '被碎石阻塞的上游渠口。', kind: 'wilderness', tags: ['盐渠', '危险'],
           purpose: '承载上游探索、战斗和盐渠主线后续。', functions: ['narrative', 'exploration', 'combat', 'travel'],
           earlyArrivalDescription: '玩家可以检查荒废渠口和周边野兽痕迹，但主线真相场景仍等待对应任务阶段。',
-          sourceRefs: ['world-release:location:ridge-channel'], presentationRefs: ['map.world'],
+          initialKnowledge: 'heard', sourceRefs: ['world-release:location:ridge-channel'], presentationRefs: ['map.world'],
         },
       ],
       edges: [{
@@ -481,8 +481,15 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
       achievements: [{ key: 'achievement.first-clue', title: '第一道水痕', description: '完成第一次渠线调查。', conditionKeys: ['condition.always'] }],
     },
     presentation: {
-      version: 1,
+      version: 2,
       textStyle: { narrationTone: '克制而有地域感', dialogueStyle: '简短、符合人物身份', systemReceiptStyle: '明确列出确定性结果' },
+      mapLayout: {
+        version: 1, coordinateSystem: 'normalized-1000', width: 1000, height: 700, source: 'authored',
+        locationNodes: [
+          { locationKey: 'location.salt-port', x: 220, y: 420 },
+          { locationKey: 'location.ridge-channel', x: 760, y: 220 },
+        ],
+      },
       mediaSlots: [{
         key: 'map.world', kind: 'map', consumerRef: 'world', required: true, assetKey: null,
         fallbackText: '盐港与断脊的程序地图', altText: '盐港通往断脊渠口的地图',

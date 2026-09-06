@@ -55,7 +55,7 @@ describe('Text Open World vNext · authoritative Session Projection', () => {
           currency: 20, knownRecipeKeys: ['recipe.brine-tonic'],
         },
         quests: { instancesByKey: { [mainQuestInstanceKey]: { definitionKey: 'quest.main.1', sourceKind: 'release', status: 'revealed', objectiveStatusByKey: { 'objective.main.1': 'inactive' } } } },
-        map: { currentLocationKey: 'location.salt-port', revealedLocationKeys: ['location.salt-port'], regionKnowledgeByKey: { 'region.salt-port': 'visited', 'region.ridge': 'heard' }, openEdgeKeys: ['edge.port-ridge'] },
+        map: { currentLocationKey: 'location.salt-port', revealedLocationKeys: ['location.salt-port', 'location.ridge-channel'], regionKnowledgeByKey: { 'region.salt-port': 'visited', 'region.ridge': 'heard' }, locationKnowledgeByKey: { 'location.salt-port': 'visited', 'location.ridge-channel': 'heard' }, openEdgeKeys: ['edge.port-ridge'] },
         time: { worldMinute: 480, currentWeatherByRegionKey: { 'region.salt-port': 'weather.clear', 'region.ridge': 'weather.clear' } },
         relationships: { morality: 0, factionAffinityByKey: { 'faction.canal-keepers': 0 } },
         actors: { 'actor.caretaker': { alive: true, present: true, locationKey: 'location.salt-port', scheduleState: '检查内渠' } },

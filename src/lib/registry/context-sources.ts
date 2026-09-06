@@ -583,7 +583,7 @@ async function readOpenWorldRuntimeContext(input: AssembleContextInput): Promise
   }
   const state = await readProductRuntimeStateForContext(session.id!)
   if (manifest.textOpenWorldVNext) {
-    const [sessionProjection, modulesModule, actionModule, bindingModule, feedbackModule, skillsModule, lifeModule, inventoryModule, questModule, mapModule] = await Promise.all([
+    const [sessionProjection, modulesModule, actionModule, bindingModule, feedbackModule, skillsModule, lifeModule, inventoryModule, questModule, mapModule, mapViewModule] = await Promise.all([
       import('../open-world/session-projection'),
       import('../open-world/modules'),
       import('../open-world/action-registry'),
@@ -594,6 +594,7 @@ async function readOpenWorldRuntimeContext(input: AssembleContextInput): Promise
       import('../open-world/inventory'),
       import('../open-world/quests'),
       import('../open-world/map-topology'),
+      import('../open-world/map-view'),
     ])
     if (!state.textOpenWorld) return ''
     const binding = await bindingModule.verifyTextOpenWorldVNextSessionBindingV1(session)
@@ -621,13 +622,14 @@ async function readOpenWorldRuntimeContext(input: AssembleContextInput): Promise
     const day = Math.floor(runtime.time.worldMinute / modules['time-weather'].minutesPerDay) + 1
     const weatherKey = runtime.time.currentWeatherByRegionKey[region.key]
     const weather = modules['time-weather'].weather.find(item => item.key === weatherKey)
-    const visibleRegions = modules.world.regions.filter(item => runtime.map.regionKnowledgeByKey[item.key] !== 'unknown')
-    const visibleLocations = modules.world.locations.filter(item => runtime.map.revealedLocationKeys.includes(item.key))
+    const playerMap = mapViewModule.projectTextOpenWorldPlayerMapV1({ runtimePackage, state: runtime })
+    const visibleRegions = playerMap.regions
+    const visibleLocations = playerMap.locations
     const visibleConnections = mapModule.projectTextOpenWorldMapConnectionsV1({
       runtimePackage,
       currentLocationKey: location.key,
       openEdgeKeys: runtime.map.openEdgeKeys,
-    }).filter(connection => runtime.map.regionKnowledgeByKey[connection.destinationRegionKey] !== 'unknown')
+    }).filter(connection => visibleLocations.some(location => location.locationKey === connection.destinationLocationKey))
     const visibleQuests = questModule.projectTextOpenWorldQuestInstancesV1(modules, runtime.quests)
       .filter(item => !['locked', 'available'].includes(item.instance.status))
     const questLines = visibleQuests.map(({ definition: quest, instance }) => {
@@ -691,8 +693,8 @@ async function readOpenWorldRuntimeContext(input: AssembleContextInput): Promise
       '【当前状态】', ...(statusLines.length ? statusLines : ['- 无']),
       `【背包】${Object.entries(inventoryQuantities).filter(([, quantity]) => quantity > 0).map(([key, quantity]) => `${itemByKey.get(key)?.title ?? key}×${quantity}`).join('、') || '空'}｜货币=${runtime.inventory.currency}`,
       `【装备】${Object.entries(equippedItemKeys).map(([slot, key]) => `${slot}=${key ? itemByKey.get(key)?.title ?? key : '空'}`).join('、')}`,
-      `【区域认知】${visibleRegions.map(item => `${item.title}=${runtime.map.regionKnowledgeByKey[item.key]}`).join('、') || '无'}`,
-      `【已发现地点】${visibleLocations.map(item => `${item.key}:${item.title}`).join('、') || '无'}`,
+      `【区域认知】${visibleRegions.map(item => `${item.title}=${item.knowledge}`).join('、') || '无'}`,
+      `【已发现地点】${visibleLocations.map(item => `${item.locationKey}:${item.title}=${item.knowledge}`).join('、') || '无'}｜布局=${playerMap.layoutSource}`,
       '【玩家可知相邻道路】', ...(visibleConnections.length ? visibleConnections.map(connection => {
         const destination = modules.world.locations.find(item => item.key === connection.destinationLocationKey)!
         return `- ${connection.edgeKey}｜前往=${destination.key}:${destination.title}｜${connection.travelMinutes}分钟｜风险=${connection.riskProfile}｜${connection.currentlyOpen ? '可通行' : '未开放'}`

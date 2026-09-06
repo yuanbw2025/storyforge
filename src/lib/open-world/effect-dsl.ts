@@ -275,6 +275,17 @@ export function validateTextOpenWorldEffectStateV1(state: TextOpenWorldEffectSta
   pinnedInstanceKeys.forEach(instanceKey => { if (!state.quests.instancesByKey[instanceKey]) fail(`钉选任务实例不存在:${instanceKey}`) })
   assertUniqueKnown(state.map.revealedLocationKeys, refs.locations, 'map.revealedLocationKeys')
   for (const [regionKey, knowledge] of Object.entries(state.map.regionKnowledgeByKey)) { ref(regionKey, refs.regions, 'region knowledge key'); enumValue(knowledge, ['unknown', 'heard', 'visited', 'familiar'], `region knowledge:${regionKey}`) }
+  const locationKnowledgeEntries = Object.entries(state.map.locationKnowledgeByKey)
+  if (locationKnowledgeEntries.length !== modules.world.locations.length) fail('locationKnowledgeByKey必须覆盖全部冻结地点')
+  const knowledgeRank = { unknown: 0, heard: 1, visited: 2, familiar: 3 }
+  for (const [locationKey, knowledge] of locationKnowledgeEntries) {
+    ref(locationKey, refs.locations, 'location knowledge key')
+    enumValue(knowledge, ['unknown', 'heard', 'visited', 'familiar'], `location knowledge:${locationKey}`)
+    const regionKey = modules.world.locations.find(location => location.key === locationKey)!.regionKey
+    if (knowledgeRank[knowledge] > knowledgeRank[state.map.regionKnowledgeByKey[regionKey] ?? 'unknown']) fail(`地点认知不能高于所属地区:${locationKey}`)
+  }
+  const expectedRevealedLocationKeys = locationKnowledgeEntries.filter(([, knowledge]) => knowledge !== 'unknown').map(([locationKey]) => locationKey).sort()
+  if (canonicalProductProductionJsonV2([...state.map.revealedLocationKeys].sort()) !== canonicalProductProductionJsonV2(expectedRevealedLocationKeys)) fail('revealedLocationKeys必须由地点认知派生')
   assertUniqueKnown(state.map.unlockedFastTravelPointKeys, refs.travelPoints, 'map.unlockedFastTravelPointKeys')
   for (const pointKey of state.map.unlockedFastTravelPointKeys) {
     const locationKey = modules.world.fastTravelPoints.find(point => point.key === pointKey)!.locationKey
@@ -308,7 +319,7 @@ export function validateTextOpenWorldEffectStateV1(state: TextOpenWorldEffectSta
     }
   }
   if (!modules.world.locations.some(item => item.key === state.map.currentLocationKey)) fail('currentLocationKey不存在')
-  if (!state.map.revealedLocationKeys.includes(state.map.currentLocationKey)) fail('当前位置必须已经揭示')
+  if (knowledgeRank[state.map.locationKnowledgeByKey[state.map.currentLocationKey] ?? 'unknown'] < knowledgeRank.visited) fail('当前位置必须已经到访')
   if (state.map.travel) {
     const edge = modules.world.edges.find(candidate => candidate.key === state.map.travel!.edgeKey) ?? fail('travel edgeKey不存在')
     if (![edge.fromLocationKey, edge.toLocationKey].includes(state.map.currentLocationKey) || ![edge.fromLocationKey, edge.toLocationKey].includes(state.map.travel.destinationLocationKey) || state.map.currentLocationKey === state.map.travel.destinationLocationKey) fail('travel状态端点无效')
@@ -569,8 +580,13 @@ function applyDefinitions(
         state.knowledge.visibilityByKey[payload.knowledgeKey] = payload.visibility; record(changes, effect, `揭示知识:${payload.knowledgeKey}`, before, payload.visibility); break
       }
       case 'reveal-location': {
-        const { payload } = effect; const before = state.map.revealedLocationKeys.includes(payload.locationKey)
-        addUnique(state.map.revealedLocationKeys, payload.locationKey); record(changes, effect, `揭示地点:${payload.locationKey}`, before, true); break
+        const { payload } = effect; const before = state.map.locationKnowledgeByKey[payload.locationKey] ?? 'unknown'
+        const rank = { unknown: 0, heard: 1, visited: 2, familiar: 3 }
+        if (rank[before] < rank.heard) state.map.locationKnowledgeByKey[payload.locationKey] = 'heard'
+        addUnique(state.map.revealedLocationKeys, payload.locationKey)
+        const regionKey = modules.world.locations.find(location => location.key === payload.locationKey)!.regionKey
+        if (rank[state.map.regionKnowledgeByKey[regionKey] ?? 'unknown'] < rank.heard) state.map.regionKnowledgeByKey[regionKey] = 'heard'
+        record(changes, effect, `听说地点:${payload.locationKey}`, before, state.map.locationKnowledgeByKey[payload.locationKey]); break
       }
       case 'unlock-fast-travel': {
         const { payload } = effect; const before = state.map.unlockedFastTravelPointKeys.includes(payload.fastTravelPointKey)
@@ -581,6 +597,7 @@ function applyDefinitions(
       case 'enter-location': {
         const { payload } = effect; const before = state.map.currentLocationKey
         state.map.currentLocationKey = payload.locationKey; state.map.travel = null; addUnique(state.map.revealedLocationKeys, payload.locationKey)
+        state.map.locationKnowledgeByKey[payload.locationKey] = 'visited'
         const regionKey = modules.world.locations.find(location => location.key === payload.locationKey)!.regionKey
         const rank = { unknown: 0, heard: 1, visited: 2, familiar: 3 }
         if (rank[state.map.regionKnowledgeByKey[regionKey] ?? 'unknown'] < rank.visited) state.map.regionKnowledgeByKey[regionKey] = 'visited'
@@ -633,6 +650,7 @@ function applyDefinitions(
         const harmful = new Set(modules.progression.statuses.filter(status => status.polarity === 'harmful').map(status => status.key))
         state.player.statusKeys = state.player.statusKeys.filter(statusKey => !harmful.has(statusKey))
         state.map.currentLocationKey = point.locationKey; state.map.travel = null; state.combat = null; addUnique(state.map.revealedLocationKeys, point.locationKey)
+        state.map.locationKnowledgeByKey[point.locationKey] = 'visited'
         const regionKey = modules.world.locations.find(location => location.key === point.locationKey)!.regionKey; state.map.regionKnowledgeByKey[regionKey] = 'visited'
         record(changes, effect, `在${point.locationKey}复活`, before, { health: state.player.health, skillResource: state.player.skillResource, statusKeys: state.player.statusKeys, locationKey: state.map.currentLocationKey, combat: null }); break
       }

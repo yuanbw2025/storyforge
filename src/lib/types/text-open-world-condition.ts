@@ -26,6 +26,7 @@ export type TextOpenWorldConditionExpressionV1 =
   | { op: 'quest-objective'; objectiveKey: string; status: TextOpenWorldObjectiveStatusV1 }
   | { op: 'quest-result-tag'; tag: string; present: boolean }
   | { op: 'map-location'; locationKey: string }
+  | { op: 'map-location-knowledge'; locationKey: string; minimum: 'unknown' | 'heard' | 'visited' | 'familiar' }
   | { op: 'map-region-knowledge'; regionKey: string; minimum: 'unknown' | 'heard' | 'visited' | 'familiar' }
   | { op: 'map-fast-travel'; fastTravelPointKey: string; unlocked: boolean }
   | { op: 'map-edge'; edgeKey: string; open: boolean }
@@ -79,6 +80,7 @@ export interface TextOpenWorldConditionEvaluationContextV1 {
   map: {
     currentLocationKey: string
     regionKnowledgeByKey: Record<string, 'unknown' | 'heard' | 'visited' | 'familiar'>
+    locationKnowledgeByKey: Record<string, 'unknown' | 'heard' | 'visited' | 'familiar'>
     unlockedFastTravelPointKeys: string[]
     openEdgeKeys: string[]
   }

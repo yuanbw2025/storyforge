@@ -96,6 +96,7 @@ export interface TextOpenWorldEffectStateV1 {
     currentLocationKey: string
     revealedLocationKeys: string[]
     regionKnowledgeByKey: Record<string, 'unknown' | 'heard' | 'visited' | 'familiar'>
+    locationKnowledgeByKey: Record<string, 'unknown' | 'heard' | 'visited' | 'familiar'>
     unlockedFastTravelPointKeys: string[]
     openEdgeKeys: string[]
     travel: { edgeKey: string; destinationLocationKey: string } | null

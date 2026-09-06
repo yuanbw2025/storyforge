@@ -24,8 +24,9 @@ function state(overrides: Partial<TextOpenWorldEffectStateV1> = {}): TextOpenWor
       tracking: { primaryInstanceKey: 'quest-instance.12.quest.main.1.release.13.session-start', pinnedInstanceKeys: [] },
     },
     map: {
-      currentLocationKey: 'location.salt-port', revealedLocationKeys: ['location.salt-port'],
+      currentLocationKey: 'location.salt-port', revealedLocationKeys: ['location.salt-port', 'location.ridge-channel'],
       regionKnowledgeByKey: { 'region.salt-port': 'visited', 'region.ridge': 'heard' },
+      locationKnowledgeByKey: { 'location.salt-port': 'visited', 'location.ridge-channel': 'heard' },
       unlockedFastTravelPointKeys: ['fast-travel.salt-port'], openEdgeKeys: ['edge.port-ridge'], travel: null,
     },
     time: { worldMinute: 480, currentWeatherByRegionKey: { 'region.salt-port': 'weather.clear', 'region.ridge': 'weather.clear' }, deadlineWorldMinuteByKey: {} },
@@ -155,7 +156,11 @@ describe('Text Open World vNext · typed Effect DSL and atomic EffectPlan', () =
     ]))
     const defeated = state({
       player: { ...state().player, health: 0 },
-      map: { ...state().map, currentLocationKey: 'location.ridge-channel', revealedLocationKeys: ['location.salt-port', 'location.ridge-channel'] },
+      map: {
+        ...state().map, currentLocationKey: 'location.ridge-channel', revealedLocationKeys: ['location.salt-port', 'location.ridge-channel'],
+        regionKnowledgeByKey: { 'region.salt-port': 'visited', 'region.ridge': 'visited' },
+        locationKnowledgeByKey: { 'location.salt-port': 'visited', 'location.ridge-channel': 'visited' },
+      },
       combat: { encounterKey: 'encounter.ridge-jackal', status: 'defeat' },
     })
     const plan = await catalog.plan({ effectKeys: ['effect.respawn-port'], claimKey: 'claim.respawn', state: defeated })

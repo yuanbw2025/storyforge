@@ -166,15 +166,18 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
   scenes.forEach((item, index) => { text(item.title, `narrative.scenes[${index}].title`, 2_000); text(item.purpose, `narrative.scenes[${index}].purpose`); key(item.locationKey, `narrative.scenes[${index}].locationKey`); strings(item.participantKeys, `narrative.scenes[${index}].participantKeys`); strings(item.actionKeys, `narrative.scenes[${index}].actionKeys`); requireRefs(strings(item.fixedChoiceKeys, `narrative.scenes[${index}].fixedChoiceKeys`), choiceKeys, 'scene choice') })
   fixedChoices.forEach((item, index) => { requireRef(key(item.sceneKey, `narrative.fixedChoices[${index}].sceneKey`), sceneKeys, 'choice scene'); text(item.label, `narrative.fixedChoices[${index}].label`, 2_000); text(item.description, `narrative.fixedChoices[${index}].description`); key(item.actionKey, `narrative.fixedChoices[${index}].actionKey`) })
 
-  const world = versioned(packageValue, 'world', [1, 2])
+  const world = versioned(packageValue, 'world', [1, 2, 3])
   const legacyWorldModule = world.version === 1
+  const worldHasLocationKnowledge = world.version === 3
   exact(world, ['version', 'initialLocationKey', 'regions', 'locations', 'edges', 'fastTravelPoints'], 'world')
   const regions = catalog(world.regions, 'world.regions', legacyWorldModule
     ? ['key', 'title', 'description', 'locationKeys', 'initialKnowledge']
     : ['key', 'title', 'description', 'theme', 'levelBand', 'knowledgePolicy', 'locationKeys', 'fastTravelPointKey', 'initialKnowledge', 'sourceRefs', 'presentationRefs'])
   const locations = catalog(world.locations, 'world.locations', legacyWorldModule
     ? ['key', 'regionKey', 'title', 'description', 'kind', 'tags']
-    : ['key', 'regionKey', 'title', 'description', 'kind', 'tags', 'purpose', 'functions', 'earlyArrivalDescription', 'sourceRefs', 'presentationRefs'])
+    : worldHasLocationKnowledge
+      ? ['key', 'regionKey', 'title', 'description', 'kind', 'tags', 'purpose', 'functions', 'earlyArrivalDescription', 'initialKnowledge', 'sourceRefs', 'presentationRefs']
+      : ['key', 'regionKey', 'title', 'description', 'kind', 'tags', 'purpose', 'functions', 'earlyArrivalDescription', 'sourceRefs', 'presentationRefs'])
   const edges = catalog(world.edges, 'world.edges', legacyWorldModule
     ? ['key', 'fromLocationKey', 'toLocationKey', 'bidirectional', 'travelMinutes', 'conditionKeys']
     : ['key', 'fromLocationKey', 'toLocationKey', 'bidirectional', 'travelMinutes', 'conditionKeys', 'description', 'riskProfile', 'sourceRefs'])
@@ -209,6 +212,7 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
       if (!strings(item.functions, `world.locations[${index}].functions`, 'text').length) fail(`world.locations[${index}] 必须声明至少一种功能`)
       strings(item.functions, `world.locations[${index}].functions`, 'text').forEach((value, functionIndex) => enumValue(value, ['narrative', 'service', 'exploration', 'combat', 'crafting', 'travel'], `world.locations[${index}].functions[${functionIndex}]`))
       text(item.earlyArrivalDescription, `world.locations[${index}].earlyArrivalDescription`)
+      if (worldHasLocationKnowledge) enumValue(item.initialKnowledge, ['unknown', 'heard', 'visited', 'familiar'], `world.locations[${index}].initialKnowledge`)
       if (!strings(item.sourceRefs, `world.locations[${index}].sourceRefs`, 'text').length) fail(`world.locations[${index}] 必须说明来源`)
       strings(item.presentationRefs, `world.locations[${index}].presentationRefs`)
     }
@@ -257,8 +261,20 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
   const unreachableLocationKeys = [...locationKeys].filter(locationKey => !structurallyReachable.has(locationKey))
   if (unreachableLocationKeys.length) fail(`存在从初始地点结构不可达的地点:${unreachableLocationKeys.sort().join(',')}`)
 
+  if (worldHasLocationKnowledge) {
+    const rank = { unknown: 0, heard: 1, visited: 2, familiar: 3 }
+    locations.forEach((item, index) => {
+      const region = regions.find(candidate => candidate.key === item.regionKey)!
+      if (rank[item.initialKnowledge as keyof typeof rank] > rank[region.initialKnowledge as keyof typeof rank]) {
+        fail(`world.locations[${index}].initialKnowledge不能高于所属地区`)
+      }
+    })
+    const initialLocation = locations.find(item => item.key === initialLocationKey)!
+    if (!['visited', 'familiar'].includes(String(initialLocation.initialKnowledge))) fail('initialLocation必须初始已到访')
+  }
+
   const normalizedWorld: TextOpenWorldParsedModulesV1['world'] = {
-    version: 2,
+    version: 3,
     initialLocationKey,
     regions: regions.map(item => legacyWorldModule ? {
       key: String(item.key), title: String(item.title), description: String(item.description), theme: String(item.description),
@@ -270,8 +286,14 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
     locations: locations.map(item => legacyWorldModule ? {
       key: String(item.key), regionKey: String(item.regionKey), title: String(item.title), description: String(item.description),
       kind: item.kind as TextOpenWorldParsedModulesV1['world']['locations'][number]['kind'], tags: structuredClone(item.tags) as string[],
-      purpose: String(item.description), functions: ['exploration'], earlyArrivalDescription: String(item.description), sourceRefs: [], presentationRefs: [],
-    } : structuredClone(item) as unknown as TextOpenWorldParsedModulesV1['world']['locations'][number]),
+      purpose: String(item.description), functions: ['exploration'], earlyArrivalDescription: String(item.description),
+      initialKnowledge: item.key === initialLocationKey ? 'visited' : 'unknown', sourceRefs: [], presentationRefs: [],
+    } : worldHasLocationKnowledge
+      ? structuredClone(item) as unknown as TextOpenWorldParsedModulesV1['world']['locations'][number]
+      : {
+          ...(structuredClone(item) as unknown as Omit<TextOpenWorldParsedModulesV1['world']['locations'][number], 'initialKnowledge'>),
+          initialKnowledge: item.key === initialLocationKey ? 'visited' : 'unknown',
+        }),
     edges: edges.map(item => legacyWorldModule ? {
       key: String(item.key), fromLocationKey: String(item.fromLocationKey), toLocationKey: String(item.toLocationKey),
       bidirectional: Boolean(item.bidirectional), travelMinutes: Number(item.travelMinutes), conditionKeys: structuredClone(item.conditionKeys) as string[],
@@ -855,8 +877,44 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
   rumors.forEach((item, index) => { requireRef(key(item.knowledgeKey, `knowledge.rumors[${index}].knowledgeKey`), knowledgeKeys, 'rumor knowledge'); text(item.text, `knowledge.rumors[${index}].text`); enumValue(item.reliability, ['uncertain', 'likely', 'confirmed'], `knowledge.rumors[${index}].reliability`) })
   achievements.forEach((item, index) => { text(item.title, `knowledge.achievements[${index}].title`, 2_000); text(item.description, `knowledge.achievements[${index}].description`); requireRefs(strings(item.conditionKeys, `knowledge.achievements[${index}].conditionKeys`), conditionKeys, 'achievement condition') })
 
-  const presentation = versioned(packageValue, 'presentation')
-  exact(presentation, ['version', 'textStyle', 'mediaSlots', 'taskTextVariants', 'tutorials'], 'presentation'); const textStyle = row(presentation.textStyle, 'presentation.textStyle'); exact(textStyle, ['narrationTone', 'dialogueStyle', 'systemReceiptStyle'], 'presentation.textStyle'); ['narrationTone', 'dialogueStyle', 'systemReceiptStyle'].forEach(field => text(textStyle[field], `presentation.textStyle.${field}`))
+  const presentation = versioned(packageValue, 'presentation', [1, 2])
+  const legacyPresentationModule = presentation.version === 1
+  exact(presentation, legacyPresentationModule
+    ? ['version', 'textStyle', 'mediaSlots', 'taskTextVariants', 'tutorials']
+    : ['version', 'textStyle', 'mapLayout', 'mediaSlots', 'taskTextVariants', 'tutorials'], 'presentation')
+  const textStyle = row(presentation.textStyle, 'presentation.textStyle'); exact(textStyle, ['narrationTone', 'dialogueStyle', 'systemReceiptStyle'], 'presentation.textStyle'); ['narrationTone', 'dialogueStyle', 'systemReceiptStyle'].forEach(field => text(textStyle[field], `presentation.textStyle.${field}`))
+  const sortedLayoutLocations = [...normalizedWorld.locations].sort((left, right) => left.key.localeCompare(right.key))
+  const layoutColumns = Math.max(1, Math.ceil(Math.sqrt(sortedLayoutLocations.length)))
+  const layoutRows = Math.max(1, Math.ceil(sortedLayoutLocations.length / layoutColumns))
+  const fallbackLocationNodes = sortedLayoutLocations.map((location, index) => ({
+    locationKey: location.key,
+    x: Math.round(((index % layoutColumns) + 1) * 1000 / (layoutColumns + 1)),
+    y: Math.round((Math.floor(index / layoutColumns) + 1) * 700 / (layoutRows + 1)),
+  }))
+  const fallbackMapLayout: TextOpenWorldParsedModulesV1['presentation']['mapLayout'] = {
+    version: 1, coordinateSystem: 'normalized-1000', width: 1000, height: 700,
+    source: 'deterministic-fallback', locationNodes: fallbackLocationNodes,
+  }
+  let mapLayout = fallbackMapLayout
+  if (!legacyPresentationModule) {
+    const layout = row(presentation.mapLayout, 'presentation.mapLayout')
+    exact(layout, ['version', 'coordinateSystem', 'width', 'height', 'source', 'locationNodes'], 'presentation.mapLayout')
+    if (layout.version !== 1 || layout.coordinateSystem !== 'normalized-1000'
+      || layout.width !== 1000 || layout.height !== 700) fail('presentation.mapLayout坐标合同无效')
+    const source = enumValue(layout.source, ['authored', 'deterministic-fallback'], 'presentation.mapLayout.source')
+    const nodes = catalog(layout.locationNodes, 'presentation.mapLayout.locationNodes', ['locationKey', 'x', 'y']).map((item, index) => ({
+      locationKey: key(item.locationKey, `presentation.mapLayout.locationNodes[${index}].locationKey`),
+      x: int(item.x, `presentation.mapLayout.locationNodes[${index}].x`, 0, 1000),
+      y: int(item.y, `presentation.mapLayout.locationNodes[${index}].y`, 0, 700),
+    }))
+    requireSameKeys(nodes.map(node => node.locationKey), [...locationKeys], 'map layout location nodes')
+    if (new Set(nodes.map(node => `${node.x}:${node.y}`)).size !== nodes.length) fail('map layout地点坐标不能重叠')
+    if (source === 'deterministic-fallback'
+      && canonicalProductProductionJsonV2(nodes) !== canonicalProductProductionJsonV2(fallbackLocationNodes)) {
+      fail('deterministic-fallback地图布局与规范算法不一致')
+    }
+    mapLayout = { version: 1, coordinateSystem: 'normalized-1000', width: 1000, height: 700, source, locationNodes: nodes }
+  }
   const mediaSlots = catalog(presentation.mediaSlots, 'presentation.mediaSlots', ['key', 'kind', 'consumerRef', 'required', 'assetKey', 'fallbackText', 'altText']); const variants = catalog(presentation.taskTextVariants, 'presentation.taskTextVariants', ['key', 'templateKey', 'title', 'description']); const tutorials = catalog(presentation.tutorials, 'presentation.tutorials', ['key', 'triggerActionKey', 'targetUiKey', 'title', 'body']); const mediaSlotKeys = keysOf(mediaSlots, 'presentation.mediaSlots'); const variantKeys = keysOf(variants, 'presentation.taskTextVariants'); keysOf(tutorials, 'presentation.tutorials')
   if ([...mediaSlotKeys].sort().join(',') !== [...packageValue.mediaManifest.slotKeys].sort().join(',')) fail('presentation.mediaSlots与根mediaManifest.slotKeys不一致')
   mediaSlots.forEach((item, index) => { enumValue(item.kind, ['map', 'portrait', 'background', 'item-icon', 'enemy-icon', 'audio'], `presentation.mediaSlots[${index}].kind`); text(item.consumerRef, `presentation.mediaSlots[${index}].consumerRef`, 1_000); const required = bool(item.required, `presentation.mediaSlots[${index}].required`); nullableKey(item.assetKey, `presentation.mediaSlots[${index}].assetKey`); text(item.fallbackText, `presentation.mediaSlots[${index}].fallbackText`, 5_000); text(item.altText, `presentation.mediaSlots[${index}].altText`, 2_000); if (required !== packageValue.mediaManifest.requiredSlotKeys.includes(String(item.key))) fail(`presentation.mediaSlots[${index}].required与根manifest不一致`) })
@@ -909,6 +967,8 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
     'time-weather': structuredClone(timeWeather) as unknown as TextOpenWorldParsedModulesV1['time-weather'],
     director: structuredClone(director) as unknown as TextOpenWorldParsedModulesV1['director'],
     knowledge: structuredClone(knowledge) as unknown as TextOpenWorldParsedModulesV1['knowledge'],
-    presentation: structuredClone(presentation) as unknown as TextOpenWorldParsedModulesV1['presentation'],
+    presentation: {
+      ...structuredClone(presentation), version: 2, mapLayout,
+    } as unknown as TextOpenWorldParsedModulesV1['presentation'],
   }
 }

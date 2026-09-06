@@ -20,6 +20,7 @@ function evaluationContext(): TextOpenWorldConditionEvaluationContextV1 {
     },
     map: {
       currentLocationKey: 'location.salt-port', regionKnowledgeByKey: { 'region.salt-port': 'visited' },
+      locationKnowledgeByKey: { 'location.salt-port': 'visited', 'location.ridge-channel': 'heard' },
       unlockedFastTravelPointKeys: ['fast-travel.salt-port'], openEdgeKeys: ['edge.port-ridge'],
     },
     time: {
@@ -57,6 +58,7 @@ function allDomainExpression(): TextOpenWorldConditionExpressionV1 {
       { op: 'quest-objective', objectiveKey: 'objective.main.1', status: 'active' },
       { op: 'quest-result-tag', tag: 'tag.channel-seen', present: true },
       { op: 'map-location', locationKey: 'location.salt-port' },
+      { op: 'map-location-knowledge', locationKey: 'location.salt-port', minimum: 'visited' },
       { op: 'map-region-knowledge', regionKey: 'region.salt-port', minimum: 'heard' },
       { op: 'map-fast-travel', fastTravelPointKey: 'fast-travel.salt-port', unlocked: true },
       { op: 'map-edge', edgeKey: 'edge.port-ridge', open: true },

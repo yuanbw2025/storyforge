@@ -93,7 +93,7 @@ export interface TextOpenWorldNarrativeModuleV1 {
 }
 
 export interface TextOpenWorldWorldModuleV1 {
-  version: 2
+  version: 3
   initialLocationKey: string
   regions: Array<{
     key: string
@@ -118,6 +118,7 @@ export interface TextOpenWorldWorldModuleV1 {
     purpose: string
     functions: Array<'narrative' | 'service' | 'exploration' | 'combat' | 'crafting' | 'travel'>
     earlyArrivalDescription: string
+    initialKnowledge: 'unknown' | 'heard' | 'visited' | 'familiar'
     sourceRefs: string[]
     presentationRefs: string[]
   }>
@@ -523,11 +524,23 @@ export interface TextOpenWorldKnowledgeModuleV1 {
 }
 
 export interface TextOpenWorldPresentationModuleV1 {
-  version: 1
+  version: 2
   textStyle: {
     narrationTone: string
     dialogueStyle: string
     systemReceiptStyle: string
+  }
+  mapLayout: {
+    version: 1
+    coordinateSystem: 'normalized-1000'
+    width: 1000
+    height: 700
+    source: 'authored' | 'deterministic-fallback'
+    locationNodes: Array<{
+      locationKey: string
+      x: number
+      y: number
+    }>
   }
   mediaSlots: Array<{
     key: string

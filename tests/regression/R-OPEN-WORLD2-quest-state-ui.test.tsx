@@ -60,6 +60,8 @@ describe('Text Open World vNext · quest lifecycle player UI', () => {
     expect(host.querySelector('[data-testid="text-open-world-quest-hud"]')?.textContent).toContain('主追踪')
     expect(host.querySelector('[data-testid="text-open-world-map-topology"]')?.textContent).toContain('断脊渠口')
     expect(host.querySelector('[data-testid="text-open-world-map-topology"]')?.textContent).toContain('60分钟 · 普通风险 · 可通行')
+    expect(host.querySelector('[data-testid="text-open-world-map-topology"] svg[role="img"]')).toBeTruthy()
+    expect(host.querySelector('[data-testid="text-open-world-map-topology"] [aria-label="地图列表视图"]')).toBeTruthy()
     expect(host.querySelector(`[data-quest-instance="${ordinary.instanceKey}"]`)?.textContent).toContain('剩余1天')
 
     const pin = Array.from(host.querySelectorAll('button')).find(button => button.textContent === '钉选到HUD')
