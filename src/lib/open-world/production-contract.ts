@@ -283,7 +283,7 @@ export const TEXT_OPEN_WORLD_PRODUCTION_TASK_CONTRACTS_V1: TextOpenWorldProducti
     dependsOn: ['p2.gameplay-ruleset', 'p4.player-build', 'p8.quest-skeletons'],
     inputArtifactKeys: [
       'text-open-world.gameplay-ruleset-skeleton', 'text-open-world.player-build',
-      'text-open-world.content-requirement-manifest',
+      'text-open-world.quest-skeletons', 'text-open-world.content-requirement-manifest',
     ],
     outputArtifactKeys: ['text-open-world.progression-catalogs'],
     completion: {
@@ -300,7 +300,8 @@ export const TEXT_OPEN_WORLD_PRODUCTION_TASK_CONTRACTS_V1: TextOpenWorldProducti
     ],
     inputArtifactKeys: [
       'text-open-world.gameplay-ruleset-skeleton', 'text-open-world.player-build',
-      'text-open-world.region-narrative-packs', 'text-open-world.content-requirement-manifest',
+      'text-open-world.region-narrative-packs', 'text-open-world.quest-skeletons',
+      'text-open-world.content-requirement-manifest',
       'text-open-world.progression-catalogs',
     ],
     outputArtifactKeys: ['text-open-world.enemy-encounter-catalog'],
@@ -318,7 +319,8 @@ export const TEXT_OPEN_WORLD_PRODUCTION_TASK_CONTRACTS_V1: TextOpenWorldProducti
     ],
     inputArtifactKeys: [
       'text-open-world.gameplay-ruleset-skeleton', 'text-open-world.player-build',
-      'text-open-world.content-requirement-manifest', 'text-open-world.progression-catalogs',
+      'text-open-world.quest-skeletons', 'text-open-world.content-requirement-manifest',
+      'text-open-world.progression-catalogs',
       'text-open-world.enemy-encounter-catalog',
     ],
     outputArtifactKeys: ['text-open-world.item-reward-catalog'],

@@ -21,6 +21,7 @@ import type {
   TextOpenWorldPlayerBuildV1,
   TextOpenWorldProgressionCatalogsV1,
   TextOpenWorldProgressionSkillDemandKindV1,
+  TextOpenWorldQuestSkeletonsV1,
   WorkspaceScope,
 } from '../types'
 import { assertRecordInScope } from '../workspace/scope'
@@ -64,6 +65,7 @@ export interface TextOpenWorldProgressionCatalogsInputContextV1 {
   productInstanceKey: string
   gameplayRuleset: TextOpenWorldGameplayRulesetSkeletonV1
   playerBuild: TextOpenWorldPlayerBuildV1
+  questSkeletons: TextOpenWorldQuestSkeletonsV1
   contentRequirementManifest: TextOpenWorldContentRequirementManifestV1
   skillDemands: SkillDemandV1[]
   contextSelectionHash: string
@@ -240,7 +242,7 @@ function buildSkillDemands(input: {
 }
 
 async function validateUpstream(context: Omit<TextOpenWorldProgressionCatalogsInputContextV1, 'contextSelectionHash'>): Promise<void> {
-  const { gameplayRuleset, playerBuild, contentRequirementManifest } = context
+  const { gameplayRuleset, playerBuild, questSkeletons, contentRequirementManifest } = context
   await validateTextOpenWorldGameplayRulesetSkeletonV1({ artifact: gameplayRuleset })
   if (playerBuild.schema !== 'storyforge.text-open-world-player-build' || playerBuild.version !== 1
     || playerBuild.catalogBinding.status !== 'reserved-unbound'
@@ -249,9 +251,14 @@ async function validateUpstream(context: Omit<TextOpenWorldProgressionCatalogsIn
   if (gameplayRuleset.productInstanceKey !== context.productInstanceKey
     || playerBuild.productInstanceKey !== context.productInstanceKey
     || playerBuild.gameplayRulesetHash !== gameplayRuleset.gameplayRulesetHash
+    || questSkeletons.schema !== 'storyforge.text-open-world-quest-skeletons'
+    || questSkeletons.version !== 1
+    || questSkeletons.productInstanceKey !== context.productInstanceKey
     || contentRequirementManifest.schema !== 'storyforge.text-open-world-content-requirement-manifest'
     || contentRequirementManifest.version !== 1
-    || contentRequirementManifest.productInstanceKey !== context.productInstanceKey) fail('成长目录上游身份或引用无效')
+    || contentRequirementManifest.productInstanceKey !== context.productInstanceKey
+    || contentRequirementManifest.questSkeletonsHash !== questSkeletons.questSkeletonsHash) fail('成长目录上游身份或引用无效')
+  await assertOwnHash(questSkeletons as unknown as Record<string, unknown>, 'questSkeletonsHash', 'QuestSkeletons')
   await assertOwnHash(contentRequirementManifest as unknown as Record<string, unknown>, 'contentRequirementManifestHash', 'ContentRequirementManifest')
   const expected = buildSkillDemands({ playerBuild, manifest: contentRequirementManifest })
   if (canonicalProductProductionJsonV2(expected) !== canonicalProductProductionJsonV2(context.skillDemands)) {
@@ -270,16 +277,18 @@ async function loadContext(input: { scope: WorkspaceScope; productionId: number;
     || !await assertRecordInScope(input.scope, 'productBuilds', build, { owner: 'work' })) fail('Build不属于当前Production/Work')
   const gameplayRow = unique(rows, 'text-open-world.gameplay-ruleset-skeleton')
   const playerRow = unique(rows, 'text-open-world.player-build')
+  const questRow = unique(rows, 'text-open-world.quest-skeletons')
   const manifestRow = unique(rows, 'text-open-world.content-requirement-manifest')
   const gameplayRuleset = artifact<TextOpenWorldGameplayRulesetSkeletonV1>(gameplayRow, gameplayRow.artifactKey)
   const playerBuild = artifact<TextOpenWorldPlayerBuildV1>(playerRow, playerRow.artifactKey)
+  const questSkeletons = artifact<TextOpenWorldQuestSkeletonsV1>(questRow, questRow.artifactKey)
   const contentRequirementManifest = artifact<TextOpenWorldContentRequirementManifestV1>(manifestRow, manifestRow.artifactKey)
-  for (const [row, payload] of [[gameplayRow, gameplayRuleset], [playerRow, playerBuild], [manifestRow, contentRequirementManifest]] as const) {
+  for (const [row, payload] of [[gameplayRow, gameplayRuleset], [playerRow, playerBuild], [questRow, questSkeletons], [manifestRow, contentRequirementManifest]] as const) {
     if (await hashProductProductionValueV2(payload) !== row.contentHash) fail(`Artifact行Hash不匹配:${row.artifactKey}`)
   }
   const body: Omit<TextOpenWorldProgressionCatalogsInputContextV1, 'contextSelectionHash'> = {
     schema: 'storyforge.text-open-world-progression-catalogs-input', version: 1,
-    productInstanceKey: production.productionKey, gameplayRuleset, playerBuild, contentRequirementManifest,
+    productInstanceKey: production.productionKey, gameplayRuleset, playerBuild, questSkeletons, contentRequirementManifest,
     skillDemands: buildSkillDemands({ playerBuild, manifest: contentRequirementManifest }),
   }
   await validateUpstream(body)
@@ -459,6 +468,7 @@ async function createArtifact(input: {
     productInstanceKey: input.context.productInstanceKey,
     gameplayRulesetHash: input.context.gameplayRuleset.gameplayRulesetHash,
     playerBuildHash: input.context.playerBuild.playerBuildHash,
+    questSkeletonsHash: input.context.questSkeletons.questSkeletonsHash,
     contentRequirementManifestHash: input.context.contentRequirementManifest.contentRequirementManifestHash,
     rules: {
       maximumLevel: 20,
@@ -494,6 +504,7 @@ async function createArtifact(input: {
     basisHash: await hashProductProductionValueV2({
       gameplayRulesetHash: input.context.gameplayRuleset.gameplayRulesetHash,
       playerBuildHash: input.context.playerBuild.playerBuildHash,
+      questSkeletonsHash: input.context.questSkeletons.questSkeletonsHash,
       contentRequirementManifestHash: input.context.contentRequirementManifest.contentRequirementManifestHash,
       contextSelectionHash: input.context.contextSelectionHash,
       demandKeys: input.context.skillDemands.map(demand => demand.sourceDemandKey),

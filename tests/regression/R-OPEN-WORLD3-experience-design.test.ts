@@ -74,6 +74,12 @@ import {
   type TextOpenWorldProgressionCatalogsInputContextV1,
   type TextOpenWorldProgressionCatalogsModelRunnerV1,
 } from '../../src/lib/open-world/progression-catalogs-production'
+import {
+  createTextOpenWorldEncounterCatalogExecutorV1,
+  validateTextOpenWorldEnemyEncounterCatalogV1,
+  type TextOpenWorldEncounterCatalogInputContextV1,
+  type TextOpenWorldEncounterCatalogModelRunnerV1,
+} from '../../src/lib/open-world/encounter-catalog-production'
 import { TEXT_OPEN_WORLD_EFFECT_OPERATIONS_V1 } from '../../src/lib/types/text-open-world-effect'
 import type {
   TextOpenWorldGameplayRulesetSkeletonV1,
@@ -84,6 +90,7 @@ import type {
   TextOpenWorldContentRequirementManifestV1,
   TextOpenWorldQuestSkeletonsV1,
   TextOpenWorldProgressionCatalogsV1,
+  TextOpenWorldEnemyEncounterCatalogV1,
   TextOpenWorldSignificantThreadsV1,
 } from '../../src/lib/types'
 import {
@@ -1509,7 +1516,7 @@ function questSkeletonsRunner(options: {
     const kindsBySource = {
       'mainline-stage': ['actor', 'skill', 'faction', 'item', 'encounter', 'faction', 'reward'],
       'significant-stage': ['actor', 'action', 'faction', 'actor', 'faction', 'reward'],
-      'ordinary-seed': ['actor', 'item', 'material', 'encounter', 'vendor', 'reward'],
+      'ordinary-seed': ['actor', 'item', 'material', 'enemy', 'vendor', 'reward'],
       'template-seed': ['actor', 'item', 'encounter', 'location-interaction'],
     } as const
     const intentByKind = {
@@ -1734,6 +1741,92 @@ async function executeProgressionCatalogs(
     attempt: 1,
     idempotencyKey: await hashProductProductionValueV2('p8-progression-catalogs'),
     contextText: input.progressionContextText,
+    inputArtifacts: [],
+    capabilityBindings: input.task.capabilityRequirementKeys.map(requirementKey => ({
+      requirementKey, bindingHash: CAPABILITY_HASH, adapterId: 'configured-text.v1',
+    })),
+    signal: new AbortController().signal,
+  })
+}
+
+function encounterCatalogRunner(options: {
+  omitDemand?: boolean
+  invalidLocation?: boolean
+  duplicateEnemyTitle?: boolean
+} = {}): TextOpenWorldEncounterCatalogModelRunnerV1 {
+  return async input => {
+    const context = JSON.parse(input.contextText) as TextOpenWorldEncounterCatalogInputContextV1
+    const encounters = context.encounterDemands.map((demand, index) => ({
+      demandNumber: demand.demandNumber,
+      enemyTitle: options.duplicateEnemyTitle ? '重复敌人' : `${demand.title}之敌${index + 1}`,
+      enemyDescription: `${demand.description}该敌人的行动方式能够体现${demand.requestedTraits[0] ?? '地区危险'}。`,
+      enemyTags: [demand.demandKind, demand.criticality],
+      enemyArchetype: ['balanced', 'brute', 'swift', 'armored'][index % 4],
+      encounterTitle: `${demand.title}遭遇${index + 1}`,
+      encounterDescription: `玩家在${demand.regionKey}面对与需求相符、可以逃跑并可失败恢复的战斗。`,
+      locationNumber: options.invalidLocation && index === 0 ? demand.candidateLocationKeys.length + 1 : 1,
+      recommendedLevel: Math.min(5, index + 1),
+      intensity: demand.criticality === 'protected' ? 'dangerous' : 'ordinary',
+      enemyCount: demand.criticality === 'ordinary' ? 1 : 2,
+      openingText: `${demand.title}对应的威胁挡在玩家面前。`,
+      victoryText: '威胁暂时解除，玩家可以继续当前行动。',
+      defeatText: '这次交锋失败了；玩家可以从战前重试或回到复活点。',
+    }))
+    return {
+      output: JSON.stringify({
+        schema: 'storyforge.text-open-world-encounter-catalog-draft',
+        version: 1,
+        encounters: options.omitDemand ? encounters.slice(0, -1) : encounters,
+      }),
+      bindingReceipt: bindingReceipt(input.requirementKey),
+      usage: null,
+    }
+  }
+}
+
+async function encounterCatalogFixture() {
+  const input = await progressionCatalogsFixture()
+  const progressionResult = await executeProgressionCatalogs(input)
+  await acceptTaskArtifacts(input, progressionResult.artifacts, 'P8-progression-catalogs')
+  const plan = await createTextOpenWorldProductionPlanV1({
+    buildNumber: input.build.buildNumber,
+    controlEpoch: input.build.controlEpoch,
+    briefHash: input.briefRow.briefHash,
+    brief: input.brief,
+  })
+  const task = plan.tasks.find(item => item.taskKey === 'p8.catalog.encounters')!
+  const assembled = await assembleContext({
+    projectId: input.scope.projectId,
+    scope: input.scope,
+    sourceKeys: ['text-open-world.encounter-catalog-input'],
+    productProductionId: input.production.id!,
+    productBuildId: input.build.id!,
+    inputBudgetMaxTokens: task.budgetReservation.inputTokens,
+  })
+  return {
+    ...input,
+    task,
+    encounterContextText: assembled.text,
+    encounterContext: JSON.parse(assembled.text) as TextOpenWorldEncounterCatalogInputContextV1,
+    encounterContextEvidence: assembled.sourceEvidence,
+  }
+}
+
+async function executeEncounterCatalog(
+  input: Awaited<ReturnType<typeof encounterCatalogFixture>>,
+  runModel: TextOpenWorldEncounterCatalogModelRunnerV1 = encounterCatalogRunner(),
+) {
+  return createTextOpenWorldEncounterCatalogExecutorV1({ runModel, now: () => NOW + 14 })({
+    scope: input.scope,
+    productionId: input.production.id!,
+    buildId: input.build.id!,
+    buildNumber: input.build.buildNumber,
+    controlEpoch: input.build.controlEpoch,
+    planHash: input.planHash,
+    task: input.task,
+    attempt: 1,
+    idempotencyKey: await hashProductProductionValueV2('p8-encounter-catalog'),
+    contextText: input.encounterContextText,
     inputArtifacts: [],
     capabilityBindings: input.task.capabilityRequirementKeys.map(requirementKey => ({
       requirementKey, bindingHash: CAPABILITY_HASH, adapterId: 'configured-text.v1',
@@ -2841,4 +2934,78 @@ describe('R-OPEN-WORLD3 · P8 ProgressionCatalogs', () => {
     await expect(validateTextOpenWorldProgressionCatalogsV1({ artifact, context: input.progressionContext }))
       .rejects.toThrow(/成长曲线、需求覆盖、技能稳定键或未绑定运行槽被篡改/)
   }, 120_000)
+})
+
+describe('R-OPEN-WORLD3 · P8 EnemyEncounterCatalog', () => {
+  beforeEach(async () => { await db.delete(); await db.open() })
+  afterAll(() => db.close())
+
+  it('把战斗Objective与地区保底供给编译为有确定性数值的敌人和遭遇目录候选', async () => {
+    const input = await encounterCatalogFixture()
+    expect(CONTEXT_SOURCE_BY_KEY.get('text-open-world.encounter-catalog-input')).toMatchObject({
+      layer: 'L0', ownerFrom: 'work', protectedFromTrim: true,
+    })
+    expect(getAgentSkillV1('text-open-world.production.encounter-catalog.v1')).toMatchObject({
+      contextSourceKeys: ['text-open-world.encounter-catalog-input'],
+      writeTargets: [{ table: 'productBuildArtifacts', fields: ['payloadJson'] }],
+    })
+    expect(input.encounterContextEvidence).toEqual([
+      expect.objectContaining({ key: 'text-open-world.encounter-catalog-input', status: 'included', delivery: 'full' }),
+    ])
+    expect(input.encounterContext.encounterDemands).toHaveLength(5)
+
+    const result = await executeEncounterCatalog(input)
+    const artifact = result.artifacts[0]!.payload as TextOpenWorldEnemyEncounterCatalogV1
+    expect(result.passedGateIds).toEqual(input.task.acceptanceGateIds)
+    expect(result.usage).toMatchObject({ modelCalls: 1, mediaCalls: 0 })
+    expect(artifact.enemies).toHaveLength(5)
+    expect(artifact.encounters).toHaveLength(5)
+    expect(artifact.strategyProfiles).toHaveLength(5)
+    expect(artifact.coverage.requiredEnemyRequirementKeys).toHaveLength(1)
+    expect(artifact.coverage.coveredEnemyRequirementKeys).toEqual(artifact.coverage.requiredEnemyRequirementKeys)
+    expect(artifact.coverage.requiredEncounterRequirementKeys).toHaveLength(2)
+    expect(artifact.coverage.coveredEncounterRequirementKeys).toEqual(artifact.coverage.requiredEncounterRequirementKeys)
+    expect(new Set(artifact.coverage.coveredCombatObjectiveKeys)).toEqual(new Set(artifact.coverage.combatObjectiveKeys))
+    expect(new Set(artifact.coverage.coveredRegionKeys)).toEqual(new Set(artifact.coverage.requiredRegionKeys))
+    expect(artifact.playerSkillResolutions.map(item => item.skillKey)).toEqual(expect.arrayContaining([
+      'skill.player.basic-attack', 'skill.player.signature',
+    ]))
+    expect(artifact.enemies.every(enemy => enemy.runtimeBinding.status === 'runtime-partial'
+      && enemy.runtimeBinding.dropTableKey === null
+      && enemy.skillKeys.length === 1)).toBe(true)
+    expect(artifact.encounters.every(encounter => encounter.runtimeBinding.status === 'runtime-unbound'
+      && encounter.runtimeBinding.rewardContractKey === null
+      && encounter.escapePolicy.allowed
+      && encounter.defeatPolicy.kind === 'retry-or-respawn')).toBe(true)
+    expect(artifact.governance).toMatchObject({
+      statOwner: 'deterministic-compiler', standardDifficultyOnly: true,
+      friendlyNpcCombatants: false, elementsDisabled: true,
+      everyCombatObjectiveCovered: true, rewardsAndDropsDeferred: true,
+      encounterModuleReady: false,
+    })
+    await expect(validateTextOpenWorldEnemyEncounterCatalogV1({ artifact, context: input.encounterContext }))
+      .resolves.toEqual(artifact)
+  }, 150_000)
+
+  it('拒绝遭遇需求漏项、越界地点和同质化敌人标题', async () => {
+    const input = await encounterCatalogFixture()
+    await expect(executeEncounterCatalog(input, encounterCatalogRunner({ omitDemand: true })))
+      .rejects.toThrow(/encounters必须与5项需求一一对应/)
+    await expect(executeEncounterCatalog(input, encounterCatalogRunner({ invalidLocation: true })))
+      .rejects.toThrow(/locationNumber必须是/)
+    await expect(executeEncounterCatalog(input, encounterCatalogRunner({ duplicateEnemyTitle: true })))
+      .rejects.toThrow(/敌人标题不得重复/)
+  }, 150_000)
+
+  it('拒绝重算Hash后修改敌人数值、奖励预留或战斗保护策略', async () => {
+    const input = await encounterCatalogFixture()
+    const artifact = structuredClone((await executeEncounterCatalog(input)).artifacts[0]!.payload as TextOpenWorldEnemyEncounterCatalogV1)
+    artifact.enemies[0]!.attack += 999
+    artifact.encounters[0]!.runtimeBinding.rewardContractKey = 'reward.forged' as null
+    artifact.encounters[0]!.defeatPolicy.kind = 'none' as 'retry-or-respawn'
+    const { enemyEncounterCatalogHash: _hash, ...body } = artifact
+    artifact.enemyEncounterCatalogHash = await hashProductProductionValueV2(body)
+    await expect(validateTextOpenWorldEnemyEncounterCatalogV1({ artifact, context: input.encounterContext }))
+      .rejects.toThrow(/遭遇需求覆盖、敌人数值、稳定键、奖励预留或运行绑定被篡改|Enemy数值不属于确定性archetype/)
+  }, 150_000)
 })

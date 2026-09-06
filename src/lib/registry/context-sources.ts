@@ -189,6 +189,9 @@ async function readTextOpenWorldQuestSkeletonsInputContextV1(input: AssembleCont
 async function readTextOpenWorldProgressionCatalogsInputContextV1(input: AssembleContextInput): Promise<string> {
   return (await import('../open-world/progression-catalogs-production')).readTextOpenWorldProgressionCatalogsInputContextV1(input)
 }
+async function readTextOpenWorldEncounterCatalogInputContextV1(input: AssembleContextInput): Promise<string> {
+  return (await import('../open-world/encounter-catalog-production')).readTextOpenWorldEncounterCatalogInputContextV1(input)
+}
 async function readTtrpgGmRuntimeContextV1(input: AssembleContextInput): Promise<string> {
   return (await import('../ttrpg/gm-context')).readTtrpgGmRuntimeContextV1(input)
 }
@@ -1708,6 +1711,18 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     enabled: input => Number.isInteger(input.productProductionId)
       && Number.isInteger(input.productBuildId),
     read: readTextOpenWorldProgressionCatalogsInputContextV1,
+  },
+  {
+    key: 'text-open-world.encounter-catalog-input',
+    label: '文字开放世界敌人与遭遇目录生产输入',
+    scope: 'project',
+    layer: 'L0',
+    ownerFrom: 'work',
+    budgetTokens: 100_000,
+    protectedFromTrim: true,
+    enabled: input => Number.isInteger(input.productProductionId)
+      && Number.isInteger(input.productBuildId),
+    read: readTextOpenWorldEncounterCatalogInputContextV1,
   },
   {
     key: 'product-production.quality-feedback',

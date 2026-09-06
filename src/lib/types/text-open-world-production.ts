@@ -1748,6 +1748,7 @@ export interface TextOpenWorldProgressionCatalogsV1 {
   productInstanceKey: string
   gameplayRulesetHash: string
   playerBuildHash: string
+  questSkeletonsHash: string
   contentRequirementManifestHash: string
   rules: {
     maximumLevel: 20
@@ -1832,6 +1833,113 @@ export interface TextOpenWorldProgressionCatalogsV1 {
   basisHash: string
   createdAt: number
   progressionCatalogsHash: string
+}
+
+export interface TextOpenWorldEnemyEncounterCatalogV1 {
+  schema: 'storyforge.text-open-world-enemy-encounter-catalog'
+  version: 1
+  productType: 'text-open-world'
+  productInstanceKey: string
+  gameplayRulesetHash: string
+  playerBuildHash: string
+  regionNarrativePacksHash: string
+  questSkeletonsHash: string
+  contentRequirementManifestHash: string
+  progressionCatalogsHash: string
+  rules: TextOpenWorldGameplayRulesetSkeletonV1['combat']
+  playerSkillResolutions: Array<{
+    skillKey: string
+    powerNumerator: number
+    powerDenominator: number
+    flatDamage: number
+  }>
+  strategyProfiles: Array<{
+    key: string
+    title: string
+    selection: 'ordered-skill-priority'
+    prioritySkillKeys: string[]
+    fallbackSkillKey: string
+  }>
+  enemies: Array<{
+    key: string
+    order: number
+    familyKey: string
+    sourceDemandKey: string
+    title: string
+    description: string
+    tags: string[]
+    regionKey: string
+    homeLocationKey: string
+    level: number
+    maximumHealth: number
+    attack: number
+    defense: number
+    criticalChance: number
+    initiative: number
+    skillKeys: string[]
+    strategyProfileKey: string
+    fulfilledRequirementKeys: string[]
+    sourceRefs: string[]
+    runtimeBinding: {
+      status: 'runtime-partial'
+      dropTableKey: null
+      dropRequirementKey: string
+      presentationRefs: []
+    }
+  }>
+  encounters: Array<{
+    key: string
+    order: number
+    sourceDemandKey: string
+    title: string
+    description: string
+    regionKey: string
+    locationKey: string
+    questObjectiveKeys: string[]
+    enemyGroups: Array<{ key: string; enemyKey: string; count: number; order: number }>
+    recommendedLevel: number
+    levelBand: { minimum: number; maximum: number }
+    difficultyProfileKey: 'standard'
+    intensity: 'ordinary' | 'dangerous' | 'boss'
+    escapePolicy: { allowed: true; failureConsumesTurn: true }
+    defeatPolicy: { kind: 'retry-or-respawn'; preservesWorldProgress: true }
+    openingText: string
+    victoryText: string
+    defeatText: string
+    fulfilledRequirementKeys: string[]
+    sourceRefs: string[]
+    runtimeBinding: {
+      status: 'runtime-unbound'
+      questKeys: []
+      rewardContractKey: null
+      rewardRequirementKey: string
+      presentationRefs: []
+    }
+  }>
+  coverage: {
+    requiredEnemyRequirementKeys: string[]
+    coveredEnemyRequirementKeys: string[]
+    requiredEncounterRequirementKeys: string[]
+    coveredEncounterRequirementKeys: string[]
+    combatObjectiveKeys: string[]
+    coveredCombatObjectiveKeys: string[]
+    requiredRegionKeys: string[]
+    coveredRegionKeys: string[]
+    uncoveredDemandKeys: []
+  }
+  governance: {
+    statOwner: 'deterministic-compiler'
+    semanticOwner: 'model-validated'
+    standardDifficultyOnly: true
+    friendlyNpcCombatants: false
+    elementsDisabled: true
+    everyCombatObjectiveCovered: true
+    rewardsAndDropsDeferred: true
+    encounterModuleReady: false
+  }
+  basisHash: string
+  createdAt: number
+  enemyEncounterCatalogHash: string
 }
 
 export const TEXT_OPEN_WORLD_PRODUCTION_STAGES_V1 = [
