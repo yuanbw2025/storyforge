@@ -1,6 +1,6 @@
 # AI 主导文字开放世界游戏 · 完整开发清单
 
-> 版本：1.1.57
+> 版本：1.1.58
 > 建立日期：2026-09-06
 > 对应总任务：`E-OPENWORLD-01`
 > 当前状态：`IN_PROGRESS`；用户已于2026-09-06明确下达完整产品开发指令
@@ -196,7 +196,7 @@ G7 盐脊验收、发布更新与旧入口收口
 | TOW-G3-11 | DONE | RegionNarrativePack与地区生态 | G3-08～G3-10 | P7专属Context只读取同一Build已验收的GameBrief、ExperienceContract、SourceLedger、RegionSkeleton、MainlineThread和SignificantThreads，优先交付体验/地区/重要故事必需claim；模型按地区逐项设计独特幻想、地方冲突/问题、生活基线、2～5条矛盾与状态轴，精确覆盖全部地点的日常活动/NPC需求/传闻/时段表现，并按Brief保底精确提供6个普通任务、4个任务模板、12个随机事件种子及每区至少3条传闻；每区同时提出重要Agent维护角色、规则驱动功能/氛围角色和势力需求，重要角色/势力owner由唯一地区需求承接；代码生成Pack/Tension/StateAxis/LocationPlan/Actor与Faction预留/Quest与Template与Event与Rumor种子稳定键，固定普通世界继续、主线等待、重要故事安全点等待、地区后果不阻断主线和全部目录绑定unbound；地点漏项、地区同质、保底不足、owner缺失及重算Hash篡改失败关闭；不新增表、不写Release/Session |
 | TOW-G3-12 | DONE | QuestSkeleton与ContentRequirementManifest | G3-09～G3-11 | P8专属Context把Brief、体验、玩法、主线、重要故事和地区种子投影为23项确定性Quest Source；模型逐项生成故事动机、1～4 Stage、可执行Objective及语义内容需求，代码保证7主线Stage、6重要故事Stage、6普通任务种子和4地区模板一一覆盖，固定主线/重要故事无限等待不可放弃或永久失败、普通任务放弃可重接、模板由地区导演实例化、到达地点不单独触发；ContentRequirementManifest同时汇总全部Objective及地区角色/势力/地点交互需求，按技能、遭遇、物品奖励、制作经济、NPC、地图交互和QuestFinalize声明唯一后序owner，所有正式目录/Action/Condition/Reward/运行引用保持unbound；遗漏来源、弱化保护、无敌人战斗目标、同名定义冲突、模型越权字段和重算Hash篡改失败关闭 |
 | TOW-G3-13 | DONE | 技能、物品、敌人、遭遇、奖励目录生产 | G3-05、G3-06、G3-12 | 三条专属Lane均从同一Build已验收QuestSkeleton与Manifest出发：Progression固定20级平方经验、自动属性成长、两项初始/六项等级/任务技能精确需求和主动攻击公式；Encounter逐项兑现enemy/encounter需求、每区基础遭遇、1～5级敌人数值、基础技能策略、战斗Objective/地区覆盖及失败恢复；Item/Reward精确兑现两项初始物品与item/equipment/material/reward需求，为全部23个任务和5个遭遇生成奖励、为5个敌人生成地区材料掉落，并确定性分配主线总计1600经验以支撑1→5级。模型只负责技能/状态/敌人/遭遇/物品/奖励语义和有界选择，代码固定稳定键、数值、保护、来源、预算与消费者；Action/Effect/Condition/Quest/Reward/Drop正式引用保持unbound交给P8F，漏项、越界、无来源、预算不闭合、模型越权及重算Hash篡改失败关闭 |
-| TOW-G3-14 | IN_PROGRESS | 配方、商店、NPC运行规则目录生产 | G3-11～G3-13 | Crafting/Economy Lane已完成：正式任务补入QuestSkeleton语境，按recipe/vendor需求与每区保底生成配方、商店及Actor服务预留；模型只选择有来源物品和合法地点并编写语义，代码固定单货币、数量、价格、普通无限/装备限量库存、来源/消耗、全地区覆盖和反套利；关键物品禁售、同物转换、产物类别错配、越界、漏项和运行绑定越权均失败关闭。NPC Runtime与Map Interaction Lane待完成 |
+| TOW-G3-14 | IN_PROGRESS | 配方、商店、NPC运行规则目录生产 | G3-11～G3-13 | Crafting/Economy与NPC Runtime Lane已完成：前者逐项兑现recipe/vendor及每区基础供给，固定来源/消耗、库存、价格和反套利；后者读取任务消费者、地区角色/势力需求及真实商店Actor预留，保留整段人物小传，固定主线/重要角色Agent维护与保护、普通角色四时段规则日程、三档道德/阵营态度、普通功能NPC死亡后的预制替代者和独特内容不继承边界；全部对话/Action/Scene仍交后序绑定。Map Interaction Lane待完成 |
 | TOW-G3-15 | QUEUED | QuestFinalize与EncounterFinalize | G3-12～G3-14 | Stage/Objective/Action/Reward/Failure/Time绑定真实目录且可运行 |
 | TOW-G3-16 | QUEUED | SceneScript、ChoiceContract和三类交互绑定 | G3-15 | 场景文本、固定选项、系统Action和自然语言入口不产生第二套结果 |
 | TOW-G3-17 | QUEUED | UI/媒资需求、内容时长、平衡、语义评审和局部修复 | G3-06～G3-16 | 必需消费槽完整；库存时长与单次时长分离；问题可局部修复并传播stale |
@@ -355,6 +355,7 @@ G7 盐脊验收、发布更新与旧入口收口
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| 1.1.58 | 2026-09-07 | G3-14完成NPC Runtime Catalog Lane并将其显式接到Crafting/Economy之后：Context投影已验收Quest消费者和商店Actor预留，同时完整读取地区角色/势力需求；模型只写势力目标、道德方向、角色姓名/小传/演绎、普通日常和三档招呼语气，人物身份信息保持一个整体文本资产；代码固定Faction/Actor/Service/Schedule稳定键、主线/重要角色Agent维护与protected、普通角色rule-driven/mortal、四时段日程、道德/阵营加权三档态度、商店与普通功能服务替代者，替代者只继承功能不继承独特故事；全部角色/势力/商店预留、地区居民、关键保护和死亡替代精确闭合，对话/Action/Scene仍未绑定；漏项、同名、越界阵营、错误日程、越权保护字段及重算Hash篡改失败关闭；下一Lane为Map Interaction |
 | 1.1.57 | 2026-09-07 | 启动G3-14并完成Crafting/Economy Catalog Lane：修正P8任务闭包，三个后半目录均读取QuestSkeleton以保留消费者语境；配方经济Context只读取同Build已验收玩法、地区、任务、需求和物品奖励目录，逐项兑现recipe/vendor需求并为每区提供基础配方与商店；模型只写地区化语义并从有来源非关键物品及合法地点中选取，代码固定稳定键、配方学习、制作数量/时长、单货币整数基点价格、普通无限/装备限量库存、商店Actor预留、物品来源/消耗投影和反套利；关键物品禁售、同物转换、类别错配、漏项/越界及重算Hash改价格/库存/数量/Action失败关闭；G3-14继续进行，下一Lane为NPC Runtime |
 | 1.1.56 | 2026-09-07 | 完成G3-13全部Gameplay Catalog前半段：Item/Reward Lane从PlayerBuild、QuestSkeleton、Manifest、Progression和Encounter生成9个物品、28个任务/战斗奖励及5个敌人掉落表；主角初始物品键和装备位不可改写，关键物品不可丢弃出售，所有item/equipment/material/reward需求均精确兑现，每个物品有初始/任务奖励/地区掉落来源，每个任务与遭遇都有奖励，每个敌人有掉落；代码按主线时长精确分配1600经验达到5级并确定货币、装备加成、地区材料与掉落数量，模型只写语义和可选物品；全部Action/Effect/Condition/Quest运行绑定保持unbound，漏项、非法装备位、同名奖励、来源/预算不闭合及重算Hash篡改失败关闭；总进度64/121，业务功能54/111，下一项G3-14 |
 | 1.1.55 | 2026-09-07 | G3-13完成Enemy/Encounter Catalog Lane，并修正三个玩法目录的输入闭包：Progression、Encounter、Item/Reward正式读取已验收QuestSkeleton，避免仅凭Manifest消费者键猜测任务类型、地区、地点与时长；遭遇Lane逐项兑现enemy/encounter需求并为每区生成基础遭遇，模型只设计敌人/遭遇语义、原型、地点候选序号和表现文本，代码固定验收1～5级数值、基础攻击策略、敌群、标准难度、可逃跑/重试复活、战斗Objective及地区覆盖，并为每个敌人/遭遇预留掉落和奖励；越界地点、漏需求、同质标题及重算Hash改数值/保护策略失败关闭；G3-13下一Lane为Item/Reward |

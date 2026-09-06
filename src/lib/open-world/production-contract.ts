@@ -347,10 +347,11 @@ export const TEXT_OPEN_WORLD_PRODUCTION_TASK_CONTRACTS_V1: TextOpenWorldProducti
   modelTask({
     stage: 'P8', taskKey: 'p8.catalog.npc-runtime', objective: '生产角色层级、日程、服务、关系和死亡替代运行规则。',
     skillId: 'text-open-world.production.npc-runtime-catalog.v1', recommendedModelCalls: 5,
-    dependsOn: ['p2.gameplay-ruleset', 'p7.region-narrative-packs', 'p8.quest-skeletons'],
+    dependsOn: ['p2.gameplay-ruleset', 'p7.region-narrative-packs', 'p8.quest-skeletons', 'p8.catalog.crafting-economy'],
     inputArtifactKeys: [
       'text-open-world.gameplay-ruleset-skeleton', 'text-open-world.region-narrative-packs',
       'text-open-world.quest-skeletons', 'text-open-world.content-requirement-manifest',
+      'text-open-world.crafting-economy-catalog',
     ],
     outputArtifactKeys: ['text-open-world.npc-runtime-catalog'],
     completion: {

@@ -92,6 +92,12 @@ import {
   type TextOpenWorldCraftingEconomyInputContextV1,
   type TextOpenWorldCraftingEconomyModelRunnerV1,
 } from '../../src/lib/open-world/crafting-economy-catalog-production'
+import {
+  createTextOpenWorldNpcRuntimeCatalogExecutorV1,
+  validateTextOpenWorldNpcRuntimeCatalogV1,
+  type TextOpenWorldNpcRuntimeInputContextV1,
+  type TextOpenWorldNpcRuntimeModelRunnerV1,
+} from '../../src/lib/open-world/npc-runtime-catalog-production'
 import { TEXT_OPEN_WORLD_EFFECT_OPERATIONS_V1 } from '../../src/lib/types/text-open-world-effect'
 import type {
   TextOpenWorldGameplayRulesetSkeletonV1,
@@ -105,6 +111,7 @@ import type {
   TextOpenWorldEnemyEncounterCatalogV1,
   TextOpenWorldItemRewardCatalogV1,
   TextOpenWorldCraftingEconomyCatalogV1,
+  TextOpenWorldNpcRuntimeCatalogV1,
   TextOpenWorldSignificantThreadsV1,
 } from '../../src/lib/types'
 import {
@@ -2033,6 +2040,89 @@ async function executeCraftingEconomy(
   })
 }
 
+function npcRuntimeRunner(options: {
+  omitActor?: boolean
+  duplicateActorName?: boolean
+  invalidFaction?: boolean
+  invalidSchedule?: boolean
+  missingAttitude?: boolean
+  prematureField?: boolean
+} = {}): TextOpenWorldNpcRuntimeModelRunnerV1 {
+  return async input => {
+    const context = JSON.parse(input.contextText) as TextOpenWorldNpcRuntimeInputContextV1
+    const factions = context.factionDemands.map(demand => ({
+      demandNumber: demand.demandNumber,
+      description: `${demand.description}该势力以${demand.requestedTraits[0] ?? '本地资源'}维持影响。`,
+      publicGoal: `围绕${demand.title}维护公开秩序与自身利益。`,
+      moralityMultiplier: demand.demandNumber % 3 === 0 ? -1 : demand.demandNumber % 2 === 0 ? 0 : 1,
+    }))
+    const actors = context.actorDemands.map((demand, index) => ({
+      demandNumber: demand.demandNumber,
+      name: options.duplicateActorName ? '同名角色' : `${demand.title}${index + 1}`,
+      biography: `${demand.description}此人长期生活在${demand.regionKey}，其经历与当前职责相互呼应。`,
+      portrayal: `以${demand.requestedTraits[0] ?? '当地居民'}的身份回应玩家，重要事实不越过已知边界。`,
+      factionNumber: options.invalidFaction && index === 0 ? context.factionDemands.length + 1
+        : context.factionDemands.length ? (index % context.factionDemands.length) + 1 : 0,
+      scheduleActivities: demand.runtimeMode === 'rule-driven'
+        ? options.invalidSchedule ? ['只填一项'] : ['准备一天工作。', '在岗位上活动。', '收尾并回应来客。', '休息。']
+        : [],
+      ...(options.prematureField && index === 0 ? { protected: false } : {}),
+    }))
+    const attitudeBands = [
+      { attitude: 'bad', label: '敌意', greetingTone: '冷淡、防备，可能拒绝非必要互动。' },
+      { attitude: 'neutral', label: '一般', greetingTone: '礼貌克制，只回应当前能够提供的信息。' },
+      { attitude: 'good', label: '友善', greetingTone: '主动而温和，但不泄露尚未解锁的信息。' },
+    ]
+    return {
+      output: JSON.stringify({
+        schema: 'storyforge.text-open-world-npc-runtime-draft', version: 1,
+        factions, actors: options.omitActor ? actors.slice(0, -1) : actors,
+        attitudeBands: options.missingAttitude ? attitudeBands.slice(0, -1) : attitudeBands,
+      }),
+      bindingReceipt: bindingReceipt(input.requirementKey), usage: null,
+    }
+  }
+}
+
+async function npcRuntimeFixture() {
+  const input = await craftingEconomyFixture()
+  const craftingResult = await executeCraftingEconomy(input)
+  await acceptTaskArtifacts(input, craftingResult.artifacts, 'P8-crafting-economy')
+  const plan = await createTextOpenWorldProductionPlanV1({
+    buildNumber: input.build.buildNumber, controlEpoch: input.build.controlEpoch,
+    briefHash: input.briefRow.briefHash, brief: input.brief,
+  })
+  const task = plan.tasks.find(item => item.taskKey === 'p8.catalog.npc-runtime')!
+  const assembled = await assembleContext({
+    projectId: input.scope.projectId, scope: input.scope,
+    sourceKeys: ['text-open-world.npc-runtime-input'],
+    productProductionId: input.production.id!, productBuildId: input.build.id!,
+    inputBudgetMaxTokens: task.budgetReservation.inputTokens,
+  })
+  return {
+    ...input, task, npcRuntimeContextText: assembled.text,
+    npcRuntimeContext: JSON.parse(assembled.text) as TextOpenWorldNpcRuntimeInputContextV1,
+    npcRuntimeContextEvidence: assembled.sourceEvidence,
+  }
+}
+
+async function executeNpcRuntime(
+  input: Awaited<ReturnType<typeof npcRuntimeFixture>>,
+  runModel: TextOpenWorldNpcRuntimeModelRunnerV1 = npcRuntimeRunner(),
+) {
+  return createTextOpenWorldNpcRuntimeCatalogExecutorV1({ runModel, now: () => NOW + 17 })({
+    scope: input.scope, productionId: input.production.id!, buildId: input.build.id!,
+    buildNumber: input.build.buildNumber, controlEpoch: input.build.controlEpoch,
+    planHash: input.planHash, task: input.task, attempt: 1,
+    idempotencyKey: await hashProductProductionValueV2('p8-npc-runtime'),
+    contextText: input.npcRuntimeContextText, inputArtifacts: [],
+    capabilityBindings: input.task.capabilityRequirementKeys.map(requirementKey => ({
+      requirementKey, bindingHash: CAPABILITY_HASH, adapterId: 'configured-text.v1',
+    })),
+    signal: new AbortController().signal,
+  })
+}
+
 describe('R-OPEN-WORLD3 · P2 GameBrief / ExperienceContract / ProtagonistAsset', () => {
   beforeEach(async () => { await db.delete(); await db.open() })
   afterAll(() => db.close())
@@ -3368,4 +3458,83 @@ describe('R-OPEN-WORLD3 · P8 CraftingEconomyCatalog', () => {
     await expect(validateTextOpenWorldCraftingEconomyCatalogV1({ artifact, context: input.craftingEconomyContext }))
       .rejects.toThrow(/配方、商店、价格、来源\/消耗或运行绑定被篡改/)
   }, 210_000)
+})
+
+describe('R-OPEN-WORLD3 · P8 NpcRuntimeCatalog', () => {
+  beforeEach(async () => { await db.delete(); await db.open() })
+  afterAll(() => db.close())
+
+  it('把角色势力需求和商店服务编译为Agent/规则分层、三档关系及死亡替代目录', async () => {
+    const input = await npcRuntimeFixture()
+    expect(CONTEXT_SOURCE_BY_KEY.get('text-open-world.npc-runtime-input')).toMatchObject({
+      layer: 'L0', ownerFrom: 'work', protectedFromTrim: true,
+    })
+    expect(getAgentSkillV1('text-open-world.production.npc-runtime-catalog.v1')).toMatchObject({
+      contextSourceKeys: ['text-open-world.npc-runtime-input'],
+      writeTargets: [{ table: 'productBuildArtifacts', fields: ['payloadJson'] }],
+    })
+    expect(input.npcRuntimeContextEvidence).toEqual([
+      expect.objectContaining({ key: 'text-open-world.npc-runtime-input', status: 'included', delivery: 'full' }),
+    ])
+    expect(input.npcRuntimeContext.actorDemands.length).toBeGreaterThan(3)
+    expect(input.npcRuntimeContext.factionDemands.length).toBeGreaterThan(0)
+
+    const result = await executeNpcRuntime(input)
+    const artifact = result.artifacts[0]!.payload as TextOpenWorldNpcRuntimeCatalogV1
+    expect(result.passedGateIds).toEqual(input.task.acceptanceGateIds)
+    expect(result.usage).toMatchObject({ modelCalls: 1, mediaCalls: 0 })
+    expect(new Set(artifact.coverage.coveredActorRequirementKeys)).toEqual(new Set(artifact.coverage.requiredActorRequirementKeys))
+    expect(new Set(artifact.coverage.coveredFactionRequirementKeys)).toEqual(new Set(artifact.coverage.requiredFactionRequirementKeys))
+    expect(new Set(artifact.coverage.coveredVendorActorReservationKeys)).toEqual(new Set(artifact.coverage.requiredVendorActorReservationKeys))
+    expect(new Set(artifact.coverage.regionsWithResidentActors)).toEqual(new Set(artifact.coverage.requiredRegionKeys))
+    expect(artifact.coverage.protectedQuestActorKeysWithProtection).toEqual(artifact.coverage.protectedQuestActorKeys)
+    expect(artifact.coverage.functionalMortalActorKeysWithReplacement).toEqual(artifact.coverage.functionalMortalActorKeys)
+    expect(artifact.actors.filter(actor => actor.runtimeMode === 'agent-maintained')
+      .every(actor => actor.protected && actor.mortalityPolicy === 'protected' && actor.scheduleKey === null)).toBe(true)
+    expect(artifact.actors.filter(actor => actor.runtimeMode === 'rule-driven')
+      .every(actor => actor.scheduleKey !== null)).toBe(true)
+    expect(artifact.schedules.every(schedule => schedule.entries.map(entry => entry.timePeriodKey)
+      .join(',') === 'period.dawn,period.day,period.evening,period.night')).toBe(true)
+    expect(artifact.relationshipPolicy.attitudeBands.map(item => item.attitude)).toEqual(['bad', 'neutral', 'good'])
+    expect(artifact.governance).toMatchObject({
+      importantActors: 'agent-maintained', ordinaryActors: 'rule-driven', attitudes: 'bad-neutral-good',
+      independentNpcAffinity: false, importantActorsProtected: true, ordinaryActorsMayDie: true,
+      functionalServicesReplaceable: true, uniqueContentMayDisappear: true,
+      mainlineCannotBeBlockedByRelationship: true, dialogueAndActionsDeferred: true,
+      npcRuntimeModuleReady: false,
+    })
+    await expect(validateTextOpenWorldNpcRuntimeCatalogV1({ artifact, context: input.npcRuntimeContext }))
+      .resolves.toEqual(artifact)
+  }, 240_000)
+
+  it('拒绝角色漏项、同名角色、越界阵营、错误日程和模型越权保护字段', async () => {
+    const input = await npcRuntimeFixture()
+    await expect(executeNpcRuntime(input, npcRuntimeRunner({ omitActor: true })))
+      .rejects.toThrow(/actors必须与\d+项需求一一对应/)
+    await expect(executeNpcRuntime(input, npcRuntimeRunner({ duplicateActorName: true })))
+      .rejects.toThrow(/actors必须按序覆盖且姓名不得重复/)
+    await expect(executeNpcRuntime(input, npcRuntimeRunner({ invalidFaction: true })))
+      .rejects.toThrow(/factionNumber必须是/)
+    await expect(executeNpcRuntime(input, npcRuntimeRunner({ invalidSchedule: true })))
+      .rejects.toThrow(/scheduleActivities必须精确包含4项/)
+    await expect(executeNpcRuntime(input, npcRuntimeRunner({ missingAttitude: true })))
+      .rejects.toThrow(/attitudeBands必须精确包含三档/)
+    await expect(executeNpcRuntime(input, npcRuntimeRunner({ prematureField: true })))
+      .rejects.toThrow(/字段不精确/)
+  }, 240_000)
+
+  it('拒绝重算Hash后弱化关键保护、删掉服务替代、改写关系阈值或注入Scene', async () => {
+    const input = await npcRuntimeFixture()
+    const artifact = structuredClone((await executeNpcRuntime(input)).artifacts[0]!.payload as TextOpenWorldNpcRuntimeCatalogV1)
+    const protectedActor = artifact.actors.find(actor => actor.protected)!
+    protectedActor.protected = false
+    protectedActor.mortalityPolicy = 'mortal'
+    artifact.serviceContinuity.splice(0, 1)
+    artifact.relationshipPolicy.attitude.badMaximum = -99
+    artifact.actors[0]!.runtimeBinding.dialogueSceneKeys.push('scene.forged')
+    const { npcRuntimeCatalogHash: _hash, ...body } = artifact
+    artifact.npcRuntimeCatalogHash = await hashProductProductionValueV2(body)
+    await expect(validateTextOpenWorldNpcRuntimeCatalogV1({ artifact, context: input.npcRuntimeContext }))
+      .rejects.toThrow(/角色层级、保护、日程、关系或服务连续性被篡改/)
+  }, 240_000)
 })

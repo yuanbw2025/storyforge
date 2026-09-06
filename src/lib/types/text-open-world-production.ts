@@ -2174,6 +2174,134 @@ export interface TextOpenWorldCraftingEconomyCatalogV1 {
   craftingEconomyCatalogHash: string
 }
 
+export type TextOpenWorldNpcRuntimeDemandKindV1 =
+  | 'content-requirement'
+  | 'vendor-service'
+  | 'service-replacement'
+
+/** P8 actor/faction catalog candidate. Biography and portrayal remain cohesive
+ * authored assets; deterministic runtime rules are structured separately. */
+export interface TextOpenWorldNpcRuntimeCatalogV1 {
+  schema: 'storyforge.text-open-world-npc-runtime-catalog'
+  version: 1
+  productType: 'text-open-world'
+  productInstanceKey: string
+  gameplayRulesetHash: string
+  regionNarrativePacksHash: string
+  questSkeletonsHash: string
+  contentRequirementManifestHash: string
+  craftingEconomyCatalogHash: string
+  factions: Array<{
+    key: string
+    order: number
+    sourceDemandKey: string
+    title: string
+    description: string
+    publicGoal: string
+    moralityMultiplier: -1 | 0 | 1
+    fulfilledRequirementKeys: string[]
+    sourceRefs: string[]
+  }>
+  actors: Array<{
+    key: string
+    order: number
+    sourceDemandKey: string
+    demandKind: TextOpenWorldNpcRuntimeDemandKindV1
+    tier: 'mainline' | 'significant' | 'resident' | 'transient'
+    runtimeMode: 'agent-maintained' | 'rule-driven'
+    name: string
+    biography: string
+    portrayal: string
+    factionKey: string | null
+    homeLocationKey: string
+    regionKey: string
+    protected: boolean
+    mortalityPolicy: 'protected' | 'story-only' | 'mortal' | 'despawn-on-resolution'
+    serviceKeys: string[]
+    scheduleKey: string | null
+    fulfilledRequirementKeys: string[]
+    questConsumerKeys: string[]
+    sourceRefs: string[]
+    runtimeBinding: {
+      status: 'runtime-partial'
+      dialogueSceneKeys: []
+      actionKeys: []
+      presentationRefs: []
+    }
+  }>
+  schedules: Array<{
+    key: string
+    actorKey: string
+    entries: Array<{
+      timePeriodKey: 'period.dawn' | 'period.day' | 'period.evening' | 'period.night'
+      locationKey: string
+      activity: string
+      availableServiceKeys: string[]
+    }>
+  }>
+  serviceContinuity: Array<{
+    key: string
+    ownerActorKey: string
+    serviceKey: string
+    policy: 'replace-on-owner-death' | 'disappear-on-owner-death'
+    replacementActorKey: string | null
+    replacementServiceKey: string | null
+  }>
+  relationshipPolicy: {
+    morality: { minimum: number; maximum: number; initial: number }
+    factionAffinity: { minimum: number; maximum: number; initial: number }
+    attitude: {
+      badMaximum: number
+      goodMinimum: number
+      moralityWeight: number
+      factionWeight: number
+      explicitStoryModifierCap: number
+    }
+    unaffiliatedMoralityMultiplier: 0
+    attitudeBands: Array<{
+      attitude: 'bad' | 'neutral' | 'good'
+      label: string
+      greetingTone: string
+      buyPriceMultiplier: number
+      sellPriceMultiplier: number
+      optionalInteractionPolicy: 'available' | 'may-refuse'
+    }>
+    crimeScope: 'morality-affinity-prices-local-quests-only'
+    storyModifiers: 'p8f-unbound'
+  }
+  coverage: {
+    requiredActorRequirementKeys: string[]
+    coveredActorRequirementKeys: string[]
+    requiredFactionRequirementKeys: string[]
+    coveredFactionRequirementKeys: string[]
+    requiredVendorActorReservationKeys: string[]
+    coveredVendorActorReservationKeys: string[]
+    requiredRegionKeys: string[]
+    regionsWithResidentActors: string[]
+    protectedQuestActorKeys: string[]
+    protectedQuestActorKeysWithProtection: string[]
+    functionalMortalActorKeys: string[]
+    functionalMortalActorKeysWithReplacement: string[]
+    uncoveredDemandKeys: []
+  }
+  governance: {
+    importantActors: 'agent-maintained'
+    ordinaryActors: 'rule-driven'
+    attitudes: 'bad-neutral-good'
+    independentNpcAffinity: false
+    importantActorsProtected: true
+    ordinaryActorsMayDie: true
+    functionalServicesReplaceable: true
+    uniqueContentMayDisappear: true
+    mainlineCannotBeBlockedByRelationship: true
+    dialogueAndActionsDeferred: true
+    npcRuntimeModuleReady: false
+  }
+  basisHash: string
+  createdAt: number
+  npcRuntimeCatalogHash: string
+}
+
 export const TEXT_OPEN_WORLD_PRODUCTION_STAGES_V1 = [
   'P0', 'P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8', 'P8F', 'P9', 'P10',
   'V1', 'V2', 'V3', 'QA',
