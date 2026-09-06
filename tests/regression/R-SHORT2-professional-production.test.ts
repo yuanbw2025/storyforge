@@ -18,6 +18,7 @@ import {
   parseShortNovelBriefV1,
   parseShortNovelReviewV1,
 } from '../../src/lib/short-novel/contracts'
+import { buildShortNovelPromptV1 } from '../../src/lib/short-novel/prompts'
 import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
 import { seedCurrentWorkspace } from '../helpers/current-workspace'
 import type {
@@ -165,6 +166,19 @@ describe('R-SHORT2 · 专业短篇独立生产闭环', () => {
     expect(importedReleases[1].parentReleaseId).toBe(importedReleases[0].id)
     expect((await db.shortNovelProductions.where('projectId').equals(importedProjectId).first())?.currentReleaseId).toBe(importedReleases[1].id)
     expect(await readShortNovelReleaseManifestV1({ projectId: importedProjectId, worldId: importedWorld!.id!, workId: importedWork!.id! }, importedRelease!.id!)).toMatchObject({ manuscriptHash: manifest.manuscriptHash })
+  })
+
+  it('把数字类型与英文枚举写入 provider 可执行协议，不依赖模型自行猜测合同', () => {
+    const [system, objective] = buildShortNovelPromptV1({
+      kind: 'brief',
+      context: '目标字数：5000\n章节数：3',
+      authorInstruction: '',
+    })
+    expect(system.content).toContain('version 的字段必须使用 JSON 数字 1')
+    expect(system.content).toContain('英文枚举标识必须逐字照抄')
+    expect(objective.content).toContain('first-person、third-limited、third-omniscient')
+    expect(objective.content).toContain('past、present')
+    expect(objective.content).toContain('targetWordCount 和 chapterCount 必须是 JSON 数字')
   })
 
   it('手稿变化后拒绝 stale 候选，且不能跨 Work 采纳', async () => {
