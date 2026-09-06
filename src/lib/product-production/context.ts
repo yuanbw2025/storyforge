@@ -1,4 +1,5 @@
 import { db } from '../db/schema'
+import { estimateTokens } from '../ai/context-budget'
 import type { WorkspaceScope } from '../types'
 import type { AssembleContextInput } from '../registry/types'
 import { assertRecordInScope } from '../workspace/scope'
@@ -57,6 +58,205 @@ export async function readProductProductionArtifactInputs(input: AssembleContext
     }))
   if (artifacts.length !== requested.size) throw new Error('[product-production-context] 选择的 Artifact 缺失或未验收')
   return JSON.stringify({ schema: 'storyforge.product-production.artifact-inputs', version: 1, buildNumber: build.buildNumber, artifacts })
+}
+
+function contextRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown> : {}
+}
+
+function contextRows(value: unknown): Record<string, unknown>[] {
+  return Array.isArray(value) ? value.map(contextRecord) : []
+}
+
+function contextText(value: unknown, maximum: number): string {
+  if (typeof value !== 'string') return ''
+  const normalized = value.trim().normalize('NFC')
+  return normalized.length <= maximum ? normalized : `${normalized.slice(0, maximum)}…`
+}
+
+/**
+ * Registered, deterministic review projection for the text-adventure quality
+ * Agent. The full accepted Artifacts stay authoritative in IndexedDB; this
+ * packet keeps every graph edge, target opening and quest location visible
+ * inside the bounded model context instead of truncating one large JSON blob.
+ */
+export async function readTextAdventureQualityInputsV1(input: AssembleContextInput): Promise<string> {
+  const { build } = await productionAndBuild(input)
+  if (!build) throw new Error('[product-production-context] 文字冒险质量审查需要 productBuildId')
+  const requiredKeys = [
+    'content.adventure-architecture', 'content.narrative', 'content.product-module',
+    'content.adventure-side-quests', 'content.adventure-ambient-events',
+  ]
+  const requested = new Set(input.productArtifactKeys ?? [])
+  if (requiredKeys.some(key => !requested.has(key))) {
+    throw new Error('[product-production-context] 文字冒险质量审查 Artifact 选择不完整')
+  }
+  const candidateRows = (await db.productBuildArtifacts.where('buildId').equals(build.id!).toArray())
+    .filter(row => requiredKeys.includes(row.artifactKey)
+      && (row.status === 'accepted' || row.status === 'carried-forward'))
+    .sort((left, right) => left.version - right.version)
+  const rowByKey = new Map(candidateRows.map(row => [row.artifactKey, row]))
+  const rows = requiredKeys.flatMap(key => {
+    const row = rowByKey.get(key)
+    return row ? [row] : []
+  })
+  if (rows.length !== requiredKeys.length) {
+    throw new Error('[product-production-context] 文字冒险质量审查 Artifact 缺失或未验收')
+  }
+  const payloadByKey = new Map(rows.map(row => [row.artifactKey, contextRecord(JSON.parse(row.payloadJson))]))
+  const architecture = payloadByKey.get('content.adventure-architecture') ?? {}
+  const narrative = payloadByKey.get('content.narrative') ?? {}
+  const productModule = payloadByKey.get('content.product-module') ?? {}
+  const locations = contextRows(architecture.regions).flatMap(region => (
+    contextRows(region.areas).flatMap(area => contextRows(area.locations).map(location => contextText(location.title, 80)))
+  )).filter(Boolean)
+  const beatsByNode = new Map<string, Record<string, unknown>[]>()
+  contextRows(narrative.beats).forEach(beat => {
+    const nodeKey = contextText(beat.nodeKey, 200)
+    if (!nodeKey) return
+    beatsByNode.set(nodeKey, [...(beatsByNode.get(nodeKey) ?? []), beat])
+  })
+  const nodes = contextRows(narrative.nodes).map(node => {
+    const nodeKey = contextText(node.key, 200)
+    const beats = (beatsByNode.get(nodeKey) ?? []).sort((left, right) => (
+      Number(left.order ?? 0) - Number(right.order ?? 0)
+    ))
+    return {
+      key: nodeKey,
+      kind: contextText(node.kind, 40),
+      title: contextText(node.title, 80),
+      summary: contextText(node.summary, 160),
+      openingBeat: contextText(beats[0]?.text, 220),
+      beatCount: beats.length,
+      beatCharacters: beats.reduce((sum, beat) => sum + (typeof beat.text === 'string' ? beat.text.length : 0), 0),
+    }
+  })
+  const projectQuestBundle = (key: string) => contextRows(payloadByKey.get(key)?.entries).map(entry => ({
+    key: contextText(entry.key, 120),
+    title: contextText(entry.title, 80),
+    description: contextText(entry.description, 180),
+    hook: contextText(entry.hook, 140),
+    objective: contextText(entry.objective, 140),
+    locationOrdinal: entry.locationOrdinal,
+    success: contextText(entry.successText, 120),
+    costlySuccess: contextText(entry.costlySuccessText, 120),
+    failure: contextText(entry.failureText, 120),
+    abilityKey: contextText(entry.abilityKey, 120),
+    difficulty: entry.difficulty,
+    rewardExperience: entry.rewardExperience,
+    rewardCurrency: entry.rewardCurrency,
+    timeCostMinutes: entry.timeCostMinutes,
+  }))
+  const packet = {
+    schema: 'storyforge.text-adventure-quality-inputs', version: 1,
+    buildNumber: build.buildNumber,
+    sources: rows.map(row => ({ artifactKey: row.artifactKey, contentHash: row.contentHash })).sort((a, b) => (
+      a.artifactKey.localeCompare(b.artifactKey)
+    )),
+    architecture: {
+      title: contextText(architecture.title, 120),
+      premise: contextText(architecture.premise, 300),
+      emotionalPromise: contextText(architecture.emotionalPromise, 240),
+      themes: Array.isArray(architecture.themes) ? architecture.themes : [],
+      locations,
+    },
+    narrative: {
+      entryNodeKey: contextText(narrative.entryNodeKey, 200),
+      nodes,
+      choices: contextRows(narrative.choices).map(choice => ({
+        key: contextText(choice.choiceKey, 120),
+        sourceNodeKey: contextText(choice.sourceNodeKey, 120),
+        targetNodeKey: contextText(choice.targetNodeKey, 120),
+        label: contextText(choice.text ?? choice.label, 140),
+        description: contextText(choice.description, 140),
+      })),
+    },
+    systems: {
+      abilities: contextRows(productModule.abilities).map(item => ({
+        key: item.key, title: item.title, role: item.role,
+        initial: item.initial, minimum: item.minimum, maximum: item.maximum,
+      })),
+      resources: contextRows(productModule.resources).map(item => ({
+        key: item.key, title: item.title, role: item.role,
+        initial: item.initial, minimum: item.minimum, maximum: item.maximum,
+      })),
+    },
+    sideQuests: projectQuestBundle('content.adventure-side-quests'),
+    ambientEvents: projectQuestBundle('content.adventure-ambient-events'),
+  }
+  const serialized = JSON.stringify(packet)
+  if (estimateTokens(serialized) > 11_750) {
+    throw new Error('[product-production-context] 文字冒险质量审查投影超过登记预算，必须拆分生产内容后再审查')
+  }
+  return serialized
+}
+
+/**
+ * Exact, bounded feedback from the previous failed quality gate. It is exposed
+ * only while resolving that blocker and remains a read-only historical input;
+ * the repaired Artifact must still pass its normal parser and quality gate.
+ */
+export async function readTextAdventureRepairFeedbackV1(input: AssembleContextInput): Promise<string> {
+  const { build } = await productionAndBuild(input)
+  if (!build) throw new Error('[product-production-context] 文字冒险修复反馈需要 productBuildId')
+  const pending = [contextRecord(JSON.parse(build.failureJson))]
+  let failure: Record<string, unknown> | null = null
+  const taskFailures = new Map<string, { taskKey: string; code: string; attempt: number | null; detail: string }>()
+  for (let depth = 0; depth < 8 && pending.length > 0; depth++) {
+    const current = pending.shift()!
+    if (typeof current.taskKey === 'string' && current.taskKey.startsWith('content.')
+      && typeof current.detail === 'string' && current.detail.trim()) {
+      taskFailures.set(current.taskKey, {
+        taskKey: contextText(current.taskKey, 120), code: contextText(current.code, 80),
+        attempt: Number.isInteger(current.attempt) ? Number(current.attempt) : null,
+        detail: contextText(current.detail, 500),
+      })
+    }
+    const recordedFailures = contextRecord(current.taskFailures)
+    for (const nested of Object.values(recordedFailures)) {
+      const row = contextRecord(nested)
+      if (Object.keys(row).length > 0) pending.push(row)
+    }
+    if (current.taskKey === 'integration.package'
+      && typeof current.detail === 'string'
+      && current.detail.includes('文字冒险叙事质量审查未通过')) {
+      failure = current
+      break
+    }
+    for (const key of ['repairCause', 'previousFailure']) {
+      const nested = contextRecord(current[key])
+      if (Object.keys(nested).length > 0) pending.push(nested)
+    }
+  }
+  if (!failure && taskFailures.size === 0) return ''
+  const reviews = failure ? (await db.productBuildArtifacts.where('buildId').equals(build.id!).toArray())
+    .filter(row => row.artifactKey === 'quality.adventure-review'
+      && row.controlEpoch < build.controlEpoch)
+    .sort((left, right) => right.version - left.version) : []
+  const review = reviews.find(row => contextRecord(JSON.parse(row.payloadJson)).passed === false)
+  const payload = review ? contextRecord(JSON.parse(review.payloadJson)) : {}
+  const blockingIssues = contextRows(payload.issues)
+    .filter(issue => issue.severity === 'blocking')
+    .slice(0, 5)
+    .map(issue => ({
+      artifactKey: contextText(issue.artifactKey, 120),
+      detail: contextText(issue.detail, 240),
+      recommendation: contextText(issue.recommendation, 240),
+    }))
+  if (blockingIssues.length === 0 && taskFailures.size === 0) return ''
+  return JSON.stringify({
+    schema: 'storyforge.text-adventure-repair-feedback', version: 1,
+    source: review ? {
+      artifactKey: review.artifactKey, artifactVersion: review.version,
+      contentHash: review.contentHash, producerReceiptHash: review.producerReceiptHash,
+      controlEpoch: review.controlEpoch,
+    } : null,
+    instruction: '只修复与当前任务输出对应的 blocking 问题和 lastTaskFailures 中同 taskKey 的精确协议错误；保持冻结 Brief、架构、稳定 key 与未受影响内容。',
+    scores: payload.scores,
+    blockingIssues,
+    lastTaskFailures: [...taskFailures.values()].sort((left, right) => left.taskKey.localeCompare(right.taskKey)),
+  })
 }
 
 export async function readProductProductionQualityFeedback(input: AssembleContextInput): Promise<string> {

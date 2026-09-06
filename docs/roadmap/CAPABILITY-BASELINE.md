@@ -61,7 +61,7 @@
 | E-TTRPG-01 | partial | 已接入中立世界协议、专用需求适配器、统一 Production/Build/ProductRelease v1、AI GM runtime、事件/存档与在线 handoff | 专用生产体验、完整媒资、权限隔离、真实多人体验和产品级 E2E 尚未封板 |
 | E-CHAT-01 | partial | 单/多角色互动已接入专用需求适配器、统一 Production/Build/ProductRelease v1、玩家 runtime 与 runtime Skill | 主 Agent 会谈、多人导演、长期记忆/可见性和完整发布运行体验需验收 |
 | E-TOWN-01 | missing | 有角色互动和通用产品运行时基础能力可复用 | 没有独立 AI 小镇产品的时间、日程、地点、群体与离线演化闭环 |
-| E-TEXTADV-01 | partial | 严格 `AdventureContentV2` 通用合同已接入冻结 WorldRelease → 作者 Brief → 八任务 AI 生产 DAG → 独立叙事质量审查 → 插图需求/共享媒资 → Build/QA → ProductRelease；模拟正式生产与自动 E2E 之外，作者配置的真实 Agnes 文本/图片 Provider 已完成约 60 分钟目标内容、2/2 媒资、不可变发布、11 次选择到结局、刷新恢复和 30 分钟浏览器验收。玩家面覆盖空间、属性/技能、资源、背包、装备、任务、时间、storylet、失败推进、自由输入候选、存档分支、因果结局和纯文字降级；支线具备可接取→进行中→完成事件生命周期，地点错位、占位 NPC 和无条件越过主线的移动已收口；文字开放世界继续隔离在 V1 | 仍需不同题材/世界的多样本叙事质量验收、同角色多图一致性、作者侧差异化有界修复；运行期动态出图后置，旧 V1 只能在文字开放世界迁移后收口 |
+| E-TEXTADV-01 | partial | 严格 `AdventureContentV2` 通用合同已接入冻结 WorldRelease → 作者 Brief → 八任务 AI 生产 DAG → 独立叙事质量审查 → 插图需求/共享媒资 → Build/QA → ProductRelease；模拟正式生产与自动 E2E 之外，作者配置的真实 Agnes 文本/图片 Provider 已完成约 60 分钟目标内容、2/2 媒资、不可变发布、11 次选择到结局、刷新恢复和 30 分钟浏览器验收。玩家面覆盖空间、属性/技能、资源、背包、装备、任务、时间、storylet、失败推进、自由输入候选、存档分支、因果结局和纯文字降级；支线具备可接取→进行中→完成事件生命周期，地点错位、占位 NPC 和无条件越过主线的移动已收口；独立质量 Agent 使用登记的紧凑审查投影，避免 Brief/世界读取挤掉上游工件；作者确认重试后按 blocking Artifact 依赖闭包定向重生成并读取冻结修复反馈；文字开放世界继续隔离在 V1 | 仍需不同题材/世界的多样本叙事质量验收、同角色多图一致性、作者侧逐工件修复差异预览与选择性采纳；运行期动态出图后置，旧 V1 只能在文字开放世界迁移后收口 |
 | E-AVG-01 | partial | AVG 已接入专用需求适配器、统一 Production/Build/ProductRelease v1、演出与独立玩家面 | 真实视觉/声音资产、演出绑定和完整体验未验收 |
 | E-OPENWORLD-01 | partial | 文字开放世界已接入专用需求适配器、统一 Production/Build/ProductRelease v1、专用运行 API 和独立玩家面；状态演化仅是该产品的内部能力 | 区域按需演化、角色自治、长期任务演化与性能门未完整 |
 

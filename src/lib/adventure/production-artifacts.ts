@@ -239,6 +239,10 @@ export function parseTextAdventureSystemsArtifactV1(
   if (!health || health.initial <= health.minimum) {
     fail('health 初始值必须高于下限，确保失败推进能够安全结算代价')
   }
+  const clock = resources.find(item => item.role === 'clock')
+  if (!clock || clock.initial !== 0 || clock.minimum !== 0) {
+    fail('clock 必须以分钟记录开局后经过时间，且 initial/minimum 必须为 0')
+  }
   if (new Set(resources.map(item => item.key)).size !== resources.length
     || new Set(resources.map(item => item.role)).size !== resources.length) fail('resource key/role 重复')
   const equipmentSlots = row.equipmentSlots.map((value, index) => {
@@ -392,13 +396,15 @@ export function parseTextAdventureQualityReviewArtifactV1(
     }
   })
   if (issues.length > 100) fail('qualityReview.issues 超出上限')
-  const passed = bool(row.passed, 'qualityReview.passed')
+  // `passed` is a deterministic projection of the review evidence, not a
+  // model-owned decision. Still require the model field to be a boolean so
+  // malformed protocol cannot pass silently, then canonicalize it below.
+  bool(row.passed, 'qualityReview.passed')
   const expectedPassed = !issues.some(issue => issue.severity === 'blocking')
     && Object.values(parsedScores).every(score => score >= 3)
-  if (passed !== expectedPassed) fail('qualityReview.passed 与分数/阻塞问题不一致')
   return {
     schema: 'storyforge.text-adventure-quality-review-artifact', version: 1,
-    scores: parsedScores, issues, passed,
+    scores: parsedScores, issues, passed: expectedPassed,
   }
 }
 

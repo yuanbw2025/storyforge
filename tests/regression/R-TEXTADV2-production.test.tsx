@@ -86,7 +86,10 @@ describe('R-TEXTADV2-production · 文字冒险正式生产契约与工作台', 
     expect(taskByKey.get('content.narrative')).toMatchObject({
       skillId: 'text-adventure.production-mainline.v1',
       dependsOn: ['content.adventure-architecture'],
+      timeoutMs: 600_000,
     })
+    expect(taskByKey.get('content.narrative')!.budgetReservation.durationMs)
+      .toBeGreaterThan(taskByKey.get('content.product-module')!.budgetReservation.durationMs)
     expect(taskByKey.get('content.narrative')!.budgetReservation.outputTokens)
       .toBeGreaterThan(taskByKey.get('content.product-module')!.budgetReservation.outputTokens)
     expect(taskByKey.get('content.adventure-side-quests')?.dependsOn).toEqual([
@@ -145,14 +148,20 @@ describe('R-TEXTADV2-production · 文字冒险正式生产契约与工作台', 
     }
     expect(() => parseTextAdventureSystemsArtifactV1(systems, brief.textAdventure!))
       .toThrow(/health 初始值必须高于下限/)
-    expect(() => parseTextAdventureQualityReviewArtifactV1({
+    expect(() => parseTextAdventureSystemsArtifactV1({
+      ...systems,
+      resources: systems.resources.map(resource => resource.role === 'health'
+        ? { ...resource, initial: 10 }
+        : resource.role === 'clock' ? { ...resource, initial: 3600, maximum: 10_000 } : resource),
+    }, brief.textAdventure!)).toThrow(/clock 必须以分钟记录.*initial\/minimum 必须为 0/)
+    expect(parseTextAdventureQualityReviewArtifactV1({
       schema: 'storyforge.text-adventure-quality-review-artifact', version: 1,
       scores: {
         causality: 2, playerAgency: 4, routeDifferentiation: 4, pacing: 4,
         setupPayoff: 4, characterMotivation: 4, emotionalImpact: 4,
       },
       issues: [], passed: true,
-    })).toThrow(/passed 与分数\/阻塞问题不一致/)
+    })).toMatchObject({ passed: false, scores: { causality: 2 } })
   })
 
   it('把主线场景单调分布到地点，并拒绝选项、正文与运行地点互相错位', () => {

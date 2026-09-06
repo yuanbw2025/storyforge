@@ -147,6 +147,12 @@ async function readProductProductionBriefContext(input: AssembleContextInput): P
 async function readProductProductionArtifactInputs(input: AssembleContextInput): Promise<string> {
   return (await import('../product-production/context')).readProductProductionArtifactInputs(input)
 }
+async function readTextAdventureQualityInputsV1(input: AssembleContextInput): Promise<string> {
+  return (await import('../product-production/context')).readTextAdventureQualityInputsV1(input)
+}
+async function readTextAdventureRepairFeedbackV1(input: AssembleContextInput): Promise<string> {
+  return (await import('../product-production/context')).readTextAdventureRepairFeedbackV1(input)
+}
 async function readProductProductionQualityFeedback(input: AssembleContextInput): Promise<string> {
   return (await import('../product-production/context')).readProductProductionQualityFeedback(input)
 }
@@ -1374,6 +1380,28 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     budgetTokens: 10_000,
     enabled: input => Number.isInteger(input.productBuildId) && !!input.productArtifactKeys?.length,
     read: readProductProductionArtifactInputs,
+  },
+  {
+    key: 'product-production.adventure-quality-inputs',
+    label: '文字冒险叙事质量审查投影',
+    scope: 'project',
+    layer: 'L0',
+    ownerFrom: 'work',
+    budgetTokens: 12_000,
+    protectedFromTrim: true,
+    enabled: input => Number.isInteger(input.productBuildId) && !!input.productArtifactKeys?.length,
+    read: readTextAdventureQualityInputsV1,
+  },
+  {
+    key: 'product-production.adventure-repair-feedback',
+    label: '文字冒险上一轮质量修复反馈',
+    scope: 'project',
+    layer: 'L0',
+    ownerFrom: 'work',
+    budgetTokens: 3_000,
+    protectedFromTrim: true,
+    enabled: input => Number.isInteger(input.productBuildId) && !!input.productArtifactKeys?.length,
+    read: readTextAdventureRepairFeedbackV1,
   },
   {
     key: 'product-production.quality-feedback',

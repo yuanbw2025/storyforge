@@ -728,10 +728,14 @@ async function ensurePlan(input: {
   const planHash = await hashProductProductionValueV2(plan)
   if (currentPlan && currentPlan.controlEpoch < plan.controlEpoch
     && currentPlan.briefHash === plan.briefHash && currentPlan.buildNumber === plan.buildNumber) {
+    const invalidatedTaskKeys = await recoveryInvalidatedTaskKeys({
+      buildId: state.build.id!, failureJson: state.build.failureJson,
+      previousControlEpoch: currentPlan.controlEpoch, plan,
+    })
     const previousTasks = new Map(currentPlan.tasks.map(task => [task.taskKey, task]))
     const reusableArtifactKeys = plan.tasks.flatMap(task => {
       const previous = previousTasks.get(task.taskKey)
-      return task.executionMode !== 'deterministic' && previous
+      return task.executionMode !== 'deterministic' && !invalidatedTaskKeys.has(task.taskKey) && previous
         && canonicalProductProductionJsonV2(previous.outputArtifactKeys) === canonicalProductProductionJsonV2(task.outputArtifactKeys)
         ? task.outputArtifactKeys : []
     })
@@ -757,6 +761,135 @@ async function ensurePlan(input: {
   })
   state = await currentProductionBuild(input.scope, input.productionId)
   return { ...state, plan }
+}
+
+function parsedObject(value: string): Record<string, unknown> {
+  try {
+    const parsed: unknown = JSON.parse(value)
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown> : {}
+  } catch { return {} }
+}
+
+function textAdventureQualityRepairCause(value: string | Record<string, unknown>): Record<string, unknown> | null {
+  const pending: Record<string, unknown>[] = [typeof value === 'string' ? parsedObject(value) : value]
+  for (let depth = 0; depth < 8 && pending.length > 0; depth++) {
+    const current = pending.shift()!
+    if (current.taskKey === 'integration.package'
+      && typeof current.detail === 'string'
+      && current.detail.includes('文字冒险叙事质量审查未通过')) return current
+    for (const key of ['repairCause', 'previousFailure']) {
+      const nested = current[key]
+      if (nested && typeof nested === 'object' && !Array.isArray(nested)) {
+        pending.push(nested as Record<string, unknown>)
+      }
+    }
+  }
+  return null
+}
+
+function textAdventureTaskFailures(value: string | Record<string, unknown>): Map<string, Record<string, unknown>> {
+  const result = new Map<string, Record<string, unknown>>()
+  const pending: Record<string, unknown>[] = [typeof value === 'string' ? parsedObject(value) : value]
+  for (let depth = 0; depth < 12 && pending.length > 0; depth++) {
+    const current = pending.shift()!
+    if (typeof current.taskKey === 'string' && current.taskKey.startsWith('content.')
+      && typeof current.detail === 'string' && current.detail.trim()) {
+      result.set(current.taskKey, current)
+    }
+    const taskFailures = current.taskFailures
+    if (taskFailures && typeof taskFailures === 'object' && !Array.isArray(taskFailures)) {
+      for (const nested of Object.values(taskFailures)) {
+        if (nested && typeof nested === 'object' && !Array.isArray(nested)) {
+          pending.push(nested as Record<string, unknown>)
+        }
+      }
+    }
+    for (const key of ['repairCause', 'previousFailure']) {
+      const nested = current[key]
+      if (nested && typeof nested === 'object' && !Array.isArray(nested)) {
+        pending.push(nested as Record<string, unknown>)
+      }
+    }
+  }
+  return result
+}
+
+function taskFailureEnvelope(
+  existingFailureJson: string,
+  failure: Record<string, unknown>,
+): Record<string, unknown> {
+  const taskKey = typeof failure.taskKey === 'string' ? failure.taskKey : 'unknown'
+  const taskFailures = textAdventureTaskFailures(existingFailureJson)
+  taskFailures.set(taskKey, failure)
+  const repairCause = textAdventureQualityRepairCause(existingFailureJson)
+  return {
+    ...failure,
+    taskFailures: Object.fromEntries([...taskFailures.entries()].sort(([left], [right]) => left.localeCompare(right))),
+    ...(repairCause ? { repairCause } : {}),
+  }
+}
+
+/**
+ * A deterministic integration blocker can prove that an accepted model
+ * artifact is unsuitable. Recovery must invalidate that artifact and every
+ * non-deterministic descendant, otherwise a new epoch would faithfully carry
+ * the failed evidence forward and reproduce the same blocker forever.
+ */
+async function recoveryInvalidatedTaskKeys(input: {
+  buildId: number
+  failureJson: string
+  previousControlEpoch: number
+  plan: ProductProductionPlanV3
+}): Promise<Set<string>> {
+  if (input.plan.productType !== 'text-adventure') return new Set()
+  const failure = textAdventureQualityRepairCause(input.failureJson)
+  if (!failure) return new Set()
+  const reviewRows = (await db.productBuildArtifacts.where('buildId').equals(input.buildId).toArray())
+    .filter(row => row.controlEpoch === input.previousControlEpoch
+      && row.artifactKey === 'quality.adventure-review'
+      && (row.status === 'accepted' || row.status === 'carried-forward'))
+    .sort((left, right) => right.version - left.version)
+  const review = reviewRows[0]
+  const reviewPayload = review ? parsedObject(review.payloadJson) : {}
+  if (!review || reviewPayload.passed !== false) return new Set()
+  const taskByArtifactKey = new Map(input.plan.tasks.flatMap(task => (
+    task.outputArtifactKeys.map(artifactKey => [artifactKey, task.taskKey] as const)
+  )))
+  const acceptedArtifactKeys = new Set((await db.productBuildArtifacts.where('buildId').equals(input.buildId).toArray())
+    .filter(row => row.controlEpoch === input.previousControlEpoch
+      && (row.status === 'accepted' || row.status === 'carried-forward'))
+    .map(row => row.artifactKey))
+  const unresolvedFailureTaskKeys = [...textAdventureTaskFailures(input.failureJson).keys()]
+    .filter(taskKey => {
+      const task = input.plan.tasks.find(candidate => candidate.taskKey === taskKey)
+      return task && !task.outputArtifactKeys.every(artifactKey => acceptedArtifactKeys.has(artifactKey))
+    })
+  const blockingArtifactKeys = Array.isArray(reviewPayload.issues)
+    ? reviewPayload.issues.flatMap(value => {
+        const issue = value && typeof value === 'object' && !Array.isArray(value)
+          ? value as Record<string, unknown> : {}
+        return issue.severity === 'blocking' && typeof issue.artifactKey === 'string'
+          ? [issue.artifactKey] : []
+      })
+    : []
+  const invalidated = new Set<string>(unresolvedFailureTaskKeys.length > 0
+    ? unresolvedFailureTaskKeys
+    : blockingArtifactKeys.flatMap(artifactKey => {
+        const taskKey = taskByArtifactKey.get(artifactKey)
+        return taskKey ? [taskKey] : []
+      }))
+  if (invalidated.size === 0) invalidated.add('content.adventure-quality-review')
+  let expanded = true
+  while (expanded) {
+    expanded = false
+    for (const task of input.plan.tasks) {
+      if (invalidated.has(task.taskKey) || !task.dependsOn.some(key => invalidated.has(key))) continue
+      invalidated.add(task.taskKey)
+      expanded = true
+    }
+  }
+  return invalidated
 }
 
 async function ensureRootRun(input: {
@@ -1307,6 +1440,19 @@ async function runClaimedTask(input: {
         candidateHash: null, terminalReceiptHash: null, passedGateIds: [], usage: null, errorCode: code,
       },
     })
+    const failure = {
+      taskKey: input.task.taskKey, code, attempt, detail: safeExecutorError(error),
+    }
+    if (retryable) {
+      await db.transaction('rw', db.productBuilds, async () => {
+        const build = await db.productBuilds.get(input.build.id)
+        if (!build || build.controlEpoch !== input.build.controlEpoch || build.status !== 'building') return
+        await db.productBuilds.update(input.build.id, {
+          failureJson: canonicalProductProductionJsonV2(taskFailureEnvelope(build.failureJson, failure)),
+          updatedAt: Date.now(),
+        })
+      })
+    }
     if (code === 'task-aborted' || code === 'provider-safety-refusal' || attempt >= input.task.maxAttempts) {
       snapshot = code === 'task-aborted'
         ? await append(input.scope, snapshot, 'run.cancelled', { reason: 'task-executor-aborted' })
@@ -1319,9 +1465,7 @@ async function runClaimedTask(input: {
         const updatedAt = Date.now()
         await db.productBuilds.update(input.build.id, {
           status,
-          failureJson: canonicalProductProductionJsonV2({
-            taskKey: input.task.taskKey, code, attempt, detail: safeExecutorError(error),
-          }),
+          failureJson: canonicalProductProductionJsonV2(taskFailureEnvelope(build.failureJson, failure)),
           updatedAt,
         })
         if (status === 'failed') await db.productProductions.update(input.productionId, {

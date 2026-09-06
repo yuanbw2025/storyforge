@@ -357,6 +357,7 @@ async function applyCommand(input: {
 
   if (command.type === 'resolve-blocker') {
     const build = await currentBuild(production)
+    const previousFailure = readResult(build.failureJson)
     const repairingLegacyFailure = isRepairRetryableFailedProductBuildV1(build)
     if (!['recovery-required', 'paused'].includes(build.status) && !repairingLegacyFailure) {
       reject('invalid-state-transition', '当前 Build 没有待处理 blocker')
@@ -372,7 +373,9 @@ async function applyCommand(input: {
     if (command.resolution.action === 'cancel') {
       await db.productBuilds.update(build.id, {
         status: 'cancelled', resumeState: null, controlEpoch,
-        failureJson: safeJson({ blockerKey: command.blockerKey, resolution: command.resolution }),
+        failureJson: safeJson({
+          blockerKey: command.blockerKey, resolution: command.resolution, previousFailure,
+        }),
         stateRevision: build.stateRevision + 1, completedAt: now, updatedAt: now,
       })
       await db.productProductions.update(production.id, {
@@ -382,7 +385,10 @@ async function applyCommand(input: {
     } else {
       await db.productBuilds.update(build.id, {
         status: 'building', resumeState: null, controlEpoch,
-        failureJson: safeJson({ blockerKey: command.blockerKey, resolution: command.resolution, resolvedAt: now }),
+        failureJson: safeJson({
+          blockerKey: command.blockerKey, resolution: command.resolution,
+          previousFailure, resolvedAt: now,
+        }),
         stateRevision: build.stateRevision + 1, completedAt: null, updatedAt: now,
       })
       await db.productProductions.update(production.id, {

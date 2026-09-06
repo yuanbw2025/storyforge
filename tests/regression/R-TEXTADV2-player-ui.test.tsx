@@ -46,6 +46,11 @@ describe('TEXTADV-2 · 玩家界面纵切面', () => {
       worldRelease: owned.release as typeof owned.release & { id: number },
       sourceCatalog,
     })
+    if (runtimePackage.adventure?.version !== 2) throw new Error('玩家界面夹具未进入 AdventureContentV2')
+    const legacyClock = runtimePackage.adventure.resources.find(resource => resource.role === 'clock')!
+    legacyClock.initial = 3600
+    legacyClock.maximum = 10_000
+    runtimePackage.adventure.locations[0].title = '**封港仓房**'
     runtimePackage.interaction.profiles = runtimePackage.interaction.profiles.map((profile, index) => ({
       ...profile, characterKey: `generated:participant.${index + 1}`, name: `产品角色 ${index + 1}`,
     }))
@@ -90,6 +95,9 @@ describe('TEXTADV-2 · 玩家界面纵切面', () => {
     await renderPlayer()
     expect(host.textContent).toContain('离线确定性模式')
     expect(host.textContent).toContain('雾港 · 内港区')
+    expect(host.textContent).toContain('封港钟前 +0 分钟')
+    expect(host.textContent).not.toContain('封港钟前 +3600 分钟')
+    expect(host.textContent).not.toContain('**封港仓房**')
     expect(host.textContent).toContain('没有可交谈的人')
     expect(host.textContent).not.toContain('产品角色 1')
     expect(host.textContent).not.toContain('交谈：守钟人')

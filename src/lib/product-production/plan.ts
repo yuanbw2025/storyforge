@@ -312,7 +312,18 @@ export async function createProductProductionPlanV3(input: {
   // architecture, mainline, side content, ambient events and systems.
   const perInput = Math.floor(brief.productionBudget.maximumInputTokens / (modelTaskCount + 1))
   const perOutput = Math.floor(brief.productionBudget.maximumOutputTokens / modelTaskCount)
-  const perDuration = Math.floor(brief.productionBudget.maximumDurationMs / (modelTaskCount + 4 + activeMediaLaneCount))
+  const durationSlots = modelTaskCount + 4 + activeMediaLaneCount
+  // A one-hour text adventure can legitimately ask the mainline specialist for
+  // tens of thousands of output tokens. Give that single long-running task a
+  // larger, still-authorized reservation instead of applying the same timeout
+  // as the much smaller system/quest tasks.
+  const textAdventureNarrativeDuration = textAdventure
+    ? Math.min(600_000, Math.floor(brief.productionBudget.maximumDurationMs * 0.2))
+    : 0
+  const perDuration = Math.floor(
+    (brief.productionBudget.maximumDurationMs - textAdventureNarrativeDuration)
+      / Math.max(1, durationSlots - (textAdventure ? 1 : 0)),
+  )
   const costTaskCount = modelTaskCount + activeMediaLaneCount
   const perCost = brief.productionBudget.maximumCostUsd == null
     ? null
@@ -326,7 +337,9 @@ export async function createProductProductionPlanV3(input: {
     outputTokens: textAdventure
       ? Math.floor(brief.productionBudget.maximumOutputTokens * textAdventureOutputWeights[taskKey])
       : perOutput,
-    maximumCostUsd: perCost, durationMs: perDuration,
+    maximumCostUsd: perCost,
+    durationMs: textAdventure && taskKey === 'content.narrative'
+      ? textAdventureNarrativeDuration : perDuration,
   })
   const tasks: ProductProductionPlanTaskV3[] = [
     productionTask({
@@ -358,7 +371,8 @@ export async function createProductProductionPlanV3(input: {
       inputArtifactKeys: [narrativeInput], outputArtifactKeys: ['content.narrative'], requirementKeys: [],
       capabilityRequirementKeys: textCapabilities, concurrencyGroup: 'text-provider',
       subjectLockKeys: ['content.narrative'], priority: 90, budgetReservation: modelBudget('content.narrative'),
-      maxAttempts: 2, timeoutMs: 240_000, failurePolicy: 'pause', fallbackTaskKey: null,
+      maxAttempts: 2, timeoutMs: textAdventure ? 600_000 : 240_000,
+      failurePolicy: 'pause', fallbackTaskKey: null,
       acceptanceGateIds: ['artifact.protocol', 'narrative.graph'],
     }),
     productionTask({

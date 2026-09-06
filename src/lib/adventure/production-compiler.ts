@@ -272,7 +272,8 @@ export function compileTextAdventureModuleV2(
       ]
       registerAction({
         key: actionKey, kind: bundle.bundleKind === 'side' ? 'quest-action' : 'inspect',
-        label: entry.objective, description: entry.description, locationKey: location.key, targetKey: null,
+        label: `${bundle.bundleKind === 'side' ? '执行' : '处理'}：${entry.title}`,
+        description: `${entry.objective}\n${entry.description}`, locationKey: location.key, targetKey: null,
         requirements: [{ questKey, questStatus: 'active' }],
         rule: { kind: 'random', abilityKey, expression: '1d20', difficulty: entry.difficulty, costlySuccessFloor: Math.max(1, entry.difficulty - 4) },
         successEffects: completionEffects, costlySuccessEffects: [

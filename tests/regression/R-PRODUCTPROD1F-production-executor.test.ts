@@ -1068,14 +1068,22 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     const bindingHash = await hashProductProductionValueV2({ provider: 'full-length-text-adventure' })
     const outputs = fullLengthTextAdventureOutputs(owned.brief) as Record<string, unknown>
     let narrativeSystem = ''
+    let productModuleSystem = ''
     let sideQuestSystem = ''
+    let qualityReviewSystem = ''
+    let qualityReviewContext = ''
     let modelCallCount = 0
     const runText: ProductionTextRunnerV1 = async request => {
       modelCallCount += 1
       const taskKey = Object.keys(outputs).find(key => request.system.includes(`任务=${key}。`))
       if (!taskKey) throw new Error(`unknown full-length task:${request.system}`)
       if (taskKey === 'content.narrative') narrativeSystem = request.system
+      if (taskKey === 'content.product-module') productModuleSystem = request.system
       if (taskKey === 'content.adventure-side-quests') sideQuestSystem = request.system
+      if (taskKey === 'content.adventure-quality-review') {
+        qualityReviewSystem = request.system
+        qualityReviewContext = request.contextText
+      }
       return {
         output: JSON.stringify(outputs[taskKey]), usage: { inputTokens: 400, outputTokens: 2_000 },
         bindingReceipt: {
@@ -1107,6 +1115,18 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     expect(sideQuestSystem).toContain('地点编号与标题的唯一映射=')
     expect(sideQuestSystem).toContain('"locationOrdinal":1,"locationTitle":"地点 1-1-1"')
     expect(sideQuestSystem).toContain('不得伪装成尚未实现的跨地点多阶段任务')
+    expect(productModuleSystem).toContain('clock 表示开局后累计经过的分钟数')
+    expect(productModuleSystem).toContain('initial 和 minimum 必须同时为 0')
+    expect(qualityReviewSystem).toContain('只能是 JSON number 1、2、3、4 或 5')
+    expect(qualityReviewSystem).toContain('禁止小数、字符串、"4/5"、"4分"、null')
+    expect(qualityReviewContext).toContain('storyforge.text-adventure-quality-inputs')
+    expect(qualityReviewContext).toContain('"artifactKey":"content.narrative"')
+    expect(qualityReviewContext).toContain('"openingBeat"')
+    expect(qualityReviewContext).toContain('"key":"choice.main.1"')
+    expect(qualityReviewContext).toMatch(/"label":"[^"]+"/)
+    expect(qualityReviewContext).toContain('"title":"攻击","role":"stat","initial":3')
+    expect(qualityReviewContext).toContain('"timeCostMinutes":')
+    expect(qualityReviewContext).not.toContain('该上下文源已按预算截断')
     const build = (await db.productBuilds.get(projection.buildId))!
     const quality = JSON.parse(build.qualityReportJson) as {
       hardGateResults: Array<{ gateId: string; passed: boolean; evidence: string[] }>
@@ -1131,6 +1151,10 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     expect(runtimePackage.adventure.quests.filter(item => item.category === 'side')
       .every(item => item.initialStatus === 'available')).toBe(true)
     expect(runtimePackage.adventure.actions.filter(item => item.key.startsWith('action.accept.side.'))).toHaveLength(3)
+    expect(runtimePackage.adventure.actions.filter(item => item.key.startsWith('action.side.'))
+      .every(item => item.label.startsWith('执行：'))).toBe(true)
+    expect(runtimePackage.adventure.actions.filter(item => item.key.startsWith('action.ambient.'))
+      .every(item => item.label.startsWith('处理：'))).toBe(true)
     expect(runtimePackage.adventure.actions.some(item => item.key.startsWith('action.travel.'))).toBe(false)
     expect(runtimePackage.adventure.storylets).toHaveLength(7)
     expect(runtimePackage.adventure.endings).toHaveLength(3)
@@ -1238,12 +1262,25 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
       issues: [{
         severity: 'blocking', artifactKey: 'content.narrative',
         detail: '主要转折缺少因果铺垫。', recommendation: '补充前置场景与可见状态回响。',
+      }, {
+        severity: 'blocking', artifactKey: 'content.adventure-side-quests',
+        detail: '一条支线钩子与冻结地点错位。', recommendation: '保持稳定 key 并重写错位钩子。',
       }],
       passed: false,
     }
+    const taskCalls = new Map<string, number>()
+    const repairedNarrativeContexts: string[] = []
+    const repairedNarrativeSystems: string[] = []
+    let failFirstRepairEpoch = true
     const runText: ProductionTextRunnerV1 = async request => {
       const taskKey = Object.keys(outputs).find(key => request.system.includes(`任务=${key}。`))
       if (!taskKey) throw new Error(`unknown blocking-review task:${request.system}`)
+      taskCalls.set(taskKey, (taskCalls.get(taskKey) ?? 0) + 1)
+      if (taskKey === 'content.narrative' && (taskCalls.get(taskKey) ?? 0) >= 2) {
+        repairedNarrativeContexts.push(request.contextText)
+        repairedNarrativeSystems.push(request.system)
+        if (failFirstRepairEpoch) throw new Error('fixture repair provider timeout')
+      }
       return {
         output: JSON.stringify(outputs[taskKey]), usage: { inputTokens: 100, outputTokens: 100 },
         bindingReceipt: {
@@ -1273,6 +1310,93 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     expect(JSON.parse(review!.payloadJson)).toMatchObject({ passed: false })
     expect(await db.productBuildArtifacts
       .where('[buildId+artifactKey]').equals([build.id!, 'runtime.package']).count()).toBe(0)
+
+    outputs['content.adventure-quality-review'] = {
+      schema: 'storyforge.text-adventure-quality-review-artifact', version: 1,
+      scores: {
+        causality: 4, playerAgency: 4, routeDifferentiation: 4, pacing: 4,
+        setupPayoff: 4, characterMotivation: 4, emotionalImpact: 4,
+      },
+      issues: [], passed: true,
+    }
+    const production = (await db.productProductions.get(owned.productionId))!
+    await executeProductProductionCommand({
+      scope: owned.scope, productionId: owned.productionId,
+      command: {
+        type: 'resolve-blocker', commandId: 'text-adventure.quality-repair.retry',
+        expectedStateRevision: production.stateRevision, blockerKey: 'integration.package',
+        resolution: { action: 'retry', note: '修复质量审查上下文后重新审查并重建下游' },
+      },
+    })
+    const repairingBuild = (await db.productBuilds.get(build.id!))!
+    expect(JSON.parse(repairingBuild.failureJson)).toMatchObject({
+      previousFailure: {
+        taskKey: 'integration.package', detail: expect.stringContaining('文字冒险叙事质量审查未通过'),
+      },
+    })
+    const interruptedRepair = await runProductProductionUntilBlockedV1({
+      scope: owned.scope, productionId: owned.productionId,
+      executor: createConfiguredProductProductionExecutorV1({
+        production: (await db.productProductions.get(owned.productionId))!, brief: owned.brief, runText,
+      }),
+      capabilityBindings: [{
+        requirementKey: textRequirement.requirementKey, adapterId: 'configured-text.v1', bindingHash,
+      }],
+    })
+    expect(interruptedRepair).toMatchObject({ terminal: false, buildStatus: 'recovery-required' })
+    const interruptedBuild = (await db.productBuilds.get(build.id!))!
+    expect(JSON.parse(interruptedBuild.failureJson)).toMatchObject({
+      taskKey: 'content.narrative',
+      repairCause: {
+        taskKey: 'integration.package', detail: expect.stringContaining('文字冒险叙事质量审查未通过'),
+      },
+    })
+    failFirstRepairEpoch = false
+    const interruptedProduction = (await db.productProductions.get(owned.productionId))!
+    await executeProductProductionCommand({
+      scope: owned.scope, productionId: owned.productionId,
+      command: {
+        type: 'resolve-blocker', commandId: 'text-adventure.quality-repair.retry-after-timeout',
+        expectedStateRevision: interruptedProduction.stateRevision, blockerKey: 'content.narrative',
+        resolution: { action: 'retry', note: '保留原质量反馈并重试超时的主线修复' },
+      },
+    })
+    const repaired = await runProductProductionUntilBlockedV1({
+      scope: owned.scope, productionId: owned.productionId,
+      executor: createConfiguredProductProductionExecutorV1({
+        production: (await db.productProductions.get(owned.productionId))!, brief: owned.brief, runText,
+      }),
+      capabilityBindings: [{
+        requirementKey: textRequirement.requirementKey, adapterId: 'configured-text.v1', bindingHash,
+      }],
+    })
+    expect(repaired).toMatchObject({ terminal: true, buildStatus: 'release-ready' })
+    const expectedCalls = new Map([
+      ['content.design', 1], ['content.adventure-architecture', 1], ['content.narrative', 4],
+      ['content.product-module', 1], ['content.adventure-side-quests', 2],
+      ['content.adventure-ambient-events', 1], ['content.adventure-quality-review', 2],
+      ['media.requirements', 2],
+    ])
+    expect(taskCalls).toEqual(expectedCalls)
+    expect(repairedNarrativeContexts).toHaveLength(3)
+    for (const repairedNarrativeContext of repairedNarrativeContexts) {
+      expect(repairedNarrativeContext).toContain('storyforge.text-adventure-repair-feedback')
+      expect(repairedNarrativeContext).toContain('主要转折缺少因果铺垫')
+    }
+    expect(repairedNarrativeContexts[1]).toContain('lastTaskFailures')
+    expect(repairedNarrativeContexts[1]).toContain('fixture repair provider timeout')
+    expect(repairedNarrativeContexts[2]).toContain('lastTaskFailures')
+    expect(repairedNarrativeContexts[2]).toContain('fixture repair provider timeout')
+    expect(repairedNarrativeSystems).toHaveLength(3)
+    expect(repairedNarrativeSystems[0]).toContain('detail 是需要消除的缺陷证据，recommendation 只是建议')
+    expect(repairedNarrativeSystems[0]).toContain('优先重写错位的钩子与结果文本')
+    const repairedReviewRows = await db.productBuildArtifacts
+      .where('[buildId+artifactKey]').equals([build.id!, 'quality.adventure-review']).toArray()
+    expect(repairedReviewRows.filter(row => row.status === 'accepted')).toHaveLength(1)
+    expect(JSON.parse(repairedReviewRows.find(row => row.status === 'accepted')!.payloadJson))
+      .toMatchObject({ passed: true })
+    expect(await db.productBuildArtifacts
+      .where('[buildId+artifactKey]').equals([build.id!, 'runtime.package']).count()).toBe(1)
   }, 30_000)
 
   it('五种现行生产产品经过正式生产、可玩 Build Preview 与同包原子发布', async () => {

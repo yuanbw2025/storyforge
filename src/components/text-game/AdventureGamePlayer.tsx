@@ -71,13 +71,25 @@ const COMMON_LABELS: Record<string, string> = {
   reason: '推理', empathy: '共情', wounded: '受伤', inspired: '振奋', wanted: '被通缉',
 }
 
+function presentationText(value: string | undefined): string {
+  return (value ?? '')
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replace(/(\*\*|__)(.*?)\1/gs, '$2')
+    .replace(/~~(.*?)~~/gs, '$1')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/^\s{0,3}#{1,6}\s*/gm, '')
+    .replace(/[*_~]/g, '')
+    .trim()
+}
+
 function friendlyName(title: string | undefined, key: string): string {
-  const value = title?.trim()
+  const value = presentationText(title)
   return !value || value.toLowerCase() === key.toLowerCase() ? COMMON_LABELS[key] ?? value ?? key : value
 }
 
 function friendlyDescription(description: string | undefined, key: string, kind: 'object' | 'item' | 'ability' | 'condition'): string {
-  const value = description?.trim() ?? ''
+  const value = presentationText(description)
   if (value && !value.toLowerCase().startsWith(key.toLowerCase())) return value
   if (kind === 'object') return '可调查的场景要素，可能藏着推进冒险的线索。'
   if (kind === 'item') return '可在任务、判定或场景行动中使用的物品。'
@@ -199,6 +211,7 @@ export default function AdventureGamePlayer(props: {
   const adventureV2 = manifest?.adventure.version === 2 ? manifest.adventure : null
   const playerIdentity = useMemo(() => manifest ? resolveAdventurePlayerIdentity(manifest) : null, [manifest])
   const location = manifest?.adventure.locations.find(item => item.key === adventure?.currentLocationKey) ?? null
+  const locationTitle = presentationText(location?.title)
   const objects = useMemo(() => manifest?.adventure.objects.filter(item => item.locationKey === location?.key) ?? [], [manifest, location?.key])
   const actions = selectAdventureActions(store)
   const availableActions = actions.filter(item => item.available)
@@ -223,6 +236,8 @@ export default function AdventureGamePlayer(props: {
   const currentArea = adventureV2?.areas.find(item => item.key === adventureV2.locations.find(location => location.key === adventure?.currentLocationKey)?.areaKey) ?? null
   const currentRegion = adventureV2?.regions.find(item => item.key === currentArea?.regionKey) ?? null
   const clockValue = adventureV2 && adventure ? adventure.resources[adventureV2.clock.resourceKey] : null
+  const clockInitial = adventureV2?.resources.find(item => item.key === adventureV2.clock.resourceKey)?.initial ?? null
+  const elapsedMinutes = clockValue != null && clockInitial != null ? Math.max(0, clockValue - clockInitial) : null
   const currentNarrativeBeatKeys = new Set((manifest?.narrative.beats ?? [])
     .filter(beat => beat.nodeKey === store.runtimeState.narrative?.currentNodeKey)
     .map(beat => beat.beatKey))
@@ -367,11 +382,11 @@ export default function AdventureGamePlayer(props: {
 
   const systemResponse = (command: AdventureSystemCommand): string => {
     if (!adventure || !manifest || !location) return '冒险尚未就绪。'
-    if (command === 'help') return `你可以直接输入行动，例如“观察${location.title}”“询问人物”“前往下一个地点”。也可输入数字执行下方快捷指令，或输入“状态、背包、技能、任务、记录、存档”。`
+    if (command === 'help') return `你可以直接输入行动，例如“观察${locationTitle}”“询问人物”“前往下一个地点”。也可输入数字执行下方快捷指令，或输入“状态、背包、技能、任务、记录、存档”。`
     if (command === 'status') {
       const resources = Object.entries(adventure.resources).map(([key, value]) => `${manifest.adventure.resources.find(item => item.key === key)?.title ?? key} ${value}`).join('；')
       const conditions = adventure.conditions.map(item => manifest.adventure.conditions.find(value => value.key === item.conditionKey)?.title ?? item.conditionKey).join('、')
-      return `当前位置：${location.title}。${resources || '暂无资源状态'}。${conditions ? `当前状态：${conditions}。` : '当前没有异常状态。'}`
+      return `当前位置：${locationTitle}。${resources || '暂无资源状态'}。${conditions ? `当前状态：${conditions}。` : '当前没有异常状态。'}`
     }
     if (command === 'inventory') return playerItems.length
       ? `背包：${playerItems.map(item => `${friendlyName(manifest.adventure.items.find(value => value.key === item.itemKey)?.title, item.itemKey)} ×${item.quantity}${item.state === 'equipped' ? '（已装备）' : ''}`).join('；')}。`
@@ -380,7 +395,7 @@ export default function AdventureGamePlayer(props: {
     if (command === 'quests') return adventure.quests.map(quest => {
       const definition = manifest.adventure.quests.find(item => item.key === quest.questKey)
       const completed = quest.objectives.filter(item => item.completed).length
-      return `${definition?.title ?? quest.questKey}（${QUEST_STATUS[quest.status]}，${completed}/${quest.objectives.length}）`
+      return `${presentationText(definition?.title) || quest.questKey}（${QUEST_STATUS[quest.status]}，${completed}/${quest.objectives.length}）`
     }).join('；') || '当前没有任务。'
     if (command === 'history') return transcript.length ? `已经完成 ${transcript.length} 次行动。最近一次是“${transcript[transcript.length - 1]?.actionLabel}”。` : '冒险刚刚开始，还没有行动记录。'
     setPanel('saves')
@@ -470,15 +485,15 @@ export default function AdventureGamePlayer(props: {
         <div className="textgame-title-art" aria-hidden="true"><Compass /><span>EXPLORE<br />THE UNKNOWN</span></div>
         <div className="textgame-title-copy">
           <small>文字冒险 · 当前可玩版本</small>
-          <h3>{catalogRelease.manifest?.definition.title ?? catalogRelease.release.label}</h3>
-          <p>{catalogRelease.manifest?.definition.description || '一场由探索、物品、能力和任务共同推进的冒险。'}</p>
+          <h3>{presentationText(catalogRelease.manifest?.definition.title) || catalogRelease.release.label}</h3>
+          <p>{presentationText(catalogRelease.manifest?.definition.description) || '一场由探索、物品、能力和任务共同推进的冒险。'}</p>
           {catalogRelease.manifest && <div className="textgame-title-stats"><span>{catalogRelease.manifest.adventure.locations.length} 个地点</span><span>{adventureNpcCount(catalogRelease.manifest)} 名可交谈角色</span><span>{catalogRelease.manifest.adventure.items.length} 件物品</span><span>{catalogRelease.manifest.adventure.abilities.length} 项技能</span><span>{catalogRelease.manifest.adventure.quests.length} 个任务</span></div>}
           {catalogRelease.error ? <p className="adventure-error">{catalogRelease.error}</p> : <div className="textgame-title-actions"><button type="button" className="textgame-start" disabled={!catalogRelease.manifest || store.busy} onClick={() => void run(() => store.start(catalogRelease.release.id!))}><Plus />开始新冒险</button>{store.sessions.find(session => session.productReleaseId === catalogRelease.release.id) && <button type="button" onClick={() => void store.select(store.sessions.find(session => session.productReleaseId === catalogRelease.release.id)!.id!)}><Save />继续上次进度</button>}</div>}
         </div>
       </section> : <>
         <div className="textgame-catalog-heading"><span>全部游戏</span><small>{catalog.length} 部可游玩作品</small></div>
         <section className="textgame-catalog-list" aria-label="文字冒险游戏列表">
-          {catalog.map(item => <article key={item.release.id}><button type="button" aria-label={`查看游戏：${item.manifest?.definition.title ?? item.release.label}`} onClick={() => setCatalogReleaseId(item.release.id!)}><span className="textgame-catalog-icon"><Map /></span><span className="textgame-catalog-copy"><small>文字冒险</small><strong>{item.manifest?.definition.title ?? item.release.label}</strong><p>{item.manifest?.definition.description || '一场由探索、物品、能力和任务共同推进的冒险。'}</p>{item.manifest && <i>{item.manifest.adventure.locations.length} 地点 · {adventureNpcCount(item.manifest)} 可交谈角色 · {item.manifest.adventure.items.length} 物品 · {item.manifest.adventure.quests.length} 任务</i>}</span><span className="textgame-catalog-open">查看详情<ChevronRight /></span></button></article>)}
+          {catalog.map(item => <article key={item.release.id}><button type="button" aria-label={`查看游戏：${presentationText(item.manifest?.definition.title) || item.release.label}`} onClick={() => setCatalogReleaseId(item.release.id!)}><span className="textgame-catalog-icon"><Map /></span><span className="textgame-catalog-copy"><small>文字冒险</small><strong>{presentationText(item.manifest?.definition.title) || item.release.label}</strong><p>{presentationText(item.manifest?.definition.description) || '一场由探索、物品、能力和任务共同推进的冒险。'}</p>{item.manifest && <i>{item.manifest.adventure.locations.length} 地点 · {adventureNpcCount(item.manifest)} 可交谈角色 · {item.manifest.adventure.items.length} 物品 · {item.manifest.adventure.quests.length} 任务</i>}</span><span className="textgame-catalog-open">查看详情<ChevronRight /></span></button></article>)}
           {!catalog.length && <div className="adventure-empty">尚无可游玩的文字冒险。请先在作者工作台完成发布。</div>}
         </section>
         {!!store.sessions.length && <section className="adventure-launcher-saves"><h3><Save />继续冒险</h3>{store.sessions.map(session => <div key={session.id}><button onClick={() => void store.select(session.id!)}><strong>{session.title}</strong><small>{formatTime(session.updatedAt)} · 可继续</small></button><button aria-label="删除冒险存档" onClick={() => void removeSession(session.id!, session.title)}><Trash2 /></button></div>)}</section>}
@@ -489,7 +504,7 @@ export default function AdventureGamePlayer(props: {
   return <div className="adventure-game adventure-player-v2" data-testid="adventure-game-player">
     <header className="adventure-gamebar adventure-console-bar">
       <button className="textgame-player-exit" aria-label="退出游戏" onClick={() => void store.select(null)}><ArrowLeft /><span>退出游戏</span></button>
-      <div><small>{manifest.definition.title}</small><strong>{location.title}</strong></div>
+      <div><small>{presentationText(manifest.definition.title)}</small><strong>{locationTitle}</strong></div>
       <span className="adventure-autosave"><CircleDot />自动保存已开启</span>
       <nav aria-label="冒险功能">
         {adventureV2 && <button onClick={() => setPanel('character')}><CircleDot />角色</button>}
@@ -513,13 +528,13 @@ export default function AdventureGamePlayer(props: {
         {!!mediaFailures.length && <details className="adventure-media-fallback"><summary>插图已降级为纯文字</summary><p>{mediaFailures.map(item => `${item.assetKey}：${item.reason}`).join('；')}</p></details>}
         <section className="adventure-console-prologue">
           <small>玩家身份 · {playerIdentity ? `${playerIdentity.name}（由你扮演）` : '你（唯一行动主角）'} · {selected.title}</small>
-          <h1>{location.title}</h1>
-          <p>{location.description}</p>
+          <h1>{locationTitle}</h1>
+          <p>{presentationText(location.description)}</p>
           <dl>
             <div><dt>在场</dt><dd>{currentProfiles.filter(profile => currentParticipantKeys.has(profile.participantKey)).map(profile => profile.name).join('、') || '没有可交谈的人'}</dd></div>
             <div><dt>可调查</dt><dd>{objects.map(item => friendlyName(item.title, item.key)).join('、') || '暂时没有显眼的物件'}</dd></div>
             <div><dt>状态</dt><dd>{Object.entries(adventure.resources).filter(([key]) => adventureV2?.resources.find(item => item.key === key)?.role !== 'clock').map(([key, value]) => `${manifest.adventure.resources.find(item => item.key === key)?.title ?? key} ${value}`).join(' · ')}</dd></div>
-            {adventureV2 && <div><dt>区域</dt><dd>{[currentRegion?.title, currentArea?.title].filter(Boolean).join(' · ') || '未标记区域'}{clockValue != null ? ` · ${adventureV2.clock.startLabel} +${clockValue} 分钟` : ''}</dd></div>}
+            {adventureV2 && <div><dt>区域</dt><dd>{[currentRegion?.title, currentArea?.title].map(presentationText).filter(Boolean).join(' · ') || '未标记区域'}{elapsedMinutes != null ? ` · ${presentationText(adventureV2.clock.startLabel)} +${elapsedMinutes} 分钟` : ''}</dd></div>}
           </dl>
         </section>
 
@@ -543,7 +558,7 @@ export default function AdventureGamePlayer(props: {
               && activeNarrativeUnit != null
               && playback.visibleCharacters >= activeNarrativeUnit.text.length
             return <article className={`adventure-console-entry outcome-${entry.outcome}${playback ? ' is-playing' : ''}`} key={entry.eventSequence}>
-              <header className="adventure-player-command"><span>&gt;</span><strong>{entry.actionLabel}</strong><small>你 · {ACTION_KIND[manifest.adventure.actions.find(item => item.key === entry.actionKey)?.kind ?? 'look']}</small></header>
+              <header className="adventure-player-command"><span>&gt;</span><strong>{presentationText(entry.actionLabel)}</strong><small>你 · {ACTION_KIND[manifest.adventure.actions.find(item => item.key === entry.actionKey)?.kind ?? 'look']}</small></header>
               <div className="adventure-console-prose" aria-live={playback ? 'off' : undefined}>{visibleBlocks.map((block, index) => block.kind === 'dialogue'
                 ? <blockquote className={block.speaker === playerIdentity?.name ? 'player-dialogue' : ''} key={index}><small>{block.speaker}</small><p>{block.text}{playback && index === playback.unitIndex && <span className="adventure-typewriter-caret" aria-hidden="true" />}</p></blockquote>
                 : <p className={`adventure-${block.kind}`} key={index}>{block.text}{playback && index === playback.unitIndex && <span className="adventure-typewriter-caret" aria-hidden="true" />}</p>)}</div>
@@ -563,20 +578,20 @@ export default function AdventureGamePlayer(props: {
           })}
           {consoleResponse && <article className="adventure-console-entry adventure-console-response"><header className="adventure-player-command"><span>&gt;</span><strong>{consoleResponse.command}</strong><small>你 · 指令</small></header><div className="adventure-console-prose"><p className="adventure-system-response">{consoleResponse.text}</p></div></article>}
           {generating && <article className="adventure-console-system"><Loader2 /><p>主 Agent 正在理解你的行动……</p><button onClick={() => void store.cancelGeneration()}><Square />取消</button></article>}
-          {store.pendingIntent && <article className="adventure-console-intent"><small>请确认行动</small><strong>{manifest.adventure.actions.find(item => item.key === store.pendingIntent?.actionKey)?.label ?? store.pendingIntent.actionKey}</strong><p>{store.pendingIntent.rationale}</p><div><button onClick={() => void run(async () => { await store.adoptPendingIntent(); setConsoleResponse(null) })}><Check />执行</button><button onClick={() => void run(() => store.rejectPendingIntent())}>取消</button></div></article>}
+          {store.pendingIntent && <article className="adventure-console-intent"><small>请确认行动</small><strong>{presentationText(manifest.adventure.actions.find(item => item.key === store.pendingIntent?.actionKey)?.label) || store.pendingIntent.actionKey}</strong><p>{presentationText(store.pendingIntent.rationale)}</p><div><button onClick={() => void run(async () => { await store.adoptPendingIntent(); setConsoleResponse(null) })}><Check />执行</button><button onClick={() => void run(() => store.rejectPendingIntent())}>取消</button></div></article>}
           {!!store.recoverableRunIds.length && <details className="adventure-console-recovery"><summary>恢复未完成的主 Agent 行动</summary><p>候选已经保存在统一 Harness 中，可以从原检查点继续，不会重复调用模型。</p>{store.recoverableRunIds.map(runId => <button key={runId} disabled={store.busy || generating} onClick={() => void run(() => store.resumeRun(runId))}>恢复行动 #{runId}</button>)}</details>}
         </section>
 
-        {!!progressionChoices.length && !store.runtimeState.narrative?.completed && <section className="adventure-console-choices"><small>关键推进已经解锁</small>{progressionChoices.map(choice => { const action = narrativeActionByChoice.get(choice.choiceKey); return <button key={choice.choiceKey} title={action && !action.available ? action.reason : undefined} disabled={store.busy || narrativeReading || (action != null && !action.available)} onClick={() => void run(() => store.choose(choice.choiceKey))}>{choice.text}<ChevronRight /></button> })}</section>}
-        {!!endingChoices.length && !store.runtimeState.narrative?.completed && <section className="adventure-console-choices"><small>最终抉择已经解锁</small>{endingChoices.map(choice => { const action = narrativeActionByChoice.get(choice.choiceKey); return <button key={choice.choiceKey} title={action && !action.available ? action.reason : undefined} disabled={store.busy || narrativeReading || (action != null && !action.available)} onClick={() => void run(() => store.choose(choice.choiceKey))}>{choice.text}<ChevronRight /></button> })}</section>}
+        {!!progressionChoices.length && !store.runtimeState.narrative?.completed && <section className="adventure-console-choices"><small>关键推进已经解锁</small>{progressionChoices.map(choice => { const action = narrativeActionByChoice.get(choice.choiceKey); return <button key={choice.choiceKey} title={action && !action.available ? presentationText(action.reason) : undefined} disabled={store.busy || narrativeReading || (action != null && !action.available)} onClick={() => void run(() => store.choose(choice.choiceKey))}>{presentationText(choice.text)}<ChevronRight /></button> })}</section>}
+        {!!endingChoices.length && !store.runtimeState.narrative?.completed && <section className="adventure-console-choices"><small>最终抉择已经解锁</small>{endingChoices.map(choice => { const action = narrativeActionByChoice.get(choice.choiceKey); return <button key={choice.choiceKey} title={action && !action.available ? presentationText(action.reason) : undefined} disabled={store.busy || narrativeReading || (action != null && !action.available)} onClick={() => void run(() => store.choose(choice.choiceKey))}>{presentationText(choice.text)}<ChevronRight /></button> })}</section>}
         {store.runtimeState.narrative?.completed && <section className="adventure-console-ending"><BookOpenCheck /><div><small>冒险结束</small><h2>{store.runtimeState.narrative.nodes.find(item => item.key === store.runtimeState.narrative?.endingKey)?.title}</h2><p>这条时间线已经完整保存。你可以从检查点探索另一种结果。</p></div><button onClick={() => setPanel('saves')}><GitBranch />查看时间线</button></section>}
 
         {!store.runtimeState.narrative?.completed && <section className={`adventure-command-center${narrativeReading ? ' is-reading' : ''}`} aria-label="冒险指令台" aria-busy={narrativeReading}>
           <header><div><small>{narrativeReading ? '故事正在继续…' : '你要做什么？'}</small><p>{narrativeReading ? '读完当前行动结果后，下一轮指令会重新开放。' : '输入自然语言命令，或选择当前可执行的文字指令。'}</p></div><span>{narrativeReading ? '正在逐句呈现' : aiReady ? '自由表达已连接主 Agent' : '离线确定性模式'}</span></header>
-          <div className="adventure-command-suggestions">{commandSuggestions.map((item, index) => <button key={item.action.key} disabled={store.busy || generating || narrativeReading} title={item.action.description} onClick={() => void executeAction(item.action.key)}><kbd>{index + 1}</kbd>{item.action.label}</button>)}</div>
+          <div className="adventure-command-suggestions">{commandSuggestions.map((item, index) => <button key={item.action.key} disabled={store.busy || generating || narrativeReading} title={presentationText(item.action.description)} onClick={() => void executeAction(item.action.key)}><kbd>{index + 1}</kbd>{presentationText(item.action.label)}</button>)}</div>
           <form onSubmit={(event) => void submitCommand(event)}>
             <span>&gt;</span>
-            <input aria-label="输入冒险指令" value={commandText} onChange={event => setCommandText(event.target.value)} onKeyDown={navigateCommandHistory} disabled={store.busy || generating || narrativeReading} autoComplete="off" placeholder={narrativeReading ? '请先读完当前行动结果' : `例如：观察${location.title}，或输入“帮助”`} />
+            <input aria-label="输入冒险指令" value={commandText} onChange={event => setCommandText(event.target.value)} onKeyDown={navigateCommandHistory} disabled={store.busy || generating || narrativeReading} autoComplete="off" placeholder={narrativeReading ? '请先读完当前行动结果' : `例如：观察${locationTitle}，或输入“帮助”`} />
             <button type="submit" disabled={!commandText.trim() || store.busy || generating || narrativeReading}><Send />执行</button>
           </form>
         </section>}

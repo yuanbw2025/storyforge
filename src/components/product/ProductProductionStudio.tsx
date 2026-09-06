@@ -699,7 +699,7 @@ export default function ProductProductionStudio(props: {
     const productionId = details.production.id!
     await retryProductProductionBlockerV1({ scope: props.scope, details })
     await refresh(productionId)
-    setMessage('重试已由作者确认；已完成产物会跨 epoch 复用，不会重复调用。')
+    setMessage('重试已由作者确认；未受影响的已完成产物会跨 epoch 复用，阻塞工件及其下游将按质量反馈定向重做。')
   }, '重试阻塞任务')
 
   const selectedSuggestion = suggestions.find(item => item.suggestionKey === suggestionKey) ?? null
