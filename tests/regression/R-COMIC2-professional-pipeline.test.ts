@@ -4,7 +4,7 @@ import { createWorkspace } from '../../src/lib/workspace/create-workspace'
 import { createAdaptation, listActiveSourceUnits, saveAdaptationBriefDraft, confirmAdaptationBrief } from '../../src/lib/adaptation/source-manifest'
 import { adoptAdaptationCausalEdgesV1, adoptAdaptationDecisionsV1 } from '../../src/lib/adaptation/analysis'
 import type { AdaptationBriefV1, ComicTargetSpecV1, MediaRightsV1, ScreenplayTargetSpecV1 } from '../../src/lib/types'
-import { adoptComicProfessionalCandidateV1, generateComicProfessionalCandidateV1 } from '../../src/lib/comic/durable-production'
+import { adoptComicProfessionalCandidateV1, comicProfessionalInstructionV1, generateComicProfessionalCandidateV1 } from '../../src/lib/comic/durable-production'
 import { adoptComicPagePlansV1, adoptComicPanelPlansV1, adoptComicReviewIssuesV1, adoptComicScriptBeatsV1, adoptComicVisualBibleV1, startComicProductionV1 } from '../../src/lib/comic/production'
 import { commitUploadedComicAssetV1, removeComicMediaAssetV1, selectComicMediaAssetV1 } from '../../src/lib/comic/media-service'
 import { inspectComicQualityV1 } from '../../src/lib/comic/qa'
@@ -32,12 +32,33 @@ describe('COMIC-2 · professional novel-to-comic pipeline', () => {
 
   it('候选确认前零写入，formal.written 中断后幂等恢复', async () => {
     const item = await fixture(); const payload = [{ stableKey: 'fact_arrival', kind: 'event', statement: '林岚在暴雨中走进旧车站。', subjectKeys: ['hero'], sourceUnitKeys: [item.unit.sourceUnitKey], confidence: 1 }, { stableKey: 'fact_choice', kind: 'character-state', statement: '林岚在黎明前决定留下。', subjectKeys: ['hero'], sourceUnitKeys: [item.unit.sourceUnitKey], confidence: 1 }]
-    const generated = await generateComicProfessionalCandidateV1({ scope: item.scope, adaptationProjectId: item.adaptation.id!, stage: 'source-analysis', sourceUnitKeys: [item.unit.sourceUnitKey], runAI: async messages => { expect(messages[0].content).toContain('不得把新增桥接伪装成原文'); return JSON.stringify(payload) } })
+    const generated = await generateComicProfessionalCandidateV1({ scope: item.scope, adaptationProjectId: item.adaptation.id!, stage: 'source-analysis', sourceUnitKeys: [item.unit.sourceUnitKey], runAI: async messages => {
+      expect(messages[0].content).toContain('候选自身新建的 stableKey 必须全批次唯一')
+      expect(messages[0].content).toContain('可空定位字段必须显式写 null')
+      expect(messages[1].content).toContain('kind 只能是 event/character-state/relationship/location/object/motif')
+      expect(messages[1].content).toContain('不要输出 certainty、timeAnchor、database id 或其它字段')
+      return JSON.stringify(payload)
+    } })
     expect(await db.adaptationSourceFacts.count()).toBe(0)
     await expect(adoptComicProfessionalCandidateV1({ scope: item.scope, runId: generated.snapshot.run.id, onDurableBoundary: boundary => { if (boundary === 'formal.written') throw new Error('simulated comic crash') } })).rejects.toThrow('simulated comic crash')
     expect(await db.adaptationSourceFacts.count()).toBe(2)
     const resumed = await adoptComicProfessionalCandidateV1({ scope: item.scope, runId: generated.snapshot.run.id })
     expect(resumed.snapshot.projection.state).toBe('completed'); expect(await db.adaptationSourceFacts.count()).toBe(2)
+  })
+
+  it('十二个岗位各自声明闭集 JSON 协议与漫画专业约束', () => {
+    expect(comicProfessionalInstructionV1('causal-graph')).toContain('relation 只能是 cause/enables/motivates/reveals/prevents')
+    expect(comicProfessionalInstructionV1('adaptation-brief')).toContain('version 必须是 JSON 数字 1')
+    expect(comicProfessionalInstructionV1('decision-pass')).toContain('只有 action=add 时可为空')
+    expect(comicProfessionalInstructionV1('script-adaptation')).toContain('order 从 0 全局连续')
+    expect(comicProfessionalInstructionV1('page-rhythm')).toContain('数组长度必须等于 chapterCount × targetPagesPerChapter')
+    expect(comicProfessionalInstructionV1('panel-plan')).toContain('末格必须为 null')
+    expect(comicProfessionalInstructionV1('panel-plan')).toContain('每格只冻结一个可画瞬间')
+    expect(comicProfessionalInstructionV1('visual-bible')).toContain('必须覆盖所有 panel subjectStates 和 continuityRefs 引用')
+    expect(comicProfessionalInstructionV1('image-request')).toContain('no speech balloons')
+    expect(comicProfessionalInstructionV1('visual-continuity-review')).toContain('不得声称看见了人物外观')
+    expect(comicProfessionalInstructionV1('targeted-repair')).toContain('repairMode 必须是 full-regenerate')
+    expect(comicProfessionalInstructionV1('page-review')).toContain('subjectKey/assetKey 必须为 null')
   })
 
   it('十二步正式数据闭合，分镜/视觉双层发布冻结 Blob，并完成 v14 往返', async () => {
