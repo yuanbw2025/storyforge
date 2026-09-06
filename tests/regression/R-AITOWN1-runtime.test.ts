@@ -13,6 +13,7 @@ import {
   moveAiTownPlayerV1,
   performAiTownActionV1,
   proposeAiTownMajorChangeV1,
+  recordAiTownConversationV1,
   resolveAiTownEventSeedV1,
   resolveAiTownMajorChangeV1,
   runAiTownOfflineBatchV1,
@@ -249,9 +250,29 @@ describe('R-AITOWN1 · 后日谈 AI 小镇产品闭环', () => {
     const state = await readProductRuntimeState(seeded.session.id!)
     expect(state.town).toMatchObject({ slot: 'late-morning', actionsRemaining: 3 })
     expect(state.town?.player.locationKey).toBe('town.location.2')
-    expect(state.town?.sharedProject.progress).toBe(2)
+    expect(state.town?.sharedProject.progress).toBe(3)
+    expect(state.town?.player.resources.materials).toBe(4)
     expect(state.town?.relationships['town.relationship.player.2'].trust).toBe(42)
     expect(state.town?.memories[0]).toMatchObject({ ownerResidentKey: 'town.resident.2', visibility: 'shared' })
+  })
+
+  it('行动次数耗尽后观察也不能无限推进时间或刷取资源', async () => {
+    const seeded = await runtimeFixture()
+    for (let index = 0; index < 4; index += 1) {
+      const version = await readProductRuntimeStateVersion(seeded.session.id!)
+      await performAiTownActionV1({
+        sessionId: seeded.session.id!, commandId: `town:observe:${index}`,
+        baseSequence: version.sequence, baseStateHash: version.stateHash, kind: 'observe',
+      })
+    }
+    const exhausted = await readProductRuntimeState(seeded.session.id!)
+    expect(exhausted.town).toMatchObject({ actionsRemaining: 0, slot: 'evening' })
+    const version = await readProductRuntimeStateVersion(seeded.session.id!)
+    await expect(performAiTownActionV1({
+      sessionId: seeded.session.id!, commandId: 'town:observe:unbounded',
+      baseSequence: version.sequence, baseStateHash: version.stateHash, kind: 'observe',
+    })).rejects.toThrow(/行动次数已用完/)
+    expect((await readProductRuntimeStateVersion(seeded.session.id!)).sequence).toBe(version.sequence)
   })
 
   it('离线演化遵守产品冻结上限，不执行重大变化', async () => {
@@ -325,11 +346,52 @@ describe('R-AITOWN1 · 后日谈 AI 小镇产品闭环', () => {
     expect(adopted.snapshot.projection.state).toBe('completed')
     expect((await readProductRuntimeState(seeded.session.id!)).interaction?.messages.at(-1)?.text)
       .toContain('你可以同行')
+    version = await readProductRuntimeStateVersion(seeded.session.id!)
+    await recordAiTownConversationV1({
+      sessionId: seeded.session.id!, commandId: 'town:conversation:1', baseSequence: version.sequence,
+      baseStateHash: version.stateHash, residentKey: 'town.resident.1', participantKey: 'participant.1',
+      sourceSequences: [player.sequence, adopted.event!.sequence],
+    })
+    const integrated = await readProductRuntimeState(seeded.session.id!)
+    expect(integrated.town?.memories.at(-1)).toMatchObject({
+      ownerResidentKey: 'town.resident.1',
+      sourceSequences: [player.sequence, adopted.event!.sequence],
+      visibility: 'shared',
+    })
+    expect(integrated.town?.relationships['town.relationship.player.1'].trust).toBe(41)
+    version = await readProductRuntimeStateVersion(seeded.session.id!)
+    const secondPlayer = await commitInteractionPlayerMessage({
+      sessionId: seeded.session.id!, commandId: 'town:message:2', baseSequence: version.sequence,
+      baseStateHash: version.stateHash, messageId: 'town:message:player:2', text: '晚些时候再见。',
+      audienceKeys: ['participant.1'],
+    })
+    version = await readProductRuntimeStateVersion(seeded.session.id!)
+    await recordAiTownConversationV1({
+      sessionId: seeded.session.id!, commandId: 'town:conversation:2', baseSequence: version.sequence,
+      baseStateHash: version.stateHash, residentKey: 'town.resident.1', participantKey: 'participant.1',
+      sourceSequences: [secondPlayer.sequence],
+    })
+    const boundedRelationship = await readProductRuntimeState(seeded.session.id!)
+    expect(boundedRelationship.town?.relationships['town.relationship.player.1'].trust).toBe(41)
+    expect(boundedRelationship.town?.memories.filter(memory => memory.ownerResidentKey === 'town.resident.1')).toHaveLength(2)
   })
 
   it('重大变化只能先形成待确认候选，再由显式命令接受或拒绝', async () => {
     const seeded = await runtimeFixture()
     let version = await readProductRuntimeStateVersion(seeded.session.id!)
+    await expect(proposeAiTownMajorChangeV1({
+      sessionId: seeded.session.id!, commandId: 'town:major:too-early', baseSequence: version.sequence,
+      baseStateHash: version.stateHash, candidateKey: 'town.major.too-early', kind: 'permanent-departure',
+      title: '过早的远行', summary: '第一日就提出永久离场。', residentKeys: ['town.resident.2'],
+    })).rejects.toThrow(/第 7 个游戏日/)
+    for (const commandId of ['town:major:prepare:1', 'town:major:prepare:2', 'town:major:prepare:3']) {
+      version = await readProductRuntimeStateVersion(seeded.session.id!)
+      await runAiTownOfflineBatchV1({
+        sessionId: seeded.session.id!, commandId, baseSequence: version.sequence,
+        baseStateHash: version.stateHash, days: 2,
+      })
+    }
+    version = await readProductRuntimeStateVersion(seeded.session.id!)
     await proposeAiTownMajorChangeV1({
       sessionId: seeded.session.id!, commandId: 'town:major:propose:1', baseSequence: version.sequence,
       baseStateHash: version.stateHash, candidateKey: 'town.major.departure.1', kind: 'permanent-departure',

@@ -11,8 +11,13 @@ import {
   stableJson,
   type JsonObject,
 } from '../product/runtime-core'
-import type { AiTownMajorChangeKindV1, AiTownRuntimeStateV1, ProductRuntimeEvent, ProductRuntimeEventType } from '../types'
-import { isAiTownLocationReachableV1, nextAiTownSlotV1 } from './runtime'
+import type { AiTownMajorChangeKindV1, AiTownRuntimeStateV1, ProductRuntimeEvent, ProductRuntimeEventType, ProductRuntimeState } from '../types'
+import {
+  aiTownMajorChangeEligibilityV1,
+  availableAiTownEventSeedsV1,
+  isAiTownLocationReachableV1,
+  nextAiTownSlotV1,
+} from './runtime'
 
 export type AiTownPlayerActionKindV1 = 'talk' | 'help' | 'work' | 'gift' | 'cook' | 'care' | 'observe'
 
@@ -21,7 +26,7 @@ async function appendAiTownCommand(
     type: Extract<ProductRuntimeEventType, `town.${string}`>
     actorKey?: string | null
     targetKey?: string | null
-    buildPayload(state: AiTownRuntimeStateV1, sequence: number): JsonObject
+    buildPayload(state: AiTownRuntimeStateV1, sequence: number, events: ProductRuntimeEvent[], runtimeState: ProductRuntimeState): JsonObject
   },
 ): Promise<ProductRuntimeEvent> {
   const commandId = normalizeCommandId(input.commandId)
@@ -47,7 +52,7 @@ async function appendAiTownCommand(
       )
       if (!baseState.town) throw new Error('[ai-town] 幂等命令缺少冻结小镇状态')
       const expectedPayload = {
-        ...input.buildPayload(baseState.town, prior.sequence),
+        ...input.buildPayload(baseState.town, prior.sequence, events.filter(event => event.sequence <= input.baseSequence), baseState),
         commandId,
         baseSequence: input.baseSequence,
         baseStateHash,
@@ -61,7 +66,7 @@ async function appendAiTownCommand(
       return prior
     }
     const payload = {
-      ...input.buildPayload(state.town, state.lastSequence + 1),
+      ...input.buildPayload(state.town, state.lastSequence + 1, events, state),
       commandId,
       baseSequence: input.baseSequence,
       baseStateHash,
@@ -158,13 +163,32 @@ export async function performAiTownActionV1(
     targetKey: input.targetResidentKey ?? null,
     buildPayload: state => {
       if (!Object.prototype.hasOwnProperty.call(ACTION_COSTS, input.kind)) throw new Error('[ai-town] 行动类型无效')
-      if (state.actionsRemaining < 1 && input.kind !== 'observe') throw new Error('[ai-town] 今天的主动行动次数已用完')
+      if (state.actionsRemaining < 1) throw new Error('[ai-town] 今天的主动行动次数已用完')
       const target = input.targetResidentKey ? state.residents[input.targetResidentKey] : null
       if (input.targetResidentKey && !target) throw new Error('[ai-town] 行动目标居民不存在')
       if (target && target.residencyStatus !== 'resident') throw new Error('[ai-town] 行动目标已不在小镇生活')
       if (target && target.locationKey !== state.player.locationKey) throw new Error('[ai-town] 行动目标不在当前地点')
       const cost = ACTION_COSTS[input.kind]
       if (state.player.energy < cost) throw new Error('[ai-town] 精力不足')
+      const resourceChanges: Array<{ resourceKey: string; delta: number }> = []
+      let moneyDelta = 0
+      const resourceAt = (index: number) => state.content.economy.resources[index] ?? state.content.economy.resources[0]
+      const changeResource = (index: number, delta: number, required: boolean) => {
+        const definition = resourceAt(index)
+        const current = state.player.resources[definition.key]
+        if (required && current + delta < 0) throw new Error(`[ai-town] ${definition.title}不足`)
+        const boundedDelta = Math.max(-current, Math.min(delta, definition.maximum - current))
+        if (boundedDelta) resourceChanges.push({ resourceKey: definition.key, delta: boundedDelta })
+      }
+      if (input.kind === 'observe') changeResource(0, 1, false)
+      if (input.kind === 'help') changeResource(2, 1, false)
+      if (input.kind === 'work') { changeResource(0, -1, true); moneyDelta = 12 }
+      if (input.kind === 'gift') {
+        if (state.player.money < 10) throw new Error('[ai-town] 金钱不足，无法准备礼物')
+        moneyDelta = -10
+      }
+      if (input.kind === 'cook') changeResource(1, -1, true)
+      if (input.kind === 'care') changeResource(2, -1, true)
       const residentDefinition = target ? state.content.residents.find(resident => resident.residentKey === target.residentKey) : null
       const location = state.content.map.locations.find(item => item.key === state.player.locationKey)!
       const actionLabel: Record<AiTownPlayerActionKindV1, string> = {
@@ -190,7 +214,9 @@ export async function performAiTownActionV1(
         targetResidentKey: target?.residentKey ?? null,
         summary,
         energyCost: cost,
-        projectProgress: input.kind === 'work' ? 6 : input.kind === 'help' || input.kind === 'care' ? 2 : 0,
+        moneyDelta,
+        resourceChanges,
+        projectProgress: input.kind === 'work' ? 8 : input.kind === 'help' || input.kind === 'care' ? 3 : 0,
         relationshipKey: relationship?.key ?? null,
         trustDelta: relationship ? (input.kind === 'talk' || input.kind === 'help' || input.kind === 'care' ? 2 : 1) : 0,
         intimacyDelta: relationship ? (input.kind === 'gift' || input.kind === 'cook' ? 2 : 1) : 0,
@@ -222,7 +248,7 @@ export async function advanceAiTownTimeV1(
 }
 
 export async function resolveAiTownEventSeedV1(
-  input: ProductRuntimeCommandEnvelopeV1 & { seedKey: string },
+  input: ProductRuntimeCommandEnvelopeV1 & { seedKey: string; summary?: string },
 ): Promise<ProductRuntimeEvent> {
   const seedKey = input.seedKey.trim()
   return appendAiTownCommand({
@@ -230,17 +256,88 @@ export async function resolveAiTownEventSeedV1(
     type: 'town.event.resolved',
     targetKey: seedKey,
     buildPayload: state => {
-      const seed = state.content.eventSeeds.find(item => item.key === seedKey)
-      if (!seed || state.day < seed.minimumDay || !seed.eligibleSlots.includes(state.slot)) throw new Error('[ai-town] 事件当前不符合触发条件')
-      const lastDay = state.cadence.seedLastTriggeredDay[seedKey]
-      if (lastDay != null && state.day - lastDay < seed.cooldownDays) throw new Error('[ai-town] 事件仍在冷却')
-      if (seed.category === 'rare-crisis' && state.cadence.lastRareCrisisDay != null
-        && state.day - state.cadence.lastRareCrisisDay < state.content.cadence.rareCrisisCooldownDays) throw new Error('[ai-town] 罕见危机仍在全局冷却')
-      if (seed.intensity > state.cadence.remainingIntensity) throw new Error('[ai-town] 今日事件强度预算不足')
-      if (seed.intensity >= 4 && state.cadence.highIntensityStreak >= state.content.cadence.highIntensityStreakLimit) throw new Error('[ai-town] 高强度事件需要留出喘息日')
-      const participants = seed.participantKeys.filter(key => state.residents[key]?.residencyStatus === 'resident' && state.residents[key]?.locationKey === state.player.locationKey)
-      if (!participants.length && !seed.locationKeys.includes(state.player.locationKey)) throw new Error('[ai-town] 当前地点无法观察此事件')
-      return { seedKey, intensity: seed.intensity, participants, summary: `${seed.title}：${seed.summary}` }
+      const availability = availableAiTownEventSeedsV1(state.content, state).find(item => item.seed.key === seedKey)
+      if (!availability) throw new Error('[ai-town] 事件 seed 不存在')
+      if (!availability.available) throw new Error(`[ai-town] ${availability.reason ?? '事件当前不可用'}`)
+      const authoredSummary = input.summary?.trim()
+      return {
+        seedKey,
+        intensity: availability.seed.intensity,
+        participants: availability.participantKeys,
+        summary: authoredSummary ? authoredSummary.slice(0, 4_000) : `${availability.seed.title}：${availability.seed.summary}`,
+      }
+    },
+  })
+}
+
+export async function recordAiTownConversationV1(
+  input: ProductRuntimeCommandEnvelopeV1 & {
+    residentKey: string
+    participantKey: string
+    sourceSequences: number[]
+  },
+): Promise<ProductRuntimeEvent> {
+  const residentKey = input.residentKey.trim()
+  const participantKey = input.participantKey.trim()
+  const sourceSequences = input.sourceSequences.map(value => value)
+  return appendAiTownCommand({
+    ...input,
+    type: 'town.conversation.integrated',
+    actorKey: residentKey,
+    targetKey: 'player',
+    buildPayload: (state, sequence, events, runtimeState) => {
+      const residentDefinition = state.content.residents.find(resident => resident.residentKey === residentKey)
+      const resident = state.residents[residentKey]
+      const interaction = runtimeState.interaction
+      const expectedParticipant = residentDefinition == null ? null : interaction?.profiles.find(profile => (
+        profile.characterKey === residentDefinition.sourceCharacterResourceKey
+      ))?.participantKey
+      if (!residentDefinition || !resident || resident.residencyStatus !== 'resident' || resident.locationKey !== state.player.locationKey) {
+        throw new Error('[ai-town] 只能整合当前地点居民的对话')
+      }
+      if (!participantKey || expectedParticipant !== participantKey
+        || !interaction?.activeScene?.activeParticipantKeys.includes(participantKey)) {
+        throw new Error('[ai-town] 对话参与者与冻结居民映射不一致')
+      }
+      if (sourceSequences.length < 1 || sourceSequences.length > 2
+        || new Set(sourceSequences).size !== sourceSequences.length
+        || sourceSequences.some(value => !Number.isInteger(value) || value < 1 || value > runtimeState.lastSequence)) {
+        throw new Error('[ai-town] 对话证据序号无效')
+      }
+      const sourceEvents = sourceSequences.map(sourceSequence => events.find(event => event.sequence === sourceSequence))
+      if (sourceEvents.some(event => !event)) throw new Error('[ai-town] 对话证据事件不存在')
+      const playerMessage = interaction.messages.find(message => message.eventSequence === sourceSequences[0])
+      if (!playerMessage || playerMessage.role !== 'player'
+        || (playerMessage.audienceKeys != null && !playerMessage.audienceKeys.includes(participantKey))
+        || sourceEvents[0]?.type !== 'interaction.player.message.committed') {
+        throw new Error('[ai-town] 对话证据必须从对该居民可见的玩家消息开始')
+      }
+      const reply = sourceSequences.length === 2
+        ? interaction.messages.find(message => message.eventSequence === sourceSequences[1])
+        : null
+      if (sourceSequences.length === 2 && (!reply || reply.role !== 'character'
+        || reply.speakerKey !== participantKey || reply.replyToSequence !== playerMessage.eventSequence
+        || reply.supersededBySequence != null || sourceEvents[1]?.type !== 'interaction.character.reply.committed')) {
+        throw new Error('[ai-town] 角色回复与本次对话证据不匹配')
+      }
+      const relationship = Object.values(state.relationships)
+        .find(edge => edge.fromResidentKey === residentKey && edge.toResidentKey === 'player')
+      if (!relationship) throw new Error('[ai-town] 居民与玩家的关系边缺失')
+      const firstMeaningfulContactToday = resident.lastSpokeDay !== state.day
+      const compact = (value: string) => value.replace(/\s+/g, ' ').trim().slice(0, 500)
+      const summary = reply
+        ? `你对${residentDefinition.name}说“${compact(playerMessage.text)}”；对方回应“${compact(reply.text)}”。`
+        : `你对${residentDefinition.name}说“${compact(playerMessage.text)}”，这句话被对方记住了。`
+      return {
+        residentKey,
+        memoryKey: `town.memory.conversation.${sequence}`,
+        summary,
+        sourceSequences,
+        relationshipKey: relationship.key,
+        trustDelta: firstMeaningfulContactToday ? 1 : 0,
+        intimacyDelta: firstMeaningfulContactToday && reply ? 1 : 0,
+        salience: reply ? 60 : 45,
+      }
     },
   })
 }
@@ -301,6 +398,8 @@ export async function proposeAiTownMajorChangeV1(
     actorKey: 'town-director',
     targetKey: candidateKey,
     buildPayload: (state, sequence) => {
+      const eligibility = aiTownMajorChangeEligibilityV1(state)
+      if (!eligibility.eligible) throw new Error(`[ai-town] ${eligibility.reason}`)
       if (!state.content.safety.majorChangeKinds.includes(input.kind)) throw new Error('[ai-town] 重大变化类型未获 Brief 授权')
       const residentKeys = [...new Set(input.residentKeys.map(key => key.trim()).filter(Boolean))].sort()
       if (residentKeys.length > 8 || residentKeys.some(key => !state.residents[key])) throw new Error('[ai-town] 重大变化居民范围无效')

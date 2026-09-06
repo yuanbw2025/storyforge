@@ -9,9 +9,11 @@ import {
   performAiTownActionV1,
   readProductRuntimeState,
   readProductRuntimeStateVersion,
+  recordAiTownConversationV1,
   resolveAiTownEventSeedV1,
   resolveAiTownMajorChangeV1,
   runAiTownOfflineBatchV1,
+  startAiTownInitialSceneV1,
   type AiTownPlayerActionKindV1,
 } from '../lib/ai-town/runtime-api'
 import {
@@ -21,8 +23,9 @@ import {
 } from '../lib/product/releases'
 import { assertInstanceBinding, createAiTownInstance } from '../lib/product/runtime-instances'
 import { verifyProductRuntimeSessionSourceV1 } from '../lib/product-production/preview-source'
-import { commitInteractionPlayerMessage, startInteractionScene } from '../lib/character-interaction/runtime-api'
+import { commitInteractionPlayerMessage } from '../lib/character-interaction/runtime-api'
 import { adoptInteractionRuntimeCandidateV1, generateInteractionRuntimeCandidateV1 } from '../lib/character-interaction/harness'
+import { adoptAiTownDirectorCandidateV1, generateAiTownDirectorCandidateV1 } from '../lib/ai-town/director-harness'
 import type {
   AIConfig,
   AiTownProductRuntimePackageV1,
@@ -53,6 +56,7 @@ interface AiTownPlayerStoreV1 {
   loading: boolean
   busy: boolean
   generatingRunId: number | null
+  directorRunId: number | null
   error: string
   load(scope: WorkspaceScope, worldGroupId: number | null): Promise<void>
   select(sessionId: number | null): Promise<void>
@@ -60,6 +64,7 @@ interface AiTownPlayerStoreV1 {
   move(locationKey: string): Promise<void>
   act(kind: AiTownPlayerActionKindV1, targetResidentKey?: string | null, note?: string): Promise<void>
   sendMessage(text: string, targetResidentKey: string, aiConfig?: AIConfig): Promise<void>
+  direct(aiConfig: AIConfig): Promise<void>
   wait(): Promise<void>
   trigger(seedKey: string): Promise<void>
   offline(days: number): Promise<void>
@@ -145,7 +150,7 @@ export const useAiTownPlayerStore = create<AiTownPlayerStoreV1>((set, get) => {
     catch (reason) {
       set({ error: reason instanceof Error ? reason.message : String(reason) })
       throw reason
-    } finally { set({ busy: false, generatingRunId: null }) }
+    } finally { set({ busy: false, generatingRunId: null, directorRunId: null }) }
   }
   const version = async () => {
     const scope = get().scope
@@ -166,6 +171,7 @@ export const useAiTownPlayerStore = create<AiTownPlayerStoreV1>((set, get) => {
     loading: false,
     busy: false,
     generatingRunId: null,
+    directorRunId: null,
     error: '',
     load: async (scope, worldGroupId) => {
       const changed = get().scope?.projectId !== scope.projectId || get().scope?.worldId !== scope.worldId
@@ -192,21 +198,31 @@ export const useAiTownPlayerStore = create<AiTownPlayerStoreV1>((set, get) => {
         title: `${item.manifest.definition.title} · 第一次安顿`,
         worldGroupId: get().worldGroupId,
       })
-      const firstScene = item.manifest.interaction.sceneTemplates[0]
-      if (firstScene) {
-        const base = await readProductRuntimeStateVersion(session.id!)
-        await startInteractionScene({
-          sessionId: session.id!, commandId: commandId('town.scene.start', session.id!),
-          baseSequence: base.sequence, baseStateHash: base.stateHash,
-          sceneId: `town-scene:${crypto.randomUUID()}`, sceneKey: firstScene.sceneKey,
-        })
-      }
+      await startAiTownInitialSceneV1({
+        sessionId: session.id!,
+        commandId: commandId('town.scene.start', session.id!),
+      })
       await reload(session.id!)
       return session.id!
     }),
     move: async locationKey => withBusy(async () => {
       const base = await version()
       await moveAiTownPlayerV1({ sessionId: base.sessionId, commandId: commandId('town.move', base.sessionId), baseSequence: base.sequence, baseStateHash: base.stateHash, locationKey })
+      await refresh()
+    }),
+    direct: async aiConfig => withBusy(async () => {
+      const scope = get().scope
+      const base = await version()
+      if (!scope) throw new Error('[ai-town] 工作区未就绪')
+      const generated = await generateAiTownDirectorCandidateV1({
+        scope,
+        productRuntimeSessionId: base.sessionId,
+        objective: '在当前地点、时段、事件冷却和居民生活线约束下，让小镇自然向前发展一步。',
+        aiConfig,
+        onRunCreated: runId => { set({ directorRunId: runId }) },
+      })
+      await adoptAiTownDirectorCandidateV1({ scope, runId: generated.snapshot.run.id })
+      set({ directorRunId: null })
       await refresh()
     }),
     act: async (kind, targetResidentKey, note) => withBusy(async () => {
@@ -220,9 +236,11 @@ export const useAiTownPlayerStore = create<AiTownPlayerStoreV1>((set, get) => {
       const interaction = get().runtimeState.interaction
       const base = await version()
       if (!scope || !town || !interaction?.activeScene) throw new Error('[ai-town] 当前没有可用的交谈场景')
-      const residentIndex = town.content.residents.findIndex(resident => resident.residentKey === targetResidentKey)
-      const participantKey = interaction.profiles[residentIndex]?.participantKey
-      if (residentIndex < 0 || !participantKey || town.residents[targetResidentKey]?.residencyStatus !== 'resident'
+      const residentDefinition = town.content.residents.find(resident => resident.residentKey === targetResidentKey)
+      const participantKey = residentDefinition == null ? null : interaction.profiles.find(profile => (
+        profile.characterKey === residentDefinition.sourceCharacterResourceKey
+      ))?.participantKey
+      if (!residentDefinition || !participantKey || town.residents[targetResidentKey]?.residencyStatus !== 'resident'
         || town.residents[targetResidentKey]?.locationKey !== town.player.locationKey) {
         throw new Error('[ai-town] 只能与当前地点的居民交谈')
       }
@@ -234,20 +252,48 @@ export const useAiTownPlayerStore = create<AiTownPlayerStoreV1>((set, get) => {
         baseSequence: base.sequence, baseStateHash: base.stateHash,
         messageId: `message:town-player:${crypto.randomUUID()}`, text: message.trim(), audienceKeys: [participantKey],
       })
-      if (aiConfig) {
-        const generated = await generateInteractionRuntimeCandidateV1({
-          scope,
-          productRuntimeSessionId: base.sessionId,
+      const integrateConversation = async (replyEvent: ProductRuntimeEvent | null) => {
+        const current = await readProductRuntimeStateVersion(base.sessionId)
+        await recordAiTownConversationV1({
+          sessionId: base.sessionId,
+          commandId: commandId('town.conversation.integrate', base.sessionId),
+          baseSequence: current.sequence,
+          baseStateHash: current.stateHash,
+          residentKey: targetResidentKey,
           participantKey,
-          skillId: 'character.ai-town-reply',
-          objective: `在后日谈小镇当下回应玩家消息 #${playerEvent.sequence}；保持自己的日程、知识边界和独立立场。`,
-          replyToSequence: playerEvent.sequence,
-          replyBudgetCost: 1,
-          aiConfig,
-          onRunCreated: runId => { set({ generatingRunId: runId }) },
+          sourceSequences: replyEvent ? [playerEvent.sequence, replyEvent.sequence] : [playerEvent.sequence],
         })
-        await adoptInteractionRuntimeCandidateV1({ scope, runId: generated.snapshot.run.id })
       }
+      if (aiConfig) {
+        try {
+          const generated = await generateInteractionRuntimeCandidateV1({
+            scope,
+            productRuntimeSessionId: base.sessionId,
+            participantKey,
+            skillId: 'character.ai-town-reply',
+            objective: `在后日谈小镇当下回应玩家消息 #${playerEvent.sequence}；保持自己的日程、知识边界和独立立场。`,
+            replyToSequence: playerEvent.sequence,
+            replyBudgetCost: 1,
+            aiConfig,
+            onRunCreated: runId => { set({ generatingRunId: runId }) },
+          })
+          const adopted = await adoptInteractionRuntimeCandidateV1({ scope, runId: generated.snapshot.run.id })
+          await integrateConversation(adopted.event)
+        } catch (reason) {
+          const committedReply = (await db.productRuntimeEvents.where('sessionId').equals(base.sessionId).toArray())
+            .find(event => event.type === 'interaction.character.reply.committed'
+              && event.sequence > playerEvent.sequence
+              && (() => {
+                try {
+                  const payload = JSON.parse(event.payloadJson) as { speakerKey?: unknown; replyToSequence?: unknown }
+                  return payload.speakerKey === participantKey && payload.replyToSequence === playerEvent.sequence
+                } catch { return false }
+              })()) ?? null
+          try { await integrateConversation(committedReply) } catch { /* preserve the original Harness failure */ }
+          await refresh()
+          throw reason
+        }
+      } else await integrateConversation(null)
       set({ generatingRunId: null })
       await refresh()
     }),

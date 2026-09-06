@@ -60,7 +60,7 @@
 |---|---|---|---|
 | E-TTRPG-01 | partial | 已接入中立世界协议、专用需求适配器、统一 Production/Build/ProductRelease v1、AI GM runtime、事件/存档与在线 handoff | 专用生产体验、完整媒资、权限隔离、真实多人体验和产品级 E2E 尚未封板 |
 | E-CHAT-01 | partial | 单/多角色互动已接入专用需求适配器、统一 Production/Build/ProductRelease v1、玩家 runtime 与 runtime Skill | 主 Agent 会谈、多人导演、长期记忆/可见性和完整发布运行体验需验收 |
-| E-TOWN-01 | partial | 已有专属 Brief/SourceSelection/adapter、Production/Build/ProductRelease、六时段语义地图、居民日程、知识隔离、关系、轻经营、离线演化、检查点/分支、专属 Runtime Skill 与玩家界面 | 真实长期内容量、重大变化导演、产品专属媒资与非 fixture 浏览器商业验收仍需继续 |
+| E-TOWN-01 | partial | 已有专属 Brief/SourceSelection/adapter、Production/Build/ProductRelease、六时段语义地图、居民日程、知识隔离、证据化对话记忆、关系/轻经营、离线演化、检查点/分支、14 日回放、重大变化确认、durable 自治导演、产品专属地点/肖像/表情/环境音媒资 lane、玩家界面与冻结 Build 浏览器旅程 E2E | 真实模型长期角色一致性、真实媒体 provider 的肖像/音频质量、权利/成本/性能回执及非 fixture 浏览器商业验收仍需继续 |
 | E-TEXTADV-01 | partial | 文字冒险已接入专用需求适配器、统一 Production/Build/ProductRelease v1 和独立玩家面 | 可玩内容、规则、媒资、结局和真实 E2E 仍需专项封板 |
 | E-AVG-01 | partial | AVG 已接入专用需求适配器、统一 Production/Build/ProductRelease v1、演出与独立玩家面 | 真实视觉/声音资产、演出绑定和完整体验未验收 |
 | E-OPENWORLD-01 | partial | 文字开放世界已接入专用需求适配器、统一 Production/Build/ProductRelease v1、专用运行 API 和独立玩家面；状态演化仅是该产品的内部能力 | 区域按需演化、角色自治、长期任务演化与性能门未完整 |

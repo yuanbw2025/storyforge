@@ -80,3 +80,34 @@ export async function openCurrentTtrpgPlayer(page: Page): Promise<Locator> {
   await expect(guide).toBeVisible({ timeout: 20_000 })
   return guide
 }
+
+/**
+ * Seeds a current Build-bound afterstory town in the browser. The underlying
+ * fixture freezes four real world characters before creating the town source
+ * selection, so every resident identity resolves back to the immutable world
+ * release instead of relying on array position or synthetic database ids.
+ */
+export async function seedCurrentAiTownProduct(page: Page) {
+  await page.goto('./')
+  return page.evaluate(async () => {
+    const importer = new Function('path', 'return import(path)') as (path: string) => Promise<any>
+    const { seedAiTownRuntimeFixture } = await importer('/storyforge/tests/helpers/ai-town-runtime.ts')
+    const fixture = await seedAiTownRuntimeFixture({ reverseInteractionProfiles: true })
+    return {
+      projectId: fixture.scope.projectId,
+      worldReleaseId: fixture.release.id,
+      worldContentHash: fixture.release.contentHash,
+      sessionId: fixture.session.id,
+      buildId: fixture.buildId,
+      packageHash: fixture.preview.packageHash,
+    }
+  })
+}
+
+export async function openCurrentAiTownPlayer(page: Page): Promise<Locator> {
+  await page.reload()
+  await page.getByTestId('product-tab-town').click()
+  const player = page.getByTestId('ai-town-player')
+  await expect(player).toBeVisible({ timeout: 20_000 })
+  return player
+}

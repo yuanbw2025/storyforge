@@ -107,7 +107,7 @@ export function evaluateProductRuntimeProductQualityV1(input: {
         && town.relationships.every(relationship => (relationship.fromResidentKey === 'player' || residentKeys.has(relationship.fromResidentKey))
           && (relationship.toResidentKey === 'player' || residentKeys.has(relationship.toResidentKey))),
       [`relationships=${town?.relationships.length ?? 0}`, 'requires=bounded-per-resident-knowledge']),
-      gate('product.ai-town.cadence-management', !!town && town.eventSeeds.length >= 3
+      gate('product.ai-town.cadence-management', !!town && town.eventSeeds.length >= town.residents.length + 4
         && town.economy.resources.length >= 1 && town.economy.resources.length <= 3
         && town.economy.sharedProject.targetProgress > 0,
       [`eventSeeds=${town?.eventSeeds.length ?? 0}`, `resources=${town?.economy.resources.length ?? 0}`]),

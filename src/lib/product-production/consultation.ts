@@ -144,17 +144,34 @@ function mediaProfile(input: {
   productType: ProductionProductKindV1
   visualLevel: ProductProductionMediaProfileV1['visualLevel']
   audioLevel: ProductProductionMediaProfileV1['audioLevel']
+  aiTown?: Pick<AiTownBriefSettingsV1,
+    'residentTarget' | 'majorLocationTarget' | 'portraits' | 'expressions' | 'locationCards' | 'ambientAudio'>
 }): ProductProductionMediaProfileV1 {
-  // AVG and the governed TTRPG tabletop both bind presentation assets.
-  const presentationEnabled = input.productType === 'avg' || input.productType === 'ttrpg'
-  const images = !presentationEnabled || input.visualLevel === 'none' ? 0 : input.visualLevel === 'key-scenes' ? 2 : 8
-  const music = !presentationEnabled || input.audioLevel === 'none' ? 0 : 1
-  const sfx = !presentationEnabled || input.audioLevel === 'none' ? 0 : input.audioLevel === 'music-sfx' ? 3 : 8
+  // Each presentation product owns its own count/profile while sharing the
+  // content-addressed media transport and release integrity primitives.
+  const presentationEnabled = input.productType === 'avg' || input.productType === 'ttrpg' || input.productType === 'ai-town'
+  const townImages = input.productType === 'ai-town' && input.visualLevel !== 'none'
+    ? (input.aiTown?.locationCards === false ? 0 : input.aiTown?.majorLocationTarget ?? 4)
+      + (input.aiTown?.portraits === false ? 0 : input.aiTown?.residentTarget ?? 6)
+      + (input.aiTown?.expressions === false ? 0 : input.aiTown?.residentTarget ?? 6)
+    : 0
+  const images = !presentationEnabled || input.visualLevel === 'none' ? 0
+    : input.productType === 'ai-town' ? Math.min(28, townImages)
+      : input.visualLevel === 'key-scenes' ? 2 : 8
+  const townAudio = input.productType === 'ai-town' && input.aiTown?.ambientAudio === true && input.audioLevel !== 'none'
+  const music = input.productType === 'ai-town' ? 0 : !presentationEnabled || input.audioLevel === 'none' ? 0 : 1
+  const sfx = input.productType === 'ai-town' ? (townAudio ? 1 : 0)
+    : !presentationEnabled || input.audioLevel === 'none' ? 0 : input.audioLevel === 'music-sfx' ? 3 : 8
   const requiredMediaKinds: ProductProductionMediaProfileV1['requiredMediaKinds'] = []
-  if (images > 0) requiredMediaKinds.push('background')
-  if ((input.productType === 'avg' || input.productType === 'ttrpg') && images > 0) requiredMediaKinds.push('character-pose')
+  if (input.productType === 'ai-town') {
+    if (images > 0 && input.aiTown?.locationCards !== false) requiredMediaKinds.push('background')
+    if (images > 0 && input.aiTown?.portraits !== false) requiredMediaKinds.push('character-pose')
+    if (images > 0 && input.aiTown?.expressions !== false) requiredMediaKinds.push('character-expression')
+  } else if (images > 0) {
+    requiredMediaKinds.push('background', 'character-pose')
+  }
   if (music > 0) requiredMediaKinds.push('bgm')
-  if (sfx > 0) requiredMediaKinds.push('sfx')
+  if (sfx > 0) requiredMediaKinds.push(townAudio ? 'ambience' : 'sfx')
   return {
     visualLevel: images > 0 ? input.visualLevel : 'none',
     audioLevel: music + sfx > 0 ? input.audioLevel : 'none', imageCount: images,
@@ -306,11 +323,6 @@ export async function draftProductProductionBriefV3(input: {
   const selectedScale = input.scale ?? selected.scale
   const qualityProfile = input.qualityProfile ?? 'prototype'
   const scale = { scope: selectedScale, ...SCALE_DEFAULTS[selectedScale] }
-  const media = mediaProfile({
-    productType: input.productType,
-    visualLevel: input.visualLevel ?? 'key-scenes',
-    audioLevel: input.audioLevel ?? 'none',
-  })
   const selectedCatalog = normalizeAuthorSelection({
     source, selected, authorSelection: input.sourceSelection,
   })
@@ -328,6 +340,19 @@ export async function draftProductProductionBriefV3(input: {
       throw new Error('[product-production] 严格后日谈需要至少一个冻结故事终局/故事弧资源')
     }
   }
+  const media = mediaProfile({
+    productType: input.productType,
+    visualLevel: input.visualLevel ?? 'key-scenes',
+    audioLevel: input.audioLevel ?? 'none',
+    aiTown: input.productType === 'ai-town' ? {
+      residentTarget: selectedCatalog.characterResourceKeys.length,
+      majorLocationTarget: input.aiTown?.majorLocationTarget ?? 4,
+      portraits: input.aiTown?.portraits ?? true,
+      expressions: input.aiTown?.expressions ?? true,
+      locationCards: input.aiTown?.locationCards ?? true,
+      ambientAudio: input.aiTown?.ambientAudio ?? false,
+    } : undefined,
+  })
   const roleBindings = compileUpperProductWorldRoleBindingsV1(input.productType, selectedCatalog)
   const selection: ProductWorldSourceSelectionV1 = {
     schema: 'storyforge.product-world-source-selection', version: 1,

@@ -1266,6 +1266,7 @@ export const PRODUCT_RUNTIME_EVENT_TYPES = [
   "town.thread.progressed",
   "town.resource.changed",
   "town.event.resolved",
+  "town.conversation.integrated",
   "town.major-change.proposed",
   "town.major-change.accepted",
   "town.major-change.rejected",

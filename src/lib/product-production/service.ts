@@ -33,6 +33,7 @@ import {
   type ProductProductionSchedulerProjectionV1,
 } from './scheduler'
 import { createProductRuntimeInstanceFromSource } from '../product/runtime-instances'
+import { startAiTownInitialSceneV1 } from '../ai-town/runtime-api'
 import {
   listProductMediaProviderCapabilitiesV1,
   type ProductMediaProviderCapabilityV1,
@@ -527,6 +528,12 @@ export async function startProductProductionPreviewV1(input: {
     title: `${details.production.title} · Build #${details.build.buildNumber} 预览`,
     worldGroupId: input.worldGroupId ?? null,
   })
+  if (brief.intent.productType === 'ai-town') {
+    await startAiTownInitialSceneV1({
+      sessionId: session.id!,
+      commandId: `product-preview:ai-town-scene:${session.id}`,
+    })
+  }
   return { sessionId: session.id!, productType: brief.intent.productType }
 }
 

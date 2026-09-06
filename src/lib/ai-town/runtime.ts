@@ -382,11 +382,20 @@ function parseDigest(value: unknown, sequence: number): AiTownDailyDigestV1 {
 }
 
 function moveResidentsForSlot(state: AiTownRuntimeStateV1, content: AiTownRuntimeContentV1, nextSlot: AiTownDaySlotV1): void {
+  const destinations = new Map<string, { locationKey: string; activity: string }>()
   for (const resident of content.residents) {
     if (state.residents[resident.residentKey]?.residencyStatus !== 'resident') continue
     const entry = scheduleFor(content, resident.residentKey, nextSlot)
     if (!entry) fail(`居民日程缺失:${resident.residentKey}/${nextSlot}`)
-    state.residents[resident.residentKey] = { ...state.residents[resident.residentKey], locationKey: entry.locationKey, activity: entry.activity }
+    destinations.set(resident.residentKey, { locationKey: entry.locationKey, activity: entry.activity })
+  }
+  for (const location of content.map.locations) {
+    const residents = [...destinations.values()].filter(item => item.locationKey === location.key).length
+    const player = state.player.locationKey === location.key ? 1 : 0
+    if (residents + player > location.capacity) fail(`居民日程超过地点容量:${location.key}/${nextSlot}`)
+  }
+  for (const [residentKey, destination] of destinations) {
+    state.residents[residentKey] = { ...state.residents[residentKey], ...destination }
   }
 }
 
@@ -406,9 +415,51 @@ function advanceDailyAutonomy(
   thread.progress = clamp(thread.progress + 4, 0, 100)
   thread.stage = thread.progress >= 100 ? 'resolved' : 'active'
   thread.lastAdvancedDay = simulatedDay
-  if (thread.evidenceSequences[thread.evidenceSequences.length - 1] !== sequence) thread.evidenceSequences.push(sequence)
+  appendBoundedEvidence(thread.evidenceSequences, sequence)
   const owner = state.content.residents.find(resident => resident.residentKey === definition.ownerResidentKey)!
+  const ownerState = state.residents[definition.ownerResidentKey]
+  ownerState.mood = thread.progress >= 80 ? 'bright' : simulatedDay % 5 === 0 ? 'tired' : 'calm'
+  ownerState.energy = clamp(ownerState.energy + 8, 0, 100)
+  const counterpartKey = definition.participantKeys.find(key => key !== definition.ownerResidentKey
+    && state.residents[key]?.residencyStatus === 'resident')
+  if (counterpartKey) {
+    const relationship = Object.values(state.relationships).find(edge => (
+      edge.fromResidentKey === definition.ownerResidentKey && edge.toResidentKey === counterpartKey
+    )) ?? Object.values(state.relationships).find(edge => (
+      edge.fromResidentKey === counterpartKey && edge.toResidentKey === definition.ownerResidentKey
+    ))
+    if (relationship) {
+      relationship.trust = clamp(relationship.trust + 1, 0, 100)
+      relationship.wariness = clamp(relationship.wariness - 1, 0, 100)
+      appendBoundedEvidence(relationship.evidenceSequences, sequence)
+    }
+  }
   return `${owner.name}的生活线“${definition.title}”在自己的日程中继续推进。`
+}
+
+function weatherForDay(day: number): AiTownRuntimeStateV1['weatherKey'] {
+  return (['clear', 'cloudy', 'clear', 'rain', 'clear', 'cloudy'] as const)[(day - 1) % 6]
+}
+
+function appendRecentPublicEvent(items: string[], value: string, maximum = 12): string[] {
+  return [...items.filter(item => item !== value).slice(-(maximum - 1)), value]
+}
+
+function appendBoundedEvidence(items: number[], sequence: number, maximum = 2_000): void {
+  if (items[items.length - 1] !== sequence) items.push(sequence)
+  if (items.length > maximum) items.splice(0, items.length - maximum)
+}
+
+function appendTownMemory(
+  state: AiTownRuntimeStateV1,
+  memory: AiTownRuntimeStateV1['memories'][number],
+): void {
+  const ownerMemoryIndexes = state.memories
+    .map((item, index) => item.ownerResidentKey === memory.ownerResidentKey ? index : -1)
+    .filter(index => index >= 0)
+  if (ownerMemoryIndexes.length >= 80) state.memories.splice(ownerMemoryIndexes[0], 1)
+  state.memories.push(memory)
+  if (state.memories.length > 480) state.memories.splice(0, state.memories.length - 480)
 }
 
 export function applyAiTownEventV1(
@@ -425,8 +476,24 @@ export function applyAiTownEventV1(
     const energyCost = integer(payload.energyCost, 'event.energyCost', 0, 100)
     if (state.player.energy < energyCost) fail('玩家精力不足')
     state.player.energy -= energyCost
+    const moneyDelta = integer(payload.moneyDelta, 'event.moneyDelta', -1_000, 1_000)
+    if (state.player.money + moneyDelta < 0 || state.player.money + moneyDelta > 1_000_000_000) fail('行动金钱变化越界')
+    state.player.money += moneyDelta
+    if (!Array.isArray(payload.resourceChanges) || payload.resourceChanges.length > content.economy.resources.length) fail('行动资源变化无效')
+    const changedResources = new Set<string>()
+    for (const [index, rawChange] of payload.resourceChanges.entries()) {
+      const change = object(rawChange, `event.resourceChanges[${index}]`)
+      exact(change, ['resourceKey', 'delta'], `event.resourceChanges[${index}]`)
+      const resourceKey = stableKey(change.resourceKey, `event.resourceChanges[${index}].resourceKey`)
+      const definition = content.economy.resources.find(item => item.key === resourceKey)
+      if (!definition || changedResources.has(resourceKey)) fail('行动资源变化包含未知或重复资源')
+      changedResources.add(resourceKey)
+      const next = state.player.resources[resourceKey] + integer(change.delta, `event.resourceChanges[${index}].delta`, -100, 100)
+      if (next < 0 || next > definition.maximum) fail(`行动资源变化越界:${resourceKey}`)
+      state.player.resources[resourceKey] = next
+    }
     state.actionsRemaining = Math.max(0, state.actionsRemaining - 1)
-    state.latestPublicEvents = [...state.latestPublicEvents.slice(-11), summary]
+    state.latestPublicEvents = appendRecentPublicEvent(state.latestPublicEvents, summary)
     const targetResidentKey = payload.targetResidentKey == null ? null : stableKey(payload.targetResidentKey, 'event.targetResidentKey')
     if (targetResidentKey) {
       const resident = state.residents[targetResidentKey]
@@ -434,7 +501,7 @@ export function applyAiTownEventV1(
       if (resident.residencyStatus !== 'resident') fail('行动目标已不在小镇生活')
       if (resident.locationKey !== state.player.locationKey) fail('不能对不在场居民执行行动')
       resident.lastSpokeDay = state.day
-      state.memories.push({
+      appendTownMemory(state, {
         memoryKey: `town.memory.shared.${event.sequence}.${targetResidentKey}`,
         ownerResidentKey: targetResidentKey,
         summary,
@@ -443,7 +510,6 @@ export function applyAiTownEventV1(
         salience: 50,
         createdDay: state.day,
       })
-      if (state.memories.length > 480) state.memories.splice(0, state.memories.length - 480)
     }
     if (payload.projectProgress != null) {
       const delta = integer(payload.projectProgress, 'event.projectProgress', 0, 20)
@@ -451,7 +517,7 @@ export function applyAiTownEventV1(
       state.sharedProject.progress = clamp(state.sharedProject.progress + delta, 0, state.sharedProject.targetProgress)
       state.sharedProject.completed = state.sharedProject.progress >= state.sharedProject.targetProgress
       if (!wasCompleted && state.sharedProject.completed) {
-        state.latestPublicEvents = [...state.latestPublicEvents.slice(-11), `共同建设“${state.sharedProject.title}”已经完成，居民开始围绕它安排新的生活。`]
+        state.latestPublicEvents = appendRecentPublicEvent(state.latestPublicEvents, `共同建设“${state.sharedProject.title}”已经完成，居民开始围绕它安排新的生活。`)
         for (const resident of Object.values(state.residents)) {
           if (resident.residencyStatus === 'resident') resident.activeGoal = `让“${state.sharedProject.title}”真正融入共同体的新生活`
         }
@@ -464,7 +530,7 @@ export function applyAiTownEventV1(
       relationship.trust = clamp(relationship.trust + integer(payload.trustDelta ?? 0, 'event.trustDelta', -5, 5), 0, 100)
       relationship.intimacy = clamp(relationship.intimacy + integer(payload.intimacyDelta ?? 0, 'event.intimacyDelta', -5, 5), 0, 100)
       relationship.wariness = clamp(relationship.wariness + integer(payload.warinessDelta ?? 0, 'event.warinessDelta', -5, 5), 0, 100)
-      relationship.evidenceSequences.push(event.sequence)
+      appendBoundedEvidence(relationship.evidenceSequences, event.sequence)
     }
     if (payload.nextSlot != null) {
       const nextSlot = slot(payload.nextSlot, 'event.nextSlot')
@@ -478,6 +544,7 @@ export function applyAiTownEventV1(
         if (autonomy && !digest.publicSummary.includes(autonomy)) digest.publicSummary.push(autonomy)
         state.dailyDigests = [...state.dailyDigests.slice(-29), digest]
         state.day += 1
+        state.weatherKey = weatherForDay(state.day)
         state.actionsRemaining = content.clock.actionsPerDay
         state.player.energy = state.player.maximumEnergy
         state.cadence.remainingIntensity = content.cadence.dailyIntensityBudget
@@ -487,7 +554,7 @@ export function applyAiTownEventV1(
   } else if (event.type === 'town.player.moved') {
     const locationKey = stableKey(payload.locationKey, 'event.locationKey')
     state.player.locationKey = locationKey
-    state.latestPublicEvents = [...state.latestPublicEvents.slice(-11), payloadText(payload, 'summary')]
+    state.latestPublicEvents = appendRecentPublicEvent(state.latestPublicEvents, payloadText(payload, 'summary'))
   } else if (event.type === 'town.time.advanced') {
     const fromSlot = slot(payload.fromSlot, 'event.fromSlot')
     const toSlot = slot(payload.toSlot, 'event.toSlot')
@@ -503,6 +570,7 @@ export function applyAiTownEventV1(
       if (autonomy && !digest.publicSummary.includes(autonomy)) digest.publicSummary.push(autonomy)
       state.dailyDigests = [...state.dailyDigests.slice(-29), digest]
       state.day += 1
+      state.weatherKey = weatherForDay(state.day)
       state.actionsRemaining = content.clock.actionsPerDay
       state.player.energy = state.player.maximumEnergy
       state.cadence.remainingIntensity = content.cadence.dailyIntensityBudget
@@ -519,7 +587,7 @@ export function applyAiTownEventV1(
     relationship.trust = clamp(relationship.trust + trustDelta, 0, 100)
     relationship.intimacy = clamp(relationship.intimacy + intimacyDelta, 0, 100)
     relationship.wariness = clamp(relationship.wariness + warinessDelta, 0, 100)
-    relationship.evidenceSequences.push(event.sequence)
+    appendBoundedEvidence(relationship.evidenceSequences, event.sequence)
   } else if (event.type === 'town.knowledge.exposed') {
     const factKey = stableKey(payload.factKey, 'event.factKey')
     const holderKey = stableKey(payload.holderKey, 'event.holderKey')
@@ -532,8 +600,7 @@ export function applyAiTownEventV1(
     const ownerResidentKey = stableKey(payload.ownerResidentKey, 'event.ownerResidentKey')
     if (!state.residents[ownerResidentKey] || state.memories.some(memory => memory.memoryKey === memoryKey)) fail('记忆 owner/key 无效')
     if (!['private', 'shared', 'public'].includes(String(payload.visibility))) fail('记忆可见性无效')
-    state.memories.push({ memoryKey, ownerResidentKey, summary: payloadText(payload, 'summary'), visibility: payload.visibility as 'private' | 'shared' | 'public', sourceSequences: [event.sequence], salience: integer(payload.salience, 'event.salience', 1, 100), createdDay: state.day })
-    if (state.memories.length > 480) state.memories.splice(0, state.memories.length - 480)
+    appendTownMemory(state, { memoryKey, ownerResidentKey, summary: payloadText(payload, 'summary'), visibility: payload.visibility as 'private' | 'shared' | 'public', sourceSequences: [event.sequence], salience: integer(payload.salience, 'event.salience', 1, 100), createdDay: state.day })
   } else if (event.type === 'town.thread.progressed') {
     const threadKey = stableKey(payload.threadKey, 'event.threadKey')
     const thread = state.lifeThreads[threadKey]
@@ -542,14 +609,43 @@ export function applyAiTownEventV1(
     thread.progress = clamp(thread.progress + delta, 0, 100)
     thread.stage = thread.progress >= 100 ? 'resolved' : 'active'
     thread.lastAdvancedDay = state.day
-    thread.evidenceSequences.push(event.sequence)
+    appendBoundedEvidence(thread.evidenceSequences, event.sequence)
   } else if (event.type === 'town.resource.changed') {
     const resourceKey = stableKey(payload.resourceKey, 'event.resourceKey')
     const delta = integer(payload.delta, 'event.delta', -1_000_000, 1_000_000)
     if (resourceKey === 'money') state.player.money = Math.max(0, state.player.money + delta)
     else if (resourceKey === 'energy') state.player.energy = clamp(state.player.energy + delta, 0, state.player.maximumEnergy)
-    else if (Object.prototype.hasOwnProperty.call(state.player.resources, resourceKey)) state.player.resources[resourceKey] = Math.max(0, state.player.resources[resourceKey] + delta)
+    else if (Object.prototype.hasOwnProperty.call(state.player.resources, resourceKey)) {
+      const maximum = content.economy.resources.find(item => item.key === resourceKey)?.maximum ?? fail('资源定义缺失')
+      const next = state.player.resources[resourceKey] + delta
+      if (next < 0 || next > maximum) fail('资源变化越界')
+      state.player.resources[resourceKey] = next
+    }
     else fail('未知资源')
+  } else if (event.type === 'town.conversation.integrated') {
+    const residentKey = stableKey(payload.residentKey, 'event.residentKey')
+    const resident = state.residents[residentKey]
+    if (!resident || resident.residencyStatus !== 'resident') fail('对话记忆居民已不在小镇')
+    const memoryKey = stableKey(payload.memoryKey, 'event.memoryKey')
+    if (state.memories.some(memory => memory.memoryKey === memoryKey)) fail('对话记忆 key 重复')
+    const sourceSequences = integerList(payload.sourceSequences, 'event.sourceSequences', 8, event.sequence - 1)
+    if (!sourceSequences.length) fail('对话记忆缺少运行证据')
+    appendTownMemory(state, {
+      memoryKey,
+      ownerResidentKey: residentKey,
+      summary: payloadText(payload, 'summary'),
+      visibility: 'shared',
+      sourceSequences,
+      salience: integer(payload.salience, 'event.salience', 1, 100),
+      createdDay: state.day,
+    })
+    const relationshipKey = stableKey(payload.relationshipKey, 'event.relationshipKey')
+    const relationship = state.relationships[relationshipKey]
+    if (!relationship || relationship.fromResidentKey !== residentKey || relationship.toResidentKey !== 'player') fail('对话关系与居民不匹配')
+    relationship.trust = clamp(relationship.trust + integer(payload.trustDelta, 'event.trustDelta', 0, 3), 0, 100)
+    relationship.intimacy = clamp(relationship.intimacy + integer(payload.intimacyDelta, 'event.intimacyDelta', 0, 3), 0, 100)
+    appendBoundedEvidence(relationship.evidenceSequences, event.sequence)
+    resident.lastSpokeDay = state.day
   } else if (event.type === 'town.event.resolved') {
     const seedKey = stableKey(payload.seedKey, 'event.seedKey')
     const intensity = integer(payload.intensity, 'event.intensity', 1, 5)
@@ -572,7 +668,7 @@ export function applyAiTownEventV1(
     if (seed.category === 'rare-crisis') state.cadence.lastRareCrisisDay = state.day
     state.cadence.highIntensityStreak = intensity >= 4 ? state.cadence.highIntensityStreak + 1 : 0
     const summary = payloadText(payload, 'summary')
-    state.latestPublicEvents = [...state.latestPublicEvents.slice(-11), summary]
+    state.latestPublicEvents = appendRecentPublicEvent(state.latestPublicEvents, summary)
     for (const threadKey of seed.lifeThreadKeys) {
       const thread = state.lifeThreads[threadKey]
       if (!thread || thread.stage === 'resolved') continue
@@ -580,9 +676,9 @@ export function applyAiTownEventV1(
       thread.progress = clamp(thread.progress + intensity * 2, 0, 100)
       if (thread.progress >= 100) thread.stage = 'resolved'
       thread.lastAdvancedDay = state.day
-      thread.evidenceSequences.push(event.sequence)
+      appendBoundedEvidence(thread.evidenceSequences, event.sequence)
     }
-    for (const residentKey of participants) state.memories.push({
+    for (const residentKey of participants) appendTownMemory(state, {
       memoryKey: `town.memory.event.${event.sequence}.${residentKey}`,
       ownerResidentKey: residentKey,
       summary,
@@ -591,8 +687,9 @@ export function applyAiTownEventV1(
       salience: clamp(30 + intensity * 10, 1, 100),
       createdDay: state.day,
     })
-    if (state.memories.length > 480) state.memories.splice(0, state.memories.length - 480)
   } else if (event.type === 'town.major-change.proposed') {
+    const eligibility = aiTownMajorChangeEligibilityV1(state)
+    if (!eligibility.eligible) fail(eligibility.reason ?? '重大变化尚未达到提案门槛')
     const candidateKey = stableKey(payload.candidateKey, 'event.candidateKey')
     if (state.pendingMajorChanges.some(candidate => candidate.candidateKey === candidateKey)) fail('重大变化候选重复')
     if (!MAJOR_CHANGE_KINDS.has(String(payload.kind))
@@ -601,7 +698,11 @@ export function applyAiTownEventV1(
     if (residentKeysValue.some(key => !state.residents[key])) fail('重大变化居民无效')
     if ((payload.kind === 'permanent-departure' || payload.kind === 'death-or-permanent-incapacity')
       && (!residentKeysValue.length || residentKeysValue.some(key => state.residents[key].residencyStatus !== 'resident'))) fail('居民离场类变化必须指向当前居民')
-    state.pendingMajorChanges.push({ candidateKey, kind: payload.kind as AiTownRuntimeStateV1['pendingMajorChanges'][number]['kind'], title: payloadText(payload, 'title', 200), summary: payloadText(payload, 'summary'), residentKeys: residentKeysValue, evidenceSequences: [event.sequence], status: 'pending' })
+    state.pendingMajorChanges = [
+      ...state.pendingMajorChanges.filter(candidate => candidate.status === 'pending'),
+      ...state.pendingMajorChanges.filter(candidate => candidate.status !== 'pending').slice(-198),
+      { candidateKey, kind: payload.kind as AiTownRuntimeStateV1['pendingMajorChanges'][number]['kind'], title: payloadText(payload, 'title', 200), summary: payloadText(payload, 'summary'), residentKeys: residentKeysValue, evidenceSequences: [event.sequence], status: 'pending' as const },
+    ]
   } else if (event.type === 'town.major-change.accepted' || event.type === 'town.major-change.rejected') {
     const candidateKey = stableKey(payload.candidateKey, 'event.candidateKey')
     const candidate = state.pendingMajorChanges.find(item => item.candidateKey === candidateKey)
@@ -614,7 +715,7 @@ export function applyAiTownEventV1(
       if (residencyStatus) {
         for (const residentKey of candidate.residentKeys) state.residents[residentKey].residencyStatus = residencyStatus
       }
-      state.latestPublicEvents = [...state.latestPublicEvents.slice(-11), `重大变化已确认：${candidate.title}`]
+      state.latestPublicEvents = appendRecentPublicEvent(state.latestPublicEvents, `重大变化已确认：${candidate.title}`)
     }
   } else if (event.type === 'town.day.closed') {
     const digest = parseDigest(payload.digest, event.sequence)
@@ -633,6 +734,7 @@ export function applyAiTownEventV1(
       return parsed
     })
     state.day += days
+    state.weatherKey = weatherForDay(state.day)
     state.slot = 'morning'
     state.actionsRemaining = content.clock.actionsPerDay
     state.player.energy = state.player.maximumEnergy
@@ -640,7 +742,7 @@ export function applyAiTownEventV1(
     state.cadence.remainingIntensity = content.cadence.dailyIntensityBudget
     state.dailyDigests = [...state.dailyDigests, ...digests].slice(-30)
     state.offlineDaysSimulated += days
-    state.latestPublicEvents = [...state.latestPublicEvents.slice(-9), `离开期间经过了 ${days} 个游戏日。`]
+    state.latestPublicEvents = appendRecentPublicEvent(state.latestPublicEvents, `离开期间经过了 ${days} 个游戏日（第 ${startDay} 日至第 ${startDay + days - 1} 日）。`)
   } else if (event.type !== 'town.started') {
     fail(`未知 AI 小镇事件:${event.type}`)
   }
@@ -816,6 +918,50 @@ export function parseAiTownStateV1(value: unknown): AiTownRuntimeStateV1 | null 
   })
   strings(row.latestPublicEvents, 'state.latestPublicEvents', 50)
   return structuredClone(value as AiTownRuntimeStateV1)
+}
+
+export interface AiTownEventAvailabilityV1 {
+  seed: AiTownRuntimeContentV1['eventSeeds'][number]
+  available: boolean
+  reason: string | null
+  participantKeys: string[]
+}
+
+export interface AiTownMajorChangeEligibilityV1 {
+  eligible: boolean
+  reason: string | null
+}
+
+export function aiTownMajorChangeEligibilityV1(state: AiTownRuntimeStateV1): AiTownMajorChangeEligibilityV1 {
+  if (state.day < 7) return { eligible: false, reason: '重大变化最早只能在第 7 个游戏日提出' }
+  if (state.pendingMajorChanges.some(candidate => candidate.status === 'pending')) {
+    return { eligible: false, reason: '已有重大变化等待确认' }
+  }
+  const hasAccumulatedPressure = state.sharedProject.progress > 0
+    || Object.values(state.lifeThreads).some(thread => thread.progress > 0)
+  if (!hasAccumulatedPressure) return { eligible: false, reason: '尚无可审计的长期生活线或共同建设积累' }
+  return { eligible: true, reason: null }
+}
+
+export function availableAiTownEventSeedsV1(
+  content: AiTownRuntimeContentV1,
+  state: AiTownRuntimeStateV1,
+): AiTownEventAvailabilityV1[] {
+  return content.eventSeeds.map(seed => {
+    const participantKeys = seed.participantKeys.filter(key => state.residents[key]?.residencyStatus === 'resident'
+      && state.residents[key]?.locationKey === state.player.locationKey)
+    const lastDay = state.cadence.seedLastTriggeredDay[seed.key]
+    let reason: string | null = null
+    if (state.day < seed.minimumDay) reason = `第 ${seed.minimumDay} 日后才可能发生`
+    else if (!seed.eligibleSlots.includes(state.slot)) reason = '当前时段不符合事件条件'
+    else if (lastDay != null && state.day - lastDay < seed.cooldownDays) reason = '事件仍在冷却'
+    else if (seed.intensity > state.cadence.remainingIntensity) reason = '今日事件强度预算不足'
+    else if (seed.intensity >= 4 && state.cadence.highIntensityStreak >= content.cadence.highIntensityStreakLimit) reason = '高强度事件需要留出喘息期'
+    else if (seed.category === 'rare-crisis' && state.cadence.lastRareCrisisDay != null
+      && state.day - state.cadence.lastRareCrisisDay < content.cadence.rareCrisisCooldownDays) reason = '罕见危机仍在全局冷却'
+    else if (!participantKeys.length && !seed.locationKeys.includes(state.player.locationKey)) reason = '当前地点无法观察此事件'
+    return { seed, available: reason == null, reason, participantKeys }
+  })
 }
 
 export function nextAiTownSlotV1(current: AiTownDaySlotV1): AiTownDaySlotV1 {

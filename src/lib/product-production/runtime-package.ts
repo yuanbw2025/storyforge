@@ -271,12 +271,12 @@ export function parseProductRuntimePackageV1(value: string | unknown): ProductRu
   }
   const pkg = record(raw, 'package')
   const selectedProduct = productType(pkg.productType)
-  const hasTtrpgPresentation = selectedProduct === 'ttrpg'
+  const hasOptionalPresentation = (selectedProduct === 'ttrpg' || selectedProduct === 'ai-town')
     && Object.prototype.hasOwnProperty.call(pkg, 'presentation')
   exactKeys(pkg, [
     'schema', 'version', 'productType', 'definition', 'sourceWorld', 'narrative',
     ...PRODUCT_MODULE_KEYS[selectedProduct],
-    ...(hasTtrpgPresentation ? ['presentation'] : []),
+    ...(hasOptionalPresentation ? ['presentation'] : []),
   ], 'package')
   if (pkg.schema !== 'storyforge.product-runtime-package' || pkg.version !== 1) fail('schema/version 无效')
 
@@ -285,7 +285,7 @@ export function parseProductRuntimePackageV1(value: string | unknown): ProductRu
     'productKey', 'title', 'description', 'enabledCapabilities', 'rulesetVersion', 'initialVariables',
   ], 'definition')
   const enabledCapabilities = stringArray(definition.enabledCapabilities, 'enabledCapabilities', 20)
-  const expectedCapabilities = hasTtrpgPresentation
+  const expectedCapabilities = hasOptionalPresentation
     ? [...CAPABILITIES[selectedProduct], 'presentation'] : CAPABILITIES[selectedProduct]
   if (enabledCapabilities.join(',') !== expectedCapabilities.join(',')) fail('enabledCapabilities 与 productType 不一致')
   const initialVariables = record(definition.initialVariables, 'initialVariables')
@@ -329,7 +329,7 @@ export function parseProductRuntimePackageV1(value: string | unknown): ProductRu
   if (selectedProduct === 'text-adventure' || selectedProduct === 'text-open-world') {
     parsed.adventure = parseAdventureContent(pkg.adventure as never)
   }
-  if (selectedProduct === 'avg' || hasTtrpgPresentation) {
+  if (selectedProduct === 'avg' || hasOptionalPresentation) {
     const presentation = record(pkg.presentation, 'presentation')
     if (!Array.isArray(presentation.assets)) fail('presentation.assets 无效')
     const content = parseAvgPresentationContent(presentation)

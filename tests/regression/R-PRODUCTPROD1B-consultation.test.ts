@@ -14,6 +14,7 @@ import {
   freezeAiTownWorldSourceSelectionV1,
   loadAiTownWorldSourceCatalogV1,
 } from '../../src/lib/ai-town/world-source'
+import type { AiTownBriefSettingsV1 } from '../../src/lib/types'
 
 async function workspace(name: string) {
   return seedCurrentProductWorld(name)
@@ -202,17 +203,18 @@ describe('R-PRODUCTPROD-1B · consultation and reviewable Brief', () => {
     expect(frozenSelection.dependencyClosureResourceKeys).toEqual(expect.arrayContaining(frozenSelection.relationSubgraphResourceKeys))
     const suggestions = await suggestProductStartingPoints({ scope: owned.scope, worldReleaseId: owned.release.id! })
     const customStart = suggestions.suggestions.find(item => item.kind === 'custom')!
+    const townSettings: AiTownBriefSettingsV1 = {
+      playerRole: 'caretaker', playerName: '阿晴', homeConcept: '带工作台的旧灯塔看守房',
+      townTitle: '潮声余居', elapsedDays: 730, romance: 'opt-in', residentTarget: 4,
+      majorLocationTarget: 6, actionsPerDay: 5, offlineEnabled: true, offlineMaximumDays: 2,
+      resourceKeys: ['wood', 'food'], startingMoney: 360, sharedProjectConcept: '修复海边温室',
+      portraits: true, expressions: false, locationCards: true, ambientAudio: true,
+    }
     const brief = await draftProductProductionBriefV3({
       scope: owned.scope, worldReleaseId: owned.release.id!, suggestionKey: customStart.suggestionKey,
-      productType: 'ai-town', visualLevel: 'none', audioLevel: 'none',
+      productType: 'ai-town', visualLevel: 'key-scenes', audioLevel: 'music-sfx',
       playerRole: '扮演新居民', openingSituation: '危机结束两年后，旧友共同修复海边温室。',
-      aiTown: {
-        playerRole: 'caretaker', playerName: '阿晴', homeConcept: '带工作台的旧灯塔看守房',
-        townTitle: '潮声余居', elapsedDays: 730, romance: 'opt-in', residentTarget: 4,
-        majorLocationTarget: 6, actionsPerDay: 5, offlineEnabled: true, offlineMaximumDays: 2,
-        resourceKeys: ['wood', 'food'], startingMoney: 360, sharedProjectConcept: '修复海边温室',
-        portraits: true, expressions: false, locationCards: true, ambientAudio: true,
-      },
+      aiTown: townSettings,
     })
     expect(parseProductProductionBriefV3(brief)).toEqual(brief)
     expect(brief.aiTown).toMatchObject({
@@ -222,6 +224,30 @@ describe('R-PRODUCTPROD-1B · consultation and reviewable Brief', () => {
       clock: { actionsPerDay: 5 }, autonomy: { offlineMaximumDays: 2 },
       management: { resourceKeys: ['wood', 'food'], startingMoney: 360 },
       safety: { majorChangeConfirmation: true, privateMindPlayerAccess: 'none' },
+    })
+    expect(brief.media).toMatchObject({
+      imageCount: 10,
+      musicTrackCount: 0,
+      sfxCount: 1,
+      requiredMediaKinds: ['background', 'character-pose', 'ambience'],
+    })
+    expect(brief.capabilityRequirements.filter(item => item.mediaClass !== 'text').map(item => item.mediaClass).sort())
+      .toEqual(['image', 'sfx'])
+    const boundedResidents = await draftProductProductionBriefV3({
+      scope: owned.scope, worldReleaseId: owned.release.id!, suggestionKey: customStart.suggestionKey,
+      productType: 'ai-town', visualLevel: 'key-scenes', audioLevel: 'none',
+      aiTown: { ...townSettings, residentTarget: 8, expressions: true },
+    })
+    expect(boundedResidents.aiTown?.town.residentTarget).toBe(5)
+    expect(boundedResidents.media).toMatchObject({ imageCount: 16 })
+    const silentTown = await draftProductProductionBriefV3({
+      scope: owned.scope, worldReleaseId: owned.release.id!, suggestionKey: customStart.suggestionKey,
+      productType: 'ai-town', visualLevel: 'none', audioLevel: 'music-sfx',
+      aiTown: { ...townSettings, portraits: false, expressions: false, locationCards: false, ambientAudio: false },
+    })
+    expect(silentTown.media).toMatchObject({
+      visualLevel: 'none', audioLevel: 'none', imageCount: 0, musicTrackCount: 0, sfxCount: 0,
+      requiredMediaKinds: [],
     })
     expect(brief.aiTown?.sourceSelection.residentResourceKeys).toHaveLength(4)
     await expect(assertAiTownWorldSourceSelectionHashV1({

@@ -218,7 +218,7 @@ export function compileAiTownModuleV1(input: ProductModuleCompilerInputV1): AiTo
     locationKeys: [resident.homeLocationKey, resident.workLocationKey ?? locations[0].key],
     participantKeys: [resident.residentKey, residents[(index + 1) % residents.length].residentKey],
   }))
-  const eventSeeds: AiTownRuntimeContentV1['eventSeeds'] = [{
+  const communalEventSeeds: AiTownRuntimeContentV1['eventSeeds'] = [{
     key: 'town.event.morning-routine', category: 'ambient', title: '寻常的早晨',
     summary: '居民按自己的习惯开始一天，细小变化会留下可观察的痕迹。', intensity: 1,
     minimumDay: 1, cooldownDays: 1, eligibleSlots: ['morning'], locationKeys: locations.map(location => location.key),
@@ -239,6 +239,24 @@ export function compileAiTownModuleV1(input: ProductModuleCompilerInputV1): AiTo
     minimumDay: 7, cooldownDays: 14, eligibleSlots: ['afternoon', 'evening'], locationKeys: [locations[0].key],
     participantKeys: residents.map(resident => resident.residentKey), lifeThreadKeys: lifeThreads.map(thread => thread.key),
   }]
+  const residentEventSeeds: AiTownRuntimeContentV1['eventSeeds'] = residents.map((resident, index) => {
+    const thread = lifeThreads[index]
+    const counterpart = residents[(index + 1) % residents.length]
+    return {
+      key: `town.event.resident-opportunity.${pad(index)}`,
+      category: 'resident-opportunity',
+      title: `${resident.name}想推进一件自己的事`,
+      summary: `${resident.name}正围绕“${thread.title}”尝试跨出一小步；${counterpart.name}可能参与，但两人都保留自己的立场。`,
+      intensity: index % 3 === 2 ? 3 : 2,
+      minimumDay: 2 + index,
+      cooldownDays: 4 + (index % 3),
+      eligibleSlots: index % 2 === 0 ? ['late-morning', 'afternoon'] : ['noon', 'evening'],
+      locationKeys: [...new Set(thread.locationKeys)],
+      participantKeys: [...new Set([resident.residentKey, counterpart.residentKey])],
+      lifeThreadKeys: [thread.key],
+    } satisfies AiTownRuntimeContentV1['eventSeeds'][number]
+  })
+  const eventSeeds = [...communalEventSeeds, ...residentEventSeeds]
   const storyEvidence = [...selectedStorySources(input), ...selectedStoryArcs(input)].slice(0, 20)
   return parseAiTownRuntimeContentV1({
     schema: 'storyforge.ai-town-runtime-content', version: 1,

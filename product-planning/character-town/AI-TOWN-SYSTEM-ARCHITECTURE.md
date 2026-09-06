@@ -2,7 +2,7 @@
 
 > 状态：E-TOWN-01 施工契约（非项目总纲）<br>
 > 产品身份：`ai-town`<br>
-> 基线：`feat/ai-town-product` / `b1706281`，上游基线 `origin/main@8df14cca`<br>
+> 基线：`feat/ai-town-product`（以分支 HEAD 为准），上游基线 `origin/main@8df14cca`<br>
 > 研究与代码复核日期：2026-09-06
 
 ## 1. Executive Decision
@@ -28,7 +28,7 @@
 | 运行 | 共用 session/event/checkpoint、命令幂等、state hash、分支 | 增加 AI 小镇状态、事件、reducer、命令 API；不新建第二套 session 表 |
 | 角色互动 | 已有 profile、scene、message、knowledge、memory、relationship | 可复用对话子能力与类型思想；小镇拥有独立长期状态和事件命名空间 |
 | AI/Harness | 生产已有正式 Harness；角色互动已有运行调用路径 | 新建 AI 小镇运行 Skill/Run Contract；任何候选必须经 parser 与裁决 |
-| 当前完成度 | E-TOWN-01 为 partial | 冻结来源到发布、六时段地图/日程、行动、知识隔离、关系、轻经营、离线推进、重大变化确认、存档分支和 UI 已形成纵切面；真实长期内容、专属媒资、自治导演和商业验收仍需专项推进 |
+| 当前完成度 | E-TOWN-01 为 partial | 冻结来源到发布、六时段地图/日程、行动、知识隔离、对话记忆、关系、轻经营、离线推进、重大变化确认、存档分支、14 日确定性演化、自治导演 Harness、专属媒资生产/装配、玩家 UI 与浏览器旅程 E2E 已形成纵切面；真实模型长期体验、真实 provider 媒资质量与非 fixture 商业验收仍需专项推进 |
 
 禁止复用身份：`CharacterInteractionProductRuntimePackageV1`、`OpenWorldContentV1`、其 Brief、Session kind、Source role bindings 均不能作为 AI 小镇的正式合同。允许组合的是共享底层机制和角色互动领域函数。
 
@@ -111,7 +111,7 @@ stateDiagram-v2
   DayReview --> Morning: 无重大候选
 ```
 
-玩家可只聊天，也可送礼、做饭/照料、共同劳动、观察群体活动或休息。每种行动必须消耗时段或精力，并产生可审计事件；“聊天”不得成为免费无限刷关系按钮。
+玩家可只聊天，也可送礼、做饭/照料、共同劳动、观察群体活动或休息。主动行动必须消耗时段或精力并产生可审计事件；自由对话可保持多轮，但同一居民每日首次有效接触之后不再重复增加关系，不能成为免费无限刷关系按钮。
 
 ## 7. World Data Requirement Matrix
 
@@ -254,7 +254,7 @@ flowchart TD
 
 ## 12. Media Plan and Ownership
 
-MVP required：6 张角色主肖像、每人 2–4 个表情差分或文字降级、4 张地点卡、1 张与语义拓扑一致的可点击 2D 地图底图、日历图标。Optional：共同项目阶段图、节庆插图、环境音。Deferred：全语音、视频、3D、连续像素动画。
+MVP required：每名入选居民 1 张主肖像、可选每人 1 张首发表情差分、每个主要地点 1 张地点卡，以及始终可用的语义拓扑地图；全部允许文字/首字占位降级。Optional：共同项目阶段图、更多表情、节庆插图、环境音。Deferred：全语音、视频、3D、连续像素动画。当前生产器按 `location → portrait → expression` 冻结 artifactKey、sceneTag、尺寸和角色锚点，模型不能交换媒资用途。
 
 所有媒资归 Product Build/Release，不进入 WorldRelease。生成顺序是视觉 bible → 角色身份基准 → 地点/地图 → 表情与项目阶段 → 完整性/权利检查。`assetKey` 与 `blobContentHash` 进入冻结包；object URL、本地 row id、provider credential 不进入。纯文字 fallback 必须完整可玩，地图退化为可访问的地点列表与路线描述。
 
@@ -377,7 +377,7 @@ P4 扩展门：14 日 eval 达标、经营相关事件的有效率 ≥ 70%、用
 | 治理面 | 新增/复用 | 约束 |
 |---|---|---|
 | AI 读 | 新增 `aiTownRuntime`；复用 `product-production.brief/artifact-inputs/quality-feedback` 和 WorldRelease Gateway | 只能由 `assembleContext()` 读取；按角色权限过滤秘密 |
-| AI 写 | 当前复用严格 `character-reply` 候选并登记 AI 小镇专属 Skill；后续 Director 的 intent/event/memory/reflection/digest 各自建立产品合同 | 普通 runtime 结果只能经命令裁决写产品事件；世界回写候选才进入 FIELD_REGISTRY/adopt，当前绝不回写世界 |
+| AI 写 | `character.ai-town-reply` 与 `prose.ai-town-director` 均先冻结候选；对话候选采用后再由证据化命令整合共享记忆，Director 候选只能解析为事件 seed 或待确认重大变化 | 普通 runtime 结果只能经命令裁决写产品事件；世界回写候选才进入 FIELD_REGISTRY/adopt，当前绝不回写世界 |
 | 表 | 优先复用 productProductions/builds/artifacts/releases/runtimeSessions/events/checkpoints/agentRuns/creativeArtifacts | 若后续新增向量/大规模记忆表，先入 PROJECT_TABLES 再做 schema、迁移、导出导入删除 scope/remap |
 | 生命周期 | Build/Release 不可变；runtime event canonical，head/checkpoint 派生 | 导入重映射本地 ids，不改变 portable hash；删产品实例按 registry 闭包删除 |
 
@@ -415,10 +415,10 @@ MVP 不新增 Dexie 表。小镇定义放冻结 RuntimePackage；运行事件放
 
 | 阶段 | 可玩结果 | 串行提交/PR | 可并行项 |
 |---|---|---|---|
-| P0 | 合同可编译，架构测试 fail-closed | 1 架构文档；2 shared identity/registry closure；3 ai-town types/parsers | 研究/eval fixtures |
-| P1 | 无 AI 也可玩 3 日：地图、日程、行动、关系、资源、项目 | 4 deterministic runtime/reducer；5 compiler/release；6 基础 UI | 视觉占位资产 |
-| P2 | 14 日 MVP：LifeThread、秘密、群体事件、离线 3 日、每日回顾 | 7 AI/Harness；8 knowledge/memory/cadence；9 offline durable batch；10 E2E | eval 数据集与 UX 打磨 |
-| P3 | 商业候选：正式媒资、质量/权利/成本/性能门 | 11 media lane；12 commercial receipts | 模型/媒体 provider 验证 |
+| P0 | 合同可编译，架构测试 fail-closed | 已完成：架构文档、identity/registry closure、类型与严格 parser | 研究/eval fixtures |
+| P1 | 无 AI 也可玩 3 日：地图、日程、行动、关系、资源、项目 | 已完成：deterministic runtime/reducer、compiler/release、基础 UI | 视觉占位资产已接生产 lane |
+| P2 | 14 日 MVP：LifeThread、秘密、群体事件、离线 3 日、每日回顾 | 工程纵切面完成：专属回复与 Director Harness、knowledge/memory/cadence、离线批次、14 日回放和玩家 UI；真实模型质量门待验 | eval 数据集与 UX 打磨 |
+| P3 | 商业候选：正式媒资、质量/权利/成本/性能门 | media lane、冻结语义绑定、Build/Release resolver 已完成；真实 provider、肖像一致性、性能/权利回执待验 | 模型/媒体 provider 验证 |
 | P4 | 经营扩展 | 独立农业/制造/商店 RFC 与迁移 | 内容包 |
 | P5 | 云同步、分享/市场、可选托管离线 | 等平台阶段合同 | 安全与版权审计 |
 
@@ -445,19 +445,21 @@ MVP 不新增 Dexie 表。小镇定义放冻结 RuntimePackage；运行事件放
 
 没有阻塞 P0–P2 的产品负责人问题。采用以下默认值并允许以后在 Brief 修改：玩家名为“新居民”、每天 3 次主动行动、关系不显示精确数字、浪漫默认关闭、少量环境音默认关闭、共同项目由 3 个候选中确认一个。
 
-P3 前需要真实测试决定：6 人上下文的模型分档与日成本；表情差分是否带来足够体验增益；商业候选最低可接受的肖像一致性。P4 前按第 17 节指标裁决是否进入完整经营。P5 必须等待平台总纲能力，不提前建立云表或跨产品市场协议。
+P3 商业放行前仍需要真实测试决定：6 人上下文的模型分档与日成本；表情差分是否带来足够体验增益；商业候选最低可接受的肖像一致性。P4 前按第 17 节指标裁决是否进入完整经营。P5 必须等待平台总纲能力，不提前建立云表或跨产品市场协议。
 
-## 25. Implemented Vertical Slice and Next Gate
+## 25. Implemented Vertical Slices and Next Gate
 
-本分支已按下列顺序完成首个不跨边界纵切片：
+本分支已按下列顺序完成不跨边界的本地优先产品闭环：
 
 1. 扩展 `product-identity.ts`、产品目录/surface、Source requirement adapter，使 `ai-town` 成为正式但仍 preview-gated 的独立产品。
 2. 新建 `types/ai-town.ts`，实现 Brief、source selection、runtime content/state/event candidate 的严格 parser 与图闭包校验。
 3. 在 `ProductProductionBriefV3` 与 RuntimePackage 添加精确 `aiTown`/`town` 联合约束；扩展 compiler、package parser、quality gates。
 4. 新建 `lib/ai-town/runtime.ts`、`runtime-commands.ts`、`runtime-api.ts`：确定性 6 时段、移动/在场、行动、关系/知识、资源/项目、日结、离线最多 3 日。
 5. 接入共享 runtime composition root、instance factory、event closed set、checkpoint/branch 验证。
-6. 登记 `aiTownRuntime` 与 `character.ai-town-reply` 正式 AI 入口；实现候选式对话，provider 不可用时明确只保存玩家消息、不伪造回复。自治 intent/event/memory/reflection/digest 仍属于后续 Director 专项。
-7. 新建 `AiTownPanel.tsx` 与样式：语义 2D 地图、现场、行动、生活面板、日回顾、离线审阅；接 Product Hub 独立 tab。
-8. 添加 parser/reducer/source/release/lifecycle/UI 正反例并接入项目验证；非 fixture 浏览器长期体验、产品专属媒资和商业性能/权利验收继续由 P3 gate 管理。
+6. 登记 `aiTownRuntime`、`character.ai-town-reply`、`aiTownDirectorRuntime` 与 `prose.ai-town-director` 正式 AI 入口；对话提交后形成带事件证据的居民共享记忆，Director 只能采用当前事件闭集或提出待确认重大候选。
+7. Director 采用单调用 durable Harness、Context Manifest、checkpoint、stale hash、幂等 runtime command、adoption 与终验回执；不读取居民 private/secret 知识。重大变化第 7 日前禁止提出，且同一时间只能有一个 pending 候选。
+8. 轻经营行动真实结算精力、货币和 1–3 类资源，共同项目完成后形成里程碑并改变居民长期目标；每个居民都有可触发事件 seed，低保真 NPC–NPC 关系和 LifeThread 在日结/离线批次推进。
+9. AI 小镇进入专属 media profile：地点卡、居民主肖像、可选表情和环境音经现有 content-addressed media lane 生产，以 SourceSelection 中的便携居民 ID 固定角色锚点并装入同一个 Build/ProductRelease；玩家面按冻结 sceneTag/角色锚点解析，失败时完整降级为文字。
+10. 添加 parser/reducer/source/release/lifecycle/director/14 日 longevity/媒资生产/玩家 UI 正反例，并增加从冻结 Build 进入小镇、对话、行动、离线日结、检查点、分支、刷新恢复、移动端宽度及世界哈希不变的浏览器 E2E。Build Preview 与 ProductRelease 新存档均调用 AI 小镇自己的首场景启动钩子。E-TOWN-01 仍保持 `partial`，直到真实模型长期角色一致性、真实图片/音频 provider、权利/成本/性能回执和非 fixture 浏览器体验达到第 5、20、21 节门槛。
 
 受影响的共享文件限定为 product identity/catalog、三注册表、公共生产/发布/运行 composition roots 和导出类型；AI 小镇专属规则全部留在 `src/lib/ai-town`、`src/lib/types/ai-town.ts`、`src/components/ai-town`。任何实现若要求修改 WorldRelease 正式出口、自动回写世界或建立跨产品公共经营层，应停止并单独报告。

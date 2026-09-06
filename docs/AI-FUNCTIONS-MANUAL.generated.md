@@ -80,7 +80,7 @@
 
 ## 二、上下文源清单（CONTEXT_SOURCES · AI 读什么）
 
-共 82 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
+共 83 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
 
 | key | 标签 | 作用域 | 层级 | 预算(token) |
 |---|---|---|---|---|
@@ -103,6 +103,7 @@
 | `openWorldRuntime` | 文字开放世界玩家视角 | runtime | L0 | 8000 |
 | `interactionRuntime` | 角色互动单一视角 | runtime | L0 | 8000 |
 | `aiTownRuntime` | 后日谈 AI 小镇居民单一视角 | runtime | L0 | 8000 |
+| `aiTownDirectorRuntime` | 后日谈 AI 小镇导演公开运行视角 | runtime | L0 | 10000 |
 | `productRuntime` | 冻结运行时状态 | runtime | L0 | 8000 |
 | `workStatus` | 作品概况 | project | L2 | 1200 |
 | `worldGroups` | 世界组目录 | project | L2 | 1500 |
@@ -263,7 +264,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ## 四、AI 调用点（消耗统计 category · 在哪触发)
 
-共 41 个 category。
+共 42 个 category。
 未分类调用: 0 个。动态 category 调用: 34 个。
 
 | category | 触发文件 |
@@ -303,6 +304,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `review.quality` | `src/components/editor/ReviewPanel.tsx:112` |
 | `review.readability` | `src/components/editor/ReviewPanel.tsx:133` |
 | `review.revise` | `src/components/editor/ChapterEditor.tsx:1711` |
+| `runtime.prose.ai-town-director` | `src/lib/ai-town/director-harness.ts:266` |
 | `runtime.ttrpg-player` | `src/lib/ttrpg/player-harness.ts:298` |
 | `scene.verify` | `src/components/scene/SceneVerifyPanel.tsx:81` |
 | `story.timeline` | `src/lib/agent/run/impact-story-timeline-regeneration-durable.ts:670`<br/>`src/lib/agent/run/story-timeline-extraction-durable.ts:758` |
@@ -392,4 +394,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `b1706281`
+生成时间基准:commit `ee93e27e`
