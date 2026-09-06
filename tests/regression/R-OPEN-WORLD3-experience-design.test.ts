@@ -98,6 +98,12 @@ import {
   type TextOpenWorldNpcRuntimeInputContextV1,
   type TextOpenWorldNpcRuntimeModelRunnerV1,
 } from '../../src/lib/open-world/npc-runtime-catalog-production'
+import {
+  createTextOpenWorldMapInteractionCatalogExecutorV1,
+  validateTextOpenWorldMapInteractionCatalogV1,
+  type TextOpenWorldMapInteractionInputContextV1,
+  type TextOpenWorldMapInteractionModelRunnerV1,
+} from '../../src/lib/open-world/map-interaction-catalog-production'
 import { TEXT_OPEN_WORLD_EFFECT_OPERATIONS_V1 } from '../../src/lib/types/text-open-world-effect'
 import type {
   TextOpenWorldGameplayRulesetSkeletonV1,
@@ -112,6 +118,7 @@ import type {
   TextOpenWorldItemRewardCatalogV1,
   TextOpenWorldCraftingEconomyCatalogV1,
   TextOpenWorldNpcRuntimeCatalogV1,
+  TextOpenWorldMapInteractionCatalogV1,
   TextOpenWorldSignificantThreadsV1,
 } from '../../src/lib/types'
 import {
@@ -2123,6 +2130,80 @@ async function executeNpcRuntime(
   })
 }
 
+function mapInteractionRunner(options: {
+  omitInteraction?: boolean
+  invalidKind?: boolean
+  invalidLocation?: boolean
+  duplicateTitle?: boolean
+  prematureField?: boolean
+} = {}): TextOpenWorldMapInteractionModelRunnerV1 {
+  return async input => {
+    const context = JSON.parse(input.contextText) as TextOpenWorldMapInteractionInputContextV1
+    const interactions = context.interactionDemands.map((demand, index) => {
+      const forbiddenKind = (
+        ['observe', 'investigate', 'explore', 'service', 'crafting']
+          .find(kind => !demand.candidateKinds.includes(kind as typeof demand.candidateKinds[number]))
+        ?? 'invalid-kind'
+      ) as typeof demand.candidateKinds[number]
+      return {
+        demandNumber: demand.demandNumber,
+        title: options.duplicateTitle ? '重复交互' : `${demand.title}${index + 1}`,
+        description: `${demand.description}该交互在提前到达时只表现地点常态，不自动推进故事。`,
+        playerPrompt: `在此${demand.candidateKinds[0] === 'observe' ? '观察周围' : '进行互动'}`,
+        kind: options.invalidKind && index === 0 ? forbiddenKind : demand.candidateKinds[0],
+        locationNumber: options.invalidLocation && index === 0 ? demand.candidateLocationKeys.length + 1 : 1,
+        ...(options.prematureField && index === 0 ? { questKey: 'quest.forged' } : {}),
+      }
+    })
+    return {
+      output: JSON.stringify({
+        schema: 'storyforge.text-open-world-map-interaction-draft', version: 1,
+        interactions: options.omitInteraction ? interactions.slice(0, -1) : interactions,
+      }),
+      bindingReceipt: bindingReceipt(input.requirementKey), usage: null,
+    }
+  }
+}
+
+async function mapInteractionFixture() {
+  const input = await questSkeletonsFixture()
+  const questResult = await executeQuestSkeletons(input)
+  await acceptTaskArtifacts(input, questResult.artifacts, 'P8-quest-skeletons')
+  const plan = await createTextOpenWorldProductionPlanV1({
+    buildNumber: input.build.buildNumber, controlEpoch: input.build.controlEpoch,
+    briefHash: input.briefRow.briefHash, brief: input.brief,
+  })
+  const task = plan.tasks.find(item => item.taskKey === 'p8.catalog.map-interactions')!
+  const assembled = await assembleContext({
+    projectId: input.scope.projectId, scope: input.scope,
+    sourceKeys: ['text-open-world.map-interaction-input'],
+    productProductionId: input.production.id!, productBuildId: input.build.id!,
+    inputBudgetMaxTokens: task.budgetReservation.inputTokens,
+  })
+  return {
+    ...input, task, mapInteractionContextText: assembled.text,
+    mapInteractionContext: JSON.parse(assembled.text) as TextOpenWorldMapInteractionInputContextV1,
+    mapInteractionContextEvidence: assembled.sourceEvidence,
+  }
+}
+
+async function executeMapInteraction(
+  input: Awaited<ReturnType<typeof mapInteractionFixture>>,
+  runModel: TextOpenWorldMapInteractionModelRunnerV1 = mapInteractionRunner(),
+) {
+  return createTextOpenWorldMapInteractionCatalogExecutorV1({ runModel, now: () => NOW + 18 })({
+    scope: input.scope, productionId: input.production.id!, buildId: input.build.id!,
+    buildNumber: input.build.buildNumber, controlEpoch: input.build.controlEpoch,
+    planHash: input.planHash, task: input.task, attempt: 1,
+    idempotencyKey: await hashProductProductionValueV2('p8-map-interaction'),
+    contextText: input.mapInteractionContextText, inputArtifacts: [],
+    capabilityBindings: input.task.capabilityRequirementKeys.map(requirementKey => ({
+      requirementKey, bindingHash: CAPABILITY_HASH, adapterId: 'configured-text.v1',
+    })),
+    signal: new AbortController().signal,
+  })
+}
+
 describe('R-OPEN-WORLD3 · P2 GameBrief / ExperienceContract / ProtagonistAsset', () => {
   beforeEach(async () => { await db.delete(); await db.open() })
   afterAll(() => db.close())
@@ -3537,4 +3618,94 @@ describe('R-OPEN-WORLD3 · P8 NpcRuntimeCatalog', () => {
     await expect(validateTextOpenWorldNpcRuntimeCatalogV1({ artifact, context: input.npcRuntimeContext }))
       .rejects.toThrow(/角色层级、保护、日程、关系或服务连续性被篡改/)
   }, 240_000)
+})
+
+describe('R-OPEN-WORLD3 · P8 MapInteractionCatalog', () => {
+  beforeEach(async () => { await db.delete(); await db.open() })
+  afterAll(() => db.close())
+
+  it('把完整地图和地点需求编译为可点击交互、程序SVG节点与提前到达安全目录', async () => {
+    const input = await mapInteractionFixture()
+    expect(CONTEXT_SOURCE_BY_KEY.get('text-open-world.map-interaction-input')).toMatchObject({
+      layer: 'L0', ownerFrom: 'work', protectedFromTrim: true,
+    })
+    expect(getAgentSkillV1('text-open-world.production.map-interaction-catalog.v1')).toMatchObject({
+      contextSourceKeys: ['text-open-world.map-interaction-input'],
+      writeTargets: [{ table: 'productBuildArtifacts', fields: ['payloadJson'] }],
+    })
+    expect(input.mapInteractionContextEvidence).toEqual([
+      expect.objectContaining({ key: 'text-open-world.map-interaction-input', status: 'included', delivery: 'full' }),
+    ])
+    expect(input.mapInteractionContext.interactionDemands).toHaveLength(9)
+
+    const result = await executeMapInteraction(input)
+    const artifact = result.artifacts[0]!.payload as TextOpenWorldMapInteractionCatalogV1
+    expect(result.passedGateIds).toEqual(input.task.acceptanceGateIds)
+    expect(result.usage).toMatchObject({ modelCalls: 1, mediaCalls: 0 })
+    expect(artifact.regions).toHaveLength(2)
+    expect(artifact.locations).toHaveLength(8)
+    expect(artifact.fastTravelPoints).toHaveLength(2)
+    expect(artifact.interactions).toHaveLength(9)
+    expect(artifact.mapLayout).toMatchObject({
+      coordinateSystem: 'normalized-1000', width: 1000, height: 700, source: 'deterministic-fallback',
+    })
+    expect(artifact.mapLayout.locationNodes).toHaveLength(8)
+    expect(new Set(artifact.mapLayout.locationNodes.map(node => `${node.x}:${node.y}`)).size).toBe(8)
+    expect(new Set(artifact.coverage.coveredRegionKeys)).toEqual(new Set(artifact.coverage.requiredRegionKeys))
+    expect(new Set(artifact.coverage.coveredLocationKeys)).toEqual(new Set(artifact.coverage.requiredLocationKeys))
+    expect(new Set(artifact.coverage.coveredEdgeKeys)).toEqual(new Set(artifact.coverage.requiredEdgeKeys))
+    expect(new Set(artifact.coverage.coveredFastTravelPointKeys)).toEqual(new Set(artifact.coverage.requiredFastTravelPointKeys))
+    expect(new Set(artifact.coverage.coveredLocationInteractionRequirementKeys))
+      .toEqual(new Set(artifact.coverage.requiredLocationInteractionRequirementKeys))
+    expect(artifact.coverage.protectedQuestKeysWithArrivalSafeInteractions).toEqual(artifact.coverage.protectedQuestKeys)
+    expect(artifact.coverage.unreachableLocationKeys).toEqual([])
+    expect(artifact.locations.every(location => location.interactionKeys.length > 0)).toBe(true)
+    expect(artifact.interactions.every(interaction => interaction.earlyArrivalSafe
+      && !interaction.startsQuestOnArrival
+      && interaction.runtimeBinding.status === 'runtime-unbound'
+      && interaction.runtimeBinding.questKeys.length === 0)).toBe(true)
+    expect(artifact.fastTravelPoints.filter(point => point.unlockedByDefault)).toHaveLength(1)
+    expect(artifact.fastTravelPoints.filter(point => !point.unlockedByDefault)
+      .every(point => point.unlockPolicy === 'first-visit')).toBe(true)
+    expect(artifact.travelPolicy).toMatchObject({
+      ordinaryTravelAdvancesWorldTime: true, ordinaryTravelMayBeInterrupted: false,
+      fastTravelRequiresVisitedDestination: true, travelResourceConsumption: 'none',
+    })
+    expect(artifact.governance).toMatchObject({
+      completeMapAtBuild: true, progressiveKnowledge: true, allLocationsConnected: true,
+      everyRegionHasFastTravelPoint: true, arrivalNeverSoleCriticalTrigger: true,
+      earlyArrivalAlwaysSafe: true, topologyOwner: 'deterministic-compiler',
+      allRuntimeBindingsUnbound: true, worldAndActionModulesReady: false,
+    })
+    await expect(validateTextOpenWorldMapInteractionCatalogV1({ artifact, context: input.mapInteractionContext }))
+      .resolves.toEqual(artifact)
+  }, 180_000)
+
+  it('拒绝地点交互漏项、非法类型、越界地点、同名交互和模型越权Quest字段', async () => {
+    const input = await mapInteractionFixture()
+    await expect(executeMapInteraction(input, mapInteractionRunner({ omitInteraction: true })))
+      .rejects.toThrow(/interactions必须与9项需求一一对应/)
+    await expect(executeMapInteraction(input, mapInteractionRunner({ invalidKind: true })))
+      .rejects.toThrow(/不在允许闭集/)
+    await expect(executeMapInteraction(input, mapInteractionRunner({ invalidLocation: true })))
+      .rejects.toThrow(/locationNumber必须是/)
+    await expect(executeMapInteraction(input, mapInteractionRunner({ duplicateTitle: true })))
+      .rejects.toThrow(/interactions必须按序覆盖且标题不得重复/)
+    await expect(executeMapInteraction(input, mapInteractionRunner({ prematureField: true })))
+      .rejects.toThrow(/字段不精确/)
+  }, 180_000)
+
+  it('拒绝重算Hash后改写道路、坐标、快旅解锁、到达触发或注入运行Action', async () => {
+    const input = await mapInteractionFixture()
+    const artifact = structuredClone((await executeMapInteraction(input)).artifacts[0]!.payload as TextOpenWorldMapInteractionCatalogV1)
+    artifact.edges[0]!.travelMinutes += 999
+    artifact.mapLayout.locationNodes[0]!.x += 100
+    artifact.fastTravelPoints[1]!.unlockedByDefault = true
+    artifact.interactions[0]!.startsQuestOnArrival = true as false
+    artifact.interactions[0]!.runtimeBinding.actionKey = 'action.forged' as null
+    const { mapInteractionCatalogHash: _hash, ...body } = artifact
+    artifact.mapInteractionCatalogHash = await hashProductProductionValueV2(body)
+    await expect(validateTextOpenWorldMapInteractionCatalogV1({ artifact, context: input.mapInteractionContext }))
+      .rejects.toThrow(/拓扑、坐标、交互、旅行、快旅或提前到达保护被篡改/)
+  }, 180_000)
 })

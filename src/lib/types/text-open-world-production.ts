@@ -2302,6 +2302,144 @@ export interface TextOpenWorldNpcRuntimeCatalogV1 {
   npcRuntimeCatalogHash: string
 }
 
+/** P8 spatial/runtime interaction catalog candidate. Topology is copied from
+ * RegionSkeleton; the model cannot add map nodes, roads or quest triggers. */
+export interface TextOpenWorldMapInteractionCatalogV1 {
+  schema: 'storyforge.text-open-world-map-interaction-catalog'
+  version: 1
+  productType: 'text-open-world'
+  productInstanceKey: string
+  regionSkeletonHash: string
+  regionNarrativePacksHash: string
+  questSkeletonsHash: string
+  contentRequirementManifestHash: string
+  initialRegionKey: string
+  initialLocationKey: string
+  regions: Array<{
+    key: string
+    order: number
+    title: string
+    description: string
+    theme: string
+    locationKeys: string[]
+    fastTravelPointKey: string
+    initialKnowledge: 'unknown' | 'visited'
+    sourceRefs: string[]
+    presentationRefs: []
+  }>
+  locations: Array<{
+    key: string
+    regionKey: string
+    order: number
+    title: string
+    description: string
+    kind: TextOpenWorldLocationKindV1
+    purpose: string
+    functions: TextOpenWorldLocationFunctionV1[]
+    earlyArrivalDescription: string
+    initialKnowledge: 'unknown' | 'visited'
+    interactionKeys: string[]
+    sourceRefs: string[]
+    presentationRefs: []
+  }>
+  edges: Array<{
+    key: string
+    fromLocationKey: string
+    toLocationKey: string
+    bidirectional: true
+    travelMinutes: number
+    description: string
+    riskProfile: 'safe' | 'ordinary' | 'dangerous'
+    sourceRefs: string[]
+    runtimeBinding: {
+      status: 'runtime-unbound'
+      forwardActionKey: null
+      reverseActionKey: null
+      conditionKeys: []
+      effectKeys: []
+    }
+  }>
+  fastTravelPoints: Array<{
+    key: string
+    regionKey: string
+    locationKey: string
+    unlockedByDefault: boolean
+    unlockPolicy: 'initial' | 'first-visit'
+    canRespawn: true
+    runtimeBinding: { status: 'runtime-unbound'; unlockEffectKey: null }
+  }>
+  interactions: Array<{
+    key: string
+    order: number
+    sourceDemandKey: string
+    title: string
+    description: string
+    playerPrompt: string
+    kind: 'observe' | 'investigate' | 'explore' | 'service' | 'crafting'
+    regionKey: string
+    locationKey: string
+    requiredFunctions: TextOpenWorldLocationFunctionV1[]
+    questConsumerKeys: string[]
+    fulfilledRequirementKeys: string[]
+    earlyArrivalSafe: true
+    startsQuestOnArrival: false
+    runtimeBinding: {
+      status: 'runtime-unbound'
+      actionKey: null
+      sceneKey: null
+      conditionKeys: []
+      effectKeys: []
+      questKeys: []
+    }
+  }>
+  mapLayout: {
+    version: 1
+    coordinateSystem: 'normalized-1000'
+    width: 1000
+    height: 700
+    source: 'deterministic-fallback'
+    locationNodes: Array<{ locationKey: string; x: number; y: number }>
+  }
+  travelPolicy: {
+    ordinaryTravelAdvancesWorldTime: true
+    ordinaryTravelMayBeInterrupted: false
+    fastTravelRequiresVisitedDestination: true
+    fastTravelAdvancesWorldTime: true
+    travelResourceConsumption: 'none'
+  }
+  coverage: {
+    requiredRegionKeys: string[]
+    coveredRegionKeys: string[]
+    requiredLocationKeys: string[]
+    coveredLocationKeys: string[]
+    requiredEdgeKeys: string[]
+    coveredEdgeKeys: string[]
+    requiredFastTravelPointKeys: string[]
+    coveredFastTravelPointKeys: string[]
+    requiredLocationInteractionRequirementKeys: string[]
+    coveredLocationInteractionRequirementKeys: string[]
+    protectedQuestKeys: string[]
+    protectedQuestKeysWithArrivalSafeInteractions: string[]
+    unreachableLocationKeys: []
+    uncoveredDemandKeys: []
+  }
+  governance: {
+    completeMapAtBuild: true
+    progressiveKnowledge: true
+    allLocationsConnected: true
+    everyRegionHasFastTravelPoint: true
+    arrivalNeverSoleCriticalTrigger: true
+    earlyArrivalAlwaysSafe: true
+    topologyOwner: 'deterministic-compiler'
+    interactionSemanticsOwner: 'model-validated'
+    allRuntimeBindingsUnbound: true
+    worldAndActionModulesReady: false
+  }
+  basisHash: string
+  createdAt: number
+  mapInteractionCatalogHash: string
+}
+
 export const TEXT_OPEN_WORLD_PRODUCTION_STAGES_V1 = [
   'P0', 'P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8', 'P8F', 'P9', 'P10',
   'V1', 'V2', 'V3', 'QA',

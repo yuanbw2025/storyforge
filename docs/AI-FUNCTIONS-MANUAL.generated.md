@@ -80,7 +80,7 @@
 
 ## 二、上下文源清单（CONTEXT_SOURCES · AI 读什么）
 
-共 101 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
+共 102 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
 
 | key | 标签 | 作用域 | 层级 | 预算(token) |
 |---|---|---|---|---|
@@ -108,6 +108,7 @@
 | `text-open-world.item-reward-catalog-input` | 文字开放世界物品与奖励目录生产输入 | project | L0 | 100000 |
 | `text-open-world.crafting-economy-input` | 文字开放世界配方与经济目录生产输入 | project | L0 | 100000 |
 | `text-open-world.npc-runtime-input` | 文字开放世界NPC运行规则目录生产输入 | project | L0 | 100000 |
+| `text-open-world.map-interaction-input` | 文字开放世界地图交互目录生产输入 | project | L0 | 100000 |
 | `product-production.quality-feedback` | 上层产品生产质量反馈 | project | L1 | 6000 |
 | `product-production.repair-feedback` | 当前制作任务的失败草稿与校验意见 | project | L1 | 12000 |
 | `product-production.evolution-base` | 游戏持续演化基线 | project | L0 | 12000 |
@@ -412,4 +413,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `96d28070`
+生成时间基准:commit `50b70480`
