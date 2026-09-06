@@ -3,6 +3,7 @@ import { inspectAdaptationFreshness } from '../adaptation/source-manifest'
 import { hashCanonicalValue } from '../agent/run/hash'
 import { db } from '../db/schema'
 import type {
+  AdaptationProject,
   AIConfig,
   ComicMediaAsset,
   ComicMediaAssetRole,
@@ -37,6 +38,130 @@ function roleForSubject(subject: ComicVisualSubject): ComicMediaAssetRole {
   if (subject.kind === 'location') return 'location-sheet'
   if (subject.kind === 'prop') return 'prop-sheet'
   return 'style-reference'
+}
+
+function promptList(label: string, values: string[]): string {
+  return values.length ? `${label}: ${values.join(', ')}` : ''
+}
+
+function subjectStudyPlan(kind: ComicVisualSubject['kind']): string {
+  if (kind === 'character') return 'Show the exact same character in front, three-quarter, profile, and full-body turnaround views, plus two controlled expression or identifying-detail studies.'
+  if (kind === 'location') return 'Show the exact same location in an establishing view, reverse view, key approach, functional interior angle, and material or landmark detail. Preserve one coherent floor plan, scale, entrances, and landmarks across every view.'
+  if (kind === 'prop') return 'Show the exact same prop in front, side, rear, and three-quarter orthographic views, plus one in-use scale view and one construction or mechanism detail.'
+  return 'Show one coherent visual language applied to the same neutral narrative motif at wide, medium, and close-up scale, plus line, value, texture, and palette studies. Preserve one consistent finish rather than unrelated samples.'
+}
+
+function subjectCandidateSize(kind: ComicVisualSubject['kind']): { width: 1024 | 1536; height: 1024 | 1536 } {
+  return kind === 'character' ? { width: 1024, height: 1536 } : { width: 1536, height: 1024 }
+}
+
+export function compileComicPanelImagePromptV2(input: {
+  root: AdaptationProject
+  pagePanels: ComicPanel[]
+  panel: ComicPanel
+  subjects: ComicVisualSubject[]
+}): string {
+  if (!input.root.visualBible) throw new Error('[media] 缺少已确认视觉圣经')
+  const sorted = [...input.pagePanels].sort((left, right) => left.order - right.order)
+  const index = sorted.findIndex(row => row.stableKey === input.panel.stableKey)
+  const previous = index > 0 ? sorted[index - 1] : null
+  const next = index >= 0 ? sorted[index + 1] ?? null : null
+  const subjectKeys = new Set([
+    ...(input.panel.subjectStates ?? []).map(row => row.subjectKey),
+    ...(input.panel.continuityRefs ?? []).map(row => row.subjectKey),
+  ])
+  const subjectByKey = new Map(input.subjects.map(subject => [subject.stableKey, subject]))
+  const subjectBlocks = [...subjectKeys].map(key => {
+    const subject = subjectByKey.get(key)
+    const state = input.panel.subjectStates?.find(row => row.subjectKey === key)
+    const continuity = input.panel.continuityRefs?.find(row => row.subjectKey === key)
+    if (!subject) return ''
+    return [
+      `- ${subject.kind.toUpperCase()} ${subject.label} [${subject.stableKey}]`,
+      `  identity: ${subject.design.description}`,
+      subject.design.silhouette ? `  silhouette: ${subject.design.silhouette}` : '',
+      subject.design.facialFeatures ? `  face: ${subject.design.facialFeatures}` : '',
+      subject.design.hairAndCostume ? `  canonical hair/costume: ${subject.design.hairAndCostume}` : '',
+      promptList('  distinguishing marks', subject.design.distinguishingMarks),
+      promptList('  materials', subject.design.materials),
+      promptList('  never change', subject.design.prohibitedChanges),
+      state ? `  this panel state: costume=${state.costume || 'canonical'}; condition=${state.condition || 'unchanged'}; props=${state.props.join(', ') || 'none'}; position=${state.position || 'as composed'}` : '',
+      continuity?.note ? `  continuity lock: ${continuity.note}` : '',
+    ].filter(Boolean).join('\n')
+  }).filter(Boolean)
+  const protectedAreas = (input.panel.protectedAreas ?? []).map((frame, protectedIndex) => `- area ${protectedIndex + 1}: x=${frame.x.toFixed(3)}, y=${frame.y.toFixed(3)}, width=${frame.width.toFixed(3)}, height=${frame.height.toFixed(3)}`)
+  const prompt = [
+    'PRODUCTION TASK: FINISHED SEQUENTIAL ART COMIC PANEL',
+    'Create one polished, publication-ready comic panel, not a concept sheet, storyboard collage, poster, cover, or multi-panel page.',
+    '',
+    'FROZEN STORY MOMENT',
+    `Narrative function: ${input.panel.narrativeFunction || 'story progression'}`,
+    `Depict exactly one frozen instant: ${input.panel.moment || input.panel.action}`,
+    `Visible action: ${input.panel.action}`,
+    '',
+    'CAMERA AND COMPOSITION',
+    `Shot: ${input.panel.shot.size}; angle: ${input.panel.shot.angle}; camera energy: ${input.panel.shot.movement}`,
+    `Composition contract: ${input.panel.shot.composition || 'clear focal hierarchy with readable silhouettes'}`,
+    `Panel aspect ratio: ${(input.panel.frame.width / input.panel.frame.height).toFixed(3)}:1; compose for this exact crop, with foreground, midground, and background separation where appropriate.`,
+    `Reading direction: ${input.root.targetSpec.readingDirection.toUpperCase()}. Lead the eye toward the next panel without adding arrows or interface graphics.`,
+    `Target finish: ${input.root.targetSpec.colorMode}; ${input.root.targetSpec.artStyleBrief}.`,
+    '',
+    'PANEL SEQUENCE CONTEXT — continuity only, do not combine moments',
+    `Previous panel: ${previous ? previous.moment || previous.action : 'page opening'}`,
+    `Next panel: ${next ? next.moment || next.action : 'page ending'}`,
+    '',
+    'LOCKED SUBJECT IDENTITIES',
+    subjectBlocks.join('\n') || '- No registered subject; follow the frozen story moment.',
+    '',
+    'LETTERING SAFE AREAS',
+    protectedAreas.join('\n') || '- No reserved lettering area.',
+    protectedAreas.length ? 'Keep these normalized regions calm and low-detail for local lettering, but do not draw empty balloons or boxes.' : '',
+    '',
+    'STYLE BIBLE',
+    `Art direction: ${input.root.visualBible.artDirection}`,
+    `Linework: ${input.root.visualBible.linework}`,
+    promptList('Palette', input.root.visualBible.palette),
+    `Lighting: ${input.root.visualBible.lighting}`,
+    `Period and materials: ${input.root.visualBible.periodAndMaterials}`,
+    promptList('Camera language', input.root.visualBible.cameraLanguage),
+    promptList('Forbidden depictions', input.root.visualBible.prohibitedDepictions),
+    input.panel.visualPrompt ? `Panel-specific direction: ${input.panel.visualPrompt}` : '',
+    '',
+    'OUTPUT RULES',
+    'Professional finished sequential art, decisive values, readable silhouette at thumbnail size, controlled detail, coherent anatomy, natural acting, stable faces and costumes, cinematic depth, clean crop.',
+    'Include only story-required subjects. Do not duplicate named characters or props. Keep important faces, hands, and story clues clear of crop edges and lettering-safe regions.',
+    'No text, no letters, no speech balloons, no captions, no sound-effect typography, no watermark, no signature, no logo, no UI, no panel border, no contact sheet, no split screen, no collage.',
+    input.panel.negativePrompt ? `Additional negative constraints: ${input.panel.negativePrompt}` : '',
+  ].filter(line => line !== '').join('\n')
+  if (prompt.length > 16_000) throw new Error('[media] 编译后的漫画格 Prompt 超过 provider 上限')
+  return prompt
+}
+
+export function compileComicSubjectReferencePromptV2(root: AdaptationProject, subject: ComicVisualSubject): string {
+  if (!root.visualBible) throw new Error('[media] 缺少已确认视觉圣经')
+  const prompt = [
+    'PRODUCTION TASK: PROFESSIONAL COMIC VISUAL DEVELOPMENT SHEET',
+    `Create one clean reference sheet for the exact same ${subject.kind}: ${subject.label}.`,
+    subjectStudyPlan(subject.kind),
+    'This is a reusable production reference, not a dramatic story scene, cover, poster, or unrelated image collection.',
+    `Identity: ${subject.design.description}`,
+    subject.design.silhouette ? `Silhouette: ${subject.design.silhouette}` : '',
+    subject.design.facialFeatures ? `Facial features: ${subject.design.facialFeatures}` : '',
+    subject.design.hairAndCostume ? `${subject.kind === 'character' ? 'Canonical hair and costume' : 'Canonical construction and appearance'}: ${subject.design.hairAndCostume}` : '',
+    promptList('Subject palette', subject.design.palette),
+    promptList('Materials', subject.design.materials),
+    promptList('Distinguishing marks', subject.design.distinguishingMarks),
+    promptList('Never change', subject.design.prohibitedChanges),
+    `Art direction: ${root.visualBible.artDirection}`,
+    `Target finish: ${root.targetSpec.colorMode}; ${root.targetSpec.artStyleBrief}.`,
+    `Linework: ${root.visualBible.linework}`,
+    `Lighting: neutral studio lighting that preserves ${root.visualBible.lighting} as a style cue without changing identity.`,
+    `Period and materials: ${root.visualBible.periodAndMaterials}`,
+    'Plain unobtrusive background, consistent scale and design logic in every view, generous spacing between studies, no cropped studies.',
+    'No text, no labels, no letters, no watermark, no signature, no logo, no UI, no speech balloons, no unrelated subjects, no unrequested design variants.',
+  ].filter(Boolean).join('\n')
+  if (prompt.length > 16_000) throw new Error('[media] 编译后的视觉设定 Prompt 超过 provider 上限')
+  return prompt
 }
 
 export async function listComicMediaAssets(scopeInput: WorkspaceScope): Promise<ComicMediaAsset[]> {
@@ -104,7 +229,8 @@ export async function generateComicPanelCandidatesV1(input: {
   if (!page || page.adaptationProjectId !== root.id) throw new Error('[media] 格的父页不存在')
   const subjects = await db.comicVisualSubjects.where('adaptationProjectId').equals(root.id!).toArray()
   const subjectByKey = new Map(subjects.map(subject => [subject.stableKey, subject]))
-  const continuitySubjects = panel.continuityRefs.map(ref => subjectByKey.get(ref.subjectKey)).filter(Boolean) as ComicVisualSubject[]
+  const panelSubjectKeys = [...new Set([...(panel.subjectStates ?? []), ...(panel.continuityRefs ?? [])].map(ref => ref.subjectKey))]
+  const continuitySubjects = panelSubjectKeys.map(key => subjectByKey.get(key)).filter(Boolean) as ComicVisualSubject[]
   if (continuitySubjects.some(subject => subject.status !== 'reviewed' && subject.status !== 'locked')) throw new Error('[media] 连续性视觉条目尚未审定')
   const requestedReferenceAssetKeys = continuitySubjects.flatMap(subject => subject.selectedMediaAssetKey ? [subject.selectedMediaAssetKey] : [])
   const binding = imageBindingFromAIConfigV1(input.aiConfig, input.imageModel)
@@ -117,17 +243,11 @@ export async function generateComicPanelCandidatesV1(input: {
   // This transport currently sends text only. Never record requested references as transmitted evidence.
   const transmittedReferenceAssetKeys = OPENAI_COMPATIBLE_IMAGE_CAPABILITY_V1.referenceImage ? requestedReferenceAssetKeys : []
   const visualBibleHash = await hashCanonicalValue(root.visualBible)
-  const prompt = [
-    root.visualBible.artDirection, root.visualBible.linework, root.visualBible.lighting,
-    `palette: ${root.visualBible.palette.join(', ')}`, `camera: ${root.visualBible.cameraLanguage.join(', ')}`,
-    ...continuitySubjects.map(subject => `${subject.label}: ${subject.design.description}; ${subject.design.distinguishingMarks.join(', ')}`),
-    panel.visualPrompt || `${panel.shot.size}, ${panel.shot.angle}, ${panel.action}`,
-    'clean comic illustration, no text, no letters, no speech bubbles, no captions, no watermark',
-    panel.negativePrompt ? `negative: ${panel.negativePrompt}` : '',
-  ].filter(Boolean).join('\n')
+  const pagePanels = await db.comicPanels.where('pageId').equals(page.id!).sortBy('order')
+  const prompt = compileComicPanelImagePromptV2({ root, pagePanels, panel, subjects })
   const promptHash = await hashCanonicalValue({ prompt })
   const requestHash = await hashCanonicalValue({
-    version: 1, workId: scope.workId, panelStableKey: panel.stableKey, panelRevision: panel.revision,
+    version: 2, workId: scope.workId, panelStableKey: panel.stableKey, panelRevision: panel.revision,
     sourceManifestVersion: root.activeSourceManifestVersion, visualBibleHash, requestedReferenceAssetKeys, transmittedReferenceAssetKeys,
     provider: binding.provider, model: binding.model, count: input.count, promptHash,
     regenerateNonce: input.regenerateNonce?.trim() || null,
@@ -198,19 +318,10 @@ export async function generateComicSubjectCandidatesV1(input: {
   if (requestedReferenceAssetKeys.length && !OPENAI_COMPATIBLE_IMAGE_CAPABILITY_V1.referenceImage) capabilityWarnings.push('当前 provider 不支持参考图，新候选无法直接继承已选设定图')
   if (capabilityWarnings.length && !input.allowLimitedConsistency) throw new Error(`[media] ${capabilityWarnings.join('；')}；请显式确认后继续`)
   const transmittedReferenceAssetKeys = OPENAI_COMPATIBLE_IMAGE_CAPABILITY_V1.referenceImage ? requestedReferenceAssetKeys : []
-  const prompt = [
-    root.visualBible.artDirection, root.visualBible.linework, root.visualBible.lighting,
-    `palette: ${root.visualBible.palette.join(', ')}`, `period/materials: ${root.visualBible.periodAndMaterials}`,
-    `${subject.kind} reference sheet for ${subject.label}`,
-    subject.design.description, subject.design.silhouette, subject.design.facialFeatures, subject.design.hairAndCostume,
-    `subject palette: ${subject.design.palette.join(', ')}`, `materials: ${subject.design.materials.join(', ')}`,
-    `distinguishing marks: ${subject.design.distinguishingMarks.join(', ')}`,
-    `never change: ${subject.design.prohibitedChanges.join(', ')}`,
-    'clean comic production reference sheet, multiple consistent views, plain background, no text, no letters, no watermark',
-  ].filter(Boolean).join('\n')
+  const prompt = compileComicSubjectReferencePromptV2(root, subject)
   const promptHash = await hashCanonicalValue({ prompt })
   const requestHash = await hashCanonicalValue({
-    version: 1, workId: scope.workId, subjectStableKey: subject.stableKey, subjectRevision: subject.revision,
+    version: 2, workId: scope.workId, subjectStableKey: subject.stableKey, subjectRevision: subject.revision,
     sourceManifestVersion: root.activeSourceManifestVersion, visualBibleHash: await hashCanonicalValue(root.visualBible), requestedReferenceAssetKeys, transmittedReferenceAssetKeys,
     provider: binding.provider, model: binding.model, count: input.count, promptHash,
     regenerateNonce: input.regenerateNonce?.trim() || null,
@@ -221,7 +332,7 @@ export async function generateComicSubjectCandidatesV1(input: {
     if (available.length !== input.count || available.some(asset => asset.subjectKey !== subject.stableKey || asset.workId !== scope.workId)) throw new Error('[media] 同 requestHash 设定图候选集不完整或越界')
     return { assets: available, requestHash, reused: true, capabilityWarnings }
   }
-  const response = await requestOpenAICompatibleImagesV1({ binding, prompt, count: input.count, width: 1024, height: 1536, signal: input.signal })
+  const response = await requestOpenAICompatibleImagesV1({ binding, prompt, count: input.count, ...subjectCandidateSize(subject.kind), signal: input.signal })
   const prepared = await Promise.all(response.images.map(prepareMediaBlobV1))
   if (prepared.some(image => image.width < root.targetSpec.imageCapabilityRequirement.minimumWidth || image.height < root.targetSpec.imageCapabilityRequirement.minimumHeight)) throw new Error('[media] provider 设定图低于目标规格最小尺寸，候选不落库')
   const receipt = await createMediaProviderReceiptV1({ binding, requestId: response.requestId })

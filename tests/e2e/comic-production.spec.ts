@@ -51,7 +51,7 @@ test('小说转漫画从独立产品入口冻结来源，经十二步正式数�
 
   await expect(page.getByRole('heading', { name: '漫画工作台', exact: true })).toBeVisible()
   await expect(page.getByRole('heading', { name: '十二步小说转漫画', exact: true })).toBeVisible()
-  for (const stage of ['1 来源事实', '2 因果图', '3 改编 Brief', '4 删改决定', '5 漫画脚本', '6 分页节奏', '7 页格分镜', '8 视觉圣经', '9 图片请求', '10 视觉监修', '11 定点修复', '12 页级审校']) {
+  for (const stage of ['来源事实', '因果图', '改编 Brief', '删改决定', '漫画脚本', '分页节奏', '页格分镜', '视觉圣经', '图片请求', '视觉监修', '定点修复', '页级审校']) {
     await expect(page.locator('.comic-pipeline-steps').getByText(stage, { exact: true })).toBeVisible()
   }
   await expect(page.getByText('候选 · 尚未写入')).toHaveCount(0)
@@ -112,8 +112,15 @@ test('小说转漫画从独立产品入口冻结来源，经十二步正式数�
 
   await page.reload()
   await page.getByTestId('product-tab-novel').click()
+  await expect(page.locator('.comic-studio')).toBeVisible()
+  await expect(page.locator('.comic-page-thumbnail')).toHaveCount(1)
+  const panelHitbox = page.getByRole('button', { name: /选择第 1 格/ })
+  await expect(panelHitbox).toBeVisible()
+  await panelHitbox.click()
+  await expect(page.getByLabel('画布缩放')).toHaveValue('85')
+  await page.getByRole('button', { name: '展开专业流程', exact: true }).click()
   await expect(page.getByLabel('目标页')).toHaveValue('page_1')
-  await page.getByRole('button', { name: 'QA 与导出', exact: true }).click()
+  await page.getByRole('button', { name: /审校与发布/ }).click()
   await expect(page.getByText('可发布专业分镜版', { exact: true })).toBeVisible()
   const publish = page.getByRole('button', { name: '发布不可变分镜版', exact: true })
   await expect(publish).toBeEnabled()
@@ -132,6 +139,6 @@ test('小说转漫画从独立产品入口冻结来源，经十二步正式数�
 
   await page.reload()
   await page.getByTestId('product-tab-novel').click()
-  await page.getByRole('button', { name: 'QA 与导出', exact: true }).click()
+  await page.getByRole('button', { name: /审校与发布/ }).click()
   await expect(page.getByText(/v1 · 分镜版 · E2E 旧站页漫 分镜版 v1/)).toBeVisible()
 })

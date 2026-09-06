@@ -24,6 +24,7 @@ import {
 } from '../../src/lib/comic/service'
 import {
   commitUploadedComicAssetV1,
+  compileComicSubjectReferencePromptV2,
   generateComicPanelCandidatesV1,
   readComicAssetDataUrlV1,
   removeComicMediaAssetV1,
@@ -145,8 +146,27 @@ describe('COMIC-1/2 · complete comic production workflow', () => {
     expect(() => assertComicPanelPlanCandidateV1({ projectId: 7 } as any)).toThrow('字段不在闭集')
   })
 
+  it('视觉设定 Prompt 按角色、地点和道具使用不同的专业设定图语言', () => {
+    const root = { targetSpec, visualBible: { version: 1, artDirection: '黑色电影', linework: '有重量的墨线', palette: ['炭黑', '冷蓝'], lighting: '高反差', periodAndMaterials: '当代旧车站', cameraLanguage: ['建立镜头后切近景'], prohibitedDepictions: ['无文字成图'] } } as any
+    const base = { id: 1, stableKey: 'subject', characterId: null, locationRefKey: null, label: '测试', design: { ...EMPTY_DESIGN, description: '固定设计', materials: ['湿混凝土'] }, sourceUnitIds: [], selectedMediaAssetKey: null, status: 'reviewed', revision: 1 } as any
+    const character = compileComicSubjectReferencePromptV2(root, { ...base, kind: 'character' })
+    const location = compileComicSubjectReferencePromptV2(root, { ...base, kind: 'location' })
+    const prop = compileComicSubjectReferencePromptV2(root, { ...base, kind: 'prop' })
+    expect(character).toContain('full-body turnaround views')
+    expect(location).toContain('coherent floor plan')
+    expect(location).not.toContain('expression or identifying-detail')
+    expect(prop).toContain('in-use scale view')
+    expect(prop).toContain('克制的黑色电影漫画')
+    expect(prop).toContain('No text, no labels, no letters')
+  })
+
   it('provider 失败/低尺寸响应零落库；成功请求幂等、选片与回收闭合', async () => {
-    const item = await fixture(); const created = await createComicPage(item.scope, pageDraft(item.unit.id!)); const panel = created.panels[0]
+    const item = await fixture(); const created = await createComicPage(item.scope, pageDraft(item.unit.id!)); let panel = created.panels[0]
+    const now = Date.now()
+    const characterId = await db.characters.add({ projectId: item.scope.projectId, worldId: item.scope.worldId, name: '林岚', roleWeight: 'main', moralAxis: 'neutral', orderAxis: 'neutral', shortDescription: '', appearance: '', personality: '', background: '', motivation: '', abilities: '', relationships: '', arc: '', createdAt: now, updatedAt: now } as any) as number
+    await db.workCharacterBindings.add({ projectId: item.scope.projectId, workId: item.scope.workId, characterId, role: 'protagonist', createdAt: now, updatedAt: now })
+    await saveComicVisualSubject({ scope: item.scope, draft: { stableKey: 'hero', kind: 'character', characterId, locationRefKey: null, label: '林岚', design: { ...EMPTY_DESIGN, description: '二十多岁短发女性', silhouette: '窄肩长风衣', facialFeatures: '细长眼与直眉', hairAndCostume: '黑色短发、深色风衣', distinguishingMarks: ['银色旧车票夹'], prohibitedChanges: ['发型', '风衣长度'] }, sourceUnitIds: [item.unit.id!], status: 'reviewed' } })
+    panel = await updateComicPanel({ scope: item.scope, panelId: panel.id!, expectedRevision: panel.revision, patch: { subjectStates: [{ subjectKey: 'hero', costume: '深色风衣', condition: '雨湿但完整', props: ['车票'], position: '画面右下' }], continuityRefs: [{ subjectKey: 'hero', note: '保持短发、深色风衣与车票。' }], protectedAreas: [{ x: .58, y: .05, width: .35, height: .14 }] } })
     const aiConfig = { provider: 'openai' as const, baseUrl: 'https://api.example.test/v1', apiKey: 'secret-test-key', model: 'gpt-5-test', temperature: .7, maxTokens: 1000 }
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network down')))
     await expect(generateComicPanelCandidatesV1({ scope: item.scope, panelId: panel.id!, expectedPanelRevision: panel.revision, aiConfig, count: 2, rights: rights('provider-generated') })).rejects.toThrow('network down')
@@ -162,6 +182,16 @@ describe('COMIC-1/2 · complete comic production workflow', () => {
     vi.stubGlobal('fetch', fetchMock)
     const first = await generateComicPanelCandidatesV1({ scope: item.scope, panelId: panel.id!, expectedPanelRevision: panel.revision, aiConfig, count: 2, rights: rights('provider-generated') })
     const replay = await generateComicPanelCandidatesV1({ scope: item.scope, panelId: panel.id!, expectedPanelRevision: panel.revision, aiConfig, count: 2, rights: rights('provider-generated') })
+    const requestBody = JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body))
+    expect(requestBody.prompt).toContain('FINISHED SEQUENTIAL ART COMIC PANEL')
+    expect(requestBody.prompt).toContain('PANEL SEQUENCE CONTEXT')
+    expect(requestBody.prompt).toContain('LETTERING SAFE AREAS')
+    expect(requestBody.prompt).toContain('二十多岁短发女性')
+    expect(requestBody.prompt).toContain('costume=深色风衣')
+    expect(requestBody.prompt).toContain('克制的黑色电影漫画')
+    expect(requestBody.prompt).toContain('Target finish: color')
+    expect(requestBody.prompt).toContain('No text, no letters, no speech balloons')
+    expect(requestBody.prompt).toContain('no contact sheet, no split screen, no collage')
     expect(replay.reused).toBe(true); expect(fetchMock).toHaveBeenCalledTimes(1)
     expect(first.assets).toHaveLength(2); expect(await db.mediaBlobObjects.count()).toBe(1)
     const selected = await selectComicMediaAssetV1({ scope: item.scope, assetKey: first.assets[0].stableKey, panelId: panel.id!, expectedRevision: panel.revision })
@@ -180,6 +210,10 @@ describe('COMIC-1/2 · complete comic production workflow', () => {
     const dataUrl = (await readComicAssetDataUrlV1({ scope: item.scope, assetKey: asset.stableKey })).dataUrl
     const svg = renderComicPageSvgV1({ page: created.page, panels: [panel, created.panels[1]], targetSpec, assetDataUrls: { [asset.stableKey]: dataUrl }, mode: 'storyboard' })
     expect(svg).toContain('data-storyforge-comic-page="1"'); expect(svg).toContain('你'); expect(svg).toContain('readingDirection')
+    expect(svg).toContain('data-storyboard-placeholder="page-1-panel-2"')
+    expect(svg).toContain('她看向停摆的时钟')
+    expect(svg).toContain('<ellipse')
+    expect(svg).not.toContain('分镜占位 · page-1-panel-2')
 
     const backup = await exportProjectJSON(item.scope.projectId)
     expect(backup.version).toBe(14); expect(backup.comicMediaAssets?.[0].rights.declaration).toContain('测试作者')

@@ -1,8 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { nanoid } from "nanoid";
 import {
+  ChevronLeft,
+  ChevronRight,
   Check,
+  Eye,
   Images,
+  Layers3,
   Lock,
   Plus,
   RefreshCw,
@@ -137,6 +141,7 @@ export default function ComicStudio({ scope }: Props) {
     status: "draft",
   });
   const [tab, setTab] = useState<"storyboard" | "visual" | "qa">("storyboard");
+  const [canvasZoom, setCanvasZoom] = useState(85);
   const [newPanelCount, setNewPanelCount] = useState(4);
   const [assetUrls, setAssetUrls] = useState<Record<string, string>>({});
   const [rightsDeclaration, setRightsDeclaration] = useState(
@@ -222,6 +227,11 @@ export default function ComicStudio({ scope }: Props) {
         ? current
         : (pageGroups[0]?.page.id ?? null),
     );
+    setSelectedSubjectId((current) =>
+      current != null && visualSubjects.some((subject) => subject.id === current)
+        ? current
+        : (visualSubjects[0]?.id ?? null),
+    );
   }, [scope]);
 
   useEffect(() => {
@@ -266,18 +276,12 @@ export default function ComicStudio({ scope }: Props) {
   }, [selectedSubjectId, subjects]);
 
   const visibleAssets = useMemo(
-    () =>
-      assets.filter(
-        (asset) =>
-          asset.panelId === selectedPanelId ||
-          asset.subjectKey ===
-            subjects.find((subject) => subject.id === selectedSubjectId)
-              ?.stableKey ||
-          currentGroup?.panels.some(
-            (panel) => panel.selectedMediaAssetKey === asset.stableKey,
-          ),
-      ),
-    [assets, currentGroup, selectedPanelId, selectedSubjectId, subjects],
+    () => {
+      const selectedPanelAssets = new Set(groups.flatMap(group => group.panels.flatMap(panel => panel.selectedMediaAssetKey ? [panel.selectedMediaAssetKey] : [])))
+      const subjectKey = subjects.find((subject) => subject.id === selectedSubjectId)?.stableKey
+      return assets.filter(asset => asset.panelId === selectedPanelId || asset.subjectKey === subjectKey || selectedPanelAssets.has(asset.stableKey))
+    },
+    [assets, groups, selectedPanelId, selectedSubjectId, subjects],
   );
   useEffect(() => {
     let cancelled = false;
@@ -381,21 +385,22 @@ export default function ComicStudio({ scope }: Props) {
         )
         .sort((left, right) => left.candidateIndex - right.candidateIndex)
     : [];
-  const previewSvg = currentGroup
-    ? (() => {
-        try {
-          return renderComicPageSvgV1({
-            page: currentGroup.page,
-            panels: currentGroup.panels,
-            targetSpec: adaptation.targetSpec,
-            assetDataUrls: assetUrls,
-            mode: "storyboard",
-          });
-        } catch {
-          return "";
-        }
-      })()
-    : "";
+  const renderPagePreview = (group: ComicPageGroup): string => {
+    try {
+      return renderComicPageSvgV1({
+        page: group.page,
+        panels: group.panels,
+        targetSpec: adaptation.targetSpec,
+        assetDataUrls: assetUrls,
+        mode: "storyboard",
+      });
+    } catch {
+      return "";
+    }
+  };
+  const previewSvg = currentGroup ? renderPagePreview(currentGroup) : "";
+  const currentPageIndex = currentGroup ? groups.findIndex(group => group.page.id === currentGroup.page.id) : -1;
+  const selectedMediaCount = groups.reduce((total, group) => total + group.panels.filter(panel => !!panel.selectedMediaAssetKey).length, 0);
 
   const createPage = () => {
     const unit =
@@ -472,9 +477,10 @@ export default function ComicStudio({ scope }: Props) {
     setError("");
     setMessage("");
     try {
+      let capabilityWarnings: string[] = [];
       if (subject) {
         if (!selectedSubject?.id) throw new Error("请先选择视觉条目");
-        await generateComicSubjectCandidatesV1({
+        const result = await generateComicSubjectCandidatesV1({
           scope,
           subjectId: selectedSubject.id,
           expectedSubjectRevision: selectedSubject.revision,
@@ -486,9 +492,10 @@ export default function ComicStudio({ scope }: Props) {
           regenerateNonce: regenerate ? nanoid(12) : undefined,
           signal: controller.signal,
         });
+        capabilityWarnings = result.capabilityWarnings;
       } else {
         if (!editingPanel?.id) throw new Error("请先选择漫画格");
-        await generateComicPanelCandidatesV1({
+        const result = await generateComicPanelCandidatesV1({
           scope,
           panelId: editingPanel.id,
           expectedPanelRevision: editingPanel.revision,
@@ -500,9 +507,12 @@ export default function ComicStudio({ scope }: Props) {
           regenerateNonce: regenerate ? nanoid(12) : undefined,
           signal: controller.signal,
         });
+        capabilityWarnings = result.capabilityWarnings;
       }
       await reload();
-      setMessage("图片候选已验证并提交；尚未自动选片。");
+      setMessage(capabilityWarnings.length
+        ? `图片候选已提交，尚未自动选片。能力提示：${capabilityWarnings.join("；")}`
+        : "图片候选已验证并提交；尚未自动选片。");
     } catch (cause) {
       setError(
         controller.signal.aborted
@@ -667,20 +677,24 @@ export default function ComicStudio({ scope }: Props) {
   return (
     <div className="comic-studio">
       <header className="comic-top">
-        <div>
-          <span>COMIC STUDIO</span>
+        <div className="comic-title-block">
+          <span>STORYFORGE · COMIC PRODUCTION</span>
           <h2>{work.title}</h2>
           <p>
-            页漫 · {adaptation.targetSpec.readingDirection.toUpperCase()} ·{" "}
-            {adaptation.targetSpec.colorMode} ·{" "}
-            {adaptation.targetSpec.pageSize.width}×
-            {adaptation.targetSpec.pageSize.height}
-            {adaptation.targetSpec.pageSize.unit}
+            固定页漫画 · {adaptation.targetSpec.readingDirection.toUpperCase()} 阅读 ·{" "}
+            {adaptation.targetSpec.colorMode} · {adaptation.targetSpec.pageSize.width}×{adaptation.targetSpec.pageSize.height}{adaptation.targetSpec.pageSize.unit}
           </p>
+          <div className="comic-production-stats" aria-label="漫画制作概况">
+            <span><strong>{groups.length}</strong> 页</span>
+            <span><strong>{groups.reduce((sum, group) => sum + group.panels.length, 0)}</strong> 格</span>
+            <span><strong>{selectedMediaCount}</strong> 格已选片</span>
+            <span><strong>{subjects.length}</strong> 视觉锚点</span>
+          </div>
         </div>
         <div className={`comic-source ${freshness?.status ?? ""}`}>
+          <span className="comic-status-kicker">{isComplete ? 'RELEASE LOCKED' : 'SOURCE STATUS'}</span>
           <strong>{isComplete ? "正式完稿 · 当前只读" : sourceLabel}</strong>
-          <small>manifest v{adaptation.activeSourceManifestVersion}</small>
+          <small>来源快照 manifest v{adaptation.activeSourceManifestVersion}</small>
           {isComplete ? (
             <button
               onClick={() =>
@@ -726,31 +740,34 @@ export default function ComicStudio({ scope }: Props) {
         onChanged={reload}
       />
       <nav className="comic-toolbar">
+        <div className="comic-mode-tabs" role="group" aria-label="漫画工作区">
         <button
           className={tab === "storyboard" ? "active" : ""}
           onClick={() => setTab("storyboard")}
         >
-          <Images />
-          页格与排字
+          <Layers3 />
+          <span><strong>漫画页面</strong><small>分镜 · 成图 · 排字</small></span>
         </button>
         <button
           className={tab === "visual" ? "active" : ""}
           onClick={() => setTab("visual")}
         >
           <Sparkles />
-          视觉圣经与设定图
+          <span><strong>视觉圣经</strong><small>角色 · 场景 · 道具</small></span>
         </button>
         <button
           className={tab === "qa" ? "active" : ""}
           onClick={() => void runQuality()}
         >
           <Check />
-          QA 与导出
+          <span><strong>审校与发布</strong><small>QA · 导出 · Release</small></span>
         </button>
-        <span />
+        </div>
+        <div className="comic-provider-settings">
         <label>
-          图片模型
+          <span>图片模型</span>
           <input
+            aria-label="图片模型"
             value={imageModel}
             onChange={(event) => setImageModel(event.target.value)}
           />
@@ -763,14 +780,15 @@ export default function ComicStudio({ scope }: Props) {
               setAllowLimitedConsistency(event.target.checked)
             }
           />
-          接受 provider 一致性能力限制
+          <span title="当前 OpenAI 兼容接口只发送文字描述；勾选表示接受参考图、seed 或局部重绘能力不足，并会在候选元数据中保留警告。">允许有限一致性</span>
         </label>
+        </div>
       </nav>
       {tab === "storyboard" && (
         <div className="comic-layout">
           <aside className="comic-pages">
             <header>
-              <strong>页面</strong>
+              <div><span>PAGE BOARD</span><strong>页面导航</strong></div>
               <small>
                 {groups.length} 页 /{" "}
                 {groups.reduce((sum, group) => sum + group.panels.length, 0)} 格
@@ -816,15 +834,17 @@ export default function ComicStudio({ scope }: Props) {
                   );
                   setDragPageId(null);
                 }}
-                className={group.page.id === selectedPageId ? "active" : ""}
+                className={`comic-page-row ${group.page.id === selectedPageId ? "active" : ""}`}
                 onClick={() => setSelectedPageId(group.page.id!)}
               >
-                <span>{index + 1}</span>
-                <div>
+                <div className="comic-page-thumbnail" style={{ aspectRatio: `${adaptation.targetSpec.pageSize.width} / ${adaptation.targetSpec.pageSize.height}` }} aria-hidden="true" dangerouslySetInnerHTML={{ __html: renderPagePreview(group) }} />
+                <div className="comic-page-copy">
+                  <span>PAGE {String(index + 1).padStart(2, '0')}</span>
                   <strong>
                     第 {group.page.chapterNumber} 章 · {group.panels.length} 格
                   </strong>
                   <small>{group.page.summary || "未写页面摘要"}</small>
+                  <em>{group.panels.filter(panel => !!panel.selectedMediaAssetKey).length}/{group.panels.length} 已选片</em>
                 </div>
                 {group.page.status === "locked" && <Lock />}
               </button>
@@ -833,8 +853,21 @@ export default function ComicStudio({ scope }: Props) {
           <main className="comic-canvas-area">
             {currentGroup ? (
               <>
+                <header className="comic-canvas-heading">
+                  <div>
+                    <span>CHAPTER {currentGroup.page.chapterNumber} · PAGE {currentPageIndex + 1}</span>
+                    <strong>{currentGroup.page.summary || '未命名页面'}</strong>
+                    <small>直接点击画布中的格进行编辑；文字始终由本地排字层保持可编辑。</small>
+                  </div>
+                  <div className="comic-canvas-navigation">
+                    <button aria-label="上一页" disabled={currentPageIndex <= 0} onClick={() => setSelectedPageId(groups[currentPageIndex - 1]?.page.id ?? null)}><ChevronLeft /></button>
+                    <span>{currentPageIndex + 1} / {groups.length}</span>
+                    <button aria-label="下一页" disabled={currentPageIndex < 0 || currentPageIndex >= groups.length - 1} onClick={() => setSelectedPageId(groups[currentPageIndex + 1]?.page.id ?? null)}><ChevronRight /></button>
+                  </div>
+                </header>
                 <div className="comic-page-controls">
                   <input
+                    aria-label="页面摘要"
                     value={currentGroup.page.summary}
                     onChange={(event) =>
                       setGroups((rows) =>
@@ -923,14 +956,33 @@ export default function ComicStudio({ scope }: Props) {
                   >
                     <Trash2 />
                   </button>
+                  <label className="comic-zoom-control">
+                    <Eye />
+                    <input aria-label="画布缩放" type="range" min="55" max="120" step="5" value={canvasZoom} onChange={event => setCanvasZoom(Number(event.target.value))} />
+                    <span>{canvasZoom}%</span>
+                  </label>
                 </div>
-                {previewSvg && (
-                  <div
-                    className="comic-page-preview"
-                    dangerouslySetInnerHTML={{ __html: previewSvg }}
-                  />
-                )}
+                <div className="comic-page-desk">
+                  {previewSvg && (
+                    <div className="comic-page-board" style={{ width: `${canvasZoom}%`, aspectRatio: `${adaptation.targetSpec.pageSize.width} / ${adaptation.targetSpec.pageSize.height}` }}>
+                      <div className="comic-page-preview" dangerouslySetInnerHTML={{ __html: previewSvg }} />
+                      <div className="comic-page-hitboxes" aria-label="页面格选择层">
+                        {currentGroup.panels.map((panel, index) => (
+                          <button
+                            key={panel.id}
+                            type="button"
+                            aria-label={`选择第 ${index + 1} 格：${panel.moment ?? panel.action}`}
+                            className={panel.id === selectedPanelId ? 'active' : ''}
+                            style={{ left: `${panel.frame.x * 100}%`, top: `${panel.frame.y * 100}%`, width: `${panel.frame.width * 100}%`, height: `${panel.frame.height * 100}%` }}
+                            onClick={() => setSelectedPanelId(panel.id!)}
+                          ><span>{index + 1}</span></button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
                 <div className="comic-panel-strip">
+                  <span>阅读顺序</span>
                   {currentGroup.panels.map((panel, index) => (
                     <button
                       key={panel.id}
@@ -958,7 +1010,7 @@ export default function ComicStudio({ scope }: Props) {
                       onClick={() => setSelectedPanelId(panel.id!)}
                     >
                       <span>{index + 1}</span>
-                      <small>{panel.shot.size}</small>
+                      <small>{panel.shot.size} · {panel.status === 'locked' ? '锁定' : panel.status === 'reviewed' ? '已审' : '草稿'}</small>
                       {panel.selectedMediaAssetKey ? <Check /> : <Images />}
                     </button>
                   ))}

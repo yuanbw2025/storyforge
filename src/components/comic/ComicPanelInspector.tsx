@@ -63,6 +63,11 @@ function newLettering(): ComicLetteringItemV1 {
   }
 }
 
+const SHOT_SIZES = [['extreme-wide', '大远景'], ['wide', '远景'], ['full', '全身'], ['medium', '中景'], ['close-up', '近景'], ['extreme-close-up', '特写'], ['insert', '插入镜头']] as const
+const SHOT_ANGLES = [['eye-level', '平视'], ['high', '俯拍'], ['low', '仰拍'], ['overhead', '顶视'], ['dutch', '倾斜镜头']] as const
+const SHOT_MOVEMENTS = [['static', '静态定格'], ['pan', '横移感'], ['tilt', '纵移感'], ['track', '跟随感'], ['zoom', '推拉感'], ['handheld', '手持感']] as const
+const LETTERING_KINDS = [['speech', '对白气泡'], ['thought', '思绪气泡'], ['caption', '旁白框'], ['sfx', '拟声字']] as const
+
 export default function ComicPanelInspector({
   scope,
   groups,
@@ -104,24 +109,19 @@ export default function ComicPanelInspector({
       </header>
       <section>
         <h3>画框与镜头</h3>
+        <p className="comic-section-hint">镜头要服务这一格唯一的可画瞬间，避免把连续动作塞进同一画面。</p>
         <div className="comic-number-grid">
           {(['x', 'y', 'width', 'height'] as const).map((key) => (
             <label key={key}>{key}<input type="number" min={0} max={1} step={0.01} value={editingPanel.frame[key]} onChange={(event) => patchPanel({ frame: { ...editingPanel.frame, [key]: Number(event.target.value) } })} /></label>
           ))}
         </div>
         <div className="comic-select-grid">
-          <select value={editingPanel.shot.size} onChange={(event) => patchShot({ size: event.target.value as ComicPanel['shot']['size'] })}>
-            {['extreme-wide', 'wide', 'full', 'medium', 'close-up', 'extreme-close-up', 'insert'].map((value) => <option key={value}>{value}</option>)}
-          </select>
-          <select value={editingPanel.shot.angle} onChange={(event) => patchShot({ angle: event.target.value as ComicPanel['shot']['angle'] })}>
-            {['eye-level', 'high', 'low', 'overhead', 'dutch'].map((value) => <option key={value}>{value}</option>)}
-          </select>
-          <select value={editingPanel.shot.movement} onChange={(event) => patchShot({ movement: event.target.value as ComicPanel['shot']['movement'] })}>
-            {['static', 'pan', 'tilt', 'track', 'zoom', 'handheld'].map((value) => <option key={value}>{value}</option>)}
-          </select>
+          <label className="comic-field"><span>景别</span><select value={editingPanel.shot.size} onChange={(event) => patchShot({ size: event.target.value as ComicPanel['shot']['size'] })}>{SHOT_SIZES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+          <label className="comic-field"><span>机位</span><select value={editingPanel.shot.angle} onChange={(event) => patchShot({ angle: event.target.value as ComicPanel['shot']['angle'] })}>{SHOT_ANGLES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+          <label className="comic-field"><span>动势</span><select value={editingPanel.shot.movement} onChange={(event) => patchShot({ movement: event.target.value as ComicPanel['shot']['movement'] })}>{SHOT_MOVEMENTS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
         </div>
-        <textarea value={editingPanel.shot.composition} onChange={(event) => patchShot({ composition: event.target.value })} placeholder="构图" />
-        <textarea value={editingPanel.action} onChange={(event) => patchPanel({ action: event.target.value })} placeholder="可见动作" />
+        <label className="comic-field"><span>构图与视觉焦点</span><textarea value={editingPanel.shot.composition} onChange={(event) => patchShot({ composition: event.target.value })} placeholder="例如：人物置于右下三分点，门框形成前景，视线指向下一格" /></label>
+        <label className="comic-field"><span>这一格的可见动作</span><textarea value={editingPanel.action} onChange={(event) => patchPanel({ action: event.target.value })} placeholder="只写摄像机能看到的一瞬间" /></label>
       </section>
       <section>
         <h3>成图裁切</h3>
@@ -178,15 +178,16 @@ export default function ComicPanelInspector({
       </section>
       <section>
         <h3>视觉 Prompt</h3>
-        <textarea value={editingPanel.visualPrompt} onChange={(event) => patchPanel({ visualPrompt: event.target.value })} />
-        <textarea value={editingPanel.negativePrompt} onChange={(event) => patchPanel({ negativePrompt: event.target.value })} />
+        <p className="comic-section-hint">系统会把镜头、相邻格、角色状态、视觉圣经和排字安全区编译进最终生图请求。</p>
+        <label className="comic-field"><span>本格补充指令</span><textarea value={editingPanel.visualPrompt} onChange={(event) => patchPanel({ visualPrompt: event.target.value })} /></label>
+        <label className="comic-field"><span>负向约束</span><textarea value={editingPanel.negativePrompt} onChange={(event) => patchPanel({ negativePrompt: event.target.value })} /></label>
       </section>
       <section>
         <h3>本地排字</h3>
         {editingPanel.lettering.map((item, index) => (
           <article className="comic-lettering" key={item.id}>
             <div>
-              <select value={item.kind} onChange={(event) => patchLettering(index, { kind: event.target.value as ComicLetteringItemV1['kind'] })}>{['speech', 'thought', 'caption', 'sfx'].map((value) => <option key={value}>{value}</option>)}</select>
+              <select value={item.kind} onChange={(event) => patchLettering(index, { kind: event.target.value as ComicLetteringItemV1['kind'] })}>{LETTERING_KINDS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
               <select value={item.direction} onChange={(event) => patchLettering(index, { direction: event.target.value as ComicLetteringItemV1['direction'] })}><option value="horizontal">横排</option><option value="vertical">竖排</option></select>
               <button onClick={() => patchPanel({ lettering: editingPanel.lettering.filter((_, itemIndex) => itemIndex !== index) })}><Trash2 /></button>
             </div>

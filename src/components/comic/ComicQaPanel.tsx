@@ -71,6 +71,18 @@ export default function ComicQaPanel({
       </header>
       {quality && (
         <>
+          <div className="comic-release-tiers">
+            <article className={quality.canStoryboardRelease ? 'ready' : 'blocked'}>
+              <span>STORYBOARD RELEASE</span>
+              <strong>{quality.canStoryboardRelease ? '专业分镜版就绪' : '专业分镜版未就绪'}</strong>
+              <p>冻结脚本、分页、页格、阅读顺序、视觉锚点和本地排字，可直接交给画师继续制作。</p>
+            </article>
+            <article className={quality.canVisualRelease ? 'ready' : 'blocked'}>
+              <span>VISUAL RELEASE</span>
+              <strong>{quality.canVisualRelease ? '视觉成品版就绪' : `${quality.visualBlockers.length} 项视觉阻断`}</strong>
+              <p>每格必须拥有已选成图，并通过角色连续性、作者验图、权利和媒资完整性检查。</p>
+            </article>
+          </div>
           <div className={`comic-qa-summary ${quality.canStoryboardRelease ? 'valid' : 'invalid'}`}>
             {quality.canStoryboardRelease ? <Check /> : <X />}
             <strong>{quality.canStoryboardRelease ? '可发布专业分镜版' : '分镜版发布已阻止'}</strong>
@@ -90,6 +102,7 @@ export default function ComicQaPanel({
           </ul>
         </>
       )}
+      <div className="comic-export-heading"><span>DELIVERY</span><strong>导出与不可变发布</strong><small>分镜资料与结构可以随时带走；成品图片导出遵守视觉 QA 门禁。</small></div>
       <div className="comic-export-grid">
         <button
           onClick={() => downloadText(
