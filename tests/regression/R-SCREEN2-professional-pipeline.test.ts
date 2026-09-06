@@ -269,6 +269,8 @@ describe('SCREEN-2 · professional novel-to-screenplay pipeline', () => {
     expect((await readScreenplayReleaseManifestV1(item.scope, release2.id)).scenes[0].summary).toContain('第二版')
 
     expect(new Set(prompts.values()).size).toBe(10)
+    expect(prompts.get('adaptation-brief')).toContain('version 必须是 JSON 数字 1，不是字符串')
+    expect(prompts.get('adaptation-brief')).toContain('mustKeep、mayCut、mayMerge、mayReorder、allowedAdditions、unresolvedQuestions、assumptions 必须是字符串数组')
     expect(prompts.get('grounding-review')).toContain('来源忠实度与连续性审查')
     expect(prompts.get('targeted-rewrite')).toContain('只修复作者选中的开放问题')
 
