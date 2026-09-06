@@ -105,6 +105,8 @@ const STAGES = {
   'page-review': { skillId: 'comic.page-review', role: '漫画页审编辑' },
 } as const
 
+const COMIC_MODEL_TIMEOUT_MS = 180_000
+
 const FACT_KEYS = ['stableKey', 'kind', 'statement', 'subjectKeys', 'sourceUnitKeys', 'confidence'] as const
 const EDGE_KEYS = ['stableKey', 'fromFactKey', 'toFactKey', 'relation', 'rationale', 'sourceUnitKeys'] as const
 const DECISION_KEYS = ['stableKey', 'action', 'sourceFactKeys', 'targetKeys', 'rationale'] as const
@@ -261,8 +263,12 @@ export async function generateComicProfessionalCandidateV1(input: { scope: Works
   const invoke = async (attemptMessages: ChatMessage[], attempt: number): Promise<string> => {
     snapshot = await append(input.scope, snapshot, 'model.requested', { stepId, attempt, bindingHash: await hashCanonicalValue(snapshot.contract.executionBindings?.[0]) })
     let output: string
-    try { output = await (input.runAI ? input.runAI(attemptMessages) : chat(attemptMessages, input.aiConfig!, { category: `comic.${input.stage}`, projectId: input.scope.projectId, configOverrides: { maxTokens: skill.maxOutputTokens }, contextOverflowPolicy: 'reject' })) }
-    catch (error) { await append(input.scope, snapshot, 'run.paused', { reason: `comic-${input.stage}-model-outcome-unknown`, recoverable: false }); throw error }
+    try { output = await (input.runAI ? input.runAI(attemptMessages) : chat(attemptMessages, input.aiConfig!, { category: `comic.${input.stage}`, projectId: input.scope.projectId, configOverrides: { maxTokens: skill.maxOutputTokens }, contextOverflowPolicy: 'reject' }, AbortSignal.timeout(COMIC_MODEL_TIMEOUT_MS))) }
+    catch (error) {
+      await append(input.scope, snapshot, 'run.paused', { reason: `comic-${input.stage}-model-outcome-unknown`, recoverable: false })
+      if (error instanceof DOMException && error.name === 'TimeoutError') throw new Error(`[comic-run] 模型 ${COMIC_MODEL_TIMEOUT_MS / 1_000} 秒未返回；本次运行已暂停，可重试或使用作者兜底。`)
+      throw error
+    }
     snapshot = await append(input.scope, snapshot, 'model.responded', { stepId, attempt, outputHash: await hashCanonicalValue({ raw: output }) })
     return output
   }

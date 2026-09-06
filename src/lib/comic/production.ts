@@ -119,6 +119,43 @@ export async function adoptComicPagePlansV1(input: { scope: WorkspaceScope; expe
   })
 }
 
+/**
+ * Author-invoked deterministic fallback for providers that cannot return a
+ * complete nested panel batch. It only materializes confirmed beats/page plans
+ * into an editable vertical storyboard; it does not claim AI authorship or
+ * visual-release quality.
+ */
+export async function createComicPanelScaffoldFromConfirmedPlanV1(input: { scope: WorkspaceScope; expectedAdaptationRevision: number; sourceManifestVersion: number }): Promise<Array<{ page: ComicPage; panels: ComicPanel[] }>> {
+  const { root } = await requireRoot(input.scope, input.expectedAdaptationRevision); await requireFresh(root)
+  if (root.activeSourceManifestVersion !== input.sourceManifestVersion) throw new Error('[comic-production] 基础分镜来源版本已变化')
+  const key = [root.id, input.sourceManifestVersion] as [number, number]
+  const [plans, beats, facts] = await Promise.all([
+    db.comicPagePlans.where('[adaptationProjectId+manifestVersion]').equals(key).sortBy('order'),
+    db.comicScriptBeats.where('[adaptationProjectId+manifestVersion]').equals(key).toArray(),
+    db.adaptationSourceFacts.where('[adaptationProjectId+manifestVersion]').equals(key).filter(row => row.authorStatus === 'confirmed').toArray(),
+  ])
+  if (!plans.length || plans.length !== root.targetSpec.chapterCount * root.targetSpec.targetPagesPerChapter) throw new Error('[comic-production] 请先确认完整分页计划')
+  const beatByKey = new Map(beats.map(row => [row.stableKey, row])); const factByKey = new Map(facts.map(row => [row.stableKey, row]))
+  const candidates = plans.flatMap(plan => {
+    const pageBeats = plan.beatKeys.map(beatKey => beatByKey.get(beatKey)).filter((row): row is ComicScriptBeatV1 => Boolean(row))
+    if (!pageBeats.length) throw new Error(`[comic-production] ${plan.stableKey} 没有可用于基础分镜的已确认节拍`)
+    const panelKeys = Array.from({ length: plan.expectedPanelCount }, (_, index) => `${plan.stableKey}_panel_${index + 1}`)
+    return panelKeys.map((stableKey, order): ComicPanelPlanCandidateV1 => {
+      const beat = pageBeats[Math.min(order, pageBeats.length - 1)]
+      const subjectKeys = [...new Set(beat.causalFactKeys.flatMap(factKey => factByKey.get(factKey)?.subjectKeys ?? []))]
+      const height = 1 / plan.expectedPanelCount
+      return {
+        pagePlanKey: plan.stableKey, stableKey, order, nextPanelKey: panelKeys[order + 1] ?? null,
+        frame: { x: 0, y: order * height, width: 1, height }, narrativeFunction: beat.narrativeFunction, moment: beat.visualAction,
+        shot: { size: order === 0 ? 'wide' : order === plan.expectedPanelCount - 1 ? 'close-up' : 'medium', angle: 'eye-level', movement: 'static', composition: `第 ${order + 1} 格采用全宽纵向分带，按 ${root.targetSpec.readingDirection.toUpperCase()} 顺序阅读。` },
+        subjectStates: subjectKeys.map(subjectKey => ({ subjectKey, costume: '', condition: '', props: [], position: '' })),
+        protectedAreas: [], continuityRefs: subjectKeys.map(subjectKey => ({ subjectKey, note: '保持当前页及相邻页的身份、服装、道具与状态连续。' })), lettering: [], sourceUnitKeys: [...beat.sourceUnitKeys],
+      }
+    })
+  })
+  return adoptComicPanelPlansV1({ scope: input.scope, expectedAdaptationRevision: root.revision, sourceManifestVersion: input.sourceManifestVersion, candidates })
+}
+
 export async function adoptComicPanelPlansV1(input: { scope: WorkspaceScope; expectedAdaptationRevision: number; sourceManifestVersion: number; candidates: ComicPanelPlanCandidateV1[]; allowReplaceExisting?: boolean }): Promise<Array<{ page: ComicPage; panels: ComicPanel[] }>> {
   assertComicCandidateBatchV1(input.candidates, assertComicPanelPlanCandidateV1, 'panel plan', 20_000)
   const { scope, root } = await requireRoot(input.scope, input.expectedAdaptationRevision); await requireFresh(root)
