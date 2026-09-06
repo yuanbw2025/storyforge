@@ -583,7 +583,7 @@ async function readOpenWorldRuntimeContext(input: AssembleContextInput): Promise
   }
   const state = await readProductRuntimeStateForContext(session.id!)
   if (manifest.textOpenWorldVNext) {
-    const [sessionProjection, modulesModule, actionModule, bindingModule, feedbackModule, skillsModule, lifeModule, inventoryModule, questModule, mapModule, mapViewModule, travelModule] = await Promise.all([
+    const [sessionProjection, modulesModule, actionModule, bindingModule, feedbackModule, skillsModule, lifeModule, inventoryModule, questModule, mapModule, mapViewModule, travelModule, weatherModule] = await Promise.all([
       import('../open-world/session-projection'),
       import('../open-world/modules'),
       import('../open-world/action-registry'),
@@ -596,6 +596,7 @@ async function readOpenWorldRuntimeContext(input: AssembleContextInput): Promise
       import('../open-world/map-topology'),
       import('../open-world/map-view'),
       import('../open-world/travel'),
+      import('../open-world/weather'),
     ])
     if (!state.textOpenWorld) return ''
     const binding = await bindingModule.verifyTextOpenWorldVNextSessionBindingV1(session)
@@ -615,13 +616,7 @@ async function readOpenWorldRuntimeContext(input: AssembleContextInput): Promise
     if (!region) throw new Error('文字开放世界当前区域不在冻结ProductRelease/Build中。')
     const itemByKey = new Map(modules.items.items.map(item => [item.key, item]))
     const factionByKey = new Map(modules.actors.factions.map(item => [item.key, item]))
-    const timePeriod = modules['time-weather'].timePeriods.find(period => {
-      const minute = runtime.time.worldMinute % modules['time-weather'].minutesPerDay
-      return minute >= period.startMinute && minute < period.endMinute
-    })
-    const day = Math.floor(runtime.time.worldMinute / modules['time-weather'].minutesPerDay) + 1
-    const weatherKey = runtime.time.currentWeatherByRegionKey[region.key]
-    const weather = modules['time-weather'].weather.find(item => item.key === weatherKey)
+    const clockWeather = weatherModule.projectTextOpenWorldClockWeatherV1({ runtimePackage, state: runtime, parsedModules: modules })
     const playerMap = mapViewModule.projectTextOpenWorldPlayerMapV1({ runtimePackage, state: runtime })
     const visibleRegions = playerMap.regions
     const visibleLocations = playerMap.locations
@@ -683,7 +678,7 @@ async function readOpenWorldRuntimeContext(input: AssembleContextInput): Promise
       `【文字开放世界vNext玩家视角】${session.title}｜事件序号=${projection.lastEventSequence}｜运行源=${playable.packageHash.slice(0, 16)}`,
       `【体验边界】${runtimePackage.experienceContract.freedomBoundary}`,
       `【当前位置】${region.title}／${location.title}｜${location.description}｜存在目的=${location.purpose}｜提前到达=${location.earlyArrivalDescription}`,
-      `【时间与天气】第${day}天｜${timePeriod?.label ?? '未知时段'}｜${weather?.label ?? weatherKey ?? '未知天气'}`,
+      `【时间与天气】第${clockWeather.day}天｜${clockWeather.timePeriodLabel}｜${clockWeather.weatherLabel}｜${clockWeather.weatherDescription}`,
       `【主角】${modules.actors.player.identity.name}｜等级=${runtime.player.level}/${derived.progression.maximumLevel}｜经验=${runtime.player.experience}${derived.progression.nextLevelThreshold == null ? '（满级）' : `/${derived.progression.nextLevelThreshold}`}｜生命=${runtime.player.health}/${derived.playerStats.maximumHealth}｜技能资源=${runtime.player.skillResource}/${derived.playerStats.maximumSkillResource}`,
       `【生命状态】${life.phase}｜生命比例=${Math.round(life.healthRatio * 100)}%｜休息=${life.rest.available ? '可用' : life.rest.reason}｜复活点=${life.respawnPoints.map(point => `${point.fastTravelPointKey}:${point.title}`).join('、') || '无'}｜战前重试=${life.combatRetryCheckpointIds.length ? '可用' : '不可用'}`,
       `【主角身份】称谓=${modules.actors.player.identity.pronouns || '未指定'}｜外观=${modules.actors.player.identity.appearance || '未指定'}｜背景=${modules.actors.player.identity.background || '未指定'}｜性格=${modules.actors.player.identity.personality || '未指定'}`,

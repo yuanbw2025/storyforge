@@ -131,6 +131,7 @@ describe('Text Open World vNext · quest tracking, deadlines and history', () =>
     const events = await db.productRuntimeEvents.where('sessionId').equals(session.id!).sortBy('sequence')
     expect(events.filter(event => event.type.startsWith('text-open-world.')).map(event => event.type)).toEqual([
       'text-open-world.command.committed', 'text-open-world.effects.applied',
+      'text-open-world.command.committed', 'text-open-world.random.resolved', 'text-open-world.random.resolved', 'text-open-world.effects.applied',
       'text-open-world.command.committed', 'text-open-world.effects.applied',
     ])
     expect(projectTextOpenWorldQuestHistoryV1({ runtimePackage, events, instanceKey: TIMED_INSTANCE_KEY }).map(entry => entry.kind)).toEqual(['expired'])

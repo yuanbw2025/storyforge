@@ -43,7 +43,7 @@ async function outcome(sessionId: number, claimKey = 'claim.event.1') {
   const projection = (await readProductRuntimeState(sessionId)).textOpenWorld!
   const catalog = createTextOpenWorldEffectCatalogV1(projection.runtimePackage)
   const before = projection.state
-  const plan = await catalog.plan({ effectKeys: [], claimKey, state: before })
+  const plan = await catalog.plan({ effectKeys: ['effect.investigate-time'], claimKey, state: before })
   const { receipt } = await catalog.apply({ plan, state: before })
   return { plan, receipt, outcome: 'success' as const, reason: null, degradation: null }
 }

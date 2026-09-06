@@ -29,7 +29,12 @@ function state(overrides: Partial<TextOpenWorldEffectStateV1> = {}): TextOpenWor
       locationKnowledgeByKey: { 'location.salt-port': 'visited', 'location.ridge-channel': 'heard' },
       unlockedFastTravelPointKeys: ['fast-travel.salt-port'], openEdgeKeys: ['edge.port-ridge'], travel: null,
     },
-    time: { worldMinute: 480, currentWeatherByRegionKey: { 'region.salt-port': 'weather.clear', 'region.ridge': 'weather.clear' }, deadlineWorldMinuteByKey: {} },
+    time: {
+      worldMinute: 480,
+      currentWeatherByRegionKey: { 'region.salt-port': 'weather.clear', 'region.ridge': 'weather.clear' },
+      deadlineWorldMinuteByKey: {},
+      lastWeatherSettlementEpoch: 1,
+    },
     relationships: { morality: 0, factionAffinityByKey: { 'faction.canal-keepers': 0 }, storyModifierByActorKey: {} },
     combat: null,
     actors: { 'actor.caretaker': { alive: true, present: true, locationKey: 'location.salt-port', scheduleState: '检查内渠' } },

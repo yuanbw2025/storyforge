@@ -23,7 +23,7 @@ import { createTextOpenWorldVNextFixture } from '../helpers/text-open-world-vnex
 
 async function fixture() {
   const textOpenWorldVNext = createTextOpenWorldVNextFixture()
-  ;(textOpenWorldVNext.modules.actions.payload as any).actions.find((action: any) => action.key === 'action.investigate-channel').successEffectKeys = ['effect.reward-currency']
+  ;(textOpenWorldVNext.modules.actions.payload as any).actions.find((action: any) => action.key === 'action.investigate-channel').successEffectKeys = ['effect.reward-currency', 'effect.investigate-time']
   ;(textOpenWorldVNext.modules.knowledge.payload as any).entries.push({
     key: 'knowledge.hidden-origin', kind: 'lore', title: '不应看见的真相',
     content: '渠水断流由尚未登场的幕后人物造成。', sourceRefs: ['world-release:hidden'],
@@ -48,7 +48,7 @@ async function completeAction(created: Awaited<ReturnType<typeof fixture>>) {
   })
   const pending = (await readProductRuntimeState(created.session.id!)).textOpenWorld!
   const catalog = createTextOpenWorldEffectCatalogV1(created.textOpenWorldVNext)
-  const plan = await catalog.plan({ effectKeys: ['effect.reward-currency'], claimKey: 'claim.registry-lifecycle.1', state: pending.state })
+  const plan = await catalog.plan({ effectKeys: ['effect.reward-currency', 'effect.investigate-time'], claimKey: 'claim.registry-lifecycle.1', state: pending.state })
   const { receipt } = await catalog.apply({ plan, state: pending.state })
   await commitTextOpenWorldOutcomeBatchV1({
     sessionId: created.session.id!, commandId: 'command.registry-lifecycle.1',
@@ -77,6 +77,7 @@ describe('Text Open World vNext · three registries and complete data lifecycle'
     expect(context.text).toContain('skill.basic-attack:挥击｜active/attack｜目标=single-enemy｜消耗=0｜冷却=0回合｜来源=初始｜当前可用')
     expect(context.text).toContain('【当前状态】\n- 无')
     expect(context.text).toContain('【生命状态】healthy')
+    expect(context.text).toContain('【时间与天气】第1天｜白天｜晴朗｜干燥而明亮。')
     expect(context.text).toContain('存在目的=承载开场、主线委托、交易和安全复活。')
     expect(context.text).toContain('【玩家可知相邻道路】')
     expect(context.text).toContain('edge.port-ridge｜前往=location.ridge-channel:断脊渠口｜60分钟｜风险=ordinary｜可执行=action.travel-port-ridge')

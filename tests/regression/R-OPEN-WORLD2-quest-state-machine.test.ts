@@ -263,7 +263,7 @@ describe('Text Open World vNext · governed Quest lifecycle', () => {
 
   it('发布时拒绝普通Action夹带任务迁移，也拒绝系统使受保护主线失败', () => {
     const smuggled = createTextOpenWorldVNextFixture()
-    ;(smuggled.modules.actions.payload as any).actions[0].successEffectKeys = ['effect.accept-main']
+    ;(smuggled.modules.actions.payload as any).actions[0].successEffectKeys = ['effect.accept-main', 'effect.investigate-time']
     expect(() => parseTextOpenWorldModulesV1(smuggled)).toThrow('任务迁移Effect只能由任务生命周期Action引用')
 
     const failedMain = createTextOpenWorldVNextFixture()

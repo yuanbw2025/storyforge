@@ -15,7 +15,7 @@ type Row = Record<string, unknown>
 const KEY = /^[a-z][a-z0-9._:-]{0,199}$/
 const ACTION_CATEGORIES: TextOpenWorldActionCategoryV1[] = [
   'move', 'travel', 'fast-travel', 'observe', 'investigate', 'talk', 'take', 'use', 'equip', 'unequip', 'drop',
-  'buy', 'sell', 'craft', 'accept-quest', 'abandon-quest', 'objective-action', 'quest-action', 'claim-reward', 'start-combat', 'continue-combat', 'escape',
+  'buy', 'sell', 'craft', 'accept-quest', 'abandon-quest', 'objective-action', 'quest-action', 'weather-action', 'claim-reward', 'start-combat', 'continue-combat', 'escape',
   'rest', 'respawn', 'read', 'track', 'untrack', 'save', 'load-branch',
 ]
 const QUEST_TYPES: TextOpenWorldQuestTypeV1[] = ['mainline', 'significant', 'ordinary', 'template']
@@ -326,10 +326,11 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
     if (actorRows.find(actor => actor.key === item.actorKey)?.scheduleKey !== item.key) fail(`schedule/actor反向引用不一致:${String(item.key)}`)
   })
 
-  const actions = versioned(packageValue, 'actions', [1, 2, 3, 4])
+  const actions = versioned(packageValue, 'actions', [1, 2, 3, 4, 5])
   const modernActionModule = Number(actions.version) >= 2
   const travelActionModule = Number(actions.version) >= 3
   const fastTravelActionModule = Number(actions.version) >= 4
+  const timeWeatherActionModule = Number(actions.version) >= 5
   exact(actions, ['version', 'conditions', 'effects', 'actions'], 'actions')
   const conditions = catalog(actions.conditions, 'actions.conditions', ['key', 'expression', 'failureMessage']); const effects = catalog(actions.effects, 'actions.effects', ['key', 'operation', 'payload']); const actionRows = catalog(actions.actions, 'actions.actions', ['key', 'category', 'label', 'description', 'actorScope', 'targetScope', 'locationKeys', 'requirementConditionKeys', 'costEffectKeys', 'successEffectKeys', 'failureEffectKeys', 'timeCostMinutes', 'confirmationPolicy', 'repeatPolicy', 'cooldownMinutes'])
   const conditionKeys = keysOf(conditions, 'actions.conditions'); const effectKeys = keysOf(effects, 'actions.effects'); const actionKeys = keysOf(actionRows, 'actions.actions')
@@ -406,6 +407,43 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
     actionRows.filter(candidate => candidate.key !== action.key).forEach(candidate => {
       const referenced = [...strings(candidate.costEffectKeys, `action ${String(candidate.key)} costs`), ...strings(candidate.successEffectKeys, `action ${String(candidate.key)} success`), ...strings(candidate.failureEffectKeys, `action ${String(candidate.key)} failures`)]
       if (referenced.includes(String(successEffects[0].key))) fail(`fast-travel只能由快速旅行Action引用:${String(candidate.key)}`)
+    })
+  }
+
+  if (timeWeatherActionModule) {
+    const weatherActions = actionRows.filter(action => action.category === 'weather-action')
+    if (weatherActions.length !== 1) fail('Action v5必须且只能定义一个天气结算Action')
+    const action = weatherActions[0]
+    const successEffectKeys = strings(action.successEffectKeys, 'weather action.successEffectKeys')
+    const successEffects = successEffectKeys.map(effectKey => effects.find(effect => effect.key === effectKey)!)
+    if (action.actorScope !== 'system' || action.targetScope !== 'none'
+      || strings(action.locationKeys, 'weather action.locationKeys').length
+      || strings(action.requirementConditionKeys, 'weather action.requirementConditionKeys').length
+      || strings(action.costEffectKeys, 'weather action.costEffectKeys').length
+      || strings(action.failureEffectKeys, 'weather action.failureEffectKeys').length
+      || successEffects.length !== 1 || successEffects[0].operation !== 'settle-weather'
+      || action.timeCostMinutes !== 0 || action.confirmationPolicy !== 'never'
+      || action.repeatPolicy !== 'repeatable' || action.cooldownMinutes != null) fail('天气结算Action合同无效')
+    const weatherEffects = effects.filter(effect => effect.operation === 'settle-weather')
+    if (weatherEffects.length !== 1 || weatherEffects[0].key !== successEffects[0].key) fail('天气结算Effect必须且只能属于天气结算Action')
+    exact(row(weatherEffects[0].payload, 'weather effect.payload'), [], 'weather effect.payload')
+    actionRows.filter(candidate => candidate.key !== action.key).forEach(candidate => {
+      const referenced = [...strings(candidate.costEffectKeys, `action ${String(candidate.key)} costs`), ...strings(candidate.successEffectKeys, `action ${String(candidate.key)} success`), ...strings(candidate.failureEffectKeys, `action ${String(candidate.key)} failures`)]
+      if (referenced.includes(String(successEffects[0].key))) fail(`settle-weather只能由天气结算Action引用:${String(candidate.key)}`)
+    })
+    actionRows.filter(candidate => candidate.category !== 'fast-travel' && candidate.category !== 'weather-action').forEach(candidate => {
+      const successEffects = strings(candidate.successEffectKeys, `action ${String(candidate.key)} success`).map(effectKey => effects.find(effect => effect.key === effectKey)!)
+      const nonSuccessEffects = [...strings(candidate.costEffectKeys, `action ${String(candidate.key)} costs`), ...strings(candidate.failureEffectKeys, `action ${String(candidate.key)} failures`)]
+        .map(effectKey => effects.find(effect => effect.key === effectKey)!)
+      if (nonSuccessEffects.some(effect => effect.operation === 'advance-time')) fail(`世界时间只能在Action成功Effect中推进:${String(candidate.key)}`)
+      const timeEffects = successEffects.filter(effect => effect.operation === 'advance-time')
+      const declaredMinutes = Number(candidate.timeCostMinutes)
+      if (declaredMinutes === 0 && timeEffects.length) fail(`零耗时Action不能推进世界时间:${String(candidate.key)}`)
+      if (declaredMinutes > 0) {
+        if (timeEffects.length !== 1 || row(timeEffects[0].payload, `action ${String(candidate.key)} time payload`).minutes !== declaredMinutes) {
+          fail(`Action声明耗时必须由唯一advance-time Effect落实:${String(candidate.key)}`)
+        }
+      }
     })
   }
 
@@ -925,8 +963,17 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
     fail('relationships模块与根calibration不一致')
   }
 
-  const timeWeather = versioned(packageValue, 'time-weather')
-  exact(timeWeather, ['version', 'initialWorldMinute', 'minutesPerDay', 'timePeriods', 'weather', 'regionWeatherTables'], 'time-weather'); const minutesPerDay = int(timeWeather.minutesPerDay, 'time-weather.minutesPerDay', 60, 100_000); int(timeWeather.initialWorldMinute, 'time-weather.initialWorldMinute', 0, 1_000_000_000)
+  const timeWeather = versioned(packageValue, 'time-weather', [1, 2])
+  const modernTimeWeather = Number(timeWeather.version) >= 2
+  exact(timeWeather, modernTimeWeather
+    ? ['version', 'initialWorldMinute', 'minutesPerDay', 'weatherUpdateIntervalMinutes', 'timePeriods', 'weather', 'regionWeatherTables']
+    : ['version', 'initialWorldMinute', 'minutesPerDay', 'timePeriods', 'weather', 'regionWeatherTables'], 'time-weather')
+  const minutesPerDay = int(timeWeather.minutesPerDay, 'time-weather.minutesPerDay', 60, 100_000)
+  int(timeWeather.initialWorldMinute, 'time-weather.initialWorldMinute', 0, 1_000_000_000)
+  const weatherUpdateIntervalMinutes = modernTimeWeather
+    ? int(timeWeather.weatherUpdateIntervalMinutes, 'time-weather.weatherUpdateIntervalMinutes', 1, 1_000_000)
+    : minutesPerDay
+  if (timeWeatherActionModule && !modernTimeWeather) fail('Action v5必须搭配TimeWeather v2')
   const periods = catalog(timeWeather.timePeriods, 'time-weather.timePeriods', ['key', 'label', 'startMinute', 'endMinute']); const weather = catalog(timeWeather.weather, 'time-weather.weather', ['key', 'label', 'description']); const weatherTables = catalog(timeWeather.regionWeatherTables, 'time-weather.regionWeatherTables', ['regionKey', 'entries']); const periodKeys = keysOf(periods, 'time-weather.timePeriods'); const weatherKeys = keysOf(weather, 'time-weather.weather')
   periods.forEach((item, index) => { text(item.label, `time-weather.timePeriods[${index}].label`, 100); const start = int(item.startMinute, `time-weather.timePeriods[${index}].startMinute`, 0, minutesPerDay - 1); const end = int(item.endMinute, `time-weather.timePeriods[${index}].endMinute`, 1, minutesPerDay); if (start >= end) fail('time period start必须小于end') })
   const orderedPeriods = [...periods].sort((left, right) => Number(left.startMinute) - Number(right.startMinute))
@@ -935,7 +982,9 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
     fail('timePeriods必须无重叠无空洞覆盖完整一天')
   }
   weather.forEach((item, index) => { text(item.label, `time-weather.weather[${index}].label`, 100); text(item.description, `time-weather.weather[${index}].description`) })
-  const weatherRegionKeys = weatherTables.map((item, index) => key(item.regionKey, `time-weather.regionWeatherTables[${index}].regionKey`)); if (new Set(weatherRegionKeys).size !== weatherRegionKeys.length) fail('regionWeatherTables.regionKey重复'); requireRefs(weatherRegionKeys, regionKeys, 'weather region'); weatherTables.forEach((item, index) => { const entries = array(item.entries, `time-weather.regionWeatherTables[${index}].entries`); if (!entries.length) fail('weather table不能为空'); entries.forEach((entry, entryIndex) => { const parsed = row(entry, `weather entries[${entryIndex}]`); exact(parsed, ['weatherKey', 'weight'], 'weather entry'); requireRef(key(parsed.weatherKey, 'weatherKey'), weatherKeys, 'weather'); numberValue(parsed.weight, 'weather weight', 0.000001, 1_000_000) }) })
+  if (modernTimeWeather && weather.length < 2) fail('TimeWeather v2至少需要两种天气')
+  if (modernTimeWeather && weatherTables.length > 128) fail('TimeWeather v2最多支持128个地区的原子天气结算')
+  const weatherRegionKeys = weatherTables.map((item, index) => key(item.regionKey, `time-weather.regionWeatherTables[${index}].regionKey`)); if (new Set(weatherRegionKeys).size !== weatherRegionKeys.length) fail('regionWeatherTables.regionKey重复'); requireRefs(weatherRegionKeys, regionKeys, 'weather region'); weatherTables.forEach((item, index) => { const entries = array(item.entries, `time-weather.regionWeatherTables[${index}].entries`, modernTimeWeather ? 128 : 20_000); if (!entries.length) fail('weather table不能为空'); const entryWeatherKeys: string[] = []; let totalWeight = 0; entries.forEach((entry, entryIndex) => { const parsed = row(entry, `weather entries[${entryIndex}]`); exact(parsed, ['weatherKey', 'weight'], 'weather entry'); const weatherKey = key(parsed.weatherKey, 'weatherKey'); requireRef(weatherKey, weatherKeys, 'weather'); entryWeatherKeys.push(weatherKey); const weight = modernTimeWeather ? int(parsed.weight, 'weather weight', 1, 1_000_000) : numberValue(parsed.weight, 'weather weight', 0.000001, 1_000_000); totalWeight += weight }); if (new Set(entryWeatherKeys).size !== entryWeatherKeys.length) fail(`weather table天气重复:${String(item.regionKey)}`); if (modernTimeWeather && (!Number.isSafeInteger(totalWeight) || totalWeight > 1_000_000_000)) fail(`weather table总权重越界:${String(item.regionKey)}`) })
   requireSameKeys(weatherRegionKeys, [...regionKeys], 'region weather tables')
   schedules.forEach((item, index) => array(item.entries, `actors.schedules[${index}].entries`).forEach((entry, entryIndex) => requireRef(key(row(entry, 'schedule entry').timePeriodKey, `actors.schedules[${index}].entries[${entryIndex}].timePeriodKey`), periodKeys, 'schedule time period')))
 
@@ -1044,7 +1093,7 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
     crafting: structuredClone(crafting) as unknown as TextOpenWorldParsedModulesV1['crafting'],
     economy: structuredClone(economy) as unknown as TextOpenWorldParsedModulesV1['economy'],
     relationships: structuredClone(relationships) as unknown as TextOpenWorldParsedModulesV1['relationships'],
-    'time-weather': structuredClone(timeWeather) as unknown as TextOpenWorldParsedModulesV1['time-weather'],
+    'time-weather': { ...structuredClone(timeWeather), weatherUpdateIntervalMinutes } as unknown as TextOpenWorldParsedModulesV1['time-weather'],
     director: structuredClone(director) as unknown as TextOpenWorldParsedModulesV1['director'],
     knowledge: structuredClone(knowledge) as unknown as TextOpenWorldParsedModulesV1['knowledge'],
     presentation: {

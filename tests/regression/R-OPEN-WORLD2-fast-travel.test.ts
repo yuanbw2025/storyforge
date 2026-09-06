@@ -144,7 +144,7 @@ describe('Text Open World vNext · governed atomic fast travel', () => {
     expect(() => parseTextOpenWorldModulesV1(slow)).toThrow('耗时比例不能高于普通路线')
 
     const smuggled = createTextOpenWorldVNextFixture()
-    ;(smuggled.modules.actions.payload as any).actions.find((action: any) => action.key === 'action.investigate-channel').successEffectKeys = ['effect.fast-travel']
+    ;(smuggled.modules.actions.payload as any).actions.find((action: any) => action.key === 'action.investigate-channel').successEffectKeys = ['effect.fast-travel', 'effect.investigate-time']
     expect(() => parseTextOpenWorldModulesV1(smuggled)).toThrow('fast-travel只能由快速旅行Action引用')
   })
 

@@ -21,6 +21,7 @@ import type {
   TextOpenWorldRulesetStampV1,
   TextOpenWorldRewardAuthorizationV1,
   TextOpenWorldFastTravelAuthorizationV1,
+  TextOpenWorldWeatherSettlementAuthorizationV1,
 } from '../types'
 import { parseTextOpenWorldCommandEventPayloadV1 } from './command-contract'
 
@@ -133,6 +134,34 @@ function parseAuthorization(value: unknown, label: string): TextOpenWorldEffectP
       baseWorldMinute: integer(raw.baseWorldMinute, `${label}.baseWorldMinute`),
       travelMinutes: integer(raw.travelMinutes, `${label}.travelMinutes`, 1),
     } satisfies TextOpenWorldFastTravelAuthorizationV1
+  }
+  if (raw.kind === 'weather-settlement') {
+    exact(raw, ['kind', 'worldMinute', 'weatherEpoch', 'randomRequests', 'changes'], label)
+    if (!Array.isArray(raw.randomRequests) || raw.randomRequests.length < 1 || raw.randomRequests.length > 128) fail(`${label}.randomRequests无效`)
+    if (!Array.isArray(raw.changes) || raw.changes.length !== raw.randomRequests.length) fail(`${label}.changes无效`)
+    const randomRequests = raw.randomRequests.map((request, index) => parseTextOpenWorldRandomRequestV1(request, `${label}.randomRequests[${index}]`))
+    const changes = raw.changes.map((change, index) => {
+      const parsed = row(change, `${label}.changes[${index}]`)
+      exact(parsed, ['regionKey', 'fromWeatherKey', 'toWeatherKey', 'drawKey', 'drawValue'], `${label}.changes[${index}]`)
+      const request = randomRequests[index]
+      const drawKey = token(parsed.drawKey, `${label}.changes[${index}].drawKey`)
+      if (drawKey !== request.drawKey) fail(`${label}.changes[${index}].drawKey与随机请求不一致`)
+      return {
+        regionKey: token(parsed.regionKey, `${label}.changes[${index}].regionKey`),
+        fromWeatherKey: token(parsed.fromWeatherKey, `${label}.changes[${index}].fromWeatherKey`),
+        toWeatherKey: token(parsed.toWeatherKey, `${label}.changes[${index}].toWeatherKey`),
+        drawKey,
+        drawValue: integer(parsed.drawValue, `${label}.changes[${index}].drawValue`, request.minimumInclusive, request.maximumInclusive),
+      }
+    })
+    if (new Set(changes.map(change => change.regionKey)).size !== changes.length) fail(`${label}.changes地区不能重复`)
+    return {
+      kind: 'weather-settlement',
+      worldMinute: integer(raw.worldMinute, `${label}.worldMinute`),
+      weatherEpoch: integer(raw.weatherEpoch, `${label}.weatherEpoch`),
+      randomRequests,
+      changes,
+    } satisfies TextOpenWorldWeatherSettlementAuthorizationV1
   }
   if (raw.kind === 'quest-objective') {
     exact(raw, ['kind', 'instanceKey', 'definitionKey', 'stageKey', 'objectiveKey', 'worldMinute', 'fromStatus', 'toStatus'], label)

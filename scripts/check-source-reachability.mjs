@@ -48,6 +48,10 @@ const entrypoints = [
   // Scope conversion is a headless ownership-administration service. It remains independently tested
   // while no author UI exposes arbitrary record-owner conversion.
   'src/lib/registry/ownership-scope-conversion.ts',
+  // Text Open World vNext release authoring exposes the player compiler/installer as a headless boundary.
+  // The player UI consumes its frozen Release result; importing the compiler into that runtime bundle
+  // would couple authoring-only WorldRelease reads to play. This entry also owns source-gateway reachability.
+  'src/lib/open-world/player-definition.ts',
 ].map(file => path.resolve(root, file))
 
 const graph = new Map()

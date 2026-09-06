@@ -36,6 +36,7 @@ import {
 import { createTextOpenWorldRewardCatalogV1 } from './rewards'
 import { parseTextOpenWorldRuntimePackageV1 } from './runtime-package'
 import { createTextOpenWorldFastTravelCatalogV1 } from './fast-travel'
+import { createTextOpenWorldWeatherCatalogV1, projectTextOpenWorldClockWeatherV1 } from './weather'
 
 type Row = Record<string, unknown>
 const STABLE_KEY = /^[a-z][a-z0-9._:-]{0,199}$/
@@ -53,10 +54,6 @@ function json(event: ProductRuntimeEvent): unknown { try { return JSON.parse(eve
 function timePeriodKey(modules: TextOpenWorldParsedModulesV1, worldMinute: number): string {
   const minute = worldMinute % modules['time-weather'].minutesPerDay
   return modules['time-weather'].timePeriods.find(period => minute >= period.startMinute && minute < period.endMinute)?.key ?? fail('世界分钟无法映射时间段')
-}
-
-function currentRegionKey(modules: TextOpenWorldParsedModulesV1, state: TextOpenWorldEffectStateV1): string {
-  return modules.world.locations.find(location => location.key === state.map.currentLocationKey)?.regionKey ?? fail('当前位置没有所属地区')
 }
 
 function actorInitialState(modules: TextOpenWorldParsedModulesV1, actorKey: string, periodKey: string) {
@@ -107,6 +104,7 @@ function initialEffectState(runtimePackage: ReturnType<typeof parseTextOpenWorld
     },
     time: {
       worldMinute: modules['time-weather'].initialWorldMinute,
+      lastWeatherSettlementEpoch: Math.floor(modules['time-weather'].initialWorldMinute / modules['time-weather'].weatherUpdateIntervalMinutes),
       currentWeatherByRegionKey: Object.fromEntries(modules['time-weather'].regionWeatherTables.map(table => [table.regionKey, table.entries[0].weatherKey])),
       deadlineWorldMinuteByKey: {},
     },
@@ -178,6 +176,15 @@ export function createTextOpenWorldInitialProjectionCandidatesV1(value: unknown)
       candidates.push(legacy)
     }
   }
+  if (modules.actions.version < 5 || modules['time-weather'].version < 2) {
+    for (const candidate of [...candidates]) {
+      const legacy = structuredClone(candidate) as Row
+      const legacyState = row(legacy.state, 'legacy projection.state')
+      const legacyTime = row(legacyState.time, 'legacy projection.state.time')
+      delete legacyTime.lastWeatherSettlementEpoch
+      candidates.push(legacy)
+    }
+  }
   return candidates
 }
 
@@ -189,6 +196,11 @@ export function parseTextOpenWorldSessionProjectionV1(value: unknown): TextOpenW
   const ruleset = row(parsed.ruleset, 'ruleset'); exact(ruleset, ['key', 'version'], 'ruleset')
   if (ruleset.key !== runtimePackage.metadata.rulesetKey || ruleset.version !== runtimePackage.metadata.rulesetVersion) fail('ruleset与RuntimePackage不一致')
   const state = structuredClone(parsed.state) as unknown as TextOpenWorldEffectStateV1
+  const legacyTime = state.time as TextOpenWorldEffectStateV1['time'] & { lastWeatherSettlementEpoch?: number }
+  if (legacyTime.lastWeatherSettlementEpoch == null) {
+    if (modules.actions.version >= 5 && modules['time-weather'].version >= 2) fail('新版Session缺少天气结算周期游标')
+    legacyTime.lastWeatherSettlementEpoch = Math.floor(legacyTime.worldMinute / modules['time-weather'].weatherUpdateIntervalMinutes)
+  }
   const legacyQuests = state.quests as TextOpenWorldEffectStateV1['quests'] & { tracking?: TextOpenWorldEffectStateV1['quests']['tracking'] }
   if (!legacyQuests.tracking) {
     legacyQuests.tracking = {
@@ -322,6 +334,18 @@ export function applyTextOpenWorldSessionEventV1(current: TextOpenWorldSessionPr
       if (projection.protocol.pendingTargetKey !== authorization.destinationLocationKey || projection.protocol.pendingActorKey !== 'player'
         || action.category !== 'fast-travel' || action.actorScope !== 'player' || action.targetScope !== 'location') fail('快速旅行授权与命令目标不一致')
       createTextOpenWorldFastTravelCatalogV1(projection.runtimePackage, modules).assertAuthorization({ state: projection.state, effect: fastTravelEffect, authorization })
+    } else if (applied.plan.authorization?.kind === 'weather-settlement') {
+      const authorization = applied.plan.authorization
+      const action = modules.actions.actions.find(item => item.key === projection.protocol.pendingActionKey) ?? fail('命令Action不存在')
+      const expectedEffectKeys = [...new Set([...action.costEffectKeys, ...action.successEffectKeys])]
+      if (canonicalProductProductionJsonV2(applied.plan.effectKeys) !== canonicalProductProductionJsonV2(expectedEffectKeys)) fail('天气结算EffectPlan与命令Action不一致')
+      if (projection.protocol.pendingActorKey !== 'system' || projection.protocol.pendingTargetKey !== null
+        || action.category !== 'weather-action' || action.actorScope !== 'system' || action.targetScope !== 'none') fail('天气结算授权与系统命令不一致')
+      createTextOpenWorldWeatherCatalogV1(projection.runtimePackage, modules).assertAuthorization({
+        state: projection.state,
+        authorization,
+        evidence: pendingRandom.map(item => item.evidence),
+      })
     } else {
       const action = modules.actions.actions.find(item => item.key === projection.protocol.pendingActionKey) ?? fail('命令Action不存在')
       const outcomeEffectKeys = applied.outcome === 'failure' ? action.failureEffectKeys : action.successEffectKeys
@@ -349,7 +373,8 @@ export function applyTextOpenWorldSessionEventV1(current: TextOpenWorldSessionPr
 
 export function deriveTextOpenWorldContextsV1(value: TextOpenWorldSessionProjectionV1): TextOpenWorldDerivedContextsV1 {
   const projection = parseTextOpenWorldSessionProjectionV1(value); const modules = parseTextOpenWorldModulesV1(projection.runtimePackage); const state = projection.state
-  const regionKey = currentRegionKey(modules, state); const periodKey = timePeriodKey(modules, state.time.worldMinute)
+  const clockWeather = projectTextOpenWorldClockWeatherV1({ runtimePackage: projection.runtimePackage, state, parsedModules: modules })
+  const regionKey = clockWeather.regionKey; const periodKey = clockWeather.timePeriodKey
   const attitudeByActorKey = Object.fromEntries(modules.actors.actors.map(actor => {
     const affinity = actor.factionKey ? state.relationships.factionAffinityByKey[actor.factionKey] ?? modules.relationships.factionAffinity.initial : 0
     const score = state.relationships.morality * modules.relationships.attitude.moralityWeight + affinity * modules.relationships.attitude.factionWeight + (state.relationships.storyModifierByActorKey[actor.key] ?? 0)

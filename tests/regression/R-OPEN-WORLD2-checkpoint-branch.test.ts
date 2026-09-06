@@ -17,7 +17,7 @@ import { createTextOpenWorldVNextFixture } from '../helpers/text-open-world-vnex
 
 function rewardRuntimePackage(): TextOpenWorldRuntimePackageV1 {
   const runtimePackage = createTextOpenWorldVNextFixture()
-  ;(runtimePackage.modules.actions.payload as any).actions.find((action: any) => action.key === 'action.investigate-channel').successEffectKeys = ['effect.reward-currency']
+  ;(runtimePackage.modules.actions.payload as any).actions.find((action: any) => action.key === 'action.investigate-channel').successEffectKeys = ['effect.reward-currency', 'effect.investigate-time']
   return runtimePackage
 }
 
@@ -37,7 +37,7 @@ async function command(sessionId: number, commandId: string): Promise<TextOpenWo
 async function playReward(runtimePackage: TextOpenWorldRuntimePackageV1, sessionId: number, commandId: string, claimKey: string) {
   const envelope = await command(sessionId, commandId); await commitTextOpenWorldCommandV1(envelope)
   const pending = (await readProductRuntimeState(sessionId)).textOpenWorld!; const catalog = createTextOpenWorldEffectCatalogV1(runtimePackage)
-  const plan = await catalog.plan({ effectKeys: ['effect.reward-currency'], claimKey, state: pending.state }); const { receipt } = await catalog.apply({ plan, state: pending.state })
+  const plan = await catalog.plan({ effectKeys: ['effect.reward-currency', 'effect.investigate-time'], claimKey, state: pending.state }); const { receipt } = await catalog.apply({ plan, state: pending.state })
   await commitTextOpenWorldOutcomeBatchV1({ sessionId, commandId, ruleset: { key: 'storyforge.standard', version: 1 }, randomRequests: [], plan, receipt, outcome: 'success', reason: null, degradation: null })
 }
 

@@ -18,7 +18,7 @@ import { createTextOpenWorldVNextFixture } from '../helpers/text-open-world-vnex
 async function fixture(suffix: string) {
   const textOpenWorldVNext = createTextOpenWorldVNextFixture()
   if (suffix === 'success') {
-    ;(textOpenWorldVNext.modules.actions.payload as any).actions.find((action: any) => action.key === 'action.investigate-channel').successEffectKeys = ['effect.reward-currency']
+    ;(textOpenWorldVNext.modules.actions.payload as any).actions.find((action: any) => action.key === 'action.investigate-channel').successEffectKeys = ['effect.reward-currency', 'effect.investigate-time']
   }
   const created = await createGovernedTextOpenWorldSessionFixtureV1({
     name: `TEXT-OPEN-WORLD Feedback验收-${suffix}-${crypto.randomUUID()}`,
@@ -82,10 +82,13 @@ describe('Text Open World vNext · unified player feedback receipt', () => {
     const pending = await readTextOpenWorldFeedbackV1({ sessionId: current.id!, commandId: 'command.feedback.success' })
     expect(pending).toMatchObject({ phase: 'pending', status: 'pending', outcomeCommitted: false, presentation: { mayNarrateSuccess: false }, evidenceEventSequences: [3] })
 
-    await settle({ sessionId: current.id!, commandId: 'command.feedback.success', claimKey: 'claim.feedback.success', outcome: 'success', reason: null, degradation: null, effectKeys: ['effect.reward-currency'] })
+    await settle({ sessionId: current.id!, commandId: 'command.feedback.success', claimKey: 'claim.feedback.success', outcome: 'success', reason: null, degradation: null, effectKeys: ['effect.reward-currency', 'effect.investigate-time'] })
     const success = await readTextOpenWorldFeedbackV1({ sessionId: current.id!, commandId: 'command.feedback.success' })
     expect(success).toMatchObject({ phase: 'terminal', status: 'succeeded', outcomeCommitted: true, gameplayStateChanged: true, presentation: { headline: '检查盐渠已完成', mayNarrateSuccess: true }, evidenceEventSequences: [3, 4] })
-    expect(success.changes).toEqual([expect.objectContaining({ effectKey: 'effect.reward-currency', domain: 'inventory' })])
+    expect(success.changes).toEqual([
+      expect.objectContaining({ effectKey: 'effect.reward-currency', domain: 'inventory' }),
+      expect.objectContaining({ effectKey: 'effect.investigate-time', domain: 'time' }),
+    ])
     await expect(verifyTextOpenWorldFeedbackReceiptV1(success)).resolves.toEqual(success)
   })
 
@@ -99,7 +102,7 @@ describe('Text Open World vNext · unified player feedback receipt', () => {
     const degradedCreated = await fixture('degraded')
     const degradedSession = degradedCreated.session; await command(degradedSession.id!, 'command.feedback.degraded')
     const degradation = { code: 'portrait-unavailable', message: '角色头像暂时不可用。', unavailableCapability: 'portrait', fallback: '使用角色姓名与文字描写。' }
-    await settle({ sessionId: degradedSession.id!, commandId: 'command.feedback.degraded', claimKey: 'claim.feedback.degraded', outcome: 'degraded', reason: null, degradation })
+    await settle({ sessionId: degradedSession.id!, commandId: 'command.feedback.degraded', claimKey: 'claim.feedback.degraded', outcome: 'degraded', reason: null, degradation, effectKeys: ['effect.investigate-time'] })
     const degraded = await readTextOpenWorldFeedbackV1({ sessionId: degradedSession.id!, commandId: 'command.feedback.degraded' })
     expect(degraded).toMatchObject({ status: 'degraded', outcomeCommitted: true, degradation, presentation: { mayNarrateSuccess: true } })
     expect(degraded.presentation.details).toContain('替代表现：使用角色姓名与文字描写。')

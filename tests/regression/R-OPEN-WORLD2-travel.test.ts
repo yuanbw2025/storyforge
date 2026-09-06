@@ -89,7 +89,7 @@ describe('Text Open World vNext · governed ordinary travel and early arrival', 
 
     const smuggled = createTextOpenWorldVNextFixture()
     ;(smuggled.modules.actions.payload as any).actions
-      .find((action: any) => action.key === 'action.investigate-channel').successEffectKeys = ['effect.travel-port-ridge-start']
+      .find((action: any) => action.key === 'action.investigate-channel').successEffectKeys = ['effect.travel-port-ridge-start', 'effect.investigate-time']
     expect(() => parseTextOpenWorldModulesV1(smuggled)).toThrow('start-travel只能由普通旅行Action引用')
 
     const legacy = createTextOpenWorldVNextFixture()

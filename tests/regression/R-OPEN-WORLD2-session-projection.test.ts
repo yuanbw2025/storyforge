@@ -69,7 +69,7 @@ describe('Text Open World vNext · authoritative Session Projection', () => {
 
   it('同一事件日志可重建中间态与最终态，Effect真正更新权威投影', async () => {
     const runtimePackage = createTextOpenWorldVNextFixture()
-    ;(runtimePackage.modules.actions.payload as any).actions.find((action: any) => action.key === 'action.investigate-channel').successEffectKeys = ['effect.reward-currency']
+    ;(runtimePackage.modules.actions.payload as any).actions.find((action: any) => action.key === 'action.investigate-channel').successEffectKeys = ['effect.reward-currency', 'effect.investigate-time']
     const session = await createSession(runtimePackage)
     const envelope = await command(session.id!); await commitTextOpenWorldCommandV1(envelope)
     const afterCommand = await readProductRuntimeState(session.id!, 3)
@@ -77,13 +77,14 @@ describe('Text Open World vNext · authoritative Session Projection', () => {
       state: { inventory: { currency: 20 } }, protocol: { pendingCommandId: envelope.commandId, pendingActionKey: envelope.actionKey }, lastEventSequence: 3,
     })
     const catalog = createTextOpenWorldEffectCatalogV1(runtimePackage)
-    const plan = await catalog.plan({ effectKeys: ['effect.reward-currency'], claimKey: 'claim.projection.1', state: afterCommand.textOpenWorld!.state })
+    const plan = await catalog.plan({ effectKeys: ['effect.reward-currency', 'effect.investigate-time'], claimKey: 'claim.projection.1', state: afterCommand.textOpenWorld!.state })
     const { receipt } = await catalog.apply({ plan, state: afterCommand.textOpenWorld!.state })
     await commitTextOpenWorldOutcomeBatchV1({ sessionId: session.id!, commandId: envelope.commandId, ruleset: { key: 'storyforge.standard', version: 1 }, randomRequests: [], plan, receipt, outcome: 'success', reason: null, degradation: null })
 
     const final = await readProductRuntimeState(session.id!); const projection = final.textOpenWorld!
     expect(final.lastSequence).toBe(4); expect(projection.lastEventSequence).toBe(4)
     expect(projection.state.inventory.currency).toBe(30)
+    expect(projection.state.time.worldMinute).toBe(495)
     expect(projection.state.appliedClaimKeys).toEqual(['claim.projection.1'])
     expect(projection.protocol).toMatchObject({ pendingCommandId: null, lastCompletedCommandId: envelope.commandId })
     expect((await readProductRuntimeState(session.id!, 3)).textOpenWorld!.state.inventory.currency).toBe(20)
@@ -117,10 +118,10 @@ describe('Text Open World vNext · authoritative Session Projection', () => {
     action.repeatPolicy = 'cooldown'; action.cooldownMinutes = 60
     const session = await createSession(runtimePackage); const envelope = await command(session.id!); await commitTextOpenWorldCommandV1(envelope)
     const pending = (await readProductRuntimeState(session.id!)).textOpenWorld!; const catalog = createTextOpenWorldEffectCatalogV1(runtimePackage)
-    const plan = await catalog.plan({ effectKeys: [], claimKey: 'claim.cooldown.1', state: pending.state }); const { receipt } = await catalog.apply({ plan, state: pending.state })
+    const plan = await catalog.plan({ effectKeys: ['effect.investigate-time'], claimKey: 'claim.cooldown.1', state: pending.state }); const { receipt } = await catalog.apply({ plan, state: pending.state })
     await commitTextOpenWorldOutcomeBatchV1({ sessionId: session.id!, commandId: envelope.commandId, ruleset: { key: 'storyforge.standard', version: 1 }, randomRequests: [], plan, receipt, outcome: 'success', reason: null, degradation: null })
     const projection = (await readProductRuntimeState(session.id!)).textOpenWorld!
-    expect(projection.actions.cooldownUntilWorldMinuteByActionKey[action.key]).toBe(540)
+    expect(projection.actions.cooldownUntilWorldMinuteByActionKey[action.key]).toBe(555)
     expect(createTextOpenWorldActionRegistryV1(runtimePackage).project(deriveTextOpenWorldContextsV1(projection).action)[0])
       .toMatchObject({ available: false, cooldownRemainingMinutes: 60, unavailableReasons: [{ code: 'cooldown' }] })
   })

@@ -164,7 +164,7 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
       ],
     },
     actions: {
-      version: 4,
+      version: 5,
       conditions: [
         { key: 'condition.always', expression: { op: 'all', conditions: [{ op: 'player-number', field: 'level', comparator: 'gte', value: 1 }] }, failureMessage: '角色尚未进入可行动状态。' },
         { key: 'condition.health-not-full', expression: { op: 'player-resource-below-maximum', resource: 'health' }, failureMessage: '生命已经满了。' },
@@ -177,6 +177,8 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
         { key: 'effect.reward-currency', operation: 'change-currency', payload: { amount: 10 } },
         { key: 'effect.rest-full', operation: 'rest', payload: { healthRatio: 1, skillResourceRatio: 1, clearHarmfulStatuses: true } },
         { key: 'effect.rest-time', operation: 'advance-time', payload: { minutes: 480 } },
+        { key: 'effect.investigate-time', operation: 'advance-time', payload: { minutes: 15 } },
+        { key: 'effect.settle-weather', operation: 'settle-weather', payload: {} },
         { key: 'effect.respawn-salt-port', operation: 'respawn', payload: { fastTravelPointKey: 'fast-travel.salt-port', healthRatio: 1 } },
         { key: 'effect.start-ridge-jackal', operation: 'start-combat', payload: { encounterKey: 'encounter.ridge-jackal' } },
         { key: 'effect.consume-brine-tonic', operation: 'remove-item', payload: { itemKey: 'item.brine-tonic', quantity: 1, reason: 'consume' } },
@@ -215,7 +217,7 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
         key: 'action.investigate-channel', category: 'investigate', label: '检查盐渠',
         description: '检查当前位置的盐渠痕迹。', actorScope: 'player', targetScope: 'location',
         locationKeys: ['location.salt-port', 'location.ridge-channel'], requirementConditionKeys: [], costEffectKeys: [],
-        successEffectKeys: [], failureEffectKeys: [], timeCostMinutes: 15,
+        successEffectKeys: ['effect.investigate-time'], failureEffectKeys: [], timeCostMinutes: 15,
         confirmationPolicy: 'never', repeatPolicy: 'repeatable', cooldownMinutes: null,
       }, {
         key: 'action.travel-port-ridge', category: 'travel', label: '前往断脊渠口', description: '沿盐渠维护道前往断脊渠口。',
@@ -231,6 +233,11 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
         key: 'action.fast-travel', category: 'fast-travel', label: '快速旅行', description: '立即结算到已到访并解锁的快速旅行点，不触发途中事件。',
         actorScope: 'player', targetScope: 'location', locationKeys: [], requirementConditionKeys: [], costEffectKeys: [],
         successEffectKeys: ['effect.fast-travel'], failureEffectKeys: [], timeCostMinutes: 0,
+        confirmationPolicy: 'never', repeatPolicy: 'repeatable', cooldownMinutes: null,
+      }, {
+        key: 'action.settle-weather', category: 'weather-action', label: '结算天气', description: '按冻结的地区气候表结算当前天气周期。',
+        actorScope: 'system', targetScope: 'none', locationKeys: [], requirementConditionKeys: [], costEffectKeys: [],
+        successEffectKeys: ['effect.settle-weather'], failureEffectKeys: [], timeCostMinutes: 0,
         confirmationPolicy: 'never', repeatPolicy: 'repeatable', cooldownMinutes: null,
       }, {
         key: 'action.accept-main', category: 'accept-quest', label: '接受主线任务', description: '接受并开始调查断流的盐渠。',
@@ -460,17 +467,21 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
       storyModifiers: [{ key: 'story-modifier.caretaker-trust', actorKey: 'actor.caretaker', value: 10, sourceQuestKey: 'quest.main.1' }],
     },
     'time-weather': {
-      version: 1,
-      initialWorldMinute: 480, minutesPerDay: 1440,
+      version: 2,
+      initialWorldMinute: 480, minutesPerDay: 1440, weatherUpdateIntervalMinutes: 360,
       timePeriods: [
         { key: 'time.dawn', label: '清晨', startMinute: 0, endMinute: 360 },
         { key: 'time.day', label: '白天', startMinute: 360, endMinute: 1080 },
         { key: 'time.night', label: '夜晚', startMinute: 1080, endMinute: 1440 },
       ],
-      weather: [{ key: 'weather.clear', label: '晴朗', description: '干燥而明亮。' }],
+      weather: [
+        { key: 'weather.clear', label: '晴朗', description: '干燥而明亮。' },
+        { key: 'weather.rain', label: '降雨', description: '云层压低，雨水冲刷道路。' },
+        { key: 'weather.salt-fog', label: '盐雾', description: '咸白雾气从盐地漫过道路。' },
+      ],
       regionWeatherTables: [
-        { regionKey: 'region.salt-port', entries: [{ weatherKey: 'weather.clear', weight: 1 }] },
-        { regionKey: 'region.ridge', entries: [{ weatherKey: 'weather.clear', weight: 1 }] },
+        { regionKey: 'region.salt-port', entries: [{ weatherKey: 'weather.clear', weight: 3 }, { weatherKey: 'weather.rain', weight: 1 }, { weatherKey: 'weather.salt-fog', weight: 2 }] },
+        { regionKey: 'region.ridge', entries: [{ weatherKey: 'weather.clear', weight: 2 }, { weatherKey: 'weather.rain', weight: 2 }, { weatherKey: 'weather.salt-fog', weight: 1 }] },
       ],
     },
     director: {

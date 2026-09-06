@@ -1,7 +1,7 @@
 import { db } from '../db/schema'
 import { hashProductProductionValueV2 } from '../product-production/hash'
 import { hashProductRuntimeStateV1, readProductRuntimeState } from '../product/runtime-core'
-import type { TextOpenWorldCommandEnvelopeV1, TextOpenWorldEffectDefinitionV1, TextOpenWorldEffectPlanV1, TextOpenWorldFeedbackReceiptV1 } from '../types'
+import type { TextOpenWorldCommandEnvelopeV1, TextOpenWorldEffectDefinitionV1, TextOpenWorldEffectPlanV1, TextOpenWorldFeedbackReceiptV1, TextOpenWorldRandomEvidenceV1, TextOpenWorldRandomRequestV1 } from '../types'
 import { createTextOpenWorldActionRegistryV1 } from './action-registry'
 import { ensureTextOpenWorldCombatRetryCheckpointV1 } from './checkpoints'
 import { commitTextOpenWorldCommandV1, getTextOpenWorldCommandStatusV1 } from './commands'
@@ -19,6 +19,8 @@ import { createTextOpenWorldQuestTrackingCatalogV1 } from './quest-tracking'
 import { executeTextOpenWorldPendingRewardV1 } from './reward-executor'
 import { deriveTextOpenWorldContextsV1, parseTextOpenWorldSessionProjectionV1 } from './session-projection'
 import { createTextOpenWorldFastTravelCatalogV1 } from './fast-travel'
+import { resolveTextOpenWorldRandomEvidenceV1 } from './event-contract'
+import { createTextOpenWorldWeatherCatalogV1 } from './weather'
 
 const COMMAND_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/
 
@@ -60,7 +62,24 @@ async function settleAcceptedCommand(envelope: TextOpenWorldCommandEnvelopeV1): 
     .filter((effect): effect is Extract<TextOpenWorldEffectDefinitionV1, { operation: 'track-quest' | 'untrack-quest' }> => effect.operation === 'track-quest' || effect.operation === 'untrack-quest')
   const fastTravelEffects = effectKeys.map(effectKey => modules.actions.effects.find(effect => effect.key === effectKey)!)
     .filter((effect): effect is Extract<TextOpenWorldEffectDefinitionV1, { operation: 'fast-travel' }> => effect.operation === 'fast-travel')
-  if ([questTransitions.length > 0, objectiveEffects.length > 0, trackingEffects.length > 0, fastTravelEffects.length > 0].filter(Boolean).length > 1) fail('同一Action不能混合任务迁移、Objective、追踪或快速旅行状态')
+  const weatherEffects = effectKeys.map(effectKey => modules.actions.effects.find(effect => effect.key === effectKey)!)
+    .filter((effect): effect is Extract<TextOpenWorldEffectDefinitionV1, { operation: 'settle-weather' }> => effect.operation === 'settle-weather')
+  if ([questTransitions.length > 0, objectiveEffects.length > 0, trackingEffects.length > 0, fastTravelEffects.length > 0, weatherEffects.length > 0].filter(Boolean).length > 1) fail('同一Action不能混合任务迁移、Objective、追踪、快速旅行或天气状态')
+  let randomRequests: TextOpenWorldRandomRequestV1[] = []
+  let randomEvidence: TextOpenWorldRandomEvidenceV1[] = []
+  if (weatherEffects.length === 1) {
+    const session = await db.productRuntimeSessions.get(envelope.sessionId)
+    if (!session || session.kind !== 'text-open-world') fail('天气结算Session不存在')
+    const commandSequence = projection.protocol.pendingCommandSequence ?? fail('天气结算命令缺少序号')
+    randomRequests = createTextOpenWorldWeatherCatalogV1(projection.runtimePackage, modules).prepare({ state: projection.state })
+    randomEvidence = await Promise.all(randomRequests.map((request, drawIndex) => resolveTextOpenWorldRandomEvidenceV1({
+      seed: session.seed,
+      commandId: envelope.commandId,
+      commandSequence,
+      drawIndex,
+      request,
+    })))
+  }
   const authorization: TextOpenWorldEffectPlanV1['authorization'] = questTransitions.length
     ? createTextOpenWorldQuestTransitionCatalogV1(projection.runtimePackage).prepare({
         instanceKey: targetFrom(envelope) ?? fail('任务状态Action缺少实例目标'),
@@ -86,7 +105,9 @@ async function settleAcceptedCommand(envelope: TextOpenWorldCommandEnvelopeV1): 
               effect: fastTravelEffects[0],
               destinationLocationKey: targetFrom(envelope) ?? fail('快速旅行Action缺少地点目标'),
             })
-          : null
+          : weatherEffects.length === 1
+            ? createTextOpenWorldWeatherCatalogV1(projection.runtimePackage, modules).resolve({ state: projection.state, evidence: randomEvidence })
+            : null
   const catalog = createTextOpenWorldEffectCatalogV1(projection.runtimePackage)
   const plan = await catalog.plan({ effectKeys, claimKey: `claim.${envelope.commandId}`, state: projection.state, authorization })
   const { receipt } = await catalog.apply({ plan, state: projection.state })
@@ -94,7 +115,7 @@ async function settleAcceptedCommand(envelope: TextOpenWorldCommandEnvelopeV1): 
     sessionId: envelope.sessionId,
     commandId: envelope.commandId,
     ruleset: projection.ruleset,
-    randomRequests: [],
+    randomRequests,
     plan,
     receipt,
     outcome: 'success',
@@ -123,6 +144,7 @@ type ExecuteTextOpenWorldActionInputV1 = {
 async function executeTextOpenWorldActionAsV1(
   input: ExecuteTextOpenWorldActionInputV1,
   actorKey: 'player' | 'system',
+  systemCategory?: 'quest-action' | 'weather-action',
 ): Promise<TextOpenWorldFeedbackReceiptV1> {
   if (!Number.isSafeInteger(input.sessionId) || input.sessionId < 1) fail('sessionId无效')
   const commandId = input.commandId ?? newCommandId()
@@ -162,7 +184,7 @@ async function executeTextOpenWorldActionAsV1(
     })
   }
   const resolved = registry.resolve({ actionKey: input.actionKey, targetKey, context: actionContext })
-  if (actorKey === 'system' && resolved.entry.action.category !== 'quest-action') fail('系统入口只能执行quest-action')
+  if (actorKey === 'system' && resolved.entry.action.category !== systemCategory) fail('系统入口只能执行指定类别的受治理系统Action')
   if (resolved.entry.action.category === 'start-combat') {
     const modules = parseTextOpenWorldModulesV1(projection.runtimePackage)
     const startEffects = resolved.entry.action.successEffectKeys
@@ -205,7 +227,7 @@ async function settleReadyQuestSystemActionsV1(sessionId: number, causeCommandId
       const feedback = await executeTextOpenWorldActionAsV1({
         sessionId, actionKey: pendingActionKey, targetKey: pendingTargetKey,
         commandId: projection.protocol.pendingCommandId, source: 'system-action',
-      }, 'system')
+      }, 'system', 'quest-action')
       if (feedback.phase !== 'terminal' || feedback.status !== 'succeeded') fail(`Stage待结算命令未成功:${pendingActionKey}:${pendingTargetKey}`)
       continue
     }
@@ -220,15 +242,34 @@ async function settleReadyQuestSystemActionsV1(sessionId: number, causeCommandId
     const feedback = await executeTextOpenWorldActionAsV1({
       sessionId, actionKey: next.actionKey, targetKey: next.targetKey,
       commandId: `command.system-quest.${commandHash}`, source: 'system-action',
-    }, 'system')
+    }, 'system', 'quest-action')
     if (feedback.phase !== 'terminal' || feedback.status !== 'succeeded') fail(`Stage系统结算未成功:${next.actionKey}:${next.targetKey}`)
   }
   fail('单次玩家行动触发的任务系统结算超过32步')
 }
 
+async function settleWeatherForCurrentEpochV1(sessionId: number): Promise<void> {
+  const runtime = await readProductRuntimeState(sessionId)
+  const projection = parseTextOpenWorldSessionProjectionV1(runtime.textOpenWorld)
+  const modules = parseTextOpenWorldModulesV1(projection.runtimePackage)
+  const timeWeather = modules['time-weather']
+  if (timeWeather.version < 2 || modules.actions.version < 5) return
+  const currentEpoch = Math.floor(projection.state.time.worldMinute / timeWeather.weatherUpdateIntervalMinutes)
+  if (currentEpoch <= projection.state.time.lastWeatherSettlementEpoch) return
+  const weatherAction = modules.actions.actions.find(action => action.category === 'weather-action') ?? fail('新版时间天气模块缺少天气结算Action')
+  const feedback = await executeTextOpenWorldActionAsV1({
+    sessionId,
+    actionKey: weatherAction.key,
+    commandId: `command.system-weather.epoch.${currentEpoch}`,
+    source: 'system-action',
+  }, 'system', 'weather-action')
+  if (feedback.phase !== 'terminal' || feedback.status !== 'succeeded') fail(`天气系统结算未成功:${currentEpoch}`)
+}
+
 export async function executeTextOpenWorldActionV1(input: ExecuteTextOpenWorldActionInputV1): Promise<TextOpenWorldFeedbackReceiptV1> {
   const feedback = await executeTextOpenWorldActionAsV1(input, 'player')
   if (feedback.phase === 'terminal' && feedback.status === 'succeeded' && feedback.commandId) {
+    await settleWeatherForCurrentEpochV1(input.sessionId)
     await settleReadyQuestSystemActionsV1(input.sessionId, feedback.commandId)
   }
   return feedback
@@ -236,5 +277,5 @@ export async function executeTextOpenWorldActionV1(input: ExecuteTextOpenWorldAc
 
 /** Runs a governed Stage completion/quest lifecycle action owned by deterministic code. */
 export async function executeTextOpenWorldSystemQuestActionV1(input: ExecuteTextOpenWorldActionInputV1): Promise<TextOpenWorldFeedbackReceiptV1> {
-  return executeTextOpenWorldActionAsV1(input, 'system')
+  return executeTextOpenWorldActionAsV1(input, 'system', 'quest-action')
 }

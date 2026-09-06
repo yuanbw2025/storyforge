@@ -11,7 +11,7 @@ export type TextOpenWorldQuestTimePolicyV1 = 'waits' | 'timed'
 export type TextOpenWorldActionCategoryV1 =
   | 'move' | 'travel' | 'fast-travel' | 'observe' | 'investigate' | 'talk'
   | 'take' | 'use' | 'equip' | 'unequip' | 'drop' | 'buy' | 'sell' | 'craft'
-  | 'accept-quest' | 'abandon-quest' | 'objective-action' | 'quest-action' | 'claim-reward'
+  | 'accept-quest' | 'abandon-quest' | 'objective-action' | 'quest-action' | 'weather-action' | 'claim-reward'
   | 'start-combat' | 'continue-combat' | 'escape' | 'rest' | 'respawn'
   | 'read' | 'track' | 'untrack' | 'save' | 'load-branch'
 
@@ -212,7 +212,7 @@ export interface TextOpenWorldQuestModuleV1 {
 }
 
 export interface TextOpenWorldActionModuleV1 {
-  version: 1 | 2 | 3 | 4
+  version: 1 | 2 | 3 | 4 | 5
   conditions: Array<{
     key: string
     expression: TextOpenWorldConditionExpressionV1
@@ -441,9 +441,11 @@ export interface TextOpenWorldRelationshipModuleV1 {
 }
 
 export interface TextOpenWorldTimeWeatherModuleV1 {
-  version: 1
+  version: 1 | 2
   initialWorldMinute: number
   minutesPerDay: number
+  /** Normalized to minutesPerDay when reading a legacy v1 module. */
+  weatherUpdateIntervalMinutes: number
   timePeriods: Array<{
     key: string
     label: string

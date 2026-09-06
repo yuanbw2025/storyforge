@@ -7,7 +7,7 @@ export type TextOpenWorldEffectOperationV1 =
   | 'transition-quest' | 'complete-objective' | 'claim-quest-reward' | 'track-quest' | 'untrack-quest'
   | 'change-morality' | 'change-faction-affinity' | 'set-story-modifier'
   | 'reveal-knowledge' | 'reveal-location' | 'unlock-fast-travel'
-  | 'enter-location' | 'start-travel' | 'fast-travel' | 'advance-time'
+  | 'enter-location' | 'start-travel' | 'fast-travel' | 'advance-time' | 'settle-weather'
   | 'start-combat' | 'resolve-combat' | 'rest' | 'respawn'
   | 'change-actor-state' | 'change-region-state' | 'set-world-flag'
   | 'earn-achievement' | 'unlock-ending' | 'reach-ending'
@@ -36,6 +36,7 @@ export type TextOpenWorldEffectDefinitionV1 =
   | { key: string; operation: 'start-travel'; payload: { edgeKey: string; destinationLocationKey: string } }
   | { key: string; operation: 'fast-travel'; payload: { timeRatioNumerator: number; timeRatioDenominator: number; minimumMinutes: number } }
   | { key: string; operation: 'advance-time'; payload: { minutes: number } }
+  | { key: string; operation: 'settle-weather'; payload: Record<string, never> }
   | { key: string; operation: 'start-combat'; payload: { encounterKey: string } }
   | { key: string; operation: 'resolve-combat'; payload: { encounterKey: string; outcome: 'victory' | 'defeat' | 'escaped' } }
   | { key: string; operation: 'rest'; payload: { healthRatio: number; skillResourceRatio: number; clearHarmfulStatuses: boolean } }
@@ -104,6 +105,7 @@ export interface TextOpenWorldEffectStateV1 {
   }
   time: {
     worldMinute: number
+    lastWeatherSettlementEpoch: number
     currentWeatherByRegionKey: Record<string, string>
     deadlineWorldMinuteByKey: Record<string, number>
   }
@@ -202,6 +204,20 @@ export interface TextOpenWorldFastTravelAuthorizationV1 {
   travelMinutes: number
 }
 
+export interface TextOpenWorldWeatherSettlementAuthorizationV1 {
+  kind: 'weather-settlement'
+  worldMinute: number
+  weatherEpoch: number
+  randomRequests: Array<{ drawKey: string; minimumInclusive: number; maximumInclusive: number }>
+  changes: Array<{
+    regionKey: string
+    fromWeatherKey: string
+    toWeatherKey: string
+    drawKey: string
+    drawValue: number
+  }>
+}
+
 export interface TextOpenWorldEffectPlanV1 {
   schema: 'storyforge.text-open-world.effect-plan'
   version: 1
@@ -210,7 +226,7 @@ export interface TextOpenWorldEffectPlanV1 {
   resultingStateHash: string
   effectKeys: string[]
   effects: TextOpenWorldEffectDefinitionV1[]
-  authorization: TextOpenWorldRewardAuthorizationV1 | TextOpenWorldQuestTransitionAuthorizationV1 | TextOpenWorldObjectiveAuthorizationV1 | TextOpenWorldQuestTrackingAuthorizationV1 | TextOpenWorldFastTravelAuthorizationV1 | null
+  authorization: TextOpenWorldRewardAuthorizationV1 | TextOpenWorldQuestTransitionAuthorizationV1 | TextOpenWorldObjectiveAuthorizationV1 | TextOpenWorldQuestTrackingAuthorizationV1 | TextOpenWorldFastTravelAuthorizationV1 | TextOpenWorldWeatherSettlementAuthorizationV1 | null
   impactDomains: TextOpenWorldEffectImpactDomainV1[]
   previewChanges: TextOpenWorldEffectChangeV1[]
   planHash: string

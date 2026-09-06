@@ -191,9 +191,9 @@ export function createTextOpenWorldActionRegistryV1(value: TextOpenWorldRuntimeP
       const action = entry.action
       const unavailableReasons: TextOpenWorldActionAvailabilityV1['unavailableReasons'] = []
       const defeated = context.playerHealth === 0 || context.combatStatus === 'defeat'
-      if (defeated && !['respawn', 'load-branch'].includes(action.category)) unavailableReasons.push({ code: 'defeated', message: '战败后只能选择战前重试、读档或复活点恢复。', conditionKey: null })
+      if (context.actorKey === 'player' && defeated && !['respawn', 'load-branch'].includes(action.category)) unavailableReasons.push({ code: 'defeated', message: '战败后只能选择战前重试、读档或复活点恢复。', conditionKey: null })
       if (action.category === 'respawn' && context.combatStatus !== 'defeat') unavailableReasons.push({ code: 'combat-state', message: '只有战败后才能在复活点恢复。', conditionKey: null })
-      if (!defeated && context.combatStatus === 'active' && !['continue-combat', 'escape', 'use'].includes(action.category)) unavailableReasons.push({ code: 'combat-state', message: '战斗中只能选择战斗、技能、道具或逃跑。', conditionKey: null })
+      if (context.actorKey === 'player' && !defeated && context.combatStatus === 'active' && !['continue-combat', 'escape', 'use'].includes(action.category)) unavailableReasons.push({ code: 'combat-state', message: '战斗中只能选择战斗、技能、道具或逃跑。', conditionKey: null })
       if (['continue-combat', 'escape'].includes(action.category) && context.combatStatus !== 'active') unavailableReasons.push({ code: 'combat-state', message: '当前没有进行中的战斗。', conditionKey: null })
       if (action.actorScope !== context.actorKey) unavailableReasons.push({ code: 'actor-scope', message: '当前操作者不能执行该行动。', conditionKey: null })
       if (action.locationKeys.length && !action.locationKeys.includes(context.currentLocationKey)) unavailableReasons.push({ code: 'wrong-location', message: '该行动不能在当前位置执行。', conditionKey: null })
