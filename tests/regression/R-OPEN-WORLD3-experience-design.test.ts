@@ -38,10 +38,17 @@ import {
   type TextOpenWorldStoryArchitectureInputContextV1,
   type TextOpenWorldStoryArchitectureModelRunnerV1,
 } from '../../src/lib/open-world/story-architecture'
+import {
+  createTextOpenWorldRegionSkeletonExecutorV1,
+  validateTextOpenWorldRegionSkeletonV1,
+  type TextOpenWorldRegionSkeletonInputContextV1,
+  type TextOpenWorldRegionSkeletonModelRunnerV1,
+} from '../../src/lib/open-world/region-skeleton'
 import { TEXT_OPEN_WORLD_EFFECT_OPERATIONS_V1 } from '../../src/lib/types/text-open-world-effect'
 import type {
   TextOpenWorldGameplayRulesetSkeletonV1,
   TextOpenWorldPlayerBuildV1,
+  TextOpenWorldRegionSkeletonV1,
 } from '../../src/lib/types'
 import {
   createTextOpenWorldProductionPlanV1,
@@ -745,6 +752,192 @@ function storyArtifacts(
   }
 }
 
+function regionSkeletonRunner(options: {
+  forgedClaim?: boolean
+  disconnected?: boolean
+} = {}): TextOpenWorldRegionSkeletonModelRunnerV1 {
+  return async input => {
+    const context = JSON.parse(input.contextText) as TextOpenWorldRegionSkeletonInputContextV1
+    const claimKey = options.forgedClaim
+      ? 'source.claim.forged'
+      : context.sourceLedger.selectedClaims[0]!.claimKey
+    const grounding = (beatNumber: number) => ({
+      sourceClaimKeys: [claimKey],
+      storyNeedRefs: [{ beatNumber, needNumber: 1 }],
+    })
+    const connections = [
+      [1, 2, 'near', 'safe'], [1, 3, 'near', 'safe'], [1, 4, 'medium', 'ordinary'],
+      [1, 5, 'far', 'ordinary'], [5, 6, 'near', 'safe'], [5, 7, 'medium', 'dangerous'],
+      [5, 8, 'near', 'safe'],
+    ].map(([fromLocationNumber, toLocationNumber, distanceBand, riskProfile], index) => ({
+      fromLocationNumber,
+      toLocationNumber,
+      distanceBand,
+      description: `第${index + 1}条道路连接相邻的生活、调查与冒险空间。`,
+      riskProfile,
+      connectionPurpose: '让玩家可自由往返，并为后续任务提供不依赖到达触发的空间路径。',
+      ...grounding(Math.min(5, index + 1)),
+    }))
+    if (options.disconnected) connections.splice(3, 1)
+    return {
+      output: JSON.stringify({
+        schema: 'storyforge.text-open-world-region-skeleton-draft',
+        version: 1,
+        startingRegionNumber: 1,
+        startingLocationNumber: 1,
+        regions: [
+          {
+            title: '雾港核心区',
+            description: '守灯人、工坊与潮门共同维持的港口核心，也是玩家最初理解危机的安全起点。',
+            theme: '职责、日常秩序与最初裂痕',
+            narrativeRole: '承载开场危机、主角身份和最终回到家园时可见的变化。',
+            ...grounding(1),
+            hubLocationNumber: 1,
+            locations: [
+              {
+                title: '雾港潮门', description: '守灯人与居民出入的港口广场，潮门异变的痕迹仍清晰可见。',
+                kind: 'settlement', purpose: '提供开局叙事、安全服务、制作与地区旅行枢纽。',
+                functions: ['narrative', 'service', 'crafting', 'travel'],
+                earlyArrivalDescription: '主线未推进时，这里仍保持日常港务、基础服务和可反复调查的公开痕迹。',
+                ...grounding(1),
+              },
+              {
+                title: '守灯塔', description: '俯瞰潮门和沿岸航路的旧塔，保存守灯人的公开记录。',
+                kind: 'landmark', purpose: '承载主角身份、世界观察和后续叙事回收。',
+                functions: ['narrative', 'exploration'],
+                earlyArrivalDescription: '玩家可查看公开记录与远眺沿岸，但关键真相不会因抵达而自动揭示。',
+                ...grounding(5),
+              },
+              {
+                title: '盐雾工坊', description: '修理灯具、武器和航行器材的公共工坊。',
+                kind: 'interior', purpose: '为装备制作、补给和普通居民委托预留功能空间。',
+                functions: ['service', 'crafting', 'exploration'],
+                earlyArrivalDescription: '工匠只提供与当前进度相符的普通服务，不泄露尚未发生的任务信息。',
+                ...grounding(2),
+              },
+              {
+                title: '退潮滩', description: '潮水退去后显露盐壳、残骸与危险生物的开阔滩地。',
+                kind: 'wilderness', purpose: '提供探索、基础战斗和地区小事件空间。',
+                functions: ['exploration', 'combat'],
+                earlyArrivalDescription: '这里始终可进行普通探索和战斗，主线相关遗留物只有在条件满足后才进入场景。',
+                ...grounding(2),
+              },
+            ],
+          },
+          {
+            title: '脊湾沿岸',
+            description: '与雾港互相依赖却长期保留戒心的沿岸地区，分布集市、峡谷与旧约遗迹。',
+            theme: '地区利益、旧约代价与协作选择',
+            narrativeRole: '扩展地区差异，承载冲突升级、真相揭示、集结和终局选择。',
+            sourceClaimKeys: [claimKey],
+            storyNeedRefs: [2, 3, 4, 5].map(beatNumber => ({ beatNumber, needNumber: 1 })),
+            hubLocationNumber: 1,
+            locations: [
+              {
+                title: '脊湾集市', description: '沿岸居民交换物资与消息的中立集市。',
+                kind: 'settlement', purpose: '提供第二地区服务、旅行枢纽、地方传闻和重要人物交汇点。',
+                functions: ['narrative', 'service', 'travel'],
+                earlyArrivalDescription: '提前到达时只呈现日常贸易与当地态度，重要人物保持安全等待而不自动开场。',
+                ...grounding(2),
+              },
+              {
+                title: '旧约档案所', description: '存放沿岸盟约公开副本与残缺索引的石屋。',
+                kind: 'interior', purpose: '为调查与分阶段真相揭示提供可控的叙事空间。',
+                functions: ['narrative', 'exploration'],
+                earlyArrivalDescription: '玩家只能阅读公开索引，关键卷宗由后续明确任务条件开放而非到达触发。',
+                ...grounding(3),
+              },
+              {
+                title: '裂潮峡', description: '潮灾侵蚀形成的峡谷，危险生物与旧设施散布其中。',
+                kind: 'dungeon', purpose: '承载成长战斗、资源探索和危机升级的环境证据。',
+                functions: ['combat', 'exploration'],
+                earlyArrivalDescription: '普通敌人与资源始终存在，涉及核心危机的场景在主线到达前不会加载。',
+                ...grounding(2),
+              },
+              {
+                title: '沿岸议事台', description: '各聚落处理共同事务的露天环形议场。',
+                kind: 'landmark', purpose: '承载地区群像、后果汇聚与多结局前的价值选择。',
+                functions: ['narrative', 'exploration'],
+                earlyArrivalDescription: '非关键议事和居民争论可正常发生，主线集结必须由明确任务阶段启动。',
+                sourceClaimKeys: [claimKey],
+                storyNeedRefs: [{ beatNumber: 4, needNumber: 1 }, { beatNumber: 5, needNumber: 1 }],
+              },
+            ],
+          },
+        ],
+        connections,
+      }),
+      bindingReceipt: bindingReceipt(input.requirementKey),
+      usage: null,
+    }
+  }
+}
+
+async function regionSkeletonFixture() {
+  const input = await storyArchitectureFixture()
+  const storyResult = await executeStoryArchitecture(input)
+  for (const artifact of storyResult.artifacts) {
+    await acceptProductBuildArtifact({
+      scope: input.scope,
+      buildId: input.build.id!,
+      controlEpoch: input.build.controlEpoch,
+      artifactKey: artifact.artifactKey,
+      kind: artifact.kind,
+      payload: artifact.payload,
+      quality: artifact.quality,
+      rights: artifact.rights,
+      inputHash: await hashProductProductionValueV2({ stage: 'P3', artifactKey: artifact.artifactKey }),
+    })
+  }
+  const plan = await createTextOpenWorldProductionPlanV1({
+    buildNumber: input.build.buildNumber,
+    controlEpoch: input.build.controlEpoch,
+    briefHash: input.briefRow.briefHash,
+    brief: input.brief,
+  })
+  const task = plan.tasks.find(item => item.taskKey === 'p4.region-skeleton')!
+  const assembled = await assembleContext({
+    projectId: input.scope.projectId,
+    scope: input.scope,
+    sourceKeys: ['text-open-world.region-skeleton-input'],
+    productProductionId: input.production.id!,
+    productBuildId: input.build.id!,
+    inputBudgetMaxTokens: task.budgetReservation.inputTokens,
+  })
+  return {
+    ...input,
+    task,
+    regionContextText: assembled.text,
+    regionContext: JSON.parse(assembled.text) as TextOpenWorldRegionSkeletonInputContextV1,
+    regionContextEvidence: assembled.sourceEvidence,
+  }
+}
+
+async function executeRegionSkeleton(
+  input: Awaited<ReturnType<typeof regionSkeletonFixture>>,
+  runModel: TextOpenWorldRegionSkeletonModelRunnerV1 = regionSkeletonRunner(),
+) {
+  return createTextOpenWorldRegionSkeletonExecutorV1({ runModel, now: () => NOW + 8 })({
+    scope: input.scope,
+    productionId: input.production.id!,
+    buildId: input.build.id!,
+    buildNumber: input.build.buildNumber,
+    controlEpoch: input.build.controlEpoch,
+    planHash: input.planHash,
+    task: input.task,
+    attempt: 1,
+    idempotencyKey: await hashProductProductionValueV2('p4-region-skeleton'),
+    contextText: input.regionContextText,
+    inputArtifacts: [],
+    capabilityBindings: input.task.capabilityRequirementKeys.map(requirementKey => ({
+      requirementKey,
+      bindingHash: CAPABILITY_HASH,
+      adapterId: 'configured-text.v1',
+    })),
+    signal: new AbortController().signal,
+  })
+}
+
 describe('R-OPEN-WORLD3 · P2 GameBrief / ExperienceContract / ProtagonistAsset', () => {
   beforeEach(async () => { await db.delete(); await db.open() })
   afterAll(() => db.close())
@@ -1213,5 +1406,114 @@ describe('R-OPEN-WORLD3 · P3 StoryArchitecture', () => {
       })),
       signal: new AbortController().signal,
     })).rejects.toThrow(/ProtagonistAsset Hash不匹配|选择Hash不匹配/)
+  }, 30_000)
+})
+
+describe('R-OPEN-WORLD3 · P4 RegionSkeleton', () => {
+  beforeEach(async () => { await db.delete(); await db.open() })
+  afterAll(() => db.close())
+
+  it('把来源事实和StoryArc空间需求编译为完整、连通且可提前到达的世界骨架', async () => {
+    const input = await regionSkeletonFixture()
+    expect(CONTEXT_SOURCE_BY_KEY.get('text-open-world.region-skeleton-input')).toMatchObject({
+      layer: 'L0', ownerFrom: 'work', protectedFromTrim: true,
+    })
+    expect(getAgentSkillV1('text-open-world.production.region-skeleton.v1')).toMatchObject({
+      contextSourceKeys: ['text-open-world.region-skeleton-input'],
+      writeTargets: [{ table: 'productBuildArtifacts', fields: ['payloadJson'] }],
+    })
+    expect(input.regionContextEvidence).toEqual([
+      expect.objectContaining({ key: 'text-open-world.region-skeleton-input', status: 'included', delivery: 'full' }),
+    ])
+    expect(input.regionContext.storyNeeds).toHaveLength(5)
+    const result = await executeRegionSkeleton(input)
+    const artifact = result.artifacts[0]!.payload as TextOpenWorldRegionSkeletonV1
+    expect(result.passedGateIds).toEqual(input.task.acceptanceGateIds)
+    expect(result.usage).toMatchObject({ modelCalls: 1, mediaCalls: 0 })
+    expect(artifact).toMatchObject({
+      productInstanceKey: input.production.productionKey,
+      worldScale: {
+        regionCount: 2,
+        namedLocationCount: 8,
+        completeness: 'complete-at-build',
+        revealPolicy: 'progressive-knowledge',
+      },
+      initialRegionKey: 'region.001',
+      initialLocationKey: 'location.001',
+      governance: {
+        topology: 'all-locations-connected',
+        regionTopology: 'all-regions-connected',
+        everyRegionHasFastTravelPoint: true,
+        earlyArrival: 'all-locations-safe',
+        arrivalStoryTrigger: 'never-critical-location-only',
+        mainlineBindings: 'unbound-until-p5',
+        ordinaryContentBindings: 'unbound-until-p7-p8',
+        travelConditions: 'none-in-skeleton',
+      },
+      coverage: { requiredStoryNeedCount: 5, coveredStoryNeedCount: 5, uncoveredStoryNeedRefs: [] },
+    })
+    expect(artifact.regions.map(region => region.key)).toEqual(['region.001', 'region.002'])
+    expect(artifact.locations.map(location => location.key)).toEqual(
+      Array.from({ length: 8 }, (_, index) => `location.${String(index + 1).padStart(3, '0')}`),
+    )
+    expect(artifact.edges.map(edge => edge.key)).toEqual(
+      Array.from({ length: 7 }, (_, index) => `edge.${String(index + 1).padStart(3, '0')}`),
+    )
+    expect(artifact.fastTravelPoints).toEqual([
+      expect.objectContaining({ key: 'fast-travel.001', locationKey: 'location.001', unlockedByDefault: true, canRespawn: true }),
+      expect.objectContaining({ key: 'fast-travel.002', locationKey: 'location.005', unlockedByDefault: false, canRespawn: true }),
+    ])
+    expect(artifact.locations.every(location => (
+      location.contentBinding.status === 'content-unbound'
+      && location.contentBinding.sceneKeys.length === 0
+      && location.presentationBinding.status === 'presentation-unbound'
+      && location.earlyArrivalDescription.length > 0
+    ))).toBe(true)
+    expect(artifact.edges.every(edge => edge.bidirectional && edge.conditionKeys.length === 0)).toBe(true)
+    await expect(validateTextOpenWorldRegionSkeletonV1({ artifact, context: input.regionContext }))
+      .resolves.toEqual(artifact)
+  }, 30_000)
+
+  it('拒绝未交付来源引用与不能连通完整世界的地图建议', async () => {
+    const input = await regionSkeletonFixture()
+    await expect(executeRegionSkeleton(input, regionSkeletonRunner({ forgedClaim: true })))
+      .rejects.toThrow(/引用了未交付claim/)
+    await expect(executeRegionSkeleton(input, regionSkeletonRunner({ disconnected: true })))
+      .rejects.toThrow(/connections数量不足|结构可达|跨区道路连通/)
+  }, 30_000)
+
+  it('即使重算Hash也拒绝篡改提前到达、地点内容绑定与快旅解锁规则', async () => {
+    const input = await regionSkeletonFixture()
+    const artifact = (await executeRegionSkeleton(input)).artifacts[0]!.payload as TextOpenWorldRegionSkeletonV1
+    const tampered = structuredClone(artifact)
+    tampered.governance.arrivalStoryTrigger = 'arrival-can-trigger-mainline' as 'never-critical-location-only'
+    tampered.locations[0]!.contentBinding.sceneKeys = ['scene.forged'] as []
+    tampered.fastTravelPoints[1]!.unlockedByDefault = true
+    const { regionSkeletonHash: _hash, ...body } = tampered
+    tampered.regionSkeletonHash = await hashProductProductionValueV2(body)
+    await expect(validateTextOpenWorldRegionSkeletonV1({ artifact: tampered, context: input.regionContext }))
+      .rejects.toThrow(/固定键、连通性、提前到达保护、绑定占位或Hash被篡改/)
+
+    const forgedContext = structuredClone(input.regionContext)
+    forgedContext.storyArc.macroBeats[0]!.spatialFunctionNeeds[0] = '被篡改的空间需求'
+    await expect(createTextOpenWorldRegionSkeletonExecutorV1({ runModel: regionSkeletonRunner() })({
+      scope: input.scope,
+      productionId: input.production.id!,
+      buildId: input.build.id!,
+      buildNumber: input.build.buildNumber,
+      controlEpoch: input.build.controlEpoch,
+      planHash: input.planHash,
+      task: input.task,
+      attempt: 1,
+      idempotencyKey: await hashProductProductionValueV2('forged-region-context'),
+      contextText: JSON.stringify(forgedContext),
+      inputArtifacts: [],
+      capabilityBindings: input.task.capabilityRequirementKeys.map(requirementKey => ({
+        requirementKey,
+        bindingHash: CAPABILITY_HASH,
+        adapterId: 'configured-text.v1',
+      })),
+      signal: new AbortController().signal,
+    })).rejects.toThrow(/StoryArc Hash不匹配|storyNeeds与StoryArc不一致|选择Hash不匹配/)
   }, 30_000)
 })

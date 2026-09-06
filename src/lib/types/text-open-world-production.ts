@@ -906,6 +906,144 @@ export interface TextOpenWorldNarrativePromisesV1 {
   narrativePromisesHash: string
 }
 
+export type TextOpenWorldRegionDerivationBasisV1 =
+  | 'source'
+  | 'story-need'
+  | 'source-and-story-need'
+
+export type TextOpenWorldLocationKindV1 =
+  | 'settlement'
+  | 'interior'
+  | 'wilderness'
+  | 'dungeon'
+  | 'landmark'
+
+export type TextOpenWorldLocationFunctionV1 =
+  | 'narrative'
+  | 'service'
+  | 'exploration'
+  | 'combat'
+  | 'crafting'
+  | 'travel'
+
+export interface TextOpenWorldRegionStoryNeedRefV1 {
+  beatKey: string
+  need: string
+}
+
+/**
+ * P4 world-scale spatial skeleton. It freezes stable region/location/topology
+ * keys for downstream story production without pretending that Scene, Quest,
+ * Condition, presentation media, or runtime catalogs already exist.
+ */
+export interface TextOpenWorldRegionSkeletonV1 {
+  schema: 'storyforge.text-open-world-region-skeleton'
+  version: 1
+  productType: 'text-open-world'
+  productInstanceKey: string
+  gameBriefHash: string
+  sourceManifestHash: string
+  sourceLedgerHash: string
+  experienceContractHash: string
+  storyArcHash: string
+  worldScale: {
+    regionCount: number
+    namedLocationCount: number
+    requestedNamedLocationRange: { minimum: number; maximum: number }
+    completeness: 'complete-at-build'
+    revealPolicy: 'progressive-knowledge'
+  }
+  initialRegionKey: string
+  initialLocationKey: string
+  regions: Array<{
+    key: string
+    order: number
+    title: string
+    description: string
+    theme: string
+    narrativeRole: string
+    derivationBasis: TextOpenWorldRegionDerivationBasisV1
+    sourceClaimKeys: string[]
+    storyNeedRefs: TextOpenWorldRegionStoryNeedRefV1[]
+    locationKeys: string[]
+    fastTravelPointKey: string
+    progressionOrder: number
+    knowledgePolicy: 'title-on-heard'
+    initialKnowledge: 'unknown' | 'visited'
+    presentationBinding: {
+      status: 'presentation-unbound'
+      presentationRefs: []
+    }
+  }>
+  locations: Array<{
+    key: string
+    regionKey: string
+    order: number
+    title: string
+    description: string
+    kind: TextOpenWorldLocationKindV1
+    purpose: string
+    functions: TextOpenWorldLocationFunctionV1[]
+    earlyArrivalDescription: string
+    derivationBasis: TextOpenWorldRegionDerivationBasisV1
+    sourceClaimKeys: string[]
+    storyNeedRefs: TextOpenWorldRegionStoryNeedRefV1[]
+    initialKnowledge: 'unknown' | 'visited'
+    contentBinding: {
+      status: 'content-unbound'
+      sceneKeys: []
+      questKeys: []
+      actorKeys: []
+      encounterKeys: []
+      vendorKeys: []
+    }
+    presentationBinding: {
+      status: 'presentation-unbound'
+      presentationRefs: []
+    }
+  }>
+  edges: Array<{
+    key: string
+    fromLocationKey: string
+    toLocationKey: string
+    bidirectional: true
+    distanceBand: 'near' | 'medium' | 'far'
+    travelMinutes: number
+    description: string
+    riskProfile: 'safe' | 'ordinary' | 'dangerous'
+    connectionPurpose: string
+    conditionKeys: []
+    sourceClaimKeys: string[]
+    storyNeedRefs: TextOpenWorldRegionStoryNeedRefV1[]
+  }>
+  fastTravelPoints: Array<{
+    key: string
+    regionKey: string
+    locationKey: string
+    unlockedByDefault: boolean
+    canRespawn: true
+  }>
+  governance: {
+    topology: 'all-locations-connected'
+    regionTopology: 'all-regions-connected'
+    everyRegionHasFastTravelPoint: true
+    earlyArrival: 'all-locations-safe'
+    arrivalStoryTrigger: 'never-critical-location-only'
+    mainlineBindings: 'unbound-until-p5'
+    ordinaryContentBindings: 'unbound-until-p7-p8'
+    travelConditions: 'none-in-skeleton'
+  }
+  coverage: {
+    requiredStoryNeedCount: number
+    coveredStoryNeedCount: number
+    uncoveredStoryNeedRefs: []
+    usedSourceClaimKeys: string[]
+  }
+  basisHash: string
+  createdAt: number
+  regionSkeletonHash: string
+}
+
 export const TEXT_OPEN_WORLD_PRODUCTION_STAGES_V1 = [
   'P0', 'P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8', 'P8F', 'P9', 'P10',
   'V1', 'V2', 'V3', 'QA',

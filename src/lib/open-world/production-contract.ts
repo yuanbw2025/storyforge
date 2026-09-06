@@ -188,7 +188,7 @@ export const TEXT_OPEN_WORLD_PRODUCTION_TASK_CONTRACTS_V1: TextOpenWorldProducti
     skillId: 'text-open-world.production.region-skeleton.v1', recommendedModelCalls: 6,
     dependsOn: ['p1.source-curation', 'p2.experience-design', 'p3.story-architecture'],
     inputArtifactKeys: [
-      'text-open-world.source-manifest', 'text-open-world.source-ledger',
+      'text-open-world.game-brief', 'text-open-world.source-manifest', 'text-open-world.source-ledger',
       'text-open-world.experience-contract', 'text-open-world.story-arc',
     ],
     outputArtifactKeys: ['text-open-world.region-skeleton'],

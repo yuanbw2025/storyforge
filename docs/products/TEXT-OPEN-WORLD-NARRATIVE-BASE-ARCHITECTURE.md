@@ -1,6 +1,6 @@
 # AI 主导文字开放世界叙事基座 · StoryForge 施工规格
 
-> 规格版本：3.2.8
+> 规格版本：3.2.9
 > 生效日期：2026-09-06
 > 文档层级：L2 产品目标架构与施工规格
 > 当前状态：设计基线；不代表代码已经实现
@@ -451,6 +451,20 @@ P2已经登记Skill和Executor，但专属生产Plan仍保持未激活。G3-18�
 - Story、Ending、Promise和Callback稳定键均由代码生成；三个Artifact通过上游Hash、实际claim entry hash、显式假设gap hash、basis和内容Hash闭合。伪造来源、错误节拍、承诺乱序、结局漏回收、模型自造运行绑定以及重算Hash后的确定性字段篡改都会失败关闭。
 
 P3仍只产出Build候选，不写世界引擎、ProductRelease或Session。它给P4地区骨架提供空间戏剧需求，给P5主线与后续场景提供必须兑现的叙事约束，而不是自行承担这些下游职责。
+
+#### 5.4.8 P4 RegionSkeleton与世界级空间规划落地
+
+`src/lib/open-world/region-skeleton.ts`把“从世界观或小说拆世界”落实为来源—故事—空间的受治理编译，不允许先画一张与故事无关的地图：
+
+- 登记的`text-open-world.region-skeleton-input`只读取同一Build已验收的GameBrief、SourceManifest、SourceLedger、ExperienceContract和StoryArc；它核验Artifact行Hash、各自内容Hash、来源读取集合、体验链和故事治理，再优先交付地点/地区/势力/事件claim及StoryArc实际使用的来源事实；
+- GameBrief在P4输入中是必要项，因为ExperienceContract只有其Hash而没有地区数和命名地点范围。地区数必须精确匹配Brief，地点总量必须落在冻结范围内；首版编译器显式限制在20区、200命名地点以内，超出时要求拆分产品规模而不是静默截断；
+- StoryArc的每项`spatialFunctionNeeds`被转换为稳定的`beatNumber/needNumber`引用。模型设计的每个地区、地点和道路必须至少引用当前交付的SourceLedger claim或故事空间需求，且所有空间需求都要被地区或地点覆盖；
+- 每区至少拥有叙事、探索和旅行空间，一个同时提供旅行与服务的地区枢纽；完整地图还必须拥有战斗和制作空间。每个地点都必须说明主线尚未推进时可安全体验的日常、探索或系统内容，不能把提前抵达变成关键剧情触发、剧透或流程跳跃；
+- 模型只建议语义、地点类型、功能、距离档位、风险和连线。代码按顺序生成`region.*`、`location.*`、`edge.*`、`fast-travel.*`稳定键，冻结双向道路及15～90分钟的距离档耗时，验证全地点可达、跨区图连通、每区恰有一个快旅/复活点、仅初始点默认解锁；
+- 世界骨架在Build时完整存在，玩家知识固定为起始地区/地点`visited`、其余`unknown`并采用`title-on-heard`渐进揭示。骨架道路不带Condition，关键主线固定为`never-critical-location-only`；后续若要门控具体内容，必须由任务和场景条件完成，不能破坏玩家提前到达的地图安全；
+- 所有Location的Scene、Quest、Actor、Encounter、Vendor绑定以及地区/地点媒资绑定保持空数组和显式unbound；P5主线、P7地区生态、P8任务与后续目录必须引用这些稳定坐标后再逐项兑现，P4不得冒充完整可玩地图模块。
+
+验证器从Artifact反向还原模型草稿，再用同一Context重新生成全部键、知识状态、连接、快旅、空绑定、治理、coverage、basis和内容Hash做规范比较。伪造claim、漏接空间需求、断开地点或地区、重复道路、错误起点、缺功能、私自绑定Scene/Quest、提前解锁异区快旅，以及重算Hash后的治理篡改都会失败关闭。P4仍只写Build候选，不新增物理表，不写WorldRelease、ProductRelease或Session。
 
 ### 5.5 正确的验证顺序
 
@@ -1270,6 +1284,7 @@ StoryForge当前没有独立staging。发布前仍需在隔离数据中完成灰
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| 3.2.9 | 2026-09-07 | 落地P4 RegionSkeleton：登记只读Brief/P1/体验/StoryArc的Context与专属Skill/Executor；AI把来源claim和全部故事空间需求编排为精确规模的地区、地点、功能、提前到达常态及连线，代码固定稳定键、全图/跨区连通、每区快旅复活点、渐进知识、距离耗时及非地点唯一主线触发；Scene/Quest/NPC/遭遇/商店/媒资和主线绑定保持unbound，全部规模、来源、需求、连通、治理和Hash可复验 |
 | 3.2.8 | 2026-09-07 | 落地P3 StoryArchitecture：登记只读体验/主角/P1证据的Context与专属Skill/Executor；AI设计核心冲突、长程节拍、多结局差异与叙事承诺，代码固定严格顺序/等待/不可永久失败主线、阶段序列、稳定键、来源与显式假设权限、全结局核心目标达成及建立—回响—回收闭环；Condition/Scene保持unbound供下游兑现，全部上游、引用、顺序、绑定和Hash可复验 |
 | 3.2.7 | 2026-09-07 | 落地P4 PlayerBuild：登记只读已验收体验/主角/Ruleset的Context与专属Skill/Executor；AI只生成身份演绎、非职业玩法风格、主副属性选择及初始技能物品语义，代码固定1级、12点属性预算、100货币、数量、机制和稳定预留键；在后续目录兑现前固定`reserved-unbound/playerDefinitionReady=false`，禁止把需求键伪装成可运行定义；全部上游、预算、键、binding和Hash可复验 |
 | 3.2.6 | 2026-09-07 | 落地P2 GameplayRulesetSkeleton：登记只读已验收体验链与Ledger claim的Context Source及专属Skill/Executor；模型只生成世界化显示语义，代码冻结三属性、20级、1→5验收跨度、自动成长、G2公式、标准难度单人四操作回合战斗、三装备位、单货币、确定性制作交易和模块版本；Effect单一事实源分离模型、编译器与旧版只读权限，全部上游、固定边界、claim和Hash可复验 |

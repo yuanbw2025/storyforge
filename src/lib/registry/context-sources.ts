@@ -171,6 +171,9 @@ async function readTextOpenWorldPlayerBuildInputContextV1(input: AssembleContext
 async function readTextOpenWorldStoryArchitectureInputContextV1(input: AssembleContextInput): Promise<string> {
   return (await import('../open-world/story-architecture')).readTextOpenWorldStoryArchitectureInputContextV1(input)
 }
+async function readTextOpenWorldRegionSkeletonInputContextV1(input: AssembleContextInput): Promise<string> {
+  return (await import('../open-world/region-skeleton')).readTextOpenWorldRegionSkeletonInputContextV1(input)
+}
 async function readTtrpgGmRuntimeContextV1(input: AssembleContextInput): Promise<string> {
   return (await import('../ttrpg/gm-context')).readTtrpgGmRuntimeContextV1(input)
 }
@@ -1618,6 +1621,18 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     enabled: input => Number.isInteger(input.productProductionId)
       && Number.isInteger(input.productBuildId),
     read: readTextOpenWorldStoryArchitectureInputContextV1,
+  },
+  {
+    key: 'text-open-world.region-skeleton-input',
+    label: '文字开放世界来源与故事空间骨架输入',
+    scope: 'project',
+    layer: 'L0',
+    ownerFrom: 'work',
+    budgetTokens: 100_000,
+    protectedFromTrim: true,
+    enabled: input => Number.isInteger(input.productProductionId)
+      && Number.isInteger(input.productBuildId),
+    read: readTextOpenWorldRegionSkeletonInputContextV1,
   },
   {
     key: 'product-production.quality-feedback',

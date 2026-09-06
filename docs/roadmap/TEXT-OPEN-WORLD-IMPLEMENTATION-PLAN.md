@@ -36,15 +36,15 @@
 | 指标 | 当前值 |
 |---|---|
 | 首版工作包 | 121 |
-| 已完成 | 58（G0、G1、G2及G3-01～G3-07完成） |
-| 产品总进度 | 58 / 121（47.9%） |
-| G1～G7业务功能进度 | 48 / 111（43.2%） |
+| 已完成 | 59（G0、G1、G2及G3-01～G3-08完成） |
+| 产品总进度 | 59 / 121（48.8%） |
+| G1～G7业务功能进度 | 49 / 111（44.1%） |
 | 当前阶段 | G3 AI内容生产编译器 |
 | G0阶段进度 | 10 / 10（100%） |
 | G1阶段进度 | 13 / 13（100%） |
 | G2阶段进度 | 28 / 28（100%） |
-| G3阶段进度 | 7 / 18（38.9%） |
-| 当前工作包 | `TOW-G3-08` |
+| G3阶段进度 | 8 / 18（44.4%） |
+| 当前工作包 | `TOW-G3-09` |
 | 当前阻塞项 | 无 |
 
 每次状态变化必须同时更新本节汇总、对应任务行、验证证据和变更记录。
@@ -190,8 +190,8 @@ G7 盐脊验收、发布更新与旧入口收口
 | TOW-G3-05 | DONE | GameplayRulesetSkeleton Skill | G3-04、G2接口 | 登记的P2 Context Source只读取同一Build已验收的GameBrief、ExperienceContract、ProtagonistAsset和SourceLedger引用事实；模型只能生成世界化规则标题、说明、三属性/技能资源/装备位/货币/标准难度显示语义并引用已交付claim；代码冻结无职业/无配点、三语义属性、20级与1→5验收跨度、自动成长、G2公式、逐回合四操作、单人无元素战斗、有界物理结算、无代价复活、无限背包、三装备位、无词缀/强化/耐久、确定性制作、单货币与库存策略；唯一Effect词表直接复用G2类型事实源，并分为模型可提议、编译器专属和旧Release只读三类无重叠权限；Artifact精确声明Progression v1、Combat v3、Items v1、Crafting v2、Economy v2、Action v14及RuntimePackage v1映射，固定值、上游、claim、basis和内容Hash篡改均失败关闭；不新增表、不写Release/Session |
 | TOW-G3-06 | DONE | 主角身份与PlayerBuild Skill | G3-04、G3-05 | 登记的P4 Context Source只读取同一Build已验收的GameBrief、ExperienceContract、ProtagonistAsset和GameplayRuleset；模型负责不改名、不改变核心目标的身份演绎、描述性玩法风格、两个不同主副属性选择以及基础攻击、标志技能、初始武器和恢复品语义，未知代词/外观/秘密允许留空且不得把玩法风格变成职业系统；代码固定1级、主5/副4/其余3且总预算12、初始货币100、两技能/两物品稳定键、技能机制映射、数量与后续目录依赖；PlayerBuild把真实运行字段与语义需求一并冻结，但明确标记`reserved-unbound/playerDefinitionReady=false`，只有后续Progression与Item目录精确兑现预留键后才允许装配；上下文、上游、身份、预算、货币、目录键、binding状态和最终Hash均可复验，不新增表、不写Release/Session |
 | TOW-G3-07 | DONE | StoryArc、核心冲突、承诺和多结局 | G3-04 | 登记的P3 Context只读取同一Build已验收的GameBrief、ExperienceContract、ProtagonistAsset、SourceLedger和Gap Report，不重读活动来源；模型负责核心冲突、5～8个宏观节拍、与Brief数量一致的多结局语义及4～12项建立—回响—回收承诺，并只能引用当前选择的claim或允许显式假设的非阻断gap；代码固定严格顺序、等待玩家、不可永久失败、关键触发不只依赖地点，确保所有结局完成同一核心目标、阶段单调、结局差异轴唯一、至少覆盖核心冲突/角色/世界承诺且每个结局得到回收；稳定Story/Ending/Promise/Callback键由代码生成，结局Condition和承诺Scene绑定保持unbound等待后序任务与场景生产；三个Artifact形成完整上游、证据、basis和内容Hash链，结构篡改、伪造claim、错误顺序和缺失回收均失败关闭；不新增表、不写Release/Session |
-| TOW-G3-08 | READY | RegionSkeleton与世界级空间规划 | G3-03、G3-07 | 地区来自来源和故事需求；先建稳定骨架，不凭空铺地图 |
-| TOW-G3-09 | QUEUED | 严格顺序主线生产 | G3-05～G3-08 | 主线Stage顺序、保护、成长节奏和结局条件结构化 |
+| TOW-G3-08 | DONE | RegionSkeleton与世界级空间规划 | G3-03、G3-07 | P4专属Context只读取同一Build已验收的GameBrief、SourceManifest/Ledger、ExperienceContract和StoryArc；模型必须按Brief精确地区数与地点范围，把每个地区、地点和道路落到已交付claim或StoryArc空间需求，覆盖全部空间需求、每区叙事/探索/旅行功能、全图战斗/制作功能，并为所有地点写提前到达安全常态；代码按数组顺序生成Region/Location/Edge/FastTravel稳定键，固定完整世界在Build时存在但按知识渐进揭示、所有地点与地区双向连通、每区一个快旅/复活点、只有起点默认解锁、旅行耗时、无骨架期Condition、关键主线非到达触发；Scene/Quest/Actor/Encounter/Vendor/媒资及P5主线绑定全部显式unbound；完整上游、来源读取、空间需求、规模、稳定键、连通、绑定和Hash可重建复验，伪造claim、断图与重算Hash篡改失败关闭；不新增表、不写Release/Session |
+| TOW-G3-09 | READY | 严格顺序主线生产 | G3-05～G3-08 | 主线Stage顺序、保护、成长节奏和结局条件结构化 |
 | TOW-G3-10 | QUEUED | 角色/势力/地区重要故事线生产 | G3-07～G3-09 | 至少覆盖两种owner；不因缺席永久失败；与主线相容 |
 | TOW-G3-11 | QUEUED | RegionNarrativePack与地区生态 | G3-08～G3-10 | 地区矛盾、NPC、功能、任务母题、传闻和随机事件供给完整 |
 | TOW-G3-12 | QUEUED | QuestSkeleton与ContentRequirementManifest | G3-09～G3-11 | 任务先表达体验和玩法需求，不提前引用不存在的敌人/物品 |
@@ -355,6 +355,7 @@ G7 盐脊验收、发布更新与旧入口收口
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| 1.1.49 | 2026-09-07 | 完成G3-08 RegionSkeleton：新增只读已验收Brief/P1/体验/StoryArc的Context Source、专属Skill与Executor；AI把来源地点事实和所有故事空间需求编排为精确规模的地区、地点及道路语义，代码生成稳定键、全地点/全地区连通图、每区快旅复活点、渐进知识、固定旅行耗时和提前到达保护；下游主线、场景、任务、NPC、遭遇、商店与媒资保持unbound，伪造来源、空间需求漏覆盖、断图和重算Hash篡改失败关闭；总进度59/121，业务功能49/111，下一项G3-09 |
 | 1.1.48 | 2026-09-07 | 完成G3-07 StoryArchitecture：新增只读已验收体验/主角/P1证据的Context Source、专属Skill与Executor；AI设计核心冲突、5～8个长程节拍、与Brief数量一致的多结局语义及4～12项叙事承诺，代码固定主线保护、阶段顺序、稳定键、来源/缺口权限、全结局核心目标达成和建立—回响—回收闭环；结局Condition与承诺Scene显式保持unbound等待后序绑定，新增完整生产链、错误顺序、伪造来源及重算Hash篡改反例；总进度58/121，业务功能48/111，下一项G3-08 |
 | 1.1.47 | 2026-09-07 | 完成G3-06 PlayerBuild：新增只读已验收P2产物的Context Source、正式Skill与Executor；AI只补主角身份演绎、非职业玩法风格、主副属性选择和初始技能/物品语义，代码固定1级、12点属性预算、100货币、技能机制、物品数量及稳定预留键；产物在后续目录兑现前保持`reserved-unbound`并禁止冒充可运行PlayerDefinition；新增完整生产链、注册闭包、篡改和非法属性反例；总进度57/121，业务功能47/111，下一项G3-07 |
 | 1.1.46 | 2026-09-07 | 完成G3-05 GameplayRulesetSkeleton：新增登记的P2规则Context、Skill与Executor，输入只来自同一Build已验收体验链和Ledger claim；模型只负责世界化显示语义，代码冻结三属性/20级/1→5验收跨度/自动成长、G2公式、标准难度四操作单人回合战斗、三装备位、单货币、确定性制作交易及当前模块版本；Effect词表改为与G2共享单一常量，并分离模型可提议、编译器专属和旧版只读操作，伪造claim、固定值、权限分区、上下文或Hash全部失败关闭；总进度56/121，业务功能46/111，下一项G3-06 |
