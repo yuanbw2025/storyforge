@@ -332,10 +332,11 @@ export const TEXT_OPEN_WORLD_PRODUCTION_TASK_CONTRACTS_V1: TextOpenWorldProducti
   modelTask({
     stage: 'P8', taskKey: 'p8.catalog.crafting-economy', objective: '生产配方、商店、货币流和价格目录并闭合资源来源与消耗。',
     skillId: 'text-open-world.production.crafting-economy-catalog.v1', recommendedModelCalls: 5,
-    dependsOn: ['p2.gameplay-ruleset', 'p7.region-narrative-packs', 'p8.catalog.items-rewards'],
+    dependsOn: ['p2.gameplay-ruleset', 'p7.region-narrative-packs', 'p8.quest-skeletons', 'p8.catalog.items-rewards'],
     inputArtifactKeys: [
       'text-open-world.gameplay-ruleset-skeleton', 'text-open-world.region-narrative-packs',
-      'text-open-world.content-requirement-manifest', 'text-open-world.item-reward-catalog',
+      'text-open-world.quest-skeletons', 'text-open-world.content-requirement-manifest',
+      'text-open-world.item-reward-catalog',
     ],
     outputArtifactKeys: ['text-open-world.crafting-economy-catalog'],
     completion: {
@@ -349,7 +350,7 @@ export const TEXT_OPEN_WORLD_PRODUCTION_TASK_CONTRACTS_V1: TextOpenWorldProducti
     dependsOn: ['p2.gameplay-ruleset', 'p7.region-narrative-packs', 'p8.quest-skeletons'],
     inputArtifactKeys: [
       'text-open-world.gameplay-ruleset-skeleton', 'text-open-world.region-narrative-packs',
-      'text-open-world.content-requirement-manifest',
+      'text-open-world.quest-skeletons', 'text-open-world.content-requirement-manifest',
     ],
     outputArtifactKeys: ['text-open-world.npc-runtime-catalog'],
     completion: {
@@ -363,7 +364,7 @@ export const TEXT_OPEN_WORLD_PRODUCTION_TASK_CONTRACTS_V1: TextOpenWorldProducti
     dependsOn: ['p4.region-skeleton', 'p7.region-narrative-packs', 'p8.quest-skeletons'],
     inputArtifactKeys: [
       'text-open-world.region-skeleton', 'text-open-world.region-narrative-packs',
-      'text-open-world.content-requirement-manifest',
+      'text-open-world.quest-skeletons', 'text-open-world.content-requirement-manifest',
     ],
     outputArtifactKeys: ['text-open-world.map-interaction-catalog'],
     completion: {

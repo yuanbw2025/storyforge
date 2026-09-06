@@ -86,6 +86,12 @@ import {
   type TextOpenWorldItemRewardCatalogInputContextV1,
   type TextOpenWorldItemRewardCatalogModelRunnerV1,
 } from '../../src/lib/open-world/item-reward-catalog-production'
+import {
+  createTextOpenWorldCraftingEconomyCatalogExecutorV1,
+  validateTextOpenWorldCraftingEconomyCatalogV1,
+  type TextOpenWorldCraftingEconomyInputContextV1,
+  type TextOpenWorldCraftingEconomyModelRunnerV1,
+} from '../../src/lib/open-world/crafting-economy-catalog-production'
 import { TEXT_OPEN_WORLD_EFFECT_OPERATIONS_V1 } from '../../src/lib/types/text-open-world-effect'
 import type {
   TextOpenWorldGameplayRulesetSkeletonV1,
@@ -98,6 +104,7 @@ import type {
   TextOpenWorldProgressionCatalogsV1,
   TextOpenWorldEnemyEncounterCatalogV1,
   TextOpenWorldItemRewardCatalogV1,
+  TextOpenWorldCraftingEconomyCatalogV1,
   TextOpenWorldSignificantThreadsV1,
 } from '../../src/lib/types'
 import {
@@ -1577,7 +1584,17 @@ function questSkeletonsRunner(options: {
             playerIntent,
             successDescription: `已完成${source.title}要求的关键行动。`,
             optional: false,
-            requirements: [requirement],
+            requirements: [
+              requirement,
+              ...(source.kind === 'ordinary-seed' && sourceNumber === 5 ? [{
+                kind: 'recipe',
+                title: `${source.title}所需recipe`,
+                description: `为${source.sourceKey}提供能够支持玩家完成目标的recipe定义。`,
+                requestedTraits: [`关联${source.kind}`, `服务${source.title}`],
+                minimumCount: 1,
+                criticality: 'ordinary',
+              }] : []),
+            ],
           }],
         }],
       }
@@ -1927,6 +1944,88 @@ async function executeItemRewardCatalog(
     idempotencyKey: await hashProductProductionValueV2('p8-item-reward-catalog'),
     contextText: input.itemRewardContextText,
     inputArtifacts: [],
+    capabilityBindings: input.task.capabilityRequirementKeys.map(requirementKey => ({
+      requirementKey, bindingHash: CAPABILITY_HASH, adapterId: 'configured-text.v1',
+    })),
+    signal: new AbortController().signal,
+  })
+}
+
+function craftingEconomyRunner(options: {
+  omitRecipe?: boolean
+  invalidLocation?: boolean
+  criticalInventory?: boolean
+  duplicateVendorTitle?: boolean
+} = {}): TextOpenWorldCraftingEconomyModelRunnerV1 {
+  return async input => {
+    const context = JSON.parse(input.contextText) as TextOpenWorldCraftingEconomyInputContextV1
+    const recipes = context.recipeDemands.map((demand, index) => {
+      const ingredientItemNumber = 1
+      const ingredientKey = demand.candidateIngredientItemKeys[ingredientItemNumber - 1]
+      const outputItemNumber = Math.max(1, demand.candidateOutputItemKeys.findIndex(key => key !== ingredientKey) + 1)
+      const output = context.itemRewardCatalog.items.find(item => item.key === demand.candidateOutputItemKeys[outputItemNumber - 1])!
+      return {
+        demandNumber: demand.demandNumber,
+        title: `${demand.title}配方${index + 1}`,
+        description: `${demand.description}制作过程符合${demand.requestedTraits[0] ?? '当地生活'}。`,
+        category: output.kind === 'equipment' || output.kind === 'consumable' || output.kind === 'material' ? output.kind : 'tool',
+        stationLocationNumber: options.invalidLocation && index === 0 ? demand.candidateLocationKeys.length + 1 : 1,
+        ingredientItemNumber,
+        outputItemNumber,
+      }
+    })
+    const firstTradeable = context.itemRewardCatalog.items.findIndex(item => !item.critical && item.sellable) + 1
+    const firstCritical = context.itemRewardCatalog.items.findIndex(item => item.critical || !item.sellable) + 1
+    const vendors = context.vendorDemands.map((demand, index) => ({
+      demandNumber: demand.demandNumber,
+      title: options.duplicateVendorTitle ? '重复商店' : `${demand.title}${index + 1}`,
+      description: `${demand.description}店铺供应日常成长所需物资。`,
+      locationNumber: 1,
+      inventoryItemNumbers: [options.criticalInventory && index === 0 ? firstCritical : firstTradeable],
+    }))
+    return {
+      output: JSON.stringify({
+        schema: 'storyforge.text-open-world-crafting-economy-draft', version: 1,
+        recipes: options.omitRecipe ? recipes.slice(0, -1) : recipes,
+        vendors,
+      }),
+      bindingReceipt: bindingReceipt(input.requirementKey), usage: null,
+    }
+  }
+}
+
+async function craftingEconomyFixture() {
+  const input = await itemRewardCatalogFixture()
+  const itemResult = await executeItemRewardCatalog(input)
+  await acceptTaskArtifacts(input, itemResult.artifacts, 'P8-item-reward-catalog')
+  const plan = await createTextOpenWorldProductionPlanV1({
+    buildNumber: input.build.buildNumber, controlEpoch: input.build.controlEpoch,
+    briefHash: input.briefRow.briefHash, brief: input.brief,
+  })
+  const task = plan.tasks.find(item => item.taskKey === 'p8.catalog.crafting-economy')!
+  const assembled = await assembleContext({
+    projectId: input.scope.projectId, scope: input.scope,
+    sourceKeys: ['text-open-world.crafting-economy-input'],
+    productProductionId: input.production.id!, productBuildId: input.build.id!,
+    inputBudgetMaxTokens: task.budgetReservation.inputTokens,
+  })
+  return {
+    ...input, task, craftingEconomyContextText: assembled.text,
+    craftingEconomyContext: JSON.parse(assembled.text) as TextOpenWorldCraftingEconomyInputContextV1,
+    craftingEconomyContextEvidence: assembled.sourceEvidence,
+  }
+}
+
+async function executeCraftingEconomy(
+  input: Awaited<ReturnType<typeof craftingEconomyFixture>>,
+  runModel: TextOpenWorldCraftingEconomyModelRunnerV1 = craftingEconomyRunner(),
+) {
+  return createTextOpenWorldCraftingEconomyCatalogExecutorV1({ runModel, now: () => NOW + 16 })({
+    scope: input.scope, productionId: input.production.id!, buildId: input.build.id!,
+    buildNumber: input.build.buildNumber, controlEpoch: input.build.controlEpoch,
+    planHash: input.planHash, task: input.task, attempt: 1,
+    idempotencyKey: await hashProductProductionValueV2('p8-crafting-economy'),
+    contextText: input.craftingEconomyContextText, inputArtifacts: [],
     capabilityBindings: input.task.capabilityRequirementKeys.map(requirementKey => ({
       requirementKey, bindingHash: CAPABILITY_HASH, adapterId: 'configured-text.v1',
     })),
@@ -3194,4 +3293,79 @@ describe('R-OPEN-WORLD3 · P8 ItemRewardCatalog', () => {
     await expect(validateTextOpenWorldItemRewardCatalogV1({ artifact, context: input.itemRewardContext }))
       .rejects.toThrow(/物品来源、奖励预算、稳定键、掉落映射或未绑定运行槽被篡改/)
   }, 180_000)
+})
+
+describe('R-OPEN-WORLD3 · P8 CraftingEconomyCatalog', () => {
+  beforeEach(async () => { await db.delete(); await db.open() })
+  afterAll(() => db.close())
+
+  it('把任务需求和地区保底供给编译为来源/消耗闭合且无风险套利的配方商店目录', async () => {
+    const input = await craftingEconomyFixture()
+    expect(CONTEXT_SOURCE_BY_KEY.get('text-open-world.crafting-economy-input')).toMatchObject({
+      layer: 'L0', ownerFrom: 'work', protectedFromTrim: true,
+    })
+    expect(getAgentSkillV1('text-open-world.production.crafting-economy-catalog.v1')).toMatchObject({
+      contextSourceKeys: ['text-open-world.crafting-economy-input'],
+      writeTargets: [{ table: 'productBuildArtifacts', fields: ['payloadJson'] }],
+    })
+    expect(input.craftingEconomyContextEvidence).toEqual([
+      expect.objectContaining({ key: 'text-open-world.crafting-economy-input', status: 'included', delivery: 'full' }),
+    ])
+    expect(input.craftingEconomyContext.recipeDemands).toHaveLength(3)
+    expect(input.craftingEconomyContext.vendorDemands).toHaveLength(3)
+
+    const result = await executeCraftingEconomy(input)
+    const artifact = result.artifacts[0]!.payload as TextOpenWorldCraftingEconomyCatalogV1
+    expect(result.passedGateIds).toEqual(input.task.acceptanceGateIds)
+    expect(result.usage).toMatchObject({ modelCalls: 1, mediaCalls: 0 })
+    expect(artifact.recipes).toHaveLength(3)
+    expect(artifact.vendors).toHaveLength(3)
+    expect(artifact.coverage.requiredRecipeRequirementKeys).toHaveLength(1)
+    expect(artifact.coverage.coveredRecipeRequirementKeys).toEqual(artifact.coverage.requiredRecipeRequirementKeys)
+    expect(artifact.coverage.requiredVendorRequirementKeys).toHaveLength(1)
+    expect(artifact.coverage.coveredVendorRequirementKeys).toEqual(artifact.coverage.requiredVendorRequirementKeys)
+    expect(new Set(artifact.coverage.regionsWithRecipe)).toEqual(new Set(artifact.coverage.requiredRegionKeys))
+    expect(new Set(artifact.coverage.regionsWithVendor)).toEqual(new Set(artifact.coverage.requiredRegionKeys))
+    expect(artifact.coverage.sourcedIngredientItemKeys).toEqual(artifact.coverage.ingredientItemKeys)
+    expect(artifact.coverage.sinkedOutputItemKeys).toEqual(artifact.coverage.outputItemKeys)
+    expect(artifact.coverage.riskFreeArbitrageRecipeKeys).toEqual([])
+    expect(artifact.recipes.every(recipe => recipe.runtimeBinding.status === 'runtime-unbound'
+      && recipe.runtimeBinding.craftActionKey === null)).toBe(true)
+    expect(artifact.vendors.every(vendor => vendor.runtimeBinding.status === 'runtime-unbound'
+      && vendor.runtimeBinding.actorKey === null
+      && vendor.inventoryEntries.every(entry => entry.stockPolicy === 'unlimited' ? entry.initialQuantity === null : entry.initialQuantity === 1))).toBe(true)
+    expect(artifact.governance).toMatchObject({
+      singleCurrency: true, guaranteedCrafting: true, recipeKnowledgeRequired: true,
+      quantityAndPriceOwner: 'deterministic-compiler', everyIngredientSourced: true,
+      everyOutputHasSink: true, noRiskFreeArbitrage: true,
+      allRuntimeBindingsUnbound: true, craftingEconomyModulesReady: false,
+    })
+    await expect(validateTextOpenWorldCraftingEconomyCatalogV1({ artifact, context: input.craftingEconomyContext }))
+      .resolves.toEqual(artifact)
+  }, 210_000)
+
+  it('拒绝配方漏项、越界地点、关键物品上架和同名商店', async () => {
+    const input = await craftingEconomyFixture()
+    await expect(executeCraftingEconomy(input, craftingEconomyRunner({ omitRecipe: true })))
+      .rejects.toThrow(/recipes必须与3项需求一一对应/)
+    await expect(executeCraftingEconomy(input, craftingEconomyRunner({ invalidLocation: true })))
+      .rejects.toThrow(/stationLocationNumber必须是/)
+    await expect(executeCraftingEconomy(input, craftingEconomyRunner({ criticalInventory: true })))
+      .rejects.toThrow(/商店不得出售关键或不可交易物品/)
+    await expect(executeCraftingEconomy(input, craftingEconomyRunner({ duplicateVendorTitle: true })))
+      .rejects.toThrow(/vendors必须按序覆盖且标题不得重复/)
+  }, 210_000)
+
+  it('拒绝重算Hash后修改价格、库存、配方数量或注入运行Action', async () => {
+    const input = await craftingEconomyFixture()
+    const artifact = structuredClone((await executeCraftingEconomy(input)).artifacts[0]!.payload as TextOpenWorldCraftingEconomyCatalogV1)
+    artifact.recipes[0]!.ingredients[0]!.quantity += 10
+    artifact.vendors[0]!.sellPriceMultiplierBasisPoints = 20_000
+    artifact.vendors[0]!.inventoryEntries[0]!.stockPolicy = 'limited'
+    artifact.recipes[0]!.runtimeBinding.craftActionKey = 'action.forged' as null
+    const { craftingEconomyCatalogHash: _hash, ...body } = artifact
+    artifact.craftingEconomyCatalogHash = await hashProductProductionValueV2(body)
+    await expect(validateTextOpenWorldCraftingEconomyCatalogV1({ artifact, context: input.craftingEconomyContext }))
+      .rejects.toThrow(/配方、商店、价格、来源\/消耗或运行绑定被篡改/)
+  }, 210_000)
 })

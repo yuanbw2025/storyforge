@@ -2058,6 +2058,122 @@ export interface TextOpenWorldItemRewardCatalogV1 {
   itemRewardCatalogHash: string
 }
 
+export type TextOpenWorldCraftingEconomyDemandKindV1 =
+  | 'content-requirement'
+  | 'region-baseline'
+
+/**
+ * P8 recipe/store catalog candidate. The model selects world-grounded item and
+ * location semantics from bounded candidates; code owns quantities, prices,
+ * stock policy, source/sink closure and every runtime binding slot.
+ */
+export interface TextOpenWorldCraftingEconomyCatalogV1 {
+  schema: 'storyforge.text-open-world-crafting-economy-catalog'
+  version: 1
+  productType: 'text-open-world'
+  productInstanceKey: string
+  gameplayRulesetHash: string
+  regionNarrativePacksHash: string
+  questSkeletonsHash: string
+  contentRequirementManifestHash: string
+  itemRewardCatalogHash: string
+  currency: TextOpenWorldGameplayRulesetSkeletonV1['economy']['currency']
+  craftingRules: TextOpenWorldGameplayRulesetSkeletonV1['crafting']
+  economyRules: TextOpenWorldGameplayRulesetSkeletonV1['economy']
+  recipes: Array<{
+    key: string
+    order: number
+    sourceDemandKey: string
+    demandKind: TextOpenWorldCraftingEconomyDemandKindV1
+    title: string
+    description: string
+    category: 'consumable' | 'equipment' | 'tool' | 'material'
+    learnedByDefault: boolean
+    regionKey: string
+    stationLocationKeys: string[]
+    ingredients: Array<{ itemKey: string; quantity: number }>
+    outputs: Array<{ itemKey: string; quantity: number }>
+    timeCostMinutes: number
+    fulfilledRequirementKeys: string[]
+    runtimeBinding: {
+      status: 'runtime-unbound'
+      requirementConditionKeys: []
+      craftActionKey: null
+      learnActionKey: null
+      learnQuestKey: null
+      consumeEffectKeys: []
+      outputEffectKeys: []
+      presentationRefs: []
+    }
+  }>
+  vendors: Array<{
+    key: string
+    order: number
+    sourceDemandKey: string
+    demandKind: TextOpenWorldCraftingEconomyDemandKindV1
+    title: string
+    description: string
+    regionKey: string
+    locationKey: string
+    buyPriceMultiplierBasisPoints: number
+    sellPriceMultiplierBasisPoints: number
+    buyCategories: Array<'equipment' | 'consumable' | 'material' | 'misc'>
+    sellCategories: Array<'equipment' | 'consumable' | 'material' | 'misc'>
+    inventoryEntries: Array<{
+      itemKey: string
+      stockPolicy: 'unlimited' | 'limited'
+      initialQuantity: number | null
+    }>
+    fulfilledRequirementKeys: string[]
+    runtimeBinding: {
+      status: 'runtime-unbound'
+      actorKey: null
+      actorRequirementKey: string
+      factionKey: null
+      availabilityConditionKeys: []
+      buyActionKey: null
+      sellActionKey: null
+    }
+  }>
+  itemFlows: Array<{
+    itemKey: string
+    sourceKinds: Array<'initial' | 'reward' | 'drop' | 'craft' | 'vendor'>
+    sinkKinds: Array<'consume' | 'equip' | 'quest' | 'craft' | 'vendor-sale'>
+  }>
+  coverage: {
+    requiredRecipeRequirementKeys: string[]
+    coveredRecipeRequirementKeys: string[]
+    requiredVendorRequirementKeys: string[]
+    coveredVendorRequirementKeys: string[]
+    requiredRegionKeys: string[]
+    regionsWithRecipe: string[]
+    regionsWithVendor: string[]
+    ingredientItemKeys: string[]
+    sourcedIngredientItemKeys: string[]
+    outputItemKeys: string[]
+    sinkedOutputItemKeys: string[]
+    riskFreeArbitrageRecipeKeys: []
+    uncoveredDemandKeys: []
+  }
+  governance: {
+    singleCurrency: true
+    guaranteedCrafting: true
+    recipeKnowledgeRequired: true
+    ordinaryStockUnlimited: true
+    specialStockLimited: true
+    quantityAndPriceOwner: 'deterministic-compiler'
+    semanticSelectionOwner: 'model-validated'
+    everyIngredientSourced: true
+    everyOutputHasSink: true
+    noRiskFreeArbitrage: true
+    allRuntimeBindingsUnbound: true
+    craftingEconomyModulesReady: false
+  }
+  basisHash: string
+  createdAt: number
+  craftingEconomyCatalogHash: string
+}
+
 export const TEXT_OPEN_WORLD_PRODUCTION_STAGES_V1 = [
   'P0', 'P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8', 'P8F', 'P9', 'P10',
   'V1', 'V2', 'V3', 'QA',

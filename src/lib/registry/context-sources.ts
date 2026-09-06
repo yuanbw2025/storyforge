@@ -195,6 +195,9 @@ async function readTextOpenWorldEncounterCatalogInputContextV1(input: AssembleCo
 async function readTextOpenWorldItemRewardCatalogInputContextV1(input: AssembleContextInput): Promise<string> {
   return (await import('../open-world/item-reward-catalog-production')).readTextOpenWorldItemRewardCatalogInputContextV1(input)
 }
+async function readTextOpenWorldCraftingEconomyInputContextV1(input: AssembleContextInput): Promise<string> {
+  return (await import('../open-world/crafting-economy-catalog-production')).readTextOpenWorldCraftingEconomyInputContextV1(input)
+}
 async function readTtrpgGmRuntimeContextV1(input: AssembleContextInput): Promise<string> {
   return (await import('../ttrpg/gm-context')).readTtrpgGmRuntimeContextV1(input)
 }
@@ -1738,6 +1741,18 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     enabled: input => Number.isInteger(input.productProductionId)
       && Number.isInteger(input.productBuildId),
     read: readTextOpenWorldItemRewardCatalogInputContextV1,
+  },
+  {
+    key: 'text-open-world.crafting-economy-input',
+    label: '文字开放世界配方与经济目录生产输入',
+    scope: 'project',
+    layer: 'L0',
+    ownerFrom: 'work',
+    budgetTokens: 100_000,
+    protectedFromTrim: true,
+    enabled: input => Number.isInteger(input.productProductionId)
+      && Number.isInteger(input.productBuildId),
+    read: readTextOpenWorldCraftingEconomyInputContextV1,
   },
   {
     key: 'product-production.quality-feedback',
