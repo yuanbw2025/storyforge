@@ -946,6 +946,81 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
   })
 
   it('仅补全有确定空语义的叙事协议字段，并保留未知字段供严格解析器拒绝', () => {
+    const supervision = legalizeProductionModelProtocolDefaultsV1('production.supervision', {
+      stages: Array.from({ length: 6 }, (_, index) => ({
+        key: `g${index + 1}`, responsibleAgentIds: index === 0 ? ['showrunner'] : [],
+      })),
+    })
+    expect((supervision.payload.stages as Array<{ responsibleAgentIds: string[] }>).flatMap(
+      stage => stage.responsibleAgentIds,
+    )).toEqual([
+      'text-adventure-showrunner', 'text-adventure-source-editor', 'text-adventure-creative-director',
+      'text-adventure-story-architect', 'text-adventure-cast-director',
+      'text-adventure-space-designer', 'text-adventure-game-designer',
+      'text-adventure-narrative-designer', 'text-adventure-main-quest-designer',
+      'text-adventure-side-quest-designer', 'text-adventure-storylet-designer',
+      'text-adventure-quest-scripter', 'text-adventure-scene-writer',
+      'text-adventure-dialogue-editor', 'text-adventure-continuity-editor',
+      'text-adventure-art-director', 'text-adventure-visual-qa-director',
+      'text-adventure-playtest-director',
+    ])
+    expect(supervision.defaultedFields).toEqual([
+      'stages[0].responsibleAgentIds', 'stages[1].responsibleAgentIds',
+      'stages[2].responsibleAgentIds', 'stages[3].responsibleAgentIds',
+      'stages[4].responsibleAgentIds', 'stages[5].responsibleAgentIds',
+    ])
+
+    const sourceSufficiency = legalizeProductionModelProtocolDefaultsV1(
+      'content.source-sufficiency',
+      {
+        decision: 'ready-with-private-additions',
+        coverage: [{ domain: 'world-premise', status: 'sufficient', resourceKeys: [], ratione: '来源充分。' }],
+        gaps: [
+          { key: 'gap.items', severity: 'warning' },
+          { key: '缺少视觉锚点', severity: 'warning' },
+        ],
+        privateAdditions: [{ key: '补充规则细节', kind: 'rule-detail' }],
+      },
+      { allowedSourceResourceKeys: ['story.world-rules'] },
+    )
+    expect(sourceSufficiency.payload).toEqual({
+      authorDecisionRequired: true,
+      decision: 'ready-with-private-additions',
+      coverage: [{ domain: 'world-premise', status: 'sufficient', resourceKeys: [], rationale: '来源充分。' }],
+      gaps: [
+        { key: 'gap.items', severity: 'warning' },
+        { key: 'gap.generated.002', severity: 'warning' },
+      ],
+      privateAdditions: [{ key: 'private-addition.generated.001', kind: 'rule-detail' }],
+    })
+    expect(sourceSufficiency.defaultedFields).toEqual([
+      'authorDecisionRequired<-decision',
+      'coverage[0].rationale<-ratione',
+      'gaps[1].key',
+      'privateAdditions[0].key',
+    ])
+
+    const sourceReferences = legalizeProductionModelProtocolDefaultsV1(
+      'content.source-sufficiency',
+      {
+        coverage: [{
+          domain: 'space', status: 'partial', rationale: '只接受冻结引用。',
+          resourceKeys: [' story.world-rules ', 'world:invented-hash', 42],
+        }],
+      },
+      { allowedSourceResourceKeys: ['story.world-rules'] },
+    )
+    expect(sourceReferences.payload).toEqual({
+      coverage: [{
+        domain: 'space', status: 'partial', rationale: '只接受冻结引用。',
+        resourceKeys: ['story.world-rules'],
+      }],
+    })
+    expect(sourceReferences.defaultedFields).toEqual([
+      'coverage[0].resourceKeys[1]<-discarded-unauthorized',
+      'coverage[0].resourceKeys[2]<-discarded-unauthorized',
+    ])
+
     const narrative = legalizeProductionModelProtocolDefaultsV1('content.narrative', {
       nodes: [{
         key: 'entry', kind: 'entry', title: '入口', summary: '开始。',

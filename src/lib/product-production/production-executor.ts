@@ -450,6 +450,23 @@ function protocolObjectWithDefaults(
   return next
 }
 
+const TEXT_ADVENTURE_SUPERVISION_AGENT_GROUPS_V1: readonly (readonly string[])[] = [
+  ['text-adventure-showrunner', 'text-adventure-source-editor', 'text-adventure-creative-director'],
+  [
+    'text-adventure-story-architect', 'text-adventure-cast-director',
+    'text-adventure-space-designer', 'text-adventure-game-designer',
+    'text-adventure-narrative-designer',
+  ],
+  [
+    'text-adventure-main-quest-designer', 'text-adventure-side-quest-designer',
+    'text-adventure-storylet-designer', 'text-adventure-quest-scripter',
+    'text-adventure-scene-writer', 'text-adventure-dialogue-editor',
+  ],
+  ['text-adventure-continuity-editor', 'text-adventure-art-director'],
+  ['text-adventure-visual-qa-director'],
+  ['text-adventure-playtest-director'],
+]
+
 /**
  * Normalize only protocol bookkeeping fields whose empty/default meaning is
  * already fixed by the runtime contract. Unknown fields remain untouched so
@@ -459,11 +476,85 @@ function protocolObjectWithDefaults(
 export function legalizeProductionModelProtocolDefaultsV1(
   taskKey: string,
   payload: JsonRecord,
-  options: { narrativeStatePolicy?: 'preserve-validated' | 'empty-unregistered' } = {},
+  options: {
+    narrativeStatePolicy?: 'preserve-validated' | 'empty-unregistered'
+    allowedSourceResourceKeys?: readonly string[]
+  } = {},
 ): ProductionModelProtocolLegalizationV1 {
   const defaultedFields: string[] = []
   const discardedNullEntries: string[] = []
   const discardedUnregisteredStateFields: string[] = []
+  if (taskKey === 'production.supervision') {
+    const next: JsonRecord = { ...payload }
+    if (Array.isArray(payload.stages)) next.stages = payload.stages.map((stage, index) => {
+      if (!stage || typeof stage !== 'object' || Array.isArray(stage)) return stage
+      const frozenAgents = TEXT_ADVENTURE_SUPERVISION_AGENT_GROUPS_V1[index]
+      if (!frozenAgents) return stage
+      const item = { ...(stage as JsonRecord) }
+      if (JSON.stringify(item.responsibleAgentIds) !== JSON.stringify(frozenAgents)) {
+        defaultedFields.push(`stages[${index}].responsibleAgentIds`)
+      }
+      item.responsibleAgentIds = [...frozenAgents]
+      return item
+    })
+    return { payload: next, defaultedFields, discardedNullEntries, discardedUnregisteredStateFields }
+  }
+  if (taskKey === 'content.source-sufficiency') {
+    const next: JsonRecord = { ...payload }
+    if (!Object.prototype.hasOwnProperty.call(next, 'authorDecisionRequired')
+      && typeof next.decision === 'string') {
+      next.authorDecisionRequired = next.decision !== 'ready'
+      defaultedFields.push('authorDecisionRequired<-decision')
+    }
+    if (Array.isArray(payload.coverage)) next.coverage = payload.coverage.map((entry, index) => {
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return entry
+      const item = { ...(entry as JsonRecord) }
+      if (!Object.prototype.hasOwnProperty.call(item, 'rationale')
+        && typeof item.ratione === 'string') {
+        item.rationale = item.ratione
+        delete item.ratione
+        defaultedFields.push(`coverage[${index}].rationale<-ratione`)
+      }
+      if (Array.isArray(item.resourceKeys) && options.allowedSourceResourceKeys) {
+        const allowed = new Set(options.allowedSourceResourceKeys)
+        item.resourceKeys = item.resourceKeys.filter((resourceKey, resourceIndex) => {
+          if (typeof resourceKey === 'string' && allowed.has(resourceKey.trim().normalize('NFC'))) return true
+          defaultedFields.push(`coverage[${index}].resourceKeys[${resourceIndex}]<-discarded-unauthorized`)
+          return false
+        }).map(resourceKey => (resourceKey as string).trim().normalize('NFC'))
+      }
+      return item
+    })
+    const stabilizeBookkeepingKeys = (
+      value: unknown,
+      field: 'gaps' | 'privateAdditions',
+      prefix: 'gap' | 'private-addition',
+    ): unknown => {
+      if (!Array.isArray(value)) return value
+      const candidates = value.map(entry => {
+        if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return null
+        const rawKey = (entry as JsonRecord).key
+        return typeof rawKey === 'string' ? rawKey.trim().normalize('NFC') : null
+      })
+      if (candidates.some(candidate => candidate === null)) return value
+      const stableKeys = canonicalModelKeys(candidates as string[], prefix, `${field}.key`)
+      return value.map((entry, index) => {
+        const item = { ...(entry as JsonRecord) }
+        if (item.key !== stableKeys[index]) {
+          item.key = stableKeys[index]
+          defaultedFields.push(`${field}[${index}].key`)
+        }
+        return item
+      })
+    }
+    next.gaps = stabilizeBookkeepingKeys(payload.gaps, 'gaps', 'gap')
+    next.privateAdditions = stabilizeBookkeepingKeys(
+      payload.privateAdditions,
+      'privateAdditions',
+      'private-addition',
+    )
+    return { payload: next, defaultedFields, discardedNullEntries, discardedUnregisteredStateFields }
+  }
   if (taskKey === 'content.narrative') {
     const next: JsonRecord = { ...payload }
     const nodes = compactProtocolArray(payload.nodes, 'nodes', discardedNullEntries)
@@ -1161,7 +1252,12 @@ function textSystem(
       : '')
   if (taskKey === 'production.supervision') return `${common}\n你是文字冒险制作主管（Showrunner）。你不代写故事、角色、任务、场景、对白、规则或美术，只把冻结 Brief 转换为可审计的六阶段执行约束、风险登记和作者闸门。` +
     'stages 必须严格按 G1 到 G6 输出；全部十八个专业 Agent 必须且只能被分配一次，不得把多个专业职责改挂到同一个 Agent。exitCriteria 必须是可观察证据，stopConditions 必须说明何时暂停，不得写空泛口号。' +
-    '建议岗位分组（不得遗漏、重复或跨组改写 ID）：G1=showrunner/source-editor/creative-director；G2=story-architect/cast-director/space-designer/game-designer/narrative-designer；G3=main-quest-designer/side-quest-designer/storylet-designer/quest-scripter/scene-writer/dialogue-editor；G4=continuity-editor/art-director；G5=visual-qa-director；G6=playtest-director。' +
+    'responsibleAgentIds 必须逐字复制以下冻结分组，不得使用岗位简称、翻译、增删或调换：' +
+    'G1=["text-adventure-showrunner","text-adventure-source-editor","text-adventure-creative-director"]；' +
+    'G2=["text-adventure-story-architect","text-adventure-cast-director","text-adventure-space-designer","text-adventure-game-designer","text-adventure-narrative-designer"]；' +
+    'G3=["text-adventure-main-quest-designer","text-adventure-side-quest-designer","text-adventure-storylet-designer","text-adventure-quest-scripter","text-adventure-scene-writer","text-adventure-dialogue-editor"]；' +
+    'G4=["text-adventure-continuity-editor","text-adventure-art-director"]；' +
+    'G5=["text-adventure-visual-qa-director"]；G6=["text-adventure-playtest-director"]。' +
     `登记 Agent=${JSON.stringify(TEXT_ADVENTURE_PRODUCTION_AGENT_IDS)}。` +
     '输出字段必须精确为：{"schema":"storyforge.text-adventure-production-supervision-artifact","version":1,"productionPromise":"...","stages":[{"key":"g1-source-and-direction|g2-architecture-and-quests|g3-scripts-and-dialogue|g4-quality-and-media|g5-assembly-and-automation|g6-human-validation-and-release","objective":"...","responsibleAgentIds":["text-adventure-showrunner"],"exitCriteria":["..."],"stopConditions":["..."]}],"risks":[{"key":"risk.some-key","severity":"warning|blocking","ownerAgentId":"text-adventure-showrunner","evidence":"...","mitigation":"..."}],"authorGates":[{"key":"gate.some-key","afterStageKey":"g1-source-and-direction","decision":"..."}],"nonGoals":["..."]}。stages 必须恰好六项且 key 顺序与枚举顺序一致；risks 至少三项，authorGates 至少三项，nonGoals 至少三项。'
   if (taskKey === 'content.source-sufficiency') return `${common}\n你是来源编辑，只审查冻结 SourcePlan 能否支撑这次文字冒险生产，不创作剧情正文。` +
@@ -1415,6 +1511,7 @@ async function executeModelTask(input: ProductProductionTaskExecutionInputV1, op
     narrativeStatePolicy: options.brief.intent.productType === 'text-adventure'
       ? 'empty-unregistered'
       : 'preserve-validated',
+    allowedSourceResourceKeys: options.brief.source.selection.resourceKeys,
   })
   const raw = legalized.payload
   let payload: unknown
