@@ -298,9 +298,9 @@ export async function createProductProductionPlanV3(input: {
   const textAdventure = brief.intent.productType === 'text-adventure'
   const modelTaskCount = textAdventure ? 21 + Number(activeVisual) : 4
   const textAdventureOutputWeights: Record<string, number> = {
-    'production.supervision': 0.02,
+    'production.supervision': 0.03,
     'content.source-sufficiency': 0.04,
-    'content.design': 0.04,
+    'content.design': 0.03,
     'content.story-bible': 0.07,
     'content.cast-bible': 0.08,
     'content.adventure-architecture': 0.06,
