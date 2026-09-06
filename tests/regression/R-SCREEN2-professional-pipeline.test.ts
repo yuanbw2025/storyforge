@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { readFileSync } from 'node:fs'
 import { createWorkspace } from '../../src/lib/workspace/create-workspace'
 import { createAdaptation, listActiveSourceUnits } from '../../src/lib/adaptation/source-manifest'
 import { reopenAdaptationProductionV1 } from '../../src/lib/adaptation/completion'
@@ -109,6 +110,10 @@ describe('SCREEN-2 · professional novel-to-screenplay pipeline', () => {
       expect(skill.promptVersion).toMatch(/screenplay|adaptation/)
     }
     expect(() => parseScreenplayProfessionalPayloadV1('scene-card', [{ stableKey: 'card.bad', systemId: 1 }] as never)).toThrow('字段不在闭集')
+    const panelSource = readFileSync(`${process.cwd()}/src/components/screenplay/ScreenplayPipelinePanel.tsx`, 'utf8')
+    expect(panelSource).toContain("confirmNoIssues('grounding')")
+    expect(panelSource).toContain("confirmNoIssues('dramaturgy')")
+    expect(panelSource).toContain('candidates: []')
   })
 
   it('来源事实提示明确闭集形状和 kind 枚举，避免兼容模型返回近义字段', async () => {

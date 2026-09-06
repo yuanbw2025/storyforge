@@ -10,7 +10,7 @@ import {
   type ScreenplayProfessionalPayloadV1,
   type ScreenplayProfessionalStageV1,
 } from '../../lib/screenplay/durable-production'
-import { listScreenplayProductionV1, startScreenplayProductionV1, updateScreenplayReviewIssueStatusV1 } from '../../lib/screenplay/production'
+import { adoptScreenplayReviewIssuesV1, listScreenplayProductionV1, startScreenplayProductionV1, updateScreenplayReviewIssueStatusV1 } from '../../lib/screenplay/production'
 import { getAIConfigRequiredMessage, isAIConfigReady } from '../../lib/ai/config-readiness'
 import { useAIConfigStore } from '../../stores/ai-config'
 
@@ -121,6 +121,25 @@ export default function ScreenplayPipelinePanel({ scope, adaptation, sourceUnits
     catch (cause) { setError(cause instanceof Error ? cause.message : '放弃候选失败') } finally { setBusy(false) }
   }
 
+  const confirmNoIssues = async (category: 'grounding' | 'dramaturgy') => {
+    if (busy || candidate) return
+    const scene = scenes.find(item => item.stableKey === targetSceneKey)
+    if (!scene) { setError('请选择一个已经成稿的目标场景。'); return }
+    setBusy(true); setError('')
+    try {
+      await adoptScreenplayReviewIssuesV1({
+        scope,
+        expectedAdaptationRevision: adaptation.revision,
+        sourceManifestVersion: adaptation.activeSourceManifestVersion,
+        category,
+        targetSceneKeys: [scene.stableKey],
+        expectedSceneRevisions: { [scene.stableKey]: scene.revision },
+        candidates: [],
+      })
+      await reload(); await onChanged()
+    } catch (cause) { setError(cause instanceof Error ? cause.message : '作者审查确认失败') } finally { setBusy(false) }
+  }
+
   const stageButtons: Array<{ stage: ScreenplayProfessionalStageV1; ready: boolean; detail: string }> = [
     { stage: 'source-analysis', ready: true, detail: `${coveredSourceKeys.length}/${sourceUnits.filter(unit => unit.sourceKind !== 'work').length} 来源单元 · ${counts.facts} 事实` },
     { stage: 'causal-graph', ready: counts.facts > 0, detail: `${counts.edges} 因果边` },
@@ -143,6 +162,10 @@ export default function ScreenplayPipelinePanel({ scope, adaptation, sourceUnits
       {counts.cards > 0 && !['producing', 'review', 'complete'].includes(adaptation.status) && <button className="primary" onClick={() => void (async () => { setBusy(true); setError(''); try { await startScreenplayProductionV1({ scope, expectedAdaptationRevision: adaptation.revision }); await onChanged() } catch (cause) { setError(cause instanceof Error ? cause.message : '进入场景生产失败') } finally { setBusy(false) } })()} disabled={busy}><Play className="h-4 w-4" />进入场景生产</button>}
     </div>
     <div className="screenplay-pipeline-steps">{stageButtons.map(item => <button key={item.stage} onClick={() => void runStage(item.stage)} disabled={busy || !!candidate || !item.ready || adaptation.status === 'complete'}><Sparkles className="h-4 w-4" /><span><strong>{STAGE_LABELS[item.stage]}</strong><small>{item.detail}</small></span></button>)}</div>
+    {targetSceneKey && scenes.some(scene => scene.stableKey === targetSceneKey) && adaptation.status !== 'complete' && <div className="screenplay-author-review-actions">
+      <button onClick={() => void confirmNoIssues('grounding')} disabled={busy || !!candidate}><Check className="h-4 w-4" />作者确认来源无问题</button>
+      <button onClick={() => void confirmNoIssues('dramaturgy')} disabled={busy || !!candidate}><Check className="h-4 w-4" />作者确认戏剧无问题</button>
+    </div>}
     {candidate && <div className="screenplay-professional-candidate"><header><strong>{STAGE_LABELS[candidate.stage]}候选 · 尚未写入</strong><span>可编辑后确认</span></header>
       {candidateItems.length > 0 && <div className="screenplay-candidate-items">{candidateItems.map((item: any, index) => <label key={item.stableKey ?? index}><input type="checkbox" checked={acceptedKeys.has(item.stableKey)} onChange={event => setAcceptedKeys(current => { const next = new Set(current); if (event.target.checked) next.add(item.stableKey); else next.delete(item.stableKey); return next })} /><span><strong>{item.stableKey}</strong><small>{item.statement ?? item.rationale ?? item.objective ?? item.purpose ?? item.problem ?? ''}</small></span></label>)}</div>}
       <textarea value={candidate.text} onChange={event => { setCandidate({ ...candidate, text: event.target.value }); try { setAcceptedKeys(new Set(payloadKeys(JSON.parse(event.target.value)))) } catch { /* keep editor usable while JSON is incomplete */ } }} spellCheck={false} />
