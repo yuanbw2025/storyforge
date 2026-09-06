@@ -304,6 +304,16 @@ export function parseProductionModelJsonObjectV1(output: string, label: string):
 export interface ProductionModelProtocolLegalizationV1 {
   payload: JsonRecord
   defaultedFields: string[]
+  discardedNullEntries: string[]
+}
+
+function compactProtocolArray(value: unknown, path: string, discardedNullEntries: string[]): unknown {
+  if (!Array.isArray(value)) return value
+  return value.filter((item, index) => {
+    if (item !== null) return true
+    discardedNullEntries.push(`${path}[${index}]`)
+    return false
+  })
 }
 
 function protocolObjectWithDefaults(
@@ -333,36 +343,41 @@ export function legalizeProductionModelProtocolDefaultsV1(
   payload: JsonRecord,
 ): ProductionModelProtocolLegalizationV1 {
   const defaultedFields: string[] = []
+  const discardedNullEntries: string[] = []
   if (taskKey === 'content.narrative') {
     const next: JsonRecord = { ...payload }
-    if (Array.isArray(payload.nodes)) next.nodes = payload.nodes.map((node, index) => (
+    const nodes = compactProtocolArray(payload.nodes, 'nodes', discardedNullEntries)
+    const beats = compactProtocolArray(payload.beats, 'beats', discardedNullEntries)
+    const choices = compactProtocolArray(payload.choices, 'choices', discardedNullEntries)
+    if (Array.isArray(nodes)) next.nodes = nodes.map((node, index) => (
       protocolObjectWithDefaults(node, `nodes[${index}]`, { condition: {}, effects: [] }, defaultedFields)
     ))
-    if (Array.isArray(payload.beats)) next.beats = payload.beats.map((beat, index) => (
+    if (Array.isArray(beats)) next.beats = beats.map((beat, index) => (
       protocolObjectWithDefaults(beat, `beats[${index}]`, { speakerKey: null, order: index }, defaultedFields)
     ))
-    if (Array.isArray(payload.choices)) next.choices = payload.choices.map((choice, index) => (
+    if (Array.isArray(choices)) next.choices = choices.map((choice, index) => (
       protocolObjectWithDefaults(choice, `choices[${index}]`, {
         description: '', unavailableReason: '', displayCondition: {}, availableCondition: {},
         effects: [], tags: [], order: index,
       }, defaultedFields)
     ))
-    return { payload: next, defaultedFields }
+    return { payload: next, defaultedFields, discardedNullEntries }
   }
   if (taskKey === 'content.adventure-side-quests'
     || taskKey === 'content.adventure-ambient-events') {
     const side = taskKey === 'content.adventure-side-quests'
     const next: JsonRecord = { ...payload }
-    if (Array.isArray(payload.entries)) next.entries = payload.entries.map((entry, index) => (
+    const entries = compactProtocolArray(payload.entries, 'entries', discardedNullEntries)
+    if (Array.isArray(entries)) next.entries = entries.map((entry, index) => (
       protocolObjectWithDefaults(entry, `entries[${index}]`, {
         rewardExperience: side ? 5 : 2,
         rewardCurrency: 0,
         timeCostMinutes: side ? 10 : 5,
       }, defaultedFields)
     ))
-    return { payload: next, defaultedFields }
+    return { payload: next, defaultedFields, discardedNullEntries }
   }
-  return { payload, defaultedFields }
+  return { payload, defaultedFields, discardedNullEntries }
 }
 
 function parseDesign(value: unknown, brief: ProductProductionBriefV3): ProductDesignArtifactV1 {
@@ -901,7 +916,11 @@ async function executeModelTask(input: ProductProductionTaskExecutionInputV1, op
     quality = { fourLevelSpaceVerified: true }
   } else if (input.task.taskKey === 'content.narrative') {
     payload = parseNarrative(raw, options.brief); kind = 'narrative'
-    quality = { graphValidated: true, protocolDefaultsApplied: legalized.defaultedFields }
+    quality = {
+      graphValidated: true,
+      protocolDefaultsApplied: legalized.defaultedFields,
+      protocolNullEntriesDiscarded: legalized.discardedNullEntries,
+    }
   } else if (input.task.taskKey === 'content.product-module') {
     payload = parseProductModule(raw, options.brief); kind = 'product-module'
     quality = { productTypeVerified: true }
@@ -921,6 +940,7 @@ async function executeModelTask(input: ProductProductionTaskExecutionInputV1, op
     kind = 'narrative'; quality = {
       questBundleVerified: true,
       protocolDefaultsApplied: legalized.defaultedFields,
+      protocolNullEntriesDiscarded: legalized.discardedNullEntries,
     }
   } else if (input.task.taskKey === 'content.adventure-quality-review') {
     const review = parseTextAdventureQualityReviewArtifactV1(raw)

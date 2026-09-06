@@ -509,7 +509,7 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
       choices: [{
         choiceKey: 'choice.leave', sourceNodeKey: 'entry', text: '离开',
         targetNodeKey: 'ending', leaked: true,
-      }],
+      }, null],
     })
     expect(narrative.payload).toMatchObject({
       nodes: [{ condition: {}, effects: [] }],
@@ -520,6 +520,7 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
       }],
     })
     expect(narrative.defaultedFields).toContain('choices[0].availableCondition')
+    expect(narrative.discardedNullEntries).toEqual(['choices[1]'])
 
     const quests = legalizeProductionModelProtocolDefaultsV1('content.adventure-ambient-events', {
       entries: [{ key: 'tide-warning', title: '潮汐警告', leaked: true }],
@@ -532,6 +533,7 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
     expect(quests.defaultedFields).toEqual([
       'entries[0].rewardExperience', 'entries[0].rewardCurrency', 'entries[0].timeCostMinutes',
     ])
+    expect(quests.discardedNullEntries).toEqual([])
   })
 })
 
