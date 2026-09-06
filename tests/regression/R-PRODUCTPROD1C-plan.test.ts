@@ -92,7 +92,7 @@ async function planFixture() {
 
 describe('R-PRODUCTPROD-1C · bounded parallel production plan', () => {
   it('把内容、美术和音频拆成有界 DAG，并在集成节点汇合', async () => {
-    const { plan, briefHash } = await planFixture()
+    const { plan, briefHash, parsedBrief } = await planFixture()
     expect(plan.briefHash).toBe(briefHash)
     expect(plan.concurrency).toEqual({
       maximumCostBearingTasks: 3,
@@ -105,6 +105,13 @@ describe('R-PRODUCTPROD-1C · bounded parallel production plan', () => {
     expect(plan.tasks.find(task => task.taskKey === 'integration.package')?.dependsOn).toEqual([
       'content.narrative', 'content.product-module', 'media.requirements', 'media.visual', 'media.audio',
     ])
+    const modelTasks = plan.tasks.filter(task => task.executionMode === 'model')
+    expect(modelTasks).toHaveLength(4)
+    expect(modelTasks.every(task => task.budgetReservation.inputTokens === 32_000)).toBe(true)
+    expect(plan.tasks.find(task => task.taskKey === 'integration.package')?.budgetReservation.inputTokens).toBe(32_000)
+    expect(modelTasks.reduce((sum, task) => sum + task.budgetReservation.inputTokens, 0)
+      + plan.tasks.find(task => task.taskKey === 'integration.package')!.budgetReservation.inputTokens)
+      .toBe(parsedBrief.productionBudget.maximumInputTokens)
     expect(plan.terminalTaskKey).toBe('qa.release')
   })
 
@@ -139,5 +146,10 @@ describe('R-PRODUCTPROD-1C · bounded parallel production plan', () => {
       task.capabilityRequirementKeys = task.capabilityRequirementKeys.filter(key => key !== 'media.visual')
     }
     expect(() => parseProductProductionPlanV3(uncovered, parsedBrief, briefHash)).toThrow(/必需 capability 未覆盖/)
+
+    const staleBudgetProtocol = structuredClone(plan)
+    staleBudgetProtocol.tasks.find(task => task.taskKey === 'content.design')!.budgetReservation.inputTokens /= 2
+    expect(() => parseProductProductionPlanV3(staleBudgetProtocol, parsedBrief, briefHash))
+      .toThrow(/输入预算切片不是当前生产协议/)
   })
 })

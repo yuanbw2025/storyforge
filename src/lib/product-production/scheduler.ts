@@ -1132,8 +1132,15 @@ async function runClaimedTask(input: {
   const contractSourceKeys = taskContractContextSourceKeys(input.task)
   const totalInputBudget = Math.max(1, input.task.budgetReservation.inputTokens)
   const worldGatewayRequired = productProductionTaskUsesWorldGatewayV1(input.task)
+  const deterministicWorldCompiler = input.task.executionMode === 'deterministic'
+    && input.task.kind === 'runtime-package'
   const normalInputBudget = worldGatewayRequired
-    ? Math.max(1, Math.floor(totalInputBudget * 0.4))
+    // The compiler consumes artifact rows directly after content-hash checks.
+    // Its assembled normal context only needs the immutable authorized Brief;
+    // reserve the rest for full-depth WorldRelease compilation evidence.
+    ? deterministicWorldCompiler
+      ? Math.max(1, Math.min(8_000, Math.floor(totalInputBudget * 0.4)))
+      : Math.max(1, Math.floor(totalInputBudget * 0.4))
     : totalInputBudget
   const normalAssembled = await assembleContext({
     projectId: input.scope.projectId, scope: input.scope, sourceKeys: normalSourceKeys,

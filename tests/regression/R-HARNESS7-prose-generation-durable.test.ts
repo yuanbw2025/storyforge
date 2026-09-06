@@ -267,6 +267,33 @@ describe.sequential('R-HARNESS7 · 正文生成 durable run', { timeout: 15_000 
     expect(snapshot.projection.terminalReceiptHash).toBeUndefined()
   })
 
+  it('作者可以关闭 stale 正文候选，留下取消证据且不再恢复候选', async () => {
+    const pending = await preparePending('正文 stale 关闭')
+    await db.outlineNodes.update(pending.fixture.outlineNodeId, {
+      summary: '作者在候选生成后更新了本章事件边界。',
+      updatedAt: Date.now(),
+    })
+    await expect(commitProseGenerationAdoptionV1({
+      scope: pending.fixture.scope,
+      runId: pending.candidate.durable.runId,
+      candidate: pending.candidate,
+      contentHtml: '<p>潮门在暮色中缓缓开启。</p>',
+      wordCount: 12,
+    })).rejects.toThrow('已过期')
+
+    const cancelled = await rejectProseGenerationCandidateV1({
+      scope: pending.fixture.scope,
+      runId: pending.candidate.durable.runId,
+      candidate: pending.candidate,
+    })
+    expect(cancelled.projection.state).toBe('cancelled')
+    expect(cancelled.events.map(event => event.type)).toContain('run.cancelled')
+    expect(await recoverProseGenerationCandidateV1({
+      scope: pending.fixture.scope,
+      candidate: pending.candidate,
+    })).toBeNull()
+  })
+
   it('等待确认期间上游 Canon 变化会由 content revision 阻断，不只检查当前正文', async () => {
     const pending = await preparePending('正文上游 stale')
     await db.outlineNodes.update(pending.fixture.outlineNodeId, {

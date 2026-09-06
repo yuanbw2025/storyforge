@@ -316,6 +316,12 @@ const AGNES_IMAGE_CAPABILITY: ProductMediaProviderCapabilityV1 = {
   commercialEligible: true, availability: 'implemented',
 }
 
+const AUTHORED_IMAGE_PACK_CAPABILITY: ProductMediaProviderCapabilityV1 = {
+  adapterId: 'storyforge.authored-image-pack.v1', version: 1, mediaClasses: ['image'],
+  operations: ['reuse', 'import'], executionLocations: ['browser-direct'], maximumOutputsPerRequest: 1,
+  commercialEligible: false, availability: 'implemented',
+}
+
 function agnesImageRatio(width: number | null, height: number | null): string {
   if (width == null || height == null || width === height) return '1:1'
   const requested = width / height
@@ -405,6 +411,72 @@ export const agnesImage21FlashAdapterV1: ProductMediaProviderAdapterV1 = {
     }))
   },
   parseAndVerify(value) { return verifyCandidate(value, AGNES_IMAGE_CAPABILITY.adapterId) },
+}
+
+/**
+ * Imports a project-owned, pre-generated image from a deployment-bundled media
+ * pack. The transport owns manifest/path/hash validation; this adapter repeats
+ * byte-level MIME, hash and intrinsic-dimension checks before the candidate can
+ * enter a Product Build. It is intentionally not commercial-eligible because
+ * an authored pack still needs a separate rights review for public sale.
+ */
+export const authoredImagePackAdapterV1: ProductMediaProviderAdapterV1 = {
+  capability: AUTHORED_IMAGE_PACK_CAPABILITY,
+  async estimate(request) {
+    assertRequest(request, AUTHORED_IMAGE_PACK_CAPABILITY)
+    return estimate(request, 4_000_000, 100)
+  },
+  async generate(request, transport, signal) {
+    assertRequest(request, AUTHORED_IMAGE_PACK_CAPABILITY)
+    if (request.qualityProfile === 'commercial-candidate') {
+      fail('作者媒资包尚未完成商业权利复核，不能作为商业候选')
+    }
+    if (transport.executionLocation !== 'browser-direct') fail('作者媒资包只能由浏览器同源读取')
+    const response = await transport.request({
+      adapterId: AUTHORED_IMAGE_PACK_CAPABILITY.adapterId,
+      requestId: request.requestId,
+      method: 'POST',
+      endpoint: '/v1/storyforge/authored-image-pack/read',
+      allowedDataClasses: [...request.allowedDataClasses],
+      body: { artifactKey: request.artifactKey, mediaKind: request.mediaKind },
+    }, signal)
+    assertProviderResponse(response, '作者媒资包', true)
+    const metadata = row(response.json, '作者媒资包记录')
+    allowedKeys(metadata, [
+      'packId', 'packVersion', 'artifactKey', 'fileName', 'declaredContentHash',
+      'mimeType', 'width', 'height', 'title', 'altText', 'license', 'commercialUse', 'source',
+    ], '作者媒资包记录')
+    if (!KEY.test(String(metadata.packId ?? '')) || metadata.packVersion !== 1
+      || metadata.artifactKey !== request.artifactKey
+      || !HASH.test(String(metadata.declaredContentHash ?? ''))
+      || typeof metadata.fileName !== 'string' || metadata.fileName.length > 300
+      || metadata.mimeType !== 'image/png'
+      || !Number.isInteger(metadata.width) || !Number.isInteger(metadata.height)
+      || metadata.commercialUse !== false
+      || typeof metadata.license !== 'string' || metadata.license.length > 200
+      || typeof metadata.source !== 'string' || metadata.source.length > 300) {
+      fail('作者媒资包记录不符合严格合同')
+    }
+    const result = await candidate({
+      adapterId: AUTHORED_IMAGE_PACK_CAPABILITY.adapterId,
+      request,
+      candidateIndex: 0,
+      data: response.body!,
+      expectedMimeTypes: ['image/png'],
+      origin: 'generated',
+      commercialUse: false,
+      transport,
+      response,
+      metadata: structuredClone(metadata),
+    })
+    if (result.contentHash !== metadata.declaredContentHash) fail('作者媒资包内容哈希与清单不一致')
+    const dimensions = detectProductImageDimensionsV1(result.data)
+    if (!dimensions || dimensions.width !== metadata.width || dimensions.height !== metadata.height) {
+      fail('作者媒资包图片尺寸与清单不一致')
+    }
+    return [result]
+  },
+  parseAndVerify(value) { return verifyCandidate(value, AUTHORED_IMAGE_PACK_CAPABILITY.adapterId) },
 }
 
 export const openAIGptImage2AdapterV1: ProductMediaProviderAdapterV1 = {
@@ -555,6 +627,7 @@ const UNIMPLEMENTED_CAPABILITIES: ProductMediaProviderCapabilityV1[] = [
 ]
 
 const IMPLEMENTED_ADAPTERS = new Map<string, ProductMediaProviderAdapterV1>([
+  authoredImagePackAdapterV1,
   agnesImage21FlashAdapterV1,
   openAIGptImage2AdapterV1,
   elevenLabsSoundEffectsAdapterV2,

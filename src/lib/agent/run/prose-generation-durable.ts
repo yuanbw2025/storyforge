@@ -935,6 +935,7 @@ export async function recoverProseGenerationCandidateV1(input: {
   if (!await isProseGenerationCandidateCurrentV1(input.candidate)) return null
   const snapshot = await readAgentRunV1(input.scope, input.candidate.durable.runId)
   assertProseGenerationExecutionBindingsV1(snapshot)
+  if (['completed', 'failed', 'cancelled', 'recovery_required'].includes(snapshot.projection.state)) return null
   if (requiresSemanticReview(snapshot) && (
     !await verifySemanticReviewEvidence(input.candidate)
       || !verifySemanticReviewDurableEvidence(snapshot, input.candidate)
@@ -996,10 +997,13 @@ export async function rejectProseGenerationCandidateV1(input: {
 }): Promise<AgentRunSnapshotV1> {
   const snapshot = await readAgentRunV1(input.scope, input.runId)
   const step = snapshot.projection.steps[PROSE_GENERATION_STEP_ID_V1]
-  if (
-    step?.status !== 'awaiting_confirmation'
-    || step.candidateHash !== input.candidate.durable.candidateHash
-  ) return snapshot
+  if (step?.candidateHash !== input.candidate.durable.candidateHash) return snapshot
+  if (step.status === 'stale' && snapshot.projection.state === 'paused') {
+    return append(input.scope, snapshot, 'run.cancelled', {
+      reason: 'author-discarded-stale-prose-candidate',
+    })
+  }
+  if (step.status !== 'awaiting_confirmation') return snapshot
   return append(input.scope, snapshot, 'confirmation.recorded', {
     stepId: PROSE_GENERATION_STEP_ID_V1,
     candidateHash: input.candidate.durable.candidateHash,

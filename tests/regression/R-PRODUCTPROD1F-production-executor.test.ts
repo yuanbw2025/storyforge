@@ -23,6 +23,7 @@ import {
 import { runProductProductionUntilBlockedV1 } from '../../src/lib/product-production/scheduler'
 import { parseProductRuntimePackageV1 } from '../../src/lib/product-production/runtime-package'
 import { resolveProductRuntimeSource } from '../../src/lib/product-production/preview-source'
+import { exportCommunityPrototypeDistributionBundleV2 } from '../../src/lib/product-platform/distribution-bundle'
 import {
   recordProductBrowserPerformanceMeasurementV1,
   recordProductBuildMainRoutePlaythroughV1,
@@ -910,17 +911,71 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     expect(runtimePackage.presentation?.assets.filter(item => item.kind === 'character-pose')).toHaveLength(4)
     expect(runtimePackage.presentation?.assets.filter(item => item.kind === 'character-expression')).toHaveLength(4)
     expect(runtimePackage.presentation?.assets.filter(item => item.kind === 'ambience')).toHaveLength(1)
+    const firstMediaArtifact = (await db.productBuildArtifacts.where('buildId').equals(build.id!).toArray())
+      .find(item => item.blobObjectId != null)!
+    const originalRightsJson = firstMediaArtifact.rightsJson
+    await db.productBuildArtifacts.update(firstMediaArtifact.id!, {
+      rightsJson: JSON.stringify({
+        ...JSON.parse(firstMediaArtifact.rightsJson),
+        commercialUse: false,
+        requiresProviderTermsReview: false,
+        license: 'rights-policy:StoryForge-community-prototype-rights-pending-v1',
+      }),
+    })
+    await expect(exportCommunityPrototypeDistributionBundleV2({
+      scope: owned.scope, productionId: owned.productionId,
+    })).rejects.toThrow(/社区原型媒资权利声明不完整/)
+    await db.productBuildArtifacts.update(firstMediaArtifact.id!, {
+      rightsJson: JSON.stringify({
+        ...JSON.parse(firstMediaArtifact.rightsJson),
+        commercialUse: false,
+        requiresProviderTermsReview: true,
+        license: 'rights-policy:StoryForge-community-prototype-rights-pending-v1',
+      }),
+    })
+    await expect(prepareProductProductionAdoption({
+      scope: owned.scope, productionId: owned.productionId,
+    })).rejects.toThrow(/媒资商业权利不完整/)
+    const prototypeBundle = await exportCommunityPrototypeDistributionBundleV2({
+      scope: owned.scope, productionId: owned.productionId,
+    })
+    expect(prototypeBundle).toMatchObject({
+      schema: 'storyforge.product-distribution-bundle', version: 2,
+      productRelease: { manifest: { productType: 'ai-town' } },
+      sourceWorld: { contentHash: owned.brief.source.worldContentHash },
+    })
+    expect(prototypeBundle.media).toHaveLength(13)
+    await db.productBuildArtifacts.update(firstMediaArtifact.id!, { rightsJson: originalRightsJson })
     const preview = await startProductProductionPreviewV1({ scope: owned.scope, productionId: owned.productionId })
     expect((await readProductRuntimeState(preview.sessionId)).town?.content.title).toBe('潮门后日镇')
     const playable = await resolveProductRuntimeSource({
       scope: owned.scope,
       source: { kind: 'build', productBuildId: build.id!, expectedPreviewHash: build.previewHash },
     })
+    const concurrentPlayable = await resolveProductRuntimeSource({
+      scope: owned.scope,
+      source: { kind: 'build', productBuildId: build.id!, expectedPreviewHash: build.previewHash },
+    })
     const background = runtimePackage.presentation!.assets.find(item => item.kind === 'background')!
-    const loaded = await playable.mediaResolver.read(background.assetKey)
+    const [loaded, concurrentlyLoaded] = await Promise.all([
+      playable.mediaResolver.read(background.assetKey),
+      concurrentPlayable.mediaResolver.read(background.assetKey),
+    ])
     expect(loaded).toMatchObject({ type: 'image/svg+xml', size: expect.any(Number) })
     expect(loaded.size).toBeGreaterThan(100)
+    expect(concurrentlyLoaded.size).toBe(loaded.size)
     playable.mediaResolver.dispose()
+    concurrentPlayable.mediaResolver.dispose()
+    const reopened = await resolveProductRuntimeSource({
+      scope: owned.scope,
+      source: { kind: 'build', productBuildId: build.id!, expectedPreviewHash: build.previewHash },
+    })
+    const reloaded = await reopened.mediaResolver.preload({
+      assetKeys: runtimePackage.presentation!.assets.map(item => item.assetKey),
+      maximumBytes: runtimePackage.presentation!.assets.reduce((sum, item) => sum + item.byteSize, 0),
+    })
+    expect(reloaded.failures).toEqual([])
+    reopened.mediaResolver.dispose()
     const published = await publishProductProductionV1({ scope: owned.scope, productionId: owned.productionId })
     const released = await resolveProductRuntimeSource({
       scope: owned.scope, source: { kind: 'release', productReleaseId: published.receipt.productReleaseId },

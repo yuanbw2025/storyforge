@@ -160,6 +160,16 @@ describe.sequential('RACE-4 · races save/refresh/stale/fault matrix', () => {
       worldGroupId: fixture.primaryGroupId,
     })).rejects.toThrow(/stale|过期/)
     expect((await db.worldviews.get(worldviewId))?.races).toContain('九次')
+    const discarded = await rejectMasterAgentCandidateV1({
+      scope: fixture.scope,
+      runId: result.runId,
+      candidateEventId: candidate.event.id!,
+      worldGroupId: fixture.primaryGroupId,
+    })
+    expect(discarded.projection.state).toBe('cancelled')
+    expect((await db.agentEvents.where('projectId').equals(fixture.projectId).toArray())
+      .filter(event => event.kind === 'confirmation' && event.payload?.includes(`"candidateEventId":${candidate.event.id}`)))
+      .toHaveLength(1)
 
     const failed = await seedWorkspace('网络结果未知')
     vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('network outcome unknown') }))

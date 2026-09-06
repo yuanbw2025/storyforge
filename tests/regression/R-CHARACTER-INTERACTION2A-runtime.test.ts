@@ -86,7 +86,9 @@ describe('CHARACTER-INTERACTION-2A · 确定性角色互动内核', () => {
         playerKey: 'player',
         profiles: [
           {
-            participantKey: 'aria', characterKey: 'character:aria', name: '阿莉娅', roleLabel: '信使',
+            participantKey: 'aria',
+            characterKey: `world-release:${'a'.repeat(64)}:characters:character:${'b'.repeat(64)}`,
+            name: '阿莉娅', roleLabel: '信使',
             voiceRules: '克制直接',
             initialKnowledge: [{ key: 'sealed-letter', content: '失踪的信藏在钟楼第三层。', visibility: 'private', importance: 95 }],
             relationshipDimensions: [{ key: 'trust', label: '信任', minimum: -5, maximum: 5, initial: 1, largeChangeThreshold: 2 }],

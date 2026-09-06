@@ -9,6 +9,8 @@ import {
   sha256MediaData,
 } from '../product-production/media-blob-store'
 import { readProductReleaseMediaBytes } from '../product-production/release-media'
+import { prepareCommunityPrototypeProductReleaseV1 } from '../product-production/adoption'
+import { createBuildProductMediaResolver } from '../product-production/media-resolver'
 import { verifyProductReleaseManifestV1 } from '../product-production/runtime-package'
 import type {
   FrozenRuntimeMediaAssetV2,
@@ -216,6 +218,52 @@ export async function exportProductDistributionBundleV2(input: {
   const bundle = { ...payload, bundleHash: await hashProductProductionValueV2(payload) }
   await verifyProductDistributionBundleV2(bundle)
   return bundle
+}
+
+/**
+ * Export a release-ready Build as an explicitly non-commercial repository
+ * prototype. This does not create a formal local ProductRelease and therefore
+ * cannot bypass the commercial-rights adoption gate. The catalog importer adds
+ * the community license provenance when a player installs the verified bundle.
+ */
+export async function exportCommunityPrototypeDistributionBundleV2(input: {
+  scope: WorkspaceScope
+  productionId: number
+}): Promise<ProductDistributionBundleV2> {
+  const scope = await resolveScope({ scope: input.scope })
+  const prepared = await prepareCommunityPrototypeProductReleaseV1({
+    scope,
+    productionId: input.productionId,
+  })
+  const resolver = await createBuildProductMediaResolver({
+    scope,
+    productBuildId: prepared.productBuildId,
+    preview: prepared.preview,
+  })
+  try {
+    const media: ProductDistributionMediaV2[] = []
+    let totalBytes = 0
+    for (const asset of prepared.productRelease.manifest.runtimePackage.presentation?.assets ?? []) {
+      totalBytes += asset.byteSize
+      if (totalBytes > MAXIMUM_DISTRIBUTION_BYTES) {
+        throw new Error('[distribution] 社区原型媒资超过 256MiB')
+      }
+      const data = await (await resolver.read(asset.assetKey)).arrayBuffer()
+      media.push({ asset: structuredClone(asset), dataBase64: encodeBase64(data) })
+    }
+    const payload = {
+      schema: 'storyforge.product-distribution-bundle' as const,
+      version: 2 as const,
+      productRelease: prepared.productRelease,
+      sourceWorld: { contentHash: prepared.productRelease.manifest.sourceWorldRelease.contentHash },
+      media,
+    }
+    const bundle = { ...payload, bundleHash: await hashProductProductionValueV2(payload) }
+    await verifyProductDistributionBundleV2(bundle)
+    return bundle
+  } finally {
+    resolver.dispose()
+  }
 }
 
 function validateProvenance(value: MarketplaceImportProvenanceV2): MarketplaceImportProvenanceV2 {

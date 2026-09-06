@@ -1,11 +1,14 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
+  inspectAuthoredImagePackConfigurationV1,
+  resolveAuthoredImagePackCapabilityV1,
   createTrustedRelayMediaTransportV1,
   inspectConfiguredAgnesImageCapabilityV1,
   inspectTrustedRelayMediaConfigurationV1,
   resolveConfiguredAgnesImageCapabilityV1,
   resolveTrustedRelayMediaCapabilityV1,
 } from '../../src/lib/product-production/media-transport'
+import { sha256MediaData } from '../../src/lib/product-production/media-blob-store'
 import type { AIConfig, ProviderCapabilityRequirementV1 } from '../../src/lib/types'
 
 function requirement(mediaClass: 'image' | 'music' | 'sfx'): ProviderCapabilityRequirementV1 {
@@ -23,6 +26,91 @@ function usageHeader(value: unknown): string {
 }
 
 describe('R-PRODUCTPROD-1E · trusted media relay transport', () => {
+  it('作者媒资包只从同源严格清单绑定，并按 artifactKey 无凭据读取冻结图片', async () => {
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).buffer
+    const contentHash = await sha256MediaData(png)
+    const manifest = {
+      schema: 'storyforge.authored-image-pack', version: 1,
+      packId: 'tidewake-town.prototype.v1', title: '回潮镇场景包',
+      rightsReview: 'community-prototype-only',
+      assets: [{
+        artifactKey: 'media.visual.001', fileName: 'town-overview.png', contentHash,
+        byteSize: png.byteLength, mimeType: 'image/png', mediaKind: 'background',
+        width: 1672, height: 941, title: '回潮镇', altText: '海湾小镇',
+        license: 'StoryForge-community-prototype-rights-pending-v1', commercialUse: false,
+        source: 'StoryForge original AI-generated concept art',
+      }],
+    }
+    const fetcher = vi.fn(async (target: RequestInfo | URL) => {
+      const url = String(target)
+      if (url.endsWith('/manifest.json')) {
+        return new Response(JSON.stringify(manifest), {
+          status: 200, headers: { 'content-type': 'application/json' },
+        })
+      }
+      return new Response(png, {
+        status: 200, headers: { 'content-type': 'image/png', 'content-length': String(png.byteLength) },
+      })
+    })
+    expect(inspectAuthoredImagePackConfigurationV1({
+      manifestUrl: '/prototypes/tidewake-town/media/manifest.json',
+      environment: 'test', pageOrigin: 'http://127.0.0.1:1111',
+    })).toEqual({
+      configured: true, ready: true,
+      manifestPath: '/prototypes/tidewake-town/media/manifest.json', issue: null,
+    })
+    const resolved = await resolveAuthoredImagePackCapabilityV1({
+      requirement: requirement('image'),
+      manifestUrl: '/prototypes/tidewake-town/media/manifest.json',
+      environment: 'test', pageOrigin: 'http://127.0.0.1:1111', fetcher, now: 10,
+    })
+    expect(resolved.binding).toMatchObject({
+      requirementKey: 'media.image', adapterId: 'storyforge.authored-image-pack.v1',
+    })
+    expect(resolved.receipt).toMatchObject({
+      schema: 'storyforge.authored-image-pack-binding-receipt',
+      packId: 'tidewake-town.prototype.v1',
+      manifestPath: '/prototypes/tidewake-town/media/manifest.json',
+      executionLocation: 'browser-direct', credentialSource: 'none', boundAt: 10,
+    })
+    expect(JSON.stringify(resolved.receipt)).not.toMatch(/api[-_]?key|authorization|bearer/i)
+
+    const response = await resolved.transport.request({
+      adapterId: 'storyforge.authored-image-pack.v1', requestId: 'request.1', method: 'POST',
+      endpoint: '/v1/storyforge/authored-image-pack/read',
+      body: { artifactKey: 'media.visual.001', mediaKind: 'background' },
+      allowedDataClasses: ['world-selection'],
+    }, new AbortController().signal)
+    expect(response.body).toEqual(png)
+    expect(response.json).toMatchObject({ artifactKey: 'media.visual.001', declaredContentHash: contentHash })
+    expect(String(fetcher.mock.calls[1][0])).toBe('http://127.0.0.1:1111/prototypes/tidewake-town/media/town-overview.png')
+    expect(fetcher.mock.calls[1][1]).toMatchObject({
+      method: 'GET', credentials: 'omit', mode: 'same-origin', redirect: 'error', referrerPolicy: 'no-referrer',
+    })
+  })
+
+  it('作者媒资包拒绝跨源清单、路径穿越和资产大小漂移', async () => {
+    expect(inspectAuthoredImagePackConfigurationV1({
+      manifestUrl: 'https://evil.example/manifest.json',
+      environment: 'test', pageOrigin: 'http://127.0.0.1:1111',
+    })).toMatchObject({ configured: true, ready: false, manifestPath: null })
+
+    const invalidManifest = {
+      schema: 'storyforge.authored-image-pack', version: 1,
+      packId: 'pack.v1', title: '坏包', rightsReview: 'community-prototype-only',
+      assets: [{
+        artifactKey: 'media.visual.001', fileName: '../escape.png', contentHash: 'a'.repeat(64),
+        byteSize: 8, mimeType: 'image/png', mediaKind: 'background', width: 1, height: 1,
+        title: '', altText: '', license: 'pending', commercialUse: false, source: 'fixture',
+      }],
+    }
+    await expect(resolveAuthoredImagePackCapabilityV1({
+      requirement: requirement('image'), manifestUrl: '/prototype/manifest.json',
+      environment: 'test', pageOrigin: 'http://127.0.0.1:1111',
+      fetcher: vi.fn(async () => new Response(JSON.stringify(invalidManifest), { status: 200 })),
+    })).rejects.toThrow(/assets\[0\] 无效/)
+  })
+
   it('Agnes 图片能力直接复用现有全局配置，持久化 binding 不复制 Key', async () => {
     const config: AIConfig = {
       provider: 'agnes', apiKey: 'test-existing-agnes-key', model: 'agnes-2.0-flash',

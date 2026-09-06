@@ -430,7 +430,8 @@ export async function rejectMasterAgentCandidateV1(
   const resolved = await resolveCandidate(input)
   const step = resolved.snapshot.projection.steps[resolved.stepId]
   if (step.status === 'failed' && step.confirmation === 'reject') return resolved.snapshot
-  if (step.status !== 'awaiting_confirmation') {
+  const stale = step.status === 'stale'
+  if (step.status !== 'awaiting_confirmation' && !stale) {
     throw new Error(`主 Agent durable 候选当前状态 ${step.status} 不能拒绝`)
   }
   const conversationId = resolved.snapshot.run.conversationId
@@ -440,22 +441,32 @@ export async function rejectMasterAgentCandidateV1(
     'rw',
     scopeTransactionTables(db.agentConversations, db.agentEvents, db.agentRuns, db.agentRunEvents),
     async () => {
-      snapshot = await appendAgentRunEventV1({
-        scope: input.scope,
-        runId: input.runId,
-        type: 'confirmation.recorded',
-        payload: {
-          stepId: resolved.stepId,
-          candidateHash: resolved.candidate.payload.candidateHash!,
-          decision: 'reject',
-        },
-        expectedLastSequence: snapshot.projection.lastSequence,
-      })
+      snapshot = stale
+        ? await appendAgentRunEventV1({
+            scope: input.scope,
+            runId: input.runId,
+            type: 'run.cancelled',
+            payload: { reason: 'author-discarded-stale-master-candidate' },
+            expectedLastSequence: snapshot.projection.lastSequence,
+          })
+        : await appendAgentRunEventV1({
+            scope: input.scope,
+            runId: input.runId,
+            type: 'confirmation.recorded',
+            payload: {
+              stepId: resolved.stepId,
+              candidateHash: resolved.candidate.payload.candidateHash!,
+              decision: 'reject',
+            },
+            expectedLastSequence: snapshot.projection.lastSequence,
+          })
       await appendAgentEvent({
         projectId: input.scope.projectId,
         conversationId,
         kind: 'confirmation',
-        content: reason.trim().slice(0, 1_000) || '作者拒绝了领域 Agent 候选。',
+        content: stale
+          ? '作者已丢弃过期的领域 Agent 候选，没有写入项目。'
+          : reason.trim().slice(0, 1_000) || '作者拒绝了领域 Agent 候选。',
         payload: {
           version: 1,
           runId: input.runId,

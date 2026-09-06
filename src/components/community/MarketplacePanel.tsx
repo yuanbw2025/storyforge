@@ -43,6 +43,7 @@ interface LocalReleaseView {
 const PRODUCT_OPTIONS: Array<{ value: '' | ProductionProductKindV1; label: string }> = [
   { value: '', label: '全部产品' }, { value: 'ttrpg', label: '跑团战役' },
   { value: 'character-interaction', label: '角色互动' },
+  { value: 'ai-town', label: '后日谈 AI 小镇' },
   { value: 'text-adventure', label: '文字冒险' }, { value: 'avg', label: 'AVG / Galgame' },
   { value: 'text-open-world', label: '文字开放世界' },
 ]

@@ -4,6 +4,7 @@ import type {
   ProductMediaAsset,
   ProductMediaBlob,
   ProductBuildArtifactRecordV1,
+  ProductBuildPreviewManifestV1,
   ProductBuildManifestV1,
   ProductBuildQualityReportV1,
   ProductProductionCommandRecordV1,
@@ -97,6 +98,7 @@ export interface ProductProductionPublishReceiptV1 {
 interface VerifiedAdoption extends PreparedProductProductionAdoptionV1 {
   scope: WorkspaceScope
   runtimePackage: ProductRuntimePackageV1
+  preview: ProductBuildPreviewManifestV1
   artifacts: ProductBuildArtifactRecordV1[]
   mediaArtifacts: Map<string, ProductBuildArtifactRecordV1>
   sourcePlan: ProductSourcePlanV1
@@ -256,7 +258,11 @@ async function priorReleaseLineageV1(input: {
   }
 }
 
-async function inspectAdoption(scope: WorkspaceScope, productionId: number): Promise<VerifiedAdoption> {
+async function inspectAdoption(
+  scope: WorkspaceScope,
+  productionId: number,
+  mediaRightsPolicy: 'commercial-release' | 'community-prototype' = 'commercial-release',
+): Promise<VerifiedAdoption> {
   const production = await db.productProductions.get(productionId)
   if (!production || !await assertRecordInScope(scope, 'productProductions', production, { owner: 'work' })) {
     fail('Production 不存在或跨 Work')
@@ -391,8 +397,12 @@ async function inspectAdoption(scope: WorkspaceScope, productionId: number): Pro
     if (!binding || !artifact || artifact.blobObjectId == null || artifact.contentHash !== asset.blobContentHash
       || artifact.mimeType !== asset.mimeType || artifact.byteSize !== asset.byteSize) fail(`媒资 Artifact 绑定无效:${asset.assetKey}`)
     const rights = object(JSON.parse(artifact.rightsJson), `rights:${artifact.artifactKey}`)
-    if (rights.commercialUse !== true || typeof rights.license !== 'string' || !rights.license.trim()) {
-      fail(`媒资商业权利不完整:${artifact.artifactKey}`)
+    const license = typeof rights.license === 'string' ? rights.license.trim() : ''
+    if (mediaRightsPolicy === 'commercial-release') {
+      if (rights.commercialUse !== true || !license) fail(`媒资商业权利不完整:${artifact.artifactKey}`)
+    } else if (typeof rights.commercialUse !== 'boolean' || !license
+      || rights.commercialUse === false && rights.requiresProviderTermsReview !== true) {
+      fail(`社区原型媒资权利声明不完整:${artifact.artifactKey}`)
     }
     const blob = await db.mediaBlobObjects.get(artifact.blobObjectId)
     if (!blob || !await assertRecordInScope(scope, 'mediaBlobObjects', blob, { owner: 'work' })
@@ -424,7 +434,7 @@ async function inspectAdoption(scope: WorkspaceScope, productionId: number): Pro
     scope, intent, adoptionIntentHash: await hashProductProductionValueV2(intent),
     productType: preview.runtimePackage.productType, title: preview.runtimePackage.definition.title,
     mediaAssetKeys: runtimeAssets.map(asset => asset.assetKey).sort(),
-    runtimePackage: preview.runtimePackage, artifacts, mediaArtifacts,
+    runtimePackage: preview.runtimePackage, preview, artifacts, mediaArtifacts,
     sourcePlan,
     confirmedBrief,
     sourceManifest,
@@ -433,6 +443,93 @@ async function inspectAdoption(scope: WorkspaceScope, productionId: number): Pro
     compatibilityHash,
     compatibilityStatus,
     qualityReceiptHashes,
+  }
+}
+
+async function composeProductReleaseManifestV1(
+  verified: VerifiedAdoption,
+  releaseCreatedAt: number,
+): Promise<{ manifest: ProductReleaseManifestV1; manifestJson: string; contentHash: string }> {
+  const productionProvenance: NonNullable<ProductReleaseManifestV1['productionProvenance']> = {
+    productionKey: verified.intent.productionKey,
+    buildNumber: verified.intent.buildNumber,
+    buildManifestHash: verified.intent.manifestHash,
+    rootTerminalReceiptHash: verified.intent.rootTerminalReceiptHash,
+  }
+  const portableSourcePlan = await portableProductSourcePlanV1(verified.sourcePlan)
+  const sourceContracts: ProductReleaseManifestV1['sourceContracts'] = {
+    sourcePlan: portableSourcePlan,
+    confirmedBrief: verified.confirmedBrief,
+    sourceManifest: verified.sourceManifest,
+  }
+  const identityBody: Omit<ProductReleaseManifestV1, 'releaseIdentityHash' | 'lineage'> = {
+    schema: 'storyforge.product-release',
+    version: 1,
+    productType: verified.runtimePackage.productType,
+    sourceWorldRelease: { contentHash: verified.runtimePackage.sourceWorld.contentHash },
+    runtimePackage: verified.runtimePackage,
+    packageHash: await hashProductProductionValueV2(verified.runtimePackage),
+    productionProvenance,
+    sourceContracts,
+  }
+  const releaseIdentityHash = await productReleaseIdentityHashV1(identityBody)
+  const releaseUid = productReleaseUidV1({
+    productType: verified.productType,
+    productInstanceKey: verified.intent.productionKey,
+    releaseVersion: verified.releaseVersion,
+    releaseHash: releaseIdentityHash,
+  })
+  const lineage = await createProductReleaseLineageV1({
+    productType: verified.productType,
+    productInstanceKey: verified.intent.productionKey,
+    releaseUid,
+    releaseVersion: verified.releaseVersion,
+    releaseHash: releaseIdentityHash,
+    parentRelease: verified.parentRelease,
+    worldReference: verified.sourcePlan.worldReference,
+    sourcePlan: portableSourcePlan,
+    sourceManifest: verified.sourceManifest,
+    confirmedBrief: verified.confirmedBrief,
+    build: {
+      buildUid: `GB-${encodeURIComponent(verified.intent.productionKey)}-b${verified.intent.buildNumber}-${verified.intent.manifestHash.slice(0, 24)}`,
+      buildHash: verified.intent.manifestHash,
+    },
+    quality: { passed: true, receiptHashes: verified.qualityReceiptHashes },
+    compatibility: {
+      status: verified.compatibilityStatus,
+      protocolVersion: 1,
+      evidenceHashes: [verified.compatibilityHash],
+    },
+    createdAt: releaseCreatedAt,
+  })
+  const manifest = await createProductReleaseManifestV1({
+    runtimePackage: verified.runtimePackage,
+    productionProvenance,
+    sourceContracts,
+    lineage,
+  })
+  return {
+    manifest,
+    manifestJson: canonicalProductProductionJsonV2(manifest),
+    contentHash: await hashProductProductionValueV2(manifest),
+  }
+}
+
+export async function prepareCommunityPrototypeProductReleaseV1(input: {
+  scope: WorkspaceScope
+  productionId: number
+}): Promise<{
+  productBuildId: number
+  preview: ProductBuildPreviewManifestV1
+  productRelease: { contentHash: string; manifest: ProductReleaseManifestV1 }
+}> {
+  const scope = await resolveScope({ scope: input.scope })
+  const verified = await inspectAdoption(scope, input.productionId, 'community-prototype')
+  const release = await composeProductReleaseManifestV1(verified, Date.now())
+  return {
+    productBuildId: verified.intent.buildId,
+    preview: verified.preview,
+    productRelease: { contentHash: release.contentHash, manifest: release.manifest },
   }
 }
 
@@ -568,67 +665,8 @@ export async function publishProductProductionBuild(input: {
   // transaction repeats a bounded field-level CAS over every locked authority
   // row, so it stays atomic without holding IndexedDB open across WebCrypto or
   // multi-megabyte byte verification.
-  const productionProvenance: NonNullable<ProductReleaseManifestV1['productionProvenance']> = {
-    productionKey: prepared.intent.productionKey,
-    buildNumber: prepared.intent.buildNumber,
-    buildManifestHash: prepared.intent.manifestHash,
-    rootTerminalReceiptHash: prepared.intent.rootTerminalReceiptHash,
-  }
-  const portableSourcePlan = await portableProductSourcePlanV1(prepared.sourcePlan)
-  const sourceContracts: ProductReleaseManifestV1['sourceContracts'] = {
-    sourcePlan: portableSourcePlan,
-    confirmedBrief: prepared.confirmedBrief,
-    sourceManifest: prepared.sourceManifest,
-  }
-  const identityBody: Omit<ProductReleaseManifestV1, 'releaseIdentityHash' | 'lineage'> = {
-    schema: 'storyforge.product-release',
-    version: 1,
-    productType: prepared.runtimePackage.productType,
-    sourceWorldRelease: { contentHash: prepared.runtimePackage.sourceWorld.contentHash },
-    runtimePackage: prepared.runtimePackage,
-    packageHash: await hashProductProductionValueV2(prepared.runtimePackage),
-    productionProvenance,
-    sourceContracts,
-  }
-  const releaseIdentityHash = await productReleaseIdentityHashV1(identityBody)
   const releaseCreatedAt = Date.now()
-  const releaseUid = productReleaseUidV1({
-    productType: prepared.productType,
-    productInstanceKey: prepared.intent.productionKey,
-    releaseVersion: prepared.releaseVersion,
-    releaseHash: releaseIdentityHash,
-  })
-  const lineage = await createProductReleaseLineageV1({
-    productType: prepared.productType,
-    productInstanceKey: prepared.intent.productionKey,
-    releaseUid,
-    releaseVersion: prepared.releaseVersion,
-    releaseHash: releaseIdentityHash,
-    parentRelease: prepared.parentRelease,
-    worldReference: prepared.sourcePlan.worldReference,
-    sourcePlan: portableSourcePlan,
-    sourceManifest: prepared.sourceManifest,
-    confirmedBrief: prepared.confirmedBrief,
-    build: {
-      buildUid: `GB-${encodeURIComponent(prepared.intent.productionKey)}-b${prepared.intent.buildNumber}-${prepared.intent.manifestHash.slice(0, 24)}`,
-      buildHash: prepared.intent.manifestHash,
-    },
-    quality: { passed: true, receiptHashes: prepared.qualityReceiptHashes },
-    compatibility: {
-      status: prepared.compatibilityStatus,
-      protocolVersion: 1,
-      evidenceHashes: [prepared.compatibilityHash],
-    },
-    createdAt: releaseCreatedAt,
-  })
-  const releaseManifest = await createProductReleaseManifestV1({
-    runtimePackage: prepared.runtimePackage,
-    productionProvenance,
-    sourceContracts,
-    lineage,
-  })
-  const manifestJson = canonicalProductProductionJsonV2(releaseManifest)
-  const contentHash = await hashProductProductionValueV2(releaseManifest)
+  const { manifestJson, contentHash } = await composeProductReleaseManifestV1(prepared, releaseCreatedAt)
 
   let transactionStage = 'open'
   try {

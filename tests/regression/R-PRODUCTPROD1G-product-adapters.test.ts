@@ -306,6 +306,12 @@ describe('R-PRODUCTPROD-1G · upper-product adapter registry', () => {
       if (parsed.interaction) {
         expect(parsed.interaction.sceneTemplates).toHaveLength(currentNarrative.nodes.filter(node => node.kind !== 'ending').length)
       }
+      if (productType === 'ai-town') {
+        expect(modules.town).toBeDefined()
+        expect(modules.interaction?.profiles.map(profile => profile.characterKey)).toEqual(
+          modules.town!.residents.map(resident => resident.sourceCharacterResourceKey),
+        )
+      }
       if (parsed.adventure) {
         expect(parsed.adventure.locations).toHaveLength(currentNarrative.nodes.length)
         expect(parsed.adventure.actions.filter(action => action.narrativeChoiceKey != null)).toHaveLength(currentNarrative.choices.length)

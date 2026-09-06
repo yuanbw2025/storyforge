@@ -52,7 +52,12 @@ function characterKey(input: ProductModuleCompilerInputV1, index: number): strin
   const key = (input.brief.source.selection.roleBindings.characters
     ?? input.brief.source.selection.roleBindings.participants
     ?? input.brief.source.selection.roleBindings.residents ?? [])[index]
-  return key == null ? `generated:participant.${pad(index)}` : `character:${index + 1}`
+  if (key == null) return `generated:participant.${pad(index)}`
+  // AI Town residents already carry the immutable WorldRelease resource key.
+  // Preserve that same portable identity in the interaction profile so the
+  // runtime can prove which resident a participant represents after export,
+  // import, refresh and device transfer.
+  return input.brief.intent.productType === 'ai-town' ? key : `character:${index + 1}`
 }
 
 function selectedRows<T extends { resourceKey: string }>(
