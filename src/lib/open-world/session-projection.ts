@@ -37,6 +37,7 @@ import { createTextOpenWorldRewardCatalogV1 } from './rewards'
 import { parseTextOpenWorldRuntimePackageV1 } from './runtime-package'
 import { createTextOpenWorldFastTravelCatalogV1 } from './fast-travel'
 import { createTextOpenWorldWeatherCatalogV1, projectTextOpenWorldClockWeatherV1 } from './weather'
+import { createTextOpenWorldActorScheduleCatalogV1, projectTextOpenWorldActorsV1 } from './actors'
 
 type Row = Record<string, unknown>
 const STABLE_KEY = /^[a-z][a-z0-9._:-]{0,199}$/
@@ -54,6 +55,12 @@ function json(event: ProductRuntimeEvent): unknown { try { return JSON.parse(eve
 function timePeriodKey(modules: TextOpenWorldParsedModulesV1, worldMinute: number): string {
   const minute = worldMinute % modules['time-weather'].minutesPerDay
   return modules['time-weather'].timePeriods.find(period => minute >= period.startMinute && minute < period.endMinute)?.key ?? fail('世界分钟无法映射时间段')
+}
+
+function timePeriodStartWorldMinute(modules: TextOpenWorldParsedModulesV1, worldMinute: number): number {
+  const periodKey = timePeriodKey(modules, worldMinute)
+  const period = modules['time-weather'].timePeriods.find(item => item.key === periodKey) ?? fail('世界分钟无法映射时间段起点')
+  return Math.floor(worldMinute / modules['time-weather'].minutesPerDay) * modules['time-weather'].minutesPerDay + period.startMinute
 }
 
 function actorInitialState(modules: TextOpenWorldParsedModulesV1, actorKey: string, periodKey: string) {
@@ -105,6 +112,7 @@ function initialEffectState(runtimePackage: ReturnType<typeof parseTextOpenWorld
     time: {
       worldMinute: modules['time-weather'].initialWorldMinute,
       lastWeatherSettlementEpoch: Math.floor(modules['time-weather'].initialWorldMinute / modules['time-weather'].weatherUpdateIntervalMinutes),
+      lastActorScheduleSettlementWorldMinute: timePeriodStartWorldMinute(modules, modules['time-weather'].initialWorldMinute),
       currentWeatherByRegionKey: Object.fromEntries(modules['time-weather'].regionWeatherTables.map(table => [table.regionKey, table.entries[0].weatherKey])),
       deadlineWorldMinuteByKey: {},
     },
@@ -185,6 +193,15 @@ export function createTextOpenWorldInitialProjectionCandidatesV1(value: unknown)
       candidates.push(legacy)
     }
   }
+  if (modules.actions.version < 6) {
+    for (const candidate of [...candidates]) {
+      const legacy = structuredClone(candidate) as Row
+      const legacyState = row(legacy.state, 'legacy projection.state')
+      const legacyTime = row(legacyState.time, 'legacy projection.state.time')
+      delete legacyTime.lastActorScheduleSettlementWorldMinute
+      candidates.push(legacy)
+    }
+  }
   return candidates
 }
 
@@ -200,6 +217,11 @@ export function parseTextOpenWorldSessionProjectionV1(value: unknown): TextOpenW
   if (legacyTime.lastWeatherSettlementEpoch == null) {
     if (modules.actions.version >= 5 && modules['time-weather'].version >= 2) fail('新版Session缺少天气结算周期游标')
     legacyTime.lastWeatherSettlementEpoch = Math.floor(legacyTime.worldMinute / modules['time-weather'].weatherUpdateIntervalMinutes)
+  }
+  const legacyActorTime = state.time as TextOpenWorldEffectStateV1['time'] & { lastActorScheduleSettlementWorldMinute?: number }
+  if (legacyActorTime.lastActorScheduleSettlementWorldMinute == null) {
+    if (modules.actions.version >= 6) fail('新版Session缺少角色日程结算游标')
+    legacyActorTime.lastActorScheduleSettlementWorldMinute = timePeriodStartWorldMinute(modules, legacyActorTime.worldMinute)
   }
   const legacyQuests = state.quests as TextOpenWorldEffectStateV1['quests'] & { tracking?: TextOpenWorldEffectStateV1['quests']['tracking'] }
   if (!legacyQuests.tracking) {
@@ -346,6 +368,14 @@ export function applyTextOpenWorldSessionEventV1(current: TextOpenWorldSessionPr
         authorization,
         evidence: pendingRandom.map(item => item.evidence),
       })
+    } else if (applied.plan.authorization?.kind === 'actor-schedule-settlement') {
+      const authorization = applied.plan.authorization
+      const action = modules.actions.actions.find(item => item.key === projection.protocol.pendingActionKey) ?? fail('命令Action不存在')
+      const expectedEffectKeys = [...new Set([...action.costEffectKeys, ...action.successEffectKeys])]
+      if (canonicalProductProductionJsonV2(applied.plan.effectKeys) !== canonicalProductProductionJsonV2(expectedEffectKeys)) fail('角色日程结算EffectPlan与命令Action不一致')
+      if (projection.protocol.pendingActorKey !== 'system' || projection.protocol.pendingTargetKey !== null
+        || action.category !== 'actor-schedule-action' || action.actorScope !== 'system' || action.targetScope !== 'none') fail('角色日程结算授权与系统命令不一致')
+      createTextOpenWorldActorScheduleCatalogV1(projection.runtimePackage, modules).assertAuthorization({ state: projection.state, authorization })
     } else {
       const action = modules.actions.actions.find(item => item.key === projection.protocol.pendingActionKey) ?? fail('命令Action不存在')
       const outcomeEffectKeys = applied.outcome === 'failure' ? action.failureEffectKeys : action.successEffectKeys
@@ -404,7 +434,12 @@ export function deriveTextOpenWorldContextsV1(value: TextOpenWorldSessionProject
     knowledge: { visibilityByKey: structuredClone(state.knowledge.visibilityByKey), readRumorKeys: [...state.knowledge.readRumorKeys], earnedAchievementKeys: [...state.knowledge.earnedAchievementKeys] },
   }
   const evaluations = createTextOpenWorldConditionCatalogV1(projection.runtimePackage).evaluateMany(modules.actions.conditions.map(item => item.key), condition)
-  const actorTargets = modules.actors.actors.filter(actor => { const runtime = state.actors[actor.key]; return runtime.alive && runtime.present && runtime.locationKey === state.map.currentLocationKey }).map(actor => actor.key)
+  const projectedActors = projectTextOpenWorldActorsV1({
+    runtimePackage: projection.runtimePackage,
+    state,
+    attitudeByActorKey,
+  })
+  const actorTargets = projectedActors.map(actor => actor.key)
   const action: TextOpenWorldActionProjectionContextV1 = {
     actorKey: 'player', currentLocationKey: state.map.currentLocationKey, worldMinute: state.time.worldMinute,
     playerHealth: state.player.health, combatStatus: state.combat?.status ?? null,
@@ -415,7 +450,7 @@ export function deriveTextOpenWorldContextsV1(value: TextOpenWorldSessionProject
     validTargetKeysByScope: {
       actor: actorTargets, location: [...state.map.revealedLocationKeys], item: Object.keys(inventoryQuantities),
       quest: Object.values(state.quests.instancesByKey).filter(instance => !['locked', 'available'].includes(instance.status)).map(instance => instance.instanceKey),
-      vendor: modules.economy.vendors.filter(vendor => vendor.locationKey === state.map.currentLocationKey && actorTargets.includes(vendor.actorKey)).map(vendor => vendor.key),
+      vendor: projectedActors.flatMap(actor => actor.availableServices.map(service => service.key)),
       encounter: modules.combat.encounters.filter(encounter => encounter.locationKey === state.map.currentLocationKey).map(encounter => encounter.key),
     },
     questDefinitionKeyByInstanceKey: Object.fromEntries(Object.values(state.quests.instancesByKey).map(instance => [instance.instanceKey, instance.definitionKey])),

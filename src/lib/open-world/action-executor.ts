@@ -21,6 +21,7 @@ import { deriveTextOpenWorldContextsV1, parseTextOpenWorldSessionProjectionV1 } 
 import { createTextOpenWorldFastTravelCatalogV1 } from './fast-travel'
 import { resolveTextOpenWorldRandomEvidenceV1 } from './event-contract'
 import { createTextOpenWorldWeatherCatalogV1 } from './weather'
+import { createTextOpenWorldActorScheduleCatalogV1 } from './actors'
 
 const COMMAND_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/
 
@@ -64,7 +65,9 @@ async function settleAcceptedCommand(envelope: TextOpenWorldCommandEnvelopeV1): 
     .filter((effect): effect is Extract<TextOpenWorldEffectDefinitionV1, { operation: 'fast-travel' }> => effect.operation === 'fast-travel')
   const weatherEffects = effectKeys.map(effectKey => modules.actions.effects.find(effect => effect.key === effectKey)!)
     .filter((effect): effect is Extract<TextOpenWorldEffectDefinitionV1, { operation: 'settle-weather' }> => effect.operation === 'settle-weather')
-  if ([questTransitions.length > 0, objectiveEffects.length > 0, trackingEffects.length > 0, fastTravelEffects.length > 0, weatherEffects.length > 0].filter(Boolean).length > 1) fail('同一Action不能混合任务迁移、Objective、追踪、快速旅行或天气状态')
+  const actorScheduleEffects = effectKeys.map(effectKey => modules.actions.effects.find(effect => effect.key === effectKey)!)
+    .filter((effect): effect is Extract<TextOpenWorldEffectDefinitionV1, { operation: 'settle-actor-schedules' }> => effect.operation === 'settle-actor-schedules')
+  if ([questTransitions.length > 0, objectiveEffects.length > 0, trackingEffects.length > 0, fastTravelEffects.length > 0, weatherEffects.length > 0, actorScheduleEffects.length > 0].filter(Boolean).length > 1) fail('同一Action不能混合任务迁移、Objective、追踪、快速旅行、天气或角色日程状态')
   let randomRequests: TextOpenWorldRandomRequestV1[] = []
   let randomEvidence: TextOpenWorldRandomEvidenceV1[] = []
   if (weatherEffects.length === 1) {
@@ -107,7 +110,9 @@ async function settleAcceptedCommand(envelope: TextOpenWorldCommandEnvelopeV1): 
             })
           : weatherEffects.length === 1
             ? createTextOpenWorldWeatherCatalogV1(projection.runtimePackage, modules).resolve({ state: projection.state, evidence: randomEvidence })
-            : null
+            : actorScheduleEffects.length === 1
+              ? createTextOpenWorldActorScheduleCatalogV1(projection.runtimePackage, modules).prepare(projection.state)
+              : null
   const catalog = createTextOpenWorldEffectCatalogV1(projection.runtimePackage)
   const plan = await catalog.plan({ effectKeys, claimKey: `claim.${envelope.commandId}`, state: projection.state, authorization })
   const { receipt } = await catalog.apply({ plan, state: projection.state })
@@ -144,7 +149,7 @@ type ExecuteTextOpenWorldActionInputV1 = {
 async function executeTextOpenWorldActionAsV1(
   input: ExecuteTextOpenWorldActionInputV1,
   actorKey: 'player' | 'system',
-  systemCategory?: 'quest-action' | 'weather-action',
+  systemCategory?: 'quest-action' | 'weather-action' | 'actor-schedule-action',
 ): Promise<TextOpenWorldFeedbackReceiptV1> {
   if (!Number.isSafeInteger(input.sessionId) || input.sessionId < 1) fail('sessionId无效')
   const commandId = input.commandId ?? newCommandId()
@@ -266,10 +271,31 @@ async function settleWeatherForCurrentEpochV1(sessionId: number): Promise<void> 
   if (feedback.phase !== 'terminal' || feedback.status !== 'succeeded') fail(`天气系统结算未成功:${currentEpoch}`)
 }
 
+async function settleActorSchedulesForCurrentPeriodV1(sessionId: number): Promise<void> {
+  const runtime = await readProductRuntimeState(sessionId)
+  const projection = parseTextOpenWorldSessionProjectionV1(runtime.textOpenWorld)
+  const modules = parseTextOpenWorldModulesV1(projection.runtimePackage)
+  if (modules.actions.version < 6) return
+  const actorSchedules = createTextOpenWorldActorScheduleCatalogV1(projection.runtimePackage, modules)
+  const currentPeriod = actorSchedules.currentPeriod(projection.state.time.worldMinute)
+  if (currentPeriod.settlementWorldMinute <= projection.state.time.lastActorScheduleSettlementWorldMinute) return
+  const action = modules.actions.actions.find(item => item.category === 'actor-schedule-action') ?? fail('新版角色模块缺少角色日程结算Action')
+  const feedback = await executeTextOpenWorldActionAsV1({
+    sessionId,
+    actionKey: action.key,
+    commandId: `command.system-actor-schedule.period.${currentPeriod.settlementWorldMinute}`,
+    source: 'system-action',
+  }, 'system', 'actor-schedule-action')
+  if (feedback.phase !== 'terminal' || feedback.status !== 'succeeded') fail(`角色日程系统结算未成功:${currentPeriod.settlementWorldMinute}`)
+}
+
 export async function executeTextOpenWorldActionV1(input: ExecuteTextOpenWorldActionInputV1): Promise<TextOpenWorldFeedbackReceiptV1> {
+  await settleWeatherForCurrentEpochV1(input.sessionId)
+  await settleActorSchedulesForCurrentPeriodV1(input.sessionId)
   const feedback = await executeTextOpenWorldActionAsV1(input, 'player')
   if (feedback.phase === 'terminal' && feedback.status === 'succeeded' && feedback.commandId) {
     await settleWeatherForCurrentEpochV1(input.sessionId)
+    await settleActorSchedulesForCurrentPeriodV1(input.sessionId)
     await settleReadyQuestSystemActionsV1(input.sessionId, feedback.commandId)
   }
   return feedback

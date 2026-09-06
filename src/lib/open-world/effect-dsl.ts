@@ -6,6 +6,7 @@ import type {
   TextOpenWorldEffectPlanV1,
   TextOpenWorldEffectReceiptV1,
   TextOpenWorldEffectStateV1,
+  TextOpenWorldActorScheduleSettlementAuthorizationV1,
   TextOpenWorldFastTravelAuthorizationV1,
   TextOpenWorldParsedModulesV1,
   TextOpenWorldObjectiveAuthorizationV1,
@@ -31,6 +32,7 @@ import {
 import { createTextOpenWorldQuestInstanceKeyV1 } from './quests'
 import { createTextOpenWorldFastTravelCatalogV1, type TextOpenWorldFastTravelCatalogV1 } from './fast-travel'
 import { createTextOpenWorldWeatherCatalogV1, type TextOpenWorldWeatherCatalogV1 } from './weather'
+import { createTextOpenWorldActorScheduleCatalogV1, type TextOpenWorldActorScheduleCatalogV1 } from './actors'
 
 type Row = Record<string, unknown>
 type Refs = ReturnType<typeof references>
@@ -106,6 +108,7 @@ function parseDefinition(value: unknown, refs: Refs, label: string): TextOpenWor
   }
   if (operation === 'advance-time') { exact(payload, ['minutes'], `${label}.payload`); return { key: effectKey, operation, payload: { minutes: int(payload.minutes, `${label}.minutes`, 1, 1_000_000_000) } } }
   if (operation === 'settle-weather') { exact(payload, [], `${label}.payload`); return { key: effectKey, operation, payload: {} } }
+  if (operation === 'settle-actor-schedules') { exact(payload, [], `${label}.payload`); return { key: effectKey, operation, payload: {} } }
   if (operation === 'start-combat') { exact(payload, ['encounterKey'], `${label}.payload`); return { key: effectKey, operation, payload: { encounterKey: ref(payload.encounterKey, refs.encounters, `${label}.encounterKey`) } } }
   if (operation === 'resolve-combat') { exact(payload, ['encounterKey', 'outcome'], `${label}.payload`); return { key: effectKey, operation, payload: { encounterKey: ref(payload.encounterKey, refs.encounters, `${label}.encounterKey`), outcome: enumValue(payload.outcome, ['victory', 'defeat', 'escaped'], `${label}.outcome`) } } }
   if (operation === 'rest') { exact(payload, ['healthRatio', 'skillResourceRatio', 'clearHarmfulStatuses'], `${label}.payload`); return { key: effectKey, operation, payload: { healthRatio: numberValue(payload.healthRatio, `${label}.healthRatio`, 0.000001, 1), skillResourceRatio: numberValue(payload.skillResourceRatio, `${label}.skillResourceRatio`, 0, 1), clearHarmfulStatuses: bool(payload.clearHarmfulStatuses, `${label}.clearHarmfulStatuses`) } } }
@@ -133,6 +136,7 @@ function effectDomains(operation: TextOpenWorldEffectDefinitionV1['operation']):
   if (operation === 'fast-travel') return ['map', 'time']
   if (['reveal-location', 'unlock-fast-travel', 'enter-location', 'start-travel'].includes(operation)) return ['map']
   if (operation === 'advance-time' || operation === 'settle-weather') return ['time']
+  if (operation === 'settle-actor-schedules') return ['actors', 'time']
   if (['change-morality', 'change-faction-affinity', 'set-story-modifier'].includes(operation)) return ['relationships']
   if (operation === 'start-combat') return ['combat']
   if (operation === 'change-actor-state') return ['actors']
@@ -309,6 +313,12 @@ export function validateTextOpenWorldEffectStateV1(state: TextOpenWorldEffectSta
   const currentWeatherEpoch = Math.floor(state.time.worldMinute / modules['time-weather'].weatherUpdateIntervalMinutes)
   const lastWeatherSettlementEpoch = int(state.time.lastWeatherSettlementEpoch, 'time.lastWeatherSettlementEpoch')
   if (lastWeatherSettlementEpoch > currentWeatherEpoch) fail('最近天气结算周期不能晚于当前世界时间')
+  const minuteInDay = state.time.worldMinute % modules['time-weather'].minutesPerDay
+  const currentPeriod = modules['time-weather'].timePeriods.find(period => minuteInDay >= period.startMinute && minuteInDay < period.endMinute)
+    ?? fail('当前世界时间无法映射时间段')
+  const currentPeriodStart = Math.floor(state.time.worldMinute / modules['time-weather'].minutesPerDay) * modules['time-weather'].minutesPerDay + currentPeriod.startMinute
+  const lastActorScheduleSettlementWorldMinute = int(state.time.lastActorScheduleSettlementWorldMinute, 'time.lastActorScheduleSettlementWorldMinute')
+  if (lastActorScheduleSettlementWorldMinute > currentPeriodStart) fail('最近角色日程结算不能晚于当前时间段起点')
   if (canonicalProductProductionJsonV2(Object.keys(state.time.currentWeatherByRegionKey).sort()) !== canonicalProductProductionJsonV2(modules.world.regions.map(region => region.key).sort())) fail('currentWeatherByRegionKey必须覆盖全部冻结地区')
   for (const [regionKey, weatherKey] of Object.entries(state.time.currentWeatherByRegionKey)) { ref(regionKey, refs.regions, 'weather region key'); ref(weatherKey, refs.weather, 'weather key') }
   for (const [deadlineKey, deadline] of Object.entries(state.time.deadlineWorldMinuteByKey)) { key(deadlineKey, 'deadline key'); int(deadline, `deadline:${deadlineKey}`) }
@@ -379,6 +389,7 @@ function applyDefinitions(
   tracking: TextOpenWorldQuestTrackingCatalogV1,
   fastTravel: TextOpenWorldFastTravelCatalogV1,
   weather: TextOpenWorldWeatherCatalogV1,
+  actorSchedules: TextOpenWorldActorScheduleCatalogV1,
 ) {
   validateTextOpenWorldEffectStateV1(stateValue, modules)
   if (stateValue.appliedClaimKeys.includes(claimKey)) fail(`claim已应用:${claimKey}`)
@@ -416,6 +427,11 @@ function applyDefinitions(
     if (weatherEffects.length !== 1 || effects.length !== 1 || authorization?.kind !== 'weather-settlement') fail('天气结算Effect缺少唯一命令授权')
     weather.assertAuthorization({ state: stateValue, authorization })
   } else if (authorization?.kind === 'weather-settlement') fail('天气结算授权没有对应Effect')
+  const actorScheduleEffects = effects.filter((effect): effect is Extract<TextOpenWorldEffectDefinitionV1, { operation: 'settle-actor-schedules' }> => effect.operation === 'settle-actor-schedules')
+  if (actorScheduleEffects.length) {
+    if (actorScheduleEffects.length !== 1 || effects.length !== 1 || authorization?.kind !== 'actor-schedule-settlement') fail('角色日程结算Effect缺少唯一命令授权')
+    actorSchedules.assertAuthorization({ state: stateValue, authorization })
+  } else if (authorization?.kind === 'actor-schedule-settlement') fail('角色日程结算授权没有对应Effect')
   let questTransitionsApplied = false
   for (const effect of effects) {
     switch (effect.operation) {
@@ -680,6 +696,24 @@ function applyDefinitions(
         })
         break
       }
+      case 'settle-actor-schedules': {
+        const actorScheduleAuthorization = authorization as TextOpenWorldActorScheduleSettlementAuthorizationV1
+        const before = {
+          settlementWorldMinute: state.time.lastActorScheduleSettlementWorldMinute,
+          actors: Object.fromEntries(actorScheduleAuthorization.changes.map(change => [change.actorKey, structuredClone(state.actors[change.actorKey])])),
+        }
+        actorScheduleAuthorization.changes.forEach(change => {
+          const actor = state.actors[change.actorKey]
+          actor.locationKey = change.toLocationKey
+          actor.scheduleState = change.toScheduleState
+        })
+        state.time.lastActorScheduleSettlementWorldMinute = actorScheduleAuthorization.toSettlementWorldMinute
+        record(changes, effect, `结算角色日程:${actorScheduleAuthorization.timePeriodKey}`, before, {
+          settlementWorldMinute: state.time.lastActorScheduleSettlementWorldMinute,
+          actors: Object.fromEntries(actorScheduleAuthorization.changes.map(change => [change.actorKey, structuredClone(state.actors[change.actorKey])])),
+        })
+        break
+      }
       case 'start-combat': {
         const { payload } = effect; if (state.player.health <= 0) fail(`${effect.key}战败玩家不能开始战斗`); if (state.combat?.status === 'active') fail(`${effect.key}已有进行中的战斗`)
         const before = state.combat; state.combat = { encounterKey: payload.encounterKey, status: 'active' }
@@ -767,11 +801,12 @@ export function applyTextOpenWorldEffectPlanForReplayV1(
   const tracking = createTextOpenWorldQuestTrackingCatalogV1(value)
   const fastTravel = createTextOpenWorldFastTravelCatalogV1(value, modules)
   const weather = createTextOpenWorldWeatherCatalogV1(value, modules)
+  const actorSchedules = createTextOpenWorldActorScheduleCatalogV1(value, modules)
   const definitions = modules.actions.effects.map((item, index) => parseDefinition(item, refs, `effects[${index}]`))
   const byKey = new Map(definitions.map(item => [item.key, item]))
   const canonical = plan.effectKeys.map(effectKey => byKey.get(effectKey) ?? fail(`Effect不存在:${effectKey}`))
   if (canonicalProductProductionJsonV2(canonical) !== canonicalProductProductionJsonV2(plan.effects)) fail('EffectPlan定义与Release不一致')
-  const applied = applyDefinitions(state, canonical, plan.claimKey, modules, plan.authorization, questTransitions, objectives, tracking, fastTravel, weather)
+  const applied = applyDefinitions(state, canonical, plan.claimKey, modules, plan.authorization, questTransitions, objectives, tracking, fastTravel, weather, actorSchedules)
   if (canonicalProductProductionJsonV2(applied.changes) !== canonicalProductProductionJsonV2(plan.previewChanges)) fail('EffectPlan重放变化与预演不一致')
   return applied
 }
@@ -790,10 +825,11 @@ export function createTextOpenWorldEffectCatalogV1(value: TextOpenWorldRuntimePa
   const tracking = createTextOpenWorldQuestTrackingCatalogV1(value)
   const fastTravel = createTextOpenWorldFastTravelCatalogV1(value, modules)
   const weather = createTextOpenWorldWeatherCatalogV1(value, modules)
+  const actorSchedules = createTextOpenWorldActorScheduleCatalogV1(value, modules)
   const definitions = modules.actions.effects.map((item, index) => parseDefinition(item, refs, `effects[${index}]`)); const byKey = new Map(definitions.map(item => [item.key, item])); const clone = <T>(item: T): T => structuredClone(item)
   const plan = async (input: { effectKeys: string[]; claimKey: string; state: TextOpenWorldEffectStateV1; authorization?: TextOpenWorldEffectPlanV1['authorization'] }): Promise<TextOpenWorldEffectPlanV1> => {
     const claimKey = key(input.claimKey, 'claimKey', CLAIM_KEY); if (!Array.isArray(input.effectKeys) || new Set(input.effectKeys).size !== input.effectKeys.length) fail('effectKeys必须是无重复数组')
-    const effects = input.effectKeys.map(effectKey => byKey.get(key(effectKey, 'effectKey')) ?? fail(`Effect不存在:${effectKey}`)); const baseStateHash = await hashProductProductionValueV2(input.state); const preview = applyDefinitions(input.state, effects, claimKey, modules, input.authorization ?? null, questTransitions, objectives, tracking, fastTravel, weather); const resultingStateHash = await hashProductProductionValueV2(preview.state); const impactDomains = [...new Set(effects.flatMap(effect => effectDomains(effect.operation)))]
+    const effects = input.effectKeys.map(effectKey => byKey.get(key(effectKey, 'effectKey')) ?? fail(`Effect不存在:${effectKey}`)); const baseStateHash = await hashProductProductionValueV2(input.state); const preview = applyDefinitions(input.state, effects, claimKey, modules, input.authorization ?? null, questTransitions, objectives, tracking, fastTravel, weather, actorSchedules); const resultingStateHash = await hashProductProductionValueV2(preview.state); const impactDomains = [...new Set(effects.flatMap(effect => effectDomains(effect.operation)))]
     const body: Omit<TextOpenWorldEffectPlanV1, 'planHash'> = {
       schema: 'storyforge.text-open-world.effect-plan', version: 1, claimKey, baseStateHash, resultingStateHash,
       effectKeys: [...input.effectKeys], effects: clone(effects), authorization: clone(input.authorization ?? null),
@@ -810,7 +846,7 @@ export function createTextOpenWorldEffectCatalogV1(value: TextOpenWorldRuntimePa
       if (!isSha256Hash(planHash) || await hashProductProductionValueV2(planBody(body)) !== planHash) fail('EffectPlan planHash无效')
       const baseStateHash = await hashProductProductionValueV2(input.state); if (baseStateHash !== input.plan.baseStateHash) fail('EffectPlan基线状态已变化')
       const canonicalEffects = input.plan.effectKeys.map(effectKey => byKey.get(effectKey) ?? fail(`Effect不存在:${effectKey}`)); if (canonicalProductProductionJsonV2(canonicalEffects) !== canonicalProductProductionJsonV2(input.plan.effects)) fail('EffectPlan定义与Release不一致')
-      const applied = applyDefinitions(input.state, canonicalEffects, input.plan.claimKey, modules, input.plan.authorization, questTransitions, objectives, tracking, fastTravel, weather); const resultingStateHash = await hashProductProductionValueV2(applied.state)
+      const applied = applyDefinitions(input.state, canonicalEffects, input.plan.claimKey, modules, input.plan.authorization, questTransitions, objectives, tracking, fastTravel, weather, actorSchedules); const resultingStateHash = await hashProductProductionValueV2(applied.state)
       if (resultingStateHash !== input.plan.resultingStateHash || canonicalProductProductionJsonV2(applied.changes) !== canonicalProductProductionJsonV2(input.plan.previewChanges)) fail('EffectPlan预演与应用结果不一致')
       return { state: applied.state, receipt: { schema: 'storyforge.text-open-world.effect-receipt', version: 1, claimKey: input.plan.claimKey, planHash: input.plan.planHash, baseStateHash, resultingStateHash, impactDomains: [...input.plan.impactDomains], changes: clone(applied.changes) } }
     },

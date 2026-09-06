@@ -106,8 +106,8 @@ describe('Text Open World vNext · monotonic world time and replayable weather',
     expect(events.map(event => event.type)).toEqual([
       'narrative.started', 'narrative.node.entered',
       'text-open-world.command.committed', 'text-open-world.effects.applied',
-      'text-open-world.command.committed', 'text-open-world.effects.applied',
       'text-open-world.command.committed', 'text-open-world.random.resolved', 'text-open-world.random.resolved', 'text-open-world.effects.applied',
+      'text-open-world.command.committed', 'text-open-world.effects.applied',
     ])
   })
 

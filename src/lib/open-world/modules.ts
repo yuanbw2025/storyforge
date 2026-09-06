@@ -15,7 +15,7 @@ type Row = Record<string, unknown>
 const KEY = /^[a-z][a-z0-9._:-]{0,199}$/
 const ACTION_CATEGORIES: TextOpenWorldActionCategoryV1[] = [
   'move', 'travel', 'fast-travel', 'observe', 'investigate', 'talk', 'take', 'use', 'equip', 'unequip', 'drop',
-  'buy', 'sell', 'craft', 'accept-quest', 'abandon-quest', 'objective-action', 'quest-action', 'weather-action', 'claim-reward', 'start-combat', 'continue-combat', 'escape',
+  'buy', 'sell', 'craft', 'accept-quest', 'abandon-quest', 'objective-action', 'quest-action', 'weather-action', 'actor-schedule-action', 'claim-reward', 'start-combat', 'continue-combat', 'escape',
   'rest', 'respawn', 'read', 'track', 'untrack', 'save', 'load-branch',
 ]
 const QUEST_TYPES: TextOpenWorldQuestTypeV1[] = ['mainline', 'significant', 'ordinary', 'template']
@@ -309,15 +309,26 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
     fastTravelPoints: structuredClone(travelPoints) as unknown as TextOpenWorldParsedModulesV1['world']['fastTravelPoints'],
   }
 
-  const actors = versioned(packageValue, 'actors')
+  const actors = versioned(packageValue, 'actors', [1, 2])
+  const legacyActorModule = Number(actors.version) < 2
   exact(actors, ['version', 'player', 'factions', 'actors', 'schedules'], 'actors')
   const player = playerDefinition(actors.player)
   const build = row(player.build, 'actors.player.build')
-  const factions = catalog(actors.factions, 'actors.factions', ['key', 'title', 'description']); const actorRows = catalog(actors.actors, 'actors.actors', ['key', 'tier', 'name', 'biography', 'portrayal', 'factionKey', 'homeLocationKey', 'protected', 'serviceKeys', 'scheduleKey']); const schedules = catalog(actors.schedules, 'actors.schedules', ['key', 'actorKey', 'entries'])
+  const factions = catalog(actors.factions, 'actors.factions', ['key', 'title', 'description']); const actorRows = catalog(actors.actors, 'actors.actors', ['key', 'tier', 'name', 'biography', 'portrayal', 'factionKey', 'homeLocationKey', 'protected', 'serviceKeys', 'scheduleKey']); const scheduleRows = catalog(actors.schedules, 'actors.schedules', ['key', 'actorKey', 'entries'])
+  const schedules: Row[] = scheduleRows.map((item, index) => ({
+    ...item,
+    entries: array(item.entries, `actors.schedules[${index}].entries`, 100).map((entry, entryIndex) => {
+      const parsed = row(entry, `actors.schedules[${index}].entries[${entryIndex}]`)
+      exact(parsed, legacyActorModule ? ['timePeriodKey', 'locationKey', 'activity'] : ['timePeriodKey', 'locationKey', 'activity', 'availableServiceKeys'], `actors.schedules[${index}].entries[${entryIndex}]`)
+      return legacyActorModule
+        ? { ...parsed, availableServiceKeys: structuredClone(actorRows.find(actor => actor.key === item.actorKey)?.serviceKeys ?? []) }
+        : parsed
+    }),
+  }))
   const factionKeys = keysOf(factions, 'actors.factions'); const actorKeys = keysOf(actorRows, 'actors.actors'); const scheduleKeys = keysOf(schedules, 'actors.schedules')
   factions.forEach((item, index) => { text(item.title, `actors.factions[${index}].title`, 2_000); text(item.description, `actors.factions[${index}].description`) })
   actorRows.forEach((item, index) => { enumValue(item.tier, ['mainline', 'significant', 'resident', 'transient'], `actors.actors[${index}].tier`); text(item.name, `actors.actors[${index}].name`, 2_000); text(item.biography, `actors.actors[${index}].biography`); text(item.portrayal, `actors.actors[${index}].portrayal`); requireRef(nullableKey(item.factionKey, `actors.actors[${index}].factionKey`), factionKeys, 'actor faction'); requireRef(key(item.homeLocationKey, `actors.actors[${index}].homeLocationKey`), locationKeys, 'actor home'); bool(item.protected, `actors.actors[${index}].protected`); strings(item.serviceKeys, `actors.actors[${index}].serviceKeys`); requireRef(nullableKey(item.scheduleKey, `actors.actors[${index}].scheduleKey`), scheduleKeys, 'actor schedule') })
-  schedules.forEach((item, index) => { requireRef(key(item.actorKey, `actors.schedules[${index}].actorKey`), actorKeys, 'schedule actor'); array(item.entries, `actors.schedules[${index}].entries`, 100).forEach((entry, entryIndex) => { const parsed = row(entry, `actors.schedules[${index}].entries[${entryIndex}]`); exact(parsed, ['timePeriodKey', 'locationKey', 'activity'], `actors.schedules[${index}].entries[${entryIndex}]`); key(parsed.timePeriodKey, 'schedule timePeriodKey'); requireRef(key(parsed.locationKey, 'schedule locationKey'), locationKeys, 'schedule location'); text(parsed.activity, 'schedule activity', 2_000) }) })
+  schedules.forEach((item, index) => { requireRef(key(item.actorKey, `actors.schedules[${index}].actorKey`), actorKeys, 'schedule actor'); array(item.entries, `actors.schedules[${index}].entries`, 100).forEach((entry, entryIndex) => { const parsed = row(entry, `actors.schedules[${index}].entries[${entryIndex}]`); key(parsed.timePeriodKey, 'schedule timePeriodKey'); requireRef(key(parsed.locationKey, 'schedule locationKey'), locationKeys, 'schedule location'); text(parsed.activity, 'schedule activity', 2_000); strings(parsed.availableServiceKeys, `actors.schedules[${index}].entries[${entryIndex}].availableServiceKeys`) }) })
   actorRows.forEach((item, index) => {
     const scheduleKey = nullableKey(item.scheduleKey, `actors.actors[${index}].scheduleKey`)
     if (scheduleKey && schedules.find(schedule => schedule.key === scheduleKey)?.actorKey !== item.key) fail(`actor/schedule反向引用不一致:${String(item.key)}`)
@@ -326,11 +337,13 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
     if (actorRows.find(actor => actor.key === item.actorKey)?.scheduleKey !== item.key) fail(`schedule/actor反向引用不一致:${String(item.key)}`)
   })
 
-  const actions = versioned(packageValue, 'actions', [1, 2, 3, 4, 5])
+  const actions = versioned(packageValue, 'actions', [1, 2, 3, 4, 5, 6])
   const modernActionModule = Number(actions.version) >= 2
   const travelActionModule = Number(actions.version) >= 3
   const fastTravelActionModule = Number(actions.version) >= 4
   const timeWeatherActionModule = Number(actions.version) >= 5
+  const actorScheduleActionModule = Number(actions.version) >= 6
+  if (actorScheduleActionModule && legacyActorModule) fail('Action v6必须搭配Actor v2')
   exact(actions, ['version', 'conditions', 'effects', 'actions'], 'actions')
   const conditions = catalog(actions.conditions, 'actions.conditions', ['key', 'expression', 'failureMessage']); const effects = catalog(actions.effects, 'actions.effects', ['key', 'operation', 'payload']); const actionRows = catalog(actions.actions, 'actions.actions', ['key', 'category', 'label', 'description', 'actorScope', 'targetScope', 'locationKeys', 'requirementConditionKeys', 'costEffectKeys', 'successEffectKeys', 'failureEffectKeys', 'timeCostMinutes', 'confirmationPolicy', 'repeatPolicy', 'cooldownMinutes'])
   const conditionKeys = keysOf(conditions, 'actions.conditions'); const effectKeys = keysOf(effects, 'actions.effects'); const actionKeys = keysOf(actionRows, 'actions.actions')
@@ -444,6 +457,29 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
           fail(`Action声明耗时必须由唯一advance-time Effect落实:${String(candidate.key)}`)
         }
       }
+    })
+  }
+
+  if (actorScheduleActionModule) {
+    const scheduleActions = actionRows.filter(action => action.category === 'actor-schedule-action')
+    if (scheduleActions.length !== 1) fail('Action v6必须且只能定义一个角色日程结算Action')
+    const action = scheduleActions[0]
+    const successEffectKeys = strings(action.successEffectKeys, 'actor schedule action.successEffectKeys')
+    const successEffects = successEffectKeys.map(effectKey => effects.find(effect => effect.key === effectKey)!)
+    if (action.actorScope !== 'system' || action.targetScope !== 'none'
+      || strings(action.locationKeys, 'actor schedule action.locationKeys').length
+      || strings(action.requirementConditionKeys, 'actor schedule action.requirementConditionKeys').length
+      || strings(action.costEffectKeys, 'actor schedule action.costEffectKeys').length
+      || strings(action.failureEffectKeys, 'actor schedule action.failureEffectKeys').length
+      || successEffects.length !== 1 || successEffects[0].operation !== 'settle-actor-schedules'
+      || action.timeCostMinutes !== 0 || action.confirmationPolicy !== 'never'
+      || action.repeatPolicy !== 'repeatable' || action.cooldownMinutes != null) fail('角色日程结算Action合同无效')
+    const scheduleEffects = effects.filter(effect => effect.operation === 'settle-actor-schedules')
+    if (scheduleEffects.length !== 1 || scheduleEffects[0].key !== successEffects[0].key) fail('角色日程结算Effect必须且只能属于角色日程结算Action')
+    exact(row(scheduleEffects[0].payload, 'actor schedule effect.payload'), [], 'actor schedule effect.payload')
+    actionRows.filter(candidate => candidate.key !== action.key).forEach(candidate => {
+      const referenced = [...strings(candidate.costEffectKeys, `action ${String(candidate.key)} costs`), ...strings(candidate.successEffectKeys, `action ${String(candidate.key)} success`), ...strings(candidate.failureEffectKeys, `action ${String(candidate.key)} failures`)]
+      if (referenced.includes(String(successEffects[0].key))) fail(`settle-actor-schedules只能由角色日程结算Action引用:${String(candidate.key)}`)
     })
   }
 
@@ -952,6 +988,12 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
   const vendors = catalog(economy.vendors, 'economy.vendors', ['key', 'title', 'actorKey', 'locationKey', 'factionKey', 'buyPriceMultiplier', 'sellPriceMultiplier', 'stock']); const vendorKeys = keysOf(vendors, 'economy.vendors')
   vendors.forEach((item, index) => { text(item.title, `economy.vendors[${index}].title`, 2_000); requireRef(key(item.actorKey, `economy.vendors[${index}].actorKey`), actorKeys, 'vendor actor'); requireRef(key(item.locationKey, `economy.vendors[${index}].locationKey`), locationKeys, 'vendor location'); requireRef(nullableKey(item.factionKey, `economy.vendors[${index}].factionKey`), factionKeys, 'vendor faction'); numberValue(item.buyPriceMultiplier, `economy.vendors[${index}].buyPriceMultiplier`, 0.01, 100); numberValue(item.sellPriceMultiplier, `economy.vendors[${index}].sellPriceMultiplier`, 0.01, 100); array(item.stock, `economy.vendors[${index}].stock`).forEach((entry, entryIndex) => { const parsed = row(entry, `economy.vendors[${index}].stock[${entryIndex}]`); exact(parsed, ['itemKey', 'quantity'], `economy.vendors[${index}].stock[${entryIndex}]`); requireRef(key(parsed.itemKey, 'vendor stock item'), itemKeys, 'vendor stock item'); if (parsed.quantity != null) int(parsed.quantity, 'vendor stock quantity', 0, 1_000_000) }) })
   actorRows.forEach((item, index) => requireRefs(strings(item.serviceKeys, `actors.actors[${index}].serviceKeys`), vendorKeys, 'actor service'))
+  if (!legacyActorModule) {
+    vendors.forEach(vendor => {
+      const owners = actorRows.filter(actor => strings(actor.serviceKeys, `actor ${String(actor.key)} serviceKeys`).includes(String(vendor.key)))
+      if (owners.length !== 1 || owners[0].key !== vendor.actorKey) fail(`vendor必须由actorKey对应角色唯一持有:${String(vendor.key)}`)
+    })
+  }
 
   const relationships = versioned(packageValue, 'relationships')
   exact(relationships, ['version', 'morality', 'factionAffinity', 'attitude', 'storyModifiers'], 'relationships')
@@ -986,7 +1028,21 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
   if (modernTimeWeather && weatherTables.length > 128) fail('TimeWeather v2最多支持128个地区的原子天气结算')
   const weatherRegionKeys = weatherTables.map((item, index) => key(item.regionKey, `time-weather.regionWeatherTables[${index}].regionKey`)); if (new Set(weatherRegionKeys).size !== weatherRegionKeys.length) fail('regionWeatherTables.regionKey重复'); requireRefs(weatherRegionKeys, regionKeys, 'weather region'); weatherTables.forEach((item, index) => { const entries = array(item.entries, `time-weather.regionWeatherTables[${index}].entries`, modernTimeWeather ? 128 : 20_000); if (!entries.length) fail('weather table不能为空'); const entryWeatherKeys: string[] = []; let totalWeight = 0; entries.forEach((entry, entryIndex) => { const parsed = row(entry, `weather entries[${entryIndex}]`); exact(parsed, ['weatherKey', 'weight'], 'weather entry'); const weatherKey = key(parsed.weatherKey, 'weatherKey'); requireRef(weatherKey, weatherKeys, 'weather'); entryWeatherKeys.push(weatherKey); const weight = modernTimeWeather ? int(parsed.weight, 'weather weight', 1, 1_000_000) : numberValue(parsed.weight, 'weather weight', 0.000001, 1_000_000); totalWeight += weight }); if (new Set(entryWeatherKeys).size !== entryWeatherKeys.length) fail(`weather table天气重复:${String(item.regionKey)}`); if (modernTimeWeather && (!Number.isSafeInteger(totalWeight) || totalWeight > 1_000_000_000)) fail(`weather table总权重越界:${String(item.regionKey)}`) })
   requireSameKeys(weatherRegionKeys, [...regionKeys], 'region weather tables')
-  schedules.forEach((item, index) => array(item.entries, `actors.schedules[${index}].entries`).forEach((entry, entryIndex) => requireRef(key(row(entry, 'schedule entry').timePeriodKey, `actors.schedules[${index}].entries[${entryIndex}].timePeriodKey`), periodKeys, 'schedule time period')))
+  schedules.forEach((item, index) => {
+    const actor = actorRows.find(candidate => candidate.key === item.actorKey)!
+    const actorServiceKeys = new Set(strings(actor.serviceKeys, `actor ${String(actor.key)} serviceKeys`))
+    const entries = array(item.entries, `actors.schedules[${index}].entries`)
+    entries.forEach((entry, entryIndex) => {
+      const parsed = row(entry, 'schedule entry')
+      requireRef(key(parsed.timePeriodKey, `actors.schedules[${index}].entries[${entryIndex}].timePeriodKey`), periodKeys, 'schedule time period')
+      const locationKey = key(parsed.locationKey, `actors.schedules[${index}].entries[${entryIndex}].locationKey`)
+      strings(parsed.availableServiceKeys, `actors.schedules[${index}].entries[${entryIndex}].availableServiceKeys`).forEach(serviceKey => {
+        if (!actorServiceKeys.has(serviceKey)) fail(`日程开放了不属于角色的服务:${String(actor.key)}:${serviceKey}`)
+        if (vendors.find(vendor => vendor.key === serviceKey)?.locationKey !== locationKey) fail(`日程服务地点与vendor地点不一致:${serviceKey}`)
+      })
+    })
+    if (!legacyActorModule) requireSameKeys(entries.map(entry => String(row(entry, 'schedule entry').timePeriodKey)), [...periodKeys], `schedule ${String(item.key)} time period coverage`)
+  })
 
   const director = versioned(packageValue, 'director')
   exact(director, ['version', 'rules', 'decks', 'templates', 'randomEvents'], 'director'); const directorRules = row(director.rules, 'director.rules'); exact(directorRules, ['globalMaximumRevealed', 'globalMaximumActive', 'maximumQuestInstances', 'highIntensityStreakLimit'], 'director.rules'); ['globalMaximumRevealed', 'globalMaximumActive', 'maximumQuestInstances', 'highIntensityStreakLimit'].forEach(field => int(directorRules[field], `director.rules.${field}`, 1, 1_000_000))
@@ -1084,7 +1140,7 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
   return {
     narrative: structuredClone(narrative) as unknown as TextOpenWorldParsedModulesV1['narrative'],
     world: normalizedWorld,
-    actors: structuredClone(actors) as unknown as TextOpenWorldParsedModulesV1['actors'],
+    actors: { ...structuredClone(actors), version: 2, schedules: structuredClone(schedules) } as unknown as TextOpenWorldParsedModulesV1['actors'],
     quests: { ...structuredClone(quests), version: 2, quests: structuredClone(questRows), stages: structuredClone(questStages) } as unknown as TextOpenWorldParsedModulesV1['quests'],
     actions: structuredClone(actions) as unknown as TextOpenWorldParsedModulesV1['actions'],
     progression: structuredClone(progression) as unknown as TextOpenWorldParsedModulesV1['progression'],

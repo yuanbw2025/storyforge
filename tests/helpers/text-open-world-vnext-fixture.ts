@@ -11,7 +11,7 @@ const SELECTION_HASH = 'b'.repeat(64)
 
 const MODULE_DEPENDENCIES: Partial<Record<TextOpenWorldRuntimeModuleKeyV1, TextOpenWorldRuntimeModuleKeyV1[]>> = {
   world: ['narrative'],
-  actors: ['world'],
+  actors: ['world', 'time-weather'],
   actions: ['world'],
   quests: ['narrative', 'actors', 'actions'],
   progression: ['actions'],
@@ -106,7 +106,7 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
       ],
     },
     actors: {
-      version: 1,
+      version: 2,
       player: {
         key: 'player',
         identity: {
@@ -129,8 +129,9 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
       schedules: [{
         key: 'schedule.caretaker', actorKey: 'actor.caretaker',
         entries: [
-          { timePeriodKey: 'time.day', locationKey: 'location.salt-port', activity: '检查内渠' },
-          { timePeriodKey: 'time.night', locationKey: 'location.salt-port', activity: '整理渠图' },
+          { timePeriodKey: 'time.dawn', locationKey: 'location.salt-port', activity: '准备守渠工具', availableServiceKeys: [] },
+          { timePeriodKey: 'time.day', locationKey: 'location.salt-port', activity: '检查内渠', availableServiceKeys: ['vendor.caretaker'] },
+          { timePeriodKey: 'time.night', locationKey: 'location.salt-port', activity: '整理渠图', availableServiceKeys: [] },
         ],
       }],
     },
@@ -164,7 +165,7 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
       ],
     },
     actions: {
-      version: 5,
+      version: 6,
       conditions: [
         { key: 'condition.always', expression: { op: 'all', conditions: [{ op: 'player-number', field: 'level', comparator: 'gte', value: 1 }] }, failureMessage: '角色尚未进入可行动状态。' },
         { key: 'condition.health-not-full', expression: { op: 'player-resource-below-maximum', resource: 'health' }, failureMessage: '生命已经满了。' },
@@ -179,6 +180,7 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
         { key: 'effect.rest-time', operation: 'advance-time', payload: { minutes: 480 } },
         { key: 'effect.investigate-time', operation: 'advance-time', payload: { minutes: 15 } },
         { key: 'effect.settle-weather', operation: 'settle-weather', payload: {} },
+        { key: 'effect.settle-actor-schedules', operation: 'settle-actor-schedules', payload: {} },
         { key: 'effect.respawn-salt-port', operation: 'respawn', payload: { fastTravelPointKey: 'fast-travel.salt-port', healthRatio: 1 } },
         { key: 'effect.start-ridge-jackal', operation: 'start-combat', payload: { encounterKey: 'encounter.ridge-jackal' } },
         { key: 'effect.consume-brine-tonic', operation: 'remove-item', payload: { itemKey: 'item.brine-tonic', quantity: 1, reason: 'consume' } },
@@ -238,6 +240,11 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
         key: 'action.settle-weather', category: 'weather-action', label: '结算天气', description: '按冻结的地区气候表结算当前天气周期。',
         actorScope: 'system', targetScope: 'none', locationKeys: [], requirementConditionKeys: [], costEffectKeys: [],
         successEffectKeys: ['effect.settle-weather'], failureEffectKeys: [], timeCostMinutes: 0,
+        confirmationPolicy: 'never', repeatPolicy: 'repeatable', cooldownMinutes: null,
+      }, {
+        key: 'action.settle-actor-schedules', category: 'actor-schedule-action', label: '结算角色日程', description: '按冻结日程把常驻角色投影到当前时间段。',
+        actorScope: 'system', targetScope: 'none', locationKeys: [], requirementConditionKeys: [], costEffectKeys: [],
+        successEffectKeys: ['effect.settle-actor-schedules'], failureEffectKeys: [], timeCostMinutes: 0,
         confirmationPolicy: 'never', repeatPolicy: 'repeatable', cooldownMinutes: null,
       }, {
         key: 'action.accept-main', category: 'accept-quest', label: '接受主线任务', description: '接受并开始调查断流的盐渠。',

@@ -11,7 +11,7 @@ export type TextOpenWorldQuestTimePolicyV1 = 'waits' | 'timed'
 export type TextOpenWorldActionCategoryV1 =
   | 'move' | 'travel' | 'fast-travel' | 'observe' | 'investigate' | 'talk'
   | 'take' | 'use' | 'equip' | 'unequip' | 'drop' | 'buy' | 'sell' | 'craft'
-  | 'accept-quest' | 'abandon-quest' | 'objective-action' | 'quest-action' | 'weather-action' | 'claim-reward'
+  | 'accept-quest' | 'abandon-quest' | 'objective-action' | 'quest-action' | 'weather-action' | 'actor-schedule-action' | 'claim-reward'
   | 'start-combat' | 'continue-combat' | 'escape' | 'rest' | 'respawn'
   | 'read' | 'track' | 'untrack' | 'save' | 'load-branch'
 
@@ -142,7 +142,7 @@ export interface TextOpenWorldWorldModuleV1 {
 }
 
 export interface TextOpenWorldActorModuleV1 {
-  version: 1
+  version: 1 | 2
   player: TextOpenWorldPlayerCharacterDefinitionV1
   factions: Array<{
     key: string
@@ -164,7 +164,7 @@ export interface TextOpenWorldActorModuleV1 {
   schedules: Array<{
     key: string
     actorKey: string
-    entries: Array<{ timePeriodKey: string; locationKey: string; activity: string }>
+    entries: Array<{ timePeriodKey: string; locationKey: string; activity: string; availableServiceKeys: string[] }>
   }>
 }
 
@@ -212,7 +212,7 @@ export interface TextOpenWorldQuestModuleV1 {
 }
 
 export interface TextOpenWorldActionModuleV1 {
-  version: 1 | 2 | 3 | 4 | 5
+  version: 1 | 2 | 3 | 4 | 5 | 6
   conditions: Array<{
     key: string
     expression: TextOpenWorldConditionExpressionV1

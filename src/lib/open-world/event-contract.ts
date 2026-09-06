@@ -22,6 +22,7 @@ import type {
   TextOpenWorldRewardAuthorizationV1,
   TextOpenWorldFastTravelAuthorizationV1,
   TextOpenWorldWeatherSettlementAuthorizationV1,
+  TextOpenWorldActorScheduleSettlementAuthorizationV1,
 } from '../types'
 import { parseTextOpenWorldCommandEventPayloadV1 } from './command-contract'
 
@@ -162,6 +163,30 @@ function parseAuthorization(value: unknown, label: string): TextOpenWorldEffectP
       randomRequests,
       changes,
     } satisfies TextOpenWorldWeatherSettlementAuthorizationV1
+  }
+  if (raw.kind === 'actor-schedule-settlement') {
+    exact(raw, ['kind', 'worldMinute', 'fromSettlementWorldMinute', 'toSettlementWorldMinute', 'timePeriodKey', 'changes'], label)
+    if (!Array.isArray(raw.changes) || raw.changes.length > 20_000) fail(`${label}.changes无效`)
+    const worldMinute = integer(raw.worldMinute, `${label}.worldMinute`)
+    const fromSettlementWorldMinute = integer(raw.fromSettlementWorldMinute, `${label}.fromSettlementWorldMinute`)
+    const toSettlementWorldMinute = integer(raw.toSettlementWorldMinute, `${label}.toSettlementWorldMinute`)
+    if (fromSettlementWorldMinute >= toSettlementWorldMinute || toSettlementWorldMinute > worldMinute) fail(`${label}.结算时间范围无效`)
+    const changes = raw.changes.map((change, index) => {
+      const parsed = row(change, `${label}.changes[${index}]`)
+      exact(parsed, ['actorKey', 'fromLocationKey', 'toLocationKey', 'fromScheduleState', 'toScheduleState'], `${label}.changes[${index}]`)
+      return {
+        actorKey: token(parsed.actorKey, `${label}.changes[${index}].actorKey`),
+        fromLocationKey: token(parsed.fromLocationKey, `${label}.changes[${index}].fromLocationKey`),
+        toLocationKey: token(parsed.toLocationKey, `${label}.changes[${index}].toLocationKey`),
+        fromScheduleState: text(parsed.fromScheduleState, `${label}.changes[${index}].fromScheduleState`),
+        toScheduleState: text(parsed.toScheduleState, `${label}.changes[${index}].toScheduleState`),
+      }
+    })
+    if (new Set(changes.map(change => change.actorKey)).size !== changes.length) fail(`${label}.changes角色不能重复`)
+    return {
+      kind: 'actor-schedule-settlement', worldMinute, fromSettlementWorldMinute, toSettlementWorldMinute,
+      timePeriodKey: token(raw.timePeriodKey, `${label}.timePeriodKey`), changes,
+    } satisfies TextOpenWorldActorScheduleSettlementAuthorizationV1
   }
   if (raw.kind === 'quest-objective') {
     exact(raw, ['kind', 'instanceKey', 'definitionKey', 'stageKey', 'objectiveKey', 'worldMinute', 'fromStatus', 'toStatus'], label)

@@ -583,7 +583,7 @@ async function readOpenWorldRuntimeContext(input: AssembleContextInput): Promise
   }
   const state = await readProductRuntimeStateForContext(session.id!)
   if (manifest.textOpenWorldVNext) {
-    const [sessionProjection, modulesModule, actionModule, bindingModule, feedbackModule, skillsModule, lifeModule, inventoryModule, questModule, mapModule, mapViewModule, travelModule, weatherModule] = await Promise.all([
+    const [sessionProjection, modulesModule, actionModule, bindingModule, feedbackModule, skillsModule, lifeModule, inventoryModule, questModule, mapModule, mapViewModule, travelModule, weatherModule, actorsModule] = await Promise.all([
       import('../open-world/session-projection'),
       import('../open-world/modules'),
       import('../open-world/action-registry'),
@@ -597,6 +597,7 @@ async function readOpenWorldRuntimeContext(input: AssembleContextInput): Promise
       import('../open-world/map-view'),
       import('../open-world/travel'),
       import('../open-world/weather'),
+      import('../open-world/actors'),
     ])
     if (!state.textOpenWorld) return ''
     const binding = await bindingModule.verifyTextOpenWorldVNextSessionBindingV1(session)
@@ -615,7 +616,6 @@ async function readOpenWorldRuntimeContext(input: AssembleContextInput): Promise
     const region = modules.world.regions.find(item => item.key === location.regionKey)
     if (!region) throw new Error('文字开放世界当前区域不在冻结ProductRelease/Build中。')
     const itemByKey = new Map(modules.items.items.map(item => [item.key, item]))
-    const factionByKey = new Map(modules.actors.factions.map(item => [item.key, item]))
     const clockWeather = weatherModule.projectTextOpenWorldClockWeatherV1({ runtimePackage, state: runtime, parsedModules: modules })
     const playerMap = mapViewModule.projectTextOpenWorldPlayerMapV1({ runtimePackage, state: runtime })
     const visibleRegions = playerMap.regions
@@ -641,12 +641,15 @@ async function readOpenWorldRuntimeContext(input: AssembleContextInput): Promise
         : []
       return `- ${instance.instanceKey}｜定义=${quest.key}｜${quest.type}｜${status}｜${quest.title}｜${quest.description}${stage ? `｜阶段=${stage.title}` : ''}${objectives.length ? `｜目标=${objectives.join('；')}` : ''}`
     })
-    const presentActors = modules.actors.actors.filter(actor => {
-      const actorState = runtime.actors[actor.key]
-      return actorState?.alive && actorState.present && actorState.locationKey === location.key
+    const presentActors = actorsModule.projectTextOpenWorldActorsV1({
+      runtimePackage,
+      state: runtime,
+      attitudeByActorKey: derived.condition.relations.attitudeByActorKey,
     }).map(actor => {
-      const faction = actor.factionKey ? factionByKey.get(actor.factionKey)?.title ?? actor.factionKey : '中立'
-      return `- ${actor.key}:${actor.name}｜阵营=${faction}｜态度=${derived.condition.relations.attitudeByActorKey[actor.key] ?? 'neutral'}${actor.serviceKeys.length ? `｜功能=${actor.serviceKeys.join('、')}` : ''}`
+      const faction = actor.factionKey ? modules.actors.factions.find(item => item.key === actor.factionKey)?.title ?? actor.factionKey : '中立'
+      const portrayal = actor.portrayal ? `｜演绎=${actor.portrayal}` : ''
+      const services = actor.availableServices.length ? `｜当前服务=${actor.availableServices.map(service => `${service.key}:${service.title}`).join('、')}` : '｜当前服务=无'
+      return `- ${actor.key}:${actor.name}｜层级=${actor.tier}｜阵营=${faction}｜态度=${actor.attitude}｜当前活动=${actor.activity}${services}${portrayal}`
     })
     const knowledgeLines = modules.knowledge.entries.flatMap(entry => {
       const visibility = runtime.knowledge.visibilityByKey[entry.key]
@@ -703,7 +706,7 @@ async function readOpenWorldRuntimeContext(input: AssembleContextInput): Promise
       '【玩家已知事实】', ...(knowledgeLines.length ? knowledgeLines : ['- 无']),
       '【当前可执行Action闭集】', ...(availableActions.length ? availableActions.map(item => `- ${item.action.key}｜${item.action.category}｜${item.action.label}｜目标=${item.validTargetKeys.join('、') || '无'}`) : ['- 无']),
       '【最近正式结果】', ...(feedback.length ? feedback.map(item => `- ${item.commandId}｜${item.status}｜${item.presentation.headline}${item.presentation.details.length ? `｜${item.presentation.details.join('；')}` : ''}`) : ['- 无']),
-      '自由输入只能映射到当前可执行Action；模型只能叙述正式Feedback Receipt已经提交的结果。不得创造地点、任务、人物、物品、随机结果或状态变化，也不得透露未发现地点、锁定任务、隐藏知识、NPC小传、保护状态或日程。',
+      '自由输入只能映射到当前可执行Action；模型只能叙述正式Feedback Receipt已经提交的结果。不得创造地点、任务、人物、物品、随机结果或状态变化，也不得透露未发现地点、锁定任务、隐藏知识、NPC小传、保护状态、完整日程表或未来行踪。',
     ].join('\n')
   }
   if (!state.openWorld) return ''

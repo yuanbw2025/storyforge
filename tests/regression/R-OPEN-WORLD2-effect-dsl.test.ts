@@ -34,6 +34,7 @@ function state(overrides: Partial<TextOpenWorldEffectStateV1> = {}): TextOpenWor
       currentWeatherByRegionKey: { 'region.salt-port': 'weather.clear', 'region.ridge': 'weather.clear' },
       deadlineWorldMinuteByKey: {},
       lastWeatherSettlementEpoch: 1,
+      lastActorScheduleSettlementWorldMinute: 360,
     },
     relationships: { morality: 0, factionAffinityByKey: { 'faction.canal-keepers': 0 }, storyModifierByActorKey: {} },
     combat: null,
