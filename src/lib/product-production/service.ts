@@ -50,6 +50,7 @@ import {
 } from './media-transport'
 import { readAcceptedBuildArtifacts } from './artifact-store'
 import { putMediaBlobObject, readMediaBlobObjectData } from './media-blob-store'
+import { minimumTextAdventureCommercialImageCountV1 } from '../adventure/production-brief'
 
 export interface ProductProductionDetailsV1 {
   production: ProductProductionRecordV1
@@ -498,6 +499,71 @@ export async function createProductProductionWithBriefV1(input: {
   })
   if (!saved.ok) throw new Error(String(saved.result.message ?? saved.errorCode ?? 'Brief 保存失败'))
   return created.productionId
+}
+
+/**
+ * Builds a reviewable replacement for a legacy commercial text-adventure
+ * Brief whose frozen image count predates the current recommendation floor.
+ * This is deliberately pure: the author must save the revision and then
+ * authorize a new Build in two separate commands.
+ */
+export function draftTextAdventureCommercialMediaRepairV1(
+  details: ProductProductionDetailsV1,
+): ProductProductionBriefV3 {
+  if (details.production.productType !== 'text-adventure'
+    || details.production.status !== 'stopped'
+    || details.build?.status !== 'cancelled'
+    || !details.brief) {
+    throw new Error('[product-production-service] 只有已取消的文字冒险 Build 可以生成商业媒资修订 Brief')
+  }
+  const brief = parseProductProductionBriefV3(details.brief.briefJson)
+  if (brief.qualityProfile !== 'commercial-candidate' || !brief.textAdventure) {
+    throw new Error('[product-production-service] 当前 Brief 不是商业文字冒险')
+  }
+  const minimum = minimumTextAdventureCommercialImageCountV1(brief.textAdventure.media.mode)
+  if (minimum === 0 || brief.media.imageCount >= minimum) {
+    throw new Error('[product-production-service] 当前 Brief 已满足商业媒资底线，无需自动修订')
+  }
+  return parseProductProductionBriefV3({
+    ...brief,
+    media: { ...brief.media, imageCount: minimum },
+    productionBudget: {
+      ...brief.productionBudget,
+      maximumMediaCalls: Math.max(
+        brief.productionBudget.maximumMediaCalls,
+        minimum + brief.media.musicTrackCount + brief.media.sfxCount,
+      ),
+    },
+  })
+}
+
+/** Saves a candidate revision on the same stopped Production lineage. */
+export async function saveStoppedProductProductionBriefRevisionV1(input: {
+  scope: WorkspaceScope
+  details: ProductProductionDetailsV1
+  brief: ProductProductionBriefV3
+}): Promise<void> {
+  if (input.details.production.status !== 'stopped'
+    || input.details.build?.status !== 'cancelled'
+    || !input.details.brief) {
+    throw new Error('[product-production-service] 当前 Production 没有可修订的已取消 Build')
+  }
+  if (input.brief.intent.productType !== input.details.production.productType
+    || input.brief.source.worldReleaseId !== input.details.brief.sourceWorldReleaseId
+    || input.brief.source.worldContentHash !== input.details.brief.sourceWorldContentHash) {
+    throw new Error('[product-production-service] Brief 修订不得静默更换产品或冻结世界来源')
+  }
+  const receipt = await executeProductProductionCommand({
+    scope: input.scope,
+    productionId: input.details.production.id!,
+    command: {
+      type: 'save-brief-revision', commandId: commandId('brief-repair'),
+      expectedStateRevision: input.details.production.stateRevision,
+      parentRevision: input.details.brief.revision,
+      brief: input.brief,
+    },
+  })
+  if (!receipt.ok) throw new Error(String(receipt.result.message ?? receipt.errorCode ?? 'Brief 修订保存失败'))
 }
 
 export async function authorizeProductProductionStartV1(input: {

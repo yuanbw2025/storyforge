@@ -11,6 +11,7 @@ import {
   compileProductProductionBriefV3,
   consultProductProductionStartV1,
   createProductProductionWithBriefV1,
+  draftTextAdventureCommercialMediaRepairV1,
   evaluateProductProductionAuthorizationReadinessV1,
   inspectProductProductionCapabilityReadinessV1,
   isTextAdventureMediaAnchorBlockerV1,
@@ -29,6 +30,7 @@ import {
   resolveTextAdventureSourceDecisionV1,
   restoreArchivedProductProductionV1,
   runAuthorizedProductProductionV1,
+  saveStoppedProductProductionBriefRevisionV1,
   setProductProductionPausedV1,
   startProductProductionPreviewV1,
   stopProductProductionV1,
@@ -157,6 +159,7 @@ function statusLabel(value: string): string {
     'preview-ready': '可预览', released: '已发布', stopped: '已停止', failed: '失败', archived: '已归档',
     authorized: '已授权', planning: '规划中', building: '构建中', integrating: '装配中', validating: '质检中',
     'release-ready': '可发布', 'recovery-required': '需要处理', cancelled: '已取消',
+    draft: '草稿', superseded: '已取代',
     waiting: '等待依赖', ready: '可执行', running: '执行中', 'retry-ready': '等待重试', completed: '已完成',
     blocked: '阻塞', stale: '旧 epoch',
   } as Record<string, string>)[value] ?? value
@@ -406,6 +409,10 @@ export default function ProductProductionStudio(props: {
     () => createDefaultTextAdventureProductionWizardValueV1(initialProduct === 'text-adventure' ? 'short-arc' : 'scene'),
   )
   const [draft, setDraft] = useState<ProductProductionBriefV3 | null>(null)
+  const [briefRepairDraft, setBriefRepairDraft] = useState<{
+    productionId: number
+    brief: ProductProductionBriefV3
+  } | null>(null)
   const [busy, setBusy] = useState(false)
   const [productionRunning, setProductionRunning] = useState(false)
   const [campaignProposalRunning, setCampaignProposalRunning] = useState(false)
@@ -766,6 +773,28 @@ export default function ProductProductionStudio(props: {
     await refresh(productionId)
     setMessage('Production 与 Brief revision 已保存；未授权前不会创建 Build 或调用生成能力。')
   }, '保存 Brief revision')
+
+  const prepareCommercialMediaBriefRepair = () => run(async () => {
+    if (!details?.production.id) throw new Error('当前没有可修订的 Production。')
+    const repaired = draftTextAdventureCommercialMediaRepairV1(details)
+    setBriefRepairDraft({ productionId: details.production.id, brief: repaired })
+    setMessage(`已生成 Brief r${(details.brief?.revision ?? 0) + 1} 候选；冻结世界、故事目标和玩法合同均保持不变，请核对媒资数量后再保存。`)
+  }, '生成商业媒资 Brief 修订候选')
+
+  const saveCommercialMediaBriefRepair = () => run(async () => {
+    if (!details?.production.id || briefRepairDraft?.productionId !== details.production.id) {
+      throw new Error('商业媒资 Brief 修订候选不存在或已过期。')
+    }
+    const productionId = details.production.id
+    await saveStoppedProductProductionBriefRevisionV1({
+      scope: props.scope,
+      details,
+      brief: briefRepairDraft.brief,
+    })
+    setBriefRepairDraft(null)
+    await refresh(productionId)
+    setMessage('修订 Brief 已保存到同一 Production；旧 Build 与全部工件保留为审计证据，尚未开始新 Build。')
+  }, '保存商业媒资 Brief revision')
 
   const startProduction = async (productionId: number) => {
     if (productionRunningRef.current) {
@@ -1203,6 +1232,14 @@ export default function ProductProductionStudio(props: {
     ? minimumTextAdventureCommercialImageCountV1(selectedBrief.textAdventure.media.mode) : 0
   const commercialTextAdventureMediaPlanReady = (selectedBrief?.media.imageCount ?? 0)
     >= commercialTextAdventureImageMinimum
+  const commercialMediaRepairAvailable = details?.production.status === 'stopped'
+    && details.build?.status === 'cancelled'
+    && selectedBrief?.qualityProfile === 'commercial-candidate'
+    && selectedBrief.intent.productType === 'text-adventure'
+    && commercialTextAdventureImageMinimum > 0
+    && !commercialTextAdventureMediaPlanReady
+  const activeBriefRepairDraft = briefRepairDraft && briefRepairDraft.productionId === details?.production.id
+    ? briefRepairDraft.brief : null
   const commercialPerformancePassed = performanceGate?.gateReceipt.status === 'passed'
     && performanceGate.evidence.receipt.passed
   const commercialPlaythroughPassed = playthroughGate?.gateReceipt.status === 'passed'
@@ -1273,7 +1310,7 @@ export default function ProductProductionStudio(props: {
   return <div className="grid min-h-[720px] grid-cols-1 bg-bg-base text-text-primary lg:grid-cols-[260px_minmax(0,1fr)]" data-testid="product-production-studio">
     <aside className="border-b border-border bg-bg-surface p-4 lg:border-b-0 lg:border-r">
       <div className="flex items-center justify-between gap-2"><div><small className="font-mono text-[9px] text-accent">PRODUCT-PROD</small><h2 className="font-serif text-base">游戏制作</h2></div><button aria-label="刷新制作列表" onClick={() => void refresh()} className="rounded border border-border p-2 text-text-muted"><RefreshCw className="h-3.5 w-3.5" /></button></div>
-      <button onClick={() => { const nextScale = initialProduct === 'text-adventure' ? 'short-arc' : 'scene'; setSelectedProductionId(null); setDetails(null); setProductType(initialProduct); setScale(nextScale); setTextAdventureWizard(createDefaultTextAdventureProductionWizardValueV1(nextScale)); props.onProductSelected?.(initialProduct); setSuggestions([]); setSourceOptions(null); setSelectionDefaults({}); setSourceSelection(null); setDraft(null); setMessage(''); setError('') }} className="mt-4 flex w-full items-center justify-center gap-2 rounded border border-accent/40 bg-accent/10 px-3 py-2 text-xs text-accent"><Plus className="h-3.5 w-3.5" />新建 Production</button>
+      <button onClick={() => { const nextScale = initialProduct === 'text-adventure' ? 'short-arc' : 'scene'; setSelectedProductionId(null); setDetails(null); setBriefRepairDraft(null); setProductType(initialProduct); setScale(nextScale); setTextAdventureWizard(createDefaultTextAdventureProductionWizardValueV1(nextScale)); props.onProductSelected?.(initialProduct); setSuggestions([]); setSourceOptions(null); setSelectionDefaults({}); setSourceSelection(null); setDraft(null); setMessage(''); setError('') }} className="mt-4 flex w-full items-center justify-center gap-2 rounded border border-accent/40 bg-accent/10 px-3 py-2 text-xs text-accent"><Plus className="h-3.5 w-3.5" />新建 Production</button>
       <div className="mt-4 grid gap-2">{productions.map(row => <button key={row.id} onClick={() => void refresh(row.id)} className={`rounded border p-3 text-left ${selectedProductionId === row.id ? 'border-accent bg-accent/10' : 'border-border bg-bg-base'}`}><strong className="block truncate text-xs">{row.title}</strong><span className="mt-1 flex items-center justify-between text-[9px] text-text-muted"><code>{row.productionKey}</code><em className="not-italic text-accent">{statusLabel(row.status)}</em></span></button>)}{productions.length === 0 && <p className="rounded border border-dashed border-border p-4 text-[10px] leading-relaxed text-text-muted">还没有 Production。会谈只读取冻结 WorldRelease，不会在后台自动开始制作。</p>}</div>
     </aside>
     <main className="min-w-0 p-5 md:p-8">
@@ -1342,7 +1379,7 @@ export default function ProductProductionStudio(props: {
             <button type="button" onClick={() => { setSourceSelection(structuredClone(selectionDefaults[suggestionKey])); setDraft(null) }} className="mt-4 rounded border border-border px-3 py-2 text-[10px] text-text-muted">恢复该起点的推荐素材</button>
           </details>}
         </section>}
-        {draft && <section className="mt-5 rounded border border-border bg-bg-elevated p-5"><div className="flex items-center justify-between"><h2 className="text-sm font-semibold">Brief v3 审查摘要</h2><code className="text-[9px] text-accent">{draft.intent.productType} / {draft.qualityProfile}</code></div><div className="mt-4 grid gap-3 text-[10px] md:grid-cols-3"><article className="rounded bg-bg-base p-3"><strong className="block text-xs">体验</strong><p className="mt-1 text-text-muted">{draft.intent.openingSituation}</p></article><article className="rounded bg-bg-base p-3"><strong className="block text-xs">规模</strong><p className="mt-1 text-text-muted">{draft.scale.targetPlayMinutes} 分钟 · {draft.scale.targetEndingCount} 结局</p>{draft.textAdventure && <p className="mt-1 text-text-muted">{draft.textAdventure.narrative.targetRegionCount} 大区域 / {draft.textAdventure.narrative.targetAreaCount} 区域 / {draft.textAdventure.narrative.targetLocationCount} 地点 / {draft.textAdventure.narrative.targetSceneCount} 场景</p>}</article><article className="rounded bg-bg-base p-3"><strong className="block text-xs">完成合同</strong><p className="mt-1 text-text-muted">可玩预览 · 媒资覆盖 {Math.round(draft.completionContract.minimumMediaCoverage * 100)}%</p>{draft.textAdventure && <p className="mt-1 text-text-muted">主线 1 · 支线 {draft.textAdventure.narrative.targetSideQuestCount} · 区域事件 {draft.textAdventure.narrative.targetAmbientEventCount} · {draft.textAdventure.media.mode}</p>}</article></div>{selectedSuggestion && <p className="mt-4 text-[10px] text-text-muted">起点冲突：{selectedSuggestion.openingConflict}</p>}<p className="mt-2 text-[10px] text-text-muted" data-testid="product-production-source-selection-summary">本次通过世界网关冻结 {draft.source.selection.resourceKeys.length} 项语义资源（{frozenSourceFacetSummary(draft, sourceOptions)}）；上层叙事、媒资和运行状态均由产品 Build 自己拥有。</p>{draft.unresolvedDecisionKeys.length > 0 && <p className="mt-2 rounded border border-error/30 bg-error/5 p-2 text-[10px] text-error">待确认：{draft.unresolvedDecisionKeys.join('、')}</p>}</section>}
+        {draft && <section className="mt-5 rounded border border-border bg-bg-elevated p-5"><div className="flex items-center justify-between"><h2 className="text-sm font-semibold">Brief v3 审查摘要</h2><code className="text-[9px] text-accent">{draft.intent.productType} / {draft.qualityProfile}</code></div><div className="mt-4 grid gap-3 text-[10px] md:grid-cols-3"><article className="rounded bg-bg-base p-3"><strong className="block text-xs">体验</strong><p className="mt-1 text-text-muted">{draft.intent.openingSituation}</p></article><article className="rounded bg-bg-base p-3"><strong className="block text-xs">规模</strong><p className="mt-1 text-text-muted">{draft.scale.targetPlayMinutes} 分钟 · {draft.scale.targetEndingCount} 结局</p>{draft.textAdventure && <p className="mt-1 text-text-muted">{draft.textAdventure.narrative.targetRegionCount} 大区域 / {draft.textAdventure.narrative.targetAreaCount} 区域 / {draft.textAdventure.narrative.targetLocationCount} 地点 / {draft.textAdventure.narrative.targetSceneCount} 场景</p>}</article><article className="rounded bg-bg-base p-3"><strong className="block text-xs">完成合同</strong><p className="mt-1 text-text-muted">可玩预览 · 媒资覆盖 {Math.round(draft.completionContract.minimumMediaCoverage * 100)}% · {draft.media.imageCount} 张图片</p>{draft.textAdventure && <p className="mt-1 text-text-muted">主线 1 · 支线 {draft.textAdventure.narrative.targetSideQuestCount} · 区域事件 {draft.textAdventure.narrative.targetAmbientEventCount} · {draft.textAdventure.media.mode}</p>}</article></div>{selectedSuggestion && <p className="mt-4 text-[10px] text-text-muted">起点冲突：{selectedSuggestion.openingConflict}</p>}<p className="mt-2 text-[10px] text-text-muted" data-testid="product-production-source-selection-summary">本次通过世界网关冻结 {draft.source.selection.resourceKeys.length} 项语义资源（{frozenSourceFacetSummary(draft, sourceOptions)}）；上层叙事、媒资和运行状态均由产品 Build 自己拥有。</p>{draft.unresolvedDecisionKeys.length > 0 && <p className="mt-2 rounded border border-error/30 bg-error/5 p-2 text-[10px] text-error">待确认：{draft.unresolvedDecisionKeys.join('、')}</p>}</section>}
         {draft?.ttrpg?.campaignDesign && <TtrpgCampaignProposalSelector
           value={draft.ttrpg.campaignDesign}
           aiGenerating={campaignProposalRunning}
@@ -1381,6 +1418,15 @@ export default function ProductProductionStudio(props: {
             {mediaAnchor ? <><p className="mt-2 rounded bg-bg-base p-2"><strong>整体风格：</strong>{mediaAnchor.style}</p><ul className="mt-2 grid gap-2">{mediaAnchor.characterAnchors.map(anchor => <li key={anchor.characterKey} className="rounded border border-border bg-bg-base p-3"><span className="flex flex-wrap items-center gap-2"><strong>{anchor.name}</strong><em className="not-italic text-accent">{anchor.role}</em><span className="text-text-muted">{anchor.identity}</span></span><p className="mt-1 leading-5 text-text-muted">{anchor.visualAnchor}</p><span className="mt-2 flex gap-1" aria-label={`${anchor.name} 色板`}>{anchor.palette.map(color => <i key={color} title={color} className="h-4 w-4 rounded border border-border" style={{ backgroundColor: color }} />)}</span></li>)}</ul></> : <p className="mt-2 text-error">视觉圣经读取失败；请保留当前 Build 并检查工件。</p>}
             <p className="mt-3 text-text-muted">若不接受，请取消本 Build，再以“视觉”演化目标创建新版。确认只对当前冻结视觉圣经 hash 有效。</p>
           </div>}
+          {commercialMediaRepairAvailable && <div className="mt-3 rounded border border-accent/40 bg-accent/5 p-4 text-[10px] leading-5 text-text-primary" data-testid="text-adventure-commercial-media-repair">
+            <strong className="block text-xs">旧 Build 已安全取消，可以在同一 Production 修订</strong>
+            <p className="mt-2 text-text-muted">系统只提升商业媒资计划，不改 WorldRelease、冻结来源、故事目标、玩法合同或旧工件。修订候选保存后仍需作者再次授权，才会创建 Build #{(details.build?.buildNumber ?? 0) + 1}。</p>
+            {activeBriefRepairDraft && <div className="mt-3 grid gap-2 sm:grid-cols-3" data-testid="text-adventure-commercial-media-repair-diff">
+              <span className="rounded bg-bg-base p-2">图片：{selectedBrief?.media.imageCount ?? 0} → <strong>{activeBriefRepairDraft.media.imageCount}</strong></span>
+              <span className="rounded bg-bg-base p-2">媒资调用上限：{selectedBrief?.productionBudget.maximumMediaCalls ?? 0} → <strong>{activeBriefRepairDraft.productionBudget.maximumMediaCalls}</strong></span>
+              <span className="rounded bg-bg-base p-2">来源 hash：<strong>保持不变</strong></span>
+            </div>}
+          </div>}
           {canRetryBlocker && <div className="mt-3 rounded border border-error/30 bg-error/5 p-3 text-[10px] text-error"><strong className="block">自动制作停在可恢复边界</strong><span className="mt-1 block">{blockerSummary || '执行能力返回失败；可检查全局 AI 配置后重试。'}</span></div>}
           <div className="mt-4 flex flex-wrap gap-2">
             {details.production.status === 'brief-ready' && <button disabled={busy || productionRunning || authorizationReadiness?.ready !== true} onClick={authorize} className="flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white disabled:opacity-40"><ShieldCheck className="h-3.5 w-3.5" />作者授权并开始自动制作</button>}
@@ -1390,6 +1436,8 @@ export default function ProductProductionStudio(props: {
             {sourceDecisionBlocker && <button disabled={busy || productionRunning} onClick={() => resolveSourceDecision('cancel')} className="flex items-center gap-2 rounded border border-error/40 px-4 py-2 text-xs text-error disabled:opacity-40"><Square className="h-3.5 w-3.5" />取消本次 Build</button>}
             {mediaAnchorBlocker && mediaAnchor && <button disabled={busy || productionRunning || !commercialTextAdventureMediaPlanReady} onClick={() => resolveMediaAnchorDecision('confirm-character-anchors')} className="flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white disabled:opacity-40"><ShieldCheck className="h-3.5 w-3.5" />确认角色锚点并开始出图</button>}
             {mediaAnchorBlocker && <button disabled={busy || productionRunning} onClick={() => resolveMediaAnchorDecision('cancel')} className="flex items-center gap-2 rounded border border-error/40 px-4 py-2 text-xs text-error disabled:opacity-40"><Square className="h-3.5 w-3.5" />拒绝并取消 Build</button>}
+            {commercialMediaRepairAvailable && !activeBriefRepairDraft && <button disabled={busy || productionRunning} onClick={prepareCommercialMediaBriefRepair} className="flex items-center gap-2 rounded border border-accent/40 bg-accent/10 px-4 py-2 text-xs text-accent disabled:opacity-40"><FileCheck2 className="h-3.5 w-3.5" />生成 12 图修订 Brief</button>}
+            {commercialMediaRepairAvailable && activeBriefRepairDraft && <button disabled={busy || productionRunning} onClick={saveCommercialMediaBriefRepair} className="flex items-center gap-2 rounded bg-success px-4 py-2 text-xs text-white disabled:opacity-40"><ShieldCheck className="h-3.5 w-3.5" />保存为 Brief r{(details.brief?.revision ?? 0) + 1}</button>}
             {canRetryBlocker && <button disabled={busy || productionRunning} onClick={retryBlocker} className="flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white"><RefreshCw className="h-3.5 w-3.5" />修正后重试</button>}
             {details.build && ['preview-ready', 'release-ready', 'released'].includes(details.build.status) && <button disabled={busy || productionRunning} onClick={preview} className="flex items-center gap-2 rounded border border-accent/40 bg-accent/10 px-4 py-2 text-xs text-accent"><Play className="h-3.5 w-3.5" />{details.build.status === 'released' ? '试玩此 Build' : '试玩未发布 Build'}</button>}
             {details.build?.status === 'release-ready' && <button disabled={busy || productionRunning || (commercialPerformanceRequired && !commercialQualityPassed)} onClick={publish} className="flex items-center gap-2 rounded bg-success px-4 py-2 text-xs text-white disabled:opacity-40"><Rocket className="h-3.5 w-3.5" />复验并原子发布</button>}

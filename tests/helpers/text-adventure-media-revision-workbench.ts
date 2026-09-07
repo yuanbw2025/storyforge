@@ -327,6 +327,27 @@ export async function seedTextAdventureMediaRevisionWorkbenchV1(imageBase64: str
   }
 }
 
+export async function seedTextAdventureLegacyCommercialGateV1(imageBase64: string) {
+  const seeded = await seedTextAdventureMediaRevisionWorkbenchV1(imageBase64)
+  const now = Date.now()
+  await db.productBuilds.update(seeded.parentBuildId, {
+    status: 'recovery-required',
+    failureJson: canonicalProductProductionJsonV2({
+      taskKey: 'media.anchor-author-gate',
+      code: 'task-executor-failed',
+      attempt: 1,
+      detail: '商业文字冒险媒资计划不足:2/12；需要作者取消旧 Build 并修订 Brief。',
+    }),
+    completedAt: null,
+    updatedAt: now,
+  })
+  await db.productProductions.update(seeded.productionId, {
+    status: 'producing',
+    updatedAt: now,
+  })
+  return seeded
+}
+
 export async function finalizeTextAdventureMediaRevisionBuildV1(input: {
   scope: WorkspaceScope
   productionId: number

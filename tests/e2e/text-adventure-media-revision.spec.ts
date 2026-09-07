@@ -48,6 +48,113 @@ function solidPng(width: number, height: number, color: [number, number, number,
   ])
 }
 
+test('旧两图商业 Build 可在同一 Production 取消、修订为十二图 Brief 并重新授权', async ({ page }) => {
+  test.setTimeout(90_000)
+  await page.addInitScript(() => {
+    localStorage.setItem('storyforge_guide_completed', 'text-adventure-legacy-media-repair-e2e')
+    localStorage.setItem('storyforge-ai-api-key-remember', 'true')
+    localStorage.setItem('storyforge-ai-config', JSON.stringify({
+      provider: 'agnes', apiKey: 'e2e-existing-global-key', model: 'agnes-2.0-flash',
+      baseUrl: 'https://apihub.agnes-ai.com/v1', temperature: 0, maxTokens: 0,
+    }))
+  })
+  let imageRequests = 0
+  await page.route('**/images/generations', async route => {
+    imageRequests += 1
+    await route.fulfill({ status: 503, contentType: 'application/json', body: '{"error":"unexpected image request"}' })
+  })
+  await page.route('**/chat/completions', async route => {
+    await route.fulfill({ status: 503, contentType: 'application/json', body: '{"error":"intentional e2e stop"}' })
+  })
+  const image = solidPng(1280, 720, [28, 52, 70, 255])
+  await page.goto('./')
+  const seeded = await page.evaluate(async imageBase64 => {
+    const importer = new Function('path', 'return import(path)') as (path: string) => Promise<any>
+    const fixture = await importer('/storyforge/tests/helpers/text-adventure-media-revision-workbench.ts')
+    return fixture.seedTextAdventureLegacyCommercialGateV1(imageBase64)
+  }, image.toString('base64'))
+
+  await page.reload()
+  await page.getByTestId('product-tab-text-games').click()
+  await page.getByRole('button', { name: '制作', exact: true }).click()
+  const studio = page.getByTestId('product-production-studio')
+  await expect(studio).toContainText('潮门灯塔 · 媒资修订验收')
+  await expect(page.getByTestId('text-adventure-media-plan-blocker')).toContainText('2 张图片')
+  await expect(page.getByTestId('text-adventure-media-plan-blocker')).toContainText('12 张底线')
+  await expect(studio.getByRole('button', { name: '确认角色锚点并开始出图' })).toBeDisabled()
+  expect(imageRequests).toBe(0)
+
+  await studio.getByRole('button', { name: '拒绝并取消 Build' }).click()
+  await expect(page.getByTestId('product-production-command-activity')).toContainText('处理角色视觉锚点决策 · succeeded')
+  await expect(page.getByTestId('text-adventure-commercial-media-repair')).toContainText('旧 Build 已安全取消')
+  await studio.getByRole('button', { name: '生成 12 图修订 Brief' }).click()
+  const diff = page.getByTestId('text-adventure-commercial-media-repair-diff')
+  await expect(diff).toContainText('图片：2 → 12')
+  await expect(diff).toContainText('来源 hash：保持不变')
+  await studio.getByRole('button', { name: '保存为 Brief r2' }).click()
+  await expect(studio).toContainText('r2 · 草稿')
+  await expect(studio).toContainText('#1 · 已取消')
+
+  const revised = await page.evaluate(async productionId => {
+    const importer = new Function('path', 'return import(path)') as (path: string) => Promise<any>
+    const { db } = await importer('/storyforge/src/lib/db/schema.ts')
+    const production = await db.productProductions.get(productionId)
+    const briefs = await db.productProductionBriefs.where('productionId').equals(productionId).sortBy('revision')
+    const builds = await db.productBuilds.where('productionId').equals(productionId).sortBy('buildNumber')
+    return {
+      productionKey: production?.productionKey,
+      status: production?.status,
+      briefs: briefs.map((row: any) => {
+        const brief = JSON.parse(row.briefJson)
+        return {
+          revision: row.revision, status: row.status, worldHash: brief.source.worldContentHash,
+          imageCount: brief.media.imageCount,
+          maximumMediaCalls: brief.productionBudget.maximumMediaCalls,
+        }
+      }),
+      builds: builds.map((row: any) => ({ number: row.buildNumber, status: row.status })),
+    }
+  }, seeded.productionId)
+  expect(revised.status).toBe('brief-ready')
+  expect(revised.briefs).toHaveLength(2)
+  expect(revised.briefs[0]).toMatchObject({ revision: 1, imageCount: 2 })
+  expect(revised.briefs[1]).toMatchObject({ revision: 2, status: 'draft', imageCount: 12, maximumMediaCalls: 12 })
+  expect(revised.briefs[1].worldHash).toBe(revised.briefs[0].worldHash)
+  expect(revised.builds).toEqual([{ number: 1, status: 'cancelled' }])
+
+  const authorize = studio.getByRole('button', { name: '作者授权并开始自动制作' })
+  await expect(authorize).toBeEnabled()
+  await authorize.click()
+  await expect.poll(async () => page.evaluate(async productionId => {
+    const importer = new Function('path', 'return import(path)') as (path: string) => Promise<any>
+    const { db } = await importer('/storyforge/src/lib/db/schema.ts')
+    const build = await db.productBuilds.where('[productionId+buildNumber]').equals([productionId, 2]).first()
+    return build?.planRevision ?? 0
+  }, seeded.productionId), { timeout: 20_000 }).toBe(1)
+
+  const lineage = await page.evaluate(async productionId => {
+    const importer = new Function('path', 'return import(path)') as (path: string) => Promise<any>
+    const { db } = await importer('/storyforge/src/lib/db/schema.ts')
+    const rows = await db.productBuilds.where('productionId').equals(productionId).sortBy('buildNumber')
+    const child = rows[1]
+    const plan = JSON.parse(child.planJson)
+    return {
+      builds: rows.map((row: any) => ({
+        number: row.buildNumber, briefRevision: row.briefRevision,
+        parentBuildNumber: row.parentBuildNumber, status: row.status,
+      })),
+      visualTasks: plan.tasks.filter((task: any) => /^media\.visual\.\d{3}$/.test(task.taskKey)).length,
+    }
+  }, seeded.productionId)
+  expect(lineage.builds[0]).toMatchObject({ number: 1, briefRevision: 1, status: 'cancelled' })
+  expect(lineage.builds[1]).toMatchObject({ number: 2, briefRevision: 2, parentBuildNumber: 1 })
+  expect(lineage.visualTasks).toBe(12)
+  expect(imageRequests).toBe(0)
+
+  const stop = studio.getByRole('button', { name: '停止', exact: true })
+  if (await stop.isVisible()) await stop.click()
+})
+
 test('作者退回单图后从真实文件输入派生新 Build，并只在新 hash 上重新通过逐图验收', async ({ page }) => {
   test.setTimeout(120_000)
   await page.addInitScript(() => {
