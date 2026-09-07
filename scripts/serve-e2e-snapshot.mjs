@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process'
-import { cp, mkdtemp, rm, symlink } from 'node:fs/promises'
+import { cp, mkdir, mkdtemp, rm, symlink } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { basename, join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 
 const workspaceRoot = process.cwd()
 const snapshotRoot = await mkdtemp(join(tmpdir(), 'storyforge-e2e-snapshot-'))
@@ -10,6 +10,12 @@ const configuredPort = Number(portFlagIndex >= 0 ? process.argv[portFlagIndex + 
 const port = Number.isInteger(configuredPort) && configuredPort > 0 ? configuredPort : 4178
 const snapshotEntries = [
   'data',
+  'showcase/short-novel',
+  'showcase/screenplay',
+  'showcase/comic/before-rain-stops/art/final/community-preview-ui.jpg',
+  'showcase/comic/borrowed-flame/art/final/community-preview-ui.jpg',
+  'showcase/comic/before-the-gun/art/final/community-preview-ui.jpg',
+  'showcase/comic/moon-buys-bread/art/final/community-preview-ui.jpg',
   'index.html',
   'package.json',
   'postcss.config.js',
@@ -22,7 +28,9 @@ const snapshotEntries = [
 ]
 
 for (const entry of snapshotEntries) {
-  await cp(join(workspaceRoot, entry), join(snapshotRoot, entry), {
+  const snapshotTarget = join(snapshotRoot, entry)
+  await mkdir(dirname(snapshotTarget), { recursive: true })
+  await cp(join(workspaceRoot, entry), snapshotTarget, {
     recursive: true,
     filter(source) {
       // The fixture supplies an isolated non-secret provider binding. Never
