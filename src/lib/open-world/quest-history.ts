@@ -20,6 +20,19 @@ const INTENT_KIND: Partial<Record<string, TextOpenWorldQuestHistoryKindV1>> = {
   expire: 'expired', withdraw: 'withdrawn', reoffer: 'reoffered',
 }
 
+const HISTORY_KIND_LABEL: Partial<Record<TextOpenWorldQuestHistoryKindV1, string>> = {
+  accepted: '已接取',
+  activated: '已开始',
+  suspended: '进入等待',
+  resumed: '继续推进',
+  completed: '已完成',
+  failed: '永久失败',
+  abandoned: '已放弃',
+  expired: '已过期',
+  withdrawn: '已撤回',
+  reoffered: '已重新开放',
+}
+
 /** Read-only task ledger rebuilt from canonical Effect events; it owns no duplicate persistence. */
 export function projectTextOpenWorldQuestHistoryV1(input: {
   runtimePackage: TextOpenWorldRuntimePackageV1 | string | unknown
@@ -50,7 +63,9 @@ export function projectTextOpenWorldQuestHistoryV1(input: {
           sequence: event.sequence, commandId: applied.commandId, instanceKey: authorization.instanceKey,
           definitionKey: authorization.definitionKey, kind, worldMinute: authorization.worldMinute,
           stageKey: step.stageKey, objectiveKey: null, trackingSlot: null,
-          summary: kind === 'stage-advanced' && stageTitle ? `${definition.title}推进至“${stageTitle}”` : `${definition.title}：${kind}`,
+          summary: kind === 'stage-advanced' && stageTitle
+            ? `${definition.title}推进至“${stageTitle}”`
+            : `${definition.title}：${HISTORY_KIND_LABEL[kind] ?? kind}`,
         })
       })
     } else if (authorization?.kind === 'quest-objective') {

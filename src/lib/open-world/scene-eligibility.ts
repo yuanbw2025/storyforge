@@ -60,13 +60,21 @@ export function effectiveTextOpenWorldSceneParticipantKeysV1(
 export function textOpenWorldSceneQuestInstanceKeysV1(
   scene: TextOpenWorldAuthoredSceneV2,
   context: TextOpenWorldActionProjectionContextV1,
+  actions?: TextOpenWorldParsedModulesV1['actions'],
 ): string[] {
   if (!scene.questKey) return []
   const instanceKeys = Object.entries(context.questDefinitionKeyByInstanceKey)
     .filter(([, questKey]) => questKey === scene.questKey)
     .map(([instanceKey]) => instanceKey)
   if (scene.sourceKind === 'quest-offer') {
-    return instanceKeys.filter(instanceKey => context.questStatusByInstanceKey[instanceKey] === 'revealed')
+    const restartActionKey = scene.questKey == null ? null : `action.restart.${scene.questKey}`
+    const hasGovernedRestart = actions != null && actions.version >= 16 && restartActionKey != null
+      && scene.actionKeys.includes(restartActionKey)
+      && actions.actions.some(action => action.key === restartActionKey && action.category === 'restart-quest')
+    return instanceKeys.filter(instanceKey => (
+      context.questStatusByInstanceKey[instanceKey] === 'revealed'
+      || hasGovernedRestart && context.questStatusByInstanceKey[instanceKey] === 'abandoned'
+    ))
   }
   if (scene.sourceKind === 'quest-objective') {
     return instanceKeys.filter(instanceKey => (
@@ -88,8 +96,9 @@ export function textOpenWorldSceneQuestInstanceKeysV1(
 function questLifecycleAllows(
   scene: TextOpenWorldAuthoredSceneV2,
   context: TextOpenWorldActionProjectionContextV1,
+  actions: TextOpenWorldParsedModulesV1['actions'],
 ): boolean {
-  return !scene.questKey || textOpenWorldSceneQuestInstanceKeysV1(scene, context).length > 0
+  return !scene.questKey || textOpenWorldSceneQuestInstanceKeysV1(scene, context, actions).length > 0
 }
 
 /**
@@ -125,5 +134,5 @@ export function textOpenWorldSceneEligibleV1(input: {
     modules.narrative.scenes,
   )
   if (!participantKeys.every(actorKey => presentActorKeys.has(actorKey))) return false
-  return questLifecycleAllows(scene, context)
+  return questLifecycleAllows(scene, context, modules.actions)
 }

@@ -166,6 +166,8 @@ export interface TextOpenWorldSystemFinalizeInputContextV1 {
   regionPacks: Array<{ regionKey: string; title: string; ordinaryQuestSeedCount: number; templateSeedCount: number; randomEventSeedCount: number }>
   regions: Array<{ key: string; title: string; description: string }>
   actors: Array<{ key: string; name: string; portrayal: string; regionKey: string }>
+  /** Missing from the pre-G4-05 durable P10 context contract; omission means Action v15. */
+  questLifecycleActionVersion?: 15 | 16
   quests: Array<Pick<TextOpenWorldQuestDesignDocumentsV1['quests'][number], 'key' | 'type' | 'title' | 'regionKeys' | 'estimatedMinutes' | 'lifecyclePolicy' | 'timePolicy'>>
   director: {
     templates: Array<Pick<TextOpenWorldDirectorDecksV1['templates'][number], 'key' | 'questKey' | 'regionKeys' | 'variantTextRequirementKeys'>>
@@ -222,7 +224,7 @@ const MODULE_SOURCES: Record<TextOpenWorldRuntimeModuleKeyV1, TextOpenWorldProdu
 }
 
 const MODULE_SCHEMA_VERSIONS: Record<TextOpenWorldRuntimeModuleKeyV1, number> = {
-  narrative: 2, world: 3, actors: 3, quests: 2, actions: 15, progression: 1,
+  narrative: 2, world: 3, actors: 3, quests: 2, actions: 16, progression: 1,
   combat: 3, items: 1, crafting: 2, economy: 2, relationships: 3,
   'time-weather': 2, director: 2, knowledge: 1, presentation: 2,
 }
@@ -439,6 +441,10 @@ async function buildContext(scope: WorkspaceScope, buildId: number): Promise<Tex
     })),
     regions: artifacts.map.regions.map(region => ({ key: region.key, title: region.title, description: region.description })),
     actors: artifacts.npcs.actors.map(actor => ({ key: actor.key, name: actor.name, portrayal: actor.portrayal, regionKey: actor.regionKey })),
+    ...(artifacts.quests.governance.allAbandonableQuestStagesCovered === true
+      && artifacts.quests.governance.restartActionsRequireOriginalOfferRoute === true
+      ? { questLifecycleActionVersion: 16 as const }
+      : {}),
     quests: artifacts.quests.quests.map(quest => ({
       key: quest.key, type: quest.type, title: quest.title, regionKeys: quest.regionKeys,
       estimatedMinutes: quest.estimatedMinutes, lifecyclePolicy: quest.lifecyclePolicy, timePolicy: quest.timePolicy,
@@ -463,11 +469,16 @@ export async function readTextOpenWorldSystemFinalizeInputContextV1(input: Assem
 async function parseContext(value: string): Promise<TextOpenWorldSystemFinalizeInputContextV1> {
   const row = record(parseProductionModelJsonObjectV1(value, 'text-open-world-system-finalize-input'), 'context')
   const expected = ['schema', 'version', 'productInstanceKey', 'artifactHashes', 'gameBrief', 'experience', 'gameplayRuleset', 'presentationProfile', 'player', 'regionPacks', 'regions', 'actors', 'quests', 'director', 'scenes', 'mediaSlotDemands', 'contextSelectionHash']
+  if (row.questLifecycleActionVersion !== undefined) expected.push('questLifecycleActionVersion')
   exactKeys(row, expected, 'context')
   if (row.schema !== 'storyforge.text-open-world-system-finalize-input' || row.version !== 1 || !isSha256Hash(row.contextSelectionHash)) fail('Context身份无效')
   const body = { ...row }; delete body.contextSelectionHash
   if (await hashProductProductionValueV2(body) !== row.contextSelectionHash) fail('Context选择Hash不匹配')
   const context = row as unknown as TextOpenWorldSystemFinalizeInputContextV1
+  if (context.questLifecycleActionVersion !== undefined
+    && context.questLifecycleActionVersion !== 15 && context.questLifecycleActionVersion !== 16) {
+    fail('任务生命周期Action版本无效')
+  }
   if (!context.artifactHashes.every(item => isSha256Hash(item.contentHash) && isSha256Hash(item.payloadHash))
     || context.artifactHashes.length !== P10_INPUT_SPECS.length
     || !same(context.artifactHashes.map(item => item.artifactKey), P10_INPUT_SPECS.map(item => item[0]))) fail('Context Artifact Hash清单无效')
@@ -592,7 +603,8 @@ async function createArtifacts(input: {
     sceneScriptsHash: hash('text-open-world.scene-scripts'), choiceContractsHash: hash('text-open-world.choice-contracts'),
     actionBindingsHash: hash('text-open-world.action-bindings'),
     runtimeModules: TEXT_OPEN_WORLD_RUNTIME_MODULE_KEYS_V1.map(moduleKey => ({
-      moduleKey, schemaVersion: MODULE_SCHEMA_VERSIONS[moduleKey], sourceArtifactKeys: MODULE_SOURCES[moduleKey], status: 'ready-for-v3-assembly' as const,
+      moduleKey, schemaVersion: moduleKey === 'actions' ? context.questLifecycleActionVersion ?? 15 : MODULE_SCHEMA_VERSIONS[moduleKey],
+      sourceArtifactKeys: MODULE_SOURCES[moduleKey], status: 'ready-for-v3-assembly' as const,
     })),
     uiConsumers: context.presentationProfile.consumerSlots.map(slot => ({
       key: slot.key,

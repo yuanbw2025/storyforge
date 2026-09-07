@@ -67,6 +67,14 @@ test('文字开放世界玩家壳在桌面三栏与移动五入口之间保持�
   expect(desktopGeometry.left.right).toBeLessThanOrEqual(desktopGeometry.main.left + 0.5)
   expect(desktopGeometry.main.right).toBeLessThanOrEqual(desktopGeometry.right.left + 0.5)
 
+  await left.getByRole('button', { name: '任务', exact: true }).click()
+  await expect(main).toHaveAttribute('data-open-world-view', 'quests')
+  await expect(page.getByTestId('text-open-world-quest-log')).toBeVisible()
+  await expect(page.getByTestId('text-open-world-quest-log')).toContainText('断流的盐渠')
+  await expect(page.getByTestId('text-open-world-quest-log')).not.toContainText('交付短缺物资')
+  await page.getByRole('button', { name: '返回当前场景', exact: true }).click()
+  await expect(main).toHaveAttribute('data-open-world-view', 'scene')
+
   const timelineBeforeConfirmation = await page.getByTestId('text-open-world-global-status').textContent()
   const riskyAction = page.locator('button').filter({ hasText: '偷取盐露药剂' }).first()
   const underlyingAction = page.locator('button').filter({ hasText: '休息' }).first()

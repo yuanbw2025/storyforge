@@ -79,7 +79,7 @@ export type TextOpenWorldSceneProjectionV1 =
   | {
       status: 'ready'
       narrativeVersion: 2
-      actionVersion: 15
+      actionVersion: 15 | 16
       currentLocationKey: string
       randomEventPolicy: 'hidden-without-current-activation-evidence'
       scenes: TextOpenWorldProjectedSceneV1[]
@@ -127,7 +127,7 @@ export function projectTextOpenWorldScenesV1(
   const currentLocationKey = projection.state.map.currentLocationKey
   const randomEventPolicy = 'hidden-without-current-activation-evidence' as const
 
-  if (modules.narrative.version !== 2 || modules.actions.version !== 15) {
+  if (modules.narrative.version !== 2 || !('inputBindings' in modules.actions)) {
     return {
       status: 'unsupported',
       reason: 'narrative-v2-and-action-v15-required',
@@ -249,7 +249,7 @@ export function projectTextOpenWorldScenesV1(
   return {
     status: 'ready',
     narrativeVersion: 2,
-    actionVersion: 15,
+    actionVersion: actions.version,
     currentLocationKey,
     randomEventPolicy,
     scenes,

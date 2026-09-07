@@ -107,9 +107,13 @@ describe('Text Open World vNext · governed Quest lifecycle', () => {
     catalog.apply({ state, authorization: resumed })
     const objective = createTextOpenWorldObjectiveCatalogV1(runtimePackage)
     objective.apply({ state, authorization: objective.prepare({ instanceKey: MAIN_INSTANCE_KEY, objectiveKey: 'objective.main.1', state }) })
+    state.quests.tracking.primaryInstanceKey = MAIN_INSTANCE_KEY
     const completed = catalog.prepare({ instanceKey: MAIN_INSTANCE_KEY, state, transitions: [{ toStatus: 'completed', stageKey: 'quest-stage.main.1' }] })
     catalog.apply({ state, authorization: completed })
     expect(state.quests.instancesByKey[MAIN_INSTANCE_KEY]).toMatchObject({ status: 'completed', terminalAtWorldMinute: 480 })
+    // Frozen Action v14 Releases preserve their historical projection exactly;
+    // Action v16 owns deterministic terminal tracking cleanup.
+    expect(state.quests.tracking.primaryInstanceKey).toBe(MAIN_INSTANCE_KEY)
   })
 
   it('不限时普通任务可放弃并重新揭示，失败则永久终结', () => {
@@ -144,7 +148,7 @@ describe('Text Open World vNext · governed Quest lifecycle', () => {
       .toThrow('不存在合法迁移')
   })
 
-  it('限时任务只有到达实例截止时间后才能过期，授权篡改和裸迁移Effect均被拒绝', async () => {
+  it('限时任务放弃后保留原截止时间，并在到期时规范过期且不能重接', async () => {
     const runtimePackage = createTextOpenWorldVNextFixture()
     const state = createInitialTextOpenWorldSessionProjectionV1(runtimePackage).state
     const timed = createTextOpenWorldDirectorQuestInstanceV1(runtimePackage, {
@@ -153,20 +157,78 @@ describe('Text Open World vNext · governed Quest lifecycle', () => {
     state.time.worldMinute = 600
     state.quests.instancesByKey[timed.instanceKey] = timed
     const catalog = createTextOpenWorldQuestTransitionCatalogV1(runtimePackage)
+    const deadlineWorldMinute = timed.deadlineWorldMinute!
+    const abandonment = catalog.prepare({
+      instanceKey: timed.instanceKey, state,
+      transitions: [{ toStatus: 'abandoned', stageKey: null }],
+    })
+    state.quests.tracking.pinnedInstanceKeys = [timed.instanceKey]
+    catalog.apply({ state, authorization: abandonment })
+    expect(state.quests.instancesByKey[timed.instanceKey]).toMatchObject({
+      status: 'abandoned', currentStageKey: null, deadlineWorldMinute,
+      terminalAtWorldMinute: 600,
+    })
+    expect(state.quests.tracking.pinnedInstanceKeys).toEqual([timed.instanceKey])
+    state.time.worldMinute = deadlineWorldMinute - 1
     expect(() => catalog.prepare({ instanceKey: timed.instanceKey, state, transitions: [{ toStatus: 'expired', stageKey: null }] }))
       .toThrow('任务尚未到期')
-    state.time.worldMinute = timed.deadlineWorldMinute!
+    state.time.worldMinute = deadlineWorldMinute
     const expiration = catalog.prepare({ instanceKey: timed.instanceKey, state, transitions: [{ toStatus: 'expired', stageKey: null }] })
     const forged = structuredClone(expiration)
-    forged.transitions[0].fromStatus = 'active'
+    forged.transitions[0].fromStatus = 'revealed'
     expect(() => catalog.assertAuthorization({ state, authorization: forged })).toThrow('授权与权威状态不一致')
     catalog.apply({ state, authorization: expiration })
-    expect(state.quests.instancesByKey[timed.instanceKey]).toMatchObject({ status: 'expired', terminalAtWorldMinute: timed.deadlineWorldMinute })
+    expect(state.quests.instancesByKey[timed.instanceKey]).toMatchObject({
+      status: 'expired', currentStageKey: null, deadlineWorldMinute,
+      terminalAtWorldMinute: deadlineWorldMinute,
+    })
+    expect(() => catalog.prepare({
+      instanceKey: timed.instanceKey, state,
+      transitions: [{ toStatus: 'available', stageKey: null }],
+    })).toThrow('不存在合法迁移')
 
     const initial = createInitialTextOpenWorldSessionProjectionV1(runtimePackage).state
     await expect(createTextOpenWorldEffectCatalogV1(runtimePackage).plan({
       effectKeys: ['effect.accept-main'], claimKey: 'claim.unauthorized-quest-transition', state: initial,
     })).rejects.toThrow('缺少QuestTransition授权')
+  })
+
+  it('即使旧Release把限时普通任务标成abandon-restart，状态机也拒绝重新开放', () => {
+    const runtimePackage = addRestartableOrdinaryQuest()
+    const definition = (runtimePackage.modules.quests.payload as any).quests
+      .find((quest: any) => quest.key === 'quest.ordinary.1')
+    definition.timePolicy = 'timed'
+    definition.expirationMinutes = 120
+    const actions = runtimePackage.modules.actions.payload as any
+    actions.effects.push(
+      { key: 'effect.expire-ordinary-unstarted', operation: 'transition-quest', payload: { questKey: 'quest.ordinary.1', status: 'expired', stageKey: null } },
+      { key: 'effect.expire-ordinary-active', operation: 'transition-quest', payload: { questKey: 'quest.ordinary.1', status: 'expired', stageKey: 'quest-stage.ordinary.1' } },
+    )
+    actions.actions.push({
+      key: 'action.expire-ordinary-unstarted', category: 'quest-action', label: '过期未开始普通任务', description: '系统关闭到期任务。',
+      actorScope: 'system', targetScope: 'quest', locationKeys: [], requirementConditionKeys: [], costEffectKeys: [],
+      successEffectKeys: ['effect.expire-ordinary-unstarted'], failureEffectKeys: [], timeCostMinutes: 0,
+      confirmationPolicy: 'never', repeatPolicy: 'repeatable', cooldownMinutes: null,
+    }, {
+      key: 'action.expire-ordinary-active', category: 'quest-action', label: '过期进行中普通任务', description: '系统关闭到期任务。',
+      actorScope: 'system', targetScope: 'quest', locationKeys: [], requirementConditionKeys: [], costEffectKeys: [],
+      successEffectKeys: ['effect.expire-ordinary-active'], failureEffectKeys: [], timeCostMinutes: 0,
+      confirmationPolicy: 'never', repeatPolicy: 'repeatable', cooldownMinutes: null,
+    })
+    const state = createInitialTextOpenWorldSessionProjectionV1(runtimePackage).state
+    const catalog = createTextOpenWorldQuestTransitionCatalogV1(runtimePackage)
+    catalog.apply({ state, authorization: catalog.prepare({
+      instanceKey: ORDINARY_INSTANCE_KEY, state,
+      transitions: [
+        { toStatus: 'accepted', stageKey: null },
+        { toStatus: 'active', stageKey: 'quest-stage.ordinary.1' },
+        { toStatus: 'abandoned', stageKey: 'quest-stage.ordinary.1' },
+      ],
+    }) })
+    expect(() => catalog.prepare({
+      instanceKey: ORDINARY_INSTANCE_KEY, state,
+      transitions: [{ toStatus: 'available', stageKey: null }],
+    })).toThrow('只有不限时、可重接的固定普通任务')
   })
 
   it('同一模板的多个任务实例分别完成Objective，不会按定义串改另一实例', () => {

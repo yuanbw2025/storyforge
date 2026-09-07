@@ -281,7 +281,7 @@ export function createTextOpenWorldActionRegistryV1(value: TextOpenWorldRuntimeP
       let validTargetKeys = action.targetScope === 'none' ? [] : [...(context.validTargetKeysByScope[action.targetScope] ?? [])]
       if (sceneExclusivePlayerAction && action.targetScope === 'quest') {
         const eligibleQuestInstanceKeys = new Set(eligibleOwningScenes.flatMap(scene => (
-          textOpenWorldSceneQuestInstanceKeysV1(scene, context)
+          textOpenWorldSceneQuestInstanceKeysV1(scene, context, modules.actions)
         )))
         validTargetKeys = validTargetKeys.filter(instanceKey => eligibleQuestInstanceKeys.has(instanceKey))
       }
@@ -423,7 +423,7 @@ export function createTextOpenWorldActionRegistryV1(value: TextOpenWorldRuntimeP
         const crime = modules.relationships.crimeActions.find(item => item.actionKey === action.key)
         validTargetKeys = crime ? validTargetKeys.filter(actorKey => actorKey === crime.targetActorKey) : []
       }
-      if (action.targetScope === 'quest' && ['accept-quest', 'abandon-quest', 'quest-action'].includes(action.category)) {
+      if (action.targetScope === 'quest' && ['accept-quest', 'restart-quest', 'abandon-quest', 'quest-action'].includes(action.category)) {
         const transitionDefinitions = [...action.costEffectKeys, ...action.successEffectKeys]
           .map(effectKey => effectByKey.get(effectKey))
           .filter((effect): effect is Extract<TextOpenWorldEffectDefinitionV1, { operation: 'transition-quest' }> => effect?.operation === 'transition-quest')
@@ -432,10 +432,13 @@ export function createTextOpenWorldActionRegistryV1(value: TextOpenWorldRuntimeP
           ? validTargetKeys.filter(instanceKey => context.questDefinitionKeyByInstanceKey[instanceKey] === [...questKeys][0])
           : []
         if (action.category === 'accept-quest') validTargetKeys = validTargetKeys.filter(instanceKey => context.questStatusByInstanceKey[instanceKey] === 'revealed')
+        if (action.category === 'restart-quest') validTargetKeys = validTargetKeys.filter(instanceKey => (
+          context.questStatusByInstanceKey[instanceKey] === 'abandoned'
+        ))
         if (action.category === 'abandon-quest') {
           const abandonedStageKey = transitionDefinitions[0]?.payload.stageKey ?? null
           validTargetKeys = validTargetKeys.filter(instanceKey => (
-            ['active', 'suspended'].includes(context.questStatusByInstanceKey[instanceKey])
+            ['revealed', 'accepted', 'active', 'suspended'].includes(context.questStatusByInstanceKey[instanceKey])
             && context.questStageKeyByInstanceKey[instanceKey] === abandonedStageKey
           ))
         }
@@ -454,7 +457,7 @@ export function createTextOpenWorldActionRegistryV1(value: TextOpenWorldRuntimeP
               : null
             validTargetKeys = expiration
               ? validTargetKeys.filter(instanceKey => (
-                  ['revealed', 'active', 'suspended'].includes(context.questStatusByInstanceKey[instanceKey])
+                  ['revealed', 'accepted', 'active', 'suspended', 'abandoned'].includes(context.questStatusByInstanceKey[instanceKey])
                   && context.questStageKeyByInstanceKey[instanceKey] === expiration.payload.stageKey
                   && context.worldMinute >= (context.questDeadlineWorldMinuteByInstanceKey[instanceKey] ?? Number.MAX_SAFE_INTEGER)
                 ))

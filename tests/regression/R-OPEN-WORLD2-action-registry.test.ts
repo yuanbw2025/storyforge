@@ -326,4 +326,30 @@ describe('Text Open World vNext · unified Action registry and availability proj
     expect(wrongStage.find(item => item.action.key === 'action.abandon-supplies'))
       .toMatchObject({ available: false, validTargetKeys: [] })
   })
+
+  it('限时任务过期Action覆盖accepted与abandoned，但截止时间前保持不可用', () => {
+    const registry = createTextOpenWorldActionRegistryV1(createTextOpenWorldVNextFixture())
+    const accepted = 'quest-instance.timed.accepted'
+    const abandoned = 'quest-instance.timed.abandoned'
+    const base = {
+      validTargetKeysByScope: { quest: [accepted, abandoned] },
+      questDefinitionKeyByInstanceKey: {
+        [accepted]: 'quest.template.supplies', [abandoned]: 'quest.template.supplies',
+      },
+      questStatusByInstanceKey: { [accepted]: 'accepted' as const, [abandoned]: 'abandoned' as const },
+      questStageKeyByInstanceKey: { [accepted]: null, [abandoned]: 'quest-stage.template.supplies' },
+      questDeadlineWorldMinuteByInstanceKey: { [accepted]: 600, [abandoned]: 600 },
+    }
+    const beforeDeadline = registry.project(context({ actorKey: 'system', worldMinute: 599, ...base }))
+    expect(beforeDeadline.find(item => item.action.key === 'action.expire-supplies-unstarted'))
+      .toMatchObject({ available: false, validTargetKeys: [] })
+    expect(beforeDeadline.find(item => item.action.key === 'action.expire-supplies-active'))
+      .toMatchObject({ available: false, validTargetKeys: [] })
+
+    const atDeadline = registry.project(context({ actorKey: 'system', worldMinute: 600, ...base }))
+    expect(atDeadline.find(item => item.action.key === 'action.expire-supplies-unstarted'))
+      .toMatchObject({ available: true, validTargetKeys: [accepted] })
+    expect(atDeadline.find(item => item.action.key === 'action.expire-supplies-active'))
+      .toMatchObject({ available: true, validTargetKeys: [abandoned] })
+  })
 })

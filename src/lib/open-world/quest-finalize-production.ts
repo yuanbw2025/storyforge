@@ -57,6 +57,8 @@ export interface TextOpenWorldQuestFinalizeInputContextV1 {
   npcRuntimeCatalog: TextOpenWorldNpcRuntimeCatalogV1
   mapInteractionCatalog: TextOpenWorldMapInteractionCatalogV1
   objectiveBindingDemands: ObjectiveBindingDemandV1[]
+  /** Missing from the pre-G4-05 durable P8F context; omission compiles the legacy contract. */
+  questLifecycleContract?: 'governed-v16'
   contextSelectionHash: string
 }
 
@@ -199,6 +201,9 @@ function buildObjectiveDemands(
 }
 
 async function validateUpstream(context: Omit<TextOpenWorldQuestFinalizeInputContextV1, 'contextSelectionHash'>): Promise<void> {
+  if (context.questLifecycleContract !== undefined && context.questLifecycleContract !== 'governed-v16') {
+    fail('Quest生命周期生产合同无效')
+  }
   const artifacts: Array<[Record<string, unknown>, string, string]> = [
     [context.mainlineThread as unknown as Record<string, unknown>, 'mainlineThreadHash', 'MainlineThread'],
     [context.significantThreads as unknown as Record<string, unknown>, 'significantThreadsHash', 'SignificantThreads'],
@@ -310,7 +315,7 @@ async function loadContext(input: { scope: WorkspaceScope; productionId: number;
     mapInteractionCatalog: values[10] as TextOpenWorldMapInteractionCatalogV1,
   }
   const body: Omit<TextOpenWorldQuestFinalizeInputContextV1, 'contextSelectionHash'> = {
-    ...base, objectiveBindingDemands: buildObjectiveDemands(base),
+    ...base, objectiveBindingDemands: buildObjectiveDemands(base), questLifecycleContract: 'governed-v16',
   }
   await validateUpstream(body)
   const context = { ...body, contextSelectionHash: await hashProductProductionValueV2(body) }
@@ -506,7 +511,9 @@ async function createArtifacts(input: {
   context: TextOpenWorldQuestFinalizeInputContextV1
   draft: QuestFinalizeDraftV1
   createdAt: number
+  lifecycleContract?: 'legacy' | 'governed-v16'
 }): Promise<TextOpenWorldQuestFinalizeArtifactsV1> {
+  const governedLifecycle = input.lifecycleContract !== 'legacy'
   const conditions: TextOpenWorldConditionDefinitionV1[] = []
   const effects: TextOpenWorldEffectDefinitionV1[] = []
   const actions: TextOpenWorldActionDefinitionV1[] = []
@@ -793,12 +800,21 @@ async function createArtifacts(input: {
     const draft = input.draft.objectives[index]!
     const definitions = requirementBindings.filter(binding => objective.requirementKeys.includes(binding.requirementKey)).flatMap(binding => binding.definitionKeys)
     const stageConditionKey = `condition.objective.${objective.key}.stage`
+    const objectiveQuest = input.context.questSkeletons.quests.find(quest => quest.key === objective.questKey)!
     addCondition({
       key: stageConditionKey,
-      expression: { op: 'all', conditions: [
-        { op: 'quest-status', questKey: objective.questKey, statuses: ['active'] },
-        { op: 'quest-stage', questKey: objective.questKey, stageKey: objective.stageKey },
-      ] }, failureMessage: '当前任务尚未进入这个目标阶段。',
+      // Template definitions may have several runtime instances, so a
+      // definition-level quest-status expression cannot identify the command
+      // target. Action v16 delegates that exact instance/stage check to the
+      // Action Registry and Quest authorization instead of publishing an
+      // ambiguous Condition. Keep the legacy artifact byte shape unchanged.
+      expression: governedLifecycle && objectiveQuest.type === 'template'
+        ? { op: 'player-number', field: 'level', comparator: 'gte', value: 1 }
+        : { op: 'all', conditions: [
+            { op: 'quest-status', questKey: objective.questKey, statuses: ['active'] },
+            { op: 'quest-stage', questKey: objective.questKey, stageKey: objective.stageKey },
+          ] },
+      failureMessage: '当前任务尚未进入这个目标阶段。',
     })
     const combatEncounter = definitions.map(key => {
       const direct = input.context.enemyEncounterCatalog.encounters.find(item => item.key === key)
@@ -834,12 +850,18 @@ async function createArtifacts(input: {
 
   input.context.questSkeletons.stages.forEach(stage => {
     const requiredObjectiveKeys = stage.objectiveKeys.filter(key => !input.context.questSkeletons.objectives.find(objective => objective.key === key)!.optional)
+    const quest = input.context.questSkeletons.quests.find(item => item.key === stage.questKey)!
     const completionConditionKeys = requiredObjectiveKeys.map(objectiveKey => {
       const key = `condition.stage.${stage.key}.${objectiveKey}`
-      addCondition({ key, expression: { op: 'quest-objective', objectiveKey, status: 'completed' }, failureMessage: '仍有必需目标尚未完成。' })
+      addCondition({
+        key,
+        expression: governedLifecycle && quest.type === 'template'
+          ? { op: 'player-number', field: 'level', comparator: 'gte', value: 1 }
+          : { op: 'quest-objective', objectiveKey, status: 'completed' },
+        failureMessage: '仍有必需目标尚未完成。',
+      })
       return key
     })
-    const quest = input.context.questSkeletons.quests.find(item => item.key === stage.questKey)!
     const ordered = input.context.questSkeletons.stages.filter(item => item.questKey === quest.key).sort((left, right) => left.order - right.order)
     const stageIndex = ordered.findIndex(item => item.key === stage.key)
     const final = stageIndex === ordered.length - 1
@@ -853,7 +875,18 @@ async function createArtifacts(input: {
     const draft = input.draft.quests[index]!
     const unlock = questUnlockCondition({ quest, context: input.context })
     if (unlock) addCondition(unlock)
-    const firstStage = input.context.questSkeletons.stages.filter(stage => stage.questKey === quest.key).sort((left, right) => left.order - right.order)[0]!
+    const orderedStages = input.context.questSkeletons.stages
+      .filter(stage => stage.questKey === quest.key)
+      .sort((left, right) => left.order - right.order)
+    const firstStage = orderedStages[0]!
+    const questOwner = ownerBinding(quest, input.context)
+    const lifecyclePolicy = governedLifecycle && quest.type === 'ordinary' && quest.lifecyclePlan.timePolicy === 'timed'
+      ? 'abandon-terminal' as const
+      : quest.lifecyclePlan.lifecyclePolicy
+    const offerLocationKey = questOwner.ownerKind === 'actor'
+      ? input.context.npcRuntimeCatalog.actors.find(actor => actor.key === questOwner.ownerKey)?.homeLocationKey
+        ?? fail(`任务发布Actor缺少常驻地:${quest.key}`)
+      : quest.locationKeys[0] ?? input.context.mapInteractionCatalog.initialLocationKey
     const acceptOne = `effect.accept.${quest.key}`; const activate = `effect.activate.${quest.key}`; const acceptActionKey = `action.accept.${quest.key}`
     addEffect({ key: acceptOne, operation: 'transition-quest', payload: { questKey: quest.key, status: 'accepted', stageKey: null } })
     addEffect({ key: activate, operation: 'transition-quest', payload: { questKey: quest.key, status: 'active', stageKey: firstStage.key } })
@@ -861,9 +894,68 @@ async function createArtifacts(input: {
     let abandonActionKey: string | null = null
     if (quest.lifecyclePlan.abandonable) {
       abandonActionKey = `action.abandon.${quest.key}`
-      const key = `effect.abandon.${quest.key}`
-      addEffect({ key, operation: 'transition-quest', payload: { questKey: quest.key, status: 'abandoned', stageKey: firstStage.key } })
-      addAction(action({ key: abandonActionKey, category: 'abandon-quest', label: `放弃：${quest.title}`, description: '放弃当前任务；可重接任务保留重新接取入口。', targetScope: 'quest', successEffectKeys: [key], confirmationPolicy: 'always' }))
+      if (!governedLifecycle) {
+        const effectKey = `effect.abandon.${quest.key}`
+        addEffect({ key: effectKey, operation: 'transition-quest', payload: { questKey: quest.key, status: 'abandoned', stageKey: firstStage.key } })
+        addAction(action({
+          key: abandonActionKey, category: 'abandon-quest', label: `放弃：${quest.title}`,
+          description: '放弃当前任务；可重接任务保留重新接取入口。', targetScope: 'quest',
+          successEffectKeys: [effectKey], confirmationPolicy: 'always',
+        }))
+      } else {
+        const abandonmentDescription = lifecyclePolicy === 'abandon-restart'
+          ? '放弃当前任务；之后可回到原发布场景重新接取。'
+          : quest.lifecyclePlan.timePolicy === 'timed'
+            ? '放弃当前任务；原截止时间仍然有效，且不可重新接取。'
+            : '放弃当前任务；该任务将永久终结。'
+        const abandonVariants: Array<{ actionKey: string; effectKey: string; stageKey: string | null; label: string }> = [
+          {
+            actionKey: abandonActionKey,
+            effectKey: `effect.abandon.${quest.key}`,
+            stageKey: firstStage.key,
+            label: `放弃：${quest.title}`,
+          },
+          {
+            actionKey: `action.abandon.${quest.key}.unstarted`,
+            effectKey: `effect.abandon.${quest.key}.unstarted`,
+            stageKey: null,
+            label: `开始前放弃：${quest.title}`,
+          },
+          ...orderedStages.slice(1).map((stage, stageIndex) => ({
+            actionKey: `action.abandon.${quest.key}.stage.${String(stageIndex + 2).padStart(3, '0')}`,
+            effectKey: `effect.abandon.${quest.key}.stage.${String(stageIndex + 2).padStart(3, '0')}`,
+            stageKey: stage.key,
+            label: `在“${stage.title}”阶段放弃：${quest.title}`,
+          })),
+        ]
+        abandonVariants.forEach(variant => {
+          addEffect({ key: variant.effectKey, operation: 'transition-quest', payload: { questKey: quest.key, status: 'abandoned', stageKey: variant.stageKey } })
+          addAction(action({
+            key: variant.actionKey, category: 'abandon-quest', label: variant.label,
+            description: abandonmentDescription, targetScope: 'quest', successEffectKeys: [variant.effectKey],
+            confirmationPolicy: 'always',
+          }))
+        })
+      }
+    }
+    if (governedLifecycle && quest.type === 'ordinary' && lifecyclePolicy === 'abandon-restart'
+      && quest.lifecyclePlan.timePolicy === 'waits' && quest.lifecyclePlan.instantiationPolicy === 'session-start') {
+      const restartEffects = [
+        { key: `effect.restart.${quest.key}.available`, status: 'available' as const, stageKey: null },
+        { key: `effect.restart.${quest.key}.revealed`, status: 'revealed' as const, stageKey: null },
+        { key: `effect.restart.${quest.key}.accepted`, status: 'accepted' as const, stageKey: null },
+        { key: `effect.restart.${quest.key}.active`, status: 'active' as const, stageKey: firstStage.key },
+      ]
+      restartEffects.forEach(effect => addEffect({
+        key: effect.key, operation: 'transition-quest',
+        payload: { questKey: quest.key, status: effect.status, stageKey: effect.stageKey },
+      }))
+      addAction(action({
+        key: `action.restart.${quest.key}`, category: 'restart-quest', label: `重新接取：${quest.title}`,
+        description: '在原任务发布场景重新接取，并从第一阶段开始。', targetScope: 'quest',
+        locationKeys: [offerLocationKey], requirementConditionKeys: unlock ? [unlock.key] : [],
+        successEffectKeys: restartEffects.map(effect => effect.key),
+      }))
     }
     const expirationActionKeys: string[] = []
     if (quest.lifecyclePlan.timePolicy === 'timed') {
@@ -881,11 +973,11 @@ async function createArtifacts(input: {
     const claimActionKey = `action.claim.${quest.key}`
     addAction(action({ key: claimActionKey, category: 'claim-reward', label: `领取${quest.title}奖励`, description: reward.description, targetScope: 'quest' }))
     questRows.push({
-      key: quest.key, order: quest.order, type: quest.type, ...ownerBinding(quest, input.context), title: quest.title,
+      key: quest.key, order: quest.order, type: quest.type, ...questOwner, title: quest.title,
       description: draft.description, storylineKey: quest.storylineKey, regionKeys: quest.regionKeys, stageKeys: quest.stageKeys,
       prerequisiteConditionKeys: unlock ? [unlock.key] : [], rewardEffectKeys: rewardBinding.effectKeys,
       rewardContractKey: reward.key, claimActionKey, acceptActionKey, abandonActionKey, expirationActionKeys,
-      lifecyclePolicy: quest.lifecyclePlan.lifecyclePolicy, timePolicy: quest.lifecyclePlan.timePolicy,
+      lifecyclePolicy, timePolicy: quest.lifecyclePlan.timePolicy,
       expirationMinutes: quest.lifecyclePlan.expirationMinutes, repeatable: quest.lifecyclePlan.repeatable,
       instantiationPolicy: quest.lifecyclePlan.instantiationPolicy,
       initialStatus: quest.type === 'template' ? 'locked' : quest.type === 'mainline' && index === 0 ? 'revealed' : quest.type === 'ordinary' ? 'available' : 'locked',
@@ -1019,7 +1111,12 @@ async function createArtifacts(input: {
     governance: {
       referenceOwner: 'deterministic-compiler', objectiveSemanticsOwner: 'model-validated', protectedStoriesWait: true,
       ordinaryFailureAllowed: true, criticalArrivalNeverSoleTrigger: true, allObjectivesHaveActions: true,
-      allRewardsClaimableOnce: true, allTimedQuestsHaveExpirationCoverage: true, allCatalogBindingsResolved: true,
+      allRewardsClaimableOnce: true, allTimedQuestsHaveExpirationCoverage: true,
+      ...(governedLifecycle ? {
+        allAbandonableQuestStagesCovered: true as const,
+        restartActionsRequireOriginalOfferRoute: true as const,
+      } : {}),
+      allCatalogBindingsResolved: true,
       allEndingsRuntimeBound: true, sceneBindingsDeferred: true, questAndEncounterBindingsReady: true,
     },
     basisHash: await hashProductProductionValueV2({
@@ -1130,6 +1227,37 @@ function artifactsHashes(context: TextOpenWorldQuestFinalizeInputContextV1) {
 }
 
 function assertQuestArtifact(artifact: Omit<TextOpenWorldQuestDesignDocumentsV1, 'questDesignDocumentsHash'>): void {
+  const lifecycleGovernanceDeclared = artifact.governance.allAbandonableQuestStagesCovered !== undefined
+    || artifact.governance.restartActionsRequireOriginalOfferRoute !== undefined
+  const governedLifecycle = artifact.governance.allAbandonableQuestStagesCovered === true
+    && artifact.governance.restartActionsRequireOriginalOfferRoute === true
+  const questTransitionsFor = (actionKey: string) => {
+    const action = artifact.actions.find(item => item.key === actionKey)
+    return action?.successEffectKeys.map(effectKey => artifact.effects.find(effect => effect.key === effectKey))
+      .filter((effect): effect is Extract<TextOpenWorldEffectDefinitionV1, { operation: 'transition-quest' }> => effect?.operation === 'transition-quest') ?? []
+  }
+  const abandonCoverageInvalid = artifact.quests.some(quest => {
+    if (quest.abandonActionKey === null) return false
+    const stageCoverage = artifact.actions.filter(action => action.category === 'abandon-quest')
+      .flatMap(action => questTransitionsFor(action.key))
+      .filter(effect => effect.payload.questKey === quest.key && effect.payload.status === 'abandoned')
+      .map(effect => effect.payload.stageKey ?? '__unstarted__')
+    return !same(stageCoverage, ['__unstarted__', ...quest.stageKeys])
+  })
+  const restartCoverageInvalid = artifact.quests.some(quest => {
+    const eligible = quest.type === 'ordinary' && quest.lifecyclePolicy === 'abandon-restart'
+      && quest.timePolicy === 'waits' && quest.instantiationPolicy === 'session-start'
+    const action = artifact.actions.find(item => item.key === `action.restart.${quest.key}`)
+    if (!eligible) return action != null
+    const transitions = action ? questTransitionsFor(action.key) : []
+    return action?.category !== 'restart-quest' || action.actorScope !== 'player' || action.targetScope !== 'quest'
+      || canonicalProductProductionJsonV2(transitions.map(effect => ({
+        status: effect.payload.status, stageKey: effect.payload.stageKey,
+      }))) !== canonicalProductProductionJsonV2([
+        { status: 'available', stageKey: null }, { status: 'revealed', stageKey: null },
+        { status: 'accepted', stageKey: null }, { status: 'active', stageKey: quest.stageKeys[0]! },
+      ])
+  })
   if (!same(artifact.coverage.requiredQuestKeys, artifact.coverage.finalizedQuestKeys)
     || !same(artifact.coverage.requiredObjectiveKeys, artifact.coverage.finalizedObjectiveKeys)
     || !same(artifact.coverage.requiredRequirementKeys, artifact.coverage.boundRequirementKeys)
@@ -1140,6 +1268,7 @@ function assertQuestArtifact(artifact: Omit<TextOpenWorldQuestDesignDocumentsV1,
     || artifact.quests.some(quest => (quest.type === 'mainline' || quest.type === 'significant')
       && (quest.lifecyclePolicy !== 'protected-wait' || quest.timePolicy !== 'waits' || quest.abandonActionKey !== null))
     || artifact.quests.some(quest => quest.timePolicy === 'timed' && quest.expirationActionKeys.length !== quest.stageKeys.length + 1)
+    || lifecycleGovernanceDeclared && (!governedLifecycle || abandonCoverageInvalid || restartCoverageInvalid)
     || artifact.catalogBindings.encounters.some(binding => !binding.rewardContractKey || !binding.startActionKey)
     || new Set(artifact.conditions.map(item => item.key)).size !== artifact.conditions.length
     || new Set(artifact.effects.map(item => item.key)).size !== artifact.effects.length
@@ -1287,7 +1416,10 @@ export async function validateTextOpenWorldQuestFinalizeArtifactsV1(input: {
     || !isSha256Hash(input.artifacts.directorDecks.directorDecksHash)) fail('P8F Artifact身份或Hash无效')
   const context = await parseContext(canonicalProductProductionJsonV2(input.context))
   const draft = parseDraft(draftFromArtifacts(input.artifacts), context)
-  const expected = await createArtifacts({ context, draft, createdAt: input.artifacts.questDesignDocuments.createdAt })
+  const lifecycleContract = context.questLifecycleContract ?? 'legacy'
+  const expected = await createArtifacts({
+    context, draft, createdAt: input.artifacts.questDesignDocuments.createdAt, lifecycleContract,
+  })
   assertCrossArtifacts(input.artifacts)
   if (canonicalProductProductionJsonV2(expected) !== canonicalProductProductionJsonV2(input.artifacts)) fail('P8F Artifact固定引用、运行定义、预算或Hash被篡改')
   return input.artifacts
@@ -1345,7 +1477,10 @@ export function createTextOpenWorldQuestFinalizeExecutorV1(options: {
     })
     if (model.bindingReceipt.capabilityHash !== binding.bindingHash) fail('执行时文本capability与Plan binding不一致')
     const draft = parseDraft(parseProductionModelJsonObjectV1(model.output, 'text-open-world-quest-finalize'), context)
-    const artifacts = await createArtifacts({ context, draft, createdAt: integer(now(), 'createdAt', 0, Number.MAX_SAFE_INTEGER) })
+    const artifacts = await createArtifacts({
+      context, draft, createdAt: integer(now(), 'createdAt', 0, Number.MAX_SAFE_INTEGER),
+      lifecycleContract: context.questLifecycleContract ?? 'legacy',
+    })
     await validateTextOpenWorldQuestFinalizeArtifactsV1({ artifacts, context })
     const durationMs = Math.max(0, Math.round(performance.now() - started))
     const result: ProductProductionTaskExecutionResultV1 = {

@@ -152,6 +152,7 @@ import {
 } from '../../src/lib/open-world/quality-review-production'
 import { TEXT_OPEN_WORLD_EFFECT_OPERATIONS_V1 } from '../../src/lib/types/text-open-world-effect'
 import type {
+  ProductRuntimeEvent,
   TextOpenWorldGameplayRulesetSkeletonV1,
   TextOpenWorldMainlineThreadV1,
   TextOpenWorldPlayerBuildV1,
@@ -203,7 +204,15 @@ import {
   verifyProductReleaseManifestV1,
 } from '../../src/lib/product-production/runtime-package'
 import { parseTextOpenWorldModulesV1 } from '../../src/lib/open-world/modules'
-import { createInitialTextOpenWorldSessionProjectionV1 } from '../../src/lib/open-world/session-projection'
+import { createTextOpenWorldActionRegistryV1 } from '../../src/lib/open-world/action-registry'
+import { createTextOpenWorldEffectCatalogV1 } from '../../src/lib/open-world/effect-dsl'
+import { createTextOpenWorldQuestTransitionCatalogV1 } from '../../src/lib/open-world/quest-state-machine'
+import { projectTextOpenWorldQuestHistoryV1 } from '../../src/lib/open-world/quest-history'
+import {
+  applyTextOpenWorldSessionEventV1,
+  createInitialTextOpenWorldSessionProjectionV1,
+  deriveTextOpenWorldContextsV1,
+} from '../../src/lib/open-world/session-projection'
 
 const CAPABILITY_HASH = 'b'.repeat(64)
 const NOW = 1_788_720_000_000
@@ -4202,6 +4211,45 @@ describe('R-OPEN-WORLD3 · P8F QuestFinalize / EncounterFinalize', () => {
       .every(quest => quest.lifecyclePolicy === 'protected-wait' && quest.timePolicy === 'waits' && quest.abandonActionKey === null)).toBe(true)
     expect(questArtifact.quests.filter(quest => quest.timePolicy === 'timed')
       .every(quest => quest.expirationActionKeys.length === quest.stageKeys.length + 1)).toBe(true)
+    expect(questArtifact.governance).toMatchObject({
+      allAbandonableQuestStagesCovered: true,
+      restartActionsRequireOriginalOfferRoute: true,
+    })
+    const questTransitionPayloads = (actionKey: string) => questArtifact.actions
+      .find(action => action.key === actionKey)?.successEffectKeys.flatMap(effectKey => {
+        const effect = questArtifact.effects.find(candidate => candidate.key === effectKey)
+        return effect?.operation === 'transition-quest' ? [effect.payload] : []
+      }) ?? []
+    for (const quest of questArtifact.quests.filter(candidate => candidate.abandonActionKey !== null)) {
+      const coverage = questArtifact.actions.filter(action => action.category === 'abandon-quest')
+        .flatMap(action => questTransitionPayloads(action.key))
+        .filter(payload => payload.questKey === quest.key && payload.status === 'abandoned')
+        .map(payload => payload.stageKey ?? '__unstarted__')
+      expect(new Set(coverage)).toEqual(new Set(['__unstarted__', ...quest.stageKeys]))
+      expect(questTransitionPayloads(quest.abandonActionKey!)).toEqual([{
+        questKey: quest.key, status: 'abandoned', stageKey: quest.stageKeys[0],
+      }])
+    }
+    const restartableQuests = questArtifact.quests.filter(quest => (
+      quest.type === 'ordinary' && quest.lifecyclePolicy === 'abandon-restart'
+      && quest.timePolicy === 'waits' && quest.instantiationPolicy === 'session-start'
+    ))
+    expect(restartableQuests.length).toBeGreaterThan(0)
+    expect(questArtifact.actions.filter(action => action.category === 'restart-quest').map(action => action.key))
+      .toEqual(restartableQuests.map(quest => `action.restart.${quest.key}`))
+    for (const quest of restartableQuests) {
+      const restart = questArtifact.actions.find(action => action.key === `action.restart.${quest.key}`)!
+      expect(restart.locationKeys).toHaveLength(1)
+      expect(questTransitionPayloads(restart.key)).toEqual([
+        { questKey: quest.key, status: 'available', stageKey: null },
+        { questKey: quest.key, status: 'revealed', stageKey: null },
+        { questKey: quest.key, status: 'accepted', stageKey: null },
+        { questKey: quest.key, status: 'active', stageKey: quest.stageKeys[0] },
+      ])
+    }
+    expect(questArtifact.quests.filter(quest => quest.timePolicy === 'timed')
+      .every(quest => quest.lifecyclePolicy !== 'abandon-restart'
+        && !questArtifact.actions.some(action => action.key === `action.restart.${quest.key}`))).toBe(true)
     expect(questArtifact.catalogBindings.encounters.every(binding => binding.startActionKey && binding.rewardContractKey)).toBe(true)
     expect(questArtifact.actions.filter(action => action.category === 'combat-basic-attack')).toHaveLength(1)
     expect(questArtifact.actions.filter(action => action.category === 'combat-reward-action')).toHaveLength(1)
@@ -4236,6 +4284,35 @@ describe('R-OPEN-WORLD3 · P8F QuestFinalize / EncounterFinalize', () => {
     await expect(validateTextOpenWorldQuestFinalizeArtifactsV1({
       artifacts: { questDesignDocuments: questArtifact, directorDecks: directorArtifact },
       context: input.questFinalizeContext,
+    })).resolves.toEqual({ questDesignDocuments: questArtifact, directorDecks: directorArtifact })
+  }, 300_000)
+
+  it('旧P8F durable Context缺少生命周期门时继续生成并验证legacy Artifact', async () => {
+    const input = await questFinalizeFixture()
+    const legacyContext = structuredClone(input.questFinalizeContext)
+    delete legacyContext.questLifecycleContract
+    const { contextSelectionHash: _contextSelectionHash, ...legacyBody } = legacyContext
+    legacyContext.contextSelectionHash = await hashProductProductionValueV2(legacyBody)
+    const legacyInput = {
+      ...input,
+      questFinalizeContext: legacyContext,
+      questFinalizeContextText: JSON.stringify(legacyContext),
+    }
+    const result = await executeQuestFinalize(legacyInput)
+    const questArtifact = result.artifacts.find(artifact => artifact.artifactKey === 'text-open-world.quest-design-documents')!.payload as TextOpenWorldQuestDesignDocumentsV1
+    const directorArtifact = result.artifacts.find(artifact => artifact.artifactKey === 'text-open-world.director-decks')!.payload as TextOpenWorldDirectorDecksV1
+    expect(questArtifact.governance.allAbandonableQuestStagesCovered).toBeUndefined()
+    expect(questArtifact.governance.restartActionsRequireOriginalOfferRoute).toBeUndefined()
+    expect(questArtifact.actions.some(action => action.category === 'restart-quest')).toBe(false)
+    expect(questArtifact.quests.filter(quest => quest.abandonActionKey !== null).every(quest => (
+      questArtifact.actions.filter(action => action.category === 'abandon-quest'
+        && action.successEffectKeys.some(effectKey => questArtifact.effects.some(effect => (
+          effect.key === effectKey && effect.operation === 'transition-quest' && effect.payload.questKey === quest.key
+        )))).length === 1
+    ))).toBe(true)
+    await expect(validateTextOpenWorldQuestFinalizeArtifactsV1({
+      artifacts: { questDesignDocuments: questArtifact, directorDecks: directorArtifact },
+      context: legacyContext,
     })).resolves.toEqual({ questDesignDocuments: questArtifact, directorDecks: directorArtifact })
   }, 300_000)
 
@@ -4351,6 +4428,23 @@ describe('R-OPEN-WORLD3 · P9 SceneScripts / ChoiceContract / ActionBindings', (
         locationKey: owner.homeLocationKey,
         regionKey: location.regionKey,
         participantKeys: [owner.key],
+      })
+    }
+    for (const restartAction of input.sceneScriptsContext.questDesignDocuments.actions
+      .filter(action => action.category === 'restart-quest')) {
+      const questKey = restartAction.key.slice('action.restart.'.length)
+      const offerScene = sceneScripts.scenes.find(scene => (
+        scene.sourceKind === 'quest-offer' && scene.questKey === questKey
+      ))!
+      const restartChoice = choices.choices.find(choice => (
+        choice.sceneKey === offerScene.key && choice.actionKey === restartAction.key
+      ))!
+      expect(offerScene.actionKeys).toContain(restartAction.key)
+      expect(restartAction.locationKeys).toEqual([offerScene.locationKey])
+      expect(offerScene.fixedChoiceKeys).toContain(restartChoice.key)
+      expect(bindings.actions.find(binding => binding.actionKey === restartAction.key)).toMatchObject({
+        fixedChoiceKeys: [restartChoice.key],
+        naturalLanguage: { mode: 'existing-action-candidate', candidateMayOnlySelectThisAction: true },
       })
     }
     expect(sceneScripts.randomEventPresentations).toHaveLength(input.sceneScriptsContext.directorDecks.randomEvents.length)
@@ -4583,6 +4677,27 @@ describe('R-OPEN-WORLD3 · P2表现 / P10系统收口 / V1确定性预检', () =
     await expect(validateTextOpenWorldDeterministicPreflightV1({ artifact: tampered, rows: input.inputArtifacts }))
       .rejects.toThrow(/预检结果或Hash被篡改/)
   }, 420_000)
+
+  it('旧P10 durable Context省略生命周期版本时仍按Action v15重验', async () => {
+    const input = await systemFinalizeFixture()
+    const legacyContext = structuredClone(input.systemFinalizeContext)
+    delete legacyContext.questLifecycleActionVersion
+    const { contextSelectionHash: _contextSelectionHash, ...legacyBody } = legacyContext
+    legacyContext.contextSelectionHash = await hashProductProductionValueV2(legacyBody)
+    const result = await executeSystemFinalize({
+      ...input,
+      systemFinalizeContext: legacyContext,
+      systemFinalizeContextText: JSON.stringify(legacyContext),
+    })
+    const system = result.artifacts.find(item => item.artifactKey === 'text-open-world.system-configs')!.payload as TextOpenWorldSystemConfigsV1
+    const media = result.artifacts.find(item => item.artifactKey === 'text-open-world.media-requirements')!.payload as TextOpenWorldMediaRequirementsV1
+    const budget = result.artifacts.find(item => item.artifactKey === 'text-open-world.content-budget')!.payload as TextOpenWorldContentBudgetV1
+    expect(system.runtimeModules.find(module => module.moduleKey === 'actions')).toMatchObject({ schemaVersion: 15 })
+    await expect(validateTextOpenWorldSystemFinalizeArtifactsV1({
+      artifacts: { systemConfigs: system, mediaRequirements: media, contentBudget: budget },
+      context: legacyContext,
+    })).resolves.toEqual({ systemConfigs: system, mediaRequirements: media, contentBudget: budget })
+  }, 420_000)
 })
 
 describe('R-OPEN-WORLD3 · V2平衡与叙事语义评审 / 局部修复影响闭包', () => {
@@ -4747,9 +4862,9 @@ describe('R-OPEN-WORLD3 · V3运行包装配与QA', () => {
     })
     const modules = parseTextOpenWorldModulesV1(runtimePackage.textOpenWorldVNext!)
     expect(modules.narrative.version).toBe(2)
-    expect(modules.actions.version).toBe(15)
-    if (modules.narrative.version !== 2 || modules.actions.version !== 15) {
-      throw new Error('V3必须发布Narrative v2与Action v15')
+    expect(modules.actions.version).toBe(16)
+    if (modules.narrative.version !== 2 || modules.actions.version !== 16) {
+      throw new Error('新V3生产必须发布Narrative v2与Action v16')
     }
     const acceptedScenes = JSON.parse(accepted.find(row => row.artifactKey === 'text-open-world.scene-scripts')!
       .payloadJson) as TextOpenWorldSceneScriptsV1
@@ -4791,6 +4906,258 @@ describe('R-OPEN-WORLD3 · V3运行包装配与QA', () => {
     expect(modules.narrative.storylines.filter(item => item.kind === 'mainline')).toHaveLength(1)
     expect(modules.world.locations.length).toBeGreaterThan(1)
     expect(modules.quests.quests.some(item => item.type === 'ordinary')).toBe(true)
+    const restartActions = modules.actions.actions.filter(action => action.category === 'restart-quest')
+    expect(restartActions.length).toBeGreaterThan(0)
+    for (const restartAction of restartActions) {
+      const questKey = restartAction.key.slice('action.restart.'.length)
+      const offerScene = modules.narrative.scenes.find(scene => (
+        scene.sourceKind === 'quest-offer' && scene.questKey === questKey
+      ))!
+      expect(restartAction.locationKeys).toEqual([offerScene.locationKey])
+      expect(offerScene.actionKeys).toContain(restartAction.key)
+    }
+    const missingAbandonCoverage = structuredClone(runtimePackage.textOpenWorldVNext!)
+    const missingActions = missingAbandonCoverage.modules.actions.payload as any
+    const unstartedAbandon = missingActions.actions.find((action: any) => (
+      action.category === 'abandon-quest' && action.key.endsWith('.unstarted')
+    ))
+    missingActions.actions = missingActions.actions.filter((action: any) => action.key !== unstartedAbandon.key)
+    missingActions.effects = missingActions.effects.filter((effect: any) => !unstartedAbandon.successEffectKeys.includes(effect.key))
+    missingActions.inputBindings.actions = missingActions.inputBindings.actions
+      .filter((binding: any) => binding.actionKey !== unstartedAbandon.key)
+    expect(() => parseTextOpenWorldModulesV1(missingAbandonCoverage)).toThrow(/Stage覆盖/)
+
+    const remoteRestartPackage = structuredClone(runtimePackage.textOpenWorldVNext!)
+    const remoteModules = remoteRestartPackage.modules.actions.payload as any
+    const remoteAction = remoteModules.actions.find((action: any) => action.key === restartActions[0]!.key)
+    remoteAction.locationKeys = [modules.world.locations.find(location => (
+      !restartActions[0]!.locationKeys.includes(location.key)
+    ))!.key]
+    expect(() => parseTextOpenWorldModulesV1(remoteRestartPackage)).toThrow(/原发布地点/)
+
+    const legacyQuestWithV16Actions = structuredClone(runtimePackage.textOpenWorldVNext!)
+    legacyQuestWithV16Actions.modules.quests.schemaVersion = 1
+    ;(legacyQuestWithV16Actions.modules.quests.payload as any).version = 1
+    expect(() => parseTextOpenWorldModulesV1(legacyQuestWithV16Actions)).toThrow(/Action v16必须搭配Quest v2/)
+
+    const managedQuestKeys = new Set(modules.director.decks.flatMap(deck => deck.questKeys))
+    const restartAction = restartActions.find(action => (
+      managedQuestKeys.has(action.key.slice('action.restart.'.length))
+      && action.requirementConditionKeys.length === 0
+    )) ?? restartActions.find(action => managedQuestKeys.has(action.key.slice('action.restart.'.length)))!
+    const restartQuestKey = restartAction.key.slice('action.restart.'.length)
+    const restartDefinition = modules.quests.quests.find(quest => quest.key === restartQuestKey)!
+    const restartOfferScene = modules.narrative.scenes.find(scene => (
+      scene.sourceKind === 'quest-offer' && scene.questKey === restartQuestKey
+    ))!
+    const lifecycleProjection = createInitialTextOpenWorldSessionProjectionV1(runtimePackage.textOpenWorldVNext!)
+    const restartInstance = Object.values(lifecycleProjection.state.quests.instancesByKey)
+      .find(instance => instance.definitionKey === restartQuestKey)!
+    expect(restartInstance).toMatchObject({ status: 'available', currentStageKey: null })
+    const transitionCatalog = createTextOpenWorldQuestTransitionCatalogV1(runtimePackage.textOpenWorldVNext!)
+    transitionCatalog.apply({
+      state: lifecycleProjection.state,
+      authorization: transitionCatalog.prepare({
+        instanceKey: restartInstance.instanceKey,
+        state: lifecycleProjection.state,
+        transitions: [{ toStatus: 'revealed', stageKey: null }],
+      }),
+    })
+    lifecycleProjection.director = structuredClone(lifecycleProjection.state.director)
+    expect(lifecycleProjection.state.director.revealedQuestInstanceKeys).toContain(restartInstance.instanceKey)
+    lifecycleProjection.state.quests.tracking.pinnedInstanceKeys = [restartInstance.instanceKey]
+
+    const visitLocation = (projection: typeof lifecycleProjection, locationKey: string, participantKeys: string[] = []) => {
+      const location = modules.world.locations.find(candidate => candidate.key === locationKey)!
+      projection.state.map.currentLocationKey = locationKey
+      projection.state.map.locationKnowledgeByKey[locationKey] = 'visited'
+      projection.state.map.regionKnowledgeByKey[location.regionKey] = 'visited'
+      if (!projection.state.map.revealedLocationKeys.includes(locationKey)) {
+        projection.state.map.revealedLocationKeys.push(locationKey)
+      }
+      participantKeys.forEach(actorKey => {
+        projection.state.actors[actorKey].alive = true
+        projection.state.actors[actorKey].present = true
+        projection.state.actors[actorKey].locationKey = locationKey
+      })
+    }
+    const remoteLocation = modules.world.locations.find(location => location.key !== restartOfferScene.locationKey)!
+    visitLocation(lifecycleProjection, remoteLocation.key)
+
+    const actionRegistry = createTextOpenWorldActionRegistryV1(runtimePackage.textOpenWorldVNext!)
+    const effectCatalog = createTextOpenWorldEffectCatalogV1(runtimePackage.textOpenWorldVNext!)
+    const runLifecycleActionEvents = async (
+      projection: typeof lifecycleProjection,
+      action: typeof restartAction,
+      firstSequence: number,
+      commandId: string,
+    ) => {
+      const transitionEffects = action.successEffectKeys.map(effectKey => (
+        modules.actions.effects.find(effect => effect.key === effectKey)!
+      )).filter((effect): effect is Extract<typeof effect, { operation: 'transition-quest' }> => (
+        effect.operation === 'transition-quest'
+      ))
+      const authorization = transitionCatalog.prepare({
+        instanceKey: restartInstance.instanceKey,
+        state: projection.state,
+        transitions: transitionEffects.map(effect => ({
+          toStatus: effect.payload.status,
+          stageKey: effect.payload.stageKey,
+        })),
+      })
+      const effectKeys = [...new Set([...action.costEffectKeys, ...action.successEffectKeys])]
+      const plan = await effectCatalog.plan({
+        effectKeys,
+        claimKey: `claim.${commandId}`,
+        state: projection.state,
+        authorization,
+      })
+      const { receipt } = await effectCatalog.apply({ plan, state: structuredClone(projection.state) })
+      const requestFingerprint = await hashProductProductionValueV2({ commandId, kind: 'request' })
+      const commandStateHash = await hashProductProductionValueV2({ commandId, kind: 'command-state' })
+      const outcomeFingerprint = await hashProductProductionValueV2({ commandId, kind: 'outcome' })
+      const commandEvent: ProductRuntimeEvent = {
+        projectId: 1,
+        worldGroupId: null,
+        sessionId: 1,
+        sequence: firstSequence,
+        type: 'text-open-world.command.committed',
+        actorKey: action.actorScope,
+        targetKey: restartInstance.instanceKey,
+        commandId,
+        baseSequence: projection.lastEventSequence,
+        baseStateHash: plan.baseStateHash,
+        createdAt: NOW + firstSequence,
+        payloadJson: JSON.stringify({
+          schema: 'storyforge.text-open-world.command-event',
+          version: 1,
+          envelope: {
+            schema: 'storyforge.text-open-world.command',
+            version: 1,
+            commandId,
+            sessionId: 1,
+            actorKey: action.actorScope,
+            actionKey: action.key,
+            payload: { targetKey: restartInstance.instanceKey },
+            baseSequence: projection.lastEventSequence,
+            baseStateHash: plan.baseStateHash,
+            source: 'fixed-choice',
+            requestedAt: NOW + firstSequence,
+          },
+          requestFingerprint,
+          resultingSequence: firstSequence,
+          resultingStateHash: commandStateHash,
+        }),
+      }
+      const effectEvent: ProductRuntimeEvent = {
+        projectId: 1,
+        worldGroupId: null,
+        sessionId: 1,
+        sequence: firstSequence + 1,
+        type: 'text-open-world.effects.applied',
+        actorKey: action.actorScope,
+        targetKey: restartInstance.instanceKey,
+        commandId,
+        baseSequence: firstSequence,
+        baseStateHash: plan.baseStateHash,
+        createdAt: NOW + firstSequence + 1,
+        payloadJson: JSON.stringify({
+          schema: 'storyforge.text-open-world.effects-applied-event',
+          version: 1,
+          commandId,
+          commandSequence: firstSequence,
+          ruleset: projection.ruleset,
+          randomEventSequences: [],
+          outcome: 'success',
+          reason: null,
+          degradation: null,
+          plan,
+          receipt,
+          outcomeFingerprint,
+        }),
+      }
+      const afterCommand = applyTextOpenWorldSessionEventV1(projection, commandEvent)
+      return {
+        projection: applyTextOpenWorldSessionEventV1(afterCommand, effectEvent),
+        events: [commandEvent, effectEvent] as const,
+        plan,
+      }
+    }
+
+    const unstartedAbandonAction = modules.actions.actions.find(action => (
+      action.category === 'abandon-quest'
+      && action.key === `action.abandon.${restartQuestKey}.unstarted`
+    ))!
+    expect(actionRegistry.resolve({
+      actionKey: unstartedAbandonAction.key,
+      targetKey: restartInstance.instanceKey,
+      context: deriveTextOpenWorldContextsV1(lifecycleProjection).action,
+    }).entry.available).toBe(true)
+    const abandonBaseline = structuredClone(lifecycleProjection)
+    const abandoned = await runLifecycleActionEvents(
+      lifecycleProjection,
+      unstartedAbandonAction,
+      1,
+      'command.lifecycle.abandon',
+    )
+    expect(abandoned.projection.state.quests.instancesByKey[restartInstance.instanceKey]).toMatchObject({
+      status: 'abandoned',
+      currentStageKey: null,
+    })
+    expect(abandoned.projection.state.quests.tracking.pinnedInstanceKeys).not.toContain(restartInstance.instanceKey)
+    expect(abandoned.projection.state.director.revealedQuestInstanceKeys).not.toContain(restartInstance.instanceKey)
+    expect(abandoned.plan.impactDomains).toEqual(expect.arrayContaining(['quests', 'director']))
+    let abandonReplay = structuredClone(abandonBaseline)
+    for (const event of abandoned.events) abandonReplay = applyTextOpenWorldSessionEventV1(abandonReplay, event)
+    expect(abandonReplay).toEqual(abandoned.projection)
+
+    const remoteRestartAvailability = actionRegistry.project(deriveTextOpenWorldContextsV1(abandoned.projection).action)
+      .find(entry => entry.action.key === restartAction.key)!
+    expect(remoteRestartAvailability.available).toBe(false)
+    expect(remoteRestartAvailability.unavailableReasons.map(reason => reason.code)).toContain('wrong-location')
+
+    visitLocation(abandoned.projection, restartOfferScene.locationKey, restartOfferScene.participantKeys)
+    expect(actionRegistry.resolve({
+      actionKey: restartAction.key,
+      targetKey: restartInstance.instanceKey,
+      context: deriveTextOpenWorldContextsV1(abandoned.projection).action,
+    }).entry.available).toBe(true)
+    const restartBaseline = structuredClone(abandoned.projection)
+    const restarted = await runLifecycleActionEvents(
+      abandoned.projection,
+      restartAction,
+      3,
+      'command.lifecycle.restart',
+    )
+    expect(restarted.projection.state.quests.instancesByKey[restartInstance.instanceKey]).toMatchObject({
+      status: 'active',
+      currentStageKey: restartDefinition.stageKeys[0],
+      terminalAtWorldMinute: null,
+    })
+    const restartedInstance = restarted.projection.state.quests.instancesByKey[restartInstance.instanceKey]
+    const firstStage = modules.quests.stages.find(stage => stage.key === restartDefinition.stageKeys[0])!
+    expect(firstStage.objectiveKeys.map(objectiveKey => restartedInstance.objectiveStatusByKey[objectiveKey]))
+      .toEqual(firstStage.objectiveKeys.map(() => 'active'))
+    expect(restarted.projection.state.director.revealedQuestInstanceKeys).toContain(restartInstance.instanceKey)
+    expect(restarted.projection.state.director.activeQuestInstanceKeys).toContain(restartInstance.instanceKey)
+    const lifecycleHistory = projectTextOpenWorldQuestHistoryV1({
+      runtimePackage: runtimePackage.textOpenWorldVNext!,
+      events: [...abandoned.events, ...restarted.events],
+      instanceKey: restartInstance.instanceKey,
+    })
+    expect(lifecycleHistory.map(entry => entry.kind)).toEqual([
+      'abandoned', 'reoffered', 'accepted', 'activated',
+    ])
+    expect(new Set(lifecycleHistory.map(entry => entry.instanceKey))).toEqual(new Set([restartInstance.instanceKey]))
+    let restartReplay = structuredClone(restartBaseline)
+    for (const event of restarted.events) restartReplay = applyTextOpenWorldSessionEventV1(restartReplay, event)
+    expect(restartReplay).toEqual(restarted.projection)
+    expect(() => actionRegistry.resolve({
+      actionKey: restartAction.key,
+      targetKey: restartInstance.instanceKey,
+      context: deriveTextOpenWorldContextsV1(restarted.projection).action,
+    })).toThrow(/Action不可用/)
+
     const endingActions = modules.actions.actions.filter(action => action.key.startsWith('action.ending.'))
     const endingConditions = modules.actions.conditions.filter(condition => condition.key.startsWith('condition.ending.'))
     expect(endingActions).toHaveLength(modules.narrative.endings.length)

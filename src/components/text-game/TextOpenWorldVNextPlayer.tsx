@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Backpack, Bell, GitBranch, History, MapPinned, Save, Swords, UserRound } from 'lucide-react'
+import { Backpack, Bell, GitBranch, Save, Swords, UserRound } from 'lucide-react'
 import { createTextOpenWorldInventoryCatalogV1 } from '../../lib/open-world/inventory'
 import { deriveTextOpenWorldLifeProjectionV1 } from '../../lib/open-world/life-cycle'
 import { parseTextOpenWorldModulesV1 } from '../../lib/open-world/modules'
@@ -9,13 +9,8 @@ import {
   type TextOpenWorldPlayerNotificationCategoryV1,
 } from '../../lib/open-world/player-notifications'
 import { projectTextOpenWorldScenesV1 } from '../../lib/open-world/scene-projection'
-import {
-  projectTextOpenWorldQuestDeadlineV1,
-  projectTextOpenWorldQuestHistoryV1,
-} from '../../lib/open-world/quest-history'
 import { deriveTextOpenWorldContextsV1 } from '../../lib/open-world/session-projection'
 import { createTextOpenWorldSkillCatalogV1 } from '../../lib/open-world/skills'
-import { projectTextOpenWorldQuestInstancesV1 } from '../../lib/open-world/quests'
 import type { TextOpenWorldCommandSourceV1 } from '../../lib/types'
 import {
   selectTextOpenWorldVNextActions,
@@ -25,6 +20,7 @@ import TextOpenWorldActorsPanel from './TextOpenWorldActorsPanel'
 import TextOpenWorldEquipmentPanel from './TextOpenWorldEquipmentPanel'
 import TextOpenWorldGameShell from './TextOpenWorldGameShell'
 import TextOpenWorldMapPanel from './TextOpenWorldMapPanel'
+import TextOpenWorldQuestLogPanel from './TextOpenWorldQuestLogPanel'
 import TextOpenWorldRelationshipsPanel from './TextOpenWorldRelationshipsPanel'
 import TextOpenWorldScenePanel from './TextOpenWorldScenePanel'
 
@@ -38,13 +34,6 @@ const QUEST_STATUS_LABELS = {
   expired: '已过期',
   abandoned: '已放弃',
   withdrawn: '已撤回',
-} as const
-
-const OBJECTIVE_STATUS_LABELS = {
-  inactive: '未开始',
-  active: '进行中',
-  completed: '已完成',
-  failed: '未完成',
 } as const
 
 const NOTIFICATION_CATEGORY_LABELS: Record<TextOpenWorldPlayerNotificationCategoryV1, string> = {
@@ -70,9 +59,16 @@ export default function TextOpenWorldVNextPlayer() {
     text: string
   } | null>(null)
   const notificationCursor = useRef<{ sessionId: number; throughSequence: number } | null>(null)
+  const questMapRequestCounter = useRef(0)
+  const [questMapFocus, setQuestMapFocus] = useState<{
+    sessionKey: number | string
+    locationKey: string
+    requestId: number
+  } | null>(null)
   const projection = store.runtimeState.textOpenWorld
   const runtimePackage = store.selectedManifest?.textOpenWorldVNext
-  const availableActions = selectTextOpenWorldVNextActions(store).filter(action => action.available)
+  const projectedActions = selectTextOpenWorldVNextActions(store)
+  const availableActions = projectedActions.filter(action => action.available)
   const modules = useMemo(
     () => runtimePackage ? parseTextOpenWorldModulesV1(runtimePackage) : null,
     [runtimePackage],
@@ -94,27 +90,44 @@ export default function TextOpenWorldVNextPlayer() {
   // caching by object identity so an externally restored mutable snapshot can
   // never leave stale HUD facts on screen.
   const hud = projection ? projectTextOpenWorldPlayerHudV1(projection) : null
-  let notificationsReady = true
-  let notifications: ReturnType<typeof projectTextOpenWorldPlayerNotificationsV1> = []
-  if (projection && selectedSessionId != null) {
+  const notificationProjection = useMemo((): {
+    ready: boolean
+    entries: ReturnType<typeof projectTextOpenWorldPlayerNotificationsV1>
+  } => {
+    if (!projection || projectionSequence == null || selectedSessionId == null) {
+      return { ready: true, entries: [] }
+    }
     try {
-      notifications = projectTextOpenWorldPlayerNotificationsV1({
-        sessionId: selectedSessionId,
-        projection,
-        events: store.events,
-      })
+      return {
+        ready: true,
+        entries: projectTextOpenWorldPlayerNotificationsV1({
+          sessionId: selectedSessionId,
+          projection,
+          events: store.events,
+        }),
+      }
     } catch {
       // readDetails obtains state and events independently. A concurrent commit
       // can briefly make one snapshot newer; wait for the next governed refresh
       // instead of crashing or guessing a partial notification.
-      notificationsReady = false
+      return { ready: false, entries: [] }
     }
-  }
+  }, [projection, projectionSequence, selectedSessionId, store.events])
+  const notificationsReady = notificationProjection.ready
+  const notifications = notificationProjection.entries
   const dismissConfirmation = useCallback(() => setPendingConfirmation(null), [])
+  const focusQuestLocation = useCallback((locationKey: string) => {
+    questMapRequestCounter.current += 1
+    setQuestMapFocus({ sessionKey, locationKey, requestId: questMapRequestCounter.current })
+  }, [sessionKey])
 
   useEffect(() => {
     setPendingConfirmation(null)
   }, [projectionSequence, sessionKey])
+
+  useEffect(() => {
+    setQuestMapFocus(null)
+  }, [sessionKey])
 
   useEffect(() => {
     if (selectedSessionId == null || projectionSequence == null) {
@@ -172,12 +185,8 @@ export default function TextOpenWorldVNextPlayer() {
     checkpoints: store.checkpoints,
   })
   const respawnAction = availableActions.find(action => action.action.category === 'respawn')
-  const questActions = availableActions.filter(action => action.targetScope === 'quest')
   const location = modules.world.locations.find(item => item.key === state.map.currentLocationKey)
   const region = modules.world.regions.find(item => item.key === location?.regionKey)
-  const visibleQuests = projectTextOpenWorldQuestInstancesV1(modules, state.quests)
-    .filter(item => !['locked', 'available'].includes(item.instance.status))
-  const questHistory = projectTextOpenWorldQuestHistoryV1({ runtimePackage, events: store.events })
   const inventory = createTextOpenWorldInventoryCatalogV1(runtimePackage).project(state.inventory)
   const derived = deriveTextOpenWorldContextsV1(projection)
   const { playerStats, progression } = derived
@@ -199,7 +208,7 @@ export default function TextOpenWorldVNextPlayer() {
     }
   }
   const executeProjectedAction = (
-    action: typeof availableActions[number],
+    action: typeof projectedActions[number],
     explicitTargetKey?: string | null,
     source: TextOpenWorldCommandSourceV1 = 'system-action',
   ) => {
@@ -313,101 +322,17 @@ export default function TextOpenWorldVNextPlayer() {
     </section>}
   </div>
 
-  const questsView = <div className="space-y-3">
-    <section className="rounded border border-accent/30 bg-accent/5 p-3" data-testid="text-open-world-quest-hud">
-      <div className="mb-2 flex items-center gap-2 text-sm font-semibold">
-        <MapPinned className="h-4 w-4 text-accent" />任务追踪
-      </div>
-      <div className="grid gap-2 sm:grid-cols-2">
-        {[...(hud.primaryQuest ? [hud.primaryQuest] : []), ...hud.pinnedQuests].map((quest, index) => {
-          const primary = index === 0 && hud.primaryQuest?.instanceKey === quest.instanceKey
-          return <article key={quest.instanceKey} className="rounded border border-border bg-bg-surface p-2 text-xs">
-            <small className="text-accent">{primary ? '主追踪' : 'HUD钉选'}</small>
-            <strong className="mt-1 block">{quest.title}</strong>
-            <span className="text-text-muted">
-              {QUEST_STATUS_LABELS[quest.status]}
-              {quest.deadline.label ? ` · ${quest.deadline.label}` : ''}
-            </span>
-            {quest.nextRequiredObjective && <p className="mt-1 text-text-muted">
-              下一目标：{quest.nextRequiredObjective.title}
-            </p>}
-          </article>
-        })}
-        {!hud.primaryQuest && !hud.pinnedQuests.length && <p className="text-xs text-text-muted">
-          当前没有追踪任务。取消追踪不会放弃任务。
-        </p>}
-      </div>
-    </section>
-    <article className="rounded border border-border bg-bg-surface p-4">
-      <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
-        <MapPinned className="h-4 w-4 text-accent" />可见任务实例
-      </div>
-      <div className="space-y-2">
-        {visibleQuests.map(({ definition, instance }) => {
-          const stage = instance.currentStageKey
-            ? modules.quests.stages.find(item => item.key === instance.currentStageKey)
-            : null
-          const objectives = stage
-            ? stage.objectiveKeys
-              .map(objectiveKey => modules.quests.objectives.find(item => item.key === objectiveKey))
-              .filter((objective): objective is NonNullable<typeof objective> => objective != null)
-            : []
-          const instanceActions = questActions.filter(action => (
-            action.validTargetKeys.includes(instance.instanceKey)
-          ))
-          const deadline = projectTextOpenWorldQuestDeadlineV1(instance, state.time.worldMinute)
-          const trackingLabel = state.quests.tracking.primaryInstanceKey === instance.instanceKey
-            ? '主追踪'
-            : state.quests.tracking.pinnedInstanceKeys.includes(instance.instanceKey) ? 'HUD钉选' : null
-          return <div
-            key={instance.instanceKey}
-            className="rounded bg-bg-base p-3 text-xs"
-            data-quest-instance={instance.instanceKey}
-          >
-            <span className="flex justify-between gap-2">
-              <strong>{definition.title}{trackingLabel ? ` · ${trackingLabel}` : ''}</strong>
-              <code>{QUEST_STATUS_LABELS[instance.status as keyof typeof QUEST_STATUS_LABELS]
-                ?? instance.status}</code>
-            </span>
-            <p className="mt-1 text-text-muted">{definition.description}</p>
-            {stage && <div className="mt-2 rounded border border-border/70 p-2">
-              <strong>当前阶段：{stage.title}</strong>
-              {objectives.map(objective => <p
-                key={objective.key}
-                className="mt-1 flex justify-between gap-2 text-text-muted"
-              >
-                <span>{objective.optional ? '可选：' : ''}{objective.title}</span>
-                <span>{OBJECTIVE_STATUS_LABELS[instance.objectiveStatusByKey[objective.key]]}</span>
-              </p>)}
-            </div>}
-            {instance.status === 'completed' && definition.rewardContractKey && <small
-              className={`mt-2 block ${instance.rewardClaimKey ? 'text-text-muted' : 'text-accent'}`}
-            >
-              {instance.rewardClaimKey ? '奖励已领取' : '奖励待领取'}
-            </small>}
-            {deadline.label && <small className={`mt-1 block ${deadline.expired ? 'text-danger' : 'text-warning'}`}>
-              {deadline.label} · 截止世界分钟 {deadline.deadlineWorldMinute}
-            </small>}
-            {!!instanceActions.length && <div className="mt-2 flex flex-wrap gap-2">
-              {instanceActions.map(action => <button
-                key={action.action.key}
-                type="button"
-                disabled={store.busy}
-                onClick={() => executeProjectedAction(action, instance.instanceKey)}
-                className="rounded border border-accent/40 px-2 py-1 text-accent disabled:opacity-40"
-              >
-                {action.action.label}
-              </button>)}
-            </div>}
-            <small className="mt-2 block break-all text-[9px] text-text-muted">
-              定义 {definition.key} · 实例 {instance.instanceKey}
-            </small>
-          </div>
-        })}
-        {!visibleQuests.length && <p className="text-xs text-text-muted">尚无可见任务。</p>}
-      </div>
-    </article>
-  </div>
+  const questsView = selectedSessionId == null
+    ? <p className="text-xs text-text-muted">任务 Session 尚未就绪。</p>
+    : <TextOpenWorldQuestLogPanel
+        sessionId={selectedSessionId}
+        projection={projection}
+        events={store.events}
+        actions={projectedActions}
+        busy={store.busy}
+        onExecute={(action, instanceKey) => executeProjectedAction(action, instanceKey)}
+        onFocusLocation={focusQuestLocation}
+      />
 
   const characterView = <div className="space-y-3">
     <section className="grid gap-3 sm:grid-cols-2">
@@ -518,20 +443,6 @@ export default function TextOpenWorldVNextPlayer() {
       {!inventory.length && <p className="text-xs text-text-muted">背包为空。</p>}
     </article>
     <TextOpenWorldRelationshipsPanel runtimePackage={runtimePackage} state={state} />
-    <article className="rounded border border-border bg-bg-surface p-4" data-testid="text-open-world-quest-history">
-      <div className="mb-2 flex items-center gap-2 text-sm font-semibold">
-        <History className="h-4 w-4 text-accent" />任务历史
-      </div>
-      <div className="max-h-40 space-y-1 overflow-y-auto">
-        {questHistory.slice().reverse().map((entry, index) => <p
-          key={`${entry.sequence}:${index}`}
-          className="rounded bg-bg-base px-2 py-1 text-[9px]"
-        >
-          <strong>#{entry.sequence}</strong> {entry.summary}
-        </p>)}
-        {!questHistory.length && <p className="text-xs text-text-muted">尚无任务状态事件。</p>}
-      </div>
-    </article>
     <article className="rounded border border-border bg-bg-surface p-4">
       <div className="mb-2 flex items-center gap-2 text-sm font-semibold">
         <Save className="h-4 w-4 text-accent" />存档与分支
@@ -652,6 +563,11 @@ export default function TextOpenWorldVNextPlayer() {
         : null}</div>
     <TextOpenWorldGameShell
       sessionKey={sessionKey}
+      viewRequest={questMapFocus?.sessionKey === sessionKey ? {
+        sessionKey,
+        requestId: questMapFocus.requestId,
+        view: 'map',
+      } : null}
       gameTitle={runtimePackage.metadata.title}
       locationTitle={`${region?.title ?? '未知区域'} · ${location?.title ?? state.map.currentLocationKey}`}
       sourceLabel={sourceLabel}
@@ -660,6 +576,8 @@ export default function TextOpenWorldVNextPlayer() {
         map: <TextOpenWorldMapPanel
           projection={projection}
           busy={store.busy}
+          focusedLocationKey={questMapFocus?.sessionKey === sessionKey ? questMapFocus.locationKey : null}
+          focusedLocationRequestId={questMapFocus?.sessionKey === sessionKey ? questMapFocus.requestId : null}
           onTravel={(actionKey, destinationLocationKey) => {
             void run(() => store.executeVNextAction(actionKey, destinationLocationKey))
           }}

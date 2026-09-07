@@ -13,7 +13,7 @@ export type TextOpenWorldServiceContinuityPolicyV1 = 'replace-on-owner-death' | 
 export type TextOpenWorldActionCategoryV1 =
   | 'move' | 'travel' | 'fast-travel' | 'observe' | 'investigate' | 'talk'
   | 'take' | 'use' | 'equip' | 'unequip' | 'drop' | 'buy' | 'sell' | 'craft'
-  | 'accept-quest' | 'abandon-quest' | 'objective-action' | 'quest-action' | 'weather-action' | 'actor-schedule-action' | 'actor-state-action' | 'director-action' | 'claim-reward'
+  | 'accept-quest' | 'restart-quest' | 'abandon-quest' | 'objective-action' | 'quest-action' | 'weather-action' | 'actor-schedule-action' | 'actor-state-action' | 'director-action' | 'claim-reward'
   | 'attack-actor' | 'steal' | 'deceive' | 'crime'
   | 'start-combat' | 'continue-combat' | 'combat-state-action' | 'combat-reward-action'
   | 'combat-basic-attack' | 'combat-skill' | 'combat-item' | 'combat-enemy-skill' | 'escape'
@@ -376,6 +376,15 @@ export interface TextOpenWorldActionInputBindingsV1 {
 /** Action v15 freezes P9 input routing beside the deterministic Action graph. */
 export interface TextOpenWorldActionModuleV15 {
   version: 15
+  conditions: TextOpenWorldActionModuleV1['conditions']
+  effects: TextOpenWorldActionModuleV1['effects']
+  actions: TextOpenWorldActionModuleV1['actions']
+  inputBindings: TextOpenWorldActionInputBindingsV1
+}
+
+/** Action v16 adds governed restart Actions and complete abandon-stage coverage. */
+export interface TextOpenWorldActionModuleV16 {
+  version: 16
   conditions: TextOpenWorldActionModuleV1['conditions']
   effects: TextOpenWorldActionModuleV1['effects']
   actions: TextOpenWorldActionModuleV1['actions']
@@ -924,7 +933,7 @@ export interface TextOpenWorldParsedModulesV1 {
   world: TextOpenWorldWorldModuleV1
   actors: TextOpenWorldActorModuleV1
   quests: TextOpenWorldQuestModuleV1
-  actions: TextOpenWorldActionModuleV1 | TextOpenWorldActionModuleV15
+  actions: TextOpenWorldActionModuleV1 | TextOpenWorldActionModuleV15 | TextOpenWorldActionModuleV16
   progression: TextOpenWorldProgressionModuleV1
   combat: TextOpenWorldCombatModuleV1
   items: TextOpenWorldItemModuleV1

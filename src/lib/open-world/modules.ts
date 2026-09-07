@@ -16,7 +16,7 @@ const KEY = /^[a-z][a-z0-9._:-]{0,199}$/
 const SHA256 = /^[a-f0-9]{64}$/
 const ACTION_CATEGORIES: TextOpenWorldActionCategoryV1[] = [
   'move', 'travel', 'fast-travel', 'observe', 'investigate', 'talk', 'take', 'use', 'equip', 'unequip', 'drop',
-  'buy', 'sell', 'craft', 'accept-quest', 'abandon-quest', 'objective-action', 'quest-action', 'weather-action', 'actor-schedule-action', 'actor-state-action', 'claim-reward', 'attack-actor', 'steal', 'deceive', 'crime', 'start-combat', 'continue-combat', 'combat-state-action', 'escape',
+  'buy', 'sell', 'craft', 'accept-quest', 'restart-quest', 'abandon-quest', 'objective-action', 'quest-action', 'weather-action', 'actor-schedule-action', 'actor-state-action', 'claim-reward', 'attack-actor', 'steal', 'deceive', 'crime', 'start-combat', 'continue-combat', 'combat-state-action', 'escape',
   'director-action',
   'combat-basic-attack', 'combat-skill', 'combat-item', 'combat-enemy-skill', 'combat-reward-action',
   'rest', 'respawn', 'read', 'track', 'untrack', 'save', 'load-branch',
@@ -456,7 +456,7 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
     if (actorRows.find(actor => actor.key === item.actorKey)?.scheduleKey !== item.key) fail(`schedule/actor反向引用不一致:${String(item.key)}`)
   })
 
-  const actions = versioned(packageValue, 'actions', [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15])
+  const actions = versioned(packageValue, 'actions', [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16])
   const modernActionModule = Number(actions.version) >= 2
   const travelActionModule = Number(actions.version) >= 3
   const fastTravelActionModule = Number(actions.version) >= 4
@@ -471,6 +471,7 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
   const economyActionModule = Number(actions.version) >= 13
   const directorActionModule = Number(actions.version) >= 14
   const inputBindingActionModule = Number(actions.version) >= 15
+  const governedQuestLifecycleActionModule = Number(actions.version) >= 16
   if (actorScheduleActionModule && legacyActorModule) fail('Action v6必须搭配Actor v2')
   if (actorLifecycleActionModule && !actorLifecycleModule) fail('Action v7必须搭配Actor v3')
   if (combatStateActionModule !== (packageValue.modules.combat.schemaVersion >= 2)) fail('Action v9+必须与Combat v2+一起发布')
@@ -484,6 +485,9 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
   normalizedWorld.edges.forEach((item, index) => requireRefs(item.conditionKeys, conditionKeys, `world.edges[${index}].conditionKeys`))
   effects.forEach((item, index) => { key(item.operation, `actions.effects[${index}].operation`); canonicalProductProductionJsonV2(item.payload) })
   actionRows.forEach((item, index) => { enumValue(item.category, ACTION_CATEGORIES, `actions.actions[${index}].category`); text(item.label, `actions.actions[${index}].label`, 2_000); text(item.description, `actions.actions[${index}].description`); enumValue(item.actorScope, ['player', 'system'], `actions.actions[${index}].actorScope`); enumValue(item.targetScope, ['none', 'actor', 'location', 'item', 'quest', 'vendor', 'encounter', 'combatant', 'recipe'], `actions.actions[${index}].targetScope`); requireRefs(strings(item.locationKeys, `actions.actions[${index}].locationKeys`), locationKeys, 'action location'); requireRefs(strings(item.requirementConditionKeys, `actions.actions[${index}].requirementConditionKeys`), conditionKeys, 'action condition'); requireRefs(strings(item.costEffectKeys, `actions.actions[${index}].costEffectKeys`), effectKeys, 'action cost effect'); requireRefs(strings(item.successEffectKeys, `actions.actions[${index}].successEffectKeys`), effectKeys, 'action success effect'); requireRefs(strings(item.failureEffectKeys, `actions.actions[${index}].failureEffectKeys`), effectKeys, 'action failure effect'); int(item.timeCostMinutes, `actions.actions[${index}].timeCostMinutes`, 0, 1_000_000); enumValue(item.confirmationPolicy, ['never', 'high-risk', 'always'], `actions.actions[${index}].confirmationPolicy`); const repeatPolicy = enumValue(item.repeatPolicy, ['once', 'repeatable', 'cooldown'], `actions.actions[${index}].repeatPolicy`); const cooldown = item.cooldownMinutes == null ? null : int(item.cooldownMinutes, `actions.actions[${index}].cooldownMinutes`, 1, 1_000_000); if ((repeatPolicy === 'cooldown') !== (cooldown != null)) fail(`actions.actions[${index}] cooldown策略不一致`) })
+  if (!governedQuestLifecycleActionModule && actionRows.some(action => action.category === 'restart-quest')) {
+    fail('restart-quest需要Action v16')
+  }
 
   if (inputBindingActionModule) {
     const bindings = row(actions.inputBindings, 'actions.inputBindings')
@@ -754,6 +758,7 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
   const quests = versioned(packageValue, 'quests', [1, 2])
   exact(quests, ['version', 'quests', 'stages', 'objectives'], 'quests')
   const legacyQuestModule = quests.version === 1
+  if (governedQuestLifecycleActionModule && legacyQuestModule) fail('Action v16必须搭配Quest v2')
   const questRows = catalog(quests.quests, 'quests.quests', legacyQuestModule
     ? ['key', 'type', 'ownerKind', 'ownerKey', 'title', 'description', 'storylineKey', 'regionKeys', 'stageKeys', 'prerequisiteConditionKeys', 'rewardEffectKeys', 'lifecyclePolicy', 'timePolicy', 'expirationMinutes', 'repeatable', 'instantiationPolicy', 'initialStatus', 'estimatedMinutes', 'tags']
     : ['key', 'type', 'ownerKind', 'ownerKey', 'title', 'description', 'storylineKey', 'regionKeys', 'stageKeys', 'prerequisiteConditionKeys', 'rewardEffectKeys', 'rewardContractKey', 'claimActionKey', 'lifecyclePolicy', 'timePolicy', 'expirationMinutes', 'repeatable', 'instantiationPolicy', 'initialStatus', 'estimatedMinutes', 'tags'])
@@ -792,6 +797,10 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
     if ((type === 'mainline' || type === 'significant') && (policy !== 'protected-wait' || timePolicy !== 'waits')) fail(`${label}重要任务必须受保护并等待玩家`)
     const repeatable = bool(item.repeatable, `${label}.repeatable`)
     const instantiationPolicy = enumValue(item.instantiationPolicy, ['session-start', 'director'], `${label}.instantiationPolicy`)
+    if (governedQuestLifecycleActionModule && policy === 'abandon-restart'
+      && (type !== 'ordinary' || timePolicy !== 'waits' || instantiationPolicy !== 'session-start')) {
+      fail(`${label} Action v16只允许不限时固定普通任务重接`)
+    }
     const initialStatus = enumValue(item.initialStatus, ['locked', 'available', 'revealed'], `${label}.initialStatus`)
     if (type === 'template') {
       if (!repeatable || instantiationPolicy !== 'director' || initialStatus !== 'locked' || storylineKey != null) fail(`${label}模板任务必须由Director重复实例化且不能直接开放`)
@@ -922,7 +931,7 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
       requireSameKeys(strings(action.requirementConditionKeys, `stage action ${completionActionKey} requirements`), strings(stage.completionConditionKeys, `stage ${String(stage.key)} completion conditions`), `stage ${String(stage.key)} completion conditions`)
     })
   }
-  actionRows.filter(action => ['accept-quest', 'abandon-quest'].includes(String(action.category))).forEach(action => {
+  actionRows.filter(action => ['accept-quest', 'restart-quest', 'abandon-quest'].includes(String(action.category))).forEach(action => {
     const label = `quest action ${String(action.key)}`
     if (action.actorScope !== 'player' || action.targetScope !== 'quest' || strings(action.costEffectKeys, `${label}.costEffectKeys`).length || strings(action.failureEffectKeys, `${label}.failureEffectKeys`).length) fail(`${label}必须是无cost/failure的玩家任务实例Action`)
     const transitions = strings(action.successEffectKeys, `${label}.successEffectKeys`).map(effectKey => effects.find(effect => effect.key === effectKey)!)
@@ -933,10 +942,30 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
     if (definitionKeys.size !== 1) fail(`${label}必须只绑定一个任务定义`)
     const definition = questRows.find(quest => quest.key === [...definitionKeys][0]) ?? fail(`${label}任务定义不存在`)
     if (action.category === 'accept-quest') {
+      const orderedStages = strings(definition.stageKeys, `${label}.definition.stageKeys`)
+        .map(stageKey => questStages.find(stage => stage.key === stageKey)!)
+        .sort((left, right) => Number(left.order) - Number(right.order))
       if (transitionPayloads.length !== 2 || transitionPayloads[0].status !== 'accepted' || transitionPayloads[0].stageKey != null
-        || transitionPayloads[1].status !== 'active' || !strings(definition.stageKeys, `${label}.definition.stageKeys`).includes(String(transitionPayloads[1].stageKey))) fail(`${label}必须依次accept并激活合法Stage`)
+        || transitionPayloads[1].status !== 'active' || !strings(definition.stageKeys, `${label}.definition.stageKeys`).includes(String(transitionPayloads[1].stageKey))
+        || (governedQuestLifecycleActionModule && transitionPayloads[1].stageKey !== orderedStages[0]?.key)) fail(`${label}必须依次accept并激活第一Stage`)
+    } else if (action.category === 'restart-quest') {
+      const orderedStages = strings(definition.stageKeys, `${label}.definition.stageKeys`)
+        .map(stageKey => questStages.find(stage => stage.key === stageKey)!)
+        .sort((left, right) => Number(left.order) - Number(right.order))
+      const expected = [
+        { status: 'available', stageKey: null }, { status: 'revealed', stageKey: null },
+        { status: 'accepted', stageKey: null }, { status: 'active', stageKey: orderedStages[0]?.key ?? null },
+      ]
+      if (!governedQuestLifecycleActionModule
+        || definition.type !== 'ordinary' || definition.lifecyclePolicy !== 'abandon-restart'
+        || definition.timePolicy !== 'waits' || definition.instantiationPolicy !== 'session-start'
+        || definition.initialStatus !== 'available'
+        || canonicalProductProductionJsonV2(transitionPayloads.map(payload => ({ status: payload.status, stageKey: payload.stageKey })))
+          !== canonicalProductProductionJsonV2(expected)) fail(`${label}必须原子重启不限时固定普通任务`)
     } else if (transitionPayloads.length !== 1 || transitionPayloads[0].status !== 'abandoned'
-      || !strings(definition.stageKeys, `${label}.definition.stageKeys`).includes(String(transitionPayloads[0].stageKey))
+      || (transitionPayloads[0].stageKey != null
+        && !strings(definition.stageKeys, `${label}.definition.stageKeys`).includes(String(transitionPayloads[0].stageKey)))
+      || (transitionPayloads[0].stageKey == null && !governedQuestLifecycleActionModule)
       || ['mainline', 'significant'].includes(String(definition.type))) fail(`${label}不能违反任务保护策略`)
     if (action.confirmationPolicy !== (action.category === 'abandon-quest' ? 'always' : 'never') || action.repeatPolicy !== 'repeatable') fail(`${label}确认或重复策略无效`)
   })
@@ -950,7 +979,7 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
       .filter(effect => effect.operation === 'transition-quest')
     if (!transitions.length) return
     const category = String(action.category)
-    if (!['accept-quest', 'abandon-quest', 'quest-action'].includes(category)) fail(`任务迁移Effect只能由任务生命周期Action引用:${String(action.key)}`)
+    if (!['accept-quest', 'restart-quest', 'abandon-quest', 'quest-action'].includes(category)) fail(`任务迁移Effect只能由任务生命周期Action引用:${String(action.key)}`)
     if (category !== 'quest-action') return
     const label = `system quest action ${String(action.key)}`
     if (action.actorScope !== 'system' || action.targetScope !== 'quest'
@@ -1022,6 +1051,39 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
         return String(row(effect.payload, `expiration action ${String(action.key)} payload`).stageKey ?? '__unstarted__')
       })
       requireSameKeys(stageCoverage, ['__unstarted__', ...strings(quest.stageKeys, `quest ${questKey} stageKeys`)], `限时任务${questKey}过期Stage覆盖`)
+    })
+  }
+  if (governedQuestLifecycleActionModule && !legacyQuestModule) {
+    const transitionPayloads = (action: Row) => strings(action.successEffectKeys, `lifecycle action ${String(action.key)} effects`)
+      .map(effectKey => effects.find(effect => effect.key === effectKey)!)
+      .filter(effect => effect.operation === 'transition-quest')
+      .map(effect => row(effect.payload, `lifecycle action ${String(action.key)} payload`))
+    questRows.filter(quest => quest.lifecyclePolicy !== 'protected-wait').forEach(quest => {
+      const questKey = String(quest.key)
+      const stageCoverage = actionRows.filter(action => action.category === 'abandon-quest')
+        .flatMap(action => transitionPayloads(action))
+        .filter(payload => payload.questKey === questKey && payload.status === 'abandoned')
+        .map(payload => String(payload.stageKey ?? '__unstarted__'))
+      requireSameKeys(stageCoverage, ['__unstarted__', ...strings(quest.stageKeys, `quest ${questKey} abandon stages`)], `可放弃任务${questKey} Stage覆盖`)
+    })
+    const restartableQuests = questRows.filter(quest => quest.type === 'ordinary'
+      && quest.lifecyclePolicy === 'abandon-restart' && quest.timePolicy === 'waits'
+      && quest.instantiationPolicy === 'session-start')
+    const restartActions = actionRows.filter(action => action.category === 'restart-quest')
+    requireSameKeys(
+      restartActions.map(action => String(action.key)),
+      restartableQuests.map(quest => `action.restart.${String(quest.key)}`),
+      '可重接普通任务Action覆盖',
+    )
+    restartableQuests.forEach(quest => {
+      const actionKey = `action.restart.${String(quest.key)}`
+      const action = restartActions.find(candidate => candidate.key === actionKey)!
+      const offerScene = scenes.find(scene => scene.sourceKind === 'quest-offer' && scene.questKey === quest.key)
+        ?? fail(`可重接任务缺少原发布场景:${String(quest.key)}`)
+      if (!strings(offerScene.actionKeys, `restart scene ${String(offerScene.key)} actions`).includes(actionKey)) {
+        fail(`重接Action必须精确绑定原发布场景与地点:${String(quest.key)}`)
+      }
+      requireSameKeys(strings(action.locationKeys, `restart action ${actionKey} locations`), [String(offerScene.locationKey)], `重接Action ${actionKey} 原发布地点`)
     })
   }
 

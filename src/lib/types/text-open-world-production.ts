@@ -2655,6 +2655,10 @@ export interface TextOpenWorldQuestDesignDocumentsV1 {
     allObjectivesHaveActions: true
     allRewardsClaimableOnce: true
     allTimedQuestsHaveExpirationCoverage: true
+    /** Missing on the pre-G4-05 P8F v1 artifact contract. */
+    allAbandonableQuestStagesCovered?: true
+    /** P9 must prove this requirement against the authored quest-offer scene. */
+    restartActionsRequireOriginalOfferRoute?: true
     allCatalogBindingsResolved: true
     allEndingsRuntimeBound: true
     sceneBindingsDeferred: true

@@ -19,6 +19,14 @@ export type TextOpenWorldGameViewKey = typeof TEXT_OPEN_WORLD_GAME_VIEW_KEYS[num
 
 export type TextOpenWorldGameViews = Record<TextOpenWorldGameViewKey, ReactNode>
 
+export interface TextOpenWorldGameViewRequest {
+  /** Bind the request to one runtime session so a stale task link cannot move a new save. */
+  sessionKey: number | string
+  /** Monotonic UI-only identity; replaying the same request must be a no-op. */
+  requestId: number
+  view: TextOpenWorldGameViewKey
+}
+
 export interface TextOpenWorldGameShellProps {
   /** A changed key starts from the scene again without persisting UI-only navigation state. */
   sessionKey: number | string
@@ -29,6 +37,8 @@ export interface TextOpenWorldGameShellProps {
   context: ReactNode
   status: ReactNode
   navigationSupplement?: ReactNode
+  /** One-shot navigation intent from content such as a task-location link. */
+  viewRequest?: TextOpenWorldGameViewRequest | null
   overlay?: ReactNode
   onDismissOverlay?(): void
   error?: string | null
@@ -119,6 +129,7 @@ export default function TextOpenWorldGameShell(props: TextOpenWorldGameShellProp
   const overlayReturnFocusRef = useRef<HTMLElement | null>(null)
   const restoreContextFocusAfterCloseRef = useRef(false)
   const previousSessionKey = useRef(props.sessionKey)
+  const consumedViewRequestRef = useRef<string | null>(null)
   const overlayOpen = props.overlay != null
   const onDismissOverlay = props.onDismissOverlay
   const contextModalOpen = contextOpen && contextDrawerMode && !overlayOpen
@@ -154,10 +165,20 @@ export default function TextOpenWorldGameShell(props: TextOpenWorldGameShellProp
   useEffect(() => {
     if (previousSessionKey.current === props.sessionKey) return
     previousSessionKey.current = props.sessionKey
+    consumedViewRequestRef.current = null
     setActiveView('scene')
     setContextOpen(false)
     queueMicrotask(() => mainRef.current?.focus())
   }, [props.sessionKey])
+
+  useEffect(() => {
+    const request = props.viewRequest
+    if (!request || request.sessionKey !== props.sessionKey) return
+    const signature = `${typeof request.sessionKey}:${String(request.sessionKey)}:${request.requestId}:${request.view}`
+    if (consumedViewRequestRef.current === signature) return
+    consumedViewRequestRef.current = signature
+    selectView(request.view)
+  }, [props.sessionKey, props.viewRequest, selectView])
 
   useEffect(() => {
     if (!contextModalOpen) return

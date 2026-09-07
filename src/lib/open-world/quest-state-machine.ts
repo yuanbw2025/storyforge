@@ -9,6 +9,7 @@ import type {
   TextOpenWorldRuntimePackageV1,
 } from '../types'
 import { parseTextOpenWorldModulesV1 } from './modules'
+import { synchronizeTextOpenWorldDirectorQuestMirrorsV1 } from './director'
 
 const PLAYER_INTENTS = new Set<TextOpenWorldQuestTransitionIntentV1>(['accept', 'abandon'])
 
@@ -26,7 +27,7 @@ function intentFor(instance: TextOpenWorldQuestInstanceV1, toStatus: TextOpenWor
   if (fromStatus === 'active' && toStatus === 'completed') return 'complete'
   if (fromStatus === 'active' && toStatus === 'failed') return 'fail'
   if (['revealed', 'accepted', 'active', 'suspended'].includes(fromStatus) && toStatus === 'abandoned') return 'abandon'
-  if (['revealed', 'accepted', 'active', 'suspended'].includes(fromStatus) && toStatus === 'expired') return 'expire'
+  if (['revealed', 'accepted', 'active', 'suspended', 'abandoned'].includes(fromStatus) && toStatus === 'expired') return 'expire'
   if (['available', 'revealed'].includes(fromStatus) && toStatus === 'withdrawn') return 'withdraw'
   if (fromStatus === 'abandoned' && toStatus === 'available') return 'reoffer'
   fail(`不存在合法迁移:${fromStatus}->${toStatus}`)
@@ -46,7 +47,10 @@ function assertPolicy(
   if (definition.type === 'mainline' && ['fail', 'abandon', 'expire', 'withdraw', 'reoffer'].includes(intent)) fail(`主线不允许${intent}`)
   if (definition.type === 'significant' && ['fail', 'abandon', 'expire', 'withdraw', 'reoffer'].includes(intent)) fail(`重要故事线不允许${intent}`)
   if (definition.lifecyclePolicy === 'protected-wait' && ['fail', 'abandon', 'expire', 'withdraw', 'reoffer'].includes(intent)) fail(`protected-wait任务不允许${intent}`)
-  if (intent === 'reoffer' && (definition.type !== 'ordinary' || definition.lifecyclePolicy !== 'abandon-restart')) fail('只有可重接普通任务能够重新开放原实例')
+  if (intent === 'reoffer' && (definition.type !== 'ordinary' || definition.lifecyclePolicy !== 'abandon-restart'
+    || definition.timePolicy !== 'waits' || definition.instantiationPolicy !== 'session-start')) {
+    fail('只有不限时、可重接的固定普通任务能够重新开放原实例')
+  }
   if (intent === 'expire') {
     if (definition.timePolicy !== 'timed' || instance.deadlineWorldMinute == null) fail('非限时任务不能过期')
     if (worldMinute < instance.deadlineWorldMinute) fail('任务尚未到期')
@@ -76,10 +80,11 @@ function assertPolicy(
 function applyStep(
   modules: TextOpenWorldParsedModulesV1,
   definition: TextOpenWorldParsedModulesV1['quests']['quests'][number],
+  state: TextOpenWorldEffectStateV1,
   instance: TextOpenWorldQuestInstanceV1,
   step: TextOpenWorldQuestTransitionAuthorizationV1['transitions'][number],
   worldMinute: number,
-) {
+): { trackingCleared: boolean; directorMirrorsUpdated: boolean } {
   if (instance.status !== step.fromStatus) fail(`迁移基线状态漂移:${instance.status}!=${step.fromStatus}`)
   const intent = intentFor(instance, step.toStatus, step.stageKey)
   if (intent !== step.intent) fail(`迁移意图与状态边不一致:${step.intent}`)
@@ -116,8 +121,22 @@ function applyStep(
       if (instance.objectiveStatusByKey[objectiveKey] === 'active') instance.objectiveStatusByKey[objectiveKey] = 'failed'
     })
   }
-  if (['complete', 'fail', 'abandon', 'expire', 'withdraw'].includes(intent)) instance.terminalAtWorldMinute = worldMinute
+  let trackingCleared = false
+  if (['complete', 'fail', 'abandon', 'expire', 'withdraw'].includes(intent)) {
+    instance.terminalAtWorldMinute = worldMinute
+    if (modules.actions.version >= 16) {
+      trackingCleared = state.quests.tracking.primaryInstanceKey === instance.instanceKey
+        || state.quests.tracking.pinnedInstanceKeys.includes(instance.instanceKey)
+      if (state.quests.tracking.primaryInstanceKey === instance.instanceKey) state.quests.tracking.primaryInstanceKey = null
+      state.quests.tracking.pinnedInstanceKeys = state.quests.tracking.pinnedInstanceKeys
+        .filter(instanceKey => instanceKey !== instance.instanceKey)
+    }
+  }
   instance.status = step.toStatus
+  const directorMirrorsUpdated = modules.actions.version >= 16
+    ? synchronizeTextOpenWorldDirectorQuestMirrorsV1(modules, state)
+    : false
+  return { trackingCleared, directorMirrorsUpdated }
 }
 
 export interface TextOpenWorldQuestTransitionCatalogV1 {
@@ -129,7 +148,12 @@ export interface TextOpenWorldQuestTransitionCatalogV1 {
   apply(input: {
     state: TextOpenWorldEffectStateV1
     authorization: TextOpenWorldQuestTransitionAuthorizationV1
-  }): Array<{ before: TextOpenWorldQuestInstanceV1; after: TextOpenWorldQuestInstanceV1 }>
+  }): Array<{
+    before: TextOpenWorldQuestInstanceV1
+    after: TextOpenWorldQuestInstanceV1
+    trackingCleared: boolean
+    directorMirrorsUpdated: boolean
+  }>
   assertAuthorization(input: {
     state: TextOpenWorldEffectStateV1
     authorization: TextOpenWorldQuestTransitionAuthorizationV1
@@ -151,11 +175,16 @@ export function createTextOpenWorldQuestTransitionCatalogV1(
     const instance = state.quests.instancesByKey[authorization.instanceKey] ?? fail(`任务实例不存在:${authorization.instanceKey}`)
     if (instance.definitionKey !== authorization.definitionKey) fail('任务迁移定义引用漂移')
     const definition = modules.quests.quests.find(candidate => candidate.key === instance.definitionKey) ?? fail('任务定义不存在')
-    const changes: Array<{ before: TextOpenWorldQuestInstanceV1; after: TextOpenWorldQuestInstanceV1 }> = []
+    const changes: Array<{
+      before: TextOpenWorldQuestInstanceV1
+      after: TextOpenWorldQuestInstanceV1
+      trackingCleared: boolean
+      directorMirrorsUpdated: boolean
+    }> = []
     authorization.transitions.forEach(step => {
       const before = clone(instance)
-      applyStep(modules, definition, instance, step, authorization.worldMinute)
-      changes.push({ before, after: clone(instance) })
+      const derivedChanges = applyStep(modules, definition, state, instance, step, authorization.worldMinute)
+      changes.push({ before, after: clone(instance), ...derivedChanges })
     })
     return changes
   }

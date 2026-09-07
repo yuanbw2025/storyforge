@@ -344,6 +344,47 @@ describe('Text Open World G4 · 玩家游戏壳', () => {
     expect(document.activeElement).toBe(host.querySelector('[data-testid="text-open-world-main-view"]'))
   })
 
+  it('只消费绑定当前Session的一次性内容导航请求，旧请求不会在换档或重渲染后复活', async () => {
+    const initial = props({
+      sessionKey: 'session-a',
+      viewRequest: { sessionKey: 'session-a', requestId: 1, view: 'map' },
+    })
+    await act(async () => {
+      root.render(createElement(TextOpenWorldGameShell, initial))
+      await new Promise(resolve => setTimeout(resolve, 0))
+    })
+    expect(host.querySelector('[data-testid="text-open-world-shell"]')?.getAttribute('data-active-view')).toBe('map')
+
+    await click(buttonByLabel(host, '返回当前场景'))
+    await act(async () => {
+      root.render(createElement(TextOpenWorldGameShell, {
+        ...initial,
+        viewRequest: { ...initial.viewRequest! },
+      }))
+      await new Promise(resolve => setTimeout(resolve, 0))
+    })
+    expect(host.querySelector('[data-testid="text-open-world-shell"]')?.getAttribute('data-active-view')).toBe('scene')
+
+    await act(async () => {
+      root.render(createElement(TextOpenWorldGameShell, {
+        ...initial,
+        viewRequest: { sessionKey: 'session-a', requestId: 2, view: 'map' },
+      }))
+      await new Promise(resolve => setTimeout(resolve, 0))
+    })
+    expect(host.querySelector('[data-testid="text-open-world-shell"]')?.getAttribute('data-active-view')).toBe('map')
+
+    await act(async () => {
+      root.render(createElement(TextOpenWorldGameShell, {
+        ...initial,
+        sessionKey: 'session-b',
+        viewRequest: { sessionKey: 'session-a', requestId: 3, view: 'map' },
+      }))
+      await new Promise(resolve => setTimeout(resolve, 0))
+    })
+    expect(host.querySelector('[data-testid="text-open-world-shell"]')?.getAttribute('data-active-view')).toBe('scene')
+  })
+
   it('确认层接管焦点、循环 Tab，并在 Escape 取消后恢复原触发器焦点', async () => {
     const onDismiss = vi.fn()
     await act(async () => root.render(createElement(OverlaySafetyHarness, {

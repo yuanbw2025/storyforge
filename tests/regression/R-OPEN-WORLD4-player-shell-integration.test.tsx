@@ -166,6 +166,7 @@ describe('Text Open World G4 · 真实 vNext 玩家壳集成', () => {
     expect(shell.getAttribute('data-active-view')).toBe('quests')
     expect(quests.hidden).toBe(false)
     expect(quests.querySelector('[data-testid="text-open-world-quest-hud"]')).toBeTruthy()
+    expect(quests.querySelector('[aria-label="任务历史"]')).toBeTruthy()
     expect(quests.textContent).toContain('可见任务实例')
     expect(quests.textContent).toContain('断流的盐渠')
 
@@ -183,7 +184,6 @@ describe('Text Open World G4 · 真实 vNext 玩家壳集成', () => {
     expect(more.hidden).toBe(false)
     expect(more.querySelector('[data-testid="text-open-world-equipment"]')).toBeTruthy()
     expect(more.querySelector('[data-testid="text-open-world-relationships"]')).toBeTruthy()
-    expect(more.querySelector('[data-testid="text-open-world-quest-history"]')).toBeTruthy()
     expect(more.textContent).toContain('背包')
     expect(more.textContent).toContain('存档与分支')
 

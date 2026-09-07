@@ -40,4 +40,63 @@ describe('Text Open World vNext · fast travel player UI', () => {
     await act(async () => fastTravel!.click())
     expect(onTravel).toHaveBeenCalledWith('action.fast-travel', 'location.salt-port')
   })
+
+  it('任务定位只聚焦玩家已知地点，未知key不会泄露地图内容或抢走焦点', async () => {
+    const projection = createInitialTextOpenWorldSessionProjectionV1(createTextOpenWorldVNextFixture())
+    const onTravel = vi.fn()
+    await act(async () => {
+      root.render(createElement(TextOpenWorldMapPanel, {
+        projection,
+        busy: false,
+        focusedLocationKey: 'location.salt-port',
+        focusedLocationRequestId: 1,
+        onTravel,
+      }))
+    })
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 0))
+    })
+
+    const focused = host.querySelector('[aria-current="location"]')
+    expect(focused?.textContent).toContain('盐港广场')
+    expect(host.querySelectorAll('[data-task-focused="true"]')).toHaveLength(2)
+    expect(document.activeElement).toBe(focused)
+    expect(host.textContent).not.toContain('未公开')
+
+    const sentinel = document.createElement('button')
+    document.body.append(sentinel)
+    sentinel.focus()
+    await act(async () => {
+      root.render(createElement(TextOpenWorldMapPanel, {
+        projection,
+        busy: false,
+        focusedLocationKey: 'location.salt-port',
+        focusedLocationRequestId: 2,
+        onTravel,
+      }))
+    })
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 0))
+    })
+    expect(document.activeElement).toBe(host.querySelector('[aria-current="location"]'))
+
+    sentinel.focus()
+    await act(async () => {
+      root.render(createElement(TextOpenWorldMapPanel, {
+        projection,
+        busy: false,
+        focusedLocationKey: 'location.never-disclosed',
+        focusedLocationRequestId: 3,
+        onTravel,
+      }))
+    })
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 0))
+    })
+
+    expect(host.querySelector('[data-task-focused="true"]')).toBeNull()
+    expect(document.activeElement).toBe(sentinel)
+    expect(onTravel).not.toHaveBeenCalled()
+    sentinel.remove()
+  })
 })

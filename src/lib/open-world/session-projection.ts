@@ -560,6 +560,8 @@ export function applyTextOpenWorldSessionEventV1(current: TextOpenWorldSessionPr
       const intents = authorization.transitions.map(step => step.intent)
       if (action.category === 'accept-quest') {
         if (intents.join(',') !== 'accept,activate') fail('接受任务必须原子完成accept与activate')
+      } else if (action.category === 'restart-quest') {
+        if (intents.join(',') !== 'reoffer,reveal,accept,activate') fail('重新接取任务必须原子完成reoffer、reveal、accept与activate')
       } else if (action.category === 'abandon-quest') {
         if (intents.length !== 1 || intents[0] !== 'abandon') fail('放弃任务Action只能执行abandon')
       } else if (action.category !== 'quest-action' || action.actorScope !== 'system') fail('任务系统迁移必须使用system quest-action')

@@ -409,6 +409,11 @@ function compileModulePayloads(
 ): TextOpenWorldParsedModulesV1 {
   const qdd = artifacts.quests
   const binding = qdd.catalogBindings
+  const actionModuleVersion = artifacts.system.runtimeModules.find(module => module.moduleKey === 'actions')?.schemaVersion
+  if (actionModuleVersion !== 15 && actionModuleVersion !== 16) fail('SystemConfigs任务Action版本无效')
+  const expectedActionModuleVersion = qdd.governance.allAbandonableQuestStagesCovered === true
+    && qdd.governance.restartActionsRequireOriginalOfferRoute === true ? 16 : 15
+  if (actionModuleVersion !== expectedActionModuleVersion) fail('SystemConfigs与QuestDesign任务生命周期版本不一致')
   const endingBindings = qdd.endingBindings
   const endingScene = [...artifacts.scenes.scenes]
     .find(scene => scene.sourceKind === 'quest-resolution'
@@ -657,7 +662,7 @@ function compileModulePayloads(
       })),
     },
     actions: {
-      version: 15,
+      version: actionModuleVersion,
       conditions: qdd.conditions,
       effects: finalQuestEffects,
       actions: finalQuestActions,

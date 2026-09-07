@@ -162,7 +162,7 @@ export interface TextOpenWorldSceneScriptsInputContextV1 {
       catalogBindings: Pick<TextOpenWorldQuestDesignDocumentsV1['catalogBindings'],
         'actors' | 'encounters' | 'items' | 'recipes' | 'vendors' | 'interactions' | 'rewards'>
       governance: Pick<TextOpenWorldQuestDesignDocumentsV1['governance'],
-        'questAndEncounterBindingsReady' | 'sceneBindingsDeferred'>
+        'questAndEncounterBindingsReady' | 'sceneBindingsDeferred' | 'restartActionsRequireOriginalOfferRoute'>
     }
   directorDecks: {
     productInstanceKey: string
@@ -445,7 +445,9 @@ function buildDemands(context: TextOpenWorldSceneScriptsContextBaseV1) {
       : context.mapInteractionCatalog.locations
         .find(location => location.key === endpointLocationKey)?.regionKey
         ?? fail(`任务端点地点缺少地区:${quest.key}:${endpointLocationKey}`)
-    const offerActions = playerActionKeys(hydrated, [quest.acceptActionKey])
+    const restartActionKey = hydrated.questDesignDocuments.actions
+      .find(action => action.key === `action.restart.${quest.key}` && action.category === 'restart-quest')?.key
+    const offerActions = playerActionKeys(hydrated, [quest.acceptActionKey, ...(restartActionKey ? [restartActionKey] : [])])
     addScene({
       sceneKey: `scene.offer.${quest.key}`, sourceKind: 'quest-offer', sourceKey: quest.key,
       suggestedTitle: `委托：${quest.title}`, purpose: skeleton.storyMotivation,
@@ -766,6 +768,9 @@ async function loadContext(input: { scope: WorkspaceScope; productionId: number;
       governance: {
         questAndEncounterBindingsReady: questDesignDocuments.governance.questAndEncounterBindingsReady,
         sceneBindingsDeferred: questDesignDocuments.governance.sceneBindingsDeferred,
+        ...(questDesignDocuments.governance.restartActionsRequireOriginalOfferRoute === true
+          ? { restartActionsRequireOriginalOfferRoute: true as const }
+          : {}),
       },
       questDesignDocumentsHash: questDesignDocuments.questDesignDocumentsHash,
     },
@@ -1104,6 +1109,18 @@ async function assertCrossArtifacts(
     if (!scene.actionKeys.every(key => actions.get(key)?.actorScope === 'player')) fail(`Scene只能引用玩家Action:${scene.key}`)
     if (!same(scene.fixedChoiceKeys, choiceContracts.choices.filter(choice => choice.sceneKey === scene.key).map(choice => choice.key))) fail(`Scene/Choice反向绑定不一致:${scene.key}`)
     if (scene.sourceKind === 'actor-dialogue' && !scene.attitudeOpenings) fail(`角色场景缺少三档态度:${scene.key}`)
+  }
+  if (context.questDesignDocuments.governance.restartActionsRequireOriginalOfferRoute === true) {
+    for (const action of context.questDesignDocuments.actions.filter(item => item.category === 'restart-quest')) {
+      const questKey = action.key.startsWith('action.restart.')
+        ? action.key.slice('action.restart.'.length)
+        : fail(`重接Action稳定键无法反向定位任务:${action.key}`)
+      const offerScene = sceneScripts.scenes.find(scene => scene.sourceKind === 'quest-offer' && scene.questKey === questKey)
+        ?? fail(`可重接任务没有原发布场景:${questKey}`)
+      if (!offerScene.actionKeys.includes(action.key) || !same(action.locationKeys, [offerScene.locationKey])) {
+        fail(`重接Action没有精确绑定原发布场景与地点:${questKey}`)
+      }
+    }
   }
   const endingScene = sceneScripts.scenes.find(scene => (
     scene.sourceKind === 'quest-resolution'

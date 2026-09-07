@@ -62,6 +62,21 @@ function projectedQuestMirrors(modules: TextOpenWorldParsedModulesV1, state: Tex
   }
 }
 
+/** Recomputes the derived Director quest-budget mirrors from the canonical quest ledger. */
+export function synchronizeTextOpenWorldDirectorQuestMirrorsV1(
+  modules: TextOpenWorldParsedModulesV1,
+  state: TextOpenWorldEffectStateV1,
+): boolean {
+  const projected = projectedQuestMirrors(modules, state)
+  const before = {
+    generatedQuestInstanceCount: state.director.generatedQuestInstanceCount,
+    revealedQuestInstanceKeys: state.director.revealedQuestInstanceKeys,
+    activeQuestInstanceKeys: state.director.activeQuestInstanceKeys,
+  }
+  Object.assign(state.director, projected)
+  return canonicalProductProductionJsonV2(before) !== canonicalProductProductionJsonV2(projected)
+}
+
 function regionChanges(modules: TextOpenWorldParsedModulesV1, state: TextOpenWorldEffectStateV1): TextOpenWorldDirectorSettlementAuthorizationV1['regionChanges'] {
   return modules.director.regionRules.flatMap(rule => {
     const fromSettlementWorldMinute = state.director.lastRegionSettlementWorldMinuteByRegionKey[rule.regionKey]
@@ -319,7 +334,7 @@ export function createTextOpenWorldDirectorCatalogV1(
         state.director.history = state.director.history.slice(-modules.director.rules.historyLimit)
       }
       state.knowledge.history = state.knowledge.history.slice(-modules.director.rules.historyLimit)
-      Object.assign(state.director, projectedQuestMirrors(modules, state))
+      synchronizeTextOpenWorldDirectorQuestMirrorsV1(modules, state)
       return state
     },
   }

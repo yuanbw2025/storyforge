@@ -728,7 +728,7 @@ function applyDefinitions(
         transitionChanges.forEach((change, index) => record(
           changes,
           questTransitionEffects[index],
-          `任务实例${questAuthorization.instanceKey}变为${questAuthorization.transitions[index].toStatus}`,
+          `任务实例${questAuthorization.instanceKey}变为${questAuthorization.transitions[index].toStatus}${change.trackingCleared ? '并清除HUD追踪' : ''}${change.directorMirrorsUpdated ? '并同步Director任务预算镜像' : ''}`,
           change.before,
           change.after,
         ))
@@ -1057,7 +1057,12 @@ export function createTextOpenWorldEffectCatalogV1(value: TextOpenWorldRuntimePa
   const definitions = modules.actions.effects.map((item, index) => parseDefinition(item, refs, `effects[${index}]`)); const byKey = new Map(definitions.map(item => [item.key, item])); const clone = <T>(item: T): T => structuredClone(item)
   const plan = async (input: { effectKeys: string[]; claimKey: string; state: TextOpenWorldEffectStateV1; authorization?: TextOpenWorldEffectPlanV1['authorization'] }): Promise<TextOpenWorldEffectPlanV1> => {
     const claimKey = key(input.claimKey, 'claimKey', CLAIM_KEY); if (!Array.isArray(input.effectKeys) || new Set(input.effectKeys).size !== input.effectKeys.length) fail('effectKeys必须是无重复数组')
-    const effects = input.effectKeys.map(effectKey => byKey.get(key(effectKey, 'effectKey')) ?? fail(`Effect不存在:${effectKey}`)); const baseStateHash = await hashProductProductionValueV2(input.state); const preview = applyDefinitions(input.state, effects, claimKey, modules, input.authorization ?? null, questTransitions, objectives, tracking, fastTravel, weather, actorSchedules, actorLifecycle, crime, combatState, combatActions, crafting, economy, director); const resultingStateHash = await hashProductProductionValueV2(preview.state); const impactDomains = [...new Set(effects.flatMap(effect => effectDomains(effect.operation)))]
+    const effects = input.effectKeys.map(effectKey => byKey.get(key(effectKey, 'effectKey')) ?? fail(`Effect不存在:${effectKey}`)); const baseStateHash = await hashProductProductionValueV2(input.state); const preview = applyDefinitions(input.state, effects, claimKey, modules, input.authorization ?? null, questTransitions, objectives, tracking, fastTravel, weather, actorSchedules, actorLifecycle, crime, combatState, combatActions, crafting, economy, director); const resultingStateHash = await hashProductProductionValueV2(preview.state); const impactDomains = [...new Set([
+      ...effects.flatMap(effect => effectDomains(effect.operation)),
+      ...(canonicalProductProductionJsonV2(input.state.director) !== canonicalProductProductionJsonV2(preview.state.director)
+        ? ['director' as const]
+        : []),
+    ])]
     const body: Omit<TextOpenWorldEffectPlanV1, 'planHash'> = {
       schema: 'storyforge.text-open-world.effect-plan', version: 1, claimKey, baseStateHash, resultingStateHash,
       effectKeys: [...input.effectKeys], effects: clone(effects), authorization: clone(input.authorization ?? null),

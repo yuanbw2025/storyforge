@@ -56,6 +56,11 @@ describe('Text Open World vNext · quest lifecycle player UI', () => {
     expect(host.textContent).toContain('断流的盐渠')
     expect(host.textContent).toContain('短缺物资')
     expect(host.textContent).toContain('进行中')
+    const ordinaryListItem = host.querySelector(
+      `[role="listitem"][data-quest-instance="${ordinary.instanceKey}"]`,
+    ) as HTMLButtonElement | null
+    expect(ordinaryListItem).toBeTruthy()
+    await act(async () => { ordinaryListItem!.click(); await new Promise(resolve => setTimeout(resolve, 0)) })
     expect(host.textContent).toContain('当前阶段：搜集物资')
     expect(host.textContent).toContain('寻找盐晶')
     expect(host.querySelector('[data-testid="text-open-world-quest-hud"]')?.textContent).toContain('主追踪')
@@ -108,9 +113,8 @@ describe('Text Open World vNext · quest lifecycle player UI', () => {
     })
     expect(host.textContent).toContain('奖励待领取')
     const claim = Array.from(host.querySelectorAll('button')).find(button => button.textContent?.includes('领取物资奖励'))
-    expect(claim).toBeTruthy()
-    await act(async () => { claim!.click(); await new Promise(resolve => setTimeout(resolve, 0)) })
-    expect(executeVNextAction).toHaveBeenCalledWith('action.claim-supplies-reward', ordinary.instanceKey)
+    expect(claim).toBeUndefined()
+    expect(executeVNextAction).not.toHaveBeenCalled()
 
     projection.state.quests.instancesByKey['quest-instance.12.quest.main.1.release.13.session-start'].status = 'available'
     projection.state.quests.instancesByKey['quest-instance.12.quest.main.1.release.13.session-start'].offeredAtWorldMinute = null

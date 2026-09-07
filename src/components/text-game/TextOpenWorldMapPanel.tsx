@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import { MapPinned } from 'lucide-react'
 import { projectTextOpenWorldPlayerMapV1 } from '../../lib/open-world/map-view'
 import {
@@ -14,6 +15,10 @@ const RISK_LABELS = { safe: '安全', ordinary: '普通风险', dangerous: '危�
 export default function TextOpenWorldMapPanel(props: {
   projection: TextOpenWorldSessionProjectionV1
   busy: boolean
+  /** UI-only task focus. Unknown locations are ignored and never disclosed. */
+  focusedLocationKey?: string | null
+  /** Lets a repeated request for the same known location restore keyboard focus. */
+  focusedLocationRequestId?: number | null
   onTravel(actionKey: string, destinationLocationKey: string): void
 }) {
   const view = projectTextOpenWorldPlayerMapV1({ runtimePackage: props.projection.runtimePackage, state: props.projection.state })
@@ -24,6 +29,17 @@ export default function TextOpenWorldMapPanel(props: {
   const fastTravelByDestinationKey = new Map<string, TextOpenWorldFastTravelOptionV1>()
   fastTravelOptions.forEach(option => fastTravelByDestinationKey.set(option.destinationLocationKey, option))
   const nodeByKey = new Map(view.locations.map(node => [node.locationKey, node]))
+  const focusedLocationKey = props.focusedLocationKey && nodeByKey.has(props.focusedLocationKey)
+    ? props.focusedLocationKey
+    : null
+  const locationItemRefs = useRef(new Map<string, HTMLDivElement>())
+
+  useEffect(() => {
+    if (!focusedLocationKey) return
+    const timeout = window.setTimeout(() => locationItemRefs.current.get(focusedLocationKey)?.focus(), 0)
+    return () => window.clearTimeout(timeout)
+  }, [focusedLocationKey, props.focusedLocationRequestId])
+
   return <article className="rounded border border-border bg-bg-surface p-4" data-testid="text-open-world-map-topology">
     <div className="mb-2 flex items-center gap-2 text-sm font-semibold"><MapPinned className="h-4 w-4 text-accent" />世界地图</div>
     <svg role="img" aria-labelledby="text-open-world-map-title text-open-world-map-description" viewBox={`0 0 ${view.viewBox.width} ${view.viewBox.height}`} className="w-full rounded border border-border bg-bg-base">
@@ -34,19 +50,32 @@ export default function TextOpenWorldMapPanel(props: {
         const to = nodeByKey.get(edge.toLocationKey)!
         return <line key={edge.edgeKey} x1={from.x} y1={from.y} x2={to.x} y2={to.y} stroke="currentColor" strokeWidth="8" strokeDasharray={edge.open ? undefined : '20 16'} className={edge.open ? 'text-accent/60' : 'text-text-muted/40'} />
       })}
-      {view.locations.map(location => { const travel = travelByDestinationKey.get(location.locationKey); return <g key={location.locationKey} transform={`translate(${location.x} ${location.y})`}
+      {view.locations.map(location => { const travel = travelByDestinationKey.get(location.locationKey); const focused = location.locationKey === focusedLocationKey; return <g key={location.locationKey} transform={`translate(${location.x} ${location.y})`}
         role={travel ? 'button' : undefined} tabIndex={travel ? 0 : undefined} aria-disabled={travel ? !travel.available || props.busy : undefined}
         aria-label={travel ? `${travel.label}，耗时${travel.travelMinutes}分钟` : undefined}
+        data-task-focused={focused || undefined}
         onClick={() => { if (travel?.available && !props.busy) props.onTravel(travel.actionKey, travel.destinationLocationKey) }}
         onKeyDown={event => { if (travel?.available && !props.busy && (event.key === 'Enter' || event.key === ' ')) props.onTravel(travel.actionKey, travel.destinationLocationKey) }}
         className={travel?.available ? 'cursor-pointer' : undefined}>
+        {focused && <circle r={location.current ? 42 : 35} className="fill-none stroke-accent" strokeWidth="5" strokeDasharray="10 7" aria-hidden="true" />}
         <circle r={location.current ? 28 : 20} className={location.current ? 'fill-accent' : 'fill-bg-surface stroke-text-muted'} strokeWidth="6" />
         <text y="-38" textAnchor="middle" className="fill-current text-[30px] font-semibold">{location.title}</text>
       </g> })}
     </svg>
     <div className="mt-2 space-y-1" aria-label="地图列表视图">
-      {view.listFallback.map(location => <div key={location.locationKey} className="rounded bg-bg-base px-2 py-1 text-xs">
+      {view.listFallback.map(location => <div
+        key={location.locationKey}
+        ref={element => {
+          if (element) locationItemRefs.current.set(location.locationKey, element)
+          else locationItemRefs.current.delete(location.locationKey)
+        }}
+        className={`rounded bg-bg-base px-2 py-1 text-xs${location.locationKey === focusedLocationKey ? ' ring-1 ring-accent' : ''}`}
+        data-task-focused={location.locationKey === focusedLocationKey || undefined}
+        aria-current={location.locationKey === focusedLocationKey ? 'location' : undefined}
+        tabIndex={location.locationKey === focusedLocationKey ? -1 : undefined}
+      >
         <span className="flex items-center justify-between gap-2"><strong>{location.current ? `当前位置 · ${location.title}` : location.title}</strong><small className="text-text-muted">{KNOWLEDGE_LABELS[location.knowledge]}</small></span>
+        {location.locationKey === focusedLocationKey && <small className="mt-1 block text-accent">任务定位</small>}
         {location.description && <p className="mt-1 text-text-muted">{location.description}</p>}
         {location.earlyArrivalDescription && <p className="mt-1 text-text-muted">当前可见：{location.earlyArrivalDescription}</p>}
         {fastTravelByDestinationKey.has(location.locationKey) && <button type="button" disabled={!fastTravelByDestinationKey.get(location.locationKey)!.available || props.busy} onClick={() => {
