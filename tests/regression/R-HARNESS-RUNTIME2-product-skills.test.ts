@@ -250,7 +250,7 @@ describe('R-HARNESS-RUNTIME2 · current Product Build runtime Skills', () => {
     })
 
     const openWorld = await runtimeFixture('text-open-world', '现行开放世界预览界面')
-    await useTextOpenWorldPlayerStore.getState().load(openWorld.scope, null)
+    await useTextOpenWorldPlayerStore.getState().load(openWorld.scope, null, openWorld.session.id)
     expect(useTextOpenWorldPlayerStore.getState()).toMatchObject({
       selectedSessionId: openWorld.session.id, error: '',
       selectedManifest: { productType: 'text-open-world' },

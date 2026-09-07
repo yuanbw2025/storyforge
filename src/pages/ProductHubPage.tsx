@@ -560,7 +560,10 @@ function TextGamePage({ project, world, onOpenWorldPicker, onCreate, initialProd
   const updateWorkspace = useProjectStore(state => state.updateWorkspace)
   const [mode, setMode] = useState<'play' | 'production'>(initialMode)
   const [product, setProduct] = useState<TextGameProductKindV1>(initialProduct)
-  const [previewSessionId, setPreviewSessionId] = useState<number | null>(null)
+  const [previewHandoff, setPreviewHandoff] = useState<{
+    productType: TextGameProductKindV1
+    sessionId: number
+  } | null>(null)
   const availableProducts = useMemo(
     () => TEXT_GAME_PRODUCT_KINDS_V1.filter(kind => productDecision(textGameCatalogId(kind)).enterable),
     [],
@@ -610,7 +613,7 @@ function TextGamePage({ project, world, onOpenWorldPicker, onCreate, initialProd
         }
       }}
       onPublished={next => {
-        setPreviewSessionId(null)
+        setPreviewHandoff(null)
         if (TEXT_GAME_PRODUCT_KINDS_V1.includes(next as TextGameProductKindV1) && productDecision(textGameCatalogId(next as TextGameProductKindV1)).enterable) {
           setProduct(next as TextGameProductKindV1)
           setMode('play')
@@ -618,8 +621,9 @@ function TextGamePage({ project, world, onOpenWorldPicker, onCreate, initialProd
       }}
       onPreviewStarted={(next, sessionId) => {
         if (TEXT_GAME_PRODUCT_KINDS_V1.includes(next as TextGameProductKindV1) && productDecision(textGameCatalogId(next as TextGameProductKindV1)).enterable) {
-          setPreviewSessionId(sessionId)
-          setProduct(next as TextGameProductKindV1)
+          const productType = next as TextGameProductKindV1
+          setPreviewHandoff({ productType, sessionId })
+          setProduct(productType)
           setMode('play')
         }
       }}
@@ -627,10 +631,10 @@ function TextGamePage({ project, world, onOpenWorldPicker, onCreate, initialProd
       productPlatformOptIns: { ...project.productPlatformOptIns, productProductionV3: true },
     })} />
     : isAdventure
-      ? <AdventureGamePlayer project={project} scope={scope} worldGroupId={worldGroupId} initialSessionId={previewSessionId} />
+      ? <AdventureGamePlayer project={project} scope={scope} worldGroupId={worldGroupId} initialSessionId={previewHandoff?.productType === 'text-adventure' ? previewHandoff.sessionId : null} />
       : isAvg
-        ? <AvgGamePlayer project={project} scope={scope} worldGroupId={worldGroupId} initialSessionId={previewSessionId} />
-        : <TextOpenWorldPlayer project={project} scope={scope} worldGroupId={worldGroupId} initialSessionId={previewSessionId} />
+        ? <AvgGamePlayer project={project} scope={scope} worldGroupId={worldGroupId} initialSessionId={previewHandoff?.productType === 'avg' ? previewHandoff.sessionId : null} />
+        : <TextOpenWorldPlayer project={project} scope={scope} worldGroupId={worldGroupId} initialSessionId={previewHandoff?.productType === 'text-open-world' ? previewHandoff.sessionId : null} />
   return <><PageHeading eyebrow={`${mode === 'play' ? 'PLAY' : 'PRODUCE'} / ${productCode}`} title={mode === 'production' ? '文字游戏制作中心' : productTitle} description={mode === 'production' ? '从冻结 WorldRelease 会谈、审查 Brief、显式授权、构建可玩预览，并经证据复验原子发布。' : description} action={<div className="product-mode-actions">{availableProducts.includes('text-adventure') && <Button variant={isAdventure ? 'primary' : 'secondary'} icon={Map} onClick={() => setProduct('text-adventure')}>文字冒险</Button>}{availableProducts.includes('avg') && <Button variant={isAvg ? 'primary' : 'secondary'} icon={MonitorPlay} onClick={() => setProduct('avg')}>AVG</Button>}{availableProducts.includes('text-open-world') && <Button variant={isOpenWorld ? 'primary' : 'secondary'} icon={Globe2} onClick={() => setProduct('text-open-world')}>文字开放世界</Button>}<Button variant={mode === 'play' ? 'primary' : 'secondary'} icon={Gamepad2} onClick={() => setMode('play')}>玩家</Button><Button variant={mode === 'production' ? 'primary' : 'secondary'} icon={Sparkles} onClick={() => setMode('production')}>制作</Button><Button icon={Hash} onClick={onOpenWorldPicker}>选择世界</Button></div>} /><BindingBanner world={world} onChange={onOpenWorldPicker} /><section className="sf-product-runtime-surface"><Suspense fallback={<FeaturePanelFallback />}>{content}</Suspense></section></>
 }
 

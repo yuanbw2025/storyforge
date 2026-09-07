@@ -63,6 +63,7 @@ describe('Text Open World vNext · ProductRuntime vNext player UI', () => {
     localStorage.clear()
     useTextOpenWorldPlayerStore.setState({
       scope: null, worldGroupId: null, releases: [], sessions: [], selectedSessionId: null,
+      selectedSession: null, selectedSessionSource: null,
       events: [], checkpoints: [], runtimeState: structuredClone(EMPTY_PRODUCT_RUNTIME_STATE),
       selectedManifest: null, lastFeedback: null, generatedCandidate: null,
       loading: false, busy: false, error: '',
@@ -83,10 +84,11 @@ describe('Text Open World vNext · ProductRuntime vNext player UI', () => {
       await new Promise(resolve => setTimeout(resolve, 0))
     })
     await waitFor(() => expect(host.textContent).toContain('盐脊'))
+    await click(host, '查看详情', true)
     await click(host, '新旅程')
     await waitFor(() => expect(host.querySelector('[data-testid="text-open-world-vnext-runtime"]')).toBeTruthy())
     await waitFor(() => expect(useTextOpenWorldPlayerStore.getState().busy).toBe(false))
-    expect(host.textContent).toContain('TEXT-OPEN-WORLD vNEXT · PRODUCT RELEASE PINNED')
+    expect(host.textContent).toContain('TEXT-OPEN-WORLD vNEXT · PRODUCT RELEASE v1 · 已固定')
     expect(host.textContent).toContain('Lv.1 · 0 EXP')
     expect(host.textContent).toContain('6 · 3 · 6.5% · 3')
     expect(host.textContent).toContain('baseHealth:20')

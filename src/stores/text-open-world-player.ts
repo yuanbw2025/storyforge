@@ -30,6 +30,7 @@ import {
   type OpenWorldCommand,
 } from '../lib/open-world/runtime-api'
 import { verifyProductRuntimeSessionSourceV1 } from '../lib/product-production/preview-source'
+import { verifyProductReleaseManifestV1 } from '../lib/product-production/runtime-package'
 import {
   assertProductReleaseUnchanged,
   classifyTextOpenWorldRuntimePackageShapeV1,
@@ -37,6 +38,7 @@ import {
 } from '../lib/product/releases'
 import { assertInstanceBinding, createTextOpenWorldInstance, readBoundInstances } from '../lib/product/runtime-instances'
 import { EMPTY_PRODUCT_RUNTIME_STATE } from '../lib/types'
+import { resolveScope } from '../lib/workspace/scope'
 import type {
   AIConfig,
   ProductRelease,
@@ -52,15 +54,29 @@ import type {
 export interface TextOpenWorldLibraryItem {
   release: ProductRelease
   manifest: PlayableTextOpenWorldProductRuntimePackageV1 | null
+  /** Hash of the verified immutable RuntimePackage inside the release envelope. */
+  packageHash: string | null
   error: string
 }
 
-interface TextOpenWorldPlayerState {
+export type TextOpenWorldSelectedSessionSource = 'release' | 'build-preview'
+
+interface TextOpenWorldProjectionRequest {
+  revision: number
+  scope: WorkspaceScope
+  worldGroupId: number | null
+}
+
+export interface TextOpenWorldPlayerState {
   scope: WorkspaceScope | null
   worldGroupId: number | null
   releases: TextOpenWorldLibraryItem[]
+  /** All bound sessions; presentation separates formal saves from Build Preview. */
   sessions: ProductRuntimeSession[]
   selectedSessionId: number | null
+  /** Explicitly selected row, including a Build Preview handoff omitted from sessions. */
+  selectedSession: ProductRuntimeSession | null
+  selectedSessionSource: TextOpenWorldSelectedSessionSource | null
   events: ProductRuntimeEvent[]
   checkpoints: ProductRuntimeCheckpoint[]
   runtimeState: ProductRuntimeState
@@ -70,7 +86,7 @@ interface TextOpenWorldPlayerState {
   loading: boolean
   busy: boolean
   error: string
-  load(scope: WorkspaceScope, worldGroupId: number | null): Promise<void>
+  load(scope: WorkspaceScope, worldGroupId: number | null, initialSessionId?: number | null): Promise<void>
   select(sessionId: number | null): Promise<void>
   start(productReleaseId: number, title?: string): Promise<number>
   command(command: OpenWorldCommand): Promise<void>
@@ -87,25 +103,76 @@ interface TextOpenWorldPlayerState {
 
 async function readLibrary(scope: WorkspaceScope): Promise<TextOpenWorldLibraryItem[]> {
   const releases = (await db.productReleases.where('workId').equals(scope.workId).toArray())
-    .filter(release => {
-      try { return (JSON.parse(release.manifestJson) as { productType?: string }).productType === 'text-open-world' }
-      catch { return false }
-    })
+    .filter(release => release.projectId === scope.projectId
+      && release.worldId === scope.worldId
+      && release.workId === scope.workId
+      && release.productType === 'text-open-world')
     .sort((left, right) => right.createdAt - left.createdAt)
   return Promise.all(releases.map(async release => {
     try {
-      await assertProductReleaseUnchanged(release.id!)
-      return { release, manifest: parseTextOpenWorldProductReleaseManifest(release.manifestJson), error: '' }
+      const verifiedRelease = await assertProductReleaseUnchanged(release.id!)
+      const verified = await verifyProductReleaseManifestV1(verifiedRelease.manifestJson)
+      if (verifiedRelease.productionKey !== verified.productionProvenance.productionKey) {
+        throw new Error('[text-open-world] ProductRelease 与生产谱系不一致。')
+      }
+      return {
+        release: verifiedRelease,
+        manifest: parseTextOpenWorldProductReleaseManifest(verifiedRelease.manifestJson),
+        packageHash: verified.packageHash,
+        error: '',
+      }
     } catch (error) {
-      return { release, manifest: null, error: error instanceof Error ? error.message : String(error) }
+      return {
+        release,
+        manifest: null,
+        packageHash: null,
+        error: error instanceof Error ? error.message : String(error),
+      }
     }
   }))
+}
+
+async function assertSessionOwnership(
+  scope: WorkspaceScope,
+  worldGroupId: number | null,
+  sessionId: number,
+): Promise<ProductRuntimeSession> {
+  const resolved = await resolveScope({ scope })
+  const session = await db.productRuntimeSessions.get(sessionId)
+  if (!session
+    || session.projectId !== resolved.projectId
+    || session.worldId !== resolved.worldId
+    || session.workId !== resolved.workId
+    || (session.worldGroupId ?? null) !== (worldGroupId ?? null)
+    || session.kind !== 'text-open-world') {
+    throw new Error('[text-open-world] 只能删除当前World/Work和世界分组内的文字开放世界存档。')
+  }
+  return session
 }
 
 async function assertSession(scope: WorkspaceScope, sessionId: number): Promise<ProductRuntimeSession> {
   const session = await assertInstanceBinding(sessionId, scope)
   if (session.kind !== 'text-open-world') throw new Error('[text-open-world] 该存档不是文字开放世界。')
   return session
+}
+
+function sessionSource(session: ProductRuntimeSession): TextOpenWorldSelectedSessionSource {
+  return session.productReleaseId != null ? 'release' : 'build-preview'
+}
+
+function emptySelectionState(error = '') {
+  return {
+    selectedSessionId: null,
+    selectedSession: null,
+    selectedSessionSource: null,
+    events: [],
+    checkpoints: [],
+    runtimeState: structuredClone(EMPTY_PRODUCT_RUNTIME_STATE),
+    selectedManifest: null,
+    generatedCandidate: null,
+    lastFeedback: null,
+    error,
+  }
 }
 
 function playableManifest(runtimePackage: Awaited<ReturnType<typeof verifyProductRuntimeSessionSourceV1>>['runtimePackage']) {
@@ -116,8 +183,11 @@ function playableManifest(runtimePackage: Awaited<ReturnType<typeof verifyProduc
   return structuredClone(runtimePackage) as PlayableTextOpenWorldProductRuntimePackageV1
 }
 
-async function readDetails(scope: WorkspaceScope, sessionId: number) {
+async function readDetails(scope: WorkspaceScope, worldGroupId: number | null, sessionId: number) {
   const session = await assertSession(scope, sessionId)
+  if ((session.worldGroupId ?? null) !== (worldGroupId ?? null)) {
+    throw new Error('[text-open-world] 该存档不属于当前世界分组。')
+  }
   const [events, checkpoints, runtimeState, playable] = await Promise.all([
     db.productRuntimeEvents.where('sessionId').equals(sessionId).sortBy('sequence'),
     db.productRuntimeCheckpoints.where('sessionId').equals(sessionId).toArray(),
@@ -133,6 +203,9 @@ async function readDetails(scope: WorkspaceScope, sessionId: number) {
     }
   }
   return {
+    selectedSessionId: session.id!,
+    selectedSession: session,
+    selectedSessionSource: sessionSource(session),
     events,
     checkpoints: checkpoints.sort((left, right) => right.createdAt - left.createdAt),
     runtimeState,
@@ -141,29 +214,82 @@ async function readDetails(scope: WorkspaceScope, sessionId: number) {
 }
 
 export const useTextOpenWorldPlayerStore = create<TextOpenWorldPlayerState>((set, get) => {
+  let projectionRequestRevision = 0
+  const beginProjectionRequest = (
+    scope: WorkspaceScope,
+    worldGroupId: number | null,
+  ): TextOpenWorldProjectionRequest => ({
+    revision: ++projectionRequestRevision,
+    scope: { ...scope },
+    worldGroupId,
+  })
+  const captureProjectionRequest = (): TextOpenWorldProjectionRequest | null => {
+    const scope = get().scope
+    return scope ? {
+      revision: projectionRequestRevision,
+      scope: { ...scope },
+      worldGroupId: get().worldGroupId,
+    } : null
+  }
+  const isCurrentProjectionRequest = (request: TextOpenWorldProjectionRequest): boolean => {
+    const currentScope = get().scope
+    return projectionRequestRevision === request.revision
+      && currentScope != null
+      && currentScope.projectId === request.scope.projectId
+      && currentScope.worldId === request.scope.worldId
+      && currentScope.workId === request.scope.workId
+      && (get().worldGroupId ?? null) === (request.worldGroupId ?? null)
+  }
   const refresh = async () => {
     const scope = get().scope
     const sessionId = get().selectedSessionId
     if (!scope || sessionId == null) return
-    set(await readDetails(scope, sessionId))
+    const request = captureProjectionRequest()
+    if (!request) return
+    try {
+      const details = await readDetails(scope, request.worldGroupId, sessionId)
+      if (isCurrentProjectionRequest(request) && get().selectedSessionId === sessionId) set(details)
+    } catch (error) {
+      if (!isCurrentProjectionRequest(request)) return
+      throw error
+    }
   }
-  const reload = async (requested?: number | null) => {
-    const scope = get().scope
-    if (!scope) return
-    if (requested !== undefined) set({ generatedCandidate: null, lastFeedback: null })
-    const [releases, sessions] = await Promise.all([
-      readLibrary(scope),
-      readBoundInstances(scope).then(rows => rows.filter(row => row.kind === 'text-open-world'
-        && (row.worldGroupId ?? null) === get().worldGroupId).sort((left, right) => right.updatedAt - left.updatedAt)),
-    ])
+  const reload = async (
+    requested?: number | null,
+    providedRequest?: TextOpenWorldProjectionRequest,
+  ) => {
+    const request = providedRequest ?? captureProjectionRequest()
+    if (!request || !isCurrentProjectionRequest(request)) return
     const desired = requested === undefined ? get().selectedSessionId : requested
-    const selectedSessionId = desired != null && sessions.some(row => row.id === desired) ? desired : sessions[0]?.id ?? null
-    set({ releases, sessions, selectedSessionId })
-    if (selectedSessionId != null) await refresh()
-    else set({
-      events: [], checkpoints: [], runtimeState: structuredClone(EMPTY_PRODUCT_RUNTIME_STATE),
-      selectedManifest: null, generatedCandidate: null, lastFeedback: null,
-    })
+    if (requested !== undefined) set({ generatedCandidate: null, lastFeedback: null })
+    let releases: TextOpenWorldLibraryItem[]
+    let sessions: ProductRuntimeSession[]
+    try {
+      const result = await Promise.all([
+        readLibrary(request.scope),
+        readBoundInstances(request.scope).then(rows => rows.filter(row => row.kind === 'text-open-world'
+          && (row.worldGroupId ?? null) === (request.worldGroupId ?? null))
+          .sort((left, right) => right.updatedAt - left.updatedAt)),
+      ])
+      releases = result[0]
+      sessions = result[1]
+    } catch (error) {
+      if (!isCurrentProjectionRequest(request)) return
+      throw error
+    }
+    if (!isCurrentProjectionRequest(request)) return
+    set({ releases, sessions })
+    if (desired == null) {
+      if (isCurrentProjectionRequest(request)) set(emptySelectionState())
+      return
+    }
+    try {
+      const details = await readDetails(request.scope, request.worldGroupId, desired)
+      if (isCurrentProjectionRequest(request)) set(details)
+    } catch (error) {
+      if (!isCurrentProjectionRequest(request)) return
+      throw error
+    }
   }
   const run = async <T>(operation: () => Promise<T>): Promise<T> => {
     set({ busy: true, error: '' })
@@ -172,28 +298,55 @@ export const useTextOpenWorldPlayerStore = create<TextOpenWorldPlayerState>((set
     finally { set({ busy: false }) }
   }
   return {
-    scope: null, worldGroupId: null, releases: [], sessions: [], selectedSessionId: null, events: [], checkpoints: [],
+    scope: null, worldGroupId: null, releases: [], sessions: [], selectedSessionId: null,
+    selectedSession: null, selectedSessionSource: null, events: [], checkpoints: [],
     runtimeState: structuredClone(EMPTY_PRODUCT_RUNTIME_STATE), selectedManifest: null, lastFeedback: null,
     generatedCandidate: null, loading: false, busy: false, error: '',
-    load: async (scope, worldGroupId) => {
-      set({ scope, worldGroupId, loading: true, error: '', generatedCandidate: null, lastFeedback: null })
-      try { await reload() } catch (error) { set({ error: error instanceof Error ? error.message : String(error) }) }
-      finally { set({ loading: false }) }
+    load: async (scope, worldGroupId, initialSessionId) => {
+      const request = beginProjectionRequest(scope, worldGroupId)
+      set({
+        scope, worldGroupId, releases: [], sessions: [], loading: true,
+        ...emptySelectionState(),
+      })
+      try { await reload(initialSessionId ?? null, request) }
+      catch (error) {
+        if (!isCurrentProjectionRequest(request)) return
+        const detail = error instanceof Error ? error.message : String(error)
+        set(emptySelectionState(`[text-open-world] 存档加载失败，可返回游戏库重试：${detail}`))
+      }
+      finally {
+        if (isCurrentProjectionRequest(request)) set({ loading: false })
+      }
     },
     select: async sessionId => {
-      set({ selectedSessionId: sessionId, loading: true, generatedCandidate: null, lastFeedback: null })
+      const scope = get().scope
+      if (!scope) {
+        projectionRequestRevision += 1
+        set({ ...emptySelectionState('[text-open-world] scope 缺失。'), loading: false })
+        return
+      }
+      const request = beginProjectionRequest(scope, get().worldGroupId)
+      set({ loading: true, error: '', generatedCandidate: null, lastFeedback: null })
       try {
-        if (sessionId == null) set({
-          runtimeState: structuredClone(EMPTY_PRODUCT_RUNTIME_STATE), selectedManifest: null,
-          generatedCandidate: null, lastFeedback: null,
-        })
-        else await refresh()
-      } finally { set({ loading: false }) }
+        if (sessionId == null) {
+          if (isCurrentProjectionRequest(request)) set(emptySelectionState())
+        }
+        else {
+          const details = await readDetails(request.scope, request.worldGroupId, sessionId)
+          if (isCurrentProjectionRequest(request)) set(details)
+        }
+      } catch (error) {
+        if (!isCurrentProjectionRequest(request)) return
+        const detail = error instanceof Error ? error.message : String(error)
+        set(emptySelectionState(`[text-open-world] 存档加载失败，可返回游戏库重试：${detail}`))
+      } finally {
+        if (isCurrentProjectionRequest(request)) set({ loading: false })
+      }
     },
     start: async (productReleaseId, title) => run(async () => {
       const item = get().releases.find(row => row.release.id === productReleaseId)
       if (!item?.manifest || !get().scope) throw new Error('[text-open-world] 请选择有效发布。')
-      const displayTitle = item.manifest.textOpenWorldVNext?.metadata.title ?? item.manifest.definition.title
+      const displayTitle = item.manifest.definition.title
       const session = await createTextOpenWorldInstance({
         scope: get().scope!, productReleaseId,
         title: title?.trim() || `${displayTitle} · 新旅程`,
@@ -294,7 +447,7 @@ export const useTextOpenWorldPlayerStore = create<TextOpenWorldPlayerState>((set
     }),
     remove: async sessionId => run(async () => {
       if (!get().scope) throw new Error('[text-open-world] scope 缺失。')
-      await assertSession(get().scope!, sessionId)
+      await assertSessionOwnership(get().scope!, get().worldGroupId, sessionId)
       await deleteProductRuntimeSession(sessionId)
       await reload(get().selectedSessionId === sessionId ? null : undefined)
     }),
