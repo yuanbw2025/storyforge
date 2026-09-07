@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { readFileSync } from 'node:fs'
 import { createWorkspace } from '../../src/lib/workspace/create-workspace'
 import { createAdaptation, listActiveSourceUnits } from '../../src/lib/adaptation/source-manifest'
 import { reopenAdaptationProductionV1 } from '../../src/lib/adaptation/completion'
@@ -7,10 +8,13 @@ import type { AdaptationBriefV1, ChatMessage, ScreenplayTargetSpecV1, WorkspaceS
 import {
   adoptScreenplayProfessionalCandidateV1,
   generateScreenplayProfessionalCandidateV1,
+  normalizeScreenplayProviderKeysV1,
   parseScreenplayProfessionalPayloadV1,
   type ScreenplayProfessionalPayloadV1,
   type ScreenplayProfessionalStageV1,
 } from '../../src/lib/screenplay/durable-production'
+import { parseScreenplayModelJsonV1 } from '../../src/lib/screenplay/model-json'
+import { screenplaySourceAnalysisUnitsV1 } from '../../src/lib/screenplay/source-analysis-units'
 import { getAgentSkillV1 } from '../../src/lib/agent/skill-registry'
 import {
   inspectScreenplayCompletionV1,
@@ -109,6 +113,91 @@ describe('SCREEN-2 · professional novel-to-screenplay pipeline', () => {
       expect(skill.promptVersion).toMatch(/screenplay|adaptation/)
     }
     expect(() => parseScreenplayProfessionalPayloadV1('scene-card', [{ stableKey: 'card.bad', systemId: 1 }] as never)).toThrow('字段不在闭集')
+    const panelSource = readFileSync(`${process.cwd()}/src/components/screenplay/ScreenplayPipelinePanel.tsx`, 'utf8')
+    expect(panelSource).toContain("confirmNoIssues('grounding')")
+    expect(panelSource).toContain("confirmNoIssues('dramaturgy')")
+    expect(panelSource).toContain('candidates: []')
+  })
+
+  it('来源事实提示明确闭集形状和 kind 枚举，避免兼容模型返回近义字段', async () => {
+    const item = await fixture()
+    let systemPrompt = ''
+    await generateScreenplayProfessionalCandidateV1({
+      scope: item.scope,
+      adaptationProjectId: item.adaptation.id!,
+      stage: 'source-analysis',
+      sourceUnitKeys: [item.unit.sourceUnitKey],
+      runAI: async messages => {
+        systemPrompt = messages.map(message => message.content).join('\n')
+        return JSON.stringify([{ stableKey: 'fact.arrival', kind: 'event', statement: '林岚赶到旧车站。', subjectKeys: ['character.linlan'], sourceUnitKeys: [item.unit.sourceUnitKey], confidence: 1 }])
+      },
+    })
+    expect(systemPrompt).toContain('kind 只能是 event、character-state、relationship、location、object、motif 之一')
+    expect(systemPrompt).toContain('不得增加 evidence、quote、reasoning、category、id 等字段')
+    expect(systemPrompt).toContain('{"stableKey":"fact.source-token.event","kind":"event"')
+    expect(systemPrompt).toContain('stableKey 必须匹配 ^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$')
+    expect(systemPrompt).toContain('数组内每个 stableKey 必须唯一')
+    expect(systemPrompt).toContain('场景 blocks 内每个 id 也必须唯一')
+    expect(systemPrompt).toContain('提取 8～16 项高价值')
+    expect(systemPrompt).toContain('禁止使用 fact.001')
+    expect(systemPrompt).toContain('不确定主体键时写 []')
+  })
+
+  it('安全兼容单一 JSON 的 provider 包装和字符串控制字符，但拒绝歧义输出', () => {
+    const payload = [{ stableKey: 'fact.arrival', kind: 'event', statement: '林岚说："现在出发"。\n雨更大了。', subjectKeys: ['character.linlan'], sourceUnitKeys: ['asu_abcdefgh'], confidence: 1 }]
+    expect(parseScreenplayModelJsonV1(`以下是候选：\n\`\`\`json\n${JSON.stringify(payload)}\n\`\`\``)).toEqual(payload)
+    expect(parseScreenplayModelJsonV1('[{"stableKey":"fact.arrival","statement":"第一行\n第二行"}]')).toEqual([{ stableKey: 'fact.arrival', statement: '第一行\n第二行' }])
+    expect(parseScreenplayModelJsonV1('[{"stableKey":"fact.arrival","statement":"她说："现在出发"。"}]')).toEqual([{ stableKey: 'fact.arrival', statement: '她说："现在出发"。' }])
+    expect(() => parseScreenplayModelJsonV1('{"version":1}\n{"version":1}')).toThrow('唯一 JSON')
+    expect(() => parseScreenplayModelJsonV1('{"version":1')).toThrow('唯一 JSON')
+  })
+
+  it('兼容模型协议偏差只做一次可追踪修复，并把精确错误交给第二次调用', async () => {
+    const item = await fixture()
+    const outputs = [
+      JSON.stringify([{ stableKey: 'fact.bad', kind: 'action', statement: '林岚抵达。', subjectKeys: [], sourceUnitKeys: [item.unit.sourceUnitKey], confidence: 1 }]),
+      JSON.stringify([{ stableKey: 'fact.arrival', kind: 'event', statement: '林岚赶到旧车站。', subjectKeys: ['character.linlan'], sourceUnitKeys: [item.unit.sourceUnitKey], confidence: 1 }]),
+    ]
+    const prompts: string[] = []
+    const generated = await generateScreenplayProfessionalCandidateV1({
+      scope: item.scope,
+      adaptationProjectId: item.adaptation.id!,
+      stage: 'source-analysis',
+      sourceUnitKeys: [item.unit.sourceUnitKey],
+      runAI: async messages => {
+        prompts.push(messages.map(message => message.content).join('\n'))
+        return outputs[prompts.length - 1]
+      },
+    })
+    expect(prompts).toHaveLength(2)
+    expect(prompts[1]).toContain('上一次输出未通过严格协议')
+    expect(prompts[1]).toContain('SourceFact.kind 非法')
+    expect(generated.snapshot.projection.state).toBe('awaiting_confirmation')
+    expect(generated.snapshot.projection.steps['screenplay-professional:source-analysis']).toMatchObject({ attempt: 2, status: 'awaiting_confirmation' })
+  })
+
+  it('确定性修复模型新建 key，引用键仍保持原值并由领域契约校验', () => {
+    expect(normalizeScreenplayProviderKeysV1('source-analysis', [{ stableKey: 'fact.001', subjectKeys: ['asu__character_赵宁'], sourceUnitKeys: ['asu_abcdefghijk'] }])).toEqual([{ stableKey: 'fact.abcdefghij.001', subjectKeys: [expect.stringMatching(/^subject\.gen\.[a-f0-9]{8}$/)], sourceUnitKeys: ['asu_abcdefghijk'] }])
+    expect(normalizeScreenplayProviderKeysV1('source-analysis', [{ stableKey: 'fact.radio distress', subjectKeys: ['character.zhaoning'], sourceUnitKeys: ['asu_keep'] }])).toEqual([{ stableKey: 'fact.radio-distress', subjectKeys: ['character.zhaoning'], sourceUnitKeys: ['asu_keep'] }])
+    expect(normalizeScreenplayProviderKeysV1('causal-graph', [{ stableKey: 'edge:one', fromFactKey: 'fact.keep one', toFactKey: 'fact.keep-two' }])).toEqual([{ stableKey: 'edge-one', fromFactKey: 'fact.keep one', toFactKey: 'fact.keep-two' }])
+    expect(normalizeScreenplayProviderKeysV1('beat-sheet', [{ stableKey: 'beat one', sectionKey: 'act one' }])).toEqual([{ stableKey: 'beat-one', sectionKey: 'act-one', sectionTitle: 'act-one' }])
+    expect(normalizeScreenplayProviderKeysV1('source-analysis', [{ stableKey: '事实.抵达', subjectKeys: [], sourceUnitKeys: ['asu_abcdefghijk'] }])).toEqual([{ stableKey: expect.stringMatching(/^fact\.abcdefghij\.[a-f0-9]{8}$/), subjectKeys: [], sourceUnitKeys: ['asu_abcdefghijk'] }])
+    expect(() => parseScreenplayProfessionalPayloadV1('scene-draft', {
+      stableKey: 'scene.bad', planSectionKey: 'act.one', episodeNumber: 1, sceneNumber: 1,
+      intExt: 'INT', location: '调度室', timeOfDay: '夜', summary: '角色 cue 不能悬空。', estimatedSeconds: 60,
+      sourceUnitKeys: ['asu_abcdefghijk'], blocks: [
+        { id: 'block.cue', type: 'character', name: '赵宁' },
+        { id: 'block.action', type: 'action', text: '她关掉屏幕。' },
+      ],
+    })).toThrow('角色 cue 后必须先有对白')
+  })
+
+  it('有正文时只把正文作为事实 canon，没有正文时才回退到有效章纲', async () => {
+    const item = await fixture()
+    const units = await listActiveSourceUnits(item.adaptation.id!)
+    expect(screenplaySourceAnalysisUnitsV1(units)).toEqual([expect.objectContaining({ sourceKind: 'chapter', sourceUnitKey: item.unit.sourceUnitKey })])
+    expect(screenplaySourceAnalysisUnitsV1(units.map(unit => unit.sourceKind === 'chapter' ? { ...unit, wordCount: 0 } : unit)))
+      .toEqual(expect.arrayContaining(units.filter(unit => unit.sourceKind === 'outline-node' && unit.summary.trim()).map(unit => expect.objectContaining({ sourceUnitKey: unit.sourceUnitKey }))))
   })
 
   it('领域事务提交后事件写入中断可以恢复，且不会重复采纳', async () => {
@@ -250,8 +339,28 @@ describe('SCREEN-2 · professional novel-to-screenplay pipeline', () => {
     expect((await readScreenplayReleaseManifestV1(item.scope, release2.id)).scenes[0].summary).toContain('第二版')
 
     expect(new Set(prompts.values()).size).toBe(10)
+    expect(prompts.get('adaptation-brief')).toContain('version 必须是 JSON 数字 1，不是字符串')
+    expect(prompts.get('adaptation-brief')).toContain('mustKeep、mayCut、mayMerge、mayReorder、allowedAdditions、unresolvedQuestions、assumptions 必须是字符串数组')
+    expect(prompts.get('decision-pass')).toContain('sourceFactKeys 与 targetKeys 必须始终是无重复的字符串数组')
+    expect(prompts.get('decision-pass')).toContain('4～8 项高价值改编决定')
+    expect(prompts.get('beat-sheet')).toContain('scope 只能是 act、sequence、episode')
+    expect(prompts.get('beat-sheet')).toContain('order 必须严格连续为 0、1、2……')
+    expect(prompts.get('beat-sheet')).toContain('正负 10%')
+    expect(prompts.get('beat-sheet')).toContain('"decisionKeys":["decision.externalize-clock"]')
+    expect(prompts.get('beat-sheet')).toContain(`"sourceUnitKeys":["${unitKey}"]`)
+    expect(prompts.get('scene-card')).toContain('不得增加 heading、location、characters、shots、id 等字段')
+    expect(prompts.get('scene-draft')).toContain('每个 dialogue 前必须先有 character')
+    expect(prompts.get('scene-draft')).toContain('每个 block.id 在本场必须唯一')
+    expect(prompts.get('scene-draft')).toContain('扩展只写入 extension')
+    expect(prompts.get('scene-draft')).toContain('sceneCardPlanSectionKeys')
+    expect(prompts.get('scene-draft')).toContain('绝不能写 beatKey')
     expect(prompts.get('grounding-review')).toContain('来源忠实度与连续性审查')
+    expect(prompts.get('grounding-review')).toContain('blockId 只能逐字复制目标场景已有')
+    expect(prompts.get('grounding-review')).toContain('无法定位单块时必须写 JSON null')
+    expect(prompts.get('dramaturgy-review')).toContain('sourceUnitKeys 必须是数组且允许 []')
     expect(prompts.get('targeted-rewrite')).toContain('只修复作者选中的开放问题')
+    expect(prompts.get('targeted-rewrite')).toContain('blocks 必须给出修订后的整场合法 AST')
+    expect(prompts.get('targeted-rewrite')).toContain('expectedSceneRevision 必须是大于 0 的 JSON 整数')
 
     const backup = await exportProjectJSON(item.source.scope.projectId)
     expect(backup).toMatchObject({ version: 14 })

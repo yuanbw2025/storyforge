@@ -1,0 +1,54 @@
+{
+  "schema": "storyforge.showcase-evidence.v1",
+  "productKind": "screenplay",
+  "artifactStatus": "editorial-website-showcase",
+  "title": "七分钟退款",
+  "sourceTitle": "七分钟退款",
+  "target": {
+    "format": "vertical-short-drama",
+    "episodeCount": 8,
+    "targetMinutesPerEpisode": 2,
+    "rating": "PG-13",
+    "productionScale": "contained"
+  },
+  "source": {
+    "chapterCount": 3,
+    "contentChars": 2086
+  },
+  "screenplay": {
+    "episodeCount": 8,
+    "sceneCount": 9,
+    "fountainLines": 427,
+    "structuredBlocks": 216,
+    "dialogueBlocks": 41,
+    "episodeEndTransitions": 8
+  },
+  "review": {
+    "openIssues": 0,
+    "checks": [
+      "each episode opens with an actionable visual state and ends on a changed dramatic question",
+      "the apparent future-video rule is explained as a seven-minute delayed rehearsal mechanism",
+      "all evidence advances through shootable props, screens, access logs, recordings, and physical choices",
+      "the four principal characters carry distinct culpability and make consequential choices",
+      "the final manual-review action resolves both the countdown motif and the protagonist's emotional flaw",
+      "Fountain and Final Draft XML exports preserve episode, scene, action, character, dialogue, and transition blocks"
+    ]
+  },
+  "files": {
+    "source-novel.md": {
+      "sha256": "a40769cff0a3097db0cb73e77e7e9fe38b7ebd5c51160b222b69721b7baf894c"
+    },
+    "seven-minute-refund-final.fountain": {
+      "sha256": "3ae061a5b192e914eadf4b14ef22fe2d1390ea92a13cedda8f7f919a9760482c"
+    },
+    "seven-minute-refund-final.fdx": {
+      "sha256": "81ebc5b9e03a6efa2feaf2d87bee0fbca86158a51808303ae87999a612886dbb",
+      "xmlWellFormed": true
+    },
+    "website-preview.png": {
+      "sha256": "2180dddb046970e9dd6e64a3f72544c41468e6ff402d8adff4197e1816b99086",
+      "width": 1600,
+      "height": 1000
+    }
+  }
+}

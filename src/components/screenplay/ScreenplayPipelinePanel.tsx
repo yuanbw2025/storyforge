@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Check, Play, RefreshCw, Sparkles, X } from 'lucide-react'
 import type { AdaptationProject, AdaptationSourceUnit, ScreenplayReviewIssueV1, ScreenplayScene, WorkspaceScope } from '../../lib/types'
 import { listAdaptationAnalysisV1 } from '../../lib/adaptation/analysis'
@@ -10,9 +10,10 @@ import {
   type ScreenplayProfessionalPayloadV1,
   type ScreenplayProfessionalStageV1,
 } from '../../lib/screenplay/durable-production'
-import { listScreenplayProductionV1, startScreenplayProductionV1, updateScreenplayReviewIssueStatusV1 } from '../../lib/screenplay/production'
+import { adoptScreenplayReviewIssuesV1, listScreenplayProductionV1, startScreenplayProductionV1, updateScreenplayReviewIssueStatusV1 } from '../../lib/screenplay/production'
 import { getAIConfigRequiredMessage, isAIConfigReady } from '../../lib/ai/config-readiness'
 import { useAIConfigStore } from '../../stores/ai-config'
+import { screenplaySourceAnalysisUnitLabelV1, screenplaySourceAnalysisUnitsV1 } from '../../lib/screenplay/source-analysis-units'
 
 interface Props {
   scope: WorkspaceScope
@@ -43,8 +44,12 @@ export default function ScreenplayPipelinePanel({ scope, adaptation, sourceUnits
   const [candidate, setCandidate] = useState<{ runId: number; stage: ScreenplayProfessionalStageV1; text: string } | null>(null)
   const [acceptedKeys, setAcceptedKeys] = useState<Set<string>>(new Set())
   const [busy, setBusy] = useState(false)
+  const [generating, setGenerating] = useState(false)
   const [error, setError] = useState('')
+  const activeGeneration = useRef<AbortController | null>(null)
   const aiConfig = useAIConfigStore(state => state.config)
+  const sourceAnalysisUnits = useMemo(() => screenplaySourceAnalysisUnitsV1(sourceUnits), [sourceUnits])
+  const sourceAnalysisComplete = sourceAnalysisUnits.length > 0 && sourceAnalysisUnits.every(unit => coveredSourceKeys.includes(unit.sourceUnitKey))
 
   const reload = useCallback(async () => {
     const [analysis, production] = await Promise.all([
@@ -60,9 +65,11 @@ export default function ScreenplayPipelinePanel({ scope, adaptation, sourceUnits
 
   useEffect(() => { void reload().catch(cause => setError(cause instanceof Error ? cause.message : '读取专业流程失败')) }, [reload])
   useEffect(() => {
-    const usableUnits = sourceUnits.filter(unit => unit.sourceKind !== 'work')
-    setSourceUnitKey(current => current && usableUnits.some(unit => unit.sourceUnitKey === current) ? current : usableUnits.find(unit => !coveredSourceKeys.includes(unit.sourceUnitKey))?.sourceUnitKey ?? usableUnits[0]?.sourceUnitKey ?? '')
-  }, [coveredSourceKeys, sourceUnits])
+    setSourceUnitKey(current => {
+      const currentIsUncovered = sourceAnalysisUnits.some(unit => unit.sourceUnitKey === current) && !coveredSourceKeys.includes(current)
+      return currentIsUncovered ? current : sourceAnalysisUnits.find(unit => !coveredSourceKeys.includes(unit.sourceUnitKey))?.sourceUnitKey ?? sourceAnalysisUnits[0]?.sourceUnitKey ?? ''
+    })
+  }, [coveredSourceKeys, sourceAnalysisUnits])
   useEffect(() => {
     const available = [...new Set([...cards.map(card => card.stableKey), ...scenes.map(scene => scene.stableKey)])]
     setTargetSceneKey(current => current && available.includes(current) ? current : available[0] ?? '')
@@ -90,17 +97,29 @@ export default function ScreenplayPipelinePanel({ scope, adaptation, sourceUnits
     if (stage === 'source-analysis' && !sourceUnitKey) { setError('请选择一个来源单元。'); return }
     if (['scene-draft', 'grounding-review', 'dramaturgy-review', 'targeted-rewrite'].includes(stage) && !targetSceneKey) { setError('请选择目标 Scene Card 或场景。'); return }
     if (stage === 'targeted-rewrite' && !openIssuesForTarget.length) { setError('当前场景没有可定点修订的开放问题。'); return }
-    setBusy(true); setError('')
+    const controller = new AbortController()
+    let timedOut = false
+    const timeoutId = window.setTimeout(() => { timedOut = true; controller.abort() }, 90_000)
+    activeGeneration.current = controller
+    setBusy(true); setGenerating(true); setError('')
     try {
       const generated = await generateScreenplayProfessionalCandidateV1({
         scope, adaptationProjectId: adaptation.id!, stage, aiConfig,
         sourceUnitKeys: stage === 'source-analysis' ? [sourceUnitKey] : undefined,
         targetSceneKeys: ['scene-draft', 'grounding-review', 'dramaturgy-review', 'targeted-rewrite'].includes(stage) ? [targetSceneKey] : undefined,
         targetIssueKeys: stage === 'targeted-rewrite' ? openIssuesForTarget.map(issue => issue.stableKey) : undefined,
+        signal: controller.signal,
       })
       setCandidate({ runId: generated.snapshot.run.id, stage, text: JSON.stringify(generated.candidate.payload, null, 2) })
       setAcceptedKeys(new Set(payloadKeys(generated.candidate.payload)))
-    } catch (cause) { setError(cause instanceof Error ? cause.message : '专业阶段生成失败') } finally { setBusy(false) }
+    } catch (cause) {
+      if (controller.signal.aborted) setError(timedOut ? '本次生成超过 90 秒，已安全停止；没有内容写入正式剧本。' : '本次生成已取消；没有内容写入正式剧本。')
+      else setError(cause instanceof Error ? cause.message : '专业阶段生成失败')
+    } finally {
+      window.clearTimeout(timeoutId)
+      if (activeGeneration.current === controller) activeGeneration.current = null
+      setGenerating(false); setBusy(false)
+    }
   }
 
   const accept = async () => {
@@ -121,9 +140,28 @@ export default function ScreenplayPipelinePanel({ scope, adaptation, sourceUnits
     catch (cause) { setError(cause instanceof Error ? cause.message : '放弃候选失败') } finally { setBusy(false) }
   }
 
+  const confirmNoIssues = async (category: 'grounding' | 'dramaturgy') => {
+    if (busy || candidate) return
+    const scene = scenes.find(item => item.stableKey === targetSceneKey)
+    if (!scene) { setError('请选择一个已经成稿的目标场景。'); return }
+    setBusy(true); setError('')
+    try {
+      await adoptScreenplayReviewIssuesV1({
+        scope,
+        expectedAdaptationRevision: adaptation.revision,
+        sourceManifestVersion: adaptation.activeSourceManifestVersion,
+        category,
+        targetSceneKeys: [scene.stableKey],
+        expectedSceneRevisions: { [scene.stableKey]: scene.revision },
+        candidates: [],
+      })
+      await reload(); await onChanged()
+    } catch (cause) { setError(cause instanceof Error ? cause.message : '作者审查确认失败') } finally { setBusy(false) }
+  }
+
   const stageButtons: Array<{ stage: ScreenplayProfessionalStageV1; ready: boolean; detail: string }> = [
-    { stage: 'source-analysis', ready: true, detail: `${coveredSourceKeys.length}/${sourceUnits.filter(unit => unit.sourceKind !== 'work').length} 来源单元 · ${counts.facts} 事实` },
-    { stage: 'causal-graph', ready: counts.facts > 0, detail: `${counts.edges} 因果边` },
+    { stage: 'source-analysis', ready: sourceAnalysisUnits.length > 0, detail: `${sourceAnalysisUnits.filter(unit => coveredSourceKeys.includes(unit.sourceUnitKey)).length}/${sourceAnalysisUnits.length} 正文单元 · ${counts.facts} 事实` },
+    { stage: 'causal-graph', ready: sourceAnalysisComplete && counts.facts > 0, detail: sourceAnalysisComplete ? `${counts.edges} 因果边` : '先完成全部正文事实' },
     { stage: 'adaptation-brief', ready: counts.edges > 0, detail: adaptation.briefSourceManifestVersion === adaptation.activeSourceManifestVersion ? '已确认' : '待确认' },
     { stage: 'decision-pass', ready: adaptation.briefSourceManifestVersion === adaptation.activeSourceManifestVersion, detail: `${counts.decisions} 决定` },
     { stage: 'beat-sheet', ready: counts.decisions > 0, detail: `${counts.beats} Beats` },
@@ -137,12 +175,17 @@ export default function ScreenplayPipelinePanel({ scope, adaptation, sourceUnits
   return <section className="screenplay-pipeline">
     <header><div><span>PROFESSIONAL ADAPTATION PIPELINE</span><h3>十步小说转剧本</h3></div><strong>manifest v{adaptation.activeSourceManifestVersion}</strong></header>
     <p>每一步由独立职业 Skill 生成候选；只有这里的作者确认会写入正式数据。格式 lint 与导出由确定性代码完成。</p>
+    {generating && <div className="screenplay-generation-status"><span>正在生成专业候选，最长等待 90 秒</span><button onClick={() => activeGeneration.current?.abort()}><X className="h-4 w-4" />取消本次生成</button></div>}
     <div className="screenplay-pipeline-targets">
-      <label>来源分析单元<select value={sourceUnitKey} onChange={event => setSourceUnitKey(event.target.value)}>{sourceUnits.filter(unit => unit.sourceKind !== 'work').map(unit => <option key={unit.sourceUnitKey} value={unit.sourceUnitKey}>{coveredSourceKeys.includes(unit.sourceUnitKey) ? '✓ ' : ''}{unit.label} · {unit.wordCount} 字</option>)}</select></label>
+      <label>来源分析单元<select value={sourceUnitKey} onChange={event => setSourceUnitKey(event.target.value)}>{sourceAnalysisUnits.map(unit => <option key={unit.sourceUnitKey} value={unit.sourceUnitKey}>{coveredSourceKeys.includes(unit.sourceUnitKey) ? '✓ ' : ''}{screenplaySourceAnalysisUnitLabelV1(unit)}</option>)}</select></label>
       <label>目标 Scene Card / 场景<select value={targetSceneKey} onChange={event => setTargetSceneKey(event.target.value)}>{[...cards, ...scenes.filter(scene => !cards.some(card => card.stableKey === scene.stableKey)).map(scene => ({ stableKey: scene.stableKey, purpose: scene.summary }))].map(item => <option key={item.stableKey} value={item.stableKey}>{scenes.some(scene => scene.stableKey === item.stableKey) ? '✓ ' : ''}{item.stableKey} · {item.purpose}</option>)}</select></label>
       {counts.cards > 0 && !['producing', 'review', 'complete'].includes(adaptation.status) && <button className="primary" onClick={() => void (async () => { setBusy(true); setError(''); try { await startScreenplayProductionV1({ scope, expectedAdaptationRevision: adaptation.revision }); await onChanged() } catch (cause) { setError(cause instanceof Error ? cause.message : '进入场景生产失败') } finally { setBusy(false) } })()} disabled={busy}><Play className="h-4 w-4" />进入场景生产</button>}
     </div>
     <div className="screenplay-pipeline-steps">{stageButtons.map(item => <button key={item.stage} onClick={() => void runStage(item.stage)} disabled={busy || !!candidate || !item.ready || adaptation.status === 'complete'}><Sparkles className="h-4 w-4" /><span><strong>{STAGE_LABELS[item.stage]}</strong><small>{item.detail}</small></span></button>)}</div>
+    {targetSceneKey && scenes.some(scene => scene.stableKey === targetSceneKey) && adaptation.status !== 'complete' && <div className="screenplay-author-review-actions">
+      <button onClick={() => void confirmNoIssues('grounding')} disabled={busy || !!candidate}><Check className="h-4 w-4" />作者确认来源无问题</button>
+      <button onClick={() => void confirmNoIssues('dramaturgy')} disabled={busy || !!candidate}><Check className="h-4 w-4" />作者确认戏剧无问题</button>
+    </div>}
     {candidate && <div className="screenplay-professional-candidate"><header><strong>{STAGE_LABELS[candidate.stage]}候选 · 尚未写入</strong><span>可编辑后确认</span></header>
       {candidateItems.length > 0 && <div className="screenplay-candidate-items">{candidateItems.map((item: any, index) => <label key={item.stableKey ?? index}><input type="checkbox" checked={acceptedKeys.has(item.stableKey)} onChange={event => setAcceptedKeys(current => { const next = new Set(current); if (event.target.checked) next.add(item.stableKey); else next.delete(item.stableKey); return next })} /><span><strong>{item.stableKey}</strong><small>{item.statement ?? item.rationale ?? item.objective ?? item.purpose ?? item.problem ?? ''}</small></span></label>)}</div>}
       <textarea value={candidate.text} onChange={event => { setCandidate({ ...candidate, text: event.target.value }); try { setAcceptedKeys(new Set(payloadKeys(JSON.parse(event.target.value)))) } catch { /* keep editor usable while JSON is incomplete */ } }} spellCheck={false} />
