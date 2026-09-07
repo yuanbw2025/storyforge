@@ -40,15 +40,19 @@ export default function StorylineProgressPanel(props: {
   const [chapterId, setChapterId] = useState<number | null>(null)
   const [accepted, setAccepted] = useState(false)
   const [actionError, setActionError] = useState('')
+  const [loadError, setLoadError] = useState('')
   const arcVersion = props.arcs.map(arc => `${arc.id}:${arc.updatedAt}`).join('|')
 
   useEffect(() => {
+    let active = true
+    setLoadError('')
     void resolveReadScopeLike(props.projectId).then(scope => Promise.all([
       loadAll(scope),
       Promise.all([
         readOwnedRows<Chapter>(scope, 'chapters', { owner: 'work' }),
         readOwnedRows<any>(scope, 'outlineNodes', { owner: 'work' }),
       ]).then(([chapterRows, outlineNodes]) => {
+        if (!active) return
         const { sequence } = resolveCanonicalChapterSequence(outlineNodes, chapterRows)
         const written = sequence
           .map(entry => entry.chapter)
@@ -58,7 +62,13 @@ export default function StorylineProgressPanel(props: {
           ? current
           : written[written.length - 1]?.id ?? null)
       }),
-    ]))
+    ])).catch(error => {
+      if (!active) return
+      setChapters([])
+      setChapterId(null)
+      setLoadError(error instanceof Error ? error.message : String(error))
+    })
+    return () => { active = false }
   }, [props.projectId, loadAll, arcVersion])
 
   const selectedChapter = chapters.find(row => row.id === chapterId) ?? null
@@ -158,7 +168,7 @@ export default function StorylineProgressPanel(props: {
         </div>
         {!props.arcs.length && <p className="text-xs text-warning mt-2">请先登记至少一条故事线。</p>}
         {!chapters.length && <p className="text-xs text-text-muted mt-2">保存章节正文后才能进行映射。</p>}
-        {(props.copilot.error || actionError) && <p role="alert" className="text-xs text-error mt-2">{actionError || props.copilot.error}</p>}
+        {(loadError || props.copilot.error || actionError) && <p role="alert" className="text-xs text-error mt-2">{loadError || actionError || props.copilot.error}</p>}
       </div>
 
       {progress.length > 0 && (
