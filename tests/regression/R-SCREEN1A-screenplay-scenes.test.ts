@@ -23,7 +23,7 @@ import { renderScreenplayFdxV1, renderScreenplayFountainV1, renderScreenplayPrin
 import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
 import { applyCharacterReferenceRemap } from '../../src/lib/registry/character-references'
 import { transactionTablesFor } from '../../src/lib/registry/lifecycle'
-import { completeAdaptationProductionV1, reopenAdaptationProductionV1 } from '../../src/lib/adaptation/completion'
+import { completeAdaptationProductionV1 } from '../../src/lib/adaptation/completion'
 import { stampNewRecord } from '../../src/lib/workspace/scope'
 
 const spec: ScreenplayTargetSpecV1 = {
@@ -132,25 +132,21 @@ describe('SCREEN-1A · structured screenplay and deterministic export', () => {
     expect(html).not.toContain('作者注释')
   })
 
-  it('逐场审定后可正式完稿；完成态只读且必须显式重新打开审校', async () => {
+  it('旧的一步式完稿入口即使场景已审定也拒绝，避免绕过专业 Release 门', async () => {
     const fixture = await setup()
-    let scene = await createScreenplayScene(fixture.scope, { planSectionKey: 'act-1', episodeNumber: 1, sceneNumber: 1, intExt: 'INT', location: '候车室', timeOfDay: '夜', summary: '选择', estimatedSeconds: 60, sourceUnitIds: [fixture.unitId], blocks: [{ id: 'a', type: 'action', text: '林岚在两扇门之间停下。' }] })
-    scene = await updateScreenplayScene({ scope: fixture.scope, sceneId: scene.id!, expectedRevision: scene.revision, patch: { status: 'reviewed' } })
+    const scene = await createScreenplayScene(fixture.scope, { planSectionKey: 'act-1', episodeNumber: 1, sceneNumber: 1, intExt: 'INT', location: '候车室', timeOfDay: '夜', summary: '选择', estimatedSeconds: 60, sourceUnitIds: [fixture.unitId], blocks: [{ id: 'a', type: 'action', text: '林岚在两扇门之间停下。' }] })
+    await updateScreenplayScene({ scope: fixture.scope, sceneId: scene.id!, expectedRevision: scene.revision, patch: { status: 'reviewed' } })
     const root = await db.adaptationProjects.where('workId').equals(fixture.scope.workId).first()
-    const completed = await completeAdaptationProductionV1({ scope: fixture.scope, expectedRevision: root!.revision })
-    expect(completed.status).toBe('complete'); expect((await db.works.get(fixture.scope.workId))?.status).toBe('completed')
-    await expect(updateScreenplayScene({ scope: fixture.scope, sceneId: scene.id!, expectedRevision: scene.revision, patch: { summary: '完稿后静默改写' } })).rejects.toThrow('重新打开审校')
-    const reopened = await reopenAdaptationProductionV1({ scope: fixture.scope, expectedRevision: completed.revision })
-    expect(reopened.status).toBe('review'); expect((await db.works.get(fixture.scope.workId))?.status).toBe('ongoing')
-    scene = await updateScreenplayScene({ scope: fixture.scope, sceneId: scene.id!, expectedRevision: scene.revision, patch: { summary: '作者重新审校' } })
-    expect(scene.summary).toBe('作者重新审校')
+    await expect(completeAdaptationProductionV1({ scope: fixture.scope, expectedRevision: root!.revision })).rejects.toThrow('旧剧本完稿入口已停用')
+    expect((await db.adaptationProjects.get(root!.id!))?.status).not.toBe('complete')
+    expect((await db.works.get(fixture.scope.workId))?.status).not.toBe('completed')
   })
 
   it('v7 往返重映射场景 owner、来源证据和块角色；删除角色保留 cue name 并置空 ID', async () => {
     const fixture = await setup()
     await createScreenplayScene(fixture.scope, { planSectionKey: 'act-1', episodeNumber: 1, sceneNumber: 1, intExt: 'INT', location: '候车室', timeOfDay: '夜', summary: '对话', estimatedSeconds: 40, sourceUnitIds: [fixture.unitId], blocks: [{ id: 'c', type: 'character', characterId: fixture.characterId, name: '林岚' }, { id: 'd', type: 'dialogue', text: '回去吧。' }] })
     const backup = await exportProjectJSON(fixture.scope.projectId)
-    expect(backup.version).toBe(10)
+    expect(backup.version).toBe(14)
     expect(backup.screenplayScenes?.[0]._blockCharacterExportIds).toEqual([0, null])
     expect((backup.screenplayScenes?.[0].blocks[0] as any).characterId).toBeNull()
     const importedId = await importProjectJSON(structuredClone(backup))

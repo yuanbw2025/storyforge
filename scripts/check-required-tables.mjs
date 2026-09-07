@@ -25,16 +25,26 @@ if (missing.length > 0 || extra.length > 0) {
 console.log(`[required-tables] ok: ${requiredTables.length} tables match schema.ts`)
 
 function extractSchemaTables(source) {
-  const match = source.match(/export const STORYFORGE_STORES = \{([\s\S]*?)\n\} as const/)
-  if (!match) {
-    console.error('[required-tables] STORYFORGE_STORES not found')
-    process.exit(1)
+  const seen = new Set()
+  function visit(constantName) {
+    if (seen.has(constantName)) return []
+    seen.add(constantName)
+    const pattern = new RegExp(`(?:export\\s+)?const\\s+${constantName}\\s*=\\s*\\{([\\s\\S]*?)\\n\\}\\s+as const`)
+    const match = source.match(pattern)
+    if (!match) {
+      console.error(`[required-tables] ${constantName} not found`)
+      process.exit(1)
+    }
+    const names = []
+    const tableRe = /\n\s*([A-Za-z]\w*)\s*:\s*'[^']*'/g
+    let table
+    while ((table = tableRe.exec(match[1]))) names.push(table[1])
+    const spreadRe = /\.\.\.([A-Za-z]\w*)/g
+    let spread
+    while ((spread = spreadRe.exec(match[1]))) names.push(...visit(spread[1]))
+    return names
   }
-  const names = []
-  const tableRe = /\n\s*([A-Za-z]\w*)\s*:\s*'[^']*'/g
-  let table
-  while ((table = tableRe.exec(match[1]))) names.push(table[1])
-  return names.sort()
+  return [...new Set(visit('STORYFORGE_STORES'))].sort()
 }
 
 function extractRequiredTables(source) {

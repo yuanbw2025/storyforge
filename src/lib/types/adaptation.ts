@@ -170,3 +170,88 @@ export interface AdaptationSourceUnit {
   sourceUpdatedAt: number | null
   createdAt: number
 }
+
+export type AdaptationSourceFactKindV1 =
+  | 'event'
+  | 'character-state'
+  | 'relationship'
+  | 'location'
+  | 'object'
+  | 'motif'
+
+export type AdaptationAuthorStatusV1 = 'confirmed' | 'rejected'
+
+/**
+ * A portable, author-reviewed assertion about the frozen source. Candidates
+ * remain CreativeArtifacts; only an explicit review action creates this row.
+ */
+export interface AdaptationSourceFactV1 {
+  id?: number
+  projectId: number
+  /** Target Work owner, never the source Work. */
+  workId: number
+  adaptationProjectId: number
+  manifestVersion: number
+  stableKey: string
+  kind: AdaptationSourceFactKindV1
+  statement: string
+  subjectKeys: string[]
+  sourceUnitKeys: string[]
+  confidence: number
+  authorStatus: AdaptationAuthorStatusV1
+  createdAt: number
+  updatedAt: number
+}
+
+export type AdaptationCausalRelationV1 =
+  | 'cause'
+  | 'enables'
+  | 'motivates'
+  | 'reveals'
+  | 'prevents'
+
+/** A directed, evidenced relationship between two source-fact stable keys. */
+export interface AdaptationCausalEdgeV1 {
+  id?: number
+  projectId: number
+  workId: number
+  adaptationProjectId: number
+  manifestVersion: number
+  stableKey: string
+  fromFactKey: string
+  toFactKey: string
+  relation: AdaptationCausalRelationV1
+  rationale: string
+  sourceUnitKeys: string[]
+  authorStatus: AdaptationAuthorStatusV1
+  createdAt: number
+  updatedAt: number
+}
+
+export type AdaptationDecisionActionV1 =
+  | 'keep'
+  | 'cut'
+  | 'merge'
+  | 'reorder'
+  | 'externalize'
+  | 'add'
+
+/**
+ * An explicit adaptation choice. `add` is the only action that may have no
+ * sourceFactKeys; it must still carry a rationale and an author decision.
+ */
+export interface AdaptationDecisionV1 {
+  id?: number
+  projectId: number
+  workId: number
+  adaptationProjectId: number
+  manifestVersion: number
+  stableKey: string
+  action: AdaptationDecisionActionV1
+  sourceFactKeys: string[]
+  targetKeys: string[]
+  rationale: string
+  authorStatus: AdaptationAuthorStatusV1
+  createdAt: number
+  updatedAt: number
+}

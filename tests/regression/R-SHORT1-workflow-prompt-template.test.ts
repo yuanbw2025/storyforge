@@ -57,12 +57,12 @@ describe('SHORT-1 · 声明式工作流、Prompt 与节点模板', () => {
 
   it('短篇节点模板按目标字数和作者章数参数化，不再固定 3×1,800', () => {
     const lower = buildOfficialAuthoringTemplate('short-novel', { targetWordCount: 5_000 })
-    const custom = buildOfficialAuthoringTemplate('short-novel', { targetWordCount: 25_000, preferredChapterCount: 10 })
+    const custom = buildOfficialAuthoringTemplate('short-novel', { targetWordCount: 25_000, preferredChapterCount: 8 })
     const value = (graph: typeof lower, templateId: string) => graph.nodes.find(node => node.templateId === templateId)?.config.value
     expect(value(lower, 'control.volume-count')).toBe(1)
-    expect(value(lower, 'control.chapter-count')).toBe(2)
-    expect(value(lower, 'control.word-count')).toBe(2_500)
-    expect(value(custom, 'control.chapter-count')).toBe(10)
-    expect(value(custom, 'control.word-count')).toBe(2_500)
+    expect(value(lower, 'control.chapter-count')).toBe(3)
+    expect(value(lower, 'control.word-count')).toBe(1_667)
+    expect(value(custom, 'control.chapter-count')).toBe(8)
+    expect(value(custom, 'control.word-count')).toBe(3_125)
   })
 })

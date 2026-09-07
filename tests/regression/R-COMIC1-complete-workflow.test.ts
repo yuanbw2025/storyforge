@@ -29,11 +29,10 @@ import {
   removeComicMediaAssetV1,
   selectComicMediaAssetV1,
 } from '../../src/lib/comic/media-service'
-import { generateAdaptationCandidateV1, adoptAdaptationCandidateV1 } from '../../src/lib/agent/run/adaptation-durable'
-import type { ComicPageCandidateV1 } from '../../src/lib/comic/adoption'
+import { assertComicPanelPlanCandidateV1 } from '../../src/lib/comic/production-contracts'
 import { renderComicPageSvgV1 } from '../../src/lib/comic/renderers'
 import { inspectComicQualityV1 } from '../../src/lib/comic/qa'
-import { completeAdaptationProductionV1, reopenAdaptationProductionV1 } from '../../src/lib/adaptation/completion'
+import { completeAdaptationProductionV1 } from '../../src/lib/adaptation/completion'
 import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
 
 const targetSpec: ComicTargetSpecV1 = {
@@ -142,34 +141,8 @@ describe('COMIC-1/2 · complete comic production workflow', () => {
     await expect(saveComicVisualSubject({ scope: item.scope, draft: { stableKey: 'missing-place', kind: 'location', characterId: null, locationRefKey: 'missing', label: '不存在', design: EMPTY_DESIGN, sourceUnitIds: [item.unit.id!] } })).rejects.toThrow('不可解析')
   })
 
-  it('durable 漫画分镜候选在确认前零写入，formal.written 中断后可幂等恢复', async () => {
-    const item = await fixture()
-    const candidate: ComicPageCandidateV1[] = [{
-      stableKey: 'ai-page-1', chapterNumber: 1, summary: 'AI 分镜页', panels: [{
-        stableKey: 'ai-panel-1', frame: { x: 0, y: 0, width: 1, height: 1 }, shot: { size: 'wide', angle: 'eye-level', movement: 'static', composition: '旧站全景' }, action: '林岚走入旧站。', visualPrompt: 'old station, cinematic comic, no text, no bubbles, no watermark', negativePrompt: 'text, letters, watermark', continuityRefs: [], sourceUnitKeys: [item.unit.sourceUnitKey],
-        lettering: [{ id: 'caption-1', kind: 'caption', text: '凌晨一点。', frame: { x: .05, y: .05, width: .3, height: .12 }, direction: 'horizontal', fontFamily: 'storyforge-sans', fontSize: 28, textColor: '#111111', fillColor: '#ffffff', strokeColor: '#111111', strokeWidth: 2, tail: null, zIndex: 1 }],
-      }],
-    }]
-    const generated = await generateAdaptationCandidateV1({ scope: item.scope, adaptationProjectId: item.root.id!, artifactKind: 'comic-storyboard', selectedPlanSectionKeys: ['chapter-1'], runAI: async () => JSON.stringify(candidate) })
-    expect(await db.comicPages.count()).toBe(0)
-    await expect(adoptAdaptationCandidateV1<'comic-storyboard'>({ scope: item.scope, runId: generated.snapshot.run.id, onDurableBoundary: boundary => { if (boundary === 'formal.written') throw new Error('simulated crash') } })).rejects.toThrow('simulated crash')
-    expect(await db.comicPages.count()).toBe(1)
-    const resumed = await adoptAdaptationCandidateV1<'comic-storyboard'>({ scope: item.scope, runId: generated.snapshot.run.id })
-    expect(resumed.snapshot.projection.state).toBe('completed')
-    expect(await db.comicPages.count()).toBe(1)
-    expect((await db.comicPanels.toArray())[0]).toMatchObject({ sourceUnitIds: [item.unit.id], sourceReviewManifestVersion: 1 })
-  })
-
-  it('非法 AI 页格使整批零落库，候选协议拒绝系统字段', async () => {
-    const item = await fixture()
-    const invalid = pageDraft(item.unit.id!, 'bad') as any
-    invalid.panels[0].sourceUnitKeys = [item.unit.sourceUnitKey]; delete invalid.panels[0].sourceUnitIds
-    invalid.panels[1].sourceUnitKeys = [item.unit.sourceUnitKey]; delete invalid.panels[1].sourceUnitIds
-    invalid.panels[1].frame = { x: 0, y: .2, width: 1, height: .6 }
-    const run = await generateAdaptationCandidateV1({ scope: item.scope, adaptationProjectId: item.root.id!, artifactKind: 'comic-storyboard', selectedPlanSectionKeys: ['chapter-1'], runAI: async () => JSON.stringify([invalid]) })
-    await expect(adoptAdaptationCandidateV1<'comic-storyboard'>({ scope: item.scope, runId: run.snapshot.run.id })).rejects.toThrow('重叠')
-    expect(await db.comicPages.count()).toBe(0)
-    await expect(generateAdaptationCandidateV1({ scope: item.scope, adaptationProjectId: item.root.id!, artifactKind: 'comic-storyboard', selectedPlanSectionKeys: ['chapter-1'], runAI: async () => JSON.stringify([{ ...invalid, projectId: 7 }]) })).rejects.toThrow('允许闭集')
+  it('专业 PanelPlan 候选协议拒绝系统字段', () => {
+    expect(() => assertComicPanelPlanCandidateV1({ projectId: 7 } as any)).toThrow('字段不在闭集')
   })
 
   it('provider 失败/低尺寸响应零落库；成功请求幂等、选片与回收闭合', async () => {
@@ -209,7 +182,7 @@ describe('COMIC-1/2 · complete comic production workflow', () => {
     expect(svg).toContain('data-storyforge-comic-page="1"'); expect(svg).toContain('你'); expect(svg).toContain('readingDirection')
 
     const backup = await exportProjectJSON(item.scope.projectId)
-    expect(backup.version).toBe(10); expect(backup.comicMediaAssets?.[0].rights.declaration).toContain('测试作者')
+    expect(backup.version).toBe(14); expect(backup.comicMediaAssets?.[0].rights.declaration).toContain('测试作者')
     const cyclic = structuredClone(backup)
     const firstAsset = cyclic.comicMediaAssets![0]
     firstAsset.referenceAssetKeys = ['cycle-copy']
@@ -228,7 +201,7 @@ describe('COMIC-1/2 · complete comic production workflow', () => {
     expect(importedBlob?.data.byteLength).toBe(32)
   })
 
-  it('正式 QA 阻止缺图完稿；全部格选片并审定后可完稿', async () => {
+  it('旧手工页格即使选片也不能绕过专业生产与 Release 闸门', async () => {
     const item = await fixture(); const created = await createComicPage(item.scope, pageDraft(item.unit.id!))
     expect((await inspectComicQualityV1(item.scope)).canFormalExport).toBe(false)
     for (const initial of created.panels) {
@@ -238,13 +211,9 @@ describe('COMIC-1/2 · complete comic production workflow', () => {
       expect(panel.status).toBe('reviewed')
     }
     const page = await updateComicPage({ scope: item.scope, pageId: created.page.id!, expectedRevision: created.page.revision, patch: { status: 'reviewed' } })
-    expect((await inspectComicQualityV1(item.scope)).canFormalExport).toBe(true)
-    const completed = await completeAdaptationProductionV1({ scope: item.scope, expectedRevision: item.root.revision })
-    expect(completed.status).toBe('complete'); expect((await db.works.get(item.scope.workId))?.status).toBe('completed')
+    expect((await inspectComicQualityV1(item.scope)).canFormalExport).toBe(false)
+    await expect(completeAdaptationProductionV1({ scope: item.scope, expectedRevision: item.root.revision })).rejects.toThrow('旧漫画完稿入口已停用')
     expect(page.status).toBe('reviewed')
-    await expect(updateComicPage({ scope: item.scope, pageId: page.id!, expectedRevision: page.revision, patch: { summary: '完稿后静默改写' } })).rejects.toThrow('重新打开审校')
-    const reopened = await reopenAdaptationProductionV1({ scope: item.scope, expectedRevision: completed.revision })
-    expect(reopened.status).toBe('review'); expect((await db.works.get(item.scope.workId))?.status).toBe('ongoing')
     const revised = await updateComicPage({ scope: item.scope, pageId: page.id!, expectedRevision: page.revision, patch: { summary: '作者重新审校' } })
     expect(revised.summary).toBe('作者重新审校')
   })

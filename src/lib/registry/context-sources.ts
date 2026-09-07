@@ -156,6 +156,12 @@ async function readProductProductionRepairFeedback(input: AssembleContextInput):
 async function readProductProductionEvolutionBase(input: AssembleContextInput): Promise<string> {
   return (await import('../product-production/context')).readProductProductionEvolutionBase(input)
 }
+async function readShortNovelProductionContext(input: AssembleContextInput): Promise<string> {
+  return (await import('../short-novel/context')).readShortNovelProductionContextV1(input)
+}
+async function readShortNovelManuscriptContext(input: AssembleContextInput): Promise<string> {
+  return (await import('../short-novel/context')).readShortNovelManuscriptContextV1(input)
+}
 async function readTtrpgGmRuntimeContextV1(input: AssembleContextInput): Promise<string> {
   return (await import('../ttrpg/gm-context')).readTtrpgGmRuntimeContextV1(input)
 }
@@ -223,6 +229,40 @@ async function readAdaptationPlanContext(input: AssembleContextInput): Promise<s
   return `【已确认改编计划｜manifest v${root.planSourceManifestVersion}】\n${JSON.stringify(root.plan)}`
 }
 
+async function readAdaptationSourceFactsContext(input: AssembleContextInput): Promise<string> {
+  const root = await requireTargetAdaptation(input)
+  const { listAdaptationAnalysisV1 } = await import('../adaptation/analysis')
+  const analysis = await listAdaptationAnalysisV1({
+    scope: input.scope!,
+    adaptationProjectId: root.id!,
+    manifestVersion: root.activeSourceManifestVersion,
+  })
+  const facts = analysis.facts.filter(item => item.authorStatus === 'confirmed')
+  const edges = analysis.edges.filter(item => item.authorStatus === 'confirmed')
+  if (!facts.length && !edges.length) return ''
+  return [
+    `【已确认来源事实与因果图｜manifest v${root.activeSourceManifestVersion}】`,
+    ...facts.map(fact => `FACT ${fact.stableKey}｜${fact.kind}｜${fact.statement}｜subjects ${fact.subjectKeys.join(', ') || '-'}｜sources ${fact.sourceUnitKeys.join(', ')}`),
+    ...edges.map(edge => `EDGE ${edge.stableKey}｜${edge.fromFactKey} -${edge.relation}-> ${edge.toFactKey}｜${edge.rationale}｜sources ${edge.sourceUnitKeys.join(', ')}`),
+  ].join('\n')
+}
+
+async function readAdaptationDecisionsContext(input: AssembleContextInput): Promise<string> {
+  const root = await requireTargetAdaptation(input)
+  const { listAdaptationAnalysisV1 } = await import('../adaptation/analysis')
+  const { decisions } = await listAdaptationAnalysisV1({
+    scope: input.scope!,
+    adaptationProjectId: root.id!,
+    manifestVersion: root.activeSourceManifestVersion,
+  })
+  const confirmed = decisions.filter(item => item.authorStatus === 'confirmed')
+  if (!confirmed.length) return ''
+  return [
+    `【已确认改编决策｜manifest v${root.activeSourceManifestVersion}】`,
+    ...confirmed.map(decision => `- ${decision.stableKey}｜${decision.action}｜facts ${decision.sourceFactKeys.join(', ') || '(新增)'}｜targets ${decision.targetKeys.join(', ') || '-'}｜${decision.rationale}`),
+  ].join('\n')
+}
+
 async function readScreenplayCurrentScenesContext(input: AssembleContextInput): Promise<string> {
   const root = await requireTargetAdaptation(input)
   if (root.medium !== 'screenplay' || !input.screenplaySceneIds?.length) return ''
@@ -233,6 +273,49 @@ async function readScreenplayCurrentScenesContext(input: AssembleContextInput): 
     `目的：${scene.summary}`,
     ...scene.blocks.map(block => block.type === 'character' ? `${block.type}｜${block.name}${block.extension ? ` (${block.extension})` : ''}` : `${block.type}｜${block.text}`),
   ].join('\n'))].join('\n\n')
+}
+
+async function readScreenplayBeatsContext(input: AssembleContextInput): Promise<string> {
+  const root = await requireTargetAdaptation(input)
+  if (root.medium !== 'screenplay') return ''
+  const beats = await db.screenplayBeats
+    .where('[adaptationProjectId+manifestVersion]')
+    .equals([root.id!, root.activeSourceManifestVersion])
+    .sortBy('order')
+  if (!beats.length) return ''
+  return [
+    `【已确认 Beat Sheet｜manifest v${root.activeSourceManifestVersion}】`,
+    ...beats.map(beat => `${beat.stableKey}｜${beat.scope}｜第 ${beat.episodeNumber} 集｜${beat.sectionKey}｜${beat.objective} → ${beat.turn} → ${beat.outcome}｜冲突：${beat.conflict}｜${beat.estimatedSeconds}s｜facts ${beat.causalFactKeys.join(', ') || '-'}｜decisions ${beat.decisionKeys.join(', ')}｜sources ${beat.sourceUnitKeys.join(', ')}`),
+  ].join('\n')
+}
+
+async function readScreenplaySceneCardsContext(input: AssembleContextInput): Promise<string> {
+  const root = await requireTargetAdaptation(input)
+  if (root.medium !== 'screenplay') return ''
+  const cards = await db.screenplaySceneCards
+    .where('[adaptationProjectId+manifestVersion]')
+    .equals([root.id!, root.activeSourceManifestVersion])
+    .sortBy('order')
+  if (!cards.length) return ''
+  return [
+    `【已确认 Scene Cards｜manifest v${root.activeSourceManifestVersion}】`,
+    ...cards.map(card => `${card.stableKey}｜beat ${card.beatKey}｜第 ${card.episodeNumber} 集第 ${card.sceneNumber} 场｜目的：${card.purpose}｜冲突：${card.conflict}｜进入：${card.entryState}｜可视动作：${card.visibleAction}｜揭示：${card.informationReveal}｜退出：${card.exitState}｜${card.estimatedSeconds}s｜sources ${card.sourceUnitKeys.join(', ')}`),
+  ].join('\n')
+}
+
+async function readScreenplayReviewIssuesContext(input: AssembleContextInput): Promise<string> {
+  const root = await requireTargetAdaptation(input)
+  if (root.medium !== 'screenplay') return ''
+  const issues = await db.screenplayReviewIssues
+    .where('[adaptationProjectId+manifestVersion]')
+    .equals([root.id!, root.activeSourceManifestVersion])
+    .toArray()
+  const open = issues.filter(issue => issue.status === 'open')
+  if (!open.length) return ''
+  return [
+    `【开放剧本审查问题｜manifest v${root.activeSourceManifestVersion}】`,
+    ...open.map(issue => `${issue.stableKey}｜${issue.category}/${issue.severity}｜scene ${issue.sceneKey}${issue.blockId ? ` block ${issue.blockId}` : ''}｜scene revision ${issue.reviewedSceneRevision}｜证据：${issue.evidence}｜问题：${issue.problem}｜建议：${issue.suggestion}`),
+  ].join('\n')
 }
 
 async function readComicVisualBibleContext(input: AssembleContextInput): Promise<string> {
@@ -257,6 +340,41 @@ async function readComicVisualBibleContext(input: AssembleContextInput): Promise
       status: subject.status,
     })),
   ].join('\n')
+}
+
+async function readComicScriptBeatsContext(input: AssembleContextInput): Promise<string> {
+  const root = await requireTargetAdaptation(input)
+  if (root.medium !== 'comic') return ''
+  const rows = await db.comicScriptBeats.where('[adaptationProjectId+manifestVersion]').equals([root.id!, root.activeSourceManifestVersion]).sortBy('order')
+  return rows.length ? ['【已确认漫画脚本节拍】', ...rows.map(row => `${row.stableKey}｜第${row.chapterNumber}章｜${row.narrativeFunction}｜${row.visualAction}｜对白意图：${row.dialogueIntent || '-'}｜情绪：${row.emotion}｜facts ${row.causalFactKeys.join(',')}｜decisions ${row.decisionKeys.join(',')}｜sources ${row.sourceUnitKeys.join(',')}`)].join('\n') : ''
+}
+
+async function readComicPagePlansContext(input: AssembleContextInput): Promise<string> {
+  const root = await requireTargetAdaptation(input)
+  if (root.medium !== 'comic') return ''
+  const rows = await db.comicPagePlans.where('[adaptationProjectId+manifestVersion]').equals([root.id!, root.activeSourceManifestVersion]).sortBy('order')
+  return rows.length ? ['【已确认漫画分页与页节奏】', ...rows.map(row => `${row.stableKey}｜页${row.pageNumber}｜第${row.chapterNumber}章｜${row.goal}｜beats ${row.beatKeys.join(',')}｜页末：${row.endReveal || '-'}｜翻页：${row.pageTurn}｜${row.expectedPanelCount}格｜文字预算${row.textBudget}字`)].join('\n') : ''
+}
+
+async function readComicSelectedMediaContext(input: AssembleContextInput): Promise<string> {
+  const root = await requireTargetAdaptation(input)
+  if (root.medium !== 'comic') return ''
+  const [pages, assets, subjects] = await Promise.all([
+    db.comicPages.where('adaptationProjectId').equals(root.id!).toArray(),
+    db.comicMediaAssets.where('adaptationProjectId').equals(root.id!).toArray(),
+    db.comicVisualSubjects.where('adaptationProjectId').equals(root.id!).toArray(),
+  ])
+  const pageIds = pages.flatMap(page => page.id == null ? [] : [page.id]); const panels = pageIds.length ? await db.comicPanels.where('pageId').anyOf(pageIds).toArray() : []
+  const selected = new Set([...panels.flatMap(panel => panel.selectedMediaAssetKey ? [panel.selectedMediaAssetKey] : []), ...subjects.flatMap(subject => subject.selectedMediaAssetKey ? [subject.selectedMediaAssetKey] : [])])
+  const rows = assets.filter(asset => selected.has(asset.stableKey) && asset.disposition === 'available')
+  return rows.length ? ['【漫画已选媒资元数据｜不等同于视觉观察】', ...rows.map(asset => JSON.stringify({ assetKey: asset.stableKey, role: asset.role, origin: asset.origin, panelKey: panels.find(panel => panel.id === asset.panelId)?.stableKey ?? null, subjectKey: asset.subjectKey, contentHashEvidence: asset.requestHash ?? null, referenceAssetKeys: asset.referenceAssetKeys, providerReceipt: asset.providerReceipt, rights: asset.rights, quality: asset.quality }))].join('\n') : ''
+}
+
+async function readComicReviewIssuesContext(input: AssembleContextInput): Promise<string> {
+  const root = await requireTargetAdaptation(input)
+  if (root.medium !== 'comic') return ''
+  const rows = await db.comicReviewIssues.where('[adaptationProjectId+manifestVersion]').equals([root.id!, root.activeSourceManifestVersion]).filter(row => row.status === 'open').toArray()
+  return rows.length ? ['【开放漫画审查问题】', ...rows.map(row => `${row.stableKey}｜${row.category}/${row.severity}｜page ${row.pageKey}${row.panelKey ? ` panel ${row.panelKey}` : ''}${row.subjectKey ? ` subject ${row.subjectKey}` : ''}${row.assetKey ? ` asset ${row.assetKey}` : ''}｜${row.problem}｜证据：${row.evidence}｜建议：${row.suggestion}`)].join('\n') : ''
 }
 
 async function readComicCurrentPagesContext(input: AssembleContextInput): Promise<string> {
@@ -1314,6 +1432,26 @@ async function readCharacterPassages(projectId: number, name?: string, worldGrou
 
 export const CONTEXT_SOURCES: ContextSource[] = [
   {
+    key: 'shortNovel.production',
+    label: '短篇已确认生产合同',
+    scope: 'project',
+    layer: 'L0',
+    ownerFrom: 'work',
+    budgetTokens: 8_000,
+    protectedFromTrim: true,
+    read: readShortNovelProductionContext,
+  },
+  {
+    key: 'shortNovel.manuscript',
+    label: '短篇当前结构与正文',
+    scope: 'project',
+    layer: 'L0',
+    ownerFrom: 'work',
+    budgetTokens: 64_000,
+    protectedFromTrim: true,
+    read: readShortNovelManuscriptContext,
+  },
+  {
     // ARCH-05: immutable WorldReference resource provider. Ordinary
     // assembleContext readers never activate it implicitly; upper-product
     // adapters open a frozen Context Gateway session with release id + hash.
@@ -1480,6 +1618,28 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     read: readAdaptationPlanContext,
   },
   {
+    key: 'adaptation.sourceFacts',
+    label: '已确认改编来源事实与因果图',
+    scope: 'project',
+    layer: 'L0',
+    ownerFrom: 'work',
+    budgetTokens: 10_000,
+    protectedFromTrim: true,
+    requiresAdaptationProjectId: true,
+    read: readAdaptationSourceFactsContext,
+  },
+  {
+    key: 'adaptation.decisions',
+    label: '已确认改编决策',
+    scope: 'project',
+    layer: 'L0',
+    ownerFrom: 'work',
+    budgetTokens: 8_000,
+    protectedFromTrim: true,
+    requiresAdaptationProjectId: true,
+    read: readAdaptationDecisionsContext,
+  },
+  {
     key: 'screenplay.currentScenes',
     label: '当前剧本场景',
     scope: 'project',
@@ -1492,6 +1652,39 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     read: readScreenplayCurrentScenesContext,
   },
   {
+    key: 'screenplay.beats',
+    label: '已确认剧本 Beat Sheet',
+    scope: 'project',
+    layer: 'L0',
+    ownerFrom: 'work',
+    budgetTokens: 12_000,
+    protectedFromTrim: true,
+    requiresAdaptationProjectId: true,
+    read: readScreenplayBeatsContext,
+  },
+  {
+    key: 'screenplay.sceneCards',
+    label: '已确认剧本 Scene Cards',
+    scope: 'project',
+    layer: 'L0',
+    ownerFrom: 'work',
+    budgetTokens: 16_000,
+    protectedFromTrim: true,
+    requiresAdaptationProjectId: true,
+    read: readScreenplaySceneCardsContext,
+  },
+  {
+    key: 'screenplay.reviewIssues',
+    label: '开放剧本审查问题',
+    scope: 'project',
+    layer: 'L0',
+    ownerFrom: 'work',
+    budgetTokens: 10_000,
+    protectedFromTrim: true,
+    requiresAdaptationProjectId: true,
+    read: readScreenplayReviewIssuesContext,
+  },
+  {
     key: 'comic.visualBible',
     label: '漫画视觉圣经与视觉条目',
     scope: 'project',
@@ -1501,6 +1694,22 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     protectedFromTrim: true,
     requiresAdaptationProjectId: true,
     read: readComicVisualBibleContext,
+  },
+  {
+    key: 'comic.scriptBeats', label: '已确认漫画脚本节拍', scope: 'project', layer: 'L0', ownerFrom: 'work',
+    budgetTokens: 12_000, protectedFromTrim: true, requiresAdaptationProjectId: true, read: readComicScriptBeatsContext,
+  },
+  {
+    key: 'comic.pagePlans', label: '已确认漫画分页与页节奏', scope: 'project', layer: 'L0', ownerFrom: 'work',
+    budgetTokens: 14_000, protectedFromTrim: true, requiresAdaptationProjectId: true, read: readComicPagePlansContext,
+  },
+  {
+    key: 'comic.selectedMedia', label: '漫画已选媒资证据', scope: 'project', layer: 'L0', ownerFrom: 'work',
+    budgetTokens: 12_000, protectedFromTrim: true, requiresAdaptationProjectId: true, read: readComicSelectedMediaContext,
+  },
+  {
+    key: 'comic.reviewIssues', label: '开放漫画审查问题', scope: 'project', layer: 'L0', ownerFrom: 'work',
+    budgetTokens: 10_000, protectedFromTrim: true, requiresAdaptationProjectId: true, read: readComicReviewIssuesContext,
   },
   {
     key: 'comic.currentPages',

@@ -1,0 +1,25 @@
+{
+  "schema": "storyforge.showcase-evidence.v1",
+  "productKind": "short-novel",
+  "title": "雨落在第七码头",
+  "genre": ["climate-fiction", "social-thriller", "near-future"],
+  "chapterCount": 5,
+  "timeWindow": "forty days, centered on one typhoon night",
+  "review": {
+    "structure": "five-stage investigation and public-action arc",
+    "pointOfView": "third-person limited: Shen Yao",
+    "openIssues": 0,
+    "checks": [
+      "the 412 cloud shadows, glass beads and commercial weather orders resolve into one evidence chain",
+      "the seven-minute protocol pays off without turning Shen Bozhou into an uncomplicated hero",
+      "technical exposition is converted into visible objects, timed decisions and public measurements",
+      "the climax distributes risk instead of inventing a consequence-free shutdown",
+      "the ending preserves institutional uncertainty while completing Shen Yao's personal change"
+    ]
+  },
+  "file": {
+    "path": "story.md",
+    "contentChars": 5697,
+    "sha256": "a6916f6b34293336ca032b12bdd92ed8b8d3cd3d9cc4995c2c71f2d0b4aa3ef2"
+  }
+}

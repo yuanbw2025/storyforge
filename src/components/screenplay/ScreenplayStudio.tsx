@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Check, Copy, Download, FileText, Lock, Merge, Plus, Printer, RefreshCw, Save, Scissors, Sparkles, Trash2, Undo2, Unlock, X } from 'lucide-react'
+import { Check, Copy, Download, FileText, Lock, Merge, Plus, Printer, RefreshCw, Save, Scissors, Trash2, Undo2, Unlock } from 'lucide-react'
 import { nanoid } from 'nanoid'
 import { db } from '../../lib/db/schema'
 import type { AdaptationFreshnessReport } from '../../lib/adaptation/source-manifest'
 import { inspectAdaptationFreshness, listActiveSourceUnits, resyncAdaptationSource } from '../../lib/adaptation/source-manifest'
-import { completeAdaptationProductionV1, reopenAdaptationProductionV1 } from '../../lib/adaptation/completion'
-import type { AdaptationProject, AdaptationSourceUnit, ScreenplayBlock, ScreenplayScene, Work, WorkspaceScope } from '../../lib/types'
+import { reopenAdaptationProductionV1 } from '../../lib/adaptation/completion'
+import type { AdaptationProject, AdaptationSourceUnit, CreationReleaseV1, ScreenplayBlock, ScreenplayScene, Work, WorkspaceScope } from '../../lib/types'
 import {
   createScreenplayScene,
   deleteScreenplayScene,
@@ -17,13 +17,11 @@ import {
   splitScreenplayScene,
   updateScreenplayScene,
 } from '../../lib/screenplay/service'
-import { renderScreenplayFdxV1, renderScreenplayFountainV1, renderScreenplayPrintHtmlV1 } from '../../lib/screenplay/renderers'
+import { renderScreenplayFdxV1, renderScreenplayFountainV1, renderScreenplayPrintHtmlV1, screenplayRenderDocumentFromReleaseV1 } from '../../lib/screenplay/renderers'
 import { validateScreenplayBlocksV1 } from '../../lib/screenplay/contracts'
-import AdaptationSetupPanel from '../adaptation/AdaptationSetupPanel'
-import { adoptAdaptationCandidateV1, generateAdaptationCandidateV1, readPendingAdaptationCandidateV1, rejectAdaptationCandidateV1 } from '../../lib/agent/run/adaptation-durable'
-import type { ScreenplaySceneCandidateV1 } from '../../lib/screenplay/adoption'
-import { getAIConfigRequiredMessage, isAIConfigReady } from '../../lib/ai/config-readiness'
-import { useAIConfigStore } from '../../stores/ai-config'
+import { inspectScreenplayCompletionV1, type ScreenplayCompletionReportV1 } from '../../lib/screenplay/production'
+import { listScreenplayReleasesV1, publishScreenplayReleaseV1, readScreenplayReleaseManifestV1 } from '../../lib/screenplay/release'
+import ScreenplayPipelinePanel from './ScreenplayPipelinePanel'
 import './screenplay-studio.css'
 
 interface Props { scope: WorkspaceScope }
@@ -51,6 +49,9 @@ export default function ScreenplayStudio({ scope }: Props) {
   const [work, setWork] = useState<Work | null>(null)
   const [units, setUnits] = useState<AdaptationSourceUnit[]>([])
   const [scenes, setScenes] = useState<ScreenplayScene[]>([])
+  const [releases, setReleases] = useState<CreationReleaseV1[]>([])
+  const [selectedReleaseId, setSelectedReleaseId] = useState<number | null>(null)
+  const [completion, setCompletion] = useState<ScreenplayCompletionReportV1 | null>(null)
   const [freshness, setFreshness] = useState<AdaptationFreshnessReport | null>(null)
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [editing, setEditing] = useState<ScreenplayScene | null>(null)
@@ -59,14 +60,13 @@ export default function ScreenplayStudio({ scope }: Props) {
   const [dragId, setDragId] = useState<number | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const [aiCandidate, setAiCandidate] = useState<{ runId: number; payload: ScreenplaySceneCandidateV1[]; text: string } | null>(null)
-  const aiConfig = useAIConfigStore(state => state.config)
 
   const reload = useCallback(async () => {
     const [root, targetWork] = await Promise.all([db.adaptationProjects.where('workId').equals(scope.workId).first(), db.works.get(scope.workId)])
     if (!root || root.medium !== 'screenplay' || !targetWork) throw new Error('当前作品不是有效剧本改编。')
-    const [sourceUnits, rows, fresh] = await Promise.all([listActiveSourceUnits(root.id!), listScreenplayScenes(scope), inspectAdaptationFreshness(root.id!)])
-    setAdaptation(root); setWork(targetWork); setUnits(sourceUnits); setScenes(rows); setFreshness(fresh)
+    const [sourceUnits, rows, fresh, releaseRows, completionReport] = await Promise.all([listActiveSourceUnits(root.id!), listScreenplayScenes(scope), inspectAdaptationFreshness(root.id!), listScreenplayReleasesV1(scope), inspectScreenplayCompletionV1(scope)])
+    setAdaptation(root); setWork(targetWork); setUnits(sourceUnits); setScenes(rows); setFreshness(fresh); setReleases(releaseRows); setCompletion(completionReport)
+    setSelectedReleaseId(current => current != null && releaseRows.some(row => row.id === current) ? current : releaseRows[releaseRows.length - 1]?.id ?? null)
     setSelectedId(current => current != null && rows.some(row => row.id === current) ? current : rows[0]?.id ?? null)
   }, [scope])
   useEffect(() => { void reload().catch(cause => setError(cause instanceof Error ? cause.message : '读取剧本失败')) }, [reload])
@@ -74,15 +74,6 @@ export default function ScreenplayStudio({ scope }: Props) {
     const scene = scenes.find(row => row.id === selectedId) ?? null
     setEditing(scene ? structuredClone(scene) : null); setHistory([]); setFuture([])
   }, [scenes, selectedId])
-  useEffect(() => {
-    let cancelled = false
-    void readPendingAdaptationCandidateV1({ scope, artifactKind: 'screenplay-scenes' }).then(pending => {
-      if (!pending || cancelled) return
-      const payload = pending.candidate.payload as ScreenplaySceneCandidateV1[]
-      setAiCandidate({ runId: pending.snapshot.run.id, payload, text: JSON.stringify(payload, null, 2) })
-    }).catch(() => undefined)
-    return () => { cancelled = true }
-  }, [scope])
 
   const act = async (action: () => Promise<unknown>) => { if (busy) return; setBusy(true); setError(''); try { await action(); await reload() } catch (cause) { setError(cause instanceof Error ? cause.message : '操作失败') } finally { setBusy(false) } }
   const pushBlocks = (blocks: ScreenplayBlock[]) => { if (!editing) return; setHistory(current => [...current.slice(-39), structuredClone(editing.blocks)]); setFuture([]); setEditing({ ...editing, blocks }) }
@@ -108,12 +99,16 @@ export default function ScreenplayStudio({ scope }: Props) {
   const sourceLabel = freshness?.status === 'unchanged' ? '来源未变化' : freshness?.status === 'changed' ? '来源已变化' : freshness?.status === 'missing' ? '来源缺失' : '已脱离来源'
 
   const createScene = () => {
-    const section = adaptation.plan?.sections[0]
-    const sourceUnit = units.find(unit => unit.sourceKind === 'chapter') ?? units[0]
-    if (!section || !sourceUnit?.id) { setError('当前计划或来源单元不可用。'); return }
-    const episodeNumber = section.episodeNumber ?? 1
-    const sceneNumber = Math.max(0, ...scenes.filter(scene => scene.episodeNumber === episodeNumber).map(scene => scene.sceneNumber)) + 1
-    void act(() => createScreenplayScene(scope, { planSectionKey: section.stableKey, episodeNumber, sceneNumber, intExt: 'INT', location: '新地点', timeOfDay: '日', summary: '新场景', estimatedSeconds: 60, sourceUnitIds: [sourceUnit.id!], blocks: [{ id: `block_${nanoid(12)}`, type: 'action', text: '在这里写可拍摄的动作。' }] }))
+    void act(async () => {
+      const cards = await db.screenplaySceneCards.where('[adaptationProjectId+manifestVersion]').equals([adaptation.id!, adaptation.activeSourceManifestVersion]).sortBy('order')
+      const card = cards.find(item => !scenes.some(scene => scene.stableKey === item.stableKey))
+      if (!card) throw new Error('没有尚未写作的 Scene Card。')
+      const beat = await db.screenplayBeats.where('[adaptationProjectId+manifestVersion]').equals([adaptation.id!, adaptation.activeSourceManifestVersion]).filter(item => item.stableKey === card.beatKey).first()
+      if (!beat) throw new Error('Scene Card 对应的 Beat 已缺失。')
+      const unitByKey = new Map(units.map(unit => [unit.sourceUnitKey, unit]))
+      const sourceUnitIds = card.sourceUnitKeys.map(key => unitByKey.get(key)?.id).filter((id): id is number => Number.isInteger(id))
+      return createScreenplayScene(scope, { stableKey: card.stableKey, planSectionKey: beat.sectionKey, episodeNumber: card.episodeNumber, sceneNumber: card.sceneNumber, order: card.order, intExt: 'INT', location: '待确认地点', timeOfDay: '日', summary: card.purpose, estimatedSeconds: card.estimatedSeconds, sourceUnitIds, blocks: [{ id: `block_${nanoid(12)}`, type: 'action', text: card.visibleAction }] })
+    })
   }
 
   const save = () => {
@@ -130,40 +125,30 @@ export default function ScreenplayStudio({ scope }: Props) {
     ids.splice(to, 0, ids.splice(from, 1)[0])
     void act(() => reorderScreenplayScenes({ scope, orderedSceneIds: ids }))
   }
-  const generateScenes = async () => {
-    if (busy || !adaptation) return
-    if (!isAIConfigReady(aiConfig)) { setError(getAIConfigRequiredMessage(aiConfig)); return }
-    const sectionKey = editing?.planSectionKey ?? adaptation.plan?.sections[0]?.stableKey
-    if (!sectionKey) { setError('请先确认结构计划。'); return }
-    setBusy(true); setError('')
+  const exportRelease = async (format: 'fountain' | 'fdx' | 'print') => {
+    if (!selectedReleaseId) { setError('请先发布一个不可变剧本版本。'); return }
     try {
-      const generated = await generateAdaptationCandidateV1({ scope, adaptationProjectId: adaptation.id!, artifactKind: 'screenplay-scenes', selectedPlanSectionKeys: [sectionKey], aiConfig })
-      const payload = generated.candidate.payload as ScreenplaySceneCandidateV1[]
-      setAiCandidate({ runId: generated.snapshot.run.id, payload, text: JSON.stringify(payload, null, 2) })
-    } catch (cause) { setError(cause instanceof Error ? cause.message : '场景生成失败') } finally { setBusy(false) }
+      const manifest = await readScreenplayReleaseManifestV1(scope, selectedReleaseId)
+      const document = screenplayRenderDocumentFromReleaseV1(manifest)
+      if (format === 'fountain') download(`${work.title}-v${releases.find(row => row.id === selectedReleaseId)?.version}.fountain`, renderScreenplayFountainV1(document), 'text/plain;charset=utf-8')
+      else if (format === 'fdx') download(`${work.title}-v${releases.find(row => row.id === selectedReleaseId)?.version}.fdx`, renderScreenplayFdxV1(document), 'application/xml;charset=utf-8')
+      else { const popup = window.open('', '_blank'); if (popup) { popup.document.write(renderScreenplayPrintHtmlV1(document)); popup.document.close(); popup.focus(); setTimeout(() => popup.print(), 250) } }
+    } catch (cause) { setError(cause instanceof Error ? cause.message : '导出 Release 失败') }
   }
-  const acceptScenes = async () => {
-    if (!aiCandidate || busy) return
-    setBusy(true); setError('')
-    try {
-      const payload = JSON.parse(aiCandidate.text) as ScreenplaySceneCandidateV1[]
-      await adoptAdaptationCandidateV1<'screenplay-scenes'>({ scope, runId: aiCandidate.runId, authorPayload: payload })
-      setAiCandidate(null)
-      await reload()
-    } catch (cause) { setError(cause instanceof Error ? cause.message : '采纳场景候选失败') } finally { setBusy(false) }
-  }
-  const rejectScenes = async () => {
-    if (!aiCandidate || busy) return
-    setBusy(true); setError('')
-    try { await rejectAdaptationCandidateV1({ scope, runId: aiCandidate.runId }); setAiCandidate(null) } catch (cause) { setError(cause instanceof Error ? cause.message : '放弃候选失败') } finally { setBusy(false) }
-  }
-
-  const exportDocument = { title: work.title, targetSpec: adaptation.targetSpec, scenes }
   return <div className="screenplay-studio">
     <header className="screenplay-top"><div><span>SCREENPLAY STUDIO</span><h2>{work.title}</h2><p>{adaptation.targetSpec.format === 'film' ? '电影' : adaptation.targetSpec.format === 'series' ? '剧集' : '短剧'} · 结构化正规剧本</p></div><div className={`screenplay-source ${freshness?.status ?? ''}`}><strong>{isComplete ? '正式完稿 · 当前只读' : sourceLabel}</strong><small>manifest v{adaptation.activeSourceManifestVersion}</small>{isComplete ? <button onClick={() => void act(() => reopenAdaptationProductionV1({ scope, expectedRevision: adaptation.revision }))}><Unlock className="h-4 w-4" />重新打开审校</button> : freshness?.status === 'changed' && <button onClick={() => void act(() => resyncAdaptationSource({ adaptationProjectId: adaptation.id!, expectedRevision: adaptation.revision }))}><RefreshCw className="h-4 w-4" />确认同步</button>}</div></header>
-    {!productionReady ? <AdaptationSetupPanel scope={scope} adaptation={adaptation} sourceUnits={units} onChanged={async root => { setAdaptation(root); await reload() }} /> : <>
-      <nav className="screenplay-toolbar"><button onClick={createScene} disabled={isComplete || busy || freshness?.status !== 'unchanged'}><Plus className="h-4 w-4" />新建场景</button><button onClick={() => void generateScenes()} disabled={isComplete || busy || !!aiCandidate || freshness?.status !== 'unchanged'}><Sparkles className="h-4 w-4" />AI 生成当前计划段</button><button onClick={() => download(`${work.title}.fountain`, renderScreenplayFountainV1(exportDocument), 'text/plain;charset=utf-8')}><Download className="h-4 w-4" />Fountain</button><button onClick={() => download(`${work.title}.fdx`, renderScreenplayFdxV1(exportDocument), 'application/xml;charset=utf-8')}><FileText className="h-4 w-4" />FDX</button><button onClick={() => { const popup = window.open('', '_blank'); if (popup) { popup.document.write(renderScreenplayPrintHtmlV1(exportDocument)); popup.document.close(); popup.focus(); setTimeout(() => popup.print(), 250) } }}><Printer className="h-4 w-4" />PDF 打印</button><button className="primary" onClick={() => void act(() => completeAdaptationProductionV1({ scope, expectedRevision: adaptation.revision }))} disabled={busy || isComplete}><Check className="h-4 w-4" />{isComplete ? '已正式完稿' : '正式完稿'}</button><span>{Math.round(stats.seconds / 60)} 分钟 · {stats.locations} 个场景地点 · {stats.cues} 次角色 cue · {stats.dialogueChars} 字对白</span></nav>
-      {aiCandidate && <section className="screenplay-ai-candidate"><header><div><Sparkles className="h-4 w-4" /><strong>AI 场景候选 · 尚未写入正式剧本</strong></div><span>{aiCandidate.payload.length} 场</span></header><p>可直接检查或修改结构化 JSON。确认时整批校验、整批写入；任一场非法则全部不落库。</p><textarea value={aiCandidate.text} onChange={event => setAiCandidate({ ...aiCandidate, text: event.target.value })} spellCheck={false} /><footer><button onClick={() => void rejectScenes()} disabled={busy}><X className="h-4 w-4" />放弃</button><button className="primary" onClick={() => void acceptScenes()} disabled={busy}><Check className="h-4 w-4" />作者确认并采纳</button></footer></section>}
+    <ScreenplayPipelinePanel scope={scope} adaptation={adaptation} sourceUnits={units} scenes={scenes} onChanged={reload} />
+    {productionReady && <>
+      <nav className="screenplay-toolbar">
+        <button onClick={createScene} disabled={isComplete || busy || freshness?.status !== 'unchanged'}><Plus className="h-4 w-4" />从下一张 Scene Card 新建</button>
+        <label className="screenplay-release-picker">版本<select value={selectedReleaseId ?? ''} onChange={event => setSelectedReleaseId(event.target.value ? Number(event.target.value) : null)}><option value="">尚未发布</option>{releases.map(release => <option key={release.id} value={release.id}>v{release.version}</option>)}</select></label>
+        <button onClick={() => void exportRelease('fountain')} disabled={!selectedReleaseId}><Download className="h-4 w-4" />Fountain</button>
+        <button onClick={() => void exportRelease('fdx')} disabled={!selectedReleaseId}><FileText className="h-4 w-4" />FDX</button>
+        <button onClick={() => void exportRelease('print')} disabled={!selectedReleaseId}><Printer className="h-4 w-4" />PDF 打印</button>
+        <button className="primary" onClick={() => void act(() => publishScreenplayReleaseV1({ scope, expectedAdaptationRevision: adaptation.revision }))} disabled={busy || isComplete || !completion?.ready}><Check className="h-4 w-4" />{isComplete ? `已发布 v${releases[releases.length - 1]?.version ?? 1}` : '发布不可变版本'}</button>
+        <span>{Math.round(stats.seconds / 60)} 分钟 · {stats.locations} 个场景地点 · {stats.cues} 次角色 cue · {stats.dialogueChars} 字对白</span>
+      </nav>
+      {completion && !completion.ready && <section className="screenplay-completion"><strong>发布前还需处理 {completion.blockers.length} 项</strong>{completion.blockers.map(item => <p key={item}>{item}</p>)}{completion.warnings.map(item => <small key={item}>{item}</small>)}</section>}
       <div className="screenplay-layout">
         <aside className="screenplay-tree"><header><strong>场景树</strong><small>{scenes.length} 场</small></header>{scenes.map((scene, index) => <button key={scene.id} draggable onDragStart={() => setDragId(scene.id!)} onDragOver={event => event.preventDefault()} onDrop={() => { if (dragId) reorder(dragId, scene.id!); setDragId(null) }} className={scene.id === selectedId ? 'active' : ''} onClick={() => setSelectedId(scene.id!)}><span>{index + 1}</span><div><strong>{scene.intExt === 'INT_EXT' ? 'INT./EXT.' : scene.intExt} {scene.location} - {scene.timeOfDay}</strong><small>第 {scene.episodeNumber} 集 · 场 {scene.sceneNumber} · {Math.round(scene.estimatedSeconds / 60)} 分</small></div>{scene.status === 'locked' && <Lock className="h-3.5 w-3.5" />}</button>)}</aside>
         <main className="screenplay-editor">{editing ? <><div className="screenplay-scene-meta"><select value={editing.planSectionKey} onChange={event => setEditing({ ...editing, planSectionKey: event.target.value })}>{adaptation.plan?.sections.map(section => <option key={section.stableKey} value={section.stableKey}>{section.title}</option>)}</select><label>集<input type="number" min={1} value={editing.episodeNumber} onChange={event => setEditing({ ...editing, episodeNumber: Number(event.target.value) })} /></label><label>场<input type="number" min={1} value={editing.sceneNumber} onChange={event => setEditing({ ...editing, sceneNumber: Number(event.target.value) })} /></label><select value={editing.intExt} onChange={event => setEditing({ ...editing, intExt: event.target.value as ScreenplayScene['intExt'] })}><option value="INT">INT.</option><option value="EXT">EXT.</option><option value="INT_EXT">INT./EXT.</option></select><input value={editing.location} onChange={event => setEditing({ ...editing, location: event.target.value })} placeholder="地点" /><input value={editing.timeOfDay} onChange={event => setEditing({ ...editing, timeOfDay: event.target.value })} placeholder="时间" /><label>秒<input type="number" min={1} value={editing.estimatedSeconds} onChange={event => setEditing({ ...editing, estimatedSeconds: Number(event.target.value) })} /></label></div><textarea className="screenplay-summary" value={editing.summary} onChange={event => setEditing({ ...editing, summary: event.target.value })} placeholder="场景目的、冲突和转折" />

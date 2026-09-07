@@ -92,12 +92,32 @@ export type AgentSkillExecutionModeV1 =
   | 'ttrpg-private-guidance'
   | 'ttrpg-player-intent'
   | 'product-production'
-  | 'adaptation-brief'
-  | 'adaptation-impact'
-  | 'screenplay-plan'
-  | 'screenplay-scenes'
-  | 'comic-plan'
-  | 'comic-storyboard'
+  | 'adaptation-source-analysis'
+  | 'adaptation-causal-graph'
+  | 'screenplay-adaptation-brief'
+  | 'screenplay-decision-pass'
+  | 'screenplay-beat-sheet'
+  | 'screenplay-scene-card'
+  | 'screenplay-scene-draft'
+  | 'screenplay-grounding-review'
+  | 'screenplay-dramaturgy-review'
+  | 'screenplay-targeted-rewrite'
+  | 'comic-adaptation-brief'
+  | 'comic-decision-pass'
+  | 'comic-script-adaptation'
+  | 'comic-page-rhythm'
+  | 'comic-panel-plan'
+  | 'comic-visual-bible'
+  | 'comic-image-request'
+  | 'comic-visual-continuity-review'
+  | 'comic-targeted-repair'
+  | 'comic-page-review'
+  | 'short-intent-brief'
+  | 'short-story-design'
+  | 'short-scene-plan'
+  | 'short-chapter-draft'
+  | 'short-continuity-review'
+  | 'short-targeted-rewrite'
 
 export interface AgentSkillWriteTargetV1 {
   table: string
@@ -226,10 +246,36 @@ const PRODUCT_PRODUCTION_WORLD_GATEWAY_POLICY = {
   ],
 } as const satisfies AgentSkillContextGatewayPolicyV1
 
-const ADAPTATION_BRIEF_CONTEXT_SOURCE_KEYS = ['adaptation.sourceManifest', 'adaptation.sourceContent', 'characters', 'worldview', 'creativeRules'] as const
-const ADAPTATION_PLAN_CONTEXT_SOURCE_KEYS = ['adaptation.sourceManifest', 'adaptation.sourceContent', 'adaptation.currentBrief', 'characters'] as const
-const SCREENPLAY_SCENES_CONTEXT_SOURCE_KEYS = ['adaptation.sourceManifest', 'adaptation.sourceContent', 'adaptation.currentBrief', 'adaptation.currentPlan', 'characters'] as const
-const COMIC_STORYBOARD_CONTEXT_SOURCE_KEYS = ['adaptation.sourceManifest', 'adaptation.sourceContent', 'adaptation.currentBrief', 'adaptation.currentPlan', 'comic.visualBible', 'characters'] as const
+const SCREENPLAY_SOURCE_ANALYSIS_CONTEXT_KEYS = ['adaptation.sourceManifest', 'adaptation.sourceContent'] as const
+const SCREENPLAY_CAUSAL_CONTEXT_KEYS = ['adaptation.sourceManifest', 'adaptation.sourceContent', 'adaptation.sourceFacts'] as const
+const SCREENPLAY_BRIEF_CONTEXT_KEYS = ['adaptation.sourceManifest', 'adaptation.sourceContent', 'adaptation.sourceFacts', 'characters'] as const
+const SCREENPLAY_DECISION_CONTEXT_KEYS = ['adaptation.sourceManifest', 'adaptation.sourceContent', 'adaptation.sourceFacts', 'adaptation.currentBrief'] as const
+const SCREENPLAY_BEAT_CONTEXT_KEYS = ['adaptation.sourceManifest', 'adaptation.sourceContent', 'adaptation.sourceFacts', 'adaptation.decisions', 'adaptation.currentBrief'] as const
+const SCREENPLAY_CARD_CONTEXT_KEYS = ['adaptation.sourceManifest', 'adaptation.sourceContent', 'adaptation.sourceFacts', 'adaptation.decisions', 'adaptation.currentBrief', 'screenplay.beats'] as const
+const SCREENPLAY_DRAFT_CONTEXT_KEYS = ['adaptation.sourceManifest', 'adaptation.sourceContent', 'adaptation.sourceFacts', 'adaptation.decisions', 'adaptation.currentBrief', 'screenplay.beats', 'screenplay.sceneCards', 'screenplay.currentScenes', 'characters'] as const
+const SCREENPLAY_REVIEW_CONTEXT_KEYS = ['adaptation.sourceManifest', 'adaptation.sourceContent', 'adaptation.sourceFacts', 'adaptation.decisions', 'screenplay.sceneCards', 'screenplay.currentScenes'] as const
+const SCREENPLAY_REWRITE_CONTEXT_KEYS = ['adaptation.sourceManifest', 'adaptation.sourceContent', 'adaptation.sourceFacts', 'adaptation.decisions', 'screenplay.sceneCards', 'screenplay.currentScenes', 'screenplay.reviewIssues'] as const
+const COMIC_BRIEF_CONTEXT_KEYS = ['adaptation.sourceManifest', 'adaptation.sourceContent', 'adaptation.sourceFacts'] as const
+const COMIC_DECISION_CONTEXT_KEYS = ['adaptation.sourceManifest', 'adaptation.sourceContent', 'adaptation.sourceFacts', 'adaptation.currentBrief'] as const
+const COMIC_SCRIPT_CONTEXT_KEYS = ['adaptation.sourceManifest', 'adaptation.sourceContent', 'adaptation.sourceFacts', 'adaptation.decisions', 'adaptation.currentBrief'] as const
+const COMIC_PAGE_RHYTHM_CONTEXT_KEYS = ['adaptation.sourceManifest', 'adaptation.sourceContent', 'adaptation.sourceFacts', 'adaptation.decisions', 'adaptation.currentBrief', 'comic.scriptBeats'] as const
+const COMIC_PANEL_PLAN_CONTEXT_KEYS = ['adaptation.sourceManifest', 'adaptation.sourceContent', 'comic.scriptBeats', 'comic.pagePlans'] as const
+const COMIC_VISUAL_BIBLE_CONTEXT_KEYS = ['adaptation.sourceManifest', 'adaptation.sourceContent', 'adaptation.sourceFacts', 'comic.currentPages', 'characters'] as const
+const COMIC_IMAGE_REQUEST_CONTEXT_KEYS = ['adaptation.sourceManifest', 'adaptation.sourceContent', 'comic.currentPages', 'comic.visualBible', 'comic.selectedMedia'] as const
+const COMIC_REVIEW_CONTEXT_KEYS = ['adaptation.sourceManifest', 'adaptation.sourceContent', 'adaptation.sourceFacts', 'adaptation.decisions', 'comic.scriptBeats', 'comic.pagePlans', 'comic.currentPages', 'comic.visualBible', 'comic.selectedMedia'] as const
+const COMIC_REPAIR_CONTEXT_KEYS = [...COMIC_REVIEW_CONTEXT_KEYS, 'comic.reviewIssues'] as const
+const SHORT_NOVEL_DESIGN_CONTEXT_SOURCE_KEYS = ['workStatus', 'shortNovel.production'] as const
+const SHORT_NOVEL_MANUSCRIPT_CONTEXT_SOURCE_KEYS = ['workStatus', 'shortNovel.production', 'shortNovel.manuscript'] as const
+const SHORT_NOVEL_INPUT_POLICY: AgentSkillInputPolicyV1 = {
+  sourceKeys: ['shortNovel.production'],
+  states: {
+    empty: { handling: 'require-upstream', instruction: '当前没有短篇生产根；不得调用模型或把长篇流程伪装成短篇。' },
+    partial: { handling: 'reference-and-create', instruction: '只依据作者要求与当前已确认短篇阶段生成本步候选；缺失上游须明确指出。' },
+    complete: { handling: 'grounded-transform', instruction: '锁定短篇已确认 Brief、设计、结构和正文，只生成当前 Skill 的单一候选。' },
+  },
+}
+const SHORT_NOVEL_DESIGN_COMPRESSION_POLICY = compressionPolicy(SHORT_NOVEL_DESIGN_CONTEXT_SOURCE_KEYS)
+const SHORT_NOVEL_MANUSCRIPT_COMPRESSION_POLICY = compressionPolicy(SHORT_NOVEL_MANUSCRIPT_CONTEXT_SOURCE_KEYS)
 
 const STORY_CORE_CONTEXT_SOURCE_KEYS = [
   'workStatus',
@@ -424,7 +470,6 @@ const ADAPTATION_INPUT_POLICY: AgentSkillInputPolicyV1 = {
     complete: { handling: 'grounded-transform', instruction: '严格依据冻结来源、已确认改编约束和目标媒介合同生成可审查候选。' },
   },
 }
-const ADAPTATION_COMPRESSION_POLICY = compressionPolicy(['adaptation.sourceContent'])
 const FORESHADOW_SUGGESTION_COMPRESSION_POLICY = compressionPolicy(FORESHADOW_SUGGESTION_CONTEXT_SOURCE_KEYS)
 const HISTORY_AGENT_COMPRESSION_POLICY = compressionPolicy(HISTORY_AGENT_CONTEXT_SOURCE_KEYS)
 const REFERENCE_DERIVED_COMPRESSION_POLICY = compressionPolicy(REFERENCE_DERIVED_CONTEXT_SOURCE_KEYS)
@@ -2031,126 +2076,398 @@ export const AGENT_SKILLS = [
   },
   {
     version: 1,
-    id: 'outline.adaptation-brief',
+    id: 'adaptation.source-analysis',
     agentId: 'outline',
     defaultForAgent: false,
-    label: '小说改编 Brief 候选',
-    owner: 'outline-agent',
-    promptVersion: 'adaptation-brief-v1',
-    executionMode: 'adaptation-brief',
+    label: '小说改编来源事实分析',
+    owner: 'adaptation-products',
+    promptVersion: 'adaptation-source-analysis-v1',
+    executionMode: 'adaptation-source-analysis',
     contextTaskKind: 'agent-outline',
     readToolNames: [],
-    contextSourceKeys: ADAPTATION_BRIEF_CONTEXT_SOURCE_KEYS,
+    contextSourceKeys: SCREENPLAY_SOURCE_ANALYSIS_CONTEXT_KEYS,
     optionalContextSourceKeys: [],
     inputPolicy: ADAPTATION_INPUT_POLICY,
-    contextCompression: ADAPTATION_COMPRESSION_POLICY,
+    contextCompression: compressionPolicy(SCREENPLAY_SOURCE_ANALYSIS_CONTEXT_KEYS),
+    maxOutputTokens: 12_000,
+    writeTargets: [{ table: 'adaptationSourceFacts', fields: ['kind', 'statement', 'subjectKeys', 'sourceUnitKeys', 'confidence'], adoptionExtension: 'adaptation-source-fact-lifecycle' }],
+    lastVerifiedAt: '2026-09-06',
+    regressionTests: ['R-SCREEN2-professional-pipeline', 'R-COMIC2-professional-pipeline'],
+  },
+  {
+    version: 1,
+    id: 'adaptation.causal-graph',
+    agentId: 'outline',
+    defaultForAgent: false,
+    label: '小说改编因果图',
+    owner: 'adaptation-products',
+    promptVersion: 'adaptation-causal-graph-v1',
+    executionMode: 'adaptation-causal-graph',
+    contextTaskKind: 'agent-outline',
+    readToolNames: [],
+    contextSourceKeys: SCREENPLAY_CAUSAL_CONTEXT_KEYS,
+    optionalContextSourceKeys: [],
+    inputPolicy: ADAPTATION_INPUT_POLICY,
+    contextCompression: compressionPolicy(SCREENPLAY_CAUSAL_CONTEXT_KEYS),
+    maxOutputTokens: 10_000,
+    writeTargets: [{ table: 'adaptationCausalEdges', fields: ['fromFactKey', 'toFactKey', 'relation', 'rationale', 'sourceUnitKeys'], adoptionExtension: 'adaptation-causal-edge-lifecycle' }],
+    lastVerifiedAt: '2026-09-06',
+    regressionTests: ['R-SCREEN2-professional-pipeline', 'R-COMIC2-professional-pipeline'],
+  },
+  {
+    version: 1,
+    id: 'screenplay.adaptation-brief',
+    agentId: 'outline',
+    defaultForAgent: false,
+    label: '专业剧本改编 Brief',
+    owner: 'screenplay-product',
+    promptVersion: 'screenplay-adaptation-brief-v1',
+    executionMode: 'screenplay-adaptation-brief',
+    contextTaskKind: 'agent-outline',
+    readToolNames: [],
+    contextSourceKeys: SCREENPLAY_BRIEF_CONTEXT_KEYS,
+    optionalContextSourceKeys: [],
+    inputPolicy: ADAPTATION_INPUT_POLICY,
+    contextCompression: compressionPolicy(SCREENPLAY_BRIEF_CONTEXT_KEYS),
     maxOutputTokens: 6_000,
     writeTargets: [{ table: 'adaptationProjects', fields: ['brief'] }],
-    lastVerifiedAt: '2026-08-22',
-    regressionTests: ['R-ADAPTCORE1B-durable-candidates'],
+    lastVerifiedAt: '2026-09-06',
+    regressionTests: ['R-SCREEN2-professional-pipeline'],
   },
   {
     version: 1,
-    id: 'outline.adaptation-impact',
+    id: 'screenplay.decision-pass',
     agentId: 'outline',
     defaultForAgent: false,
-    label: '改编来源变化影响分析',
-    owner: 'outline-agent',
-    promptVersion: 'adaptation-impact-v1',
-    executionMode: 'adaptation-impact',
+    label: '剧本逐项改编决定',
+    owner: 'screenplay-product',
+    promptVersion: 'screenplay-decision-pass-v1',
+    executionMode: 'screenplay-decision-pass',
     contextTaskKind: 'agent-outline',
     readToolNames: [],
-    contextSourceKeys: ['adaptation.sourceManifest'],
-    optionalContextSourceKeys: ['adaptation.currentBrief', 'adaptation.currentPlan', 'screenplay.currentScenes'],
-    inputPolicy: { ...ADAPTATION_INPUT_POLICY, sourceKeys: ['adaptation.sourceManifest'] },
-    contextCompression: compressionPolicy(['adaptation.sourceManifest']),
-    maxOutputTokens: 4_000,
-    writeTargets: [],
-    lastVerifiedAt: '2026-08-22',
-    regressionTests: ['R-ADAPTCORE1B-durable-candidates'],
-  },
-  {
-    version: 1,
-    id: 'outline.screenplay-plan',
-    agentId: 'outline',
-    defaultForAgent: false,
-    label: '剧本幕集序列计划',
-    owner: 'outline-agent',
-    promptVersion: 'screenplay-plan-v1',
-    executionMode: 'screenplay-plan',
-    contextTaskKind: 'agent-outline',
-    readToolNames: [],
-    contextSourceKeys: ADAPTATION_PLAN_CONTEXT_SOURCE_KEYS,
+    contextSourceKeys: SCREENPLAY_DECISION_CONTEXT_KEYS,
     optionalContextSourceKeys: [],
     inputPolicy: ADAPTATION_INPUT_POLICY,
-    contextCompression: ADAPTATION_COMPRESSION_POLICY,
-    maxOutputTokens: 8_000,
-    writeTargets: [{ table: 'adaptationProjects', fields: ['plan'] }],
-    lastVerifiedAt: '2026-08-22',
-    regressionTests: ['R-ADAPTCORE1B-durable-candidates'],
+    contextCompression: compressionPolicy(SCREENPLAY_DECISION_CONTEXT_KEYS),
+    maxOutputTokens: 10_000,
+    writeTargets: [{ table: 'adaptationDecisions', fields: ['action', 'sourceFactKeys', 'targetKeys', 'rationale'], adoptionExtension: 'adaptation-decision-lifecycle' }],
+    lastVerifiedAt: '2026-09-06',
+    regressionTests: ['R-SCREEN2-professional-pipeline'],
   },
   {
     version: 1,
-    id: 'prose.screenplay-scenes',
+    id: 'screenplay.beat-sheet',
+    agentId: 'outline',
+    defaultForAgent: false,
+    label: '剧本 Beat Sheet',
+    owner: 'screenplay-product',
+    promptVersion: 'screenplay-beat-sheet-v1',
+    executionMode: 'screenplay-beat-sheet',
+    contextTaskKind: 'agent-outline',
+    readToolNames: [],
+    contextSourceKeys: SCREENPLAY_BEAT_CONTEXT_KEYS,
+    optionalContextSourceKeys: [],
+    inputPolicy: ADAPTATION_INPUT_POLICY,
+    contextCompression: compressionPolicy(SCREENPLAY_BEAT_CONTEXT_KEYS),
+    maxOutputTokens: 12_000,
+    writeTargets: [{ table: 'screenplayBeats', fields: ['sectionKey', 'sectionTitle', 'scope', 'episodeNumber', 'order', 'objective', 'conflict', 'turn', 'outcome', 'causalFactKeys', 'decisionKeys', 'sourceUnitKeys', 'estimatedSeconds'], adoptionExtension: 'screenplay-beat-lifecycle' }],
+    lastVerifiedAt: '2026-09-06',
+    regressionTests: ['R-SCREEN2-professional-pipeline'],
+  },
+  {
+    version: 1,
+    id: 'screenplay.scene-card',
+    agentId: 'outline',
+    defaultForAgent: false,
+    label: '剧本 Scene Cards',
+    owner: 'screenplay-product',
+    promptVersion: 'screenplay-scene-card-v1',
+    executionMode: 'screenplay-scene-card',
+    contextTaskKind: 'agent-outline',
+    readToolNames: [],
+    contextSourceKeys: SCREENPLAY_CARD_CONTEXT_KEYS,
+    optionalContextSourceKeys: [],
+    inputPolicy: ADAPTATION_INPUT_POLICY,
+    contextCompression: compressionPolicy(SCREENPLAY_CARD_CONTEXT_KEYS),
+    maxOutputTokens: 14_000,
+    writeTargets: [{ table: 'screenplaySceneCards', fields: ['beatKey', 'episodeNumber', 'sceneNumber', 'order', 'purpose', 'conflict', 'entryState', 'exitState', 'visibleAction', 'informationReveal', 'sourceUnitKeys', 'estimatedSeconds'], adoptionExtension: 'screenplay-scene-card-lifecycle' }],
+    lastVerifiedAt: '2026-09-06',
+    regressionTests: ['R-SCREEN2-professional-pipeline'],
+  },
+  {
+    version: 1,
+    id: 'screenplay.scene-draft',
     agentId: 'prose',
     defaultForAgent: false,
-    label: '正规剧本场景批次',
-    owner: 'prose-agent',
-    promptVersion: 'screenplay-scenes-v1',
-    executionMode: 'screenplay-scenes',
+    label: '剧本逐场 AST 写作',
+    owner: 'screenplay-product',
+    promptVersion: 'screenplay-scene-draft-v1',
+    executionMode: 'screenplay-scene-draft',
     contextTaskKind: 'agent-prose',
     readToolNames: [],
-    contextSourceKeys: SCREENPLAY_SCENES_CONTEXT_SOURCE_KEYS,
+    contextSourceKeys: SCREENPLAY_DRAFT_CONTEXT_KEYS,
     optionalContextSourceKeys: [],
     inputPolicy: ADAPTATION_INPUT_POLICY,
-    contextCompression: ADAPTATION_COMPRESSION_POLICY,
+    contextCompression: compressionPolicy(SCREENPLAY_DRAFT_CONTEXT_KEYS),
     maxOutputTokens: 14_000,
     writeTargets: [{ table: 'screenplayScenes', fields: ['planSectionKey', 'intExt', 'location', 'timeOfDay', 'summary', 'estimatedSeconds', 'sourceUnitIds', 'blocks'], adoptionExtension: 'screenplay-scene-lifecycle' }],
-    lastVerifiedAt: '2026-08-22',
-    regressionTests: ['R-ADAPTCORE1B-durable-candidates'],
+    lastVerifiedAt: '2026-09-06',
+    regressionTests: ['R-SCREEN2-professional-pipeline'],
   },
   {
     version: 1,
-    id: 'outline.comic-plan',
+    id: 'screenplay.grounding-review',
     agentId: 'outline',
     defaultForAgent: false,
-    label: '漫画章页节奏计划',
-    owner: 'outline-agent',
-    promptVersion: 'comic-plan-v1',
-    executionMode: 'comic-plan',
+    label: '剧本来源与连续性审查',
+    owner: 'screenplay-product',
+    promptVersion: 'screenplay-grounding-review-v1',
+    executionMode: 'screenplay-grounding-review',
     contextTaskKind: 'agent-outline',
     readToolNames: [],
-    contextSourceKeys: ADAPTATION_PLAN_CONTEXT_SOURCE_KEYS,
+    contextSourceKeys: SCREENPLAY_REVIEW_CONTEXT_KEYS,
     optionalContextSourceKeys: [],
     inputPolicy: ADAPTATION_INPUT_POLICY,
-    contextCompression: ADAPTATION_COMPRESSION_POLICY,
+    contextCompression: compressionPolicy(SCREENPLAY_REVIEW_CONTEXT_KEYS),
     maxOutputTokens: 8_000,
-    writeTargets: [{ table: 'adaptationProjects', fields: ['plan'] }],
-    lastVerifiedAt: '2026-08-22',
-    regressionTests: ['R-COMIC1-complete-workflow'],
+    writeTargets: [{ table: 'screenplayReviewIssues', fields: ['category', 'severity', 'sceneKey', 'blockId', 'evidence', 'problem', 'suggestion', 'sourceUnitKeys'], adoptionExtension: 'screenplay-review-issue-lifecycle' }],
+    lastVerifiedAt: '2026-09-06',
+    regressionTests: ['R-SCREEN2-professional-pipeline'],
   },
   {
     version: 1,
-    id: 'outline.comic-storyboard',
+    id: 'screenplay.dramaturgy-review',
     agentId: 'outline',
     defaultForAgent: false,
-    label: '漫画页格分镜批次',
-    owner: 'outline-agent',
-    promptVersion: 'comic-storyboard-v1',
-    executionMode: 'comic-storyboard',
+    label: '剧本戏剧性审查',
+    owner: 'screenplay-product',
+    promptVersion: 'screenplay-dramaturgy-review-v1',
+    executionMode: 'screenplay-dramaturgy-review',
     contextTaskKind: 'agent-outline',
     readToolNames: [],
-    contextSourceKeys: COMIC_STORYBOARD_CONTEXT_SOURCE_KEYS,
+    contextSourceKeys: SCREENPLAY_REVIEW_CONTEXT_KEYS,
     optionalContextSourceKeys: [],
     inputPolicy: ADAPTATION_INPUT_POLICY,
-    contextCompression: ADAPTATION_COMPRESSION_POLICY,
-    maxOutputTokens: 18_000,
+    contextCompression: compressionPolicy(SCREENPLAY_REVIEW_CONTEXT_KEYS),
+    maxOutputTokens: 8_000,
+    writeTargets: [{ table: 'screenplayReviewIssues', fields: ['category', 'severity', 'sceneKey', 'blockId', 'evidence', 'problem', 'suggestion', 'sourceUnitKeys'], adoptionExtension: 'screenplay-review-issue-lifecycle' }],
+    lastVerifiedAt: '2026-09-06',
+    regressionTests: ['R-SCREEN2-professional-pipeline'],
+  },
+  {
+    version: 1,
+    id: 'screenplay.targeted-rewrite',
+    agentId: 'prose',
+    defaultForAgent: false,
+    label: '剧本定点修订',
+    owner: 'screenplay-product',
+    promptVersion: 'screenplay-targeted-rewrite-v1',
+    executionMode: 'screenplay-targeted-rewrite',
+    contextTaskKind: 'agent-prose',
+    readToolNames: [],
+    contextSourceKeys: SCREENPLAY_REWRITE_CONTEXT_KEYS,
+    optionalContextSourceKeys: [],
+    inputPolicy: ADAPTATION_INPUT_POLICY,
+    contextCompression: compressionPolicy(SCREENPLAY_REWRITE_CONTEXT_KEYS),
+    maxOutputTokens: 14_000,
+    writeTargets: [{ table: 'screenplayScenes', fields: ['summary', 'blocks'], adoptionExtension: 'screenplay-scene-lifecycle' }],
+    lastVerifiedAt: '2026-09-06',
+    regressionTests: ['R-SCREEN2-professional-pipeline'],
+  },
+  {
+    version: 1, id: 'comic.adaptation-brief', agentId: 'outline', defaultForAgent: false,
+    label: '专业漫画改编 Brief', owner: 'comic-product', promptVersion: 'comic-adaptation-brief-v1', executionMode: 'comic-adaptation-brief', contextTaskKind: 'agent-outline', readToolNames: [],
+    contextSourceKeys: COMIC_BRIEF_CONTEXT_KEYS, optionalContextSourceKeys: [], inputPolicy: ADAPTATION_INPUT_POLICY, contextCompression: compressionPolicy(COMIC_BRIEF_CONTEXT_KEYS), maxOutputTokens: 6_000,
+    writeTargets: [{ table: 'adaptationProjects', fields: ['brief'] }], lastVerifiedAt: '2026-09-06', regressionTests: ['R-COMIC2-professional-pipeline'],
+  },
+  {
+    version: 1, id: 'comic.decision-pass', agentId: 'outline', defaultForAgent: false,
+    label: '漫画逐项改编决定', owner: 'comic-product', promptVersion: 'comic-decision-pass-v1', executionMode: 'comic-decision-pass', contextTaskKind: 'agent-outline', readToolNames: [],
+    contextSourceKeys: COMIC_DECISION_CONTEXT_KEYS, optionalContextSourceKeys: [], inputPolicy: ADAPTATION_INPUT_POLICY, contextCompression: compressionPolicy(COMIC_DECISION_CONTEXT_KEYS), maxOutputTokens: 10_000,
+    writeTargets: [{ table: 'adaptationDecisions', fields: ['action', 'sourceFactKeys', 'targetKeys', 'rationale'], adoptionExtension: 'adaptation-decision-lifecycle' }], lastVerifiedAt: '2026-09-06', regressionTests: ['R-COMIC2-professional-pipeline'],
+  },
+  {
+    version: 1, id: 'comic.script-adaptation', agentId: 'outline', defaultForAgent: false,
+    label: '漫画脚本视觉节拍', owner: 'comic-product', promptVersion: 'comic-script-adaptation-v1', executionMode: 'comic-script-adaptation', contextTaskKind: 'agent-outline', readToolNames: [],
+    contextSourceKeys: COMIC_SCRIPT_CONTEXT_KEYS, optionalContextSourceKeys: [], inputPolicy: ADAPTATION_INPUT_POLICY, contextCompression: compressionPolicy(COMIC_SCRIPT_CONTEXT_KEYS), maxOutputTokens: 14_000,
+    writeTargets: [{ table: 'comicScriptBeats', fields: ['sectionKey', 'narrativeFunction', 'visualAction', 'dialogueIntent', 'emotion', 'causalFactKeys', 'decisionKeys', 'sourceUnitKeys'], adoptionExtension: 'comic-script-beat-lifecycle' }], lastVerifiedAt: '2026-09-06', regressionTests: ['R-COMIC2-professional-pipeline'],
+  },
+  {
+    version: 1, id: 'comic.page-rhythm', agentId: 'outline', defaultForAgent: false,
+    label: '漫画分页与翻页节奏', owner: 'comic-product', promptVersion: 'comic-page-rhythm-v1', executionMode: 'comic-page-rhythm', contextTaskKind: 'agent-outline', readToolNames: [],
+    contextSourceKeys: COMIC_PAGE_RHYTHM_CONTEXT_KEYS, optionalContextSourceKeys: [], inputPolicy: ADAPTATION_INPUT_POLICY, contextCompression: compressionPolicy(COMIC_PAGE_RHYTHM_CONTEXT_KEYS), maxOutputTokens: 16_000,
+    writeTargets: [{ table: 'comicPagePlans', fields: ['goal', 'beatKeys', 'endReveal', 'pageTurn'], adoptionExtension: 'comic-page-plan-lifecycle' }], lastVerifiedAt: '2026-09-06', regressionTests: ['R-COMIC2-professional-pipeline'],
+  },
+  {
+    version: 1, id: 'comic.panel-plan', agentId: 'outline', defaultForAgent: false,
+    label: '漫画页格与阅读顺序', owner: 'comic-product', promptVersion: 'comic-panel-plan-v1', executionMode: 'comic-panel-plan', contextTaskKind: 'agent-outline', readToolNames: [],
+    contextSourceKeys: COMIC_PANEL_PLAN_CONTEXT_KEYS, optionalContextSourceKeys: [], inputPolicy: ADAPTATION_INPUT_POLICY, contextCompression: compressionPolicy(COMIC_PANEL_PLAN_CONTEXT_KEYS), maxOutputTokens: 18_000,
     writeTargets: [
-      { table: 'comicPages', fields: ['summary'], adoptionExtension: 'comic-page-panel-lifecycle' },
-      { table: 'comicPanels', fields: ['frame', 'shot', 'action', 'visualPrompt', 'negativePrompt', 'continuityRefs', 'lettering', 'sourceUnitIds'], adoptionExtension: 'comic-panel-lifecycle' },
+      { table: 'comicPages', fields: ['pagePlanKey', 'summary'], adoptionExtension: 'comic-page-panel-lifecycle' },
+      { table: 'comicPanels', fields: ['frame', 'nextPanelKey', 'shot', 'narrativeFunction', 'moment', 'continuityRefs', 'subjectStates', 'protectedAreas', 'lettering', 'sourceUnitIds'], adoptionExtension: 'comic-panel-lifecycle' },
+    ], lastVerifiedAt: '2026-09-06', regressionTests: ['R-COMIC2-professional-pipeline'],
+  },
+  {
+    version: 1, id: 'comic.visual-bible', agentId: 'outline', defaultForAgent: false,
+    label: '漫画视觉圣经与 Subject 锚点', owner: 'comic-product', promptVersion: 'comic-visual-bible-v1', executionMode: 'comic-visual-bible', contextTaskKind: 'agent-outline', readToolNames: [],
+    contextSourceKeys: COMIC_VISUAL_BIBLE_CONTEXT_KEYS, optionalContextSourceKeys: [], inputPolicy: ADAPTATION_INPUT_POLICY, contextCompression: compressionPolicy(COMIC_VISUAL_BIBLE_CONTEXT_KEYS), maxOutputTokens: 14_000,
+    writeTargets: [
+      { table: 'adaptationProjects', fields: ['visualBible'] },
+      { table: 'comicVisualSubjects', fields: ['label', 'design', 'sourceUnitIds'], adoptionExtension: 'comic-visual-subject-lifecycle' },
+    ], lastVerifiedAt: '2026-09-06', regressionTests: ['R-COMIC2-professional-pipeline'],
+  },
+  {
+    version: 1, id: 'comic.image-request', agentId: 'outline', defaultForAgent: false,
+    label: '漫画单格图像请求编译', owner: 'comic-product', promptVersion: 'comic-image-request-v1', executionMode: 'comic-image-request', contextTaskKind: 'agent-outline', readToolNames: [],
+    contextSourceKeys: COMIC_IMAGE_REQUEST_CONTEXT_KEYS, optionalContextSourceKeys: [], inputPolicy: ADAPTATION_INPUT_POLICY, contextCompression: compressionPolicy(COMIC_IMAGE_REQUEST_CONTEXT_KEYS), maxOutputTokens: 5_000,
+    writeTargets: [{ table: 'comicPanels', fields: ['visualPrompt', 'negativePrompt', 'continuityRefs', 'protectedAreas'], adoptionExtension: 'comic-panel-lifecycle' }], lastVerifiedAt: '2026-09-06', regressionTests: ['R-COMIC2-professional-pipeline'],
+  },
+  {
+    version: 1, id: 'comic.visual-continuity-review', agentId: 'outline', defaultForAgent: false,
+    label: '漫画媒资证据与视觉连续性监修', owner: 'comic-product', promptVersion: 'comic-visual-continuity-review-v1', executionMode: 'comic-visual-continuity-review', contextTaskKind: 'agent-outline', readToolNames: [],
+    contextSourceKeys: COMIC_REVIEW_CONTEXT_KEYS, optionalContextSourceKeys: [], inputPolicy: ADAPTATION_INPUT_POLICY, contextCompression: compressionPolicy(COMIC_REVIEW_CONTEXT_KEYS), maxOutputTokens: 8_000,
+    writeTargets: [{ table: 'comicReviewIssues', fields: ['category', 'severity', 'pageKey', 'panelKey', 'subjectKey', 'assetKey', 'evidence', 'problem', 'suggestion', 'sourceUnitKeys'], adoptionExtension: 'comic-review-issue-lifecycle' }], lastVerifiedAt: '2026-09-06', regressionTests: ['R-COMIC2-professional-pipeline'],
+  },
+  {
+    version: 1, id: 'comic.targeted-repair', agentId: 'outline', defaultForAgent: false,
+    label: '漫画指定格局部修复编排', owner: 'comic-product', promptVersion: 'comic-targeted-repair-v1', executionMode: 'comic-targeted-repair', contextTaskKind: 'agent-outline', readToolNames: [],
+    contextSourceKeys: COMIC_REPAIR_CONTEXT_KEYS, optionalContextSourceKeys: [], inputPolicy: ADAPTATION_INPUT_POLICY, contextCompression: compressionPolicy(COMIC_REPAIR_CONTEXT_KEYS), maxOutputTokens: 6_000,
+    writeTargets: [{ table: 'comicPanels', fields: ['visualPrompt', 'negativePrompt', 'continuityRefs', 'protectedAreas'], adoptionExtension: 'comic-panel-lifecycle' }], lastVerifiedAt: '2026-09-06', regressionTests: ['R-COMIC2-professional-pipeline'],
+  },
+  {
+    version: 1, id: 'comic.page-review', agentId: 'outline', defaultForAgent: false,
+    label: '漫画页级叙事与排字审校', owner: 'comic-product', promptVersion: 'comic-page-review-v1', executionMode: 'comic-page-review', contextTaskKind: 'agent-outline', readToolNames: [],
+    contextSourceKeys: COMIC_REVIEW_CONTEXT_KEYS, optionalContextSourceKeys: [], inputPolicy: ADAPTATION_INPUT_POLICY, contextCompression: compressionPolicy(COMIC_REVIEW_CONTEXT_KEYS), maxOutputTokens: 8_000,
+    writeTargets: [{ table: 'comicReviewIssues', fields: ['category', 'severity', 'pageKey', 'panelKey', 'subjectKey', 'assetKey', 'evidence', 'problem', 'suggestion', 'sourceUnitKeys'], adoptionExtension: 'comic-review-issue-lifecycle' }], lastVerifiedAt: '2026-09-06', regressionTests: ['R-COMIC2-professional-pipeline'],
+  },
+  {
+    version: 1,
+    id: 'short.intent-brief',
+    agentId: 'outline',
+    defaultForAgent: false,
+    label: '短篇创作 Brief',
+    owner: 'short-novel-production-agent',
+    promptVersion: 'short-intent-brief-v2',
+    executionMode: 'short-intent-brief',
+    contextTaskKind: 'agent-outline',
+    readToolNames: [],
+    contextSourceKeys: SHORT_NOVEL_DESIGN_CONTEXT_SOURCE_KEYS,
+    optionalContextSourceKeys: [],
+    inputPolicy: SHORT_NOVEL_INPUT_POLICY,
+    contextCompression: SHORT_NOVEL_DESIGN_COMPRESSION_POLICY,
+    maxOutputTokens: 4_000,
+    writeTargets: [{ table: 'shortNovelProductions', fields: ['brief'], adoptionExtension: 'short-novel-production-lifecycle' }],
+    lastVerifiedAt: '2026-09-06',
+    regressionTests: ['R-SHORT2-professional-production'],
+  },
+  {
+    version: 1,
+    id: 'short.story-design',
+    agentId: 'outline',
+    defaultForAgent: false,
+    label: '短篇故事设计',
+    owner: 'short-novel-production-agent',
+    promptVersion: 'short-story-design-v2',
+    executionMode: 'short-story-design',
+    contextTaskKind: 'agent-outline',
+    readToolNames: [],
+    contextSourceKeys: SHORT_NOVEL_DESIGN_CONTEXT_SOURCE_KEYS,
+    optionalContextSourceKeys: [],
+    inputPolicy: SHORT_NOVEL_INPUT_POLICY,
+    contextCompression: SHORT_NOVEL_DESIGN_COMPRESSION_POLICY,
+    maxOutputTokens: 5_000,
+    writeTargets: [{ table: 'shortNovelProductions', fields: ['storyDesign'], adoptionExtension: 'short-novel-production-lifecycle' }],
+    lastVerifiedAt: '2026-09-06',
+    regressionTests: ['R-SHORT2-professional-production'],
+  },
+  {
+    version: 1,
+    id: 'short.scene-plan',
+    agentId: 'outline',
+    defaultForAgent: false,
+    label: '短篇章节与场景卡',
+    owner: 'short-novel-production-agent',
+    promptVersion: 'short-scene-plan-v2',
+    executionMode: 'short-scene-plan',
+    contextTaskKind: 'agent-outline',
+    readToolNames: [],
+    contextSourceKeys: SHORT_NOVEL_MANUSCRIPT_CONTEXT_SOURCE_KEYS,
+    optionalContextSourceKeys: [],
+    inputPolicy: SHORT_NOVEL_INPUT_POLICY,
+    contextCompression: SHORT_NOVEL_MANUSCRIPT_COMPRESSION_POLICY,
+    maxOutputTokens: 8_000,
+    writeTargets: [
+      { table: 'outlineNodes', fields: ['title', 'summary', 'order'], adoptionExtension: 'short-novel-outline-skeleton-lifecycle' },
+      { table: 'chapters', fields: ['title', 'order'], adoptionExtension: 'chapter-delete-lifecycle' },
     ],
-    lastVerifiedAt: '2026-08-22',
-    regressionTests: ['R-COMIC1-complete-workflow'],
+    lastVerifiedAt: '2026-09-06',
+    regressionTests: ['R-SHORT2-professional-production'],
+  },
+  {
+    version: 1,
+    id: 'short.chapter-draft',
+    agentId: 'prose',
+    defaultForAgent: false,
+    label: '短篇单章正文',
+    owner: 'short-novel-production-agent',
+    promptVersion: 'short-chapter-draft-v4',
+    executionMode: 'short-chapter-draft',
+    contextTaskKind: 'agent-prose',
+    readToolNames: [],
+    contextSourceKeys: SHORT_NOVEL_MANUSCRIPT_CONTEXT_SOURCE_KEYS,
+    optionalContextSourceKeys: [],
+    inputPolicy: SHORT_NOVEL_INPUT_POLICY,
+    contextCompression: SHORT_NOVEL_MANUSCRIPT_COMPRESSION_POLICY,
+    maxOutputTokens: 16_000,
+    writeTargets: [
+      { table: 'outlineNodes', fields: ['title'], adoptionExtension: 'short-novel-outline-skeleton-lifecycle' },
+      { table: 'chapters', fields: ['title', 'content', 'wordCount', 'status'], adoptionExtension: 'chapter-delete-lifecycle' },
+    ],
+    lastVerifiedAt: '2026-09-06',
+    regressionTests: ['R-SHORT2-professional-production'],
+  },
+  {
+    version: 1,
+    id: 'short.continuity-review',
+    agentId: 'outline',
+    defaultForAgent: false,
+    label: '短篇全篇连续性审校',
+    owner: 'short-novel-production-agent',
+    promptVersion: 'short-continuity-review-v3',
+    executionMode: 'short-continuity-review',
+    contextTaskKind: 'agent-outline',
+    readToolNames: [],
+    contextSourceKeys: SHORT_NOVEL_MANUSCRIPT_CONTEXT_SOURCE_KEYS,
+    optionalContextSourceKeys: [],
+    inputPolicy: SHORT_NOVEL_INPUT_POLICY,
+    contextCompression: SHORT_NOVEL_MANUSCRIPT_COMPRESSION_POLICY,
+    maxOutputTokens: 8_000,
+    writeTargets: [{ table: 'shortNovelProductions', fields: ['latestReview'], adoptionExtension: 'short-novel-production-lifecycle' }],
+    lastVerifiedAt: '2026-09-06',
+    regressionTests: ['R-SHORT2-professional-production'],
+  },
+  {
+    version: 1,
+    id: 'short.targeted-rewrite',
+    agentId: 'prose',
+    defaultForAgent: false,
+    label: '短篇问题定向重写',
+    owner: 'short-novel-production-agent',
+    promptVersion: 'short-targeted-rewrite-v2',
+    executionMode: 'short-targeted-rewrite',
+    contextTaskKind: 'agent-prose',
+    readToolNames: [],
+    contextSourceKeys: SHORT_NOVEL_MANUSCRIPT_CONTEXT_SOURCE_KEYS,
+    optionalContextSourceKeys: [],
+    inputPolicy: SHORT_NOVEL_INPUT_POLICY,
+    contextCompression: SHORT_NOVEL_MANUSCRIPT_COMPRESSION_POLICY,
+    maxOutputTokens: 16_000,
+    writeTargets: [
+      { table: 'outlineNodes', fields: ['title'], adoptionExtension: 'short-novel-outline-skeleton-lifecycle' },
+      { table: 'chapters', fields: ['title', 'content', 'wordCount', 'status'], adoptionExtension: 'chapter-delete-lifecycle' },
+    ],
+    lastVerifiedAt: '2026-09-06',
+    regressionTests: ['R-SHORT2-professional-production'],
   },
   {
     version: 1,
@@ -3395,8 +3712,8 @@ export function validateAgentSkillDefinitionsV1(
     'world-origin': new Set(['worldview-field', 'world-suggest', 'worldview-expand', 'world-link-context', 'constitution-extract', 'codex-extract', 'codex-enrich', 'story-core', 'creative-rules', 'locations', 'map-config', 'history-consult', 'history-storm', 'review']),
     character: new Set(['create', 'supplement', 'lifecycle', 'relationships', 'character-reply', 'memory-curator']),
     inspiration: new Set(['reference-summary', 'reference-characters', 'reverse', 'review']),
-    outline: new Set(['auto', 'story-arcs', 'foreshadow-suggestions', 'storyline-progress', 'character-driven', 'character-revision', 'impact-summary-regenerate', 'volumes', 'chapters', 'details', 'adaptation-brief', 'adaptation-impact', 'screenplay-plan', 'comic-plan', 'comic-storyboard', 'character-interaction-production', 'product-production']),
-    prose: new Set(['auto', 'generate', 'continue', 'emotion-beats', 'inventory-extraction', 'story-timeline-extraction', 'cultivation-progress-extraction', 'style-learn', 'selection-edit', 'selection-check', 'review', 'revise', 'organize', 'memory', 'consistency', 'scene-director', 'adventure-intent', 'adventure-narrator', 'open-world-briefing', 'open-world-advisor', 'open-world-outcome-narrator', 'open-world-actor-suggestion', 'open-world-expression', 'open-world-narration', 'screenplay-scenes', 'ttrpg-gm-narrator', 'ttrpg-gm-actor-intent', 'ttrpg-director', 'ttrpg-private-guidance', 'ttrpg-player-intent']),
+    outline: new Set(['auto', 'story-arcs', 'foreshadow-suggestions', 'storyline-progress', 'character-driven', 'character-revision', 'impact-summary-regenerate', 'volumes', 'chapters', 'details', 'adaptation-source-analysis', 'adaptation-causal-graph', 'screenplay-adaptation-brief', 'screenplay-decision-pass', 'screenplay-beat-sheet', 'screenplay-scene-card', 'screenplay-grounding-review', 'screenplay-dramaturgy-review', 'comic-adaptation-brief', 'comic-decision-pass', 'comic-script-adaptation', 'comic-page-rhythm', 'comic-panel-plan', 'comic-visual-bible', 'comic-image-request', 'comic-visual-continuity-review', 'comic-targeted-repair', 'comic-page-review', 'short-intent-brief', 'short-story-design', 'short-scene-plan', 'short-continuity-review', 'character-interaction-production', 'product-production']),
+    prose: new Set(['auto', 'generate', 'continue', 'emotion-beats', 'inventory-extraction', 'story-timeline-extraction', 'cultivation-progress-extraction', 'style-learn', 'selection-edit', 'selection-check', 'review', 'revise', 'organize', 'memory', 'consistency', 'scene-director', 'adventure-intent', 'adventure-narrator', 'open-world-briefing', 'open-world-advisor', 'open-world-outcome-narrator', 'open-world-actor-suggestion', 'open-world-expression', 'open-world-narration', 'screenplay-scene-draft', 'screenplay-targeted-rewrite', 'short-chapter-draft', 'short-targeted-rewrite', 'ttrpg-gm-narrator', 'ttrpg-gm-actor-intent', 'ttrpg-director', 'ttrpg-private-guidance', 'ttrpg-player-intent']),
   }
   const ids = new Set<string>()
   const defaultAgents = new Set<DomainAgentId>()

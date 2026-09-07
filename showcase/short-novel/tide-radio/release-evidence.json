@@ -1,0 +1,35 @@
+{
+  "schema": "storyforge.showcase-evidence",
+  "version": 1,
+  "productKind": "short-novel",
+  "communityTitle": "潮汐电台",
+  "sourceProjectTitle": "Codex短篇实测·潮汐电台",
+  "releaseVersion": 3,
+  "releaseUiHashPrefix": "ebbfa2328afe",
+  "manuscriptHash": "e2f97db18db6f126178eb977cbc4e421e473127c64839f5abf10e042bb30a3f7",
+  "exportedMarkdownSha256": "02f3b10070ea8f931600b15639a937b96c77e17b4c50c222ef743ed487f1a745",
+  "targetWordCount": 5000,
+  "actualWordCount": 5080,
+  "chapterCount": 4,
+  "productionRevisionReviewed": 17,
+  "reviewedManuscriptHash": "e2f97db18db6f126178eb977cbc4e421e473127c64839f5abf10e042bb30a3f7",
+  "review": {
+    "summary": "社区展示版复审通过：四章形成完整的限时悬疑链，线索从潮位童谣、北礁缓存、十年前事故推进到公开预警与职业代价；船型、潮位报数、时间线和中文标点均已统一。",
+    "strengths": [
+      "开场十小时封岛倒计时迅速建立压力，四章均有明确行动目标与离场转折",
+      "缓存语音由潮位阈值触发，谜底建立在可验证的设备与制度因果上，不依赖超自然解释",
+      "林岚从服从规程、压抑责任到公开证据并承担失去资格的代价，人物弧光完整",
+      "灯塔熄灭与十二艘船归港形成强烈视觉对照，结尾回收燕子报数和守望主题",
+      "全篇第一人称过去时稳定，林岚、林汐、北礁、巡逻艇、潮位数字与中文引号连续一致"
+    ],
+    "openIssues": 0
+  },
+  "provenance": {
+    "generatedThroughLiveProduct": true,
+    "candidateConfirmationUsed": true,
+    "fullManuscriptReviewUsed": true,
+    "immutableReleaseUsed": true,
+    "credentialsIncluded": false
+  }
+}
+
