@@ -1,0 +1,77 @@
+{
+  "schema": "storyforge.showcase-evidence.v1",
+  "productKind": "comic",
+  "title": "凌晨四点，月亮来买面包",
+  "format": {
+    "readingDirection": "LTR",
+    "pageCount": 5,
+    "panelCount": 21,
+    "canvas": "1024x1536",
+    "colorProfile": "deep-indigo-butter-gold-with-coral-and-teal-accents"
+  },
+  "source": {
+    "path": "source-novel.md",
+    "chapterCount": 3,
+    "contentChars": 1376,
+    "sha256": "3ba18292c1e4e374fa5bc8bc44a557ea75a177dfbbc7ffd1c3332b9784cfe6d6"
+  },
+  "production": {
+    "imageMode": "built-in-imagegen",
+    "continuityMethod": "visual bible plus page-specific continuity anchors",
+    "letteringMethod": "local deterministic browser composition",
+    "targetedRepairs": [
+      "page 1 caption and dialogue moved away from the moon, faces and brass tin",
+      "page 2 dialogue moved away from the missing moon and bicycle departure action",
+      "page 3 labels and caption moved away from supporting-character faces",
+      "page 4 and page 5 dialogue moved away from the warming tin and restored moon"
+    ]
+  },
+  "review": {
+    "openIssues": 0,
+    "checks": [
+      "Jiang Mai retains the jaw-length black bob, wheat hair clip, mustard shirt, cream apron and flour crescent",
+      "Shiliu retains the lavender-gray hair, silver constellation jacket and cracked helmet until the repair on page 5",
+      "the oval brass tin, green delivery bicycle and moon fragment remain recognizable across pages",
+      "the moon fragment progresses from pale frost to butter-gold light before returning to the sky",
+      "dialogue and captions avoid faces, hands, the brass tin, the moon and the principal light sources",
+      "the ending resolves the fantasy task while giving the night-shift ensemble food, rest and mutual recognition"
+    ]
+  },
+  "files": {
+    "visualBible": {
+      "path": "art/visual-bible.png",
+      "width": 1536,
+      "height": 1024,
+      "sha256": "ea911352ba8e902a2a85a41137c973c0952a8fafc462718de9807a9305b005d9"
+    },
+    "cover": {
+      "path": "art/final/cover.png",
+      "width": 1024,
+      "height": 1536,
+      "sha256": "41314c743c31f12849acde1c7dedf8b9ce3cd1b983af00a8888a6c6ec3e966c0"
+    },
+    "pages": [
+      { "path": "art/final/pages/page-01.png", "sha256": "236d7b8ab0bb3d3340fdb5eebbd7a85144327fabd33b7c33d85e1495b9df881d" },
+      { "path": "art/final/pages/page-02.png", "sha256": "65b277bce43a65465fe2d4f384993ea4b8a2af10b02c40d2fd77bfe72803f55a" },
+      { "path": "art/final/pages/page-03.png", "sha256": "d16ac97a5dcf6e85609b6965f48edadc829d1ca7c1499bc809cc51016af78a43" },
+      { "path": "art/final/pages/page-04.png", "sha256": "74fba8646095d5df432aa28d88fc1a3cb8cf43bb5f83bb07f8cf25177cb1e1e0" },
+      { "path": "art/final/pages/page-05.png", "sha256": "1d502ce58dc60255521718b5bd618464d7dd76f3aae496cca0e8d3bb527b1186" }
+    ],
+    "communityPreview": {
+      "path": "art/final/community-preview.png",
+      "width": 1800,
+      "height": 1180,
+      "sha256": "c182cfa5aedb4781ad6b6482c41077070074fea4e895161642faff588f9530bd"
+    },
+    "pdf": {
+      "path": "art/final/moon-buys-bread.pdf",
+      "pageCount": 6,
+      "sha256": "01f1a11aabba24645b6be92889ecdb213fe1180627e1c10771e4a8dd9f782640"
+    },
+    "cbz": {
+      "path": "art/final/moon-buys-bread.cbz",
+      "entryCount": 7,
+      "sha256": "fd1416c945bab99d6121311722e110c51251a36096e17acc0898625cdcb66557"
+    }
+  }
+}
