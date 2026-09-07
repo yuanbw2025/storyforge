@@ -101,7 +101,8 @@ export interface TextOpenWorldSceneActionSourceV1 {
 
 export interface TextOpenWorldSceneScriptsInputContextV1 {
   schema: 'storyforge.text-open-world-scene-scripts-input'
-  version: 1
+  /** v1 is retained for durable-run replay; all newly assembled contexts use v2. */
+  version: 1 | 2
   productInstanceKey: string
   sourceLedger: TextOpenWorldSourceLedgerV1
   experienceContract: TextOpenWorldExperienceContractV1
@@ -330,7 +331,10 @@ function futureObjectiveKeys(context: TextOpenWorldSceneScriptsInputContextV1, o
     && ((stageOrder.get(candidate.stageKey) ?? 0) > (stageOrder.get(objective.stageKey) ?? 0)
       || (candidate.stageKey === objective.stageKey && candidate.order > objective.order))).map(candidate => candidate.key)
 }
-function participantsForObjective(context: TextOpenWorldSceneScriptsInputContextV1, objectiveKey: string): string[] {
+function legacyParticipantsForObjective(
+  context: TextOpenWorldSceneScriptsInputContextV1,
+  objectiveKey: string,
+): string[] {
   const objective = context.questDesignDocuments.objectives.find(item => item.key === objectiveKey) ?? fail(`缺少定稿Objective:${objectiveKey}`)
   const actors = context.questDesignDocuments.requirementBindings
     .filter(binding => objective.requirementKeys.includes(binding.requirementKey) && binding.definitionKind === 'actor')
@@ -338,6 +342,44 @@ function participantsForObjective(context: TextOpenWorldSceneScriptsInputContext
   const quest = context.questDesignDocuments.quests.find(item => item.key === objective.questKey)!
   if (quest.ownerKind === 'actor' && quest.ownerKey) actors.push(quest.ownerKey)
   return [...new Set(actors)].filter(key => context.npcRuntimeCatalog.actors.some(actor => actor.key === key))
+}
+
+function participantsForObjective(
+  context: TextOpenWorldSceneScriptsInputContextV1,
+  objectiveKey: string,
+  locationKey: string,
+): string[] {
+  if (context.version === 1) return legacyParticipantsForObjective(context, objectiveKey)
+  const objective = context.questDesignDocuments.objectives.find(item => item.key === objectiveKey) ?? fail(`缺少定稿Objective:${objectiveKey}`)
+  const actors = context.questDesignDocuments.requirementBindings
+    .filter(binding => objective.requirementKeys.includes(binding.requirementKey) && binding.definitionKind === 'actor')
+    .flatMap(binding => binding.definitionKeys)
+  return [...new Set(actors)].filter(key => {
+    const actor = context.npcRuntimeCatalog.actors.find(candidate => candidate.key === key)
+    // P8 currently compiles every rule-driven schedule entry to the actor's
+    // home location. Keep P9's participant gate aligned with that frozen
+    // runtime contract without pulling schedules into this atomic context.
+    return actor?.homeLocationKey === locationKey
+  })
+}
+
+/**
+ * Scene availability is a scene-level gate. Action requirements remain owned
+ * by each Action/Choice and may differ inside the same scene. Only conditions
+ * shared by every action can therefore be promoted to the scene boundary.
+ */
+function sharedActionConditionKeys(
+  context: TextOpenWorldSceneScriptsInputContextV1,
+  actionKeys: string[],
+): string[] {
+  if (context.version === 1) {
+    return [...new Set(actionKeys.flatMap(key => actionByKey(context, key).requirementConditionKeys))]
+  }
+  if (!actionKeys.length) return []
+  const conditionSets = actionKeys.map(key => new Set(actionByKey(context, key).requirementConditionKeys))
+  return [...conditionSets[0]!].filter(conditionKey => (
+    conditionSets.slice(1).every(keys => keys.has(conditionKey))
+  ))
 }
 function locationForActions(
   context: TextOpenWorldSceneScriptsInputContextV1,
@@ -384,18 +426,30 @@ function buildDemands(context: TextOpenWorldSceneScriptsContextBaseV1) {
   }
   for (const quest of context.questDesignDocuments.quests) {
     const skeleton = context.questSkeletons.quests.find(item => item.key === quest.key) ?? fail(`缺少QuestSkeleton:${quest.key}`)
-    const regionKey = quest.regionKeys[0] ?? context.mapInteractionCatalog.initialRegionKey
-    const locationKey = skeleton.locationKeys[0] ?? context.mapInteractionCatalog.initialLocationKey
+    const questLocationKey = skeleton.locationKeys[0] ?? context.mapInteractionCatalog.initialLocationKey
     const orderedObjectiveKeys = skeleton.stageKeys.flatMap(stageKey => (
       context.questSkeletons.stages.find(stage => stage.key === stageKey)?.objectiveKeys ?? []
     ))
-    const ownerActor = quest.ownerKind === 'actor' && quest.ownerKey && context.npcRuntimeCatalog.actors.some(actor => actor.key === quest.ownerKey)
-      ? quest.ownerKey : null
+    const ownerActorDefinition = quest.ownerKind === 'actor' && quest.ownerKey
+      ? context.npcRuntimeCatalog.actors.find(actor => actor.key === quest.ownerKey) ?? null
+      : null
+    const ownerActor = ownerActorDefinition?.key ?? null
+    // An actor-owned commission is offered and settled where that actor is
+    // actually authored to live. Quest locations describe the adventure body,
+    // not permission to teleport its owner into the first stage location.
+    const endpointLocationKey = context.version === 1
+      ? questLocationKey
+      : ownerActorDefinition?.homeLocationKey ?? questLocationKey
+    const endpointRegionKey = context.version === 1
+      ? quest.regionKeys[0] ?? context.mapInteractionCatalog.initialRegionKey
+      : context.mapInteractionCatalog.locations
+        .find(location => location.key === endpointLocationKey)?.regionKey
+        ?? fail(`任务端点地点缺少地区:${quest.key}:${endpointLocationKey}`)
     const offerActions = playerActionKeys(hydrated, [quest.acceptActionKey])
     addScene({
       sceneKey: `scene.offer.${quest.key}`, sourceKind: 'quest-offer', sourceKey: quest.key,
       suggestedTitle: `委托：${quest.title}`, purpose: skeleton.storyMotivation,
-      regionKey, locationKey, questKey: quest.key, stageKey: null, objectiveKey: null,
+      regionKey: endpointRegionKey, locationKey: endpointLocationKey, questKey: quest.key, stageKey: null, objectiveKey: null,
       actorKey: ownerActor, interactionKey: null, randomEventKey: null,
       participantKeys: ownerActor ? [ownerActor] : [], actionKeys: offerActions,
       choiceCount: offerActions.length, allowedKnowledgeClaimKeys: questClaimKeys(hydrated, quest.key),
@@ -411,7 +465,8 @@ function buildDemands(context: TextOpenWorldSceneScriptsContextBaseV1) {
     addScene({
       sceneKey: `scene.resolution.${quest.key}`, sourceKind: 'quest-resolution', sourceKey: quest.key,
       suggestedTitle: `收束：${quest.title}`, purpose: '呈现任务结果并领取已冻结奖励。',
-      regionKey, locationKey, questKey: quest.key, stageKey: quest.stageKeys[quest.stageKeys.length - 1] ?? null, objectiveKey: null,
+      regionKey: endpointRegionKey, locationKey: endpointLocationKey, questKey: quest.key,
+      stageKey: quest.stageKeys[quest.stageKeys.length - 1] ?? null, objectiveKey: null,
       actorKey: ownerActor, interactionKey: null, randomEventKey: null,
       participantKeys: ownerActor ? [ownerActor] : [], actionKeys: resolutionActions,
       choiceCount: resolutionActions.length, allowedKnowledgeClaimKeys: questClaimKeys(hydrated, quest.key), forbiddenFutureObjectiveKeys: [],
@@ -423,16 +478,17 @@ function buildDemands(context: TextOpenWorldSceneScriptsContextBaseV1) {
     const quest = context.questSkeletons.quests.find(item => item.key === objective.questKey) ?? fail(`缺少QuestSkeleton:${objective.questKey}`)
     const actions = playerActionKeys(hydrated, [...objective.supportActionKeys, objective.completionActionKey])
     const regionKey = quest.regionKeys[0] ?? context.mapInteractionCatalog.initialRegionKey
+    const locationKey = locationForActions(hydrated, actions, quest.locationKeys)
     addScene({
       sceneKey: `scene.objective.${objective.key}`, sourceKind: 'quest-objective', sourceKey: objective.key,
       suggestedTitle: objective.title, purpose: objective.description, regionKey,
-      locationKey: locationForActions(hydrated, actions, quest.locationKeys),
+      locationKey,
       questKey: objective.questKey, stageKey: objective.stageKey, objectiveKey: objective.key,
       actorKey: null, interactionKey: null, randomEventKey: null,
-      participantKeys: participantsForObjective(hydrated, objective.key), actionKeys: actions, choiceCount: actions.length,
+      participantKeys: participantsForObjective(hydrated, objective.key, locationKey), actionKeys: actions, choiceCount: actions.length,
       allowedKnowledgeClaimKeys: questClaimKeys(hydrated, objective.questKey),
       forbiddenFutureObjectiveKeys: futureObjectiveKeys(hydrated, objective.key),
-      availabilityConditionKeys: [...new Set(actions.flatMap(key => actionByKey(hydrated, key).requirementConditionKeys))],
+      availabilityConditionKeys: sharedActionConditionKeys(hydrated, actions),
     })
   }
   const allProtectedObjectives = protectedObjectiveKeys(hydrated)
@@ -445,7 +501,7 @@ function buildDemands(context: TextOpenWorldSceneScriptsContextBaseV1) {
       locationKey: actor.homeLocationKey, questKey: null, stageKey: null, objectiveKey: null,
       actorKey: actor.key, interactionKey: null, randomEventKey: null, participantKeys: [actor.key],
       actionKeys: actions, choiceCount: actions.length, allowedKnowledgeClaimKeys: packClaimKeys(hydrated, actor.regionKey),
-      forbiddenFutureObjectiveKeys: allProtectedObjectives, availabilityConditionKeys: actions.flatMap(key => actionByKey(hydrated, key).requirementConditionKeys),
+      forbiddenFutureObjectiveKeys: allProtectedObjectives, availabilityConditionKeys: sharedActionConditionKeys(hydrated, actions),
     })
   }
   for (const interaction of context.mapInteractionCatalog.interactions) {
@@ -622,7 +678,7 @@ async function loadContext(input: { scope: WorkspaceScope; productionId: number;
     actionDefinitionHash: await hashProductProductionValueV2(action),
   })))
   const base: TextOpenWorldSceneScriptsContextBaseV1 = {
-    schema: 'storyforge.text-open-world-scene-scripts-input' as const, version: 1 as const,
+    schema: 'storyforge.text-open-world-scene-scripts-input' as const, version: 2 as const,
     productInstanceKey: production.productionKey,
     sourceLedger, experienceContract, storyArc, regionNarrativePacks,
     questSkeletons: {
@@ -743,7 +799,8 @@ export async function readTextOpenWorldSceneScriptsInputContextV1(input: Assembl
 async function parseContext(value: string): Promise<TextOpenWorldSceneScriptsInputContextV1> {
   let context: TextOpenWorldSceneScriptsInputContextV1
   try { context = JSON.parse(value) as TextOpenWorldSceneScriptsInputContextV1 } catch { return fail('Context JSON损坏') }
-  if (context.schema !== 'storyforge.text-open-world-scene-scripts-input' || context.version !== 1) fail('Context身份无效')
+  if (context.schema !== 'storyforge.text-open-world-scene-scripts-input'
+    || (context.version !== 1 && context.version !== 2)) fail('Context身份无效')
   const { contextSelectionHash, ...body } = context
   await validateUpstream(body)
   if (!isSha256Hash(contextSelectionHash) || await hashProductProductionValueV2(body) !== contextSelectionHash) fail('Context选择Hash不匹配')

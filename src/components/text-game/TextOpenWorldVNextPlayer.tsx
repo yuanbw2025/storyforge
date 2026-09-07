@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Backpack, GitBranch, Globe2, History, MapPinned, Save, Swords, UserRound } from 'lucide-react'
+import { Backpack, GitBranch, History, MapPinned, Save, Swords, UserRound } from 'lucide-react'
 import { createTextOpenWorldInventoryCatalogV1 } from '../../lib/open-world/inventory'
 import { deriveTextOpenWorldLifeProjectionV1 } from '../../lib/open-world/life-cycle'
 import { parseTextOpenWorldModulesV1 } from '../../lib/open-world/modules'
+import { projectTextOpenWorldScenesV1 } from '../../lib/open-world/scene-projection'
 import {
   projectTextOpenWorldQuestDeadlineV1,
   projectTextOpenWorldQuestHistoryV1,
@@ -11,6 +12,7 @@ import { deriveTextOpenWorldContextsV1 } from '../../lib/open-world/session-proj
 import { createTextOpenWorldSkillCatalogV1 } from '../../lib/open-world/skills'
 import { projectTextOpenWorldClockWeatherV1 } from '../../lib/open-world/weather'
 import { projectTextOpenWorldQuestInstancesV1 } from '../../lib/open-world/quests'
+import type { TextOpenWorldCommandSourceV1 } from '../../lib/types'
 import {
   selectTextOpenWorldVNextActions,
   useTextOpenWorldPlayerStore,
@@ -20,6 +22,7 @@ import TextOpenWorldEquipmentPanel from './TextOpenWorldEquipmentPanel'
 import TextOpenWorldGameShell from './TextOpenWorldGameShell'
 import TextOpenWorldMapPanel from './TextOpenWorldMapPanel'
 import TextOpenWorldRelationshipsPanel from './TextOpenWorldRelationshipsPanel'
+import TextOpenWorldScenePanel from './TextOpenWorldScenePanel'
 
 const QUEST_STATUS_LABELS = {
   revealed: '可接取',
@@ -49,8 +52,8 @@ export default function TextOpenWorldVNextPlayer() {
     label: string
     description: string
     sessionId: number
-    sessionKey: number | string
-    eventSequence: number
+    baseSequence: number
+    source: TextOpenWorldCommandSourceV1
   } | null>(null)
   const projection = store.runtimeState.textOpenWorld
   const runtimePackage = store.selectedManifest?.textOpenWorldVNext
@@ -58,6 +61,10 @@ export default function TextOpenWorldVNextPlayer() {
   const modules = useMemo(
     () => runtimePackage ? parseTextOpenWorldModulesV1(runtimePackage) : null,
     [runtimePackage],
+  )
+  const sceneProjection = useMemo(
+    () => projection ? projectTextOpenWorldScenesV1(projection) : null,
+    [projection],
   )
   const session = store.selectedSession
     ?? store.sessions.find(item => item.id === store.selectedSessionId)
@@ -73,7 +80,7 @@ export default function TextOpenWorldVNextPlayer() {
     setPendingConfirmation(null)
   }, [projectionSequence, sessionKey])
 
-  if (!projection || !runtimePackage || !modules) return null
+  if (!projection || !runtimePackage || !modules || !sceneProjection) return null
 
   const release = session?.productReleaseId == null
     ? null
@@ -90,8 +97,6 @@ export default function TextOpenWorldVNextPlayer() {
   })
   const respawnAction = availableActions.find(action => action.action.category === 'respawn')
   const questActions = availableActions.filter(action => action.targetScope === 'quest')
-  const actions = availableActions.filter(action => action.targetScope !== 'quest'
-    && !['respawn', 'equip', 'unequip', 'travel', 'fast-travel'].includes(action.action.category))
   const location = modules.world.locations.find(item => item.key === state.map.currentLocationKey)
   const region = modules.world.regions.find(item => item.key === location?.regionKey)
   const visibleQuests = projectTextOpenWorldQuestInstancesV1(modules, state.quests)
@@ -134,10 +139,12 @@ export default function TextOpenWorldVNextPlayer() {
   }
   const executeProjectedAction = (
     action: typeof availableActions[number],
-    explicitTargetKey?: string,
+    explicitTargetKey?: string | null,
+    source: TextOpenWorldCommandSourceV1 = 'system-action',
   ) => {
-    const targetKey = explicitTargetKey
-      ?? (action.targetScope === 'none' ? null : action.validTargetKeys[0] ?? null)
+    const targetKey = explicitTargetKey !== undefined
+      ? explicitTargetKey
+      : action.targetScope === 'none' ? null : action.validTargetKeys[0] ?? null
     if (action.confirmationRequired) {
       const sessionId = session?.id ?? store.selectedSessionId
       if (sessionId == null) return
@@ -147,12 +154,14 @@ export default function TextOpenWorldVNextPlayer() {
         label: action.action.label,
         description: action.action.description,
         sessionId,
-        sessionKey,
-        eventSequence: projection.lastEventSequence,
+        baseSequence: store.runtimeState.lastSequence,
+        source,
       })
       return
     }
-    void run(() => store.executeVNextAction(action.action.key, targetKey))
+    void run(() => source === 'system-action'
+      ? store.executeVNextAction(action.action.key, targetKey)
+      : store.executeVNextAction(action.action.key, targetKey, { source }))
   }
 
   const trackedQuestContent = <section className="open-world-game-rail-card" aria-label="当前任务">
@@ -164,30 +173,26 @@ export default function TextOpenWorldVNextPlayer() {
     </> : <p>当前没有追踪任务</p>}
   </section>
 
-  const feedback = store.lastFeedback && <section
-    className={`rounded border p-3 text-sm ${store.lastFeedback.presentation.mayNarrateSuccess
-      ? 'border-accent/30 bg-accent/5'
-      : 'border-warning/30 bg-warning/5'}`}
-    data-testid="text-open-world-feedback"
-  >
-    <strong>{store.lastFeedback.presentation.headline}</strong>
-    {store.lastFeedback.presentation.details.map((detail, index) => (
-      <p key={index} className="mt-1 text-xs text-text-muted">{detail}</p>
-    ))}
-    <small className="mt-2 block text-[9px] text-text-muted">
-      正式证据 {store.lastFeedback.evidenceEventSequences.map(sequence => `#${sequence}`).join('、') || '预检'}
-      {' · '}{store.lastFeedback.status}
-    </small>
-  </section>
-
   const sceneView = <div className="space-y-3">
-    <article className="open-world-game-scene-card">
-      <small>{region?.title ?? '未知区域'} · 当前场景</small>
-      <h1>{location?.title ?? state.map.currentLocationKey}</h1>
-      <p>{location?.description || location?.earlyArrivalDescription || '这里的场景信息仍在展开。'}</p>
-      <span>{modules.actors.player.identity.name} · 事件 #{projection.lastEventSequence}</span>
-    </article>
-    {feedback}
+    <TextOpenWorldScenePanel
+      sessionKey={sessionKey}
+      eventSequence={projection.lastEventSequence}
+      projection={sceneProjection}
+      availableActions={availableActions}
+      feedback={store.lastFeedback}
+      busy={store.busy}
+      combatActive={state.combat?.status === 'active'}
+      fallback={{
+        regionTitle: region?.title ?? '未知区域',
+        locationTitle: location?.title ?? state.map.currentLocationKey,
+        description: location?.description || location?.earlyArrivalDescription || '这里的场景信息仍在展开。',
+        playerName: modules.actors.player.identity.name,
+      }}
+      onExecute={(actionKey, targetKey, source) => {
+        const action = availableActions.find(item => item.action.key === actionKey)
+        if (action) executeProjectedAction(action, targetKey, source)
+      }}
+    />
     {life.phase === 'defeated' && <section
       className="rounded border border-danger/40 bg-danger/5 p-4"
       data-testid="text-open-world-defeat-recovery"
@@ -218,24 +223,6 @@ export default function TextOpenWorldVNextPlayer() {
         没有通过校验的战前自动检查点，仍可读档或复活。
       </small>}
     </section>}
-    <article className="rounded border border-border bg-bg-surface p-4">
-      <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
-        <Globe2 className="h-4 w-4 text-accent" />当前可执行行动
-      </div>
-      <div className="grid gap-2 sm:grid-cols-2">
-        {actions.map(action => <button
-          key={action.action.key}
-          type="button"
-          disabled={store.busy}
-          onClick={() => executeProjectedAction(action)}
-          className="rounded border border-border bg-bg-base p-3 text-left text-xs disabled:opacity-40"
-        >
-          <strong>{action.action.label}</strong>
-          <small className="mt-1 block text-text-muted">{action.action.description}</small>
-        </button>)}
-        {!actions.length && <p className="text-xs text-text-muted">当前位置没有可执行行动。</p>}
-      </div>
-    </article>
     {store.runtimeState.narrative?.availableChoiceKeys?.includes('ending.world') && <section
       className="rounded border border-accent/30 bg-accent/5 p-5"
     >
@@ -539,17 +526,22 @@ export default function TextOpenWorldVNextPlayer() {
         onClick={() => {
           const request = pendingConfirmation
           const liveStore = useTextOpenWorldPlayerStore.getState()
-          const selectedSessionId = liveStore.selectedSession?.id ?? liveStore.selectedSessionId
+          const selectedSessionId = liveStore.selectedSessionId
+          const selectedSessionRowId = liveStore.selectedSession?.id ?? selectedSessionId
           const liveProjection = liveStore.runtimeState.textOpenWorld
           dismissConfirmation()
           if (request.sessionId !== selectedSessionId
-            || request.sessionKey !== sessionKey
-            || request.eventSequence !== liveProjection?.lastEventSequence) return
+            || selectedSessionRowId !== selectedSessionId
+            || liveProjection == null
+            || request.baseSequence !== liveStore.runtimeState.lastSequence) return
           void run(() => liveStore.executeVNextAction(
             request.actionKey,
             request.targetKey,
-            undefined,
-            true,
+            {
+              confirmed: true,
+              source: request.source,
+              expectedBaseSequence: request.baseSequence,
+            },
           ))
         }}
       >

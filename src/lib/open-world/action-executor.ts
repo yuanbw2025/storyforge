@@ -260,6 +260,8 @@ type ExecuteTextOpenWorldActionInputV1 = {
   itemKey?: string
   source?: TextOpenWorldCommandEnvelopeV1['source']
   confirmed?: boolean
+  /** Optional UI confirmation baseline; stale confirmations must never rebase silently. */
+  expectedBaseSequence?: number
   commandId?: string
   requestedAt?: number
 }
@@ -274,6 +276,10 @@ async function executeTextOpenWorldActionAsV1(
   systemCategory?: 'quest-action' | 'weather-action' | 'actor-schedule-action' | 'actor-state-action' | 'combat-state-action' | 'combat-enemy-skill' | 'combat-reward-action' | 'director-action',
 ): Promise<TextOpenWorldFeedbackReceiptV1> {
   if (!Number.isSafeInteger(input.sessionId) || input.sessionId < 1) fail('sessionId无效')
+  if (input.expectedBaseSequence != null
+    && (!Number.isSafeInteger(input.expectedBaseSequence) || input.expectedBaseSequence < 0)) {
+    fail('expectedBaseSequence无效')
+  }
   const commandId = input.commandId ?? newCommandId()
   if (!COMMAND_ID.test(commandId)) fail('commandId无效')
   const targetKey = input.targetKey ?? null
@@ -310,6 +316,9 @@ async function executeTextOpenWorldActionAsV1(
   if (!session || session.kind !== 'text-open-world') fail('文字开放世界Session不存在')
   const binding = await verifyTextOpenWorldVNextSessionBindingV1(session)
   const state = await readProductRuntimeState(input.sessionId)
+  if (input.expectedBaseSequence != null && state.lastSequence !== input.expectedBaseSequence) {
+    fail('确认基线已变化，请刷新当前状态后重新确认')
+  }
   const projection = parseTextOpenWorldSessionProjectionV1(state.textOpenWorld)
   assertTextOpenWorldVNextProjectionBindingV1(projection, binding)
   const registry = createTextOpenWorldActionRegistryV1(projection.runtimePackage)
@@ -331,6 +340,9 @@ async function executeTextOpenWorldActionAsV1(
       availability,
       confirmed: input.confirmed === true,
     })
+  }
+  if (availability.confirmationRequired && input.expectedBaseSequence == null) {
+    fail('高风险确认缺少原始Session事件基线')
   }
   const resolved = registry.resolve({ actionKey: input.actionKey, targetKey, context: actionContext })
   if (actorKey === 'system' && resolved.entry.action.category !== systemCategory) fail('系统入口只能执行指定类别的受治理系统Action')

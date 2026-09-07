@@ -85,7 +85,15 @@ describe('Text Open World vNext · quest lifecycle player UI', () => {
     expect(host.querySelector('[role="alertdialog"]')?.textContent).toContain('此操作会写入正式事件记录')
     const confirm = Array.from(host.querySelectorAll('button')).find(button => button.textContent === '确认执行')
     await act(async () => { confirm!.click(); await new Promise(resolve => setTimeout(resolve, 0)) })
-    expect(executeVNextAction).toHaveBeenCalledWith('action.abandon-supplies', ordinary.instanceKey, undefined, true)
+    expect(executeVNextAction).toHaveBeenCalledWith(
+      'action.abandon-supplies',
+      ordinary.instanceKey,
+      {
+        confirmed: true,
+        source: 'system-action',
+        expectedBaseSequence: 0,
+      },
+    )
 
     executeVNextAction.mockClear()
     ordinary.status = 'completed'

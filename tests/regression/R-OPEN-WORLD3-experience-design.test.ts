@@ -4278,6 +4278,7 @@ describe('R-OPEN-WORLD3 · P9 SceneScripts / ChoiceContract / ActionBindings', (
 
   it('生产完整场景表现，并让系统Action、固定选项和自然语言共享同一P8F Action', async () => {
     const input = await sceneScriptsFixture()
+    expect(input.sceneScriptsContext.version).toBe(2)
     expect(CONTEXT_SOURCE_BY_KEY.get('text-open-world.scene-scripts-input')).toMatchObject({
       layer: 'L0', ownerFrom: 'work', protectedFromTrim: true, atomic: true,
     })
@@ -4307,6 +4308,51 @@ describe('R-OPEN-WORLD3 · P9 SceneScripts / ChoiceContract / ActionBindings', (
       .toHaveLength(input.sceneScriptsContext.npcRuntimeCatalog.actors.length)
     expect(sceneScripts.scenes.filter(scene => scene.sourceKind === 'actor-dialogue')
       .every(scene => scene.attitudeOpenings?.bad && scene.attitudeOpenings.neutral && scene.attitudeOpenings.good)).toBe(true)
+    expect(input.sceneScriptsContext.questDesignDocuments.actions
+      .some(action => action.key === 'action.rest.standard')).toBe(true)
+    expect(sceneScripts.scenes
+      .some(scene => scene.actionKeys.includes('action.rest.standard'))).toBe(false)
+    const sourceActionByKey = new Map(input.sceneScriptsContext.questDesignDocuments.actions
+      .map(action => [action.key, action]))
+    const sharedActionConditions = (actionKeys: string[]) => {
+      if (!actionKeys.length) return []
+      const conditionSets = actionKeys.map(actionKey => new Set(sourceActionByKey.get(actionKey)!.requirementConditionKeys))
+      return [...conditionSets[0]!].filter(conditionKey => conditionSets.slice(1).every(keys => keys.has(conditionKey)))
+    }
+    const objectiveDemands = input.sceneScriptsContext.sceneDemands
+      .filter(scene => scene.sourceKind === 'quest-objective')
+    const actorDialogueDemands = input.sceneScriptsContext.sceneDemands
+      .filter(scene => scene.sourceKind === 'actor-dialogue')
+    for (const scene of [...objectiveDemands, ...actorDialogueDemands]) {
+      expect(scene.availabilityConditionKeys).toEqual(sharedActionConditions(scene.actionKeys))
+    }
+    expect(objectiveDemands.some(scene => {
+      const union = new Set(scene.actionKeys.flatMap(actionKey => sourceActionByKey.get(actionKey)!.requirementConditionKeys))
+      return union.size > scene.availabilityConditionKeys.length
+    })).toBe(true)
+    for (const scene of objectiveDemands) {
+      const objective = input.sceneScriptsContext.questDesignDocuments.objectives
+        .find(candidate => candidate.key === scene.objectiveKey)!
+      const expectedParticipants = [...new Set(input.sceneScriptsContext.questDesignDocuments.requirementBindings
+        .filter(binding => objective.requirementKeys.includes(binding.requirementKey) && binding.definitionKind === 'actor')
+        .flatMap(binding => binding.definitionKeys))]
+        .filter(actorKey => input.sceneScriptsContext.npcRuntimeCatalog.actors
+          .some(actor => actor.key === actorKey && actor.homeLocationKey === scene.locationKey))
+      expect(scene.participantKeys).toEqual(expectedParticipants)
+    }
+    for (const scene of input.sceneScriptsContext.sceneDemands.filter(scene => (
+      (scene.sourceKind === 'quest-offer' || scene.sourceKind === 'quest-resolution') && scene.actorKey
+    ))) {
+      const owner = input.sceneScriptsContext.npcRuntimeCatalog.actors
+        .find(actor => actor.key === scene.actorKey)!
+      const location = input.sceneScriptsContext.mapInteractionCatalog.locations
+        .find(candidate => candidate.key === owner.homeLocationKey)!
+      expect(scene).toMatchObject({
+        locationKey: owner.homeLocationKey,
+        regionKey: location.regionKey,
+        participantKeys: [owner.key],
+      })
+    }
     expect(sceneScripts.randomEventPresentations).toHaveLength(input.sceneScriptsContext.directorDecks.randomEvents.length)
     expect(sceneScripts.templateTextVariants).toHaveLength(input.sceneScriptsContext.templateVariantDemands.length)
     expect(choices.coverage.coveredSceneActionPairs).toEqual(choices.coverage.requiredSceneActionPairs)
@@ -4349,6 +4395,53 @@ describe('R-OPEN-WORLD3 · P9 SceneScripts / ChoiceContract / ActionBindings', (
       artifacts: { sceneScripts, choiceContracts: choices, actionBindings: bindings },
       context: input.sceneScriptsContext,
     })).resolves.toEqual({ sceneScripts, choiceContracts: choices, actionBindings: bindings })
+
+    // Historical v1 Contexts keep their original deterministic demand
+    // semantics so an already-paid durable P9 run can still resume and be
+    // verified after v2 stops promoting per-Action gates to whole scenes.
+    const legacyContext = structuredClone(input.sceneScriptsContext)
+    legacyContext.version = 1
+    let legacyForeignOwnerEndpointCount = 0
+    for (const scene of legacyContext.sceneDemands) {
+      if ((scene.sourceKind === 'quest-offer' || scene.sourceKind === 'quest-resolution') && scene.actorKey) {
+        const quest = legacyContext.questSkeletons.quests.find(candidate => candidate.key === scene.questKey)!
+        const owner = legacyContext.npcRuntimeCatalog.actors.find(candidate => candidate.key === scene.actorKey)!
+        const legacyLocationKey = quest.locationKeys[0] ?? legacyContext.mapInteractionCatalog.initialLocationKey
+        scene.locationKey = legacyLocationKey
+        scene.regionKey = quest.regionKeys[0] ?? legacyContext.mapInteractionCatalog.initialRegionKey
+        if (legacyLocationKey !== owner.homeLocationKey) legacyForeignOwnerEndpointCount += 1
+      }
+      if (scene.sourceKind === 'quest-objective') {
+        const objective = legacyContext.questDesignDocuments.objectives
+          .find(candidate => candidate.key === scene.objectiveKey)!
+        const quest = legacyContext.questDesignDocuments.quests
+          .find(candidate => candidate.key === objective.questKey)!
+        const participants = legacyContext.questDesignDocuments.requirementBindings
+          .filter(binding => objective.requirementKeys.includes(binding.requirementKey) && binding.definitionKind === 'actor')
+          .flatMap(binding => binding.definitionKeys)
+        if (quest.ownerKind === 'actor' && quest.ownerKey) participants.push(quest.ownerKey)
+        scene.participantKeys = [...new Set(participants)]
+          .filter(actorKey => legacyContext.npcRuntimeCatalog.actors.some(actor => actor.key === actorKey))
+      }
+      if (scene.sourceKind === 'quest-objective' || scene.sourceKind === 'actor-dialogue') {
+        scene.availabilityConditionKeys = [...new Set(scene.actionKeys
+          .flatMap(actionKey => sourceActionByKey.get(actionKey)!.requirementConditionKeys))]
+      }
+    }
+    expect(legacyForeignOwnerEndpointCount).toBeGreaterThan(0)
+    const legacyBody = structuredClone(legacyContext) as Omit<TextOpenWorldSceneScriptsInputContextV1, 'contextSelectionHash'>
+      & { contextSelectionHash?: string }
+    delete legacyBody.contextSelectionHash
+    legacyContext.contextSelectionHash = await hashProductProductionValueV2(legacyBody)
+    const legacyResult = await executeSceneScripts({
+      ...input,
+      sceneScriptsContextText: JSON.stringify(legacyContext),
+    })
+    expect(legacyResult.artifacts.map(artifact => artifact.artifactKey)).toEqual([
+      'text-open-world.scene-scripts',
+      'text-open-world.choice-contracts',
+      'text-open-world.action-bindings',
+    ])
   }, 360_000)
 
   it('拒绝场景漏项、自然语言歧义、三档态度缺失、传闻缺失和模型越权字段', async () => {

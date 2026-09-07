@@ -1,5 +1,6 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
+import { executeTextOpenWorldActionV1 } from '../../src/lib/open-world/action-executor'
 import { hashProductProductionValueV2 } from '../../src/lib/product-production/hash'
 import { createTextOpenWorldInstance } from '../../src/lib/product/runtime-instances'
 import { EMPTY_PRODUCT_RUNTIME_STATE, type ProductRelease } from '../../src/lib/types'
@@ -112,6 +113,39 @@ describe('Text Open World G4 · 玩家库与显式Session加载', () => {
       .toBe(created.runtimePackage.textOpenWorldVNext?.metadata.packageKey)
     expect(state.error).toBe('')
   })
+
+  it('高风险确认遇到外部事件漂移后刷新权威Projection，并可按新基线重试', async () => {
+    const created = await fixture()
+    await useTextOpenWorldPlayerStore.getState().load(created.scope, null, created.formalSession.id)
+    const staleBaseSequence = useTextOpenWorldPlayerStore.getState().runtimeState.lastSequence
+
+    await executeTextOpenWorldActionV1({
+      sessionId: created.formalSession.id!,
+      actionKey: 'action.talk-caretaker',
+      targetKey: 'actor.caretaker',
+      commandId: 'command.player-store.external-talk',
+    })
+    const databaseSequence = (await db.productRuntimeSessions.get(created.formalSession.id!))!
+      .runtimeHeadSequence!
+    expect(databaseSequence).toBeGreaterThan(staleBaseSequence)
+
+    await expect(useTextOpenWorldPlayerStore.getState().executeVNextAction(
+      'action.steal-tonic',
+      'actor.caretaker',
+      { confirmed: true, expectedBaseSequence: staleBaseSequence },
+    )).rejects.toThrow('确认基线已变化')
+
+    const refreshed = useTextOpenWorldPlayerStore.getState()
+    expect(refreshed.runtimeState.lastSequence).toBe(databaseSequence)
+    expect(refreshed.error).toContain('确认基线已变化')
+
+    await refreshed.executeVNextAction(
+      'action.steal-tonic',
+      'actor.caretaker',
+      { confirmed: true, expectedBaseSequence: refreshed.runtimeState.lastSequence },
+    )
+    expect(useTextOpenWorldPlayerStore.getState()).toMatchObject({ error: '' })
+  }, 15_000)
 
   it('较慢的旧scope与世界分组装载完成后不会覆盖较新的游戏库与空选择', async () => {
     const stale = await fixture()

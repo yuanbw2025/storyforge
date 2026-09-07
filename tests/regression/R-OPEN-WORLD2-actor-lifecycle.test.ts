@@ -112,7 +112,9 @@ describe('Text Open World vNext · governed Actor lifecycle and service continui
     })
     expect(preflight).toMatchObject({ phase: 'preflight', status: 'confirmation-required' })
     const result = await executeTextOpenWorldActionV1({
-      sessionId: session.id!, actionKey: 'action.attack-salt-merchant', targetKey: 'actor.salt-merchant', confirmed: true, commandId: 'command.attack.confirmed', requestedAt: 1_200,
+      sessionId: session.id!, actionKey: 'action.attack-salt-merchant', targetKey: 'actor.salt-merchant',
+      confirmed: true, expectedBaseSequence: before.lastSequence,
+      commandId: 'command.attack.confirmed', requestedAt: 1_200,
     })
     expect(result).toMatchObject({ phase: 'terminal', status: 'succeeded' })
 

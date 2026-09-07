@@ -1,6 +1,6 @@
 # AI 主导文字开放世界游戏 · 完整开发清单
 
-> 版本：1.1.66
+> 版本：1.1.71
 > 建立日期：2026-09-06
 > 对应总任务：`E-OPENWORLD-01`
 > 当前状态：`IN_PROGRESS`；用户已于2026-09-06明确下达完整产品开发指令
@@ -36,16 +36,16 @@
 | 指标 | 当前值 |
 |---|---|
 | 首版工作包 | 121 |
-| 已完成 | 71（G0、G1、G2及G3全部完成，G4完成2项） |
-| 产品总进度 | 71 / 121（58.7%） |
-| G1～G7业务功能进度 | 61 / 111（55.0%） |
+| 已完成 | 72（G0、G1、G2及G3全部完成，G4完成3项） |
+| 产品总进度 | 72 / 121（59.5%） |
+| G1～G7业务功能进度 | 62 / 111（55.9%） |
 | 当前阶段 | G4 完整玩家端 |
 | G0阶段进度 | 10 / 10（100%） |
 | G1阶段进度 | 13 / 13（100%） |
 | G2阶段进度 | 28 / 28（100%） |
 | G3阶段进度 | 18 / 18（100%） |
-| G4阶段进度 | 2 / 15（13.3%） |
-| 当前工作包 | `TOW-G4-03` |
+| G4阶段进度 | 3 / 15（20.0%） |
+| 当前工作包 | `TOW-G4-04` |
 | 当前阻塞项 | 无 |
 
 每次状态变化必须同时更新本节汇总、对应任务行、验证证据和变更记录。
@@ -199,7 +199,7 @@ G7 盐脊验收、发布更新与旧入口收口
 | TOW-G3-13 | DONE | 技能、物品、敌人、遭遇、奖励目录生产 | G3-05、G3-06、G3-12 | 三条专属Lane均从同一Build已验收QuestSkeleton与Manifest出发：Progression固定20级平方经验、自动属性成长、两项初始/六项等级/任务技能精确需求和主动攻击公式；Encounter逐项兑现enemy/encounter需求、每区基础遭遇、1～5级敌人数值、基础技能策略、战斗Objective/地区覆盖及失败恢复；Item/Reward精确兑现两项初始物品与item/equipment/material/reward需求，为全部23个任务和5个遭遇生成奖励、为5个敌人生成地区材料掉落，并确定性分配主线总计1600经验以支撑1→5级。模型只负责技能/状态/敌人/遭遇/物品/奖励语义和有界选择，代码固定稳定键、数值、保护、来源、预算与消费者；Action/Effect/Condition/Quest/Reward/Drop正式引用保持unbound交给P8F，漏项、越界、无来源、预算不闭合、模型越权及重算Hash篡改失败关闭 |
 | TOW-G3-14 | DONE | 配方、商店、NPC运行规则目录生产 | G3-11～G3-13 | Crafting/Economy、NPC Runtime与Map Interaction三条Lane完成：配方/商店闭合来源消耗、库存、价格、服务Actor预留和反套利；NPC目录保留整体小传并固定关键保护、普通四时段规则、三档道德/阵营态度及功能替代；地图目录原样继承完整Region/Location/Edge/FastTravel拓扑，为每个地点和任务需求生成提前到达安全交互与确定性SVG坐标，固定逐步揭示、旅行推进时间、首版快旅不中断且不消耗资源。所有Action/Condition/Effect/Scene/Quest运行引用仍为unbound，留待P8F/P9装配 |
 | TOW-G3-15 | DONE | QuestFinalize与EncounterFinalize | G3-12～G3-14 | 11件已验收叙事/任务/玩法目录以完整Hash链原子交付；模型只补任务与区域发牌语义，代码生成Quest/Stage/Objective、奖励、失败/过期/时间、战斗/物品/制作/商店/NPC/地图/旅行/复活/世界演化的Condition/Effect/Action及双向真实引用；每个结局也在P8F形成独立Condition及固定`route→unlock→reach` Effect/Action，不留给V3临时生成；主线和重要故事继续受保护等待，普通任务可放弃/过期；Director按区域冻结固定任务、模板、随机事件、冷却、并发与空白牌预算 |
-| TOW-G3-16 | DONE | SceneScript、ChoiceContract和三类交互绑定 | G3-15 | P9以代码侧完整验签、模型侧去重投影的原子Context生产任务委托/目标/收束、角色对话、地点交互和随机事件Scene；模型只写场景/对话/选项标签、模板三变体、事件/传闻表现和非战斗自然语言示例，代码固定知识边界、稳定键、目标、Condition继承及Action Hash；最终主线场景为每个P8F结局Action生成唯一Choice，系统Action、固定Choice与两条自然语言示例共同指向该结果源；战斗自然语言关闭，低置信度只回应和推荐，高风险需确认，模型不得创建Action/Quest/地图或写状态 |
+| TOW-G3-16 | DONE | SceneScript、ChoiceContract和三类交互绑定 | G3-15 | P9以代码侧完整验签、模型侧去重投影的原子Context生产任务委托/目标/收束、角色对话、地点交互和随机事件Scene；Context v2只把同场景全部Action共有的Condition提升为场景门槛，每个Action/Choice仍各自持有条件，Objective只绑定当地显式内容需求Actor而不默认要求任务发布者在场；v1历史Context保留旧投影校验以支持durable Run恢复；模型只写场景/对话/选项标签、模板三变体、事件/传闻表现和非战斗自然语言示例，代码固定知识边界、稳定键、目标及Action Hash；最终主线场景为每个P8F结局Action生成唯一Choice，系统Action、固定Choice与两条自然语言示例共同指向该结果源；战斗自然语言关闭，低置信度只回应和推荐，高风险需确认，模型不得创建Action/Quest/地图或写状态 |
 | TOW-G3-17 | DONE | UI/媒资需求、内容时长、平衡、语义评审和局部修复 | G3-06～G3-16 | P2表现轮廓、P10系统收口、V1预检和V2双评审均登记正式Skill/Context/Executor；代码冻结15个运行模块、18个UI消费槽及完整媒资槽，把本次实际排产与`fallback-only`槽分开并让0/4/9音频槽与Brief/Plan同源；内容库存时长和单次游玩时长分离；V1覆盖Schema/Hash链/全量Action—Scene—Choice—结局引用/可解性/预算/消费槽，V2问题映射到唯一新Build修复任务并按DAG传播stale，绝不原地修改已验收Artifact，真人时长校准继续保留为发布证据 |
 | TOW-G3-18 | DONE | AI生产Build装配端到端验证 | G3-01～G3-17、G2-28 | 共享正式生产入口已按产品类型选择文字开放世界专属P0～P10/V1～V3/QA Plan与Executor；P0按Brief精确冻结来源单元，P1逐批保存真实ContextManifest且恢复不重复成功调用；Narrative v2完整携带P9正文/对话/随机事件，Action v15携带三类输入绑定，V3不再创造上游内容；每个实际媒资核验物理Blob、Capability、生产/Provider回执与权利策略，IntegrationReport及覆盖/权利子证据均验Hash；QA逐门判断，原型可玩fallback与商业真实资产覆盖分开；vNext-only、Hybrid、Legacy均有正式读取证据，Build Preview可创建只含统一`textOpenWorld`投影的Session，无需人工改JSON |
 
@@ -213,10 +213,10 @@ G7 盐脊验收、发布更新与旧入口收口
 
 | ID | 状态 | 工作包 | 依赖 | 完成判据 |
 |---|---|---|---|---|
-| TOW-G4-01 | DONE | 玩家入口、Release/存档选择和Session启动 | G1-10、G2-28 | 玩家默认停留游戏库；作品按已核验`productionKey`分组并以版本号选择当前Release，详情可明确切换旧版；新旅程、旧Release存档继续、正式Release与Build Preview显式隔离；版本/来源/Package/Release证据可见；损坏发布留作诊断且禁开新档，选档失败清空投影并可重试；删除需确认且即使来源损坏也只删除当前scope/世界分组的Session私域；21项定向回归覆盖选版、启动、预览、损坏、删除、并发载入隔离和原游戏循环 |
+| TOW-G4-01 | DONE | 玩家入口、Release/存档选择和Session启动 | G1-10、G2-28 | 玩家默认停留游戏库；作品按已核验`productionKey`分组并以版本号选择当前Release，详情可明确切换旧版；新旅程、旧Release存档继续、正式Release与Build Preview显式隔离；版本/来源/Package/Release证据可见；损坏发布留作诊断且禁开新档，选档失败清空投影并可重试；删除需确认且即使来源损坏也只删除当前scope/世界分组的Session私域；22项定向回归覆盖选版、启动、预览、损坏、删除、并发载入隔离、stale确认恢复和原游戏循环 |
 | TOW-G4-02 | DONE | 响应式游戏壳与场景主界面 | G4-01 | vNext与legacy共用纯展示壳；桌面左导航/中央主视图/右上下文三栏，1180px以下上下文抽屉，780px以下严格五项底部导航；场景、地图、任务、角色、更多只重排现有能力，Header、Release来源与运行包Hash、退出、战斗/全局状态和返回场景入口稳定；Session切换复位纯UI态并撤销旧确认；高风险确认和上下文抽屉隔离背景、循环焦点并支持Escape；旧版缺失角色合同明确降级且不伪造；13项壳/真实运行器回归与双视口Playwright证明导航不写Projection、三栏不重叠、移动抽屉和页面无横向溢出 |
-| TOW-G4-03 | READY | 场景叙述、NPC对话、固定选项和自然输入 | G2-11、G2-18、G4-02 | 三种交互并存；系统回执与AI文本视觉区分 |
-| TOW-G4-04 | QUEUED | HUD、当前任务、状态变化和通知 | G2-12、G2-17、G2-20、G4-02 | 生命、地点、天数/时段、天气、任务和重要变化可见不过载 |
+| TOW-G4-03 | DONE | 场景叙述、NPC对话、固定选项和自然输入 | G2-11、G2-18、G4-02 | 当前地点、场景共有条件、任务生命周期与场景显式NPC在场/存活共同投影冻结P9场景，不保存第二份scene状态；旧P9无论同地或异地误注入的任务发布者都不会吞掉Objective，单个Action条件不成立也不会吞掉同场景其他合法Choice；新生产把角色拥有的委托/收束放在owner常驻地点，v1 Context保留旧Quest端点以恢复durable Run，旧冻结包运行时按常驻地点归一；发布叙事、NPC三档态度对白、固定Choice、系统Action及自然输入在同一场景共存，三类输入保留source后进入同一Action/Event；交谈与开战按冻结Actor场景和Encounter Effect收窄目标；场景专属玩家Quest Action按offer/当前Objective/resolution生命周期精确收窄实例，同定义多轮任务不串目标，Quest页和命令不能越过NPC/地点/Stage/Objective，P8F的`observe + quest`兜底需求同样受管；通用use/equip/craft/buy/sell不会因被Objective引用而全局锁死，未绑定场景的合法通用Action仍作为环境行动；普通多目标、无目标、无匹配、战斗自由输入均fail-closed，多敌战斗在G4-09前确定性选首个存活目标；v15/v14场景均隐藏缺参数制作交易按钮；高风险确认必须携带整个ProductRuntimeState事件基线，拒绝缺失、跨标签页stale及旧DOM串Session，stale后刷新权威Projection再重试；回执使用独立live region；运行投影不暴露内部purpose、知识边界或未发生结果；32项G4场景/壳回归、12项Action注册表及6项犯罪回归与真实浏览器路径覆盖上述边界 |
+| TOW-G4-04 | READY | HUD、当前任务、状态变化和通知 | G2-12、G2-17、G2-20、G4-02 | 生命、地点、天数/时段、天气、任务和重要变化可见不过载；随机事件表现必须由当前激活/失效证据驱动，不能把Director历史误当成仍在发生 |
 | TOW-G4-05 | QUEUED | 完整任务日志 | G2-09～G2-12 | 分类、筛选、追踪、定位、普通任务放弃、过期/失败/重接和历史完整 |
 | TOW-G4-06 | QUEUED | SVG节点地图、路线和快速旅行UI | G2-13～G2-17 | 点击地点旅行；知识不剧透；移动端列表可完成同等操作 |
 | TOW-G4-07 | QUEUED | 角色、等级、属性、技能和状态UI | G2-01～G2-05 | 三属性和派生值来源可解释；技能解锁条件与来源可见 |
@@ -356,6 +356,11 @@ G7 盐脊验收、发布更新与旧入口收口
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| 1.1.71 | 2026-09-08 | G4-03兼容与恢复收口：新P9的actor-owned委托/收束落在owner常驻地点，历史v1 Context按旧Quest端点继续恢复，旧冻结包运行时归一；正式Release与显式Build Preview共享冻结场景消费规则；高风险确认强制使用整个运行状态事件基线，stale后刷新权威Projection；证据更新为G4场景/壳32项、玩家入口22项，进度不变，下一项G4-04 |
+| 1.1.70 | 2026-09-07 | G4-03最终门控审计：Scene专属玩家Quest动作按Scene lifecycle精确收窄实例，补同定义active+revealed多轮任务与`observe + quest`兜底反例；通用use支持动作在Objective未激活时仍可由专用入口执行；高风险确认携带弹窗事件基线到执行器，拒绝跨标签页stale和旧DOM串Session；多敌战斗暂选首个存活目标；v15/v14场景均隐藏缺参数制作交易按钮；G4场景/壳31项、Action注册表12项、犯罪6项回归，进度不变，下一项G4-04 |
+| 1.1.69 | 2026-09-07 | G4-03最终差异审查收口：Action注册表从冻结Actor对话场景和开战Effect恢复交谈/遭遇的唯一目标，避免同地点多NPC或多遭遇让正式Choice失效；场景投影把当前可用且从未归属任何P9场景的通用Action作为环境行动交给系统按钮，同时不把隐藏场景绑定Action泄露出来，正式生产中未写Scene的休息流程保持可玩；新增目标收窄、真实未绑定休息投影和正式Session执行回归，G4-03累计29项定向回归，进度不变，下一项G4-04 |
+| 1.1.68 | 2026-09-07 | G4-03独立审查收口：修正P9把同场景多个Action条件并集误作整场景AND门槛的语义，Context v2只提升全Action交集，各Choice仍独立校验；Objective只绑定当地显式Actor需求，不再强制任务发布者在场；保留v1 Context旧语义的验签/恢复路径，并按Action交集、Actor场景引用与居所兼容归一无法从Narrative v2/Action v15版本号识别的旧P9包，同地或异地误注入owner均不吞场景；玩家投影删除内部purpose、知识边界与未发生结果文案，结算回执增加读屏live region；新增行动独立条件、旧包归一、零/多目标与战斗自由输入回归，总进度不变，下一项G4-04 |
+| 1.1.67 | 2026-09-07 | 完成G4-03场景与三类输入：新增不持久化的P9场景投影，按当前地点、Condition、Quest实例/Stage/Objective及Actor在场存活门控任务委托、目标、收束、NPC对话和地点交互；NPC对白从统一关系投影选择差/一般/好三档，知识治理字段不穿透玩家视图；发布叙事、固定Choice、系统Action、受限自然输入和系统结算回执分层展示，三类可执行输入全部回到同一Action注册表并在正式Command/Event中保留source，高风险确认继续复核Session和事件基线；首版无模型时只精确匹配P9冻结例句，无匹配、多目标、无目标及战斗自由输入均不写状态，真正语义理解留给G6-03；Narrative v1/Action v14明确兼容降级；随机事件因当前合同只有发生历史、没有仍激活/失效证据而fail-closed并移交G4-04通知切面；新增场景投影、真实Store/IndexedDB交互和Playwright回归；总进度72/121，业务功能62/111，下一项G4-04 |
 | 1.1.66 | 2026-09-07 | 完成G4-02响应式玩家壳：vNext和legacy统一进入同一纯展示壳，父入口只负责加载、Launcher和运行包分派；桌面固定左导航/中央主视图/右上下文三栏，窄屏把上下文变为可由Escape/遮罩/关闭键退出并恢复焦点的抽屉，移动端固定场景/地图/任务/角色/更多五项底栏；五页仅重排现有功能，Header、Release或Build Preview来源/运行包Hash、退出、战斗/全局Projection状态和返回场景入口不随页面切换；Session切换复位本地UI态并撤销旧确认，高风险确认和上下文抽屉均隔离背景、循环焦点且可由Escape退出；导航不写Event/Checkpoint/Projection；legacy继续保留tick、旅行、任务、Harness、分支和结局，缺失角色合同明确降级而不伪造；新增13项组件/集成回归及真实Playwright 1440/390双视口几何、确认层、抽屉与溢出验收；总进度71/121，业务功能61/111，下一项G4-03 |
 | 1.1.65 | 2026-09-07 | 完成G4-01玩家入口：新增文字开放世界专属游戏库与Release详情，按稳定`productionKey`而非标题归并作品，组内以不可变版本号优先且可显式选择旧版；正式存档继续固定各自Release，Build Preview仅接受制作端显式handoff并标为非正式，不混入正式目录；Release卡展示公开主角、规模、来源/运行包/发布Hash，损坏Release保留诊断且禁止开档；普通进入不再自动打开最近存档，加载/选档失败清空旧投影并提供重试；删除经过确认和scope/世界分组owner校验，来源损坏时仍可级联清理Session私域而不删Release；三种文字游戏预览handoff按产品类型隔离；总进度70/121，业务功能60/111，下一项G4-02 |
 | 1.1.64 | 2026-09-07 | G3-18独立审查收口但不虚增进度：P1按批保存精确来源Manifest并只采纳最新成功尝试；P8F/P9/V1/V2闭合结局Action、场景Choice和三类输入，Narrative v2与Action v15保留全部可玩正文；P10将完整槽清单与本次排产分离，未排产项明确`fallback-only`且音频0/4/9计数与Plan一致；V3核验物理Blob、Capability、任务/Provider回执及权利策略，IntegrationReport分层验Hash；QA不再无条件通过`rights.complete`，商业真实资产覆盖不足只到preview-ready；vNext-only、Hybrid、Legacy和Release→Session链回归通过；总进度仍为69/121，下一项G4-01 |

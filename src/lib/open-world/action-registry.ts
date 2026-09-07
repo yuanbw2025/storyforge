@@ -13,6 +13,10 @@ import { parseTextOpenWorldCommandEnvelopeV1 } from './command-contract'
 import { createTextOpenWorldConditionCatalogV1 } from './condition-dsl'
 import { createTextOpenWorldEffectCatalogV1 } from './effect-dsl'
 import { planTextOpenWorldRouteV1 } from './map-topology'
+import {
+  textOpenWorldSceneQuestInstanceKeysV1,
+  textOpenWorldSceneEligibleV1,
+} from './scene-eligibility'
 import { createTextOpenWorldSkillCatalogV1 } from './skills'
 
 const STABLE_KEY = /^[a-z][a-z0-9._:-]{0,199}$/
@@ -215,6 +219,7 @@ export function createTextOpenWorldActionRegistryV1(value: TextOpenWorldRuntimeP
   const entries = buildEntries(modules)
   const byKey = new Map(entries.map(entry => [entry.action.key, entry]))
   const effectByKey = new Map(modules.actions.effects.map(effect => [effect.key, effect]))
+  const narrativeV2 = modules.narrative.version === 2 ? modules.narrative : null
   const skillCatalog = createTextOpenWorldSkillCatalogV1(value)
   const cloneEntry = (entry: TextOpenWorldActionCatalogEntryV1) => structuredClone(entry)
 
@@ -247,7 +252,63 @@ export function createTextOpenWorldActionRegistryV1(value: TextOpenWorldRuntimeP
       const cooldownUntil = context.cooldownUntilWorldMinuteByActionKey[action.key] ?? 0
       const cooldownRemainingMinutes = Math.max(0, cooldownUntil - context.worldMinute)
       if (action.repeatPolicy === 'cooldown' && cooldownRemainingMinutes > 0) unavailableReasons.push({ code: 'cooldown', message: `该行动还需等待${cooldownRemainingMinutes}分钟。`, conditionKey: null })
+      const owningScenes = narrativeV2?.scenes.filter(scene => scene.actionKeys.includes(action.key)) ?? []
+      // Scene ownership constrains player quest decisions, including fallback
+      // requirement Actions whose category is observe but whose target is a
+      // Quest. It must not constrain generic inventory, equipment, crafting or
+      // transaction Actions merely referenced by an Objective for story flavor.
+      const sceneExclusivePlayerAction = action.actorScope === 'player'
+        && owningScenes.length > 0
+        && (action.targetScope === 'quest' || action.category === 'quest-action')
+      const eligibleOwningScenes = narrativeV2 && sceneExclusivePlayerAction
+        ? owningScenes.filter(scene => textOpenWorldSceneEligibleV1({
+          scene,
+          modules: {
+            narrative: narrativeV2,
+            actions: modules.actions,
+            actors: modules.actors,
+          },
+          context,
+        }))
+        : []
+      if (sceneExclusivePlayerAction && eligibleOwningScenes.length === 0) {
+          unavailableReasons.push({
+            code: 'scene-unavailable',
+            message: '该任务行动所属场景当前不可用。',
+            conditionKey: null,
+          })
+      }
       let validTargetKeys = action.targetScope === 'none' ? [] : [...(context.validTargetKeysByScope[action.targetScope] ?? [])]
+      if (sceneExclusivePlayerAction && action.targetScope === 'quest') {
+        const eligibleQuestInstanceKeys = new Set(eligibleOwningScenes.flatMap(scene => (
+          textOpenWorldSceneQuestInstanceKeysV1(scene, context)
+        )))
+        validTargetKeys = validTargetKeys.filter(instanceKey => eligibleQuestInstanceKeys.has(instanceKey))
+      }
+      if (action.targetScope === 'actor' && action.category === 'talk' && narrativeV2) {
+        // ChoiceContracts freeze a concrete actor for generated dialogue, but
+        // RuntimePackage v1 does not carry that production-only row. Recover
+        // the same governed binding from the frozen P9 Actor scene instead of
+        // guessing from every actor who happens to be present at the location.
+        const actorKeys = new Set(narrativeV2.scenes
+          .filter(scene => scene.sourceKind === 'actor-dialogue'
+            && scene.actorKey != null
+            && scene.actionKeys.includes(action.key))
+          .map(scene => scene.actorKey!))
+        validTargetKeys = validTargetKeys.filter(actorKey => actorKeys.has(actorKey))
+      }
+      if (action.targetScope === 'encounter' && action.category === 'start-combat') {
+        // A start-combat Action is owned by the encounter frozen in its start
+        // Effect. Nearby encounters are valid scope members, not interchangeable
+        // targets for this specific Action.
+        const start = action.successEffectKeys.map(effectKey => effectByKey.get(effectKey))
+          .find((effect): effect is Extract<TextOpenWorldEffectDefinitionV1, { operation: 'start-combat' | 'initialize-combat' }> => (
+            effect?.operation === 'start-combat' || effect?.operation === 'initialize-combat'
+          ))
+        validTargetKeys = start
+          ? validTargetKeys.filter(encounterKey => encounterKey === start.payload.encounterKey)
+          : []
+      }
       if (action.targetScope === 'location' && action.category === 'travel') {
         const start = action.successEffectKeys.map(effectKey => effectByKey.get(effectKey))
           .find((effect): effect is Extract<TextOpenWorldEffectDefinitionV1, { operation: 'start-travel' }> => effect?.operation === 'start-travel')

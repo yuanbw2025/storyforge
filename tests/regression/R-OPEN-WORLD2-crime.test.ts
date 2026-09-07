@@ -90,9 +90,16 @@ describe('Text Open World vNext · governed theft, deception and local crime', (
     })
     expect(preflight).toMatchObject({ phase: 'preflight', status: 'confirmation-required', outcomeCommitted: false })
     expect(await db.productRuntimeEvents.where('sessionId').equals(session.id!).count()).toBe(2)
+    const confirmationBaseline = await readProductRuntimeState(session.id!)
+
+    await expect(executeTextOpenWorldActionV1({
+      sessionId: session.id!, actionKey: 'action.steal-tonic', targetKey: 'actor.caretaker', confirmed: true,
+      commandId: 'command.crime.steal.no-baseline', requestedAt: 1_050,
+    })).rejects.toThrow('高风险确认缺少原始Session事件基线')
 
     const completed = await executeTextOpenWorldActionV1({
       sessionId: session.id!, actionKey: 'action.steal-tonic', targetKey: 'actor.caretaker', confirmed: true,
+      expectedBaseSequence: confirmationBaseline.lastSequence,
       commandId: 'command.crime.steal', requestedAt: 1_100,
     })
     expect(completed).toMatchObject({
@@ -116,10 +123,36 @@ describe('Text Open World vNext · governed theft, deception and local crime', (
     expect(consumed).toMatchObject({ phase: 'preflight', status: 'rejected', reason: { code: 'once-consumed' } })
   })
 
+  it('高风险确认拒绝弹窗打开后已经变化的Session事件基线', async () => {
+    const session = await publishedCrimeSession('盐脊过期确认验收')
+    const preflight = await executeTextOpenWorldActionV1({
+      sessionId: session.id!, actionKey: 'action.steal-tonic', targetKey: 'actor.caretaker',
+      commandId: 'command.crime.stale.preflight', requestedAt: 1_000,
+    })
+    expect(preflight).toMatchObject({ phase: 'preflight', status: 'confirmation-required' })
+    const baseline = await readProductRuntimeState(session.id!)
+
+    await executeTextOpenWorldActionV1({
+      sessionId: session.id!, actionKey: 'action.rest',
+      commandId: 'command.crime.stale.advance', requestedAt: 1_100,
+    })
+    await expect(executeTextOpenWorldActionV1({
+      sessionId: session.id!, actionKey: 'action.steal-tonic', targetKey: 'actor.caretaker',
+      confirmed: true, expectedBaseSequence: baseline.lastSequence,
+      commandId: 'command.crime.stale.confirm', requestedAt: 1_200,
+    })).rejects.toThrow('确认基线已变化')
+
+    const current = (await readProductRuntimeState(session.id!)).textOpenWorld!.state
+    expect(current.relationships.morality).toBe(0)
+    expect(current.inventory.stackQuantities['item.brine-tonic'] ?? 0).toBe(0)
+  })
+
   it('欺骗失败仍提交道德与目击阵营后果，并可由事件刷新重放', async () => {
     const session = await publishedCrimeSession('盐脊欺骗验收')
+    const confirmationBaseline = await readProductRuntimeState(session.id!)
     const failed = await executeTextOpenWorldActionV1({
       sessionId: session.id!, actionKey: 'action.deceive-caretaker', targetKey: 'actor.caretaker', confirmed: true,
+      expectedBaseSequence: confirmationBaseline.lastSequence,
       commandId: 'command.crime.deceive', requestedAt: 1_300,
     })
     expect(failed).toMatchObject({

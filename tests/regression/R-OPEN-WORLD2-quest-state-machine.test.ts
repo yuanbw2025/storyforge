@@ -353,9 +353,11 @@ describe('Text Open World vNext · governed Quest lifecycle', () => {
     })
     expect(preflight).toMatchObject({ status: 'confirmation-required', phase: 'preflight', outcomeCommitted: false, evidenceEventSequences: [] })
     expect(await db.productRuntimeEvents.where('sessionId').equals(session.id!).count()).toBe(4)
+    const confirmationBaseline = await readProductRuntimeState(session.id!)
     const abandoned = await executeTextOpenWorldActionV1({
       sessionId: session.id!, actionKey: 'action.abandon-ordinary', targetKey: ORDINARY_INSTANCE_KEY,
       commandId: 'command.quest.abandon-ordinary', requestedAt: 1_100, confirmed: true,
+      expectedBaseSequence: confirmationBaseline.lastSequence,
     })
     expect(abandoned).toMatchObject({ status: 'succeeded', outcomeCommitted: true, evidenceEventSequences: [5, 6] })
     expect((await readProductRuntimeState(session.id!)).textOpenWorld?.state.quests.instancesByKey[ORDINARY_INSTANCE_KEY].status).toBe('abandoned')

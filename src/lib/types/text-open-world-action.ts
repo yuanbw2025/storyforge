@@ -66,6 +66,7 @@ export type TextOpenWorldActionUnavailableCodeV1 =
   | 'recipe-unavailable'
   | 'materials-insufficient'
   | 'route-closed'
+  | 'scene-unavailable'
 
 export interface TextOpenWorldActionUnavailableReasonV1 {
   code: TextOpenWorldActionUnavailableCodeV1

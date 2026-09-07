@@ -739,6 +739,247 @@ export function createTextOpenWorldVNextFixture(): TextOpenWorldRuntimePackageV1
   }
 }
 
+/**
+ * Upgrades the broad G2 fixture with the authored P9 narrative and Action v15
+ * bindings consumed by the player scene surface. The base fixture stays on the
+ * compatibility contract so older-reader regression tests retain their value.
+ */
+export function createTextOpenWorldVNextP9Fixture(): TextOpenWorldRuntimePackageV1 {
+  const runtimePackage = createTextOpenWorldVNextFixture()
+  const narrative = runtimePackage.modules.narrative.payload as any
+  const actions = runtimePackage.modules.actions.payload as any
+  const choices = [
+    {
+      key: 'choice.accept-main', sceneKey: 'scene.offer.main', label: '接下盐渠委托',
+      description: '答应岑阿婆，从盐港内渠开始追查断流。', actionKey: 'action.accept-main',
+    },
+    {
+      key: 'choice.inspect-channel', sceneKey: 'scene.objective.main.1', label: '俯身检查渠壁',
+      description: '检查盐渍、裂缝与水痕，寻找断流的第一条线索。', actionKey: 'action.investigate-channel',
+    },
+    {
+      key: 'choice.claim-main', sceneKey: 'scene.resolution.main', label: '收下守渠印',
+      description: '领取已经结算完成的主线阶段奖励。', actionKey: 'action.claim-main-reward',
+    },
+    {
+      key: 'choice.accept-supplies', sceneKey: 'scene.offer.supplies', label: '接下物资委托',
+      description: '接受本轮由地区Director发放的物资任务。', actionKey: 'action.accept-supplies',
+    },
+    {
+      key: 'choice.complete-supplies', sceneKey: 'scene.objective.supplies', label: '交付盐晶',
+      description: '提交本次物资任务的目标。', actionKey: 'action.complete-supplies-objective',
+    },
+    {
+      key: 'choice.claim-supplies', sceneKey: 'scene.resolution.supplies', label: '领取物资报酬',
+      description: '领取已经结算完成的普通任务奖励。', actionKey: 'action.claim-supplies-reward',
+    },
+    {
+      key: 'choice.talk-caretaker', sceneKey: 'scene.actor.caretaker', label: '询问昨夜的异响',
+      description: '请岑阿婆只讲她亲眼所见、亲耳所闻的情况。', actionKey: 'action.talk-caretaker',
+    },
+    {
+      key: 'choice.rest', sceneKey: 'scene.location.salt-port', label: '在守渠棚休整',
+      description: '在安全地点休息，恢复生命与技能资源。', actionKey: 'action.rest',
+    },
+  ]
+  narrative.version = 2
+  narrative.stages[0].sceneKeys = ['scene.offer.main', 'scene.objective.main.1']
+  narrative.scenes = [
+    {
+      key: 'scene.offer.main', order: 1, sourceKind: 'quest-offer', sourceKey: 'quest.main.1',
+      title: '干涸的内渠', purpose: '由守渠人提出主线委托。',
+      regionKey: 'region.salt-port', locationKey: 'location.salt-port', questKey: 'quest.main.1',
+      stageKey: null, objectiveKey: null, actorKey: 'actor.caretaker', interactionKey: null, randomEventKey: null,
+      participantKeys: ['actor.caretaker'],
+      openingText: '潮声仍在堤外起伏，广场中央的内渠却只剩一层发白的盐壳。',
+      bodyText: '岑阿婆把磨旧的渠图压在石栏上，请你先查清水为何没有抵达盐港。',
+      successText: '岑阿婆把守渠印交到你手中，指向渠壁上最新的一道水痕。',
+      failureText: '你暂时没有接下委托，岑阿婆仍守在渠图旁等候。', attitudeOpenings: null,
+      allowedKnowledgeClaimKeys: [], forbiddenFutureObjectiveKeys: [],
+      availabilityConditionKeys: [], actionKeys: ['action.accept-main'], fixedChoiceKeys: ['choice.accept-main'],
+    },
+    {
+      key: 'scene.objective.main.1', order: 2, sourceKind: 'quest-objective', sourceKey: 'objective.main.1',
+      title: '盐壳下的水痕', purpose: '让玩家执行当前主线目标。',
+      regionKey: 'region.salt-port', locationKey: 'location.salt-port', questKey: 'quest.main.1',
+      stageKey: 'quest-stage.main.1', objectiveKey: 'objective.main.1', actorKey: null,
+      interactionKey: null, randomEventKey: null, participantKeys: [],
+      openingText: '渠壁的盐壳在日光下泛白，几道颜色更深的水痕一路伸向北侧闸口。',
+      bodyText: '你可以从水痕、渠砖和残留泥沙入手，先确认断流发生在港内还是更远的上游。',
+      successText: '新旧水痕的差异暴露了断流的方向，调查可以继续推进。',
+      failureText: '眼前的痕迹还不足以支撑结论，你需要换一种已登记的调查方式。', attitudeOpenings: null,
+      allowedKnowledgeClaimKeys: [], forbiddenFutureObjectiveKeys: [],
+      availabilityConditionKeys: [], actionKeys: ['action.investigate-channel'], fixedChoiceKeys: ['choice.inspect-channel'],
+    },
+    {
+      key: 'scene.resolution.main', order: 3, sourceKind: 'quest-resolution', sourceKey: 'quest.main.1',
+      title: '盐渠阶段收束', purpose: '在正式任务完成后提供奖励收束。',
+      regionKey: 'region.salt-port', locationKey: 'location.salt-port', questKey: 'quest.main.1',
+      stageKey: 'quest-stage.main.1', objectiveKey: null, actorKey: 'actor.caretaker', interactionKey: null, randomEventKey: null,
+      participantKeys: ['actor.caretaker'], openingText: '岑阿婆把守渠印和报酬放在渠图旁。',
+      bodyText: '只有任务正式进入完成状态后，这段收束才会向玩家显示。',
+      successText: '本阶段的奖励已经写入正式状态。', failureText: null, attitudeOpenings: null,
+      allowedKnowledgeClaimKeys: [], forbiddenFutureObjectiveKeys: [], availabilityConditionKeys: [],
+      actionKeys: ['action.claim-main-reward'], fixedChoiceKeys: ['choice.claim-main'],
+    },
+    {
+      key: 'scene.offer.supplies', order: 4, sourceKind: 'quest-offer', sourceKey: 'quest.template.supplies',
+      title: '临时物资请求', purpose: '承接地区Director实际发出的普通任务。',
+      regionKey: 'region.salt-port', locationKey: 'location.salt-port', questKey: 'quest.template.supplies',
+      stageKey: null, objectiveKey: null, actorKey: 'actor.caretaker', interactionKey: null, randomEventKey: null,
+      participantKeys: ['actor.caretaker'], openingText: '守渠棚外贴出了一张临时物资清单。',
+      bodyText: '只有本轮任务实例已经由地区Director揭示时，玩家才能接下它。',
+      successText: '物资请求已经加入任务列表。', failureText: null, attitudeOpenings: null,
+      allowedKnowledgeClaimKeys: [], forbiddenFutureObjectiveKeys: [], availabilityConditionKeys: [],
+      actionKeys: ['action.accept-supplies'], fixedChoiceKeys: ['choice.accept-supplies'],
+    },
+    {
+      key: 'scene.objective.supplies', order: 5, sourceKind: 'quest-objective', sourceKey: 'objective.template.supplies',
+      title: '交付短缺物资', purpose: '推进当前有效的普通任务目标。',
+      regionKey: 'region.salt-port', locationKey: 'location.salt-port', questKey: 'quest.template.supplies',
+      stageKey: 'quest-stage.template.supplies', objectiveKey: 'objective.template.supplies', actorKey: null,
+      interactionKey: null, randomEventKey: null, participantKeys: [],
+      openingText: '物资清单仍压在守渠棚的木桌上。', bodyText: '交付只会作用于当前这一轮普通任务实例。',
+      successText: '物资目标已经提交给确定性任务状态机。', failureText: null, attitudeOpenings: null,
+      allowedKnowledgeClaimKeys: [], forbiddenFutureObjectiveKeys: [], availabilityConditionKeys: [],
+      actionKeys: ['action.complete-supplies-objective'], fixedChoiceKeys: ['choice.complete-supplies'],
+    },
+    {
+      key: 'scene.resolution.supplies', order: 6, sourceKind: 'quest-resolution', sourceKey: 'quest.template.supplies',
+      title: '物资请求收束', purpose: '在普通任务完成后领取报酬。',
+      regionKey: 'region.salt-port', locationKey: 'location.salt-port', questKey: 'quest.template.supplies',
+      stageKey: 'quest-stage.template.supplies', objectiveKey: null, actorKey: 'actor.caretaker',
+      interactionKey: null, randomEventKey: null, participantKeys: ['actor.caretaker'],
+      openingText: '清单上的缺口已经补齐，约定的报酬也准备好了。', bodyText: '领取报酬会走正式奖励合同。',
+      successText: '本次物资任务已经完整收束。', failureText: null, attitudeOpenings: null,
+      allowedKnowledgeClaimKeys: [], forbiddenFutureObjectiveKeys: [], availabilityConditionKeys: [],
+      actionKeys: ['action.claim-supplies-reward'], fixedChoiceKeys: ['choice.claim-supplies'],
+    },
+    {
+      key: 'scene.actor.caretaker', order: 7, sourceKind: 'actor-dialogue', sourceKey: 'actor.caretaker',
+      title: '守渠人的话', purpose: '提供符合角色态度与知识边界的常驻对话。',
+      regionKey: 'region.salt-port', locationKey: 'location.salt-port', questKey: null, stageKey: null,
+      objectiveKey: null, actorKey: 'actor.caretaker', interactionKey: null, randomEventKey: null,
+      participantKeys: ['actor.caretaker'], openingText: '岑阿婆停下手里的活，抬眼看向你。',
+      bodyText: '她只谈盐港已经发生的异响、渠水和守渠事务，不替未知的上游真相下结论。',
+      successText: '谈话在可验证的线索范围内继续。', failureText: '岑阿婆避开了她并不知道的事。',
+      attitudeOpenings: {
+        bad: '岑阿婆把渠图收近了些，只冷淡地问你还有什么正事。',
+        neutral: '岑阿婆礼貌地点头，等你说明来意。',
+        good: '岑阿婆给你让出石栏边的位置，愿意把记得的细节再讲一遍。',
+      },
+      allowedKnowledgeClaimKeys: [], forbiddenFutureObjectiveKeys: [],
+      availabilityConditionKeys: [], actionKeys: ['action.talk-caretaker'], fixedChoiceKeys: ['choice.talk-caretaker'],
+    },
+    {
+      key: 'scene.location.salt-port', order: 8, sourceKind: 'location-interaction',
+      sourceKey: 'interaction.salt-port.rest', title: '守渠棚', purpose: '提供地点上的确定性休整交互。',
+      regionKey: 'region.salt-port', locationKey: 'location.salt-port', questKey: null, stageKey: null,
+      objectiveKey: null, actorKey: null, interactionKey: 'interaction.salt-port.rest', randomEventKey: null,
+      participantKeys: [], openingText: '守渠棚里铺着干燥的草席，门外能听见广场上的脚步声。',
+      bodyText: '这里是已经确认的安全地点，可以短暂休整，但时间仍会照常推进。',
+      successText: '你收拾好行装，重新回到盐港广场。', failureText: null, attitudeOpenings: null,
+      allowedKnowledgeClaimKeys: [], forbiddenFutureObjectiveKeys: [], availabilityConditionKeys: [],
+      actionKeys: ['action.rest'], fixedChoiceKeys: ['choice.rest'],
+    },
+    {
+      key: 'scene.random.channel-rumor', order: 9, sourceKind: 'random-event', sourceKey: 'event.channel-rumor',
+      title: '渠边传闻', purpose: '只在Director提供正式发生证据时呈现随机事件。',
+      regionKey: 'region.salt-port', locationKey: 'location.salt-port', questKey: null, stageKey: null,
+      objectiveKey: null, actorKey: null, interactionKey: null, randomEventKey: 'event.channel-rumor',
+      participantKeys: [], openingText: '有人压低声音谈起北侧闸口的怪响。',
+      bodyText: '这条传闻只有在地区Director正式发出后才属于当前场景。',
+      successText: '传闻已经作为不确定信息进入玩家所知范围。', failureText: null, attitudeOpenings: null,
+      allowedKnowledgeClaimKeys: [], forbiddenFutureObjectiveKeys: [], availabilityConditionKeys: [],
+      actionKeys: [], fixedChoiceKeys: [],
+    },
+  ]
+  narrative.fixedChoices = choices
+  narrative.randomEventPresentations = [{
+    key: 'presentation.event.channel-rumor', order: 1, randomEventKey: 'event.channel-rumor',
+    openingText: '渠边有人说昨夜北闸传来石块拖动的声音。',
+    resolutionText: '传闻没有被当成事实，只作为可调查方向保留。',
+    rumorKey: 'rumor.channel', rumorRequirementKey: 'requirement.rumor.channel',
+    rumorText: '北闸昨夜可能有异常动静。', reliability: 'uncertain', sourceClaimKeys: ['source.claim.channel'],
+  }]
+  runtimePackage.modules.narrative.schemaVersion = 2
+
+  const combatCategories = new Set([
+    'start-combat', 'continue-combat', 'combat-state-action', 'combat-reward-action',
+    'combat-basic-attack', 'combat-skill', 'combat-item', 'combat-enemy-skill', 'escape',
+  ])
+  const naturalExamples: Record<string, [string, string]> = {
+    'action.accept-main': ['我接受这个任务', '接受盐渠委托'],
+    'action.investigate-channel': ['检查一下盐渠', '看看盐渠的痕迹'],
+    'action.talk-caretaker': ['和岑阿婆聊聊', '询问岑阿婆'],
+    'action.rest': ['我想休息', '在盐港休息'],
+  }
+  actions.version = 15
+  actions.inputBindings = {
+    sourceActionBindingsHash: 'c'.repeat(64),
+    actions: actions.actions.map((action: any, index: number) => {
+      const actionDefinitionHash = (index + 1).toString(16).padStart(64, '0')
+      const mode = action.actorScope === 'system'
+        ? 'disabled-system-only'
+        : combatCategories.has(action.category)
+          ? 'disabled-combat-button-only'
+          : 'existing-action-candidate'
+      return {
+        key: `binding.${action.key}`, order: index + 1, actionKey: action.key, actionDefinitionHash,
+        actorScope: action.actorScope, category: action.category, targetScope: action.targetScope,
+        systemAction: {
+          enabled: action.actorScope === 'player', label: action.label,
+          description: action.description, executionSource: 'system-action',
+        },
+        fixedChoiceKeys: choices.filter(choice => choice.actionKey === action.key).map(choice => choice.key),
+        naturalLanguage: {
+          mode,
+          exampleUtterances: mode === 'existing-action-candidate'
+            ? naturalExamples[action.key] ?? [`请执行 ${action.key}`, `我要进行 ${action.key}`]
+            : [],
+          candidateMayOnlySelectThisAction: true,
+          targetResolution: 'current-projection-valid-targets-only',
+          highConfidenceLowRisk: 'execute-after-runtime-validation',
+          highRiskOrIrreversible: 'require-explicit-confirmation',
+          lowConfidence: 'respond-and-recommend-formal-actions',
+          mayCreateAction: false, mayCreateQuest: false, mayCreateMapContent: false, mayWriteState: false,
+        },
+        resultAuthority: {
+          artifactKey: 'text-open-world.quest-design-documents', collection: 'actions',
+          actionKey: action.key, actionDefinitionHash,
+        },
+      }
+    }),
+    unmatchedNaturalLanguage: {
+      policy: 'natural-response-then-formal-action-redirect',
+      impossibleActionPolicy: 'explicit-decline-with-in-world-alternative',
+      customSolutionPolicy: 'future-extension-disabled', stateMutationAllowed: false,
+    },
+    thresholds: { directExecutionMinimumConfidence: 0.9, recommendationMinimumConfidence: 0.55 },
+    governance: {
+      singleResultSource: true, allThreeInputsUseActionRegistry: true, modelCannotCreateActionOrResult: true,
+      combatFreeTextDisabled: true, lowConfidenceNeverExecutes: true,
+      irreversibleActionsRequireConfirmation: true, runtimeProjectionValidationRequired: true,
+    },
+  }
+  runtimePackage.modules.actions.schemaVersion = 15
+  return runtimePackage
+}
+
+/** Mirrors production P9, where the general rest Action has no authored Scene row. */
+export function createTextOpenWorldVNextP9UnboundRestFixture(): TextOpenWorldRuntimePackageV1 {
+  const runtimePackage = createTextOpenWorldVNextP9Fixture()
+  const narrative = runtimePackage.modules.narrative.payload as any
+  const actions = runtimePackage.modules.actions.payload as any
+  narrative.scenes = narrative.scenes.filter((scene: any) => scene.key !== 'scene.location.salt-port')
+  narrative.fixedChoices = narrative.fixedChoices.filter((choice: any) => choice.key !== 'choice.rest')
+  const restBinding = actions.inputBindings.actions
+    .find((binding: any) => binding.actionKey === 'action.rest')
+  restBinding.fixedChoiceKeys = restBinding.fixedChoiceKeys
+    .filter((choiceKey: string) => choiceKey !== 'choice.rest')
+  return runtimePackage
+}
+
 /** Removes Director v2 and its Action v14 settlement binding. */
 export function downgradeTextOpenWorldFixtureDirectorV1(
   runtimePackage: TextOpenWorldRuntimePackageV1,

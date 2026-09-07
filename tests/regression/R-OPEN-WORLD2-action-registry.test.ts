@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import { createTextOpenWorldActionRegistryV1 } from '../../src/lib/open-world/action-registry'
+import {
+  createInitialTextOpenWorldSessionProjectionV1,
+  deriveTextOpenWorldContextsV1,
+} from '../../src/lib/open-world/session-projection'
 import type { TextOpenWorldActionProjectionContextV1 } from '../../src/lib/types'
-import { createTextOpenWorldVNextFixture } from '../helpers/text-open-world-vnext-fixture'
+import {
+  createTextOpenWorldVNextFixture,
+  createTextOpenWorldVNextP9Fixture,
+} from '../helpers/text-open-world-vnext-fixture'
 
 function context(overrides: Partial<TextOpenWorldActionProjectionContextV1> = {}): TextOpenWorldActionProjectionContextV1 {
   return {
@@ -135,6 +142,150 @@ describe('Text Open World vNext · unified Action registry and availability proj
       validTargetKeysByScope: { location: ['location.salt-port', 'location.ridge-channel'] }, openEdgeKeys: [],
     })).find(item => item.action.key === 'action.travel-port-ridge'))
       .toMatchObject({ available: false, validTargetKeys: [], unavailableReasons: expect.arrayContaining([expect.objectContaining({ code: 'route-closed' })]) })
+  })
+
+  it('P9交谈与开战Action按冻结场景或Effect收窄唯一目标', () => {
+    const registry = createTextOpenWorldActionRegistryV1(createTextOpenWorldVNextP9Fixture())
+    const actorProjection = registry.project(context({
+      validTargetKeysByScope: { actor: ['actor.caretaker', 'actor.other-present'] },
+    }))
+    expect(actorProjection.find(item => item.action.key === 'action.talk-caretaker'))
+      .toMatchObject({ available: true, validTargetKeys: ['actor.caretaker'] })
+
+    const encounterProjection = registry.project(context({
+      currentLocationKey: 'location.ridge-channel',
+      validTargetKeysByScope: { encounter: ['encounter.ridge-jackal', 'encounter.other-present'] },
+    }))
+    expect(encounterProjection.find(item => item.action.key === 'action.start-ridge-jackal'))
+      .toMatchObject({ available: true, validTargetKeys: ['encounter.ridge-jackal'] })
+  })
+
+  it('P9场景失效时只关闭场景专属任务Action，不锁死被Objective引用的通用Action', () => {
+    const runtimePackage = createTextOpenWorldVNextP9Fixture()
+    const narrative = runtimePackage.modules.narrative.payload as any
+    const actions = runtimePackage.modules.actions.payload as any
+    const objectiveScene = narrative.scenes
+      .find((scene: any) => scene.sourceKind === 'quest-objective')
+    const useChoice = {
+      key: 'choice.use-tonic-as-support', sceneKey: objectiveScene.key,
+      label: '使用盐露药剂', description: '先处理伤势，再继续任务。',
+      actionKey: 'action.use-brine-tonic',
+    }
+    objectiveScene.actionKeys.push(useChoice.actionKey)
+    objectiveScene.fixedChoiceKeys.push(useChoice.key)
+    narrative.fixedChoices.push(useChoice)
+    actions.inputBindings.actions
+      .find((binding: any) => binding.actionKey === useChoice.actionKey)
+      .fixedChoiceKeys.push(useChoice.key)
+    const projection = createInitialTextOpenWorldSessionProjectionV1(runtimePackage)
+    projection.state.player.health -= 1
+    projection.state.inventory.stackQuantities['item.brine-tonic'] = 1
+    Object.assign(projection.state.actors['actor.caretaker'], { alive: false, present: false })
+    const actionContext = deriveTextOpenWorldContextsV1(projection).action
+    const availability = createTextOpenWorldActionRegistryV1(runtimePackage).project(actionContext)
+    const accept = availability.find(action => action.action.key === 'action.accept-main')
+    const useTonic = availability.find(action => action.action.key === 'action.use-brine-tonic')
+
+    expect(accept).toMatchObject({
+      available: false,
+      unavailableReasons: expect.arrayContaining([
+        expect.objectContaining({ code: 'scene-unavailable' }),
+      ]),
+    })
+    expect(useTonic).toMatchObject({
+      available: true,
+      unavailableReasons: [],
+      validTargetKeys: ['item.brine-tonic'],
+    })
+    expect(() => createTextOpenWorldActionRegistryV1(runtimePackage).resolve({
+      actionKey: 'action.accept-main',
+      targetKey: actionContext.validTargetKeysByScope.quest?.[0] ?? null,
+      context: actionContext,
+    })).toThrow('Action不可用:scene-unavailable')
+  })
+
+  it('P9未落目录的Quest目标Action只作用于当前合法Objective所属实例', () => {
+    const runtimePackage = createTextOpenWorldVNextP9Fixture()
+    const narrative = runtimePackage.modules.narrative.payload as any
+    const actions = runtimePackage.modules.actions.payload as any
+    const fallbackAction = {
+      key: 'action.requirement.inspect-ledger', category: 'observe', label: '核对盐运账册',
+      description: '执行尚未落入专用目录的任务需求。', actorScope: 'player', targetScope: 'quest',
+      locationKeys: [], requirementConditionKeys: [], costEffectKeys: [], successEffectKeys: [],
+      failureEffectKeys: [], timeCostMinutes: 0, confirmationPolicy: 'never',
+      repeatPolicy: 'repeatable', cooldownMinutes: null,
+    }
+    actions.actions.push(fallbackAction)
+    const fallbackChoice = {
+      key: 'choice.requirement.inspect-ledger', sceneKey: 'scene.objective.main.1',
+      label: fallbackAction.label, description: fallbackAction.description,
+      actionKey: fallbackAction.key,
+    }
+    const objectiveScene = narrative.scenes
+      .find((scene: any) => scene.key === fallbackChoice.sceneKey)
+    objectiveScene.actionKeys.push(fallbackAction.key)
+    objectiveScene.fixedChoiceKeys.push(fallbackChoice.key)
+    narrative.fixedChoices.push(fallbackChoice)
+    actions.inputBindings.actions.push({
+      key: 'binding.action.requirement.inspect-ledger',
+      order: actions.inputBindings.actions.length + 1,
+      actionKey: fallbackAction.key,
+      actionDefinitionHash: 'f'.repeat(64),
+      actorScope: fallbackAction.actorScope,
+      category: fallbackAction.category,
+      targetScope: fallbackAction.targetScope,
+      systemAction: {
+        enabled: true,
+        label: fallbackAction.label,
+        description: fallbackAction.description,
+        executionSource: 'system-action',
+      },
+      fixedChoiceKeys: [fallbackChoice.key],
+      naturalLanguage: {
+        mode: 'existing-action-candidate',
+        exampleUtterances: ['核对盐运账册', '查看这份盐运记录'],
+        candidateMayOnlySelectThisAction: true,
+        targetResolution: 'current-projection-valid-targets-only',
+        highConfidenceLowRisk: 'execute-after-runtime-validation',
+        highRiskOrIrreversible: 'require-explicit-confirmation',
+        lowConfidence: 'respond-and-recommend-formal-actions',
+        mayCreateAction: false,
+        mayCreateQuest: false,
+        mayCreateMapContent: false,
+        mayWriteState: false,
+      },
+      resultAuthority: {
+        artifactKey: 'text-open-world.quest-design-documents',
+        collection: 'actions',
+        actionKey: fallbackAction.key,
+        actionDefinitionHash: 'f'.repeat(64),
+      },
+    })
+
+    const session = createInitialTextOpenWorldSessionProjectionV1(runtimePackage)
+    const main = Object.values(session.state.quests.instancesByKey)
+      .find(instance => instance.definitionKey === 'quest.main.1')!
+    main.status = 'active'
+    main.acceptedAtWorldMinute = session.state.time.worldMinute
+    main.currentStageKey = 'quest-stage.main.1'
+    main.objectiveStatusByKey['objective.main.1'] = 'active'
+    const actionContext = deriveTextOpenWorldContextsV1(session).action
+    const sameDefinitionRevealedInstanceKey = 'quest-instance.same-definition-revealed'
+    actionContext.validTargetKeysByScope.quest = [main.instanceKey, sameDefinitionRevealedInstanceKey]
+    actionContext.questDefinitionKeyByInstanceKey[sameDefinitionRevealedInstanceKey] = 'quest.main.1'
+    actionContext.questStatusByInstanceKey[sameDefinitionRevealedInstanceKey] = 'revealed'
+    actionContext.questStageKeyByInstanceKey[sameDefinitionRevealedInstanceKey] = null
+    actionContext.questObjectiveStatusByInstanceKey[sameDefinitionRevealedInstanceKey] = {
+      'objective.main.1': 'inactive',
+    }
+    actionContext.questRewardClaimKeyByInstanceKey[sameDefinitionRevealedInstanceKey] = null
+    actionContext.questDeadlineWorldMinuteByInstanceKey[sameDefinitionRevealedInstanceKey] = null
+
+    expect(createTextOpenWorldActionRegistryV1(runtimePackage).project(actionContext)
+      .find(action => action.action.key === fallbackAction.key)).toMatchObject({
+      available: true,
+      validTargetKeys: [main.instanceKey],
+    })
   })
 
   it('任务Action同时按定义、状态和当前Stage收窄到合法实例', () => {
