@@ -17,6 +17,9 @@ import {
   evaluateTtrpgGmCandidateOutputV1,
   generateTtrpgGmNarrationCandidateV1,
 } from '../../src/lib/ttrpg/gm-harness'
+import { projectTtrpgNpcDecisionViewV1 } from '../../src/lib/ttrpg/npc-context'
+import { projectTtrpgPublicNarrationViewV1 } from '../../src/lib/ttrpg/narrator-context'
+import { evaluateTtrpgGmActorCandidateOutputV1 } from '../../src/lib/ttrpg/gm-actor-harness'
 import { loadTtrpgGmRuntimeViewV1 } from '../../src/lib/ttrpg/gm-context'
 import {
   configureTtrpgSessionParticipantV2,
@@ -190,17 +193,35 @@ describe('R-HARNESS-RUNTIME3 · current Product Build TTRPG Skills', () => {
       offeredClueKeys: [],
       recommendedNextSceneKeys: [],
     }), view)).toMatchObject({ accepted: false })
+    const knownOutput = JSON.stringify({ narration: '已公开的调查记录仍在桌上。', synthesisFrame: createDeterministicGmSynthesisFrameV2(receipt), offeredClueKeys: ['clue.already-known'], recommendedNextSceneKeys: [] })
+    const escapedTail = JSON.stringify(knownOutput.slice(knownOutput.indexOf('"synthesisFrame"'))).slice(1, -1)
+    const overescaped = knownOutput.slice(0, knownOutput.indexOf('"synthesisFrame"')) + escapedTail
+    const escapedView = { ...view, suggestibleClues: [], discoveredClues: [{ clueKey: 'clue.already-known', title: '记录', description: '公开记录', visibility: 'party' as const, actorKey: view.latestAction!.actorKey, eventSequence: 1 }] }
+    expect(evaluateTtrpgGmCandidateOutputV1('```json\n' + overescaped + '\n```', escapedView))
+      .toMatchObject({ accepted: true, draft: { offeredClueKeys: [] } })
+    expect(evaluateTtrpgGmCandidateOutputV1(overescaped.slice(0, -4), escapedView))
+      .toMatchObject({ accepted: false })
+    const knownClue = { clueKey: 'clue.already-known', title: '公开记录', description: '已公开的调查记录', visibility: 'party' as const, actorKey: view.latestAction!.actorKey, eventSequence: 1 }
+    expect(evaluateTtrpgGmCandidateOutputV1(knownOutput, { ...view, suggestibleClues: [], discoveredClues: [knownClue] }))
+      .toMatchObject({ accepted: true, draft: { offeredClueKeys: [] } })
+    expect(evaluateTtrpgGmCandidateOutputV1(knownOutput, { ...view, suggestibleClues: [], discoveredClues: [{ ...knownClue, visibility: 'private' }] }))
+      .toMatchObject({ accepted: false })
+    expect(evaluateTtrpgGmCandidateOutputV1(knownOutput, { ...view, suggestibleClues: [], discoveredClues: [] }))
+      .toMatchObject({ accepted: false })
+    let narrationCalls = 0
     const generated = await generateTtrpgGmNarrationCandidateV1({
       scope: fixture.scope,
       productRuntimeSessionId: fixture.session.id,
       objective: '只叙述刚才已经结算的调查结果',
-      runAI: async () => JSON.stringify({
+      runAI: async () => { narrationCalls++; return JSON.stringify({
         narration: '潮声之中，已经完成的检查留下了可供下一步判断的明确痕迹。',
-        synthesisFrame: createDeterministicGmSynthesisFrameV2(receipt),
+        synthesisFrame: { ...createDeterministicGmSynthesisFrameV2(receipt), actionSequence: narrationCalls === 1 ? -1 : createDeterministicGmSynthesisFrameV2(receipt).actionSequence },
         offeredClueKeys: [],
         recommendedNextSceneKeys: [],
-      }),
+      }) },
     })
+    expect(narrationCalls).toBe(2)
+    expect(generated.candidate.repairEvidence).toBeDefined()
     const adopted = await adoptTtrpgGmNarrationCandidateV1({
       scope: fixture.scope,
       runId: generated.candidate.runId,
@@ -235,18 +256,21 @@ describe('R-HARNESS-RUNTIME3 · current Product Build TTRPG Skills', () => {
       actors: view.projection.actors,
       actorRole: 'player',
     })
+    let modelCalls = 0
     const generated = await generateTtrpgPlayerActionCandidateV1({
       scope: fixture.scope,
       productRuntimeSessionId: fixture.session.id,
       actorKey: player.actorKey,
       objective: '依据角色目标选择一个合法调查行动',
-      runAI: async () => JSON.stringify({
+      runAI: async () => { modelCalls++; return JSON.stringify({
         actionKey: action.actionKey,
-        targetKey,
+        targetKey: modelCalls === 1 ? 'current-scene-is-not-an-actor' : targetKey,
         approach: '沿着当前可见痕迹逐项核对，寻找彼此矛盾的细节。',
         spokenIntent: null,
-      }),
+      }) },
     })
+    expect(modelCalls).toBe(2)
+    expect(generated.candidate.repairEvidence).toBeDefined()
     const adopted = await adoptTtrpgPlayerActionCandidateV1({
       scope: fixture.scope,
       runId: generated.candidate.runId,
@@ -278,21 +302,47 @@ describe('R-HARNESS-RUNTIME3 · current Product Build TTRPG Skills', () => {
       actors: turn.visibleTargets,
       actorRole: 'npc',
     })
+    const secretView = structuredClone(view)
+    secretView.scene!.gmSecret = '地下铁柜里藏着失踪守灯人的真实航海日志。'
+    const npc = secretView.participants.find(actor => actor.entityKey === turn.actorKey)!
+    npc.privateProfile!.secret = '十年前的沉船事故其实由我亲手伪造了灯号。'
+    const other = secretView.participants.find(actor => actor.entityKey !== turn.actorKey)!
+    other.privateProfile = { kind: 'player', secret: '我受雇于内港议会并携带烧毁码头的秘密命令。', portrayal: '谨慎' }
+    secretView.forbiddenSecretPhrases = [secretView.scene!.gmSecret]
+    const npcProjection = JSON.stringify(projectTtrpgNpcDecisionViewV1(secretView))
+    expect(npcProjection).toContain(npc.privateProfile!.secret)
+    expect(npcProjection).not.toContain(secretView.scene!.gmSecret)
+    expect(npcProjection).not.toContain(other.privateProfile.secret)
+    expect(npcProjection).not.toContain('forbiddenSecretPhrases')
+    for (const secret of [npc.privateProfile!.secret, other.privateProfile.secret, secretView.scene!.gmSecret]) {
+      const leaked = evaluateTtrpgGmActorCandidateOutputV1(JSON.stringify({
+        actionKey: action.actionKey, targetKey, approach: '检查附近的痕迹。',
+        spokenIntent: secret.split('').join(' · '),
+      }), secretView)
+      expect(leaked.accepted).toBe(false)
+    }
     const generated = await generateTtrpgGmActorActionCandidateV1({
       scope: fixture.scope,
       productRuntimeSessionId: fixture.session.id,
       objective: '依据 NPC 已知目标合理推进当前回合',
-      runAI: async () => JSON.stringify({
-        actionKey: action.actionKey,
-        targetKey,
-        approach: '依据当前掌握的现场事实检查痕迹，并对调查者的推进形成回应。',
-        spokenIntent: null,
-      }),
+      runAI: async messages => {
+        const prompt = messages.map(message => message.content).join('\n')
+        expect(prompt).toContain('storyforge.ttrpg-npc-decision-view')
+        expect(prompt).not.toContain('forbiddenSecretPhrases')
+        expect(prompt).not.toContain('gmSecret')
+        return JSON.stringify({ actionKey: action.actionKey, targetKey,
+          approach: '依据当前掌握的现场事实检查痕迹，并对调查者的推进形成回应。', spokenIntent: null })
+      },
     })
     const adopted = await adoptTtrpgGmActorActionCandidateV1({
       scope: fixture.scope,
       runId: generated.candidate.runId,
     })
+    secretView.latestAction = (await loadTtrpgGmRuntimeViewV1({ scope: fixture.scope, productRuntimeSessionId: fixture.session.id })).latestAction
+    const publicProjection = JSON.stringify(projectTtrpgPublicNarrationViewV1(secretView))
+    expect(publicProjection).not.toContain(npc.privateProfile!.secret)
+    expect(publicProjection).not.toContain(other.privateProfile.secret)
+    expect(publicProjection).not.toContain(secretView.scene!.gmSecret)
     expect(adopted.snapshot.projection.state).toBe('completed')
     expect((await readProductRuntimeState(fixture.session.id)).ttrpg!.product!.actionHistory.at(-1)!.actorAuthority)
       .toMatchObject({ source: 'ai-gm-npc', candidateHash: generated.candidate.candidateHash })

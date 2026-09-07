@@ -188,6 +188,9 @@ export function downloadTextFile(content: string, filename: string, mimeType: st
   const a = document.createElement('a')
   a.href = url
   a.download = filename
+  document.body.appendChild(a)
   a.click()
-  URL.revokeObjectURL(url)
+  a.remove()
+  // Embedded browsers may begin reading the URL after click has returned.
+  setTimeout(() => URL.revokeObjectURL(url), 1_000)
 }

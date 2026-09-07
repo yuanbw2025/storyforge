@@ -11,3 +11,5 @@
 
 实现状态统一看 [`../roadmap/CAPABILITY-BASELINE.md`](../roadmap/CAPABILITY-BASELINE.md)，下一步看
 [`../roadmap/README.md`](../roadmap/README.md)。
+
+跑团专项契约：[AI KP 跑团](TTRPG-AI-KP.md)。

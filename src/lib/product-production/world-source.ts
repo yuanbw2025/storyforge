@@ -195,9 +195,13 @@ export async function loadProductProductionConsultationSourceV2(input: {
     const descriptor = codexDescriptors.get(key)
     return descriptor ? [descriptorOption(descriptor, 'artifact')] : []
   })
-  const loreEntries = byKind('codex-entry')
-    .filter(resource => !artifactKeys.has(resource.resourceKey))
-    .map(resource => descriptorOption(resource, 'lore'))
+  // Foundation-only worlds are valid sources too. Offer their immutable
+  // semantic descriptors in the existing lore facet, never read live drafts.
+  const loreEntries = descriptors.filter(resource => (
+    resource.worldSemantic!.area === 'foundation'
+    || (resource.worldSemantic!.resourceKind === 'codex-entry'
+      && !artifactKeys.has(resource.resourceKey))
+  )).map(resource => descriptorOption(resource, 'lore'))
   const relationships = byKind('character-relation').flatMap(resource => {
     const fromCharacterResourceKey = resource.relations.find(relation => (
       relation.kind === 'depends-on' && relation.direction === 'outgoing'
@@ -293,8 +297,11 @@ export async function loadProductProductionWorldSourceCatalogV2(input: {
     return (typeof category === 'number' || typeof category === 'string')
       && categoryKinds.get(String(category)) === 'artifact'
   }).map(item)
-  const loreEntries = codex.filter(resource => !artifacts.some(artifact => artifact.resourceKey === resource.descriptor.resourceKey))
-    .map(item)
+  const loreEntries = resources.filter(resource => (
+    resource.descriptor.worldSemantic.area === 'foundation'
+    || (resource.descriptor.worldSemantic.resourceKind === 'codex-entry'
+      && !artifacts.some(artifact => artifact.resourceKey === resource.descriptor.resourceKey))
+  )).map(item)
   const relationships = kind(resources, 'character-relation').flatMap(resource => {
     const from = resource.value._fromCharacterIndex
     const to = resource.value._toCharacterIndex

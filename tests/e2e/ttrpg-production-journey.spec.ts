@@ -42,56 +42,16 @@ async function configureMockedTextProvider(page: Page) {
         }
       : system.includes("StoryForge 可信 AI GM 的候选叙事生成器")
         ? (() => {
-            const marker = "【冻结主持上下文】\n";
+            const marker = "【已授权公开叙述素材】\n";
             const contextMessage = body.messages?.find(
               (message) => message.role === "user" && message.content?.includes(marker),
             )?.content;
             if (!contextMessage) throw new Error("AI GM 测试请求缺少冻结主持上下文");
-            const view = JSON.parse(contextMessage.slice(contextMessage.indexOf(marker) + marker.length)) as {
-              latestAction?: {
-                receipt?: {
-                  actionSequence: number;
-                  mechanicalSummary: string;
-                  actorConsequence: string;
-                  sceneConsequence: string;
-                  worldConsequence: string;
-                  context: {
-                    actorKey: string;
-                    observers: Array<{
-                      actorKey: string;
-                      relevance: "primary" | "relevant" | "ambient";
-                      responsePolicy: "actor-owned" | "prompt-human" | "ai-eligible" | "gm-eligible" | "observe-only";
-                    }>;
-                  };
-                };
-              };
-            };
-            const receipt = view.latestAction?.receipt;
-            if (!receipt) throw new Error("AI GM 测试上下文缺少行动回执");
+            const view = JSON.parse(contextMessage.slice(contextMessage.indexOf('{"schema":"storyforge.ttrpg-public-narration-view"'))) as { synthesisTemplate: unknown };
+            if (!view.synthesisTemplate) throw new Error("公开叙事缺少确定性反馈模板");
             return {
-              narration:
-                "规则结果已经呈现；现场人物依据各自所知作出反应，后续选择仍交给玩家决定。",
-              synthesisFrame: {
-                schema: "storyforge.ttrpg-gm-synthesis-frame",
-                version: 2,
-                actionSequence: receipt.actionSequence,
-                mechanicalOutcome: receipt.mechanicalSummary,
-                actorFeedback: receipt.actorConsequence,
-                reactions: receipt.context.observers
-                  .filter(observer => observer.actorKey !== receipt.context.actorKey && observer.relevance !== "ambient")
-                  .map(observer => ({
-                    actorKey: observer.actorKey,
-                    responsePolicy: observer.responsePolicy,
-                    text: observer.responsePolicy === "ai-eligible" || observer.responsePolicy === "gm-eligible"
-                      ? "该角色依据当前已知信息回应规则结果。"
-                      : null,
-                  })),
-                sceneUpdate: receipt.sceneConsequence,
-                worldUpdate: receipt.worldConsequence,
-                nextPrompts: [],
-              },
-              offeredClueKeys: [],
-              recommendedNextSceneKeys: [],
+              narration: "现场人物依据刚才可见的结果作出反应，后续选择仍交给玩家决定。",
+              synthesisFrame: view.synthesisTemplate, offeredClueKeys: [], recommendedNextSceneKeys: [],
             };
           })()
         : system.includes("StoryForge 的隔离 AI 玩家行动提议器")

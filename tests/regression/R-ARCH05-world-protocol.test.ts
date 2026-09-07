@@ -35,7 +35,6 @@ async function fixture() {
   const now = Date.now()
   await db.worldviews.add(stampNewRecord(created.scope, 'worldviews', {
     projectId: created.scope.projectId,
-    summary: '潮汐世界由月相法则维持。',
     worldOrigin: '双月牵引海陆。',
     races: '潮民',
     createdAt: now, updatedAt: now,
@@ -83,6 +82,7 @@ describe('ARCH-05 · 中立 WorldRelease Gateway 与产品需求适配器', () =
     const owned = await fixture()
     const description = await describeWorldReleaseV1(owned.resourceScope)
     const descriptors = await listAllWorldReleaseResourceDescriptorsV1(owned.resourceScope)
+    expect(descriptors.find(item => item.worldSemantic?.resourceKind === 'worldview')?.shortSummary).toContain('双月牵引海陆')
     expect(description.worldReference.referenceHash).toBe(owned.reference.referenceHash)
     expect(JSON.stringify(description)).not.toContain('selectedTables')
     expect(JSON.stringify(description)).not.toContain('"table"')

@@ -1,0 +1,18 @@
+{
+  "schema": "storyforge.community-ttrpg-catalog",
+  "version": 1,
+  "games": [
+    {
+      "key": "fog-harbor",
+      "title": "雾港：最后一盏灯",
+      "tagline": "今夜的归航，十年前的真相。",
+      "description": "十一点，最后一盏潮灯将熄灭。与两名 AI 同伴调查海难旧案，保护各自的秘密，为今夜归航的人选择一条出路。原创合作调查，StoryForge 叙事 2d6，三种有代价的结局。",
+      "coverPath": "games/fog-harbor/cover.png",
+      "bundlePath": "games/fog-harbor/game.json",
+      "bundleHash": "4883a8582e929937fa437055a96a7251067bcb16fcddb3d8bc07df134477d308",
+      "minutes": 90,
+      "playerCount": "1 人 + 2 名 AI / 同机 2–3 人",
+      "version": "1.0.0-preview.1"
+    }
+  ]
+}

@@ -8,6 +8,10 @@ import { executeProductProductionCommand } from '../../src/lib/product-productio
 import { parseProductProductionBriefV3 } from '../../src/lib/product-production/contracts'
 import { loadProductProductionWorldSourceCatalogV2 } from '../../src/lib/product-production/world-source'
 import { seedCurrentProductWorld } from '../helpers/current-product-world'
+import { createWorkspace } from '../../src/lib/workspace/create-workspace'
+import { stampNewRecord } from '../../src/lib/workspace/scope'
+import { createWorldRevision, publishWorldRevision } from '../../src/lib/world-engine/releases'
+import { createProductProductionWithBriefV1 } from '../../src/lib/product-production/service'
 
 async function workspace(name: string) {
   return seedCurrentProductWorld(name)
@@ -16,6 +20,51 @@ async function workspace(name: string) {
 describe('R-PRODUCTPROD-1B · consultation and reviewable Brief', () => {
   beforeEach(async () => { await db.delete(); await db.open() })
   afterEach(() => db.close())
+
+  it('仅有世界基础时可显式冻结设定并制作原创开场，草稿修改不污染来源', async () => {
+    const owned = await createWorkspace({ name: '原创设定世界', genres: ['fantasy'], status: 'drafting',
+      description: '只有世界起源，没有产品角色或地点。', targetWordCount: 1000, enableMultiWorld: false,
+    }, { purpose: 'world-engine', kind: 'novel', novelProfile: 'long' })
+    const worldviewId = await db.worldviews.add(stampNewRecord(owned.scope, 'worldviews', {
+      projectId: owned.scope.projectId, worldOrigin: '盐晶只能留存自愿交出的感官记忆，不能复活死者。',
+      createdAt: Date.now(), updatedAt: Date.now(),
+    } as never, { owner: 'world' }))
+    const revision = await createWorldRevision({ scope: owned.scope, label: '设定基线' })
+    const release = await publishWorldRevision(revision.id!)
+    await db.worldviews.update(worldviewId, { worldOrigin: '后续草稿不应被读取' })
+    const suggestions = await suggestProductStartingPoints({ scope: owned.scope, worldReleaseId: release.id! })
+    expect(suggestions.sourceOptions.characters).toHaveLength(0)
+    expect(suggestions.sourceOptions.importantLocations).toHaveLength(0)
+    const foundation = suggestions.sourceOptions.codexEntries.find(item => item.resourceKey.includes(':worldview:'))!
+    expect(foundation).toBeDefined()
+    const custom = suggestions.suggestions.find(item => item.kind === 'custom')!
+    const selection = structuredClone(suggestions.selectionDefaults[custom.suggestionKey])
+    selection.codexEntryResourceKeys = [foundation.resourceKey]
+    const input = { scope: owned.scope, worldReleaseId: release.id!, suggestionKey: custom.suggestionKey,
+      productType: 'ttrpg' as const, sourceSelection: selection, playerRole: '调查者',
+      openingSituation: '在潮阶调查重复的灯号。', confirmTtrpgDefaultMappings: true }
+    const undecided = await draftProductProductionBriefV3(input)
+    expect(undecided.unresolvedDecisionKeys).toContain('ttrpg-starting-location')
+    const brief = await draftProductProductionBriefV3({ ...input, ttrpg: {
+      naturalLanguageInstruction: '基于盐晶记忆设定创作独立调查团，AI KP 主持。',
+      story: { openingScene: '在产品原创的潮阶场景开始调查重复灯号。' },
+    } })
+    expect(brief.unresolvedDecisionKeys).not.toContain('ttrpg-starting-location')
+    expect(brief.source.selection.resourceKeys).toEqual([foundation.resourceKey])
+    const catalog = await loadProductProductionWorldSourceCatalogV2({ scope: owned.scope,
+      worldReleaseId: release.id!, selection: brief.source.selection })
+    expect(catalog.loreEntries.map(item => item.resourceKey)).toEqual([foundation.resourceKey])
+    expect(catalog.resources[0].value.worldOrigin).toContain('不能复活死者')
+    expect(JSON.stringify(catalog)).not.toContain('后续草稿不应被读取')
+    const productionId = await createProductProductionWithBriefV1({ scope: owned.scope,
+      worldReleaseId: release.id!, title: '原创调查团', brief })
+    expect(productionId).toBeGreaterThan(0)
+    expect(await db.productBuilds.count()).toBe(0)
+    await expect(createProductProductionWithBriefV1({ scope: owned.scope, worldReleaseId: release.id!,
+      title: '空来源应拦截', brief: { ...brief, source: { ...brief.source,
+        selection: { ...brief.source.selection, resourceKeys: [] } } },
+    })).rejects.toThrow(/至少需要一个作者冻结的世界资源/)
+  })
 
   it('从登记的冻结来源给出稳定起点建议，重复读取不产生任何 Production/Build/Run', async () => {
     const owned = await workspace('会谈不生产')

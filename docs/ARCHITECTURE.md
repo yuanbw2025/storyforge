@@ -7,9 +7,12 @@
 
 StoryForge 当前是 React + TypeScript + Vite 的本地优先单页应用，核心业务数据保存在浏览器 IndexedDB，文件工作区可使用 File System Access / OPFS。AI 请求发送到用户配置的模型服务。应用没有自建核心业务后端，也没有 staging；`main` 进入生产发布链。
 
-路由只有三个壳入口：
+路由壳入口：
 
 - `/`：产品综合页 `ProductHubPage`；
+- `/play`：社区跑团目录和本地存档；
+- `/play/:gameKey`：冻结社区模组的介绍与明确开始入口；
+- `/play/session/:sessionId`：绑定正式发布或受治理预览的沉浸跑团桌面；
 - `/settings`：模型与应用设置；
 - `/workspace/:projectId`：分步骤长篇工作区。
 
@@ -82,11 +85,11 @@ flowchart TB
 | 当前事实 | 数值 | 单一事实源 |
 |---|---:|---|
 | 应用语义版本 | `3.9.1` | `package.json` |
-| TypeScript 生产源码 | 971 个文件 / 326453 行 | `tsconfig.json` |
+| TypeScript 生产源码 | 993 个文件 / 328612 行 | `tsconfig.json` |
 | IndexedDB schema | v1 / 94 张 required tables | `schema.ts` / `REQUIRED_TABLES` |
 | PROJECT_TABLES | 94 张表 | `project-tables.ts` |
 | Prompt 主线 | 65 个 moduleKey / 210 条内置模板 | `PromptModuleKey` / `prompt-seeds*.ts` |
-| CONTEXT_SOURCES | 81 个上下文源 | `context-sources.ts` |
+| CONTEXT_SOURCES | 86 个上下文源 | `context-sources.ts` |
 | 写回治理 | 38 个通用 adopt target / 34 个领域扩展 | `adoption-schema.ts` |
 <!-- project-metrics:end -->
 

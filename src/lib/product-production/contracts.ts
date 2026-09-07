@@ -355,10 +355,12 @@ function expectedRevision(value: unknown): number {
 
 function parseResolution(value: unknown): ProductProductionBlockerResolutionV1 {
   const row = record(value, 'resolution')
-  exactKeys(row, ['action', 'note'], 'resolution')
+  exactKeys(row, ['action', 'note', ...(row.action === 'author-edit' ? ['authorDraftJson'] : [])], 'resolution')
+  if (row.action === 'author-edit') record(JSON.parse(text(row.authorDraftJson, 'resolution.authorDraftJson', 120000)), 'authorDraft')
   return {
-    action: enumValue(row.action, ['retry', 'fallback', 'waive-soft-gate', 'change-capability', 'cancel'], 'resolution.action'),
+    action: enumValue(row.action, ['retry', 'author-edit', 'fallback', 'waive-soft-gate', 'change-capability', 'cancel'], 'resolution.action'),
     note: text(row.note, 'resolution.note', 4000),
+    ...(row.action === 'author-edit' ? { authorDraftJson: text(row.authorDraftJson, 'resolution.authorDraftJson', 120000) } : {}),
   }
 }
 

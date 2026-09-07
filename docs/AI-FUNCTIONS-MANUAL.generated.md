@@ -80,16 +80,21 @@
 
 ## 二、上下文源清单（CONTEXT_SOURCES · AI 读什么）
 
-共 81 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
+共 86 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
 
 | key | 标签 | 作用域 | 层级 | 预算(token) |
 |---|---|---|---|---|
 | `worldRelease` | 冻结世界版本资源 | manual | L0 | 100000 |
 | `ttrpgRuntime` | 正式 TTRPG 主持人运行视角 | runtime | L0 | 10000 |
+| `ttrpgPrivateGuidance` | 正式 TTRPG 单角色私密指引 | runtime | L0 | 8000 |
+| `ttrpgDirector` | 正式 TTRPG AI KP 决策与冻结揭示条件 | runtime | L0 | 12000 |
+| `ttrpgPublicNarration` | 正式 TTRPG 已授权公开叙述素材 | runtime | L0 | 10000 |
+| `ttrpgNpcRuntime` | 正式 TTRPG NPC 独立知情视角 | runtime | L0 | 10000 |
 | `ttrpgPlayerRuntime` | 正式 TTRPG 单角色玩家运行视角 | runtime | L0 | 10000 |
 | `product-production.brief` | 已授权上层产品生产 Brief | project | L0 | 8000 |
 | `product-production.artifact-inputs` | 上层产品生产任务依赖 | project | L1 | 10000 |
 | `product-production.quality-feedback` | 上层产品生产质量反馈 | project | L1 | 6000 |
+| `product-production.repair-feedback` | 当前制作任务的失败草稿与校验意见 | project | L1 | 12000 |
 | `product-production.evolution-base` | 游戏持续演化基线 | project | L0 | 12000 |
 | `adaptation.sourceManifest` | 改编来源清单 | project | L0 | 6000 |
 | `adaptation.sourceContent` | 改编来源正文 | project | L0 | 24000 |
@@ -262,7 +267,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ## 四、AI 调用点（消耗统计 category · 在哪触发)
 
-共 41 个 category。
+共 42 个 category。
 未分类调用: 0 个。动态 category 调用: 34 个。
 
 | category | 触发文件 |
@@ -302,7 +307,8 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `review.quality` | `src/components/editor/ReviewPanel.tsx:112` |
 | `review.readability` | `src/components/editor/ReviewPanel.tsx:133` |
 | `review.revise` | `src/components/editor/ChapterEditor.tsx:1711` |
-| `runtime.ttrpg-player` | `src/lib/ttrpg/player-harness.ts:298` |
+| `runtime.ttrpg-gm` | `src/lib/ttrpg/decision-harness.ts:134` |
+| `runtime.ttrpg-player` | `src/lib/ttrpg/player-harness.ts:310` |
 | `scene.verify` | `src/components/scene/SceneVerifyPanel.tsx:81` |
 | `story.timeline` | `src/lib/agent/run/impact-story-timeline-regeneration-durable.ts:670`<br/>`src/lib/agent/run/story-timeline-extraction-durable.ts:758` |
 | `style.learn` | `src/lib/agent/run/style-learning-durable.ts:493` |
@@ -343,8 +349,8 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 - `src/lib/open-world/evolution-harness.ts:246 · chat`
 - `src/lib/open-world/harness.ts:139 · chat`
 - `src/lib/product-production/capabilities.ts:158 · chat`
-- `src/lib/ttrpg/gm-actor-harness.ts:468 · chat`
-- `src/lib/ttrpg/gm-harness.ts:534 · chat`
+- `src/lib/ttrpg/gm-actor-harness.ts:481 · chat`
+- `src/lib/ttrpg/gm-harness.ts:542 · chat`
 
 ## 五、正式 AI 入口（FormalAIEntryBindingV1）
 
@@ -391,4 +397,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `4c6ac46f`
+生成时间基准:commit `24a2e46a`

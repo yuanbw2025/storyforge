@@ -1,3 +1,5 @@
+import { createOnlineTtrpgNpcDecisionViewV1, createOnlineTtrpgPublicNarrationViewV1, createOnlineTtrpgNarratedActionV1 } from './ttrpg-ai-views';
+import { assertTtrpgNoRestrictedTextV1 } from '../ttrpg/information-boundary';
 import { hashCanonicalValue } from "../agent/run/hash";
 import { hashProductProductionValueV2 } from "../product-production/hash";
 import {
@@ -1292,11 +1294,12 @@ export class DurableFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV
           actorKey: null,
           participantControllers,
         });
+        const decisionView = createOnlineTtrpgNpcDecisionViewV1(projection, actorKey);
         const contextManifestHash = await hashCanonicalValue({
           releaseHash: this.releaseHash,
           baseSequence: this.state.lastSequence,
           actorKey,
-          projection,
+          projection: decisionView,
         });
         const proposal = parseOnlineTtrpgAiGmActorProposalV1({
           value: await this.aiGmService.act({
@@ -1304,7 +1307,7 @@ export class DurableFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV
             releaseHash: this.releaseHash,
             actorKey,
             objective,
-            projection,
+            projection: decisionView,
           }),
           projection,
           actorKey,
@@ -1374,7 +1377,7 @@ export class DurableFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV
           state: this.state,
           campaign: this.campaign,
           rulePack: this.rulePack,
-          role: "gm",
+          role: "spectator",
           actorKey: null,
         });
         const proposal = parseOnlineTtrpgAiGmProposalV1({
@@ -1382,12 +1385,17 @@ export class DurableFormalTtrpgRoomAdapterV1 implements OnlineRoomDomainAdapterV
             roomId: this.roomId,
             releaseHash: this.releaseHash,
             objective,
-            projection,
-            action: structuredClone(action),
+            projection: createOnlineTtrpgPublicNarrationViewV1(projection),
+            action: createOnlineTtrpgNarratedActionV1(action),
           }),
           action,
           receipt,
         });
+        assertTtrpgNoRestrictedTextV1(proposal.text, [
+          ...this.campaign.scenes.map(scene => scene.gmSecret ?? ''),
+          ...this.campaign.characterTemplates.flatMap(actor => [actor.playerProfile?.secret ?? '', actor.gmProfile?.secret ?? '']),
+          ...this.campaign.clues.filter(clue => !product.discoveredClues.some(item => item.clueKey === clue.clueKey && item.visibility === 'party')).map(clue => clue.description),
+        ], [...projection.visibleClues.filter(clue => clue.visibility === 'party').map(clue => clue.description), ...projection.scenes.filter(scene => scene.status === 'current').map(scene => scene.description ?? '')]);
         const candidateHash = await hashCanonicalValue({
           runId: proposal.runId,
           releaseHash: this.releaseHash,

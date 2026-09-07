@@ -36,6 +36,7 @@ const activeDocs = [
   'docs/products/INDEPENDENT-CREATION.md',
   'docs/products/WORLD-ENGINE.md',
   'docs/products/UPPER-PRODUCTS.md',
+  'docs/products/TTRPG-AI-KP.md',
   'docs/roadmap/README.md',
   'docs/roadmap/CAPABILITY-BASELINE.md',
   'docs/roadmap/COMPLETED.md',

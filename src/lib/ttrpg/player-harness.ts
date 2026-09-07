@@ -1,5 +1,7 @@
+import { parseStructuredOutputV1, StructuredOutputPipelineErrorV1 } from '../agent/structured-output-pipeline';
 import { chat, resolveRequestConfig, type ChatResult } from '../ai/client'
 import { estimateTokens } from '../ai/context-budget'
+import { assertTtrpgCompleteContextV1 } from './prompt-context'
 import { computeKnownCostUsd } from '../ai/usage-log'
 import { createAgentSkillExecutionBindingV1 } from '../agent/execution-binding'
 import { getAgentSkillV1 } from '../agent/skill-registry'
@@ -84,11 +86,19 @@ function exact(value: Record<string, unknown>, keys: readonly string[], label: s
   }
 }
 function parseJson(output: string): Record<string, unknown> {
-  let source = output.trim()
-  const fenced = source.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/)
-  if (fenced) source = fenced[1]
-  try { return record(JSON.parse(source), '模型输出') }
-  catch (error) { if (error instanceof SyntaxError) fail('模型输出不是有效 JSON'); throw error }
+  try {
+    return parseStructuredOutputV1({
+      raw: output,
+      contract: { version: 1, schemaId: 'storyforge.ttrpg-player-output', target: 'runtime-candidate',
+        root: 'object', maxChars: 100_000, allowedRootFields: ['actionKey', 'targetKey', 'approach', 'spokenIntent'],
+        requiredRootFields: ['actionKey', 'targetKey', 'approach', 'spokenIntent'], unknownRootFieldMessage: '模型输出字段不在允许闭集' },
+      parse: value => record(value, '模型输出'),
+    });
+  } catch (error) {
+    if (error instanceof StructuredOutputPipelineErrorV1
+      && error.evidence.issues.some(issue => issue.category === 'parse')) fail('模型输出不是有效 JSON');
+    throw error;
+  }
 }
 function boundedText(value: unknown, label: string, maximum: number, nullable = false): string | null {
   if (nullable && value == null) return null
@@ -104,6 +114,7 @@ function messages(objective: string, context: string): ChatMessage[] {
     content: [
       '你是 StoryForge 的隔离 AI 玩家行动提议器，只扮演上下文 seat.actorKey 对应的一个玩家角色。',
       '你只能从 projection.availableActions 选择 actionKey，只能选择 projection.actors 中按行动 target 允许的可见目标。',
+      'target=scene 的行动（例如调查或克服）必须输出真正的 JSON null，不能把 sceneKey、地点名、物件名或字符串“null”填入 targetKey。target=self 使用当前 actorKey；单体角色行动才使用合法目标的 actorKey。',
       '你不能读取或猜测 KP 秘密、未探索场景、未发现线索、其他角色私密目标；不能替其他真人角色说话、决定或描述内心。',
       '你只提出行动意图，不生成骰点、难度、修正、成功失败、伤害、资源/状态变化、奖励、线索发现、场景推进或世界事实。',
       'approach 说明角色尝试怎么做；spokenIntent 只允许该角色自己当下说出的一句话，无台词时为 null。',
@@ -204,7 +215,7 @@ async function append(
 }
 
 function repairable(error: unknown): boolean {
-  return /不是有效 JSON|字段不在允许闭集|必须是文本|无效/u.test(error instanceof Error ? error.message : String(error))
+  return /不是有效 JSON|字段不在允许闭集|必须是文本|无效|targetKey 不在|actionKey 不在|targetKey 必须|自身行动必须/u.test(error instanceof Error ? error.message : String(error))
 }
 function repairPrompt(original: ChatMessage[], output: string, issue: string): ChatMessage[] {
   return [...original, { role: 'assistant', content: output.slice(0, 12_000) }, {
@@ -273,6 +284,7 @@ export async function generateTtrpgPlayerActionCandidateV1(input: {
       inputBudgetMaxTokens: 15_000,
     })
     if (!assembled.included.includes('ttrpgPlayerRuntime')) fail('正式 TTRPG 玩家上下文为空')
+    assertTtrpgCompleteContextV1(assembled, 'ttrpgPlayerRuntime')
     await assertTtrpgPlayerRuntimeHarnessFreshV1({
       scope: input.scope, contractScope: snapshot.contract.scope, actorKey: view.seat.actorKey,
     })
@@ -280,7 +292,7 @@ export async function generateTtrpgPlayerActionCandidateV1(input: {
       runId: snapshot.run.id, stepId: TTRPG_PLAYER_RUNTIME_STEP_ID_V1, attempt: 1,
       projectId: input.scope.projectId, worldGroupId: boundary.scope.worldGroupId,
       declaredSourceKeys: ['ttrpgPlayerRuntime'], assembled,
-      readerVersion: 'ttrpg-player-runtime-view-v1',
+      readerVersion: 'ttrpg-player-runtime-view-v2',
     })
     snapshot = await append(input.scope, snapshot, 'context.assembled', {
       stepId: TTRPG_PLAYER_RUNTIME_STEP_ID_V1, attempt: 1, manifestHash: manifest.manifestHash,

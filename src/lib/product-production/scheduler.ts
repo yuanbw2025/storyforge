@@ -1,6 +1,7 @@
 import { db } from '../db/schema'
 import { createAgentSkillExecutionBindingV1 } from '../agent/execution-binding'
 import { getAgentSkillV1 } from '../agent/skill-registry'
+import { classifyHarnessFailureV1 } from '../agent/run/harness-failure'
 import { createAgentRunCheckpointV1, readLatestVerifiedAgentRunCheckpointV1 } from '../agent/run/checkpoint'
 import {
   appendAgentRunEventV1,
@@ -53,6 +54,9 @@ import {
   parseProductProductionSourcePlanV1,
 } from './source-contracts'
 import { assertFormalProductProductionStartV1 } from '../product/source-contracts'
+import { preserveProductProductionContextV1, ProductProductionContextBudgetErrorV1 } from './context'
+import { recordAgentRunArtifactV1 } from '../memory/artifact-store'
+import { assertExactRunArtifactBodySafeV1 } from '../memory/evidence-policy'
 
 const ROOT_TASK_KEY = '$root'
 const ROOT_STEP_ID = '$join'
@@ -96,6 +100,14 @@ export interface ProductProductionTaskExecutionResultV1 {
   usage: ProductProductionTaskUsageV1
 }
 
+/** A received draft failed validation; repeating the same request is not a repair. */
+export class ProductProductionDraftRejectedErrorV1 extends Error {
+  constructor(message: string, readonly usage: ProductProductionTaskUsageV1) {
+    super(message)
+    this.name = 'ProductProductionDraftRejectedErrorV1'
+  }
+}
+
 export interface ProductProductionTaskExecutionInputV1 {
   scope: WorkspaceScope
   productionId: number
@@ -110,6 +122,9 @@ export interface ProductProductionTaskExecutionInputV1 {
   inputArtifacts: ProductBuildArtifactRecordV1[]
   capabilityBindings: ProductProductionCapabilityBindingV1[]
   signal: AbortSignal
+  /** Persist the received model text before parsing, including rejected drafts. */
+  onModelOutput?: (output: string) => Promise<void>
+  authorDraftJson?: string
 }
 
 export type ProductProductionTaskExecutorV1 = (
@@ -311,10 +326,13 @@ function zeroUsage(): ProductProductionTaskUsageV1 {
 
 function safeExecutorError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error)
-  return message
+  const redacted = message
+    .replace(/\bBearer\s+\S+/gi, 'Bearer [redacted]')
     .replace(/\b(?:sk|ak)-[A-Za-z0-9_-]{8,}\b/g, '[redacted-credential]')
     .replace(/(?:authorization|api[-_ ]?key)\s*[:=]\s*\S+/gi, 'credential=[redacted]')
     .slice(0, 1_000)
+  try { assertExactRunArtifactBodySafeV1({ artifactKind: 'tool-result', body: redacted }); return redacted }
+  catch { return '任务执行失败；错误详情包含不适合保存的内容。' }
 }
 
 function boundedUsage(usage: ProductProductionTaskUsageV1, reservation: ProductTaskBudgetReservationV1): void {
@@ -367,7 +385,7 @@ function taskContextSourceKeys(task: ProductProductionPlanTaskV3): string[] {
     const skill = getAgentSkillV1(task.skillId)
     return [
       ...skill.contextSourceKeys,
-      ...(task.inputArtifactKeys.length > 0 ? skill.optionalContextSourceKeys : []),
+      ...skill.optionalContextSourceKeys.filter(key => key !== 'product-production.artifact-inputs' || task.inputArtifactKeys.length > 0),
     ]
   }
   return ['product-production.brief', ...(task.inputArtifactKeys.length > 0 ? ['product-production.artifact-inputs'] : [])]
@@ -1102,7 +1120,7 @@ async function recoverCompletedOrCheckpointed(input: {
 async function runClaimedTask(input: {
   scope: WorkspaceScope
   productionId: number
-  build: { id: number; buildNumber: number; controlEpoch: number; planHash: string }
+  build: { id: number; buildNumber: number; controlEpoch: number; planHash: string; failureJson: string }
   task: ProductProductionPlanTaskV3
   snapshot: AgentRunSnapshotV1
   executor: ProductProductionTaskExecutorV1
@@ -1132,15 +1150,47 @@ async function runClaimedTask(input: {
   const contractSourceKeys = taskContractContextSourceKeys(input.task)
   const totalInputBudget = Math.max(1, input.task.budgetReservation.inputTokens)
   const worldGatewayRequired = productProductionTaskUsesWorldGatewayV1(input.task)
-  const normalInputBudget = worldGatewayRequired
-    ? Math.max(1, Math.floor(totalInputBudget * 0.4))
-    : totalInputBudget
-  const normalAssembled = await assembleContext({
+  const requiresExactContext = worldGatewayRequired || input.task.executionMode === 'model'
+  // The actual frozen world packet is added and checked below; a fixed 40%
+  // slice needlessly truncated valid Brief + repair inputs in small worlds.
+  const normalInputBudget = totalInputBudget
+  let normalAssembled: AssembleContextResult
+  try {
+    normalAssembled = await assembleContext({
     projectId: input.scope.projectId, scope: input.scope, sourceKeys: normalSourceKeys,
     productProductionId: input.productionId, productBuildId: input.build.id,
+    productProductionTaskKey: input.task.taskKey,
     productArtifactKeys: input.task.inputArtifactKeys,
     inputBudgetMaxTokens: normalInputBudget,
-  })
+    ...(requiresExactContext ? { sourceTransformer: preserveProductProductionContextV1 } : {}),
+    })
+    if (requiresExactContext && (normalAssembled.overBudgetAfterTrim || !normalAssembled.sourceEvidence || normalAssembled.sourceEvidence.some(source => (
+      source.status !== 'included' || source.delivery !== 'full'
+    )))) {
+      throw new ProductProductionContextBudgetErrorV1('[product-production-context] 制作合同或依赖产物未完整进入任务预算；未调用模型，请缩小制作范围。')
+    }
+  } catch (error) {
+    if (!(error instanceof ProductProductionContextBudgetErrorV1)) throw error
+    const code = 'task-context-budget-exceeded'
+    snapshot = await append(input.scope, snapshot, 'step.failed', {
+      stepId: input.task.taskKey, attempt, code, retryable: false, category: 'deterministic', action: 'fail',
+    })
+    snapshot = await append(input.scope, snapshot, 'run.failed', { code, retryable: false })
+    await settleLedger({
+      buildId: input.build.id, controlEpoch: input.build.controlEpoch, taskKey: input.task.taskKey,
+      entry: { runId: snapshot.run.id, attempt, status: 'failed', idempotencyKey: '',
+        candidateHash: null, terminalReceiptHash: null, passedGateIds: [], usage: zeroUsage(), errorCode: code },
+    })
+    await db.transaction('rw', scopeTransactionTables(db.productBuilds), async () => {
+      const build = await db.productBuilds.get(input.build.id)
+      if (!build || build.controlEpoch !== input.build.controlEpoch) return
+      await db.productBuilds.update(input.build.id, {
+        status: 'recovery-required', updatedAt: Date.now(),
+        failureJson: canonicalProductProductionJsonV2({ taskKey: input.task.taskKey, code, attempt, detail: error.message }),
+      })
+    })
+    return
+  }
   let assembled = normalAssembled
   let gatewayExecution: ContextGatewayExecutionV1 | null = null
   let gatewayBaseManifest: ContextManifestV2 | null = null
@@ -1167,7 +1217,7 @@ async function runClaimedTask(input: {
     })
     sourcePlanHash = sourcePlan.planHash
     confirmedBriefHash = confirmedBrief.confirmationHash
-    const worldBudget = Math.max(1, totalInputBudget - normalInputBudget)
+    const worldBudget = Math.max(1, totalInputBudget - normalAssembled.totalInputTokens)
     gatewayExecution = await executeProductProductionWorldGatewayV1({
       scope: input.scope,
       sourcePlan,
@@ -1238,9 +1288,20 @@ async function runClaimedTask(input: {
     toolCalls: input.task.budgetReservation.mediaCalls,
     tokens: input.task.budgetReservation.inputTokens + input.task.budgetReservation.outputTokens,
   })
+  const repair = JSON.parse(input.build.failureJson)
+  const authorDraftJson = repair.blockerKey === input.task.taskKey && repair.resolution?.action === 'author-edit'
+    ? repair.resolution.authorDraftJson as string : undefined
+  if (authorDraftJson) {
+    const recorded = await recordAgentRunArtifactV1({
+      scope: input.scope, runId: snapshot.run.id, stepId: input.task.taskKey, attempt,
+      artifactKind: 'source-snapshot', content: authorDraftJson,
+      expectedLastSequence: snapshot.projection.lastSequence,
+    })
+    snapshot = recorded.snapshot
+  }
   const bindingHash = snapshot.contract.runtimeBindingHash
     ?? await hashProductProductionValueV2(snapshot.contract.executionBindings ?? { deterministic: input.task.kind })
-  if (input.task.executionMode === 'model') {
+  if (input.task.executionMode === 'model' && !authorDraftJson) {
     snapshot = await append(input.scope, snapshot, 'model.requested', { stepId: input.task.taskKey, attempt, bindingHash })
   } else if (input.task.executionMode === 'media-provider') {
     snapshot = await append(input.scope, snapshot, 'tool.called', {
@@ -1258,16 +1319,36 @@ async function runClaimedTask(input: {
       scope: input.scope, productionId: input.productionId, buildId: input.build.id,
       buildNumber: input.build.buildNumber, controlEpoch: input.build.controlEpoch,
       planHash: input.build.planHash, task: input.task, attempt,
-      idempotencyKey: inputHash, contextText: assembled.text,
+      idempotencyKey: inputHash, contextText: assembled.text, authorDraftJson,
       inputArtifacts: artifacts, capabilityBindings: bindings, signal: input.signal,
+      onModelOutput: async output => {
+        const recorded = await recordAgentRunArtifactV1({
+          scope: input.scope, runId: snapshot.run.id, stepId: input.task.taskKey, attempt,
+          artifactKind: 'raw-response', content: output,
+          expectedLastSequence: snapshot.projection.lastSequence,
+        })
+        snapshot = recorded.snapshot
+      },
     })
     validateExecutionResult(input.task, result)
   } catch (error) {
+    const failure = await classifyHarnessFailureV1(error)
+    const recordedFailure = await recordAgentRunArtifactV1({
+      scope: input.scope, runId: snapshot.run.id, stepId: input.task.taskKey, attempt,
+      artifactKind: 'tool-result',
+      content: canonicalProductProductionJsonV2({
+        schema: 'storyforge.product-task-failure', version: 1,
+        taskKey: input.task.taskKey, detail: safeExecutorError(error),
+      }),
+      expectedLastSequence: snapshot.projection.lastSequence,
+    })
+    snapshot = recordedFailure.snapshot
     const code = error instanceof Error && error.name === 'AbortError' ? 'task-aborted'
+      : error instanceof ProductProductionDraftRejectedErrorV1 ? 'task-draft-rejected'
       : error instanceof Error && error.message.includes('provider-safety-refusal')
-        ? 'provider-safety-refusal' : 'task-executor-failed'
-    const retryable = code !== 'task-aborted' && code !== 'provider-safety-refusal'
-      && attempt < input.task.maxAttempts
+        ? 'provider-safety-refusal' : !failure.retryable ? 'task-executor-nonretryable' : 'task-executor-failed'
+    const retryable = code !== 'task-aborted' && code !== 'provider-safety-refusal' && code !== 'task-draft-rejected'
+      && failure.retryable && attempt < input.task.maxAttempts
     snapshot = await append(input.scope, snapshot, 'step.failed', {
       stepId: input.task.taskKey, attempt, code,
       retryable,
@@ -1285,10 +1366,11 @@ async function runClaimedTask(input: {
       buildId: input.build.id, controlEpoch: input.build.controlEpoch, taskKey: input.task.taskKey,
       entry: {
         runId: snapshot.run.id, attempt, status: 'failed', idempotencyKey: inputHash,
-        candidateHash: null, terminalReceiptHash: null, passedGateIds: [], usage: null, errorCode: code,
+        candidateHash: null, terminalReceiptHash: null, passedGateIds: [],
+        usage: error instanceof ProductProductionDraftRejectedErrorV1 ? error.usage : null, errorCode: code,
       },
     })
-    if (code === 'task-aborted' || code === 'provider-safety-refusal' || attempt >= input.task.maxAttempts) {
+    if (!retryable) {
       snapshot = code === 'task-aborted'
         ? await append(input.scope, snapshot, 'run.cancelled', { reason: 'task-executor-aborted' })
         : await append(input.scope, snapshot, 'run.failed', { code, retryable: false })
@@ -1313,7 +1395,7 @@ async function runClaimedTask(input: {
     return
   }
   const candidateHash = await hashProductProductionValueV2(result)
-  if (input.task.executionMode === 'model') {
+  if (input.task.executionMode === 'model' && !authorDraftJson) {
     snapshot = await append(input.scope, snapshot, 'model.responded', {
       stepId: input.task.taskKey, attempt, outputHash: candidateHash,
     })
@@ -1344,7 +1426,7 @@ async function runClaimedTask(input: {
       policyHash: gatewayExecution.contextPacket.policyHash,
       rawResponse: result,
       candidateHash,
-      executionBoundary: input.task.executionMode === 'model'
+      executionBoundary: input.task.executionMode === 'model' && !authorDraftJson
         ? { kind: 'model' }
         : { kind: 'tool', toolName: DETERMINISTIC_WORLD_TOOL },
       expectedLastSequence: snapshot.projection.lastSequence,
@@ -1558,11 +1640,11 @@ export async function projectProductProductionSchedulerV1(input: {
       const step = child.projection.steps[task.taskKey]
       if (child.contract.scope.productProduction?.controlEpoch !== build.controlEpoch) status = 'stale'
       else if (child.projection.state === 'completed') status = 'completed'
-      else if (step?.status === 'failed' && step.failureCode !== 'provider-safety-refusal'
-        && step.attempt < task.maxAttempts) status = 'retry-ready'
       else if (['failed', 'cancelled', 'recovery_required', 'paused'].includes(child.projection.state)) {
         status = 'blocked'; blocker = `run-${child.projection.state}`
-      } else status = 'running'
+      } else if (step?.status === 'failed' && step.failureCode !== 'provider-safety-refusal'
+        && step.attempt < task.maxAttempts) status = 'retry-ready'
+      else status = 'running'
     }
     return {
       taskKey: task.taskKey, lane: task.lane, status,
@@ -1655,6 +1737,7 @@ export async function runProductProductionSchedulerCycleV1(input: {
   const ready = state.plan.tasks
     .filter(task => {
       const child = children.get(task.taskKey)
+      if (child && ['failed', 'cancelled', 'recovery_required', 'paused'].includes(child.projection.state)) return false
       const retryReady = child?.projection.steps[task.taskKey]?.status === 'failed'
         && (child.projection.steps[task.taskKey]?.attempt ?? 0) < task.maxAttempts
       if (child && !retryReady) return false
@@ -1719,7 +1802,7 @@ export async function runProductProductionSchedulerCycleV1(input: {
       scope, productionId: input.productionId,
       build: {
         id: state.build.id!, buildNumber: state.build.buildNumber,
-        controlEpoch: state.build.controlEpoch, planHash: state.build.planHash,
+        controlEpoch: state.build.controlEpoch, planHash: state.build.planHash, failureJson: state.build.failureJson,
       },
       task, snapshot, executor: input.executor,
       capabilityBindings: input.capabilityBindings ?? [], signal: controller.signal,

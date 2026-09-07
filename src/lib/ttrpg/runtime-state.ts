@@ -1,3 +1,5 @@
+import { parseTtrpgPrivateGuidanceReceiptV1 } from './private-guidance-model'
+import { parseTtrpgDirectorReceiptV1 } from './director-model'
 /** TTRPG-owned runtime state parsing and deterministic reducers. */
 import type { RuleCheckResolutionV1 } from "./rule-pack";
 import { assertProductRuntimeIntegerV1 as assertFiniteInteger, isProductRuntimeJsonObjectV1 as isObject } from "../product/runtime-values";
@@ -1507,6 +1509,8 @@ function parseTtrpgProductState(
       "actionHistory", "intentReceipts", "humanResponses", "restHistory",
       "gmNarrations", "questProgress", "endingCatalog", "ending", "advancement",
       "tabletop", "media",
+      ...(Object.prototype.hasOwnProperty.call(value, "privateGuidance") ? ["privateGuidance"] : []),
+      ...(Object.prototype.hasOwnProperty.call(value, "directorDecisions") ? ["directorDecisions"] : []),
     ],
     "正式 TTRPG 产品状态",
   );
@@ -2427,6 +2431,20 @@ function parseTtrpgProductState(
     humanResponses,
     restHistory,
     gmNarrations,
+    ...(Object.prototype.hasOwnProperty.call(value, 'privateGuidance') ? {
+      privateGuidance: (() => {
+        if (!Array.isArray(value.privateGuidance)) throw new Error('私密指引账本无效');
+        return value.privateGuidance.map(parseTtrpgPrivateGuidanceReceiptV1);
+      })(),
+    } : {}),
+    ...(Object.prototype.hasOwnProperty.call(value, 'directorDecisions') ? {
+      directorDecisions: (() => {
+        if (!Array.isArray(value.directorDecisions)) throw new Error('主持决策账本无效');
+        const receipts = value.directorDecisions.map(parseTtrpgDirectorReceiptV1);
+        if (new Set(receipts.map(item => item.basisActionSequence)).size !== receipts.length) throw new Error('主持决策重复');
+        return receipts;
+      })(),
+    } : {}),
     questProgress,
     endingCatalog,
     ending,

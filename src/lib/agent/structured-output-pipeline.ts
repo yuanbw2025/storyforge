@@ -432,6 +432,20 @@ function unescapeAllowedRootFields(
       if (match && field && (previous === '{' || previous === ',')
         && contract.allowedRootFields.includes(field)
         && !text.slice(0, index).includes(`"${field}"`)) {
+        // Some providers double-encode the entire remaining object after a
+        // valid text field. Decode exactly one JSON string layer, and accept
+        // only if the complete object parses. Never infer missing content.
+        try {
+          const tail = JSON.parse(`"${text.slice(index)}"`) as unknown
+          if (typeof tail === 'string') {
+            const candidate = output + tail
+            const parsed: unknown = JSON.parse(candidate)
+            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+              && Object.keys(parsed).every(key => contract.allowedRootFields!.includes(key))) {
+              return candidate
+            }
+          }
+        } catch { /* Fall through to the narrower escaped-key normalization. */ }
         output += `"${field}":`
         index += match[0].length - 1
         changed = true

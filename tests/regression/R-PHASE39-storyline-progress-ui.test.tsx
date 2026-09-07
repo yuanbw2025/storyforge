@@ -33,6 +33,31 @@ describe('Phase 39 · 动态故事线作者确认 UI', () => {
     db.close()
   })
 
+  it('工作区读取失败时显示错误，切换到有效工作区后恢复', async () => {
+    const copilot = { pendingCandidates: [], busy: false, error: null } as any
+    const renderPanel = (projectId: number) => root.render(createElement(StorylineProgressPanel, {
+      projectId,
+      arcs: [],
+      copilot,
+      onArcsChanged: async () => undefined,
+    }))
+
+    await act(async () => renderPanel(999))
+    await act(async () => {
+      await vi.waitFor(() => {
+        expect(host.querySelector('[role="alert"]')?.textContent).toContain('本地工作区 999 不存在')
+      })
+    })
+    expect(host.querySelector('button')?.disabled).toBe(true)
+
+    const now = Date.now()
+    const projectId = await seedCurrentProject({ name: '可恢复工作区', createdAt: now, updatedAt: now })
+    await act(async () => renderPanel(projectId))
+    await act(async () => {
+      await vi.waitFor(() => expect(host.querySelector('[role="alert"]')).toBeNull())
+    })
+  })
+
   it('映射已写章节后只显示候选，作者点击采纳才落库', async () => {
     const now = Date.now()
     const projectId = await seedCurrentProject({ name: '故事线 UI', createdAt: now, updatedAt: now })

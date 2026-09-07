@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ImageIcon, Loader2, RefreshCw, Sparkles, XCircle } from "lucide-react";
-import { resolveProductRuntimeSource } from "../../lib/product-production/preview-source";
+import { useTtrpgMediaUrls } from "./useTtrpgMediaUrls";
 import {
   cancelTtrpgRuntimeAssetRequestV1,
-  readTtrpgRuntimeMediaBlobV1,
   readVisibleTtrpgRuntimeMediaRequestsV1,
   requestConfiguredTtrpgRuntimeAssetV1,
   retryConfiguredTtrpgRuntimeAssetRequestV1,
@@ -61,7 +60,6 @@ export default function TtrpgRuntimeMediaPanel(props: {
   onChanged: () => Promise<void>;
 }) {
   const [requests, setRequests] = useState<VisibleRequest[]>([]);
-  const [urls, setUrls] = useState<Record<string, string>>({});
   const [promptAddition, setPromptAddition] = useState("");
   const [workingSlotKey, setWorkingSlotKey] = useState("");
   const [error, setError] = useState("");
@@ -87,79 +85,8 @@ export default function TtrpgRuntimeMediaPanel(props: {
     };
   }, [props.media.generatedCount, props.media.slots, refreshRequests]);
 
-  const mediaSignature = useMemo(
-    () =>
-      JSON.stringify(
-        props.media.slots.map((slot) => [
-          slot.slotKey,
-          slot.status,
-          slot.assetKey,
-          slot.mediaAssetId,
-          slot.mediaContentHash,
-        ]),
-      ),
-    [props.media.slots],
-  );
-
-  useEffect(() => {
-    let cancelled = false;
-    const objectUrls: string[] = [];
-    let resolver: Awaited<ReturnType<typeof resolveProductRuntimeSource>>["mediaResolver"] | null = null;
-    void (async () => {
-      const next: Record<string, string> = {};
-      const prebuiltKeys = props.media.slots.flatMap((slot) => {
-        if (slot.mediaAssetId != null) return [];
-        return slot.status === "available" && slot.assetKey ? [slot.assetKey] : [];
-      });
-      if (prebuiltKeys.length) {
-        resolver = (await resolveProductRuntimeSource({
-          scope: props.scope,
-          source: props.source,
-        })).mediaResolver;
-        const catalog = await resolver.preload({
-          assetKeys: prebuiltKeys,
-          maximumBytes: 100 * 1024 * 1024,
-        });
-        for (const slot of props.media.slots) {
-          const key = slot.assetKey;
-          if (key && catalog.urls[key]) next[slot.slotKey] = catalog.urls[key];
-        }
-      }
-      for (const slot of props.media.slots) {
-        if (slot.status !== "available" || slot.mediaAssetId == null) continue;
-        try {
-          const blob = await readTtrpgRuntimeMediaBlobV1({
-            scope: props.scope,
-            sessionId: props.sessionId,
-            mediaAssetId: slot.mediaAssetId,
-            viewerKey: props.viewerKey,
-          });
-          const url = URL.createObjectURL(blob);
-          objectUrls.push(url);
-          next[slot.slotKey] = url;
-        } catch {
-          // A broken or unauthorized byte binding remains playable through fallback text.
-        }
-      }
-      if (!cancelled) setUrls(next);
-    })().catch((cause) => {
-      if (!cancelled)
-        setError(cause instanceof Error ? cause.message : String(cause));
-    });
-    return () => {
-      cancelled = true;
-      for (const url of objectUrls) URL.revokeObjectURL(url);
-      resolver?.dispose();
-    };
-  }, [
-    mediaSignature,
-    props.runtimePackage,
-    props.source,
-    props.scope,
-    props.sessionId,
-    props.viewerKey,
-    props.media.slots,
-  ]);
+  const urls = useTtrpgMediaUrls({ scope: props.scope, sessionId: props.sessionId,
+    source: props.source, viewerKey: props.viewerKey, media: props.media });
 
   const pending = requests.some(
     (row) => row.status === "queued" || row.status === "generating",

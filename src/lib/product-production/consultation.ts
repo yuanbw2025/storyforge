@@ -358,7 +358,13 @@ export async function draftProductProductionBriefV3(input: {
     unresolvedDecisionKeys.push('adventure-starting-location')
   }
   if (input.productType === 'ttrpg') {
-    if ((selection.roleBindings.locations?.length ?? 0) === 0) unresolvedDecisionKeys.push('ttrpg-starting-location')
+    // An explicit product-authored opening may introduce a campaign location
+    // without requiring the author to write runtime design back into the world.
+    const authoredOpening = input.ttrpg?.naturalLanguageInstruction?.trim()
+      && input.ttrpg.story?.openingScene?.trim()
+    if ((selection.roleBindings.locations?.length ?? 0) === 0 && !authoredOpening) {
+      unresolvedDecisionKeys.push('ttrpg-starting-location')
+    }
     unresolvedDecisionKeys.push(...unresolvedTtrpgProductionBriefDecisionsV2(ttrpg!))
   }
   return parseProductProductionBriefV3({

@@ -581,6 +581,8 @@ export interface AssembleContextInput {
   ttrpgPlayerActorKey?: string
   /** PRODUCTPROD-1 registered production context anchors. */
   productProductionId?: number
+  /** Exact task identity for registered, Build-bound repair feedback. */
+  productProductionTaskKey?: string
   productBuildId?: number
   productArtifactKeys?: string[]
   /** Character interaction: exactly one viewpoint for the registered reader. */

@@ -1,0 +1,354 @@
+{
+  "schema": "storyforge.product-module-artifact",
+  "version": 1,
+  "productType": "ttrpg",
+  "interfaceStyle": "沉浸式调查桌面",
+  "interactionNotes": [
+    "玩家声明行动，规则先结算，KP只依据已获知的事实回应。",
+    "所有私人材料由角色本人决定是否分享；救援不强迫捐献新记忆。",
+    "调查地点可以往返；关键证据允许带代价取得，至少保留一条无证据门槛的救援出口。"
+  ],
+  "presentationPolicy": {
+    "pacing": "balanced",
+    "transitionMs": 400,
+    "backgroundStrategy": "key-scenes"
+  },
+  "ttrpgScenario": {
+    "schema": "storyforge.ttrpg-authored-scenario",
+    "version": 1,
+    "characters": [
+      {
+        "key": "pc.shen_yan",
+        "seatKey": "player.1",
+        "name": "沈砚",
+        "description": "留在港口的旧信号员。说话前总要看一眼黄铜怀表，深色工装的袖口带着洗不净的油痕。",
+        "appearance": "四十岁上下，瘦削，深色旧工装，细链黄铜怀表，短发被海风吹乱。",
+        "background": "十年前在信号台当班，此后改做临时信号员；熟悉潮汐、钟声与调度格式。",
+        "goal": "救下今夜归航的人，弄清旧日命令的来路；是否承认自己的参与由自己决定。",
+        "secret": "事故当晚，他遵照一封港内电报改动了第二段灯号。怀表盖内藏有回执残角；它不能证明发令者预知危险。",
+        "portrayal": "先核时间再发问；紧张时按住表盖。愿意核实，不替同伴下结论。",
+        "leverage": "熟悉航标规程，能辨认信号台的编号格式；私人物证是否公开由自己选择。",
+        "strengthAttributeKey": "mind",
+        "weaknessAttributeKey": "presence"
+      },
+      {
+        "key": "pc.gu_yao",
+        "seatKey": "player.2",
+        "name": "顾遥",
+        "description": "替码头家属整理补偿材料的抄写员。浅灰长外套，银纸夹别在领边，记得许多工人的姓名。",
+        "appearance": "三十出头，浅灰磨边长外套，银纸夹，木簪，指腹带着淡淡墨渍。",
+        "background": "事故后长期替失去亲人的家庭誊写申请，认识港务会职员，也见过未被登记的求助者。",
+        "goal": "让被遗漏的家属获得承认；在交叉核实后决定公开多少材料，避免一人承担全部责任。",
+        "secret": "她的母亲签过事故摘要。家藏旧账册记录了一笔在沉船事故之前转作救灾粮采购的维修款；她担心母亲被单独归罪。",
+        "portrayal": "条理清楚，先问人名和日期。被逼迫时会停顿，要求看原件。",
+        "leverage": "掌握家属访谈渠道与文书经验；私人账本仍需她同意才可向别人展示。",
+        "strengthAttributeKey": "presence",
+        "weaknessAttributeKey": "body"
+      },
+      {
+        "key": "pc.qiao_yu",
+        "seatKey": "player.3",
+        "name": "乔屿",
+        "description": "常年潜入沉船区的打捞人。褪色防水披肩下挂着裂纹潜水镜，旧绳在掌中打结很快。",
+        "appearance": "三十岁左右，海水晒出的面部纹路，褪色防水披肩，修补过的潜水镜，整齐的工具袋。",
+        "background": "靠外岛打捞为生，认识船体构造与油料封存方法。宁可先检查物件，再讨论传闻。",
+        "goal": "确认自己经手的货物是否带来危险，救回今晚的乘客，找回被遗忘的船工身份。",
+        "secret": "三天前他把混合打捞货中的一瓶旧油卖给灯塔，当时不知其船源。工具袋里的瓶塞留有白鹭号油仓编号。",
+        "portrayal": "短句，常用手势说明结构；不替真人行动，不主动交出自己的证物。",
+        "leverage": "打捞工具、结绳本领与船体知识；可自愿提供瓶塞供核验。",
+        "strengthAttributeKey": "body",
+        "weaknessAttributeKey": "mind"
+      },
+      {
+        "key": "npc.xu_wei",
+        "seatKey": null,
+        "name": "许维",
+        "description": "疲惫的守灯人，盐渍泛白的制服上挂着钥匙串。回答机械问题时格外精确。",
+        "appearance": "五十岁左右，灰白发茬，盐渍制服，磨亮的黄铜钥匙，提着防风灯。",
+        "background": "白鹭号事故后接任守灯人，负责换芯、检修和油料保管。",
+        "goal": "让归汐安全靠泊，同时保住可核验的维修资料。",
+        "secret": "他读过前任留下的工单，知道定位槽在事故前已磨损半格，却一直未推动彻底更换。他不知道其他角色的私人物证。",
+        "portrayal": "惜字，先救人；涉及职责时会要求对照原始记录。",
+        "leverage": "灯塔钥匙、维修工单、与港务夜值台的联络权。",
+        "strengthAttributeKey": "mind",
+        "weaknessAttributeKey": "body"
+      },
+      {
+        "key": "npc.fei_lan",
+        "seatKey": null,
+        "name": "费岚",
+        "description": "港务会夜值代表。笔挺制服与紧绷神情不太相称，手里握着一支旧钢笔。",
+        "appearance": "四十岁上下，深色制服，眼下暗影，拇指有按笔的茧，随身防水文件夹。",
+        "background": "长期负责夜班调度和档案归整，既担心恐慌，也怕旧案毁掉职位。",
+        "goal": "避免未经核实的广播；在证据足够时协助救援，但争取保住自己的解释机会。",
+        "secret": "他曾从正式汇总表删去三名没有登记的船工，备份班次表仍留在柜中。他会抵触追问，不因一次影响就无条件服从。",
+        "portrayal": "反复问来源和日期；遇到交叉证据时逐步让步，拒绝空白承诺。",
+        "leverage": "广播线路、值班册和档案柜；没有读取玩家秘密的能力。",
+        "strengthAttributeKey": "presence",
+        "weaknessAttributeKey": "mind"
+      }
+    ],
+    "scenes": [
+      {
+        "nodeKey": "tide_steps",
+        "description": "夜里十点二十，雾把港湾压成一片灰蓝。石阶上方，最后一盏潮灯一明一暗；两声短促汽笛从海上穿来，夜值台确认那是载着外岛撤离者的归汐。阶缝夹着一角潮湿纸片，检修架的冷凝片上泛着白霜。通往灯室的铁梯、档案棚门缝的微光和旧钟码头的系缆桩，都还看得清。今晚要靠怎样的信号，把船带回岸边？",
+        "gmTruth": "现用燃料混入沉船里封存的油，燃烧会重放旧事故的感官片段。当前汽笛也来自活人的求救，两者有物质关联而非亡者复生。守灯人此刻在灯室。",
+        "failureForward": "行动失手仍可取到纸片或冷凝残样，但会弄湿工具、擦伤手掌或耗费救援准备时间；不取消其他调查路径。",
+        "participantKeys": [
+          "pc.shen_yan",
+          "pc.gu_yao",
+          "pc.qiao_yu"
+        ]
+      },
+      {
+        "nodeKey": "lamp_room",
+        "description": "铁门一推开，冷凝水就沿门框滴落。黄铜灯罩映着暗金色火苗，检修台上摆着标记表、带刻度的支架和一枚取样夹。定位槽的漆面有新旧交错的擦痕，油罐封签已被拆开。许维守在操作杆旁：“灯还能烧一会儿。你们想先看油，还是看这架子？”窗外的船灯忽隐忽现。",
+        "gmTruth": "老燃料携带白鹭号失事时的残声；灯芯座的偏差源于事故以前的磨耗。维修桌有旧工单和器材交接单，可据实检验，不要求捐献新记忆。",
+        "failureForward": "取样或复位不顺时留下湿滑、轻伤或工具损坏的代价，关键读数仍可辨认；若谈不拢，可自己核验台上留存的副本。",
+        "participantKeys": [
+          "pc.shen_yan",
+          "pc.gu_yao",
+          "pc.qiao_yu",
+          "npc.xu_wei"
+        ]
+      },
+      {
+        "nodeKey": "archive_shed",
+        "description": "铁皮屋顶被细雨敲得沙沙响。值班桌上的电报夹用石块压住，靠墙柜子分别标着“班次”“维修”“物资”。几只抽屉被潮气胀住，桌角还有待归档的票据。费岚挡在广播话筒前：“救援我配合。但要广播旧案，先告诉我，你们拿什么证明。”纸张上的印章和登记号都需要凑近核对。",
+        "gmTruth": "档案中保留着更改航标的调度记录、被省略的船工班次和设备失修工单；粮款收据与维修采购章能够相互核验。港内错误决策与器件缺陷共同造成旧事故。",
+        "failureForward": "柜子卡住可撬出副本，谈判受挫仍允许核对公开编号；行动有代价但不会烧毁全部证据，也不替角色交出私藏材料。",
+        "participantKeys": [
+          "pc.shen_yan",
+          "pc.gu_yao",
+          "pc.qiao_yu",
+          "npc.fei_lan"
+        ]
+      },
+      {
+        "nodeKey": "old_bell_quay",
+        "description": "旧木栈桥在脚下轻晃。棚里的木架空着，只剩船钟拓片、打捞交接单和一张维修图；真正的钟已随船离港。储物箱半浸在潮水里，岸边堆着可用的引航绳索。许维和费岚赶来，分别带着灯塔夹册与夜值记录。雾中的汽笛又近了一点。这里可以汇总证据、返回调查，也可以决定今晚怎样迎船。",
+        "gmTruth": "归汐装用了从白鹭号回收的原钟，原配金属钟舌仍在。旧油残声与现役船钟把两次求救联在一起；本地只有纸质拓印与器材记录，不是钟本体。",
+        "failureForward": "搬取箱子时会浸湿衣物，复核文件可能招来争执；仍能取得身份标记或收据。即使证据不足，也能组织人力引航撤离，不封死出路。",
+        "participantKeys": [
+          "pc.shen_yan",
+          "pc.gu_yao",
+          "pc.qiao_yu",
+          "npc.xu_wei",
+          "npc.fei_lan"
+        ]
+      },
+      {
+        "nodeKey": "ending_glimmer",
+        "description": "队伍选择用剩余旧油校准灯标。归汐循着稳定的灯号驶入避风水域，岸上响起接住缆绳的呼喊，乘客终于踏上潮湿的石阶。油罐里的旧日残声一点点散去，这份声音证据无法再重放。今晚的归航得到保障，十年前的问责仍需人们用尚存的材料继续追索。谁愿意交出自己的私事，仍由谁自己决定。",
+        "gmTruth": "已到结算节点。只回应实际选定的方法和已公开的信息，不补写角色坦白、长期处罚或额外牺牲。",
+        "failureForward": "结算后不追加检定；可以复盘或从此前检查点另开一条分支。",
+        "participantKeys": [
+          "pc.shen_yan",
+          "pc.gu_yao",
+          "pc.qiao_yu",
+          "npc.xu_wei",
+          "npc.fei_lan"
+        ]
+      },
+      {
+        "nodeKey": "ending_heard",
+        "description": "经过交叉核实的记录被送上港口广播。人们听见错误调度、设备失修和遗漏船工彼此相连的责任，而不是一个可以轻易替罪的名字。归汐在岸海协作中靠泊，码头同时响起质问、争辩和迎接亲人的呼喊。公开事实换来追责的可能，也动摇了港务会旧有的信任。没有任何人的记忆被强行取走；未主动公开的私人经历仍留在各自手中。",
+        "gmTruth": "已到结算节点。只回应实际选定的方法和已公开的信息，不补写角色坦白、长期处罚或额外牺牲。",
+        "failureForward": "结算后不追加检定；可以复盘或从此前检查点另开一条分支。",
+        "participantKeys": [
+          "pc.shen_yan",
+          "pc.gu_yao",
+          "pc.qiao_yu",
+          "npc.xu_wei",
+          "npc.fei_lan"
+        ]
+      },
+      {
+        "nodeKey": "ending_silence",
+        "description": "队伍选择暂时熄灯，以船钟和岸上的绳索信号组织人力引航。湿绳勒进掌心，接力的呼喊在雾里传开，归汐终于缓缓靠上码头。旧油被封存，今夜没有人必须捐出新的记忆。港口为清理航道和检查设备暂时停航，工人们还要承担额外劳作与生计压力。它何时重新亮灯，留给获救的人们共同决定。",
+        "gmTruth": "已到结算节点。只回应实际选定的方法和已公开的信息，不补写角色坦白、长期处罚或额外牺牲。",
+        "failureForward": "结算后不追加检定；可以复盘或从此前检查点另开一条分支。",
+        "participantKeys": [
+          "pc.shen_yan",
+          "pc.gu_yao",
+          "pc.qiao_yu",
+          "npc.xu_wei",
+          "npc.fei_lan"
+        ]
+      }
+    ],
+    "clues": [
+      {
+        "key": "clue.reverse_salt",
+        "title": "逆向盐痕",
+        "description": "冷凝片的剖面分成两层：底层是经年碳化的旧燃料，上层是刚燃起的新油。盐纹逆着灯罩热流攀升，符合封存油受热后重放旧日感官痕迹的现象。灯号中的过往声响确有物质载体，不能据此认定海上没有活人。",
+        "conclusionKey": "conclusion.reverse_salt",
+        "required": true,
+        "visibility": "discoverable",
+        "paths": [
+          {
+            "nodeKey": "lamp_room",
+            "actionKey": "investigate",
+            "failForward": "取样夹滑脱，划伤指尖；碎片上的两层断面仍足以比对，获得完整线索。"
+          },
+          {
+            "nodeKey": "tide_steps",
+            "actionKey": "overcome",
+            "failForward": "拆冷凝片时水淋透衣袖，工具生锈；保住的残片仍能看出新旧层次，获得完整线索。"
+          }
+        ]
+      },
+      {
+        "key": "clue.old_bell_number",
+        "title": "旧钟号码",
+        "description": "拓片记着 BL-07，器材交接单把这一编号从白鹭号打捞清单接到了归汐的装船记录上。维修图标明原有铜制钟舌保留。今晚的船钟正在归汐上使用；岸上的材料只是副本。回收器件让旧日残声与眼前的求救出现关联。",
+        "conclusionKey": "conclusion.old_bell_number",
+        "required": true,
+        "visibility": "discoverable",
+        "paths": [
+          {
+            "nodeKey": "old_bell_quay",
+            "actionKey": "investigate",
+            "failForward": "拓片受潮晕开，需拆开防水夹花时间复核；交接编号与装船日期仍完整可读。"
+          },
+          {
+            "nodeKey": "lamp_room",
+            "actionKey": "influence",
+            "failForward": "许维不愿空口担保，要求逐张核对他的交接副本；争执耗时，最终编号链条仍交给队伍。"
+          }
+        ]
+      },
+      {
+        "key": "clue.offset_mark",
+        "title": "半格偏移",
+        "description": "旧工单的日期早于白鹭号失事，检修图把灯芯座的偏差标成半格。现存支架的磨耗方向与工单一致：航标器件在出事前就不可靠，错误不能只归于某个当班者。",
+        "conclusionKey": "conclusion.offset_mark",
+        "required": true,
+        "visibility": "discoverable",
+        "paths": [
+          {
+            "nodeKey": "lamp_room",
+            "actionKey": "overcome",
+            "failForward": "复位扳手打滑，手臂受了轻伤；暴露出的刻度与旧工单依然能够互证。"
+          },
+          {
+            "nodeKey": "archive_shed",
+            "actionKey": "overcome",
+            "failForward": "搬柜时撞坏一只抽屉，留下修理欠账；取出的原始工单清楚记着缺陷和日期。"
+          }
+        ]
+      },
+      {
+        "key": "clue.dispatch_receipt",
+        "title": "调度回执",
+        "description": "档案中的调度底稿留有 10:42 的发送时刻，搁浅记录是 11:15。港内信号台的收发编号串起了传递过程。要求改变让路信号的命令先于事故发出，但这些资料不足以证明发令人当时预知船将遇险。",
+        "conclusionKey": "conclusion.dispatch_receipt",
+        "required": true,
+        "visibility": "discoverable",
+        "paths": [
+          {
+            "nodeKey": "archive_shed",
+            "actionKey": "investigate",
+            "failForward": "纸页粘连，分开时撕破空白边；编号与两个时间仍保留，足以核验先后。"
+          },
+          {
+            "nodeKey": "tide_steps",
+            "actionKey": "influence",
+            "failForward": "夜值台不愿口头担责，要求反复报出编号；无线电核对耗时后给出同一组时间记录。"
+          }
+        ]
+      },
+      {
+        "key": "clue.undocumented_crew",
+        "title": "名单外的人",
+        "description": "备份班次表写着林启、周荷、陈满三位临时船工及北巷家属住址，正式事故汇总却少了这三行。码头身份牌能与班次相互对应。被漏记的是具体的人，家属有权得到追认；名单本身不能证明是谁下达了让路命令。",
+        "conclusionKey": "conclusion.undocumented_crew",
+        "required": true,
+        "visibility": "discoverable",
+        "paths": [
+          {
+            "nodeKey": "archive_shed",
+            "actionKey": "influence",
+            "failForward": "费岚拒绝替自己开脱，谈话气氛恶化；他仍取出备份班次表，队伍核对到全部名字。"
+          },
+          {
+            "nodeKey": "old_bell_quay",
+            "actionKey": "overcome",
+            "failForward": "储物箱绳索崩断，取回身份牌时浸湿靴子；三块标记与值班副本仍可对上。"
+          }
+        ]
+      },
+      {
+        "key": "clue.emergency_funds",
+        "title": "紧急挪款",
+        "description": "维修采购章与救灾粮收据有对应的金额和拨款号，两张单据都签发于失事之前。器材经费的一部分转去买粮，解释了检修为何拖延，也留下了需要公开追问的决策责任。现有凭证没有完整签字，不能独自指认某个家庭成员。",
+        "conclusionKey": "conclusion.emergency_funds",
+        "required": true,
+        "visibility": "discoverable",
+        "paths": [
+          {
+            "nodeKey": "old_bell_quay",
+            "actionKey": "influence",
+            "failForward": "费岚要求保留收据原件，队伍为核对编号耽误了准备；复本上的金额、日期仍足以互证。"
+          },
+          {
+            "nodeKey": "tide_steps",
+            "actionKey": "investigate",
+            "failForward": "纸片被雨泡软，捡取时弄脏外套；保住的拨款号与粮站公开告示对应，仍得到完整结论。"
+          }
+        ]
+      }
+    ],
+    "quests": [
+      {
+        "key": "quest.double_distress",
+        "title": "双重求救",
+        "objective": "分清重现的旧声与今夜求救，弄清二者为何相连，再选择救援方法。",
+        "requiredConclusionKeys": [
+          "conclusion.reverse_salt",
+          "conclusion.old_bell_number"
+        ]
+      },
+      {
+        "key": "quest.complex_responsibility",
+        "title": "复合责任",
+        "objective": "交叉核验调度、器件、名单和拨款，避免让一个人承担所有责任。",
+        "requiredConclusionKeys": [
+          "conclusion.offset_mark",
+          "conclusion.dispatch_receipt",
+          "conclusion.undocumented_crew",
+          "conclusion.emergency_funds"
+        ]
+      }
+    ],
+    "endings": [
+      {
+        "nodeKey": "ending_glimmer",
+        "title": "保留微光",
+        "epilogue": "队伍选择用剩余旧油校准灯标。归汐循着稳定的灯号驶入避风水域，岸上响起接住缆绳的呼喊，乘客终于踏上潮湿的石阶。油罐里的旧日残声一点点散去，这份声音证据无法再重放。今晚的归航得到保障，十年前的问责仍需人们用尚存的材料继续追索。谁愿意交出自己的私事，仍由谁自己决定。",
+        "requiredConclusionKeys": [
+          "conclusion.old_bell_number"
+        ],
+        "forbiddenConclusionKeys": []
+      },
+      {
+        "nodeKey": "ending_heard",
+        "title": "让港口听见",
+        "epilogue": "经过交叉核实的记录被送上港口广播。人们听见错误调度、设备失修和遗漏船工彼此相连的责任，而不是一个可以轻易替罪的名字。归汐在岸海协作中靠泊，码头同时响起质问、争辩和迎接亲人的呼喊。公开事实换来追责的可能，也动摇了港务会旧有的信任。没有任何人的记忆被强行取走；未主动公开的私人经历仍留在各自手中。",
+        "requiredConclusionKeys": [
+          "conclusion.dispatch_receipt",
+          "conclusion.offset_mark",
+          "conclusion.undocumented_crew"
+        ],
+        "forbiddenConclusionKeys": []
+      },
+      {
+        "nodeKey": "ending_silence",
+        "title": "熄灯引航",
+        "epilogue": "队伍选择暂时熄灯，以船钟和岸上的绳索信号组织人力引航。湿绳勒进掌心，接力的呼喊在雾里传开，归汐终于缓缓靠上码头。旧油被封存，今夜没有人必须捐出新的记忆。港口为清理航道和检查设备暂时停航，工人们还要承担额外劳作与生计压力。它何时重新亮灯，留给获救的人们共同决定。",
+        "requiredConclusionKeys": [],
+        "forbiddenConclusionKeys": []
+      }
+    ]
+  }
+}

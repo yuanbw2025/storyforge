@@ -9,21 +9,26 @@ import {
   assertProductProductionBudgetLedgerV1,
   runProductProductionSchedulerCycleV1,
   runProductProductionUntilBlockedV1,
+  ProductProductionDraftRejectedErrorV1,
   type ProductProductionTaskExecutionResultV1,
   type ProductProductionTaskExecutorV1,
 } from '../../src/lib/product-production/scheduler'
 import type { ProductBuildArtifactKindV1, ProductRuntimePackageV1 } from '../../src/lib/types'
 import { seedCurrentProductWorld } from '../helpers/current-product-world'
 import { resolveProductProductionWorldCompilationDescriptorsV2 } from '../../src/lib/product-production/world-source'
+import { AIError } from '../../src/lib/types'
+import { AICompletionResponseErrorV1 } from '../../src/lib/ai/completion-response'
+import { readProductProductionTaskEvidenceV1 } from '../../src/lib/product-production/service'
+import { readProductProductionRepairFeedback } from '../../src/lib/product-production/context'
 
-async function fixture(name: string) {
+async function fixture(name: string, extraFacts: string[] = []) {
   const owned = await seedCurrentProductWorld(name)
   const release = owned.release
   const suggestions = await suggestProductStartingPoints({ scope: owned.scope, worldReleaseId: release.id! })
   const brief = await draftProductProductionBriefV3({
     scope: owned.scope, worldReleaseId: release.id!, suggestionKey: suggestions.suggestions[0].suggestionKey,
     productType: 'avg', scale: 'scene', visualLevel: 'none', audioLevel: 'none',
-    requiredFacts: ['冻结世界事实保持一致'], forbiddenChanges: ['不得写回世界正式表'],
+    requiredFacts: ['冻结世界事实保持一致', ...extraFacts], forbiddenChanges: ['不得写回世界正式表'],
   })
   const created = await executeProductProductionCommand({
     scope: owned.scope,
@@ -148,6 +153,105 @@ describe('R-PRODUCTPROD-1D · durable bounded DAG scheduler', () => {
     })
   })
   afterAll(() => db.close())
+
+  it('结构校验失败前保留模型原文证据，失败候选不成为正式产物', async () => {
+    const owned = await fixture('scheduler-rejected-output')
+    const raw = '{"scene":"未完成的候选"'
+    let calls = 0
+    const result = await runProductProductionUntilBlockedV1({
+      scope: owned.scope, productionId: owned.productionId,
+      executor: async request => {
+        calls++
+        await request.onModelOutput?.(raw)
+        throw new ProductProductionDraftRejectedErrorV1('JSON 不完整', {
+          modelCalls: 1, inputTokens: 100, outputTokens: 10, mediaCalls: 0,
+          costUsd: null, durationMs: 100, storageBytes: 0,
+        })
+      },
+      capabilityBindings: [{ requirementKey: owned.brief.capabilityRequirements[0].requirementKey,
+        adapterId: 'configured-text-provider.v1', bindingHash: 'a'.repeat(64) }],
+    })
+    expect(result.tasks.find(item => item.taskKey === 'content.design')?.status).toBe('blocked')
+    expect((await db.agentRunArtifacts.toArray()).some(item => item.artifactKind === 'raw-response' && item.content === raw)).toBe(true)
+    expect(await db.productBuildArtifacts.count()).toBe(0)
+    expect(calls).toBe(1)
+    expect(result.budget.usage.modelCalls).toBe(1)
+    expect(result.budget.usage.costUsd).toBeNull()
+    const evidence = await readProductProductionTaskEvidenceV1({
+      scope: owned.scope, productionId: owned.productionId, taskKey: 'content.design',
+    })
+    expect(evidence.some(item => item.kind === 'raw-response' && item.content === raw)).toBe(true)
+    expect(evidence.some(item => item.kind === 'tool-result' && item.content.includes('JSON 不完整'))).toBe(true)
+    const repair = JSON.parse(await readProductProductionRepairFeedback({
+      projectId: owned.scope.projectId, scope: owned.scope, productProductionId: owned.productionId,
+      productBuildId: result.buildId, productProductionTaskKey: 'content.design',
+    }))
+    expect(repair.previous.evidence.some((item: { content: string }) => item.content === raw)).toBe(true)
+    const other = await fixture('scheduler-other-owner')
+    await expect(readProductProductionTaskEvidenceV1({
+      scope: other.scope, productionId: owned.productionId, taskKey: 'content.design',
+    })).rejects.toThrow()
+  })
+
+  it.each([
+    new AIError(401, 'invalid token'),
+    new AICompletionResponseErrorV1('empty', 'content=0; finish=length'),
+  ])('授权拒绝与空响应不隐藏重试: %s', async error => {
+    const owned = await fixture('scheduler-nonretryable')
+    let calls = 0
+    const input = { scope: owned.scope, productionId: owned.productionId,
+      executor: async () => { calls++; throw error },
+      capabilityBindings: [{ requirementKey: owned.brief.capabilityRequirements[0].requirementKey,
+        adapterId: 'configured-text-provider.v1', bindingHash: 'a'.repeat(64) }] }
+    const result = await runProductProductionUntilBlockedV1(input)
+    expect(calls).toBe(1)
+    expect(result.tasks.find(item => item.taskKey === 'content.design')?.status).toBe('blocked')
+    await runProductProductionUntilBlockedV1(input)
+    expect(calls).toBe(1)
+  })
+
+  it('长 Brief 超过单源软上限仍全文交付；尾部约束与 V3 证据一致', async () => {
+    const owned = await fixture('scheduler-long-contract', Array.from({ length: 6 }, (_, i) => `${i}：${'潮'.repeat(800)}`))
+    const calls = new Map<string, number>()
+    const executor = executorFor(owned, calls, { active: 0, peak: 0 })
+    const projection = await runProductProductionSchedulerCycleV1({
+      scope: owned.scope, productionId: owned.productionId,
+      executor: async request => {
+        expect(request.contextText).toContain('不得写回世界正式表')
+        expect(request.contextText).not.toContain('…（上下文已截断）')
+        for (const fact of owned.brief.intent.requiredFacts) expect(request.contextText).toContain(fact)
+        return executor(request)
+      },
+      capabilityBindings: [{ requirementKey: owned.brief.capabilityRequirements[0].requirementKey,
+        adapterId: 'configured-text-provider.v1', bindingHash: 'a'.repeat(64) }],
+    })
+    const task = projection.tasks.find(item => item.taskKey === 'content.design')!
+    expect(task.status).toBe('completed')
+    expect(calls.get('content.design')).toBe(1)
+    const evidence = await readContextGatewayManifestV3ForAttemptV1({ scope: owned.scope,
+      runId: task.runId!, stepId: 'content.design', attempt: 1 })
+    const source = evidence.manifest.sources.find(item => item.key === 'product-production.brief')!
+    expect(source.delivery).toBe('full')
+    expect(source.originalTokens).toBeGreaterThan(8000)
+    expect(source.tokens).toBe(source.originalTokens)
+  })
+
+  it('超过任务总预算在调用前持久化阻塞；重新调度不自动花费模型调用', async () => {
+    const owned = await fixture('scheduler-oversized-contract', Array.from({ length: 20 }, (_, i) => `${i}：${'潮'.repeat(1900)}`))
+    const calls = new Map<string, number>()
+    const input = { scope: owned.scope, productionId: owned.productionId,
+      executor: executorFor(owned, calls, { active: 0, peak: 0 }),
+      capabilityBindings: [{ requirementKey: owned.brief.capabilityRequirements[0].requirementKey,
+        adapterId: 'configured-text-provider.v1', bindingHash: 'a'.repeat(64) }] }
+    const projection = await runProductProductionUntilBlockedV1(input)
+    expect(calls.size).toBe(0)
+    expect(projection.tasks.find(item => item.taskKey === 'content.design')?.status).toBe('blocked')
+    const build = await db.productBuilds.get(projection.buildId)
+    expect(build?.status).toBe('recovery-required')
+    expect(build?.failureJson).toContain('task-context-budget-exceeded')
+    await runProductProductionUntilBlockedV1(input)
+    expect(calls.size).toBe(0)
+  })
 
   it('从授权 Brief 自主并行执行 DAG、冻结 child receipts、编译 Preview 并完成 root join', async () => {
     const owned = await fixture('scheduler-parallel')

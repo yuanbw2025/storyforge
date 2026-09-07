@@ -269,7 +269,8 @@ function validateProvenance(value: MarketplaceImportProvenanceV2): MarketplaceIm
   return { ...structuredClone(value), attribution }
 }
 
-export async function importMarketplaceProductDistributionV2(input: {
+async function installProductDistributionV2(input: {
+  source: 'marketplace' | 'community-bundle'
   scope: WorkspaceScope
   bundle: unknown
   provenance: MarketplaceImportProvenanceV2
@@ -315,12 +316,12 @@ export async function importMarketplaceProductDistributionV2(input: {
         productType: manifest.productType,
         worldReleaseId: null,
         version: Math.max(0, ...prior.map(candidate => candidate.version)) + 1,
-        label: `${manifest.runtimePackage.definition.title} · 市场副本`,
+        label: `${manifest.runtimePackage.definition.title} · ${input.source === 'marketplace' ? '市场副本' : '社区游戏'}`,
         manifestJson: canonicalProductProductionJsonV2(manifest),
         contentHash: bundle.productRelease.contentHash,
         createdAt: importedAt,
         distributionProvenance: {
-          source: 'marketplace' as const,
+          source: input.source,
           ...provenance,
           importedAt,
         },
@@ -384,4 +385,23 @@ export async function importMarketplaceProductDistributionV2(input: {
 
     return release
   })
+}
+
+/** Marketplace orders retain their existing provenance contract. */
+export function importMarketplaceProductDistributionV2(input: {
+  scope: WorkspaceScope; bundle: unknown; provenance: MarketplaceImportProvenanceV2
+}): Promise<ProductRelease> {
+  return installProductDistributionV2({ ...input, source: 'marketplace' })
+}
+
+/** Free, repository-distributed releases do not invent an order or entitlement. */
+export function importCommunityProductDistributionV1(input: {
+  scope: WorkspaceScope; bundle: unknown; catalogKey: string;
+  license: MarketplaceImportProvenanceV2['license']; attribution: string[]
+}): Promise<ProductRelease> {
+  if (!/^[a-z0-9][a-z0-9.-]{0,99}$/.test(input.catalogKey)) throw new Error('[distribution] 社区目录 key 无效')
+  return installProductDistributionV2({ scope: input.scope, bundle: input.bundle, source: 'community-bundle', provenance: {
+    listingId: `listing.community.${input.catalogKey}`, orderId: null, entitlementId: null,
+    license: input.license, attribution: input.attribution, localCopyPreserved: true, acquiredAt: Date.now(),
+  } })
 }

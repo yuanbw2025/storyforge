@@ -149,6 +149,10 @@ async function readProductProductionArtifactInputs(input: AssembleContextInput):
 async function readProductProductionQualityFeedback(input: AssembleContextInput): Promise<string> {
   return (await import('../product-production/context')).readProductProductionQualityFeedback(input)
 }
+
+async function readProductProductionRepairFeedback(input: AssembleContextInput): Promise<string> {
+  return (await import('../product-production/context')).readProductProductionRepairFeedback(input)
+}
 async function readProductProductionEvolutionBase(input: AssembleContextInput): Promise<string> {
   return (await import('../product-production/context')).readProductProductionEvolutionBase(input)
 }
@@ -1336,6 +1340,40 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     read: readTtrpgGmRuntimeContextV1,
   },
   {
+    key: 'ttrpgPrivateGuidance', label: '正式 TTRPG 单角色私密指引', scope: 'runtime', layer: 'L0', ownerFrom: 'work',
+    budgetTokens: 8000, protectedFromTrim: true, requiresProductRuntimeSessionId: true,
+    read: async input => (await import('../ttrpg/private-guidance')).readTtrpgPrivateGuidanceContextV1(input),
+  },
+  {
+    key: 'ttrpgDirector',
+    label: '正式 TTRPG AI KP 决策与冻结揭示条件',
+    scope: 'runtime', layer: 'L0', ownerFrom: 'work', budgetTokens: 12000,
+    protectedFromTrim: true, requiresProductRuntimeSessionId: true,
+    read: async input => (await import('../ttrpg/director-context')).readTtrpgDirectorContextV1(input),
+  },
+  {
+    key: 'ttrpgPublicNarration',
+    label: '正式 TTRPG 已授权公开叙述素材',
+    scope: 'runtime',
+    layer: 'L0',
+    ownerFrom: 'work',
+    budgetTokens: 10_000,
+    protectedFromTrim: true,
+    requiresProductRuntimeSessionId: true,
+    read: async input => (await import('../ttrpg/narrator-context')).readTtrpgPublicNarrationContextV1(input),
+  },
+  {
+    key: 'ttrpgNpcRuntime',
+    label: '正式 TTRPG NPC 独立知情视角',
+    scope: 'runtime',
+    layer: 'L0',
+    ownerFrom: 'work',
+    budgetTokens: 10_000,
+    protectedFromTrim: true,
+    requiresProductRuntimeSessionId: true,
+    read: async input => (await import('../ttrpg/npc-context')).readTtrpgNpcRuntimeContextV1(input),
+  },
+  {
     key: 'ttrpgPlayerRuntime',
     label: '正式 TTRPG 单角色玩家运行视角',
     scope: 'runtime',
@@ -1377,6 +1415,13 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     budgetTokens: 6000,
     enabled: input => Number.isInteger(input.productBuildId),
     read: readProductProductionQualityFeedback,
+  },
+  {
+    key: 'product-production.repair-feedback',
+    label: '当前制作任务的失败草稿与校验意见',
+    scope: 'project', layer: 'L1', ownerFrom: 'work', budgetTokens: 12_000,
+    enabled: input => Number.isInteger(input.productBuildId) && !!input.productProductionTaskKey,
+    read: readProductProductionRepairFeedback,
   },
   {
     key: 'product-production.evolution-base',

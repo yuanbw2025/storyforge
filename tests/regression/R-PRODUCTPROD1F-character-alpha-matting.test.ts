@@ -12,6 +12,19 @@ function checkerboard(width: number, height: number): Uint8ClampedArray {
 }
 
 describe('R-PRODUCTPROD-1F · character alpha matting', () => {
+  it('显式品红背景契约移除发丝与指间封闭色块，普通抠图仍保护主体颜色', () => {
+    const width = 30; const height = 30
+    const data = new Uint8ClampedArray(width * height * 4)
+    for (let i = 0; i < data.length; i += 4) data.set([255, 0, 255, 255], i)
+    for (let y = 5; y < 25; y++) for (let x = 7; x < 23; x++) data.set([30, 60, 90, 255], (y * width + x) * 4)
+    const hole = (15 * width + 15) * 4
+    data.set([228, 31, 219, 255], hole)
+    const normal = matteEdgeConnectedCharacterBackdropV1({ width, height, data })
+    const keyed = matteEdgeConnectedCharacterBackdropV1({ width, height, data, reservedMagentaBackdrop: true })
+    expect(normal.data[hole + 3]).toBe(255)
+    expect(keyed.data[hole + 3]).toBe(0)
+    expect(keyed.data[(15 * width + 12) * 4 + 3]).toBe(255)
+  })
   it('只移除与画布边缘连通的棋盘格，保留主体内部的白色区域', () => {
     const width = 12; const height = 12; const data = checkerboard(width, height)
     for (let y = 3; y <= 10; y += 1) for (let x = 3; x <= 8; x += 1) {

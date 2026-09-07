@@ -50,7 +50,7 @@ Phase 5 已完成世界观/故事/角色/主支线/大纲/细纲/正文、候选
 
 | ID | 状态 | 工作 | 完成判据 |
 |---|---|---|---|
-| E-TTRPG-01 | QUEUED | 跑团标准纵切面 | WorldRelease→会谈/Brief→内容/规则/媒资→build/release→AI KP 运行/恢复 |
+| E-TTRPG-01 | IN_PROGRESS | 跑团标准纵切面 | WorldRelease→会谈/Brief→内容/规则/媒资→build/release→AI KP 运行/恢复 |
 | E-CHAT-01 | QUEUED | 单/多角色聊天完整产品 | 可见性、导演、长期记忆、关系、生产与不可变 release |
 | E-TOWN-01 | QUEUED | AI 小镇 | 时间、地点、日程、群体关系、自治和离线演化；与聊天分离 |
 | E-TEXTADV-01 | QUEUED | 文字冒险 | 选择/判定/资源/任务/结局和可玩发布 |

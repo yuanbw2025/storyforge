@@ -76,6 +76,7 @@ import './product-hub.css'
 
 const NodeAuthoringWorkspace = lazy(() => import('../components/node-authoring/NodeAuthoringWorkspace'))
 const TtrpgRuntimePanel = lazy(() => import('../components/ttrpg/TtrpgRuntimePanel'))
+const TtrpgCommunityPage = lazy(() => import('./TtrpgCommunityPage'))
 const CharacterInteractionPanel = lazy(() => import('../components/character-interaction/CharacterInteractionPanel'))
 const AdventureGamePlayer = lazy(() => import('../components/text-game/AdventureGamePlayer'))
 const AvgGamePlayer = lazy(() => import('../components/text-game/AvgGamePlayer'))
@@ -183,7 +184,7 @@ const FEATURE_META: Record<Exclude<TabId, 'home'>, { eyebrow: string; descriptio
   worlds: { eyebrow: 'FOUNDATION', description: '把设定、角色和规则整理成可持续复用的世界版本。', icon: Globe2, accent: 'ochre' },
   novel: { eyebrow: 'AUTHORING', description: '在同一套可靠工作流中创作短篇、长篇，并承接剧本与漫画改编。', icon: BookOpenText, accent: 'rust' as Accent },
   nodes: { eyebrow: 'FLOW', description: '自由组合世界资料、处理中间产物和生成节点。', icon: Workflow, accent: 'blue' },
-  ttrpg: { eyebrow: 'PLAY', description: '选择一个世界版本，开始战役、行动和事件回放。', icon: Swords, accent: 'teal' },
+  ttrpg: { eyebrow: 'PLAY', description: '制作和主持自己的战役，体验已发布的原创跑团作品。', icon: Swords, accent: 'teal' },
   chat: { eyebrow: 'CHARACTERS', description: '冻结一个世界与角色快照，开始可分支的独立角色聊天。', icon: MessageCircle, accent: 'violet' },
   'text-games': { eyebrow: 'TEXT GAMES', description: '选择文字冒险、AVG 或文字开放世界，从冻结来源生产并运行独立产品。', icon: Gamepad2, accent: 'blue' },
   market: { eyebrow: 'COMMUNITY', description: '发现、领取和发布完整可验证的跑团与文字游戏发行物。', icon: Store, accent: 'ochre' },
@@ -509,6 +510,10 @@ function NodesPage({ project, onCreate }: { project?: Project; onCreate: () => v
   return <><PageHeading eyebrow="FLOW / NODE AUTHORING" title="节点创作" description="把分步骤长篇的同源能力拆成更自由、更细粒度、可视且可组合的创作图。" /><section className="sf-product-runtime-surface"><Suspense fallback={<FeaturePanelFallback />}><NodeAuthoringWorkspace project={project} worldGroupId={worldGroupId} /></Suspense></section></>
 }
 
+function TtrpgPublishedGames() {
+  return <Suspense fallback={<FeaturePanelFallback />}><TtrpgCommunityPage embedded /></Suspense>
+}
+
 function TtrpgPage({ project, world, onOpenWorldPicker, onCreate, initialSessionId = null, initialProductionHandoff = null, initialOnlineHandoff = null, onOnlineHandoffConsumed }: { project?: Project; world?: ProductWorld; onOpenWorldPicker: () => void; onCreate: () => void; initialSessionId?: number | null; initialProductionHandoff?: ProductProductionHandoffV1 | null; initialOnlineHandoff?: OnlineRoomJoinHandoffV1 | null; onOnlineHandoffConsumed?: () => void }) {
   const [mode, setMode] = useState<'play' | 'production'>('play')
   const [runtimeKey, setRuntimeKey] = useState(0)
@@ -524,10 +529,10 @@ function TtrpgPage({ project, world, onOpenWorldPicker, onCreate, initialSession
     if (initialProductionHandoff?.productType === 'ttrpg') setMode('production')
   }, [initialProductionHandoff])
   const worldGroupId = useSelectedWorldGroupId(project)
-  if (!project || !world) return <><PageHeading eyebrow="PLAY / TTRPG" title="跑团" description="选择世界版本，开始可回放的单机战役。" /><EmptyProjectState onCreate={onCreate} /></>
+  if (!project || !world) return <><PageHeading eyebrow="PLAY / TTRPG" title="跑团" description="制作与主持自己的战役，或在下方体验已有跑团作品。" /><section className="sf-product-empty"><Swords className="h-8 w-8" /><h2>制作自己的跑团</h2><p>从世界引擎封存一个世界版本，开始制作新的战役。下方已有作品可以直接游玩。</p><Button icon={Plus} onClick={onCreate}>新建内容</Button></section><TtrpgPublishedGames /></>
   const scope = scopeForProject(project)
-  if (!scope) return <><PageHeading eyebrow="PLAY / TTRPG" title="跑团" description="从正式发布建立可回放战役。" /><BindingBanner world={world} onChange={onOpenWorldPicker} /><section className="sf-product-empty"><ShieldCheck className="h-8 w-8" /><h2>工作区归属尚未就绪</h2><p>请先在世界引擎完成 World/Work 初始化。</p></section></>
-  return <><PageHeading eyebrow={mode === 'play' ? 'PLAY / TTRPG' : 'PRODUCE / TTRPG'} title="跑团" description={mode === 'play' ? '从冻结产品发布进入确定性规则、场景、战斗与长期记录。' : '从不可变世界来源确认 Brief，经统一 Production、Build、媒资和质量闸门形成可运行产品。'} action={<div className="product-mode-actions"><Button variant={mode === 'play' ? 'primary' : 'secondary'} icon={Gamepad2} onClick={() => setMode('play')}>主持与游玩</Button><Button variant={mode === 'production' ? 'primary' : 'secondary'} icon={Sparkles} onClick={() => setMode('production')}>跑团制作</Button><Button icon={Hash} onClick={onOpenWorldPicker}>选择世界</Button></div>} /><BindingBanner world={world} onChange={onOpenWorldPicker} />{mode === 'production' && <p className="mx-5 rounded border border-accent/30 bg-accent/5 px-4 py-3 text-xs leading-5 text-text-muted" data-testid="ttrpg-production-contract-boundary">跑团只通过统一产品生产链读取冻结世界资源；内容、媒资、Build、Release 与运行私域均归跑团产品，不回写世界引擎。</p>}<section className="sf-product-runtime-surface"><Suspense fallback={<FeaturePanelFallback />}>{mode === 'production' ? <ProductProductionStudio scope={scope} worldGroupId={worldGroupId} allowedProducts={TTRPG_PRODUCTION_PRODUCTS} initialProduct="ttrpg" initialSource={initialProductionHandoff} onPublished={() => { setPreviewSessionId(null); setRuntimeKey(value => value + 1); setMode('play') }} onPreviewStarted={(_, sessionId) => { setPreviewSessionId(sessionId); setRuntimeKey(value => value + 1); setMode('play') }} /> : <TtrpgRuntimePanel key={runtimeKey} project={project} worldGroupId={worldGroupId} workspaceScope={scope} initialSessionId={previewSessionId ?? initialSessionId} initialOnlineHandoff={initialOnlineHandoff} onOnlineHandoffConsumed={onOnlineHandoffConsumed} />}</Suspense></section></>
+  if (!scope) return <><PageHeading eyebrow="PLAY / TTRPG" title="跑团" description="从正式发布建立可回放战役。" /><BindingBanner world={world} onChange={onOpenWorldPicker} /><section className="sf-product-empty"><ShieldCheck className="h-8 w-8" /><h2>工作区归属尚未就绪</h2><p>请先在世界引擎完成 World/Work 初始化。</p></section><TtrpgPublishedGames /></>
+  return <><PageHeading eyebrow={mode === 'play' ? 'PLAY / TTRPG' : 'PRODUCE / TTRPG'} title="跑团" description={mode === 'play' ? '从冻结产品发布进入确定性规则、场景、战斗与长期记录。' : '从不可变世界来源确认 Brief，经统一 Production、Build、媒资和质量闸门形成可运行产品。'} action={<div className="product-mode-actions"><Button variant={mode === 'play' ? 'primary' : 'secondary'} icon={Gamepad2} onClick={() => setMode('play')}>主持与游玩</Button><Button variant={mode === 'production' ? 'primary' : 'secondary'} icon={Sparkles} onClick={() => setMode('production')}>跑团制作</Button><Button icon={Hash} onClick={onOpenWorldPicker}>选择世界</Button></div>} /><BindingBanner world={world} onChange={onOpenWorldPicker} />{mode === 'production' && <p className="mx-5 rounded border border-accent/30 bg-accent/5 px-4 py-3 text-xs leading-5 text-text-muted" data-testid="ttrpg-production-contract-boundary">跑团只通过统一产品生产链读取冻结世界资源；内容、媒资、Build、Release 与运行私域均归跑团产品，不回写世界引擎。</p>}<section className="sf-product-runtime-surface"><Suspense fallback={<FeaturePanelFallback />}>{mode === 'production' ? <ProductProductionStudio scope={scope} worldGroupId={worldGroupId} allowedProducts={TTRPG_PRODUCTION_PRODUCTS} initialProduct="ttrpg" initialSource={initialProductionHandoff} onPublished={() => { setPreviewSessionId(null); setRuntimeKey(value => value + 1); setMode('play') }} onPreviewStarted={(_, sessionId) => { setPreviewSessionId(sessionId); setRuntimeKey(value => value + 1); setMode('play') }} /> : <TtrpgRuntimePanel key={runtimeKey} project={project} worldGroupId={worldGroupId} workspaceScope={scope} initialSessionId={previewSessionId ?? initialSessionId} initialOnlineHandoff={initialOnlineHandoff} onOnlineHandoffConsumed={onOnlineHandoffConsumed} />}</Suspense></section><TtrpgPublishedGames /></>
 }
 
 function MarketplacePage({ project, world, onOpenWorldPicker, onImported, onRoomHandoff }: {

@@ -1,19 +1,22 @@
 import { lazy, Suspense } from 'react'
-import { useNavigate } from 'react-router'
+import { useNavigate, useSearchParams } from 'react-router'
 import { ArrowLeft } from 'lucide-react'
 
 const SettingsPage = lazy(() => import('../components/settings/SettingsPage'))
 
 export default function SettingsRoutePage() {
   const navigate = useNavigate()
+  const [params] = useSearchParams()
+  const requestedReturn = params.get('returnTo') ?? ''
+  const returnTo = /^\/play(?:\/[a-zA-Z0-9./-]+)?$/.test(requestedReturn) && !requestedReturn.includes('..') ? requestedReturn : '/'
 
   return (
     <div className="min-h-screen bg-bg-base">
       <header className="border-b border-border px-6 py-3 flex items-center gap-3">
         <button
-          onClick={() => navigate('/')}
+          onClick={() => navigate(returnTo)}
           className="p-2 rounded-lg text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-colors"
-          title="返回首页"
+          title={returnTo === '/' ? '返回首页' : '返回冒险'}
         >
           <ArrowLeft className="w-4 h-4" />
         </button>

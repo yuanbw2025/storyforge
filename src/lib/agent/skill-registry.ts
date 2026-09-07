@@ -88,6 +88,8 @@ export type AgentSkillExecutionModeV1 =
   | 'open-world-narration'
   | 'ttrpg-gm-narrator'
   | 'ttrpg-gm-actor-intent'
+  | 'ttrpg-director'
+  | 'ttrpg-private-guidance'
   | 'ttrpg-player-intent'
   | 'product-production'
   | 'adaptation-brief'
@@ -1119,7 +1121,6 @@ const TTRPG_GM_RUNTIME_INPUT_POLICY: AgentSkillInputPolicyV1 = {
     complete: { handling: 'grounded-transform', instruction: '只能叙述已完成的正式 RulePack 行动，或为当前 GM 控制 NPC 从 availableActions 提出闭集行动意图；不得指定骰点、结果、资源变化、线索权限或场景事实。' },
   },
 }
-const TTRPG_GM_RUNTIME_COMPRESSION_POLICY = compressionPolicy(['ttrpgRuntime'])
 const TTRPG_PLAYER_RUNTIME_INPUT_POLICY: AgentSkillInputPolicyV1 = {
   sourceKeys: ['ttrpgPlayerRuntime'],
   states: {
@@ -2857,20 +2858,37 @@ export const AGENT_SKILLS = [
     regressionTests: ['R-HARNESS-RUNTIME2-product-skills'],
   },
   {
+    version: 1, id: 'prose.ttrpg-private-guidance', agentId: 'prose', defaultForAgent: false,
+    label: '角色私密指引', owner: 'prose-agent', promptVersion: 'ttrpg-private-guidance-v1', executionMode: 'ttrpg-private-guidance',
+    contextTaskKind: 'agent-prose', readToolNames: [], contextSourceKeys: ['ttrpgPrivateGuidance'], optionalContextSourceKeys: [],
+    inputPolicy: { ...TTRPG_PLAYER_RUNTIME_INPUT_POLICY, sourceKeys: ['ttrpgPrivateGuidance'] },
+    contextCompression: compressionPolicy(['ttrpgPrivateGuidance']), maxOutputTokens: 1500, writeTargets: [],
+    lastVerifiedAt: '2026-09-06', regressionTests: ['R-TTRPG4-ai-kp-director'],
+  },
+  {
+    version: 1, id: 'prose.ttrpg-director', agentId: 'prose', defaultForAgent: false,
+    label: 'AI KP 主持决策', owner: 'prose-agent', promptVersion: 'ttrpg-director-v1',
+    executionMode: 'ttrpg-director', contextTaskKind: 'agent-prose', readToolNames: [],
+    contextSourceKeys: ['ttrpgDirector'], optionalContextSourceKeys: [],
+    inputPolicy: { ...TTRPG_GM_RUNTIME_INPUT_POLICY, sourceKeys: ['ttrpgDirector'] },
+    contextCompression: compressionPolicy(['ttrpgDirector']), maxOutputTokens: 1000, writeTargets: [],
+    lastVerifiedAt: '2026-09-06', regressionTests: ['R-TTRPG4-ai-kp-director'],
+  },
+  {
     version: 1,
     id: 'prose.ttrpg-gm-narrator',
     agentId: 'prose',
     defaultForAgent: false,
     label: '可信 TTRPG 主持叙事候选',
     owner: 'prose-agent',
-    promptVersion: 'ttrpg-gm-narrator-v1',
+    promptVersion: 'ttrpg-gm-narrator-v2',
     executionMode: 'ttrpg-gm-narrator',
     contextTaskKind: 'agent-prose',
     readToolNames: [],
-    contextSourceKeys: ['ttrpgRuntime'],
+    contextSourceKeys: ['ttrpgPublicNarration'],
     optionalContextSourceKeys: [],
-    inputPolicy: TTRPG_GM_RUNTIME_INPUT_POLICY,
-    contextCompression: TTRPG_GM_RUNTIME_COMPRESSION_POLICY,
+    inputPolicy: { ...TTRPG_GM_RUNTIME_INPUT_POLICY, sourceKeys: ['ttrpgPublicNarration'] },
+    contextCompression: compressionPolicy(['ttrpgPublicNarration']),
     maxOutputTokens: 2_000,
     writeTargets: [],
     lastVerifiedAt: '2026-09-01',
@@ -2883,7 +2901,7 @@ export const AGENT_SKILLS = [
     defaultForAgent: false,
     label: '隔离 TTRPG AI 玩家行动候选',
     owner: 'prose-agent',
-    promptVersion: 'ttrpg-player-intent-v1',
+    promptVersion: 'ttrpg-player-intent-v2',
     executionMode: 'ttrpg-player-intent',
     contextTaskKind: 'agent-prose',
     readToolNames: [],
@@ -2903,14 +2921,14 @@ export const AGENT_SKILLS = [
     defaultForAgent: false,
     label: '可信 TTRPG AI KP 角色行动候选',
     owner: 'prose-agent',
-    promptVersion: 'ttrpg-gm-actor-intent-v1',
+    promptVersion: 'ttrpg-gm-actor-intent-v2',
     executionMode: 'ttrpg-gm-actor-intent',
     contextTaskKind: 'agent-prose',
     readToolNames: [],
-    contextSourceKeys: ['ttrpgRuntime'],
+    contextSourceKeys: ['ttrpgNpcRuntime'],
     optionalContextSourceKeys: [],
-    inputPolicy: TTRPG_GM_RUNTIME_INPUT_POLICY,
-    contextCompression: TTRPG_GM_RUNTIME_COMPRESSION_POLICY,
+    inputPolicy: { ...TTRPG_GM_RUNTIME_INPUT_POLICY, sourceKeys: ['ttrpgNpcRuntime'] },
+    contextCompression: compressionPolicy(['ttrpgNpcRuntime']),
     maxOutputTokens: 1_200,
     writeTargets: [],
     lastVerifiedAt: '2026-09-01',
@@ -3038,9 +3056,9 @@ export const AGENT_SKILLS = [
     contextTaskKind: 'agent-outline',
     readToolNames: [],
     contextSourceKeys: ['product-production.brief'],
-    optionalContextSourceKeys: ['product-production.artifact-inputs'],
+    optionalContextSourceKeys: ['product-production.artifact-inputs', 'product-production.repair-feedback'],
     inputPolicy: productProductionInputPolicy(['product-production.brief']),
-    contextCompression: compressionPolicy(['product-production.brief', 'product-production.artifact-inputs']),
+    contextCompression: compressionPolicy(['product-production.brief', 'product-production.artifact-inputs', 'product-production.repair-feedback']),
     contextGateway: PRODUCT_PRODUCTION_WORLD_GATEWAY_POLICY,
     maxOutputTokens: 16_000,
     writeTargets: [{ table: 'productBuildArtifacts', fields: ['payloadJson'], adoptionExtension: 'product-production-artifacts' }],
@@ -3059,9 +3077,9 @@ export const AGENT_SKILLS = [
     contextTaskKind: 'agent-outline',
     readToolNames: [],
     contextSourceKeys: ['product-production.brief'],
-    optionalContextSourceKeys: ['product-production.artifact-inputs'],
+    optionalContextSourceKeys: ['product-production.artifact-inputs', 'product-production.repair-feedback'],
     inputPolicy: productProductionInputPolicy(['product-production.brief']),
-    contextCompression: compressionPolicy(['product-production.brief', 'product-production.artifact-inputs']),
+    contextCompression: compressionPolicy(['product-production.brief', 'product-production.artifact-inputs', 'product-production.repair-feedback']),
     contextGateway: PRODUCT_PRODUCTION_WORLD_GATEWAY_POLICY,
     maxOutputTokens: 8_000,
     writeTargets: [{ table: 'productBuildArtifacts', fields: ['metadataJson'], adoptionExtension: 'product-production-artifacts' }],
@@ -3378,7 +3396,7 @@ export function validateAgentSkillDefinitionsV1(
     character: new Set(['create', 'supplement', 'lifecycle', 'relationships', 'character-reply', 'memory-curator']),
     inspiration: new Set(['reference-summary', 'reference-characters', 'reverse', 'review']),
     outline: new Set(['auto', 'story-arcs', 'foreshadow-suggestions', 'storyline-progress', 'character-driven', 'character-revision', 'impact-summary-regenerate', 'volumes', 'chapters', 'details', 'adaptation-brief', 'adaptation-impact', 'screenplay-plan', 'comic-plan', 'comic-storyboard', 'character-interaction-production', 'product-production']),
-    prose: new Set(['auto', 'generate', 'continue', 'emotion-beats', 'inventory-extraction', 'story-timeline-extraction', 'cultivation-progress-extraction', 'style-learn', 'selection-edit', 'selection-check', 'review', 'revise', 'organize', 'memory', 'consistency', 'scene-director', 'adventure-intent', 'adventure-narrator', 'open-world-briefing', 'open-world-advisor', 'open-world-outcome-narrator', 'open-world-actor-suggestion', 'open-world-expression', 'open-world-narration', 'screenplay-scenes', 'ttrpg-gm-narrator', 'ttrpg-gm-actor-intent', 'ttrpg-player-intent']),
+    prose: new Set(['auto', 'generate', 'continue', 'emotion-beats', 'inventory-extraction', 'story-timeline-extraction', 'cultivation-progress-extraction', 'style-learn', 'selection-edit', 'selection-check', 'review', 'revise', 'organize', 'memory', 'consistency', 'scene-director', 'adventure-intent', 'adventure-narrator', 'open-world-briefing', 'open-world-advisor', 'open-world-outcome-narrator', 'open-world-actor-suggestion', 'open-world-expression', 'open-world-narration', 'screenplay-scenes', 'ttrpg-gm-narrator', 'ttrpg-gm-actor-intent', 'ttrpg-director', 'ttrpg-private-guidance', 'ttrpg-player-intent']),
   }
   const ids = new Set<string>()
   const defaultAgents = new Set<DomainAgentId>()

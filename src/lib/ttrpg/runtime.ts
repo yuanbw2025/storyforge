@@ -273,6 +273,8 @@ export function createInitialTtrpgProductStateV1(input: {
       humanResponses: [],
       restHistory: [],
       gmNarrations: [],
+      directorDecisions: [],
+      privateGuidance: [],
       questProgress: campaign.quests.map((quest) => ({
         questKey: quest.questKey,
         requiredConclusionKeys: quest.requiredConclusionKeys,

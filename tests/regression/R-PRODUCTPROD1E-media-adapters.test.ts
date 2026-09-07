@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
+import { AIError } from '../../src/lib/types'
+import { classifyHarnessFailureV1 } from '../../src/lib/agent/run/harness-failure'
 import {
   agnesImage21FlashAdapterV1,
   detectProductImageDimensionsV1,
@@ -50,6 +52,20 @@ function transport(input: {
 }
 
 describe('R-PRODUCTPROD-1E · central media provider adapters', () => {
+  it('图片 400 保留安全参数错误且禁止自动重试，不保存凭据', async () => {
+    const provider = transport({ executionLocation: 'browser-direct', response: {
+      status: 400, contentType: 'application/json', body: null, providerRequestId: 'image-request',
+      usage: null, costUsd: null,
+      json: { error: { code: 'invalid_parameter', param: 'size', message: 'Bad size; Bearer abcdefghijklmnop' } },
+    } })
+    const error = await agnesImage21FlashAdapterV1.generate(request({ adapterId: 'agnes.image-2.1-flash.v1' }),
+      provider.value, new AbortController().signal).catch(cause => cause)
+    expect(error).toBeInstanceOf(AIError)
+    expect(error.status).toBe(400)
+    expect(error.message).toContain('param: size')
+    expect(error.message).not.toContain('abcdefghijklmnop')
+    expect((await classifyHarnessFailureV1(error)).retryable).toBe(false)
+  })
   it('从 PNG/JPEG/WebP provider bytes 读取真实尺寸，不信任请求元数据', () => {
     const png = Uint8Array.from([
       0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
@@ -186,12 +202,12 @@ describe('R-PRODUCTPROD-1E · central media provider adapters', () => {
     expect(JSON.stringify(candidates[0].metadata)).not.toContain('signature=secret')
   })
 
-  it('Agnes 角色立绘显式请求透明 PNG，背景图不伪造透明要求', async () => {
+  it('Agnes 不发送队列不支持的 background 参数，透明要求交给生成后 alpha 验证', async () => {
     const direct = transport({
       executionLocation: 'browser-direct',
       response: {
         status: 200, contentType: 'application/json', body: null,
-        json: { created: 1, data: [{ url: null, b64_json: base64(PNG), revised_prompt: null }] },
+        json: { created: 1, task_id: 'task_completed_image', data: [{ url: null, b64_json: base64(PNG), revised_prompt: null }] },
         providerRequestId: 'agnes-character-alpha-1', usage: null, costUsd: null,
       },
     })
@@ -199,10 +215,12 @@ describe('R-PRODUCTPROD-1E · central media provider adapters', () => {
       adapterId: 'agnes.image-2.1-flash.v1', mediaKind: 'character-pose',
     }), direct.value, new AbortController().signal)
     expect(direct.call.mock.calls[0][0].body).toMatchObject({
-      model: 'agnes-image-2.1-flash', background: 'transparent', output_format: 'png',
+      model: 'agnes-image-2.1-flash',
       extra_body: { response_format: 'b64_json' },
     })
     expect(candidates[0].metadata).toMatchObject({ requestedTransparentBackground: true })
+    expect(direct.call.mock.calls[0][0].body).not.toHaveProperty('background')
+    expect(direct.call.mock.calls[0][0].body).not.toHaveProperty('output_format')
   })
 
   it('OpenAI 图片 adapter 只发去敏请求并验证 base64、真实 MIME 与 hash', async () => {

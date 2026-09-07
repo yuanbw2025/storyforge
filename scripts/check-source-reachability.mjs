@@ -31,6 +31,9 @@ const entrypoints = [
   // Text-open-world owns this headless durable expression Harness. It is an
   // internal capability boundary, never a product route or session identity.
   'src/lib/open-world/evolution-harness.ts',
+  // TTRPG's durable host loop is a headless product API; its independent foundation
+  // is validated before the playing table is integrated and can be driven by replay tooling.
+  'src/lib/ttrpg/kp-coordinator.ts',
   // FLOW-3 public domain-node boundary is exercised by regression tests and external tooling.
   'src/lib/node-authoring/index.ts',
   // HARNESS-26 is a headless offline release-evaluation boundary; production routing must not import it.

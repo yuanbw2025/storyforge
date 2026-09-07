@@ -20,6 +20,7 @@ export interface AILogEntry {
   statusCode?: number
   errorMessage?: string
   responseBody?: string
+  responseSummary?: string
   duration?: number
   usage?: TokenUsage
 }
@@ -81,6 +82,7 @@ export function formatLog(entry: AILogEntry): string {
   let line = `${status} [${time}] ${entry.type.toUpperCase()} → ${entry.provider} ${entry.url}${dur}`
   if (entry.statusCode) line += ` HTTP ${entry.statusCode}`
   if (entry.usage) line += `\n   Token: ↑${entry.usage.inputTokens} ↓${entry.usage.outputTokens} = ${entry.usage.totalTokens}`
+  if (entry.responseSummary) line += `\n   响应: ${entry.responseSummary}`
   if (entry.errorMessage) line += `\n   错误: ${entry.errorMessage}`
   return line
 }

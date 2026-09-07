@@ -1052,7 +1052,10 @@ export function createTtrpgViewerProjectionV1(input: {
       body: item.body || item.fallbackText,
       assetKey: item.assetKey,
     }));
-  const recentActions = product.actionHistory.slice(-50).map((action) => {
+  const witnessedActions = product.actionHistory.filter(action => input.role !== 'player'
+    || action.actorKey === actorKey || action.receipt?.context.observers.some(observer => observer.actorKey === actorKey));
+  const witnessedSequences = new Set(witnessedActions.map(action => action.eventSequence));
+  const recentActions = witnessedActions.slice(-50).map((action) => {
     const hidden = action.check?.visibility === "gm-only" && input.role !== "gm";
     return {
       eventSequence: action.eventSequence,
@@ -1181,7 +1184,7 @@ export function createTtrpgViewerProjectionV1(input: {
       }];
     });
   });
-  const recentNarrations = product.gmNarrations.slice(-50).map((narration) => ({
+  const recentNarrations = product.gmNarrations.filter(narration => input.role !== 'player' || witnessedSequences.has(narration.actionSequence)).slice(-50).map((narration) => ({
     eventSequence: narration.eventSequence,
     actionSequence: narration.actionSequence,
     text: narration.text,

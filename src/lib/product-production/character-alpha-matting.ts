@@ -1,4 +1,4 @@
-export const CHARACTER_ALPHA_MATTING_ID_V1 = 'storyforge.character-alpha.edge-connected.v1'
+export const CHARACTER_ALPHA_MATTING_ID_V1 = 'storyforge.character-alpha.edge-connected.v2'
 
 export interface CharacterAlphaMattingResultV1 {
   data: ArrayBuffer
@@ -13,6 +13,8 @@ interface RgbaRasterV1 {
   width: number
   height: number
   data: Uint8ClampedArray
+  /** Explicit provider contract: the reserved backdrop colour is not subject paint. */
+  reservedMagentaBackdrop?: boolean
 }
 
 function fail(message: string): never {
@@ -84,6 +86,10 @@ export function matteEdgeConnectedCharacterBackdropV1(input: RgbaRasterV1): {
   }
 
   const borders = borderOffsets(width, height)
+  const magenta = (offset: number) => Math.min(data[offset], data[offset + 2]) - data[offset + 1] > 55
+    && Math.min(data[offset], data[offset + 2]) > 100
+  const useReservedMagenta = input.reservedMagentaBackdrop === true
+    && borders.filter(magenta).length / borders.length > 0.8
   const buckets = new Map<string, { count: number; red: number; green: number; blue: number }>()
   for (const offset of borders) {
     const key = `${data[offset] >> 4}:${data[offset + 1] >> 4}:${data[offset + 2] >> 4}`
@@ -147,7 +153,9 @@ export function matteEdgeConnectedCharacterBackdropV1(input: RgbaRasterV1): {
   const openedForeground = openForegroundMask(foreground, width, height, Math.max(width, height) >= 640 ? 2 : 1)
   let finalRemoved = 0
   for (let pixel = 0; pixel < pixelCount; pixel += 1) {
-    if (!openedForeground[pixel]) { removed[pixel] = 1; finalRemoved += 1 }
+    if (!openedForeground[pixel] || (useReservedMagenta && magenta(pixel * 4))) {
+      removed[pixel] = 1; finalRemoved += 1
+    }
   }
   const removedPixelRatio = finalRemoved / pixelCount
   if (removedPixelRatio > 0.92) {
@@ -157,6 +165,7 @@ export function matteEdgeConnectedCharacterBackdropV1(input: RgbaRasterV1): {
   const transparentDistance = 20
   for (let pixel = 0; pixel < pixelCount; pixel += 1) {
     if (!removed[pixel]) continue
+    if (useReservedMagenta && magenta(pixel * 4)) { data[pixel * 4 + 3] = 0; continue }
     if (!edgeRemoved[pixel]) { data[pixel * 4 + 3] = 0; continue }
     const distance = Math.sqrt(distanceAt(pixel))
     data[pixel * 4 + 3] = distance <= transparentDistance
@@ -174,7 +183,7 @@ async function canvasBlob(canvas: HTMLCanvasElement): Promise<Blob> {
 }
 
 /** Browser-only governed post-process used before character media is frozen. */
-export async function ensureGeneratedCharacterAlphaV1(data: ArrayBuffer, mimeType: string): Promise<CharacterAlphaMattingResultV1> {
+export async function ensureGeneratedCharacterAlphaV1(data: ArrayBuffer, mimeType: string, reservedMagentaBackdrop = false): Promise<CharacterAlphaMattingResultV1> {
   if (!['image/png', 'image/jpeg', 'image/webp'].includes(mimeType)) fail('输入 MIME 不支持抠图')
   if (typeof createImageBitmap !== 'function' || typeof document === 'undefined') fail('浏览器图片抠图能力不可用')
   const bitmap = await createImageBitmap(new Blob([data], { type: mimeType }))
@@ -190,7 +199,7 @@ export async function ensureGeneratedCharacterAlphaV1(data: ArrayBuffer, mimeTyp
     context.drawImage(bitmap, 0, 0)
     const pixels = context.getImageData(0, 0, bitmap.width, bitmap.height)
     const matte = matteEdgeConnectedCharacterBackdropV1({
-      width: bitmap.width, height: bitmap.height, data: pixels.data,
+      width: bitmap.width, height: bitmap.height, data: pixels.data, reservedMagentaBackdrop,
     })
     if (matte.alreadyTransparent) return {
       data: data.slice(0), width: bitmap.width, height: bitmap.height,

@@ -1,3 +1,6 @@
+import { parseStructuredOutputV1, StructuredOutputPipelineErrorV1 } from '../agent/structured-output-pipeline';
+import { assertTtrpgNoRestrictedTextV1 } from './information-boundary';
+import { assertTtrpgCompleteContextV1 } from './prompt-context';
 import { chat, resolveRequestConfig, type ChatResult } from "../ai/client";
 import { estimateTokens } from "../ai/context-budget";
 import { computeKnownCostUsd } from "../ai/usage-log";
@@ -100,13 +103,17 @@ function exact(
   }
 }
 function parseJson(output: string): Record<string, unknown> {
-  let source = output.trim();
-  const fenced = source.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/);
-  if (fenced) source = fenced[1];
   try {
-    return record(JSON.parse(source), "模型输出");
+    return parseStructuredOutputV1({
+      raw: output,
+      contract: { version: 1, schemaId: 'storyforge.ttrpg-gm-actor-output', target: 'runtime-candidate',
+        root: 'object', maxChars: 100_000, allowedRootFields: ['actionKey', 'targetKey', 'approach', 'spokenIntent'],
+        requiredRootFields: ['actionKey', 'targetKey', 'approach', 'spokenIntent'], unknownRootFieldMessage: '模型输出字段不在允许闭集' },
+      parse: value => record(value, '模型输出'),
+    });
   } catch (error) {
-    if (error instanceof SyntaxError) fail("模型输出不是有效 JSON");
+    if (error instanceof StructuredOutputPipelineErrorV1
+      && error.evidence.issues.some(issue => issue.category === 'parse')) fail('模型输出不是有效 JSON');
     throw error;
   }
 }
@@ -131,7 +138,8 @@ function messages(objective: string, context: string): ChatMessage[] {
       content: [
         "你是 StoryForge 可信 AI KP 的 NPC 行动提议器，只控制 activeTurn.actorKey 对应的当前 NPC。",
         "你必须从 activeTurn.availableActions 选择 actionKey，并按行动 target 只选择 activeTurn.visibleTargets 中的合法目标。",
-        "你可以依据 GM 私密场景信息、该 NPC 的 objective、leverage、escalation、当前角色状态和已发生事实选择合理行动，但不得泄露这些私密信息给玩家。",
+        "target=scene 的行动（例如调查或克服）必须输出真正的 JSON null，不能把 sceneKey、地点名、物件名或字符串“null”填入 targetKey。target=self 使用当前 actorKey；单体角色行动才使用合法目标的 actorKey。",
+        "你只能依据当前 NPC 自己的资料、可见场景和合法目标选择行动；不能猜测其他角色秘密或主持人真相。私人动机影响选择，但不得在台词中披露尚未授权的秘密。",
         "你只提出 NPC 行动意图，不能生成骰点、难度、修正、成功失败、伤害、资源/状态变化、奖励、线索发现、场景推进或新世界事实。",
         "approach 说明 NPC 尝试怎么做；spokenIntent 只允许该 NPC 当下说出的一句话，无台词时为 null。",
         "只输出严格 JSON，不要 Markdown、解释或额外字段：",
@@ -140,7 +148,7 @@ function messages(objective: string, context: string): ChatMessage[] {
     },
     {
       role: "user",
-      content: `【主持目标】${objective}\n\n【冻结 GM 运行上下文】\n${context}`,
+      content: `【主持目标】${objective}\n\n【冻结 NPC 独立知情视角】\n${context}`,
     },
   ];
 }
@@ -193,6 +201,10 @@ function parseDraft(output: string, view: TtrpgGmRuntimeViewV1) {
   ) {
     fail("approach 夹带骰点、难度或尚未结算的机械结果");
   }
+  assertTtrpgNoRestrictedTextV1(`${approach}\n${spokenIntent ?? ''}`, [
+    ...view.forbiddenSecretPhrases,
+    ...view.participants.flatMap(item => item.privateProfile?.secret ? [item.privateProfile.secret] : []),
+  ]);
   return {
     actionKey: action.actionKey,
     actionName: action.name,
@@ -245,7 +257,7 @@ function contract(input: {
     objective: input.objective,
     workflowKind: "direct-generation" as const,
     scope: input.boundary.scope,
-    permissions: { contextSourceKeys: ["ttrpgRuntime"], writeTargets: [] },
+    permissions: { contextSourceKeys: ["ttrpgNpcRuntime"], writeTargets: [] },
     runtimeBindingHash: input.runtimeBindingHash,
     executionBindings: [
       {
@@ -317,7 +329,7 @@ async function append(
 }
 
 function repairable(error: unknown): boolean {
-  return /不是有效 JSON|字段不在允许闭集|必须是文本|无效/u.test(
+  return /不是有效 JSON|字段不在允许闭集|必须是文本|无效|targetKey 不在|actionKey 不在|targetKey 必须|自身行动必须/u.test(
     error instanceof Error ? error.message : String(error),
   );
 }
@@ -424,13 +436,14 @@ export async function generateTtrpgGmActorActionCandidateV1(input: {
       scope: input.scope,
       worldGroupId: boundary.scope.worldGroupId,
       productRuntimeSessionId: input.productRuntimeSessionId,
-      sourceKeys: ["ttrpgRuntime"],
+      sourceKeys: ["ttrpgNpcRuntime"],
       provider: input.aiConfig?.provider,
       model: input.aiConfig?.model,
       inputBudgetMaxTokens: 18_000,
     });
-    if (!assembled.included.includes("ttrpgRuntime"))
+    if (!assembled.included.includes("ttrpgNpcRuntime"))
       fail("正式 TTRPG GM 上下文为空");
+    assertTtrpgCompleteContextV1(assembled, 'ttrpgNpcRuntime');
     await assertTtrpgGmActorRuntimeHarnessFreshV1({
       scope: input.scope,
       contractScope: snapshot.contract.scope,
@@ -441,7 +454,7 @@ export async function generateTtrpgGmActorActionCandidateV1(input: {
       attempt: 1,
       projectId: input.scope.projectId,
       worldGroupId: boundary.scope.worldGroupId,
-      declaredSourceKeys: ["ttrpgRuntime"],
+      declaredSourceKeys: ["ttrpgNpcRuntime"],
       assembled,
       readerVersion: "ttrpg-gm-runtime-view-v1",
     });

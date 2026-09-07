@@ -1,4 +1,6 @@
 import type { ProductMediaKind } from '../types'
+import { AIError } from '../types'
+import { assertExactRunArtifactBodySafeV1 } from '../memory/evidence-policy'
 import { sha256MediaData } from './media-blob-store'
 
 export type ProductMediaClassV1 = 'image' | 'music' | 'sfx'
@@ -125,9 +127,20 @@ function providerSafetyRefused(response: MediaTransportResponseV1): boolean {
 
 function assertProviderResponse(response: MediaTransportResponseV1, label: string, requiresBody = false): void {
   if (providerSafetyRefused(response)) fail('provider-safety-refusal')
-  if (response.status < 200 || response.status >= 300 || (requiresBody && !response.body)) {
-    fail(`${label} 响应无效:${response.status}`)
+  if (response.status < 200 || response.status >= 300) {
+    const root = response.json && typeof response.json === 'object' ? response.json as Record<string, unknown> : {}
+    const error = root.error && typeof root.error === 'object' ? root.error as Record<string, unknown> : root
+    let detail = ['code', 'type', 'message', 'param'].flatMap(key => (
+      typeof error[key] === 'string' ? [`${key}: ${String(error[key]).slice(0, 600)}`] : []
+    )).join(' · ')
+    detail = detail.replace(/\bBearer\s+\S+/gi, 'Bearer [redacted]')
+      .replace(/\b(?:sk|ak)-[A-Za-z0-9_-]{8,}\b/g, '[redacted]')
+      .replace(/(?:authorization|api[-_ ]?key)\s*[:=]\s*\S+/gi, 'credential=[redacted]')
+    try { assertExactRunArtifactBodySafeV1({ artifactKind: 'tool-result', body: detail }) }
+    catch { detail = '服务端错误详情包含不适合保存的内容' }
+    throw new AIError(response.status, `${label} 响应无效:${response.status}${detail ? ` · ${detail}` : ''}`)
   }
+  if (requiresBody && !response.body) fail(`${label} 响应缺少媒体载荷`)
 }
 
 function row(value: unknown, label: string): Record<string, unknown> {
@@ -352,16 +365,15 @@ export const agnesImage21FlashAdapterV1: ProductMediaProviderAdapterV1 = {
       body: {
         model: 'agnes-image-2.1-flash', prompt, size: '1K', ratio, return_base64: true,
         extra_body: { response_format: 'b64_json' },
-        ...(requiresAlpha ? { background: 'transparent', output_format: 'png' } : {}),
       },
     }, signal)
     assertProviderResponse(response, 'Agnes 图片')
     const root = row(response.json, 'Agnes image response')
     allowedKeys(root, [
       'created', 'data', 'usage',
-      'background', 'output_format', 'quality', 'size',
+      'background', 'output_format', 'quality', 'size', 'task_id',
     ], 'Agnes image response')
-    for (const metadataKey of ['background', 'output_format', 'quality', 'size'] as const) {
+    for (const metadataKey of ['background', 'output_format', 'quality', 'size', 'task_id'] as const) {
       const value = root[metadataKey]
       if (value != null && (typeof value !== 'string' || value.length > 100)) {
         fail(`Agnes image response.${metadataKey} 元数据无效`)

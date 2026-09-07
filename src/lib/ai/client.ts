@@ -6,6 +6,7 @@ import { estimateTokens, trimMessagesToFit } from './context-budget'
 import { buildOpenAIEndpoint } from './openai-endpoint'
 import { getAIConfigPresetSessionApiKey, useAIConfigStore } from '../../stores/ai-config'
 import { resolveAIConfigForTask, type AITaskKind } from './task-routing'
+import { AICompletionResponseErrorV1, inspectCompletionResponseV1, requireCompletionTextV1 } from './completion-response'
 
 /** 调用元信息（用于消耗统计分类） */
 export interface AICallMeta {
@@ -362,37 +363,56 @@ export async function chat(
     throw new Error('当前模型上下文窗口无法容纳最低连续性保护块；请降低输出长度或改用更大上下文模型。')
   }
   const req = buildRequest(config, trimmed.messages, false, options)
+  const startedAt = Date.now()
+  const log = createLog({ type: 'chat', provider: config.provider, model: config.model, url: req.url, status: 'pending' })
+  try {
+    const response = await fetch(req.url, {
+      method: 'POST',
+      headers: req.headers,
+      body: req.body,
+      signal,
+    })
 
-  const response = await fetch(req.url, {
-    method: 'POST',
-    headers: req.headers,
-    body: req.body,
-    signal,
-  })
-
-  if (!response.ok) {
-    const errorText = await response.text()
-    throw new AIError(response!.status, errorText)
-  }
-
-  const json = await response.json()
-  if (json.usage) {
-    const usage = {
-      inputTokens: json.usage.prompt_tokens ?? 0,
-      outputTokens: json.usage.completion_tokens ?? 0,
-      totalTokens: json.usage.total_tokens ?? 0,
+    if (!response.ok) {
+      const errorText = await response.text()
+      throw new AIError(response!.status, errorText)
     }
-    if (result) result.usage = usage
-    void recordUsage(usageEntry(meta, config, resolved.taskKind, usage))
+
+    let json
+    try { json = await response.json() } catch {
+      throw new AICompletionResponseErrorV1('invalid-json', '无法读取 chat/completions 响应。')
+    }
+    const responseSummary = inspectCompletionResponseV1(json).summary
+    updateLog(log.id, { statusCode: response.status, responseSummary })
+    if (json?.usage) {
+      const usage = {
+        inputTokens: json.usage.prompt_tokens ?? 0,
+        outputTokens: json.usage.completion_tokens ?? 0,
+        totalTokens: json.usage.total_tokens ?? 0,
+      }
+      if (result) result.usage = usage
+      updateLog(log.id, { usage })
+      void recordUsage(usageEntry(meta, config, resolved.taskKind, usage))
+    }
+    const choice = json?.choices?.[0]
+    if (result && choice?.message && typeof choice.message === 'object'
+      && Object.prototype.hasOwnProperty.call(choice.message, 'tool_calls')) {
+      result.toolCallsPresent = true
+      result.toolCalls = choice.message.tool_calls
+    }
+    if (result && typeof choice?.finish_reason === 'string') {
+      result.finishReason = choice.finish_reason
+    }
+    const content = requireCompletionTextV1(json, Boolean(options?.tools?.length && result))
+    updateLog(log.id, { status: 'success', duration: Date.now() - startedAt })
+    return content
+  } catch (error) {
+    updateLog(log.id, {
+      status: 'error', duration: Date.now() - startedAt,
+      ...(error instanceof AIError ? { statusCode: error.status } : {}),
+      errorMessage: error instanceof AICompletionResponseErrorV1 ? error.message
+        : error instanceof AIError ? `模型服务返回 HTTP ${error.status}` : '模型请求失败或连接中断',
+    })
+    throw error
   }
-  const choice = json.choices?.[0]
-  if (result && choice?.message && typeof choice.message === 'object'
-    && Object.prototype.hasOwnProperty.call(choice.message, 'tool_calls')) {
-    result.toolCallsPresent = true
-    result.toolCalls = choice.message.tool_calls
-  }
-  if (result && typeof choice?.finish_reason === 'string') {
-    result.finishReason = choice.finish_reason
-  }
-  return typeof choice?.message?.content === 'string' ? choice.message.content : ''
 }

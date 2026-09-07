@@ -1,3 +1,5 @@
+import type { createOnlineTtrpgNpcDecisionViewV1, createOnlineTtrpgPublicNarrationViewV1, createOnlineTtrpgNarratedActionV1 } from './ttrpg-ai-views';
+import { assertTtrpgNoRestrictedTextV1 } from '../ttrpg/information-boundary';
 import type {
   TtrpgRuntimeActionReceiptV2,
   TtrpgRuntimeGmSynthesisFrameV2,
@@ -22,15 +24,15 @@ export interface OnlineTtrpgAiGmServiceV1 {
     releaseHash: string;
     actorKey: string;
     objective: string;
-    projection: TtrpgViewerProjectionV1;
+    projection: ReturnType<typeof createOnlineTtrpgNpcDecisionViewV1>;
   }): Promise<unknown>;
   /** Deployment-owned model boundary; result is treated as untrusted protocol input. */
   narrate(input: {
     roomId: string;
     releaseHash: string;
     objective: string;
-    projection: TtrpgViewerProjectionV1;
-    action: TtrpgRuntimeRuleActionResultV1;
+    projection: ReturnType<typeof createOnlineTtrpgPublicNarrationViewV1>;
+    action: ReturnType<typeof createOnlineTtrpgNarratedActionV1>;
   }): Promise<unknown>;
 }
 
@@ -136,6 +138,8 @@ export function parseOnlineTtrpgAiGmActorProposalV1(input: {
   if (/(?:掷|骰|d\d+|dc\s*\d+|难度\s*\d+|成功|失败|伤害\s*\d+|获得\s*\d+|失去\s*\d+)/iu.test(approach)) {
     fail("AI GM NPC 意图夹带尚未结算的机械结果");
   }
+  try { assertTtrpgNoRestrictedTextV1(`${approach}\n${spokenIntent ?? ''}`, input.projection.actors.flatMap(actor => actor.privateProfile?.secret ? [actor.privateProfile.secret] : [])); }
+  catch { fail("NPC 行动泄露角色私密信息"); }
   return { runId, actionKey, targetKey, approach, spokenIntent };
 }
 

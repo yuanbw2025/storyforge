@@ -76,6 +76,7 @@ export async function seedCurrentTtrpgProduct(page: Page, input: CurrentTtrpgSee
 export async function openCurrentTtrpgPlayer(page: Page): Promise<Locator> {
   await page.reload()
   await page.getByTestId('product-tab-ttrpg').click()
+  await page.getByRole('button', { name: '主持、联机与存档工具', exact: true }).click()
   const guide = page.getByTestId('formal-ttrpg-campaign-guide')
   await expect(guide).toBeVisible({ timeout: 20_000 })
   return guide

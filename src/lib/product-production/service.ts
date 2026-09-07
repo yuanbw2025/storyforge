@@ -1,4 +1,6 @@
 import { db } from '../db/schema'
+import { readAgentRunV1 } from '../agent/run/event-store'
+import { readAgentRunArtifactExactV1 } from '../memory/artifact-store'
 import type {
   ProductBuildRecordV1,
   ProductEvolutionAffectedLaneV1,
@@ -58,6 +60,35 @@ export interface ProductProductionDetailsV1 {
 }
 
 export type ProductProductionProgressV1 = ProductProductionSchedulerProjectionV1
+
+/** Author-only inspection of evidence already bound to the current Build task. */
+export async function readProductProductionTaskEvidenceV1(input: {
+  scope: WorkspaceScope
+  productionId: number
+  taskKey: string
+}): Promise<Array<{ attempt: number; kind: string; content: string }>> {
+  const scope = await resolveScope({ scope: input.scope })
+  const progress = await projectProductProductionSchedulerV1({ scope, productionId: input.productionId })
+  const task = progress.tasks.find(item => item.taskKey === input.taskKey)
+  if (!task?.runId) return []
+  const snapshot = await readAgentRunV1(scope, task.runId)
+  if (snapshot.run.productBuildId !== progress.buildId) throw new Error('任务证据不属于当前 Build')
+  const result: Array<{ attempt: number; kind: string; content: string }> = []
+  for (const event of snapshot.events) {
+    if (event.type === 'evidence.artifact.recorded' && event.payload.stepId === input.taskKey
+      && ['raw-response', 'source-snapshot', 'tool-result'].includes(event.payload.artifactKind)) {
+      const content = await readAgentRunArtifactExactV1({
+        projectId: scope.projectId, artifactKind: event.payload.artifactKind,
+        contentHash: event.payload.contentHash,
+      })
+      result.push({ attempt: event.payload.attempt ?? 0, kind: event.payload.artifactKind, content })
+    }
+    if (event.type === 'step.failed' && event.payload.stepId === input.taskKey) {
+      result.push({ attempt: event.payload.attempt, kind: 'failure', content: event.payload.code })
+    }
+  }
+  return result
+}
 
 export interface ProductProductionCapabilityReadinessV1 {
   text: ConfiguredTextCapabilityReadinessV1
@@ -357,6 +388,8 @@ export async function retryProductProductionBlockerV1(input: {
   scope: WorkspaceScope
   details: ProductProductionDetailsV1
   afterCapabilityChange?: boolean
+  repairNote?: string
+  authorDraftJson?: string
 }): Promise<void> {
   if (!input.details.build || input.details.build.status !== 'recovery-required') {
     throw new Error('[product-production-service] 当前 Build 没有可重试 blocker')
@@ -374,8 +407,9 @@ export async function retryProductProductionBlockerV1(input: {
       type: 'resolve-blocker', commandId: commandId('resolve-blocker'),
       expectedStateRevision: input.details.production.stateRevision, blockerKey,
       resolution: {
-        action: input.afterCapabilityChange ? 'change-capability' : 'retry',
-        note: input.afterCapabilityChange ? '作者已调整全局能力配置并要求重试' : '作者从制作工作台要求重试',
+        action: input.authorDraftJson ? 'author-edit' : input.afterCapabilityChange ? 'change-capability' : 'retry',
+        ...(input.authorDraftJson ? { authorDraftJson: input.authorDraftJson } : {}),
+        note: input.repairNote?.trim() || (input.afterCapabilityChange ? '作者已调整全局能力配置并要求重试' : '作者从制作工作台要求重试'),
       },
     },
   })

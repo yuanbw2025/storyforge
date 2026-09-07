@@ -64,6 +64,20 @@ describe('WEH-0E structured output pipeline', () => {
     expect(explained.evidence.status).toBe('usable-with-warnings')
   })
 
+  it('完整尾对象仅解码一层 JSON 转义，保留正文和嵌套字符串，不补全截断响应', () => {
+    const tailContract = { ...contract, allowedRootFields: ['field', 'value', 'frame'] }
+    const expected = { field: 'races', value: '她说："保留原文"', frame: { text: '嵌套"引号"与\n换行', refs: [] } }
+    const clean = JSON.stringify(expected)
+    const offset = clean.indexOf('"frame"')
+    const raw = clean.slice(0, offset) + JSON.stringify(clean.slice(offset)).slice(1, -1)
+    const repaired = evaluateStructuredOutputV1({ raw, contract: tailContract, parse: value => value })
+    expect(repaired.output).toEqual(expected)
+    expect(repaired.evidence.originalText).toBe(raw)
+    expect(repaired.evidence.normalizationSteps).toContain('unescape-allowed-root-field')
+    expect(() => evaluateStructuredOutputV1({ raw: raw.slice(0, -4), contract: tailContract, parse: value => value })).toThrow()
+    expect(() => evaluateStructuredOutputV1({ raw: raw.replace('frame', 'unknown'), contract: tailContract, parse: value => value })).toThrow()
+  })
+
   it('只补相邻数组字符串缺失的逗号，不推断对象成员分隔符', () => {
     const arrayContract: StructuredOutputContractV1 = {
       ...contract,

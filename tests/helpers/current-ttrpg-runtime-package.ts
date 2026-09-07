@@ -20,6 +20,7 @@ import type {
 } from '../../src/lib/types'
 import { createCurrentProductBriefFixture, createCurrentNarrativeFixture } from './current-runtime-package'
 import { currentProductSelection } from './current-product-world'
+import { authoredScenarioFixture } from './ttrpg-authored-scenario'
 
 /**
  * Builds a TTRPG RuntimePackage through the current neutral WorldReference ->
@@ -35,6 +36,7 @@ export async function createCurrentTtrpgRuntimePackageFixture(input: {
   title?: string
   ruleOrigin?: TtrpgProductionBriefV2['rules']['origin']
   seats?: TtrpgProductionSeatV2[]
+  authoredScenario?: boolean
 }): Promise<ProductRuntimePackageV1> {
   const player = input.sourceCatalog.characters[0]
   if (!player) throw new Error('现行 TTRPG 测试世界缺少玩家角色')
@@ -93,6 +95,7 @@ export async function createCurrentTtrpgRuntimePackageFixture(input: {
     rulePack,
     worldContentHash: input.worldRelease.contentHash,
     worldSourceBundleHash: worldSourceBundle.bundleHash,
+    authoredScenario: input.authoredScenario ? authoredScenarioFixture({ brief: ttrpgBrief, rulePack, nodes: narrative.nodes }) : undefined,
   })
   const ttrpg = {
     rulePack: { content: rulePack, contentHash: rulePackContentHash },

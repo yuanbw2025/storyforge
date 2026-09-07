@@ -1,3 +1,5 @@
+import { parseTtrpgPrivateGuidanceReceiptV1 } from './private-guidance-model'
+import { parseTtrpgDirectorReceiptV1 } from './director-model'
 /** TTRPG-owned event reducer. Shared runtime storage dispatches here by product event namespace. */
 import { earnedTtrpgCharacterCurrencyV2 } from './advancement'
 import { parseTtrpgAbilityRuntimeStateV2, resetTtrpgAbilityUsageV2, ttrpgAbilityStateKeyV2 } from './ability-ledger'
@@ -1107,6 +1109,35 @@ export function applyTtrpgRuntimeEventV1(
         eventSequence: event.sequence,
       });
       Object.assign(state, applied.state);
+      break;
+    }
+    case "ttrpg.private-guidance.recorded": {
+      const product = requireTtrpgState(state).product;
+      const receipt = parseTtrpgPrivateGuidanceReceiptV1(payload.guidance);
+      if (!product.sessionZero.completed || product.safety.status !== 'active' || product.ending
+        || event.actorKey !== receipt.actorKey || receipt.eventSequence !== event.sequence
+        || receipt.runId !== payload.runId || receipt.candidateHash !== payload.candidateHash
+        || !product.sessionZero.selectedCharacterKeys.includes(receipt.actorKey)) throw new Error('私密指引身份或状态无效');
+      (product.privateGuidance ??= []).push(receipt);
+      break;
+    }
+    case "ttrpg.director.committed": {
+      const ttrpg = requireTtrpgState(state), product = ttrpg.product;
+      const receipt = parseTtrpgDirectorReceiptV1(payload.decision);
+      if (!product.sessionZero.completed || product.safety.status !== 'active' || product.ending
+        || receipt.eventSequence !== event.sequence || receipt.sceneKey !== ttrpg.scene?.sceneKey
+        || receipt.basisActionSequence !== product.actionHistory[product.actionHistory.length - 1]?.eventSequence
+        || receipt.actorKey !== product.actionHistory[product.actionHistory.length - 1]?.actorKey
+        || receipt.runId !== payload.runId || receipt.candidateHash !== payload.candidateHash
+        || product.directorDecisions?.some(item => item.basisActionSequence === receipt.basisActionSequence)
+        || receipt.recommendedSceneKeys.some(key => !product.sceneKeys.includes(key))
+        || receipt.recommendedEndingKeys.some(key => !product.endingCatalog.some(ending => ending.endingKey === key)))
+        throw new Error('主持决策未绑定当前行动、场景或授权');
+      for (const reveal of receipt.reveals) {
+        applyTtrpgRuntimeEventV1(state, { ...event, type: 'ttrpg.clue.discovered', actorKey: reveal.actorKey, targetKey: reveal.clueKey },
+          { clueKey: reveal.clueKey, actorKey: reveal.actorKey, visibility: reveal.visibility });
+      }
+      (product.directorDecisions ??= []).push(receipt);
       break;
     }
     case "ttrpg.gm.response.recorded": {
