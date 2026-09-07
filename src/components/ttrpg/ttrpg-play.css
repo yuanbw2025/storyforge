@@ -13,3 +13,9 @@
 .sf-ttrpg-scene-art { margin:0; border-bottom:1px solid var(--line); }
 .sf-ttrpg-scene-art img { display:block; width:100%; aspect-ratio:16/7; object-fit:cover; }
 .sf-ttrpg-handout-art { width:100%; border-radius:5px; margin:12px 0; }
+.sf-ttrpg-privacy-gate { display:flex; flex-direction:column; align-items:center; padding:60px 24px; text-align:center; min-height:340px; justify-content:center; }
+.sf-ttrpg-privacy-gate>svg { color:var(--gold); margin-bottom:20px; }
+.sf-ttrpg-privacy-gate h3 { margin:12px 0; }
+.sf-ttrpg-privacy-gate p { color:var(--muted); margin:0 0 24px; max-width:420px; }
+@media(max-width:640px) { .sf-ttrpg-toolbar { flex-wrap:wrap; } .sf-ttrpg-toolbar>div { flex-wrap:wrap; } }
+.sf-ttrpg-save-label { display:block; margin-top:12px; color:var(--muted); font-size:10px; overflow-wrap:anywhere; }

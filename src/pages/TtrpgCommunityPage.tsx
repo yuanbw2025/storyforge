@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { liveQuery } from 'dexie'
 import { Link, useNavigate, useParams } from 'react-router'
 import { ArrowLeft, ArrowRight, Dices, Play, Settings, Users } from 'lucide-react'
 import { db } from '../lib/db/schema'
@@ -11,13 +12,24 @@ export default function TtrpgCommunityPage() {
   const [games, setGames] = useState<CommunityTtrpgGameV1[]>([])
   const [sessions, setSessions] = useState<ProductRuntimeSession[]>([])
   const [loading, setLoading] = useState(true), [busy, setBusy] = useState(''), [error, setError] = useState('')
+  const [catalogError, setCatalogError] = useState(''), [savesError, setSavesError] = useState('')
+  const [catalogAttempt, setCatalogAttempt] = useState(0), [savesAttempt, setSavesAttempt] = useState(0)
   useEffect(() => {
     const controller = new AbortController()
-    void Promise.all([readCommunityTtrpgCatalogV1(controller.signal), db.productRuntimeSessions.where('kind').equals('ttrpg').toArray()])
-      .then(([catalog, rows]) => { if (!controller.signal.aborted) { setGames(catalog); setSessions(rows.sort((a, b) => b.updatedAt - a.updatedAt)); setLoading(false) } })
-      .catch(cause => { if (!controller.signal.aborted) { setError(cause instanceof Error ? cause.message : String(cause)); setLoading(false) } })
+    setLoading(true); setCatalogError('')
+    void readCommunityTtrpgCatalogV1(controller.signal)
+      .then(catalog => { if (!controller.signal.aborted) { setGames(catalog); setLoading(false) } })
+      .catch(cause => { if (!controller.signal.aborted) { setCatalogError(cause instanceof Error ? cause.message : String(cause)); setLoading(false) } })
     return () => controller.abort()
-  }, [])
+  }, [catalogAttempt])
+  useEffect(() => {
+    setSavesError('')
+    const subscription = liveQuery(() => db.productRuntimeSessions.where('kind').equals('ttrpg').toArray()).subscribe({
+      next: rows => setSessions(rows.sort((a, b) => b.updatedAt - a.updatedAt)),
+      error: cause => setSavesError(cause instanceof Error ? cause.message : String(cause)),
+    })
+    return () => subscription.unsubscribe()
+  }, [savesAttempt])
   const start = async (game: CommunityTtrpgGameV1) => {
     if (busy) return
     setBusy(game.key); setError('')
@@ -30,8 +42,9 @@ export default function TtrpgCommunityPage() {
     <header className="sf-community-nav"><Link to="/"><ArrowLeft size={16} />StoryForge</Link><Link to={`/settings?returnTo=${encodeURIComponent(gameKey ? `/play/${gameKey}` : '/play')}`}><Settings size={16} />API 设置</Link></header>
     <main className="sf-community-main"><div className="sf-community-intro"><span>STORYFORGE ORIGINALS</span><h1>坐下来，<br />让故事开始。</h1><p>你扮演角色，AI 担任主持人。带上自己的选择、疑问和秘密，走进一场由你改变的冒险。</p></div>
       {loading && <p role="status">正在布置游戏桌面…</p>}
+      {catalogError && <div className="sf-community-error" role="alert"><p>新冒险目录暂时无法加载。已有存档仍可在下方打开。</p><small>{catalogError}</small><button onClick={() => setCatalogAttempt(attempt => attempt + 1)}>重新加载游戏目录</button></div>}
       {error && <div className="sf-community-error" role="alert">{error}</div>}
-      {!loading && !error && !visible.length && <p>这场冒险还未发布。你可以从已有存档继续游玩。</p>}
+      {!loading && !catalogError && !visible.length && <p>这场冒险还未发布。你可以从已有存档继续游玩。</p>}
       <div className="sf-community-games">{visible.map(game => <article className="sf-community-game" key={game.key}>
         {game.coverPath && <img src={`${import.meta.env.BASE_URL}${game.coverPath}`} alt={game.title} />}
         <div><span className="sf-community-kicker">原创调查冒险 · {game.version}</span><h2>{game.title}</h2><strong>{game.tagline}</strong><p>{game.description}</p>
@@ -39,7 +52,8 @@ export default function TtrpgCommunityPage() {
           <button disabled={Boolean(busy)} onClick={() => void start(game)}><Play size={17} />{busy === game.key ? '正在准备你的冒险…' : '开始一场新冒险'}<ArrowRight size={18} /></button>
           <small>需要你在本机配置可用的模型 API。游戏进度自动保存在当前浏览器。</small>
         </div></article>)}</div>
-      {sessions.length > 0 && <section className="sf-community-saves"><h2>故事还在等你</h2>{sessions.map(session => <Link key={session.id} to={`/play/session/${session.id}`}><div><strong>{session.title}</strong><small>{new Date(session.updatedAt).toLocaleString('zh-CN')}</small></div><ArrowRight size={18} /></Link>)}</section>}
+      {savesError && <div className="sf-community-error" role="alert"><p>本地存档暂时无法读取：{savesError}</p><button onClick={() => setSavesAttempt(attempt => attempt + 1)}>重新读取本地存档</button></div>}
+      {sessions.length > 0 && <section className="sf-community-saves" aria-label="本地冒险存档"><h2>故事还在等你</h2>{sessions.map(session => <Link key={session.id} to={`/play/session/${session.id}`}><div><strong>{session.title}</strong><small>{session.parentSessionId != null ? '恢复的冒险 · ' : ''}{new Date(session.updatedAt).toLocaleString('zh-CN')}</small></div><ArrowRight size={18} /></Link>)}</section>}
       <footer>原创规则与模组 · 真实骰点与持久存档 · 随时暂停</footer>
     </main>
   </div>

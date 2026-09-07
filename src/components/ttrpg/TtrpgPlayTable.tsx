@@ -22,6 +22,7 @@ export default function TtrpgPlayTable(props: {
   scope: WorkspaceScope
   onChanged: () => Promise<void>
   onCheckpoint: (name: string) => Promise<void>
+  onBusyChange?: (busy: boolean) => void
 }) {
   const config = useAIConfigStore(store => store.config)
   const [content, setContent] = useState<Awaited<ReturnType<typeof loadTtrpgRuntimeContentV1>> | null>(null)
@@ -37,12 +38,15 @@ export default function TtrpgPlayTable(props: {
   const [actionKey, setActionKey] = useState('')
   const [targetKey, setTargetKey] = useState('')
   const [privateOpen, setPrivateOpen] = useState(false)
+  const [viewerConfirmed, setViewerConfirmed] = useState(false)
+  const [privacyLocked, setPrivacyLocked] = useState(false)
   const [privateQuestion, setPrivateQuestion] = useState('')
   const [responseText, setResponseText] = useState('')
   const [actionAdvice, setActionAdvice] = useState<{ actorKey: string; draft: string; advice: string; suggestedActionKey: string | null } | null>(null)
   const controller = useRef<AbortController | null>(null)
   const transcriptEnd = useRef<HTMLDivElement>(null)
   const sessionId = props.session.id!
+  const tableTitle = props.session.title.split(' · ')[0] || props.session.title
   const product = props.state.ttrpg!.product!
   useEffect(() => {
     let stale = false
@@ -56,15 +60,17 @@ export default function TtrpgPlayTable(props: {
     void readTtrpgSessionParticipantsV2(sessionId).then(rows => {
       if (stale) return
       setSeats(rows)
-      setHeroKey(current => current || rows.find(seat => seat.role === 'player' && seat.controller === 'human')?.actorKey || rows.find(seat => seat.role === 'player')?.actorKey || '')
+      setHeroKey(current => rows.some(seat => seat.actorKey === current && seat.role === 'player' && (!product.sessionZero.completed || seat.controller === 'human'))
+        ? current : rows.find(seat => seat.role === 'player' && seat.controller === 'human')?.actorKey || rows.find(seat => seat.role === 'player')?.actorKey || '')
     }).catch(cause => { if (!stale) setError(cause instanceof Error ? cause.message : String(cause)) })
     return () => { stale = true }
-  }, [sessionId, props.state.lastSequence])
+  }, [sessionId, props.state.lastSequence, product.sessionZero.completed])
   useEffect(() => { transcriptEnd.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }) }, [props.state.lastSequence])
+  const hasHumanSeat = seats.some(seat => seat.actorKey === heroKey && seat.role === 'player' && seat.controller === 'human')
   const projection = useMemo(() => !content || !heroKey ? null : createTtrpgViewerProjectionV1({
-    state: props.state, campaign: content.campaign, rulePack: content.rulePack, role: product.sessionZero.completed ? 'player' : 'spectator', actorKey: product.sessionZero.completed ? heroKey : null,
+    state: props.state, campaign: content.campaign, rulePack: content.rulePack, role: product.sessionZero.completed && hasHumanSeat ? 'player' : 'spectator', actorKey: product.sessionZero.completed && hasHumanSeat ? heroKey : null,
     participantControllers: Object.fromEntries(seats.filter(seat => seat.actorKey).map(seat => [seat.actorKey!, seat.controller])),
-  }), [content, props.state, heroKey, seats, product.sessionZero.completed])
+  }), [content, props.state, heroKey, seats, product.sessionZero.completed, hasHumanSeat])
   const actions = projection?.availableActions.filter(action => action.phase !== 'reaction') ?? []
   const action = actions.find(item => item.actionKey === actionKey) ?? actions[0]
   const hero = projection?.actors.find(actor => actor.actorKey === heroKey)
@@ -88,7 +94,14 @@ export default function TtrpgPlayTable(props: {
   const effectOwnerKey = product.effectLedger?.pendingChoices.find(choice => seats.some(seat => seat.actorKey === choice.ownerActorKey && seat.controller === 'human'))?.ownerActorKey
   const waitingKey = effectOwnerKey ?? responseOwnerKey
   const handoffActor = waitingKey && waitingKey !== heroKey ? projection?.actors.find(actor => actor.actorKey === waitingKey) : null
-  const handoff = (actorKey: string) => { setHeroKey(actorKey); setPrivateOpen(false); setPrivateQuestion(''); setResponseText(''); setDraft(''); setActionAdvice(null) }
+  const multipleHumans = seats.filter(seat => seat.role === 'player' && seat.controller === 'human').length > 1
+  const recipient = waitingKey ? projection?.actors.find(actor => actor.actorKey === waitingKey)
+    : active?.controller === 'human' ? active : hero
+  const privacyGate = product.sessionZero.completed && (privacyLocked || (multipleHumans && (!viewerConfirmed || recipient?.actorKey !== heroKey)))
+  const handoff = (actorKey: string) => {
+    setHeroKey(actorKey); setPrivateOpen(false); setPrivateQuestion(''); setResponseText(''); setDraft(''); setActionAdvice(null)
+    setActionKey(''); setTargetKey(''); setError(''); setNotice(''); setViewerConfirmed(true); setPrivacyLocked(false)
+  }
 
   const ending = content?.campaign.endings.find(ending => ending.endingKey === product.ending?.endingKey)
   const envelope = async (label: string) => {
@@ -104,15 +117,20 @@ export default function TtrpgPlayTable(props: {
         : result.status === 'busy' ? '另一个窗口正在主持，稍后会同步进度。' : '')
   }
   const perform = async (job: (signal: AbortSignal) => Promise<void>) => {
-    if (busy) return
+    if (controller.current) return
     const abort = new AbortController(); controller.current = abort
-    setBusy(true); setError(''); setNotice('')
+    setBusy(true); props.onBusyChange?.(true); setError(''); setNotice('')
     try { await job(abort.signal) }
     catch (cause) { if (!abort.signal.aborted) setError(cause instanceof Error ? cause.message : String(cause)); else setNotice('已停止。完成的行动已经保存，可以从这里继续。') }
-    finally { setBusy(false); setPhase(''); controller.current = null; await props.onChanged() }
+    finally {
+      try { await props.onChanged() }
+      catch (cause) { setError(`进度暂时无法读取：${cause instanceof Error ? cause.message : String(cause)}`) }
+      setBusy(false); props.onBusyChange?.(false); setPhase(''); controller.current = null
+    }
   }
   const begin = () => perform(async signal => {
     if (!accepted || !content) return
+    setViewerConfirmed(true)
     setPhase('正在确认角色与开团约定')
     const rows = await readTtrpgSessionParticipantsV2(sessionId)
     for (const seat of rows) {
@@ -169,29 +187,35 @@ export default function TtrpgPlayTable(props: {
   return <section className="sf-ttrpg" data-testid="ttrpg-play-table">
     <header className="sf-ttrpg-banner">
       <div className="sf-ttrpg-beacon" aria-hidden="true" /><span className="sf-ttrpg-eyebrow">STORYFORGE · AI GAME MASTER</span>
-      <h2>{props.session.title}</h2><p>{content.campaign.pitch}</p>
+      <h2>{tableTitle}</h2><p>{content.campaign.pitch}</p>
       <div className="sf-ttrpg-meta"><span><Dices size={14} />{content.rulePack.title}</span><span><Users size={14} />{players.length} 位角色</span><span><Compass size={14} />约 {content.campaign.estimatedMinutes} 分钟</span></div>
+      {props.session.title !== tableTitle && <small className="sf-ttrpg-save-label">当前存档：{props.session.title}</small>}
     </header>
     {!product.sessionZero.completed ? <div className="sf-ttrpg-setup">
       <span className="sf-ttrpg-eyebrow">你的故事，从一个角色开始</span><h3>选择你要扮演的人</h3>
-      <div className="sf-ttrpg-character-grid">{players.map((actor, index) => <button key={actor.characterKey} className={`sf-ttrpg-character ${heroKey === actor.characterKey ? 'selected' : ''}`} onClick={() => setHeroKey(actor.characterKey)}>
+      <div className="sf-ttrpg-character-grid">{players.map((actor, index) => <button key={actor.characterKey} disabled={busy} className={`sf-ttrpg-character ${heroKey === actor.characterKey ? 'selected' : ''}`} onClick={() => setHeroKey(actor.characterKey)}>
         <span className="sf-ttrpg-character-number">0{index + 1}</span><strong>{actor.name}</strong><p>{actor.description}</p><span>{heroKey === actor.characterKey ? <><Check size={14} /> 你的角色</> : '选择角色'}</span>
       </button>)}</div>
-      <div className="sf-ttrpg-modes"><button className={mode === 'solo' ? 'selected' : ''} onClick={() => setMode('solo')}><Sparkles size={17} /><strong>单人 + AI 同伴</strong><span>你做决定，AI 扮演其余队友与 KP。</span></button>
-        <button className={mode === 'local' ? 'selected' : ''} onClick={() => setMode('local')}><Users size={17} /><strong>本地多人轮流玩</strong><span>在同一设备交接角色，AI 担任 KP。</span></button></div>
+      <div className="sf-ttrpg-modes"><button disabled={busy} className={mode === 'solo' ? 'selected' : ''} onClick={() => setMode('solo')}><Sparkles size={17} /><strong>单人 + AI 同伴</strong><span>你做决定，AI 扮演其余队友与 KP。</span></button>
+        <button disabled={busy} className={mode === 'local' ? 'selected' : ''} onClick={() => setMode('local')}><Users size={17} /><strong>本地多人轮流玩</strong><span>在同一设备交接角色，AI 担任 KP。</span></button></div>
       <div className="sf-ttrpg-agreement"><h4>开团约定</h4><p>{content.campaign.sessionZero.premise}</p>
         {content.campaign.contentWarnings.length > 0 && <p>内容提示：{content.campaign.contentWarnings.join('、')}</p>}
         {content.campaign.sessionZero.lines.length > 0 && <p>不出现：{content.campaign.sessionZero.lines.join('、')}</p>}
         {content.campaign.sessionZero.veils.length > 0 && <p>淡出处理：{content.campaign.sessionZero.veils.join('、')}</p>}
         <ul>{content.campaign.sessionZero.consentChecklist.map(item => <li key={item}>{item}</li>)}</ul>
-        <label><input type="checkbox" checked={accepted} onChange={event => setAccepted(event.target.checked)} />我接受这些约定，并授权 AI KP 主持、AI 同伴自主行动，并启用本人私密指引。我的角色选择仍由我决定；随时可以暂停。</label>
+        <label><input type="checkbox" disabled={busy} checked={accepted} onChange={event => setAccepted(event.target.checked)} />我接受这些约定，并授权 AI KP 主持、AI 同伴自主行动，并启用本人私密指引。我的角色选择仍由我决定；随时可以暂停。</label>
       </div>
       <button className="sf-ttrpg-primary" disabled={!accepted || busy} onClick={() => void begin()}><Play size={17} />{busy ? phase : '与 AI KP 开始冒险'}</button>
     </div> : <>
       <div className="sf-ttrpg-toolbar"><div><span className="sf-ttrpg-dot" />{product.safety.status === 'paused' ? '已暂停' : ending ? '本次冒险已落幕' : scene?.title ?? '等待开场'}</div>
-        <div><button onClick={() => void perform(async () => props.onCheckpoint(`${scene?.title ?? '冒险'} · 手动存档`))} disabled={busy}><Save size={15} />存档</button>
+        <div>{!privacyGate && <button onClick={() => setPrivacyLocked(true)}><LockKeyhole size={15} />遮住桌面</button>}
+          <button onClick={() => void perform(async () => props.onCheckpoint(`${scene?.title ?? '冒险'} · 手动存档`))} disabled={busy || privacyGate}><Save size={15} />存档</button>
           <button onClick={() => void pause()}><Pause size={15} />{product.safety.status === 'paused' ? '恢复' : '暂停'}</button></div></div>
-      <div className="sf-ttrpg-layout"><aside className="sf-ttrpg-party">
+      {privacyGate ? <div className="sf-ttrpg-privacy-gate" role="region" aria-label="交接桌面"><LockKeyhole size={30} />
+        <span className="sf-ttrpg-eyebrow">桌面已遮住</span><h3>{recipient ? `请交给 ${recipient.name}` : '等待玩家入座'}</h3>
+        <p>确认后才显示这位角色的记录与手记。个人秘密保持收起。</p>
+        {recipient && <button className="sf-ttrpg-primary" disabled={busy} onClick={() => handoff(recipient.actorKey)}>我是 {recipient.name}，继续冒险</button>}
+      </div> : <div className="sf-ttrpg-layout"><aside className="sf-ttrpg-party">
         <span className="sf-ttrpg-eyebrow">同行者</span>{projection.actors.map(actor => <div key={actor.actorKey} className={`sf-ttrpg-seat ${actor.actorKey === active?.actorKey ? 'active' : ''}`}>
           <span className="sf-ttrpg-avatar">{portrait(actor.actorKey) ? <img src={mediaUrls[portrait(actor.actorKey)!.slotKey]} alt={portrait(actor.actorKey)!.altText} /> : actor.name.slice(0, 1)}</span><div><strong>{actor.name}</strong><small>{actor.actorKey === heroKey ? '你' : actor.role === 'npc' ? '场景人物' : actor.controller === 'ai' ? 'AI 同伴' : '真人玩家'}</small>
             {actor.resources.map(resource => <span className="sf-ttrpg-resource" key={resource.key}>{resource.name} <b>{resource.current}/{resource.maximum}</b></span>)}</div>
@@ -255,16 +279,16 @@ export default function TtrpgPlayTable(props: {
             <button className="sf-ttrpg-primary" disabled={busy} onClick={() => handoff(active.actorKey)}>我是 {active.name}</button></div>
             : <button className="sf-ttrpg-primary" disabled={busy} onClick={() => void perform(signal => coordinate(signal, true))}><Play size={15} />{busy ? phase : '继续主持'}</button>}
         </div>}
-        {busy && <div className="sf-ttrpg-progress" role="status"><span className="sf-ttrpg-spinner" />{phase || '正在保存'}<button onClick={() => controller.current?.abort()} aria-label="停止主持"><X size={16} /></button></div>}
-        {notice && <p className="sf-ttrpg-notice" role="status">{notice}</p>}
       </main><aside className="sf-ttrpg-notebook"><span className="sf-ttrpg-eyebrow"><BookOpen size={14} /> 调查手记</span>
         {projection.visibleClues.length === 0 ? <p className="sf-ttrpg-empty">第一条线索，正在等你发现。</p> : projection.visibleClues.map(clue => <article key={clue.clueKey}>
           <small>{clue.visibility === 'private' ? '只对你可见' : '队伍已知'}</small><h4>{clue.title}</h4><p>{clue.description}</p></article>)}
         {projection.visibleHandouts.map(handout => <details key={handout.handoutKey}><summary>{handout.title}</summary><p>{handout.body}</p>
           {projection.media?.slots.filter(slot => slot.kind === 'handout' && slot.targetRef === handout.handoutKey && mediaUrls[slot.slotKey]).map(slot => <img className="sf-ttrpg-handout-art" key={slot.slotKey} src={mediaUrls[slot.slotKey]} alt={slot.altText} loading="lazy" />)}</details>)}
         <details className="sf-ttrpg-rules"><summary>规则速查</summary>{projection.ruleReference.map(rule => <div key={rule.key}><strong>{rule.title}</strong><p>{rule.body}</p></div>)}</details>
-      </aside></div>
+      </aside></div>}
     </>}
-    {error && <div className="sf-ttrpg-error" role="alert"><strong>主持暂时停在这里</strong><p>{error}</p><span>已完成的行动会保留。处理后点击继续主持即可从当前进度恢复。</span><a href={`${import.meta.env.BASE_URL}settings?returnTo=${encodeURIComponent(`/play/session/${sessionId}`)}`}>API 设置</a>{product.sessionZero.completed && product.safety.status === 'active' && <button disabled={busy} onClick={() => void perform(signal => coordinate(signal))}>从当前进度继续主持</button>}</div>}
+    {busy && <div className="sf-ttrpg-progress" role="status"><span className="sf-ttrpg-spinner" />{phase || '正在保存'}<button onClick={() => controller.current?.abort()} aria-label="停止主持"><X size={16} /></button></div>}
+    {notice && !privacyGate && <p className="sf-ttrpg-notice" role="status">{notice}</p>}
+    {error && !privacyGate && <div className="sf-ttrpg-error" role="alert"><strong>主持暂时停在这里</strong><p>{error}</p><span>已完成的行动会保留。处理后点击继续主持即可从当前进度恢复。</span><a href={`${import.meta.env.BASE_URL}settings?returnTo=${encodeURIComponent(`/play/session/${sessionId}`)}`}>API 设置</a>{product.sessionZero.completed && product.safety.status === 'active' && <button disabled={busy} onClick={() => void perform(signal => coordinate(signal))}>从当前进度继续主持</button>}</div>}
   </section>
 }
