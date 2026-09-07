@@ -76,7 +76,9 @@ flowchart TB
 
 ## 体验首个原创跑团
 
-《雾港：最后一盏灯》社区试玩版已随仓库提供。启动后访问 `/storyforge/play`，选择游戏并配置自己的模型 API，即可由 AI KP 主持，和两名 AI 同伴调查旧海难、保守角色秘密并作出结局选择。也支持同一设备上的多人交接。
+《雾港：最后一盏灯》社区试玩版已随仓库提供。从 GitHub 下载最新 `main` 源码 ZIP 或拉取主干，即包含游戏包、封面和随包媒资，无需另找模组文件。使用 Node.js 24，在解压后的项目目录运行 `npm ci`、`npm run dev`，打开终端显示的网址，点击首页的“体验原创跑团”（或访问 `/storyforge/play`）。选择游戏并配置自己的模型 API，即可由 AI KP 主持，和两名 AI 同伴调查旧海难、保守角色秘密并作出结局选择。也支持同一设备上的多人交接。
+
+已经发布的旧版本 Release 压缩包内容固定；要体验本作，请使用最新主干或包含本作的后续版本。
 
 本作使用原创 2d6 规则，包含 7 个场景、6 条线索和 3 种结局。游戏进度保存在本机，可暂停、刷新继续和读取检查点。它是本地社区预览；公共联网多人尚未部署。详见[玩家说明](examples/ttrpg/README.md)及[真实制作与试玩证据](examples/ttrpg/fog-harbor/production-status.md)。
 
@@ -113,12 +115,12 @@ Harness 保障权限、预算、恢复、stale 和证据，不承诺任何模型
 
 ## 本地运行
 
-要求：Node.js 20+ 与 npm。
+推荐使用与 CI 一致的 Node.js 24 与 npm。
 
 ```bash
-git clone https://github.com/aloneonez/storyforge.git
+git clone https://github.com/yuanbw2025/storyforge.git
 cd storyforge
-npm install
+npm ci
 npm run dev
 ```
 

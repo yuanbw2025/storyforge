@@ -27,7 +27,9 @@ test('目录不可用时仍能读取本地存档，另一标签新增存档后�
 test('社区真实游戏包：多人刷新和交接遮屏，检查点另建冒险，手机桌面可用', async ({ page }) => {
   test.setTimeout(120_000)
   await installKpRehearsal(page)
-  await page.goto('./play')
+  await page.goto('./')
+  await page.getByRole('button', { name: '体验原创跑团', exact: true }).click()
+  await expect(page).toHaveURL(/\/storyforge\/play$/)
   await page.getByRole('button', { name: '开始一场新冒险' }).click()
   const table = page.getByTestId('ttrpg-play-table')
   await table.getByRole('button', { name: /本地多人轮流玩/ }).click()
