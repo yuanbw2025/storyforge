@@ -100,6 +100,61 @@ test('文字开放世界玩家壳在桌面三栏与移动五入口之间保持�
   await page.getByRole('button', { name: '返回当前场景', exact: true }).click()
   await expect(main).toHaveAttribute('data-open-world-view', 'scene')
 
+  const characterStateBefore = await page.evaluate(async () => {
+    const importer = new Function('path', 'return import(path)') as (path: string) => Promise<any>
+    const { useTextOpenWorldPlayerStore } = await importer('/storyforge/src/stores/text-open-world-player.ts')
+    const state = useTextOpenWorldPlayerStore.getState()
+    return JSON.stringify({
+      runtimeState: state.runtimeState,
+      events: state.events,
+      checkpoints: state.checkpoints,
+      selectedSessionId: state.selectedSessionId,
+    })
+  })
+  const globalStatusBeforeCharacter = await page.getByTestId('text-open-world-global-status').textContent()
+  await left.getByRole('button', { name: '角色', exact: true }).click()
+  await expect(main).toHaveAttribute('data-open-world-view', 'character')
+  const characterPanel = page.getByTestId('text-open-world-character-panel')
+  await expect(characterPanel).toBeVisible()
+  await expect(characterPanel.getByRole('heading', { name: '来客', exact: true })).toBeVisible()
+  await expect(characterPanel.getByTestId('text-open-world-character-progression')).toContainText('等级 1 / 20')
+  await expect(characterPanel.getByRole('progressbar', { name: '等级经验进度 0%' })).toBeVisible()
+  const characterAttributes = characterPanel.getByTestId('text-open-world-character-attributes')
+  await expect(characterAttributes.locator('section')).toHaveCount(3)
+  await expect(characterAttributes).toContainText('力量')
+  await expect(characterAttributes).toContainText('体质')
+  await expect(characterAttributes).toContainText('敏捷')
+  const characterSkills = characterPanel.getByTestId('text-open-world-character-skills')
+  await expect(characterSkills).toContainText('挥击')
+  await expect(characterSkills).toContainText('主动技能 · 攻击 · 单个敌人')
+  await expect(characterSkills).toContainText('技能条件就绪')
+  await expect(characterSkills).toContainText('规则冷却')
+  await expect(characterSkills).toContainText('当前冷却')
+  await expect(characterSkills).toContainText('初始可掌握')
+  const characterStatBreakdowns = characterPanel.locator(
+    'details[data-testid="text-open-world-character-stat-breakdown"]',
+  )
+  await expect(characterStatBreakdowns).toHaveCount(6)
+  await characterStatBreakdowns.first().getByText('展开查看数值来源', { exact: true }).click()
+  await expect(characterStatBreakdowns.first()).toContainText('基础生命')
+  await expect(characterPanel).not.toContainText(/(?:skill|condition|quest|status|effect)\./)
+  await expect(characterPanel).not.toContainText('world-release:')
+  await page.getByRole('button', { name: '返回当前场景', exact: true }).click()
+  await expect(main).toHaveAttribute('data-open-world-view', 'scene')
+  await expect(page.getByTestId('text-open-world-global-status')).toHaveText(globalStatusBeforeCharacter ?? '')
+  const characterStateAfter = await page.evaluate(async () => {
+    const importer = new Function('path', 'return import(path)') as (path: string) => Promise<any>
+    const { useTextOpenWorldPlayerStore } = await importer('/storyforge/src/stores/text-open-world-player.ts')
+    const state = useTextOpenWorldPlayerStore.getState()
+    return JSON.stringify({
+      runtimeState: state.runtimeState,
+      events: state.events,
+      checkpoints: state.checkpoints,
+      selectedSessionId: state.selectedSessionId,
+    })
+  })
+  expect(characterStateAfter).toBe(characterStateBefore)
+
   const timelineBeforeConfirmation = await page.getByTestId('text-open-world-global-status').textContent()
   const riskyAction = page.locator('button').filter({ hasText: '偷取盐露药剂' }).first()
   const underlyingAction = page.locator('button').filter({ hasText: '休息' }).first()
@@ -140,6 +195,34 @@ test('文字开放世界玩家壳在桌面三栏与移动五入口之间保持�
   await expect(page.getByTestId('text-open-world-global-status')).toContainText('地点盐港广场')
   await page.getByRole('button', { name: '返回当前场景', exact: true }).click()
   await expect(main).toHaveAttribute('data-open-world-view', 'scene')
+
+  await mobileNavigation.getByRole('button', { name: '角色', exact: true }).click()
+  await expect(main).toHaveAttribute('data-open-world-view', 'character')
+  await expect(characterPanel).toBeVisible()
+  const mobileCharacterColumns = await page.evaluate(() => {
+    const box = (testId: string) => document.querySelector<HTMLElement>(`[data-testid="${testId}"]`)!
+      .getBoundingClientRect()
+    const progression = box('text-open-world-character-progression')
+    const resources = box('text-open-world-character-resources')
+    const attributes = box('text-open-world-character-attributes')
+    const derived = box('text-open-world-character-derived-stats')
+    return {
+      progression: { left: progression.left, right: progression.right, bottom: progression.bottom },
+      resources: { left: resources.left, right: resources.right, top: resources.top },
+      attributes: { left: attributes.left, right: attributes.right, bottom: attributes.bottom },
+      derived: { left: derived.left, right: derived.right, top: derived.top },
+    }
+  })
+  expect(Math.abs(mobileCharacterColumns.progression.left - mobileCharacterColumns.resources.left)).toBeLessThanOrEqual(1)
+  expect(Math.abs(mobileCharacterColumns.progression.right - mobileCharacterColumns.resources.right)).toBeLessThanOrEqual(1)
+  expect(mobileCharacterColumns.resources.top).toBeGreaterThanOrEqual(mobileCharacterColumns.progression.bottom - 1)
+  expect(Math.abs(mobileCharacterColumns.attributes.left - mobileCharacterColumns.derived.left)).toBeLessThanOrEqual(1)
+  expect(Math.abs(mobileCharacterColumns.attributes.right - mobileCharacterColumns.derived.right)).toBeLessThanOrEqual(1)
+  expect(mobileCharacterColumns.derived.top).toBeGreaterThanOrEqual(mobileCharacterColumns.attributes.bottom - 1)
+  const characterStatuses = characterPanel.getByTestId('text-open-world-character-statuses')
+  await characterStatuses.scrollIntoViewIfNeeded()
+  await expect(characterStatuses).toBeVisible()
+  await expect(characterStatuses).toContainText('当前没有持续状态')
 
   await page.getByRole('button', { name: '打开当前位置上下文', exact: true }).click()
   await expect(right).toBeVisible()

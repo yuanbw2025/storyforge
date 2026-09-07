@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Backpack, Bell, GitBranch, Save, Swords, UserRound } from 'lucide-react'
+import { Backpack, Bell, GitBranch, Save, Swords } from 'lucide-react'
 import { createTextOpenWorldInventoryCatalogV1 } from '../../lib/open-world/inventory'
 import { deriveTextOpenWorldLifeProjectionV1 } from '../../lib/open-world/life-cycle'
 import { parseTextOpenWorldModulesV1 } from '../../lib/open-world/modules'
@@ -10,13 +10,13 @@ import {
 } from '../../lib/open-world/player-notifications'
 import { projectTextOpenWorldScenesV1 } from '../../lib/open-world/scene-projection'
 import { deriveTextOpenWorldContextsV1 } from '../../lib/open-world/session-projection'
-import { createTextOpenWorldSkillCatalogV1 } from '../../lib/open-world/skills'
 import type { TextOpenWorldCommandSourceV1 } from '../../lib/types'
 import {
   selectTextOpenWorldVNextActions,
   useTextOpenWorldPlayerStore,
 } from '../../stores/text-open-world-player'
 import TextOpenWorldActorsPanel from './TextOpenWorldActorsPanel'
+import TextOpenWorldCharacterPanel from './TextOpenWorldCharacterPanel'
 import TextOpenWorldEquipmentPanel from './TextOpenWorldEquipmentPanel'
 import TextOpenWorldGameShell from './TextOpenWorldGameShell'
 import TextOpenWorldMapPanel, { type TextOpenWorldMapTravelRequestV1 } from './TextOpenWorldMapPanel'
@@ -189,16 +189,6 @@ export default function TextOpenWorldVNextPlayer() {
   const region = modules.world.regions.find(item => item.key === location?.regionKey)
   const inventory = createTextOpenWorldInventoryCatalogV1(runtimePackage).project(state.inventory)
   const derived = deriveTextOpenWorldContextsV1(projection)
-  const { playerStats, progression } = derived
-  const skillCatalog = createTextOpenWorldSkillCatalogV1(runtimePackage)
-  const learnedSkills = skillCatalog.project({
-    learnedSkillKeys: state.player.learnedSkillKeys,
-    skillResource: state.player.skillResource,
-    conditionResults: Object.fromEntries(
-      Object.entries(derived.action.conditionResults).map(([key, result]) => [key, result.satisfied]),
-    ),
-  }).filter(item => item.learned)
-  const activeStatuses = skillCatalog.projectStatuses(state.player.statusKeys).filter(item => item.active)
 
   const run = async (operation: () => Promise<unknown>) => {
     try {
@@ -334,94 +324,7 @@ export default function TextOpenWorldVNextPlayer() {
         onFocusLocation={focusQuestLocation}
       />
 
-  const characterView = <div className="space-y-3">
-    <section className="grid gap-3 sm:grid-cols-2">
-      <article className="rounded border border-border bg-bg-surface p-3">
-        <small className="text-text-muted">等级与经验</small>
-        <strong className="mt-1 block">Lv.{state.player.level} · {state.player.experience} EXP</strong>
-        <small className="text-text-muted">
-          {progression.atMaximumLevel
-            ? '已达20级上限'
-            : `本级 ${progression.experienceIntoLevel}/${progression.experienceForNextLevel}`}
-        </small>
-      </article>
-      <article className="rounded border border-border bg-bg-surface p-3">
-        <small className="text-text-muted">生命 / 技能资源</small>
-        <strong className="mt-1 block">
-          {state.player.health}/{playerStats.maximumHealth} · {state.player.skillResource}/{playerStats.maximumSkillResource}
-        </strong>
-        <small className="text-text-muted">
-          {life.phase === 'healthy' ? '状态良好' : life.phase === 'wounded' ? '负伤' : '战败'}
-        </small>
-      </article>
-      <article className="rounded border border-border bg-bg-surface p-3">
-        <small className="text-text-muted">三项属性</small>
-        <strong className="mt-1 block">
-          力 {state.player.attributes.power} · 体 {state.player.attributes.vitality} · 敏 {state.player.attributes.agility}
-        </strong>
-      </article>
-      <article className="rounded border border-border bg-bg-surface p-3">
-        <small className="text-text-muted">攻击 / 防御 / 暴击 / 先手</small>
-        <strong className="mt-1 block">
-          {playerStats.attack} · {playerStats.defense} · {Math.round(playerStats.criticalChance * 10_000) / 100}% · {playerStats.initiative}
-        </strong>
-      </article>
-    </section>
-    <article className="rounded border border-border bg-bg-surface p-4">
-      <div className="mb-2 flex items-center gap-2 text-sm font-semibold">
-        <UserRound className="h-4 w-4 text-accent" />{modules.actors.player.identity.name}
-      </div>
-      <p className="text-xs text-text-muted">{modules.actors.player.identity.background || '未设置背景'}</p>
-      <p className="mt-2 text-xs"><strong>近期目标：</strong>{modules.actors.player.identity.shortGoal || '未设置'}</p>
-      <p className="mt-1 text-xs"><strong>长期目标：</strong>{modules.actors.player.identity.longGoal || '未设置'}</p>
-      <details className="mt-3 text-[10px]">
-        <summary className="cursor-pointer text-accent">查看数值来源</summary>
-        {Object.values(playerStats.breakdown).map(stat => <div key={stat.semanticKey} className="mt-2">
-          <strong>{stat.semanticKey} = {stat.value}</strong>
-          <p className="text-text-muted">
-            {stat.components.map(component => `${component.sourceKey}:${component.value}`).join(' + ')}
-          </p>
-        </div>)}
-      </details>
-    </article>
-    <section className="grid gap-3 md:grid-cols-2" data-testid="text-open-world-skills-statuses">
-      <article className="rounded border border-border bg-bg-surface p-3">
-        <div className="mb-2 flex items-center gap-2 text-sm font-semibold">
-          <Swords className="h-4 w-4 text-accent" />已学技能
-        </div>
-        <div className="space-y-2">
-          {learnedSkills.map(({ skill, available, unavailableReasons }) => <div
-            key={skill.key}
-            className="rounded bg-bg-base p-2 text-xs"
-          >
-            <span className="flex flex-wrap items-center justify-between gap-2">
-              <strong>{skill.title}</strong>
-              <small className={available ? 'text-accent' : 'text-text-muted'}>
-                {available ? '当前可用' : unavailableReasons.join(' / ')}
-              </small>
-            </span>
-            <p className="mt-1 text-text-muted">{skill.description}</p>
-            <small className="mt-1 block text-text-muted">
-              {skill.activation === 'active' ? '主动' : '被动'} · {skill.target} · 消耗 {skill.resourceCost}
-              {' · '}冷却 {skill.cooldownTurns} 回合
-            </small>
-          </div>)}
-          {!learnedSkills.length && <p className="text-xs text-text-muted">尚未学会技能。</p>}
-        </div>
-      </article>
-      <article className="rounded border border-border bg-bg-surface p-3">
-        <div className="mb-2 text-sm font-semibold">当前状态</div>
-        <div className="space-y-2">
-          {activeStatuses.map(({ status }) => <div key={status.key} className="rounded bg-bg-base p-2 text-xs">
-            <strong>{status.title}</strong>
-            <small className="ml-2 text-text-muted">{status.polarity}</small>
-            <p className="mt-1 text-text-muted">{status.description}</p>
-          </div>)}
-          {!activeStatuses.length && <p className="text-xs text-text-muted">当前没有持续状态。</p>}
-        </div>
-      </article>
-    </section>
-  </div>
+  const characterView = <TextOpenWorldCharacterPanel projection={projection} />
 
   const moreView = <div className="space-y-3">
     <TextOpenWorldEquipmentPanel
