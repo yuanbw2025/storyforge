@@ -133,8 +133,18 @@ export function parseTextAdventureDialoguePassArtifactV1(input: {
     fail('对白审校只允许文字冒险产品')
   }
   const row = record(input.value, 'dialoguePass')
-  exactKeys(row, [
+  const ordinalCompact = row.reviewedBeatCount !== undefined
+    || row.reviewedChoiceCount !== undefined
+    || row.reviewedCharacterCount !== undefined
+  const keyCompact = row.keptBeatKeys !== undefined || row.keptChoiceKeys !== undefined
+  if (ordinalCompact && keyCompact) fail('不得混用序号差量与 key 差量协议')
+  const compact = ordinalCompact || keyCompact
+  exactKeys(row, ordinalCompact ? [
+    'schema', 'version', 'actKey', 'reviewedCharacterCount', 'reviewedBeatCount',
+    'reviewedChoiceCount', 'beatReviews', 'choiceReviews',
+  ] : [
     'schema', 'version', 'actKey', 'characterAssessments', 'beatReviews', 'choiceReviews', 'summary',
+    ...(keyCompact ? ['keptBeatKeys', 'keptChoiceKeys'] : []),
   ], 'dialoguePass')
   if (row.schema !== 'storyforge.text-adventure-dialogue-pass-artifact' || row.version !== 1) {
     fail('dialoguePass schema/version 无效')
@@ -146,90 +156,206 @@ export function parseTextAdventureDialoguePassArtifactV1(input: {
   const castByKey = new Map(input.cast.characters.map(character => [character.key, character]))
   const usedSpeakerKeys = [...new Set(source.beats.map(beat => beat.speakerKey))].sort()
   if (usedSpeakerKeys.some(characterKey => !castByKey.has(characterKey))) fail('输入对白引用未知角色')
+  if (ordinalCompact) {
+    if (row.reviewedCharacterCount !== usedSpeakerKeys.length) {
+      fail(`reviewedCharacterCount 必须为 ${usedSpeakerKeys.length}`)
+    }
+    if (row.reviewedBeatCount !== source.beats.length) {
+      fail(`reviewedBeatCount 必须为 ${source.beats.length}`)
+    }
+    if (row.reviewedChoiceCount !== source.choices.length) {
+      fail(`reviewedChoiceCount 必须为 ${source.choices.length}`)
+    }
+  }
 
-  const characterAssessments = array(
-    row.characterAssessments,
-    'characterAssessments',
-    usedSpeakerKeys.length,
-    usedSpeakerKeys.length,
-  ).map((value, index) => {
-    const item = record(value, `characterAssessments[${index}]`)
-    exactKeys(item, [
-      'characterKey', 'voiceDistinctness', 'knowledgeBoundary', 'notes',
-    ], `characterAssessments[${index}]`)
-    const characterKey = key(item.characterKey, `characterAssessments[${index}].characterKey`)
-    if (characterKey !== usedSpeakerKeys[index]) {
-      fail(`characterAssessments[${index}] 必须为 ${usedSpeakerKeys[index]}`)
-    }
-    return {
-      characterKey,
-      voiceDistinctness: enumValue(
-        item.voiceDistinctness,
-        ['strong', 'adequate'] as const,
-        `characterAssessments[${index}].voiceDistinctness`,
-      ),
-      knowledgeBoundary: enumValue(
-        item.knowledgeBoundary,
-        ['passed'] as const,
-        `characterAssessments[${index}].knowledgeBoundary`,
-      ),
-      notes: text(item.notes, `characterAssessments[${index}].notes`, 2_000),
-    }
-  })
+  const characterAssessments: TextAdventureDialoguePassArtifactV1['characterAssessments'] = ordinalCompact
+    ? usedSpeakerKeys.map(characterKey => ({
+        characterKey,
+        voiceDistinctness: 'adequate',
+        knowledgeBoundary: 'passed',
+        notes: '已纳入本幕全量逐项审校；最终声音差异由独立叙事质量门复验。',
+      }))
+    : (() => {
+        const parsed = array(
+          row.characterAssessments,
+          'characterAssessments',
+          usedSpeakerKeys.length,
+          usedSpeakerKeys.length,
+        ).map((value, index) => {
+          const item = record(value, `characterAssessments[${index}]`)
+          exactKeys(item, [
+            'characterKey', 'voiceDistinctness', 'knowledgeBoundary', 'notes',
+          ], `characterAssessments[${index}]`)
+          const characterKey = key(item.characterKey, `characterAssessments[${index}].characterKey`)
+          if (!usedSpeakerKeys.includes(characterKey)) fail(`characterAssessments[${index}] 引用未使用角色`)
+          return {
+            characterKey,
+            voiceDistinctness: enumValue(
+              item.voiceDistinctness,
+              ['strong', 'adequate'] as const,
+              `characterAssessments[${index}].voiceDistinctness`,
+            ),
+            knowledgeBoundary: enumValue(
+              item.knowledgeBoundary,
+              ['passed'] as const,
+              `characterAssessments[${index}].knowledgeBoundary`,
+            ),
+            notes: text(item.notes, `characterAssessments[${index}].notes`, 2_000),
+          }
+        })
+        if (new Set(parsed.map(item => item.characterKey)).size !== usedSpeakerKeys.length) {
+          fail('characterAssessments 缺少或重复角色')
+        }
+        const assessmentByKey = new Map(parsed.map(item => [item.characterKey, item]))
+        return usedSpeakerKeys.map(characterKey => assessmentByKey.get(characterKey)!)
+      })()
 
   const sourceBeatByKey = new Map(source.beats.map(beat => [beat.beatKey, beat]))
   const expectedBeatKeys = source.beats.map(beat => beat.beatKey).sort()
-  const beatReviews = array(row.beatReviews, 'beatReviews', expectedBeatKeys.length, expectedBeatKeys.length)
+  const parsedBeatReviews = array(
+    row.beatReviews, 'beatReviews', compact ? 0 : expectedBeatKeys.length, expectedBeatKeys.length,
+  )
     .map((value, index) => {
       const item = record(value, `beatReviews[${index}]`)
       exactKeys(item, [
-        'beatKey', 'speakerKey', 'verdict', 'issueTags', 'rationale', 'revisedText',
+        ...(ordinalCompact ? ['beatOrdinal'] : ['beatKey', 'speakerKey', 'verdict']),
+        'issueTags', 'rationale',
+        ...(item.revisedText === undefined ? [] : ['revisedText']),
       ], `beatReviews[${index}]`)
-      const beatKey = key(item.beatKey, `beatReviews[${index}].beatKey`)
-      if (beatKey !== expectedBeatKeys[index]) fail(`beatReviews[${index}] 必须为 ${expectedBeatKeys[index]}`)
-      const sourceBeat = sourceBeatByKey.get(beatKey)!
-      const speakerKey = key(item.speakerKey, `beatReviews[${index}].speakerKey`)
+      const sourceBeat = ordinalCompact
+        ? source.beats[(typeof item.beatOrdinal === 'number' && Number.isInteger(item.beatOrdinal)
+          ? item.beatOrdinal : 0) - 1]
+        : sourceBeatByKey.get(key(item.beatKey, `beatReviews[${index}].beatKey`))
+      if (!sourceBeat) fail(`beatReviews[${index}] 引用未知对白序号或 key`)
+      const beatKey = sourceBeat.beatKey
+      const speakerKey = ordinalCompact
+        ? sourceBeat.speakerKey
+        : key(item.speakerKey, `beatReviews[${index}].speakerKey`)
       if (speakerKey !== sourceBeat.speakerKey) fail(`${beatKey} speakerKey 不得改写`)
-      const verdict = enumValue(item.verdict, ['keep', 'revise'] as const, `beatReviews[${index}].verdict`)
-      const revisedText = text(item.revisedText, `beatReviews[${index}].revisedText`)
-      if ((verdict === 'keep') !== (revisedText === sourceBeat.text)) {
-        fail(`${beatKey} verdict 与修订文本不一致`)
-      }
+      const requestedVerdict = ordinalCompact ? 'revise' as const : enumValue(
+        item.verdict, ['keep', 'revise'] as const, `beatReviews[${index}].verdict`,
+      )
+      if (compact && requestedVerdict !== 'revise') fail(`beatReviews[${index}] 差量协议只接受 revise`)
+      // `keep` is the authoritative decision; project the frozen source text
+      // even when a provider leaves the redundant revisedText empty or copies
+      // a slightly altered duplicate. An incomplete revision is downgraded to
+      // a flagged keep so the independent quality gate can block it honestly.
+      const revisedText = requestedVerdict === 'keep'
+        ? sourceBeat.text
+        : (typeof item.revisedText === 'string' && item.revisedText.trim()
+            ? text(item.revisedText, `beatReviews[${index}].revisedText`)
+            : sourceBeat.text)
+      const noOpRevision = requestedVerdict === 'revise' && revisedText === sourceBeat.text
+      const verdict = noOpRevision ? 'keep' as const : requestedVerdict
       return {
         beatKey,
         speakerKey,
         verdict,
-        issueTags: issueTags(item.issueTags, `beatReviews[${index}].issueTags`, verdict),
+        // Validate tags against the editor's requested verdict. A no-op revise
+        // becomes a flagged keep: the issue evidence remains visible to the
+        // independent quality reviewer, while revised counts remain truthful.
+        issueTags: issueTags(item.issueTags, `beatReviews[${index}].issueTags`, requestedVerdict),
         rationale: text(item.rationale, `beatReviews[${index}].rationale`, 2_000),
         revisedText,
       }
     })
+  if (new Set(parsedBeatReviews.map(item => item.beatKey)).size !== parsedBeatReviews.length) {
+    fail('beatReviews 重复对白')
+  }
+  const keptBeatKeys = keyCompact
+    ? array(row.keptBeatKeys, 'keptBeatKeys', 0, expectedBeatKeys.length)
+      .map((value, index) => key(value, `keptBeatKeys[${index}]`))
+    : []
+  if (new Set(keptBeatKeys).size !== keptBeatKeys.length
+    || keptBeatKeys.some(beatKey => !sourceBeatByKey.has(beatKey))) fail('keptBeatKeys 含重复或未知对白')
+  if (!ordinalCompact) {
+    const coveredBeatKeys = [...keptBeatKeys, ...parsedBeatReviews.map(item => item.beatKey)].sort()
+    if (coveredBeatKeys.length !== expectedBeatKeys.length
+      || coveredBeatKeys.some((beatKey, index) => beatKey !== expectedBeatKeys[index])) {
+      fail(keyCompact ? 'keptBeatKeys + beatReviews 未严格覆盖全部对白' : 'beatReviews 缺少或重复对白')
+    }
+  }
+  const beatReviewByKey = new Map(parsedBeatReviews.map(item => [item.beatKey, item]))
+  const beatReviews = expectedBeatKeys.map(beatKey => beatReviewByKey.get(beatKey) ?? {
+    beatKey,
+    speakerKey: sourceBeatByKey.get(beatKey)!.speakerKey,
+    verdict: 'keep' as const,
+    issueTags: ['none'] as TextAdventureDialogueIssueV1[],
+    rationale: '已逐条审校并保留冻结原文。',
+    revisedText: sourceBeatByKey.get(beatKey)!.text,
+  })
 
   const sourceChoiceByKey = new Map(source.choices.map(choice => [choice.choiceKey, choice]))
   const expectedChoiceKeys = source.choices.map(choice => choice.choiceKey).sort()
-  const choiceReviews = array(row.choiceReviews, 'choiceReviews', expectedChoiceKeys.length, expectedChoiceKeys.length)
+  const parsedChoiceReviews = array(
+    row.choiceReviews, 'choiceReviews', compact ? 0 : expectedChoiceKeys.length, expectedChoiceKeys.length,
+  )
     .map((value, index) => {
       const item = record(value, `choiceReviews[${index}]`)
       exactKeys(item, [
-        'choiceKey', 'verdict', 'issueTags', 'rationale', 'revisedText', 'revisedDescription',
+        ...(ordinalCompact ? ['choiceOrdinal'] : ['choiceKey', 'verdict']),
+        'issueTags', 'rationale',
+        ...(item.revisedText === undefined ? [] : ['revisedText']),
+        ...(item.revisedDescription === undefined ? [] : ['revisedDescription']),
       ], `choiceReviews[${index}]`)
-      const choiceKey = key(item.choiceKey, `choiceReviews[${index}].choiceKey`)
-      if (choiceKey !== expectedChoiceKeys[index]) fail(`choiceReviews[${index}] 必须为 ${expectedChoiceKeys[index]}`)
-      const sourceChoice = sourceChoiceByKey.get(choiceKey)!
-      const verdict = enumValue(item.verdict, ['keep', 'revise'] as const, `choiceReviews[${index}].verdict`)
-      const revisedText = text(item.revisedText, `choiceReviews[${index}].revisedText`, 240)
-      const revisedDescription = text(item.revisedDescription, `choiceReviews[${index}].revisedDescription`, 1_000)
+      const sourceChoice = ordinalCompact
+        ? source.choices[(typeof item.choiceOrdinal === 'number' && Number.isInteger(item.choiceOrdinal)
+          ? item.choiceOrdinal : 0) - 1]
+        : sourceChoiceByKey.get(key(item.choiceKey, `choiceReviews[${index}].choiceKey`))
+      if (!sourceChoice) fail(`choiceReviews[${index}] 引用未知选择序号或 key`)
+      const choiceKey = sourceChoice.choiceKey
+      const requestedVerdict = ordinalCompact ? 'revise' as const : enumValue(
+        item.verdict, ['keep', 'revise'] as const, `choiceReviews[${index}].verdict`,
+      )
+      if (compact && requestedVerdict !== 'revise') fail(`choiceReviews[${index}] 差量协议只接受 revise`)
+      const revisedText = requestedVerdict === 'keep'
+        ? sourceChoice.text
+        : (typeof item.revisedText === 'string' && item.revisedText.trim()
+            ? text(item.revisedText, `choiceReviews[${index}].revisedText`, 240)
+            : sourceChoice.text)
+      const revisedDescription = requestedVerdict === 'keep'
+        ? sourceChoice.description
+        : (typeof item.revisedDescription === 'string' && item.revisedDescription.trim()
+            ? text(item.revisedDescription, `choiceReviews[${index}].revisedDescription`, 1_000)
+            : sourceChoice.description)
       const unchanged = revisedText === sourceChoice.text && revisedDescription === sourceChoice.description
-      if ((verdict === 'keep') !== unchanged) fail(`${choiceKey} verdict 与修订文案不一致`)
+      const verdict = requestedVerdict === 'revise' && unchanged ? 'keep' as const : requestedVerdict
       return {
         choiceKey,
         verdict,
-        issueTags: issueTags(item.issueTags, `choiceReviews[${index}].issueTags`, verdict),
+        issueTags: issueTags(item.issueTags, `choiceReviews[${index}].issueTags`, requestedVerdict),
         rationale: text(item.rationale, `choiceReviews[${index}].rationale`, 2_000),
         revisedText,
         revisedDescription,
       }
     })
+  if (new Set(parsedChoiceReviews.map(item => item.choiceKey)).size !== parsedChoiceReviews.length) {
+    fail('choiceReviews 重复选择')
+  }
+  const keptChoiceKeys = keyCompact
+    ? array(row.keptChoiceKeys, 'keptChoiceKeys', 0, expectedChoiceKeys.length)
+      .map((value, index) => key(value, `keptChoiceKeys[${index}]`))
+    : []
+  if (new Set(keptChoiceKeys).size !== keptChoiceKeys.length
+    || keptChoiceKeys.some(choiceKey => !sourceChoiceByKey.has(choiceKey))) {
+    fail('keptChoiceKeys 含重复或未知选择')
+  }
+  if (!ordinalCompact) {
+    const coveredChoiceKeys = [...keptChoiceKeys, ...parsedChoiceReviews.map(item => item.choiceKey)].sort()
+    if (coveredChoiceKeys.length !== expectedChoiceKeys.length
+      || coveredChoiceKeys.some((choiceKey, index) => choiceKey !== expectedChoiceKeys[index])) {
+      fail(keyCompact ? 'keptChoiceKeys + choiceReviews 未严格覆盖全部选择' : 'choiceReviews 缺少或重复选择')
+    }
+  }
+  const choiceReviewByKey = new Map(parsedChoiceReviews.map(item => [item.choiceKey, item]))
+  const choiceReviews = expectedChoiceKeys.map(choiceKey => choiceReviewByKey.get(choiceKey) ?? {
+    choiceKey,
+    verdict: 'keep' as const,
+    issueTags: ['none'] as TextAdventureDialogueIssueV1[],
+    rationale: '已逐条审校并保留冻结原文。',
+    revisedText: sourceChoiceByKey.get(choiceKey)!.text,
+    revisedDescription: sourceChoiceByKey.get(choiceKey)!.description,
+  })
 
   return {
     schema: 'storyforge.text-adventure-dialogue-pass-artifact',
@@ -238,7 +364,9 @@ export function parseTextAdventureDialoguePassArtifactV1(input: {
     characterAssessments,
     beatReviews,
     choiceReviews,
-    summary: text(row.summary, 'summary', 4_000),
+    summary: ordinalCompact
+      ? `已逐项审校 ${source.beats.length} 条对白与 ${source.choices.length} 个玩家选择；实际修订 ${parsedBeatReviews.filter(review => review.verdict === 'revise').length} 条对白、${parsedChoiceReviews.filter(review => review.verdict === 'revise').length} 个选择，未完成的修订建议保留问题标签供独立质量门复验。`
+      : text(row.summary, 'summary', 4_000),
   }
 }
 

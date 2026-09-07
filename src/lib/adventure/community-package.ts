@@ -32,14 +32,17 @@ import {
   PRODUCT_BROWSER_PERFORMANCE_GATE_ID_V1,
   PRODUCT_MAIN_ROUTE_PLAYTHROUGH_GATE_ID_V1,
   PRODUCT_MEDIA_RUNTIME_GATE_ID_V1,
+  TEXT_ADVENTURE_HUMAN_PLAYTEST_GATE_ID_V1,
   TEXT_ADVENTURE_HUMAN_VISUAL_REVIEW_GATE_ID_V1,
   requirePassedProductBrowserPerformanceGateV1,
   requirePassedProductBuildMainRouteGateV1,
   requirePassedProductMediaRuntimeGateV1,
+  requirePassedTextAdventureHumanPlaytestGateV1,
   requirePassedTextAdventureHumanVisualReviewGateV1,
   verifyPortableProductQualityGateReceiptV1,
   type ProductQualityGateReceiptV1,
   type ProductMainRoutePlaythroughEvidenceV1,
+  type TextAdventureHumanPlaytestCoverageEvidenceV1,
 } from '../product-production/quality-receipts'
 import {
   parseTextAdventureMediaAuditArtifactV1,
@@ -126,6 +129,28 @@ export interface TextAdventureCommunityCandidateDossierV1 {
     visualReviewHash: string | null
     authorMainRouteEndingKey: string
     authorMainRouteChoiceCount: number
+    humanPlaytest: {
+      author: {
+        participantLabel: string
+        endingKey: string
+        elapsedMs: number
+        choiceCount: number
+        actionCount: number
+        meaningfulActionCount: number
+        dialogueActionCount: number
+        ratings: TextAdventureHumanPlaytestCoverageEvidenceV1['sessions'][number]['assessment']['ratings']
+      }
+      independentPlayer: {
+        participantLabel: string
+        endingKey: string
+        elapsedMs: number
+        choiceCount: number
+        actionCount: number
+        meaningfulActionCount: number
+        dialogueActionCount: number
+        ratings: TextAdventureHumanPlaytestCoverageEvidenceV1['sessions'][number]['assessment']['ratings']
+      }
+    }
   }
   offlineFallback: 'text-only'
 }
@@ -244,6 +269,7 @@ async function verifyEvidence(input: {
   evidence: TextAdventureCommunityPackageV1['evidence']
   autoplay: TextAdventureAutoplayReportV1
   mainRoute: ProductMainRoutePlaythroughEvidenceV1
+  humanPlaytest: TextAdventureHumanPlaytestCoverageEvidenceV1
 }> {
   const raw = record(input.raw, 'evidence')
   exactKeys(raw, ['previewHash', 'brief', 'buildManifest', 'qualityReport', 'artifacts', 'gateReceipts'], 'evidence')
@@ -352,13 +378,15 @@ async function verifyEvidence(input: {
   const expectedGateIds = [
     PRODUCT_BROWSER_PERFORMANCE_GATE_ID_V1,
     PRODUCT_MAIN_ROUTE_PLAYTHROUGH_GATE_ID_V1,
+    TEXT_ADVENTURE_HUMAN_PLAYTEST_GATE_ID_V1,
     ...(mediaRequired ? [PRODUCT_MEDIA_RUNTIME_GATE_ID_V1, TEXT_ADVENTURE_HUMAN_VISUAL_REVIEW_GATE_ID_V1] : []),
   ].sort()
   const verifiedGates = await Promise.all(raw.gateReceipts.map(receipt => verifyPortableProductQualityGateReceiptV1({
     receipt,
     binding: {
       buildNumber: buildManifest.buildNumber, packageHash: manifest.packageHash,
-      previewHash: raw.previewHash as string, briefHash, humanVisual,
+      previewHash: raw.previewHash as string, briefHash,
+      targetPlayMinutes: Math.round(brief.scale.targetPlayMinutes), humanVisual,
     },
   })))
   verifiedGates.sort((left, right) => left.gateReceipt.gateId.localeCompare(right.gateReceipt.gateId))
@@ -385,6 +413,30 @@ async function verifyEvidence(input: {
   if (currentNodeKey !== mainRoute.endingKey || endingNode?.kind !== 'ending') {
     fail('作者主路线结局不是冻结 RuntimePackage 的可达结局')
   }
+  const humanPlaytest = verifiedGates.find(item => item.gateReceipt.gateId === TEXT_ADVENTURE_HUMAN_PLAYTEST_GATE_ID_V1)
+    ?.evidence as TextAdventureHumanPlaytestCoverageEvidenceV1 | undefined
+  if (!humanPlaytest?.passed || !humanPlaytest.authorSessionEvidenceHash
+    || !humanPlaytest.independentPlayerSessionEvidenceHash) fail('候选包缺少作者与独立玩家双角色真人试玩覆盖')
+  const narrative = manifest.runtimePackage.narrative
+  const adventureActions = new Map(manifest.runtimePackage.adventure!.actions.map(action => [action.key, action]))
+  for (const session of humanPlaytest.sessions) {
+    let sessionNodeKey = narrative.entryNodeKey
+    if (session.routeEvents[0].nodeKey !== sessionNodeKey) fail(`真人试玩起点与冻结 RuntimePackage 不一致:${session.participantRole}`)
+    for (const event of session.routeEvents.slice(1, -1)) {
+      const choice = narrative.choices.find(item => item.choiceKey === event.choiceKey)
+      if (!choice || event.fromNodeKey !== sessionNodeKey || choice.sourceNodeKey !== sessionNodeKey
+        || event.toNodeKey !== choice.targetNodeKey) fail(`真人试玩 Choice 不属于冻结 RuntimePackage:${event.choiceKey ?? 'missing'}`)
+      sessionNodeKey = choice.targetNodeKey
+    }
+    const sessionEnding = narrative.nodes.find(node => node.key === session.endingKey)
+    if (sessionNodeKey !== session.endingKey || sessionEnding?.kind !== 'ending') {
+      fail(`真人试玩结局不是冻结 RuntimePackage 结局:${session.participantRole}`)
+    }
+    for (const actionEvent of session.actionEvents) {
+      const action = adventureActions.get(actionEvent.actionKey)
+      if (!action || action.kind !== actionEvent.kind) fail(`真人试玩行动不属于冻结 RuntimePackage:${actionEvent.actionKey}`)
+    }
+  }
   return {
     evidence: {
       previewHash: raw.previewHash as string,
@@ -396,6 +448,7 @@ async function verifyEvidence(input: {
     },
     autoplay,
     mainRoute,
+    humanPlaytest,
   }
 }
 
@@ -403,10 +456,25 @@ function createDossier(input: {
   bundle: ProductDistributionBundleV2
   evidence: TextAdventureCommunityPackageV1['evidence']
   mainRoute: ProductMainRoutePlaythroughEvidenceV1
+  humanPlaytest: TextAdventureHumanPlaytestCoverageEvidenceV1
 }): TextAdventureCommunityCandidateDossierV1 {
   const manifest = input.bundle.productRelease.manifest
   const calculated = runtimeMetrics(manifest.runtimePackage)
   const artifacts = new Map(input.evidence.artifacts.map(item => [item.artifactKey, item.contentHash]))
+  const authorSession = input.humanPlaytest.sessions.find(item =>
+    item.sessionEvidenceHash === input.humanPlaytest.authorSessionEvidenceHash)!
+  const independentSession = input.humanPlaytest.sessions.find(item =>
+    item.sessionEvidenceHash === input.humanPlaytest.independentPlayerSessionEvidenceHash)!
+  const publicPlaytestProjection = (session: TextAdventureHumanPlaytestCoverageEvidenceV1['sessions'][number]) => ({
+    participantLabel: session.participant.label,
+    endingKey: session.endingKey,
+    elapsedMs: session.elapsedMs,
+    choiceCount: session.choiceCount,
+    actionCount: session.actionCount,
+    meaningfulActionCount: session.meaningfulActionCount,
+    dialogueActionCount: session.dialogueActionCount,
+    ratings: session.assessment.ratings,
+  })
   return {
     schema: 'storyforge.text-adventure-community-candidate-dossier', version: 1,
     status: 'eligible-for-community-submission',
@@ -429,6 +497,10 @@ function createDossier(input: {
       visualReviewHash: artifacts.get('quality.visual-review') ?? null,
       authorMainRouteEndingKey: input.mainRoute.endingKey,
       authorMainRouteChoiceCount: input.mainRoute.choiceCount,
+      humanPlaytest: {
+        author: publicPlaytestProjection(authorSession),
+        independentPlayer: publicPlaytestProjection(independentSession),
+      },
     },
     offlineFallback: 'text-only',
   }
@@ -448,7 +520,10 @@ export async function verifyTextAdventureCommunityPackageV1(value: unknown): Pro
     fail('Release 不是来源充分且质量通过的 Adventure V2')
   }
   const verified = await verifyEvidence({ raw: raw.evidence, bundle: distributionBundle })
-  const dossier = createDossier({ bundle: distributionBundle, evidence: verified.evidence, mainRoute: verified.mainRoute })
+  const dossier = createDossier({
+    bundle: distributionBundle, evidence: verified.evidence,
+    mainRoute: verified.mainRoute, humanPlaytest: verified.humanPlaytest,
+  })
   if (canonicalProductProductionJsonV2(raw.dossier) !== canonicalProductProductionJsonV2(dossier)) {
     fail('候选档案不是由冻结证据确定性派生')
   }
@@ -469,7 +544,10 @@ export async function createTextAdventureCommunityPackageV1(input: {
 }): Promise<TextAdventureCommunityPackageV1> {
   const distributionBundle = await verifyProductDistributionBundleV2(input.distributionBundle)
   const verified = await verifyEvidence({ raw: input.evidence, bundle: distributionBundle })
-  const dossier = createDossier({ bundle: distributionBundle, evidence: verified.evidence, mainRoute: verified.mainRoute })
+  const dossier = createDossier({
+    bundle: distributionBundle, evidence: verified.evidence,
+    mainRoute: verified.mainRoute, humanPlaytest: verified.humanPlaytest,
+  })
   const body = {
     schema: TEXT_ADVENTURE_COMMUNITY_PACKAGE_SCHEMA_V1,
     version: 1 as const,
@@ -523,9 +601,10 @@ export async function exportTextAdventureCommunityPackageV1(input: {
     try { payload = JSON.parse(row.payloadJson) } catch { fail(`候选包证据 Artifact JSON 损坏:${artifactKey}`) }
     return { artifactKey, contentHash: row.contentHash, payload }
   }).sort((left, right) => left.artifactKey.localeCompare(right.artifactKey))
-  const [performance, mainRoute, mediaRuntime, humanVisual] = await Promise.all([
+  const [performance, mainRoute, humanPlaytest, mediaRuntime, humanVisual] = await Promise.all([
     requirePassedProductBrowserPerformanceGateV1({ scope, productBuildId: build.id! }),
     requirePassedProductBuildMainRouteGateV1({ scope, productBuildId: build.id! }),
+    requirePassedTextAdventureHumanPlaytestGateV1({ scope, productBuildId: build.id! }),
     runtimeMedia.length ? requirePassedProductMediaRuntimeGateV1({ scope, productBuildId: build.id! }) : Promise.resolve(null),
     runtimeMedia.length ? requirePassedTextAdventureHumanVisualReviewGateV1({ scope, productBuildId: build.id! }) : Promise.resolve(null),
   ])
@@ -536,7 +615,7 @@ export async function exportTextAdventureCommunityPackageV1(input: {
     buildManifest,
     qualityReport,
     artifacts,
-    gateReceipts: [performance.gateReceipt, mainRoute.gateReceipt,
+    gateReceipts: [performance.gateReceipt, mainRoute.gateReceipt, humanPlaytest.gateReceipt,
       ...(mediaRuntime ? [mediaRuntime.gateReceipt] : []),
       ...(humanVisual ? [humanVisual.gateReceipt] : []),
     ].sort((left, right) => left.gateId.localeCompare(right.gateId)),

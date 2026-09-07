@@ -538,6 +538,21 @@ describe('PRODUCTPROD-1B · user command control plane', () => {
     expect(JSON.parse(childTarget.metadataJson)).toMatchObject({
       authorRevision: { action: 'lock', locked: true, parentBuildNumber: 1 },
     })
+    const carriedImage = (await db.productBuildArtifacts.where('buildId').equals(child!.id!).toArray())
+      .find(row => row.artifactKey === 'media.visual.002')!
+    const parentCarriedImage = (await db.productBuildArtifacts.where('buildId').equals(f.build.id!).toArray())
+      .find(row => row.artifactKey === 'media.visual.002')!
+    expect(carriedImage).toMatchObject({
+      status: 'carried-forward', contentHash: target.contentHash, blobObjectId: target.blobObjectId,
+      parentArtifactHash: target.contentHash,
+    })
+    expect(JSON.parse(carriedImage.payloadJson)).toMatchObject({
+      assetKey: 'media-revision-story.build-2.media.visual.002',
+    })
+    expect(JSON.parse(carriedImage.metadataJson)).toMatchObject({
+      assetKey: 'media-revision-story.build-2.media.visual.002',
+    })
+    expect(carriedImage.inputHash).not.toBe(parentCarriedImage.inputHash)
 
     const executorCalls: string[] = []
     await runProductProductionSchedulerCycleV1({

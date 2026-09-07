@@ -1,5 +1,6 @@
 import type { ProductProductionBriefV3, ProductRuntimePackageV1 } from '../types'
 import { analyzeTextAdventureRouteQualityV1 } from '../adventure/quality-analysis'
+import { minimumTextAdventureCommercialImageCountV1 } from '../adventure/production-brief'
 import { validateTtrpgCampaignForPublicationV1 } from '../ttrpg/campaign'
 
 export interface ProductQualityGateV1 {
@@ -249,6 +250,13 @@ export function evaluateProductRuntimeProductQualityV1(input: {
           [`playerFacingUnits=${descriptiveTextUnits}`, `minimum=${Math.min(500, Math.floor(brief.scale.targetWordCount * 0.2))}`, `target=${brief.scale.targetWordCount}`]),
       )
       if (brief.qualityProfile === 'commercial-candidate' && productionContract) {
+        const minimumImageCount = minimumTextAdventureCommercialImageCountV1(productionContract.media.mode)
+        const actualImages = runtimePackage.presentation?.assets.filter(asset => (
+          ['background', 'character-pose', 'character-expression', 'cg', 'ui'].includes(asset.kind)
+        )).length ?? 0
+        const imageKinds = new Set(runtimePackage.presentation?.assets.map(asset => asset.kind) ?? [])
+        const requiredImageKinds = productionContract.media.mode === 'text-only'
+          ? [] : ['background', 'character-pose']
         const minimumRouteUnits = Math.max(
           brief.scale.targetWordCount,
           Math.ceil(brief.scale.targetPlayMinutes * 200),
@@ -265,6 +273,9 @@ export function evaluateProductRuntimeProductQualityV1(input: {
         const minimumMainActions = Math.max(6, Math.ceil(brief.scale.targetPlayMinutes / 3))
         const minimumEndingUnits = Math.max(80, Math.min(400, Math.ceil(brief.scale.targetPlayMinutes * 4)))
         gates.push(
+          gate('product.adventure.recommendation-media-composition', actualImages >= minimumImageCount
+            && requiredImageKinds.every(kind => imageKinds.has(kind as 'background' | 'character-pose')),
+          [`images=${actualImages}/${minimumImageCount}`, `kinds=${[...imageKinds].sort().join(',') || 'none'}`, `requiredKinds=${requiredImageKinds.join(',') || 'none'}`]),
           gate('product.adventure.recommendation-analysis-complete', !routeQuality.truncated
             && routeQuality.routes.length >= productionContract.narrative.minimumDistinctRoutes
             && routeQuality.reachableEndingKeys.length >= productionContract.narrative.targetEndingCount,

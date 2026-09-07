@@ -142,8 +142,11 @@ const AUTHOR_REVIEW_ARTIFACT_KEYS = new Set([
   'content.story-bible',
   'content.cast-bible',
   'content.adventure-architecture',
+  'content.narrative-arc-scenes',
+  'content.narrative-decision-plan',
   'content.narrative-arc-plan',
   'content.main-quest-plan',
+  'content.quest-script.supplemental',
   'content.quest-script',
   'content.scene-script.act-1',
   'content.scene-script.act-2',
@@ -172,7 +175,9 @@ export async function listProductProductionReviewArtifactsV1(input: {
   buildId: number
 }): Promise<ProductProductionReviewArtifactV1[]> {
   const rows = await readAcceptedBuildArtifacts(input)
-  return rows.filter(row => AUTHOR_REVIEW_ARTIFACT_KEYS.has(row.artifactKey)).map(row => ({
+  return rows.filter(row => AUTHOR_REVIEW_ARTIFACT_KEYS.has(row.artifactKey)
+    || /^content\.quest-script\.main\.act-[1-3]\.(single|multi)$/.test(row.artifactKey)
+    || /^content\.scene-script\.act-[1-3]\.part-[1-2]$/.test(row.artifactKey)).map(row => ({
     artifactKey: row.artifactKey,
     kind: row.kind,
     version: row.version,

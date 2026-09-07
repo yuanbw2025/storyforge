@@ -9,7 +9,10 @@ import {
   PRODUCT_BROWSER_PERFORMANCE_GATE_ID_V1,
   PRODUCT_MAIN_ROUTE_PLAYTHROUGH_GATE_ID_V1,
   PRODUCT_MAIN_ROUTE_PLAYTHROUGH_POLICY_ID_V1,
+  TEXT_ADVENTURE_HUMAN_PLAYTEST_GATE_ID_V1,
+  TEXT_ADVENTURE_HUMAN_PLAYTEST_POLICY_ID_V1,
   type ProductQualityGateReceiptV1,
+  type TextAdventureHumanPlaytestSessionEvidenceV1,
 } from '../../src/lib/product-production/quality-receipts'
 import {
   canonicalProductProductionJsonV2,
@@ -116,6 +119,111 @@ async function mainRouteReceipt(
   return { ...body, receiptHash: await hashProductProductionValueV2(body) }
 }
 
+async function humanPlaytestReceipt(
+  runtime: ProductRuntimePackageV1,
+  packageHash: string,
+  briefHash: string,
+): Promise<ProductQualityGateReceiptV1> {
+  const routes = analyzeTextAdventureRouteQualityV1(runtime).routes
+  if (routes.length < 2) throw new Error('[text-adventure-community-package-fixture] 真人试玩需要两条路线')
+  const environment = {
+    browserName: 'chromium', browserVersion: 'fixture', platform: 'desktop',
+    viewport: { width: 1440, height: 900 },
+  }
+  const actionDefinitions = runtime.adventure!.actions.slice(0, 6)
+  if (actionDefinitions.length < 6) throw new Error('[text-adventure-community-package-fixture] 真人试玩行动不足')
+  const createSession = async (
+    participantRole: 'author' | 'independent-player',
+    routeIndex: number,
+    startedAt: number,
+  ): Promise<TextAdventureHumanPlaytestSessionEvidenceV1> => {
+    const route = routes[routeIndex]
+    const completedAt = startedAt + 8 * 60 * 1000
+    const routeEvents = [
+      {
+        kind: 'started' as const, sequence: 1, nodeKey: route.nodeKeys[0], fromNodeKey: null,
+        choiceKey: null, toNodeKey: null, endingKey: null, payloadHash: HASH, createdAt: startedAt,
+      },
+      ...route.choiceKeys.map((choiceKey, index) => ({
+        kind: 'choice' as const, sequence: 20 + index, nodeKey: null,
+        fromNodeKey: route.nodeKeys[index], choiceKey, toNodeKey: route.nodeKeys[index + 1], endingKey: null,
+        payloadHash: HASH, createdAt: startedAt + (index + 1) * 60_000,
+      })),
+      {
+        kind: 'ending' as const, sequence: 40, nodeKey: null, fromNodeKey: null,
+        choiceKey: null, toNodeKey: null, endingKey: route.endingNodeKey,
+        payloadHash: HASH, createdAt: completedAt,
+      },
+    ]
+    const actionEvents = await Promise.all(actionDefinitions.map(async (action, index) => ({
+      sequence: 2 + index, commandId: `${participantRole}.action.${index + 1}`,
+      actionKey: action.key, kind: action.kind, outcome: 'success' as const,
+      payloadHash: await hashProductProductionValueV2({ actionKey: action.key, participantRole }),
+      createdAt: startedAt + (index + 1) * 30_000,
+    })))
+    const eventStreamHash = await hashProductProductionValueV2([
+      ...routeEvents.map(event => ({ stream: 'route' as const, sequence: event.sequence, event })),
+      ...actionEvents.map(event => ({ stream: 'action' as const, sequence: event.sequence, event })),
+    ].sort((left, right) => left.sequence - right.sequence || left.stream.localeCompare(right.stream)))
+    const sessionBody = {
+      participantRole,
+      participant: {
+        label: participantRole === 'author' ? '技术夹具作者' : '技术夹具独立玩家',
+        declaration: participantRole === 'author'
+          ? 'author-self-attestation' as const : 'not-involved-in-production' as const,
+      },
+      sessionKind: 'text-adventure' as const, routeEvents, actionEvents,
+      eventStreamHash, endingKey: route.endingNodeKey, startedAt, completedAt, elapsedMs: completedAt - startedAt,
+      choiceCount: route.choiceKeys.length, actionCount: actionEvents.length,
+      meaningfulActionCount: actionEvents.length, dialogueActionCount: actionEvents.filter(event => event.kind === 'talk').length,
+      thresholds: {
+        targetPlayMinutes: 10, minimumElapsedMs: 450_000, maximumElapsedMs: 750_000,
+        minimumChoiceCount: 2, minimumActionCount: 6,
+      },
+      environment,
+      assessment: {
+        ratings: { comprehension: 4, pacing: 4, agency: 4, emotionalImpact: 4 },
+        blockingIssues: [],
+        feedback: {
+          comprehensionObstacles: '无', boringMoments: '无', errors: '无',
+          choiceExperience: '选择后果清楚', endingFeedback: '结局回应了此前行动',
+        },
+        note: '',
+      },
+      confirmedAt: completedAt + 1, passed: true,
+    }
+    return { ...sessionBody, sessionEvidenceHash: await hashProductProductionValueV2(sessionBody) }
+  }
+  const sessions = [
+    await createSession('author', 0, CREATED_AT),
+    await createSession('independent-player', 1, CREATED_AT + 1_000_000),
+  ]
+  const evidence = {
+    schema: 'storyforge.text-adventure-human-playtest-coverage-evidence' as const, version: 1 as const,
+    buildNumber: 1, packageHash, previewHash: PREVIEW_HASH, briefHash, sessions,
+    authorSessionEvidenceHash: sessions[0].sessionEvidenceHash,
+    independentPlayerSessionEvidenceHash: sessions[1].sessionEvidenceHash,
+    passed: true,
+  }
+  const sessionHashes = sessions.map(session => session.sessionEvidenceHash)
+  const body = {
+    schema: 'storyforge.product-quality-gate-receipt' as const, version: 1 as const,
+    gateId: TEXT_ADVENTURE_HUMAN_PLAYTEST_GATE_ID_V1, gateVersion: '1',
+    verifierId: 'storyforge.text-adventure-human-playtest-coverage', verifierVersion: '1',
+    verifierKind: 'human-evidence' as const,
+    inputHashes: [packageHash, PREVIEW_HASH, briefHash, ...sessionHashes],
+    environmentHash: await hashProductProductionValueV2(sessions.map(session => ({
+      participantRole: session.participantRole,
+      sessionEvidenceHash: session.sessionEvidenceHash,
+      environment: session.environment,
+    }))),
+    measuredJson: canonicalProductProductionJsonV2(evidence), status: 'passed' as const,
+    thresholdProfileId: TEXT_ADVENTURE_HUMAN_PLAYTEST_POLICY_ID_V1, thresholdProfileVersion: '1',
+    evidenceRefs: sessionHashes, createdAt: sessions[1].confirmedAt,
+  }
+  return { ...body, receiptHash: await hashProductProductionValueV2(body) }
+}
+
 /**
  * Technical fixture for package/lifecycle verification only. It is deliberately
  * short and must never be presented as the one-hour flagship product.
@@ -214,9 +322,11 @@ export async function createTextAdventureCommunityPackageFixtureV1(): Promise<Te
     completedGateIds: qualityReport.hardGateResults.map(gate => gate.gateId), fallbackSummary: [],
   }
   const buildManifestHash = await hashProductProductionValueV2(buildManifest)
+  const briefHash = await hashProductProductionValueV2(normalizedBrief)
   const rootReceiptHash = 'e'.repeat(64)
   const performance = await browserReceipt(runtimePackageHash)
   const mainRoute = await mainRouteReceipt(runtime, runtimePackageHash)
+  const humanPlaytest = await humanPlaytestReceipt(runtime, runtimePackageHash, briefHash)
   const manifest = await createFixtureProductReleaseManifestV1({
     runtimePackage: runtime,
     productionProvenance: {
@@ -225,7 +335,7 @@ export async function createTextAdventureCommunityPackageFixtureV1(): Promise<Te
     },
     qualityReceiptHashes: [
       rootReceiptHash, buildManifestHash, qualityReportHash,
-      performance.receiptHash, mainRoute.receiptHash,
+      performance.receiptHash, mainRoute.receiptHash, humanPlaytest.receiptHash,
     ],
   })
   const releaseContentHash = await hashProductProductionValueV2(manifest)
@@ -242,7 +352,7 @@ export async function createTextAdventureCommunityPackageFixtureV1(): Promise<Te
     evidence: {
       previewHash: PREVIEW_HASH, brief: normalizedBrief, buildManifest, qualityReport,
       artifacts: [{ artifactKey: 'quality.autoplay', contentHash: autoplayHash, payload: autoplay }],
-      gateReceipts: [performance, mainRoute],
+      gateReceipts: [performance, mainRoute, humanPlaytest],
     },
   })
 }

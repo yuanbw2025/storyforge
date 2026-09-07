@@ -44,6 +44,6 @@
 
 ## 6. 当前施工状态
 
-已实现：严格 `revise-media-asset` 命令、production revision 与旧图片 hash CAS、作者上传 Blob 的物理 hash/MIME/字节复验、商业权利门、父子 Build lineage、未受影响 Artifact 的 Build-local carry-forward、目标图片 human-import 零调用回执、目标图片及下游定向重跑、锁定后拒绝直接重生成，以及工作台中的缩略图、许可声明、上传替换、锁定、解锁和单项重生成入口。
+已实现：严格 `revise-media-asset` 命令、production revision 与旧图片 hash CAS、作者上传 Blob 的物理 hash/MIME/字节复验、商业权利门、父子 Build lineage、未受影响 Artifact 的 Build-local carry-forward、目标图片 human-import 零调用回执、目标图片及下游定向重跑、锁定后拒绝直接重生成，以及工作台中的缩略图、许可声明、上传替换、锁定、解锁和单项重生成入口。未修改的媒资沿用原 Blob/content hash，但 payload 与 metadata 的稳定 `assetKey` 会确定性重绑当前子 Build；否则新 `media.audit` 会正确拒绝父 Build key。隔离浏览器已覆盖退回、真实 PNG 上传、暂停恢复、新 Build 重审和新旧逐图回执隔离。
 
 本批验证要求：类型检查、命令与调度回归、完整文字冒险生产回归、架构/表/AI 手工调用检查和生产构建全部通过后才允许提交。真实浏览器 file input、刷新与新 Preview 的 E2E 证据在端到端黄金产品验收批次统一冻结，不能用 jsdom 单元测试冒充。

@@ -115,6 +115,62 @@ describe('TEXTADV-2 · 玩家界面纵切面', () => {
     expect(world?.textContent).toContain('雾港')
     expect(world?.textContent).toContain('外海灯塔带')
     expect(world?.textContent).toContain('回声盐沼')
+    expect(world?.textContent).toContain('前往')
+    expect(world?.textContent).not.toContain('灯塔底层')
+    expect(world?.textContent).not.toContain('灯塔核心')
+    await closePanel()
+
+    await clickNavigation('背包')
+    const inventory = host.querySelector('[aria-label="背包"]')
+    expect(inventory?.textContent).toContain('守灯披风')
+    expect(inventory?.textContent).toContain('装备守灯披风')
+    await closePanel()
+
+    await clickNavigation('装备')
+    const initialEquipment = host.querySelector('[aria-label="装备"]')
+    expect(initialEquipment?.textContent).toContain('未装备')
+    expect(initialEquipment?.textContent).toContain('装备守灯披风')
+    await closePanel()
+
+    await clickNavigation('任务')
+    const quests = host.querySelector('[aria-label="任务"]')
+    expect(quests?.textContent).toContain('当前阶段 · 穿越盐沼')
+    expect(quests?.textContent).toContain('确认穿过盐沼的路线')
+    expect(quests?.textContent).toContain('地点：回声盐沼')
+    await closePanel()
+
+    await clickNavigation('关系')
+    const relationships = host.querySelector('[aria-label="人物关系"]')
+    expect(relationships?.textContent).toContain('产品角色 1')
+    expect(relationships?.textContent).toContain('关系由玩家行动的正式事件推进')
+    await closePanel()
+
+    await clickNavigation('显示')
+    const accessibility = host.querySelector('[aria-label="阅读与可访问性"]')
+    const fontScale = accessibility?.querySelector<HTMLSelectElement>('select[aria-label="正文字号"]')
+    const highContrast = Array.from(accessibility?.querySelectorAll<HTMLInputElement>('input[type="checkbox"]') ?? [])
+      .find(input => input.parentElement?.textContent?.includes('高对比度'))
+    const reducedMotion = Array.from(accessibility?.querySelectorAll<HTMLInputElement>('input[type="checkbox"]') ?? [])
+      .find(input => input.parentElement?.textContent?.includes('减少动态效果'))
+    expect(fontScale).toBeTruthy()
+    expect(highContrast).toBeTruthy()
+    expect(reducedMotion).toBeTruthy()
+    await act(async () => {
+      if (fontScale) {
+        fontScale.value = '1.3'
+        fontScale.dispatchEvent(new Event('change', { bubbles: true }))
+      }
+      highContrast?.click()
+      reducedMotion?.click()
+    })
+    expect(host.querySelector('[data-testid="adventure-game-player"]')?.className).toContain('adventure-high-contrast')
+    expect(host.querySelector('[data-testid="adventure-game-player"]')?.className).toContain('adventure-reduced-motion')
+    expect(host.querySelector<HTMLElement>('[data-testid="adventure-game-player"]')?.style.getPropertyValue('--adventure-font-scale')).toBe('1.3')
+    expect(JSON.parse(localStorage.getItem('storyforge.text-adventure.accessibility') ?? '{}')).toMatchObject({
+      fontScale: 1.3,
+      highContrast: true,
+      reducedMotion: true,
+    })
     await closePanel()
 
     const parentResolver = useAdventureGamePlayerStore.getState().selectedMediaResolver
@@ -150,6 +206,8 @@ describe('TEXTADV-2 · 玩家界面纵切面', () => {
     await useAdventureGamePlayerStore.getState().select(null)
     root = createRoot(host)
     await renderPlayer()
+    expect(host.querySelector('[data-testid="adventure-game-player"]')?.className).toContain('adventure-high-contrast')
+    expect(host.querySelector<HTMLElement>('[data-testid="adventure-game-player"]')?.style.getPropertyValue('--adventure-font-scale')).toBe('1.3')
     await clickNavigation('装备')
     const equipment = host.querySelector('[aria-label="装备"]')
     expect(equipment?.textContent).toContain('身体')

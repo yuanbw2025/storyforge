@@ -1399,10 +1399,10 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     scope: 'project',
     layer: 'L0',
     ownerFrom: 'work',
-    budgetTokens: 19_000,
+    budgetTokens: 15_100,
     protectedFromTrim: true,
     enabled: input => Number.isInteger(input.productBuildId)
-      && /^content\.scene-script\.act-[123]$/.test(input.productProductionTaskKey ?? '')
+      && /^content\.scene-script\.act-[123]\.part-[12]$/.test(input.productProductionTaskKey ?? '')
       && !!input.productArtifactKeys?.length,
     read: readTextAdventureSceneScriptInputsV1,
   },
@@ -1438,7 +1438,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     scope: 'project',
     layer: 'L0',
     ownerFrom: 'work',
-    budgetTokens: 16_000,
+    budgetTokens: 32_000,
     protectedFromTrim: true,
     enabled: input => Number.isInteger(input.productBuildId) && !!input.productArtifactKeys?.length,
     read: readTextAdventureQualityInputsV1,

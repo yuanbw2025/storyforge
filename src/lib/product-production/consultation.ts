@@ -24,6 +24,7 @@ import {
 } from '../ttrpg/production-brief'
 import {
   compileTextAdventureProductionBriefV1,
+  minimumTextAdventureCommercialImageCountV1,
   type TextAdventureProductionBriefDraftV1,
   unresolvedTextAdventureProductionBriefDecisionsV1,
 } from '../adventure/production-brief'
@@ -147,10 +148,16 @@ function mediaProfile(input: {
   productType: ProductionProductKindV1
   visualLevel: ProductProductionMediaProfileV1['visualLevel']
   audioLevel: ProductProductionMediaProfileV1['audioLevel']
+  qualityProfile: ProductProductionBriefV3['qualityProfile']
 }): ProductProductionMediaProfileV1 {
   // AVG, TTRPG and finite text adventures can bind product-owned presentation assets.
   const presentationEnabled = ['avg', 'ttrpg', 'text-adventure'].includes(input.productType)
-  const images = !presentationEnabled || input.visualLevel === 'none' ? 0 : input.visualLevel === 'key-scenes' ? 2 : 8
+  const textAdventureMode = input.visualLevel === 'none'
+    ? 'text-only' : input.visualLevel === 'illustrated' ? 'rich-illustrations' : 'key-illustrations'
+  const images = !presentationEnabled || input.visualLevel === 'none' ? 0
+    : input.productType === 'text-adventure' && input.qualityProfile === 'commercial-candidate'
+      ? minimumTextAdventureCommercialImageCountV1(textAdventureMode)
+      : input.visualLevel === 'key-scenes' ? 2 : 8
   const audioEnabled = input.productType === 'avg' || input.productType === 'ttrpg'
   const music = !audioEnabled || input.audioLevel === 'none' ? 0 : 1
   const sfx = !audioEnabled || input.audioLevel === 'none' ? 0 : input.audioLevel === 'music-sfx' ? 3 : 8
@@ -315,6 +322,7 @@ export async function draftProductProductionBriefV3(input: {
     productType: input.productType,
     visualLevel: input.visualLevel ?? 'key-scenes',
     audioLevel: input.audioLevel ?? 'none',
+    qualityProfile,
   })
   const selectedCatalog = normalizeAuthorSelection({
     source, selected, authorSelection: input.sourceSelection,
@@ -378,7 +386,7 @@ export async function draftProductProductionBriefV3(input: {
   }
   if (textAdventure) unresolvedDecisionKeys.push(...unresolvedTextAdventureProductionBriefDecisionsV1(textAdventure))
   const productionModelCalls = textAdventure
-    ? Math.max(24, 16 + textAdventure.narrative.targetSceneCount + scale.targetEndingCount)
+    ? Math.max(32, 16 + textAdventure.narrative.targetSceneCount + scale.targetEndingCount)
     : 16
   const productionInputTokens = textAdventure
     ? Math.max(300_000, productionModelCalls * 16_000)
@@ -463,6 +471,7 @@ export async function draftProductProductionBriefV3(input: {
             'product.adventure.recommendation-main-quest',
             'product.adventure.recommendation-endings',
             'product.adventure.recommendation-copy',
+            'product.adventure.recommendation-media-composition',
           ] : []),
         ] : []),
       ],

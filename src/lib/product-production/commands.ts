@@ -706,13 +706,34 @@ async function applyCommand(input: {
     const buildId = await db.productBuilds.add(build) as number
     for (const artifactKey of revisionPlan.carriedArtifactKeys) {
       const source = sourceByKey.get(artifactKey)!
+      let payloadJson = source.payloadJson
+      let metadataJson = source.metadataJson
+      let inputHash = source.inputHash
+      if (source.kind === 'image' || source.kind === 'audio') {
+        const payload = objectJson(source.payloadJson, `${artifactKey}.payload`)
+        const metadata = objectJson(source.metadataJson, `${artifactKey}.metadata`)
+        if (payload.schema !== 'storyforge.generated-media-artifact' || payload.version !== 1
+          || typeof payload.assetKey !== 'string' || !payload.assetKey.trim()
+          || typeof metadata.assetKey !== 'string' || !metadata.assetKey.trim()) {
+          reject('media-revision-invalid', `父 Build 媒资缺少可重绑定的生成合同:${artifactKey}`)
+        }
+        const assetKey = `${production.productionKey}.build-${buildNumber}.${artifactKey}`
+        payloadJson = canonicalProductProductionJsonV2({ ...payload, assetKey })
+        metadataJson = canonicalProductProductionJsonV2({ ...metadata, assetKey })
+        inputHash = await Dexie.waitFor(hashProductProductionValueV2({
+          schema: 'storyforge.text-adventure-carried-media-input', version: 1,
+          commandId: command.commandId, sourceBuildNumber: parentBuild.buildNumber,
+          targetBuildNumber: buildNumber, artifactKey, assetKey,
+          sourceInputHash: source.inputHash, contentHash: source.contentHash,
+        }))
+      }
       await db.productBuildArtifacts.add(stampNewRecord(scope, 'productBuildArtifacts', {
         projectId: scope.projectId, worldId: scope.worldId, workId: scope.workId,
         buildId, artifactKey, requirementKey: source.requirementKey, version: 1,
         kind: source.kind, mediaKind: source.mediaKind, status: 'carried-forward' as const,
         producerRunId: null, producerReceiptHash: source.producerReceiptHash, controlEpoch,
-        inputHash: source.inputHash, contentHash: source.contentHash, payloadJson: source.payloadJson,
-        metadataJson: source.metadataJson, qualityJson: source.qualityJson, rightsJson: source.rightsJson,
+        inputHash, contentHash: source.contentHash, payloadJson,
+        metadataJson, qualityJson: source.qualityJson, rightsJson: source.rightsJson,
         blobObjectId: source.blobObjectId, mimeType: source.mimeType, byteSize: source.byteSize,
         parentArtifactHash: source.contentHash,
         carriedFrom: {

@@ -1,6 +1,6 @@
 # 02 · 专业 Agent 团队与岗位 Skill 方案
 
-> 层级：L2 · 版本：1.3.0 · 生效：2026-09-07
+> 层级：L2 · 版本：1.6.0 · 生效：2026-09-07
 > 性质：目标 Agent/Skill/Run Contract 设计；代码注册、执行回执和测试同时存在后才算实现。
 
 ## 1. 核心裁决
@@ -17,7 +17,7 @@ Agent 是有稳定职责、权限、上下文边界和最终责任的岗位主�
 | `text-adventure-creative-director` | 创意总监 | `creative-direction.v1` | Brief、来源审计 | `design.game`；冻结玩家幻想、核心循环、基调和跨部门不变量 |
 | `text-adventure-source-editor` | 来源与改编编辑 | `source-sufficiency.v1` | 冻结 SourcePlan、Context Manifest、WorldRelease 资源 | `source.sufficiency`、`adaptation.brief`；不得把产品补充写回世界 |
 | `text-adventure-story-architect` | 故事架构师 | `story-bible.v1` | Brief、来源审计、产品方向 | `story.bible`；负责主题、冲突、铺垫回收和结局候选 |
-| `text-adventure-narrative-designer` | 叙事设计师 | `narrative-arc-plan.v1` | 故事/角色圣经、空间与系统 | `narrative.arc-plan`；负责三幕、场景卡、决定与后续回响 |
+| `text-adventure-narrative-designer` | 叙事设计师 | `narrative-design.v1` | 故事/角色圣经、空间与系统 | 两个有界 Run 分别产出三幕场景卡、决定与回响；确定性装配为 `narrative.arc-plan` |
 | `text-adventure-cast-director` | 角色总监 | `cast-bible.v1` | 故事圣经、来源角色 | `cast.bible`；负责动机、知识边界、关系弧与声音锚点 |
 | `text-adventure-space-designer` | 空间设计师 | `production-architecture.v1` | 故事/角色圣经、来源空间 | `adventure-architecture`；负责大区、区域、地点和场景空间锚点 |
 | `text-adventure-game-designer` | 通用玩法系统设计师 | `gameplay-systems.v1` | Brief、故事/角色/空间工件 | `systems.design`；负责属性、技能、资源、物品、装备、关系、时间与检查语义 |
@@ -32,7 +32,7 @@ Agent 是有稳定职责、权限、上下文边界和最终责任的岗位主�
 | `text-adventure-continuity-editor` | 连续性与内容审校 | `continuity-and-literary-review.v1` | 所有定稿候选和确定性投影 | `quality.continuity`、有证据的问题清单；不能修改原工件或自报通过 |
 | `text-adventure-playtest-director` | 试玩与发布验证 | `playtest-strategy.v1` | RuntimePackage、静态报告、自动游玩证据 | 路线矩阵、真人试玩清单、推荐候选意见；正式状态仍由确定性系统执行 |
 
-同一个 `text-adventure-scene-writer` 可以按 Act/场景启动多个独立 Run，因为它们属于同一核心 Skill 的同类工作；每个 Run 仍有单独输入、预算、checkpoint 和 receipt。这不同于让一个 Agent 兼任多个生产步骤。当前登记的 18 个岗位各自只有一个核心 Skill；计划回归会进一步验证 18 个岗位全部真实出现在模型任务中，而不只验证“注册过”。
+同一个 `text-adventure-scene-writer` 可以按 Act/场景启动多个独立 Run，因为它们属于同一核心 Skill 的同类工作；每个 Run 仍有单独输入、预算、checkpoint 和 receipt。这不同于让一个 Agent 兼任多个生产步骤。一小时旗舰把每幕冻结为两个场景包，共六个 Scene Writer Run；每个包只填充自己获配的场景槽位，三个零模型调用的分幕装配任务再分别生成 `content.scene-script.act-1/2/3`。叙事设计师也采用同一规则：`narrative-design.v1` 先执行“三幕与场景卡”Run，再以其结果执行“玩家决定与跨场景回响”Run；两者是一个专业方法的分步合同，不是两个岗位 Skill，正式 `narrative.arc-plan` 由确定性装配器生成。任务脚本工程师的唯一 `quest-script-compile.v1` Skill 则把每一幕按单解/多解目标分为两个 Run，再执行一个支线/区域事件 Run，共七个有界合同；它们分别逐项覆盖冻结目标，最后由零模型调用装配器生成正式 `quest.scripts`。这样既避免长 JSON 在 provider 侧截断，也让多路线目标与玩家可见正文获得独立预算，而不把职责重新塞回万能 Agent。当前登记的 18 个岗位各自只有一个核心 Skill；计划回归会进一步验证 18 个岗位全部真实出现在模型任务中，而且同一岗位在计划里不会出现第二个 Skill。
 
 `production.supervision` 现在是专业 DAG 的第一个真实模型任务，不再是纸面 Skill。其严格 parser 要求固定 G1–G6 顺序、18 个已登记 Agent 不重不漏且每个只分配一次、至少三项风险、三项作者闸门和三项非目标。来源审计必须读取这份监督工件；内容质量审查和最终装配也把它纳入输入与发布证据。纯运行包演化可携带该工件，来源或内容变化会使它与下游闭包一起重新生产。
 

@@ -145,12 +145,25 @@ interface LedgerTaskV1 {
   errorCode: string | null
 }
 
-interface SchedulerLedgerV1 {
+interface LedgerAttemptV2 {
+  controlEpoch: number
+  taskKey: string
+  runId: number
+  attempt: number
+  idempotencyKey: string
+  outcome: 'settled' | 'failed'
+  usage: ProductProductionTaskUsageV1 | null
+  usageKnown: boolean
+  errorCode: string | null
+}
+
+interface SchedulerLedgerV2 {
   schema: 'storyforge.product-production-budget-ledger'
-  version: 1
+  version: 2
   rootRunId: number | null
   rootClaim: { owner: string; expiresAt: number } | null
   tasks: Record<string, LedgerTaskV1>
+  attempts: LedgerAttemptV2[]
 }
 
 interface ResumeCandidateV1 {
@@ -190,13 +203,14 @@ export interface ProductProductionSchedulerProjectionV1 {
   tasks: ProductProductionTaskProjectionV1[]
 }
 
-function emptyLedger(): SchedulerLedgerV1 {
+function emptyLedger(attempts: LedgerAttemptV2[] = []): SchedulerLedgerV2 {
   return {
     schema: 'storyforge.product-production-budget-ledger',
-    version: 1,
+    version: 2,
     rootRunId: null,
     rootClaim: null,
     tasks: {},
+    attempts,
   }
 }
 
@@ -248,18 +262,21 @@ function parseLedgerUsage(value: unknown, label: string): ProductProductionTaskU
   }
 }
 
-function parseLedger(value: string): SchedulerLedgerV1 {
+function parseLedger(value: string): SchedulerLedgerV2 {
   if (value === '{}' || !value.trim()) return emptyLedger()
   let candidate: unknown
   try { candidate = JSON.parse(value) } catch { throw new Error('[product-production-scheduler] budget ledger JSON 损坏') }
   const row = ledgerRecord(candidate, 'budget ledger')
-  exactLedgerKeys(row, ['schema', 'version', 'rootRunId', 'rootClaim', 'tasks'], 'budget ledger')
-  if (row.schema !== 'storyforge.product-production-budget-ledger' || row.version !== 1
+  const legacy = row.version === 1
+  exactLedgerKeys(row, [
+    'schema', 'version', 'rootRunId', 'rootClaim', 'tasks', ...(legacy ? [] : ['attempts']),
+  ], 'budget ledger')
+  if (row.schema !== 'storyforge.product-production-budget-ledger' || ![1, 2].includes(Number(row.version))
     || !row.tasks || typeof row.tasks !== 'object' || Array.isArray(row.tasks)) {
     throw new Error('[product-production-scheduler] budget ledger 基础字段无效')
   }
   const rootRunId = row.rootRunId === null ? null : ledgerInteger(row.rootRunId, 'rootRunId', 1)
-  let rootClaim: SchedulerLedgerV1['rootClaim'] = null
+  let rootClaim: SchedulerLedgerV2['rootClaim'] = null
   if (row.rootClaim !== null) {
     const claim = ledgerRecord(row.rootClaim, 'rootClaim')
     exactLedgerKeys(claim, ['owner', 'expiresAt'], 'rootClaim')
@@ -303,9 +320,61 @@ function parseLedger(value: string): SchedulerLedgerV1 {
       errorCode,
     }
   }
+  const rawAttempts = legacy
+    ? Object.entries(tasks).flatMap(([taskKey, task]) => task.status === 'claimed' ? [] : [{
+        controlEpoch: 0,
+        taskKey,
+        runId: task.runId,
+        attempt: task.attempt,
+        idempotencyKey: task.idempotencyKey,
+        outcome: task.status,
+        usage: task.usage,
+        usageKnown: task.usage !== null,
+        errorCode: task.errorCode,
+      }])
+    : Array.isArray(row.attempts) ? row.attempts : (() => {
+        throw new Error('[product-production-scheduler] budget ledger attempts 无效')
+      })()
+  if (rawAttempts.length > 20_000) throw new Error('[product-production-scheduler] budget ledger attempts 超限')
+  const attempts = rawAttempts.map((rawAttempt, index): LedgerAttemptV2 => {
+    const attempt = ledgerRecord(rawAttempt, `attempts[${index}]`)
+    exactLedgerKeys(attempt, [
+      'controlEpoch', 'taskKey', 'runId', 'attempt', 'idempotencyKey',
+      'outcome', 'usage', 'usageKnown', 'errorCode',
+    ], `attempts[${index}]`)
+    if (typeof attempt.taskKey !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(attempt.taskKey)) {
+      throw new Error(`[product-production-scheduler] attempts[${index}].taskKey 无效`)
+    }
+    if (!['settled', 'failed'].includes(String(attempt.outcome)) || typeof attempt.usageKnown !== 'boolean') {
+      throw new Error(`[product-production-scheduler] attempts[${index}] 终态无效`)
+    }
+    const usage = attempt.usage === null ? null : parseLedgerUsage(attempt.usage, `attempts[${index}].usage`)
+    if (attempt.usageKnown && usage === null) {
+      throw new Error(`[product-production-scheduler] attempts[${index}].usageKnown 缺少已知 usage`)
+    }
+    const errorCode = attempt.errorCode === null ? null : attempt.errorCode
+    if (errorCode !== null && (typeof errorCode !== 'string' || !errorCode || errorCode.length > 300)) {
+      throw new Error(`[product-production-scheduler] attempts[${index}].errorCode 无效`)
+    }
+    return {
+      controlEpoch: ledgerInteger(attempt.controlEpoch, `attempts[${index}].controlEpoch`),
+      taskKey: attempt.taskKey,
+      runId: ledgerInteger(attempt.runId, `attempts[${index}].runId`, 1),
+      attempt: ledgerInteger(attempt.attempt, `attempts[${index}].attempt`, 1),
+      idempotencyKey: ledgerHash(attempt.idempotencyKey, `attempts[${index}].idempotencyKey`, true),
+      outcome: attempt.outcome as LedgerAttemptV2['outcome'],
+      usage,
+      usageKnown: attempt.usageKnown,
+      errorCode,
+    }
+  })
+  const identities = attempts.map(attempt => `${attempt.controlEpoch}:${attempt.runId}:${attempt.attempt}`)
+  if (new Set(identities).size !== identities.length) {
+    throw new Error('[product-production-scheduler] budget ledger attempts 身份重复')
+  }
   return {
-    schema: 'storyforge.product-production-budget-ledger', version: 1,
-    rootRunId, rootClaim, tasks,
+    schema: 'storyforge.product-production-budget-ledger', version: 2,
+    rootRunId, rootClaim, tasks, attempts,
   }
 }
 
@@ -318,12 +387,51 @@ function zeroUsage(): ProductProductionTaskUsageV1 {
   return { modelCalls: 0, inputTokens: 0, outputTokens: 0, mediaCalls: 0, costUsd: 0, durationMs: 0, storageBytes: 0 }
 }
 
+function reservationUsage(reservation: ProductTaskBudgetReservationV1): ProductProductionTaskUsageV1 {
+  return {
+    modelCalls: reservation.modelCalls,
+    inputTokens: reservation.inputTokens,
+    outputTokens: reservation.outputTokens,
+    mediaCalls: reservation.mediaCalls,
+    costUsd: reservation.maximumCostUsd,
+    durationMs: reservation.durationMs,
+    storageBytes: reservation.storageBytes,
+  }
+}
+
 function safeExecutorError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error)
   return message
     .replace(/\b(?:sk|ak)-[A-Za-z0-9_-]{8,}\b/g, '[redacted-credential]')
     .replace(/(?:authorization|api[-_ ]?key)\s*[:=]\s*\S+/gi, 'credential=[redacted]')
     .slice(0, 1_000)
+}
+
+function paidUsageFromExecutorError(error: unknown): ProductProductionTaskUsageV1 | null {
+  if (!error || typeof error !== 'object' || !('productProductionUsage' in error)) return null
+  try {
+    return parseLedgerUsage(
+      (error as { productProductionUsage?: unknown }).productProductionUsage,
+      'executorError.productProductionUsage',
+    )
+  } catch {
+    // A malformed usage attachment is not accepted as evidence. The caller
+    // records an unknown paid attempt, which the next budget preflight must
+    // hold conservatively.
+    return null
+  }
+}
+
+const NON_AUTOMATIC_RETRY_FAILURE_CODES = new Set([
+  'provider-safety-refusal',
+  'task-preflight-failed',
+  'task-result-unknown',
+  'task-finalization-failed',
+  'task-budget-exceeded',
+])
+
+function permitsAutomaticTaskRetry(failureCode: string | undefined): boolean {
+  return !failureCode || !NON_AUTOMATIC_RETRY_FAILURE_CODES.has(failureCode)
 }
 
 function boundedUsage(usage: ProductProductionTaskUsageV1, reservation: ProductTaskBudgetReservationV1): void {
@@ -345,6 +453,61 @@ function boundedUsage(usage: ProductProductionTaskUsageV1, reservation: ProductT
     throw new Error(`[product-production-scheduler] task usage 超出 Plan 预算预留${
       invalid ? ':usage-invalid' : `:${exceeded.join(',')}`
     }`)
+  }
+}
+
+function sumTaskUsage(usages: readonly ProductProductionTaskUsageV1[]): ProductProductionTaskUsageV1 {
+  const knownCosts = usages.map(usage => usage.costUsd)
+  return {
+    modelCalls: usages.reduce((sum, usage) => sum + usage.modelCalls, 0),
+    inputTokens: usages.reduce((sum, usage) => sum + usage.inputTokens, 0),
+    outputTokens: usages.reduce((sum, usage) => sum + usage.outputTokens, 0),
+    mediaCalls: usages.reduce((sum, usage) => sum + usage.mediaCalls, 0),
+    costUsd: knownCosts.some(value => value == null)
+      ? null : knownCosts.reduce<number>((sum, value) => sum + (value ?? 0), 0),
+    durationMs: usages.reduce((sum, usage) => sum + usage.durationMs, 0),
+    storageBytes: usages.reduce((sum, usage) => sum + usage.storageBytes, 0),
+  }
+}
+
+async function assertBuildLifetimeBudgetCapacity(input: {
+  scope: WorkspaceScope
+  productionId: number
+  buildId: number
+  controlEpoch: number
+}): Promise<void> {
+  const current = await currentProductionBuild(input.scope, input.productionId)
+  if (current.build.id !== input.buildId || current.build.controlEpoch !== input.controlEpoch) {
+    throw new Error('[product-production-scheduler] Build lifetime budget 复验 epoch 已过期')
+  }
+  const plan = parseProductProductionPlanV3(
+    current.build.planJson, current.brief, current.briefRow.briefHash,
+  )
+  const ledger = parseLedger(current.build.budgetLedgerJson)
+  const planTaskByKey = new Map(plan.tasks.map(task => [task.taskKey, task]))
+  const charged = ledger.attempts.flatMap(attempt => attempt.usage ? [attempt.usage] : [])
+  const inFlight = Object.entries(ledger.tasks).flatMap(([taskKey, entry]) => {
+    if (entry.status !== 'claimed') return []
+    const task = planTaskByKey.get(taskKey)
+    return task ? [reservationUsage(task.budgetReservation)] : []
+  })
+  const usage = sumTaskUsage([...charged, ...inFlight])
+  const limits = current.brief.productionBudget
+  const exceeded = [
+    ['modelCalls', usage.modelCalls, limits.maximumModelCalls],
+    ['inputTokens', usage.inputTokens, limits.maximumInputTokens],
+    ['outputTokens', usage.outputTokens, limits.maximumOutputTokens],
+    ['mediaCalls', usage.mediaCalls, limits.maximumMediaCalls],
+    ['durationMs', usage.durationMs, limits.maximumDurationMs],
+    ['storageBytes', usage.storageBytes, limits.maximumStorageBytes],
+  ].filter(([, actual, maximum]) => actual > maximum)
+    .map(([field, actual, maximum]) => `${field}=${actual}/${maximum}`)
+  if (limits.maximumCostUsd != null
+    && (usage.costUsd == null || usage.costUsd > limits.maximumCostUsd)) {
+    exceeded.push(`costUsd=${usage.costUsd ?? 'unknown'}/${limits.maximumCostUsd}`)
+  }
+  if (exceeded.length > 0) {
+    throw new Error(`[product-production-scheduler] Build lifetime budget 不足:${exceeded.join(',')}`)
   }
 }
 
@@ -600,9 +763,13 @@ function evolutionTaskLane(taskKey: string): 'content' | 'product' | 'visual' | 
     || taskKey === 'content.cast-bible'
     || taskKey === 'content.narrative'
     || taskKey === 'content.adventure-architecture'
+    || taskKey === 'content.narrative-arc-scenes'
+    || taskKey === 'content.narrative-decision-plan'
     || taskKey === 'content.narrative-arc-plan'
     || taskKey === 'content.main-quest-plan'
     || taskKey === 'content.quest-script'
+    || taskKey.startsWith('content.quest-script.main.act-')
+    || taskKey === 'content.quest-script.supplemental'
     || taskKey === 'content.adventure-side-quests'
     || taskKey === 'content.adventure-ambient-events'
     || taskKey === 'content.adventure-quality-review') return 'content'
@@ -717,6 +884,36 @@ async function applyCrossBuildEvolutionReuse(input: {
       tasks.push(task)
       continue
     }
+    if (task.taskKey === 'content.narrative-arc-plan'
+      && !affected.has('content') && !affected.has('world-source')
+      && !!parentTask && task.dependsOn.every(dependency => reusableTasks.has(dependency))) {
+      // The narrative department emits two bounded model artifacts and this
+      // task deterministically assembles their public arc contract. Re-run the
+      // cheap assembler, while preserving the proven unchanged content closure
+      // so downstream specialists can be carried into a runtime-only Build.
+      reusableTasks.add(task.taskKey)
+      tasks.push(task)
+      continue
+    }
+    if (task.taskKey === 'content.quest-script'
+      && !affected.has('content') && !affected.has('product') && !affected.has('world-source')
+      && !!parentTask && task.dependsOn.every(dependency => reusableTasks.has(dependency))) {
+      // Four bounded Quest Scripter Runs are carried when their inputs are
+      // unchanged; re-run only the deterministic completeness assembler so
+      // downstream scene/runtime proof remains Build-local.
+      reusableTasks.add(task.taskKey)
+      tasks.push(task)
+      continue
+    }
+    if (/^content\.scene-script\.act-[1-3]$/.test(task.taskKey)
+      && !affected.has('content') && !affected.has('world-source')
+      && !!parentTask && task.dependsOn.every(dependency => reusableTasks.has(dependency))) {
+      // Scene packets carry across unchanged content Builds, while the cheap
+      // act assembler runs again to prove packet completeness in this Build.
+      reusableTasks.add(task.taskKey)
+      tasks.push(task)
+      continue
+    }
     if (task.taskKey === 'media.visual-bible.compile' && !affected.has('visual')
       && !affected.has('content') && !affected.has('world-source')
       && !!parentTask && task.dependsOn.every(dependency => reusableTasks.has(dependency))) {
@@ -792,7 +989,7 @@ async function ensurePlan(input: {
   suppliedPlan?: ProductProductionPlanV3
 }) {
   let state = await currentProductionBuild(input.scope, input.productionId)
-  if (['paused', 'cancelled', 'failed', 'archived', 'released'].includes(state.build.status)) {
+  if (['paused', 'cancelled', 'failed', 'recovery-required', 'archived', 'released'].includes(state.build.status)) {
     throw new Error(`[product-production-scheduler] Build 状态 ${state.build.status} 不允许调度`)
   }
   let currentPlan: ProductProductionPlanV3 | null = null
@@ -855,10 +1052,13 @@ async function ensurePlan(input: {
     await db.productBuildArtifacts.where('buildId').equals(build.id!).filter(row => (
       row.controlEpoch !== build.controlEpoch && (row.status === 'accepted' || row.status === 'carried-forward')
     )).modify({ status: 'invalid', updatedAt: Date.now() })
+    const priorLedger = parseLedger(build.budgetLedgerJson)
     await db.productBuilds.update(build.id!, {
       status: 'building', planRevision: build.planRevision + 1,
       planJson: canonicalProductProductionJsonV2(plan), planHash,
-      budgetLedgerJson: canonicalProductProductionJsonV2(emptyLedger()),
+      // A recovery epoch owns a fresh root/task projection, but paid attempts
+      // remain append-only for the entire Build lifetime.
+      budgetLedgerJson: canonicalProductProductionJsonV2(emptyLedger(priorLedger.attempts)),
       stateRevision: build.stateRevision + 1, startedAt: build.startedAt ?? Date.now(), updatedAt: Date.now(),
     })
   })
@@ -1000,6 +1200,50 @@ async function recoveryInvalidatedTaskKeys(input: {
     }
     return invalidated
   }
+  const recordedFailureDetails = [recovery, previousFailure]
+    .flatMap(value => value && typeof value.detail === 'string' ? [value.detail] : [])
+  if (recovery.blockerKey === 'content.quest-script.supplemental'
+    && recordedFailureDetails.some(detail => detail.includes('abilityKey 未闭合系统与任务设计'))) {
+    // The strict Quest Scripter parser has proven that accepted side/ambient
+    // plans referenced abilities outside the frozen systems registry. Repair
+    // must return to both owning specialist tasks; changing the downstream
+    // script would otherwise hide a broken upstream contract.
+    const invalidated = new Set<string>([
+      'content.adventure-side-quests', 'content.adventure-ambient-events',
+    ])
+    let expanded = true
+    while (expanded) {
+      expanded = false
+      for (const task of input.plan.tasks) {
+        if (invalidated.has(task.taskKey) || !task.dependsOn.some(key => invalidated.has(key))) continue
+        invalidated.add(task.taskKey)
+        expanded = true
+      }
+    }
+    return invalidated
+  }
+  const acceptedArtifactKeys = new Set((await db.productBuildArtifacts.where('buildId').equals(input.buildId).toArray())
+    .filter(row => row.controlEpoch === input.previousControlEpoch
+      && (row.status === 'accepted' || row.status === 'carried-forward'))
+    .map(row => row.artifactKey))
+  const unresolvedFailureTaskKeys = [...textAdventureTaskFailures(input.failureJson).keys()]
+    .filter(taskKey => {
+      const task = input.plan.tasks.find(candidate => candidate.taskKey === taskKey)
+      return task && !task.outputArtifactKeys.every(artifactKey => acceptedArtifactKeys.has(artifactKey))
+    })
+  if (unresolvedFailureTaskKeys.length > 0) {
+    const invalidated = new Set(unresolvedFailureTaskKeys)
+    let expanded = true
+    while (expanded) {
+      expanded = false
+      for (const task of input.plan.tasks) {
+        if (invalidated.has(task.taskKey) || !task.dependsOn.some(key => invalidated.has(key))) continue
+        invalidated.add(task.taskKey)
+        expanded = true
+      }
+    }
+    return invalidated
+  }
   const failure = textAdventureQualityRepairCause(input.failureJson)
   if (!failure) return new Set()
   const reviewRows = (await db.productBuildArtifacts.where('buildId').equals(input.buildId).toArray())
@@ -1013,15 +1257,6 @@ async function recoveryInvalidatedTaskKeys(input: {
   const taskByArtifactKey = new Map(input.plan.tasks.flatMap(task => (
     task.outputArtifactKeys.map(artifactKey => [artifactKey, task.taskKey] as const)
   )))
-  const acceptedArtifactKeys = new Set((await db.productBuildArtifacts.where('buildId').equals(input.buildId).toArray())
-    .filter(row => row.controlEpoch === input.previousControlEpoch
-      && (row.status === 'accepted' || row.status === 'carried-forward'))
-    .map(row => row.artifactKey))
-  const unresolvedFailureTaskKeys = [...textAdventureTaskFailures(input.failureJson).keys()]
-    .filter(taskKey => {
-      const task = input.plan.tasks.find(candidate => candidate.taskKey === taskKey)
-      return task && !task.outputArtifactKeys.every(artifactKey => acceptedArtifactKeys.has(artifactKey))
-    })
   const blockingArtifactKeys = Array.isArray(reviewPayload.issues)
     ? reviewPayload.issues.flatMap(value => {
         const issue = value && typeof value === 'object' && !Array.isArray(value)
@@ -1033,17 +1268,29 @@ async function recoveryInvalidatedTaskKeys(input: {
   const sceneScriptTaskKeys = [
     'content.scene-script.act-1', 'content.scene-script.act-2', 'content.scene-script.act-3',
   ]
+  const sceneScriptPartKeys = (taskKey: string) => {
+    const match = /^content\.scene-script\.act-([1-3])$/.exec(taskKey)
+    if (!match) return [taskKey]
+    return input.plan.tasks
+      .filter(task => task.taskKey.startsWith(`content.scene-script.act-${match[1]}.part-`))
+      .map(task => task.taskKey)
+      .concat(taskKey)
+  }
   const dialoguePassTaskKeys = [
     'content.dialogue-pass.act-1', 'content.dialogue-pass.act-2', 'content.dialogue-pass.act-3',
   ]
   const invalidated = new Set<string>(unresolvedFailureTaskKeys.length > 0
     ? unresolvedFailureTaskKeys.flatMap(taskKey => (
-        taskKey === 'integration.narrative' ? [...sceneScriptTaskKeys, ...dialoguePassTaskKeys] : [taskKey]
+        taskKey === 'integration.narrative'
+          ? [...sceneScriptTaskKeys.flatMap(sceneScriptPartKeys), ...dialoguePassTaskKeys]
+          : sceneScriptPartKeys(taskKey)
       ))
     : blockingArtifactKeys.flatMap(artifactKey => {
-        if (artifactKey === 'content.narrative') return [...sceneScriptTaskKeys, ...dialoguePassTaskKeys]
+        if (artifactKey === 'content.narrative') {
+          return [...sceneScriptTaskKeys.flatMap(sceneScriptPartKeys), ...dialoguePassTaskKeys]
+        }
         const taskKey = taskByArtifactKey.get(artifactKey)
-        return taskKey ? [taskKey] : []
+        return taskKey ? sceneScriptPartKeys(taskKey) : []
       }))
   if (invalidated.size === 0) invalidated.add('content.adventure-quality-review')
   let expanded = true
@@ -1158,11 +1405,11 @@ async function settleCarriedTask(input: {
       inputHash: input.inputHash, updatedAt: now,
     })
     const ledger = parseLedger(build.budgetLedgerJson)
-    ledger.tasks[input.task.taskKey] = {
+    recordLedgerEntryV2(ledger, input.controlEpoch, input.task.taskKey, {
       runId: input.snapshot.run.id, attempt: 1, status: 'settled', idempotencyKey: input.inputHash,
       candidateHash: input.candidateHash, terminalReceiptHash: receiptHash,
       passedGateIds: [...input.task.acceptanceGateIds], usage: zeroUsage(), errorCode: null,
-    }
+    })
     await db.productBuilds.update(build.id!, {
       budgetLedgerJson: canonicalProductProductionJsonV2(ledger), updatedAt: now,
     })
@@ -1312,17 +1559,55 @@ function parseResumeCandidate(value: unknown, task: ProductProductionPlanTaskV3,
   return candidate
 }
 
+function recordLedgerEntryV2(
+  ledger: SchedulerLedgerV2,
+  controlEpoch: number,
+  taskKey: string,
+  entry: LedgerTaskV1,
+  unknownUsageHold: ProductProductionTaskUsageV1 | null = null,
+): void {
+  ledger.tasks[taskKey] = entry
+  if (entry.status === 'claimed') return
+  const identity = `${controlEpoch}:${entry.runId}:${entry.attempt}`
+  const existing = ledger.attempts.find(attempt => (
+    `${attempt.controlEpoch}:${attempt.runId}:${attempt.attempt}` === identity
+  ))
+  const attempt: LedgerAttemptV2 = {
+    controlEpoch,
+    taskKey,
+    runId: entry.runId,
+    attempt: entry.attempt,
+    idempotencyKey: entry.idempotencyKey,
+    outcome: entry.status,
+    usage: entry.usage == null
+      ? (unknownUsageHold == null ? null : structuredClone(unknownUsageHold))
+      : structuredClone(entry.usage),
+    usageKnown: entry.usage != null,
+    errorCode: entry.errorCode,
+  }
+  if (existing) {
+    if (canonicalProductProductionJsonV2(existing) !== canonicalProductProductionJsonV2(attempt)) {
+      throw new Error('[product-production-scheduler] budget ledger attempt 不可覆写')
+    }
+    return
+  }
+  ledger.attempts.push(attempt)
+}
+
 async function settleLedger(input: {
   buildId: number
   controlEpoch: number
   taskKey: string
   entry: LedgerTaskV1
+  unknownUsageHold?: ProductProductionTaskUsageV1 | null
 }): Promise<void> {
   await db.transaction('rw', db.productBuilds, async () => {
     const build = await db.productBuilds.get(input.buildId)
     if (!build || build.controlEpoch !== input.controlEpoch) throw new Error('[product-production-scheduler] ledger epoch 已过期')
     const ledger = parseLedger(build.budgetLedgerJson)
-    ledger.tasks[input.taskKey] = input.entry
+    recordLedgerEntryV2(
+      ledger, input.controlEpoch, input.taskKey, input.entry, input.unknownUsageHold ?? null,
+    )
     await db.productBuilds.update(build.id!, { budgetLedgerJson: canonicalProductProductionJsonV2(ledger), updatedAt: Date.now() })
   })
 }
@@ -1410,7 +1695,7 @@ async function recoverCompletedOrCheckpointed(input: {
   return true
 }
 
-async function runClaimedTask(input: {
+async function runClaimedTaskCore(input: {
   scope: WorkspaceScope
   productionId: number
   build: { id: number; buildNumber: number; controlEpoch: number; planHash: string; failureJson: string }
@@ -1552,6 +1837,28 @@ async function runClaimedTask(input: {
     toolCalls: input.task.budgetReservation.mediaCalls,
     tokens: input.task.budgetReservation.inputTokens + input.task.budgetReservation.outputTokens,
   })
+  await settleLedger({
+    buildId: input.build.id,
+    controlEpoch: input.build.controlEpoch,
+    taskKey: input.task.taskKey,
+    entry: {
+      runId: snapshot.run.id,
+      attempt,
+      status: 'claimed',
+      idempotencyKey: inputHash,
+      candidateHash: null,
+      terminalReceiptHash: null,
+      passedGateIds: [],
+      usage: zeroUsage(),
+      errorCode: null,
+    },
+  })
+  await assertBuildLifetimeBudgetCapacity({
+    scope: input.scope,
+    productionId: input.productionId,
+    buildId: input.build.id,
+    controlEpoch: input.build.controlEpoch,
+  })
   const bindingHash = snapshot.contract.runtimeBindingHash
     ?? await hashProductProductionValueV2(snapshot.contract.executionBindings ?? { deterministic: input.task.kind })
   if (input.task.executionMode === 'model') {
@@ -1566,56 +1873,72 @@ async function runClaimedTask(input: {
     })
   }
   await input.onDurableBoundary?.('provider.requested', snapshot)
-  let result: ProductProductionTaskExecutionResultV1
+  let result: ProductProductionTaskExecutionResultV1 | undefined
   let timedOut = false
   const executionController = new AbortController()
   const abortFromParent = () => executionController.abort(input.signal.reason)
   if (input.signal.aborted) abortFromParent()
   else input.signal.addEventListener('abort', abortFromParent, { once: true })
-  const timeoutHandle = globalThis.setTimeout(() => {
-    timedOut = true
-    const timeoutError = new Error(
-      `[product-production-scheduler] ${input.task.taskKey} 超过任务合同 ${input.task.timeoutMs}ms`,
-    )
-    timeoutError.name = 'TimeoutError'
-    executionController.abort(timeoutError)
-  }, input.task.timeoutMs)
+  let timeoutHandle: ReturnType<typeof globalThis.setTimeout> | null = null
+  const timeoutPromise = new Promise<never>((_resolve, reject) => {
+    timeoutHandle = globalThis.setTimeout(() => {
+      timedOut = true
+      const timeoutError = new Error(
+        `[product-production-scheduler] ${input.task.taskKey} 超过任务合同 ${input.task.timeoutMs}ms`,
+      )
+      timeoutError.name = 'TimeoutError'
+      executionController.abort(timeoutError)
+      // Provider adapters are required to observe AbortSignal, but Scheduler
+      // correctness cannot depend on that courtesy. The race releases the
+      // durable task even when a transport ignores cancellation.
+      reject(timeoutError)
+    }, input.task.timeoutMs)
+  })
   try {
-    result = await input.executor({
-      scope: input.scope, productionId: input.productionId, buildId: input.build.id,
-      buildNumber: input.build.buildNumber, controlEpoch: input.build.controlEpoch,
-      planHash: input.build.planHash, task: input.task, attempt,
-      idempotencyKey: inputHash, contextText: assembled.text,
-      inputArtifacts: artifacts, capabilityBindings: bindings, authorResolution,
-      signal: executionController.signal,
-    })
+    result = await Promise.race([
+      input.executor({
+        scope: input.scope, productionId: input.productionId, buildId: input.build.id,
+        buildNumber: input.build.buildNumber, controlEpoch: input.build.controlEpoch,
+        planHash: input.build.planHash, task: input.task, attempt,
+        idempotencyKey: inputHash, contextText: assembled.text,
+        inputArtifacts: artifacts, capabilityBindings: bindings, authorResolution,
+        signal: executionController.signal,
+      }),
+      timeoutPromise,
+    ])
     validateExecutionResult(input.task, result)
   } catch (error) {
+    const paidUsage = result?.usage ?? paidUsageFromExecutorError(error)
     const code = timedOut || (error instanceof Error && error.name === 'TimeoutError') ? 'task-timeout'
       : error instanceof Error && error.name === 'AbortError' ? 'task-aborted'
       : error instanceof Error && error.message.includes('provider-safety-refusal')
-        ? 'provider-safety-refusal' : 'task-executor-failed'
-    const retryable = code !== 'task-aborted' && code !== 'provider-safety-refusal'
+        ? 'provider-safety-refusal'
+        : error instanceof Error && error.message.includes('task usage 超出 Plan 预算预留')
+          ? 'task-budget-exceeded' : 'task-executor-failed'
+    const retryable = permitsAutomaticTaskRetry(code) && code !== 'task-aborted'
       && attempt < input.task.maxAttempts
     snapshot = await append(input.scope, snapshot, 'step.failed', {
       stepId: input.task.taskKey, attempt, code,
       retryable,
       category: code === 'task-aborted' ? 'cancelled'
         : code === 'task-timeout' ? 'transient'
-        : code === 'provider-safety-refusal' ? 'deterministic' : 'unknown',
+        : code === 'provider-safety-refusal' || code === 'task-budget-exceeded' ? 'deterministic' : 'unknown',
       action: retryable ? 'retry' : 'fail',
     })
     const current = await db.productBuilds.get(input.build.id)
     if (!current || current.controlEpoch !== input.build.controlEpoch
-      || ['paused', 'cancelled', 'failed', 'archived', 'released'].includes(current.status)) {
+      || ['paused', 'cancelled', 'failed', 'recovery-required', 'archived', 'released'].includes(current.status)) {
       await append(input.scope, snapshot, 'run.cancelled', { reason: 'task-failed-after-control-epoch-change' })
       return
     }
     await settleLedger({
       buildId: input.build.id, controlEpoch: input.build.controlEpoch, taskKey: input.task.taskKey,
+      unknownUsageHold: paidUsage == null && costBearing(input.task)
+        ? reservationUsage(input.task.budgetReservation) : null,
       entry: {
         runId: snapshot.run.id, attempt, status: 'failed', idempotencyKey: inputHash,
-        candidateHash: null, terminalReceiptHash: null, passedGateIds: [], usage: null, errorCode: code,
+        candidateHash: null, terminalReceiptHash: null, passedGateIds: [],
+        usage: paidUsage, errorCode: code,
       },
     })
     const failure = {
@@ -1631,7 +1954,7 @@ async function runClaimedTask(input: {
         })
       })
     }
-    if (code === 'task-aborted' || code === 'provider-safety-refusal' || attempt >= input.task.maxAttempts) {
+    if (!retryable) {
       snapshot = code === 'task-aborted'
         ? await append(input.scope, snapshot, 'run.cancelled', { reason: 'task-executor-aborted' })
         : await append(input.scope, snapshot, 'run.failed', { code, retryable: false })
@@ -1653,9 +1976,10 @@ async function runClaimedTask(input: {
     }
     return
   } finally {
-    globalThis.clearTimeout(timeoutHandle)
+    if (timeoutHandle != null) globalThis.clearTimeout(timeoutHandle)
     input.signal.removeEventListener('abort', abortFromParent)
   }
+  if (!result) throw new Error('[product-production-scheduler] executor 未返回结果')
   const candidateHash = await hashProductProductionValueV2(result)
   if (input.task.executionMode === 'model') {
     snapshot = await append(input.scope, snapshot, 'model.responded', {
@@ -1698,7 +2022,7 @@ async function runClaimedTask(input: {
   await input.onDurableBoundary?.('provider.responded', snapshot)
   const current = await db.productBuilds.get(input.build.id)
   if (!current || current.controlEpoch !== input.build.controlEpoch
-    || ['paused', 'cancelled', 'failed', 'archived', 'released'].includes(current.status)) {
+    || ['paused', 'cancelled', 'failed', 'recovery-required', 'archived', 'released'].includes(current.status)) {
     snapshot = await append(input.scope, snapshot, 'budget.settled', {
       stepId: input.task.taskKey,
       modelCalls: result.usage.modelCalls,
@@ -1728,6 +2052,112 @@ async function runClaimedTask(input: {
     task: input.task, snapshot, candidate: resumePayload,
   })
   await input.onDurableBoundary?.('artifact.accepted', snapshot)
+}
+
+/**
+ * A claimed child Run must never be left in `running` merely because setup or
+ * post-provider evidence handling threw outside the executor timeout boundary.
+ *
+ * Preflight failures are deterministic until an author/developer changes the
+ * inputs, while failures after a durable provider-request event are
+ * deliberately classified as result-unknown. Neither is retried implicitly:
+ * the former would repeat the same invalid input and the latter could bill the
+ * provider twice. A verified candidate checkpoint remains recoverable by the
+ * normal checkpoint path and is therefore not rewritten here.
+ */
+async function settleEscapedClaimedTaskFailure(input: {
+  scope: WorkspaceScope
+  productionId: number
+  build: { id: number; controlEpoch: number; failureJson: string }
+  task: ProductProductionPlanTaskV3
+  snapshot: AgentRunSnapshotV1
+}, error: unknown): Promise<void> {
+  let snapshot = await readAgentRunV1(input.scope, input.snapshot.run.id)
+  const step = snapshot.projection.steps[input.task.taskKey]
+  if (!step || step.status !== 'running') throw error
+
+  const checkpoint = await readLatestVerifiedAgentRunCheckpointV1(input.scope, snapshot.run.id)
+  if (checkpoint?.resumePayload || step.candidateHash) throw error
+
+  const current = await db.productBuilds.get(input.build.id)
+  if (!current || current.controlEpoch !== input.build.controlEpoch
+    || ['paused', 'cancelled', 'failed', 'recovery-required', 'archived', 'released'].includes(current.status)) {
+    await append(input.scope, snapshot, 'run.cancelled', { reason: 'task-error-after-control-epoch-change' })
+    return
+  }
+
+  const providerRequested = snapshot.events.some(event => (
+    event.type === 'model.requested' || event.type === 'tool.called'
+  ))
+  const providerResponded = snapshot.events.some(event => (
+    event.type === 'model.responded' || event.type === 'tool.returned'
+  ))
+  const budgetPreflightFailed = error instanceof Error
+    && error.message.includes('Build lifetime budget')
+  const code = budgetPreflightFailed
+    ? 'task-budget-exceeded'
+    : providerResponded
+      ? 'task-finalization-failed'
+      : providerRequested ? 'task-result-unknown' : 'task-preflight-failed'
+  const failure = {
+    taskKey: input.task.taskKey,
+    code,
+    attempt: Math.max(1, step.attempt),
+    detail: safeExecutorError(error),
+  }
+  snapshot = await append(input.scope, snapshot, 'step.failed', {
+    stepId: input.task.taskKey,
+    attempt: failure.attempt,
+    code,
+    retryable: false,
+    category: providerRequested ? 'unknown' : 'deterministic',
+    action: 'fail',
+  })
+  snapshot = await append(input.scope, snapshot, 'run.failed', { code, retryable: false })
+  await settleLedger({
+    buildId: input.build.id,
+    controlEpoch: input.build.controlEpoch,
+    taskKey: input.task.taskKey,
+    unknownUsageHold: providerRequested ? reservationUsage(input.task.budgetReservation) : null,
+    entry: {
+      runId: snapshot.run.id,
+      attempt: failure.attempt,
+      status: 'failed',
+      idempotencyKey: '',
+      candidateHash: null,
+      terminalReceiptHash: null,
+      passedGateIds: [],
+      usage: null,
+      errorCode: code,
+    },
+  })
+  await db.transaction('rw', scopeTransactionTables(db.productBuilds, db.productProductions), async () => {
+    const build = await db.productBuilds.get(input.build.id)
+    const production = await db.productProductions.get(input.productionId)
+    if (!build || !production || build.controlEpoch !== input.build.controlEpoch) return
+    const status = input.task.failurePolicy === 'fail-build' ? 'failed' : 'recovery-required'
+    const updatedAt = Date.now()
+    await db.productBuilds.update(input.build.id, {
+      status,
+      failureJson: canonicalProductProductionJsonV2(taskFailureEnvelope(build.failureJson, failure)),
+      updatedAt,
+    })
+    if (status === 'failed') {
+      await db.productProductions.update(input.productionId, {
+        status: 'failed',
+        stateRevision: production.stateRevision + 1,
+        updatedAt,
+      })
+    }
+  })
+}
+
+async function runClaimedTask(input: Parameters<typeof runClaimedTaskCore>[0]): Promise<void> {
+  try {
+    await runClaimedTaskCore(input)
+  } catch (error) {
+    await settleEscapedClaimedTaskFailure(input, error)
+  }
 }
 
 async function compileTerminalBuild(input: {
@@ -1893,8 +2323,12 @@ export async function projectProductProductionSchedulerV1(input: {
       completed.set(taskKey, child.projection.terminalReceiptHash)
     }
   }
+  const recordedTaskFailures = textAdventureTaskFailures(build.failureJson)
   const tasks = (plan?.tasks ?? []).map(task => {
     const child = children.get(task.taskKey)
+    const recordedFailure = recordedTaskFailures.get(task.taskKey)
+    const failureDetail = typeof recordedFailure?.detail === 'string'
+      ? recordedFailure.detail.slice(0, 500) : null
     const dependenciesReady = task.requiredReceipts.every(edge => {
       const receipt = completed.get(edge.taskKey)
       return !!receipt && (edge.receiptHash == null || edge.receiptHash === receipt)
@@ -1905,10 +2339,14 @@ export async function projectProductProductionSchedulerV1(input: {
       const step = child.projection.steps[task.taskKey]
       if (child.contract.scope.productProduction?.controlEpoch !== build.controlEpoch) status = 'stale'
       else if (child.projection.state === 'completed') status = 'completed'
-      else if (step?.status === 'failed' && step.failureCode !== 'provider-safety-refusal'
-        && step.attempt < task.maxAttempts) status = 'retry-ready'
+      else if (step?.status === 'failed' && permitsAutomaticTaskRetry(step.failureCode)
+        && step.attempt < task.maxAttempts) {
+        status = 'retry-ready'
+        blocker = failureDetail ?? step.failureCode ?? 'task-executor-failed'
+      }
       else if (['failed', 'cancelled', 'recovery_required', 'paused'].includes(child.projection.state)) {
-        status = 'blocked'; blocker = `run-${child.projection.state}`
+        status = 'blocked'
+        blocker = failureDetail ?? step?.failureCode ?? `run-${child.projection.state}`
       } else status = 'running'
     }
     return {
@@ -1917,7 +2355,10 @@ export async function projectProductProductionSchedulerV1(input: {
       terminalReceiptHash: child?.projection.terminalReceiptHash ?? null, blocker,
     }
   })
-  const settledUsage = Object.values(ledger.tasks).flatMap(entry => entry.usage ? [entry.usage] : [])
+  // Build-lifetime accounting includes every terminal attempt, including
+  // failed retries and previous recovery epochs. Current task projection is
+  // intentionally not a source of budget truth.
+  const settledUsage = ledger.attempts.flatMap(entry => entry.usage ? [entry.usage] : [])
   const knownCosts = settledUsage.map(usage => usage.costUsd)
   const usage: ProductProductionTaskUsageV1 = {
     modelCalls: settledUsage.reduce((sum, item) => sum + item.modelCalls, 0),
@@ -1953,7 +2394,7 @@ export async function runProductProductionSchedulerCycleV1(input: {
 }): Promise<ProductProductionSchedulerProjectionV1> {
   const scope = await resolveScope({ scope: input.scope })
   const current = await currentProductionBuild(scope, input.productionId)
-  if (['paused', 'cancelled', 'failed', 'archived', 'released'].includes(current.build.status)) {
+  if (['paused', 'cancelled', 'failed', 'recovery-required', 'archived', 'released'].includes(current.build.status)) {
     return projectProductProductionSchedulerV1({ scope, productionId: input.productionId })
   }
   const state = await ensureRootRun({ scope, productionId: input.productionId, suppliedPlan: input.suppliedPlan })
@@ -2003,6 +2444,7 @@ export async function runProductProductionSchedulerCycleV1(input: {
     .filter(task => {
       const child = children.get(task.taskKey)
       const retryReady = child?.projection.steps[task.taskKey]?.status === 'failed'
+        && permitsAutomaticTaskRetry(child.projection.steps[task.taskKey]?.failureCode)
         && (child.projection.steps[task.taskKey]?.attempt ?? 0) < task.maxAttempts
       if (child && !retryReady) return false
       return task.requiredReceipts.every(edge => {
@@ -2094,7 +2536,7 @@ export async function runProductProductionUntilBlockedV1(input: {
   let projection!: ProductProductionSchedulerProjectionV1
   for (let cycle = 0; cycle < maximumCycles; cycle++) {
     projection = await runProductProductionSchedulerCycleV1(input)
-    if (projection.terminal || ['paused', 'failed', 'cancelled', 'archived', 'released', 'preview-ready', 'release-ready'].includes(projection.buildStatus)) {
+    if (projection.terminal || ['paused', 'failed', 'recovery-required', 'cancelled', 'archived', 'released', 'preview-ready', 'release-ready'].includes(projection.buildStatus)) {
       return projection
     }
     const signature = canonicalProductProductionJsonV2(projection.tasks.map(task => ({

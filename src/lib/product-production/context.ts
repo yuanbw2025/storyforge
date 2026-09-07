@@ -110,15 +110,16 @@ async function requiredContextArtifactsV1(input: AssembleContextInput, options: 
  * three Runs. Exact task identity is supplied by the durable scheduler.
  */
 export async function readTextAdventureSceneScriptInputsV1(input: AssembleContextInput): Promise<string> {
-  const match = /^content\.scene-script\.act-([123])$/.exec(input.productProductionTaskKey ?? '')
-  if (!match) throw new Error('[product-production-context] 分场投影缺少精确 act taskKey')
+  const match = /^content\.scene-script\.act-([123])\.part-([12])$/.exec(input.productProductionTaskKey ?? '')
+  if (!match) throw new Error('[product-production-context] 分场投影缺少精确 act/part taskKey')
   const actIndex = Number(match[1]) - 1
+  const partIndex = Number(match[2]) - 1
   const requiredKeys = [
     'content.story-bible', 'content.cast-bible', 'content.adventure-architecture',
     'content.product-module', 'content.narrative-arc-plan', 'content.main-quest-plan',
     'content.adventure-side-quests', 'content.adventure-ambient-events', 'content.quest-script',
   ]
-  const { build, rows, payloadByKey } = await requiredContextArtifactsV1(input, {
+  const { build, payloadByKey } = await requiredContextArtifactsV1(input, {
     label: `第 ${actIndex + 1} 幕分场投影`, requiredKeys,
   })
   const story = payloadByKey.get('content.story-bible') ?? {}
@@ -131,7 +132,15 @@ export async function readTextAdventureSceneScriptInputsV1(input: AssembleContex
   const acts = contextRows(arc.acts)
   const currentAct = acts[actIndex]
   if (!currentAct) throw new Error(`[product-production-context] 第 ${actIndex + 1} 幕叙事弧缺失`)
-  const sceneCards = contextRows(currentAct.sceneCards)
+  const fullActSceneCards = contextRows(currentAct.sceneCards)
+  const firstPartCount = Math.ceil(fullActSceneCards.length / 2)
+  const sceneParts = fullActSceneCards.length <= 1
+    ? [fullActSceneCards]
+    : [fullActSceneCards.slice(0, firstPartCount), fullActSceneCards.slice(firstPartCount)]
+  const sceneCards = sceneParts[partIndex]
+  if (!sceneCards?.length) {
+    throw new Error(`[product-production-context] 第 ${actIndex + 1} 幕不存在正文分包 ${partIndex + 1}`)
+  }
   const sceneKeys = new Set(sceneCards.map(scene => contextText(scene.key, 200)).filter(Boolean))
   const castKeys = new Set(sceneCards.flatMap(scene => (
     Array.isArray(scene.castKeys) ? scene.castKeys.filter((value): value is string => typeof value === 'string') : []
@@ -164,57 +173,192 @@ export async function readTextAdventureSceneScriptInputsV1(input: AssembleContex
   const ambientEntries = supplemental('content.adventure-ambient-events')
   const sideKeys = new Set(sideEntries.map(entry => contextText(entry.key, 200)).filter(Boolean))
   const ambientKeys = new Set(ambientEntries.map(entry => contextText(entry.key, 200)).filter(Boolean))
+  const mainScripts = contextRows(questScript.mainObjectiveScripts)
+    .filter(script => objectiveKeys.has(contextText(script.objectiveKey, 200)))
+  const sideScripts = contextRows(questScript.sideQuestScripts)
+    .filter(script => sideKeys.has(contextText(script.entryKey, 200)))
+  const ambientScripts = contextRows(questScript.ambientEventScripts)
+    .filter(script => ambientKeys.has(contextText(script.entryKey, 200)))
+  const usedAbilityKeys = new Set([
+    ...mainScripts.flatMap(script => contextRows(script.alternatives).flatMap(alternative => {
+      const resolution = alternative.resolution && typeof alternative.resolution === 'object'
+        && !Array.isArray(alternative.resolution)
+        ? alternative.resolution as Record<string, unknown> : {}
+      return typeof resolution.abilityKey === 'string' ? [resolution.abilityKey] : []
+    })),
+    ...sideScripts.flatMap(script => typeof script.abilityKey === 'string' ? [script.abilityKey] : []),
+    ...ambientScripts.flatMap(script => typeof script.abilityKey === 'string' ? [script.abilityKey] : []),
+  ])
   const currentDecisions = contextRows(arc.decisions).filter(decision => sceneKeys.has(contextText(decision.sceneKey, 200)))
-  const previousAct = acts[actIndex - 1]
-  const nextAct = acts[actIndex + 1]
-  const previousCards = contextRows(previousAct?.sceneCards)
-  const nextCards = contextRows(nextAct?.sceneCards)
+  const previousCards = partIndex > 0
+    ? sceneParts[partIndex - 1]
+    : contextRows(acts[actIndex - 1]?.sceneCards)
+  const nextCards = partIndex + 1 < sceneParts.length
+    ? sceneParts[partIndex + 1]
+    : contextRows(acts[actIndex + 1]?.sceneCards)
+  const projectCharacter = (character: Record<string, unknown>) => ({
+    key: character.key,
+    role: character.role,
+    name: character.name,
+    publicIdentity: contextText(character.publicIdentity, 200),
+    desire: contextText(character.desire, 240),
+    fear: contextText(character.fear, 240),
+    secret: contextText(character.secret, 240),
+    motivation: contextText(character.motivation, 240),
+    voice: contextText(character.voice, 300),
+    initialKnowledge: Array.isArray(character.initialKnowledge)
+      ? character.initialKnowledge.map(value => contextText(value, 180)) : [],
+    forbiddenKnowledge: Array.isArray(character.forbiddenKnowledge)
+      ? character.forbiddenKnowledge.map(value => contextText(value, 180)) : [],
+    relationshipArc: Array.isArray(character.relationshipArc)
+      ? character.relationshipArc.map(value => contextText(value, 200)) : [],
+  })
+  const projectSceneCard = (scene: Record<string, unknown>) => ({
+    key: scene.key,
+    title: scene.title,
+    locationOrdinal: scene.locationOrdinal,
+    purpose: contextText(scene.purpose, 450),
+    conflict: contextText(scene.conflict, 450),
+    entryState: contextText(scene.entryState, 360),
+    exitState: contextText(scene.exitState, 360),
+    castKeys: scene.castKeys,
+    setupKeys: scene.setupKeys,
+    payoffKeys: scene.payoffKeys,
+  })
+  const projectObjective = (objective: Record<string, unknown>) => ({
+    key: objective.key,
+    stageKey: objective.stageKey,
+    title: objective.title,
+    narrativePurpose: contextText(objective.narrativePurpose, 420),
+    sceneKeys: objective.sceneKeys,
+    locationOrdinal: objective.locationOrdinal,
+  })
+  const projectSupplemental = (entry: Record<string, unknown>) => ({
+    key: entry.key,
+    title: entry.title,
+    description: contextText(entry.description, 350),
+    hook: contextText(entry.hook, 350),
+    objective: contextText(entry.objective, 350),
+    locationOrdinal: entry.locationOrdinal,
+  })
+  const projectMainScript = (script: Record<string, unknown>) => ({
+    objectiveKey: script.objectiveKey,
+    sceneKey: script.sceneKey,
+    alternatives: contextRows(script.alternatives).map(alternative => ({
+      alternativeKey: alternative.alternativeKey,
+      resolution: alternative.resolution,
+      timeCostMinutes: alternative.timeCostMinutes,
+      successText: contextText(alternative.successText, 360),
+      costlySuccessText: contextText(alternative.costlySuccessText, 360),
+      failureForwardText: contextText(alternative.failureForwardText, 360),
+    })),
+  })
+  const projectSupplementalScript = (script: Record<string, unknown>) => ({
+    entryKey: script.entryKey,
+    actionKind: script.actionKind,
+    abilityKey: script.abilityKey,
+    difficulty: script.difficulty,
+    costlySuccessFloor: script.costlySuccessFloor,
+    timeCostMinutes: script.timeCostMinutes,
+    successText: contextText(script.successText, 300),
+    costlySuccessText: contextText(script.costlySuccessText, 300),
+    failureForwardText: contextText(script.failureForwardText, 300),
+  })
   const packet = {
     schema: 'storyforge.text-adventure-scene-script-inputs', version: 1,
     buildNumber: build.buildNumber,
     taskKey: input.productProductionTaskKey,
-    sources: rows.map(row => ({ artifactKey: row.artifactKey, contentHash: row.contentHash }))
-      .sort((left, right) => left.artifactKey.localeCompare(right.artifactKey)),
     story: {
-      title: story.title, premise: story.premise, playerFantasy: story.playerFantasy,
-      thematicQuestion: story.thematicQuestion, emotionalPromise: story.emotionalPromise,
-      centralConflict: story.centralConflict,
-      canonFacts: story.canonFacts, productPrivateFacts: story.productPrivateFacts,
-      prohibitions: story.prohibitions,
+      title: story.title,
+      premise: contextText(story.premise, 450),
+      playerFantasy: contextText(story.playerFantasy, 320),
+      thematicQuestion: contextText(story.thematicQuestion, 320),
+      emotionalPromise: contextText(story.emotionalPromise, 320),
+      centralConflict: contextText(story.centralConflict, 450),
+      canonFacts: Array.isArray(story.canonFacts) ? story.canonFacts.map(value => contextText(value, 200)) : [],
+      productPrivateFacts: Array.isArray(story.productPrivateFacts)
+        ? story.productPrivateFacts.map(value => contextText(value, 200)) : [],
+      prohibitions: Array.isArray(story.prohibitions) ? story.prohibitions.map(value => contextText(value, 200)) : [],
       setupPayoffs: contextRows(story.setupPayoffs).filter(item => (
         item.introducedAct === actIndex + 1 || item.resolvedAct === actIndex + 1
-      )),
-      endings: actIndex === 2 ? story.endings : [],
+      )).map(item => ({
+        key: item.key,
+        setup: contextText(item.setup, 260),
+        payoff: contextText(item.payoff, 260),
+        introducedAct: item.introducedAct,
+        resolvedAct: item.resolvedAct,
+      })),
+      endings: actIndex === 2 && partIndex === sceneParts.length - 1
+        ? contextRows(story.endings).map(ending => ({
+            key: ending.key,
+            title: ending.title,
+            dramaticAnswer: contextText(ending.dramaticAnswer, 450),
+            requiredConsequences: Array.isArray(ending.requiredConsequences)
+              ? ending.requiredConsequences.map(value => contextText(value, 250)) : [],
+          }))
+        : [],
     },
-    act: currentAct,
+    act: {
+      key: currentAct.key,
+      title: currentAct.title,
+      targetMinutes: currentAct.targetMinutes,
+      goal: contextText(currentAct.goal, 500),
+      irreversibleTurn: contextText(currentAct.irreversibleTurn, 500),
+      sceneCards: sceneCards.map(projectSceneCard),
+    },
     handoff: {
       previousExit: previousCards.length ? previousCards[previousCards.length - 1].exitState : null,
       nextEntry: nextCards.length ? nextCards[0].entryState : null,
     },
-    decisions: currentDecisions,
-    cast: contextRows(cast.characters).filter(character => castKeys.has(contextText(character.key, 200))),
+    decisions: currentDecisions.map(decision => ({
+      key: decision.key,
+      sceneKey: decision.sceneKey,
+      prompt: contextText(decision.prompt, 450),
+      options: contextRows(decision.options).map(option => ({
+        key: option.key,
+        label: contextText(option.label, 300),
+        cost: contextText(option.cost, 300),
+        persistentEffectKey: option.persistentEffectKey,
+        echoSceneKeys: option.echoSceneKeys,
+      })),
+    })),
+    cast: contextRows(cast.characters)
+      .filter(character => castKeys.has(contextText(character.key, 200)))
+      .map(projectCharacter),
     locations: relevantLocations,
     systems: {
-      abilities: systems.abilities, resources: systems.resources,
-      equipmentSlots: systems.equipmentSlots, starterEquipment: systems.starterEquipment,
+      abilities: contextRows(systems.abilities)
+        .filter(ability => usedAbilityKeys.size === 0 || usedAbilityKeys.has(contextText(ability.key, 200)))
+        .map(ability => ({
+        key: ability.key, title: ability.title, description: contextText(ability.description, 260), role: ability.role,
+        })),
+      resources: contextRows(systems.resources).map(resource => ({
+        key: resource.key, title: resource.title, description: contextText(resource.description, 260), role: resource.role,
+      })),
+      starterEquipment: contextRows(systems.starterEquipment).map(item => ({
+        key: item.key, title: item.title, description: contextText(item.description, 260),
+        modifierAbilityKey: item.modifierAbilityKey, modifierDelta: item.modifierDelta,
+      })),
     },
     mainQuest: {
       key: mainQuest.key, title: mainQuest.title,
-      objectives,
-      scripts: contextRows(questScript.mainObjectiveScripts)
-        .filter(script => objectiveKeys.has(contextText(script.objectiveKey, 200))),
+      objectives: objectives.map(projectObjective),
+      scripts: mainScripts.map(projectMainScript),
     },
-    sideContent: sideEntries,
-    sideScripts: contextRows(questScript.sideQuestScripts)
-      .filter(script => sideKeys.has(contextText(script.entryKey, 200))),
-    ambientContent: ambientEntries,
-    ambientScripts: contextRows(questScript.ambientEventScripts)
-      .filter(script => ambientKeys.has(contextText(script.entryKey, 200))),
+    sideContent: sideEntries.map(projectSupplemental),
+    sideScripts: sideScripts.map(projectSupplementalScript),
+    ambientContent: ambientEntries.map(projectSupplemental),
+    ambientScripts: ambientScripts.map(projectSupplementalScript),
   }
   const serialized = JSON.stringify(packet)
   const estimatedTokens = estimateTokens(serialized)
-  if (estimatedTokens > 18_500) {
-    throw new Error(`[product-production-context] 第 ${actIndex + 1} 幕分场投影超过登记预算:${estimatedTokens}/18500`)
+  if (estimatedTokens > 15_000) {
+    const sectionTokens = Object.fromEntries(Object.entries(packet).map(([key, value]) => (
+      [key, estimateTokens(JSON.stringify(value))]
+    )))
+    throw new Error(
+      `[product-production-context] 第 ${actIndex + 1} 幕分场投影超过登记预算:${estimatedTokens}/15000 sections=${JSON.stringify(sectionTokens)}`,
+    )
   }
   return serialized
 }
@@ -236,34 +380,78 @@ export async function readTextAdventureDialogueInputsV1(input: AssembleContextIn
   const cast = payloadByKey.get('content.cast-bible') ?? {}
   const arc = payloadByKey.get('content.narrative-arc-plan') ?? {}
   const sceneScript = payloadByKey.get(`content.scene-script.act-${act}`) ?? {}
+  const scenes = contextRows(sceneScript.scenes)
+  const endings = contextRows(sceneScript.endings)
+  const dialogueBeats = [
+    ...scenes.flatMap(scene => contextRows(scene.beats)
+      .filter(beat => beat.kind === 'dialogue')
+      .map(beat => ({
+        beatKey: beat.beatKey, speakerKey: beat.speakerKey, text: beat.text, order: beat.order,
+        sceneKey: scene.sceneKey, endingKey: null,
+      }))),
+    ...endings.flatMap(ending => contextRows(ending.beats)
+      .filter(beat => beat.kind === 'dialogue')
+      .map(beat => ({
+        beatKey: beat.beatKey, speakerKey: beat.speakerKey, text: beat.text, order: beat.order,
+        sceneKey: null, endingKey: ending.endingKey,
+      }))),
+  ]
+  const usedSpeakerKeys = [...new Set(dialogueBeats.map(beat => String(beat.speakerKey)))].sort()
+  const speakerOrdinalByKey = new Map(usedSpeakerKeys.map((characterKey, index) => [characterKey, index + 1]))
   const packet = {
     schema: 'storyforge.text-adventure-dialogue-inputs', version: 1,
     buildNumber: build.buildNumber,
     taskKey: input.productProductionTaskKey,
+    reviewContract: {
+      reviewedCharacterCount: usedSpeakerKeys.length,
+      reviewedBeatCount: dialogueBeats.length,
+      reviewedChoiceCount: contextRows(sceneScript.choices).length,
+      rule: '输出必须逐字复制这三个冻结计数；不得使用样例数值或自行计数。',
+    },
     sources: rows.map(row => ({ artifactKey: row.artifactKey, contentHash: row.contentHash }))
       .sort((left, right) => left.artifactKey.localeCompare(right.artifactKey)),
     storyBoundary: {
       title: story.title, thematicQuestion: story.thematicQuestion,
       centralConflict: story.centralConflict, prohibitions: story.prohibitions,
     },
-    cast: cast.characters,
+    speakingCharacters: contextRows(cast.characters)
+      .filter(character => usedSpeakerKeys.includes(String(character.key)))
+      .sort((left, right) => String(left.key).localeCompare(String(right.key)))
+      .map(character => ({
+      characterOrdinal: speakerOrdinalByKey.get(String(character.key)),
+      key: character.key, role: character.role, name: character.name,
+      publicIdentity: character.publicIdentity, desire: character.desire,
+      fear: character.fear, secret: character.secret, motivation: character.motivation,
+      voice: character.voice, initialKnowledge: character.initialKnowledge,
+      forbiddenKnowledge: character.forbiddenKnowledge, relationshipArc: character.relationshipArc,
+    })),
     sceneKnowledgeBoundaries: contextRows(contextRows(arc.acts)[act - 1]?.sceneCards).map(scene => ({
       sceneKey: scene.key, title: scene.title, entryState: scene.entryState, exitState: scene.exitState,
       castKeys: scene.castKeys, setupKeys: scene.setupKeys, payoffKeys: scene.payoffKeys,
     })),
     act: {
       actKey: sceneScript.actKey, moduleTitle: sceneScript.moduleTitle,
-      scenes: contextRows(sceneScript.scenes).map(scene => ({
-        sceneKey: scene.sceneKey, title: scene.title, summary: scene.summary, beats: scene.beats,
+      scenes: scenes.map(scene => ({
+        sceneKey: scene.sceneKey, title: scene.title, summary: contextText(scene.summary, 320),
       })),
-      choices: sceneScript.choices,
-      endings: sceneScript.endings,
+      dialogueBeats: dialogueBeats.map((beat, index) => ({
+        beatOrdinal: index + 1, beatKey: beat.beatKey,
+        sceneKey: beat.sceneKey, endingKey: beat.endingKey,
+        speakerOrdinal: speakerOrdinalByKey.get(String(beat.speakerKey)),
+        speakerKey: beat.speakerKey, text: beat.text, order: beat.order,
+      })),
+      choices: contextRows(sceneScript.choices).map((choice, index) => ({
+        ...choice, choiceOrdinal: index + 1,
+      })),
+      endings: endings.map(ending => ({
+        endingKey: ending.endingKey, title: ending.title, summary: ending.summary,
+      })),
     },
   }
   const serialized = JSON.stringify(packet)
   const estimatedTokens = estimateTokens(serialized)
-  if (estimatedTokens > 12_000) {
-    throw new Error(`[product-production-context] 第 ${act} 幕对白审校投影超过登记预算:${estimatedTokens}/12000，必须增加更小的有界对白分包计划`)
+  if (estimatedTokens > 12_500) {
+    throw new Error(`[product-production-context] 第 ${act} 幕对白审校投影超过登记预算:${estimatedTokens}/12500，必须增加更小的有界对白分包计划`)
   }
   return serialized
 }
@@ -548,8 +736,8 @@ export async function readTextAdventureQualityInputsV1(input: AssembleContextInp
   }
   const serialized = JSON.stringify(packet)
   const estimatedTokens = estimateTokens(serialized)
-  if (estimatedTokens > 15_750) {
-    throw new Error(`[product-production-context] 文字冒险质量审查投影超过登记预算:${estimatedTokens}/15750，必须拆分生产内容后再审查`)
+  if (estimatedTokens > 31_500) {
+    throw new Error(`[product-production-context] 文字冒险质量审查投影超过登记预算:${estimatedTokens}/31500，必须拆分审查任务`)
   }
   return serialized
 }

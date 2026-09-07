@@ -17,15 +17,25 @@ import type { ProductBuildArtifactKindV1, ProductRuntimePackageV1 } from '../../
 import { seedCurrentProductWorld } from '../helpers/current-product-world'
 import { resolveProductProductionWorldCompilationDescriptorsV2 } from '../../src/lib/product-production/world-source'
 
-async function fixture(name: string) {
+async function fixture(name: string, options: { retryModelCallHeadroom?: number } = {}) {
   const owned = await seedCurrentProductWorld(name)
   const release = owned.release
   const suggestions = await suggestProductStartingPoints({ scope: owned.scope, worldReleaseId: release.id! })
-  const brief = await draftProductProductionBriefV3({
+  const draftedBrief = await draftProductProductionBriefV3({
     scope: owned.scope, worldReleaseId: release.id!, suggestionKey: suggestions.suggestions[0].suggestionKey,
     productType: 'avg', scale: 'scene', visualLevel: 'none', audioLevel: 'none',
     requiredFacts: ['冻结世界事实保持一致'], forbiddenChanges: ['不得写回世界正式表'],
   })
+  const brief = options.retryModelCallHeadroom
+    ? {
+        ...draftedBrief,
+        productionBudget: {
+          ...draftedBrief.productionBudget,
+          maximumModelCalls: draftedBrief.productionBudget.maximumModelCalls
+            + options.retryModelCallHeadroom,
+        },
+      }
+    : draftedBrief
   const created = await executeProductProductionCommand({
     scope: owned.scope,
     command: {
@@ -235,6 +245,50 @@ describe('R-PRODUCTPROD-1D · durable bounded DAG scheduler', () => {
       .filter(row => row.artifactKey === 'design.game' && row.status === 'accepted')).toHaveLength(1)
   }, 30_000)
 
+  it('任务领取后输入工件丢失会落正式失败回执，不留下永久 running child Run', async () => {
+    const owned = await fixture('scheduler-preflight-failure')
+    const calls = new Map<string, number>()
+    const concurrency = { active: 0, peak: 0 }
+    const executor = executorFor(owned, calls, concurrency)
+    const textRequirement = owned.brief.capabilityRequirements.find(item => item.mediaClass === 'text')!
+    const capabilityBindings = [{
+      requirementKey: textRequirement.requirementKey,
+      adapterId: 'configured-text-provider.v1',
+      bindingHash: await hashProductProductionValueV2({ provider: 'configured' }),
+    }]
+    const first = await runProductProductionSchedulerCycleV1({
+      scope: owned.scope,
+      productionId: owned.productionId,
+      executor,
+      capabilityBindings,
+    })
+    expect(calls.get('content.design')).toBe(1)
+    const design = await db.productBuildArtifacts
+      .where('[buildId+artifactKey]').equals([first.buildId, 'design.game']).first()
+    await db.productBuildArtifacts.delete(design!.id!)
+    const designRun = await db.agentRuns
+      .where('[parentRunId+parentRelation]')
+      .equals([first.rootRunId!, 'task:content.design'])
+      .first()
+    await db.agentRunCheckpoints.where('runId').equals(designRun!.id!).delete()
+
+    const failed = await runProductProductionSchedulerCycleV1({
+      scope: owned.scope,
+      productionId: owned.productionId,
+      executor,
+      capabilityBindings,
+    })
+    const narrative = failed.tasks.find(task => task.taskKey === 'content.narrative')
+    expect(narrative).toMatchObject({ status: 'blocked', blocker: expect.stringContaining('Artifact 缺失') })
+    expect(calls.get('content.narrative')).toBeUndefined()
+    const child = await db.agentRuns.get(narrative!.runId!)
+    expect(JSON.parse(child!.projectionJson)).toMatchObject({
+      state: 'failed',
+      steps: { 'content.narrative': { status: 'failed', failureCode: 'task-preflight-failed' } },
+    })
+    expect((await db.productBuilds.get(first.buildId))!.status).toBe('recovery-required')
+  }, 30_000)
+
   it('作者暂停并恢复后复用已验收产物，只为新 epoch 补签收据而不重复调用 executor', async () => {
     const owned = await fixture('scheduler-pause-resume')
     const calls = new Map<string, number>()
@@ -290,7 +344,7 @@ describe('R-PRODUCTPROD-1D · durable bounded DAG scheduler', () => {
   }, 30_000)
 
   it('供应商连续失败停在用户 blocker，作者重试后新 epoch 继续且错误信息不泄露密钥', async () => {
-    const owned = await fixture('scheduler-user-retry')
+    const owned = await fixture('scheduler-user-retry', { retryModelCallHeadroom: 2 })
     const calls = new Map<string, number>()
     const concurrency = { active: 0, peak: 0 }
     const successExecutor = executorFor(owned, calls, concurrency)
@@ -329,9 +383,21 @@ describe('R-PRODUCTPROD-1D · durable bounded DAG scheduler', () => {
     const completed = await runProductProductionUntilBlockedV1({
       scope: owned.scope, productionId: owned.productionId, executor, capabilityBindings,
     })
-    expect(completed.terminal).toBe(true)
+    expect(completed.terminal, JSON.stringify({
+      status: completed.buildStatus, budget: completed.budget,
+      blockers: completed.tasks.filter(task => task.blocker),
+    })).toBe(true)
     expect(calls.get('content.design')).toBe(3)
     expect([...calls.entries()].filter(([key]) => key !== 'content.design').every(([, count]) => count === 1)).toBe(true)
+    const finalBuild = (await db.productBuilds.get(completed.buildId))!
+    const ledger = JSON.parse(finalBuild.budgetLedgerJson) as {
+      version: number
+      attempts: Array<{ taskKey: string; outcome: string; usageKnown: boolean }>
+    }
+    expect(ledger.version).toBe(2)
+    expect(ledger.attempts.filter(attempt => attempt.taskKey === 'content.design')).toHaveLength(3)
+    expect(ledger.attempts.filter(attempt => attempt.taskKey === 'content.design' && !attempt.usageKnown)).toHaveLength(2)
+    expect(completed.budget.usage.modelCalls).toBe(6)
   }, 30_000)
 
   it('provider safety refusal 不自动改写或重试，第一次即暂停等待用户决定', async () => {
@@ -358,7 +424,47 @@ describe('R-PRODUCTPROD-1D · durable bounded DAG scheduler', () => {
     expect((await db.productBuilds.get(blocked.buildId))?.failureJson).toContain('provider-safety-refusal')
   }, 30_000)
 
-  it('按任务合同真实中止超时 provider，并保存 task-timeout 恢复证据', async () => {
+  it('已付费结果超出单任务预留时记录真实用量并立即暂停，不盲目自动重试', async () => {
+    const owned = await fixture('scheduler-task-budget-exceeded')
+    const calls = new Map<string, number>()
+    const concurrency = { active: 0, peak: 0 }
+    const basePlan = await createProductProductionPlanV3({
+      buildNumber: 1,
+      briefHash: await hashProductProductionValueV2(owned.brief),
+      brief: owned.brief,
+    })
+    const plan = {
+      ...basePlan,
+      tasks: basePlan.tasks.map(task => task.taskKey === 'content.design'
+        ? {
+            ...task,
+            maxAttempts: 2,
+            budgetReservation: { ...task.budgetReservation, outputTokens: 5 },
+          }
+        : task),
+    }
+    const textRequirement = owned.brief.capabilityRequirements.find(item => item.mediaClass === 'text')!
+    const blocked = await runProductProductionUntilBlockedV1({
+      scope: owned.scope,
+      productionId: owned.productionId,
+      executor: executorFor(owned, calls, concurrency),
+      suppliedPlan: plan,
+      capabilityBindings: [{
+        requirementKey: textRequirement.requirementKey,
+        adapterId: 'configured-text-provider.v1',
+        bindingHash: await hashProductProductionValueV2({ provider: 'configured' }),
+      }],
+    })
+    expect(calls.get('content.design')).toBe(1)
+    expect(blocked.buildStatus).toBe('recovery-required')
+    expect(blocked.tasks.find(task => task.taskKey === 'content.design')).toMatchObject({
+      status: 'blocked', attempt: 1, blocker: expect.stringContaining('outputTokens=10/5'),
+    })
+    expect(blocked.budget.usage).toMatchObject({ modelCalls: 1, inputTokens: 10, outputTokens: 10 })
+    expect((await db.productBuilds.get(blocked.buildId))?.failureJson).toContain('task-budget-exceeded')
+  }, 30_000)
+
+  it('即使 provider 忽略 abort 也按任务合同强制结算超时，并保存 task-timeout 恢复证据', async () => {
     const owned = await fixture('scheduler-task-timeout')
     const basePlan = await createProductProductionPlanV3({
       buildNumber: 1,
@@ -374,10 +480,9 @@ describe('R-PRODUCTPROD-1D · durable bounded DAG scheduler', () => {
     let aborted = false
     const executor: ProductProductionTaskExecutorV1 = async request => {
       if (request.task.taskKey !== 'content.design') throw new Error('超时后不应领取下游任务')
-      return await new Promise<ProductProductionTaskExecutionResultV1>((_resolve, reject) => {
+      return await new Promise<ProductProductionTaskExecutionResultV1>(() => {
         request.signal.addEventListener('abort', () => {
           aborted = true
-          reject(request.signal.reason)
         }, { once: true })
       })
     }

@@ -49,6 +49,7 @@ import type {
   VerifiedProductBrowserPerformanceGateV1,
   VerifiedProductMainRoutePlaythroughGateV1,
   VerifiedProductMediaRuntimeGateV1,
+  VerifiedTextAdventureHumanPlaytestGateV1,
   VerifiedTextAdventureHumanVisualReviewGateV1,
 } from '../../lib/product-production/quality-receipts'
 import type { InAppBrowserPerformanceLabProgressV1 } from '../../lib/product-production/in-app-browser-performance-lab'
@@ -60,6 +61,7 @@ import TextAdventureProductionWizard, {
   toTextAdventureProductionBriefDraftV1,
   type TextAdventureProductionWizardValueV1,
 } from '../text-game/TextAdventureProductionWizard'
+import { minimumTextAdventureCommercialImageCountV1 } from '../../lib/adventure/production-brief'
 import { useAIConfigStore } from '../../stores/ai-config'
 import { resolveRequestConfig } from '../../lib/ai/client'
 import { isAIConfigReady } from '../../lib/ai/config-readiness'
@@ -161,6 +163,10 @@ function statusLabel(value: string): string {
 }
 
 function reviewArtifactLabel(key: string): string {
+  const questScriptPart = /^content\.quest-script\.main\.act-([1-3])\.(single|multi)$/.exec(key)
+  if (questScriptPart) return `第${questScriptPart[1]}幕${questScriptPart[2] === 'single' ? '单解' : '多解'}目标任务脚本`
+  const sceneScriptPart = /^content\.scene-script\.act-([1-3])\.part-([1-2])$/.exec(key)
+  if (sceneScriptPart) return `第${sceneScriptPart[1]}幕分场正文 · 分包 ${sceneScriptPart[2]}`
   return ({
     'design.game': '产品与核心循环设计',
     'content.source-sufficiency': '来源充分性与改编审计',
@@ -168,8 +174,11 @@ function reviewArtifactLabel(key: string): string {
     'content.story-bible': '故事圣经',
     'content.cast-bible': '角色圣经与关系弧',
     'content.adventure-architecture': '世界空间与叙事架构',
+    'content.narrative-arc-scenes': '三幕与场景卡',
+    'content.narrative-decision-plan': '玩家决定与跨场景回响',
     'content.narrative-arc-plan': '分幕叙事弧与选择回响',
     'content.main-quest-plan': '主线阶段与任务计划',
+    'content.quest-script.supplemental': '支线与区域事件脚本',
     'content.quest-script': '任务脚本与结算规则',
     'content.scene-script.act-1': '第一幕分场正文',
     'content.scene-script.act-2': '第二幕分场正文',
@@ -195,6 +204,16 @@ function reviewArtifactLabel(key: string): string {
 }
 
 function productionTaskPresentation(taskKey: string): { label: string; owner: string } {
+  const questScriptPart = /^content\.quest-script\.main\.act-([1-3])\.(single|multi)$/.exec(taskKey)
+  if (questScriptPart) return {
+    label: `第${questScriptPart[1]}幕${questScriptPart[2] === 'single' ? '单解' : '多解'}目标脚本`,
+    owner: `任务脚本工程师 · 第${questScriptPart[1]}幕${questScriptPart[2] === 'single' ? '单解' : '多解'} Run`,
+  }
+  const sceneScriptPart = /^content\.scene-script\.act-([1-3])\.part-([1-2])$/.exec(taskKey)
+  if (sceneScriptPart) return {
+    label: `第${sceneScriptPart[1]}幕正文 ${sceneScriptPart[2]}/2`,
+    owner: `分场叙事作者 · 第${sceneScriptPart[1]}幕分包 ${sceneScriptPart[2]} Run`,
+  }
   if (/^media\.visual\.\d{3}$/.test(taskKey)) return {
     label: `视觉素材 ${Number(taskKey.slice(-3))}`,
     owner: '媒资 Provider · 单项可恢复',
@@ -211,11 +230,14 @@ function productionTaskPresentation(taskKey: string): { label: string; owner: st
     'content.cast-bible': ['角色圣经与关系弧', '角色总监'],
     'content.adventure-architecture': ['空间与叙事架构', '空间设计师'],
     'content.product-module': ['属性、资源与装备系统', '通用玩法设计师'],
-    'content.narrative-arc-plan': ['分幕叙事弧与选择回响', '叙事设计师'],
+    'content.narrative-arc-scenes': ['三幕与场景卡', '叙事设计师 · 结构 Run'],
+    'content.narrative-decision-plan': ['玩家决定与跨场景回响', '叙事设计师 · 决定 Run'],
+    'content.narrative-arc-plan': ['分幕叙事弧与选择回响', '确定性叙事弧装配器'],
     'content.main-quest-plan': ['主线阶段与目标拆分', '主线任务设计师'],
     'content.adventure-side-quests': ['支线任务设计', '支线任务设计师'],
     'content.adventure-ambient-events': ['区域与随机事件设计', 'Storylet 设计师'],
-    'content.quest-script': ['任务脚本与结算规则', '任务脚本工程师'],
+    'content.quest-script.supplemental': ['支线与事件脚本', '任务脚本工程师 · 补充内容 Run'],
+    'content.quest-script': ['任务脚本确定性装配', '任务脚本装配器'],
     'content.scene-script.act-1': ['分场正文 1/3', '第一幕分场叙事作者'],
     'content.scene-script.act-2': ['分场正文 2/3', '第二幕分场叙事作者'],
     'content.scene-script.act-3': ['分场正文 3/3', '第三幕分场叙事作者'],
@@ -394,6 +416,20 @@ export default function ProductProductionStudio(props: {
   const [performanceLabProgress, setPerformanceLabProgress] = useState<InAppBrowserPerformanceLabProgressV1 | null>(null)
   const [playthroughGate, setPlaythroughGate] = useState<VerifiedProductMainRoutePlaythroughGateV1 | null>(null)
   const [playthroughGateError, setPlaythroughGateError] = useState('')
+  const [humanPlaytestGate, setHumanPlaytestGate] = useState<VerifiedTextAdventureHumanPlaytestGateV1 | null>(null)
+  const [humanPlaytestGateError, setHumanPlaytestGateError] = useState('')
+  const [humanPlaytestSessionId, setHumanPlaytestSessionId] = useState<number | null>(null)
+  const [humanPlaytestRole, setHumanPlaytestRole] = useState<'author' | 'independent-player'>('author')
+  const [humanPlaytestParticipantLabel, setHumanPlaytestParticipantLabel] = useState('作者')
+  const [humanPlaytestIndependenceConfirmed, setHumanPlaytestIndependenceConfirmed] = useState(false)
+  const [humanPlaytestRatings, setHumanPlaytestRatings] = useState({
+    comprehension: 0, pacing: 0, agency: 0, emotionalImpact: 0,
+  })
+  const [humanPlaytestFeedback, setHumanPlaytestFeedback] = useState({
+    comprehensionObstacles: '', boringMoments: '', errors: '', choiceExperience: '', endingFeedback: '',
+  })
+  const [humanPlaytestBlockingIssues, setHumanPlaytestBlockingIssues] = useState('')
+  const [humanPlaytestNote, setHumanPlaytestNote] = useState('')
   const [mediaRuntimeGate, setMediaRuntimeGate] = useState<VerifiedProductMediaRuntimeGateV1 | null>(null)
   const [mediaRuntimeGateError, setMediaRuntimeGateError] = useState('')
   const [humanVisualGate, setHumanVisualGate] = useState<VerifiedTextAdventureHumanVisualReviewGateV1 | null>(null)
@@ -516,10 +552,15 @@ export default function ProductProductionStudio(props: {
         setPlaythroughGate(null)
         nextPlaythroughError = cause instanceof Error ? cause.message : String(cause)
       }
+      let nextCompletedPlaythroughs: CompletedProductBuildPlaythroughV1[] = []
       try {
-        setCompletedPlaythroughs(await qualityReceipts.listCompletedProductBuildPlaythroughsV1({
+        nextCompletedPlaythroughs = await qualityReceipts.listCompletedProductBuildPlaythroughsV1({
           scope, productBuildId: nextDetails.build.id!,
-        }))
+        })
+        setCompletedPlaythroughs(nextCompletedPlaythroughs)
+        setHumanPlaytestSessionId(current => current != null
+          && nextCompletedPlaythroughs.some(item => item.sessionId === current)
+          ? current : nextCompletedPlaythroughs[0]?.sessionId ?? null)
       } catch (cause) {
         setCompletedPlaythroughs([])
         const message = cause instanceof Error ? cause.message : String(cause)
@@ -529,6 +570,21 @@ export default function ProductProductionStudio(props: {
       let nextBrief: ProductProductionBriefV3 | null = null
       try { nextBrief = nextDetails.brief ? JSON.parse(nextDetails.brief.briefJson) as ProductProductionBriefV3 : null }
       catch { nextBrief = null }
+      if (nextDetails.production.productType === 'text-adventure'
+        && nextBrief?.qualityProfile === 'commercial-candidate') {
+        try {
+          setHumanPlaytestGate(await qualityReceipts.readLatestTextAdventureHumanPlaytestGateV1({
+            scope, productBuildId: nextDetails.build.id!,
+          }))
+          setHumanPlaytestGateError('')
+        } catch (cause) {
+          setHumanPlaytestGate(null)
+          setHumanPlaytestGateError(cause instanceof Error ? cause.message : String(cause))
+        }
+      } else {
+        setHumanPlaytestGate(null)
+        setHumanPlaytestGateError('')
+      }
       const humanVisualRequired = nextDetails.production.productType === 'text-adventure'
         && nextBrief?.qualityProfile === 'commercial-candidate'
         && nextMediaAssets.length > 0
@@ -565,6 +621,9 @@ export default function ProductProductionStudio(props: {
       setPerformanceGateError('')
       setPlaythroughGate(null)
       setPlaythroughGateError('')
+      setHumanPlaytestGate(null)
+      setHumanPlaytestGateError('')
+      setHumanPlaytestSessionId(null)
       setMediaRuntimeGate(null)
       setMediaRuntimeGateError('')
       setHumanVisualGate(null)
@@ -861,6 +920,57 @@ export default function ProductProductionStudio(props: {
     setMessage(`已确认主路线试玩：${candidate.choiceCount} 次选择到达结局 ${candidate.endingKey}，事件流与 Build hash 已冻结。`)
   }, '确认主路线试玩')
 
+  const recordHumanPlaytest = () => run(async () => {
+    if (!details?.build || details.production.productType !== 'text-adventure') {
+      throw new Error('缺少当前商业文字冒险 Build。')
+    }
+    const candidate = completedPlaythroughs.find(item => item.sessionId === humanPlaytestSessionId)
+    if (!candidate) throw new Error('请选择一个已经到达结局的当前 Build 试玩会话。')
+    if (Object.values(humanPlaytestRatings).some(score => score < 1 || score > 5)) {
+      throw new Error('请对理解、节奏、能动性和情绪触达分别给出 1–5 分。')
+    }
+    if (Object.values(humanPlaytestFeedback).some(value => !value.trim())) {
+      throw new Error('请填写理解障碍、无聊点、错误、选择感受和结局反馈；没有问题时请明确填写“无”。')
+    }
+    const userAgent = navigator.userAgent || 'unknown-browser'
+    const environment = {
+      browserName: /Edg\//.test(userAgent) ? 'edge'
+        : /Chrome\//.test(userAgent) ? 'chromium'
+          : /Firefox\//.test(userAgent) ? 'firefox'
+            : /Safari\//.test(userAgent) ? 'safari' : 'browser',
+      browserVersion: userAgent,
+      platform: navigator.platform || 'desktop',
+      viewport: { width: Math.max(1, window.innerWidth), height: Math.max(1, window.innerHeight) },
+    }
+    const qualityReceipts = await loadProductQualityReceiptsV1()
+    if (humanPlaytestRole === 'author' && playthroughGate?.gateReceipt.status !== 'passed') {
+      await qualityReceipts.recordProductBuildMainRoutePlaythroughV1({
+        scope: props.scope, productBuildId: details.build.id!, productRuntimeSessionId: candidate.sessionId,
+        authorConfirmation: 'author-confirmed-main-route', environment,
+      })
+    }
+    const result = await qualityReceipts.recordTextAdventureHumanPlaytestV1({
+      scope: props.scope, productBuildId: details.build.id!, productRuntimeSessionId: candidate.sessionId,
+      participantRole: humanPlaytestRole,
+      participantLabel: humanPlaytestParticipantLabel,
+      participantDeclaration: humanPlaytestRole === 'author'
+        ? 'author-self-attestation' : 'not-involved-in-production',
+      environment,
+      assessment: {
+        ratings: humanPlaytestRatings,
+        blockingIssues: humanPlaytestBlockingIssues.split('\n').map(item => item.trim()).filter(Boolean),
+        feedback: humanPlaytestFeedback,
+        note: humanPlaytestNote,
+      },
+    })
+    await refresh(details.production.id)
+    setMessage(result.gateReceipt.status === 'passed'
+      ? '作者与独立玩家的两个不同完整会话均已通过，真人试玩覆盖回执已冻结。'
+      : result.gateReceipt.status === 'failed'
+        ? '本次真人试玩证据已冻结，但时长、交互量、评分或阻断问题未通过；商业发布仍被阻断。'
+        : '本次真人试玩证据已冻结；仍需由另一角色使用不同新会话完整通关。')
+  }, '冻结真人试玩回执')
+
   const confirmHumanVisualReview = () => run(async () => {
     if (!details?.build || details.production.productType !== 'text-adventure') {
       throw new Error('缺少当前文字冒险 Build。')
@@ -1088,9 +1198,30 @@ export default function ProductProductionStudio(props: {
     catch { return null }
   }, [details?.brief])
   const commercialPerformanceRequired = selectedBrief?.qualityProfile === 'commercial-candidate'
+  const commercialTextAdventureImageMinimum = selectedBrief?.qualityProfile === 'commercial-candidate'
+    && selectedBrief.intent.productType === 'text-adventure' && selectedBrief.textAdventure
+    ? minimumTextAdventureCommercialImageCountV1(selectedBrief.textAdventure.media.mode) : 0
+  const commercialTextAdventureMediaPlanReady = (selectedBrief?.media.imageCount ?? 0)
+    >= commercialTextAdventureImageMinimum
   const commercialPerformancePassed = performanceGate?.gateReceipt.status === 'passed'
     && performanceGate.evidence.receipt.passed
   const commercialPlaythroughPassed = playthroughGate?.gateReceipt.status === 'passed'
+  const commercialHumanPlaytestRequired = commercialPerformanceRequired
+    && selectedBrief?.intent.productType === 'text-adventure'
+  const commercialHumanPlaytestPassed = !commercialHumanPlaytestRequired
+    || humanPlaytestGate?.gateReceipt.status === 'passed' && humanPlaytestGate.evidence.passed
+  const selectedHumanPlaytest = completedPlaythroughs.find(item => item.sessionId === humanPlaytestSessionId) ?? null
+  const humanPlaytestAuthor = humanPlaytestGate?.evidence.sessions.find(item =>
+    item.sessionEvidenceHash === humanPlaytestGate.evidence.authorSessionEvidenceHash) ?? null
+  const humanPlaytestIndependent = humanPlaytestGate?.evidence.sessions.find(item =>
+    item.sessionEvidenceHash === humanPlaytestGate.evidence.independentPlayerSessionEvidenceHash) ?? null
+  const selectedHumanPlaytestClaimedByOtherRole = selectedHumanPlaytest != null
+    && humanPlaytestGate?.evidence.sessions.some(item => item.eventStreamHash === selectedHumanPlaytest.eventStreamHash
+      && item.participantRole !== humanPlaytestRole) === true
+  const humanPlaytestFormComplete = Object.values(humanPlaytestRatings).every(score => score >= 1 && score <= 5)
+    && Object.values(humanPlaytestFeedback).every(value => value.trim().length > 0)
+    && humanPlaytestParticipantLabel.trim().length > 0
+    && (humanPlaytestRole === 'author' || humanPlaytestIndependenceConfirmed)
   const commercialMediaRuntimeRequired = commercialPerformanceRequired
     && (selectedBrief?.media.requiredMediaKinds.length ?? 0) > 0
   const commercialMediaRuntimePassed = !commercialMediaRuntimeRequired
@@ -1113,7 +1244,8 @@ export default function ProductProductionStudio(props: {
     return decision === 'approved' || decision === 'rejected' && !!humanVisualNotes[asset.artifactKey]?.trim()
   })
   const commercialQualityPassed = commercialPerformancePassed
-    && commercialPlaythroughPassed && commercialMediaRuntimePassed && commercialHumanVisualPassed
+    && commercialPlaythroughPassed && commercialHumanPlaytestPassed
+    && commercialMediaRuntimePassed && commercialHumanVisualPassed
   const capabilityReadiness = inspectProductProductionCapabilityReadinessV1({
     projectId: props.scope.projectId,
   })
@@ -1245,6 +1377,7 @@ export default function ProductProductionStudio(props: {
           {mediaAnchorBlocker && <div className="mt-3 rounded border border-accent/40 bg-accent/5 p-4 text-[10px] text-text-primary" data-testid="text-adventure-media-anchor-blocker">
             <strong className="block text-xs">美术总监已完成视觉圣经，等待作者确认角色锚点</strong>
             <p className="mt-2 leading-5 text-text-muted">确认后，每张插图会把下列身份、视觉特征和色板作为不可弱化约束；未经确认不会调用图片 Provider。</p>
+            {!commercialTextAdventureMediaPlanReady && <p className="mt-2 rounded border border-error/30 bg-error/5 p-3 text-error" data-testid="text-adventure-media-plan-blocker">当前旧 Build 只计划 {selectedBrief?.media.imageCount ?? 0} 张图片，低于社区推荐关键插图档的 {commercialTextAdventureImageMinimum} 张底线。不得继续消耗图片额度；请取消此 Build，并用修正后的商业 Brief 重新授权。已完成工件仍保留供审计。</p>}
             {mediaAnchor ? <><p className="mt-2 rounded bg-bg-base p-2"><strong>整体风格：</strong>{mediaAnchor.style}</p><ul className="mt-2 grid gap-2">{mediaAnchor.characterAnchors.map(anchor => <li key={anchor.characterKey} className="rounded border border-border bg-bg-base p-3"><span className="flex flex-wrap items-center gap-2"><strong>{anchor.name}</strong><em className="not-italic text-accent">{anchor.role}</em><span className="text-text-muted">{anchor.identity}</span></span><p className="mt-1 leading-5 text-text-muted">{anchor.visualAnchor}</p><span className="mt-2 flex gap-1" aria-label={`${anchor.name} 色板`}>{anchor.palette.map(color => <i key={color} title={color} className="h-4 w-4 rounded border border-border" style={{ backgroundColor: color }} />)}</span></li>)}</ul></> : <p className="mt-2 text-error">视觉圣经读取失败；请保留当前 Build 并检查工件。</p>}
             <p className="mt-3 text-text-muted">若不接受，请取消本 Build，再以“视觉”演化目标创建新版。确认只对当前冻结视觉圣经 hash 有效。</p>
           </div>}
@@ -1255,7 +1388,7 @@ export default function ProductProductionStudio(props: {
             {sourceDecision?.decision === 'ready-with-private-additions' && <button disabled={busy || productionRunning} onClick={() => resolveSourceDecision('accept-product-private-expansion')} className="flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white disabled:opacity-40"><ShieldCheck className="h-3.5 w-3.5" />接受私域补充并继续</button>}
             {sourceDecision?.decision === 'blocked' && <button disabled={busy || productionRunning} onClick={retrySourceReview} className="flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white disabled:opacity-40"><RefreshCw className="h-3.5 w-3.5" />按产品边界重新审查</button>}
             {sourceDecisionBlocker && <button disabled={busy || productionRunning} onClick={() => resolveSourceDecision('cancel')} className="flex items-center gap-2 rounded border border-error/40 px-4 py-2 text-xs text-error disabled:opacity-40"><Square className="h-3.5 w-3.5" />取消本次 Build</button>}
-            {mediaAnchorBlocker && mediaAnchor && <button disabled={busy || productionRunning} onClick={() => resolveMediaAnchorDecision('confirm-character-anchors')} className="flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white disabled:opacity-40"><ShieldCheck className="h-3.5 w-3.5" />确认角色锚点并开始出图</button>}
+            {mediaAnchorBlocker && mediaAnchor && <button disabled={busy || productionRunning || !commercialTextAdventureMediaPlanReady} onClick={() => resolveMediaAnchorDecision('confirm-character-anchors')} className="flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white disabled:opacity-40"><ShieldCheck className="h-3.5 w-3.5" />确认角色锚点并开始出图</button>}
             {mediaAnchorBlocker && <button disabled={busy || productionRunning} onClick={() => resolveMediaAnchorDecision('cancel')} className="flex items-center gap-2 rounded border border-error/40 px-4 py-2 text-xs text-error disabled:opacity-40"><Square className="h-3.5 w-3.5" />拒绝并取消 Build</button>}
             {canRetryBlocker && <button disabled={busy || productionRunning} onClick={retryBlocker} className="flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white"><RefreshCw className="h-3.5 w-3.5" />修正后重试</button>}
             {details.build && ['preview-ready', 'release-ready', 'released'].includes(details.build.status) && <button disabled={busy || productionRunning} onClick={preview} className="flex items-center gap-2 rounded border border-accent/40 bg-accent/10 px-4 py-2 text-xs text-accent"><Play className="h-3.5 w-3.5" />{details.build.status === 'released' ? '试玩此 Build' : '试玩未发布 Build'}</button>}
@@ -1326,6 +1459,28 @@ export default function ProductProductionStudio(props: {
         </section>
         {details.build && <section className="mt-5 rounded border border-border bg-bg-elevated p-5"><div className="flex items-center justify-between"><h2 className="text-sm font-semibold">冻结证据链</h2><span className="flex items-center gap-1 text-[9px] text-success"><ShieldCheck className="h-3.5 w-3.5" />Canonical JSON v2</span></div><p className="mt-3 text-[9px] leading-5 text-text-muted">商业浏览器验收：缓存场景 p95 ≤ {PRODUCT_BROWSER_PERFORMANCE_POLICY_V1.maximumCachedSceneP95Ms}ms、选择输入 p95 ≤ {PRODUCT_BROWSER_PERFORMANCE_POLICY_V1.maximumChoiceInputP95Ms}ms、桌面峰值堆内存 ≤ {Math.round(PRODUCT_BROWSER_PERFORMANCE_POLICY_V1.maximumDesktopHeapBytes / 1024 / 1024)}MiB、30 分钟稳定增长 ≤ {Math.round(PRODUCT_BROWSER_PERFORMANCE_POLICY_V1.maximumLongRunGrowthRatio * 100)}%。Smoke 不会被标成商业通过。</p>{performanceGateError ? <p className="mt-3 rounded border border-error/30 bg-error/5 p-3 text-[10px] text-error">浏览器性能回执损坏：{performanceGateError}</p> : performanceGate ? <div className={`mt-3 rounded border p-3 text-[10px] ${performanceGate.gateReceipt.status === 'passed' ? 'border-success/30 bg-success/5 text-success' : 'border-error/30 bg-error/5 text-error'}`} data-testid="product-production-performance-receipt"><strong>{performanceGate.gateReceipt.status === 'passed' ? '真实浏览器性能已通过' : '最新浏览器测量未通过'}</strong><p className="mt-1">场景 p95 {performanceGate.evidence.receipt.metrics.cachedSceneP95Ms?.toFixed(1) ?? '—'}ms · 输入 p95 {performanceGate.evidence.receipt.metrics.choiceInputP95Ms?.toFixed(1) ?? '—'}ms · 峰值堆 {performanceGate.evidence.receipt.metrics.peakUsedHeapBytes == null ? '—' : `${(performanceGate.evidence.receipt.metrics.peakUsedHeapBytes / 1024 / 1024).toFixed(1)}MiB`} · 长跑 {(performanceGate.evidence.receipt.metrics.longRunDurationMs / 60_000).toFixed(1)} 分钟</p>{performanceGate.evidence.receipt.failures.length > 0 && <p className="mt-1">失败项：{performanceGate.evidence.receipt.failures.join('、')}</p>}<code className="mt-1 block">{compactHash(performanceGate.gateReceipt.receiptHash)}</code></div> : <p className="mt-3 rounded border border-border bg-bg-base p-3 text-[10px] text-text-muted">当前 Build 尚无浏览器性能回执。</p>}<div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">{buildHashRows.map(([label, hash]) => <div key={label} className="flex items-center justify-between rounded bg-bg-base p-3 text-[10px]"><span className="text-text-muted">{label}</span><code title={hash}>{compactHash(hash)}</code></div>)}</div>{details.build.rootTerminalReceiptHash && <p className="mt-4 text-[10px] text-text-muted">终端 receipt：<code>{compactHash(details.build.rootTerminalReceiptHash)}</code></p>}</section>}
         {commercialPerformanceRequired && details.build && <section className="mt-5 rounded border border-border bg-bg-elevated p-5"><h2 className="text-sm font-semibold">作者主路线试玩回执</h2><p className="mt-2 text-[10px] leading-5 text-text-muted">这里不是“点一下算通过”：系统会重放当前 Build 预览存档的起点、每次选择和结局，再由作者明确确认。</p>{playthroughGateError ? <p className="mt-3 rounded border border-error/30 bg-error/5 p-3 text-[10px] text-error">主路线回执无法验证：{playthroughGateError}</p> : playthroughGate ? <div className="mt-3 rounded border border-success/30 bg-success/5 p-3 text-[10px] text-success" data-testid="product-production-playthrough-receipt"><strong className="block">主路线试玩已由作者确认</strong><span className="mt-1 block">结局 {playthroughGate.evidence.endingKey} · {playthroughGate.evidence.choiceCount} 次选择 · 事件流 {compactHash(playthroughGate.evidence.eventStreamHash)}</span><code className="mt-1 block">{compactHash(playthroughGate.gateReceipt.receiptHash)}</code></div> : <p className="mt-3 rounded border border-border bg-bg-base p-3 text-[10px] text-text-muted">{completedPlaythroughs.length > 0 ? `已检测到 ${completedPlaythroughs.length} 个到达结局的当前 Build 预览存档，等待作者确认。` : '尚未检测到当前 Build 的完整主路线试玩。'}</p>}</section>}
+        {commercialHumanPlaytestRequired && details.build && <section className="mt-5 rounded border border-border bg-bg-elevated p-5" data-testid="text-adventure-human-playtest-review">
+          <h2 className="text-sm font-semibold">真人试玩覆盖验收</h2>
+          <p className="mt-2 text-[10px] leading-5 text-text-muted">商业文字冒险必须由作者和一名未参与生产的玩家，分别从两个不同新会话完整通关。系统冻结真实起止时间、每次选择与行动、主观评分和文字反馈；同一事件流不能重复冒充两种身份。公开代号、评分与反馈会进入社区候选证据，请勿填写真实姓名或隐私。</p>
+          {humanPlaytestGateError && <p className="mt-3 rounded border border-error/30 bg-error/5 p-3 text-[10px] text-error">真人试玩回执无法复验：{humanPlaytestGateError}</p>}
+          <div className="mt-3 grid gap-2 md:grid-cols-2">
+            {([['作者', humanPlaytestAuthor], ['独立玩家', humanPlaytestIndependent]] as const).map(([label, session]) => <article key={label} className={`rounded border p-3 text-[10px] ${session?.passed ? 'border-success/30 bg-success/5 text-success' : session ? 'border-error/30 bg-error/5 text-error' : 'border-border bg-bg-base text-text-muted'}`}><strong>{label}</strong><span className="mt-1 block">{session ? `${Math.round(session.elapsedMs / 60_000)} 分钟 · ${session.choiceCount} 选择 · ${session.meaningfulActionCount}/${session.actionCount} 有效/总行动 · ${session.dialogueActionCount} 交谈 · ${session.passed ? '通过' : '未通过'}` : '尚无完整回执'}</span>{session && <code className="mt-1 block">{compactHash(session.sessionEvidenceHash)}</code>}</article>)}
+          </div>
+          {humanPlaytestGate && <p className={`mt-3 rounded border p-3 text-[10px] ${humanPlaytestGate.evidence.passed ? 'border-success/30 bg-success/5 text-success' : 'border-accent/30 bg-accent/5 text-accent'}`}>覆盖状态：{humanPlaytestGate.evidence.passed ? '双角色均通过' : humanPlaytestGate.gateReceipt.status === 'failed' ? '最新角色证据未达标' : '仍缺另一角色'} · receipt {compactHash(humanPlaytestGate.gateReceipt.receiptHash)}</p>}
+          <div className="mt-4 grid gap-3 text-[10px] md:grid-cols-2">
+            <label className="grid gap-1"><span>选择完整试玩会话</span><select value={humanPlaytestSessionId ?? ''} onChange={event => setHumanPlaytestSessionId(event.target.value ? Number(event.target.value) : null)} className="rounded border border-border bg-bg-base p-2"><option value="">请选择</option>{completedPlaythroughs.map(item => <option key={item.sessionId} value={item.sessionId}>会话 #{item.sessionId} · {Math.round(item.elapsedMs / 60_000)} 分钟 · {item.choiceCount} 选择 · {item.meaningfulActionCount}/{item.actionCount} 有效/总行动 · {item.endingKey}</option>)}</select></label>
+            <label className="grid gap-1"><span>试玩者身份</span><select value={humanPlaytestRole} onChange={event => { const role = event.target.value as 'author' | 'independent-player'; setHumanPlaytestRole(role); setHumanPlaytestParticipantLabel(role === 'author' ? '作者' : ''); setHumanPlaytestIndependenceConfirmed(false) }} className="rounded border border-border bg-bg-base p-2"><option value="author">作者</option><option value="independent-player">未参与生产的独立玩家</option></select></label>
+          </div>
+          <label className="mt-3 grid gap-1 text-[10px]"><span>试玩者公开代号（建议匿名昵称）</span><input value={humanPlaytestParticipantLabel} onChange={event => setHumanPlaytestParticipantLabel(event.target.value)} maxLength={200} className="rounded border border-border bg-bg-base p-2" /></label>
+          {humanPlaytestRole === 'independent-player' && <label className="mt-3 flex items-start gap-2 rounded border border-border bg-bg-base p-3 text-[10px]"><input type="checkbox" checked={humanPlaytestIndependenceConfirmed} onChange={event => setHumanPlaytestIndependenceConfirmed(event.target.checked)} /><span>我确认该试玩者未参与本 Build 的故事、任务、脚本、美术或质量生产，只依据玩家界面独立完成本次会话。</span></label>}
+          {selectedHumanPlaytest && <p className="mt-3 rounded border border-border bg-bg-base p-3 text-[10px] text-text-muted">实测 {Math.round(selectedHumanPlaytest.elapsedMs / 60_000)} 分钟（目标区间 {Math.round(selectedBrief!.scale.targetPlayMinutes * 0.75)}–{Math.round(selectedBrief!.scale.targetPlayMinutes * 1.25)} 分钟）· {selectedHumanPlaytest.choiceCount}/{Math.max(2, Math.ceil(selectedBrief!.scale.targetPlayMinutes / 6))} 选择 · {selectedHumanPlaytest.meaningfulActionCount}/{Math.max(6, Math.ceil(selectedBrief!.scale.targetPlayMinutes / 4))} 个不同有效行动（总操作 {selectedHumanPlaytest.actionCount}）· {selectedHumanPlaytest.dialogueActionCount} 交谈</p>}
+          {selectedHumanPlaytestClaimedByOtherRole && <p className="mt-3 rounded border border-error/30 bg-error/5 p-3 text-[10px] text-error">这个事件流已经由另一身份签收，不能重复使用；请启动一个全新的 Build Preview 会话。</p>}
+          <fieldset className="mt-4"><legend className="font-semibold">1–5 分主观评价（3 分为最低通过线）</legend><div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">{([['comprehension', '目标与规则理解'], ['pacing', '节奏'], ['agency', '选择能动性'], ['emotionalImpact', '情绪触达']] as const).map(([key, label]) => <label key={key} className="grid gap-1"><span>{label}</span><select aria-label={label} value={humanPlaytestRatings[key]} onChange={event => setHumanPlaytestRatings(current => ({ ...current, [key]: Number(event.target.value) }))} className="rounded border border-border bg-bg-base p-2"><option value={0}>请选择</option>{[1, 2, 3, 4, 5].map(score => <option key={score} value={score}>{score} 分</option>)}</select></label>)}</div></fieldset>
+          <div className="mt-4 grid gap-3 md:grid-cols-2">{([['comprehensionObstacles', '理解障碍'], ['boringMoments', '无聊或拖沓点'], ['errors', '错误或异常'], ['choiceExperience', '选择与后果感受'], ['endingFeedback', '结局反馈']] as const).map(([key, label]) => <label key={key} className="grid gap-1 text-[10px]"><span>{label}（没有时明确写“无”）</span><textarea value={humanPlaytestFeedback[key]} onChange={event => setHumanPlaytestFeedback(current => ({ ...current, [key]: event.target.value }))} rows={2} maxLength={2000} className="rounded border border-border bg-bg-base p-2" /></label>)}</div>
+          <label className="mt-3 grid gap-1 text-[10px]"><span>尚未关闭的 blocking 问题（每行一项；没有则留空）</span><textarea value={humanPlaytestBlockingIssues} onChange={event => setHumanPlaytestBlockingIssues(event.target.value)} rows={2} maxLength={4000} className="rounded border border-border bg-bg-base p-2" /></label>
+          <label className="mt-3 grid gap-1 text-[10px]"><span>补充说明（可选）</span><textarea value={humanPlaytestNote} onChange={event => setHumanPlaytestNote(event.target.value)} rows={2} maxLength={4000} className="rounded border border-border bg-bg-base p-2" /></label>
+          <button disabled={busy || productionRunning || !selectedHumanPlaytest || !humanPlaytestFormComplete || selectedHumanPlaytestClaimedByOtherRole} onClick={recordHumanPlaytest} className="mt-4 rounded bg-accent px-4 py-2 text-xs text-white disabled:opacity-40">冻结本次真人试玩证据</button>
+        </section>}
         {commercialPerformanceRequired && details.build?.status === 'preview-ready' && !commercialPerformancePassed && <section className="mt-5 rounded border border-error/30 bg-error/5 p-4 text-[10px] text-error" data-testid="product-production-performance-blocker">
           <strong className="block">商业发布等待真实浏览器性能验收</strong>
           <span className="mt-1 block">{performanceGateError || (performanceGate ? `最新回执未通过：${performanceGate.evidence.receipt.failures.join('、') || 'unknown'}。短时 smoke 不能解锁发布。` : '当前 Build 尚无浏览器性能回执。')}</span>
@@ -1340,7 +1495,8 @@ export default function ProductProductionStudio(props: {
             ? <button onClick={stopBrowserPerformanceLab} className="rounded border border-error/40 bg-bg-base px-4 py-2 text-xs text-error">停止性能验收</button>
             : <button disabled={busy || productionRunning} onClick={() => void startBrowserPerformanceLab()} className="rounded bg-error px-4 py-2 text-xs text-white disabled:opacity-40">开始 30 分钟商业性能验收</button>}</div>
         </section>}
-        {commercialPerformanceRequired && details.build?.status === 'preview-ready' && !commercialPlaythroughPassed && <section className="mt-5 rounded border border-error/30 bg-error/5 p-4 text-[10px] text-error" data-testid="product-production-playthrough-blocker"><strong className="block">商业发布等待作者完成主路线试玩</strong><span className="mt-1 block">{playthroughGateError || (completedPlaythroughs.length > 0 ? `最新完整试玩已到达结局 ${completedPlaythroughs[0].endingKey}；确认后将冻结事件流回执。` : '请点击“试玩未发布 Build”，实际选择到达一个结局，再回到制作页。')}</span>{completedPlaythroughs.length > 0 && !playthroughGateError && <button disabled={busy || productionRunning} onClick={confirmMainRoutePlaythrough} className="mt-3 rounded bg-error px-4 py-2 text-xs text-white disabled:opacity-40">确认本次主路线试玩并冻结回执</button>}</section>}
+        {commercialPerformanceRequired && details.build?.status === 'preview-ready' && !commercialPlaythroughPassed && <section className="mt-5 rounded border border-error/30 bg-error/5 p-4 text-[10px] text-error" data-testid="product-production-playthrough-blocker"><strong className="block">商业发布等待作者完成主路线试玩</strong><span className="mt-1 block">{playthroughGateError || (completedPlaythroughs.length > 0 ? `最新完整试玩已到达结局 ${completedPlaythroughs[0].endingKey}；实际用时 ${Math.round(completedPlaythroughs[0].elapsedMs / 60_000)} 分钟、${completedPlaythroughs[0].choiceCount} 次选择、${completedPlaythroughs[0].actionCount} 次行动、${completedPlaythroughs[0].dialogueActionCount} 次交谈。${commercialHumanPlaytestRequired ? '请在上方“真人试玩覆盖验收”中以作者身份填写质量反馈；提交时会同时冻结主路线回执。' : '确认后将冻结事件流回执。'}` : '请点击“试玩未发布 Build”，实际选择到达一个结局，再回到制作页。')}</span>{completedPlaythroughs.length > 0 && !playthroughGateError && !commercialHumanPlaytestRequired && <button disabled={busy || productionRunning} onClick={confirmMainRoutePlaythrough} className="mt-3 rounded bg-error px-4 py-2 text-xs text-white disabled:opacity-40">确认本次主路线试玩并冻结回执</button>}</section>}
+        {commercialHumanPlaytestRequired && details.build?.status === 'preview-ready' && !commercialHumanPlaytestPassed && <section className="mt-5 rounded border border-error/30 bg-error/5 p-4 text-[10px] text-error" data-testid="text-adventure-human-playtest-blocker"><strong className="block">商业发布等待双角色真人试玩</strong><span className="mt-1 block">{humanPlaytestGateError || (humanPlaytestGate?.gateReceipt.status === 'failed' ? '最新作者或独立玩家会话未满足真实时长、交互量、最低 3 分或零 blocking 问题要求。' : `作者：${humanPlaytestAuthor?.passed ? '已通过' : '未通过或缺失'}；独立玩家：${humanPlaytestIndependent?.passed ? '已通过' : '未通过或缺失'}。两者必须使用不同的完整会话。`)}</span></section>}
         {commercialHumanVisualRequired && details.build?.status === 'preview-ready' && !commercialHumanVisualPassed && <section className="mt-5 rounded border border-error/30 bg-error/5 p-4 text-[10px] text-error" data-testid="text-adventure-human-visual-blocker"><strong className="block">商业发布等待作者逐图确认</strong><span className="mt-1 block">{humanVisualGateError || (humanVisualGate ? `最新回执退回了 ${humanVisualGate.evidence.assets.filter(asset => asset.decision === 'rejected').length} 张图片；请修订后在新 Build 重新审查。` : '请在“插图素材、独立质检与作者逐图验收”中检查每张实际图片并冻结回执。')}</span></section>}
         {commercialMediaRuntimeRequired && details.build && <section className="mt-5 rounded border border-border bg-bg-elevated p-5" data-testid="product-production-media-runtime-receipt"><h2 className="text-sm font-semibold">真实浏览器媒资验收</h2><p className="mt-2 text-[10px] leading-5 text-text-muted">打开当前 Build 预览时，系统会自动解码每个冻结图片和音频对象，核对 hash/尺寸/透明度，并从 WebAudio PCM 计算声道、采样率、LUFS、true peak 与循环接缝。这里验证的是技术可显示性；逐图审美与内容确认在插图素材区独立完成。</p>{mediaRuntimeGateError ? <p className="mt-3 rounded border border-error/30 bg-error/5 p-3 text-[10px] text-error">媒资回执无法验证：{mediaRuntimeGateError}</p> : mediaRuntimeGate ? <div className={`mt-3 rounded border p-3 text-[10px] ${mediaRuntimeGate.evidence.passed ? 'border-success/30 bg-success/5 text-success' : 'border-error/30 bg-error/5 text-error'}`}><strong className="block">{mediaRuntimeGate.evidence.passed ? '全部冻结媒资已解码并通过商业规格' : '最新媒资解码或商业规格存在失败'}</strong><span className="mt-1 block">通过 {mediaRuntimeGate.evidence.assets.filter(asset => asset.status === 'decoded' && asset.policyFailures.length === 0).length}/{mediaRuntimeGate.evidence.assets.length} · receipt {compactHash(mediaRuntimeGate.gateReceipt.receiptHash)}</span>{!mediaRuntimeGate.evidence.passed && <span className="mt-1 block">失败：{mediaRuntimeGate.evidence.assets.filter(asset => asset.status === 'failed' || asset.policyFailures.length > 0).map(asset => `${asset.assetKey}:${asset.failureCode ?? asset.policyFailures.join('+')}`).join('、')}</span>}</div> : <p className="mt-3 rounded border border-error/30 bg-error/5 p-3 text-[10px] text-error">商业发布等待媒资浏览器验收。请点击“试玩未发布 Build”；进入{PRODUCT_LABELS[selectedBrief.intent.productType]}后会自动检查，无需额外操作。</p>}</section>}
       </>}

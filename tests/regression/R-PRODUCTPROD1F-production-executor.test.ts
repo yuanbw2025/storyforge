@@ -33,6 +33,7 @@ import { planTextAdventureNarrativeLocationsV1 } from '../../src/lib/adventure/n
 import {
   textAdventureActSceneKeysV1,
   textAdventureNarrativeSkeletonV1,
+  textAdventureSceneScriptPartSceneKeysV1,
 } from '../../src/lib/adventure/scene-script'
 import { resolveProductRuntimeSource } from '../../src/lib/product-production/preview-source'
 import {
@@ -102,6 +103,7 @@ async function fixtureForProduct(productType: ProductionProductKindV1, options?:
   visualLevel?: 'none' | 'key-scenes'
   omitWorldArtifacts?: boolean
   qualityProfile?: 'prototype' | 'commercial-candidate'
+  maximumModelCalls?: number
 }) {
   const owned = await seedCurrentProductWorld(`formal-${productType}`)
   const release = owned.release
@@ -116,6 +118,7 @@ async function fixtureForProduct(productType: ProductionProductKindV1, options?:
     confirmTtrpgDefaultMappings: productType === 'ttrpg',
     textAdventure: productType === 'text-adventure' ? { confirmAll: true } : undefined,
   })
+  if (options?.maximumModelCalls != null) brief.productionBudget.maximumModelCalls = options.maximumModelCalls
   if (options?.omitWorldArtifacts) {
     const artifactKeys = new Set(brief.source.selection.roleBindings.items ?? [])
     brief.source.selection.resourceKeys = brief.source.selection.resourceKeys
@@ -287,6 +290,44 @@ function productionSupervisionOutput() {
       decision: '完成真人试玩后由作者确认发布。',
     }],
     nonGoals: ['不写回 WorldRelease', '不实现 AVG 连续舞台演出', '不把专用调查机制放入通用内核'],
+  }
+}
+
+function questScriptRunOutputs(
+  brief: Awaited<ReturnType<typeof fixtureForProduct>>['brief'],
+  questScript: {
+    schema: 'storyforge.text-adventure-quest-script-artifact'
+    version: 1
+    mainObjectiveScripts: ReadonlyArray<{ sceneKey: string } & Record<string, unknown>>
+    sideQuestScripts: ReadonlyArray<unknown>
+    ambientEventScripts: ReadonlyArray<unknown>
+  },
+) {
+  const emptySupplemental = { sideQuestScripts: [], ambientEventScripts: [] }
+  return {
+    ...Object.fromEntries([0, 1, 2].flatMap(actIndex => {
+      const sceneKeys = new Set(textAdventureActSceneKeysV1(brief, actIndex))
+      return (['single', 'multi'] as const).map(routeClass => [
+        `content.quest-script.main.act-${actIndex + 1}.${routeClass}`,
+        {
+          schema: questScript.schema,
+          version: questScript.version,
+          mainObjectiveScripts: questScript.mainObjectiveScripts.filter(script => {
+            const alternativeCount = Array.isArray(script.alternatives) ? script.alternatives.length : 0
+            return sceneKeys.has(script.sceneKey) && (routeClass === 'multi'
+              ? alternativeCount > 1 : alternativeCount <= 1)
+          }),
+          ...emptySupplemental,
+        },
+      ])
+    })),
+    'content.quest-script.supplemental': {
+      schema: questScript.schema,
+      version: questScript.version,
+      mainObjectiveScripts: [],
+      sideQuestScripts: questScript.sideQuestScripts,
+      ambientEventScripts: questScript.ambientEventScripts,
+    },
   }
 }
 
@@ -589,6 +630,29 @@ function professionalTextAdventurePlanningOutputs(
       failureForwardText: `你没有按预期完成${objective.title}，却获得替代入口并继续主线。`,
     })),
   }))
+  const questScript = {
+    schema: 'storyforge.text-adventure-quest-script-artifact' as const,
+    version: 1 as const,
+    mainObjectiveScripts,
+    sideQuestScripts: [{
+      entryKey: 'lost-lamp', actionKind: 'quest-action', abilityKey: 'ability.perception',
+      difficulty: 10, costlySuccessFloor: 6, timeCostMinutes: 10,
+      successText: '你在旧仓街木箱夹层找到了引航灯。',
+      costlySuccessText: '你找到了引航灯，但手臂受伤并耽误了时间。',
+      failureForwardText: '灯被冲远了，但船工给出另一条通往灯塔的路线。',
+    }],
+    ambientEventScripts: [{
+      entryKey: 'tide-warning', actionKind: 'inspect', abilityKey: 'ability.perception',
+      difficulty: 8, costlySuccessFloor: 4, timeCostMinutes: 5,
+      successText: '你准确读出了潮汐变化。', costlySuccessText: '你读懂刻度，但浪费了一些时间。',
+      failureForwardText: '你判断失误，却因此发现墙后的避险通道。',
+    }, {
+      entryKey: 'warehouse-echo', actionKind: 'attempt', abilityKey: 'ability.resolve',
+      difficulty: 9, costlySuccessFloor: 5, timeCostMinutes: 8,
+      successText: '你发现那是被困船员的求救信号。', costlySuccessText: '你救出船员，但耽误了赶往灯塔的时间。',
+      failureForwardText: '声音消失了，却留下一张通往灯塔的旧图。',
+    }],
+  }
   return {
     'content.source-sufficiency': {
       schema: 'storyforge.text-adventure-source-sufficiency-artifact', version: 1,
@@ -608,6 +672,17 @@ function professionalTextAdventurePlanningOutputs(
     'content.cast-bible': {
       schema: 'storyforge.text-adventure-cast-bible-artifact', version: 1, characters,
     },
+    'content.narrative-arc-scenes': {
+      schema: 'storyforge.text-adventure-narrative-arc-scenes-artifact', version: 1,
+      acts,
+      endings: storyEndings.slice(0, brief.scale.targetEndingCount).map(ending => ({
+        endingKey: ending.key, sceneKey: sceneKeys[sceneKeys.length - 1],
+      })),
+    },
+    'content.narrative-decision-plan': {
+      schema: 'storyforge.text-adventure-narrative-decision-plan-artifact', version: 1,
+      decisions,
+    },
     'content.narrative-arc-plan': {
       schema: 'storyforge.text-adventure-narrative-arc-plan-artifact', version: 1,
       acts, decisions,
@@ -616,28 +691,8 @@ function professionalTextAdventurePlanningOutputs(
       })),
     },
     'content.main-quest-plan': mainQuestPlan,
-    'content.quest-script': {
-      schema: 'storyforge.text-adventure-quest-script-artifact', version: 1,
-      mainObjectiveScripts,
-      sideQuestScripts: [{
-        entryKey: 'lost-lamp', actionKind: 'quest-action', abilityKey: 'ability.perception',
-        difficulty: 10, costlySuccessFloor: 6, timeCostMinutes: 10,
-        successText: '你在旧仓街木箱夹层找到了引航灯。',
-        costlySuccessText: '你找到了引航灯，但手臂受伤并耽误了时间。',
-        failureForwardText: '灯被冲远了，但船工给出另一条通往灯塔的路线。',
-      }],
-      ambientEventScripts: [{
-        entryKey: 'tide-warning', actionKind: 'inspect', abilityKey: 'ability.perception',
-        difficulty: 8, costlySuccessFloor: 4, timeCostMinutes: 5,
-        successText: '你准确读出了潮汐变化。', costlySuccessText: '你读懂刻度，但浪费了一些时间。',
-        failureForwardText: '你判断失误，却因此发现墙后的避险通道。',
-      }, {
-        entryKey: 'warehouse-echo', actionKind: 'attempt', abilityKey: 'ability.resolve',
-        difficulty: 9, costlySuccessFloor: 5, timeCostMinutes: 8,
-        successText: '你发现那是被困船员的求救信号。', costlySuccessText: '你救出船员，但耽误了赶往灯塔的时间。',
-        failureForwardText: '声音消失了，却留下一张通往灯塔的旧图。',
-      }],
-    },
+    'content.quest-script': questScript,
+    ...questScriptRunOutputs(brief, questScript),
   } as const
 }
 
@@ -771,8 +826,21 @@ function professionalTextAdventureSceneScriptOutputs(
       summary: '已逐条覆盖本幕全部对白与玩家选择文案，角色声音、知识边界和玩家意图均可进入确定性装配。',
     }]
   }))
+  const sceneScriptPartOutputs = Object.fromEntries(Object.entries(sceneScriptOutputs).flatMap(([taskKey, bundle]) => {
+    const actIndex = Number(taskKey.slice('content.scene-script.act-'.length)) - 1
+    return textAdventureSceneScriptPartSceneKeysV1(brief, actIndex).map((sceneKeys, partIndex, parts) => {
+      const selected = new Set(sceneKeys)
+      return [`${taskKey}.part-${partIndex + 1}`, {
+        ...bundle,
+        scenes: bundle.scenes.filter(scene => selected.has(scene.sceneKey)),
+        choices: bundle.choices.filter(choice => selected.has(choice.sourceNodeKey)),
+        endings: partIndex === parts.length - 1 ? bundle.endings : [],
+      }]
+    })
+  }))
   return {
     ...sceneScriptOutputs,
+    ...sceneScriptPartOutputs,
     ...dialoguePassOutputs,
   }
 }
@@ -828,6 +896,26 @@ function fullLengthTextAdventureOutputs(
       failureForwardText: entry.failureText,
     }))
   )
+  const questScript = {
+    schema: 'storyforge.text-adventure-quest-script-artifact' as const, version: 1 as const,
+    mainObjectiveScripts: mainPlan.quests[0].objectives.map(objective => ({
+      objectiveKey: objective.key, sceneKey: objective.sceneKeys[0],
+      alternatives: objective.alternatives.map(alternative => ({
+        alternativeKey: alternative.key,
+        resolution: alternative.actionKind === 'talk'
+          ? { mode: 'automatic' as const, abilityKey: null, difficulty: null, costlySuccessFloor: null }
+          : { mode: 'check' as const, abilityKey: 'ability.perception', difficulty: 10, costlySuccessFloor: 6 },
+        timeCostMinutes: 5,
+        successText: `你完成了${objective.title}，主线获得清晰进展。`,
+        costlySuccessText: `你完成了${objective.title}，但付出了时间和体力。`,
+        failureForwardText: `你没有按预期完成${objective.title}，却找到替代推进方式。`,
+      })),
+    })),
+    sideQuestScripts: scriptedSupplemental(sideEntries, 'quest-action').map((script, index) => (
+      index === 0 ? { ...script, actionKind: 'use' as const } : script
+    )),
+    ambientEventScripts: scriptedSupplemental(ambientEntries, 'inspect'),
+  }
   return {
     ...base,
     ...professional,
@@ -844,24 +932,8 @@ function fullLengthTextAdventureOutputs(
       schema: 'storyforge.text-adventure-quest-bundle-artifact' as const, version: 1 as const, bundleKind: 'ambient' as const,
       entries: ambientEntries,
     },
-    'content.quest-script': {
-      schema: 'storyforge.text-adventure-quest-script-artifact' as const, version: 1 as const,
-      mainObjectiveScripts: mainPlan.quests[0].objectives.map(objective => ({
-        objectiveKey: objective.key, sceneKey: objective.sceneKeys[0],
-        alternatives: objective.alternatives.map(alternative => ({
-          alternativeKey: alternative.key,
-          resolution: alternative.actionKind === 'talk'
-            ? { mode: 'automatic' as const, abilityKey: null, difficulty: null, costlySuccessFloor: null }
-            : { mode: 'check' as const, abilityKey: 'ability.perception', difficulty: 10, costlySuccessFloor: 6 },
-          timeCostMinutes: 5,
-          successText: `你完成了${objective.title}，主线获得清晰进展。`,
-          costlySuccessText: `你完成了${objective.title}，但付出了时间和体力。`,
-          failureForwardText: `你没有按预期完成${objective.title}，却找到替代推进方式。`,
-        })),
-      })),
-      sideQuestScripts: scriptedSupplemental(sideEntries, 'quest-action'),
-      ambientEventScripts: scriptedSupplemental(ambientEntries, 'inspect'),
-    },
+    'content.quest-script': questScript,
+    ...questScriptRunOutputs(brief, questScript),
     'media.requirements': {
       ...base['media.requirements'], visual: [], audio: [],
     },
@@ -1033,7 +1105,7 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
     ])
 
     const arcGrouping = legalizeProductionModelProtocolDefaultsV1(
-      'content.narrative-arc-plan',
+      'content.narrative-arc-scenes',
       {
         acts: [
           { key: 'act.1', targetMinutes: '20', sceneCards: [{ key: 'scene.001', title: '一', locationOrdinal: '1' }] },
@@ -1058,6 +1130,251 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
       'acts[0].sceneCards<-frozen-scene-key-group',
       'acts[1].sceneCards<-frozen-scene-key-group',
     ])
+    const frozenArcLocations = legalizeProductionModelProtocolDefaultsV1(
+      'content.narrative-arc-scenes',
+      {
+        acts: [
+          { key: 'act.1', sceneCards: [{ key: 'scene.001', locationOrdinal: 2 }, { key: 'scene.002', locationOrdinal: 2 }] },
+          { key: 'act.2', sceneCards: [{ key: 'scene.003', locationOrdinal: 1 }] },
+          { key: 'act.3', sceneCards: [{ key: 'scene.004', locationOrdinal: 1 }] },
+        ],
+      },
+      {
+        narrativeArcSceneKeys: [['scene.001', 'scene.002'], ['scene.003'], ['scene.004']],
+        narrativeArcLocationOrdinals: [1, 1, 2, 2],
+      },
+    )
+    expect((frozenArcLocations.payload.acts as Array<{
+      sceneCards: Array<{ locationOrdinal: number }>
+    }>).flatMap(act => act.sceneCards.map(card => card.locationOrdinal))).toEqual([1, 1, 2, 2])
+    expect(frozenArcLocations.defaultedFields).toContain(
+      'acts[0].sceneCards[0].locationOrdinal<-frozen-location-plan',
+    )
+
+    const decisionKeys = legalizeProductionModelProtocolDefaultsV1(
+      'content.narrative-decision-plan',
+      {
+        decisions: [{
+          key: '第一处抉择', sceneKey: 'scene.wrong', prompt: '是否公开？',
+          options: [
+            { key: '公开真相', persistentEffectKey: '公开！', label: '公开', cost: '失去庇护' },
+            { key: 'option.invalid key', persistentEffectKey: '隐瞒！', label: '隐瞒', cost: '承担秘密' },
+          ],
+        }],
+      },
+      { narrativeDecisionSceneKeys: ['scene.001'] },
+    )
+    expect(decisionKeys.payload.decisions).toEqual([{
+      key: 'decision.1', sceneKey: 'scene.001', prompt: '是否公开？',
+      options: [
+        { key: 'option.1.1', persistentEffectKey: 'flag.decision.1.1', label: '公开', cost: '失去庇护' },
+        { key: 'option.1.2', persistentEffectKey: 'flag.decision.1.2', label: '隐瞒', cost: '承担秘密' },
+      ],
+    }])
+    expect(decisionKeys.defaultedFields).toEqual([
+      'decisions[0].key<-frozen-ordinal',
+      'decisions[0].sceneKey<-frozen-scene-plan',
+      'decisions[0].options[0].key<-frozen-ordinal',
+      'decisions[0].options[0].persistentEffectKey<-frozen-ordinal',
+      'decisions[0].options[1].key<-frozen-ordinal',
+      'decisions[0].options[1].persistentEffectKey<-frozen-ordinal',
+    ])
+
+    const projectedQuestCast = legalizeProductionModelProtocolDefaultsV1(
+      'content.main-quest-plan',
+      {
+        quests: [{
+          characterKeys: ['船长', 'character.hallucinated'],
+          objectives: [
+            { sceneKeys: ['scene.001'] },
+            { sceneKeys: ['scene.002'] },
+          ],
+        }],
+      },
+      {
+        questSceneCastPlan: [
+          { sceneKey: 'scene.001', castKeys: ['character.player', 'character.npc.1'] },
+          { sceneKey: 'scene.002', castKeys: ['character.player', 'character.npc.2'] },
+        ],
+        questFallbackCastKeys: ['character.player'],
+      },
+    )
+    expect((projectedQuestCast.payload.quests as Array<{ characterKeys: string[] }>)[0].characterKeys)
+      .toEqual(['character.player', 'character.npc.1', 'character.npc.2'])
+    expect(projectedQuestCast.defaultedFields).toEqual([
+      'quests[0].characterKeys<-scene-cast-projection',
+    ])
+
+    const topologicallyOrderedQuest = legalizeProductionModelProtocolDefaultsV1(
+      'content.main-quest-plan',
+      {
+        quests: [{
+          stages: [
+            { key: 'stage.2', objectiveKeys: ['objective.3'] },
+            { key: 'stage.1', objectiveKeys: ['objective.2', 'objective.1'] },
+          ],
+          objectives: [
+            { key: 'objective.1', sceneKeys: ['scene.001'] },
+            { key: 'objective.2', sceneKeys: ['scene.002'] },
+            { key: 'objective.3', sceneKeys: ['scene.003'] },
+          ],
+        }],
+      },
+      {
+        questSceneCastPlan: [
+          { sceneKey: 'scene.001', castKeys: [] },
+          { sceneKey: 'scene.002', castKeys: [] },
+          { sceneKey: 'scene.003', castKeys: [] },
+        ],
+      },
+    )
+    expect((topologicallyOrderedQuest.payload.quests as Array<{ stages: unknown[] }>)[0].stages)
+      .toEqual([
+        { key: 'stage.1', objectiveKeys: ['objective.1', 'objective.2'] },
+        { key: 'stage.2', objectiveKeys: ['objective.3'] },
+      ])
+    expect(topologicallyOrderedQuest.defaultedFields).toContain(
+      'quests[0].stages<-frozen-scene-topology',
+    )
+
+    const frozenQuestScriptIdentities = legalizeProductionModelProtocolDefaultsV1(
+      'content.quest-script',
+      {
+        mainObjectiveScripts: [{
+          objectiveKey: 'invented-objective', sceneKey: 'invented-scene',
+          alternatives: [{
+            alternativeKey: 'invented-alternative',
+            resolution: {
+              mode: 'automatic', abilityKey: 'ability.invented', difficulty: '31', costlySuccessFloor: '30',
+            },
+            timeCostMinutes: '4.6',
+            successText: '无需检定即可完成。', costlySuccessText: '', failureForwardText: '   ',
+          }, {
+            alternativeKey: 'invented-alternative-2',
+            resolution: {
+              mode: 'check', abilityKey: 'ability.insight', difficulty: '31', costlySuccessFloor: '30',
+            },
+            timeCostMinutes: 0,
+          }, {
+            alternativeKey: 'surplus-alternative',
+            resolution: { mode: 'automatic' }, timeCostMinutes: 5,
+          }],
+        }, {
+          objectiveKey: 'surplus-objective', sceneKey: 'surplus-scene', alternatives: [],
+        }],
+        sideQuestScripts: [{
+          entryKey: 'invented-side', abilityKey: 'invented-ability',
+          difficulty: '31', costlySuccessFloor: '30', timeCostMinutes: '8.4',
+        }, { entryKey: 'surplus-side', abilityKey: 'ability.insight' }],
+        ambientEventScripts: [{
+          entryKey: 'invented-ambient', abilityKey: 'invented-ability',
+          difficulty: 1, costlySuccessFloor: 0, timeCostMinutes: 121,
+        }, { entryKey: 'surplus-ambient', abilityKey: 'ability.agility' }],
+      },
+      {
+        questScriptIdentityPlan: {
+          mainObjectiveScripts: [{
+            objectiveKey: 'objective.1', sceneKey: 'scene.001',
+            alternativeKeys: ['alternative.1', 'alternative.2'],
+          }],
+          sideQuestScripts: [{ entryKey: 'side.1', abilityKey: 'ability.insight' }],
+          ambientEventScripts: [{ entryKey: 'ambient.1', abilityKey: 'ability.agility' }],
+        },
+      },
+    )
+    expect(frozenQuestScriptIdentities.payload).toMatchObject({
+      mainObjectiveScripts: [{
+        objectiveKey: 'objective.1', sceneKey: 'scene.001',
+        alternatives: [{
+          alternativeKey: 'alternative.1',
+          resolution: { mode: 'automatic', abilityKey: null, difficulty: null, costlySuccessFloor: null },
+          timeCostMinutes: 5,
+          successText: '无需检定即可完成。',
+          costlySuccessText: '无需检定即可完成。',
+          failureForwardText: '无需检定即可完成。',
+        }, {
+          alternativeKey: 'alternative.2',
+          resolution: {
+            mode: 'check', abilityKey: 'ability.insight', difficulty: 30, costlySuccessFloor: 29,
+          },
+          timeCostMinutes: 1,
+        }],
+      }],
+      sideQuestScripts: [{
+        entryKey: 'side.1', abilityKey: 'ability.insight',
+        difficulty: 30, costlySuccessFloor: 29, timeCostMinutes: 8,
+      }],
+      ambientEventScripts: [{
+        entryKey: 'ambient.1', abilityKey: 'ability.agility',
+        difficulty: 2, costlySuccessFloor: 1, timeCostMinutes: 120,
+      }],
+    })
+    expect(frozenQuestScriptIdentities.defaultedFields).toHaveLength(27)
+    expect(frozenQuestScriptIdentities.defaultedFields).toEqual(expect.arrayContaining([
+      'mainObjectiveScripts[1..1]<-discarded-surplus',
+      'mainObjectiveScripts[0].alternatives[2..2]<-discarded-surplus',
+      'sideQuestScripts[1..1]<-discarded-surplus',
+      'ambientEventScripts[1..1]<-discarded-surplus',
+    ]))
+
+    const flattenedQuestObjectives = legalizeProductionModelProtocolDefaultsV1(
+      'content.main-quest-plan',
+      {
+        quests: [{
+          key: 'quest.main', title: '主线', description: '主线说明', characterKeys: [],
+          stages: [{
+            key: 'stage.1', title: '启程',
+            objectives: [{
+              key: 'objective.1', title: '登船', sceneKeys: ['scene.001'], locationOrdinal: 2,
+              alternatives: [{
+                actionKind: 'inspect', targetCharacterKey: 'character.npc.1',
+                persistentEffectKeys: ['记住了潮汐！'],
+              }, {
+                actionKind: 'talk', targetCharacterKey: 'character.player',
+              }],
+            }],
+          }],
+        }],
+      },
+      {
+        questSceneCastPlan: [{
+          sceneKey: 'scene.001', castKeys: ['character.player', 'character.npc.1'],
+          nonPlayerCastKeys: ['character.npc.1'], locationOrdinal: 1,
+        }],
+      },
+    )
+    const flattenedQuest = (
+      flattenedQuestObjectives.payload.quests as Array<Record<string, unknown>>
+    )[0]
+    expect(flattenedQuest.stages).toEqual([{
+      key: 'stage.1', title: '启程', objectiveKeys: ['objective.1'],
+    }])
+    expect(flattenedQuest.objectives).toEqual([{
+      key: 'objective.1', title: '登船', sceneKeys: ['scene.001'], locationOrdinal: 1, stageKey: 'stage.1',
+      alternatives: [{
+        actionKind: 'inspect', targetCharacterKey: null,
+        persistentEffectKeys: ['flag.quest.1.objective.1.alternative.1.effect.1'],
+      }, {
+        actionKind: 'talk', targetCharacterKey: 'character.npc.1',
+        persistentEffectKeys: ['flag.quest.1.objective.1.alternative.2.effect.1'],
+      }],
+    }])
+    expect(flattenedQuest.characterKeys).toEqual(['character.player', 'character.npc.1'])
+    expect(flattenedQuestObjectives.defaultedFields).toContain(
+      'quests[0].objectives[0].alternatives[0].targetCharacterKey<-non-talk-null',
+    )
+    expect(flattenedQuestObjectives.defaultedFields).toContain(
+      'quests[0].objectives[0].alternatives[1].targetCharacterKey<-sole-scene-npc',
+    )
+    expect(flattenedQuestObjectives.defaultedFields).toContain(
+      'quests[0].objectives[0].alternatives[1].persistentEffectKeys<-required-event-flag',
+    )
+    expect(flattenedQuestObjectives.defaultedFields).toContain(
+      'quests[0].objectives[0].alternatives[0].persistentEffectKeys<-frozen-ordinal',
+    )
+    expect(flattenedQuestObjectives.defaultedFields).toContain(
+      'quests[0].objectives[0].locationOrdinal<-scene-location-projection',
+    )
 
     const narrative = legalizeProductionModelProtocolDefaultsV1('content.narrative', {
       nodes: [{
@@ -1087,15 +1404,20 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
     ])
 
     const quests = legalizeProductionModelProtocolDefaultsV1('content.adventure-ambient-events', {
-      entries: [{ key: 'tide-warning', title: '潮汐警告', leaked: true }],
-    })
+      entries: [{
+        key: 'tide-warning', title: '潮汐警告', hook: '旧仓街响起三次敲击',
+        objective: '在旧仓街确认回声来源', locationOrdinal: 1, leaked: true,
+      }],
+    }, { questLocationTitles: ['潮门广场', '旧仓街'] })
     expect(quests.payload).toMatchObject({
       entries: [{
-        rewardExperience: 2, rewardCurrency: 0, timeCostMinutes: 5, leaked: true,
+        rewardExperience: 2, rewardCurrency: 0, timeCostMinutes: 5,
+        locationOrdinal: 2, leaked: true,
       }],
     })
     expect(quests.defaultedFields).toEqual([
       'entries[0].rewardExperience', 'entries[0].rewardCurrency', 'entries[0].timeCostMinutes',
+      'entries[0].locationOrdinal<-hook-objective-location',
     ])
     expect(quests.discardedNullEntries).toEqual([])
     expect(quests.discardedUnregisteredStateFields).toEqual([])
@@ -1291,6 +1613,15 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
       ],
       authorResolution: null, signal: new AbortController().signal,
     }
+    const legacyTwoImageBrief = structuredClone(owned.brief)
+    legacyTwoImageBrief.media.imageCount = 2
+    const legacyExecutor = createConfiguredProductProductionExecutorV1({
+      production,
+      brief: legacyTwoImageBrief,
+    })
+    await expect(legacyExecutor(gateInput)).rejects.toThrow(
+      '商业文字冒险媒资计划不足:2/12',
+    )
     await expect(executor(gateInput)).rejects.toThrow('需要作者明确确认角色视觉锚点')
     const confirmed = await executor({
       ...gateInput,
@@ -2023,12 +2354,12 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
         },
       },
     })
-    const validArcPlan = outputs['content.narrative-arc-plan']
+    const validArcPlan = outputs['content.narrative-arc-scenes']
     const invalidArcPlan = structuredClone(validArcPlan) as {
       acts: Array<{ sceneCards: unknown[] }>
     }
     invalidArcPlan.acts[0].sceneCards = invalidArcPlan.acts[0].sceneCards.slice(1)
-    outputs['content.narrative-arc-plan'] = invalidArcPlan
+    outputs['content.narrative-arc-scenes'] = invalidArcPlan
     const arcBlocked = await runProductProductionUntilBlockedV1({
       scope: owned.scope, productionId: owned.productionId,
       executor: createConfiguredProductProductionExecutorV1({
@@ -2038,7 +2369,7 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     })
     expect(arcBlocked).toMatchObject({ terminal: false, buildStatus: 'recovery-required' })
     expect(JSON.parse((await db.productBuilds.get(arcBlocked.buildId))!.failureJson)).toMatchObject({
-      taskKey: 'content.narrative-arc-plan', detail: expect.stringContaining('sceneCards 数量无效'),
+      taskKey: 'content.narrative-arc-scenes', detail: expect.stringContaining('sceneCards 数量无效'),
     })
     const decisionBeforeArcRetry = await db.productBuildArtifacts
       .where('[buildId+artifactKey]').equals([arcBlocked.buildId, 'content.source-decision'])
@@ -2050,11 +2381,11 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
       command: {
         type: 'resolve-blocker', commandId: 'narrative-arc.retry',
         expectedStateRevision: arcBlockedProduction.stateRevision,
-        blockerKey: 'content.narrative-arc-plan',
+        blockerKey: 'content.narrative-arc-scenes',
         resolution: { action: 'retry', note: '修正三幕冻结场景槽位后继续。' },
       },
     })
-    outputs['content.narrative-arc-plan'] = validArcPlan
+    outputs['content.narrative-arc-scenes'] = validArcPlan
     const completed = await runProductProductionUntilBlockedV1({
       scope: owned.scope, productionId: owned.productionId,
       executor: createConfiguredProductProductionExecutorV1({
@@ -2088,8 +2419,12 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     const outputs = fullLengthTextAdventureOutputs(owned.brief) as Record<string, unknown>
     const sceneScriptSystems: string[] = []
     const sceneScriptContexts: string[] = []
+    let narrativeArcSystem = ''
+    let narrativeDecisionSystem = ''
+    let mainQuestSystem = ''
     let productModuleSystem = ''
     let sideQuestSystem = ''
+    let questScriptSystem = ''
     const dialoguePassSystems: string[] = []
     const dialoguePassContexts: string[] = []
     let qualityReviewSystem = ''
@@ -2105,8 +2440,12 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
         sceneScriptSystems.push(request.system)
         sceneScriptContexts.push(request.contextText)
       }
+      if (taskKey === 'content.narrative-arc-scenes') narrativeArcSystem = request.system
+      if (taskKey === 'content.narrative-decision-plan') narrativeDecisionSystem = request.system
+      if (taskKey === 'content.main-quest-plan') mainQuestSystem = request.system
       if (taskKey === 'content.product-module') productModuleSystem = request.system
       if (taskKey === 'content.adventure-side-quests') sideQuestSystem = request.system
+      if (taskKey.startsWith('content.quest-script.')) questScriptSystem += request.system
       if (taskKey.startsWith('content.dialogue-pass.act-')) {
         dialoguePassSystems.push(request.system)
         dialoguePassContexts.push(request.contextText)
@@ -2145,20 +2484,41 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
       projection,
       `full-length text-adventure projection:\n${JSON.stringify(projection, null, 2)}\nfailure=${projectedBuild?.failureJson}`,
     ).toMatchObject({ terminal: true, buildStatus: 'release-ready' })
-    expect(sceneScriptSystems).toHaveLength(3)
+    expect(sceneScriptSystems).toHaveLength(6)
     const actOneSceneSystem = sceneScriptSystems.find(system => (
-      system.includes('任务=content.scene-script.act-1')
+      system.includes('任务=content.scene-script.act-1.part-1')
     ))
     const actThreeSceneSystem = sceneScriptSystems.find(system => (
-      system.includes('任务=content.scene-script.act-3')
+      system.includes('任务=content.scene-script.act-3.part-2')
     ))
     expect(actOneSceneSystem).toContain('你是第 1 幕的专职分场叙事作者')
     expect(actOneSceneSystem).toContain('"sceneKey":"scene.001","locationTitle":"地点 1-1-1"')
+    expect(actOneSceneSystem).toContain('"sceneKey":"scene.001","beats0MustStartWith":"地点 1-1-1"')
+    expect(actOneSceneSystem).toContain('beats[0] 必须是 narration、speakerKey=null')
+    expect(actOneSceneSystem).toContain('text 的第一个字开始逐字复制 beats0MustStartWith')
     expect(actOneSceneSystem).toContain('一律不得改写')
+    expect(actOneSceneSystem).toContain('每个 locationTitle 必须至少一次逐字出现在对应 scene')
+    expect(actOneSceneSystem).toContain('简称不能证明场景已经落实到冻结地点')
+    expect(actOneSceneSystem).toContain('choices 只能作为根对象的数组')
+    expect(actOneSceneSystem).toContain('禁止填写角色姓名、称谓、narrator、空字符串或 null')
+    expect(actOneSceneSystem).toContain('必须使用 kind=narration 且 speakerKey=null')
     expect(actThreeSceneSystem).toContain('"endings":["ending.001","ending.002","ending.003"]')
-    expect(sceneScriptContexts).toHaveLength(3)
+    expect(narrativeArcSystem).toContain('场景与地点的冻结映射=')
+    expect(narrativeArcSystem).toContain('"sceneKey":"scene.001","locationOrdinal":1,"locationTitle":"地点 1-1-1"')
+    expect(narrativeDecisionSystem).toContain('你是同一位叙事设计师的决定设计 Run')
+    expect(narrativeDecisionSystem).toContain('"decisionKey":"decision.1","sceneKey":"scene.001"')
+    expect(narrativeDecisionSystem).toContain('"optionKeys":["option.1.1","option.1.2"]')
+    expect(mainQuestSystem).toContain('场景的冻结地点与出场角色约束=')
+    expect(mainQuestSystem).toContain('characterKeys 将由系统确定性投影')
+    expect(mainQuestSystem).toContain('quests[0] 必须同时包含 key/title/description/characterKeys/stages/objectives')
+    expect(mainQuestSystem).toContain('每个主线 objective.sceneKeys 必须恰好包含一个场景 key')
+    expect(mainQuestSystem).toContain('locationOrdinal 必须复制所引用场景共同绑定的地点编号')
+    expect(mainQuestSystem).toContain('stage 及其 objectiveKeys 必须按场景约束数组中的 sceneKey 顺序单调推进')
+    expect(mainQuestSystem).toContain('nonPlayerCastKeys 是 talk 目标的唯一白名单')
+    expect(mainQuestSystem).toContain('"nonPlayerCastKeys"')
+    expect(sceneScriptContexts).toHaveLength(6)
     const actOneSceneContext = sceneScriptContexts.find(context => (
-      context.includes('"taskKey":"content.scene-script.act-1"')
+      context.includes('"taskKey":"content.scene-script.act-1.part-1"')
     ))
     expect(actOneSceneContext).toContain('storyforge.text-adventure-scene-script-inputs')
     expect(actOneSceneContext).not.toContain('storyforge.product-production.artifact-inputs')
@@ -2166,9 +2526,18 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     expect(sideQuestSystem).toContain('地点编号与标题的唯一映射=')
     expect(sideQuestSystem).toContain('"locationOrdinal":1,"locationTitle":"地点 1-1-1"')
     expect(sideQuestSystem).toContain('不得伪装成尚未实现的跨地点多阶段任务')
+    expect(sideQuestSystem).toContain('hook 与 objective 必须都能在绑定地点当场成立')
+    expect(sideQuestSystem).toContain('abilityKey 只能逐字使用这些上游已登记能力=')
+    expect(sideQuestSystem).toContain('"ability.perception"')
+    expect(questScriptSystem).toContain('上游已冻结的脚本身份与顺序=')
+    expect(questScriptSystem).toContain('不得重新命名、翻译或按自己的理解排序')
+    expect(questScriptSystem).toContain('check.resolution.abilityKey 只能逐字使用')
+    expect(questScriptSystem).toContain('"ability.perception"')
     expect(dialoguePassSystems).toHaveLength(3)
     expect(dialoguePassSystems[0]).toContain('独立对白编辑，不是分场作者')
-    expect(dialoguePassSystems[0]).toContain('每个 dialogue beat 和 choice 必须恰好审校一次')
+    expect(dialoguePassSystems[0]).toContain('使用序号差量协议')
+    expect(dialoguePassSystems[0]).toContain('reviewedBeatCount')
+    expect(dialoguePassSystems[0]).toContain('禁止回显 keep 项的原文')
     expect(dialoguePassContexts).toHaveLength(3)
     const firstActDialogueContext = dialoguePassContexts.find(context => (
       context.includes('"taskKey":"content.dialogue-pass.act-1"')
@@ -2243,9 +2612,21 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     expect(runtimePackage.adventure.quests.filter(item => item.category === 'side')).toHaveLength(3)
     expect(runtimePackage.adventure.quests.filter(item => item.category === 'side')
       .every(item => item.initialStatus === 'available')).toBe(true)
+    expect(runtimePackage.adventure.quests.filter(item => item.category === 'side')
+      .every(item => item.stages.length === 2 && item.objectives.length === 2)).toBe(true)
     expect(runtimePackage.adventure.actions.filter(item => item.key.startsWith('action.accept.side.'))).toHaveLength(3)
     expect(runtimePackage.adventure.actions.filter(item => item.key.startsWith('action.side.'))
       .every(item => item.label.startsWith('执行：'))).toBe(true)
+    const sideUseAction = runtimePackage.adventure.actions.find(item => item.key === 'action.side.side-1')!
+    expect(sideUseAction).toMatchObject({ kind: 'use', targetKey: 'item.side.side-1' })
+    expect(sideUseAction.requirements).toContainEqual({ itemKey: 'item.side.side-1', itemQuantity: 1 })
+    expect(runtimePackage.adventure.items).toContainEqual(expect.objectContaining({
+      key: 'item.side.side-1', usableActionKey: 'action.side.side-1', category: 'quest',
+    }))
+    expect(runtimePackage.adventure.actions).toContainEqual(expect.objectContaining({
+      key: 'action.prepare.side.side-1', kind: 'take',
+      successEffects: [expect.objectContaining({ op: 'gain-item', itemKey: 'item.side.side-1' })],
+    }))
     expect(runtimePackage.adventure.actions.filter(item => item.key.startsWith('action.ambient.'))
       .every(item => item.label.startsWith('处理：'))).toBe(true)
     expect(runtimePackage.adventure.actions.some(item => item.key.startsWith('action.travel.'))).toBe(false)
@@ -2342,8 +2723,11 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
       baseSequence: acceptBase.sequence,
       baseStateHash: acceptBase.stateHash,
     })
-    expect((await readProductRuntimeState(preview.sessionId)).adventure?.quests
-      .find(item => item.questKey === entrySideQuest.key)?.status).toBe('active')
+    const acceptedSideQuest = (await readProductRuntimeState(preview.sessionId)).adventure?.quests
+      .find(item => item.questKey === entrySideQuest.key)
+    expect(acceptedSideQuest?.status).toBe('active')
+    expect(acceptedSideQuest?.objectives[0]).toMatchObject({ completed: true, optional: false })
+    expect(acceptedSideQuest?.objectives[1]).toMatchObject({ completed: false, optional: false })
 
     const mainRoute = await startProductProductionPreviewV1({
       scope: owned.scope, productionId: owned.productionId,
@@ -2428,12 +2812,14 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     expect(modelCallCount).toBe(modelCallCountBeforeReassembly + 1)
     const reassemblyArtifacts = await db.productBuildArtifacts.where('buildId').equals(reassembled.buildId).toArray()
     expect(reassemblyArtifacts.filter(item => item.status === 'accepted').map(item => item.artifactKey).sort()).toEqual([
-      'content.narrative', 'media.visual-bible', 'quality.autoplay', 'quality.playtest-plan', 'quality.report', 'runtime.package',
+      'content.narrative', 'content.narrative-arc-plan', 'content.quest-script',
+      'content.scene-script.act-1', 'content.scene-script.act-2', 'content.scene-script.act-3', 'media.visual-bible',
+      'quality.autoplay', 'quality.playtest-plan', 'quality.report', 'runtime.package',
     ])
   }, 30_000)
 
   it('保留独立叙事审查证据，并在存在阻塞问题时拒绝装配可玩包', async () => {
-    const owned = await fixtureForProduct('text-adventure', { visualLevel: 'none' })
+    const owned = await fixtureForProduct('text-adventure', { visualLevel: 'none', maximumModelCalls: 48 })
     const textRequirement = owned.brief.capabilityRequirements.find(item => item.mediaClass === 'text')!
     const bindingHash = await hashProductProductionValueV2({ provider: 'blocking-quality-review' })
     const outputs = modelOutputs(
@@ -2476,7 +2862,7 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
       const taskKey = Object.keys(outputs).find(key => request.system.includes(`任务=${key}。`))
       if (!taskKey) throw new Error(`unknown blocking-review task:${request.system}`)
       taskCalls.set(taskKey, (taskCalls.get(taskKey) ?? 0) + 1)
-      if (taskKey === 'content.scene-script.act-1' && (taskCalls.get(taskKey) ?? 0) >= 2) {
+      if (taskKey === 'content.scene-script.act-1.part-1' && (taskCalls.get(taskKey) ?? 0) >= 2) {
         repairedSceneContexts.push(request.contextText)
         repairedSceneSystems.push(request.system)
         if (failFirstRepairEpoch) throw new Error('fixture repair provider timeout')
@@ -2545,19 +2931,24 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     })
     expect(interruptedRepair).toMatchObject({ terminal: false, buildStatus: 'recovery-required' })
     const interruptedBuild = (await db.productBuilds.get(build.id!))!
-    expect(JSON.parse(interruptedBuild.failureJson)).toMatchObject({
-      taskKey: 'content.scene-script.act-1',
+    const interruptedFailure = JSON.parse(interruptedBuild.failureJson) as {
+      taskKey: string
+      taskFailures: Record<string, { detail?: string }>
+    }
+    expect(interruptedFailure).toMatchObject({
       repairCause: {
         taskKey: 'integration.package', detail: expect.stringContaining('文字冒险叙事质量审查未通过'),
       },
     })
+    expect(interruptedFailure.taskFailures['content.scene-script.act-1.part-1']?.detail)
+      .toContain('fixture repair provider timeout')
     failFirstRepairEpoch = false
     const interruptedProduction = (await db.productProductions.get(owned.productionId))!
     await executeProductProductionCommand({
       scope: owned.scope, productionId: owned.productionId,
       command: {
         type: 'resolve-blocker', commandId: 'text-adventure.quality-repair.retry-after-timeout',
-        expectedStateRevision: interruptedProduction.stateRevision, blockerKey: 'content.scene-script.act-1',
+        expectedStateRevision: interruptedProduction.stateRevision, blockerKey: interruptedFailure.taskKey,
         resolution: { action: 'retry', note: '保留原质量反馈并重试超时的主线修复' },
       },
     })
@@ -2574,11 +2965,18 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     const expectedCalls = new Map([
       ['production.supervision', 1], ['content.source-sufficiency', 1], ['content.design', 1], ['content.story-bible', 1],
       ['content.cast-bible', 1], ['content.adventure-architecture', 1],
-      ['content.narrative-arc-plan', 1], ['content.main-quest-plan', 1],
-      ['content.scene-script.act-1', 4], ['content.scene-script.act-2', 2], ['content.scene-script.act-3', 2],
+      ['content.narrative-arc-scenes', 1], ['content.narrative-decision-plan', 1],
+      ['content.main-quest-plan', 1],
+      ['content.scene-script.act-1.part-1', 4], ['content.scene-script.act-1.part-2', 2],
+      ['content.scene-script.act-2.part-1', 2],
+      ['content.scene-script.act-3.part-1', 2],
       ['content.dialogue-pass.act-1', 2], ['content.dialogue-pass.act-2', 2],
       ['content.dialogue-pass.act-3', 2],
-      ['content.product-module', 1], ['content.adventure-side-quests', 2], ['content.quest-script', 2],
+      ['content.product-module', 1], ['content.adventure-side-quests', 2],
+      ['content.quest-script.main.act-1.single', 1], ['content.quest-script.main.act-1.multi', 1],
+      ['content.quest-script.main.act-2.single', 1], ['content.quest-script.main.act-2.multi', 1],
+      ['content.quest-script.main.act-3.single', 1], ['content.quest-script.main.act-3.multi', 1],
+      ['content.quest-script.supplemental', 2],
       ['content.adventure-ambient-events', 1], ['content.adventure-quality-review', 2],
       ['media.requirements', 2], ['qa.playtest-strategy', 1],
     ])

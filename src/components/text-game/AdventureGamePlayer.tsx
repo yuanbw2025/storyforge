@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type KeyboardEvent } from 'react'
 import {
   ArrowLeft,
   Backpack,
@@ -18,9 +18,11 @@ import {
   Save,
   ScrollText,
   Send,
+  Settings2,
   Sparkles,
   Square,
   Trash2,
+  Users,
   WandSparkles,
   X,
 } from 'lucide-react'
@@ -45,7 +47,33 @@ import { useAIConfigStore } from '../../stores/ai-config'
 import { useDialog } from '../shared/Dialog'
 import './player-roadshow.css'
 
-type AdventurePanel = 'character' | 'world' | 'inventory' | 'equipment' | 'skills' | 'quests' | 'journal' | 'saves' | null
+type AdventurePanel = 'character' | 'world' | 'inventory' | 'equipment' | 'skills' | 'quests' | 'relationships' | 'journal' | 'ending' | 'accessibility' | 'saves' | null
+
+interface AdventureAccessibilityPreferences {
+  fontScale: number
+  lineHeight: number
+  highContrast: boolean
+  reducedMotion: boolean
+}
+
+const DEFAULT_ACCESSIBILITY: AdventureAccessibilityPreferences = {
+  fontScale: 1,
+  lineHeight: 1.9,
+  highContrast: false,
+  reducedMotion: false,
+}
+
+function initialAccessibilityPreferences(): AdventureAccessibilityPreferences {
+  try {
+    const stored = JSON.parse(localStorage.getItem('storyforge.text-adventure.accessibility') ?? '{}') as Partial<AdventureAccessibilityPreferences>
+    return {
+      fontScale: [0.9, 1, 1.15, 1.3].includes(Number(stored.fontScale)) ? Number(stored.fontScale) : 1,
+      lineHeight: [1.6, 1.9, 2.2].includes(Number(stored.lineHeight)) ? Number(stored.lineHeight) : 1.9,
+      highContrast: stored.highContrast === true,
+      reducedMotion: stored.reducedMotion === true,
+    }
+  } catch { return DEFAULT_ACCESSIBILITY }
+}
 
 interface AdventureNarrativePlayback {
   eventSequence: number
@@ -189,6 +217,7 @@ export default function AdventureGamePlayer(props: {
   const [catalogReleaseId, setCatalogReleaseId] = useState<number | null>(null)
   const [mediaUrls, setMediaUrls] = useState<Record<string, string>>({})
   const [mediaFailures, setMediaFailures] = useState<Array<{ assetKey: string; reason: string }>>([])
+  const [accessibility, setAccessibility] = useState<AdventureAccessibilityPreferences>(initialAccessibilityPreferences)
   const playbackSessionRef = useRef<number | null>(null)
   const transcriptHydratedRef = useRef(false)
   const knownTranscriptSequencesRef = useRef<Set<number>>(new Set())
@@ -269,11 +298,31 @@ export default function AdventureGamePlayer(props: {
       && !/^产品角色\s*\d+$/u.test(profile.name.trim())
     ))
   }, [currentParticipantKeys, manifest?.interaction.profiles, playerIdentity?.participantKey])
+  const relationshipProfiles = useMemo(() => (manifest?.interaction.profiles ?? []).map(profile => ({
+    profile,
+    values: (store.runtimeState.interaction?.relationships ?? []).filter(relationship => (
+      relationship.fromParticipantKey === profile.participantKey
+      && relationship.toParticipantKey === (store.runtimeState.interaction?.playerKey ?? 'player')
+    )),
+    changes: (store.runtimeState.interaction?.relationshipHistory ?? []).filter(change => (
+      change.fromParticipantKey === profile.participantKey
+      && change.toParticipantKey === (store.runtimeState.interaction?.playerKey ?? 'player')
+    )),
+  })), [manifest?.interaction.profiles, store.runtimeState.interaction])
+  const endingJourney = useMemo(() => (store.runtimeState.narrative?.choiceHistory ?? []).map(history => {
+    const choice = manifest?.narrative.choices.find(item => item.choiceKey === history.choiceKey)
+    const target = manifest?.narrative.nodes.find(item => item.key === history.toNodeKey)
+    return { ...history, label: presentationText(choice?.text) || history.choiceKey, targetTitle: presentationText(target?.title) || history.toNodeKey }
+  }), [manifest?.narrative.choices, manifest?.narrative.nodes, store.runtimeState.narrative?.choiceHistory])
   const transcript = useMemo(() => manifest && adventure
     ? projectAdventureTranscript(manifest, adventure.actionHistory, store.events)
     : [], [adventure, manifest, store.events])
   const mediaCacheKey = `${store.selectedSessionId ?? 'title'}:${manifest?.presentation?.assets
     .map(asset => `${asset.assetKey}@${asset.version}:${asset.contentHash}`).join('|') ?? ''}`
+
+  useEffect(() => {
+    localStorage.setItem('storyforge.text-adventure.accessibility', JSON.stringify(accessibility))
+  }, [accessibility])
 
   useEffect(() => {
     let active = true
@@ -405,7 +454,14 @@ export default function AdventureGamePlayer(props: {
   const executeAction = async (actionKey: string) => {
     if (narrativeReading) return
     setConsoleResponse(null)
-    await run(() => store.act(actionKey))
+    const entry = actions.find(item => item.action.key === actionKey)
+    if (!entry?.available) {
+      setConsoleResponse({ command: actionKey, text: entry?.reason || '这个行动当前还不能执行。' })
+      return
+    }
+    await run(() => entry.action.narrativeChoiceKey
+      ? store.choose(entry.action.narrativeChoiceKey)
+      : store.act(entry.action.key))
   }
 
   const submitCommand = async (event?: FormEvent) => {
@@ -501,7 +557,14 @@ export default function AdventureGamePlayer(props: {
     </div>
   </div>
 
-  return <div className="adventure-game adventure-player-v2" data-testid="adventure-game-player">
+  return <div
+    className={`adventure-game adventure-player-v2${accessibility.highContrast ? ' adventure-high-contrast' : ''}${accessibility.reducedMotion ? ' adventure-reduced-motion' : ''}`}
+    style={{
+      '--adventure-font-scale': accessibility.fontScale,
+      '--adventure-line-height': accessibility.lineHeight,
+    } as CSSProperties}
+    data-testid="adventure-game-player"
+  >
     <header className="adventure-gamebar adventure-console-bar">
       <button className="textgame-player-exit" aria-label="退出游戏" onClick={() => void store.select(null)}><ArrowLeft /><span>退出游戏</span></button>
       <div><small>{presentationText(manifest.definition.title)}</small><strong>{locationTitle}</strong></div>
@@ -513,7 +576,9 @@ export default function AdventureGamePlayer(props: {
         {adventureV2 && <button onClick={() => setPanel('equipment')}><Gem />装备</button>}
         <button onClick={() => setPanel('skills')}><WandSparkles />技能</button>
         <button onClick={() => setPanel('quests')}><ScrollText />任务</button>
+        {adventureV2 && <button onClick={() => setPanel('relationships')}><Users />关系</button>}
         <button onClick={() => setPanel('journal')}><History />记录</button>
+        <button onClick={() => setPanel('accessibility')}><Settings2 />显示</button>
         <button onClick={() => setPanel('saves')}><Save />存档</button>
       </nav>
     </header>
@@ -584,7 +649,7 @@ export default function AdventureGamePlayer(props: {
 
         {!!progressionChoices.length && !store.runtimeState.narrative?.completed && <section className="adventure-console-choices"><small>关键推进已经解锁</small>{progressionChoices.map(choice => { const action = narrativeActionByChoice.get(choice.choiceKey); return <button key={choice.choiceKey} title={action && !action.available ? presentationText(action.reason) : undefined} disabled={store.busy || narrativeReading || (action != null && !action.available)} onClick={() => void run(() => store.choose(choice.choiceKey))}>{presentationText(choice.text)}<ChevronRight /></button> })}</section>}
         {!!endingChoices.length && !store.runtimeState.narrative?.completed && <section className="adventure-console-choices"><small>最终抉择已经解锁</small>{endingChoices.map(choice => { const action = narrativeActionByChoice.get(choice.choiceKey); return <button key={choice.choiceKey} title={action && !action.available ? presentationText(action.reason) : undefined} disabled={store.busy || narrativeReading || (action != null && !action.available)} onClick={() => void run(() => store.choose(choice.choiceKey))}>{presentationText(choice.text)}<ChevronRight /></button> })}</section>}
-        {store.runtimeState.narrative?.completed && <section className="adventure-console-ending"><BookOpenCheck /><div><small>冒险结束</small><h2>{store.runtimeState.narrative.nodes.find(item => item.key === store.runtimeState.narrative?.endingKey)?.title}</h2><p>这条时间线已经完整保存。你可以从检查点探索另一种结果。</p></div><button onClick={() => setPanel('saves')}><GitBranch />查看时间线</button></section>}
+        {store.runtimeState.narrative?.completed && <section className="adventure-console-ending"><BookOpenCheck /><div><small>冒险结束</small><h2>{store.runtimeState.narrative.nodes.find(item => item.key === store.runtimeState.narrative?.endingKey)?.title}</h2><p>这条时间线已经完整保存。你可以回顾关键决定，或从检查点探索另一种结果。</p></div><span><button onClick={() => setPanel('ending')}><BookOpenCheck />结局因果</button><button onClick={() => setPanel('saves')}><GitBranch />查看时间线</button></span></section>}
 
         {!store.runtimeState.narrative?.completed && <section className={`adventure-command-center${narrativeReading ? ' is-reading' : ''}`} aria-label="冒险指令台" aria-busy={narrativeReading}>
           <header><div><small>{narrativeReading ? '故事正在继续…' : '你要做什么？'}</small><p>{narrativeReading ? '读完当前行动结果后，下一轮指令会重新开放。' : '输入自然语言命令，或选择当前可执行的文字指令。'}</p></div><span>{narrativeReading ? '正在逐句呈现' : aiReady ? '自由表达已连接主 Agent' : '离线确定性模式'}</span></header>
@@ -600,13 +665,16 @@ export default function AdventureGamePlayer(props: {
 
     <nav className="adventure-mobile-dock" aria-label="冒险快捷功能"><button onClick={() => setPanel(adventureV2 ? 'character' : 'inventory')}>{adventureV2 ? <CircleDot /> : <Backpack />}<span>{adventureV2 ? '角色' : '背包'}</span></button><button onClick={() => setPanel('inventory')}><Backpack /><span>背包</span></button><button onClick={() => setPanel('skills')}><WandSparkles /><span>技能</span></button><button onClick={() => setPanel('quests')}><ScrollText /><span>任务</span></button><button onClick={() => setPanel('saves')}><Save /><span>存档</span></button></nav>
 
-    {panel && <div className="adventure-panel-backdrop" role="presentation"><section className="adventure-panel" aria-label={{ character: '角色状态', world: '区域地图', inventory: '背包', equipment: '装备', skills: '技能', quests: '任务', journal: '冒险记录', saves: '存档与时间线' }[panel]}><header><div><small>ADVENTURER'S JOURNAL</small><h2>{{ character: '角色状态', world: '区域与地点', inventory: '背包与物品', equipment: '装备栏', skills: '角色能力', quests: '任务日志', journal: '冒险记录', saves: '存档与时间线' }[panel]}</h2></div><button aria-label="关闭面板" onClick={() => setPanel(null)}><X /></button></header><div className="adventure-panel-content">
+    {panel && <div className="adventure-panel-backdrop" role="presentation"><section className="adventure-panel" aria-label={{ character: '角色状态', world: '区域地图', inventory: '背包', equipment: '装备', skills: '技能', quests: '任务', relationships: '人物关系', journal: '冒险记录', ending: '结局因果回顾', accessibility: '阅读与可访问性', saves: '存档与时间线' }[panel]}><header><div><small>ADVENTURER'S JOURNAL</small><h2>{{ character: '角色状态', world: '区域与地点', inventory: '背包与物品', equipment: '装备栏', skills: '角色能力', quests: '任务日志', relationships: '人物关系', journal: '冒险记录', ending: '结局因果回顾', accessibility: '阅读与可访问性', saves: '存档与时间线' }[panel]}</h2></div><button aria-label="关闭面板" onClick={() => setPanel(null)}><X /></button></header><div className="adventure-panel-content">
       {panel === 'character' && adventureV2 && <div className="adventure-system-grid"><article>{characterPortraitAsset && mediaUrls[characterPortraitAsset.assetKey] && <figure className="adventure-panel-portrait"><img src={mediaUrls[characterPortraitAsset.assetKey]} alt={characterPortraitAsset.altText} /></figure>}<small>身份与成长</small><strong>{playerIdentity?.name ?? '玩家'} · 等级 {adventure.abilities[adventureV2.progression.levelAbilityKey] ?? 1}</strong><p>{playerIdentity?.description}</p><dl>{adventureV2.resources.filter(item => item.role !== 'clock').map(item => <div key={item.key}><dt>{item.title}</dt><dd>{adventure.resources[item.key]} / {item.maximum}</dd></div>)}</dl></article><article><small>基础属性</small><dl>{visibleAbilities.filter(item => abilityRole(item.definition.key) === 'stat').map(item => <div key={item.definition.key}><dt>{item.definition.title}</dt><dd>{item.effective}{item.effective !== item.base ? `（装备 +${item.effective - item.base}）` : ''}</dd></div>)}</dl></article></div>}
-      {panel === 'world' && adventureV2 && <div className="adventure-system-grid">{adventureV2.regions.map(region => <article key={region.key}><small>{region.key === currentRegion?.key ? '当前大区域' : '大区域'}</small><strong>{region.title}</strong><p>{region.description}</p>{adventureV2.areas.filter(area => area.regionKey === region.key).map(area => <section key={area.key}><b>{area.title}</b><span>{adventureV2.locations.filter(item => item.areaKey === area.key).map(item => `${item.key === adventure.currentLocationKey ? '● ' : adventure.visitedLocationKeys.includes(item.key) ? '○ ' : '◇ '}${item.title}`).join(' · ')}</span></section>)}</article>)}</div>}
-      {panel === 'inventory' && <div className="adventure-inventory-grid">{playerItems.map(item => { const definition = manifest.adventure.items.find(value => value.key === item.itemKey); return <article key={`${item.itemKey}:${item.state}`}><i>{itemIcon(definition?.tags ?? [], item.itemKey)}</i><div><small>{item.state === 'equipped' ? '已装备' : definition?.consumable ? '消耗品' : '携带中'}</small><strong>{friendlyName(definition?.title, item.itemKey)}</strong><p>{friendlyDescription(definition?.description, item.itemKey, 'item')}</p></div><b>×{item.quantity}</b></article> })}{!playerItems.length && <div className="adventure-empty">背包还是空的，探索场景会找到可携带的物品。</div>}</div>}
-      {panel === 'equipment' && adventureV2 && <div className="adventure-system-grid">{adventureV2.equipmentSlots.map(slot => { const entry = playerItems.find(item => item.state === 'equipped' && adventureV2.items.find(definition => definition.key === item.itemKey)?.equipmentSlotKey === slot.key); const definition = entry ? adventureV2.items.find(item => item.key === entry.itemKey) : null; return <article key={slot.key}><small>{slot.title}</small><strong>{definition?.title ?? '未装备'}</strong><p>{definition?.description ?? `可放置带有 ${slot.acceptsTags.join('、') || '兼容'} 标签的装备。`}</p>{definition?.modifiers.map(modifier => <span key={modifier.abilityKey}>{adventureV2.abilities.find(item => item.key === modifier.abilityKey)?.title ?? modifier.abilityKey} {modifier.delta > 0 ? '+' : ''}{modifier.delta}</span>)}</article> })}</div>}
+      {panel === 'world' && adventureV2 && <div className="adventure-system-grid">{adventureV2.regions.map(region => <article key={region.key}><small>{region.key === currentRegion?.key ? '当前大区域' : '大区域'}</small><strong>{region.title}</strong><p>{region.description}</p>{adventureV2.areas.filter(area => area.regionKey === region.key).map(area => <section key={area.key}><b>{area.title}</b>{adventureV2.locations.filter(item => item.areaKey === area.key).map((item, index) => { const move = actions.find(candidate => candidate.available && candidate.action.kind === 'move' && candidate.action.targetKey === item.key); const revealed = item.key === adventure.currentLocationKey || adventure.visitedLocationKeys.includes(item.key) || move != null; return <span className="adventure-map-location" key={item.key}><i>{item.key === adventure.currentLocationKey ? '●' : adventure.visitedLocationKeys.includes(item.key) ? '○' : '◇'}</i>{revealed ? item.title : `未探索地点 ${index + 1}`}{move && item.key !== adventure.currentLocationKey && <button onClick={() => void executeAction(move.action.key)}>前往</button>}</span> })}</section>)}</article>)}</div>}
+      {panel === 'inventory' && <div className="adventure-inventory-grid">{playerItems.map(item => { const definition = manifest.adventure.items.find(value => value.key === item.itemKey); const itemActions = actions.filter(candidate => candidate.available && candidate.action.targetKey === item.itemKey && ['use', 'give'].includes(candidate.action.kind)); return <article key={`${item.itemKey}:${item.state}`}><i>{itemIcon(definition?.tags ?? [], item.itemKey)}</i><div><small>{item.state === 'equipped' ? '已装备' : definition?.consumable ? '消耗品' : '携带中'}</small><strong>{friendlyName(definition?.title, item.itemKey)}</strong><p>{friendlyDescription(definition?.description, item.itemKey, 'item')}</p>{itemActions.length > 0 && <span className="adventure-item-actions">{itemActions.map(action => <button key={action.action.key} onClick={() => void executeAction(action.action.key)}>{presentationText(action.action.label)}</button>)}</span>}</div><b>×{item.quantity}</b></article> })}{!playerItems.length && <div className="adventure-empty">背包还是空的，探索场景会找到可携带的物品。</div>}</div>}
+      {panel === 'equipment' && adventureV2 && <div className="adventure-system-grid">{adventureV2.equipmentSlots.map(slot => { const entry = playerItems.find(item => item.state === 'equipped' && adventureV2.items.find(definition => definition.key === item.itemKey)?.equipmentSlotKey === slot.key); const definition = entry ? adventureV2.items.find(item => item.key === entry.itemKey) : null; const availableEquipment = playerItems.filter(item => item.state !== 'equipped' && adventureV2.items.find(candidate => candidate.key === item.itemKey)?.equipmentSlotKey === slot.key); const selectedAction = entry ? actions.find(candidate => candidate.available && candidate.action.key.startsWith('action.unequip.') && candidate.action.targetKey === entry.itemKey) : availableEquipment.map(item => actions.find(candidate => candidate.available && candidate.action.key.startsWith('action.equip.') && candidate.action.targetKey === item.itemKey)).find(Boolean); return <article key={slot.key}><small>{slot.title}</small><strong>{definition?.title ?? '未装备'}</strong><p>{definition?.description ?? `可放置带有 ${slot.acceptsTags.join('、') || '兼容'} 标签的装备。`}</p>{definition?.modifiers.map(modifier => <span key={modifier.abilityKey}>{adventureV2.abilities.find(item => item.key === modifier.abilityKey)?.title ?? modifier.abilityKey} {modifier.delta > 0 ? '+' : ''}{modifier.delta}</span>)}{selectedAction && <button className="adventure-panel-action" onClick={() => void executeAction(selectedAction.action.key)}>{presentationText(selectedAction.action.label)}</button>}</article> })}</div>}
       {panel === 'skills' && <div className="adventure-skills-grid">{visibleAbilities.filter(item => !adventureV2 || abilityRole(item.definition.key) === 'skill').map(({ definition, base, effective }) => <article key={definition.key}><i><WandSparkles /></i><div><small>能力等级 {effective}{effective !== base ? ` · 基础 ${base}` : ''}</small><strong>{friendlyName(definition.title, definition.key)}</strong><p>{friendlyDescription(definition.description, definition.key, 'ability')}</p><span><b style={{ width: `${gauge(effective, definition.minimum, definition.maximum)}%` }} /></span></div></article>)}</div>}
-      {panel === 'quests' && <div className="adventure-quest-list">{adventure.quests.map(quest => { const definition = manifest.adventure.quests.find(item => item.key === quest.questKey); return <article className={`status-${quest.status}`} key={quest.questKey}><header><span>{QUEST_STATUS[quest.status]}</span><strong>{definition?.title ?? quest.questKey}</strong></header><p>{definition?.description}</p><ul>{quest.objectives.map(item => <li className={item.completed ? 'done' : ''} key={item.objectiveKey}>{item.completed ? <Check /> : <CircleDot />}{definition?.objectives.find(value => value.key === item.objectiveKey)?.title ?? item.objectiveKey}</li>)}</ul></article> })}</div>}
+      {panel === 'quests' && <div className="adventure-quest-list">{adventure.quests.map(quest => { const definition = manifest.adventure.quests.find(item => item.key === quest.questKey); const activeObjective = quest.objectives.find(item => !item.completed && !item.optional) ?? quest.objectives.find(item => !item.completed); const activeDefinition = definition?.objectives.find(item => item.key === activeObjective?.objectiveKey); const activeStage = adventureV2?.quests.find(item => item.key === quest.questKey)?.stages.find(stage => stage.objectiveKeys.includes(activeObjective?.objectiveKey ?? '')); const actionLocationKey = activeDefinition?.alternativeActionKeys.map(actionKey => manifest.adventure.actions.find(action => action.key === actionKey)?.locationKey).find(Boolean); const actionLocation = manifest.adventure.locations.find(item => item.key === actionLocationKey); return <article className={`status-${quest.status}`} key={quest.questKey}><header><span>{QUEST_STATUS[quest.status]}</span><strong>{definition?.title ?? quest.questKey}</strong></header><p>{definition?.description}</p>{activeObjective && <div className="adventure-quest-current"><small>{activeStage ? `当前阶段 · ${activeStage.title}` : '当前目标'}</small><b>{activeDefinition?.title ?? activeObjective.objectiveKey}</b>{actionLocation && <span>地点：{actionLocation.title}</span>}</div>}<ul>{quest.objectives.map(item => <li className={item.completed ? 'done' : ''} key={item.objectiveKey}>{item.completed ? <Check /> : <CircleDot />}{definition?.objectives.find(value => value.key === item.objectiveKey)?.title ?? item.objectiveKey}</li>)}</ul></article> })}</div>}
+      {panel === 'relationships' && <div className="adventure-system-grid">{relationshipProfiles.map(({ profile, values, changes }) => <article key={profile.participantKey}><small>{profile.roleLabel || '同行者'}</small><strong>{profile.name}</strong><p>{values.length ? '关系由玩家行动的正式事件推进。' : '尚未形成可量化的关系变化。'}</p>{values.map(value => <dl key={`${value.dimensionKey}:${value.toParticipantKey}`}><div><dt>{value.label}</dt><dd>{value.value}</dd></div></dl>)}{changes.slice(-2).map(change => <span key={change.eventSequence}>{change.delta > 0 ? '+' : ''}{change.delta} · {change.reason}</span>)}</article>)}{!relationshipProfiles.length && <div className="adventure-empty">当前发布包没有可互动角色。</div>}</div>}
+      {panel === 'ending' && <div className="adventure-ending-review"><header><small>抵达结局</small><strong>{store.runtimeState.narrative?.nodes.find(item => item.key === store.runtimeState.narrative?.endingKey)?.title ?? '尚未抵达结局'}</strong><p>以下只引用这条时间线已提交的选择与行动，不由 AI 临时补写。</p></header>{endingJourney.map((item, index) => <article key={item.eventSequence}><i>{index + 1}</i><div><small>选择 #{item.eventSequence}</small><strong>{item.label}</strong><p>进入：{item.targetTitle}</p></div></article>)}{!!adventure.conditions.length && <section><small>持久后果</small>{adventure.conditions.map(condition => <span key={`${condition.conditionKey}:${condition.appliedSequence}`}>{manifest.adventure.conditions.find(item => item.key === condition.conditionKey)?.title ?? condition.conditionKey}</span>)}</section>}{!endingJourney.length && <div className="adventure-empty">完成冒险后，这里会列出抵达结局的关键决定链。</div>}</div>}
+      {panel === 'accessibility' && <div className="adventure-accessibility"><label><span>正文字号</span><select aria-label="正文字号" value={accessibility.fontScale} onChange={event => setAccessibility(current => ({ ...current, fontScale: Number(event.target.value) }))}><option value={0.9}>较小</option><option value={1}>标准</option><option value={1.15}>较大</option><option value={1.3}>特大</option></select></label><label><span>正文行距</span><select aria-label="正文行距" value={accessibility.lineHeight} onChange={event => setAccessibility(current => ({ ...current, lineHeight: Number(event.target.value) }))}><option value={1.6}>紧凑</option><option value={1.9}>标准</option><option value={2.2}>宽松</option></select></label><label><span>高对比度</span><input type="checkbox" checked={accessibility.highContrast} onChange={event => setAccessibility(current => ({ ...current, highContrast: event.target.checked }))} /></label><label><span>减少动态效果</span><input type="checkbox" checked={accessibility.reducedMotion} onChange={event => setAccessibility(current => ({ ...current, reducedMotion: event.target.checked }))} /></label><button onClick={() => setAccessibility(DEFAULT_ACCESSIBILITY)}>恢复默认</button></div>}
       {panel === 'journal' && <div className="adventure-journal">{[...adventure.actionHistory].reverse().map(item => <article key={item.eventSequence}><i>{item.eventSequence}</i><div><small>{ACTION_KIND[item.kind]} · {item.outcome === 'success' ? '成功' : item.outcome}</small><strong>{manifest.adventure.actions.find(value => value.key === item.actionKey)?.label ?? item.actionKey}</strong><p>{item.narrative}</p></div></article>)}{!adventure.actionHistory.length && <div className="adventure-empty">你的冒险还没有留下行动记录。</div>}</div>}
       {panel === 'saves' && <div className="adventure-save-panel"><section><h3><Save />保存检查点</h3><div><input value={checkpointName} onChange={event => setCheckpointName(event.target.value)} placeholder="为此刻命名" /><button disabled={!checkpointName.trim()} onClick={() => void run(async () => { await store.saveCheckpoint(checkpointName); setCheckpointName('') })}>保存</button></div></section><section><h3><GitBranch />已有检查点</h3>{store.checkpoints.map(item => <button key={item.id} onClick={() => void run(() => store.forkCheckpoint(item.id!))}><span><strong>{item.name}</strong><small>事件 #{item.throughSequence} · {formatTime(item.createdAt)}</small></span><b>从这里分支</b></button>)}{!store.checkpoints.length && <p>行动会自动保存；你也可以为重要时刻建立手动检查点。</p>}</section><section><h3><GitBranch />当前时间线分支</h3><div><input value={branchTitle} onChange={event => setBranchTitle(event.target.value)} placeholder="新时间线名称" /><button disabled={!branchTitle.trim()} onClick={() => void run(async () => { await store.forkCurrent(branchTitle); setBranchTitle(''); setPanel(null) })}>建立分支</button></div></section></div>}
     </div></section></div>}

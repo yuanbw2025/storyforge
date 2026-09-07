@@ -89,10 +89,10 @@
 | `ttrpgPlayerRuntime` | 正式 TTRPG 单角色玩家运行视角 | runtime | L0 | 10000 |
 | `product-production.brief` | 已授权上层产品生产 Brief | project | L0 | 8000 |
 | `product-production.artifact-inputs` | 上层产品生产任务依赖 | project | L1 | 24000 |
-| `product-production.adventure-scene-script-inputs` | 文字冒险单幕分场写作投影 | project | L0 | 19000 |
+| `product-production.adventure-scene-script-inputs` | 文字冒险单幕分场写作投影 | project | L0 | 15100 |
 | `product-production.adventure-dialogue-inputs` | 文字冒险独立对白审校投影 | project | L0 | 12500 |
 | `product-production.adventure-visual-quality-inputs` | 文字冒险独立图片审查投影 | project | L0 | 12500 |
-| `product-production.adventure-quality-inputs` | 文字冒险叙事质量审查投影 | project | L0 | 16000 |
+| `product-production.adventure-quality-inputs` | 文字冒险叙事质量审查投影 | project | L0 | 32000 |
 | `product-production.adventure-playtest-inputs` | 文字冒险试玩总监验收证据投影 | project | L0 | 8500 |
 | `product-production.adventure-repair-feedback` | 文字冒险上一轮质量修复反馈 | project | L0 | 3000 |
 | `product-production.quality-feedback` | 上层产品生产质量反馈 | project | L1 | 6000 |
@@ -397,4 +397,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `ddbed63c`
+生成时间基准:commit `382d2ea8`

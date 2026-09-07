@@ -36,6 +36,8 @@ function dossierCards(dossier: TextAdventureCommunityCandidateDossierV1) {
     ['大区 / 地点 / 场景', `${dossier.systems.regions} / ${dossier.systems.locations} / ${dossier.systems.scenes}`],
     ['支线 / 事件', `${dossier.systems.sideQuests} / ${dossier.systems.storylets}`],
     ['冻结插图', `${dossier.systems.mediaAssets}`],
+    ['作者实测', `${Math.round(dossier.evidence.humanPlaytest.author.elapsedMs / 60_000)} 分钟 / ${dossier.evidence.humanPlaytest.author.meaningfulActionCount} 有效行动`],
+    ['独立玩家实测', `${Math.round(dossier.evidence.humanPlaytest.independentPlayer.elapsedMs / 60_000)} 分钟 / ${dossier.evidence.humanPlaytest.independentPlayer.meaningfulActionCount} 有效行动`],
   ] as const
 }
 
@@ -106,7 +108,7 @@ export default function TextAdventurePackagePanel(props: TextAdventurePackagePan
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div>
         <span className="flex items-center gap-2 text-sm font-semibold"><FileArchive className="h-4 w-4 text-accent" />完整产品包与社区候选档案</span>
-        <p className="mt-2 max-w-3xl text-[10px] leading-5 text-text-muted">导出会重新核验商业 Brief、真实内容规模、自动游玩、作者主路线、浏览器性能及全部冻结媒资；上传先离线复验，再原子写入当前 Work。两者都不会自动向社区公开。</p>
+        <p className="mt-2 max-w-3xl text-[10px] leading-5 text-text-muted">导出会重新核验商业 Brief、真实内容规模、自动游玩、作者与独立玩家双角色完整试玩、浏览器性能及全部冻结媒资；上传先离线复验，再原子写入当前 Work。两者都不会自动向社区公开。</p>
       </div>
       <div className="flex flex-wrap gap-2">
         <button type="button" disabled={!props.productReleaseId || busy != null} onClick={() => void runExport()} className="flex items-center gap-2 rounded border border-accent/40 bg-accent/10 px-4 py-2 text-xs text-accent disabled:opacity-40">

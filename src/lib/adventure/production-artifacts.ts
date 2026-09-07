@@ -421,6 +421,7 @@ export function parseTextAdventureQuestBundleArtifactV1(
   expectedKind: TextAdventureQuestBundleArtifactV1['bundleKind'],
   expectedCount: number,
   locationTitles: readonly string[] = [],
+  allowedAbilityKeys: readonly string[] = [],
 ): TextAdventureQuestBundleArtifactV1 {
   const row = record(value, `${expectedKind}Bundle`)
   exactKeys(row, ['schema', 'version', 'bundleKind', 'entries'], `${expectedKind}Bundle`)
@@ -452,6 +453,13 @@ export function parseTextAdventureQuestBundleArtifactV1(
     }
   })
   if (new Set(entries.map(item => item.key)).size !== entries.length) fail(`${expectedKind}Bundle key 重复`)
+  if (allowedAbilityKeys.length) {
+    const allowed = new Set(allowedAbilityKeys)
+    const invalid = entries.filter(entry => !allowed.has(entry.abilityKey))
+    if (invalid.length) {
+      fail(`${expectedKind}Bundle abilityKey 未登记:${invalid.map(entry => entry.abilityKey).join(',')}`)
+    }
+  }
   const result: TextAdventureQuestBundleArtifactV1 = {
     schema: 'storyforge.text-adventure-quest-bundle-artifact', version: 1, bundleKind: expectedKind, entries,
   }

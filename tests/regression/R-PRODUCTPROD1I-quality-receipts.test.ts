@@ -8,13 +8,16 @@ import {
   listCompletedProductBuildPlaythroughsV1,
   readLatestProductBrowserPerformanceGateV1,
   readLatestProductMediaRuntimeGateV1,
+  readLatestTextAdventureHumanPlaytestGateV1,
   recordProductBrowserPerformanceMeasurementV1,
   recordProductBuildMainRoutePlaythroughV1,
   recordProductMediaRuntimeMeasurementV1,
+  recordTextAdventureHumanPlaytestV1,
   recordTextAdventureHumanVisualReviewV1,
   requirePassedProductBrowserPerformanceGateV1,
   requirePassedProductBuildMainRouteGateV1,
   requirePassedProductMediaRuntimeGateV1,
+  requirePassedTextAdventureHumanPlaytestGateV1,
   requirePassedTextAdventureHumanVisualReviewGateV1,
 } from '../../src/lib/product-production/quality-receipts'
 import { parseProductProductionBriefV3 } from '../../src/lib/product-production/contracts'
@@ -27,11 +30,14 @@ import { putMediaBlobObject } from '../../src/lib/product-production/media-blob-
 import { compileTextAdventureProductionBriefV1 } from '../../src/lib/adventure/production-brief'
 import { createWorkspace } from '../../src/lib/workspace/create-workspace'
 import { commitNarrativeChoice, readProductRuntimeStateVersion } from '../../src/lib/avg/runtime-api'
+import { commitAdventureAction, commitAdventureNarrativeChoice } from '../../src/lib/adventure/runtime-api'
+import { createProductRuntimeInstance } from '../../src/lib/product/runtime-instances'
 import { EMPTY_PRODUCT_RUNTIME_STATE } from '../../src/lib/types'
-import { CURRENT_PRODUCT_RESOURCE_KEYS, currentProductSelection } from '../helpers/current-product-world'
+import { CURRENT_PRODUCT_RESOURCE_KEYS, CURRENT_PRODUCT_SOURCE_CATALOG, currentProductSelection } from '../helpers/current-product-world'
 import {
   createTextAdventureFoundationContentV2,
   createTextAdventureFoundationNarrativeV2,
+  createTextAdventureFoundationRuntimePackageV2,
 } from '../helpers/text-adventure-v2-foundation'
 
 const PACKAGE_HASH = 'a'.repeat(64)
@@ -394,6 +400,130 @@ async function confirmPreviewMainRoute(input: Awaited<ReturnType<typeof fixture>
   })
 }
 
+async function textAdventurePlaytestFixture() {
+  const owned = await fixture()
+  const scale = { scope: 'scene' as const, targetPlayMinutes: 20, targetWordCount: 4_000, targetEndingCount: 2 }
+  const media = {
+    visualLevel: 'none' as const, audioLevel: 'none' as const, imageCount: 0,
+    musicTrackCount: 0, sfxCount: 0, voiceLineCount: 0, requiredMediaKinds: [],
+  }
+  const brief = parseProductProductionBriefV3({
+    ...commercialBrief(),
+    source: {
+      ...commercialBrief().source,
+      selection: currentProductSelection('text-adventure', {
+        characters: [CURRENT_PRODUCT_RESOURCE_KEYS.character],
+        locations: [CURRENT_PRODUCT_RESOURCE_KEYS.location],
+        items: [CURRENT_PRODUCT_RESOURCE_KEYS.artifact],
+        quests: [CURRENT_PRODUCT_RESOURCE_KEYS.arc],
+      }),
+    },
+    intent: { ...commercialBrief().intent, productType: 'text-adventure' },
+    scale, media,
+    textAdventure: compileTextAdventureProductionBriefV1({ scale, media, draft: { confirmAll: true } }),
+  })
+  const authored = createTextAdventureFoundationRuntimePackageV2({
+    worldRelease: { id: 1, contentHash: PACKAGE_HASH } as never,
+    sourceCatalog: {
+      ...CURRENT_PRODUCT_SOURCE_CATALOG,
+      worldReference: { referenceHash: 'f'.repeat(64) },
+    } as never,
+  })
+  const opening = authored.narrative.nodes.find(node => node.key === 'opening')!
+  const crossroads = authored.narrative.nodes.find(node => node.key === 'crossroads')!
+  const enterCore = authored.narrative.choices.find(choice => choice.choiceKey === 'choice.enter-core')!
+  opening.successorKeys = ['approach']
+  enterCore.targetNodeKey = 'approach'
+  crossroads.effectsJson = '[]'
+  authored.narrative.nodes.splice(1, 0,
+    { key: 'approach', kind: 'scene', title: '灯芯回声', summary: '听完两种代价。', conditionJson: '{}', effectsJson: '[]', successorKeys: ['stance'] },
+    { key: 'stance', kind: 'choice', title: '先作承诺', summary: '决定先保护什么。', conditionJson: '{}', effectsJson: '[]', successorKeys: ['crossroads'] },
+  )
+  authored.narrative.choices.push(
+    { choiceKey: 'choice.listen', sourceNodeKey: 'approach', text: '听完争论', description: '理解两种代价。', unavailableReason: '', targetNodeKey: 'stance', displayConditionJson: '{}', availableConditionJson: '{}', effectsJson: '[]', tags: [], order: 0 },
+    { choiceKey: 'choice.promise-people', sourceNodeKey: 'stance', text: '先保护求救者', description: '承担港城风险。', unavailableReason: '', targetNodeKey: 'crossroads', displayConditionJson: '{}', availableConditionJson: '{}', effectsJson: '[]', tags: [], order: 0 },
+    { choiceKey: 'choice.promise-city', sourceNodeKey: 'stance', text: '先保护港城', description: '承担海上风险。', unavailableReason: '', targetNodeKey: 'crossroads', displayConditionJson: '{}', availableConditionJson: '{}', effectsJson: '[]', tags: [], order: 1 },
+  )
+  const runtimePackage = parseProductRuntimePackageV1(authored)
+  const briefHash = await hashProductProductionValueV2(brief)
+  const packageHash = await hashProductProductionValueV2(runtimePackage)
+  const build = (await db.productBuilds.get(owned.buildId))!
+  const production = (await db.productProductions.get(build.productionId))!
+  const preview = await createProductBuildPreviewManifestV1({
+    productionKey: production.productionKey, buildNumber: build.buildNumber,
+    buildManifestHash: build.manifestHash, runtimePackage, mediaBindings: [],
+  })
+  await db.productProductions.update(production.id!, { productType: 'text-adventure' })
+  await db.productProductionBriefs.where('[productionId+revision]').equals([production.id!, 1]).modify({
+    briefJson: canonicalProductProductionJsonV2(brief), briefHash,
+    confirmedBriefJson: canonicalProductProductionJsonV2(brief), confirmedBriefHash: briefHash,
+  })
+  await db.productBuilds.update(owned.buildId, {
+    briefHash, packageHash, previewHash: preview.previewHash,
+    previewManifestJson: canonicalProductProductionJsonV2(preview),
+  })
+  return { ...owned, briefHash, packageHash, previewHash: preview.previewHash }
+}
+
+async function completeTextAdventureHumanPlaytest(
+  input: Awaited<ReturnType<typeof textAdventurePlaytestFixture>>,
+  route: 'rescue' | 'seal',
+  elapsedMinutes = 16,
+): Promise<number> {
+  const session = await createProductRuntimeInstance({
+    scope: input.scope, kind: 'text-adventure', title: `真人试玩-${route}`,
+    productSource: {
+      kind: 'build', productBuildId: input.buildId, expectedPreviewHash: input.previewHash,
+    },
+  })
+  const act = async (actionKey: string) => {
+    const state = await readProductRuntimeStateVersion(session.id!)
+    await commitAdventureAction({
+      sessionId: session.id!, actionKey, commandId: `human-${session.id}-${actionKey}`,
+      baseSequence: state.sequence, baseStateHash: state.stateHash,
+    })
+  }
+  for (const actionKey of [
+    'action.look.harbor', 'action.equip.cloak', 'action.search.cache', 'action.move.marsh',
+    'action.find.route', 'action.move.tower', 'action.take.lens', 'action.rest.tower',
+  ]) await act(actionKey)
+  await commitAdventureNarrativeChoice({ sessionId: session.id!, choiceKey: 'choice.enter-core', commandId: `human-${session.id}-choice-enter` })
+  await act(route === 'rescue' ? 'action.prepare.rescue' : 'action.prepare.seal')
+  await commitAdventureNarrativeChoice({ sessionId: session.id!, choiceKey: 'choice.listen', commandId: `human-${session.id}-choice-listen` })
+  await commitAdventureNarrativeChoice({
+    sessionId: session.id!, choiceKey: route === 'rescue' ? 'choice.promise-people' : 'choice.promise-city',
+    commandId: `human-${session.id}-choice-promise`,
+  })
+  await commitAdventureNarrativeChoice({
+    sessionId: session.id!, choiceKey: route === 'rescue' ? 'choice.rescue' : 'choice.seal',
+    commandId: `human-${session.id}-choice-ending`,
+  })
+  const events = await db.productRuntimeEvents.where('sessionId').equals(session.id!).sortBy('sequence')
+  const endingAt = Date.now()
+  const startedAt = endingAt - elapsedMinutes * 60_000
+  await db.productRuntimeEvents.bulkPut(events.map((event, index) => ({
+    ...event,
+    createdAt: index === events.length - 1
+      ? endingAt : startedAt + Math.floor((endingAt - startedAt) * index / Math.max(1, events.length - 1)),
+  })))
+  return session.id!
+}
+
+const passingHumanAssessment = () => ({
+  ratings: { comprehension: 4, pacing: 4, agency: 4, emotionalImpact: 4 },
+  blockingIssues: [],
+  feedback: {
+    comprehensionObstacles: '无', boringMoments: '无', errors: '无',
+    choiceExperience: '选择与后果清楚', endingFeedback: '结局回应此前行动',
+  },
+  note: '',
+})
+
+const humanEnvironment = {
+  browserName: 'chromium', browserVersion: 'fixture', platform: 'desktop',
+  viewport: { width: 1440, height: 900 },
+}
+
 function measurement(measuredAt = Date.now()): ProductBrowserPerformanceMeasurementV1 {
   return {
     browserName: 'chromium', browserVersion: 'fixture', platform: 'desktop',
@@ -586,6 +716,76 @@ describe('R-PRODUCTPROD-1I · durable Build quality receipts', () => {
       scope: owned.scope, productBuildId: owned.buildId,
     })).rejects.toThrow(/image-background-dimensions-below-commercial-minimum/)
     expect(await db.productBuilds.get(owned.buildId)).toMatchObject({ status: 'preview-ready' })
+  })
+
+  it('要求作者与独立玩家使用两个不同完整会话，单角色只能留下 needs-human 回执', async () => {
+    const owned = await textAdventurePlaytestFixture()
+    const authorSessionId = await completeTextAdventureHumanPlaytest(owned, 'rescue')
+    const author = await recordTextAdventureHumanPlaytestV1({
+      scope: owned.scope, productBuildId: owned.buildId, productRuntimeSessionId: authorSessionId,
+      participantRole: 'author', participantLabel: '测试作者', participantDeclaration: 'author-self-attestation',
+      assessment: passingHumanAssessment(), environment: humanEnvironment,
+    })
+    expect(author.gateReceipt).toMatchObject({
+      gateId: 'text-adventure.playtest.human-coverage', status: 'needs-human', verifierKind: 'human-evidence',
+    })
+    expect(author.evidence.sessions[0]).toMatchObject({
+      participantRole: 'author', elapsedMs: 16 * 60_000, choiceCount: 4,
+      meaningfulActionCount: 10, passed: true,
+    })
+    await expect(requirePassedTextAdventureHumanPlaytestGateV1({
+      scope: owned.scope, productBuildId: owned.buildId,
+    })).rejects.toThrow(/尚未由作者与独立玩家分别通过/)
+    await expect(recordTextAdventureHumanPlaytestV1({
+      scope: owned.scope, productBuildId: owned.buildId, productRuntimeSessionId: authorSessionId,
+      participantRole: 'independent-player', participantLabel: '独立玩家甲',
+      participantDeclaration: 'not-involved-in-production',
+      assessment: passingHumanAssessment(), environment: humanEnvironment,
+    })).rejects.toThrow(/同一个事件流不能同时冒充/)
+
+    const independentSessionId = await completeTextAdventureHumanPlaytest(owned, 'seal')
+    const completed = await recordTextAdventureHumanPlaytestV1({
+      scope: owned.scope, productBuildId: owned.buildId, productRuntimeSessionId: independentSessionId,
+      participantRole: 'independent-player', participantLabel: '独立玩家甲',
+      participantDeclaration: 'not-involved-in-production',
+      assessment: passingHumanAssessment(), environment: humanEnvironment,
+    })
+    expect(completed.gateReceipt.status).toBe('passed')
+    expect(completed.evidence).toMatchObject({ passed: true })
+    expect(completed.evidence.sessions.map(item => item.participantRole)).toEqual(['author', 'independent-player'])
+    expect(completed.evidence.sessions[0].eventStreamHash).not.toBe(completed.evidence.sessions[1].eventStreamHash)
+    await expect(requirePassedTextAdventureHumanPlaytestGateV1({
+      scope: owned.scope, productBuildId: owned.buildId,
+    })).resolves.toMatchObject({ row: { receiptHash: completed.row.receiptHash } })
+  })
+
+  it('过短、交互量不足、低评分或未关闭 blocking 问题会冻结失败证据且拒绝篡改', async () => {
+    const owned = await textAdventurePlaytestFixture()
+    const sessionId = await completeTextAdventureHumanPlaytest(owned, 'rescue', 2)
+    const failed = await recordTextAdventureHumanPlaytestV1({
+      scope: owned.scope, productBuildId: owned.buildId, productRuntimeSessionId: sessionId,
+      participantRole: 'author', participantLabel: '测试作者',
+      participantDeclaration: 'author-self-attestation', environment: humanEnvironment,
+      assessment: {
+        ...passingHumanAssessment(),
+        ratings: { comprehension: 4, pacing: 2, agency: 4, emotionalImpact: 4 },
+        blockingIssues: ['选择后任务状态没有及时刷新'],
+      },
+    })
+    expect(failed.gateReceipt.status).toBe('failed')
+    expect(failed.evidence.sessions[0]).toMatchObject({ elapsedMs: 2 * 60_000, passed: false })
+    await expect(requirePassedTextAdventureHumanPlaytestGateV1({
+      scope: owned.scope, productBuildId: owned.buildId,
+    })).rejects.toThrow(/尚未由作者与独立玩家分别通过/)
+    const row = (await db.productQualityGateReceipts.get(failed.row.id!))!
+    const receipt = JSON.parse(row.receiptJson)
+    const evidence = JSON.parse(receipt.measuredJson)
+    evidence.sessions[0].meaningfulActionCount += 100
+    receipt.measuredJson = canonicalProductProductionJsonV2(evidence)
+    await db.productQualityGateReceipts.update(row.id!, { receiptJson: canonicalProductProductionJsonV2(receipt) })
+    await expect(readLatestTextAdventureHumanPlaytestGateV1({
+      scope: owned.scope, productBuildId: owned.buildId,
+    })).rejects.toThrow(/receiptHash 校验失败/)
   })
 
   it('把独立 Visual QA 已接受的每张图片交给作者逐图确认，并冻结精确 Build/Artifact/Blob 证据', async () => {

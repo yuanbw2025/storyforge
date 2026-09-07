@@ -1,6 +1,6 @@
 # 05 · Durable 生产 DAG 与工件方案
 
-> 层级：L2 · 版本：1.9.0 · 生效：2026-09-07
+> 层级：L2 · 版本：2.2.0 · 生效：2026-09-07
 > 性质：正式生产计划、Run Contract 和候选采纳目标契约。
 
 ## 1. 目标拓扑
@@ -15,11 +15,14 @@ WorldRelease + Confirmed Brief + Frozen SourcePlan
   → story.bible ───────────────┐
   → cast.bible                 │
   → systems.design             │
-  → narrative.arc-plan         │
+  → narrative.arc-scenes       │
+  → narrative.decision-plan    │
+  → deterministic arc-plan     │
   → quest.main-plan            │
   → quest.side-plan + storylet.plan
   → quest.scripts
-  → scene.script.act-* (同岗有界并行)
+  → scene.script.act-*.part-* (同岗有界并行)
+  → deterministic scene.script.act-* assembly
   → dialogue.pass
   → continuity/literary review
   → media.requirements（美术总监候选）
@@ -37,7 +40,7 @@ WorldRelease + Confirmed Brief + Frozen SourcePlan
 
 关键依赖不可省略：系统设计读取故事/角色；主线任务读取故事弧、角色和系统；支线读取主线；任务脚本读取全部任务与系统；场景正文读取任务脚本；美术清单读取定稿场景和角色锚点。旧 DAG 中“主线与系统并行、支线不读主线”的结构必须下线。
 
-当前代码已经实现制作监督、来源作者闸门、分场正文、独立对白审校、确定性叙事装配、独立连续性审校、确定性自动游玩和 Playtest Director。`production.supervision` 是首个真实 Run：它冻结 G1–G6 的目标、岗位、退出证据、停机条件、风险和作者闸门；严格 parser 要求 18 个已登记 Agent 不重不漏且只出现一次。来源审计随后消费该监督工件并经 `source.author-gate`，只有 `content.source-decision` 生效后创意总监才可继续；规划、故事、角色、空间、系统、叙事弧、主线、支线和区域事件分别形成已登记任务，随后由 `text-adventure-quest-scripter` 生成严格的 `content.quest-script`；三幕 Scene Writer 分别生成 `content.scene-script.act-1/2/3`，独立 Dialogue Editor 再按幕产生 `content.dialogue-pass.act-1/2/3`，全部通过严格 parser 后，由 `integration.narrative` 应用表达修订并装配 `content.narrative`。
+当前代码已经实现制作监督、来源作者闸门、分场正文、独立对白审校、确定性叙事装配、独立连续性审校、确定性自动游玩和 Playtest Director。`production.supervision` 是首个真实 Run：它冻结 G1–G6 的目标、岗位、退出证据、停机条件、风险和作者闸门；严格 parser 要求 18 个已登记 Agent 不重不漏且只出现一次。来源审计随后消费该监督工件并经 `source.author-gate`，只有 `content.source-decision` 生效后创意总监才可继续；规划、故事、角色、空间和系统分别形成已登记任务。叙事设计师的唯一 `narrative-design.v1` Skill 分两个有界 Run 产出 `content.narrative-arc-scenes` 与 `content.narrative-decision-plan`，确定性任务再合成并复验 `content.narrative-arc-plan`。主线、支线和区域事件随后分别生产；任务脚本工程师以唯一 `quest-script-compile.v1` Skill 把每一幕按单解/多解目标拆成两个 Run，再加补充内容 Run，共七个有界模型合同。`content.quest-script` 确定性装配器复验目标、解法、能力和顺序后形成唯一正式脚本。三幕各由两个 Scene Writer 场景包 Run 生成 `content.scene-script.act-{1..3}.part-{1|2}`，三个确定性分幕装配任务再形成 `content.scene-script.act-1/2/3`；独立 Dialogue Editor 按幕产生 `content.dialogue-pass.act-1/2/3`，全部通过严格 parser 后，由 `integration.narrative` 应用表达修订并装配 `content.narrative`。
 
 `qa.autoplay` 以零模型调用运行黄金路线、结局覆盖、替代路线、失败注入、状态往返、分支隔离、AI 离线和媒资离线八类检查，产出绑定 Build/package hash 的 `quality.autoplay`。路线选择会实际执行任务前置链、持久决定条件和结局条件；同一终点的第一条图路径不可执行时继续检查其余候选，禁止把结构可达冒充规则可达。`qa.release` 消费该证据；商业候选的自动游玩失败会阻断。之后 `text-adventure-playtest-director` 使用独立 Skill/Run Contract 和有界证据投影生成 `quality.playtest-plan`，必须覆盖 15 种路线/生命周期用例和至少两场真人试玩。该模型工件最多只可判为“可进入真人验证”，无权产生 `release-ready`。
 
@@ -51,9 +54,11 @@ WorldRelease + Confirmed Brief + Frozen SourcePlan
 
 当前专业链路继续使用已受治理的 `storyforge.product-production-plan` V3，不为产品私域另造计划底座；文字冒险通过新增登记任务和依赖拓扑扩展 V3。计划在开始前冻结：任务 key、Agent/Skill、依赖、输入/输出 Artifact、required receipt、预算、并发组、锁、attempt、timeout、failure policy 和 acceptance gate。若未来字段语义发生不兼容变化，才升级计划版本并保留旧 Build 回放 parser。
 
-V1.2 的一小时纵切面固定为三幕，因此计划创建时已经冻结三个 Scene Writer 任务，不在运行中动态追加 provider 调用。每幕包含哪些场景、选择和结局由 Brief 规模与确定性骨架计算，并由已采纳 `narrative.arc-plan` 精确覆盖；三个任务各自拥有独立的 Run Contract、预算、attempt、receipt 和输出 Artifact。未来支持任意幕数时，必须通过显式 plan revision 与作者预算确认扩展，不能让执行器根据模型输出偷偷追加任务。
+一小时纵切面固定为三幕，每幕在计划创建时冻结两个 Scene Writer 场景包和一个零模型调用装配任务，不在运行中动态追加 provider 调用。每个包包含哪些场景、选择和结局由 Brief 规模与确定性骨架计算，并由已采纳 `narrative.arc-plan` 精确覆盖；六个模型任务各自拥有独立的 Run Contract、预算、attempt、receipt 和输出 Artifact。未来支持任意幕数或不同分包数时，必须通过显式 plan revision 与作者预算确认扩展，不能让执行器根据模型输出偷偷追加任务。
 
 `integration.narrative` 是纯确定性装配任务：它读取三幕候选、对白审校、故事/角色/叙事弧和位置投影，验证跨幕不变量，应用只限表达文本的对白修订，再生成统一叙事工件。它不持有模型预算。某一幕的局部缺陷只重跑对应 Scene Writer 及其后代；对白缺陷只回到 Dialogue Editor；无法定位的跨幕缺陷会使三幕候选与对白审校全部 stale 后重跑。装配本身失败时同样回到原始内容 owner，不能在集成层编造修复正文。
+
+`content.narrative-arc-plan` 同样是纯确定性装配任务。它不在失败后把一个更大的 prompt 再发给模型，而是精确报告场景或决定子工件的缺失字段。跨 Build 仅重装 runtime 时，该装配任务会重新计算并留下新 Build 证据，但两个模型子工件及其下游专业内容可以按 hash 携带，不得错误触发整条内容链重跑。
 
 ## 3. 工件规则
 
@@ -74,6 +79,7 @@ V1.2 的一小时纵切面固定为三幕，因此计划创建时已经冻结三
 
 - 鉴权、余额、非重试 4xx、结果未知、stale、预算不足和 schema 大范围不匹配立即暂停。
 - 可重试错误最多按 plan 的 `maxAttempts` 执行；每次 attempt 有独立事件和 receipt，不能覆盖失败证据。
+- Scheduler 的保护边界覆盖任务领取后的上下文装配、World Gateway 预检、Provider 调用、候选校验、证据冻结和正式采纳。任何逃逸异常都必须把 child Run 与 ledger 落成正式失败；调用前失败标为确定性预检错误，`model.requested/tool.called` 之后但没有 checkpoint 的失败标为结果未知，二者都不得隐式重试或留下永久 `running`。
 - 质量问题定位到 Artifact、字段、证据和建议 owner，由依赖图形成最小修复闭包；作者可预览差异、锁定无关工件后再执行。
 - 连续两次同类内容缺陷不自动扩大重生成范围，交回作者决策；不能无界“让模型再试一次”。
 

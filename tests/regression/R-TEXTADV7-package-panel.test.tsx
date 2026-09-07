@@ -43,6 +43,18 @@ function candidate(): TextAdventureCommunityPackageV1 {
         autoplayArtifactHash: '2'.repeat(64), gateReceiptHashes: ['3'.repeat(64)],
         mediaAuditHash: '4'.repeat(64), visualReviewHash: '5'.repeat(64),
         authorMainRouteEndingKey: 'ending.home', authorMainRouteChoiceCount: 14,
+        humanPlaytest: {
+          author: {
+            participantLabel: '作者', endingKey: 'ending.home', elapsedMs: 3_600_000,
+            choiceCount: 14, actionCount: 24, meaningfulActionCount: 20, dialogueActionCount: 6,
+            ratings: { comprehension: 4, pacing: 4, agency: 4, emotionalImpact: 5 },
+          },
+          independentPlayer: {
+            participantLabel: '玩家甲', endingKey: 'ending.sea', elapsedMs: 3_900_000,
+            choiceCount: 15, actionCount: 25, meaningfulActionCount: 21, dialogueActionCount: 5,
+            ratings: { comprehension: 4, pacing: 4, agency: 5, emotionalImpact: 4 },
+          },
+        },
       },
       offlineFallback: 'text-only',
     },

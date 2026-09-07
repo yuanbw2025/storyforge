@@ -35,6 +35,11 @@ function text(value: unknown, label: string, maximum = 20_000): string {
   return value.trim().normalize('NFC')
 }
 
+function boundedString(value: unknown, label: string, maximum: number): string {
+  if (typeof value !== 'string' || value.length > maximum) fail(`${label} 无效`)
+  return value.trim().normalize('NFC')
+}
+
 function nullableText(value: unknown, label: string, maximum = 200): string | null {
   if (value === null) return null
   return text(value, label, maximum)
@@ -132,6 +137,21 @@ export function textAdventureActSceneKeysV1(brief: ProductProductionBriefV3, act
   return sceneKeys.slice(start, start + counts[actIndex])
 }
 
+/**
+ * Scene prose is deliberately produced in at most two bounded packets per act.
+ * The split is derived from the frozen scene order, so retries never invent a
+ * new boundary and the deterministic act assembler can prove completeness.
+ */
+export function textAdventureSceneScriptPartSceneKeysV1(
+  brief: ProductProductionBriefV3,
+  actIndex: number,
+): string[][] {
+  const sceneKeys = textAdventureActSceneKeysV1(brief, actIndex)
+  if (sceneKeys.length <= 1) return [sceneKeys]
+  const firstCount = Math.ceil(sceneKeys.length / 2)
+  return [sceneKeys.slice(0, firstCount), sceneKeys.slice(firstCount)]
+}
+
 export interface TextAdventureSceneScriptBundleArtifactV1 {
   schema: 'storyforge.text-adventure-scene-script-bundle-artifact'
   version: 1
@@ -168,7 +188,13 @@ function parseBeats(input: {
   const rows = array(input.value, input.label, 1, 80)
   const beats = rows.map((value, index) => {
     const item = record(value, `${input.label}[${index}]`)
-    exactKeys(item, ['beatKey', 'kind', 'speakerKey', 'text', 'order'], `${input.label}[${index}]`)
+    exactKeys(
+      item,
+      item.order === undefined
+        ? ['beatKey', 'kind', 'speakerKey', 'text']
+        : ['beatKey', 'kind', 'speakerKey', 'text', 'order'],
+      `${input.label}[${index}]`,
+    )
     const kind = enumValue(item.kind, ['narration', 'dialogue', 'action', 'system'] as const, `${input.label}[${index}].kind`)
     const speakerKey = nullableText(item.speakerKey, `${input.label}[${index}].speakerKey`)
     if (kind === 'dialogue') {
@@ -179,7 +205,11 @@ function parseBeats(input: {
       kind,
       speakerKey,
       text: text(item.text, `${input.label}[${index}].text`),
-      order: integer(item.order, `${input.label}[${index}].order`, 0, 1_000),
+      // Array position is already canonical. Accepting an omitted cosmetic
+      // order avoids another paid model call without inventing story content.
+      order: item.order === undefined
+        ? index
+        : integer(item.order, `${input.label}[${index}].order`, 0, 1_000),
     }
   })
   if (new Set(beats.map(beat => beat.beatKey)).size !== beats.length) fail(`${input.label} beatKey 重复`)
@@ -197,27 +227,69 @@ export function parseTextAdventureSceneScriptBundleArtifactV1(input: {
   expectedModuleTitle: string
   sceneTitles: Readonly<Record<string, string>>
   endingTitles: Readonly<Record<string, string>>
+  expectedSceneKeys?: readonly string[]
 }): TextAdventureSceneScriptBundleArtifactV1 {
   if (!input.brief.textAdventure) fail('分场脚本缺少文字冒险 Brief')
   if (input.locationTitles.length < 1) fail('分场脚本缺少已冻结地点')
   const row = record(input.value, 'sceneScriptBundle')
-  exactKeys(row, ['schema', 'version', 'actKey', 'moduleTitle', 'scenes', 'choices', 'endings'], 'sceneScriptBundle')
+  exactKeys(row, [
+    'schema', 'version', 'actKey', 'moduleTitle', 'scenes',
+    ...(row.choices === undefined ? [] : ['choices']),
+    ...(row.endings === undefined ? [] : ['endings']),
+  ], 'sceneScriptBundle')
   if (row.schema !== 'storyforge.text-adventure-scene-script-bundle-artifact' || row.version !== 1) {
     fail('sceneScriptBundle schema/version 无效')
   }
   const expectedActKey = `act.${input.actIndex + 1}`
   if (row.actKey !== expectedActKey) fail(`sceneScriptBundle actKey 必须为 ${expectedActKey}`)
   const skeleton = textAdventureNarrativeSkeletonV1(input.brief)
-  const expectedSceneKeys = textAdventureActSceneKeysV1(input.brief, input.actIndex)
+  const fullActSceneKeys = textAdventureActSceneKeysV1(input.brief, input.actIndex)
+  const expectedSceneKeys = input.expectedSceneKeys == null
+    ? fullActSceneKeys
+    : [...input.expectedSceneKeys]
+  if (expectedSceneKeys.length < 1
+    || new Set(expectedSceneKeys).size !== expectedSceneKeys.length
+    || expectedSceneKeys.some(sceneKey => !fullActSceneKeys.includes(sceneKey))) {
+    fail('expectedSceneKeys 必须是本幕非空、不重复的冻结场景子集')
+  }
+  const expectedPositions = expectedSceneKeys.map(sceneKey => fullActSceneKeys.indexOf(sceneKey))
+  if (expectedPositions.some((position, index) => index > 0 && position !== expectedPositions[index - 1] + 1)) {
+    fail('expectedSceneKeys 必须是本幕连续且有序的冻结场景子集')
+  }
   const speakerKeys = new Set(input.allowedSpeakerKeys)
-  const scenes = array(row.scenes, 'sceneScriptBundle.scenes', expectedSceneKeys.length, expectedSceneKeys.length)
-    .map((value, index) => {
-      const item = record(value, `scenes[${index}]`)
-      exactKeys(item, ['sceneKey', 'title', 'summary', 'beats'], `scenes[${index}]`)
-      const sceneKey = key(item.sceneKey, `scenes[${index}].sceneKey`)
-      if (sceneKey !== expectedSceneKeys[index]) fail(`scenes[${index}] 必须为 ${expectedSceneKeys[index]}`)
+  const rawSceneRows = array(row.scenes, 'sceneScriptBundle.scenes', 1, 80)
+  const identifiedSceneRows = rawSceneRows.map((value, index) => {
+    const item = record(value, `scenes[${index}]`)
+    const sceneKey = key(item.sceneKey, `scenes[${index}].sceneKey`)
+    if (!fullActSceneKeys.includes(sceneKey)) fail(`scenes[${index}] 不属于本幕:${sceneKey}`)
+    return { item, sceneKey, sourceIndex: index }
+  })
+  if (new Set(identifiedSceneRows.map(row => row.sceneKey)).size !== identifiedSceneRows.length) {
+    fail('sceneScriptBundle.scenes sceneKey 重复')
+  }
+  const sceneRowByKey = new Map(identifiedSceneRows.map(scene => [scene.sceneKey, scene]))
+  const missingSceneKeys = expectedSceneKeys.filter(sceneKey => !sceneRowByKey.has(sceneKey))
+  if (missingSceneKeys.length > 0) {
+    fail(`sceneScriptBundle.scenes 未覆盖冻结分包:实际=${identifiedSceneRows.map(scene => scene.sceneKey).join(',') || 'none'};缺失=${missingSceneKeys.join(',')}`)
+  }
+  // Some providers repeat the whole act for a bounded part request. Selecting
+  // only frozen in-scope identities is lossless: no prose is invented and an
+  // unknown, duplicate, or missing scene still fails closed.
+  const selectedSceneRows = expectedSceneKeys.map(sceneKey => sceneRowByKey.get(sceneKey)!)
+  const nestedChoiceRows = identifiedSceneRows.flatMap(scene => {
+    if (scene.item.choices === undefined) return []
+    return array(scene.item.choices, `scenes[${scene.sourceIndex}].choices`, 0, 100)
+  })
+  const scenes = selectedSceneRows.map(({ item, sceneKey, sourceIndex }) => {
+      exactKeys(
+        item,
+        item.choices === undefined
+          ? ['sceneKey', 'title', 'summary', 'beats']
+          : ['sceneKey', 'title', 'summary', 'beats', 'choices'],
+        `scenes[${sourceIndex}]`,
+      )
       const beats = parseBeats({
-        value: item.beats, label: `scenes[${index}].beats`, allowedSpeakerKeys: speakerKeys,
+        value: item.beats, label: `scenes[${sourceIndex}].beats`, allowedSpeakerKeys: speakerKeys,
       })
       const locationIndex = skeleton.sceneKeys.indexOf(sceneKey)
       const locationPlan = planTextAdventureNarrativeLocationsV1(
@@ -225,36 +297,70 @@ export function parseTextAdventureSceneScriptBundleArtifactV1(input: {
         input.locationTitles.length,
       )
       const locationTitle = input.locationTitles[locationPlan[locationIndex].locationIndex]
-      const title = text(item.title, `scenes[${index}].title`, 300)
-      if (title !== input.sceneTitles[sceneKey]) fail(`${sceneKey} title 必须复用叙事弧场景标题`)
-      const summary = text(item.summary, `scenes[${index}].summary`, 2_000)
-      if (locationTitle && ![title, summary, ...beats.map(beat => beat.text)].join('\n').includes(locationTitle)) {
-        fail(`${sceneKey} 正文没有落实地点 ${locationTitle}`)
-      }
+      text(item.title, `scenes[${sourceIndex}].title`, 300)
+      // Title is immutable architecture metadata, not a creative slot owned by
+      // the Scene Writer. Always project the accepted arc title so a provider
+      // typo cannot rename the graph node or waste otherwise valid prose.
+      const title = input.sceneTitles[sceneKey]
+      if (!title) fail(`${sceneKey} 缺少已冻结叙事弧场景标题`)
+      const authoredSummary = text(item.summary, `scenes[${sourceIndex}].summary`, 2_000)
+      // Scene identity already has one deterministic location assignment from
+      // the frozen architecture. Providers sometimes use a natural short name
+      // in prose; preserve that prose while making the canonical location
+      // visible to the player instead of discarding an otherwise valid paid
+      // result or asking the model to invent state.
+      const summary = locationTitle
+        && ![title, authoredSummary, ...beats.map(beat => beat.text)].join('\n').includes(locationTitle)
+        ? `${locationTitle}｜${authoredSummary}`
+        : authoredSummary
       return { sceneKey, title, summary, beats }
     })
   const expectedEdges = skeleton.edges.filter(edge => expectedSceneKeys.includes(edge.sourceNodeKey))
-  const choices = array(row.choices, 'sceneScriptBundle.choices', expectedEdges.length, expectedEdges.length)
-    .map((value, index) => {
-      const item = record(value, `choices[${index}]`)
+  const fullActChoiceKeys = new Set(skeleton.edges
+    .filter(edge => fullActSceneKeys.includes(edge.sourceNodeKey))
+    .map(edge => edge.choiceKey))
+  const rawChoiceRows = [
+    ...array(row.choices ?? [], 'sceneScriptBundle.choices', 0, 100),
+    ...nestedChoiceRows,
+  ].map((value, index) => {
+    const item = record(value, `choiceCandidates[${index}]`)
+    const choiceKey = key(item.choiceKey, `choiceCandidates[${index}].choiceKey`)
+    if (!fullActChoiceKeys.has(choiceKey)) fail(`choiceCandidates[${index}] 不属于本幕:${choiceKey}`)
+    return { item, choiceKey, sourceIndex: index }
+  })
+  const choices = expectedEdges.map(expected => {
+      const candidates = rawChoiceRows.filter(candidate => candidate.choiceKey === expected.choiceKey)
+      if (candidates.length === 0) fail(`sceneScriptBundle.choices 缺少冻结选择 ${expected.choiceKey}`)
+      const parsedCandidates = candidates.map(({ item, sourceIndex }) => {
       exactKeys(item, [
-        'choiceKey', 'sourceNodeKey', 'targetNodeKey', 'text', 'description', 'unavailableReason', 'order',
-      ], `choices[${index}]`)
-      const expected = expectedEdges[index]
+        'choiceKey', 'sourceNodeKey', 'targetNodeKey', 'text', 'description',
+        ...(item.unavailableReason === undefined ? [] : ['unavailableReason']),
+        ...(item.order === undefined ? [] : ['order']),
+      ], `choiceCandidates[${sourceIndex}]`)
       const parsed = {
-        choiceKey: key(item.choiceKey, `choices[${index}].choiceKey`),
-        sourceNodeKey: key(item.sourceNodeKey, `choices[${index}].sourceNodeKey`),
-        targetNodeKey: key(item.targetNodeKey, `choices[${index}].targetNodeKey`),
-        text: text(item.text, `choices[${index}].text`, 240),
-        description: text(item.description, `choices[${index}].description`, 1_000),
-        unavailableReason: text(item.unavailableReason, `choices[${index}].unavailableReason`, 500),
-        order: integer(item.order, `choices[${index}].order`, 0, 100),
+        choiceKey: key(item.choiceKey, `choiceCandidates[${sourceIndex}].choiceKey`),
+        sourceNodeKey: key(item.sourceNodeKey, `choiceCandidates[${sourceIndex}].sourceNodeKey`),
+        targetNodeKey: key(item.targetNodeKey, `choiceCandidates[${sourceIndex}].targetNodeKey`),
+        text: text(item.text, `choiceCandidates[${sourceIndex}].text`, 240),
+        description: text(item.description, `choiceCandidates[${sourceIndex}].description`, 1_000),
+        unavailableReason: (item.unavailableReason === undefined
+          ? ''
+          : boundedString(item.unavailableReason, `choiceCandidates[${sourceIndex}].unavailableReason`, 500))
+          || '当前状态不满足此行动条件。',
+        order: item.order === undefined
+          ? expected.order
+          : integer(item.order, `choiceCandidates[${sourceIndex}].order`, 0, 100),
       }
       if (parsed.choiceKey !== expected.choiceKey || parsed.sourceNodeKey !== expected.sourceNodeKey
         || parsed.targetNodeKey !== expected.targetNodeKey || parsed.order !== expected.order) {
-        fail(`choices[${index}] 改写了冻结图骨架`)
+        fail(`choiceCandidates[${sourceIndex}] 改写了冻结图骨架`)
       }
       return parsed
+      })
+      if (new Set(parsedCandidates.map(candidate => JSON.stringify(candidate))).size !== 1) {
+        fail(`${expected.choiceKey} 在根级与 scene 内的重复内容冲突`)
+      }
+      return parsedCandidates[0]
     })
   for (const sourceNodeKey of new Set(choices.map(choice => choice.sourceNodeKey))) {
     const sourceChoices = choices.filter(choice => choice.sourceNodeKey === sourceNodeKey)
@@ -262,13 +368,17 @@ export function parseTextAdventureSceneScriptBundleArtifactV1(input: {
       fail(`${sourceNodeKey} 同源选择文案重复`)
     }
   }
-  const expectedEndingCount = input.actIndex === 2 ? skeleton.endingKeys.length : 0
-  const endings = array(row.endings, 'sceneScriptBundle.endings', expectedEndingCount, expectedEndingCount)
+  const expectedEndingKeys = input.actIndex === 2
+    && expectedSceneKeys.includes(fullActSceneKeys[fullActSceneKeys.length - 1])
+    ? skeleton.endingKeys : []
+  const endings = array(
+    row.endings ?? [], 'sceneScriptBundle.endings', expectedEndingKeys.length, expectedEndingKeys.length,
+  )
     .map((value, index) => {
       const item = record(value, `endings[${index}]`)
       exactKeys(item, ['endingKey', 'title', 'summary', 'beats'], `endings[${index}]`)
       const endingKey = key(item.endingKey, `endings[${index}].endingKey`)
-      if (endingKey !== skeleton.endingKeys[index]) fail(`endings[${index}] 改写了冻结结局 key`)
+      if (endingKey !== expectedEndingKeys[index]) fail(`endings[${index}] 改写了冻结结局 key`)
       const beats = parseBeats({
         value: item.beats, label: `endings[${index}].beats`, allowedSpeakerKeys: speakerKeys,
       })
@@ -293,10 +403,20 @@ export function parseTextAdventureSceneScriptBundleArtifactV1(input: {
       Math.ceil(input.brief.scale.targetPlayMinutes * 200),
     )
     const minimumActUnits = Math.ceil(minimumRouteUnits * expectedSceneKeys.length / skeleton.sceneKeys.length)
+    const minimumBundleUnits = expectedSceneKeys.length === fullActSceneKeys.length
+      ? minimumActUnits
+      : Math.ceil(minimumActUnits * 0.9)
     const actUnits = scenes.reduce((sum, scene) => (
       sum + visibleUnits([scene.summary, ...scene.beats.map(beat => beat.text)].join('\n'))
     ), 0)
-    if (actUnits < minimumActUnits) fail(`第 ${input.actIndex + 1} 幕正文不足:${actUnits}/${minimumActUnits}`)
+    if (actUnits < minimumBundleUnits) fail(`第 ${input.actIndex + 1} 幕正文不足:${actUnits}/${minimumBundleUnits}`)
+    const minimumSceneUnits = Math.floor(minimumActUnits / expectedSceneKeys.length * 0.75)
+    for (const scene of scenes) {
+      const sceneUnits = visibleUnits([scene.summary, ...scene.beats.map(beat => beat.text)].join('\n'))
+      if (sceneUnits < minimumSceneUnits) {
+        fail(`${scene.sceneKey} 正文不足:${sceneUnits}/${minimumSceneUnits}`)
+      }
+    }
     const minimumDialogueTurns = Math.ceil(
       Math.max(4, Math.ceil(input.brief.scale.targetPlayMinutes / 2))
       * expectedSceneKeys.length / skeleton.sceneKeys.length,
@@ -306,6 +426,11 @@ export function parseTextAdventureSceneScriptBundleArtifactV1(input: {
       fail(`第 ${input.actIndex + 1} 幕有效对白不足:${dialogueTurns}/${minimumDialogueTurns}`)
     }
   }
+  const allBeatKeys = [
+    ...scenes.flatMap(scene => scene.beats.map(beat => beat.beatKey)),
+    ...endings.flatMap(ending => ending.beats.map(beat => beat.beatKey)),
+  ]
+  if (new Set(allBeatKeys).size !== allBeatKeys.length) fail('sceneScriptBundle 跨场景 beatKey 重复')
   return {
     schema: 'storyforge.text-adventure-scene-script-bundle-artifact', version: 1,
     actKey: expectedActKey,
@@ -316,6 +441,46 @@ export function parseTextAdventureSceneScriptBundleArtifactV1(input: {
     })(),
     scenes, choices, endings,
   }
+}
+
+export function assembleTextAdventureSceneScriptActV1(input: {
+  brief: ProductProductionBriefV3
+  actIndex: number
+  bundles: readonly TextAdventureSceneScriptBundleArtifactV1[]
+  allowedSpeakerKeys: readonly string[]
+  locationTitles: readonly string[]
+  expectedModuleTitle: string
+  sceneTitles: Readonly<Record<string, string>>
+  endingTitles: Readonly<Record<string, string>>
+}): TextAdventureSceneScriptBundleArtifactV1 {
+  const expectedParts = textAdventureSceneScriptPartSceneKeysV1(input.brief, input.actIndex)
+  if (input.bundles.length !== expectedParts.length) fail('分场幕装配缺少或重复正文分包')
+  const byFirstScene = new Map(input.bundles.map(bundle => [bundle.scenes[0]?.sceneKey, bundle]))
+  const ordered = expectedParts.map(part => byFirstScene.get(part[0]))
+  if (ordered.some(bundle => !bundle)) fail('分场幕装配无法按冻结场景边界排序')
+  const bundles = ordered as TextAdventureSceneScriptBundleArtifactV1[]
+  if (new Set(bundles.map(bundle => bundle.moduleTitle)).size !== 1
+    || bundles.some(bundle => bundle.actKey !== `act.${input.actIndex + 1}`)) {
+    fail('分场幕装配的 actKey/moduleTitle 不一致')
+  }
+  return parseTextAdventureSceneScriptBundleArtifactV1({
+    value: {
+      schema: 'storyforge.text-adventure-scene-script-bundle-artifact',
+      version: 1,
+      actKey: `act.${input.actIndex + 1}`,
+      moduleTitle: bundles[0].moduleTitle,
+      scenes: bundles.flatMap(bundle => bundle.scenes),
+      choices: bundles.flatMap(bundle => bundle.choices),
+      endings: bundles.flatMap(bundle => bundle.endings),
+    },
+    brief: input.brief,
+    actIndex: input.actIndex,
+    allowedSpeakerKeys: input.allowedSpeakerKeys,
+    locationTitles: input.locationTitles,
+    expectedModuleTitle: input.expectedModuleTitle,
+    sceneTitles: input.sceneTitles,
+    endingTitles: input.endingTitles,
+  })
 }
 
 export function assembleTextAdventureNarrativeFromSceneScriptsV1(input: {

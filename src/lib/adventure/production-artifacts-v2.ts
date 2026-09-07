@@ -7,6 +7,7 @@ import {
   textAdventureActSceneKeysV1,
   textAdventureNarrativeSkeletonV1,
 } from './scene-script'
+import { planTextAdventureNarrativeLocationsV1 } from './narrative-location-plan'
 
 const STABLE_KEY = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/
 
@@ -54,7 +55,10 @@ function enumValue<T extends string>(value: unknown, allowed: readonly T[], labe
 }
 
 function array(value: unknown, label: string, minimum: number, maximum: number): unknown[] {
-  if (!Array.isArray(value) || value.length < minimum || value.length > maximum) fail(`${label} 数量无效`)
+  if (!Array.isArray(value) || value.length < minimum || value.length > maximum) {
+    const received = Array.isArray(value) ? value.length : typeof value
+    fail(`${label} 数量无效 received=${received} expected=${minimum}..${maximum}`)
+  }
   return value
 }
 
@@ -734,6 +738,7 @@ export function parseTextAdventureNarrativeArcPlanArtifactV1(input: {
   brief: ProductProductionBriefV3
   cast: TextAdventureCastBibleArtifactV1
   storyBible: TextAdventureStoryBibleArtifactV1
+  locationTitles?: readonly string[]
 }): TextAdventureNarrativeArcPlanArtifactV1 {
   if (!input.brief.textAdventure) fail('叙事弧缺少文字冒险 Brief')
   const row = record(input.value, 'arcPlan')
@@ -744,6 +749,12 @@ export function parseTextAdventureNarrativeArcPlanArtifactV1(input: {
   const castKeys = new Set(input.cast.characters.map(item => item.key))
   const setupKeys = new Set(input.storyBible.setupPayoffs.map(item => item.key))
   const skeleton = textAdventureNarrativeSkeletonV1(input.brief)
+  // Older frozen Plans did not hand the architecture artifact to every
+  // downstream consumer. Those consumers may re-parse an already accepted
+  // arc without the catalog, so retain the schema ceiling here; the producing
+  // task and all current Plans pass locationTitles and enforce the exact map.
+  const locationCount = input.locationTitles?.length ?? 48
+  const locationPlan = planTextAdventureNarrativeLocationsV1(skeleton.sceneKeys.length, locationCount)
   const acts = array(row.acts, 'acts', 3, 3).map((value, actIndex) => {
     const item = record(value, `acts[${actIndex}]`)
     exactKeys(item, ['key', 'title', 'targetMinutes', 'goal', 'irreversibleTurn', 'sceneCards'], `acts[${actIndex}]`)
@@ -770,10 +781,25 @@ export function parseTextAdventureNarrativeArcPlanArtifactV1(input: {
       if (sceneKey !== expectedSceneKeys[sceneIndex]) {
         fail(`acts[${actIndex}].sceneCards[${sceneIndex}].key 必须为 ${expectedSceneKeys[sceneIndex]}`)
       }
+      const parsedLocationOrdinal = integer(
+        scene.locationOrdinal,
+        `sceneCards[${sceneIndex}].locationOrdinal`,
+        1,
+        locationCount,
+      )
+      if (input.locationTitles) {
+        const globalSceneIndex = skeleton.sceneKeys.indexOf(sceneKey)
+        const expectedLocationOrdinal = locationPlan[globalSceneIndex].locationOrdinal
+        if (parsedLocationOrdinal !== expectedLocationOrdinal) {
+          fail(
+            `sceneCards[${sceneIndex}].locationOrdinal 必须为冻结映射 ${expectedLocationOrdinal}`,
+          )
+        }
+      }
       return {
         key: sceneKey,
         title: text(scene.title, `sceneCards[${sceneIndex}].title`, 300),
-        locationOrdinal: integer(scene.locationOrdinal, `sceneCards[${sceneIndex}].locationOrdinal`, 1, input.brief.textAdventure!.narrative.targetLocationCount),
+        locationOrdinal: parsedLocationOrdinal,
         purpose: text(scene.purpose, `sceneCards[${sceneIndex}].purpose`, 2_000),
         conflict: text(scene.conflict, `sceneCards[${sceneIndex}].conflict`, 2_000),
         entryState: text(scene.entryState, `sceneCards[${sceneIndex}].entryState`, 2_000),
@@ -857,6 +883,145 @@ export function parseTextAdventureNarrativeArcPlanArtifactV1(input: {
   }
 }
 
+export interface TextAdventureNarrativeArcScenesArtifactV1 {
+  schema: 'storyforge.text-adventure-narrative-arc-scenes-artifact'
+  version: 1
+  acts: TextAdventureNarrativeArcPlanArtifactV1['acts']
+  endings: TextAdventureNarrativeArcPlanArtifactV1['endings']
+}
+
+export interface TextAdventureNarrativeDecisionPlanArtifactV1 {
+  schema: 'storyforge.text-adventure-narrative-decision-plan-artifact'
+  version: 1
+  decisions: TextAdventureNarrativeArcPlanArtifactV1['decisions']
+}
+
+function placeholderNarrativeDecisionsV1(brief: ProductProductionBriefV3) {
+  const skeleton = textAdventureNarrativeSkeletonV1(brief)
+  return skeleton.sceneKeys.slice(0, skeleton.statefulDecisionSceneCount).map((sceneKey, index) => {
+    const echoes = skeleton.sceneKeys.filter(key => key !== sceneKey).slice(0, 2)
+    return {
+      key: `decision.placeholder.${index + 1}`,
+      sceneKey,
+      prompt: '占位决定，仅用于分段工件协议校验。',
+      options: [0, 1].map(optionIndex => ({
+        key: `option.placeholder.${index + 1}.${optionIndex + 1}`,
+        label: optionIndex === 0 ? '采取第一种行动' : '采取第二种行动',
+        cost: optionIndex === 0 ? '承担第一种代价' : '承担第二种代价',
+        persistentEffectKey: `flag.placeholder.${index + 1}.${optionIndex + 1}`,
+        echoSceneKeys: echoes,
+      })),
+    }
+  })
+}
+
+function placeholderNarrativeActsV1(input: {
+  brief: ProductProductionBriefV3
+  cast: TextAdventureCastBibleArtifactV1
+  locationTitles?: readonly string[]
+}) {
+  const skeleton = textAdventureNarrativeSkeletonV1(input.brief)
+  const locationCount = input.locationTitles?.length
+    ?? input.brief.textAdventure!.narrative.targetLocationCount
+  const locationPlan = planTextAdventureNarrativeLocationsV1(skeleton.sceneKeys.length, locationCount)
+  const baseMinutes = Math.floor(input.brief.scale.targetPlayMinutes / 3)
+  const playerKey = input.cast.characters.find(character => character.role === 'player')?.key
+    ?? input.cast.characters[0].key
+  return [0, 1, 2].map(actIndex => ({
+    key: `act.${actIndex + 1}`,
+    title: `第${actIndex + 1}幕占位`,
+    targetMinutes: actIndex === 2
+      ? input.brief.scale.targetPlayMinutes - baseMinutes * 2
+      : baseMinutes,
+    goal: '占位目标，仅用于分段工件协议校验。',
+    irreversibleTurn: '占位转折，仅用于分段工件协议校验。',
+    sceneCards: textAdventureActSceneKeysV1(input.brief, actIndex).map(sceneKey => {
+      const sceneIndex = skeleton.sceneKeys.indexOf(sceneKey)
+      return {
+        key: sceneKey,
+        title: `${sceneKey} 占位`,
+        locationOrdinal: locationPlan[sceneIndex].locationOrdinal,
+        purpose: '占位目的。',
+        conflict: '占位冲突。',
+        entryState: '占位进入状态。',
+        exitState: '占位退出状态。',
+        castKeys: [playerKey],
+        setupKeys: [],
+        payoffKeys: [],
+      }
+    }),
+  }))
+}
+
+export function parseTextAdventureNarrativeArcScenesArtifactV1(input: {
+  value: unknown
+  brief: ProductProductionBriefV3
+  cast: TextAdventureCastBibleArtifactV1
+  storyBible: TextAdventureStoryBibleArtifactV1
+  locationTitles?: readonly string[]
+}): TextAdventureNarrativeArcScenesArtifactV1 {
+  const row = record(input.value, 'arcScenes')
+  exactKeys(row, ['schema', 'version', 'acts', 'endings'], 'arcScenes')
+  if (row.schema !== 'storyforge.text-adventure-narrative-arc-scenes-artifact' || row.version !== 1) {
+    fail('arcScenes schema/version 无效')
+  }
+  const parsed = parseTextAdventureNarrativeArcPlanArtifactV1({
+    value: {
+      schema: 'storyforge.text-adventure-narrative-arc-plan-artifact',
+      version: 1,
+      acts: row.acts,
+      decisions: placeholderNarrativeDecisionsV1(input.brief),
+      endings: row.endings,
+    },
+    brief: input.brief,
+    cast: input.cast,
+    storyBible: input.storyBible,
+    locationTitles: input.locationTitles,
+  })
+  return {
+    schema: 'storyforge.text-adventure-narrative-arc-scenes-artifact',
+    version: 1,
+    acts: parsed.acts,
+    endings: parsed.endings,
+  }
+}
+
+export function parseTextAdventureNarrativeDecisionPlanArtifactV1(input: {
+  value: unknown
+  brief: ProductProductionBriefV3
+  cast: TextAdventureCastBibleArtifactV1
+  storyBible: TextAdventureStoryBibleArtifactV1
+  locationTitles?: readonly string[]
+}): TextAdventureNarrativeDecisionPlanArtifactV1 {
+  const row = record(input.value, 'decisionPlan')
+  exactKeys(row, ['schema', 'version', 'decisions'], 'decisionPlan')
+  if (row.schema !== 'storyforge.text-adventure-narrative-decision-plan-artifact' || row.version !== 1) {
+    fail('decisionPlan schema/version 无效')
+  }
+  const skeleton = textAdventureNarrativeSkeletonV1(input.brief)
+  const parsed = parseTextAdventureNarrativeArcPlanArtifactV1({
+    value: {
+      schema: 'storyforge.text-adventure-narrative-arc-plan-artifact',
+      version: 1,
+      acts: placeholderNarrativeActsV1(input),
+      decisions: row.decisions,
+      endings: skeleton.endingKeys.map(endingKey => ({
+        endingKey,
+        sceneKey: skeleton.sceneKeys[skeleton.sceneKeys.length - 1],
+      })),
+    },
+    brief: input.brief,
+    cast: input.cast,
+    storyBible: input.storyBible,
+    locationTitles: input.locationTitles,
+  })
+  return {
+    schema: 'storyforge.text-adventure-narrative-decision-plan-artifact',
+    version: 1,
+    decisions: parsed.decisions,
+  }
+}
+
 export interface TextAdventureQuestPlanArtifactV1 {
   schema: 'storyforge.text-adventure-quest-plan-artifact'
   version: 1
@@ -898,6 +1063,7 @@ export function parseTextAdventureQuestPlanArtifactV1(input: {
   cast: TextAdventureCastBibleArtifactV1
   expectedKind: TextAdventureQuestPlanArtifactV1['bundleKind']
   expectedQuestCount: number
+  locationCount?: number
 }): TextAdventureQuestPlanArtifactV1 {
   if (!input.brief.textAdventure) fail('任务计划缺少文字冒险 Brief')
   const row = record(input.value, `${input.expectedKind}QuestPlan`)
@@ -936,11 +1102,14 @@ export function parseTextAdventureQuestPlanArtifactV1(input: {
         ], `quests[${questIndex}].objectives[${objectiveIndex}]`)
         const parsedSceneKeys = keyArray(objective.sceneKeys, `objectives[${objectiveIndex}].sceneKeys`, 1, 12)
         if (parsedSceneKeys.some(value => !sceneKeys.has(value))) fail(`objectives[${objectiveIndex}] 引用未知场景`)
+        if (input.expectedKind === 'main' && parsedSceneKeys.length !== 1) {
+          fail(`objectives[${objectiveIndex}] 主线目标必须恰好绑定一个可结算场景`)
+        }
         const locationOrdinal = integer(
           objective.locationOrdinal,
           `objectives[${objectiveIndex}].locationOrdinal`,
           1,
-          input.brief.textAdventure!.narrative.targetLocationCount,
+          input.locationCount ?? input.brief.textAdventure!.narrative.targetLocationCount,
         )
         const sceneCards = input.arcPlan.acts.flatMap(act => act.sceneCards)
           .filter(scene => parsedSceneKeys.includes(scene.key))
@@ -1147,15 +1316,31 @@ export function parseTextAdventureQuestScriptArtifactV1(input: {
       }
       if (mode === 'check' && (!abilityKey || !abilityKeys.has(abilityKey) || difficulty == null
         || costlySuccessFloor == null || costlySuccessFloor >= difficulty)) {
-        fail('check resolution 必须绑定已登记能力与有效难度区间')
+        fail(
+          `mainObjectiveScripts[${objectiveIndex}].alternatives[${alternativeIndex}] check resolution `
+          + `必须绑定已登记能力与有效难度区间: abilityKey=${String(abilityKey)}, `
+          + `difficulty=${String(difficulty)}, costlySuccessFloor=${String(costlySuccessFloor)}`,
+        )
       }
       return {
         alternativeKey,
         resolution: { mode, abilityKey, difficulty, costlySuccessFloor },
         timeCostMinutes: integer(alternative.timeCostMinutes, 'questScript.timeCostMinutes', 1, 120),
-        successText: text(alternative.successText, 'questScript.successText', 4_000),
-        costlySuccessText: text(alternative.costlySuccessText, 'questScript.costlySuccessText', 4_000),
-        failureForwardText: text(alternative.failureForwardText, 'questScript.failureForwardText', 4_000),
+        successText: text(
+          alternative.successText,
+          `mainObjectiveScripts[${objectiveIndex}].alternatives[${alternativeIndex}].successText`,
+          4_000,
+        ),
+        costlySuccessText: text(
+          alternative.costlySuccessText,
+          `mainObjectiveScripts[${objectiveIndex}].alternatives[${alternativeIndex}].costlySuccessText`,
+          4_000,
+        ),
+        failureForwardText: text(
+          alternative.failureForwardText,
+          `mainObjectiveScripts[${objectiveIndex}].alternatives[${alternativeIndex}].failureForwardText`,
+          4_000,
+        ),
       }
     })
     if (new Set(alternatives.map(alternative => alternative.alternativeKey)).size !== alternativeByKey.size) {

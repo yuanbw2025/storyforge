@@ -8,6 +8,19 @@ const REQUIRED_RESOURCE_ROLES: TextAdventureProductionBriefV1['character']['reso
   'health', 'mana', 'stamina', 'experience', 'skill-points', 'currency', 'clock',
 ]
 
+/**
+ * A commercial finite adventure needs enough distinct surfaces to communicate
+ * its world, cast and turning points. Two generic images may be a prototype,
+ * but cannot represent a community recommendation candidate.
+ */
+export function minimumTextAdventureCommercialImageCountV1(
+  mode: TextAdventureProductionBriefV1['media']['mode'],
+): number {
+  if (mode === 'text-only') return 0
+  if (mode === 'key-illustrations') return 12
+  return 24
+}
+
 function fail(message: string): never {
   throw new Error(`[text-adventure-production-brief] ${message}`)
 }

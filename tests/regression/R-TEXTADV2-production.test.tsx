@@ -82,23 +82,50 @@ describe('R-TEXTADV2-production · 文字冒险正式生产契约与工作台', 
     const plan = await createProductProductionPlanV3({ buildNumber: 1, briefHash, brief })
     const taskByKey = new Map(plan.tasks.map(task => [task.taskKey, task]))
     expect(brief.productionBudget.maximumOutputTokens).toBe(160_000)
-    expect(taskByKey.get('content.narrative-arc-plan')?.budgetReservation.outputTokens)
-      .toBe(Math.floor(brief.productionBudget.maximumOutputTokens * 0.12))
+    expect(taskByKey.get('content.narrative-arc-scenes')?.budgetReservation.outputTokens)
+      .toBe(Math.floor(brief.productionBudget.maximumOutputTokens * 0.025))
+    expect(taskByKey.get('content.narrative-decision-plan')?.budgetReservation.outputTokens)
+      .toBe(Math.floor(brief.productionBudget.maximumOutputTokens * 0.02))
+    expect(taskByKey.get('content.narrative-arc-plan')?.budgetReservation.outputTokens).toBe(0)
+    expect(taskByKey.get('content.quest-script.main.act-1.single')?.budgetReservation.outputTokens)
+      .toBe(Math.floor(brief.productionBudget.maximumOutputTokens * 0.015))
+    expect(taskByKey.get('content.quest-script.main.act-1.multi')?.budgetReservation.outputTokens)
+      .toBe(Math.floor(brief.productionBudget.maximumOutputTokens * 0.02))
+    expect(taskByKey.get('content.adventure-ambient-events')?.budgetReservation.outputTokens)
+      .toBe(Math.floor(brief.productionBudget.maximumOutputTokens * 0.02))
+    expect(taskByKey.get('content.dialogue-pass.act-1')?.budgetReservation.outputTokens)
+      .toBe(Math.floor(brief.productionBudget.maximumOutputTokens * 0.065))
+    expect(taskByKey.get('content.dialogue-pass.act-1')?.budgetReservation.inputTokens)
+      .toBe(Math.floor(brief.productionBudget.maximumInputTokens * 0.035))
+    expect(taskByKey.get('content.adventure-quality-review')?.budgetReservation.inputTokens)
+      .toBe(Math.floor(brief.productionBudget.maximumInputTokens * 0.075))
+    expect(taskByKey.get('content.adventure-quality-review')?.budgetReservation.outputTokens)
+      .toBe(Math.floor(brief.productionBudget.maximumOutputTokens * 0.075))
     expect([
-      'content.scene-script.act-1',
-      'content.scene-script.act-2',
-      'content.scene-script.act-3',
+      'content.scene-script.act-1.part-1', 'content.scene-script.act-1.part-2',
+      'content.scene-script.act-2.part-1', 'content.scene-script.act-2.part-2',
+      'content.scene-script.act-3.part-1', 'content.scene-script.act-3.part-2',
     ].reduce((sum, taskKey) => sum + taskByKey.get(taskKey)!.budgetReservation.outputTokens, 0))
-      .toBe(Math.floor(brief.productionBudget.maximumOutputTokens * 0.08) * 3)
+      .toBe(Math.floor(brief.productionBudget.maximumOutputTokens * 0.09) * 6)
     expect(plan.tasks.reduce((sum, task) => sum + task.budgetReservation.outputTokens, 0))
-      .toBeLessThanOrEqual(brief.productionBudget.maximumOutputTokens)
+      .toBeLessThanOrEqual(Math.floor(brief.productionBudget.maximumOutputTokens * 1.25))
+    expect(plan.tasks.reduce((sum, task) => sum + task.budgetReservation.inputTokens, 0))
+      .toBeLessThanOrEqual(brief.productionBudget.maximumInputTokens)
     expect([...taskByKey.keys()]).toEqual(expect.arrayContaining([
       'production.supervision',
       'content.source-sufficiency', 'source.author-gate', 'content.design', 'content.story-bible', 'content.cast-bible',
-      'content.adventure-architecture', 'content.product-module', 'content.narrative-arc-plan',
+      'content.adventure-architecture', 'content.product-module', 'content.narrative-arc-scenes',
+      'content.narrative-decision-plan', 'content.narrative-arc-plan',
       'content.main-quest-plan', 'content.adventure-side-quests', 'content.adventure-ambient-events',
-      'content.quest-script', 'content.scene-script.act-1', 'content.scene-script.act-2',
-      'content.scene-script.act-3', 'content.dialogue-pass.act-1',
+      'content.quest-script.main.act-1.single', 'content.quest-script.main.act-1.multi',
+      'content.quest-script.main.act-2.single', 'content.quest-script.main.act-2.multi',
+      'content.quest-script.main.act-3.single', 'content.quest-script.main.act-3.multi',
+      'content.quest-script.supplemental',
+      'content.quest-script',
+      'content.scene-script.act-1.part-1', 'content.scene-script.act-1.part-2', 'content.scene-script.act-1',
+      'content.scene-script.act-2.part-1', 'content.scene-script.act-2.part-2', 'content.scene-script.act-2',
+      'content.scene-script.act-3.part-1', 'content.scene-script.act-3.part-2', 'content.scene-script.act-3',
+      'content.dialogue-pass.act-1',
       'content.dialogue-pass.act-2', 'content.dialogue-pass.act-3', 'integration.narrative',
       'content.adventure-quality-review', 'media.requirements', 'media.visual-bible.compile',
       'media.anchor-author-gate', 'media.visual.001', 'media.visual.002',
@@ -131,13 +158,47 @@ describe('R-TEXTADV2-production · 文字冒险正式生产契约与工作台', 
     expect(taskByKey.get('content.cast-bible')?.dependsOn).toEqual([
       'content.source-sufficiency', 'content.story-bible',
     ])
-    expect(taskByKey.get('content.narrative-arc-plan')?.dependsOn).toEqual([
+    expect(taskByKey.get('content.narrative-arc-scenes')?.dependsOn).toEqual([
       'content.story-bible', 'content.cast-bible', 'content.adventure-architecture', 'content.product-module',
     ])
-    expect(taskByKey.get('content.main-quest-plan')?.dependsOn).toEqual([
-      'content.story-bible', 'content.cast-bible', 'content.product-module', 'content.narrative-arc-plan',
+    expect(taskByKey.get('content.narrative-arc-scenes')?.skillId).toBe('text-adventure.narrative-design.v1')
+    expect(taskByKey.get('content.narrative-decision-plan')?.dependsOn).toEqual([
+      'content.story-bible', 'content.cast-bible', 'content.narrative-arc-scenes',
     ])
-    expect(taskByKey.get('content.scene-script.act-1')).toMatchObject({
+    expect(taskByKey.get('content.narrative-decision-plan')?.skillId)
+      .toBe(taskByKey.get('content.narrative-arc-scenes')?.skillId)
+    expect(taskByKey.get('content.narrative-arc-plan')).toMatchObject({
+      executionMode: 'deterministic',
+      dependsOn: [
+        'content.story-bible', 'content.cast-bible', 'content.adventure-architecture',
+        'content.narrative-arc-scenes', 'content.narrative-decision-plan',
+      ],
+    })
+    expect(taskByKey.get('content.main-quest-plan')?.dependsOn).toEqual([
+      'content.story-bible', 'content.cast-bible', 'content.adventure-architecture',
+      'content.product-module', 'content.narrative-arc-plan',
+    ])
+    expect(taskByKey.get('content.quest-script.main.act-1.single')).toMatchObject({
+      executionMode: 'model', skillId: 'text-adventure.quest-script.v1',
+      outputArtifactKeys: ['content.quest-script.main.act-1.single'],
+    })
+    expect(taskByKey.get('content.quest-script.supplemental')).toMatchObject({
+      executionMode: 'model', skillId: 'text-adventure.quest-script.v1',
+      dependsOn: [
+        'content.product-module', 'content.adventure-side-quests', 'content.adventure-ambient-events',
+      ],
+    })
+    expect(taskByKey.get('content.quest-script')).toMatchObject({
+      executionMode: 'deterministic', skillId: null,
+      dependsOn: [
+        'content.quest-script.main.act-1.single', 'content.quest-script.main.act-1.multi',
+        'content.quest-script.main.act-2.single', 'content.quest-script.main.act-2.multi',
+        'content.quest-script.main.act-3.single', 'content.quest-script.main.act-3.multi',
+        'content.quest-script.supplemental',
+      ],
+      outputArtifactKeys: ['content.quest-script'],
+    })
+    expect(taskByKey.get('content.scene-script.act-1.part-1')).toMatchObject({
       skillId: 'text-adventure.scene-script.v1',
       dependsOn: [
         'content.story-bible', 'content.cast-bible', 'content.adventure-architecture',
@@ -145,10 +206,15 @@ describe('R-TEXTADV2-production · 文字冒险正式生产契约与工作台', 
         'content.main-quest-plan', 'content.adventure-side-quests', 'content.adventure-ambient-events',
         'content.quest-script',
       ],
-      timeoutMs: 600_000,
+      timeoutMs: 300_000,
     })
-    expect(taskByKey.get('content.scene-script.act-1')!.budgetReservation.outputTokens)
+    expect(taskByKey.get('content.scene-script.act-1.part-1')!.budgetReservation.outputTokens)
       .toBeGreaterThan(0)
+    expect(taskByKey.get('content.scene-script.act-1')).toMatchObject({
+      executionMode: 'deterministic', skillId: null,
+      dependsOn: ['content.scene-script.act-1.part-1', 'content.scene-script.act-1.part-2'],
+      outputArtifactKeys: ['content.scene-script.act-1'],
+    })
     expect(taskByKey.get('integration.narrative')).toMatchObject({
       executionMode: 'deterministic',
       dependsOn: expect.arrayContaining([
@@ -238,6 +304,16 @@ describe('R-TEXTADV2-production · 文字冒险正式生产契约与工作台', 
       return TEXT_ADVENTURE_PRODUCTION_AGENT_IDS.includes(agentId as never) ? [agentId] : []
     }))
     expect(activeAgentIds).toEqual(new Set(TEXT_ADVENTURE_PRODUCTION_AGENT_IDS))
+    const skillIdsByAgent = new Map<string, Set<string>>()
+    for (const task of plan.tasks) {
+      if (!task.skillId) continue
+      const agentId = getAgentSkillV1(task.skillId).agentId
+      if (!TEXT_ADVENTURE_PRODUCTION_AGENT_IDS.includes(agentId as never)) continue
+      const skillIds = skillIdsByAgent.get(agentId) ?? new Set<string>()
+      skillIds.add(task.skillId)
+      skillIdsByAgent.set(agentId, skillIds)
+    }
+    expect([...skillIdsByAgent.values()].every(skillIds => skillIds.size === 1)).toBe(true)
     expect(plan.terminalTaskKey).toBe('qa.playtest-strategy')
     expect(taskByKey.get('integration.package')?.inputArtifactKeys).toEqual(expect.arrayContaining([
       'content.story-bible', 'content.cast-bible', 'content.adventure-architecture',
@@ -247,6 +323,53 @@ describe('R-TEXTADV2-production · 文字冒险正式生产契约与工作台', 
       'media.visual-bible', 'media.anchor-decision', 'media.audit',
       'quality.visual-review', 'media.visual.001', 'media.visual.002',
     ]))
+  })
+
+  it('商业文字冒险不会再把两张图伪装成社区推荐关键插图档', async () => {
+    const owned = await seedCurrentProductWorld('TEXTADV-2 商业媒资规模')
+    const consultation = await suggestProductStartingPoints({
+      scope: owned.scope,
+      worldReleaseId: owned.release.id!,
+    })
+    const keyIllustrations = await draftProductProductionBriefV3({
+      scope: owned.scope,
+      worldReleaseId: owned.release.id!,
+      suggestionKey: consultation.suggestions[0].suggestionKey,
+      productType: 'text-adventure',
+      qualityProfile: 'commercial-candidate',
+      scale: 'short-arc',
+      visualLevel: 'key-scenes',
+      audioLevel: 'none',
+      playerRole: '守灯人',
+      openingSituation: '在潮门关闭前完成主线。',
+      textAdventure: { confirmAll: true },
+    })
+    expect(keyIllustrations.media).toMatchObject({
+      visualLevel: 'key-scenes', imageCount: 12, requiredMediaKinds: ['background'],
+    })
+    expect(keyIllustrations.completionContract.requiredGateIds).toContain(
+      'product.adventure.recommendation-media-composition',
+    )
+    expect((await createProductProductionPlanV3({
+      buildNumber: 1,
+      briefHash: await hashProductProductionValueV2(keyIllustrations),
+      brief: keyIllustrations,
+    })).tasks.filter(task => /^media\.visual\.\d{3}$/.test(task.taskKey))).toHaveLength(12)
+
+    const richIllustrations = await draftProductProductionBriefV3({
+      scope: owned.scope,
+      worldReleaseId: owned.release.id!,
+      suggestionKey: consultation.suggestions[0].suggestionKey,
+      productType: 'text-adventure',
+      qualityProfile: 'commercial-candidate',
+      scale: 'short-arc',
+      visualLevel: 'illustrated',
+      audioLevel: 'none',
+      playerRole: '守灯人',
+      openingSituation: '在潮门关闭前完成主线。',
+      textAdventure: { confirmAll: true },
+    })
+    expect(richIllustrations.media.imageCount).toBe(24)
   })
 
   it('未确认四项产品边界时保持阻塞，并拒绝会让失败代价越界的生命资源', async () => {

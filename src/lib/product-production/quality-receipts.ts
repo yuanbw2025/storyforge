@@ -29,6 +29,8 @@ import { readMediaBlobObjectData } from './media-blob-store'
 export const PRODUCT_BROWSER_PERFORMANCE_GATE_ID_V1 = 'browser.performance.desktop'
 export const PRODUCT_MAIN_ROUTE_PLAYTHROUGH_GATE_ID_V1 = 'playthrough.main-route'
 export const PRODUCT_MAIN_ROUTE_PLAYTHROUGH_POLICY_ID_V1 = 'storyforge.product-main-route-playthrough.v1'
+export const TEXT_ADVENTURE_HUMAN_PLAYTEST_GATE_ID_V1 = 'text-adventure.playtest.human-coverage'
+export const TEXT_ADVENTURE_HUMAN_PLAYTEST_POLICY_ID_V1 = 'storyforge.text-adventure-human-playtest.v1'
 export const PRODUCT_MEDIA_RUNTIME_GATE_ID_V1 = 'media.runtime.decode'
 export const PRODUCT_MEDIA_RUNTIME_POLICY_ID_V1 = 'storyforge.product-media-runtime.v2'
 export const TEXT_ADVENTURE_HUMAN_VISUAL_REVIEW_GATE_ID_V1 = 'text-adventure.visual.author-approval'
@@ -104,6 +106,87 @@ export interface VerifiedProductMainRoutePlaythroughGateV1 {
   row: ProductQualityGateReceiptRecordV1
   gateReceipt: ProductQualityGateReceiptV1
   evidence: ProductMainRoutePlaythroughEvidenceV1
+}
+
+export type TextAdventureHumanPlaytestParticipantRoleV1 = 'author' | 'independent-player'
+
+export interface TextAdventureHumanPlaytestActionEvidenceV1 {
+  sequence: number
+  commandId: string
+  actionKey: string
+  kind: 'look' | 'move' | 'talk' | 'take' | 'give' | 'use' | 'inspect' | 'attempt' | 'rest' | 'quest-action'
+  outcome: 'success' | 'costly-success' | 'failure' | 'not-attempted'
+  payloadHash: string
+  createdAt: number
+}
+
+export interface TextAdventureHumanPlaytestAssessmentV1 {
+  ratings: {
+    comprehension: number
+    pacing: number
+    agency: number
+    emotionalImpact: number
+  }
+  blockingIssues: string[]
+  feedback: {
+    comprehensionObstacles: string
+    boringMoments: string
+    errors: string
+    choiceExperience: string
+    endingFeedback: string
+  }
+  note: string
+}
+
+export interface TextAdventureHumanPlaytestSessionEvidenceV1 {
+  participantRole: TextAdventureHumanPlaytestParticipantRoleV1
+  participant: {
+    label: string
+    declaration: 'author-self-attestation' | 'not-involved-in-production'
+  }
+  sessionKind: 'text-adventure'
+  routeEvents: ProductMainRouteEventEvidenceV1[]
+  actionEvents: TextAdventureHumanPlaytestActionEvidenceV1[]
+  eventStreamHash: string
+  endingKey: string
+  startedAt: number
+  completedAt: number
+  elapsedMs: number
+  choiceCount: number
+  actionCount: number
+  meaningfulActionCount: number
+  dialogueActionCount: number
+  thresholds: {
+    targetPlayMinutes: number
+    minimumElapsedMs: number
+    maximumElapsedMs: number
+    minimumChoiceCount: number
+    minimumActionCount: number
+  }
+  environment: ProductPlaythroughBrowserEnvironmentV1
+  assessment: TextAdventureHumanPlaytestAssessmentV1
+  confirmedAt: number
+  passed: boolean
+  sessionEvidenceHash: string
+}
+
+export interface TextAdventureHumanPlaytestCoverageEvidenceV1 {
+  schema: 'storyforge.text-adventure-human-playtest-coverage-evidence'
+  version: 1
+  buildNumber: number
+  packageHash: string
+  previewHash: string
+  briefHash: string
+  sessions: TextAdventureHumanPlaytestSessionEvidenceV1[]
+  authorSessionEvidenceHash: string | null
+  independentPlayerSessionEvidenceHash: string | null
+  passed: boolean
+}
+
+export interface VerifiedTextAdventureHumanPlaytestGateV1 {
+  row: ProductQualityGateReceiptRecordV1
+  gateReceipt: ProductQualityGateReceiptV1
+  evidence: TextAdventureHumanPlaytestCoverageEvidenceV1
 }
 
 export interface ProductMediaRuntimeAssetEvidenceV1 {
@@ -186,7 +269,13 @@ export interface CompletedProductBuildPlaythroughV1 {
   sessionKind: ProductRuntimeKind
   endingKey: string
   choiceCount: number
+  actionCount: number
+  meaningfulActionCount: number
+  dialogueActionCount: number
+  startedAt: number
   completedAt: number
+  elapsedMs: number
+  eventStreamHash: string
 }
 
 export interface PortableProductQualityGateBindingV1 {
@@ -194,6 +283,7 @@ export interface PortableProductQualityGateBindingV1 {
   packageHash: string
   previewHash: string
   briefHash: string
+  targetPlayMinutes: number
   humanVisual?: {
     mediaAuditHash: string
     visualReviewHash: string
@@ -212,6 +302,7 @@ export interface VerifiedPortableProductQualityGateV1 {
   gateReceipt: ProductQualityGateReceiptV1
   evidence: ProductBrowserPerformanceEvidenceV1
     | ProductMainRoutePlaythroughEvidenceV1
+    | TextAdventureHumanPlaytestCoverageEvidenceV1
     | ProductMediaRuntimeEvidenceV1
     | TextAdventureHumanVisualReviewEvidenceV1
 }
@@ -262,6 +353,16 @@ function positiveInteger(value: unknown, label: string): number {
 
 function nullableStableText(value: unknown, label: string): string | null {
   return value == null ? null : boundedText(value, label, 500)
+}
+
+function optionalBoundedText(value: unknown, label: string, maximum = 2_000): string {
+  if (typeof value !== 'string' || value.length > maximum) fail(`${label} 无效`)
+  return value.trim().normalize('NFC')
+}
+
+function boundedInteger(value: unknown, label: string, minimum: number, maximum: number): number {
+  if (!Number.isInteger(value) || Number(value) < minimum || Number(value) > maximum) fail(`${label} 无效`)
+  return Number(value)
 }
 
 function parsePlaythroughEnvironment(value: unknown): ProductPlaythroughBrowserEnvironmentV1 {
@@ -513,6 +614,208 @@ function parsePlaythroughEvidence(value: string | unknown): ProductMainRoutePlay
   }
 }
 
+function parseHumanPlaytestActionEvents(value: unknown): TextAdventureHumanPlaytestActionEvidenceV1[] {
+  if (!Array.isArray(value) || value.length < 1 || value.length > 10_000) fail('human playtest actionEvents 无效')
+  const kinds = new Set(['look', 'move', 'talk', 'take', 'give', 'use', 'inspect', 'attempt', 'rest', 'quest-action'])
+  const outcomes = new Set(['success', 'costly-success', 'failure', 'not-attempted'])
+  const actions = value.map((item, index) => {
+    const row = record(item, `human playtest actionEvents[${index}]`)
+    exactKeys(row, [
+      'sequence', 'commandId', 'actionKey', 'kind', 'outcome', 'payloadHash', 'createdAt',
+    ], `human playtest actionEvents[${index}]`)
+    if (!kinds.has(String(row.kind)) || !outcomes.has(String(row.outcome)) || !isSha256Hash(row.payloadHash)) {
+      fail(`human playtest actionEvents[${index}] 基础字段无效`)
+    }
+    return {
+      sequence: positiveInteger(row.sequence, `human playtest actionEvents[${index}].sequence`),
+      commandId: boundedText(row.commandId, `human playtest actionEvents[${index}].commandId`, 500),
+      actionKey: boundedText(row.actionKey, `human playtest actionEvents[${index}].actionKey`, 500),
+      kind: row.kind as TextAdventureHumanPlaytestActionEvidenceV1['kind'],
+      outcome: row.outcome as TextAdventureHumanPlaytestActionEvidenceV1['outcome'],
+      payloadHash: row.payloadHash as string,
+      createdAt: positiveInteger(row.createdAt, `human playtest actionEvents[${index}].createdAt`),
+    }
+  })
+  if (actions.some((action, index) => index > 0 && action.sequence <= actions[index - 1].sequence)) {
+    fail('human playtest actionEvents sequence 必须严格递增')
+  }
+  return actions
+}
+
+function parseHumanPlaytestAssessment(value: unknown): TextAdventureHumanPlaytestAssessmentV1 {
+  const row = record(value, 'human playtest assessment')
+  exactKeys(row, ['ratings', 'blockingIssues', 'feedback', 'note'], 'human playtest assessment')
+  const ratings = record(row.ratings, 'human playtest ratings')
+  exactKeys(ratings, ['comprehension', 'pacing', 'agency', 'emotionalImpact'], 'human playtest ratings')
+  const feedback = record(row.feedback, 'human playtest feedback')
+  exactKeys(feedback, [
+    'comprehensionObstacles', 'boringMoments', 'errors', 'choiceExperience', 'endingFeedback',
+  ], 'human playtest feedback')
+  return {
+    ratings: {
+      comprehension: boundedInteger(ratings.comprehension, 'ratings.comprehension', 1, 5),
+      pacing: boundedInteger(ratings.pacing, 'ratings.pacing', 1, 5),
+      agency: boundedInteger(ratings.agency, 'ratings.agency', 1, 5),
+      emotionalImpact: boundedInteger(ratings.emotionalImpact, 'ratings.emotionalImpact', 1, 5),
+    },
+    blockingIssues: textArray(row.blockingIssues, 'human playtest blockingIssues', 50),
+    feedback: {
+      comprehensionObstacles: boundedText(feedback.comprehensionObstacles, 'feedback.comprehensionObstacles', 2_000),
+      boringMoments: boundedText(feedback.boringMoments, 'feedback.boringMoments', 2_000),
+      errors: boundedText(feedback.errors, 'feedback.errors', 2_000),
+      choiceExperience: boundedText(feedback.choiceExperience, 'feedback.choiceExperience', 2_000),
+      endingFeedback: boundedText(feedback.endingFeedback, 'feedback.endingFeedback', 2_000),
+    },
+    note: optionalBoundedText(row.note, 'human playtest note', 4_000),
+  }
+}
+
+function humanPlaytestSessionPassed(
+  session: Pick<TextAdventureHumanPlaytestSessionEvidenceV1,
+    'elapsedMs' | 'choiceCount' | 'meaningfulActionCount' | 'thresholds' | 'assessment'>,
+): boolean {
+  return session.elapsedMs >= session.thresholds.minimumElapsedMs
+    && session.elapsedMs <= session.thresholds.maximumElapsedMs
+    && session.choiceCount >= session.thresholds.minimumChoiceCount
+    && session.meaningfulActionCount >= session.thresholds.minimumActionCount
+    && Object.values(session.assessment.ratings).every(score => score >= 3)
+    && session.assessment.blockingIssues.length === 0
+}
+
+function parseHumanPlaytestSession(value: unknown, index: number): TextAdventureHumanPlaytestSessionEvidenceV1 {
+  const label = `human playtest sessions[${index}]`
+  const row = record(value, label)
+  exactKeys(row, [
+    'participantRole', 'participant', 'sessionKind', 'routeEvents', 'actionEvents', 'eventStreamHash', 'endingKey',
+    'startedAt', 'completedAt', 'elapsedMs', 'choiceCount', 'actionCount', 'meaningfulActionCount', 'dialogueActionCount',
+    'thresholds', 'environment', 'assessment', 'confirmedAt', 'passed', 'sessionEvidenceHash',
+  ], label)
+  if (!['author', 'independent-player'].includes(String(row.participantRole))
+    || row.sessionKind !== 'text-adventure' || !isSha256Hash(row.eventStreamHash)
+    || !isSha256Hash(row.sessionEvidenceHash) || typeof row.passed !== 'boolean') fail(`${label} 基础字段无效`)
+  const routeEvents = parseRouteEvents(row.routeEvents)
+  const actionEvents = parseHumanPlaytestActionEvents(row.actionEvents)
+  const participantRow = record(row.participant, `${label}.participant`)
+  exactKeys(participantRow, ['label', 'declaration'], `${label}.participant`)
+  const participant = {
+    label: boundedText(participantRow.label, `${label}.participant.label`, 200),
+    declaration: participantRow.declaration as TextAdventureHumanPlaytestSessionEvidenceV1['participant']['declaration'],
+  }
+  if (participant.declaration !== (row.participantRole === 'author'
+    ? 'author-self-attestation' : 'not-involved-in-production')) fail(`${label} 身份声明与角色不一致`)
+  const thresholdsRow = record(row.thresholds, `${label}.thresholds`)
+  exactKeys(thresholdsRow, [
+    'targetPlayMinutes', 'minimumElapsedMs', 'maximumElapsedMs', 'minimumChoiceCount', 'minimumActionCount',
+  ], `${label}.thresholds`)
+  const thresholds = {
+    targetPlayMinutes: boundedInteger(thresholdsRow.targetPlayMinutes, `${label}.targetPlayMinutes`, 1, 100_000),
+    minimumElapsedMs: positiveInteger(thresholdsRow.minimumElapsedMs, `${label}.minimumElapsedMs`),
+    maximumElapsedMs: positiveInteger(thresholdsRow.maximumElapsedMs, `${label}.maximumElapsedMs`),
+    minimumChoiceCount: positiveInteger(thresholdsRow.minimumChoiceCount, `${label}.minimumChoiceCount`),
+    minimumActionCount: positiveInteger(thresholdsRow.minimumActionCount, `${label}.minimumActionCount`),
+  }
+  if (thresholds.maximumElapsedMs < thresholds.minimumElapsedMs) fail(`${label} 时长阈值顺序无效`)
+  const expectedThresholds = {
+    targetPlayMinutes: thresholds.targetPlayMinutes,
+    minimumElapsedMs: Math.max(60_000, Math.round(thresholds.targetPlayMinutes * 60_000 * 0.75)),
+    maximumElapsedMs: Math.max(60_000, Math.round(thresholds.targetPlayMinutes * 60_000 * 1.25)),
+    minimumChoiceCount: Math.max(2, Math.ceil(thresholds.targetPlayMinutes / 6)),
+    minimumActionCount: Math.max(6, Math.ceil(thresholds.targetPlayMinutes / 4)),
+  }
+  if (canonicalProductProductionJsonV2(thresholds) !== canonicalProductProductionJsonV2(expectedThresholds)) {
+    fail(`${label} 阈值不是策略确定性派生值`)
+  }
+  const startedAt = positiveInteger(row.startedAt, `${label}.startedAt`)
+  const completedAt = positiveInteger(row.completedAt, `${label}.completedAt`)
+  const elapsedMs = boundedInteger(row.elapsedMs, `${label}.elapsedMs`, 1, Number.MAX_SAFE_INTEGER)
+  const choiceCount = positiveInteger(row.choiceCount, `${label}.choiceCount`)
+  const actionCount = positiveInteger(row.actionCount, `${label}.actionCount`)
+  const meaningfulActionCount = positiveInteger(row.meaningfulActionCount, `${label}.meaningfulActionCount`)
+  const dialogueActionCount = boundedInteger(row.dialogueActionCount, `${label}.dialogueActionCount`, 0, 10_000)
+  const endingKey = boundedText(row.endingKey, `${label}.endingKey`, 500)
+  const assessment = parseHumanPlaytestAssessment(row.assessment)
+  const session: TextAdventureHumanPlaytestSessionEvidenceV1 = {
+    participantRole: row.participantRole as TextAdventureHumanPlaytestParticipantRoleV1,
+    participant, sessionKind: 'text-adventure', routeEvents, actionEvents,
+    eventStreamHash: row.eventStreamHash as string, endingKey,
+    startedAt, completedAt, elapsedMs, choiceCount, actionCount, meaningfulActionCount, dialogueActionCount,
+    thresholds, environment: parsePlaythroughEnvironment(row.environment), assessment,
+    confirmedAt: positiveInteger(row.confirmedAt, `${label}.confirmedAt`),
+    passed: row.passed as boolean, sessionEvidenceHash: row.sessionEvidenceHash as string,
+  }
+  if (completedAt <= startedAt || elapsedMs !== completedAt - startedAt || session.confirmedAt < completedAt
+    || routeEvents[0].createdAt !== startedAt || routeEvents[routeEvents.length - 1].createdAt !== completedAt
+    || routeEvents[routeEvents.length - 1].endingKey !== endingKey
+    || choiceCount !== routeEvents.filter(event => event.kind === 'choice').length
+    || actionCount !== actionEvents.length
+    || meaningfulActionCount !== new Set(actionEvents.filter(event => event.outcome !== 'not-attempted')
+      .map(event => event.actionKey)).size
+    || dialogueActionCount !== actionEvents.filter(event => event.kind === 'talk').length
+    || new Set([...routeEvents, ...actionEvents].map(event => event.sequence)).size !== routeEvents.length + actionEvents.length
+    || [...routeEvents, ...actionEvents].some(event => event.createdAt < startedAt || event.createdAt > completedAt)
+    || row.passed !== humanPlaytestSessionPassed(session)) fail(`${label} 计数、时序或通过判定不一致`)
+  return session
+}
+
+function latestHumanSession(
+  sessions: TextAdventureHumanPlaytestSessionEvidenceV1[],
+  role: TextAdventureHumanPlaytestParticipantRoleV1,
+): TextAdventureHumanPlaytestSessionEvidenceV1 | null {
+  return [...sessions].filter(session => session.participantRole === role)
+    .sort((left, right) => right.confirmedAt - left.confirmedAt
+      || right.sessionEvidenceHash.localeCompare(left.sessionEvidenceHash))[0] ?? null
+}
+
+function humanCoverageStatus(evidence: TextAdventureHumanPlaytestCoverageEvidenceV1): ProductQualityGateReceiptStatusV1 {
+  const author = latestHumanSession(evidence.sessions, 'author')
+  const independent = latestHumanSession(evidence.sessions, 'independent-player')
+  if (author?.passed && independent?.passed && author.eventStreamHash !== independent.eventStreamHash) return 'passed'
+  if (author && !author.passed || independent && !independent.passed) return 'failed'
+  return 'needs-human'
+}
+
+export function parseTextAdventureHumanPlaytestCoverageEvidenceV1(
+  value: string | unknown,
+): TextAdventureHumanPlaytestCoverageEvidenceV1 {
+  let raw: unknown = value
+  if (typeof value === 'string') {
+    try { raw = JSON.parse(value) } catch { fail('真人试玩 measuredJson 不是合法 JSON') }
+  }
+  const row = record(raw, 'human playtest coverage evidence')
+  exactKeys(row, [
+    'schema', 'version', 'buildNumber', 'packageHash', 'previewHash', 'briefHash', 'sessions',
+    'authorSessionEvidenceHash', 'independentPlayerSessionEvidenceHash', 'passed',
+  ], 'human playtest coverage evidence')
+  if (row.schema !== 'storyforge.text-adventure-human-playtest-coverage-evidence' || row.version !== 1
+    || !isSha256Hash(row.packageHash) || !isSha256Hash(row.previewHash) || !isSha256Hash(row.briefHash)
+    || !Array.isArray(row.sessions) || row.sessions.length < 1 || row.sessions.length > 20
+    || typeof row.passed !== 'boolean') fail('真人试玩 coverage 基础字段无效')
+  const sessions = row.sessions.map(parseHumanPlaytestSession)
+  if (new Set(sessions.map(session => session.sessionEvidenceHash)).size !== sessions.length
+    || sessions.some((session, index) => index > 0 && (session.confirmedAt < sessions[index - 1].confirmedAt
+      || session.confirmedAt === sessions[index - 1].confirmedAt
+        && session.sessionEvidenceHash.localeCompare(sessions[index - 1].sessionEvidenceHash) <= 0))) {
+    fail('真人试玩 sessions 必须按确认时间和 hash 唯一排序')
+  }
+  const author = latestHumanSession(sessions, 'author')
+  const independent = latestHumanSession(sessions, 'independent-player')
+  const authorHash = row.authorSessionEvidenceHash == null ? null : row.authorSessionEvidenceHash
+  const independentHash = row.independentPlayerSessionEvidenceHash == null ? null : row.independentPlayerSessionEvidenceHash
+  if ((authorHash != null && !isSha256Hash(authorHash)) || (independentHash != null && !isSha256Hash(independentHash))
+    || authorHash !== (author?.sessionEvidenceHash ?? null)
+    || independentHash !== (independent?.sessionEvidenceHash ?? null)) fail('真人试玩最新角色会话指针无效')
+  const evidence: TextAdventureHumanPlaytestCoverageEvidenceV1 = {
+    schema: 'storyforge.text-adventure-human-playtest-coverage-evidence', version: 1,
+    buildNumber: positiveInteger(row.buildNumber, 'human playtest buildNumber'),
+    packageHash: row.packageHash as string, previewHash: row.previewHash as string, briefHash: row.briefHash as string,
+    sessions, authorSessionEvidenceHash: authorHash, independentPlayerSessionEvidenceHash: independentHash,
+    passed: row.passed as boolean,
+  }
+  const expectedPassed = humanCoverageStatus(evidence) === 'passed'
+  if (evidence.passed !== expectedPassed) fail('真人试玩 coverage passed 派生不一致')
+  return evidence
+}
+
 export function parseProductQualityGateReceiptV1(value: string | unknown): ProductQualityGateReceiptV1 {
   let raw: unknown = value
   if (typeof value === 'string') {
@@ -583,6 +886,16 @@ export async function verifyPortableProductQualityGateReceiptV1(input: {
     const verified = await verifyPlaythroughGateReceipt(row, {
       buildId: 0, packageHash: input.binding.packageHash, previewHash: input.binding.previewHash,
     })
+    return { gateReceipt, evidence: verified.evidence }
+  }
+  if (gateReceipt.gateId === TEXT_ADVENTURE_HUMAN_PLAYTEST_GATE_ID_V1) {
+    const evidence = parseTextAdventureHumanPlaytestCoverageEvidenceV1(gateReceipt.measuredJson)
+    const verified = await verifyTextAdventureHumanPlaytestGateReceiptV1(row, {
+      buildId: 0, buildNumber: input.binding.buildNumber,
+      packageHash: input.binding.packageHash, previewHash: input.binding.previewHash,
+      briefHash: input.binding.briefHash, targetPlayMinutes: input.binding.targetPlayMinutes,
+    })
+    if (!evidence.passed) fail('候选包文字冒险真人试玩覆盖未通过')
     return { gateReceipt, evidence: verified.evidence }
   }
   if (gateReceipt.gateId === PRODUCT_MEDIA_RUNTIME_GATE_ID_V1) {
@@ -724,6 +1037,26 @@ async function createRouteEvidence(events: ProductRuntimeEvent[]): Promise<Produ
   return parseRouteEvents(routeEvents)
 }
 
+async function createHumanPlaytestActionEvidence(
+  events: ProductRuntimeEvent[],
+): Promise<TextAdventureHumanPlaytestActionEvidenceV1[]> {
+  const actions: TextAdventureHumanPlaytestActionEvidenceV1[] = []
+  for (const event of [...events].sort((left, right) => left.sequence - right.sequence)) {
+    if (event.type !== 'adventure.action.committed') continue
+    const payload = eventPayload(event)
+    actions.push({
+      sequence: event.sequence,
+      commandId: boundedText(payload.commandId, 'adventure.action.commandId', 500),
+      actionKey: boundedText(payload.actionKey, 'adventure.action.actionKey', 500),
+      kind: boundedText(payload.kind, 'adventure.action.kind', 100) as TextAdventureHumanPlaytestActionEvidenceV1['kind'],
+      outcome: boundedText(payload.outcome, 'adventure.action.outcome', 100) as TextAdventureHumanPlaytestActionEvidenceV1['outcome'],
+      payloadHash: await hashProductProductionValueV2(payload),
+      createdAt: event.createdAt,
+    })
+  }
+  return parseHumanPlaytestActionEvents(actions)
+}
+
 async function verifyPlaythroughGateReceipt(
   row: ProductQualityGateReceiptRecordV1,
   expected: { buildId: number; packageHash: string; previewHash: string },
@@ -750,6 +1083,75 @@ async function verifyPlaythroughGateReceipt(
     ])
     || gateReceipt.createdAt !== evidence.confirmation.confirmedAt) {
     fail('主路线原始事件、作者确认与 gate receipt 不一致')
+  }
+  return { row, gateReceipt, evidence }
+}
+
+function humanPlaytestEventStreamProjection(
+  routeEvents: ProductMainRouteEventEvidenceV1[],
+  actionEvents: TextAdventureHumanPlaytestActionEvidenceV1[],
+): Array<{ stream: 'route' | 'action'; sequence: number; event: ProductMainRouteEventEvidenceV1 | TextAdventureHumanPlaytestActionEvidenceV1 }> {
+  return [
+    ...routeEvents.map(event => ({ stream: 'route' as const, sequence: event.sequence, event })),
+    ...actionEvents.map(event => ({ stream: 'action' as const, sequence: event.sequence, event })),
+  ].sort((left, right) => left.sequence - right.sequence || left.stream.localeCompare(right.stream))
+}
+
+async function humanPlaytestSessionEvidenceHash(
+  session: Omit<TextAdventureHumanPlaytestSessionEvidenceV1, 'sessionEvidenceHash'>,
+): Promise<string> {
+  return hashProductProductionValueV2(session)
+}
+
+async function verifyTextAdventureHumanPlaytestGateReceiptV1(
+  row: ProductQualityGateReceiptRecordV1,
+  expected: {
+    buildId: number
+    buildNumber: number
+    packageHash: string
+    previewHash: string
+    briefHash: string
+    targetPlayMinutes: number
+  },
+): Promise<VerifiedTextAdventureHumanPlaytestGateV1> {
+  const gateReceipt = parseProductQualityGateReceiptV1(row.receiptJson)
+  await verifyGateReceiptHash(gateReceipt)
+  if (row.buildId !== expected.buildId || row.gateId !== TEXT_ADVENTURE_HUMAN_PLAYTEST_GATE_ID_V1
+    || row.gateId !== gateReceipt.gateId || row.gateVersion !== gateReceipt.gateVersion
+    || row.verifierId !== gateReceipt.verifierId || row.verifierVersion !== gateReceipt.verifierVersion
+    || row.status !== gateReceipt.status || row.receiptHash !== gateReceipt.receiptHash
+    || gateReceipt.verifierKind !== 'human-evidence'
+    || gateReceipt.thresholdProfileId !== TEXT_ADVENTURE_HUMAN_PLAYTEST_POLICY_ID_V1
+    || gateReceipt.thresholdProfileVersion !== '1') fail('文字冒险真人试玩 gate 与 Build/索引绑定不一致')
+  const evidence = parseTextAdventureHumanPlaytestCoverageEvidenceV1(gateReceipt.measuredJson)
+  const expectedStatus = humanCoverageStatus(evidence)
+  if (evidence.buildNumber !== expected.buildNumber || evidence.packageHash !== expected.packageHash
+    || evidence.previewHash !== expected.previewHash || evidence.briefHash !== expected.briefHash
+    || evidence.sessions.some(session => session.thresholds.targetPlayMinutes !== expected.targetPlayMinutes)
+    || gateReceipt.status !== expectedStatus) fail('文字冒险真人试玩 evidence 与 Build 或状态不一致')
+  for (const session of evidence.sessions) {
+    const expectedEventStreamHash = await hashProductProductionValueV2(
+      humanPlaytestEventStreamProjection(session.routeEvents, session.actionEvents),
+    )
+    const { sessionEvidenceHash, ...sessionBody } = session
+    if (session.eventStreamHash !== expectedEventStreamHash
+      || sessionEvidenceHash !== await humanPlaytestSessionEvidenceHash(sessionBody)) {
+      fail(`文字冒险真人试玩会话 hash 校验失败:${session.participantRole}`)
+    }
+  }
+  const sessionHashes = evidence.sessions.map(session => session.sessionEvidenceHash)
+  const expectedEnvironmentHash = await hashProductProductionValueV2(evidence.sessions.map(session => ({
+    participantRole: session.participantRole,
+    sessionEvidenceHash: session.sessionEvidenceHash,
+    environment: session.environment,
+  })))
+  if (gateReceipt.environmentHash !== expectedEnvironmentHash
+    || canonicalProductProductionJsonV2(gateReceipt.inputHashes) !== canonicalProductProductionJsonV2([
+      expected.packageHash, expected.previewHash, expected.briefHash, ...sessionHashes,
+    ])
+    || canonicalProductProductionJsonV2(gateReceipt.evidenceRefs) !== canonicalProductProductionJsonV2(sessionHashes)
+    || gateReceipt.createdAt !== Math.max(...evidence.sessions.map(session => session.confirmedAt))) {
+    fail('文字冒险真人试玩原始会话、环境与 gate receipt 不一致')
   }
   return { row, gateReceipt, evidence }
 }
@@ -1349,11 +1751,11 @@ async function verifyTextAdventureHumanVisualReviewGateV1(
     || canonicalProductProductionJsonV2(gateReceipt.inputHashes) !== canonicalProductProductionJsonV2([
       resolved.packageHash, resolved.previewHash, resolved.briefHash,
       resolved.mediaAuditHash, resolved.visualReviewHash,
-      ...resolved.assets.map(asset => asset.contentHash),
+      ...[...new Set(resolved.assets.map(asset => asset.contentHash))].sort(),
     ])
     || canonicalProductProductionJsonV2(gateReceipt.evidenceRefs) !== canonicalProductProductionJsonV2([
       resolved.mediaAuditHash, resolved.visualReviewHash,
-      ...resolved.assets.map(asset => asset.contentHash),
+      ...[...new Set(resolved.assets.map(asset => asset.contentHash))].sort(),
     ])
     || evidence.buildNumber !== resolved.build.buildNumber || evidence.packageHash !== resolved.packageHash
     || evidence.previewHash !== resolved.previewHash || evidence.briefHash !== resolved.briefHash
@@ -1418,7 +1820,7 @@ export async function recordTextAdventureHumanVisualReviewV1(input: {
     inputHashes: [
       resolved.packageHash, resolved.previewHash, resolved.briefHash,
       resolved.mediaAuditHash, resolved.visualReviewHash,
-      ...resolved.assets.map(asset => asset.contentHash),
+      ...[...new Set(resolved.assets.map(asset => asset.contentHash))].sort(),
     ],
     environmentHash: null,
     measuredJson: canonicalProductProductionJsonV2(evidence),
@@ -1427,7 +1829,7 @@ export async function recordTextAdventureHumanVisualReviewV1(input: {
     thresholdProfileVersion: '1',
     evidenceRefs: [
       resolved.mediaAuditHash, resolved.visualReviewHash,
-      ...resolved.assets.map(asset => asset.contentHash),
+      ...[...new Set(resolved.assets.map(asset => asset.contentHash))].sort(),
     ],
     createdAt: confirmedAt,
   }
@@ -1550,11 +1952,28 @@ export async function listCompletedProductBuildPlaythroughsV1(input: {
       || state.narrative.contentHash !== build.packageHash) continue
     const events = await db.productRuntimeEvents.where('sessionId').equals(session.id!).toArray()
     const routeEvents = await createRouteEvidence(events)
+    const actionEvents = session.kind === 'text-adventure'
+      ? await createHumanPlaytestActionEvidence(events) : []
     const ending = routeEvents[routeEvents.length - 1]
+    const started = routeEvents[0]
+    const committedActions = events.filter(event => event.type === 'adventure.action.committed')
+    const dialogueActionCount = committedActions.filter(event => {
+      const payload = eventPayload(event)
+      return payload.kind === 'talk'
+    }).length
+    const meaningfulActionCount = new Set(committedActions.filter(event => {
+      const payload = eventPayload(event)
+      return payload.outcome !== 'not-attempted'
+    }).map(event => boundedText(eventPayload(event).actionKey, 'adventure.action.actionKey', 500))).size
     completed.push({
       sessionId: session.id!, sessionKind: session.kind, endingKey: ending.endingKey!,
       choiceCount: routeEvents.filter(event => event.kind === 'choice').length,
-      completedAt: ending.createdAt,
+      actionCount: committedActions.length, meaningfulActionCount, dialogueActionCount,
+      startedAt: started.createdAt, completedAt: ending.createdAt,
+      elapsedMs: Math.max(0, ending.createdAt - started.createdAt),
+      eventStreamHash: await hashProductProductionValueV2(
+        humanPlaytestEventStreamProjection(routeEvents, actionEvents),
+      ),
     })
   }
   return completed.sort((left, right) => right.completedAt - left.completedAt || right.sessionId - left.sessionId)
@@ -1696,6 +2115,240 @@ export async function requirePassedProductBuildMainRouteGateV1(input: {
   return latest
 }
 
+export async function recordTextAdventureHumanPlaytestV1(input: {
+  scope: WorkspaceScope
+  productBuildId: number
+  productRuntimeSessionId: number
+  participantRole: TextAdventureHumanPlaytestParticipantRoleV1
+  participantLabel: string
+  participantDeclaration: 'author-self-attestation' | 'not-involved-in-production'
+  assessment: TextAdventureHumanPlaytestAssessmentV1
+  environment: ProductPlaythroughBrowserEnvironmentV1
+}): Promise<VerifiedTextAdventureHumanPlaytestGateV1> {
+  if (!['author', 'independent-player'].includes(input.participantRole)) fail('真人试玩参与者角色无效')
+  const participant = {
+    label: boundedText(input.participantLabel, '真人试玩参与者标识', 200),
+    declaration: input.participantDeclaration,
+  }
+  if (participant.declaration !== (input.participantRole === 'author'
+    ? 'author-self-attestation' : 'not-involved-in-production')) fail('真人试玩身份声明与角色不一致')
+  const scope = await resolveScope({ scope: input.scope })
+  const build = await db.productBuilds.get(input.productBuildId)
+  if (!build || !await assertRecordInScope(scope, 'productBuilds', build, { owner: 'work' })) fail('Build 不存在或跨 Work')
+  if (!['preview-ready', 'release-ready'].includes(build.status)) fail('Build 尚未达到可试玩验收状态')
+  const briefRow = await db.productProductionBriefs
+    .where('[productionId+revision]').equals([build.productionId, build.briefRevision]).first()
+  if (!briefRow || !await assertRecordInScope(scope, 'productProductionBriefs', briefRow, { owner: 'work' })
+    || briefRow.briefHash !== build.briefHash) fail('Build 对应 Brief 不存在或 hash 不一致')
+  const brief = parseProductProductionBriefV3(briefRow.briefJson)
+  if (await hashProductProductionValueV2(brief) !== briefRow.briefHash) fail('Build 对应 Brief hash 校验失败')
+  if (brief.intent.productType !== 'text-adventure' || brief.qualityProfile !== 'commercial-candidate') {
+    fail('双角色真人试玩回执只用于商业候选文字冒险 Build')
+  }
+  const session = await db.productRuntimeSessions.get(input.productRuntimeSessionId)
+  if (!session || session.projectId !== scope.projectId || session.worldId !== scope.worldId
+    || session.workId !== scope.workId || session.productBuildId !== build.id || session.productReleaseId != null
+    || session.runtimeSourceHash !== build.packageHash || session.kind !== 'text-adventure') {
+    fail('真人试玩会话未绑定当前文字冒险 Build/packageHash')
+  }
+  const [state, events] = await Promise.all([
+    readProductRuntimeState(session.id!),
+    db.productRuntimeEvents.where('sessionId').equals(session.id!).toArray(),
+  ])
+  if (!state.narrative?.completed || !state.narrative.endingKey
+    || state.narrative.contentHash !== build.packageHash) fail('真人试玩尚未到达当前 Build 的冻结叙事结局')
+  for (const event of events) {
+    if (event.projectId !== scope.projectId || event.sessionId !== session.id
+      || (event.worldGroupId ?? null) !== (session.worldGroupId ?? null)) fail('真人试玩事件作用域不一致')
+  }
+  const [routeEvents, actionEvents] = await Promise.all([
+    createRouteEvidence(events), createHumanPlaytestActionEvidence(events),
+  ])
+  const preview = await verifyProductBuildPreviewManifestV1(build.previewManifestJson)
+  if (preview.previewHash !== build.previewHash || preview.packageHash !== build.packageHash
+    || preview.runtimePackage.productType !== 'text-adventure' || preview.runtimePackage.adventure?.version !== 2) {
+    fail('真人试玩 Build Preview 不是当前冻结 Adventure V2 包')
+  }
+  let routeNodeKey = preview.runtimePackage.narrative.entryNodeKey
+  if (routeEvents[0].nodeKey !== routeNodeKey) fail('真人试玩起点与当前 Build 不一致')
+  for (const event of routeEvents.slice(1, -1)) {
+    const choice = preview.runtimePackage.narrative.choices.find(item => item.choiceKey === event.choiceKey)
+    if (!choice || choice.sourceNodeKey !== routeNodeKey || event.fromNodeKey !== routeNodeKey
+      || choice.targetNodeKey !== event.toNodeKey) fail(`真人试玩选择不属于当前 Build:${event.choiceKey ?? 'missing'}`)
+    routeNodeKey = choice.targetNodeKey
+  }
+  if (routeNodeKey !== routeEvents[routeEvents.length - 1].endingKey
+    || preview.runtimePackage.narrative.nodes.find(node => node.key === routeNodeKey)?.kind !== 'ending') {
+    fail('真人试玩结局不属于当前 Build')
+  }
+  const buildActions = new Map(preview.runtimePackage.adventure.actions.map(action => [action.key, action.kind]))
+  if (actionEvents.some(event => buildActions.get(event.actionKey) !== event.kind)) {
+    fail('真人试玩包含不属于当前 Build 的行动')
+  }
+  const startedAt = routeEvents[0].createdAt
+  const completedAt = routeEvents[routeEvents.length - 1].createdAt
+  if (completedAt <= startedAt) fail('真人试玩缺少可计时的真实起止间隔')
+  const endingKey = routeEvents[routeEvents.length - 1].endingKey!
+  if (endingKey !== state.narrative.endingKey) fail('真人试玩路线与重放终态结局不一致')
+  const targetPlayMinutes = Math.round(brief.scale.targetPlayMinutes)
+  const thresholds = {
+    targetPlayMinutes,
+    minimumElapsedMs: Math.max(60_000, Math.round(targetPlayMinutes * 60_000 * 0.75)),
+    maximumElapsedMs: Math.max(60_000, Math.round(targetPlayMinutes * 60_000 * 1.25)),
+    minimumChoiceCount: Math.max(2, Math.ceil(targetPlayMinutes / 6)),
+    minimumActionCount: Math.max(6, Math.ceil(targetPlayMinutes / 4)),
+  }
+  const environment = parsePlaythroughEnvironment(input.environment)
+  const assessment = parseHumanPlaytestAssessment(input.assessment)
+  const confirmedAt = Math.max(Date.now(), completedAt)
+  const eventStreamHash = await hashProductProductionValueV2(
+    humanPlaytestEventStreamProjection(routeEvents, actionEvents),
+  )
+  const sessionWithoutHash: Omit<TextAdventureHumanPlaytestSessionEvidenceV1, 'sessionEvidenceHash'> = {
+    participantRole: input.participantRole, participant, sessionKind: 'text-adventure', routeEvents, actionEvents,
+    eventStreamHash, endingKey, startedAt, completedAt, elapsedMs: completedAt - startedAt,
+    choiceCount: routeEvents.filter(event => event.kind === 'choice').length,
+    actionCount: actionEvents.length,
+    meaningfulActionCount: new Set(actionEvents.filter(event => event.outcome !== 'not-attempted')
+      .map(event => event.actionKey)).size,
+    dialogueActionCount: actionEvents.filter(event => event.kind === 'talk').length,
+    thresholds, environment, assessment, confirmedAt, passed: false,
+  }
+  sessionWithoutHash.passed = humanPlaytestSessionPassed(sessionWithoutHash)
+  const candidateSession: TextAdventureHumanPlaytestSessionEvidenceV1 = {
+    ...sessionWithoutHash,
+    sessionEvidenceHash: await humanPlaytestSessionEvidenceHash(sessionWithoutHash),
+  }
+  const prior = await readLatestTextAdventureHumanPlaytestGateV1({ scope, productBuildId: build.id! })
+  const priorSameStream = prior?.evidence.sessions.find(item => item.eventStreamHash === eventStreamHash) ?? null
+  if (priorSameStream && priorSameStream.participantRole !== input.participantRole) {
+    fail('同一个事件流不能同时冒充作者与独立玩家试玩')
+  }
+  if (priorSameStream && canonicalProductProductionJsonV2({
+    ...priorSameStream, confirmedAt: 0, sessionEvidenceHash: '',
+  }) === canonicalProductProductionJsonV2({
+    ...candidateSession, confirmedAt: 0, sessionEvidenceHash: '',
+  })) return prior!
+  const sessions = [
+    ...(prior?.evidence.sessions.filter(item => item.eventStreamHash !== eventStreamHash) ?? []),
+    candidateSession,
+  ].sort((left, right) => left.confirmedAt - right.confirmedAt
+    || left.sessionEvidenceHash.localeCompare(right.sessionEvidenceHash))
+  if (sessions.length > 20) fail('真人试玩回执最多保留 20 个完整会话；请生成新 Build 收口历史')
+  const author = latestHumanSession(sessions, 'author')
+  const independent = latestHumanSession(sessions, 'independent-player')
+  const evidence: TextAdventureHumanPlaytestCoverageEvidenceV1 = {
+    schema: 'storyforge.text-adventure-human-playtest-coverage-evidence', version: 1,
+    buildNumber: build.buildNumber, packageHash: build.packageHash, previewHash: build.previewHash,
+    briefHash: build.briefHash, sessions,
+    authorSessionEvidenceHash: author?.sessionEvidenceHash ?? null,
+    independentPlayerSessionEvidenceHash: independent?.sessionEvidenceHash ?? null,
+    passed: Boolean(author?.passed && independent?.passed && author.eventStreamHash !== independent.eventStreamHash),
+  }
+  const status = humanCoverageStatus(evidence)
+  const sessionHashes = sessions.map(item => item.sessionEvidenceHash)
+  const body = {
+    schema: 'storyforge.product-quality-gate-receipt' as const, version: 1 as const,
+    gateId: TEXT_ADVENTURE_HUMAN_PLAYTEST_GATE_ID_V1, gateVersion: '1',
+    verifierId: 'storyforge.text-adventure-human-playtest-coverage', verifierVersion: '1',
+    verifierKind: 'human-evidence' as const,
+    inputHashes: [build.packageHash, build.previewHash, build.briefHash, ...sessionHashes],
+    environmentHash: await hashProductProductionValueV2(sessions.map(item => ({
+      participantRole: item.participantRole,
+      sessionEvidenceHash: item.sessionEvidenceHash,
+      environment: item.environment,
+    }))),
+    measuredJson: canonicalProductProductionJsonV2(evidence), status,
+    thresholdProfileId: TEXT_ADVENTURE_HUMAN_PLAYTEST_POLICY_ID_V1,
+    thresholdProfileVersion: '1', evidenceRefs: sessionHashes,
+    createdAt: Math.max(...sessions.map(item => item.confirmedAt)),
+  }
+  const gateReceipt: ProductQualityGateReceiptV1 = {
+    ...body, receiptHash: await hashProductProductionValueV2(body),
+  }
+  const pendingRow = stampNewRecord(scope, 'productQualityGateReceipts', {
+    projectId: scope.projectId, worldId: scope.worldId, workId: scope.workId,
+    buildId: build.id!, gateId: gateReceipt.gateId, gateVersion: gateReceipt.gateVersion,
+    verifierId: gateReceipt.verifierId, verifierVersion: gateReceipt.verifierVersion,
+    status: gateReceipt.status, receiptJson: canonicalProductProductionJsonV2(gateReceipt),
+    receiptHash: gateReceipt.receiptHash, createdAt: gateReceipt.createdAt,
+  } satisfies ProductQualityGateReceiptRecordV1, { owner: 'work' })
+  const relevantSequences = new Set([...routeEvents, ...actionEvents].map(event => event.sequence))
+  const frozenRelevantEvents = events.filter(event => relevantSequences.has(event.sequence))
+    .map(event => ({ sequence: event.sequence, type: event.type, payloadJson: event.payloadJson, createdAt: event.createdAt }))
+    .sort((left, right) => left.sequence - right.sequence)
+  const row = await db.transaction('rw', scopeTransactionTables(
+    db.productBuilds, db.productProductionBriefs, db.productRuntimeSessions,
+    db.productRuntimeEvents, db.productQualityGateReceipts,
+  ), async () => {
+    const [currentBuild, currentBrief, currentSession] = await Promise.all([
+      db.productBuilds.get(build.id!),
+      db.productProductionBriefs.where('[productionId+revision]').equals([build.productionId, build.briefRevision]).first(),
+      db.productRuntimeSessions.get(session.id!),
+    ])
+    if (!currentBuild || currentBuild.packageHash !== build.packageHash || currentBuild.previewHash !== build.previewHash
+      || !currentBrief || currentBrief.briefHash !== briefRow.briefHash
+      || !currentSession || currentSession.productBuildId !== build.id
+      || currentSession.runtimeSourceHash !== build.packageHash) fail('Build/Brief/真人试玩会话在写入回执前已变化')
+    const currentRelevantEvents = (await db.productRuntimeEvents.where('sessionId').equals(session.id!).toArray())
+      .filter(event => relevantSequences.has(event.sequence))
+      .map(event => ({ sequence: event.sequence, type: event.type, payloadJson: event.payloadJson, createdAt: event.createdAt }))
+      .sort((left, right) => left.sequence - right.sequence)
+    if (canonicalProductProductionJsonV2(currentRelevantEvents) !== canonicalProductProductionJsonV2(frozenRelevantEvents)) {
+      fail('真人试玩事件流在写入回执前已变化')
+    }
+    const existing = await db.productQualityGateReceipts
+      .where('[buildId+gateId+receiptHash]').equals([build.id!, gateReceipt.gateId, gateReceipt.receiptHash]).first()
+    if (existing) return existing
+    const id = await db.productQualityGateReceipts.add(pendingRow) as number
+    return { ...pendingRow, id }
+  })
+  const verified = await verifyTextAdventureHumanPlaytestGateReceiptV1(row, {
+    buildId: build.id!, buildNumber: build.buildNumber, packageHash: build.packageHash,
+    previewHash: build.previewHash, briefHash: build.briefHash, targetPlayMinutes,
+  })
+  await reconcileCommercialProductBuildReadinessV1({ scope, productBuildId: build.id! })
+  return verified
+}
+
+export async function readLatestTextAdventureHumanPlaytestGateV1(input: {
+  scope: WorkspaceScope
+  productBuildId: number
+}): Promise<VerifiedTextAdventureHumanPlaytestGateV1 | null> {
+  const scope = await resolveScope({ scope: input.scope })
+  const build = await db.productBuilds.get(input.productBuildId)
+  if (!build || !await assertRecordInScope(scope, 'productBuilds', build, { owner: 'work' })) fail('Build 不存在或跨 Work')
+  const briefRow = await db.productProductionBriefs
+    .where('[productionId+revision]').equals([build.productionId, build.briefRevision]).first()
+  if (!briefRow || !await assertRecordInScope(scope, 'productProductionBriefs', briefRow, { owner: 'work' })
+    || briefRow.briefHash !== build.briefHash) fail('Build 对应 Brief 不存在或 hash 不一致')
+  const brief = parseProductProductionBriefV3(briefRow.briefJson)
+  if (await hashProductProductionValueV2(brief) !== build.briefHash) fail('Build 对应 Brief hash 校验失败')
+  const rows = await db.productQualityGateReceipts
+    .where('[buildId+gateId]').equals([build.id!, TEXT_ADVENTURE_HUMAN_PLAYTEST_GATE_ID_V1]).toArray()
+  rows.sort((left, right) => right.createdAt - left.createdAt || (right.id ?? 0) - (left.id ?? 0))
+  const latest = rows[0]
+  if (!latest) return null
+  if (!await assertRecordInScope(scope, 'productQualityGateReceipts', latest, { owner: 'work' })) fail('质量回执跨 Work')
+  return verifyTextAdventureHumanPlaytestGateReceiptV1(latest, {
+    buildId: build.id!, buildNumber: build.buildNumber, packageHash: build.packageHash,
+    previewHash: build.previewHash, briefHash: build.briefHash,
+    targetPlayMinutes: Math.round(brief.scale.targetPlayMinutes),
+  })
+}
+
+export async function requirePassedTextAdventureHumanPlaytestGateV1(input: {
+  scope: WorkspaceScope
+  productBuildId: number
+}): Promise<VerifiedTextAdventureHumanPlaytestGateV1> {
+  const latest = await readLatestTextAdventureHumanPlaytestGateV1(input)
+  if (!latest) fail('商业文字冒险缺少作者与独立玩家双角色真人试玩回执')
+  if (latest.gateReceipt.status !== 'passed' || !latest.evidence.passed) {
+    fail('商业文字冒险真人试玩尚未由作者与独立玩家分别通过')
+  }
+  return latest
+}
+
 /**
  * Build.status is a recoverable projection of immutable commercial receipts.
  * It is promoted only when browser performance, author-confirmed main route,
@@ -1720,10 +2373,14 @@ export async function reconcileCommercialProductBuildReadinessV1(input: {
     return build.status === 'release-ready' ? 'release-ready' : 'preview-ready'
   }
   const mediaRequired = brief.media.requiredMediaKinds.length > 0
+  const humanPlaytestRequired = brief.intent.productType === 'text-adventure'
   const humanVisualRequired = brief.intent.productType === 'text-adventure' && mediaRequired
-  const [performance, playthrough, mediaRuntime, humanVisual] = await Promise.all([
+  const [performance, playthrough, humanPlaytest, mediaRuntime, humanVisual] = await Promise.all([
     readLatestProductBrowserPerformanceGateV1({ scope, productBuildId: build.id! }),
     readLatestProductBuildMainRouteGateV1({ scope, productBuildId: build.id! }),
+    humanPlaytestRequired
+      ? readLatestTextAdventureHumanPlaytestGateV1({ scope, productBuildId: build.id! })
+      : Promise.resolve(null),
     mediaRequired
       ? readLatestProductMediaRuntimeGateV1({ scope, productBuildId: build.id! })
       : Promise.resolve(null),
@@ -1734,6 +2391,7 @@ export async function reconcileCommercialProductBuildReadinessV1(input: {
   const nextStatus = performance?.gateReceipt.status === 'passed'
     && performance.evidence.receipt.passed
     && playthrough?.gateReceipt.status === 'passed'
+    && (!humanPlaytestRequired || humanPlaytest?.gateReceipt.status === 'passed' && humanPlaytest.evidence.passed)
     && (!mediaRequired || mediaRuntime?.gateReceipt.status === 'passed' && mediaRuntime.evidence.passed)
     && (!humanVisualRequired || humanVisual?.gateReceipt.status === 'passed' && humanVisual.evidence.passed)
     ? 'release-ready' as const : 'preview-ready' as const
@@ -1748,9 +2406,12 @@ export async function reconcileCommercialProductBuildReadinessV1(input: {
       rows.sort((left, right) => right.createdAt - left.createdAt || (right.id ?? 0) - (left.id ?? 0))
       return rows[0] ?? null
     }
-    const [currentPerformance, currentPlaythrough, currentMediaRuntime, currentHumanVisual] = await Promise.all([
+    const [currentPerformance, currentPlaythrough, currentHumanPlaytest, currentMediaRuntime, currentHumanVisual] = await Promise.all([
       latestFor(PRODUCT_BROWSER_PERFORMANCE_GATE_ID_V1),
       latestFor(PRODUCT_MAIN_ROUTE_PLAYTHROUGH_GATE_ID_V1),
+      humanPlaytestRequired
+        ? latestFor(TEXT_ADVENTURE_HUMAN_PLAYTEST_GATE_ID_V1, '1')
+        : Promise.resolve(null),
       mediaRequired ? latestFor(PRODUCT_MEDIA_RUNTIME_GATE_ID_V1, '2') : Promise.resolve(null),
       humanVisualRequired
         ? latestFor(TEXT_ADVENTURE_HUMAN_VISUAL_REVIEW_GATE_ID_V1, '1')
@@ -1758,6 +2419,7 @@ export async function reconcileCommercialProductBuildReadinessV1(input: {
     ])
     if ((currentPerformance?.receiptHash ?? null) !== (performance?.row.receiptHash ?? null)
       || (currentPlaythrough?.receiptHash ?? null) !== (playthrough?.row.receiptHash ?? null)
+      || (currentHumanPlaytest?.receiptHash ?? null) !== (humanPlaytest?.row.receiptHash ?? null)
       || (currentMediaRuntime?.receiptHash ?? null) !== (mediaRuntime?.row.receiptHash ?? null)
       || (currentHumanVisual?.receiptHash ?? null) !== (humanVisual?.row.receiptHash ?? null)) {
       fail('质量回执在刷新 Build 状态前已变化')

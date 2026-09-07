@@ -657,6 +657,18 @@ export function validateAdventureContent(value: AdventureContent): AdventureCont
       }
     }
     for (const action of value.actions) if (!value.scenes.some(scene => scene.locationKey === action.locationKey && scene.actionKeys.includes(action.key))) error(`V2 行动未被地点场景收录:${action.key}`)
+    for (const action of value.actions) {
+      const successfulEffects = [...action.successEffects, ...action.costlySuccessEffects]
+      if (action.kind === 'take' && !successfulEffects.some(effect => effect.op === 'gain-item')) {
+        error(`V2 取得行动没有物品入包效果:${action.key}`)
+      }
+      if (action.kind === 'give' && !successfulEffects.some(effect => (
+        effect.op === 'transfer-item' || effect.op === 'remove-item'
+      ))) error(`V2 交付行动没有物品转移效果:${action.key}`)
+      if (action.kind === 'use' && !action.requirements.some(requirement => requirement.itemKey)) {
+        error(`V2 使用行动没有物品前置条件:${action.key}`)
+      }
+    }
     for (const object of value.objects) if (object.sceneKey) {
       const scene = value.scenes.find(candidate => candidate.key === object.sceneKey)
       if (!scene) error(`交互物引用不存在场景:${object.key}.${object.sceneKey}`)

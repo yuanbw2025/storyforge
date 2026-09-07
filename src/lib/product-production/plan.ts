@@ -7,6 +7,7 @@ import type {
 import { PRODUCTION_PRODUCT_KINDS_V1 } from '../types'
 import { parseProductProductionBriefV3 } from './contracts'
 import { hashProductProductionValueV2, isSha256Hash } from './hash'
+import { textAdventureSceneScriptPartSceneKeysV1 } from '../adventure/scene-script'
 
 const STABLE_KEY = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/
 const LANES = ['planning', 'content', 'visual', 'audio', 'integration', 'qa'] as const
@@ -223,8 +224,16 @@ export function parseProductProductionPlanV3(
       durationMs: 0, storageBytes: 0, maximumCostUsd: 0 as number | null,
     })
     const budget = brief.productionBudget
+    // Provider completion usage can include hidden reasoning tokens even when
+    // visible JSON is tightly bounded. Text-adventure task ceilings may be
+    // overbooked by at most 25%; the scheduler's append-only Build ledger is
+    // still the hard authority and refuses each call once real usage plus
+    // in-flight reservations would exceed the author-approved total.
+    const maximumReservedOutputTokens = productType === 'text-adventure'
+      ? Math.floor(budget.maximumOutputTokens * 1.25)
+      : budget.maximumOutputTokens
     if (totals.modelCalls > budget.maximumModelCalls || totals.inputTokens > budget.maximumInputTokens
-      || totals.outputTokens > budget.maximumOutputTokens || totals.mediaCalls > budget.maximumMediaCalls
+      || totals.outputTokens > maximumReservedOutputTokens || totals.mediaCalls > budget.maximumMediaCalls
       || totals.durationMs > budget.maximumDurationMs || totals.storageBytes > budget.maximumStorageBytes
       || (budget.maximumCostUsd != null
         && (totals.maximumCostUsd == null || totals.maximumCostUsd > budget.maximumCostUsd))) {
@@ -296,55 +305,109 @@ export async function createProductProductionPlanV3(input: {
     (_, index) => `media.audio.${String(index + 1).padStart(3, '0')}`,
   )
   const textAdventure = brief.intent.productType === 'text-adventure'
-  const modelTaskCount = textAdventure ? 21 + Number(activeVisual) : 4
+  const sceneScriptPartCount = textAdventure
+    ? [0, 1, 2].reduce((sum, actIndex) => (
+        sum + textAdventureSceneScriptPartSceneKeysV1(brief, actIndex).length
+      ), 0)
+    : 0
+  // The previous 28-task topology contained three whole-act scene writers.
+  // Replace those with the frozen scene packets actually required by this
+  // Brief; every packet remains one durable model Run.
+  const modelTaskCount = textAdventure ? 25 + sceneScriptPartCount + Number(activeVisual) : 4
   const textAdventureOutputWeights: Record<string, number> = {
-    'production.supervision': 0.03,
-    'content.source-sufficiency': 0.06,
+    'production.supervision': 0.015,
+    'content.source-sufficiency': 0.02,
     'content.design': 0.015,
-    'content.story-bible': 0.05,
-    'content.cast-bible': 0.065,
-    'content.adventure-architecture': 0.05,
-    'content.product-module': 0.05,
-    'content.narrative-arc-plan': 0.12,
-    'content.main-quest-plan': 0.06,
-    'content.quest-script': 0.04,
-    // Scene prose is the player-visible product, not scaffolding. Reserve 24%
-    // of the full output envelope for the three independent act writers and
-    // another 7.5% for their independent dialogue passes.
-    'content.scene-script.act-1': 0.08,
-    'content.scene-script.act-2': 0.08,
-    'content.scene-script.act-3': 0.08,
-    'content.dialogue-pass.act-1': 0.025,
-    'content.dialogue-pass.act-2': 0.025,
-    'content.dialogue-pass.act-3': 0.025,
-    'content.adventure-side-quests': 0.04,
-    'content.adventure-ambient-events': 0.03,
-    'content.adventure-quality-review': 0.025,
-    'media.requirements': 0.02,
-    'media.visual-quality-review': 0.01,
-    'qa.playtest-strategy': 0.02,
+    'content.story-bible': 0.02,
+    'content.cast-bible': 0.02,
+    'content.adventure-architecture': 0.02,
+    'content.product-module': 0.02,
+    'content.narrative-arc-scenes': 0.025,
+    'content.narrative-decision-plan': 0.02,
+    'content.main-quest-plan': 0.025,
+    // One whole act still encouraged providers to collapse multi-route
+    // objectives. Each act therefore has a simple and complex Run that share
+    // the same professional Skill and together keep the former 5.5% envelope.
+    'content.quest-script.main.act-1.single': 0.015,
+    'content.quest-script.main.act-1.multi': 0.02,
+    'content.quest-script.main.act-2.single': 0.015,
+    'content.quest-script.main.act-2.multi': 0.02,
+    'content.quest-script.main.act-3.single': 0.015,
+    'content.quest-script.main.act-3.multi': 0.02,
+    'content.quest-script.supplemental': 0.025,
+    // Scene prose is the player-visible product, not scaffolding. Each act's
+    // 18% envelope is split into two bounded scene packets so a provider cannot
+    // strand a whole act in one oversized request.
+    'content.scene-script.act-1.part-1': 0.09,
+    'content.scene-script.act-1.part-2': 0.09,
+    'content.scene-script.act-2.part-1': 0.09,
+    'content.scene-script.act-2.part-2': 0.09,
+    'content.scene-script.act-3.part-1': 0.09,
+    'content.scene-script.act-3.part-2': 0.09,
+    // The provider usage receipt may include hidden reasoning. Each Dialogue
+    // Editor therefore receives a 6.5% ceiling while returning only an ordinal
+    // delta; the Build-lifetime ledger, not the sum of task ceilings, remains
+    // the author-approved hard budget.
+    'content.dialogue-pass.act-1': 0.065,
+    'content.dialogue-pass.act-2': 0.065,
+    'content.dialogue-pass.act-3': 0.065,
+    'content.adventure-side-quests': 0.015,
+    'content.adventure-ambient-events': 0.02,
+    // Independent continuity review is reasoning-heavy even though its visible
+    // result is a compact scorecard. Provider receipts may charge those hidden
+    // reasoning tokens as output, so its task ceiling must reflect observed
+    // billable usage rather than the JSON byte count alone.
+    'content.adventure-quality-review': 0.075,
+    'media.requirements': 0.015,
+    'media.visual-quality-review': 0.005,
+    'qa.playtest-strategy': 0.015,
+  }
+  // Most model tasks consume a similarly sized context packet. Dialogue and
+  // independent whole-product review are exceptions: even after compact
+  // ordinal protocols, provider receipts include the system prompt and schema
+  // framing in addition to the frozen packet. Give those tasks an explicit
+  // ceiling while retaining aggregate input headroom for retries. The
+  // append-only Build ledger below the Plan remains the hard authority.
+  const textAdventureInputWeights: Record<string, number> = {
+    'content.dialogue-pass.act-1': 0.035,
+    'content.dialogue-pass.act-2': 0.035,
+    'content.dialogue-pass.act-3': 0.035,
+    'content.adventure-quality-review': 0.075,
   }
   // Every provider task and deterministic integration receives a declared
   // slice. Text adventure reserves separate bounded specialists for the
   // architecture, mainline, side content, ambient events and systems.
-  const perInput = Math.floor(brief.productionBudget.maximumInputTokens / (modelTaskCount + 1))
-  const perOutput = Math.floor(brief.productionBudget.maximumOutputTokens / modelTaskCount)
+  // Keep explicit Build-level retry headroom. Without it, a single unknown
+  // paid call consumes one task ceiling and the remaining first attempts can
+  // no longer be admitted even though every task declares bounded recovery.
+  const retryReserveSlots = textAdventure ? Math.max(3, Math.ceil(modelTaskCount * 0.1)) : 3
+  const perInput = Math.floor(
+    brief.productionBudget.maximumInputTokens / (modelTaskCount + retryReserveSlots),
+  )
+  const perOutput = Math.floor(
+    brief.productionBudget.maximumOutputTokens / (modelTaskCount + retryReserveSlots),
+  )
   const activeMediaTaskCount = textAdventure
     ? visualArtifactKeys.length + audioArtifactKeys.length
     : activeMediaLaneCount
-  const textAdventureDeterministicTaskCount = textAdventure ? 7 + Number(activeVisual) : 4
+  const textAdventureDeterministicTaskCount = textAdventure ? 12 + Number(activeVisual) : 4
   const durationSlots = modelTaskCount + textAdventureDeterministicTaskCount + activeMediaTaskCount
-  const perDuration = Math.floor(brief.productionBudget.maximumDurationMs / Math.max(1, durationSlots))
+  const perDuration = Math.floor(
+    brief.productionBudget.maximumDurationMs / Math.max(1, durationSlots + retryReserveSlots),
+  )
   const costTaskCount = modelTaskCount + activeMediaTaskCount
   const perCost = brief.productionBudget.maximumCostUsd == null
     ? null
-    : brief.productionBudget.maximumCostUsd / Math.max(1, costTaskCount)
+    : brief.productionBudget.maximumCostUsd / Math.max(1, costTaskCount + retryReserveSlots)
   const mediaStorage = activeMediaTaskCount === 0
     ? 0
     : Math.floor(brief.productionBudget.maximumStorageBytes / activeMediaTaskCount)
 
   const modelBudget = (taskKey: string) => reservation({
-    modelCalls: 1, inputTokens: perInput,
+    modelCalls: 1,
+    inputTokens: textAdventure && textAdventureInputWeights[taskKey] != null
+      ? Math.floor(brief.productionBudget.maximumInputTokens * textAdventureInputWeights[taskKey])
+      : perInput,
     outputTokens: textAdventure
       ? Math.floor(brief.productionBudget.maximumOutputTokens * textAdventureOutputWeights[taskKey])
       : perOutput,
@@ -439,24 +502,59 @@ export async function createProductProductionPlanV3(input: {
       acceptanceGateIds: ['artifact.protocol', 'product.module'],
     }),
     productionTask({
-      taskKey: 'content.narrative-arc-plan', lane: 'planning', kind: 'text-adventure-narrative-arc-plan',
-      skillId: 'text-adventure.narrative-arc-plan.v1', executionMode: 'model',
+      taskKey: 'content.narrative-arc-scenes', lane: 'planning', kind: 'text-adventure-narrative-arc-scenes',
+      skillId: 'text-adventure.narrative-design.v1', executionMode: 'model',
       dependsOn: ['content.story-bible', 'content.cast-bible', 'content.adventure-architecture', 'content.product-module'],
       inputArtifactKeys: ['content.story-bible', 'content.cast-bible', 'content.adventure-architecture', 'content.product-module'],
-      outputArtifactKeys: ['content.narrative-arc-plan'], requirementKeys: [],
+      outputArtifactKeys: ['content.narrative-arc-scenes'], requirementKeys: [],
       capabilityRequirementKeys: textCapabilities, concurrencyGroup: 'text-provider',
-      subjectLockKeys: ['content.narrative-arc-plan'], priority: 90, budgetReservation: modelBudget('content.narrative-arc-plan'),
+      subjectLockKeys: ['content.narrative-arc-scenes'], priority: 90, budgetReservation: modelBudget('content.narrative-arc-scenes'),
       maxAttempts: 2, timeoutMs: 300_000, failurePolicy: 'pause', fallbackTaskKey: null,
+      acceptanceGateIds: ['artifact.protocol', 'adventure.narrative-arc-scenes'],
+    }),
+    productionTask({
+      taskKey: 'content.narrative-decision-plan', lane: 'planning', kind: 'text-adventure-narrative-decision-plan',
+      skillId: 'text-adventure.narrative-design.v1', executionMode: 'model',
+      dependsOn: ['content.story-bible', 'content.cast-bible', 'content.narrative-arc-scenes'],
+      inputArtifactKeys: ['content.story-bible', 'content.cast-bible', 'content.narrative-arc-scenes'],
+      outputArtifactKeys: ['content.narrative-decision-plan'], requirementKeys: [],
+      capabilityRequirementKeys: textCapabilities, concurrencyGroup: 'text-provider',
+      subjectLockKeys: ['content.narrative-decision-plan'], priority: 89, budgetReservation: modelBudget('content.narrative-decision-plan'),
+      maxAttempts: 2, timeoutMs: 240_000, failurePolicy: 'pause', fallbackTaskKey: null,
+      acceptanceGateIds: ['artifact.protocol', 'adventure.narrative-decision-plan'],
+    }),
+    productionTask({
+      taskKey: 'content.narrative-arc-plan', lane: 'planning', kind: 'text-adventure-narrative-arc-plan',
+      skillId: null, executionMode: 'deterministic',
+      dependsOn: [
+        'content.story-bible', 'content.cast-bible', 'content.adventure-architecture',
+        'content.narrative-arc-scenes', 'content.narrative-decision-plan',
+      ],
+      inputArtifactKeys: [
+        'content.story-bible', 'content.cast-bible', 'content.adventure-architecture',
+        'content.narrative-arc-scenes', 'content.narrative-decision-plan',
+      ],
+      outputArtifactKeys: ['content.narrative-arc-plan'], requirementKeys: [],
+      capabilityRequirementKeys: [], concurrencyGroup: 'cpu',
+      subjectLockKeys: ['content.narrative-arc-plan'], priority: 88,
+      budgetReservation: reservation({ durationMs: perDuration }),
+      maxAttempts: 1, timeoutMs: 30_000, failurePolicy: 'pause', fallbackTaskKey: null,
       acceptanceGateIds: ['artifact.protocol', 'adventure.narrative-arc-plan'],
     }),
     productionTask({
       taskKey: 'content.main-quest-plan', lane: 'planning', kind: 'text-adventure-main-quest-plan',
       skillId: 'text-adventure.production-mainline.v1', executionMode: 'model',
-      dependsOn: ['content.story-bible', 'content.cast-bible', 'content.product-module', 'content.narrative-arc-plan'],
-      inputArtifactKeys: ['content.story-bible', 'content.cast-bible', 'content.product-module', 'content.narrative-arc-plan'],
+      dependsOn: [
+        'content.story-bible', 'content.cast-bible', 'content.adventure-architecture',
+        'content.product-module', 'content.narrative-arc-plan',
+      ],
+      inputArtifactKeys: [
+        'content.story-bible', 'content.cast-bible', 'content.adventure-architecture',
+        'content.product-module', 'content.narrative-arc-plan',
+      ],
       outputArtifactKeys: ['content.main-quest-plan'], requirementKeys: [],
       capabilityRequirementKeys: textCapabilities, concurrencyGroup: 'text-provider',
-      subjectLockKeys: ['content.main-quest-plan'], priority: 88, budgetReservation: modelBudget('content.main-quest-plan'),
+      subjectLockKeys: ['content.main-quest-plan'], priority: 87, budgetReservation: modelBudget('content.main-quest-plan'),
       maxAttempts: 2, timeoutMs: 300_000, failurePolicy: 'pause', fallbackTaskKey: null,
       acceptanceGateIds: ['artifact.protocol', 'adventure.main-quest-plan'],
     }),
@@ -505,25 +603,64 @@ export async function createProductProductionPlanV3(input: {
       acceptanceGateIds: ['artifact.protocol', 'adventure.ambient-events'],
     }),
   )
-  if (textAdventure) tasks.push(productionTask({
-    taskKey: 'content.quest-script', lane: 'content', kind: 'text-adventure-quest-script',
-    skillId: 'text-adventure.quest-script.v1', executionMode: 'model',
-    dependsOn: [
-      'content.story-bible', 'content.cast-bible', 'content.product-module',
-      'content.narrative-arc-plan', 'content.main-quest-plan',
-      'content.adventure-side-quests', 'content.adventure-ambient-events',
-    ],
-    inputArtifactKeys: [
-      'content.story-bible', 'content.cast-bible', 'content.product-module',
-      'content.narrative-arc-plan', 'content.main-quest-plan',
-      'content.adventure-side-quests', 'content.adventure-ambient-events',
-    ],
-    outputArtifactKeys: ['content.quest-script'], requirementKeys: [],
-    capabilityRequirementKeys: textCapabilities, concurrencyGroup: 'text-provider',
-    subjectLockKeys: ['content.quest-script'], priority: 78, budgetReservation: modelBudget('content.quest-script'),
-    maxAttempts: 2, timeoutMs: 300_000, failurePolicy: 'pause', fallbackTaskKey: null,
-    acceptanceGateIds: ['artifact.protocol', 'adventure.quest-script'],
-  }))
+  if (textAdventure) {
+    const mainQuestScriptInputs = [
+      'content.story-bible', 'content.cast-bible', 'content.adventure-architecture',
+      'content.product-module', 'content.narrative-arc-plan', 'content.main-quest-plan',
+    ]
+    for (let act = 1; act <= 3; act += 1) {
+      for (const routeClass of ['single', 'multi'] as const) {
+        const taskKey = `content.quest-script.main.act-${act}.${routeClass}`
+        tasks.push(productionTask({
+          taskKey, lane: 'content', kind: 'text-adventure-quest-script-part',
+          skillId: 'text-adventure.quest-script.v1', executionMode: 'model',
+          dependsOn: mainQuestScriptInputs,
+          inputArtifactKeys: mainQuestScriptInputs,
+          outputArtifactKeys: [taskKey], requirementKeys: [],
+          capabilityRequirementKeys: textCapabilities, concurrencyGroup: 'text-provider',
+          subjectLockKeys: [taskKey], priority: 82 - act * 2 - Number(routeClass === 'multi'),
+          budgetReservation: modelBudget(taskKey),
+          maxAttempts: 2, timeoutMs: 300_000, failurePolicy: 'pause', fallbackTaskKey: null,
+          acceptanceGateIds: ['artifact.protocol', 'adventure.quest-script-part'],
+        }))
+      }
+    }
+    tasks.push(productionTask({
+      taskKey: 'content.quest-script.supplemental', lane: 'content',
+      kind: 'text-adventure-quest-script-part',
+      skillId: 'text-adventure.quest-script.v1', executionMode: 'model',
+      dependsOn: [
+        'content.product-module', 'content.adventure-side-quests', 'content.adventure-ambient-events',
+      ],
+      inputArtifactKeys: [
+        'content.product-module', 'content.adventure-side-quests', 'content.adventure-ambient-events',
+      ],
+      outputArtifactKeys: ['content.quest-script.supplemental'], requirementKeys: [],
+      capabilityRequirementKeys: textCapabilities, concurrencyGroup: 'text-provider',
+      subjectLockKeys: ['content.quest-script.supplemental'], priority: 75,
+      budgetReservation: modelBudget('content.quest-script.supplemental'),
+      maxAttempts: 2, timeoutMs: 300_000, failurePolicy: 'pause', fallbackTaskKey: null,
+      acceptanceGateIds: ['artifact.protocol', 'adventure.quest-script-part'],
+    }))
+    const questScriptPartKeys = [1, 2, 3].flatMap(act => [
+      `content.quest-script.main.act-${act}.single`,
+      `content.quest-script.main.act-${act}.multi`,
+    ]).concat('content.quest-script.supplemental')
+    tasks.push(productionTask({
+      taskKey: 'content.quest-script', lane: 'content', kind: 'text-adventure-quest-script',
+      skillId: null, executionMode: 'deterministic', dependsOn: questScriptPartKeys,
+      inputArtifactKeys: [
+        'content.story-bible', 'content.cast-bible', 'content.adventure-architecture',
+        'content.product-module', 'content.narrative-arc-plan', 'content.main-quest-plan',
+        'content.adventure-side-quests', 'content.adventure-ambient-events', ...questScriptPartKeys,
+      ],
+      outputArtifactKeys: ['content.quest-script'], requirementKeys: [], capabilityRequirementKeys: [],
+      concurrencyGroup: 'deterministic', subjectLockKeys: ['content.quest-script'], priority: 74,
+      budgetReservation: reservation({ durationMs: perDuration }), maxAttempts: 1,
+      timeoutMs: 30_000, failurePolicy: 'pause', fallbackTaskKey: null,
+      acceptanceGateIds: ['artifact.protocol', 'adventure.quest-script'],
+    }))
+  }
   if (textAdventure) {
     const sceneScriptDependencies = [
       'content.story-bible', 'content.cast-bible', 'content.adventure-architecture',
@@ -532,16 +669,32 @@ export async function createProductProductionPlanV3(input: {
       'content.quest-script',
     ]
     for (let act = 1; act <= 3; act += 1) {
-      const taskKey = `content.scene-script.act-${act}`
-      tasks.push(productionTask({
-        taskKey, lane: 'content', kind: 'text-adventure-scene-script-bundle',
+      const partKeys = textAdventureSceneScriptPartSceneKeysV1(brief, act - 1).map((_, partIndex) => (
+        `content.scene-script.act-${act}.part-${partIndex + 1}`
+      ))
+      for (const taskKey of partKeys) tasks.push(productionTask({
+        taskKey, lane: 'content', kind: 'text-adventure-scene-script-part',
         skillId: 'text-adventure.scene-script.v1', executionMode: 'model',
         dependsOn: sceneScriptDependencies,
         inputArtifactKeys: sceneScriptDependencies,
         outputArtifactKeys: [taskKey], requirementKeys: [],
         capabilityRequirementKeys: textCapabilities, concurrencyGroup: 'text-provider',
-        subjectLockKeys: [taskKey], priority: 77 - act, budgetReservation: modelBudget(taskKey),
-        maxAttempts: 2, timeoutMs: 600_000, failurePolicy: 'pause', fallbackTaskKey: null,
+        subjectLockKeys: [taskKey], priority: 79 - act, budgetReservation: modelBudget(taskKey),
+        maxAttempts: 2, timeoutMs: 300_000, failurePolicy: 'pause', fallbackTaskKey: null,
+        acceptanceGateIds: ['artifact.protocol', 'adventure.scene-script-part'],
+      }))
+      const taskKey = `content.scene-script.act-${act}`
+      tasks.push(productionTask({
+        taskKey, lane: 'content', kind: 'text-adventure-scene-script-bundle',
+        skillId: null, executionMode: 'deterministic', dependsOn: partKeys,
+        inputArtifactKeys: [
+          'content.story-bible', 'content.cast-bible', 'content.adventure-architecture',
+          'content.narrative-arc-plan', ...partKeys,
+        ],
+        outputArtifactKeys: [taskKey], requirementKeys: [], capabilityRequirementKeys: [],
+        concurrencyGroup: 'deterministic', subjectLockKeys: [taskKey], priority: 75 - act,
+        budgetReservation: reservation({ durationMs: perDuration }), maxAttempts: 1,
+        timeoutMs: 30_000, failurePolicy: 'pause', fallbackTaskKey: null,
         acceptanceGateIds: ['artifact.protocol', 'adventure.scene-script-bundle'],
       }))
     }
