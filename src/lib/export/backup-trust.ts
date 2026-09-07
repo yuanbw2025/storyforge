@@ -7,7 +7,7 @@
 import { PROJECT_TABLES } from '../registry/project-tables'
 import { isCurrentWorldCode } from '../workspace/identity'
 
-export const CURRENT_BACKUP_VERSION = 10
+export const CURRENT_BACKUP_VERSION = 14
 
 export interface BackupTrustReport {
   valid: boolean

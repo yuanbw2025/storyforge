@@ -65,6 +65,9 @@ export default function ComicVisualPanel({
   act,
 }: Props) {
   const dialog = useDialog()
+  const selectedReference = selectedSubject?.selectedMediaAssetKey
+    ? subjectAssets.find(asset => asset.stableKey === selectedSubject.selectedMediaAssetKey) ?? null
+    : null
   const patchDesign = <K extends keyof ComicSubjectDraft['design']>(
     key: K,
     value: ComicSubjectDraft['design'][K],
@@ -88,7 +91,7 @@ export default function ComicVisualPanel({
     <div className="comic-visual-layout">
       <aside>
         <header>
-          <strong>视觉条目</strong>
+          <div><span>VISUAL BIBLE</span><strong>视觉锚点</strong></div>
           <button onClick={beginNewSubject}><Plus />新建</button>
         </header>
         {subjects.map((subject) => (
@@ -97,13 +100,26 @@ export default function ComicVisualPanel({
             className={subject.id === selectedSubjectId ? 'active' : ''}
             onClick={() => setSelectedSubjectId(subject.id!)}
           >
-            <strong>{subject.label}</strong>
-            <small>{subject.kind} · {subject.status}</small>
+            <span><strong>{subject.label}</strong><small>{subject.kind}</small></span>
+            <em>{subject.status === 'locked' ? '已锁定' : subject.status === 'reviewed' ? '已审定' : '草稿'}</em>
             {subject.selectedMediaAssetKey && <Check />}
           </button>
         ))}
       </aside>
       <main>
+        <section className="comic-subject-hero">
+          <div className="comic-subject-reference">
+            {selectedReference && assetUrls[selectedReference.stableKey]
+              ? <img src={assetUrls[selectedReference.stableKey]} alt={`${selectedSubject?.label ?? '视觉条目'} 当前参考图`} />
+              : <div><Sparkles /><span>{selectedSubject ? '尚未选定参考图' : '选择视觉锚点'}</span><small>角色、地点、道具和画风都应先形成稳定视觉身份</small></div>}
+          </div>
+          <div className="comic-subject-summary">
+            <span>{selectedSubject?.kind?.toUpperCase() ?? 'VISUAL DEVELOPMENT'}</span>
+            <h3>{selectedSubject?.label || subjectDraft.label || '新视觉锚点'}</h3>
+            <p>{subjectDraft.design.description || '在这里固定轮廓、脸部、服装、材质和绝不能漂移的标志物。设定图用于跨格一致性，不是普通图库。'}</p>
+            <div>{subjectDraft.design.palette.slice(0, 5).map(color => <i key={color} title={color} style={{ background: /^#[0-9a-f]{6}$/i.test(color) ? color : undefined }}><span>{color}</span></i>)}</div>
+          </div>
+        </section>
         <div className="comic-visual-form">
           <label>
             稳定 key

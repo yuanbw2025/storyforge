@@ -60,12 +60,11 @@ export function deriveShortNovelStructure(
   preferredChapterCount?: number,
 ): { volumeCount: 1; chapterCount: number; targetWordsPerChapter: number } {
   assertShortNovelTargetWords(targetWordCount)
-  if (preferredChapterCount != null && (!Number.isInteger(preferredChapterCount) || preferredChapterCount <= 0)) {
-    throw new Error('短篇建议章数必须是正整数')
+  if (preferredChapterCount != null && (!Number.isInteger(preferredChapterCount) || preferredChapterCount < 3 || preferredChapterCount > 8)) {
+    throw new Error('短篇建议章数必须为 3～8 的整数')
   }
   const chapterCount = preferredChapterCount ?? (
-    targetWordCount < 8_000 ? 2
-      : targetWordCount < 13_000 ? 3
+    targetWordCount < 13_000 ? 3
         : targetWordCount < 18_000 ? 4
           : targetWordCount < 22_000 ? 5
             : 6

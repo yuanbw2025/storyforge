@@ -1,0 +1,25 @@
+{
+  "schema": "storyforge.showcase-evidence.v1",
+  "productKind": "short-novel",
+  "title": "盐从记忆里长出来",
+  "genre": ["near-future", "family-drama", "medical-ethics"],
+  "chapterCount": 5,
+  "timeWindow": "three months, centered on one interrupted memory procedure",
+  "review": {
+    "structure": "five-stage consent dilemma and long-term care arc",
+    "pointOfView": "third-person limited: Jiang Wu",
+    "openIssues": 0,
+    "checks": [
+      "the four salt jars, yellow raincoat, red float and shoulder taps form a continuous motif chain",
+      "the fictional treatment distinguishes memory weathering from irreversible deletion",
+      "the mother retains agency through advance directives and lucid-window decisions",
+      "the climax is triggered by both measurable protocol drift and emotional recognition",
+      "the ending preserves the cost and progression of care instead of offering a miraculous cure"
+    ]
+  },
+  "file": {
+    "path": "story.md",
+    "contentChars": 5344,
+    "sha256": "937434597421612cff97472be78fe9959227d09306b0c208e018ad75442674ce"
+  }
+}

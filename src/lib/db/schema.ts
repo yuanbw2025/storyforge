@@ -1,6 +1,9 @@
 import Dexie, { type Table } from 'dexie'
 import type {
   AdaptationProject,
+  AdaptationCausalEdgeV1,
+  AdaptationDecisionV1,
+  AdaptationSourceFactV1,
   AdaptationSourceUnit,
   AgentConversation,
   AgentEvent,
@@ -16,8 +19,13 @@ import type {
   CodexEntry,
   ComicMediaAsset,
   ComicPage,
+  ComicPagePlanV1,
   ComicPanel,
+  ComicReviewIssueV1,
+  ComicScriptBeatV1,
   ComicVisualSubject,
+  CreationReleaseAssetV1,
+  CreationReleaseV1,
   CreativeRules,
   CultivationProgress,
   CultivationSystem,
@@ -66,7 +74,11 @@ import type {
   ReferenceAnalysisSource,
   ReferenceChunkAnalysis,
   ScreenplayScene,
+  ScreenplayBeatV1,
+  ScreenplayReviewIssueV1,
+  ScreenplaySceneCardV1,
   Snapshot,
+  ShortNovelProductionV1,
   StateCard,
   StoryArc,
   StoryCore,
@@ -97,10 +109,10 @@ import type { RetrievalChunk } from '../types/retrieval-chunk'
 import type { TemporalFact } from '../types/temporal-fact'
 
 export const STORYFORGE_DATABASE_NAME = 'storyforge-core'
-export const STORYFORGE_SCHEMA_VERSION = 1
+export const STORYFORGE_SCHEMA_VERSION = 5
 
-/** The only persistent schema understood by the current application. */
-export const STORYFORGE_STORES = {
+/** The hard-cutover baseline released before independent creation releases. */
+export const STORYFORGE_STORES_V1 = {
   projects: '++id, &workspaceUid, workspacePurpose, name, createdAt, updatedAt',
   worlds: '++id, projectId, identityKind, code, [projectId+identityKind], [projectId+updatedAt]',
   works: '++id, projectId, worldId, code, &[projectId+code], [projectId+worldId], [worldId+updatedAt], status, activeNarrativeModuleId',
@@ -197,6 +209,38 @@ export const STORYFORGE_STORES = {
   ttrpgRuntimeAssetRequests: '++id, projectId, worldGroupId, worldId, workId, sessionId, &[sessionId+requestKey], [sessionId+slotKey], [sessionId+status], priority, mediaAssetId, processorLeaseExpiresAt, updatedAt',
 } as const satisfies Record<string, string>
 
+/** The released short-novel schema, retained as the exact v2 migration step. */
+export const STORYFORGE_STORES_V2 = {
+  ...STORYFORGE_STORES_V1,
+  shortNovelProductions: '++id, projectId, worldId, &workId, phase, currentReleaseId, updatedAt',
+  creationReleases: '++id, projectId, worldId, workId, productKind, &[workId+productKind+version], contentHash, parentReleaseId, createdAt',
+} as const satisfies Record<string, string>
+
+/** The released medium-neutral adaptation analysis schema, retained as the exact v3 migration step. */
+export const STORYFORGE_STORES_V3 = {
+  ...STORYFORGE_STORES_V2,
+  adaptationSourceFacts: '++id, projectId, workId, adaptationProjectId, &[adaptationProjectId+manifestVersion+stableKey], [adaptationProjectId+manifestVersion], kind, authorStatus, updatedAt',
+  adaptationCausalEdges: '++id, projectId, workId, adaptationProjectId, &[adaptationProjectId+manifestVersion+stableKey], [adaptationProjectId+manifestVersion], relation, authorStatus, updatedAt',
+  adaptationDecisions: '++id, projectId, workId, adaptationProjectId, &[adaptationProjectId+manifestVersion+stableKey], [adaptationProjectId+manifestVersion], action, authorStatus, updatedAt',
+} as const satisfies Record<string, string>
+
+/** The released screenplay schema, retained as the exact v4 migration step. */
+export const STORYFORGE_STORES_V4 = {
+  ...STORYFORGE_STORES_V3,
+  screenplayBeats: '++id, projectId, workId, adaptationProjectId, &[adaptationProjectId+manifestVersion+stableKey], [adaptationProjectId+manifestVersion], [adaptationProjectId+episodeNumber], sectionKey, order, updatedAt',
+  screenplaySceneCards: '++id, projectId, workId, adaptationProjectId, &[adaptationProjectId+manifestVersion+stableKey], &[adaptationProjectId+episodeNumber+sceneNumber], [adaptationProjectId+manifestVersion], beatKey, order, updatedAt',
+  screenplayReviewIssues: '++id, projectId, workId, adaptationProjectId, &[adaptationProjectId+manifestVersion+stableKey], [adaptationProjectId+manifestVersion], sceneKey, category, severity, status, updatedAt',
+} as const satisfies Record<string, string>
+
+/** The only writable current schema. V5 adds comic production and release-asset stores. */
+export const STORYFORGE_STORES = {
+  ...STORYFORGE_STORES_V4,
+  comicScriptBeats: '++id, projectId, workId, adaptationProjectId, &[adaptationProjectId+manifestVersion+stableKey], [adaptationProjectId+manifestVersion], chapterNumber, sectionKey, order, updatedAt',
+  comicPagePlans: '++id, projectId, workId, adaptationProjectId, &[adaptationProjectId+manifestVersion+stableKey], &[adaptationProjectId+manifestVersion+pageNumber], [adaptationProjectId+manifestVersion], chapterNumber, order, updatedAt',
+  comicReviewIssues: '++id, projectId, workId, adaptationProjectId, &[adaptationProjectId+manifestVersion+stableKey], [adaptationProjectId+manifestVersion], pageKey, panelKey, category, severity, status, updatedAt',
+  creationReleaseAssets: '++id, projectId, worldId, workId, releaseId, &[releaseId+assetKey], blobObjectId, contentHash, createdAt',
+} as const satisfies Record<string, string>
+
 export class StoryForgeDB extends Dexie {
   projects!: Table<Project>
   worlds!: Table<World, number>
@@ -271,7 +315,16 @@ export class StoryForgeDB extends Dexie {
   workspaceDocuments!: Table<WorkspaceDocumentBindingV1, number>
   adaptationProjects!: Table<AdaptationProject, number>
   adaptationSourceUnits!: Table<AdaptationSourceUnit, number>
+  adaptationSourceFacts!: Table<AdaptationSourceFactV1, number>
+  adaptationCausalEdges!: Table<AdaptationCausalEdgeV1, number>
+  adaptationDecisions!: Table<AdaptationDecisionV1, number>
+  screenplayBeats!: Table<ScreenplayBeatV1, number>
+  screenplaySceneCards!: Table<ScreenplaySceneCardV1, number>
+  screenplayReviewIssues!: Table<ScreenplayReviewIssueV1, number>
   screenplayScenes!: Table<ScreenplayScene, number>
+  comicScriptBeats!: Table<ComicScriptBeatV1, number>
+  comicPagePlans!: Table<ComicPagePlanV1, number>
+  comicReviewIssues!: Table<ComicReviewIssueV1, number>
   comicPages!: Table<ComicPage, number>
   comicPanels!: Table<ComicPanel, number>
   comicVisualSubjects!: Table<ComicVisualSubject, number>
@@ -292,9 +345,16 @@ export class StoryForgeDB extends Dexie {
   productRuntimeCheckpoints!: Table<ProductRuntimeCheckpoint, number>
   ttrpgSessionParticipants!: Table<TtrpgSessionParticipantRecordV2, number>
   ttrpgRuntimeAssetRequests!: Table<TtrpgRuntimeAssetRequestRecordV1, number>
+  shortNovelProductions!: Table<ShortNovelProductionV1, number>
+  creationReleases!: Table<CreationReleaseV1, number>
+  creationReleaseAssets!: Table<CreationReleaseAssetV1, number>
 
   constructor(databaseName = STORYFORGE_DATABASE_NAME) {
     super(databaseName)
+    this.version(1).stores(STORYFORGE_STORES_V1)
+    this.version(2).stores(STORYFORGE_STORES_V2)
+    this.version(3).stores(STORYFORGE_STORES_V3)
+    this.version(4).stores(STORYFORGE_STORES_V4)
     this.version(STORYFORGE_SCHEMA_VERSION).stores(STORYFORGE_STORES)
   }
 }

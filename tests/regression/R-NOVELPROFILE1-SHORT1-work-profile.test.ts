@@ -32,14 +32,15 @@ describe('NOVEL-PROFILE-1 / SHORT-1 · Work 分类与短篇边界', () => {
 
   afterEach(() => db.close())
 
-  it('短篇结构建议覆盖全部边界并允许作者指定任意正整数章数', () => {
-    expect(deriveShortNovelStructure(5_000)).toMatchObject({ volumeCount: 1, chapterCount: 2, targetWordsPerChapter: 2_500 })
+  it('短篇结构建议覆盖全部边界并把作者章数约束为 3～8', () => {
+    expect(deriveShortNovelStructure(5_000)).toMatchObject({ volumeCount: 1, chapterCount: 3, targetWordsPerChapter: 1_667 })
     expect(deriveShortNovelStructure(8_000).chapterCount).toBe(3)
     expect(deriveShortNovelStructure(13_000).chapterCount).toBe(4)
     expect(deriveShortNovelStructure(18_000).chapterCount).toBe(5)
     expect(deriveShortNovelStructure(22_000).chapterCount).toBe(6)
-    expect(deriveShortNovelStructure(25_000, 11).chapterCount).toBe(11)
-    expect(() => deriveShortNovelStructure(10_000, 0)).toThrow('正整数')
+    expect(deriveShortNovelStructure(25_000, 8).chapterCount).toBe(8)
+    expect(() => deriveShortNovelStructure(10_000, 2)).toThrow('3～8')
+    expect(() => deriveShortNovelStructure(10_000, 9)).toThrow('3～8')
   })
 
   it('短篇创建拒绝 4,999/25,001 且事务整体零写入，接受 5,000/25,000', async () => {
@@ -103,7 +104,7 @@ describe('NOVEL-PROFILE-1 / SHORT-1 · Work 分类与短篇边界', () => {
       novelProfile: 'short',
     })
     const backup = await exportProjectJSON(created.scope.projectId)
-    expect(backup.version).toBe(10)
+    expect(backup.version).toBe(14)
     expect(backup.works?.[0]).toMatchObject({ kind: 'novel', novelProfile: 'short' })
 
     const importedId = await importProjectJSON(structuredClone(backup))
@@ -116,7 +117,7 @@ describe('NOVEL-PROFILE-1 / SHORT-1 · Work 分类与短篇边界', () => {
     const wrongVersion = structuredClone(backup) as any
     wrongVersion.version = 9
     const beforeWrongVersion = await db.projects.count()
-    await expect(importProjectJSON(wrongVersion)).rejects.toThrow('只接受当前备份版本 v10')
+    await expect(importProjectJSON(wrongVersion)).rejects.toThrow('只接受当前备份版本 v14')
     expect(await db.projects.count()).toBe(beforeWrongVersion)
 
     const invalid = structuredClone(backup) as any

@@ -39,6 +39,7 @@ export function validateScreenplayBlocksV1(blocks: ScreenplayBlock[]): Screenpla
     const text = block.type === 'character' ? block.name : block.text
     if (typeof text !== 'string' || !text.trim() || text.length > 20_000) issue(issues, 'error', 'block-text', '块文本必须为 1～20000 字符。', block.id)
     if (block.type === 'character') {
+      if (activeCharacter) issue(issues, 'error', 'character-without-dialogue', '角色 cue 后必须先有对白，不能直接开始下一角色。', block.id)
       if (block.characterId != null && (!Number.isInteger(block.characterId) || block.characterId <= 0)) issue(issues, 'error', 'character-id', '角色引用非法。', block.id)
       if (block.extension && !CHARACTER_EXTENSIONS.has(block.extension)) issue(issues, 'error', 'character-extension', '角色扩展标记非法。', block.id)
       if (block.dualDialogue && !priorDialogueSequence) issue(issues, 'error', 'dual-dialogue-pair', '双栏对白的第二个角色 cue 前必须有一组完整对白。', block.id)
@@ -57,6 +58,7 @@ export function validateScreenplayBlocksV1(blocks: ScreenplayBlock[]): Screenpla
       pendingDual = false
       continue
     }
+    if (activeCharacter) issue(issues, 'error', 'character-without-dialogue', '角色 cue 后必须先有对白，不能直接开始动作或转场。', block.id)
     if (pendingDual) issue(issues, 'error', 'dual-dialogue-missing', '双栏对白角色 cue 后必须紧跟对白。', block.id)
     activeCharacter = false
     priorDialogueSequence = false

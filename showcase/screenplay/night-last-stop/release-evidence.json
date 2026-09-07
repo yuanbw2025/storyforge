@@ -1,0 +1,54 @@
+{
+  "schema": "storyforge.showcase-evidence.v1",
+  "productKind": "screenplay",
+  "title": "夜班末站·电影剧本",
+  "sourceTitle": "夜班末站",
+  "release": {
+    "version": 3,
+    "label": "夜班末站·电影剧本 v3",
+    "sourceRevision": 38,
+    "contentHash": "b4806fcbcc82d5061ca364eb78ea909ccb33aad44b538eafa395afc5703e5f9f",
+    "createdAt": "2026-09-06T16:29:54.131Z",
+    "immutable": true
+  },
+  "source": {
+    "chapterCount": 3,
+    "characterCount": 3370,
+    "sourceManifestVersion": 1,
+    "sourceManifestHash": "56270464568ee69da0c93857ff8b8cc83fb1f0936c82f39493464fd56e845431"
+  },
+  "pipeline": {
+    "sourceUnits": 3,
+    "sourceFacts": 37,
+    "causalEdges": 12,
+    "adaptationDecisions": 8,
+    "beats": 8,
+    "sceneCards": 8,
+    "scenes": 8,
+    "structuredBlocks": 176
+  },
+  "verification": {
+    "targetEstimatedSeconds": 1500,
+    "totalEstimatedSeconds": 1500,
+    "reviewedScenes": 8,
+    "groundingReviewsCurrent": 8,
+    "dramaturgyReviewsCurrent": 8,
+    "openIssues": 0,
+    "blockers": [],
+    "warnings": []
+  },
+  "files": {
+    "night-last-stop-final.fountain": {
+      "sha256": "0621fad1c9a234e961bd6178ebc1a2a326e7b31d621727e621d46dcaf3020076",
+      "bytes": 12171,
+      "lines": 373
+    },
+    "night-last-stop-final.fdx": {
+      "sha256": "03b45879734781ce6d2f51b6f3cc21e88a996247107157c54de3ce4d2acc9160",
+      "bytes": 21773
+    },
+    "screenplay-studio-final.png": {
+      "sha256": "9e54e62d39b65a997b2cc5468bf6033a9f5bfc3baa1238d64cb7a07e0dd8d78d"
+    }
+  }
+}

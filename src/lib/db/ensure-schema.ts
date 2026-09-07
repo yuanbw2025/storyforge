@@ -5,7 +5,10 @@ import {
 } from './schema'
 
 export const REQUIRED_TABLES = [
+  'adaptationCausalEdges',
+  'adaptationDecisions',
   'adaptationProjects',
+  'adaptationSourceFacts',
   'adaptationSourceUnits',
   'agentConversations',
   'agentEvents',
@@ -21,10 +24,14 @@ export const REQUIRED_TABLES = [
   'codexCategories',
   'codexEntries',
   'comicMediaAssets',
+  'comicPagePlans',
   'comicPages',
   'comicPanels',
+  'comicReviewIssues',
+  'comicScriptBeats',
   'comicVisualSubjects',
   'creativeRules',
+  'creationReleaseAssets',
   'cultivationProgress',
   'cultivationSystems',
   'detailedOutlines',
@@ -75,6 +82,10 @@ export const REQUIRED_TABLES = [
   'references',
   'retrievalChunks',
   'screenplayScenes',
+  'screenplayBeats',
+  'screenplayReviewIssues',
+  'screenplaySceneCards',
+  'shortNovelProductions',
   'snapshots',
   'stateCards',
   'storyArcs',
@@ -99,6 +110,7 @@ export const REQUIRED_TABLES = [
   'worldRulesProfiles',
   'worlds',
   'worldviews',
+  'creationReleases',
 ] as const
 
 export interface CurrentSchemaState {
@@ -115,10 +127,8 @@ export function assertCurrentSchemaDefinition(): void {
   }
 }
 
-/**
- * Opens and verifies the only supported database schema. There is no upgrade,
- * import or compatibility path from any prior database generation.
- */
+/** Opens the current schema. Dexie preserves v1-v4 release steps, then adds
+ * the v5 comic production and immutable release-asset stores. */
 export async function openCurrentSchema(): Promise<CurrentSchemaState> {
   assertCurrentSchemaDefinition()
   await db.open()

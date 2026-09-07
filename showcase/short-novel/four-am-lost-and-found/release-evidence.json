@@ -1,0 +1,25 @@
+{
+  "schema": "storyforge.showcase-evidence.v1",
+  "productKind": "short-novel",
+  "title": "凌晨四点的失物招领处",
+  "genre": ["urban-fantasy", "family-drama", "mystery"],
+  "chapterCount": 5,
+  "timeWindow": "03:47-07:00",
+  "review": {
+    "structure": "five-stage deadline chain",
+    "pointOfView": "third-person limited: Tang Li",
+    "openIssues": 0,
+    "checks": [
+      "all four object motifs pay off",
+      "station rule never removes character agency",
+      "sibling conflict resolves through a shared choice rather than forced reunion",
+      "timestamps progress monotonically",
+      "character names and object continuity are consistent"
+    ]
+  },
+  "file": {
+    "path": "story.md",
+    "contentChars": 5072,
+    "sha256": "8578d2fbdd131270c51ee7c559b092bbce2e833e833719b74cdac2f8da70e2d9"
+  }
+}

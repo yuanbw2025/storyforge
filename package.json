@@ -20,7 +20,7 @@
     "check:bundle-size": "node scripts/check-bundle-size.mjs",
     "check:dependencies": "npm audit --omit=dev --audit-level=moderate",
     "check:release-metadata": "node scripts/check-release-metadata.mjs",
-    "check:docs": "node scripts/check-document-authority.mjs",
+    "check:docs": "node scripts/check-document-authority.mjs && node scripts/check-independent-creation-plans.mjs",
     "check:roadmap": "node scripts/check-roadmap.mjs",
     "check:agent-context": "node scripts/check-agent-context.mjs",
     "check:agent-freshness": "node scripts/check-agent-freshness.mjs",

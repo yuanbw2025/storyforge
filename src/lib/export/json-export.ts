@@ -53,12 +53,21 @@ import type {
   ProductMediaAsset,
   ProductMediaBlob,
   AdaptationProject,
+  AdaptationCausalEdgeV1,
+  AdaptationDecisionV1,
+  AdaptationSourceFactV1,
   AdaptationSourceUnit,
   ScreenplayScene,
+  ScreenplayBeatV1,
+  ScreenplayReviewIssueV1,
+  ScreenplaySceneCardV1,
   ComicPage,
   ComicPanel,
   ComicVisualSubject,
   ComicMediaAsset,
+  ComicScriptBeatV1,
+  ComicPagePlanV1,
+  ComicReviewIssueV1,
   TtrpgRulePackRecordV1,
   TtrpgSessionParticipantRecordV2,
   TtrpgRuntimeAssetRequestRecordV1,
@@ -69,6 +78,9 @@ import type {
   ProductBuildArtifactRecordV1,
   ProductQualityGateReceiptRecordV1,
   MediaBlobObjectRecordV1,
+  ShortNovelProductionV1,
+  CreationReleaseV1,
+  CreationReleaseAssetV1,
 } from '../types'
 import type { TemporalFact } from '../types/temporal-fact'
 
@@ -109,6 +121,28 @@ export interface ProjectExportData {
       _activeNarrativeModuleExportId?: number | null
     }
   )[]
+  shortNovelProductions: (
+    Omit<ShortNovelProductionV1, 'id' | 'projectId' | 'worldId' | 'workId' | 'currentReleaseId'>
+    & {
+      _exportId: number
+      _worldExportId: number
+      _workExportId: number
+      _currentReleaseExportId?: number | null
+    }
+  )[]
+  creationReleases: (
+    Omit<CreationReleaseV1, 'id' | 'projectId' | 'worldId' | 'workId' | 'parentReleaseId'>
+    & {
+      _exportId: number
+      _worldExportId: number
+      _workExportId: number
+      _parentExportId?: number | null
+    }
+  )[]
+  creationReleaseAssets: (
+    Omit<CreationReleaseAssetV1, 'id' | 'projectId' | 'worldId' | 'workId' | 'releaseId' | 'blobObjectId'>
+    & { _exportId: number; _worldExportId: number; _workExportId: number; _releaseExportId: number; _blobObjectExportId: number }
+  )[]
   adaptationProjects: (
     Omit<AdaptationProject, 'id' | 'projectId' | 'worldId' | 'workId' | 'sourceWorkId' | 'sourceOutlineRootId' | 'sourceStartChapterId' | 'sourceEndChapterId'>
     & {
@@ -131,6 +165,30 @@ export interface ProjectExportData {
       _sourceChapterExportId?: number | null
     }
   )[]
+  adaptationSourceFacts: (
+    Omit<AdaptationSourceFactV1, 'id' | 'projectId' | 'workId' | 'adaptationProjectId'>
+    & { _exportId: number; _workExportId: number; _adaptationProjectExportId: number }
+  )[]
+  adaptationCausalEdges: (
+    Omit<AdaptationCausalEdgeV1, 'id' | 'projectId' | 'workId' | 'adaptationProjectId'>
+    & { _exportId: number; _workExportId: number; _adaptationProjectExportId: number }
+  )[]
+  adaptationDecisions: (
+    Omit<AdaptationDecisionV1, 'id' | 'projectId' | 'workId' | 'adaptationProjectId'>
+    & { _exportId: number; _workExportId: number; _adaptationProjectExportId: number }
+  )[]
+  screenplayBeats: (
+    Omit<ScreenplayBeatV1, 'id' | 'projectId' | 'workId' | 'adaptationProjectId'>
+    & { _exportId: number; _workExportId: number; _adaptationProjectExportId: number }
+  )[]
+  screenplaySceneCards: (
+    Omit<ScreenplaySceneCardV1, 'id' | 'projectId' | 'workId' | 'adaptationProjectId'>
+    & { _exportId: number; _workExportId: number; _adaptationProjectExportId: number }
+  )[]
+  screenplayReviewIssues: (
+    Omit<ScreenplayReviewIssueV1, 'id' | 'projectId' | 'workId' | 'adaptationProjectId'>
+    & { _exportId: number; _workExportId: number; _adaptationProjectExportId: number }
+  )[]
   screenplayScenes: (
     Omit<ScreenplayScene, 'id' | 'projectId' | 'workId' | 'adaptationProjectId' | 'sourceUnitIds'>
     & {
@@ -143,6 +201,18 @@ export interface ProjectExportData {
   )[]
   comicPages: (
     Omit<ComicPage, 'id' | 'projectId' | 'workId' | 'adaptationProjectId'>
+    & { _exportId: number; _workExportId: number; _adaptationProjectExportId: number }
+  )[]
+  comicScriptBeats: (
+    Omit<ComicScriptBeatV1, 'id' | 'projectId' | 'workId' | 'adaptationProjectId'>
+    & { _exportId: number; _workExportId: number; _adaptationProjectExportId: number }
+  )[]
+  comicPagePlans: (
+    Omit<ComicPagePlanV1, 'id' | 'projectId' | 'workId' | 'adaptationProjectId'>
+    & { _exportId: number; _workExportId: number; _adaptationProjectExportId: number }
+  )[]
+  comicReviewIssues: (
+    Omit<ComicReviewIssueV1, 'id' | 'projectId' | 'workId' | 'adaptationProjectId'>
     & { _exportId: number; _workExportId: number; _adaptationProjectExportId: number }
   )[]
   comicPanels: (

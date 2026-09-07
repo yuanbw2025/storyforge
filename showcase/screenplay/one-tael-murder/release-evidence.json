@@ -1,0 +1,56 @@
+{
+  "schema": "storyforge.showcase-evidence.v1",
+  "productKind": "screenplay",
+  "title": "一两银子的谋杀",
+  "targetProfile": {
+    "format": "vertical-limited-series",
+    "genre": ["period-mystery", "light-comedy", "female-led"],
+    "episodeCount": 6,
+    "targetMinutesPerEpisode": 3,
+    "rating": "PG-13"
+  },
+  "source": {
+    "path": "source-novel.md",
+    "chapterCount": 3,
+    "contentChars": 2081,
+    "sha256": "af75e2813c5eb92c0a429810868ce315a621f23bb111158c54d5418030824174"
+  },
+  "screenplay": {
+    "episodeCount": 6,
+    "sceneCount": 18,
+    "fountainLines": 547,
+    "fdxParagraphs": 269,
+    "openIssues": 0,
+    "episodeEndTurns": [
+      "the missing bride's pawn ticket bears Lu Qinghe's dead father's seal",
+      "the extra tael cracks open and reveals a hidden paper roll",
+      "the county clerk arrives before the evidence can leave the inn",
+      "Yan Shuang offers to stage the wedding again in front of the buyer",
+      "Luo Jing supplies a secret accounting detail and then sets the ledger alight",
+      "the crowd reconstructs the burned ledger through independent testimony"
+    ],
+    "reviewChecks": [
+      "all internal information is externalized through props, blocking, dialogue or public testimony",
+      "each episode changes the action objective instead of only withholding an answer",
+      "Lu Qinghe, Pei Du and Yan Shuang retain distinct strategies and speech patterns",
+      "the trafficking case resolves through corroboration rather than a surprise confession alone",
+      "the one-tael motif changes function across the full season and pays off in the final image"
+    ]
+  },
+  "files": {
+    "fountain": {
+      "path": "one-tael-murder-final.fountain",
+      "sha256": "85794be48179b8ff299487f9a223f79007b8859a303924b3681bb28acfe51200"
+    },
+    "fdx": {
+      "path": "one-tael-murder-final.fdx",
+      "sha256": "89f2908c53901c03a46b6e0395ef102bc7e7a6ec06fcf631751bece891e69fae"
+    },
+    "websitePreview": {
+      "path": "website-preview.png",
+      "width": 1600,
+      "height": 1000,
+      "sha256": "294e54eee5e770f443e504ab871f8e6c5f516a89bd22081e76491e13dbef9b84"
+    }
+  }
+}

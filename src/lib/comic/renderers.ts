@@ -40,6 +40,26 @@ function textLines(text: string, width: number, fontSize: number): string[] {
   return result.slice(0, 40)
 }
 
+function speechShape(item: ComicPanel['lettering'][number], x: number, y: number, width: number, height: number, panelX: number, panelY: number, panelWidth: number, panelHeight: number): string {
+  if (item.kind === 'sfx') return ''
+  if (item.kind === 'caption') return `<rect x="${x}" y="${y}" width="${width}" height="${height}" rx="${Math.min(9, height * .06)}" fill="${escapeXml(item.fillColor)}" stroke="${escapeXml(item.strokeColor)}" stroke-width="${item.strokeWidth}"/>`
+  const cx = x + width / 2; const cy = y + height / 2
+  if (item.kind === 'thought') {
+    const body = `<rect x="${x}" y="${y}" width="${width}" height="${height}" rx="${Math.min(width, height) * .38}" fill="${escapeXml(item.fillColor)}" stroke="${escapeXml(item.strokeColor)}" stroke-width="${item.strokeWidth}"/>`
+    if (!item.tail) return body
+    const tx = panelX + item.tail.x * panelWidth; const ty = panelY + item.tail.y * panelHeight
+    const firstX = cx + (tx - cx) * .58; const firstY = cy + (ty - cy) * .58
+    const secondX = cx + (tx - cx) * .8; const secondY = cy + (ty - cy) * .8
+    return `${body}<circle cx="${firstX}" cy="${firstY}" r="${Math.max(3, Math.min(width, height) * .07)}" fill="${escapeXml(item.fillColor)}" stroke="${escapeXml(item.strokeColor)}" stroke-width="${Math.max(1, item.strokeWidth * .75)}"/><circle cx="${secondX}" cy="${secondY}" r="${Math.max(2, Math.min(width, height) * .035)}" fill="${escapeXml(item.fillColor)}" stroke="${escapeXml(item.strokeColor)}" stroke-width="${Math.max(1, item.strokeWidth * .6)}"/>`
+  }
+  const body = `<ellipse cx="${cx}" cy="${cy}" rx="${width / 2}" ry="${height / 2}" fill="${escapeXml(item.fillColor)}" stroke="${escapeXml(item.strokeColor)}" stroke-width="${item.strokeWidth}"/>`
+  if (!item.tail) return body
+  const tx = panelX + item.tail.x * panelWidth; const ty = panelY + item.tail.y * panelHeight
+  const baseY = y + height * .82; const spread = Math.max(4, width * .07)
+  const tail = `<path d="M ${cx - spread} ${baseY} L ${tx} ${ty} L ${cx + spread} ${baseY}" fill="${escapeXml(item.fillColor)}" stroke="${escapeXml(item.strokeColor)}" stroke-width="${item.strokeWidth}" stroke-linejoin="round"/>`
+  return `${tail}${body}`
+}
+
 function letteringSvg(panel: ComicPanel, pageWidth: number, pageHeight: number): string {
   const panelX = panel.frame.x * pageWidth
   const panelY = panel.frame.y * pageHeight
@@ -51,12 +71,7 @@ function letteringSvg(panel: ComicPanel, pageWidth: number, pageHeight: number):
     const width = item.frame.width * panelWidth
     const height = item.frame.height * panelHeight
     const font = item.fontFamily === 'storyforge-serif' ? 'serif' : 'sans-serif'
-    const shape = item.kind === 'sfx' ? '' : item.kind === 'caption'
-      ? `<rect x="${x}" y="${y}" width="${width}" height="${height}" rx="${Math.min(12, height * 0.08)}" fill="${escapeXml(item.fillColor)}" stroke="${escapeXml(item.strokeColor)}" stroke-width="${item.strokeWidth}"/>`
-      : `<ellipse cx="${x + width / 2}" cy="${y + height / 2}" rx="${width / 2}" ry="${height / 2}" fill="${escapeXml(item.fillColor)}" stroke="${escapeXml(item.strokeColor)}" stroke-width="${item.strokeWidth}"/>`
-    const tail = item.tail && item.kind !== 'caption' && item.kind !== 'sfx'
-      ? `<path d="M ${x + width * .5} ${y + height * .86} L ${panelX + item.tail.x * panelWidth} ${panelY + item.tail.y * panelHeight}" fill="none" stroke="${escapeXml(item.strokeColor)}" stroke-width="${Math.max(1, item.strokeWidth)}"/>`
-      : ''
+    const shape = speechShape(item, x, y, width, height, panelX, panelY, panelWidth, panelHeight)
     if (item.direction === 'vertical') {
       const chars = [...item.text].slice(0, 200)
       const perColumn = Math.max(1, Math.floor((height - item.fontSize) / (item.fontSize * 1.15)))
@@ -65,13 +80,32 @@ function letteringSvg(panel: ComicPanel, pageWidth: number, pageHeight: number):
         const row = index % perColumn
         return `<text x="${x + width - item.fontSize * (.8 + column * 1.1)}" y="${y + item.fontSize * (1.1 + row * 1.15)}" font-family="${font}" font-size="${item.fontSize}" fill="${escapeXml(item.textColor)}" text-anchor="middle">${escapeXml(char)}</text>`
       }).join('')
-      return `<g data-lettering-id="${escapeXml(item.id)}">${shape}${tail}${text}</g>`
+      return `<g data-lettering-id="${escapeXml(item.id)}">${shape}${text}</g>`
     }
     const lines = textLines(item.text, width * .82, item.fontSize)
     const startY = y + Math.max(item.fontSize * 1.1, (height - lines.length * item.fontSize * 1.2) / 2 + item.fontSize)
     const tspans = lines.map((line, index) => `<tspan x="${x + width / 2}" y="${startY + index * item.fontSize * 1.2}">${escapeXml(line)}</tspan>`).join('')
-    return `<g data-lettering-id="${escapeXml(item.id)}">${shape}${tail}<text font-family="${font}" font-size="${item.fontSize}" fill="${escapeXml(item.textColor)}" text-anchor="middle" paint-order="stroke" stroke="${escapeXml(item.strokeColor)}" stroke-width="${item.kind === 'sfx' ? item.strokeWidth : 0}">${tspans}</text></g>`
+    return `<g data-lettering-id="${escapeXml(item.id)}">${shape}<text font-family="${font}" font-size="${item.fontSize}" font-weight="${item.kind === 'sfx' ? 800 : 600}" font-style="${item.kind === 'sfx' ? 'italic' : 'normal'}" fill="${escapeXml(item.textColor)}" text-anchor="middle" paint-order="stroke" stroke="${escapeXml(item.strokeColor)}" stroke-width="${item.kind === 'sfx' ? Math.max(2, item.strokeWidth) : 0}">${tspans}</text></g>`
   }).join('')
+}
+
+function storyboardPlaceholderSvg(panel: ComicPanel, index: number, x: number, y: number, width: number, height: number, pageWidth: number): string {
+  const labelSize = Math.max(15, Math.min(32, pageWidth * .013))
+  const bodySize = Math.max(17, Math.min(38, Math.min(width / 17, height / 10)))
+  const inset = Math.max(10, Math.min(width, height) * .045)
+  const labelY = y + inset + labelSize
+  const description = panel.moment?.trim() || panel.action.trim() || '待补充可画瞬间'
+  const lines = textLines(description, Math.max(1, width - inset * 2), bodySize).slice(0, Math.max(2, Math.floor(height * .22 / (bodySize * 1.25))))
+  const textY = y + height * .76
+  const tspans = lines.map((line, lineIndex) => `<tspan x="${x + inset}" y="${textY + lineIndex * bodySize * 1.22}">${escapeXml(line)}</tspan>`).join('')
+  const subjectCount = Math.max(1, Math.min(3, panel.subjectStates?.length || panel.continuityRefs?.length || 1))
+  const silhouettes = Array.from({ length: subjectCount }, (_, subjectIndex) => {
+    const centerX = x + width * (.38 + subjectIndex * .16 - (subjectCount - 1) * .08)
+    const centerY = y + height * .43 + subjectIndex * height * .025
+    const head = Math.max(8, Math.min(width, height) * .055)
+    return `<g opacity="${.34 + subjectIndex * .08}"><circle cx="${centerX}" cy="${centerY - head * 1.45}" r="${head}" fill="#4d5660"/><path d="M ${centerX - head * 1.35} ${centerY - head * .35} Q ${centerX} ${centerY - head * 1.05} ${centerX + head * 1.35} ${centerY - head * .35} L ${centerX + head * 1.8} ${centerY + head * 2.4} L ${centerX - head * 1.8} ${centerY + head * 2.4} Z" fill="#4d5660"/></g>`
+  }).join('')
+  return `<g data-storyboard-placeholder="${escapeXml(panel.stableKey)}"><rect x="${x}" y="${y}" width="${width}" height="${height}" fill="#e8edf0"/><path d="M ${x} ${y + height * .62} L ${x + width} ${y + height * .46} M ${x + width * .18} ${y} L ${x + width * .5} ${y + height * .68} M ${x + width * .82} ${y} L ${x + width * .5} ${y + height * .68}" fill="none" stroke="#78848d" stroke-width="${Math.max(1, pageWidth * .0007)}" opacity=".18"/>${silhouettes}<rect x="${x}" y="${y + height * .69}" width="${width}" height="${height * .31}" fill="#f8f6f0" fill-opacity=".94"/><circle cx="${x + inset + labelSize * .55}" cy="${labelY - labelSize * .38}" r="${labelSize * .55}" fill="#20272d"/><text x="${x + inset + labelSize * .55}" y="${labelY - labelSize * .18}" text-anchor="middle" font-family="sans-serif" font-size="${labelSize * .72}" font-weight="800" fill="#fff">${index + 1}</text><text x="${x + inset + labelSize * 1.35}" y="${labelY}" font-family="sans-serif" font-size="${labelSize * .68}" font-weight="700" letter-spacing="${labelSize * .08}" fill="#39434b">${escapeXml(panel.shot.size.toUpperCase())} · ${escapeXml(panel.shot.angle.toUpperCase())}</text><text font-family="sans-serif" font-size="${bodySize}" font-weight="600" fill="#20272d">${tspans}</text></g>`
 }
 
 export function renderComicPageSvgV1(input: ComicPageRenderV1): string {
@@ -82,14 +116,14 @@ export function renderComicPageSvgV1(input: ComicPageRenderV1): string {
   if (input.mode === 'formal' && missing.length) throw new Error(`[comic-render] 正式导出缺少已选成图：${missing.map(panel => panel.stableKey).join('、')}`)
   const filters = input.targetSpec.colorMode === 'color' ? '' : `<filter id="color-mode"><feColorMatrix type="saturate" values="0"/>${input.targetSpec.colorMode === 'monochrome' ? '<feComponentTransfer><feFuncR type="discrete" tableValues="0 1"/><feFuncG type="discrete" tableValues="0 1"/><feFuncB type="discrete" tableValues="0 1"/></feComponentTransfer>' : ''}</filter>`
   const defs = sorted.map(panel => `<clipPath id="clip-${escapeXml(panel.stableKey)}"><rect x="${panel.frame.x * width}" y="${panel.frame.y * height}" width="${panel.frame.width * width}" height="${panel.frame.height * height}"/></clipPath>`).join('')
-  const panels = sorted.map(panel => {
+  const panels = sorted.map((panel, index) => {
     const x = panel.frame.x * width; const y = panel.frame.y * height
     const panelWidth = panel.frame.width * width; const panelHeight = panel.frame.height * height
     const selected = panel.selectedMediaAssetKey ? assetUrl(input, panel.selectedMediaAssetKey) : undefined
     const cx = x + panelWidth / 2; const cy = y + panelHeight / 2
     const media = selected
       ? `<image href="${escapeXml(selected)}" x="${x}" y="${y}" width="${panelWidth}" height="${panelHeight}" preserveAspectRatio="xMidYMid ${panel.imageTransform.fit === 'cover' ? 'slice' : 'meet'}" transform="translate(${panel.imageTransform.offsetX * panelWidth} ${panel.imageTransform.offsetY * panelHeight}) translate(${cx} ${cy}) rotate(${panel.imageTransform.rotation}) scale(${panel.imageTransform.scale}) translate(${-cx} ${-cy})"/>`
-      : `<g><rect x="${x}" y="${y}" width="${panelWidth}" height="${panelHeight}" fill="#ece9e2"/><text x="${cx}" y="${cy}" text-anchor="middle" font-family="sans-serif" font-size="${Math.max(18, width * .012)}" fill="#746f67">分镜占位 · ${escapeXml(panel.stableKey)}</text></g>`
+      : storyboardPlaceholderSvg(panel, index, x, y, panelWidth, panelHeight, width)
     return `<g data-panel-key="${escapeXml(panel.stableKey)}" clip-path="url(#clip-${escapeXml(panel.stableKey)})"${filters ? ' filter="url(#color-mode)"' : ''}>${media}</g><rect x="${x}" y="${y}" width="${panelWidth}" height="${panelHeight}" fill="none" stroke="#111" stroke-width="${Math.max(2, width * .002)}"/>${letteringSvg(panel, width, height)}`
   }).join('')
   return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" data-storyforge-comic-page="1"><metadata>${escapeXml(JSON.stringify({ version: 1, pageStableKey: input.page.stableKey, readingDirection: input.targetSpec.readingDirection, bleed }))}</metadata><defs>${filters}${defs}</defs><rect width="${width}" height="${height}" fill="#fff"/>${panels}</svg>`

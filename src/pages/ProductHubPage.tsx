@@ -9,6 +9,7 @@ import {
   Gamepad2,
   Globe2,
   Hash,
+  Images,
   LayoutDashboard,
   Loader2,
   Menu,
@@ -31,6 +32,8 @@ import {
   type TextGameProductKindV1,
   type WorkspaceScope,
   type ProductProductionHandoffV1,
+  type ScreenplayTargetSpecV1,
+  type ComicTargetSpecV1,
 } from '../lib/types'
 import type { OnlineRoomJoinHandoffV1 } from '../lib/online/http-transport'
 import { db } from '../lib/db/schema'
@@ -63,6 +66,7 @@ import { useActiveWork } from '../hooks/useActiveWork'
 import WorkKindBadge from '../components/work/WorkKindBadge'
 import { effectiveNovelProfile, effectiveWorkKind, SHORT_NOVEL_DEFAULT_WORDS } from '../lib/workspace/work-kind'
 import { switchNovelProfile } from '../lib/workspace/works'
+import { createAdaptation } from '../lib/adaptation/source-manifest'
 import WorldDerivationActions from '../components/world-engine/WorldDerivationActions'
 import {
   currentExperimentalProductOptInV1,
@@ -87,6 +91,7 @@ const OutlinePanel = lazy(() => import('../components/outline/OutlinePanel'))
 const ChaptersListPanel = lazy(() => import('../components/editor/ChaptersListPanel'))
 const ScreenplayStudio = lazy(() => import('../components/screenplay/ScreenplayStudio'))
 const ComicStudio = lazy(() => import('../components/comic/ComicStudio'))
+const ShortNovelStudio = lazy(() => import('../components/short-novel/ShortNovelStudio'))
 
 type TabId = 'home' | 'worlds' | 'novel' | 'nodes' | 'ttrpg' | 'chat' | 'text-games' | 'market'
 type Accent = 'ochre' | 'teal' | 'blue' | 'violet' | 'rust'
@@ -501,7 +506,11 @@ function NovelPage({ project, onCreate, onDerived }: { project?: Project; onCrea
   }
   const alternateProductId: StoryForgeProductIdV1 = profile === 'short' ? 'independent.longform' : 'independent.shortform'
   const canSwitchProfile = productDecision(alternateProductId).enterable
-  return <><PageHeading eyebrow="AUTHORING / STEP BY STEP" title={profile === 'short' ? '短篇小说创作' : '长篇小说创作'} description={profile === 'short' ? '独立短篇产品复用同一份可靠 Canon 与生成底座。' : '独立运行完整的分步骤长篇创作流程；世界引擎不是前置条件。'} action={<div className="flex flex-wrap items-center justify-end gap-2">{activeWork && <WorkKindBadge work={activeWork} />}<MaturityBadge productId={activeProductId} /><WorldDerivationActions project={project} onDerived={onDerived} />{canSwitchProfile && <Button onClick={() => void changeProfile(profile === 'short' ? 'long' : 'short')} disabled={profileBusy}>{profileBusy ? '切换中…' : profile === 'short' ? '扩写为长篇' : '切换为短篇'}</Button>}<Button variant="primary" icon={ArrowRight} onClick={() => setView('chapters')}>打开正文</Button></div>} />{profileError && <p className="mb-3 text-sm text-red-600" role="alert">{profileError}</p>}<div className="sf-subnav"><button className={view === 'outline' ? 'active' : ''} onClick={() => setView('outline')}><BookOpenText className="h-4 w-4" />卷纲与章纲</button><button className={view === 'chapters' ? 'active' : ''} onClick={() => setView('chapters')}><BookOpenText className="h-4 w-4" />章节与正文</button><span className="sf-subnav-spacer" /><span className="sf-subnav-note">{activeWork?.title ?? '当前作品'}</span></div><section className="sf-product-panel sf-novel-panel"><Suspense fallback={<FeaturePanelFallback />}>{view === 'outline' ? <OutlinePanel project={project} onOpenChapter={id => { setNodeId(id); setView('chapters') }} /> : <ChaptersListPanel project={project} initialNodeId={nodeId} />}</Suspense></section></>
+  if (profile === 'short') {
+    const scope = scopeForProject(project)
+    return <><PageHeading eyebrow="AUTHORING / SHORT FICTION" title="短篇小说创作" description="从创作意图、故事设计、章节卡、正文到全篇审校与冻结发布的独立生产流程。" action={<div className="flex flex-wrap items-center justify-end gap-2">{activeWork && <WorkKindBadge work={activeWork} />}<MaturityBadge productId={activeProductId} /><WorldDerivationActions project={project} onDerived={onDerived} />{canSwitchProfile && <Button onClick={() => void changeProfile('long')} disabled={profileBusy}>{profileBusy ? '切换中…' : '扩写为长篇'}</Button>}</div>} />{profileError && <p className="mb-3 text-sm text-red-600" role="alert">{profileError}</p>}{scope ? <Suspense fallback={<FeaturePanelFallback />}><ShortNovelStudio project={project} scope={scope} /></Suspense> : <section className="sf-product-empty"><BookOpenText className="h-8 w-8" /><h2>短篇工作区归属尚未就绪</h2><p>请先完成目标 Work 初始化。</p></section>}</>
+  }
+  return <><PageHeading eyebrow="AUTHORING / STEP BY STEP" title="长篇小说创作" description="独立运行完整的分步骤长篇创作流程；世界引擎不是前置条件。" action={<div className="flex flex-wrap items-center justify-end gap-2">{activeWork && <WorkKindBadge work={activeWork} />}<MaturityBadge productId={activeProductId} /><WorldDerivationActions project={project} onDerived={onDerived} />{canSwitchProfile && <Button onClick={() => void changeProfile('short')} disabled={profileBusy}>{profileBusy ? '切换中…' : '切换为短篇'}</Button>}<Button variant="primary" icon={ArrowRight} onClick={() => setView('chapters')}>打开正文</Button></div>} />{profileError && <p className="mb-3 text-sm text-red-600" role="alert">{profileError}</p>}<div className="sf-subnav"><button className={view === 'outline' ? 'active' : ''} onClick={() => setView('outline')}><BookOpenText className="h-4 w-4" />卷纲与章纲</button><button className={view === 'chapters' ? 'active' : ''} onClick={() => setView('chapters')}><BookOpenText className="h-4 w-4" />章节与正文</button><span className="sf-subnav-spacer" /><span className="sf-subnav-note">{activeWork?.title ?? '当前作品'}</span></div><section className="sf-product-panel sf-novel-panel"><Suspense fallback={<FeaturePanelFallback />}>{view === 'outline' ? <OutlinePanel project={project} onOpenChapter={id => { setNodeId(id); setView('chapters') }} /> : <ChaptersListPanel project={project} initialNodeId={nodeId} />}</Suspense></section></>
 }
 
 function NodesPage({ project, onCreate }: { project?: Project; onCreate: () => void }) {
@@ -634,9 +643,36 @@ function TextGamePage({ project, world, onOpenWorldPicker, onCreate, initialProd
   return <><PageHeading eyebrow={`${mode === 'play' ? 'PLAY' : 'PRODUCE'} / ${productCode}`} title={mode === 'production' ? '文字游戏制作中心' : productTitle} description={mode === 'production' ? '从冻结 WorldRelease 会谈、审查 Brief、显式授权、构建可玩预览，并经证据复验原子发布。' : description} action={<div className="product-mode-actions">{availableProducts.includes('text-adventure') && <Button variant={isAdventure ? 'primary' : 'secondary'} icon={Map} onClick={() => setProduct('text-adventure')}>文字冒险</Button>}{availableProducts.includes('avg') && <Button variant={isAvg ? 'primary' : 'secondary'} icon={MonitorPlay} onClick={() => setProduct('avg')}>AVG</Button>}{availableProducts.includes('text-open-world') && <Button variant={isOpenWorld ? 'primary' : 'secondary'} icon={Globe2} onClick={() => setProduct('text-open-world')}>文字开放世界</Button>}<Button variant={mode === 'play' ? 'primary' : 'secondary'} icon={Gamepad2} onClick={() => setMode('play')}>玩家</Button><Button variant={mode === 'production' ? 'primary' : 'secondary'} icon={Sparkles} onClick={() => setMode('production')}>制作</Button><Button icon={Hash} onClick={onOpenWorldPicker}>选择世界</Button></div>} /><BindingBanner world={world} onChange={onOpenWorldPicker} /><section className="sf-product-runtime-surface"><Suspense fallback={<FeaturePanelFallback />}>{content}</Suspense></section></>
 }
 
-function CreatePanel({ onClose, onCreated }: { onClose: () => void; onCreated: (kind: 'worlds' | 'novel', id: number) => void }) {
-  const { createWorkspace } = useProjectStore()
-  const [kind, setKind] = useState<'choose' | 'worlds' | 'long-novel' | 'short-novel'>('choose')
+type ScreenplaySourceOption = { projectId: number; worldId: number; workId: number; label: string }
+
+function screenplayTargetSpec(format: ScreenplayTargetSpecV1['format'], episodeCount: number, targetMinutes: number): ScreenplayTargetSpecV1 {
+  return {
+    format,
+    language: 'zh-CN',
+    episodeCount: format === 'film' ? null : episodeCount,
+    targetMinutesPerEpisode: targetMinutes,
+    rating: 'PG-13',
+    dialogueDensity: 'balanced',
+    productionScale: 'standard',
+    preserveVoiceOver: false,
+    titlePage: {
+      creditLine: '小说改编',
+      authorDisplayName: '作者',
+      contactText: '',
+      copyrightNotice: '',
+      draftLabel: '第一稿',
+    },
+    exportDefaults: ['fountain', 'fdx', 'pdf'],
+  }
+}
+
+function comicTargetSpec(input: { readingDirection: ComicTargetSpecV1['readingDirection']; chapterCount: number; pagesPerChapter: number; colorMode: ComicTargetSpecV1['colorMode']; artStyleBrief: string }): ComicTargetSpecV1 {
+  return { format: 'page-comic', audience: '青少年及以上', readingDirection: input.readingDirection, chapterCount: input.chapterCount, targetPagesPerChapter: input.pagesPerChapter, pageSize: { width: 1200, height: 1700, unit: 'px', bleed: 0 }, colorMode: input.colorMode, artStyleBrief: input.artStyleBrief.trim() || '清晰叙事、稳定人物设计、适合页漫印刷与屏幕阅读', renderCandidatesPerPanel: 3, imageCapabilityRequirement: { referenceImage: true, deterministicSeed: false, inpainting: false, commercialUseRequired: true, minimumWidth: 512, minimumHeight: 512 } }
+}
+
+function CreatePanel({ projects, onClose, onCreated }: { projects: Project[]; onClose: () => void; onCreated: (kind: 'worlds' | 'novel' | 'shortform' | 'screenplay' | 'comic', id: number) => void }) {
+  const { createWorkspace, loadProjects } = useProjectStore()
+  const [kind, setKind] = useState<'choose' | 'worlds' | 'long-novel' | 'short-novel' | 'screenplay' | 'comic'>('choose')
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [targetWordCount, setTargetWordCount] = useState(10_000)
@@ -644,13 +680,54 @@ function CreatePanel({ onClose, onCreated }: { onClose: () => void; onCreated: (
   const [projectFolder, setProjectFolder] = useState<FileSystemDirectoryHandle | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [screenplaySources, setScreenplaySources] = useState<ScreenplaySourceOption[]>([])
+  const [screenplaySourceWorkId, setScreenplaySourceWorkId] = useState<number | ''>('')
+  const [screenplayFormat, setScreenplayFormat] = useState<ScreenplayTargetSpecV1['format']>('film')
+  const [screenplayEpisodeCount, setScreenplayEpisodeCount] = useState(8)
+  const [screenplayMinutes, setScreenplayMinutes] = useState(100)
+  const [comicReadingDirection, setComicReadingDirection] = useState<ComicTargetSpecV1['readingDirection']>('ltr')
+  const [comicChapterCount, setComicChapterCount] = useState(1)
+  const [comicPagesPerChapter, setComicPagesPerChapter] = useState(8)
+  const [comicColorMode, setComicColorMode] = useState<ComicTargetSpecV1['colorMode']>('color')
+  const [comicArtStyle, setComicArtStyle] = useState('清晰叙事、稳定人物设计、电影感光影的彩色页漫')
   const canCreateShort = productDecision('independent.shortform').enterable
   const canCreateLong = productDecision('independent.longform').enterable
+  const canCreateScreenplay = productDecision('independent.screenplay').enterable
+  const canCreateComic = productDecision('independent.comic').enterable
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      const works = await db.works.toArray()
+      const projectById = new globalThis.Map(projects.flatMap(project => project.id == null ? [] : [[project.id, project] as const]))
+      const options = works.filter(work => work.id != null && effectiveWorkKind(work) === 'novel')
+        .flatMap(work => {
+          const project = projectById.get(work.projectId)
+          return project && work.worldId != null
+            ? [{ projectId: work.projectId, worldId: work.worldId, workId: work.id!, label: `${work.title} · ${project.name}` }]
+            : []
+        })
+      if (cancelled) return
+      setScreenplaySources(options)
+      setScreenplaySourceWorkId(current => current !== '' && options.some(option => option.workId === current) ? current : options[0]?.workId ?? '')
+    })().catch(cause => { if (!cancelled) setError(cause instanceof Error ? cause.message : '读取小说来源失败') })
+    return () => { cancelled = true }
+  }, [projects])
   const create = async () => {
     if (!name.trim()) return
     setBusy(true)
     setError('')
     try {
+      if (kind === 'screenplay' || kind === 'comic') {
+        const source = screenplaySources.find(option => option.workId === screenplaySourceWorkId)
+        if (!source) throw new Error('请先选择一个本地小说来源。')
+        const common = { sourceScope: { projectId: source.projectId, worldId: source.worldId, workId: source.workId }, sourceWorkId: source.workId, title: name.trim(), sourceSelection: { mode: 'entire-work' as const } }
+        const result = kind === 'screenplay'
+          ? await createAdaptation({ ...common, medium: 'screenplay', targetSpec: screenplayTargetSpec(screenplayFormat, screenplayEpisodeCount, screenplayMinutes) })
+          : await createAdaptation({ ...common, medium: 'comic', targetSpec: comicTargetSpec({ readingDirection: comicReadingDirection, chapterCount: comicChapterCount, pagesPerChapter: comicPagesPerChapter, colorMode: comicColorMode, artStyleBrief: comicArtStyle }) })
+        await loadProjects()
+        onCreated(kind, result.scope.projectId)
+        return
+      }
       const isShort = kind === 'short-novel'
       const isNovel = isShort || kind === 'long-novel'
       const id = await createWorkspace({
@@ -669,12 +746,12 @@ function CreatePanel({ onClose, onCreated }: { onClose: () => void; onCreated: (
           console.error('[project-storage] 新项目存储位置保存失败', error)
         }
       }
-      onCreated(kind === 'worlds' ? 'worlds' : 'novel', id)
+      onCreated(kind === 'worlds' ? 'worlds' : isShort ? 'shortform' : 'novel', id)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '创建失败')
     } finally { setBusy(false) }
   }
-  const label = kind === 'worlds' ? '创建世界引擎' : kind === 'short-novel' ? '创建短篇小说' : '创建长篇小说'
+  const label = kind === 'worlds' ? '创建世界引擎' : kind === 'short-novel' ? '创建短篇小说' : kind === 'screenplay' ? '创建剧本项目' : kind === 'comic' ? '创建漫画项目' : '创建长篇小说'
   return <div className="sf-modal-backdrop" onMouseDown={onClose}>
     <aside className="sf-create-panel" onMouseDown={event => event.stopPropagation()}>
       <div className="sf-modal-header">
@@ -689,14 +766,33 @@ function CreatePanel({ onClose, onCreated }: { onClose: () => void; onCreated: (
         <button onClick={() => setKind('worlds')}><span className="sf-create-option-icon"><Globe2 className="h-5 w-5" /></span><span><strong>世界引擎</strong><small>从零创建可被其他功能引用的世界</small></span><ArrowRight className="h-4 w-4" /></button>
         {canCreateShort && <button onClick={() => setKind('short-novel')}><span className="sf-create-option-icon"><BookOpenText className="h-5 w-5" /></span><span><strong>短篇小说 <MaturityBadge productId="independent.shortform" /></strong><small>5,000～25,000 字，动态单卷结构</small></span><ArrowRight className="h-4 w-4" /></button>}
         {canCreateLong && <button onClick={() => setKind('long-novel')}><span className="sf-create-option-icon"><BookOpenText className="h-5 w-5" /></span><span><strong>长篇小说</strong><small>保留熟悉的完整分步骤工作流</small></span><ArrowRight className="h-4 w-4" /></button>}
+        {canCreateScreenplay && <button onClick={() => setKind('screenplay')}><span className="sf-create-option-icon"><Sparkles className="h-5 w-5" /></span><span><strong>小说转剧本 <MaturityBadge productId="independent.screenplay" /></strong><small>冻结本地小说来源，进入十步专业改编流程</small></span><ArrowRight className="h-4 w-4" /></button>}
+        {canCreateComic && <button onClick={() => setKind('comic')}><span className="sf-create-option-icon"><Images className="h-5 w-5" /></span><span><strong>小说转漫画 <MaturityBadge productId="independent.comic" /></strong><small>冻结本地小说来源，进入十二步页漫生产流程</small></span><ArrowRight className="h-4 w-4" /></button>}
       </div> : <div className="sf-create-form">
         <label>名称<input value={name} onChange={event => setName(event.target.value)} placeholder={kind === 'worlds' ? '例如：潮汐之后' : '例如：《幽都遗闻》'} autoFocus /></label>
         <label>简介<textarea value={description} onChange={event => setDescription(event.target.value)} rows={4} placeholder="一句话描述这个世界或作品" /></label>
+        {(kind === 'screenplay' || kind === 'comic') && <>
+          <label>小说来源<select aria-label="小说来源" value={screenplaySourceWorkId} onChange={event => setScreenplaySourceWorkId(event.target.value ? Number(event.target.value) : '')}><option value="">请选择本地小说</option>{screenplaySources.map(source => <option key={source.workId} value={source.workId}>{source.label}</option>)}</select></label>
+        </>}
+        {kind === 'screenplay' && <>
+          <label>剧本类型<select aria-label="剧本类型" value={screenplayFormat} onChange={event => setScreenplayFormat(event.target.value as ScreenplayTargetSpecV1['format'])}><option value="film">电影</option><option value="series">剧集</option><option value="short-drama">短剧</option></select></label>
+          {screenplayFormat !== 'film' && <label>集数<input aria-label="集数" type="number" min={1} max={1000} value={screenplayEpisodeCount} onChange={event => setScreenplayEpisodeCount(Number(event.target.value))} /></label>}
+          <label>单集目标分钟<input aria-label="单集目标分钟" type="number" min={1} max={300} value={screenplayMinutes} onChange={event => setScreenplayMinutes(Number(event.target.value))} /></label>
+          <p className="text-xs leading-5 text-text-muted">创建时冻结整部小说为 manifest v1；后续同步必须显式确认，剧本写入目标 Work，不修改来源小说。</p>
+        </>}
+        {kind === 'comic' && <>
+          <label>阅读方向<select aria-label="阅读方向" value={comicReadingDirection} onChange={event => setComicReadingDirection(event.target.value as ComicTargetSpecV1['readingDirection'])}><option value="ltr">左到右</option><option value="rtl">右到左</option></select></label>
+          <label>章节数<input aria-label="漫画章节数" type="number" min={1} max={100} value={comicChapterCount} onChange={event => setComicChapterCount(Number(event.target.value))} /></label>
+          <label>每章页数<input aria-label="每章页数" type="number" min={1} max={100} value={comicPagesPerChapter} onChange={event => setComicPagesPerChapter(Number(event.target.value))} /></label>
+          <label>色彩模式<select aria-label="色彩模式" value={comicColorMode} onChange={event => setComicColorMode(event.target.value as ComicTargetSpecV1['colorMode'])}><option value="color">彩色</option><option value="grayscale">灰度</option><option value="monochrome">黑白</option></select></label>
+          <label>画风要求<textarea aria-label="画风要求" value={comicArtStyle} onChange={event => setComicArtStyle(event.target.value)} rows={3} /></label>
+          <p className="text-xs leading-5 text-text-muted">创建时冻结整部小说为 manifest v1；分镜版与视觉版分别发布。视觉版只接受实际传输参考图或作者上传并完成权利审查的成图。</p>
+        </>}
         {kind === 'short-novel' && <>
           <label>目标字数（5,000～25,000）<input type="number" min={5000} max={25000} step={500} value={targetWordCount} onChange={event => setTargetWordCount(Number(event.target.value))} /></label>
-          <label>建议章节数（可空）<input type="number" min={1} step={1} value={preferredChapterCount} placeholder="自动推导" onChange={event => setPreferredChapterCount(event.target.value === '' ? '' : Number(event.target.value))} /></label>
+          <label>建议章节数（可空）<input type="number" min={3} max={8} step={1} value={preferredChapterCount} placeholder="自动推导 3～8 章" onChange={event => setPreferredChapterCount(event.target.value === '' ? '' : Number(event.target.value))} /></label>
         </>}
-        <ProjectStorageFolderField value={projectFolder} onChange={setProjectFolder} disabled={busy} />
+        {kind !== 'screenplay' && kind !== 'comic' && <ProjectStorageFolderField value={projectFolder} onChange={setProjectFolder} disabled={busy} />}
         {error && <p className="text-sm text-red-600" role="alert">{error}</p>}
         <div className="sf-create-form-actions"><Button onClick={() => setKind('choose')}>返回</Button><Button variant="primary" icon={Check} onClick={() => void create()} disabled={busy || !name.trim()}>{busy ? '创建中…' : label}</Button></div>
       </div>}
@@ -855,5 +951,5 @@ export default function ProductHubPage() {
     }
   }
 
-  return <div className="sf-product-shell"><WelcomeGuide onGoSettings={() => navigate('/settings')} /><ProductHeader activeTab={activeTab} onSelect={selectTab} onOpenCreate={() => setShowCreate(true)} onOpenMobileNav={() => setShowMobileNav(true)} onOpenWorldPicker={() => setShowWorldPicker(true)} onOpenSettings={() => navigate('/settings')} /><main className="sf-product-main">{renderPage()}</main><footer className="sf-product-footer"><span>StoryForge 产品综合页 · 本地数据</span><span><ShieldCheck className="h-3.5 w-3.5" />世界版本与产品实例分开管理</span></footer>{showCreate && <CreatePanel onClose={() => setShowCreate(false)} onCreated={(kind, id) => { if (kind === 'worlds') setActiveWorldProjectId(id); else setActiveWorkProjectId(id); setActiveTab(kind); setShowCreate(false); if (kind === 'novel') navigate(`/workspace/${id}?module=outline`) }} />}{showWorldPicker && <WorldPicker worlds={worlds} onClose={() => setShowWorldPicker(false)} onChoose={selectWorld} />}{showMobileNav && <MobileNavPanel activeTab={activeTab} onClose={() => setShowMobileNav(false)} onSelect={selectTab} />}</div>
+  return <div className="sf-product-shell"><WelcomeGuide onGoSettings={() => navigate('/settings')} /><ProductHeader activeTab={activeTab} onSelect={selectTab} onOpenCreate={() => setShowCreate(true)} onOpenMobileNav={() => setShowMobileNav(true)} onOpenWorldPicker={() => setShowWorldPicker(true)} onOpenSettings={() => navigate('/settings')} /><main className="sf-product-main">{renderPage()}</main><footer className="sf-product-footer"><span>StoryForge 产品综合页 · 本地数据</span><span><ShieldCheck className="h-3.5 w-3.5" />世界版本与产品实例分开管理</span></footer>{showCreate && <CreatePanel projects={projects} onClose={() => setShowCreate(false)} onCreated={(kind, id) => { if (kind === 'worlds') setActiveWorldProjectId(id); else setActiveWorkProjectId(id); setActiveTab(kind === 'worlds' ? 'worlds' : 'novel'); setShowCreate(false); if (kind === 'novel') navigate(`/workspace/${id}?module=outline`) }} />}{showWorldPicker && <WorldPicker worlds={worlds} onClose={() => setShowWorldPicker(false)} onChoose={selectWorld} />}{showMobileNav && <MobileNavPanel activeTab={activeTab} onClose={() => setShowMobileNav(false)} onSelect={selectTab} />}</div>
 }
