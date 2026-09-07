@@ -1,0 +1,56 @@
+{
+  "schema": "storyforge.showcase-evidence.v1",
+  "productKind": "screenplay",
+  "title": "婚礼第零桌",
+  "targetProfile": {
+    "format": "short-film",
+    "genre": ["ensemble-comedy", "wedding-dramedy", "contemporary"],
+    "episodeCount": 1,
+    "targetMinutes": 15,
+    "rating": "PG"
+  },
+  "source": {
+    "path": "source-novel.md",
+    "chapterCount": 3,
+    "contentChars": 2176,
+    "sha256": "7863dd63c2febf8acb8f2a4dab272f9ef71312e6c16b66535233d0dd73e1ef2c"
+  },
+  "screenplay": {
+    "sceneCount": 12,
+    "fountainLines": 635,
+    "fdxParagraphs": 315,
+    "characterCues": 86,
+    "openIssues": 0,
+    "storyTurns": [
+      "the hired relatives rehearse a complete family at the hidden Table Zero",
+      "the role cards and temporary family tree replace the whale video on the ballroom screens",
+      "Tang Mo leaves when Gu Yan hesitates between her and the identity he invented",
+      "Ji Xia breaks contract and identifies herself before the full wedding livestream",
+      "Gu Yan publicly names his first lie without demanding immediate forgiveness",
+      "the wedding resumes only after every proxy guest speaks under a real name"
+    ],
+    "reviewChecks": [
+      "every scene changes an objective, relationship or piece of public information",
+      "the comedy targets professional role-play and social performance rather than foster-care history",
+      "Ji Xia, Tang Mo, Gu Yan and Su Min retain distinct responsibilities and choices",
+      "the hotel locations and screen reveal are achievable without expensive visual effects",
+      "the silver pendant, role cards, Table Zero placard and unplanned photograph all pay off"
+    ]
+  },
+  "files": {
+    "fountain": {
+      "path": "table-zero-final.fountain",
+      "sha256": "28a4eb7d7f4488037951cc6618a12e2328b1bdf435d7ad4d17e883622a00bb07"
+    },
+    "fdx": {
+      "path": "table-zero-final.fdx",
+      "sha256": "d3d48da5cd811c085b1f47f750a16f3dcd2d8b70d93d314f3da2064ae9931f8c"
+    },
+    "websitePreview": {
+      "path": "website-preview.png",
+      "width": 1600,
+      "height": 1000,
+      "sha256": "e2e82b1484020fd918f862ea5ee316ee55894742de335a71ca09aa5f2db4ad8e"
+    }
+  }
+}
