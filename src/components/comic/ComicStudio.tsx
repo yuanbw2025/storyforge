@@ -75,6 +75,7 @@ import ComicPanelInspector from "./ComicPanelInspector";
 import ComicQaPanel from "./ComicQaPanel";
 import ComicVisualPanel from "./ComicVisualPanel";
 import ComicPipelinePanel from "./ComicPipelinePanel";
+import ComicShowcase from "./ComicShowcase";
 import {
   EMPTY_COMIC_SUBJECT_DESIGN,
   type ComicPageGroup,
@@ -1100,6 +1101,7 @@ export default function ComicStudio({ scope }: Props) {
           {error || message}
         </div>
       )}
+      <ComicShowcase />
     </div>
   );
 }
