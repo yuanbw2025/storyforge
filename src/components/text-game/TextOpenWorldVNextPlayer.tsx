@@ -1,8 +1,13 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Backpack, GitBranch, History, MapPinned, Save, Swords, UserRound } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Backpack, Bell, GitBranch, History, MapPinned, Save, Swords, UserRound } from 'lucide-react'
 import { createTextOpenWorldInventoryCatalogV1 } from '../../lib/open-world/inventory'
 import { deriveTextOpenWorldLifeProjectionV1 } from '../../lib/open-world/life-cycle'
 import { parseTextOpenWorldModulesV1 } from '../../lib/open-world/modules'
+import { projectTextOpenWorldPlayerHudV1 } from '../../lib/open-world/player-hud'
+import {
+  projectTextOpenWorldPlayerNotificationsV1,
+  type TextOpenWorldPlayerNotificationCategoryV1,
+} from '../../lib/open-world/player-notifications'
 import { projectTextOpenWorldScenesV1 } from '../../lib/open-world/scene-projection'
 import {
   projectTextOpenWorldQuestDeadlineV1,
@@ -10,7 +15,6 @@ import {
 } from '../../lib/open-world/quest-history'
 import { deriveTextOpenWorldContextsV1 } from '../../lib/open-world/session-projection'
 import { createTextOpenWorldSkillCatalogV1 } from '../../lib/open-world/skills'
-import { projectTextOpenWorldClockWeatherV1 } from '../../lib/open-world/weather'
 import { projectTextOpenWorldQuestInstancesV1 } from '../../lib/open-world/quests'
 import type { TextOpenWorldCommandSourceV1 } from '../../lib/types'
 import {
@@ -43,6 +47,11 @@ const OBJECTIVE_STATUS_LABELS = {
   failed: '未完成',
 } as const
 
+const NOTIFICATION_CATEGORY_LABELS: Record<TextOpenWorldPlayerNotificationCategoryV1, string> = {
+  player: '角色', inventory: '物品', quest: '任务', world: '世界', relationship: '关系',
+  combat: '战斗', achievement: '成就', 'random-event': '随机事件',
+}
+
 export default function TextOpenWorldVNextPlayer() {
   const store = useTextOpenWorldPlayerStore()
   const [checkpointName, setCheckpointName] = useState('')
@@ -55,6 +64,12 @@ export default function TextOpenWorldVNextPlayer() {
     baseSequence: number
     source: TextOpenWorldCommandSourceV1
   } | null>(null)
+  const [liveAnnouncement, setLiveAnnouncement] = useState<{
+    sessionId: number
+    notificationId: string
+    text: string
+  } | null>(null)
+  const notificationCursor = useRef<{ sessionId: number; throughSequence: number } | null>(null)
   const projection = store.runtimeState.textOpenWorld
   const runtimePackage = store.selectedManifest?.textOpenWorldVNext
   const availableActions = selectTextOpenWorldVNextActions(store).filter(action => action.available)
@@ -69,18 +84,79 @@ export default function TextOpenWorldVNextPlayer() {
   const session = store.selectedSession
     ?? store.sessions.find(item => item.id === store.selectedSessionId)
     ?? null
+  const selectedSessionId = session?.id ?? store.selectedSessionId
   const sessionKey = session?.id
     ?? store.selectedSessionId
     ?? runtimePackage?.metadata.packageKey
     ?? 'no-session'
   const projectionSequence = projection?.lastEventSequence ?? null
+  // These are cheap, deterministic render projections. Recompute rather than
+  // caching by object identity so an externally restored mutable snapshot can
+  // never leave stale HUD facts on screen.
+  const hud = projection ? projectTextOpenWorldPlayerHudV1(projection) : null
+  let notificationsReady = true
+  let notifications: ReturnType<typeof projectTextOpenWorldPlayerNotificationsV1> = []
+  if (projection && selectedSessionId != null) {
+    try {
+      notifications = projectTextOpenWorldPlayerNotificationsV1({
+        sessionId: selectedSessionId,
+        projection,
+        events: store.events,
+      })
+    } catch {
+      // readDetails obtains state and events independently. A concurrent commit
+      // can briefly make one snapshot newer; wait for the next governed refresh
+      // instead of crashing or guessing a partial notification.
+      notificationsReady = false
+    }
+  }
   const dismissConfirmation = useCallback(() => setPendingConfirmation(null), [])
 
   useEffect(() => {
     setPendingConfirmation(null)
   }, [projectionSequence, sessionKey])
 
-  if (!projection || !runtimePackage || !modules || !sceneProjection) return null
+  useEffect(() => {
+    if (selectedSessionId == null || projectionSequence == null) {
+      notificationCursor.current = null
+      setLiveAnnouncement(null)
+      return
+    }
+    if (!notificationsReady) return
+    const cursor = notificationCursor.current
+    if (!cursor || cursor.sessionId !== selectedSessionId) {
+      // Loading or switching a Session establishes a baseline. Historical
+      // changes stay visible in the log but are never replayed as fresh alerts.
+      notificationCursor.current = {
+        sessionId: selectedSessionId,
+        throughSequence: projectionSequence,
+      }
+      setLiveAnnouncement(null)
+      return
+    }
+    if (projectionSequence <= cursor.throughSequence) return
+    const fresh = notifications.filter(notification => (
+      notification.effectsEventSequence > cursor.throughSequence
+      && notification.effectsEventSequence <= projectionSequence
+      && notification.origin === 'system'
+      && notification.priority !== 'normal'
+    ))
+    notificationCursor.current = {
+      sessionId: selectedSessionId,
+      throughSequence: Math.max(cursor.throughSequence, projectionSequence),
+    }
+    if (fresh.length) {
+      setLiveAnnouncement({
+        sessionId: selectedSessionId,
+        notificationId: fresh.map(notification => notification.id).join('|'),
+        text: fresh.map(notification => (
+          `${notification.headline}${notification.details[0] ? `：${notification.details[0]}` : ''}`
+        )).join('；'),
+      })
+    }
+  }, [notifications, notificationsReady, projectionSequence, selectedSessionId])
+
+  if (!projection || !runtimePackage || !modules || !sceneProjection || !hud) return null
 
   const release = session?.productReleaseId == null
     ? null
@@ -101,24 +177,9 @@ export default function TextOpenWorldVNextPlayer() {
   const region = modules.world.regions.find(item => item.key === location?.regionKey)
   const visibleQuests = projectTextOpenWorldQuestInstancesV1(modules, state.quests)
     .filter(item => !['locked', 'available'].includes(item.instance.status))
-  const trackedQuestKeys = [
-    state.quests.tracking.primaryInstanceKey,
-    ...state.quests.tracking.pinnedInstanceKeys,
-  ].filter((key): key is string => key != null)
-  const trackedQuests = trackedQuestKeys
-    .map(instanceKey => visibleQuests.find(item => item.instance.instanceKey === instanceKey))
-    .filter((item): item is typeof visibleQuests[number] => item != null)
-  const primaryQuest = trackedQuests.find(item => (
-    item.instance.instanceKey === state.quests.tracking.primaryInstanceKey
-  )) ?? trackedQuests[0] ?? null
   const questHistory = projectTextOpenWorldQuestHistoryV1({ runtimePackage, events: store.events })
   const inventory = createTextOpenWorldInventoryCatalogV1(runtimePackage).project(state.inventory)
   const derived = deriveTextOpenWorldContextsV1(projection)
-  const clockWeather = projectTextOpenWorldClockWeatherV1({
-    runtimePackage,
-    state,
-    parsedModules: modules,
-  })
   const { playerStats, progression } = derived
   const skillCatalog = createTextOpenWorldSkillCatalogV1(runtimePackage)
   const learnedSkills = skillCatalog.project({
@@ -166,11 +227,25 @@ export default function TextOpenWorldVNextPlayer() {
 
   const trackedQuestContent = <section className="open-world-game-rail-card" aria-label="当前任务">
     <small>当前任务</small>
-    {primaryQuest ? <>
-      <strong>{primaryQuest.definition.title}</strong>
-      <span>{QUEST_STATUS_LABELS[primaryQuest.instance.status as keyof typeof QUEST_STATUS_LABELS]
-        ?? primaryQuest.instance.status}</span>
-    </> : <p>当前没有追踪任务</p>}
+    {hud.primaryQuest ? <>
+      <strong>{hud.primaryQuest.title}</strong>
+      <span>
+        {QUEST_STATUS_LABELS[hud.primaryQuest.status]}
+        {hud.primaryQuest.currentStage ? ` · ${hud.primaryQuest.currentStage.title}` : ''}
+      </span>
+      {hud.primaryQuest.nextRequiredObjective && <p>
+        下一目标：{hud.primaryQuest.nextRequiredObjective.title}
+      </p>}
+      {hud.primaryQuest.deadline.label && <span className={hud.primaryQuest.deadline.expired ? 'text-danger' : 'text-warning'}>
+        {hud.primaryQuest.deadline.label}
+      </span>}
+    </> : <p>当前没有主追踪任务</p>}
+    {!!hud.pinnedQuests.length && <div className="open-world-game-pinned-quests" aria-label="钉选任务">
+      <small>钉选</small>
+      {hud.pinnedQuests.map(quest => <span key={quest.instanceKey}>
+        {quest.title}{quest.deadline.label ? ` · ${quest.deadline.label}` : ''}
+      </span>)}
+    </div>}
   </section>
 
   const sceneView = <div className="space-y-3">
@@ -244,19 +319,21 @@ export default function TextOpenWorldVNextPlayer() {
         <MapPinned className="h-4 w-4 text-accent" />任务追踪
       </div>
       <div className="grid gap-2 sm:grid-cols-2">
-        {trackedQuests.map(({ definition, instance }) => {
-          const deadline = projectTextOpenWorldQuestDeadlineV1(instance, state.time.worldMinute)
-          const primary = state.quests.tracking.primaryInstanceKey === instance.instanceKey
-          return <article key={instance.instanceKey} className="rounded border border-border bg-bg-surface p-2 text-xs">
+        {[...(hud.primaryQuest ? [hud.primaryQuest] : []), ...hud.pinnedQuests].map((quest, index) => {
+          const primary = index === 0 && hud.primaryQuest?.instanceKey === quest.instanceKey
+          return <article key={quest.instanceKey} className="rounded border border-border bg-bg-surface p-2 text-xs">
             <small className="text-accent">{primary ? '主追踪' : 'HUD钉选'}</small>
-            <strong className="mt-1 block">{definition.title}</strong>
+            <strong className="mt-1 block">{quest.title}</strong>
             <span className="text-text-muted">
-              {QUEST_STATUS_LABELS[instance.status as keyof typeof QUEST_STATUS_LABELS] ?? instance.status}
-              {deadline.label ? ` · ${deadline.label}` : ''}
+              {QUEST_STATUS_LABELS[quest.status]}
+              {quest.deadline.label ? ` · ${quest.deadline.label}` : ''}
             </span>
+            {quest.nextRequiredObjective && <p className="mt-1 text-text-muted">
+              下一目标：{quest.nextRequiredObjective.title}
+            </p>}
           </article>
         })}
-        {!trackedQuests.length && <p className="text-xs text-text-muted">
+        {!hud.primaryQuest && !hud.pinnedQuests.length && <p className="text-xs text-text-muted">
           当前没有追踪任务。取消追踪不会放弃任务。
         </p>}
       </div>
@@ -504,10 +581,22 @@ export default function TextOpenWorldVNextPlayer() {
       state={state}
       attitudeByActorKey={derived.condition.relations.attitudeByActorKey}
     />
-    {store.lastFeedback && <article className="open-world-game-context-card">
-      <small>近期变化</small>
-      <strong>{store.lastFeedback.presentation.headline}</strong>
-      <p>{store.lastFeedback.presentation.details[0] ?? '正式事件已经写入时间线。'}</p>
+    {!!notifications.length && <article
+      className="open-world-game-context-card open-world-game-notifications"
+      data-testid="text-open-world-important-changes"
+    >
+      <small><Bell aria-hidden="true" />近期变化</small>
+      <ol>
+        {notifications.slice(-3).reverse().map(notification => <li
+          key={notification.id}
+          data-notification-priority={notification.priority}
+          data-random-event-status={notification.randomEventStatus ?? undefined}
+        >
+          <span>{NOTIFICATION_CATEGORY_LABELS[notification.category]}</span>
+          <strong>{notification.headline}</strong>
+          {notification.details[0] && <p>{notification.details[0]}</p>}
+        </li>)}
+      </ol>
     </article>}
   </div>
 
@@ -552,6 +641,15 @@ export default function TextOpenWorldVNextPlayer() {
   </section>
 
   return <div data-testid="text-open-world-vnext-runtime">
+    <div
+      className="open-world-game-live-announcement"
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+      data-testid="text-open-world-important-change-announcement"
+    >{liveAnnouncement?.sessionId === selectedSessionId
+        ? <span key={liveAnnouncement.notificationId}>{liveAnnouncement.text}</span>
+        : null}</div>
     <TextOpenWorldGameShell
       sessionKey={sessionKey}
       gameTitle={runtimePackage.metadata.title}
@@ -572,15 +670,15 @@ export default function TextOpenWorldVNextPlayer() {
       }}
       context={context}
       status={<>
-        <span><strong>生命</strong>{state.player.health}/{playerStats.maximumHealth}</span>
-        <span><strong>技能资源</strong>{state.player.skillResource}/{playerStats.maximumSkillResource}</span>
-        <span><strong>地点</strong>{location?.title ?? state.map.currentLocationKey}</span>
+        <span><strong>生命</strong>{hud.player.health}/{hud.player.maximumHealth}</span>
+        <span><strong>技能资源</strong>{hud.player.skillResource}/{hud.player.maximumSkillResource}</span>
+        <span><strong>地点</strong>{hud.location.title}</span>
         {state.combat && <span data-testid="text-open-world-combat-status">
           <strong>战斗</strong>：{state.combat.status}
         </span>}
         <span data-testid="text-open-world-clock-weather">
-          <strong>世界时间</strong>第 {clockWeather.day} 天 · {clockWeather.timePeriodLabel}
-          {' · '}{clockWeather.weatherLabel} · {clockWeather.weatherDescription}
+          <strong>世界时间</strong>第 {hud.clockWeather.day} 天 · {hud.clockWeather.timePeriodLabel}
+          {' · '}{hud.clockWeather.weatherLabel} · {hud.clockWeather.weatherDescription}
         </span>
         <span><strong>时间线</strong>事件 #{projection.lastEventSequence}</span>
         <span data-testid="text-open-world-runtime-package-hash">

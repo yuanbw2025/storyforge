@@ -137,6 +137,18 @@
 .open-world-game-rail-card strong,.open-world-game-context-card strong { color: #e7dfd2; font-family: var(--font-serif); font-size: 13px; font-weight: 500; line-height: 1.35; }
 .open-world-game-rail-card span,.open-world-game-context-card span { color: #819697; font-size: 8px; }
 .open-world-game-rail-card p,.open-world-game-context-card p { margin: 0; color: #829396; font-size: 9px; line-height: 1.55; }
+.open-world-game-pinned-quests { display: grid; gap: 4px; margin-top: 5px; padding-top: 7px; border-top: 1px solid rgba(255,255,255,.07); }
+.open-world-game-pinned-quests>span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.open-world-game-notifications>small { display: inline-flex; align-items: center; gap: 5px; }
+.open-world-game-notifications>small svg { width: 11px; height: 11px; }
+.open-world-game-notifications ol { display: grid; gap: 7px; margin: 2px 0 0; padding: 0; list-style: none; }
+.open-world-game-notifications li { display: grid; gap: 3px; padding-top: 7px; border-top: 1px solid rgba(255,255,255,.06); }
+.open-world-game-notifications li:first-child { padding-top: 0; border-top: 0; }
+.open-world-game-notifications li[data-notification-priority="important"] { border-left: 2px solid rgba(210,170,108,.65); padding-left: 7px; }
+.open-world-game-notifications li[data-notification-priority="critical"] { border-left: 2px solid rgba(213,105,93,.75); padding-left: 7px; }
+.open-world-game-notifications li>span { color: #b9945d; font-family: var(--font-mono); font-size: 7px; letter-spacing: .06em; }
+.open-world-game-notifications li>strong { font-size: 11px; }
+.open-world-game-live-announcement { position: absolute; width: 1px; height: 1px; overflow: hidden; margin: -1px; padding: 0; clip: rect(0 0 0 0); border: 0; white-space: nowrap; }
 .open-world-game-scene-card { min-height: 205px; padding: 28px clamp(20px,4vw,44px); border: 1px solid rgba(207,173,114,.2); border-radius: 11px; background: radial-gradient(circle at 82% 17%,rgba(177,128,65,.18),transparent 28%),linear-gradient(142deg,rgba(46,87,77,.45),rgba(11,25,30,.96) 68%); box-shadow: inset 0 0 60px rgba(0,0,0,.18); }
 .open-world-game-scene-card h1 { margin: 12px 0 9px; color: #f3eadc; font-family: var(--font-serif); font-size: clamp(27px,4vw,42px); font-weight: 500; line-height: 1.15; }
 .open-world-game-scene-card p { max-width: 760px; margin: 0; color: #c6d0cc; font-family: var(--font-serif); font-size: 15px; line-height: 1.8; }
