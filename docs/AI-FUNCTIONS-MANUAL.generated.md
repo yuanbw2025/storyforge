@@ -304,7 +304,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `review.quality` | `src/components/editor/ReviewPanel.tsx:112` |
 | `review.readability` | `src/components/editor/ReviewPanel.tsx:133` |
 | `review.revise` | `src/components/editor/ChapterEditor.tsx:1735` |
-| `runtime.prose.ai-town-director` | `src/lib/ai-town/director-harness.ts:266` |
+| `runtime.prose.ai-town-director` | `src/lib/ai-town/director-harness.ts:271` |
 | `runtime.ttrpg-player` | `src/lib/ttrpg/player-harness.ts:298` |
 | `scene.verify` | `src/components/scene/SceneVerifyPanel.tsx:81` |
 | `story.timeline` | `src/lib/agent/run/impact-story-timeline-regeneration-durable.ts:670`<br/>`src/lib/agent/run/story-timeline-extraction-durable.ts:758` |
@@ -394,4 +394,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `e1d0f7e8`
+生成时间基准:commit `f2f59d0f`

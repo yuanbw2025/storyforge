@@ -60,6 +60,31 @@ describe('R-AITOWN2 · AI 小镇自治导演 durable Harness', () => {
     expect(state.town?.memories.some(memory => memory.memoryKey.includes('town.memory.event.'))).toBe(true)
   })
 
+  it('兼容包住唯一 JSON 根的代码围栏，但继续拒绝解释文字', async () => {
+    const accepted = await seedAiTownRuntimeFixture()
+    const payload = JSON.stringify({
+      kind: 'ai-town-director', decision: 'event', seedKey: 'town.event.1', majorChange: null,
+      summary: '清晨的日常事件。', rationale: '当前可触发且不会改变世界事实。',
+    })
+    const generated = await generateAiTownDirectorCandidateV1({
+      scope: accepted.scope,
+      productRuntimeSessionId: accepted.session.id!,
+      runAI: async () => `\`\`\`json\n${payload}\n\`\`\``,
+    })
+    expect(generated.candidate).toMatchObject({
+      kind: 'ai-town-director-event-candidate', seedKey: 'town.event.1',
+    })
+
+    const rejected = await seedAiTownRuntimeFixture()
+    await expect(generateAiTownDirectorCandidateV1({
+      scope: rejected.scope,
+      productRuntimeSessionId: rejected.session.id!,
+      runAI: async () => `这是结果：\n${payload}`,
+    })).rejects.toThrow(/不是有效 JSON/)
+    const state = await readProductRuntimeState(rejected.session.id!)
+    expect(state.town?.cadence.seedLastTriggeredDay['town.event.1']).toBeUndefined()
+  })
+
   it('状态变化后候选必须 stale，不得偷偷在新状态采用', async () => {
     const seeded = await seedAiTownRuntimeFixture()
     const generated = await generateAiTownDirectorCandidateV1({

@@ -92,8 +92,13 @@ function stableKeys(value: unknown, label: string): string[] {
   return result
 }
 function parseJson(output: string): Record<string, unknown> {
-  const source = output.trim()
-  if (source.startsWith('```')) fail('模型输出不得包含 Markdown 代码块')
+  let source = output.trim()
+  // Some otherwise schema-compliant OpenAI-compatible providers wrap their
+  // single JSON root in a json code fence. Treat that wrapper as transport
+  // noise only when it encloses the entire response; explanatory prose,
+  // multiple roots and partially fenced output still fail closed below.
+  const fenced = source.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/)
+  if (fenced) source = fenced[1]
   try { return record(JSON.parse(source), '模型输出') }
   catch (error) { if (error instanceof SyntaxError) fail('模型输出不是有效 JSON'); throw error }
 }
