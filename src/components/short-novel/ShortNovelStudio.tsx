@@ -38,6 +38,7 @@ import {
 } from '../../lib/agent/run/short-novel-durable'
 import { isAIConfigReady, getAIConfigRequiredMessage } from '../../lib/ai/config-readiness'
 import { useAIConfigStore } from '../../stores/ai-config'
+import ShortNovelShowcase from './ShortNovelShowcase'
 import './short-novel-studio.css'
 
 const OutlinePanel = lazy(() => import('../outline/OutlinePanel'))
@@ -277,5 +278,6 @@ export default function ShortNovelStudio({ project, scope }: Props) {
     </div>
     {selectedIssueKey && <span className="sr-only">当前修订问题 {selectedIssueKey}</span>}
     {error && <div className="short-error" role="alert">{error}</div>}
+    <ShortNovelShowcase />
   </div>
 }
