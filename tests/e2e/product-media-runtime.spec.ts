@@ -53,6 +53,11 @@ test('真实 Chromium 解码透明 PNG 与 PCM WAV，并产出可审计媒体指
       }
     }
     const audioBlob = new Blob([wav], { type: 'audio/wav' })
+    // decodeAudioData resamples to the browser's audio context rate, which
+    // follows the output device and can differ from the WAV's 48 kHz on CI.
+    const audioContext = new AudioContext()
+    const browserSampleRate = audioContext.sampleRate
+    await audioContext.close()
 
     const characterCanvas = document.createElement('canvas')
     characterCanvas.width = 20
@@ -119,6 +124,7 @@ test('真实 Chromium 解码透明 PNG 与 PCM WAV，并产出可审计媒体指
         timeoutMs: 10_000,
       })
       return {
+        browserSampleRate,
         runtimeMeasurement,
         alphaMatting: {
           changed: alphaMatting.changed,
@@ -141,7 +147,8 @@ test('真实 Chromium 解码透明 PNG 与 PCM WAV，并产出可审计媒体指
   expect(measurement.runtimeMeasurement.assets).toHaveLength(3)
   expect(measurement.runtimeMeasurement.assets[0]).toMatchObject({
     assetKey: 'audio.pcm-probe', mediaClass: 'audio', status: 'decoded',
-    decodedDurationMs: 1_000, decodedChannelCount: 2, decodedSampleRateHz: 48_000,
+    decodedDurationMs: 1_000, decodedChannelCount: 2,
+    decodedSampleRateHz: measurement.browserSampleRate,
     failureCode: null,
   })
   expect(measurement.runtimeMeasurement.assets[0].integratedLufs).toBeGreaterThan(-40)
