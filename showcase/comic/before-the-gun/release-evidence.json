@@ -1,0 +1,76 @@
+{
+  "schema": "storyforge.showcase-evidence.v1",
+  "productKind": "comic",
+  "title": "枪响以前",
+  "format": {
+    "readingDirection": "LTR",
+    "pageCount": 5,
+    "panelCount": 21,
+    "canvas": "1024x1536",
+    "colorProfile": "black-white-charcoal-with-vermilion-spot-color"
+  },
+  "source": {
+    "path": "source-novel.md",
+    "chapterCount": 3,
+    "contentChars": 1322,
+    "sha256": "46561c5b38d95dc7298a1b2f23a6bfc491c51fed7f06d218f6c34bf8d7aad087"
+  },
+  "production": {
+    "imageMode": "built-in-imagegen",
+    "continuityMethod": "visual bible plus previous-page reference",
+    "letteringMethod": "local deterministic browser composition",
+    "targetedRepairs": [
+      "page 5 surplus seventh starting light removed while preserving the five-panel page",
+      "page 3 and page 4 balloons repositioned away from faces and hearing aid",
+      "community preview cover column widened so the title remains fully visible"
+    ]
+  },
+  "review": {
+    "openIssues": 0,
+    "checks": [
+      "An Ning retains the jaw-length bob, white/navy kit and vermilion left-ear hearing aid",
+      "Xu Ran retains the high ponytail, charcoal kit and slightly taller silhouette",
+      "the failed lane light remains dark through pages 2 and 3 and is repaired before pages 4 and 5",
+      "the final page contains exactly six aligned starting lights",
+      "dialogue and captions avoid eyes, hearing aid, hands, signal lights and finish-line action",
+      "the outcome shows An Ning finishing second by 0.03 seconds rather than using victory as a substitute for access"
+    ]
+  },
+  "files": {
+    "visualBible": {
+      "path": "art/visual-bible.png",
+      "width": 1536,
+      "height": 1024,
+      "sha256": "18e7ab77469ac561ce81ddb753ab7159e89e4114688781c23cb897dce51681e1"
+    },
+    "cover": {
+      "path": "art/final/cover.png",
+      "width": 1024,
+      "height": 1536,
+      "sha256": "5f86a417f9dbf5cf5581530bc70b818752d5c813ebcb2aad89a72e4b1caf26e4"
+    },
+    "pages": [
+      { "path": "art/final/pages/page-01.png", "sha256": "19e9643836d038a9162b6d1bc44129dfde1f650b3a8a91d3cb4235dac93ee10c" },
+      { "path": "art/final/pages/page-02.png", "sha256": "d0614b8c1f40db96105d62731a0361cc19a0817f1a07810af9d87e6bcd11deee" },
+      { "path": "art/final/pages/page-03.png", "sha256": "6115bfdafbc9ffe3901aa2c50316f809c13cf3a651da16fd39d3b3dda3920922" },
+      { "path": "art/final/pages/page-04.png", "sha256": "790fc6a10d062e62a99987ab441b60aa7040198fdae9ec202b0745527c22cc5b" },
+      { "path": "art/final/pages/page-05.png", "sha256": "fa808d65f586e8dbb723dd70da4c224ec8e597e167c97ba50de7a611dbc99f50" }
+    ],
+    "communityPreview": {
+      "path": "art/final/community-preview.png",
+      "width": 1800,
+      "height": 1180,
+      "sha256": "be0667d049979551a84c477148c804a0c2a1e93fa2e0ae7029915b268ece0bc4"
+    },
+    "pdf": {
+      "path": "art/final/before-the-gun.pdf",
+      "pageCount": 6,
+      "sha256": "40dbdb29e04c857ecb3c5b41d6a57bca17d5cdf269d5c6c6564678f31d268a43"
+    },
+    "cbz": {
+      "path": "art/final/before-the-gun.cbz",
+      "entryCount": 7,
+      "sha256": "de624d50c9ded816283e1909fc1be58c3a083d1bca01804bb3027125e66ac1a3"
+    }
+  }
+}

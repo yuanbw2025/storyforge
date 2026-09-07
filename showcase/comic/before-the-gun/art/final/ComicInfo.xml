@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ComicInfo xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <Title>枪响以前</Title>
+  <Series>StoryForge Showcase</Series>
+  <Number>1</Number>
+  <Count>1</Count>
+  <Writer>StoryForge Showcase</Writer>
+  <Penciller>StoryForge Showcase</Penciller>
+  <Colorist>StoryForge Showcase</Colorist>
+  <Letterer>StoryForge Showcase</Letterer>
+  <Genre>Sports, Drama</Genre>
+  <Summary>安宁输了零点零三秒，却第一次没有等待一声听不清的枪响。</Summary>
+  <PageCount>6</PageCount>
+  <LanguageISO>zh-CN</LanguageISO>
+  <Manga>No</Manga>
+  <BlackAndWhite>YesAndNo</BlackAndWhite>
+  <AgeRating>Everyone 10+</AgeRating>
+</ComicInfo>
