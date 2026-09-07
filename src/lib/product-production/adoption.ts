@@ -29,6 +29,7 @@ import {
 } from './quality-receipts'
 import {
   createProductReleaseManifestV1,
+  productProductionTerminalArtifactKeysV1,
   productReleaseIdentityHashV1,
   verifyProductReleaseManifestV1,
 } from './runtime-package'
@@ -219,7 +220,13 @@ async function worldContextManifestPointersV1(input: {
     if (!wanted.has(taskKey)) continue
     const snapshot = await readAgentRunV1(input.scope, row.id)
     for (const event of snapshot.events) {
-      if (event.type !== 'context.assembled' || event.payload.stepId !== taskKey) continue
+      if (event.type !== 'context.assembled') continue
+      const isExactAttempt = taskKey === 'p1.source-curation'
+        ? event.payload.stepId.startsWith(`${taskKey}.world.source-curation.batch.`)
+          && snapshot.projection.steps[event.payload.stepId]?.status === 'succeeded'
+          && snapshot.projection.steps[event.payload.stepId]?.attempt === event.payload.attempt
+        : event.payload.stepId === taskKey
+      if (!isExactAttempt) continue
       pointers.push({
         runId: row.id,
         stepId: event.payload.stepId,
@@ -324,8 +331,9 @@ async function inspectAdoption(scope: WorkspaceScope, productionId: number): Pro
   if (canonicalProductProductionJsonV2(receipts) !== canonicalProductProductionJsonV2(manifest.artifactReceipts)) {
     fail('Build manifest 未完整且唯一地覆盖 accepted Artifacts')
   }
-  const packageArtifact = artifacts.find(row => row.artifactKey === 'runtime.package')
-  const qualityArtifact = artifacts.find(row => row.artifactKey === 'quality.report')
+  const terminalArtifactKeys = productProductionTerminalArtifactKeysV1(brief.intent.productType)
+  const packageArtifact = artifacts.find(row => row.artifactKey === terminalArtifactKeys.runtimePackage)
+  const qualityArtifact = artifacts.find(row => row.artifactKey === terminalArtifactKeys.qualityReport)
   if (!packageArtifact || packageArtifact.contentHash !== build.packageHash
     || !qualityArtifact || qualityArtifact.contentHash !== build.qualityReportHash) fail('Runtime/Quality Artifact 缺失')
   const expectedRootReceipt = await createProductBuildRootTerminalReceiptV1({

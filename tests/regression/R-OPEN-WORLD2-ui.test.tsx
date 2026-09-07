@@ -49,6 +49,7 @@ async function fixture() {
   return createGovernedTextOpenWorldSessionFixtureV1({
     name: `TEXT-OPEN-WORLD vNext 玩家 UI-${crypto.randomUUID()}`,
     textOpenWorldVNext,
+    runtimeShape: 'vnext-only',
     title: '盐脊初始存档',
     seed: 'ui-vnext-seed',
   })

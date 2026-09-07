@@ -30,7 +30,11 @@ import {
   type OpenWorldCommand,
 } from '../lib/open-world/runtime-api'
 import { verifyProductRuntimeSessionSourceV1 } from '../lib/product-production/preview-source'
-import { assertProductReleaseUnchanged, parseTextOpenWorldProductReleaseManifest } from '../lib/product/releases'
+import {
+  assertProductReleaseUnchanged,
+  classifyTextOpenWorldRuntimePackageShapeV1,
+  parseTextOpenWorldProductReleaseManifest,
+} from '../lib/product/releases'
 import { assertInstanceBinding, createTextOpenWorldInstance, readBoundInstances } from '../lib/product/runtime-instances'
 import { EMPTY_PRODUCT_RUNTIME_STATE } from '../lib/types'
 import type {
@@ -40,14 +44,14 @@ import type {
   ProductRuntimeEvent,
   ProductRuntimeState,
   ProductRuntimeSession,
+  PlayableTextOpenWorldProductRuntimePackageV1,
   TextOpenWorldFeedbackReceiptV1,
-  TextOpenWorldProductRuntimePackageV1,
   WorkspaceScope,
 } from '../lib/types'
 
 export interface TextOpenWorldLibraryItem {
   release: ProductRelease
-  manifest: TextOpenWorldProductRuntimePackageV1 | null
+  manifest: PlayableTextOpenWorldProductRuntimePackageV1 | null
   error: string
 }
 
@@ -60,7 +64,7 @@ interface TextOpenWorldPlayerState {
   events: ProductRuntimeEvent[]
   checkpoints: ProductRuntimeCheckpoint[]
   runtimeState: ProductRuntimeState
-  selectedManifest: TextOpenWorldProductRuntimePackageV1 | null
+  selectedManifest: PlayableTextOpenWorldProductRuntimePackageV1 | null
   lastFeedback: TextOpenWorldFeedbackReceiptV1 | null
   generatedCandidate: OpenWorldRuntimeCandidateV1 | null
   loading: boolean
@@ -105,11 +109,11 @@ async function assertSession(scope: WorkspaceScope, sessionId: number): Promise<
 }
 
 function playableManifest(runtimePackage: Awaited<ReturnType<typeof verifyProductRuntimeSessionSourceV1>>['runtimePackage']) {
-  if (runtimePackage.productType !== 'text-open-world' || !runtimePackage.openWorld
-    || !runtimePackage.adventure || !runtimePackage.openWorldEvolution || !runtimePackage.interaction) {
+  if (runtimePackage.productType !== 'text-open-world') {
     throw new Error('[text-open-world] 该存档没有绑定有效的 Product Build 或 ProductRelease。')
   }
-  return structuredClone(runtimePackage) as TextOpenWorldProductRuntimePackageV1
+  classifyTextOpenWorldRuntimePackageShapeV1(runtimePackage)
+  return structuredClone(runtimePackage) as PlayableTextOpenWorldProductRuntimePackageV1
 }
 
 async function readDetails(scope: WorkspaceScope, sessionId: number) {
@@ -298,7 +302,7 @@ export const useTextOpenWorldPlayerStore = create<TextOpenWorldPlayerState>((set
 })
 
 export function selectTextOpenWorldAdventureActions(state: TextOpenWorldPlayerState) {
-  if (!state.selectedManifest || state.runtimeState.textOpenWorld || !state.runtimeState.adventure) return []
+  if (!state.selectedManifest?.adventure || state.runtimeState.textOpenWorld || !state.runtimeState.adventure) return []
   return availableAdventureActions(state.selectedManifest.adventure, state.runtimeState.adventure, state.runtimeState.narrative?.variables)
     .filter(item => item.action.kind !== 'move')
 }

@@ -58,6 +58,7 @@ export interface TextOpenWorldMainlineModelExecutionV1 {
 export type TextOpenWorldMainlineModelRunnerV1 = (input: {
   projectId: number
   requirementKey: string
+  expectedCapabilityHash: string
   category: string
   system: string
   contextText: string
@@ -681,6 +682,7 @@ async function defaultModelRunner(input: Parameters<TextOpenWorldMainlineModelRu
   const response = await runConfiguredProductionTextV1({
     projectId: input.projectId,
     requirementKey: input.requirementKey,
+    expectedCapabilityHash: input.expectedCapabilityHash,
     category: input.category,
     messages: [
       { role: 'system', content: input.system },
@@ -718,6 +720,7 @@ export function createTextOpenWorldMainlineExecutorV1(options: {
     const response = await runModel({
       projectId: execution.scope.projectId,
       requirementKey,
+      expectedCapabilityHash: binding.bindingHash,
       category: 'text-open-world.production.mainline',
       system: prompt,
       contextText: execution.contextText,

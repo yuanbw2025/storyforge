@@ -298,41 +298,58 @@ export function assertFrozenProductRuntimeStateV1(input: {
   }
 
   if (runtimePackage.productType === 'text-open-world') {
-    const expectedInteraction = createInitialInteractionState({
-      playerKey: runtimePackage.interaction!.playerKey,
-      profiles: runtimePackage.interaction!.profiles,
-      sceneTemplates: runtimePackage.interaction!.sceneTemplates,
-    })
-    const expectedAdventure = createInitialAdventureState(runtimePackage.adventure!, runtimeSourceHash)
-    const expectedEvolution = createInitialOpenWorldEvolutionState(runtimePackage.openWorldEvolution!, runtimeSourceHash)
-    const expectedOpenWorld = createInitialOpenWorldState(runtimePackage.openWorld!, runtimeSourceHash)
-    const expectedTextOpenWorld = runtimePackage.textOpenWorldVNext
-      ? createInitialTextOpenWorldSessionProjectionV1(runtimePackage.textOpenWorldVNext)
-      : null
-    const frozenMismatch = !initial.interaction
-      || !initial.adventure
-      || !initial.openWorldEvolution
-      || !initial.openWorld
-      || initial.adventure.contentHash !== runtimeSourceHash
-      || initial.openWorldEvolution.contentHash !== runtimeSourceHash
-      || initial.openWorld.contentHash !== runtimeSourceHash
-      || stableProductRuntimeJsonV1(initial.interaction.profiles) !== stableProductRuntimeJsonV1(expectedInteraction.profiles)
-      || stableProductRuntimeJsonV1(initial.interaction.sceneTemplates) !== stableProductRuntimeJsonV1(expectedInteraction.sceneTemplates)
-      || stableProductRuntimeJsonV1(initial.openWorld.mainlineQuestKeys) !== stableProductRuntimeJsonV1(expectedOpenWorld.mainlineQuestKeys)
-      || (runtimePackage.textOpenWorldVNext != null) !== (initial.textOpenWorld != null)
-      || (initial.textOpenWorld != null && expectedTextOpenWorld != null
-        && stableProductRuntimeJsonV1(initial.textOpenWorld.runtimePackage)
-          !== stableProductRuntimeJsonV1(expectedTextOpenWorld.runtimePackage))
-    const entryStateMismatch = input.origin !== 'branch'
-      && (
-        stableProductRuntimeJsonV1(initial.interaction) !== stableProductRuntimeJsonV1(expectedInteraction)
-        || stableProductRuntimeJsonV1(initial.adventure) !== stableProductRuntimeJsonV1(expectedAdventure)
-        || stableProductRuntimeJsonV1(initial.openWorldEvolution) !== stableProductRuntimeJsonV1(expectedEvolution)
-        || stableProductRuntimeJsonV1(initial.openWorld) !== stableProductRuntimeJsonV1(expectedOpenWorld)
-        || stableProductRuntimeJsonV1(initial.textOpenWorld) !== stableProductRuntimeJsonV1(expectedTextOpenWorld)
-      )
-    if (frozenMismatch || entryStateMismatch) {
-      throw new Error('text-open-world 初始状态必须来自绑定 RuntimePackage 的全部冻结内容。')
+    const hasLegacyRuntime = runtimePackage.interaction != null
+      && runtimePackage.adventure != null
+      && runtimePackage.openWorldEvolution != null
+      && runtimePackage.openWorld != null
+    if (runtimePackage.textOpenWorldVNext) {
+      const expected = createInitialTextOpenWorldSessionProjectionV1(runtimePackage.textOpenWorldVNext)
+      const frozenMismatch = !initial.textOpenWorld
+        || (!hasLegacyRuntime && (
+          initial.interaction != null
+          || initial.adventure != null
+          || initial.openWorldEvolution != null
+          || initial.openWorld != null
+        ))
+        || stableProductRuntimeJsonV1(initial.textOpenWorld.runtimePackage)
+          !== stableProductRuntimeJsonV1(expected.runtimePackage)
+      const entryStateMismatch = input.origin !== 'branch'
+        && stableProductRuntimeJsonV1(initial.textOpenWorld) !== stableProductRuntimeJsonV1(expected)
+      if (frozenMismatch || entryStateMismatch) {
+        throw new Error('text-open-world vNext初始状态必须来自绑定RuntimePackage的统一投影。')
+      }
+    }
+    if (hasLegacyRuntime) {
+      const expectedInteraction = createInitialInteractionState({
+        playerKey: runtimePackage.interaction!.playerKey,
+        profiles: runtimePackage.interaction!.profiles,
+        sceneTemplates: runtimePackage.interaction!.sceneTemplates,
+      })
+      const expectedAdventure = createInitialAdventureState(runtimePackage.adventure!, runtimeSourceHash)
+      const expectedEvolution = createInitialOpenWorldEvolutionState(runtimePackage.openWorldEvolution!, runtimeSourceHash)
+      const expectedOpenWorld = createInitialOpenWorldState(runtimePackage.openWorld!, runtimeSourceHash)
+      const frozenMismatch = !initial.interaction
+        || !initial.adventure
+        || !initial.openWorldEvolution
+        || !initial.openWorld
+        || initial.adventure.contentHash !== runtimeSourceHash
+        || initial.openWorldEvolution.contentHash !== runtimeSourceHash
+        || initial.openWorld.contentHash !== runtimeSourceHash
+        || stableProductRuntimeJsonV1(initial.interaction.profiles) !== stableProductRuntimeJsonV1(expectedInteraction.profiles)
+        || stableProductRuntimeJsonV1(initial.interaction.sceneTemplates) !== stableProductRuntimeJsonV1(expectedInteraction.sceneTemplates)
+        || stableProductRuntimeJsonV1(initial.openWorld.mainlineQuestKeys) !== stableProductRuntimeJsonV1(expectedOpenWorld.mainlineQuestKeys)
+        || (!runtimePackage.textOpenWorldVNext && initial.textOpenWorld != null)
+      const entryStateMismatch = input.origin !== 'branch'
+        && (
+          stableProductRuntimeJsonV1(initial.interaction) !== stableProductRuntimeJsonV1(expectedInteraction)
+          || stableProductRuntimeJsonV1(initial.adventure) !== stableProductRuntimeJsonV1(expectedAdventure)
+          || stableProductRuntimeJsonV1(initial.openWorldEvolution) !== stableProductRuntimeJsonV1(expectedEvolution)
+          || stableProductRuntimeJsonV1(initial.openWorld) !== stableProductRuntimeJsonV1(expectedOpenWorld)
+          || (!runtimePackage.textOpenWorldVNext && initial.textOpenWorld != null)
+        )
+      if (frozenMismatch || entryStateMismatch) {
+        throw new Error('text-open-world 初始状态必须来自绑定 RuntimePackage 的全部冻结内容。')
+      }
     }
     return
   }

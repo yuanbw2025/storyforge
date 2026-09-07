@@ -117,6 +117,16 @@ export function productProductionTaskUsesWorldGatewayV1(task: ProductProductionP
       || isDeterministicIntegration)
 }
 
+/** P1 must split the complete frozen source selection into bounded model
+ * batches. Its executor therefore owns the per-batch Gateway attempts and
+ * exact ContextManifestV3 evidence instead of accepting one synthetic outer
+ * scheduler packet that no individual model call actually read. */
+export function productProductionTaskOwnsWorldGatewayV1(task: ProductProductionPlanTaskV3): boolean {
+  return task.taskKey === 'p1.source-curation'
+    && task.skillId === 'text-open-world.production.source-curation.v1'
+    && task.executionMode === 'model'
+}
+
 export async function parseProductProductionSourcePlanV1(
   row: Pick<ProductProductionBriefRecordV1, 'sourcePlanJson' | 'sourcePlanHash'>,
 ): Promise<ProductSourcePlanV1> {

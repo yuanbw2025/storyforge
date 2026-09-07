@@ -74,6 +74,7 @@ export interface TextOpenWorldQuestFinalizeModelExecutionV1 {
 export type TextOpenWorldQuestFinalizeModelRunnerV1 = (input: {
   projectId: number
   requirementKey: string
+  expectedCapabilityHash: string
   category: string
   system: string
   contextText: string
@@ -892,6 +893,64 @@ async function createArtifacts(input: {
     })
   })
 
+  const endingRoutes = [...input.context.mainlineThread.endingRoutes].sort((left, right) => (
+    input.context.mainlineThread.thread.endingKeys.indexOf(left.endingKey)
+      - input.context.mainlineThread.thread.endingKeys.indexOf(right.endingKey)
+  ))
+  if (!endingRoutes.length
+    || !same(endingRoutes.map(route => route.endingKey), input.context.mainlineThread.thread.endingKeys)
+    || new Set(endingRoutes.map(route => route.finalStageKey)).size !== 1) {
+    fail('主线结局必须完整绑定到同一个最终Stage')
+  }
+  const finalMainlineStageKey = endingRoutes[0]!.finalStageKey
+  const finalMainlineQuestSkeleton = input.context.questSkeletons.quests.find(quest => (
+    quest.type === 'mainline' && quest.source.sourceKey === finalMainlineStageKey
+  )) ?? fail(`最终主线Stage没有任务骨架:${finalMainlineStageKey}`)
+  const finalMainlineQuest = questRows.find(quest => quest.key === finalMainlineQuestSkeleton.key)
+    ?? fail(`最终主线任务没有完成定稿:${finalMainlineQuestSkeleton.key}`)
+  const finalLocationKey = finalMainlineQuestSkeleton.locationKeys[0]
+    ?? fail(`最终主线任务没有可演绎地点:${finalMainlineQuest.key}`)
+  const selectionReadyConditionKey = 'condition.system.ending-selection-ready'
+  addCondition({
+    key: selectionReadyConditionKey,
+    expression: { op: 'quest-status', questKey: finalMainlineQuest.key, statuses: ['completed'] },
+    failureMessage: '完成主线最终任务后，才能作出最终选择。',
+  })
+  const endingRouteBindings: TextOpenWorldQuestDesignDocumentsV1['endingBindings']['routes'] = endingRoutes.map(route => {
+    const conditionKey = `condition.ending.${route.endingKey}`
+    const actionKey = `action.ending.${route.endingKey}`
+    const routeEffectKey = `effect.ending.route.${route.endingKey}`
+    const unlockEffectKey = `effect.ending.unlock.${route.endingKey}`
+    const reachEffectKey = `effect.ending.reach.${route.endingKey}`
+    addCondition({
+      key: conditionKey,
+      expression: {
+        op: 'all',
+        conditions: [
+          { op: 'quest-status', questKey: finalMainlineQuest.key, statuses: ['completed'] },
+          { op: 'world-flag', flagKey: 'flag.ending.route', value: route.endingKey },
+        ],
+      },
+      failureMessage: `尚未选择“${route.decisivePlayerValue}”对应的最终道路。`,
+    })
+    addEffect({ key: routeEffectKey, operation: 'set-world-flag', payload: { flagKey: 'flag.ending.route', value: route.endingKey } })
+    addEffect({ key: unlockEffectKey, operation: 'unlock-ending', payload: { endingKey: route.endingKey } })
+    addEffect({ key: reachEffectKey, operation: 'reach-ending', payload: { endingKey: route.endingKey } })
+    addAction(action({
+      key: actionKey, category: 'quest-action', label: `走向结局：${route.decisivePlayerValue}`,
+      description: route.routeSummary, actorScope: 'player', targetScope: 'none',
+      locationKeys: [finalLocationKey], requirementConditionKeys: [selectionReadyConditionKey],
+      successEffectKeys: [routeEffectKey, unlockEffectKey, reachEffectKey],
+      confirmationPolicy: 'always', repeatPolicy: 'once',
+    }))
+    return { endingKey: route.endingKey, conditionKey, actionKey, routeEffectKey, unlockEffectKey, reachEffectKey }
+  })
+  const endingBindings: TextOpenWorldQuestDesignDocumentsV1['endingBindings'] = {
+    finalMainlineQuestKey: finalMainlineQuest.key,
+    finalMainlineStageKey, finalLocationKey, selectionReadyConditionKey,
+    routes: endingRouteBindings,
+  }
+
   const trackingDefinitions = [
     ['track', 'primary'], ['track', 'pinned'], ['untrack', 'primary'], ['untrack', 'pinned'],
   ] as const
@@ -939,6 +998,7 @@ async function createArtifacts(input: {
     npcRuntimeCatalogHash: input.context.npcRuntimeCatalog.npcRuntimeCatalogHash,
     mapInteractionCatalogHash: input.context.mapInteractionCatalog.mapInteractionCatalogHash,
     requirementBindings, quests: questRows, stages: stageRows, objectives: objectiveRows, conditions, effects, actions,
+    endingBindings,
     catalogBindings: {
       skills: skillBindings, enemies: enemyBindings, encounters: encounterBindings, items: itemBindings,
       rewards: rewardBindings, dropTables: dropBindings, recipes: recipeBindings, vendors: vendorBindings,
@@ -951,13 +1011,16 @@ async function createArtifacts(input: {
       boundRequirementKeys: requirementBindings.map(binding => binding.requirementKey),
       encounterKeys: input.context.enemyEncounterCatalog.encounters.map(encounter => encounter.key),
       encounterKeysWithRewardAndAction: encounterBindings.map(binding => binding.encounterKey), catalogDefinitionKeys,
-      referencedCatalogDefinitionKeys, orphanActionKeys: [], orphanEffectKeys: [], uncoveredRequirementKeys: [],
+      referencedCatalogDefinitionKeys,
+      requiredEndingKeys: input.context.mainlineThread.thread.endingKeys,
+      boundEndingKeys: endingRouteBindings.map(binding => binding.endingKey),
+      orphanActionKeys: [], orphanEffectKeys: [], uncoveredRequirementKeys: [],
     },
     governance: {
       referenceOwner: 'deterministic-compiler', objectiveSemanticsOwner: 'model-validated', protectedStoriesWait: true,
       ordinaryFailureAllowed: true, criticalArrivalNeverSoleTrigger: true, allObjectivesHaveActions: true,
       allRewardsClaimableOnce: true, allTimedQuestsHaveExpirationCoverage: true, allCatalogBindingsResolved: true,
-      sceneBindingsDeferred: true, questAndEncounterBindingsReady: true,
+      allEndingsRuntimeBound: true, sceneBindingsDeferred: true, questAndEncounterBindingsReady: true,
     },
     basisHash: await hashProductProductionValueV2({
       contextSelectionHash: input.context.contextSelectionHash,
@@ -1071,6 +1134,7 @@ function assertQuestArtifact(artifact: Omit<TextOpenWorldQuestDesignDocumentsV1,
     || !same(artifact.coverage.requiredObjectiveKeys, artifact.coverage.finalizedObjectiveKeys)
     || !same(artifact.coverage.requiredRequirementKeys, artifact.coverage.boundRequirementKeys)
     || !same(artifact.coverage.encounterKeys, artifact.coverage.encounterKeysWithRewardAndAction)
+    || !same(artifact.coverage.requiredEndingKeys, artifact.coverage.boundEndingKeys)
     || artifact.requirementBindings.some(binding => !binding.definitionKeys.length)
     || artifact.objectives.some(objective => !objective.completionActionKey || !objective.completionConditionKeys.length)
     || artifact.quests.some(quest => (quest.type === 'mainline' || quest.type === 'significant')
@@ -1079,7 +1143,9 @@ function assertQuestArtifact(artifact: Omit<TextOpenWorldQuestDesignDocumentsV1,
     || artifact.catalogBindings.encounters.some(binding => !binding.rewardContractKey || !binding.startActionKey)
     || new Set(artifact.conditions.map(item => item.key)).size !== artifact.conditions.length
     || new Set(artifact.effects.map(item => item.key)).size !== artifact.effects.length
-    || new Set(artifact.actions.map(item => item.key)).size !== artifact.actions.length) fail('QuestDesign覆盖、保护、限时、目录引用或运行定义未闭合')
+    || new Set(artifact.actions.map(item => item.key)).size !== artifact.actions.length
+    || new Set(artifact.endingBindings.routes.map(item => item.endingKey)).size !== artifact.endingBindings.routes.length
+    || !artifact.governance.allEndingsRuntimeBound) fail('QuestDesign覆盖、保护、限时、结局、目录引用或运行定义未闭合')
   const actionKeys = new Set(artifact.actions.map(item => item.key)); const effectKeys = new Set(artifact.effects.map(item => item.key)); const conditionKeys = new Set(artifact.conditions.map(item => item.key))
   artifact.actions.forEach(item => {
     if ([...item.requirementConditionKeys].some(key => !conditionKeys.has(key))
@@ -1087,6 +1153,44 @@ function assertQuestArtifact(artifact: Omit<TextOpenWorldQuestDesignDocumentsV1,
   })
   artifact.objectives.forEach(objective => {
     if (!actionKeys.has(objective.completionActionKey) || objective.supportActionKeys.some(key => !actionKeys.has(key))) fail(`Objective Action未定义:${objective.key}`)
+  })
+  const finalQuest = artifact.quests.find(quest => quest.key === artifact.endingBindings.finalMainlineQuestKey)
+  const selectionReady = artifact.conditions.find(condition => condition.key === artifact.endingBindings.selectionReadyConditionKey)
+  if (!finalQuest || finalQuest.type !== 'mainline'
+    || canonicalProductProductionJsonV2(selectionReady?.expression) !== canonicalProductProductionJsonV2({
+      op: 'quest-status', questKey: finalQuest.key, statuses: ['completed'],
+    })) fail('结局选择入口没有绑定最终主线完成条件')
+  artifact.endingBindings.routes.forEach(binding => {
+    const condition = artifact.conditions.find(item => item.key === binding.conditionKey)
+    const routeEffect = artifact.effects.find(item => item.key === binding.routeEffectKey)
+    const unlockEffect = artifact.effects.find(item => item.key === binding.unlockEffectKey)
+    const reachEffect = artifact.effects.find(item => item.key === binding.reachEffectKey)
+    const endingAction = artifact.actions.find(item => item.key === binding.actionKey)
+    if (canonicalProductProductionJsonV2(condition?.expression) !== canonicalProductProductionJsonV2({
+      op: 'all', conditions: [
+        { op: 'quest-status', questKey: finalQuest.key, statuses: ['completed'] },
+        { op: 'world-flag', flagKey: 'flag.ending.route', value: binding.endingKey },
+      ],
+    })
+      || canonicalProductProductionJsonV2(routeEffect) !== canonicalProductProductionJsonV2({
+        key: binding.routeEffectKey, operation: 'set-world-flag', payload: { flagKey: 'flag.ending.route', value: binding.endingKey },
+      })
+      || canonicalProductProductionJsonV2(unlockEffect) !== canonicalProductProductionJsonV2({
+        key: binding.unlockEffectKey, operation: 'unlock-ending', payload: { endingKey: binding.endingKey },
+      })
+      || canonicalProductProductionJsonV2(reachEffect) !== canonicalProductProductionJsonV2({
+        key: binding.reachEffectKey, operation: 'reach-ending', payload: { endingKey: binding.endingKey },
+      })
+      || !endingAction || endingAction.category !== 'quest-action' || endingAction.actorScope !== 'player'
+      || endingAction.targetScope !== 'none'
+      || !same(endingAction.locationKeys, [artifact.endingBindings.finalLocationKey])
+      || !same(endingAction.requirementConditionKeys, [artifact.endingBindings.selectionReadyConditionKey])
+      || canonicalProductProductionJsonV2(endingAction.successEffectKeys)
+        !== canonicalProductProductionJsonV2([binding.routeEffectKey, binding.unlockEffectKey, binding.reachEffectKey])
+      || endingAction.costEffectKeys.length || endingAction.failureEffectKeys.length
+      || endingAction.confirmationPolicy !== 'always' || endingAction.repeatPolicy !== 'once') {
+      fail(`结局运行绑定没有形成唯一Condition/Action/Effect闭环:${binding.endingKey}`)
+    }
   })
 }
 
@@ -1210,7 +1314,8 @@ function prompts(context: TextOpenWorldQuestFinalizeInputContextV1) {
 async function defaultRunner(input: Parameters<TextOpenWorldQuestFinalizeModelRunnerV1>[0]): Promise<TextOpenWorldQuestFinalizeModelExecutionV1> {
   const result: ChatResult = {}
   const response = await runConfiguredProductionTextV1({
-    projectId: input.projectId, requirementKey: input.requirementKey, category: input.category,
+    projectId: input.projectId, requirementKey: input.requirementKey,
+    expectedCapabilityHash: input.expectedCapabilityHash, category: input.category,
     messages: [{ role: 'system', content: input.system }, { role: 'user', content: `以下是QuestFinalize输入合同：\n<quest-finalize-input>\n${input.contextText}\n</quest-finalize-input>` }],
     maximumOutputTokens: input.maximumOutputTokens, signal: input.signal, result, responseFormat: 'json_object',
   })
@@ -1233,7 +1338,8 @@ export function createTextOpenWorldQuestFinalizeExecutorV1(options: {
     const context = await parseContext(execution.contextText)
     const prompt = prompts(context); const started = performance.now()
     const model = await runModel({
-      projectId: execution.scope.projectId, requirementKey, category: SKILL_ID,
+      projectId: execution.scope.projectId, requirementKey, expectedCapabilityHash: binding.bindingHash,
+      category: SKILL_ID,
       system: `${prompt.system}\n${prompt.user}`, contextText: execution.contextText,
       maximumOutputTokens: Math.max(1, Math.min(32_000, execution.task.budgetReservation.outputTokens)), signal: execution.signal,
     })

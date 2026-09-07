@@ -95,12 +95,70 @@ export interface TextOpenWorldMediaSlotDemandV1 {
   semanticContext: string
 }
 
+type TextOpenWorldMediaSlotDemandWithoutNumberV1 = Omit<TextOpenWorldMediaSlotDemandV1, 'slotNumber'>
+
+/**
+ * The production Plan reserves one provider output per requested Brief audio
+ * item before P10 runs. P10 must therefore derive exactly the same number of
+ * semantic slots; a generic "music + ambience" pair would make every
+ * music-sfx/full Build fail after the expensive narrative pipeline completed.
+ */
+export function deriveTextOpenWorldAudioSlotDemandsV1(input: {
+  productInstanceKey: string
+  media: TextOpenWorldGameBriefV1['media']
+  audioLevel: TextOpenWorldPresentationProfileV1['mediaPolicy']['audioLevel']
+  presentationProfileHash: string
+  toneGuide: string[]
+  scenes: Array<Pick<TextOpenWorldSceneScriptsV1['scenes'][number], 'key' | 'title' | 'purpose' | 'openingText'>>
+  actors: Array<Pick<TextOpenWorldNpcRuntimeCatalogV1['actors'][number], 'key' | 'name' | 'portrayal'>>
+}): TextOpenWorldMediaSlotDemandWithoutNumberV1[] {
+  const requestedAudioCount = input.media.musicTrackCount + input.media.sfxCount + input.media.voiceLineCount
+  if ((input.audioLevel === 'none') !== (requestedAudioCount === 0)) {
+    fail('PresentationProfile与GameBrief音频档位不一致')
+  }
+  const demands: TextOpenWorldMediaSlotDemandWithoutNumberV1[] = []
+  for (let index = 0; index < input.media.musicTrackCount; index += 1) {
+    demands.push({
+      key: `media.audio.music.${String(index + 1).padStart(3, '0')}`,
+      kind: 'music', subjectKind: 'world', subjectKey: input.productInstanceKey,
+      title: input.media.musicTrackCount === 1 ? '世界主题音乐' : `世界主题音乐 ${index + 1}`,
+      required: false, productionMode: 'optional-generate-or-import', fallback: 'silent',
+      sourceArtifactKey: 'text-open-world.presentation-profile', sourceEntityKey: input.presentationProfileHash,
+      consumerKeys: ['play.scene'], semanticContext: input.toneGuide.join('；'),
+    })
+  }
+  for (let index = 0; index < input.media.sfxCount; index += 1) {
+    const scene = input.scenes[index % input.scenes.length] ?? fail('音效需求缺少可绑定Scene')
+    demands.push({
+      key: `media.audio.sfx.${String(index + 1).padStart(3, '0')}`,
+      kind: 'sound-effect', subjectKind: 'scene', subjectKey: scene.key,
+      title: `${scene.title}音效 ${index + 1}`,
+      required: false, productionMode: 'optional-generate-or-import', fallback: 'silent',
+      sourceArtifactKey: 'text-open-world.scene-scripts', sourceEntityKey: scene.key,
+      consumerKeys: ['play.scene'], semanticContext: `${scene.purpose}；${scene.openingText}`,
+    })
+  }
+  for (let index = 0; index < input.media.voiceLineCount; index += 1) {
+    const actor = input.actors[index % input.actors.length] ?? fail('语音需求缺少可绑定Actor')
+    demands.push({
+      key: `media.audio.voice.${String(index + 1).padStart(3, '0')}`,
+      kind: 'voice', subjectKind: 'actor', subjectKey: actor.key,
+      title: `${actor.name}语音 ${index + 1}`,
+      required: false, productionMode: 'optional-generate-or-import', fallback: 'silent',
+      sourceArtifactKey: 'text-open-world.npc-runtime-catalog', sourceEntityKey: actor.key,
+      consumerKeys: ['play.scene'], semanticContext: `${actor.name}；${actor.portrayal}`,
+    })
+  }
+  return demands
+}
+
 export interface TextOpenWorldSystemFinalizeInputContextV1 {
   schema: 'storyforge.text-open-world-system-finalize-input'
   version: 1
   productInstanceKey: string
   artifactHashes: Array<{ artifactKey: TextOpenWorldProductionArtifactKindV1; contentHash: string; payloadHash: string }>
-  gameBrief: Pick<TextOpenWorldGameBriefV1, 'gameBriefHash' | 'scale' | 'media' | 'effectiveProductionBudget'>
+  gameBrief: Pick<TextOpenWorldGameBriefV1,
+    'gameBriefHash' | 'qualityProfile' | 'scale' | 'media' | 'effectiveProductionBudget' | 'completion'>
   experience: Pick<TextOpenWorldExperienceContractV1, 'experienceContractHash' | 'title' | 'toneGuide' | 'coreLoop' | 'freedom' | 'narrative' | 'worldEvolution'>
   gameplayRuleset: Pick<TextOpenWorldGameplayRulesetSkeletonV1, 'gameplayRulesetHash' | 'progression' | 'combat' | 'inventory' | 'crafting' | 'economy'>
   presentationProfile: TextOpenWorldPresentationProfileV1
@@ -133,6 +191,7 @@ export interface TextOpenWorldSystemFinalizeModelExecutionV1 {
 export type TextOpenWorldSystemFinalizeModelRunnerV1 = (input: {
   projectId: number
   requirementKey: string
+  expectedCapabilityHash: string
   category: string
   system: string
   contextText: string
@@ -163,9 +222,9 @@ const MODULE_SOURCES: Record<TextOpenWorldRuntimeModuleKeyV1, TextOpenWorldProdu
 }
 
 const MODULE_SCHEMA_VERSIONS: Record<TextOpenWorldRuntimeModuleKeyV1, number> = {
-  narrative: 1, world: 3, actors: 3, quests: 2, actions: 14, progression: 1,
+  narrative: 2, world: 3, actors: 3, quests: 2, actions: 15, progression: 1,
   combat: 3, items: 1, crafting: 2, economy: 2, relationships: 3,
-  'time-weather': 2, director: 2, knowledge: 1, presentation: 1,
+  'time-weather': 2, director: 2, knowledge: 1, presentation: 2,
 }
 
 const UI_MODULES: Record<string, TextOpenWorldRuntimeModuleKeyV1[]> = {
@@ -275,7 +334,7 @@ async function readP10Artifacts(scope: WorkspaceScope, buildId: number): Promise
 }
 
 function mediaDemands(artifacts: P10Artifacts): TextOpenWorldMediaSlotDemandV1[] {
-  const demands: Omit<TextOpenWorldMediaSlotDemandV1, 'slotNumber'>[] = []
+  const demands: TextOpenWorldMediaSlotDemandWithoutNumberV1[] = []
   demands.push({
     key: 'media.map.world.svg', kind: 'procedural-map', subjectKind: 'world', subjectKey: artifacts.gameBrief.productInstanceKey,
     title: '完整世界地图', required: true, productionMode: 'procedural-code', fallback: 'procedural-svg',
@@ -304,21 +363,41 @@ function mediaDemands(artifacts: P10Artifacts): TextOpenWorldMediaSlotDemandV1[]
     sourceArtifactKey: 'text-open-world.presentation-profile', sourceEntityKey: artifacts.presentationProfile.presentationProfileHash,
     consumerKeys: artifacts.presentationProfile.consumerSlots.map(slot => slot.key), semanticContext: artifacts.presentationProfile.theme.designIntent,
   })
-  if (artifacts.presentationProfile.mediaPolicy.audioLevel !== 'none') {
-    demands.push({
-      key: 'media.audio.music.world', kind: 'music', subjectKind: 'world', subjectKey: artifacts.gameBrief.productInstanceKey,
-      title: '世界主题音乐', required: false, productionMode: 'optional-generate-or-import', fallback: 'silent',
-      sourceArtifactKey: 'text-open-world.presentation-profile', sourceEntityKey: artifacts.presentationProfile.presentationProfileHash,
-      consumerKeys: ['play.scene'], semanticContext: artifacts.experienceContract.toneGuide.join('；'),
-    })
-    demands.push({
-      key: 'media.audio.ambient.world', kind: 'ambient-sound', subjectKind: 'world', subjectKey: artifacts.gameBrief.productInstanceKey,
-      title: '世界环境音', required: false, productionMode: 'optional-generate-or-import', fallback: 'silent',
-      sourceArtifactKey: 'text-open-world.map-interaction-catalog', sourceEntityKey: artifacts.map.mapInteractionCatalogHash,
-      consumerKeys: ['play.scene', 'overlay.map'], semanticContext: artifacts.map.regions.map(region => region.theme).join('；'),
-    })
+  demands.push(...deriveTextOpenWorldAudioSlotDemandsV1({
+    productInstanceKey: artifacts.gameBrief.productInstanceKey,
+    media: artifacts.gameBrief.media,
+    audioLevel: artifacts.presentationProfile.mediaPolicy.audioLevel,
+    presentationProfileHash: artifacts.presentationProfile.presentationProfileHash,
+    toneGuide: artifacts.experienceContract.toneGuide,
+    scenes: artifacts.scenes.scenes,
+    actors: artifacts.npcs.actors,
+  }))
+  const portraits = demands.filter(slot => slot.kind === 'character-portrait')
+  const backgrounds = demands.filter(slot => slot.kind === 'scene-background')
+  const optionalVisuals = demands.filter(slot => slot.kind === 'ui-skin')
+  // `imageCount` is the exact provider-output count already frozen into the
+  // Plan. P10 may describe every runtime slot, but only this deterministic
+  // subset is eligible for generation; every other slot is explicitly
+  // fallback-only instead of pretending that it has a scheduled provider job.
+  const visualPriority = [
+    ...backgrounds.slice(0, 1), ...portraits.slice(0, 1),
+    ...backgrounds.slice(1), ...portraits.slice(1), ...optionalVisuals,
+  ]
+  if (visualPriority.length < artifacts.gameBrief.media.imageCount) {
+    fail(`冻结图片数超过可生产视觉槽:${artifacts.gameBrief.media.imageCount}/${visualPriority.length}`)
   }
-  return demands.map((demand, index) => ({ slotNumber: index + 1, ...demand }))
+  const generatedVisualKeys = new Set(
+    visualPriority.slice(0, artifacts.gameBrief.media.imageCount).map(slot => slot.key),
+  )
+  return demands.map((demand, index) => ({
+    slotNumber: index + 1,
+    ...demand,
+    productionMode: ['character-portrait', 'scene-background', 'ui-skin'].includes(demand.kind)
+      ? generatedVisualKeys.has(demand.key)
+        ? demand.required ? 'generate-or-import' as const : 'optional-generate-or-import' as const
+        : 'fallback-only' as const
+      : demand.productionMode,
+  }))
 }
 
 async function buildContext(scope: WorkspaceScope, buildId: number): Promise<TextOpenWorldSystemFinalizeInputContextV1> {
@@ -332,8 +411,10 @@ async function buildContext(scope: WorkspaceScope, buildId: number): Promise<Tex
       return { artifactKey, contentHash: row.contentHash, payloadHash: payload[hashKey] as string }
     }),
     gameBrief: {
-      gameBriefHash: artifacts.gameBrief.gameBriefHash, scale: artifacts.gameBrief.scale,
-      media: artifacts.gameBrief.media, effectiveProductionBudget: artifacts.gameBrief.effectiveProductionBudget,
+      gameBriefHash: artifacts.gameBrief.gameBriefHash, qualityProfile: artifacts.gameBrief.qualityProfile,
+      scale: artifacts.gameBrief.scale, media: artifacts.gameBrief.media,
+      effectiveProductionBudget: artifacts.gameBrief.effectiveProductionBudget,
+      completion: artifacts.gameBrief.completion,
     },
     experience: {
       experienceContractHash: artifacts.experienceContract.experienceContractHash,
@@ -539,7 +620,9 @@ async function createArtifacts(input: {
     basisHash: context.contextSelectionHash, createdAt,
   }
   const systemConfigs: TextOpenWorldSystemConfigsV1 = { ...systemBody, systemConfigsHash: await hashProductProductionValueV2(systemBody) }
-  const requestedGenerated = context.mediaSlotDemands.filter(slot => slot.productionMode !== 'procedural-code')
+  const requestedGenerated = context.mediaSlotDemands.filter(slot => (
+    slot.productionMode !== 'procedural-code' && slot.productionMode !== 'fallback-only'
+  ))
   const authorized = context.gameBrief.effectiveProductionBudget.maximumMediaCalls
   const overflow = requestedGenerated.slice(authorized).map(slot => slot.key)
   const mediaBody: Omit<TextOpenWorldMediaRequirementsV1, 'mediaRequirementsHash'> = {
@@ -572,6 +655,15 @@ async function createArtifacts(input: {
     basisHash: systemConfigs.systemConfigsHash, createdAt,
   }
   const mediaRequirements: TextOpenWorldMediaRequirementsV1 = { ...mediaBody, mediaRequirementsHash: await hashProductProductionValueV2(mediaBody) }
+  const expectedGeneratedCount = context.gameBrief.media.imageCount
+    + context.gameBrief.media.musicTrackCount + context.gameBrief.media.sfxCount
+    + context.gameBrief.media.voiceLineCount
+  if (requestedGenerated.length !== expectedGeneratedCount) {
+    fail(`P10生成槽与冻结Plan计数不一致:${requestedGenerated.length}/${expectedGeneratedCount}`)
+  }
+  if (!mediaRequirements.productionBudget.fitsAuthorizedMediaCalls) {
+    fail(`P10生成槽超过冻结媒资预算:${mediaRequirements.productionBudget.overflowSlotKeys.join(',')}`)
+  }
   const contentBudget = await deriveContentBudget(context, createdAt)
   return { systemConfigs, mediaRequirements, contentBudget }
 }
@@ -616,7 +708,8 @@ function prompts(context: TextOpenWorldSystemFinalizeInputContextV1) {
 async function defaultRunner(input: Parameters<TextOpenWorldSystemFinalizeModelRunnerV1>[0]): Promise<TextOpenWorldSystemFinalizeModelExecutionV1> {
   const result: ChatResult = {}
   const response = await runConfiguredProductionTextV1({
-    projectId: input.projectId, requirementKey: input.requirementKey, category: input.category,
+    projectId: input.projectId, requirementKey: input.requirementKey,
+    expectedCapabilityHash: input.expectedCapabilityHash, category: input.category,
     messages: [{ role: 'system', content: input.system }, { role: 'user', content: `<system-finalize-input>\n${input.contextText}\n</system-finalize-input>` }],
     maximumOutputTokens: input.maximumOutputTokens, signal: input.signal, result, responseFormat: 'json_object',
   })
@@ -638,7 +731,8 @@ export function createTextOpenWorldSystemFinalizeExecutorV1(options: {
     const binding = execution.capabilityBindings.find(item => item.requirementKey === requirementKey) ?? fail('P10缺少文本capability binding')
     const context = await parseContext(execution.contextText); const prompt = prompts(context); const started = performance.now()
     const model = await runModel({
-      projectId: execution.scope.projectId, requirementKey, category: SKILL_ID,
+      projectId: execution.scope.projectId, requirementKey, expectedCapabilityHash: binding.bindingHash,
+      category: SKILL_ID,
       system: `${prompt.system}\n${prompt.user}`, contextText: execution.contextText,
       maximumOutputTokens: Math.max(1, Math.min(24_000, execution.task.budgetReservation.outputTokens)), signal: execution.signal,
     })
@@ -668,6 +762,8 @@ function parsePreflightInput(rows: ProductBuildArtifactRecordV1[]) {
     ['text-open-world.media-requirements', 'storyforge.text-open-world-media-requirements', 'mediaRequirementsHash'],
     ['text-open-world.content-budget', 'storyforge.text-open-world-content-budget', 'contentBudgetHash'],
     ['text-open-world.quest-design-documents', 'storyforge.text-open-world-quest-design-documents', 'questDesignDocumentsHash'],
+    ['text-open-world.scene-scripts', 'storyforge.text-open-world-scene-scripts', 'sceneScriptsHash'],
+    ['text-open-world.choice-contracts', 'storyforge.text-open-world-choice-contracts', 'choiceContractsHash'],
     ['text-open-world.action-bindings', 'storyforge.text-open-world-action-bindings', 'actionBindingsHash'],
   ] as const
   const values = new Map<string, Record<string, unknown>>()
@@ -681,6 +777,8 @@ function parsePreflightInput(rows: ProductBuildArtifactRecordV1[]) {
     media: values.get('text-open-world.media-requirements') as unknown as TextOpenWorldMediaRequirementsV1,
     budget: values.get('text-open-world.content-budget') as unknown as TextOpenWorldContentBudgetV1,
     quests: values.get('text-open-world.quest-design-documents') as unknown as TextOpenWorldQuestDesignDocumentsV1,
+    scenes: values.get('text-open-world.scene-scripts') as unknown as TextOpenWorldSceneScriptsV1,
+    choices: values.get('text-open-world.choice-contracts') as unknown as TextOpenWorldChoiceContractsV1,
     bindings: values.get('text-open-world.action-bindings') as unknown as TextOpenWorldActionBindingsV1,
   }))
 }
@@ -689,10 +787,18 @@ export async function createTextOpenWorldDeterministicPreflightV1(input: {
   rows: ProductBuildArtifactRecordV1[]
   createdAt: number
 }): Promise<TextOpenWorldDeterministicPreflightV1> {
-  const { system, media, budget, quests, bindings } = await parsePreflightInput(input.rows)
-  if (new Set([system.productInstanceKey, media.productInstanceKey, budget.productInstanceKey, quests.productInstanceKey, bindings.productInstanceKey]).size !== 1) fail('预检输入跨产品')
+  const { system, media, budget, quests, scenes, choices, bindings } = await parsePreflightInput(input.rows)
+  if (new Set([system.productInstanceKey, media.productInstanceKey, budget.productInstanceKey, quests.productInstanceKey,
+    scenes.productInstanceKey, choices.productInstanceKey, bindings.productInstanceKey]).size !== 1) fail('预检输入跨产品')
   if (system.questDesignDocumentsHash !== quests.questDesignDocumentsHash
     || system.actionBindingsHash !== bindings.actionBindingsHash
+    || system.sceneScriptsHash !== scenes.sceneScriptsHash
+    || system.choiceContractsHash !== choices.choiceContractsHash
+    || choices.questDesignDocumentsHash !== quests.questDesignDocumentsHash
+    || choices.sceneScriptsHash !== scenes.sceneScriptsHash
+    || bindings.questDesignDocumentsHash !== quests.questDesignDocumentsHash
+    || bindings.sceneScriptsHash !== scenes.sceneScriptsHash
+    || bindings.choiceContractsHash !== choices.choiceContractsHash
     || media.presentationProfileHash !== system.presentationProfileHash
     || budget.questDesignDocumentsHash !== quests.questDesignDocumentsHash) fail('预检输入Hash链不一致')
   if (!same(system.coverage.requiredRuntimeModuleKeys, TEXT_OPEN_WORLD_RUNTIME_MODULE_KEYS_V1)
@@ -724,6 +830,46 @@ export async function createTextOpenWorldDeterministicPreflightV1(input: {
       || binding.resultAuthority.actionKey !== binding.actionKey
       || binding.resultAuthority.actionDefinitionHash !== binding.actionDefinitionHash) unknownActions.add(binding.actionKey)
   }
+  const ending = quests.endingBindings
+  const endingScene = scenes.scenes.find(scene => (
+    scene.sourceKind === 'quest-resolution' && scene.questKey === ending.finalMainlineQuestKey
+  )) ?? fail('预检缺少最终主线结局场景')
+  if (!same(quests.coverage.requiredEndingKeys, quests.coverage.boundEndingKeys)
+    || !ending.routes.length
+    || new Set(ending.routes.map(route => route.endingKey)).size !== ending.routes.length
+    || !quests.conditions.some(condition => condition.key === ending.selectionReadyConditionKey
+      && same(condition.expression, { op: 'quest-status', questKey: ending.finalMainlineQuestKey, statuses: ['completed'] }))) {
+    fail('预检结局覆盖或最终主线选择条件无效')
+  }
+  for (const route of ending.routes) {
+    const action = actionByKey.get(route.actionKey)
+    const condition = quests.conditions.find(item => item.key === route.conditionKey)
+    const routeEffect = quests.effects.find(item => item.key === route.routeEffectKey)
+    const unlockEffect = quests.effects.find(item => item.key === route.unlockEffectKey)
+    const reachEffect = quests.effects.find(item => item.key === route.reachEffectKey)
+    const routeChoices = choices.choices.filter(choice => choice.sceneKey === endingScene.key && choice.actionKey === route.actionKey)
+    const inputBinding = bindings.actions.find(binding => binding.actionKey === route.actionKey)
+    if (!action || action.category !== 'quest-action' || action.actorScope !== 'player' || action.targetScope !== 'none'
+      || !same(action.locationKeys, [ending.finalLocationKey])
+      || !same(action.requirementConditionKeys, [ending.selectionReadyConditionKey])
+      || canonicalProductProductionJsonV2(action.successEffectKeys)
+        !== canonicalProductProductionJsonV2([route.routeEffectKey, route.unlockEffectKey, route.reachEffectKey])
+      || action.confirmationPolicy !== 'always' || action.repeatPolicy !== 'once'
+      || !condition || !same(condition.expression, { op: 'all', conditions: [
+        { op: 'quest-status', questKey: ending.finalMainlineQuestKey, statuses: ['completed'] },
+        { op: 'world-flag', flagKey: 'flag.ending.route', value: route.endingKey },
+      ] })
+      || !same(routeEffect, { key: route.routeEffectKey, operation: 'set-world-flag', payload: { flagKey: 'flag.ending.route', value: route.endingKey } })
+      || !same(unlockEffect, { key: route.unlockEffectKey, operation: 'unlock-ending', payload: { endingKey: route.endingKey } })
+      || !same(reachEffect, { key: route.reachEffectKey, operation: 'reach-ending', payload: { endingKey: route.endingKey } })
+      || routeChoices.length !== 1 || !endingScene.actionKeys.includes(route.actionKey)
+      || !endingScene.fixedChoiceKeys.includes(routeChoices[0]!.key)
+      || !inputBinding || !inputBinding.fixedChoiceKeys.includes(routeChoices[0]!.key)
+      || inputBinding.naturalLanguage.mode !== 'existing-action-candidate'
+      || inputBinding.naturalLanguage.exampleUtterances.length !== 2) {
+      fail(`预检结局没有经过P8F Action、P9 Choice和自然语言绑定闭环:${route.endingKey}`)
+    }
+  }
   if (unknownConditions.size || unknownEffects.size || unknownActions.size) fail(`预检存在悬空引用 condition=${[...unknownConditions]} effect=${[...unknownEffects]} action=${[...unknownActions]}`)
   const mainline = quests.quests.filter(quest => quest.type === 'mainline').sort((a, b) => a.order - b.order)
   if (!mainline.length
@@ -733,7 +879,7 @@ export async function createTextOpenWorldDeterministicPreflightV1(input: {
   const checks: TextOpenWorldDeterministicPreflightV1['checks'] = [
     { key: 'preflight.schema', category: 'schema', status: 'pass', summary: '所有输入Schema与内容Hash有效。', evidenceRefs: [system.systemConfigsHash, quests.questDesignDocumentsHash], targetArtifactKeys: ['text-open-world.system-configs', 'text-open-world.quest-design-documents'] },
     { key: 'preflight.hash-chain', category: 'hash-chain', status: 'pass', summary: 'P10、任务与交互Hash链闭合。', evidenceRefs: [media.mediaRequirementsHash, budget.contentBudgetHash, bindings.actionBindingsHash], targetArtifactKeys: ['text-open-world.media-requirements', 'text-open-world.content-budget', 'text-open-world.action-bindings'] },
-    { key: 'preflight.references', category: 'reference', status: 'pass', summary: 'Action、Condition、Effect和绑定无悬空引用。', evidenceRefs: [quests.questDesignDocumentsHash, bindings.actionBindingsHash], targetArtifactKeys: ['text-open-world.quest-design-documents', 'text-open-world.action-bindings'] },
+    { key: 'preflight.references', category: 'reference', status: 'pass', summary: 'Action、Condition、Effect、场景Choice和三类输入绑定无悬空引用，所有结局已经P8F/P9治理。', evidenceRefs: [quests.questDesignDocumentsHash, scenes.sceneScriptsHash, choices.choiceContractsHash, bindings.actionBindingsHash], targetArtifactKeys: ['text-open-world.quest-design-documents', 'text-open-world.scene-scripts', 'text-open-world.choice-contracts', 'text-open-world.action-bindings'] },
     { key: 'preflight.solvability', category: 'solvability', status: 'pass', summary: '严格顺序主线具备受保护等待入口，普通内容不能写死主线。', evidenceRefs: mainline.map(quest => quest.key), targetArtifactKeys: ['text-open-world.quest-design-documents'] },
     { key: 'preflight.budget', category: 'budget', status: 'pass', summary: '主线时长、可选库存和地区供给符合Brief。', evidenceRefs: [budget.contentBudgetHash], targetArtifactKeys: ['text-open-world.content-budget'] },
     { key: 'preflight.consumer-slots', category: 'consumer-slot', status: 'pass', summary: '运行模块、UI消费槽与媒资降级全部闭合。', evidenceRefs: [system.systemConfigsHash, media.mediaRequirementsHash], targetArtifactKeys: ['text-open-world.system-configs', 'text-open-world.media-requirements'] },
@@ -750,7 +896,11 @@ export async function createTextOpenWorldDeterministicPreflightV1(input: {
     },
     result: { passedCheckKeys: checks.map(check => check.key), blockingCheckKeys: [], readyForModelReviews: true },
     governance: { codeOnly: true, noSemanticQualityClaims: true, boundedAbstractReachability: true, exactInputHashesVerified: true },
-    basisHash: await hashProductProductionValueV2({ system: system.systemConfigsHash, media: media.mediaRequirementsHash, budget: budget.contentBudgetHash, quests: quests.questDesignDocumentsHash, bindings: bindings.actionBindingsHash }),
+    basisHash: await hashProductProductionValueV2({
+      system: system.systemConfigsHash, media: media.mediaRequirementsHash, budget: budget.contentBudgetHash,
+      quests: quests.questDesignDocumentsHash, scenes: scenes.sceneScriptsHash,
+      choices: choices.choiceContractsHash, bindings: bindings.actionBindingsHash,
+    }),
     createdAt: input.createdAt,
   }
   return { ...body, deterministicPreflightHash: await hashProductProductionValueV2(body) }

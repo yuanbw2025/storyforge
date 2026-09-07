@@ -71,6 +71,7 @@ export interface TextOpenWorldMapInteractionModelExecutionV1 {
 export type TextOpenWorldMapInteractionModelRunnerV1 = (input: {
   projectId: number
   requirementKey: string
+  expectedCapabilityHash: string
   category: string
   system: string
   contextText: string
@@ -431,7 +432,8 @@ function systemPrompt(context: TextOpenWorldMapInteractionInputContextV1): strin
 async function defaultModelRunner(input: Parameters<TextOpenWorldMapInteractionModelRunnerV1>[0]): Promise<TextOpenWorldMapInteractionModelExecutionV1> {
   const result: ChatResult = {}
   const response = await runConfiguredProductionTextV1({
-    projectId: input.projectId, requirementKey: input.requirementKey, category: input.category,
+    projectId: input.projectId, requirementKey: input.requirementKey,
+    expectedCapabilityHash: input.expectedCapabilityHash, category: input.category,
     messages: [{ role: 'system', content: input.system }, { role: 'user', content: `以下是已登记并验签的地图交互目录输入：\n<map-interaction-input>\n${input.contextText}\n</map-interaction-input>` }],
     maximumOutputTokens: input.maximumOutputTokens, signal: input.signal, result, responseFormat: 'json_object',
   })
@@ -452,7 +454,8 @@ export function createTextOpenWorldMapInteractionCatalogExecutorV1(options: {
     if (!binding) fail('Map Interaction缺少文本capability binding')
     const context = await parseContext(execution.contextText); const prompt = systemPrompt(context); const startedAt = performance.now()
     const response = await runModel({
-      projectId: execution.scope.projectId, requirementKey, category: 'text-open-world.production.map-interaction-catalog',
+      projectId: execution.scope.projectId, requirementKey, expectedCapabilityHash: binding.bindingHash,
+      category: 'text-open-world.production.map-interaction-catalog',
       system: prompt, contextText: execution.contextText,
       maximumOutputTokens: Math.max(1, Math.min(28_000, execution.task.budgetReservation.outputTokens)), signal: execution.signal,
     })

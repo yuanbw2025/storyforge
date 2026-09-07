@@ -120,7 +120,7 @@ export function createTextOpenWorldProductRuntimePackageFixtureV1(
       productKey: textOpenWorldVNext.metadata.packageKey,
       title: textOpenWorldVNext.metadata.title,
       description: textOpenWorldVNext.metadata.description,
-      enabledCapabilities: modules.enabledCapabilities,
+      enabledCapabilities: [...modules.enabledCapabilities, 'textOpenWorldVNext'],
       rulesetVersion: textOpenWorldVNext.metadata.rulesetVersion,
       initialVariables: { productAdapterId: modules.adapterId },
     },
@@ -137,9 +137,28 @@ export function createTextOpenWorldProductRuntimePackageFixtureV1(
   })
 }
 
+export function createTextOpenWorldVNextOnlyProductRuntimePackageFixtureV1(
+  textOpenWorldVNext: TextOpenWorldRuntimePackageV1,
+): ProductRuntimePackageV1 {
+  const hybrid = createTextOpenWorldProductRuntimePackageFixtureV1(textOpenWorldVNext)
+  return parseProductRuntimePackageV1({
+    schema: hybrid.schema,
+    version: hybrid.version,
+    productType: hybrid.productType,
+    definition: {
+      ...hybrid.definition,
+      enabledCapabilities: ['narrative', 'textOpenWorldVNext'],
+    },
+    sourceWorld: hybrid.sourceWorld,
+    narrative: hybrid.narrative,
+    textOpenWorldVNext,
+  })
+}
+
 export async function createGovernedTextOpenWorldSessionFixtureV1(input: {
   name: string
   textOpenWorldVNext: TextOpenWorldRuntimePackageV1
+  runtimeShape?: 'hybrid' | 'vnext-only'
   title?: string
   seed?: string
   status?: ProductRuntimeSession['status']
@@ -150,7 +169,9 @@ export async function createGovernedTextOpenWorldSessionFixtureV1(input: {
     genres: ['open-world'], status: 'drafting', description: '', targetWordCount: 1,
     enableMultiWorld: false,
   }, { purpose: 'world-engine', kind: 'novel', novelProfile: 'long' })
-  const runtimePackage = createTextOpenWorldProductRuntimePackageFixtureV1(input.textOpenWorldVNext)
+  const runtimePackage = input.runtimeShape === 'vnext-only'
+    ? createTextOpenWorldVNextOnlyProductRuntimePackageFixtureV1(input.textOpenWorldVNext)
+    : createTextOpenWorldProductRuntimePackageFixtureV1(input.textOpenWorldVNext)
   const productionKey = `fixture.text-open-world.${crypto.randomUUID()}`
   const manifest = await createFixtureProductReleaseManifestV1({
     runtimePackage,

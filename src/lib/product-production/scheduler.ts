@@ -44,11 +44,14 @@ import { createProductBuildCompatibilityReportV1 } from './compatibility'
 import { parseProductProductionBriefV3 } from './contracts'
 import { canonicalProductProductionJsonV2, hashProductProductionValueV2, isSha256Hash } from './hash'
 import { createProductProductionPlanV3, parseProductProductionPlanV3 } from './plan'
+import { createTextOpenWorldProductionPlanV1 } from '../open-world/production-contract'
+import { parseTextOpenWorldModulesV1 } from '../open-world/modules'
 import { createProductBuildPreviewManifestV1 } from './preview-manifest'
 import { createProductBuildRootTerminalReceiptV1 } from './receipts'
-import { parseProductRuntimePackageV1 } from './runtime-package'
+import { parseProductRuntimePackageV1, productProductionTerminalArtifactKeysV1 } from './runtime-package'
 import {
   executeProductProductionWorldGatewayV1,
+  productProductionTaskOwnsWorldGatewayV1,
   productProductionTaskUsesWorldGatewayV1,
   parseConfirmedProductBriefV1,
   parseProductProductionSourcePlanV1,
@@ -118,6 +121,9 @@ export interface ProductProductionTaskExecutionInputV1 {
   task: ProductProductionPlanTaskV3
   attempt: number
   idempotencyKey: string
+  /** Present on every formal scheduler execution. Specialized bounded-batch
+   * executors use this run to persist the exact per-call evidence. */
+  taskRunId?: number
   contextText: string
   inputArtifacts: ProductBuildArtifactRecordV1[]
   capabilityBindings: ProductProductionCapabilityBindingV1[]
@@ -718,12 +724,19 @@ async function ensurePlan(input: {
   }
   let plan = input.suppliedPlan
     ? parseProductProductionPlanV3(input.suppliedPlan, state.brief, state.briefRow.briefHash)
-    : await createProductProductionPlanV3({
+    : await (state.brief.intent.productType === 'text-open-world'
+      ? createTextOpenWorldProductionPlanV1({
+          brief: state.brief,
+          briefHash: state.briefRow.briefHash,
+          buildNumber: state.build.buildNumber,
+          controlEpoch: state.build.controlEpoch,
+        })
+      : createProductProductionPlanV3({
         brief: state.brief,
         briefHash: state.briefRow.briefHash,
         buildNumber: state.build.buildNumber,
         controlEpoch: state.build.controlEpoch,
-      })
+      }))
   if (!input.suppliedPlan) {
     const reuse = await applyCrossBuildEvolutionReuse({
       scope: input.scope, build: state.build, brief: state.brief, plan,
@@ -1149,8 +1162,10 @@ async function runClaimedTask(input: {
   const normalSourceKeys = taskContextSourceKeys(input.task)
   const contractSourceKeys = taskContractContextSourceKeys(input.task)
   const totalInputBudget = Math.max(1, input.task.budgetReservation.inputTokens)
-  const worldGatewayRequired = productProductionTaskUsesWorldGatewayV1(input.task)
-  const requiresExactContext = worldGatewayRequired || input.task.executionMode === 'model'
+  const worldGatewayUsed = productProductionTaskUsesWorldGatewayV1(input.task)
+  const executorOwnsWorldGateway = productProductionTaskOwnsWorldGatewayV1(input.task)
+  const worldGatewayRequired = worldGatewayUsed && !executorOwnsWorldGateway
+  const requiresExactContext = worldGatewayUsed || input.task.executionMode === 'model'
   // The actual frozen world packet is added and checked below; a fixed 40%
   // slice needlessly truncated valid Brief + repair inputs in small worlds.
   const normalInputBudget = totalInputBudget
@@ -1197,7 +1212,7 @@ async function runClaimedTask(input: {
   let gatewayPreflight: ContextGatewayPreflightEvidenceV1 | null = null
   let sourcePlanHash: string | null = null
   let confirmedBriefHash: string | null = null
-  if (worldGatewayRequired) {
+  if (worldGatewayUsed) {
     const production = await db.productProductions.get(input.productionId)
     if (!production?.id || production.currentBriefRevision == null) {
       throw new Error('[product-production-scheduler] 模型任务缺少当前 Production/Brief')
@@ -1217,54 +1232,56 @@ async function runClaimedTask(input: {
     })
     sourcePlanHash = sourcePlan.planHash
     confirmedBriefHash = confirmedBrief.confirmationHash
-    const worldBudget = Math.max(1, totalInputBudget - normalAssembled.totalInputTokens)
-    gatewayExecution = await executeProductProductionWorldGatewayV1({
-      scope: input.scope,
-      sourcePlan,
-      brief,
-      task: input.task,
-      budgetTokens: worldBudget,
-      requireCompilationResources: input.task.executionMode === 'deterministic'
-        && input.task.kind === 'runtime-package',
-      signal: input.signal,
-    })
-    assembled = combineProductProductionContextV1({
-      assembled: normalAssembled,
-      worldContent: gatewayExecution.contextPacket.content,
-      worldContentHash: gatewayExecution.contextPacket.contentHash,
-      worldTokens: gatewayExecution.contextPacket.tokenCount,
-      inputBudget: totalInputBudget,
-    })
-    if (assembled.overBudgetAfterTrim) {
-      throw new Error('[product-production-scheduler] Brief/Artifact 与冻结世界事实合并后超过任务输入预算')
+    if (worldGatewayRequired) {
+      const worldBudget = Math.max(1, totalInputBudget - normalAssembled.totalInputTokens)
+      gatewayExecution = await executeProductProductionWorldGatewayV1({
+        scope: input.scope,
+        sourcePlan,
+        brief,
+        task: input.task,
+        budgetTokens: worldBudget,
+        requireCompilationResources: input.task.executionMode === 'deterministic'
+          && input.task.kind === 'runtime-package',
+        signal: input.signal,
+      })
+      assembled = combineProductProductionContextV1({
+        assembled: normalAssembled,
+        worldContent: gatewayExecution.contextPacket.content,
+        worldContentHash: gatewayExecution.contextPacket.contentHash,
+        worldTokens: gatewayExecution.contextPacket.tokenCount,
+        inputBudget: totalInputBudget,
+      })
+      if (assembled.overBudgetAfterTrim) {
+        throw new Error('[product-production-scheduler] Brief/Artifact 与冻结世界事实合并后超过任务输入预算')
+      }
+      const manifestV1 = await createContextManifestFromAssemblyV1({
+        runId: snapshot.run.id, stepId: input.task.taskKey, attempt,
+        projectId: input.scope.projectId, worldGroupId: null,
+        declaredSourceKeys: contractSourceKeys, assembled,
+        readerVersion: 'product-production-world-gateway-v1',
+      })
+      gatewayBaseManifest = await createContextManifestV2FromV1({ manifest: manifestV1, scope: input.scope })
+      const recorded = await recordContextGatewayPreflightEvidenceV1({
+        scope: input.scope,
+        runId: snapshot.run.id,
+        stepId: input.task.taskKey,
+        attempt,
+        contextPacket: gatewayExecution.contextPacket,
+        selector: gatewayExecution.selector,
+        renderedRequest: {
+          schema: 'storyforge.product-production-task-request', version: 1,
+          taskKey: input.task.taskKey, planHash: input.build.planHash,
+          executionMode: input.task.executionMode,
+          contextText: assembled.text,
+          inputArtifacts: artifacts.map(row => ({ artifactKey: row.artifactKey, contentHash: row.contentHash })),
+        },
+        sourceSnapshots: gatewayExecution.sourceSnapshots,
+        toolTranscript: gatewayExecution.toolTranscript,
+        expectedLastSequence: snapshot.projection.lastSequence,
+      })
+      snapshot = recorded.snapshot
+      gatewayPreflight = recorded.evidence
     }
-    const manifestV1 = await createContextManifestFromAssemblyV1({
-      runId: snapshot.run.id, stepId: input.task.taskKey, attempt,
-      projectId: input.scope.projectId, worldGroupId: null,
-      declaredSourceKeys: contractSourceKeys, assembled,
-      readerVersion: 'product-production-world-gateway-v1',
-    })
-    gatewayBaseManifest = await createContextManifestV2FromV1({ manifest: manifestV1, scope: input.scope })
-    const recorded = await recordContextGatewayPreflightEvidenceV1({
-      scope: input.scope,
-      runId: snapshot.run.id,
-      stepId: input.task.taskKey,
-      attempt,
-      contextPacket: gatewayExecution.contextPacket,
-      selector: gatewayExecution.selector,
-      renderedRequest: {
-        schema: 'storyforge.product-production-task-request', version: 1,
-        taskKey: input.task.taskKey, planHash: input.build.planHash,
-        executionMode: input.task.executionMode,
-        contextText: assembled.text,
-        inputArtifacts: artifacts.map(row => ({ artifactKey: row.artifactKey, contentHash: row.contentHash })),
-      },
-      sourceSnapshots: gatewayExecution.sourceSnapshots,
-      toolTranscript: gatewayExecution.toolTranscript,
-      expectedLastSequence: snapshot.projection.lastSequence,
-    })
-    snapshot = recorded.snapshot
-    gatewayPreflight = recorded.evidence
   } else {
     const manifest = await createContextManifestFromAssemblyV1({
       runId: snapshot.run.id, stepId: input.task.taskKey, attempt,
@@ -1301,7 +1318,7 @@ async function runClaimedTask(input: {
   }
   const bindingHash = snapshot.contract.runtimeBindingHash
     ?? await hashProductProductionValueV2(snapshot.contract.executionBindings ?? { deterministic: input.task.kind })
-  if (input.task.executionMode === 'model' && !authorDraftJson) {
+  if (input.task.executionMode === 'model' && !authorDraftJson && !executorOwnsWorldGateway) {
     snapshot = await append(input.scope, snapshot, 'model.requested', { stepId: input.task.taskKey, attempt, bindingHash })
   } else if (input.task.executionMode === 'media-provider') {
     snapshot = await append(input.scope, snapshot, 'tool.called', {
@@ -1319,7 +1336,7 @@ async function runClaimedTask(input: {
       scope: input.scope, productionId: input.productionId, buildId: input.build.id,
       buildNumber: input.build.buildNumber, controlEpoch: input.build.controlEpoch,
       planHash: input.build.planHash, task: input.task, attempt,
-      idempotencyKey: inputHash, contextText: assembled.text, authorDraftJson,
+      idempotencyKey: inputHash, taskRunId: snapshot.run.id, contextText: assembled.text, authorDraftJson,
       inputArtifacts: artifacts, capabilityBindings: bindings, signal: input.signal,
       onModelOutput: async output => {
         const recorded = await recordAgentRunArtifactV1({
@@ -1331,7 +1348,13 @@ async function runClaimedTask(input: {
       },
     })
     validateExecutionResult(input.task, result)
+    // A bounded-batch executor may have appended exact per-call evidence to
+    // this same durable task run. Refresh before the scheduler continues.
+    snapshot = await readAgentRunV1(input.scope, snapshot.run.id)
   } catch (error) {
+    if (executorOwnsWorldGateway) {
+      snapshot = await readAgentRunV1(input.scope, snapshot.run.id)
+    }
     const failure = await classifyHarnessFailureV1(error)
     const recordedFailure = await recordAgentRunArtifactV1({
       scope: input.scope, runId: snapshot.run.id, stepId: input.task.taskKey, attempt,
@@ -1395,7 +1418,7 @@ async function runClaimedTask(input: {
     return
   }
   const candidateHash = await hashProductProductionValueV2(result)
-  if (input.task.executionMode === 'model' && !authorDraftJson) {
+  if (input.task.executionMode === 'model' && !authorDraftJson && !executorOwnsWorldGateway) {
     snapshot = await append(input.scope, snapshot, 'model.responded', {
       stepId: input.task.taskKey, attempt, outputHash: candidateHash,
     })
@@ -1487,8 +1510,9 @@ async function compileTerminalBuild(input: {
   if (new Set(artifacts.map(row => row.artifactKey)).size !== artifacts.length) {
     throw new Error('[product-production-scheduler] terminal Artifact key 不唯一')
   }
-  const packageArtifact = artifacts.find(row => row.artifactKey === 'runtime.package')
-  const qualityArtifact = artifacts.find(row => row.artifactKey === 'quality.report')
+  const terminalArtifactKeys = productProductionTerminalArtifactKeysV1(input.brief.intent.productType)
+  const packageArtifact = artifacts.find(row => row.artifactKey === terminalArtifactKeys.runtimePackage)
+  const qualityArtifact = artifacts.find(row => row.artifactKey === terminalArtifactKeys.qualityReport)
   if (!packageArtifact || !qualityArtifact) throw new Error('[product-production-scheduler] terminal package/quality Artifact 缺失')
   const runtimePackage = parseProductRuntimePackageV1(packageArtifact.payloadJson)
   const packageHash = await hashProductProductionValueV2(runtimePackage)
@@ -1500,8 +1524,15 @@ async function compileTerminalBuild(input: {
     if (!parentBuild?.id || !parentBuild.packageHash) {
       throw new Error('[product-production-scheduler] compatibility parent Build 缺失')
     }
-    const parentArtifact = await db.productBuildArtifacts
-      .where('[buildId+artifactKey]').equals([parentBuild.id, 'runtime.package']).first()
+    let parentArtifact = await db.productBuildArtifacts
+      .where('[buildId+artifactKey]').equals([parentBuild.id, terminalArtifactKeys.runtimePackage]).first()
+    // A production created before the dedicated DAG may evolve from the old
+    // generic text-open-world package. It remains a valid compatibility input
+    // but can never become the output key of a new dedicated Build.
+    if (!parentArtifact && input.brief.intent.productType === 'text-open-world') {
+      parentArtifact = await db.productBuildArtifacts
+        .where('[buildId+artifactKey]').equals([parentBuild.id, 'runtime.package']).first()
+    }
     if (!parentArtifact || !['accepted', 'carried-forward'].includes(parentArtifact.status)) {
       throw new Error('[product-production-scheduler] compatibility parent package Artifact 缺失')
     }
@@ -1539,12 +1570,18 @@ async function compileTerminalBuild(input: {
     artifactKey: row.artifactKey, version: row.version, contentHash: row.contentHash,
     producerReceiptHash: row.producerReceiptHash,
   }))
+  const fallbackSummary = runtimePackage.textOpenWorldVNext == null
+    ? []
+    : parseTextOpenWorldModulesV1(runtimePackage.textOpenWorldVNext).presentation.mediaSlots
+      .filter(slot => slot.assetKey == null)
+      .map(slot => `媒资槽 ${slot.key} 使用${slot.kind}降级表现`)
+      .sort()
   const manifest = {
     schema: 'storyforge.product-build-manifest' as const, version: 1 as const,
     productionKey: production.productionKey, buildNumber: build.buildNumber,
     briefRevision: build.briefRevision, briefHash: build.briefHash, planHash: build.planHash,
     controlEpoch: build.controlEpoch, runtimePackageHash: packageHash,
-    artifactReceipts, completedGateIds, fallbackSummary: [],
+    artifactReceipts, completedGateIds, fallbackSummary,
   }
   const manifestHash = await hashProductProductionValueV2(manifest)
   const mediaBindings = (runtimePackage.presentation?.assets ?? []).map(asset => {
@@ -1556,7 +1593,7 @@ async function compileTerminalBuild(input: {
   })
   const preview = await createProductBuildPreviewManifestV1({
     productionKey: production.productionKey, buildNumber: build.buildNumber,
-    buildManifestHash: manifestHash, runtimePackage, mediaBindings, fallbackSummary: [],
+    buildManifestHash: manifestHash, runtimePackage, mediaBindings, fallbackSummary,
   })
   const rootTerminalReceiptHash = await createProductBuildRootTerminalReceiptV1({
     planHash: build.planHash, manifestHash, packageHash, qualityReportHash,

@@ -67,6 +67,7 @@ export interface TextOpenWorldRegionNarrativePacksModelExecutionV1 {
 export type TextOpenWorldRegionNarrativePacksModelRunnerV1 = (input: {
   projectId: number
   requirementKey: string
+  expectedCapabilityHash: string
   category: string
   system: string
   contextText: string
@@ -1104,6 +1105,7 @@ async function defaultModelRunner(
   const response = await runConfiguredProductionTextV1({
     projectId: input.projectId,
     requirementKey: input.requirementKey,
+    expectedCapabilityHash: input.expectedCapabilityHash,
     category: input.category,
     messages: [
       { role: 'system', content: input.system },
@@ -1141,6 +1143,7 @@ export function createTextOpenWorldRegionNarrativePacksExecutorV1(options: {
     const response = await runModel({
       projectId: execution.scope.projectId,
       requirementKey,
+      expectedCapabilityHash: binding.bindingHash,
       category: 'text-open-world.production.region-narrative-packs',
       system: prompt,
       contextText: execution.contextText,

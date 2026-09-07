@@ -97,6 +97,64 @@ export interface TextOpenWorldNarrativeModuleV1 {
   }>
 }
 
+/**
+ * Current playable narrative contract. Unlike the legacy v1 index, v2 freezes
+ * the authored P9 prose and its knowledge/availability boundaries into the
+ * ProductRelease instead of requiring runtime access to production artifacts.
+ */
+export interface TextOpenWorldNarrativeModuleV2 {
+  version: 2
+  storylines: TextOpenWorldNarrativeModuleV1['storylines']
+  stages: TextOpenWorldNarrativeModuleV1['stages']
+  endings: TextOpenWorldNarrativeModuleV1['endings']
+  scenes: Array<{
+    key: string
+    order: number
+    sourceKind:
+      | 'quest-offer'
+      | 'quest-objective'
+      | 'quest-resolution'
+      | 'actor-dialogue'
+      | 'location-interaction'
+      | 'random-event'
+    sourceKey: string
+    title: string
+    purpose: string
+    regionKey: string
+    locationKey: string
+    questKey: string | null
+    stageKey: string | null
+    objectiveKey: string | null
+    actorKey: string | null
+    interactionKey: string | null
+    randomEventKey: string | null
+    participantKeys: string[]
+    openingText: string
+    bodyText: string
+    successText: string
+    failureText: string | null
+    attitudeOpenings: { bad: string; neutral: string; good: string } | null
+    allowedKnowledgeClaimKeys: string[]
+    forbiddenFutureObjectiveKeys: string[]
+    availabilityConditionKeys: string[]
+    actionKeys: string[]
+    fixedChoiceKeys: string[]
+  }>
+  fixedChoices: TextOpenWorldNarrativeModuleV1['fixedChoices']
+  randomEventPresentations: Array<{
+    key: string
+    order: number
+    randomEventKey: string
+    openingText: string
+    resolutionText: string
+    rumorKey: string | null
+    rumorRequirementKey: string | null
+    rumorText: string | null
+    reliability: 'uncertain' | null
+    sourceClaimKeys: string[]
+  }>
+}
+
 export interface TextOpenWorldWorldModuleV1 {
   version: 3
   initialLocationKey: string
@@ -250,6 +308,78 @@ export interface TextOpenWorldActionModuleV1 {
     repeatPolicy: 'once' | 'repeatable' | 'cooldown'
     cooldownMinutes: number | null
   }>
+}
+
+export type TextOpenWorldRuntimeNaturalLanguageBindingModeV1 =
+  | 'existing-action-candidate'
+  | 'disabled-system-only'
+  | 'disabled-combat-button-only'
+
+export interface TextOpenWorldActionInputBindingsV1 {
+  sourceActionBindingsHash: string
+  actions: Array<{
+    key: string
+    order: number
+    actionKey: string
+    actionDefinitionHash: string
+    actorScope: 'player' | 'system'
+    category: TextOpenWorldActionCategoryV1
+    targetScope: 'none' | 'actor' | 'location' | 'item' | 'quest' | 'vendor' | 'encounter' | 'combatant' | 'recipe'
+    systemAction: {
+      enabled: boolean
+      label: string
+      description: string
+      executionSource: 'system-action'
+    }
+    fixedChoiceKeys: string[]
+    naturalLanguage: {
+      mode: TextOpenWorldRuntimeNaturalLanguageBindingModeV1
+      exampleUtterances: string[]
+      candidateMayOnlySelectThisAction: true
+      targetResolution: 'current-projection-valid-targets-only'
+      highConfidenceLowRisk: 'execute-after-runtime-validation'
+      highRiskOrIrreversible: 'require-explicit-confirmation'
+      lowConfidence: 'respond-and-recommend-formal-actions'
+      mayCreateAction: false
+      mayCreateQuest: false
+      mayCreateMapContent: false
+      mayWriteState: false
+    }
+    resultAuthority: {
+      artifactKey: 'text-open-world.quest-design-documents'
+      collection: 'actions'
+      actionKey: string
+      actionDefinitionHash: string
+    }
+  }>
+  unmatchedNaturalLanguage: {
+    policy: 'natural-response-then-formal-action-redirect'
+    impossibleActionPolicy: 'explicit-decline-with-in-world-alternative'
+    customSolutionPolicy: 'future-extension-disabled'
+    stateMutationAllowed: false
+  }
+  thresholds: {
+    directExecutionMinimumConfidence: 0.9
+    recommendationMinimumConfidence: 0.55
+  }
+  governance: {
+    singleResultSource: true
+    allThreeInputsUseActionRegistry: true
+    modelCannotCreateActionOrResult: true
+    combatFreeTextDisabled: true
+    lowConfidenceNeverExecutes: true
+    irreversibleActionsRequireConfirmation: true
+    runtimeProjectionValidationRequired: true
+  }
+}
+
+/** Action v15 freezes P9 input routing beside the deterministic Action graph. */
+export interface TextOpenWorldActionModuleV15 {
+  version: 15
+  conditions: TextOpenWorldActionModuleV1['conditions']
+  effects: TextOpenWorldActionModuleV1['effects']
+  actions: TextOpenWorldActionModuleV1['actions']
+  inputBindings: TextOpenWorldActionInputBindingsV1
 }
 
 export interface TextOpenWorldProgressionModuleV1 {
@@ -790,11 +920,11 @@ export interface TextOpenWorldPresentationModuleV1 {
 }
 
 export interface TextOpenWorldParsedModulesV1 {
-  narrative: TextOpenWorldNarrativeModuleV1
+  narrative: TextOpenWorldNarrativeModuleV1 | TextOpenWorldNarrativeModuleV2
   world: TextOpenWorldWorldModuleV1
   actors: TextOpenWorldActorModuleV1
   quests: TextOpenWorldQuestModuleV1
-  actions: TextOpenWorldActionModuleV1
+  actions: TextOpenWorldActionModuleV1 | TextOpenWorldActionModuleV15
   progression: TextOpenWorldProgressionModuleV1
   combat: TextOpenWorldCombatModuleV1
   items: TextOpenWorldItemModuleV1

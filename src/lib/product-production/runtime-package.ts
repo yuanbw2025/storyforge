@@ -39,6 +39,24 @@ import {
 
 const PRODUCT_TYPES = new Set<ProductionProductKindV1>(PRODUCTION_PRODUCT_KINDS_V1)
 
+export interface ProductProductionTerminalArtifactKeysV1 {
+  runtimePackage: string
+  qualityReport: string
+}
+
+/** Product-specific terminal Artifact names share one routing fact across the
+ * scheduler and atomic adoption path. */
+export function productProductionTerminalArtifactKeysV1(
+  productType: ProductionProductKindV1,
+): ProductProductionTerminalArtifactKeysV1 {
+  return productType === 'text-open-world'
+    ? {
+        runtimePackage: 'text-open-world.runtime-package',
+        qualityReport: 'text-open-world.quality-report',
+      }
+    : { runtimePackage: 'runtime.package', qualityReport: 'quality.report' }
+}
+
 const CAPABILITIES: Record<ProductionProductKindV1, string[]> = {
   'character-interaction': ['narrative', 'interaction'],
   'text-adventure': ['narrative', 'interaction', 'adventure'],
@@ -275,10 +293,23 @@ export function parseProductRuntimePackageV1(value: string | unknown): ProductRu
     && Object.prototype.hasOwnProperty.call(pkg, 'presentation')
   const hasTextOpenWorldVNext = selectedProduct === 'text-open-world'
     && Object.prototype.hasOwnProperty.call(pkg, 'textOpenWorldVNext')
+  const textOpenWorldLegacyKeys = PRODUCT_MODULE_KEYS['text-open-world']
+  const hasAnyTextOpenWorldLegacy = selectedProduct === 'text-open-world'
+    && textOpenWorldLegacyKeys.some(key => Object.prototype.hasOwnProperty.call(pkg, key))
+  const hasTextOpenWorldLegacy = selectedProduct === 'text-open-world'
+    && textOpenWorldLegacyKeys.every(key => Object.prototype.hasOwnProperty.call(pkg, key))
+  if (hasAnyTextOpenWorldLegacy !== hasTextOpenWorldLegacy) {
+    fail('text-open-world旧模块必须完整存在或完整省略')
+  }
+  const hasTextOpenWorldPresentation = hasTextOpenWorldVNext
+    && Object.prototype.hasOwnProperty.call(pkg, 'presentation')
+  const productModuleKeys = hasTextOpenWorldVNext && !hasTextOpenWorldLegacy
+    ? [] : PRODUCT_MODULE_KEYS[selectedProduct]
   exactKeys(pkg, [
     'schema', 'version', 'productType', 'definition', 'sourceWorld', 'narrative',
-    ...PRODUCT_MODULE_KEYS[selectedProduct],
+    ...productModuleKeys,
     ...(hasTtrpgPresentation ? ['presentation'] : []),
+    ...(hasTextOpenWorldPresentation ? ['presentation'] : []),
     ...(hasTextOpenWorldVNext ? ['textOpenWorldVNext'] : []),
   ], 'package')
   if (pkg.schema !== 'storyforge.product-runtime-package' || pkg.version !== 1) fail('schema/version 无效')
@@ -288,8 +319,12 @@ export function parseProductRuntimePackageV1(value: string | unknown): ProductRu
     'productKey', 'title', 'description', 'enabledCapabilities', 'rulesetVersion', 'initialVariables',
   ], 'definition')
   const enabledCapabilities = stringArray(definition.enabledCapabilities, 'enabledCapabilities', 20)
-  const expectedCapabilities = hasTtrpgPresentation
-    ? [...CAPABILITIES[selectedProduct], 'presentation'] : CAPABILITIES[selectedProduct]
+  const expectedCapabilities = hasTextOpenWorldVNext
+    ? hasTextOpenWorldLegacy
+      ? [...CAPABILITIES[selectedProduct], 'textOpenWorldVNext', ...(hasTextOpenWorldPresentation ? ['presentation'] : [])]
+      : ['narrative', 'textOpenWorldVNext', ...(hasTextOpenWorldPresentation ? ['presentation'] : [])]
+    : hasTtrpgPresentation
+      ? [...CAPABILITIES[selectedProduct], 'presentation'] : CAPABILITIES[selectedProduct]
   if (enabledCapabilities.join(',') !== expectedCapabilities.join(',')) fail('enabledCapabilities 与 productType 不一致')
   const initialVariables = record(definition.initialVariables, 'initialVariables')
   canonicalProductProductionJsonV2(initialVariables)
@@ -327,12 +362,12 @@ export function parseProductRuntimePackageV1(value: string | unknown): ProductRu
     narrative: structuredClone(narrative),
   }
 
-  if (selectedProduct === 'character-interaction' || selectedProduct === 'text-adventure'
-    || selectedProduct === 'text-open-world') parsed.interaction = validateInteraction(pkg.interaction)
-  if (selectedProduct === 'text-adventure' || selectedProduct === 'text-open-world') {
+  if ((!hasTextOpenWorldVNext || hasTextOpenWorldLegacy) && (selectedProduct === 'character-interaction' || selectedProduct === 'text-adventure'
+    || selectedProduct === 'text-open-world')) parsed.interaction = validateInteraction(pkg.interaction)
+  if ((!hasTextOpenWorldVNext || hasTextOpenWorldLegacy) && (selectedProduct === 'text-adventure' || selectedProduct === 'text-open-world')) {
     parsed.adventure = parseAdventureContent(pkg.adventure as never)
   }
-  if (selectedProduct === 'avg' || hasTtrpgPresentation) {
+  if (selectedProduct === 'avg' || hasTtrpgPresentation || hasTextOpenWorldPresentation) {
     const presentation = record(pkg.presentation, 'presentation')
     if (!Array.isArray(presentation.assets)) fail('presentation.assets 无效')
     const content = parseAvgPresentationContent(presentation)
@@ -348,7 +383,7 @@ export function parseProductRuntimePackageV1(value: string | unknown): ProductRu
     if (!report.valid) fail(`presentation 无效:${report.errors.join('；')}`)
     parsed.presentation = { ...content, assets }
   }
-  if (selectedProduct === 'text-open-world') {
+  if (selectedProduct === 'text-open-world' && (!hasTextOpenWorldVNext || hasTextOpenWorldLegacy)) {
     const openWorldEvolution = parseOpenWorldEvolutionContent(pkg.openWorldEvolution)
     const report = validateOpenWorldEvolutionContent({
       content: openWorldEvolution,
@@ -357,7 +392,7 @@ export function parseProductRuntimePackageV1(value: string | unknown): ProductRu
     if (!report.valid) fail(`openWorldEvolution 无效:${report.errors.join('；')}`)
     parsed.openWorldEvolution = openWorldEvolution
   }
-  if (selectedProduct === 'text-open-world') {
+  if (selectedProduct === 'text-open-world' && (!hasTextOpenWorldVNext || hasTextOpenWorldLegacy)) {
     const openWorld = parseOpenWorldContent(pkg.openWorld)
     const report = validateOpenWorldContent({
       content: openWorld,
@@ -382,6 +417,16 @@ export function parseProductRuntimePackageV1(value: string | unknown): ProductRu
     if (textOpenWorldVNext.sourceManifest.contentHash !== sourceWorld.contentHash
       || textOpenWorldVNext.metadata.rulesetVersion !== parsed.definition.rulesetVersion) {
       fail('textOpenWorldVNext 与 ProductRuntimePackage 来源或规则版本不一致')
+    }
+    // ProductRelease adoption reparses this package. Closing the product-local
+    // slot references here makes every bound vNext asset trace to exactly one
+    // frozen outer presentation asset, while unbound required slots retain the
+    // non-empty fallback already enforced by the module parser.
+    const boundSlotAssetKeys = textOpenWorldModules.presentation.mediaSlots
+      .flatMap(slot => slot.assetKey == null ? [] : [slot.assetKey]).sort()
+    const frozenAssetKeys = (parsed.presentation?.assets ?? []).map(asset => asset.assetKey).sort()
+    if (boundSlotAssetKeys.join('|') !== frozenAssetKeys.join('|')) {
+      fail('textOpenWorldVNext 媒资槽与 ProductRuntimePackage 资产不闭合')
     }
     parsed.textOpenWorldVNext = textOpenWorldVNext
   }

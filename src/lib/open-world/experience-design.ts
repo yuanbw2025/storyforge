@@ -30,6 +30,7 @@ import {
   validateTextOpenWorldSourcePinBundleV1,
 } from './source-pin'
 import { validateTextOpenWorldSourceCurationArtifactsV1 } from './source-curation'
+import { TEXT_OPEN_WORLD_PRODUCTION_MODEL_CALL_BUDGET_V1 } from './production-contract'
 import type {
   ProductBuildArtifactRecordV1,
   ProductProductionBriefV3,
@@ -50,7 +51,6 @@ const STABLE_KEY = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/
 const MAX_CONTEXT_CHARS = 360_000
 const MAX_SELECTED_CLAIMS = 300
 const MAX_SELECTED_GAPS = 300
-const MIN_PRODUCTION_MODEL_CALLS = 22
 
 export interface TextOpenWorldExperienceInputContextV1 {
   schema: 'storyforge.text-open-world-experience-input'
@@ -104,6 +104,7 @@ export interface TextOpenWorldExperienceModelExecutionV1 {
 export type TextOpenWorldExperienceModelRunnerV1 = (input: {
   projectId: number
   requirementKey: string
+  expectedCapabilityHash: string
   category: string
   system: string
   contextText: string
@@ -511,7 +512,7 @@ async function compileGameBrief(input: {
   if (brief.unresolvedDecisionKeys.length) fail('GameBrief不能从含未决项的作者Brief生成')
   if (brief.intent.protagonistRefs.length > 1) fail('首版GameBrief只能拥有一个主角')
   const budget = brief.productionBudget
-  if (budget.maximumModelCalls < MIN_PRODUCTION_MODEL_CALLS
+  if (budget.maximumModelCalls < TEXT_OPEN_WORLD_PRODUCTION_MODEL_CALL_BUDGET_V1.minimum
     || budget.maximumModelCalls > config.aiBudget.production.maximumCalls
     || budget.maximumInputTokens > config.aiBudget.production.maximumInputTokens
     || budget.maximumOutputTokens > config.aiBudget.production.maximumOutputTokens
@@ -528,6 +529,7 @@ async function compileGameBrief(input: {
     productType: 'text-open-world',
     productInstanceKey: context.productInstanceKey,
     title: text(context.productionTitle, 'productionTitle', 500),
+    qualityProfile: brief.qualityProfile,
     authorization: { ...context.authorization },
     source: {
       kind: context.source.kind,
@@ -581,6 +583,10 @@ async function compileGameBrief(input: {
     media: {
       visualLevel: brief.media.visualLevel,
       audioLevel: brief.media.audioLevel,
+      imageCount: brief.media.imageCount,
+      musicTrackCount: brief.media.musicTrackCount,
+      sfxCount: brief.media.sfxCount,
+      voiceLineCount: brief.media.voiceLineCount,
       requiredVisualKinds: ['procedural-map', 'character-portrait', 'scene-background'],
       textFallbackRequired: true,
     },
@@ -680,6 +686,7 @@ async function defaultModelRunner(
   const response = await runConfiguredProductionTextV1({
     projectId: input.projectId,
     requirementKey: input.requirementKey,
+    expectedCapabilityHash: input.expectedCapabilityHash,
     category: input.category,
     messages: [
       { role: 'system', content: input.system },
@@ -805,6 +812,7 @@ export async function validateTextOpenWorldExperienceArtifactsV1(input: {
   const { gameBrief, experienceContract, protagonistAsset } = input.artifacts
   if (gameBrief.schema !== 'storyforge.text-open-world-game-brief' || gameBrief.version !== 1
     || gameBrief.productType !== 'text-open-world' || !isSha256Hash(gameBrief.gameBriefHash)
+    || !['prototype', 'internal', 'commercial-candidate'].includes(gameBrief.qualityProfile)
     || !isSha256Hash(gameBrief.authorization.productBriefHash)
     || !isSha256Hash(gameBrief.authorization.confirmedBriefHash)
     || !isSha256Hash(gameBrief.source.sourcePinHash)
@@ -834,6 +842,10 @@ export async function validateTextOpenWorldExperienceArtifactsV1(input: {
     ['procedural-map', 'character-portrait', 'scene-background'],
     'GameBrief必需视觉类型',
   )
+  integer(gameBrief.media.imageCount, 'gameBrief.media.imageCount')
+  integer(gameBrief.media.musicTrackCount, 'gameBrief.media.musicTrackCount')
+  integer(gameBrief.media.sfxCount, 'gameBrief.media.sfxCount')
+  integer(gameBrief.media.voiceLineCount, 'gameBrief.media.voiceLineCount')
   integer(gameBrief.authorization.productBriefRevision, 'gameBrief.authorization.productBriefRevision', 1)
   integer(gameBrief.authorization.authorStartRevision, 'gameBrief.authorization.authorStartRevision', 1)
   timestamp(gameBrief.authorization.confirmedAt, 'gameBrief.authorization.confirmedAt')
@@ -944,12 +956,17 @@ export async function validateTextOpenWorldExperienceArtifactsV1(input: {
       || context.source.unreadUnitCount !== gameBrief.source.unreadUnitCount
       || brief.intent.playerRole !== gameBrief.authorIntent.playerRole
       || brief.intent.openingSituation !== gameBrief.authorIntent.openingSituation
+      || brief.qualityProfile !== gameBrief.qualityProfile
       || brief.scale.scope !== gameBrief.scale.scope
       || brief.scale.targetPlayMinutes !== gameBrief.scale.requestedPlayMinutes
       || brief.scale.targetWordCount !== gameBrief.scale.requestedNarrativeWords
       || brief.scale.targetEndingCount !== gameBrief.scale.endingCount
       || brief.media.visualLevel !== gameBrief.media.visualLevel
       || brief.media.audioLevel !== gameBrief.media.audioLevel
+      || brief.media.imageCount !== gameBrief.media.imageCount
+      || brief.media.musicTrackCount !== gameBrief.media.musicTrackCount
+      || brief.media.sfxCount !== gameBrief.media.sfxCount
+      || brief.media.voiceLineCount !== gameBrief.media.voiceLineCount
       || brief.productionBudget.maximumModelCalls !== gameBrief.effectiveProductionBudget.maximumModelCalls
       || brief.productionBudget.maximumInputTokens !== gameBrief.effectiveProductionBudget.maximumInputTokens
       || brief.productionBudget.maximumOutputTokens !== gameBrief.effectiveProductionBudget.maximumOutputTokens
@@ -1020,6 +1037,7 @@ export function createTextOpenWorldExperienceDesignExecutorV1(options: {
     const response = await runModel({
       projectId: execution.scope.projectId,
       requirementKey,
+      expectedCapabilityHash: binding.bindingHash,
       category: 'text-open-world.production.experience-design',
       system: systemPrompt(gameBrief),
       contextText: execution.contextText,

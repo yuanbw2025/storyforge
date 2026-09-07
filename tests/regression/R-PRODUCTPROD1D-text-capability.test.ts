@@ -117,6 +117,57 @@ describe('R-PRODUCTPROD-1D · reuse existing text provider configuration', () =>
     expect(JSON.stringify(result.bindingReceipt)).not.toContain(configured.apiKey)
   })
 
+  it('文字开放世界各专用 Skill 只能复用 Build 授权时的 product-production 路由', async () => {
+    const incorrectlyRouted: AIConfig = {
+      ...configured,
+      provider: 'openai', model: 'wrong-specialized-route', apiKey: 'wrong-route-secret',
+      baseUrl: 'https://wrong-route.invalid/v1',
+    }
+    const resolveConfig = vi.fn((category: string) => (
+      category === 'product-production' ? configured : incorrectlyRouted
+    ))
+    const frozen = await resolveConfiguredTextCapabilityV1({
+      projectId: 7, category: 'product-production', requirementKey: 'text.runtime-package',
+    }, { resolveConfig, now: () => 100 })
+    resolveConfig.mockClear()
+    const runAI = vi.fn(async () => '{"ok":true}')
+
+    const result = await runConfiguredProductionTextV1({
+      projectId: 7,
+      category: 'text-open-world.production.mainline',
+      requirementKey: 'text.runtime-package',
+      expectedCapabilityHash: frozen.receipt.capabilityHash,
+      messages: [{ role: 'user', content: '生成已授权主线' }],
+      maximumOutputTokens: 2_000,
+    }, { resolveConfig, runAI, now: () => 101 })
+
+    expect(resolveConfig).toHaveBeenCalledTimes(1)
+    expect(resolveConfig).toHaveBeenCalledWith('product-production')
+    expect(runAI).toHaveBeenCalledWith(
+      [{ role: 'user', content: '生成已授权主线' }],
+      configured,
+      { category: 'product-production', projectId: 7, maxTokens: 2_000 },
+      undefined,
+      undefined,
+    )
+    expect(result.bindingReceipt.capabilityHash).toBe(frozen.receipt.capabilityHash)
+  })
+
+  it('冻结 binding hash 已过期时在发送任何模型请求前失败', async () => {
+    const runAI = vi.fn(async () => '{"should":"never-run"}')
+    await expect(runConfiguredProductionTextV1({
+      projectId: 7,
+      category: 'text-open-world.production.semantic-review',
+      requirementKey: 'text.runtime-package',
+      expectedCapabilityHash: 'f'.repeat(64),
+      messages: [{ role: 'user', content: '不得发送的请求' }],
+      maximumOutputTokens: 2_000,
+    }, { resolveConfig: () => configured, runAI, now: () => 102 })).rejects.toThrow(
+      /provider binding 与授权 capability 不一致/,
+    )
+    expect(runAI).not.toHaveBeenCalled()
+  })
+
   it('没有现有配置时明确阻塞，不静默切 provider 或要求生产页另存 Key', async () => {
     await expect(resolveConfiguredTextCapabilityV1({
       projectId: 1, category: 'product-production.content', requirementKey: 'text.runtime-package',

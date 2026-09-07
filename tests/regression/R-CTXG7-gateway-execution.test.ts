@@ -130,6 +130,41 @@ describe('CTXG-7 · Gateway fast/complex execution', () => {
     expect(enabled.metrics.additionalToolCalls).toBe(0)
   })
 
+  it('resource allow-list narrows the deterministic catalog and packet to exact authorized keys', async () => {
+    const fixture = await seedWorkspace('精确资源权限')
+    await addScoped(fixture.scope, 'worldviews', {
+      worldGroupId: null,
+      races: '潮民按月相迁徙。',
+      cultureOverview: '镜裔以盐钟见证契约。',
+      geography: '三座盐岛由潮桥连接。',
+    }, 'world')
+    const catalog = await descriptors(fixture.scope)
+    expect(catalog.length).toBeGreaterThan(1)
+    const target = catalog.find(item => item.sourceRefs.some(ref => ref.field === 'races'))!
+    expect(target).toBeTruthy()
+
+    const result = await executeContextGatewayV1({
+      skill: worldviewSkill(),
+      scope: fixture.scope,
+      worldGroupId: null,
+      allowedResourceKeys: [target.resourceKey],
+      mandatoryResourceKeys: [target.resourceKey],
+      mandatoryFullResourceKeys: [target.resourceKey],
+      targetResourceKeys: [target.resourceKey],
+      query: '只读取已授权的种族资料',
+      budgetTokens: 4_000,
+      additionalReadsEnabled: false,
+    })
+
+    expect(result.metrics.catalogResources).toBe(1)
+    expect(result.sourceSnapshots.map(item => item.resourceKey)).toEqual([target.resourceKey])
+    expect([
+      ...result.retrievalTrace.mandatory,
+      ...result.retrievalTrace.autoSelected,
+      ...result.retrievalTrace.agentReads,
+    ].map(item => item.resourceKey)).toEqual([target.resourceKey])
+  })
+
   it('complex soft deficit enters the same Runner once and is bounded by the Skill allowlist/budgets', async () => {
     const fixture = await seedWorkspace()
     await addScoped(fixture.scope, 'worldviews', {

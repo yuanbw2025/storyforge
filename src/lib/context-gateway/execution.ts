@@ -41,6 +41,7 @@ import {
 } from './selector'
 import {
   createContextGatewayToolSessionV1,
+  isContextGatewayResourceAllowedV1,
   settleContextGatewayTokensV1,
   type ContextGatewayProviderBindingV1,
   type ContextGatewayToolSessionV1,
@@ -200,6 +201,7 @@ async function collectCatalog(session: ContextGatewayToolSessionV1): Promise<{
         policy: session.policy,
       })
       for (const descriptor of page.items) {
+        if (!isContextGatewayResourceAllowedV1(session, descriptor.resourceKey)) continue
         if (keys.has(descriptor.resourceKey)) fail('duplicate-resource', `目录重复 ${descriptor.resourceKey}`)
         keys.add(descriptor.resourceKey)
         descriptors.push(descriptor)

@@ -3,12 +3,23 @@ import { db } from '../../src/lib/db/schema'
 import { assembleContext } from '../../src/lib/registry/assemble-context'
 import { CONTEXT_SOURCE_BY_KEY } from '../../src/lib/registry/context-sources'
 import { getAgentSkillV1 } from '../../src/lib/agent/skill-registry'
+import { readAgentRunV1 } from '../../src/lib/agent/run/event-store'
+import {
+  readContextGatewayManifestV3ForAttemptV1,
+  verifyContextGatewayCandidateEvidenceV1,
+} from '../../src/lib/context-gateway/attempt-evidence'
 import { acceptProductBuildArtifact, readAcceptedBuildArtifacts } from '../../src/lib/product-production/artifact-store'
 import { executeProductProductionCommand } from '../../src/lib/product-production/commands'
 import { draftProductProductionBriefV3, suggestProductStartingPoints } from '../../src/lib/product-production/consultation'
 import { parseProductProductionBriefV3 } from '../../src/lib/product-production/contracts'
 import { hashProductProductionValueV2 } from '../../src/lib/product-production/hash'
+import { putMediaBlobObject } from '../../src/lib/product-production/media-blob-store'
 import { parseConfirmedProductBriefV1, parseProductProductionSourcePlanV1 } from '../../src/lib/product-production/source-contracts'
+import { runProductProductionUntilBlockedV1 } from '../../src/lib/product-production/scheduler'
+import { publishProductProductionV1, startProductProductionPreviewV1 } from '../../src/lib/product-production/service'
+import { verifyProductBuildPreviewManifestV1 } from '../../src/lib/product-production/preview-manifest'
+import { readProductRuntimeState } from '../../src/lib/product/runtime-core'
+import { createProductRuntimeInstanceFromSource } from '../../src/lib/product/runtime-instances'
 import {
   createTextOpenWorldExperienceDesignExecutorV1,
   validateTextOpenWorldExperienceArtifactsV1,
@@ -166,7 +177,10 @@ import type {
   TextOpenWorldDeterministicPreflightV1,
   TextOpenWorldBalanceReviewV1,
   TextOpenWorldSemanticReviewV1,
+  TextOpenWorldIntegrationReportV1,
   TextOpenWorldSignificantThreadsV1,
+  TextOpenWorldSourcePinV1,
+  TextOpenWorldSourceManifestV1,
 } from '../../src/lib/types'
 import {
   createTextOpenWorldProductionPlanV1,
@@ -176,10 +190,20 @@ import {
   type TextOpenWorldSourceCurationModelRunnerV1,
 } from '../../src/lib/open-world/source-curation'
 import {
-  acceptTextOpenWorldSourcePinBundleV1,
-  freezeTextOpenWorldWorldReleaseSourceV1,
-} from '../../src/lib/open-world/source-pin'
+  createTextOpenWorldProductionExecutorV1,
+  createTextOpenWorldSourceLockExecutorV1,
+} from '../../src/lib/open-world/production-executor'
 import { seedCurrentProductWorld } from '../helpers/current-product-world'
+import {
+  createTextOpenWorldReleaseQaExecutorV1,
+  createTextOpenWorldRuntimePackageExecutorV1,
+} from '../../src/lib/open-world/runtime-package-production'
+import {
+  parseProductRuntimePackageV1,
+  verifyProductReleaseManifestV1,
+} from '../../src/lib/product-production/runtime-package'
+import { parseTextOpenWorldModulesV1 } from '../../src/lib/open-world/modules'
+import { createInitialTextOpenWorldSessionProjectionV1 } from '../../src/lib/open-world/session-projection'
 
 const CAPABILITY_HASH = 'b'.repeat(64)
 const NOW = 1_788_720_000_000
@@ -280,7 +304,7 @@ async function fixture() {
     scale: 'chapter',
     visualLevel: 'key-scenes',
     audioLevel: 'none',
-    qualityProfile: 'commercial-candidate',
+    qualityProfile: 'prototype',
     playerRole: '扮演守灯调查者林舟',
     openingSituation: '从雾港潮门危机开始，逐步进入两个完整地区。',
     coreExperience: ['有边界的自由演绎', '长期任务成长', '地区探索'],
@@ -289,24 +313,7 @@ async function fixture() {
     contentBoundaries: ['不生成露骨内容'],
     tone: ['边地悬疑', '成长冒险'],
   })
-  const brief = parseProductProductionBriefV3({
-    ...draft,
-    media: {
-      ...draft.media,
-      visualLevel: 'key-scenes',
-      imageCount: 3,
-      requiredMediaKinds: ['background'],
-    },
-    productionBudget: {
-      ...draft.productionBudget,
-      maximumModelCalls: 160,
-      maximumInputTokens: 1_200_000,
-      maximumOutputTokens: 360_000,
-      maximumMediaCalls: 30,
-      maximumCostUsd: 30,
-      maximumDurationMs: 7_200_000,
-    },
-  })
+  const brief = parseProductProductionBriefV3(draft)
   const productionKey = `tow.p2.${crypto.randomUUID()}`
   const created = await executeProductProductionCommand({
     scope: owned.scope,
@@ -364,31 +371,28 @@ async function fixture() {
     planJson: JSON.stringify(plan),
     planHash,
   })
-  const bundle = await freezeTextOpenWorldWorldReleaseSourceV1({
-    scope: owned.scope,
-    localReleaseRecordId: owned.release.id!,
-    selection: {
-      mode: 'selected-resources',
-      resourceKeys: brief.source.selection.resourceKeys,
-    },
-    authorization: {
-      productInstanceKey: production.productionKey,
-      briefRevision: briefRow.revision,
-      briefHash: briefRow.briefHash,
-      authorStartRevision: confirmed.authorStartRevision,
-      authorizationNonce: `${productionKey}.source-pin`,
-      rightsBasis: 'author-owned',
-      rightsNote: '仅供本次文字开放世界生产。',
-      authorizedAt: NOW + 2,
-    },
-    createdAt: NOW + 2,
+  const p0 = plan.tasks.find(task => task.taskKey === 'p0.source-lock')!
+  const p0Result = await createTextOpenWorldSourceLockExecutorV1({ now: () => NOW + 2 })({
+    scope: owned.scope, productionId: production.id!, buildId: build.id!,
+    buildNumber: build.buildNumber, controlEpoch: build.controlEpoch,
+    planHash, task: p0, attempt: 1,
+    idempotencyKey: await hashProductProductionValueV2('p0-source-lock'),
+    contextText: '', inputArtifacts: [], capabilityBindings: [],
+    signal: new AbortController().signal,
   })
-  await acceptTextOpenWorldSourcePinBundleV1({
-    scope: owned.scope,
-    buildId: build.id!,
-    controlEpoch: build.controlEpoch,
-    bundle,
-  })
+  for (const artifact of p0Result.artifacts) {
+    await acceptProductBuildArtifact({
+      scope: owned.scope, buildId: build.id!, controlEpoch: build.controlEpoch,
+      artifactKey: artifact.artifactKey, kind: artifact.kind, payload: artifact.payload,
+      quality: artifact.quality, rights: artifact.rights,
+      contentHash: artifact.contentHash,
+      inputHash: await hashProductProductionValueV2({ stage: 'P0', artifactKey: artifact.artifactKey }),
+    })
+  }
+  const bundle = {
+    pin: p0Result.artifacts.find(item => item.artifactKey === 'text-open-world.source-pin')!
+      .payload as TextOpenWorldSourcePinV1,
+  }
   const p1 = plan.tasks.find(task => task.taskKey === 'p1.source-curation')!
   const p1Result = await createTextOpenWorldSourceCurationExecutorV1({
     runModel: curationRunner(brief.intent.protagonistRefs[0]!),
@@ -4205,6 +4209,24 @@ describe('R-OPEN-WORLD3 · P8F QuestFinalize / EncounterFinalize', () => {
     expect(questArtifact.actions.find(action => action.category === 'craft')).toMatchObject({ timeCostMinutes: 0 })
     expect(questArtifact.actions.filter(action => action.category === 'objective-action')
       .every(action => action.timeCostMinutes === 0 && action.successEffectKeys.length === 1)).toBe(true)
+    const requiredEndingKeys = input.questFinalizeContext.mainlineThread.endingRoutes.map(route => route.endingKey)
+    expect(questArtifact.coverage.requiredEndingKeys).toEqual(requiredEndingKeys)
+    expect(questArtifact.coverage.boundEndingKeys).toEqual(requiredEndingKeys)
+    expect(questArtifact.endingBindings.routes.map(route => route.endingKey)).toEqual(requiredEndingKeys)
+    expect(questArtifact.governance.allEndingsRuntimeBound).toBe(true)
+    for (const route of questArtifact.endingBindings.routes) {
+      expect(questArtifact.actions.find(action => action.key === route.actionKey)).toMatchObject({
+        actorScope: 'player', targetScope: 'none', category: 'quest-action',
+        locationKeys: [questArtifact.endingBindings.finalLocationKey],
+        requirementConditionKeys: [questArtifact.endingBindings.selectionReadyConditionKey],
+        successEffectKeys: [route.routeEffectKey, route.unlockEffectKey, route.reachEffectKey],
+        confirmationPolicy: 'always', repeatPolicy: 'once',
+      })
+      expect(questArtifact.conditions.some(condition => condition.key === route.conditionKey)).toBe(true)
+      expect(questArtifact.effects.filter(effect => (
+        [route.routeEffectKey, route.unlockEffectKey, route.reachEffectKey].includes(effect.key)
+      ))).toHaveLength(3)
+    }
     expect(directorArtifact.coverage.coveredRegionKeys).toEqual(directorArtifact.coverage.requiredRegionKeys)
     expect(new Set(directorArtifact.coverage.coveredTemplateQuestKeys)).toEqual(new Set(directorArtifact.coverage.templateQuestKeys))
     expect(new Set(directorArtifact.coverage.coveredRandomEventSeedKeys)).toEqual(new Set(directorArtifact.coverage.randomEventSeedKeys))
@@ -4302,6 +4324,26 @@ describe('R-OPEN-WORLD3 · P9 SceneScripts / ChoiceContract / ActionBindings', (
       && binding.actionDefinitionHash === choice.actionDefinitionHash
       && binding.fixedChoiceKeys.includes(choice.key)
     )))).toBe(true)
+    const endings = input.sceneScriptsContext.questDesignDocuments.endingBindings
+    const endingScene = sceneScripts.scenes.find(scene => (
+      scene.sourceKind === 'quest-resolution' && scene.questKey === endings.finalMainlineQuestKey
+    ))!
+    expect(endingScene).toBeTruthy()
+    for (const route of endings.routes) {
+      const endingChoices = choices.choices.filter(choice => (
+        choice.sceneKey === endingScene.key && choice.actionKey === route.actionKey
+      ))
+      const inputBinding = bindings.actions.find(binding => binding.actionKey === route.actionKey)
+      expect(endingScene.actionKeys).toContain(route.actionKey)
+      expect(endingChoices).toEqual([expect.objectContaining({ key: `choice.ending.${route.endingKey}` })])
+      expect(endingScene.fixedChoiceKeys).toContain(endingChoices[0]!.key)
+      expect(inputBinding).toMatchObject({
+        fixedChoiceKeys: [endingChoices[0]!.key],
+        naturalLanguage: { mode: 'existing-action-candidate', candidateMayOnlySelectThisAction: true },
+        resultAuthority: { artifactKey: 'text-open-world.quest-design-documents', actionKey: route.actionKey },
+      })
+      expect(inputBinding!.naturalLanguage.exampleUtterances).toHaveLength(2)
+    }
     expect(JSON.stringify(bindings)).not.toContain('successEffectKeys')
     await expect(validateTextOpenWorldSceneScriptsArtifactsV1({
       artifacts: { sceneScripts, choiceContracts: choices, actionBindings: bindings },
@@ -4399,6 +4441,19 @@ describe('R-OPEN-WORLD3 · P2表现 / P10系统收口 / V1确定性预检', () =
     expect(media.coverage.coveredRegionKeys).toEqual(media.coverage.requiredRegionKeys)
     expect(media.slots.find(slot => slot.kind === 'procedural-map')).toMatchObject({ productionMode: 'procedural-code', fallback: 'procedural-svg' })
     expect(media.slots.filter(slot => slot.required).every(slot => slot.fallback !== 'silent')).toBe(true)
+    const plannedGeneratedSlots = media.slots.filter(slot => (
+      slot.productionMode !== 'procedural-code' && slot.productionMode !== 'fallback-only'
+    ))
+    const frozenMediaCounts = input.systemFinalizeContext.gameBrief.media
+    expect(plannedGeneratedSlots).toHaveLength(
+      frozenMediaCounts.imageCount + frozenMediaCounts.musicTrackCount
+      + frozenMediaCounts.sfxCount + frozenMediaCounts.voiceLineCount,
+    )
+    expect(media.productionBudget).toMatchObject({
+      requestedGeneratedSlotCount: plannedGeneratedSlots.length,
+      fitsAuthorizedMediaCalls: true, overflowSlotKeys: [],
+    })
+    expect(media.slots.some(slot => slot.productionMode === 'fallback-only')).toBe(true)
     expect(budget.governance.inventoryAndSingleRunSeparated).toBe(true)
     expect(budget.inventory.totalAuthoredMinutes).toBeGreaterThanOrEqual(budget.singlePlaythrough.maximumTotalMinutes)
     expect(Object.values(budget.fit).every(Boolean)).toBe(true)
@@ -4422,6 +4477,10 @@ describe('R-OPEN-WORLD3 · P2表现 / P10系统收口 / V1确定性预检', () =
     expect(preflight.checks.every(check => check.status === 'pass')).toBe(true)
     expect(preflight.result).toMatchObject({ blockingCheckKeys: [], readyForModelReviews: true })
     expect(preflight.reachability.reachableMainlineQuestKeys).toEqual(preflight.reachability.mainlineQuestKeys)
+    expect(preflight.checks.find(check => check.key === 'preflight.references')!.targetArtifactKeys).toEqual([
+      'text-open-world.quest-design-documents', 'text-open-world.scene-scripts',
+      'text-open-world.choice-contracts', 'text-open-world.action-bindings',
+    ])
     await expect(validateTextOpenWorldDeterministicPreflightV1({ artifact: preflight, rows: input.inputArtifacts })).resolves.toEqual(preflight)
 
     const tampered = structuredClone(preflight)
@@ -4451,6 +4510,14 @@ describe('R-OPEN-WORLD3 · V2平衡与叙事语义评审 / 局部修复影响闭
     })
     expect(input.balanceContext.preflight.result.readyForModelReviews).toBe(true)
     expect(input.semanticContext.preflight.result.readyForModelReviews).toBe(true)
+    expect(input.semanticContext.mainline.endingRuntime.routes).toHaveLength(
+      input.semanticContext.mainline.thread.endingKeys.length,
+    )
+    expect(input.semanticContext.mainline.endingRuntime.routes.every(route => (
+      route.systemActionLabel.length > 0
+      && route.fixedChoiceLabels.length === 1
+      && route.naturalLanguageExamples.length === 2
+    ))).toBe(true)
     expect(input.balanceEvidence).toEqual([
       expect.objectContaining({ key: 'text-open-world.balance-review-input', status: 'included', delivery: 'full' }),
     ])
@@ -4493,4 +4560,423 @@ describe('R-OPEN-WORLD3 · V2平衡与叙事语义评审 / 局部修复影响闭
     await expect(executeQualityReview(input, 'semantic', qualityReviewRunner({ invalidEntity: true })))
       .rejects.toThrow(/引用未知或重复实体/)
   }, 480_000)
+})
+
+describe('R-OPEN-WORLD3 · V3运行包装配与QA', () => {
+  beforeEach(async () => { await db.delete(); await db.open() })
+  afterAll(() => db.close())
+
+  it('从全部已验收生产产物装配统一ProductRuntimePackage并创建初始可玩投影', async () => {
+    const input = await qualityReviewFixture()
+    const [balanceResult, semanticResult] = await Promise.all([
+      executeQualityReview(input, 'balance'), executeQualityReview(input, 'semantic'),
+    ])
+    await acceptTaskArtifacts(input, balanceResult.artifacts, 'V2-balance')
+    await acceptTaskArtifacts(input, semanticResult.artifacts, 'V2-semantic')
+    const plan = await createTextOpenWorldProductionPlanV1({
+      buildNumber: input.build.buildNumber, controlEpoch: input.build.controlEpoch,
+      briefHash: input.briefRow.briefHash, brief: input.brief,
+    })
+    const task = structuredClone(plan.tasks.find(item => item.taskKey === 'v3.runtime-package')!)
+    const accepted = await readAcceptedBuildArtifacts({ scope: input.scope, buildId: input.build.id! })
+    const requirements = JSON.parse(accepted.find(row => row.artifactKey === 'text-open-world.media-requirements')!
+      .payloadJson) as TextOpenWorldMediaRequirementsV1
+    const visualSlots = requirements.slots.filter(slot => (
+      ['character-portrait', 'scene-background', 'ui-skin'] as const
+    ).includes(slot.kind as 'character-portrait') && slot.productionMode !== 'fallback-only')
+    const audioSlots = requirements.slots.filter(slot => (
+      ['music', 'ambient-sound', 'sound-effect', 'voice'] as const
+    ).includes(slot.kind as 'music') && slot.productionMode !== 'fallback-only')
+    let visualIndex = 0
+    let audioIndex = 0
+    const mediaRows = new Map<string, (typeof accepted)[number]>()
+    for (const [index, key] of task.inputArtifactKeys.filter(key => (
+      key.startsWith('text-open-world.media.')
+    )).entries()) {
+      const visual = key.startsWith('text-open-world.media.visual.')
+      const slot = visual ? visualSlots[visualIndex++]! : audioSlots[audioIndex++]!
+      const row = structuredClone(accepted[0]!)
+      row.id = 90_000 + index
+      row.artifactKey = key
+      row.kind = visual ? 'image' : 'audio'
+      row.mediaKind = visual
+        ? slot.kind === 'character-portrait' ? 'character-pose'
+          : slot.kind === 'ui-skin' ? 'ui' : 'background'
+        : slot.kind === 'music' ? 'bgm' : slot.kind === 'sound-effect' ? 'sfx'
+          : slot.kind === 'voice' ? 'voice' : 'ambience'
+      const capability = input.brief.capabilityRequirements.find(item => item.mediaClass === (
+        visual ? 'image' : row.mediaKind === 'bgm' ? 'music' : row.mediaKind === 'voice' ? 'voice' : 'sfx'
+      ))!
+      row.requirementKey = capability.requirementKey
+      row.producerReceiptHash = 'd'.repeat(64)
+      row.payloadJson = JSON.stringify({ schema: 'storyforge.generated-media-artifact', version: 1 })
+      row.metadataJson = JSON.stringify({
+        assetKey: `asset.${index + 1}`, name: slot.title,
+        width: visual ? 1200 : null, height: visual ? 675 : null,
+        durationMs: visual ? null : 8_000, altText: slot.title,
+        characterTag: '', sceneTag: slot.subjectKey,
+        source: visual ? 'storyforge-procedural-svg-v1' : 'storyforge-procedural-audio-v1',
+        license: 'CC0-1.0',
+      })
+      row.qualityJson = JSON.stringify({ deterministicRenderer: 'test', prototypeOnly: true })
+      row.rightsJson = JSON.stringify({
+        origin: 'procedural', adapterId: visual
+          ? 'storyforge.procedural-svg.v1' : 'storyforge.procedural-audio.v1',
+        license: 'CC0-1.0', commercialUse: true,
+      })
+      row.mimeType = visual ? 'image/png' : 'audio/wav'
+      const blob = await putMediaBlobObject({
+        scope: input.scope, data: new Uint8Array(128).fill(index + 1).buffer,
+        mimeType: row.mimeType,
+      })
+      row.blobObjectId = blob.id!
+      row.contentHash = blob.contentHash
+      row.byteSize = blob.byteSize
+      mediaRows.set(key, row)
+    }
+    const inputArtifacts = task.inputArtifactKeys.map(key => (
+      accepted.find(row => row.artifactKey === key) ?? mediaRows.get(key)!
+    ))
+    expect(task.inputArtifactKeys.filter((key, index) => !inputArtifacts[index])).toEqual([])
+    const result = await createTextOpenWorldRuntimePackageExecutorV1({ now: () => NOW + 26 })({
+      scope: input.scope, productionId: input.production.id!, buildId: input.build.id!,
+      buildNumber: input.build.buildNumber, controlEpoch: input.build.controlEpoch,
+      planHash: input.planHash, task, attempt: 1,
+      idempotencyKey: await hashProductProductionValueV2('v3-runtime-package'),
+      contextText: '', inputArtifacts, capabilityBindings: [], signal: new AbortController().signal,
+    })
+    const runtimePackage = parseProductRuntimePackageV1(
+      result.artifacts.find(item => item.artifactKey === 'text-open-world.runtime-package')!.payload,
+    )
+    expect(runtimePackage).toMatchObject({
+      productType: 'text-open-world',
+      definition: { enabledCapabilities: ['narrative', 'textOpenWorldVNext', 'presentation'] },
+    })
+    const modules = parseTextOpenWorldModulesV1(runtimePackage.textOpenWorldVNext!)
+    expect(modules.narrative.version).toBe(2)
+    expect(modules.actions.version).toBe(15)
+    if (modules.narrative.version !== 2 || modules.actions.version !== 15) {
+      throw new Error('V3必须发布Narrative v2与Action v15')
+    }
+    const acceptedScenes = JSON.parse(accepted.find(row => row.artifactKey === 'text-open-world.scene-scripts')!
+      .payloadJson) as TextOpenWorldSceneScriptsV1
+    const acceptedChoices = JSON.parse(accepted.find(row => row.artifactKey === 'text-open-world.choice-contracts')!
+      .payloadJson) as TextOpenWorldChoiceContractsV1
+    const acceptedBindings = JSON.parse(accepted.find(row => row.artifactKey === 'text-open-world.action-bindings')!
+      .payloadJson) as TextOpenWorldActionBindingsV1
+    const acceptedQuests = JSON.parse(accepted.find(row => row.artifactKey === 'text-open-world.quest-design-documents')!
+      .payloadJson) as TextOpenWorldQuestDesignDocumentsV1
+    expect(modules.narrative.scenes).toEqual(acceptedScenes.scenes.map(scene => ({
+      key: scene.key, order: scene.order, sourceKind: scene.sourceKind, sourceKey: scene.sourceKey,
+      title: scene.title, purpose: scene.purpose, regionKey: scene.regionKey,
+      locationKey: scene.locationKey, questKey: scene.questKey, stageKey: scene.stageKey,
+      objectiveKey: scene.objectiveKey, actorKey: scene.actorKey,
+      interactionKey: scene.interactionKey, randomEventKey: scene.randomEventKey,
+      participantKeys: scene.participantKeys,
+      openingText: scene.openingText, bodyText: scene.bodyText,
+      successText: scene.successText, failureText: scene.failureText,
+      attitudeOpenings: scene.attitudeOpenings,
+      allowedKnowledgeClaimKeys: scene.allowedKnowledgeClaimKeys,
+      forbiddenFutureObjectiveKeys: scene.forbiddenFutureObjectiveKeys,
+      availabilityConditionKeys: scene.availabilityConditionKeys,
+      actionKeys: scene.actionKeys, fixedChoiceKeys: scene.fixedChoiceKeys,
+    })))
+    expect(modules.narrative.randomEventPresentations).toEqual(acceptedScenes.randomEventPresentations.map(event => ({
+      key: event.key, order: event.order, randomEventKey: event.randomEventKey,
+      openingText: event.openingText, resolutionText: event.resolutionText,
+      rumorKey: event.rumorKey, rumorRequirementKey: event.rumorRequirementKey,
+      rumorText: event.rumorText, reliability: event.reliability,
+      sourceClaimKeys: event.sourceClaimKeys,
+    })))
+    expect(modules.actions.inputBindings).toEqual({
+      sourceActionBindingsHash: acceptedBindings.actionBindingsHash,
+      actions: acceptedBindings.actions,
+      unmatchedNaturalLanguage: acceptedBindings.unmatchedNaturalLanguage,
+      thresholds: acceptedBindings.thresholds,
+      governance: acceptedBindings.governance,
+    })
+    expect(modules.narrative.storylines.filter(item => item.kind === 'mainline')).toHaveLength(1)
+    expect(modules.world.locations.length).toBeGreaterThan(1)
+    expect(modules.quests.quests.some(item => item.type === 'ordinary')).toBe(true)
+    const endingActions = modules.actions.actions.filter(action => action.key.startsWith('action.ending.'))
+    const endingConditions = modules.actions.conditions.filter(condition => condition.key.startsWith('condition.ending.'))
+    expect(endingActions).toHaveLength(modules.narrative.endings.length)
+    expect(new Set(endingConditions.map(condition => JSON.stringify(condition.expression))).size)
+      .toBe(modules.narrative.endings.length)
+    expect(endingConditions.every(condition => JSON.stringify(condition.expression).includes('flag.ending.route')))
+      .toBe(true)
+    expect(endingActions.every(action => (
+      action.requirementConditionKeys.includes('condition.system.ending-selection-ready')
+      && action.successEffectKeys.some(key => key.startsWith('effect.ending.route.'))
+      && action.successEffectKeys.some(key => key.startsWith('effect.ending.reach.'))
+    ))).toBe(true)
+    const endingChoiceKeys = new Set(modules.narrative.fixedChoices
+      .filter(choice => choice.key.startsWith('choice.ending.')).map(choice => choice.key))
+    expect(endingChoiceKeys.size).toBe(modules.narrative.endings.length)
+    expect(modules.narrative.scenes.some(scene => (
+      endingActions.every(action => scene.actionKeys.includes(action.key))
+      && [...endingChoiceKeys].every(key => scene.fixedChoiceKeys.includes(key))
+    ))).toBe(true)
+    const finalScene = modules.narrative.scenes.find(scene => (
+      scene.sourceKind === 'quest-resolution'
+      && scene.questKey === acceptedQuests.endingBindings.finalMainlineQuestKey
+    ))!
+    for (const route of acceptedQuests.endingBindings.routes) {
+      expect(modules.actions.actions.find(action => action.key === route.actionKey))
+        .toEqual(acceptedQuests.actions.find(action => action.key === route.actionKey))
+      const acceptedChoice = acceptedChoices.choices.find(choice => (
+        choice.sceneKey === finalScene.key && choice.actionKey === route.actionKey
+      ))!
+      expect(finalScene.fixedChoiceKeys).toContain(acceptedChoice.key)
+      expect(modules.narrative.fixedChoices.find(choice => choice.key === acceptedChoice.key)).toMatchObject({
+        sceneKey: finalScene.key, actionKey: route.actionKey, label: acceptedChoice.label,
+      })
+      expect(modules.actions.inputBindings.actions.find(binding => binding.actionKey === route.actionKey))
+        .toEqual(acceptedBindings.actions.find(binding => binding.actionKey === route.actionKey))
+    }
+    expect(runtimePackage.narrative.choices.every(choice => choice.availableConditionJson !== '{}')).toBe(true)
+    expect(modules.presentation.mediaSlots.filter(slot => slot.assetKey != null))
+      .toHaveLength(mediaRows.size)
+    expect(result.artifacts.find(item => item.artifactKey === 'text-open-world.integration-report')!.payload)
+      .toMatchObject({
+        media: {
+          generatedBindingCount: mediaRows.size, playableCoverage: 1,
+          qualityProfile: 'prototype', releaseReady: true,
+        },
+        rights: { evaluatedArtifactCount: mediaRows.size, complete: true, commercialPolicyPassed: true },
+      })
+    expect(createInitialTextOpenWorldSessionProjectionV1(runtimePackage.textOpenWorldVNext!))
+      .toMatchObject({ lastEventSequence: 0 })
+
+    const missingRightsInputs = structuredClone(inputArtifacts)
+    missingRightsInputs.find(row => row.artifactKey.startsWith('text-open-world.media.'))!.rightsJson = '{}'
+    await expect(createTextOpenWorldRuntimePackageExecutorV1({ now: () => NOW + 26 })({
+      scope: input.scope, productionId: input.production.id!, buildId: input.build.id!,
+      buildNumber: input.build.buildNumber, controlEpoch: input.build.controlEpoch,
+      planHash: input.planHash, task, attempt: 1,
+      idempotencyKey: await hashProductProductionValueV2('v3-runtime-package-missing-rights'),
+      contextText: '', inputArtifacts: missingRightsInputs, capabilityBindings: [], signal: new AbortController().signal,
+    })).rejects.toThrow(/rights\.origin|权利/)
+
+    const tamperedInputs = structuredClone(inputArtifacts)
+    const semanticRow = tamperedInputs.find(row => row.artifactKey === 'text-open-world.semantic-review')!
+    const tamperedSemantic = JSON.parse(semanticRow.payloadJson) as TextOpenWorldSemanticReviewV1
+    tamperedSemantic.scores[0]!.rationale = `${tamperedSemantic.scores[0]!.rationale}（事后篡改）`
+    semanticRow.payloadJson = JSON.stringify(tamperedSemantic)
+    semanticRow.contentHash = await hashProductProductionValueV2(tamperedSemantic)
+    await expect(createTextOpenWorldRuntimePackageExecutorV1({ now: () => NOW + 26 })({
+      scope: input.scope, productionId: input.production.id!, buildId: input.build.id!,
+      buildNumber: input.build.buildNumber, controlEpoch: input.build.controlEpoch,
+      planHash: input.planHash, task, attempt: 1,
+      idempotencyKey: await hashProductProductionValueV2('v3-runtime-package-tampered'),
+      contextText: '', inputArtifacts: tamperedInputs, capabilityBindings: [], signal: new AbortController().signal,
+    })).rejects.toThrow(/自身Hash不匹配/)
+    await acceptTaskArtifacts(input, result.artifacts, 'V3-runtime-package')
+
+    const qaTask = plan.tasks.find(item => item.taskKey === 'qa.release')!
+    const qaAccepted = await readAcceptedBuildArtifacts({ scope: input.scope, buildId: input.build.id! })
+    const qaResult = await createTextOpenWorldReleaseQaExecutorV1()({
+      scope: input.scope, productionId: input.production.id!, buildId: input.build.id!,
+      buildNumber: input.build.buildNumber, controlEpoch: input.build.controlEpoch,
+      planHash: input.planHash, task: qaTask, attempt: 1,
+      idempotencyKey: await hashProductProductionValueV2('qa-release'), contextText: '',
+      inputArtifacts: qaTask.inputArtifactKeys.map(key => qaAccepted.find(row => row.artifactKey === key)!),
+      capabilityBindings: [], signal: new AbortController().signal,
+    })
+    expect(qaResult.artifacts[0]!.payload).toMatchObject({
+      playable: true, releaseReady: true, mediaCoverage: 1,
+    })
+
+    const tamperedQaInputs = structuredClone(qaTask.inputArtifactKeys.map(key => (
+      qaAccepted.find(row => row.artifactKey === key)!
+    )))
+    const reportRow = tamperedQaInputs.find(row => row.artifactKey === 'text-open-world.integration-report')!
+    const tamperedReport = JSON.parse(reportRow.payloadJson) as TextOpenWorldIntegrationReportV1
+    tamperedReport.media.releaseReady = false
+    reportRow.payloadJson = JSON.stringify(tamperedReport)
+    await expect(createTextOpenWorldReleaseQaExecutorV1()({
+      scope: input.scope, productionId: input.production.id!, buildId: input.build.id!,
+      buildNumber: input.build.buildNumber, controlEpoch: input.build.controlEpoch,
+      planHash: input.planHash, task: qaTask, attempt: 1,
+      idempotencyKey: await hashProductProductionValueV2('qa-release-tampered-report'), contextText: '',
+      inputArtifacts: tamperedQaInputs, capabilityBindings: [], signal: new AbortController().signal,
+    })).rejects.toThrow(/IntegrationReport自身Hash不匹配/)
+  }, 600_000)
+
+  it('由共享durable scheduler自动执行专属DAG并收口为可恢复Build，不需要人工写Artifact JSON', async () => {
+    const input = await fixture()
+    const production = (await db.productProductions.get(input.production.id!))!
+    let p1Calls = 0
+    let p1ModelAttempts = 0
+    const groundedCuration = curationRunner(input.brief.intent.protagonistRefs[0]!)
+    const p1Executor = createTextOpenWorldSourceCurationExecutorV1({
+      runModel: async request => {
+        p1ModelAttempts += 1
+        const response = await groundedCuration(request)
+        return p1ModelAttempts === 1
+          ? { ...response, output: JSON.stringify({ schema: 'invalid-first-p1-response' }) }
+          : response
+      },
+      now: () => NOW + 3,
+    })
+    const executor = createTextOpenWorldProductionExecutorV1({
+      production,
+      brief: input.brief,
+      taskExecutors: {
+        'p1.source-curation': async execution => {
+          p1Calls += 1
+          return p1Executor(execution)
+        },
+        'p2.experience-design': createTextOpenWorldExperienceDesignExecutorV1({ runModel: experienceRunner(), now: () => NOW + 4 }),
+        'p2.gameplay-ruleset': createTextOpenWorldGameplayRulesetExecutorV1({ runModel: rulesetRunner(), now: () => NOW + 5 }),
+        'p2.presentation-profile': createTextOpenWorldPresentationProfileExecutorV1({ runModel: presentationProfileRunner(), now: () => NOW + 21 }),
+        'p3.story-architecture': createTextOpenWorldStoryArchitectureExecutorV1({ runModel: storyArchitectureRunner(), now: () => NOW + 7 }),
+        'p4.region-skeleton': createTextOpenWorldRegionSkeletonExecutorV1({ runModel: regionSkeletonRunner(), now: () => NOW + 8 }),
+        'p4.player-build': createTextOpenWorldPlayerBuildExecutorV1({ runModel: playerBuildRunner(), now: () => NOW + 6 }),
+        'p5.mainline': createTextOpenWorldMainlineExecutorV1({ runModel: mainlineRunner(), now: () => NOW + 9 }),
+        'p6.significant-threads': createTextOpenWorldSignificantThreadsExecutorV1({ runModel: significantThreadsRunner(), now: () => NOW + 10 }),
+        'p7.region-narrative-packs': createTextOpenWorldRegionNarrativePacksExecutorV1({ runModel: regionNarrativePacksRunner(), now: () => NOW + 11 }),
+        'p8.quest-skeletons': createTextOpenWorldQuestSkeletonsExecutorV1({ runModel: questSkeletonsRunner(), now: () => NOW + 12 }),
+        'p8.catalog.progression': createTextOpenWorldProgressionCatalogsExecutorV1({ runModel: progressionCatalogsRunner(), now: () => NOW + 13 }),
+        'p8.catalog.encounters': createTextOpenWorldEncounterCatalogExecutorV1({ runModel: encounterCatalogRunner(), now: () => NOW + 14 }),
+        'p8.catalog.items-rewards': createTextOpenWorldItemRewardCatalogExecutorV1({ runModel: itemRewardCatalogRunner(), now: () => NOW + 15 }),
+        'p8.catalog.crafting-economy': createTextOpenWorldCraftingEconomyCatalogExecutorV1({ runModel: craftingEconomyRunner(), now: () => NOW + 16 }),
+        'p8.catalog.npc-runtime': createTextOpenWorldNpcRuntimeCatalogExecutorV1({ runModel: npcRuntimeRunner(), now: () => NOW + 17 }),
+        'p8.catalog.map-interactions': createTextOpenWorldMapInteractionCatalogExecutorV1({ runModel: mapInteractionRunner(), now: () => NOW + 18 }),
+        'p8f.quest-finalize': createTextOpenWorldQuestFinalizeExecutorV1({ runModel: questFinalizeRunner(), now: () => NOW + 19 }),
+        'p9.scene-scripts': createTextOpenWorldSceneScriptsExecutorV1({ runModel: sceneScriptsRunner(), now: () => NOW + 20 }),
+        'p10.system-finalize': createTextOpenWorldSystemFinalizeExecutorV1({ runModel: systemFinalizeRunner(), now: () => NOW + 22 }),
+        'v2.balance-review': createTextOpenWorldBalanceReviewExecutorV1({ runModel: qualityReviewRunner(), now: () => NOW + 24 }),
+        'v2.semantic-review': createTextOpenWorldSemanticReviewExecutorV1({ runModel: qualityReviewRunner(), now: () => NOW + 25 }),
+      },
+    })
+    const bindings = input.brief.capabilityRequirements
+      .filter(requirement => requirement.mediaClass === 'text' || requirement.mediaClass === 'image')
+      .map(requirement => ({
+        requirementKey: requirement.requirementKey,
+        bindingHash: CAPABILITY_HASH,
+        adapterId: requirement.mediaClass === 'image'
+          ? 'storyforge.procedural-svg.v1' : 'configured-text.v1',
+      }))
+    let injected = false
+    await expect(runProductProductionUntilBlockedV1({
+      scope: input.scope, productionId: production.id!, executor, capabilityBindings: bindings,
+      onDurableBoundary(boundary, snapshot) {
+        if (!injected && boundary === 'candidate.checkpoint'
+          && snapshot.contract.scope.productProduction?.taskKey === 'p1.source-curation') {
+          injected = true
+          throw new Error('injected-open-world-process-crash')
+        }
+      },
+    })).rejects.toThrow('injected-open-world-process-crash')
+    expect(p1Calls).toBe(2)
+    const projection = await runProductProductionUntilBlockedV1({
+      scope: input.scope, productionId: production.id!, executor, capabilityBindings: bindings,
+    })
+    expect(p1Calls).toBe(2)
+    const projectedBuild = await db.productBuilds.get(projection.buildId)
+    expect(
+      projection,
+      `projection=${JSON.stringify(projection, null, 2)}\nfailure=${projectedBuild?.failureJson}`,
+    ).toMatchObject({ terminal: true, buildStatus: 'release-ready' })
+    expect(projection.tasks.every(task => task.status === 'completed')).toBe(true)
+    const build = projectedBuild!
+    const storedPlan = JSON.parse(build.planJson) as { tasks: Array<{ taskKey: string }> }
+    expect(storedPlan.tasks.map(task => task.taskKey)).toEqual(expect.arrayContaining([
+      'p0.source-lock', 'p10.system-finalize', 'v3.runtime-package', 'qa.release',
+    ]))
+    const artifacts = await readAcceptedBuildArtifacts({ scope: input.scope, buildId: projection.buildId })
+    expect(artifacts.some(row => row.artifactKey === 'runtime.package')).toBe(false)
+    expect(artifacts.find(row => row.artifactKey === 'text-open-world.runtime-package')).toBeTruthy()
+    expect(artifacts.find(row => row.artifactKey === 'text-open-world.quality-report')).toBeTruthy()
+    expect(parseProductRuntimePackageV1(
+      artifacts.find(row => row.artifactKey === 'text-open-world.runtime-package')!.payloadJson,
+    ).textOpenWorldVNext).toBeTruthy()
+    const p1RunRow = await db.agentRuns.where('[parentRunId+parentRelation]')
+      .equals([projection.rootRunId!, 'task:p1.source-curation']).first()
+    expect(p1RunRow?.id).toBeTruthy()
+    const p1Snapshot = await readAgentRunV1(input.scope, p1RunRow!.id!)
+    const allP1BatchManifestEvents = p1Snapshot.events.filter(event => event.type === 'context.assembled'
+      && event.payload.stepId.startsWith('p1.source-curation.world.source-curation.batch.'))
+    const p1BatchManifestEvents = allP1BatchManifestEvents.filter(event => (
+      p1Snapshot.projection.steps[event.payload.stepId]?.status === 'succeeded'
+        && p1Snapshot.projection.steps[event.payload.stepId]?.attempt === event.payload.attempt
+    ))
+    expect(p1BatchManifestEvents.length).toBeGreaterThan(0)
+    const failedBatchEvent = p1Snapshot.events.find(event => event.type === 'step.failed'
+      && event.payload.stepId.startsWith('p1.source-curation.world.source-curation.batch.')
+      && event.payload.attempt === 1)
+    expect(failedBatchEvent).toBeTruthy()
+    const failedBatchManifestEvent = allP1BatchManifestEvents.find(event => (
+      event.payload.stepId === failedBatchEvent!.payload.stepId && event.payload.attempt === 1
+    ))
+    expect(failedBatchManifestEvent).toBeTruthy()
+    expect(p1BatchManifestEvents.some(event => event.payload.stepId === failedBatchEvent!.payload.stepId
+      && event.payload.attempt === 2)).toBe(true)
+    expect(p1Snapshot.events.some(event => event.type === 'context.assembled'
+      && event.payload.stepId === 'p1.source-curation')).toBe(false)
+    const p1ManifestHashes = new Set<string>()
+    const p1ActuallyReadResourceKeys = new Set<string>()
+    for (const event of p1BatchManifestEvents) {
+      const restored = await readContextGatewayManifestV3ForAttemptV1({
+        scope: input.scope,
+        runId: p1RunRow!.id!,
+        stepId: event.payload.stepId,
+        attempt: event.payload.attempt,
+      })
+      p1ManifestHashes.add(restored.manifest.manifestHash)
+      for (const decision of [
+        ...restored.manifest.gateway.retrievalTrace.mandatory,
+        ...restored.manifest.gateway.retrievalTrace.autoSelected,
+        ...restored.manifest.gateway.retrievalTrace.agentReads,
+      ]) p1ActuallyReadResourceKeys.add(decision.resourceKey)
+      const batchStep = p1Snapshot.projection.steps[event.payload.stepId]!
+      await expect(verifyContextGatewayCandidateEvidenceV1({
+        scope: input.scope,
+        runId: p1RunRow!.id!,
+        stepId: event.payload.stepId,
+        attempt: event.payload.attempt,
+        candidateHash: batchStep.candidateHash!,
+      })).resolves.toMatchObject({ manifest: { manifestHash: event.payload.manifestHash } })
+    }
+    const p1SourceManifest = JSON.parse(artifacts.find(
+      row => row.artifactKey === 'text-open-world.source-manifest',
+    )!.payloadJson) as TextOpenWorldSourceManifestV1
+    const curatedResourceKeys = p1SourceManifest.units
+      .filter(unit => unit.curationStatus === 'read')
+      .map(unit => unit.sourceResourceKey!)
+      .sort()
+    expect([...p1ActuallyReadResourceKeys].sort()).toEqual(curatedResourceKeys)
+    const previewManifest = await verifyProductBuildPreviewManifestV1(build.previewManifestJson)
+    expect(previewManifest.mediaBindings).toHaveLength(input.brief.media.imageCount)
+    expect(previewManifest.fallbackSummary.length).toBeGreaterThan(0)
+    const preview = await startProductProductionPreviewV1({
+      scope: input.scope, productionId: production.id!,
+    })
+    const state = await readProductRuntimeState(preview.sessionId)
+    expect(state.textOpenWorld).toBeTruthy()
+    expect(state).toMatchObject({
+      interaction: null, adventure: null, openWorldEvolution: null, openWorld: null,
+    })
+    const published = await publishProductProductionV1({
+      scope: input.scope, productionId: production.id!,
+    })
+    const releaseRow = (await db.productReleases.get(published.receipt.productReleaseId))!
+    expect(releaseRow).toMatchObject({ productType: 'text-open-world' })
+    const releaseManifest = await verifyProductReleaseManifestV1(releaseRow.manifestJson)
+    expect(releaseManifest.packageHash).toBe(build.packageHash)
+    for (const resourceKey of curatedResourceKeys) {
+      const sourceEvidence = releaseManifest.sourceContracts.sourceManifest?.resources
+        .find(resource => resource.resourceKey === resourceKey)
+      expect(sourceEvidence?.status).toBe('matched')
+      expect(sourceEvidence?.contextManifestHashes.some(hash => p1ManifestHashes.has(hash))).toBe(true)
+      expect(sourceEvidence?.contextManifestHashes).not.toContain(failedBatchManifestEvent!.payload.manifestHash)
+    }
+    const releasedSession = await createProductRuntimeInstanceFromSource({
+      scope: input.scope,
+      source: { kind: 'release', productReleaseId: published.receipt.productReleaseId },
+      title: '文字开放世界正式版本',
+    })
+    expect((await readProductRuntimeState(releasedSession.id!)).textOpenWorld).toBeTruthy()
+  }, 600_000)
 })

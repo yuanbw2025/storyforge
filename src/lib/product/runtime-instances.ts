@@ -201,25 +201,31 @@ function createProductInitialState(input: {
     })
   }
   if (runtimePackage.productType === 'text-open-world') {
-    state.interaction = createInitialInteractionState({
-      playerKey: runtimePackage.interaction!.playerKey,
-      profiles: runtimePackage.interaction!.profiles,
-      sceneTemplates: runtimePackage.interaction!.sceneTemplates,
-    })
-    state.adventure = createInitialAdventureState(runtimePackage.adventure!, input.runtimeSourceHash)
-    state.openWorldEvolution = createInitialOpenWorldEvolutionState(
-      runtimePackage.openWorldEvolution!,
-      input.runtimeSourceHash,
-    )
-    state.openWorld = createInitialOpenWorldState(runtimePackage.openWorld!, input.runtimeSourceHash)
+    const hasLegacyRuntime = runtimePackage.interaction != null
+      && runtimePackage.adventure != null
+      && runtimePackage.openWorldEvolution != null
+      && runtimePackage.openWorld != null
     if (runtimePackage.textOpenWorldVNext) {
       state.textOpenWorld = createInitialTextOpenWorldSessionProjectionV1(
         runtimePackage.textOpenWorldVNext,
       )
     }
-    state = withAdventureNarrativeProjectionV1(state)
-    state = withOpenWorldEvolutionProjectionV1(state)
-    state = withOpenWorldNarrativeProjectionV1(state)
+    if (hasLegacyRuntime) {
+      state.interaction = createInitialInteractionState({
+        playerKey: runtimePackage.interaction!.playerKey,
+        profiles: runtimePackage.interaction!.profiles,
+        sceneTemplates: runtimePackage.interaction!.sceneTemplates,
+      })
+      state.adventure = createInitialAdventureState(runtimePackage.adventure!, input.runtimeSourceHash)
+      state.openWorldEvolution = createInitialOpenWorldEvolutionState(
+        runtimePackage.openWorldEvolution!,
+        input.runtimeSourceHash,
+      )
+      state.openWorld = createInitialOpenWorldState(runtimePackage.openWorld!, input.runtimeSourceHash)
+      state = withAdventureNarrativeProjectionV1(state)
+      state = withOpenWorldEvolutionProjectionV1(state)
+      state = withOpenWorldNarrativeProjectionV1(state)
+    }
   }
   if (runtimePackage.productType === 'ttrpg') {
     state = createInitialTtrpgProductStateV1({

@@ -28,6 +28,7 @@ import {
   createBuiltInProductionCapabilityBindingV1,
   createConfiguredProductProductionExecutorV1,
 } from './production-executor'
+import { createTextOpenWorldProductionExecutorV1 } from '../open-world/production-executor'
 import {
   projectProductProductionSchedulerV1,
   runProductProductionUntilBlockedV1,
@@ -114,7 +115,7 @@ export function inspectProductProductionCapabilityReadinessV1(input: {
   return {
     text: inspectConfiguredTextCapabilityV1({
       projectId: input.projectId,
-      category: 'product-production.content',
+      category: 'product-production',
     }),
     image: inspectConfiguredAgnesImageCapabilityV1({ projectId: input.projectId }),
     mediaRelayConfigured: relay.configured,
@@ -484,9 +485,13 @@ export async function runAuthorizedProductProductionV1(input: {
       }))
     }
   }
-  const executor = createConfiguredProductProductionExecutorV1({
-    production: details.production, brief, mediaCapabilities,
-  })
+  const executor = brief.intent.productType === 'text-open-world'
+    ? createTextOpenWorldProductionExecutorV1({
+      production: details.production, brief, mediaCapabilities,
+    })
+    : createConfiguredProductProductionExecutorV1({
+      production: details.production, brief, mediaCapabilities,
+    })
   const projection = await runProductProductionUntilBlockedV1({
     scope, productionId: input.productionId, executor, capabilityBindings, signal: input.signal,
     async onDurableBoundary() {

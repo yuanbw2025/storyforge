@@ -362,6 +362,7 @@ export interface TextOpenWorldGameBriefV1 {
   productType: 'text-open-world'
   productInstanceKey: string
   title: string
+  qualityProfile: 'prototype' | 'internal' | 'commercial-candidate'
   authorization: {
     productBriefRevision: number
     productBriefHash: string
@@ -421,6 +422,10 @@ export interface TextOpenWorldGameBriefV1 {
   media: {
     visualLevel: 'none' | 'key-scenes' | 'illustrated'
     audioLevel: 'none' | 'music-sfx' | 'full'
+    imageCount: number
+    musicTrackCount: number
+    sfxCount: number
+    voiceLineCount: number
     requiredVisualKinds: ['procedural-map', 'character-portrait', 'scene-background']
     textFallbackRequired: true
   }
@@ -2530,6 +2535,25 @@ export interface TextOpenWorldQuestDesignDocumentsV1 {
   conditions: TextOpenWorldConditionDefinitionV1[]
   effects: TextOpenWorldEffectDefinitionV1[]
   actions: TextOpenWorldActionDefinitionV1[]
+  /**
+   * Deterministic P8F binding of every authored ending to the final protected
+   * mainline quest. P9 may author the visible choice copy, but it must point at
+   * these already-frozen Actions instead of creating a second result path.
+   */
+  endingBindings: {
+    finalMainlineQuestKey: string
+    finalMainlineStageKey: string
+    finalLocationKey: string
+    selectionReadyConditionKey: string
+    routes: Array<{
+      endingKey: string
+      conditionKey: string
+      actionKey: string
+      routeEffectKey: string
+      unlockEffectKey: string
+      reachEffectKey: string
+    }>
+  }
   catalogBindings: {
     skills: Array<{
       skillKey: string
@@ -2616,6 +2640,8 @@ export interface TextOpenWorldQuestDesignDocumentsV1 {
     encounterKeysWithRewardAndAction: string[]
     catalogDefinitionKeys: string[]
     referencedCatalogDefinitionKeys: string[]
+    requiredEndingKeys: string[]
+    boundEndingKeys: string[]
     orphanActionKeys: string[]
     orphanEffectKeys: string[]
     uncoveredRequirementKeys: []
@@ -2630,6 +2656,7 @@ export interface TextOpenWorldQuestDesignDocumentsV1 {
     allRewardsClaimableOnce: true
     allTimedQuestsHaveExpirationCoverage: true
     allCatalogBindingsResolved: true
+    allEndingsRuntimeBound: true
     sceneBindingsDeferred: true
     questAndEncounterBindingsReady: true
   }
@@ -3126,7 +3153,7 @@ export interface TextOpenWorldMediaRequirementsV1 {
     title: string
     creativeBrief: string
     required: boolean
-    productionMode: 'procedural-code' | 'generate-or-import' | 'optional-generate-or-import'
+    productionMode: 'procedural-code' | 'generate-or-import' | 'optional-generate-or-import' | 'fallback-only'
     fallback: 'procedural-svg' | 'generated-placeholder' | 'text-description' | 'silent'
     sourceArtifactKey: TextOpenWorldProductionArtifactKindV1
     sourceEntityKey: string
@@ -3356,6 +3383,88 @@ export interface TextOpenWorldSemanticReviewV1 {
   semanticReviewHash: string
 }
 
+/** Deterministic V3 evidence that the accepted production graph was compiled
+ * into the single ProductRuntimePackage consumed by preview and ProductRelease. */
+export interface TextOpenWorldIntegrationReportV1 {
+  schema: 'storyforge.text-open-world-integration-report'
+  version: 1
+  productType: 'text-open-world'
+  productInstanceKey: string
+  runtimePackageHash: string
+  sourcePinHash: string
+  systemConfigsHash: string
+  deterministicPreflightHash: string
+  balanceReviewHash: string
+  semanticReviewHash: string
+  modules: Array<{
+    moduleKey: TextOpenWorldRuntimeModuleKeyV1
+    schemaVersion: number
+    contentHash: string
+    sourceArtifactKeys: string[]
+    parsed: true
+  }>
+  generatedBindings: {
+    endingActionKeys: string[]
+    generatedMediaArtifactKeys: string[]
+    fallbackMediaSlotKeys: string[]
+  }
+  verification: {
+    productPackageParsed: true
+    allModulesParsed: true
+    initialProjectionCreated: true
+    mainlineHasStart: true
+    endingActionsReachable: true
+    sourceProvenanceClosed: true
+    rightsEvidenceClosed: true
+    mediaCoveragePolicyEvaluated: true
+  }
+  media: {
+    qualityProfile: 'prototype' | 'internal' | 'commercial-candidate'
+    slotCount: number
+    requiredSlotCount: number
+    requiredGeneratedSlotCount: number
+    generatedBindingCount: number
+    generatedRequiredBindingCount: number
+    fallbackReadyCount: number
+    playableCoverage: number
+    generatedRequiredCoverage: number
+    evaluatedCoverage: number
+    minimumCoverage: number
+    releaseReady: boolean
+    coverageEvidenceHash: string
+  }
+  rights: {
+    evaluatedArtifactCount: number
+    evidence: Array<{
+      artifactKey: string
+      assetKey: string
+      origin: string
+      adapterId: string
+      source: string
+      license: string
+      commercialUse: true
+      commercialPolicyPassed: boolean
+      capabilityRequirementKey: string
+      rightsPolicyVersion: string
+      producerReceiptHash: string
+      providerReceiptHash: string | null
+      evidenceHash: string
+    }>
+    complete: true
+    commercialPolicyPassed: boolean
+    rightsEvidenceHash: string
+  }
+  governance: {
+    compilerOnly: true
+    acceptedArtifactsNeverMutated: true
+    runtimeStateSessionOwned: true
+    productReleaseOwned: true
+  }
+  basisHash: string
+  createdAt: number
+  integrationReportHash: string
+}
+
 export const TEXT_OPEN_WORLD_PRODUCTION_STAGES_V1 = [
   'P0', 'P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8', 'P8F', 'P9', 'P10',
   'V1', 'V2', 'V3', 'QA',
@@ -3437,7 +3546,7 @@ export interface TextOpenWorldProductionRunContractBlueprintV1 {
   version: 1
   productOwner: 'text-open-world'
   workflowKind: 'long-running-resumable'
-  activation: 'contract-only-until-skills-and-executors-registered'
+  activation: 'active'
   scopeBindings: Array<'projectId' | 'worldId' | 'workId' | 'productionId' | 'buildId'>
   lineageBindings: Array<'sourceReleaseId' | 'sourceHash' | 'briefHash' | 'planHash' | 'controlEpoch'>
   artifactAcceptance: 'candidate-then-accepted-by-shared-artifact-store'

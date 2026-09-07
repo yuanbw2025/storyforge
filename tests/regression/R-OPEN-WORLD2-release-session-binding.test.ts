@@ -9,23 +9,35 @@ import {
   parseProductRuntimePackageV1,
   verifyProductReleaseManifestV1,
 } from '../../src/lib/product-production/runtime-package'
-import { assertProductReleaseUnchanged } from '../../src/lib/product/releases'
+import { assertProductReleaseUnchanged, parseTextOpenWorldProductReleaseManifest } from '../../src/lib/product/releases'
 import { createTextOpenWorldInstance } from '../../src/lib/product/runtime-instances'
 import {
   hashProductRuntimeStateV1,
   readProductRuntimeState,
   readProductRuntimeStateVersion,
 } from '../../src/lib/product/runtime-core'
-import type { ProductRelease } from '../../src/lib/types'
+import { assembleContext } from '../../src/lib/registry/assemble-context'
+import { EMPTY_PRODUCT_RUNTIME_STATE, type ProductRelease } from '../../src/lib/types'
+import { useTextOpenWorldPlayerStore } from '../../src/stores/text-open-world-player'
 import { createFixtureProductReleaseManifestV1 } from '../helpers/product-release-v1'
 import {
   createGovernedTextOpenWorldSessionFixtureV1,
   createTextOpenWorldProductRuntimePackageFixtureV1,
+  createTextOpenWorldVNextOnlyProductRuntimePackageFixtureV1,
 } from '../helpers/text-open-world-product-session'
 import { createTextOpenWorldVNextFixture } from '../helpers/text-open-world-vnext-fixture'
 
 describe('Text Open World vNext · ProductBuild/ProductRelease、InitialState和Session绑定', () => {
-  beforeEach(async () => { await db.delete(); await db.open() })
+  beforeEach(async () => {
+    await db.delete()
+    await db.open()
+    useTextOpenWorldPlayerStore.setState({
+      scope: null, worldGroupId: null, releases: [], sessions: [], selectedSessionId: null,
+      events: [], checkpoints: [], runtimeState: structuredClone(EMPTY_PRODUCT_RUNTIME_STATE),
+      selectedManifest: null, lastFeedback: null, generatedCandidate: null,
+      loading: false, busy: false, error: '',
+    })
+  })
   afterAll(() => db.close())
 
   it('vNext 15模块作为共享ProductRuntimePackage字段逐层校验', async () => {
@@ -55,6 +67,56 @@ describe('Text Open World vNext · ProductBuild/ProductRelease、InitialState和
     })).toThrow(/来源或规则版本不一致/)
   })
 
+  it('产品专用Release reader同时接受legacy-only、hybrid和vNext-only三态', async () => {
+    const textOpenWorldVNext = createTextOpenWorldVNextFixture()
+    const hybrid = createTextOpenWorldProductRuntimePackageFixtureV1(textOpenWorldVNext)
+    const { textOpenWorldVNext: _removed, ...legacyShell } = hybrid
+    const legacyOnly = {
+      ...legacyShell,
+      definition: {
+        ...legacyShell.definition,
+        enabledCapabilities: legacyShell.definition.enabledCapabilities
+          .filter(capability => capability !== 'textOpenWorldVNext'),
+      },
+    }
+    const vNextOnly = createTextOpenWorldVNextOnlyProductRuntimePackageFixtureV1(textOpenWorldVNext)
+    const [legacyManifest, hybridManifest, vNextManifest] = await Promise.all([
+      createFixtureProductReleaseManifestV1({ runtimePackage: parseProductRuntimePackageV1(legacyOnly) }),
+      createFixtureProductReleaseManifestV1({ runtimePackage: hybrid }),
+      createFixtureProductReleaseManifestV1({ runtimePackage: vNextOnly }),
+    ])
+
+    const parsedLegacy = parseTextOpenWorldProductReleaseManifest(JSON.stringify(legacyManifest))
+    expect(parsedLegacy.openWorld).toBeDefined()
+    expect(parsedLegacy.textOpenWorldVNext).toBeUndefined()
+    const parsedHybrid = parseTextOpenWorldProductReleaseManifest(JSON.stringify(hybridManifest))
+    expect(parsedHybrid.openWorld).toBeDefined()
+    expect(parsedHybrid.textOpenWorldVNext).toBeDefined()
+    expect(parsedHybrid.definition.enabledCapabilities).toContain('textOpenWorldVNext')
+    const parsedVNext = parseTextOpenWorldProductReleaseManifest(JSON.stringify(vNextManifest))
+    expect(parsedVNext.openWorld).toBeUndefined()
+    expect(parsedVNext.textOpenWorldVNext).toBeDefined()
+
+    const partialHybridManifest = structuredClone(vNextManifest)
+    partialHybridManifest.runtimePackage.interaction = hybrid.interaction
+    expect(() => parseTextOpenWorldProductReleaseManifest(JSON.stringify(partialHybridManifest)))
+      .toThrow(/旧四运行模块必须完整存在或完整省略/)
+
+    const hybridWithPresentation = parseProductRuntimePackageV1({
+      ...hybrid,
+      definition: {
+        ...hybrid.definition,
+        enabledCapabilities: [...hybrid.definition.enabledCapabilities, 'presentation'],
+      },
+      presentation: { version: 1, cues: [], assets: [] },
+    })
+    expect(hybridWithPresentation.presentation).toEqual({ version: 1, cues: [], assets: [] })
+    expect(hybridWithPresentation.definition.enabledCapabilities).toEqual([
+      'narrative', 'interaction', 'adventure', 'openWorldEvolution', 'open-world',
+      'textOpenWorldVNext', 'presentation',
+    ])
+  })
+
   it('正式Session由ProductRelease确定性开局，Release被篡改后fail-closed', async () => {
     const textOpenWorldVNext = createTextOpenWorldVNextFixture()
     const created = await createGovernedTextOpenWorldSessionFixtureV1({
@@ -67,6 +129,10 @@ describe('Text Open World vNext · ProductBuild/ProductRelease、InitialState和
       productBuildId: null, runtimeSourceHash: created.manifest.packageHash,
     })
     expect(state.textOpenWorld).toEqual(createInitialTextOpenWorldSessionProjectionV1(textOpenWorldVNext))
+    expect(state.interaction).not.toBeNull()
+    expect(state.adventure).not.toBeNull()
+    expect(state.openWorldEvolution).not.toBeNull()
+    expect(state.openWorld).not.toBeNull()
     await expect(verifyTextOpenWorldVNextSessionBindingV1(created.session)).resolves.toMatchObject({
       runtimePackage: textOpenWorldVNext,
     })
@@ -76,6 +142,70 @@ describe('Text Open World vNext · ProductBuild/ProductRelease、InitialState和
     })
     await expect(assertProductReleaseUnchanged(created.release.id!)).rejects.toThrow(/packageHash|已被篡改/)
   })
+
+  it('vNext-only正式Release可入玩家库、启动并装配运行Context，越界读取和篡改继续fail-closed', async () => {
+    const textOpenWorldVNext = createTextOpenWorldVNextFixture()
+    expect(createTextOpenWorldVNextOnlyProductRuntimePackageFixtureV1(textOpenWorldVNext))
+      .toMatchObject({ definition: { enabledCapabilities: ['narrative', 'textOpenWorldVNext'] } })
+    const created = await createGovernedTextOpenWorldSessionFixtureV1({
+      name: 'TEXT-OPEN-WORLD vNext-only绑定验收',
+      textOpenWorldVNext,
+      runtimeShape: 'vnext-only',
+    })
+    const state = await readProductRuntimeState(created.session.id!)
+    expect(state.textOpenWorld).toEqual(createInitialTextOpenWorldSessionProjectionV1(textOpenWorldVNext))
+    expect(state.interaction).toBeNull()
+    expect(state.adventure).toBeNull()
+    expect(state.openWorldEvolution).toBeNull()
+    expect(state.openWorld).toBeNull()
+
+    await useTextOpenWorldPlayerStore.getState().load(created.scope, null)
+    const libraryItem = useTextOpenWorldPlayerStore.getState().releases
+      .find(item => item.release.id === created.release.id)
+    expect(libraryItem).toMatchObject({ error: '' })
+    expect(libraryItem?.manifest?.textOpenWorldVNext?.metadata.packageKey)
+      .toBe(textOpenWorldVNext.metadata.packageKey)
+    expect(libraryItem?.manifest?.openWorld).toBeUndefined()
+
+    const startedSessionId = await useTextOpenWorldPlayerStore.getState()
+      .start(created.release.id!, 'vNext-only玩家入口')
+    expect(useTextOpenWorldPlayerStore.getState()).toMatchObject({
+      selectedSessionId: startedSessionId,
+      error: '',
+      runtimeState: { interaction: null, adventure: null, openWorldEvolution: null, openWorld: null },
+    })
+    expect(useTextOpenWorldPlayerStore.getState().runtimeState.textOpenWorld).not.toBeNull()
+
+    const context = await assembleContext({
+      projectId: created.scope.projectId,
+      scope: created.scope,
+      worldGroupId: null,
+      productRuntimeSessionId: startedSessionId,
+      sourceKeys: ['openWorldRuntime'],
+    })
+    expect(context.included).toEqual(['openWorldRuntime'])
+    expect(context.text).toContain('【文字开放世界vNext玩家视角】vNext-only玩家入口')
+    expect(context.text).toContain('【当前位置】盐港／盐港')
+
+    const wrongWorld = await assembleContext({
+      projectId: created.scope.projectId,
+      scope: created.scope,
+      worldGroupId: 404,
+      productRuntimeSessionId: startedSessionId,
+      sourceKeys: ['openWorldRuntime'],
+    })
+    expect(wrongWorld.included).toEqual([])
+    expect(wrongWorld.text).toBe('')
+
+    const tampered = JSON.parse(created.release.manifestJson)
+    tampered.runtimePackage.textOpenWorldVNext.metadata.title = '被篡改的vNext-only发布'
+    await db.productReleases.update(created.release.id!, { manifestJson: JSON.stringify(tampered) })
+    await useTextOpenWorldPlayerStore.getState().load(created.scope, null)
+    const rejected = useTextOpenWorldPlayerStore.getState().releases
+      .find(item => item.release.id === created.release.id)
+    expect(rejected?.manifest).toBeNull()
+    expect(rejected?.error).toMatch(/packageHash|已被篡改/)
+  }, 20_000)
 
   it('新ProductRelease不迁移旧存档，投影不能混用另一Release的vNext包', async () => {
     const firstPackage = createTextOpenWorldVNextFixture()

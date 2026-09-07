@@ -1,4 +1,5 @@
 import type { ProductBuildCompatibilityReportV1, ProductRuntimePackageV1 } from '../types'
+import { TEXT_OPEN_WORLD_RUNTIME_MODULE_KEYS_V1 } from '../types'
 import { canonicalProductProductionJsonV2, hashProductProductionValueV2, isSha256Hash } from './hash'
 
 interface RuntimePackageBuildRefV1 {
@@ -54,6 +55,17 @@ function stableValues(pkg: ProductRuntimePackageV1): Map<string, string> {
   for (const channel of pkg.openWorld?.discoveryChannels ?? []) add('open-world.channel', channel.key, channel)
   for (const card of pkg.openWorld?.fixedTaskCards ?? []) add('open-world.card', card.key, card)
   for (const template of pkg.openWorld?.taskTemplates ?? []) add('open-world.template', template.key, template)
+  if (pkg.textOpenWorldVNext) {
+    for (const moduleKey of TEXT_OPEN_WORLD_RUNTIME_MODULE_KEYS_V1) {
+      const envelope = pkg.textOpenWorldVNext.modules[moduleKey]
+      add('text-open-world.module', moduleKey, {
+        moduleKey: envelope.moduleKey,
+        schemaVersion: envelope.schemaVersion,
+        contentHash: envelope.contentHash,
+        dependencies: [...envelope.dependencies].sort(),
+      })
+    }
+  }
   return values
 }
 

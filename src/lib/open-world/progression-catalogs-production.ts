@@ -80,6 +80,7 @@ export interface TextOpenWorldProgressionCatalogsModelExecutionV1 {
 export type TextOpenWorldProgressionCatalogsModelRunnerV1 = (input: {
   projectId: number
   requirementKey: string
+  expectedCapabilityHash: string
   category: string
   system: string
   contextText: string
@@ -573,7 +574,8 @@ function systemPrompt(context: TextOpenWorldProgressionCatalogsInputContextV1): 
 async function defaultModelRunner(input: Parameters<TextOpenWorldProgressionCatalogsModelRunnerV1>[0]): Promise<TextOpenWorldProgressionCatalogsModelExecutionV1> {
   const result: ChatResult = {}
   const response = await runConfiguredProductionTextV1({
-    projectId: input.projectId, requirementKey: input.requirementKey, category: input.category,
+    projectId: input.projectId, requirementKey: input.requirementKey,
+    expectedCapabilityHash: input.expectedCapabilityHash, category: input.category,
     messages: [
       { role: 'system', content: input.system },
       { role: 'user', content: `以下是已登记并验签的成长目录输入：\n<progression-catalog-input>\n${input.contextText}\n</progression-catalog-input>` },
@@ -603,7 +605,8 @@ export function createTextOpenWorldProgressionCatalogsExecutorV1(options: {
     const prompt = systemPrompt(context)
     const startedAt = performance.now()
     const response = await runModel({
-      projectId: execution.scope.projectId, requirementKey, category: 'text-open-world.production.progression-catalogs',
+      projectId: execution.scope.projectId, requirementKey, expectedCapabilityHash: binding.bindingHash,
+      category: 'text-open-world.production.progression-catalogs',
       system: prompt, contextText: execution.contextText,
       maximumOutputTokens: Math.max(1, Math.min(24_000, execution.task.budgetReservation.outputTokens)),
       signal: execution.signal,

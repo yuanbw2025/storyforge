@@ -22,6 +22,7 @@ import {
   type TtrpgProductionBriefDraftInputV2,
   unresolvedTtrpgProductionBriefDecisionsV2,
 } from '../ttrpg/production-brief'
+import { DEFAULT_TEXT_OPEN_WORLD_CALIBRATION_V1 } from '../open-world/product-config'
 
 type ConsultationSourceV1 = ProductProductionConsultationSourceV2
 
@@ -143,14 +144,18 @@ function mediaProfile(input: {
   visualLevel: ProductProductionMediaProfileV1['visualLevel']
   audioLevel: ProductProductionMediaProfileV1['audioLevel']
 }): ProductProductionMediaProfileV1 {
-  // AVG and the governed TTRPG tabletop both bind presentation assets.
-  const presentationEnabled = input.productType === 'avg' || input.productType === 'ttrpg'
+  // AVG, the governed tabletop and the text open world bind product-owned
+  // presentation assets. The text-open-world map itself remains procedural,
+  // while portraits/backgrounds may be generated or use declared fallbacks.
+  const presentationEnabled = ['avg', 'ttrpg', 'text-open-world'].includes(input.productType)
   const images = !presentationEnabled || input.visualLevel === 'none' ? 0 : input.visualLevel === 'key-scenes' ? 2 : 8
   const music = !presentationEnabled || input.audioLevel === 'none' ? 0 : 1
   const sfx = !presentationEnabled || input.audioLevel === 'none' ? 0 : input.audioLevel === 'music-sfx' ? 3 : 8
   const requiredMediaKinds: ProductProductionMediaProfileV1['requiredMediaKinds'] = []
   if (images > 0) requiredMediaKinds.push('background')
-  if ((input.productType === 'avg' || input.productType === 'ttrpg') && images > 0) requiredMediaKinds.push('character-pose')
+  if (['avg', 'ttrpg', 'text-open-world'].includes(input.productType) && images > 0) {
+    requiredMediaKinds.push('character-pose')
+  }
   if (music > 0) requiredMediaKinds.push('bgm')
   if (sfx > 0) requiredMediaKinds.push('sfx')
   return {
@@ -367,6 +372,26 @@ export async function draftProductProductionBriefV3(input: {
     }
     unresolvedDecisionKeys.push(...unresolvedTtrpgProductionBriefDecisionsV2(ttrpg!))
   }
+  const openWorldBudget = DEFAULT_TEXT_OPEN_WORLD_CALIBRATION_V1.aiBudget.production
+  const productionBudget = input.productType === 'text-open-world'
+    ? {
+        maximumModelCalls: openWorldBudget.maximumCalls,
+        maximumInputTokens: openWorldBudget.maximumInputTokens,
+        maximumOutputTokens: openWorldBudget.maximumOutputTokens,
+        maximumCostUsd: openWorldBudget.maximumEstimatedCostUsd,
+        maximumMediaCalls: Math.max(1, media.imageCount + media.musicTrackCount + media.sfxCount),
+        maximumDurationMs: 7_200_000,
+        maximumStorageBytes: 200_000_000,
+      }
+    : {
+        maximumModelCalls: 16,
+        maximumInputTokens: 180_000,
+        maximumOutputTokens: 60_000,
+        maximumCostUsd: null,
+        maximumMediaCalls: Math.max(1, media.imageCount + media.musicTrackCount + media.sfxCount),
+        maximumDurationMs: 3_600_000,
+        maximumStorageBytes: 200_000_000,
+      }
   return parseProductProductionBriefV3({
     schema: 'storyforge.product-production-brief', version: 3,
     source: {
@@ -394,11 +419,7 @@ export async function draftProductProductionBriefV3(input: {
     consultationBudget: {
       maximumModelCalls: 3, maximumInputTokens: 30_000, maximumOutputTokens: 8_000, maximumCostUsd: null,
     },
-    productionBudget: {
-      maximumModelCalls: 16, maximumInputTokens: 180_000, maximumOutputTokens: 60_000,
-      maximumCostUsd: null, maximumMediaCalls: Math.max(1, media.imageCount + media.musicTrackCount + media.sfxCount),
-      maximumDurationMs: 3_600_000, maximumStorageBytes: 200_000_000,
-    },
+    productionBudget,
     qualityProfile,
     capabilityRequirements: requirements,
     externalDataPolicy: {

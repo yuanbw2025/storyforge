@@ -70,6 +70,7 @@ export interface TextOpenWorldSignificantThreadsModelExecutionV1 {
 export type TextOpenWorldSignificantThreadsModelRunnerV1 = (input: {
   projectId: number
   requirementKey: string
+  expectedCapabilityHash: string
   category: string
   system: string
   contextText: string
@@ -868,6 +869,7 @@ async function defaultModelRunner(
   const response = await runConfiguredProductionTextV1({
     projectId: input.projectId,
     requirementKey: input.requirementKey,
+    expectedCapabilityHash: input.expectedCapabilityHash,
     category: input.category,
     messages: [
       { role: 'system', content: input.system },
@@ -905,6 +907,7 @@ export function createTextOpenWorldSignificantThreadsExecutorV1(options: {
     const response = await runModel({
       projectId: execution.scope.projectId,
       requirementKey,
+      expectedCapabilityHash: binding.bindingHash,
       category: 'text-open-world.production.significant-threads',
       system: prompt,
       contextText: execution.contextText,

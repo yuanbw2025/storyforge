@@ -448,7 +448,8 @@ export const TEXT_OPEN_WORLD_PRODUCTION_TASK_CONTRACTS_V1: TextOpenWorldProducti
     lane: 'qa', dependsOn: ['p10.system-finalize'],
     inputArtifactKeys: [
       'text-open-world.system-configs', 'text-open-world.media-requirements', 'text-open-world.content-budget',
-      'text-open-world.quest-design-documents', 'text-open-world.action-bindings',
+      'text-open-world.quest-design-documents', 'text-open-world.scene-scripts',
+      'text-open-world.choice-contracts', 'text-open-world.action-bindings',
     ],
     outputArtifactKeys: ['text-open-world.deterministic-preflight'],
     completion: {
@@ -483,7 +484,8 @@ export const TEXT_OPEN_WORLD_PRODUCTION_TASK_CONTRACTS_V1: TextOpenWorldProducti
       'text-open-world.source-ledger', 'text-open-world.experience-contract',
       'text-open-world.story-arc', 'text-open-world.narrative-promises', 'text-open-world.mainline-thread',
       'text-open-world.significant-threads', 'text-open-world.region-narrative-packs',
-      'text-open-world.quest-design-documents', 'text-open-world.scene-scripts', 'text-open-world.action-bindings',
+      'text-open-world.quest-design-documents', 'text-open-world.scene-scripts',
+      'text-open-world.choice-contracts', 'text-open-world.action-bindings',
       'text-open-world.content-budget', 'text-open-world.deterministic-preflight',
     ],
     outputArtifactKeys: ['text-open-world.semantic-review'],
@@ -499,6 +501,11 @@ export const TEXT_OPEN_WORLD_PRODUCTION_TASK_CONTRACTS_V1: TextOpenWorldProducti
       'v2.balance-review', 'v2.semantic-review',
     ],
     inputArtifactKeys: [
+      'text-open-world.source-pin', 'text-open-world.source-ledger',
+      'text-open-world.game-brief', 'text-open-world.experience-contract',
+      'text-open-world.story-arc', 'text-open-world.ending-contracts',
+      'text-open-world.mainline-thread', 'text-open-world.significant-threads',
+      'text-open-world.quest-skeletons',
       'text-open-world.presentation-profile', 'text-open-world.player-build',
       'text-open-world.region-narrative-packs', 'text-open-world.progression-catalogs',
       'text-open-world.enemy-encounter-catalog', 'text-open-world.item-reward-catalog',
@@ -528,6 +535,19 @@ export const TEXT_OPEN_WORLD_PRODUCTION_TASK_CONTRACTS_V1: TextOpenWorldProducti
     },
   }),
 ]
+
+/**
+ * One canonical model-call profile for every producer of a text-open-world
+ * Brief. The minimum gives each model-owned durable task one bounded call;
+ * the recommended value preserves each task contract's authored allowance.
+ */
+export const TEXT_OPEN_WORLD_PRODUCTION_MODEL_CALL_BUDGET_V1 = Object.freeze({
+  minimum: TEXT_OPEN_WORLD_PRODUCTION_TASK_CONTRACTS_V1
+    .filter(task => task.executionMode === 'model').length,
+  recommended: TEXT_OPEN_WORLD_PRODUCTION_TASK_CONTRACTS_V1
+    .filter(task => task.executionMode === 'model')
+    .reduce((sum, task) => sum + task.recommendedModelCalls, 0),
+})
 
 export const TEXT_OPEN_WORLD_PRODUCTION_ARTIFACT_DEFINITIONS_V1: TextOpenWorldProductionArtifactDefinitionV1[] =
   TEXT_OPEN_WORLD_PRODUCTION_TASK_CONTRACTS_V1.flatMap(task => task.outputArtifactKeys.map(artifactKey => ({
@@ -634,7 +654,7 @@ export function createTextOpenWorldProductionRunContractBlueprintV1(): TextOpenW
     version: 1,
     productOwner: 'text-open-world',
     workflowKind: 'long-running-resumable',
-    activation: 'contract-only-until-skills-and-executors-registered',
+    activation: 'active',
     scopeBindings: ['projectId', 'worldId', 'workId', 'productionId', 'buildId'],
     lineageBindings: ['sourceReleaseId', 'sourceHash', 'briefHash', 'planHash', 'controlEpoch'],
     artifactAcceptance: 'candidate-then-accepted-by-shared-artifact-store',
@@ -719,11 +739,7 @@ function planTask(
   }
 }
 
-/**
- * Generates a valid shared ProductProductionPlan without activating the route.
- * G3-18 may select this builder only after every declared Skill and executor is
- * registered and its product-level schemas have shipped.
- */
+/** Generates the active, shared-Harness-compatible text-open-world plan. */
 export async function createTextOpenWorldProductionPlanV1(input: {
   buildNumber: number
   controlEpoch?: number
@@ -732,6 +748,7 @@ export async function createTextOpenWorldProductionPlanV1(input: {
 }): Promise<ProductProductionPlanV3> {
   const brief = parseProductProductionBriefV3(input.brief)
   if (brief.intent.productType !== 'text-open-world') fail('只能为 text-open-world Brief 创建专属 Plan')
+  if (brief.media.voiceLineCount > 0) fail('文字开放世界首版尚未实现独立voice媒资通路，请将voiceLineCount设为0')
   if (!Number.isInteger(input.buildNumber) || input.buildNumber < 1) fail('buildNumber 无效')
   if (!isSha256Hash(input.briefHash)) fail('briefHash 无效')
   if (await hashProductProductionValueV2(brief) !== input.briefHash) fail('briefHash 与 Brief 内容不一致')
@@ -747,7 +764,6 @@ export async function createTextOpenWorldProductionPlanV1(input: {
   const textCapabilities = capabilityKeys(['text'])
   const imageCapabilities = capabilityKeys(['image'])
   const audioCapabilities = capabilityKeys(['music', 'sfx', 'voice'])
-  const transcodeCapabilities = capabilityKeys(['transcode'])
   const visualCount = brief.media.imageCount > 0 || imageCapabilities.length > 0
     ? Math.max(1, brief.media.imageCount) : 0
   const requestedAudioCount = brief.media.musicTrackCount + brief.media.sfxCount + brief.media.voiceLineCount
@@ -772,6 +788,21 @@ export async function createTextOpenWorldProductionPlanV1(input: {
     }) : deterministicBudget
     return planTask(contract, taskBudget, textCapabilities, 1_000 - index * 10)
   })
+
+  // P0 freezes one immutable unit Artifact for every selected WorldRelease
+  // resource. The contract declares the base kind; the concrete Plan owns the
+  // exact bounded keys so P1 can prove that it read the complete selection.
+  const sourceUnitKeys = brief.source.selection.resourceKeys.map((_, index) => (
+    index === 0
+      ? 'text-open-world.source-pin-unit'
+      : `text-open-world.source-pin-unit.${String(index + 1).padStart(5, '0')}`
+  ))
+  if (sourceUnitKeys.length === 0) fail('文字开放世界来源选择不能为空')
+  const p0 = tasks.find(task => task.taskKey === 'p0.source-lock')!
+  p0.outputArtifactKeys = ['text-open-world.source-pin', ...sourceUnitKeys]
+  p0.subjectLockKeys = [...p0.outputArtifactKeys]
+  const p1 = tasks.find(task => task.taskKey === 'p1.source-curation')!
+  p1.inputArtifactKeys = ['text-open-world.source-pin', ...sourceUnitKeys]
 
   const v3 = tasks.find(task => task.taskKey === 'v3.runtime-package')!
   const addMediaTask = (config: {
@@ -802,7 +833,12 @@ export async function createTextOpenWorldProductionPlanV1(input: {
         durationMs: perDuration, storageBytes: perStorage,
       }),
       maxAttempts: 2, timeoutMs: 600_000,
-      failurePolicy: brief.fallbackPolicy.allowTextOnly ? 'skip-optional' : 'pause',
+      // The shared scheduler has no durable "skipped task" terminal state.
+      // Prototype Builds bind built-in procedural adapters, while required
+      // commercial media pauses visibly. Slot-level text/placeholder fallback
+      // remains available when a slot is intentionally left unbound; a failed
+      // scheduled provider task must never be silently reported as complete.
+      failurePolicy: 'pause',
       fallbackTaskKey: null, acceptanceGateIds: ['media.integrity', 'media.rights'], reuse: null,
     })
     v3.dependsOn.push(config.taskKey)
@@ -823,7 +859,11 @@ export async function createTextOpenWorldProductionPlanV1(input: {
     requirementKinds: brief.media.requiredMediaKinds.filter(kind => ['bgm', 'sfx', 'voice'].includes(kind)),
     lane: 'audio',
   })
-  v3.capabilityRequirementKeys = transcodeCapabilities
+  // V3 only assembles already-normalized accepted blobs and never invokes a
+  // transcoder. If a future format conversion is needed it must be a separate
+  // media-provider task with its own receipt, not an unused binding on this
+  // deterministic compiler.
+  v3.capabilityRequirementKeys = []
   const qa = tasks.find(task => task.taskKey === 'qa.release')!
   qa.acceptanceGateIds = [...new Set([
     ...qa.acceptanceGateIds, ...brief.completionContract.requiredGateIds,

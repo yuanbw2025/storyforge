@@ -13,6 +13,7 @@ import { parseTextOpenWorldRuntimePackageV1 } from './runtime-package'
 type Row = Record<string, unknown>
 
 const KEY = /^[a-z][a-z0-9._:-]{0,199}$/
+const SHA256 = /^[a-f0-9]{64}$/
 const ACTION_CATEGORIES: TextOpenWorldActionCategoryV1[] = [
   'move', 'travel', 'fast-travel', 'observe', 'investigate', 'talk', 'take', 'use', 'equip', 'unequip', 'drop',
   'buy', 'sell', 'craft', 'accept-quest', 'abandon-quest', 'objective-action', 'quest-action', 'weather-action', 'actor-schedule-action', 'actor-state-action', 'claim-reward', 'attack-actor', 'steal', 'deceive', 'crime', 'start-combat', 'continue-combat', 'combat-state-action', 'escape',
@@ -137,13 +138,29 @@ export function parseTextOpenWorldPlayerCharacterDefinitionV1(value: unknown): T
 export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1 | string | unknown): TextOpenWorldParsedModulesV1 {
   const packageValue = parseTextOpenWorldRuntimePackageV1(value)
 
-  const narrative = versioned(packageValue, 'narrative')
-  exact(narrative, ['version', 'storylines', 'stages', 'endings', 'scenes', 'fixedChoices'], 'narrative')
+  const narrative = versioned(packageValue, 'narrative', [1, 2])
+  const authoredNarrativeModule = narrative.version === 2
+  exact(narrative, authoredNarrativeModule
+    ? ['version', 'storylines', 'stages', 'endings', 'scenes', 'fixedChoices', 'randomEventPresentations']
+    : ['version', 'storylines', 'stages', 'endings', 'scenes', 'fixedChoices'], 'narrative')
   const storylines = catalog(narrative.storylines, 'narrative.storylines', ['key', 'kind', 'ownerKind', 'ownerKey', 'title', 'summary', 'stageKeys', 'endingKeys'])
   const narrativeStages = catalog(narrative.stages, 'narrative.stages', ['key', 'storylineKey', 'order', 'title', 'summary', 'questKeys', 'sceneKeys', 'safeWaitPoint'])
   const endings = catalog(narrative.endings, 'narrative.endings', ['key', 'title', 'summary', 'conditionKeys'])
-  const scenes = catalog(narrative.scenes, 'narrative.scenes', ['key', 'title', 'purpose', 'locationKey', 'participantKeys', 'actionKeys', 'fixedChoiceKeys'])
+  const scenes = catalog(narrative.scenes, 'narrative.scenes', authoredNarrativeModule
+    ? [
+        'key', 'order', 'sourceKind', 'sourceKey', 'title', 'purpose', 'regionKey', 'locationKey', 'questKey', 'stageKey',
+        'objectiveKey', 'actorKey', 'interactionKey', 'randomEventKey', 'participantKeys', 'openingText', 'bodyText',
+        'successText', 'failureText', 'attitudeOpenings', 'allowedKnowledgeClaimKeys', 'forbiddenFutureObjectiveKeys',
+        'availabilityConditionKeys', 'actionKeys', 'fixedChoiceKeys',
+      ]
+    : ['key', 'title', 'purpose', 'locationKey', 'participantKeys', 'actionKeys', 'fixedChoiceKeys'])
   const fixedChoices = catalog(narrative.fixedChoices, 'narrative.fixedChoices', ['key', 'sceneKey', 'label', 'description', 'actionKey'])
+  const randomEventPresentations = authoredNarrativeModule
+    ? catalog(narrative.randomEventPresentations, 'narrative.randomEventPresentations', [
+        'key', 'order', 'randomEventKey', 'openingText', 'resolutionText', 'rumorKey', 'rumorRequirementKey',
+        'rumorText', 'reliability', 'sourceClaimKeys',
+      ])
+    : []
   const storylineKeys = keysOf(storylines, 'narrative.storylines'); const narrativeStageKeys = keysOf(narrativeStages, 'narrative.stages')
   const endingKeys = keysOf(endings, 'narrative.endings'); const sceneKeys = keysOf(scenes, 'narrative.scenes'); const choiceKeys = keysOf(fixedChoices, 'narrative.fixedChoices')
   for (const [index, item] of storylines.entries()) {
@@ -173,8 +190,72 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
     strings(item.questKeys, `narrative.stages[${index}].questKeys`); requireRefs(strings(item.sceneKeys, `narrative.stages[${index}].sceneKeys`), sceneKeys, 'stage scene')
   })
   endings.forEach((item, index) => { text(item.title, `narrative.endings[${index}].title`, 2_000); text(item.summary, `narrative.endings[${index}].summary`); strings(item.conditionKeys, `narrative.endings[${index}].conditionKeys`) })
-  scenes.forEach((item, index) => { text(item.title, `narrative.scenes[${index}].title`, 2_000); text(item.purpose, `narrative.scenes[${index}].purpose`); key(item.locationKey, `narrative.scenes[${index}].locationKey`); strings(item.participantKeys, `narrative.scenes[${index}].participantKeys`); strings(item.actionKeys, `narrative.scenes[${index}].actionKeys`); requireRefs(strings(item.fixedChoiceKeys, `narrative.scenes[${index}].fixedChoiceKeys`), choiceKeys, 'scene choice') })
+  scenes.forEach((item, index) => {
+    const label = `narrative.scenes[${index}]`
+    text(item.title, `${label}.title`, 2_000); text(item.purpose, `${label}.purpose`); key(item.locationKey, `${label}.locationKey`)
+    strings(item.participantKeys, `${label}.participantKeys`); strings(item.actionKeys, `${label}.actionKeys`)
+    requireRefs(strings(item.fixedChoiceKeys, `${label}.fixedChoiceKeys`), choiceKeys, 'scene choice')
+    if (!authoredNarrativeModule) return
+    int(item.order, `${label}.order`, 1, 1_000_000)
+    const sourceKind = enumValue(item.sourceKind, ['quest-offer', 'quest-objective', 'quest-resolution', 'actor-dialogue', 'location-interaction', 'random-event'], `${label}.sourceKind`)
+    const sourceKey = key(item.sourceKey, `${label}.sourceKey`)
+    key(item.regionKey, `${label}.regionKey`)
+    const questKey = nullableKey(item.questKey, `${label}.questKey`)
+    const stageKey = nullableKey(item.stageKey, `${label}.stageKey`)
+    const objectiveKey = nullableKey(item.objectiveKey, `${label}.objectiveKey`)
+    const actorKey = nullableKey(item.actorKey, `${label}.actorKey`)
+    const interactionKey = nullableKey(item.interactionKey, `${label}.interactionKey`)
+    const randomEventKey = nullableKey(item.randomEventKey, `${label}.randomEventKey`)
+    const expectedSourceKey = sourceKind === 'quest-objective' ? objectiveKey
+      : sourceKind === 'actor-dialogue' ? actorKey
+        : sourceKind === 'location-interaction' ? interactionKey
+          : sourceKind === 'random-event' ? randomEventKey : questKey
+    if (!expectedSourceKey || sourceKey !== expectedSourceKey) fail(`${label}.sourceKey与sourceKind不一致`)
+    if (sourceKind === 'quest-objective') {
+      if (!questKey || !stageKey || !objectiveKey || actorKey || interactionKey || randomEventKey) fail(`${label}任务目标场景引用不完整`)
+    } else if (sourceKind === 'quest-offer') {
+      if (!questKey || stageKey || objectiveKey || interactionKey || randomEventKey) fail(`${label}任务委托场景引用不完整`)
+    } else if (sourceKind === 'quest-resolution') {
+      if (!questKey || !stageKey || objectiveKey || interactionKey || randomEventKey) fail(`${label}任务收束场景引用不完整`)
+    } else if (sourceKind === 'actor-dialogue') {
+      if (questKey || stageKey || objectiveKey || !actorKey || interactionKey || randomEventKey) fail(`${label}角色对话场景引用不完整`)
+    } else if (sourceKind === 'location-interaction') {
+      if (questKey || stageKey || objectiveKey || actorKey || !interactionKey || randomEventKey) fail(`${label}地点交互场景引用不完整`)
+    } else if (questKey || stageKey || objectiveKey || actorKey || interactionKey || !randomEventKey) fail(`${label}随机事件场景引用不完整`)
+    text(item.openingText, `${label}.openingText`); text(item.bodyText, `${label}.bodyText`); text(item.successText, `${label}.successText`)
+    if (item.failureText != null) text(item.failureText, `${label}.failureText`)
+    if (item.attitudeOpenings == null) {
+      if (sourceKind === 'actor-dialogue') fail(`${label}角色对话必须提供三档态度开场`)
+    } else {
+      if (sourceKind !== 'actor-dialogue') fail(`${label}只有角色对话可以提供三档态度开场`)
+      const attitudes = row(item.attitudeOpenings, `${label}.attitudeOpenings`)
+      exact(attitudes, ['bad', 'neutral', 'good'], `${label}.attitudeOpenings`)
+      ;['bad', 'neutral', 'good'].forEach(band => text(attitudes[band], `${label}.attitudeOpenings.${band}`, 2_000))
+    }
+    strings(item.allowedKnowledgeClaimKeys, `${label}.allowedKnowledgeClaimKeys`)
+    strings(item.forbiddenFutureObjectiveKeys, `${label}.forbiddenFutureObjectiveKeys`)
+    strings(item.availabilityConditionKeys, `${label}.availabilityConditionKeys`)
+  })
   fixedChoices.forEach((item, index) => { requireRef(key(item.sceneKey, `narrative.fixedChoices[${index}].sceneKey`), sceneKeys, 'choice scene'); text(item.label, `narrative.fixedChoices[${index}].label`, 2_000); text(item.description, `narrative.fixedChoices[${index}].description`); key(item.actionKey, `narrative.fixedChoices[${index}].actionKey`) })
+  if (authoredNarrativeModule) {
+    const sceneOrders = scenes.map((item, index) => int(item.order, `narrative.scenes[${index}].order`, 1, 1_000_000))
+    if (new Set(sceneOrders).size !== sceneOrders.length) fail('narrative.scenes.order不能重复')
+    keysOf(randomEventPresentations, 'narrative.randomEventPresentations')
+    const eventOrders = randomEventPresentations.map((item, index) => {
+      const label = `narrative.randomEventPresentations[${index}]`
+      const order = int(item.order, `${label}.order`, 1, 1_000_000)
+      key(item.randomEventKey, `${label}.randomEventKey`)
+      text(item.openingText, `${label}.openingText`); text(item.resolutionText, `${label}.resolutionText`)
+      const rumorKey = nullableKey(item.rumorKey, `${label}.rumorKey`)
+      const requirementKey = nullableKey(item.rumorRequirementKey, `${label}.rumorRequirementKey`)
+      const rumorText = item.rumorText == null ? null : text(item.rumorText, `${label}.rumorText`)
+      if ((rumorKey != null) !== (requirementKey != null) || (rumorKey != null) !== (rumorText != null)
+        || (rumorKey != null) !== (item.reliability === 'uncertain')) fail(`${label}传闻字段必须成组出现`)
+      strings(item.sourceClaimKeys, `${label}.sourceClaimKeys`)
+      return order
+    })
+    if (new Set(eventOrders).size !== eventOrders.length) fail('narrative.randomEventPresentations.order不能重复')
+  }
 
   const world = versioned(packageValue, 'world', [1, 2, 3])
   const legacyWorldModule = world.version === 1
@@ -375,7 +456,7 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
     if (actorRows.find(actor => actor.key === item.actorKey)?.scheduleKey !== item.key) fail(`schedule/actor反向引用不一致:${String(item.key)}`)
   })
 
-  const actions = versioned(packageValue, 'actions', [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14])
+  const actions = versioned(packageValue, 'actions', [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15])
   const modernActionModule = Number(actions.version) >= 2
   const travelActionModule = Number(actions.version) >= 3
   const fastTravelActionModule = Number(actions.version) >= 4
@@ -389,16 +470,102 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
   const craftingActionModule = Number(actions.version) >= 12
   const economyActionModule = Number(actions.version) >= 13
   const directorActionModule = Number(actions.version) >= 14
+  const inputBindingActionModule = Number(actions.version) >= 15
   if (actorScheduleActionModule && legacyActorModule) fail('Action v6必须搭配Actor v2')
   if (actorLifecycleActionModule && !actorLifecycleModule) fail('Action v7必须搭配Actor v3')
   if (combatStateActionModule !== (packageValue.modules.combat.schemaVersion >= 2)) fail('Action v9+必须与Combat v2+一起发布')
-  exact(actions, ['version', 'conditions', 'effects', 'actions'], 'actions')
+  if (inputBindingActionModule && !authoredNarrativeModule) fail('Action v15必须与Narrative v2一起发布')
+  exact(actions, inputBindingActionModule
+    ? ['version', 'conditions', 'effects', 'actions', 'inputBindings']
+    : ['version', 'conditions', 'effects', 'actions'], 'actions')
   const conditions = catalog(actions.conditions, 'actions.conditions', ['key', 'expression', 'failureMessage']); const effects = catalog(actions.effects, 'actions.effects', ['key', 'operation', 'payload']); const actionRows = catalog(actions.actions, 'actions.actions', ['key', 'category', 'label', 'description', 'actorScope', 'targetScope', 'locationKeys', 'requirementConditionKeys', 'costEffectKeys', 'successEffectKeys', 'failureEffectKeys', 'timeCostMinutes', 'confirmationPolicy', 'repeatPolicy', 'cooldownMinutes'])
   const conditionKeys = keysOf(conditions, 'actions.conditions'); const effectKeys = keysOf(effects, 'actions.effects'); const actionKeys = keysOf(actionRows, 'actions.actions')
   conditions.forEach((item, index) => { canonicalProductProductionJsonV2(item.expression); text(item.failureMessage, `actions.conditions[${index}].failureMessage`, 1_000) })
   normalizedWorld.edges.forEach((item, index) => requireRefs(item.conditionKeys, conditionKeys, `world.edges[${index}].conditionKeys`))
   effects.forEach((item, index) => { key(item.operation, `actions.effects[${index}].operation`); canonicalProductProductionJsonV2(item.payload) })
   actionRows.forEach((item, index) => { enumValue(item.category, ACTION_CATEGORIES, `actions.actions[${index}].category`); text(item.label, `actions.actions[${index}].label`, 2_000); text(item.description, `actions.actions[${index}].description`); enumValue(item.actorScope, ['player', 'system'], `actions.actions[${index}].actorScope`); enumValue(item.targetScope, ['none', 'actor', 'location', 'item', 'quest', 'vendor', 'encounter', 'combatant', 'recipe'], `actions.actions[${index}].targetScope`); requireRefs(strings(item.locationKeys, `actions.actions[${index}].locationKeys`), locationKeys, 'action location'); requireRefs(strings(item.requirementConditionKeys, `actions.actions[${index}].requirementConditionKeys`), conditionKeys, 'action condition'); requireRefs(strings(item.costEffectKeys, `actions.actions[${index}].costEffectKeys`), effectKeys, 'action cost effect'); requireRefs(strings(item.successEffectKeys, `actions.actions[${index}].successEffectKeys`), effectKeys, 'action success effect'); requireRefs(strings(item.failureEffectKeys, `actions.actions[${index}].failureEffectKeys`), effectKeys, 'action failure effect'); int(item.timeCostMinutes, `actions.actions[${index}].timeCostMinutes`, 0, 1_000_000); enumValue(item.confirmationPolicy, ['never', 'high-risk', 'always'], `actions.actions[${index}].confirmationPolicy`); const repeatPolicy = enumValue(item.repeatPolicy, ['once', 'repeatable', 'cooldown'], `actions.actions[${index}].repeatPolicy`); const cooldown = item.cooldownMinutes == null ? null : int(item.cooldownMinutes, `actions.actions[${index}].cooldownMinutes`, 1, 1_000_000); if ((repeatPolicy === 'cooldown') !== (cooldown != null)) fail(`actions.actions[${index}] cooldown策略不一致`) })
+
+  if (inputBindingActionModule) {
+    const bindings = row(actions.inputBindings, 'actions.inputBindings')
+    exact(bindings, ['sourceActionBindingsHash', 'actions', 'unmatchedNaturalLanguage', 'thresholds', 'governance'], 'actions.inputBindings')
+    if (typeof bindings.sourceActionBindingsHash !== 'string' || !SHA256.test(bindings.sourceActionBindingsHash)) fail('actions.inputBindings.sourceActionBindingsHash无效')
+    const bindingRows = catalog(bindings.actions, 'actions.inputBindings.actions', [
+      'key', 'order', 'actionKey', 'actionDefinitionHash', 'actorScope', 'category', 'targetScope',
+      'systemAction', 'fixedChoiceKeys', 'naturalLanguage', 'resultAuthority',
+    ])
+    keysOf(bindingRows, 'actions.inputBindings.actions')
+    const bindingActionKeys = bindingRows.map((binding, index) => key(binding.actionKey, `actions.inputBindings.actions[${index}].actionKey`))
+    if (new Set(bindingActionKeys).size !== bindingActionKeys.length) fail('actions.inputBindings.actions.actionKey不能重复')
+    requireSameKeys(bindingActionKeys, [...actionKeys], 'Action input binding coverage')
+    const orders = bindingRows.map((binding, index) => int(binding.order, `actions.inputBindings.actions[${index}].order`, 1, 1_000_000))
+    if (new Set(orders).size !== orders.length) fail('actions.inputBindings.actions.order不能重复')
+    const combatCategories = new Set<TextOpenWorldActionCategoryV1>([
+      'start-combat', 'continue-combat', 'combat-state-action', 'combat-reward-action',
+      'combat-basic-attack', 'combat-skill', 'combat-item', 'combat-enemy-skill', 'escape',
+    ])
+    const normalizedExamples = new Set<string>()
+    bindingRows.forEach((binding, index) => {
+      const label = `actions.inputBindings.actions[${index}]`
+      const actionKey = key(binding.actionKey, `${label}.actionKey`)
+      const action = actionRows.find(candidate => candidate.key === actionKey) ?? fail(`${label}引用未知Action`)
+      if (typeof binding.actionDefinitionHash !== 'string' || !SHA256.test(binding.actionDefinitionHash)) fail(`${label}.actionDefinitionHash无效`)
+      if (enumValue(binding.actorScope, ['player', 'system'], `${label}.actorScope`) !== action.actorScope
+        || enumValue(binding.category, ACTION_CATEGORIES, `${label}.category`) !== action.category
+        || enumValue(binding.targetScope, ['none', 'actor', 'location', 'item', 'quest', 'vendor', 'encounter', 'combatant', 'recipe'], `${label}.targetScope`) !== action.targetScope) {
+        fail(`${label}没有精确绑定Action范围`)
+      }
+      const systemAction = row(binding.systemAction, `${label}.systemAction`)
+      exact(systemAction, ['enabled', 'label', 'description', 'executionSource'], `${label}.systemAction`)
+      const systemEnabled = bool(systemAction.enabled, `${label}.systemAction.enabled`)
+      if (systemEnabled !== (action.actorScope === 'player') || systemAction.executionSource !== 'system-action'
+        || text(systemAction.label, `${label}.systemAction.label`, 2_000) !== action.label
+        || text(systemAction.description, `${label}.systemAction.description`) !== action.description) fail(`${label}.systemAction没有复用同一Action`)
+      const bindingChoiceKeys = strings(binding.fixedChoiceKeys, `${label}.fixedChoiceKeys`)
+      requireRefs(bindingChoiceKeys, choiceKeys, `${label}.fixedChoiceKeys`)
+      requireSameKeys(bindingChoiceKeys, fixedChoices.filter(choice => choice.actionKey === actionKey).map(choice => String(choice.key)), `${label} fixed choices`)
+      const naturalLanguage = row(binding.naturalLanguage, `${label}.naturalLanguage`)
+      exact(naturalLanguage, [
+        'mode', 'exampleUtterances', 'candidateMayOnlySelectThisAction', 'targetResolution', 'highConfidenceLowRisk',
+        'highRiskOrIrreversible', 'lowConfidence', 'mayCreateAction', 'mayCreateQuest', 'mayCreateMapContent', 'mayWriteState',
+      ], `${label}.naturalLanguage`)
+      const mode = enumValue(naturalLanguage.mode, ['existing-action-candidate', 'disabled-system-only', 'disabled-combat-button-only'], `${label}.naturalLanguage.mode`)
+      const expectedMode = action.actorScope === 'system' ? 'disabled-system-only'
+        : combatCategories.has(action.category as TextOpenWorldActionCategoryV1) ? 'disabled-combat-button-only' : 'existing-action-candidate'
+      if (mode !== expectedMode) fail(`${label}.naturalLanguage.mode与Action边界不一致`)
+      const examples = strings(naturalLanguage.exampleUtterances, `${label}.naturalLanguage.exampleUtterances`, 'text')
+      if ((mode === 'existing-action-candidate' && examples.length !== 2) || (mode !== 'existing-action-candidate' && examples.length !== 0)) fail(`${label}.naturalLanguage示例数量无效`)
+      examples.forEach(example => {
+        const normalized = example.toLocaleLowerCase('zh-CN')
+        if (normalizedExamples.has(normalized)) fail(`自然语言示例存在跨Action歧义重复:${example}`)
+        normalizedExamples.add(normalized)
+      })
+      if (naturalLanguage.candidateMayOnlySelectThisAction !== true
+        || naturalLanguage.targetResolution !== 'current-projection-valid-targets-only'
+        || naturalLanguage.highConfidenceLowRisk !== 'execute-after-runtime-validation'
+        || naturalLanguage.highRiskOrIrreversible !== 'require-explicit-confirmation'
+        || naturalLanguage.lowConfidence !== 'respond-and-recommend-formal-actions'
+        || naturalLanguage.mayCreateAction !== false || naturalLanguage.mayCreateQuest !== false
+        || naturalLanguage.mayCreateMapContent !== false || naturalLanguage.mayWriteState !== false) fail(`${label}.naturalLanguage越过首版自由演绎边界`)
+      const authority = row(binding.resultAuthority, `${label}.resultAuthority`)
+      exact(authority, ['artifactKey', 'collection', 'actionKey', 'actionDefinitionHash'], `${label}.resultAuthority`)
+      if (authority.artifactKey !== 'text-open-world.quest-design-documents' || authority.collection !== 'actions'
+        || authority.actionKey !== actionKey || authority.actionDefinitionHash !== binding.actionDefinitionHash) fail(`${label}.resultAuthority没有指向同一Action`)
+    })
+    const unmatched = row(bindings.unmatchedNaturalLanguage, 'actions.inputBindings.unmatchedNaturalLanguage')
+    exact(unmatched, ['policy', 'impossibleActionPolicy', 'customSolutionPolicy', 'stateMutationAllowed'], 'actions.inputBindings.unmatchedNaturalLanguage')
+    if (unmatched.policy !== 'natural-response-then-formal-action-redirect'
+      || unmatched.impossibleActionPolicy !== 'explicit-decline-with-in-world-alternative'
+      || unmatched.customSolutionPolicy !== 'future-extension-disabled' || unmatched.stateMutationAllowed !== false) fail('actions.inputBindings.unmatchedNaturalLanguage越过首版边界')
+    const thresholds = row(bindings.thresholds, 'actions.inputBindings.thresholds')
+    exact(thresholds, ['directExecutionMinimumConfidence', 'recommendationMinimumConfidence'], 'actions.inputBindings.thresholds')
+    if (thresholds.directExecutionMinimumConfidence !== 0.9 || thresholds.recommendationMinimumConfidence !== 0.55) fail('actions.inputBindings.thresholds必须使用已批准阈值')
+    const governance = row(bindings.governance, 'actions.inputBindings.governance')
+    exact(governance, [
+      'singleResultSource', 'allThreeInputsUseActionRegistry', 'modelCannotCreateActionOrResult', 'combatFreeTextDisabled',
+      'lowConfidenceNeverExecutes', 'irreversibleActionsRequireConfirmation', 'runtimeProjectionValidationRequired',
+    ], 'actions.inputBindings.governance')
+    Object.entries(governance).forEach(([field, value]) => { if (value !== true) fail(`actions.inputBindings.governance.${field}必须为true`) })
+  }
 
   if (travelActionModule) {
     const travelActions = actionRows.filter(action => action.category === 'travel')
@@ -653,6 +820,42 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
     fixedChoices.filter(choice => choice.sceneKey === item.key).map(choice => String(choice.key)),
     `scene ${String(item.key)} choices`,
   ))
+  if (authoredNarrativeModule) {
+    scenes.forEach((item, index) => {
+      const label = `narrative.scenes[${index}]`
+      const regionKey = key(item.regionKey, `${label}.regionKey`)
+      const locationKey = key(item.locationKey, `${label}.locationKey`)
+      requireRef(regionKey, regionKeys, `${label}.regionKey`)
+      if (normalizedWorld.locations.find(location => location.key === locationKey)?.regionKey !== regionKey) fail(`${label}.regionKey与locationKey不一致`)
+      const questKey = nullableKey(item.questKey, `${label}.questKey`)
+      const stageKey = nullableKey(item.stageKey, `${label}.stageKey`)
+      const objectiveKey = nullableKey(item.objectiveKey, `${label}.objectiveKey`)
+      const actorKey = nullableKey(item.actorKey, `${label}.actorKey`)
+      requireRef(questKey, questKeys, `${label}.questKey`); requireRef(stageKey, questStageKeys, `${label}.stageKey`)
+      requireRef(objectiveKey, objectiveKeys, `${label}.objectiveKey`); requireRef(actorKey, actorKeys, `${label}.actorKey`)
+      if (stageKey && questStages.find(stage => stage.key === stageKey)?.questKey !== questKey) fail(`${label}.stageKey不属于questKey`)
+      if (objectiveKey && objectives.find(objective => objective.key === objectiveKey)?.stageKey !== stageKey) fail(`${label}.objectiveKey不属于stageKey`)
+      if (actorKey && !strings(item.participantKeys, `${label}.participantKeys`).includes(actorKey)) fail(`${label}.actorKey必须进入participantKeys`)
+      requireRefs(strings(item.forbiddenFutureObjectiveKeys, `${label}.forbiddenFutureObjectiveKeys`), objectiveKeys, `${label}.forbiddenFutureObjectiveKeys`)
+      requireRefs(strings(item.availabilityConditionKeys, `${label}.availabilityConditionKeys`), conditionKeys, `${label}.availabilityConditionKeys`)
+      requireSameKeys(
+        strings(item.actionKeys, `${label}.actionKeys`),
+        fixedChoices.filter(choice => choice.sceneKey === item.key).map(choice => String(choice.actionKey)),
+        `${label} Action/Choice result source`,
+      )
+    })
+    questRows.forEach(quest => {
+      for (const sourceKind of ['quest-offer', 'quest-resolution'] as const) {
+        if (scenes.filter(scene => scene.sourceKind === sourceKind && scene.questKey === quest.key).length !== 1) fail(`每个任务必须且只能有一个${sourceKind}场景:${String(quest.key)}`)
+      }
+    })
+    objectives.forEach(objective => {
+      if (scenes.filter(scene => scene.sourceKind === 'quest-objective' && scene.objectiveKey === objective.key).length !== 1) fail(`每个任务目标必须且只能有一个场景:${String(objective.key)}`)
+    })
+    actorRows.forEach(actor => {
+      if (scenes.filter(scene => scene.sourceKind === 'actor-dialogue' && scene.actorKey === actor.key).length !== 1) fail(`每个Actor必须且只能有一个对话入口场景:${String(actor.key)}`)
+    })
+  }
   narrativeStages.forEach(item => {
     const storyline = storylines.find(candidate => candidate.key === item.storylineKey)
     strings(item.questKeys, `narrative stage ${String(item.key)} questKeys`).forEach(questKey => {
@@ -1339,8 +1542,7 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
           if (costEffectKeys.length !== 1 || resourceCosts.length !== 1 || row(resourceCosts[0].payload, `combat skill cost ${resourceCosts[0].key}`).amount !== -Number(skill.resourceCost)) fail(`战斗技能资源cost不匹配:${actionKey}`)
         }
         requireSameKeys(successEffectKeys, [...strings(skill.effectKeys, `skill ${skillKey} effects`), String(effect.key)], `combat skill ${actionKey} success effects`)
-        if (kind === 'basic-attack' && (skillKey !== 'skill.basic-attack' || Number(skill.resourceCost) !== 0 || Number(skill.cooldownTurns) !== 0)) fail('普通攻击必须绑定零消耗零冷却skill.basic-attack')
-        if (kind === 'skill' && skillKey === 'skill.basic-attack') fail('技能面板Action不能重复普通攻击')
+        if (kind === 'basic-attack' && (Number(skill.resourceCost) !== 0 || Number(skill.cooldownTurns) !== 0)) fail('普通攻击必须绑定零消耗零冷却技能')
       } else if (kind === 'item') {
         const itemKey = key(payload.itemKey, `combat item ${actionKey} itemKey`); requireRef(itemKey, itemKeys, 'combat item')
         if (payload.skillKey != null || action.actorScope !== 'player' || action.targetScope !== 'item') fail(`战斗道具Action范围无效:${actionKey}`)
@@ -1362,7 +1564,8 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
     performCombatEffects.forEach(effect => { if (!markerOwner.has(String(effect.key))) fail(`perform-combat-action Effect没有唯一战斗Action owner:${String(effect.key)}`) })
     const markerRows = combatActions.map(action => ({ action, payload: row(effects.find(effect => markerOwner.get(String(effect.key)) === action.key)!.payload, `combat marker ${String(action.key)}`) }))
     if (markerRows.filter(row => row.payload.kind === 'basic-attack').length !== 1 || markerRows.filter(row => row.payload.kind === 'escape').length !== 1) fail('Action v10必须各有一个普通攻击和逃跑Action')
-    const activePlayerSkillKeys = skills.filter(skill => skill.activation === 'active' && skill.key !== 'skill.basic-attack').map(skill => String(skill.key))
+    const basicAttackSkillKey = String(markerRows.find(row => row.payload.kind === 'basic-attack')!.payload.skillKey)
+    const activePlayerSkillKeys = skills.filter(skill => skill.activation === 'active' && skill.key !== basicAttackSkillKey).map(skill => String(skill.key))
     requireSameKeys(markerRows.filter(row => row.payload.kind === 'skill').map(row => String(row.payload.skillKey)), activePlayerSkillKeys, '玩家战斗技能Action覆盖')
     requireSameKeys(markerRows.filter(row => row.payload.kind === 'item').map(row => String(row.payload.itemKey)), itemRows.filter(item => item.consumable === true).map(item => String(item.key)), '玩家战斗道具Action覆盖')
     const enemySkillKeys = [...new Set(enemies.flatMap(enemy => strings(enemy.skillKeys, `enemy ${String(enemy.key)} skillKeys`)))]
@@ -1929,6 +2132,20 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
       if (!directorSafeOperations.has(String(effect.operation))) fail(`随机事件Effect需要独立授权或会破坏受保护流程:${String(item.key)}:${effectKey}`)
     })
   })
+  if (authoredNarrativeModule) {
+    const presentedEventKeys = randomEventPresentations.map((item, index) => key(item.randomEventKey, `narrative.randomEventPresentations[${index}].randomEventKey`))
+    if (new Set(presentedEventKeys).size !== presentedEventKeys.length) fail('每个随机事件只能有一个表现定义')
+    requireSameKeys(presentedEventKeys, [...randomEventKeys], 'random event presentation coverage')
+    const eventSceneKeys = scenes.filter(scene => scene.sourceKind === 'random-event').map((scene, index) => key(scene.randomEventKey, `narrative.randomEventScenes[${index}].randomEventKey`))
+    if (new Set(eventSceneKeys).size !== eventSceneKeys.length) fail('每个随机事件只能有一个场景')
+    requireSameKeys(eventSceneKeys, [...randomEventKeys], 'random event scene coverage')
+    scenes.filter(scene => scene.sourceKind === 'random-event').forEach(scene => {
+      const event = randomEvents.find(candidate => candidate.key === scene.randomEventKey) ?? fail(`随机事件场景引用未知事件:${String(scene.key)}`)
+      if (!(event.regionKeys as string[]).includes(String(scene.regionKey))) fail(`随机事件场景地区不属于事件:${String(scene.key)}`)
+      const declaredActions = new Set(event.actionKeys as string[])
+      if (strings(scene.actionKeys, `random event scene ${String(scene.key)} actionKeys`).some(actionKey => !declaredActions.has(actionKey))) fail(`随机事件场景引用事件外Action:${String(scene.key)}`)
+    })
+  }
   const fingerprints = [...templates.map(item => String(item.fingerprint)), ...randomEvents.map(item => String(item.fingerprint))]
   if (new Set(fingerprints).size !== fingerprints.length) fail('Director模板与随机事件fingerprint不能重复')
   decks.forEach((item, index) => {
@@ -1987,6 +2204,11 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
     if (item.kind === 'quest-upgrade' && item.upgradeTemplateKey == null) fail(`升级事件必须绑定任务模板:${String(item.key)}`)
     if (item.kind !== 'quest-upgrade' && item.upgradeTemplateKey != null) fail(`非升级事件不能绑定任务模板:${String(item.key)}`)
     if (!['atmosphere', 'clue', 'quest-upgrade'].includes(String(item.kind)) && !(item.effectKeys as string[]).length && !(item.actionKeys as string[]).length) fail(`资源或遭遇事件必须包含Action或Effect:${String(item.key)}`)
+  })
+  if (authoredNarrativeModule) randomEventPresentations.forEach((item, index) => {
+    requireRef(nullableKey(item.rumorKey, `narrative.randomEventPresentations[${index}].rumorKey`), rumorKeys, 'random event presentation rumor')
+    const event = randomEvents.find(candidate => candidate.key === item.randomEventKey) ?? fail(`随机事件表现引用未知事件:${String(item.key)}`)
+    if (item.rumorKey !== event.rumorKey) fail(`随机事件表现与Director传闻引用不一致:${String(item.key)}`)
   })
 
   const presentation = versioned(packageValue, 'presentation', [1, 2])

@@ -98,6 +98,7 @@ export interface TextOpenWorldNpcRuntimeModelExecutionV1 {
 export type TextOpenWorldNpcRuntimeModelRunnerV1 = (input: {
   projectId: number
   requirementKey: string
+  expectedCapabilityHash: string
   category: string
   system: string
   contextText: string
@@ -535,7 +536,8 @@ function systemPrompt(context: TextOpenWorldNpcRuntimeInputContextV1): string {
 async function defaultModelRunner(input: Parameters<TextOpenWorldNpcRuntimeModelRunnerV1>[0]): Promise<TextOpenWorldNpcRuntimeModelExecutionV1> {
   const result: ChatResult = {}
   const response = await runConfiguredProductionTextV1({
-    projectId: input.projectId, requirementKey: input.requirementKey, category: input.category,
+    projectId: input.projectId, requirementKey: input.requirementKey,
+    expectedCapabilityHash: input.expectedCapabilityHash, category: input.category,
     messages: [{ role: 'system', content: input.system }, { role: 'user', content: `以下是已登记并验签的NPC运行目录输入：\n<npc-runtime-input>\n${input.contextText}\n</npc-runtime-input>` }],
     maximumOutputTokens: input.maximumOutputTokens, signal: input.signal, result, responseFormat: 'json_object',
   })
@@ -556,7 +558,8 @@ export function createTextOpenWorldNpcRuntimeCatalogExecutorV1(options: {
     if (!binding) fail('NPC Runtime缺少文本capability binding')
     const context = await parseContext(execution.contextText); const prompt = systemPrompt(context); const startedAt = performance.now()
     const response = await runModel({
-      projectId: execution.scope.projectId, requirementKey, category: 'text-open-world.production.npc-runtime-catalog',
+      projectId: execution.scope.projectId, requirementKey, expectedCapabilityHash: binding.bindingHash,
+      category: 'text-open-world.production.npc-runtime-catalog',
       system: prompt, contextText: execution.contextText,
       maximumOutputTokens: Math.max(1, Math.min(32_000, execution.task.budgetReservation.outputTokens)), signal: execution.signal,
     })

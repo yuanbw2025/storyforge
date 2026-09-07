@@ -1,6 +1,6 @@
 # AI 主导文字开放世界叙事基座 · StoryForge 施工规格
 
-> 规格版本：3.2.20
+> 规格版本：3.2.22
 > 生效日期：2026-09-06
 > 文档层级：L2 产品目标架构与施工规格
 > 当前状态：设计基线；不代表代码已经实现
@@ -371,7 +371,7 @@ events / checkpoints / terminalReceipt
 - 模型任务最多两次尝试，只允许传输、限流、协议或Schema局部修复；授权、余额、stale和结果未知不得隐藏重发；
 - V3是唯一把已验收产物装配为G2运行包的节点，AI不得直接写正式Release或Session状态。
 
-这套合同当前标记为`contract-only-until-skills-and-executors-registered`。G3-02～G3-17逐项补齐Schema、Skill和Executor，G3-18完成端到端证据后才替换现有通用生产入口，避免半套新DAG进入正式创建流程。
+这套合同已在G3-18激活为`active`。共享调度器按`text-open-world`产品类型选择这套专属Plan，正式生产Service选择唯一专属Executor；其他产品仍走原有通用流程。激活依据不是“所有文件都存在”，而是完整DAG、断点恢复、媒资装配、Build Preview与真实Session启动证据均已闭合。
 
 #### 5.4.2 P0双来源SourcePin落地
 
@@ -397,7 +397,7 @@ P0本身没有增加物理表、AI可写字段或第二套Context Source。单�
 - SourceGapReport不由模型自行宣称覆盖率。代码依据SourceManifest的实读集合及Ledger的证据标签，确定性生成未读、故事核心、主角、核心冲突、角色、势力、地点和时间线缺口；模型只能补充矛盾、歧义和低证据缺口；
 - Manifest、Ledger与GapReport依次绑定上游Hash、相同生成时间和受控rights证据，仍只产生`productBuildArtifacts`候选，不写世界引擎、正式ProductRelease或运行Session。
 
-P1已登记专属Skill与Executor，但完整P0～P10线上入口仍保持关闭；直到G3-18完成共享durable scheduler、checkpoint、receipt、恢复与端到端Build证据后，才允许替代旧生产入口。
+P1专属Skill与Executor已经进入正式P0～P10生产Plan。共享durable scheduler持久化每个候选、验收回执与checkpoint；在P1候选写入后模拟崩溃并恢复时，已完成的模型调用不会再次执行或重复计费。
 
 #### 5.4.4 P2 GameBrief、体验契约与主角身份落地
 
@@ -411,7 +411,7 @@ P1已登记专属Skill与Executor，但完整P0～P10线上入口仍保持关闭
 - GameBrief、ExperienceContract和ProtagonistAsset分别拥有内容Hash，并通过Brief、Pin、Manifest、Ledger、Gap Report、完整P2输入与实际claim entry hash形成basis链。即使重新计算单个Artifact Hash，偷换作者意图、固定边界、来源缺口或未交付claim仍会在采纳前失败关闭；
 - P2不再读取WorldRelease/小说原文，P1是唯一来源证据入口；输出仍是`productBuildArtifacts`候选，不写世界引擎、正式Release或Session。一次P2模型请求对应一个durable任务尝试，隐藏多轮重试不在Executor内部发生。
 
-P2已经登记Skill和Executor，但专属生产Plan仍保持未激活。G3-18之前，线上通用产品生产不会误调半套P0～P10流程。
+P2已经登记Skill和Executor并随专属生产Plan正式激活。产品路由在调度与执行两层都按`text-open-world`显式选择，不会把半套专属产物交给其他产品，也不会回落到旧通用开放世界机械编译器。
 
 #### 5.4.5 P2 GameplayRulesetSkeleton落地
 
@@ -424,7 +424,7 @@ P2已经登记Skill和Executor，但专属生产Plan仍保持未激活。G3-18�
 - Effect词表直接来自`TEXT_OPEN_WORLD_EFFECT_OPERATIONS_V1`，不再在生产Prompt另抄一份；当前新Build操作进一步无重叠地分为模型可提议内容效果与编译器专属协议效果，旧`start-combat/resolve-combat`只用于旧Release读取；
 - Artifact精确冻结Progression v1、Combat v3、Items v1、Crafting v2、Economy v2、Action v14和RuntimePackage v1。后续PlayerBuild、任务、目录及最终V3装配可以直接消费这些字段；任何固定数值、模块版本、权限分区、上游Hash、claim或basis变化都会失败关闭。
 
-该Artifact仍只进入`productBuildArtifacts`候选，不写ProductRelease、Session或世界引擎。完整生产Plan继续等G3-18才激活。
+该Artifact仍只进入`productBuildArtifacts`候选，不写ProductRelease、Session或世界引擎。它现在由已激活的专属Plan消费，但正式ProductRelease仍只能在后续发布动作中产生。
 
 #### 5.4.6 P4 PlayerBuild与目录预留落地
 
@@ -567,6 +567,22 @@ P10 `SystemFinalize`完整验签GameBrief、ExperienceContract、GameplayRuleset
 V1 `DeterministicPreflight`不调用模型，先检查Schema、Artifact Hash链、全部Action/Condition/Effect引用、首个主线任务可揭示可启动、后续主线受保护等待、内容预算和全部消费槽可解析。任何一项失败时禁止进入模型质量评审。
 
 V2在V1通过后分别运行平衡和叙事语义评审。平衡评审覆盖成长、战斗、奖励、经济、可解性和内容供给；语义评审覆盖来源忠实、主线弧、重要故事、地区差异、任务体验、对话知识边界、重复度和时长引导。分数低于70为阻断，70～84必须给出可定位问题；代码而非模型决定问题对应的唯一生产任务，并沿正式DAG计算传递stale闭包。修复只产生同一Production中的新Build候选，已验收Artifact保持不可变，修复后必须重新执行V1与双评审。模型评分不能代替真人游玩时长校准，后者仍是发布阶段的独立证据。
+
+#### 5.4.17 G3-18专属生产入口、V3装配与端到端恢复落地
+
+G3-18把此前逐项完成的生产零件接入共享正式Harness，而不是建立第二套调度系统：
+
+- 共享scheduler在创建计划时按产品类型选择`createTextOpenWorldProductionPlanV1`，正式Service在执行时选择`createTextOpenWorldProductionExecutorV1`；其余产品继续使用通用Plan和Executor，产品边界在调度与执行两层均显式可验；
+- P0 Executor读取当前Production唯一已授权Brief，按其中的来源选择动态展开精确SourcePinUnit任务，先落单元、后落SourcePin索引闭合标记。WorldRelease与小说仍遵守各自读取边界，Pin、单元及Brief Hash必须一致；
+- 同一dispatcher覆盖P1～P10、V1双评审、V3和QA。共享checkpoint、候选、验收与terminal receipt协议保持不变；在P1候选检查点后注入崩溃再恢复，P1不会重复调用模型，后续26项专属任务可以继续完成；
+- P1的每次真实模型批次各自拥有精确ContextManifest、请求/响应快照与尝试号；allow-list在确定性目录读取阶段真实生效。失败批次重试不会覆盖旧证据，恢复只复用已经成功的批次，最终采纳只汇总每批最新成功尝试；
+- P8F生成每个结局独立Condition及`route→unlock→reach` Effect/Action，P9再把最终场景、固定Choice、系统Action和自然语言示例绑定到该唯一Action。V1检查全链引用，V2读取完整结局表现；V3不得临时创造结局。Narrative v2完整冻结P9场景正文、三档NPC对话、知识边界、随机事件与传闻，Action v15冻结三类输入绑定；
+- P10把完整媒资槽清单和本次实际排产分开：未排产项显式为`fallback-only`，实际生成槽数与冻结Brief/Plan精确一致；`none/music-sfx/full`分别形成0/4/9个音频槽。媒资任务把这些槽翻译为共享媒资执行协议，首版语音保持0并在启用前失败关闭；
+- V3逐件核验实际媒资的物理Blob、Capability需求、任务生产回执、Provider回执和权利策略，再把真实资产写入ProductRuntimePackage的冻结`presentation.assets`。IntegrationReport自身、权利明细和覆盖结论各自有Hash；原型/内部档的文字或程序降级只计可玩覆盖，商业候选必须以真实资产覆盖全部必需视觉及Brief已排产音频，降级不得冒充商业完成；
+- V3只从已验收Artifact确定性装配15个G2运行模块、兼容叙事壳和`textOpenWorldVNext`能力，不生成旧interaction/adventure/evolution/openWorld四份重复运行状态。旧混合包仍可解析，vNext-only包可独立进入玩家库、ProductRelease与Session，新Session只创建统一`textOpenWorld`投影；
+- 端到端证据覆盖完整调度、断点恢复、Package/Quality Artifact、Build Preview媒资解析及真实Session启动。QA逐门重验Package、主线/结局、IntegrationReport和权利证据，不再把所有门直接标为通过；媒资覆盖不足只形成preview-ready，商业候选还必须在发布阶段补真实浏览器、主路线和媒资运行回执。ProductRelease仍只由发布动作创建。
+
+至此G3“来源→故事→任务→玩法目录→场景→可运行Build”出口闭合。下一阶段G4只消费统一运行包与Session能力建设真实玩家端，不回头复制生产逻辑。
 
 ### 5.5 正确的验证顺序
 
@@ -1386,6 +1402,8 @@ StoryForge当前没有独立staging。发布前仍需在隔离数据中完成灰
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| 3.2.22 | 2026-09-07 | 收口G3-18独立审查：P1按真实模型批次保存精确ContextManifest并仅采纳最新成功尝试；结局生产前移至P8F/P9且V1/V2验收，Narrative v2与Action v15不丢失正文和三类输入；P10区分排产槽与`fallback-only`并与Brief音频计数同源；V3核验物理Blob、Capability、生产/Provider回执及权利策略，IntegrationReport分层验Hash；QA按证据逐门判定，商业真实资产覆盖与原型可玩fallback彻底分开；vNext-only、Hybrid和Legacy读取边界均有回归证据 |
+| 3.2.21 | 2026-09-07 | 激活G3-18专属生产链：共享scheduler与service按产品类型选择P0～P10/V1～V3/QA Plan和Executor，P0按Brief精确展开来源单元；完整断点恢复证明已完成模型调用不重复执行；V3验签并装配15个G2模块、兼容叙事壳、真实媒资和降级槽，Build Preview可解析资产并启动只有统一`textOpenWorld`状态的Session；旧混合包只读兼容，正式ProductRelease与真人时长证据仍由发布阶段负责 |
 | 3.2.20 | 2026-09-07 | 补齐P2 PresentationProfile并落地P10/V1/V2：代码冻结18个UI消费槽、15个运行模块、必需媒资槽与全量降级，区分内容库存和单次游玩时长；确定性预检先验证Schema/Hash链/引用/可解性/预算/消费槽，再由双模型评审检查6项平衡与8项叙事指标；问题由代码定位到新Build唯一修复任务并传播stale，禁止原地改写已验收Artifact，真人时长校准仍为发布证据 |
 | 3.2.19 | 2026-09-07 | 落地P9 SceneScripts/ChoiceContracts/ActionBindings：代码完整验签10件上游并向模型交付去重紧凑投影，覆盖任务委托/目标/收束、NPC三档态度对话、地点交互、随机事件/传闻及模板三变体；固定Choice与自然语言候选都只引用P8F Action Hash和唯一结果权威，战斗自由输入关闭，低置信度不执行、高风险需确认，模型不能创建运行内容或改状态 |
 | 3.2.18 | 2026-09-07 | 落地P8后半制作经济/NPC运行/地图交互目录及P8F QuestFinalize/EncounterFinalize：11件叙事、任务与玩法Artifact以完整Hash链原子交付，模型只补受约束叙事/发牌语义，代码最终化全部Quest/Stage/Objective生命周期、Condition/Effect/Action、奖励、战斗、物品、制作、商店、NPC、地图、旅行、快旅、复活和世界演化真实引用；地区Director冻结普通任务、模板、随机事件、冷却、并发和空白牌，保护故事排除于发牌压力；表现变体留给P9；同时修正正式调度的Context预算传递并增加atomic JSON超额失败关闭，推荐总调用仍为150次 |

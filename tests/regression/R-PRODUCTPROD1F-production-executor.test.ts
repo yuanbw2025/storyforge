@@ -809,9 +809,11 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     expect(events.some(row => row.type === 'evidence.artifact.recorded' && JSON.parse(row.payloadJson).artifactKind === 'source-snapshot')).toBe(true)
   }, 30000)
 
-  it('五种现行生产产品经过正式生产、可玩 Build Preview 与同包原子发布', async () => {
+  it('四种共享生产产品经过正式生产、可玩 Build Preview 与同包原子发布', async () => {
+    // text-open-world 已切换为 P0-P10/V1-V3/QA 专属生产链，不能再用
+    // 这套通用六步 fixture 冒充开放世界生产；其装配闭环由 R-OPEN-WORLD3 覆盖。
     const products: ProductionProductKindV1[] = [
-      'character-interaction', 'text-adventure', 'avg', 'text-open-world', 'ttrpg',
+      'character-interaction', 'text-adventure', 'avg', 'ttrpg',
     ]
     for (const productType of products) {
       const owned = await fixtureForProduct(productType)

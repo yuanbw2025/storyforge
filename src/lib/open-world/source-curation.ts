@@ -2,10 +2,20 @@ import type { ChatResult } from '../ai/client'
 import { estimateTokens } from '../ai/context-budget'
 import { sha256Text } from '../ai/chapter-memory/text-normalization'
 import { getAgentSkillV1 } from '../agent/skill-registry'
+import { appendAgentRunEventV1, readAgentRunV1, type AgentRunSnapshotV1 } from '../agent/run/event-store'
+import { canonicalStringify } from '../agent/run/hash'
+import { createContextManifestFromAssemblyV1, createContextManifestV2FromV1 } from '../agent/run/context-manifest'
+import {
+  finalizeContextGatewayAttemptEvidenceV1,
+  recordContextGatewayPreflightEvidenceV1,
+} from '../context-gateway/attempt-evidence'
 import { executeContextGatewayV1, type ContextGatewayExecutionV1 } from '../context-gateway/execution'
 import { openWorldSemanticResourceCatalogV1 } from '../context-gateway/world-release-client'
+import { db } from '../db/schema'
+import { readAgentRunArtifactExactV1, recordAgentRunArtifactV1 } from '../memory/artifact-store'
+import { resolveProductSourceReadBoundaryV1 } from '../product/source-contracts'
 import { assembleContext } from '../registry/assemble-context'
-import type { AssembleContextInput, ContextResourceDescriptorV1 } from '../registry/types'
+import type { AssembleContextInput, AssembleContextResult, ContextResourceDescriptorV1 } from '../registry/types'
 import type {
   ProductBuildArtifactRecordV1,
   TextOpenWorldProductionStageV1,
@@ -25,6 +35,7 @@ import type {
 } from '../types'
 import { runConfiguredProductionTextV1, type ProviderBindingReceiptV1 } from '../product-production/capabilities'
 import { hashProductProductionValueV2, isSha256Hash } from '../product-production/hash'
+import { parseProductProductionSourcePlanV1 } from '../product-production/source-contracts'
 import { parseProductionModelJsonObjectV1 } from '../product-production/production-executor'
 import type {
   ProductProductionTaskExecutionInputV1,
@@ -86,6 +97,7 @@ export interface TextOpenWorldSourceCurationModelExecutionV1 {
 export type TextOpenWorldSourceCurationModelRunnerV1 = (input: {
   projectId: number
   requirementKey: string
+  expectedCapabilityHash: string
   category: string
   system: string
   contextText: string
@@ -98,6 +110,8 @@ interface CurationBatchV1 {
   reads: TextOpenWorldSourceCurationReadV1[]
   contextText: string
   contextEvidenceHash: string
+  assembled: AssembleContextResult
+  gateway: ContextGatewayExecutionV1 | null
 }
 
 interface DraftEvidenceV1 {
@@ -373,6 +387,8 @@ async function novelBatches(input: {
         sourceEvidence: evidence,
         unitKeys: keys,
       }),
+      assembled,
+      gateway: null,
     })
   }
   return result
@@ -395,9 +411,26 @@ async function worldBatches(input: {
   totalInputTokens: number
   signal: AbortSignal
   executeGateway: typeof executeContextGatewayV1
+  requireSourcePlan: boolean
 }): Promise<CurationBatchV1[]> {
   const available = await verifyTextOpenWorldSourcePinAvailabilityV1({ scope: input.scope, pin: input.bundle.pin })
   if (available.kind !== 'world-release') fail('WorldRelease SourcePin 无法解析本地冻结来源')
+  const production = await db.productProductions.get(input.productionId)
+  const briefRow = production?.id && production.currentBriefRevision != null
+    ? await db.productProductionBriefs
+      .where('[productionId+revision]').equals([production.id, production.currentBriefRevision]).first()
+    : null
+  if (input.requireSourcePlan && (!briefRow || briefRow.status !== 'authorized')) {
+    fail('正式P1缺少已授权Brief/SourcePlan')
+  }
+  const sourcePlan = briefRow?.status === 'authorized'
+    ? await parseProductProductionSourcePlanV1(briefRow)
+    : null
+  if (sourcePlan && (sourcePlan.worldReference.localReleaseRecordId !== available.worldReference.localReleaseRecordId
+    || sourcePlan.worldReference.releaseHash !== available.worldReference.releaseHash)) {
+    fail('P1 SourcePin与冻结SourcePlan不属于同一WorldRelease')
+  }
+  const boundary = sourcePlan ? await resolveProductSourceReadBoundaryV1(sourcePlan) : null
   const catalog = await openWorldSemanticResourceCatalogV1({
     localReleaseRecordId: available.worldReference.localReleaseRecordId,
     expectedProjectId: input.scope.projectId,
@@ -410,6 +443,10 @@ async function worldBatches(input: {
     .sort((left, right) => descriptorPriority(left) - descriptorPriority(right)
       || left.resourceKey.localeCompare(right.resourceKey))
   if (descriptors.length !== unitByResource.size) fail('WorldRelease目录未覆盖SourcePin全部资源')
+  const allowedResourceKeys = new Set(boundary?.allowedResourceKeys ?? descriptors.map(item => item.resourceKey))
+  if (descriptors.some(descriptor => !allowedResourceKeys.has(descriptor.resourceKey))) {
+    fail('P1 SourcePin包含SourcePlan未授权资源')
+  }
   for (const descriptor of descriptors) {
     if (descriptor.contentHash !== unitByResource.get(descriptor.resourceKey)!.sourceContentHash) {
       fail(`WorldRelease资源Hash与SourcePin不一致:${descriptor.resourceKey}`)
@@ -432,7 +469,8 @@ async function worldBatches(input: {
     const gateway: ContextGatewayExecutionV1 = await input.executeGateway({
       skill,
       scope: input.scope,
-      resourceScope: catalog.scope,
+      resourceScope: boundary?.sourceScope ?? catalog.scope,
+      ...(sourcePlan ? { accessPolicyOverride: sourcePlan.gatewayPolicy } : {}),
       allowedResourceKeys: resourceKeys,
       mandatoryResourceKeys: resourceKeys,
       mandatoryFullResourceKeys: resourceKeys,
@@ -489,27 +527,64 @@ async function worldBatches(input: {
       || sourcePinEvidence.delivery !== 'full' || sourcePinAssembly.overBudgetAfterTrim) {
       fail(`WorldRelease SourcePin索引没有通过注册Context Source完整交付:${batchKey(index)}`)
     }
+    const contextText = JSON.stringify({
+      schema: 'storyforge.text-open-world-world-source-curation-context',
+      version: 1,
+      sourcePinHash: input.bundle.pin.pinHash,
+      sourcePinContext: JSON.parse(sourcePinAssembly.text),
+      units: units.map(unit => ({
+        unitKey: unit.unitKey,
+        sourceResourceKey: unit.sourceResourceKey,
+        sourceContentHash: unit.sourceContentHash,
+        content: reads.find(read => read.unitKey === unit.unitKey)!.content,
+      })),
+    })
+    const totalInputTokens = sourcePinEvidence.inputTokens + gateway.contextPacket.tokenCount
+    const inputBudget = Math.min(100_000, Math.max(1, Math.floor(input.totalInputTokens / input.maximumModelCalls)))
     result.push({
       batchKey: batchKey(index),
       reads,
-      contextText: JSON.stringify({
-        schema: 'storyforge.text-open-world-world-source-curation-context',
-        version: 1,
-        sourcePinHash: input.bundle.pin.pinHash,
-        sourcePinContext: JSON.parse(sourcePinAssembly.text),
-        units: units.map(unit => ({
-          unitKey: unit.unitKey,
-          sourceResourceKey: unit.sourceResourceKey,
-          sourceContentHash: unit.sourceContentHash,
-          content: reads.find(read => read.unitKey === unit.unitKey)!.content,
-        })),
-      }),
+      contextText,
       contextEvidenceHash: await hashProductProductionValueV2({
         sourcePinEvidence,
         packetHash: gateway.contextPacket.packetHash,
         traceHash: gateway.retrievalTrace.traceHash,
         unitKeys: units.map(unit => unit.unitKey),
       }),
+      assembled: {
+        text: contextText,
+        segments: [
+          ...sourcePinAssembly.segments,
+          {
+            label: `文字开放世界来源拆解 ${batchKey(index)} · 冻结世界正文`,
+            layer: 'L0',
+            content: gateway.contextPacket.content,
+            tokens: gateway.contextPacket.tokenCount,
+            trimmable: false,
+          },
+        ],
+        included: ['text-open-world.source-pin', 'worldRelease'],
+        omitted: [],
+        trimmed: [],
+        sourceEvidence: [
+          sourcePinEvidence,
+          {
+            key: 'worldRelease',
+            status: 'included',
+            delivery: 'full',
+            sourceHash: gateway.contextPacket.contentHash,
+            originalCharacters: gateway.contextPacket.content.length,
+            inputCharacters: gateway.contextPacket.content.length,
+            originalTokens: gateway.contextPacket.tokenCount,
+            inputTokens: gateway.contextPacket.tokenCount,
+          },
+        ],
+        totalInputTokens,
+        inputBudget,
+        overBudgetBeforeTrim: totalInputTokens > inputBudget,
+        overBudgetAfterTrim: totalInputTokens > inputBudget,
+      },
+      gateway,
     })
   }
   return result
@@ -597,6 +672,7 @@ async function defaultModelRunner(
   const response = await runConfiguredProductionTextV1({
     projectId: input.projectId,
     requirementKey: input.requirementKey,
+    expectedCapabilityHash: input.expectedCapabilityHash,
     category: input.category,
     messages: [
       { role: 'system', content: input.system },
@@ -608,6 +684,256 @@ async function defaultModelRunner(
     responseFormat: 'json_object',
   })
   return { output: response.output, bindingReceipt: response.bindingReceipt, usage: result.usage ?? null }
+}
+
+async function appendBatchEvent(
+  scope: WorkspaceScope,
+  snapshot: AgentRunSnapshotV1,
+  type: Parameters<typeof appendAgentRunEventV1>[0]['type'],
+  payload: unknown,
+): Promise<AgentRunSnapshotV1> {
+  return appendAgentRunEventV1({
+    scope,
+    runId: snapshot.run.id,
+    type,
+    payload,
+    expectedLastSequence: snapshot.projection.lastSequence,
+  } as Parameters<typeof appendAgentRunEventV1>[0])
+}
+
+function durableBatchStepId(execution: ProductProductionTaskExecutionInputV1, batch: CurationBatchV1): string {
+  const source = batch.gateway ? 'world' : 'novel'
+  return `${execution.task.taskKey}.${source}.${batch.batchKey}`
+}
+
+async function restoreDurableBatchResponse(input: {
+  execution: ProductProductionTaskExecutionInputV1
+  snapshot: AgentRunSnapshotV1
+  stepId: string
+  batch: CurationBatchV1
+  bindingHash: string
+}): Promise<{ response: TextOpenWorldSourceCurationModelExecutionV1; draft: CurationDraftV1 }> {
+  const step = input.snapshot.projection.steps[input.stepId]
+  if (!step || step.status !== 'succeeded' || !step.candidateHash) {
+    fail(`P1批次没有可恢复的成功候选:${input.batch.batchKey}`)
+  }
+  const responseHashes = input.snapshot.events.flatMap(event => event.type === 'evidence.artifact.recorded'
+    && event.payload.stepId === input.stepId
+    && event.payload.attempt === step.attempt
+    && event.payload.artifactKind === 'raw-response'
+    ? [event.payload.contentHash]
+    : [])
+  if (responseHashes.length !== 1) fail(`P1批次成功候选缺少唯一raw-response:${input.batch.batchKey}`)
+  let response: TextOpenWorldSourceCurationModelExecutionV1
+  try {
+    response = JSON.parse(await readAgentRunArtifactExactV1({
+      projectId: input.execution.scope.projectId,
+      artifactKind: 'raw-response',
+      contentHash: responseHashes[0]!,
+    })) as TextOpenWorldSourceCurationModelExecutionV1
+  } catch {
+    fail(`P1批次raw-response损坏:${input.batch.batchKey}`)
+  }
+  if (typeof response.output !== 'string'
+    || response.bindingReceipt?.capabilityHash !== input.bindingHash
+    || await hashProductProductionValueV2(response.output) !== step.candidateHash) {
+    fail(`P1批次恢复候选与冻结binding/hash不一致:${input.batch.batchKey}`)
+  }
+  const draft = parseDraft(
+    parseProductionModelJsonObjectV1(response.output, `source-curation:${input.batch.batchKey}`),
+    input.batch,
+  )
+  return { response, draft }
+}
+
+/** Persist the exact prompt, snapshots, retrieval trace and response around
+ * each real P1 model call. The enclosing scheduler task remains responsible
+ * for the aggregate Artifact candidate and terminal receipt. */
+async function runDurableBatchModel(input: {
+  execution: ProductProductionTaskExecutionInputV1
+  batch: CurationBatchV1
+  runModel: TextOpenWorldSourceCurationModelRunnerV1
+  requirementKey: string
+  bindingHash: string
+  maximumOutputTokens: number
+}): Promise<{ response: TextOpenWorldSourceCurationModelExecutionV1; draft: CurationDraftV1 }> {
+  if (input.execution.taskRunId == null) {
+    const response = await input.runModel({
+      projectId: input.execution.scope.projectId,
+      requirementKey: input.requirementKey,
+      expectedCapabilityHash: input.bindingHash,
+      category: 'text-open-world.production.source-curation',
+      system: systemPrompt(input.batch),
+      contextText: input.batch.contextText,
+      maximumOutputTokens: input.maximumOutputTokens,
+      signal: input.execution.signal,
+    })
+    if (response.bindingReceipt.capabilityHash !== input.bindingHash) {
+      fail('执行时文本capability与Plan binding不一致')
+    }
+    return {
+      response,
+      draft: parseDraft(
+        parseProductionModelJsonObjectV1(response.output, `source-curation:${input.batch.batchKey}`),
+        input.batch,
+      ),
+    }
+  }
+  const stepId = durableBatchStepId(input.execution, input.batch)
+  let snapshot = await readAgentRunV1(input.execution.scope, input.execution.taskRunId)
+  const existing = snapshot.projection.steps[stepId]
+  if (existing?.status === 'succeeded') {
+    return restoreDurableBatchResponse({
+      execution: input.execution,
+      snapshot,
+      stepId,
+      batch: input.batch,
+      bindingHash: input.bindingHash,
+    })
+  }
+  if (existing && existing.status !== 'failed' && existing.status !== 'scheduled') {
+    fail(`P1批次存在结果未知或不可恢复状态:${input.batch.batchKey}:${existing.status}`)
+  }
+  if (!existing) snapshot = await appendBatchEvent(input.execution.scope, snapshot, 'step.scheduled', { stepId })
+  const batchAttempt = existing?.status === 'failed' ? existing.attempt + 1 : 1
+  snapshot = await appendBatchEvent(input.execution.scope, snapshot, 'step.started', { stepId, attempt: batchAttempt })
+  const manifestV1 = await createContextManifestFromAssemblyV1({
+    runId: snapshot.run.id,
+    stepId,
+    attempt: batchAttempt,
+    projectId: input.execution.scope.projectId,
+    worldGroupId: null,
+    declaredSourceKeys: input.batch.gateway
+      ? ['text-open-world.source-pin', 'worldRelease']
+      : ['text-open-world.source-pin'],
+    assembled: input.batch.assembled,
+    readerVersion: input.batch.gateway
+      ? 'text-open-world-source-curation-world-batch-v1'
+      : 'text-open-world-source-curation-novel-batch-v1',
+  })
+  let gatewayPreflight: Awaited<ReturnType<typeof recordContextGatewayPreflightEvidenceV1>>['evidence'] | null = null
+  let gatewayBaseManifest: Awaited<ReturnType<typeof createContextManifestV2FromV1>> | null = null
+  if (input.batch.gateway) {
+    gatewayBaseManifest = await createContextManifestV2FromV1({
+      manifest: manifestV1,
+      scope: input.execution.scope,
+    })
+    const request = {
+      schema: 'storyforge.text-open-world-source-curation-model-request',
+      version: 1,
+      batchKey: input.batch.batchKey,
+      requirementKey: input.requirementKey,
+      category: 'text-open-world.production.source-curation',
+      system: systemPrompt(input.batch),
+      contextText: input.batch.contextText,
+      maximumOutputTokens: input.maximumOutputTokens,
+    }
+    const recorded = await recordContextGatewayPreflightEvidenceV1({
+      scope: input.execution.scope,
+      runId: snapshot.run.id,
+      stepId,
+      attempt: batchAttempt,
+      contextPacket: input.batch.gateway.contextPacket,
+      selector: input.batch.gateway.selector,
+      renderedRequest: request,
+      sourceSnapshots: input.batch.gateway.sourceSnapshots,
+      toolTranscript: input.batch.gateway.toolTranscript,
+      expectedLastSequence: snapshot.projection.lastSequence,
+    })
+    snapshot = recorded.snapshot
+    gatewayPreflight = recorded.evidence
+  } else {
+    snapshot = await appendBatchEvent(input.execution.scope, snapshot, 'context.assembled', {
+      stepId,
+      attempt: batchAttempt,
+      manifestHash: manifestV1.manifestHash,
+    })
+  }
+  snapshot = await appendBatchEvent(input.execution.scope, snapshot, 'model.requested', {
+    stepId,
+    attempt: batchAttempt,
+    bindingHash: input.bindingHash,
+  })
+  try {
+    const response = await input.runModel({
+      projectId: input.execution.scope.projectId,
+      requirementKey: input.requirementKey,
+      expectedCapabilityHash: input.bindingHash,
+      category: 'text-open-world.production.source-curation',
+      system: systemPrompt(input.batch),
+      contextText: input.batch.contextText,
+      maximumOutputTokens: input.maximumOutputTokens,
+      signal: input.execution.signal,
+    })
+    const candidateHash = await hashProductProductionValueV2(response.output)
+    snapshot = await appendBatchEvent(input.execution.scope, snapshot, 'model.responded', {
+      stepId,
+      attempt: batchAttempt,
+      outputHash: candidateHash,
+    })
+    if (input.batch.gateway) {
+      if (!gatewayPreflight || !gatewayBaseManifest) fail(`P1批次Gateway证据未初始化:${input.batch.batchKey}`)
+      const finalized = await finalizeContextGatewayAttemptEvidenceV1({
+        scope: input.execution.scope,
+        runId: snapshot.run.id,
+        stepId,
+        attempt: batchAttempt,
+        baseManifest: gatewayBaseManifest,
+        preflight: gatewayPreflight,
+        selector: input.batch.gateway.selector,
+        sufficiency: input.batch.gateway.sufficiency,
+        retrievalTrace: input.batch.gateway.retrievalTrace,
+        gatewayVersionHash: input.batch.gateway.contextPacket.gatewayVersionHash,
+        policyHash: input.batch.gateway.contextPacket.policyHash,
+        rawResponse: response,
+        candidateHash,
+        executionBoundary: { kind: 'model' },
+        expectedLastSequence: snapshot.projection.lastSequence,
+      })
+      snapshot = finalized.snapshot
+    } else {
+      const recorded = await recordAgentRunArtifactV1({
+        scope: input.execution.scope,
+        runId: snapshot.run.id,
+        artifactKind: 'raw-response',
+        content: canonicalStringify(response),
+        stepId,
+        attempt: batchAttempt,
+        expectedLastSequence: snapshot.projection.lastSequence,
+      })
+      snapshot = recorded.snapshot
+    }
+    if (response.bindingReceipt.capabilityHash !== input.bindingHash) {
+      fail('执行时文本capability与Plan binding不一致')
+    }
+    const draft = parseDraft(
+      parseProductionModelJsonObjectV1(response.output, `source-curation:${input.batch.batchKey}`),
+      input.batch,
+    )
+    snapshot = await appendBatchEvent(input.execution.scope, snapshot, 'candidate.persisted', {
+      stepId,
+      attempt: batchAttempt,
+      candidateHash,
+      requiresConfirmation: false,
+    })
+    await appendBatchEvent(input.execution.scope, snapshot, 'step.succeeded', {
+      stepId,
+      attempt: batchAttempt,
+      outputHash: candidateHash,
+    })
+    return { response, draft }
+  } catch (error) {
+    snapshot = await readAgentRunV1(input.execution.scope, snapshot.run.id)
+    if (snapshot.projection.steps[stepId]?.status === 'running') {
+      await appendBatchEvent(input.execution.scope, snapshot, 'step.failed', {
+        stepId,
+        attempt: batchAttempt,
+        code: 'source-curation-batch-failed',
+        retryable: input.execution.attempt < input.execution.task.maxAttempts,
+      })
+    }
+    throw error
+  }
 }
 
 async function evidenceAnchor(
@@ -1006,6 +1332,7 @@ async function executeCuration(input: {
       totalInputTokens,
       signal: input.execution.signal,
       executeGateway: input.executeGateway,
+      requireSourcePlan: input.execution.taskRunId != null,
     })
   if (!batches.length) fail('模型预算不足以完整读取任何来源单元')
   const drafts: CurationDraftV1[] = []
@@ -1013,22 +1340,15 @@ async function executeCuration(input: {
   const maximumOutputTokens = Math.max(1, Math.floor(task.budgetReservation.outputTokens / batches.length))
   for (const batch of batches) {
     const startedAt = performance.now()
-    const response = await input.runModel({
-      projectId: input.execution.scope.projectId,
-      requirementKey,
-      category: 'text-open-world.production.source-curation',
-      system: systemPrompt(batch),
-      contextText: batch.contextText,
-      maximumOutputTokens,
-      signal: input.execution.signal,
-    })
-    if (response.bindingReceipt.capabilityHash !== binding.bindingHash) {
-      fail('执行时文本capability与Plan binding不一致')
-    }
-    drafts.push(parseDraft(
-      parseProductionModelJsonObjectV1(response.output, `source-curation:${batch.batchKey}`),
+    const { response, draft } = await runDurableBatchModel({
+      execution: input.execution,
       batch,
-    ))
+      runModel: input.runModel,
+      requirementKey,
+      bindingHash: binding.bindingHash,
+      maximumOutputTokens,
+    })
+    drafts.push(draft)
     usage = addUsage(usage, {
       modelCalls: 1,
       inputTokens: response.usage?.inputTokens ?? estimateTokens(batch.contextText + systemPrompt(batch)),

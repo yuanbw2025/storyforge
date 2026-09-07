@@ -212,6 +212,40 @@ export type TextOpenWorldProductRuntimePackageV1 = ProductRuntimePackageV1 & {
   textOpenWorldVNext?: TextOpenWorldRuntimePackageV1
 }
 
+export type TextOpenWorldLegacyOnlyProductRuntimePackageV1 =
+  Omit<TextOpenWorldProductRuntimePackageV1, 'textOpenWorldVNext' | 'presentation'> & {
+    textOpenWorldVNext?: undefined
+    presentation?: undefined
+  }
+
+export type TextOpenWorldHybridProductRuntimePackageV1 =
+  TextOpenWorldProductRuntimePackageV1 & {
+    textOpenWorldVNext: TextOpenWorldRuntimePackageV1
+    /** Optional vNext media; when present every inner slot asset must close to
+     * exactly one frozen outer presentation asset. */
+    presentation?: AvgPresentationContentV1 & { assets: FrozenRuntimeMediaAssetV2[] }
+  }
+
+/**
+ * A vNext-only text-open-world package deliberately omits the four legacy
+ * runtime modules. Keeping this shape separate preserves the stricter legacy
+ * contract for old command code while allowing product readers and players to
+ * model all three formal release states: legacy-only, hybrid, and vNext-only.
+ */
+export type TextOpenWorldVNextOnlyProductRuntimePackageV1 = ProductRuntimePackageV1 & {
+  productType: 'text-open-world'
+  interaction?: undefined
+  adventure?: undefined
+  openWorldEvolution?: undefined
+  openWorld?: undefined
+  textOpenWorldVNext: TextOpenWorldRuntimePackageV1
+}
+
+export type PlayableTextOpenWorldProductRuntimePackageV1 =
+  | TextOpenWorldLegacyOnlyProductRuntimePackageV1
+  | TextOpenWorldHybridProductRuntimePackageV1
+  | TextOpenWorldVNextOnlyProductRuntimePackageV1
+
 export type AnyProductReleaseManifest = ProductReleaseManifestV1
 
 export interface ProductRelease {

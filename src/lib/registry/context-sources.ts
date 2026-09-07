@@ -643,7 +643,7 @@ async function readOpenWorldRuntimeContext(input: AssembleContextInput): Promise
     session,
   })
   const manifest = playable.runtimePackage
-  if (manifest.productType !== 'text-open-world' || !manifest.openWorld
+  if (manifest.productType !== 'text-open-world'
     || playable.runtimeSourceHash !== session.runtimeSourceHash) {
     throw new Error('开放世界 RuntimePackage 校验失败。')
   }
@@ -783,6 +783,7 @@ async function readOpenWorldRuntimeContext(input: AssembleContextInput): Promise
     ].join('\n')
   }
   if (!state.openWorld) return ''
+  if (!manifest.openWorld) throw new Error('开放世界 RuntimePackage 缺少旧版运行模块。')
   const world = state.openWorld
   const region = manifest.openWorld.regions.find(item => item.key === world.currentRegionKey)
   const projection = world.regionalProjections.find(item => item.regionKey === world.currentRegionKey)

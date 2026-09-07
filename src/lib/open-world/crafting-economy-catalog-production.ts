@@ -83,6 +83,7 @@ export interface TextOpenWorldCraftingEconomyModelExecutionV1 {
 export type TextOpenWorldCraftingEconomyModelRunnerV1 = (input: {
   projectId: number
   requirementKey: string
+  expectedCapabilityHash: string
   category: string
   system: string
   contextText: string
@@ -542,7 +543,8 @@ function systemPrompt(context: TextOpenWorldCraftingEconomyInputContextV1): stri
 async function defaultModelRunner(input: Parameters<TextOpenWorldCraftingEconomyModelRunnerV1>[0]): Promise<TextOpenWorldCraftingEconomyModelExecutionV1> {
   const result: ChatResult = {}
   const response = await runConfiguredProductionTextV1({
-    projectId: input.projectId, requirementKey: input.requirementKey, category: input.category,
+    projectId: input.projectId, requirementKey: input.requirementKey,
+    expectedCapabilityHash: input.expectedCapabilityHash, category: input.category,
     messages: [{ role: 'system', content: input.system }, { role: 'user', content: `以下是已登记并验签的配方经济目录输入：\n<crafting-economy-input>\n${input.contextText}\n</crafting-economy-input>` }],
     maximumOutputTokens: input.maximumOutputTokens, signal: input.signal, result, responseFormat: 'json_object',
   })
@@ -563,7 +565,8 @@ export function createTextOpenWorldCraftingEconomyCatalogExecutorV1(options: {
     if (!binding) fail('Crafting/Economy缺少文本capability binding')
     const context = await parseContext(execution.contextText); const prompt = systemPrompt(context); const startedAt = performance.now()
     const response = await runModel({
-      projectId: execution.scope.projectId, requirementKey, category: 'text-open-world.production.crafting-economy-catalog',
+      projectId: execution.scope.projectId, requirementKey, expectedCapabilityHash: binding.bindingHash,
+      category: 'text-open-world.production.crafting-economy-catalog',
       system: prompt, contextText: execution.contextText,
       maximumOutputTokens: Math.max(1, Math.min(32_000, execution.task.budgetReservation.outputTokens)), signal: execution.signal,
     })

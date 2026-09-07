@@ -37,6 +37,7 @@ export interface TextOpenWorldPresentationProfileModelExecutionV1 {
 export type TextOpenWorldPresentationProfileModelRunnerV1 = (input: {
   projectId: number
   requirementKey: string
+  expectedCapabilityHash: string
   category: string
   system: string
   contextText: string
@@ -254,7 +255,8 @@ function prompts(context: TextOpenWorldPresentationProfileInputContextV1) {
 async function defaultRunner(input: Parameters<TextOpenWorldPresentationProfileModelRunnerV1>[0]): Promise<TextOpenWorldPresentationProfileModelExecutionV1> {
   const result: ChatResult = {}
   const response = await runConfiguredProductionTextV1({
-    projectId: input.projectId, requirementKey: input.requirementKey, category: input.category,
+    projectId: input.projectId, requirementKey: input.requirementKey,
+    expectedCapabilityHash: input.expectedCapabilityHash, category: input.category,
     messages: [{ role: 'system', content: input.system }, { role: 'user', content: `<presentation-input>\n${input.contextText}\n</presentation-input>` }],
     maximumOutputTokens: input.maximumOutputTokens, signal: input.signal, result, responseFormat: 'json_object',
   })
@@ -275,7 +277,8 @@ export function createTextOpenWorldPresentationProfileExecutorV1(options: {
     const binding = execution.capabilityBindings.find(item => item.requirementKey === requirementKey) ?? fail('P2表现缺少文本capability binding')
     const context = await parseContext(execution.contextText); const prompt = prompts(context); const started = performance.now()
     const model = await runModel({
-      projectId: execution.scope.projectId, requirementKey, category: SKILL_ID,
+      projectId: execution.scope.projectId, requirementKey, expectedCapabilityHash: binding.bindingHash,
+      category: SKILL_ID,
       system: `${prompt.system}\n${prompt.user}`, contextText: execution.contextText,
       maximumOutputTokens: Math.max(1, Math.min(8_000, execution.task.budgetReservation.outputTokens)), signal: execution.signal,
     })

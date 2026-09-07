@@ -10,6 +10,7 @@ import type { AssembleContextInput } from '../registry/types'
 import type {
   TextOpenWorldActionBindingsV1,
   TextOpenWorldBalanceReviewV1,
+  TextOpenWorldChoiceContractsV1,
   TextOpenWorldContentBudgetV1,
   TextOpenWorldCraftingEconomyCatalogV1,
   TextOpenWorldDeterministicPreflightV1,
@@ -79,6 +80,7 @@ export interface TextOpenWorldQualityReviewModelExecutionV1 {
 export type TextOpenWorldQualityReviewModelRunnerV1 = (input: {
   projectId: number
   requirementKey: string
+  expectedCapabilityHash: string
   category: string
   system: string
   contextText: string
@@ -133,6 +135,19 @@ export interface TextOpenWorldSemanticReviewInputContextV1 {
   mainline: {
     thread: Pick<TextOpenWorldMainlineThreadV1['thread'], 'key' | 'title' | 'summary' | 'coreGoal' | 'endingKeys'>
     stages: Array<{ key: string; order: number; title: string; summary: string; dramaticQuestion: string; playerGoals: string[]; requiredReveal: string; stageOutcome: string; estimatedMinutes: number }>
+    endingRuntime: {
+      finalMainlineQuestKey: string
+      finalLocationKey: string
+      routes: Array<{
+        endingKey: string
+        routeSummary: string
+        decisivePlayerValue: string
+        actionKey: string
+        systemActionLabel: string
+        fixedChoiceLabels: string[]
+        naturalLanguageExamples: string[]
+      }>
+    }
     pacing: TextOpenWorldMainlineThreadV1['pacing']
   }
   significantThreads: Array<{
@@ -186,6 +201,7 @@ const SEMANTIC_SPECS = [
   ['text-open-world.region-narrative-packs', 'storyforge.text-open-world-region-narrative-packs', 'regionNarrativePacksHash'],
   ['text-open-world.quest-design-documents', 'storyforge.text-open-world-quest-design-documents', 'questDesignDocumentsHash'],
   ['text-open-world.scene-scripts', 'storyforge.text-open-world-scene-scripts', 'sceneScriptsHash'],
+  ['text-open-world.choice-contracts', 'storyforge.text-open-world-choice-contracts', 'choiceContractsHash'],
   ['text-open-world.action-bindings', 'storyforge.text-open-world-action-bindings', 'actionBindingsHash'],
   ['text-open-world.content-budget', 'storyforge.text-open-world-content-budget', 'contentBudgetHash'],
   ['text-open-world.deterministic-preflight', 'storyforge.text-open-world-deterministic-preflight', 'deterministicPreflightHash'],
@@ -307,7 +323,7 @@ function semanticMetricDemands(input: {
 }): ReviewMetricDemandV1[] {
   const entities: Record<SemanticMetric, string[]> = {
     'source-fidelity': [...input.source.entries.map(item => item.claimKey), ...input.story.macroBeats.map(item => item.key)],
-    'mainline-arc': input.mainline.stages.map(item => item.key),
+    'mainline-arc': [...input.mainline.stages.map(item => item.key), ...input.mainline.endingRoutes.map(item => item.endingKey)],
     'significant-stories': input.significant.threads.map(item => item.key),
     'regional-identity': input.regions.packs.map(item => item.regionKey),
     'quest-experience': input.quests.quests.map(item => item.key),
@@ -377,6 +393,7 @@ async function buildSemanticContext(scope: WorkspaceScope, buildId: number): Pro
   const regions = values.get('text-open-world.region-narrative-packs') as unknown as TextOpenWorldRegionNarrativePacksV1
   const quests = values.get('text-open-world.quest-design-documents') as unknown as TextOpenWorldQuestDesignDocumentsV1
   const scenes = values.get('text-open-world.scene-scripts') as unknown as TextOpenWorldSceneScriptsV1
+  const choices = values.get('text-open-world.choice-contracts') as unknown as TextOpenWorldChoiceContractsV1
   const bindings = values.get('text-open-world.action-bindings') as unknown as TextOpenWorldActionBindingsV1
   const budget = values.get('text-open-world.content-budget') as unknown as TextOpenWorldContentBudgetV1
   const preflight = values.get('text-open-world.deterministic-preflight') as unknown as TextOpenWorldDeterministicPreflightV1
@@ -384,7 +401,9 @@ async function buildSemanticContext(scope: WorkspaceScope, buildId: number): Pro
     || promises.storyArcHash !== story.storyArcHash || mainline.storyArcHash !== story.storyArcHash
     || significant.mainlineThreadHash !== mainline.mainlineThreadHash || regions.mainlineThreadHash !== mainline.mainlineThreadHash
     || quests.regionNarrativePacksHash !== regions.regionNarrativePacksHash || scenes.questDesignDocumentsHash !== quests.questDesignDocumentsHash
-    || bindings.sceneScriptsHash !== scenes.sceneScriptsHash || budget.questDesignDocumentsHash !== quests.questDesignDocumentsHash
+    || choices.sceneScriptsHash !== scenes.sceneScriptsHash || choices.questDesignDocumentsHash !== quests.questDesignDocumentsHash
+    || bindings.sceneScriptsHash !== scenes.sceneScriptsHash || bindings.choiceContractsHash !== choices.choiceContractsHash
+    || budget.questDesignDocumentsHash !== quests.questDesignDocumentsHash
     || preflight.contentBudgetHash !== budget.contentBudgetHash || !preflight.result.readyForModelReviews) fail('语义评审输入Hash链或预检状态无效')
   const body = {
     schema: 'storyforge.text-open-world-semantic-review-input' as const, version: 1 as const,
@@ -414,6 +433,25 @@ async function buildSemanticContext(scope: WorkspaceScope, buildId: number): Pro
         dramaticQuestion: stage.dramaticQuestion, playerGoals: stage.playerGoals,
         requiredReveal: stage.requiredReveal, stageOutcome: stage.stageOutcome, estimatedMinutes: stage.estimatedMinutes,
       })),
+      endingRuntime: {
+        finalMainlineQuestKey: quests.endingBindings.finalMainlineQuestKey,
+        finalLocationKey: quests.endingBindings.finalLocationKey,
+        routes: quests.endingBindings.routes.map(route => {
+          const sourceRoute = mainline.endingRoutes.find(item => item.endingKey === route.endingKey)
+            ?? fail(`语义评审缺少主线结局路线:${route.endingKey}`)
+          const action = quests.actions.find(item => item.key === route.actionKey)
+            ?? fail(`语义评审缺少结局Action:${route.actionKey}`)
+          const inputBinding = bindings.actions.find(item => item.actionKey === route.actionKey)
+            ?? fail(`语义评审缺少结局输入绑定:${route.actionKey}`)
+          return {
+            endingKey: route.endingKey, routeSummary: sourceRoute.routeSummary,
+            decisivePlayerValue: sourceRoute.decisivePlayerValue, actionKey: route.actionKey,
+            systemActionLabel: action.label,
+            fixedChoiceLabels: choices.choices.filter(item => item.actionKey === route.actionKey).map(item => item.label),
+            naturalLanguageExamples: inputBinding.naturalLanguage.exampleUtterances,
+          }
+        }),
+      },
       pacing: mainline.pacing,
     },
     significantThreads: significant.threads.map(thread => ({
@@ -622,7 +660,8 @@ function prompts(context: TextOpenWorldBalanceReviewInputContextV1 | TextOpenWor
 async function defaultRunner(input: Parameters<TextOpenWorldQualityReviewModelRunnerV1>[0]): Promise<TextOpenWorldQualityReviewModelExecutionV1> {
   const result: ChatResult = {}
   const response = await runConfiguredProductionTextV1({
-    projectId: input.projectId, requirementKey: input.requirementKey, category: input.category,
+    projectId: input.projectId, requirementKey: input.requirementKey,
+    expectedCapabilityHash: input.expectedCapabilityHash, category: input.category,
     messages: [{ role: 'system', content: input.system }, { role: 'user', content: `<quality-review-input>\n${input.contextText}\n</quality-review-input>` }],
     maximumOutputTokens: input.maximumOutputTokens, signal: input.signal, result, responseFormat: 'json_object',
   })
@@ -645,7 +684,8 @@ function createReviewExecutor(kind: 'balance' | 'semantic', options: { runModel?
       : await parseContext<TextOpenWorldSemanticReviewInputContextV1>(execution.contextText, kind)
     const prompt = prompts(context, kind); const started = performance.now()
     const model = await runModel({
-      projectId: execution.scope.projectId, requirementKey, category: skillId,
+      projectId: execution.scope.projectId, requirementKey, expectedCapabilityHash: binding.bindingHash,
+      category: skillId,
       system: `${prompt.system}\n${prompt.user}`, contextText: execution.contextText,
       maximumOutputTokens: Math.max(1, Math.min(16_000, execution.task.budgetReservation.outputTokens)), signal: execution.signal,
     })

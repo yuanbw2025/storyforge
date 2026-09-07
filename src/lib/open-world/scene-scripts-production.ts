@@ -157,6 +157,7 @@ export interface TextOpenWorldSceneScriptsInputContextV1 {
         | 'key' | 'questKey' | 'stageKey' | 'title' | 'description' | 'requirementKeys'
         | 'supportActionKeys' | 'completionActionKey' | 'completionConditionKeys'>>
       actions: TextOpenWorldSceneActionSourceV1[]
+      endingBindings: TextOpenWorldQuestDesignDocumentsV1['endingBindings']
       catalogBindings: Pick<TextOpenWorldQuestDesignDocumentsV1['catalogBindings'],
         'actors' | 'encounters' | 'items' | 'recipes' | 'vendors' | 'interactions' | 'rewards'>
       governance: Pick<TextOpenWorldQuestDesignDocumentsV1['governance'],
@@ -196,6 +197,7 @@ export interface TextOpenWorldSceneScriptsModelExecutionV1 {
 export type TextOpenWorldSceneScriptsModelRunnerV1 = (input: {
   projectId: number
   requirementKey: string
+  expectedCapabilityHash: string
   category: string
   system: string
   contextText: string
@@ -400,7 +402,12 @@ function buildDemands(context: TextOpenWorldSceneScriptsContextBaseV1) {
       forbiddenFutureObjectiveKeys: orderedObjectiveKeys.slice(1),
       availabilityConditionKeys: [...quest.prerequisiteConditionKeys],
     })
-    const resolutionActions = playerActionKeys(hydrated, [quest.claimActionKey])
+    const resolutionActions = playerActionKeys(hydrated, [
+      quest.claimActionKey,
+      ...(quest.key === context.questDesignDocuments.endingBindings.finalMainlineQuestKey
+        ? context.questDesignDocuments.endingBindings.routes.map(route => route.actionKey)
+        : []),
+    ])
     addScene({
       sceneKey: `scene.resolution.${quest.key}`, sourceKind: 'quest-resolution', sourceKey: quest.key,
       suggestedTitle: `收束：${quest.title}`, purpose: '呈现任务结果并领取已冻结奖励。',
@@ -542,6 +549,19 @@ async function validateUpstream(context: Omit<TextOpenWorldSceneScriptsInputCont
     || context.questDesignDocuments.actions.some(action => !isSha256Hash(action.actionDefinitionHash))) {
     fail('P9 Action投影键或Definition Hash无效')
   }
+  const endingBindingActionKeys = context.questDesignDocuments.endingBindings.routes.map(route => route.actionKey)
+  if (!context.questDesignDocuments.quests.some(quest => (
+    quest.key === context.questDesignDocuments.endingBindings.finalMainlineQuestKey && quest.type === 'mainline'
+  ))
+    || !endingBindingActionKeys.length
+    || new Set(context.questDesignDocuments.endingBindings.routes.map(route => route.endingKey)).size !== endingBindingActionKeys.length
+    || endingBindingActionKeys.some(actionKey => {
+      const action = context.questDesignDocuments.actions.find(item => item.key === actionKey)
+      return !action || action.actorScope !== 'player' || action.category !== 'quest-action'
+        || action.targetScope !== 'none'
+        || !action.locationKeys.includes(context.questDesignDocuments.endingBindings.finalLocationKey)
+        || !action.requirementConditionKeys.includes(context.questDesignDocuments.endingBindings.selectionReadyConditionKey)
+    })) fail('P9上游没有完整的P8F结局Action绑定')
   const expected = buildDemands(context)
   if (canonicalProductProductionJsonV2(expected.knowledgeBoundaries) !== canonicalProductProductionJsonV2(context.knowledgeBoundaries)
     || canonicalProductProductionJsonV2(expected.sceneDemands) !== canonicalProductProductionJsonV2(context.sceneDemands)
@@ -677,6 +697,7 @@ async function loadContext(input: { scope: WorkspaceScope; productionId: number;
       })),
       requirementBindings: questDesignDocuments.requirementBindings,
       actions: actionSources,
+      endingBindings: questDesignDocuments.endingBindings,
       catalogBindings: {
         actors: questDesignDocuments.catalogBindings.actors,
         encounters: questDesignDocuments.catalogBindings.encounters,
@@ -848,7 +869,11 @@ async function createArtifacts(input: {
     const draft = input.draft.scenes[index]!
     const knowledgeBoundary = input.context.knowledgeBoundaries.find(item => item.key === demand.knowledgeBoundaryKey)
       ?? fail(`Scene引用未知知识边界:${demand.sceneKey}`)
-    const fixedChoiceKeys = demand.actionKeys.map((_actionKey, actionIndex) => `choice.${demand.sceneKey}.${String(actionIndex + 1).padStart(2, '0')}`)
+    const fixedChoiceKeys = demand.actionKeys.map((actionKey, actionIndex) => {
+      const endingRoute = input.context.questDesignDocuments.endingBindings.routes.find(route => route.actionKey === actionKey)
+      return endingRoute ? `choice.ending.${endingRoute.endingKey}`
+        : `choice.${demand.sceneKey}.${String(actionIndex + 1).padStart(2, '0')}`
+    })
     demand.actionKeys.forEach((actionKey, actionIndex) => {
       const action = actionByKey(input.context, actionKey)
       const target = fixedTarget({ context: input.context, demand, action })
@@ -1023,6 +1048,15 @@ async function assertCrossArtifacts(
     if (!same(scene.fixedChoiceKeys, choiceContracts.choices.filter(choice => choice.sceneKey === scene.key).map(choice => choice.key))) fail(`Scene/Choice反向绑定不一致:${scene.key}`)
     if (scene.sourceKind === 'actor-dialogue' && !scene.attitudeOpenings) fail(`角色场景缺少三档态度:${scene.key}`)
   }
+  const endingScene = sceneScripts.scenes.find(scene => (
+    scene.sourceKind === 'quest-resolution'
+      && scene.questKey === context.questDesignDocuments.endingBindings.finalMainlineQuestKey
+  )) ?? fail('P9没有最终主线结局场景')
+  const endingActionKeys = context.questDesignDocuments.endingBindings.routes.map(route => route.actionKey)
+  if (!same(endingActionKeys, endingScene.actionKeys.filter(actionKey => endingActionKeys.includes(actionKey)))
+    || endingActionKeys.some(actionKey => choiceContracts.choices.filter(choice => (
+      choice.sceneKey === endingScene.key && choice.actionKey === actionKey
+    )).length !== 1)) fail('P9没有把全部P8F结局Action作为最终场景唯一Choice')
   for (const choice of choiceContracts.choices) {
     const action = actions.get(choice.actionKey) ?? fail(`Choice引用未知Action:${choice.key}`)
     if (!sceneKeys.has(choice.sceneKey) || choice.actionDefinitionHash !== action.actionDefinitionHash
@@ -1114,7 +1148,8 @@ function prompts(context: TextOpenWorldSceneScriptsInputContextV1) {
 async function defaultRunner(input: Parameters<TextOpenWorldSceneScriptsModelRunnerV1>[0]): Promise<TextOpenWorldSceneScriptsModelExecutionV1> {
   const result: ChatResult = {}
   const response = await runConfiguredProductionTextV1({
-    projectId: input.projectId, requirementKey: input.requirementKey, category: input.category,
+    projectId: input.projectId, requirementKey: input.requirementKey,
+    expectedCapabilityHash: input.expectedCapabilityHash, category: input.category,
     messages: [{ role: 'system', content: input.system }, { role: 'user', content: `以下是已验签的P9输入合同：\n<scene-scripts-input>\n${input.contextText}\n</scene-scripts-input>` }],
     maximumOutputTokens: input.maximumOutputTokens, signal: input.signal, result, responseFormat: 'json_object',
   })
@@ -1137,7 +1172,8 @@ export function createTextOpenWorldSceneScriptsExecutorV1(options: {
     if (!binding) fail('P9缺少文本capability binding')
     const context = await parseContext(execution.contextText); const prompt = prompts(context); const started = performance.now()
     const model = await runModel({
-      projectId: execution.scope.projectId, requirementKey, category: SKILL_ID,
+      projectId: execution.scope.projectId, requirementKey, expectedCapabilityHash: binding.bindingHash,
+      category: SKILL_ID,
       system: `${prompt.system}\n${prompt.user}`, contextText: execution.contextText,
       maximumOutputTokens: Math.max(1, Math.min(32_000, execution.task.budgetReservation.outputTokens)), signal: execution.signal,
     })

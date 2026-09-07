@@ -38,6 +38,22 @@ interface CapabilityDependenciesV1 {
   ) => Promise<string>
 }
 
+/**
+ * Formal text-open-world production is authorized against one shared text
+ * capability. Individual Skills remain separate durable Runs, but they must
+ * not become independent AI routing categories after the Build has frozen its
+ * provider binding.
+ */
+export const TEXT_OPEN_WORLD_PRODUCTION_TEXT_CATEGORY_V1 = 'product-production'
+
+export function normalizeProductProductionTextCategoryV1(category: string): string {
+  const normalized = category.trim()
+  return normalized === 'text-open-world.production'
+    || normalized.startsWith('text-open-world.production.')
+    ? TEXT_OPEN_WORLD_PRODUCTION_TEXT_CATEGORY_V1
+    : normalized
+}
+
 export interface ConfiguredTextCapabilityReadinessV1 {
   ready: boolean
   provider: string
@@ -74,9 +90,10 @@ export function inspectConfiguredTextCapabilityV1(input: {
   projectId: number
   category: string
 }, dependencies: Pick<CapabilityDependenciesV1, 'resolveConfig'> = {}): ConfiguredTextCapabilityReadinessV1 {
-  const config = dependencies.resolveConfig?.(input.category) ?? resolveRequestConfig(
+  const category = normalizeProductProductionTextCategoryV1(input.category)
+  const config = dependencies.resolveConfig?.(category) ?? resolveRequestConfig(
     useAIConfigStore.getState().config,
-    { category: input.category, projectId: input.projectId },
+    { category, projectId: input.projectId },
   ).config
   const credentialPresent = isAIConfigReady(config)
   const identityComplete = Boolean(config.model.trim() && config.baseUrl.trim())
@@ -103,9 +120,10 @@ export async function resolveConfiguredTextCapabilityV1(input: {
   requirementKey: string
   expectedCapabilityHash?: string
 }, dependencies: CapabilityDependenciesV1 = {}): Promise<ResolvedConfiguredTextCapabilityV1> {
-  const config = dependencies.resolveConfig?.(input.category) ?? resolveRequestConfig(
+  const category = normalizeProductProductionTextCategoryV1(input.category)
+  const config = dependencies.resolveConfig?.(category) ?? resolveRequestConfig(
     useAIConfigStore.getState().config,
-    { category: input.category, projectId: input.projectId },
+    { category, projectId: input.projectId },
   ).config
   if (!isAIConfigReady(config)) throw new Error(getAIConfigRequiredMessage(config))
   if (!config.model.trim() || !config.baseUrl.trim()) throw new Error('现有 AI 配置缺少模型或 Base URL。')
@@ -150,13 +168,14 @@ export async function runConfiguredProductionTextV1(input: {
   if (!Number.isInteger(input.maximumOutputTokens) || input.maximumOutputTokens < 1) {
     throw new Error('[product-production-capability] maximumOutputTokens 无效')
   }
-  const resolved = await resolveConfiguredTextCapabilityV1(input, dependencies)
+  const category = normalizeProductProductionTextCategoryV1(input.category)
+  const resolved = await resolveConfiguredTextCapabilityV1({ ...input, category }, dependencies)
   const output = dependencies.runAI
     ? await dependencies.runAI(input.messages, resolved.config, {
-        category: input.category, projectId: input.projectId, maxTokens: input.maximumOutputTokens,
+        category, projectId: input.projectId, maxTokens: input.maximumOutputTokens,
       }, input.signal, input.result)
     : await chat(input.messages, resolved.config, {
-        category: input.category,
+        category: normalizeProductProductionTextCategoryV1(input.category),
         projectId: input.projectId,
         configOverrides: { maxTokens: input.maximumOutputTokens },
         contextOverflowPolicy: 'reject',

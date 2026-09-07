@@ -1,6 +1,6 @@
 # AI 主导文字开放世界游戏 · 完整开发清单
 
-> 版本：1.1.62
+> 版本：1.1.64
 > 建立日期：2026-09-06
 > 对应总任务：`E-OPENWORLD-01`
 > 当前状态：`IN_PROGRESS`；用户已于2026-09-06明确下达完整产品开发指令
@@ -36,15 +36,15 @@
 | 指标 | 当前值 |
 |---|---|
 | 首版工作包 | 121 |
-| 已完成 | 68（G0、G1、G2及G3-01～G3-17完成） |
-| 产品总进度 | 68 / 121（56.2%） |
-| G1～G7业务功能进度 | 58 / 111（52.3%） |
-| 当前阶段 | G3 AI内容生产编译器 |
+| 已完成 | 69（G0、G1、G2及G3全部完成） |
+| 产品总进度 | 69 / 121（57.0%） |
+| G1～G7业务功能进度 | 59 / 111（53.2%） |
+| 当前阶段 | G4 完整玩家端 |
 | G0阶段进度 | 10 / 10（100%） |
 | G1阶段进度 | 13 / 13（100%） |
 | G2阶段进度 | 28 / 28（100%） |
-| G3阶段进度 | 17 / 18（94.4%） |
-| 当前工作包 | `TOW-G3-18` |
+| G3阶段进度 | 18 / 18（100%） |
+| 当前工作包 | `TOW-G4-01` |
 | 当前阻塞项 | 无 |
 
 每次状态变化必须同时更新本节汇总、对应任务行、验证证据和变更记录。
@@ -197,10 +197,10 @@ G7 盐脊验收、发布更新与旧入口收口
 | TOW-G3-12 | DONE | QuestSkeleton与ContentRequirementManifest | G3-09～G3-11 | P8专属Context把Brief、体验、玩法、主线、重要故事和地区种子投影为23项确定性Quest Source；模型逐项生成故事动机、1～4 Stage、可执行Objective及语义内容需求，代码保证7主线Stage、6重要故事Stage、6普通任务种子和4地区模板一一覆盖，固定主线/重要故事无限等待不可放弃或永久失败、普通任务放弃可重接、模板由地区导演实例化、到达地点不单独触发；ContentRequirementManifest同时汇总全部Objective及地区角色/势力/地点交互需求，按技能、遭遇、物品奖励、制作经济、NPC、地图交互和QuestFinalize声明唯一后序owner，所有正式目录/Action/Condition/Reward/运行引用保持unbound；遗漏来源、弱化保护、无敌人战斗目标、同名定义冲突、模型越权字段和重算Hash篡改失败关闭 |
 | TOW-G3-13 | DONE | 技能、物品、敌人、遭遇、奖励目录生产 | G3-05、G3-06、G3-12 | 三条专属Lane均从同一Build已验收QuestSkeleton与Manifest出发：Progression固定20级平方经验、自动属性成长、两项初始/六项等级/任务技能精确需求和主动攻击公式；Encounter逐项兑现enemy/encounter需求、每区基础遭遇、1～5级敌人数值、基础技能策略、战斗Objective/地区覆盖及失败恢复；Item/Reward精确兑现两项初始物品与item/equipment/material/reward需求，为全部23个任务和5个遭遇生成奖励、为5个敌人生成地区材料掉落，并确定性分配主线总计1600经验以支撑1→5级。模型只负责技能/状态/敌人/遭遇/物品/奖励语义和有界选择，代码固定稳定键、数值、保护、来源、预算与消费者；Action/Effect/Condition/Quest/Reward/Drop正式引用保持unbound交给P8F，漏项、越界、无来源、预算不闭合、模型越权及重算Hash篡改失败关闭 |
 | TOW-G3-14 | DONE | 配方、商店、NPC运行规则目录生产 | G3-11～G3-13 | Crafting/Economy、NPC Runtime与Map Interaction三条Lane完成：配方/商店闭合来源消耗、库存、价格、服务Actor预留和反套利；NPC目录保留整体小传并固定关键保护、普通四时段规则、三档道德/阵营态度及功能替代；地图目录原样继承完整Region/Location/Edge/FastTravel拓扑，为每个地点和任务需求生成提前到达安全交互与确定性SVG坐标，固定逐步揭示、旅行推进时间、首版快旅不中断且不消耗资源。所有Action/Condition/Effect/Scene/Quest运行引用仍为unbound，留待P8F/P9装配 |
-| TOW-G3-15 | DONE | QuestFinalize与EncounterFinalize | G3-12～G3-14 | 11件已验收叙事/任务/玩法目录以完整Hash链原子交付；模型只补任务与区域发牌语义，代码生成Quest/Stage/Objective、奖励、失败/过期/时间、战斗/物品/制作/商店/NPC/地图/旅行/复活/世界演化的Condition/Effect/Action及双向真实引用；主线和重要故事继续受保护等待，普通任务可放弃/过期；Director按区域冻结固定任务、模板、随机事件、冷却、并发与空白牌预算，P9只待补场景和模板变体文字 |
-| TOW-G3-16 | DONE | SceneScript、ChoiceContract和三类交互绑定 | G3-15 | P9以代码侧完整验签、模型侧去重投影的原子Context生产任务委托/目标/收束、角色对话、地点交互和随机事件Scene；模型只写场景/对话/选项标签、模板三变体、事件/传闻表现和非战斗自然语言示例，代码固定知识边界、稳定键、目标、Condition继承及Action Hash；系统Action、固定Choice与自由输入候选全部引用P8F唯一Action结果源，战斗自由输入关闭，低置信度只回应和推荐，高风险需确认，模型不得创建Action/Quest/地图或写状态 |
-| TOW-G3-17 | DONE | UI/媒资需求、内容时长、平衡、语义评审和局部修复 | G3-06～G3-16 | P2表现轮廓、P10系统收口、V1预检和V2双评审均登记正式Skill/Context/Executor；代码冻结15个运行模块、18个UI消费槽、必需视觉槽及全量文本/程序降级，把内容库存时长和单次游玩时长分离；确定性预检覆盖Schema/Hash链/引用/可解性/预算/消费槽；平衡与语义评审将问题映射到唯一新Build修复任务并按DAG传播stale，绝不原地修改已验收Artifact，真人时长校准继续保留为发布前要求 |
-| TOW-G3-18 | READY | AI生产Build装配端到端验证 | G3-01～G3-17、G2-28 | 同一来源可恢复生产并生成G2可直接运行的Build，无需人工改JSON |
+| TOW-G3-15 | DONE | QuestFinalize与EncounterFinalize | G3-12～G3-14 | 11件已验收叙事/任务/玩法目录以完整Hash链原子交付；模型只补任务与区域发牌语义，代码生成Quest/Stage/Objective、奖励、失败/过期/时间、战斗/物品/制作/商店/NPC/地图/旅行/复活/世界演化的Condition/Effect/Action及双向真实引用；每个结局也在P8F形成独立Condition及固定`route→unlock→reach` Effect/Action，不留给V3临时生成；主线和重要故事继续受保护等待，普通任务可放弃/过期；Director按区域冻结固定任务、模板、随机事件、冷却、并发与空白牌预算 |
+| TOW-G3-16 | DONE | SceneScript、ChoiceContract和三类交互绑定 | G3-15 | P9以代码侧完整验签、模型侧去重投影的原子Context生产任务委托/目标/收束、角色对话、地点交互和随机事件Scene；模型只写场景/对话/选项标签、模板三变体、事件/传闻表现和非战斗自然语言示例，代码固定知识边界、稳定键、目标、Condition继承及Action Hash；最终主线场景为每个P8F结局Action生成唯一Choice，系统Action、固定Choice与两条自然语言示例共同指向该结果源；战斗自然语言关闭，低置信度只回应和推荐，高风险需确认，模型不得创建Action/Quest/地图或写状态 |
+| TOW-G3-17 | DONE | UI/媒资需求、内容时长、平衡、语义评审和局部修复 | G3-06～G3-16 | P2表现轮廓、P10系统收口、V1预检和V2双评审均登记正式Skill/Context/Executor；代码冻结15个运行模块、18个UI消费槽及完整媒资槽，把本次实际排产与`fallback-only`槽分开并让0/4/9音频槽与Brief/Plan同源；内容库存时长和单次游玩时长分离；V1覆盖Schema/Hash链/全量Action—Scene—Choice—结局引用/可解性/预算/消费槽，V2问题映射到唯一新Build修复任务并按DAG传播stale，绝不原地修改已验收Artifact，真人时长校准继续保留为发布证据 |
+| TOW-G3-18 | DONE | AI生产Build装配端到端验证 | G3-01～G3-17、G2-28 | 共享正式生产入口已按产品类型选择文字开放世界专属P0～P10/V1～V3/QA Plan与Executor；P0按Brief精确冻结来源单元，P1逐批保存真实ContextManifest且恢复不重复成功调用；Narrative v2完整携带P9正文/对话/随机事件，Action v15携带三类输入绑定，V3不再创造上游内容；每个实际媒资核验物理Blob、Capability、生产/Provider回执与权利策略，IntegrationReport及覆盖/权利子证据均验Hash；QA逐门判断，原型可玩fallback与商业真实资产覆盖分开；vNext-only、Hybrid、Legacy均有正式读取证据，Build Preview可创建只含统一`textOpenWorld`投影的Session，无需人工改JSON |
 
 阶段出口：来源→故事→任务→玩法目录→场景→Build的完整内容生产链。
 
@@ -355,6 +355,8 @@ G7 盐脊验收、发布更新与旧入口收口
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| 1.1.64 | 2026-09-07 | G3-18独立审查收口但不虚增进度：P1按批保存精确来源Manifest并只采纳最新成功尝试；P8F/P9/V1/V2闭合结局Action、场景Choice和三类输入，Narrative v2与Action v15保留全部可玩正文；P10将完整槽清单与本次排产分离，未排产项明确`fallback-only`且音频0/4/9计数与Plan一致；V3核验物理Blob、Capability、任务/Provider回执及权利策略，IntegrationReport分层验Hash；QA不再无条件通过`rights.complete`，商业真实资产覆盖不足只到preview-ready；vNext-only、Hybrid、Legacy和Release→Session链回归通过；总进度仍为69/121，下一项G4-01 |
+| 1.1.63 | 2026-09-07 | 完成G3-18并关闭G3阶段：共享durable scheduler和正式生产service现按文字开放世界产品选择专属26任务Plan与统一Executor，P0从作者授权Brief动态展开精确SourcePinUnit并以后写索引闭合；P1断点后的恢复实证不会重复计费调用，整条P0～P10、V1、V2、V3、QA链可完成；V3确定性验签并装配15个G2运行模块、兼容叙事壳、真实生成媒资与全部降级槽，形成带`textOpenWorldVNext`和可冻结媒资资产的ProductRuntimePackage；Build Preview已真实解析三件媒资并创建只含统一`textOpenWorld`投影的Session，旧混合包继续只读兼容；同时修复基础攻击键、表现模块版本、调度耗时整数及专属计划旧通用转码能力残留；真人时长证据仍留给发布门；总进度69/121，业务功能59/111，下一项G4-01 |
 | 1.1.62 | 2026-09-07 | 完成G3-17系统收口、质量门与局部修复：补齐此前缺失的P2 PresentationProfile正式Skill/Context/Executor，代码冻结三类输入、四类战斗操作、18个UI消费槽和可降级表现策略；P10完整验签17件上游，生成15个运行模块配置、必需程序地图/NPC头像/地区背景媒资需求及全量占位降级，并把作者生产的内容库存时长与玩家单次可达时长分开计算；V1在任何模型评审前确定性检查Schema、Hash链、引用、主线首任务可解、预算与消费槽；V2平衡和语义评审分别检查6项与8项指标，低于70阻断、70～84形成明确问题，代码把每项问题绑定唯一新Build修复任务并计算传递stale闭包，已验收Artifact不可原地改写；真人时长校准仍作为后续发布门；总进度68/121，业务功能58/111，下一项G3-18 |
 | 1.1.61 | 2026-09-07 | 完成G3-16 SceneScript/ChoiceContract/三类交互绑定：P9先在代码侧读取并验签10件已验收上游，再向模型交付任务、角色、地图、Director和Action的去重确定性投影，原子Context在实际112000 token任务预算内完整交付；覆盖全部任务委托/Objective/收束、NPC三档态度对话、地点交互、随机事件表现、传闻及每个地区任务模板3份文字变体；固定Choice精确继承Action Hash、可用Condition和确认策略，系统按钮/固定选项/自然语言候选共同进入P8F Action结果权威；战斗自然语言关闭，低置信度不执行，高风险二次确认，模型不能创建Action/Quest/地图或写状态；漏场景、自然语言歧义、知识/传闻缺口、越权字段及重算Hash篡改失败关闭；总进度67/121，业务功能57/111，下一项G3-17 |
 | 1.1.60 | 2026-09-07 | 完成G3-15 QuestFinalize/EncounterFinalize：正式Skill和原子Context一次读取11件已验收Artifact，全链校验行Hash、内容Hash、产品实例与跨目录来源；模型只写任务/Objective描述、发牌类别/强度/权重和随机事件语义，代码确定性生成Quest、Stage、Objective、Condition、Effect、Action、奖励领取、战斗开始/结算、技能/道具、制作/商店、NPC交互、地图/旅行/快旅/复活及Director结算全部运行定义和双向引用；主线/重要故事保持等待与不可永久失败，普通任务支持放弃重接和限时过期；地区Director冻结固定任务、模板、随机事件、冷却、并发上限、高强度连续限制与空白牌，保护故事不进入发牌压力；同时修复生产调度器未向Context Gateway传递实际任务输入预算的旧上限，为不可切分JSON来源增加atomic失败关闭；在150次推荐总调用不变下，P8F调整为11次、表现轮廓调整为1次；总进度66/121，业务功能56/111，下一项G3-16 |

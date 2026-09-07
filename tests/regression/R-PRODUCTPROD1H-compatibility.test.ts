@@ -4,6 +4,8 @@ import { hashProductProductionValueV2 } from '../../src/lib/product-production/h
 import { parseProductRuntimePackageV1 } from '../../src/lib/product-production/runtime-package'
 import type { ProductRuntimePackageV1 } from '../../src/lib/types'
 import { CURRENT_PRODUCT_RESOURCE_KEYS, currentProductSelection } from '../helpers/current-product-world'
+import { createTextOpenWorldProductRuntimePackageFixtureV1 } from '../helpers/text-open-world-product-session'
+import { createTextOpenWorldVNextFixture } from '../helpers/text-open-world-vnext-fixture'
 
 function avgPackage(choiceEffectsJson = '[]'): ProductRuntimePackageV1 {
   const hash = 'a'.repeat(64)
@@ -71,5 +73,53 @@ describe('R-PRODUCTPROD-1H · deterministic save compatibility', () => {
     expect(report).toMatchObject({ level: 'breaking', migrationPolicy: 'pin-old-save' })
     expect(report.changedStableKeys).toContain('narrative.choice:choice.finish')
     expect(report.reasons.join('')).toContain('旧存档')
+  })
+
+  it('把vNext全部模块envelope纳入稳定键，并识别schema、hash和依赖变化', async () => {
+    const previousVNext = createTextOpenWorldVNextFixture()
+    const previous = createTextOpenWorldProductRuntimePackageFixtureV1(previousVNext)
+    const initial = await createProductBuildCompatibilityReportV1({
+      previous: null,
+      current: {
+        buildNumber: 1,
+        packageHash: await hashProductProductionValueV2(previous),
+        runtimePackage: previous,
+      },
+    })
+    expect(initial.addedStableKeys.filter(key => key.startsWith('text-open-world.module:')))
+      .toHaveLength(15)
+
+    const variants = (['schemaVersion', 'contentHash', 'dependencies'] as const).map(field => {
+      const next = structuredClone(previousVNext)
+      if (field === 'schemaVersion') {
+        next.modules.presentation.schemaVersion = 1
+        ;(next.modules.presentation.payload as { version: number; mapLayout?: unknown }).version = 1
+        delete (next.modules.presentation.payload as { mapLayout?: unknown }).mapLayout
+      }
+      if (field === 'contentHash') next.modules.world.contentHash = 'c'.repeat(64)
+      if (field === 'dependencies') next.modules.world.dependencies = []
+      return {
+        changedKey: field === 'schemaVersion'
+          ? 'text-open-world.module:presentation'
+          : 'text-open-world.module:world',
+        runtimePackage: createTextOpenWorldProductRuntimePackageFixtureV1(next),
+      }
+    })
+    for (const { changedKey, runtimePackage: current } of variants) {
+      const report = await createProductBuildCompatibilityReportV1({
+        previous: {
+          buildNumber: 1,
+          packageHash: await hashProductProductionValueV2(previous),
+          runtimePackage: previous,
+        },
+        current: {
+          buildNumber: 2,
+          packageHash: await hashProductProductionValueV2(current),
+          runtimePackage: current,
+        },
+      })
+      expect(report).toMatchObject({ level: 'breaking', migrationPolicy: 'pin-old-save' })
+      expect(report.changedStableKeys).toContain(changedKey)
+    }
   })
 })

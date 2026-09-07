@@ -3,6 +3,7 @@ import {
   createTextOpenWorldProductionPlanV1,
   createTextOpenWorldProductionRunContractBlueprintV1,
   TEXT_OPEN_WORLD_PRODUCTION_ARTIFACT_DEFINITIONS_V1,
+  TEXT_OPEN_WORLD_PRODUCTION_MODEL_CALL_BUDGET_V1,
   TEXT_OPEN_WORLD_PRODUCTION_TASK_CONTRACTS_V1,
   textOpenWorldProductionArtifactKindForKeyV1,
   textOpenWorldProductionStageTaskKeysV1,
@@ -92,7 +93,6 @@ function brief(input: {
           capability('text.open-world-production', 'text'),
           capability('media.visual', 'image'),
           capability('media.music', 'music'),
-          capability('media.transcode', 'transcode'),
         ]
       : [capability('text.open-world-production', 'text')],
     externalDataPolicy: {
@@ -125,7 +125,7 @@ describe('R-OPEN-WORLD3 · product production contract and P0-P10 DAG', () => {
     expect(blueprint).toMatchObject({
       productOwner: 'text-open-world',
       workflowKind: 'long-running-resumable',
-      activation: 'contract-only-until-skills-and-executors-registered',
+      activation: 'active',
       artifactAcceptance: 'candidate-then-accepted-by-shared-artifact-store',
       terminalTaskKey: 'qa.release',
     })
@@ -169,7 +169,9 @@ describe('R-OPEN-WORLD3 · product production contract and P0-P10 DAG', () => {
       terminalTaskKey: 'qa.release',
     })
     expect(plan.tasks.filter(task => task.executionMode === 'model')).toHaveLength(22)
-    expect(plan.tasks.reduce((sum, task) => sum + task.budgetReservation.modelCalls, 0)).toBe(150)
+    expect(TEXT_OPEN_WORLD_PRODUCTION_MODEL_CALL_BUDGET_V1).toEqual({ minimum: 22, recommended: 150 })
+    expect(plan.tasks.reduce((sum, task) => sum + task.budgetReservation.modelCalls, 0))
+      .toBe(TEXT_OPEN_WORLD_PRODUCTION_MODEL_CALL_BUDGET_V1.recommended)
     expect(plan.tasks.find(task => task.taskKey === 'p5.mainline')?.budgetReservation.modelCalls).toBe(12)
     expect(plan.tasks.find(task => task.taskKey === 'p7.region-narrative-packs')?.budgetReservation.modelCalls).toBe(16)
     expect(plan.tasks.find(task => task.taskKey === 'p8f.quest-finalize')?.dependsOn).toEqual(
@@ -204,9 +206,13 @@ describe('R-OPEN-WORLD3 · product production contract and P0-P10 DAG', () => {
     })
     const integration = plan.tasks.find(task => task.taskKey === 'v3.runtime-package')!
     expect(integration.dependsOn).toEqual(expect.arrayContaining(['media.visual', 'media.audio']))
-    expect(integration.capabilityRequirementKeys).toEqual(['media.transcode'])
+    expect(integration.capabilityRequirementKeys).toEqual([])
     expect(plan.tasks.find(task => task.taskKey === 'media.visual')).toMatchObject({
       dependsOn: ['p10.system-finalize'], outputArtifactKeys: ['text-open-world.media.visual.001'],
+      failurePolicy: 'pause', fallbackTaskKey: null,
+    })
+    expect(plan.tasks.find(task => task.taskKey === 'media.audio')).toMatchObject({
+      failurePolicy: 'pause', fallbackTaskKey: null,
     })
     expect(textOpenWorldProductionArtifactKindForKeyV1('text-open-world.media.visual.001')).toBe('image')
     expect(textOpenWorldProductionArtifactKindForKeyV1('text-open-world.media.audio.001')).toBe('audio')
@@ -224,6 +230,18 @@ describe('R-OPEN-WORLD3 · product production contract and P0-P10 DAG', () => {
     await expect(createTextOpenWorldProductionPlanV1({
       buildNumber: 1, briefHash: await hashProductProductionValueV2(underBudget), brief: underBudget,
     })).rejects.toThrow(/至少需要 22 次/)
+
+    const unsupportedVoice = structuredClone(brief())
+    unsupportedVoice.media.audioLevel = 'full'
+    unsupportedVoice.media.voiceLineCount = 1
+    unsupportedVoice.media.requiredMediaKinds = ['voice']
+    unsupportedVoice.productionBudget.maximumMediaCalls = 1
+    unsupportedVoice.capabilityRequirements.push(capability('media.voice', 'voice'))
+    await expect(createTextOpenWorldProductionPlanV1({
+      buildNumber: 1,
+      briefHash: await hashProductProductionValueV2(unsupportedVoice),
+      brief: unsupportedVoice,
+    })).rejects.toThrow(/尚未实现独立voice媒资通路/)
 
     const staleGap = structuredClone(TEXT_OPEN_WORLD_PRODUCTION_TASK_CONTRACTS_V1)
     staleGap[0].stalePolicy.watches = staleGap[0].stalePolicy.watches.filter(item => item !== 'sourcePinHash')
