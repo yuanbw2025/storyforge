@@ -67,6 +67,31 @@ test('文字开放世界玩家壳在桌面三栏与移动五入口之间保持�
   expect(desktopGeometry.left.right).toBeLessThanOrEqual(desktopGeometry.main.left + 0.5)
   expect(desktopGeometry.main.right).toBeLessThanOrEqual(desktopGeometry.right.left + 0.5)
 
+  await left.getByRole('button', { name: '地图', exact: true }).click()
+  await expect(main).toHaveAttribute('data-open-world-view', 'map')
+  const mapPanel = page.getByTestId('text-open-world-map-topology')
+  const mapSvg = page.getByTestId('text-open-world-map-svg')
+  const mapGeometry = await mapSvg.boundingBox()
+  // This catches the former global icon rule that collapsed the whole map to
+  // 16px while remaining valid inside the desktop shell's bounded main column.
+  expect(mapGeometry?.width ?? 0).toBeGreaterThan(400)
+  expect(mapGeometry?.height ?? 0).toBeGreaterThan(250)
+  const sequenceBeforeMapSelection = await page.getByTestId('text-open-world-global-status').textContent()
+  await mapSvg.getByRole('button', { name: /查看地点：断脊渠口/ }).click()
+  await expect(mapPanel.getByLabel('选中地点详情')).toContainText('你目前只知道这个地点的名称')
+  await expect(mapPanel.locator('[data-map-route="edge.port-ridge"]')).toHaveAttribute('data-route-selected', 'true')
+  await expect(page.getByTestId('text-open-world-global-status')).toHaveText(sequenceBeforeMapSelection ?? '')
+  await mapPanel.getByLabel('选中地点详情').getByRole('button', { name: /^前往断脊渠口：/ }).click()
+  await expect(page.getByTestId('text-open-world-global-status')).toContainText('地点断脊渠口')
+  await expect(mapPanel.getByTestId('text-open-world-map-feedback')).toBeVisible()
+  await expect(mapPanel).toContainText('快速旅行点已解锁')
+
+  await mapPanel.getByRole('button', { name: '查看快旅路线', exact: true }).click()
+  await mapPanel.getByLabel('选中地点详情').getByRole('button', { name: /^快速旅行：前往盐港广场/ }).click()
+  await expect(page.getByTestId('text-open-world-global-status')).toContainText('地点盐港广场')
+  await page.getByRole('button', { name: '返回当前场景', exact: true }).click()
+  await expect(main).toHaveAttribute('data-open-world-view', 'scene')
+
   await left.getByRole('button', { name: '任务', exact: true }).click()
   await expect(main).toHaveAttribute('data-open-world-view', 'quests')
   await expect(page.getByTestId('text-open-world-quest-log')).toBeVisible()
@@ -104,6 +129,15 @@ test('文字开放世界玩家壳在桌面三栏与移动五入口之间保持�
 
   await mobileNavigation.getByRole('button', { name: '地图', exact: true }).click()
   await expect(main).toHaveAttribute('data-open-world-view', 'map')
+  const mobileMapList = mapPanel.getByRole('list', { name: '地图列表视图' })
+  const mobileRidge = mobileMapList.getByRole('listitem').filter({ hasText: '断脊渠口' })
+  await mobileRidge.getByRole('button', { name: /断脊渠口/ }).first().click()
+  await mobileRidge.getByRole('button', { name: /^前往断脊渠口：/ }).click()
+  await expect(page.getByTestId('text-open-world-global-status')).toContainText('地点断脊渠口')
+  const mobileSaltPort = mobileMapList.getByRole('listitem').filter({ hasText: '盐港广场' })
+  await mobileSaltPort.getByRole('button', { name: /盐港广场/ }).first().click()
+  await mobileSaltPort.getByRole('button', { name: /^快速旅行：前往盐港广场/ }).click()
+  await expect(page.getByTestId('text-open-world-global-status')).toContainText('地点盐港广场')
   await page.getByRole('button', { name: '返回当前场景', exact: true }).click()
   await expect(main).toHaveAttribute('data-open-world-view', 'scene')
 

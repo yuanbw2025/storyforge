@@ -19,7 +19,7 @@ import {
 import TextOpenWorldActorsPanel from './TextOpenWorldActorsPanel'
 import TextOpenWorldEquipmentPanel from './TextOpenWorldEquipmentPanel'
 import TextOpenWorldGameShell from './TextOpenWorldGameShell'
-import TextOpenWorldMapPanel from './TextOpenWorldMapPanel'
+import TextOpenWorldMapPanel, { type TextOpenWorldMapTravelRequestV1 } from './TextOpenWorldMapPanel'
 import TextOpenWorldQuestLogPanel from './TextOpenWorldQuestLogPanel'
 import TextOpenWorldRelationshipsPanel from './TextOpenWorldRelationshipsPanel'
 import TextOpenWorldScenePanel from './TextOpenWorldScenePanel'
@@ -575,11 +575,26 @@ export default function TextOpenWorldVNextPlayer() {
         scene: sceneView,
         map: <TextOpenWorldMapPanel
           projection={projection}
+          runtimeEventSequence={store.runtimeState.lastSequence}
           busy={store.busy}
+          sessionKey={sessionKey}
           focusedLocationKey={questMapFocus?.sessionKey === sessionKey ? questMapFocus.locationKey : null}
           focusedLocationRequestId={questMapFocus?.sessionKey === sessionKey ? questMapFocus.requestId : null}
-          onTravel={(actionKey, destinationLocationKey) => {
-            void run(() => store.executeVNextAction(actionKey, destinationLocationKey))
+          onTravel={async (request: TextOpenWorldMapTravelRequestV1) => {
+            const liveStore = useTextOpenWorldPlayerStore.getState()
+            const liveSessionKey = liveStore.selectedSession?.id
+              ?? liveStore.selectedSessionId
+              ?? liveStore.selectedManifest?.textOpenWorldVNext?.metadata.packageKey
+              ?? 'no-session'
+            if (request.sessionKey !== liveSessionKey) return null
+            if (liveStore.runtimeState.lastSequence !== request.expectedBaseSequence) {
+              throw new Error('地图状态已经变化，请重新选择地点后再出发。')
+            }
+            return liveStore.executeVNextAction(
+              request.actionKey,
+              request.destinationLocationKey,
+              { expectedBaseSequence: request.expectedBaseSequence },
+            )
           }}
         />,
         quests: questsView,

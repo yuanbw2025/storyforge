@@ -101,6 +101,7 @@
 /* Text open world runtime shell: responsive navigation and projection-owned status slots. */
 .open-world-game-shell { position: relative; display: grid; width: 100%; height: min(860px,calc(100dvh - 32px)); min-height: 700px; max-height: 900px; grid-template-rows: auto minmax(0,1fr) auto auto; overflow: hidden; background: radial-gradient(circle at 72% -8%,rgba(83,132,112,.14),transparent 32%),#091218; color: #e7ecea; font-family: var(--font-sans); }
 .open-world-game-shell svg { width: 16px; height: 16px; }
+.open-world-game-shell .open-world-player-map-svg { display: block; width: 100%; height: auto; min-height: 256px; }
 .open-world-game-shell button { font: inherit; }
 .open-world-game-shell button:focus-visible,.open-world-game-main-view:focus-visible { outline: 2px solid #d2aa6c; outline-offset: -2px; }
 .open-world-game-header { position: relative; z-index: 20; display: grid; min-height: 66px; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 13px; padding: 8px 14px; border-bottom: 1px solid rgba(255,255,255,.1); background: rgba(7,15,20,.94); box-shadow: 0 10px 28px rgba(0,0,0,.22); backdrop-filter: blur(14px); }
