@@ -22,6 +22,7 @@ import { validateScreenplayBlocksV1 } from '../../lib/screenplay/contracts'
 import { inspectScreenplayCompletionV1, type ScreenplayCompletionReportV1 } from '../../lib/screenplay/production'
 import { listScreenplayReleasesV1, publishScreenplayReleaseV1, readScreenplayReleaseManifestV1 } from '../../lib/screenplay/release'
 import ScreenplayPipelinePanel from './ScreenplayPipelinePanel'
+import ScreenplayShowcase from './ScreenplayShowcase'
 import './screenplay-studio.css'
 
 interface Props { scope: WorkspaceScope }
@@ -159,5 +160,6 @@ export default function ScreenplayStudio({ scope }: Props) {
       </div>
     </>}
     {error && <div className="screenplay-error" role="alert">{error}</div>}
+    <ScreenplayShowcase />
   </div>
 }
