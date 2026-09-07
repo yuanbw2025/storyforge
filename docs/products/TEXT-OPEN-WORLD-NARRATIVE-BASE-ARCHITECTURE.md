@@ -1,6 +1,6 @@
 # AI 主导文字开放世界叙事基座 · StoryForge 施工规格
 
-> 规格版本：3.2.27
+> 规格版本：3.2.28
 > 生效日期：2026-09-06
 > 文档层级：L2 产品目标架构与施工规格
 > 当前状态：设计基线；不代表代码已经实现
@@ -558,6 +558,8 @@ P9把已经可运行的任务与地区Director结果图转换为玩家可读、�
 
 SceneScripts生产Context自G4-03收口后使用v2确定性语义：同场景多个Action的条件交集才是Scene availability，各Action的其余条件仍只约束自己的Choice；Objective participant只来自该目标显式Actor需求且与场景地点一致，Quest owner不再被无条件复制到所有目标；角色拥有的委托与收束端点则固定在owner常驻地点，Quest地点继续描述冒险主体。因此战斗完成条件尚未成立时仍能看到启动战斗Action，任务不会因委托人缺席而隐藏，发布者也不会被要求瞬移到任务首地点。已冻结的v1 Context继续按旧投影规则和旧Quest首地点/地区端点验签，保护未完成durable Run与历史Artifact复验；旧产物无法仅凭Narrative v2/Action v15版本号与新产物区分，因此玩家投影会依Action条件交集、Objective与Actor对话场景共享的冻结Action引用及Actor居所兼容归一旧P9场景，同地或异地误注入owner都不会成为目标门槛，旧的异地委托/收束也会回到owner常驻地点。
 
+如果旧Scene的冻结地点与归一后的owner常驻地点不同，其模型正文可能仍明确描写旧地点。运行投影必须把这种场景标为`legacy-endpoint-fallback`，隐藏可能矛盾的旧开场/正文，并展示地点中性的确定性兼容文案及可见提示；它不能无提示地改换地点后仍把旧文字标成当前冻结正文。未发生端点迁移的新Scene继续原样消费P9文本。
+
 `ChoiceContracts`中的每个固定选项都精确引用P8F Action Definition Hash，并继承该Action的Condition与确认策略；`ActionBindings`则把系统Action按钮、固定Choice和自然语言候选统一绑定到同一Action结果权威。自然语言只能选择当前投影中已存在的非战斗Action并交回确定性运行校验：高置信度低风险才可执行，高风险/不可逆操作必须确认，低置信度只自然回应并推荐正式Action，无法映射时不得创建Action、任务、地图或写状态。全部战斗Action保持按钮操作，不开放自由描述。模型漏场景、重复自然语言示例、缺少三档态度、无依据传闻、越权输出运行字段，或重算Hash后篡改Action/Choice引用均失败关闭。P9继续只写Build Artifact候选，不新增物理表、不写ProductRelease或Session。
 
 #### 5.4.16 P2表现轮廓、P10系统收口与V1/V2质量门落地
@@ -853,6 +855,8 @@ WASD像素移动、逐格碰撞和室内关卡属于后续表现升级。
 #### 8.2.1 G4-03确定性场景消费基线
 
 当前玩家端已经能直接消费ProductRelease或制作端显式Build Preview冻结的P9正文与三类输入绑定。代码只从唯一Session Projection派生当前地点、任务生命周期、Scene共有Condition和显式在场NPC允许的场景；一个Action的私有条件不会隐藏同场景其他合法选择，异地Objective不需要发布者同行。新生产把角色拥有的委托/收束放在owner常驻地点，旧冻结包的异地端点也在运行时兼容归一；历史Context v1仍保留原Quest首地点/地区语义以支持durable恢复。交谈和开战Action分别依冻结Actor对话场景与Encounter启动Effect收窄唯一目标，不会因同地点还有其他NPC或遭遇而让正式选项失效。被Scene引用的玩家Quest目标Action及玩家结局`quest-action`还会在Action注册表复核Scene合法性，并按offer、当前Objective、resolution各自生命周期精确收窄实例；同定义多轮任务不会串目标，Quest页或直接命令也不能绕过场景。P8F的`observe + targetScope:quest`兜底需求同样受此约束。Choice、系统按钮及精确匹配的冻结自然语言例句分别标记`fixed-choice`、`system-action`和`mapped-intent`，随后统一进入Action注册表、风险确认、Event提交和Projection重建。高风险确认必须把弹窗打开时整个`ProductRuntimeState.lastSequence`作为基线交给执行器；缺失、数据库状态变化或实时Store切换Session时都必须重新确认，stale失败后Store先尽力刷新权威Projection，Command事务继续以Sequence+Hash处理检查后的竞态。无法唯一映射、普通动作零/多目标或战斗中的自由输入不会写状态；G4-09前，多敌战斗暂按权威Projection选择首个存活目标以保证循环可继续。玩家场景投影不携带内部purpose或未发生结果文案，系统回执以独立读屏动态区与P9正文保持分离。
+
+界面把正式Release和显式Build Preview中的正文统一标为“冻结叙事”，由全局来源标识负责区分已发布与非正式预览；旧端点迁移时则明确改标兼容回退。Action执行同时冻结完整请求代次、scope、世界分组和Session，切换存档后旧Action只影响原Session，不得把回执、错误、busy或刷新投影写进新界面。Narrative v1 / Action v14还按旧正式编译器的`action.talk.<actorKey>`稳定键恢复唯一交谈对象，使同地点多NPC时仍可执行，而非把无目标选择器的按钮伪装为可用。
 
 P9没有为休息等所有通用玩法Action造Scene。运行投影会保留当前合法、且从未被任何P9 Scene引用的环境Action，让这些确定性循环继续从系统按钮执行；被隐藏Scene引用的Action不会从场景环境入口泄露。Scene引用不是通用玩法的全局所有权：Objective即使把use/equip/craft/buy/sell作为支持动作引用，也不能让任务生命周期反向锁死背包、装备、制作或商店页。制作与交易在专用UI补齐商品/配方和数量参数前，不出现在v15 Scene快捷入口或v14兼容场景按钮中。
 
@@ -1412,6 +1416,7 @@ StoryForge当前没有独立staging。发布前仍需在隔离数据中完成灰
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| 3.2.28 | 2026-09-08 | 收口G4-03运行兼容：Action异步结果绑定完整请求代次与Session，不串回执、错误、busy或刷新；Release/Preview正文统一称冻结叙事；旧端点迁移隐藏地点冲突正文并标记确定性兼容回退；Narrative v1/Action v14按稳定Action键恢复唯一交谈Actor |
 | 3.2.27 | 2026-09-08 | 完成G4-03兼容收口：新P9把角色拥有的委托/收束端点绑定owner常驻地点，v1冻结Context继续按旧Quest端点恢复，旧运行包按常驻地点归一；正式Release与显式Build Preview共享冻结叙事消费边界；高风险确认强制使用整个ProductRuntimeState事件基线，stale后刷新权威Projection再重试 |
 | 3.2.26 | 2026-09-07 | 收口G4-03门控语义：场景专属玩家Quest Action按Scene lifecycle精确收窄具体实例，包含同定义多轮任务与`observe + quest`兜底需求；通用玩法不因被Objective引用而全局失效；高风险确认拒绝DB事件基线变化与旧DOM串Session；多敌战斗暂选首个存活目标；v15/v14场景均隐藏缺参数制作交易按钮 |
 | 3.2.25 | 2026-09-07 | 完成G4-03最终差异收口：从冻结Actor Scene与Encounter启动Effect恢复交谈/开战唯一目标；把从未绑定P9 Scene但当前合法的通用Action投影为环境系统行动，同时保证隐藏Scene Action不能越过叙事门控；补正式生产休息未绑定Scene的证据与运行回归 |

@@ -147,6 +147,92 @@ describe('Text Open World G4 · 玩家库与显式Session加载', () => {
     expect(useTextOpenWorldPlayerStore.getState()).toMatchObject({ error: '' })
   }, 15_000)
 
+  it('旧Session行动完成后不会把权威回执或busy状态写入新Session', async () => {
+    const stale = await fixture()
+    const current = await fixture()
+    await useTextOpenWorldPlayerStore.getState().load(stale.scope, null, stale.formalSession.id)
+    let releaseActionRead!: () => void
+    let actionReadEntered!: () => void
+    const actionReadGate = new Promise<void>(resolve => { releaseActionRead = resolve })
+    const actionReadStarted = new Promise<void>(resolve => { actionReadEntered = resolve })
+    const originalGet = db.productRuntimeSessions.get.bind(db.productRuntimeSessions)
+    let delayNextStaleRead = true
+    const getSpy = vi.spyOn(db.productRuntimeSessions, 'get').mockImplementation(async key => {
+      const result = originalGet(key)
+      if (delayNextStaleRead && key === stale.formalSession.id) {
+        delayNextStaleRead = false
+        actionReadEntered()
+        await actionReadGate
+      }
+      return result
+    })
+
+    try {
+      const staleAction = useTextOpenWorldPlayerStore.getState().executeVNextAction(
+        'action.talk-caretaker',
+        'actor.caretaker',
+        { commandId: 'command.player-store.stale-success' },
+      )
+      await actionReadStarted
+      await useTextOpenWorldPlayerStore.getState().load(current.scope, null, current.formalSession.id)
+      releaseActionRead()
+      await staleAction
+
+      expect(useTextOpenWorldPlayerStore.getState()).toMatchObject({
+        scope: current.scope,
+        selectedSessionId: current.formalSession.id,
+        lastFeedback: null,
+        busy: false,
+        error: '',
+      })
+      expect(await db.productRuntimeEvents.where('sessionId').equals(stale.formalSession.id!).count())
+        .toBeGreaterThan(0)
+    } finally {
+      getSpy.mockRestore()
+      releaseActionRead()
+    }
+  }, 15_000)
+
+  it('旧Session行动失败后不会把错误或刷新结果写入新Session', async () => {
+    const stale = await fixture()
+    const current = await fixture()
+    await useTextOpenWorldPlayerStore.getState().load(stale.scope, null, stale.formalSession.id)
+    let releaseActionRead!: () => void
+    let actionReadEntered!: () => void
+    const actionReadGate = new Promise<void>(resolve => { releaseActionRead = resolve })
+    const actionReadStarted = new Promise<void>(resolve => { actionReadEntered = resolve })
+    const originalGet = db.productRuntimeSessions.get.bind(db.productRuntimeSessions)
+    let delayNextStaleRead = true
+    const getSpy = vi.spyOn(db.productRuntimeSessions, 'get').mockImplementation(async key => {
+      const result = originalGet(key)
+      if (delayNextStaleRead && key === stale.formalSession.id) {
+        delayNextStaleRead = false
+        actionReadEntered()
+        await actionReadGate
+      }
+      return result
+    })
+
+    try {
+      const staleAction = useTextOpenWorldPlayerStore.getState().executeVNextAction('action.missing')
+      await actionReadStarted
+      await useTextOpenWorldPlayerStore.getState().load(current.scope, null, current.formalSession.id)
+      releaseActionRead()
+      await expect(staleAction).rejects.toThrow('Release不存在Action')
+
+      expect(useTextOpenWorldPlayerStore.getState()).toMatchObject({
+        scope: current.scope,
+        selectedSessionId: current.formalSession.id,
+        lastFeedback: null,
+        busy: false,
+        error: '',
+      })
+    } finally {
+      getSpy.mockRestore()
+      releaseActionRead()
+    }
+  }, 15_000)
+
   it('较慢的旧scope与世界分组装载完成后不会覆盖较新的游戏库与空选择', async () => {
     const stale = await fixture()
     const current = await fixture()

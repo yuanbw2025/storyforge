@@ -252,17 +252,22 @@ export const useTextOpenWorldPlayerStore = create<TextOpenWorldPlayerState>((set
       && currentScope.workId === request.scope.workId
       && (get().worldGroupId ?? null) === (request.worldGroupId ?? null)
   }
-  const refresh = async () => {
-    const scope = get().scope
-    const sessionId = get().selectedSessionId
-    if (!scope || sessionId == null) return
-    const request = captureProjectionRequest()
-    if (!request) return
+  const isCurrentSessionRequest = (
+    request: TextOpenWorldProjectionRequest,
+    sessionId: number,
+  ): boolean => isCurrentProjectionRequest(request) && get().selectedSessionId === sessionId
+  const refresh = async (
+    providedRequest?: TextOpenWorldProjectionRequest,
+    providedSessionId?: number,
+  ) => {
+    const request = providedRequest ?? captureProjectionRequest()
+    const sessionId = providedSessionId ?? get().selectedSessionId
+    if (!request || sessionId == null || !isCurrentSessionRequest(request, sessionId)) return
     try {
-      const details = await readDetails(scope, request.worldGroupId, sessionId)
-      if (isCurrentProjectionRequest(request) && get().selectedSessionId === sessionId) set(details)
+      const details = await readDetails(request.scope, request.worldGroupId, sessionId)
+      if (isCurrentSessionRequest(request, sessionId)) set(details)
     } catch (error) {
-      if (!isCurrentProjectionRequest(request)) return
+      if (!isCurrentSessionRequest(request, sessionId)) return
       throw error
     }
   }
@@ -303,11 +308,17 @@ export const useTextOpenWorldPlayerStore = create<TextOpenWorldPlayerState>((set
       throw error
     }
   }
-  const run = async <T>(operation: () => Promise<T>): Promise<T> => {
-    set({ busy: true, error: '' })
+  const run = async <T>(
+    operation: () => Promise<T>,
+    mayPublish: () => boolean = () => true,
+  ): Promise<T> => {
+    if (mayPublish()) set({ busy: true, error: '' })
     try { return await operation() }
-    catch (error) { set({ error: error instanceof Error ? error.message : String(error) }); throw error }
-    finally { set({ busy: false }) }
+    catch (error) {
+      if (mayPublish()) set({ error: error instanceof Error ? error.message : String(error) })
+      throw error
+    }
+    finally { if (mayPublish()) set({ busy: false }) }
   }
   return {
     scope: null, worldGroupId: null, releases: [], sessions: [], selectedSessionId: null,
@@ -317,7 +328,7 @@ export const useTextOpenWorldPlayerStore = create<TextOpenWorldPlayerState>((set
     load: async (scope, worldGroupId, initialSessionId) => {
       const request = beginProjectionRequest(scope, worldGroupId)
       set({
-        scope, worldGroupId, releases: [], sessions: [], loading: true,
+        scope, worldGroupId, releases: [], sessions: [], loading: true, busy: false,
         ...emptySelectionState(),
       })
       try { await reload(initialSessionId ?? null, request) }
@@ -338,7 +349,7 @@ export const useTextOpenWorldPlayerStore = create<TextOpenWorldPlayerState>((set
         return
       }
       const request = beginProjectionRequest(scope, get().worldGroupId)
-      set({ loading: true, error: '', generatedCandidate: null, lastFeedback: null })
+      set({ loading: true, busy: false, error: '', generatedCandidate: null, lastFeedback: null })
       try {
         if (sessionId == null) {
           if (isCurrentProjectionRequest(request)) set(emptySelectionState())
@@ -394,32 +405,38 @@ export const useTextOpenWorldPlayerStore = create<TextOpenWorldPlayerState>((set
       set({ generatedCandidate: null })
       await refresh()
     }),
-    executeVNextAction: async (actionKey, targetKey, options) => run(async () => {
+    executeVNextAction: async (actionKey, targetKey, options) => {
       const sessionId = get().selectedSessionId
-      if (sessionId == null || !get().scope) throw new Error('[text-open-world] 请先开始正式开放世界。')
-      const session = await assertSession(get().scope!, sessionId)
-      if (!(await readProductRuntimeState(session.id!)).textOpenWorld) throw new Error('[text-open-world] 当前存档不是vNext运行包。')
-      try {
-        const feedback = await executeTextOpenWorldActionV1({
-          sessionId,
-          actionKey,
-          targetKey,
-          commandId: options?.commandId,
-          confirmed: options?.confirmed,
-          source: options?.source,
-          expectedBaseSequence: options?.expectedBaseSequence,
-        })
-        set({ generatedCandidate: null, lastFeedback: feedback })
-        await refresh()
-        return feedback
-      } catch (error) {
-        // A stale confirmation is expected under another tab/process. Refresh
-        // the authoritative projection before exposing the original error so
-        // the player can reopen the action and confirm against the new state.
-        try { await refresh() } catch { /* Preserve the action failure. */ }
-        throw error
-      }
-    }),
+      const request = captureProjectionRequest()
+      if (sessionId == null || !request) throw new Error('[text-open-world] 请先开始正式开放世界。')
+      const mayPublish = () => isCurrentSessionRequest(request, sessionId)
+      return run(async () => {
+        const session = await assertSession(request.scope, sessionId)
+        if (!(await readProductRuntimeState(session.id!)).textOpenWorld) throw new Error('[text-open-world] 当前存档不是vNext运行包。')
+        try {
+          const feedback = await executeTextOpenWorldActionV1({
+            sessionId,
+            actionKey,
+            targetKey,
+            commandId: options?.commandId,
+            confirmed: options?.confirmed,
+            source: options?.source,
+            expectedBaseSequence: options?.expectedBaseSequence,
+          })
+          await refresh(request, sessionId)
+          if (mayPublish()) set({ generatedCandidate: null, lastFeedback: feedback })
+          return feedback
+        } catch (error) {
+          // A stale confirmation is expected under another tab/process. Refresh
+          // only the captured Session projection before exposing the original
+          // error; a later scope/Session must never receive this receipt.
+          if (mayPublish()) {
+            try { await refresh(request, sessionId) } catch { /* Preserve the action failure. */ }
+          }
+          throw error
+        }
+      }, mayPublish)
+    },
     generatePresentation: async (skillId, objective, aiConfig) => run(async () => {
       const sessionId = get().selectedSessionId
       if (sessionId == null || !get().scope) throw new Error('[text-open-world] 请先开始正式开放世界。')

@@ -160,6 +160,19 @@ describe('Text Open World vNext · unified Action registry and availability proj
       .toMatchObject({ available: true, validTargetKeys: ['encounter.ridge-jackal'] })
   })
 
+  it('Narrative v1 / Action v14按旧编译器稳定Action键收窄交谈Actor', () => {
+    const runtimePackage = createTextOpenWorldVNextFixture()
+    const actions = runtimePackage.modules.actions.payload.actions
+    const talk = actions.find(action => action.key === 'action.talk-caretaker')!
+    talk.key = 'action.talk.actor.caretaker'
+
+    const projection = createTextOpenWorldActionRegistryV1(runtimePackage).project(context({
+      validTargetKeysByScope: { actor: ['actor.caretaker', 'actor.other-present'] },
+    }))
+    expect(projection.find(item => item.action.key === 'action.talk.actor.caretaker'))
+      .toMatchObject({ available: true, validTargetKeys: ['actor.caretaker'] })
+  })
+
   it('P9场景失效时只关闭场景专属任务Action，不锁死被Objective引用的通用Action', () => {
     const runtimePackage = createTextOpenWorldVNextP9Fixture()
     const narrative = runtimePackage.modules.narrative.payload as any

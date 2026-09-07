@@ -89,10 +89,13 @@ function SystemReceipt({ feedback }: { feedback: TextOpenWorldFeedbackReceiptV1 
 function PublishedScene({ scene }: { scene: TextOpenWorldProjectedSceneV1 }) {
   return <article className="open-world-scene-narrative" data-testid="text-open-world-published-scene">
     <header>
-      <span><ScrollText aria-hidden="true" />发布叙事</span>
+      <span><ScrollText aria-hidden="true" />冻结叙事</span>
       <small>{scene.sourceKind}</small>
     </header>
     <h1>{scene.title}</h1>
+    {scene.compatibilityNotice && <aside className="open-world-scene-compatibility" role="note">
+      {scene.compatibilityNotice}
+    </aside>}
     <p className="open-world-scene-opening">{scene.authoredOpeningText}</p>
     <p>{scene.bodyText}</p>
     {scene.sourceKind === 'actor-dialogue' && scene.actor && <section className="open-world-scene-dialogue" data-testid="text-open-world-npc-dialogue">

@@ -150,7 +150,7 @@ describe('Text Open World G4-03 · 场景与三类输入集成', () => {
     })
 
     const published = host.querySelector('[data-testid="text-open-world-published-scene"]')
-    expect(published?.textContent).toContain('发布叙事')
+    expect(published?.textContent).toContain('冻结叙事')
     expect(published?.textContent).toContain('干涸的内渠')
     expect(published?.textContent).toContain('潮声仍在堤外起伏')
     expect(host.querySelector('[data-testid="text-open-world-npc-dialogue"]')).toBeNull()
@@ -486,7 +486,7 @@ describe('Text Open World G4-03 · 场景与三类输入集成', () => {
     expect(host.textContent).toContain('旧版运行包')
     expect(host.textContent).toContain('叙事与自然输入不会被伪造')
     expect(host.textContent).toContain('系统 Action · 当前可执行行动')
-    expect(host.textContent).not.toContain('发布叙事')
+    expect(host.textContent).not.toContain('冻结叙事')
     expect(host.textContent).not.toContain('干涸的内渠')
     expect(host.textContent).not.toContain('可识别示例')
     expect(host.textContent).not.toContain('向岑阿婆购买')

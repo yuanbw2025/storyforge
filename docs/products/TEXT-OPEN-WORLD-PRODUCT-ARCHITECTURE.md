@@ -1,6 +1,6 @@
 # AI 主导文字开放世界游戏 · 整体产品与游戏系统施工规格
 
-> 规格版本：1.1.38
+> 规格版本：1.1.39
 > 生效日期：2026-09-06
 > 文档层级：L2 文字开放世界整体产品施工入口
 > 当前状态：目标架构已冻结并进入分阶段实现；实际完成度以完整开发清单为准
@@ -2004,15 +2004,19 @@ created → active → paused → active
 
 G4-03直接消费ProductRelease或制作端显式Build Preview内冻结的Narrative v2场景正文和Action v15输入绑定，不回读生产Artifact，也不新建`currentSceneKey`。当前可见场景由代码从唯一Session Projection实时派生：地点必须等于玩家当前位置，Context v2确定的场景共有Condition必须成立，任务委托/当前Objective/收束分别匹配`revealed`、当前`active`目标和`completed`实例，场景显式参与NPC必须仍存活且在场。任一Action的私有Condition只隐藏自己的Choice/Action，不隐藏同场景其他合法行动；旧P9误注入的任务发布者无论同地或异地，也会由Objective与Actor对话场景共享的冻结Action引用被剔除，真正的Actor需求仍保留在场门控。角色拥有的委托与收束在新生产中固定落到发布者常驻地点，其任务地点继续描述冒险主体；无法区分编译修订的旧Narrative v2包在运行时同样按角色常驻地点归一，避免发布者被要求异地出现而软锁。历史P9 Context v1仍按任务首地点/地区的原端点语义验签，使已付费未完成的durable Run可以继续恢复。推荐场景只取合法集合中P9 `order`最小者，玩家切换同地点的其他合法场景只是前端临时选择，不写Event。玩家投影仅携带当前显示与交互所需字段，不向UI或后续模型暴露内部场景purpose及未发生的成功/失败文案。
 
+旧P9端点归一不能把按原任务地点写成的正文冒充为当前地点文本。只要归一后的地点与冻结Scene地点不同，玩家投影就显式标记`legacy-endpoint-fallback`，隐藏可能产生地理矛盾的旧开场/正文，改用带兼容提示的地点中性确定性文案；新生产及未迁移地点的Scene仍逐字展示冻结P9正文。该回退不修改Release、Build或Session状态，未来若允许NPC移动，必须以新版本端点合同取代这项兼容推断。
+
 同一场景表面分成五个不可混淆的区域：
 
-1. “发布叙事”只展示Release冻结的P9开场与正文；
+1. “冻结叙事”只展示当前Session来源中冻结的P9开场与正文；正式Session来自ProductRelease，制作端显式试玩来自Build Preview，不能把Preview标成已经发布；
 2. NPC对话从统一关系Projection选择`bad/neutral/good`开场和问候语气，不读取或暴露知识治理内部字段；
 3. 固定Choice以`fixed-choice`提交它绑定的Action；
 4. 系统Action以`system-action`提交同一Action；
 5. 自然输入在无运行时模型的首版只对当前场景P9冻结例句做Unicode归一、去首尾空白和大小写归一后的精确匹配，唯一匹配才以`mapped-intent`提交。
 
 三类执行入口都必须再次通过当前Action Projection解析合法目标并进入同一Command/Event事务。交谈Action从冻结的Actor对话场景反向限定对应Actor，开战Action从唯一`start-combat/initialize-combat` Effect限定对应Encounter，不能把同地点其他NPC或遭遇当作可互换目标。被P9 Scene引用、由玩家执行且目标为Quest的Action，以及玩家执行的结局`quest-action`，属于场景专属任务动作：Action注册表会再次校验所属Scene当前合法，并以该Scene的offer=`revealed`、objective=`active + 当前Stage + 当前Objective`、resolution=`completed + 对应Stage`精确匹配实例；即使同一可重复任务定义同时存在多轮实例，也不会把旧active实例与新revealed实例混成多个目标。这也覆盖P8F为未落专用目录需求生成的`observe + targetScope:quest`兜底Action，Quest页和直接命令不能越过NPC、地点、Stage或Objective门槛。目标为零、普通动作收窄后仍不唯一、Action已经失效、自然输入无唯一匹配或处于战斗自由输入禁用状态时都不写世界状态；G4-09完整目标选择器落地前，战斗动作在多名合法敌人中按权威Projection顺序选择第一名存活目标，避免多敌遭遇死锁。高风险Action仍进入统一确认层，确认后保留原始输入来源，并把弹窗打开时整个`ProductRuntimeState.lastSequence`作为必填`expectedBaseSequence`传到执行器；执行器读取数据库最新状态后拒绝缺失基线，或跨标签页/其他命令造成的stale确认，随后Command事务仍以Sequence+State Hash防住检查后的并发变化。确认按钮还必须读取实时Store身份，旧DOM不能把上一Session意图提交到新Session；若确认因stale失败，Store先尽力刷新权威Projection再保留并抛出原错误，让玩家可在新基线上重新确认。系统结算回执在视觉与辅助语义上均独立于发布正文，通过独立的读屏动态区播报终态，不能让AI文本伪装成已发生结果。
+
+Action开始时还必须冻结`request revision + scope + worldGroupId + sessionId`。执行期间即使用户切换了游戏或存档，旧Action仍可只在其原Session完成，但它的成功回执、错误、busy终态和刷新结果都不得提交到新Session界面；新一次load/select会显式清除旧busy。Narrative v1 / Action v14的正式旧编译器以`action.talk.<actorKey>`冻结单NPC交谈目标，兼容投影按该稳定键收窄目标，避免同地点多NPC时出现“按钮可见但永远不可执行”；无法证明该键契约的更旧通用Action不作猜测。
 
 P9只为任务、NPC、地点交互和随机事件等叙事需求生产Scene，并不保证休息等通用玩法Action拥有Scene。场景投影因此额外返回“当前Action Projection可用、但从未被任何P9 Scene引用”的环境Action；场景页将其与当前选中Scene的Action去重合并。被隐藏Scene引用的Action不会借场景页的环境入口提前出现，但Scene引用本身也不能反向锁死背包、装备、制作或商店等通用玩法：这些Action继续按自身Condition与专用功能UI执行。制作、购买和出售还需要商品/配方及数量参数，G4-10专用UI完成前，Narrative v2/Action v15场景快捷入口及Narrative v1/Action v14兼容场景均不展示这三类必然缺参的按钮；旅行、快旅和装备同样由对应功能页消费。
 
@@ -2764,6 +2768,7 @@ Session中的高频状态优先作为Event和可重建Projection存在，不建�
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| 1.1.39 | 2026-09-08 | 关闭G4-03最终竞态与兼容缺口：Action结果以完整请求代次和Session身份守卫，切换后旧回执/错误/busy/刷新不串入新存档；场景统一标为冻结叙事以区分正式Release与非正式Preview；旧端点正文在地点变化时使用显式确定性兼容回退；Narrative v1/Action v14按旧稳定Action键收窄交谈Actor；玩家入口回归增至24项、Action注册表增至13项 |
 | 1.1.38 | 2026-09-08 | 完成G4-03发布前兼容收口：新P9生产把角色拥有的委托/收束固定在发布者常驻地点，历史Context v1继续按旧任务端点验签并可恢复，旧冻结包由运行投影按常驻地点归一；明确正式Release与显式Build Preview共用冻结场景消费边界；高风险确认必须携带整个ProductRuntimeState事件基线，stale后Store刷新权威Projection再允许重新确认；更新32项G4场景/壳及22项玩家入口回归证据 |
 | 1.1.37 | 2026-09-07 | 完成G4-03最终门控审计：场景专属玩家Quest Action按Scene lifecycle精确收窄到具体实例，覆盖同定义多轮实例与P8F的`observe + quest`兜底需求；Scene引用不再反向锁死通用use/equip/craft/buy/sell；高风险确认携带弹窗事件基线至执行器并拒绝跨标签页stale，旧DOM不能串Session；多敌战斗在G4-09前确定性选取首个存活目标；v15/v14场景均隐藏缺参数制作交易快捷按钮 |
 | 1.1.36 | 2026-09-07 | 收口G4-03正式生产差异：交谈Action按冻结Actor场景、开战Action按冻结Encounter Effect收窄目标，避免同地多目标令Choice失效；未被任何P9 Scene引用且当前合法的通用Action作为环境系统行动保留，任何属于隐藏Scene的Action仍不能越权出现；补真实生产未绑定休息的投影与Session执行回归 |

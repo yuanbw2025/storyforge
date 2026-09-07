@@ -1,6 +1,6 @@
 # AI 主导文字开放世界游戏 · 完整开发清单
 
-> 版本：1.1.71
+> 版本：1.1.72
 > 建立日期：2026-09-06
 > 对应总任务：`E-OPENWORLD-01`
 > 当前状态：`IN_PROGRESS`；用户已于2026-09-06明确下达完整产品开发指令
@@ -213,9 +213,9 @@ G7 盐脊验收、发布更新与旧入口收口
 
 | ID | 状态 | 工作包 | 依赖 | 完成判据 |
 |---|---|---|---|---|
-| TOW-G4-01 | DONE | 玩家入口、Release/存档选择和Session启动 | G1-10、G2-28 | 玩家默认停留游戏库；作品按已核验`productionKey`分组并以版本号选择当前Release，详情可明确切换旧版；新旅程、旧Release存档继续、正式Release与Build Preview显式隔离；版本/来源/Package/Release证据可见；损坏发布留作诊断且禁开新档，选档失败清空投影并可重试；删除需确认且即使来源损坏也只删除当前scope/世界分组的Session私域；22项定向回归覆盖选版、启动、预览、损坏、删除、并发载入隔离、stale确认恢复和原游戏循环 |
+| TOW-G4-01 | DONE | 玩家入口、Release/存档选择和Session启动 | G1-10、G2-28 | 玩家默认停留游戏库；作品按已核验`productionKey`分组并以版本号选择当前Release，详情可明确切换旧版；新旅程、旧Release存档继续、正式Release与Build Preview显式隔离；版本/来源/Package/Release证据可见；损坏发布留作诊断且禁开新档，选档失败清空投影并可重试；删除需确认且即使来源损坏也只删除当前scope/世界分组的Session私域；24项定向回归覆盖选版、启动、预览、损坏、删除、并发载入隔离、stale确认恢复、跨Session行动结果隔离和原游戏循环 |
 | TOW-G4-02 | DONE | 响应式游戏壳与场景主界面 | G4-01 | vNext与legacy共用纯展示壳；桌面左导航/中央主视图/右上下文三栏，1180px以下上下文抽屉，780px以下严格五项底部导航；场景、地图、任务、角色、更多只重排现有能力，Header、Release来源与运行包Hash、退出、战斗/全局状态和返回场景入口稳定；Session切换复位纯UI态并撤销旧确认；高风险确认和上下文抽屉隔离背景、循环焦点并支持Escape；旧版缺失角色合同明确降级且不伪造；13项壳/真实运行器回归与双视口Playwright证明导航不写Projection、三栏不重叠、移动抽屉和页面无横向溢出 |
-| TOW-G4-03 | DONE | 场景叙述、NPC对话、固定选项和自然输入 | G2-11、G2-18、G4-02 | 当前地点、场景共有条件、任务生命周期与场景显式NPC在场/存活共同投影冻结P9场景，不保存第二份scene状态；旧P9无论同地或异地误注入的任务发布者都不会吞掉Objective，单个Action条件不成立也不会吞掉同场景其他合法Choice；新生产把角色拥有的委托/收束放在owner常驻地点，v1 Context保留旧Quest端点以恢复durable Run，旧冻结包运行时按常驻地点归一；发布叙事、NPC三档态度对白、固定Choice、系统Action及自然输入在同一场景共存，三类输入保留source后进入同一Action/Event；交谈与开战按冻结Actor场景和Encounter Effect收窄目标；场景专属玩家Quest Action按offer/当前Objective/resolution生命周期精确收窄实例，同定义多轮任务不串目标，Quest页和命令不能越过NPC/地点/Stage/Objective，P8F的`observe + quest`兜底需求同样受管；通用use/equip/craft/buy/sell不会因被Objective引用而全局锁死，未绑定场景的合法通用Action仍作为环境行动；普通多目标、无目标、无匹配、战斗自由输入均fail-closed，多敌战斗在G4-09前确定性选首个存活目标；v15/v14场景均隐藏缺参数制作交易按钮；高风险确认必须携带整个ProductRuntimeState事件基线，拒绝缺失、跨标签页stale及旧DOM串Session，stale后刷新权威Projection再重试；回执使用独立live region；运行投影不暴露内部purpose、知识边界或未发生结果；32项G4场景/壳回归、12项Action注册表及6项犯罪回归与真实浏览器路径覆盖上述边界 |
+| TOW-G4-03 | DONE | 场景叙述、NPC对话、固定选项和自然输入 | G2-11、G2-18、G4-02 | 当前地点、场景共有条件、任务生命周期与场景显式NPC在场/存活共同投影冻结P9场景，不保存第二份scene状态；旧P9无论同地或异地误注入的任务发布者都不会吞掉Objective，单个Action条件不成立也不会吞掉同场景其他合法Choice；新生产把角色拥有的委托/收束放在owner常驻地点，v1 Context保留旧Quest端点以恢复durable Run，旧冻结包运行时按常驻地点归一，地点改变时隐藏矛盾旧正文并显式使用确定性兼容回退；冻结叙事、NPC三档态度对白、固定Choice、系统Action及自然输入在同一场景共存，三类输入保留source后进入同一Action/Event；交谈与开战按冻结Actor场景和Encounter Effect收窄目标，Narrative v1 / Action v14还按旧稳定Action键恢复唯一交谈Actor；场景专属玩家Quest Action按offer/当前Objective/resolution生命周期精确收窄实例，同定义多轮任务不串目标，Quest页和命令不能越过NPC/地点/Stage/Objective，P8F的`observe + quest`兜底需求同样受管；通用use/equip/craft/buy/sell不会因被Objective引用而全局锁死，未绑定场景的合法通用Action仍作为环境行动；普通多目标、无目标、无匹配、战斗自由输入均fail-closed，多敌战斗在G4-09前确定性选首个存活目标；v15/v14场景均隐藏缺参数制作交易按钮；高风险确认必须携带整个ProductRuntimeState事件基线，拒绝缺失、跨标签页stale及旧DOM串Session，stale后刷新权威Projection再重试；Action执行期间切换存档后，旧回执、错误、busy和刷新均不得串入新Session；回执使用独立live region；运行投影不暴露内部purpose、知识边界或未发生结果；32项G4场景/壳回归、13项Action注册表及6项犯罪回归与真实浏览器路径覆盖上述边界 |
 | TOW-G4-04 | READY | HUD、当前任务、状态变化和通知 | G2-12、G2-17、G2-20、G4-02 | 生命、地点、天数/时段、天气、任务和重要变化可见不过载；随机事件表现必须由当前激活/失效证据驱动，不能把Director历史误当成仍在发生 |
 | TOW-G4-05 | QUEUED | 完整任务日志 | G2-09～G2-12 | 分类、筛选、追踪、定位、普通任务放弃、过期/失败/重接和历史完整 |
 | TOW-G4-06 | QUEUED | SVG节点地图、路线和快速旅行UI | G2-13～G2-17 | 点击地点旅行；知识不剧透；移动端列表可完成同等操作 |
@@ -356,6 +356,7 @@ G7 盐脊验收、发布更新与旧入口收口
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| 1.1.72 | 2026-09-08 | G4-03最终运行竞态与旧包兼容收口：Action结果按完整请求代次与Session身份提交，切换后不串回执/错误/busy/刷新；Release与Preview场景统一标为冻结叙事；旧端点正文冲突时使用显式确定性兼容回退；Narrative v1/Action v14按稳定Action键收窄唯一交谈Actor；玩家入口24项、Action注册表13项，进度不变，下一项G4-04 |
 | 1.1.71 | 2026-09-08 | G4-03兼容与恢复收口：新P9的actor-owned委托/收束落在owner常驻地点，历史v1 Context按旧Quest端点继续恢复，旧冻结包运行时归一；正式Release与显式Build Preview共享冻结场景消费规则；高风险确认强制使用整个运行状态事件基线，stale后刷新权威Projection；证据更新为G4场景/壳32项、玩家入口22项，进度不变，下一项G4-04 |
 | 1.1.70 | 2026-09-07 | G4-03最终门控审计：Scene专属玩家Quest动作按Scene lifecycle精确收窄实例，补同定义active+revealed多轮任务与`observe + quest`兜底反例；通用use支持动作在Objective未激活时仍可由专用入口执行；高风险确认携带弹窗事件基线到执行器，拒绝跨标签页stale和旧DOM串Session；多敌战斗暂选首个存活目标；v15/v14场景均隐藏缺参数制作交易按钮；G4场景/壳31项、Action注册表12项、犯罪6项回归，进度不变，下一项G4-04 |
 | 1.1.69 | 2026-09-07 | G4-03最终差异审查收口：Action注册表从冻结Actor对话场景和开战Effect恢复交谈/遭遇的唯一目标，避免同地点多NPC或多遭遇让正式Choice失效；场景投影把当前可用且从未归属任何P9场景的通用Action作为环境行动交给系统按钮，同时不把隐藏场景绑定Action泄露出来，正式生产中未写Scene的休息流程保持可玩；新增目标收窄、真实未绑定休息投影和正式Session执行回归，G4-03累计29项定向回归，进度不变，下一项G4-04 |

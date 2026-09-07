@@ -56,6 +56,8 @@ export interface TextOpenWorldProjectedSceneV1 {
   openingText: string
   bodyText: string
   actor: TextOpenWorldProjectedSceneActorV1 | null
+  presentationMode: 'authored' | 'legacy-endpoint-fallback'
+  compatibilityNotice: string | null
   fixedChoiceKeys: string[]
   fixedChoices: TextOpenWorldProjectedSceneChoiceV1[]
   actionKeys: string[]
@@ -191,7 +193,8 @@ export function projectTextOpenWorldScenesV1(
       })
       const actor = projectActor(scene.actorKey ? projectedActorsByKey.get(scene.actorKey) : undefined)
       const locationKey = effectiveTextOpenWorldSceneLocationKeyV1(scene, modules.actors.actors)
-      const regionKey = modules.world.locations.find(location => location.key === locationKey)?.regionKey
+      const location = modules.world.locations.find(candidate => candidate.key === locationKey)
+      const regionKey = location?.regionKey
         ?? scene.regionKey
       const participantKeys = effectiveTextOpenWorldSceneParticipantKeysV1(
         scene,
@@ -201,6 +204,18 @@ export function projectTextOpenWorldScenesV1(
       const openingText = scene.sourceKind === 'actor-dialogue' && scene.attitudeOpenings && actor
         ? scene.attitudeOpenings[actor.attitude]
         : scene.openingText
+      const legacyEndpointFallback = locationKey !== scene.locationKey
+      const presentationMode: TextOpenWorldProjectedSceneV1['presentationMode'] = legacyEndpointFallback
+        ? 'legacy-endpoint-fallback'
+        : 'authored'
+      const endpointActorName = actor?.name ?? '任务发布者'
+      const endpointLocationTitle = location?.title ?? '其常驻地点'
+      const compatibilityOpening = scene.sourceKind === 'quest-offer'
+        ? `${endpointActorName}正在${endpointLocationTitle}等候，并向你说明这项委托。`
+        : `${endpointActorName}正在${endpointLocationTitle}等候你处理后续。`
+      const compatibilityBody = scene.sourceKind === 'quest-offer'
+        ? `你可以在这里了解“${scene.title}”并决定是否接受。`
+        : `你可以在这里继续处理“${scene.title}”的收束与奖励。`
       return {
         key: scene.key,
         order: scene.order,
@@ -210,10 +225,14 @@ export function projectTextOpenWorldScenesV1(
         regionKey,
         locationKey,
         participantKeys,
-        authoredOpeningText: scene.openingText,
-        openingText,
-        bodyText: scene.bodyText,
+        authoredOpeningText: legacyEndpointFallback ? compatibilityOpening : scene.openingText,
+        openingText: legacyEndpointFallback ? compatibilityOpening : openingText,
+        bodyText: legacyEndpointFallback ? compatibilityBody : scene.bodyText,
         actor,
+        presentationMode,
+        compatibilityNotice: legacyEndpointFallback
+          ? '此旧版场景的任务端点已归一到发布者常驻地点；为避免地点矛盾，正文使用确定性兼容回退。'
+          : null,
         fixedChoiceKeys: fixedChoices.map(choice => choice.key),
         fixedChoices,
         actionKeys,

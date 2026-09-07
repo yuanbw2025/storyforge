@@ -34,7 +34,7 @@ test('P9场景在真实玩家入口统一承载叙事、固定选项、系统Act
   await formalSaves.locator('.open-world-save-open').filter({ hasText: seeded.title }).click()
 
   const published = page.getByTestId('text-open-world-published-scene')
-  await expect(published).toContainText('发布叙事')
+  await expect(published).toContainText('冻结叙事')
   await expect(published).toContainText('干涸的内渠')
   await expect(page.getByTestId('text-open-world-fixed-choices')).toContainText('接下盐渠委托')
   await expect(page.getByTestId('text-open-world-system-actions')).toContainText('接受主线任务')

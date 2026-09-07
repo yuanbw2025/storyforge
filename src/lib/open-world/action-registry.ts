@@ -285,17 +285,27 @@ export function createTextOpenWorldActionRegistryV1(value: TextOpenWorldRuntimeP
         )))
         validTargetKeys = validTargetKeys.filter(instanceKey => eligibleQuestInstanceKeys.has(instanceKey))
       }
-      if (action.targetScope === 'actor' && action.category === 'talk' && narrativeV2) {
-        // ChoiceContracts freeze a concrete actor for generated dialogue, but
-        // RuntimePackage v1 does not carry that production-only row. Recover
-        // the same governed binding from the frozen P9 Actor scene instead of
-        // guessing from every actor who happens to be present at the location.
-        const actorKeys = new Set(narrativeV2.scenes
-          .filter(scene => scene.sourceKind === 'actor-dialogue'
-            && scene.actorKey != null
-            && scene.actionKeys.includes(action.key))
-          .map(scene => scene.actorKey!))
-        validTargetKeys = validTargetKeys.filter(actorKey => actorKeys.has(actorKey))
+      if (action.targetScope === 'actor' && action.category === 'talk') {
+        if (narrativeV2) {
+          // ChoiceContracts freeze a concrete actor for generated dialogue, but
+          // RuntimePackage v1 does not carry that production-only row. Recover
+          // the same governed binding from the frozen P9 Actor scene instead of
+          // guessing from every actor who happens to be present at the location.
+          const actorKeys = new Set(narrativeV2.scenes
+            .filter(scene => scene.sourceKind === 'actor-dialogue'
+              && scene.actorKey != null
+              && scene.actionKeys.includes(action.key))
+            .map(scene => scene.actorKey!))
+          validTargetKeys = validTargetKeys.filter(actorKey => actorKeys.has(actorKey))
+        } else if (modules.actions.version === 14 && action.key.startsWith('action.talk.')) {
+          // The last pre-P9 compiler froze one talk Action per Actor using this
+          // stable key. Preserve that deterministic target in Narrative v1;
+          // malformed or older generic keys retain their original projection.
+          const actorKey = action.key.slice('action.talk.'.length)
+          if (modules.actors.actors.some(actor => actor.key === actorKey)) {
+            validTargetKeys = validTargetKeys.filter(candidate => candidate === actorKey)
+          }
+        }
       }
       if (action.targetScope === 'encounter' && action.category === 'start-combat') {
         // A start-combat Action is owned by the encounter frozen in its start

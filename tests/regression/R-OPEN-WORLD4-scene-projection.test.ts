@@ -295,6 +295,8 @@ describe('Text Open World G4-03 · current P9 scene projection', () => {
       .find((scene: any) => scene.key === 'scene.offer.main')
     offer.locationKey = 'location.ridge-channel'
     offer.regionKey = 'region.ridge'
+    offer.openingText = '你在断脊维护道遇见了本不该离开盐港的发布者。'
+    offer.bodyText = '断脊维护道的碎石在脚边滚落。'
 
     const projection = createInitialTextOpenWorldSessionProjectionV1(runtimePackage)
     const atOwnerHome = ready(projection)
@@ -302,7 +304,13 @@ describe('Text Open World G4-03 · current P9 scene projection', () => {
       locationKey: 'location.salt-port',
       regionKey: 'region.salt-port',
       participantKeys: ['actor.caretaker'],
+      presentationMode: 'legacy-endpoint-fallback',
+      compatibilityNotice: expect.stringContaining('确定性兼容回退'),
     })
+    expect(atOwnerHome.scenes.find(scene => scene.key === offer.key)?.authoredOpeningText)
+      .not.toContain('断脊维护道')
+    expect(atOwnerHome.scenes.find(scene => scene.key === offer.key)?.bodyText)
+      .not.toContain('断脊维护道')
 
     projection.state.map.regionKnowledgeByKey['region.ridge'] = 'visited'
     projection.state.map.locationKnowledgeByKey['location.ridge-channel'] = 'visited'
