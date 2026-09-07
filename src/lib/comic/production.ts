@@ -119,6 +119,43 @@ export async function adoptComicPagePlansV1(input: { scope: WorkspaceScope; expe
   })
 }
 
+/**
+ * Author-invoked deterministic fallback for providers that cannot return a
+ * complete nested panel batch. It only materializes confirmed beats/page plans
+ * into an editable vertical storyboard; it does not claim AI authorship or
+ * visual-release quality.
+ */
+export async function createComicPanelScaffoldFromConfirmedPlanV1(input: { scope: WorkspaceScope; expectedAdaptationRevision: number; sourceManifestVersion: number }): Promise<Array<{ page: ComicPage; panels: ComicPanel[] }>> {
+  const { root } = await requireRoot(input.scope, input.expectedAdaptationRevision); await requireFresh(root)
+  if (root.activeSourceManifestVersion !== input.sourceManifestVersion) throw new Error('[comic-production] 基础分镜来源版本已变化')
+  const key = [root.id, input.sourceManifestVersion] as [number, number]
+  const [plans, beats, facts] = await Promise.all([
+    db.comicPagePlans.where('[adaptationProjectId+manifestVersion]').equals(key).sortBy('order'),
+    db.comicScriptBeats.where('[adaptationProjectId+manifestVersion]').equals(key).toArray(),
+    db.adaptationSourceFacts.where('[adaptationProjectId+manifestVersion]').equals(key).filter(row => row.authorStatus === 'confirmed').toArray(),
+  ])
+  if (!plans.length || plans.length !== root.targetSpec.chapterCount * root.targetSpec.targetPagesPerChapter) throw new Error('[comic-production] 请先确认完整分页计划')
+  const beatByKey = new Map(beats.map(row => [row.stableKey, row])); const factByKey = new Map(facts.map(row => [row.stableKey, row]))
+  const candidates = plans.flatMap(plan => {
+    const pageBeats = plan.beatKeys.map(beatKey => beatByKey.get(beatKey)).filter((row): row is ComicScriptBeatV1 => Boolean(row))
+    if (!pageBeats.length) throw new Error(`[comic-production] ${plan.stableKey} 没有可用于基础分镜的已确认节拍`)
+    const panelKeys = Array.from({ length: plan.expectedPanelCount }, (_, index) => `${plan.stableKey}_panel_${index + 1}`)
+    return panelKeys.map((stableKey, order): ComicPanelPlanCandidateV1 => {
+      const beat = pageBeats[Math.min(order, pageBeats.length - 1)]
+      const subjectKeys = [...new Set(beat.causalFactKeys.flatMap(factKey => factByKey.get(factKey)?.subjectKeys ?? []))]
+      const height = 1 / plan.expectedPanelCount
+      return {
+        pagePlanKey: plan.stableKey, stableKey, order, nextPanelKey: panelKeys[order + 1] ?? null,
+        frame: { x: 0, y: order * height, width: 1, height }, narrativeFunction: beat.narrativeFunction, moment: beat.visualAction,
+        shot: { size: order === 0 ? 'wide' : order === plan.expectedPanelCount - 1 ? 'close-up' : 'medium', angle: 'eye-level', movement: 'static', composition: `第 ${order + 1} 格采用全宽纵向分带，按 ${root.targetSpec.readingDirection.toUpperCase()} 顺序阅读。` },
+        subjectStates: subjectKeys.map(subjectKey => ({ subjectKey, costume: '', condition: '', props: [], position: '' })),
+        protectedAreas: [], continuityRefs: subjectKeys.map(subjectKey => ({ subjectKey, note: '保持当前页及相邻页的身份、服装、道具与状态连续。' })), lettering: [], sourceUnitKeys: [...beat.sourceUnitKeys],
+      }
+    })
+  })
+  return adoptComicPanelPlansV1({ scope: input.scope, expectedAdaptationRevision: root.revision, sourceManifestVersion: input.sourceManifestVersion, candidates })
+}
+
 export async function adoptComicPanelPlansV1(input: { scope: WorkspaceScope; expectedAdaptationRevision: number; sourceManifestVersion: number; candidates: ComicPanelPlanCandidateV1[]; allowReplaceExisting?: boolean }): Promise<Array<{ page: ComicPage; panels: ComicPanel[] }>> {
   assertComicCandidateBatchV1(input.candidates, assertComicPanelPlanCandidateV1, 'panel plan', 20_000)
   const { scope, root } = await requireRoot(input.scope, input.expectedAdaptationRevision); await requireFresh(root)
@@ -185,6 +222,8 @@ async function applyImageRequest(scopeInput: WorkspaceScope, expectedAdaptationR
   return db.transaction('rw', db.comicPanels, db.comicVisualSubjects, async () => {
     const panel = await db.comicPanels.where('[workId+stableKey]').equals([scope.workId, candidate.panelKey]).first()
     if (!panel || panel.revision !== candidate.expectedPanelRevision || panel.status === 'locked') throw new Error('[comic-production] 图片请求目标格不存在、已变化或已锁定')
+    const expectedFrames = (panel.protectedAreas ?? []).map(row => [row.x, row.y, row.width, row.height]); const actualFrames = candidate.protectedAreas.map(row => [row.x, row.y, row.width, row.height])
+    if (JSON.stringify(actualFrames) !== JSON.stringify(expectedFrames)) throw new Error('[comic-production] 图片请求不得改写目标格 protectedAreas')
     const subjects = await db.comicVisualSubjects.where('adaptationProjectId').equals(root.id).toArray(); const subjectKeys = new Set(subjects.map(row => row.stableKey))
     if (candidate.referenceSubjectKeys.some(key => !subjectKeys.has(key))) throw new Error('[comic-production] 图片请求引用未知 visual subject')
     const refs = candidate.referenceSubjectKeys.map(subjectKey => ({ subjectKey, note: '图片请求必须实际使用已选参考图；缺失能力时阻断 visual release。' }))
@@ -219,7 +258,10 @@ export async function adoptComicReviewIssuesV1(input: { scope: WorkspaceScope; e
     const pageKeys = new Set(targetPages.map(row => row.stableKey)); const panelByKey = new Map(panels.map(row => [row.stableKey, row])); const subjectKeys = new Set(subjects.map(row => row.stableKey)); const assetKeys = new Set(assets.map(row => row.stableKey))
     const now = Date.now(); const rows = input.candidates.map(candidate => {
       const panel = candidate.panelKey ? panelByKey.get(candidate.panelKey) : null
-      if (!pageKeys.has(candidate.pageKey) || (candidate.panelKey && !panel) || (candidate.subjectKey && !subjectKeys.has(candidate.subjectKey)) || (candidate.assetKey && !assetKeys.has(candidate.assetKey))) throw new Error(`[comic-production] issue ${candidate.stableKey} 定位越界`)
+      if (!pageKeys.has(candidate.pageKey)) throw new Error(`[comic-production] issue ${candidate.stableKey} pageKey 越界：${candidate.pageKey}；允许 ${[...pageKeys].join('、')}`)
+      if (candidate.panelKey && !panel) throw new Error(`[comic-production] issue ${candidate.stableKey} panelKey 越界：${candidate.panelKey}；允许 ${[...panelByKey.keys()].join('、')}`)
+      if (candidate.subjectKey && !subjectKeys.has(candidate.subjectKey)) throw new Error(`[comic-production] issue ${candidate.stableKey} subjectKey 越界：${candidate.subjectKey}`)
+      if (candidate.assetKey && !assetKeys.has(candidate.assetKey)) throw new Error(`[comic-production] issue ${candidate.stableKey} assetKey 越界：${candidate.assetKey}`)
       if (input.reviewKind === 'page' && !['narrative', 'reading-order', 'lettering'].includes(candidate.category)) throw new Error('[comic-production] page review 不能写视觉类问题')
       if (input.reviewKind === 'visual' && !['continuity', 'rights', 'media-integrity'].includes(candidate.category)) throw new Error('[comic-production] visual review 不能写叙事类问题')
       return stampNewRecord(scope, 'comicReviewIssues', { ...structuredClone(candidate), projectId: scope.projectId, workId: scope.workId, adaptationProjectId: root.id, manifestVersion: input.sourceManifestVersion, reviewedPanelRevision: panel?.revision ?? null, status: 'open' as const, createdAt: now, updatedAt: now }, { owner: 'work' }) as ComicReviewIssueV1

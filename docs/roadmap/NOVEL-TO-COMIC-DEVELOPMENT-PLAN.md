@@ -1,9 +1,9 @@
 # 小说转漫画独立产品开发设计
 
-> 版本：1.1.0 · 生效：2026-09-06 · 权威层级：L2
+> 版本：1.2.0 · 生效：2026-09-06 · 权威层级：L2
 > 对应总纲：§4.5、阶段 C · 产品：`independent.comic`
 > 性质：小说转漫画唯一专项施工方案。它不复用剧本场次作为页格，也不把漫画媒资交给世界引擎。
-> 实施状态：`feat/comic-production` 已完成代码与定向验收；最终 CI/E2E 证据以集成审查记录为准。
+> 实施状态：`feat/comic-production` 已完成基础闭环；`feat/comic-visual-experience` 完成成图 Prompt 与专业工作台体验复审，最终 CI/E2E 证据以集成审查记录为准。
 
 ## 1. 开工卡与边界
 
@@ -216,7 +216,7 @@ Storyboard Release 要求脚本、分页、页格、阅读顺序、视觉圣经�
 
 ## 14. 施工顺序与分支
 
-唯一功能分支：`feat/comic-production`；从剧本完成并审定后的独立创作集成基线创建独立 worktree。不得沿用剧本 worktree 或包含其未提交改动。
+唯一功能分支原则：任何施工阶段只在一个漫画专属 worktree 中进行。基础实现分支为 `feat/comic-production`，视觉体验复审分支为 `feat/comic-visual-experience`；两者都从已审定的独立创作集成基线创建，不得沿用剧本 worktree 或包含其未提交改动，复审通过后才按顺序合入集成分支。
 
 1. 共享来源分析契约只从 foundation/集成基线同步。
 2. 漫画脚本、page plan、review issue、release asset pinning 与三注册表。
@@ -233,6 +233,14 @@ Storyboard Release 要求脚本、分页、页格、阅读顺序、视觉圣经�
 
 已实现的收口项：十二阶段 durable Skill DAG、作者确认候选协议、来源事实/因果/决定、漫画脚本、分页、显式阅读链、页格、视觉圣经、provider 能力与参考图实传证据、单格修复、页级 AI 审校、媒资元数据 AI 审查与作者实际画面确认、storyboard/visual 双层不可变 Release、Release→Blob 强引用、PNG/WebP/CBZ/PDF 与 v14 备份往返。旧的一步式漫画候选和直接完稿入口已拒绝；未接入视觉输入的模型不会被标成多模态审查者。
 
+### 15.1 视觉体验复审补充
+
+- 页面工作区收口为左侧真实页缩略图、中央纸张画布、右侧格属性；画布格可直接选中，页面按目标比例显示，不再把管理表单当作主要操作面。
+- 空白 storyboard 使用带镜头、构图、主体剪影和可画瞬间的确定性分镜稿；成图后由本地 SVG 层继续合成对白气泡、思绪气泡、旁白和拟声，文字不烤进底图。
+- 图片 Prompt V2 固定单格瞬间、相邻格语境、视觉锚点完整身份、本格服装/道具/状态、阅读方向、精确画幅和排字安全区，并明确拒绝海报、拼贴、多格页、文字、水印和重复主体。
+- 角色、地点、道具、画风分别使用转面、空间反打、正交结构或风格样片的设定图语言；角色使用竖幅候选，其余设定使用横幅候选。
+- 当前 OpenAI-compatible transport 仍是 text-only。没有 reference image/seed/inpainting 时必须显式确认有限一致性，成功候选也继续显示能力警告；本轮不把 Prompt 改良描述成参考图已传输。
+
 ## 16. 研究来源
 
 访问/复核日期：2026-09-06。
@@ -244,3 +252,6 @@ Storyboard Release 要求脚本、分页、页格、阅读顺序、视觉圣经�
 - [StoryGPT-V: Consistent Story Visualizers](https://openaccess.thecvf.com/content/CVPR2025/html/Shen_StoryGPT-V_Large_Language_Models_as_Consistent_Story_Visualizers_CVPR_2025_paper.html)
 - [Clip Studio Paint · Creating a New Canvas](https://help.clip-studio.com/en-us/manual_en/210_file/Creating_a_New_Canvas.htm)
 - [Clip Studio Paint · Margins](https://help.clip-studio.com/en-us/manual_en/270_canvas/Margins.htm)
+- [MediBang Paint · Creating Comics](https://medibangpaint.com/en/tutorial/pc/create-comics/)
+- [MediBang Paint · Text Tool](https://medibangpaint.com/en/use/2023/11/protext/)
+- [MediBang Paint · 7 Tips for Drawing Easy-to-Read Manga](https://medibangpaint.com/en/use/2021/07/7-tips-for-drawing-easy-to-read-manga/)

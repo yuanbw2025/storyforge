@@ -1,0 +1,93 @@
+{
+  "version": 1,
+  "product": "novel-to-comic",
+  "title": "雨停之前·彩色页漫",
+  "branch": "feat/comic-visual-experience",
+  "input": {
+    "file": "source-novel.md",
+    "chapters": 3,
+    "contentChars": 1868,
+    "sha256": "fc7ac5167dc6262e1700e1c720cd3cdacbebc0d740ff1cf9c4e718e3850b5d7b"
+  },
+  "pipeline": {
+    "savedStages": [
+      "source-analysis:run-1:provider-generated-author-edited",
+      "source-analysis:run-2:provider-generated-author-edited",
+      "source-analysis:run-3:provider-generated-author-edited",
+      "causal-graph:run-4:provider-generated-author-edited",
+      "adaptation-brief:run-5:provider-generated-author-edited",
+      "decision-pass:run-6:provider-generated-author-edited",
+      "script-adaptation:run-7:provider-generated-author-edited",
+      "page-rhythm:run-8:provider-generated-author-edited"
+    ],
+    "counts": {
+      "sourceUnits": 3,
+      "facts": 9,
+      "causalEdges": 7,
+      "decisions": 5,
+      "beats": 8,
+      "pagePlans": 6,
+      "pages": 6,
+      "panels": 23,
+      "visualSubjects": 9,
+      "mediaAssets": 32,
+      "releaseAssets": 32
+    }
+  },
+  "quality": {
+    "storyboardBlockers": 0,
+    "visualBlockers": 0,
+    "openIssues": 0,
+    "canStoryboardRelease": true,
+    "canVisualRelease": true,
+    "canFormalExport": true,
+    "manualVisualReview": [
+      "all six pages reviewed at original resolution",
+      "page 2 balloon placement repaired to clear faces",
+      "page 3 crop geometry repaired to clear the protagonist face",
+      "reading order, lettering, page continuity and color arc reviewed"
+    ]
+  },
+  "release": {
+    "label": "雨停之前·彩色页漫 v1",
+    "version": 1,
+    "contentHash": "5e4fb9c9c40be3d05d31bded23c1d2a3d6e13a2dc0ad7f5904697e30adbc601b"
+  },
+  "artifacts": {
+    "visualBible": {
+      "file": "art/visual-bible.png",
+      "sha256": "e666813384bb7c98df77bc8db77ccb83e6c95dfc46988437305ebe2ddda29c49"
+    },
+    "cover": {
+      "file": "art/final/cover.png",
+      "sha256": "8e92a348688ab95c6a1118baaca60d0548d2a6a0649c9e2303e0488f8c0c58d2"
+    },
+    "pages": [
+      "8b4e194e9a21f782031885e5259682755f86f94b9fc02908f8a62c1e22e86ef6",
+      "587515dee6082ce959b98ce074f2dd77acb45d836300e5280b4189d015a94262",
+      "29586053666e05bcf49f9ae274c3905fee2da4980ab680efffd0d74de04b07ed",
+      "5c365fba576b8bb6770e22e77d877c5d2078c0ff342fe6217e8d6891abedaf82",
+      "fcc8d142ed56599b8505c0390c3ef8d215def093e6092f15ac9a7586755cf6f5",
+      "14fed760b37508fbbeae2f41880d946bdc9e151b4c56237ea6bfb8d7be887f9b"
+    ],
+    "pdf": {
+      "file": "art/final/before-rain-stops.pdf",
+      "pages": 6,
+      "sha256": "38e1ac284028731f8bc7be11134833d0436f3ab44827e7a5be89b4a88067318e"
+    },
+    "cbz": {
+      "file": "art/final/before-rain-stops.cbz",
+      "pages": 6,
+      "readingDirection": "ltr",
+      "sha256": "1e0c5be602fa7c467dff83fd6f865fde93bda6ba91b279b411538900e2c521c9"
+    },
+    "communityPreview": {
+      "file": "art/final/community-preview.png",
+      "sha256": "cdad155966ecd805b8382c92d6036c6854ef09ad53c94ea6afc6a3b57eec60f7"
+    },
+    "studioScreenshot": {
+      "file": "art/final/comic-studio-final.png",
+      "sha256": "0a7ffb7a6b7895ede1d351647358b108cbe6ca800cd08177e482985c112925e7"
+    }
+  }
+}

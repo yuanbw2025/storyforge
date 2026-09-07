@@ -375,7 +375,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 - `src/lib/agent/storyline-progress-copilot.ts:366 · chat`
 - `src/lib/agent/worldview-field-copilot.ts:890 · chat`
 - `src/lib/character-interaction/harness.ts:396 · chat`
-- `src/lib/comic/durable-production.ts:246 · chat`
+- `src/lib/comic/durable-production.ts:269 · chat`
 - `src/lib/evals/agent-harness/story-arc-main-path-browser.ts:98 · chat`
 - `src/lib/evals/creative-reliability/browser.ts:89 · chat`
 - `src/lib/generation/workflow-generation-node.ts:23 · ai.start`
@@ -432,4 +432,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `5c28dc33`
+生成时间基准:commit `5b147b37`

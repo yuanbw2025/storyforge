@@ -1,0 +1,84 @@
+{
+  "schema": "storyforge.showcase-evidence.v1",
+  "productKind": "comic",
+  "artifactStatus": "editorial-website-showcase",
+  "title": "借火",
+  "branch": "feat/comic-visual-experience",
+  "input": {
+    "file": "source-novel.md",
+    "chapters": 3,
+    "contentChars": 1267,
+    "sha256": "231c185d2f2ba5a6fdf810c6e76cdb8e259bad86360dec29e6d04084dc01f3a2"
+  },
+  "format": {
+    "readingDirection": "left-to-right",
+    "pageCount": 5,
+    "panelCount": 20,
+    "color": "full-color",
+    "pageWidth": 1024,
+    "pageHeight": 1536,
+    "rating": "PG"
+  },
+  "production": {
+    "imageMode": "built-in-imagegen",
+    "sequence": [
+      "visual bible with character, prop, environment, and palette references",
+      "cover art using visual-bible reference",
+      "five sequential unlettered pages using visual bible plus previous-page reference",
+      "deterministic local Chinese lettering and title composition",
+      "website preview, PDF, and CBZ assembly from the same final PNG set"
+    ],
+    "letteringPolicy": "generated art contains no intentional readable dialogue; all narrative text is composed locally",
+    "style": "contemporary Asian graphic novel with ink contours, gouache-watercolor texture, and rice-paper grain"
+  },
+  "quality": {
+    "openIssues": 0,
+    "checks": [
+      "all five pages were reviewed at original or rendered contact-sheet resolution",
+      "white gutters create an unambiguous top-to-bottom and left-to-right reading order",
+      "Ye Cheng's face, outfit, red wrist thread, bicycle, and injury continuity remain recognizable",
+      "A-Deng remains a paper-lantern rabbit with the gold-repaired ear and amber heart flame",
+      "balloons and captions do not cover principal faces, hands, the flame, or the red paper boat",
+      "the cold construction palette opens into sunrise and lantern gold on the final page",
+      "PDF was re-rendered through Poppler after final compression and visually inspected",
+      "CBZ integrity test passed and ComicInfo declares one cover plus five story pages"
+    ]
+  },
+  "artifacts": {
+    "visualBible": {
+      "file": "art/visual-bible.png",
+      "sha256": "22652b66e502615989cd1e9c44cdeabae42d40890b71687f3586d58fbbf67bfa"
+    },
+    "cover": {
+      "file": "art/final/cover.png",
+      "sha256": "befc355c41aedd504301efcd6b050129dea99af6b4a8707f237843e7d66a0cbd"
+    },
+    "pages": [
+      "732f59020e248c393544abb6c79c39a30cefe56f68114f945d17f3e6b8129c99",
+      "e66589a485f479839969129f09ce733db86d7758d676afdff26f5d1d316c6fd4",
+      "49b947d31120cd6ddaa56f59854990b272b4db88416302e7d32468be20490aef",
+      "d19c35fe612c5a62848a5e2381a75962a7e3f16d644390e7da0886facf25b614",
+      "b46afb02263bb7bd8c5df14d060c329e23dd9f69da452b2573d23d8fc5dc0e7a"
+    ],
+    "communityPreview": {
+      "file": "art/final/community-preview.png",
+      "width": 1800,
+      "height": 1180,
+      "sha256": "8b18235ce678c6737b5d35c154738d4f7ccee52f05a3e28dcf188fb947a16a44"
+    },
+    "pdf": {
+      "file": "art/final/borrowed-flame.pdf",
+      "pages": 6,
+      "sha256": "04931ae7330feeca2277e8e17793cb69a38b00484418b45315bfc9ecc1e945dd"
+    },
+    "cbz": {
+      "file": "art/final/borrowed-flame.cbz",
+      "images": 6,
+      "sha256": "c1c480c13e89eb440d0aa125b33dc7b6315a03f11ee0fe7b70aa0d6d22f5adda"
+    },
+    "comicInfo": {
+      "file": "art/final/ComicInfo.xml",
+      "sha256": "e080bb3b88bef1a87b560e7cc6130d42e7ef9188f383cb7a35fcccb2a9389281"
+    }
+  }
+}
