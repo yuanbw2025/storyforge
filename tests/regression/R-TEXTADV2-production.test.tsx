@@ -82,6 +82,8 @@ describe('R-TEXTADV2-production · 文字冒险正式生产契约与工作台', 
     const plan = await createProductProductionPlanV3({ buildNumber: 1, briefHash, brief })
     const taskByKey = new Map(plan.tasks.map(task => [task.taskKey, task]))
     expect(brief.productionBudget.maximumOutputTokens).toBe(160_000)
+    expect(taskByKey.get('production.supervision')?.budgetReservation.outputTokens)
+      .toBe(Math.floor(brief.productionBudget.maximumOutputTokens * 0.03))
     expect(taskByKey.get('content.narrative-arc-scenes')?.budgetReservation.outputTokens)
       .toBe(Math.floor(brief.productionBudget.maximumOutputTokens * 0.025))
     expect(taskByKey.get('content.narrative-decision-plan')?.budgetReservation.outputTokens)

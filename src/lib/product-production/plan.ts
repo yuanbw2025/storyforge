@@ -315,7 +315,13 @@ export async function createProductProductionPlanV3(input: {
   // Brief; every packet remains one durable model Run.
   const modelTaskCount = textAdventure ? 25 + sceneScriptPartCount + Number(activeVisual) : 4
   const textAdventureOutputWeights: Record<string, number> = {
-    'production.supervision': 0.015,
+    // Agnes/OpenAI-compatible usage receipts include the Showrunner's hidden
+    // reasoning tokens. A real commercial run used 2,522 output tokens while
+    // the former 1.5% reservation only allowed 1,500, so the otherwise valid
+    // first task was stranded before any downstream work could start. Reserve
+    // 3% (at least 3,000 tokens for the minimum 100k text-adventure budget),
+    // while the Build-lifetime ledger remains the hard aggregate authority.
+    'production.supervision': 0.03,
     'content.source-sufficiency': 0.02,
     'content.design': 0.015,
     'content.story-bible': 0.02,
