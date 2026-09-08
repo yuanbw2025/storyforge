@@ -1360,6 +1360,9 @@ async function recoveryInvalidatedTaskKeys(input: {
   const dialoguePassTaskKeys = [
     'content.dialogue-pass.act-1', 'content.dialogue-pass.act-2', 'content.dialogue-pass.act-3',
   ]
+  const visualReviewBatchTaskKeys = input.plan.tasks
+    .filter(task => /^media\.visual-quality-review\.batch-\d+$/.test(task.taskKey))
+    .map(task => task.taskKey)
   const directlyResolvedFailureDetail = previousFailure && typeof previousFailure.detail === 'string'
     ? previousFailure.detail : ''
   const failedMediaArtifactTaskKeys = [...new Set(
@@ -1389,6 +1392,8 @@ async function recoveryInvalidatedTaskKeys(input: {
           : input.plan.tasks
             .filter(task => /^media\.visual\.\d{3}$/.test(task.taskKey))
             .map(task => task.taskKey)
+      : taskKey === 'media.visual-quality-review'
+        ? visualReviewBatchTaskKeys
       : sceneScriptPartKeys(taskKey)
   )
   const directlyResolvedFailureTaskKey = previousFailure
@@ -1396,7 +1401,8 @@ async function recoveryInvalidatedTaskKeys(input: {
     && (previousFailure.taskKey.startsWith('content.')
       || previousFailure.taskKey === 'integration.narrative'
       || previousFailure.taskKey === 'media.requirements'
-      || previousFailure.taskKey === 'media.audit')
+      || previousFailure.taskKey === 'media.audit'
+      || previousFailure.taskKey.startsWith('media.visual-quality-review'))
     ? previousFailure.taskKey : null
   // A resolve-blocker envelope names the current failure in previousFailure.
   // Prefer that root over append-only diagnostic history; otherwise an older,
