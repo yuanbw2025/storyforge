@@ -217,8 +217,11 @@ describe('Text Open World G4 · 真实 vNext 玩家壳集成', () => {
     const more = viewSection(main, 'more')
     expect(shell.getAttribute('data-active-view')).toBe('more')
     expect(more.hidden).toBe(false)
+    expect(more.querySelector('[data-testid="text-open-world-crafting-economy-panel"]')).toBeTruthy()
     expect(more.querySelector('[data-testid="text-open-world-inventory-panel"]')).toBeTruthy()
     expect(more.querySelector('[data-testid="text-open-world-relationships"]')).toBeTruthy()
+    expect(more.textContent).toContain('制作与交易')
+    expect(more.textContent).toContain('盐露药剂')
     expect(more.textContent).toContain('背包')
     expect(more.textContent).toContain('存档与分支')
 
@@ -355,5 +358,66 @@ describe('Text Open World G4 · 真实 vNext 玩家壳集成', () => {
 
     const packageHash = host.querySelector('[data-testid="text-open-world-runtime-package-hash"]')
     expect(packageHash?.textContent).toContain(created.session.runtimeSourceHash.slice(0, 12))
+  })
+
+  it.sequential('父壳只公开固定分类错误，未知 Action、物品与 hash 诊断不进入 DOM', async () => {
+    const runtimePackage = createTextOpenWorldVNextFixture()
+    const productRuntimePackage = createTextOpenWorldProductRuntimePackageFixtureV1(runtimePackage)
+    const projection = createInitialTextOpenWorldSessionProjectionV1(runtimePackage)
+    const leakedActionKey = 'action.private-vault-operation'
+    const leakedItemKey = 'item.private-ledger'
+    const leakedHash = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'
+    useTextOpenWorldPlayerStore.setState({
+      sessions: [],
+      releases: [],
+      selectedSessionId: 404,
+      selectedSession: null,
+      selectedSessionSource: 'build-preview',
+      selectedManifest: productRuntimePackage,
+      runtimeState: { ...structuredClone(EMPTY_PRODUCT_RUNTIME_STATE), textOpenWorld: projection },
+      checkpoints: [],
+      events: [],
+      busy: false,
+      lastFeedback: null,
+      error: `[text-open-world-action-executor] Release不存在Action:${leakedActionKey}; ${leakedItemKey}; ${leakedHash}`,
+    })
+
+    await act(async () => {
+      root.render(createElement(TextOpenWorldVNextPlayer))
+      await new Promise(resolve => setTimeout(resolve, 0))
+    })
+
+    const alert = host.querySelector('[role="alert"]')
+    expect(alert?.textContent).toBe('操作未能完成，请确认当前状态后重试。')
+    expect(host.innerHTML).not.toContain(leakedActionKey)
+    expect(host.innerHTML).not.toContain(leakedItemKey)
+    expect(host.innerHTML).not.toContain(leakedHash)
+
+    await act(async () => {
+      useTextOpenWorldPlayerStore.setState({
+        error: `[text-open-world-action-executor] 确认基线已变化，请刷新当前状态后重新确认:${leakedActionKey}`,
+      })
+    })
+    expect(host.querySelector('[role="alert"]')?.textContent)
+      .toBe('游戏状态已经变化，请查看最新状态后重新选择并确认。')
+    expect(host.innerHTML).not.toContain(leakedActionKey)
+
+    await act(async () => {
+      useTextOpenWorldPlayerStore.setState({
+        error: `[text-open-world] 存档加载失败，可返回游戏库重试：${leakedHash}`,
+      })
+    })
+    expect(host.querySelector('[role="alert"]')?.textContent)
+      .toBe('存档加载失败，请返回游戏库后重试。')
+    expect(host.innerHTML).not.toContain(leakedHash)
+
+    await act(async () => {
+      useTextOpenWorldPlayerStore.setState({
+        error: `[text-open-world] 只能删除当前World/Work和世界分组内的文字开放世界存档。:${leakedItemKey}`,
+      })
+    })
+    expect(host.querySelector('[role="alert"]')?.textContent)
+      .toBe('只能删除当前工作区和世界分组内的文字开放世界存档。')
+    expect(host.innerHTML).not.toContain(leakedItemKey)
   })
 })

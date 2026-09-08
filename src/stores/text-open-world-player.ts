@@ -70,6 +70,8 @@ export interface TextOpenWorldExecuteActionOptions {
   confirmed?: boolean
   source?: TextOpenWorldCommandSourceV1
   expectedBaseSequence?: number
+  quantity?: number
+  itemKey?: string
 }
 
 interface TextOpenWorldProjectionRequest {
@@ -198,6 +200,32 @@ function playableManifest(runtimePackage: Awaited<ReturnType<typeof verifyProduc
   return structuredClone(runtimePackage) as PlayableTextOpenWorldProductRuntimePackageV1
 }
 
+function assertActionFeedbackIdentity(
+  feedback: TextOpenWorldFeedbackReceiptV1,
+  request: {
+    sessionId: number
+    actionKey: string
+    targetKey: string | null
+    commandId?: string
+    expectedBaseSequence?: number
+  },
+) {
+  if (feedback.sessionId !== request.sessionId
+    || feedback.actionKey !== request.actionKey
+    || feedback.targetKey !== request.targetKey) {
+    throw new Error('[text-open-world] Action回执与发起请求的Session或目标不一致。')
+  }
+  if (request.expectedBaseSequence != null
+    && feedback.baseSequence !== request.expectedBaseSequence) {
+    throw new Error('[text-open-world] Action回执属于过期的Session事件基线。')
+  }
+  if (feedback.phase !== 'preflight'
+    && request.commandId != null
+    && feedback.commandId !== request.commandId) {
+    throw new Error('[text-open-world] Action回执与发起请求的commandId不一致。')
+  }
+}
+
 async function readDetails(scope: WorkspaceScope, worldGroupId: number | null, sessionId: number) {
   const selectedSession = await assertSession(scope, sessionId)
   if ((selectedSession.worldGroupId ?? null) !== (worldGroupId ?? null)) {
@@ -236,6 +264,7 @@ async function readDetails(scope: WorkspaceScope, worldGroupId: number | null, s
 
 export const useTextOpenWorldPlayerStore = create<TextOpenWorldPlayerState>((set, get) => {
   let projectionRequestRevision = 0
+  let actionRequestRevision = 0
   const beginProjectionRequest = (
     scope: WorkspaceScope,
     worldGroupId: number | null,
@@ -418,7 +447,10 @@ export const useTextOpenWorldPlayerStore = create<TextOpenWorldPlayerState>((set
       const sessionId = get().selectedSessionId
       const request = captureProjectionRequest()
       if (sessionId == null || !request) throw new Error('[text-open-world] 请先开始正式开放世界。')
-      const mayPublish = () => isCurrentSessionRequest(request, sessionId)
+      const requestedTargetKey = targetKey ?? null
+      const actionRevision = ++actionRequestRevision
+      const mayPublish = () => actionRequestRevision === actionRevision
+        && isCurrentSessionRequest(request, sessionId)
       return run(async () => {
         const session = await assertSession(request.scope, sessionId)
         if (!(await readProductRuntimeState(session.id!)).textOpenWorld) throw new Error('[text-open-world] 当前存档不是vNext运行包。')
@@ -430,6 +462,15 @@ export const useTextOpenWorldPlayerStore = create<TextOpenWorldPlayerState>((set
             commandId: options?.commandId,
             confirmed: options?.confirmed,
             source: options?.source,
+            expectedBaseSequence: options?.expectedBaseSequence,
+            quantity: options?.quantity,
+            itemKey: options?.itemKey,
+          })
+          assertActionFeedbackIdentity(feedback, {
+            sessionId,
+            actionKey,
+            targetKey: requestedTargetKey,
+            commandId: options?.commandId,
             expectedBaseSequence: options?.expectedBaseSequence,
           })
           await refresh(request, sessionId)

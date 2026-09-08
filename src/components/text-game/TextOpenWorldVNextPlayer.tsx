@@ -2,6 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Bell, GitBranch, Save } from 'lucide-react'
 import { parseTextOpenWorldModulesV1 } from '../../lib/open-world/modules'
 import { projectTextOpenWorldPlayerCombatV1 } from '../../lib/open-world/player-combat'
+import {
+  projectTextOpenWorldPlayerCraftingEconomyReceiptV1,
+  projectTextOpenWorldPlayerCraftingEconomyV1,
+  type TextOpenWorldPlayerCraftingEconomyExecuteRequestV1,
+} from '../../lib/open-world/player-crafting-economy'
 import { projectTextOpenWorldPlayerHudV1 } from '../../lib/open-world/player-hud'
 import {
   projectTextOpenWorldPlayerNotificationsV1,
@@ -17,6 +22,7 @@ import {
 import TextOpenWorldActorsPanel from './TextOpenWorldActorsPanel'
 import TextOpenWorldCharacterPanel from './TextOpenWorldCharacterPanel'
 import TextOpenWorldCombatPanel, { type TextOpenWorldCombatActionRequestV1 } from './TextOpenWorldCombatPanel'
+import TextOpenWorldCraftingEconomyPanel from './TextOpenWorldCraftingEconomyPanel'
 import TextOpenWorldGameShell from './TextOpenWorldGameShell'
 import TextOpenWorldInventoryPanel from './TextOpenWorldInventoryPanel'
 import TextOpenWorldMapPanel, { type TextOpenWorldMapTravelRequestV1 } from './TextOpenWorldMapPanel'
@@ -39,6 +45,59 @@ const QUEST_STATUS_LABELS = {
 const NOTIFICATION_CATEGORY_LABELS: Record<TextOpenWorldPlayerNotificationCategoryV1, string> = {
   player: '角色', inventory: '物品', quest: '任务', world: '世界', relationship: '关系',
   combat: '战斗', achievement: '成就', 'random-event': '随机事件',
+}
+
+const PLAYER_SAFE_ERROR_RULES: ReadonlyArray<{
+  markers: readonly string[]
+  message: string
+}> = [
+  {
+    markers: ['存档加载失败'],
+    message: '存档加载失败，请返回游戏库后重试。',
+  },
+  {
+    markers: ['只能删除当前World/Work和世界分组内'],
+    message: '只能删除当前工作区和世界分组内的文字开放世界存档。',
+  },
+  {
+    markers: [
+      '确认基线已变化',
+      '世界状态已变化',
+      '演化状态已变化',
+      '回执属于过期的Session事件基线',
+      '地图状态已经变化',
+      '制作或交易状态已经变化',
+    ],
+    message: '游戏状态已经变化，请查看最新状态后重新选择并确认。',
+  },
+  {
+    markers: ['检查点无效'],
+    message: '这个存档点不可用，请选择其他存档点后重试。',
+  },
+  {
+    markers: ['请先开始正式开放世界'],
+    message: '请先开始或选择一段文字开放世界旅程。',
+  },
+  {
+    markers: ['请选择有效发布'],
+    message: '请选择一个可用的正式发布后再开始。',
+  },
+  {
+    markers: ['scope 缺失'],
+    message: '当前工作区信息不可用，请返回游戏库后重试。',
+  },
+  {
+    markers: ['只有 active 实例可以提交命令'],
+    message: '当前旅程暂时不能继续操作，请返回游戏库检查存档状态。',
+  },
+]
+
+function playerSafeError(rawError: string): string {
+  const diagnostic = rawError.trim()
+  if (!diagnostic) return ''
+  return PLAYER_SAFE_ERROR_RULES.find(rule => (
+    rule.markers.some(marker => diagnostic.includes(marker))
+  ))?.message ?? '操作未能完成，请确认当前状态后重试。'
 }
 
 export default function TextOpenWorldVNextPlayer() {
@@ -67,6 +126,7 @@ export default function TextOpenWorldVNextPlayer() {
     requestId: number
   } | null>(null)
   const projection = store.runtimeState.textOpenWorld
+  const publicError = playerSafeError(store.error)
   const runtimePackage = store.selectedManifest?.textOpenWorldVNext
   const projectedActions = selectTextOpenWorldVNextActions(store)
   const availableActions = projectedActions.filter(action => action.available)
@@ -140,6 +200,20 @@ export default function TextOpenWorldVNextPlayer() {
     }
   }, [projection, projectionSequence, projectedActions, selectedSessionId, store.checkpoints, store.events])
   const combatProjection = combatProjectionResult.value
+  const craftingEconomyProjection = useMemo(() => {
+    if (!projection || selectedSessionId == null) return null
+    try {
+      return projectTextOpenWorldPlayerCraftingEconomyV1({
+        sessionId: selectedSessionId,
+        projection,
+        runtimeEventSequence: store.runtimeState.lastSequence,
+      })
+    } catch {
+      // The same read can briefly span an Event commit and Store refresh. The
+      // player surface remains closed until one authoritative snapshot parses.
+      return null
+    }
+  }, [projection, selectedSessionId, store.runtimeState.lastSequence])
   const combatIdentity = combatProjection
     ? `${combatProjection.operationIdentity.sessionId}:${combatProjection.operationIdentity.combatInstanceKey ?? 'legacy'}`
     : null
@@ -300,6 +374,72 @@ export default function TextOpenWorldVNextPlayer() {
     executeProjectedAction(action, request.targetKey, 'system-action', request.expectedBaseSequence)
   }
 
+  const handleCraftingEconomyAction = async (
+    request: TextOpenWorldPlayerCraftingEconomyExecuteRequestV1,
+  ) => {
+    const liveStore = useTextOpenWorldPlayerStore.getState()
+    const liveSessionId = liveStore.selectedSession?.id ?? liveStore.selectedSessionId
+    const liveProjection = liveStore.runtimeState.textOpenWorld
+    if (request.sessionId !== liveSessionId
+      || liveProjection == null
+      || request.expectedBaseSequence !== liveStore.runtimeState.lastSequence) {
+      throw new Error('制作或交易状态已经变化，请重新选择并确认。')
+    }
+
+    const liveScreen = projectTextOpenWorldPlayerCraftingEconomyV1({
+      sessionId: request.sessionId,
+      projection: liveProjection,
+      runtimeEventSequence: liveStore.runtimeState.lastSequence,
+    })
+    const executable = request.kind === 'craft'
+      ? (() => {
+          const recipe = liveScreen.crafting.learnedRecipes.find(candidate => (
+            candidate.operationTargetKey === request.targetKey
+          ))
+          return recipe?.available === true
+            && recipe.maximumQuantity >= request.quantity
+            && recipe.action?.available === true
+            && recipe.action.actionKey === request.actionKey
+            && recipe.action.targetKey === request.targetKey
+        })()
+      : (() => {
+          const vendor = liveScreen.vendors.find(candidate => (
+            candidate.operationTargetKey === request.targetKey
+          ))
+          const item = (request.kind === 'buy' ? vendor?.buy : vendor?.sell)?.find(candidate => (
+            candidate.operationItemKey === request.itemKey
+          ))
+          return vendor?.available === true
+            && item?.available === true
+            && item.maximumQuantity >= request.quantity
+            && item.action?.available === true
+            && item.action.actionKey === request.actionKey
+            && item.action.targetKey === request.targetKey
+            && item.action.itemKey === request.itemKey
+        })()
+    if (!executable) throw new Error('制作或交易条件已经变化，请重新选择并确认。')
+
+    // Receipt sanitization must compare the committed change with the exact
+    // pre-command state, not with the refreshed post-command projection.
+    const submissionProjection = structuredClone(liveProjection)
+    const feedback = await liveStore.executeVNextAction(
+      request.actionKey,
+      request.targetKey,
+      {
+        expectedBaseSequence: request.expectedBaseSequence,
+        quantity: request.quantity,
+        confirmed: true,
+        ...(request.kind === 'craft' ? {} : { itemKey: request.itemKey }),
+      },
+    )
+    return projectTextOpenWorldPlayerCraftingEconomyReceiptV1({
+      projection: submissionProjection,
+      runtimeEventSequence: request.expectedBaseSequence,
+      request,
+      receipt: feedback,
+    })
+  }
+
   const combatSurfaceVisible = state.combat != null
     && (!combatIdentity || dismissedCombatIdentity !== combatIdentity)
   const sceneView = <div className="space-y-3">
@@ -360,6 +500,16 @@ export default function TextOpenWorldVNextPlayer() {
   const characterView = <TextOpenWorldCharacterPanel projection={projection} />
 
   const moreView = <div className="space-y-3">
+    {craftingEconomyProjection ? <TextOpenWorldCraftingEconomyPanel
+      sessionKey={sessionKey}
+      projection={craftingEconomyProjection}
+      busy={store.busy}
+      onExecute={handleCraftingEconomyAction}
+    /> : <article
+      className="rounded border border-border bg-bg-surface p-4 text-xs text-text-muted"
+      role="status"
+      data-testid="text-open-world-crafting-economy-synchronizing"
+    >制作与交易状态核对中，完成前不会开放操作。</article>}
     <TextOpenWorldInventoryPanel
       sessionKey={sessionKey}
       projection={projection}
@@ -545,12 +695,12 @@ export default function TextOpenWorldVNextPlayer() {
         <span data-testid="text-open-world-runtime-package-hash">
           <strong>运行包</strong>{runtimeSourceEvidence}
         </span>
-        <span><strong>保存状态</strong>{store.busy ? '正在结算' : store.error ? '需要处理' : '已自动保存'}</span>
+        <span><strong>保存状态</strong>{store.busy ? '正在结算' : publicError ? '需要处理' : '已自动保存'}</span>
       </>}
       navigationSupplement={trackedQuestContent}
       overlay={confirmationOverlay}
       onDismissOverlay={dismissConfirmation}
-      error={store.error}
+      error={publicError}
       busy={store.busy}
       onExit={() => void store.select(null)}
     />
