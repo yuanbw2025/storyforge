@@ -4,6 +4,7 @@ import {
   branchProductRuntimeSession,
   createProductRuntimeCheckpoint,
   hashProductRuntimeStateV1,
+  normalizeProductRuntimeCheckpointPurposeV1,
   parseProductRuntimeState,
   replayProductRuntimeEvents,
   updateProductRuntimeSessionHeadV1,
@@ -90,11 +91,14 @@ export async function inspectTextOpenWorldCheckpointV1(checkpointId: number): Pr
   let saved: ProductRuntimeState
   try { saved = parseProductRuntimeState(checkpoint.stateJson) } catch (cause) { return { ...base, code: 'checkpoint-state-invalid', detail: cause instanceof Error ? cause.message : String(cause), valid: false } }
   if (!isVNext(saved)) return { ...base, code: 'not-vnext', detail: '检查点不包含文字开放世界vNext投影。', valid: false }
-  const purpose = checkpoint.purpose ?? 'manual'
-  if (!['manual', 'combat-retry'].includes(purpose) || (purpose === 'combat-retry') !== (checkpoint.subjectKey != null)) return { ...base, code: 'checkpoint-purpose-invalid', detail: '检查点用途与对象不一致。', valid: false }
+  let normalizedPurpose: ReturnType<typeof normalizeProductRuntimeCheckpointPurposeV1>
+  try { normalizedPurpose = normalizeProductRuntimeCheckpointPurposeV1(checkpoint) } catch (cause) {
+    return { ...base, code: 'checkpoint-purpose-invalid', detail: cause instanceof Error ? cause.message : String(cause), valid: false }
+  }
+  const { purpose, subjectKey } = normalizedPurpose
   if (purpose === 'combat-retry') {
     const modules = parseTextOpenWorldModulesV1(saved.textOpenWorld!.runtimePackage)
-    const encounter = modules.combat.encounters.find(item => item.key === checkpoint.subjectKey)
+    const encounter = modules.combat.encounters.find(item => item.key === subjectKey)
     if (!encounter || saved.textOpenWorld!.state.combat != null || saved.textOpenWorld!.state.player.health <= 0
       || saved.textOpenWorld!.state.map.currentLocationKey !== encounter.locationKey) {
       return { ...base, code: 'checkpoint-purpose-invalid', detail: '战前重试点没有冻结对应遭遇开始前的安全状态。', valid: false }
@@ -125,15 +129,19 @@ export async function createTextOpenWorldCheckpointV1(input: {
   const latestEvents = await eventsFor(session); const throughSequence = input.throughSequence ?? (latestEvents[latestEvents.length - 1]?.sequence ?? 0)
   const verified = await canonical(session, throughSequence)
   if (verified.protocol.pendingCommandId) fail(`不能在未终结命令上创建检查点:${verified.protocol.pendingCommandId}`)
-  const purpose = input.purpose ?? 'manual'
+  let normalizedPurpose: ReturnType<typeof normalizeProductRuntimeCheckpointPurposeV1>
+  try { normalizedPurpose = normalizeProductRuntimeCheckpointPurposeV1(input) } catch (cause) {
+    fail(cause instanceof Error ? cause.message : String(cause))
+  }
+  const { purpose, subjectKey } = normalizedPurpose
   if (purpose === 'combat-retry') {
-    const encounterKey = input.subjectKey ?? fail('战前重试点缺少encounterKey')
+    const encounterKey = subjectKey ?? fail('战前重试点缺少encounterKey')
     const modules = parseTextOpenWorldModulesV1(verified.state.textOpenWorld!.runtimePackage)
     const encounter = modules.combat.encounters.find(item => item.key === encounterKey) ?? fail(`战前重试点遭遇不存在:${encounterKey}`)
     const runtime = verified.state.textOpenWorld!.state
     if (runtime.combat != null || runtime.player.health <= 0 || runtime.map.currentLocationKey !== encounter.locationKey) fail('只能在对应遭遇开始前建立战前重试点')
-  } else if (input.subjectKey != null) fail('手动检查点不能绑定战斗对象')
-  const checkpoint = await createProductRuntimeCheckpoint({ ...input, throughSequence })
+  }
+  const checkpoint = await createProductRuntimeCheckpoint({ ...input, ...normalizedPurpose, throughSequence })
   const inspection = await inspectTextOpenWorldCheckpointV1(checkpoint.id!)
   if (!inspection.valid) fail(`新检查点验证失败:${inspection.code}`)
   return checkpoint
