@@ -630,6 +630,7 @@ export function legalizeProductionModelProtocolDefaultsV1(
       }[]
     }
     questScriptAbilityKeys?: readonly string[]
+    sceneScriptModuleTitle?: string
   } = {},
 ): ProductionModelProtocolLegalizationV1 {
   const defaultedFields: string[] = []
@@ -1359,8 +1360,22 @@ export function legalizeProductionModelProtocolDefaultsV1(
     )
     return { payload: next, defaultedFields, discardedNullEntries, discardedUnregisteredStateFields }
   }
-  if (textAdventureSceneScriptBoundary(taskKey) != null) {
+  const sceneScriptBoundary = textAdventureSceneScriptBoundary(taskKey)
+  if (sceneScriptBoundary != null) {
     const next: JsonRecord = { ...payload }
+    const frozenEnvelope: Readonly<Record<string, unknown>> = {
+      schema: 'storyforge.text-adventure-scene-script-bundle-artifact',
+      version: 1,
+      actKey: `act.${sceneScriptBoundary.actIndex + 1}`,
+      ...(options.sceneScriptModuleTitle == null
+        ? {}
+        : { moduleTitle: options.sceneScriptModuleTitle }),
+    }
+    for (const [field, value] of Object.entries(frozenEnvelope)) {
+      if (next[field] === value) continue
+      next[field] = value
+      defaultedFields.push(`${field}<-frozen-scene-script-envelope`)
+    }
     const normalizeBeats = (value: unknown, path: string): unknown => {
       if (!Array.isArray(value)) return value
       const decorated = value.map((beat, index) => ({ beat, index }))
@@ -2179,6 +2194,7 @@ function textAdventureSceneScriptContract(input: {
   )
   const targetUnitsPerScene = Math.ceil(minimumActUnits / scenes.length)
   const maximumActUnits = Math.ceil(minimumActUnits * 1.4)
+  const targetSubmissionUnits = Math.min(maximumActUnits, Math.ceil(minimumActUnits * 1.15))
   const requiredSceneOpenings = scenes.map(scene => ({
     sceneKey: scene.sceneKey,
     beats0MustStartWith: scene.locationTitle,
@@ -2193,7 +2209,7 @@ function textAdventureSceneScriptContract(input: {
     '每个场景必须用多个 beats 完成环境建立、人物行动与有效对白、冲突升级、可行动信息和选择前铺垫；同源同目标的两个选择必须体现不同立场、代价与后续回响，不得是同义改写。' +
     `dialogue 的 speakerKey 必须逐字使用 ${JSON.stringify(input.castKeys)} 中的一个稳定 key，禁止填写角色姓名、称谓、narrator、空字符串或 null；旁白不得伪装成 dialogue，必须使用 kind=narration 且 speakerKey=null。其他非 dialogue 的 speakerKey 也必须为 null。beatKey 必须在整个游戏内唯一，建议使用 beat.act-${input.actIndex + 1}.NNN；同一场景按 order 稳定排序。` +
     (input.brief.qualityProfile === 'commercial-candidate'
-      ? `本分包 scenes 的 summary+beats.text 合计应在 ${minimumActUnits}–${maximumActUnits} 个玩家可见中文内容单位之间，不得把一个分包写成无上限长篇；每个场景分别以 ${targetUnitsPerScene} 单位为写作目标并完整起承转合；至少 ${minimumDialogueTurns} 个有效对白回合；每个结局正文至少 ${minimumEndingUnits} 单位。JSON 字段名、key、choices 与标点不计入正文量。`
+      ? `本分包 scenes 的 summary+beats.text 合计硬性下限为 ${minimumActUnits} 个玩家可见中文内容单位，低于该值会被直接拒收；本次提交目标为约 ${targetSubmissionUnits} 单位、上限 ${maximumActUnits} 单位。完成 JSON 后必须逐场估算 summary+beats.text，再汇总确认不少于 ${minimumActUnits}；不要把 choices、JSON 字段名、key 或标点误算进正文。每个场景分别以 ${targetUnitsPerScene} 单位为最低写作基准并完整起承转合；至少 ${minimumDialogueTurns} 个有效对白回合；每个结局正文至少 ${minimumEndingUnits} 单位。`
       : 'prototype 仍须形成完整场景，不得只写一句摘要。') +
     '禁止复制句子灌水，禁止写“略”“待补充”“同上”，禁止新增专用机制字段；失败推进、任务结算与持久效果由确定性编译器处理。' +
     '输出字段必须精确为：{"schema":"storyforge.text-adventure-scene-script-bundle-artifact","version":1,"actKey":"act.1","moduleTitle":"...","scenes":[{"sceneKey":"scene.001","title":"...","summary":"...","beats":[{"beatKey":"beat.act-1.001","kind":"narration|dialogue|action|system","speakerKey":null,"text":"...","order":0}]}],"choices":[{"choiceKey":"choice.001","sourceNodeKey":"scene.001","targetNodeKey":"scene.002","text":"...","description":"...","unavailableReason":"...","order":0}],"endings":[{"endingKey":"ending.001","title":"...","summary":"...","beats":[{"beatKey":"beat.act-3.ending-001.001","kind":"narration|dialogue|action|system","speakerKey":null,"text":"...","order":0}]}]}。非终幕 endings 必须是空数组。'
@@ -2711,6 +2727,13 @@ async function executeModelTask(input: ProductProductionTaskExecutionInputV1, op
     && input.task.taskKey === 'content.main-quest-plan'
     ? planTextAdventureMainQuestIdentityV1(options.brief, textAdventureSceneConstraints)
     : undefined
+  const textAdventureSceneScriptModuleTitle = sceneScriptBoundary != null
+    && input.inputArtifacts.some(artifact => artifact.artifactKey === 'content.story-bible')
+    ? (() => {
+        const storyBible = artifactPayload(input, 'content.story-bible') as JsonRecord
+        return typeof storyBible.title === 'string' ? storyBible.title : undefined
+      })()
+    : undefined
   const system = textSystem(
     input.task.taskKey,
     options.brief,
@@ -2769,6 +2792,7 @@ async function executeModelTask(input: ProductProductionTaskExecutionInputV1, op
     questLocationTitles: textAdventureLocationTitles,
     questScriptIdentityPlan: textAdventureQuestScriptIdentityPlan,
     questScriptAbilityKeys: textAdventureSystemAbilityKeys,
+    sceneScriptModuleTitle: textAdventureSceneScriptModuleTitle,
   })
   const raw = legalized.payload
   let payload: unknown

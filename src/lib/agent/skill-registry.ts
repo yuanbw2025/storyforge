@@ -3239,7 +3239,7 @@ export const AGENT_SKILLS = [
     defaultForAgent: true,
     label: '文字冒险分场正文与玩家可见选择',
     owner: 'text-adventure-scene-writer',
-    promptVersion: 'text-adventure-scene-script-v2',
+    promptVersion: 'text-adventure-scene-script-v3',
     executionMode: 'product-production',
     contextTaskKind: 'agent-prose',
     readToolNames: [],

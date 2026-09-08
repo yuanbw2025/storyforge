@@ -1630,6 +1630,7 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
     const sceneScript = legalizeProductionModelProtocolDefaultsV1(
       'content.scene-script.act-2.part-1',
       {
+        schema: 'provider.scene-script', version: 2, actKey: 'act.9', moduleTitle: '临时标题',
         scenes: [{
           sceneKey: 'scene.004', title: '潮门', summary: '潮声逼近。',
           beats: [
@@ -1653,8 +1654,13 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
           ],
         }],
       },
+      { sceneScriptModuleTitle: '潮钟群岛：最后的灯火' },
     )
     expect(sceneScript.payload).toMatchObject({
+      schema: 'storyforge.text-adventure-scene-script-bundle-artifact',
+      version: 1,
+      actKey: 'act.2',
+      moduleTitle: '潮钟群岛：最后的灯火',
       scenes: [{
         beats: [{ beatKey: 'beat.1' }, { beatKey: 'beat.2' }],
         choices: [expect.not.objectContaining({ unavailableReason: expect.anything() })],
@@ -1663,6 +1669,10 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
       endings: [{ beats: [{ beatKey: 'beat.end.1' }, { beatKey: 'beat.end.2' }] }],
     })
     expect(sceneScript.defaultedFields).toEqual([
+      'schema<-frozen-scene-script-envelope',
+      'version<-frozen-scene-script-envelope',
+      'actKey<-frozen-scene-script-envelope',
+      'moduleTitle<-frozen-scene-script-envelope',
       'scenes[0].beats<-stable-order',
       'scenes[0].choices[0].unavailableReason<-null-as-omitted',
       'endings[0].beats<-stable-order',
