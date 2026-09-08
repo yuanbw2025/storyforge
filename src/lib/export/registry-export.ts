@@ -18,6 +18,10 @@ import { resolveWorkspaceOwnership } from '../workspace/ownership'
 import { portableizeAgentRunLedgerExportV1 } from '../agent/run/ledger-portability'
 import { assertAgentRunArtifactRecordIntegrityV1 } from '../memory/artifact-record'
 import { readVerifiedMediaBlobObjectData } from '../product-production/media-blob-store'
+import {
+  hashStateJson,
+  parseProductRuntimeCheckpointV1,
+} from '../product/runtime-core'
 
 /** 当前完整便携备份契约。 */
 export const CURRENT_EXPORT_VERSION = 10
@@ -25,6 +29,102 @@ export const CURRENT_EXPORT_VERSION = 10
 export interface StrictProjectExportSnapshot {
   data: ProjectExportData
   exportIds: ReadonlyMap<string, ReadonlyMap<number, number>>
+}
+
+function maximumRuntimeSequenceForExport(sequences: ReadonlySet<number> | undefined): number {
+  let maximum = 0
+  for (const sequence of sequences ?? []) maximum = Math.max(maximum, sequence)
+  return maximum
+}
+
+/** Fail closed before a corrupt runtime tree or derived checkpoint leaves IndexedDB. */
+async function assertProductRuntimeExportIntegrityV1(
+  rowsByTable: ReadonlyMap<string, readonly any[]>,
+): Promise<void> {
+  const sessions = rowsByTable.get('productRuntimeSessions') ?? []
+  const events = rowsByTable.get('productRuntimeEvents') ?? []
+  const checkpoints = rowsByTable.get('productRuntimeCheckpoints') ?? []
+  const sessionsById = new Map<number, any>()
+  for (const session of sessions) {
+    if (!Number.isSafeInteger(session.id) || session.id < 1 || sessionsById.has(session.id)) {
+      throw new Error('[deriveExport] ProductRuntimeSession 本地主键无效')
+    }
+    sessionsById.set(session.id, session)
+  }
+
+  const sequencesBySession = new Map<number, Set<number>>()
+  for (const event of events) {
+    const session = sessionsById.get(event.sessionId)
+    if (!session || event.projectId !== session.projectId
+      || (event.worldGroupId ?? null) !== (session.worldGroupId ?? null)
+      || !Number.isSafeInteger(event.sequence) || event.sequence < 1) {
+      throw new Error('[deriveExport] ProductRuntimeEvent lineage 或序号无效')
+    }
+    const sequences = sequencesBySession.get(session.id) ?? new Set<number>()
+    if (sequences.has(event.sequence)) {
+      throw new Error('[deriveExport] ProductRuntimeEvent 序号重复')
+    }
+    sequences.add(event.sequence)
+    sequencesBySession.set(session.id, sequences)
+  }
+  for (const [sessionId, sequences] of sequencesBySession) {
+    const ordered = [...sequences].sort((left, right) => left - right)
+    if (ordered.some((sequence, index) => sequence !== index + 1)) {
+      throw new Error(`[deriveExport] ProductRuntimeEvent 序号不连续:${sessionId}`)
+    }
+  }
+
+  for (const session of sessions) {
+    const hasParent = session.parentSessionId != null
+    const hasParentSequence = session.parentThroughSequence != null
+    if (hasParent !== hasParentSequence) {
+      throw new Error('[deriveExport] ProductRuntimeSession 分支 lineage 配对无效')
+    }
+    if (!hasParent) continue
+    const parent = sessionsById.get(session.parentSessionId)
+    const parentMaximumSequence = maximumRuntimeSequenceForExport(
+      sequencesBySession.get(session.parentSessionId),
+    )
+    if (!parent || parent === session || !Number.isSafeInteger(session.parentThroughSequence)
+      || session.parentThroughSequence < 0 || session.parentThroughSequence > parentMaximumSequence
+      || parent.projectId !== session.projectId
+      || (parent.worldGroupId ?? null) !== (session.worldGroupId ?? null)
+      || parent.worldId !== session.worldId || parent.workId !== session.workId
+      || parent.kind !== session.kind || parent.runtimeSourceHash !== session.runtimeSourceHash
+      || parent.productReleaseId !== session.productReleaseId
+      || parent.productBuildId !== session.productBuildId) {
+      throw new Error('[deriveExport] ProductRuntimeSession 分支 lineage 或序号无效')
+    }
+  }
+  for (const session of sessions) {
+    const seen = new Set<number>([session.id])
+    let parentSessionId = session.parentSessionId
+    while (parentSessionId != null) {
+      if (seen.has(parentSessionId)) {
+        throw new Error('[deriveExport] ProductRuntimeSession 分支 lineage 形成循环')
+      }
+      seen.add(parentSessionId)
+      parentSessionId = sessionsById.get(parentSessionId)?.parentSessionId ?? null
+    }
+  }
+
+  for (const checkpoint of checkpoints) {
+    let parsed: ReturnType<typeof parseProductRuntimeCheckpointV1>
+    try {
+      parsed = parseProductRuntimeCheckpointV1(checkpoint)
+    } catch {
+      throw new Error('[deriveExport] ProductRuntimeCheckpoint 内容、purpose、序号或 Hash 无效')
+    }
+    const session = sessionsById.get(parsed.sessionId)
+    if (!session || parsed.projectId !== session.projectId
+      || parsed.worldGroupId !== (session.worldGroupId ?? null)
+      || parsed.throughSequence > maximumRuntimeSequenceForExport(
+        sequencesBySession.get(parsed.sessionId),
+      )
+      || await hashStateJson(parsed.stateJson) !== parsed.stateHash) {
+      throw new Error('[deriveExport] ProductRuntimeCheckpoint 内容、purpose、序号或 Hash 无效')
+    }
+  }
 }
 
 /** 取一张 exportable 表的库内记录(项目级按 projectId;direct-child 经 projectResolver) */
@@ -245,6 +345,7 @@ async function captureProjectExportInTransaction(
     rows.forEach((r, i) => { if (r.id != null) idMap.set(r.id, i) })
     idMaps.set(spec.name, idMap)
   }
+  await assertProductRuntimeExportIntegrityV1(rowsByTable)
 
   // 第二遍:逐行转导出对象
   const projectSpec = REGISTRY_BY_NAME.get('projects')

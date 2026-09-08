@@ -957,8 +957,13 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
       { field: 'sessionId', remapVia: 'productRuntimeSessions',
         exportAs: '_productRuntimeSessionExportId', onUnmapped: 'require' },
     ],
-    defaults: { throughSequence: 0, name: '检查点' },
-    note: 'PRODUCT-RUNTIME-1 可重建状态检查点；hash 异常时从初始状态与追加事件恢复' },
+    defaults: {
+      throughSequence: 0,
+      name: '检查点',
+      purpose: 'manual',
+      subjectKey: null,
+    },
+    note: 'PRODUCT-RUNTIME-1 可重建状态检查点；purpose 使用 v1 闭集，旧缺失值按 manual 读取，hash/序号/会话 lineage 异常时失败关闭' },
 
   // ───────────────────── NS-4 时序事实账本 ─────────────────────
   // 导出/导入：全部分类型 FK + 三个章节引用 + 自引用 supersedesFactId 都做 exportRemap，

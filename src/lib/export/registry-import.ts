@@ -31,7 +31,10 @@ import { assertAdaptationProjectInvariant } from '../adaptation/contracts'
 import { validateScreenplayBlocksV1 } from '../screenplay/contracts'
 import { assertComicLetteringV1, assertComicMediaAssetV1, assertNormalizedFrameV1, framesOverlap } from '../comic/contracts'
 import type { AdaptationProject, ComicLetteringItemV1, ComicMediaAsset, ScreenplayBlock, Work } from '../types'
-import { PRODUCTION_PRODUCT_KINDS_V1 } from '../types'
+import {
+  PRODUCT_RUNTIME_CHECKPOINT_PURPOSES_V1,
+  PRODUCTION_PRODUCT_KINDS_V1,
+} from '../types'
 import { isCompleteCharacterAxes } from '../character/character-axes'
 
 function portableRows(value: Record<string, any>, name: string): Record<string, any>[] {
@@ -47,7 +50,20 @@ function portableRows(value: Record<string, any>, name: string): Record<string, 
   return rows
 }
 
-function validateProductArchitectureBackup(value: Record<string, any>): void {
+async function sha256PortableText(value: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))
+  return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('')
+}
+
+function maximumRuntimeSequence(
+  sequences: ReadonlySet<number> | undefined,
+): number {
+  let maximum = 0
+  for (const sequence of sequences ?? []) maximum = Math.max(maximum, sequence)
+  return maximum
+}
+
+async function validateProductArchitectureBackup(value: Record<string, any>): Promise<void> {
   const productKinds = new Set<string>(PRODUCTION_PRODUCT_KINDS_V1)
   const productions = new Map(portableRows(value, 'productProductions').map(row => [row._exportId, row]))
   const briefs = portableRows(value, 'productProductionBriefs')
@@ -59,8 +75,8 @@ function validateProductArchitectureBackup(value: Record<string, any>): void {
   const runtimeSessions = portableRows(value, 'productRuntimeSessions')
   const runtimeSessionById = new Map(runtimeSessions.map(row => [row._exportId, row]))
   const mediaAssets = portableRows(value, 'productMediaAssets')
-  portableRows(value, 'productRuntimeEvents')
-  portableRows(value, 'productRuntimeCheckpoints')
+  const runtimeEvents = portableRows(value, 'productRuntimeEvents')
+  const runtimeCheckpoints = portableRows(value, 'productRuntimeCheckpoints')
   const worldReleases = new Map(portableRows(value, 'worldReleases').map(row => [row._exportId, row]))
 
   for (const production of productions.values()) {
@@ -123,6 +139,101 @@ function validateProductArchitectureBackup(value: Record<string, any>): void {
       throw new Error('[deriveImport] v10 ProductRuntime 身份与来源产品不一致')
     }
   }
+  const runtimeSequences = new Map<number, Set<number>>()
+  for (const event of runtimeEvents) {
+    const session = runtimeSessionById.get(event._productRuntimeSessionExportId)
+    if (!session || event._worldGroupExportId !== session._worldGroupExportId
+      || !Number.isSafeInteger(event.sequence) || event.sequence < 1) {
+      throw new Error('[deriveImport] v10 ProductRuntimeEvent lineage 或序号无效')
+    }
+    const sequences = runtimeSequences.get(session._exportId) ?? new Set<number>()
+    if (sequences.has(event.sequence)) {
+      throw new Error('[deriveImport] v10 ProductRuntimeEvent 序号重复')
+    }
+    sequences.add(event.sequence)
+    runtimeSequences.set(session._exportId, sequences)
+  }
+  for (const [sessionId, sequences] of runtimeSequences) {
+    const ordered = [...sequences].sort((left, right) => left - right)
+    if (ordered.some((sequence, index) => sequence !== index + 1)) {
+      throw new Error(`[deriveImport] v10 ProductRuntimeEvent 序号不连续:${sessionId}`)
+    }
+  }
+  for (const session of runtimeSessions) {
+    const parentExportId = session._parentSessionExportId
+    const parentThroughSequence = session.parentThroughSequence
+    const hasParent = parentExportId != null
+    const hasParentSequence = parentThroughSequence != null
+    if (hasParent !== hasParentSequence) {
+      throw new Error('[deriveImport] v10 ProductRuntime 分支 lineage 配对无效')
+    }
+    if (!hasParent) continue
+    const parent = runtimeSessionById.get(parentExportId)
+    const parentMaximumSequence = maximumRuntimeSequence(runtimeSequences.get(parentExportId))
+    if (!parent || parent === session || !Number.isSafeInteger(parentThroughSequence)
+      || parentThroughSequence < 0 || parentThroughSequence > parentMaximumSequence
+      || parent.kind !== session.kind || parent.runtimeSourceHash !== session.runtimeSourceHash
+      || parent._worldGroupExportId !== session._worldGroupExportId
+      || parent._worldExportId !== session._worldExportId
+      || parent._workExportId !== session._workExportId
+      || parent._productReleaseExportId !== session._productReleaseExportId
+      || parent._productBuildExportId !== session._productBuildExportId) {
+      throw new Error('[deriveImport] v10 ProductRuntime 分支 lineage 或序号无效')
+    }
+  }
+  for (const session of runtimeSessions) {
+    const seen = new Set<number>([session._exportId])
+    let parentExportId = session._parentSessionExportId
+    while (parentExportId != null) {
+      if (seen.has(parentExportId)) {
+        throw new Error('[deriveImport] v10 ProductRuntime 分支 lineage 形成循环')
+      }
+      seen.add(parentExportId)
+      parentExportId = runtimeSessionById.get(parentExportId)?._parentSessionExportId ?? null
+    }
+  }
+  const checkpointPurposes = new Set<string>(PRODUCT_RUNTIME_CHECKPOINT_PURPOSES_V1)
+  for (const checkpoint of runtimeCheckpoints) {
+    const session = runtimeSessionById.get(checkpoint._productRuntimeSessionExportId)
+    const throughSequence = checkpoint.throughSequence
+    const maximumSequence = session
+      ? maximumRuntimeSequence(runtimeSequences.get(session._exportId))
+      : -1
+    const purpose = checkpoint.purpose === undefined ? 'manual' : checkpoint.purpose
+    const subjectKey = checkpoint.subjectKey == null ? null : checkpoint.subjectKey
+    const requiresSubject = purpose === 'combat-retry' || purpose === 'milestone'
+    if (!session || checkpoint._worldGroupExportId !== session._worldGroupExportId
+      || !Number.isSafeInteger(throughSequence) || throughSequence < 0 || throughSequence > maximumSequence) {
+      throw new Error('[deriveImport] v10 ProductRuntimeCheckpoint lineage 或序号无效')
+    }
+    if (!checkpointPurposes.has(purpose)
+      || (subjectKey != null && (typeof subjectKey !== 'string' || !subjectKey.trim()
+        || subjectKey !== subjectKey.trim() || subjectKey.length > 200))
+      || requiresSubject !== (subjectKey != null)) {
+      throw new Error('[deriveImport] v10 ProductRuntimeCheckpoint purpose 与对象配对无效')
+    }
+    if (typeof checkpoint.name !== 'string' || !checkpoint.name.trim()
+      || checkpoint.name !== checkpoint.name.trim() || checkpoint.name.length > 200
+      || typeof checkpoint.stateJson !== 'string'
+      || typeof checkpoint.stateHash !== 'string' || !/^[a-f0-9]{64}$/.test(checkpoint.stateHash)
+      || !Number.isSafeInteger(checkpoint.createdAt) || checkpoint.createdAt < 0) {
+      throw new Error('[deriveImport] v10 ProductRuntimeCheckpoint 内容或 Hash 无效')
+    }
+    let state: Record<string, unknown>
+    try {
+      const parsed = JSON.parse(checkpoint.stateJson)
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('not-object')
+      state = parsed
+    } catch {
+      throw new Error('[deriveImport] v10 ProductRuntimeCheckpoint stateJson 无效')
+    }
+    if (state.lastSequence !== throughSequence) {
+      throw new Error('[deriveImport] v10 ProductRuntimeCheckpoint 状态序号不一致')
+    }
+    if (await sha256PortableText(checkpoint.stateJson) !== checkpoint.stateHash) {
+      throw new Error('[deriveImport] v10 ProductRuntimeCheckpoint Hash 不匹配')
+    }
+  }
   for (const asset of mediaAssets) {
     const releaseId = asset._productReleaseExportId
     const runtimeSessionId = asset._productRuntimeSessionExportId
@@ -175,7 +286,7 @@ function strictOwnerShadow(spec: TableSpec, row: Record<string, any>): {
   return null
 }
 
-function validateCurrentBackup(data: ProjectExportData): void {
+async function validateCurrentBackup(data: ProjectExportData): Promise<void> {
   if (data.version !== CURRENT_BACKUP_VERSION) {
     throw new Error(`[deriveImport] 只接受当前备份版本 v${CURRENT_BACKUP_VERSION}`)
   }
@@ -231,7 +342,7 @@ function validateCurrentBackup(data: ProjectExportData): void {
   validateScreenplayBackup(value)
   validateComicStoryboardBackup(value)
   validateComicMediaBackup(value)
-  validateProductArchitectureBackup(value)
+  await validateProductArchitectureBackup(value)
   for (const spec of PROJECT_TABLES) {
     if (!spec.exportable || spec.name === 'projects' || spec.name === 'worlds' || spec.name === 'works') continue
     const rows = value[spec.name]
@@ -610,7 +721,7 @@ async function restorePortableSharedMediaObject(
  */
 export async function deriveImportProjectJSON(data: ProjectExportData): Promise<number> {
   if (!data.project) throw new Error('无效的导出文件格式')
-  validateCurrentBackup(data)
+  await validateCurrentBackup(data)
   const now = Date.now()
   const specs = PROJECT_TABLES.filter(s => s.exportable && s.name !== 'projects')
   const order = deriveImportOrder(specs)
@@ -707,6 +818,12 @@ export async function deriveImportProjectJSON(data: ProjectExportData): Promise<
           && obj.sourceStoryCoreId == null && obj.sourceCharacterId == null
           && obj.status !== 'rejected' && obj.status !== 'superseded') {
           obj.status = 'source-missing'
+        }
+        if (spec.name === 'productRuntimeCheckpoints') {
+          // The only supported legacy checkpoint form omitted purpose entirely.
+          // Persist its explicit current equivalent after strict backup validation.
+          if (obj.purpose === undefined) obj.purpose = 'manual'
+          if (obj.subjectKey === undefined) obj.subjectKey = null
         }
 
         if (spec.owner === 'project') obj.projectId = newProjectId

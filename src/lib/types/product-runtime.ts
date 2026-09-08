@@ -1284,6 +1284,17 @@ export interface ProductRuntimeEvent {
   createdAt: number;
 }
 
+/** Versioned, product-neutral reasons for freezing a runtime checkpoint. */
+export const PRODUCT_RUNTIME_CHECKPOINT_PURPOSES_V1 = [
+  "manual",
+  "autosave",
+  "combat-retry",
+  "milestone",
+  "system",
+] as const;
+export type ProductRuntimeCheckpointPurposeV1 =
+  (typeof PRODUCT_RUNTIME_CHECKPOINT_PURPOSES_V1)[number];
+
 export interface ProductRuntimeCheckpoint {
   id?: number;
   projectId: number;
@@ -1291,7 +1302,9 @@ export interface ProductRuntimeCheckpoint {
   sessionId: number;
   throughSequence: number;
   name: string;
-  purpose?: "manual" | "combat-retry";
+  /** Missing only on legacy rows, which readers normalize to `manual`. */
+  purpose?: ProductRuntimeCheckpointPurposeV1;
+  /** Required for combat/milestone lineage; forbidden for other purposes. */
   subjectKey?: string | null;
   stateJson: string;
   stateHash: string;

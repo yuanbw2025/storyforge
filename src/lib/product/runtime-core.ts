@@ -8,7 +8,7 @@ import { normalizeProductRuntimeCommandIdV1 } from "./runtime-command-id";
 import { assertProductRuntimeIntegerV1, isProductRuntimeJsonObjectV1, stableProductRuntimeJsonV1, type ProductRuntimeJsonObjectV1 } from "./runtime-values";
 import { parseNarrativeCondition, parseNarrativeEffects, evaluateNarrativeCondition, applyNarrativeEffects } from "../narrative/blueprint";
 import { transactionTablesForReferenceCascade } from "../registry/lifecycle";
-import { type ProductRuntimeKind, type ProductRuntimeState, type FrozenNarrativeBeat, NARRATIVE_BEAT_KINDS, type FrozenNarrativeChoice, type ProductNarrativeRuntimeNodeSnapshot, NARRATIVE_NODE_KINDS, type ProductNarrativeRuntimeState, NARRATIVE_MODULE_KINDS, type NarrativeChoiceHistoryEntry, type RuntimeAttributes, type RuntimeEntityState, RUNTIME_ENTITY_KINDS, RUNTIME_LIFECYCLE_STATUSES, type RuntimeMemory, type ProductRuntimeEvent, PRODUCT_RUNTIME_EVENT_TYPES, type ProductRuntimeSession, PRODUCT_RUNTIME_KINDS, EMPTY_PRODUCT_RUNTIME_STATE, type ProductRuntimePackageV1, type ProductRuntimeEventType, type ProductRelease, type ProductBuildRecordV1, type ProductProductionRecordV1, type ProductProductionBriefRecordV1, type ProductRuntimeCheckpoint } from "../types";
+import { type ProductRuntimeKind, type ProductRuntimeState, type FrozenNarrativeBeat, NARRATIVE_BEAT_KINDS, type FrozenNarrativeChoice, type ProductNarrativeRuntimeNodeSnapshot, NARRATIVE_NODE_KINDS, type ProductNarrativeRuntimeState, NARRATIVE_MODULE_KINDS, type NarrativeChoiceHistoryEntry, type RuntimeAttributes, type RuntimeEntityState, RUNTIME_ENTITY_KINDS, RUNTIME_LIFECYCLE_STATUSES, type RuntimeMemory, type ProductRuntimeEvent, PRODUCT_RUNTIME_EVENT_TYPES, type ProductRuntimeSession, PRODUCT_RUNTIME_KINDS, EMPTY_PRODUCT_RUNTIME_STATE, type ProductRuntimePackageV1, type ProductRuntimeEventType, type ProductRelease, type ProductBuildRecordV1, type ProductProductionRecordV1, type ProductProductionBriefRecordV1, type ProductRuntimeCheckpoint, PRODUCT_RUNTIME_CHECKPOINT_PURPOSES_V1, type ProductRuntimeCheckpointPurposeV1 } from "../types";
 import { verifyProductReleaseManifestV1 } from "../product-production/runtime-package";
 import { verifyProductRuntimeSource, verifyProductRuntimeSessionSourceV1 } from "../product-production/preview-source";
 import {
@@ -1713,6 +1713,136 @@ export async function hashStateJson(stateJson: string): Promise<string> {
   ).join("");
 }
 
+const PRODUCT_RUNTIME_CHECKPOINT_SUBJECT_PURPOSES_V1 = new Set<ProductRuntimeCheckpointPurposeV1>([
+  "combat-retry",
+  "milestone",
+]);
+
+/**
+ * Normalizes the only legacy checkpoint shape: a missing purpose is `manual`.
+ * Product-specific callers still own validation of what an encounter or
+ * milestone key refers to; this shared boundary owns the purpose/key pairing.
+ */
+export function normalizeProductRuntimeCheckpointPurposeV1(input: {
+  purpose?: unknown;
+  subjectKey?: unknown;
+}): {
+  purpose: ProductRuntimeCheckpointPurposeV1;
+  subjectKey: string | null;
+} {
+  const rawPurpose = input.purpose;
+  const purpose = rawPurpose === undefined
+    ? "manual"
+    : typeof rawPurpose === "string"
+      && PRODUCT_RUNTIME_CHECKPOINT_PURPOSES_V1.includes(
+        rawPurpose as ProductRuntimeCheckpointPurposeV1,
+      )
+      ? rawPurpose as ProductRuntimeCheckpointPurposeV1
+      : null;
+  if (!purpose) throw new Error("检查点用途无效。");
+
+  const rawSubjectKey = input.subjectKey;
+  const subjectKey = rawSubjectKey == null
+    ? null
+    : typeof rawSubjectKey === "string"
+      ? rawSubjectKey.trim() || null
+      : null;
+  if (rawSubjectKey != null && typeof rawSubjectKey !== "string") {
+    throw new Error("检查点对象必须是字符串。");
+  }
+  if (subjectKey && subjectKey.length > 200) {
+    throw new Error("检查点对象不能超过 200 个字符。");
+  }
+
+  const requiresSubject = PRODUCT_RUNTIME_CHECKPOINT_SUBJECT_PURPOSES_V1.has(purpose);
+  if (requiresSubject && !subjectKey) {
+    throw new Error(`${purpose} 检查点必须绑定有效对象。`);
+  }
+  if (!requiresSubject && subjectKey != null) {
+    throw new Error(`${purpose} 检查点不能绑定对象。`);
+  }
+  return { purpose, subjectKey };
+}
+
+export type NormalizedProductRuntimeCheckpointV1 = ProductRuntimeCheckpoint & {
+  worldGroupId: number | null;
+  purpose: ProductRuntimeCheckpointPurposeV1;
+  subjectKey: string | null;
+};
+
+/** Strict persisted-row parser used by readers before trusting checkpoint data. */
+export function parseProductRuntimeCheckpointV1(
+  value: unknown,
+): NormalizedProductRuntimeCheckpointV1 {
+  if (!isObject(value)) throw new Error("检查点记录必须是对象。");
+  const id = value.id === undefined
+    ? undefined
+    : assertFiniteInteger(value.id, "检查点 id", 1, Number.MAX_SAFE_INTEGER);
+  const projectId = assertFiniteInteger(
+    value.projectId,
+    "检查点 projectId",
+    1,
+    Number.MAX_SAFE_INTEGER,
+  );
+  const worldGroupId = value.worldGroupId == null
+    ? null
+    : assertFiniteInteger(
+      value.worldGroupId,
+      "检查点 worldGroupId",
+      1,
+      Number.MAX_SAFE_INTEGER,
+    );
+  const sessionId = assertFiniteInteger(
+    value.sessionId,
+    "检查点 sessionId",
+    1,
+    Number.MAX_SAFE_INTEGER,
+  );
+  const throughSequence = assertFiniteInteger(
+    value.throughSequence,
+    "检查点序号",
+    0,
+    Number.MAX_SAFE_INTEGER,
+  );
+  if (typeof value.name !== "string" || !value.name.trim() || value.name !== value.name.trim()
+    || value.name.length > 200) {
+    throw new Error("检查点名称无效。");
+  }
+  const normalizedPurpose = normalizeProductRuntimeCheckpointPurposeV1({
+    purpose: value.purpose,
+    subjectKey: value.subjectKey,
+  });
+  if (value.subjectKey != null && value.subjectKey !== normalizedPurpose.subjectKey) {
+    throw new Error("检查点对象不是规范字符串。");
+  }
+  if (typeof value.stateJson !== "string") throw new Error("检查点状态正文无效。");
+  const state = parseProductRuntimeState(value.stateJson);
+  if (state.lastSequence !== throughSequence) {
+    throw new Error("检查点状态序号与 throughSequence 不一致。");
+  }
+  if (typeof value.stateHash !== "string" || !/^[a-f0-9]{64}$/.test(value.stateHash)) {
+    throw new Error("检查点状态 Hash 无效。");
+  }
+  const createdAt = assertFiniteInteger(
+    value.createdAt,
+    "检查点创建时间",
+    0,
+    Number.MAX_SAFE_INTEGER,
+  );
+  return {
+    ...(id == null ? {} : { id }),
+    projectId,
+    worldGroupId,
+    sessionId,
+    throughSequence,
+    name: value.name,
+    ...normalizedPurpose,
+    stateJson: value.stateJson,
+    stateHash: value.stateHash,
+    createdAt,
+  };
+}
+
 export async function createProductRuntimeCheckpoint(input: {
   sessionId: number;
   name: string;
@@ -1720,74 +1850,89 @@ export async function createProductRuntimeCheckpoint(input: {
   purpose?: ProductRuntimeCheckpoint["purpose"];
   subjectKey?: string | null;
 }): Promise<ProductRuntimeCheckpoint> {
-  const session = await db.productRuntimeSessions.get(input.sessionId);
-  if (!session) throw new Error("产品运行会话不存在。");
-  const events = await readSessionEvents(session);
-  const latest = events.reduce(
-    (max, event) => Math.max(max, event.sequence),
-    0,
-  );
-  const throughSequence = input.throughSequence ?? latest;
-  if (
-    !Number.isInteger(throughSequence) ||
-    throughSequence < 0 ||
-    throughSequence > latest
-  ) {
-    throw new Error("检查点序号不在会话事件范围内。");
+  if (!Number.isInteger(input.sessionId) || input.sessionId < 1) {
+    throw new Error("检查点 sessionId 无效。");
   }
-  const state = replayProductRuntimeEvents(
-    parseProductRuntimeState(session.initialStateJson),
-    events,
-    throughSequence,
+  if (typeof input.name !== "string") throw new Error("检查点名称无效。");
+  const purpose = normalizeProductRuntimeCheckpointPurposeV1(input);
+  return db.transaction(
+    "rw",
+    db.productRuntimeSessions,
+    db.productRuntimeEvents,
+    db.productRuntimeCheckpoints,
+    async () => {
+      const session = await db.productRuntimeSessions.get(input.sessionId);
+      if (!session) throw new Error("产品运行会话不存在。");
+      const events = await readSessionEvents(session);
+      const latest = events.reduce(
+        (max, event) => Math.max(max, event.sequence),
+        0,
+      );
+      const throughSequence = input.throughSequence ?? latest;
+      if (
+        !Number.isInteger(throughSequence) ||
+        throughSequence < 0 ||
+        throughSequence > latest
+      ) {
+        throw new Error("检查点序号不在会话事件范围内。");
+      }
+      const state = replayProductRuntimeEvents(
+        parseProductRuntimeState(session.initialStateJson),
+        events,
+        throughSequence,
+      );
+      if (state.lastSequence !== throughSequence) {
+        throw new Error("检查点序号不是可重放的会话事件边界。");
+      }
+      const stateJson = JSON.stringify(state);
+      const name = input.name.trim() || `检查点 ${throughSequence}`;
+      if (name.length > 200) throw new Error("检查点名称不能超过 200 个字符。");
+      const checkpoint: ProductRuntimeCheckpoint = {
+        projectId: session.projectId,
+        worldGroupId: session.worldGroupId ?? null,
+        sessionId: session.id!,
+        throughSequence,
+        name,
+        ...purpose,
+        stateJson,
+        stateHash: await hashStateJson(stateJson),
+        createdAt: Date.now(),
+      };
+      parseProductRuntimeCheckpointV1(checkpoint);
+      checkpoint.id = (await db.productRuntimeCheckpoints.add(checkpoint)) as number;
+      return checkpoint;
+    },
   );
-  const stateJson = JSON.stringify(state);
-  const name = input.name.trim() || `检查点 ${throughSequence}`;
-  if (name.length > 200) throw new Error("检查点名称不能超过 200 个字符。");
-  const purpose = input.purpose ?? "manual";
-  const subjectKey = input.subjectKey?.trim() || null;
-  if (purpose === "combat-retry") {
-    if (!subjectKey || subjectKey.length > 200)
-      throw new Error("战前重试检查点必须绑定有效对象。");
-  } else if (subjectKey != null) {
-    throw new Error("手动检查点不能绑定对象。");
-  }
-  const checkpoint: ProductRuntimeCheckpoint = {
-    projectId: session.projectId,
-    worldGroupId: session.worldGroupId ?? null,
-    sessionId: session.id!,
-    throughSequence,
-    name,
-    purpose,
-    subjectKey,
-    stateJson,
-    stateHash: await hashStateJson(stateJson),
-    createdAt: Date.now(),
-  };
-  checkpoint.id = (await db.productRuntimeCheckpoints.add(checkpoint)) as number;
-  return checkpoint;
 }
 
 export async function verifyProductRuntimeCheckpoint(
   checkpointId: number,
 ): Promise<boolean> {
-  const checkpoint = await db.productRuntimeCheckpoints.get(checkpointId);
-  if (!checkpoint) return false;
-  const session = await db.productRuntimeSessions.get(checkpoint.sessionId);
-  if (
-    !session ||
-    session.projectId !== checkpoint.projectId ||
-    (session.worldGroupId ?? null) !== (checkpoint.worldGroupId ?? null)
-  )
+  try {
+    const stored = await db.productRuntimeCheckpoints.get(checkpointId);
+    if (!stored) return false;
+    const checkpoint = parseProductRuntimeCheckpointV1(stored);
+    const session = await db.productRuntimeSessions.get(checkpoint.sessionId);
+    if (
+      !session ||
+      session.projectId !== checkpoint.projectId ||
+      (session.worldGroupId ?? null) !== checkpoint.worldGroupId
+    ) return false;
+    const latestSequence = await readLatestSessionEventSequenceV1(checkpoint.sessionId);
+    if (checkpoint.throughSequence > latestSequence) return false;
+    if (await hashStateJson(checkpoint.stateJson) !== checkpoint.stateHash) return false;
+    const replayed = await readProductRuntimeState(
+      checkpoint.sessionId,
+      checkpoint.throughSequence,
+    );
+    const stateJson = JSON.stringify(replayed);
+    return (
+      stateJson === checkpoint.stateJson &&
+      (await hashStateJson(stateJson)) === checkpoint.stateHash
+    );
+  } catch {
     return false;
-  const replayed = await readProductRuntimeState(
-    checkpoint.sessionId,
-    checkpoint.throughSequence,
-  );
-  const stateJson = JSON.stringify(replayed);
-  return (
-    stateJson === checkpoint.stateJson &&
-    (await hashStateJson(stateJson)) === checkpoint.stateHash
-  );
+  }
 }
 
 export interface BranchProductRuntimeSessionInputV1 {

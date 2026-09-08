@@ -921,21 +921,24 @@ export async function seedFullProject() {
     payloadJson: JSON.stringify({ text: '林惊羽踏入青云山门。' }),
     createdAt: now,
   })
+  const runtimeCheckpointStateJson = JSON.stringify({
+    version: 1,
+    clock: 0,
+    entities: {},
+    memories: [],
+    narratives: [{ eventSequence: 1, text: '林惊羽踏入青云山门。' }],
+    lastSequence: 1,
+  })
   await db.productRuntimeCheckpoints.add({
     projectId,
     worldGroupId: wgA,
     sessionId: runtimeChild,
     throughSequence: 1,
     name: '入山',
-    stateJson: JSON.stringify({
-      version: 1,
-      clock: 0,
-      entities: {},
-      memories: [],
-      narratives: [{ eventSequence: 1, text: '林惊羽踏入青云山门。' }],
-      lastSequence: 1,
-    }),
-    stateHash: 'fixture-hash',
+    purpose: 'manual',
+    subjectKey: null,
+    stateJson: runtimeCheckpointStateJson,
+    stateHash: await sha256Text(runtimeCheckpointStateJson),
     createdAt: now,
   })
   await db.ttrpgSessionParticipants.add({
