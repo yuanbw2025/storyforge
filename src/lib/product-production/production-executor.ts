@@ -81,6 +81,7 @@ import {
   textAdventureActSceneKeysV1,
   textAdventureNarrativeSkeletonV1,
   textAdventureSceneScriptPartSceneKeysV1,
+  type TextAdventureSceneScriptBundleArtifactV1,
 } from '../adventure/scene-script'
 import {
   applyTextAdventureDialoguePassV1,
@@ -1388,7 +1389,7 @@ export function legalizeProductionModelProtocolDefaultsV1(
       next[field] = value
       defaultedFields.push(`${field}<-frozen-scene-script-envelope`)
     }
-    const normalizeBeats = (value: unknown, path: string): unknown => {
+    const normalizeBeats = (value: unknown, path: string, stableScope: string): unknown => {
       if (!Array.isArray(value)) return value
       const decorated = value.map((beat, index) => ({ beat, index }))
       const ordered = [...decorated].sort((left, right) => {
@@ -1431,6 +1432,11 @@ export function legalizeProductionModelProtocolDefaultsV1(
           beat.speakerKey = null
           defaultedFields.push(`${path}[${index}].speakerKey<-non-dialogue-null`)
         }
+        const canonicalBeatKey = `beat.act-${sceneScriptBoundary.actIndex + 1}.part-${sceneScriptBoundary.partIndex + 1}.${stableScope}.${String(index + 1).padStart(3, '0')}`
+        if (beat.beatKey !== canonicalBeatKey) {
+          beat.beatKey = canonicalBeatKey
+          defaultedFields.push(`${path}[${index}].beatKey<-frozen-part-ordinal`)
+        }
         return beat
       })
     }
@@ -1450,7 +1456,9 @@ export function legalizeProductionModelProtocolDefaultsV1(
     if (Array.isArray(payload.scenes)) next.scenes = payload.scenes.map((scene, sceneIndex) => {
       if (!scene || typeof scene !== 'object' || Array.isArray(scene)) return scene
       const item = { ...(scene as JsonRecord) }
-      item.beats = normalizeBeats(item.beats, `scenes[${sceneIndex}].beats`)
+      item.beats = normalizeBeats(
+        item.beats, `scenes[${sceneIndex}].beats`, `scene-${String(sceneIndex + 1).padStart(2, '0')}`,
+      )
       if (Object.prototype.hasOwnProperty.call(item, 'choices')) {
         item.choices = normalizeChoices(item.choices, `scenes[${sceneIndex}].choices`)
       }
@@ -1459,7 +1467,9 @@ export function legalizeProductionModelProtocolDefaultsV1(
     if (Array.isArray(payload.endings)) next.endings = payload.endings.map((ending, endingIndex) => {
       if (!ending || typeof ending !== 'object' || Array.isArray(ending)) return ending
       const item = { ...(ending as JsonRecord) }
-      item.beats = normalizeBeats(item.beats, `endings[${endingIndex}].beats`)
+      item.beats = normalizeBeats(
+        item.beats, `endings[${endingIndex}].beats`, `ending-${String(endingIndex + 1).padStart(2, '0')}`,
+      )
       return item
     })
     if (Object.prototype.hasOwnProperty.call(payload, 'choices')) {
@@ -4580,8 +4590,8 @@ async function executeTextAdventureSceneScriptActAssemblyTask(
     storyBible.endings.map(ending => [ending.key, ending.title]),
   )
   const sceneParts = textAdventureSceneScriptPartSceneKeysV1(brief, actIndex)
-  const bundles = sceneParts.map((expectedSceneKeys, partIndex) => (
-    parseTextAdventureSceneScriptBundleArtifactV1({
+  const bundles = sceneParts.map((expectedSceneKeys, partIndex) => {
+    const parsed = parseTextAdventureSceneScriptBundleArtifactV1({
       value: artifactPayload(input, `content.scene-script.act-${actIndex + 1}.part-${partIndex + 1}`),
       brief,
       actIndex,
@@ -4592,7 +4602,28 @@ async function executeTextAdventureSceneScriptActAssemblyTask(
       endingTitles,
       expectedSceneKeys,
     })
-  ))
+    // Older accepted part artifacts may predate frozen beat ordinals. Re-key
+    // them at the deterministic act assembler so cross-part model counters
+    // can never collide, without changing prose, speaker, kind or order.
+    const canonicalizeBeats = (
+      beats: TextAdventureSceneScriptBundleArtifactV1['scenes'][number]['beats'],
+      stableScope: string,
+    ) => beats.map((beat, beatIndex) => ({
+      ...beat,
+      beatKey: `beat.act-${actIndex + 1}.part-${partIndex + 1}.${stableScope}.${String(beatIndex + 1).padStart(3, '0')}`,
+    }))
+    return {
+      ...parsed,
+      scenes: parsed.scenes.map((scene, sceneIndex) => ({
+        ...scene,
+        beats: canonicalizeBeats(scene.beats, `scene-${String(sceneIndex + 1).padStart(2, '0')}`),
+      })),
+      endings: parsed.endings.map((ending, endingIndex) => ({
+        ...ending,
+        beats: canonicalizeBeats(ending.beats, `ending-${String(endingIndex + 1).padStart(2, '0')}`),
+      })),
+    }
+  })
   const bundle = assembleTextAdventureSceneScriptActV1({
     brief,
     actIndex,

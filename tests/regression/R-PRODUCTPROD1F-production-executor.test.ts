@@ -1728,11 +1728,17 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
       actKey: 'act.2',
       moduleTitle: '潮钟群岛：最后的灯火',
       scenes: [{
-        beats: [{ beatKey: 'beat.1', speakerKey: null, order: 0 }, { beatKey: 'beat.2', order: 1 }],
+        beats: [
+          { beatKey: 'beat.act-2.part-1.scene-01.001', speakerKey: null, order: 0 },
+          { beatKey: 'beat.act-2.part-1.scene-01.002', order: 1 },
+        ],
         choices: [expect.not.objectContaining({ unavailableReason: expect.anything() })],
       }],
       choices: [expect.not.objectContaining({ unavailableReason: expect.anything() })],
-      endings: [{ beats: [{ beatKey: 'beat.end.1', speakerKey: null }, { beatKey: 'beat.end.2' }] }],
+      endings: [{ beats: [
+        { beatKey: 'beat.act-2.part-1.ending-01.001', speakerKey: null },
+        { beatKey: 'beat.act-2.part-1.ending-01.002' },
+      ] }],
     })
     expect(sceneScript.defaultedFields).toEqual([
       'schema<-frozen-scene-script-envelope',
@@ -1742,12 +1748,16 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
       'scenes[0].beats<-stable-order',
       'scenes[0].beats[0].order<-canonical-position',
       'scenes[0].beats[0].speakerKey<-non-dialogue-null',
+      'scenes[0].beats[0].beatKey<-frozen-part-ordinal',
       'scenes[0].beats[1].order<-canonical-position',
+      'scenes[0].beats[1].beatKey<-frozen-part-ordinal',
       'scenes[0].choices[0].unavailableReason<-null-as-omitted',
       'endings[0].beats<-stable-order',
       'endings[0].beats[0].order<-canonical-position',
       'endings[0].beats[0].speakerKey<-non-dialogue-null',
+      'endings[0].beats[0].beatKey<-frozen-part-ordinal',
       'endings[0].beats[1].order<-canonical-position',
+      'endings[0].beats[1].beatKey<-frozen-part-ordinal',
       'choices[0].unavailableReason<-null-as-omitted',
     ])
 
