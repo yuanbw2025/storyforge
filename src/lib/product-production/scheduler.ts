@@ -1229,6 +1229,21 @@ export function textAdventureNarrativeRepairPreservesFrozenMediaV1(issues: unkno
   })
 }
 
+async function latestFailedTextAdventureQualityReviewV1(
+  buildId: number,
+  beforeControlEpoch: number,
+): Promise<Record<string, unknown> | null> {
+  const rows = (await db.productBuildArtifacts.where('buildId').equals(buildId).toArray())
+    .filter(row => row.artifactKey === 'quality.adventure-review'
+      && row.controlEpoch < beforeControlEpoch && isSha256Hash(row.contentHash))
+    .sort((left, right) => right.controlEpoch - left.controlEpoch || right.version - left.version)
+  for (const row of rows) {
+    const payload = parsedObject(row.payloadJson)
+    if (payload.passed === false && await hashProductProductionValueV2(payload) === row.contentHash) return payload
+  }
+  return null
+}
+
 /**
  * A deterministic integration blocker can prove that an accepted model
  * artifact is unsuitable. Recovery must invalidate that artifact and every
@@ -1293,6 +1308,13 @@ async function recoveryInvalidatedTaskKeys(input: {
     .filter(row => row.controlEpoch === input.previousControlEpoch
       && (row.status === 'accepted' || row.status === 'carried-forward'))
     .map(row => row.artifactKey))
+  const qualityRepairCause = textAdventureQualityRepairCause(input.failureJson)
+  const failedQualityReview = qualityRepairCause
+    ? await latestFailedTextAdventureQualityReviewV1(input.buildId, input.plan.controlEpoch)
+    : null
+  const preserveFrozenMedia = textAdventureNarrativeRepairPreservesFrozenMediaV1(
+    failedQualityReview?.issues,
+  )
   const unresolvedFailureTaskKeys = [...textAdventureTaskFailures(input.failureJson).keys()]
     .filter(taskKey => {
       const task = input.plan.tasks.find(candidate => candidate.taskKey === taskKey)
@@ -1305,22 +1327,15 @@ async function recoveryInvalidatedTaskKeys(input: {
       expanded = false
       for (const task of input.plan.tasks) {
         if (invalidated.has(task.taskKey) || !task.dependsOn.some(key => invalidated.has(key))) continue
+        if (preserveFrozenMedia && task.taskKey === 'media.requirements') continue
         invalidated.add(task.taskKey)
         expanded = true
       }
     }
     return invalidated
   }
-  const failure = textAdventureQualityRepairCause(input.failureJson)
-  if (!failure) return new Set()
-  const reviewRows = (await db.productBuildArtifacts.where('buildId').equals(input.buildId).toArray())
-    .filter(row => row.controlEpoch === input.previousControlEpoch
-      && row.artifactKey === 'quality.adventure-review'
-      && (row.status === 'accepted' || row.status === 'carried-forward'))
-    .sort((left, right) => right.version - left.version)
-  const review = reviewRows[0]
-  const reviewPayload = review ? parsedObject(review.payloadJson) : {}
-  if (!review || reviewPayload.passed !== false) return new Set()
+  if (!qualityRepairCause || !failedQualityReview) return new Set()
+  const reviewPayload = failedQualityReview
   const taskByArtifactKey = new Map(input.plan.tasks.flatMap(task => (
     task.outputArtifactKeys.map(artifactKey => [artifactKey, task.taskKey] as const)
   )))
@@ -1332,7 +1347,6 @@ async function recoveryInvalidatedTaskKeys(input: {
           ? [issue.artifactKey] : []
       })
     : []
-  const preserveFrozenMedia = textAdventureNarrativeRepairPreservesFrozenMediaV1(reviewPayload.issues)
   const sceneScriptTaskKeys = [
     'content.scene-script.act-1', 'content.scene-script.act-2', 'content.scene-script.act-3',
   ]

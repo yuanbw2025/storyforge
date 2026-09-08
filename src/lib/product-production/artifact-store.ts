@@ -168,12 +168,22 @@ export async function carryForwardProductBuildArtifactsToEpochV1(input: {
       throw new Error('[product-production-artifact] carry-forward Build/epoch 不可写')
     }
     const allRows = await db.productBuildArtifacts.where('buildId').equals(build.id!).toArray()
-    const sourceRows = allRows.filter(row => keys.includes(row.artifactKey)
-      && row.controlEpoch === input.fromControlEpoch
-      && (row.status === 'accepted' || row.status === 'carried-forward'))
-    if (new Set(sourceRows.map(row => row.artifactKey)).size !== sourceRows.length) {
-      throw new Error('[product-production-artifact] carry-forward 来源 key 不唯一')
-    }
+    const sourceRows = keys.flatMap(artifactKey => {
+      const eligible = allRows.filter(row => row.artifactKey === artifactKey
+        && row.controlEpoch <= input.fromControlEpoch
+        && isSha256Hash(row.contentHash)
+        && isSha256Hash(row.producerReceiptHash ?? ''))
+      const immediate = eligible.filter(row => row.controlEpoch === input.fromControlEpoch
+        && (row.status === 'accepted' || row.status === 'carried-forward'))
+      if (immediate.length > 1) {
+        throw new Error(`[product-production-artifact] carry-forward 当前来源 key 不唯一:${artifactKey}`)
+      }
+      const source = immediate[0] ?? eligible
+        .filter(row => row.controlEpoch < input.fromControlEpoch
+          && (row.status === 'accepted' || row.status === 'carried-forward' || row.status === 'invalid'))
+        .sort((left, right) => right.controlEpoch - left.controlEpoch || right.version - left.version)[0]
+      return source ? [source] : []
+    })
     const carried: ProductBuildArtifactRecordV1[] = []
     const now = Date.now()
     for (const source of sourceRows) {

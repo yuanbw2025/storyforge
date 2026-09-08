@@ -5,6 +5,10 @@ import { openWorldSemanticResourceCatalogV1 } from '../../src/lib/context-gatewa
 import { executeProductProductionCommand } from '../../src/lib/product-production/commands'
 import { draftProductProductionBriefV3, suggestProductStartingPoints } from '../../src/lib/product-production/consultation'
 import { hashProductProductionValueV2 } from '../../src/lib/product-production/hash'
+import {
+  acceptProductBuildArtifact,
+  carryForwardProductBuildArtifactsToEpochV1,
+} from '../../src/lib/product-production/artifact-store'
 import { createProductProductionPlanV3 } from '../../src/lib/product-production/plan'
 import {
   assertProductProductionBudgetLedgerV1,
@@ -165,6 +169,34 @@ describe('R-PRODUCTPROD-1D · durable bounded DAG scheduler', () => {
       severity: 'blocking', artifactKey: 'content.adventure-side-quests',
       detail: '支线地点错位。', recommendation: '重写。',
     }])).toBe(false)
+  })
+
+  it('连续恢复中间 epoch 尚未签收时，可按 receipt 与 hash 回溯最近的已验证工件', async () => {
+    const f = await fixture('historical-epoch-carry')
+    const production = (await db.productProductions.get(f.productionId))!
+    const build = (await db.productBuilds.where('[productionId+buildNumber]')
+      .equals([f.productionId, production.currentBuildNumber!]).first())!
+    const payload = { schema: 'fixture.historical-media', version: 1, value: '已验证媒资需求' }
+    const source = await acceptProductBuildArtifact({
+      scope: f.scope, buildId: build.id!, controlEpoch: build.controlEpoch,
+      artifactKey: 'media.requirements', kind: 'asset-manifest', payload,
+      inputHash: 'a'.repeat(64), producerReceiptHash: 'b'.repeat(64),
+    })
+    await db.productBuildArtifacts.update(source.id!, { status: 'invalid' })
+    await db.productBuilds.update(build.id!, { controlEpoch: build.controlEpoch + 2 })
+
+    const carried = await carryForwardProductBuildArtifactsToEpochV1({
+      scope: f.scope, buildId: build.id!,
+      fromControlEpoch: build.controlEpoch + 1,
+      toControlEpoch: build.controlEpoch + 2,
+      artifactKeys: ['media.requirements'],
+    })
+    expect(carried).toHaveLength(1)
+    expect(carried[0]).toMatchObject({
+      artifactKey: 'media.requirements', status: 'carried-forward',
+      controlEpoch: build.controlEpoch + 2, contentHash: source.contentHash,
+      carriedFrom: { version: source.version, contentHash: source.contentHash },
+    })
   })
 
   beforeAll(async () => { await db.delete(); await db.open() })
