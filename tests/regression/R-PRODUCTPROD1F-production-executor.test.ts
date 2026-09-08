@@ -1194,6 +1194,7 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
       {
         narrativeArcSceneKeys: [['scene.001', 'scene.002'], ['scene.003'], ['scene.004']],
         narrativeArcLocationOrdinals: [1, 1, 2, 2],
+        narrativeArcEndingKeys: ['ending.open', 'ending.hidden'],
       },
     )
     expect((frozenArcLocations.payload.acts as Array<{
@@ -1202,6 +1203,11 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
     expect(frozenArcLocations.defaultedFields).toContain(
       'acts[0].sceneCards[0].locationOrdinal<-frozen-location-plan',
     )
+    expect(frozenArcLocations.payload.endings).toEqual([
+      { endingKey: 'ending.open', sceneKey: 'scene.004' },
+      { endingKey: 'ending.hidden', sceneKey: 'scene.004' },
+    ])
+    expect(frozenArcLocations.defaultedFields).toContain('endings<-frozen-narrative-skeleton')
 
     const frozenArcLocationBeforeLaterIdentityFailure = legalizeProductionModelProtocolDefaultsV1(
       'content.narrative-arc-scenes',

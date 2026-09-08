@@ -486,6 +486,7 @@ export function legalizeProductionModelProtocolDefaultsV1(
     allowedSourceResourceKeys?: readonly string[]
     narrativeArcSceneKeys?: readonly (readonly string[])[]
     narrativeArcLocationOrdinals?: readonly number[]
+    narrativeArcEndingKeys?: readonly string[]
     narrativeDecisionSceneKeys?: readonly string[]
     questSceneCastPlan?: readonly {
       sceneKey: string
@@ -626,6 +627,18 @@ export function legalizeProductionModelProtocolDefaultsV1(
   }
   if (taskKey === 'content.narrative-arc-scenes' && options.narrativeArcSceneKeys?.length === 3) {
     const next: JsonRecord = { ...payload }
+    if (!Object.prototype.hasOwnProperty.call(next, 'endings')
+      && options.narrativeArcEndingKeys?.length) {
+      const frozenSceneKeys = options.narrativeArcSceneKeys.flat()
+      const finalSceneKey = frozenSceneKeys[frozenSceneKeys.length - 1]
+      if (finalSceneKey) {
+        next.endings = options.narrativeArcEndingKeys.map(endingKey => ({
+          endingKey,
+          sceneKey: finalSceneKey,
+        }))
+        defaultedFields.push('endings<-frozen-narrative-skeleton')
+      }
+    }
     if (Array.isArray(payload.acts) && payload.acts.length === 3) {
       const acts = payload.acts.map((act, actIndex) => {
         if (!act || typeof act !== 'object' || Array.isArray(act)) return act
@@ -2479,6 +2492,9 @@ async function executeModelTask(input: ProductProductionTaskExecutionInputV1, op
           textAdventureLocationTitles.length
             || options.brief.textAdventure.narrative.targetLocationCount,
         ).map(entry => entry.locationOrdinal)
+      : undefined,
+    narrativeArcEndingKeys: options.brief.textAdventure
+      ? textAdventureNarrativeSkeletonV1(options.brief).endingKeys
       : undefined,
     narrativeDecisionSceneKeys: options.brief.textAdventure
       ? textAdventureNarrativeSkeletonV1(options.brief).sceneKeys.slice(
