@@ -3505,8 +3505,14 @@ async function executeVisualTask(input: ProductProductionTaskExecutionInputV1, o
         if (!['warning', 'blocking'].includes(String(issue.severity))) {
           fail(`视觉返修反馈严重性无效:${artifactKey}`)
         }
-        return `${issueIndex + 1}. [${text(issue.severity, 'severity', 20)} / ${text(issue.category, 'category', 50)}] ` +
-          `上轮问题：${text(issue.detail, 'detail', 1_000)}；修复要求：${text(issue.recommendation, 'recommendation', 1_000)}`
+        const category = text(issue.category, 'category', 50)
+        const detail = text(issue.detail, 'detail', 1_000)
+        const recommendation = text(issue.recommendation, 'recommendation', 1_000)
+        const noGlyphOverride = category === 'text' || /文字|字符|汉字|字形|伪字/.test(detail)
+          ? '；最高优先约束：完全去除可读文字、伪文字和类似字符的字形，不得用虚构文字替代；允许不构成字符的纯几何纹样'
+          : ''
+        return `${issueIndex + 1}. [${text(issue.severity, 'severity', 20)} / ${category}] ` +
+          `上轮问题：${detail}；修复要求：${recommendation}${noGlyphOverride}`
       })
       repairInstruction = `\n本次是受 Visual QA 约束的返修，不是自由变体。禁止重复上轮已识别缺陷。` +
         `逐项落实以下审查意见，并继续遵守原始需求、视觉圣经和角色锚点：\n${issueInstructions.join('\n')}`
