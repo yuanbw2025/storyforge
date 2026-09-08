@@ -1264,6 +1264,13 @@ async function recoveryInvalidatedTaskKeys(input: {
   const previousFailure = recovery.previousFailure && typeof recovery.previousFailure === 'object'
     && !Array.isArray(recovery.previousFailure)
     ? recovery.previousFailure as Record<string, unknown> : null
+  if (recovery.blockerKey === 'media.anchor-author-gate'
+    && recoveryResolution?.action === 'confirm-character-anchors') {
+    // Confirming the frozen visual bible only unlocks downstream media work.
+    // Append-only narrative repair history must not be interpreted as a new
+    // invalidation root when this unrelated author gate advances the epoch.
+    return new Set()
+  }
   if (recovery.blockerKey === 'content.source-sufficiency'
     && recoveryResolution?.action === 'retry'
     && previousFailure?.taskKey === 'source.author-gate') {
