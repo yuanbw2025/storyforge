@@ -111,16 +111,23 @@ function collectDialogueInputs(bundles: readonly TextAdventureSceneScriptBundleA
   return { beats, choices }
 }
 
-function issueTags(value: unknown, label: string, verdict: 'keep' | 'revise'): TextAdventureDialogueIssueV1[] {
+function issueTags(value: unknown, label: string): TextAdventureDialogueIssueV1[] {
   const parsed = array(value, label, 1, TEXT_ADVENTURE_DIALOGUE_ISSUES_V1.length).map((item, index) => (
     enumValue(item, TEXT_ADVENTURE_DIALOGUE_ISSUES_V1, `${label}[${index}]`)
   ))
   if (new Set(parsed).size !== parsed.length) fail(`${label} 不允许重复`)
-  if (verdict === 'keep' && (parsed.length !== 1 || parsed[0] !== 'none')) {
-    fail(`${label} keep 必须且只能使用 none`)
-  }
-  if (verdict === 'revise' && parsed.includes('none')) fail(`${label} revise 不得使用 none`)
   return parsed
+}
+
+function canonicalReviewRationale(
+  rationale: string,
+  suppliedIssueTags: TextAdventureDialogueIssueV1[],
+  verdict: 'keep' | 'revise',
+): string {
+  if (verdict === 'revise' || suppliedIssueTags.every(tag => tag === 'none')) return rationale
+  const unresolved = suppliedIssueTags.filter(tag => tag !== 'none')
+  const suffix = `（输入标记 ${unresolved.join('、')}，但未产生有效改写；规则保留冻结原文并交由独立质量门复验。）`
+  return `${rationale.slice(0, Math.max(0, 2_000 - suffix.length))}${suffix}`
 }
 
 export function parseTextAdventureDialoguePassArtifactV1(input: {
@@ -247,15 +254,21 @@ export function parseTextAdventureDialoguePassArtifactV1(input: {
             : sourceBeat.text)
       const noOpRevision = requestedVerdict === 'revise' && revisedText === sourceBeat.text
       const verdict = noOpRevision ? 'keep' as const : requestedVerdict
+      const suppliedIssueTags = issueTags(item.issueTags, `beatReviews[${index}].issueTags`)
+      if (requestedVerdict === 'revise' && suppliedIssueTags.includes('none')) {
+        fail(`beatReviews[${index}].issueTags revise 不得使用 none`)
+      }
+      const rationale = text(item.rationale, `beatReviews[${index}].rationale`, 2_000)
       return {
         beatKey,
         speakerKey,
         verdict,
-        // Validate tags against the editor's requested verdict. A no-op revise
-        // becomes a flagged keep: the issue evidence remains visible to the
-        // independent quality reviewer, while revised counts remain truthful.
-        issueTags: issueTags(item.issueTags, `beatReviews[${index}].issueTags`, requestedVerdict),
-        rationale: text(item.rationale, `beatReviews[${index}].rationale`, 2_000),
+        // Canonical artifacts must be parse-idempotent: a keep can only carry
+        // `none`. Preserve unresolved provider evidence in rationale instead
+        // of emitting the former invalid keep + issueTags combination.
+        issueTags: verdict === 'keep'
+          ? ['none'] as TextAdventureDialogueIssueV1[] : suppliedIssueTags,
+        rationale: canonicalReviewRationale(rationale, suppliedIssueTags, verdict),
         revisedText,
       }
     })
@@ -320,11 +333,17 @@ export function parseTextAdventureDialoguePassArtifactV1(input: {
             : sourceChoice.description)
       const unchanged = revisedText === sourceChoice.text && revisedDescription === sourceChoice.description
       const verdict = requestedVerdict === 'revise' && unchanged ? 'keep' as const : requestedVerdict
+      const suppliedIssueTags = issueTags(item.issueTags, `choiceReviews[${index}].issueTags`)
+      if (requestedVerdict === 'revise' && suppliedIssueTags.includes('none')) {
+        fail(`choiceReviews[${index}].issueTags revise 不得使用 none`)
+      }
+      const rationale = text(item.rationale, `choiceReviews[${index}].rationale`, 2_000)
       return {
         choiceKey,
         verdict,
-        issueTags: issueTags(item.issueTags, `choiceReviews[${index}].issueTags`, requestedVerdict),
-        rationale: text(item.rationale, `choiceReviews[${index}].rationale`, 2_000),
+        issueTags: verdict === 'keep'
+          ? ['none'] as TextAdventureDialogueIssueV1[] : suppliedIssueTags,
+        rationale: canonicalReviewRationale(rationale, suppliedIssueTags, verdict),
         revisedText,
         revisedDescription,
       }

@@ -561,8 +561,13 @@ describe('TEXTADV-3 · 专业生产工件合同', () => {
     const normalizedNoOp = parseTextAdventureDialoguePassArtifactV1({
       value: flaggedNoOp, brief: inputBrief, cast, bundles: [bundles[0]],
     })
-    expect(normalizedNoOp.beatReviews[0]).toMatchObject({ verdict: 'keep', issueTags: ['exposition'] })
-    expect(normalizedNoOp.choiceReviews[0]).toMatchObject({ verdict: 'keep', issueTags: ['player-intent'] })
+    expect(normalizedNoOp.beatReviews[0]).toMatchObject({ verdict: 'keep', issueTags: ['none'] })
+    expect(normalizedNoOp.beatReviews[0].rationale).toContain('exposition')
+    expect(normalizedNoOp.choiceReviews[0]).toMatchObject({ verdict: 'keep', issueTags: ['none'] })
+    expect(normalizedNoOp.choiceReviews[0].rationale).toContain('player-intent')
+    expect(parseTextAdventureDialoguePassArtifactV1({
+      value: normalizedNoOp, brief: inputBrief, cast, bundles: [bundles[0]],
+    })).toEqual(normalizedNoOp)
     const revisedBundles = [
       ...applyTextAdventureDialoguePassV1({ bundles: [bundles[0]], dialoguePass }),
       bundles[1], bundles[2],
