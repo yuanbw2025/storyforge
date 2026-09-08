@@ -86,6 +86,10 @@ describe('R-TEXTADV2-production · 文字冒险正式生产契约与工作台', 
       promptVersion: 'text-adventure-cast-bible-v2',
       maxOutputTokens: 16_000,
     })
+    expect(getAgentSkillV1('text-adventure.narrative-design.v1')).toMatchObject({
+      agentId: 'text-adventure-narrative-designer',
+      promptVersion: 'text-adventure-narrative-design-v2',
+    })
     const briefHash = await hashProductProductionValueV2(brief)
     const plan = await createProductProductionPlanV3({ buildNumber: 1, briefHash, brief })
     const taskByKey = new Map(plan.tasks.map(task => [task.taskKey, task]))

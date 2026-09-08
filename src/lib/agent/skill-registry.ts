@@ -3172,7 +3172,7 @@ export const AGENT_SKILLS = [
     defaultForAgent: true,
     label: '文字冒险叙事弧、场景卡与选择回响设计',
     owner: 'text-adventure-narrative-designer',
-    promptVersion: 'text-adventure-narrative-design-v1',
+    promptVersion: 'text-adventure-narrative-design-v2',
     executionMode: 'product-production',
     contextTaskKind: 'agent-outline',
     readToolNames: [],

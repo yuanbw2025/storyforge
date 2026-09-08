@@ -2061,7 +2061,7 @@ function textSystem(
       '输出字段必须精确为：{"schema":"storyforge.text-adventure-narrative-arc-scenes-artifact","version":1,"acts":[{"key":"act.1","title":"...","targetMinutes":20,"goal":"...","irreversibleTurn":"...","sceneCards":[{"key":"scene.001","title":"...","locationOrdinal":1,"purpose":"...","conflict":"...","entryState":"...","exitState":"...","castKeys":["character.some-key"],"setupKeys":[],"payoffKeys":[]}]}],"endings":[{"endingKey":"ending.some-key","sceneKey":"scene.012"}]}。' +
       `必须恰好三幕 act.1/act.2/act.3；各幕 sceneCards 数量必须依次为 ${JSON.stringify(actSceneKeys.map(keys => keys.length))}，并依次精确使用 ${JSON.stringify(actSceneKeys)}，总计 ${adventure.narrative.targetSceneCount} 张，不得增删。先逐字复制全部 scene key 槽位并按幕核对数量，再填写每张卡内容；不得把某幕的卡放入另一幕。targetMinutes 合计约 ${brief.scale.targetPlayMinutes} 分钟。` +
       `endings 必须依次复用 ${JSON.stringify(skeleton.endingKeys)} 且全部从 ${skeleton.sceneKeys[skeleton.sceneKeys.length - 1]} 汇出；角色、铺垫和回收必须逐字复用上游稳定 key。` +
-      `场景与地点的冻结映射=${JSON.stringify(frozenSceneLocations)}；每张场景卡必须逐项复制对应 locationOrdinal，不得自选地点、使用最小目标规模猜上限或填写地点标题。` +
+      `场景与地点的冻结映射=${JSON.stringify(frozenSceneLocations)}；每张场景卡必须逐项复制对应 locationOrdinal，不得自选地点、使用最小目标规模猜上限或填写地点标题。即使你在内部采用五幕、英雄旅程或其他理论，也必须压缩为且只输出 act.1、act.2、act.3 三个对象，禁止输出第4幕、第5幕或幕外附录；提交前必须确认 acts.length === 3，并分别核对三幕 sceneCards.length 与冻结数组完全相等。` +
       '这是结构规划工件，不是正文：每个场景 title 最多 30 个中文字符，purpose/conflict/entryState/exitState 各用 20–90 个中文字符；每幕 goal/irreversibleTurn 各用 40–120 个中文字符。禁止写对白或长篇背景复述；后续三个分场叙事作者会扩写足量正文。'
   }
   if (taskKey === 'content.narrative-decision-plan') {
