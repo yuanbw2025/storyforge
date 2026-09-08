@@ -3507,6 +3507,19 @@ export function positiveImageRepairDirectiveV1(recommendation: string, category:
     .join('；')
 }
 
+export async function textAdventureVisualAnchorConfirmationHashV1(
+  visualBible: TextAdventureVisualBibleArtifactV1,
+): Promise<string> {
+  return hashProductProductionValueV2({
+    schema: 'storyforge.text-adventure-visual-anchor-confirmation', version: 1,
+    style: visualBible.style,
+    palette: visualBible.palette,
+    compositionRules: visualBible.compositionRules,
+    continuityRules: visualBible.continuityRules,
+    characterAnchors: visualBible.characterAnchors,
+  })
+}
+
 async function executeVisualTask(input: ProductProductionTaskExecutionInputV1, options: {
   production: ProductProductionRecordV1
   brief: ProductProductionBriefV3
@@ -3526,7 +3539,6 @@ async function executeVisualTask(input: ProductProductionTaskExecutionInputV1, o
     cast ? textAdventureCharacterAnchors(cast) : [],
   )
   if (cast) {
-    const visualBibleArtifact = artifactRecord(input, 'media.visual-bible')
     const visualBible = parseTextAdventureVisualBibleArtifactV1({
       value: artifactPayload(input, 'media.visual-bible'),
       cast,
@@ -3535,7 +3547,7 @@ async function executeVisualTask(input: ProductProductionTaskExecutionInputV1, o
     parseTextAdventureMediaAnchorDecisionArtifactV1({
       value: artifactPayload(input, 'media.anchor-decision'),
       visualBible,
-      visualBibleHash: visualBibleArtifact.contentHash,
+      visualBibleHash: await textAdventureVisualAnchorConfirmationHashV1(visualBible),
       confirmationRequired: options.brief.qualityProfile === 'commercial-candidate',
     })
   }
@@ -4760,7 +4772,7 @@ async function executeIntegrationTask(input: ProductProductionTaskExecutionInput
       parseTextAdventureMediaAnchorDecisionArtifactV1({
         value: artifactPayload(input, 'media.anchor-decision'),
         visualBible,
-        visualBibleHash: visualBibleArtifact.contentHash,
+        visualBibleHash: await textAdventureVisualAnchorConfirmationHashV1(visualBible),
         confirmationRequired: options.brief.qualityProfile === 'commercial-candidate',
       })
       const auditArtifact = artifactRecord(input, 'media.audit')
@@ -5369,7 +5381,6 @@ async function executeTextAdventureMediaAnchorGateTask(
   if (confirmationRequired && brief.media.imageCount < minimumCommercialImages) {
     fail(`商业文字冒险媒资计划不足:${brief.media.imageCount}/${minimumCommercialImages}；必须创建修正后的新 Brief/Build`)
   }
-  const visualBibleArtifact = artifactRecord(input, 'media.visual-bible')
   const visualBible = parseTextAdventureVisualBibleArtifactV1({
     value: artifactPayload(input, 'media.visual-bible'), cast,
     expectedAssetKeys: expectedVisualKeys(brief),
@@ -5382,23 +5393,24 @@ async function executeTextAdventureMediaAnchorGateTask(
     || authorResolution.resolution.action !== 'confirm-character-anchors')) {
     fail('商业候选生成图片前需要作者明确确认角色视觉锚点')
   }
+  const visualAnchorConfirmationHash = await textAdventureVisualAnchorConfirmationHashV1(visualBible)
   const payload = confirmationRequired ? {
     schema: 'storyforge.text-adventure-media-anchor-decision-artifact', version: 1,
-    visualBibleHash: visualBibleArtifact.contentHash,
+    visualBibleHash: visualAnchorConfirmationHash,
     decision: 'confirm-character-anchors' as const,
     confirmedCharacterKeys: visualBible.characterAnchors.map(anchor => anchor.characterKey),
     authorCommandId: authorResolution?.commandId ?? null,
     authorNote: authorResolution?.resolution.note ?? null,
   } : {
     schema: 'storyforge.text-adventure-media-anchor-decision-artifact', version: 1,
-    visualBibleHash: visualBibleArtifact.contentHash,
+    visualBibleHash: visualAnchorConfirmationHash,
     decision: 'not-required-noncommercial' as const,
     confirmedCharacterKeys: [],
     authorCommandId: null,
     authorNote: null,
   }
   const verified = parseTextAdventureMediaAnchorDecisionArtifactV1({
-    value: payload, visualBible, visualBibleHash: visualBibleArtifact.contentHash,
+    value: payload, visualBible, visualBibleHash: visualAnchorConfirmationHash,
     confirmationRequired,
   })
   return {

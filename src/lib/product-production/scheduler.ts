@@ -1273,7 +1273,8 @@ async function recoveryInvalidatedTaskKeys(input: {
   }
   if (previousFailure
     && typeof previousFailure.taskKey === 'string'
-    && /^media\.visual\.\d{3}$/.test(previousFailure.taskKey)
+    && (/^media\.visual\.\d{3}$/.test(previousFailure.taskKey)
+      || previousFailure.taskKey === 'integration.package')
     && typeof previousFailure.detail === 'string'
     && previousFailure.detail.includes('mediaAnchorDecision schema/version/hash 无效')) {
     // A carried author decision cannot authorize a changed visual bible. Go

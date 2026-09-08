@@ -25,6 +25,7 @@ import {
   parseTextAdventureVisualQualityReviewArtifactV1,
   positiveImageRepairDirectiveV1,
   productImageNegativePromptV1,
+  textAdventureVisualAnchorConfirmationHashV1,
   textAdventureVisualRepairCastConstraintV1,
   type ProductionTextRunnerV1,
   type ProductionVisionRunnerV1,
@@ -1887,6 +1888,7 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
         sceneTag: requirement.sceneTag, beatKey: requirement.beatKey,
       })),
     }
+    const visualAnchorConfirmationHash = await textAdventureVisualAnchorConfirmationHashV1(visualBible)
     const artifact = (
       artifactKey: string,
       kind: ProductBuildArtifactRecordV1['kind'],
@@ -1908,7 +1910,8 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
       artifact('media.visual-bible', 'visual-bible', visualBible, visualBibleHash),
       artifact('media.anchor-decision', 'visual-bible', {
         schema: 'storyforge.text-adventure-media-anchor-decision-artifact', version: 1,
-        visualBibleHash, decision: 'not-required-noncommercial', confirmedCharacterKeys: [],
+        visualBibleHash: visualAnchorConfirmationHash,
+        decision: 'not-required-noncommercial', confirmedCharacterKeys: [],
         authorCommandId: null, authorNote: null,
       }, '9'.repeat(64)),
     ]
