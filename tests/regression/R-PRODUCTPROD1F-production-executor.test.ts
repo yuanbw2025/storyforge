@@ -1701,7 +1701,7 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
           sceneKey: 'scene.004', title: '潮门', summary: '潮声逼近。',
           beats: [
             { beatKey: 'beat.2', kind: 'narration', speakerKey: null, text: '后发生。', order: 2 },
-            { beatKey: 'beat.1', kind: 'narration', speakerKey: null, text: '先发生。', order: 1 },
+            { beatKey: 'beat.1', kind: 'narration', speakerKey: 'character.npc.1', text: '先发生。', order: 1 },
           ],
           choices: [{
             choiceKey: 'choice.1', sourceNodeKey: 'scene.004', targetNodeKey: 'scene.005',
@@ -1716,7 +1716,7 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
           endingKey: 'ending.1', title: '余潮', summary: '潮声退去。',
           beats: [
             { beatKey: 'beat.end.2', kind: 'narration', speakerKey: null, text: '灯火熄灭。', order: 2 },
-            { beatKey: 'beat.end.1', kind: 'narration', speakerKey: null, text: '天光升起。', order: 1 },
+            { beatKey: 'beat.end.1', kind: 'action', speakerKey: 'character.npc.1', text: '天光升起。', order: 1 },
           ],
         }],
       },
@@ -1728,11 +1728,11 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
       actKey: 'act.2',
       moduleTitle: '潮钟群岛：最后的灯火',
       scenes: [{
-        beats: [{ beatKey: 'beat.1', order: 0 }, { beatKey: 'beat.2', order: 1 }],
+        beats: [{ beatKey: 'beat.1', speakerKey: null, order: 0 }, { beatKey: 'beat.2', order: 1 }],
         choices: [expect.not.objectContaining({ unavailableReason: expect.anything() })],
       }],
       choices: [expect.not.objectContaining({ unavailableReason: expect.anything() })],
-      endings: [{ beats: [{ beatKey: 'beat.end.1' }, { beatKey: 'beat.end.2' }] }],
+      endings: [{ beats: [{ beatKey: 'beat.end.1', speakerKey: null }, { beatKey: 'beat.end.2' }] }],
     })
     expect(sceneScript.defaultedFields).toEqual([
       'schema<-frozen-scene-script-envelope',
@@ -1741,10 +1741,12 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
       'moduleTitle<-frozen-scene-script-envelope',
       'scenes[0].beats<-stable-order',
       'scenes[0].beats[0].order<-canonical-position',
+      'scenes[0].beats[0].speakerKey<-non-dialogue-null',
       'scenes[0].beats[1].order<-canonical-position',
       'scenes[0].choices[0].unavailableReason<-null-as-omitted',
       'endings[0].beats<-stable-order',
       'endings[0].beats[0].order<-canonical-position',
+      'endings[0].beats[0].speakerKey<-non-dialogue-null',
       'endings[0].beats[1].order<-canonical-position',
       'choices[0].unavailableReason<-null-as-omitted',
     ])

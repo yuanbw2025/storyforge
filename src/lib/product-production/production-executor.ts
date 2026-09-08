@@ -1421,6 +1421,16 @@ export function legalizeProductionModelProtocolDefaultsV1(
           beat.order = index
           defaultedFields.push(`${path}[${index}].order<-canonical-position`)
         }
+        if (['narration', 'action', 'system'].includes(String(beat.kind))
+          && beat.speakerKey !== null) {
+          // Some OpenAI-compatible providers redundantly attach the current
+          // character to every beat. Speaker identity has no meaning outside
+          // dialogue, so discard that protocol noise deterministically and
+          // retain the normalization in the provider receipt instead of
+          // paying for another identical long-form generation.
+          beat.speakerKey = null
+          defaultedFields.push(`${path}[${index}].speakerKey<-non-dialogue-null`)
+        }
         return beat
       })
     }
