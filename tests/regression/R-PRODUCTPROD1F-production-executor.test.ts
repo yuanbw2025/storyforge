@@ -1203,6 +1203,27 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
       'acts[0].sceneCards[0].locationOrdinal<-frozen-location-plan',
     )
 
+    const frozenArcLocationBeforeLaterIdentityFailure = legalizeProductionModelProtocolDefaultsV1(
+      'content.narrative-arc-scenes',
+      {
+        acts: [
+          { key: 'act.1', sceneCards: [{ key: 'scene.001', locationOrdinal: 9 }, { key: 'scene.002', locationOrdinal: 9 }] },
+          { key: 'act.2', sceneCards: [{ key: 'scene.003', locationOrdinal: 9 }] },
+          { key: 'act.3', sceneCards: [{ key: 'scene.wrong', locationOrdinal: 9 }] },
+        ],
+      },
+      {
+        narrativeArcSceneKeys: [['scene.001', 'scene.002'], ['scene.003'], ['scene.004']],
+        narrativeArcLocationOrdinals: [1, 1, 2, 2],
+      },
+    )
+    expect((frozenArcLocationBeforeLaterIdentityFailure.payload.acts as Array<{
+      sceneCards: Array<{ locationOrdinal: number }>
+    }>).flatMap(act => act.sceneCards.map(card => card.locationOrdinal))).toEqual([1, 1, 2, 9])
+    expect(frozenArcLocationBeforeLaterIdentityFailure.defaultedFields).toContain(
+      'acts[1].sceneCards[0].locationOrdinal<-frozen-location-plan',
+    )
+
     const decisionKeys = legalizeProductionModelProtocolDefaultsV1(
       'content.narrative-decision-plan',
       {

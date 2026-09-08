@@ -644,6 +644,23 @@ export function legalizeProductionModelProtocolDefaultsV1(
               `acts[${actIndex}].sceneCards[${sceneIndex}].locationOrdinal<-decimal-string`,
             )
           }
+          // Scene identity and scene-to-location allocation are deterministic
+          // Plan fields. Project the ordinal as soon as this card is in its
+          // frozen slot, even if a later card has a bad/duplicate key. The
+          // strict parser still rejects that later identity defect; it should
+          // not prevent an unrelated deterministic ordinal from being fixed.
+          const expectedSceneKey = options.narrativeArcSceneKeys?.[actIndex]?.[sceneIndex]
+          if (expectedSceneKey && scene.key === expectedSceneKey) {
+            const globalSceneIndex = options.narrativeArcSceneKeys!.flat().indexOf(expectedSceneKey)
+            const expectedLocationOrdinal = options.narrativeArcLocationOrdinals?.[globalSceneIndex]
+            if (Number.isSafeInteger(expectedLocationOrdinal)
+              && scene.locationOrdinal !== expectedLocationOrdinal) {
+              scene.locationOrdinal = expectedLocationOrdinal
+              defaultedFields.push(
+                `acts[${actIndex}].sceneCards[${sceneIndex}].locationOrdinal<-frozen-location-plan`,
+              )
+            }
+          }
           return scene
         })
         return item
