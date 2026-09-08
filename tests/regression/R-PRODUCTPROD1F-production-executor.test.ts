@@ -1162,13 +1162,22 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
           ],
         }],
       },
-      { narrativeDecisionSceneKeys: ['scene.001'] },
+      {
+        narrativeDecisionSceneKeys: ['scene.001'],
+        narrativeArcSceneKeys: [['scene.001', 'scene.002'], ['scene.003'], ['scene.004']],
+      },
     )
     expect(decisionKeys.payload.decisions).toEqual([{
       key: 'decision.1', sceneKey: 'scene.001', prompt: '是否公开？',
       options: [
-        { key: 'option.1.1', persistentEffectKey: 'flag.decision.1.1', label: '公开', cost: '失去庇护' },
-        { key: 'option.1.2', persistentEffectKey: 'flag.decision.1.2', label: '隐瞒', cost: '承担秘密' },
+        {
+          key: 'option.1.1', persistentEffectKey: 'flag.decision.1.1', label: '公开',
+          cost: '失去庇护', echoSceneKeys: ['scene.002', 'scene.003'],
+        },
+        {
+          key: 'option.1.2', persistentEffectKey: 'flag.decision.1.2', label: '隐瞒',
+          cost: '承担秘密', echoSceneKeys: ['scene.002', 'scene.003'],
+        },
       ],
     }])
     expect(decisionKeys.defaultedFields).toEqual([
@@ -1176,8 +1185,10 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
       'decisions[0].sceneKey<-frozen-scene-plan',
       'decisions[0].options[0].key<-frozen-ordinal',
       'decisions[0].options[0].persistentEffectKey<-frozen-ordinal',
+      'decisions[0].options[0].echoSceneKeys<-frozen-later-scenes',
       'decisions[0].options[1].key<-frozen-ordinal',
       'decisions[0].options[1].persistentEffectKey<-frozen-ordinal',
+      'decisions[0].options[1].echoSceneKeys<-frozen-later-scenes',
     ])
 
     const projectedQuestCast = legalizeProductionModelProtocolDefaultsV1(

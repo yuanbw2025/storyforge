@@ -706,6 +706,22 @@ export function legalizeProductionModelProtocolDefaultsV1(
             `decisions[${decisionIndex}].options[${optionIndex}].persistentEffectKey<-frozen-ordinal`,
           )
         }
+        const allSceneKeys = options.narrativeArcSceneKeys?.flat() ?? []
+        const decisionSceneIndex = sceneKey ? allSceneKeys.indexOf(sceneKey) : -1
+        const deterministicEchoSceneKeys = decisionSceneIndex >= 0
+          ? allSceneKeys.slice(decisionSceneIndex + 1, decisionSceneIndex + 3) : []
+        const suppliedEchoSceneKeys = Array.isArray(choice.echoSceneKeys)
+          ? choice.echoSceneKeys : []
+        const hasValidEchoes = suppliedEchoSceneKeys.length >= 2
+          && suppliedEchoSceneKeys.every(value => (
+            typeof value === 'string' && allSceneKeys.indexOf(value) > decisionSceneIndex
+          ))
+        if (!hasValidEchoes && deterministicEchoSceneKeys.length === 2) {
+          choice.echoSceneKeys = deterministicEchoSceneKeys
+          defaultedFields.push(
+            `decisions[${decisionIndex}].options[${optionIndex}].echoSceneKeys<-frozen-later-scenes`,
+          )
+        }
         return choice
       })
       return item
