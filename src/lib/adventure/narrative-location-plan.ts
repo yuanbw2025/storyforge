@@ -28,6 +28,45 @@ export function planTextAdventureNarrativeLocationsV1(
   })
 }
 
+function assignedLocationTitleByNodeV1(
+  nodes: readonly FrozenProductNarrativeNode[],
+  locationTitles: readonly string[],
+): Map<string, string> {
+  const sceneNodes = nodes.filter(node => node.kind !== 'ending')
+  if (!sceneNodes.length || !locationTitles.length) return new Map()
+  const plan = planTextAdventureNarrativeLocationsV1(sceneNodes.length, locationTitles.length)
+  return new Map(sceneNodes.map((node, index) => [
+    node.key, locationTitles[plan[index].locationIndex],
+  ]))
+}
+
+/**
+ * A Choice's frozen target node is authoritative. If generated copy names a
+ * different registered location and omits the actual target, replace only
+ * those location titles. The graph, action identity and effects never change.
+ */
+export function canonicalizeTextAdventureChoiceLocationsV1(input: {
+  nodes: readonly FrozenProductNarrativeNode[]
+  choices: readonly FrozenNarrativeChoice[]
+  locationTitles: readonly string[]
+}): FrozenNarrativeChoice[] {
+  const assignedTitleByNode = assignedLocationTitleByNodeV1(input.nodes, input.locationTitles)
+  return input.choices.map(choice => {
+    const expectedTitle = assignedTitleByNode.get(choice.targetNodeKey)
+    if (!expectedTitle) return { ...choice }
+    const copy = `${choice.text}\n${choice.description}`
+    if (copy.includes(expectedTitle)) return { ...choice }
+    const conflictingTitles = [...input.locationTitles]
+      .filter(title => title !== expectedTitle && copy.includes(title))
+      .sort((left, right) => right.length - left.length)
+    if (!conflictingTitles.length) return { ...choice }
+    const replace = (value: string) => conflictingTitles.reduce(
+      (current, title) => current.split(title).join(expectedTitle), value,
+    )
+    return { ...choice, text: replace(choice.text), description: replace(choice.description) }
+  })
+}
+
 export function validateTextAdventureNarrativeLocationPlanV1(input: {
   nodes: FrozenProductNarrativeNode[]
   beats: FrozenNarrativeBeat[]
@@ -36,16 +75,14 @@ export function validateTextAdventureNarrativeLocationPlanV1(input: {
 }): string[] {
   const sceneNodes = input.nodes.filter(node => node.kind !== 'ending')
   if (!sceneNodes.length || !input.locationTitles.length) return []
-  const plan = planTextAdventureNarrativeLocationsV1(sceneNodes.length, input.locationTitles.length)
   const beatsByNode = new Map<string, string[]>()
   for (const beat of input.beats) {
     beatsByNode.set(beat.nodeKey, [...(beatsByNode.get(beat.nodeKey) ?? []), beat.text])
   }
   const errors: string[] = []
-  const assignedTitleByNode = new Map<string, string>()
-  sceneNodes.forEach((node, index) => {
-    const expectedTitle = input.locationTitles[plan[index].locationIndex]
-    assignedTitleByNode.set(node.key, expectedTitle)
+  const assignedTitleByNode = assignedLocationTitleByNodeV1(input.nodes, input.locationTitles)
+  sceneNodes.forEach(node => {
+    const expectedTitle = assignedTitleByNode.get(node.key)!
     const authoredText = [node.title, node.summary, ...(beatsByNode.get(node.key) ?? [])].join('\n')
     if (!authoredText.includes(expectedTitle)) {
       errors.push(`${node.key} 必须明确出现地点锚点「${expectedTitle}」`)

@@ -25,6 +25,10 @@ import {
   parseTextAdventurePlaytestStrategyArtifactV1,
   TEXT_ADVENTURE_PLAYTEST_ROUTE_KINDS_V1,
 } from '../../src/lib/adventure/autoplay'
+import {
+  canonicalizeTextAdventureChoiceLocationsV1,
+  validateTextAdventureNarrativeLocationPlanV1,
+} from '../../src/lib/adventure/narrative-location-plan'
 
 function brief(qualityProfile: ProductProductionBriefV3['qualityProfile'] = 'internal') {
   return {
@@ -580,6 +584,27 @@ describe('TEXTADV-3 · 专业生产工件合同', () => {
     expect(assembled.nodes.every(node => node.conditionJson === '{}' && node.effectsJson === '[]')).toBe(true)
     expect(assembled.beats.find(beat => beat.beatKey === dialogueBeats[0].beatKey)?.text)
       .toContain('钟只剩三响')
+    const locationNodes = [
+      { key: 'scene.a', kind: 'entry' as const, title: '起点', summary: '冰窟渔村', conditionJson: '{}', effectsJson: '[]', successorKeys: ['scene.b'] },
+      { key: 'scene.b', kind: 'scene' as const, title: '中段', summary: '冰窟渔村', conditionJson: '{}', effectsJson: '[]', successorKeys: ['scene.c'] },
+      { key: 'scene.c', kind: 'scene' as const, title: '终段', summary: '观潮台废墟', conditionJson: '{}', effectsJson: '[]', successorKeys: [] },
+    ]
+    const alignedChoices = canonicalizeTextAdventureChoiceLocationsV1({
+      nodes: locationNodes,
+      choices: [{
+        choiceKey: 'choice.location-drift', sourceNodeKey: 'scene.b', targetNodeKey: 'scene.c',
+        text: '赶往冰窟渔村', description: '去冰窟渔村完成最后的选择。', unavailableReason: '',
+        displayConditionJson: '{}', availableConditionJson: '{}', effectsJson: '[]', tags: [], order: 0,
+      }],
+      locationTitles: ['冰窟渔村', '观潮台废墟'],
+    })
+    expect(alignedChoices[0]).toMatchObject({
+      text: '赶往观潮台废墟', description: '去观潮台废墟完成最后的选择。',
+    })
+    expect(validateTextAdventureNarrativeLocationPlanV1({
+      nodes: locationNodes, beats: [], choices: alignedChoices,
+      locationTitles: ['冰窟渔村', '观潮台废墟'],
+    })).toEqual([])
     const omittedCosmeticOrder = bundleValue(0)
     delete omittedCosmeticOrder.scenes[0].beats[0].order
     delete omittedCosmeticOrder.choices[0].order

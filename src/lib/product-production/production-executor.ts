@@ -65,6 +65,7 @@ import {
 import { TEXT_ADVENTURE_PRODUCTION_AGENT_IDS } from '../agent/skill-registry'
 import { bindTextAdventureNarrativeActionsV1 } from '../adventure/production-compiler'
 import {
+  canonicalizeTextAdventureChoiceLocationsV1,
   planTextAdventureNarrativeLocationsV1,
   validateTextAdventureNarrativeLocationPlanV1,
 } from '../adventure/narrative-location-plan'
@@ -1775,8 +1776,13 @@ function parseNarrative(
   const beats = candidateBeats.filter(beat => reachable.has(beat.nodeKey))
   if (nodes.length < 3 || beats.length < 3 || choices.length < 2) fail('narrative 可玩闭包基础数量无效')
   const knownSpeakerKeys = new Set([...productCharacterKeys(brief), ...textAdventureCastKeys])
+  const canonicalChoices = brief.intent.productType === 'text-adventure'
+    ? canonicalizeTextAdventureChoiceLocationsV1({
+        nodes, choices, locationTitles: textAdventureLocationTitles,
+      })
+    : choices
   const report = validateNarrativeContentGraph({
-    entryNodeKey, nodes, beats, choices, knownSpeakerKeys,
+    entryNodeKey, nodes, beats, choices: canonicalChoices, knownSpeakerKeys,
   })
   if (!report.valid) fail(`narrative 图无效:${[...report.errors, ...report.unreachableNodeKeys].join('；')}`)
   if (report.reachableEndingKeys.length < minimumEndings) fail(`narrative 可达结局少于 Brief 要求:${minimumEndings}`)
@@ -1784,7 +1790,7 @@ function parseNarrative(
     schema: 'storyforge.product-narrative-artifact', version: 1,
     moduleKind: enumValue(row.moduleKind, NARRATIVE_MODULE_KINDS, 'narrative.moduleKind'),
     moduleTitle: text(row.moduleTitle, 'narrative.moduleTitle', 500),
-    entryNodeKey: report.entryKey!, nodes, beats, choices,
+    entryNodeKey: report.entryKey!, nodes, beats, choices: canonicalChoices,
   }
   if (brief.intent.productType === 'text-adventure') {
     const locationErrors = validateTextAdventureNarrativeLocationPlanV1({
