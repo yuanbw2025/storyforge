@@ -136,7 +136,9 @@ describe('R-TEXTADV2-production · 文字冒险正式生产契约与工作台', 
       'content.scene-script.act-2.part-1', 'content.scene-script.act-2.part-2',
       'content.scene-script.act-3.part-1', 'content.scene-script.act-3.part-2',
     ].reduce((sum, taskKey) => sum + taskByKey.get(taskKey)!.budgetReservation.outputTokens, 0))
-      .toBe(Math.floor(200_000 * 0.07) * 6)
+      .toBe(Math.floor(200_000 * 0.12) * 6)
+    expect(taskByKey.get('content.scene-script.act-1.part-1')?.budgetReservation.durationMs)
+      .toBe(300_000)
     expect(plan.tasks.reduce((sum, task) => sum + task.budgetReservation.outputTokens, 0))
       .toBeLessThanOrEqual(Math.floor(brief.productionBudget.maximumOutputTokens * 1.3))
     expect(plan.tasks.reduce((sum, task) => sum + task.budgetReservation.inputTokens, 0))

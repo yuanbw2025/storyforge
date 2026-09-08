@@ -406,15 +406,17 @@ export async function createProductProductionPlanV3(input: {
     // Scene prose is the player-visible product, not scaffolding. Each act's
     // 18% envelope is split into two bounded scene packets so a provider cannot
     // strand a whole act in one oversized request.
-    // Real accepted scene packets are roughly 9–18 KiB. A 7% slice gives each
-    // writer 11,200 tokens in the current commercial envelope and leaves room
-    // for the measured reasoning overhead of upstream specialist bibles.
-    'content.scene-script.act-1.part-1': 0.07,
-    'content.scene-script.act-1.part-2': 0.07,
-    'content.scene-script.act-2.part-1': 0.07,
-    'content.scene-script.act-2.part-2': 0.07,
-    'content.scene-script.act-3.part-1': 0.07,
-    'content.scene-script.act-3.part-2': 0.07,
+    // A live 60-minute packet reported 17,701 billable output tokens after
+    // hidden reasoning, despite a much smaller visible JSON body. The Scene
+    // Writer skill is registered for 24k output, so each bounded packet gets
+    // that complete ceiling while the append-only Build ledger remains the
+    // aggregate authority.
+    'content.scene-script.act-1.part-1': 0.12,
+    'content.scene-script.act-1.part-2': 0.12,
+    'content.scene-script.act-2.part-1': 0.12,
+    'content.scene-script.act-2.part-2': 0.12,
+    'content.scene-script.act-3.part-1': 0.12,
+    'content.scene-script.act-3.part-2': 0.12,
     // The provider usage receipt may include hidden reasoning. Each Dialogue
     // Editor therefore receives an 8,800-token ceiling in the repaired Brief
     // while returning only an ordinal
@@ -506,7 +508,11 @@ export async function createProductProductionPlanV3(input: {
       ? Math.floor(textAdventureTaskOutputBaseline * textAdventureOutputWeights[taskKey])
       : perOutput,
     maximumCostUsd: perCost,
-    durationMs: perDuration,
+    // Long-form scene packets have a 300s task timeout and live receipts above
+    // 230s. Reserve the same bounded duration locally instead of rejecting a
+    // successful paid response against the generic per-task average.
+    durationMs: textAdventure && /^content\.scene-script\.act-[1-3]\.part-[1-2]$/.test(taskKey)
+      ? 300_000 : perDuration,
   })
   const tasks: ProductProductionPlanTaskV3[] = []
   if (textAdventure) tasks.push(productionTask({
