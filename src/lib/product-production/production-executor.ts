@@ -3799,22 +3799,32 @@ async function executeTextAdventureMediaAuditTask(
     const rightsComplete = typeof rights.origin === 'string' && rights.origin.trim().length > 0
       && typeof rights.license === 'string' && rights.license.trim().length > 0
       && (options.brief.qualityProfile !== 'commercial-candidate' || rights.commercialUse === true)
-    if (payload.schema !== 'storyforge.generated-media-artifact' || payload.version !== 1
-      || canonicalProductProductionJsonV2(payload.request) !== canonicalProductProductionJsonV2(requirement)
-      || metadata.assetKey !== expectedAssetKey || artifact.kind !== 'image'
-      || artifact.mediaKind !== requirement.mediaKind || artifact.blobObjectId == null
-      || !artifact.mimeType?.startsWith('image/')
-      || metadata.width !== requirement.width || metadata.height !== requirement.height
-      || typeof metadata.source !== 'string' || !metadata.source.trim()
-      || typeof metadata.license !== 'string' || !metadata.license.trim()
-      || metadata.license !== rights.license || !rightsComplete) {
-      fail(`需求—图片 Artifact 审计失败:${requirement.artifactKey}`)
+    const sourceComplete = typeof metadata.source === 'string' && metadata.source.trim().length > 0
+    const licenseComplete = typeof metadata.license === 'string' && metadata.license.trim().length > 0
+    const mediaSource = sourceComplete ? (metadata.source as string).trim() : ''
+    const mediaLicense = licenseComplete ? (metadata.license as string).trim() : ''
+    const failedChecks = [
+      ['payload-schema', payload.schema === 'storyforge.generated-media-artifact' && payload.version === 1],
+      ['request', canonicalProductProductionJsonV2(payload.request) === canonicalProductProductionJsonV2(requirement)],
+      ['asset-key', metadata.assetKey === expectedAssetKey],
+      ['kind', artifact.kind === 'image'],
+      ['media-kind', artifact.mediaKind === requirement.mediaKind],
+      ['blob', artifact.blobObjectId != null],
+      ['mime', artifact.mimeType?.startsWith('image/') === true],
+      ['dimensions', metadata.width === requirement.width && metadata.height === requirement.height],
+      ['source', sourceComplete],
+      ['license', licenseComplete],
+      ['rights-license', metadata.license === rights.license],
+      ['rights-complete', rightsComplete],
+    ].filter(([, passed]) => !passed).map(([name]) => name)
+    if (failedChecks.length > 0) {
+      fail(`需求—图片 Artifact 审计失败:${requirement.artifactKey}:${failedChecks.join(',')}`)
     }
     assets.push({
       artifactKey: requirement.artifactKey, status: 'fulfilled', assetKey: expectedAssetKey,
       requirementHash, contentHash: artifact.contentHash,
       mimeType: artifact.mimeType, width: requirement.width, height: requirement.height,
-      source: metadata.source.trim(), license: metadata.license.trim(), rightsComplete: true, fallbackReason: null,
+      source: mediaSource, license: mediaLicense, rightsComplete: true, fallbackReason: null,
     })
   }
   const report = parseTextAdventureMediaAuditArtifactV1({
