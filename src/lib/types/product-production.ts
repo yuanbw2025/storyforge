@@ -632,10 +632,17 @@ export interface ProductQualityGateReceiptRecordV1 {
 
 export type ProductEvolutionBaseV1 =
   | { kind: "build"; buildNumber: number; manifestHash: string }
+  | {
+      kind: "recovery-build";
+      buildNumber: number;
+      briefHash: string;
+      planHash: string;
+      controlEpoch: number;
+    }
   | { kind: "release"; productReleaseId: number; contentHash: string };
 
 export type ProductEvolutionAffectedLaneV1 =
-  "content" | "product" | "visual" | "audio" | "runtime" | "world-source";
+  "content" | "product" | "visual" | "audio" | "runtime" | "world-source" | "production-budget";
 
 export interface ProductEvolutionImpactV1 {
   schema: "storyforge.product-evolution-impact";

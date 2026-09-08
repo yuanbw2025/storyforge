@@ -171,6 +171,17 @@ describe('R-PRODUCTPROD-1A1 · current product-production lifecycle', () => {
     expect(await db.mediaBlobObjects.where('projectId').equals(source!.id!).count()).toBe(1)
 
     await db.productBuildArtifacts.delete(carried[0].id!)
+    await db.productBuilds.update(sourceBuild!.id!, { status: 'recovery-required' })
+    await expect(carryForwardProductBuildArtifactsAcrossBuildsV1({
+      scope: ownership.scope,
+      sourceBuildId: sourceBuild!.id!,
+      targetBuildId,
+      targetControlEpoch: 2,
+      artifactKeys: [sourceArtifact!.artifactKey],
+    })).rejects.toThrow(/来源\/目标关系不可复用/)
+    expect(await db.productBuildArtifacts.where('buildId').equals(targetBuildId).count()).toBe(0)
+
+    await db.productBuilds.update(sourceBuild!.id!, { status: 'released' })
     await db.productBuilds.update(targetBuildId, { parentBuildNumber: 999 })
     await expect(carryForwardProductBuildArtifactsAcrossBuildsV1({
       scope: ownership.scope,

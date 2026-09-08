@@ -1088,6 +1088,18 @@ export default function ProductProductionStudio(props: {
     setMessage(`演化目标已编译为 Brief r${created.briefRevision}；请审查后再次授权，系统会创建新 Build 并复用可证明未变的基础。`)
   }, '创建演化 Brief')
 
+  const recoverProductionBudget = () => run(async () => {
+    if (!details) throw new Error('缺少 Production。')
+    const created = await beginProductProductionEvolutionV1({
+      scope: props.scope,
+      productionId: details.production.id!,
+      userText: '当前 Build 已耗尽原作者授权的模型预算。仅扩充专业文字冒险生产预算并续建；继承所有可证明未变化且已签收的工件，不修改剧情、玩法、世界来源或媒资范围。',
+      affectedLanes: ['production-budget'],
+    })
+    await refresh(details.production.id)
+    setMessage(`预算恢复已形成 Brief r${created.briefRevision}；审查并授权后将创建子 Build，继承已签收成果继续生产。`)
+  }, '创建预算恢复 Brief')
+
   const reviseMediaAsset = (
     asset: TextAdventureMediaAssetV1,
     action: 'upload-replacement' | 'regenerate' | 'lock' | 'unlock',
@@ -1227,6 +1239,10 @@ export default function ProductProductionStudio(props: {
     try { return details?.brief ? JSON.parse(details.brief.briefJson) as ProductProductionBriefV3 : null }
     catch { return null }
   }, [details?.brief])
+  const modelBudgetExhausted = !!progress && !!selectedBrief
+    && progress.budget.usage.modelCalls >= selectedBrief.productionBudget.maximumModelCalls
+  const canRecoverProductionBudget = canRetryBlocker && modelBudgetExhausted
+    && details?.production.productType === 'text-adventure'
   const commercialPerformanceRequired = selectedBrief?.qualityProfile === 'commercial-candidate'
   const commercialTextAdventureImageMinimum = selectedBrief?.qualityProfile === 'commercial-candidate'
     && selectedBrief.intent.productType === 'text-adventure' && selectedBrief.textAdventure
@@ -1438,7 +1454,8 @@ export default function ProductProductionStudio(props: {
             {mediaAnchorBlocker && <button disabled={busy || productionRunning} onClick={() => resolveMediaAnchorDecision('cancel')} className="flex items-center gap-2 rounded border border-error/40 px-4 py-2 text-xs text-error disabled:opacity-40"><Square className="h-3.5 w-3.5" />拒绝并取消 Build</button>}
             {communityCandidateRepairAvailable && !activeBriefRepairDraft && <button disabled={busy || productionRunning} onClick={prepareCommunityCandidateBriefRepair} className="flex items-center gap-2 rounded border border-accent/40 bg-accent/10 px-4 py-2 text-xs text-accent disabled:opacity-40"><FileCheck2 className="h-3.5 w-3.5" />生成社区候选修订 Brief</button>}
             {communityCandidateRepairAvailable && activeBriefRepairDraft && <button disabled={busy || productionRunning} onClick={saveCommunityCandidateBriefRepair} className="flex items-center gap-2 rounded bg-success px-4 py-2 text-xs text-white disabled:opacity-40"><ShieldCheck className="h-3.5 w-3.5" />保存为 Brief r{(details.brief?.revision ?? 0) + 1}</button>}
-            {canRetryBlocker && <button disabled={busy || productionRunning} onClick={retryBlocker} className="flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white"><RefreshCw className="h-3.5 w-3.5" />修正后重试</button>}
+            {canRecoverProductionBudget && <button disabled={busy || productionRunning} onClick={recoverProductionBudget} className="flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white"><RefreshCw className="h-3.5 w-3.5" />扩充预算并续建</button>}
+            {canRetryBlocker && !modelBudgetExhausted && <button disabled={busy || productionRunning} onClick={retryBlocker} className="flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white"><RefreshCw className="h-3.5 w-3.5" />修正后重试</button>}
             {details.build && ['preview-ready', 'release-ready', 'released'].includes(details.build.status) && <button disabled={busy || productionRunning} onClick={preview} className="flex items-center gap-2 rounded border border-accent/40 bg-accent/10 px-4 py-2 text-xs text-accent"><Play className="h-3.5 w-3.5" />{details.build.status === 'released' ? '试玩此 Build' : '试玩未发布 Build'}</button>}
             {details.build?.status === 'release-ready' && <button disabled={busy || productionRunning || (commercialPerformanceRequired && !commercialQualityPassed)} onClick={publish} className="flex items-center gap-2 rounded bg-success px-4 py-2 text-xs text-white disabled:opacity-40"><Rocket className="h-3.5 w-3.5" />复验并原子发布</button>}
             {details.production.status === 'released' && <button disabled={busy} onClick={() => props.onPublished?.(details.production.productType)} className="flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white"><Gamepad2 className="h-3.5 w-3.5" />进入玩家模式</button>}

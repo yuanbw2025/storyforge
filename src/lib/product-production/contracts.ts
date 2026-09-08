@@ -218,13 +218,24 @@ function parseEvolutionBase(value: unknown, label: string): ProductEvolutionBase
     if (!isSha256Hash(base.manifestHash)) fail(`${label}.manifestHash 无效`)
     return { kind: 'build', buildNumber: positiveId(base.buildNumber, `${label}.buildNumber`), manifestHash: base.manifestHash }
   }
+  if (base.kind === 'recovery-build') {
+    exactKeys(base, ['kind', 'buildNumber', 'briefHash', 'planHash', 'controlEpoch'], label)
+    if (!isSha256Hash(base.briefHash) || !isSha256Hash(base.planHash)) fail(`${label} recovery hash 无效`)
+    return {
+      kind: 'recovery-build',
+      buildNumber: positiveId(base.buildNumber, `${label}.buildNumber`),
+      briefHash: base.briefHash,
+      planHash: base.planHash,
+      controlEpoch: finite(base.controlEpoch, `${label}.controlEpoch`, Number.MAX_SAFE_INTEGER, true),
+    }
+  }
   exactKeys(base, ['kind', 'productReleaseId', 'contentHash'], label)
   if (base.kind !== 'release' || !isSha256Hash(base.contentHash)) fail(`${label} release 无效`)
   return { kind: 'release', productReleaseId: positiveId(base.productReleaseId, `${label}.productReleaseId`), contentHash: base.contentHash }
 }
 
 const EVOLUTION_LANES: readonly ProductEvolutionAffectedLaneV1[] = [
-  'content', 'product', 'visual', 'audio', 'runtime', 'world-source',
+  'content', 'product', 'visual', 'audio', 'runtime', 'world-source', 'production-budget',
 ]
 
 function parseEvolutionImpact(value: unknown): ProductEvolutionImpactV1 {

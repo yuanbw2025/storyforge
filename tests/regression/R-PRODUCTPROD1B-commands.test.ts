@@ -2,7 +2,11 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { executeProductProductionCommand } from '../../src/lib/product-production/commands'
 import { draftProductProductionBriefV3, suggestProductStartingPoints } from '../../src/lib/product-production/consultation'
-import { readProductProductionDetailsV1 } from '../../src/lib/product-production/service'
+import {
+  beginProductProductionEvolutionV1,
+  readProductProductionDetailsV1,
+} from '../../src/lib/product-production/service'
+import { parseProductProductionBriefV3 } from '../../src/lib/product-production/contracts'
 import { canonicalProductProductionJsonV2, hashProductProductionValueV2 } from '../../src/lib/product-production/hash'
 import { createProductProductionPlanV3, parseProductProductionPlanV3 } from '../../src/lib/product-production/plan'
 import { putMediaBlobObject } from '../../src/lib/product-production/media-blob-store'
@@ -372,6 +376,115 @@ describe('PRODUCTPROD-1B · user command control plane', () => {
         blockerKey: 'media.visual', resolution: { action: 'retry', note: '不应复活普通终态失败' },
       },
     })).resolves.toMatchObject({ ok: false, errorCode: 'invalid-state-transition' })
+  })
+
+  it('预算耗尽时创建不可变恢复子 Build，并只继承已签收的专业生产工件', async () => {
+    const f = await fixture('text-adventure')
+    const lowBudgetBrief = parseProductProductionBriefV3({
+      ...f.brief,
+      productionBudget: { ...f.brief.productionBudget, maximumModelCalls: 64 },
+    })
+    const created = await executeProductProductionCommand({
+      scope: f.scope,
+      command: {
+        type: 'create-intent', commandId: 'budget-recovery.intent',
+        productionKey: 'budget-recovery-story', productType: 'text-adventure',
+        worldReleaseId: f.worldReleaseId, userText: '制作专业文字冒险并验证预算续建',
+      },
+    })
+    const saved = await executeProductProductionCommand({
+      scope: f.scope, productionId: created.productionId,
+      command: {
+        type: 'save-brief-revision', commandId: 'budget-recovery.brief', expectedStateRevision: 0,
+        parentRevision: null, brief: lowBudgetBrief,
+      },
+    })
+    await executeProductProductionCommand({
+      scope: f.scope, productionId: created.productionId,
+      command: {
+        type: 'authorize-start', commandId: 'budget-recovery.start', expectedStateRevision: 1,
+        briefRevision: 1, briefHash: saved.result.briefHash as string,
+        authorizationNonce: 'budget-recovery.click',
+      },
+    })
+    const parent = (await db.productBuilds.where('productionId').equals(created.productionId).first())!
+    const parentPlan = await createProductProductionPlanV3({
+      buildNumber: parent.buildNumber, controlEpoch: parent.controlEpoch,
+      briefHash: saved.result.briefHash as string, brief: lowBudgetBrief,
+    })
+    const parentPlanHash = await hashProductProductionValueV2(parentPlan)
+    const supervisionTask = parentPlan.tasks.find(task => task.taskKey === 'production.supervision')!
+    const supervisionPayload = {
+      schema: 'fixture.accepted-artifact', version: 1, taskKey: supervisionTask.taskKey,
+    }
+    const supervisionHash = await hashProductProductionValueV2(supervisionPayload)
+    await db.productBuildArtifacts.add({
+      projectId: f.scope.projectId, worldId: f.scope.worldId, workId: f.scope.workId,
+      buildId: parent.id!, artifactKey: supervisionTask.outputArtifactKeys[0],
+      requirementKey: null, version: 1, kind: 'narrative', mediaKind: null,
+      status: 'accepted', producerRunId: null, producerReceiptHash: null,
+      controlEpoch: parent.controlEpoch, inputHash: await hashProductProductionValueV2({ input: 1 }),
+      contentHash: supervisionHash, payloadJson: canonicalProductProductionJsonV2(supervisionPayload),
+      metadataJson: '{}', qualityJson: '{}', rightsJson: '{}', blobObjectId: null,
+      mimeType: null, byteSize: 1, parentArtifactHash: null, carriedFrom: null,
+      createdAt: Date.now(), updatedAt: Date.now(),
+    } satisfies ProductBuildArtifactRecordV1)
+    await db.productBuilds.update(parent.id!, {
+      status: 'recovery-required', planRevision: 1,
+      planJson: canonicalProductProductionJsonV2(parentPlan), planHash: parentPlanHash,
+      failureJson: JSON.stringify({
+        taskKey: 'content.dialogue-pass.act-3', code: 'task-executor-failed',
+        detail: 'Build lifetime budget 不足:modelCalls=64/64',
+      }),
+    })
+
+    const evolved = await beginProductProductionEvolutionV1({
+      scope: f.scope, productionId: created.productionId,
+      userText: '仅扩充专业文字冒险生产预算并继承已签收工件继续生产。',
+      affectedLanes: ['production-budget'],
+    })
+    const recoveredBriefRow = (await db.productProductionBriefs
+      .where('[productionId+revision]').equals([created.productionId, evolved.briefRevision]).first())!
+    const recoveredBrief = parseProductProductionBriefV3(recoveredBriefRow.briefJson)
+    expect(recoveredBrief.productionBudget.maximumModelCalls).toBeGreaterThan(64)
+    expect(recoveredBrief.evolution).toMatchObject({
+      affectedLanes: ['production-budget'],
+      base: {
+        kind: 'recovery-build', buildNumber: 1, briefHash: saved.result.briefHash,
+        planHash: parentPlanHash, controlEpoch: parent.controlEpoch,
+      },
+    })
+    expect(await db.productBuilds.get(parent.id!)).toMatchObject({
+      status: 'recovery-required', briefHash: saved.result.briefHash, planHash: parentPlanHash,
+    })
+
+    const production = (await db.productProductions.get(created.productionId))!
+    await executeProductProductionCommand({
+      scope: f.scope, productionId: created.productionId,
+      command: {
+        type: 'authorize-start', commandId: 'budget-recovery.restart',
+        expectedStateRevision: production.stateRevision, briefRevision: evolved.briefRevision,
+        briefHash: recoveredBriefRow.briefHash, authorizationNonce: 'budget-recovery.restart-click',
+      },
+    })
+    const child = (await db.productBuilds
+      .where('[productionId+buildNumber]').equals([created.productionId, 2]).first())!
+    expect(child).toMatchObject({ parentBuildNumber: 1, status: 'authorized' })
+    await runProductProductionSchedulerCycleV1({
+      scope: f.scope, productionId: created.productionId,
+      capabilityBindings: recoveredBrief.capabilityRequirements.map(requirement => ({
+        requirementKey: requirement.requirementKey,
+        adapterId: `fixture.${requirement.mediaClass}`,
+        bindingHash: 'f'.repeat(64),
+      })),
+      executor: async () => { throw new Error('fixture stops after reuse materialization') },
+    })
+    const carried = await db.productBuildArtifacts
+      .where('[buildId+artifactKey]').equals([child.id!, supervisionTask.outputArtifactKeys[0]]).first()
+    expect(carried).toMatchObject({
+      status: 'carried-forward', contentHash: supervisionHash,
+      parentArtifactHash: supervisionHash,
+    })
   })
 
   it('只允许文字冒险来源作者闸门接受产品私域补充，并冻结命令证据', async () => {

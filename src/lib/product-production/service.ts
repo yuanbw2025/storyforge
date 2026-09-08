@@ -1011,7 +1011,27 @@ export async function beginProductProductionEvolutionV1(input: {
   const details = await readProductProductionDetailsV1(scope, input.productionId)
   if (!details.build) throw new Error('[product-production-service] 演化需要一个可验证的 Preview 或 Release 基线')
   let base: ProductEvolutionBaseV1
-  if (details.production.status === 'released' && details.production.currentProductReleaseId != null) {
+  const budgetRecovery = affectedLanes.length === 1 && affectedLanes[0] === 'production-budget'
+  if (budgetRecovery) {
+    if (details.production.productType !== 'text-adventure'
+      || details.production.status !== 'producing'
+      || details.build.status !== 'recovery-required'
+      || !details.build.briefHash || !details.build.planHash) {
+      throw new Error('[product-production-service] 当前状态不能创建文字冒险预算恢复 Build')
+    }
+    const brief = parseProductProductionBriefV3(details.brief?.briefJson ?? '')
+    const floor = textAdventureProductionBudgetFloorV1(brief)
+    if (brief.productionBudget.maximumModelCalls >= floor.minimumModelCalls
+      && brief.productionBudget.maximumInputTokens >= floor.minimumInputTokens
+      && brief.productionBudget.maximumOutputTokens >= floor.minimumOutputTokens) {
+      throw new Error('[product-production-service] 当前 Brief 已满足专业生产预算底线，请检查实际 blocker 后重试')
+    }
+    base = {
+      kind: 'recovery-build', buildNumber: details.build.buildNumber,
+      briefHash: details.build.briefHash, planHash: details.build.planHash,
+      controlEpoch: details.build.controlEpoch,
+    }
+  } else if (details.production.status === 'released' && details.production.currentProductReleaseId != null) {
     const release = await db.productReleases.get(details.production.currentProductReleaseId)
     if (!release || !await assertRecordInScope(scope, 'productReleases', release, { owner: 'work' })) {
       throw new Error('[product-production-service] 当前 ProductRelease 基线缺失或跨 Work')

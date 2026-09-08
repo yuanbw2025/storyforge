@@ -813,8 +813,15 @@ async function applyCrossBuildEvolutionReuse(input: {
     || !await assertRecordInScope(input.scope, 'productBuilds', parentBuild, { owner: 'work' })) {
     throw new Error('[product-production-scheduler] 演化 parent Build 缺失或跨 Work')
   }
-  if (evolution.base.kind === 'build' && evolution.base.buildNumber !== parentBuild.buildNumber) {
+  if ((evolution.base.kind === 'build' || evolution.base.kind === 'recovery-build')
+    && evolution.base.buildNumber !== parentBuild.buildNumber) {
     throw new Error('[product-production-scheduler] 演化 impact 与 parent Build 不一致')
+  }
+  if (evolution.base.kind === 'recovery-build'
+    && (evolution.base.briefHash !== parentBuild.briefHash
+      || evolution.base.planHash !== parentBuild.planHash
+      || evolution.base.controlEpoch !== parentBuild.controlEpoch)) {
+    throw new Error('[product-production-scheduler] 恢复 Build 的 Brief/Plan/epoch 已变化')
   }
   const parentBriefRow = await db.productProductionBriefs
     .where('[productionId+revision]').equals([input.build.productionId, parentBuild.briefRevision]).first()
@@ -1026,6 +1033,13 @@ async function ensurePlan(input: {
       await carryForwardProductBuildArtifactsAcrossBuildsV1({
         scope: input.scope, sourceBuildId: reuse.sourceBuildId, targetBuildId: state.build.id!,
         targetControlEpoch: state.build.controlEpoch, artifactKeys: reuse.reusableArtifactKeys,
+        recoverySource: state.brief.evolution?.base.kind === 'recovery-build'
+          ? {
+              briefHash: state.brief.evolution.base.briefHash,
+              planHash: state.brief.evolution.base.planHash,
+              controlEpoch: state.brief.evolution.base.controlEpoch,
+            }
+          : undefined,
       })
     }
   }

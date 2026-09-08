@@ -232,6 +232,11 @@ export async function carryForwardProductBuildArtifactsAcrossBuildsV1(input: {
   targetBuildId: number
   targetControlEpoch: number
   artifactKeys: string[]
+  recoverySource?: {
+    briefHash: string
+    planHash: string
+    controlEpoch: number
+  }
 }): Promise<ProductBuildArtifactRecordV1[]> {
   const scope = await resolveScope({ scope: input.scope })
   if (input.sourceBuildId === input.targetBuildId || !Number.isInteger(input.targetControlEpoch)
@@ -248,13 +253,19 @@ export async function carryForwardProductBuildArtifactsAcrossBuildsV1(input: {
     const [sourceBuild, targetBuild] = await Promise.all([
       db.productBuilds.get(input.sourceBuildId), db.productBuilds.get(input.targetBuildId),
     ])
+    const recoverySourceAllowed = sourceBuild?.status === 'recovery-required'
+      && input.recoverySource != null
+      && input.recoverySource.briefHash === sourceBuild.briefHash
+      && input.recoverySource.planHash === sourceBuild.planHash
+      && input.recoverySource.controlEpoch === sourceBuild.controlEpoch
     if (!sourceBuild || !targetBuild
       || !await assertRecordInScope(scope, 'productBuilds', sourceBuild, { owner: 'work' })
       || !await assertRecordInScope(scope, 'productBuilds', targetBuild, { owner: 'work' })
       || sourceBuild.productionId !== targetBuild.productionId
       || targetBuild.parentBuildNumber !== sourceBuild.buildNumber
       || targetBuild.controlEpoch !== input.targetControlEpoch
-      || !['preview-ready', 'release-ready', 'released'].includes(sourceBuild.status)
+      || (!['preview-ready', 'release-ready', 'released'].includes(sourceBuild.status)
+        && !recoverySourceAllowed)
       || ['cancelled', 'failed', 'archived', 'released'].includes(targetBuild.status)) {
       throw new Error('[product-production-artifact] cross-build 来源/目标关系不可复用')
     }
