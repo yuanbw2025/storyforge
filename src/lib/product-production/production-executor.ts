@@ -1359,6 +1359,64 @@ export function legalizeProductionModelProtocolDefaultsV1(
     )
     return { payload: next, defaultedFields, discardedNullEntries, discardedUnregisteredStateFields }
   }
+  if (textAdventureSceneScriptBoundary(taskKey) != null) {
+    const next: JsonRecord = { ...payload }
+    const normalizeBeats = (value: unknown, path: string): unknown => {
+      if (!Array.isArray(value)) return value
+      const decorated = value.map((beat, index) => ({ beat, index }))
+      const ordered = [...decorated].sort((left, right) => {
+        const leftRecord = left.beat && typeof left.beat === 'object' && !Array.isArray(left.beat)
+          ? left.beat as JsonRecord : null
+        const rightRecord = right.beat && typeof right.beat === 'object' && !Array.isArray(right.beat)
+          ? right.beat as JsonRecord : null
+        const leftOrder = typeof leftRecord?.order === 'number' && Number.isSafeInteger(leftRecord.order)
+          ? leftRecord.order : left.index
+        const rightOrder = typeof rightRecord?.order === 'number' && Number.isSafeInteger(rightRecord.order)
+          ? rightRecord.order : right.index
+        const byOrder = leftOrder - rightOrder
+        if (byOrder !== 0) return byOrder
+        const leftKey = typeof leftRecord?.beatKey === 'string' ? leftRecord.beatKey : ''
+        const rightKey = typeof rightRecord?.beatKey === 'string' ? rightRecord.beatKey : ''
+        return leftKey.localeCompare(rightKey) || left.index - right.index
+      })
+      if (ordered.some((entry, index) => entry.index !== index)) {
+        defaultedFields.push(`${path}<-stable-order`)
+      }
+      return ordered.map(entry => entry.beat)
+    }
+    const normalizeChoices = (value: unknown, path: string): unknown => (
+      Array.isArray(value) ? value.map((choice, index) => {
+        if (!choice || typeof choice !== 'object' || Array.isArray(choice)) return choice
+        const item = { ...(choice as JsonRecord) }
+        if (item.unavailableReason === null) {
+          // The protocol defines an omitted unavailableReason as the empty
+          // state. Treat provider null as omission without inventing copy.
+          delete item.unavailableReason
+          defaultedFields.push(`${path}[${index}].unavailableReason<-null-as-omitted`)
+        }
+        return item
+      }) : value
+    )
+    if (Array.isArray(payload.scenes)) next.scenes = payload.scenes.map((scene, sceneIndex) => {
+      if (!scene || typeof scene !== 'object' || Array.isArray(scene)) return scene
+      const item = { ...(scene as JsonRecord) }
+      item.beats = normalizeBeats(item.beats, `scenes[${sceneIndex}].beats`)
+      if (Object.prototype.hasOwnProperty.call(item, 'choices')) {
+        item.choices = normalizeChoices(item.choices, `scenes[${sceneIndex}].choices`)
+      }
+      return item
+    })
+    if (Array.isArray(payload.endings)) next.endings = payload.endings.map((ending, endingIndex) => {
+      if (!ending || typeof ending !== 'object' || Array.isArray(ending)) return ending
+      const item = { ...(ending as JsonRecord) }
+      item.beats = normalizeBeats(item.beats, `endings[${endingIndex}].beats`)
+      return item
+    })
+    if (Object.prototype.hasOwnProperty.call(payload, 'choices')) {
+      next.choices = normalizeChoices(payload.choices, 'choices')
+    }
+    return { payload: next, defaultedFields, discardedNullEntries, discardedUnregisteredStateFields }
+  }
   if (taskKey === 'content.narrative') {
     const next: JsonRecord = { ...payload }
     const nodes = compactProtocolArray(payload.nodes, 'nodes', discardedNullEntries)

@@ -1627,6 +1627,48 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
       'quests[0].objectives[1].alternatives[0].actionKind<-scene-without-npc',
     ]))
 
+    const sceneScript = legalizeProductionModelProtocolDefaultsV1(
+      'content.scene-script.act-2.part-1',
+      {
+        scenes: [{
+          sceneKey: 'scene.004', title: '潮门', summary: '潮声逼近。',
+          beats: [
+            { beatKey: 'beat.2', kind: 'narration', speakerKey: null, text: '后发生。', order: 2 },
+            { beatKey: 'beat.1', kind: 'narration', speakerKey: null, text: '先发生。', order: 1 },
+          ],
+          choices: [{
+            choiceKey: 'choice.1', sourceNodeKey: 'scene.004', targetNodeKey: 'scene.005',
+            text: '继续', description: '走向潮门。', unavailableReason: null, order: 0,
+          }],
+        }],
+        choices: [{
+          choiceKey: 'choice.1', sourceNodeKey: 'scene.004', targetNodeKey: 'scene.005',
+          text: '继续', description: '走向潮门。', unavailableReason: null, order: 0,
+        }],
+        endings: [{
+          endingKey: 'ending.1', title: '余潮', summary: '潮声退去。',
+          beats: [
+            { beatKey: 'beat.end.2', kind: 'narration', speakerKey: null, text: '灯火熄灭。', order: 2 },
+            { beatKey: 'beat.end.1', kind: 'narration', speakerKey: null, text: '天光升起。', order: 1 },
+          ],
+        }],
+      },
+    )
+    expect(sceneScript.payload).toMatchObject({
+      scenes: [{
+        beats: [{ beatKey: 'beat.1' }, { beatKey: 'beat.2' }],
+        choices: [expect.not.objectContaining({ unavailableReason: expect.anything() })],
+      }],
+      choices: [expect.not.objectContaining({ unavailableReason: expect.anything() })],
+      endings: [{ beats: [{ beatKey: 'beat.end.1' }, { beatKey: 'beat.end.2' }] }],
+    })
+    expect(sceneScript.defaultedFields).toEqual([
+      'scenes[0].beats<-stable-order',
+      'scenes[0].choices[0].unavailableReason<-null-as-omitted',
+      'endings[0].beats<-stable-order',
+      'choices[0].unavailableReason<-null-as-omitted',
+    ])
+
     const narrative = legalizeProductionModelProtocolDefaultsV1('content.narrative', {
       nodes: [{
         key: 'entry', kind: 'entry', title: '入口', summary: '开始。',
