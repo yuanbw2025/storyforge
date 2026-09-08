@@ -1553,6 +1553,7 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
     })
     expect(quests.defaultedFields).toEqual([
       'entries[0].rewardExperience', 'entries[0].rewardCurrency',
+      'entries[0].stages[0].timeCostMinutes',
       'entries[0].stages[0].locationOrdinal<-stage-location',
     ])
     expect(quests.discardedNullEntries).toEqual(['entries[0].stages[1]'])

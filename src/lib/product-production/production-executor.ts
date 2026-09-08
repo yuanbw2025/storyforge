@@ -1189,26 +1189,33 @@ export function legalizeProductionModelProtocolDefaultsV1(
       const stages = compactProtocolArray(item.stages, `entries[${index}].stages`, discardedNullEntries)
       if (!Array.isArray(stages)) return item
       item.stages = stages.map((stage, stageIndex) => {
-        if (!stage || typeof stage !== 'object' || Array.isArray(stage) || locationTitles.length === 0) {
-          return stage
+        const nextStage = protocolObjectWithDefaults(
+          stage,
+          `entries[${index}].stages[${stageIndex}]`,
+          { timeCostMinutes: side ? 8 : 5 },
+          defaultedFields,
+        )
+        if (!nextStage || typeof nextStage !== 'object' || Array.isArray(nextStage)
+          || locationTitles.length === 0) {
+          return nextStage
         }
-        const nextStage = { ...(stage as JsonRecord) }
+        const stageRecord = nextStage as JsonRecord
         // A settlement can legitimately point at the next location. Freeze the
         // current action location from the stage title/objective only, matching
         // the strict parser's definition of the action surface.
-        const decisiveSurface = [nextStage.title, nextStage.objective]
+        const decisiveSurface = [stageRecord.title, stageRecord.objective]
           .filter((value): value is string => typeof value === 'string')
           .join('\n')
         const mentionedOrdinals = locationTitles.flatMap((title, titleIndex) => (
           decisiveSurface.includes(title) ? [titleIndex + 1] : []
         ))
-        if (mentionedOrdinals.length === 1 && nextStage.locationOrdinal !== mentionedOrdinals[0]) {
-          nextStage.locationOrdinal = mentionedOrdinals[0]
+        if (mentionedOrdinals.length === 1 && stageRecord.locationOrdinal !== mentionedOrdinals[0]) {
+          stageRecord.locationOrdinal = mentionedOrdinals[0]
           defaultedFields.push(
             `entries[${index}].stages[${stageIndex}].locationOrdinal<-stage-location`,
           )
         }
-        return nextStage
+        return stageRecord
       })
       return item
     })
