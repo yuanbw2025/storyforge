@@ -1326,9 +1326,14 @@ async function recoveryInvalidatedTaskKeys(input: {
   const narrativeIntegrationOwnerTaskKeys = input.plan.tasks
     .filter(task => /^content\.(?:scene-script\.act-[1-3](?:\.part-\d+)?|dialogue-pass\.act-[1-3])$/.test(task.taskKey))
     .map(task => task.taskKey)
+  const directlyResolvedFailureDetail = previousFailure && typeof previousFailure.detail === 'string'
+    ? previousFailure.detail : ''
   const expandFailureOwnerTaskKeys = (taskKey: string) => (
     taskKey === 'integration.narrative'
       ? narrativeIntegrationOwnerTaskKeys
+      : /^content\.scene-script\.act-[1-3]$/.test(taskKey)
+        && directlyResolvedFailureDetail.includes('跨场景 beatKey 重复')
+        ? [taskKey]
       : sceneScriptPartKeys(taskKey)
   )
   const directlyResolvedFailureTaskKey = previousFailure

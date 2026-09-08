@@ -840,29 +840,11 @@ function professionalTextAdventureSceneScriptOutputs(
       schema: 'storyforge.text-adventure-dialogue-pass-artifact' as const,
       version: 1 as const,
       actKey: bundle.actKey,
-      characterAssessments: usedSpeakerKeys.map(characterKey => ({
-        characterKey,
-        voiceDistinctness: 'adequate' as const,
-        knowledgeBoundary: 'passed' as const,
-        notes: '审校后说话方式与角色圣经一致，未越过已知事实边界。',
-      })),
-      beatReviews: dialogueBeats.map(beat => ({
-        beatKey: beat.beatKey,
-        speakerKey: beat.speakerKey!,
-        verdict: 'keep' as const,
-        issueTags: ['none'] as const,
-        rationale: '声音、目的和知识边界均符合角色圣经。',
-        revisedText: beat.text,
-      })),
-      choiceReviews: choices.map(choice => ({
-        choiceKey: choice.choiceKey,
-        verdict: 'keep' as const,
-        issueTags: ['none'] as const,
-        rationale: '选择措辞表达了可理解的玩家意图与差异化代价。',
-        revisedText: choice.text,
-        revisedDescription: choice.description,
-      })),
-      summary: '已逐条覆盖本幕全部对白与玩家选择文案，角色声音、知识边界和玩家意图均可进入确定性装配。',
+      reviewedCharacterCount: usedSpeakerKeys.length,
+      reviewedBeatCount: dialogueBeats.length,
+      reviewedChoiceCount: choices.length,
+      beatReviews: [],
+      choiceReviews: [],
     }]
   }))
   const sceneScriptPartOutputs = Object.fromEntries(Object.entries(sceneScriptOutputs).flatMap(([taskKey, bundle]) => {
