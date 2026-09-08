@@ -3421,6 +3421,7 @@ export function productImageNegativePromptV1(
 export function textAdventureVisualRepairCastConstraintV1(input: {
   repairEvidence: string
   mediaKind: ProductMediaKind
+  scenePrompt?: string
   characters: ReadonlyArray<{
     key: string
     name: string
@@ -3428,16 +3429,23 @@ export function textAdventureVisualRepairCastConstraintV1(input: {
     publicIdentity: string
     visualAnchor: string
   }>
-}): { promptSuffix: string; negativePromptSuffix: string } {
+}): { promptSuffix: string; promptOverride: string; negativePromptSuffix: string } {
   const identityRepair = input.mediaKind === 'cg'
     && /对峙|角色身份|身份归属|无关角色|未登记角色|视觉锚点/.test(input.repairEvidence)
+  const preferMentor = /导师|记忆|回忆|遗物/.test(`${input.scenePrompt ?? ''}\n${input.repairEvidence}`)
   const namedNpc = identityRepair
     ? input.characters
         .filter(character => character.role !== 'player' && input.repairEvidence.includes(character.name))
-        .map(character => ({ character, offset: input.repairEvidence.indexOf(character.name) }))
-        .sort((left, right) => left.offset - right.offset || left.character.key.localeCompare(right.character.key))[0]
+        .map(character => ({
+          character,
+          offset: input.repairEvidence.indexOf(character.name),
+          preferred: preferMentor && /导师/.test(character.publicIdentity) ? 1 : 0,
+        }))
+        .sort((left, right) => right.preferred - left.preferred
+          || left.offset - right.offset || left.character.key.localeCompare(right.character.key))[0]
         ?.character ?? null
     : null
+  const player = input.characters.find(character => character.role === 'player') ?? null
   const banMilitary = /军服|军事|军队|大檐帽|肩章|军人|长柄斧|持斧/.test(input.repairEvidence)
   const banUnknownCast = /无关角色|未登记角色|身份归属不明|无匹配/.test(input.repairEvidence)
   return {
@@ -3446,6 +3454,13 @@ export function textAdventureVisualRepairCastConstraintV1(input: {
         `视觉锚点：${namedNpc.visualAnchor}。画面只能出现主角与「${namedNpc.name}」两名有身份角色，` +
         '采用面对面或隔着关键物件的对峙构图，禁止群像海报排布、无身份第三人和自由发明服饰。'
       : '',
+    promptOverride: namedNpc && player
+      ? `电影感横幅海洋奇幻与机械遗迹插画。叙事目标：${input.scenePrompt ?? '关键真相揭露的对峙时刻'}。` +
+        `画面严格只有两名已登记角色：角色 A「${player.name}」，${player.publicIdentity}，${player.visualAnchor}；` +
+        `角色 B「${namedNpc.name}」，${namedNpc.publicIdentity}，${namedNpc.visualAnchor}。` +
+        '两人面对面，或隔着发光的古旧机械记忆匣对峙，视线与手势相互呼应，真相正被揭开。' +
+        '单一连续场景构图，不是海报、角色卡、拼贴画、分屏或群像。服饰、道具与背景全部服从冻结身份与视觉锚点。'
+      : '',
     negativePromptSuffix: [
       ...(banMilitary
         ? ['现实军服、大檐帽、肩章、军用徽章、持斧军人、长柄斧、枪械、modern military uniform, peaked cap, epaulets, soldier, axe, weapon']
@@ -3453,6 +3468,20 @@ export function textAdventureVisualRepairCastConstraintV1(input: {
       ...(banUnknownCast ? ['未登记角色、无身份群众、第三人物、unregistered character, anonymous extra'] : []),
     ].join('；'),
   }
+}
+
+export function positiveImageRepairDirectiveV1(recommendation: string, category: string): string {
+  if (category === 'text') return ''
+  return recommendation
+    .split(/[；。\n]+/)
+    .map(value => value.trim())
+    .filter(Boolean)
+    .map(value => {
+      const replacement = value.match(/(?:替换为|调整为|改为|改用)(.+)$/)?.[1]?.trim()
+      return replacement ? `使用${replacement}` : value
+    })
+    .filter(value => !/去除|移除|清除|禁止|不得|不要|避免|消除|无文字|伪文字|汉字/.test(value))
+    .join('；')
 }
 
 async function executeVisualTask(input: ProductProductionTaskExecutionInputV1, options: {
@@ -3556,7 +3585,8 @@ async function executeVisualTask(input: ProductProductionTaskExecutionInputV1, o
         || !Array.isArray(feedback.issues) || feedback.issues.length > 12) {
         fail(`视觉返修反馈目标无效:${artifactKey}`)
       }
-      const issueInstructions = feedback.issues.map((value, issueIndex) => {
+      const rawEvidence: string[] = []
+      const issueInstructions = feedback.issues.flatMap((value, issueIndex) => {
         const issue = record(value, `media.repair-feedback.${artifactKey}.issues[${issueIndex}]`)
         exactKeys(issue, [
           'severity', 'category', 'detail', 'recommendation',
@@ -3567,22 +3597,26 @@ async function executeVisualTask(input: ProductProductionTaskExecutionInputV1, o
         const category = text(issue.category, 'category', 50)
         const detail = text(issue.detail, 'detail', 1_000)
         const recommendation = text(issue.recommendation, 'recommendation', 1_000)
+        rawEvidence.push(`${issueIndex + 1}. [${category}] ${detail}；${recommendation}`)
         const noGlyphOverride = category === 'text' || /文字|字符|汉字|字形|伪字/.test(detail)
-          ? '；最高优先约束：完全去除可读文字、伪文字和类似字符的字形，不得用虚构文字替代；允许不构成字符的纯几何纹样'
-          : ''
+          ? true : false
         if (noGlyphOverride) repairRequiresGlyphSuppression = true
-        return `${issueIndex + 1}. [${text(issue.severity, 'severity', 20)} / ${category}] ` +
-          `上轮问题：${detail}；修复要求：${recommendation}${noGlyphOverride}`
+        const directive = positiveImageRepairDirectiveV1(recommendation, category)
+        return directive
+          ? [`${issueIndex + 1}. [${text(issue.severity, 'severity', 20)} / ${category}] ${directive}`]
+          : []
       })
-      repairInstruction = `\n本次是受 Visual QA 约束的返修，不是自由变体。禁止重复上轮已识别缺陷。` +
-        `逐项落实以下审查意见，并继续遵守原始需求、视觉圣经和角色锚点：\n${issueInstructions.join('\n')}`
-      repairEvidence = issueInstructions.join('\n')
+      repairInstruction = `\n本次是受 Visual QA 约束的全新候选，继续遵守原始需求、视觉圣经和角色锚点。` +
+        (issueInstructions.length ? `正向修复目标：\n${issueInstructions.join('\n')}` : '')
+      repairEvidence = rawEvidence.join('\n')
     }
     const repairCastConstraint = textAdventureVisualRepairCastConstraintV1({
       repairEvidence, mediaKind: requirement.mediaKind,
+      scenePrompt: requirement.prompt,
       characters: cast?.characters ?? [],
     })
-    const providerPrompt = `${baseProviderPrompt}${repairInstruction}${repairCastConstraint.promptSuffix}` + (repairRequiresGlyphSuppression
+    const providerPrompt = `${repairCastConstraint.promptOverride || baseProviderPrompt}` +
+      `${repairCastConstraint.promptOverride ? '' : repairInstruction}${repairCastConstraint.promptSuffix}` + (repairRequiresGlyphSuppression
       ? '\nABSOLUTE REPAIR CONSTRAINT: blank artifact surfaces; no readable text, letters, numbers, pseudo-text, runes, labels, logos, signatures, or character-like marks. Do not replace forbidden text with invented glyphs.'
       : '')
     if (binding?.adapterId === 'storyforge.procedural-svg.v1') {
