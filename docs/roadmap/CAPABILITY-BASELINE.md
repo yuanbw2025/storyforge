@@ -44,6 +44,7 @@
 | C-SHORT-01 | implemented | 独立 `ShortNovelProductionV1`、六个专属 Skill/durable run、3～8 章工作台、逐章确认、证据审校/定向重写、完成门、append-only `CreationReleaseV1` 及 Markdown/TXT/JSON 导出已通过确定性回归、备份往返和真实 UI E2E | 文学质量和 provider 表现持续评测；不把剧本或漫画能力混入短篇产品 |
 | C-SCREENPLAY-01 | implemented | Product Hub 正式入口、冻结来源事实/因果/删改决定、Beat/Scene Card/场景 AST、十个专属 Skill 与 durable run、来源/戏剧双审查、定点修订、完成门、append-only `CreationReleaseV1` 及 Fountain/FDX/打印导出已通过恢复、备份、生命周期、round-trip 和真实 Chromium E2E | provider 表现和人工盲评持续观察；旧一步式剧本候选与完稿入口已拒绝，不把漫画页格或媒资混入剧本产品 |
 | C-COMIC-01 | implemented | Product Hub 正式入口、十二阶段专业改编、漫画脚本/分页/显式阅读链/页格/视觉圣经、provider 能力与参考图实传证据、叙事/视觉双审查、定点修复、storyboard/visual 不可变 Release、Release→Blob 强引用及 PNG/WebP/CBZ/PDF 导出已通过恢复、迁移、备份、媒资生命周期和真实 Chromium E2E | provider 缺少 reference/seed/inpainting 时诚实阻断或降级；新 provider 仍须各自完成真实能力与质量验收，不能把 Prompt 声明当实传证据 |
+| C-MOTION-DRAMA-01 | in-progress | 产品契约、专项规划、流程图和行业流程审查已建立；功能在 `feat/motion-drama-preproduction` 施工 | 完成来源、系列/分集、物料、剧本、分镜、参考帧、Image/Video Prompt IR、适配包、Release、三注册表与隔离 E2E 后才能升级为 implemented |
 
 ## D · 世界引擎
 

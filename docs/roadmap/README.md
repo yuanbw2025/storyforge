@@ -32,16 +32,13 @@ Phase 5 已完成世界观/故事/角色/主支线/大纲/细纲/正文、候选
 
 ## 阶段 C · 独立创作产品
 
-三项都必须保持独立产品闭环。允许从同一治理基线创建不同分支并行施工；它们可以复用稳定底座，但不能共用万能产物表或万能 Agent。
+短篇、小说转剧本和小说转漫画已经完成当前工程闭环并进入 [`COMPLETED.md`](./COMPLETED.md)。新增的漫剧前期生产必须继续保持独立产品闭环；它可以复用稳定底座，但不能复用页漫/剧本正式表或建立万能 Agent。
 
 共同边界、研究索引和集成顺序以 [`INDEPENDENT-CREATION-DEVELOPMENT-PLAN.md`](./INDEPENDENT-CREATION-DEVELOPMENT-PLAN.md) 为入口；实际施工必须分别使用 [`SHORT-NOVEL-DEVELOPMENT-PLAN.md`](./SHORT-NOVEL-DEVELOPMENT-PLAN.md)、[`NOVEL-TO-SCREENPLAY-DEVELOPMENT-PLAN.md`](./NOVEL-TO-SCREENPLAY-DEVELOPMENT-PLAN.md) 或 [`NOVEL-TO-COMIC-DEVELOPMENT-PLAN.md`](./NOVEL-TO-COMIC-DEVELOPMENT-PLAN.md)。三方案隔离结论见 [`INDEPENDENT-CREATION-PLAN-AUDIT.md`](./INDEPENDENT-CREATION-PLAN-AUDIT.md)。不得从现有单次 Prompt 骨架直接扩成一键全自动生成。
 
 | ID | 状态 | 工作 | 前置与完成重点 |
 |---|---|---|---|
-| C-CREATION-00 | NEXT | 独立创作专业共享底座 | 原创 fixtures/eval、来源事实与因果、改编决策、不可变 creation release、三注册表和创建向导 |
-| C-SHORT-01 | QUEUED | 短篇小说完整产品 | Phase 5 长篇共享能力可复用；轻量规划→正文→版本→导出，非长篇开关；支持显式一键派生世界 |
-| C-SCREENPLAY-01 | QUEUED | 小说转剧本完整产品 | 来源事实/因果→Brief/决策→人物弧/beat→scene card→场次→审校/局部重写→专业格式/release |
-| C-COMIC-01 | QUEUED | 小说转漫画完整产品 | 来源与 Brief→漫画脚本→分页/分格→视觉圣经/subject state→生图/一致性→排字→成品 release |
+| C-MOTION-DRAMA-01 | IN_PROGRESS | 漫剧前期生产完整产品 | 一句话/小说→系列/分集→漫剧剧本→版本化物料→分镜/参考帧→Image/Video Prompt IR→工具适配包/release；终点在视频生成前 |
 
 ## 阶段 D · 世界引擎（已完成架构基线）
 
