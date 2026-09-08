@@ -78,7 +78,10 @@ export default function TextOpenWorldLegacyPlayer() {
       <p>{currentRegionDescription}</p>
       <span>tick {world.tick}/{world.tickLimit} · 事件 #{store.runtimeState.lastSequence}</span>
     </article>
-    <article className="rounded border border-border bg-bg-surface p-4">
+    <article
+      className="rounded border border-border bg-bg-surface p-4"
+      data-open-world-ui-key="play.system-actions"
+    >
       <div className="mb-3 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 text-sm font-semibold">
           <Compass className="h-4 w-4 text-accent" />区域行动
@@ -332,6 +335,29 @@ export default function TextOpenWorldLegacyPlayer() {
       <strong>{active.length} 进行中 · {revealed.length} 可接取</strong>
       <span>旧版兼容运行包</span>
     </section>}
+    tutorial={{
+      productionKey,
+      runtimeChannel: store.selectedSessionSource === 'build-preview' ? 'build-preview' : 'release',
+      cycleKey: store.runtimeState.lastSequence,
+      featureSupport: {
+        scene: true,
+        'system-actions': true,
+        quests: true,
+        'map-travel': true,
+        'formal-save': store.selectedSessionSource === 'release',
+        'settings-help': true,
+      },
+      featureAvailability: {
+        scene: true,
+        'system-actions': !world.ended,
+        quests: revealed.length + active.length > 0,
+        'map-travel': travelEdges.length > 0 && !world.travel && !world.ended,
+        'formal-save': store.selectedSessionSource === 'release',
+        'settings-help': true,
+      },
+      availableActionKeys: [],
+      authoredTutorials: [],
+    }}
     error={publicError}
     busy={store.busy}
     onExit={() => void store.select(null)}

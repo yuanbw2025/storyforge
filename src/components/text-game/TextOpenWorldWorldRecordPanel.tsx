@@ -83,6 +83,7 @@ export default function TextOpenWorldWorldRecordPanel(props: {
         role="tab"
         aria-selected={activeTab === tab}
         aria-controls={`text-open-world-world-record-panel-${tab}`}
+        data-open-world-ui-key={tab === 'relationships' ? 'overlay.relationships' : undefined}
         tabIndex={activeTab === tab ? 0 : -1}
         onClick={() => setActiveTab(tab)}
         onKeyDown={event => moveTabFocus(event, index)}

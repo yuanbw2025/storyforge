@@ -255,6 +255,38 @@ describe('Text Open World G4 · 玩家游戏壳', () => {
     expect(desktop.querySelector('button[aria-current="page"]')?.textContent?.trim()).toBe('任务')
   })
 
+  it('自动教程只在功能所属页面真实打开后出现，不用导航回退提前剧透', async () => {
+    const productionKey = `fixture.text-open-world.tutorial-view-${crypto.randomUUID()}`
+    await act(async () => root.render(createElement(TextOpenWorldGameShell, props({
+      preferenceProductionKey: productionKey,
+      tutorial: {
+        productionKey,
+        runtimeChannel: 'release',
+        cycleKey: 1,
+        featureSupport: { quests: true },
+        featureAvailability: { quests: true },
+        availableActionKeys: ['action.global-fallback'],
+        availableActionKeysByView: { scene: [], quests: ['action.quest-page'] },
+        authoredTutorials: [{
+          key: 'quest-page',
+          triggerActionKey: 'action.quest-page',
+          targetUiKey: 'overlay.quest-log',
+          title: '任务页作者提示',
+          body: '只在任务页和该页Action披露后出现。',
+        }],
+      },
+    }))))
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 20)) })
+    expect(host.querySelector('[data-testid="text-open-world-tutorial-hint"]')).toBeNull()
+
+    const navigation = host.querySelector('[data-testid="text-open-world-navigation-rail"]')!
+    await click(buttonByText(navigation, '任务'))
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 20)) })
+    const hint = host.querySelector<HTMLElement>('[data-testid="text-open-world-tutorial-hint"]')
+    expect(hint?.dataset.tutorialStepKey).toBe('authored.quest-page')
+    expect(hint?.dataset.tutorialTargetKey).toBe('overlay.quest-log')
+  })
+
   it('切换面板后可稳定返回场景，且全局状态、来源和退出入口不被重建', async () => {
     const onExit = vi.fn()
     await act(async () => root.render(createElement(TextOpenWorldGameShell, props({ onExit }))))

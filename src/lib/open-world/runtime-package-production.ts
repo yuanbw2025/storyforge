@@ -487,6 +487,10 @@ function compileModulePayloads(
   const edgeBindingByKey = new Map(binding.edges.map(item => [item.edgeKey, item]))
   const finalQuestEffects = qdd.effects
   const finalQuestActions = qdd.actions
+  const firstTutorialAction = artifacts.scenes.scenes
+    .flatMap(scene => scene.actionKeys)
+    .map(actionKey => finalQuestActions.find(action => action.key === actionKey))
+    .find(action => action?.actorScope === 'player')
   const actionOwnerQuest = (effectKey: string) => {
     const actionKeys = finalQuestActions.filter(action => [
       ...action.costEffectKeys, ...action.successEffectKeys, ...action.failureEffectKeys,
@@ -1019,11 +1023,11 @@ function compileModulePayloads(
       taskTextVariants: artifacts.scenes.templateTextVariants.map(variant => ({
         key: variant.key, templateKey: variant.templateKey, title: variant.title, description: variant.description,
       })),
-      tutorials: finalQuestActions.find(action => action.actorScope === 'player') ? [{
+      tutorials: firstTutorialAction ? [{
         key: 'tutorial.first-action',
-        triggerActionKey: finalQuestActions.find(action => action.actorScope === 'player')!.key,
-        targetUiKey: 'play.system-actions', title: '行动方式',
-        body: '可以点击系统行动、选择固定选项，或输入自然语言；所有实际结果都由同一行动规则结算。',
+        triggerActionKey: firstTutorialAction.key,
+        targetUiKey: 'play.fixed-choices', title: '固定选项与行动规则',
+        body: '这个固定选项引用已经发布的行动；系统行动和其他受支持的输入入口也会进入同一规则校验。',
       }] : [],
     },
   }

@@ -495,6 +495,7 @@ export default function TextOpenWorldCraftingEconomyPanel(
   return <section
     className="min-w-0"
     data-testid="text-open-world-crafting-economy-panel"
+    data-open-world-ui-key="overlay.crafting overlay.shop"
     aria-labelledby="text-open-world-crafting-economy-title"
     aria-busy={actionBusy}
   >

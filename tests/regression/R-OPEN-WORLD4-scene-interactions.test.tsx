@@ -185,6 +185,57 @@ describe('Text Open World G4-03 · 场景与三类输入集成', () => {
     expect(dialogue?.textContent).toContain('岑阿婆给你让出石栏边的位置，愿意把记得的细节再讲一遍。')
   })
 
+  it.sequential('教程可用性只跟随当前选中场景，而不聚合其他候选场景', async () => {
+    const runtimePackage = createTextOpenWorldVNextP9Fixture()
+    const runtimeProjection = createInitialTextOpenWorldSessionProjectionV1(runtimePackage)
+    const projected = projectTextOpenWorldScenesV1(runtimeProjection)
+    if (projected.status !== 'ready') throw new Error('测试需要P9场景投影')
+    const projection = structuredClone(projected)
+    const actorScene = projection.scenes.find(scene => scene.key === 'scene.actor.caretaker')!
+    actorScene.fixedChoices = []
+    actorScene.naturalLanguageExamples = []
+    actorScene.fixedChoiceKeys = []
+    actorScene.actionKeys = []
+    const availableActions = createTextOpenWorldActionRegistryV1(runtimePackage)
+      .project(deriveTextOpenWorldContextsV1(runtimeProjection).action)
+      .filter(action => action.available)
+    const onTutorialAvailabilityChange = vi.fn()
+
+    await act(async () => {
+      root.render(createElement(TextOpenWorldScenePanel, {
+        sessionKey: 'tutorial-current-scene',
+        eventSequence: 0,
+        projection,
+        availableActions,
+        feedback: null,
+        busy: false,
+        fallback: {
+          regionTitle: '盐港', locationTitle: '盐港广场', description: '测试场景', playerName: '来客',
+        },
+        onExecute: vi.fn(),
+        onTutorialAvailabilityChange,
+      }))
+      await new Promise(resolve => setTimeout(resolve, 0))
+    })
+
+    expect(onTutorialAvailabilityChange).toHaveBeenLastCalledWith(expect.objectContaining({
+      systemActions: true,
+      fixedChoices: true,
+      naturalInput: true,
+      actionKeys: expect.arrayContaining(['action.accept-main']),
+    }))
+    await click(buttonByText(host, '岑阿婆 · 守渠人的话'))
+    expect(onTutorialAvailabilityChange).toHaveBeenLastCalledWith(expect.objectContaining({
+      systemActions: true,
+      fixedChoices: false,
+      naturalInput: false,
+    }))
+    const latestAvailability = onTutorialAvailabilityChange.mock.calls.at(-1)?.[0]
+    expect(latestAvailability.actionKeys).not.toContain('action.accept-main')
+    expect(host.querySelector('[data-testid="text-open-world-fixed-choices"]')).toBeNull()
+    expect((host.querySelector('#text-open-world-natural-command') as HTMLInputElement).disabled).toBe(true)
+  })
+
   it.sequential('固定选项只选择既有Action，并把fixed-choice写入正式命令信封', async () => {
     const created = await createGovernedTextOpenWorldSessionFixtureV1({
       name: `场景固定选项-${crypto.randomUUID()}`,

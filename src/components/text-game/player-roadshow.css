@@ -133,6 +133,20 @@
 .open-world-game-global-status>* { flex: 0 0 auto; }
 .open-world-game-mobile-navigation { display: none; }
 .open-world-game-overlay { position: absolute; z-index: 65; inset: 0; display: grid; place-items: center; padding: 18px; background: rgba(1,5,7,.66); backdrop-filter: blur(6px); }
+.open-world-tutorial-trigger { white-space: nowrap; }
+.open-world-tutorial-layer { color: #e7ecea; font-family: var(--font-sans); }
+.open-world-tutorial-card { background: linear-gradient(145deg,rgba(19,34,40,.99),rgba(8,17,22,.99)); box-shadow: 0 24px 70px rgba(0,0,0,.62); }
+.open-world-tutorial-card button { min-height: 32px; border-radius: 6px; cursor: pointer; }
+.open-world-tutorial-card button:hover { border-color: rgba(210,170,108,.58); color: #f4e2c6; }
+.open-world-tutorial-step-list { margin-bottom: 0; padding: 0; list-style: none; }
+.open-world-tutorial-step-list [data-tutorial-status="completed"] { border-color: rgba(99,167,128,.36); color: #9bc8ad; }
+.open-world-tutorial-step-list [data-tutorial-status="skipped"] { color: #879699; }
+.open-world-game-shell [data-open-world-tutorial-active] { position: relative; z-index: 42; outline: 3px solid #d2aa6c!important; outline-offset: 3px; box-shadow: 0 0 0 7px rgba(210,170,108,.16),0 0 28px rgba(210,170,108,.26)!important; }
+.open-world-game-shell[data-high-contrast] .open-world-tutorial-card { border-color: #fff; background: #000; color: #fff; }
+.open-world-game-shell[data-high-contrast] .open-world-tutorial-card :is(p,small,span,strong,h2,button) { color: #fff!important; }
+.open-world-game-shell[data-high-contrast] .open-world-tutorial-card button { border-color: #fff!important; background: #000!important; }
+.open-world-game-shell[data-high-contrast] .open-world-tutorial-card button.bg-accent { background: #fff!important; color: #000!important; }
+.open-world-game-shell[data-high-contrast] [data-open-world-tutorial-active] { outline-color: #ffdf6b!important; box-shadow: 0 0 0 7px #000,0 0 0 10px #ffdf6b!important; }
 .open-world-game-rail-card,.open-world-game-context-card { display: grid; gap: 5px; padding: 11px; border: 1px solid rgba(255,255,255,.08); border-radius: 8px; background: rgba(255,255,255,.025); }
 .open-world-game-rail-card small,.open-world-game-context-card small,.open-world-game-scene-card>small { color: #b8945d; font-family: var(--font-mono); font-size: 7px; letter-spacing: .1em; text-transform: uppercase; }
 .open-world-game-rail-card strong,.open-world-game-context-card strong { color: #e7dfd2; font-family: var(--font-serif); font-size: 13px; font-weight: 500; line-height: 1.35; }
@@ -412,6 +426,12 @@
   .open-world-game-mobile-navigation button svg { width: 17px; height: 17px; }
   .open-world-game-mobile-navigation button[aria-current="page"] { border-top-color: #c69e61; background: linear-gradient(180deg,rgba(177,128,64,.14),transparent); color: #eed7b0; }
   .open-world-game-overlay { padding: 9px; }
+  .open-world-tutorial-trigger { width: 36px!important; padding: 0!important; }
+  .open-world-tutorial-trigger svg { margin: 0; }
+  .open-world-tutorial-trigger { font-size: 0!important; }
+  .open-world-tutorial-card { max-width: calc(100vw - 18px); }
+  .open-world-tutorial-layer.open-world-tutorial-card { right: 9px; bottom: 68px; width: calc(100vw - 18px); }
+  .open-world-tutorial-help { padding: 9px; }
   .open-world-scene-narrative { min-height: 190px; padding: 22px 18px; }
   .open-world-scene-narrative>header,.open-world-scene-dialogue>header,.open-world-scene-input-card>header { align-items: flex-start; flex-direction: column; gap: 4px; }
   .open-world-scene-choice-list,.open-world-scene-action-list { grid-template-columns: minmax(0,1fr); }

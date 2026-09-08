@@ -21,6 +21,10 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { createTextOpenWorldPlayerPreferencesStoreV1 } from '../../lib/open-world/player-preferences'
+import type { TextOpenWorldTutorialFeatureV1 } from '../../lib/open-world/player-tutorials'
+import TextOpenWorldTutorialCoach, {
+  type TextOpenWorldTutorialCoachProps,
+} from './TextOpenWorldTutorialCoach'
 import './player-roadshow.css'
 
 export const TEXT_OPEN_WORLD_GAME_VIEW_KEYS = ['scene', 'map', 'quests', 'character', 'more'] as const
@@ -37,6 +41,19 @@ export interface TextOpenWorldGameViewRequest {
   view: TextOpenWorldGameViewKey
 }
 
+type TextOpenWorldActiveTutorialConfig = Omit<
+  TextOpenWorldTutorialCoachProps,
+  'sessionKey' | 'activeView' | 'suspended' | 'containerRef' | 'onSelectView'
+>
+
+export type TextOpenWorldGameTutorialConfig = TextOpenWorldActiveTutorialConfig & {
+  /** Optional visible Action disclosure per page; unspecified pages use availableActionKeys. */
+  availableActionKeysByView?: Readonly<Partial<Record<
+    TextOpenWorldGameViewKey,
+    readonly string[]
+  >>>
+}
+
 export interface TextOpenWorldGameShellProps {
   /** A changed key starts from the scene again without persisting UI-only navigation state. */
   sessionKey: number | string
@@ -49,6 +66,7 @@ export interface TextOpenWorldGameShellProps {
   context: ReactNode
   status: ReactNode
   navigationSupplement?: ReactNode
+  tutorial?: TextOpenWorldGameTutorialConfig
   /** One-shot navigation intent from content such as a task-location link. */
   viewRequest?: TextOpenWorldGameViewRequest | null
   overlay?: ReactNode
@@ -109,6 +127,54 @@ const NAVIGATION: ReadonlyArray<{
   { key: 'more', label: '更多', icon: CircleEllipsis },
 ]
 
+const VIEW_UI_KEYS: Record<TextOpenWorldGameViewKey, string> = {
+  scene: 'play.scene',
+  map: 'overlay.map',
+  quests: 'overlay.quest-log',
+  character: 'overlay.character',
+  more: 'system.settings-help',
+}
+
+const TUTORIAL_FEATURE_VIEW: Readonly<Partial<Record<
+  TextOpenWorldTutorialFeatureV1,
+  TextOpenWorldGameViewKey
+>>> = Object.freeze({
+  scene: 'scene',
+  'system-actions': 'scene',
+  'fixed-choices': 'scene',
+  'natural-input': 'scene',
+  combat: 'scene',
+  quests: 'quests',
+  'map-travel': 'map',
+  character: 'character',
+  skills: 'character',
+  'inventory-equipment': 'more',
+  crafting: 'more',
+  shop: 'more',
+  relationships: 'more',
+  'formal-save': 'more',
+  'settings-help': 'more',
+})
+
+function tutorialForActiveView(
+  tutorial: TextOpenWorldGameTutorialConfig | undefined,
+  activeView: TextOpenWorldGameViewKey,
+): TextOpenWorldActiveTutorialConfig | undefined {
+  if (!tutorial) return undefined
+  const { availableActionKeysByView, ...activeTutorial } = tutorial
+  const featureAvailability = { ...tutorial.featureAvailability }
+  for (const feature of Object.keys(featureAvailability) as TextOpenWorldTutorialFeatureV1[]) {
+    const owningView = TUTORIAL_FEATURE_VIEW[feature]
+    if (owningView && owningView !== activeView) featureAvailability[feature] = false
+  }
+  return {
+    ...activeTutorial,
+    featureAvailability,
+    availableActionKeys: availableActionKeysByView?.[activeView]
+      ?? activeTutorial.availableActionKeys,
+  }
+}
+
 function NavigationButtons(props: {
   activeView: TextOpenWorldGameViewKey
   onSelect(view: TextOpenWorldGameViewKey): void
@@ -119,6 +185,7 @@ function NavigationButtons(props: {
       key={item.key}
       type="button"
       aria-current={props.activeView === item.key ? 'page' : undefined}
+      data-open-world-ui-key={`navigation.${item.key}`}
       onClick={() => props.onSelect(item.key)}
     >
       <Icon aria-hidden="true" />
@@ -134,6 +201,7 @@ export default function TextOpenWorldGameShell(props: TextOpenWorldGameShellProp
     typeof window !== 'undefined' && window.matchMedia?.('(max-width: 1180px)').matches
   ))
   const mainRef = useRef<HTMLElement>(null)
+  const shellRef = useRef<HTMLElement>(null)
   const contextTriggerRef = useRef<HTMLButtonElement>(null)
   const contextCloseRef = useRef<HTMLButtonElement>(null)
   const contextPanelRef = useRef<HTMLElement>(null)
@@ -154,6 +222,10 @@ export default function TextOpenWorldGameShell(props: TextOpenWorldGameShellProp
     preferencesStore.subscribe,
     preferencesStore.getSnapshot,
     preferencesStore.getServerSnapshot,
+  )
+  const activeViewTutorial = useMemo(
+    () => tutorialForActiveView(props.tutorial, activeView),
+    [activeView, props.tutorial],
   )
 
   const closeContext = useCallback((restoreFocus = true) => {
@@ -250,6 +322,7 @@ export default function TextOpenWorldGameShell(props: TextOpenWorldGameShellProp
   }, [onDismissOverlay, overlayOpen])
 
   return <section
+    ref={shellRef}
     className="open-world-game-shell"
     data-testid="text-open-world-shell"
     data-active-view={activeView}
@@ -283,6 +356,14 @@ export default function TextOpenWorldGameShell(props: TextOpenWorldGameShellProp
         <span>{props.locationTitle}</span>
       </div>
       <div className="open-world-game-header-actions">
+        {activeViewTutorial && <TextOpenWorldTutorialCoach
+          {...activeViewTutorial}
+          sessionKey={props.sessionKey}
+          activeView={activeView}
+          suspended={Boolean(props.busy) || overlayOpen || contextModalOpen}
+          containerRef={shellRef}
+          onSelectView={selectView}
+        />}
         <button type="button" aria-label="返回当前场景" onClick={() => selectView('scene')}>
           <ChevronLeft aria-hidden="true" />
           <span>返回场景</span>
@@ -329,6 +410,7 @@ export default function TextOpenWorldGameShell(props: TextOpenWorldGameShellProp
           key={view}
           className="open-world-game-view"
           data-open-world-view={view}
+          data-open-world-ui-key={VIEW_UI_KEYS[view]}
           aria-label={NAVIGATION.find(item => item.key === view)!.label}
           hidden={activeView !== view}
         >
@@ -367,6 +449,7 @@ export default function TextOpenWorldGameShell(props: TextOpenWorldGameShellProp
     <footer
       className="open-world-game-global-status"
       data-testid="text-open-world-global-status"
+      data-open-world-ui-key="overlay.world-status"
       inert={backgroundInert}
       aria-hidden={backgroundInert || undefined}
     >

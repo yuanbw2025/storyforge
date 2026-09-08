@@ -112,6 +112,7 @@ export default function TextOpenWorldCombatPanel({
   if (synchronizing || !projection) return <section
     className="open-world-combat-panel is-synchronizing"
     data-testid="text-open-world-combat-panel"
+    data-open-world-ui-key="overlay.combat"
     role="status"
     aria-live="polite"
   >
@@ -141,6 +142,7 @@ export default function TextOpenWorldCombatPanel({
   return <section
     className={`open-world-combat-panel is-${projection.mode}`}
     data-testid="text-open-world-combat-panel"
+    data-open-world-ui-key="overlay.combat"
     aria-labelledby="text-open-world-combat-title"
   >
     <div className="open-world-game-live-announcement" role="status" aria-live="polite" aria-atomic="true">

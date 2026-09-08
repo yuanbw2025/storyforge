@@ -175,6 +175,7 @@ export default function TextOpenWorldSaveSettingsPanel(
   return <section
     className="open-world-save-settings"
     data-testid="text-open-world-save-settings"
+    data-open-world-ui-key="system.save-branches system.settings-help"
     aria-labelledby="text-open-world-save-settings-heading"
   >
     <header className="open-world-save-settings-heading">

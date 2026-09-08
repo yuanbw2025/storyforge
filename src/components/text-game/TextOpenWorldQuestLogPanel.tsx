@@ -218,6 +218,7 @@ export default function TextOpenWorldQuestLogPanel(props: TextOpenWorldQuestLogP
   return <section
     className="min-w-0 space-y-3 overflow-hidden"
     data-testid="text-open-world-quest-log"
+    data-open-world-ui-key="overlay.quest-log"
     aria-label="任务日志"
   >
     <header className="rounded border border-accent/30 bg-accent/5 p-3" data-testid="text-open-world-quest-hud">

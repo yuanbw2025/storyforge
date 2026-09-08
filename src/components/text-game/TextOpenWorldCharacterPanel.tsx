@@ -47,6 +47,7 @@ export default function TextOpenWorldCharacterPanel(props: {
   return <section
     className="grid min-w-0 gap-4"
     data-testid="text-open-world-character-panel"
+    data-open-world-ui-key="overlay.character"
     aria-label="角色与成长"
   >
     <header
@@ -196,6 +197,7 @@ export default function TextOpenWorldCharacterPanel(props: {
     <article
       className="rounded border border-border bg-bg-surface p-4"
       data-testid="text-open-world-character-skills"
+      data-open-world-ui-key="overlay.skills"
     >
       <div className="flex items-center gap-2 text-sm font-semibold">
         <WandSparkles className="h-4 w-4 text-accent" aria-hidden="true" />技能

@@ -28,7 +28,9 @@ import TextOpenWorldGameShell from './TextOpenWorldGameShell'
 import TextOpenWorldInventoryPanel from './TextOpenWorldInventoryPanel'
 import TextOpenWorldMapPanel, { type TextOpenWorldMapTravelRequestV1 } from './TextOpenWorldMapPanel'
 import TextOpenWorldQuestLogPanel from './TextOpenWorldQuestLogPanel'
-import TextOpenWorldScenePanel from './TextOpenWorldScenePanel'
+import TextOpenWorldScenePanel, {
+  type TextOpenWorldSceneTutorialAvailabilityV1,
+} from './TextOpenWorldScenePanel'
 import TextOpenWorldSaveSettingsPanel from './TextOpenWorldSaveSettingsPanel'
 import TextOpenWorldWorldRecordPanel from './TextOpenWorldWorldRecordPanel'
 
@@ -134,6 +136,13 @@ export default function TextOpenWorldVNextPlayer() {
     locationKey: string
     requestId: number
   } | null>(null)
+  const [sceneTutorialAvailability, setSceneTutorialAvailability] = useState<{
+    sessionKey: number | string | null
+    value: TextOpenWorldSceneTutorialAvailabilityV1
+  }>({
+    sessionKey: null,
+    value: { systemActions: false, fixedChoices: false, naturalInput: false, actionKeys: [] },
+  })
   const projection = store.runtimeState.textOpenWorld
   const publicError = playerSafeError(store.error)
   const runtimePackage = store.selectedManifest?.textOpenWorldVNext
@@ -157,6 +166,20 @@ export default function TextOpenWorldVNextPlayer() {
     ?? 'no-session'
   const productionKey = store.selectedManifest?.definition.productKey
     ?? `unavailable-product:${sessionKey}`
+  const handleSceneTutorialAvailability = useCallback((
+    value: TextOpenWorldSceneTutorialAvailabilityV1,
+  ) => {
+    setSceneTutorialAvailability(current => (
+      current.sessionKey === sessionKey
+        && current.value.systemActions === value.systemActions
+        && current.value.fixedChoices === value.fixedChoices
+        && current.value.naturalInput === value.naturalInput
+        && current.value.actionKeys.length === value.actionKeys.length
+        && current.value.actionKeys.every((key, index) => key === value.actionKeys[index])
+        ? current
+        : { sessionKey, value }
+    ))
+  }, [sessionKey])
   const projectionSequence = projection?.lastEventSequence ?? null
   // These are cheap, deterministic render projections. Recompute rather than
   // caching by object identity so an externally restored mutable snapshot can
@@ -467,6 +490,68 @@ export default function TextOpenWorldVNextPlayer() {
 
   const combatSurfaceVisible = state.combat != null
     && (!combatIdentity || dismissedCombatIdentity !== combatIdentity)
+  const combatTutorialAvailable = combatSurfaceVisible
+    && combatProjectionResult.ready
+    && combatProjection != null
+  const hasVisibleQuest = Object.values(state.quests.instancesByKey).some(instance => (
+    instance.offeredAtWorldMinute != null
+    && instance.status !== 'locked'
+    && instance.status !== 'available'
+  ))
+  const hasInventoryContent = Object.values(state.inventory.stackQuantities).some(quantity => quantity > 0)
+    || Object.keys(state.inventory.itemInstances).length > 0
+  const currentSceneTutorialAvailability = sceneTutorialAvailability.sessionKey === sessionKey
+    ? sceneTutorialAvailability.value
+    : { systemActions: false, fixedChoices: false, naturalInput: false, actionKeys: [] }
+  // The ScenePanel owns which of several eligible scenes is actually selected.
+  // Do not let a later global feature consume this render cycle before that
+  // child has reported the controls that are genuinely on screen.
+  const tutorialAvailabilityReady = combatSurfaceVisible
+    || sceneTutorialAvailability.sessionKey === sessionKey
+  const tutorialFeatureAvailability = {
+    scene: true,
+    'system-actions': !combatSurfaceVisible && currentSceneTutorialAvailability.systemActions,
+    'fixed-choices': !combatSurfaceVisible && currentSceneTutorialAvailability.fixedChoices,
+    'natural-input': !combatSurfaceVisible && currentSceneTutorialAvailability.naturalInput,
+    quests: hasVisibleQuest,
+    'map-travel': availableActions.some(action => (
+      action.action.category === 'travel' || action.action.category === 'fast-travel'
+    )),
+    combat: combatTutorialAvailable,
+    'inventory-equipment': hasInventoryContent,
+    crafting: (craftingEconomyProjection?.crafting.learnedRecipes.length ?? 0) > 0,
+    shop: craftingEconomyProjection?.vendors.some(vendor => vendor.available) ?? false,
+    character: true,
+    skills: modules.progression.skills.length > 0,
+    relationships: worldRecordProjection != null,
+    'world-status': true,
+    'formal-save': store.selectedSessionSource === 'release',
+    'settings-help': true,
+  } as const
+  const tutorialFeatureSupport = {
+    scene: true,
+    'system-actions': modules.narrative.scenes.some(scene => scene.actionKeys.length > 0),
+    'fixed-choices': modules.narrative.fixedChoices.length > 0,
+    'natural-input': sceneProjection.status !== 'unsupported',
+    quests: modules.quests.quests.length > 0,
+    'map-travel': modules.actions.actions.some(action => (
+      action.category === 'travel' || action.category === 'fast-travel'
+    )),
+    character: true,
+    skills: modules.progression.skills.length > 0,
+    combat: modules.combat.encounters.length > 0,
+    'inventory-equipment': modules.items.items.length > 0,
+    crafting: modules.crafting.recipes.length > 0,
+    shop: modules.economy.vendors.length > 0,
+    relationships: true,
+    'world-status': true,
+    'formal-save': store.selectedSessionSource === 'release',
+    'settings-help': true,
+  } as const
+  const allAvailableTutorialActionKeys = availableActions.map(action => action.action.key)
+  const sceneTutorialActionKeys = combatTutorialAvailable
+    ? combatProjection.actions.filter(action => action.available).map(action => action.actionKey)
+    : currentSceneTutorialAvailability.actionKeys
   const sceneView = <div className="space-y-3">
     {combatSurfaceVisible ? <TextOpenWorldCombatPanel
       projection={combatProjection}
@@ -494,6 +579,7 @@ export default function TextOpenWorldVNextPlayer() {
         const action = availableActions.find(item => item.action.key === actionKey)
         if (action) executeProjectedAction(action, targetKey, source)
       }}
+      onTutorialAvailabilityChange={handleSceneTutorialAvailability}
     />}
     {store.runtimeState.narrative?.availableChoiceKeys?.includes('ending.world') && <section
       className="rounded border border-accent/30 bg-accent/5 p-5"
@@ -667,6 +753,16 @@ export default function TextOpenWorldVNextPlayer() {
       gameTitle={runtimePackage.metadata.title}
       locationTitle={`${region?.title ?? '未知区域'} · ${location?.title ?? state.map.currentLocationKey}`}
       sourceLabel={sourceLabel}
+      tutorial={tutorialAvailabilityReady ? {
+        productionKey,
+        runtimeChannel: store.selectedSessionSource === 'build-preview' ? 'build-preview' : 'release',
+        cycleKey: projection.lastEventSequence,
+        featureAvailability: tutorialFeatureAvailability,
+        featureSupport: tutorialFeatureSupport,
+        availableActionKeys: allAvailableTutorialActionKeys,
+        availableActionKeysByView: { scene: sceneTutorialActionKeys },
+        authoredTutorials: modules.presentation.tutorials,
+      } : undefined}
       views={{
         scene: sceneView,
         map: <TextOpenWorldMapPanel

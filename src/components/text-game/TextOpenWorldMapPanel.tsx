@@ -328,6 +328,7 @@ export default function TextOpenWorldMapPanel(props: {
   return <article
     className="rounded border border-border bg-bg-surface p-3 sm:p-4"
     data-testid="text-open-world-map-topology"
+    data-open-world-ui-key="overlay.map"
   >
     <header className="flex flex-wrap items-start justify-between gap-3">
       <div>

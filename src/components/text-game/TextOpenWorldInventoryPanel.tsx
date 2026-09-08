@@ -311,6 +311,7 @@ export default function TextOpenWorldInventoryPanel(props: TextOpenWorldInventor
   return <section
     className="grid min-w-0 gap-4"
     data-testid="text-open-world-inventory-panel"
+    data-open-world-ui-key="overlay.inventory overlay.equipment"
     aria-label="背包与装备"
     aria-busy={props.busy}
   >

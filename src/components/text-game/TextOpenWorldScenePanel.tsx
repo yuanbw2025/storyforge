@@ -10,6 +10,14 @@ import type {
   TextOpenWorldSceneProjectionV1,
 } from '../../lib/open-world/scene-projection'
 
+export interface TextOpenWorldSceneTutorialAvailabilityV1 {
+  systemActions: boolean
+  fixedChoices: boolean
+  naturalInput: boolean
+  /** Action keys rendered for the selected scene, including governed ambient actions. */
+  actionKeys: readonly string[]
+}
+
 interface TextOpenWorldScenePanelProps {
   sessionKey: string | number
   eventSequence: number
@@ -28,6 +36,8 @@ interface TextOpenWorldScenePanelProps {
     targetKey: string | null,
     source: TextOpenWorldCommandSourceV1,
   ): void
+  /** Reports only controls rendered for the currently selected scene. */
+  onTutorialAvailabilityChange?(availability: TextOpenWorldSceneTutorialAvailabilityV1): void
 }
 
 type InteractionNotice = {
@@ -111,6 +121,7 @@ export default function TextOpenWorldScenePanel({
   busy,
   fallback,
   onExecute,
+  onTutorialAvailabilityChange,
 }: TextOpenWorldScenePanelProps) {
   const [selectedSceneKey, setSelectedSceneKey] = useState<string | null>(projection.recommendedSceneKey)
   const [naturalInput, setNaturalInput] = useState('')
@@ -148,11 +159,28 @@ export default function TextOpenWorldScenePanel({
   const sceneActions = projection.status === 'ready'
     ? sceneAndAmbientActions
     : compatibilityActions
+  const tutorialActionKeys = sceneActions.map(action => action.action.key).sort()
+  const tutorialActionSignature = tutorialActionKeys.join('\u0000')
   const naturalCandidates = scene?.naturalLanguageExamples.flatMap(entry => (
     entry.exampleUtterances.map(example => ({ actionKey: entry.actionKey, example }))
   )) ?? []
   const naturalInputEnabled = projection.status === 'ready'
     && naturalCandidates.length > 0
+
+  useEffect(() => {
+    onTutorialAvailabilityChange?.({
+      systemActions: sceneActions.length > 0,
+      fixedChoices: (scene?.fixedChoices.length ?? 0) > 0,
+      naturalInput: naturalInputEnabled,
+      actionKeys: tutorialActionSignature ? tutorialActionSignature.split('\u0000') : [],
+    })
+  }, [
+    naturalInputEnabled,
+    onTutorialAvailabilityChange,
+    scene?.fixedChoices.length,
+    sceneActions.length,
+    tutorialActionSignature,
+  ])
 
   const execute = (
     action: TextOpenWorldActionAvailabilityV1 | undefined,
@@ -226,7 +254,11 @@ export default function TextOpenWorldScenePanel({
 
     <SystemReceipt feedback={feedback} />
 
-    {scene?.fixedChoices.length ? <section className="open-world-scene-input-card" data-testid="text-open-world-fixed-choices">
+    {scene?.fixedChoices.length ? <section
+      className="open-world-scene-input-card"
+      data-testid="text-open-world-fixed-choices"
+      data-open-world-ui-key="play.fixed-choices"
+    >
       <header><MousePointerClick aria-hidden="true" /><strong>固定选项</strong><small>选择后进入同一 Action 规则</small></header>
       <div className="open-world-scene-choice-list">
         {scene.fixedChoices.map(choice => <button
@@ -240,7 +272,11 @@ export default function TextOpenWorldScenePanel({
       </div>
     </section> : null}
 
-    <section className="open-world-scene-input-card" data-testid="text-open-world-system-actions">
+    <section
+      className="open-world-scene-input-card"
+      data-testid="text-open-world-system-actions"
+      data-open-world-ui-key="play.system-actions"
+    >
       <header><TerminalSquare aria-hidden="true" /><strong>系统 Action · 当前可执行行动</strong><small>由确定性规则直接校验</small></header>
       <div className="open-world-scene-action-list">
         {sceneActions.map(action => <button
@@ -255,7 +291,11 @@ export default function TextOpenWorldScenePanel({
       </div>
     </section>
 
-    <section className="open-world-scene-input-card open-world-scene-natural" data-testid="text-open-world-natural-input">
+    <section
+      className="open-world-scene-input-card open-world-scene-natural"
+      data-testid="text-open-world-natural-input"
+      data-open-world-ui-key="play.natural-language"
+    >
       <header><MessageCircle aria-hidden="true" /><strong>自然语言</strong><small>首版确定性理解</small></header>
       <form onSubmit={event => { event.preventDefault(); submitNaturalInput() }}>
         <label htmlFor="text-open-world-natural-command">你想怎么做？</label>
