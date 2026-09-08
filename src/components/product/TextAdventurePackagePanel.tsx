@@ -53,6 +53,7 @@ function dossierCards(dossier: TextAdventureCommunityCandidateDossierV1) {
 
 export default function TextAdventurePackagePanel(props: TextAdventurePackagePanelProps) {
   const dialog = useDialog()
+  const { projectId, worldId, workId } = props.scope
   const [busy, setBusy] = useState<'export' | 'import' | 'delete' | null>(null)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
@@ -63,7 +64,7 @@ export default function TextAdventurePackagePanel(props: TextAdventurePackagePan
   useEffect(() => {
     let cancelled = false
     void (props.listImportedReleases ?? listImportedProductReleasesV1)({
-      scope: props.scope,
+      scope: { projectId, worldId, workId },
       productType: 'text-adventure',
     }).then(rows => {
       if (!cancelled) setImportedReleases(rows)
@@ -71,7 +72,7 @@ export default function TextAdventurePackagePanel(props: TextAdventurePackagePan
       if (!cancelled) setError(cause instanceof Error ? cause.message : String(cause))
     })
     return () => { cancelled = true }
-  }, [props.scope.projectId, props.scope.worldId, props.scope.workId, props.listImportedReleases])
+  }, [projectId, worldId, workId, props.listImportedReleases])
 
   const runExport = async () => {
     if (!props.productReleaseId) return
