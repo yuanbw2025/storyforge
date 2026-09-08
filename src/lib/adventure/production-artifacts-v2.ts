@@ -502,9 +502,10 @@ export function parseTextAdventureCastBibleArtifactV1(input: {
     if (sourceResourceKey && (!STABLE_KEY.test(sourceResourceKey) || !allowed.has(sourceResourceKey))) {
       fail(`characters[${index}].sourceResourceKey 未授权`)
     }
+    const role = enumValue(item.role, ['player', 'major-npc', 'supporting-npc'], `characters[${index}].role`)
     return {
       key: key(item.key, `characters[${index}].key`),
-      role: enumValue(item.role, ['player', 'major-npc', 'supporting-npc'], `characters[${index}].role`),
+      role,
       sourceResourceKey,
       name: text(item.name, `characters[${index}].name`, 200),
       publicIdentity: text(item.publicIdentity, `characters[${index}].publicIdentity`, 1_000),
@@ -514,7 +515,13 @@ export function parseTextAdventureCastBibleArtifactV1(input: {
       motivation: text(item.motivation, `characters[${index}].motivation`, 1_000),
       voice: text(item.voice, `characters[${index}].voice`, 1_000),
       initialKnowledge: textArray(item.initialKnowledge, `characters[${index}].initialKnowledge`, 1, 30),
-      forbiddenKnowledge: textArray(item.forbiddenKnowledge, `characters[${index}].forbiddenKnowledge`, 1, 30),
+      // The player may legitimately start without an additional hidden-fact
+      // denylist. NPC knowledge remains bounded by at least one fact they do
+      // not know, preserving dialogue authority without manufacturing a fake
+      // restriction for the player role.
+      forbiddenKnowledge: textArray(
+        item.forbiddenKnowledge, `characters[${index}].forbiddenKnowledge`, role === 'player' ? 0 : 1, 30,
+      ),
       relationshipArc: textArray(item.relationshipArc, `characters[${index}].relationshipArc`, 2, 12),
       visualAnchor: text(item.visualAnchor, `characters[${index}].visualAnchor`, 2_000),
     }

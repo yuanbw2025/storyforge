@@ -387,10 +387,10 @@ export async function draftProductProductionBriefV3(input: {
   if (textAdventure) unresolvedDecisionKeys.push(...unresolvedTextAdventureProductionBriefDecisionsV1(textAdventure))
   const productionModelCalls = textAdventure
     // The current professional pipeline owns 31–32 model Runs depending on
-    // whether visual production is active. Forty calls leave eight explicit
-    // recovery slots; authorizing exactly one call per task made a single
-    // provider/schema retry sufficient to strand an otherwise valid Build.
-    ? Math.max(40, 20 + textAdventure.narrative.targetSceneCount + scale.targetEndingCount)
+    // whether visual production is active. Forty-eight calls leave sixteen
+    // explicit recovery slots; structured specialist schemas commonly need
+    // more than one repair across a full commercial pipeline.
+    ? Math.max(48, 28 + textAdventure.narrative.targetSceneCount + scale.targetEndingCount)
     : 16
   const productionInputTokens = textAdventure
     ? Math.max(300_000, productionModelCalls * 16_000)
@@ -400,7 +400,7 @@ export async function draftProductProductionBriefV3(input: {
         100_000,
         scale.targetWordCount * 8 + 60_000,
         scale.targetPlayMinutes * 2_000 + 40_000,
-        160_000,
+        200_000,
       )
     : 60_000
   return parseProductProductionBriefV3({

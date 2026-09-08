@@ -253,6 +253,22 @@ describe('TEXTADV-3 · 专业生产工件合同', () => {
     expect(castBible('commercial-candidate').characters.filter(item => item.role !== 'player')).toHaveLength(5)
   })
 
+  it('玩家可没有额外禁止知识，但 NPC 仍必须声明知识边界', () => {
+    const characters = structuredClone(castBible('commercial-candidate').characters)
+    characters[0].forbiddenKnowledge = []
+    expect(parseTextAdventureCastBibleArtifactV1({
+      value: { schema: 'storyforge.text-adventure-cast-bible-artifact', version: 1, characters },
+      brief: brief('commercial-candidate'),
+      allowedResourceKeys: ['world.character.0', 'world.character.1'],
+    }).characters[0].forbiddenKnowledge).toEqual([])
+    characters[1].forbiddenKnowledge = []
+    expect(() => parseTextAdventureCastBibleArtifactV1({
+      value: { schema: 'storyforge.text-adventure-cast-bible-artifact', version: 1, characters },
+      brief: brief('commercial-candidate'),
+      allowedResourceKeys: ['world.character.0', 'world.character.1'],
+    })).toThrow('forbiddenKnowledge 数量无效')
+  })
+
   it('叙事弧把每个有效决定绑定持久效果和至少两个后续回响场景', () => {
     const cast = castBible()
     const story = storyBible()

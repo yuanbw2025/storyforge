@@ -40,7 +40,10 @@ export function textAdventureProductionBudgetFloorV1(
     sum + textAdventureSceneScriptPartSceneKeysV1(brief, actIndex).length
   ), 0)
   const modelTaskCount = 25 + sceneScriptPartCount + Number(activeVisual)
-  const retryReserveSlots = Math.max(8, Math.ceil(modelTaskCount * 0.25))
+  // Structured-output providers can legitimately need one repair pass for
+  // several specialist schemas. Reserve half a pipeline (at least 16 calls),
+  // not merely one optimistic retry per eight tasks.
+  const retryReserveSlots = Math.max(16, Math.ceil(modelTaskCount * 0.5))
   const minimumModelCalls = modelTaskCount + retryReserveSlots
   return {
     modelTaskCount,
@@ -51,7 +54,7 @@ export function textAdventureProductionBudgetFloorV1(
       100_000,
       brief.scale.targetWordCount * 8 + 60_000,
       brief.scale.targetPlayMinutes * 2_000 + 40_000,
-      modelTaskCount * 5_000,
+      modelTaskCount * 6_250,
     ),
   }
 }

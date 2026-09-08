@@ -84,7 +84,7 @@ describe('R-TEXTADV2-production · 文字冒险正式生产契约与工作台', 
     const briefHash = await hashProductProductionValueV2(brief)
     const plan = await createProductProductionPlanV3({ buildNumber: 1, briefHash, brief })
     const taskByKey = new Map(plan.tasks.map(task => [task.taskKey, task]))
-    expect(brief.productionBudget.maximumOutputTokens).toBe(160_000)
+    expect(brief.productionBudget.maximumOutputTokens).toBe(200_000)
     expect(brief.productionBudget.maximumModelCalls).toBeGreaterThanOrEqual(
       textAdventureProductionBudgetFloorV1(brief).minimumModelCalls,
     )
