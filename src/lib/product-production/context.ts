@@ -168,7 +168,9 @@ export async function readTextAdventureSceneScriptInputsV1(input: AssembleContex
   ))
   const objectiveKeys = new Set(objectives.map(objective => contextText(objective.key, 200)).filter(Boolean))
   const supplemental = (artifactKey: string) => contextRows(payloadByKey.get(artifactKey)?.entries)
-    .filter(entry => Number.isSafeInteger(entry.locationOrdinal) && locationOrdinals.has(Number(entry.locationOrdinal)))
+    .filter(entry => contextRows(entry.stages).some(stage => (
+      Number.isSafeInteger(stage.locationOrdinal) && locationOrdinals.has(Number(stage.locationOrdinal))
+    )))
   const sideEntries = supplemental('content.adventure-side-quests')
   const ambientEntries = supplemental('content.adventure-ambient-events')
   const sideKeys = new Set(sideEntries.map(entry => contextText(entry.key, 200)).filter(Boolean))
@@ -186,8 +188,10 @@ export async function readTextAdventureSceneScriptInputsV1(input: AssembleContex
         ? alternative.resolution as Record<string, unknown> : {}
       return typeof resolution.abilityKey === 'string' ? [resolution.abilityKey] : []
     })),
-    ...sideScripts.flatMap(script => typeof script.abilityKey === 'string' ? [script.abilityKey] : []),
-    ...ambientScripts.flatMap(script => typeof script.abilityKey === 'string' ? [script.abilityKey] : []),
+    ...sideScripts.flatMap(script => contextRows(script.stages)
+      .flatMap(stage => typeof stage.abilityKey === 'string' ? [stage.abilityKey] : [])),
+    ...ambientScripts.flatMap(script => contextRows(script.stages)
+      .flatMap(stage => typeof stage.abilityKey === 'string' ? [stage.abilityKey] : [])),
   ])
   const currentDecisions = contextRows(arc.decisions).filter(decision => sceneKeys.has(contextText(decision.sceneKey, 200)))
   const previousCards = partIndex > 0
@@ -238,8 +242,13 @@ export async function readTextAdventureSceneScriptInputsV1(input: AssembleContex
     title: entry.title,
     description: contextText(entry.description, 350),
     hook: contextText(entry.hook, 350),
-    objective: contextText(entry.objective, 350),
-    locationOrdinal: entry.locationOrdinal,
+    stages: contextRows(entry.stages).map(stage => ({
+      key: stage.key,
+      title: contextText(stage.title, 160),
+      objective: contextText(stage.objective, 350),
+      locationOrdinal: stage.locationOrdinal,
+      actionKind: stage.actionKind,
+    })),
   })
   const projectMainScript = (script: Record<string, unknown>) => ({
     objectiveKey: script.objectiveKey,
@@ -255,14 +264,17 @@ export async function readTextAdventureSceneScriptInputsV1(input: AssembleContex
   })
   const projectSupplementalScript = (script: Record<string, unknown>) => ({
     entryKey: script.entryKey,
-    actionKind: script.actionKind,
-    abilityKey: script.abilityKey,
-    difficulty: script.difficulty,
-    costlySuccessFloor: script.costlySuccessFloor,
-    timeCostMinutes: script.timeCostMinutes,
-    successText: contextText(script.successText, 300),
-    costlySuccessText: contextText(script.costlySuccessText, 300),
-    failureForwardText: contextText(script.failureForwardText, 300),
+    stages: contextRows(script.stages).map(stage => ({
+      stageKey: stage.stageKey,
+      actionKind: stage.actionKind,
+      abilityKey: stage.abilityKey,
+      difficulty: stage.difficulty,
+      costlySuccessFloor: stage.costlySuccessFloor,
+      timeCostMinutes: stage.timeCostMinutes,
+      successText: contextText(stage.successText, 300),
+      costlySuccessText: contextText(stage.costlySuccessText, 300),
+      failureForwardText: contextText(stage.failureForwardText, 300),
+    })),
   })
   const packet = {
     schema: 'storyforge.text-adventure-scene-script-inputs', version: 1,
@@ -591,16 +603,21 @@ export async function readTextAdventureQualityInputsV1(input: AssembleContextInp
     title: contextText(entry.title, 80),
     description: contextText(entry.description, 180),
     hook: contextText(entry.hook, 140),
-    objective: contextText(entry.objective, 140),
-    locationOrdinal: entry.locationOrdinal,
-    success: contextText(entry.successText, 120),
-    costlySuccess: contextText(entry.costlySuccessText, 120),
-    failure: contextText(entry.failureText, 120),
-    abilityKey: contextText(entry.abilityKey, 120),
-    difficulty: entry.difficulty,
+    stages: contextRows(entry.stages).map(stage => ({
+      key: contextText(stage.key, 120),
+      title: contextText(stage.title, 80),
+      objective: contextText(stage.objective, 140),
+      locationOrdinal: stage.locationOrdinal,
+      actionKind: stage.actionKind,
+      success: contextText(stage.successText, 120),
+      costlySuccess: contextText(stage.costlySuccessText, 120),
+      failure: contextText(stage.failureText, 120),
+      abilityKey: contextText(stage.abilityKey, 120),
+      difficulty: stage.difficulty,
+      timeCostMinutes: stage.timeCostMinutes,
+    })),
     rewardExperience: entry.rewardExperience,
     rewardCurrency: entry.rewardCurrency,
-    timeCostMinutes: entry.timeCostMinutes,
   }))
   const packet = {
     schema: 'storyforge.text-adventure-quality-inputs', version: 1,
@@ -686,12 +703,18 @@ export async function readTextAdventureQualityInputsV1(input: AssembleContextInp
         })),
       })),
       side: contextRows(questScript.sideQuestScripts).map(script => ({
-        entryKey: script.entryKey, actionKind: script.actionKind, abilityKey: script.abilityKey,
-        difficulty: script.difficulty, timeCostMinutes: script.timeCostMinutes,
+        entryKey: script.entryKey,
+        stages: contextRows(script.stages).map(stage => ({
+          stageKey: stage.stageKey, actionKind: stage.actionKind, abilityKey: stage.abilityKey,
+          difficulty: stage.difficulty, timeCostMinutes: stage.timeCostMinutes,
+        })),
       })),
       ambient: contextRows(questScript.ambientEventScripts).map(script => ({
-        entryKey: script.entryKey, actionKind: script.actionKind, abilityKey: script.abilityKey,
-        difficulty: script.difficulty, timeCostMinutes: script.timeCostMinutes,
+        entryKey: script.entryKey,
+        stages: contextRows(script.stages).map(stage => ({
+          stageKey: stage.stageKey, actionKind: stage.actionKind, abilityKey: stage.abilityKey,
+          difficulty: stage.difficulty, timeCostMinutes: stage.timeCostMinutes,
+        })),
       })),
     },
     dialoguePasses: dialoguePasses.map(dialoguePass => ({

@@ -141,7 +141,11 @@ export function evaluateProductRuntimeProductQualityV1(input: {
       const enabledCapabilities = new Set(adventure.capabilities.filter(item => item.enabled).map(item => item.key))
       const requiredCapabilities = ['space', 'character', 'inventory', 'equipment', 'quests', 'time', 'storylets', 'endings']
       const productionContract = brief.textAdventure
-      const sideQuestCount = adventure.quests.filter(item => item.category === 'side').length
+      const sideQuests = adventure.quests.filter(item => item.category === 'side')
+      const sideQuestCount = sideQuests.length
+      const multiStageSideQuestCount = sideQuests.filter(quest => (
+        quest.stages.length >= 3 && quest.objectives.length >= 3
+      )).length
       const mappedNarrativeActions = adventure.actions.filter(action => action.narrativeChoiceKey != null)
       const narrativeChoices = new Map(narrative.choices.map(choice => [choice.choiceKey, choice]))
       const bridgedNarrativeActions = mappedNarrativeActions.filter(action => (
@@ -149,6 +153,18 @@ export function evaluateProductRuntimeProductQualityV1(input: {
       ))
       const failForwardActions = adventure.actions.filter(action => action.rule.kind !== 'automatic'
         && action.failureEffects.length > 0 && action.failureText.trim().length > 0)
+      const itemOperationActions = adventure.actions.filter(action => (
+        action.kind === 'take' || action.kind === 'give' || action.kind === 'use'
+      ))
+      const invalidItemOperationActions = itemOperationActions.filter(action => {
+        const successfulEffects = [...action.successEffects, ...action.costlySuccessEffects]
+        if (action.kind === 'take') return !successfulEffects.some(effect => effect.op === 'gain-item')
+        if (action.kind === 'give') return !successfulEffects.some(effect => (
+          effect.op === 'transfer-item' || effect.op === 'remove-item'
+        ))
+        return action.targetKey == null
+          || !action.requirements.some(requirement => requirement.itemKey === action.targetKey)
+      })
       const presentationKeys = new Set(runtimePackage.presentation?.assets.map(asset => asset.assetKey) ?? [])
       const narrativeNonEnding = narrative.nodes.filter(node => node.kind !== 'ending')
       const narrativeNonEndingKeys = new Set(narrativeNonEnding.map(node => node.key))
@@ -201,6 +217,18 @@ export function evaluateProductRuntimeProductQualityV1(input: {
           && adventure.resources.some(item => item.key === adventure.clock.resourceKey && item.role === 'clock')
           && adventure.storylets.length >= 1 && adventure.endings.length >= 2,
         [`questStages=${adventure.quests.map(item => item.stages.length).join(',')}`, `storylets=${adventure.storylets.length}`, `endings=${adventure.endings.length}`]),
+        gate('product.adventure.v2-multi-stage-side-quests', !productionContract || (
+          multiStageSideQuestCount >= Math.min(2, productionContract.narrative.targetSideQuestCount)
+        ), [
+          `multiStageSideQuests=${multiStageSideQuestCount}/${Math.min(2, productionContract?.narrative.targetSideQuestCount ?? 0)}`,
+          `sideQuestStages=${sideQuests.map(quest => `${quest.key}:${quest.stages.length}`).join(',') || 'none'}`,
+        ]),
+        gate('product.adventure.v2-item-action-semantics', invalidItemOperationActions.length === 0
+          && (!productionContract || brief.qualityProfile !== 'commercial-candidate'
+            || (kinds.has('take') && kinds.has('give') && kinds.has('use'))), [
+          `itemActionKinds=${[...new Set(itemOperationActions.map(action => action.kind))].sort().join(',') || 'none'}`,
+          `invalid=${invalidItemOperationActions.map(action => action.key).join(',') || 'none'}`,
+        ]),
         gate('product.adventure.v2-offline-fallback', adventure.media.fallback === 'text-only',
           [`media=${adventure.media.mode}`, `fallback=${adventure.media.fallback}`]),
         gate('product.adventure.v2-production-targets', !productionContract || (

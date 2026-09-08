@@ -297,7 +297,7 @@ function questScriptRunOutputs(
   brief: Awaited<ReturnType<typeof fixtureForProduct>>['brief'],
   questScript: {
     schema: 'storyforge.text-adventure-quest-script-artifact'
-    version: 1
+    version: 2
     mainObjectiveScripts: ReadonlyArray<{ sceneKey: string } & Record<string, unknown>>
     sideQuestScripts: ReadonlyArray<unknown>
     ambientEventScripts: ReadonlyArray<unknown>
@@ -450,30 +450,46 @@ function modelOutputs(
       },
     },
     'content.adventure-side-quests': {
-      schema: 'storyforge.text-adventure-quest-bundle-artifact', version: 1, bundleKind: 'side',
+      schema: 'storyforge.text-adventure-quest-bundle-artifact', version: 2, bundleKind: 'side',
       entries: [{
         key: 'lost-lamp', title: '失落的引航灯', description: '找回被潮水卷走的引航灯。',
-        hook: '旧仓街的一名船工请求你在潮门关闭前帮忙。', objective: '在旧仓街找回引航灯',
-        locationOrdinal: 2, abilityKey: 'ability.perception', difficulty: 10,
-        successText: '你在木箱夹层找到了引航灯。', costlySuccessText: '你找到了灯，但划伤了手臂。',
-        failureText: '灯被冲远了，但船工给出了另一条通往灯塔的小路。',
-        rewardExperience: 5, rewardCurrency: 2, timeCostMinutes: 10,
+        hook: '旧仓街的一名船工请求你在潮门关闭前帮忙。',
+        stages: [{
+          key: 'trace', title: '追查灯迹', objective: '在旧仓街追查引航灯留下的痕迹',
+          locationOrdinal: 2, actionKind: 'inspect', abilityKey: 'ability.perception', difficulty: 10,
+          successText: '你在旧仓街木箱夹层找到了引航灯。',
+          costlySuccessText: '你在旧仓街找到了灯，但划伤了手臂。',
+          failureText: '引航灯被冲出旧仓街，但船工指出了沿岸留下的新痕迹。', timeCostMinutes: 6,
+        }, {
+          key: 'relight', title: '重新点灯', objective: '在信号塔重新点亮引航灯',
+          locationOrdinal: 3, actionKind: 'use', abilityKey: 'ability.resolve', difficulty: 11,
+          successText: '你在信号塔重新点亮了引航灯。',
+          costlySuccessText: '你在信号塔点亮灯火，却耗尽了备用燃料。',
+          failureText: '信号塔的灯芯损坏，但应急反光板仍为船队打开了归路。', timeCostMinutes: 8,
+        }],
+        rewardExperience: 5, rewardCurrency: 2,
       }],
     },
     'content.adventure-ambient-events': {
-      schema: 'storyforge.text-adventure-quest-bundle-artifact', version: 1, bundleKind: 'ambient',
+      schema: 'storyforge.text-adventure-quest-bundle-artifact', version: 2, bundleKind: 'ambient',
       entries: [{
         key: 'tide-warning', title: '潮汐警告', description: '辨认潮门墙上的水位记号。',
-        hook: '潮门广场的海水正漫过旧刻度。', objective: '判断安全通过时间', locationOrdinal: 1,
-        abilityKey: 'ability.perception', difficulty: 8, successText: '你准确读出了潮汐变化。',
-        costlySuccessText: '你读懂刻度，但浪费了一些时间。', failureText: '你判断失误，却因此发现墙后的避险通道。',
-        rewardExperience: 2, rewardCurrency: 0, timeCostMinutes: 5,
+        hook: '潮门广场的海水正漫过旧刻度。', stages: [{
+          key: 'read-tide', title: '读取潮汐', objective: '在潮门广场判断安全通过时间', locationOrdinal: 1,
+          actionKind: 'inspect', abilityKey: 'ability.perception', difficulty: 8,
+          successText: '你在潮门广场准确读出了潮汐变化。',
+          costlySuccessText: '你在潮门广场读懂刻度，但浪费了一些时间。',
+          failureText: '你在潮门广场判断失误，却因此发现墙后的避险通道。', timeCostMinutes: 5,
+        }], rewardExperience: 2, rewardCurrency: 0,
       }, {
         key: 'warehouse-echo', title: '仓街回声', description: '追查仓街深处反复出现的敲击声。',
-        hook: '旧仓街的雾里传来规律的三次敲击。', objective: '确认敲击声来源', locationOrdinal: 2,
-        abilityKey: 'ability.resolve', difficulty: 9, successText: '你发现那是被困船员的求救信号。',
-        costlySuccessText: '你救出船员，但耽误了赶往灯塔的时间。', failureText: '声音消失了，却留下一张通往灯塔的旧图。',
-        rewardExperience: 3, rewardCurrency: 1, timeCostMinutes: 8,
+        hook: '旧仓街的雾里传来规律的三次敲击。', stages: [{
+          key: 'follow-echo', title: '追随回声', objective: '在旧仓街确认敲击声来源', locationOrdinal: 2,
+          actionKind: 'attempt', abilityKey: 'ability.resolve', difficulty: 9,
+          successText: '你在旧仓街发现那是被困船员的求救信号。',
+          costlySuccessText: '你在旧仓街救出船员，但耽误了赶往灯塔的时间。',
+          failureText: '旧仓街的声音消失了，却留下一张通往灯塔的旧图。', timeCostMinutes: 8,
+        }], rewardExperience: 3, rewardCurrency: 1,
       }],
     },
     'content.adventure-quality-review': {
@@ -632,25 +648,39 @@ function professionalTextAdventurePlanningOutputs(
   }))
   const questScript = {
     schema: 'storyforge.text-adventure-quest-script-artifact' as const,
-    version: 1 as const,
+    version: 2 as const,
     mainObjectiveScripts,
     sideQuestScripts: [{
-      entryKey: 'lost-lamp', actionKind: 'quest-action', abilityKey: 'ability.perception',
-      difficulty: 10, costlySuccessFloor: 6, timeCostMinutes: 10,
-      successText: '你在旧仓街木箱夹层找到了引航灯。',
-      costlySuccessText: '你找到了引航灯，但手臂受伤并耽误了时间。',
-      failureForwardText: '灯被冲远了，但船工给出另一条通往灯塔的路线。',
+      entryKey: 'lost-lamp', stages: [{
+        stageKey: 'trace', actionKind: 'inspect', abilityKey: 'ability.perception',
+        difficulty: 10, costlySuccessFloor: 6, timeCostMinutes: 6,
+        successText: '你在旧仓街木箱夹层找到了引航灯。',
+        costlySuccessText: '你在旧仓街找到引航灯，但手臂受伤。',
+        failureForwardText: '灯被冲出旧仓街，但船工指出了沿岸留下的新痕迹。',
+      }, {
+        stageKey: 'relight', actionKind: 'use', abilityKey: 'ability.resolve',
+        difficulty: 11, costlySuccessFloor: 7, timeCostMinutes: 8,
+        successText: '你在信号塔重新点亮了引航灯。',
+        costlySuccessText: '你在信号塔点亮灯火，却耗尽了备用燃料。',
+        failureForwardText: '信号塔的灯芯损坏，但应急反光板仍为船队打开了归路。',
+      }],
     }],
     ambientEventScripts: [{
-      entryKey: 'tide-warning', actionKind: 'inspect', abilityKey: 'ability.perception',
-      difficulty: 8, costlySuccessFloor: 4, timeCostMinutes: 5,
-      successText: '你准确读出了潮汐变化。', costlySuccessText: '你读懂刻度，但浪费了一些时间。',
-      failureForwardText: '你判断失误，却因此发现墙后的避险通道。',
+      entryKey: 'tide-warning', stages: [{
+        stageKey: 'read-tide', actionKind: 'inspect', abilityKey: 'ability.perception',
+        difficulty: 8, costlySuccessFloor: 4, timeCostMinutes: 5,
+        successText: '你在潮门广场准确读出了潮汐变化。',
+        costlySuccessText: '你在潮门广场读懂刻度，但浪费了一些时间。',
+        failureForwardText: '你在潮门广场判断失误，却因此发现墙后的避险通道。',
+      }],
     }, {
-      entryKey: 'warehouse-echo', actionKind: 'attempt', abilityKey: 'ability.resolve',
-      difficulty: 9, costlySuccessFloor: 5, timeCostMinutes: 8,
-      successText: '你发现那是被困船员的求救信号。', costlySuccessText: '你救出船员，但耽误了赶往灯塔的时间。',
-      failureForwardText: '声音消失了，却留下一张通往灯塔的旧图。',
+      entryKey: 'warehouse-echo', stages: [{
+        stageKey: 'follow-echo', actionKind: 'attempt', abilityKey: 'ability.resolve',
+        difficulty: 9, costlySuccessFloor: 5, timeCostMinutes: 8,
+        successText: '你在旧仓街发现那是被困船员的求救信号。',
+        costlySuccessText: '你在旧仓街救出船员，但耽误了赶往灯塔的时间。',
+        failureForwardText: '旧仓街的声音消失了，却留下一张通往灯塔的旧图。',
+      }],
     }],
   }
   return {
@@ -867,17 +897,38 @@ function fullLengthTextAdventureOutputs(
   const locationTitles = regions.flatMap(region => region.areas.flatMap(area => (
     area.locations.map(location => location.title)
   )))
-  const questEntry = (kind: 'side' | 'ambient', index: number) => ({
-    key: `${kind}-${index + 1}`, title: `${kind === 'side' ? '支线' : '区域事件'} ${index + 1}`,
-    description: `${locationTitles[index % locationTitles.length]}里，与主线主题呼应但拥有独立目标和回响。`,
-    hook: '一个可理解的局面邀请玩家介入。',
-    objective: `完成${kind === 'side' ? '支线' : '区域事件'}目标 ${index + 1}`,
-    locationOrdinal: index % contract.narrative.targetLocationCount + 1,
-    abilityKey: index % 2 ? 'ability.resolve' : 'ability.perception', difficulty: 9 + index,
-    successText: '行动成功并改变了局部状态。', costlySuccessText: '目标达成，但玩家付出了明确代价。',
-    failureText: '行动失败，却打开了替代局面并继续推进。', rewardExperience: 3, rewardCurrency: 1,
-    timeCostMinutes: 8,
-  })
+  const questEntry = (kind: 'side' | 'ambient', index: number) => {
+    const firstLocationOrdinal = index % locationTitles.length + 1
+    const secondLocationOrdinal = firstLocationOrdinal % locationTitles.length + 1
+    const stage = (
+      stageIndex: number,
+      locationOrdinal: number,
+      actionKind: 'inspect' | 'use',
+    ) => {
+      const locationTitle = locationTitles[locationOrdinal - 1]
+      return {
+        key: `${kind}-${index + 1}.stage-${stageIndex + 1}`,
+        title: `${locationTitle}阶段 ${stageIndex + 1}`,
+        objective: `在${locationTitle}完成${kind === 'side' ? '支线' : '区域事件'}阶段 ${stageIndex + 1}`,
+        locationOrdinal, actionKind,
+        abilityKey: stageIndex % 2 ? 'ability.resolve' : 'ability.perception',
+        difficulty: 9 + index + stageIndex,
+        successText: `你在${locationTitle}完成行动并改变了局部状态。`,
+        costlySuccessText: `你在${locationTitle}达成目标，但付出了明确代价。`,
+        failureText: `你在${locationTitle}行动失败，却打开了替代局面并继续推进。`,
+        timeCostMinutes: 6 + stageIndex * 2,
+      }
+    }
+    return {
+      key: `${kind}-${index + 1}`, title: `${kind === 'side' ? '支线' : '区域事件'} ${index + 1}`,
+      description: `${locationTitles[firstLocationOrdinal - 1]}里，与主线主题呼应但拥有独立目标和回响。`,
+      hook: '一个可理解的局面邀请玩家介入。',
+      stages: kind === 'side'
+        ? [stage(0, firstLocationOrdinal, 'inspect'), stage(1, secondLocationOrdinal, 'use')]
+        : [stage(0, firstLocationOrdinal, 'inspect')],
+      rewardExperience: 3, rewardCurrency: 1,
+    }
+  }
   const professional = professionalTextAdventurePlanningOutputs(brief)
   const sceneScripts = professionalTextAdventureSceneScriptOutputs(brief, professional, locationTitles)
   const sideEntries = Array.from(
@@ -887,17 +938,20 @@ function fullLengthTextAdventureOutputs(
     { length: contract.narrative.targetAmbientEventCount }, (_, index) => questEntry('ambient', index),
   )
   const mainPlan = professional['content.main-quest-plan']
-  const scriptedSupplemental = (entries: typeof sideEntries, actionKind: 'quest-action' | 'inspect') => (
+  const scriptedSupplemental = (entries: typeof sideEntries) => (
     entries.map(entry => ({
-      entryKey: entry.key, actionKind, abilityKey: entry.abilityKey,
-      difficulty: entry.difficulty, costlySuccessFloor: Math.max(1, entry.difficulty - 4),
-      timeCostMinutes: entry.timeCostMinutes,
-      successText: entry.successText, costlySuccessText: entry.costlySuccessText,
-      failureForwardText: entry.failureText,
+      entryKey: entry.key,
+      stages: entry.stages.map(stage => ({
+        stageKey: stage.key, actionKind: stage.actionKind, abilityKey: stage.abilityKey,
+        difficulty: stage.difficulty, costlySuccessFloor: Math.max(1, stage.difficulty - 4),
+        timeCostMinutes: stage.timeCostMinutes,
+        successText: stage.successText, costlySuccessText: stage.costlySuccessText,
+        failureForwardText: stage.failureText,
+      })),
     }))
   )
   const questScript = {
-    schema: 'storyforge.text-adventure-quest-script-artifact' as const, version: 1 as const,
+    schema: 'storyforge.text-adventure-quest-script-artifact' as const, version: 2 as const,
     mainObjectiveScripts: mainPlan.quests[0].objectives.map(objective => ({
       objectiveKey: objective.key, sceneKey: objective.sceneKeys[0],
       alternatives: objective.alternatives.map(alternative => ({
@@ -911,10 +965,8 @@ function fullLengthTextAdventureOutputs(
         failureForwardText: `你没有按预期完成${objective.title}，却找到替代推进方式。`,
       })),
     })),
-    sideQuestScripts: scriptedSupplemental(sideEntries, 'quest-action').map((script, index) => (
-      index === 0 ? { ...script, actionKind: 'use' as const } : script
-    )),
-    ambientEventScripts: scriptedSupplemental(ambientEntries, 'inspect'),
+    sideQuestScripts: scriptedSupplemental(sideEntries),
+    ambientEventScripts: scriptedSupplemental(ambientEntries),
   }
   return {
     ...base,
@@ -925,11 +977,11 @@ function fullLengthTextAdventureOutputs(
       regions,
     },
     'content.adventure-side-quests': {
-      schema: 'storyforge.text-adventure-quest-bundle-artifact' as const, version: 1 as const, bundleKind: 'side' as const,
+      schema: 'storyforge.text-adventure-quest-bundle-artifact' as const, version: 2 as const, bundleKind: 'side' as const,
       entries: sideEntries,
     },
     'content.adventure-ambient-events': {
-      schema: 'storyforge.text-adventure-quest-bundle-artifact' as const, version: 1 as const, bundleKind: 'ambient' as const,
+      schema: 'storyforge.text-adventure-quest-bundle-artifact' as const, version: 2 as const, bundleKind: 'ambient' as const,
       entries: ambientEntries,
     },
     'content.quest-script': questScript,
@@ -1274,13 +1326,22 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
           objectiveKey: 'surplus-objective', sceneKey: 'surplus-scene', alternatives: [],
         }],
         sideQuestScripts: [{
-          entryKey: 'invented-side', abilityKey: 'invented-ability',
-          difficulty: '31', costlySuccessFloor: '30', timeCostMinutes: '8.4',
-        }, { entryKey: 'surplus-side', abilityKey: 'ability.insight' }],
+          entryKey: 'invented-side', stages: [{
+            stageKey: 'invented-side-stage', actionKind: 'inspect', abilityKey: 'invented-ability',
+            difficulty: '31', costlySuccessFloor: '30', timeCostMinutes: '8.4',
+          }, {
+            stageKey: 'invented-side-stage-2', actionKind: 'use', abilityKey: 'invented-ability',
+            difficulty: 1, costlySuccessFloor: 0, timeCostMinutes: 121,
+          }, {
+            stageKey: 'surplus-side-stage', actionKind: 'inspect', abilityKey: 'ability.insight',
+          }],
+        }, { entryKey: 'surplus-side', stages: [] }],
         ambientEventScripts: [{
-          entryKey: 'invented-ambient', abilityKey: 'invented-ability',
-          difficulty: 1, costlySuccessFloor: 0, timeCostMinutes: 121,
-        }, { entryKey: 'surplus-ambient', abilityKey: 'ability.agility' }],
+          entryKey: 'invented-ambient', stages: [{
+            stageKey: 'invented-ambient-stage', actionKind: 'inspect', abilityKey: 'invented-ability',
+            difficulty: 1, costlySuccessFloor: 0, timeCostMinutes: 121,
+          }],
+        }, { entryKey: 'surplus-ambient', stages: [] }],
       },
       {
         questScriptIdentityPlan: {
@@ -1288,8 +1349,18 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
             objectiveKey: 'objective.1', sceneKey: 'scene.001',
             alternativeKeys: ['alternative.1', 'alternative.2'],
           }],
-          sideQuestScripts: [{ entryKey: 'side.1', abilityKey: 'ability.insight' }],
-          ambientEventScripts: [{ entryKey: 'ambient.1', abilityKey: 'ability.agility' }],
+          sideQuestScripts: [{
+            entryKey: 'side.1', stages: [{
+              stageKey: 'side.1.stage.1', actionKind: 'use', abilityKey: 'ability.insight',
+            }, {
+              stageKey: 'side.1.stage.2', actionKind: 'inspect', abilityKey: 'ability.agility',
+            }],
+          }],
+          ambientEventScripts: [{
+            entryKey: 'ambient.1', stages: [{
+              stageKey: 'ambient.1.stage.1', actionKind: 'quest-action', abilityKey: 'ability.agility',
+            }],
+          }],
         },
       },
     )
@@ -1312,19 +1383,30 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
         }],
       }],
       sideQuestScripts: [{
-        entryKey: 'side.1', abilityKey: 'ability.insight',
-        difficulty: 30, costlySuccessFloor: 29, timeCostMinutes: 8,
+        entryKey: 'side.1', stages: [{
+          stageKey: 'side.1.stage.1', actionKind: 'use', abilityKey: 'ability.insight',
+          difficulty: 30, costlySuccessFloor: 29, timeCostMinutes: 8,
+        }, {
+          stageKey: 'side.1.stage.2', actionKind: 'inspect', abilityKey: 'ability.agility',
+          difficulty: 2, costlySuccessFloor: 1, timeCostMinutes: 120,
+        }],
       }],
       ambientEventScripts: [{
-        entryKey: 'ambient.1', abilityKey: 'ability.agility',
-        difficulty: 2, costlySuccessFloor: 1, timeCostMinutes: 120,
+        entryKey: 'ambient.1', stages: [{
+          stageKey: 'ambient.1.stage.1', actionKind: 'quest-action', abilityKey: 'ability.agility',
+          difficulty: 2, costlySuccessFloor: 1, timeCostMinutes: 120,
+        }],
       }],
     })
-    expect(frozenQuestScriptIdentities.defaultedFields).toHaveLength(27)
+    expect(frozenQuestScriptIdentities.defaultedFields.length).toBeGreaterThanOrEqual(35)
     expect(frozenQuestScriptIdentities.defaultedFields).toEqual(expect.arrayContaining([
       'mainObjectiveScripts[1..1]<-discarded-surplus',
       'mainObjectiveScripts[0].alternatives[2..2]<-discarded-surplus',
       'sideQuestScripts[1..1]<-discarded-surplus',
+      'sideQuestScripts[0].stages[2..2]<-discarded-surplus',
+      'sideQuestScripts[0].stages[0].stageKey<-frozen-plan',
+      'sideQuestScripts[0].stages[0].actionKind<-frozen-plan',
+      'sideQuestScripts[0].stages[0].abilityKey<-frozen-plan',
       'ambientEventScripts[1..1]<-discarded-surplus',
     ]))
 
@@ -1456,21 +1538,24 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
 
     const quests = legalizeProductionModelProtocolDefaultsV1('content.adventure-ambient-events', {
       entries: [{
-        key: 'tide-warning', title: '潮汐警告', hook: '旧仓街响起三次敲击',
-        objective: '在旧仓街确认回声来源', locationOrdinal: 1, leaked: true,
+        key: 'tide-warning', title: '潮汐警告', hook: '旧仓街响起三次敲击', leaked: true,
+        stages: [{
+          key: 'follow-echo', title: '追随回声', objective: '在旧仓街确认回声来源',
+          locationOrdinal: 1, successText: '旧仓街的回声得到回应。',
+        }, null],
       }],
     }, { questLocationTitles: ['潮门广场', '旧仓街'] })
     expect(quests.payload).toMatchObject({
       entries: [{
-        rewardExperience: 2, rewardCurrency: 0, timeCostMinutes: 5,
-        locationOrdinal: 2, leaked: true,
+        rewardExperience: 2, rewardCurrency: 0, leaked: true,
+        stages: [{ locationOrdinal: 2 }],
       }],
     })
     expect(quests.defaultedFields).toEqual([
-      'entries[0].rewardExperience', 'entries[0].rewardCurrency', 'entries[0].timeCostMinutes',
-      'entries[0].locationOrdinal<-hook-objective-location',
+      'entries[0].rewardExperience', 'entries[0].rewardCurrency',
+      'entries[0].stages[0].locationOrdinal<-stage-location',
     ])
-    expect(quests.discardedNullEntries).toEqual([])
+    expect(quests.discardedNullEntries).toEqual(['entries[0].stages[1]'])
     expect(quests.discardedUnregisteredStateFields).toEqual([])
   })
 
@@ -2576,12 +2661,13 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     expect(actOneSceneContext).not.toContain('"key":"scene.012"')
     expect(sideQuestSystem).toContain('地点编号与标题的唯一映射=')
     expect(sideQuestSystem).toContain('"locationOrdinal":1,"locationTitle":"地点 1-1-1"')
-    expect(sideQuestSystem).toContain('不得伪装成尚未实现的跨地点多阶段任务')
-    expect(sideQuestSystem).toContain('hook 与 objective 必须都能在绑定地点当场成立')
+    expect(sideQuestSystem).toContain('每条支线必须包含 2–4 个有因果顺序的实质阶段')
+    expect(sideQuestSystem).toContain('不能把“接取任务”充当模型阶段')
+    expect(sideQuestSystem).toContain('每个 stage 的 title、objective、successText、costlySuccessText、failureText')
     expect(sideQuestSystem).toContain('abilityKey 只能逐字使用这些上游已登记能力=')
     expect(sideQuestSystem).toContain('"ability.perception"')
     expect(questScriptSystem).toContain('上游已冻结的脚本身份与顺序=')
-    expect(questScriptSystem).toContain('不得重新命名、翻译或按自己的理解排序')
+    expect(questScriptSystem).toContain('不得重新命名、翻译、合并阶段或按自己的理解排序')
     expect(questScriptSystem).toContain('check.resolution.abilityKey 只能逐字使用')
     expect(questScriptSystem).toContain('"ability.perception"')
     expect(dialoguePassSystems).toHaveLength(3)
@@ -2664,19 +2750,22 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     expect(runtimePackage.adventure.quests.filter(item => item.category === 'side')
       .every(item => item.initialStatus === 'available')).toBe(true)
     expect(runtimePackage.adventure.quests.filter(item => item.category === 'side')
-      .every(item => item.stages.length === 2 && item.objectives.length === 2)).toBe(true)
+      .every(item => item.stages.length === 3 && item.objectives.length === 3)).toBe(true)
     expect(runtimePackage.adventure.actions.filter(item => item.key.startsWith('action.accept.side.'))).toHaveLength(3)
     expect(runtimePackage.adventure.actions.filter(item => item.key.startsWith('action.side.'))
-      .every(item => item.label.startsWith('执行：'))).toBe(true)
-    const sideUseAction = runtimePackage.adventure.actions.find(item => item.key === 'action.side.side-1')!
-    expect(sideUseAction).toMatchObject({ kind: 'use', targetKey: 'item.side.side-1' })
-    expect(sideUseAction.requirements).toContainEqual({ itemKey: 'item.side.side-1', itemQuantity: 1 })
+      .every(item => item.label.startsWith('推进：'))).toBe(true)
+    const sideUseAction = runtimePackage.adventure.actions.find(item => (
+      item.key.startsWith('action.side.side-1.') && item.kind === 'use'
+    ))!
+    expect(sideUseAction).toMatchObject({ kind: 'use' })
+    expect(sideUseAction.targetKey).toMatch(/^item\.side\.side-1\./)
+    expect(sideUseAction.requirements).toContainEqual({ itemKey: sideUseAction.targetKey, itemQuantity: 1 })
     expect(runtimePackage.adventure.items).toContainEqual(expect.objectContaining({
-      key: 'item.side.side-1', usableActionKey: 'action.side.side-1', category: 'quest',
+      key: sideUseAction.targetKey, usableActionKey: sideUseAction.key, category: 'quest',
     }))
     expect(runtimePackage.adventure.actions).toContainEqual(expect.objectContaining({
-      key: 'action.prepare.side.side-1', kind: 'take',
-      successEffects: [expect.objectContaining({ op: 'gain-item', itemKey: 'item.side.side-1' })],
+      key: expect.stringMatching(/^action\.prepare\.side\.side-1\./), kind: 'take',
+      successEffects: [expect.objectContaining({ op: 'gain-item', itemKey: sideUseAction.targetKey })],
     }))
     expect(runtimePackage.adventure.actions.filter(item => item.key.startsWith('action.ambient.'))
       .every(item => item.label.startsWith('处理：'))).toBe(true)

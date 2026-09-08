@@ -10,14 +10,14 @@ import type { ProductProductionWorldSourceCatalogV2 } from '../product-productio
 import { parseAdventureContent } from './runtime'
 import type {
   TextAdventureArchitectureArtifactV1,
-  TextAdventureQuestBundleArtifactV1,
+  TextAdventureQuestBundleArtifactV2,
   TextAdventureSystemsArtifactV1,
 } from './production-artifacts'
 import type {
   TextAdventureCastBibleArtifactV1,
   TextAdventureNarrativeArcPlanArtifactV1,
   TextAdventureQuestPlanArtifactV1,
-  TextAdventureQuestScriptArtifactV1,
+  TextAdventureQuestScriptArtifactV2,
 } from './production-artifacts-v2'
 import { planTextAdventureNarrativeLocationsV1 } from './narrative-location-plan'
 
@@ -30,9 +30,9 @@ export interface TextAdventureProductionCompilerInputV1 {
   cast: TextAdventureCastBibleArtifactV1
   arcPlan: TextAdventureNarrativeArcPlanArtifactV1
   mainQuestPlan: TextAdventureQuestPlanArtifactV1
-  questScript: TextAdventureQuestScriptArtifactV1
-  sideQuests: TextAdventureQuestBundleArtifactV1
-  ambientEvents: TextAdventureQuestBundleArtifactV1
+  questScript: TextAdventureQuestScriptArtifactV2
+  sideQuests: TextAdventureQuestBundleArtifactV2
+  ambientEvents: TextAdventureQuestBundleArtifactV2
   sourceCatalog?: Pick<ProductProductionWorldSourceCatalogV2, 'artifacts'>
 }
 
@@ -561,50 +561,64 @@ export function compileTextAdventureModuleV2(
   }]
 
   const storylets: AdventureContentV2['storylets'] = []
-  const compileBundle = (bundle: TextAdventureQuestBundleArtifactV1) => {
+  const compileBundle = (bundle: TextAdventureQuestBundleArtifactV2) => {
     const scripts = bundle.bundleKind === 'side'
       ? input.questScript.sideQuestScripts : input.questScript.ambientEventScripts
     const scriptByEntry = new Map(scripts.map(script => [script.entryKey, script]))
     bundle.entries.forEach((entry, index) => {
       const script = scriptByEntry.get(entry.key)
       if (!script) fail(`${bundle.bundleKind} 条目缺少 Quest Script:${entry.key}`)
-      const location = locations[(entry.locationOrdinal - 1) % locations.length]
+      const firstLocation = locations[(entry.stages[0].locationOrdinal - 1) % locations.length]
       const questKey = `quest.${bundle.bundleKind}.${entry.key}`
-      const stageKey = `stage.${bundle.bundleKind}.${entry.key}`
-      const objectiveKey = `objective.${bundle.bundleKind}.${entry.key}`
       const intakeStageKey = `stage.${bundle.bundleKind}.${entry.key}.intake`
       const intakeObjectiveKey = `objective.${bundle.bundleKind}.${entry.key}.intake`
-      const actionKey = `action.${bundle.bundleKind}.${entry.key}`
       const acceptActionKey = `action.accept.${bundle.bundleKind}.${entry.key}`
-      const conditionKey = `condition.${bundle.bundleKind}.${entry.key}.resolved`
-      conditions.push({ key: conditionKey, title: `${entry.title}已回应`, description: entry.failureText, tags: [bundle.bundleKind] })
       const rewardEffects: AdventureEffect[] = [
         { op: 'change-resource', resourceKey: experience.key, delta: entry.rewardExperience },
         { op: 'change-resource', resourceKey: currency.key, delta: entry.rewardCurrency },
       ]
+      const compiledStages = entry.stages.map((stage, stageIndex) => ({
+        key: `stage.${bundle.bundleKind}.${entry.key}.${stage.key}`,
+        title: stage.title,
+        objectiveKeys: [`objective.${bundle.bundleKind}.${entry.key}.${stage.key}`],
+        stage,
+        stageIndex,
+      }))
       quests.push({
         key: questKey, title: entry.title, description: `${entry.hook}\n${entry.description}`,
         category: bundle.bundleKind, initialStatus: bundle.bundleKind === 'side' ? 'available' : 'active', prerequisites: [],
         stages: bundle.bundleKind === 'side'
           ? [
               { key: intakeStageKey, title: `接触：${entry.title}`, objectiveKeys: [intakeObjectiveKey] },
-              { key: stageKey, title: `推进：${entry.title}`, objectiveKeys: [objectiveKey] },
+              ...compiledStages.map(({ key, title, objectiveKeys }) => ({ key, title, objectiveKeys })),
             ]
-          : [{ key: stageKey, title: entry.title, objectiveKeys: [objectiveKey] }],
+          : compiledStages.map(({ key, title, objectiveKeys }) => ({ key, title, objectiveKeys })),
         objectives: bundle.bundleKind === 'side'
           ? [
               {
                 key: intakeObjectiveKey, stageKey: intakeStageKey, title: `了解并接下：${entry.title}`,
                 optional: false, alternativeActionKeys: [acceptActionKey],
               },
-              { key: objectiveKey, stageKey, title: entry.objective, optional: false, alternativeActionKeys: [actionKey] },
+              ...compiledStages.map(({ key, stage }) => ({
+                key: `objective.${bundle.bundleKind}.${entry.key}.${stage.key}`,
+                stageKey: key,
+                title: stage.objective,
+                optional: false,
+                alternativeActionKeys: [`action.${bundle.bundleKind}.${entry.key}.${stage.key}`],
+              })),
             ]
-          : [{ key: objectiveKey, stageKey, title: entry.objective, optional: true, alternativeActionKeys: [actionKey] }],
+          : compiledStages.map(({ key, stage }) => ({
+              key: `objective.${bundle.bundleKind}.${entry.key}.${stage.key}`,
+              stageKey: key,
+              title: stage.objective,
+              optional: true,
+              alternativeActionKeys: [`action.${bundle.bundleKind}.${entry.key}.${stage.key}`],
+            })),
         rewardEffects, completionNodeKey: null, failureNodeKey: null,
       })
       if (bundle.bundleKind === 'side') registerAction({
         key: acceptActionKey, kind: 'quest-action', label: `接取：${entry.title}`,
-        description: entry.hook, locationKey: location.key, targetKey: null,
+        description: entry.hook, locationKey: firstLocation.key, targetKey: null,
         requirements: [{ questKey, questStatus: 'available' }], rule: { kind: 'automatic' },
         successEffects: [
           { op: 'accept-quest', questKey },
@@ -617,66 +631,120 @@ export function compileTextAdventureModuleV2(
         failureText: `你暂时无法接取${entry.title}。`, unavailableText: '这项支线已经接取或结束。',
         repeatable: false, narrativeChoiceKey: null, interaction: null,
       })
-      const abilityKey = abilityKeys.has(script.abilityKey) ? script.abilityKey : fallbackAbilityKey
-      const useItemKey = script.actionKind === 'use' ? `item.${bundle.bundleKind}.${entry.key}` : null
-      if (useItemKey) {
-        items.push({
-          key: useItemKey, title: `${entry.title}所需物`, description: `用于处理“${entry.title}”的任务物品。`,
-          tags: ['quest', bundle.bundleKind], stackable: false, consumable: false,
-          category: 'quest', equipmentSlotKey: null, modifiers: [], usableActionKey: actionKey,
+      const storyletActionKeys = bundle.bundleKind === 'side' ? [acceptActionKey] : []
+      compiledStages.forEach(({ stage, stageIndex }) => {
+        const stageScript = script.stages.find(candidate => candidate.stageKey === stage.key)
+        if (!stageScript) fail(`${bundle.bundleKind} 阶段缺少 Quest Script:${entry.key}.${stage.key}`)
+        const location = locations[(stage.locationOrdinal - 1) % locations.length]
+        const objectiveKey = `objective.${bundle.bundleKind}.${entry.key}.${stage.key}`
+        const actionKey = `action.${bundle.bundleKind}.${entry.key}.${stage.key}`
+        const conditionKey = `condition.${bundle.bundleKind}.${entry.key}.${stage.key}.resolved`
+        const previousStage = compiledStages[stageIndex - 1]?.stage
+        const previousConditionKey = previousStage
+          ? `condition.${bundle.bundleKind}.${entry.key}.${previousStage.key}.resolved`
+          : null
+        conditions.push({
+          key: conditionKey,
+          title: `${entry.title} · ${stage.title}已回应`,
+          description: stage.failureText,
+          tags: [bundle.bundleKind, 'quest-stage'],
         })
-        objects.push({
-          key: `object.${bundle.bundleKind}.${entry.key}`, locationKey: location.key,
-          sceneKey: firstSceneForLocation.get(location.key) ?? null,
-          title: `${entry.title}所需物`, description: `处理“${entry.title}”前可以取得的任务物品。`,
-          tags: ['quest', bundle.bundleKind],
-        })
-        registerAction({
-          key: `action.prepare.${bundle.bundleKind}.${entry.key}`, kind: 'take',
-          label: `取得：${entry.title}所需物`, description: `把处理“${entry.title}”所需的物品收入背包。`,
-          locationKey: location.key, targetKey: `object.${bundle.bundleKind}.${entry.key}`,
-          requirements: [{ questKey, questStatus: 'active' }], rule: { kind: 'automatic' },
-          successEffects: [{
-            op: 'gain-item', itemKey: useItemKey, quantity: 1,
-            claimKey: `claim.${bundle.bundleKind}.${entry.key}`,
-          }],
-          costlySuccessEffects: [], failureEffects: [],
-          successText: `你取得了${entry.title}所需物。`, costlySuccessText: `你付出代价后取得了${entry.title}所需物。`,
-          failureText: `你暂时无法取得${entry.title}所需物。`, unavailableText: '该任务物品已经取得或任务尚未进入可执行阶段。',
-          repeatable: false, narrativeChoiceKey: null, interaction: null,
-        })
-      }
-      const completionEffects: AdventureEffect[] = [
-        { op: 'complete-objective', questKey, objectiveKey },
-        { op: 'change-resource', resourceKey: clock.key, delta: script.timeCostMinutes },
-        { op: 'apply-condition', conditionKey, duration: null },
-      ]
-      registerAction({
-        key: actionKey, kind: script.actionKind,
-        label: `${bundle.bundleKind === 'side' ? '执行' : '处理'}：${entry.title}`,
-        description: `${entry.objective}\n${entry.description}`, locationKey: location.key,
-        targetKey: useItemKey,
-        requirements: [
+        const abilityKey = abilityKeys.has(stageScript.abilityKey) ? stageScript.abilityKey : fallbackAbilityKey
+        const useItemKey = stageScript.actionKind === 'use'
+          ? `item.${bundle.bundleKind}.${entry.key}.${stage.key}` : null
+        const stageRequirements: AdventureActionDefinition['requirements'] = [
           { questKey, questStatus: 'active' },
-          ...(useItemKey ? [{ itemKey: useItemKey, itemQuantity: 1 }] : []),
-        ],
-        rule: {
-          kind: 'random', abilityKey, expression: '1d20', difficulty: script.difficulty,
-          costlySuccessFloor: script.costlySuccessFloor,
-        },
-        successEffects: completionEffects, costlySuccessEffects: [
-          ...completionEffects, { op: 'change-resource', resourceKey: health.key, delta: -1 },
-        ],
-        failureEffects: contract.narrative.failForward ? [
-          ...completionEffects, { op: 'change-resource', resourceKey: health.key, delta: -1 },
-        ] : [{ op: 'change-resource', resourceKey: clock.key, delta: script.timeCostMinutes }],
-        successText: script.successText, costlySuccessText: script.costlySuccessText,
-        failureText: script.failureForwardText, unavailableText: '这段内容当前尚未满足条件。',
-        repeatable: false, narrativeChoiceKey: null, interaction: null,
+          { conditionKey, conditionPresent: false },
+          ...(previousConditionKey ? [{ conditionKey: previousConditionKey, conditionPresent: true }] : []),
+        ]
+        if (useItemKey) {
+          items.push({
+            key: useItemKey,
+            title: `${entry.title} · ${stage.title}所需物`,
+            description: `用于完成“${stage.objective}”的任务物品。`,
+            tags: ['quest', bundle.bundleKind, `stage:${stage.key}`],
+            stackable: false,
+            consumable: false,
+            category: 'quest',
+            equipmentSlotKey: null,
+            modifiers: [],
+            usableActionKey: actionKey,
+          })
+          const objectKey = `object.${bundle.bundleKind}.${entry.key}.${stage.key}`
+          objects.push({
+            key: objectKey,
+            locationKey: location.key,
+            sceneKey: firstSceneForLocation.get(location.key) ?? null,
+            title: `${entry.title} · ${stage.title}所需物`,
+            description: `完成“${stage.objective}”前可以取得的任务物品。`,
+            tags: ['quest', bundle.bundleKind, `stage:${stage.key}`],
+          })
+          const prepareActionKey = `action.prepare.${bundle.bundleKind}.${entry.key}.${stage.key}`
+          registerAction({
+            key: prepareActionKey,
+            kind: 'take',
+            label: `取得：${entry.title} · ${stage.title}所需物`,
+            description: `把完成“${stage.objective}”所需的物品收入背包。`,
+            locationKey: location.key,
+            targetKey: objectKey,
+            requirements: stageRequirements,
+            rule: { kind: 'automatic' },
+            successEffects: [{
+              op: 'gain-item', itemKey: useItemKey, quantity: 1,
+              claimKey: `claim.${bundle.bundleKind}.${entry.key}.${stage.key}`,
+            }],
+            costlySuccessEffects: [],
+            failureEffects: [],
+            successText: `你取得了完成“${stage.objective}”所需的物品。`,
+            costlySuccessText: `你付出代价后取得了完成“${stage.objective}”所需的物品。`,
+            failureText: `你暂时无法取得完成“${stage.objective}”所需的物品。`,
+            unavailableText: '该任务物品已经取得，或任务尚未进入对应阶段。',
+            repeatable: false,
+            narrativeChoiceKey: null,
+            interaction: null,
+          })
+          storyletActionKeys.push(prepareActionKey)
+        }
+        const completionEffects: AdventureEffect[] = [
+          { op: 'complete-objective', questKey, objectiveKey },
+          { op: 'change-resource', resourceKey: clock.key, delta: stageScript.timeCostMinutes },
+          { op: 'apply-condition', conditionKey, duration: null },
+        ]
+        registerAction({
+          key: actionKey,
+          kind: stageScript.actionKind,
+          label: `${bundle.bundleKind === 'side' ? '推进' : '处理'}：${entry.title} · ${stage.title}`,
+          description: `${stage.objective}\n${entry.description}`,
+          locationKey: location.key,
+          targetKey: useItemKey,
+          requirements: [
+            ...stageRequirements,
+            ...(useItemKey ? [{ itemKey: useItemKey, itemQuantity: 1 }] : []),
+          ],
+          rule: {
+            kind: 'random', abilityKey, expression: '1d20', difficulty: stageScript.difficulty,
+            costlySuccessFloor: stageScript.costlySuccessFloor,
+          },
+          successEffects: completionEffects,
+          costlySuccessEffects: [
+            ...completionEffects, { op: 'change-resource', resourceKey: health.key, delta: -1 },
+          ],
+          failureEffects: contract.narrative.failForward ? [
+            ...completionEffects, { op: 'change-resource', resourceKey: health.key, delta: -1 },
+          ] : [{ op: 'change-resource', resourceKey: clock.key, delta: stageScript.timeCostMinutes }],
+          successText: stageScript.successText,
+          costlySuccessText: stageScript.costlySuccessText,
+          failureText: stageScript.failureForwardText,
+          unavailableText: '这段内容当前尚未满足条件，或前一阶段尚未完成。',
+          repeatable: false,
+          narrativeChoiceKey: null,
+          interaction: null,
+        })
+        storyletActionKeys.push(actionKey)
       })
       storylets.push({
         key: `storylet.${bundle.bundleKind}.${entry.key}`, title: entry.title,
-        actionKeys: bundle.bundleKind === 'side' ? [acceptActionKey, actionKey] : [actionKey],
+        actionKeys: storyletActionKeys,
         requirements: [], once: true,
         priority: bundle.bundleKind === 'side' ? 60 - index : 30 - index,
       })

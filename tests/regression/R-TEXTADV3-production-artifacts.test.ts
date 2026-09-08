@@ -4,7 +4,7 @@ import {
   parseTextAdventureCastBibleArtifactV1,
   parseTextAdventureNarrativeArcPlanArtifactV1,
   parseTextAdventureQuestPlanArtifactV1,
-  parseTextAdventureQuestScriptArtifactV1,
+  parseTextAdventureQuestScriptArtifactV2,
   parseTextAdventureSourceDecisionArtifactV1,
   parseTextAdventureSourceSufficiencyArtifactV1,
   parseTextAdventureStoryBibleArtifactV1,
@@ -386,7 +386,7 @@ describe('TEXTADV-3 · 专业生产工件合同', () => {
     })).toThrow('未精确覆盖')
 
     const questScriptValue = {
-      schema: 'storyforge.text-adventure-quest-script-artifact', version: 1,
+      schema: 'storyforge.text-adventure-quest-script-artifact', version: 2,
       mainObjectiveScripts: [{
         objectiveKey: 'objective.records', sceneKey: 'scene.001',
         alternatives: [{
@@ -399,7 +399,7 @@ describe('TEXTADV-3 · 专业生产工件合同', () => {
       }],
       sideQuestScripts: [], ambientEventScripts: [],
     }
-    const script = parseTextAdventureQuestScriptArtifactV1({
+    const script = parseTextAdventureQuestScriptArtifactV2({
       value: questScriptValue, brief: brief(), mainQuestPlan: parsed,
       systems: { abilities: [{ key: 'ability.perception' }] } as never,
       sideQuests: { entries: [] } as never, ambientEvents: { entries: [] } as never,
@@ -409,7 +409,7 @@ describe('TEXTADV-3 · 专业生产工件合同', () => {
     illegalCheck.mainObjectiveScripts[0].alternatives[0].resolution = {
       mode: 'check', abilityKey: 'ability.unknown', difficulty: 10, costlySuccessFloor: 6,
     }
-    expect(() => parseTextAdventureQuestScriptArtifactV1({
+    expect(() => parseTextAdventureQuestScriptArtifactV2({
       value: illegalCheck, brief: brief(), mainQuestPlan: parsed,
       systems: { abilities: [{ key: 'ability.perception' }] } as never,
       sideQuests: { entries: [] } as never, ambientEvents: { entries: [] } as never,

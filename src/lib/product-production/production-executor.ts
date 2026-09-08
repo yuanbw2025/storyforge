@@ -42,7 +42,7 @@ import { resolveTtrpgCampaignDesignV2 } from '../ttrpg/campaign-proposal'
 import {
   parseTextAdventureArchitectureArtifactV1,
   parseTextAdventureQualityReviewArtifactV1,
-  parseTextAdventureQuestBundleArtifactV1,
+  parseTextAdventureQuestBundleArtifactV2,
   parseTextAdventureSystemsArtifactV1,
   type TextAdventureSystemsArtifactV1,
 } from '../adventure/production-artifacts'
@@ -54,7 +54,7 @@ import {
   parseTextAdventureNarrativeArcPlanArtifactV1,
   parseTextAdventureMediaAnchorDecisionArtifactV1,
   parseTextAdventureQuestPlanArtifactV1,
-  parseTextAdventureQuestScriptArtifactV1,
+  parseTextAdventureQuestScriptArtifactV2,
   parseTextAdventureSourceDecisionArtifactV1,
   parseTextAdventureSourceSufficiencyArtifactV1,
   parseTextAdventureStoryBibleArtifactV1,
@@ -501,8 +501,14 @@ export function legalizeProductionModelProtocolDefaultsV1(
         sceneKey: string
         alternativeKeys: readonly string[]
       }[]
-      sideQuestScripts: readonly { entryKey: string; abilityKey: string }[]
-      ambientEventScripts: readonly { entryKey: string; abilityKey: string }[]
+      sideQuestScripts: readonly {
+        entryKey: string
+        stages: readonly { stageKey: string; actionKind: string; abilityKey: string }[]
+      }[]
+      ambientEventScripts: readonly {
+        entryKey: string
+        stages: readonly { stageKey: string; actionKind: string; abilityKey: string }[]
+      }[]
     }
     questScriptAbilityKeys?: readonly string[]
   } = {},
@@ -1055,7 +1061,10 @@ export function legalizeProductionModelProtocolDefaultsV1(
     }
     const legalizeSupplemental = (
       value: unknown,
-      identities: readonly { entryKey: string; abilityKey: string }[],
+      identities: readonly {
+        entryKey: string
+        stages: readonly { stageKey: string; actionKind: string; abilityKey: string }[]
+      }[],
       field: 'sideQuestScripts' | 'ambientEventScripts',
     ): unknown => Array.isArray(value) ? value.slice(0, identities.length).map((script, scriptIndex) => {
       if (!script || typeof script !== 'object' || Array.isArray(script)) return script
@@ -1066,21 +1075,42 @@ export function legalizeProductionModelProtocolDefaultsV1(
         item.entryKey = identity.entryKey
         defaultedFields.push(`${field}[${scriptIndex}].entryKey<-frozen-plan`)
       }
-      if (item.abilityKey !== identity.abilityKey) {
-        item.abilityKey = identity.abilityKey
-        defaultedFields.push(`${field}[${scriptIndex}].abilityKey<-frozen-plan`)
+      if (Array.isArray(item.stages)) {
+        if (item.stages.length > identity.stages.length) {
+          defaultedFields.push(
+            `${field}[${scriptIndex}].stages[${identity.stages.length}..${item.stages.length - 1}]<-discarded-surplus`,
+          )
+        }
+        item.stages = item.stages.slice(0, identity.stages.length).map((stage, stageIndex) => {
+          if (!stage || typeof stage !== 'object' || Array.isArray(stage)) return stage
+          const stageIdentity = identity.stages[stageIndex]
+          if (!stageIdentity) return stage
+          const nextStage = { ...(stage as JsonRecord) }
+          for (const [key, expected] of [
+            ['stageKey', stageIdentity.stageKey],
+            ['actionKind', stageIdentity.actionKind],
+            ['abilityKey', stageIdentity.abilityKey],
+          ] as const) {
+            if (nextStage[key] !== expected) {
+              nextStage[key] = expected
+              defaultedFields.push(`${field}[${scriptIndex}].stages[${stageIndex}].${key}<-frozen-plan`)
+            }
+          }
+          nextStage.difficulty = boundedInteger(
+            nextStage.difficulty, 2, 30, `${field}[${scriptIndex}].stages[${stageIndex}].difficulty`,
+          )
+          const difficulty = typeof nextStage.difficulty === 'number' ? nextStage.difficulty : 30
+          nextStage.costlySuccessFloor = boundedInteger(
+            nextStage.costlySuccessFloor, 1, Math.max(1, difficulty - 1),
+            `${field}[${scriptIndex}].stages[${stageIndex}].costlySuccessFloor`,
+          )
+          nextStage.timeCostMinutes = boundedInteger(
+            nextStage.timeCostMinutes, 1, 120,
+            `${field}[${scriptIndex}].stages[${stageIndex}].timeCostMinutes`,
+          )
+          return nextStage
+        })
       }
-      item.difficulty = boundedInteger(
-        item.difficulty, 2, 30, `${field}[${scriptIndex}].difficulty`,
-      )
-      const difficulty = typeof item.difficulty === 'number' ? item.difficulty : 30
-      item.costlySuccessFloor = boundedInteger(
-        item.costlySuccessFloor, 1, Math.max(1, difficulty - 1),
-        `${field}[${scriptIndex}].costlySuccessFloor`,
-      )
-      item.timeCostMinutes = boundedInteger(
-        item.timeCostMinutes, 1, 120, `${field}[${scriptIndex}].timeCostMinutes`,
-      )
       return item
     }) : value
     for (const [field, value, identities] of [
@@ -1150,25 +1180,35 @@ export function legalizeProductionModelProtocolDefaultsV1(
       const legalizedEntry = protocolObjectWithDefaults(entry, `entries[${index}]`, {
         rewardExperience: side ? 5 : 2,
         rewardCurrency: 0,
-        timeCostMinutes: side ? 10 : 5,
       }, defaultedFields)
       const locationTitles = options.questLocationTitles ?? []
-      if (locationTitles.length > 0
-        && legalizedEntry && typeof legalizedEntry === 'object' && !Array.isArray(legalizedEntry)) {
-        const item = { ...(legalizedEntry as JsonRecord) }
-        const decisiveSurface = [item.hook, item.objective]
-          .filter((value): value is string => typeof value === 'string')
-          .join('\n')
+      if (!legalizedEntry || typeof legalizedEntry !== 'object' || Array.isArray(legalizedEntry)) {
+        return legalizedEntry
+      }
+      const item = { ...(legalizedEntry as JsonRecord) }
+      const stages = compactProtocolArray(item.stages, `entries[${index}].stages`, discardedNullEntries)
+      if (!Array.isArray(stages)) return item
+      item.stages = stages.map((stage, stageIndex) => {
+        if (!stage || typeof stage !== 'object' || Array.isArray(stage) || locationTitles.length === 0) {
+          return stage
+        }
+        const nextStage = { ...(stage as JsonRecord) }
+        const decisiveSurface = [
+          nextStage.title, nextStage.objective, nextStage.successText,
+          nextStage.costlySuccessText, nextStage.failureText,
+        ].filter((value): value is string => typeof value === 'string').join('\n')
         const mentionedOrdinals = locationTitles.flatMap((title, titleIndex) => (
           decisiveSurface.includes(title) ? [titleIndex + 1] : []
         ))
-        if (mentionedOrdinals.length === 1 && item.locationOrdinal !== mentionedOrdinals[0]) {
-          item.locationOrdinal = mentionedOrdinals[0]
-          defaultedFields.push(`entries[${index}].locationOrdinal<-hook-objective-location`)
+        if (mentionedOrdinals.length === 1 && nextStage.locationOrdinal !== mentionedOrdinals[0]) {
+          nextStage.locationOrdinal = mentionedOrdinals[0]
+          defaultedFields.push(
+            `entries[${index}].stages[${stageIndex}].locationOrdinal<-stage-location`,
+          )
         }
-        return item
-      }
-      return legalizedEntry
+        return nextStage
+      })
+      return item
     })
     return { payload: next, defaultedFields, discardedNullEntries, discardedUnregisteredStateFields }
   }
@@ -1862,8 +1902,14 @@ function textSystem(
       sceneKey: string
       alternativeKeys: readonly string[]
     }[]
-    sideQuestScripts: readonly { entryKey: string; abilityKey: string }[]
-    ambientEventScripts: readonly { entryKey: string; abilityKey: string }[]
+    sideQuestScripts: readonly {
+      entryKey: string
+      stages: readonly { stageKey: string; actionKind: string; abilityKey: string }[]
+    }[]
+    ambientEventScripts: readonly {
+      entryKey: string
+      stages: readonly { stageKey: string; actionKind: string; abilityKey: string }[]
+    }[]
   },
   textAdventureQuestScriptAbilityKeys: readonly string[] = [],
 ): string {
@@ -1984,7 +2030,7 @@ function textSystem(
       ? Math.max(8, Math.ceil(brief.scale.targetPlayMinutes / 7.5)) : 1
     return `${common}\n你是主线任务设计师。把叙事弧拆成恰好一条主线任务；这不是一句任务摘要，而是可供脚本编译的阶段、目标与通用解法合同。` +
       '输出字段必须精确为：{"schema":"storyforge.text-adventure-quest-plan-artifact","version":1,"bundleKind":"main","quests":[{"key":"quest.main","title":"...","description":"...","characterKeys":["character.some-key"],"stages":[{"key":"stage.1","title":"...","objectiveKeys":["objective.1"]}],"objectives":[{"key":"objective.1","stageKey":"stage.1","title":"...","narrativePurpose":"...","sceneKeys":["scene.001"],"locationOrdinal":1,"alternatives":[{"key":"alternative.1","actionKind":"look|move|talk|take|give|use|inspect|attempt|rest|quest-action","targetCharacterKey":null,"cost":"...","successConsequence":"...","failureForwardConsequence":"...","persistentEffectKeys":["flag.some-key"]}]}]}]}。' +
-      `商业候选至少 ${minimumStages} 阶段、${minimumObjectives} 目标，至少两个目标有 2 种通用解法；prototype 也必须至少一阶段一目标。quests[0] 必须同时包含 key/title/description/characterKeys/stages/objectives 六个同级字段；objectives 必须是 quests[0] 的完整数组，绝不能嵌进 stages 或省略。每个 stage 只含 key/title/objectiveKeys，stage.objectiveKeys 必须不重不漏精确覆盖同级 objectives。所有 stage 及其 objectiveKeys 必须按场景约束数组中的 sceneKey 顺序单调推进；一个 stage 必须占据连续场景区间，后续 stage 不得返回前一 stage 已越过的场景。每个主线 objective.sceneKeys 必须恰好包含一个场景 key：一个 objective 表示该场景中的一次可结算目标，跨场景推进只能由同一 stage 内连续多个 objective 或后续 stage 表达。合法角色 key=${JSON.stringify(textAdventureCastKeys)}；场景的冻结地点与出场角色约束=${JSON.stringify(textAdventureSceneConstraints)}。sceneKeys 只能复用该约束中的场景；locationOrdinal 必须复制所引用场景共同绑定的地点编号。characterKeys 将由系统确定性投影为全部所选场景 castKeys 的并集，不得用姓名、称谓或自造 key 表达人物。每个场景的 nonPlayerCastKeys 是 talk 目标的唯一白名单：talk.targetCharacterKey 必须逐字从目标场景的 nonPlayerCastKeys 选择；该数组为空时该场景严禁生成 talk，必须设计非 talk 行动；其他行动的 targetCharacterKey 必须为 null。每个 alternative 都必须显式包含至少一个 persistentEffectKeys；该字段只记录行动已经发生，系统会冻结其机器 key。每种失败结果都必须推进到可继续的新局面。输出前必须核对 Object.keys(quests[0]).sort() 恰为 ["characterKeys","description","key","objectives","stages","title"]。`
+      `商业候选至少 ${minimumStages} 阶段、${minimumObjectives} 目标，至少两个目标有 2 种通用解法，并且全部 alternatives 合计必须至少各出现一次 give 与 use；take 会作为这些物品行动的确定性准备步骤进入运行包，talk 必须至少出现一次以验证正式 NPC 互动。prototype 也必须至少一阶段一目标。quests[0] 必须同时包含 key/title/description/characterKeys/stages/objectives 六个同级字段；objectives 必须是 quests[0] 的完整数组，绝不能嵌进 stages 或省略。每个 stage 只含 key/title/objectiveKeys，stage.objectiveKeys 必须不重不漏精确覆盖同级 objectives。所有 stage 及其 objectiveKeys 必须按场景约束数组中的 sceneKey 顺序单调推进；一个 stage 必须占据连续场景区间，后续 stage 不得返回前一 stage 已越过的场景。每个主线 objective.sceneKeys 必须恰好包含一个场景 key：一个 objective 表示该场景中的一次可结算目标，跨场景推进只能由同一 stage 内连续多个 objective 或后续 stage 表达。合法角色 key=${JSON.stringify(textAdventureCastKeys)}；场景的冻结地点与出场角色约束=${JSON.stringify(textAdventureSceneConstraints)}。sceneKeys 只能复用该约束中的场景；locationOrdinal 必须复制所引用场景共同绑定的地点编号。characterKeys 将由系统确定性投影为全部所选场景 castKeys 的并集，不得用姓名、称谓或自造 key 表达人物。每个场景的 nonPlayerCastKeys 是 talk 目标的唯一白名单：talk.targetCharacterKey 必须逐字从目标场景的 nonPlayerCastKeys 选择；该数组为空时该场景严禁生成 talk，必须设计非 talk 行动；其他行动的 targetCharacterKey 必须为 null。每个 alternative 都必须显式包含至少一个 persistentEffectKeys；该字段只记录行动已经发生，系统会冻结其机器 key。每种失败结果都必须推进到可继续的新局面。输出前必须核对 Object.keys(quests[0]).sort() 恰为 ["characterKeys","description","key","objectives","stages","title"]。`
   }
   const sceneScriptBoundary = textAdventureSceneScriptBoundary(taskKey)
   if (sceneScriptBoundary != null) {
@@ -2026,11 +2072,14 @@ function textSystem(
     const locationIndex = textAdventureLocationTitles.map((title, index) => ({
       locationOrdinal: index + 1, locationTitle: title,
     }))
-    return `${common}\n你是文字冒险${side ? '支线任务' : '区域与随机事件'}负责人。每个条目都必须独立有钩子、目标、成功/代价成功/失败推进文本，并复用上游 systems Artifact 已登记的 abilityKey。` +
-      `输出字段必须精确为：{"schema":"storyforge.text-adventure-quest-bundle-artifact","version":1,"bundleKind":"${kind}","entries":[{"key":"stable-key","title":"...","description":"...","hook":"...","objective":"...","locationOrdinal":1,"abilityKey":"ability.some-key","difficulty":10,"successText":"...","costlySuccessText":"...","failureText":"...","rewardExperience":5,"rewardCurrency":1,"timeCostMinutes":10}]}。` +
-      `地点编号与标题的唯一映射=${JSON.stringify(locationIndex)}。entries 至少 ${count} 个；每项必须恰好包含示例中的 14 个字段，尤其不得省略 rewardExperience、rewardCurrency、timeCostMinutes；locationOrdinal 必须在 1–${textAdventureLocationTitles.length || adventure.narrative.targetLocationCount}。` +
+    return `${common}\n你是文字冒险${side ? '支线任务' : '区域与随机事件'}负责人。每个条目都必须独立有钩子；每个阶段都有可结算目标、行动种类、能力检查意图、成功/代价成功/失败推进文本，并复用上游 systems Artifact 已登记的 abilityKey。` +
+      `输出字段必须精确为：{"schema":"storyforge.text-adventure-quest-bundle-artifact","version":2,"bundleKind":"${kind}","entries":[{"key":"stable-key","title":"...","description":"...","hook":"...","stages":[{"key":"stage-one","title":"...","objective":"...","locationOrdinal":1,"actionKind":"inspect|attempt|use|quest-action","abilityKey":"ability.some-key","difficulty":10,"successText":"...","costlySuccessText":"...","failureText":"...","timeCostMinutes":8}],"rewardExperience":5,"rewardCurrency":1}]}。` +
+      `地点编号与标题的唯一映射=${JSON.stringify(locationIndex)}。entries 至少 ${count} 个；每个 entry 必须恰好包含 key/title/description/hook/stages/rewardExperience/rewardCurrency 七个字段；每个 stage 必须恰好包含示例中的 11 个字段，locationOrdinal 必须在 1–${textAdventureLocationTitles.length || adventure.narrative.targetLocationCount}。` +
+      (side
+        ? '每条支线必须包含 2–4 个有因果顺序的实质阶段，至少跨越两个登记地点；后续阶段要承接前一阶段得到的人物态度、信息、物品或代价，不能把“接取任务”充当模型阶段，也不能用两个同义按钮冒充多阶段。'
+        : '每个区域/随机事件必须恰好一个阶段；它应形成短而完整的新局面，不得伪装成跨地点支线。') +
       `abilityKey 只能逐字使用这些上游已登记能力=${JSON.stringify(textAdventureQuestScriptAbilityKeys)}；不得组合多个能力、追加子技能后缀、使用中文标题或自造 key。` +
-      '每项的 title、description、hook、objective 至少一处必须逐字写出所绑定的 locationTitle，并且不得把另一个登记地点写成该行动的发生地；hook 与 objective 必须都能在绑定地点当场成立，若它们明确写出另一个登记地点，就必须改用那个地点对应的 locationOrdinal。当前单条任务只编译为一个地点的一次行动，不得伪装成尚未实现的跨地点多阶段任务。' +
+      '每个 stage 的 title、objective、successText、costlySuccessText、failureText 至少一处必须逐字写出所绑定的 locationTitle，并且不得把另一个登记地点写成该阶段行动的发生地；失败必须留下已结算代价、新信息或替代推进。' +
       `不得把题材专用机制写成字段。${adventure.narrative.failForward ? '失败文本和效果必须开启新局面，而不是死路。' : ''}`
   }
   if (isTextAdventureQuestScriptModelTask(taskKey)) {
@@ -2041,11 +2090,11 @@ function textSystem(
       : `本 Run 只编译第 ${boundary.actIndex + 1} 幕${boundary.routeClass === 'single' ? '单解' : '多解'}主线目标：sideQuestScripts 和 ambientEventScripts 必须是空数组；mainObjectiveScripts 必须恰好输出冻结清单中的 ${textAdventureQuestScriptIdentityPlan?.mainObjectiveScripts.length ?? 0} 项，且每个目标的 alternatives 必须逐项覆盖 alternativeKeys，尤其不得把多解目标压成单解。`
     return `${common}\n你是任务脚本工程师。你不设计新故事、不修改上游阶段或目标，也不直接写运行状态；你的职责是把已采纳的主线、支线和区域事件计划逐项翻译为受控的检查参数、时间成本与三档结算文本。` +
       runBoundary +
-      '输出字段必须精确为：{"schema":"storyforge.text-adventure-quest-script-artifact","version":1,"mainObjectiveScripts":[{"objectiveKey":"objective.some-key","sceneKey":"scene.001","alternatives":[{"alternativeKey":"alternative.some-key","resolution":{"mode":"automatic|check","abilityKey":null,"difficulty":null,"costlySuccessFloor":null},"timeCostMinutes":5,"successText":"...","costlySuccessText":"...","failureForwardText":"..."}]}],"sideQuestScripts":[{"entryKey":"side-key","actionKind":"inspect|attempt|use|quest-action","abilityKey":"ability.some-key","difficulty":10,"costlySuccessFloor":6,"timeCostMinutes":8,"successText":"...","costlySuccessText":"...","failureForwardText":"..."}],"ambientEventScripts":[]}。' +
-      `上游已冻结的脚本身份与顺序=${JSON.stringify(textAdventureQuestScriptIdentityPlan)}；必须逐项原样复制 objectiveKey、sceneKey、alternativeKeys→alternativeKey、entryKey 和 abilityKey，不得重新命名、翻译或按自己的理解排序。` +
+      '输出字段必须精确为：{"schema":"storyforge.text-adventure-quest-script-artifact","version":2,"mainObjectiveScripts":[{"objectiveKey":"objective.some-key","sceneKey":"scene.001","alternatives":[{"alternativeKey":"alternative.some-key","resolution":{"mode":"automatic|check","abilityKey":null,"difficulty":null,"costlySuccessFloor":null},"timeCostMinutes":5,"successText":"...","costlySuccessText":"...","failureForwardText":"..."}]}],"sideQuestScripts":[{"entryKey":"side-key","stages":[{"stageKey":"stage-one","actionKind":"inspect|attempt|use|quest-action","abilityKey":"ability.some-key","difficulty":10,"costlySuccessFloor":6,"timeCostMinutes":8,"successText":"...","costlySuccessText":"...","failureForwardText":"..."}]}],"ambientEventScripts":[]}。' +
+      `上游已冻结的脚本身份与顺序=${JSON.stringify(textAdventureQuestScriptIdentityPlan)}；必须逐项原样复制 objectiveKey、sceneKey、alternativeKeys→alternativeKey，以及每个补充任务的 entryKey、stages[].stageKey/actionKind/abilityKey，不得重新命名、翻译、合并阶段或按自己的理解排序。` +
       `check.resolution.abilityKey 只能逐字使用这些上游已登记能力=${JSON.stringify(textAdventureQuestScriptAbilityKeys)}；不得用能力标题、中文简称、动作类型或自造 key。` +
       'mainObjectiveScripts 必须按主线 stage.objectiveKeys 的顺序不重不漏覆盖全部目标，sceneKey 必须等于该目标首个 sceneKey，每个 alternatives 必须不重不漏覆盖计划解法。automatic 的三个检查参数必须全为 null；check 必须复用 systems.abilities 的 key，difficulty 为 2–30，costlySuccessFloor 为 1–29 且严格小于 difficulty。' +
-      'sideQuestScripts 与 ambientEventScripts 必须分别精确覆盖上游条目，abilityKey 必须逐字沿用条目并存在于 systems，失败文本必须产生代价、新信息或替代推进，不得写“失败了，请重试”。所有玩家可见结算文本必须具体落实对应人物、地点、目标和后果。'
+      'sideQuestScripts 与 ambientEventScripts 必须分别精确覆盖上游条目及其全部阶段，actionKind/abilityKey 必须逐字沿用阶段且 abilityKey 存在于 systems；失败文本必须产生代价、新信息或替代推进，不得写“失败了，请重试”。所有玩家可见结算文本必须具体落实对应人物、地点、阶段目标和后果。'
   }
   if (taskKey === 'content.adventure-quality-review') {
     if (!adventure) return `${common}\n缺少文字冒险专用 Brief，停止。`
@@ -2242,8 +2291,21 @@ async function executeModelTask(input: ProductProductionTaskExecutionInputV1, op
           return entries.flatMap(entry => {
             if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return []
             const record = entry as JsonRecord
-            return typeof record.key === 'string' && typeof record.abilityKey === 'string'
-              ? [{ entryKey: record.key, abilityKey: record.abilityKey }]
+            const stages = Array.isArray(record.stages) ? record.stages.flatMap(stage => {
+              if (!stage || typeof stage !== 'object' || Array.isArray(stage)) return []
+              const stageRecord = stage as JsonRecord
+              return typeof stageRecord.key === 'string'
+                && typeof stageRecord.actionKind === 'string'
+                && typeof stageRecord.abilityKey === 'string'
+                ? [{
+                    stageKey: stageRecord.key,
+                    actionKind: stageRecord.actionKind,
+                    abilityKey: stageRecord.abilityKey,
+                  }]
+                : []
+            }) : []
+            return typeof record.key === 'string' && stages.length > 0
+              ? [{ entryKey: record.key, stages }]
               : []
           })
         }
@@ -2518,7 +2580,7 @@ async function executeModelTask(input: ProductProductionTaskExecutionInputV1, op
     )
     const emptyQuestBundle = (bundleKind: 'side' | 'ambient') => ({
       schema: 'storyforge.text-adventure-quest-bundle-artifact' as const,
-      version: 1 as const,
+      version: 2 as const,
       bundleKind,
       entries: [],
     })
@@ -2535,12 +2597,12 @@ async function executeModelTask(input: ProductProductionTaskExecutionInputV1, op
     const projected = questScriptActIndex == null
       ? {
           mainQuestPlan: supplementalMainPlan,
-          sideQuests: parseTextAdventureQuestBundleArtifactV1(
+          sideQuests: parseTextAdventureQuestBundleArtifactV2(
             artifactPayload(input, 'content.adventure-side-quests'), 'side',
             options.brief.textAdventure.narrative.targetSideQuestCount,
             [], textAdventureSystemAbilityKeys,
           ),
-          ambientEvents: parseTextAdventureQuestBundleArtifactV1(
+          ambientEvents: parseTextAdventureQuestBundleArtifactV2(
             artifactPayload(input, 'content.adventure-ambient-events'), 'ambient',
             options.brief.textAdventure.narrative.targetAmbientEventCount,
             [], textAdventureSystemAbilityKeys,
@@ -2589,7 +2651,7 @@ async function executeModelTask(input: ProductProductionTaskExecutionInputV1, op
             ambientEvents: emptyQuestBundle('ambient'),
           }
         })()
-    const questScript = parseTextAdventureQuestScriptArtifactV1({
+    const questScript = parseTextAdventureQuestScriptArtifactV2({
       value: raw,
       brief: options.brief,
       systems,
@@ -2701,7 +2763,7 @@ async function executeModelTask(input: ProductProductionTaskExecutionInputV1, op
     || input.task.taskKey === 'content.adventure-ambient-events') {
     if (!options.brief.textAdventure) fail('文字冒险任务束缺少专用 Brief')
     const side = input.task.taskKey === 'content.adventure-side-quests'
-    payload = parseTextAdventureQuestBundleArtifactV1(
+    payload = parseTextAdventureQuestBundleArtifactV2(
       raw, side ? 'side' : 'ambient',
       side
         ? options.brief.textAdventure.narrative.targetSideQuestCount
@@ -3872,13 +3934,13 @@ async function executeIntegrationTask(input: ProductProductionTaskExecutionInput
         )
         if (!qualityReview.passed) fail('文字冒险叙事质量审查未通过，必须先修复阻塞问题并重新生产')
         const systems = parseTextAdventureSystemsArtifactV1(product, options.brief.textAdventure)
-        const sideQuests = parseTextAdventureQuestBundleArtifactV1(
+        const sideQuests = parseTextAdventureQuestBundleArtifactV2(
           artifactPayload(input, 'content.adventure-side-quests'), 'side',
           options.brief.textAdventure.narrative.targetSideQuestCount,
           textAdventureLocationTitlesFromArchitectureV1(textAdventureArchitecture),
           systems.abilities.map(ability => ability.key),
         )
-        const ambientEvents = parseTextAdventureQuestBundleArtifactV1(
+        const ambientEvents = parseTextAdventureQuestBundleArtifactV2(
           artifactPayload(input, 'content.adventure-ambient-events'), 'ambient',
           options.brief.textAdventure.narrative.targetAmbientEventCount,
           textAdventureLocationTitlesFromArchitectureV1(textAdventureArchitecture),
@@ -3890,7 +3952,7 @@ async function executeIntegrationTask(input: ProductProductionTaskExecutionInput
           cast: textAdventureCast,
           arcPlan: textAdventureArcPlan,
           mainQuestPlan: textAdventureMainQuestPlan,
-          questScript: parseTextAdventureQuestScriptArtifactV1({
+          questScript: parseTextAdventureQuestScriptArtifactV2({
             value: artifactPayload(input, 'content.quest-script'), brief: options.brief,
             systems, mainQuestPlan: textAdventureMainQuestPlan, sideQuests, ambientEvents,
           }),
@@ -4346,12 +4408,12 @@ async function executeTextAdventureQuestScriptAssemblyTask(
     value: artifactPayload(input, 'content.main-quest-plan'), brief, arcPlan, cast,
     expectedKind: 'main', expectedQuestCount: 1, locationCount: locationTitles.length,
   })
-  const sideQuests = parseTextAdventureQuestBundleArtifactV1(
+  const sideQuests = parseTextAdventureQuestBundleArtifactV2(
     artifactPayload(input, 'content.adventure-side-quests'), 'side',
     brief.textAdventure.narrative.targetSideQuestCount, locationTitles,
     systems.abilities.map(ability => ability.key),
   )
-  const ambientEvents = parseTextAdventureQuestBundleArtifactV1(
+  const ambientEvents = parseTextAdventureQuestBundleArtifactV2(
     artifactPayload(input, 'content.adventure-ambient-events'), 'ambient',
     brief.textAdventure.narrative.targetAmbientEventCount, locationTitles,
     systems.abilities.map(ability => ability.key),
@@ -4364,10 +4426,10 @@ async function executeTextAdventureQuestScriptAssemblyTask(
   const supplemental = artifactPayload(
     input, TEXT_ADVENTURE_QUEST_SCRIPT_SUPPLEMENTAL,
   ) as JsonRecord
-  const assembled = parseTextAdventureQuestScriptArtifactV1({
+  const assembled = parseTextAdventureQuestScriptArtifactV2({
     value: {
       schema: 'storyforge.text-adventure-quest-script-artifact',
-      version: 1,
+      version: 2,
       mainObjectiveScripts: mainParts.flatMap(part => (
         Array.isArray(part.mainObjectiveScripts) ? part.mainObjectiveScripts : []
       )),

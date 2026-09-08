@@ -9,14 +9,14 @@ import {
 } from '../adventure/production-compiler'
 import type {
   TextAdventureArchitectureArtifactV1,
-  TextAdventureQuestBundleArtifactV1,
+  TextAdventureQuestBundleArtifactV2,
   TextAdventureSystemsArtifactV1,
 } from '../adventure/production-artifacts'
 import type {
   TextAdventureCastBibleArtifactV1,
   TextAdventureNarrativeArcPlanArtifactV1,
   TextAdventureQuestPlanArtifactV1,
-  TextAdventureQuestScriptArtifactV1,
+  TextAdventureQuestScriptArtifactV2,
 } from '../adventure/production-artifacts-v2'
 import type {
   AdventureContent,
@@ -49,9 +49,9 @@ export interface ProductAdapterBuildInputV1 {
     cast: TextAdventureCastBibleArtifactV1
     arcPlan: TextAdventureNarrativeArcPlanArtifactV1
     mainQuestPlan: TextAdventureQuestPlanArtifactV1
-    questScript: TextAdventureQuestScriptArtifactV1
-    sideQuests: TextAdventureQuestBundleArtifactV1
-    ambientEvents: TextAdventureQuestBundleArtifactV1
+    questScript: TextAdventureQuestScriptArtifactV2
+    sideQuests: TextAdventureQuestBundleArtifactV2
+    ambientEvents: TextAdventureQuestBundleArtifactV2
   }
 }
 

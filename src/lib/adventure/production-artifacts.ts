@@ -59,6 +59,13 @@ function textArray(value: unknown, label: string, minimum: number, maximum: numb
   return parsed
 }
 
+function array(value: unknown, label: string, minimum: number, maximum: number): unknown[] {
+  if (!Array.isArray(value) || value.length < minimum || value.length > maximum) {
+    fail(`${label} 数量无效`)
+  }
+  return value
+}
+
 export interface TextAdventureArchitectureLocationV1 {
   title: string
   description: string
@@ -287,25 +294,30 @@ export function parseTextAdventureSystemsArtifactV1(
   }
 }
 
-export interface TextAdventureQuestBundleArtifactV1 {
+export interface TextAdventureQuestBundleArtifactV2 {
   schema: 'storyforge.text-adventure-quest-bundle-artifact'
-  version: 1
+  version: 2
   bundleKind: 'side' | 'ambient'
   entries: Array<{
     key: string
     title: string
     description: string
     hook: string
-    objective: string
-    locationOrdinal: number
-    abilityKey: string
-    difficulty: number
-    successText: string
-    costlySuccessText: string
-    failureText: string
+    stages: Array<{
+      key: string
+      title: string
+      objective: string
+      locationOrdinal: number
+      actionKind: 'inspect' | 'attempt' | 'use' | 'quest-action'
+      abilityKey: string
+      difficulty: number
+      successText: string
+      costlySuccessText: string
+      failureText: string
+      timeCostMinutes: number
+    }>
     rewardExperience: number
     rewardCurrency: number
-    timeCostMinutes: number
   }>
 }
 
@@ -336,35 +348,42 @@ export interface TextAdventureQualityReviewArtifactV1 {
 }
 
 /**
- * A V1 quest bundle compiles every entry into one action at one location. Keep
- * the player-facing hook aligned with that deterministic location instead of
- * allowing prose about one place to surface as an action somewhere else.
+ * Each supplemental stage compiles into one deterministic action. Validate
+ * the player-facing stage against its own location instead of forcing a real
+ * multi-stage side quest into a single-location summary.
  */
-export function validateTextAdventureQuestBundleLocationAnchorsV1(
-  bundle: TextAdventureQuestBundleArtifactV1,
+export function validateTextAdventureQuestBundleLocationAnchorsV2(
+  bundle: TextAdventureQuestBundleArtifactV2,
   locationTitles: readonly string[],
 ): string[] {
   if (!locationTitles.length) return ['地点清单为空，无法核验任务发生地']
   const issues: string[] = []
   bundle.entries.forEach((entry, index) => {
-    const assignedTitle = locationTitles[entry.locationOrdinal - 1]
-    if (!assignedTitle) {
-      issues.push(`${bundle.bundleKind}[${index}] locationOrdinal=${entry.locationOrdinal} 超出地点清单上限 ${locationTitles.length}`)
-      return
-    }
-    const actionSurface = [entry.title, entry.description, entry.hook, entry.objective].join('\n')
-    if (!actionSurface.includes(assignedTitle)) {
-      issues.push(`${bundle.bundleKind}[${index}] 未在标题、描述、钩子或目标中明确发生地「${assignedTitle}」`)
-    }
-    const conflictingTitles = locationTitles.filter((title, titleIndex) => (
-      titleIndex !== entry.locationOrdinal - 1
-      && title !== assignedTitle
-      && !assignedTitle.includes(title)
-      && actionSurface.includes(title)
-    ))
-    if (conflictingTitles.length) {
-      issues.push(`${bundle.bundleKind}[${index}] 绑定「${assignedTitle}」却把行动写在「${[...new Set(conflictingTitles)].join('、')}」`)
-    }
+    entry.stages.forEach((stage, stageIndex) => {
+      const assignedTitle = locationTitles[stage.locationOrdinal - 1]
+      if (!assignedTitle) {
+        issues.push(`${bundle.bundleKind}[${index}].stages[${stageIndex}] locationOrdinal=${stage.locationOrdinal} 超出地点清单上限 ${locationTitles.length}`)
+        return
+      }
+      const actionSurface = [stage.title, stage.objective, stage.successText, stage.costlySuccessText, stage.failureText].join('\n')
+      if (!actionSurface.includes(assignedTitle)) {
+        issues.push(`${bundle.bundleKind}[${index}].stages[${stageIndex}] 未在阶段目标或结算文本中明确发生地「${assignedTitle}」`)
+      }
+      // Outcomes may legitimately point toward the next registered place. Only
+      // the stage title/objective are authoritative for where this action is
+      // performed; treating every future-place mention as a conflict would
+      // reject valid fail-forward transitions.
+      const decisiveSurface = [stage.title, stage.objective].join('\n')
+      const conflictingTitles = locationTitles.filter((title, titleIndex) => (
+        titleIndex !== stage.locationOrdinal - 1
+        && title !== assignedTitle
+        && !assignedTitle.includes(title)
+        && decisiveSurface.includes(title)
+      ))
+      if (conflictingTitles.length) {
+        issues.push(`${bundle.bundleKind}[${index}].stages[${stageIndex}] 绑定「${assignedTitle}」却把行动写在「${[...new Set(conflictingTitles)].join('、')}」`)
+      }
+    })
   })
   return issues
 }
@@ -416,16 +435,16 @@ export function parseTextAdventureQualityReviewArtifactV1(
   }
 }
 
-export function parseTextAdventureQuestBundleArtifactV1(
+export function parseTextAdventureQuestBundleArtifactV2(
   value: unknown,
-  expectedKind: TextAdventureQuestBundleArtifactV1['bundleKind'],
+  expectedKind: TextAdventureQuestBundleArtifactV2['bundleKind'],
   expectedCount: number,
   locationTitles: readonly string[] = [],
   allowedAbilityKeys: readonly string[] = [],
-): TextAdventureQuestBundleArtifactV1 {
+): TextAdventureQuestBundleArtifactV2 {
   const row = record(value, `${expectedKind}Bundle`)
   exactKeys(row, ['schema', 'version', 'bundleKind', 'entries'], `${expectedKind}Bundle`)
-  if (row.schema !== 'storyforge.text-adventure-quest-bundle-artifact' || row.version !== 1
+  if (row.schema !== 'storyforge.text-adventure-quest-bundle-artifact' || row.version !== 2
     || row.bundleKind !== expectedKind || !Array.isArray(row.entries)) fail(`${expectedKind}Bundle schema/kind 无效`)
   if (row.entries.length < expectedCount || row.entries.length > Math.max(expectedCount, 32)) {
     fail(`${expectedKind}Bundle 条目少于 Brief 目标:${expectedCount}`)
@@ -433,38 +452,66 @@ export function parseTextAdventureQuestBundleArtifactV1(
   const entries = row.entries.map((value, index) => {
     const item = record(value, `${expectedKind}[${index}]`)
     exactKeys(item, [
-      'key', 'title', 'description', 'hook', 'objective', 'locationOrdinal', 'abilityKey', 'difficulty',
-      'successText', 'costlySuccessText', 'failureText', 'rewardExperience', 'rewardCurrency', 'timeCostMinutes',
+      'key', 'title', 'description', 'hook', 'stages', 'rewardExperience', 'rewardCurrency',
     ], `${expectedKind}[${index}]`)
+    const stages = array(
+      item.stages,
+      `${expectedKind}[${index}].stages`,
+      expectedKind === 'side' ? 2 : 1,
+      expectedKind === 'side' ? 4 : 1,
+    ).map((value, stageIndex) => {
+      const stage = record(value, `${expectedKind}[${index}].stages[${stageIndex}]`)
+      exactKeys(stage, [
+        'key', 'title', 'objective', 'locationOrdinal', 'actionKind', 'abilityKey', 'difficulty',
+        'successText', 'costlySuccessText', 'failureText', 'timeCostMinutes',
+      ], `${expectedKind}[${index}].stages[${stageIndex}]`)
+      return {
+        key: key(stage.key, `${expectedKind}[${index}].stages[${stageIndex}].key`),
+        title: text(stage.title, `${expectedKind}[${index}].stages[${stageIndex}].title`, 300),
+        objective: text(stage.objective, `${expectedKind}[${index}].stages[${stageIndex}].objective`, 2_000),
+        locationOrdinal: integer(stage.locationOrdinal, `${expectedKind}[${index}].stages[${stageIndex}].locationOrdinal`, 1, 48),
+        actionKind: enumValue(
+          stage.actionKind,
+          ['inspect', 'attempt', 'use', 'quest-action'],
+          `${expectedKind}[${index}].stages[${stageIndex}].actionKind`,
+        ),
+        abilityKey: key(stage.abilityKey, `${expectedKind}[${index}].stages[${stageIndex}].abilityKey`),
+        difficulty: integer(stage.difficulty, `${expectedKind}[${index}].stages[${stageIndex}].difficulty`, 2, 30),
+        successText: text(stage.successText, `${expectedKind}[${index}].stages[${stageIndex}].successText`, 8_000),
+        costlySuccessText: text(stage.costlySuccessText, `${expectedKind}[${index}].stages[${stageIndex}].costlySuccessText`, 8_000),
+        failureText: text(stage.failureText, `${expectedKind}[${index}].stages[${stageIndex}].failureText`, 8_000),
+        timeCostMinutes: integer(stage.timeCostMinutes, `${expectedKind}[${index}].stages[${stageIndex}].timeCostMinutes`, 1, 120),
+      }
+    })
+    if (new Set(stages.map(stage => stage.key)).size !== stages.length) {
+      fail(`${expectedKind}[${index}].stages key 重复`)
+    }
+    if (expectedKind === 'side' && locationTitles.length > 1
+      && new Set(stages.map(stage => stage.locationOrdinal)).size < 2) {
+      fail(`${expectedKind}[${index}] 多阶段支线至少跨越两个登记地点`)
+    }
     return {
       key: key(item.key, `${expectedKind}[${index}].key`), title: text(item.title, `${expectedKind}[${index}].title`, 300),
       description: text(item.description, `${expectedKind}[${index}].description`),
       hook: text(item.hook, `${expectedKind}[${index}].hook`, 2_000),
-      objective: text(item.objective, `${expectedKind}[${index}].objective`, 2_000),
-      locationOrdinal: integer(item.locationOrdinal, `${expectedKind}[${index}].locationOrdinal`, 1, 48),
-      abilityKey: key(item.abilityKey, `${expectedKind}[${index}].abilityKey`),
-      difficulty: integer(item.difficulty, `${expectedKind}[${index}].difficulty`, 1, 100),
-      successText: text(item.successText, `${expectedKind}[${index}].successText`, 8_000),
-      costlySuccessText: text(item.costlySuccessText, `${expectedKind}[${index}].costlySuccessText`, 8_000),
-      failureText: text(item.failureText, `${expectedKind}[${index}].failureText`, 8_000),
+      stages,
       rewardExperience: integer(item.rewardExperience, `${expectedKind}[${index}].rewardExperience`, 0, 100_000),
       rewardCurrency: integer(item.rewardCurrency, `${expectedKind}[${index}].rewardCurrency`, 0, 100_000),
-      timeCostMinutes: integer(item.timeCostMinutes, `${expectedKind}[${index}].timeCostMinutes`, 1, 10_000),
     }
   })
   if (new Set(entries.map(item => item.key)).size !== entries.length) fail(`${expectedKind}Bundle key 重复`)
   if (allowedAbilityKeys.length) {
     const allowed = new Set(allowedAbilityKeys)
-    const invalid = entries.filter(entry => !allowed.has(entry.abilityKey))
+    const invalid = entries.flatMap(entry => entry.stages.filter(stage => !allowed.has(stage.abilityKey)))
     if (invalid.length) {
-      fail(`${expectedKind}Bundle abilityKey 未登记:${invalid.map(entry => entry.abilityKey).join(',')}`)
+      fail(`${expectedKind}Bundle abilityKey 未登记:${invalid.map(stage => stage.abilityKey).join(',')}`)
     }
   }
-  const result: TextAdventureQuestBundleArtifactV1 = {
-    schema: 'storyforge.text-adventure-quest-bundle-artifact', version: 1, bundleKind: expectedKind, entries,
+  const result: TextAdventureQuestBundleArtifactV2 = {
+    schema: 'storyforge.text-adventure-quest-bundle-artifact', version: 2, bundleKind: expectedKind, entries,
   }
   if (locationTitles.length) {
-    const locationIssues = validateTextAdventureQuestBundleLocationAnchorsV1(result, locationTitles)
+    const locationIssues = validateTextAdventureQuestBundleLocationAnchorsV2(result, locationTitles)
     if (locationIssues.length) fail(`${expectedKind}Bundle 地点锚点无效:${locationIssues.join('；')}`)
   }
   return result

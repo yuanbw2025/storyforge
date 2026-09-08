@@ -5,7 +5,7 @@ import TextAdventureProductionWizard, {
   createDefaultTextAdventureProductionWizardValueV1,
 } from '../../src/components/text-game/TextAdventureProductionWizard'
 import {
-  parseTextAdventureQuestBundleArtifactV1,
+  parseTextAdventureQuestBundleArtifactV2,
   parseTextAdventureQualityReviewArtifactV1,
   parseTextAdventureSystemsArtifactV1,
 } from '../../src/lib/adventure/production-artifacts'
@@ -466,23 +466,34 @@ describe('R-TEXTADV2-production · 文字冒险正式生产契约与工作台', 
 
   it('拒绝把一个地点的支线行动错误地显示在另一个地点', () => {
     const bundle = {
-      schema: 'storyforge.text-adventure-quest-bundle-artifact', version: 1,
+      schema: 'storyforge.text-adventure-quest-bundle-artifact', version: 2,
       bundleKind: 'side', entries: [{
         key: 'repair-lamp', title: '修好引航灯', description: '在旧仓街修好受潮的灯芯。',
-        hook: '旧仓街的船工正在等待帮助。', objective: '修好引航灯', locationOrdinal: 2,
-        abilityKey: 'ability.craft', difficulty: 10,
-        successText: '灯重新亮起。', costlySuccessText: '灯亮了，但耗掉了备用燃料。',
-        failureText: '灯仍未亮，但船工指出了另一条路。', rewardExperience: 5,
-        rewardCurrency: 1, timeCostMinutes: 10,
+        hook: '旧仓街的船工正在等待帮助。',
+        stages: [{
+          key: 'find-wick', title: '寻找灯芯', objective: '在旧仓街找到备用灯芯', locationOrdinal: 2,
+          actionKind: 'inspect', abilityKey: 'ability.craft', difficulty: 10,
+          successText: '你在旧仓街找到了灯芯。', costlySuccessText: '你在旧仓街找到灯芯，但耗掉了备用燃料。',
+          failureText: '旧仓街没有灯芯，船工却指出了潮门广场的旧储藏箱。', timeCostMinutes: 6,
+        }, {
+          key: 'repair', title: '修复灯火', objective: '在潮门广场修好引航灯', locationOrdinal: 1,
+          actionKind: 'use', abilityKey: 'ability.craft', difficulty: 12,
+          successText: '潮门广场的灯重新亮起。', costlySuccessText: '潮门广场的灯亮了，但你烧伤了手。',
+          failureText: '潮门广场的灯仍不稳定，却照出了备用航道。', timeCostMinutes: 8,
+        }],
+        rewardExperience: 5, rewardCurrency: 1,
       }],
     }
-    expect(parseTextAdventureQuestBundleArtifactV1(
-      bundle, 'side', 1, ['潮门广场', '旧仓街'],
-    ).entries[0].locationOrdinal).toBe(2)
-    expect(() => parseTextAdventureQuestBundleArtifactV1(
-      { ...bundle, entries: [{ ...bundle.entries[0], locationOrdinal: 1 }] },
-      'side', 1, ['潮门广场', '旧仓街'],
-    )).toThrow(/地点锚点无效.*绑定「潮门广场」却把行动写在「旧仓街」/)
+    expect(parseTextAdventureQuestBundleArtifactV2(
+      bundle, 'side', 1, ['潮门广场', '旧仓街', '信号塔'],
+    ).entries[0].stages.map(stage => stage.locationOrdinal)).toEqual([2, 1])
+    expect(() => parseTextAdventureQuestBundleArtifactV2(
+      { ...bundle, entries: [{
+        ...bundle.entries[0],
+        stages: [{ ...bundle.entries[0].stages[0], locationOrdinal: 3 }, bundle.entries[0].stages[1]],
+      }] },
+      'side', 1, ['潮门广场', '旧仓街', '信号塔'],
+    )).toThrow(/地点锚点无效.*绑定「信号塔」却把行动写在「旧仓街」/)
   })
 
   it('向非技术作者渐进展示空间、任务、系统和边界确认', async () => {

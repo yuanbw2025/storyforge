@@ -1,6 +1,6 @@
 import type { ProductProductionBriefV3 } from '../types'
 import type {
-  TextAdventureQuestBundleArtifactV1,
+  TextAdventureQuestBundleArtifactV2,
   TextAdventureSystemsArtifactV1,
 } from './production-artifacts'
 import {
@@ -1201,6 +1201,17 @@ export function parseTextAdventureQuestPlanArtifactV1(input: {
       && objectives.filter(objective => objective.alternatives.length >= 2).length < 2) {
       fail('商业主线至少两个目标需要多种通用解法')
     }
+    if (input.expectedKind === 'main' && input.brief.qualityProfile === 'commercial-candidate') {
+      const actionKinds = new Set(objectives.flatMap(objective => (
+        objective.alternatives.map(alternative => alternative.actionKind)
+      )))
+      const missingActionKinds = ['talk', 'give', 'use'].filter(actionKind => !actionKinds.has(
+        actionKind as TextAdventureQuestPlanArtifactV1['quests'][number]['objectives'][number]['alternatives'][number]['actionKind'],
+      ))
+      if (missingActionKinds.length) {
+        fail(`商业主线缺少正式交互行动:${missingActionKinds.join(',')}`)
+      }
+    }
     return {
       key: key(quest.key, `quests[${questIndex}].key`),
       title: text(quest.title, `quests[${questIndex}].title`, 300),
@@ -1216,9 +1227,9 @@ export function parseTextAdventureQuestPlanArtifactV1(input: {
   }
 }
 
-export interface TextAdventureQuestScriptArtifactV1 {
+export interface TextAdventureQuestScriptArtifactV2 {
   schema: 'storyforge.text-adventure-quest-script-artifact'
-  version: 1
+  version: 2
   mainObjectiveScripts: Array<{
     objectiveKey: string
     sceneKey: string
@@ -1236,20 +1247,23 @@ export interface TextAdventureQuestScriptArtifactV1 {
       failureForwardText: string
     }>
   }>
-  sideQuestScripts: TextAdventureSupplementalQuestScriptV1[]
-  ambientEventScripts: TextAdventureSupplementalQuestScriptV1[]
+  sideQuestScripts: TextAdventureSupplementalQuestScriptV2[]
+  ambientEventScripts: TextAdventureSupplementalQuestScriptV2[]
 }
 
-export interface TextAdventureSupplementalQuestScriptV1 {
+export interface TextAdventureSupplementalQuestScriptV2 {
   entryKey: string
-  actionKind: 'inspect' | 'attempt' | 'use' | 'quest-action'
-  abilityKey: string
-  difficulty: number
-  costlySuccessFloor: number
-  timeCostMinutes: number
-  successText: string
-  costlySuccessText: string
-  failureForwardText: string
+  stages: Array<{
+    stageKey: string
+    actionKind: 'inspect' | 'attempt' | 'use' | 'quest-action'
+    abilityKey: string
+    difficulty: number
+    costlySuccessFloor: number
+    timeCostMinutes: number
+    successText: string
+    costlySuccessText: string
+    failureForwardText: string
+  }>
 }
 
 /**
@@ -1257,19 +1271,19 @@ export interface TextAdventureSupplementalQuestScriptV1 {
  * quest plans into a bounded rule/check script; the deterministic compiler
  * remains the only owner of state mutations and registered effect keys.
  */
-export function parseTextAdventureQuestScriptArtifactV1(input: {
+export function parseTextAdventureQuestScriptArtifactV2(input: {
   value: unknown
   brief: ProductProductionBriefV3
   systems: TextAdventureSystemsArtifactV1
   mainQuestPlan: TextAdventureQuestPlanArtifactV1
-  sideQuests: TextAdventureQuestBundleArtifactV1
-  ambientEvents: TextAdventureQuestBundleArtifactV1
-}): TextAdventureQuestScriptArtifactV1 {
+  sideQuests: TextAdventureQuestBundleArtifactV2
+  ambientEvents: TextAdventureQuestBundleArtifactV2
+}): TextAdventureQuestScriptArtifactV2 {
   const row = record(input.value, 'questScript')
   exactKeys(row, [
     'schema', 'version', 'mainObjectiveScripts', 'sideQuestScripts', 'ambientEventScripts',
   ], 'questScript')
-  if (row.schema !== 'storyforge.text-adventure-quest-script-artifact' || row.version !== 1) {
+  if (row.schema !== 'storyforge.text-adventure-quest-script-artifact' || row.version !== 2) {
     fail('questScript schema/version 无效')
   }
   const abilityKeys = new Set(input.systems.abilities.map(ability => ability.key))
@@ -1362,42 +1376,75 @@ export function parseTextAdventureQuestScriptArtifactV1(input: {
   const parseSupplemental = (
     value: unknown,
     label: string,
-    bundle: TextAdventureQuestBundleArtifactV1,
-  ): TextAdventureSupplementalQuestScriptV1[] => {
+    bundle: TextAdventureQuestBundleArtifactV2,
+  ): TextAdventureSupplementalQuestScriptV2[] => {
     const entryByKey = new Map(bundle.entries.map(entry => [entry.key, entry]))
     const scripts = array(value, label, bundle.entries.length, bundle.entries.length).map((raw, index) => {
       const item = record(raw, `${label}[${index}]`)
-      exactKeys(item, [
-        'entryKey', 'actionKind', 'abilityKey', 'difficulty', 'costlySuccessFloor', 'timeCostMinutes',
-        'successText', 'costlySuccessText', 'failureForwardText',
-      ], `${label}[${index}]`)
+      exactKeys(item, ['entryKey', 'stages'], `${label}[${index}]`)
       const entryKey = key(item.entryKey, `${label}[${index}].entryKey`)
       const source = entryByKey.get(entryKey)
       if (!source) fail(`${label}[${index}] 引用未知任务条目`)
-      const abilityKey = key(item.abilityKey, `${label}[${index}].abilityKey`)
-      if (!abilityKeys.has(abilityKey) || abilityKey !== source.abilityKey) {
-        fail(`${label}[${index}] abilityKey 未闭合系统与任务设计`)
+      const sourceStageByKey = new Map(source.stages.map(stage => [stage.key, stage]))
+      const stages = array(
+        item.stages,
+        `${label}[${index}].stages`,
+        source.stages.length,
+        source.stages.length,
+      ).map((rawStage, stageIndex) => {
+        const stage = record(rawStage, `${label}[${index}].stages[${stageIndex}]`)
+        exactKeys(stage, [
+          'stageKey', 'actionKind', 'abilityKey', 'difficulty', 'costlySuccessFloor', 'timeCostMinutes',
+          'successText', 'costlySuccessText', 'failureForwardText',
+        ], `${label}[${index}].stages[${stageIndex}]`)
+        const stageKey = key(stage.stageKey, `${label}[${index}].stages[${stageIndex}].stageKey`)
+        const sourceStage = sourceStageByKey.get(stageKey)
+        if (!sourceStage) fail(`${label}[${index}] 引用未知阶段:${stageKey}`)
+        const actionKind = enumValue(
+          stage.actionKind,
+          ['inspect', 'attempt', 'use', 'quest-action'],
+          `${label}[${index}].stages[${stageIndex}].actionKind`,
+        )
+        const abilityKey = key(stage.abilityKey, `${label}[${index}].stages[${stageIndex}].abilityKey`)
+        if (!abilityKeys.has(abilityKey) || abilityKey !== sourceStage.abilityKey
+          || actionKind !== sourceStage.actionKind) {
+          fail(`${label}[${index}].stages[${stageIndex}] 未闭合系统与任务设计`)
+        }
+        const difficulty = integer(stage.difficulty, `${label}[${index}].stages[${stageIndex}].difficulty`, 2, 30)
+        const costlySuccessFloor = integer(
+          stage.costlySuccessFloor,
+          `${label}[${index}].stages[${stageIndex}].costlySuccessFloor`,
+          1,
+          29,
+        )
+        if (costlySuccessFloor >= difficulty) {
+          fail(`${label}[${index}].stages[${stageIndex}] costlySuccessFloor 必须小于 difficulty`)
+        }
+        return {
+          stageKey,
+          actionKind,
+          abilityKey,
+          difficulty,
+          costlySuccessFloor,
+          timeCostMinutes: integer(stage.timeCostMinutes, `${label}[${index}].stages[${stageIndex}].timeCostMinutes`, 1, 120),
+          successText: text(stage.successText, `${label}[${index}].stages[${stageIndex}].successText`, 4_000),
+          costlySuccessText: text(stage.costlySuccessText, `${label}[${index}].stages[${stageIndex}].costlySuccessText`, 4_000),
+          failureForwardText: text(stage.failureForwardText, `${label}[${index}].stages[${stageIndex}].failureForwardText`, 4_000),
+        }
+      })
+      if (new Set(stages.map(stage => stage.stageKey)).size !== sourceStageByKey.size) {
+        fail(`${label}[${index}] 未精确覆盖任务阶段`)
       }
-      const difficulty = integer(item.difficulty, `${label}[${index}].difficulty`, 2, 30)
-      const costlySuccessFloor = integer(item.costlySuccessFloor, `${label}[${index}].costlySuccessFloor`, 1, 29)
-      if (costlySuccessFloor >= difficulty) fail(`${label}[${index}] costlySuccessFloor 必须小于 difficulty`)
       return {
         entryKey,
-        actionKind: enumValue(item.actionKind, ['inspect', 'attempt', 'use', 'quest-action'], `${label}[${index}].actionKind`),
-        abilityKey,
-        difficulty,
-        costlySuccessFloor,
-        timeCostMinutes: integer(item.timeCostMinutes, `${label}[${index}].timeCostMinutes`, 1, 120),
-        successText: text(item.successText, `${label}[${index}].successText`, 4_000),
-        costlySuccessText: text(item.costlySuccessText, `${label}[${index}].costlySuccessText`, 4_000),
-        failureForwardText: text(item.failureForwardText, `${label}[${index}].failureForwardText`, 4_000),
+        stages,
       }
     })
     if (new Set(scripts.map(script => script.entryKey)).size !== entryByKey.size) fail(`${label} 未精确覆盖任务条目`)
     return scripts
   }
   return {
-    schema: 'storyforge.text-adventure-quest-script-artifact', version: 1,
+    schema: 'storyforge.text-adventure-quest-script-artifact', version: 2,
     mainObjectiveScripts,
     sideQuestScripts: parseSupplemental(row.sideQuestScripts, 'questScript.sideQuestScripts', input.sideQuests),
     ambientEventScripts: parseSupplemental(row.ambientEventScripts, 'questScript.ambientEventScripts', input.ambientEvents),
