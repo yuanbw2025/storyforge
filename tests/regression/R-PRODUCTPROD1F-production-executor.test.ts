@@ -1375,7 +1375,7 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
       'quests[0].objectives[0].alternatives[0].targetCharacterKey<-non-talk-null',
     )
     expect(flattenedQuestObjectives.defaultedFields).toContain(
-      'quests[0].objectives[0].alternatives[1].targetCharacterKey<-sole-scene-npc',
+      'quests[0].objectives[0].alternatives[1].targetCharacterKey<-scene-npc',
     )
     expect(flattenedQuestObjectives.defaultedFields).toContain(
       'quests[0].objectives[0].alternatives[1].persistentEffectKeys<-required-event-flag',
@@ -1386,6 +1386,46 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
     expect(flattenedQuestObjectives.defaultedFields).toContain(
       'quests[0].objectives[0].locationOrdinal<-scene-location-projection',
     )
+
+    const repairedTalkTargets = legalizeProductionModelProtocolDefaultsV1(
+      'content.main-quest-plan',
+      {
+        quests: [{
+          key: 'quest.main', title: '主线', description: '主线说明', characterKeys: [],
+          stages: [{ key: 'stage.1', title: '推进', objectiveKeys: ['objective.1', 'objective.2'] }],
+          objectives: [{
+            key: 'objective.1', stageKey: 'stage.1', title: '向在场者询问',
+            sceneKeys: ['scene.001'], locationOrdinal: 1,
+            alternatives: [{ actionKind: 'talk', targetCharacterKey: 'character.npc.absent' }],
+          }, {
+            key: 'objective.2', stageKey: 'stage.1', title: '独自处理',
+            sceneKeys: ['scene.002'], locationOrdinal: 2,
+            alternatives: [{ actionKind: 'talk', targetCharacterKey: 'character.npc.absent' }],
+          }],
+        }],
+      },
+      {
+        questSceneCastPlan: [{
+          sceneKey: 'scene.001', castKeys: ['character.player', 'character.npc.2', 'character.npc.3'],
+          nonPlayerCastKeys: ['character.npc.2', 'character.npc.3'], locationOrdinal: 1,
+        }, {
+          sceneKey: 'scene.002', castKeys: ['character.player'], nonPlayerCastKeys: [], locationOrdinal: 2,
+        }],
+      },
+    )
+    const repairedObjectives = (
+      (repairedTalkTargets.payload.quests as Array<Record<string, unknown>>)[0].objectives
+    ) as Array<Record<string, unknown>>
+    expect(repairedObjectives[0].alternatives).toEqual([expect.objectContaining({
+      actionKind: 'talk', targetCharacterKey: 'character.npc.2',
+    })])
+    expect(repairedObjectives[1].alternatives).toEqual([expect.objectContaining({
+      actionKind: 'quest-action', targetCharacterKey: null,
+    })])
+    expect(repairedTalkTargets.defaultedFields).toEqual(expect.arrayContaining([
+      'quests[0].objectives[0].alternatives[0].targetCharacterKey<-scene-npc',
+      'quests[0].objectives[1].alternatives[0].actionKind<-scene-without-npc',
+    ]))
 
     const narrative = legalizeProductionModelProtocolDefaultsV1('content.narrative', {
       nodes: [{

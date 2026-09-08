@@ -820,12 +820,28 @@ export function legalizeProductionModelProtocolDefaultsV1(
                 )
               }
               if (nextAlternative.actionKind === 'talk'
-                && validTalkTargetKeys.length === 1
-                && nextAlternative.targetCharacterKey !== validTalkTargetKeys[0]) {
-                nextAlternative.targetCharacterKey = validTalkTargetKeys[0]
-                defaultedFields.push(
-                  `quests[${questIndex}].objectives[${objectiveIndex}].alternatives[${alternativeIndex}].targetCharacterKey<-sole-scene-npc`,
-                )
+                && !validTalkTargetKeys.includes(String(nextAlternative.targetCharacterKey))) {
+                if (validTalkTargetKeys.length > 0) {
+                  // The scene plan is already frozen and is the authority for
+                  // who can participate in this interaction. A model may copy
+                  // a valid cast key from a neighbouring scene; binding that
+                  // key would create an impossible runtime talk action. Keep
+                  // the authored action intent and deterministically bind it
+                  // to the first frozen non-player participant in scene order.
+                  nextAlternative.targetCharacterKey = validTalkTargetKeys[0]
+                  defaultedFields.push(
+                    `quests[${questIndex}].objectives[${objectiveIndex}].alternatives[${alternativeIndex}].targetCharacterKey<-scene-npc`,
+                  )
+                } else {
+                  // A scene without an NPC cannot legally host a talk action.
+                  // Downgrade only the typed interaction verb; narrative
+                  // purpose, cost and consequences stay model-authored.
+                  nextAlternative.actionKind = 'quest-action'
+                  nextAlternative.targetCharacterKey = null
+                  defaultedFields.push(
+                    `quests[${questIndex}].objectives[${objectiveIndex}].alternatives[${alternativeIndex}].actionKind<-scene-without-npc`,
+                  )
+                }
               }
               if (!Array.isArray(nextAlternative.persistentEffectKeys)) {
                 nextAlternative.persistentEffectKeys = [
