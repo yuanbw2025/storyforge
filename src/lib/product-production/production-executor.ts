@@ -3973,9 +3973,12 @@ function parseVisualReviewIssuesV1(value: unknown, label: string) {
 function parseMultimodalVisualReviewsV1(value: unknown, expected: Map<string, string>) {
   const row = record(value, 'visualReviewModelOutput')
   exactKeys(row, ['schema', 'version', 'reviews'], 'visualReviewModelOutput')
-  if (row.schema !== 'storyforge.text-adventure-visual-quality-model-output' || row.version !== 1
-    || !Array.isArray(row.reviews) || row.reviews.length !== expected.size) {
-    fail('visualReviewModelOutput 基础合同无效')
+  // The accepted Artifact always reconstructs the canonical wrapper below.
+  // Provider spelling of schema/version is not quality authority; target
+  // cardinality, key/hash, verdict, scores and issues remain fail-closed.
+  if (!Array.isArray(row.reviews)) fail('visualReviewModelOutput.reviews 不是数组')
+  if (row.reviews.length !== expected.size) {
+    fail(`visualReviewModelOutput 审图数量不符:${row.reviews.length}/${expected.size}`)
   }
   const reviews = row.reviews.map((value, index) => {
     const review = record(value, `visualReviewModelOutput.reviews[${index}]`)
