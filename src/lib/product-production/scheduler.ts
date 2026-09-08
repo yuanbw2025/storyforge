@@ -1315,6 +1315,22 @@ async function recoveryInvalidatedTaskKeys(input: {
   const preserveFrozenMedia = textAdventureNarrativeRepairPreservesFrozenMediaV1(
     failedQualityReview?.issues,
   )
+  const sceneScriptPartKeys = (taskKey: string) => {
+    const match = /^content\.scene-script\.act-([1-3])$/.exec(taskKey)
+    if (!match) return [taskKey]
+    return input.plan.tasks
+      .filter(task => task.taskKey.startsWith(`content.scene-script.act-${match[1]}.part-`))
+      .map(task => task.taskKey)
+      .concat(taskKey)
+  }
+  const narrativeIntegrationOwnerTaskKeys = input.plan.tasks
+    .filter(task => /^content\.(?:scene-script\.act-[1-3](?:\.part-\d+)?|dialogue-pass\.act-[1-3])$/.test(task.taskKey))
+    .map(task => task.taskKey)
+  const expandFailureOwnerTaskKeys = (taskKey: string) => (
+    taskKey === 'integration.narrative'
+      ? narrativeIntegrationOwnerTaskKeys
+      : sceneScriptPartKeys(taskKey)
+  )
   const unresolvedFailureTaskKeys = [...textAdventureTaskFailures(input.failureJson).keys()]
     .filter(taskKey => {
       if (taskKey === 'integration.narrative') return true
@@ -1322,7 +1338,11 @@ async function recoveryInvalidatedTaskKeys(input: {
       return task && !task.outputArtifactKeys.every(artifactKey => acceptedArtifactKeys.has(artifactKey))
     })
   if (unresolvedFailureTaskKeys.length > 0) {
-    const invalidated = new Set(unresolvedFailureTaskKeys)
+    // Integration and act-level assembly failures prove that one or more
+    // upstream specialist artifacts are stale. Rewind to the owning scene and
+    // dialogue tasks before walking descendants; invalidating only the
+    // deterministic integration task would carry the same bad inputs forever.
+    const invalidated = new Set(unresolvedFailureTaskKeys.flatMap(expandFailureOwnerTaskKeys))
     let expanded = true
     while (expanded) {
       expanded = false
@@ -1351,14 +1371,6 @@ async function recoveryInvalidatedTaskKeys(input: {
   const sceneScriptTaskKeys = [
     'content.scene-script.act-1', 'content.scene-script.act-2', 'content.scene-script.act-3',
   ]
-  const sceneScriptPartKeys = (taskKey: string) => {
-    const match = /^content\.scene-script\.act-([1-3])$/.exec(taskKey)
-    if (!match) return [taskKey]
-    return input.plan.tasks
-      .filter(task => task.taskKey.startsWith(`content.scene-script.act-${match[1]}.part-`))
-      .map(task => task.taskKey)
-      .concat(taskKey)
-  }
   const dialoguePassTaskKeys = [
     'content.dialogue-pass.act-1', 'content.dialogue-pass.act-2', 'content.dialogue-pass.act-3',
   ]
