@@ -3458,7 +3458,7 @@ async function executeVisualTask(input: ProductProductionTaskExecutionInputV1, o
       : requirement.mediaKind === 'background' && hasStandaloneCharacterArt && requirement.characterAnchorRefs.length === 0
         ? `${requirement.prompt}\n这是独立角色立绘背后的纯空景素材：不得出现任何人物、肖像、人形、倒影、剪影或照片。`
         : requirement.prompt
-    const providerPrompt = requirement.characterAnchorRefs.length
+    const baseProviderPrompt = requirement.characterAnchorRefs.length
       ? `${governedPrompt}\n冻结角色锚点：${requirement.characterAnchorRefs.join('、')}。` +
         `必须遵守：${requirement.hardConstraints.join('；')}。角色需透明背景以供舞台自动合成。` +
         (isAgnesCharacter
@@ -3466,6 +3466,52 @@ async function executeVisualTask(input: ProductProductionTaskExecutionInputV1, o
             '不得把透明背景画成棋盘格、网格或光栅；若无法直接输出真实 alpha，角色以外的每一个像素都只能是纯品红 #FF00FF，禁止阴影、纹理、渐变和杂色。'
           : '')
       : governedPrompt
+    const repairFeedbackArtifact = input.inputArtifacts.find(artifact => (
+      artifact.artifactKey === 'media.repair-feedback'
+    ))
+    let repairInstruction = ''
+    if (repairFeedbackArtifact) {
+      const repair = record(JSON.parse(repairFeedbackArtifact.payloadJson), 'media.repair-feedback')
+      exactKeys(repair, [
+        'schema', 'version', 'sourceBuildNumber', 'sourceReviewArtifactHash', 'targets',
+      ], 'media.repair-feedback')
+      if (repair.schema !== 'storyforge.text-adventure-visual-repair-feedback'
+        || repair.version !== 1 || !Number.isSafeInteger(repair.sourceBuildNumber)
+        || typeof repair.sourceReviewArtifactHash !== 'string'
+        || !/^[a-f0-9]{64}$/.test(repair.sourceReviewArtifactHash)
+        || !Array.isArray(repair.targets)) {
+        fail('视觉返修反馈合同无效')
+      }
+      const matches = repair.targets.filter(value => (
+        value && typeof value === 'object' && !Array.isArray(value)
+          && (value as Record<string, unknown>).artifactKey === artifactKey
+      ))
+      if (matches.length !== 1) fail(`视觉返修反馈缺失或重复:${artifactKey}`)
+      const feedback = record(matches[0], `media.repair-feedback.${artifactKey}`)
+      exactKeys(feedback, [
+        'artifactKey', 'priorContentHash', 'verdict', 'scores', 'issues',
+      ], `media.repair-feedback.${artifactKey}`)
+      if (typeof feedback.priorContentHash !== 'string'
+        || !/^[a-f0-9]{64}$/.test(feedback.priorContentHash)
+        || !['revise', 'replace', 'human-review'].includes(String(feedback.verdict))
+        || !Array.isArray(feedback.issues) || feedback.issues.length > 12) {
+        fail(`视觉返修反馈目标无效:${artifactKey}`)
+      }
+      const issueInstructions = feedback.issues.map((value, issueIndex) => {
+        const issue = record(value, `media.repair-feedback.${artifactKey}.issues[${issueIndex}]`)
+        exactKeys(issue, [
+          'severity', 'category', 'detail', 'recommendation',
+        ], `media.repair-feedback.${artifactKey}.issues[${issueIndex}]`)
+        if (!['warning', 'blocking'].includes(String(issue.severity))) {
+          fail(`视觉返修反馈严重性无效:${artifactKey}`)
+        }
+        return `${issueIndex + 1}. [${text(issue.severity, 'severity', 20)} / ${text(issue.category, 'category', 50)}] ` +
+          `上轮问题：${text(issue.detail, 'detail', 1_000)}；修复要求：${text(issue.recommendation, 'recommendation', 1_000)}`
+      })
+      repairInstruction = `\n本次是受 Visual QA 约束的返修，不是自由变体。禁止重复上轮已识别缺陷。` +
+        `逐项落实以下审查意见，并继续遵守原始需求、视觉圣经和角色锚点：\n${issueInstructions.join('\n')}`
+    }
+    const providerPrompt = `${baseProviderPrompt}${repairInstruction}`
     if (binding?.adapterId === 'storyforge.procedural-svg.v1') {
       const bytes = visualSvg(requirement, options.production.title, index)
       const blob = await putMediaBlobObject({

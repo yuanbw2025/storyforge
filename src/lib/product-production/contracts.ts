@@ -468,6 +468,31 @@ export function parseProductProductionCommandV1(value: unknown): ProductProducti
       action, replacement,
     }
   }
+  if (type === 'revise-media-assets') {
+    const commandId = commandHeader(row, type, [
+      'expectedStateRevision', 'buildNumber', 'action', 'targets',
+    ])
+    if (row.action !== 'regenerate' || !Array.isArray(row.targets)
+      || row.targets.length < 1 || row.targets.length > 24) {
+      fail('批量媒资修订只允许 1–24 个 regenerate 目标')
+    }
+    const targets = row.targets.map((value, index) => {
+      const target = record(value, `targets[${index}]`)
+      exactKeys(target, ['artifactKey', 'expectedArtifactHash'], `targets[${index}]`)
+      if (!isSha256Hash(target.expectedArtifactHash)) fail(`targets[${index}].expectedArtifactHash 无效`)
+      return {
+        artifactKey: stableKey(target.artifactKey, `targets[${index}].artifactKey`),
+        expectedArtifactHash: target.expectedArtifactHash,
+      }
+    })
+    if (new Set(targets.map(target => target.artifactKey)).size !== targets.length) {
+      fail('批量媒资修订目标重复')
+    }
+    return {
+      type, commandId, expectedStateRevision: expectedRevision(row.expectedStateRevision),
+      buildNumber: positiveId(row.buildNumber, 'buildNumber'), action: 'regenerate', targets,
+    }
+  }
   if (type === 'publish') {
     const commandId = commandHeader(row, type, ['expectedStateRevision', 'buildNumber', 'expectedManifestHash', 'adoptionIntentHash'])
     if (!isSha256Hash(row.expectedManifestHash) || !isSha256Hash(row.adoptionIntentHash)) fail('publish hash 无效')

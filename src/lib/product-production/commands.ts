@@ -124,6 +124,14 @@ async function nextBriefRevision(productionId: number): Promise<number> {
 }
 
 type ReviseMediaCommandV1 = Extract<ProductProductionCommandV1, { type: 'revise-media-asset' }>
+type MediaRevisionPlanCommandV1 = {
+  commandId: string
+  action: ReviseMediaCommandV1['action']
+  targets: Array<{ artifactKey: string; expectedArtifactHash: string }>
+  includeVisualRepairFeedback: boolean
+}
+
+const MEDIA_REPAIR_FEEDBACK_TASK_KEY = 'media.repair-feedback'
 
 function objectJson(value: string, label: string): Record<string, unknown> {
   let parsed: unknown
@@ -159,31 +167,73 @@ function invalidatedMediaTaskKeys(plan: ProductProductionPlanV3, targetTaskKey: 
 async function createMediaRevisionPlan(input: {
   parentBuild: ProductBuildRecordV1 & { id: number }
   brief: ReturnType<typeof parseProductProductionBriefV3>
-  command: ReviseMediaCommandV1
+  command: MediaRevisionPlanCommandV1
   buildNumber: number
   controlEpoch: number
   artifacts: ProductBuildArtifactRecordV1[]
-}): Promise<{ plan: ProductProductionPlanV3; carriedArtifactKeys: string[]; targetTaskKey: string }> {
+}): Promise<{ plan: ProductProductionPlanV3; carriedArtifactKeys: string[]; targetTaskKeys: string[] }> {
   const base = await createProductProductionPlanV3({
     brief: input.brief,
     briefHash: input.parentBuild.briefHash,
     buildNumber: input.buildNumber,
     controlEpoch: input.controlEpoch,
   })
-  const target = base.tasks.find(task => task.taskKey === input.command.artifactKey)
-  if (!target || target.executionMode !== 'media-provider' || target.kind !== 'image-asset'
-    || target.outputArtifactKeys.length !== 1 || target.outputArtifactKeys[0] !== input.command.artifactKey) {
-    reject('media-revision-invalid', '目标不是当前文字冒险 Build 的单项图片任务')
+  const targetKeys = new Set(input.command.targets.map(target => target.artifactKey))
+  const targetTasks = base.tasks.filter(task => targetKeys.has(task.taskKey))
+  if (targetTasks.length !== targetKeys.size || targetTasks.some(task => (
+    task.executionMode !== 'media-provider' || task.kind !== 'image-asset'
+    || task.outputArtifactKeys.length !== 1 || task.outputArtifactKeys[0] !== task.taskKey
+  ))) {
+    reject('media-revision-invalid', '批量目标包含非单项图片任务')
   }
   const artifacts = new Map(input.artifacts.map(row => [row.artifactKey, row]))
   if (artifacts.size !== input.artifacts.length) reject('media-revision-invalid', '当前 Build 存在重复有效 Artifact')
-  const invalidated = invalidatedMediaTaskKeys(base, target.taskKey)
+  const invalidated = new Set<string>()
+  for (const target of targetTasks) {
+    for (const taskKey of invalidatedMediaTaskKeys(base, target.taskKey)) invalidated.add(taskKey)
+  }
   const carriedArtifactKeys: string[] = []
   const tasks = [] as ProductProductionPlanV3['tasks']
+  if (input.command.includeVisualRepairFeedback) {
+    tasks.push({
+      taskKey: MEDIA_REPAIR_FEEDBACK_TASK_KEY,
+      lane: 'planning',
+      kind: 'text-adventure-visual-repair-feedback',
+      skillId: null,
+      executionMode: 'human-import',
+      dependsOn: [],
+      requiredReceipts: [],
+      inputArtifactKeys: [],
+      outputArtifactKeys: [MEDIA_REPAIR_FEEDBACK_TASK_KEY],
+      requirementKeys: [],
+      capabilityRequirementKeys: [],
+      concurrencyGroup: 'human-import',
+      subjectLockKeys: [MEDIA_REPAIR_FEEDBACK_TASK_KEY],
+      priority: 76,
+      budgetReservation: {
+        modelCalls: 0, inputTokens: 0, outputTokens: 0, mediaCalls: 0,
+        maximumCostUsd: 0, durationMs: 30_000, storageBytes: 0,
+      },
+      maxAttempts: 1,
+      timeoutMs: 30_000,
+      failurePolicy: 'pause',
+      fallbackTaskKey: null,
+      acceptanceGateIds: ['artifact.protocol', 'media.visual-repair-feedback'],
+      reuse: null,
+    })
+  }
   for (const task of base.tasks) {
-    if (task.taskKey === target.taskKey) {
+    if (targetKeys.has(task.taskKey)) {
       if (input.command.action === 'regenerate') {
-        tasks.push(task)
+        tasks.push(input.command.includeVisualRepairFeedback ? {
+          ...task,
+          dependsOn: [...task.dependsOn, MEDIA_REPAIR_FEEDBACK_TASK_KEY],
+          requiredReceipts: [
+            ...task.requiredReceipts,
+            { taskKey: MEDIA_REPAIR_FEEDBACK_TASK_KEY, receiptHash: null },
+          ],
+          inputArtifactKeys: [...task.inputArtifactKeys, MEDIA_REPAIR_FEEDBACK_TASK_KEY],
+        } : task)
       } else {
         tasks.push({
           ...task,
@@ -228,12 +278,12 @@ async function createMediaRevisionPlan(input: {
         sourceContentHash: proven[0].contentHash,
         reuseKey,
         requiresRevalidation: true,
-        reason: `单项媒资修订 ${input.command.artifactKey} 未影响本任务依赖闭包`,
+        reason: `媒资修订 ${[...targetKeys].sort().join(',')} 未影响本任务依赖闭包`,
       },
     })
   }
   const plan = parseProductProductionPlanV3({ ...base, tasks }, input.brief, input.parentBuild.briefHash)
-  return { plan, carriedArtifactKeys, targetTaskKey: target.taskKey }
+  return { plan, carriedArtifactKeys, targetTaskKeys: [...targetKeys].sort() }
 }
 
 async function applyCommand(input: {
@@ -549,15 +599,33 @@ async function applyCommand(input: {
     return { production, result: { buildNumber: build.buildNumber, previewHash: build.previewHash, packageHash: build.packageHash } }
   }
 
-  if (command.type === 'revise-media-asset') {
-    if (production.productType !== 'text-adventure' || production.status !== 'preview-ready') {
-      reject('invalid-state-transition', '仅已完成预览的文字冒险 Production 可发起单项媒资修订')
+  if (command.type === 'revise-media-asset' || command.type === 'revise-media-assets') {
+    const batchRepair = command.type === 'revise-media-assets'
+    const revisionTargets = batchRepair
+      ? command.targets
+      : [{ artifactKey: command.artifactKey, expectedArtifactHash: command.expectedArtifactHash }]
+    const revisionAction: ReviseMediaCommandV1['action'] = batchRepair ? 'regenerate' : command.action
+    const replacement = batchRepair ? null : command.replacement
+    if (production.productType !== 'text-adventure'
+      || (batchRepair ? production.status !== 'producing' : production.status !== 'preview-ready')) {
+      reject('invalid-state-transition', batchRepair
+        ? '仅审图阻塞中的文字冒险 Production 可发起批量媒资修复'
+        : '仅已完成预览的文字冒险 Production 可发起单项媒资修订')
     }
     const parentBuild = await currentBuild(production)
-    if (parentBuild.buildNumber !== command.buildNumber
-      || !['preview-ready', 'release-ready'].includes(parentBuild.status)
-      || parentBuild.releasedProductReleaseId != null) {
-      reject('invalid-state-transition', '只能从当前未发布且已完成预览的 Build 派生媒资修订')
+    if (parentBuild.buildNumber !== command.buildNumber || parentBuild.releasedProductReleaseId != null) {
+      reject('invalid-state-transition', '只能从当前未发布 Build 派生媒资修订')
+    }
+    if (batchRepair) {
+      const failure = readResult(parentBuild.failureJson)
+      if (parentBuild.status !== 'recovery-required'
+        || failure.taskKey !== 'integration.package'
+        || typeof failure.detail !== 'string'
+        || !failure.detail.includes('独立图片审查未通过')) {
+        reject('invalid-state-transition', '批量重生成仅用于独立 Visual QA 阻塞的 Build')
+      }
+    } else if (!['preview-ready', 'release-ready'].includes(parentBuild.status)) {
+      reject('invalid-state-transition', '单项媒资修订只能从已完成预览的 Build 派生')
     }
     if (parentBuild.briefRevision !== production.currentBriefRevision) {
       reject('brief-not-authorized', '当前 Build 与已授权 Brief 指针不一致')
@@ -575,40 +643,124 @@ async function applyCommand(input: {
     const parentArtifacts = (await db.productBuildArtifacts.where('buildId').equals(parentBuild.id).toArray())
       .filter(row => row.controlEpoch === parentBuild.controlEpoch
         && (row.status === 'accepted' || row.status === 'carried-forward'))
-    const targetRows = parentArtifacts.filter(row => row.artifactKey === command.artifactKey)
-    if (targetRows.length !== 1) reject('media-revision-invalid', '目标图片 Artifact 缺失或重复')
-    const targetArtifact = targetRows[0]
-    if (targetArtifact.contentHash !== command.expectedArtifactHash
-      || targetArtifact.kind !== 'image' || targetArtifact.blobObjectId == null
-      || targetArtifact.mimeType == null || targetArtifact.mediaKind == null) {
-      reject('source-stale', '目标图片已变化或不是可修订的冻结图片')
+    const expectedHashByKey = new Map(revisionTargets.map(target => [target.artifactKey, target.expectedArtifactHash]))
+    if (!revisionTargets.length || expectedHashByKey.size !== revisionTargets.length) {
+      reject('media-revision-invalid', '媒资修订目标为空或重复')
     }
-    const targetBlob = await db.mediaBlobObjects.get(targetArtifact.blobObjectId)
-    if (!targetBlob || !await assertRecordInScope(scope, 'mediaBlobObjects', targetBlob, { owner: 'work' })
-      || targetBlob.storageState !== 'ready' || targetBlob.contentHash !== targetArtifact.contentHash
-      || targetBlob.mimeType !== targetArtifact.mimeType || targetBlob.byteSize !== targetArtifact.byteSize) {
-      reject('media-revision-invalid', '目标图片的物理 Blob 不完整或已损坏')
+    const targetArtifacts = parentArtifacts.filter(row => expectedHashByKey.has(row.artifactKey))
+    if (targetArtifacts.length !== revisionTargets.length) {
+      reject('media-revision-invalid', '目标图片 Artifact 缺失或重复')
     }
+    for (const target of targetArtifacts) {
+      if (target.contentHash !== expectedHashByKey.get(target.artifactKey)
+        || target.kind !== 'image' || target.blobObjectId == null
+        || target.mimeType == null || target.mediaKind == null) {
+        reject('source-stale', `目标图片已变化或不是可修订的冻结图片:${target.artifactKey}`)
+      }
+      const targetBlob = await db.mediaBlobObjects.get(target.blobObjectId)
+      if (!targetBlob || !await assertRecordInScope(scope, 'mediaBlobObjects', targetBlob, { owner: 'work' })
+        || targetBlob.storageState !== 'ready' || targetBlob.contentHash !== target.contentHash
+        || targetBlob.mimeType !== target.mimeType || targetBlob.byteSize !== target.byteSize) {
+        reject('media-revision-invalid', `目标图片的物理 Blob 不完整或已损坏:${target.artifactKey}`)
+      }
+      if (revisionAction === 'regenerate' && mediaArtifactLocked(target)) {
+        reject('media-revision-invalid', `图片已锁定，必须先解锁:${target.artifactKey}`)
+      }
+    }
+    let visualRepairFeedback: {
+      payload: Record<string, unknown>
+      inputHash: string
+      contentHash: string
+      sourceArtifact: ProductBuildArtifactRecordV1
+    } | null = null
+    if (batchRepair) {
+      const sourceArtifact = parentArtifacts.find(row => row.artifactKey === 'quality.visual-review')
+      if (!sourceArtifact) reject('media-revision-invalid', 'Visual QA 阻塞 Build 缺少审查报告')
+      const report = objectJson(sourceArtifact.payloadJson, 'quality.visual-review.payload')
+      if (report.schema !== 'storyforge.text-adventure-visual-quality-review-artifact'
+        || report.version !== 1 || report.buildNumber !== parentBuild.buildNumber
+        || !Array.isArray(report.reviews)) {
+        reject('media-revision-invalid', 'Visual QA 报告与父 Build 不一致')
+      }
+      const reviewByKey = new Map<string, Record<string, unknown>>()
+      for (const value of report.reviews) {
+        if (!value || typeof value !== 'object' || Array.isArray(value)) {
+          reject('media-revision-invalid', 'Visual QA 逐图证据格式无效')
+        }
+        const review = value as Record<string, unknown>
+        if (typeof review.artifactKey !== 'string' || typeof review.contentHash !== 'string'
+          || !Array.isArray(review.issues) || reviewByKey.has(review.artifactKey)) {
+          reject('media-revision-invalid', 'Visual QA 逐图证据缺失或重复')
+        }
+        reviewByKey.set(review.artifactKey, review)
+      }
+      const feedbackTargets = revisionTargets.map(target => {
+        const review = reviewByKey.get(target.artifactKey)
+        if (!review || review.contentHash !== target.expectedArtifactHash) {
+          reject('source-stale', `Visual QA 证据与目标图片不一致:${target.artifactKey}`)
+        }
+        const issues = (review.issues as unknown[]).map((value, index) => {
+          if (!value || typeof value !== 'object' || Array.isArray(value)) {
+            reject('media-revision-invalid', `${target.artifactKey} 审查问题 ${index + 1} 无效`)
+          }
+          const issue = value as Record<string, unknown>
+          if ((issue.severity !== 'warning' && issue.severity !== 'blocking')
+            || typeof issue.category !== 'string' || typeof issue.detail !== 'string'
+            || typeof issue.recommendation !== 'string') {
+            reject('media-revision-invalid', `${target.artifactKey} 审查问题 ${index + 1} 缺少修复证据`)
+          }
+          return {
+            severity: issue.severity,
+            category: issue.category,
+            detail: issue.detail,
+            recommendation: issue.recommendation,
+          }
+        })
+        const rejected = review.verdict === 'revise' || review.verdict === 'replace'
+          || review.verdict === 'human-review' || issues.some(issue => issue.severity === 'blocking')
+        if (!rejected) reject('media-revision-invalid', `图片未被 Visual QA 退回:${target.artifactKey}`)
+        return {
+          artifactKey: target.artifactKey,
+          priorContentHash: target.expectedArtifactHash,
+          verdict: review.verdict,
+          scores: review.scores ?? null,
+          issues,
+        }
+      })
+      const payload = {
+        schema: 'storyforge.text-adventure-visual-repair-feedback', version: 1,
+        sourceBuildNumber: parentBuild.buildNumber,
+        sourceReviewArtifactHash: sourceArtifact.contentHash,
+        targets: feedbackTargets.sort((left, right) => left.artifactKey.localeCompare(right.artifactKey)),
+      }
+      visualRepairFeedback = {
+        payload,
+        inputHash: await hashProductProductionValueV2({
+          schema: 'storyforge.text-adventure-visual-repair-feedback-input', version: 1,
+          commandId: command.commandId, payload,
+        }),
+        contentHash: await hashProductProductionValueV2(payload),
+        sourceArtifact,
+      }
+    }
+    const targetArtifact = targetArtifacts[0]
     const locked = mediaArtifactLocked(targetArtifact)
-    if (command.action === 'regenerate' && locked) {
-      reject('media-revision-invalid', '图片已被作者锁定，必须先派生解锁 Build')
-    }
-    if (command.action === 'lock' && locked) reject('media-revision-invalid', '图片已经处于锁定状态')
-    if (command.action === 'unlock' && !locked) reject('media-revision-invalid', '图片尚未锁定')
+    if (revisionAction === 'lock' && locked) reject('media-revision-invalid', '图片已经处于锁定状态')
+    if (revisionAction === 'unlock' && !locked) reject('media-revision-invalid', '图片尚未锁定')
 
     let replacementBlob: MediaBlobObjectRecordV1 | undefined
-    if (command.replacement) {
-      replacementBlob = await db.mediaBlobObjects.get(command.replacement.blobObjectId)
+    if (replacement) {
+      replacementBlob = await db.mediaBlobObjects.get(replacement.blobObjectId)
       if (!replacementBlob
         || !await assertRecordInScope(scope, 'mediaBlobObjects', replacementBlob, { owner: 'work' })
         || replacementBlob.storageState !== 'ready'
-        || replacementBlob.contentHash !== command.replacement.contentHash
-        || replacementBlob.mimeType !== command.replacement.mimeType
-        || replacementBlob.byteSize !== command.replacement.byteSize) {
+        || replacementBlob.contentHash !== replacement.contentHash
+        || replacementBlob.mimeType !== replacement.mimeType
+        || replacementBlob.byteSize !== replacement.byteSize) {
         reject('media-revision-invalid', '作者上传 Blob 不存在、跨 Work、损坏或与命令不一致')
       }
       if (brief.qualityProfile === 'commercial-candidate'
-        && (!command.replacement.commercialUse || !command.replacement.redistribution)) {
+        && (!replacement.commercialUse || !replacement.redistribution)) {
         reject('rights-incomplete', '商业候选的作者图片必须确认商用与再分发权利')
       }
     }
@@ -616,7 +768,12 @@ async function applyCommand(input: {
     const buildNumber = await nextBuildNumber(production.id)
     const controlEpoch = production.controlEpoch + 1
     const revisionPlan = await createMediaRevisionPlan({
-      parentBuild, brief, command, buildNumber, controlEpoch, artifacts: parentArtifacts,
+      parentBuild, brief,
+      command: {
+        commandId: command.commandId, action: revisionAction, targets: revisionTargets,
+        includeVisualRepairFeedback: batchRepair,
+      },
+      buildNumber, controlEpoch, artifacts: parentArtifacts,
     })
     const planHash = await hashProductProductionValueV2(revisionPlan.plan)
     const sourceByKey = new Map(parentArtifacts.map(row => [row.artifactKey, row]))
@@ -641,22 +798,21 @@ async function applyCommand(input: {
       qualityJson: string
       rightsJson: string
     } | null = null
-    if (command.action !== 'regenerate') {
+    if (revisionAction !== 'regenerate') {
       const oldPayload = objectJson(targetArtifact.payloadJson, `${targetArtifact.artifactKey}.payload`)
       const oldMetadata = objectJson(targetArtifact.metadataJson, `${targetArtifact.artifactKey}.metadata`)
       const oldRights = objectJson(targetArtifact.rightsJson, `${targetArtifact.artifactKey}.rights`)
       const frozenRequirement = oldPayload.request && typeof oldPayload.request === 'object'
         && !Array.isArray(oldPayload.request) ? oldPayload.request as Record<string, unknown> : null
       if (!frozenRequirement) reject('media-revision-invalid', '目标图片缺少冻结需求合同')
-      if (command.replacement && (command.replacement.width !== frozenRequirement.width
-        || command.replacement.height !== frozenRequirement.height)) {
+      if (replacement && (replacement.width !== frozenRequirement.width
+        || replacement.height !== frozenRequirement.height)) {
         reject('media-revision-invalid', '作者替换图片尺寸必须与冻结媒资需求一致')
       }
-      const nextLocked = command.action === 'lock'
+      const nextLocked = revisionAction === 'lock'
         ? true
-        : command.action === 'unlock' ? false : locked
-      const assetKey = `${production.productionKey}.build-${buildNumber}.${command.artifactKey}`
-      const replacement = command.replacement
+        : revisionAction === 'unlock' ? false : locked
+      const assetKey = `${production.productionKey}.build-${buildNumber}.${targetArtifact.artifactKey}`
       const contentHash = replacement?.contentHash ?? targetArtifact.contentHash
       const metadata = {
         ...oldMetadata,
@@ -668,7 +824,7 @@ async function applyCommand(input: {
         license: replacement?.license ?? oldMetadata.license,
         authorRevision: {
           schema: 'storyforge.text-adventure-media-revision', version: 1,
-          commandId: command.commandId, action: command.action, parentBuildNumber: parentBuild.buildNumber,
+          commandId: command.commandId, action: revisionAction, parentBuildNumber: parentBuild.buildNumber,
           priorContentHash: targetArtifact.contentHash, locked: nextLocked, revisedAt: now,
         },
       }
@@ -679,12 +835,12 @@ async function applyCommand(input: {
       } : oldRights
       humanArtifact = {
         contentHash,
-        blobObjectId: replacement?.blobObjectId ?? targetArtifact.blobObjectId,
-        mimeType: replacement?.mimeType ?? targetArtifact.mimeType,
+        blobObjectId: replacement?.blobObjectId ?? targetArtifact.blobObjectId!,
+        mimeType: replacement?.mimeType ?? targetArtifact.mimeType!,
         byteSize: replacement?.byteSize ?? targetArtifact.byteSize,
         inputHash: await hashProductProductionValueV2({
           schema: 'storyforge.text-adventure-human-media-input', version: 1,
-          commandId: command.commandId, planHash, artifactKey: command.artifactKey,
+          commandId: command.commandId, planHash, artifactKey: targetArtifact.artifactKey,
           contentHash, parentArtifactHash: targetArtifact.contentHash,
         }),
         payloadJson: canonicalProductProductionJsonV2({ ...oldPayload, assetKey }),
@@ -748,10 +904,39 @@ async function applyCommand(input: {
       } satisfies ProductBuildArtifactRecordV1, { owner: 'work' }))
     }
 
+    if (visualRepairFeedback) {
+      await db.productBuildArtifacts.add(stampNewRecord(scope, 'productBuildArtifacts', {
+        projectId: scope.projectId, worldId: scope.worldId, workId: scope.workId,
+        buildId, artifactKey: MEDIA_REPAIR_FEEDBACK_TASK_KEY, requirementKey: null,
+        version: 1, kind: 'integration-report', mediaKind: null, status: 'accepted' as const,
+        producerRunId: null, producerReceiptHash: null, controlEpoch,
+        inputHash: visualRepairFeedback.inputHash, contentHash: visualRepairFeedback.contentHash,
+        payloadJson: canonicalProductProductionJsonV2(visualRepairFeedback.payload),
+        metadataJson: canonicalProductProductionJsonV2({
+          source: 'accepted-visual-quality-review', commandId: command.commandId,
+        }),
+        qualityJson: canonicalProductProductionJsonV2({
+          targetCount: revisionTargets.length, sourceHashVerified: true,
+        }),
+        rightsJson: canonicalProductProductionJsonV2({
+          origin: 'deterministic-quality-repair', containsThirdPartyMedia: false,
+        }),
+        blobObjectId: null, mimeType: null, byteSize: 0,
+        parentArtifactHash: visualRepairFeedback.sourceArtifact.contentHash,
+        carriedFrom: {
+          buildNumber: parentBuild.buildNumber,
+          artifactKey: visualRepairFeedback.sourceArtifact.artifactKey,
+          version: visualRepairFeedback.sourceArtifact.version,
+          contentHash: visualRepairFeedback.sourceArtifact.contentHash,
+        },
+        createdAt: now, updatedAt: now,
+      } satisfies ProductBuildArtifactRecordV1, { owner: 'work' }))
+    }
+
     if (humanArtifact) {
       await db.productBuildArtifacts.add(stampNewRecord(scope, 'productBuildArtifacts', {
         projectId: scope.projectId, worldId: scope.worldId, workId: scope.workId,
-        buildId, artifactKey: command.artifactKey, requirementKey: targetArtifact.requirementKey,
+        buildId, artifactKey: targetArtifact.artifactKey, requirementKey: targetArtifact.requirementKey,
         version: 1, kind: targetArtifact.kind, mediaKind: targetArtifact.mediaKind,
         status: 'accepted' as const, producerRunId: null, producerReceiptHash: null,
         controlEpoch, inputHash: humanArtifact.inputHash, contentHash: humanArtifact.contentHash,
@@ -767,6 +952,12 @@ async function applyCommand(input: {
         createdAt: now, updatedAt: now,
       } satisfies ProductBuildArtifactRecordV1, { owner: 'work' }))
     }
+    const rerunTaskKeys = new Set<string>()
+    for (const taskKey of revisionPlan.targetTaskKeys) {
+      for (const invalidated of invalidatedMediaTaskKeys(revisionPlan.plan, taskKey)) {
+        rerunTaskKeys.add(invalidated)
+      }
+    }
     const stateRevision = production.stateRevision + 1
     await db.productProductions.update(production.id, {
       status: 'producing', currentBuildNumber: buildNumber, controlEpoch, stateRevision,
@@ -777,10 +968,12 @@ async function applyCommand(input: {
       controlEpoch, stateRevision, lastErrorJson: '{}', updatedAt: now,
     }
     return { production, result: {
-      action: command.action, artifactKey: command.artifactKey,
+      action: revisionAction,
+      artifactKeys: revisionTargets.map(target => target.artifactKey).sort(),
+      ...(batchRepair ? {} : { artifactKey: targetArtifact.artifactKey }),
       parentBuildNumber: parentBuild.buildNumber, buildId, buildNumber, controlEpoch,
       carriedArtifactCount: revisionPlan.carriedArtifactKeys.length,
-      rerunTaskKeys: [...invalidatedMediaTaskKeys(revisionPlan.plan, revisionPlan.targetTaskKey)].sort(),
+      rerunTaskKeys: [...rerunTaskKeys].sort(),
     } }
   }
 

@@ -123,6 +123,7 @@ export const PRODUCT_PRODUCTION_COMMAND_TYPES = [
   "resolve-blocker",
   "request-preview",
   "revise-media-asset",
+  "revise-media-assets",
   "publish",
   "evolve",
   "archive",
@@ -751,6 +752,17 @@ export type ProductProductionCommandV1 =
         declaration: string;
         attribution: string;
       } | null;
+    }
+  | {
+      type: "revise-media-assets";
+      commandId: string;
+      expectedStateRevision: number;
+      buildNumber: number;
+      action: "regenerate";
+      targets: Array<{
+        artifactKey: string;
+        expectedArtifactHash: string;
+      }>;
     }
   | {
       type: "publish";

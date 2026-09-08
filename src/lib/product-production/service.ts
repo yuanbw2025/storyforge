@@ -168,6 +168,7 @@ const AUTHOR_REVIEW_ARTIFACT_KEYS = new Set([
   'runtime.package',
   'quality.autoplay',
   'quality.visual-review',
+  'media.repair-feedback',
   'quality.report',
   'quality.playtest-plan',
 ])
@@ -308,6 +309,38 @@ export async function reviseTextAdventureMediaAssetV1(input: {
   return {
     parentBuildNumber: Number(receipt.result.parentBuildNumber),
     buildNumber: Number(receipt.result.buildNumber),
+  }
+}
+
+export async function regenerateTextAdventureMediaAssetsV1(input: {
+  scope: WorkspaceScope
+  details: ProductProductionDetailsV1
+  assets: TextAdventureMediaAssetV1[]
+}): Promise<{ parentBuildNumber: number; buildNumber: number; artifactKeys: string[] }> {
+  const build = input.details.build
+  if (!build || input.details.production.productType !== 'text-adventure') {
+    throw new Error('[product-production-service] 缺少可批量修复的文字冒险 Build')
+  }
+  const targets = input.assets.map(asset => ({
+    artifactKey: asset.artifactKey, expectedArtifactHash: asset.contentHash,
+  }))
+  if (!targets.length || new Set(targets.map(target => target.artifactKey)).size !== targets.length) {
+    throw new Error('[product-production-service] 批量媒资修复目标为空或重复')
+  }
+  const receipt = await executeProductProductionCommand({
+    scope: input.scope, productionId: input.details.production.id!,
+    command: {
+      type: 'revise-media-assets', commandId: commandId('media-batch-regenerate'),
+      expectedStateRevision: input.details.production.stateRevision,
+      buildNumber: build.buildNumber, action: 'regenerate', targets,
+    },
+  })
+  if (!receipt.ok) throw new Error(String(receipt.result.message ?? receipt.errorCode ?? '批量媒资修复失败'))
+  return {
+    parentBuildNumber: Number(receipt.result.parentBuildNumber),
+    buildNumber: Number(receipt.result.buildNumber),
+    artifactKeys: Array.isArray(receipt.result.artifactKeys)
+      ? receipt.result.artifactKeys.map(String) : targets.map(target => target.artifactKey),
   }
 }
 
