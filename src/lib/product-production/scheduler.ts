@@ -1266,10 +1266,11 @@ async function recoveryInvalidatedTaskKeys(input: {
     ? recovery.previousFailure as Record<string, unknown> : null
   if (recovery.blockerKey === 'media.anchor-author-gate'
     && recoveryResolution?.action === 'confirm-character-anchors') {
-    // Confirming the frozen visual bible only unlocks downstream media work.
-    // Append-only narrative repair history must not be interpreted as a new
-    // invalidation root when this unrelated author gate advances the epoch.
-    return new Set()
+    // Re-run the gate itself so the new author resolution, rather than a
+    // carried historical decision, binds the current confirmation hash.
+    // Downstream images remain reusable and append-only narrative repair
+    // history must not become an unrelated invalidation root.
+    return new Set(['media.anchor-author-gate'])
   }
   if (previousFailure
     && typeof previousFailure.taskKey === 'string'
