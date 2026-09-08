@@ -19,6 +19,7 @@ import {
   createConfiguredProductProductionExecutorV1,
   isolateCharacterProviderPromptV1,
   legalizeProductionModelProtocolDefaultsV1,
+  planTextAdventureMainQuestIdentityV1,
   parseProductMediaRequirementsArtifactV2,
   parseProductionModelJsonObjectV1,
   type ProductionTextRunnerV1,
@@ -62,7 +63,11 @@ import {
   configureTtrpgSessionParticipantV2,
   readTtrpgSessionParticipantsV2,
 } from '../../src/lib/ttrpg/participants'
-import type { ProductBuildArtifactRecordV1, ProductionProductKindV1 } from '../../src/lib/types'
+import type {
+  ProductBuildArtifactRecordV1,
+  ProductProductionBriefV3,
+  ProductionProductKindV1,
+} from '../../src/lib/types'
 import { seedCurrentProductWorld } from '../helpers/current-product-world'
 
 async function fixture(qualityProfile: 'prototype' | 'commercial-candidate' = 'prototype') {
@@ -1046,6 +1051,66 @@ async function relayCapabilities(brief: Awaited<ReturnType<typeof fixture>>['bri
 }
 
 describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
+  it('按商业时长冻结完整主线阶段与目标槽位，不允许单对象样例替代任务量', () => {
+    const brief = {
+      qualityProfile: 'commercial-candidate',
+      scale: { targetPlayMinutes: 60 },
+      textAdventure: {},
+    } as ProductProductionBriefV3
+    const sceneConstraints = Array.from({ length: 12 }, (_, index) => ({
+      sceneKey: `scene.${String(index + 1).padStart(3, '0')}`,
+      locationOrdinal: Math.floor(index / 2) + 1,
+      nonPlayerCastKeys: index % 3 === 1 ? ['character.npc-01'] : [],
+    }))
+    const plan = planTextAdventureMainQuestIdentityV1(brief, sceneConstraints)
+
+    expect(plan.stages).toHaveLength(3)
+    expect(plan.objectives).toHaveLength(8)
+    expect(plan.stages.flatMap(stage => stage.objectiveKeys)).toEqual(
+      plan.objectives.map(objective => objective.objectiveKey),
+    )
+    expect(plan.objectives[0].sceneKey).toBe('scene.001')
+    expect(plan.objectives.at(-1)?.sceneKey).toBe('scene.012')
+    expect(plan.objectives.filter(objective => objective.alternativeKeys.length === 2)).toHaveLength(2)
+    expect(new Set(plan.objectives.flatMap(objective => objective.requiredActionKinds))).toEqual(
+      new Set(['talk', 'give', 'use']),
+    )
+
+    const legalized = legalizeProductionModelProtocolDefaultsV1(
+      'content.main-quest-plan',
+      {
+        quests: [{
+          key: 'invented-main', characterKeys: [],
+          stages: plan.stages.map((_, index) => ({
+            key: `invented-stage-${index}`, title: `阶段 ${index + 1}`, objectiveKeys: [],
+          })),
+          objectives: plan.objectives.map((_, index) => ({
+            key: `invented-objective-${index}`, stageKey: 'invented-stage',
+            title: `目标 ${index + 1}`, narrativePurpose: '推进主线。',
+            sceneKeys: ['scene.999'], locationOrdinal: 99, alternatives: [],
+          })),
+        }],
+      },
+      { questPlanIdentity: plan, questSceneCastPlan: sceneConstraints },
+    )
+    const quest = (legalized.payload.quests as Array<Record<string, unknown>>)[0]
+    expect(quest.key).toBe('quest.main')
+    expect((quest.stages as Array<Record<string, unknown>>).map(stage => ({
+      stageKey: stage.key, objectiveKeys: stage.objectiveKeys,
+    }))).toEqual(plan.stages)
+    expect((quest.objectives as Array<Record<string, unknown>>).map(objective => ({
+      objectiveKey: objective.key,
+      stageKey: objective.stageKey,
+      sceneKey: (objective.sceneKeys as string[])[0],
+      locationOrdinal: objective.locationOrdinal,
+    }))).toEqual(plan.objectives.map(objective => ({
+      objectiveKey: objective.objectiveKey,
+      stageKey: objective.stageKey,
+      sceneKey: objective.sceneKey,
+      locationOrdinal: objective.locationOrdinal,
+    })))
+  })
+
   it('角色 provider prompt 在冻结前剥离模型夹带的场景描述', () => {
     expect(isolateCharacterProviderPromptV1(
       '青年守灯人，深蓝制服，手持潮汐纸条；背景为灯塔控制室与风暴海面',

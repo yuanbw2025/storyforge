@@ -430,6 +430,109 @@ export interface ProductionModelProtocolLegalizationV1 {
   discardedUnregisteredStateFields: string[]
 }
 
+export interface TextAdventureMainQuestIdentityPlanV1 {
+  stages: Array<{
+    stageKey: string
+    objectiveKeys: string[]
+  }>
+  objectives: Array<{
+    objectiveKey: string
+    stageKey: string
+    sceneKey: string
+    locationOrdinal: number
+    nonPlayerCastKeys: string[]
+    alternativeKeys: string[]
+    requiredActionKinds: Array<'talk' | 'give' | 'use'>
+  }>
+}
+
+/**
+ * Freeze the machine identity and topology of the commercial main quest while
+ * leaving titles, purposes, costs and consequences to the quest designer.
+ * This prevents a provider from silently collapsing an hour-long quest into
+ * the single-object example used to describe the JSON shape.
+ */
+export function planTextAdventureMainQuestIdentityV1(
+  brief: ProductProductionBriefV3,
+  sceneConstraints: readonly {
+    sceneKey: string
+    locationOrdinal: number
+    nonPlayerCastKeys?: readonly string[]
+  }[],
+): TextAdventureMainQuestIdentityPlanV1 {
+  if (!brief.textAdventure) fail('主线身份计划缺少文字冒险 Brief')
+  if (sceneConstraints.length < 1) fail('主线身份计划缺少冻结场景')
+  const objectiveCount = brief.qualityProfile === 'commercial-candidate'
+    ? Math.max(8, Math.ceil(brief.scale.targetPlayMinutes / 7.5)) : 1
+  const stageCount = Math.min(
+    objectiveCount,
+    brief.qualityProfile === 'commercial-candidate'
+      ? Math.max(3, Math.ceil(brief.scale.targetPlayMinutes / 20)) : 1,
+  )
+  const objectiveSceneIndexes = Array.from({ length: objectiveCount }, (_, objectiveIndex) => (
+    objectiveCount === 1
+      ? 0
+      : Math.round(objectiveIndex * (sceneConstraints.length - 1) / (objectiveCount - 1))
+  ))
+  if (brief.qualityProfile === 'commercial-candidate'
+    && !objectiveSceneIndexes.some(sceneIndex => (
+      (sceneConstraints[sceneIndex].nonPlayerCastKeys?.length ?? 0) > 0
+    ))) {
+    const npcSceneIndex = sceneConstraints.findIndex(
+      scene => (scene.nonPlayerCastKeys?.length ?? 0) > 0,
+    )
+    if (npcSceneIndex >= 0) {
+      const insertionIndex = objectiveSceneIndexes.findIndex(sceneIndex => sceneIndex >= npcSceneIndex)
+      objectiveSceneIndexes[insertionIndex >= 0 ? insertionIndex : objectiveSceneIndexes.length - 1] = npcSceneIndex
+    }
+  }
+  const objectives = Array.from({ length: objectiveCount }, (_, objectiveIndex) => {
+    const sceneIndex = objectiveSceneIndexes[objectiveIndex]
+    const scene = sceneConstraints[sceneIndex]
+    const stageIndex = Math.min(
+      stageCount - 1,
+      Math.floor(objectiveIndex * stageCount / objectiveCount),
+    )
+    const alternativeCount = objectiveIndex < Math.min(2, objectiveCount) ? 2 : 1
+    return {
+      objectiveKey: `objective.${String(objectiveIndex + 1).padStart(2, '0')}`,
+      stageKey: `stage.${String(stageIndex + 1).padStart(2, '0')}`,
+      sceneKey: scene.sceneKey,
+      locationOrdinal: scene.locationOrdinal,
+      nonPlayerCastKeys: [...new Set(scene.nonPlayerCastKeys ?? [])],
+      alternativeKeys: Array.from({ length: alternativeCount }, (_, alternativeIndex) => (
+        `alternative.${String(objectiveIndex + 1).padStart(2, '0')}.${alternativeIndex + 1}`
+      )),
+      requiredActionKinds: [] as Array<'talk' | 'give' | 'use'>,
+    }
+  })
+  if (brief.qualityProfile === 'commercial-candidate') {
+    const talkIndex = objectives.findIndex(objective => objective.nonPlayerCastKeys.length > 0)
+    if (talkIndex >= 0) objectives[talkIndex].requiredActionKinds.push('talk')
+    const reserved = new Set(talkIndex >= 0 ? [talkIndex] : [])
+    const reserveNext = (): number => {
+      const index = objectives.findIndex((_, candidateIndex) => !reserved.has(candidateIndex))
+      const resolved = index >= 0 ? index : 0
+      reserved.add(resolved)
+      return resolved
+    }
+    objectives[reserveNext()].requiredActionKinds.push('give')
+    objectives[reserveNext()].requiredActionKinds.push('use')
+  }
+  return {
+    stages: Array.from({ length: stageCount }, (_, stageIndex) => {
+      const stageKey = `stage.${String(stageIndex + 1).padStart(2, '0')}`
+      return {
+        stageKey,
+        objectiveKeys: objectives
+          .filter(objective => objective.stageKey === stageKey)
+          .map(objective => objective.objectiveKey),
+      }
+    }),
+    objectives,
+  }
+}
+
 function compactProtocolArray(value: unknown, path: string, discardedNullEntries: string[]): unknown {
   if (!Array.isArray(value)) return value
   return value.filter((item, index) => {
@@ -495,6 +598,7 @@ export function legalizeProductionModelProtocolDefaultsV1(
       locationOrdinal?: number
     }[]
     questFallbackCastKeys?: readonly string[]
+    questPlanIdentity?: TextAdventureMainQuestIdentityPlanV1
     questLocationTitles?: readonly string[]
     questScriptIdentityPlan?: {
       mainObjectiveScripts: readonly {
@@ -798,6 +902,11 @@ export function legalizeProductionModelProtocolDefaultsV1(
     next.quests = payload.quests.map((quest, questIndex) => {
       if (!quest || typeof quest !== 'object' || Array.isArray(quest)) return quest
       const item = { ...(quest as JsonRecord) }
+      const identityPlan = questIndex === 0 ? options.questPlanIdentity : undefined
+      if (identityPlan && item.key !== 'quest.main') {
+        item.key = 'quest.main'
+        defaultedFields.push(`quests[${questIndex}].key<-frozen-main-quest`)
+      }
       if (!Array.isArray(item.objectives) && Array.isArray(item.stages)) {
         const nestedObjectives = item.stages.flatMap(stage => {
           if (!stage || typeof stage !== 'object' || Array.isArray(stage)) return []
@@ -844,6 +953,33 @@ export function legalizeProductionModelProtocolDefaultsV1(
         (objective, objectiveIndex) => {
           if (!objective || typeof objective !== 'object' || Array.isArray(objective)) return objective
           const nextObjective = { ...(objective as JsonRecord) }
+          const identity = identityPlan?.objectives[objectiveIndex]
+          if (identity && item.objectives && (item.objectives as unknown[]).length === identityPlan!.objectives.length) {
+            if (nextObjective.key !== identity.objectiveKey) {
+              nextObjective.key = identity.objectiveKey
+              defaultedFields.push(
+                `quests[${questIndex}].objectives[${objectiveIndex}].key<-frozen-plan`,
+              )
+            }
+            if (nextObjective.stageKey !== identity.stageKey) {
+              nextObjective.stageKey = identity.stageKey
+              defaultedFields.push(
+                `quests[${questIndex}].objectives[${objectiveIndex}].stageKey<-frozen-plan`,
+              )
+            }
+            if (JSON.stringify(nextObjective.sceneKeys) !== JSON.stringify([identity.sceneKey])) {
+              nextObjective.sceneKeys = [identity.sceneKey]
+              defaultedFields.push(
+                `quests[${questIndex}].objectives[${objectiveIndex}].sceneKeys<-frozen-plan`,
+              )
+            }
+            if (nextObjective.locationOrdinal !== identity.locationOrdinal) {
+              nextObjective.locationOrdinal = identity.locationOrdinal
+              defaultedFields.push(
+                `quests[${questIndex}].objectives[${objectiveIndex}].locationOrdinal<-frozen-plan`,
+              )
+            }
+          }
           const objectiveSceneKeys = Array.isArray(nextObjective.sceneKeys)
             ? nextObjective.sceneKeys.filter((sceneKey): sceneKey is string => typeof sceneKey === 'string')
             : []
@@ -924,10 +1060,31 @@ export function legalizeProductionModelProtocolDefaultsV1(
         },
       )
       if (Array.isArray(item.stages) && Array.isArray(item.objectives)) {
+        if (identityPlan && item.stages.length === identityPlan.stages.length
+          && item.objectives.length === identityPlan.objectives.length) {
+          item.stages = item.stages.map((stage, stageIndex) => {
+            if (!stage || typeof stage !== 'object' || Array.isArray(stage)) return stage
+            const nextStage = { ...(stage as JsonRecord) }
+            const identity = identityPlan.stages[stageIndex]
+            if (nextStage.key !== identity.stageKey) {
+              nextStage.key = identity.stageKey
+              defaultedFields.push(`quests[${questIndex}].stages[${stageIndex}].key<-frozen-plan`)
+            }
+            if (JSON.stringify(nextStage.objectiveKeys) !== JSON.stringify(identity.objectiveKeys)) {
+              nextStage.objectiveKeys = [...identity.objectiveKeys]
+              defaultedFields.push(
+                `quests[${questIndex}].stages[${stageIndex}].objectiveKeys<-frozen-plan`,
+              )
+            }
+            return nextStage
+          })
+        }
+        const stagesForOrdering = item.stages as unknown[]
+        const objectivesForOrdering = item.objectives as unknown[]
         const sceneOrder = new Map(
           (options.questSceneCastPlan ?? []).map((scene, sceneIndex) => [scene.sceneKey, sceneIndex] as const),
         )
-        const objectiveSceneOrder = new Map(item.objectives.flatMap(objective => {
+        const objectiveSceneOrder = new Map(objectivesForOrdering.flatMap(objective => {
           if (!objective || typeof objective !== 'object' || Array.isArray(objective)) return []
           const objectiveRecord = objective as JsonRecord
           const objectiveKey = objectiveRecord.key
@@ -937,7 +1094,7 @@ export function legalizeProductionModelProtocolDefaultsV1(
             ? [[objectiveKey, order] as const]
             : []
         }))
-        const normalizedStages = item.stages.map(stage => {
+        const normalizedStages = stagesForOrdering.map(stage => {
           if (!stage || typeof stage !== 'object' || Array.isArray(stage)) return stage
           const nextStage = { ...(stage as JsonRecord) }
           if (Array.isArray(nextStage.objectiveKeys)) {
@@ -1963,6 +2120,7 @@ function textSystem(
     castKeys: string[]
     nonPlayerCastKeys?: string[]
   }> = [],
+  textAdventureMainQuestIdentityPlan?: TextAdventureMainQuestIdentityPlanV1,
   textAdventureQuestScriptIdentityPlan?: {
     mainObjectiveScripts: readonly {
       objectiveKey: string
@@ -2095,9 +2253,12 @@ function textSystem(
       ? Math.max(3, Math.ceil(brief.scale.targetPlayMinutes / 20)) : 1
     const minimumObjectives = brief.qualityProfile === 'commercial-candidate'
       ? Math.max(8, Math.ceil(brief.scale.targetPlayMinutes / 7.5)) : 1
+    const identityPlan = textAdventureMainQuestIdentityPlan
+      ?? planTextAdventureMainQuestIdentityV1(brief, textAdventureSceneConstraints)
     return `${common}\n你是主线任务设计师。把叙事弧拆成恰好一条主线任务；这不是一句任务摘要，而是可供脚本编译的阶段、目标与通用解法合同。` +
       '输出字段必须精确为：{"schema":"storyforge.text-adventure-quest-plan-artifact","version":1,"bundleKind":"main","quests":[{"key":"quest.main","title":"...","description":"...","characterKeys":["character.some-key"],"stages":[{"key":"stage.1","title":"...","objectiveKeys":["objective.1"]}],"objectives":[{"key":"objective.1","stageKey":"stage.1","title":"...","narrativePurpose":"...","sceneKeys":["scene.001"],"locationOrdinal":1,"alternatives":[{"key":"alternative.1","actionKind":"look|move|talk|take|give|use|inspect|attempt|rest|quest-action","targetCharacterKey":null,"cost":"...","successConsequence":"...","failureForwardConsequence":"...","persistentEffectKeys":["flag.some-key"]}]}]}]}。' +
-      `商业候选至少 ${minimumStages} 阶段、${minimumObjectives} 目标，至少两个目标有 2 种通用解法，并且全部 alternatives 合计必须至少各出现一次 give 与 use；take 会作为这些物品行动的确定性准备步骤进入运行包，talk 必须至少出现一次以验证正式 NPC 互动。prototype 也必须至少一阶段一目标。quests[0] 必须同时包含 key/title/description/characterKeys/stages/objectives 六个同级字段；objectives 必须是 quests[0] 的完整数组，绝不能嵌进 stages 或省略。每个 stage 只含 key/title/objectiveKeys，stage.objectiveKeys 必须不重不漏精确覆盖同级 objectives。所有 stage 及其 objectiveKeys 必须按场景约束数组中的 sceneKey 顺序单调推进；一个 stage 必须占据连续场景区间，后续 stage 不得返回前一 stage 已越过的场景。每个主线 objective.sceneKeys 必须恰好包含一个场景 key：一个 objective 表示该场景中的一次可结算目标，跨场景推进只能由同一 stage 内连续多个 objective 或后续 stage 表达。合法角色 key=${JSON.stringify(textAdventureCastKeys)}；场景的冻结地点与出场角色约束=${JSON.stringify(textAdventureSceneConstraints)}。sceneKeys 只能复用该约束中的场景；locationOrdinal 必须复制所引用场景共同绑定的地点编号。characterKeys 将由系统确定性投影为全部所选场景 castKeys 的并集，不得用姓名、称谓或自造 key 表达人物。每个场景的 nonPlayerCastKeys 是 talk 目标的唯一白名单：talk.targetCharacterKey 必须逐字从目标场景的 nonPlayerCastKeys 选择；该数组为空时该场景严禁生成 talk，必须设计非 talk 行动；其他行动的 targetCharacterKey 必须为 null。每个 alternative 都必须显式包含至少一个 persistentEffectKeys；该字段只记录行动已经发生，系统会冻结其机器 key。每种失败结果都必须推进到可继续的新局面。输出前必须核对 Object.keys(quests[0]).sort() 恰为 ["characterKeys","description","key","objectives","stages","title"]。`
+      `本次不是“至少大概达到”，而是预分配了恰好 ${identityPlan.stages.length} 个阶段和恰好 ${identityPlan.objectives.length} 个目标。冻结主线槽位=${JSON.stringify(identityPlan)}。先一次性建立 ${identityPlan.objectives.length} 个 objectives 对象，再填写内容；不得提交 1–2 个示例目标、不得省略后续槽位。stages 必须逐项复制 stages[].stageKey→key 与 objectiveKeys；objectives 必须逐项复制 objectives[].objectiveKey→key、stageKey、sceneKey→唯一 sceneKeys 项、locationOrdinal 和 alternativeKeys→alternatives[].key。每个槽位列出的 requiredActionKinds 必须在该目标的 alternatives 中逐项出现；talk 只能使用该槽位 nonPlayerCastKeys 中的角色。提交前必须显式自检 quests[0].stages.length === ${identityPlan.stages.length} 且 quests[0].objectives.length === ${identityPlan.objectives.length}，并从第 1 项数到第 ${identityPlan.objectives.length} 项。` +
+      `商业候选要求至少 ${minimumStages} 阶段、${minimumObjectives} 目标，至少两个目标有 2 种通用解法，并且全部 alternatives 合计必须至少各出现一次 give 与 use；take 会作为这些物品行动的确定性准备步骤进入运行包，talk 必须至少出现一次以验证正式 NPC 互动。prototype 也必须至少一阶段一目标。quests[0] 必须同时包含 key/title/description/characterKeys/stages/objectives 六个同级字段；objectives 必须是 quests[0] 的完整数组，绝不能嵌进 stages 或省略。每个 stage 只含 key/title/objectiveKeys，stage.objectiveKeys 必须不重不漏精确覆盖同级 objectives。所有 stage 及其 objectiveKeys 必须按场景约束数组中的 sceneKey 顺序单调推进；一个 stage 必须占据连续场景区间，后续 stage 不得返回前一 stage 已越过的场景。每个主线 objective.sceneKeys 必须恰好包含一个场景 key：一个 objective 表示该场景中的一次可结算目标，跨场景推进只能由同一 stage 内连续多个 objective 或后续 stage 表达。合法角色 key=${JSON.stringify(textAdventureCastKeys)}；场景的冻结地点与出场角色约束=${JSON.stringify(textAdventureSceneConstraints)}。sceneKeys 只能复用该约束中的场景；locationOrdinal 必须复制所引用场景共同绑定的地点编号。characterKeys 将由系统确定性投影为全部所选场景 castKeys 的并集，不得用姓名、称谓或自造 key 表达人物。每个场景的 nonPlayerCastKeys 是 talk 目标的唯一白名单：talk.targetCharacterKey 必须逐字从目标场景的 nonPlayerCastKeys 选择；该数组为空时该场景严禁生成 talk，必须设计非 talk 行动；其他行动的 targetCharacterKey 必须为 null。每个 alternative 都必须显式包含至少一个 persistentEffectKeys；该字段只记录行动已经发生，系统会冻结其机器 key。每种失败结果都必须推进到可继续的新局面。输出前必须核对 Object.keys(quests[0]).sort() 恰为 ["characterKeys","description","key","objectives","stages","title"]。`
   }
   const sceneScriptBoundary = textAdventureSceneScriptBoundary(taskKey)
   if (sceneScriptBoundary != null) {
@@ -2455,6 +2616,10 @@ async function executeModelTask(input: ProductProductionTaskExecutionInputV1, op
         ))
       })()
     : []
+  const textAdventureMainQuestIdentityPlan = options.brief.textAdventure
+    && input.task.taskKey === 'content.main-quest-plan'
+    ? planTextAdventureMainQuestIdentityV1(options.brief, textAdventureSceneConstraints)
+    : undefined
   const system = textSystem(
     input.task.taskKey,
     options.brief,
@@ -2462,6 +2627,7 @@ async function executeModelTask(input: ProductProductionTaskExecutionInputV1, op
     textAdventureLocationTitles,
     textAdventureCastKeys,
     textAdventureSceneConstraints,
+    textAdventureMainQuestIdentityPlan,
     textAdventureQuestScriptIdentityPlan,
     textAdventureSystemAbilityKeys,
   )
@@ -2508,6 +2674,7 @@ async function executeModelTask(input: ProductProductionTaskExecutionInputV1, op
       : undefined,
     questSceneCastPlan: textAdventureSceneConstraints,
     questFallbackCastKeys: textAdventureCastKeys,
+    questPlanIdentity: textAdventureMainQuestIdentityPlan,
     questLocationTitles: textAdventureLocationTitles,
     questScriptIdentityPlan: textAdventureQuestScriptIdentityPlan,
     questScriptAbilityKeys: textAdventureSystemAbilityKeys,
