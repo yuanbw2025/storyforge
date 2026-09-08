@@ -18,6 +18,7 @@ import { scopeTransactionTables, stampNewRecord } from './scope'
 import { buildWorkRecord } from './works'
 import { deriveShortNovelStructure } from './work-kind'
 import { buildShortNovelProductionRecordV1 } from '../short-novel/service'
+import { countWords, plainTextToHtml } from '../utils/html'
 
 export interface CreateWorkspaceOptions {
   /** ARCH-01: defaults to an independent authored work. */
@@ -25,6 +26,10 @@ export interface CreateWorkspaceOptions {
   kind?: WorkKind
   novelProfile?: NovelWorkflowProfile | null
   preferredChapterCount?: number
+  /** Optional author-written seed for the first short-novel chapter card. */
+  initialChapterSummary?: string
+  /** Optional author-provided prose imported into the first short-novel chapter. */
+  initialChapterContent?: string
   /** World identity options belong to the World root, never the Project shell root. */
   world?: {
     code?: string
@@ -72,6 +77,8 @@ async function createShortNovelSkeleton(
   scope: WorkspaceScope,
   targetWordCount: number,
   preferredChapterCount: number | undefined,
+  initialChapterSummary: string | undefined,
+  initialChapterContent: string | undefined,
   now: number,
 ): Promise<void> {
   const structure = deriveShortNovelStructure(targetWordCount, preferredChapterCount)
@@ -94,7 +101,7 @@ async function createShortNovelSkeleton(
       parentId: volumeId,
       type: 'chapter',
       title,
-      summary: '',
+      summary: index === 0 ? initialChapterSummary?.trim() ?? '' : '',
       order: index,
       createdAt: now,
       updatedAt: now,
@@ -104,9 +111,9 @@ async function createShortNovelSkeleton(
       projectId: scope.projectId,
       outlineNodeId,
       title,
-      content: '',
-      wordCount: 0,
-      status: 'outline',
+      content: index === 0 && initialChapterContent ? plainTextToHtml(initialChapterContent) : '',
+      wordCount: index === 0 && initialChapterContent ? countWords(initialChapterContent) : 0,
+      status: index === 0 && initialChapterContent ? 'draft' : 'outline',
       order: index,
       notes: '',
       createdAt: now,
@@ -123,6 +130,11 @@ export async function createWorkspace(
   input: CreateWorkspaceInput,
   options: CreateWorkspaceOptions = {},
 ): Promise<CreatedWorkspace> {
+  const initialChapterSummary = options.initialChapterSummary?.trim()
+  const initialChapterContent = options.initialChapterContent?.trim()
+  if ((initialChapterSummary || initialChapterContent) && (options.kind !== 'novel' || options.novelProfile !== 'short')) throw new Error('首章创意种子或导入正文只适用于短篇小说工作区')
+  if (initialChapterSummary && initialChapterSummary.length > 4_000) throw new Error('首章创意种子不得超过 4000 字符')
+  if (initialChapterContent && (initialChapterContent.length > 200_000 || countWords(initialChapterContent) > 25_000)) throw new Error('导入正文不得超过 20 万字符或 25,000 字')
   const now = Date.now()
   const preparedProject = projectRoot(input, options, now)
   const genres = input.genres.length ? [...input.genres] : ['other']
@@ -173,7 +185,7 @@ export async function createWorkspace(
     const workId = await db.works.add(work) as number
     const scope = { projectId, worldId, workId }
     if (work.kind === 'novel' && work.novelProfile === 'short') {
-      await createShortNovelSkeleton(scope, work.targetWordCount, options.preferredChapterCount, now)
+      await createShortNovelSkeleton(scope, work.targetWordCount, options.preferredChapterCount, initialChapterSummary, initialChapterContent, now)
       await db.shortNovelProductions.add(buildShortNovelProductionRecordV1(scope, now))
     }
     const createdWorld = { ...world, id: worldId }

@@ -5,6 +5,7 @@ export const CREATION_RELEASE_SCHEMAS_V1 = Object.freeze({
   'short-novel': 'storyforge.short-novel-release',
   screenplay: 'storyforge.screenplay-release',
   comic: 'storyforge.comic-release',
+  'motion-drama': 'storyforge.motion-drama-release',
 } as const satisfies Record<CreationProductKindV1, string>)
 
 function positiveInteger(value: unknown): boolean {

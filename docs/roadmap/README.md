@@ -1,6 +1,6 @@
 # StoryForge 当前施工路线
 
-> 版本：1.4.0 · 更新：2026-09-06 · 权威层级：L2
+> 版本：1.5.0 · 更新：2026-09-09 · 权威层级：L2
 > 顺序来自项目总纲 §11。任务只有进入本文件并满足前置，才是当前 backlog；旧阶段号不自动续用。
 
 ## 状态
@@ -32,13 +32,11 @@ Phase 5 已完成世界观/故事/角色/主支线/大纲/细纲/正文、候选
 
 ## 阶段 C · 独立创作产品
 
-短篇、小说转剧本和小说转漫画已经完成当前工程闭环并进入 [`COMPLETED.md`](./COMPLETED.md)。新增的漫剧前期生产必须继续保持独立产品闭环；它可以复用稳定底座，但不能复用页漫/剧本正式表或建立万能 Agent。
+短篇、小说转剧本、小说转漫画和漫剧前期生产已经分别完成当前工程闭环并进入 [`COMPLETED.md`](./COMPLETED.md)。四个产品保持独立 owner、生产表、工作台和 Release，只复用已验证的共享底座。
 
 共同边界、研究索引和集成顺序以 [`INDEPENDENT-CREATION-DEVELOPMENT-PLAN.md`](./INDEPENDENT-CREATION-DEVELOPMENT-PLAN.md) 为入口；实际施工必须分别使用 [`SHORT-NOVEL-DEVELOPMENT-PLAN.md`](./SHORT-NOVEL-DEVELOPMENT-PLAN.md)、[`NOVEL-TO-SCREENPLAY-DEVELOPMENT-PLAN.md`](./NOVEL-TO-SCREENPLAY-DEVELOPMENT-PLAN.md) 或 [`NOVEL-TO-COMIC-DEVELOPMENT-PLAN.md`](./NOVEL-TO-COMIC-DEVELOPMENT-PLAN.md)。三方案隔离结论见 [`INDEPENDENT-CREATION-PLAN-AUDIT.md`](./INDEPENDENT-CREATION-PLAN-AUDIT.md)。不得从现有单次 Prompt 骨架直接扩成一键全自动生成。
 
-| ID | 状态 | 工作 | 前置与完成重点 |
-|---|---|---|---|
-| C-MOTION-DRAMA-01 | IN_PROGRESS | 漫剧前期生产完整产品 | 一句话/小说→系列/分集→漫剧剧本→版本化物料→分镜/参考帧→Image/Video Prompt IR→工具适配包/release；终点在视频生成前 |
+漫剧的现行产品契约、专业流程与维护边界见 [`MOTION-DRAMA-PREPRODUCTION-DEVELOPMENT-PLAN.md`](./MOTION-DRAMA-PREPRODUCTION-DEVELOPMENT-PLAN.md)；后续 provider 适配和内容质量优化作为增量维护进入，不重新打开已完成主链。
 
 ## 阶段 D · 世界引擎（已完成架构基线）
 

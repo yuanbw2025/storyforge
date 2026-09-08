@@ -5,6 +5,7 @@ export function workKindLabel(work: Pick<Work, 'kind' | 'novelProfile'>): string
   const kind = effectiveWorkKind(work)
   if (kind === 'screenplay') return '剧本'
   if (kind === 'comic') return '漫画'
+  if (kind === 'motion-drama') return '漫剧'
   return effectiveNovelProfile(work) === 'short' ? '小说 · 短篇' : '小说 · 长篇'
 }
 

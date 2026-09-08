@@ -1,13 +1,13 @@
 # StoryForge 已完成能力索引
 
-> 版本：1.8.0 · 更新：2026-09-06
+> 版本：1.9.0 · 更新：2026-09-09
 > 只登记可长期成立且已进入当前治理交付树、并有当前代码/检查器证据的能力。完成表示声明范围已交付，不表示永无 Bug、具体产品已经完成或文学质量不再演进。
 
 ## 已完成基础能力
 
 | ID | 能力 | 当前证据 |
 |---|---|---|
-| BASE-DATA-01 | schema required tables 与 `PROJECT_TABLES` 同源治理 | 当前 schema v4、受支持 v1→v2→v3→v4 纯加表迁移、`check:required-tables`，当前 102 张表；严格导入导出/删除测试 |
+| BASE-DATA-01 | schema required tables 与 `PROJECT_TABLES` 同源治理 | 当前 schema v6、受支持 v1→v2→v3→v4→v5→v6 纯加表迁移、`check:required-tables`，当前 118 张表；严格导入导出/删除测试 |
 | BASE-REG-01 | 三注册表成为 AI 读、AI 写和表生命周期单一入口 | `src/lib/registry`、`check:architecture` |
 | BASE-AI-01 | 生产模型调用机器登记与分类 | `ai-entry-registry.json`、`check:ai-entry-registry` |
 | BASE-HARNESS-01 | durable run、事件、checkpoint、stale、采纳与 receipt 基础 | `src/lib/agent/run` 与对应回归套件 |
@@ -29,6 +29,8 @@
 | D-WORLD-04 | 世界 release 纯语义边界 | `PROJECT_TABLES.worldSemantic` 唯一派生、owner/packaging/static checks、`R-WORLD2C`、`R-WORLD2D`、`R-OUTLET1`；排除产品媒资与运行状态 |
 | C-SHORT-01 | 短篇小说独立产品闭环 | `ShortNovelProductionV1`、六个专属 Skill/durable run、轻量工作台、证据审校/定向重写、不可变 `CreationReleaseV1`、三格式导出、`R-SHORT2-professional-production` 与短篇 UI E2E |
 | C-SCREENPLAY-01 | 小说转剧本独立产品闭环 | Product Hub 创建入口、十步专业 Skill/durable Pipeline、事实/因果/删改决定、Beat/Scene Card/场景 AST、来源与戏剧双审查、定点修订、不可变 `CreationReleaseV1`、Fountain/FDX/打印导出、`R-SCREEN2-professional-pipeline` 与剧本 UI E2E；旧一步式入口已拒绝 |
+| C-COMIC-01 | 小说转漫画独立产品闭环 | 十二阶段专业改编、页格/排字/视觉圣经、叙事与视觉审查、真实参考图与权利门、双层不可变 Release、图片/CBZ/PDF 导出、`R-COMIC2-professional-pipeline` 与漫画 UI E2E |
+| C-MOTION-DRAMA-01 | 漫剧前期生产独立产品闭环 | 三种来源入口、系列/物料圣经、八个专业 Skill、逐集剧本/分镜、图片与试听音频版本、Image/Video Prompt IR、Seedance/Runway/LTX/generic 适配包、质量门、不可变 Release、`R-MOTIONDRAMA1-preproduction` 与漫剧 UI E2E；产品终点在视频生成前 |
 
 ## 当前权威基线
 

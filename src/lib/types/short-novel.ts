@@ -135,7 +135,7 @@ export interface ShortNovelReleaseManifestV1 {
   createdAt: number
 }
 
-export type CreationProductKindV1 = 'short-novel' | 'screenplay' | 'comic'
+export type CreationProductKindV1 = 'short-novel' | 'screenplay' | 'comic' | 'motion-drama'
 
 /** Shared append-only envelope. Every product supplies its own closed manifest codec. */
 export interface CreationReleaseV1 {

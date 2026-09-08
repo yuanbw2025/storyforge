@@ -80,7 +80,7 @@
 
 ## 二、上下文源清单（CONTEXT_SOURCES · AI 读什么）
 
-共 99 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
+共 100 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
 
 | key | 标签 | 作用域 | 层级 | 预算(token) |
 |---|---|---|---|---|
@@ -114,6 +114,7 @@
 | `comic.selectedMedia` | 漫画已选媒资证据 | project | L0 | 12000 |
 | `comic.reviewIssues` | 开放漫画审查问题 | project | L0 | 10000 |
 | `comic.currentPages` | 当前漫画页格 | project | L0 | 20000 |
+| `motionDrama.production` | 漫剧系列物料与当前分集生产状态 | project | L0 | 32000 |
 | `adventureRuntime` | 文字冒险玩家视角 | runtime | L0 | 8000 |
 | `textOpenWorldEvolutionRuntime` | 文字开放世界·内部状态演化玩家视角 | runtime | L0 | 8000 |
 | `openWorldRuntime` | 文字开放世界玩家视角 | runtime | L0 | 8000 |
@@ -222,6 +223,12 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `inspirationWorkspaces` | `fragments` `versions` |
 | `itemLedger` | `action` `chapterId` `chapterTitle` `characterId` `heldByName` `itemName` `note` `quantity` |
 | `knowledgeLedger` | `action` `belief` `characterId` `characterName` `factId` `knowledgeKey` `sourceChapterId` `sourceQuote` `sourceType` `statement` `status` `worldGroupId` |
+| `motionDramaAssetSubjects` | `appearance` `basePrompt` `continuityLocks` `identity` `kind` `label` `materials` `negativePrompt` `palette` `prohibitedChanges` `referenceBrief` `sourceUnitKeys` |
+| `motionDramaEpisodes` | `beats` `continuityIn` `continuityOut` `endHook` `logline` `openingHook` `sourceUnitKeys` `synopsis` `title` |
+| `motionDramaReviewIssues` | `category` `evidence` `problem` `sceneKey` `severity` `shotKey` `subjectKey` `suggestion` |
+| `motionDramaScriptScenes` | `characterKeys` `dialogue` `dramaticPurpose` `emotionalTurn` `entryState` `estimatedSeconds` `exitState` `heading` `location` `narration` `soundCues` `sourceUnitKeys` `timeOfDay` `visibleAction` |
+| `motionDramaSeriesBibles` | `bible` |
+| `motionDramaShots` | `cameraAngle` `cameraMovement` `composition` `dialogue` `firstFramePrompt` `imagePrompt` `keyFramePrompt` `lastFramePrompt` `lighting` `narration` `narrativeFunction` `negativeImagePrompt` `negativeVideoPrompt` `performance` `shotSize` `soundPlan` `sourceUnitKeys` `subjectKeys` `targetSeconds` `transitionIn` `transitionOut` `videoPrompt` `visibleAction` |
 | `outlineNodes` | `order` `parentId` `summary` `title` `type` `worldGroupId` |
 | `powerSystems` | `description` `levels` `name` `rules` |
 | `productBuildArtifacts` | `metadataJson` `payloadJson` `qualityJson` `rightsJson` |
@@ -269,7 +276,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `workspace-root-lifecycle` | `projects` | `PROJECT_TABLES + workspace purpose + import trust + world lifecycle` | `src/lib/export/registry-import.ts`<br/>`src/lib/memory/workspace-projection.ts`<br/>`src/lib/world-engine/world-package.ts`<br/>`src/lib/workspace/lifecycle.ts`<br/>`src/lib/workspace/ownership.ts`<br/>`src/lib/world-engine/releases.ts`<br/>`src/lib/workspace/works.ts`<br/>`src/lib/workspace/create-workspace.ts`<br/>`src/lib/world-engine/derivation.ts`<br/>`src/lib/world-engine/promotion.ts`<br/>`src/lib/adaptation/source-manifest.ts` | 2027-08-01 |
 | `world-root-lifecycle` | `worlds` | `PROJECT_TABLES refs + world package trust + world release lifecycle` | `src/lib/world-engine/world-package.ts`<br/>`src/lib/workspace/lifecycle.ts`<br/>`src/lib/workspace/ownership.ts`<br/>`src/lib/world-engine/releases.ts`<br/>`src/lib/workspace/create-workspace.ts`<br/>`src/lib/world-engine/derivation.ts`<br/>`src/lib/world-engine/promotion.ts` | 2027-08-01 |
 | `work-root-lifecycle` | `works` | `PROJECT_TABLES refs + WorkspaceScope + stable work code + narrative lifecycle` | `src/lib/memory/workspace-projection.ts`<br/>`src/lib/workspace/lifecycle.ts`<br/>`src/lib/workspace/ownership.ts`<br/>`src/lib/workspace/works.ts`<br/>`src/lib/workspace/create-workspace.ts`<br/>`src/lib/world-engine/derivation.ts`<br/>`src/lib/adaptation/source-manifest.ts`<br/>`src/lib/adaptation/completion.ts`<br/>`src/lib/short-novel/service.ts`<br/>`src/lib/screenplay/release.ts`<br/>`src/lib/comic/release.ts` | 2027-08-01 |
-| `adaptation-root-lifecycle` | `adaptationProjects` | `PROJECT_TABLES + ADOPTION_SCHEMAS + adaptation state machine + source manifest CAS` | `src/lib/adaptation/source-manifest.ts`<br/>`src/lib/adaptation/completion.ts`<br/>`src/lib/adaptation/analysis.ts`<br/>`src/lib/screenplay/production.ts`<br/>`src/lib/screenplay/release.ts`<br/>`src/lib/comic/production.ts`<br/>`src/lib/comic/release.ts` | 2027-08-01 |
+| `adaptation-root-lifecycle` | `adaptationProjects` | `PROJECT_TABLES + ADOPTION_SCHEMAS + adaptation state machine + source manifest CAS` | `src/lib/adaptation/source-manifest.ts`<br/>`src/lib/adaptation/completion.ts`<br/>`src/lib/adaptation/analysis.ts`<br/>`src/lib/screenplay/production.ts`<br/>`src/lib/screenplay/release.ts`<br/>`src/lib/comic/production.ts`<br/>`src/lib/comic/release.ts`<br/>`src/lib/motion-drama/service.ts`<br/>`src/lib/motion-drama/release.ts` | 2027-08-01 |
 | `adaptation-source-manifest-lifecycle` | `adaptationSourceUnits` | `PROJECT_TABLES + immutable source manifest policy + canonical chapter sequence` | `src/lib/adaptation/source-manifest.ts` | 2027-08-01 |
 | `adaptation-source-fact-lifecycle` | `adaptationSourceFacts` | `PROJECT_TABLES + FIELD_REGISTRY + closed source-fact contract + adaptation manifest CAS` | `src/lib/adaptation/analysis.ts` | 2027-09-01 |
 | `adaptation-causal-edge-lifecycle` | `adaptationCausalEdges` | `PROJECT_TABLES + FIELD_REGISTRY + closed causal-edge contract + same-manifest fact graph validator` | `src/lib/adaptation/analysis.ts` | 2027-09-01 |
@@ -282,14 +289,26 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `comic-script-beat-lifecycle` | `comicScriptBeats` | `PROJECT_TABLES + FIELD_REGISTRY + closed comic beat contract + source/decision CAS` | `src/lib/comic/production.ts` | 2027-09-01 |
 | `comic-page-plan-lifecycle` | `comicPagePlans` | `PROJECT_TABLES + FIELD_REGISTRY + closed page rhythm contract + script beat CAS` | `src/lib/comic/production.ts` | 2027-09-01 |
 | `comic-review-issue-lifecycle` | `comicReviewIssues` | `PROJECT_TABLES + FIELD_REGISTRY + page/panel/subject/asset/revision validator` | `src/lib/comic/production.ts` | 2027-09-01 |
-| `creation-release-asset-lifecycle` | `creationReleaseAssets` | `PROJECT_TABLES + immutable release manifest + content hash + registered media strong reference` | `src/lib/comic/release.ts` | 2027-09-01 |
+| `creation-release-asset-lifecycle` | `creationReleaseAssets` | `PROJECT_TABLES + immutable release manifest + content hash + registered media strong reference` | `src/lib/comic/release.ts`<br/>`src/lib/motion-drama/release.ts` | 2027-09-01 |
 | `comic-panel-lifecycle` | `comicPanels` | `PROJECT_TABLES + FIELD_REGISTRY + ADOPTION_SCHEMAS + comic panel validator` | `src/lib/comic/service.ts`<br/>`src/lib/comic/media-service.ts`<br/>`src/lib/comic/production.ts` | 2027-08-01 |
 | `comic-visual-subject-lifecycle` | `comicVisualSubjects` | `PROJECT_TABLES + FIELD_REGISTRY + ADOPTION_SCHEMAS + Work cast/source/asset stable-key validator` | `src/lib/comic/service.ts`<br/>`src/lib/comic/media-service.ts`<br/>`src/lib/comic/production.ts` | 2027-08-01 |
 | `comic-media-asset-lifecycle` | `comicMediaAssets` | `PROJECT_TABLES + media capability registry + hash/rights/provider receipt + stable-key reference checks` | `src/lib/comic/media-service.ts`<br/>`src/lib/comic/service.ts` | 2027-08-01 |
+| `motion-drama-production-lifecycle` | `motionDramaProductions` | `PROJECT_TABLES + motion-drama state machine + adaptation source manifest CAS` | `src/lib/adaptation/source-manifest.ts`<br/>`src/lib/motion-drama/service.ts`<br/>`src/lib/motion-drama/prompts.ts`<br/>`src/lib/motion-drama/prompt-pack.ts`<br/>`src/lib/motion-drama/release.ts` | 2027-09-09 |
+| `motion-drama-series-bible-lifecycle` | `motionDramaSeriesBibles` | `PROJECT_TABLES + FIELD_REGISTRY + append-only bible version + adaptation CAS` | `src/lib/motion-drama/service.ts` | 2027-09-09 |
+| `motion-drama-episode-lifecycle` | `motionDramaEpisodes` | `PROJECT_TABLES + FIELD_REGISTRY + episode contract + source manifest CAS` | `src/lib/motion-drama/service.ts` | 2027-09-09 |
+| `motion-drama-script-scene-lifecycle` | `motionDramaScriptScenes` | `PROJECT_TABLES + FIELD_REGISTRY + scene/dialogue/sound closed contract + episode CAS` | `src/lib/motion-drama/service.ts` | 2027-09-09 |
+| `motion-drama-asset-subject-lifecycle` | `motionDramaAssetSubjects` | `PROJECT_TABLES + FIELD_REGISTRY + stable subject key + versioned media evidence` | `src/lib/motion-drama/service.ts` | 2027-09-09 |
+| `motion-drama-shot-lifecycle` | `motionDramaShots` | `PROJECT_TABLES + FIELD_REGISTRY + shot duration/subject/source validation + dual prompt IR` | `src/lib/motion-drama/service.ts` | 2027-09-09 |
+| `motion-drama-review-issue-lifecycle` | `motionDramaReviewIssues` | `PROJECT_TABLES + FIELD_REGISTRY + current episode revision evidence` | `src/lib/motion-drama/service.ts` | 2027-09-09 |
+| `motion-drama-media-lifecycle` | `motionDramaAssetVersions` | `PROJECT_TABLES + shared media blob + content hash + rights + explicit author selection` | `src/lib/motion-drama/service.ts`<br/>`src/lib/motion-drama/release.ts` | 2027-09-09 |
+| `motion-drama-prompt-pack-lifecycle` | `motionDramaPromptPacks` | `provider-neutral Image/Video Prompt IR + deterministic provider adapters + content hash` | `src/lib/motion-drama/service.ts`<br/>`src/lib/motion-drama/prompts.ts`<br/>`src/lib/motion-drama/prompt-pack.ts`<br/>`src/lib/motion-drama/release.ts` | 2027-09-09 |
+| `motion-drama-asset-binding-lifecycle` | `motionDramaAssetBindings` | `PROJECT_TABLES + stable subject/version/shot keys + per-episode usage contract` | `src/lib/motion-drama/service.ts` | 2027-09-09 |
+| `motion-drama-shot-reference-lifecycle` | `motionDramaShotReferences` | `PROJECT_TABLES + shared media blob + rights + one selected reference per shot role` | `src/lib/motion-drama/service.ts`<br/>`src/lib/motion-drama/release.ts` | 2027-09-09 |
+| `motion-drama-prompt-override-lifecycle` | `motionDramaPromptOverrides` | `PROJECT_TABLES + work/episode override precedence + registered stage keys` | `src/lib/motion-drama/prompts.ts` | 2027-09-09 |
 | `media-blob-object-lifecycle` | `mediaBlobObjects` | `PROJECT_TABLES portable binary + PRODUCT_PRODUCTION_MEDIA_OBJECT_POLICY + SHA-256/MIME/dimension checks + lease/reference-aware GC` | `src/lib/media/blob-store.ts`<br/>`src/lib/comic/media-service.ts`<br/>`src/lib/product-production/media-blob-store.ts`<br/>`src/lib/product-production/artifact-store.ts` | 2027-08-21 |
 | `short-novel-outline-skeleton-lifecycle` | `outlineNodes` | `PROJECT_TABLES tree refs + WorkspaceScope + SHORT_NOVEL_WORKFLOW_OVERRIDES` | `src/lib/workspace/create-workspace.ts`<br/>`src/lib/short-novel/service.ts`<br/>`src/lib/agent/run/short-novel-durable.ts` | 2027-08-01 |
 | `short-novel-production-lifecycle` | `shortNovelProductions` | `SHORT_NOVEL_PRODUCTION_V1 + PROJECT_TABLES + FIELD_REGISTRY + durable Harness` | `src/lib/workspace/create-workspace.ts`<br/>`src/lib/short-novel/service.ts`<br/>`src/lib/agent/run/short-novel-durable.ts` | 2027-09-06 |
-| `independent-creation-release-lifecycle` | `creationReleases` | `SHORT_NOVEL_RELEASE_V1 + SCREENPLAY_RELEASE_V1 + COMIC_RELEASE_V1 + PROJECT_TABLES + completion gates + immutable hash` | `src/lib/short-novel/service.ts`<br/>`src/lib/screenplay/release.ts`<br/>`src/lib/comic/release.ts` | 2027-09-06 |
+| `independent-creation-release-lifecycle` | `creationReleases` | `SHORT_NOVEL_RELEASE_V1 + SCREENPLAY_RELEASE_V1 + COMIC_RELEASE_V1 + MOTION_DRAMA_RELEASE_V1 + PROJECT_TABLES + completion gates + immutable hash` | `src/lib/short-novel/service.ts`<br/>`src/lib/screenplay/release.ts`<br/>`src/lib/comic/release.ts`<br/>`src/lib/motion-drama/release.ts` | 2027-09-06 |
 | `chapter-delete-lifecycle` | `chapters` | `PROJECT_TABLES refs + WorkspaceScope + chapter deletion impact policy + SHORT_NOVEL_PRODUCTION_V1 + durable Harness` | `src/lib/chapters/lifecycle.ts`<br/>`src/lib/workspace/create-workspace.ts`<br/>`src/lib/short-novel/service.ts`<br/>`src/lib/agent/run/short-novel-durable.ts` | 2027-08-01 |
 | `chapter-emotion-delete-lifecycle` | `emotionBeatCards` | `PROJECT_TABLES chapter refs` | `src/lib/chapters/lifecycle.ts` | 2027-08-01 |
 | `product-production-roots` | `productProductions` | `PRODUCT_PRODUCTION_COMMAND_POLICY + PRODUCT_PRODUCTION_ARTIFACT_POLICY + PROJECT_TABLES` | `src/lib/product-production/commands.ts`<br/>`src/lib/product-production/artifact-store.ts`<br/>`src/lib/product-production/media-blob-store.ts`<br/>`src/lib/product-production/adoption.ts`<br/>`src/lib/product-production/scheduler.ts` | 2027-08-21 |
@@ -303,7 +322,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 ## 四、AI 调用点（消耗统计 category · 在哪触发)
 
 共 43 个 category。
-未分类调用: 0 个。动态 category 调用: 36 个。
+未分类调用: 0 个。动态 category 调用: 37 个。
 
 | category | 触发文件 |
 |---|---|
@@ -382,6 +401,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 - `src/lib/evals/agent-harness/story-arc-main-path-browser.ts:98 · chat`
 - `src/lib/evals/creative-reliability/browser.ts:89 · chat`
 - `src/lib/generation/workflow-generation-node.ts:23 · ai.start`
+- `src/lib/motion-drama/durable-production.ts:144 · chat`
 - `src/lib/node-authoring/executor.ts:417 · chat`
 - `src/lib/open-world/evolution-harness.ts:246 · chat`
 - `src/lib/open-world/harness.ts:139 · chat`
@@ -435,4 +455,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `a77ebcde`
+生成时间基准:commit `a3e4ec9d`

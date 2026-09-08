@@ -36,11 +36,12 @@ describe('R-HARNESS13 · Agent Skill 单一事实源', () => {
       'prose.generate',
       'prose.continue',
     ]))
-    expect(new Set(AGENT_SKILLS.map(skill => skill.owner)).size).toBe(10)
+    expect(new Set(AGENT_SKILLS.map(skill => skill.owner)).size).toBe(11)
     expect(AGENT_SKILLS.filter(skill => skill.owner === 'short-novel-production-agent')).toHaveLength(6)
     expect(AGENT_SKILLS.filter(skill => skill.owner === 'screenplay-product')).toHaveLength(8)
     expect(AGENT_SKILLS.filter(skill => skill.owner === 'adaptation-products')).toHaveLength(2)
     expect(AGENT_SKILLS.filter(skill => skill.owner === 'comic-product')).toHaveLength(10)
+    expect(AGENT_SKILLS.filter(skill => skill.owner === 'motion-drama-product')).toHaveLength(8)
   })
 
   it('允许同一 Agent 增加非默认 Skill，但拒绝第二个默认 Skill', () => {

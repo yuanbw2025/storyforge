@@ -43,6 +43,8 @@ import type {
   AnyAgentRunEventV1,
   ComicTargetSpecV1,
   ProductProductionBriefV3,
+  MotionDramaPromptStageV1,
+  MotionDramaTargetSpecV1,
   ScreenplayTargetSpecV1,
   WorkspaceScope,
 } from '../../src/lib/types'
@@ -63,6 +65,14 @@ import {
   ensureShortNovelProductionV1,
   publishShortNovelReleaseV1,
 } from '../../src/lib/short-novel/service'
+import {
+  adoptMotionDramaCandidateV1,
+  commitMotionDramaShotReferenceV1,
+  loadMotionDramaStudioV1,
+} from '../../src/lib/motion-drama/service'
+import { saveMotionDramaPromptOverrideV1 } from '../../src/lib/motion-drama/prompts'
+import { compileMotionDramaPromptPackV1 } from '../../src/lib/motion-drama/prompt-pack'
+import { publishMotionDramaReleaseV1 } from '../../src/lib/motion-drama/release'
 
 const now = 1_700_000_000_000 // 固定时间戳,保证派生/手写两版导出可逐字段比对
 
@@ -123,6 +133,12 @@ const comicTargetSpec: ComicTargetSpecV1 = {
     minimumWidth: 1024,
     minimumHeight: 1024,
   },
+}
+
+const motionDramaTargetSpec: MotionDramaTargetSpecV1 = {
+  format: 'motion-drama', language: 'zh-CN', episodeCount: 1, targetSecondsPerEpisode: 30,
+  aspectRatio: '9:16', narrativeMode: 'animated-comic', audience: '大众', rating: 'PG-13',
+  dialogueDensity: 'balanced', artDirection: '东方奇幻动态漫画，稳定人物与空间设计', providerTargets: ['generic'],
 }
 
 function fixturePng(width = 1200, height = 1700): ArrayBuffer {
@@ -371,7 +387,64 @@ async function seedAdaptationProducts(sourceScope: WorkspaceScope) {
   comicRoot = (await db.adaptationProjects.get(comicRoot.id!))!
   const comicRelease = await publishComicReleaseV1({ scope: comic.scope, expectedAdaptationRevision: comicRoot.revision, tier: 'visual', label: '青云山门漫画视觉版 v1' })
   comicRoot = (await db.adaptationProjects.get(comicRoot.id!))!
-  return { screenplay, screenplayRoot, screenplayScene, comic, comicRoot, comicPage, comicMedia, comicRelease }
+  const motionDrama = await seedMotionDramaProduct(sourceScope)
+  return { screenplay, screenplayRoot, screenplayScene, comic, comicRoot, comicPage, comicMedia, comicRelease, motionDrama }
+}
+
+async function seedMotionDramaProduct(sourceScope: WorkspaceScope) {
+  const created = await createAdaptation({ sourceScope, sourceWorkId: sourceScope.workId, title: '青云山门 · 漫剧', sourceSelection: { mode: 'entire-work' }, medium: 'motion-drama', targetSpec: motionDramaTargetSpec })
+  const unit = (await listActiveSourceUnits(created.adaptation.id!)).find(row => row.sourceKind === 'chapter')
+  if (!unit) throw new Error('全量夹具缺少漫剧来源章节单元')
+  const adopt = async (stage: MotionDramaPromptStageV1, payload: unknown) => {
+    const studio = await loadMotionDramaStudioV1(created.scope)
+    await adoptMotionDramaCandidateV1({ scope: created.scope, stage, payload, episodeNumber: 1, expectedAdaptationRevision: studio.adaptation.revision, expectedProductionRevision: studio.production.revision })
+  }
+  await adopt('series-bible', {
+    version: 1, titlePromise: '每集一次选择，逐步揭开青云山门的代价。', logline: '林惊羽必须在山门关闭前放下复仇并守住同门。',
+    coreTheme: '守护不是遗忘。', emotionalPromise: '紧张奇幻中的克制成长。', audiencePromise: '每集兑现一次选择并留下更大的身份谜团。',
+    storyEngine: '山门异变不断逼迫林惊羽在复仇线索与眼前生命之间选择。', worldRules: ['山门日落后不可逆地关闭。'],
+    seasonArc: '从只追逐仇敌到主动守护山门众人。', protagonistArc: '林惊羽学会让责任先于复仇。', relationshipArcs: ['林惊羽与守门人的不信任转为并肩。'],
+    episodeArchitecture: '3 秒异常钩子，20 秒行动升级，7 秒选择与尾钩。', hookPatterns: ['倒计时', '身份反转'], visualLanguage: ['青灰晨雾与金色山门对撞'],
+    soundLanguage: ['钟声承担倒计时'], continuityRules: ['青锋剑始终佩于左腰'], productionConstraints: ['单镜头不超过 10 秒'],
+  })
+  await adopt('asset-bible', [{
+    stableKey: 'character.lin-jingyu', kind: 'character', label: '林惊羽', identity: '青年剑修，左腰佩青锋剑。', appearance: '黑发束冠，青灰窄袖袍。',
+    palette: ['青灰', '金色'], materials: ['布', '青铜'], continuityLocks: ['青锋剑在左腰'], prohibitedChanges: ['不得交换佩剑方向'],
+    basePrompt: '东方奇幻青年剑修角色设定，青灰窄袖袍，左腰青锋剑。', negativePrompt: '身份漂移，左右翻转，画面文字。', referenceBrief: '正侧背三视图与持剑动作。', sourceUnitKeys: [unit.sourceUnitKey],
+  }])
+  await adopt('episode-outline', {
+    stableKey: 'episode.1', episodeNumber: 1, title: '山门将闭', logline: '林惊羽必须在复仇线索和守门之间作出选择。', synopsis: '山门倒计时启动，仇敌留下线索，林惊羽最终转身挡住冲击。',
+    openingHook: '山门金钟无风自鸣。', beats: [
+      { stableKey: 'episode.1.beat.1', order: 0, function: 'hook', visibleAction: '金钟自鸣，门缝开始合拢。', conflict: '林惊羽发现仇敌脚印通向门外。', turn: '门内传来求救。', targetSeconds: 10, sourceUnitKeys: [unit.sourceUnitKey] },
+      { stableKey: 'episode.1.beat.2', order: 1, function: 'climax', visibleAction: '林惊羽转身以剑撑门。', conflict: '追敌和救人无法同时完成。', turn: '他选择守门。', targetSeconds: 20, sourceUnitKeys: [unit.sourceUnitKey] },
+    ], endHook: '门外脚印忽然出现在他身后。', continuityIn: [], continuityOut: ['林惊羽留在门内。'], sourceUnitKeys: [unit.sourceUnitKey],
+  })
+  await adopt('episode-script', [{
+    stableKey: 'episode.1.scene.1', episodeNumber: 1, sceneNumber: 1, order: 0, heading: '外景·青云山门·晨', location: '青云山门', timeOfDay: '晨',
+    dramaticPurpose: '把复仇与守护变成同一刻的动作选择。', entryState: '林惊羽准备追出山门。', exitState: '林惊羽转身撑住山门。',
+    visibleAction: '金钟自鸣，石门合拢；林惊羽看一眼门外脚印，转身拔剑卡住门缝。', dialogue: [{ speakerKey: 'character.lin-jingyu', text: '先救人。', delivery: '压低声音，决定已下', estimatedSeconds: 2 }],
+    narration: '', soundCues: [{ kind: 'ambience', cue: '山风与沉重石门摩擦', timing: '全场持续', subjectKey: null }], emotionalTurn: '复仇冲动转为主动承担。', estimatedSeconds: 30,
+    characterKeys: ['character.lin-jingyu'], sourceUnitKeys: [unit.sourceUnitKey],
+  }])
+  await adopt('shot-design', [
+    { stableKey: 'episode.1.shot.1', episodeNumber: 1, sceneKey: 'episode.1.scene.1', shotNumber: 1, order: 0, narrativeFunction: '建立倒计时和诱惑', targetSeconds: 10, shotSize: 'wide', cameraAngle: 'low', cameraMovement: 'dolly', composition: '山门占上方三分之二，人物位于门缝前。', visibleAction: '金钟自鸣，门缝缩小，林惊羽看向门外脚印。', performance: '身体朝外，目光被门内求救拉回。', lighting: '青灰晨雾中门缝透出金光。', transitionIn: 'cut', transitionOut: 'match-cut', dialogue: '', narration: '', soundPlan: [{ kind: 'ambience', cue: '山风与钟声', timing: '0-10s', subjectKey: null }], subjectKeys: ['character.lin-jingyu'], sourceUnitKeys: [unit.sourceUnitKey], imagePrompt: '', negativeImagePrompt: '', firstFramePrompt: '', keyFramePrompt: '', lastFramePrompt: '', videoPrompt: '', negativeVideoPrompt: '' },
+    { stableKey: 'episode.1.shot.2', episodeNumber: 1, sceneKey: 'episode.1.scene.1', shotNumber: 2, order: 1, narrativeFunction: '兑现选择并留钩', targetSeconds: 20, shotSize: 'medium', cameraAngle: 'eye-level', cameraMovement: 'track', composition: '人物横向跨步回身，剑与门缝形成交叉线。', visibleAction: '林惊羽回身拔剑卡门，门外脚印却在他身后显现。', performance: '先决绝发力，再因脚印出现骤然屏息。', lighting: '金光被剑身切成两道。', transitionIn: 'match-cut', transitionOut: 'cut-to-black', dialogue: '林惊羽：先救人。', narration: '', soundPlan: [{ kind: 'sfx', cue: '剑刃卡入石缝', timing: '12s', subjectKey: null }], subjectKeys: ['character.lin-jingyu'], sourceUnitKeys: [unit.sourceUnitKey], imagePrompt: '', negativeImagePrompt: '', firstFramePrompt: '', keyFramePrompt: '', lastFramePrompt: '', videoPrompt: '', negativeVideoPrompt: '' },
+  ])
+  let studio = await loadMotionDramaStudioV1(created.scope)
+  await adopt('image-prompts', studio.shots.map(shot => ({ shotKey: shot.stableKey, expectedRevision: shot.revision, imagePrompt: `${shot.visibleAction}，${shot.composition}，东方奇幻精品漫剧定帧。`, negativeImagePrompt: '身份漂移，左右翻转，画面文字，水印。', firstFramePrompt: '动作开始前稳定姿态。', keyFramePrompt: '动作冲突峰值。', lastFramePrompt: '动作完成后的明确停点。' })))
+  studio = await loadMotionDramaStudioV1(created.scope)
+  await adopt('video-prompts', studio.shots.map(shot => ({ shotKey: shot.stableKey, expectedRevision: shot.revision, videoPrompt: `初始稳定；${shot.visibleAction}；摄影机${shot.cameraMovement}；动作落在明确停点。`, negativeVideoPrompt: '抽搐，融化，身份切换，镜头乱摆。' })))
+  await adopt('quality-review', [{ stableKey: 'episode.1.issue.1', episodeNumber: 1, sceneKey: 'episode.1.scene.1', shotKey: 'episode.1.shot.2', subjectKey: null, category: 'sound', severity: 'minor', evidence: '尾钩需要清晰声音停点。', problem: '脚印显现尚无独立声音标记。', suggestion: '目标工具制作时补一记短促砂砾声。' }])
+  await saveMotionDramaPromptOverrideV1({ scope: created.scope, stage: 'video-prompts', overrideScope: 'work', episodeNumber: 1, instruction: '所有动作必须说明起点、方向、速度和停点。' })
+  studio = await loadMotionDramaStudioV1(created.scope)
+  const firstSubject = studio.assets[0]; const firstShot = studio.shots[0]
+  await db.motionDramaAssetBindings.add({ projectId: created.scope.projectId, workId: created.scope.workId, adaptationProjectId: created.adaptation.id!, episodeNumber: 1, shotKey: firstShot.stableKey, subjectKey: firstSubject.stableKey, assetVersionKey: firstSubject.selectedVersionKey, usage: '镜头主体身份与服装连续性', createdAt: now, updatedAt: now })
+  await commitMotionDramaShotReferenceV1({ scope: created.scope, shotKey: firstShot.stableKey, role: 'start-frame', data: fixturePng(720, 1280), rights: { version: 1, source: 'author-upload', commercialUse: 'allowed', redistribution: 'allowed', attribution: 'StoryForge 全量夹具', declaration: '测试夹具确认拥有该分镜参考图完整使用权。', declaredAt: now } })
+  studio = await loadMotionDramaStudioV1(created.scope)
+  await compileMotionDramaPromptPackV1({ scope: created.scope, episodeNumber: 1, provider: 'generic', expectedProductionRevision: studio.production.revision })
+  studio = await loadMotionDramaStudioV1(created.scope)
+  const release = await publishMotionDramaReleaseV1({ scope: created.scope, episodeNumbers: [1], providers: ['generic'], tier: 'prompt-only', expectedProductionRevision: studio.production.revision, label: '青云山门漫剧前期包 v1' })
+  return { created, release }
 }
 
 async function stampFixtureOwners(projectId: number, worldId: number, workId: number): Promise<void> {

@@ -1,4 +1,4 @@
-import Dexie from 'dexie'
+import Dexie, { type Table } from 'dexie'
 import { nanoid } from 'nanoid'
 import { db } from '../db/schema'
 import type {
@@ -8,6 +8,8 @@ import type {
   Chapter,
   ComicGlobalVisualBibleV1,
   ComicTargetSpecV1,
+  MotionDramaProductionV1,
+  MotionDramaTargetSpecV1,
   OutlineNode,
   ScreenplayTargetSpecV1,
   StoryCore,
@@ -26,6 +28,7 @@ import {
   assertAdaptationProjectInvariant,
   assertComicGlobalVisualBibleV1,
   assertComicTargetSpecV1,
+  assertMotionDramaTargetSpecV1,
   assertScreenplayTargetSpecV1,
 } from './contracts'
 
@@ -40,6 +43,7 @@ export type CreateAdaptationInput = {
 } & (
   | { medium: 'screenplay'; targetSpec: ScreenplayTargetSpecV1 }
   | { medium: 'comic'; targetSpec: ComicTargetSpecV1 }
+  | { medium: 'motion-drama'; targetSpec: MotionDramaTargetSpecV1 }
 )
 
 export interface ResolvedSourceManifestV1 {
@@ -407,7 +411,8 @@ export async function createAdaptation(input: CreateAdaptationInput): Promise<{
   sourceStats: Pick<ResolvedSourceManifestV1, 'coverage' | 'writtenChapterCount' | 'totalWordCount' | 'outlineOnlyUnitCount'>
 }> {
   if (input.medium === 'screenplay') assertScreenplayTargetSpecV1(input.targetSpec)
-  else assertComicTargetSpecV1(input.targetSpec)
+  else if (input.medium === 'comic') assertComicTargetSpecV1(input.targetSpec)
+  else assertMotionDramaTargetSpecV1(input.targetSpec)
   const sourceScope = await resolveScope({ scope: input.sourceScope })
   if (sourceScope.workId !== input.sourceWorkId) throw new Error('[adaptation] sourceWorkId 必须等于授权 scope.workId')
   const now = Date.now()
@@ -417,6 +422,7 @@ export async function createAdaptation(input: CreateAdaptationInput): Promise<{
     db.storyCores,
     db.adaptationProjects,
     db.adaptationSourceUnits,
+    db.motionDramaProductions,
   ), async () => {
     const [project, world, sourceWork] = await Promise.all([
       db.projects.get(sourceScope.projectId),
@@ -484,6 +490,22 @@ export async function createAdaptation(input: CreateAdaptationInput): Promise<{
       activeSourceManifestHash: manifest.manifestHash,
     })
     await db.adaptationSourceUnits.bulkAdd(manifest.units.map(unit => stampNewRecord(targetScope, 'adaptationSourceUnits', unit, { owner: 'work' })))
+    if (input.medium === 'motion-drama') {
+      const production: MotionDramaProductionV1 = stampNewRecord(targetScope, 'motionDramaProductions', {
+        projectId: project.id!,
+        worldId: world.id!,
+        workId: targetWorkId,
+        adaptationProjectId,
+        phase: 'source',
+        activeSeriesBibleVersion: null,
+        currentEpisodeNumber: 1,
+        currentReleaseId: null,
+        revision: 1,
+        createdAt: now,
+        updatedAt: now,
+      }, { owner: 'work' })
+      await db.motionDramaProductions.add(production)
+    }
     await db.projects.update(project.id!, {
       activeWorldId: world.id!,
       activeWorkId: targetWork.id!,
@@ -681,13 +703,21 @@ export async function inspectAdaptationFreshness(adaptationProjectId: number): P
   }
 }
 
-export async function resyncAdaptationSource(input: { adaptationProjectId: number; expectedRevision: number }): Promise<AdaptationProject> {
+export async function resyncAdaptationSource(input: {
+  adaptationProjectId: number
+  expectedRevision: number
+  /** Product-owned draft tables that must join the source-version CAS transaction. */
+  additionalTransactionTables?: readonly Table<any, any>[]
+  /** Product cleanup performed atomically before the new source manifest becomes active. */
+  beforeSourceCommit?: (context: { root: AdaptationProject; nextManifestVersion: number }) => Promise<void>
+}): Promise<AdaptationProject> {
   return db.transaction('rw', scopeTransactionTables(
     db.outlineNodes,
     db.chapters,
     db.storyCores,
     db.adaptationProjects,
     db.adaptationSourceUnits,
+    ...(input.additionalTransactionTables ?? []),
   ), async () => {
     const root = await db.adaptationProjects.get(input.adaptationProjectId)
     if (!root) throw new Error('[adaptation] 改编项目不存在')
@@ -713,6 +743,7 @@ export async function resyncAdaptationSource(input: { adaptationProjectId: numbe
       now,
     })
     if (manifest.manifestHash === root.activeSourceManifestHash) throw new Error('[adaptation] 来源没有变化，无需同步')
+    await input.beforeSourceCommit?.({ root, nextManifestVersion: nextVersion })
     const targetScope = { projectId: root.projectId, worldId: root.worldId, workId: root.workId }
     await db.adaptationSourceUnits.bulkAdd(manifest.units.map(unit => stampNewRecord(targetScope, 'adaptationSourceUnits', unit, { owner: 'work' })))
     const next: AdaptationProject = {

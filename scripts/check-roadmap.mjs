@@ -46,14 +46,13 @@ const capabilityIds = [
   'A-GOV-01', 'A-GOV-02',
   'B-LF-01', 'B-LF-02', 'B-LF-03', 'B-LF-04', 'B-LF-05', 'B-LF-06',
   'B-NODE-01', 'B-NODE-02',
-  'C-SHORT-01', 'C-SCREENPLAY-01', 'C-COMIC-01',
+  'C-SHORT-01', 'C-SCREENPLAY-01', 'C-COMIC-01', 'C-MOTION-DRAMA-01',
   'D-WORLD-01', 'D-WORLD-02', 'D-WORLD-03', 'D-WORLD-04',
   'E-TTRPG-01', 'E-CHAT-01', 'E-TOWN-01', 'E-TEXTADV-01', 'E-AVG-01', 'E-OPENWORLD-01',
   'F-PLATFORM-01', 'F-COMMERCIAL-01',
 ]
 const activeTaskIds = [
   'B-NODE-02',
-  'C-SHORT-01', 'C-SCREENPLAY-01', 'C-COMIC-01',
   'E-TTRPG-01', 'E-CHAT-01', 'E-TOWN-01', 'E-TEXTADV-01', 'E-AVG-01', 'E-OPENWORLD-01',
   'F-PLATFORM-01', 'F-COMMERCIAL-01',
 ]
@@ -61,6 +60,7 @@ const completedCapabilityIds = [
   'A-GOV-01', 'A-GOV-02',
   'B-LF-01', 'B-LF-02', 'B-LF-03', 'B-LF-04', 'B-LF-05', 'B-LF-06',
   'B-NODE-01',
+  'C-SHORT-01', 'C-SCREENPLAY-01', 'C-COMIC-01', 'C-MOTION-DRAMA-01',
   'D-WORLD-01', 'D-WORLD-02', 'D-WORLD-03', 'D-WORLD-04',
 ]
 for (const id of capabilityIds) {
@@ -100,6 +100,10 @@ for (const [id, status] of [
   ['B-LF-05', 'implemented'],
   ['B-LF-06', 'implemented'],
   ['B-NODE-01', 'implemented'],
+  ['C-SHORT-01', 'implemented'],
+  ['C-SCREENPLAY-01', 'implemented'],
+  ['C-COMIC-01', 'implemented'],
+  ['C-MOTION-DRAMA-01', 'implemented'],
   ['D-WORLD-01', 'implemented'],
   ['D-WORLD-02', 'implemented'],
   ['D-WORLD-03', 'implemented'],

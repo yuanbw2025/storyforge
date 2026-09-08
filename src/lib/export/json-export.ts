@@ -78,6 +78,18 @@ import type {
   ProductBuildArtifactRecordV1,
   ProductQualityGateReceiptRecordV1,
   MediaBlobObjectRecordV1,
+  MotionDramaAssetBindingV1,
+  MotionDramaAssetSubjectV1,
+  MotionDramaAssetVersionV1,
+  MotionDramaEpisodeV1,
+  MotionDramaProductionV1,
+  MotionDramaPromptOverrideV1,
+  MotionDramaPromptPackV1,
+  MotionDramaReviewIssueV1,
+  MotionDramaScriptSceneV1,
+  MotionDramaSeriesBibleRecordV1,
+  MotionDramaShotReferenceV1,
+  MotionDramaShotV1,
   ShortNovelProductionV1,
   CreationReleaseV1,
   CreationReleaseAssetV1,
@@ -226,6 +238,73 @@ export interface ProjectExportData {
   comicMediaAssets: (
     Omit<ComicMediaAsset, 'id' | 'projectId' | 'workId' | 'adaptationProjectId' | 'panelId' | 'blobObjectId'>
     & { _exportId: number; _workExportId: number; _adaptationProjectExportId: number; _panelExportId?: number | null; _blobObjectExportId: number }
+  )[]
+  motionDramaProductions: (
+    Omit<MotionDramaProductionV1, 'id' | 'projectId' | 'worldId' | 'workId' | 'adaptationProjectId' | 'currentReleaseId'>
+    & {
+      _exportId: number
+      _worldExportId: number
+      _workExportId: number
+      _adaptationProjectExportId: number
+      _currentReleaseExportId?: number | null
+    }
+  )[]
+  motionDramaSeriesBibles: (
+    Omit<MotionDramaSeriesBibleRecordV1, 'id' | 'projectId' | 'workId' | 'adaptationProjectId'>
+    & { _exportId: number; _workExportId: number; _adaptationProjectExportId: number }
+  )[]
+  motionDramaEpisodes: (
+    Omit<MotionDramaEpisodeV1, 'id' | 'projectId' | 'workId' | 'adaptationProjectId'>
+    & { _exportId: number; _workExportId: number; _adaptationProjectExportId: number }
+  )[]
+  motionDramaScriptScenes: (
+    Omit<MotionDramaScriptSceneV1, 'id' | 'projectId' | 'workId' | 'adaptationProjectId'>
+    & { _exportId: number; _workExportId: number; _adaptationProjectExportId: number }
+  )[]
+  motionDramaAssetSubjects: (
+    Omit<MotionDramaAssetSubjectV1, 'id' | 'projectId' | 'workId' | 'adaptationProjectId'>
+    & { _exportId: number; _workExportId: number; _adaptationProjectExportId: number }
+  )[]
+  motionDramaAssetVersions: (
+    Omit<MotionDramaAssetVersionV1, 'id' | 'projectId' | 'worldId' | 'workId' | 'adaptationProjectId' | 'blobObjectId'>
+    & {
+      _exportId: number
+      _worldExportId: number
+      _workExportId: number
+      _adaptationProjectExportId: number
+      _blobObjectExportId?: number | null
+    }
+  )[]
+  motionDramaAssetBindings: (
+    Omit<MotionDramaAssetBindingV1, 'id' | 'projectId' | 'workId' | 'adaptationProjectId'>
+    & { _exportId: number; _workExportId: number; _adaptationProjectExportId: number }
+  )[]
+  motionDramaShots: (
+    Omit<MotionDramaShotV1, 'id' | 'projectId' | 'workId' | 'adaptationProjectId'>
+    & { _exportId: number; _workExportId: number; _adaptationProjectExportId: number }
+  )[]
+  motionDramaShotReferences: (
+    Omit<MotionDramaShotReferenceV1, 'id' | 'projectId' | 'worldId' | 'workId' | 'adaptationProjectId' | 'assetVersionId' | 'blobObjectId'>
+    & {
+      _exportId: number
+      _worldExportId: number
+      _workExportId: number
+      _adaptationProjectExportId: number
+      _assetVersionExportId?: number | null
+      _blobObjectExportId?: number | null
+    }
+  )[]
+  motionDramaPromptOverrides: (
+    Omit<MotionDramaPromptOverrideV1, 'id' | 'projectId' | 'workId'>
+    & { _exportId: number; _workExportId: number }
+  )[]
+  motionDramaPromptPacks: (
+    Omit<MotionDramaPromptPackV1, 'id' | 'projectId' | 'workId' | 'adaptationProjectId'>
+    & { _exportId: number; _workExportId: number; _adaptationProjectExportId: number }
+  )[]
+  motionDramaReviewIssues: (
+    Omit<MotionDramaReviewIssueV1, 'id' | 'projectId' | 'workId' | 'adaptationProjectId'>
+    & { _exportId: number; _workExportId: number; _adaptationProjectExportId: number }
   )[]
   mediaBlobObjects: (
     Omit<MediaBlobObjectRecordV1, 'id' | 'projectId' | 'worldId' | 'workId' | 'data'>

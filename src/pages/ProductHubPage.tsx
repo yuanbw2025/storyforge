@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router'
 import {
   ArrowRight,
   BookOpenText,
+  Clapperboard,
   Check,
   ChevronRight,
   FolderOpen,
@@ -35,6 +36,8 @@ import {
   type ProductProductionHandoffV1,
   type ScreenplayTargetSpecV1,
   type ComicTargetSpecV1,
+  type MotionDramaProviderTargetV1,
+  type MotionDramaTargetSpecV1,
 } from '../lib/types'
 import type { OnlineRoomJoinHandoffV1 } from '../lib/online/http-transport'
 import { db } from '../lib/db/schema'
@@ -68,6 +71,8 @@ import WorkKindBadge from '../components/work/WorkKindBadge'
 import { effectiveNovelProfile, effectiveWorkKind, SHORT_NOVEL_DEFAULT_WORDS } from '../lib/workspace/work-kind'
 import { switchNovelProfile } from '../lib/workspace/works'
 import { createAdaptation } from '../lib/adaptation/source-manifest'
+import { createWorkspace as createWorkspaceDomain } from '../lib/workspace/create-workspace'
+import { countWords } from '../lib/utils/html'
 import WorldDerivationActions from '../components/world-engine/WorldDerivationActions'
 import {
   currentExperimentalProductOptInV1,
@@ -95,6 +100,7 @@ const ChaptersListPanel = lazy(() => import('../components/editor/ChaptersListPa
 const ScreenplayStudio = lazy(() => import('../components/screenplay/ScreenplayStudio'))
 const ComicStudio = lazy(() => import('../components/comic/ComicStudio'))
 const ShortNovelStudio = lazy(() => import('../components/short-novel/ShortNovelStudio'))
+const MotionDramaStudio = lazy(() => import('../components/motion-drama/MotionDramaStudio'))
 
 type TabId = 'home' | 'worlds' | 'novel' | 'nodes' | 'ttrpg' | 'chat' | 'town' | 'text-games' | 'market'
 type Accent = 'ochre' | 'teal' | 'blue' | 'violet' | 'rust'
@@ -193,7 +199,7 @@ function SurfaceMaturityBadge({ surfaceId }: { surfaceId: ProductSurfaceIdV1 }) 
 
 const FEATURE_META: Record<Exclude<TabId, 'home'>, { eyebrow: string; description: string; icon: typeof Globe2; accent: Accent }> = {
   worlds: { eyebrow: 'FOUNDATION', description: '把设定、角色和规则整理成可持续复用的世界版本。', icon: Globe2, accent: 'ochre' },
-  novel: { eyebrow: 'AUTHORING', description: '在同一套可靠工作流中创作短篇、长篇，并承接剧本与漫画改编。', icon: BookOpenText, accent: 'rust' as Accent },
+  novel: { eyebrow: 'AUTHORING', description: '在同一套可靠工作流中创作短篇、长篇，并承接剧本、漫画与漫剧改编。', icon: BookOpenText, accent: 'rust' as Accent },
   nodes: { eyebrow: 'FLOW', description: '自由组合世界资料、处理中间产物和生成节点。', icon: Workflow, accent: 'blue' },
   ttrpg: { eyebrow: 'PLAY', description: '制作和主持自己的战役，体验已发布的原创跑团作品。', icon: Swords, accent: 'teal' },
   chat: { eyebrow: 'CHARACTERS', description: '冻结一个世界与角色快照，开始可分支的独立角色聊天。', icon: MessageCircle, accent: 'violet' },
@@ -482,7 +488,7 @@ function NovelPage({ project, onCreate, onDerived }: { project?: Project; onCrea
     ? profile === 'short' ? 'independent.shortform' : 'independent.longform'
     : effectiveWorkKind(activeWork) === 'screenplay'
       ? 'independent.screenplay'
-      : 'independent.comic'
+      : effectiveWorkKind(activeWork) === 'comic' ? 'independent.comic' : 'independent.motion-drama'
   const activeProductDecision = productDecision(activeProductId)
   const changeProfile = async (next: 'short' | 'long') => {
     if (!activeWork?.id || !project.id || profileBusy) return
@@ -509,7 +515,9 @@ function NovelPage({ project, onCreate, onDerived }: { project?: Project; onCrea
   }
   if (!isNovel && activeWork) {
     const scope = scopeForProject(project)
-    return <><PageHeading eyebrow="AUTHORING / WORKS" title={effectiveWorkKind(activeWork) === 'screenplay' ? '正规剧本工作台' : '漫画工作台'} description="派生作品拥有独立结构、来源证据和导出链；不会修改源小说。" action={<WorkKindBadge work={activeWork} />} />{scope ? <Suspense fallback={<FeaturePanelFallback />}>{effectiveWorkKind(activeWork) === 'screenplay' ? <ScreenplayStudio scope={scope} /> : <ComicStudio scope={scope} />}</Suspense> : <section className="sf-product-empty"><BookOpenText className="h-8 w-8" /><h2>漫画工作区归属尚未就绪</h2><p>请先完成目标 Work 初始化。</p></section>}</>
+    const kind = effectiveWorkKind(activeWork)
+    const title = kind === 'screenplay' ? '正规剧本工作台' : kind === 'comic' ? '漫画工作台' : '漫剧工坊'
+    return <><PageHeading eyebrow="AUTHORING / WORKS" title={title} description={kind === 'motion-drama' ? '从冻结小说到可交付 AI 视频工具的逐镜生产包；不在本产品内生成视频成片。' : '派生作品拥有独立结构、来源证据和导出链；不会修改源小说。'} action={<WorkKindBadge work={activeWork} />} />{scope ? <Suspense fallback={<FeaturePanelFallback />}>{kind === 'screenplay' ? <ScreenplayStudio scope={scope} /> : kind === 'comic' ? <ComicStudio scope={scope} /> : <MotionDramaStudio scope={scope} project={project} />}</Suspense> : <section className="sf-product-empty"><BookOpenText className="h-8 w-8" /><h2>作品工作区归属尚未就绪</h2><p>请先完成目标 Work 初始化。</p></section>}</>
   }
   const alternateProductId: StoryForgeProductIdV1 = profile === 'short' ? 'independent.longform' : 'independent.shortform'
   const canSwitchProfile = productDecision(alternateProductId).enterable
@@ -688,9 +696,13 @@ function comicTargetSpec(input: { readingDirection: ComicTargetSpecV1['readingDi
   return { format: 'page-comic', audience: '青少年及以上', readingDirection: input.readingDirection, chapterCount: input.chapterCount, targetPagesPerChapter: input.pagesPerChapter, pageSize: { width: 1200, height: 1700, unit: 'px', bleed: 0 }, colorMode: input.colorMode, artStyleBrief: input.artStyleBrief.trim() || '清晰叙事、稳定人物设计、适合页漫印刷与屏幕阅读', renderCandidatesPerPanel: 3, imageCapabilityRequirement: { referenceImage: true, deterministicSeed: false, inpainting: false, commercialUseRequired: true, minimumWidth: 512, minimumHeight: 512 } }
 }
 
-function CreatePanel({ projects, onClose, onCreated }: { projects: Project[]; onClose: () => void; onCreated: (kind: 'worlds' | 'novel' | 'shortform' | 'screenplay' | 'comic', id: number) => void }) {
+function motionDramaTargetSpec(input: { episodeCount: number; seconds: number; aspectRatio: MotionDramaTargetSpecV1['aspectRatio']; narrativeMode: MotionDramaTargetSpecV1['narrativeMode']; artDirection: string; providers: MotionDramaProviderTargetV1[] }): MotionDramaTargetSpecV1 {
+  return { format: 'motion-drama', language: 'zh-CN', episodeCount: Math.max(1, Math.min(200, Math.round(input.episodeCount))), targetSecondsPerEpisode: Math.max(30, Math.min(600, Math.round(input.seconds))), aspectRatio: input.aspectRatio, narrativeMode: input.narrativeMode, audience: '青少年及以上类型内容观众', rating: 'PG-13', dialogueDensity: 'balanced', artDirection: input.artDirection.trim() || '电影感国风条漫，稳定人物设计，清晰轮廓，层次化光影', providerTargets: input.providers.length ? [...new Set(input.providers)] : ['generic'] }
+}
+
+function CreatePanel({ projects, onClose, onCreated }: { projects: Project[]; onClose: () => void; onCreated: (kind: 'worlds' | 'novel' | 'shortform' | 'screenplay' | 'comic' | 'motion-drama', id: number) => void }) {
   const { createWorkspace, loadProjects } = useProjectStore()
-  const [kind, setKind] = useState<'choose' | 'worlds' | 'long-novel' | 'short-novel' | 'screenplay' | 'comic'>('choose')
+  const [kind, setKind] = useState<'choose' | 'worlds' | 'long-novel' | 'short-novel' | 'screenplay' | 'comic' | 'motion-drama'>('choose')
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [targetWordCount, setTargetWordCount] = useState(10_000)
@@ -708,10 +720,19 @@ function CreatePanel({ projects, onClose, onCreated }: { projects: Project[]; on
   const [comicPagesPerChapter, setComicPagesPerChapter] = useState(8)
   const [comicColorMode, setComicColorMode] = useState<ComicTargetSpecV1['colorMode']>('color')
   const [comicArtStyle, setComicArtStyle] = useState('清晰叙事、稳定人物设计、电影感光影的彩色页漫')
+  const [motionSourceMode, setMotionSourceMode] = useState<'premise' | 'existing' | 'import-text'>('premise')
+  const [motionImportedText, setMotionImportedText] = useState('')
+  const [motionEpisodeCount, setMotionEpisodeCount] = useState(24)
+  const [motionSeconds, setMotionSeconds] = useState(90)
+  const [motionAspectRatio, setMotionAspectRatio] = useState<MotionDramaTargetSpecV1['aspectRatio']>('9:16')
+  const [motionNarrativeMode, setMotionNarrativeMode] = useState<MotionDramaTargetSpecV1['narrativeMode']>('animated-comic')
+  const [motionArtDirection, setMotionArtDirection] = useState('电影感国风条漫，稳定人物设计，强轮廓与层次光影，克制而有辨识度的色彩')
+  const [motionProviders, setMotionProviders] = useState<MotionDramaProviderTargetV1[]>(['seedance', 'runway', 'ltx'])
   const canCreateShort = productDecision('independent.shortform').enterable
   const canCreateLong = productDecision('independent.longform').enterable
   const canCreateScreenplay = productDecision('independent.screenplay').enterable
   const canCreateComic = productDecision('independent.comic').enterable
+  const canCreateMotionDrama = productDecision('independent.motion-drama').enterable
   useEffect(() => {
     let cancelled = false
     void (async () => {
@@ -735,16 +756,29 @@ function CreatePanel({ projects, onClose, onCreated }: { projects: Project[]; on
     setBusy(true)
     setError('')
     try {
-      if (kind === 'screenplay' || kind === 'comic') {
+      if (kind === 'screenplay' || kind === 'comic' || (kind === 'motion-drama' && motionSourceMode === 'existing')) {
         const source = screenplaySources.find(option => option.workId === screenplaySourceWorkId)
         if (!source) throw new Error('请先选择一个本地小说来源。')
         const common = { sourceScope: { projectId: source.projectId, worldId: source.worldId, workId: source.workId }, sourceWorkId: source.workId, title: name.trim(), sourceSelection: { mode: 'entire-work' as const } }
         const result = kind === 'screenplay'
           ? await createAdaptation({ ...common, medium: 'screenplay', targetSpec: screenplayTargetSpec(screenplayFormat, screenplayEpisodeCount, screenplayMinutes) })
-          : await createAdaptation({ ...common, medium: 'comic', targetSpec: comicTargetSpec({ readingDirection: comicReadingDirection, chapterCount: comicChapterCount, pagesPerChapter: comicPagesPerChapter, colorMode: comicColorMode, artStyleBrief: comicArtStyle }) })
+          : kind === 'comic'
+            ? await createAdaptation({ ...common, medium: 'comic', targetSpec: comicTargetSpec({ readingDirection: comicReadingDirection, chapterCount: comicChapterCount, pagesPerChapter: comicPagesPerChapter, colorMode: comicColorMode, artStyleBrief: comicArtStyle }) })
+            : await createAdaptation({ ...common, medium: 'motion-drama', targetSpec: motionDramaTargetSpec({ episodeCount: motionEpisodeCount, seconds: motionSeconds, aspectRatio: motionAspectRatio, narrativeMode: motionNarrativeMode, artDirection: motionArtDirection, providers: motionProviders }) })
         await loadProjects()
         onCreated(kind, result.scope.projectId)
         return
+      }
+      if (kind === 'motion-drama') {
+        if (motionSourceMode === 'premise' && !description.trim()) throw new Error('请先填写作为小说创作起点的一句话故事。')
+        if (motionSourceMode === 'import-text' && !motionImportedText.trim()) throw new Error('请先粘贴要导入的小说正文。')
+        const importedText = motionSourceMode === 'import-text' ? motionImportedText.trim() : undefined
+        const importedWords = importedText ? countWords(importedText) : 0
+        if (importedWords > 25_000) throw new Error('当前粘贴导入入口支持不超过 25,000 字；长篇请先创建长篇小说，再选择“已有本地小说”。')
+        const sourceDescription = description.trim() || (importedText ? importedText.slice(0, 240) : '')
+        const source = await createWorkspaceDomain({ name: `${name.trim()} · 原著`, genres: ['other'], status: 'drafting', description: sourceDescription, targetWordCount: importedText ? Math.max(5_000, Math.min(25_000, importedWords)) : 20_000, enableMultiWorld: false }, { purpose: 'independent-work', kind: 'novel', novelProfile: 'short', preferredChapterCount: importedText ? 3 : 6, initialChapterSummary: importedText ? `作者导入正文：${sourceDescription}` : `创作起点：${description.trim()}`, initialChapterContent: importedText })
+        const result = await createAdaptation({ sourceScope: source.scope, sourceWorkId: source.scope.workId, title: name.trim(), sourceSelection: { mode: 'entire-work' }, medium: 'motion-drama', targetSpec: motionDramaTargetSpec({ episodeCount: motionEpisodeCount, seconds: motionSeconds, aspectRatio: motionAspectRatio, narrativeMode: motionNarrativeMode, artDirection: motionArtDirection, providers: motionProviders }) })
+        await loadProjects(); onCreated('motion-drama', result.scope.projectId); return
       }
       const isShort = kind === 'short-novel'
       const isNovel = isShort || kind === 'long-novel'
@@ -769,7 +803,7 @@ function CreatePanel({ projects, onClose, onCreated }: { projects: Project[]; on
       setError(cause instanceof Error ? cause.message : '创建失败')
     } finally { setBusy(false) }
   }
-  const label = kind === 'worlds' ? '创建世界引擎' : kind === 'short-novel' ? '创建短篇小说' : kind === 'screenplay' ? '创建剧本项目' : kind === 'comic' ? '创建漫画项目' : '创建长篇小说'
+  const label = kind === 'worlds' ? '创建世界引擎' : kind === 'short-novel' ? '创建短篇小说' : kind === 'screenplay' ? '创建剧本项目' : kind === 'comic' ? '创建漫画项目' : kind === 'motion-drama' ? '创建漫剧工坊' : '创建长篇小说'
   return <div className="sf-modal-backdrop" onMouseDown={onClose}>
     <aside className="sf-create-panel" onMouseDown={event => event.stopPropagation()}>
       <div className="sf-modal-header">
@@ -786,10 +820,11 @@ function CreatePanel({ projects, onClose, onCreated }: { projects: Project[]; on
         {canCreateLong && <button onClick={() => setKind('long-novel')}><span className="sf-create-option-icon"><BookOpenText className="h-5 w-5" /></span><span><strong>长篇小说</strong><small>保留熟悉的完整分步骤工作流</small></span><ArrowRight className="h-4 w-4" /></button>}
         {canCreateScreenplay && <button onClick={() => setKind('screenplay')}><span className="sf-create-option-icon"><Sparkles className="h-5 w-5" /></span><span><strong>小说转剧本 <MaturityBadge productId="independent.screenplay" /></strong><small>冻结本地小说来源，进入十步专业改编流程</small></span><ArrowRight className="h-4 w-4" /></button>}
         {canCreateComic && <button onClick={() => setKind('comic')}><span className="sf-create-option-icon"><Images className="h-5 w-5" /></span><span><strong>小说转漫画 <MaturityBadge productId="independent.comic" /></strong><small>冻结本地小说来源，进入十二步页漫生产流程</small></span><ArrowRight className="h-4 w-4" /></button>}
+        {canCreateMotionDrama && <button onClick={() => setKind('motion-drama')}><span className="sf-create-option-icon"><Clapperboard className="h-5 w-5" /></span><span><strong>漫剧工坊 <MaturityBadge productId="independent.motion-drama" /></strong><small>一句话或小说 → 剧本、物料、分镜与视频工具提示词包</small></span><ArrowRight className="h-4 w-4" /></button>}
       </div> : <div className="sf-create-form">
         <label>名称<input value={name} onChange={event => setName(event.target.value)} placeholder={kind === 'worlds' ? '例如：潮汐之后' : '例如：《幽都遗闻》'} autoFocus /></label>
         <label>简介<textarea value={description} onChange={event => setDescription(event.target.value)} rows={4} placeholder="一句话描述这个世界或作品" /></label>
-        {(kind === 'screenplay' || kind === 'comic') && <>
+        {(kind === 'screenplay' || kind === 'comic' || (kind === 'motion-drama' && motionSourceMode === 'existing')) && <>
           <label>小说来源<select aria-label="小说来源" value={screenplaySourceWorkId} onChange={event => setScreenplaySourceWorkId(event.target.value ? Number(event.target.value) : '')}><option value="">请选择本地小说</option>{screenplaySources.map(source => <option key={source.workId} value={source.workId}>{source.label}</option>)}</select></label>
         </>}
         {kind === 'screenplay' && <>
@@ -806,11 +841,20 @@ function CreatePanel({ projects, onClose, onCreated }: { projects: Project[]; on
           <label>画风要求<textarea aria-label="画风要求" value={comicArtStyle} onChange={event => setComicArtStyle(event.target.value)} rows={3} /></label>
           <p className="text-xs leading-5 text-text-muted">创建时冻结整部小说为 manifest v1；分镜版与视觉版分别发布。视觉版只接受实际传输参考图或作者上传并完成权利审查的成图。</p>
         </>}
+        {kind === 'motion-drama' && <>
+          <label>故事来源<select aria-label="漫剧故事来源" value={motionSourceMode} onChange={event => setMotionSourceMode(event.target.value as typeof motionSourceMode)}><option value="premise">从一句话先创作短篇小说</option><option value="existing">使用已有本地小说</option><option value="import-text">粘贴导入短篇小说正文</option></select></label>
+          {motionSourceMode === 'import-text' && <label>导入小说正文（最多 25,000 字）<textarea aria-label="导入漫剧小说正文" value={motionImportedText} onChange={event => setMotionImportedText(event.target.value)} rows={8} placeholder="粘贴完整短篇小说正文；创建后会先建立独立小说 Work，再冻结为漫剧来源。" /></label>}
+          <div className="grid grid-cols-2 gap-3"><label>计划集数<input aria-label="漫剧计划集数" type="number" min={1} max={200} value={motionEpisodeCount} onChange={event => setMotionEpisodeCount(Number(event.target.value))} /></label><label>单集目标秒数<input aria-label="漫剧单集秒数" type="number" min={30} max={600} value={motionSeconds} onChange={event => setMotionSeconds(Number(event.target.value))} /></label></div>
+          <div className="grid grid-cols-2 gap-3"><label>画幅<select value={motionAspectRatio} onChange={event => setMotionAspectRatio(event.target.value as typeof motionAspectRatio)}><option value="9:16">9:16 竖屏</option><option value="16:9">16:9 横屏</option><option value="1:1">1:1 方形</option></select></label><label>叙事形态<select value={motionNarrativeMode} onChange={event => setMotionNarrativeMode(event.target.value as typeof motionNarrativeMode)}><option value="animated-comic">动态漫画</option><option value="illustrated-motion">插画动效</option><option value="hybrid">混合表现</option></select></label></div>
+          <label>美术方向<textarea aria-label="漫剧美术方向" value={motionArtDirection} onChange={event => setMotionArtDirection(event.target.value)} rows={3} /></label>
+          <fieldset className="rounded border border-border p-3"><legend className="px-1 text-xs text-text-muted">目标视频工具</legend><div className="flex flex-wrap gap-3">{(['seedance', 'runway', 'ltx', 'generic'] as MotionDramaProviderTargetV1[]).map(provider => <label key={provider} className="!flex-row items-center gap-2"><input type="checkbox" checked={motionProviders.includes(provider)} onChange={event => setMotionProviders(current => event.target.checked ? [...new Set([...current, provider])] : current.filter(item => item !== provider))} />{provider}</label>)}</div></fieldset>
+          <p className="text-xs leading-5 text-text-muted">本产品交付到“分镜/视频生成提示词包 + 角色、服装、场景、道具和声音物料”。视频生成、剪辑和漫剧成片在目标工具中完成。</p>
+        </>}
         {kind === 'short-novel' && <>
           <label>目标字数（5,000～25,000）<input type="number" min={5000} max={25000} step={500} value={targetWordCount} onChange={event => setTargetWordCount(Number(event.target.value))} /></label>
           <label>建议章节数（可空）<input type="number" min={3} max={8} step={1} value={preferredChapterCount} placeholder="自动推导 3～8 章" onChange={event => setPreferredChapterCount(event.target.value === '' ? '' : Number(event.target.value))} /></label>
         </>}
-        {kind !== 'screenplay' && kind !== 'comic' && <ProjectStorageFolderField value={projectFolder} onChange={setProjectFolder} disabled={busy} />}
+        {kind !== 'screenplay' && kind !== 'comic' && kind !== 'motion-drama' && <ProjectStorageFolderField value={projectFolder} onChange={setProjectFolder} disabled={busy} />}
         {error && <p className="text-sm text-red-600" role="alert">{error}</p>}
         <div className="sf-create-form-actions"><Button onClick={() => setKind('choose')}>返回</Button><Button variant="primary" icon={Check} onClick={() => void create()} disabled={busy || !name.trim()}>{busy ? '创建中…' : label}</Button></div>
       </div>}

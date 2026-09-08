@@ -97,6 +97,8 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
       { kind: 'simple', field: 'id', target: 'adaptationProjects[sourceWorkId]', onDelete: 'setNull' },
       { kind: 'simple', field: 'id', target: 'shortNovelProductions[workId]', onDelete: 'cascade' },
       { kind: 'simple', field: 'id', target: 'creationReleases[workId]', onDelete: 'cascade' },
+      { kind: 'simple', field: 'id', target: 'motionDramaProductions[workId]', onDelete: 'cascade' },
+      { kind: 'simple', field: 'id', target: 'motionDramaPromptOverrides[workId]', onDelete: 'cascade' },
     ],
     exportRemap: [
       { field: 'worldId', remapVia: 'worlds', exportAs: '_worldExportId', onUnmapped: 'require' },
@@ -127,6 +129,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     refs: [
       { kind: 'simple', field: 'id', target: 'shortNovelProductions[currentReleaseId]', onDelete: 'setNull' },
       { kind: 'simple', field: 'id', target: 'creationReleaseAssets[releaseId]', onDelete: 'cascade' },
+      { kind: 'simple', field: 'id', target: 'motionDramaProductions[currentReleaseId]', onDelete: 'setNull' },
     ],
     exportRemap: [
       { field: 'worldId', remapVia: 'worlds', exportAs: '_worldExportId', onUnmapped: 'require' },
@@ -134,7 +137,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
       { field: 'parentReleaseId', remapVia: 'creationReleases', exportAs: '_parentExportId', selfTree: true },
     ],
     defaults: { parentReleaseId: null },
-    note: '独立创作不可变发布外壳；short-novel/screenplay/comic 各自使用闭集 manifest codec，导出不得回读实时草稿' },
+    note: '独立创作不可变发布外壳；short-novel/screenplay/comic/motion-drama 各自使用闭集 manifest codec，导出不得回读实时草稿' },
 
   { table: db.creationReleaseAssets, name: 'creationReleaseAssets', owner: 'project', exportable: true, exportIdField: true,
     mediaRef: { blobTable: 'mediaBlobObjects', field: 'blobObjectId' },
@@ -146,7 +149,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
       { field: 'blobObjectId', remapVia: 'mediaBlobObjects', exportAs: '_blobObjectExportId', onUnmapped: 'require' },
     ],
     defaults: { pageKey: null, panelKey: null, referenceAssetKeys: [] },
-    note: '漫画 visual Release 到内容寻址 Blob 的强引用；草稿候选清理和 GC 不得破坏既有发布' },
+    note: '漫画与漫剧 reference-ready Release 到内容寻址 Blob 的强引用；草稿候选清理和 GC 不得破坏既有发布' },
 
   { table: db.adaptationProjects, name: 'adaptationProjects', owner: 'project', exportable: true, exportIdField: true,
     domainOwner: { allowed: ['work'], defaultOwner: 'work', locator: { kind: 'field', owner: 'work', field: 'workId' } },
@@ -165,6 +168,17 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
       { kind: 'simple', field: 'id', target: 'comicPages[adaptationProjectId]', onDelete: 'cascade' },
       { kind: 'simple', field: 'id', target: 'comicVisualSubjects[adaptationProjectId]', onDelete: 'cascade' },
       { kind: 'simple', field: 'id', target: 'comicMediaAssets[adaptationProjectId]', onDelete: 'cascade' },
+      { kind: 'simple', field: 'id', target: 'motionDramaProductions[adaptationProjectId]', onDelete: 'cascade' },
+      { kind: 'simple', field: 'id', target: 'motionDramaSeriesBibles[adaptationProjectId]', onDelete: 'cascade' },
+      { kind: 'simple', field: 'id', target: 'motionDramaEpisodes[adaptationProjectId]', onDelete: 'cascade' },
+      { kind: 'simple', field: 'id', target: 'motionDramaScriptScenes[adaptationProjectId]', onDelete: 'cascade' },
+      { kind: 'simple', field: 'id', target: 'motionDramaAssetSubjects[adaptationProjectId]', onDelete: 'cascade' },
+      { kind: 'simple', field: 'id', target: 'motionDramaAssetVersions[adaptationProjectId]', onDelete: 'cascade' },
+      { kind: 'simple', field: 'id', target: 'motionDramaAssetBindings[adaptationProjectId]', onDelete: 'cascade' },
+      { kind: 'simple', field: 'id', target: 'motionDramaShots[adaptationProjectId]', onDelete: 'cascade' },
+      { kind: 'simple', field: 'id', target: 'motionDramaShotReferences[adaptationProjectId]', onDelete: 'cascade' },
+      { kind: 'simple', field: 'id', target: 'motionDramaPromptPacks[adaptationProjectId]', onDelete: 'cascade' },
+      { kind: 'simple', field: 'id', target: 'motionDramaReviewIssues[adaptationProjectId]', onDelete: 'cascade' },
     ],
     exportRemap: [
       { field: 'worldId', remapVia: 'worlds', exportAs: '_worldExportId', onUnmapped: 'require' },
@@ -341,6 +355,118 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     defaults: { panelId: null, subjectKey: null, requestHash: null, promptHash: null, referenceAssetKeys: [], providerReceipt: null, disposition: 'available' },
     note: 'COMIC-2 媒体候选元数据、rights 与 provider receipt；选择状态只存在于 Panel/VisualSubject' },
 
+  { table: db.motionDramaProductions, name: 'motionDramaProductions', owner: 'project', exportable: true, exportIdField: true,
+    domainOwner: WORK_DOMAIN_OWNER,
+    exportRemap: [
+      { field: 'worldId', remapVia: 'worlds', exportAs: '_worldExportId', onUnmapped: 'require' },
+      { field: 'workId', remapVia: 'works', exportAs: '_workExportId', onUnmapped: 'require' },
+      { field: 'adaptationProjectId', remapVia: 'adaptationProjects', exportAs: '_adaptationProjectExportId', onUnmapped: 'require' },
+      { field: 'currentReleaseId', remapVia: 'creationReleases', exportAs: '_currentReleaseExportId', deferred: true },
+    ],
+    defaults: { phase: 'source', activeSeriesBibleVersion: null, currentEpisodeNumber: 1, currentReleaseId: null, revision: 1 },
+    note: 'MOTION-DRAMA-1 漫剧前期生产根；阶段、当前集与不可变发布指针由领域服务维护' },
+
+  { table: db.motionDramaSeriesBibles, name: 'motionDramaSeriesBibles', owner: 'project', exportable: true, exportIdField: true,
+    domainOwner: { allowed: ['work'], defaultOwner: 'work', locator: { kind: 'parent', owner: 'work', table: 'adaptationProjects', field: 'adaptationProjectId' } },
+    exportRemap: [
+      { field: 'workId', remapVia: 'works', exportAs: '_workExportId', onUnmapped: 'require' },
+      { field: 'adaptationProjectId', remapVia: 'adaptationProjects', exportAs: '_adaptationProjectExportId', onUnmapped: 'require' },
+    ],
+    note: 'MOTION-DRAMA-1 追加式系列圣经版本；生产根只保存活动版本号，不镜像内容' },
+
+  { table: db.motionDramaEpisodes, name: 'motionDramaEpisodes', owner: 'project', exportable: true, exportIdField: true,
+    domainOwner: { allowed: ['work'], defaultOwner: 'work', locator: { kind: 'parent', owner: 'work', table: 'adaptationProjects', field: 'adaptationProjectId' } },
+    exportRemap: [
+      { field: 'workId', remapVia: 'works', exportAs: '_workExportId', onUnmapped: 'require' },
+      { field: 'adaptationProjectId', remapVia: 'adaptationProjects', exportAs: '_adaptationProjectExportId', onUnmapped: 'require' },
+    ],
+    defaults: { beats: [], continuityIn: [], continuityOut: [], sourceUnitKeys: [], authorStatus: 'confirmed', revision: 1 },
+    note: 'MOTION-DRAMA-1 逐集故事推进合同；一集一打磨并显式交接连续性状态' },
+
+  { table: db.motionDramaScriptScenes, name: 'motionDramaScriptScenes', owner: 'project', exportable: true, exportIdField: true,
+    domainOwner: { allowed: ['work'], defaultOwner: 'work', locator: { kind: 'parent', owner: 'work', table: 'adaptationProjects', field: 'adaptationProjectId' } },
+    exportRemap: [
+      { field: 'workId', remapVia: 'works', exportAs: '_workExportId', onUnmapped: 'require' },
+      { field: 'adaptationProjectId', remapVia: 'adaptationProjects', exportAs: '_adaptationProjectExportId', onUnmapped: 'require' },
+    ],
+    defaults: { dialogue: [], soundCues: [], characterKeys: [], sourceUnitKeys: [], authorStatus: 'confirmed', revision: 1 },
+    note: 'MOTION-DRAMA-1 可视动作、台词、旁白和声音 cue 分离的漫剧场景稿' },
+
+  { table: db.motionDramaAssetSubjects, name: 'motionDramaAssetSubjects', owner: 'project', exportable: true, exportIdField: true,
+    domainOwner: { allowed: ['work'], defaultOwner: 'work', locator: { kind: 'parent', owner: 'work', table: 'adaptationProjects', field: 'adaptationProjectId' } },
+    exportRemap: [
+      { field: 'workId', remapVia: 'works', exportAs: '_workExportId', onUnmapped: 'require' },
+      { field: 'adaptationProjectId', remapVia: 'adaptationProjects', exportAs: '_adaptationProjectExportId', onUnmapped: 'require' },
+    ],
+    defaults: { palette: [], materials: [], continuityLocks: [], prohibitedChanges: [], sourceUnitKeys: [], selectedVersionKey: null, authorStatus: 'confirmed', revision: 1 },
+    note: 'MOTION-DRAMA-1 角色、服装、场景、道具、风格和声音的稳定语义锚点' },
+
+  { table: db.motionDramaAssetVersions, name: 'motionDramaAssetVersions', owner: 'project', exportable: true, exportIdField: true,
+    mediaRef: { blobTable: 'mediaBlobObjects', field: 'blobObjectId' },
+    domainOwner: WORK_DOMAIN_OWNER,
+    exportRemap: [
+      { field: 'worldId', remapVia: 'worlds', exportAs: '_worldExportId', onUnmapped: 'require' },
+      { field: 'workId', remapVia: 'works', exportAs: '_workExportId', onUnmapped: 'require' },
+      { field: 'adaptationProjectId', remapVia: 'adaptationProjects', exportAs: '_adaptationProjectExportId', onUnmapped: 'require' },
+      { field: 'blobObjectId', remapVia: 'mediaBlobObjects', exportAs: '_blobObjectExportId' },
+    ],
+    defaults: { blobObjectId: null, origin: 'prompt-only', provider: null, model: null, rights: null },
+    note: 'MOTION-DRAMA-1 物料候选版本；prompt-only 与真实上传/生成参考素材严格区分' },
+
+  { table: db.motionDramaAssetBindings, name: 'motionDramaAssetBindings', owner: 'project', exportable: true, exportIdField: true,
+    domainOwner: WORK_DOMAIN_OWNER,
+    exportRemap: [
+      { field: 'workId', remapVia: 'works', exportAs: '_workExportId', onUnmapped: 'require' },
+      { field: 'adaptationProjectId', remapVia: 'adaptationProjects', exportAs: '_adaptationProjectExportId', onUnmapped: 'require' },
+    ],
+    defaults: { shotKey: null, assetVersionKey: null },
+    note: 'MOTION-DRAMA-1 物料稳定 key 到分集/镜头使用位置的语义绑定' },
+
+  { table: db.motionDramaShots, name: 'motionDramaShots', owner: 'project', exportable: true, exportIdField: true,
+    domainOwner: { allowed: ['work'], defaultOwner: 'work', locator: { kind: 'parent', owner: 'work', table: 'adaptationProjects', field: 'adaptationProjectId' } },
+    exportRemap: [
+      { field: 'workId', remapVia: 'works', exportAs: '_workExportId', onUnmapped: 'require' },
+      { field: 'adaptationProjectId', remapVia: 'adaptationProjects', exportAs: '_adaptationProjectExportId', onUnmapped: 'require' },
+    ],
+    defaults: { soundPlan: [], subjectKeys: [], sourceUnitKeys: [], imagePrompt: '', negativeImagePrompt: '', firstFramePrompt: '', keyFramePrompt: '', lastFramePrompt: '', videoPrompt: '', negativeVideoPrompt: '', authorStatus: 'confirmed', revision: 1 },
+    note: 'MOTION-DRAMA-1 镜头设计与 Image Prompt IR/Video Prompt IR；运动描述不混入静帧语义' },
+
+  { table: db.motionDramaShotReferences, name: 'motionDramaShotReferences', owner: 'project', exportable: true, exportIdField: true,
+    mediaRef: { blobTable: 'mediaBlobObjects', field: 'blobObjectId' },
+    domainOwner: WORK_DOMAIN_OWNER,
+    exportRemap: [
+      { field: 'worldId', remapVia: 'worlds', exportAs: '_worldExportId', onUnmapped: 'require' },
+      { field: 'workId', remapVia: 'works', exportAs: '_workExportId', onUnmapped: 'require' },
+      { field: 'adaptationProjectId', remapVia: 'adaptationProjects', exportAs: '_adaptationProjectExportId', onUnmapped: 'require' },
+      { field: 'assetVersionId', remapVia: 'motionDramaAssetVersions', exportAs: '_assetVersionExportId' },
+      { field: 'blobObjectId', remapVia: 'mediaBlobObjects', exportAs: '_blobObjectExportId' },
+    ],
+    defaults: { subjectKey: null, assetVersionId: null, blobObjectId: null, timing: '', note: '', selected: true },
+    note: 'MOTION-DRAMA-1 镜头实际选定参考；只在存在真实 Blob 时计入 reference-ready' },
+
+  { table: db.motionDramaPromptOverrides, name: 'motionDramaPromptOverrides', owner: 'project', exportable: true, exportIdField: true,
+    domainOwner: WORK_DOMAIN_OWNER,
+    exportRemap: [{ field: 'workId', remapVia: 'works', exportAs: '_workExportId', onUnmapped: 'require' }],
+    defaults: { scope: 'work', episodeNumber: null, revision: 1 },
+    note: 'MOTION-DRAMA-1 用户可编辑语义提示词层；结构协议、权限和版本门禁不在此表' },
+
+  { table: db.motionDramaPromptPacks, name: 'motionDramaPromptPacks', owner: 'project', exportable: true, exportIdField: true,
+    domainOwner: { allowed: ['work'], defaultOwner: 'work', locator: { kind: 'parent', owner: 'work', table: 'adaptationProjects', field: 'adaptationProjectId' } },
+    exportRemap: [
+      { field: 'workId', remapVia: 'works', exportAs: '_workExportId', onUnmapped: 'require' },
+      { field: 'adaptationProjectId', remapVia: 'adaptationProjects', exportAs: '_adaptationProjectExportId', onUnmapped: 'require' },
+    ],
+    note: 'MOTION-DRAMA-1 从通用双 IR 确定性编译的 Seedance/Runway/LTX/通用工具包' },
+
+  { table: db.motionDramaReviewIssues, name: 'motionDramaReviewIssues', owner: 'project', exportable: true, exportIdField: true,
+    domainOwner: { allowed: ['work'], defaultOwner: 'work', locator: { kind: 'parent', owner: 'work', table: 'adaptationProjects', field: 'adaptationProjectId' } },
+    exportRemap: [
+      { field: 'workId', remapVia: 'works', exportAs: '_workExportId', onUnmapped: 'require' },
+      { field: 'adaptationProjectId', remapVia: 'adaptationProjects', exportAs: '_adaptationProjectExportId', onUnmapped: 'require' },
+    ],
+    defaults: { sceneKey: null, shotKey: null, subjectKey: null, status: 'open' },
+    note: 'MOTION-DRAMA-1 可定位到集/场/镜头/物料的故事、连续性、动效、声音、权利与工具能力问题' },
+
   { table: db.mediaBlobObjects, name: 'mediaBlobObjects', owner: 'project', exportable: true, exportIdField: true,
     portableData: {
       kind: 'shared-media-object',
@@ -354,6 +480,8 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
       { kind: 'simple', field: 'id', target: 'creationReleaseAssets[blobObjectId]', onDelete: 'keep' },
       { kind: 'simple', field: 'id', target: 'productBuildArtifacts[blobObjectId]', onDelete: 'keep' },
       { kind: 'simple', field: 'id', target: 'productMediaBlobs[blobObjectId]', onDelete: 'keep' },
+      { kind: 'simple', field: 'id', target: 'motionDramaAssetVersions[blobObjectId]', onDelete: 'keep' },
+      { kind: 'simple', field: 'id', target: 'motionDramaShotReferences[blobObjectId]', onDelete: 'keep' },
     ],
     exportRemap: [
       { field: 'worldId', remapVia: 'worlds', exportAs: '_worldExportId', onUnmapped: 'require' },

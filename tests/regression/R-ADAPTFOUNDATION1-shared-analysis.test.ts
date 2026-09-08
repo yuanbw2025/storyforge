@@ -55,7 +55,7 @@ describe('ADAPT-FOUNDATION-1 · 共享来源事实、因果边与改编决策', 
   afterEach(() => db.close())
 
   it('共享 Release 外壳闭集接受三种产品身份并拒绝跨产品父版本', async () => {
-    expect(Object.keys(CREATION_RELEASE_SCHEMAS_V1).sort()).toEqual(['comic', 'screenplay', 'short-novel'])
+    expect(Object.keys(CREATION_RELEASE_SCHEMAS_V1).sort()).toEqual(['comic', 'motion-drama', 'screenplay', 'short-novel'])
     const manifest = { schema: 'storyforge.screenplay-release', version: 1, productKind: 'screenplay', work: { code: 'WORK-FOUNDATION-1' }, createdAt: 100 }
     const release = {
       id: 2, projectId: 1, worldId: 1, workId: 2, productKind: 'screenplay' as const,

@@ -1,6 +1,6 @@
 # 漫剧前期生产方案审查
 
-> 版本：1.0.0 · 审查日期：2026-09-09 · 权威层级：L4
+> 版本：1.1.0 · 审查日期：2026-09-09 · 权威层级：L4
 > 审查对象：漫剧产品契约、开发规划与内容生产流程图。
 
 ## 1. 审查结论
@@ -31,13 +31,13 @@
 4. **供应商参数固化风险**：保留 provider-neutral IR，限制和槽位由版本化 capability profile/adapter 编译。
 5. **整季自动化过重风险**：坚持系列/物料一次建立、单集有限步骤循环；不建立一个长程自治 Agent。
 
-### 施工中必须验证
+### 实现复审结果
 
-1. 现有图片 provider 传输是否真的携带参考图；只在 Prompt 中写“参考角色”不能记录为 reference transmitted。
-2. 当前音频基础设施支持 music/sfx，但 voice 生成能力不完整；V1 必须至少支持授权音频上传与完整声音 Prompt，生成 voice 只能在真实 provider capability 存在时放行。
-3. 当前小说转页漫的视觉 subject 和图片候选可借鉴实现，但不得复用其页格、排字或 media owner 表。
-4. 当前小说转剧本的来源事实/因果/决定可复用 medium-neutral 契约，但漫剧 scene/shot/asset/prompt 必须拥有专表。
-5. 80 集规模验证需要证明按集读取和失效，而不是一次把全季文本装进模型。
+1. 参考图和试听音频只有在真实字节签名、作用域、hash、权利和作者选择全部成立时才进入版本与 Release；Prompt 中的文字声明不计作已传输参考。
+2. V1 支持授权 MP3/WAV/OGG/M4A 试听音频上传与完整声音 Prompt；没有已登记生成能力时不伪造 voice/audio provider 结果。
+3. 页漫只复用共享 Blob 等稳定底座，漫剧没有复用页格、排字或漫画媒资 owner 表。
+4. medium-neutral 来源清单继续复用；漫剧 series/episode/scene/shot/asset/prompt 均拥有专表和专用 Adoption。
+5. 系列与物料一次建立、episode 逐集读取和失效；正式 AI 运行按单个阶段、单集有界执行，不启动整季无限任务。
 
 ## 4. 产品质量判断
 

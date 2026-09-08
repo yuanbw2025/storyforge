@@ -404,6 +404,44 @@ async function readComicCurrentPagesContext(input: AssembleContextInput): Promis
   ].join('\n'))].join('\n\n')
 }
 
+async function readMotionDramaProductionContext(input: AssembleContextInput): Promise<string> {
+  const root = await requireTargetAdaptation(input)
+  if (root.medium !== 'motion-drama') return ''
+  const production = await db.motionDramaProductions.where('workId').equals(root.workId).first()
+  if (!production || production.adaptationProjectId !== root.id) return ''
+  const episodeNumber = production.currentEpisodeNumber
+  const [bibles, episodes, scenes, subjects, versions, shots, references, issues] = await Promise.all([
+    db.motionDramaSeriesBibles.where('adaptationProjectId').equals(root.id!).toArray(),
+    db.motionDramaEpisodes.where('adaptationProjectId').equals(root.id!).toArray(),
+    db.motionDramaScriptScenes.where('adaptationProjectId').equals(root.id!).filter(row => row.episodeNumber === episodeNumber).sortBy('order'),
+    db.motionDramaAssetSubjects.where('adaptationProjectId').equals(root.id!).toArray(),
+    db.motionDramaAssetVersions.where('adaptationProjectId').equals(root.id!).toArray(),
+    db.motionDramaShots.where('adaptationProjectId').equals(root.id!).filter(row => row.episodeNumber === episodeNumber).sortBy('order'),
+    db.motionDramaShotReferences.where('adaptationProjectId').equals(root.id!).filter(row => row.selected).toArray(),
+    db.motionDramaReviewIssues.where('adaptationProjectId').equals(root.id!).filter(row => row.episodeNumber === episodeNumber && row.status === 'open').toArray(),
+  ])
+  const bible = production.activeSeriesBibleVersion == null
+    ? null
+    : bibles.find(row => row.version === production.activeSeriesBibleVersion) ?? null
+  const episode = episodes.find(row => row.episodeNumber === episodeNumber) ?? null
+  const selectedVersionKeys = new Set(subjects.flatMap(row => row.selectedVersionKey ? [row.selectedVersionKey] : []))
+  const selectedVersions = versions.filter(row => selectedVersionKeys.has(row.stableKey))
+  const shotKeys = new Set(shots.map(row => row.stableKey))
+  return [
+    `【漫剧前期生产｜当前第 ${episodeNumber} 集｜来源 manifest v${root.activeSourceManifestVersion}】`,
+    `目标规格：${JSON.stringify(root.targetSpec)}`,
+    `生产阶段：${production.phase}｜生产 revision ${production.revision}`,
+    bible ? `【活动系列圣经 v${bible.version}】\n${JSON.stringify(bible.bible)}` : '',
+    subjects.length ? `【系列物料锚点】\n${subjects.map(row => JSON.stringify({ stableKey: row.stableKey, kind: row.kind, label: row.label, identity: row.identity, appearance: row.appearance, palette: row.palette, materials: row.materials, continuityLocks: row.continuityLocks, prohibitedChanges: row.prohibitedChanges, basePrompt: row.basePrompt, negativePrompt: row.negativePrompt, referenceBrief: row.referenceBrief, sourceUnitKeys: row.sourceUnitKeys, selectedVersionKey: row.selectedVersionKey })).join('\n')}` : '',
+    selectedVersions.length ? `【已选物料版本｜仅 blobObjectId 非空才是实际参考】\n${selectedVersions.map(row => JSON.stringify({ subjectKey: row.subjectKey, stableKey: row.stableKey, origin: row.origin, provider: row.provider, model: row.model, blobObjectId: row.blobObjectId, contentHash: row.contentHash, rights: row.rights, referenceNotes: row.referenceNotes })).join('\n')}` : '',
+    episode ? `【当前分集合同】\n${JSON.stringify({ stableKey: episode.stableKey, episodeNumber: episode.episodeNumber, title: episode.title, logline: episode.logline, synopsis: episode.synopsis, openingHook: episode.openingHook, beats: episode.beats, endHook: episode.endHook, continuityIn: episode.continuityIn, continuityOut: episode.continuityOut, sourceUnitKeys: episode.sourceUnitKeys, revision: episode.revision })}` : '',
+    scenes.length ? `【当前分集漫剧场景】\n${scenes.map(row => JSON.stringify({ stableKey: row.stableKey, sceneNumber: row.sceneNumber, heading: row.heading, location: row.location, timeOfDay: row.timeOfDay, dramaticPurpose: row.dramaticPurpose, entryState: row.entryState, exitState: row.exitState, visibleAction: row.visibleAction, dialogue: row.dialogue, narration: row.narration, soundCues: row.soundCues, emotionalTurn: row.emotionalTurn, estimatedSeconds: row.estimatedSeconds, characterKeys: row.characterKeys, sourceUnitKeys: row.sourceUnitKeys, revision: row.revision })).join('\n')}` : '',
+    shots.length ? `【当前分集镜头与双提示词 IR】\n${shots.map(row => JSON.stringify({ stableKey: row.stableKey, sceneKey: row.sceneKey, shotNumber: row.shotNumber, order: row.order, narrativeFunction: row.narrativeFunction, targetSeconds: row.targetSeconds, shotSize: row.shotSize, cameraAngle: row.cameraAngle, cameraMovement: row.cameraMovement, composition: row.composition, visibleAction: row.visibleAction, performance: row.performance, lighting: row.lighting, transitionIn: row.transitionIn, transitionOut: row.transitionOut, dialogue: row.dialogue, narration: row.narration, soundPlan: row.soundPlan, subjectKeys: row.subjectKeys, sourceUnitKeys: row.sourceUnitKeys, imagePrompt: row.imagePrompt, negativeImagePrompt: row.negativeImagePrompt, firstFramePrompt: row.firstFramePrompt, keyFramePrompt: row.keyFramePrompt, lastFramePrompt: row.lastFramePrompt, videoPrompt: row.videoPrompt, negativeVideoPrompt: row.negativeVideoPrompt, revision: row.revision })).join('\n')}` : '',
+    references.length ? `【实际选定镜头参考】\n${references.filter(row => shotKeys.has(row.shotKey)).map(row => JSON.stringify({ shotKey: row.shotKey, role: row.role, subjectKey: row.subjectKey, assetVersionId: row.assetVersionId, blobObjectId: row.blobObjectId, timing: row.timing, note: row.note })).join('\n')}` : '',
+    issues.length ? `【当前开放问题】\n${issues.map(row => `${row.stableKey}｜${row.category}/${row.severity}｜${row.sceneKey ?? '-'}｜${row.shotKey ?? '-'}｜${row.problem}｜证据：${row.evidence}｜建议：${row.suggestion}`).join('\n')}` : '',
+  ].filter(Boolean).join('\n\n')
+}
+
 async function readProductRuntimeStateForContext(sessionId: number) {
   const { readProductRuntimeState } = await import('../product/runtime-api')
   return readProductRuntimeState(sessionId)
@@ -1808,6 +1846,17 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     requiresAdaptationProjectId: true,
     requiresComicPages: true,
     read: readComicCurrentPagesContext,
+  },
+  {
+    key: 'motionDrama.production',
+    label: '漫剧系列物料与当前分集生产状态',
+    scope: 'project',
+    layer: 'L0',
+    ownerFrom: 'work',
+    budgetTokens: 32_000,
+    protectedFromTrim: true,
+    requiresAdaptationProjectId: true,
+    read: readMotionDramaProductionContext,
   },
   {
     key: 'adventureRuntime',

@@ -1,8 +1,8 @@
 # 漫剧前期生产产品契约
 
-> 版本：1.0.0 · 生效：2026-09-09 · 权威层级：L2
+> 版本：1.1.0 · 生效：2026-09-09 · 权威层级：L2
 > 产品：`independent.motion-drama` · 用户名称：漫剧工坊
-> 实施状态：开发中；完成状态以能力基线与自动验证为准。
+> 实施状态：已完成当前工程闭环；能力边界与证据以能力基线和自动验证为准。
 
 ## 1. 产品目标
 
@@ -57,7 +57,7 @@
 
 ## 6. 物料与参考帧
 
-正式物料类型为 `style | character | costume | location | prop | voice | ambience | sfx | music-motif`。每项拥有稳定 key、文本定义、生成 Prompt、禁止漂移项、版本、候选、已选参考媒资、权利和内容 hash。
+正式物料类型为 `style | character | costume | location | prop | voice | sound`；`sound` 的具体用途在声音定义和逐镜 cue 中细分为 ambience、sfx 与 music。每项拥有稳定 key、文本定义、生成 Prompt、禁止漂移项、版本、候选、已选参考媒资、权利和内容 hash。
 
 shot 另有 `start | key | end` 参考帧。参考帧从已确认 shot 和精确物料版本编译，不升级为系列物料身份。物料或参考帧缺失时可以保存/导出 prompt-only 结果，但不得标记 reference-ready。
 
@@ -78,7 +78,7 @@ V1 不要求、读取或生成 WorldRelease，不向世界引擎写入人物图�
 
 ## 10. 完成判据
 
-1. Product Hub 可从一句话、已有小说或导入文本创建并完成主链。
+1. Product Hub 可从一句话、已有本地小说或不超过 25,000 字的粘贴文本创建并完成主链；更长文本先进入长篇产品，再作为已有小说冻结。
 2. 系列级内容和物料版本与逐集内容严格分层；80 集项目按需读取。
 3. 每步 Prompt 可编辑且硬边界不可绕过。
 4. 物料、剧本、shot、参考帧、Prompt IR 和 adapter 包引用闭合。

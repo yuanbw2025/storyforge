@@ -1,5 +1,6 @@
 import Dexie from 'dexie'
 import { db } from '../db/schema'
+import { PROJECT_TABLES } from '../registry/project-tables'
 import type { MediaBlobObjectRecordV1, ProductMediaBlob, WorkspaceScope } from '../types'
 import { assertRecordInScope, resolveScope, stampNewRecord } from '../workspace/scope'
 
@@ -267,22 +268,37 @@ export interface MediaBlobGcReceiptV1 {
   deleted: number[]
 }
 
+function registeredMediaReferenceSpecs() {
+  return PROJECT_TABLES.filter(spec => spec.mediaRef?.blobTable === 'mediaBlobObjects')
+}
+
+async function collectRegisteredMediaReferenceIds(workId: number): Promise<number[]> {
+  const specs = registeredMediaReferenceSpecs()
+  const rows = await Promise.all(specs.map(spec => spec.table.where('workId').equals(workId).toArray()))
+  return rows.flatMap((tableRows, index) => tableRows.flatMap(row => {
+    const value = row[specs[index].mediaRef!.field]
+    return Number.isInteger(value) && value > 0 ? [value as number] : []
+  }))
+}
+
 export async function collectUnreferencedMediaBlobObjects(input: {
   scope: WorkspaceScope
   now?: number
 }): Promise<MediaBlobGcReceiptV1> {
   const scope = await resolveScope({ scope: input.scope })
   const now = input.now ?? Date.now()
-  const [objects, artifacts, productBlobs] = await Promise.all([
+  const [objects, artifacts, productBlobs, registeredReferenceIds] = await Promise.all([
     db.mediaBlobObjects.where('workId').equals(scope.workId).toArray(),
     db.productBuildArtifacts.where('workId').equals(scope.workId).toArray(),
     db.productMediaBlobs.where('workId').equals(scope.workId).toArray(),
+    collectRegisteredMediaReferenceIds(scope.workId),
   ])
   const referenced = new Set([
     ...artifacts
       .filter(row => row.status === 'accepted' || row.status === 'carried-forward')
       .flatMap(row => row.blobObjectId == null ? [] : [row.blobObjectId]),
     ...productBlobs.map(row => row.blobObjectId),
+    ...registeredReferenceIds,
   ])
   const retained: number[] = []
   const deleted: number[] = []
@@ -292,24 +308,27 @@ export async function collectUnreferencedMediaBlobObjects(input: {
       retained.push(object.id)
       continue
     }
+    const referenceSpecs = registeredMediaReferenceSpecs()
     const claimed = await db.transaction(
       'rw',
       [
         db.mediaBlobObjects,
         db.productBuildArtifacts,
         db.productMediaBlobs,
+        ...referenceSpecs.map(spec => spec.table),
       ],
       async () => {
         const current = await db.mediaBlobObjects.get(object.id!)
         if (!current || current.workId !== scope.workId || current.storageState === 'pending-write'
           || (current.leaseExpiresAt ?? 0) > now) return null
-        const [artifactRef, productRef] = await Promise.all([
+        const [artifactRef, productRef, ...registeredRefs] = await Promise.all([
           db.productBuildArtifacts.where('blobObjectId').equals(object.id!).filter(row => (
             row.status === 'accepted' || row.status === 'carried-forward'
           )).first(),
           db.productMediaBlobs.where('blobObjectId').equals(object.id!).first(),
+          ...referenceSpecs.map(spec => spec.table.where(spec.mediaRef!.field).equals(object.id!).first()),
         ])
-        if (artifactRef || productRef) return null
+        if (artifactRef || productRef || registeredRefs.some(Boolean)) return null
         await db.mediaBlobObjects.update(object.id!, { storageState: 'pending-delete', updatedAt: now })
         return current
       },
