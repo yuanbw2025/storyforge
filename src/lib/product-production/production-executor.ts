@@ -1997,7 +1997,7 @@ function textSystem(
     return `${common}\n你是角色总监。必须创建恰好一个 player 和恰好 ${minimumNpcs} 个有独立欲望、恐惧、秘密、动机、声音、知识边界、关系变化与视觉锚点的 NPC。` +
       `characters 数组必须恰好包含 ${requiredCastSlots.length} 个对象，并按顺序逐字使用以下 key/role 槽位：${JSON.stringify(requiredCastSlots)}。先建立全部 ${requiredCastSlots.length} 个对象再逐项填写；任何槽位缺失都不得提交。` +
       '输出字段必须精确为：{"schema":"storyforge.text-adventure-cast-bible-artifact","version":1,"characters":[{"key":"character.some-key","role":"player|major-npc|supporting-npc","sourceResourceKey":null,"name":"...","publicIdentity":"...","desire":"...","fear":"...","secret":"...","motivation":"...","voice":"...","initialKnowledge":["..."],"forbiddenKnowledge":["..."],"relationshipArc":["初始关系","变化结果"],"visualAnchor":"..."}]}。' +
-      `sourceResourceKey 只能为 null 或以下授权 key：${JSON.stringify(brief.source.selection.resourceKeys)}；null 表示产品私域角色。优先用上游来源审查和故事圣经中已命名的核心角色填充 major-npc 槽位，不得把多名角色压缩成一个对象，也不得使用“某人”“NPC”“待定”作为正式姓名。player 槽位的 forbiddenKnowledge 在确实没有额外禁止知识时允许为 []，NPC 的 forbiddenKnowledge 仍至少一项。输出前必须检查 characters.length === ${requiredCastSlots.length}、player 数量 === 1、NPC 数量 === ${minimumNpcs}。`
+      `sourceResourceKey 只能为 null 或以下授权 key：${JSON.stringify(brief.source.selection.resourceKeys)}；null 表示产品私域角色。优先用上游来源审查和故事圣经中已命名的核心角色填充 major-npc 槽位，不得把多名角色压缩成一个对象，也不得使用“某人”“NPC”“待定”作为正式姓名。player 槽位的 forbiddenKnowledge 在确实没有额外禁止知识时允许为 []，NPC 的 forbiddenKnowledge 仍至少一项。每个角色的 relationshipArc 必须包含 2–4 个非空且互不重复的阶段，至少明确“初始关系”和“由玩家行动造成的变化结果”，包括配角，绝不允许只写 1 项。输出前逐个检查 relationshipArc.length >= 2，再检查 characters.length === ${requiredCastSlots.length}、player 数量 === 1、NPC 数量 === ${minimumNpcs}。`
   }
   if (taskKey === 'content.adventure-architecture') {
     if (!adventure) return `${common}\n缺少文字冒险专用 Brief，停止。`

@@ -81,6 +81,11 @@ describe('R-TEXTADV2-production · 文字冒险正式生产契约与工作台', 
     expect(brief.completionContract.requiredGateIds).toEqual(expect.arrayContaining([
       'product.adventure.world-actions', 'product.adventure.progression',
     ]))
+    expect(getAgentSkillV1('text-adventure.cast-bible.v1')).toMatchObject({
+      agentId: 'text-adventure-cast-director',
+      promptVersion: 'text-adventure-cast-bible-v2',
+      maxOutputTokens: 16_000,
+    })
     const briefHash = await hashProductProductionValueV2(brief)
     const plan = await createProductProductionPlanV3({ buildNumber: 1, briefHash, brief })
     const taskByKey = new Map(plan.tasks.map(task => [task.taskKey, task]))

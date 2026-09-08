@@ -3194,7 +3194,7 @@ export const AGENT_SKILLS = [
     defaultForAgent: true,
     label: '文字冒险角色圣经与关系弧',
     owner: 'text-adventure-cast-director',
-    promptVersion: 'text-adventure-cast-bible-v1',
+    promptVersion: 'text-adventure-cast-bible-v2',
     executionMode: 'product-production',
     contextTaskKind: 'agent-outline',
     readToolNames: [],
@@ -3207,7 +3207,7 @@ export const AGENT_SKILLS = [
     contextGateway: PRODUCT_PRODUCTION_WORLD_GATEWAY_POLICY,
     maxOutputTokens: 16_000,
     writeTargets: [{ table: 'productBuildArtifacts', fields: ['payloadJson'], adoptionExtension: 'product-production-artifacts' }],
-    lastVerifiedAt: '2026-09-06',
+    lastVerifiedAt: '2026-09-08',
     regressionTests: ['R-TEXTADV3-agent-team'],
   },
   {
