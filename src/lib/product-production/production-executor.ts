@@ -4133,8 +4133,18 @@ function visualReviewScore(value: unknown, label: string): number {
 }
 
 function parseVisualReviewIssuesV1(value: unknown, label: string) {
-  if (!Array.isArray(value) || value.length > 12) fail(`${label} 必须是有界数组`)
-  return value.map((entry, index) => {
+  // Some OpenAI-compatible vision providers collapse a one-item JSON array
+  // into the item object even when the requested schema is explicit. A
+  // single issue object still preserves every quality signal, so normalize
+  // that bounded shape before validating each field. Do not coerce strings,
+  // null, oversized arrays or malformed objects: those would lose evidence.
+  const entries = Array.isArray(value)
+    ? value
+    : value != null && typeof value === 'object'
+      ? [value]
+      : null
+  if (!entries || entries.length > 12) fail(`${label} 必须是有界数组`)
+  return entries.map((entry, index) => {
     const issue = { ...record(entry, `${label}[${index}]`) }
     if (issue.recommendation == null) {
       issue.recommendation = '修正上述问题，并重新执行独立 Visual QA。'

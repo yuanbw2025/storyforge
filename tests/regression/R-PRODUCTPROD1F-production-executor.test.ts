@@ -2124,7 +2124,13 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
                   requirementFit: 5, identityContinuity: 5, styleContinuity: 4,
                   composition: 4, technicalCleanliness: 5,
                 },
-            issues: [],
+            issues: index === 0
+              ? {
+                  severity: 'warning', category: 'artifact',
+                  detail: '单项问题被 Provider 折叠为对象。',
+                  recommendation: '保留诊断并规范化为数组。',
+                }
+              : [],
           })),
         }),
         usage: { inputTokens: 200, outputTokens: 100 },
@@ -2167,6 +2173,12 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
         payload: {
           status: 'passed', providerReviewCompleted: true, blockingIssueCount: 0,
           mediaAuditHash: auditHash,
+          reviews: expect.arrayContaining([
+            expect.objectContaining({
+              artifactKey: imageKeys[0],
+              issues: [expect.objectContaining({ detail: '单项问题被 Provider 折叠为对象。' })],
+            }),
+          ]),
         },
       }],
     })
