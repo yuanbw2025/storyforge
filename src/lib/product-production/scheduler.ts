@@ -1271,6 +1271,16 @@ async function recoveryInvalidatedTaskKeys(input: {
     // invalidation root when this unrelated author gate advances the epoch.
     return new Set()
   }
+  if (previousFailure
+    && typeof previousFailure.taskKey === 'string'
+    && /^media\.visual\.\d{3}$/.test(previousFailure.taskKey)
+    && typeof previousFailure.detail === 'string'
+    && previousFailure.detail.includes('mediaAnchorDecision schema/version/hash 无效')) {
+    // A carried author decision cannot authorize a changed visual bible. Go
+    // back only to the deterministic confirmation gate; do not regenerate
+    // prose or images until a fresh decision binds the current hash.
+    return new Set(['media.anchor-author-gate'])
+  }
   if (recovery.blockerKey === 'content.source-sufficiency'
     && recoveryResolution?.action === 'retry'
     && previousFailure?.taskKey === 'source.author-gate') {
