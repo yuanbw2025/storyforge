@@ -8,6 +8,7 @@ import {
   parseProductRuntimeState,
   replayProductRuntimeEvents,
   updateProductRuntimeSessionHeadV1,
+  verifyFormalRuntimeSourceV1,
   verifyProductRuntimeCheckpoint,
 } from '../product/runtime-core'
 import type {
@@ -30,6 +31,7 @@ import {
   replayTextOpenWorldEventProtocolV1,
 } from './event-contract'
 import { parseTextOpenWorldModulesV1 } from './modules'
+import { verifyTextOpenWorldVNextSessionBindingV1 } from './session-binding'
 
 export const TEXT_OPEN_WORLD_MANUAL_SAVE_LIMIT_V1 = 20
 export const TEXT_OPEN_WORLD_AUTOMATIC_SAVE_LIMIT_V1 = 8
@@ -91,7 +93,7 @@ export interface TextOpenWorldPlayerSaveBranchV1 {
   depth: number
   isCurrent: boolean
   updatedAt: number
-  runtimeFormat: 'vnext' | 'legacy'
+  runtimeFormat: 'vnext' | 'legacy' | 'unknown'
   summary: TextOpenWorldPlayerSaveSummaryV1 | null
   runtimeHealth: 'available' | 'repairable' | 'damaged'
   runtimeHealthLabel: string
@@ -187,6 +189,29 @@ async function ownedSession(owner: ResolvedOwnerV1, sessionId: number): Promise<
   const session = await db.productRuntimeSessions.get(sessionId)
   assertSessionMatchesOwner(session, owner)
   return session
+}
+
+async function sessionSourceIsVerifiedForProjection(session: ProductRuntimeSession): Promise<boolean> {
+  try {
+    const formal = await verifyFormalRuntimeSourceV1(session, ['text-open-world'])
+    const initialState = parseProductRuntimeState(session.initialStateJson)
+    if (formal.packageHash !== session.runtimeSourceHash
+      || initialState.narrative?.version !== 2
+      || initialState.narrative.contentHash !== formal.packageHash) return false
+    if (initialState.textOpenWorld) await verifyTextOpenWorldVNextSessionBindingV1(session)
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function assertVerifiedFormalPlayerSaveSession(session: ProductRuntimeSession): Promise<void> {
+  if (session.productReleaseId == null || session.productBuildId != null) {
+    fail('制作预览不提供正式手动存档或时间线分支；请先发布Release')
+  }
+  if (!await sessionSourceIsVerifiedForProjection(session)) {
+    fail('存档冻结Release无法核验；请保留原记录并返回游戏库诊断')
+  }
 }
 
 async function eventsFor(session: ProductRuntimeSession, throughSequence = Number.MAX_SAFE_INTEGER): Promise<ProductRuntimeEvent[]> {
@@ -361,6 +386,26 @@ async function projectCheckpoint(
   }
 }
 
+function projectUnverifiedCheckpoint(
+  checkpoint: ProductRuntimeCheckpoint,
+  session: ProductRuntimeSession,
+  uiId: string,
+): TextOpenWorldPlayerCheckpointV1 {
+  const purpose = normalizedPurpose(checkpoint)
+  return {
+    uiId,
+    actionIdentity: { sessionId: session.id!, checkpointId: checkpoint.id! },
+    name: trimLabel(checkpoint.name, checkpointPurposeLabel(purpose)),
+    purpose,
+    purposeLabel: checkpointPurposeLabel(purpose),
+    createdAt: checkpoint.createdAt,
+    summary: null,
+    health: 'damaged',
+    healthLabel: '冻结来源无法核验；已保留用于诊断',
+    repairable: false,
+  }
+}
+
 function sourceIdentity(session: ProductRuntimeSession): string {
   return session.productReleaseId != null ? `release:${session.productReleaseId}` : `build:${session.productBuildId}`
 }
@@ -406,6 +451,10 @@ export async function projectTextOpenWorldPlayerSavesV1(input: {
     .filter(session => sessionMatchesOwner(session, owner))
     .filter(session => input.includeBuildPreviews === true || session.productReleaseId != null)
   const sessionsById = new Map(sessions.map(session => [session.id!, session]))
+  const sourceVerificationRows = await Promise.all(sessions.map(async session => (
+    [session.id!, await sessionSourceIsVerifiedForProjection(session)] as const
+  )))
+  const sourceVerifiedBySessionId = new Map(sourceVerificationRows)
   const checkpointRows = await db.productRuntimeCheckpoints.where('projectId').equals(owner.projectId).toArray()
   const checkpointsBySession = new Map<number, ProductRuntimeCheckpoint[]>()
   checkpointRows.forEach(checkpoint => {
@@ -418,7 +467,11 @@ export async function projectTextOpenWorldPlayerSavesV1(input: {
   })
 
   const releases = await db.productReleases.bulkGet(
-    [...new Set(sessions.flatMap(session => session.productReleaseId == null ? [] : [session.productReleaseId]))],
+    [...new Set(sessions.flatMap(session => (
+      sourceVerifiedBySessionId.get(session.id!) === true && session.productReleaseId != null
+        ? [session.productReleaseId]
+        : []
+    )))],
   )
   const releasesById = new Map(releases.flatMap(release => release?.id == null ? [] : [[release.id, release] as const]))
   const rawGroups = new Map<string, ProductRuntimeSession[]>()
@@ -443,26 +496,35 @@ export async function projectTextOpenWorldPlayerSavesV1(input: {
     const branches: TextOpenWorldPlayerSaveBranchV1[] = []
     for (let branchIndex = 0; branchIndex < groupSessions.length; branchIndex += 1) {
       const session = groupSessions[branchIndex]
+      const sourceVerified = sourceVerifiedBySessionId.get(session.id!) === true
       const rawCheckpoints = (checkpointsBySession.get(session.id!) ?? [])
         .slice()
         .sort((left, right) => right.createdAt - left.createdAt || (right.id ?? 0) - (left.id ?? 0))
       const checkpoints = await Promise.all(rawCheckpoints.map((checkpoint, checkpointIndex) => (
-        projectCheckpoint(checkpoint, session, `save-${groupIndex + 1}-${branchIndex + 1}-${checkpointIndex + 1}`)
+        sourceVerified
+          ? projectCheckpoint(checkpoint, session, `save-${groupIndex + 1}-${branchIndex + 1}-${checkpointIndex + 1}`)
+          : projectUnverifiedCheckpoint(checkpoint, session, `save-${groupIndex + 1}-${branchIndex + 1}-${checkpointIndex + 1}`)
       )))
       let boundary: CanonicalBoundaryV1 | null = null
       let summary: TextOpenWorldPlayerSaveSummaryV1 | null = null
-      try {
-        boundary = await canonicalBoundary(session)
-        summary = playerSafeSummary(boundary.state)
-      } catch { summary = null }
-      const runtimeFormat = boundary?.runtimeFormat
+      if (sourceVerified) {
+        try {
+          boundary = await canonicalBoundary(session)
+          summary = playerSafeSummary(boundary.state)
+        } catch { summary = null }
+      }
+      const runtimeFormat: TextOpenWorldPlayerSaveBranchV1['runtimeFormat'] = !sourceVerified
+        ? 'unknown'
+        : boundary?.runtimeFormat
         ?? (() => {
           try { return parseProductRuntimeState(session.initialStateJson).textOpenWorld ? 'vnext' as const : 'legacy' as const } catch { return 'legacy' as const }
         })()
-      const runtimeInspection = runtimeFormat === 'vnext'
+      const runtimeInspection = sourceVerified && runtimeFormat === 'vnext'
         ? await inspectTextOpenWorldRuntimeHeadV1(session.id!)
         : null
-      const runtimeHealth = runtimeInspection
+      const runtimeHealth = !sourceVerified
+        ? 'damaged'
+        : runtimeInspection
         ? runtimeInspection.code === 'valid' && summary ? 'available' : runtimeInspection.repairable && summary ? 'repairable' : 'damaged'
         : boundary && summary ? 'available' : 'damaged'
       const parent = session.parentSessionId == null ? null : sessionsById.get(session.parentSessionId) ?? null
@@ -484,7 +546,9 @@ export async function projectTextOpenWorldPlayerSavesV1(input: {
         runtimeHealth,
         runtimeHealthLabel: runtimeHealth === 'available'
           ? '运行状态可读取'
-          : runtimeHealth === 'repairable' ? '运行缓存可从规范事件修复' : '事件记录需要诊断',
+          : runtimeHealth === 'repairable'
+            ? '运行缓存可从规范事件修复'
+            : sourceVerified ? '事件记录需要诊断' : '冻结来源无法核验；只保留诊断与删除入口',
         runtimeRepairable: runtimeInspection?.repairable ?? false,
         manualSlots: {
           used: manualUsed,
@@ -497,8 +561,8 @@ export async function projectTextOpenWorldPlayerSavesV1(input: {
     groups.push({
       uiId: `save-group-${groupIndex + 1}`,
       title: release ? trimLabel(release.label, '未命名游戏') : trimLabel(root.title, '未命名游戏'),
-      versionLabel: release ? `版本 ${release.version}` : '制作预览',
-      sourceKind: release ? '正式发布' : '制作预览',
+      versionLabel: release ? `版本 ${release.version}` : root.productReleaseId != null ? '版本待核验' : '制作预览',
+      sourceKind: root.productReleaseId != null ? '正式发布' : '制作预览',
       branchCount: branches.length,
       branches,
     })
@@ -519,6 +583,7 @@ export async function createTextOpenWorldManualSaveV1(input: {
 }): Promise<ProductRuntimeCheckpoint> {
   const owner = await resolveOwner(input.owner)
   const previewSession = await ownedSession(owner, input.sessionId)
+  await assertVerifiedFormalPlayerSaveSession(previewSession)
   const canonical = await canonicalBoundary(previewSession)
   if (input.expectedThroughSequence != null && canonical.throughSequence !== input.expectedThroughSequence) {
     fail('存档基线已变化，请刷新后重试')
@@ -662,10 +727,15 @@ export async function reconcileTextOpenWorldAutomaticSavesV1(input: {
           purpose: candidate.purpose,
           subjectKey: candidate.subjectKey,
           name: candidate.name,
+          createdAt: candidate.createdAt,
         })
         checkpoints.push(checkpoint)
         createdCount += 1
       } else {
+        if (checkpoint.createdAt !== candidate.createdAt) {
+          await db.productRuntimeCheckpoints.update(checkpoint.id!, { createdAt: candidate.createdAt })
+          checkpoint = { ...checkpoint, createdAt: candidate.createdAt }
+        }
         retainedCount += 1
       }
       retainedIds.push(checkpoint.id!)
@@ -699,6 +769,7 @@ export async function branchTextOpenWorldPlayerSaveV1(input: {
   const checkpoint = await db.productRuntimeCheckpoints.get(input.checkpointId)
   if (!checkpoint) fail('存档不存在')
   const parent = await ownedSession(owner, checkpoint.sessionId)
+  await assertVerifiedFormalPlayerSaveSession(parent)
   if (checkpoint.projectId !== parent.projectId
     || (checkpoint.worldGroupId ?? null) !== (parent.worldGroupId ?? null)) fail('存档作用域与Session不一致')
   const runtimeFormat = parseProductRuntimeState(parent.initialStateJson).textOpenWorld ? 'vnext' : 'legacy'
@@ -826,6 +897,9 @@ export async function deleteTextOpenWorldPlayerCheckpointV1(input: {
     assertSessionMatchesOwner(session, owner)
     if (checkpoint.projectId !== session.projectId
       || (checkpoint.worldGroupId ?? null) !== (session.worldGroupId ?? null)) fail('存档作用域与Session不一致')
+    if (normalizedPurpose(checkpoint) !== 'manual') {
+      fail('只有玩家创建的手动存档可以删除；自动、战前、里程碑和系统恢复点由系统管理')
+    }
     await db.productRuntimeCheckpoints.delete(input.checkpointId)
   })
 }

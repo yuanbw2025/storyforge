@@ -112,6 +112,11 @@ describe('Text Open World G4 · 玩家库与显式Session加载', () => {
     expect(state.selectedManifest?.textOpenWorldVNext?.metadata.packageKey)
       .toBe(created.runtimePackage.textOpenWorldVNext?.metadata.packageKey)
     expect(state.error).toBe('')
+    await expect(useTextOpenWorldPlayerStore.getState().saveCheckpoint('不能成为正式档'))
+      .rejects.toThrow('制作预览不提供正式手动存档')
+    await expect(useTextOpenWorldPlayerStore.getState().forkCurrent('不能成为正式分支'))
+      .rejects.toThrow('制作预览不提供正式手动存档')
+    expect(await db.productRuntimeCheckpoints.where('sessionId').equals(created.build.session.id!).count()).toBe(0)
   })
 
   it('高风险确认遇到外部事件漂移后刷新权威Projection，并可按新基线重试', async () => {
@@ -436,9 +441,9 @@ describe('Text Open World G4 · 玩家库与显式Session加载', () => {
     await useTextOpenWorldPlayerStore.getState().load(created.scope, null)
 
     await expect(useTextOpenWorldPlayerStore.getState().remove(created.formalSession.id!))
-      .rejects.toThrow(/只能删除当前World\/Work和世界分组/)
+      .rejects.toThrow(/只能(?:删除|操作)当前World\/Work和世界分组/)
 
     await expect(db.productRuntimeSessions.get(created.formalSession.id!)).resolves.toBeDefined()
-    expect(useTextOpenWorldPlayerStore.getState().error).toMatch(/只能删除当前World\/Work和世界分组/)
+    expect(useTextOpenWorldPlayerStore.getState().error).toMatch(/只能(?:删除|操作)当前World\/Work和世界分组/)
   })
 })

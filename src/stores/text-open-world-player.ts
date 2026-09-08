@@ -9,9 +9,23 @@ import {
 import {
   branchTextOpenWorldSessionFromCheckpointV1,
   createTextOpenWorldCheckpointV1,
-  inspectTextOpenWorldCheckpointV1,
   retryDefeatedTextOpenWorldCombatV1,
 } from '../lib/open-world/checkpoints'
+import {
+  branchTextOpenWorldPlayerSaveV1,
+  createTextOpenWorldManualSaveV1,
+  deleteTextOpenWorldPlayerBranchV1,
+  deleteTextOpenWorldPlayerCheckpointV1,
+  projectTextOpenWorldPlayerSavesV1,
+  reconcileTextOpenWorldAutomaticSavesV1,
+  repairTextOpenWorldPlayerCheckpointV1,
+  repairTextOpenWorldPlayerRuntimeHeadV1,
+  type TextOpenWorldPlayerSavesProjectionV1,
+} from '../lib/open-world/player-saves'
+import {
+  projectTextOpenWorldPlayerVersionCompatibilityV1,
+  type TextOpenWorldPlayerVersionCompatibilityProjectionV1,
+} from '../lib/open-world/player-version-compatibility'
 import {
   adoptOpenWorldRuntimeCandidateV1,
   generateOpenWorldRuntimeCandidateV1,
@@ -25,11 +39,8 @@ import {
   commitAdventureAction,
   commitNarrativeChoice,
   commitOpenWorldCommand,
-  createProductRuntimeCheckpoint,
-  deleteProductRuntimeSession,
   readProductRuntimeState,
   readProductRuntimeStateVersion,
-  verifyProductRuntimeCheckpoint,
   type OpenWorldCommand,
 } from '../lib/open-world/runtime-api'
 import { verifyProductRuntimeSessionSourceV1 } from '../lib/product-production/preview-source'
@@ -41,7 +52,6 @@ import {
 } from '../lib/product/releases'
 import { assertInstanceBinding, createTextOpenWorldInstance, readBoundInstances } from '../lib/product/runtime-instances'
 import { EMPTY_PRODUCT_RUNTIME_STATE } from '../lib/types'
-import { resolveScope } from '../lib/workspace/scope'
 import type {
   AIConfig,
   ProductRelease,
@@ -86,6 +96,7 @@ interface TextOpenWorldSessionOperationRequest {
   scope: WorkspaceScope | null
   worldGroupId: number | null
   selectedSessionId: number | null
+  selectedThroughSequence: number
   publishedSessionId: number | null
 }
 
@@ -101,6 +112,10 @@ export interface TextOpenWorldPlayerState {
   selectedSessionSource: TextOpenWorldSelectedSessionSource | null
   events: ProductRuntimeEvent[]
   checkpoints: ProductRuntimeCheckpoint[]
+  /** Player-safe save/branch catalog for this owner; action ids are non-display handles. */
+  saveProjection: TextOpenWorldPlayerSavesProjectionV1
+  /** Read-only compatibility evidence for the selected immutable Release. */
+  versionCompatibility: TextOpenWorldPlayerVersionCompatibilityProjectionV1 | null
   runtimeState: ProductRuntimeState
   selectedManifest: PlayableTextOpenWorldProductRuntimePackageV1 | null
   lastFeedback: TextOpenWorldFeedbackReceiptV1 | null
@@ -122,9 +137,17 @@ export interface TextOpenWorldPlayerState {
   generatePresentation(skillId: OpenWorldRuntimeSkillIdV1, objective: string, aiConfig: AIConfig): Promise<void>
   saveCheckpoint(name: string): Promise<void>
   forkCheckpoint(checkpointId: number, title?: string): Promise<number>
+  deleteCheckpoint(checkpointId: number): Promise<void>
+  repairCheckpoint(checkpointId: number): Promise<void>
+  repairRuntimeHead(sessionId: number): Promise<void>
+  refreshSaveCenter(): Promise<void>
   retryDefeatedCombat(title?: string): Promise<number>
   forkCurrent(title?: string): Promise<number>
   remove(sessionId: number): Promise<void>
+}
+
+function emptySaveProjection(): TextOpenWorldPlayerSavesProjectionV1 {
+  return { groups: [], totalBranches: 0, totalCheckpoints: 0 }
 }
 
 async function readLibrary(scope: WorkspaceScope): Promise<TextOpenWorldLibraryItem[]> {
@@ -158,24 +181,6 @@ async function readLibrary(scope: WorkspaceScope): Promise<TextOpenWorldLibraryI
   }))
 }
 
-async function assertSessionOwnership(
-  scope: WorkspaceScope,
-  worldGroupId: number | null,
-  sessionId: number,
-): Promise<ProductRuntimeSession> {
-  const resolved = await resolveScope({ scope })
-  const session = await db.productRuntimeSessions.get(sessionId)
-  if (!session
-    || session.projectId !== resolved.projectId
-    || session.worldId !== resolved.worldId
-    || session.workId !== resolved.workId
-    || (session.worldGroupId ?? null) !== (worldGroupId ?? null)
-    || session.kind !== 'text-open-world') {
-    throw new Error('[text-open-world] 只能删除当前World/Work和世界分组内的文字开放世界存档。')
-  }
-  return session
-}
-
 async function assertSession(scope: WorkspaceScope, sessionId: number): Promise<ProductRuntimeSession> {
   const session = await assertInstanceBinding(sessionId, scope)
   if (session.kind !== 'text-open-world') throw new Error('[text-open-world] 该存档不是文字开放世界。')
@@ -205,6 +210,8 @@ function emptySelectionState(error = '') {
     selectedSessionSource: null,
     events: [],
     checkpoints: [],
+    saveProjection: emptySaveProjection(),
+    versionCompatibility: null,
     runtimeState: structuredClone(EMPTY_PRODUCT_RUNTIME_STATE),
     selectedManifest: null,
     generatedCandidate: null,
@@ -255,12 +262,22 @@ async function readDetails(scope: WorkspaceScope, worldGroupId: number | null, s
   // Only the frozen vNext package may enter system follow-up recovery.
   if (selectedManifest.textOpenWorldVNext) {
     await resumeTextOpenWorldSystemWorkV1(sessionId)
+    await reconcileTextOpenWorldAutomaticSavesV1({
+      owner: { scope, worldGroupId },
+      sessionId,
+    })
   }
   const session = await assertSession(scope, sessionId)
-  const [events, checkpoints, runtimeState] = await Promise.all([
+  const [events, checkpoints, runtimeState, saveProjection, versionCompatibility] = await Promise.all([
     db.productRuntimeEvents.where('sessionId').equals(sessionId).sortBy('sequence'),
     db.productRuntimeCheckpoints.where('sessionId').equals(sessionId).toArray(),
     readProductRuntimeState(sessionId),
+    projectTextOpenWorldPlayerSavesV1({
+      owner: { scope, worldGroupId },
+      currentSessionId: sessionId,
+      includeBuildPreviews: session.productReleaseId == null,
+    }),
+    projectTextOpenWorldPlayerVersionCompatibilityV1({ scope, currentSessionId: sessionId }),
   ])
   if (runtimeState.textOpenWorld) {
     const binding = await verifyTextOpenWorldVNextSessionBindingV1(session)
@@ -275,6 +292,8 @@ async function readDetails(scope: WorkspaceScope, worldGroupId: number | null, s
     selectedSessionSource: sessionSource(session),
     events,
     checkpoints: checkpoints.sort((left, right) => right.createdAt - left.createdAt),
+    saveProjection,
+    versionCompatibility,
     runtimeState,
     selectedManifest,
   }
@@ -321,6 +340,7 @@ export const useTextOpenWorldPlayerStore = create<TextOpenWorldPlayerState>((set
       scope: current.scope ? { ...current.scope } : null,
       worldGroupId: current.worldGroupId,
       selectedSessionId: current.selectedSessionId,
+      selectedThroughSequence: current.runtimeState.lastSequence,
       publishedSessionId: current.selectedSessionId,
     }
   }
@@ -437,6 +457,7 @@ export const useTextOpenWorldPlayerStore = create<TextOpenWorldPlayerState>((set
   return {
     scope: null, worldGroupId: null, releases: [], sessions: [], selectedSessionId: null,
     selectedSession: null, selectedSessionSource: null, events: [], checkpoints: [],
+    saveProjection: emptySaveProjection(), versionCompatibility: null,
     runtimeState: structuredClone(EMPTY_PRODUCT_RUNTIME_STATE), selectedManifest: null, lastFeedback: null,
     generatedCandidate: null, loading: false, busy: false, error: '',
     load: async (scope, worldGroupId, initialSessionId) => {
@@ -580,52 +601,84 @@ export const useTextOpenWorldPlayerStore = create<TextOpenWorldPlayerState>((set
         const projection = sessionOperationProjection(request)
         if (sessionId == null || !projection) throw new Error('[text-open-world] 请先开始正式开放世界。')
         await assertSessionProjection(projection.scope, projection.worldGroupId, sessionId)
-        const state = await readProductRuntimeState(sessionId)
-        if (state.textOpenWorld) await createTextOpenWorldCheckpointV1({ sessionId, name })
-        else await createProductRuntimeCheckpoint({ sessionId, name })
+        await createTextOpenWorldManualSaveV1({
+          owner: { scope: projection.scope, worldGroupId: projection.worldGroupId },
+          sessionId,
+          name,
+          expectedThroughSequence: request.selectedThroughSequence,
+        })
         await refresh(projection, sessionId, mayPublish)
       }, mayPublish)
     },
     forkCheckpoint: async (checkpointId, title) => {
       const request = beginSessionOperation()
-      const checkpoint = get().checkpoints.find(row => row.id === checkpointId)
-      const frozenCheckpoint = checkpoint ? structuredClone(checkpoint) : null
       const mayPublish = () => isCurrentSessionOperation(request)
       return run(async () => {
         const sessionId = request.selectedSessionId
         const projection = sessionOperationProjection(request)
         if (sessionId == null || !projection) throw new Error('[text-open-world] 请先开始正式开放世界。')
-        if (!frozenCheckpoint || frozenCheckpoint.sessionId !== sessionId) {
-          throw new Error('[text-open-world] 检查点无效。')
-        }
         await assertSessionProjection(projection.scope, projection.worldGroupId, sessionId)
-        const checkpointState = await readProductRuntimeState(
-          frozenCheckpoint.sessionId,
-          frozenCheckpoint.throughSequence,
-        )
-        const child = checkpointState.textOpenWorld
-          ? await (async () => {
-              const inspection = await inspectTextOpenWorldCheckpointV1(checkpointId)
-              if (!inspection.valid) throw new Error(`[text-open-world] 检查点无效:${inspection.detail}`)
-              return branchTextOpenWorldSessionFromCheckpointV1({
-                checkpointId,
-                title: title?.trim() || `世界分支 · ${frozenCheckpoint.name}`,
-              })
-            })()
-          : await (async () => {
-              if (!await verifyProductRuntimeCheckpoint(checkpointId)) {
-                throw new Error('[text-open-world] 检查点无效。')
-              }
-              return branchProductRuntimeSession({
-                parentSessionId: frozenCheckpoint.sessionId,
-                throughSequence: frozenCheckpoint.throughSequence,
-                title: title?.trim() || `世界分支 · ${frozenCheckpoint.name}`,
-              })
-            })()
+        const child = await branchTextOpenWorldPlayerSaveV1({
+          owner: { scope: projection.scope, worldGroupId: projection.worldGroupId },
+          checkpointId,
+          title: title?.trim() || '开放世界存档分支',
+        })
         const childSessionId = child.id
         if (childSessionId == null) throw new Error('[text-open-world] 分支Session缺少身份。')
         await reloadSessionOperation(request, childSessionId)
         return childSessionId
+      }, mayPublish)
+    },
+    deleteCheckpoint: async checkpointId => {
+      const request = beginSessionOperation()
+      const mayPublish = () => isCurrentSessionOperation(request)
+      return run(async () => {
+        const sessionId = request.selectedSessionId
+        const projection = sessionOperationProjection(request)
+        if (sessionId == null || !projection) throw new Error('[text-open-world] 请先开始正式开放世界。')
+        await deleteTextOpenWorldPlayerCheckpointV1({
+          owner: { scope: projection.scope, worldGroupId: projection.worldGroupId },
+          checkpointId,
+        })
+        await refresh(projection, sessionId, mayPublish)
+      }, mayPublish)
+    },
+    repairCheckpoint: async checkpointId => {
+      const request = beginSessionOperation()
+      const mayPublish = () => isCurrentSessionOperation(request)
+      return run(async () => {
+        const sessionId = request.selectedSessionId
+        const projection = sessionOperationProjection(request)
+        if (sessionId == null || !projection) throw new Error('[text-open-world] 请先开始正式开放世界。')
+        await repairTextOpenWorldPlayerCheckpointV1({
+          owner: { scope: projection.scope, worldGroupId: projection.worldGroupId },
+          checkpointId,
+        })
+        await refresh(projection, sessionId, mayPublish)
+      }, mayPublish)
+    },
+    repairRuntimeHead: async targetSessionId => {
+      const request = beginSessionOperation()
+      const mayPublish = () => isCurrentSessionOperation(request)
+      return run(async () => {
+        const sessionId = request.selectedSessionId
+        const projection = sessionOperationProjection(request)
+        if (sessionId == null || !projection) throw new Error('[text-open-world] 请先开始正式开放世界。')
+        await repairTextOpenWorldPlayerRuntimeHeadV1({
+          owner: { scope: projection.scope, worldGroupId: projection.worldGroupId },
+          sessionId: targetSessionId,
+        })
+        await refresh(projection, sessionId, mayPublish)
+      }, mayPublish)
+    },
+    refreshSaveCenter: async () => {
+      const request = beginSessionOperation()
+      const mayPublish = () => isCurrentSessionOperation(request)
+      return run(async () => {
+        const sessionId = request.selectedSessionId
+        const projection = sessionOperationProjection(request)
+        if (sessionId == null || !projection) throw new Error('[text-open-world] 请先开始正式开放世界。')
+        await refresh(projection, sessionId, mayPublish)
       }, mayPublish)
     },
     retryDefeatedCombat: async title => {
@@ -650,12 +703,18 @@ export const useTextOpenWorldPlayerStore = create<TextOpenWorldPlayerState>((set
         const sessionId = request.selectedSessionId
         const projection = sessionOperationProjection(request)
         if (sessionId == null || !projection) throw new Error('[text-open-world] 请先开始正式开放世界。')
-        await assertSessionProjection(projection.scope, projection.worldGroupId, sessionId)
+        const session = await assertSessionProjection(projection.scope, projection.worldGroupId, sessionId)
+        if (session.productReleaseId == null || session.productBuildId != null) {
+          throw new Error('[text-open-world] 制作预览不提供正式手动存档或时间线分支；请先发布Release。')
+        }
         const state = await readProductRuntimeState(sessionId)
         const child = state.textOpenWorld
           ? await (async () => {
               const checkpoint = await createTextOpenWorldCheckpointV1({
                 sessionId,
+                throughSequence: request.selectedThroughSequence,
+                purpose: 'system',
+                subjectKey: null,
                 name: title?.trim() || '开放世界分支点',
               })
               return branchTextOpenWorldSessionFromCheckpointV1({
@@ -665,7 +724,7 @@ export const useTextOpenWorldPlayerStore = create<TextOpenWorldPlayerState>((set
             })()
           : await branchProductRuntimeSession({
               parentSessionId: sessionId,
-              throughSequence: state.lastSequence,
+              throughSequence: request.selectedThroughSequence,
               title: title?.trim() || '开放世界分支',
             })
         const childSessionId = child.id
@@ -683,8 +742,10 @@ export const useTextOpenWorldPlayerStore = create<TextOpenWorldPlayerState>((set
       return run(async () => {
         const projection = sessionOperationProjection(request)
         if (!projection) throw new Error('[text-open-world] scope 缺失。')
-        await assertSessionOwnership(projection.scope, projection.worldGroupId, sessionId)
-        await deleteProductRuntimeSession(sessionId)
+        await deleteTextOpenWorldPlayerBranchV1({
+          owner: { scope: projection.scope, worldGroupId: projection.worldGroupId },
+          sessionId,
+        })
         await reloadSessionOperation(request, selectedSessionIdAfterRemoval)
       }, mayPublish)
     },

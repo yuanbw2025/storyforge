@@ -223,7 +223,7 @@ describe('Text Open World G4 · 真实 vNext 玩家壳集成', () => {
     expect(more.textContent).toContain('制作与交易')
     expect(more.textContent).toContain('盐露药剂')
     expect(more.textContent).toContain('背包')
-    expect(more.textContent).toContain('存档与分支')
+    expect(more.textContent).toContain('存档、分支与设置')
 
     await click(buttonByLabel(host, '返回当前场景'))
     expect(shell.getAttribute('data-active-view')).toBe('scene')

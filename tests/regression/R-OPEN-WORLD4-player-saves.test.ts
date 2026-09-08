@@ -38,7 +38,7 @@ describe('Text Open World G4-12B · 专属存档领域', () => {
   it('以原子事务限制每个Session最多20个手动档，自动/战前/里程碑/系统档不占名额', async () => {
     const created = await fixture('手动档并发上限')
     const sessionId = created.session.id!
-    await createTextOpenWorldCheckpointV1({ sessionId, name: '自动点', purpose: 'autosave' })
+    const automatic = await createTextOpenWorldCheckpointV1({ sessionId, name: '自动点', purpose: 'autosave' })
     await createTextOpenWorldCheckpointV1({
       sessionId, name: '战前点', purpose: 'combat-retry', subjectKey: 'encounter.ridge-jackal',
     })
@@ -63,6 +63,10 @@ describe('Text Open World G4-12B · 专属存档领域', () => {
     const checkpoints = await db.productRuntimeCheckpoints.where('sessionId').equals(sessionId).toArray()
     expect(checkpoints.filter(checkpoint => (checkpoint.purpose ?? 'manual') === 'manual')).toHaveLength(20)
     expect(checkpoints.filter(checkpoint => checkpoint.purpose !== 'manual')).toHaveLength(4)
+    await expect(deleteTextOpenWorldPlayerCheckpointV1({
+      owner: created.owner,
+      checkpointId: automatic.id!,
+    })).rejects.toThrow('只有玩家创建的手动存档可以删除')
   }, 30_000)
 
   it('只投影玩家已知的版本、地点、主线和分支摘要，不泄露内部ID、Hash或未揭示任务', async () => {
@@ -212,5 +216,45 @@ describe('Text Open World G4-12B · 专属存档领域', () => {
         summary: null,
       }],
     })
+  })
+
+  it('同owner但冻结来源跨Work或损坏的Session只显示诊断，不读取Release和状态正文', async () => {
+    const owned = await fixture('来源隔离')
+    const checkpoint = await createTextOpenWorldManualSaveV1({
+      owner: owned.owner,
+      sessionId: owned.session.id!,
+      name: '来源损坏前的手动档',
+    })
+    const foreign = await fixture('跨Work秘密来源')
+    await db.productReleases.update(foreign.release.id!, { label: '跨Work秘密版本标题' })
+    const secretState = foreign.session.initialStateJson.replace('盐港广场', '跨Work秘密地点')
+    await db.productRuntimeSessions.update(owned.session.id!, {
+      productReleaseId: foreign.release.id,
+      runtimeSourceHash: foreign.session.runtimeSourceHash,
+      initialStateJson: secretState,
+    })
+    await db.productRuntimeCheckpoints.update(checkpoint.id!, { stateJson: secretState })
+
+    const projection = await projectTextOpenWorldPlayerSavesV1({
+      owner: owned.owner,
+      currentSessionId: owned.session.id,
+    })
+
+    expect(projection.groups).toHaveLength(1)
+    expect(projection.groups[0]).toMatchObject({
+      title: '盐脊旅程',
+      versionLabel: '版本待核验',
+      sourceKind: '正式发布',
+      branches: [{
+        runtimeFormat: 'unknown',
+        runtimeHealth: 'damaged',
+        runtimeRepairable: false,
+        summary: null,
+        checkpoints: [{ health: 'damaged', repairable: false, summary: null }],
+      }],
+    })
+    const serialized = JSON.stringify(projection)
+    expect(serialized).not.toContain('跨Work秘密版本标题')
+    expect(serialized).not.toContain('跨Work秘密地点')
   })
 })

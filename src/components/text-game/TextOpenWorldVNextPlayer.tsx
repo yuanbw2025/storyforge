@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Bell, GitBranch, Save } from 'lucide-react'
+import { Bell } from 'lucide-react'
 import { parseTextOpenWorldModulesV1 } from '../../lib/open-world/modules'
 import { projectTextOpenWorldPlayerCombatV1 } from '../../lib/open-world/player-combat'
 import {
@@ -29,6 +29,7 @@ import TextOpenWorldInventoryPanel from './TextOpenWorldInventoryPanel'
 import TextOpenWorldMapPanel, { type TextOpenWorldMapTravelRequestV1 } from './TextOpenWorldMapPanel'
 import TextOpenWorldQuestLogPanel from './TextOpenWorldQuestLogPanel'
 import TextOpenWorldScenePanel from './TextOpenWorldScenePanel'
+import TextOpenWorldSaveSettingsPanel from './TextOpenWorldSaveSettingsPanel'
 import TextOpenWorldWorldRecordPanel from './TextOpenWorldWorldRecordPanel'
 
 const QUEST_STATUS_LABELS = {
@@ -59,6 +60,14 @@ const PLAYER_SAFE_ERROR_RULES: ReadonlyArray<{
   {
     markers: ['只能删除当前World/Work和世界分组内'],
     message: '只能删除当前工作区和世界分组内的文字开放世界存档。',
+  },
+  {
+    markers: ['只能操作当前World/Work和世界分组内'],
+    message: '只能操作当前工作区和世界分组内的文字开放世界存档。',
+  },
+  {
+    markers: ['制作预览不提供正式手动存档或时间线分支'],
+    message: '制作预览不提供正式存档与分支；请发布后开始正式旅程。',
   },
   {
     markers: [
@@ -103,7 +112,6 @@ function playerSafeError(rawError: string): string {
 
 export default function TextOpenWorldVNextPlayer() {
   const store = useTextOpenWorldPlayerStore()
-  const [checkpointName, setCheckpointName] = useState('')
   const [dismissedCombatIdentity, setDismissedCombatIdentity] = useState<string | null>(null)
   const [pendingConfirmation, setPendingConfirmation] = useState<{
     actionKey: string
@@ -147,6 +155,8 @@ export default function TextOpenWorldVNextPlayer() {
     ?? store.selectedSessionId
     ?? runtimePackage?.metadata.packageKey
     ?? 'no-session'
+  const productionKey = store.selectedManifest?.definition.productKey
+    ?? `unavailable-product:${sessionKey}`
   const projectionSequence = projection?.lastEventSequence ?? null
   // These are cheap, deterministic render projections. Recompute rather than
   // caching by object identity so an externally restored mutable snapshot can
@@ -544,41 +554,25 @@ export default function TextOpenWorldVNextPlayer() {
       role="status"
       data-testid="text-open-world-world-record-synchronizing"
     >世界记录正在核对，完成前不会展示不完整或尚未揭示的内容。</article>}
-    <article className="rounded border border-border bg-bg-surface p-4">
-      <div className="mb-2 flex items-center gap-2 text-sm font-semibold">
-        <Save className="h-4 w-4 text-accent" />存档与分支
-      </div>
-      <div className="flex gap-2">
-        <input
-          value={checkpointName}
-          onChange={event => setCheckpointName(event.target.value)}
-          placeholder="检查点名称"
-          className="min-w-0 flex-1 rounded border border-border bg-bg-base px-2 py-1 text-xs"
-        />
-        <button
-          type="button"
-          disabled={!checkpointName.trim() || store.busy}
-          onClick={() => void run(async () => {
-            await store.saveCheckpoint(checkpointName)
-            setCheckpointName('')
-          })}
-          className="rounded border border-border px-2 text-xs"
-        >
-          保存
-        </button>
-      </div>
-      <div className="mt-2 max-h-36 space-y-1 overflow-y-auto">
-        {store.checkpoints.map(checkpoint => <button
-          key={checkpoint.id}
-          type="button"
-          disabled={store.busy}
-          onClick={() => void run(() => store.forkCheckpoint(checkpoint.id!))}
-          className="block w-full rounded bg-bg-base px-2 py-1 text-left text-[9px]"
-        >
-          {checkpoint.name} · #{checkpoint.throughSequence}<GitBranch className="ml-1 inline h-3 w-3" />
-        </button>)}
-      </div>
-    </article>
+    <TextOpenWorldSaveSettingsPanel
+      sessionKey={sessionKey}
+      productionKey={productionKey}
+      formalSaveAvailable={store.selectedSessionSource === 'release'}
+      audioAvailable={false}
+      saves={store.saveProjection}
+      versions={store.versionCompatibility}
+      busy={store.busy}
+      error={publicError}
+      onCreateManualSave={name => store.saveCheckpoint(name)}
+      onForkCurrent={title => store.forkCurrent(title)}
+      onForkCheckpoint={(checkpointId, title) => store.forkCheckpoint(checkpointId, title)}
+      onSelectBranch={sessionId => store.select(sessionId)}
+      onDeleteCheckpoint={checkpointId => store.deleteCheckpoint(checkpointId)}
+      onDeleteBranch={sessionId => store.remove(sessionId)}
+      onRepairCheckpoint={checkpointId => store.repairCheckpoint(checkpointId)}
+      onRepairRuntimeHead={sessionId => store.repairRuntimeHead(sessionId)}
+      onRefresh={() => store.refreshSaveCenter()}
+    />
   </div>
 
   const context = <div className="space-y-3">
@@ -664,6 +658,7 @@ export default function TextOpenWorldVNextPlayer() {
         : null}</div>
     <TextOpenWorldGameShell
       sessionKey={sessionKey}
+      preferenceProductionKey={productionKey}
       viewRequest={questMapFocus?.sessionKey === sessionKey ? {
         sessionKey,
         requestId: questMapFocus.requestId,
@@ -718,7 +713,7 @@ export default function TextOpenWorldVNextPlayer() {
         <span data-testid="text-open-world-runtime-package-hash">
           <strong>运行包</strong>{runtimeSourceEvidence}
         </span>
-        <span><strong>保存状态</strong>{store.busy ? '正在结算' : publicError ? '需要处理' : '已自动保存'}</span>
+        <span><strong>保存状态</strong>{store.busy ? '正在结算' : publicError ? '需要处理' : '事件已落盘'}</span>
       </>}
       navigationSupplement={trackedQuestContent}
       overlay={confirmationOverlay}

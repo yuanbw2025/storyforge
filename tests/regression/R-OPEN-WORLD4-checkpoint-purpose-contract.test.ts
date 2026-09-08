@@ -60,7 +60,9 @@ describe('TOW-G4-12A · checkpoint purpose and portable lineage contract', () =>
     const legacy = await createProductRuntimeCheckpoint({
       sessionId: session.id!,
       name: 'legacy manual',
+      createdAt: 1_700_000_000_000,
     })
+    expect(legacy.createdAt).toBe(1_700_000_000_000)
     const legacyRow = { ...legacy } as Record<string, unknown>
     delete legacyRow.purpose
     delete legacyRow.subjectKey
@@ -85,6 +87,9 @@ describe('TOW-G4-12A · checkpoint purpose and portable lineage contract', () =>
     await expect(createProductRuntimeCheckpoint({
       sessionId: session.id!, name: 'combat without subject', purpose: 'combat-retry',
     })).rejects.toThrow('必须绑定有效对象')
+    await expect(createProductRuntimeCheckpoint({
+      sessionId: session.id!, name: 'bad source time', createdAt: -1,
+    })).rejects.toThrow('创建时间无效')
   })
 
   it('读取验真对非法purpose、配对、scope、sequence和hash一律失败关闭', async () => {

@@ -1,4 +1,13 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type CSSProperties,
+  type ReactNode,
+} from 'react'
 import {
   ArrowLeft,
   ChevronLeft,
@@ -11,6 +20,7 @@ import {
   X,
   type LucideIcon,
 } from 'lucide-react'
+import { createTextOpenWorldPlayerPreferencesStoreV1 } from '../../lib/open-world/player-preferences'
 import './player-roadshow.css'
 
 export const TEXT_OPEN_WORLD_GAME_VIEW_KEYS = ['scene', 'map', 'quests', 'character', 'more'] as const
@@ -30,6 +40,8 @@ export interface TextOpenWorldGameViewRequest {
 export interface TextOpenWorldGameShellProps {
   /** A changed key starts from the scene again without persisting UI-only navigation state. */
   sessionKey: number | string
+  /** Stable product-family identity; browser-local preferences span its immutable Releases. */
+  preferenceProductionKey: string
   gameTitle: string
   locationTitle: string
   sourceLabel: string
@@ -134,6 +146,15 @@ export default function TextOpenWorldGameShell(props: TextOpenWorldGameShellProp
   const onDismissOverlay = props.onDismissOverlay
   const contextModalOpen = contextOpen && contextDrawerMode && !overlayOpen
   const backgroundInert = overlayOpen || contextModalOpen
+  const preferencesStore = useMemo(
+    () => createTextOpenWorldPlayerPreferencesStoreV1({ productionKey: props.preferenceProductionKey }),
+    [props.preferenceProductionKey],
+  )
+  const preferences = useSyncExternalStore(
+    preferencesStore.subscribe,
+    preferencesStore.getSnapshot,
+    preferencesStore.getServerSnapshot,
+  )
 
   const closeContext = useCallback((restoreFocus = true) => {
     restoreContextFocusAfterCloseRef.current = restoreFocus
@@ -232,6 +253,13 @@ export default function TextOpenWorldGameShell(props: TextOpenWorldGameShellProp
     className="open-world-game-shell"
     data-testid="text-open-world-shell"
     data-active-view={activeView}
+    data-high-contrast={preferences.highContrast || undefined}
+    data-reduced-motion={preferences.reducedMotion || undefined}
+    data-muted={preferences.muted || undefined}
+    style={{
+      '--open-world-reader-font-size': `${preferences.fontSizePx}px`,
+      '--open-world-reader-line-height': preferences.lineHeight,
+    } as CSSProperties}
     aria-busy={props.busy || undefined}
     onClickCapture={event => {
       if (!overlayOpen || overlayRef.current?.contains(event.target as Node)) return

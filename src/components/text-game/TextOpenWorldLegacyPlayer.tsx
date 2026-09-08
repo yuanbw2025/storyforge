@@ -4,11 +4,9 @@ import {
   Check,
   Compass,
   Footprints,
-  GitBranch,
   History,
   Loader2,
   MapPinned,
-  Save,
   Sparkles,
   UserRound,
 } from 'lucide-react'
@@ -20,11 +18,11 @@ import {
   useTextOpenWorldPlayerStore,
 } from '../../stores/text-open-world-player'
 import TextOpenWorldGameShell from './TextOpenWorldGameShell'
+import TextOpenWorldSaveSettingsPanel from './TextOpenWorldSaveSettingsPanel'
 
 export default function TextOpenWorldLegacyPlayer() {
   const store = useTextOpenWorldPlayerStore()
   const { config } = useAIConfigStore()
-  const [checkpointName, setCheckpointName] = useState('')
   const [localError, setLocalError] = useState('')
   const selected = store.selectedSession
   const world = store.runtimeState.openWorld
@@ -45,11 +43,11 @@ export default function TextOpenWorldLegacyPlayer() {
     setLocalError('')
     try {
       await operation()
-    } catch (error) {
-      setLocalError(error instanceof Error ? error.message : String(error))
+    } catch {
+      setLocalError('操作未能完成，请确认当前状态后重试。')
     }
   }
-  const error = localError || store.error
+  const publicError = localError || (store.error ? '操作未能完成，请确认当前状态后重试。' : '')
 
   if (!selected?.id || !world || !openWorld) return null
 
@@ -59,6 +57,7 @@ export default function TextOpenWorldLegacyPlayer() {
   const sourceLabel = store.selectedSessionSource === 'build-preview'
     ? `TEXT-OPEN-WORLD · BUILD PREVIEW · 非正式发布 · Build ID #${selected.productBuildId ?? '?'}`
     : `TEXT-OPEN-WORLD · PRODUCT RELEASE v${selectedReleaseVersion ?? '?'} · 已固定`
+  const productionKey = manifest.definition.productKey
   const currentRegionTitle = currentRegion?.title ?? world.currentRegionKey
   const currentRegionDescription = currentRegion?.description || '当前地区资料尚未展开。'
 
@@ -276,36 +275,25 @@ export default function TextOpenWorldLegacyPlayer() {
     </div>
   </article>
 
-  const checkpointPanel = <article className="rounded border border-border bg-bg-surface p-4">
-    <div className="mb-2 flex items-center gap-2 text-sm font-semibold">
-      <Save className="h-4 w-4 text-accent" />检查点与分支
-    </div>
-    <div className="flex gap-2">
-      <input
-        value={checkpointName}
-        onChange={event => setCheckpointName(event.target.value)}
-        placeholder="检查点名称"
-        className="min-w-0 flex-1 rounded border border-border bg-bg-base px-2 py-1 text-xs"
-      />
-      <button
-        type="button"
-        disabled={!checkpointName.trim()}
-        onClick={() => void run(async () => {
-          await store.saveCheckpoint(checkpointName)
-          setCheckpointName('')
-        })}
-        className="rounded border border-border px-2 text-xs"
-      >保存</button>
-    </div>
-    <div className="mt-2 max-h-32 space-y-1 overflow-y-auto">
-      {store.checkpoints.map(checkpoint => <button
-        key={checkpoint.id}
-        type="button"
-        onClick={() => void run(() => store.forkCheckpoint(checkpoint.id!))}
-        className="block w-full rounded bg-bg-base px-2 py-1 text-left text-[9px]"
-      >{checkpoint.name} · #{checkpoint.throughSequence} <GitBranch className="ml-1 inline h-3 w-3" /></button>)}
-    </div>
-  </article>
+  const checkpointPanel = <TextOpenWorldSaveSettingsPanel
+    sessionKey={selected.id}
+    productionKey={productionKey}
+    formalSaveAvailable={store.selectedSessionSource === 'release'}
+    audioAvailable={false}
+    saves={store.saveProjection}
+    versions={store.versionCompatibility}
+    busy={store.busy}
+    error={publicError}
+    onCreateManualSave={name => store.saveCheckpoint(name)}
+    onForkCurrent={title => store.forkCurrent(title)}
+    onForkCheckpoint={(checkpointId, title) => store.forkCheckpoint(checkpointId, title)}
+    onSelectBranch={sessionId => store.select(sessionId)}
+    onDeleteCheckpoint={checkpointId => store.deleteCheckpoint(checkpointId)}
+    onDeleteBranch={sessionId => store.remove(sessionId)}
+    onRepairCheckpoint={checkpointId => store.repairCheckpoint(checkpointId)}
+    onRepairRuntimeHead={sessionId => store.repairRuntimeHead(sessionId)}
+    onRefresh={() => store.refreshSaveCenter()}
+  />
 
   const context = <div className="space-y-3">
     <article className="open-world-game-context-card">
@@ -320,6 +308,7 @@ export default function TextOpenWorldLegacyPlayer() {
 
   return <TextOpenWorldGameShell
     sessionKey={selected.id}
+    preferenceProductionKey={productionKey}
     gameTitle={manifest.definition.title}
     locationTitle={currentRegionTitle}
     sourceLabel={sourceLabel}
@@ -336,14 +325,14 @@ export default function TextOpenWorldLegacyPlayer() {
       <span><strong>旅行</strong>{world.travel ? `前往 ${world.travel.toRegionKey} · 剩余 ${world.travel.remainingTicks}` : '当前驻留'}</span>
       <span><strong>当前区域</strong>{currentRegionTitle}</span>
       <span><strong>时间线</strong>事件 #{store.runtimeState.lastSequence}</span>
-      <span><strong>保存状态</strong>{store.busy ? '正在结算' : '已自动保存'}</span>
+      <span><strong>保存状态</strong>{store.busy ? '正在结算' : publicError ? '需要处理' : '事件已落盘'}</span>
     </>}
     navigationSupplement={<section className="open-world-game-rail-card" aria-label="旧版动态任务">
       <small>动态任务</small>
       <strong>{active.length} 进行中 · {revealed.length} 可接取</strong>
       <span>旧版兼容运行包</span>
     </section>}
-    error={error}
+    error={publicError}
     busy={store.busy}
     onExit={() => void store.select(null)}
   />

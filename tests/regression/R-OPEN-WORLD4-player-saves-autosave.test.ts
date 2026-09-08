@@ -50,11 +50,18 @@ describe('Text Open World G4-12B · 规范终态自动存档', () => {
     let automatic = (await db.productRuntimeCheckpoints.where('sessionId').equals(sessionId).toArray())
       .filter(checkpoint => checkpoint.purpose === 'autosave')
     expect(automatic).toHaveLength(1)
+    const terminalCreatedAt = (await db.productRuntimeEvents.where('sessionId').equals(sessionId).toArray())
+      .find(event => event.sequence === automatic[0].throughSequence)?.createdAt
+    expect(terminalCreatedAt).toEqual(expect.any(Number))
+    expect(automatic[0].createdAt).toBe(terminalCreatedAt)
 
+    await db.productRuntimeCheckpoints.update(automatic[0].id!, { createdAt: 1 })
     const repeated = await reconcileTextOpenWorldAutomaticSavesV1({
       owner: created.owner, sessionId, maximumAutomaticSaves: 2,
     })
     expect(repeated).toMatchObject({ createdCount: 0, retainedCount: 1, damagedCount: 0 })
+    await expect(db.productRuntimeCheckpoints.get(automatic[0].id!))
+      .resolves.toMatchObject({ createdAt: terminalCreatedAt })
 
     await db.productRuntimeCheckpoints.delete(automatic[0].id!)
     const recovered = await reconcileTextOpenWorldAutomaticSavesV1({
@@ -64,6 +71,7 @@ describe('Text Open World G4-12B · 规范终态自动存档', () => {
     automatic = (await db.productRuntimeCheckpoints.where('sessionId').equals(sessionId).toArray())
       .filter(checkpoint => checkpoint.purpose === 'autosave')
     expect(automatic).toHaveLength(1)
+    expect(automatic[0].createdAt).toBe(terminalCreatedAt)
   })
 
   it('每个Session有限轮转自动档，保留手动档，并从主线终态派生稳定里程碑', async () => {

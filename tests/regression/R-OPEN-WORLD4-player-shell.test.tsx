@@ -26,6 +26,7 @@ function views(): TextOpenWorldGameShellProps['views'] {
 function props(overrides: Partial<TextOpenWorldGameShellProps> = {}): TextOpenWorldGameShellProps {
   return {
     sessionKey: 1,
+    preferenceProductionKey: 'fixture.text-open-world.player-shell',
     gameTitle: '盐脊',
     locationTitle: '盐港',
     sourceLabel: 'PRODUCT RELEASE v1 · 已固定',

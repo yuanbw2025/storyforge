@@ -1849,6 +1849,8 @@ export async function createProductRuntimeCheckpoint(input: {
   throughSequence?: number;
   purpose?: ProductRuntimeCheckpoint["purpose"];
   subjectKey?: string | null;
+  /** Canonical source time for recovered derived checkpoints; defaults to creation time. */
+  createdAt?: number;
 }): Promise<ProductRuntimeCheckpoint> {
   if (!Number.isInteger(input.sessionId) || input.sessionId < 1) {
     throw new Error("检查点 sessionId 无效。");
@@ -1887,6 +1889,10 @@ export async function createProductRuntimeCheckpoint(input: {
       const stateJson = JSON.stringify(state);
       const name = input.name.trim() || `检查点 ${throughSequence}`;
       if (name.length > 200) throw new Error("检查点名称不能超过 200 个字符。");
+      const createdAt = input.createdAt ?? Date.now();
+      if (!Number.isSafeInteger(createdAt) || createdAt < 0) {
+        throw new Error("检查点创建时间无效。");
+      }
       const checkpoint: ProductRuntimeCheckpoint = {
         projectId: session.projectId,
         worldGroupId: session.worldGroupId ?? null,
@@ -1896,7 +1902,7 @@ export async function createProductRuntimeCheckpoint(input: {
         ...purpose,
         stateJson,
         stateHash: await hashStateJson(stateJson),
-        createdAt: Date.now(),
+        createdAt,
       };
       parseProductRuntimeCheckpointV1(checkpoint);
       checkpoint.id = (await db.productRuntimeCheckpoints.add(checkpoint)) as number;
