@@ -402,7 +402,7 @@ describe('R-TEXTADV2-production · 文字冒险正式生产契约与工作台', 
     expect(keyIllustrationPlan.tasks.filter(task => /^media\.visual\.\d{3}$/.test(task.taskKey))).toHaveLength(12)
     const reviewBatches = keyIllustrationPlan.tasks
       .filter(task => /^media\.visual-quality-review\.batch-\d+$/.test(task.taskKey))
-    expect(reviewBatches).toHaveLength(6)
+    expect(reviewBatches).toHaveLength(7)
     expect(reviewBatches.every(task => (
       task.subjectLockKeys.join(',') === 'quality.visual-review-provider'
     ))).toBe(true)
@@ -413,7 +413,8 @@ describe('R-TEXTADV2-production · 文字冒险正式生产契约与工作台', 
         ['media.visual.005', 'media.visual.006'],
         ['media.visual.007', 'media.visual.008'],
         ['media.visual.009', 'media.visual.010'],
-        ['media.visual.011', 'media.visual.012'],
+        ['media.visual.011'],
+        ['media.visual.012'],
       ])
     expect(keyIllustrationPlan.tasks.find(task => task.taskKey === 'media.visual-quality-review'))
       .toMatchObject({

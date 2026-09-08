@@ -15,6 +15,28 @@ const EXECUTION_MODES = ['deterministic', 'model', 'media-provider', 'human-impo
 const FAILURE_POLICIES = ['fail-build', 'pause', 'fallback', 'skip-optional'] as const
 export const TEXT_ADVENTURE_VISUAL_REVIEW_BATCH_SIZE_V1 = 2
 
+export function textAdventureVisualReviewArtifactBatchesV1(
+  artifactKeys: readonly string[],
+): string[][] {
+  const batches = Array.from(
+    { length: Math.ceil(artifactKeys.length / TEXT_ADVENTURE_VISUAL_REVIEW_BATCH_SIZE_V1) },
+    (_, index) => [...artifactKeys.slice(
+      index * TEXT_ADVENTURE_VISUAL_REVIEW_BATCH_SIZE_V1,
+      (index + 1) * TEXT_ADVENTURE_VISUAL_REVIEW_BATCH_SIZE_V1,
+    )],
+  )
+  // Commercial illustration sets put the final regional/map and turning-point
+  // assets at the tail. Live provider evidence showed that reviewing those two
+  // semantically dense images together repeatedly broke the output contract.
+  // Preserve the successful earlier pairs and give the last two independent
+  // receipts instead of invalidating the whole visual QA set.
+  const tail = batches[batches.length - 1]
+  if (artifactKeys.length >= 12 && tail?.length === 2) {
+    batches.splice(-1, 1, [tail[0]], [tail[1]])
+  }
+  return batches
+}
+
 export interface TextAdventureProductionBudgetFloorV1 {
   modelTaskCount: number
   retryReserveSlots: number
@@ -41,9 +63,9 @@ export function textAdventureProductionBudgetFloorV1(
     sum + textAdventureSceneScriptPartSceneKeysV1(brief, actIndex).length
   ), 0)
   const visualAssetCount = activeVisual ? Math.max(1, brief.media.imageCount) : 0
-  const visualReviewBatchCount = Math.ceil(
-    visualAssetCount / TEXT_ADVENTURE_VISUAL_REVIEW_BATCH_SIZE_V1,
-  )
+  const visualReviewBatchCount = textAdventureVisualReviewArtifactBatchesV1(
+    Array.from({ length: visualAssetCount }, (_, index) => String(index)),
+  ).length
   const modelTaskCount = 25 + sceneScriptPartCount + visualReviewBatchCount
   // A complete commercial run exercises many deep structured schemas. Live
   // provider evidence showed that half-pipeline retry headroom was exhausted
@@ -367,20 +389,15 @@ export async function createProductProductionPlanV3(input: {
   )
   const textAdventure = brief.intent.productType === 'text-adventure'
   const visualReviewBatches = textAdventure && activeVisual
-    ? Array.from(
-        { length: Math.ceil(visualArtifactKeys.length / TEXT_ADVENTURE_VISUAL_REVIEW_BATCH_SIZE_V1) },
-        (_, index) => {
+    ? textAdventureVisualReviewArtifactBatchesV1(visualArtifactKeys)
+        .map((batchVisualArtifactKeys, index) => {
           const batchNumber = index + 1
           return {
             taskKey: `media.visual-quality-review.batch-${batchNumber}`,
             artifactKey: `quality.visual-review.batch-${batchNumber}`,
-            visualArtifactKeys: visualArtifactKeys.slice(
-              index * TEXT_ADVENTURE_VISUAL_REVIEW_BATCH_SIZE_V1,
-              (index + 1) * TEXT_ADVENTURE_VISUAL_REVIEW_BATCH_SIZE_V1,
-            ),
+            visualArtifactKeys: batchVisualArtifactKeys,
           }
-        },
-      )
+        })
     : []
   // The previous 28-task topology contained three whole-act scene writers.
   // Replace those with the frozen scene packets actually required by this
