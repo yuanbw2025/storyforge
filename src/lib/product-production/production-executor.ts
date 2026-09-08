@@ -1445,6 +1445,23 @@ export function legalizeProductionModelProtocolDefaultsV1(
             `entries[${index}].stages[${stageIndex}].locationOrdinal<-stage-location`,
           )
         }
+        const locationOrdinal = Number(stageRecord.locationOrdinal)
+        const assignedTitle = Number.isSafeInteger(locationOrdinal)
+          ? locationTitles[locationOrdinal - 1] : undefined
+        const actionSurface = [
+          stageRecord.title,
+          stageRecord.objective,
+          stageRecord.successText,
+          stageRecord.costlySuccessText,
+          stageRecord.failureText,
+        ].filter((value): value is string => typeof value === 'string').join('\n')
+        if (assignedTitle && !actionSurface.includes(assignedTitle)
+          && typeof stageRecord.objective === 'string' && stageRecord.objective.trim()) {
+          stageRecord.objective = `在${assignedTitle}，${stageRecord.objective.trim()}`
+          defaultedFields.push(
+            `entries[${index}].stages[${stageIndex}].objective<-frozen-location-anchor`,
+          )
+        }
         return stageRecord
       })
       return item

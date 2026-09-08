@@ -1676,6 +1676,34 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
     ])
     expect(quests.discardedNullEntries).toEqual(['entries[0].stages[1]'])
     expect(quests.discardedUnregisteredStateFields).toEqual([])
+
+    const anchoredQuest = legalizeProductionModelProtocolDefaultsV1(
+      'content.adventure-side-quests',
+      {
+        entries: [{
+          stages: [{
+            title: '修复破损浮标',
+            objective: '找到被风暴卷走的铜制定位片',
+            locationOrdinal: 2,
+            successText: '定位片重新发出微光。',
+            costlySuccessText: '定位片亮了，但耽误了潮汐窗口。',
+            failureText: '虽然没能修好，你仍找到了替代航线。',
+          }],
+        }],
+      },
+      { questLocationTitles: ['潮门广场', '冰窟渔村'] },
+    )
+    expect(anchoredQuest.payload).toMatchObject({
+      entries: [{
+        stages: [{
+          locationOrdinal: 2,
+          objective: '在冰窟渔村，找到被风暴卷走的铜制定位片',
+        }],
+      }],
+    })
+    expect(anchoredQuest.defaultedFields).toContain(
+      'entries[0].stages[0].objective<-frozen-location-anchor',
+    )
   })
 
   it('文字冒险单项图片在有界重试耗尽后生成显式纯文字降级工件', async () => {
