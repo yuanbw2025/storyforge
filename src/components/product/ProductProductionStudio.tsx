@@ -1400,6 +1400,7 @@ export default function ProductProductionStudio(props: {
         productReleaseId={details?.production.productType === 'text-adventure'
           ? details.production.currentProductReleaseId : null}
         onImported={() => props.onPublished?.('text-adventure')}
+        onDeleted={() => props.onPublished?.('text-adventure')}
       /></Suspense>}
       {!details ? <>
         <header className="mb-6 border-b border-border pb-5"><small className="font-mono text-[9px] tracking-widest text-accent">CONSULT → BRIEF → AUTHORIZE</small><h1 className="mt-2 font-serif text-2xl">从冻结世界版本开始制作</h1><p className="mt-2 max-w-3xl text-xs leading-6 text-text-muted">先选择来源和起点，系统生成可审查 Brief。只有点击“保存 Brief”并再次“授权开始”后，才会创建 Build。</p></header>

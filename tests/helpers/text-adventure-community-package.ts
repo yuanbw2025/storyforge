@@ -279,6 +279,21 @@ export async function createTextAdventureCommunityPackageFixtureV1(): Promise<Te
   baseRuntime.adventure!.actions.find(action => action.key === 'action.equip.cloak')!.successEffects.push({
     op: 'complete-objective', questKey: quest.key, objectiveKey: 'objective.prepare',
   })
+  const towerScene = baseRuntime.adventure!.scenes.find(scene => scene.key === 'scene.tower')!
+  towerScene.actionKeys.push('action.give.lens')
+  baseRuntime.adventure!.actions.push({
+    key: 'action.give.lens', kind: 'give', label: '把备用透镜交给守钟人',
+    description: '把已取得的任务物品正式交付给守钟人，并在事件状态中记录所有权转移。',
+    locationKey: 'location.tower', targetKey: 'item.beacon-lens',
+    requirements: [{ itemKey: 'item.beacon-lens', itemQuantity: 1 }],
+    rule: { kind: 'automatic' },
+    successEffects: [{ op: 'transfer-item', itemKey: 'item.beacon-lens', quantity: 1, toOwnerKey: 'keeper' }],
+    costlySuccessEffects: [], failureEffects: [],
+    successText: '你把备用透镜交给守钟人；背包中的物品已经移交，守钟人接过了修复灯芯的责任。',
+    costlySuccessText: '你最终完成了透镜交付。', failureText: '守钟人暂时无法接收透镜。',
+    unavailableText: '需要先取得备用透镜，且该物品尚未交付。', repeatable: false,
+    narrativeChoiceKey: null, interaction: null,
+  })
   baseRuntime.definition.initialVariables.productAdapterCommercialReady = true
   const authoredRuntime = parseProductRuntimePackageV1(baseRuntime)
   const runtime = (await createFixtureProductReleaseManifestV1({ runtimePackage: authoredRuntime })).runtimePackage

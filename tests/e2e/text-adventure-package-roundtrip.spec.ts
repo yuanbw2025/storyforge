@@ -25,6 +25,7 @@ test('文字冒险候选包在新 Work 上传后可从正式 Release 完成双�
       packageJson: JSON.stringify(candidate),
       title: candidate.dossier.title,
       candidatePackageHash: candidate.candidatePackageHash,
+      targetScope: owned.scope,
       sourceReleaseCount: await schemaModule.db.worldReleases
         .where('worldId').equals(owned.scope.worldId).count(),
     }
@@ -131,4 +132,37 @@ test('文字冒险候选包在新 Work 上传后可从正式 Release 完成双�
   await restored.getByRole('button', { name: /雾潮灯塔.*新冒险.*可继续/ }).click()
   await expect(restored).toContainText('海上归灯', { timeout: 15_000 })
   await expect(restored).toContainText('冒险结束')
+
+  await page.getByRole('button', { name: '制作', exact: true }).click()
+  const lifecyclePanel = page.getByTestId('text-adventure-package-panel')
+  await expect(lifecyclePanel.getByTestId('text-adventure-imported-release-copies')).toContainText(prepared.title)
+  await lifecyclePanel.getByRole('button', { name: '删除本地副本', exact: true }).click()
+  const deleteDialog = page.getByRole('dialog')
+  await expect(deleteDialog).toContainText('全部本地存档')
+  await deleteDialog.getByRole('button', { name: '删除副本', exact: true }).click()
+  await expect(page.getByTestId('adventure-game-player')).toContainText(/全部游戏\s*0 部可游玩作品/, { timeout: 15_000 })
+
+  const removed = await page.evaluate(async targetScope => {
+    const importer = new Function('path', 'return import(path)') as (path: string) => Promise<any>
+    const { db } = await importer('/storyforge/src/lib/db/schema.ts')
+    const assetIds = (await db.productMediaAssets.where('workId').equals(targetScope.workId).primaryKeys()) as number[]
+    return {
+      releaseCount: await db.productReleases.where('workId').equals(targetScope.workId).count(),
+      sessionCount: await db.productRuntimeSessions.where('workId').equals(targetScope.workId).count(),
+      mediaAssetCount: assetIds.length,
+      mediaBindingCount: assetIds.length
+        ? await db.productMediaBlobs.where('mediaAssetId').anyOf(assetIds).count()
+        : 0,
+      blobObjectCount: await db.mediaBlobObjects.where('workId').equals(targetScope.workId).count(),
+      worldReleaseCount: await db.worldReleases.where('worldId').equals(targetScope.worldId).count(),
+    }
+  }, prepared.targetScope)
+  expect(removed).toEqual({
+    releaseCount: 0,
+    sessionCount: 0,
+    mediaAssetCount: 0,
+    mediaBindingCount: 0,
+    blobObjectCount: 0,
+    worldReleaseCount: 1,
+  })
 })

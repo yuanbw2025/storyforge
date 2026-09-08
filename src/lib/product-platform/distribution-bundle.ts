@@ -17,11 +17,14 @@ import type {
   ProductReleaseManifestV1,
   ProductMediaAsset,
   ProductMediaBlob,
+  ProductReleaseDistributionProvenanceV1,
   ProductReleaseMarketplaceProvenanceV1,
   ProductReleaseLocalFileProvenanceV1,
   WorkspaceScope,
 } from '../types'
 import { assertProductReleaseUnchanged } from '../product/releases'
+import { transactionTablesForReferenceCascade } from '../registry/lifecycle'
+import { cascadeRegisteredReferences } from '../workspace/lifecycle'
 import {
   assertRecordInScope,
   resolveScope,
@@ -64,6 +67,18 @@ export interface LocalFileImportProvenanceV1 {
   candidatePackageHash: string
   originalReleaseHash: string
   candidateStatus: 'eligible-for-community-submission'
+}
+
+export const DELETE_IMPORTED_PRODUCT_RELEASE_CONFIRMATION_V1 = 'delete-imported-product-release-copy'
+
+export interface DeleteImportedProductReleaseResultV1 {
+  productReleaseId: number
+  source: ProductReleaseDistributionProvenanceV1['source']
+  deletedSessionCount: number
+  deletedMediaAssetCount: number
+  deletedMediaBindingCount: number
+  reclaimedBlobObjectIds: number[]
+  retainedBlobObjectIds: number[]
 }
 
 const MAXIMUM_DISTRIBUTION_BYTES = 256 * 1024 * 1024
@@ -326,6 +341,102 @@ export async function importLocalProductDistributionV2(input: {
       importedAt: Date.now(),
     },
   })
+}
+
+export async function listImportedProductReleasesV1(input: {
+  scope: WorkspaceScope
+  productType?: ProductRelease['productType']
+}): Promise<ProductRelease[]> {
+  const scope = await resolveScope({ scope: input.scope })
+  const rows = await db.productReleases.where('workId').equals(scope.workId).toArray()
+  const imported: ProductRelease[] = []
+  for (const row of rows) {
+    if (!row.distributionProvenance || (input.productType && row.productType !== input.productType)) continue
+    if (!await assertRecordInScope(scope, 'productReleases', row, { owner: 'work' })) {
+      throw new Error('[distribution] 导入 ProductRelease 越过当前 Work')
+    }
+    imported.push(row)
+  }
+  return imported.sort((left, right) => right.createdAt - left.createdAt || (right.id ?? 0) - (left.id ?? 0))
+}
+
+/**
+ * Remove one imported local copy and the product-private runtime state that was
+ * created from it. The cascade topology is derived from PROJECT_TABLES; the
+ * content-addressed Blob objects are reclaimed only after every registered
+ * release/build binding has disappeared.
+ */
+export async function deleteImportedProductReleaseV1(input: {
+  scope: WorkspaceScope
+  productReleaseId: number
+  confirmation: typeof DELETE_IMPORTED_PRODUCT_RELEASE_CONFIRMATION_V1
+}): Promise<DeleteImportedProductReleaseResultV1> {
+  if (input.confirmation !== DELETE_IMPORTED_PRODUCT_RELEASE_CONFIRMATION_V1) {
+    throw new Error('[distribution] 删除导入副本需要明确确认')
+  }
+  if (!Number.isInteger(input.productReleaseId) || input.productReleaseId <= 0) {
+    throw new Error('[distribution] ProductRelease id 无效')
+  }
+  const scope = await resolveScope({ scope: input.scope })
+  const cascadeTables = transactionTablesForReferenceCascade('productReleases')
+  const deleted = await db.transaction('rw', scopeTransactionTables(
+    ...cascadeTables,
+    db.productBuilds,
+    db.productProductions,
+  ), async () => {
+    const release = await db.productReleases.get(input.productReleaseId)
+    if (!release || !await assertRecordInScope(scope, 'productReleases', release, { owner: 'work' })) {
+      throw new Error('[distribution] 导入 ProductRelease 不存在或跨 Work')
+    }
+    if (!release.distributionProvenance) {
+      throw new Error('[distribution] 原创 ProductRelease 不允许通过导入副本入口删除')
+    }
+    const [releasedBuild, sourceBuild, currentProduction] = await Promise.all([
+      db.productBuilds.where('releasedProductReleaseId').equals(release.id!).first(),
+      db.productBuilds.where('sourceProductReleaseId').equals(release.id!).first(),
+      db.productProductions.where('currentProductReleaseId').equals(release.id!).first(),
+    ])
+    if (releasedBuild || sourceBuild || currentProduction) {
+      throw new Error('[distribution] ProductRelease 已进入本地生产血缘，必须先处理引用它的 Production/Build')
+    }
+
+    const sessions = await db.productRuntimeSessions.where('productReleaseId').equals(release.id!).toArray()
+    const sessionIds = sessions.map(row => row.id).filter((id): id is number => id != null)
+    const releaseAssets = await db.productMediaAssets.where('productReleaseId').equals(release.id!).toArray()
+    const sessionAssets = sessionIds.length
+      ? await db.productMediaAssets.where('productRuntimeSessionId').anyOf(sessionIds).toArray()
+      : []
+    const mediaAssets = [...releaseAssets, ...sessionAssets]
+    const mediaAssetIds = [...new Set(mediaAssets.map(row => row.id).filter((id): id is number => id != null))]
+    const mediaBindings = mediaAssetIds.length
+      ? await db.productMediaBlobs.where('mediaAssetId').anyOf(mediaAssetIds).toArray()
+      : []
+    const blobObjectIds = [...new Set(mediaBindings.map(row => row.blobObjectId))]
+
+    await cascadeRegisteredReferences('productReleases', release.id!)
+    await db.productReleases.delete(release.id!)
+    return {
+      source: release.distributionProvenance.source,
+      deletedSessionCount: sessions.length,
+      deletedMediaAssetCount: mediaAssetIds.length,
+      deletedMediaBindingCount: mediaBindings.length,
+      blobObjectIds,
+    }
+  })
+  const reclaimedBlobObjectIds = await discardUnreferencedMediaBlobObjectsV1({
+    scope,
+    blobObjectIds: deleted.blobObjectIds,
+  })
+  const reclaimed = new Set(reclaimedBlobObjectIds)
+  return {
+    productReleaseId: input.productReleaseId,
+    source: deleted.source,
+    deletedSessionCount: deleted.deletedSessionCount,
+    deletedMediaAssetCount: deleted.deletedMediaAssetCount,
+    deletedMediaBindingCount: deleted.deletedMediaBindingCount,
+    reclaimedBlobObjectIds,
+    retainedBlobObjectIds: deleted.blobObjectIds.filter(id => !reclaimed.has(id)),
+  }
 }
 
 async function importVerifiedProductDistributionV2(input: {

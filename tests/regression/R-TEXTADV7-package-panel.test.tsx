@@ -2,7 +2,9 @@ import { act, createElement } from 'react'
 import { createRoot } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import TextAdventurePackagePanel from '../../src/components/product/TextAdventurePackagePanel'
+import { DialogProvider } from '../../src/components/shared/Dialog'
 import type { TextAdventureCommunityPackageV1 } from '../../src/lib/adventure/community-package'
+import { DELETE_IMPORTED_PRODUCT_RELEASE_CONFIRMATION_V1 } from '../../src/lib/product-platform/distribution-bundle'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
@@ -96,6 +98,7 @@ describe('TEXTADV-7 · product package UI', () => {
     const anchorClick = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined)
     await act(async () => root.render(createElement(TextAdventurePackagePanel, {
       scope: { projectId: 1, worldId: 2, workId: 3 }, productReleaseId: 9, exportPackage,
+      listImportedReleases: vi.fn().mockResolvedValue([]),
     })))
     const exportButton = [...host.querySelectorAll('button')]
       .find(button => button.textContent?.includes('复验并导出产品包'))!
@@ -121,6 +124,7 @@ describe('TEXTADV-7 · product package UI', () => {
     const onImported = vi.fn()
     await act(async () => root.render(createElement(TextAdventurePackagePanel, {
       scope: { projectId: 1, worldId: 2, workId: 3 }, importPackage, onImported,
+      listImportedReleases: vi.fn().mockResolvedValue([]),
     })))
     const file = new File([JSON.stringify(value)], `flagship.storyforge-adventure.json`, { type: 'application/json' })
     const input = host.querySelector<HTMLInputElement>('input[type="file"]')!
@@ -134,5 +138,50 @@ describe('TEXTADV-7 · product package UI', () => {
     expect(onImported).toHaveBeenCalledWith(expect.objectContaining({ release: expect.objectContaining({ id: 17 }) }))
     expect(host.textContent).toContain('本地可玩副本')
     expect(host.textContent).toContain('不代表远程作者身份或社区推荐')
+  })
+
+  it('列出并经明确确认删除本地导入副本，同时显示共享 Blob 保留结果', async () => {
+    const importedRelease = {
+      id: 17, projectId: 1, worldId: 2, workId: 3,
+      productionKey: 'local-file:flagship', productType: 'text-adventure', worldReleaseId: null,
+      version: 1, label: '潮钟群岛 · 本地导入副本', manifestJson: '{}', contentHash: HASH,
+      createdAt: Date.now(),
+      distributionProvenance: {
+        source: 'local-file', candidatePackageHash: 'b'.repeat(64), originalReleaseHash: HASH,
+        candidateStatus: 'eligible-for-community-submission', remoteCreatorIdentityVerified: false,
+        localCopyPreserved: true, importedAt: Date.now(),
+      },
+    } as const
+    const listImportedReleases = vi.fn().mockResolvedValue([importedRelease])
+    const deleteImportedRelease = vi.fn().mockResolvedValue({
+      productReleaseId: 17, source: 'local-file', deletedSessionCount: 2,
+      deletedMediaAssetCount: 8, deletedMediaBindingCount: 8,
+      reclaimedBlobObjectIds: [31, 32], retainedBlobObjectIds: [33],
+    })
+    const onDeleted = vi.fn()
+    await act(async () => root.render(createElement(DialogProvider, null,
+      createElement(TextAdventurePackagePanel, {
+        scope: { projectId: 1, worldId: 2, workId: 3 },
+        listImportedReleases, deleteImportedRelease, onDeleted,
+      }),
+    )))
+    await waitFor(() => expect(host.textContent).toContain('潮钟群岛 · 本地导入副本'))
+    const deleteButton = [...host.querySelectorAll('button')]
+      .find(button => button.textContent?.includes('删除本地副本'))!
+    await act(async () => deleteButton.click())
+    await waitFor(() => expect(host.querySelector('[role="dialog"]')?.textContent).toContain('全部本地存档'))
+    const confirmButton = [...host.querySelectorAll('[role="dialog"] button')]
+      .find(button => button.textContent?.includes('删除副本')) as HTMLButtonElement
+    await act(async () => confirmButton.click())
+    await waitFor(() => expect(deleteImportedRelease).toHaveBeenCalledOnce())
+    expect(deleteImportedRelease).toHaveBeenCalledWith({
+      scope: { projectId: 1, worldId: 2, workId: 3 },
+      productReleaseId: 17,
+      confirmation: DELETE_IMPORTED_PRODUCT_RELEASE_CONFIRMATION_V1,
+    })
+    expect(onDeleted).toHaveBeenCalledWith(expect.objectContaining({ productReleaseId: 17 }))
+    expect(host.textContent).toContain('已删除本地导入副本及 2 个存档')
+    expect(host.textContent).toContain('仍被其他产品引用的 1 个已保留')
+    expect(host.textContent).not.toContain('潮钟群岛 · 本地导入副本')
   })
 })

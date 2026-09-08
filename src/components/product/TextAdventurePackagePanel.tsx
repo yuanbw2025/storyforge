@@ -1,5 +1,5 @@
-import { useRef, useState } from 'react'
-import { CheckCircle2, Download, FileArchive, Loader2, Upload } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { CheckCircle2, Download, FileArchive, Loader2, Trash2, Upload } from 'lucide-react'
 import type { ProductRelease, WorkspaceScope } from '../../lib/types'
 import {
   exportTextAdventureCommunityPackageV1,
@@ -10,6 +10,13 @@ import {
   type TextAdventureCommunityCandidateDossierV1,
   type TextAdventureCommunityPackageV1,
 } from '../../lib/adventure/community-package'
+import {
+  DELETE_IMPORTED_PRODUCT_RELEASE_CONFIRMATION_V1,
+  deleteImportedProductReleaseV1,
+  listImportedProductReleasesV1,
+  type DeleteImportedProductReleaseResultV1,
+} from '../../lib/product-platform/distribution-bundle'
+import { useDialog } from '../shared/Dialog'
 
 export interface TextAdventurePackagePanelProps {
   scope: WorkspaceScope
@@ -18,8 +25,11 @@ export interface TextAdventurePackagePanelProps {
     release: ProductRelease
     package: TextAdventureCommunityPackageV1
   }) => void | Promise<void>
+  onDeleted?: (result: DeleteImportedProductReleaseResultV1) => void | Promise<void>
   exportPackage?: typeof exportTextAdventureCommunityPackageV1
   importPackage?: typeof importTextAdventureCommunityPackageV1
+  listImportedReleases?: typeof listImportedProductReleasesV1
+  deleteImportedRelease?: typeof deleteImportedProductReleaseV1
 }
 
 function compactHash(value: string): string {
@@ -42,11 +52,26 @@ function dossierCards(dossier: TextAdventureCommunityCandidateDossierV1) {
 }
 
 export default function TextAdventurePackagePanel(props: TextAdventurePackagePanelProps) {
-  const [busy, setBusy] = useState<'export' | 'import' | null>(null)
+  const dialog = useDialog()
+  const [busy, setBusy] = useState<'export' | 'import' | 'delete' | null>(null)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
   const [dossier, setDossier] = useState<TextAdventureCommunityCandidateDossierV1 | null>(null)
+  const [importedReleases, setImportedReleases] = useState<ProductRelease[]>([])
   const inputRef = useRef<HTMLInputElement | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    void (props.listImportedReleases ?? listImportedProductReleasesV1)({
+      scope: props.scope,
+      productType: 'text-adventure',
+    }).then(rows => {
+      if (!cancelled) setImportedReleases(rows)
+    }).catch(cause => {
+      if (!cancelled) setError(cause instanceof Error ? cause.message : String(cause))
+    })
+    return () => { cancelled = true }
+  }, [props.scope.projectId, props.scope.worldId, props.scope.workId, props.listImportedReleases])
 
   const runExport = async () => {
     if (!props.productReleaseId) return
@@ -94,9 +119,39 @@ export default function TextAdventurePackagePanel(props: TextAdventurePackagePan
         scope: props.scope,
         package: parsed,
       })
+      setImportedReleases(current => [
+        result.release,
+        ...current.filter(row => row.id !== result.release.id),
+      ])
       setDossier(result.package.dossier)
       setMessage(`已复验并导入“${result.package.dossier.title}”；这是本地可玩副本，不代表远程作者身份或社区推荐。`)
       await props.onImported?.(result)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const deleteImportedRelease = async (release: ProductRelease) => {
+    if (!release.id || !release.distributionProvenance) return
+    if (!await dialog.confirm({
+      title: '删除本地导入副本？',
+      message: `将删除“${release.label}”及其全部本地存档。原创世界、其他 Release 和共享媒资不会被删除。`,
+      confirmText: '删除副本',
+      tone: 'danger',
+    })) return
+    setBusy('delete'); setError(''); setMessage('')
+    try {
+      const result = await (props.deleteImportedRelease ?? deleteImportedProductReleaseV1)({
+        scope: props.scope,
+        productReleaseId: release.id,
+        confirmation: DELETE_IMPORTED_PRODUCT_RELEASE_CONFIRMATION_V1,
+      })
+      setImportedReleases(current => current.filter(row => row.id !== release.id))
+      if (dossier?.releaseContentHash === release.contentHash) setDossier(null)
+      setMessage(`已删除本地导入副本及 ${result.deletedSessionCount} 个存档；回收 ${result.reclaimedBlobObjectIds.length} 个无引用媒资对象，仍被其他产品引用的 ${result.retainedBlobObjectIds.length} 个已保留。`)
+      await props.onDeleted?.(result)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause))
     } finally {
@@ -127,6 +182,11 @@ export default function TextAdventurePackagePanel(props: TextAdventurePackagePan
       </div>
     </div>
     {!props.productReleaseId && <p className="mt-3 rounded border border-border bg-bg-base p-3 text-[10px] text-text-muted">当前没有可导出的正式文字冒险 Release；仍可上传其他作者交付的完整产品包并在本机游玩。</p>}
+    {importedReleases.length > 0 && <div className="mt-4 rounded border border-border bg-bg-base p-3" data-testid="text-adventure-imported-release-copies">
+      <strong className="text-[10px]">本地导入副本</strong>
+      <p className="mt-1 text-[9px] leading-5 text-text-muted">删除仅作用于选定的导入 Release、由它创建的本地会话和产品私域媒资。原创世界、原创 Build/Release 以及仍被其他产品引用的 Blob 保持不变。</p>
+      <ul className="mt-2 grid gap-2">{importedReleases.map(release => <li key={release.id} className="flex flex-wrap items-center justify-between gap-2 rounded border border-border p-2 text-[10px]"><span><strong>{release.label}</strong><code className="ml-2 text-[9px] text-text-muted">{compactHash(release.contentHash)}</code></span><button type="button" disabled={busy != null} onClick={() => void deleteImportedRelease(release)} className="flex items-center gap-1 rounded border border-error/40 bg-error/5 px-3 py-1.5 text-error disabled:opacity-40"><Trash2 className="h-3 w-3" />删除本地副本</button></li>)}</ul>
+    </div>}
     {(message || error) && <div role={error ? 'alert' : 'status'} className={`mt-3 rounded border p-3 text-[10px] ${error ? 'border-error/30 bg-error/5 text-error' : 'border-success/30 bg-success/5 text-success'}`}>{error || message}</div>}
     {dossier && <div className="mt-4" data-testid="text-adventure-candidate-dossier">
       <div className="flex flex-wrap items-center justify-between gap-2"><span className="flex items-center gap-2 text-xs font-semibold text-success"><CheckCircle2 className="h-4 w-4" />具备社区提交资格：{dossier.title}</span><code className="text-[9px] text-text-muted" title={dossier.releaseContentHash}>{compactHash(dossier.releaseContentHash)}</code></div>
