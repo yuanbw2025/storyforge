@@ -171,6 +171,8 @@ function reviewArtifactLabel(key: string): string {
   if (questScriptPart) return `第${questScriptPart[1]}幕${questScriptPart[2] === 'single' ? '单解' : '多解'}目标任务脚本`
   const sceneScriptPart = /^content\.scene-script\.act-([1-3])\.part-([1-2])$/.exec(key)
   if (sceneScriptPart) return `第${sceneScriptPart[1]}幕分场正文 · 分包 ${sceneScriptPart[2]}`
+  const visualReviewBatch = /^quality\.visual-review\.batch-([1-9]\d*)$/.exec(key)
+  if (visualReviewBatch) return `独立多模态视觉质量审查 · 第 ${visualReviewBatch[1]} 批`
   return ({
     'design.game': '产品与核心循环设计',
     'content.source-sufficiency': '来源充分性与改编审计',
@@ -218,6 +220,11 @@ function productionTaskPresentation(taskKey: string): { label: string; owner: st
     label: `第${sceneScriptPart[1]}幕正文 ${sceneScriptPart[2]}/2`,
     owner: `分场叙事作者 · 第${sceneScriptPart[1]}幕分包 ${sceneScriptPart[2]} Run`,
   }
+  const visualReviewBatch = /^media\.visual-quality-review\.batch-([1-9]\d*)$/.exec(taskKey)
+  if (visualReviewBatch) return {
+    label: `视觉质量审查 · 第 ${visualReviewBatch[1]} 批`,
+    owner: `Visual QA Director · 第 ${visualReviewBatch[1]} 批 Run`,
+  }
   if (/^media\.visual\.\d{3}$/.test(taskKey)) return {
     label: `视觉素材 ${Number(taskKey.slice(-3))}`,
     owner: '媒资 Provider · 单项可恢复',
@@ -254,6 +261,7 @@ function productionTaskPresentation(taskKey: string): { label: string; owner: st
     'media.requirements': ['美术需求清单', '美术总监'],
     'media.visual-bible.compile': ['冻结视觉圣经与角色锚点', '确定性视觉圣经编译器'],
     'media.anchor-author-gate': ['角色视觉锚点作者确认', '确定性治理系统'],
+    'media.visual-quality-review': ['视觉质量审查总报告', '确定性视觉审查汇总器'],
     'media.visual': ['受控图片生成与验收', '媒资 Provider'],
     'media.audio': ['受控音频生成与验收', '媒资 Provider'],
     'integration.package': ['确定性游戏装配', '运行包编译器'],

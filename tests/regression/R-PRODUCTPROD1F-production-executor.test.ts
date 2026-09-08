@@ -2011,9 +2011,9 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
     const owned = await fixtureForProduct('text-adventure', { visualLevel: 'key-scenes' })
     const briefHash = await hashProductProductionValueV2(owned.brief)
     const plan = await createProductProductionPlanV3({ buildNumber: 1, briefHash, brief: owned.brief })
-    const task = plan.tasks.find(item => item.taskKey === 'media.visual-quality-review')!
-    const imageKeys = plan.tasks.filter(item => /^media\.visual\.\d{3}$/.test(item.taskKey))
-      .map(item => item.taskKey)
+    const task = plan.tasks.find(item => item.taskKey === 'media.visual-quality-review.batch-1')!
+    const assemblyTask = plan.tasks.find(item => item.taskKey === 'media.visual-quality-review')!
+    const imageKeys = task.inputArtifactKeys.filter(item => /^media\.visual\.\d{3}$/.test(item))
     const blob = await putMediaBlobObject({
       scope: owned.scope,
       data: new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]).buffer,
@@ -2094,6 +2094,35 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
     })))
     expect(result).toMatchObject({
       usage: { modelCalls: 1, inputTokens: 200, outputTokens: 100 },
+      artifacts: [{
+        artifactKey: 'quality.visual-review.batch-1', kind: 'playtest-report',
+        payload: {
+          status: 'passed', providerReviewCompleted: true, blockingIssueCount: 0,
+          mediaAuditHash: auditHash,
+        },
+      }],
+    })
+    const batchPayload = result.artifacts[0].payload
+    const batchPayloadJson = JSON.stringify(batchPayload)
+    const batchHash = await hashProductProductionValueV2(batchPayload)
+    const assembled = await executor({
+      scope: owned.scope, productionId: owned.productionId, buildId: 1, buildNumber: 1,
+      controlEpoch: 0, planHash: 'f'.repeat(64), task: assemblyTask, attempt: 1,
+      idempotencyKey: '2'.repeat(64), contextText: '', capabilityBindings: [],
+      inputArtifacts: [
+        artifact('media.audit', {
+          kind: 'integration-report', mediaKind: null, blobObjectId: null, mimeType: null,
+          contentHash: auditHash, payloadJson: JSON.stringify(auditPayload), byteSize: 1,
+        }),
+        artifact('quality.visual-review.batch-1', {
+          kind: 'playtest-report', mediaKind: null, blobObjectId: null, mimeType: null,
+          contentHash: batchHash, payloadJson: batchPayloadJson, byteSize: batchPayloadJson.length,
+        }),
+      ],
+      authorResolution: null, signal: new AbortController().signal,
+    })
+    expect(assembled).toMatchObject({
+      usage: { modelCalls: 0 },
       artifacts: [{
         artifactKey: 'quality.visual-review', kind: 'playtest-report',
         payload: {

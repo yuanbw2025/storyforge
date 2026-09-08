@@ -4015,6 +4015,36 @@ export function parseTextAdventureVisualQualityReviewArtifactV1(
   return parsed
 }
 
+function assembleTextAdventureVisualQualityReviewArtifactV1(input: {
+  buildNumber: number
+  mediaAuditHash: string
+  reviews: TextAdventureVisualQualityReviewArtifactV1['reviews']
+  expectedAssets: Array<{ artifactKey: string; contentHash: string }>
+}): TextAdventureVisualQualityReviewArtifactV1 {
+  const reviews = [...input.reviews]
+    .sort((left, right) => left.artifactKey.localeCompare(right.artifactKey))
+  const blockingIssueCount = reviews.reduce((sum, review) => (
+    sum + review.issues.filter(issue => issue.severity === 'blocking').length
+  ), 0)
+  const status = reviews.some(review => review.verdict === 'revise' || review.verdict === 'replace')
+    || blockingIssueCount > 0
+    ? 'revision-required' as const
+    : reviews.some(review => review.verdict === 'human-review')
+      ? 'human-review-required' as const
+      : 'passed' as const
+  const providerReviewCompleted = reviews.every(review => (
+    review.reviewSource === 'multimodal-model' || review.verdict === 'not-applicable-text-fallback'
+  ))
+  return parseTextAdventureVisualQualityReviewArtifactV1({
+    schema: 'storyforge.text-adventure-visual-quality-review-artifact', version: 1,
+    buildNumber: input.buildNumber, mediaAuditHash: input.mediaAuditHash,
+    status, reviews, blockingIssueCount, providerReviewCompleted,
+  }, {
+    buildNumber: input.buildNumber, mediaAuditHash: input.mediaAuditHash,
+    assets: input.expectedAssets,
+  })
+}
+
 async function executeTextAdventureVisualQualityReviewTask(
   input: ProductProductionTaskExecutionInputV1,
   options: Pick<ProductionExecutorOptionsV1, 'brief' | 'category' | 'runVision'>,
@@ -4022,9 +4052,17 @@ async function executeTextAdventureVisualQualityReviewTask(
   const startedAt = performance.now()
   const mediaAuditArtifact = artifactRecord(input, 'media.audit')
   const mediaAudit = parseTextAdventureMediaAuditArtifactV1(artifactPayload(input, 'media.audit'))
+  const selectedArtifactKeys = input.task.inputArtifactKeys
+    .filter(artifactKey => /^media\.visual\.\d{3}$/.test(artifactKey))
+  const selectedKeySet = new Set(selectedArtifactKeys)
+  const auditedAssets = mediaAudit.assets.filter(asset => selectedKeySet.has(asset.artifactKey))
+  if (!selectedArtifactKeys.length || selectedKeySet.size !== selectedArtifactKeys.length
+    || auditedAssets.length !== selectedArtifactKeys.length) {
+    fail(`视觉审查批次与 media.audit 不一致:${input.task.taskKey}`)
+  }
   const deterministicReviews: TextAdventureVisualQualityReviewArtifactV1['reviews'] = []
   const visionImages: Parameters<ProductionVisionRunnerV1>[0]['images'] = []
-  for (const audited of mediaAudit.assets) {
+  for (const audited of auditedAssets) {
     if (audited.status === 'text-fallback') {
       deterministicReviews.push({
         artifactKey: audited.artifactKey, contentHash: audited.contentHash,
@@ -4116,31 +4154,16 @@ async function executeTextAdventureVisualQualityReviewTask(
       }
     }
   }
-  const reviews = [...deterministicReviews, ...modelReviews]
-    .sort((left, right) => left.artifactKey.localeCompare(right.artifactKey))
-  const blockingIssueCount = reviews.reduce((sum, review) => (
-    sum + review.issues.filter(issue => issue.severity === 'blocking').length
-  ), 0)
-  const status = reviews.some(review => review.verdict === 'revise' || review.verdict === 'replace')
-    || blockingIssueCount > 0
-    ? 'revision-required' as const
-    : reviews.some(review => review.verdict === 'human-review')
-      ? 'human-review-required' as const
-      : 'passed' as const
-  const providerReviewCompleted = reviews.every(review => (
-    review.reviewSource === 'multimodal-model' || review.verdict === 'not-applicable-text-fallback'
-  ))
-  const report = parseTextAdventureVisualQualityReviewArtifactV1({
-    schema: 'storyforge.text-adventure-visual-quality-review-artifact', version: 1,
+  const report = assembleTextAdventureVisualQualityReviewArtifactV1({
     buildNumber: input.buildNumber, mediaAuditHash: mediaAuditArtifact.contentHash,
-    status, reviews, blockingIssueCount, providerReviewCompleted,
-  }, {
-    buildNumber: input.buildNumber, mediaAuditHash: mediaAuditArtifact.contentHash,
-    assets: mediaAudit.assets.map(asset => ({ artifactKey: asset.artifactKey, contentHash: asset.contentHash })),
+    reviews: [...deterministicReviews, ...modelReviews],
+    expectedAssets: auditedAssets.map(asset => ({
+      artifactKey: asset.artifactKey, contentHash: asset.contentHash,
+    })),
   })
   return {
     artifacts: [{
-      artifactKey: 'quality.visual-review', kind: 'playtest-report', payload: report,
+      artifactKey: input.task.outputArtifactKeys[0], kind: 'playtest-report', payload: report,
       quality: {
         visualSemanticReviewExecuted: true, status: report.status,
         providerReviewCompleted: report.providerReviewCompleted,
@@ -4150,6 +4173,46 @@ async function executeTextAdventureVisualQualityReviewTask(
     }],
     passedGateIds: [...input.task.acceptanceGateIds],
     usage: { ...usage, durationMs: elapsed(startedAt) },
+  }
+}
+
+function executeTextAdventureVisualQualityReviewAssemblyTask(
+  input: ProductProductionTaskExecutionInputV1,
+): ProductProductionTaskExecutionResultV1 {
+  const startedAt = performance.now()
+  const mediaAuditArtifact = artifactRecord(input, 'media.audit')
+  const mediaAudit = parseTextAdventureMediaAuditArtifactV1(artifactPayload(input, 'media.audit'))
+  const batchArtifactKeys = input.task.inputArtifactKeys
+    .filter(artifactKey => /^quality\.visual-review\.batch-[1-9]\d*$/.test(artifactKey))
+  if (!batchArtifactKeys.length || new Set(batchArtifactKeys).size !== batchArtifactKeys.length) {
+    fail('视觉审查汇总缺少独立批次 Artifact')
+  }
+  const reviews = batchArtifactKeys.flatMap(artifactKey => {
+    const batch = parseTextAdventureVisualQualityReviewArtifactV1(artifactPayload(input, artifactKey))
+    if (batch.buildNumber !== input.buildNumber || batch.mediaAuditHash !== mediaAuditArtifact.contentHash) {
+      fail(`视觉审查批次与当前 Build/media.audit 不一致:${artifactKey}`)
+    }
+    return batch.reviews
+  })
+  const report = assembleTextAdventureVisualQualityReviewArtifactV1({
+    buildNumber: input.buildNumber, mediaAuditHash: mediaAuditArtifact.contentHash,
+    reviews,
+    expectedAssets: mediaAudit.assets.map(asset => ({
+      artifactKey: asset.artifactKey, contentHash: asset.contentHash,
+    })),
+  })
+  return {
+    artifacts: [{
+      artifactKey: 'quality.visual-review', kind: 'playtest-report', payload: report,
+      quality: {
+        visualSemanticReviewExecuted: true, status: report.status,
+        providerReviewCompleted: report.providerReviewCompleted,
+        blockingIssueCount: report.blockingIssueCount,
+      },
+      rights: { origin: 'deterministic-visual-review-assembly', containsThirdPartyMedia: false },
+    }],
+    passedGateIds: [...input.task.acceptanceGateIds],
+    usage: zeroUsage(elapsed(startedAt)),
   }
 }
 
@@ -5084,8 +5147,11 @@ export function createConfiguredProductProductionExecutorV1(input: {
   }
   return async request => {
     if (request.signal.aborted) throw new DOMException('Aborted', 'AbortError')
-    if (request.task.taskKey === 'media.visual-quality-review') {
+    if (/^media\.visual-quality-review\.batch-[1-9]\d*$/.test(request.task.taskKey)) {
       return executeTextAdventureVisualQualityReviewTask(request, options)
+    }
+    if (request.task.taskKey === 'media.visual-quality-review') {
+      return executeTextAdventureVisualQualityReviewAssemblyTask(request)
     }
     if (request.task.taskKey === 'content.narrative-arc-plan') {
       return executeTextAdventureNarrativeArcAssemblyTask(request, options.brief)

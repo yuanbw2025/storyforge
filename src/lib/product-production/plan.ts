@@ -13,6 +13,7 @@ const STABLE_KEY = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/
 const LANES = ['planning', 'content', 'visual', 'audio', 'integration', 'qa'] as const
 const EXECUTION_MODES = ['deterministic', 'model', 'media-provider', 'human-import'] as const
 const FAILURE_POLICIES = ['fail-build', 'pause', 'fallback', 'skip-optional'] as const
+export const TEXT_ADVENTURE_VISUAL_REVIEW_BATCH_SIZE_V1 = 4
 
 export interface TextAdventureProductionBudgetFloorV1 {
   modelTaskCount: number
@@ -39,7 +40,11 @@ export function textAdventureProductionBudgetFloorV1(
   const sceneScriptPartCount = [0, 1, 2].reduce((sum, actIndex) => (
     sum + textAdventureSceneScriptPartSceneKeysV1(brief, actIndex).length
   ), 0)
-  const modelTaskCount = 25 + sceneScriptPartCount + Number(activeVisual)
+  const visualAssetCount = activeVisual ? Math.max(1, brief.media.imageCount) : 0
+  const visualReviewBatchCount = Math.ceil(
+    visualAssetCount / TEXT_ADVENTURE_VISUAL_REVIEW_BATCH_SIZE_V1,
+  )
+  const modelTaskCount = 25 + sceneScriptPartCount + visualReviewBatchCount
   // A complete commercial run exercises many deep structured schemas. Live
   // provider evidence showed that half-pipeline retry headroom was exhausted
   // before the remaining prose/editing Runs could even be admitted. Reserve
@@ -361,6 +366,22 @@ export async function createProductProductionPlanV3(input: {
     (_, index) => `media.audio.${String(index + 1).padStart(3, '0')}`,
   )
   const textAdventure = brief.intent.productType === 'text-adventure'
+  const visualReviewBatches = textAdventure && activeVisual
+    ? Array.from(
+        { length: Math.ceil(visualArtifactKeys.length / TEXT_ADVENTURE_VISUAL_REVIEW_BATCH_SIZE_V1) },
+        (_, index) => {
+          const batchNumber = index + 1
+          return {
+            taskKey: `media.visual-quality-review.batch-${batchNumber}`,
+            artifactKey: `quality.visual-review.batch-${batchNumber}`,
+            visualArtifactKeys: visualArtifactKeys.slice(
+              index * TEXT_ADVENTURE_VISUAL_REVIEW_BATCH_SIZE_V1,
+              (index + 1) * TEXT_ADVENTURE_VISUAL_REVIEW_BATCH_SIZE_V1,
+            ),
+          }
+        },
+      )
+    : []
   // The previous 28-task topology contained three whole-act scene writers.
   // Replace those with the frozen scene packets actually required by this
   // Brief; every packet remains one durable model Run.
@@ -438,7 +459,9 @@ export async function createProductProductionPlanV3(input: {
     // billable usage rather than the JSON byte count alone.
     'content.adventure-quality-review': 0.075,
     'media.requirements': 0.015,
-    'media.visual-quality-review': 0.005,
+    // Each bounded Visual QA Run returns up to four scorecards. The final
+    // whole-set conclusion is assembled deterministically without a model.
+    'media.visual-quality-review': 0.01,
     'qa.playtest-strategy': 0.015,
   }
   // Most model tasks consume a similarly sized context packet. Dialogue and
@@ -479,7 +502,7 @@ export async function createProductProductionPlanV3(input: {
   const activeMediaTaskCount = textAdventure
     ? visualArtifactKeys.length + audioArtifactKeys.length
     : activeMediaLaneCount
-  const textAdventureDeterministicTaskCount = textAdventure ? 12 + Number(activeVisual) : 4
+  const textAdventureDeterministicTaskCount = textAdventure ? 12 + Number(activeVisual) * 2 : 4
   const durationSlots = modelTaskCount + textAdventureDeterministicTaskCount + activeMediaTaskCount
   const perDuration = Math.floor(
     brief.productionBudget.maximumDurationMs / Math.max(1, durationSlots + retryReserveSlots),
@@ -979,21 +1002,35 @@ export async function createProductProductionPlanV3(input: {
     timeoutMs: 60_000, failurePolicy: 'pause', fallbackTaskKey: null,
     acceptanceGateIds: ['artifact.protocol', 'media.requirement-artifact-audit'],
   }))
-  if (textAdventure && activeVisual) tasks.push(productionTask({
-    taskKey: 'media.visual-quality-review', lane: 'qa', kind: 'text-adventure-visual-quality-review',
-    skillId: 'text-adventure.visual-quality-review.v1', executionMode: 'model', dependsOn: ['media.audit'],
-    inputArtifactKeys: [
-      'content.cast-bible', 'media.requirements', 'media.visual-bible', 'media.audit', ...visualArtifactKeys,
-    ],
-    outputArtifactKeys: ['quality.visual-review'], requirementKeys: [],
-    capabilityRequirementKeys: textCapabilities,
-    concurrencyGroup: 'text-provider', subjectLockKeys: ['quality.visual-review'], priority: 55,
-    budgetReservation: modelBudget('media.visual-quality-review'), maxAttempts: 2,
-    timeoutMs: 300_000,
-    failurePolicy: brief.qualityProfile === 'commercial-candidate' ? 'pause' : 'skip-optional',
-    fallbackTaskKey: null,
-    acceptanceGateIds: ['artifact.protocol', 'media.visual-semantic-review-executed'],
-  }))
+  if (textAdventure && activeVisual) {
+    for (const batch of visualReviewBatches) tasks.push(productionTask({
+      taskKey: batch.taskKey, lane: 'qa', kind: 'text-adventure-visual-quality-review-batch',
+      skillId: 'text-adventure.visual-quality-review.v1', executionMode: 'model', dependsOn: ['media.audit'],
+      inputArtifactKeys: [
+        'content.cast-bible', 'media.requirements', 'media.visual-bible', 'media.audit',
+        ...batch.visualArtifactKeys,
+      ],
+      outputArtifactKeys: [batch.artifactKey], requirementKeys: [],
+      capabilityRequirementKeys: textCapabilities,
+      concurrencyGroup: 'text-provider', subjectLockKeys: [batch.artifactKey], priority: 56,
+      budgetReservation: modelBudget('media.visual-quality-review'), maxAttempts: 2,
+      timeoutMs: 240_000,
+      failurePolicy: brief.qualityProfile === 'commercial-candidate' ? 'pause' : 'skip-optional',
+      fallbackTaskKey: null,
+      acceptanceGateIds: ['artifact.protocol', 'media.visual-semantic-review-batch-executed'],
+    }))
+    tasks.push(productionTask({
+      taskKey: 'media.visual-quality-review', lane: 'qa', kind: 'text-adventure-visual-quality-review-assembly',
+      skillId: null, executionMode: 'deterministic',
+      dependsOn: visualReviewBatches.map(batch => batch.taskKey),
+      inputArtifactKeys: ['media.audit', ...visualReviewBatches.map(batch => batch.artifactKey)],
+      outputArtifactKeys: ['quality.visual-review'], requirementKeys: [], capabilityRequirementKeys: [],
+      concurrencyGroup: 'deterministic', subjectLockKeys: ['quality.visual-review'], priority: 55,
+      budgetReservation: reservation({ durationMs: perDuration }), maxAttempts: 1,
+      timeoutMs: 30_000, failurePolicy: 'pause', fallbackTaskKey: null,
+      acceptanceGateIds: ['artifact.protocol', 'media.visual-semantic-review-executed'],
+    }))
+  }
   const textAdventureDependencies = textAdventure
     ? [
         'production.supervision',

@@ -1428,7 +1428,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     budgetTokens: 12_500,
     protectedFromTrim: true,
     enabled: input => Number.isInteger(input.productBuildId)
-      && input.productProductionTaskKey === 'media.visual-quality-review'
+      && /^media\.visual-quality-review\.batch-[1-9]\d*$/.test(input.productProductionTaskKey ?? '')
       && !!input.productArtifactKeys?.length,
     read: readTextAdventureVisualQualityInputsV1,
   },

@@ -162,7 +162,7 @@ describe('R-TEXTADV2-production · 文字冒险正式生产契约与工作台', 
       'content.dialogue-pass.act-2', 'content.dialogue-pass.act-3', 'integration.narrative',
       'content.adventure-quality-review', 'media.requirements', 'media.visual-bible.compile',
       'media.anchor-author-gate', 'media.visual.001', 'media.visual.002',
-      'media.audit', 'media.visual-quality-review',
+      'media.audit', 'media.visual-quality-review.batch-1', 'media.visual-quality-review',
       'integration.package', 'qa.autoplay', 'qa.release', 'qa.playtest-strategy',
     ]))
     expect(taskByKey.get('production.supervision')).toMatchObject({
@@ -314,13 +314,20 @@ describe('R-TEXTADV2-production · 文字冒险正式生产契约与工作台', 
       ],
       outputArtifactKeys: ['media.audit'],
     })
-    expect(taskByKey.get('media.visual-quality-review')).toMatchObject({
+    expect(taskByKey.get('media.visual-quality-review.batch-1')).toMatchObject({
       executionMode: 'model', skillId: 'text-adventure.visual-quality-review.v1',
       dependsOn: ['media.audit'],
       inputArtifactKeys: [
         'content.cast-bible', 'media.requirements', 'media.visual-bible', 'media.audit',
         'media.visual.001', 'media.visual.002',
       ],
+      outputArtifactKeys: ['quality.visual-review.batch-1'],
+      timeoutMs: 240_000,
+    })
+    expect(taskByKey.get('media.visual-quality-review')).toMatchObject({
+      executionMode: 'deterministic', skillId: null,
+      dependsOn: ['media.visual-quality-review.batch-1'],
+      inputArtifactKeys: ['media.audit', 'quality.visual-review.batch-1'],
       outputArtifactKeys: ['quality.visual-review'],
     })
     expect(taskByKey.get('qa.release')?.failurePolicy).toBe('pause')
@@ -383,11 +390,27 @@ describe('R-TEXTADV2-production · 文字冒险正式生产契约与工作台', 
     expect(keyIllustrations.completionContract.requiredGateIds).toContain(
       'product.adventure.recommendation-media-composition',
     )
-    expect((await createProductProductionPlanV3({
+    const keyIllustrationPlan = await createProductProductionPlanV3({
       buildNumber: 1,
       briefHash: await hashProductProductionValueV2(keyIllustrations),
       brief: keyIllustrations,
-    })).tasks.filter(task => /^media\.visual\.\d{3}$/.test(task.taskKey))).toHaveLength(12)
+    })
+    expect(keyIllustrationPlan.tasks.filter(task => /^media\.visual\.\d{3}$/.test(task.taskKey))).toHaveLength(12)
+    const reviewBatches = keyIllustrationPlan.tasks
+      .filter(task => /^media\.visual-quality-review\.batch-\d+$/.test(task.taskKey))
+    expect(reviewBatches).toHaveLength(3)
+    expect(reviewBatches.map(task => task.inputArtifactKeys.filter(key => /^media\.visual\.\d{3}$/.test(key))))
+      .toEqual([
+        ['media.visual.001', 'media.visual.002', 'media.visual.003', 'media.visual.004'],
+        ['media.visual.005', 'media.visual.006', 'media.visual.007', 'media.visual.008'],
+        ['media.visual.009', 'media.visual.010', 'media.visual.011', 'media.visual.012'],
+      ])
+    expect(keyIllustrationPlan.tasks.find(task => task.taskKey === 'media.visual-quality-review'))
+      .toMatchObject({
+        executionMode: 'deterministic',
+        dependsOn: reviewBatches.map(task => task.taskKey),
+        inputArtifactKeys: ['media.audit', ...reviewBatches.map(task => task.outputArtifactKeys[0])],
+      })
 
     const richIllustrations = await draftProductProductionBriefV3({
       scope: owned.scope,

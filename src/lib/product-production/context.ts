@@ -474,8 +474,8 @@ export async function readTextAdventureDialogueInputsV1(input: AssembleContextIn
  * registered projection and the Build Artifact hashes have been frozen.
  */
 export async function readTextAdventureVisualQualityInputsV1(input: AssembleContextInput): Promise<string> {
-  if (input.productProductionTaskKey !== 'media.visual-quality-review') {
-    throw new Error('[product-production-context] 视觉审查投影缺少精确 taskKey')
+  if (!/^media\.visual-quality-review\.batch-[1-9]\d*$/.test(input.productProductionTaskKey ?? '')) {
+    throw new Error('[product-production-context] 视觉审查投影缺少有界批次 taskKey')
   }
   const requested = [...new Set(input.productArtifactKeys ?? [])]
   const visualKeys = requested.filter(key => /^media\.visual\.\d{3}$/.test(key)).sort()
