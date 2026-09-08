@@ -1352,13 +1352,16 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
           sideQuestScripts: [{
             entryKey: 'side.1', stages: [{
               stageKey: 'side.1.stage.1', actionKind: 'use', abilityKey: 'ability.insight',
+              difficulty: 14, costlySuccessFloor: 10, timeCostMinutes: 7,
             }, {
               stageKey: 'side.1.stage.2', actionKind: 'inspect', abilityKey: 'ability.agility',
+              difficulty: 16, costlySuccessFloor: 12, timeCostMinutes: 9,
             }],
           }],
           ambientEventScripts: [{
             entryKey: 'ambient.1', stages: [{
               stageKey: 'ambient.1.stage.1', actionKind: 'quest-action', abilityKey: 'ability.agility',
+              difficulty: 8, costlySuccessFloor: 4, timeCostMinutes: 5,
             }],
           }],
         },
@@ -1385,16 +1388,16 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
       sideQuestScripts: [{
         entryKey: 'side.1', stages: [{
           stageKey: 'side.1.stage.1', actionKind: 'use', abilityKey: 'ability.insight',
-          difficulty: 30, costlySuccessFloor: 29, timeCostMinutes: 8,
+          difficulty: 14, costlySuccessFloor: 10, timeCostMinutes: 7,
         }, {
           stageKey: 'side.1.stage.2', actionKind: 'inspect', abilityKey: 'ability.agility',
-          difficulty: 2, costlySuccessFloor: 1, timeCostMinutes: 120,
+          difficulty: 16, costlySuccessFloor: 12, timeCostMinutes: 9,
         }],
       }],
       ambientEventScripts: [{
         entryKey: 'ambient.1', stages: [{
           stageKey: 'ambient.1.stage.1', actionKind: 'quest-action', abilityKey: 'ability.agility',
-          difficulty: 2, costlySuccessFloor: 1, timeCostMinutes: 120,
+          difficulty: 8, costlySuccessFloor: 4, timeCostMinutes: 5,
         }],
       }],
     })
@@ -2670,7 +2673,7 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     expect(sideQuestSystem).toContain('abilityKey 只能逐字使用这些上游已登记能力=')
     expect(sideQuestSystem).toContain('"ability.perception"')
     expect(questScriptSystem).toContain('上游已冻结的脚本身份与顺序=')
-    expect(questScriptSystem).toContain('不得重新命名、翻译、合并阶段或按自己的理解排序')
+    expect(questScriptSystem).toContain('不得重新命名、翻译、合并阶段、重设补充任务数值')
     expect(questScriptSystem).toContain('check.resolution.abilityKey 只能逐字使用')
     expect(questScriptSystem).toContain('"ability.perception"')
     expect(dialoguePassSystems).toHaveLength(3)

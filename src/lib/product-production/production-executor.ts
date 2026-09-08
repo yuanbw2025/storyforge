@@ -503,11 +503,25 @@ export function legalizeProductionModelProtocolDefaultsV1(
       }[]
       sideQuestScripts: readonly {
         entryKey: string
-        stages: readonly { stageKey: string; actionKind: string; abilityKey: string }[]
+        stages: readonly {
+          stageKey: string
+          actionKind: string
+          abilityKey: string
+          difficulty: number
+          costlySuccessFloor: number
+          timeCostMinutes: number
+        }[]
       }[]
       ambientEventScripts: readonly {
         entryKey: string
-        stages: readonly { stageKey: string; actionKind: string; abilityKey: string }[]
+        stages: readonly {
+          stageKey: string
+          actionKind: string
+          abilityKey: string
+          difficulty: number
+          costlySuccessFloor: number
+          timeCostMinutes: number
+        }[]
       }[]
     }
     questScriptAbilityKeys?: readonly string[]
@@ -1063,7 +1077,14 @@ export function legalizeProductionModelProtocolDefaultsV1(
       value: unknown,
       identities: readonly {
         entryKey: string
-        stages: readonly { stageKey: string; actionKind: string; abilityKey: string }[]
+        stages: readonly {
+          stageKey: string
+          actionKind: string
+          abilityKey: string
+          difficulty: number
+          costlySuccessFloor: number
+          timeCostMinutes: number
+        }[]
       }[],
       field: 'sideQuestScripts' | 'ambientEventScripts',
     ): unknown => Array.isArray(value) ? value.slice(0, identities.length).map((script, scriptIndex) => {
@@ -1090,6 +1111,9 @@ export function legalizeProductionModelProtocolDefaultsV1(
             ['stageKey', stageIdentity.stageKey],
             ['actionKind', stageIdentity.actionKind],
             ['abilityKey', stageIdentity.abilityKey],
+            ['difficulty', stageIdentity.difficulty],
+            ['costlySuccessFloor', stageIdentity.costlySuccessFloor],
+            ['timeCostMinutes', stageIdentity.timeCostMinutes],
           ] as const) {
             if (nextStage[key] !== expected) {
               nextStage[key] = expected
@@ -2100,7 +2124,7 @@ function textSystem(
     return `${common}\n你是任务脚本工程师。你不设计新故事、不修改上游阶段或目标，也不直接写运行状态；你的职责是把已采纳的主线、支线和区域事件计划逐项翻译为受控的检查参数、时间成本与三档结算文本。` +
       runBoundary +
       '输出字段必须精确为：{"schema":"storyforge.text-adventure-quest-script-artifact","version":2,"mainObjectiveScripts":[{"objectiveKey":"objective.some-key","sceneKey":"scene.001","alternatives":[{"alternativeKey":"alternative.some-key","resolution":{"mode":"automatic|check","abilityKey":null,"difficulty":null,"costlySuccessFloor":null},"timeCostMinutes":5,"successText":"...","costlySuccessText":"...","failureForwardText":"..."}]}],"sideQuestScripts":[{"entryKey":"side-key","stages":[{"stageKey":"stage-one","actionKind":"inspect|attempt|use|quest-action","abilityKey":"ability.some-key","difficulty":10,"costlySuccessFloor":6,"timeCostMinutes":8,"successText":"...","costlySuccessText":"...","failureForwardText":"..."}]}],"ambientEventScripts":[]}。' +
-      `上游已冻结的脚本身份与顺序=${JSON.stringify(textAdventureQuestScriptIdentityPlan)}；必须逐项原样复制 objectiveKey、sceneKey、alternativeKeys→alternativeKey，以及每个补充任务的 entryKey、stages[].stageKey/actionKind/abilityKey，不得重新命名、翻译、合并阶段或按自己的理解排序。` +
+      `上游已冻结的脚本身份与顺序=${JSON.stringify(textAdventureQuestScriptIdentityPlan)}；必须逐项原样复制 objectiveKey、sceneKey、alternativeKeys→alternativeKey，以及每个补充任务的 entryKey、stages[].stageKey/actionKind/abilityKey/difficulty/costlySuccessFloor/timeCostMinutes，不得重新命名、翻译、合并阶段、重设补充任务数值或按自己的理解排序。` +
       `check.resolution.abilityKey 只能逐字使用这些上游已登记能力=${JSON.stringify(textAdventureQuestScriptAbilityKeys)}；不得用能力标题、中文简称、动作类型或自造 key。` +
       'mainObjectiveScripts 必须按主线 stage.objectiveKeys 的顺序不重不漏覆盖全部目标，sceneKey 必须等于该目标首个 sceneKey，每个 alternatives 必须不重不漏覆盖计划解法。automatic 的三个检查参数必须全为 null；check 必须复用 systems.abilities 的 key，difficulty 为 2–30，costlySuccessFloor 为 1–29 且严格小于 difficulty。' +
       'sideQuestScripts 与 ambientEventScripts 必须分别精确覆盖上游条目及其全部阶段，actionKind/abilityKey 必须逐字沿用阶段且 abilityKey 存在于 systems；失败文本必须产生代价、新信息或替代推进，不得写“失败了，请重试”。所有玩家可见结算文本必须具体落实对应人物、地点、阶段目标和后果。'
@@ -2306,10 +2330,15 @@ async function executeModelTask(input: ProductProductionTaskExecutionInputV1, op
               return typeof stageRecord.key === 'string'
                 && typeof stageRecord.actionKind === 'string'
                 && typeof stageRecord.abilityKey === 'string'
+                && Number.isSafeInteger(stageRecord.difficulty)
+                && Number.isSafeInteger(stageRecord.timeCostMinutes)
                 ? [{
                     stageKey: stageRecord.key,
                     actionKind: stageRecord.actionKind,
                     abilityKey: stageRecord.abilityKey,
+                    difficulty: Number(stageRecord.difficulty),
+                    costlySuccessFloor: Math.max(1, Number(stageRecord.difficulty) - 4),
+                    timeCostMinutes: Number(stageRecord.timeCostMinutes),
                   }]
                 : []
             }) : []
