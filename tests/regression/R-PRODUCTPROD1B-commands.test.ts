@@ -774,4 +774,103 @@ describe('PRODUCTPROD-1B · user command control plane', () => {
       contentHash: target.contentHash, blobObjectId: target.blobObjectId, status: 'accepted',
     })
   })
+
+  it('只允许按 Visual QA 退回证据批量返修，并把逐图建议送入新 Build 的图片任务', async () => {
+    const f = await completedTextAdventureMediaFixture()
+    const artifacts = await db.productBuildArtifacts.where('buildId').equals(f.build.id!).toArray()
+    const rejected = artifacts.find(row => row.artifactKey === 'media.visual.001')!
+    const accepted = artifacts.find(row => row.artifactKey === 'media.visual.002')!
+    const reviewArtifact = artifacts.find(row => row.artifactKey === 'quality.visual-review')!
+    const reviewPayload = {
+      schema: 'storyforge.text-adventure-visual-quality-review-artifact', version: 1,
+      buildNumber: 1, mediaAuditHash: 'a'.repeat(64), status: 'revision-required',
+      reviews: [
+        {
+          artifactKey: rejected.artifactKey, contentHash: rejected.contentHash, verdict: 'replace',
+          scores: {
+            requirementFit: 2, identityContinuity: 3, styleContinuity: 4,
+            composition: 3, technicalCleanliness: 1,
+          },
+          issues: [{
+            severity: 'blocking', category: 'text', detail: '画面出现不可读伪文字',
+            recommendation: '移除全部字符、标牌和类似字形的纹理',
+          }],
+          reviewSource: 'multimodal-model',
+        },
+        {
+          artifactKey: accepted.artifactKey, contentHash: accepted.contentHash, verdict: 'accept',
+          scores: {
+            requirementFit: 5, identityContinuity: 5, styleContinuity: 5,
+            composition: 5, technicalCleanliness: 5,
+          },
+          issues: [], reviewSource: 'multimodal-model',
+        },
+      ],
+      blockingIssueCount: 1, providerReviewCompleted: true,
+    }
+    const reviewPayloadJson = canonicalProductProductionJsonV2(reviewPayload)
+    const reviewHash = await hashProductProductionValueV2(reviewPayload)
+    await db.productBuildArtifacts.update(reviewArtifact.id!, {
+      payloadJson: reviewPayloadJson, contentHash: reviewHash,
+    })
+    await db.productBuilds.update(f.build.id!, {
+      status: 'recovery-required',
+      failureJson: canonicalProductProductionJsonV2({
+        taskKey: 'integration.package', code: 'task-executor-failed', attempt: 1,
+        detail: '商业候选的独立图片审查未通过:revision-required',
+      }),
+    })
+    await db.productProductions.update(f.productionId, { status: 'producing' })
+
+    await expect(executeProductProductionCommand({
+      scope: f.scope, productionId: f.productionId,
+      command: {
+        type: 'revise-media-assets', commandId: 'visual-repair.accepted-must-fail',
+        expectedStateRevision: 2, buildNumber: 1, action: 'regenerate',
+        targets: [{ artifactKey: accepted.artifactKey, expectedArtifactHash: accepted.contentHash }],
+      },
+    })).resolves.toMatchObject({ ok: false, errorCode: 'media-revision-invalid' })
+
+    const repaired = await executeProductProductionCommand({
+      scope: f.scope, productionId: f.productionId,
+      command: {
+        type: 'revise-media-assets', commandId: 'visual-repair.rejected',
+        expectedStateRevision: 2, buildNumber: 1, action: 'regenerate',
+        targets: [{ artifactKey: rejected.artifactKey, expectedArtifactHash: rejected.contentHash }],
+      },
+    })
+    expect(repaired).toMatchObject({
+      ok: true, stateRevision: 3,
+      result: {
+        action: 'regenerate', artifactKeys: [rejected.artifactKey],
+        parentBuildNumber: 1, buildNumber: 2,
+      },
+    })
+    const child = await db.productBuilds.where('[productionId+buildNumber]').equals([f.productionId, 2]).first()
+    const childPlan = parseProductProductionPlanV3(child!.planJson, f.brief, child!.briefHash)
+    expect(childPlan.tasks.find(task => task.taskKey === 'media.repair-feedback')).toMatchObject({
+      executionMode: 'human-import', outputArtifactKeys: ['media.repair-feedback'],
+      acceptanceGateIds: ['artifact.protocol', 'media.visual-repair-feedback'],
+    })
+    expect(childPlan.tasks.find(task => task.taskKey === rejected.artifactKey)).toMatchObject({
+      executionMode: 'media-provider',
+      dependsOn: expect.arrayContaining(['media.repair-feedback']),
+      inputArtifactKeys: expect.arrayContaining(['media.repair-feedback']),
+      reuse: null,
+    })
+    expect(childPlan.tasks.find(task => task.taskKey === accepted.artifactKey)?.reuse).not.toBeNull()
+    const feedback = await db.productBuildArtifacts
+      .where('[buildId+artifactKey]').equals([child!.id!, 'media.repair-feedback']).first()
+    expect(feedback).toMatchObject({
+      status: 'accepted', kind: 'integration-report', parentArtifactHash: reviewHash,
+    })
+    expect(JSON.parse(feedback!.payloadJson)).toMatchObject({
+      sourceBuildNumber: 1, sourceReviewArtifactHash: reviewHash,
+      targets: [{
+        artifactKey: rejected.artifactKey, priorContentHash: rejected.contentHash,
+        verdict: 'replace',
+        issues: [{ detail: '画面出现不可读伪文字', recommendation: '移除全部字符、标牌和类似字形的纹理' }],
+      }],
+    })
+  })
 })
