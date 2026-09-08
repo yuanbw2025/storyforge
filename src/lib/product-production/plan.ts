@@ -364,17 +364,19 @@ export async function createProductProductionPlanV3(input: {
     // The full WorldRelease sufficiency audit is another reasoning-heavy
     // planning task. Real commercial attempts reported 3,687 and 5,363
     // billed output tokens, so the previous 2%/2,000-token slice was not a
-    // truthful ceiling. Seven percent preserves headroom for provider-side
-    // reasoning without weakening the Build-lifetime ledger.
-    'content.source-sufficiency': 0.07,
+    // truthful ceiling. Five percent gives a repaired 160k Brief an 8,000
+    // token ceiling while returning unused reservation to adjacent bibles.
+    'content.source-sufficiency': 0.05,
     'content.design': 0.015,
     // A real commercial Story Bible receipt used 2,835 output tokens. Three
     // percent keeps legacy 100k Briefs truthful; repaired/new Briefs receive
     // the larger production envelope computed above.
     'content.story-bible': 0.03,
-    'content.cast-bible': 0.02,
-    'content.adventure-architecture': 0.02,
-    'content.product-module': 0.02,
+    // Cast, space and system bibles have comparable schema depth. A real Cast
+    // Bible receipt used 3,811 tokens, beyond the former 3,200-token slice.
+    'content.cast-bible': 0.03,
+    'content.adventure-architecture': 0.03,
+    'content.product-module': 0.03,
     'content.narrative-arc-scenes': 0.025,
     'content.narrative-decision-plan': 0.02,
     'content.main-quest-plan': 0.025,
