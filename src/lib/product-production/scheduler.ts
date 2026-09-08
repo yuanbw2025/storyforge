@@ -1031,15 +1031,24 @@ async function ensurePlan(input: {
   if (currentPlan && currentPlan.controlEpoch === state.build.controlEpoch && state.build.planHash === await hashProductProductionValueV2(currentPlan)) {
     return { ...state, plan: currentPlan }
   }
+  const currentMediaRevisionPlan = currentPlan && currentPlan.tasks.some(task => (
+    task.taskKey === 'media.repair-feedback'
+      || task.reuse?.reason.startsWith('媒资修订 ') === true
+  )) ? currentPlan : null
   let plan = input.suppliedPlan
     ? parseProductProductionPlanV3(input.suppliedPlan, state.brief, state.briefRow.briefHash)
+    : currentMediaRevisionPlan
+      ? parseProductProductionPlanV3({
+          ...currentMediaRevisionPlan,
+          controlEpoch: state.build.controlEpoch,
+        }, state.brief, state.briefRow.briefHash)
     : await createProductProductionPlanV3({
         brief: state.brief,
         briefHash: state.briefRow.briefHash,
         buildNumber: state.build.buildNumber,
         controlEpoch: state.build.controlEpoch,
       })
-  if (!input.suppliedPlan) {
+  if (!input.suppliedPlan && !currentMediaRevisionPlan) {
     const reuse = await applyCrossBuildEvolutionReuse({
       scope: input.scope, build: state.build, brief: state.brief, plan,
     })
