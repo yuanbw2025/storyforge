@@ -1166,6 +1166,8 @@ async function runClaimedTask(input: {
   const executorOwnsWorldGateway = productProductionTaskOwnsWorldGatewayV1(input.task)
   const worldGatewayRequired = worldGatewayUsed && !executorOwnsWorldGateway
   const requiresExactContext = worldGatewayUsed || input.task.executionMode === 'model'
+  const usesDedicatedPlanInputBudget = input.task.executionMode === 'model'
+    && input.task.kind.startsWith('text-open-world.')
   // The actual frozen world packet is added and checked below; a fixed 40%
   // slice needlessly truncated valid Brief + repair inputs in small worlds.
   const normalInputBudget = totalInputBudget
@@ -1176,7 +1178,9 @@ async function runClaimedTask(input: {
     productProductionId: input.productionId, productBuildId: input.build.id,
     productProductionTaskKey: input.task.taskKey,
     productArtifactKeys: input.task.inputArtifactKeys,
-    inputBudgetMaxTokens: normalInputBudget,
+    ...(usesDedicatedPlanInputBudget
+      ? { inputBudgetTokens: normalInputBudget }
+      : { inputBudgetMaxTokens: normalInputBudget }),
     ...(requiresExactContext ? { sourceTransformer: preserveProductProductionContextV1 } : {}),
     })
     if (requiresExactContext && (normalAssembled.overBudgetAfterTrim || !normalAssembled.sourceEvidence || normalAssembled.sourceEvidence.some(source => (

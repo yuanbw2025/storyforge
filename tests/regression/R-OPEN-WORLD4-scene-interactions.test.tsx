@@ -325,7 +325,6 @@ describe('Text Open World G4-03 · 场景与三类输入集成', () => {
           availableActions: [{ ...acceptAction, available: true, validTargetKeys }],
           feedback: null,
           busy: false,
-          combatActive: false,
           fallback: { regionTitle: '盐港', locationTitle: '盐港广场', description: '测试场景', playerName: '来客' },
           onExecute,
         }))
@@ -350,45 +349,14 @@ describe('Text Open World G4-03 · 场景与三类输入集成', () => {
       .toContain('当前有多个合法目标')
   })
 
-  it.sequential('战斗期间隐藏场景Choice并禁止自然语言提交', async () => {
+  it.sequential('场景页把专属战斗操作移交G4-09战斗面板，不再代选敌人或复用场景按钮', async () => {
     const runtimePackage = createTextOpenWorldVNextP9Fixture()
     const runtimeProjection = createInitialTextOpenWorldSessionProjectionV1(runtimePackage)
     const projection = projectTextOpenWorldScenesV1(runtimeProjection)
     if (projection.status !== 'ready') throw new Error('测试需要P9场景投影')
-    const availableActions = createTextOpenWorldActionRegistryV1(runtimePackage)
+    const projectedActions = createTextOpenWorldActionRegistryV1(runtimePackage)
       .project(deriveTextOpenWorldContextsV1(runtimeProjection).action)
-      .filter(action => action.available)
-    const onExecute = vi.fn()
-
-    await act(async () => {
-      root.render(createElement(TextOpenWorldScenePanel, {
-        sessionKey: 'combat-boundary', eventSequence: 0, projection, availableActions,
-        feedback: null, busy: false, combatActive: true,
-        fallback: { regionTitle: '盐港', locationTitle: '盐港广场', description: '测试场景', playerName: '来客' },
-        onExecute,
-      }))
-      await new Promise(resolve => setTimeout(resolve, 0))
-    })
-
-    expect(host.querySelector('[data-testid="text-open-world-fixed-choices"]')).toBeNull()
-    const input = host.querySelector('#text-open-world-natural-command') as HTMLInputElement
-    expect(input.disabled).toBe(true)
-    expect(input.placeholder).toBe('战斗中只允许正式按钮操作')
-    await act(async () => {
-      input.closest('form')?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
-      await new Promise(resolve => setTimeout(resolve, 0))
-    })
-    expect(onExecute).not.toHaveBeenCalled()
-  })
-
-  it.sequential('完整敌人选择UI落地前，多敌战斗Action确定性选择首个合法目标而不死锁', async () => {
-    const runtimePackage = createTextOpenWorldVNextP9Fixture()
-    const runtimeProjection = createInitialTextOpenWorldSessionProjectionV1(runtimePackage)
-    const projection = projectTextOpenWorldScenesV1(runtimeProjection)
-    if (projection.status !== 'ready') throw new Error('测试需要P9场景投影')
-    const projectedAction = createTextOpenWorldActionRegistryV1(runtimePackage)
-      .project(deriveTextOpenWorldContextsV1(runtimeProjection).action)
-      .find(action => action.action.key === 'action.combat-basic-attack')!
+    const projectedAction = projectedActions.find(action => action.action.key === 'action.combat-basic-attack')!
     const combatAction = {
       ...projectedAction,
       available: true,
@@ -400,19 +368,23 @@ describe('Text Open World G4-03 · 场景与三类输入集成', () => {
     await act(async () => {
       root.render(createElement(TextOpenWorldScenePanel, {
         sessionKey: 'multi-enemy-fallback', eventSequence: 0, projection,
-        availableActions: [combatAction], feedback: null, busy: false, combatActive: true,
+        availableActions: [...projectedActions.filter(action => action.available), combatAction],
+        feedback: null, busy: false,
         fallback: { regionTitle: '盐港', locationTitle: '断脊渠口', description: '测试场景', playerName: '来客' },
         onExecute,
       }))
       await new Promise(resolve => setTimeout(resolve, 0))
     })
 
-    await click(buttonByText(host, '普通攻击', true))
-    expect(onExecute).toHaveBeenCalledWith(
-      'action.combat-basic-attack',
-      'combatant.enemy.1',
-      'system-action',
-    )
+    expect(host.querySelector('[data-testid="text-open-world-fixed-choices"]')).toBeTruthy()
+    const input = host.querySelector('#text-open-world-natural-command') as HTMLInputElement
+    expect(input.disabled).toBe(false)
+    expect(input.placeholder).toBe('输入本场景中的行动表达')
+    expect(Array.from(host.querySelectorAll('button')).some(button => button.textContent?.includes('普通攻击')))
+      .toBe(false)
+    expect(host.querySelector('[data-testid="text-open-world-system-actions"]')?.textContent)
+      .not.toContain('普通攻击')
+    expect(onExecute).not.toHaveBeenCalled()
   })
 
   it.sequential('高风险固定Choice确认后仍保留原始source、目标和当前Session边界', async () => {

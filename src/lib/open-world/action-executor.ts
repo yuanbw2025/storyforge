@@ -19,7 +19,8 @@ import { createTextOpenWorldQuestTrackingCatalogV1 } from './quest-tracking'
 import { executeTextOpenWorldPendingRewardV1 } from './reward-executor'
 import { deriveTextOpenWorldContextsV1, parseTextOpenWorldSessionProjectionV1 } from './session-projection'
 import { createTextOpenWorldFastTravelCatalogV1 } from './fast-travel'
-import { resolveTextOpenWorldRandomEvidenceV1 } from './event-contract'
+import { parseTextOpenWorldEffectsAppliedEventPayloadV1, resolveTextOpenWorldRandomEvidenceV1 } from './event-contract'
+import { parseTextOpenWorldCommandEventPayloadV1 } from './command-contract'
 import { createTextOpenWorldWeatherCatalogV1 } from './weather'
 import { createTextOpenWorldActorScheduleCatalogV1 } from './actors'
 import { createTextOpenWorldCrimeCatalogV1 } from './crime'
@@ -32,6 +33,10 @@ import { createTextOpenWorldDirectorCatalogV1 } from './director'
 const COMMAND_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/
 
 function fail(message: string): never { throw new Error(`[text-open-world-action-executor] ${message}`) }
+/** Explicit release gate: Combat v2 has no frozen reward contract; v3/v4 do. */
+export function supportsTextOpenWorldAutomaticCombatRewardV1(combatSourceVersion: number | undefined): boolean {
+  return combatSourceVersion === 3 || combatSourceVersion === 4
+}
 function targetFrom(envelope: TextOpenWorldCommandEnvelopeV1): string | null {
   const value = envelope.payload.targetKey
   return typeof value === 'string' ? value : null
@@ -268,6 +273,8 @@ type ExecuteTextOpenWorldActionInputV1 = {
 type ExecuteTextOpenWorldActionInternalInputV1 = ExecuteTextOpenWorldActionInputV1 & {
   combatTransitionIntent?: TextOpenWorldCombatTransitionIntentV1
   directorTrigger?: TextOpenWorldDirectorTriggerV1
+  /** Durable Action v17 linkage from a system follow-up to its player cause. */
+  systemCauseCommandId?: string
 }
 
 async function executeTextOpenWorldActionAsV1(
@@ -294,12 +301,17 @@ async function executeTextOpenWorldActionAsV1(
   }
   const hasDirectorTrigger = input.directorTrigger != null
   if (hasDirectorTrigger !== (systemCategory === 'director-action')) fail('Director触发只能由Director系统Action提交')
+  if (input.systemCauseCommandId != null && !COMMAND_ID.test(input.systemCauseCommandId)) fail('系统后续工作causeCommandId无效')
+  if (input.systemCauseCommandId != null && (actorKey !== 'system' || (systemCategory !== 'quest-action' && systemCategory !== 'director-action'))) {
+    fail('系统后续工作causeCommandId只能由任务或Director系统Action提交')
+  }
   const commandPayload: Record<string, unknown> = {
     ...(targetKey == null ? {} : { targetKey }),
     ...(input.quantity == null ? {} : { quantity: input.quantity }),
     ...(input.itemKey == null ? {} : { itemKey: input.itemKey }),
     ...(input.combatTransitionIntent == null ? {} : { combatTransitionIntent: input.combatTransitionIntent }),
     ...(input.directorTrigger == null ? {} : { directorTrigger: input.directorTrigger }),
+    ...(input.systemCauseCommandId == null ? {} : { systemCauseCommandId: input.systemCauseCommandId }),
   }
 
   const prior = await getTextOpenWorldCommandStatusV1({ sessionId: input.sessionId, commandId })
@@ -321,11 +333,23 @@ async function executeTextOpenWorldActionAsV1(
   }
   const projection = parseTextOpenWorldSessionProjectionV1(state.textOpenWorld)
   assertTextOpenWorldVNextProjectionBindingV1(projection, binding)
+  const modules = parseTextOpenWorldModulesV1(projection.runtimePackage)
+  if (input.systemCauseCommandId != null) {
+    if (modules.actions.version < 17) fail('Action v17以前不能写入系统后续工作causeCommandId')
+    const cause = await assertTerminalPlayerCauseV1(input.sessionId, input.systemCauseCommandId, modules)
+    if (systemCategory === 'director-action') {
+      const causeAction = modules.actions.actions.find(action => action.key === cause.envelope.actionKey)
+        ?? fail(`Director系统后续工作cause Action不存在:${cause.envelope.actionKey}`)
+      if (input.directorTrigger !== directorTriggerForActionCategory(causeAction.category)) {
+        fail(`Director系统后续工作触发与玩家cause不一致:${input.systemCauseCommandId}`)
+      }
+    }
+  }
   const registry = createTextOpenWorldActionRegistryV1(projection.runtimePackage)
   const actionContext = deriveTextOpenWorldContextsV1(projection).action
   actionContext.actorKey = actorKey
   if (actorKey === 'system') {
-    actionContext.validTargetKeysByScope.actor = parseTextOpenWorldModulesV1(projection.runtimePackage).actors.actors
+    actionContext.validTargetKeysByScope.actor = modules.actors.actors
       .filter(actor => projection.state.actors[actor.key]?.alive && projection.state.actors[actor.key]?.present)
       .map(actor => actor.key)
   }
@@ -366,7 +390,6 @@ async function executeTextOpenWorldActionAsV1(
     })
   } else if (input.quantity != null || input.itemKey != null) fail('非制作或交易Action不能提交quantity/itemKey')
   if (resolved.entry.action.category === 'start-combat') {
-    const modules = parseTextOpenWorldModulesV1(projection.runtimePackage)
     const startEffects = resolved.entry.action.successEffectKeys
       .map(effectKey => modules.actions.effects.find(effect => effect.key === effectKey)!)
       .filter(effect => effect.operation === 'start-combat' || effect.operation === 'initialize-combat')
@@ -386,8 +409,175 @@ async function executeTextOpenWorldActionAsV1(
   return settleAcceptedCommand(envelope)
 }
 
+type DurableCommandRecordV1 = {
+  envelope: TextOpenWorldCommandEnvelopeV1
+  sequence: number
+  terminalOutcome: 'success' | 'failure' | 'degraded' | null
+}
+
+async function durableDirectorMarkerCommandIdV1(input: {
+  causeCommandId: string
+  causeActionKey: string
+  trigger: TextOpenWorldDirectorTriggerV1
+  systemActionKey: string
+}): Promise<string> {
+  const commandHash = await hashProductProductionValueV2({
+    schema: 'storyforge.text-open-world.system-follow-up-marker', version: 1,
+    ...input,
+  })
+  return `command.system-director.${commandHash}`
+}
+
+async function durableQuestFollowUpCommandIdV1(input: {
+  causeCommandId: string
+  index: number
+  actionKey: string
+  targetKey: string
+}): Promise<string> {
+  const commandHash = await hashProductProductionValueV2({
+    schema: 'storyforge.text-open-world.quest-follow-up', version: 1,
+    ...input,
+  })
+  return `command.system-quest.${commandHash}`
+}
+
+function parseDurableEventPayloadV1(payloadJson: string, sequence: number): unknown {
+  try { return JSON.parse(payloadJson) } catch { fail(`事件${sequence} payload不是合法JSON`) }
+}
+
+/**
+ * Reads the durable Action/Effect chain rather than the cached projection so
+ * recovery decisions cannot be invented from mutable runtime state. A v17
+ * Director settlement is also the completion marker for all deterministic
+ * follow-up work caused by one player Command.
+ */
+async function readDurableFollowUpLedgerV1(
+  sessionId: number,
+  modules: ReturnType<typeof parseTextOpenWorldModulesV1>,
+): Promise<{
+  commandsById: Map<string, DurableCommandRecordV1>
+  completedPlayerCauseSequence: number
+}> {
+  const directorActionKey = modules.director.rules.systemActionKey
+  const events = await db.productRuntimeEvents.where('sessionId').equals(sessionId).sortBy('sequence')
+  const commandsById = new Map<string, DurableCommandRecordV1>()
+  for (const event of events) {
+    if (event.type === 'text-open-world.command.committed') {
+      const payload = parseTextOpenWorldCommandEventPayloadV1(parseDurableEventPayloadV1(event.payloadJson, event.sequence))
+      if (payload.envelope.sessionId !== sessionId
+        || payload.envelope.commandId !== event.commandId
+        || payload.envelope.actorKey !== event.actorKey
+        || payload.resultingSequence !== event.sequence) {
+        fail(`系统后续工作命令索引字段不一致:${event.sequence}`)
+      }
+      if (commandsById.has(payload.envelope.commandId)) fail(`系统后续工作命令重复:${payload.envelope.commandId}`)
+      commandsById.set(payload.envelope.commandId, {
+        envelope: payload.envelope,
+        sequence: event.sequence,
+        terminalOutcome: null,
+      })
+      continue
+    }
+    if (event.type !== 'text-open-world.effects.applied') continue
+    const payload = parseTextOpenWorldEffectsAppliedEventPayloadV1(parseDurableEventPayloadV1(event.payloadJson, event.sequence))
+    const command = commandsById.get(payload.commandId) ?? fail(`Effect没有对应Command:${payload.commandId}`)
+    if (command.terminalOutcome != null || payload.commandSequence !== command.sequence) {
+      fail(`Effect与Command终态不一致:${payload.commandId}`)
+    }
+    command.terminalOutcome = payload.outcome
+  }
+
+  let completedPlayerCauseSequence = 0
+  for (const command of commandsById.values()) {
+    if (command.terminalOutcome !== 'success'
+      || command.envelope.actorKey !== 'system'
+      || command.envelope.actionKey !== directorActionKey
+      || typeof command.envelope.payload.directorTrigger !== 'string') continue
+    const causeCommandId = command.envelope.payload.systemCauseCommandId
+    if (typeof causeCommandId !== 'string') continue
+    const cause = commandsById.get(causeCommandId)
+    if (!cause || cause.envelope.actorKey !== 'player' || cause.terminalOutcome !== 'success'
+      || cause.sequence >= command.sequence) {
+      fail(`系统后续工作引用的玩家cause无效:${causeCommandId}`)
+    }
+    const causeAction = modules.actions.actions.find(action => action.key === cause.envelope.actionKey)
+      ?? fail(`系统后续工作cause Action不存在:${cause.envelope.actionKey}`)
+    const trigger = directorTriggerForActionCategory(causeAction.category)
+    if (command.envelope.payload.directorTrigger !== trigger
+      || command.envelope.commandId !== await durableDirectorMarkerCommandIdV1({
+        causeCommandId,
+        causeActionKey: cause.envelope.actionKey,
+        trigger,
+        systemActionKey: directorActionKey ?? fail('Action v17 Director marker缺少系统Action'),
+      })) {
+      fail(`系统后续工作完成标记与玩家cause不一致:${causeCommandId}`)
+    }
+    completedPlayerCauseSequence = Math.max(completedPlayerCauseSequence, cause.sequence)
+  }
+  return { commandsById, completedPlayerCauseSequence }
+}
+
+async function assertTerminalPlayerCauseV1(
+  sessionId: number,
+  causeCommandId: string,
+  modules: ReturnType<typeof parseTextOpenWorldModulesV1>,
+): Promise<DurableCommandRecordV1> {
+  const { commandsById } = await readDurableFollowUpLedgerV1(sessionId, modules)
+  const cause = commandsById.get(causeCommandId)
+  if (!cause || cause.envelope.actorKey !== 'player' || cause.terminalOutcome !== 'success') {
+    fail(`系统后续工作cause不是成功的玩家命令:${causeCommandId}`)
+  }
+  return cause
+}
+
+async function latestUnsettledPlayerCauseV1(
+  sessionId: number,
+  modules: ReturnType<typeof parseTextOpenWorldModulesV1>,
+): Promise<TextOpenWorldCommandEnvelopeV1 | null> {
+  const ledger = await readDurableFollowUpLedgerV1(sessionId, modules)
+  return [...ledger.commandsById.values()]
+    .filter(command => command.envelope.actorKey === 'player'
+      && command.terminalOutcome === 'success'
+      && command.sequence > ledger.completedPlayerCauseSequence)
+    .sort((left, right) => right.sequence - left.sequence)[0]?.envelope ?? null
+}
+
+async function completedLinkedQuestActionCountV1(
+  sessionId: number,
+  causeCommandId: string,
+  modules: ReturnType<typeof parseTextOpenWorldModulesV1>,
+): Promise<number> {
+  const questActionKeys = new Set(modules.actions.actions
+    .filter(action => action.category === 'quest-action')
+    .map(action => action.key))
+  const { commandsById } = await readDurableFollowUpLedgerV1(sessionId, modules)
+  const cause = commandsById.get(causeCommandId)
+  if (!cause || cause.envelope.actorKey !== 'player' || cause.terminalOutcome !== 'success') {
+    fail(`任务系统后续工作cause无效:${causeCommandId}`)
+  }
+  const linked = [...commandsById.values()].filter(command => command.terminalOutcome === 'success'
+    && command.envelope.actorKey === 'system'
+    && command.envelope.payload.systemCauseCommandId === causeCommandId
+    && questActionKeys.has(command.envelope.actionKey))
+    .sort((left, right) => left.sequence - right.sequence)
+  for (const [index, command] of linked.entries()) {
+    const targetKey = command.envelope.payload.targetKey
+    if (command.sequence <= cause.sequence || typeof targetKey !== 'string'
+      || command.envelope.commandId !== await durableQuestFollowUpCommandIdV1({
+        causeCommandId, index, actionKey: command.envelope.actionKey, targetKey,
+      })) fail(`任务系统后续工作标记与玩家cause不一致:${command.envelope.commandId}`)
+  }
+  return linked.length
+}
+
 async function settleReadyQuestSystemActionsV1(sessionId: number, causeCommandId: string): Promise<void> {
-  for (let index = 0; index < 32; index += 1) {
+  const initialRuntime = await readProductRuntimeState(sessionId)
+  const initialProjection = parseTextOpenWorldSessionProjectionV1(initialRuntime.textOpenWorld)
+  const initialModules = parseTextOpenWorldModulesV1(initialProjection.runtimePackage)
+  const modern = initialModules.actions.version >= 17
+  const initialIndex = modern ? await completedLinkedQuestActionCountV1(sessionId, causeCommandId, initialModules) : 0
+  for (let offset = 0; offset < 32; offset += 1) {
+    const index = initialIndex + offset
     const runtime = await readProductRuntimeState(sessionId)
     const projection = parseTextOpenWorldSessionProjectionV1(runtime.textOpenWorld)
     const modules = parseTextOpenWorldModulesV1(projection.runtimePackage)
@@ -407,6 +597,7 @@ async function settleReadyQuestSystemActionsV1(sessionId: number, causeCommandId
       const feedback = await executeTextOpenWorldActionAsV1({
         sessionId, actionKey: pendingActionKey, targetKey: pendingTargetKey,
         commandId: projection.protocol.pendingCommandId, source: 'system-action',
+        ...(modern ? { systemCauseCommandId: causeCommandId } : {}),
       }, 'system', 'quest-action')
       if (feedback.phase !== 'terminal' || feedback.status !== 'succeeded') fail(`Stage待结算命令未成功:${pendingActionKey}:${pendingTargetKey}`)
       continue
@@ -418,10 +609,13 @@ async function settleReadyQuestSystemActionsV1(sessionId: number, causeCommandId
       .flatMap(item => item.validTargetKeys.map(targetKey => ({ actionKey: item.action.key, targetKey, priority: completionActionKeys.has(item.action.key) ? 0 : 1 })))
       .sort((left, right) => left.priority - right.priority || left.actionKey.localeCompare(right.actionKey) || left.targetKey.localeCompare(right.targetKey))[0]
     if (!next) return
-    const commandHash = await hashProductProductionValueV2({ causeCommandId, index, ...next })
+    const commandId = modern
+      ? await durableQuestFollowUpCommandIdV1({ causeCommandId, index, actionKey: next.actionKey, targetKey: next.targetKey })
+      : `command.system-quest.${await hashProductProductionValueV2({ causeCommandId, index, ...next })}`
     const feedback = await executeTextOpenWorldActionAsV1({
       sessionId, actionKey: next.actionKey, targetKey: next.targetKey,
-      commandId: `command.system-quest.${commandHash}`, source: 'system-action',
+      commandId, source: 'system-action',
+      ...(modern ? { systemCauseCommandId: causeCommandId } : {}),
     }, 'system', 'quest-action')
     if (feedback.phase !== 'terminal' || feedback.status !== 'succeeded') fail(`Stage系统结算未成功:${next.actionKey}:${next.targetKey}`)
   }
@@ -477,51 +671,117 @@ async function settleDirectorAfterActionV1(sessionId: number, causeCommandId: st
   const runtime = await readProductRuntimeState(sessionId)
   const projection = parseTextOpenWorldSessionProjectionV1(runtime.textOpenWorld)
   const modules = parseTextOpenWorldModulesV1(projection.runtimePackage)
-  if (modules.actions.version < 14 || modules.director.sourceVersion < 2 || !modules.director.rules.systemActionKey) return
+  if (modules.actions.version < 14 || modules.director.sourceVersion < 2 || !modules.director.rules.systemActionKey) {
+    if (modules.actions.version >= 17) fail('Action v17缺少可作为系统后续工作完成标记的Director系统Action')
+    return
+  }
   const action = modules.actions.actions.find(item => item.key === causeActionKey) ?? fail(`Director触发来源Action不存在:${causeActionKey}`)
   const trigger = directorTriggerForActionCategory(action.category)
   const conditionResults = Object.fromEntries(Object.entries(deriveTextOpenWorldContextsV1(projection).action.conditionResults)
     .map(([key, result]) => [key, result.satisfied]))
   const director = createTextOpenWorldDirectorCatalogV1(projection.runtimePackage, modules)
-  if (!director.shouldSettle({ state: projection.state, trigger, conditionResults })) return
-  const commandHash = await hashProductProductionValueV2({
-    causeCommandId, causeActionKey, trigger, worldMinute: projection.state.time.worldMinute,
-    drawCount: projection.state.director.drawCount,
-    regionSettlement: projection.state.director.lastRegionSettlementWorldMinuteByRegionKey,
-  })
+  const modern = modules.actions.version >= 17
+  if (!modern && !director.shouldSettle({ state: projection.state, trigger, conditionResults })) return
+  const commandId = modern
+    ? await durableDirectorMarkerCommandIdV1({
+        causeCommandId, causeActionKey, trigger, systemActionKey: modules.director.rules.systemActionKey,
+      })
+    : `command.system-director.${await hashProductProductionValueV2({
+        causeCommandId, causeActionKey, trigger, worldMinute: projection.state.time.worldMinute,
+        drawCount: projection.state.director.drawCount,
+        regionSettlement: projection.state.director.lastRegionSettlementWorldMinuteByRegionKey,
+      })}`
   const feedback = await executeTextOpenWorldActionAsV1({
     sessionId,
     actionKey: modules.director.rules.systemActionKey,
     directorTrigger: trigger,
-    commandId: `command.system-director.${commandHash}`,
+    commandId,
     source: 'system-action',
+    ...(modern ? { systemCauseCommandId: causeCommandId } : {}),
   }, 'system', 'director-action')
   if (feedback.phase !== 'terminal' || feedback.status !== 'succeeded') fail(`Director系统结算未成功:${trigger}`)
 }
 
+type RecoveredPendingCommandV1 = {
+  envelope: TextOpenWorldCommandEnvelopeV1
+  feedback: TextOpenWorldFeedbackReceiptV1
+}
+
 /**
- * A Director command can already be durable while its Effect batch is still
- * pending (for example after a browser/process interruption). Recover that
- * exact committed envelope before accepting another player action so the
- * draw is neither lost nor repeated with a newly derived trigger.
+ * A Command can already be durable while its atomic Effect batch is still
+ * pending (for example after a browser/process interruption). Recover only
+ * the exact committed envelope represented by the cached projection. Never
+ * derive or commit a replacement Command: that would change its sequence and
+ * could repeat deterministic random draws under another identity.
  */
-async function recoverPendingDirectorSettlementV1(sessionId: number): Promise<void> {
+async function recoverPendingCommandV1(sessionId: number): Promise<RecoveredPendingCommandV1 | null> {
+  const session = await db.productRuntimeSessions.get(sessionId)
+  if (!session || session.kind !== 'text-open-world') fail('文字开放世界Session不存在')
   const runtime = await readProductRuntimeState(sessionId)
   const projection = parseTextOpenWorldSessionProjectionV1(runtime.textOpenWorld)
   const commandId = projection.protocol.pendingCommandId
-  if (!commandId) return
+  if (!commandId) return null
+  if (session.runtimeHeadSequence > runtime.lastSequence) {
+    fail(`待结算命令事件流与缓存头不一致:${commandId}`)
+  }
+  const commandSequence = projection.protocol.pendingCommandSequence ?? fail('待结算命令缺少序号')
   const actionKey = projection.protocol.pendingActionKey
   if (!actionKey) fail('待结算命令缺少Action')
+  const actorKey = projection.protocol.pendingActorKey
+  if (actorKey !== 'player' && actorKey !== 'system') fail('待结算命令缺少合法Actor')
   const modules = parseTextOpenWorldModulesV1(projection.runtimePackage)
   const action = modules.actions.actions.find(item => item.key === actionKey) ?? fail(`待结算Action不存在:${actionKey}`)
-  if (action.category !== 'director-action') return
-  if (projection.protocol.pendingActorKey !== 'system' || !projection.protocol.pendingDirectorTrigger) {
-    fail('Director待结算命令缺少系统Actor或触发类型')
-  }
   const status = await getTextOpenWorldCommandStatusV1({ sessionId, commandId })
-  if (status.status !== 'committed') fail(`Director待结算命令不存在:${commandId}`)
+  if (status.status !== 'committed') fail(`待结算命令不存在:${commandId}`)
+  const envelope = status.envelope
+  const systemCauseCommandId = envelope.payload.systemCauseCommandId
+  if (systemCauseCommandId != null) {
+    if (typeof systemCauseCommandId !== 'string' || !COMMAND_ID.test(systemCauseCommandId)
+      || actorKey !== 'system' || modules.actions.version < 17
+      || (action.category !== 'quest-action' && action.category !== 'director-action')) {
+      fail(`待结算命令系统cause不合法:${commandId}`)
+    }
+    await assertTerminalPlayerCauseV1(sessionId, systemCauseCommandId, modules)
+  }
+  const expectedPayload: Record<string, unknown> = {
+    ...(projection.protocol.pendingTargetKey == null ? {} : { targetKey: projection.protocol.pendingTargetKey }),
+    ...(projection.protocol.pendingActionQuantity == null ? {} : { quantity: projection.protocol.pendingActionQuantity }),
+    ...(projection.protocol.pendingActionItemKey == null ? {} : { itemKey: projection.protocol.pendingActionItemKey }),
+    ...(projection.protocol.pendingCombatTransitionIntent == null ? {} : { combatTransitionIntent: projection.protocol.pendingCombatTransitionIntent }),
+    ...(projection.protocol.pendingDirectorTrigger == null ? {} : { directorTrigger: projection.protocol.pendingDirectorTrigger }),
+    ...(systemCauseCommandId == null ? {} : { systemCauseCommandId }),
+  }
+  const pendingRandomSuffix = projection.protocol.randomEvidence
+    .filter(item => item.eventSequence > commandSequence)
+  if (status.receipt.eventSequence !== commandSequence
+    || projection.lastEventSequence !== commandSequence + pendingRandomSuffix.length
+    || pendingRandomSuffix.some((item, index) => item.eventSequence !== commandSequence + index + 1)
+    || envelope.sessionId !== sessionId
+    || envelope.commandId !== commandId
+    || envelope.actionKey !== actionKey
+    || envelope.actorKey !== actorKey
+    || envelope.baseSequence + 1 !== commandSequence
+    || canonicalProductProductionJsonV2(envelope.payload) !== canonicalProductProductionJsonV2(expectedPayload)) {
+    fail(`待结算命令包络与投影不一致:${commandId}`)
+  }
+  if (action.actorScope !== actorKey) fail(`待结算命令Actor与Action不一致:${commandId}`)
+  if (actorKey === 'system' && envelope.source !== 'system-action') fail(`系统待结算命令来源不合法:${commandId}`)
+  if ((action.category === 'combat-state-action') !== (projection.protocol.pendingCombatTransitionIntent != null)) {
+    fail(`战斗待结算命令缺少或错误携带transition intent:${commandId}`)
+  }
+  if ((action.category === 'director-action') !== (projection.protocol.pendingDirectorTrigger != null)) {
+    fail(`Director待结算命令缺少或错误携带触发类型:${commandId}`)
+  }
+  const expectsQuantity = action.category === 'craft' || action.category === 'buy' || action.category === 'sell'
+  const expectsItemKey = action.category === 'buy' || action.category === 'sell'
+  if (expectsQuantity !== (projection.protocol.pendingActionQuantity != null)
+    || expectsItemKey !== (projection.protocol.pendingActionItemKey != null)) {
+    fail(`制作或交易待结算命令参数不完整:${commandId}`)
+  }
   const feedback = await settleAcceptedCommand(status.envelope)
-  if (feedback.phase !== 'terminal' || feedback.status !== 'succeeded') fail(`Director待结算命令恢复失败:${commandId}`)
+  if (feedback.phase !== 'terminal' || !feedback.outcomeCommitted) fail(`待结算命令恢复失败:${commandId}`)
+  if (actorKey === 'system' && feedback.status !== 'succeeded') fail(`系统待结算命令恢复为非成功终态:${commandId}`)
+  return { envelope, feedback }
 }
 
 async function settleCombatSystemTransitionsV1(sessionId: number): Promise<void> {
@@ -534,7 +794,8 @@ async function settleCombatSystemTransitionsV1(sessionId: number): Promise<void>
     const combat = projection.state.combat
     if (!combat) return
     if (!('version' in combat)) fail('新版战斗阶段缺少Combat v2投影')
-    if (combat.status === 'victory' && modules.actions.version >= 11 && modules.combat.sourceVersion === 3) {
+    if (combat.status === 'victory' && modules.actions.version >= 11
+      && supportsTextOpenWorldAutomaticCombatRewardV1(modules.combat.sourceVersion)) {
       const encounter = modules.combat.encounters.find(item => item.key === combat.encounterKey) ?? fail('胜利战斗遭遇不存在')
       const rewardKey = encounter.rewardContractKey ?? fail('胜利战斗缺少RewardContract')
       const claimKey = `claim.reward.${rewardKey}.${combat.instanceKey}`
@@ -586,11 +847,49 @@ async function settleCombatSystemTransitionsV1(sessionId: number): Promise<void>
   fail('单次行动触发的战斗阶段结算超过32步')
 }
 
+/**
+ * Resumes the durable system-work chain without requiring a new player Action.
+ * Action <=16 keeps the historical pending-Command behavior. Action v17 also
+ * closes the crash window between a terminal player Effect and its automatic
+ * combat/quest/Director follow-ups.
+ */
+export async function resumeTextOpenWorldSystemWorkV1(sessionId: number): Promise<TextOpenWorldFeedbackReceiptV1 | null> {
+  const recovered = await recoverPendingCommandV1(sessionId)
+  const runtime = await readProductRuntimeState(sessionId)
+  const projection = parseTextOpenWorldSessionProjectionV1(runtime.textOpenWorld)
+  const modules = parseTextOpenWorldModulesV1(projection.runtimePackage)
+  const modern = modules.actions.version >= 17
+  if (!modern && !recovered) return null
+  await settleCombatSystemTransitionsV1(sessionId)
+  await settleWeatherForCurrentEpochV1(sessionId)
+  await settleActorSchedulesForCurrentPeriodV1(sessionId)
+  if (modern) {
+    const cause = await latestUnsettledPlayerCauseV1(sessionId, modules)
+    if (cause) {
+      await settleReadyQuestSystemActionsV1(sessionId, cause.commandId)
+      await settleDirectorAfterActionV1(sessionId, cause.commandId, cause.actionKey)
+    }
+  } else if (recovered?.feedback.phase === 'terminal' && recovered.feedback.status === 'succeeded' && recovered.feedback.commandId) {
+    await settleReadyQuestSystemActionsV1(sessionId, recovered.feedback.commandId)
+    if (recovered.envelope.actorKey === 'player') {
+      await settleDirectorAfterActionV1(sessionId, recovered.feedback.commandId, recovered.envelope.actionKey)
+    }
+  }
+  return recovered?.feedback ?? null
+}
+
+/** Compatibility name retained for callers that only need pending recovery. */
+export async function recoverTextOpenWorldPendingCommandV1(sessionId: number): Promise<TextOpenWorldFeedbackReceiptV1 | null> {
+  return resumeTextOpenWorldSystemWorkV1(sessionId)
+}
+
 export async function executeTextOpenWorldActionV1(input: ExecuteTextOpenWorldActionInputV1): Promise<TextOpenWorldFeedbackReceiptV1> {
-  await recoverPendingDirectorSettlementV1(input.sessionId)
-  await settleCombatSystemTransitionsV1(input.sessionId)
-  await settleWeatherForCurrentEpochV1(input.sessionId)
-  await settleActorSchedulesForCurrentPeriodV1(input.sessionId)
+  const recovered = await resumeTextOpenWorldSystemWorkV1(input.sessionId)
+  if (!recovered) {
+    await settleCombatSystemTransitionsV1(input.sessionId)
+    await settleWeatherForCurrentEpochV1(input.sessionId)
+    await settleActorSchedulesForCurrentPeriodV1(input.sessionId)
+  }
   const feedback = await executeTextOpenWorldActionAsV1(input, 'player')
   if (feedback.phase === 'terminal' && feedback.status === 'succeeded' && feedback.commandId) {
     await settleCombatSystemTransitionsV1(input.sessionId)

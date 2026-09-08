@@ -325,7 +325,9 @@ describe('Text Open World G4 · 真实 vNext 玩家壳集成', () => {
     expect(scene.hidden).toBe(false)
     expect(combatStatus?.closest('[data-testid="text-open-world-global-status"]')).toBeTruthy()
     expect(combatStatus?.textContent).toContain('战斗')
-    expect(combatStatus?.textContent).toContain('active')
+    expect(combatStatus?.textContent).toContain('战斗进行中')
+    expect(scene.querySelector('[data-testid="text-open-world-combat-panel"]')).toBeTruthy()
+    expect(scene.querySelector('[data-testid="text-open-world-natural-input"]')).toBeNull()
   })
 
   it.sequential('运行页显示当前 Session 冻结 RuntimePackage hash', async () => {

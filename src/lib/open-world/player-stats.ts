@@ -16,6 +16,7 @@ const STAT_KEYS: TextOpenWorldDerivedPlayerStatKeyV1[] = [
 type EquipmentSlots = { weapon: string | null; armor: string | null; accessory: string | null }
 type Attributes = { power: number; vitality: number; agility: number }
 type Component = TextOpenWorldDerivedPlayerStatBreakdownV1['components'][number]
+type Equipment = TextOpenWorldParsedModulesV1['items']['items'][number]
 
 function fail(message: string): never { throw new Error(`[text-open-world-player-stats] ${message}`) }
 
@@ -39,26 +40,52 @@ function rounded(value: number): number {
   return Object.is(result, -0) ? 0 : result
 }
 
-function equipmentComponents(
+function equippedItems(
   modules: TextOpenWorldParsedModulesV1,
   slots: EquipmentSlots,
-): Partial<Record<TextOpenWorldDerivedPlayerStatKeyV1, Component[]>> {
+): Equipment[] {
   exactKeys(slots, ['weapon', 'armor', 'accessory'], 'equippedItemKeyBySlot')
-  const result: Partial<Record<TextOpenWorldDerivedPlayerStatKeyV1, Component[]>> = {}
+  const result: Equipment[] = []
   for (const [slot, itemKey] of Object.entries(slots)) {
     if (!['weapon', 'armor', 'accessory'].includes(slot)) fail(`未知装备位:${slot}`)
     if (itemKey == null) continue
     const item = modules.items.items.find(candidate => candidate.key === itemKey)
     if (!item || item.kind !== 'equipment' || item.equipmentSlotKey !== slot) fail(`装备引用无效:${slot}:${itemKey}`)
+    result.push(item)
+  }
+  return result
+}
+
+function equipmentComponents(
+  modules: TextOpenWorldParsedModulesV1,
+  slots: EquipmentSlots,
+): Partial<Record<TextOpenWorldDerivedPlayerStatKeyV1, Component[]>> {
+  const result: Partial<Record<TextOpenWorldDerivedPlayerStatKeyV1, Component[]>> = {}
+  for (const item of equippedItems(modules, slots)) {
     for (const semanticKey of STAT_KEYS) {
       const modifierKey = semanticKey === 'maximumSkillResource' ? 'skillResource' : semanticKey
       const modifier = item.statModifiers[modifierKey]
       if (modifier == null) continue
-      finite(modifier, `${itemKey}.${modifierKey}`, -MAX_DERIVED_STAT, MAX_DERIVED_STAT)
-      ;(result[semanticKey] ??= []).push({ sourceKind: 'equipment', sourceKey: itemKey, value: modifier })
+      finite(modifier, `${item.key}.${modifierKey}`, -MAX_DERIVED_STAT, MAX_DERIVED_STAT)
+      ;(result[semanticKey] ??= []).push({ sourceKind: 'equipment', sourceKey: item.key, value: modifier })
     }
   }
   return result
+}
+
+/** Frozen equipment contribution used once, after an active skill's attribute coefficient. */
+export function deriveTextOpenWorldEquipmentSkillPowerFromModulesV1(input: {
+  modules: TextOpenWorldParsedModulesV1
+  equippedItemKeyBySlot: EquipmentSlots
+}): number {
+  let total = 0
+  for (const item of equippedItems(input.modules, input.equippedItemKeyBySlot)) {
+    const modifier = item.statModifiers.skillPower
+    if (modifier == null) continue
+    total += finite(modifier, `${item.key}.skillPower`, -MAX_DERIVED_STAT, MAX_DERIVED_STAT)
+    if (!Number.isFinite(total) || Math.abs(total) > MAX_DERIVED_STAT) fail('skillPower计算溢出')
+  }
+  return rounded(total)
 }
 
 function breakdown(input: {

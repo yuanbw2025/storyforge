@@ -122,6 +122,44 @@ export interface TextOpenWorldCombatRuntimeStateV1 {
   }>
 }
 
+export type TextOpenWorldCombatModifierStatV2 =
+  | 'attack'
+  | 'defense'
+  | 'skillPower'
+  | 'criticalChanceBasisPoints'
+
+/** Integer-only combat modifier shared by status and passive-static mechanics. */
+export interface TextOpenWorldCombatStatModifierV2 {
+  stat: TextOpenWorldCombatModifierStatV2
+  operation: 'add-flat'
+  amount: number
+}
+
+/**
+ * One status definition may have at most one live instance on a combatant.
+ * Stacks are represented on that instance so refresh/reject/stack semantics
+ * cannot diverge between callers.
+ */
+export interface TextOpenWorldCombatStatusInstanceV2 {
+  statusKey: string
+  sourceCombatantKey: string
+  sourceSkillKey: string
+  stacks: number
+  appliedAtActorTurnOrdinal: number
+  expiresAfterTargetTurnOrdinal: number | null
+}
+
+/**
+ * Combat v4 runtime projection. Actor ordinals count turns that have begun;
+ * target-turn statuses are expired only after that same ordinal finishes.
+ */
+export interface TextOpenWorldCombatRuntimeStateV2
+  extends Omit<TextOpenWorldCombatRuntimeStateV1, 'version'> {
+  version: 2
+  actorTurnOrdinalByCombatantKey: Record<string, number>
+  statusInstancesByCombatantKey: Record<string, TextOpenWorldCombatStatusInstanceV2[]>
+}
+
 export type TextOpenWorldCombatActionKindV1 = 'basic-attack' | 'skill' | 'item' | 'escape' | 'enemy-skill'
 
 export interface TextOpenWorldCombatActionRecordV1 {
@@ -134,7 +172,13 @@ export interface TextOpenWorldCombatActionRecordV1 {
   round: number
   turnIndex: number
   /** Added by Action v11; absent in immutable Action v10 event history. */
-  targetResolutions?: TextOpenWorldCombatTargetResolutionV1[]
+  targetResolutions?: Array<TextOpenWorldCombatTargetResolutionV1 | TextOpenWorldCombatTargetResolutionV2>
+  /** Added by Action v17 / Combat v4; absent in immutable older history. */
+  mechanicKind?: TextOpenWorldCombatActiveMechanicKindV2 | null
+  recoveryResolutions?: TextOpenWorldCombatRecoveryResolutionV2[]
+  resourceResolutions?: TextOpenWorldCombatResourceResolutionV2[]
+  statusResolutions?: TextOpenWorldCombatStatusResolutionV2[]
+  expiredStatusKeys?: string[]
 }
 
 export interface TextOpenWorldCombatTargetResolutionV1 {
@@ -154,6 +198,51 @@ export interface TextOpenWorldCombatTargetResolutionV1 {
   beforeHealth: number
   afterHealth: number
   defeated: boolean
+}
+
+/** Action v17 additionally freezes the skill-power term used exactly once. */
+export interface TextOpenWorldCombatTargetResolutionV2 extends TextOpenWorldCombatTargetResolutionV1 {
+  skillPower: number
+}
+
+export type TextOpenWorldCombatActiveMechanicKindV2 = 'attack' | 'recovery' | 'resource' | 'status'
+
+export interface TextOpenWorldCombatRecoveryResolutionV2 {
+  targetCombatantKey: string
+  scalingAttribute: 'power' | 'vitality' | 'agility'
+  scalingValue: number
+  baseAmount: number
+  scalingNumerator: number
+  scalingDenominator: number
+  skillPower: number
+  requestedRecovery: number
+  appliedRecovery: number
+  maximumHealth: number
+  beforeHealth: number
+  afterHealth: number
+}
+
+export interface TextOpenWorldCombatResourceResolutionV2 {
+  targetCombatantKey: 'player'
+  scalingAttribute: 'power' | 'vitality' | 'agility'
+  scalingValue: number
+  baseAmount: number
+  scalingNumerator: number
+  scalingDenominator: number
+  skillPower: number
+  requestedRecovery: number
+  appliedRecovery: number
+  maximumSkillResource: number
+  beforeSkillResource: number
+  afterSkillResource: number
+}
+
+export interface TextOpenWorldCombatStatusResolutionV2 {
+  targetCombatantKey: string
+  statusKey: string
+  outcome: 'applied' | 'rejected' | 'refreshed' | 'stacked' | 'max-stacks'
+  beforeStatus: TextOpenWorldCombatStatusInstanceV2 | null
+  afterStatus: TextOpenWorldCombatStatusInstanceV2 | null
 }
 
 export interface TextOpenWorldLegacyCombatStateV1 {
@@ -249,7 +338,7 @@ export interface TextOpenWorldEffectStateV1 {
     factionAffinityByKey: Record<string, number>
     storyModifierByActorKey: Record<string, number>
   }
-  combat: TextOpenWorldCombatRuntimeStateV1 | TextOpenWorldLegacyCombatStateV1 | null
+  combat: TextOpenWorldCombatRuntimeStateV1 | TextOpenWorldCombatRuntimeStateV2 | TextOpenWorldLegacyCombatStateV1 | null
   actors: Record<string, { alive: boolean; present: boolean; locationKey: string; scheduleState: string }>
   world: {
     regionStateByKey: Record<string, string>
@@ -404,6 +493,10 @@ export interface TextOpenWorldCombatTransitionAuthorizationV1 {
   afterActiveCombatantKey: string | null
   /** Added by Action v11 / Combat v3; absent in older immutable history. */
   removedPlayerStatusKeys?: string[]
+  /** Added by Action v17 / Combat v4 and recomputed during replay. */
+  combatRuntimeVersion?: 2
+  afterActorTurnOrdinalByCombatantKey?: Record<string, number>
+  afterStatusInstancesByCombatantKey?: Record<string, TextOpenWorldCombatStatusInstanceV2[]>
 }
 
 export interface TextOpenWorldCombatActionAuthorizationV1 {
@@ -427,13 +520,20 @@ export interface TextOpenWorldCombatActionAuthorizationV1 {
   cooldownUntilRound: number
   afterSkillResource: number
   /** Added by Action v11 / Combat v3; absent in older immutable history. */
-  resolutionVersion?: 1
+  resolutionVersion?: 1 | 2
   /** Frozen random requests whose resolved events prove every critical draw. */
   randomRequests?: Array<{ drawKey: string; minimumInclusive: number; maximumInclusive: number }>
   /** Deterministic numeric outcomes applied by perform-combat-action. */
-  targetResolutions?: TextOpenWorldCombatTargetResolutionV1[]
+  targetResolutions?: Array<TextOpenWorldCombatTargetResolutionV1 | TextOpenWorldCombatTargetResolutionV2>
   /** Predeclared status Effects included in the same atomic Action plan. */
   statusEffectKeys?: string[]
+  /** Structured mechanics added by Action v17 / Progression v2 / Combat v4. */
+  mechanicKind?: TextOpenWorldCombatActiveMechanicKindV2 | null
+  recoveryResolutions?: TextOpenWorldCombatRecoveryResolutionV2[]
+  resourceResolutions?: TextOpenWorldCombatResourceResolutionV2[]
+  statusResolutions?: TextOpenWorldCombatStatusResolutionV2[]
+  expiredStatusKeys?: string[]
+  afterStatusInstancesByCombatantKey?: Record<string, TextOpenWorldCombatStatusInstanceV2[]>
 }
 
 export interface TextOpenWorldCraftingAuthorizationV1 {

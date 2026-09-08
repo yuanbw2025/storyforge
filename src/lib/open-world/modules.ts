@@ -91,6 +91,17 @@ function requireSameKeys(declared: readonly string[], actual: readonly string[],
     fail(`${label} 双向引用不一致:declared=${left.join(',')};actual=${right.join(',')}`)
   }
 }
+function combatModifiers(value: unknown, label: string): Row[] {
+  const modifiers = catalog(value, label, ['stat', 'operation', 'amount'])
+  const stats = modifiers.map((modifier, index) => {
+    const stat = enumValue(modifier.stat, ['attack', 'defense', 'skillPower', 'criticalChanceBasisPoints'], `${label}[${index}].stat`)
+    if (modifier.operation !== 'add-flat') fail(`${label}[${index}].operation无效`)
+    int(modifier.amount, `${label}[${index}].amount`, -1_000_000_000, 1_000_000_000)
+    return stat
+  })
+  if (new Set(stats).size !== stats.length) fail(`${label}同一属性只能声明一个修正`)
+  return modifiers
+}
 function versioned(packageValue: TextOpenWorldRuntimePackageV1, moduleKey: TextOpenWorldRuntimeModuleKeyV1, allowedVersions: number[] = [1]): Row {
   const payload = row(packageValue.modules[moduleKey].payload, `${moduleKey}.payload`)
   if (!allowedVersions.includes(Number(payload.version))) fail(`${moduleKey}.payload.version 无效`)
@@ -456,7 +467,7 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
     if (actorRows.find(actor => actor.key === item.actorKey)?.scheduleKey !== item.key) fail(`schedule/actor反向引用不一致:${String(item.key)}`)
   })
 
-  const actions = versioned(packageValue, 'actions', [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16])
+  const actions = versioned(packageValue, 'actions', [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17])
   const modernActionModule = Number(actions.version) >= 2
   const travelActionModule = Number(actions.version) >= 3
   const fastTravelActionModule = Number(actions.version) >= 4
@@ -472,6 +483,7 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
   const directorActionModule = Number(actions.version) >= 14
   const inputBindingActionModule = Number(actions.version) >= 15
   const governedQuestLifecycleActionModule = Number(actions.version) >= 16
+  const scaledCombatActionModule = Number(actions.version) >= 17
   if (actorScheduleActionModule && legacyActorModule) fail('Action v6必须搭配Actor v2')
   if (actorLifecycleActionModule && !actorLifecycleModule) fail('Action v7必须搭配Actor v3')
   if (combatStateActionModule !== (packageValue.modules.combat.schemaVersion >= 2)) fail('Action v9+必须与Combat v2+一起发布')
@@ -1087,7 +1099,8 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
     })
   }
 
-  const progression = versioned(packageValue, 'progression')
+  const progression = versioned(packageValue, 'progression', [1, 2])
+  const structuredProgressionModule = progression.version === 2
   exact(progression, ['version', 'rules', 'levels', 'skills', 'statuses'], 'progression')
   const progressionRules = row(progression.rules, 'progression.rules'); exact(progressionRules, ['maximumLevel', 'automaticAttributeGrowth', 'levelUp', 'attributes', 'formulas'], 'progression.rules'); const maximumLevel = int(progressionRules.maximumLevel, 'progression.rules.maximumLevel', 1, 20); if (maximumLevel !== 20) fail('首版maximumLevel必须为20'); if (progressionRules.automaticAttributeGrowth !== true) fail('首版必须自动属性成长')
   const levelUp = row(progressionRules.levelUp, 'progression.rules.levelUp'); exact(levelUp, ['resourcePolicy', 'maximumLevelExperiencePolicy'], 'progression.rules.levelUp'); if (levelUp.resourcePolicy !== 'increase-by-cap-delta' || levelUp.maximumLevelExperiencePolicy !== 'cap-at-threshold') fail('progression.rules.levelUp不符合首版冻结策略')
@@ -1097,7 +1110,42 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
   numberValue(formulas.criticalChancePerAgility, 'progression.rules.formulas.criticalChancePerAgility', 0, 1)
   const criticalChanceCap = numberValue(formulas.criticalChanceCap, 'progression.rules.formulas.criticalChanceCap', 0, 1)
   if (baseCriticalChance > criticalChanceCap) fail('baseCriticalChance不能大于criticalChanceCap')
-  const levels = catalog(progression.levels, 'progression.levels', ['level', 'cumulativeExperience', 'attributeGrowth', 'unlockedSkillKeys']); const skills = catalog(progression.skills, 'progression.skills', ['key', 'title', 'description', 'tags', 'activation', 'kind', 'target', 'scalingAttribute', 'unlockSources', 'useConditionKeys', 'priority', 'resourceCost', 'cooldownTurns', 'effectKeys']); const statuses = catalog(progression.statuses, 'progression.statuses', ['key', 'title', 'description', 'polarity']); const skillKeys = keysOf(skills, 'progression.skills'); const statusKeys = keysOf(statuses, 'progression.statuses')
+  const levels = catalog(progression.levels, 'progression.levels', ['level', 'cumulativeExperience', 'attributeGrowth', 'unlockedSkillKeys'])
+  const rawSkills = catalog(progression.skills, 'progression.skills', structuredProgressionModule
+    ? ['key', 'title', 'description', 'tags', 'mechanic', 'target', 'scalingAttribute', 'unlockSources', 'useConditionKeys', 'priority', 'resourceCost', 'cooldownTurns', 'effectKeys']
+    : ['key', 'title', 'description', 'tags', 'activation', 'kind', 'target', 'scalingAttribute', 'unlockSources', 'useConditionKeys', 'priority', 'resourceCost', 'cooldownTurns', 'effectKeys'])
+  const statuses = catalog(progression.statuses, 'progression.statuses', structuredProgressionModule
+    ? ['key', 'title', 'description', 'polarity', 'duration', 'reapplyPolicy', 'maxStacks', 'modifiers']
+    : ['key', 'title', 'description', 'polarity'])
+  const skills = rawSkills.map((item, index) => {
+    if (!structuredProgressionModule) return item
+    const mechanic = row(item.mechanic, `progression.skills[${index}].mechanic`)
+    const mechanicKind = enumValue(mechanic.kind, ['attack', 'recovery', 'resource', 'status', 'passive-static'], `progression.skills[${index}].mechanic.kind`)
+    if (mechanicKind === 'attack') exact(mechanic, ['kind'], `progression.skills[${index}].mechanic`)
+    if (mechanicKind === 'recovery' || mechanicKind === 'resource') {
+      exact(mechanic, ['kind', 'baseAmount', 'scalingNumerator', 'scalingDenominator'], `progression.skills[${index}].mechanic`)
+      int(mechanic.baseAmount, `progression.skills[${index}].mechanic.baseAmount`, 0, 1_000_000_000)
+      int(mechanic.scalingNumerator, `progression.skills[${index}].mechanic.scalingNumerator`, 0, 100)
+      int(mechanic.scalingDenominator, `progression.skills[${index}].mechanic.scalingDenominator`, 1, 100)
+    }
+    if (mechanicKind === 'status') {
+      exact(mechanic, ['kind', 'statusKey'], `progression.skills[${index}].mechanic`)
+      key(mechanic.statusKey, `progression.skills[${index}].mechanic.statusKey`)
+    }
+    if (mechanicKind === 'passive-static') {
+      exact(mechanic, ['kind', 'modifiers'], `progression.skills[${index}].mechanic`)
+      if (!combatModifiers(mechanic.modifiers, `progression.skills[${index}].mechanic.modifiers`).length) {
+        fail(`progression.skills[${index}]被动技能必须至少提供一个静态修正`)
+      }
+    }
+    return {
+      ...structuredClone(item),
+      mechanic: structuredClone(mechanic),
+      activation: mechanicKind === 'passive-static' ? 'passive' : 'active',
+      kind: mechanicKind === 'passive-static' ? 'status' : mechanicKind,
+    }
+  })
+  const skillKeys = keysOf(skills, 'progression.skills'); const statusKeys = keysOf(statuses, 'progression.statuses')
   if (levels.length !== maximumLevel) fail('progression.levels必须覆盖1到maximumLevel')
   let previousExperience = -1
   levels.forEach((item, index) => { if (int(item.level, `progression.levels[${index}].level`, 1, maximumLevel) !== index + 1) fail('progression.levels必须连续有序'); const experience = int(item.cumulativeExperience, `progression.levels[${index}].cumulativeExperience`, 0, 1_000_000_000); if (experience <= previousExperience && index > 0) fail('累计经验必须递增'); previousExperience = experience; const growth = row(item.attributeGrowth, `progression.levels[${index}].attributeGrowth`); exact(growth, ['power', 'vitality', 'agility'], `progression.levels[${index}].attributeGrowth`); ['power', 'vitality', 'agility'].forEach(field => int(growth[field], `progression.levels[${index}].attributeGrowth.${field}`, 0, 10_000)); strings(item.unlockedSkillKeys, `progression.levels[${index}].unlockedSkillKeys`) })
@@ -1109,6 +1157,23 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
     const target = enumValue(item.target, ['self', 'single-enemy', 'all-enemies'], `progression.skills[${index}].target`)
     if (activation === 'active' && kind === 'attack' && target === 'self') fail(`progression.skills[${index}]主动攻击技能不能以自身为目标`)
     if (item.scalingAttribute != null) enumValue(item.scalingAttribute, ['power', 'vitality', 'agility'], `progression.skills[${index}].scalingAttribute`)
+    if (scaledCombatActionModule && activation === 'active' && kind === 'attack' && item.scalingAttribute == null) {
+      fail(`progression.skills[${index}] Action v17主动攻击技能必须声明scalingAttribute`)
+    }
+    if (structuredProgressionModule) {
+      const mechanic = row(item.mechanic, `progression.skills[${index}].mechanic`)
+      const mechanicKind = String(mechanic.kind)
+      const numericMechanic = ['attack', 'recovery', 'resource'].includes(mechanicKind)
+      if (numericMechanic !== (item.scalingAttribute != null)) fail(`progression.skills[${index}]数值机制必须且只能声明scalingAttribute`)
+      if (mechanicKind === 'attack' && target === 'self') fail(`progression.skills[${index}]攻击机制不能以自身为目标`)
+      if ((mechanicKind === 'recovery' || mechanicKind === 'resource' || mechanicKind === 'passive-static') && target !== 'self') {
+        fail(`progression.skills[${index}]恢复、资源与被动机制只能以自身为目标`)
+      }
+      if (strings(item.effectKeys, `progression.skills[${index}].effectKeys`).length) {
+        fail(`progression.skills[${index}] v2机制不能再通过effectKeys重复声明结果`)
+      }
+      if (mechanicKind === 'status') requireRef(key(mechanic.statusKey, `progression.skills[${index}].mechanic.statusKey`), statusKeys, 'status mechanic')
+    }
     const unlockSources = array(item.unlockSources, `progression.skills[${index}].unlockSources`, 100)
     if (!unlockSources.length) fail(`progression.skills[${index}]至少需要一个获得来源`)
     const sourceFingerprints = unlockSources.map((source, sourceIndex) => {
@@ -1126,7 +1191,18 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
     requireRefs(strings(item.effectKeys, `progression.skills[${index}].effectKeys`), effectKeys, 'skill effect')
     if (activation === 'passive' && (target !== 'self' || resourceCost !== 0 || cooldownTurns !== 0)) fail(`progression.skills[${index}]被动技能不能主动选择或消耗资源`)
   })
-  statuses.forEach((item, index) => { text(item.title, `progression.statuses[${index}].title`, 2_000); text(item.description, `progression.statuses[${index}].description`); enumValue(item.polarity, ['beneficial', 'harmful', 'neutral'], `progression.statuses[${index}].polarity`) })
+  statuses.forEach((item, index) => {
+    text(item.title, `progression.statuses[${index}].title`, 2_000); text(item.description, `progression.statuses[${index}].description`); enumValue(item.polarity, ['beneficial', 'harmful', 'neutral'], `progression.statuses[${index}].polarity`)
+    if (!structuredProgressionModule) return
+    const duration = row(item.duration, `progression.statuses[${index}].duration`)
+    const clock = enumValue(duration.clock, ['target-turns', 'combat'], `progression.statuses[${index}].duration.clock`)
+    exact(duration, clock === 'target-turns' ? ['clock', 'turns'] : ['clock'], `progression.statuses[${index}].duration`)
+    if (clock === 'target-turns') int(duration.turns, `progression.statuses[${index}].duration.turns`, 1, 10_000)
+    const reapplyPolicy = enumValue(item.reapplyPolicy, ['reject', 'refresh', 'stack'], `progression.statuses[${index}].reapplyPolicy`)
+    const maxStacks = int(item.maxStacks, `progression.statuses[${index}].maxStacks`, 1, 100)
+    if ((reapplyPolicy === 'stack') !== (maxStacks > 1)) fail(`progression.statuses[${index}]只有stack策略可以声明多层`)
+    combatModifiers(item.modifiers, `progression.statuses[${index}].modifiers`)
+  })
   levels.forEach((item, index) => requireRefs(strings(item.unlockedSkillKeys, `progression.levels[${index}].unlockedSkillKeys`), skillKeys, 'level unlocked skill'))
   requireRefs(strings(build.learnedSkillKeys, 'actors.player.build.learnedSkillKeys'), skillKeys, 'player skill'); if (Number(build.initialLevel) > maximumLevel) fail('player initialLevel超过maximumLevel')
   const skillSources = new Map(skills.map((skill, skillIndex) => [String(skill.key), array(skill.unlockSources, `progression.skills[${skillIndex}].unlockSources`).map(source => row(source, 'skill unlock source'))]))
@@ -1357,12 +1433,19 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
     }
   })
 
-  const combat = versioned(packageValue, 'combat', [1, 2, 3])
+  const combat = versioned(packageValue, 'combat', [1, 2, 3, 4])
   const legacyCombatModule = combat.version === 1
-  const combatResolutionModule = combat.version === 3
+  const structuredStatusCombatModule = combat.version === 4
+  const combatResolutionModule = combat.version === 3 || structuredStatusCombatModule
+  if (scaledCombatActionModule !== structuredProgressionModule
+    || structuredProgressionModule !== structuredStatusCombatModule) {
+    fail('Action v17、Progression v2与Combat v4必须严格三联发布')
+  }
   exact(combat, legacyCombatModule
     ? ['version', 'rules', 'enemies', 'encounters']
-    : combatResolutionModule
+    : structuredStatusCombatModule
+      ? ['version', 'rules', 'difficultyProfiles', 'resolution', 'skillResolutions', 'strategyProfiles', 'enemies', 'encounters']
+      : combatResolutionModule
       ? ['version', 'rules', 'difficultyProfiles', 'resolution', 'skillResolutions', 'transientPlayerStatusKeys', 'strategyProfiles', 'enemies', 'encounters']
       : ['version', 'rules', 'difficultyProfiles', 'strategyProfiles', 'enemies', 'encounters'], 'combat')
   if (combatResolutionActionModule !== combatResolutionModule) fail('Action v11与Combat v3必须成对发布')
@@ -1412,7 +1495,7 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
     int(item.flatDamage, `combat.skillResolutions[${index}].flatDamage`, 0, maximumDamage)
   })
   requireSameKeys(skillResolutions.map(item => String(item.skillKey)), skills.filter(skill => skill.activation === 'active' && skill.kind === 'attack').map(skill => String(skill.key)), '主动攻击技能伤害公式覆盖')
-  const transientPlayerStatusKeys = combatResolutionModule ? strings(combat.transientPlayerStatusKeys, 'combat.transientPlayerStatusKeys') : []
+  const transientPlayerStatusKeys = combat.version === 3 ? strings(combat.transientPlayerStatusKeys, 'combat.transientPlayerStatusKeys') : []
   requireRefs(transientPlayerStatusKeys, statusKeys, 'combat transient player status')
   const legacyEnemies = legacyCombatModule
     ? catalog(combat.enemies, 'combat.enemies', ['key', 'familyKey', 'title', 'level', 'maximumHealth', 'attack', 'defense', 'criticalChance', 'initiative', 'skillKeys', 'dropTableKey'])
@@ -1679,18 +1762,18 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
       || action.timeCostMinutes !== 0 || action.confirmationPolicy !== 'never'
       || action.repeatPolicy !== 'repeatable' || action.cooldownMinutes != null) fail('战斗胜利奖励Action合同无效')
   } else if (combatRewardActions.length) fail('Action v1～v10不能包含战斗胜利奖励Action')
-  const normalizedCombat: TextOpenWorldParsedModulesV1['combat'] = {
-    version: combatResolutionModule ? 3 : 2,
-    sourceVersion: legacyCombatModule ? 1 : combatResolutionModule ? 3 : 2,
+  const normalizedCombat = {
+    version: structuredStatusCombatModule ? 4 : combatResolutionModule ? 3 : 2,
+    sourceVersion: legacyCombatModule ? 1 : structuredStatusCombatModule ? 4 : combatResolutionModule ? 3 : 2,
     rules: structuredClone(combatRules) as unknown as TextOpenWorldParsedModulesV1['combat']['rules'],
     difficultyProfiles: structuredClone(difficultyProfiles) as unknown as TextOpenWorldParsedModulesV1['combat']['difficultyProfiles'],
     resolution: structuredClone(resolution) as unknown as TextOpenWorldParsedModulesV1['combat']['resolution'],
     skillResolutions: structuredClone(skillResolutions) as unknown as TextOpenWorldParsedModulesV1['combat']['skillResolutions'],
-    transientPlayerStatusKeys: [...transientPlayerStatusKeys],
+    transientPlayerStatusKeys: structuredStatusCombatModule ? [] : [...transientPlayerStatusKeys],
     strategyProfiles: structuredClone(strategyProfiles) as unknown as TextOpenWorldParsedModulesV1['combat']['strategyProfiles'],
     enemies: structuredClone(enemies) as unknown as TextOpenWorldParsedModulesV1['combat']['enemies'],
     encounters: structuredClone(encounters) as unknown as TextOpenWorldParsedModulesV1['combat']['encounters'],
-  }
+  } as unknown as TextOpenWorldParsedModulesV1['combat']
 
   const crafting = versioned(packageValue, 'crafting', [1, 2])
   const modernCrafting = Number(crafting.version) >= 2
@@ -2484,7 +2567,9 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
     } as unknown as TextOpenWorldParsedModulesV1['actors'],
     quests: { ...structuredClone(quests), version: 2, quests: structuredClone(questRows), stages: structuredClone(questStages) } as unknown as TextOpenWorldParsedModulesV1['quests'],
     actions: structuredClone(actions) as unknown as TextOpenWorldParsedModulesV1['actions'],
-    progression: structuredClone(progression) as unknown as TextOpenWorldParsedModulesV1['progression'],
+    progression: (structuredProgressionModule
+      ? { ...structuredClone(progression), sourceVersion: 2, skills: structuredClone(skills), statuses: structuredClone(statuses) }
+      : structuredClone(progression)) as unknown as TextOpenWorldParsedModulesV1['progression'],
     combat: normalizedCombat,
     items: structuredClone(items) as unknown as TextOpenWorldParsedModulesV1['items'],
     crafting: normalizedCrafting,

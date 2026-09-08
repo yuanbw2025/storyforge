@@ -166,8 +166,11 @@ export interface TextOpenWorldSystemFinalizeInputContextV1 {
   regionPacks: Array<{ regionKey: string; title: string; ordinaryQuestSeedCount: number; templateSeedCount: number; randomEventSeedCount: number }>
   regions: Array<{ key: string; title: string; description: string }>
   actors: Array<{ key: string; name: string; portrayal: string; regionKey: string }>
-  /** Missing from the pre-G4-05 durable P10 context contract; omission means Action v15. */
-  questLifecycleActionVersion?: 15 | 16
+  /**
+   * Missing from the pre-G4-05 durable P10 context contract; omission means
+   * Action v15. Version 17 also selects Progression v2 and Combat v4.
+   */
+  questLifecycleActionVersion?: 15 | 16 | 17
   quests: Array<Pick<TextOpenWorldQuestDesignDocumentsV1['quests'][number], 'key' | 'type' | 'title' | 'regionKeys' | 'estimatedMinutes' | 'lifecyclePolicy' | 'timePolicy'>>
   director: {
     templates: Array<Pick<TextOpenWorldDirectorDecksV1['templates'][number], 'key' | 'questKey' | 'regionKeys' | 'variantTextRequirementKeys'>>
@@ -441,7 +444,9 @@ async function buildContext(scope: WorkspaceScope, buildId: number): Promise<Tex
     })),
     regions: artifacts.map.regions.map(region => ({ key: region.key, title: region.title, description: region.description })),
     actors: artifacts.npcs.actors.map(actor => ({ key: actor.key, name: actor.name, portrayal: actor.portrayal, regionKey: actor.regionKey })),
-    ...(artifacts.quests.governance.allAbandonableQuestStagesCovered === true
+    ...(artifacts.quests.governance.structuredCombatMechanicsReady === true
+      ? { questLifecycleActionVersion: 17 as const }
+      : artifacts.quests.governance.allAbandonableQuestStagesCovered === true
       && artifacts.quests.governance.restartActionsRequireOriginalOfferRoute === true
       ? { questLifecycleActionVersion: 16 as const }
       : {}),
@@ -476,7 +481,9 @@ async function parseContext(value: string): Promise<TextOpenWorldSystemFinalizeI
   if (await hashProductProductionValueV2(body) !== row.contextSelectionHash) fail('Context选择Hash不匹配')
   const context = row as unknown as TextOpenWorldSystemFinalizeInputContextV1
   if (context.questLifecycleActionVersion !== undefined
-    && context.questLifecycleActionVersion !== 15 && context.questLifecycleActionVersion !== 16) {
+    && context.questLifecycleActionVersion !== 15
+    && context.questLifecycleActionVersion !== 16
+    && context.questLifecycleActionVersion !== 17) {
     fail('任务生命周期Action版本无效')
   }
   if (!context.artifactHashes.every(item => isSha256Hash(item.contentHash) && isSha256Hash(item.payloadHash))
@@ -603,7 +610,14 @@ async function createArtifacts(input: {
     sceneScriptsHash: hash('text-open-world.scene-scripts'), choiceContractsHash: hash('text-open-world.choice-contracts'),
     actionBindingsHash: hash('text-open-world.action-bindings'),
     runtimeModules: TEXT_OPEN_WORLD_RUNTIME_MODULE_KEYS_V1.map(moduleKey => ({
-      moduleKey, schemaVersion: moduleKey === 'actions' ? context.questLifecycleActionVersion ?? 15 : MODULE_SCHEMA_VERSIONS[moduleKey],
+      moduleKey,
+      schemaVersion: moduleKey === 'actions'
+        ? context.questLifecycleActionVersion ?? 15
+        : moduleKey === 'progression' && context.questLifecycleActionVersion === 17
+          ? 2
+          : moduleKey === 'combat' && context.questLifecycleActionVersion === 17
+            ? 4
+            : MODULE_SCHEMA_VERSIONS[moduleKey],
       sourceArtifactKeys: MODULE_SOURCES[moduleKey], status: 'ready-for-v3-assembly' as const,
     })),
     uiConsumers: context.presentationProfile.consumerSlots.map(slot => ({

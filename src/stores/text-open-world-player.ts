@@ -2,7 +2,10 @@ import { create } from 'zustand'
 import { db } from '../lib/db/schema'
 import { availableAdventureActions } from '../lib/adventure/runtime'
 import { createTextOpenWorldActionRegistryV1 } from '../lib/open-world/action-registry'
-import { executeTextOpenWorldActionV1 } from '../lib/open-world/action-executor'
+import {
+  executeTextOpenWorldActionV1,
+  resumeTextOpenWorldSystemWorkV1,
+} from '../lib/open-world/action-executor'
 import {
   branchTextOpenWorldSessionFromCheckpointV1,
   createTextOpenWorldCheckpointV1,
@@ -196,17 +199,23 @@ function playableManifest(runtimePackage: Awaited<ReturnType<typeof verifyProduc
 }
 
 async function readDetails(scope: WorkspaceScope, worldGroupId: number | null, sessionId: number) {
-  const session = await assertSession(scope, sessionId)
-  if ((session.worldGroupId ?? null) !== (worldGroupId ?? null)) {
+  const selectedSession = await assertSession(scope, sessionId)
+  if ((selectedSession.worldGroupId ?? null) !== (worldGroupId ?? null)) {
     throw new Error('[text-open-world] 该存档不属于当前世界分组。')
   }
-  const [events, checkpoints, runtimeState, playable] = await Promise.all([
+  const playable = await verifyProductRuntimeSessionSourceV1({ scope, session: selectedSession })
+  const selectedManifest = playableManifest(playable.runtimePackage)
+  // Legacy open-world packages do not own the vNext Action/Effect projection.
+  // Only the frozen vNext package may enter system follow-up recovery.
+  if (selectedManifest.textOpenWorldVNext) {
+    await resumeTextOpenWorldSystemWorkV1(sessionId)
+  }
+  const session = await assertSession(scope, sessionId)
+  const [events, checkpoints, runtimeState] = await Promise.all([
     db.productRuntimeEvents.where('sessionId').equals(sessionId).sortBy('sequence'),
     db.productRuntimeCheckpoints.where('sessionId').equals(sessionId).toArray(),
     readProductRuntimeState(sessionId),
-    verifyProductRuntimeSessionSourceV1({ scope, session }),
   ])
-  const selectedManifest = playableManifest(playable.runtimePackage)
   if (runtimeState.textOpenWorld) {
     const binding = await verifyTextOpenWorldVNextSessionBindingV1(session)
     if (!selectedManifest.textOpenWorldVNext

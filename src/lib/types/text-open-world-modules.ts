@@ -1,5 +1,5 @@
 import type { TextOpenWorldConditionExpressionV1 } from './text-open-world-condition'
-import type { TextOpenWorldEffectDefinitionV1 } from './text-open-world-effect'
+import type { TextOpenWorldCombatStatModifierV2, TextOpenWorldEffectDefinitionV1 } from './text-open-world-effect'
 
 export type TextOpenWorldStorylineKindV1 = 'mainline' | 'significant'
 export type TextOpenWorldStorylineOwnerKindV1 = 'core' | 'character' | 'faction' | 'region'
@@ -391,6 +391,19 @@ export interface TextOpenWorldActionModuleV16 {
   inputBindings: TextOpenWorldActionInputBindingsV1
 }
 
+/**
+ * Action v17 freezes post-cast cooldown turns and attribute-scaled skill
+ * damage. It is valid only in the Action v17 + Progression v2 + Combat v4
+ * release triplet.
+ */
+export interface TextOpenWorldActionModuleV17 {
+  version: 17
+  conditions: TextOpenWorldActionModuleV1['conditions']
+  effects: TextOpenWorldActionModuleV1['effects']
+  actions: TextOpenWorldActionModuleV1['actions']
+  inputBindings: TextOpenWorldActionInputBindingsV1
+}
+
 export interface TextOpenWorldProgressionModuleV1 {
   version: 1
   rules: {
@@ -451,6 +464,52 @@ export interface TextOpenWorldProgressionModuleV1 {
     description: string
     polarity: 'beneficial' | 'harmful' | 'neutral'
   }>
+}
+
+export type TextOpenWorldProgressionSkillMechanicV2 =
+  | { kind: 'attack' }
+  | {
+      kind: 'recovery'
+      baseAmount: number
+      scalingNumerator: number
+      scalingDenominator: number
+    }
+  | {
+      kind: 'resource'
+      baseAmount: number
+      scalingNumerator: number
+      scalingDenominator: number
+    }
+  | { kind: 'status'; statusKey: string }
+  | { kind: 'passive-static'; modifiers: TextOpenWorldCombatStatModifierV2[] }
+
+export interface TextOpenWorldProgressionStatusDefinitionV2 {
+  key: string
+  title: string
+  description: string
+  polarity: 'beneficial' | 'harmful' | 'neutral'
+  duration: { clock: 'target-turns'; turns: number } | { clock: 'combat' }
+  reapplyPolicy: 'reject' | 'refresh' | 'stack'
+  maxStacks: number
+  modifiers: TextOpenWorldCombatStatModifierV2[]
+}
+
+/**
+ * Progression v2 payloads use mechanic as their only authored discriminator.
+ * activation/kind below are parser-derived compatibility mirrors for existing
+ * read-only consumers and are never accepted as payload fields.
+ */
+export interface TextOpenWorldProgressionModuleV2 {
+  version: 2
+  sourceVersion: 2
+  rules: TextOpenWorldProgressionModuleV1['rules']
+  levels: TextOpenWorldProgressionModuleV1['levels']
+  skills: Array<Omit<TextOpenWorldProgressionModuleV1['skills'][number], 'activation' | 'kind'> & {
+    mechanic: TextOpenWorldProgressionSkillMechanicV2
+    activation: 'active' | 'passive'
+    kind: 'attack' | 'status' | 'resource' | 'recovery'
+  }>
+  statuses: TextOpenWorldProgressionStatusDefinitionV2[]
 }
 
 export interface TextOpenWorldCombatModuleV1 {
@@ -544,6 +603,15 @@ export interface TextOpenWorldCombatModuleV1 {
     sourceRefs: string[]
     presentationRefs: string[]
   }>
+}
+
+/** Combat v4 is the structured-status member of the strict v17/v2/v4 triplet. */
+export interface TextOpenWorldCombatModuleV4
+  extends Omit<TextOpenWorldCombatModuleV1, 'version' | 'sourceVersion'> {
+  version: 4
+  sourceVersion: 4
+  /** Parser-derived empty legacy facade; omitted from Combat v4 payloads. */
+  transientPlayerStatusKeys: []
 }
 
 export interface TextOpenWorldItemModuleV1 {
@@ -933,9 +1001,9 @@ export interface TextOpenWorldParsedModulesV1 {
   world: TextOpenWorldWorldModuleV1
   actors: TextOpenWorldActorModuleV1
   quests: TextOpenWorldQuestModuleV1
-  actions: TextOpenWorldActionModuleV1 | TextOpenWorldActionModuleV15 | TextOpenWorldActionModuleV16
-  progression: TextOpenWorldProgressionModuleV1
-  combat: TextOpenWorldCombatModuleV1
+  actions: TextOpenWorldActionModuleV1 | TextOpenWorldActionModuleV15 | TextOpenWorldActionModuleV16 | TextOpenWorldActionModuleV17
+  progression: TextOpenWorldProgressionModuleV1 | TextOpenWorldProgressionModuleV2
+  combat: TextOpenWorldCombatModuleV1 | TextOpenWorldCombatModuleV4
   items: TextOpenWorldItemModuleV1
   crafting: TextOpenWorldCraftingModuleV2
   economy: TextOpenWorldEconomyModuleV2

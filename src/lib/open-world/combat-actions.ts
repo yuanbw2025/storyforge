@@ -3,10 +3,16 @@ import type {
   TextOpenWorldCombatActionAuthorizationV1,
   TextOpenWorldCombatActionKindV1,
   TextOpenWorldCombatRuntimeStateV1,
+  TextOpenWorldCombatRuntimeStateV2,
+  TextOpenWorldCombatTargetResolutionV2,
+  TextOpenWorldCombatRecoveryResolutionV2,
+  TextOpenWorldCombatResourceResolutionV2,
+  TextOpenWorldCombatStatusResolutionV2,
   TextOpenWorldCombatTargetResolutionV1,
   TextOpenWorldEffectDefinitionV1,
   TextOpenWorldEffectStateV1,
   TextOpenWorldParsedModulesV1,
+  TextOpenWorldProgressionModuleV2,
   TextOpenWorldRandomEvidenceV1,
   TextOpenWorldRandomRequestV1,
   TextOpenWorldRuntimePackageV1,
@@ -14,17 +20,32 @@ import type {
 import { deriveTextOpenWorldEquippedItemKeysV1, deriveTextOpenWorldInventoryQuantitiesV1 } from './inventory'
 import { parseTextOpenWorldRandomEvidenceV1 } from './event-contract'
 import { parseTextOpenWorldModulesV1 } from './modules'
-import { deriveTextOpenWorldPlayerStatsFromModulesV1 } from './player-stats'
+import {
+  deriveTextOpenWorldEquipmentSkillPowerFromModulesV1,
+  deriveTextOpenWorldPlayerStatsFromModulesV1,
+} from './player-stats'
 import { createTextOpenWorldSkillCatalogV1 } from './skills'
 import {
   isTextOpenWorldCombatRuntimeStateV1,
   validateTextOpenWorldCombatRuntimeStateV1,
 } from './combat-state-machine'
+import {
+  applyTextOpenWorldCombatStatusV2,
+  deriveTextOpenWorldCombatStatusModifiersV2,
+  deriveTextOpenWorldPassiveStaticModifiersV2,
+  isTextOpenWorldCombatRuntimeStateV2,
+  settleTextOpenWorldCombatStatusesAfterTurnV2,
+} from './combat-status'
 
 const PLAYER_ACTION_CATEGORIES = new Set(['combat-basic-attack', 'combat-skill', 'combat-item', 'escape'])
+const SCALED_COMBAT_ACTION_VERSION = 17
 
 function fail(message: string): never { throw new Error(`[text-open-world-combat-action] ${message}`) }
 function unique(values: readonly string[]): string[] { return [...new Set(values)] }
+function integer(value: number, label: string, minimum = 0, maximum = 1_000_000_000): number {
+  if (!Number.isSafeInteger(value) || value < minimum || value > maximum) fail(`${label}无效`)
+  return value
+}
 
 type CombatActionInput = {
   state: TextOpenWorldEffectStateV1
@@ -50,7 +71,7 @@ function performEffect(
 function combatV10(input: {
   modules: TextOpenWorldParsedModulesV1
   state: TextOpenWorldEffectStateV1
-}): TextOpenWorldCombatRuntimeStateV1 {
+}): TextOpenWorldCombatRuntimeStateV1 | TextOpenWorldCombatRuntimeStateV2 {
   if (input.modules.actions.version < 10) fail('旧Action版本没有正式战斗操作合同')
   const combat = validateTextOpenWorldCombatRuntimeStateV1(input) ?? fail('当前没有Combat v2战斗')
   if (combat.status !== 'active' || combat.phase !== 'actor-turn' || combat.turnIndex == null || !combat.activeCombatantKey) fail('当前不是可提交行动的战斗回合')
@@ -61,7 +82,7 @@ function combatV10(input: {
 
 function remainingCooldowns(
   modules: TextOpenWorldParsedModulesV1,
-  combat: TextOpenWorldCombatRuntimeStateV1,
+  combat: TextOpenWorldCombatRuntimeStateV1 | TextOpenWorldCombatRuntimeStateV2,
   actorCombatantKey: string,
 ): Record<string, number> {
   const readyRounds = actorCombatantKey === 'player'
@@ -70,20 +91,82 @@ function remainingCooldowns(
   return Object.fromEntries(modules.progression.skills.map(skill => [skill.key, Math.max(0, (readyRounds[skill.key] ?? 0) - combat.round)]))
 }
 
+function progressionV2(modules: TextOpenWorldParsedModulesV1): TextOpenWorldProgressionModuleV2 {
+  if (modules.actions.version < SCALED_COMBAT_ACTION_VERSION || modules.progression.version !== 2 || modules.combat.sourceVersion !== 4) {
+    fail('结构化战斗结算必须使用Action v17、Progression v2与Combat v4')
+  }
+  return modules.progression
+}
+
+function combatV2(state: TextOpenWorldEffectStateV1): TextOpenWorldCombatRuntimeStateV2 {
+  if (!isTextOpenWorldCombatRuntimeStateV2(state.combat)) fail('Combat v4缺少CombatRuntimeState v2')
+  return state.combat
+}
+
+function passiveModifiers(
+  modules: TextOpenWorldParsedModulesV1,
+  state: TextOpenWorldEffectStateV1,
+) {
+  return deriveTextOpenWorldPassiveStaticModifiersV2({
+    progression: progressionV2(modules),
+    learnedSkillKeys: state.player.learnedSkillKeys,
+  })
+}
+
+function statusModifiers(
+  modules: TextOpenWorldParsedModulesV1,
+  state: TextOpenWorldEffectStateV1,
+  combatantKey: string,
+) {
+  return deriveTextOpenWorldCombatStatusModifiersV2({
+    combat: combatV2(state),
+    progression: progressionV2(modules),
+    combatantKey,
+  })
+}
+
+function playerEquipmentSkillPower(modules: TextOpenWorldParsedModulesV1, state: TextOpenWorldEffectStateV1): number {
+  return deriveTextOpenWorldEquipmentSkillPowerFromModulesV1({
+    modules,
+    equippedItemKeyBySlot: deriveTextOpenWorldEquippedItemKeysV1(modules, state.inventory),
+  })
+}
+
+function structuredSkillPower(input: {
+  modules: TextOpenWorldParsedModulesV1
+  state: TextOpenWorldEffectStateV1
+  actorCombatantKey: string
+}): number {
+  const status = statusModifiers(input.modules, input.state, input.actorCombatantKey).skillPower
+  const passive = input.actorCombatantKey === 'player'
+    ? passiveModifiers(input.modules, input.state).skillPower
+    : 0
+  const equipment = input.actorCombatantKey === 'player'
+    ? playerEquipmentSkillPower(input.modules, input.state)
+    : 0
+  const total = Math.floor(equipment + passive + status)
+  if (!Number.isSafeInteger(total) || total < -1_000_000_000 || total > 1_000_000_000) fail('skillPower无效')
+  return total
+}
+
 function targetsFor(input: {
   modules: TextOpenWorldParsedModulesV1
   state: TextOpenWorldEffectStateV1
-  combat: TextOpenWorldCombatRuntimeStateV1
+  combat: TextOpenWorldCombatRuntimeStateV1 | TextOpenWorldCombatRuntimeStateV2
   actionKind: TextOpenWorldCombatActionKindV1
   skillKey: string | null
   targetKey: string | null
 }): string[] {
   if (input.actionKind === 'escape') return []
   if (input.actionKind === 'item') return ['player']
-  if (input.actionKind === 'enemy-skill') return ['player']
   const skill = input.modules.progression.skills.find(item => item.key === input.skillKey) ?? fail(`战斗技能不存在:${String(input.skillKey)}`)
+  const actorCombatantKey = input.combat.activeCombatantKey ?? fail('战斗行动缺少当前行动者')
   if (skill.target === 'self') {
     if (input.targetKey != null) fail('自身技能不能指定敌人目标')
+    return [actorCombatantKey]
+  }
+  if (input.actionKind === 'enemy-skill') {
+    if (input.targetKey != null) fail('敌方技能不能由命令指定目标')
     return ['player']
   }
   const aliveEnemies = input.combat.enemies.filter(enemy => !enemy.defeated).map(enemy => enemy.combatantKey)
@@ -119,6 +202,12 @@ export function createTextOpenWorldCombatActionCatalogV1(
     if (actionKind === 'basic-attack' || actionKind === 'skill' || actionKind === 'enemy-skill') {
       const skill = modules.progression.skills.find(item => item.key === effect.payload.skillKey) ?? fail(`战斗技能不存在:${String(effect.payload.skillKey)}`)
       if (skill.activation !== 'active') fail('战斗不能主动使用被动技能')
+      if (modules.actions.version >= SCALED_COMBAT_ACTION_VERSION) {
+        const mechanic = progressionV2(modules).skills.find(item => item.key === skill.key)?.mechanic
+          ?? fail(`Progression v2技能机制不存在:${skill.key}`)
+        if (actionKind === 'basic-attack' && mechanic.kind !== 'attack') fail('普通攻击必须绑定attack机制')
+        if (input.actorKey === 'system' && mechanic.kind === 'resource') fail('resource技能仅允许玩家使用')
+      }
       if (input.actorKey === 'player') {
         const prepared = createTextOpenWorldSkillCatalogV1(value).prepare({
           learnedSkillKeys: input.state.player.learnedSkillKeys,
@@ -150,6 +239,7 @@ export function createTextOpenWorldCombatActionCatalogV1(
 
     const effectKeys = unique([...action.costEffectKeys, ...action.successEffectKeys])
     const cooldownUntilRound = combat.round + cooldownTurns
+      + (modules.actions.version >= SCALED_COMBAT_ACTION_VERSION ? 1 : 0)
     return {
       kind: 'combat-action', instanceKey: combat.instanceKey, encounterKey: combat.encounterKey,
       actionKey: action.key, actorKey: input.actorKey, actorCombatantKey: expectedActorCombatantKey,
@@ -183,7 +273,7 @@ export function createTextOpenWorldCombatActionCatalogV1(
     state: TextOpenWorldEffectStateV1
     authorization: TextOpenWorldCombatActionAuthorizationV1
     evidence: TextOpenWorldRandomEvidenceV1[]
-  }): TextOpenWorldCombatTargetResolutionV1[] => {
+  }): Array<TextOpenWorldCombatTargetResolutionV1 | TextOpenWorldCombatTargetResolutionV2> => {
     const skillKey = input.authorization.skillKey
     const skill = skillKey ? modules.progression.skills.find(item => item.key === skillKey) ?? fail(`战斗技能不存在:${skillKey}`) : null
     if (!skill || skill.kind !== 'attack') {
@@ -203,11 +293,13 @@ export function createTextOpenWorldCombatActionCatalogV1(
         || evidence.maximumInclusive !== request.maximumInclusive) fail(`战斗随机证据与请求不一致:${index}`)
       return evidence
     })
+    const structured = modules.actions.version >= SCALED_COMBAT_ACTION_VERSION
+    const equippedItemKeyBySlot = deriveTextOpenWorldEquippedItemKeysV1(modules, input.state.inventory)
     const playerStats = deriveTextOpenWorldPlayerStatsFromModulesV1({
       modules,
       level: input.state.player.level,
       attributes: input.state.player.attributes,
-      equippedItemKeyBySlot: deriveTextOpenWorldEquippedItemKeysV1(modules, input.state.inventory),
+      equippedItemKeyBySlot,
     })
     const actorEnemy = input.authorization.actorCombatantKey === 'player'
       ? null
@@ -215,11 +307,34 @@ export function createTextOpenWorldCombatActionCatalogV1(
         ? input.state.combat.enemies.find(enemy => enemy.combatantKey === input.authorization.actorCombatantKey) ?? fail('伤害行动者敌人不存在')
         : fail('伤害结算缺少新版战斗投影')
     const actorDefinition = actorEnemy ? modules.combat.enemies.find(enemy => enemy.key === actorEnemy.enemyKey) ?? fail('伤害行动者定义不存在') : null
-    const attack = Math.floor(actorDefinition?.attack ?? playerStats.attack)
+    const actorStructuredModifiers = structured
+      ? statusModifiers(modules, input.state, input.authorization.actorCombatantKey)
+      : null
+    const actorPassiveModifiers = structured && input.authorization.actorCombatantKey === 'player'
+      ? passiveModifiers(modules, input.state)
+      : null
+    const scaledPlayerSkill = structured
+      && input.authorization.actorCombatantKey === 'player'
+      && input.authorization.actionKind === 'skill'
+    const scalingAttribute = scaledPlayerSkill
+      ? skill.scalingAttribute ?? fail(`Action v17攻击技能缺少scalingAttribute:${skill.key}`)
+      : null
+    const baseAttack = actorDefinition?.attack ?? (scalingAttribute == null
+      ? playerStats.attack
+      : input.state.player.attributes[scalingAttribute])
+    const attackModifier = structured && !scaledPlayerSkill
+      ? (actorStructuredModifiers?.attack ?? 0) + (actorPassiveModifiers?.attack ?? 0)
+      : 0
+    const attack = Math.max(0, Math.floor(baseAttack + attackModifier))
+    const skillPower = structured && input.authorization.actionKind !== 'basic-attack'
+      ? structuredSkillPower({ modules, state: input.state, actorCombatantKey: input.authorization.actorCombatantKey })
+      : 0
     const criticalChance = actorDefinition?.criticalChance ?? playerStats.criticalChance
     const criticalChanceBasisPoints = Math.min(
       modules.combat.resolution.criticalChanceCapBasisPoints,
-      Math.max(0, Math.round(criticalChance * modules.combat.resolution.criticalRollMaximum)),
+      Math.max(0, Math.round(criticalChance * modules.combat.resolution.criticalRollMaximum)
+        + (actorStructuredModifiers?.criticalChanceBasisPoints ?? 0)
+        + (actorPassiveModifiers?.criticalChanceBasisPoints ?? 0)),
     )
     return input.authorization.targetCombatantKeys.map((targetCombatantKey, index) => {
       const targetEnemy = targetCombatantKey === 'player'
@@ -228,12 +343,26 @@ export function createTextOpenWorldCombatActionCatalogV1(
           ? input.state.combat.enemies.find(enemy => enemy.combatantKey === targetCombatantKey) ?? fail(`伤害目标不存在:${targetCombatantKey}`)
           : fail('伤害结算缺少新版战斗投影')
       const targetDefinition = targetEnemy ? modules.combat.enemies.find(enemy => enemy.key === targetEnemy.enemyKey) ?? fail('伤害目标定义不存在') : null
-      const defense = Math.floor(targetDefinition?.defense ?? playerStats.defense)
+      const targetStructuredModifiers = structured
+        ? statusModifiers(modules, input.state, targetCombatantKey)
+        : null
+      const targetPassiveModifiers = structured && targetCombatantKey === 'player'
+        ? passiveModifiers(modules, input.state)
+        : null
+      const defense = Math.max(0, Math.floor(
+        (targetDefinition?.defense ?? playerStats.defense)
+        + (targetStructuredModifiers?.defense ?? 0)
+        + (targetPassiveModifiers?.defense ?? 0),
+      ))
       const beforeHealth = Math.floor(targetEnemy?.currentHealth ?? input.state.player.health)
       if (beforeHealth <= 0) fail(`不能伤害已经战败的目标:${targetCombatantKey}`)
       const damageBeforeDefense = Math.min(
         modules.combat.resolution.maximumDamage,
-        Math.floor(attack * skillResolution.powerNumerator / skillResolution.powerDenominator) + skillResolution.flatDamage,
+        Math.max(0, Math.floor(
+          attack * skillResolution.powerNumerator / skillResolution.powerDenominator
+          + skillResolution.flatDamage
+          + skillPower,
+        )),
       )
       const damageAfterDefense = Math.min(
         modules.combat.resolution.maximumDamage,
@@ -258,8 +387,142 @@ export function createTextOpenWorldCombatActionCatalogV1(
         criticalChanceBasisPoints, criticalDrawValue, critical,
         computedDamage, appliedDamage, beforeHealth, afterHealth,
         defeated: afterHealth === 0,
+        ...(structured ? { skillPower } : {}),
       }
     })
+  }
+
+  const structuredResolutionsFor = (input: {
+    state: TextOpenWorldEffectStateV1
+    authorization: TextOpenWorldCombatActionAuthorizationV1
+    targetResolutions: Array<TextOpenWorldCombatTargetResolutionV1 | TextOpenWorldCombatTargetResolutionV2>
+  }): {
+    mechanicKind: TextOpenWorldCombatActionAuthorizationV1['mechanicKind']
+    recoveryResolutions: TextOpenWorldCombatRecoveryResolutionV2[]
+    resourceResolutions: TextOpenWorldCombatResourceResolutionV2[]
+    statusResolutions: TextOpenWorldCombatStatusResolutionV2[]
+    expiredStatusKeys: string[]
+    afterStatusInstancesByCombatantKey: TextOpenWorldCombatRuntimeStateV2['statusInstancesByCombatantKey']
+  } => {
+    const progression = progressionV2(modules)
+    const originalCombat = combatV2(input.state)
+    let combat = structuredClone(originalCombat)
+    const skill = input.authorization.skillKey == null
+      ? null
+      : progression.skills.find(candidate => candidate.key === input.authorization.skillKey)
+        ?? fail(`Progression v2技能不存在:${input.authorization.skillKey}`)
+    const mechanicKind = skill?.mechanic.kind === 'passive-static'
+      ? fail('战斗不能主动执行passive-static技能')
+      : skill?.mechanic.kind ?? null
+    if (input.authorization.actionKind === 'basic-attack' && mechanicKind !== 'attack') fail('普通攻击必须使用attack机制')
+    if (input.authorization.actorKey === 'system' && mechanicKind === 'resource') fail('resource技能仅允许玩家使用')
+    if (mechanicKind !== 'attack' && input.targetResolutions.length) fail('非攻击机制不能包含伤害结算')
+
+    const actorCombatantKey = input.authorization.actorCombatantKey
+    const actorEnemy = actorCombatantKey === 'player'
+      ? null
+      : combat.enemies.find(enemy => enemy.combatantKey === actorCombatantKey) ?? fail('技能行动者不存在')
+    const scalingValueFor = (attribute: 'power' | 'vitality' | 'agility') => {
+      if (actorCombatantKey === 'player') return integer(input.state.player.attributes[attribute], `玩家${attribute}`)
+      const definition = modules.combat.enemies.find(enemy => enemy.key === actorEnemy!.enemyKey) ?? fail('敌人定义不存在')
+      return integer(attribute === 'power' ? definition.attack : attribute === 'vitality' ? definition.defense : definition.initiative, `敌人${attribute}`)
+    }
+    const skillPower = mechanicKind === 'recovery' || mechanicKind === 'resource'
+      ? structuredSkillPower({ modules, state: input.state, actorCombatantKey })
+      : 0
+    const mechanicAmount = (mechanic: Extract<TextOpenWorldProgressionModuleV2['skills'][number]['mechanic'], { kind: 'recovery' | 'resource' }>, scalingValue: number) => {
+      const scaled = Math.floor(scalingValue * mechanic.scalingNumerator / mechanic.scalingDenominator)
+      const requested = mechanic.baseAmount + scaled + skillPower
+      return integer(Math.max(0, requested), `${mechanic.kind}恢复量`)
+    }
+
+    const recoveryResolutions: TextOpenWorldCombatRecoveryResolutionV2[] = []
+    const resourceResolutions: TextOpenWorldCombatResourceResolutionV2[] = []
+    const statusResolutions: TextOpenWorldCombatStatusResolutionV2[] = []
+    if (skill?.mechanic.kind === 'recovery') {
+      if (input.authorization.targetCombatantKeys.length !== 1 || input.authorization.targetCombatantKeys[0] !== actorCombatantKey) {
+        fail('recovery技能只能恢复行动者')
+      }
+      const scalingAttribute = skill.scalingAttribute ?? fail('recovery技能缺少scalingAttribute')
+      const scalingValue = scalingValueFor(scalingAttribute)
+      const requestedRecovery = mechanicAmount(skill.mechanic, scalingValue)
+      const targetEnemy = actorCombatantKey === 'player' ? null : actorEnemy
+      const maximumHealth = targetEnemy?.maximumHealth ?? input.state.player.maximumHealth
+      const beforeHealth = targetEnemy?.currentHealth ?? input.state.player.health
+      const afterHealth = Math.min(maximumHealth, beforeHealth + requestedRecovery)
+      recoveryResolutions.push({
+        targetCombatantKey: actorCombatantKey,
+        scalingAttribute,
+        scalingValue,
+        baseAmount: skill.mechanic.baseAmount,
+        scalingNumerator: skill.mechanic.scalingNumerator,
+        scalingDenominator: skill.mechanic.scalingDenominator,
+        skillPower,
+        requestedRecovery,
+        appliedRecovery: afterHealth - beforeHealth,
+        maximumHealth,
+        beforeHealth,
+        afterHealth,
+      })
+    } else if (skill?.mechanic.kind === 'resource') {
+      if (actorCombatantKey !== 'player' || input.authorization.targetCombatantKeys.length !== 1
+        || input.authorization.targetCombatantKeys[0] !== 'player') fail('resource技能仅允许恢复玩家自身')
+      const scalingAttribute = skill.scalingAttribute ?? fail('resource技能缺少scalingAttribute')
+      const scalingValue = scalingValueFor(scalingAttribute)
+      const requestedRecovery = mechanicAmount(skill.mechanic, scalingValue)
+      const beforeSkillResource = input.authorization.afterSkillResource
+      const afterSkillResource = Math.min(input.state.player.maximumSkillResource, beforeSkillResource + requestedRecovery)
+      resourceResolutions.push({
+        targetCombatantKey: 'player',
+        scalingAttribute,
+        scalingValue,
+        baseAmount: skill.mechanic.baseAmount,
+        scalingNumerator: skill.mechanic.scalingNumerator,
+        scalingDenominator: skill.mechanic.scalingDenominator,
+        skillPower,
+        requestedRecovery,
+        appliedRecovery: afterSkillResource - beforeSkillResource,
+        maximumSkillResource: input.state.player.maximumSkillResource,
+        beforeSkillResource,
+        afterSkillResource,
+      })
+    } else if (skill?.mechanic.kind === 'status') {
+      const statusKey = skill.mechanic.statusKey
+      for (const targetCombatantKey of input.authorization.targetCombatantKeys) {
+        const beforeStatus = combat.statusInstancesByCombatantKey[targetCombatantKey]
+          ?.find(instance => instance.statusKey === statusKey) ?? null
+        const applied = applyTextOpenWorldCombatStatusV2({
+          combat,
+          progression,
+          targetCombatantKey,
+          sourceCombatantKey: actorCombatantKey,
+          sourceSkillKey: skill.key,
+        })
+        combat = applied.combat
+        const afterStatus = combat.statusInstancesByCombatantKey[targetCombatantKey]
+          ?.find(instance => instance.statusKey === statusKey) ?? null
+        statusResolutions.push({
+          targetCombatantKey,
+          statusKey,
+          outcome: applied.outcome,
+          beforeStatus: beforeStatus == null ? null : structuredClone(beforeStatus),
+          afterStatus: afterStatus == null ? null : structuredClone(afterStatus),
+        })
+      }
+    }
+    const settled = settleTextOpenWorldCombatStatusesAfterTurnV2({
+      combat,
+      progression,
+      combatantKey: actorCombatantKey,
+    })
+    return {
+      mechanicKind,
+      recoveryResolutions,
+      resourceResolutions,
+      statusResolutions,
+      expiredStatusKeys: settled.expiredStatusKeys,
+      afterStatusInstancesByCombatantKey: structuredClone(settled.combat.statusInstancesByCombatantKey),
+    }
   }
 
   const prepare = (input: CombatActionInput): TextOpenWorldCombatActionAuthorizationV1 => {
@@ -271,13 +534,28 @@ export function createTextOpenWorldCombatActionCatalogV1(
     const randomRequests = randomRequestsForBase(authorization)
     const evidence = input.evidence ?? fail('Action v11战斗行动缺少随机证据')
     const targetResolutions = targetResolutionsFor({ state: input.state, authorization, evidence })
+    if (modules.actions.version >= SCALED_COMBAT_ACTION_VERSION) {
+      const legacyStatusEffects = authorization.effectKeys.filter(effectKey => {
+        const effect = modules.actions.effects.find(item => item.key === effectKey)!
+        return effect.operation === 'apply-status' || effect.operation === 'remove-status'
+      })
+      if (legacyStatusEffects.length) fail('Action v17战斗技能不能复用旧apply-status/remove-status Effect')
+      const structured = structuredResolutionsFor({ state: input.state, authorization, targetResolutions })
+      return {
+        ...authorization,
+        resolutionVersion: 2,
+        randomRequests,
+        targetResolutions,
+        ...structured,
+      }
+    }
     const statusEffectKeys = authorization.effectKeys.filter(effectKey => {
       const effect = modules.actions.effects.find(item => item.key === effectKey)!
       return effect.operation === 'apply-status' || effect.operation === 'remove-status'
     })
     return {
       ...authorization,
-      resolutionVersion: 1,
+      resolutionVersion: 1 as const,
       randomRequests,
       targetResolutions,
       statusEffectKeys,
@@ -292,7 +570,8 @@ export function createTextOpenWorldCombatActionCatalogV1(
   }) => {
     let evidence = input.evidence
     if (modules.actions.version >= 11 && !evidence) {
-      if (input.authorization.resolutionVersion !== 1 || !input.authorization.randomRequests || !input.authorization.targetResolutions) fail('Action v11战斗授权缺少结算字段')
+      if (![1, 2].includes(Number(input.authorization.resolutionVersion))
+        || !input.authorization.randomRequests || !input.authorization.targetResolutions) fail('Action v11+战斗授权缺少结算字段')
       evidence = input.authorization.randomRequests.map((request, index) => ({
         ...request,
         algorithm: 'sha256-range-v1' as const,
@@ -302,12 +581,16 @@ export function createTextOpenWorldCombatActionCatalogV1(
         value: input.authorization.targetResolutions?.[index]?.criticalDrawValue ?? fail(`战斗授权缺少随机结果:${index}`),
       }))
     }
+    const authorizationSkill = input.authorization.skillKey == null
+      ? null
+      : modules.progression.skills.find(skill => skill.key === input.authorization.skillKey)
+        ?? fail(`战斗授权技能不存在:${input.authorization.skillKey}`)
     const expected = prepare({
       state: input.state,
       actionKey: input.authorization.actionKey,
       targetKey: input.authorization.actionKind === 'item'
         ? input.authorization.itemKey
-        : input.authorization.targetCombatantKeys.length === 1 && input.authorization.targetCombatantKeys[0] !== 'player'
+        : input.authorization.actionKind !== 'enemy-skill' && authorizationSkill?.target === 'single-enemy'
           ? input.authorization.targetCombatantKeys[0]
           : null,
       actorKey: input.authorization.actorKey,
@@ -321,14 +604,101 @@ export function createTextOpenWorldCombatActionCatalogV1(
     beforeState: TextOpenWorldEffectStateV1
     state: TextOpenWorldEffectStateV1
     authorization: TextOpenWorldCombatActionAuthorizationV1
-  }): TextOpenWorldCombatRuntimeStateV1 => {
+  }): TextOpenWorldCombatRuntimeStateV1 | TextOpenWorldCombatRuntimeStateV2 => {
     assertAuthorization({ state: input.beforeState, authorization: input.authorization })
-    const combat = structuredClone(input.state.combat)
-    if (!isTextOpenWorldCombatRuntimeStateV1(combat)) fail('战斗行动缺少Combat v2投影')
+    const clonedCombat = structuredClone(input.state.combat)
+    if (!isTextOpenWorldCombatRuntimeStateV1(clonedCombat) && !isTextOpenWorldCombatRuntimeStateV2(clonedCombat)) fail('战斗行动缺少新版战斗投影')
+    let combat: TextOpenWorldCombatRuntimeStateV1 | TextOpenWorldCombatRuntimeStateV2 = clonedCombat
+    if ((input.authorization.resolutionVersion === 2) !== isTextOpenWorldCombatRuntimeStateV2(combat)) {
+      fail('结构化战斗授权与RuntimeState版本不一致')
+    }
     if (combat.instanceKey !== input.authorization.instanceKey || combat.phase !== input.authorization.beforePhase
       || combat.round !== input.authorization.beforeRound || combat.turnIndex !== input.authorization.beforeTurnIndex
       || combat.activeCombatantKey !== input.authorization.beforeActiveCombatantKey) fail('战斗行动应用基线已变化')
     if (input.state.player.skillResource !== input.authorization.afterSkillResource) fail('战斗行动资源消耗与授权不一致')
+    for (const resolution of input.authorization.targetResolutions ?? []) {
+      if (resolution.targetCombatantKey === 'player') {
+        if (input.state.player.health !== resolution.beforeHealth) fail('玩家伤害应用基线已变化')
+        input.state.player.health = resolution.afterHealth
+      } else {
+        const enemy = combat.enemies.find(item => item.combatantKey === resolution.targetCombatantKey) ?? fail('敌人伤害目标不存在')
+        if (enemy.currentHealth !== resolution.beforeHealth) fail('敌人伤害应用基线已变化')
+        enemy.currentHealth = resolution.afterHealth
+        enemy.defeated = resolution.defeated
+      }
+    }
+    for (const resolution of input.authorization.recoveryResolutions ?? []) {
+      if (resolution.targetCombatantKey === 'player') {
+        if (input.state.player.health !== resolution.beforeHealth
+          || input.state.player.maximumHealth !== resolution.maximumHealth) fail('玩家治疗应用基线已变化')
+        input.state.player.health = resolution.afterHealth
+      } else {
+        const enemy = combat.enemies.find(item => item.combatantKey === resolution.targetCombatantKey) ?? fail('敌人治疗目标不存在')
+        if (enemy.currentHealth !== resolution.beforeHealth || enemy.maximumHealth !== resolution.maximumHealth) fail('敌人治疗应用基线已变化')
+        enemy.currentHealth = resolution.afterHealth
+        enemy.defeated = resolution.afterHealth === 0
+      }
+    }
+    for (const resolution of input.authorization.resourceResolutions ?? []) {
+      if (resolution.targetCombatantKey !== 'player'
+        || input.authorization.actorCombatantKey !== 'player'
+        || input.state.player.skillResource !== resolution.beforeSkillResource
+        || input.state.player.maximumSkillResource !== resolution.maximumSkillResource) fail('资源恢复应用基线已变化')
+      input.state.player.skillResource = resolution.afterSkillResource
+    }
+    if (isTextOpenWorldCombatRuntimeStateV2(combat)) {
+      const progression = progressionV2(modules)
+      const actualStatusResolutions: TextOpenWorldCombatStatusResolutionV2[] = []
+      const skill = input.authorization.skillKey == null
+        ? null
+        : progression.skills.find(candidate => candidate.key === input.authorization.skillKey) ?? fail('结构化战斗技能不存在')
+      if (skill?.mechanic.kind === 'status') {
+        const statusKey = skill.mechanic.statusKey
+        for (const targetCombatantKey of input.authorization.targetCombatantKeys) {
+          const beforeStatus = combat.statusInstancesByCombatantKey[targetCombatantKey]
+            ?.find(instance => instance.statusKey === statusKey) ?? null
+          const applied = applyTextOpenWorldCombatStatusV2({
+            combat,
+            progression,
+            targetCombatantKey,
+            sourceCombatantKey: input.authorization.actorCombatantKey,
+            sourceSkillKey: skill.key,
+          })
+          combat = applied.combat
+          const afterStatus = combat.statusInstancesByCombatantKey[targetCombatantKey]
+            ?.find(instance => instance.statusKey === statusKey) ?? null
+          actualStatusResolutions.push({
+            targetCombatantKey,
+            statusKey,
+            outcome: applied.outcome,
+            beforeStatus: beforeStatus == null ? null : structuredClone(beforeStatus),
+            afterStatus: afterStatus == null ? null : structuredClone(afterStatus),
+          })
+        }
+      }
+      if (canonicalProductProductionJsonV2(actualStatusResolutions)
+        !== canonicalProductProductionJsonV2(input.authorization.statusResolutions ?? [])) {
+        fail('状态技能结算与授权不一致')
+      }
+      const settled = settleTextOpenWorldCombatStatusesAfterTurnV2({
+        combat,
+        progression,
+        combatantKey: input.authorization.actorCombatantKey,
+      })
+      combat = settled.combat
+      if (canonicalProductProductionJsonV2(settled.expiredStatusKeys)
+        !== canonicalProductProductionJsonV2(input.authorization.expiredStatusKeys ?? [])
+        || canonicalProductProductionJsonV2(combat.statusInstancesByCombatantKey)
+          !== canonicalProductProductionJsonV2(input.authorization.afterStatusInstancesByCombatantKey)) {
+        fail('战斗行动结束状态快照与授权不一致')
+      }
+    }
+    if (input.authorization.skillKey && input.authorization.cooldownTurns > 0) {
+      const cooldowns = input.authorization.actorCombatantKey === 'player'
+        ? combat.cooldownUntilRoundBySkillKey!
+        : combat.enemies.find(enemy => enemy.combatantKey === input.authorization.actorCombatantKey)?.cooldownUntilRoundBySkillKey ?? fail('敌人冷却投影不存在')
+      cooldowns[input.authorization.skillKey] = input.authorization.cooldownUntilRound
+    }
     combat.phase = 'action-resolved'
     combat.lastAction = {
       actionKey: input.authorization.actionKey,
@@ -341,24 +711,16 @@ export function createTextOpenWorldCombatActionCatalogV1(
       turnIndex: input.authorization.beforeTurnIndex,
       ...(input.authorization.resolutionVersion === 1
         ? { targetResolutions: structuredClone(input.authorization.targetResolutions ?? []) }
-        : {}),
-    }
-    for (const resolution of input.authorization.targetResolutions ?? []) {
-      if (resolution.targetCombatantKey === 'player') {
-        if (input.state.player.health !== resolution.beforeHealth) fail('玩家伤害应用基线已变化')
-        input.state.player.health = resolution.afterHealth
-      } else {
-        const enemy = combat.enemies.find(item => item.combatantKey === resolution.targetCombatantKey) ?? fail('敌人伤害目标不存在')
-        if (enemy.currentHealth !== resolution.beforeHealth) fail('敌人伤害应用基线已变化')
-        enemy.currentHealth = resolution.afterHealth
-        enemy.defeated = resolution.defeated
-      }
-    }
-    if (input.authorization.skillKey && input.authorization.cooldownTurns > 0) {
-      const cooldowns = input.authorization.actorCombatantKey === 'player'
-        ? combat.cooldownUntilRoundBySkillKey!
-        : combat.enemies.find(enemy => enemy.combatantKey === input.authorization.actorCombatantKey)?.cooldownUntilRoundBySkillKey ?? fail('敌人冷却投影不存在')
-      cooldowns[input.authorization.skillKey] = input.authorization.cooldownUntilRound
+        : input.authorization.resolutionVersion === 2
+          ? {
+              targetResolutions: structuredClone(input.authorization.targetResolutions ?? []),
+              mechanicKind: input.authorization.mechanicKind ?? null,
+              recoveryResolutions: structuredClone(input.authorization.recoveryResolutions ?? []),
+              resourceResolutions: structuredClone(input.authorization.resourceResolutions ?? []),
+              statusResolutions: structuredClone(input.authorization.statusResolutions ?? []),
+              expiredStatusKeys: [...(input.authorization.expiredStatusKeys ?? [])],
+            }
+          : {}),
     }
     const verificationState = structuredClone(input.state)
     verificationState.combat = combat

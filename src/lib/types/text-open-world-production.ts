@@ -1835,6 +1835,8 @@ export interface TextOpenWorldProgressionCatalogsV1 {
     experienceCurveOwner: 'deterministic-compiler'
     skillSemanticsOwner: 'model-validated'
     actionEffectBindingOwner: 'p8f.quest-finalize'
+    /** Missing on historical P8 artifacts that can only assemble v15/v16. */
+    structuredCombatSemanticsReady?: true
     allRuntimeBindingsUnbound: true
     progressionModuleReady: false
   }
@@ -2659,6 +2661,12 @@ export interface TextOpenWorldQuestDesignDocumentsV1 {
     allAbandonableQuestStagesCovered?: true
     /** P9 must prove this requirement against the authored quest-offer scene. */
     restartActionsRequireOriginalOfferRoute?: true
+    /**
+     * Fresh P8F builds compile active recovery/resource/status and passive
+     * mechanics into the strict Action v17 + Progression v2 + Combat v4
+     * runtime triplet. Missing on historical v15/v16 artifacts.
+     */
+    structuredCombatMechanicsReady?: true
     allCatalogBindingsResolved: true
     allEndingsRuntimeBound: true
     sceneBindingsDeferred: true

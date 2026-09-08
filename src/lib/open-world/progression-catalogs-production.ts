@@ -68,6 +68,8 @@ export interface TextOpenWorldProgressionCatalogsInputContextV1 {
   questSkeletons: TextOpenWorldQuestSkeletonsV1
   contentRequirementManifest: TextOpenWorldContentRequirementManifestV1
   skillDemands: SkillDemandV1[]
+  /** Missing from pre-G4-09 durable contexts; omission preserves v1 semantics. */
+  combatMechanicsContract?: 'governed-v17'
   contextSelectionHash: string
 }
 
@@ -244,6 +246,9 @@ function buildSkillDemands(input: {
 
 async function validateUpstream(context: Omit<TextOpenWorldProgressionCatalogsInputContextV1, 'contextSelectionHash'>): Promise<void> {
   const { gameplayRuleset, playerBuild, questSkeletons, contentRequirementManifest } = context
+  if (context.combatMechanicsContract !== undefined && context.combatMechanicsContract !== 'governed-v17') {
+    fail('结构化战斗语义生产合同无效')
+  }
   await validateTextOpenWorldGameplayRulesetSkeletonV1({ artifact: gameplayRuleset })
   if (playerBuild.schema !== 'storyforge.text-open-world-player-build' || playerBuild.version !== 1
     || playerBuild.catalogBinding.status !== 'reserved-unbound'
@@ -291,6 +296,7 @@ async function loadContext(input: { scope: WorkspaceScope; productionId: number;
     schema: 'storyforge.text-open-world-progression-catalogs-input', version: 1,
     productInstanceKey: production.productionKey, gameplayRuleset, playerBuild, questSkeletons, contentRequirementManifest,
     skillDemands: buildSkillDemands({ playerBuild, manifest: contentRequirementManifest }),
+    combatMechanicsContract: 'governed-v17',
   }
   await validateUpstream(body)
   const context = { ...body, contextSelectionHash: await hashProductProductionValueV2(body) }
@@ -350,6 +356,16 @@ function parseDraft(value: unknown, context: TextOpenWorldProgressionCatalogsInp
       fail(`被动技能必须以自身为目标且无主动消耗:${demand.sourceDemandKey}`)
     }
     if (activation === 'active' && kind === 'attack' && target === 'self') fail(`主动攻击技能不能以自身为目标:${demand.sourceDemandKey}`)
+    if (context.combatMechanicsContract === 'governed-v17') {
+      if (activation === 'active' && (kind === 'recovery' || kind === 'resource') && target !== 'self') {
+        fail(`主动恢复或资源技能必须以自身为目标:${demand.sourceDemandKey}`)
+      }
+      const numericMechanic = activation === 'active'
+        && (kind === 'attack' || kind === 'recovery' || kind === 'resource')
+      if (numericMechanic !== (scalingAttribute !== null)) {
+        fail(`数值技能必须且只能声明scalingAttribute:${demand.sourceDemandKey}`)
+      }
+    }
     const parsed = {
       demandNumber,
       title: text(row.title, `skills[${index}].title`, 200),
@@ -500,6 +516,9 @@ async function createArtifact(input: {
     governance: {
       professionSystem: 'none', attributeGrowthOwner: 'deterministic-compiler', experienceCurveOwner: 'deterministic-compiler',
       skillSemanticsOwner: 'model-validated', actionEffectBindingOwner: 'p8f.quest-finalize',
+      ...(input.context.combatMechanicsContract === 'governed-v17'
+        ? { structuredCombatSemanticsReady: true as const }
+        : {}),
       allRuntimeBindingsUnbound: true, progressionModuleReady: false,
     },
     basisHash: await hashProductProductionValueV2({
@@ -563,7 +582,7 @@ function systemPrompt(context: TextOpenWorldProgressionCatalogsInputContextV1): 
   return [
     '你是StoryForge文字开放世界Progression与Skill Catalog Designer。你只设计技能与状态语义和有界战斗参数；20级经验曲线、自动属性成长、稳定键、需求归属以及Action/Effect/Condition/Quest绑定由代码生成。',
     `skillDemands共有${context.skillDemands.length}项，必须按demandNumber精确覆盖一次。player-initial的title/description和全部机制必须与fixed字段一致；level-progression要形成无职业系统的长期成长；quest-requirement要兑现semanticBrief/requestedTraits。`,
-    'activation只能active/passive，kind只能attack/status/resource/recovery，target只能self/single-enemy/all-enemies，scalingAttribute只能power/vitality/agility/null。passive必须self、0消耗、0冷却；主动attack不能self，且必须填写完整combatPowerNumerator/Denominator/flatDamage，其他技能三个战斗公式字段必须全为null。',
+    'activation只能active/passive，kind只能attack/status/resource/recovery，target只能self/single-enemy/all-enemies，scalingAttribute只能power/vitality/agility/null。passive必须self、0消耗、0冷却；主动attack不能self；主动recovery/resource必须self；主动attack/recovery/resource应声明符合语义的scalingAttribute，status与passive使用null。主动attack必须填写完整combatPowerNumerator/Denominator/flatDamage，其他技能三个战斗公式字段必须全为null。',
     'resourceCost为0到20整数，cooldownTurns为0到10整数，priority为0到1000整数；攻击倍率分子0到20、分母1到20、flatDamage 0到1000。不要输出Action、Effect、Condition、Quest、状态施加规则或任何目录键。',
     '另设计1到6个状态词典项，只给title、description、polarity(beneficial/harmful/neutral)，用于后序技能/战斗选择，不代表已绑定Effect。技能和状态标题均不得重复。',
     '只输出字段精确的JSON：',

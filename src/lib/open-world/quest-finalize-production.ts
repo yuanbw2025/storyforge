@@ -29,6 +29,10 @@ import type {
   WorkspaceScope,
 } from '../types'
 import { assertRecordInScope } from '../workspace/scope'
+import {
+  compileTextOpenWorldSkillMechanicV2,
+  compileTextOpenWorldStatusDefinitionV2,
+} from './combat-mechanics-production'
 
 const SKILL_ID = 'text-open-world.production.quest-finalize.v1'
 const MAX_CONTEXT_CHARS = 700_000
@@ -59,6 +63,8 @@ export interface TextOpenWorldQuestFinalizeInputContextV1 {
   objectiveBindingDemands: ObjectiveBindingDemandV1[]
   /** Missing from the pre-G4-05 durable P8F context; omission compiles the legacy contract. */
   questLifecycleContract?: 'governed-v16'
+  /** Missing from pre-G4-09 durable contexts; omission preserves v15/v16 combat bindings. */
+  combatMechanicsContract?: 'governed-v17'
   contextSelectionHash: string
 }
 
@@ -204,6 +210,13 @@ async function validateUpstream(context: Omit<TextOpenWorldQuestFinalizeInputCon
   if (context.questLifecycleContract !== undefined && context.questLifecycleContract !== 'governed-v16') {
     fail('Quest生命周期生产合同无效')
   }
+  if (context.combatMechanicsContract !== undefined && context.combatMechanicsContract !== 'governed-v17') {
+    fail('结构化战斗机制生产合同无效')
+  }
+  if (context.combatMechanicsContract === 'governed-v17'
+    && context.progressionCatalogs.governance.structuredCombatSemanticsReady !== true) {
+    fail('结构化战斗机制合同缺少已验收的P8语义')
+  }
   const artifacts: Array<[Record<string, unknown>, string, string]> = [
     [context.mainlineThread as unknown as Record<string, unknown>, 'mainlineThreadHash', 'MainlineThread'],
     [context.significantThreads as unknown as Record<string, unknown>, 'significantThreadsHash', 'SignificantThreads'],
@@ -315,7 +328,12 @@ async function loadContext(input: { scope: WorkspaceScope; productionId: number;
     mapInteractionCatalog: values[10] as TextOpenWorldMapInteractionCatalogV1,
   }
   const body: Omit<TextOpenWorldQuestFinalizeInputContextV1, 'contextSelectionHash'> = {
-    ...base, objectiveBindingDemands: buildObjectiveDemands(base), questLifecycleContract: 'governed-v16',
+    ...base,
+    objectiveBindingDemands: buildObjectiveDemands(base),
+    questLifecycleContract: 'governed-v16',
+    ...(base.progressionCatalogs.governance.structuredCombatSemanticsReady === true
+      ? { combatMechanicsContract: 'governed-v17' as const }
+      : {}),
   }
   await validateUpstream(body)
   const context = { ...body, contextSelectionHash: await hashProductProductionValueV2(body) }
@@ -615,8 +633,19 @@ async function createArtifacts(input: {
   draft: QuestFinalizeDraftV1
   createdAt: number
   lifecycleContract?: 'legacy' | 'governed-v16'
+  combatMechanicsContract?: 'legacy' | 'governed-v17'
 }): Promise<TextOpenWorldQuestFinalizeArtifactsV1> {
   const governedLifecycle = input.lifecycleContract !== 'legacy'
+  const governedCombatMechanics = input.combatMechanicsContract === 'governed-v17'
+  if (governedCombatMechanics) {
+    input.context.progressionCatalogs.statuses.forEach(compileTextOpenWorldStatusDefinitionV2)
+    input.context.progressionCatalogs.skills.forEach(skill => {
+      compileTextOpenWorldSkillMechanicV2({
+        skill,
+        statuses: input.context.progressionCatalogs.statuses,
+      })
+    })
+  }
   const conditions: TextOpenWorldConditionDefinitionV1[] = []
   const effects: TextOpenWorldEffectDefinitionV1[] = []
   const actions: TextOpenWorldActionDefinitionV1[] = []
@@ -726,7 +755,7 @@ async function createArtifacts(input: {
     const skillEffectKeys: string[] = []
     if (skill.activation === 'active') {
       actionKey = `action.combat.${skill.key}`
-      if (skill.kind !== 'attack') {
+      if (!governedCombatMechanics && skill.kind !== 'attack') {
         const status = input.context.progressionCatalogs.statuses.find(item => item.polarity === 'beneficial')
           ?? input.context.progressionCatalogs.statuses[0] ?? fail(`主动状态技能缺少Status定义:${skill.key}`)
         const conditionKey = `condition.combat.${skill.key}.status-absent`
@@ -1202,6 +1231,7 @@ async function createArtifacts(input: {
         allAbandonableQuestStagesCovered: true as const,
         restartActionsRequireOriginalOfferRoute: true as const,
       } : {}),
+      ...(governedCombatMechanics ? { structuredCombatMechanicsReady: true as const } : {}),
       allCatalogBindingsResolved: true,
       allEndingsRuntimeBound: true, sceneBindingsDeferred: true, questAndEncounterBindingsReady: true,
     },
@@ -1504,7 +1534,11 @@ export async function validateTextOpenWorldQuestFinalizeArtifactsV1(input: {
   const draft = parseDraft(draftFromArtifacts(input.artifacts), context)
   const lifecycleContract = context.questLifecycleContract ?? 'legacy'
   const expected = await createArtifacts({
-    context, draft, createdAt: input.artifacts.questDesignDocuments.createdAt, lifecycleContract,
+    context,
+    draft,
+    createdAt: input.artifacts.questDesignDocuments.createdAt,
+    lifecycleContract,
+    combatMechanicsContract: context.combatMechanicsContract ?? 'legacy',
   })
   assertCrossArtifacts(input.artifacts)
   if (canonicalProductProductionJsonV2(expected) !== canonicalProductProductionJsonV2(input.artifacts)) fail('P8F Artifact固定引用、运行定义、预算或Hash被篡改')
@@ -1566,6 +1600,7 @@ export function createTextOpenWorldQuestFinalizeExecutorV1(options: {
     const artifacts = await createArtifacts({
       context, draft, createdAt: integer(now(), 'createdAt', 0, Number.MAX_SAFE_INTEGER),
       lifecycleContract: context.questLifecycleContract ?? 'legacy',
+      combatMechanicsContract: context.combatMechanicsContract ?? 'legacy',
     })
     await validateTextOpenWorldQuestFinalizeArtifactsV1({ artifacts, context })
     const durationMs = Math.max(0, Math.round(performance.now() - started))

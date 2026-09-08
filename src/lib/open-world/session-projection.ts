@@ -662,9 +662,13 @@ export function applyTextOpenWorldSessionEventV1(current: TextOpenWorldSessionPr
     } else if (applied.plan.authorization?.kind === 'combat-action') {
       const authorization = applied.plan.authorization
       const action = modules.actions.actions.find(item => item.key === projection.protocol.pendingActionKey) ?? fail('命令Action不存在')
+      const authorizationSkill = authorization.skillKey == null
+        ? null
+        : modules.progression.skills.find(skill => skill.key === authorization.skillKey)
+          ?? fail('战斗授权技能不存在')
       const expectedTargetKey = authorization.actionKind === 'item'
         ? authorization.itemKey
-        : authorization.targetCombatantKeys.length === 1 && authorization.targetCombatantKeys[0] !== 'player'
+        : authorization.actionKind !== 'enemy-skill' && authorizationSkill?.target === 'single-enemy'
           ? authorization.targetCombatantKeys[0]
           : null
       if (canonicalProductProductionJsonV2(applied.plan.effectKeys) !== canonicalProductProductionJsonV2(authorization.effectKeys)

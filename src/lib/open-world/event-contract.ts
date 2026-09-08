@@ -25,6 +25,10 @@ import type {
   TextOpenWorldActorScheduleSettlementAuthorizationV1,
   TextOpenWorldCombatTransitionAuthorizationV1,
   TextOpenWorldCombatActionAuthorizationV1,
+  TextOpenWorldCombatStatusInstanceV2,
+  TextOpenWorldCombatRecoveryResolutionV2,
+  TextOpenWorldCombatResourceResolutionV2,
+  TextOpenWorldCombatStatusResolutionV2,
   TextOpenWorldCraftingAuthorizationV1,
   TextOpenWorldTransactionAuthorizationV1,
   TextOpenWorldCrimeAuthorizationV1,
@@ -54,6 +58,42 @@ function uniqueStrings(value: unknown, label: string, allowed?: ReadonlySet<stri
   if (new Set(values).size !== values.length) fail(`${label}不能重复`)
   if (allowed) values.forEach(item => { if (!allowed.has(item)) fail(`${label}值无效:${item}`) })
   return values
+}
+
+function parseCombatStatusInstanceV2(value: unknown, label: string): TextOpenWorldCombatStatusInstanceV2 {
+  const parsed = row(value, label)
+  exact(parsed, ['statusKey', 'sourceCombatantKey', 'sourceSkillKey', 'stacks', 'appliedAtActorTurnOrdinal', 'expiresAfterTargetTurnOrdinal'], label)
+  return {
+    statusKey: token(parsed.statusKey, `${label}.statusKey`),
+    sourceCombatantKey: token(parsed.sourceCombatantKey, `${label}.sourceCombatantKey`),
+    sourceSkillKey: token(parsed.sourceSkillKey, `${label}.sourceSkillKey`),
+    stacks: integer(parsed.stacks, `${label}.stacks`, 1, 100),
+    appliedAtActorTurnOrdinal: integer(parsed.appliedAtActorTurnOrdinal, `${label}.appliedAtActorTurnOrdinal`),
+    expiresAfterTargetTurnOrdinal: parsed.expiresAfterTargetTurnOrdinal == null
+      ? null
+      : integer(parsed.expiresAfterTargetTurnOrdinal, `${label}.expiresAfterTargetTurnOrdinal`, 1),
+  }
+}
+
+function parseCombatStatusMapV2(value: unknown, label: string): Record<string, TextOpenWorldCombatStatusInstanceV2[]> {
+  const parsed = row(value, label)
+  if (!Object.keys(parsed).length || Object.keys(parsed).length > 64) fail(`${label}战斗员数量无效`)
+  return Object.fromEntries(Object.entries(parsed).map(([combatantKey, instances]) => {
+    token(combatantKey, `${label}.combatantKey`)
+    if (!Array.isArray(instances) || instances.length > 64) fail(`${label}.${combatantKey}无效`)
+    const result = instances.map((instance, index) => parseCombatStatusInstanceV2(instance, `${label}.${combatantKey}[${index}]`))
+    if (new Set(result.map(instance => instance.statusKey)).size !== result.length) fail(`${label}.${combatantKey}状态不能重复`)
+    return [combatantKey, result]
+  }))
+}
+
+function parseCombatOrdinalMapV2(value: unknown, label: string): Record<string, number> {
+  const parsed = row(value, label)
+  if (!Object.keys(parsed).length || Object.keys(parsed).length > 64) fail(`${label}战斗员数量无效`)
+  return Object.fromEntries(Object.entries(parsed).map(([combatantKey, ordinal]) => [
+    token(combatantKey, `${label}.combatantKey`),
+    integer(ordinal, `${label}.${combatantKey}`),
+  ]))
 }
 function uniqueIntegers(value: unknown, label: string): number[] {
   if (!Array.isArray(value)) fail(`${label}必须是数组`)
@@ -275,12 +315,15 @@ function parseAuthorization(value: unknown, label: string): TextOpenWorldEffectP
   }
   if (raw.kind === 'combat-transition') {
     const includesStatusSettlement = raw.removedPlayerStatusKeys !== undefined
+    const includesStructuredRuntime = raw.combatRuntimeVersion === 2
     exact(raw, [
       'kind', 'instanceKey', 'encounterKey', 'intent',
       'beforePhase', 'beforeRound', 'beforeTurnIndex', 'beforeActiveCombatantKey',
       'afterStatus', 'afterPhase', 'afterRound', 'afterTurnIndex', 'afterActiveCombatantKey',
       ...(includesStatusSettlement ? ['removedPlayerStatusKeys'] : []),
+      ...(includesStructuredRuntime ? ['combatRuntimeVersion', 'afterActorTurnOrdinalByCombatantKey', 'afterStatusInstancesByCombatantKey'] : []),
     ], label)
+    if (includesStatusSettlement && includesStructuredRuntime) fail(`${label}不能混合旧临时状态与Combat v4状态快照`)
     const intents = new Set(['begin-round', 'begin-turn', 'complete-turn', 'advance-turn', 'finish-victory', 'finish-defeat', 'finish-escaped'])
     const phases = new Set(['started', 'round-start', 'actor-turn', 'action-resolved', 'round-end', 'terminal'])
     const statuses = new Set(['active', 'victory', 'defeat', 'escaped'])
@@ -304,15 +347,29 @@ function parseAuthorization(value: unknown, label: string): TextOpenWorldEffectP
       afterTurnIndex: raw.afterTurnIndex == null ? null : integer(raw.afterTurnIndex, `${label}.afterTurnIndex`),
       afterActiveCombatantKey: raw.afterActiveCombatantKey == null ? null : token(raw.afterActiveCombatantKey, `${label}.afterActiveCombatantKey`),
       ...(includesStatusSettlement ? { removedPlayerStatusKeys: uniqueStrings(raw.removedPlayerStatusKeys, `${label}.removedPlayerStatusKeys`) } : {}),
+      ...(includesStructuredRuntime ? {
+        combatRuntimeVersion: 2 as const,
+        afterActorTurnOrdinalByCombatantKey: parseCombatOrdinalMapV2(raw.afterActorTurnOrdinalByCombatantKey, `${label}.afterActorTurnOrdinalByCombatantKey`),
+        afterStatusInstancesByCombatantKey: parseCombatStatusMapV2(raw.afterStatusInstancesByCombatantKey, `${label}.afterStatusInstancesByCombatantKey`),
+      } : {}),
     } satisfies TextOpenWorldCombatTransitionAuthorizationV1
   }
   if (raw.kind === 'combat-action') {
-    const includesResolution = raw.resolutionVersion === 1
+    const resolutionVersion = raw.resolutionVersion === 1 || raw.resolutionVersion === 2
+      ? raw.resolutionVersion
+      : null
+    const includesResolution = resolutionVersion != null
+    const structuredResolution = resolutionVersion === 2
     exact(raw, [
       'kind', 'instanceKey', 'encounterKey', 'actionKey', 'actorKey', 'actorCombatantKey', 'actionKind',
       'skillKey', 'itemKey', 'targetCombatantKeys', 'beforePhase', 'beforeRound', 'beforeTurnIndex',
       'beforeActiveCombatantKey', 'effectKeys', 'resourceCost', 'cooldownTurns', 'cooldownUntilRound', 'afterSkillResource',
-      ...(includesResolution ? ['resolutionVersion', 'randomRequests', 'targetResolutions', 'statusEffectKeys'] : []),
+      ...(resolutionVersion === 1 ? ['resolutionVersion', 'randomRequests', 'targetResolutions', 'statusEffectKeys'] : []),
+      ...(structuredResolution ? [
+        'resolutionVersion', 'randomRequests', 'targetResolutions', 'mechanicKind',
+        'recoveryResolutions', 'resourceResolutions', 'statusResolutions', 'expiredStatusKeys',
+        'afterStatusInstancesByCombatantKey',
+      ] : []),
     ], label)
     const actorKey = raw.actorKey === 'player' || raw.actorKey === 'system' ? raw.actorKey : fail(`${label}.actorKey无效`)
     const actionKind = ['basic-attack', 'skill', 'item', 'escape', 'enemy-skill'].includes(String(raw.actionKind))
@@ -332,6 +389,7 @@ function parseAuthorization(value: unknown, label: string): TextOpenWorldEffectP
               'targetCombatantKey', 'attack', 'defense', 'powerNumerator', 'powerDenominator', 'flatDamage',
               'damageBeforeDefense', 'damageAfterDefense', 'criticalChanceBasisPoints', 'criticalDrawValue',
               'critical', 'computedDamage', 'appliedDamage', 'beforeHealth', 'afterHealth', 'defeated',
+              ...(structuredResolution ? ['skillPower'] : []),
             ], `${label}.targetResolutions[${index}]`)
             if (typeof resolution.critical !== 'boolean' || typeof resolution.defeated !== 'boolean') fail(`${label}.targetResolutions[${index}]布尔字段无效`)
             const beforeHealth = integer(resolution.beforeHealth, `${label}.targetResolutions[${index}].beforeHealth`, 1, 1_000_000_000)
@@ -355,11 +413,114 @@ function parseAuthorization(value: unknown, label: string): TextOpenWorldEffectP
               beforeHealth,
               afterHealth,
               defeated: resolution.defeated,
+              ...(structuredResolution ? {
+                skillPower: integer(resolution.skillPower, `${label}.targetResolutions[${index}].skillPower`, -1_000_000_000, 1_000_000_000),
+              } : {}),
             }
           })
         : fail(`${label}.targetResolutions无效`)
       : undefined
+    const mechanicKind = structuredResolution
+      ? raw.mechanicKind == null
+        ? null
+        : ['attack', 'recovery', 'resource', 'status'].includes(String(raw.mechanicKind))
+          ? raw.mechanicKind as TextOpenWorldCombatActionAuthorizationV1['mechanicKind']
+          : fail(`${label}.mechanicKind无效`)
+      : undefined
+    const parseRecoveryResolutions = (): TextOpenWorldCombatRecoveryResolutionV2[] => {
+      if (!Array.isArray(raw.recoveryResolutions) || raw.recoveryResolutions.length > 8) fail(`${label}.recoveryResolutions无效`)
+      return raw.recoveryResolutions.map((value, index) => {
+        const item = row(value, `${label}.recoveryResolutions[${index}]`)
+        exact(item, ['targetCombatantKey', 'scalingAttribute', 'scalingValue', 'baseAmount', 'scalingNumerator', 'scalingDenominator', 'skillPower', 'requestedRecovery', 'appliedRecovery', 'maximumHealth', 'beforeHealth', 'afterHealth'], `${label}.recoveryResolutions[${index}]`)
+        const scalingAttribute = ['power', 'vitality', 'agility'].includes(String(item.scalingAttribute))
+          ? item.scalingAttribute as TextOpenWorldCombatRecoveryResolutionV2['scalingAttribute']
+          : fail(`${label}.recoveryResolutions[${index}].scalingAttribute无效`)
+        const scalingValue = integer(item.scalingValue, `${label}.recoveryResolutions[${index}].scalingValue`)
+        const baseAmount = integer(item.baseAmount, `${label}.recoveryResolutions[${index}].baseAmount`)
+        const scalingNumerator = integer(item.scalingNumerator, `${label}.recoveryResolutions[${index}].scalingNumerator`, 0, 100)
+        const scalingDenominator = integer(item.scalingDenominator, `${label}.recoveryResolutions[${index}].scalingDenominator`, 1, 100)
+        const skillPower = integer(item.skillPower, `${label}.recoveryResolutions[${index}].skillPower`, -1_000_000_000, 1_000_000_000)
+        const requestedRecovery = integer(item.requestedRecovery, `${label}.recoveryResolutions[${index}].requestedRecovery`)
+        const appliedRecovery = integer(item.appliedRecovery, `${label}.recoveryResolutions[${index}].appliedRecovery`)
+        const maximumHealth = integer(item.maximumHealth, `${label}.recoveryResolutions[${index}].maximumHealth`, 1)
+        const beforeHealth = integer(item.beforeHealth, `${label}.recoveryResolutions[${index}].beforeHealth`, 1, maximumHealth)
+        const afterHealth = integer(item.afterHealth, `${label}.recoveryResolutions[${index}].afterHealth`, beforeHealth, maximumHealth)
+        if (requestedRecovery !== Math.max(0, baseAmount + Math.floor(scalingValue * scalingNumerator / scalingDenominator) + skillPower)
+          || afterHealth !== Math.min(maximumHealth, beforeHealth + requestedRecovery)
+          || appliedRecovery !== afterHealth - beforeHealth) fail(`${label}.recoveryResolutions[${index}]数值不自洽`)
+        return {
+          targetCombatantKey: token(item.targetCombatantKey, `${label}.recoveryResolutions[${index}].targetCombatantKey`),
+          scalingAttribute, scalingValue, baseAmount, scalingNumerator, scalingDenominator, skillPower,
+          requestedRecovery, appliedRecovery, maximumHealth, beforeHealth, afterHealth,
+        }
+      })
+    }
+    const parseResourceResolutions = (): TextOpenWorldCombatResourceResolutionV2[] => {
+      if (!Array.isArray(raw.resourceResolutions) || raw.resourceResolutions.length > 1) fail(`${label}.resourceResolutions无效`)
+      return raw.resourceResolutions.map((value, index) => {
+        const item = row(value, `${label}.resourceResolutions[${index}]`)
+        exact(item, ['targetCombatantKey', 'scalingAttribute', 'scalingValue', 'baseAmount', 'scalingNumerator', 'scalingDenominator', 'skillPower', 'requestedRecovery', 'appliedRecovery', 'maximumSkillResource', 'beforeSkillResource', 'afterSkillResource'], `${label}.resourceResolutions[${index}]`)
+        if (item.targetCombatantKey !== 'player') fail(`${label}.resourceResolutions[${index}].targetCombatantKey无效`)
+        const scalingAttribute = ['power', 'vitality', 'agility'].includes(String(item.scalingAttribute))
+          ? item.scalingAttribute as TextOpenWorldCombatResourceResolutionV2['scalingAttribute']
+          : fail(`${label}.resourceResolutions[${index}].scalingAttribute无效`)
+        const scalingValue = integer(item.scalingValue, `${label}.resourceResolutions[${index}].scalingValue`)
+        const baseAmount = integer(item.baseAmount, `${label}.resourceResolutions[${index}].baseAmount`)
+        const scalingNumerator = integer(item.scalingNumerator, `${label}.resourceResolutions[${index}].scalingNumerator`, 0, 100)
+        const scalingDenominator = integer(item.scalingDenominator, `${label}.resourceResolutions[${index}].scalingDenominator`, 1, 100)
+        const skillPower = integer(item.skillPower, `${label}.resourceResolutions[${index}].skillPower`, -1_000_000_000, 1_000_000_000)
+        const requestedRecovery = integer(item.requestedRecovery, `${label}.resourceResolutions[${index}].requestedRecovery`)
+        const appliedRecovery = integer(item.appliedRecovery, `${label}.resourceResolutions[${index}].appliedRecovery`)
+        const maximumSkillResource = integer(item.maximumSkillResource, `${label}.resourceResolutions[${index}].maximumSkillResource`)
+        const beforeSkillResource = integer(item.beforeSkillResource, `${label}.resourceResolutions[${index}].beforeSkillResource`, 0, maximumSkillResource)
+        const afterSkillResource = integer(item.afterSkillResource, `${label}.resourceResolutions[${index}].afterSkillResource`, beforeSkillResource, maximumSkillResource)
+        if (requestedRecovery !== Math.max(0, baseAmount + Math.floor(scalingValue * scalingNumerator / scalingDenominator) + skillPower)
+          || afterSkillResource !== Math.min(maximumSkillResource, beforeSkillResource + requestedRecovery)
+          || appliedRecovery !== afterSkillResource - beforeSkillResource) fail(`${label}.resourceResolutions[${index}]数值不自洽`)
+        return {
+          targetCombatantKey: 'player', scalingAttribute, scalingValue, baseAmount, scalingNumerator,
+          scalingDenominator, skillPower, requestedRecovery, appliedRecovery, maximumSkillResource,
+          beforeSkillResource, afterSkillResource,
+        }
+      })
+    }
+    const parseStatusResolutions = (): TextOpenWorldCombatStatusResolutionV2[] => {
+      if (!Array.isArray(raw.statusResolutions) || raw.statusResolutions.length > 8) fail(`${label}.statusResolutions无效`)
+      return raw.statusResolutions.map((value, index) => {
+        const item = row(value, `${label}.statusResolutions[${index}]`)
+        exact(item, ['targetCombatantKey', 'statusKey', 'outcome', 'beforeStatus', 'afterStatus'], `${label}.statusResolutions[${index}]`)
+        const outcome = ['applied', 'rejected', 'refreshed', 'stacked', 'max-stacks'].includes(String(item.outcome))
+          ? item.outcome as TextOpenWorldCombatStatusResolutionV2['outcome']
+          : fail(`${label}.statusResolutions[${index}].outcome无效`)
+        const statusKey = token(item.statusKey, `${label}.statusResolutions[${index}].statusKey`)
+        const beforeStatus = item.beforeStatus == null ? null : parseCombatStatusInstanceV2(item.beforeStatus, `${label}.statusResolutions[${index}].beforeStatus`)
+        const afterStatus = item.afterStatus == null ? null : parseCombatStatusInstanceV2(item.afterStatus, `${label}.statusResolutions[${index}].afterStatus`)
+        if ((beforeStatus && beforeStatus.statusKey !== statusKey) || (afterStatus && afterStatus.statusKey !== statusKey)) fail(`${label}.statusResolutions[${index}]状态key不一致`)
+        if ((outcome === 'applied' && (beforeStatus != null || afterStatus == null))
+          || ((outcome === 'rejected' || outcome === 'max-stacks') && canonicalProductProductionJsonV2(beforeStatus) !== canonicalProductProductionJsonV2(afterStatus))
+          || ((outcome === 'refreshed' || outcome === 'stacked') && (beforeStatus == null || afterStatus == null))) fail(`${label}.statusResolutions[${index}]结果不自洽`)
+        return {
+          targetCombatantKey: token(item.targetCombatantKey, `${label}.statusResolutions[${index}].targetCombatantKey`),
+          statusKey, outcome, beforeStatus, afterStatus,
+        }
+      })
+    }
+    const recoveryResolutions = structuredResolution ? parseRecoveryResolutions() : undefined
+    const resourceResolutions = structuredResolution ? parseResourceResolutions() : undefined
+    const statusResolutions = structuredResolution ? parseStatusResolutions() : undefined
+    const targetCombatantKeys = uniqueStrings(raw.targetCombatantKeys, `${label}.targetCombatantKeys`)
     if (includesResolution && randomRequests!.length !== targetResolutions!.length) fail(`${label}伤害结果与随机请求数量不一致`)
+    if (structuredResolution) {
+      if (mechanicKind === 'attack' && canonicalProductProductionJsonV2(targetResolutions!.map(item => item.targetCombatantKey)) !== canonicalProductProductionJsonV2(targetCombatantKeys)) fail(`${label}攻击目标与伤害结果不一致`)
+      if (mechanicKind !== 'attack' && targetResolutions!.length) fail(`${label}非攻击机制不能包含伤害结果`)
+      if ((mechanicKind === 'recovery') !== (recoveryResolutions!.length === 1)) fail(`${label}recovery结果数量无效`)
+      if ((mechanicKind === 'resource') !== (resourceResolutions!.length === 1)) fail(`${label}resource结果数量无效`)
+      if (mechanicKind === 'status'
+        ? canonicalProductProductionJsonV2(statusResolutions!.map(item => item.targetCombatantKey)) !== canonicalProductProductionJsonV2(targetCombatantKeys)
+        : statusResolutions!.length > 0) fail(`${label}status结果目标无效`)
+      if ((actionKind === 'basic-attack' && mechanicKind !== 'attack')
+        || ((actionKind === 'item' || actionKind === 'escape') && mechanicKind !== null)) fail(`${label}行动与mechanicKind不一致`)
+    }
     return {
       kind: 'combat-action',
       instanceKey: token(raw.instanceKey, `${label}.instanceKey`, COMMAND_ID),
@@ -370,7 +531,7 @@ function parseAuthorization(value: unknown, label: string): TextOpenWorldEffectP
       actionKind,
       skillKey: raw.skillKey == null ? null : token(raw.skillKey, `${label}.skillKey`),
       itemKey: raw.itemKey == null ? null : token(raw.itemKey, `${label}.itemKey`),
-      targetCombatantKeys: uniqueStrings(raw.targetCombatantKeys, `${label}.targetCombatantKeys`),
+      targetCombatantKeys,
       beforePhase: 'actor-turn',
       beforeRound: integer(raw.beforeRound, `${label}.beforeRound`, 1),
       beforeTurnIndex: integer(raw.beforeTurnIndex, `${label}.beforeTurnIndex`),
@@ -380,11 +541,21 @@ function parseAuthorization(value: unknown, label: string): TextOpenWorldEffectP
       cooldownTurns: integer(raw.cooldownTurns, `${label}.cooldownTurns`),
       cooldownUntilRound: integer(raw.cooldownUntilRound, `${label}.cooldownUntilRound`, 1),
       afterSkillResource: integer(raw.afterSkillResource, `${label}.afterSkillResource`),
-      ...(includesResolution ? {
+      ...(resolutionVersion === 1 ? {
         resolutionVersion: 1 as const,
         randomRequests: randomRequests!,
         targetResolutions: targetResolutions!,
         statusEffectKeys: uniqueStrings(raw.statusEffectKeys, `${label}.statusEffectKeys`),
+      } : structuredResolution ? {
+        resolutionVersion: 2 as const,
+        randomRequests: randomRequests!,
+        targetResolutions: targetResolutions!,
+        mechanicKind: mechanicKind!,
+        recoveryResolutions: recoveryResolutions!,
+        resourceResolutions: resourceResolutions!,
+        statusResolutions: statusResolutions!,
+        expiredStatusKeys: uniqueStrings(raw.expiredStatusKeys, `${label}.expiredStatusKeys`),
+        afterStatusInstancesByCombatantKey: parseCombatStatusMapV2(raw.afterStatusInstancesByCombatantKey, `${label}.afterStatusInstancesByCombatantKey`),
       } : {}),
     } satisfies TextOpenWorldCombatActionAuthorizationV1
   }

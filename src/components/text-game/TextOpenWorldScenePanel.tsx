@@ -17,7 +17,6 @@ interface TextOpenWorldScenePanelProps {
   availableActions: TextOpenWorldActionAvailabilityV1[]
   feedback: TextOpenWorldFeedbackReceiptV1 | null
   busy: boolean
-  combatActive: boolean
   fallback: {
     regionTitle: string
     locationTitle: string
@@ -39,6 +38,7 @@ type InteractionNotice = {
 const ATTITUDE_LABELS = { bad: '态度较差', neutral: '态度一般', good: '态度友好' } as const
 const SPECIALIZED_ACTION_CATEGORIES = new Set([
   'respawn', 'equip', 'unequip', 'travel', 'fast-travel', 'buy', 'sell', 'craft',
+  'continue-combat', 'combat-basic-attack', 'combat-skill', 'combat-item', 'escape',
 ])
 
 function normalizeUtterance(value: string): string {
@@ -51,12 +51,6 @@ function targetForAction(action: TextOpenWorldActionAvailabilityV1): {
 } {
   if (action.targetScope === 'none') return { targetKey: null, error: null }
   if (action.validTargetKeys.length === 1) return { targetKey: action.validTargetKeys[0]!, error: null }
-  if (action.targetScope === 'combatant' && action.validTargetKeys.length > 1) {
-    // G4-09 owns the full enemy target picker. Until then the combat shortcut
-    // deterministically chooses the first living target from the authoritative
-    // projection so a legal multi-enemy encounter cannot deadlock.
-    return { targetKey: action.validTargetKeys[0]!, error: null }
-  }
   if (action.validTargetKeys.length > 1) {
     return {
       targetKey: null,
@@ -115,7 +109,6 @@ export default function TextOpenWorldScenePanel({
   availableActions,
   feedback,
   busy,
-  combatActive,
   fallback,
   onExecute,
 }: TextOpenWorldScenePanelProps) {
@@ -138,9 +131,6 @@ export default function TextOpenWorldScenePanel({
     ?? scenes.find(item => item.key === projection.recommendedSceneKey)
     ?? scenes[0]
     ?? null
-  const combatActionCategories = new Set([
-    'continue-combat', 'combat-basic-attack', 'combat-skill', 'combat-item', 'escape',
-  ])
   const isSceneSurfaceAction = (action: TextOpenWorldActionAvailabilityV1) => (
     action.targetScope !== 'quest' && !SPECIALIZED_ACTION_CATEGORIES.has(action.action.category)
   )
@@ -155,16 +145,13 @@ export default function TextOpenWorldScenePanel({
     : []
   const sceneAndAmbientActions = [...selectedSceneActions, ...ambientActions]
     .filter((action, index, all) => all.findIndex(candidate => candidate.action.key === action.action.key) === index)
-  const sceneActions = combatActive
-    ? availableActions.filter(action => combatActionCategories.has(action.action.category))
-    : projection.status === 'ready'
-      ? sceneAndAmbientActions
-      : compatibilityActions
+  const sceneActions = projection.status === 'ready'
+    ? sceneAndAmbientActions
+    : compatibilityActions
   const naturalCandidates = scene?.naturalLanguageExamples.flatMap(entry => (
     entry.exampleUtterances.map(example => ({ actionKey: entry.actionKey, example }))
   )) ?? []
   const naturalInputEnabled = projection.status === 'ready'
-    && !combatActive
     && naturalCandidates.length > 0
 
   const execute = (
@@ -239,7 +226,7 @@ export default function TextOpenWorldScenePanel({
 
     <SystemReceipt feedback={feedback} />
 
-    {scene?.fixedChoices.length && !combatActive ? <section className="open-world-scene-input-card" data-testid="text-open-world-fixed-choices">
+    {scene?.fixedChoices.length ? <section className="open-world-scene-input-card" data-testid="text-open-world-fixed-choices">
       <header><MousePointerClick aria-hidden="true" /><strong>固定选项</strong><small>选择后进入同一 Action 规则</small></header>
       <div className="open-world-scene-choice-list">
         {scene.fixedChoices.map(choice => <button
@@ -278,16 +265,14 @@ export default function TextOpenWorldScenePanel({
             value={naturalInput}
             onChange={event => setNaturalInput(event.target.value)}
             disabled={!naturalInputEnabled || busy}
-            placeholder={combatActive
-              ? '战斗中只允许正式按钮操作'
-              : naturalInputEnabled ? '输入本场景中的行动表达' : '当前场景没有自然语言绑定'}
+            placeholder={naturalInputEnabled ? '输入本场景中的行动表达' : '当前场景没有自然语言绑定'}
           />
           <button type="submit" disabled={!naturalInput.trim() || !naturalInputEnabled || busy}>
             <Send aria-hidden="true" />提交
           </button>
         </div>
       </form>
-      {naturalCandidates.length > 0 && !combatActive && <p className="open-world-scene-examples">
+      {naturalCandidates.length > 0 && <p className="open-world-scene-examples">
         可识别示例：{naturalCandidates.slice(0, 3).map(candidate => candidate.example).join(' / ')}
       </p>}
       <p className="open-world-scene-boundary-copy">

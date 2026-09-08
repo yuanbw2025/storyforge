@@ -59,6 +59,10 @@ import {
   verifyTextOpenWorldMediaRightsV1,
   type TextOpenWorldVerifiedMediaRightsV1,
 } from './media-quality'
+import {
+  compileTextOpenWorldSkillMechanicV2,
+  compileTextOpenWorldStatusDefinitionV2,
+} from './combat-mechanics-production'
 
 const MODULE_DEPENDENCIES: Partial<Record<TextOpenWorldRuntimeModuleKeyV1, TextOpenWorldRuntimeModuleKeyV1[]>> = {
   world: ['narrative'],
@@ -410,9 +414,13 @@ function compileModulePayloads(
   const qdd = artifacts.quests
   const binding = qdd.catalogBindings
   const actionModuleVersion = artifacts.system.runtimeModules.find(module => module.moduleKey === 'actions')?.schemaVersion
-  if (actionModuleVersion !== 15 && actionModuleVersion !== 16) fail('SystemConfigs任务Action版本无效')
-  const expectedActionModuleVersion = qdd.governance.allAbandonableQuestStagesCovered === true
-    && qdd.governance.restartActionsRequireOriginalOfferRoute === true ? 16 : 15
+  if (actionModuleVersion !== 15 && actionModuleVersion !== 16 && actionModuleVersion !== 17) {
+    fail('SystemConfigs任务Action版本无效')
+  }
+  const expectedActionModuleVersion = qdd.governance.structuredCombatMechanicsReady === true
+    ? 17
+    : qdd.governance.allAbandonableQuestStagesCovered === true
+      && qdd.governance.restartActionsRequireOriginalOfferRoute === true ? 16 : 15
   if (actionModuleVersion !== expectedActionModuleVersion) fail('SystemConfigs与QuestDesign任务生命周期版本不一致')
   const endingBindings = qdd.endingBindings
   const endingScene = [...artifacts.scenes.scenes]
@@ -674,8 +682,42 @@ function compileModulePayloads(
         governance: artifacts.actionBindings.governance,
       },
     },
-    progression: {
-      version: 1, rules: artifacts.progression.rules, levels: artifacts.progression.levels,
+    progression: (actionModuleVersion === 17 ? {
+      version: 2,
+      rules: artifacts.progression.rules,
+      levels: artifacts.progression.levels,
+      skills: artifacts.progression.skills.map(skill => {
+        const runtime = skillBindingByKey.get(skill.key) ?? fail(`技能未完成P8F绑定:${skill.key}`)
+        if (runtime.effectKeys.length) fail(`Action v17技能不能保留旧Effect结果:${skill.key}`)
+        const compiled = compileTextOpenWorldSkillMechanicV2({
+          skill,
+          statuses: artifacts.progression.statuses,
+        })
+        return {
+          key: skill.key,
+          title: skill.title,
+          description: skill.description,
+          tags: skill.tags,
+          mechanic: compiled.mechanic,
+          target: compiled.target,
+          scalingAttribute: compiled.scalingAttribute,
+          unlockSources: skill.unlockPlan.kind === 'initial'
+            ? [{ kind: 'initial' as const, level: null, questKey: null }]
+            : skill.unlockPlan.kind === 'level'
+              ? [{ kind: 'level' as const, level: skill.unlockPlan.level, questKey: null }]
+              : [{ kind: 'quest' as const, level: null, questKey: runtime.unlockQuestKey ?? fail(`任务技能未绑定任务:${skill.key}`) }],
+          useConditionKeys: runtime.useConditionKeys,
+          priority: skill.priority,
+          resourceCost: skill.resourceCost,
+          cooldownTurns: skill.cooldownTurns,
+          effectKeys: [],
+        }
+      }),
+      statuses: artifacts.progression.statuses.map(compileTextOpenWorldStatusDefinitionV2),
+    } : {
+      version: 1,
+      rules: artifacts.progression.rules,
+      levels: artifacts.progression.levels,
       skills: artifacts.progression.skills.map(skill => {
         const runtime = skillBindingByKey.get(skill.key) ?? fail(`技能未完成P8F绑定:${skill.key}`)
         return {
@@ -694,9 +736,9 @@ function compileModulePayloads(
       statuses: artifacts.progression.statuses.map(status => ({
         key: status.key, title: status.title, description: status.description, polarity: status.polarity,
       })),
-    },
-    combat: {
-      version: 3,
+    }) as unknown as TextOpenWorldParsedModulesV1['progression'],
+    combat: ({
+      version: actionModuleVersion === 17 ? 4 : 3,
       rules: {
         difficulty: 'standard', defaultAttackHits: artifacts.encounters.rules.defaultAttackHits,
         playerPartyLimit: artifacts.encounters.rules.playerPartyLimit,
@@ -707,7 +749,9 @@ function compileModulePayloads(
       difficultyProfiles: artifacts.encounters.rules.difficultyProfiles,
       resolution: artifacts.encounters.rules.resolution,
       skillResolutions: artifacts.encounters.playerSkillResolutions,
-      transientPlayerStatusKeys: artifacts.progression.statuses.map(status => status.key),
+      ...(actionModuleVersion === 17
+        ? {}
+        : { transientPlayerStatusKeys: artifacts.progression.statuses.map(status => status.key) }),
       strategyProfiles: artifacts.encounters.strategyProfiles,
       enemies: artifacts.encounters.enemies.map(enemy => ({
         key: enemy.key, familyKey: enemy.familyKey, title: enemy.title, description: enemy.description,
@@ -730,7 +774,7 @@ function compileModulePayloads(
           sourceRefs: encounter.sourceRefs, presentationRefs: mediaSlotBySubject.get(encounter.key) ?? [],
         }
       }),
-    },
+    }) as unknown as TextOpenWorldParsedModulesV1['combat'],
     items: {
       version: 1, equipmentSlots: artifacts.items.equipmentSlots,
       items: artifacts.items.items.map(item => {

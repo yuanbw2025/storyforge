@@ -902,9 +902,17 @@ function applyDefinitions(
       }
       case 'perform-combat-action': {
         if (authorization?.kind !== 'combat-action') fail(`${effect.key}缺少CombatAction授权`)
-        const before = { combat: structuredClone(state.combat), skillResource: state.player.skillResource }
+        const before = {
+          combat: structuredClone(state.combat),
+          ...(modules.actions.version >= 17 ? { health: state.player.health } : {}),
+          skillResource: state.player.skillResource,
+        }
         state.combat = combatActions.applyAuthorization({ beforeState: stateValue, state, authorization })
-        record(changes, effect, `战斗行动:${authorization.actionKind}`, before, { combat: state.combat, skillResource: state.player.skillResource }); break
+        record(changes, effect, `战斗行动:${authorization.actionKind}`, before, {
+          combat: state.combat,
+          ...(modules.actions.version >= 17 ? { health: state.player.health } : {}),
+          skillResource: state.player.skillResource,
+        }); break
       }
       case 'perform-crafting': {
         if (authorization?.kind !== 'crafting') fail(`${effect.key}缺少Crafting授权`)

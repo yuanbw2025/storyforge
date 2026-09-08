@@ -3699,6 +3699,7 @@ describe('R-OPEN-WORLD3 · P8 ProgressionCatalogs', () => {
     expect(input.progressionContextEvidence).toEqual([
       expect.objectContaining({ key: 'text-open-world.progression-catalogs-input', status: 'included', delivery: 'full' }),
     ])
+    expect(input.progressionContext.combatMechanicsContract).toBe('governed-v17')
     expect(input.progressionContext.skillDemands).toHaveLength(9)
 
     const result = await executeProgressionCatalogs(input)
@@ -3735,9 +3736,26 @@ describe('R-OPEN-WORLD3 · P8 ProgressionCatalogs', () => {
     expect(artifact.governance).toMatchObject({
       professionSystem: 'none', attributeGrowthOwner: 'deterministic-compiler',
       experienceCurveOwner: 'deterministic-compiler', allRuntimeBindingsUnbound: true,
-      progressionModuleReady: false,
+      structuredCombatSemanticsReady: true, progressionModuleReady: false,
     })
     await expect(validateTextOpenWorldProgressionCatalogsV1({ artifact, context: input.progressionContext }))
+      .resolves.toEqual(artifact)
+  }, 120_000)
+
+  it('旧P8 durable Context缺少结构化战斗门时仍按原合同重验', async () => {
+    const input = await progressionCatalogsFixture()
+    const legacyContext = structuredClone(input.progressionContext)
+    delete legacyContext.combatMechanicsContract
+    const { contextSelectionHash: _contextSelectionHash, ...legacyBody } = legacyContext
+    legacyContext.contextSelectionHash = await hashProductProductionValueV2(legacyBody)
+    const result = await executeProgressionCatalogs({
+      ...input,
+      progressionContext: legacyContext,
+      progressionContextText: JSON.stringify(legacyContext),
+    })
+    const artifact = result.artifacts[0]!.payload as TextOpenWorldProgressionCatalogsV1
+    expect(artifact.governance.structuredCombatSemanticsReady).toBeUndefined()
+    await expect(validateTextOpenWorldProgressionCatalogsV1({ artifact, context: legacyContext }))
       .resolves.toEqual(artifact)
   }, 120_000)
 
@@ -4194,6 +4212,7 @@ describe('R-OPEN-WORLD3 · P8F QuestFinalize / EncounterFinalize', () => {
       inputBudgetTokens: 1_000,
     })).rejects.toThrow(/原子来源 text-open-world\.quest-finalize-input 超出预算/)
     expect(input.questFinalizeContext.objectiveBindingDemands).toHaveLength(input.questFinalizeContext.questSkeletons.objectives.length)
+    expect(input.questFinalizeContext.combatMechanicsContract).toBe('governed-v17')
 
     const result = await executeQuestFinalize(input)
     const questArtifact = result.artifacts.find(artifact => artifact.artifactKey === 'text-open-world.quest-design-documents')!.payload as TextOpenWorldQuestDesignDocumentsV1
@@ -4214,7 +4233,9 @@ describe('R-OPEN-WORLD3 · P8F QuestFinalize / EncounterFinalize', () => {
     expect(questArtifact.governance).toMatchObject({
       allAbandonableQuestStagesCovered: true,
       restartActionsRequireOriginalOfferRoute: true,
+      structuredCombatMechanicsReady: true,
     })
+    expect(questArtifact.catalogBindings.skills.every(binding => binding.effectKeys.length === 0)).toBe(true)
     const questTransitionPayloads = (actionKey: string) => questArtifact.actions
       .find(action => action.key === actionKey)?.successEffectKeys.flatMap(effectKey => {
         const effect = questArtifact.effects.find(candidate => candidate.key === effectKey)
@@ -4287,10 +4308,11 @@ describe('R-OPEN-WORLD3 · P8F QuestFinalize / EncounterFinalize', () => {
     })).resolves.toEqual({ questDesignDocuments: questArtifact, directorDecks: directorArtifact })
   }, 300_000)
 
-  it('旧P8F durable Context缺少生命周期门时继续生成并验证legacy Artifact', async () => {
+  it('旧P8F durable Context缺少生命周期与结构化战斗门时继续生成并验证legacy Artifact', async () => {
     const input = await questFinalizeFixture()
     const legacyContext = structuredClone(input.questFinalizeContext)
     delete legacyContext.questLifecycleContract
+    delete legacyContext.combatMechanicsContract
     const { contextSelectionHash: _contextSelectionHash, ...legacyBody } = legacyContext
     legacyContext.contextSelectionHash = await hashProductProductionValueV2(legacyBody)
     const legacyInput = {
@@ -4303,6 +4325,7 @@ describe('R-OPEN-WORLD3 · P8F QuestFinalize / EncounterFinalize', () => {
     const directorArtifact = result.artifacts.find(artifact => artifact.artifactKey === 'text-open-world.director-decks')!.payload as TextOpenWorldDirectorDecksV1
     expect(questArtifact.governance.allAbandonableQuestStagesCovered).toBeUndefined()
     expect(questArtifact.governance.restartActionsRequireOriginalOfferRoute).toBeUndefined()
+    expect(questArtifact.governance.structuredCombatMechanicsReady).toBeUndefined()
     expect(questArtifact.actions.some(action => action.category === 'restart-quest')).toBe(false)
     expect(questArtifact.quests.filter(quest => quest.abandonActionKey !== null).every(quest => (
       questArtifact.actions.filter(action => action.category === 'abandon-quest'
@@ -4862,10 +4885,21 @@ describe('R-OPEN-WORLD3 · V3运行包装配与QA', () => {
     })
     const modules = parseTextOpenWorldModulesV1(runtimePackage.textOpenWorldVNext!)
     expect(modules.narrative.version).toBe(2)
-    expect(modules.actions.version).toBe(16)
-    if (modules.narrative.version !== 2 || modules.actions.version !== 16) {
-      throw new Error('新V3生产必须发布Narrative v2与Action v16')
+    expect(modules.actions.version).toBe(17)
+    expect(modules.progression.version).toBe(2)
+    expect(modules.combat.version).toBe(4)
+    if (modules.narrative.version !== 2 || modules.actions.version !== 17
+      || modules.progression.version !== 2 || modules.combat.version !== 4) {
+      throw new Error('新V3生产必须发布Narrative v2及Action v17/Progression v2/Combat v4严格三联')
     }
+    expect(modules.progression.skills.some(skill => skill.mechanic.kind === 'recovery')).toBe(true)
+    expect(modules.progression.skills.filter(skill => skill.activation === 'passive')
+      .every(skill => skill.mechanic.kind === 'passive-static')).toBe(true)
+    expect(modules.progression.statuses.every(status => (
+      status.duration.clock === 'target-turns'
+      && status.duration.turns === 2
+      && status.modifiers.length > 0
+    ))).toBe(true)
     const acceptedScenes = JSON.parse(accepted.find(row => row.artifactKey === 'text-open-world.scene-scripts')!
       .payloadJson) as TextOpenWorldSceneScriptsV1
     const acceptedChoices = JSON.parse(accepted.find(row => row.artifactKey === 'text-open-world.choice-contracts')!

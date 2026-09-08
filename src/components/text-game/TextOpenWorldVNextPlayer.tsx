@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Bell, GitBranch, Save, Swords } from 'lucide-react'
-import { deriveTextOpenWorldLifeProjectionV1 } from '../../lib/open-world/life-cycle'
+import { Bell, GitBranch, Save } from 'lucide-react'
 import { parseTextOpenWorldModulesV1 } from '../../lib/open-world/modules'
+import { projectTextOpenWorldPlayerCombatV1 } from '../../lib/open-world/player-combat'
 import { projectTextOpenWorldPlayerHudV1 } from '../../lib/open-world/player-hud'
 import {
   projectTextOpenWorldPlayerNotificationsV1,
@@ -16,6 +16,7 @@ import {
 } from '../../stores/text-open-world-player'
 import TextOpenWorldActorsPanel from './TextOpenWorldActorsPanel'
 import TextOpenWorldCharacterPanel from './TextOpenWorldCharacterPanel'
+import TextOpenWorldCombatPanel, { type TextOpenWorldCombatActionRequestV1 } from './TextOpenWorldCombatPanel'
 import TextOpenWorldGameShell from './TextOpenWorldGameShell'
 import TextOpenWorldInventoryPanel from './TextOpenWorldInventoryPanel'
 import TextOpenWorldMapPanel, { type TextOpenWorldMapTravelRequestV1 } from './TextOpenWorldMapPanel'
@@ -43,6 +44,7 @@ const NOTIFICATION_CATEGORY_LABELS: Record<TextOpenWorldPlayerNotificationCatego
 export default function TextOpenWorldVNextPlayer() {
   const store = useTextOpenWorldPlayerStore()
   const [checkpointName, setCheckpointName] = useState('')
+  const [dismissedCombatIdentity, setDismissedCombatIdentity] = useState<string | null>(null)
   const [pendingConfirmation, setPendingConfirmation] = useState<{
     actionKey: string
     targetKey: string | null
@@ -114,6 +116,33 @@ export default function TextOpenWorldVNextPlayer() {
   }, [projection, projectionSequence, selectedSessionId, store.events])
   const notificationsReady = notificationProjection.ready
   const notifications = notificationProjection.entries
+  const combatProjectionResult = useMemo((): {
+    ready: boolean
+    value: ReturnType<typeof projectTextOpenWorldPlayerCombatV1>
+  } => {
+    if (!projection?.state.combat || projectionSequence == null) return { ready: true, value: null }
+    if (selectedSessionId == null) return { ready: false, value: null }
+    try {
+      return {
+        ready: true,
+        value: projectTextOpenWorldPlayerCombatV1({
+          sessionId: selectedSessionId,
+          projection,
+          events: store.events,
+          projectedActions,
+          checkpoints: store.checkpoints,
+        }),
+      }
+    } catch {
+      // Projection and Event rows are loaded independently. Until the exact
+      // same-Session prefix aligns, combat remains read-only and fail-closed.
+      return { ready: false, value: null }
+    }
+  }, [projection, projectionSequence, projectedActions, selectedSessionId, store.checkpoints, store.events])
+  const combatProjection = combatProjectionResult.value
+  const combatIdentity = combatProjection
+    ? `${combatProjection.operationIdentity.sessionId}:${combatProjection.operationIdentity.combatInstanceKey ?? 'legacy'}`
+    : null
   const dismissConfirmation = useCallback(() => setPendingConfirmation(null), [])
   const focusQuestLocation = useCallback((locationKey: string) => {
     questMapRequestCounter.current += 1
@@ -126,7 +155,12 @@ export default function TextOpenWorldVNextPlayer() {
 
   useEffect(() => {
     setQuestMapFocus(null)
+    setDismissedCombatIdentity(null)
   }, [sessionKey])
+
+  useEffect(() => {
+    if (combatProjection?.result.status === 'none') setDismissedCombatIdentity(null)
+  }, [combatIdentity, combatProjection?.result.status])
 
   useEffect(() => {
     if (selectedSessionId == null || projectionSequence == null) {
@@ -178,12 +212,6 @@ export default function TextOpenWorldVNextPlayer() {
     ? `TEXT-OPEN-WORLD vNEXT · BUILD PREVIEW · 非正式发布 · Build ID #${session?.productBuildId ?? '?'} · 包 ${runtimeSourceEvidence}`
     : `TEXT-OPEN-WORLD vNEXT · PRODUCT RELEASE v${release?.version ?? '?'} · 已固定 · 包 ${runtimeSourceEvidence}`
   const state = projection.state
-  const life = deriveTextOpenWorldLifeProjectionV1({
-    runtimePackage,
-    state,
-    checkpoints: store.checkpoints,
-  })
-  const respawnAction = availableActions.find(action => action.action.category === 'respawn')
   const location = modules.world.locations.find(item => item.key === state.map.currentLocationKey)
   const region = modules.world.regions.find(item => item.key === location?.regionKey)
   const derived = deriveTextOpenWorldContextsV1(projection)
@@ -199,7 +227,10 @@ export default function TextOpenWorldVNextPlayer() {
     action: typeof projectedActions[number],
     explicitTargetKey?: string | null,
     source: TextOpenWorldCommandSourceV1 = 'system-action',
+    expectedBaseSequence?: number,
   ) => {
+    if (!action.available) return
+    if (action.targetScope === 'combatant' && explicitTargetKey === undefined) return
     const targetKey = explicitTargetKey !== undefined
       ? explicitTargetKey
       : action.targetScope === 'none' ? null : action.validTargetKeys[0] ?? null
@@ -212,14 +243,17 @@ export default function TextOpenWorldVNextPlayer() {
         label: action.action.label,
         description: action.action.description,
         sessionId,
-        baseSequence: store.runtimeState.lastSequence,
+        baseSequence: expectedBaseSequence ?? store.runtimeState.lastSequence,
         source,
       })
       return
     }
-    void run(() => source === 'system-action'
+    void run(() => source === 'system-action' && expectedBaseSequence == null
       ? store.executeVNextAction(action.action.key, targetKey)
-      : store.executeVNextAction(action.action.key, targetKey, { source }))
+      : store.executeVNextAction(action.action.key, targetKey, {
+          source,
+          ...(expectedBaseSequence == null ? {} : { expectedBaseSequence }),
+        }))
   }
 
   const trackedQuestContent = <section className="open-world-game-rail-card" aria-label="当前任务">
@@ -245,15 +279,46 @@ export default function TextOpenWorldVNextPlayer() {
     </div>}
   </section>
 
+  const handleCombatAction = (request: TextOpenWorldCombatActionRequestV1) => {
+    const liveStore = useTextOpenWorldPlayerStore.getState()
+    const liveSessionId = liveStore.selectedSession?.id ?? liveStore.selectedSessionId
+    const liveProjection = liveStore.runtimeState.textOpenWorld
+    const liveCombat = liveProjection?.state.combat
+    if (request.sessionId !== liveSessionId
+      || liveProjection == null
+      || !liveCombat
+      || !('version' in liveCombat)
+      || request.combatInstanceKey !== liveCombat.instanceKey
+      || request.expectedBaseSequence !== liveStore.runtimeState.lastSequence
+      || request.expectedBaseSequence !== liveProjection.lastEventSequence) return
+    const liveActions = selectTextOpenWorldVNextActions(liveStore)
+    const action = liveActions.find(item => item.action.key === request.actionKey)
+    if (!action?.available) return
+    if (action.targetScope === 'combatant' && (!request.targetKey || !action.validTargetKeys.includes(request.targetKey))) return
+    if (action.targetScope === 'none' && request.targetKey != null) return
+    if (action.targetScope === 'item' && (!request.targetKey || !action.validTargetKeys.includes(request.targetKey))) return
+    executeProjectedAction(action, request.targetKey, 'system-action', request.expectedBaseSequence)
+  }
+
+  const combatSurfaceVisible = state.combat != null
+    && (!combatIdentity || dismissedCombatIdentity !== combatIdentity)
   const sceneView = <div className="space-y-3">
-    <TextOpenWorldScenePanel
+    {combatSurfaceVisible ? <TextOpenWorldCombatPanel
+      projection={combatProjection}
+      synchronizing={!combatProjectionResult.ready}
+      busy={store.busy}
+      onExecute={handleCombatAction}
+      onRetry={() => void run(() => store.retryDefeatedCombat())}
+      onDismissResult={() => {
+        if (combatIdentity) setDismissedCombatIdentity(combatIdentity)
+      }}
+    /> : <TextOpenWorldScenePanel
       sessionKey={sessionKey}
       eventSequence={projection.lastEventSequence}
       projection={sceneProjection}
       availableActions={availableActions}
       feedback={store.lastFeedback}
       busy={store.busy}
-      combatActive={state.combat?.status === 'active'}
       fallback={{
         regionTitle: region?.title ?? '未知区域',
         locationTitle: location?.title ?? state.map.currentLocationKey,
@@ -264,37 +329,7 @@ export default function TextOpenWorldVNextPlayer() {
         const action = availableActions.find(item => item.action.key === actionKey)
         if (action) executeProjectedAction(action, targetKey, source)
       }}
-    />
-    {life.phase === 'defeated' && <section
-      className="rounded border border-danger/40 bg-danger/5 p-4"
-      data-testid="text-open-world-defeat-recovery"
-    >
-      <strong className="flex items-center gap-2"><Swords className="h-4 w-4" />本次战斗失败</strong>
-      <p className="mt-1 text-xs text-text-muted">
-        战前重试会保留这条失败时间线，并从战斗开始前建立新分支；复活会保留已经发生的消耗与事件，在已解锁安全点恢复。两者都不会使主线失败。
-      </p>
-      <div className="mt-3 flex flex-wrap gap-2">
-        <button
-          type="button"
-          disabled={store.busy || life.combatRetryCheckpointIds.length === 0}
-          onClick={() => void run(() => store.retryDefeatedCombat())}
-          className="rounded border border-border bg-bg-surface px-3 py-2 text-xs disabled:opacity-40"
-        >
-          战前重试（新分支）
-        </button>
-        <button
-          type="button"
-          disabled={store.busy || !respawnAction}
-          onClick={() => respawnAction && void run(() => store.executeVNextAction(respawnAction.action.key))}
-          className="rounded border border-border bg-bg-surface px-3 py-2 text-xs disabled:opacity-40"
-        >
-          复活点恢复（保留进度）
-        </button>
-      </div>
-      {!life.combatRetryCheckpointIds.length && <small className="mt-2 block text-warning">
-        没有通过校验的战前自动检查点，仍可读档或复活。
-      </small>}
-    </section>}
+    />}
     {store.runtimeState.narrative?.availableChoiceKeys?.includes('ending.world') && <section
       className="rounded border border-accent/30 bg-accent/5 p-5"
     >
@@ -500,7 +535,7 @@ export default function TextOpenWorldVNextPlayer() {
         <span><strong>技能资源</strong>{hud.player.skillResource}/{hud.player.maximumSkillResource}</span>
         <span><strong>地点</strong>{hud.location.title}</span>
         {state.combat && <span data-testid="text-open-world-combat-status">
-          <strong>战斗</strong>：{state.combat.status}
+          <strong>战斗</strong>{combatProjection?.phase.statusLabel ?? '记录核对中'}
         </span>}
         <span data-testid="text-open-world-clock-weather">
           <strong>世界时间</strong>第 {hud.clockWeather.day} 天 · {hud.clockWeather.timePeriodLabel}

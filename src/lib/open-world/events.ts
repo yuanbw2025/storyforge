@@ -23,6 +23,7 @@ import { createTextOpenWorldEffectCatalogV1 } from './effect-dsl'
 import {
   createTextOpenWorldOutcomeFingerprintV1,
   parseTextOpenWorldEffectsAppliedEventPayloadV1,
+  parseTextOpenWorldRandomResolvedEventPayloadV1,
   parseTextOpenWorldRandomRequestV1,
   replayTextOpenWorldEventProtocolV1,
   resolveTextOpenWorldRandomEvidenceV1,
@@ -110,7 +111,38 @@ export async function commitTextOpenWorldOutcomeBatchV1(input: {
     if (existing) return priorReceipt({ commandId: input.commandId, commandSequence: commandEvent.sequence, outcomeFingerprint, events, replayed: true })
     if (session.status !== 'active') fail('只有active Session可以提交结果批次')
     if (session.rulesetVersion !== input.ruleset.version) fail('结果批次rulesetVersion与Session不一致')
-    if (projection.pendingCommandId !== input.commandId || projection.lastSequence !== commandEvent.sequence) fail('对应命令不是当前待处理命令')
+    if (projection.pendingCommandId !== input.commandId) fail('对应命令不是当前待处理命令')
+    const pendingSuffix = events.filter(event => event.sequence > commandEvent.sequence)
+    if (pendingSuffix.some(event => event.type !== 'text-open-world.random.resolved')
+      || pendingSuffix.length > randomRequests.length) fail('待处理命令包含无法恢复的事件后缀')
+    const existingRandomEventSequences: number[] = []
+    for (let index = 0; index < pendingSuffix.length; index += 1) {
+      const event = pendingSuffix[index]
+      if (event.sequence !== commandEvent.sequence + index + 1) fail('待处理命令随机事件序号不连续')
+      if (event.sessionId !== input.sessionId
+        || event.actorKey !== command.envelope.actorKey
+        || event.targetKey != null
+        || event.commandId != null
+        || event.baseSequence != null
+        || event.baseStateHash != null) {
+        fail(`待处理命令随机前缀索引字段不一致:${index}`)
+      }
+      const random = parseTextOpenWorldRandomResolvedEventPayloadV1(payload(event))
+      const expected = await resolveTextOpenWorldRandomEvidenceV1({
+        seed: session.seed,
+        commandId: input.commandId,
+        commandSequence: commandEvent.sequence,
+        drawIndex: index,
+        request: randomRequests[index],
+      })
+      if (random.commandId !== input.commandId
+        || random.commandSequence !== commandEvent.sequence
+        || canonicalProductProductionJsonV2(random.ruleset) !== canonicalProductProductionJsonV2(input.ruleset)
+        || canonicalProductProductionJsonV2(random.evidence) !== canonicalProductProductionJsonV2(expected)) {
+        fail(`待处理命令随机前缀与确定性请求不一致:${index}`)
+      }
+      existingRandomEventSequences.push(event.sequence)
+    }
 
     const now = Date.now(); let currentState = replayProductRuntimeEvents(JSON.parse(session.initialStateJson), events); let sequence = projection.lastSequence
     assertTextOpenWorldVNextProjectionBindingV1(currentState.textOpenWorld, binding)
@@ -119,7 +151,7 @@ export async function commitTextOpenWorldOutcomeBatchV1(input: {
       if (canonicalProductProductionJsonV2(verified.receipt) !== canonicalProductProductionJsonV2(input.receipt)) fail('Effect回执与当前Session投影不一致')
     }
     const appended: ProductRuntimeEvent[] = []
-    for (let index = 0; index < randomRequests.length; index += 1) {
+    for (let index = pendingSuffix.length; index < randomRequests.length; index += 1) {
       sequence += 1
       const evidence = await resolveTextOpenWorldRandomEvidenceV1({ seed: session.seed, commandId: input.commandId, commandSequence: commandEvent.sequence, drawIndex: index, request: randomRequests[index] })
       const event: ProductRuntimeEvent = {
@@ -137,7 +169,7 @@ export async function commitTextOpenWorldOutcomeBatchV1(input: {
     const effectPayload = parseTextOpenWorldEffectsAppliedEventPayloadV1({
       schema: 'storyforge.text-open-world.effects-applied-event', version: 1,
       commandId: input.commandId, commandSequence: commandEvent.sequence, ruleset: input.ruleset,
-      randomEventSequences: appended.map(event => event.sequence), plan: input.plan, receipt: input.receipt, outcomeFingerprint,
+      randomEventSequences: [...existingRandomEventSequences, ...appended.map(event => event.sequence)], plan: input.plan, receipt: input.receipt, outcomeFingerprint,
       outcome: input.outcome, reason: input.reason, degradation: input.degradation,
     })
     const effectEvent: ProductRuntimeEvent = {
