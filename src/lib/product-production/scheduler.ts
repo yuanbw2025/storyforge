@@ -1317,6 +1317,7 @@ async function recoveryInvalidatedTaskKeys(input: {
   )
   const unresolvedFailureTaskKeys = [...textAdventureTaskFailures(input.failureJson).keys()]
     .filter(taskKey => {
+      if (taskKey === 'integration.narrative') return true
       const task = input.plan.tasks.find(candidate => candidate.taskKey === taskKey)
       return task && !task.outputArtifactKeys.every(artifactKey => acceptedArtifactKeys.has(artifactKey))
     })
