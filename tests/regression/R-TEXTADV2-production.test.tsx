@@ -24,6 +24,7 @@ import {
   createProductProductionPlanV3,
   textAdventureProductionBudgetFloorV1,
 } from '../../src/lib/product-production/plan'
+import { productProductionTaskReuseSemanticsEqualV1 } from '../../src/lib/product-production/scheduler'
 import { seedCurrentProductWorld } from '../helpers/current-product-world'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
@@ -401,15 +402,18 @@ describe('R-TEXTADV2-production · 文字冒险正式生产契约与工作台', 
     expect(keyIllustrationPlan.tasks.filter(task => /^media\.visual\.\d{3}$/.test(task.taskKey))).toHaveLength(12)
     const reviewBatches = keyIllustrationPlan.tasks
       .filter(task => /^media\.visual-quality-review\.batch-\d+$/.test(task.taskKey))
-    expect(reviewBatches).toHaveLength(3)
+    expect(reviewBatches).toHaveLength(6)
     expect(reviewBatches.every(task => (
       task.subjectLockKeys.join(',') === 'quality.visual-review-provider'
     ))).toBe(true)
     expect(reviewBatches.map(task => task.inputArtifactKeys.filter(key => /^media\.visual\.\d{3}$/.test(key))))
       .toEqual([
-        ['media.visual.001', 'media.visual.002', 'media.visual.003', 'media.visual.004'],
-        ['media.visual.005', 'media.visual.006', 'media.visual.007', 'media.visual.008'],
-        ['media.visual.009', 'media.visual.010', 'media.visual.011', 'media.visual.012'],
+        ['media.visual.001', 'media.visual.002'],
+        ['media.visual.003', 'media.visual.004'],
+        ['media.visual.005', 'media.visual.006'],
+        ['media.visual.007', 'media.visual.008'],
+        ['media.visual.009', 'media.visual.010'],
+        ['media.visual.011', 'media.visual.012'],
       ])
     expect(keyIllustrationPlan.tasks.find(task => task.taskKey === 'media.visual-quality-review'))
       .toMatchObject({
@@ -417,6 +421,14 @@ describe('R-TEXTADV2-production · 文字冒险正式生产契约与工作台', 
         dependsOn: reviewBatches.map(task => task.taskKey),
         inputArtifactKeys: ['media.audit', ...reviewBatches.map(task => task.outputArtifactKeys[0])],
       })
+    expect(productProductionTaskReuseSemanticsEqualV1(reviewBatches[0], {
+      ...reviewBatches[0], timeoutMs: reviewBatches[0].timeoutMs + 1,
+    })).toBe(true)
+    expect(productProductionTaskReuseSemanticsEqualV1(reviewBatches[0], {
+      ...reviewBatches[0], inputArtifactKeys: [
+        ...reviewBatches[0].inputArtifactKeys, 'media.visual.003',
+      ],
+    })).toBe(false)
 
     const richIllustrations = await draftProductProductionBriefV3({
       scope: owned.scope,

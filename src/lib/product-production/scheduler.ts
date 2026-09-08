@@ -1000,6 +1000,21 @@ async function applyCrossBuildEvolutionReuse(input: {
   return { plan, reusableArtifactKeys, sourceBuildId: parentBuild.id }
 }
 
+export function productProductionTaskReuseSemanticsEqualV1(
+  previous: ProductProductionPlanTaskV3,
+  next: ProductProductionPlanTaskV3,
+): boolean {
+  const signature = (task: ProductProductionPlanTaskV3) => ({
+    kind: task.kind, skillId: task.skillId, executionMode: task.executionMode,
+    dependsOn: task.dependsOn, inputArtifactKeys: task.inputArtifactKeys,
+    outputArtifactKeys: task.outputArtifactKeys, requirementKeys: task.requirementKeys,
+    capabilityRequirementKeys: task.capabilityRequirementKeys,
+    acceptanceGateIds: task.acceptanceGateIds,
+  })
+  return canonicalProductProductionJsonV2(signature(previous))
+    === canonicalProductProductionJsonV2(signature(next))
+}
+
 async function ensurePlan(input: {
   scope: WorkspaceScope
   productionId: number
@@ -1060,6 +1075,7 @@ async function ensurePlan(input: {
         || task.taskKey === 'media.anchor-author-gate'
       return (task.executionMode !== 'deterministic' || carriesExplicitAuthorDecision)
         && !invalidatedTaskKeys.has(task.taskKey) && previous
+        && productProductionTaskReuseSemanticsEqualV1(previous, task)
         && canonicalProductProductionJsonV2(previous.outputArtifactKeys) === canonicalProductProductionJsonV2(task.outputArtifactKeys)
         ? task.outputArtifactKeys : []
     })

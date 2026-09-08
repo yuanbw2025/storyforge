@@ -13,7 +13,7 @@ const STABLE_KEY = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/
 const LANES = ['planning', 'content', 'visual', 'audio', 'integration', 'qa'] as const
 const EXECUTION_MODES = ['deterministic', 'model', 'media-provider', 'human-import'] as const
 const FAILURE_POLICIES = ['fail-build', 'pause', 'fallback', 'skip-optional'] as const
-export const TEXT_ADVENTURE_VISUAL_REVIEW_BATCH_SIZE_V1 = 4
+export const TEXT_ADVENTURE_VISUAL_REVIEW_BATCH_SIZE_V1 = 2
 
 export interface TextAdventureProductionBudgetFloorV1 {
   modelTaskCount: number
@@ -485,9 +485,9 @@ export async function createProductProductionPlanV3(input: {
     'content.dialogue-pass.act-2': 0.035,
     'content.dialogue-pass.act-3': 0.035,
     'content.adventure-quality-review': 0.075,
-    // Four provider-native 1K images plus the frozen QA packet consumed
-    // 19,379 input tokens in a real browser run. Reserve 26,400 against the
-    // stable 528k baseline so the valid paid response can be settled.
+    // Keep the measured four-image ceiling even though reliability work now
+    // sends two provider-native 1K images per batch. The headroom covers image
+    // token variance without weakening the Build-lifetime hard budget.
     'media.visual-quality-review': 0.05,
   }
   // Every provider task and deterministic integration receives a declared
