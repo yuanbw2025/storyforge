@@ -386,16 +386,21 @@ export async function draftProductProductionBriefV3(input: {
   }
   if (textAdventure) unresolvedDecisionKeys.push(...unresolvedTextAdventureProductionBriefDecisionsV1(textAdventure))
   const productionModelCalls = textAdventure
-    ? Math.max(32, 16 + textAdventure.narrative.targetSceneCount + scale.targetEndingCount)
+    // The current professional pipeline owns 31–32 model Runs depending on
+    // whether visual production is active. Forty calls leave eight explicit
+    // recovery slots; authorizing exactly one call per task made a single
+    // provider/schema retry sufficient to strand an otherwise valid Build.
+    ? Math.max(40, 20 + textAdventure.narrative.targetSceneCount + scale.targetEndingCount)
     : 16
   const productionInputTokens = textAdventure
     ? Math.max(300_000, productionModelCalls * 16_000)
     : 180_000
   const productionOutputTokens = textAdventure
-    ? Math.max(
+      ? Math.max(
         100_000,
         scale.targetWordCount * 8 + 60_000,
         scale.targetPlayMinutes * 2_000 + 40_000,
+        160_000,
       )
     : 60_000
   return parseProductProductionBriefV3({

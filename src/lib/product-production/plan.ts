@@ -14,6 +14,48 @@ const LANES = ['planning', 'content', 'visual', 'audio', 'integration', 'qa'] as
 const EXECUTION_MODES = ['deterministic', 'model', 'media-provider', 'human-import'] as const
 const FAILURE_POLICIES = ['fail-build', 'pause', 'fallback', 'skip-optional'] as const
 
+export interface TextAdventureProductionBudgetFloorV1 {
+  modelTaskCount: number
+  retryReserveSlots: number
+  minimumModelCalls: number
+  minimumInputTokens: number
+  minimumOutputTokens: number
+}
+
+/**
+ * Returns the smallest production envelope that can truthfully admit the
+ * current professional text-adventure DAG. Provider receipts may include
+ * hidden reasoning tokens, so a commercial Build also needs explicit retry
+ * and output headroom instead of authorizing exactly one call per model task.
+ */
+export function textAdventureProductionBudgetFloorV1(
+  brief: ProductProductionBriefV3,
+): TextAdventureProductionBudgetFloorV1 {
+  if (brief.intent.productType !== 'text-adventure' || !brief.textAdventure) {
+    throw new Error('[product-production-plan] 预算底线只适用于文字冒险 Brief')
+  }
+  const activeVisual = brief.media.imageCount > 0
+    || brief.capabilityRequirements.some(requirement => requirement.mediaClass === 'image')
+  const sceneScriptPartCount = [0, 1, 2].reduce((sum, actIndex) => (
+    sum + textAdventureSceneScriptPartSceneKeysV1(brief, actIndex).length
+  ), 0)
+  const modelTaskCount = 25 + sceneScriptPartCount + Number(activeVisual)
+  const retryReserveSlots = Math.max(8, Math.ceil(modelTaskCount * 0.25))
+  const minimumModelCalls = modelTaskCount + retryReserveSlots
+  return {
+    modelTaskCount,
+    retryReserveSlots,
+    minimumModelCalls,
+    minimumInputTokens: Math.max(300_000, minimumModelCalls * 16_000),
+    minimumOutputTokens: Math.max(
+      100_000,
+      brief.scale.targetWordCount * 8 + 60_000,
+      brief.scale.targetPlayMinutes * 2_000 + 40_000,
+      modelTaskCount * 5_000,
+    ),
+  }
+}
+
 function fail(message: string): never { throw new Error(`[product-production-plan] ${message}`) }
 function record(value: unknown, label: string): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) fail(`${label} 必须是对象`)
@@ -305,15 +347,12 @@ export async function createProductProductionPlanV3(input: {
     (_, index) => `media.audio.${String(index + 1).padStart(3, '0')}`,
   )
   const textAdventure = brief.intent.productType === 'text-adventure'
-  const sceneScriptPartCount = textAdventure
-    ? [0, 1, 2].reduce((sum, actIndex) => (
-        sum + textAdventureSceneScriptPartSceneKeysV1(brief, actIndex).length
-      ), 0)
-    : 0
   // The previous 28-task topology contained three whole-act scene writers.
   // Replace those with the frozen scene packets actually required by this
   // Brief; every packet remains one durable model Run.
-  const modelTaskCount = textAdventure ? 25 + sceneScriptPartCount + Number(activeVisual) : 4
+  const textAdventureBudgetFloor = textAdventure
+    ? textAdventureProductionBudgetFloorV1(brief) : null
+  const modelTaskCount = textAdventureBudgetFloor?.modelTaskCount ?? 4
   const textAdventureOutputWeights: Record<string, number> = {
     // Agnes/OpenAI-compatible usage receipts include the Showrunner's hidden
     // reasoning tokens. A real commercial run used 2,522 output tokens while
@@ -322,9 +361,17 @@ export async function createProductProductionPlanV3(input: {
     // 3% (at least 3,000 tokens for the minimum 100k text-adventure budget),
     // while the Build-lifetime ledger remains the hard aggregate authority.
     'production.supervision': 0.03,
-    'content.source-sufficiency': 0.02,
+    // The full WorldRelease sufficiency audit is another reasoning-heavy
+    // planning task. Real commercial attempts reported 3,687 and 5,363
+    // billed output tokens, so the previous 2%/2,000-token slice was not a
+    // truthful ceiling. Seven percent preserves headroom for provider-side
+    // reasoning without weakening the Build-lifetime ledger.
+    'content.source-sufficiency': 0.07,
     'content.design': 0.015,
-    'content.story-bible': 0.02,
+    // A real commercial Story Bible receipt used 2,835 output tokens. Three
+    // percent keeps legacy 100k Briefs truthful; repaired/new Briefs receive
+    // the larger production envelope computed above.
+    'content.story-bible': 0.03,
     'content.cast-bible': 0.02,
     'content.adventure-architecture': 0.02,
     'content.product-module': 0.02,
@@ -344,12 +391,15 @@ export async function createProductProductionPlanV3(input: {
     // Scene prose is the player-visible product, not scaffolding. Each act's
     // 18% envelope is split into two bounded scene packets so a provider cannot
     // strand a whole act in one oversized request.
-    'content.scene-script.act-1.part-1': 0.09,
-    'content.scene-script.act-1.part-2': 0.09,
-    'content.scene-script.act-2.part-1': 0.09,
-    'content.scene-script.act-2.part-2': 0.09,
-    'content.scene-script.act-3.part-1': 0.09,
-    'content.scene-script.act-3.part-2': 0.09,
+    // Real accepted scene packets are roughly 9–18 KiB. An 8% slice still
+    // leaves ample visible-prose and reasoning headroom while returning 6% of
+    // the Build envelope to the measured planning-task overage above.
+    'content.scene-script.act-1.part-1': 0.08,
+    'content.scene-script.act-1.part-2': 0.08,
+    'content.scene-script.act-2.part-1': 0.08,
+    'content.scene-script.act-2.part-2': 0.08,
+    'content.scene-script.act-3.part-1': 0.08,
+    'content.scene-script.act-3.part-2': 0.08,
     // The provider usage receipt may include hidden reasoning. Each Dialogue
     // Editor therefore receives a 6.5% ceiling while returning only an ordinal
     // delta; the Build-lifetime ledger, not the sum of task ceilings, remains
@@ -386,7 +436,7 @@ export async function createProductProductionPlanV3(input: {
   // Keep explicit Build-level retry headroom. Without it, a single unknown
   // paid call consumes one task ceiling and the remaining first attempts can
   // no longer be admitted even though every task declares bounded recovery.
-  const retryReserveSlots = textAdventure ? Math.max(3, Math.ceil(modelTaskCount * 0.1)) : 3
+  const retryReserveSlots = textAdventureBudgetFloor?.retryReserveSlots ?? 3
   const perInput = Math.floor(
     brief.productionBudget.maximumInputTokens / (modelTaskCount + retryReserveSlots),
   )

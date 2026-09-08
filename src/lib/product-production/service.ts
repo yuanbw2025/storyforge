@@ -51,6 +51,7 @@ import {
 import { readAcceptedBuildArtifacts } from './artifact-store'
 import { putMediaBlobObject, readMediaBlobObjectData } from './media-blob-store'
 import { minimumTextAdventureCommercialImageCountV1 } from '../adventure/production-brief'
+import { textAdventureProductionBudgetFloorV1 } from './plan'
 
 export interface ProductProductionDetailsV1 {
   production: ProductProductionRecordV1
@@ -535,6 +536,101 @@ export function draftTextAdventureCommercialMediaRepairV1(
       ),
     },
   })
+}
+
+/**
+ * Upgrades a stopped legacy commercial candidate to the minimum envelope used
+ * by the current one-hour flagship pipeline. This is a reviewable Brief only:
+ * the cancelled Build and its paid-attempt evidence remain immutable, and a
+ * new Build still requires the normal save + authorize commands.
+ */
+export function draftTextAdventureCommunityCandidateRepairV1(
+  details: ProductProductionDetailsV1,
+): ProductProductionBriefV3 {
+  if (details.production.productType !== 'text-adventure'
+    || details.production.status !== 'stopped'
+    || details.build?.status !== 'cancelled'
+    || !details.brief) {
+    throw new Error('[product-production-service] 只有已取消的文字冒险 Build 可以生成社区候选修订 Brief')
+  }
+  const brief = parseProductProductionBriefV3(details.brief.briefJson)
+  if (brief.qualityProfile !== 'commercial-candidate' || !brief.textAdventure) {
+    throw new Error('[product-production-service] 当前 Brief 不是商业文字冒险')
+  }
+  const minimumImages = minimumTextAdventureCommercialImageCountV1(brief.textAdventure.media.mode)
+  const targetEndingCount = Math.max(
+    3, brief.scale.targetEndingCount, brief.textAdventure.narrative.targetEndingCount,
+  )
+  const repairedContent = parseProductProductionBriefV3({
+    ...brief,
+    scale: {
+      ...brief.scale,
+      scope: brief.scale.scope === 'scene' ? 'short-arc' : brief.scale.scope,
+      targetPlayMinutes: Math.max(60, brief.scale.targetPlayMinutes),
+      targetWordCount: Math.max(10_000, brief.scale.targetWordCount),
+      targetEndingCount,
+    },
+    textAdventure: {
+      ...brief.textAdventure,
+      narrative: {
+        ...brief.textAdventure.narrative,
+        targetRegionCount: Math.max(2, brief.textAdventure.narrative.targetRegionCount),
+        targetAreaCount: Math.max(4, brief.textAdventure.narrative.targetAreaCount),
+        targetLocationCount: Math.max(8, brief.textAdventure.narrative.targetLocationCount),
+        targetSceneCount: Math.max(12, brief.textAdventure.narrative.targetSceneCount),
+        targetSideQuestCount: Math.max(3, brief.textAdventure.narrative.targetSideQuestCount),
+        targetAmbientEventCount: Math.max(4, brief.textAdventure.narrative.targetAmbientEventCount),
+        targetEndingCount,
+        minimumDistinctRoutes: Math.max(2, brief.textAdventure.narrative.minimumDistinctRoutes),
+      },
+    },
+    media: { ...brief.media, imageCount: Math.max(minimumImages, brief.media.imageCount) },
+  })
+  const floor = textAdventureProductionBudgetFloorV1(repairedContent)
+  return parseProductProductionBriefV3({
+    ...repairedContent,
+    productionBudget: {
+      ...repairedContent.productionBudget,
+      maximumModelCalls: Math.max(
+        repairedContent.productionBudget.maximumModelCalls,
+        floor.minimumModelCalls,
+      ),
+      maximumInputTokens: Math.max(
+        repairedContent.productionBudget.maximumInputTokens,
+        floor.minimumInputTokens,
+      ),
+      maximumOutputTokens: Math.max(
+        repairedContent.productionBudget.maximumOutputTokens,
+        floor.minimumOutputTokens,
+      ),
+      maximumMediaCalls: Math.max(
+        repairedContent.productionBudget.maximumMediaCalls,
+        repairedContent.media.imageCount
+          + repairedContent.media.musicTrackCount + repairedContent.media.sfxCount,
+      ),
+    },
+  })
+}
+
+export function isTextAdventureCommunityCandidateRepairRequiredV1(
+  details: ProductProductionDetailsV1,
+): boolean {
+  try {
+    const current = parseProductProductionBriefV3(details.brief?.briefJson ?? '')
+    const repaired = draftTextAdventureCommunityCandidateRepairV1(details)
+    return current.scale.targetPlayMinutes !== repaired.scale.targetPlayMinutes
+      || current.scale.targetWordCount !== repaired.scale.targetWordCount
+      || current.scale.targetEndingCount !== repaired.scale.targetEndingCount
+      || current.media.imageCount !== repaired.media.imageCount
+      || current.productionBudget.maximumModelCalls !== repaired.productionBudget.maximumModelCalls
+      || current.productionBudget.maximumInputTokens !== repaired.productionBudget.maximumInputTokens
+      || current.productionBudget.maximumOutputTokens !== repaired.productionBudget.maximumOutputTokens
+      || current.productionBudget.maximumMediaCalls !== repaired.productionBudget.maximumMediaCalls
+      || current.textAdventure?.narrative.targetSceneCount
+        !== repaired.textAdventure?.narrative.targetSceneCount
+  } catch {
+    return false
+  }
 }
 
 /** Saves a candidate revision on the same stopped Production lineage. */

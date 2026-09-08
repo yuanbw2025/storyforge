@@ -20,7 +20,10 @@ import {
 } from '../../src/lib/agent/skill-registry'
 import { draftProductProductionBriefV3, suggestProductStartingPoints } from '../../src/lib/product-production/consultation'
 import { hashProductProductionValueV2 } from '../../src/lib/product-production/hash'
-import { createProductProductionPlanV3 } from '../../src/lib/product-production/plan'
+import {
+  createProductProductionPlanV3,
+  textAdventureProductionBudgetFloorV1,
+} from '../../src/lib/product-production/plan'
 import { seedCurrentProductWorld } from '../helpers/current-product-world'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
@@ -82,7 +85,14 @@ describe('R-TEXTADV2-production · 文字冒险正式生产契约与工作台', 
     const plan = await createProductProductionPlanV3({ buildNumber: 1, briefHash, brief })
     const taskByKey = new Map(plan.tasks.map(task => [task.taskKey, task]))
     expect(brief.productionBudget.maximumOutputTokens).toBe(160_000)
+    expect(brief.productionBudget.maximumModelCalls).toBeGreaterThanOrEqual(
+      textAdventureProductionBudgetFloorV1(brief).minimumModelCalls,
+    )
     expect(taskByKey.get('production.supervision')?.budgetReservation.outputTokens)
+      .toBe(Math.floor(brief.productionBudget.maximumOutputTokens * 0.03))
+    expect(taskByKey.get('content.source-sufficiency')?.budgetReservation.outputTokens)
+      .toBe(Math.floor(brief.productionBudget.maximumOutputTokens * 0.07))
+    expect(taskByKey.get('content.story-bible')?.budgetReservation.outputTokens)
       .toBe(Math.floor(brief.productionBudget.maximumOutputTokens * 0.03))
     expect(taskByKey.get('content.narrative-arc-scenes')?.budgetReservation.outputTokens)
       .toBe(Math.floor(brief.productionBudget.maximumOutputTokens * 0.025))
@@ -108,7 +118,7 @@ describe('R-TEXTADV2-production · 文字冒险正式生产契约与工作台', 
       'content.scene-script.act-2.part-1', 'content.scene-script.act-2.part-2',
       'content.scene-script.act-3.part-1', 'content.scene-script.act-3.part-2',
     ].reduce((sum, taskKey) => sum + taskByKey.get(taskKey)!.budgetReservation.outputTokens, 0))
-      .toBe(Math.floor(brief.productionBudget.maximumOutputTokens * 0.09) * 6)
+      .toBe(Math.floor(brief.productionBudget.maximumOutputTokens * 0.08) * 6)
     expect(plan.tasks.reduce((sum, task) => sum + task.budgetReservation.outputTokens, 0))
       .toBeLessThanOrEqual(Math.floor(brief.productionBudget.maximumOutputTokens * 1.25))
     expect(plan.tasks.reduce((sum, task) => sum + task.budgetReservation.inputTokens, 0))
