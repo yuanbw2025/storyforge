@@ -1326,11 +1326,16 @@ async function recoveryInvalidatedTaskKeys(input: {
   const narrativeIntegrationOwnerTaskKeys = input.plan.tasks
     .filter(task => /^content\.(?:scene-script\.act-[1-3](?:\.part-\d+)?|dialogue-pass\.act-[1-3])$/.test(task.taskKey))
     .map(task => task.taskKey)
+  const dialoguePassTaskKeys = [
+    'content.dialogue-pass.act-1', 'content.dialogue-pass.act-2', 'content.dialogue-pass.act-3',
+  ]
   const directlyResolvedFailureDetail = previousFailure && typeof previousFailure.detail === 'string'
     ? previousFailure.detail : ''
   const expandFailureOwnerTaskKeys = (taskKey: string) => (
     taskKey === 'integration.narrative'
-      ? narrativeIntegrationOwnerTaskKeys
+      ? directlyResolvedFailureDetail.includes('content.dialogue-pass.act-')
+        ? dialoguePassTaskKeys
+        : narrativeIntegrationOwnerTaskKeys
       : /^content\.scene-script\.act-[1-3]$/.test(taskKey)
         && directlyResolvedFailureDetail.includes('跨场景 beatKey 重复')
         ? [taskKey]
@@ -1384,9 +1389,6 @@ async function recoveryInvalidatedTaskKeys(input: {
     : []
   const sceneScriptTaskKeys = [
     'content.scene-script.act-1', 'content.scene-script.act-2', 'content.scene-script.act-3',
-  ]
-  const dialoguePassTaskKeys = [
-    'content.dialogue-pass.act-1', 'content.dialogue-pass.act-2', 'content.dialogue-pass.act-3',
   ]
   const invalidated = new Set<string>(unresolvedFailureTaskKeys.length > 0
     ? unresolvedFailureTaskKeys.flatMap(taskKey => (
