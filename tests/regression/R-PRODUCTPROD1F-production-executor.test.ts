@@ -23,6 +23,7 @@ import {
   parseProductMediaRequirementsArtifactV2,
   parseProductionModelJsonObjectV1,
   parseTextAdventureVisualQualityReviewArtifactV1,
+  productImageNegativePromptV1,
   type ProductionTextRunnerV1,
   type ProductionVisionRunnerV1,
 } from '../../src/lib/product-production/production-executor'
@@ -1052,6 +1053,18 @@ async function relayCapabilities(brief: Awaited<ReturnType<typeof fixture>>['bri
 }
 
 describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
+  it('文字冒险出图默认禁止文字，文字类返修同时下发双语强约束', () => {
+    const ordinary = productImageNegativePromptV1('text-adventure')
+    expect(ordinary).toContain('汉字')
+    expect(ordinary).toContain('伪文字')
+    expect(ordinary).not.toContain('pseudo-text')
+
+    const repaired = productImageNegativePromptV1('text-adventure', true)
+    expect(repaired).toContain('汉字')
+    expect(repaired).toContain('pseudo-text')
+    expect(productImageNegativePromptV1('avg')).not.toContain('汉字')
+  })
+
   it('保留陌生 Visual QA 分类的问题内容，并确定性归入通用 artifact 类别', () => {
     const parsed = parseTextAdventureVisualQualityReviewArtifactV1({
       schema: 'storyforge.text-adventure-visual-quality-review-artifact', version: 1,

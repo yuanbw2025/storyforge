@@ -3338,6 +3338,7 @@ async function generateProviderMedia(input: {
   mediaClass: ProductMediaClassV1
   mediaKind: ProductMediaKind
   prompt: string
+  negativePrompt?: string
   width: number | null
   height: number | null
   durationMs: number | null
@@ -3365,7 +3366,9 @@ async function generateProviderMedia(input: {
     adapterId: resolved.adapter.capability.adapterId, mediaClass: input.mediaClass,
     mediaKind: input.mediaKind, requirementKey: input.requirement.requirementKey,
     artifactKey: input.artifactKey, prompt: input.prompt,
-    negativePrompt: '第三方角色、商标、水印、签名、在世艺术家风格', count: 1,
+    negativePrompt: input.negativePrompt
+      ?? '第三方角色、商标、水印、签名、在世艺术家风格',
+    count: 1,
     width: input.width, height: input.height, durationMs: input.durationMs, inputHash,
     qualityProfile: input.options.brief.qualityProfile, environment: runtimeEnvironment(),
     allowedDataClasses: [...input.requirement.allowedDataClasses],
@@ -3398,6 +3401,21 @@ async function generateProviderMedia(input: {
       costUsd: candidate.providerReceipt.costUsd,
     }),
   }
+}
+
+export function productImageNegativePromptV1(
+  productType: ProductionProductKindV1,
+  repairRequiresGlyphSuppression = false,
+): string {
+  return [
+    '第三方角色、商标、水印、签名、在世艺术家风格',
+    ...(productType === 'text-adventure'
+      ? ['可读文字、汉字、字母、数字、伪文字、乱码、题字、标签、字形状纹样']
+      : []),
+    ...(repairRequiresGlyphSuppression
+      ? ['all text, letters, numbers, pseudo-text, runes, labels, logos, signatures, character-like marks']
+      : []),
+  ].join('；')
 }
 
 async function executeVisualTask(input: ProductProductionTaskExecutionInputV1, options: {
@@ -3470,6 +3488,7 @@ async function executeVisualTask(input: ProductProductionTaskExecutionInputV1, o
       artifact.artifactKey === 'media.repair-feedback'
     ))
     let repairInstruction = ''
+    let repairRequiresGlyphSuppression = false
     if (repairFeedbackArtifact) {
       const repair = record(JSON.parse(repairFeedbackArtifact.payloadJson), 'media.repair-feedback')
       exactKeys(repair, [
@@ -3511,13 +3530,16 @@ async function executeVisualTask(input: ProductProductionTaskExecutionInputV1, o
         const noGlyphOverride = category === 'text' || /文字|字符|汉字|字形|伪字/.test(detail)
           ? '；最高优先约束：完全去除可读文字、伪文字和类似字符的字形，不得用虚构文字替代；允许不构成字符的纯几何纹样'
           : ''
+        if (noGlyphOverride) repairRequiresGlyphSuppression = true
         return `${issueIndex + 1}. [${text(issue.severity, 'severity', 20)} / ${category}] ` +
           `上轮问题：${detail}；修复要求：${recommendation}${noGlyphOverride}`
       })
       repairInstruction = `\n本次是受 Visual QA 约束的返修，不是自由变体。禁止重复上轮已识别缺陷。` +
         `逐项落实以下审查意见，并继续遵守原始需求、视觉圣经和角色锚点：\n${issueInstructions.join('\n')}`
     }
-    const providerPrompt = `${baseProviderPrompt}${repairInstruction}`
+    const providerPrompt = `${baseProviderPrompt}${repairInstruction}` + (repairRequiresGlyphSuppression
+      ? '\nABSOLUTE REPAIR CONSTRAINT: blank artifact surfaces; no readable text, letters, numbers, pseudo-text, runes, labels, logos, signatures, or character-like marks. Do not replace forbidden text with invented glyphs.'
+      : '')
     if (binding?.adapterId === 'storyforge.procedural-svg.v1') {
       const bytes = visualSvg(requirement, options.production.title, index)
       const blob = await putMediaBlobObject({
@@ -3546,7 +3568,12 @@ async function executeVisualTask(input: ProductProductionTaskExecutionInputV1, o
     const generated = await generateProviderMedia({
       execution: input, options,
       requirement: capability, artifactKey, mediaClass: 'image', mediaKind: requirement.mediaKind,
-      prompt: providerPrompt, width: requirement.width, height: requirement.height,
+      prompt: providerPrompt,
+      negativePrompt: productImageNegativePromptV1(
+        options.brief.intent.productType,
+        repairRequiresGlyphSuppression,
+      ),
+      width: requirement.width, height: requirement.height,
       durationMs: null, index,
     })
     let candidateData = generated.candidate.data
