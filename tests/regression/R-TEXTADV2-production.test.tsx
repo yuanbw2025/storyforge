@@ -92,6 +92,7 @@ describe('R-TEXTADV2-production · 文字冒险正式生产契约与工作台', 
       .toBe(Math.floor(brief.productionBudget.maximumOutputTokens * 0.03))
     expect(taskByKey.get('content.source-sufficiency')?.budgetReservation.outputTokens)
       .toBe(Math.floor(brief.productionBudget.maximumOutputTokens * 0.07))
+    expect(taskByKey.get('content.source-sufficiency')?.timeoutMs).toBe(300_000)
     expect(taskByKey.get('content.story-bible')?.budgetReservation.outputTokens)
       .toBe(Math.floor(brief.productionBudget.maximumOutputTokens * 0.03))
     expect(taskByKey.get('content.narrative-arc-scenes')?.budgetReservation.outputTokens)

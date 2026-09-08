@@ -487,7 +487,11 @@ export async function createProductProductionPlanV3(input: {
     inputArtifactKeys: ['production.supervision'], outputArtifactKeys: ['content.source-sufficiency'], requirementKeys: [],
     capabilityRequirementKeys: textCapabilities, concurrencyGroup: 'text-provider',
     subjectLockKeys: ['content.source-sufficiency'], priority: 110, budgetReservation: modelBudget('content.source-sufficiency'),
-    maxAttempts: 2, timeoutMs: 180_000, failurePolicy: 'pause', fallbackTaskKey: null,
+    // Full WorldRelease analysis is the only planning task that routinely
+    // needs more than three minutes on reasoning-capable providers. Keep the
+    // retry count bounded, but allow one five-minute attempt to finish instead
+    // of aborting a paid response immediately before it returns.
+    maxAttempts: 2, timeoutMs: 300_000, failurePolicy: 'pause', fallbackTaskKey: null,
     acceptanceGateIds: ['artifact.protocol', 'adventure.source-sufficiency-assessed'],
   }))
   if (textAdventure) tasks.push(productionTask({
