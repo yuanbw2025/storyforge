@@ -627,6 +627,10 @@ export function legalizeProductionModelProtocolDefaultsV1(
   }
   if (taskKey === 'content.narrative-arc-scenes' && options.narrativeArcSceneKeys?.length === 3) {
     const next: JsonRecord = { ...payload }
+    if (Object.prototype.hasOwnProperty.call(next, 'metadata')) {
+      delete next.metadata
+      defaultedFields.push('metadata<-discarded-provider-annotation')
+    }
     if (!Object.prototype.hasOwnProperty.call(next, 'endings')
       && options.narrativeArcEndingKeys?.length) {
       const frozenSceneKeys = options.narrativeArcSceneKeys.flat()

@@ -1159,6 +1159,7 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
     const arcGrouping = legalizeProductionModelProtocolDefaultsV1(
       'content.narrative-arc-scenes',
       {
+        metadata: { providerNote: 'not part of the governed artifact' },
         acts: [
           { key: 'act.1', targetMinutes: '20', sceneCards: [{ key: 'scene.001', title: '一', locationOrdinal: '1' }] },
           { key: 'act.2', sceneCards: [{ key: 'scene.003', title: '三' }, { key: 'scene.002', title: '二' }] },
@@ -1176,7 +1177,9 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
     }>
     expect(legalizedArcActs[0].targetMinutes).toBe(20)
     expect(legalizedArcActs[0].sceneCards[0].locationOrdinal).toBe(1)
+    expect(arcGrouping.payload).not.toHaveProperty('metadata')
     expect(arcGrouping.defaultedFields).toEqual([
+      'metadata<-discarded-provider-annotation',
       'acts[0].targetMinutes<-decimal-string',
       'acts[0].sceneCards[0].locationOrdinal<-decimal-string',
       'acts[0].sceneCards<-frozen-scene-key-group',
