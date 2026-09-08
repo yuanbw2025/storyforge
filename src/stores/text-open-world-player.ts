@@ -80,6 +80,15 @@ interface TextOpenWorldProjectionRequest {
   worldGroupId: number | null
 }
 
+interface TextOpenWorldSessionOperationRequest {
+  revision: number
+  projectionRevision: number
+  scope: WorkspaceScope | null
+  worldGroupId: number | null
+  selectedSessionId: number | null
+  publishedSessionId: number | null
+}
+
 export interface TextOpenWorldPlayerState {
   scope: WorkspaceScope | null
   worldGroupId: number | null
@@ -173,6 +182,18 @@ async function assertSession(scope: WorkspaceScope, sessionId: number): Promise<
   return session
 }
 
+async function assertSessionProjection(
+  scope: WorkspaceScope,
+  worldGroupId: number | null,
+  sessionId: number,
+): Promise<ProductRuntimeSession> {
+  const session = await assertSession(scope, sessionId)
+  if ((session.worldGroupId ?? null) !== (worldGroupId ?? null)) {
+    throw new Error('[text-open-world] 该存档不属于当前世界分组。')
+  }
+  return session
+}
+
 function sessionSource(session: ProductRuntimeSession): TextOpenWorldSelectedSessionSource {
   return session.productReleaseId != null ? 'release' : 'build-preview'
 }
@@ -227,10 +248,7 @@ function assertActionFeedbackIdentity(
 }
 
 async function readDetails(scope: WorkspaceScope, worldGroupId: number | null, sessionId: number) {
-  const selectedSession = await assertSession(scope, sessionId)
-  if ((selectedSession.worldGroupId ?? null) !== (worldGroupId ?? null)) {
-    throw new Error('[text-open-world] 该存档不属于当前世界分组。')
-  }
+  const selectedSession = await assertSessionProjection(scope, worldGroupId, sessionId)
   const playable = await verifyProductRuntimeSessionSourceV1({ scope, session: selectedSession })
   const selectedManifest = playableManifest(playable.runtimePackage)
   // Legacy open-world packages do not own the vNext Action/Effect projection.
@@ -265,6 +283,7 @@ async function readDetails(scope: WorkspaceScope, worldGroupId: number | null, s
 export const useTextOpenWorldPlayerStore = create<TextOpenWorldPlayerState>((set, get) => {
   let projectionRequestRevision = 0
   let actionRequestRevision = 0
+  let sessionOperationRevision = 0
   const beginProjectionRequest = (
     scope: WorkspaceScope,
     worldGroupId: number | null,
@@ -294,29 +313,70 @@ export const useTextOpenWorldPlayerStore = create<TextOpenWorldPlayerState>((set
     request: TextOpenWorldProjectionRequest,
     sessionId: number,
   ): boolean => isCurrentProjectionRequest(request) && get().selectedSessionId === sessionId
+  const beginSessionOperation = (): TextOpenWorldSessionOperationRequest => {
+    const current = get()
+    return {
+      revision: ++sessionOperationRevision,
+      projectionRevision: projectionRequestRevision,
+      scope: current.scope ? { ...current.scope } : null,
+      worldGroupId: current.worldGroupId,
+      selectedSessionId: current.selectedSessionId,
+      publishedSessionId: current.selectedSessionId,
+    }
+  }
+  const sessionOperationProjection = (
+    request: TextOpenWorldSessionOperationRequest,
+  ): TextOpenWorldProjectionRequest | null => request.scope ? {
+    revision: request.projectionRevision,
+    scope: request.scope,
+    worldGroupId: request.worldGroupId,
+  } : null
+  const isCurrentSessionOperation = (
+    request: TextOpenWorldSessionOperationRequest,
+  ): boolean => {
+    const currentScope = get().scope
+    return sessionOperationRevision === request.revision
+      && projectionRequestRevision === request.projectionRevision
+      && ((currentScope == null && request.scope == null)
+        || (currentScope != null
+          && request.scope != null
+          && currentScope.projectId === request.scope.projectId
+          && currentScope.worldId === request.scope.worldId
+          && currentScope.workId === request.scope.workId))
+      && (get().worldGroupId ?? null) === (request.worldGroupId ?? null)
+      && get().selectedSessionId === request.publishedSessionId
+  }
   const refresh = async (
     providedRequest?: TextOpenWorldProjectionRequest,
     providedSessionId?: number,
+    publishGuard: () => boolean = () => true,
   ) => {
     const request = providedRequest ?? captureProjectionRequest()
     const sessionId = providedSessionId ?? get().selectedSessionId
-    if (!request || sessionId == null || !isCurrentSessionRequest(request, sessionId)) return
+    const mayPublish = () => request != null
+      && isCurrentSessionRequest(request, sessionId!)
+      && publishGuard()
+    if (!request || sessionId == null || !mayPublish()) return
     try {
       const details = await readDetails(request.scope, request.worldGroupId, sessionId)
-      if (isCurrentSessionRequest(request, sessionId)) set(details)
+      if (mayPublish()) set(details)
     } catch (error) {
-      if (!isCurrentSessionRequest(request, sessionId)) return
+      if (!mayPublish()) return
       throw error
     }
   }
   const reload = async (
     requested?: number | null,
     providedRequest?: TextOpenWorldProjectionRequest,
-  ) => {
+    publishGuard: () => boolean = () => true,
+  ): Promise<boolean> => {
     const request = providedRequest ?? captureProjectionRequest()
-    if (!request || !isCurrentProjectionRequest(request)) return
+    const mayPublish = () => request != null
+      && isCurrentProjectionRequest(request)
+      && publishGuard()
+    if (!request || !mayPublish()) return false
     const desired = requested === undefined ? get().selectedSessionId : requested
-    if (requested !== undefined) set({ generatedCandidate: null, lastFeedback: null })
+    if (requested !== undefined && mayPublish()) set({ generatedCandidate: null, lastFeedback: null })
     let releases: TextOpenWorldLibraryItem[]
     let sessions: ProductRuntimeSession[]
     try {
@@ -329,22 +389,38 @@ export const useTextOpenWorldPlayerStore = create<TextOpenWorldPlayerState>((set
       releases = result[0]
       sessions = result[1]
     } catch (error) {
-      if (!isCurrentProjectionRequest(request)) return
+      if (!mayPublish()) return false
       throw error
     }
-    if (!isCurrentProjectionRequest(request)) return
+    if (!mayPublish()) return false
     set({ releases, sessions })
     if (desired == null) {
-      if (isCurrentProjectionRequest(request)) set(emptySelectionState())
-      return
+      if (!mayPublish()) return false
+      set(emptySelectionState())
+      return true
     }
     try {
       const details = await readDetails(request.scope, request.worldGroupId, desired)
-      if (isCurrentProjectionRequest(request)) set(details)
+      if (!mayPublish()) return false
+      set(details)
+      return true
     } catch (error) {
-      if (!isCurrentProjectionRequest(request)) return
+      if (!mayPublish()) return false
       throw error
     }
+  }
+  const reloadSessionOperation = async (
+    request: TextOpenWorldSessionOperationRequest,
+    selectedSessionId: number | null,
+  ) => {
+    const projection = sessionOperationProjection(request)
+    if (!projection || !isCurrentSessionOperation(request)) return
+    const published = await reload(
+      selectedSessionId,
+      projection,
+      () => isCurrentSessionOperation(request),
+    )
+    if (published) request.publishedSessionId = selectedSessionId
   }
   const run = async <T>(
     operation: () => Promise<T>,
@@ -496,56 +572,122 @@ export const useTextOpenWorldPlayerStore = create<TextOpenWorldPlayerState>((set
       await adoptOpenWorldRuntimeCandidateV1({ scope: get().scope!, runId: generated.snapshot.run.id })
       set({ generatedCandidate: generated.candidate })
     }),
-    saveCheckpoint: async name => run(async () => {
-      const sessionId = get().selectedSessionId
-      if (sessionId == null) throw new Error('[text-open-world] 请先开始正式开放世界。')
-      const state = await readProductRuntimeState(sessionId)
-      if (state.textOpenWorld) await createTextOpenWorldCheckpointV1({ sessionId, name })
-      else await createProductRuntimeCheckpoint({ sessionId, name })
-      await refresh()
-    }),
-    forkCheckpoint: async (checkpointId, title) => run(async () => {
+    saveCheckpoint: async name => {
+      const request = beginSessionOperation()
+      const mayPublish = () => isCurrentSessionOperation(request)
+      return run(async () => {
+        const sessionId = request.selectedSessionId
+        const projection = sessionOperationProjection(request)
+        if (sessionId == null || !projection) throw new Error('[text-open-world] 请先开始正式开放世界。')
+        await assertSessionProjection(projection.scope, projection.worldGroupId, sessionId)
+        const state = await readProductRuntimeState(sessionId)
+        if (state.textOpenWorld) await createTextOpenWorldCheckpointV1({ sessionId, name })
+        else await createProductRuntimeCheckpoint({ sessionId, name })
+        await refresh(projection, sessionId, mayPublish)
+      }, mayPublish)
+    },
+    forkCheckpoint: async (checkpointId, title) => {
+      const request = beginSessionOperation()
       const checkpoint = get().checkpoints.find(row => row.id === checkpointId)
-      if (!checkpoint) throw new Error('[text-open-world] 检查点无效。')
-      const checkpointState = await readProductRuntimeState(checkpoint.sessionId, checkpoint.throughSequence)
-      const child = checkpointState.textOpenWorld
-        ? await (async () => {
-            const inspection = await inspectTextOpenWorldCheckpointV1(checkpointId)
-            if (!inspection.valid) throw new Error(`[text-open-world] 检查点无效:${inspection.detail}`)
-            return branchTextOpenWorldSessionFromCheckpointV1({ checkpointId, title: title?.trim() || `世界分支 · ${checkpoint.name}` })
-          })()
-        : await (async () => {
-            if (!await verifyProductRuntimeCheckpoint(checkpointId)) throw new Error('[text-open-world] 检查点无效。')
-            return branchProductRuntimeSession({ parentSessionId: checkpoint.sessionId, throughSequence: checkpoint.throughSequence, title: title?.trim() || `世界分支 · ${checkpoint.name}` })
-          })()
-      await reload(child.id!)
-      return child.id!
-    }),
-    retryDefeatedCombat: async title => run(async () => {
-      if (get().selectedSessionId == null) throw new Error('[text-open-world] 请先开始正式开放世界。')
-      const child = await retryDefeatedTextOpenWorldCombatV1({ sessionId: get().selectedSessionId!, title })
-      await reload(child.id!)
-      return child.id!
-    }),
-    forkCurrent: async title => run(async () => {
-      const sessionId = get().selectedSessionId
-      if (sessionId == null) throw new Error('[text-open-world] 请先开始正式开放世界。')
-      const state = await readProductRuntimeState(sessionId)
-      const child = state.textOpenWorld
-        ? await (async () => {
-            const checkpoint = await createTextOpenWorldCheckpointV1({ sessionId, name: title?.trim() || '开放世界分支点' })
-            return branchTextOpenWorldSessionFromCheckpointV1({ checkpointId: checkpoint.id!, title: title?.trim() || '开放世界分支' })
-          })()
-        : await branchProductRuntimeSession({ parentSessionId: sessionId, throughSequence: state.lastSequence, title: title?.trim() || '开放世界分支' })
-      await reload(child.id!)
-      return child.id!
-    }),
-    remove: async sessionId => run(async () => {
-      if (!get().scope) throw new Error('[text-open-world] scope 缺失。')
-      await assertSessionOwnership(get().scope!, get().worldGroupId, sessionId)
-      await deleteProductRuntimeSession(sessionId)
-      await reload(get().selectedSessionId === sessionId ? null : undefined)
-    }),
+      const frozenCheckpoint = checkpoint ? structuredClone(checkpoint) : null
+      const mayPublish = () => isCurrentSessionOperation(request)
+      return run(async () => {
+        const sessionId = request.selectedSessionId
+        const projection = sessionOperationProjection(request)
+        if (sessionId == null || !projection) throw new Error('[text-open-world] 请先开始正式开放世界。')
+        if (!frozenCheckpoint || frozenCheckpoint.sessionId !== sessionId) {
+          throw new Error('[text-open-world] 检查点无效。')
+        }
+        await assertSessionProjection(projection.scope, projection.worldGroupId, sessionId)
+        const checkpointState = await readProductRuntimeState(
+          frozenCheckpoint.sessionId,
+          frozenCheckpoint.throughSequence,
+        )
+        const child = checkpointState.textOpenWorld
+          ? await (async () => {
+              const inspection = await inspectTextOpenWorldCheckpointV1(checkpointId)
+              if (!inspection.valid) throw new Error(`[text-open-world] 检查点无效:${inspection.detail}`)
+              return branchTextOpenWorldSessionFromCheckpointV1({
+                checkpointId,
+                title: title?.trim() || `世界分支 · ${frozenCheckpoint.name}`,
+              })
+            })()
+          : await (async () => {
+              if (!await verifyProductRuntimeCheckpoint(checkpointId)) {
+                throw new Error('[text-open-world] 检查点无效。')
+              }
+              return branchProductRuntimeSession({
+                parentSessionId: frozenCheckpoint.sessionId,
+                throughSequence: frozenCheckpoint.throughSequence,
+                title: title?.trim() || `世界分支 · ${frozenCheckpoint.name}`,
+              })
+            })()
+        const childSessionId = child.id
+        if (childSessionId == null) throw new Error('[text-open-world] 分支Session缺少身份。')
+        await reloadSessionOperation(request, childSessionId)
+        return childSessionId
+      }, mayPublish)
+    },
+    retryDefeatedCombat: async title => {
+      const request = beginSessionOperation()
+      const mayPublish = () => isCurrentSessionOperation(request)
+      return run(async () => {
+        const sessionId = request.selectedSessionId
+        const projection = sessionOperationProjection(request)
+        if (sessionId == null || !projection) throw new Error('[text-open-world] 请先开始正式开放世界。')
+        await assertSessionProjection(projection.scope, projection.worldGroupId, sessionId)
+        const child = await retryDefeatedTextOpenWorldCombatV1({ sessionId, title })
+        const childSessionId = child.id
+        if (childSessionId == null) throw new Error('[text-open-world] 重试Session缺少身份。')
+        await reloadSessionOperation(request, childSessionId)
+        return childSessionId
+      }, mayPublish)
+    },
+    forkCurrent: async title => {
+      const request = beginSessionOperation()
+      const mayPublish = () => isCurrentSessionOperation(request)
+      return run(async () => {
+        const sessionId = request.selectedSessionId
+        const projection = sessionOperationProjection(request)
+        if (sessionId == null || !projection) throw new Error('[text-open-world] 请先开始正式开放世界。')
+        await assertSessionProjection(projection.scope, projection.worldGroupId, sessionId)
+        const state = await readProductRuntimeState(sessionId)
+        const child = state.textOpenWorld
+          ? await (async () => {
+              const checkpoint = await createTextOpenWorldCheckpointV1({
+                sessionId,
+                name: title?.trim() || '开放世界分支点',
+              })
+              return branchTextOpenWorldSessionFromCheckpointV1({
+                checkpointId: checkpoint.id!,
+                title: title?.trim() || '开放世界分支',
+              })
+            })()
+          : await branchProductRuntimeSession({
+              parentSessionId: sessionId,
+              throughSequence: state.lastSequence,
+              title: title?.trim() || '开放世界分支',
+            })
+        const childSessionId = child.id
+        if (childSessionId == null) throw new Error('[text-open-world] 分支Session缺少身份。')
+        await reloadSessionOperation(request, childSessionId)
+        return childSessionId
+      }, mayPublish)
+    },
+    remove: async sessionId => {
+      const request = beginSessionOperation()
+      const selectedSessionIdAfterRemoval = request.selectedSessionId === sessionId
+        ? null
+        : request.selectedSessionId
+      const mayPublish = () => isCurrentSessionOperation(request)
+      return run(async () => {
+        const projection = sessionOperationProjection(request)
+        if (!projection) throw new Error('[text-open-world] scope 缺失。')
+        await assertSessionOwnership(projection.scope, projection.worldGroupId, sessionId)
+        await deleteProductRuntimeSession(sessionId)
+        await reloadSessionOperation(request, selectedSessionIdAfterRemoval)
+      }, mayPublish)
+    },
   }
 })
 
