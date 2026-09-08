@@ -2665,6 +2665,8 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     expect(sideQuestSystem).toContain('每条支线必须包含 2–4 个有因果顺序的实质阶段')
     expect(sideQuestSystem).toContain('不能把“接取任务”充当模型阶段')
     expect(sideQuestSystem).toContain('每个 stage 的 title、objective、successText、costlySuccessText、failureText')
+    expect(sideQuestSystem).toContain('title 与 objective 合并后必须且只能出现这一个登记地点标题')
+    expect(sideQuestSystem).toContain('跨地点线索只能写进 successText、costlySuccessText 或 failureText')
     expect(sideQuestSystem).toContain('abilityKey 只能逐字使用这些上游已登记能力=')
     expect(sideQuestSystem).toContain('"ability.perception"')
     expect(questScriptSystem).toContain('上游已冻结的脚本身份与顺序=')

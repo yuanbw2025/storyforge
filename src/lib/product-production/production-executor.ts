@@ -2088,7 +2088,7 @@ function textSystem(
         ? '每条支线必须包含 2–4 个有因果顺序的实质阶段，至少跨越两个登记地点；后续阶段要承接前一阶段得到的人物态度、信息、物品或代价，不能把“接取任务”充当模型阶段，也不能用两个同义按钮冒充多阶段。'
         : '每个区域/随机事件必须恰好一个阶段；它应形成短而完整的新局面，不得伪装成跨地点支线。') +
       `abilityKey 只能逐字使用这些上游已登记能力=${JSON.stringify(textAdventureQuestScriptAbilityKeys)}；不得组合多个能力、追加子技能后缀、使用中文标题或自造 key。` +
-      '每个 stage 的 title、objective、successText、costlySuccessText、failureText 至少一处必须逐字写出所绑定的 locationTitle，并且不得把另一个登记地点写成该阶段行动的发生地；失败必须留下已结算代价、新信息或替代推进。' +
+      '每个 stage 的 title、objective、successText、costlySuccessText、failureText 至少一处必须逐字写出所绑定的 locationTitle。title 与 objective 合并后必须且只能出现这一个登记地点标题：禁止在这两个字段中提到出发地、下一站、来源地或任何其他登记地点；跨地点线索只能写进 successText、costlySuccessText 或 failureText。失败必须留下已结算代价、新信息或替代推进。' +
       `不得把题材专用机制写成字段。${adventure.narrative.failForward ? '失败文本和效果必须开启新局面，而不是死路。' : ''}`
   }
   if (isTextAdventureQuestScriptModelTask(taskKey)) {
