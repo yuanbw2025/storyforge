@@ -1338,6 +1338,9 @@ async function recoveryInvalidatedTaskKeys(input: {
   ]
   const directlyResolvedFailureDetail = previousFailure && typeof previousFailure.detail === 'string'
     ? previousFailure.detail : ''
+  const failedMediaArtifactTaskKeys = [...new Set(
+    directlyResolvedFailureDetail.match(/media\.visual\.\d{3}/g) ?? [],
+  )].filter(taskKey => input.plan.tasks.some(task => task.taskKey === taskKey))
   const expandFailureOwnerTaskKeys = (taskKey: string) => (
     taskKey === 'integration.narrative'
       ? directlyResolvedFailureDetail.includes('content.dialogue-pass.act-')
@@ -1346,13 +1349,20 @@ async function recoveryInvalidatedTaskKeys(input: {
       : /^content\.scene-script\.act-[1-3]$/.test(taskKey)
         && directlyResolvedFailureDetail.includes('跨场景 beatKey 重复')
         ? [taskKey]
+      : taskKey === 'media.audit'
+        ? failedMediaArtifactTaskKeys.length > 0
+          ? failedMediaArtifactTaskKeys
+          : input.plan.tasks
+            .filter(task => /^media\.visual\.\d{3}$/.test(task.taskKey))
+            .map(task => task.taskKey)
       : sceneScriptPartKeys(taskKey)
   )
   const directlyResolvedFailureTaskKey = previousFailure
     && typeof previousFailure.taskKey === 'string'
     && (previousFailure.taskKey.startsWith('content.')
       || previousFailure.taskKey === 'integration.narrative'
-      || previousFailure.taskKey === 'media.requirements')
+      || previousFailure.taskKey === 'media.requirements'
+      || previousFailure.taskKey === 'media.audit')
     ? previousFailure.taskKey : null
   // A resolve-blocker envelope names the current failure in previousFailure.
   // Prefer that root over append-only diagnostic history; otherwise an older,

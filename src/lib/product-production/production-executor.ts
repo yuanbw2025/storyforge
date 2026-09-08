@@ -3955,6 +3955,7 @@ async function executeTextAdventureMediaAuditTask(
     expectedAssetKeys: requirements.visual.map(item => item.artifactKey),
   })
   const assets: TextAdventureMediaAuditArtifactV1['assets'] = []
+  const failedAssetChecks: string[] = []
   for (const requirement of requirements.visual) {
     const matches = input.inputArtifacts.filter(row => row.artifactKey === requirement.artifactKey)
     if (matches.length !== 1) fail(`媒资审计目标缺失或重复:${requirement.artifactKey}`)
@@ -4018,7 +4019,8 @@ async function executeTextAdventureMediaAuditTask(
       ['rights-complete', rightsComplete],
     ].filter(([, passed]) => !passed).map(([name]) => name)
     if (failedChecks.length > 0) {
-      fail(`需求—图片 Artifact 审计失败:${requirement.artifactKey}:${failedChecks.join(',')}`)
+      failedAssetChecks.push(`${requirement.artifactKey}:${failedChecks.join(',')}`)
+      continue
     }
     assets.push({
       artifactKey: requirement.artifactKey, status: 'fulfilled', assetKey: expectedAssetKey,
@@ -4026,6 +4028,9 @@ async function executeTextAdventureMediaAuditTask(
       mimeType: artifact.mimeType, width: actualWidth, height: actualHeight,
       source: mediaSource, license: mediaLicense, rightsComplete: true, fallbackReason: null,
     })
+  }
+  if (failedAssetChecks.length > 0) {
+    fail(`需求—图片 Artifact 审计失败:${failedAssetChecks.join(';')}`)
   }
   const report = parseTextAdventureMediaAuditArtifactV1({
     schema: 'storyforge.text-adventure-media-audit-artifact', version: 1,
