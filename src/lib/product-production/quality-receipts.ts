@@ -1513,18 +1513,26 @@ function parseHumanVisualMediaAuditProjectionV1(input: {
   }
   const assets: HumanVisualMediaAuditProjectionV1['assets'] = row.assets.map((value, index) => {
     const item = record(value, `human visual media audit asset[${index}]`)
+    const hasRequirementBinding = Object.prototype.hasOwnProperty.call(item, 'sourceRequirementHash')
+      || Object.prototype.hasOwnProperty.call(item, 'requirementBinding')
     exactKeys(item, [
       'artifactKey', 'status', 'assetKey', 'requirementHash', 'contentHash', 'mimeType', 'width', 'height',
       'source', 'license', 'rightsComplete', 'fallbackReason',
+      ...(hasRequirementBinding ? ['sourceRequirementHash', 'requirementBinding'] : []),
     ], `human visual media audit asset[${index}]`)
     const status = item.status === 'fulfilled' ? 'fulfilled' : item.status === 'text-fallback' ? 'text-fallback' : null
     if (!status || !isSha256Hash(item.requirementHash) || !isSha256Hash(item.contentHash)
       || item.rightsComplete !== true) fail(`人工审图 media.audit 图片无效:${index}`)
     const artifactKey = boundedText(item.artifactKey, `human visual media audit asset[${index}].artifactKey`, 500)
     if (status === 'fulfilled') {
+      const sourceRequirementHash = hasRequirementBinding ? item.sourceRequirementHash : item.requirementHash
+      const requirementBinding = hasRequirementBinding ? item.requirementBinding : 'generated-for-requirement'
       const assetKey = boundedText(item.assetKey, `${artifactKey}.assetKey`, 500)
       const mimeType = boundedText(item.mimeType, `${artifactKey}.mimeType`, 200).toLowerCase()
       if (!['image/png', 'image/jpeg', 'image/webp'].includes(mimeType)
+        || !isSha256Hash(sourceRequirementHash)
+        || !['generated-for-requirement', 'revalidated-reuse'].includes(String(requirementBinding))
+        || (requirementBinding === 'generated-for-requirement') !== (sourceRequirementHash === item.requirementHash)
         || !Number.isInteger(item.width) || Number(item.width) < 1
         || !Number.isInteger(item.height) || Number(item.height) < 1
         || typeof item.source !== 'string' || !item.source.trim()
@@ -1532,6 +1540,10 @@ function parseHumanVisualMediaAuditProjectionV1(input: {
         fail(`人工审图 media.audit 图片合同无效:${artifactKey}`)
       }
       return { artifactKey, status, assetKey, contentHash: item.contentHash, mimeType }
+    }
+    if (hasRequirementBinding
+      && (item.sourceRequirementHash !== null || item.requirementBinding !== 'text-fallback')) {
+      fail(`人工审图 media.audit 纯文字降级需求绑定无效:${artifactKey}`)
     }
     if (item.assetKey !== null || item.mimeType !== null || item.width !== null || item.height !== null
       || item.source !== null || item.license !== null

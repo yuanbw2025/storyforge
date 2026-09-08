@@ -197,6 +197,8 @@ export interface TextAdventureMediaAuditArtifactV1 {
     status: 'fulfilled' | 'text-fallback'
     assetKey: string | null
     requirementHash: string
+    sourceRequirementHash: string | null
+    requirementBinding: 'generated-for-requirement' | 'revalidated-reuse' | 'text-fallback'
     contentHash: string
     mimeType: string | null
     width: number | null
@@ -3879,9 +3881,12 @@ export function parseTextAdventureMediaAuditArtifactV1(
     || !Array.isArray(row.assets) || row.assets.length > 200) fail('mediaAudit 基础合同无效')
   const assets = row.assets.map((value, index) => {
     const item = record(value, `mediaAudit.assets[${index}]`)
+    const hasRequirementBinding = Object.prototype.hasOwnProperty.call(item, 'sourceRequirementHash')
+      || Object.prototype.hasOwnProperty.call(item, 'requirementBinding')
     exactKeys(item, [
       'artifactKey', 'status', 'assetKey', 'requirementHash', 'contentHash', 'mimeType', 'width', 'height',
       'source', 'license', 'rightsComplete', 'fallbackReason',
+      ...(hasRequirementBinding ? ['sourceRequirementHash', 'requirementBinding'] : []),
     ], `mediaAudit.assets[${index}]`)
     if (typeof item.requirementHash !== 'string' || !/^[a-f0-9]{64}$/.test(item.requirementHash)
       || typeof item.contentHash !== 'string' || !/^[a-f0-9]{64}$/.test(item.contentHash)
@@ -3891,6 +3896,19 @@ export function parseTextAdventureMediaAuditArtifactV1(
       fail(`mediaAudit.assets[${index}].status 无效`)
     }
     const fulfilled = status === 'fulfilled'
+    const sourceRequirementHash = hasRequirementBinding
+      ? item.sourceRequirementHash
+      : fulfilled ? item.requirementHash : null
+    const requirementBinding = hasRequirementBinding
+      ? item.requirementBinding
+      : fulfilled ? 'generated-for-requirement' : 'text-fallback'
+    if (fulfilled
+      ? (typeof sourceRequirementHash !== 'string' || !/^[a-f0-9]{64}$/.test(sourceRequirementHash)
+        || !['generated-for-requirement', 'revalidated-reuse'].includes(String(requirementBinding))
+        || (requirementBinding === 'generated-for-requirement') !== (sourceRequirementHash === item.requirementHash))
+      : (sourceRequirementHash !== null || requirementBinding !== 'text-fallback')) {
+      fail(`mediaAudit.assets[${index}] 需求绑定证据无效`)
+    }
     if (fulfilled
       ? (typeof item.assetKey !== 'string' || !item.assetKey.trim()
         || typeof item.mimeType !== 'string' || !item.mimeType.startsWith('image/')
@@ -3907,6 +3925,8 @@ export function parseTextAdventureMediaAuditArtifactV1(
       status,
       assetKey: fulfilled ? key(item.assetKey, `mediaAudit.assets[${index}].assetKey`) : null,
       requirementHash: item.requirementHash,
+      sourceRequirementHash: sourceRequirementHash as string | null,
+      requirementBinding: requirementBinding as TextAdventureMediaAuditArtifactV1['assets'][number]['requirementBinding'],
       contentHash: item.contentHash,
       mimeType: fulfilled ? item.mimeType as string : null,
       width: fulfilled ? integer(item.width, `mediaAudit.assets[${index}].width`, 1, 10_000) : null,
@@ -3978,7 +3998,8 @@ async function executeTextAdventureMediaAuditTask(
       }
       assets.push({
         artifactKey: requirement.artifactKey, status: 'text-fallback', assetKey: null,
-        requirementHash, contentHash: artifact.contentHash, mimeType: null, width: null, height: null,
+        requirementHash, sourceRequirementHash: null, requirementBinding: 'text-fallback',
+        contentHash: artifact.contentHash, mimeType: null, width: null, height: null,
         source: null, license: null, rightsComplete: true,
         fallbackReason: 'provider-unavailable-after-bounded-retry',
       })
@@ -4002,7 +4023,6 @@ async function executeTextAdventureMediaAuditTask(
     // must not pretend that a 1K provider response is the requested 1280px.
     const failedChecks = [
       ['payload-schema', payload.schema === 'storyforge.generated-media-artifact' && payload.version === 1],
-      ['request', canonicalProductProductionJsonV2(payload.request) === canonicalProductProductionJsonV2(requirement)],
       ['asset-key', metadata.assetKey === expectedAssetKey],
       ['kind', artifact.kind === 'image'],
       ['media-kind', artifact.mediaKind === requirement.mediaKind],
@@ -4022,9 +4042,13 @@ async function executeTextAdventureMediaAuditTask(
       failedAssetChecks.push(`${requirement.artifactKey}:${failedChecks.join(',')}`)
       continue
     }
+    const sourceRequirementHash = await hashProductProductionValueV2(payload.request)
     assets.push({
       artifactKey: requirement.artifactKey, status: 'fulfilled', assetKey: expectedAssetKey,
-      requirementHash, contentHash: artifact.contentHash,
+      requirementHash, sourceRequirementHash,
+      requirementBinding: sourceRequirementHash === requirementHash
+        ? 'generated-for-requirement' : 'revalidated-reuse',
+      contentHash: artifact.contentHash,
       mimeType: artifact.mimeType, width: actualWidth, height: actualHeight,
       source: mediaSource, license: mediaLicense, rightsComplete: true, fallbackReason: null,
     })
@@ -4044,7 +4068,12 @@ async function executeTextAdventureMediaAuditTask(
   return {
     artifacts: [{
       artifactKey: 'media.audit', kind: 'integration-report', payload: report,
-      quality: { requirementArtifactAudit: true, auditedAssetCount: report.assets.length },
+      quality: {
+        requirementArtifactAudit: true, auditedAssetCount: report.assets.length,
+        reusedAcrossRequirementRevisionCount: report.assets.filter(
+          asset => asset.requirementBinding === 'revalidated-reuse',
+        ).length,
+      },
       rights: {},
     }],
     passedGateIds: [...input.task.acceptanceGateIds], usage: zeroUsage(elapsed(startedAt)),

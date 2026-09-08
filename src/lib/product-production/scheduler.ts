@@ -1351,6 +1351,14 @@ async function recoveryInvalidatedTaskKeys(input: {
   const failedMediaArtifactTaskKeys = [...new Set(
     directlyResolvedFailureDetail.match(/media\.visual\.\d{3}/g) ?? [],
   )].filter(taskKey => input.plan.tasks.some(task => task.taskKey === taskKey))
+  const mediaAuditFailureSegments = directlyResolvedFailureDetail.includes('需求—图片 Artifact 审计失败:')
+    ? directlyResolvedFailureDetail.slice(
+        directlyResolvedFailureDetail.indexOf('需求—图片 Artifact 审计失败:')
+          + '需求—图片 Artifact 审计失败:'.length,
+      ).split(';')
+    : []
+  const mediaAuditRequiresRevalidationOnly = mediaAuditFailureSegments.length > 0
+    && mediaAuditFailureSegments.every(segment => /^media\.visual\.\d{3}:request$/.test(segment.trim()))
   const expandFailureOwnerTaskKeys = (taskKey: string) => (
     taskKey === 'integration.narrative'
       ? directlyResolvedFailureDetail.includes('content.dialogue-pass.act-')
@@ -1360,7 +1368,9 @@ async function recoveryInvalidatedTaskKeys(input: {
         && directlyResolvedFailureDetail.includes('跨场景 beatKey 重复')
         ? [taskKey]
       : taskKey === 'media.audit'
-        ? failedMediaArtifactTaskKeys.length > 0
+        ? mediaAuditRequiresRevalidationOnly
+          ? ['media.audit']
+          : failedMediaArtifactTaskKeys.length > 0
           ? failedMediaArtifactTaskKeys
           : input.plan.tasks
             .filter(task => /^media\.visual\.\d{3}$/.test(task.taskKey))
