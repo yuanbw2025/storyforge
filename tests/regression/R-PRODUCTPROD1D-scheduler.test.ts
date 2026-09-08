@@ -10,6 +10,7 @@ import {
   runProductProductionSchedulerCycleV1,
   runProductProductionUntilBlockedV1,
   ProductProductionDraftRejectedErrorV1,
+  ProductProductionResultUnknownErrorV1,
   type ProductProductionTaskExecutionResultV1,
   type ProductProductionTaskExecutorV1,
 } from '../../src/lib/product-production/scheduler'
@@ -191,6 +192,27 @@ describe('R-PRODUCTPROD-1D · durable bounded DAG scheduler', () => {
     await expect(readProductProductionTaskEvidenceV1({
       scope: other.scope, productionId: owned.productionId, taskKey: 'content.design',
     })).rejects.toThrow()
+  })
+
+  it('结果未知不自动重试并进入作者恢复流程', async () => {
+    const owned = await fixture('scheduler-result-unknown')
+    let calls = 0
+    const result = await runProductProductionUntilBlockedV1({
+      scope: owned.scope, productionId: owned.productionId,
+      executor: async () => {
+        calls += 1
+        throw new ProductProductionResultUnknownErrorV1()
+      },
+      capabilityBindings: [{
+        requirementKey: owned.brief.capabilityRequirements[0].requirementKey,
+        adapterId: 'configured-text-provider.v1', bindingHash: 'a'.repeat(64),
+      }],
+    })
+    expect(calls).toBe(1)
+    expect(result.tasks.find(item => item.taskKey === 'content.design')).toMatchObject({
+      status: 'blocked', attempt: 1,
+    })
+    expect((await db.productBuilds.get(result.buildId))?.failureJson).toContain('unknown-result')
   })
 
   it.each([

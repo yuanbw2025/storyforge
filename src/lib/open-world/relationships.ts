@@ -66,13 +66,22 @@ export function projectTextOpenWorldRelationshipsV1(input: {
   runtimePackage: TextOpenWorldRuntimePackageV1 | string | unknown
   state: TextOpenWorldEffectStateV1
   actorKeys?: string[]
+  factionKeys?: string[]
   parsedModules?: TextOpenWorldParsedModulesV1
 }) {
   const modules = input.parsedModules ?? parseTextOpenWorldModulesV1(input.runtimePackage)
   const actorKeys = input.actorKeys ?? modules.actors.actors.map(actor => actor.key)
   if (new Set(actorKeys).size !== actorKeys.length) fail('actorKeys不能重复')
+  const factionKeys = input.factionKeys ?? []
+  if (new Set(factionKeys).size !== factionKeys.length) fail('factionKeys不能重复')
+  factionKeys.forEach(factionKey => {
+    if (!modules.actors.factions.some(faction => faction.key === factionKey)) fail(`Faction不存在:${factionKey}`)
+  })
   const actors = actorKeys.map(actorKey => projectActor(modules, input.state, actorKey))
-  const visibleFactionKeys = new Set(actors.flatMap(actor => actor.factionKey ? [actor.factionKey] : []))
+  const visibleFactionKeys = new Set([
+    ...factionKeys,
+    ...actors.flatMap(actor => actor.factionKey ? [actor.factionKey] : []),
+  ])
   return {
     morality: {
       value: input.state.relationships.morality,

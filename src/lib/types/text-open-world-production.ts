@@ -1497,6 +1497,19 @@ export interface TextOpenWorldRegionNarrativePacksV1 {
       pointsTo: 'location' | 'quest' | 'event' | 'tension' | 'character'
       spoilerBoundary: string
       sourceClaimKeys: string[]
+      /**
+       * Added by the governed Knowledge production contract. Historical P7
+       * artifacts omit these fields and are only accepted through the legacy
+       * downstream path; fresh default-model output supplies them explicitly.
+       */
+      truthSummary?: string
+      reliability?: 'uncertain' | 'likely' | 'confirmed'
+      subjectKind?: 'location' | 'actor' | 'faction' | 'lore' | 'quest-clue'
+      subjectSourceKey?: string | null
+      minimumRevealGate?: {
+        kind: 'regional-public' | 'mainline-stage-complete' | 'significant-stage-complete'
+        stageKey: string | null
+      }
       bindingStatus: 'unbound'
     }>
   }>
@@ -2538,6 +2551,52 @@ export interface TextOpenWorldQuestDesignDocumentsV1 {
   effects: TextOpenWorldEffectDefinitionV1[]
   actions: TextOpenWorldActionDefinitionV1[]
   /**
+   * Fresh P8F builds compile the player-facing Knowledge inventory and every
+   * obtainability path here. SourceLedger remains production truth and is not
+   * a runtime encyclopedia inventory.
+   */
+  knowledgeBindings?: Array<{
+    order: number
+    sourceRumorKey: string
+    regionKey: string
+    propagationLocationKey: string
+    knowledgeKey: string
+    kind: 'location' | 'actor' | 'faction' | 'enemy' | 'lore' | 'quest-clue'
+    subjectSourceKey: string | null
+    subjectDefinitionKey: string | null
+    truthSummary: string
+    sourceClaimKeys: string[]
+    rumorKey: string
+    rumorText: string
+    reliability: 'uncertain' | 'likely' | 'confirmed'
+    minimumRevealGate: {
+      kind: 'regional-public' | 'mainline-stage-complete' | 'significant-stage-complete'
+      stageKey: string | null
+    }
+    propagationEventKey: string
+    propagationConditionKeys: string[]
+    confirmationBindings: Array<{
+      order: number
+      sourceKind: 'quest-reward-claim' | 'ending-action'
+      sourceKey: string
+      sourceActionKey: string
+      effectOwnerKind: 'reward-contract' | 'action'
+      effectOwnerKey: string
+      revealEffectKey: string
+    }>
+  }>
+  /** Achievement definitions and their exact one-time Action/Effect owner path. */
+  achievementBindings?: Array<{
+    order: number
+    achievementKey: string
+    sourceKind: 'quest-reward-claim' | 'ending-action'
+    sourceKey: string
+    sourceActionKey: string
+    effectOwnerKind: 'reward-contract' | 'action'
+    effectOwnerKey: string
+    earnEffectKey: string
+  }>
+  /**
    * Deterministic P8F binding of every authored ending to the final protected
    * mainline quest. P9 may author the visible choice copy, but it must point at
    * these already-frozen Actions instead of creating a second result path.
@@ -2644,6 +2703,12 @@ export interface TextOpenWorldQuestDesignDocumentsV1 {
     referencedCatalogDefinitionKeys: string[]
     requiredEndingKeys: string[]
     boundEndingKeys: string[]
+    requiredKnowledgeKeys?: string[]
+    confirmableKnowledgeKeys?: string[]
+    requiredRumorSeedKeys?: string[]
+    boundRumorSeedKeys?: string[]
+    requiredAchievementKeys?: string[]
+    earnableAchievementKeys?: string[]
     orphanActionKeys: string[]
     orphanEffectKeys: string[]
     uncoveredRequirementKeys: []
@@ -2667,6 +2732,14 @@ export interface TextOpenWorldQuestDesignDocumentsV1 {
      * runtime triplet. Missing on historical v15/v16 artifacts.
      */
     structuredCombatMechanicsReady?: true
+    /** Fresh Action v18 compiles every locked protected story into a durable
+     * system-owned locked -> available -> revealed transition path. */
+    protectedStoryRevealActionsReady?: true
+    allRumorsHaveUniquePropagationPath?: true
+    allKnowledgeHasConfirmationPath?: true
+    allAchievementsOneTimeReachable?: true
+    /** Fresh P8F Knowledge/rumor/achievement graph is complete and runnable. */
+    knowledgeProgressReady?: true
     allCatalogBindingsResolved: true
     allEndingsRuntimeBound: true
     sceneBindingsDeferred: true
@@ -2735,6 +2808,8 @@ export interface TextOpenWorldDirectorDecksV1 {
     conditionKeys: string[]
     fingerprint: string
     rumorRequirementKey: string | null
+    /** Present on governed-v18 Knowledge builds; absent on historical decks. */
+    rumorKey?: string | null
     upgradeTemplateKey: string | null
     intensity: number
     weight: number
@@ -2758,6 +2833,8 @@ export interface TextOpenWorldDirectorDecksV1 {
     coveredTemplateQuestKeys: string[]
     randomEventSeedKeys: string[]
     coveredRandomEventSeedKeys: string[]
+    requiredRumorSeedKeys?: string[]
+    boundRumorSeedKeys?: string[]
     emptyPlayableDeckRegionKeys: []
   }
   governance: {
@@ -2769,6 +2846,8 @@ export interface TextOpenWorldDirectorDecksV1 {
     runtimeHistorySessionOwned: true
     presentationVariantsDeferred: true
     directorRuntimeReadyExceptPresentation: true
+    allRumorsHaveUniquePropagationPath?: true
+    knowledgeProgressReady?: true
   }
   basisHash: string
   createdAt: number
@@ -2849,8 +2928,23 @@ export interface TextOpenWorldSceneScriptsV1 {
     rumorKey: string | null
     rumorRequirementKey: string | null
     rumorText: string | null
-    reliability: 'uncertain' | null
+    reliability: 'uncertain' | 'likely' | 'confirmed' | null
     sourceClaimKeys: string[]
+  }>
+  /** Player-visible copy over P8F-owned definitions; no new keys or truth. */
+  knowledgePresentations?: Array<{
+    key: string
+    order: number
+    knowledgeKey: string
+    title: string
+    summary: string
+  }>
+  achievementPresentations?: Array<{
+    key: string
+    order: number
+    achievementKey: string
+    title: string
+    description: string
   }>
   coverage: {
     requiredQuestKeys: string[]
@@ -2867,6 +2961,10 @@ export interface TextOpenWorldSceneScriptsV1 {
     requiredTemplateVariantRequirementKeys: string[]
     fulfilledTemplateVariantRequirementKeys: string[]
     uncoveredSceneSourceKeys: []
+    requiredKnowledgeKeys?: string[]
+    presentedKnowledgeKeys?: string[]
+    requiredAchievementKeys?: string[]
+    presentedAchievementKeys?: string[]
   }
   governance: {
     proseOwner: 'model-validated'
@@ -2879,6 +2977,11 @@ export interface TextOpenWorldSceneScriptsV1 {
     everyDirectorEventHasPresentation: true
     allTemplateVariantsFulfilled: true
     actionResultsReferencedNotDuplicated: true
+    disclosureSafeModelContextV3?: true
+    knowledgePresentationsComplete?: true
+    achievementPresentationsComplete?: true
+    rumorFactsCopiedFromQuestDesign?: true
+    sceneKnowledgeRefsAreRuntimeKnowledgeKeys?: true
   }
   basisHash: string
   createdAt: number
@@ -3545,8 +3648,12 @@ export interface TextOpenWorldProductionTaskContractV1 {
     adoptionExtension: 'product-production-artifacts'
   }
   budgetClass: 'deterministic' | 'model'
-  /** Recommended total provider calls across initial execution and repairs. */
+  /** Maximum initial provider calls reserved for this durable task. */
   recommendedModelCalls: number
+  /** Independent share of the Build input/output token budgets. */
+  tokenBudgetWeight: number
+  /** Independent share of the Build wall-clock reservation. */
+  durationBudgetWeight: number
   retryPolicy: TextOpenWorldProductionRetryPolicyV1
   stalePolicy: TextOpenWorldProductionStalePolicyV1
   failurePolicy: 'fail-build' | 'pause'

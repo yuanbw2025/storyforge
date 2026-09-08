@@ -1,6 +1,6 @@
 # AI 主导文字开放世界游戏 · 完整开发清单
 
-> 版本：1.1.79
+> 版本：1.1.82
 > 建立日期：2026-09-06
 > 对应总任务：`E-OPENWORLD-01`
 > 当前状态：`IN_PROGRESS`；用户已于2026-09-06明确下达完整产品开发指令
@@ -36,16 +36,16 @@
 | 指标 | 当前值 |
 |---|---|
 | 首版工作包 | 121 |
-| 已完成 | 79（G0、G1、G2及G3全部完成，G4完成10项） |
-| 产品总进度 | 79 / 121（65.3%） |
-| G1～G7业务功能进度 | 69 / 111（62.2%） |
+| 已完成 | 80（G0、G1、G2及G3全部完成，G4完成11项） |
+| 产品总进度 | 80 / 121（66.1%） |
+| G1～G7业务功能进度 | 70 / 111（63.1%） |
 | 当前阶段 | G4 完整玩家端 |
 | G0阶段进度 | 10 / 10（100%） |
 | G1阶段进度 | 13 / 13（100%） |
 | G2阶段进度 | 28 / 28（100%） |
 | G3阶段进度 | 18 / 18（100%） |
-| G4阶段进度 | 10 / 15（66.7%） |
-| 当前工作包 | `TOW-G4-11` |
+| G4阶段进度 | 11 / 15（73.3%） |
+| 当前工作包 | `TOW-G4-12` |
 | 当前阻塞项 | 无 |
 
 每次状态变化必须同时更新本节汇总、对应任务行、验证证据和变更记录。
@@ -184,7 +184,7 @@ G7 盐脊验收、发布更新与旧入口收口
 
 | ID | 状态 | 工作包 | 依赖 | 完成判据 |
 |---|---|---|---|---|
-| TOW-G3-01 | DONE | 产品专属Artifact Kind、Run Contract和生产DAG | G1-13、G0-06 | 当前40种产品专属Build Artifact（G3-02将SourcePin索引与大体量冻结单元分开）全部登记到统一Kind边界并拥有唯一任务owner；26个P0～P10/V1～V3/QA合同明确输入、输出、依赖、Context、写目标、22个模型型durable Run及按Brief有界分配的调用预算、重试/不可重试错误、超时、stale传递、验收门和终态回执；Ruleset/表现、六类玩法目录及平衡/语义评审均有独立Skill边界，推荐完整Build预留150次模型调用且最低骨架为22次；P8玩法目录并行、P8F后绑定任务，确定性预检先于双评审，V3是唯一G2包装配点；可选视觉/音频Lane只在P10媒资需求之后加入；专属Plan可通过共享`ProductProductionPlanV3`严格解析，但在G3-02～G3-17的Skill/Executor齐备前保持未激活，现有线上生产入口未被半成品替换；新增5项回归并对Artifact Store补Kind运行时登记校验 |
+| TOW-G3-01 | DONE | 产品专属Artifact Kind、Run Contract和生产DAG | G1-13、G0-06 | 当前40种产品专属Build Artifact（G3-02将SourcePin索引与大体量冻结单元分开）全部登记到统一Kind边界并拥有唯一任务owner；26个P0～P10/V1～V3/QA合同明确输入、输出、依赖、Context、写目标、22个模型型durable Run及按Brief有界分配的调用预算、重试/不可重试错误、超时、stale传递、验收门和终态回执；Ruleset/表现、六类玩法目录及平衡/语义评审均有独立Skill边界。当前完整Build预留154次初始模型调用，并另给P9保留1次明确片段修复授权：P1最多6次、P9最多127个Scene加1次共享表现及1次修复、其余模型任务各1次，总授权155次；token按156份独立叙事权重分配，时长另按100份权重分配。P8玩法目录并行、P8F后绑定任务，确定性预检先于双评审，V3是唯一G2包装配点；可选视觉/音频Lane只在P10媒资需求之后加入；专属Plan可通过共享`ProductProductionPlanV3`严格解析，现已由G3-18激活；新增回归并对Artifact Store补Kind运行时登记校验 |
 | TOW-G3-02 | DONE | WorldRelease/小说SourcePin锁定 | G0-05、G3-01 | P0专属双来源合同统一冻结`sourceVersionHash/sourceBoundaryHash/authorizationHash/readEvidenceHash/pinHash`；WorldRelease入口只保存便携`WorldReference`、作者选定的中立资源坐标和真实index读取证据，不把物理Release行或完整manifest带入产品；小说入口从受控Work/大纲/规范章序读取，把选定故事核心、大纲和正文按20万字符上限完整复制为产品私有、逐单元Hash的Artifact，Pin内不保存可变来源行ID；授权保存Brief/开始revision、nonce Hash、明确rights basis及系统派生permission，原始nonce不落库；P0复用`productBuildArtifacts`，先写单元、最后写Pin闭合索引，相同Pin幂等、同Build换源失败关闭，源小说后续修改不影响冻结内容；新增3项双来源/分片/漂移/越界/篡改回归，无新增表、AI写字段或并行Context来源 |
 | TOW-G3-03 | DONE | SourceManifest、Ledger和Gap Report | G3-02 | P1以登记的`text-open-world.source-pin`来源和专属Skill/Executor分批读取冻结内容；小说只向模型交付本批产品私有全文单元，WorldRelease只通过Context Gateway按冻结资源坐标完整读取，逐项复核内容Hash并保存交付证据；SourceManifest把每个单元严格区分为已读/未读，SourceLedger要求每项事实绑定已读单元、逐字引文、UTF-16偏移、来源Hash和批次，模型伪造引文、偏移、批次或引用未读单元均失败关闭；代码从实际读集和证据覆盖确定性生成SourceGapReport，未读、故事核心、主角、冲突、角色、势力、地点和时间线缺口显式进入后续阶段；三件产物形成Pin→Manifest→Ledger→GapReport Hash链并复用productBuildArtifacts候选生命周期，不增加业务表或世界引擎写入 |
 | TOW-G3-04 | DONE | 主Agent会谈、GameBrief和ExperienceContract | G3-03 | 复用现有作者授权Brief作为会谈终态，以登记的单一P2 Context Source完整交付授权、SourcePin和已验收P1证据；代码确定性编译GameBrief中的主角模式、规模、严格顺序主线、有边界自由、三种输入、回合战斗、世界演化、关键到达策略、媒资、预算和直接发布完成条件；模型只补充体验语义与主角小传，并只能引用已交付claimKey；来源型主角必须引用绑定所选角色单元的证据；GameBrief、ExperienceContract和ProtagonistAsset形成Hash/basis链，任何作者意图、来源缺口、固定边界或capability偷换均失败关闭；仍只写Build Artifact候选，不读取活动来源、不写世界引擎或运行状态 |
@@ -223,8 +223,8 @@ G7 盐脊验收、发布更新与旧入口收口
 | TOW-G4-08 | DONE | 背包、物品详情、装备和比较UI | G2-06～G2-08 | 披露安全纯投影展示实际持有物、摘要、分类/搜索/排序/详情、安全来源、真实数值修正与关键保护；使用/装备/卸下/固定单件丢弃精确回到统一Action/Event/确认链，已装备实例排除于可移除数量；三槽比较显示旧/新/差值和资源调整；恢复品未满Condition、上限裁剪、物品Replay绑定及旧Release无drop兼容完整；出售只显示政策，真正交易留给G4-10；15项新专属回归、旧UI/壳集成和桌面/移动Playwright路径通过；无新持久化或三注册表登记 |
 | TOW-G4-09 | DONE | 逐回合战斗UI | G2-22～G2-25 | Action v17、Progression v2与Combat v4闭合攻击、恢复、资源和状态技能，scalingAttribute、装备skillPower、被动与战斗状态共同进入唯一确定性结算；状态按目标自身行动计时并支持拒绝、刷新、叠层和上限，cooldownTurns明确不含施放回合，授权、Effect、Event、Replay冻结并复核完整结果。玩家战斗页取代活动战斗时的场景页，显式选择多敌目标，提供战斗、逃跑、技能、道具四组操作及不可用原因、资源/冷却/数量、生命/状态、实际日志、已落盘奖励、战前重试和复活；内部键与未发生奖励不泄漏。刷新可从Command/Effect账本恢复缺失系统后续，Director与战斗奖励使用稳定原因链且只结算一次；旧Action≤16、Progression v1、Combat≤3和旧durable生产Context继续兼容。相关运行回归73项、生产回归63项、玩家UI回归20项及移动端正式Release战斗Playwright通过 |
 | TOW-G4-10 | DONE | 制作、商店和交易UI | G2-26、G2-27 | 披露安全投影仅展示已学配方、通用锁定占位与当前地点存活/当班服务商人；材料、产物、耗时、批量、货币、库存、整数价格、三档关系倍率及装备对比完整。制作/买入/卖出在本地摘要二次确认后，按当前Session及外层ProductRuntime基线重投影，再进入唯一Action/Event事务；安全回执重算提交时Authorization并精确复核Effect、summary、before/after，内部键和未分类诊断不进入玩家DOM。Store隔离基线漂移、换档、幂等重试和乱序请求；14项新回归、72项关联回归及真实Chromium“买材料→制作→卖出”落库闭环通过；无新持久化或三注册表登记 |
-| TOW-G4-11 | READY | 关系、百科、传闻、历程和成就UI | G2-20、G2-21、G2-28 | 三档态度不泄露秘密；事实/传闻区分；历史可回顾 |
-| TOW-G4-12 | QUEUED | 保存、读档、分支列表、版本和设置UI | G1-09～G1-11 | 20个手动档、自动/战前档、分支列表和旧Release继续可用 |
+| TOW-G4-11 | DONE | 关系、百科、传闻、历程和成就UI | G2-20、G2-21、G2-28 | 生产侧闭合P7传闻→P8F Knowledge/Rumor/传播与确认Effect/3～6成就→Director→P9安全表现→P10/Runtime；Knowledge只能由同Stage或更晚的合法任务Reward/结局下游确认，重要故事不得借全局结局越过自身进度，每个Knowledge/成就Effect只允许一组独占RewardContract/领奖Action或精确结局Action，旧条件式发布保持原义。fresh Action v18按来源Stage order生成唯一主线根、严格主线前驱和重要故事的主线窗口/线内前驱；每个锁定任务只由系统`action.reveal.*`执行`locked → available → revealed`，P10从前置图拒绝断点、分叉和环。fresh Director v3把受治理传闻冻结到唯一地区/地点并唯一放入对应牌组，以牌组`rest`和全局休息Action保证传播入口可达，候选/授权/Replay均复核地点；Director v2重冻结时删除归一字段以保持历史字节和Hash。P8F与P9共用确定性场景容量公式并在127项处封顶；P9 fresh生产按Scene独立请求并以零Scene共享请求处理公共表现，最多127+1次，另保留1次明确片段修复授权；模型看不到其他Scene、未来目标、Source Claim、人物私密内容或未声明公开的P7规划字段，片段有durable恢复证据，已成功片段不会重复调用或计费，已返回的超额响应先持久原始响应与真实usage再阻断候选。P9完整作者聚合稿以Hash绑定幂等键并记录durable `source-snapshot`，governed/legacy均以零模型、零token和零费用走同一编译验收，同时保留duration/storage预算。共享账本逐attempt计费，重试仅预留同Run剩余额度，部分调用费用上界按实际调用比例分摊，未知结果保留预留。完整Build初始最多154次调用、总授权155次，token按156份独立权重、时长按100份独立权重分配，P8F/P9分别占12/19份token，P9占48份时长且输入/输出留有最大片段修复余量。玩家侧世界记录从当前Session Projection与连续Event派生：关系含当前位置人物、已揭示任务联系人和任务势力并区分在场/异地/缺席/死亡；百科只含已知地图、已持有物和已确认Knowledge；传闻初读与后续确认保留各自时间；历程只含可验证终态；成就只公开已获得条目。五标签具备键盘导航、搜索/分类/地图定位与明确空态，切档复位筛选；专属、关联运行/生产及正式Release双视口/刷新E2E通过；无新表、Schema、migration或AI写入口 |
+| TOW-G4-12 | READY | 保存、读档、分支列表、版本和设置UI | G1-09～G1-11 | 20个手动档、自动/战前档、分支列表和旧Release继续可用 |
 | TOW-G4-13 | QUEUED | 渐进式教程 | G4-01～G4-12 | 只在真实功能首次出现时提示，可跳过、可重看，无独立教学场景 |
 | TOW-G4-14 | QUEUED | 无模型、断网、错误、空状态、移动端与无障碍收口 | G4-01～G4-13 | loading/empty/recoverable/blocking齐全；键盘、读屏、地图列表和静音可玩 |
 | TOW-G4-15 | QUEUED | 玩家端真实路径E2E | G4-01～G4-14 | 隔离数据下完成开场、任务、地图、战斗、成长、制作、存档和结局 |
@@ -356,6 +356,9 @@ G7 盐脊验收、发布更新与旧入口收口
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| 1.1.82 | 2026-09-09 | G4-11最终语义收口：fresh Action v18把主线与重要故事的Stage顺序、开放窗口和系统揭示双Effect冻结成可重放前置图；Director v3把每条受治理传闻限定为唯一地区、地点和牌组，并以`rest`与全局休息Action保证抽牌入口可达，Director v2保持历史字节/Hash；Knowledge与成就落实同Stage或更晚的合法确认顺序和唯一Reward/Action owner。P9作者聚合稿以草稿Hash、`source-snapshot`和零模型直验进入同一Harness，duration/storage预算保留；已付费超额响应先落完整证据再停止后续分片。当前库存新增50项回归、1项Playwright并增强1项既有作者修订回归；完整CI的619个测试文件、3007项测试，以及正式Release桌面/390px刷新Playwright均通过。总进度80/121，业务功能70/111，下一项G4-12 |
+| 1.1.81 | 2026-09-08 | G4-11审查收口：修复成就资格与授予同批导致Director永远不可匹配的问题，改由真实任务奖励或结局Action直接唯一授予并保留旧条件式包；严格复验Knowledge摘要、传播单地区/地点、未读条件和Stage完成来源。P8F/P9共用场景容量公式并在127项封顶；P9按Scene硬隔离为最多127项独立请求加一项零Scene共享请求，剔除未来目标、Source Claim和未声明公开的人物规划字段；每片有durable原始响应/候选/恢复证据，另保留一次片段修复预算。完整Build初始最多154次调用、总授权155次，token总权重156、时长总权重100，P8F/P9分别占12/19份token，P9占48份时长并为最大片段保留输入/输出余量。世界记录补无Actor任务势力、人物在场状态和传闻确认真实时间。总进度80/121，业务功能70/111，下一项G4-12 |
+| 1.1.80 | 2026-09-08 | 完成G4-11关系、百科、传闻、历程与成就UI，同时补齐此前不存在的Knowledge生产编译闭环：P7受治理传闻经P8F形成唯一Knowledge/Rumor、地区传播、阶段门槛、任务/结局确认Effect和3～6个真实成就；P9以正规化最小公开材料写表现，传闻事实逐字段复制且SourceLedger证据、人物秘密、内部真相和未来目标不进入模型；P10、预检及运行包验证全链引用。玩家世界记录仅显示实际接触人物、已知事实、已读传闻、连续可验证历程和已获得成就；正式Release桌面、390px及刷新回放路径验证隐藏内容不泄露。旧Release保持兼容，无新表或Schema；总进度80/121，业务功能70/111，下一项G4-12 |
 | 1.1.79 | 2026-09-08 | 完成G4-10制作、商店和交易UI：披露安全投影与专属响应式界面展示已学/锁定配方、材料/产物/批量/耗时、当前营业商店、买卖库存、货币、价格倍率、不可用原因及装备比较。数量和价格摘要先二次确认，后以外层ProductRuntime事件序列重验Session和Action；执行仍全部进入既有Crafting v2 / Economy v2 / Action / Effect / Event事务。回执根据提交时前态重算授权，复核summary及before/after后仅输出世界化变化，玩家壳将未分类底层诊断收口为固定公开指引；Store对stale、跨Session、重复命令和乱序完成隔离。14项新回归、72项关联回归和Chromium真实落库闭环通过；总进度79/121，业务功能69/111，下一项G4-11 |
 | 1.1.78 | 2026-09-08 | 完成G4-09逐回合战斗UI与结构化战斗纵切面：Action v17、Progression v2、Combat v4把攻击、恢复、资源、状态、被动、属性缩放、装备skillPower、目标自身行动持续时间、叠层策略和不含施放回合的冷却全部收进确定性授权与Replay；活动战斗切换为专属响应式页面，提供显式多敌目标、战斗/逃跑/技能/道具、不可用解释、资源冷却、状态效果、真实日志、实际奖励、战前重试与复活。崩溃后从Command/Effect账本补跑系统后续，Director和胜利奖励幂等唯一；历史运行包与durable生产Context保持原语义。相关运行73项、生产63项、玩家UI20项及390px正式Release Playwright通过，architecture、required tables、AI manual、TypeScript、ESLint和diff检查通过；总进度78/121，业务功能68/111，下一项G4-10 |
 | 1.1.77 | 2026-09-08 | 完成G4-08背包、物品详情、装备和比较UI：单一安全投影展示摘要、分类/搜索/排序、安全来源、用途、真实修正、关键保护、四类物品Action和三槽前后比较；旧原始背包/装备入口下线。P8F补固定单件必确认丢弃、恢复与装备Condition；可移除数量排除已装备实例，资源恢复按上限裁剪，Release解析和Replay共同复核玩家/物品/唯一Effect。出售仅显示资格不执行交易，页内回执不串功能或复现旧结果；15项新专属回归与真实桌面/移动Playwright通过；总进度77/121，业务功能67/111，下一项G4-09 |

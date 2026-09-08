@@ -1,6 +1,6 @@
 # AI 主导文字开放世界游戏 · 整体产品与游戏系统施工规格
 
-> 规格版本：1.1.46
+> 规格版本：1.1.49
 > 生效日期：2026-09-06
 > 文档层级：L2 文字开放世界整体产品施工入口
 > 当前状态：目标架构已冻结并进入分阶段实现；实际完成度以完整开发清单为准
@@ -238,11 +238,19 @@ O10 Build Assembly / Replay / Preview / ProductRelease
 
 P8六类Gameplay Catalog均已落地，并共享已验收QuestSkeleton而不是仅凭需求标题猜测。Progression形成20级曲线、技能及公式；Enemy/Encounter兑现战斗Objective与地区基础遭遇；Item/Reward形成任务/遭遇奖励、掉落与主线1→5级1600经验闭环；Crafting/Economy形成配方、商店、定价、库存与反套利约束；NPC Runtime形成角色/势力、重要Agent和普通规则角色、日程、态度与功能替代；Map Interaction形成完整拓扑、地点交互、旅行、快旅和程序SVG布局。六类目录在P8均保持运行引用unbound，避免各目录自建一套Action或伪造跨模块键。
 
-P8F现已把上述目录与23个任务骨架一次性最终化为`QuestDesignDocuments`和`DirectorDecks`。模型不能编造运行键、公式或结算结果，只负责任务/Objective可读语义、模板类别/强度/权重和随机事件包装；代码从已验收目录生成所有Condition、Effect、Action，并建立任务、目标、奖励、战斗、技能、道具、配方、商店、NPC、地图、旅行、快旅、复活和地区演化的双向真实引用。主线/重要故事仍为受保护等待，不进入区域发牌压力；普通任务可放弃重接或按时限过期。Director在Build时冻结每个地区的固定任务、模板、随机事件、冷却、并发、强度连续限制和空白牌；P9只需补三类交互的场景表现与模板文字变体，不得另建第二套结果。
+P8F现已把上述目录与23个任务骨架一次性最终化为`QuestDesignDocuments`和`DirectorDecks`。模型不能编造运行键、公式或结算结果，只负责任务/Objective可读语义、模板类别/强度/权重、随机事件包装，以及从代码提供的候选中选择传闻传播地点、事实确认来源和成就来源；代码从已验收目录生成所有Condition、Effect、Action，并建立任务、目标、奖励、战斗、技能、道具、配方、商店、NPC、地图、旅行、快旅、复活、地区演化、Knowledge、Rumor和Achievement的双向真实引用。P7每条受治理传闻必须声明主题、内部真相、来源Claim、可靠度和最早揭示门槛；P8F为其生成唯一Knowledge、一次性传播事件、未读/阶段Condition及1～3个真实确认Effect。阶段门槛必须由该来源Stage对应的唯一任务`completed`兑现；同Stage任务领奖因发生在任务完成后可作为确认来源。主线Knowledge只允许同Stage或更晚的主线任务领奖及最终结局确认；重要支线Knowledge只允许同故事线且不早于门槛的任务领奖确认，不得借全局结局绕过。每个`reveal-knowledge`与`earn-achievement` Effect都只有一个执行owner：对应任务独占的RewardContract/领奖Action组合，或精确结局Action；RewardContract与领奖Action不得跨任务共享，任务奖励Effect镜像必须与RewardContract完全一致。3～6个成就由真实任务领奖Reward或结局Action直接且唯一拥有`earn-achievement` Effect，Director和犯罪目击后果都不能成为第二条授予路径；历史发布缺少`owner-action`标记时继续按原条件式语义重放。
 
-P9现已落地`SceneScripts`、`ChoiceContracts`和`ActionBindings`。代码先完整读取并校验Source、体验、故事、地区、任务、NPC、地图、QuestFinalize和Director产物，再把重复的大型任务结果图压缩为对模型足够的确定性投影；这不是截断，原始Artifact仍在代码侧逐件验签，模型输入则在任务预算内原子交付。模型只拥有场景/对话文字、固定选项标签、地区模板三种文字变体、事件与传闻表现以及非战斗自然语言示例。代码拥有场景来源、知识边界、全部稳定引用和Action Definition Hash：系统Action按钮、固定Choice与自然语言候选最终都只选择`QuestDesignDocuments.actions`中的同一Action。战斗Action只允许按钮/系统操作；自然语言低置信度不得执行，高风险或不可逆Action必须确认，无法映射时只作自然回应并推荐正式操作，首版不能据此创建任务、地图、Action或直接写状态。
+fresh受治理生产进一步以Action v18冻结受保护故事的确定性揭示链。主线顺序由来源Stage order而不是Artifact数组顺序决定：必须且只能有一个无前置的主线根任务初始`revealed`，其余主线与全部重要支线初始`locked`。后续主线依赖上一主线完成；每条重要故事的首任务依赖该线声明的主线开放窗口，后续任务依赖同故事线上一任务。编译器为每个锁定的受保护任务生成唯一系统`action.reveal.*`，以有序双Effect完成`locked → available → revealed`；它不绑地点、不消耗时间或资源、没有失败分支，不进入Choice或自然语言候选，只由任务系统在前置成立后自动结算。P10不相信数组顺序，而是从前置图重建主线和每条重要故事，拒绝断点、分叉、环或错误窗口；Action≤17及历史durable Context保持原冻结语义。
 
-P9新生产使用SceneScripts Context v2：同一场景中只有全部Action共有的Condition才能上升为场景可用性，其余条件仍留在各自Choice/Action上；Objective只把该目标显式需求且属于当前地点的Actor列为必须在场参与者，不再无条件把任务发布者加入每个目标。这避免“完成Action尚未解锁导致启动Action也不可见”和“任务发布者缺席导致目标永久消失”。历史Context v1仍按原确定性语义验签，确保旧durable Run可继续恢复而不伪造篡改；鉴于旧产物与新产物都使用Narrative v2/Action v15且无法仅凭模块版本区分，玩家投影会从Action条件交集、Objective与Actor对话场景共享的冻结Action引用及Actor居所确定性归一旧P9场景，连同发布者恰好与目标同地的旧包也不会重现上述两类吞场景问题。
+fresh Knowledge运行包使用Director v3。每条受治理传闻事件必须精确冻结一个地区和该地区内一个传播地点，并且唯一进入对应地区牌组；牌组必须包含`rest`触发，且编译器拥有的`action.rest.standard`在任意地点均可执行，从而保证玩家到达冻结传播点后存在可触发抽牌的正式行动，但权重、空白牌和冷却仍决定实际传播时机。Director候选生成、弱授权复核和Replay都要再次匹配当前地点。Director v2历史事件继续是地区级语义；解析时只在内存归一为空`locationKeys`，重新冻结v2 payload时会删除该新字段，保持原字节形状与content Hash兼容。主线/重要故事仍为受保护等待，不进入区域发牌压力；普通任务可放弃重接或按时限过期。P9只补三类交互的场景表现与模板文字变体，不得另建第二套结果。
+
+P9现已落地`SceneScripts`、`ChoiceContracts`和`ActionBindings`。代码先完整读取并校验Source、体验、故事、地区、任务、NPC、地图、QuestFinalize和Director产物；fresh Build再从完整durable Context确定性派生`governed-v3`最小模型投影。每个Scene使用一项独立模型请求，只得到该Scene的唯一Knowledge边界、公开地区/地点、当前Objective、由运行元数据推导的通用角色职责和当前Action语义；另以一项不含Scene的共享请求生成Action例句、模板/事件及Knowledge/成就公开表现。请求之间不共享其他Scene材料，`forbiddenFutureObjectiveKeys`、Source Claim、P7原始人物职责/叙事功能/日程/服务需求、SourceLedger正文与证据、StoryArc全文、人物小传/私密演绎、内部真相和传闻事实均不得进入模型。fresh Build最多127个Scene加1项共享请求；P8F在接受任务包前使用同一确定性公式证明该上限。各片段拥有稳定子步骤、原始响应、候选和恢复证据，已成功片段不得在重试时重复计费；共享调度账本按`runId + attempt`结算每次真实调用，后续attempt只预留任务总预算扣除同Run历史已付用量后的余量，未知结果保留原预留，部分调用的费用上界则按本次实际模型/媒资调用比例分摊。调用、输入和输出预算各额外保留一项最大片段的修复余量。P9因此授权最多129次调用（128次初始请求加1次片段修复），输入/输出token按独立的19/156权重分配，并独占48/100的生产时长权重；P8F以12/156继续满足不可切分任务上下文，调用扇出不会挤占上游故事与任务生产，同时给大体量Scene投影保留安全余量。完整Build初始最多154次调用，连同一次P9修复授权共155次。模型只写场景/对话、固定选项标签、地区模板三种文字变体、非传闻事件表现、Knowledge/成就公开标题及非战斗自然语言示例；传闻文本、可靠度、来源与Knowledge键一律从P8F和Director复制。代码拥有场景来源、知识边界、全部稳定引用和Action Definition Hash：系统Action按钮、固定Choice与自然语言候选最终都只选择`QuestDesignDocuments.actions`中的同一Action。战斗Action只允许按钮/系统操作；自然语言低置信度不得执行，高风险或不可逆Action必须确认，无法映射时只作自然回应并推荐正式操作，首版不能据此创建任务、地图、Action或直接写状态。历史P9 durable Context继续使用原单次调用与原始字段语义。
+
+P9的作者修订是一条显式的零模型durable路径，不是把作者稿再送给模型改写。当前blocker、Run、control epoch、Plan task与Skill身份全部匹配后，scheduler把完整聚合JSON作为`authorDraftJson`交给P9；governed与legacy Context均在任何模型分支之前执行同一`parseDraft`和最终编译验证。该attempt的model/media calls、输入/输出token和最大费用全部为0，但仍预留真实的duration与storage；作者稿Hash进入结构输入Hash与幂等键，因此两份不同修订不会误复用。执行前完整原稿以`source-snapshot`记录进Agent Run，候选、验收和terminal receipt继续走同一Harness；结构或语义无效时直接阻断，绝不回落为隐藏模型请求。
+
+已返回的P9模型响应可能在返回后才被发现超出本attempt的token或费用预留。这种情况必须先将原始响应和provider返回的真实usage写入durable证据与共享账本，再把超额候选阻断；不得因验证失败丢失已付成本，也不得在剩余任务预算不足时继续隐藏重试。请求结果未知则保留全额预留并进入作者裁决，不将“没有候选”误当作“没有产生费用”。
+
+P9新生产使用SceneScripts Context v2：同一场景中只有全部Action共有的Condition才能上升为场景可用性，其余条件仍留在各自Choice/Action上；Objective只把该目标显式需求且属于当前地点的Actor列为必须在场参与者，不再无条件把任务发布者加入每个目标。这避免“完成Action尚未解锁导致启动Action也不可见”和“任务发布者缺席导致目标永久消失”。历史Context v1仍按原确定性语义验签，确保旧durable Run可继续恢复而不伪造篡改；历史Narrative v2/Action v15包仍需兼容归一；玩家投影会从Action条件交集、Objective与Actor对话场景共享的冻结Action引用及Actor居所确定性归一旧P9场景，连同发布者恰好与目标同地的旧包也不会重现上述两类吞场景问题。 fresh包仍使用Narrative v2和Action v15+输入绑定合同，但当前完整治理出口为Action v18。
 
 ### 2.4 非叙事生产 Skill
 
@@ -1215,6 +1223,7 @@ abandoned → available → revealed（仅可重接普通任务）
 - 只有固定生成、普通、不限时且明确采用`abandon-restart`策略的任务，放弃后才可回到冻结的原发布场景重新接取；重接复用原实例、清空旧终态和目标进度，并从第一Stage重新开始；
 - 普通限时任务允许放弃，但放弃是终态且原绝对截止时间继续存在；到期后仍由系统迁移为`expired`，不得借重接刷新期限；
 - 新发布的Action v16对尚未开始及每个Stage分别生成精确放弃Action；终态迁移同步清理主追踪/pin并重算Director任务预算镜像，旧Action v15存档仍按冻结语义重放；
+- fresh Action v18只让一个无前置主线根初始`revealed`；其余主线和全部重要支线初始`locked`，再由无地点、零时间、零成本且不进入玩家输入的唯一系统Action依前置图自动执行`locked → available → revealed`；后续主线只跟随上一主线，重要支线首任务跟随声明的主线窗口、后续任务跟随同线前驱；
 - 随机事件只有产生多步目标时才创建QuestInstance；
 - 完成目标、阶段切换、奖励领取必须分别留下事件证据；
 - 任务正文可以压缩，但状态、重要结果和指纹不能丢失。
@@ -1766,6 +1775,22 @@ KnowledgeEntry {
 
 这让系统能记住“玩家做过什么”，又不把所有演绎正文永久塞入上下文。
 
+### 20.5 首版已落地边界
+
+首版G4-11已经闭合Player Knowledge消费纵切面，但没有提前宣称完成G6的Actor Knowledge长期记忆：
+
+- P7生产受治理的传闻种子，P8F将其编译为唯一Knowledge/Rumor、单地点Director v3传播事件、揭示门槛、确认来源和真实Effect；传播事件唯一进入对应地区牌组，牌组的`rest`触发与全局休息Action共同保证到达传播地点后存在可达抽牌入口；Director v2继续按原地区级字节形状冻结；
+- Stage门槛只能由精确来源任务`completed`证明；同Stage或更晚的领奖可确认主线Knowledge，最终结局也是主线的合法下游；重要支线只能由同故事线且不早于门槛的领奖确认，不允许全局结局绕过；
+- P8F把3～6个成就绑定到真实任务领奖Reward或结局Action；每项Knowledge确认或成就Effect的执行owner只能是对应任务独占的RewardContract/领奖Action组合，或精确结局Action，Director与犯罪后果不得形成第二路径；历史条件式成就继续按旧语义重放；
+- fresh Action v18冻结一个初始可见的主线根、后续主线链和每条重要故事的主线窗口/线内前驱；锁定任务只能由系统`action.reveal.*`的两步Effect公开，P10从前置图拒绝断点、分叉和环；
+- P9只生产公开表现文字，传闻事实由上游逐字段复制；场景引用运行时Knowledge键，不把SourceLedger Claim冒充玩家知识；
+- P10、确定性预检和运行包装配共同验证P7→P8F→Director→P9→Runtime引用闭合；fresh运行包的百科条目只来自受治理Knowledge，不再把完整SourceLedger自动发布给玩家；
+- Session Effect/Event是唯一揭示、读传闻和获得成就的状态源；关系、百科、传闻、历程和成就页面只是当前Session的披露安全投影，不保存第二份状态；
+- 百科只显示已知事实、已知地图层级和当前持有物；传闻必须有当前Session实际读过的Rumor证据；未获得成就只显示匿名数量；历程必须由同Session连续终态事件和Knowledge历史共同证明；
+- 历史Release没有`knowledgeProgressReady`治理标记时继续使用原有解析路径，不能伪装为新闭环；Actor Knowledge、对话摘要和长期最小记忆仍由G6-08实现。
+
+关系页沿用确定性的道德值、阵营亲合度与三档态度投影，只公开当前位置人物或已揭示任务联系人；人物小传、`privateKnowledge`、内部权重、稳定内容键和未揭示任务关系均不得进入玩家DTO或DOM。
+
 ---
 
 ## 21. 通知、反馈与可解释性
@@ -2014,7 +2039,7 @@ created → active → paused → active
 
 ### 23.8 首版场景投影与三类输入的实现边界
 
-G4-03直接消费ProductRelease或制作端显式Build Preview内冻结的Narrative v2场景正文和Action v15输入绑定，不回读生产Artifact，也不新建`currentSceneKey`。当前可见场景由代码从唯一Session Projection实时派生：地点必须等于玩家当前位置，Context v2确定的场景共有Condition必须成立，任务委托/当前Objective/收束分别匹配`revealed`、当前`active`目标和`completed`实例，场景显式参与NPC必须仍存活且在场。任一Action的私有Condition只隐藏自己的Choice/Action，不隐藏同场景其他合法行动；旧P9误注入的任务发布者无论同地或异地，也会由Objective与Actor对话场景共享的冻结Action引用被剔除，真正的Actor需求仍保留在场门控。角色拥有的委托与收束在新生产中固定落到发布者常驻地点，其任务地点继续描述冒险主体；无法区分编译修订的旧Narrative v2包在运行时同样按角色常驻地点归一，避免发布者被要求异地出现而软锁。历史P9 Context v1仍按任务首地点/地区的原端点语义验签，使已付费未完成的durable Run可以继续恢复。推荐场景只取合法集合中P9 `order`最小者，玩家切换同地点的其他合法场景只是前端临时选择，不写Event。玩家投影仅携带当前显示与交互所需字段，不向UI或后续模型暴露内部场景purpose及未发生的成功/失败文案。
+G4-03直接消费ProductRelease或制作端显式Build Preview内冻结的Narrative v2场景正文和Action v15+输入绑定（当前fresh完整治理包为Action v18），不回读生产Artifact，也不新建`currentSceneKey`。当前可见场景由代码从唯一Session Projection实时派生：地点必须等于玩家当前位置，Context v2确定的场景共有Condition必须成立，任务委托/当前Objective/收束分别匹配`revealed`、当前`active`目标和`completed`实例，场景显式参与NPC必须仍存活且在场。任一Action的私有Condition只隐藏自己的Choice/Action，不隐藏同场景其他合法行动；旧P9误注入的任务发布者无论同地或异地，也会由Objective与Actor对话场景共享的冻结Action引用被剔除，真正的Actor需求仍保留在场门控。角色拥有的委托与收束在新生产中固定落到发布者常驻地点，其任务地点继续描述冒险主体；无法区分编译修订的旧Narrative v2包在运行时同样按角色常驻地点归一，避免发布者被要求异地出现而软锁。历史P9 Context v1仍按任务首地点/地区的原端点语义验签，使已付费未完成的durable Run可以继续恢复。推荐场景只取合法集合中P9 `order`最小者，玩家切换同地点的其他合法场景只是前端临时选择，不写Event。玩家投影仅携带当前显示与交互所需字段，不向UI或后续模型暴露内部场景purpose及未发生的成功/失败文案。
 
 旧P9端点归一不能把按原任务地点写成的正文冒充为当前地点文本。只要归一后的地点与冻结Scene地点不同，玩家投影就显式标记`legacy-endpoint-fallback`，隐藏可能产生地理矛盾的旧开场/正文，改用带兼容提示的地点中性确定性文案；新生产及未迁移地点的Scene仍逐字展示冻结P9正文。该回退不修改Release、Build或Session状态，未来若允许NPC移动，必须以新版本端点合同取代这项兼容推断。
 
@@ -2030,7 +2055,7 @@ G4-03直接消费ProductRelease或制作端显式Build Preview内冻结的Narrat
 
 Action开始时还必须冻结`request revision + scope + worldGroupId + sessionId`。执行期间即使用户切换了游戏或存档，旧Action仍可只在其原Session完成，但它的成功回执、错误、busy终态和刷新结果都不得提交到新Session界面；新一次load/select会显式清除旧busy。Narrative v1 / Action v14的正式旧编译器以`action.talk.<actorKey>`冻结单NPC交谈目标，兼容投影按该稳定键收窄目标，避免同地点多NPC时出现“按钮可见但永远不可执行”；无法证明该键契约的更旧通用Action不作猜测。
 
-P9只为任务、NPC、地点交互和随机事件等叙事需求生产Scene，并不保证休息等通用玩法Action拥有Scene。场景投影因此额外返回“当前Action Projection可用、但从未被任何P9 Scene引用”的环境Action；场景页将其与当前选中Scene的Action去重合并。被隐藏Scene引用的Action不会借场景页的环境入口提前出现，但Scene引用本身也不能反向锁死背包、装备、制作或商店等通用玩法：这些Action继续按自身Condition与专用功能UI执行。制作、购买和出售还需要商品/配方及数量参数，G4-10专用UI完成前，Narrative v2/Action v15场景快捷入口及Narrative v1/Action v14兼容场景均不展示这三类必然缺参的按钮；旅行、快旅和装备同样由对应功能页消费。
+P9只为任务、NPC、地点交互和随机事件等叙事需求生产Scene，并不保证休息等通用玩法Action拥有Scene。场景投影因此额外返回“当前Action Projection可用、但从未被任何P9 Scene引用”的环境Action；场景页将其与当前选中Scene的Action去重合并。被隐藏Scene引用的Action不会借场景页的环境入口提前出现，但Scene引用本身也不能反向锁死背包、装备、制作或商店等通用玩法：这些Action继续按自身Condition与专用功能UI执行。制作、购买和出售还需要商品/配方及数量参数，G4-10专用UI完成前，Narrative v2/Action v15+场景快捷入口及Narrative v1/Action v14兼容场景均不展示这三类必然缺参的按钮；旅行、快旅和装备同样由对应功能页消费。 Action v18的受保护任务揭示Action是系统私有结算入口；即使P9 ActionBindings完整覆盖该Action，也不能把它投影为环境按钮、Choice或自然语言候选。
 
 这一级不实现G6的语义模型、自由对话和结果演绎。G6-03接入模型后只能在同一候选/确认边界内扩大表达识别，不能创建Action、任务、地点或结果。Narrative v1/Action v14旧包只显示兼容地点正文和仍合法的系统Action，自然输入禁用且不得伪造P9内容。当前Director状态只能证明随机事件曾经发生，尚不能证明其场景仍处于活动窗口，因此随机事件场景先失败关闭；G4-04必须以显式当前激活/失效证据接入通知与表现。
 
@@ -2040,7 +2065,7 @@ G4-04不建立第二份HUD状态。玩家页必须从已经通过运行包与Ses
 
 “近期变化”同样不保存第二份通知表，而是从当前Session的规范Event前缀重建。通知投影只接受与Projection head完全相符、同Session、连续且已经到达终态的Command/Random/Effects链，并从冻结任务、角色、地区、地点和随机事件定义取得玩家可见标题；条数和每条细节数都有上限。跨Session事件、断裂链、未结算Effects、未来Event或无法由冻结定义证明的标签一律失败关闭，不能用`lastFeedback`、Director历史、PRNG游标或`seen`集合猜测发生了什么。
 
-Director v2首版随机事件是随系统结算原子发生的瞬时结果，不存在可供玩家继续互动的“当前激活窗口”。因此只有精确匹配Director授权、随机证据、冻结事件定义、Narrative表现和成功`effects.applied`终态时，近期变化才能显示“已发生/已结算”；不得显示“正在发生”。若未来要支持持续随机事件，必须新建有版本的`active → resolved/expired`生命周期和对应Event，而不是重新解释旧历史。
+fresh Director v3与历史Director v2的随机事件都是随系统结算原子发生的瞬时结果，不存在可供玩家继续互动的“当前激活窗口”。v3额外要求候选、授权和Replay匹配随机事件的冻结地点；v2仍按原地区级语义读取，不因内存归一获得新地点含义。因此只有精确匹配Director授权、随机证据、冻结事件定义、Narrative表现和成功`effects.applied`终态时，近期变化才能显示“已发生/已结算”；不得显示“正在发生”。若未来要支持持续随机事件，必须新建有版本的`active → resolved/expired`生命周期和对应Event，而不是重新解释旧历史。
 
 读屏播报与持久变化列表分离：初次载入或切换Session先以当前Event head建立基线，只展示历史而不重播；玩家刚执行的Action继续由独立结算回执播报，避免重复；只有同Session基线之后新增、来源为系统且级别为重要或关键的变化进入常驻`role=status`区域。播报内容可以更新，但live-region容器本身不得被替换。Projection与Event可能因独立读取短暂不同步，此时页面保持可用、通知失败关闭且不推进播报游标；事件前缀补齐后仍须正常播报一次，同一head不得重复播报，换Session不得残留旧内容。
 
@@ -2050,7 +2075,7 @@ Director v2首版随机事件是随系统结算原子发生的瞬时结果，不
 
 G4-05继续复用唯一Quest实例账本、规范Event和冻结Release模块。完整日志以主线、重要支线、普通支线、随机任务和历史分类，并可组合筛选状态、期限、追踪、地区及角色/势力owner；详情只投影已经公开的当前/过去Stage、Objective状态、固定奖励预览、随机奖励存在性、已知地点、实际读过的任务相关事实和规范历史。历史Event尚未追上Projection head时，任务正文保持权威可用，但历史区明确等待，不拼接或猜测缺失事件。
 
-新生产链以Action v16关闭放弃/重接的结构缺口：所有可放弃任务覆盖未开始和逐Stage精确Action；固定普通不限时任务的`restart-quest`只绑定原发布Scene和地点，并以`abandoned → available → revealed → accepted → active(first stage)`四步原子迁移恢复同一实例。限时任务即使被放弃也保留原截止时间，过期Action覆盖`abandoned`；主线、重要故事、模板任务和Director实例不能借该入口重接。终态同步清理HUD追踪并从规范Quest账本重算Director镜像。P8F、P9、P10和V3运行包装配共同验签这些引用，Action v16必须搭配Quest v2；缺少新生命周期字段的历史durable Context仍原样恢复Action v15产物。
+新生产链以Action v16+关闭放弃/重接的结构缺口：所有可放弃任务覆盖未开始和逐Stage精确Action；固定普通不限时任务的`restart-quest`只绑定原发布Scene和地点，并以`abandoned → available → revealed → accepted → active(first stage)`四步原子迁移恢复同一实例。限时任务即使被放弃也保留原截止时间，过期Action覆盖`abandoned`；主线、重要故事、模板任务和Director实例不能借该入口重接。终态同步清理HUD追踪并从规范Quest账本重算Director镜像。P8F、P9、P10和V3运行包装配共同验签这些引用，Action v16+必须搭配Quest v2；当前fresh完整治理包再以Action v18增加受保护故事揭示链；缺少新生命周期字段的历史durable Context仍原样恢复Action v15产物。
 
 日志页不会执行Scene拥有的接取、重接、Objective或领奖Action。玩家放弃仍使用统一高风险确认和正式Command/Effect Event；回到原发布场景后的重接也走同一Action Registry、授权、Effect、Event与Replay链。旧v15终态追踪残留在HUD/日志投影层过滤，不篡改历史状态或改变旧事件Hash。任务地点定位只是绑定当前Session的一次性UI请求，只聚焦玩家已知地图，不执行旅行。该切面没有新建表、Schema、Context Source或可采纳字段。
 
@@ -2090,7 +2115,7 @@ G4-08不建立第二份背包或装备状态。一个披露安全的纯聚合投
 
 战斗显示由一个只读聚合投影统一生成。输入仅包括冻结RuntimePackage、当前Session投影、截至投影头的同Session规范事件、完整Action Registry结果及经校验的检查点；界面不得读取隐藏敌人定义、随机种子、内部key、Condition表达式或尚未落盘的预期奖励。战斗日志只从`Command -> Random* -> Effects`闭合批次及其授权和实际Receipt生成，展示实际伤害、治疗、资源恢复、状态变化、消耗和终态；胜利奖励只显示已由独立系统命令实际领取的数值与物品，不能用RewardContract预告冒充结算。
 
-新生产发布采用严格的`Action v17 + Progression v2 + Combat v4`三联合同：
+结构化战斗机制采用严格的`Action v17+ + Progression v2 + Combat v4`三联合同；当前fresh Knowledge受治理发布使用Action v18，完整继承v17的战斗语义：
 
 - 主动机制分为attack、recovery、resource和status；被动机制只允许确定性的静态战斗修正，不形成可点击Action；
 - 玩家技能按技能自己的`scalingAttribute`读取力量、体质或敏捷，装备`skillPower`只计入一次；普通攻击仍使用派生attack；
@@ -2873,6 +2898,9 @@ Session中的高频状态优先作为Event和可重建Projection存在，不建�
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| 1.1.49 | 2026-09-09 | G4-11最终语义收口：fresh生产升级为Action v18，以唯一主线根、Stage顺序及主线窗口/重要故事线内前驱生成系统`locked → available → revealed`链，P10从前置图拒绝断点、分叉和环；Director v3冻结传闻唯一地点、唯一地区牌组和`rest`可达触发，候选/授权/Replay复核地点，Director v2重冻结时删除归一字段以保持原字节与Hash。Knowledge确认只能来自同Stage或更晚的合法Reward/结局下游，重要支线不得借全局结局绕过，Knowledge/成就Effect只允许唯一RewardContract/领奖Action或结局Action owner。P9作者聚合稿先以Hash绑定幂等键并记录`source-snapshot`，再以零模型/零token/零费用走同一编译验收；已返回的超额模型响应先持久原始证据和真实usage、再阻断候选。当前库内为50项新增回归用例、1项Playwright及1项既有作者修订用例增强；完整CI的619个测试文件、3007项测试，以及正式Release桌面/390px刷新Playwright均通过。 |
+| 1.1.48 | 2026-09-08 | G4-11独立审查收口：成就改为任务奖励/结局Action直接唯一授予，Director不再依赖同批先置资格标记的不可达链，历史条件式发布保持原义；Knowledge公开摘要、传播地区/地点、未读门和Stage完成来源逐字段复验。P9 fresh生产按Scene硬隔离为最多127项独立请求和一项零Scene共享请求，P8F以同一公式预检上限，去除未来目标、来源Claim与未声明公开的P7人物规划字段；片段以durable子步骤保存原始响应和候选并可恢复，完整Build初始最多154次调用并另授权1次P9片段修复，总调用预算155次。token按156份独立权重分配，P8F/P9各占12/19份且P9独占48/100生产时长，并在输入/输出预算内保留一项最大片段的修复余量。关系记录补齐无可见Actor的任务势力及在场/异地/缺席/死亡口径；传闻初读与后续确认保留各自真实时间线。 |
+| 1.1.47 | 2026-09-08 | 完成G4-11关系、百科、传闻、历程与成就纵切面，并补齐此前缺失的生产闭环：P7传闻种子经P8F编译为Knowledge/Rumor、传播事件、揭示门槛、确认来源与3～6个真实成就，P9以预算内最小披露投影生产公开表现且不能读取来源证据、人物私密信息、内部真相或未来目标，P10/运行包装配逐项验证引用与Effect可达。玩家世界记录只投影当前Session实际接触人物、已知事实、已读传闻、连续事件历程和已获得成就，隐藏条目只保留匿名计数；桌面、390px和刷新重放均由正式Release/Session浏览器路径验证。历史Release继续原路径；Actor Knowledge长期记忆留给G6；无新表、Schema、migration或AI写入口 |
 | 1.1.46 | 2026-09-08 | 完成G4-10制作、商店与交易玩家纵切面：披露安全投影仅展示已学配方、通用锁定占位、当前地点存活且当班服务的商人、材料/产物/耗时/批量、货币/库存/整数价格/三档关系倍率和装备比较；稳定键只作为不可渲染提交字段。制作/买入/卖出先冻结数量和公开摘要二次确认，再以外层ProductRuntime序列重投影授权并进入唯一Action/Event事务；安全回执以提交时前态重算Authorization，逐项复核Effect、summary、before/after后才重建世界化文案。Store对Session切换、外部基线漂移、重复提交和乱序请求隔离；真实浏览器完成买材料→制作药剂→卖出的落库闭环。无新表、Schema、migration或AI写入口 |
 | 1.1.45 | 2026-09-08 | 落实G4-09逐回合战斗纵切面：新生产以Action v17、Progression v2、Combat v4严格三联发布，补齐主动攻击/治疗/资源/状态、被动静态修正、成长属性与装备skillPower、目标自身回合状态时钟、叠层策略及不含施放回合的冷却语义；专用玩家战斗投影和响应式UI提供显式多敌选取、四类操作、公开不可用原因、实际日志、实际胜利奖励和战败重试/复活。Command随机前缀及玩家Effect后系统后续均可从持久事件恢复，奖励、任务结算和Director标记幂等；旧Release保持原义或明确只读；无新表和AI写入口 |
 | 1.1.44 | 2026-09-08 | 完成G4-08背包、物品详情、装备和比较UI：披露安全纯投影统一展示实际持有物、分类/搜索/排序/详情、真实数值修正、关键保护、使用/装备/卸下/丢弃和三槽前后比较；基础价值不冒充成交价，出售仅显示政策并留给G4-10。P8F补齐固定单件必确认丢弃、恢复品未满Condition和装备状态Condition；可移除数量排除已装备实例，正向资源恢复按上限裁剪，Replay复核物品Action的操作者/目标/唯一Effect。换档重置UI且页内回执不串其他功能；无新持久化或三注册表登记 |

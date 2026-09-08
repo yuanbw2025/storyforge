@@ -570,13 +570,26 @@ async function completedLinkedQuestActionCountV1(
   return linked.length
 }
 
+export function textOpenWorldQuestSettlementLimitV1(actionVersion: number, questInstanceCount: number): number {
+  if (!Number.isSafeInteger(actionVersion) || actionVersion < 1
+    || !Number.isSafeInteger(questInstanceCount) || questInstanceCount < 0
+    || questInstanceCount > Math.floor((Number.MAX_SAFE_INTEGER - 8) / 2)) {
+    fail('任务系统结算上限输入无效')
+  }
+  return actionVersion >= 18 ? Math.max(32, questInstanceCount * 2 + 8) : 32
+}
+
 async function settleReadyQuestSystemActionsV1(sessionId: number, causeCommandId: string): Promise<void> {
   const initialRuntime = await readProductRuntimeState(sessionId)
   const initialProjection = parseTextOpenWorldSessionProjectionV1(initialRuntime.textOpenWorld)
   const initialModules = parseTextOpenWorldModulesV1(initialProjection.runtimePackage)
   const modern = initialModules.actions.version >= 17
   const initialIndex = modern ? await completedLinkedQuestActionCountV1(sessionId, causeCommandId, initialModules) : 0
-  for (let offset = 0; offset < 32; offset += 1) {
+  const settlementLimit = textOpenWorldQuestSettlementLimitV1(
+    initialModules.actions.version,
+    Object.keys(initialProjection.state.quests.instancesByKey).length,
+  )
+  for (let offset = 0; offset < settlementLimit; offset += 1) {
     const index = initialIndex + offset
     const runtime = await readProductRuntimeState(sessionId)
     const projection = parseTextOpenWorldSessionProjectionV1(runtime.textOpenWorld)
@@ -587,7 +600,18 @@ async function settleReadyQuestSystemActionsV1(sessionId: number, causeCommandId
         const effect = modules.actions.effects.find(candidate => candidate.key === effectKey)
         return effect?.operation === 'transition-quest' && effect.payload.status === 'expired'
       })).map(action => action.key))
-    const settlementActionKeys = new Set([...completionActionKeys, ...expirationActionKeys])
+    const revealActionKeys = new Set(modules.actions.version >= 18
+      ? modules.actions.actions.filter(action => {
+          if (action.category !== 'quest-action' || action.actorScope !== 'system'
+            || !action.key.startsWith('action.reveal.')) return false
+          const transitions = action.successEffectKeys.map(effectKey => modules.actions.effects.find(candidate => candidate.key === effectKey))
+            .filter((effect): effect is Extract<TextOpenWorldEffectDefinitionV1, { operation: 'transition-quest' }> => effect?.operation === 'transition-quest')
+          return transitions.length === 2
+            && transitions[0]!.payload.status === 'available'
+            && transitions[1]!.payload.status === 'revealed'
+        }).map(action => action.key)
+      : [])
+    const settlementActionKeys = new Set([...completionActionKeys, ...expirationActionKeys, ...revealActionKeys])
     if (projection.protocol.pendingCommandId) {
       const pendingActionKey = projection.protocol.pendingActionKey
       const pendingTargetKey = projection.protocol.pendingTargetKey
@@ -606,7 +630,11 @@ async function settleReadyQuestSystemActionsV1(sessionId: number, causeCommandId
     context.actorKey = 'system'
     const next = createTextOpenWorldActionRegistryV1(projection.runtimePackage).project(context)
       .filter(item => item.available && item.action.category === 'quest-action' && settlementActionKeys.has(item.action.key))
-      .flatMap(item => item.validTargetKeys.map(targetKey => ({ actionKey: item.action.key, targetKey, priority: completionActionKeys.has(item.action.key) ? 0 : 1 })))
+      .flatMap(item => item.validTargetKeys.map(targetKey => ({
+        actionKey: item.action.key,
+        targetKey,
+        priority: completionActionKeys.has(item.action.key) ? 0 : expirationActionKeys.has(item.action.key) ? 1 : 2,
+      })))
       .sort((left, right) => left.priority - right.priority || left.actionKey.localeCompare(right.actionKey) || left.targetKey.localeCompare(right.targetKey))[0]
     if (!next) return
     const commandId = modern
@@ -619,7 +647,7 @@ async function settleReadyQuestSystemActionsV1(sessionId: number, causeCommandId
     }, 'system', 'quest-action')
     if (feedback.phase !== 'terminal' || feedback.status !== 'succeeded') fail(`Stage系统结算未成功:${next.actionKey}:${next.targetKey}`)
   }
-  fail('单次玩家行动触发的任务系统结算超过32步')
+  fail(`单次玩家行动触发的任务系统结算超过${settlementLimit}步`)
 }
 
 async function settleWeatherForCurrentEpochV1(sessionId: number): Promise<void> {

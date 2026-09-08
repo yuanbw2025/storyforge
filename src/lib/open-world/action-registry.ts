@@ -287,7 +287,29 @@ export function createTextOpenWorldActionRegistryV1(value: TextOpenWorldRuntimeP
             conditionKey: null,
           })
       }
-      let validTargetKeys = action.targetScope === 'none' ? [] : [...(context.validTargetKeysByScope[action.targetScope] ?? [])]
+      const transitionDefinitionsForTarget = action.targetScope === 'quest'
+        ? [...action.costEffectKeys, ...action.successEffectKeys]
+          .map(effectKey => effectByKey.get(effectKey))
+          .filter((effect): effect is Extract<TextOpenWorldEffectDefinitionV1, { operation: 'transition-quest' }> => effect?.operation === 'transition-quest')
+        : []
+      const protectedRevealDefinitionKey = modules.actions.version >= 18
+        && action.category === 'quest-action'
+        && action.actorScope === 'system'
+        && transitionDefinitionsForTarget.length === 2
+        && transitionDefinitionsForTarget[0]!.payload.status === 'available'
+        && transitionDefinitionsForTarget[0]!.payload.stageKey === null
+        && transitionDefinitionsForTarget[1]!.payload.status === 'revealed'
+        && transitionDefinitionsForTarget[1]!.payload.stageKey === null
+        && transitionDefinitionsForTarget[0]!.payload.questKey === transitionDefinitionsForTarget[1]!.payload.questKey
+        && action.key === `action.reveal.${transitionDefinitionsForTarget[0]!.payload.questKey}`
+        ? transitionDefinitionsForTarget[0]!.payload.questKey
+        : null
+      // Locked instances remain absent from the ordinary player target scope.
+      // Only the canonical v18 system reveal Action receives a private view of
+      // every quest instance so it can persist locked -> available -> revealed.
+      let validTargetKeys = protectedRevealDefinitionKey
+        ? Object.keys(context.questDefinitionKeyByInstanceKey)
+        : action.targetScope === 'none' ? [] : [...(context.validTargetKeysByScope[action.targetScope] ?? [])]
       if (sceneExclusivePlayerAction && action.targetScope === 'quest') {
         const eligibleQuestInstanceKeys = new Set(eligibleOwningScenes.flatMap(scene => (
           textOpenWorldSceneQuestInstanceKeysV1(scene, context, modules.actions)
@@ -447,9 +469,7 @@ export function createTextOpenWorldActionRegistryV1(value: TextOpenWorldRuntimeP
         validTargetKeys = crime ? validTargetKeys.filter(actorKey => actorKey === crime.targetActorKey) : []
       }
       if (action.targetScope === 'quest' && ['accept-quest', 'restart-quest', 'abandon-quest', 'quest-action'].includes(action.category)) {
-        const transitionDefinitions = [...action.costEffectKeys, ...action.successEffectKeys]
-          .map(effectKey => effectByKey.get(effectKey))
-          .filter((effect): effect is Extract<TextOpenWorldEffectDefinitionV1, { operation: 'transition-quest' }> => effect?.operation === 'transition-quest')
+        const transitionDefinitions = transitionDefinitionsForTarget
         const questKeys = new Set(transitionDefinitions.map(effect => effect.payload.questKey))
         validTargetKeys = questKeys.size === 1
           ? validTargetKeys.filter(instanceKey => context.questDefinitionKeyByInstanceKey[instanceKey] === [...questKeys][0])
@@ -475,10 +495,17 @@ export function createTextOpenWorldActionRegistryV1(value: TextOpenWorldRuntimeP
               && requiredObjectiveKeys.every(objectiveKey => context.questObjectiveStatusByInstanceKey[instanceKey]?.[objectiveKey] === 'completed')
             ))
           } else {
+            const reveal = protectedRevealDefinitionKey
             const expiration = transitionDefinitions.length === 1 && transitionDefinitions[0].payload.status === 'expired'
               ? transitionDefinitions[0]
               : null
-            validTargetKeys = expiration
+            validTargetKeys = reveal
+              ? validTargetKeys.filter(instanceKey => (
+                  context.questDefinitionKeyByInstanceKey[instanceKey] === reveal
+                  && context.questStatusByInstanceKey[instanceKey] === 'locked'
+                  && context.questStageKeyByInstanceKey[instanceKey] === null
+                ))
+              : expiration
               ? validTargetKeys.filter(instanceKey => (
                   ['revealed', 'accepted', 'active', 'suspended', 'abandoned'].includes(context.questStatusByInstanceKey[instanceKey])
                   && context.questStageKeyByInstanceKey[instanceKey] === expiration.payload.stageKey

@@ -111,6 +111,41 @@ export class ProductProductionDraftRejectedErrorV1 extends Error {
   }
 }
 
+/**
+ * A known safely repeatable failure whose provider boundary and paid usage are
+ * fully accounted (for example a transient response or one bounded fragment
+ * schema rejection). The same durable task may retry; callers must report only
+ * usage newly incurred by the current outer attempt.
+ */
+export class ProductProductionRetryableExecutionErrorV1 extends Error {
+  constructor(message: string, readonly usage: ProductProductionTaskUsageV1) {
+    super(message)
+    this.name = 'ProductProductionRetryableExecutionErrorV1'
+  }
+}
+
+/**
+ * The request crossed the provider dispatch boundary without a definitive
+ * result. Automatic retry is unsafe because it could duplicate content and
+ * charges, so author intervention is required.
+ */
+export class ProductProductionResultUnknownErrorV1 extends Error {
+  readonly requestDispatched = true
+  readonly reservationDisposition = 'retain' as const
+
+  constructor() {
+    super('[product-production-model] 请求结果未知；为避免重复生成或计费，必须由作者确认后再处理。')
+    this.name = 'ProductProductionResultUnknownErrorV1'
+  }
+}
+
+class ProductProductionAttemptBudgetExceededErrorV1 extends Error {
+  constructor() {
+    super('[product-production-scheduler] attempt usage 超出剩余任务预算预留')
+    this.name = 'ProductProductionAttemptBudgetExceededErrorV1'
+  }
+}
+
 export interface ProductProductionTaskExecutionInputV1 {
   scope: WorkspaceScope
   productionId: number
@@ -120,6 +155,10 @@ export interface ProductProductionTaskExecutionInputV1 {
   planHash: string
   task: ProductProductionPlanTaskV3
   attempt: number
+  /** The still-unspent portion of the task budget for this outer attempt.
+   * Executors may use it for dispatch-time protection while retaining the
+   * full task contract required to restore bounded child slices. */
+  attemptBudgetReservation?: ProductTaskBudgetReservationV1
   idempotencyKey: string
   /** Present on every formal scheduler execution. Specialized bounded-batch
    * executors use this run to persist the exact per-call evidence. */
@@ -157,11 +196,30 @@ interface LedgerTaskV1 {
   errorCode: string | null
 }
 
-interface SchedulerLedgerV1 {
+interface LedgerChargeV2 {
+  runId: number
+  attempt: number
+  controlEpoch: number | null
+  taskKey: string
+  costUpperBoundUsd: number | null
+  usage: ProductProductionTaskUsageV1
+}
+
+interface LedgerReservationV2 {
+  runId: number
+  attempt: number
+  controlEpoch: number
+  taskKey: string
+  budget: ProductTaskBudgetReservationV1
+}
+
+interface SchedulerLedgerV2 {
   schema: 'storyforge.product-production-budget-ledger'
-  version: 1
+  version: 2
   rootRunId: number | null
   rootClaim: { owner: string; expiresAt: number } | null
+  charges: Record<string, LedgerChargeV2>
+  reservations: Record<string, LedgerReservationV2>
   tasks: Record<string, LedgerTaskV1>
 }
 
@@ -202,12 +260,14 @@ export interface ProductProductionSchedulerProjectionV1 {
   tasks: ProductProductionTaskProjectionV1[]
 }
 
-function emptyLedger(): SchedulerLedgerV1 {
+function emptyLedger(history?: Pick<SchedulerLedgerV2, 'charges' | 'reservations'>): SchedulerLedgerV2 {
   return {
     schema: 'storyforge.product-production-budget-ledger',
-    version: 1,
+    version: 2,
     rootRunId: null,
     rootClaim: null,
+    charges: structuredClone(history?.charges ?? {}),
+    reservations: structuredClone(history?.reservations ?? {}),
     tasks: {},
   }
 }
@@ -260,18 +320,58 @@ function parseLedgerUsage(value: unknown, label: string): ProductProductionTaskU
   }
 }
 
-function parseLedger(value: string): SchedulerLedgerV1 {
+function parseLedgerReservation(value: unknown, label: string): ProductTaskBudgetReservationV1 {
+  const row = ledgerRecord(value, label)
+  exactLedgerKeys(row, [
+    'modelCalls', 'inputTokens', 'outputTokens', 'mediaCalls', 'maximumCostUsd', 'durationMs', 'storageBytes',
+  ], label)
+  const maximumCostUsd = row.maximumCostUsd === null ? null : row.maximumCostUsd
+  if (maximumCostUsd !== null
+    && (typeof maximumCostUsd !== 'number' || !Number.isFinite(maximumCostUsd) || maximumCostUsd < 0)) {
+    throw new Error(`[product-production-scheduler] ${label}.maximumCostUsd 无效`)
+  }
+  return {
+    modelCalls: ledgerInteger(row.modelCalls, `${label}.modelCalls`),
+    inputTokens: ledgerInteger(row.inputTokens, `${label}.inputTokens`),
+    outputTokens: ledgerInteger(row.outputTokens, `${label}.outputTokens`),
+    mediaCalls: ledgerInteger(row.mediaCalls, `${label}.mediaCalls`),
+    maximumCostUsd,
+    durationMs: ledgerInteger(row.durationMs, `${label}.durationMs`),
+    storageBytes: ledgerInteger(row.storageBytes, `${label}.storageBytes`),
+  }
+}
+
+function ledgerTaskKey(value: unknown, label: string): string {
+  if (typeof value !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(value)) {
+    throw new Error(`[product-production-scheduler] ${label} 无效`)
+  }
+  return value
+}
+
+function ledgerAttemptKey(runId: number, attempt: number): string {
+  return `${runId}:${attempt}`
+}
+
+function parseLedger(value: string): SchedulerLedgerV2 {
   if (value === '{}' || !value.trim()) return emptyLedger()
   let candidate: unknown
   try { candidate = JSON.parse(value) } catch { throw new Error('[product-production-scheduler] budget ledger JSON 损坏') }
   const row = ledgerRecord(candidate, 'budget ledger')
-  exactLedgerKeys(row, ['schema', 'version', 'rootRunId', 'rootClaim', 'tasks'], 'budget ledger')
-  if (row.schema !== 'storyforge.product-production-budget-ledger' || row.version !== 1
+  if (row.version === 1) {
+    exactLedgerKeys(row, ['schema', 'version', 'rootRunId', 'rootClaim', 'tasks'], 'budget ledger')
+  } else if (row.version === 2) {
+    exactLedgerKeys(row, [
+      'schema', 'version', 'rootRunId', 'rootClaim', 'charges', 'reservations', 'tasks',
+    ], 'budget ledger')
+  } else {
+    throw new Error('[product-production-scheduler] budget ledger 版本无效')
+  }
+  if (row.schema !== 'storyforge.product-production-budget-ledger'
     || !row.tasks || typeof row.tasks !== 'object' || Array.isArray(row.tasks)) {
     throw new Error('[product-production-scheduler] budget ledger 基础字段无效')
   }
   const rootRunId = row.rootRunId === null ? null : ledgerInteger(row.rootRunId, 'rootRunId', 1)
-  let rootClaim: SchedulerLedgerV1['rootClaim'] = null
+  let rootClaim: SchedulerLedgerV2['rootClaim'] = null
   if (row.rootClaim !== null) {
     const claim = ledgerRecord(row.rootClaim, 'rootClaim')
     exactLedgerKeys(claim, ['owner', 'expiresAt'], 'rootClaim')
@@ -282,9 +382,7 @@ function parseLedger(value: string): SchedulerLedgerV1 {
   }
   const tasks: Record<string, LedgerTaskV1> = {}
   for (const [taskKey, rawTask] of Object.entries(row.tasks as Record<string, unknown>)) {
-    if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(taskKey)) {
-      throw new Error('[product-production-scheduler] ledger taskKey 无效')
-    }
+    ledgerTaskKey(taskKey, 'ledger taskKey')
     const task = ledgerRecord(rawTask, `tasks.${taskKey}`)
     exactLedgerKeys(task, [
       'runId', 'attempt', 'status', 'idempotencyKey', 'candidateHash', 'terminalReceiptHash',
@@ -315,9 +413,75 @@ function parseLedger(value: string): SchedulerLedgerV1 {
       errorCode,
     }
   }
+  const charges: Record<string, LedgerChargeV2> = {}
+  const reservations: Record<string, LedgerReservationV2> = {}
+  if (row.version === 1) {
+    // v1 only retained the latest task settlement. Promote every known paid
+    // result to one idempotent attempt charge. Claimed placeholders are not
+    // charges and remain free to settle after migration.
+    for (const [taskKey, task] of Object.entries(tasks)) {
+      if (task.status === 'claimed' || task.usage == null) continue
+      const key = ledgerAttemptKey(task.runId, task.attempt)
+      charges[key] = {
+        runId: task.runId,
+        attempt: task.attempt,
+        controlEpoch: null,
+        taskKey,
+        costUpperBoundUsd: task.usage.costUsd,
+        usage: structuredClone(task.usage),
+      }
+    }
+  } else {
+    const rawCharges = ledgerRecord(row.charges, 'charges')
+    for (const [key, rawCharge] of Object.entries(rawCharges)) {
+      const charge = ledgerRecord(rawCharge, `charges.${key}`)
+      exactLedgerKeys(charge, [
+        'runId', 'attempt', 'controlEpoch', 'taskKey', 'costUpperBoundUsd', 'usage',
+      ], `charges.${key}`)
+      const runId = ledgerInteger(charge.runId, `charges.${key}.runId`, 1)
+      const attempt = ledgerInteger(charge.attempt, `charges.${key}.attempt`, 1)
+      if (key !== ledgerAttemptKey(runId, attempt)) {
+        throw new Error(`[product-production-scheduler] charges.${key} key 与 run/attempt 不一致`)
+      }
+      const costUpperBoundUsd = charge.costUpperBoundUsd === null ? null : charge.costUpperBoundUsd
+      if (costUpperBoundUsd !== null
+        && (typeof costUpperBoundUsd !== 'number' || !Number.isFinite(costUpperBoundUsd) || costUpperBoundUsd < 0)) {
+        throw new Error(`[product-production-scheduler] charges.${key}.costUpperBoundUsd 无效`)
+      }
+      charges[key] = {
+        runId,
+        attempt,
+        controlEpoch: charge.controlEpoch === null
+          ? null
+          : ledgerInteger(charge.controlEpoch, `charges.${key}.controlEpoch`),
+        taskKey: ledgerTaskKey(charge.taskKey, `charges.${key}.taskKey`),
+        costUpperBoundUsd,
+        usage: parseLedgerUsage(charge.usage, `charges.${key}.usage`),
+      }
+    }
+    const rawReservations = ledgerRecord(row.reservations, 'reservations')
+    for (const [key, rawReservation] of Object.entries(rawReservations)) {
+      const reservation = ledgerRecord(rawReservation, `reservations.${key}`)
+      exactLedgerKeys(reservation, [
+        'runId', 'attempt', 'controlEpoch', 'taskKey', 'budget',
+      ], `reservations.${key}`)
+      const runId = ledgerInteger(reservation.runId, `reservations.${key}.runId`, 1)
+      const attempt = ledgerInteger(reservation.attempt, `reservations.${key}.attempt`, 1)
+      if (key !== ledgerAttemptKey(runId, attempt) || charges[key]) {
+        throw new Error(`[product-production-scheduler] reservations.${key} key 重复或与 run/attempt 不一致`)
+      }
+      reservations[key] = {
+        runId,
+        attempt,
+        controlEpoch: ledgerInteger(reservation.controlEpoch, `reservations.${key}.controlEpoch`),
+        taskKey: ledgerTaskKey(reservation.taskKey, `reservations.${key}.taskKey`),
+        budget: parseLedgerReservation(reservation.budget, `reservations.${key}.budget`),
+      }
+    }
+  }
   return {
-    schema: 'storyforge.product-production-budget-ledger', version: 1,
-    rootRunId, rootClaim, tasks,
+    schema: 'storyforge.product-production-budget-ledger', version: 2,
+    rootRunId, rootClaim, charges, reservations, tasks,
   }
 }
 
@@ -328,6 +492,83 @@ export function assertProductProductionBudgetLedgerV1(value: string): void {
 
 function zeroUsage(): ProductProductionTaskUsageV1 {
   return { modelCalls: 0, inputTokens: 0, outputTokens: 0, mediaCalls: 0, costUsd: 0, durationMs: 0, storageBytes: 0 }
+}
+
+function sumLedgerUsage(values: readonly ProductProductionTaskUsageV1[]): ProductProductionTaskUsageV1 {
+  const costs = values.map(value => value.costUsd)
+  return {
+    modelCalls: values.reduce((sum, value) => sum + value.modelCalls, 0),
+    inputTokens: values.reduce((sum, value) => sum + value.inputTokens, 0),
+    outputTokens: values.reduce((sum, value) => sum + value.outputTokens, 0),
+    mediaCalls: values.reduce((sum, value) => sum + value.mediaCalls, 0),
+    costUsd: costs.some(value => value == null)
+      ? null
+      : costs.reduce<number>((sum, value) => sum + (value ?? 0), 0),
+    durationMs: values.reduce((sum, value) => sum + value.durationMs, 0),
+    storageBytes: values.reduce((sum, value) => sum + value.storageBytes, 0),
+  }
+}
+
+function reservationAsUsage(reservation: ProductTaskBudgetReservationV1): ProductProductionTaskUsageV1 {
+  return {
+    modelCalls: reservation.modelCalls,
+    inputTokens: reservation.inputTokens,
+    outputTokens: reservation.outputTokens,
+    mediaCalls: reservation.mediaCalls,
+    costUsd: reservation.maximumCostUsd,
+    durationMs: reservation.durationMs,
+    storageBytes: reservation.storageBytes,
+  }
+}
+
+function remainingTaskReservation(
+  reservation: ProductTaskBudgetReservationV1,
+  paidUsage: ProductProductionTaskUsageV1,
+): ProductTaskBudgetReservationV1 {
+  return {
+    modelCalls: Math.max(0, reservation.modelCalls - paidUsage.modelCalls),
+    inputTokens: Math.max(0, reservation.inputTokens - paidUsage.inputTokens),
+    outputTokens: Math.max(0, reservation.outputTokens - paidUsage.outputTokens),
+    mediaCalls: Math.max(0, reservation.mediaCalls - paidUsage.mediaCalls),
+    maximumCostUsd: reservation.maximumCostUsd == null
+      ? null
+      : Math.max(0, reservation.maximumCostUsd - (paidUsage.costUsd ?? 0)),
+    durationMs: Math.max(0, reservation.durationMs - paidUsage.durationMs),
+    storageBytes: Math.max(0, reservation.storageBytes - paidUsage.storageBytes),
+  }
+}
+
+function proportionalCostUpperBound(
+  reservation: ProductTaskBudgetReservationV1,
+  usage: ProductProductionTaskUsageV1,
+): number | null {
+  if (reservation.maximumCostUsd == null) return null
+  const reservedPaidCalls = reservation.modelCalls + reservation.mediaCalls
+  const actualPaidCalls = usage.modelCalls + usage.mediaCalls
+  if (reservedPaidCalls === 0) return actualPaidCalls === 0 ? 0 : reservation.maximumCostUsd
+  return reservation.maximumCostUsd * Math.min(1, actualPaidCalls / reservedPaidCalls)
+}
+
+function briefBudgetViolations(
+  usage: ProductProductionTaskUsageV1,
+  limits: ProductProductionBriefV3['productionBudget'],
+): string[] {
+  const violations: string[] = []
+  if (usage.modelCalls > limits.maximumModelCalls) violations.push('modelCalls')
+  if (usage.inputTokens > limits.maximumInputTokens) violations.push('inputTokens')
+  if (usage.outputTokens > limits.maximumOutputTokens) violations.push('outputTokens')
+  if (usage.mediaCalls > limits.maximumMediaCalls) violations.push('mediaCalls')
+  if (usage.durationMs > limits.maximumDurationMs) violations.push('durationMs')
+  if (usage.storageBytes > limits.maximumStorageBytes) violations.push('storageBytes')
+  if (limits.maximumCostUsd != null
+    && (usage.costUsd == null || usage.costUsd > limits.maximumCostUsd)) violations.push('costUsd')
+  return violations
+}
+
+function captureReturnedUsage(value: unknown): ProductProductionTaskUsageV1 | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value) || !('usage' in value)) return null
+  try { return parseLedgerUsage((value as { usage: unknown }).usage, 'executor result usage') }
+  catch { return null }
 }
 
 function safeExecutorError(error: unknown): string {
@@ -772,13 +1013,20 @@ async function ensurePlan(input: {
     if (!build || build.controlEpoch !== state.build.controlEpoch || build.stateRevision !== state.build.stateRevision) {
       throw new Error('[product-production-scheduler] Plan CAS 已过期')
     }
+    const previousLedger = parseLedger(build.budgetLedgerJson)
     await db.productBuildArtifacts.where('buildId').equals(build.id!).filter(row => (
       row.controlEpoch !== build.controlEpoch && (row.status === 'accepted' || row.status === 'carried-forward')
     )).modify({ status: 'invalid', updatedAt: Date.now() })
     await db.productBuilds.update(build.id!, {
       status: 'building', planRevision: build.planRevision + 1,
       planJson: canonicalProductProductionJsonV2(plan), planHash,
-      budgetLedgerJson: canonicalProductProductionJsonV2(emptyLedger()),
+      // A new control epoch invalidates task ownership and receipts, but it
+      // must never erase already-paid calls or an unresolved in-flight
+      // reservation from this authorized Build/Brief.
+      budgetLedgerJson: canonicalProductProductionJsonV2(emptyLedger({
+        charges: previousLedger.charges,
+        reservations: previousLedger.reservations,
+      })),
       stateRevision: build.stateRevision + 1, startedAt: build.startedAt ?? Date.now(), updatedAt: Date.now(),
     })
   })
@@ -1032,6 +1280,130 @@ function parseResumeCandidate(value: unknown, task: ProductProductionPlanTaskV3,
   return candidate
 }
 
+async function reserveLedgerBudget(input: {
+  buildId: number
+  controlEpoch: number
+  taskKey: string
+  runId: number
+  attempt: number
+  budget: ProductTaskBudgetReservationV1
+  limits: ProductProductionBriefV3['productionBudget']
+}): Promise<
+  { ok: true; budget: ProductTaskBudgetReservationV1 }
+  | { ok: false; violations: string[]; projected: ProductProductionTaskUsageV1 }
+> {
+  return db.transaction('rw', db.productBuilds, async () => {
+    const build = await db.productBuilds.get(input.buildId)
+    if (!build || build.controlEpoch !== input.controlEpoch) {
+      throw new Error('[product-production-scheduler] budget reservation epoch 已过期')
+    }
+    const ledger = parseLedger(build.budgetLedgerJson)
+    const key = ledgerAttemptKey(input.runId, input.attempt)
+    if (ledger.charges[key]) {
+      throw new Error('[product-production-scheduler] 已计费 attempt 不得重复执行')
+    }
+    const priorPaidUsage = sumLedgerUsage(Object.values(ledger.charges)
+      .filter(charge => charge.runId === input.runId && charge.taskKey === input.taskKey)
+      .map(charge => ({
+        ...charge.usage,
+        costUsd: charge.usage.costUsd ?? charge.costUpperBoundUsd,
+      })))
+    const remainingBudget = remainingTaskReservation(input.budget, priorPaidUsage)
+    const requested: LedgerReservationV2 = {
+      runId: input.runId,
+      attempt: input.attempt,
+      controlEpoch: input.controlEpoch,
+      taskKey: input.taskKey,
+      budget: structuredClone(remainingBudget),
+    }
+    const existing = ledger.reservations[key]
+    if (existing && canonicalProductProductionJsonV2(existing) !== canonicalProductProductionJsonV2(requested)) {
+      throw new Error('[product-production-scheduler] attempt budget reservation 与已冻结记录不一致')
+    }
+    const projected = sumLedgerUsage([
+      ...Object.values(ledger.charges).map(charge => ({
+        ...charge.usage,
+        costUsd: charge.usage.costUsd ?? charge.costUpperBoundUsd,
+      })),
+      ...Object.entries(ledger.reservations)
+        .filter(([reservationKey]) => reservationKey !== key)
+        .map(([, reservation]) => reservationAsUsage(reservation.budget)),
+      reservationAsUsage(remainingBudget),
+    ])
+    const violations = briefBudgetViolations(projected, input.limits)
+    if (violations.length > 0) return { ok: false as const, violations, projected }
+    ledger.reservations[key] = requested
+    await db.productBuilds.update(build.id!, {
+      budgetLedgerJson: canonicalProductProductionJsonV2(ledger),
+      updatedAt: Date.now(),
+    })
+    return { ok: true as const, budget: remainingBudget }
+  })
+}
+
+async function releaseLedgerReservation(input: {
+  buildId: number
+  runId: number
+  attempt: number
+}): Promise<void> {
+  await db.transaction('rw', db.productBuilds, async () => {
+    const build = await db.productBuilds.get(input.buildId)
+    if (!build) return
+    const ledger = parseLedger(build.budgetLedgerJson)
+    const key = ledgerAttemptKey(input.runId, input.attempt)
+    if (!ledger.reservations[key]) return
+    delete ledger.reservations[key]
+    await db.productBuilds.update(build.id!, {
+      budgetLedgerJson: canonicalProductProductionJsonV2(ledger),
+      updatedAt: Date.now(),
+    })
+  })
+}
+
+async function recordLedgerCharge(input: {
+  buildId: number
+  controlEpoch: number
+  taskKey: string
+  runId: number
+  attempt: number
+  costUpperBoundUsd: number | null
+  usage: ProductProductionTaskUsageV1
+}): Promise<void> {
+  const usage = parseLedgerUsage(input.usage, 'charged usage')
+  await db.transaction('rw', db.productBuilds, async () => {
+    const build = await db.productBuilds.get(input.buildId)
+    if (!build) throw new Error('[product-production-scheduler] 计费 Build 已不存在')
+    const ledger = parseLedger(build.budgetLedgerJson)
+    const key = ledgerAttemptKey(input.runId, input.attempt)
+    const existing = ledger.charges[key]
+    if (existing) {
+      if (existing.taskKey !== input.taskKey
+        || (existing.controlEpoch != null && existing.controlEpoch !== input.controlEpoch)
+        || canonicalProductProductionJsonV2(existing.usage) !== canonicalProductProductionJsonV2(usage)) {
+        throw new Error('[product-production-scheduler] attempt 计费记录不一致')
+      }
+      if (existing.controlEpoch == null) {
+        existing.controlEpoch = input.controlEpoch
+        existing.costUpperBoundUsd = input.costUpperBoundUsd
+      }
+    } else {
+      ledger.charges[key] = {
+        runId: input.runId,
+        attempt: input.attempt,
+        controlEpoch: input.controlEpoch,
+        taskKey: input.taskKey,
+        costUpperBoundUsd: input.costUpperBoundUsd,
+        usage,
+      }
+    }
+    delete ledger.reservations[key]
+    await db.productBuilds.update(build.id!, {
+      budgetLedgerJson: canonicalProductProductionJsonV2(ledger),
+      updatedAt: Date.now(),
+    })
+  })
+}
+
 async function settleLedger(input: {
   buildId: number
   controlEpoch: number
@@ -1057,6 +1429,20 @@ async function acceptCandidate(input: {
 }): Promise<void> {
   const receiptHash = input.snapshot.projection.terminalReceiptHash
   if (!receiptHash) throw new Error('[product-production-scheduler] task Run 尚无 terminal receipt')
+  // Checkpoint recovery may replay acceptance after a process crash. The
+  // run/attempt charge key makes this settlement idempotent.
+  await recordLedgerCharge({
+    buildId: input.buildId,
+    controlEpoch: input.controlEpoch,
+    taskKey: input.task.taskKey,
+    runId: input.snapshot.run.id,
+    attempt: input.candidate.attempt,
+    costUpperBoundUsd: proportionalCostUpperBound(
+      input.task.budgetReservation,
+      input.candidate.result.usage,
+    ),
+    usage: input.candidate.result.usage,
+  })
   for (const artifact of input.candidate.result.artifacts) {
     await acceptProductBuildArtifact({
       scope: input.scope, buildId: input.buildId, controlEpoch: input.controlEpoch,
@@ -1133,6 +1519,7 @@ async function recoverCompletedOrCheckpointed(input: {
 async function runClaimedTask(input: {
   scope: WorkspaceScope
   productionId: number
+  brief: ProductProductionBriefV3
   build: { id: number; buildNumber: number; controlEpoch: number; planHash: string; failureJson: string }
   task: ProductProductionPlanTaskV3
   snapshot: AgentRunSnapshotV1
@@ -1297,21 +1684,78 @@ async function runClaimedTask(input: {
       stepId: input.task.taskKey, attempt, manifestHash: manifest.manifestHash,
     })
   }
+  const repair = JSON.parse(input.build.failureJson)
+  const authorDraftJson = repair.blockerKey === input.task.taskKey && repair.resolution?.action === 'author-edit'
+    ? repair.resolution.authorDraftJson as string : undefined
+  const authorDraftHash = authorDraftJson === undefined
+    ? null
+    : await hashProductProductionValueV2(authorDraftJson)
   const inputHash = await hashProductProductionValueV2({
     ...structuralInput,
     sourcePlanHash,
     confirmedBriefHash,
     contextPacketHash: gatewayExecution?.contextPacket.packetHash ?? null,
+    authorDraftHash,
   })
+  const executionReservation: ProductTaskBudgetReservationV1 = authorDraftJson
+    ? {
+        modelCalls: 0, inputTokens: 0, outputTokens: 0, mediaCalls: 0,
+        maximumCostUsd: 0,
+        durationMs: input.task.budgetReservation.durationMs,
+        storageBytes: input.task.budgetReservation.storageBytes,
+      }
+    : input.task.budgetReservation
+  const budgetReservation = await reserveLedgerBudget({
+    buildId: input.build.id,
+    controlEpoch: input.build.controlEpoch,
+    taskKey: input.task.taskKey,
+    runId: snapshot.run.id,
+    attempt,
+    budget: executionReservation,
+    limits: input.brief.productionBudget,
+  })
+  if (!budgetReservation.ok) {
+    const code = 'brief-production-budget-exhausted'
+    const detail = `Brief 累计生产预算无法覆盖下一次任务预留:${budgetReservation.violations.join(',')}`
+    snapshot = await append(input.scope, snapshot, 'step.failed', {
+      stepId: input.task.taskKey, attempt, code,
+      retryable: false, category: 'deterministic', action: 'fail',
+    })
+    snapshot = await append(input.scope, snapshot, 'run.failed', { code, retryable: false })
+    await settleLedger({
+      buildId: input.build.id, controlEpoch: input.build.controlEpoch, taskKey: input.task.taskKey,
+      entry: {
+        runId: snapshot.run.id, attempt, status: 'failed', idempotencyKey: inputHash,
+        candidateHash: null, terminalReceiptHash: null, passedGateIds: [],
+        usage: zeroUsage(), errorCode: code,
+      },
+    })
+    await db.transaction('rw', scopeTransactionTables(db.productBuilds), async () => {
+      const build = await db.productBuilds.get(input.build.id)
+      if (!build || build.controlEpoch !== input.build.controlEpoch) return
+      await db.productBuilds.update(input.build.id, {
+        status: 'recovery-required',
+        failureJson: canonicalProductProductionJsonV2({
+          taskKey: input.task.taskKey,
+          code,
+          attempt,
+          detail,
+          violations: budgetReservation.violations,
+          projectedUsage: budgetReservation.projected,
+          limits: input.brief.productionBudget,
+        }),
+        updatedAt: Date.now(),
+      })
+    })
+    return
+  }
+  const attemptReservation = budgetReservation.budget
   snapshot = await append(input.scope, snapshot, 'budget.reserved', {
     stepId: input.task.taskKey,
-    modelCalls: input.task.budgetReservation.modelCalls,
-    toolCalls: input.task.budgetReservation.mediaCalls,
-    tokens: input.task.budgetReservation.inputTokens + input.task.budgetReservation.outputTokens,
+    modelCalls: attemptReservation.modelCalls,
+    toolCalls: attemptReservation.mediaCalls,
+    tokens: attemptReservation.inputTokens + attemptReservation.outputTokens,
   })
-  const repair = JSON.parse(input.build.failureJson)
-  const authorDraftJson = repair.blockerKey === input.task.taskKey && repair.resolution?.action === 'author-edit'
-    ? repair.resolution.authorDraftJson as string : undefined
   if (authorDraftJson) {
     const recorded = await recordAgentRunArtifactV1({
       scope: input.scope, runId: snapshot.run.id, stepId: input.task.taskKey, attempt,
@@ -1335,11 +1779,14 @@ async function runClaimedTask(input: {
   }
   await input.onDurableBoundary?.('provider.requested', snapshot)
   let result: ProductProductionTaskExecutionResultV1
+  let returnedUsage: ProductProductionTaskUsageV1 | null = null
+  let usageCharged = false
   try {
     result = await input.executor({
       scope: input.scope, productionId: input.productionId, buildId: input.build.id,
       buildNumber: input.build.buildNumber, controlEpoch: input.build.controlEpoch,
       planHash: input.build.planHash, task: input.task, attempt,
+      attemptBudgetReservation: structuredClone(attemptReservation),
       idempotencyKey: inputHash, taskRunId: snapshot.run.id, contextText: assembled.text, authorDraftJson,
       inputArtifacts: artifacts, capabilityBindings: bindings, signal: input.signal,
       onModelOutput: async output => {
@@ -1351,13 +1798,66 @@ async function runClaimedTask(input: {
         snapshot = recorded.snapshot
       },
     })
+    // Capture and charge a structurally valid usage receipt before candidate
+    // validation. A malformed paid response must not become a free retry.
+    returnedUsage = captureReturnedUsage(result)
+    if (returnedUsage) {
+      await recordLedgerCharge({
+        buildId: input.build.id,
+        controlEpoch: input.build.controlEpoch,
+        taskKey: input.task.taskKey,
+        runId: snapshot.run.id,
+        attempt,
+        costUpperBoundUsd: proportionalCostUpperBound(executionReservation, returnedUsage),
+        usage: returnedUsage,
+      })
+      usageCharged = true
+    }
+    try {
+      if (returnedUsage) boundedUsage(returnedUsage, attemptReservation)
+    } catch {
+      // The provider charge is factual and remains in the ledger, but an
+      // over-budget result can never become an accepted candidate.
+      throw new ProductProductionAttemptBudgetExceededErrorV1()
+    }
     validateExecutionResult(input.task, result)
     // A bounded-batch executor may have appended exact per-call evidence to
     // this same durable task run. Refresh before the scheduler continues.
     snapshot = await readAgentRunV1(input.scope, snapshot.run.id)
   } catch (error) {
-    if (executorOwnsWorldGateway) {
-      snapshot = await readAgentRunV1(input.scope, snapshot.run.id)
+    // Executors may append bounded child-step evidence through taskRunId
+    // before failing. Always refresh so failure evidence uses the current
+    // durable sequence, regardless of who owns the world gateway.
+    snapshot = await readAgentRunV1(input.scope, snapshot.run.id)
+    if (!returnedUsage && (error instanceof ProductProductionDraftRejectedErrorV1
+      || error instanceof ProductProductionRetryableExecutionErrorV1)) {
+      try { returnedUsage = parseLedgerUsage(error.usage, 'failed attempt usage') } catch { /* retain reservation */ }
+    }
+    const resultUnknown = error instanceof ProductProductionResultUnknownErrorV1
+      || (error instanceof Error && error.name === 'ProductProductionResultUnknownErrorV1')
+    const explicitlyRetryable = error instanceof ProductProductionRetryableExecutionErrorV1
+    let attemptBudgetExceeded = error instanceof ProductProductionAttemptBudgetExceededErrorV1
+    if (returnedUsage && !usageCharged) {
+      await recordLedgerCharge({
+        buildId: input.build.id,
+        controlEpoch: input.build.controlEpoch,
+        taskKey: input.task.taskKey,
+        runId: snapshot.run.id,
+        attempt,
+        costUpperBoundUsd: proportionalCostUpperBound(executionReservation, returnedUsage),
+        usage: returnedUsage,
+      })
+      usageCharged = true
+    } else if (!returnedUsage && !resultUnknown) {
+      await releaseLedgerReservation({
+        buildId: input.build.id,
+        runId: snapshot.run.id,
+        attempt,
+      })
+    }
+    if (returnedUsage && !attemptBudgetExceeded) {
+      try { boundedUsage(returnedUsage, attemptReservation) }
+      catch { attemptBudgetExceeded = true }
     }
     const failure = await classifyHarnessFailureV1(error)
     const recordedFailure = await recordAgentRunArtifactV1({
@@ -1370,17 +1870,30 @@ async function runClaimedTask(input: {
       expectedLastSequence: snapshot.projection.lastSequence,
     })
     snapshot = recordedFailure.snapshot
-    const code = error instanceof Error && error.name === 'AbortError' ? 'task-aborted'
+    const code = resultUnknown ? 'unknown-result'
+      : attemptBudgetExceeded ? 'task-budget-exceeded'
+      : error instanceof Error && error.name === 'AbortError' ? 'task-aborted'
       : error instanceof ProductProductionDraftRejectedErrorV1 ? 'task-draft-rejected'
+      : explicitlyRetryable ? 'task-executor-failed'
       : error instanceof Error && error.message.includes('provider-safety-refusal')
         ? 'provider-safety-refusal' : !failure.retryable ? 'task-executor-nonretryable' : 'task-executor-failed'
-    const retryable = code !== 'task-aborted' && code !== 'provider-safety-refusal' && code !== 'task-draft-rejected'
-      && failure.retryable && attempt < input.task.maxAttempts
+    const retryable = code !== 'unknown-result'
+      && code !== 'task-aborted' && code !== 'provider-safety-refusal'
+      && code !== 'task-draft-rejected' && code !== 'task-budget-exceeded'
+      && (explicitlyRetryable || failure.retryable) && attempt < input.task.maxAttempts
+    if (returnedUsage) {
+      snapshot = await append(input.scope, snapshot, 'budget.settled', {
+        stepId: input.task.taskKey,
+        modelCalls: returnedUsage.modelCalls,
+        toolCalls: returnedUsage.mediaCalls,
+        tokens: returnedUsage.inputTokens + returnedUsage.outputTokens,
+      })
+    }
     snapshot = await append(input.scope, snapshot, 'step.failed', {
       stepId: input.task.taskKey, attempt, code,
       retryable,
       category: code === 'task-aborted' ? 'cancelled'
-        : code === 'provider-safety-refusal' ? 'deterministic' : 'unknown',
+        : code === 'provider-safety-refusal' || code === 'task-budget-exceeded' ? 'deterministic' : 'unknown',
       action: retryable ? 'retry' : 'fail',
     })
     const current = await db.productBuilds.get(input.build.id)
@@ -1394,7 +1907,7 @@ async function runClaimedTask(input: {
       entry: {
         runId: snapshot.run.id, attempt, status: 'failed', idempotencyKey: inputHash,
         candidateHash: null, terminalReceiptHash: null, passedGateIds: [],
-        usage: error instanceof ProductProductionDraftRejectedErrorV1 ? error.usage : null, errorCode: code,
+        usage: returnedUsage, errorCode: code,
       },
     })
     if (!retryable) {
@@ -1405,7 +1918,9 @@ async function runClaimedTask(input: {
         const build = await db.productBuilds.get(input.build.id)
         const production = await db.productProductions.get(input.productionId)
         if (!build || !production || build.controlEpoch !== input.build.controlEpoch) return
-        const status = input.task.failurePolicy === 'fail-build' ? 'failed' : 'recovery-required'
+        const status = resultUnknown
+          ? 'recovery-required'
+          : input.task.failurePolicy === 'fail-build' ? 'failed' : 'recovery-required'
         const updatedAt = Date.now()
         await db.productBuilds.update(input.build.id, {
           status,
@@ -1693,18 +2208,7 @@ export async function projectProductProductionSchedulerV1(input: {
       terminalReceiptHash: child?.projection.terminalReceiptHash ?? null, blocker,
     }
   })
-  const settledUsage = Object.values(ledger.tasks).flatMap(entry => entry.usage ? [entry.usage] : [])
-  const knownCosts = settledUsage.map(usage => usage.costUsd)
-  const usage: ProductProductionTaskUsageV1 = {
-    modelCalls: settledUsage.reduce((sum, item) => sum + item.modelCalls, 0),
-    inputTokens: settledUsage.reduce((sum, item) => sum + item.inputTokens, 0),
-    outputTokens: settledUsage.reduce((sum, item) => sum + item.outputTokens, 0),
-    mediaCalls: settledUsage.reduce((sum, item) => sum + item.mediaCalls, 0),
-    costUsd: knownCosts.some(value => value == null)
-      ? null : knownCosts.reduce<number>((sum, value) => sum + (value ?? 0), 0),
-    durationMs: settledUsage.reduce((sum, item) => sum + item.durationMs, 0),
-    storageBytes: settledUsage.reduce((sum, item) => sum + item.storageBytes, 0),
-  }
+  const usage = sumLedgerUsage(Object.values(ledger.charges).map(charge => charge.usage))
   return {
     productionId: input.productionId, buildId: build.id!, buildNumber: build.buildNumber,
     buildStatus: build.status, controlEpoch: build.controlEpoch, planHash: build.planHash,
@@ -1841,6 +2345,7 @@ export async function runProductProductionSchedulerCycleV1(input: {
   try {
     await Promise.all(claimed.map(({ task, snapshot }) => runClaimedTask({
       scope, productionId: input.productionId,
+      brief: state.brief,
       build: {
         id: state.build.id!, buildNumber: state.build.buildNumber,
         controlEpoch: state.build.controlEpoch, planHash: state.build.planHash, failureJson: state.build.failureJson,

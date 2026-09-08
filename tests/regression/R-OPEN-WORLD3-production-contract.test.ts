@@ -3,7 +3,9 @@ import {
   createTextOpenWorldProductionPlanV1,
   createTextOpenWorldProductionRunContractBlueprintV1,
   TEXT_OPEN_WORLD_PRODUCTION_ARTIFACT_DEFINITIONS_V1,
+  TEXT_OPEN_WORLD_PRODUCTION_DURATION_BUDGET_WEIGHT_V1,
   TEXT_OPEN_WORLD_PRODUCTION_MODEL_CALL_BUDGET_V1,
+  TEXT_OPEN_WORLD_PRODUCTION_TOKEN_BUDGET_WEIGHT_V1,
   TEXT_OPEN_WORLD_PRODUCTION_TASK_CONTRACTS_V1,
   textOpenWorldProductionArtifactKindForKeyV1,
   textOpenWorldProductionStageTaskKeysV1,
@@ -153,8 +155,14 @@ describe('R-OPEN-WORLD3 · product production contract and P0-P10 DAG', () => {
       expect(task.completion.requiredGateIds.length).toBeGreaterThan(0)
       expect(task.completion.terminalEvidence).toBe('task-receipt')
       expect(task.retryPolicy.maxAttempts).toBe(task.executionMode === 'model' ? 2 : 1)
-      if (task.executionMode === 'model') expect(task.recommendedModelCalls).toBeGreaterThanOrEqual(1)
-      else expect(task.recommendedModelCalls).toBe(0)
+      if (task.executionMode === 'model') {
+        expect(task.recommendedModelCalls).toBeGreaterThanOrEqual(1)
+        expect(task.tokenBudgetWeight).toBeGreaterThanOrEqual(1)
+      } else {
+        expect(task.recommendedModelCalls).toBe(0)
+        expect(task.tokenBudgetWeight).toBe(0)
+      }
+      expect(task.durationBudgetWeight).toBeGreaterThanOrEqual(1)
     }
   })
 
@@ -169,11 +177,26 @@ describe('R-OPEN-WORLD3 · product production contract and P0-P10 DAG', () => {
       terminalTaskKey: 'qa.release',
     })
     expect(plan.tasks.filter(task => task.executionMode === 'model')).toHaveLength(22)
-    expect(TEXT_OPEN_WORLD_PRODUCTION_MODEL_CALL_BUDGET_V1).toEqual({ minimum: 22, recommended: 150 })
+    expect(TEXT_OPEN_WORLD_PRODUCTION_MODEL_CALL_BUDGET_V1).toEqual({ minimum: 155, recommended: 155 })
+    expect(TEXT_OPEN_WORLD_PRODUCTION_TOKEN_BUDGET_WEIGHT_V1).toBe(156)
+    expect(TEXT_OPEN_WORLD_PRODUCTION_DURATION_BUDGET_WEIGHT_V1).toBe(100)
     expect(plan.tasks.reduce((sum, task) => sum + task.budgetReservation.modelCalls, 0))
       .toBe(TEXT_OPEN_WORLD_PRODUCTION_MODEL_CALL_BUDGET_V1.recommended)
-    expect(plan.tasks.find(task => task.taskKey === 'p5.mainline')?.budgetReservation.modelCalls).toBe(12)
-    expect(plan.tasks.find(task => task.taskKey === 'p7.region-narrative-packs')?.budgetReservation.modelCalls).toBe(16)
+    expect(plan.tasks.find(task => task.taskKey === 'p1.source-curation')?.budgetReservation.modelCalls).toBe(6)
+    expect(plan.tasks.find(task => task.taskKey === 'p5.mainline')?.budgetReservation.modelCalls).toBe(1)
+    expect(plan.tasks.find(task => task.taskKey === 'p7.region-narrative-packs')?.budgetReservation.modelCalls).toBe(1)
+    expect(plan.tasks.find(task => task.taskKey === 'p9.scene-scripts')?.budgetReservation.modelCalls).toBe(129)
+    expect(plan.tasks.find(task => task.taskKey === 'p5.mainline')?.budgetReservation.inputTokens)
+      .toBe(Math.floor(parsedBrief.productionBudget.maximumInputTokens * 12 / 156))
+    expect(plan.tasks.find(task => task.taskKey === 'p9.scene-scripts')?.budgetReservation.inputTokens)
+      .toBe(Math.floor(parsedBrief.productionBudget.maximumInputTokens * 19 / 156))
+    expect(plan.tasks.find(task => task.taskKey === 'p9.scene-scripts')?.budgetReservation.durationMs)
+      .toBe(Math.floor(parsedBrief.productionBudget.maximumDurationMs * 48 / 100))
+    expect(plan.tasks.find(task => task.taskKey === 'p9.scene-scripts')?.timeoutMs)
+      .toBeLessThanOrEqual(plan.tasks.find(task => task.taskKey === 'p9.scene-scripts')!.budgetReservation.durationMs)
+    expect(plan.tasks.reduce((sum, task) => sum + task.budgetReservation.durationMs, 0))
+      .toBeLessThanOrEqual(parsedBrief.productionBudget.maximumDurationMs)
+    expect(plan.tasks.every(task => task.timeoutMs <= task.budgetReservation.durationMs)).toBe(true)
     expect(plan.tasks.find(task => task.taskKey === 'p8f.quest-finalize')?.dependsOn).toEqual(
       expect.arrayContaining([
         'p8.quest-skeletons', 'p8.catalog.progression',
@@ -187,15 +210,15 @@ describe('R-OPEN-WORLD3 · product production contract and P0-P10 DAG', () => {
     expect(plan.tasks.find(task => task.taskKey === 'qa.release')?.acceptanceGateIds)
       .toEqual(expect.arrayContaining(parsedBrief.completionContract.requiredGateIds))
 
-    const minimumBrief = brief({ maximumModelCalls: 22 })
+    const minimumBrief = brief({ maximumModelCalls: 155 })
     const minimumPlan = await createTextOpenWorldProductionPlanV1({
       buildNumber: 1,
       briefHash: await hashProductProductionValueV2(minimumBrief),
       brief: minimumBrief,
     })
-    expect(minimumPlan.tasks.reduce((sum, task) => sum + task.budgetReservation.modelCalls, 0)).toBe(22)
-    expect(minimumPlan.tasks.filter(task => task.executionMode === 'model')
-      .every(task => task.budgetReservation.modelCalls === 1)).toBe(true)
+    expect(minimumPlan.tasks.reduce((sum, task) => sum + task.budgetReservation.modelCalls, 0)).toBe(155)
+    expect(minimumPlan.tasks.find(task => task.taskKey === 'p1.source-curation')?.budgetReservation.modelCalls).toBe(6)
+    expect(minimumPlan.tasks.find(task => task.taskKey === 'p9.scene-scripts')?.budgetReservation.modelCalls).toBe(129)
   })
 
   it('把媒资Lane接到P10之后，并保持V3为唯一装配汇合点', async () => {
@@ -226,10 +249,10 @@ describe('R-OPEN-WORLD3 · product production contract and P0-P10 DAG', () => {
       buildNumber: 1, briefHash: await hashProductProductionValueV2(avgBrief), brief: avgBrief,
     })).rejects.toThrow(/只能为 text-open-world/)
 
-    const underBudget = brief({ maximumModelCalls: 21 })
+    const underBudget = brief({ maximumModelCalls: 154 })
     await expect(createTextOpenWorldProductionPlanV1({
       buildNumber: 1, briefHash: await hashProductProductionValueV2(underBudget), brief: underBudget,
-    })).rejects.toThrow(/至少需要 22 次/)
+    })).rejects.toThrow(/至少需要 155 次/)
 
     const unsupportedVoice = structuredClone(brief())
     unsupportedVoice.media.audioLevel = 'full'

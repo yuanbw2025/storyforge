@@ -55,6 +55,8 @@ export interface TextOpenWorldRegionNarrativePacksInputContextV1 {
   regionSkeleton: TextOpenWorldRegionSkeletonV1
   mainlineThread: TextOpenWorldMainlineThreadV1
   significantThreads: TextOpenWorldSignificantThreadsV1
+  /** Missing from historical durable P7 Contexts, which retain the old rumor seed shape. */
+  knowledgeSeedContract?: 'governed-v1'
   contextSelectionHash: string
 }
 
@@ -147,6 +149,11 @@ interface RegionNarrativePacksDraftV1 {
       pointsTo: 'location' | 'quest' | 'event' | 'tension' | 'character'
       spoilerBoundary: string
       sourceClaimKeys: string[]
+      truthSummary?: string
+      reliability?: 'uncertain' | 'likely' | 'confirmed'
+      subjectNumber?: number
+      minimumRevealGateKind?: 'regional-public' | 'mainline-stage-complete' | 'significant-stage-complete'
+      minimumRevealStageNumber?: number | null
     }>
   }>
 }
@@ -252,6 +259,9 @@ async function validateLedger(ledger: TextOpenWorldSourceLedgerV1): Promise<void
 async function validateUpstream(
   context: Omit<TextOpenWorldRegionNarrativePacksInputContextV1, 'contextSelectionHash'>,
 ): Promise<void> {
+  if (context.knowledgeSeedContract !== undefined && context.knowledgeSeedContract !== 'governed-v1') {
+    fail('Knowledge种子生产合同无效')
+  }
   const { gameBrief, experienceContract, sourceLedger, regionSkeleton, mainlineThread, significantThreads } = context
   if (gameBrief.schema !== 'storyforge.text-open-world-game-brief' || gameBrief.version !== 1
     || gameBrief.productInstanceKey !== context.productInstanceKey
@@ -398,6 +408,7 @@ async function loadRegionNarrativePacksInput(input: {
     regionSkeleton,
     mainlineThread,
     significantThreads,
+    knowledgeSeedContract: 'governed-v1',
   }
   await validateUpstream(body)
   const context = { ...body, contextSelectionHash: await hashProductProductionValueV2(body) }
@@ -458,6 +469,7 @@ function parseDraft(
   if (!Array.isArray(root.packs) || root.packs.length !== context.regionSkeleton.regions.length) {
     fail(`packs数量必须精确为${context.regionSkeleton.regions.length}`)
   }
+  const governedKnowledge = context.knowledgeSeedContract === 'governed-v1'
   const allowedClaims = new Set(context.sourceLedger.selectedClaims.map(claim => claim.claimKey))
   const packs = root.packs.map((item, packIndex) => {
     const pack = record(item, `packs[${packIndex}]`)
@@ -655,14 +667,55 @@ function parseDraft(
     }
     const rumors = pack.rumors.map((rumorItem, rumorIndex) => {
       const rumor = record(rumorItem, `rumors[${rumorIndex}]`)
-      exactKeys(rumor, ['text', 'pointsTo', 'spoilerBoundary', 'sourceClaimKeys'], `rumors[${rumorIndex}]`)
+      exactKeys(rumor, governedKnowledge
+        ? ['text', 'pointsTo', 'spoilerBoundary', 'sourceClaimKeys', 'truthSummary', 'reliability', 'subjectNumber', 'minimumRevealGateKind', 'minimumRevealStageNumber']
+        : ['text', 'pointsTo', 'spoilerBoundary', 'sourceClaimKeys'], `rumors[${rumorIndex}]`)
+      const pointsTo = enumValue(rumor.pointsTo, RUMOR_TARGETS, `rumors[${rumorIndex}].pointsTo`)
+      const sourceClaimKeys = parseSeedClaims(rumor.sourceClaimKeys, `rumors[${rumorIndex}].sourceClaimKeys`)
+      if (governedKnowledge && sourceClaimKeys.length === 0) fail(`rumors[${rumorIndex}]治理字段必须引用至少一个来源claim`)
+      const subjectMaximum = pointsTo === 'location' ? ownedLocations.length
+        : pointsTo === 'character' ? characters.length
+          : pointsTo === 'tension' ? tensions.length
+            : pointsTo === 'quest' ? ordinaryQuestSeeds.length + taskTemplateSeeds.length
+              : randomEventSeeds.length
+      if (governedKnowledge && subjectMaximum < 1) fail(`rumors[${rumorIndex}]目标类型在本地区没有可引用对象`)
+      const gateKind = governedKnowledge
+        ? enumValue(rumor.minimumRevealGateKind, ['regional-public', 'mainline-stage-complete', 'significant-stage-complete'] as const, `rumors[${rumorIndex}].minimumRevealGateKind`)
+        : undefined
+      const stageMaximum = gateKind === 'mainline-stage-complete'
+        ? context.mainlineThread.stages.length
+        : gateKind === 'significant-stage-complete' ? context.significantThreads.stages.length : 0
+      const minimumRevealStageNumber = governedKnowledge && gateKind !== 'regional-public'
+        ? integer(rumor.minimumRevealStageNumber, `rumors[${rumorIndex}].minimumRevealStageNumber`, 1, stageMaximum)
+        : null
+      if (governedKnowledge && gateKind === 'regional-public' && rumor.minimumRevealStageNumber !== null) {
+        fail(`rumors[${rumorIndex}]公开地区门槛不能携带阶段编号`)
+      }
+      const selectedRevealStage = gateKind === 'mainline-stage-complete'
+        ? context.mainlineThread.stages[(minimumRevealStageNumber ?? 1) - 1]
+        : gateKind === 'significant-stage-complete'
+          ? context.significantThreads.stages[(minimumRevealStageNumber ?? 1) - 1]
+          : null
+      if (governedKnowledge && selectedRevealStage && !selectedRevealStage.regionKeys.includes(region.key)) {
+        fail(`rumors[${rumorIndex}]揭示阶段不属于本地区`)
+      }
       return {
         text: text(rumor.text, `rumors[${rumorIndex}].text`),
-        pointsTo: enumValue(rumor.pointsTo, RUMOR_TARGETS, `rumors[${rumorIndex}].pointsTo`),
+        pointsTo,
         spoilerBoundary: text(rumor.spoilerBoundary, `rumors[${rumorIndex}].spoilerBoundary`),
-        sourceClaimKeys: parseSeedClaims(rumor.sourceClaimKeys, `rumors[${rumorIndex}].sourceClaimKeys`),
+        sourceClaimKeys,
+        ...(governedKnowledge ? {
+          truthSummary: text(rumor.truthSummary, `rumors[${rumorIndex}].truthSummary`),
+          reliability: enumValue(rumor.reliability, ['uncertain', 'likely', 'confirmed'] as const, `rumors[${rumorIndex}].reliability`),
+          subjectNumber: integer(rumor.subjectNumber, `rumors[${rumorIndex}].subjectNumber`, 1, subjectMaximum),
+          minimumRevealGateKind: gateKind,
+          minimumRevealStageNumber,
+        } : {}),
       }
     })
+    if (governedKnowledge && !rumors.some(rumor => rumor.reliability === 'uncertain')) {
+      fail(`packs[${packIndex}]至少需要一条不确定传闻`)
+    }
     return {
       regionNumber,
       title: text(pack.title, `packs[${packIndex}].title`, 200),
@@ -738,6 +791,7 @@ async function createRegionNarrativePacks(input: {
   draft: RegionNarrativePacksDraftV1
   createdAt: number
 }): Promise<TextOpenWorldRegionNarrativePacksV1> {
+  const governedKnowledge = input.context.knowledgeSeedContract === 'governed-v1'
   const draftByRegionNumber = new Map(input.draft.packs.map(pack => [pack.regionNumber, pack]))
   let characterRequirementNumber = 0
   let factionRequirementNumber = 0
@@ -872,6 +926,33 @@ async function createRegionNarrativePacks(input: {
     })
     const rumors = pack.rumors.map((rumor, index) => {
       rumorNumber += 1
+      const questSubjects = [...ordinaryQuestSeeds, ...taskTemplateSeeds]
+      const subjectNumber = governedKnowledge
+        ? rumor.subjectNumber ?? fail(`受治理传闻缺少subjectNumber:${rumorNumber}`)
+        : 1
+      const subjectSourceKey = rumor.pointsTo === 'location'
+        ? locationPlans[subjectNumber - 1]?.locationKey ?? null
+        : rumor.pointsTo === 'character'
+          ? characterRequirements[subjectNumber - 1]?.key ?? null
+          : rumor.pointsTo === 'tension'
+            ? tensions[subjectNumber - 1]?.key ?? null
+            : rumor.pointsTo === 'quest'
+              ? questSubjects[subjectNumber - 1]?.key ?? null
+              : randomEventSeeds[subjectNumber - 1]?.key ?? null
+      const subjectKind = rumor.pointsTo === 'location' ? 'location' as const
+        : rumor.pointsTo === 'character' ? 'actor' as const
+          : rumor.pointsTo === 'tension' ? 'lore' as const : 'quest-clue' as const
+      const gateKind = governedKnowledge
+        ? rumor.minimumRevealGateKind ?? fail(`受治理传闻缺少minimumRevealGateKind:${rumorNumber}`)
+        : 'regional-public'
+      const stageKey = gateKind === 'mainline-stage-complete'
+        ? input.context.mainlineThread.stages[(rumor.minimumRevealStageNumber ?? 0) - 1]?.key
+          ?? fail(`受治理传闻主线揭示阶段无效:${rumorNumber}`)
+        : gateKind === 'significant-stage-complete'
+          ? input.context.significantThreads.stages[(rumor.minimumRevealStageNumber ?? 0) - 1]?.key
+            ?? fail(`受治理传闻重要支线揭示阶段无效:${rumorNumber}`)
+          : null
+      if (governedKnowledge && subjectSourceKey === null) fail(`受治理传闻主题引用无效:${rumorNumber}`)
       return {
         key: keyFor('rumor-seed', rumorNumber),
         order: index + 1,
@@ -879,6 +960,13 @@ async function createRegionNarrativePacks(input: {
         pointsTo: rumor.pointsTo,
         spoilerBoundary: rumor.spoilerBoundary,
         sourceClaimKeys: [...rumor.sourceClaimKeys].sort(),
+        ...(governedKnowledge ? {
+          truthSummary: rumor.truthSummary ?? fail(`受治理传闻缺少truthSummary:${rumorNumber}`),
+          reliability: rumor.reliability ?? fail(`受治理传闻缺少reliability:${rumorNumber}`),
+          subjectKind,
+          subjectSourceKey,
+          minimumRevealGate: { kind: gateKind, stageKey },
+        } : {}),
         bindingStatus: 'unbound' as const,
       }
     })
@@ -1061,6 +1149,27 @@ function draftFromArtifact(
         pointsTo: rumor.pointsTo,
         spoilerBoundary: rumor.spoilerBoundary,
         sourceClaimKeys: rumor.sourceClaimKeys,
+        ...(context.knowledgeSeedContract === 'governed-v1' ? {
+          truthSummary: rumor.truthSummary,
+          reliability: rumor.reliability,
+          subjectNumber: rumor.subjectKind === 'location'
+            ? pack.locationPlans.findIndex(item => item.locationKey === rumor.subjectSourceKey) + 1
+            : rumor.subjectKind === 'actor'
+              ? pack.characterRequirements.findIndex(item => item.key === rumor.subjectSourceKey) + 1
+              : rumor.subjectKind === 'lore'
+                ? pack.tensions.findIndex(item => item.key === rumor.subjectSourceKey) + 1
+                : [...pack.ordinaryQuestSeeds, ...pack.taskTemplateSeeds, ...pack.randomEventSeeds]
+                  .filter(item => rumor.pointsTo === 'event'
+                    ? item.key.startsWith('event-seed.')
+                    : !item.key.startsWith('event-seed.'))
+                  .findIndex(item => item.key === rumor.subjectSourceKey) + 1,
+          minimumRevealGateKind: rumor.minimumRevealGate?.kind,
+          minimumRevealStageNumber: rumor.minimumRevealGate?.stageKey == null
+            ? null
+            : rumor.minimumRevealGate.kind === 'mainline-stage-complete'
+              ? context.mainlineThread.stages.findIndex(stage => stage.key === rumor.minimumRevealGate?.stageKey) + 1
+              : context.significantThreads.stages.findIndex(stage => stage.key === rumor.minimumRevealGate?.stageKey) + 1,
+        } : {}),
       })),
     })),
   }
@@ -1092,9 +1201,16 @@ function systemPrompt(context: TextOpenWorldRegionNarrativePacksInputContextV1):
     'locations必须用全局一基locationNumber精确覆盖该区全部地点一次。每个地点写日常、活动模式、NPC角色需求、传闻钩子、昼夜/天气表现和风险，让玩家即使不推进主线也有可见生活与可玩内容；不能自动触发或泄露关键主线。',
     'characters中每区至少一名important和一名functional或ambient。important由后续Agent持续保持且必须保护；其他NPC采用routine和serviceNeeds规则驱动。若character/faction承担某条重要故事，用significantThreadNumbers绑定；角色或势力owner的重要故事必须在其所在地区恰有一个需求承接。',
     '普通任务种子必须包装成不同的小故事并说明实际playerActivity、地点、地区矛盾编号、奖励需求和5到45分钟时长；模板要有至少一个变化轴；随机事件要提供玩家机会并区分one-shot或repeatable-variant。所有后果都只能局部变化，不能阻断主线或让重要故事永久失败。',
+    ...(context.knowledgeSeedContract === 'governed-v1' ? [
+      '每条rumor还必须写truthSummary、reliability(uncertain|likely|confirmed)、subjectNumber、minimumRevealGateKind和minimumRevealStageNumber。truthSummary只写该传闻最终可确认的事实；text必须是玩家实际听到的说法，不能提前泄露truthSummary。',
+      'subjectNumber是一基编号：location对应本地区locations，character对应characters，tension对应tensions，quest对应ordinaryQuestSeeds后接taskTemplateSeeds，event对应randomEventSeeds。所选类型必须在本区存在。',
+      'minimumRevealGateKind可为regional-public、mainline-stage-complete或significant-stage-complete；公开地区传闻的阶段编号必须为null，另外两类必须引用Context全局阶段数组的一基编号且该阶段属于本区。每区至少一条reliability=uncertain。',
+    ] : []),
     '所有编号都是对应Context数组的一基编号。不要输出任何稳定key、数值Effect、运行Condition、正式目录引用或媒资绑定，这些由代码与后序阶段生成。',
     '只输出一个JSON对象，字段必须精确为：',
-    '{"schema":"storyforge.text-open-world-region-narrative-packs-draft","version":1,"packs":[{"regionNumber":1,"title":"...","fantasy":"...","localConflict":"...","regionalQuestion":"...","dailyLifeBaseline":"...","distinctivenessStatement":"...","sourceClaimKeys":["source.claim.00001"],"tensions":[{"title":"...","sideA":"...","sideB":"...","stakes":"...","pressureAxis":"..."}],"stateAxes":[{"title":"...","lowExpression":"...","middleExpression":"...","highExpression":"..."}],"locations":[{"locationNumber":1,"dailyLife":"...","activityPatterns":["..."],"npcRoleNeeds":["..."],"rumorHooks":["..."],"timeExpressions":["..."],"contentRisk":"safe"}],"characters":[{"tier":"important","roleTitle":"...","narrativeFunction":"...","homeLocationNumber":1,"routine":"...","serviceNeeds":[],"significantThreadNumbers":[1],"sourceClaimKeys":[]}],"factions":[{"title":"...","publicGoal":"...","localResource":"...","visiblePresence":"...","significantThreadNumbers":[],"sourceClaimKeys":[]}],"ordinaryQuestSeeds":[{"title":"...","premise":"...","playerActivity":"...","locationNumbers":[1],"tensionNumber":1,"rewardNeeds":["经验"],"estimatedMinutes":15,"sourceClaimKeys":[]}],"taskTemplateSeeds":[{"title":"...","storyFrame":"...","locationNumbers":[1],"variationAxes":["委托人"],"eligibilitySummary":"...","cooldownIntent":"...","sourceClaimKeys":[]}],"randomEventSeeds":[{"kind":"ambient","title":"...","setup":"...","playerOpportunity":"...","locationNumbers":[1],"repeatability":"repeatable-variant","sourceClaimKeys":[]}],"rumors":[{"text":"...","pointsTo":"tension","spoilerBoundary":"...","sourceClaimKeys":[]}]}]}',
+    context.knowledgeSeedContract === 'governed-v1'
+      ? '{"schema":"storyforge.text-open-world-region-narrative-packs-draft","version":1,"packs":[{"regionNumber":1,"title":"...","fantasy":"...","localConflict":"...","regionalQuestion":"...","dailyLifeBaseline":"...","distinctivenessStatement":"...","sourceClaimKeys":["source.claim.00001"],"tensions":[{"title":"...","sideA":"...","sideB":"...","stakes":"...","pressureAxis":"..."}],"stateAxes":[{"title":"...","lowExpression":"...","middleExpression":"...","highExpression":"..."}],"locations":[{"locationNumber":1,"dailyLife":"...","activityPatterns":["..."],"npcRoleNeeds":["..."],"rumorHooks":["..."],"timeExpressions":["..."],"contentRisk":"safe"}],"characters":[{"tier":"important","roleTitle":"...","narrativeFunction":"...","homeLocationNumber":1,"routine":"...","serviceNeeds":[],"significantThreadNumbers":[1],"sourceClaimKeys":[]}],"factions":[{"title":"...","publicGoal":"...","localResource":"...","visiblePresence":"...","significantThreadNumbers":[],"sourceClaimKeys":[]}],"ordinaryQuestSeeds":[{"title":"...","premise":"...","playerActivity":"...","locationNumbers":[1],"tensionNumber":1,"rewardNeeds":["经验"],"estimatedMinutes":15,"sourceClaimKeys":[]}],"taskTemplateSeeds":[{"title":"...","storyFrame":"...","locationNumbers":[1],"variationAxes":["委托人"],"eligibilitySummary":"...","cooldownIntent":"...","sourceClaimKeys":[]}],"randomEventSeeds":[{"kind":"ambient","title":"...","setup":"...","playerOpportunity":"...","locationNumbers":[1],"repeatability":"repeatable-variant","sourceClaimKeys":[]}],"rumors":[{"text":"...","pointsTo":"tension","spoilerBoundary":"...","sourceClaimKeys":["source.claim.00001"],"truthSummary":"...","reliability":"uncertain","subjectNumber":1,"minimumRevealGateKind":"regional-public","minimumRevealStageNumber":null}]}]}'
+      : '{"schema":"storyforge.text-open-world-region-narrative-packs-draft","version":1,"packs":[{"regionNumber":1,"title":"...","fantasy":"...","localConflict":"...","regionalQuestion":"...","dailyLifeBaseline":"...","distinctivenessStatement":"...","sourceClaimKeys":["source.claim.00001"],"tensions":[{"title":"...","sideA":"...","sideB":"...","stakes":"...","pressureAxis":"..."}],"stateAxes":[{"title":"...","lowExpression":"...","middleExpression":"...","highExpression":"..."}],"locations":[{"locationNumber":1,"dailyLife":"...","activityPatterns":["..."],"npcRoleNeeds":["..."],"rumorHooks":["..."],"timeExpressions":["..."],"contentRisk":"safe"}],"characters":[{"tier":"important","roleTitle":"...","narrativeFunction":"...","homeLocationNumber":1,"routine":"...","serviceNeeds":[],"significantThreadNumbers":[1],"sourceClaimKeys":[]}],"factions":[{"title":"...","publicGoal":"...","localResource":"...","visiblePresence":"...","significantThreadNumbers":[],"sourceClaimKeys":[]}],"ordinaryQuestSeeds":[{"title":"...","premise":"...","playerActivity":"...","locationNumbers":[1],"tensionNumber":1,"rewardNeeds":["经验"],"estimatedMinutes":15,"sourceClaimKeys":[]}],"taskTemplateSeeds":[{"title":"...","storyFrame":"...","locationNumbers":[1],"variationAxes":["委托人"],"eligibilitySummary":"...","cooldownIntent":"...","sourceClaimKeys":[]}],"randomEventSeeds":[{"kind":"ambient","title":"...","setup":"...","playerOpportunity":"...","locationNumbers":[1],"repeatability":"repeatable-variant","sourceClaimKeys":[]}],"rumors":[{"text":"...","pointsTo":"tension","spoilerBoundary":"...","sourceClaimKeys":[]}]}]}',
   ].join('\n')
 }
 

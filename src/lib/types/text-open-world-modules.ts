@@ -150,7 +150,7 @@ export interface TextOpenWorldNarrativeModuleV2 {
     rumorKey: string | null
     rumorRequirementKey: string | null
     rumorText: string | null
-    reliability: 'uncertain' | null
+    reliability: 'uncertain' | 'likely' | 'confirmed' | null
     sourceClaimKeys: string[]
   }>
 }
@@ -398,6 +398,16 @@ export interface TextOpenWorldActionModuleV16 {
  */
 export interface TextOpenWorldActionModuleV17 {
   version: 17
+  conditions: TextOpenWorldActionModuleV1['conditions']
+  effects: TextOpenWorldActionModuleV1['effects']
+  actions: TextOpenWorldActionModuleV1['actions']
+  inputBindings: TextOpenWorldActionInputBindingsV1
+}
+
+/** Action v18 adds deterministic reveal Actions for every initially locked
+ * protected mainline/significant quest. */
+export interface TextOpenWorldActionModuleV18 {
+  version: 18
   conditions: TextOpenWorldActionModuleV1['conditions']
   effects: TextOpenWorldActionModuleV1['effects']
   actions: TextOpenWorldActionModuleV1['actions']
@@ -867,8 +877,9 @@ export type TextOpenWorldDirectorTriggerV1 =
  * regional pressure live only in the Session state.
  */
 export interface TextOpenWorldDirectorModuleV2 {
-  version: 2
-  sourceVersion: 1 | 2
+  /** v3 freezes random-event location gates; v2 events remain region-wide. */
+  version: 2 | 3
+  sourceVersion: 1 | 2 | 3
   rules: {
     globalMaximumRevealed: number
     globalMaximumActive: number
@@ -907,6 +918,8 @@ export interface TextOpenWorldDirectorModuleV2 {
     title: string
     kind: 'atmosphere' | 'resource' | 'encounter' | 'clue' | 'quest-upgrade'
     regionKeys: string[]
+    /** Empty only for historical v1/v2 packages whose events were region-wide. */
+    locationKeys: string[]
     actionKeys: string[]
     effectKeys: string[]
     conditionKeys: string[]
@@ -950,6 +963,8 @@ export interface TextOpenWorldKnowledgeModuleV1 {
     title: string
     description: string
     conditionKeys: string[]
+    /** Fresh P8F achievements are earned only by their bound owner Action/RewardContract. */
+    grantAuthority?: 'owner-action'
   }>
 }
 
@@ -1001,7 +1016,7 @@ export interface TextOpenWorldParsedModulesV1 {
   world: TextOpenWorldWorldModuleV1
   actors: TextOpenWorldActorModuleV1
   quests: TextOpenWorldQuestModuleV1
-  actions: TextOpenWorldActionModuleV1 | TextOpenWorldActionModuleV15 | TextOpenWorldActionModuleV16 | TextOpenWorldActionModuleV17
+  actions: TextOpenWorldActionModuleV1 | TextOpenWorldActionModuleV15 | TextOpenWorldActionModuleV16 | TextOpenWorldActionModuleV17 | TextOpenWorldActionModuleV18
   progression: TextOpenWorldProgressionModuleV1 | TextOpenWorldProgressionModuleV2
   combat: TextOpenWorldCombatModuleV1 | TextOpenWorldCombatModuleV4
   items: TextOpenWorldItemModuleV1

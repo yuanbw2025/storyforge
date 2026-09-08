@@ -54,6 +54,7 @@ import { DEFAULT_TEXT_OPEN_WORLD_CALIBRATION_V1 } from './product-config'
 import { parseTextOpenWorldRuntimePackageV1 } from './runtime-package'
 import { createInitialTextOpenWorldSessionProjectionV1 } from './session-projection'
 import { validateTextOpenWorldDeterministicPreflightV1 } from './system-finalize-production'
+import { validateTextOpenWorldKnowledgeProductionClosureV1 } from './knowledge-production'
 import {
   evaluateTextOpenWorldMediaCoverageV1,
   verifyTextOpenWorldMediaRightsV1,
@@ -412,12 +413,21 @@ function compileModulePayloads(
   assetKeyBySlot: ReadonlyMap<string, string>,
 ): TextOpenWorldParsedModulesV1 {
   const qdd = artifacts.quests
+  validateTextOpenWorldKnowledgeProductionClosureV1({
+    quests: qdd,
+    director: artifacts.director,
+    scenes: artifacts.scenes,
+    questSkeletons: artifacts.skeletons,
+  })
   const binding = qdd.catalogBindings
   const actionModuleVersion = artifacts.system.runtimeModules.find(module => module.moduleKey === 'actions')?.schemaVersion
-  if (actionModuleVersion !== 15 && actionModuleVersion !== 16 && actionModuleVersion !== 17) {
+  if (actionModuleVersion !== 15 && actionModuleVersion !== 16
+    && actionModuleVersion !== 17 && actionModuleVersion !== 18) {
     fail('SystemConfigs任务Action版本无效')
   }
-  const expectedActionModuleVersion = qdd.governance.structuredCombatMechanicsReady === true
+  const expectedActionModuleVersion = qdd.governance.protectedStoryRevealActionsReady === true
+    ? 18
+    : qdd.governance.structuredCombatMechanicsReady === true
     ? 17
     : qdd.governance.allAbandonableQuestStagesCovered === true
       && qdd.governance.restartActionsRequireOriginalOfferRoute === true ? 16 : 15
@@ -496,27 +506,89 @@ function compileModulePayloads(
       sourceQuestKey: actionOwnerQuest(effect.key),
     }]
   })
-  const rumorKnowledge = artifacts.scenes.randomEventPresentations.flatMap(item => item.rumorKey && item.rumorText ? [{
-    key: `knowledge.${item.rumorKey}`,
-    kind: 'quest-clue' as const,
-    title: `传闻：${item.rumorKey}`,
-    content: item.rumorText,
-    sourceRefs: item.sourceClaimKeys,
-    initialPlayerVisibility: 'hidden' as const,
-    actorKeys: [],
-  }] : [])
-  const knowledgeKeys = new Set(rumorKnowledge.map(item => item.key))
-  const sourceKnowledge = artifacts.sourceLedger.entries
-    .filter(entry => !knowledgeKeys.has(entry.claimKey))
-    .map(entry => ({
-      key: entry.claimKey,
-      kind: (entry.claimKind === 'identity' ? 'lore' : entry.claimKind === 'location' ? 'location' : 'lore') as 'location' | 'lore',
-      title: entry.canonicalName,
-      content: entry.statement,
-      sourceRefs: entry.evidence.map(item => item.unitKey),
-      initialPlayerVisibility: 'hidden' as const,
-      actorKeys: entry.entityKeys.filter(key => artifacts.npcs.actors.some(actor => actor.key === key)),
-    }))
+  const governedKnowledge = qdd.governance.knowledgeProgressReady === true
+  const knowledgeModule: TextOpenWorldParsedModulesV1['knowledge'] = (() => {
+    if (!governedKnowledge) {
+      const rumorKnowledge = artifacts.scenes.randomEventPresentations.flatMap(item => item.rumorKey && item.rumorText ? [{
+        key: `knowledge.${item.rumorKey}`,
+        kind: 'quest-clue' as const,
+        title: `传闻：${item.rumorKey}`,
+        content: item.rumorText,
+        sourceRefs: item.sourceClaimKeys,
+        initialPlayerVisibility: 'hidden' as const,
+        actorKeys: [],
+      }] : [])
+      const knowledgeKeys = new Set(rumorKnowledge.map(item => item.key))
+      const sourceKnowledge = artifacts.sourceLedger.entries
+        .filter(entry => !knowledgeKeys.has(entry.claimKey))
+        .map(entry => ({
+          key: entry.claimKey,
+          kind: (entry.claimKind === 'identity' ? 'lore' : entry.claimKind === 'location' ? 'location' : 'lore') as 'location' | 'lore',
+          title: entry.canonicalName,
+          content: entry.statement,
+          sourceRefs: entry.evidence.map(item => item.unitKey),
+          initialPlayerVisibility: 'hidden' as const,
+          actorKeys: entry.entityKeys.filter(key => artifacts.npcs.actors.some(actor => actor.key === key)),
+        }))
+      return {
+        version: 1 as const,
+        entries: [...sourceKnowledge, ...rumorKnowledge],
+        rumors: artifacts.scenes.randomEventPresentations.flatMap(item => item.rumorKey && item.rumorText ? [{
+          key: item.rumorKey, knowledgeKey: `knowledge.${item.rumorKey}`,
+          text: item.rumorText, reliability: item.reliability ?? 'uncertain',
+        }] : []),
+        achievements: [],
+      }
+    }
+    const knowledgeBindings = qdd.knowledgeBindings ?? fail('受治理运行包缺少Knowledge绑定')
+    const achievementBindings = qdd.achievementBindings ?? fail('受治理运行包缺少成就绑定')
+    const knowledgePresentations = artifacts.scenes.knowledgePresentations
+      ?? fail('受治理运行包缺少Knowledge表现')
+    const achievementPresentations = artifacts.scenes.achievementPresentations
+      ?? fail('受治理运行包缺少成就表现')
+    const knowledgePresentationByKey = new Map(knowledgePresentations.map(item => [item.knowledgeKey, item]))
+    const achievementPresentationByKey = new Map(achievementPresentations.map(item => [item.achievementKey, item]))
+    if (knowledgePresentationByKey.size !== knowledgeBindings.length
+      || achievementPresentationByKey.size !== achievementBindings.length
+      || knowledgePresentations.length !== knowledgeBindings.length
+      || achievementPresentations.length !== achievementBindings.length) {
+      fail('Knowledge或成就表现不是一对一绑定')
+    }
+    return {
+      version: 1 as const,
+      entries: knowledgeBindings.map(binding => {
+        const presentation = knowledgePresentationByKey.get(binding.knowledgeKey)
+          ?? fail(`Knowledge缺少表现:${binding.knowledgeKey}`)
+        return {
+          key: binding.knowledgeKey,
+          kind: binding.kind,
+          title: presentation.title,
+          content: presentation.summary,
+          sourceRefs: [...binding.sourceClaimKeys],
+          initialPlayerVisibility: 'hidden' as const,
+          actorKeys: binding.kind === 'actor' && binding.subjectDefinitionKey
+            ? [binding.subjectDefinitionKey] : [],
+        }
+      }),
+      rumors: knowledgeBindings.map(binding => ({
+        key: binding.rumorKey,
+        knowledgeKey: binding.knowledgeKey,
+        text: binding.rumorText,
+        reliability: binding.reliability,
+      })),
+      achievements: achievementBindings.map(binding => {
+        const presentation = achievementPresentationByKey.get(binding.achievementKey)
+          ?? fail(`成就缺少表现:${binding.achievementKey}`)
+        return {
+          key: binding.achievementKey,
+          title: presentation.title,
+          description: presentation.description,
+          conditionKeys: [],
+          grantAuthority: 'owner-action' as const,
+        }
+      }),
+    }
+  })()
 
   return {
     narrative: {
@@ -682,7 +754,7 @@ function compileModulePayloads(
         governance: artifacts.actionBindings.governance,
       },
     },
-    progression: (actionModuleVersion === 17 ? {
+    progression: (actionModuleVersion >= 17 ? {
       version: 2,
       rules: artifacts.progression.rules,
       levels: artifacts.progression.levels,
@@ -738,7 +810,7 @@ function compileModulePayloads(
       })),
     }) as unknown as TextOpenWorldParsedModulesV1['progression'],
     combat: ({
-      version: actionModuleVersion === 17 ? 4 : 3,
+      version: actionModuleVersion >= 17 ? 4 : 3,
       rules: {
         difficulty: 'standard', defaultAttackHits: artifacts.encounters.rules.defaultAttackHits,
         playerPartyLimit: artifacts.encounters.rules.playerPartyLimit,
@@ -749,7 +821,7 @@ function compileModulePayloads(
       difficultyProfiles: artifacts.encounters.rules.difficultyProfiles,
       resolution: artifacts.encounters.rules.resolution,
       skillResolutions: artifacts.encounters.playerSkillResolutions,
-      ...(actionModuleVersion === 17
+      ...(actionModuleVersion >= 17
         ? {}
         : { transientPlayerStatusKeys: artifacts.progression.statuses.map(status => status.key) }),
       strategyProfiles: artifacts.encounters.strategyProfiles,
@@ -899,8 +971,8 @@ function compileModulePayloads(
       })),
     },
     director: {
-      version: 2,
-      sourceVersion: 2,
+      version: governedKnowledge ? 3 : 2,
+      sourceVersion: governedKnowledge ? 3 : 2,
       rules: { ...artifacts.director.rules, systemActionKey: artifacts.director.rules.systemActionKey },
       decks: artifacts.director.decks.map(deck => ({
         regionKey: deck.regionKey, questKeys: deck.fixedQuestKeys, templateKeys: deck.templateKeys,
@@ -918,23 +990,18 @@ function compileModulePayloads(
       })),
       randomEvents: artifacts.director.randomEvents.map(event => ({
         key: event.key, title: event.title, kind: event.kind, regionKeys: event.regionKeys,
+        locationKeys: governedKnowledge ? event.locationKeys : [],
         actionKeys: event.actionKeys, effectKeys: event.effectKeys, conditionKeys: event.conditionKeys,
         fingerprint: event.fingerprint,
-        rumorKey: artifacts.scenes.randomEventPresentations.find(item => item.randomEventKey === event.key)?.rumorKey ?? null,
+        rumorKey: governedKnowledge
+          ? event.rumorKey ?? null
+          : artifacts.scenes.randomEventPresentations.find(item => item.randomEventKey === event.key)?.rumorKey ?? null,
         upgradeTemplateKey: event.upgradeTemplateKey, intensity: event.intensity,
         weight: event.weight, cooldownMinutes: event.cooldownMinutes,
       })),
       regionRules: artifacts.director.regionRules,
     },
-    knowledge: {
-      version: 1,
-      entries: [...sourceKnowledge, ...rumorKnowledge],
-      rumors: artifacts.scenes.randomEventPresentations.flatMap(item => item.rumorKey && item.rumorText ? [{
-        key: item.rumorKey, knowledgeKey: `knowledge.${item.rumorKey}`,
-        text: item.rumorText, reliability: item.reliability ?? 'uncertain',
-      }] : []),
-      achievements: [],
-    },
+    knowledge: knowledgeModule,
     presentation: {
       version: 2,
       textStyle: {
@@ -962,6 +1029,26 @@ function compileModulePayloads(
   }
 }
 
+export async function freezeTextOpenWorldRuntimeModuleV1(input: {
+  moduleKey: TextOpenWorldRuntimeModuleKeyV1
+  schemaVersion: number
+  payload: TextOpenWorldParsedModulesV1[TextOpenWorldRuntimeModuleKeyV1]
+}): Promise<TextOpenWorldRuntimePackageV1['modules'][TextOpenWorldRuntimeModuleKeyV1]> {
+  const payload = structuredClone(input.payload) as unknown as Record<string, unknown>
+  delete payload.sourceVersion
+  if (input.moduleKey === 'director' && payload.version === 2) {
+    const randomEvents = payload.randomEvents as Array<Record<string, unknown>>
+    randomEvents.forEach(event => { delete event.locationKeys })
+  }
+  return {
+    moduleKey: input.moduleKey,
+    schemaVersion: input.schemaVersion,
+    contentHash: await hashProductProductionValueV2(payload),
+    dependencies: MODULE_DEPENDENCIES[input.moduleKey] ?? [],
+    payload,
+  }
+}
+
 async function envelopes(
   modules: TextOpenWorldParsedModulesV1,
   artifacts: V3Artifacts,
@@ -969,14 +1056,11 @@ async function envelopes(
   const configByKey = new Map(artifacts.system.runtimeModules.map(module => [module.moduleKey, module]))
   return Object.fromEntries(await Promise.all(TEXT_OPEN_WORLD_RUNTIME_MODULE_KEYS_V1.map(async moduleKey => {
     const config = configByKey.get(moduleKey) ?? fail(`SystemConfigs缺少模块:${moduleKey}`)
-    const payloadValue = structuredClone(modules[moduleKey]) as unknown as Record<string, unknown>
-    delete payloadValue.sourceVersion
-    return [moduleKey, {
-      moduleKey, schemaVersion: config.schemaVersion,
-      contentHash: await hashProductProductionValueV2(payloadValue),
-      dependencies: MODULE_DEPENDENCIES[moduleKey] ?? [],
-      payload: payloadValue,
-    }]
+    return [moduleKey, await freezeTextOpenWorldRuntimeModuleV1({
+      moduleKey,
+      schemaVersion: config.schemaVersion,
+      payload: modules[moduleKey],
+    })]
   }))) as TextOpenWorldRuntimePackageV1['modules']
 }
 

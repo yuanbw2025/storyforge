@@ -12,6 +12,7 @@ import {
   projectTextOpenWorldPlayerNotificationsV1,
   type TextOpenWorldPlayerNotificationCategoryV1,
 } from '../../lib/open-world/player-notifications'
+import { projectTextOpenWorldPlayerWorldRecordV1 } from '../../lib/open-world/player-world-record'
 import { projectTextOpenWorldScenesV1 } from '../../lib/open-world/scene-projection'
 import { deriveTextOpenWorldContextsV1 } from '../../lib/open-world/session-projection'
 import type { TextOpenWorldCommandSourceV1 } from '../../lib/types'
@@ -27,8 +28,8 @@ import TextOpenWorldGameShell from './TextOpenWorldGameShell'
 import TextOpenWorldInventoryPanel from './TextOpenWorldInventoryPanel'
 import TextOpenWorldMapPanel, { type TextOpenWorldMapTravelRequestV1 } from './TextOpenWorldMapPanel'
 import TextOpenWorldQuestLogPanel from './TextOpenWorldQuestLogPanel'
-import TextOpenWorldRelationshipsPanel from './TextOpenWorldRelationshipsPanel'
 import TextOpenWorldScenePanel from './TextOpenWorldScenePanel'
+import TextOpenWorldWorldRecordPanel from './TextOpenWorldWorldRecordPanel'
 
 const QUEST_STATUS_LABELS = {
   revealed: '可接取',
@@ -176,6 +177,20 @@ export default function TextOpenWorldVNextPlayer() {
   }, [projection, projectionSequence, selectedSessionId, store.events])
   const notificationsReady = notificationProjection.ready
   const notifications = notificationProjection.entries
+  const worldRecordProjection = useMemo(() => {
+    if (!projection || projectionSequence == null || selectedSessionId == null) return null
+    try {
+      return projectTextOpenWorldPlayerWorldRecordV1({
+        sessionId: selectedSessionId,
+        projection,
+        events: store.events,
+      })
+    } catch {
+      // Projection and Event rows refresh independently. Keep the record closed
+      // until the pure projector can verify one coherent same-Session snapshot.
+      return null
+    }
+  }, [projection, projectionSequence, selectedSessionId, store.events])
   const combatProjectionResult = useMemo((): {
     ready: boolean
     value: ReturnType<typeof projectTextOpenWorldPlayerCombatV1>
@@ -520,7 +535,15 @@ export default function TextOpenWorldVNextPlayer() {
         if (action) executeProjectedAction(action, itemKey)
       }}
     />
-    <TextOpenWorldRelationshipsPanel runtimePackage={runtimePackage} state={state} />
+    {worldRecordProjection ? <TextOpenWorldWorldRecordPanel
+      sessionKey={sessionKey}
+      projection={worldRecordProjection}
+      onFocusLocation={focusQuestLocation}
+    /> : <article
+      className="rounded border border-border bg-bg-surface p-4 text-xs text-text-muted"
+      role="status"
+      data-testid="text-open-world-world-record-synchronizing"
+    >世界记录正在核对，完成前不会展示不完整或尚未揭示的内容。</article>}
     <article className="rounded border border-border bg-bg-surface p-4">
       <div className="mb-2 flex items-center gap-2 text-sm font-semibold">
         <Save className="h-4 w-4 text-accent" />存档与分支

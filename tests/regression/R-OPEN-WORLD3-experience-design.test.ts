@@ -3,7 +3,7 @@ import { db } from '../../src/lib/db/schema'
 import { assembleContext } from '../../src/lib/registry/assemble-context'
 import { CONTEXT_SOURCE_BY_KEY } from '../../src/lib/registry/context-sources'
 import { getAgentSkillV1 } from '../../src/lib/agent/skill-registry'
-import { readAgentRunV1 } from '../../src/lib/agent/run/event-store'
+import { createAgentRunV1, readAgentRunV1 } from '../../src/lib/agent/run/event-store'
 import {
   readContextGatewayManifestV3ForAttemptV1,
   verifyContextGatewayCandidateEvidenceV1,
@@ -16,6 +16,7 @@ import { hashProductProductionValueV2 } from '../../src/lib/product-production/h
 import { putMediaBlobObject } from '../../src/lib/product-production/media-blob-store'
 import { parseConfirmedProductBriefV1, parseProductProductionSourcePlanV1 } from '../../src/lib/product-production/source-contracts'
 import { runProductProductionUntilBlockedV1 } from '../../src/lib/product-production/scheduler'
+import type { ProductTaskBudgetReservationV1 } from '../../src/lib/types/product-production'
 import { publishProductProductionV1, startProductProductionPreviewV1 } from '../../src/lib/product-production/service'
 import { verifyProductBuildPreviewManifestV1 } from '../../src/lib/product-production/preview-manifest'
 import { readProductRuntimeState } from '../../src/lib/product/runtime-core'
@@ -117,6 +118,7 @@ import {
 } from '../../src/lib/open-world/map-interaction-catalog-production'
 import {
   createTextOpenWorldQuestFinalizeExecutorV1,
+  deriveTextOpenWorldQuestUnlockConditionV1,
   validateTextOpenWorldQuestFinalizeArtifactsV1,
   type TextOpenWorldQuestFinalizeInputContextV1,
   type TextOpenWorldQuestFinalizeModelRunnerV1,
@@ -134,6 +136,7 @@ import {
   type TextOpenWorldPresentationProfileModelRunnerV1,
 } from '../../src/lib/open-world/presentation-profile'
 import {
+  createTextOpenWorldDeterministicPreflightV1,
   createTextOpenWorldDeterministicPreflightExecutorV1,
   createTextOpenWorldSystemFinalizeExecutorV1,
   validateTextOpenWorldDeterministicPreflightV1,
@@ -1523,7 +1526,14 @@ function regionNarrativePacksRunner(options: {
           text: `${region.title}居民最近在谈论第${index + 1}件与地方生活有关的小事。`,
           pointsTo: ['tension', 'location', 'event'][index],
           spoilerBoundary: '只透露玩家当前可知道的地点名称、公开冲突或事件迹象，不披露隐藏任务结果。',
-          sourceClaimKeys: [],
+          sourceClaimKeys: context.knowledgeSeedContract === 'governed-v1' ? [claimKey] : [],
+          ...(context.knowledgeSeedContract === 'governed-v1' ? {
+            truthSummary: `${region.title}第${index + 1}件地方小事确有公开痕迹可以核实。`,
+            reliability: index === 0 ? 'uncertain' : 'likely',
+            subjectNumber: 1,
+            minimumRevealGateKind: 'regional-public',
+            minimumRevealStageNumber: null,
+          } : {}),
         })),
       }
     })
@@ -2269,6 +2279,7 @@ function questFinalizeRunner(options: {
   excessiveDeckBudget?: boolean
   invalidEventUpgrade?: boolean
   prematureField?: boolean
+  knowledgeTimeBatchOnly?: boolean
 } = {}): TextOpenWorldQuestFinalizeModelRunnerV1 {
   return async input => {
     const context = JSON.parse(input.contextText) as TextOpenWorldQuestFinalizeInputContextV1
@@ -2292,7 +2303,7 @@ function questFinalizeRunner(options: {
         objectives: options.omitObjective ? objectives.slice(0, -1) : objectives,
         decks: context.mapInteractionCatalog.regions.map((_region, index) => ({
           regionNumber: index + 1,
-          triggerKinds: ['explore', 'talk', 'quest-complete'],
+          triggerKinds: options.knowledgeTimeBatchOnly ? ['time-batch'] : ['explore', 'talk', 'rest', 'quest-complete'],
           maximumRevealed: 3,
           maximumActive: options.excessiveDeckBudget && index === 0 ? 4 : 2,
           cooldownMinutes: 240,
@@ -2434,8 +2445,102 @@ function sceneScriptsRunner(options: {
   }
 }
 
-async function sceneScriptsFixture() {
-  const input = await questFinalizeFixture()
+async function rehashOwnArtifactV1(value: object, hashKey: string): Promise<void> {
+  const artifact = value as Record<string, unknown>
+  const body = { ...artifact }
+  delete body[hashKey]
+  artifact[hashKey] = await hashProductProductionValueV2(body)
+}
+
+async function legacyKnowledgeQuestFinalizeInput(
+  input: Awaited<ReturnType<typeof questFinalizeFixture>>,
+): Promise<Awaited<ReturnType<typeof questFinalizeFixture>>> {
+  const context = structuredClone(input.questFinalizeContext)
+  for (const rumor of context.regionNarrativePacks.packs.flatMap(pack => pack.rumors)) {
+    const row = rumor as unknown as Record<string, unknown>
+    delete row.truthSummary
+    delete row.reliability
+    delete row.subjectKind
+    delete row.subjectSourceKey
+    delete row.minimumRevealGate
+  }
+  await rehashOwnArtifactV1(context.regionNarrativePacks, 'regionNarrativePacksHash')
+
+  context.questSkeletons.regionNarrativePacksHash = context.regionNarrativePacks.regionNarrativePacksHash
+  await rehashOwnArtifactV1(context.questSkeletons, 'questSkeletonsHash')
+  context.contentRequirementManifest.questSkeletonsHash = context.questSkeletons.questSkeletonsHash
+  context.contentRequirementManifest.regionNarrativePacksHash = context.regionNarrativePacks.regionNarrativePacksHash
+  await rehashOwnArtifactV1(context.contentRequirementManifest, 'contentRequirementManifestHash')
+  context.progressionCatalogs.questSkeletonsHash = context.questSkeletons.questSkeletonsHash
+  context.progressionCatalogs.contentRequirementManifestHash = context.contentRequirementManifest.contentRequirementManifestHash
+  await rehashOwnArtifactV1(context.progressionCatalogs, 'progressionCatalogsHash')
+  Object.assign(context.enemyEncounterCatalog, {
+    regionNarrativePacksHash: context.regionNarrativePacks.regionNarrativePacksHash,
+    questSkeletonsHash: context.questSkeletons.questSkeletonsHash,
+    contentRequirementManifestHash: context.contentRequirementManifest.contentRequirementManifestHash,
+    progressionCatalogsHash: context.progressionCatalogs.progressionCatalogsHash,
+  })
+  await rehashOwnArtifactV1(context.enemyEncounterCatalog, 'enemyEncounterCatalogHash')
+  Object.assign(context.itemRewardCatalog, {
+    questSkeletonsHash: context.questSkeletons.questSkeletonsHash,
+    contentRequirementManifestHash: context.contentRequirementManifest.contentRequirementManifestHash,
+    progressionCatalogsHash: context.progressionCatalogs.progressionCatalogsHash,
+    enemyEncounterCatalogHash: context.enemyEncounterCatalog.enemyEncounterCatalogHash,
+  })
+  await rehashOwnArtifactV1(context.itemRewardCatalog, 'itemRewardCatalogHash')
+  Object.assign(context.craftingEconomyCatalog, {
+    regionNarrativePacksHash: context.regionNarrativePacks.regionNarrativePacksHash,
+    questSkeletonsHash: context.questSkeletons.questSkeletonsHash,
+    contentRequirementManifestHash: context.contentRequirementManifest.contentRequirementManifestHash,
+    itemRewardCatalogHash: context.itemRewardCatalog.itemRewardCatalogHash,
+  })
+  await rehashOwnArtifactV1(context.craftingEconomyCatalog, 'craftingEconomyCatalogHash')
+  Object.assign(context.npcRuntimeCatalog, {
+    regionNarrativePacksHash: context.regionNarrativePacks.regionNarrativePacksHash,
+    questSkeletonsHash: context.questSkeletons.questSkeletonsHash,
+    contentRequirementManifestHash: context.contentRequirementManifest.contentRequirementManifestHash,
+    craftingEconomyCatalogHash: context.craftingEconomyCatalog.craftingEconomyCatalogHash,
+  })
+  await rehashOwnArtifactV1(context.npcRuntimeCatalog, 'npcRuntimeCatalogHash')
+  Object.assign(context.mapInteractionCatalog, {
+    regionNarrativePacksHash: context.regionNarrativePacks.regionNarrativePacksHash,
+    questSkeletonsHash: context.questSkeletons.questSkeletonsHash,
+    contentRequirementManifestHash: context.contentRequirementManifest.contentRequirementManifestHash,
+  })
+  await rehashOwnArtifactV1(context.mapInteractionCatalog, 'mapInteractionCatalogHash')
+
+  delete context.knowledgeProgressContract
+  delete context.knowledgeBindingDemands
+  delete context.achievementBindingCandidates
+  const { contextSelectionHash: _contextSelectionHash, ...body } = context
+  context.contextSelectionHash = await hashProductProductionValueV2(body)
+
+  const upstream = new Map<string, object>([
+    ['text-open-world.region-narrative-packs', context.regionNarrativePacks],
+    ['text-open-world.quest-skeletons', context.questSkeletons],
+    ['text-open-world.content-requirement-manifest', context.contentRequirementManifest],
+    ['text-open-world.progression-catalogs', context.progressionCatalogs],
+    ['text-open-world.enemy-encounter-catalog', context.enemyEncounterCatalog],
+    ['text-open-world.item-reward-catalog', context.itemRewardCatalog],
+    ['text-open-world.crafting-economy-catalog', context.craftingEconomyCatalog],
+    ['text-open-world.npc-runtime-catalog', context.npcRuntimeCatalog],
+    ['text-open-world.map-interaction-catalog', context.mapInteractionCatalog],
+  ])
+  for (const [artifactKey, payload] of upstream) {
+    const stored = await db.productBuildArtifacts.where('buildId').equals(input.build.id!)
+      .filter(row => row.artifactKey === artifactKey && row.controlEpoch === input.build.controlEpoch).first()
+      ?? (() => { throw new Error(`无法降级未找到上游Artifact:${artifactKey}`) })()
+    await db.productBuildArtifacts.update(stored.id!, {
+      payloadJson: JSON.stringify(payload),
+      contentHash: await hashProductProductionValueV2(payload),
+    })
+  }
+  return { ...input, questFinalizeContext: context, questFinalizeContextText: JSON.stringify(context) }
+}
+
+async function sceneScriptsFixture(options: { legacyKnowledge?: boolean } = {}) {
+  const baseInput = await questFinalizeFixture()
+  const input = options.legacyKnowledge ? await legacyKnowledgeQuestFinalizeInput(baseInput) : baseInput
   const questResult = await executeQuestFinalize(input)
   await acceptTaskArtifacts(input, questResult.artifacts, 'P8F-quest-finalize')
   const plan = await createTextOpenWorldProductionPlanV1({
@@ -2462,16 +2567,27 @@ async function sceneScriptsFixture() {
 async function executeSceneScripts(
   input: Awaited<ReturnType<typeof sceneScriptsFixture>>,
   runModel: TextOpenWorldSceneScriptsModelRunnerV1 = sceneScriptsRunner(),
+  durable: {
+    taskRunId?: number
+    attempt?: number
+    attemptBudgetReservation?: ProductTaskBudgetReservationV1
+    authorDraftJson?: string
+  } = {},
 ) {
   return createTextOpenWorldSceneScriptsExecutorV1({ runModel, now: () => NOW + 20 })({
     scope: input.scope, productionId: input.production.id!, buildId: input.build.id!,
     buildNumber: input.build.buildNumber, controlEpoch: input.build.controlEpoch,
-    planHash: input.planHash, task: input.task, attempt: 1,
+    planHash: input.planHash, task: input.task, attempt: durable.attempt ?? 1,
     idempotencyKey: await hashProductProductionValueV2('p9-scene-scripts'),
     contextText: input.sceneScriptsContextText, inputArtifacts: [],
     capabilityBindings: input.task.capabilityRequirementKeys.map(requirementKey => ({
       requirementKey, bindingHash: CAPABILITY_HASH, adapterId: 'configured-text.v1',
     })),
+    ...(durable.taskRunId == null ? {} : { taskRunId: durable.taskRunId }),
+    ...(durable.attemptBudgetReservation == null
+      ? {}
+      : { attemptBudgetReservation: durable.attemptBudgetReservation }),
+    ...(durable.authorDraftJson === undefined ? {} : { authorDraftJson: durable.authorDraftJson }),
     signal: new AbortController().signal,
   })
 }
@@ -4213,6 +4329,40 @@ describe('R-OPEN-WORLD3 · P8F QuestFinalize / EncounterFinalize', () => {
     })).rejects.toThrow(/原子来源 text-open-world\.quest-finalize-input 超出预算/)
     expect(input.questFinalizeContext.objectiveBindingDemands).toHaveLength(input.questFinalizeContext.questSkeletons.objectives.length)
     expect(input.questFinalizeContext.combatMechanicsContract).toBe('governed-v17')
+    expect(input.questFinalizeContext.knowledgeProgressContract).toBe('governed-v18')
+
+    const shuffledContext = structuredClone(input.questFinalizeContext)
+    shuffledContext.questSkeletons.quests.reverse()
+    const mainlineStageOrder = new Map(shuffledContext.mainlineThread.stages.map(stage => [stage.key, stage.order]))
+    const orderedMainlineSkeletons = shuffledContext.questSkeletons.quests
+      .filter(quest => quest.type === 'mainline')
+      .sort((left, right) => mainlineStageOrder.get(left.source.sourceKey)!
+        - mainlineStageOrder.get(right.source.sourceKey)! || left.key.localeCompare(right.key))
+    expect(deriveTextOpenWorldQuestUnlockConditionV1({
+      quest: orderedMainlineSkeletons[0]!, context: shuffledContext,
+    })).toBeNull()
+    orderedMainlineSkeletons.slice(1).forEach((quest, index) => {
+      expect(deriveTextOpenWorldQuestUnlockConditionV1({ quest, context: shuffledContext })?.expression).toEqual({
+        op: 'quest-status', questKey: orderedMainlineSkeletons[index]!.key, statuses: ['completed'],
+      })
+    })
+    for (const thread of shuffledContext.significantThreads.threads) {
+      const stageOrder = new Map(shuffledContext.significantThreads.stages
+        .filter(stage => stage.threadKey === thread.key).map(stage => [stage.key, stage.order]))
+      const ordered = shuffledContext.questSkeletons.quests
+        .filter(quest => quest.type === 'significant' && quest.storylineKey === thread.key)
+        .sort((left, right) => stageOrder.get(left.source.sourceKey)!
+          - stageOrder.get(right.source.sourceKey)! || left.key.localeCompare(right.key))
+      const mainlineWindowQuest = orderedMainlineSkeletons.find(quest => (
+        quest.source.sourceKey === thread.mainlineCompatibility.availableAfterStageKey
+      ))!
+      ordered.forEach((quest, index) => {
+        expect(deriveTextOpenWorldQuestUnlockConditionV1({ quest, context: shuffledContext })?.expression).toEqual({
+          op: 'quest-status', questKey: index === 0 ? mainlineWindowQuest.key : ordered[index - 1]!.key,
+          statuses: ['completed'],
+        })
+      })
+    }
 
     const result = await executeQuestFinalize(input)
     const questArtifact = result.artifacts.find(artifact => artifact.artifactKey === 'text-open-world.quest-design-documents')!.payload as TextOpenWorldQuestDesignDocumentsV1
@@ -4234,6 +4384,7 @@ describe('R-OPEN-WORLD3 · P8F QuestFinalize / EncounterFinalize', () => {
       allAbandonableQuestStagesCovered: true,
       restartActionsRequireOriginalOfferRoute: true,
       structuredCombatMechanicsReady: true,
+      protectedStoryRevealActionsReady: true,
     })
     expect(questArtifact.catalogBindings.skills.every(binding => binding.effectKeys.length === 0)).toBe(true)
     const questTransitionPayloads = (actionKey: string) => questArtifact.actions
@@ -4241,6 +4392,30 @@ describe('R-OPEN-WORLD3 · P8F QuestFinalize / EncounterFinalize', () => {
         const effect = questArtifact.effects.find(candidate => candidate.key === effectKey)
         return effect?.operation === 'transition-quest' ? [effect.payload] : []
       }) ?? []
+    const mainlineArtifactByKey = new Map(questArtifact.quests
+      .filter(quest => quest.type === 'mainline').map(quest => [quest.key, quest]))
+    orderedMainlineSkeletons.forEach((quest, index) => {
+      expect(mainlineArtifactByKey.get(quest.key)?.initialStatus).toBe(index === 0 ? 'revealed' : 'locked')
+    })
+    const protectedLockedQuests = questArtifact.quests.filter(quest => (
+      (quest.type === 'mainline' || quest.type === 'significant') && quest.initialStatus === 'locked'
+    ))
+    expect(questArtifact.quests.filter(quest => quest.type === 'significant')
+      .every(quest => quest.initialStatus === 'locked')).toBe(true)
+    for (const quest of protectedLockedQuests) {
+      const reveal = questArtifact.actions.find(action => action.key === `action.reveal.${quest.key}`)!
+      expect(reveal).toMatchObject({
+        actorScope: 'system', category: 'quest-action', targetScope: 'quest', locationKeys: [],
+        requirementConditionKeys: quest.prerequisiteConditionKeys,
+        successEffectKeys: [`effect.unlock.${quest.key}`, `effect.reveal.${quest.key}`],
+        costEffectKeys: [], failureEffectKeys: [], timeCostMinutes: 0,
+        confirmationPolicy: 'never', repeatPolicy: 'repeatable', cooldownMinutes: null,
+      })
+      expect(questTransitionPayloads(reveal.key)).toEqual([
+        { questKey: quest.key, status: 'available', stageKey: null },
+        { questKey: quest.key, status: 'revealed', stageKey: null },
+      ])
+    }
     for (const quest of questArtifact.quests.filter(candidate => candidate.abandonActionKey !== null)) {
       const coverage = questArtifact.actions.filter(action => action.category === 'abandon-quest')
         .flatMap(action => questTransitionPayloads(action.key))
@@ -4283,12 +4458,28 @@ describe('R-OPEN-WORLD3 · P8F QuestFinalize / EncounterFinalize', () => {
     expect(questArtifact.coverage.boundEndingKeys).toEqual(requiredEndingKeys)
     expect(questArtifact.endingBindings.routes.map(route => route.endingKey)).toEqual(requiredEndingKeys)
     expect(questArtifact.governance.allEndingsRuntimeBound).toBe(true)
+    expect(questArtifact.governance.knowledgeProgressReady).toBe(true)
+    expect(questArtifact.knowledgeBindings).toHaveLength(
+      input.questFinalizeContext.regionNarrativePacks.packs.flatMap(pack => pack.rumors).length,
+    )
+    expect(questArtifact.knowledgeBindings?.every(binding => binding.confirmationBindings.length > 0)).toBe(true)
+    expect(questArtifact.achievementBindings?.length).toBeGreaterThanOrEqual(3)
+    expect(questArtifact.achievementBindings?.some(binding => binding.sourceKind === 'quest-reward-claim')).toBe(true)
+    expect(questArtifact.achievementBindings?.some(binding => binding.sourceKind === 'ending-action')).toBe(true)
     for (const route of questArtifact.endingBindings.routes) {
+      const governedSuffixEffectKeys = [
+        ...(questArtifact.knowledgeBindings ?? []).flatMap(binding => binding.confirmationBindings
+          .filter(confirmation => confirmation.sourceKind === 'ending-action' && confirmation.sourceKey === route.endingKey)
+          .map(confirmation => confirmation.revealEffectKey)),
+        ...(questArtifact.achievementBindings ?? []).filter(binding => (
+          binding.sourceKind === 'ending-action' && binding.sourceKey === route.endingKey
+        )).map(binding => binding.earnEffectKey),
+      ]
       expect(questArtifact.actions.find(action => action.key === route.actionKey)).toMatchObject({
         actorScope: 'player', targetScope: 'none', category: 'quest-action',
         locationKeys: [questArtifact.endingBindings.finalLocationKey],
         requirementConditionKeys: [questArtifact.endingBindings.selectionReadyConditionKey],
-        successEffectKeys: [route.routeEffectKey, route.unlockEffectKey, route.reachEffectKey],
+        successEffectKeys: [route.routeEffectKey, route.unlockEffectKey, route.reachEffectKey, ...governedSuffixEffectKeys],
         confirmationPolicy: 'always', repeatPolicy: 'once',
       })
       expect(questArtifact.conditions.some(condition => condition.key === route.conditionKey)).toBe(true)
@@ -4339,12 +4530,14 @@ describe('R-OPEN-WORLD3 · P8F QuestFinalize / EncounterFinalize', () => {
     })).resolves.toEqual({ questDesignDocuments: questArtifact, directorDecks: directorArtifact })
   }, 300_000)
 
-  it('拒绝目标漏项、越界牌组预算、非法模板升级和模型越权Action字段', async () => {
+  it('拒绝目标漏项、越界牌组预算、不可达Knowledge牌组、非法模板升级和模型越权Action字段', async () => {
     const input = await questFinalizeFixture()
     await expect(executeQuestFinalize(input, questFinalizeRunner({ omitObjective: true })))
       .rejects.toThrow(/objectives必须与\d+项目标一一对应/)
     await expect(executeQuestFinalize(input, questFinalizeRunner({ excessiveDeckBudget: true })))
       .rejects.toThrow(/maximumActive必须是1到3之间的整数/)
+    await expect(executeQuestFinalize(input, questFinalizeRunner({ knowledgeTimeBatchOnly: true })))
+      .rejects.toThrow(/承载Knowledge传播时必须包含编译器保证可达的rest触发/)
     await expect(executeQuestFinalize(input, questFinalizeRunner({ invalidEventUpgrade: true })))
       .rejects.toThrow(/升级模板与地区或类型不一致/)
     await expect(executeQuestFinalize(input, questFinalizeRunner({ prematureField: true })))
@@ -4369,6 +4562,34 @@ describe('R-OPEN-WORLD3 · P8F QuestFinalize / EncounterFinalize', () => {
       artifacts: { questDesignDocuments: questArtifact, directorDecks: directorArtifact },
       context: input.questFinalizeContext,
     })).rejects.toThrow(/跨Artifact引用未闭合|固定引用、运行定义、预算或Hash被篡改/)
+  }, 300_000)
+
+  it('拒绝重算Hash后给Knowledge传播事件附加第二地点', async () => {
+    const input = await questFinalizeFixture()
+    const result = await executeQuestFinalize(input)
+    const questArtifact = structuredClone(result.artifacts.find(artifact => artifact.artifactKey === 'text-open-world.quest-design-documents')!.payload as TextOpenWorldQuestDesignDocumentsV1)
+    const directorArtifact = structuredClone(result.artifacts.find(artifact => artifact.artifactKey === 'text-open-world.director-decks')!.payload as TextOpenWorldDirectorDecksV1)
+    const propagationEventKey = questArtifact.knowledgeBindings![0]!.propagationEventKey
+    directorArtifact.randomEvents.find(event => event.key === propagationEventKey)!.locationKeys.push('location.forged')
+    const { directorDecksHash: _directorHash, ...directorBody } = directorArtifact
+    directorArtifact.directorDecksHash = await hashProductProductionValueV2(directorBody)
+    await expect(validateTextOpenWorldQuestFinalizeArtifactsV1({
+      artifacts: { questDesignDocuments: questArtifact, directorDecks: directorArtifact },
+      context: input.questFinalizeContext,
+    })).rejects.toThrow(/跨Artifact引用未闭合|固定引用、运行定义、预算或Hash被篡改/)
+
+    const rewrittenQuest = structuredClone(result.artifacts.find(artifact => artifact.artifactKey === 'text-open-world.quest-design-documents')!.payload as TextOpenWorldQuestDesignDocumentsV1)
+    const relinkedDirector = structuredClone(result.artifacts.find(artifact => artifact.artifactKey === 'text-open-world.director-decks')!.payload as TextOpenWorldDirectorDecksV1)
+    rewrittenQuest.knowledgeBindings![0]!.truthSummary = '重写后的伪造真相。'
+    const { questDesignDocumentsHash: _questHash, ...rewrittenQuestBody } = rewrittenQuest
+    rewrittenQuest.questDesignDocumentsHash = await hashProductProductionValueV2(rewrittenQuestBody)
+    relinkedDirector.questDesignDocumentsHash = rewrittenQuest.questDesignDocumentsHash
+    const { directorDecksHash: _relinkedDirectorHash, ...relinkedDirectorBody } = relinkedDirector
+    relinkedDirector.directorDecksHash = await hashProductProductionValueV2(relinkedDirectorBody)
+    await expect(validateTextOpenWorldQuestFinalizeArtifactsV1({
+      artifacts: { questDesignDocuments: rewrittenQuest, directorDecks: relinkedDirector },
+      context: input.questFinalizeContext,
+    })).rejects.toThrow(/固定引用、运行定义、预算或Hash被篡改/)
   }, 300_000)
 })
 
@@ -4401,7 +4622,10 @@ describe('R-OPEN-WORLD3 · P9 SceneScripts / ChoiceContract / ActionBindings', (
     const choices = result.artifacts.find(artifact => artifact.artifactKey === 'text-open-world.choice-contracts')!.payload as TextOpenWorldChoiceContractsV1
     const bindings = result.artifacts.find(artifact => artifact.artifactKey === 'text-open-world.action-bindings')!.payload as TextOpenWorldActionBindingsV1
     expect(result.passedGateIds).toEqual(input.task.acceptanceGateIds)
-    expect(result.usage).toMatchObject({ modelCalls: 1, mediaCalls: 0 })
+    expect(result.usage).toMatchObject({
+      modelCalls: input.sceneScriptsContext.sceneDemands.length + 1,
+      mediaCalls: 0,
+    })
     expect(sceneScripts.scenes.filter(scene => scene.sourceKind === 'quest-objective'))
       .toHaveLength(input.sceneScriptsContext.questDesignDocuments.objectives.length)
     expect(sceneScripts.scenes.filter(scene => scene.sourceKind === 'actor-dialogue'))
@@ -4478,6 +4702,17 @@ describe('R-OPEN-WORLD3 · P9 SceneScripts / ChoiceContract / ActionBindings', (
     expect(bindings.coverage.naturalLanguageBoundActionKeys).toEqual(bindings.coverage.naturalLanguageEligibleActionKeys)
     expect(bindings.actions.filter(binding => binding.actorScope === 'player')
       .every(binding => binding.systemAction.enabled)).toBe(true)
+    const protectedRevealActionKeys = input.sceneScriptsContext.questDesignDocuments.actions
+      .filter(action => action.key.startsWith('action.reveal.')).map(action => action.key)
+    expect(protectedRevealActionKeys.length).toBeGreaterThan(0)
+    for (const actionKey of protectedRevealActionKeys) {
+      expect(sceneScripts.scenes.every(scene => !scene.actionKeys.includes(actionKey))).toBe(true)
+      expect(choices.choices.every(choice => choice.actionKey !== actionKey)).toBe(true)
+      expect(bindings.actions.find(binding => binding.actionKey === actionKey)).toMatchObject({
+        actorScope: 'system', systemAction: { enabled: false }, fixedChoiceKeys: [],
+        naturalLanguage: { mode: 'disabled-system-only', exampleUtterances: [] },
+      })
+    }
     expect(bindings.actions.filter(binding => binding.naturalLanguage.mode === 'disabled-combat-button-only')
       .every(binding => binding.naturalLanguage.exampleUtterances.length === 0)).toBe(true)
     expect(bindings.actions.filter(binding => binding.naturalLanguage.mode === 'existing-action-candidate')
@@ -4561,16 +4796,284 @@ describe('R-OPEN-WORLD3 · P9 SceneScripts / ChoiceContract / ActionBindings', (
     ])
   }, 360_000)
 
-  it('拒绝场景漏项、自然语言歧义、三档态度缺失、传闻缺失和模型越权字段', async () => {
+  it('P9作者聚合稿在governed与legacy Context都直接校验成候选，且绝不再次调用模型', async () => {
+    const authorDraftFor = async (input: Awaited<ReturnType<typeof sceneScriptsFixture>>) => (
+      await sceneScriptsRunner()({
+        projectId: input.scope.projectId,
+        requirementKey: input.task.capabilityRequirementKeys[0]!,
+        expectedCapabilityHash: CAPABILITY_HASH,
+        category: 'text-open-world.production.scene-scripts.v1',
+        system: '',
+        contextText: input.sceneScriptsContextText,
+        maximumOutputTokens: input.task.budgetReservation.outputTokens,
+        signal: new AbortController().signal,
+      })
+    ).output
+    let modelCalls = 0
+    const forbiddenModel: TextOpenWorldSceneScriptsModelRunnerV1 = async () => {
+      modelCalls += 1
+      throw new Error('作者聚合稿不得再次调用模型')
+    }
+
+    const governed = await sceneScriptsFixture()
+    const governedDraft = await authorDraftFor(governed)
+    const governedResult = await executeSceneScripts(governed, forbiddenModel, {
+      authorDraftJson: governedDraft,
+    })
+    expect(governedResult.usage).toMatchObject({
+      modelCalls: 0,
+      inputTokens: 0,
+      outputTokens: 0,
+      mediaCalls: 0,
+    })
+    expect(governedResult.artifacts).toHaveLength(3)
+    expect(modelCalls).toBe(0)
+    await expect(executeSceneScripts(governed, forbiddenModel, { authorDraftJson: '{}' }))
+      .rejects.toThrow(/字段不精确|scenes/)
+    expect(modelCalls).toBe(0)
+
+    const legacy = await sceneScriptsFixture({ legacyKnowledge: true })
+    expect(legacy.sceneScriptsContext.questDesignDocuments.governance.knowledgeProgressReady).toBeUndefined()
+    expect(legacy.sceneScriptsContext.modelDisclosureContract).toBeUndefined()
+    expect(legacy.sceneScriptsContext.regionNarrativePacks.packs
+      .flatMap(pack => pack.rumors).every(rumor => rumor.truthSummary === undefined)).toBe(true)
+    const legacyDraft = await authorDraftFor(legacy)
+    const legacyResult = await executeSceneScripts(legacy, forbiddenModel, {
+      authorDraftJson: legacyDraft,
+    })
+    expect(legacyResult.usage).toMatchObject({
+      modelCalls: 0,
+      inputTokens: 0,
+      outputTokens: 0,
+      mediaCalls: 0,
+    })
+    expect(legacyResult.artifacts).toHaveLength(3)
+    expect(modelCalls).toBe(0)
+  }, 360_000)
+
+  it('P9分片失败后只重试失败和未执行分片，已成功Scene从durable证据恢复且不重复调用模型', async () => {
+    const input = await sceneScriptsFixture()
+    const taskRun = await createAgentRunV1({
+      scope: input.scope,
+      worldGroupId: null,
+      contract: {
+        version: 1,
+        objective: '验证P9 Scene分片的持久化恢复与精确模型计费。',
+        workflowKind: 'long-running-resumable',
+        runtimeBindingHash: CAPABILITY_HASH,
+        scope: { projectId: input.scope.projectId, worldGroupId: null },
+        permissions: {
+          contextSourceKeys: ['text-open-world.scene-scripts-input'],
+          writeTargets: [],
+        },
+        budget: {
+          maxModelCalls: input.task.budgetReservation.modelCalls,
+          maxToolCalls: 0,
+          maxInputTokens: input.task.budgetReservation.inputTokens,
+          maxOutputTokens: input.task.budgetReservation.outputTokens,
+          maxAttemptsPerStep: 2,
+        },
+        acceptance: [{ id: 'p9.fragments', kind: 'output-present', required: true }],
+        verificationPlan: [{
+          id: 'p9.fragments.terminal', kind: 'terminal', verifier: 'p9-fragment-durable-test-v1',
+          criterionIds: ['p9.fragments'],
+        }],
+        failurePolicy: {
+          onProtocolError: 'fail', onVerificationFailure: 'fail', onStaleInput: 'pause-for-author',
+        },
+      },
+    })
+    const stableRunner = sceneScriptsRunner()
+    const callsBySlice = new Map<string, number>()
+    const lateFailureOrdinal = 100
+    expect(input.sceneScriptsContext.sceneDemands.length).toBeGreaterThanOrEqual(lateFailureOrdinal)
+    let rejectedOnce = false
+    const flakyRunner: TextOpenWorldSceneScriptsModelRunnerV1 = async request => {
+      const context = JSON.parse(request.contextText) as TextOpenWorldSceneScriptsInputContextV1
+      const sliceKey = context.sceneDemands[0]?.sceneKey ?? 'shared-presentations'
+      callsBySlice.set(sliceKey, (callsBySlice.get(sliceKey) ?? 0) + 1)
+      if (!rejectedOnce && callsBySlice.size === lateFailureOrdinal) {
+        rejectedOnce = true
+        const invalid = await stableRunner(request)
+        const invalidDraft = JSON.parse(invalid.output) as { scenes: Array<{ sceneNumber: number }> }
+        invalidDraft.scenes[0]!.sceneNumber = 999
+        return { ...invalid, output: JSON.stringify(invalidDraft) }
+      }
+      return stableRunner(request)
+    }
+    await expect(executeSceneScripts(input, flakyRunner, {
+      taskRunId: taskRun.run.id,
+      attempt: 1,
+    })).rejects.toMatchObject({
+      name: 'ProductProductionRetryableExecutionErrorV1',
+      usage: expect.objectContaining({ modelCalls: lateFailureOrdinal }),
+    })
+
+    const failed = await readAgentRunV1(input.scope, taskRun.run.id)
+    const fragmentPrefix = `${input.task.taskKey}.fragment.`
+    const firstSceneStepId = `${fragmentPrefix}scene.00001`
+    const lastRestoredSceneStepId = `${fragmentPrefix}scene.${String(lateFailureOrdinal - 1).padStart(5, '0')}`
+    const failedSceneStepId = `${fragmentPrefix}scene.${String(lateFailureOrdinal).padStart(5, '0')}`
+    expect(failed.projection.steps[firstSceneStepId]).toMatchObject({ status: 'succeeded', attempt: 1 })
+    expect(failed.projection.steps[lastRestoredSceneStepId]).toMatchObject({ status: 'succeeded', attempt: 1 })
+    expect(failed.projection.steps[failedSceneStepId]).toMatchObject({ status: 'failed', attempt: 1 })
+
+    const recovered = await executeSceneScripts(input, flakyRunner, {
+      taskRunId: taskRun.run.id,
+      attempt: 2,
+    })
+    const fragmentCount = input.sceneScriptsContext.sceneDemands.length + 1
+    expect(recovered.usage.modelCalls).toBe(fragmentCount - (lateFailureOrdinal - 1))
+    expect([...callsBySlice.values()].reduce((sum, count) => sum + count, 0)).toBe(fragmentCount + 1)
+    expect(callsBySlice.get(input.sceneScriptsContext.sceneDemands[0]!.sceneKey)).toBe(1)
+    expect(callsBySlice.get(input.sceneScriptsContext.sceneDemands[lateFailureOrdinal - 2]!.sceneKey)).toBe(1)
+    expect(callsBySlice.get(input.sceneScriptsContext.sceneDemands[lateFailureOrdinal - 1]!.sceneKey)).toBe(2)
+
+    const complete = await readAgentRunV1(input.scope, taskRun.run.id)
+    const fragmentSteps = Object.entries(complete.projection.steps)
+      .filter(([stepId]) => stepId.startsWith(fragmentPrefix))
+    expect(fragmentSteps).toHaveLength(fragmentCount)
+    expect(fragmentSteps.every(([, step]) => step.status === 'succeeded')).toBe(true)
+    expect(complete.projection.steps[failedSceneStepId]).toMatchObject({ status: 'succeeded', attempt: 2 })
+    const rawResponses = complete.events.filter(event => (
+      event.type === 'evidence.artifact.recorded'
+      && event.payload.artifactKind === 'raw-response'
+      && event.payload.stepId.startsWith(fragmentPrefix)
+    ))
+    expect(rawResponses).toHaveLength(fragmentCount + 1)
+  }, 360_000)
+
+  it('P9在已返回响应超出Plan预留时仍把刚付费调用完整计入拒绝用量', async () => {
+    const input = await sceneScriptsFixture()
+    const stableRunner = sceneScriptsRunner()
+    let calls = 0
+    const oversizedUsageRunner: TextOpenWorldSceneScriptsModelRunnerV1 = async request => {
+      calls += 1
+      const response = await stableRunner(request)
+      return {
+        ...response,
+        usage: {
+          inputTokens: input.task.budgetReservation.inputTokens + 1,
+          outputTokens: 1,
+        },
+      }
+    }
+    await expect(executeSceneScripts(input, oversizedUsageRunner)).rejects.toMatchObject({
+      name: 'ProductProductionDraftRejectedErrorV1',
+      usage: expect.objectContaining({
+        modelCalls: 1,
+        inputTokens: input.task.budgetReservation.inputTokens + 1,
+        outputTokens: 1,
+      }),
+    })
+    expect(calls).toBe(1)
+  }, 360_000)
+
+  it('P9重试按scheduler下发的剩余attempt预算在首个超额片段后停止继续付费调用', async () => {
+    const input = await sceneScriptsFixture()
+    const taskRun = await createAgentRunV1({
+      scope: input.scope,
+      worldGroupId: null,
+      contract: {
+        version: 1,
+        objective: '验证P9已付费超额响应先落盘、再停止后续分片。',
+        workflowKind: 'long-running-resumable',
+        runtimeBindingHash: CAPABILITY_HASH,
+        scope: { projectId: input.scope.projectId, worldGroupId: null },
+        permissions: {
+          contextSourceKeys: ['text-open-world.scene-scripts-input'],
+          writeTargets: [],
+        },
+        budget: {
+          maxModelCalls: input.task.budgetReservation.modelCalls,
+          maxToolCalls: 0,
+          maxInputTokens: input.task.budgetReservation.inputTokens,
+          maxOutputTokens: input.task.budgetReservation.outputTokens,
+          maxAttemptsPerStep: 2,
+        },
+        acceptance: [{ id: 'p9.overage-evidence', kind: 'output-present', required: true }],
+        verificationPlan: [{
+          id: 'p9.overage-evidence.terminal', kind: 'terminal', verifier: 'p9-overage-evidence-test-v1',
+          criterionIds: ['p9.overage-evidence'],
+        }],
+        failurePolicy: {
+          onProtocolError: 'fail', onVerificationFailure: 'fail', onStaleInput: 'pause-for-author',
+        },
+      },
+    })
+    const stableRunner = sceneScriptsRunner()
+    const remainingReservation: ProductTaskBudgetReservationV1 = {
+      ...input.task.budgetReservation,
+      modelCalls: 2,
+      inputTokens: 100,
+      outputTokens: 100,
+    }
+    let calls = 0
+    const oversizedRetryRunner: TextOpenWorldSceneScriptsModelRunnerV1 = async request => {
+      calls += 1
+      const response = await stableRunner(request)
+      return {
+        ...response,
+        usage: {
+          inputTokens: remainingReservation.inputTokens + 1,
+          outputTokens: 1,
+        },
+      }
+    }
+    await expect(executeSceneScripts(input, oversizedRetryRunner, {
+      taskRunId: taskRun.run.id,
+      attempt: 2,
+      attemptBudgetReservation: remainingReservation,
+    })).rejects.toMatchObject({
+      name: 'ProductProductionDraftRejectedErrorV1',
+      usage: expect.objectContaining({
+        modelCalls: 1,
+        inputTokens: remainingReservation.inputTokens + 1,
+        outputTokens: 1,
+      }),
+    })
+    expect(calls).toBe(1)
+    const failed = await readAgentRunV1(input.scope, taskRun.run.id)
+    const fragmentEvents = failed.events.filter(event => event.payload.stepId?.startsWith('p9.scene-scripts.fragment.'))
+    expect(fragmentEvents.filter(event => event.type === 'model.requested')).toHaveLength(1)
+    expect(fragmentEvents.filter(event => event.type === 'model.responded')).toHaveLength(1)
+    expect(fragmentEvents.filter(event => (
+      event.type === 'evidence.artifact.recorded' && event.payload.artifactKind === 'raw-response'
+    ))).toHaveLength(1)
+    expect(fragmentEvents.filter(event => event.type === 'candidate.persisted')).toHaveLength(0)
+    expect(Object.values(failed.projection.steps)).toEqual([
+      expect.objectContaining({ status: 'failed', attempt: 1 }),
+    ])
+  }, 360_000)
+
+  it('拒绝场景漏项、自然语言歧义、三档态度缺失和模型越权字段，并忽略模型传闻改写', async () => {
     const input = await sceneScriptsFixture()
     await expect(executeSceneScripts(input, sceneScriptsRunner({ omitScene: true })))
       .rejects.toThrow(/scenes必须与\d+项需求一一对应/)
-    await expect(executeSceneScripts(input, sceneScriptsRunner({ duplicateUtterance: true })))
-      .rejects.toThrow(/自然语言示例不得跨Action重复/)
+    const deterministicLanguage = await executeSceneScripts(input, sceneScriptsRunner({ duplicateUtterance: true }))
+    const deterministicBindings = deterministicLanguage.artifacts.find(artifact => (
+      artifact.artifactKey === 'text-open-world.action-bindings'
+    ))!.payload as TextOpenWorldActionBindingsV1
+    const deterministicExamples = deterministicBindings.actions.flatMap(binding => (
+      binding.naturalLanguage.exampleUtterances.map(example => example.toLocaleLowerCase('zh-CN'))
+    ))
+    expect(new Set(deterministicExamples).size).toBe(deterministicExamples.length)
     await expect(executeSceneScripts(input, sceneScriptsRunner({ missingAttitude: true })))
       .rejects.toThrow(/只有角色对话场景可拥有三档态度开场/)
-    await expect(executeSceneScripts(input, sceneScriptsRunner({ missingRumor: true })))
-      .rejects.toThrow(/谣言文本必须与线索需求一致/)
+    const rumorless = await executeSceneScripts(input, sceneScriptsRunner({ missingRumor: true }))
+    const sceneScripts = rumorless.artifacts.find(artifact => (
+      artifact.artifactKey === 'text-open-world.scene-scripts'
+    ))!.payload as TextOpenWorldSceneScriptsV1
+    for (const binding of input.sceneScriptsContext.questDesignDocuments.knowledgeBindings ?? []) {
+      expect(sceneScripts.randomEventPresentations.find(presentation => (
+        presentation.randomEventKey === binding.propagationEventKey
+      ))).toMatchObject({
+        rumorKey: binding.rumorKey,
+        rumorText: binding.rumorText,
+        reliability: binding.reliability,
+        sourceClaimKeys: binding.sourceClaimKeys,
+      })
+    }
     await expect(executeSceneScripts(input, sceneScriptsRunner({ prematureField: true })))
       .rejects.toThrow(/字段不精确/)
     await expect(executeSceneScripts(input, sceneScriptsRunner({ missingChoiceLabel: true })))
@@ -4701,10 +5204,52 @@ describe('R-OPEN-WORLD3 · P2表现 / P10系统收口 / V1确定性预检', () =
       .rejects.toThrow(/预检结果或Hash被篡改/)
   }, 420_000)
 
-  it('旧P10 durable Context省略生命周期版本时仍按Action v15重验', async () => {
+  it('V1拒绝重哈希后让Director事件抢先执行Knowledge确认或成就授予', async () => {
+    const input = await preflightFixture()
+    const questRow = input.inputArtifacts.find(row => (
+      row.artifactKey === 'text-open-world.quest-design-documents'
+    ))!
+    const quests = JSON.parse(questRow.payloadJson) as TextOpenWorldQuestDesignDocumentsV1
+    const revealEffectKey = quests.knowledgeBindings![0]!.confirmationBindings[0]!.revealEffectKey
+    const earnEffectKey = quests.achievementBindings![0]!.earnEffectKey
+
+    const injectDirectorEffect = async (effectKey: string) => {
+      const rows = structuredClone(input.inputArtifacts)
+      const directorRow = rows.find(row => row.artifactKey === 'text-open-world.director-decks')!
+      const director = JSON.parse(directorRow.payloadJson) as TextOpenWorldDirectorDecksV1
+      const event = director.randomEvents.find(item => item.rumorKey === null)
+      if (!event) throw new Error('测试需要一个非传闻Director事件')
+      event.effectKeys.push(effectKey)
+      const { directorDecksHash: _directorHash, ...directorBody } = director
+      director.directorDecksHash = await hashProductProductionValueV2(directorBody)
+      directorRow.payloadJson = JSON.stringify(director)
+      directorRow.contentHash = await hashProductProductionValueV2(director)
+
+      const systemRow = rows.find(row => row.artifactKey === 'text-open-world.system-configs')!
+      const system = JSON.parse(systemRow.payloadJson) as TextOpenWorldSystemConfigsV1
+      system.directorDecksHash = director.directorDecksHash
+      const { systemConfigsHash: _systemHash, ...systemBody } = system
+      system.systemConfigsHash = await hashProductProductionValueV2(systemBody)
+      systemRow.payloadJson = JSON.stringify(system)
+      systemRow.contentHash = await hashProductProductionValueV2(system)
+      return rows
+    }
+
+    await expect(createTextOpenWorldDeterministicPreflightV1({
+      rows: await injectDirectorEffect(revealEffectKey),
+      createdAt: NOW + 27,
+    })).rejects.toThrow(/Knowledge确认Effect没有唯一执行归属/)
+    await expect(createTextOpenWorldDeterministicPreflightV1({
+      rows: await injectDirectorEffect(earnEffectKey),
+      createdAt: NOW + 28,
+    })).rejects.toThrow(/成就Earn Effect没有唯一执行归属/)
+  }, 420_000)
+
+  it('旧P10 durable Context省略新合同标记时仍按Action v15和原Knowledge来源重验', async () => {
     const input = await systemFinalizeFixture()
     const legacyContext = structuredClone(input.systemFinalizeContext)
     delete legacyContext.questLifecycleActionVersion
+    delete legacyContext.knowledgeProgressContract
     const { contextSelectionHash: _contextSelectionHash, ...legacyBody } = legacyContext
     legacyContext.contextSelectionHash = await hashProductProductionValueV2(legacyBody)
     const result = await executeSystemFinalize({
@@ -4716,6 +5261,9 @@ describe('R-OPEN-WORLD3 · P2表现 / P10系统收口 / V1确定性预检', () =
     const media = result.artifacts.find(item => item.artifactKey === 'text-open-world.media-requirements')!.payload as TextOpenWorldMediaRequirementsV1
     const budget = result.artifacts.find(item => item.artifactKey === 'text-open-world.content-budget')!.payload as TextOpenWorldContentBudgetV1
     expect(system.runtimeModules.find(module => module.moduleKey === 'actions')).toMatchObject({ schemaVersion: 15 })
+    expect(system.runtimeModules.find(module => module.moduleKey === 'knowledge')).toMatchObject({
+      sourceArtifactKeys: ['text-open-world.scene-scripts', 'text-open-world.director-decks'],
+    })
     await expect(validateTextOpenWorldSystemFinalizeArtifactsV1({
       artifacts: { systemConfigs: system, mediaRequirements: media, contentBudget: budget },
       context: legacyContext,
@@ -4885,12 +5433,12 @@ describe('R-OPEN-WORLD3 · V3运行包装配与QA', () => {
     })
     const modules = parseTextOpenWorldModulesV1(runtimePackage.textOpenWorldVNext!)
     expect(modules.narrative.version).toBe(2)
-    expect(modules.actions.version).toBe(17)
+    expect(modules.actions.version).toBe(18)
     expect(modules.progression.version).toBe(2)
     expect(modules.combat.version).toBe(4)
-    if (modules.narrative.version !== 2 || modules.actions.version !== 17
+    if (modules.narrative.version !== 2 || modules.actions.version !== 18
       || modules.progression.version !== 2 || modules.combat.version !== 4) {
-      throw new Error('新V3生产必须发布Narrative v2及Action v17/Progression v2/Combat v4严格三联')
+      throw new Error('新V3生产必须发布Narrative v2、Action v18及Progression v2/Combat v4严格战斗合同')
     }
     expect(modules.progression.skills.some(skill => skill.mechanic.kind === 'recovery')).toBe(true)
     expect(modules.progression.skills.filter(skill => skill.activation === 'passive')
@@ -4908,6 +5456,38 @@ describe('R-OPEN-WORLD3 · V3运行包装配与QA', () => {
       .payloadJson) as TextOpenWorldActionBindingsV1
     const acceptedQuests = JSON.parse(accepted.find(row => row.artifactKey === 'text-open-world.quest-design-documents')!
       .payloadJson) as TextOpenWorldQuestDesignDocumentsV1
+    expect(acceptedQuests.governance.knowledgeProgressReady).toBe(true)
+    const acceptedKnowledgeBindings = acceptedQuests.knowledgeBindings!
+    const acceptedAchievementBindings = acceptedQuests.achievementBindings!
+    expect(modules.knowledge.entries.map(entry => entry.key))
+      .toEqual(acceptedKnowledgeBindings.map(binding => binding.knowledgeKey))
+    expect(modules.knowledge.entries.map(entry => entry.sourceRefs))
+      .toEqual(acceptedKnowledgeBindings.map(binding => binding.sourceClaimKeys))
+    expect(modules.knowledge.entries.every(entry => entry.initialPlayerVisibility === 'hidden')).toBe(true)
+    expect(modules.knowledge.rumors).toEqual(acceptedKnowledgeBindings.map(binding => ({
+      key: binding.rumorKey,
+      knowledgeKey: binding.knowledgeKey,
+      text: binding.rumorText,
+      reliability: binding.reliability,
+    })))
+    expect(modules.knowledge.achievements.map(achievement => achievement.key))
+      .toEqual(acceptedAchievementBindings.map(binding => binding.achievementKey))
+    expect(modules.knowledge.achievements.every(achievement => (
+      achievement.grantAuthority === 'owner-action' && achievement.conditionKeys.length === 0
+    ))).toBe(true)
+    for (const binding of acceptedKnowledgeBindings) {
+      for (const confirmation of binding.confirmationBindings) {
+        expect(modules.actions.effects.find(effect => effect.key === confirmation.revealEffectKey))
+          .toMatchObject({
+            operation: 'reveal-knowledge',
+            payload: { knowledgeKey: binding.knowledgeKey, visibility: 'known' },
+          })
+      }
+    }
+    for (const binding of acceptedAchievementBindings) {
+      expect(modules.actions.effects.find(effect => effect.key === binding.earnEffectKey))
+        .toMatchObject({ operation: 'earn-achievement', payload: { achievementKey: binding.achievementKey } })
+    }
     expect(modules.narrative.scenes).toEqual(acceptedScenes.scenes.map(scene => ({
       key: scene.key, order: scene.order, sourceKind: scene.sourceKind, sourceKey: scene.sourceKey,
       title: scene.title, purpose: scene.purpose, regionKey: scene.regionKey,

@@ -28,11 +28,13 @@ import type {
   TextOpenWorldSignificantThreadsV1,
   WorkspaceScope,
 } from '../types'
+import { assertTextOpenWorldSceneDemandCapacityV1 } from './scene-demand-capacity'
 import { assertRecordInScope } from '../workspace/scope'
 import {
   compileTextOpenWorldSkillMechanicV2,
   compileTextOpenWorldStatusDefinitionV2,
 } from './combat-mechanics-production'
+import { validateTextOpenWorldKnowledgeProductionClosureV1 } from './knowledge-production'
 
 const SKILL_ID = 'text-open-world.production.quest-finalize.v1'
 const MAX_CONTEXT_CHARS = 700_000
@@ -44,6 +46,27 @@ interface ObjectiveBindingDemandV1 {
   objectiveNumber: number
   objectiveKey: string
 }
+
+type KnowledgeConfirmationSourceKindV1 = 'quest-reward-claim' | 'ending-action'
+
+interface KnowledgeConfirmationCandidateV1 {
+  candidateNumber: number
+  sourceKind: KnowledgeConfirmationSourceKindV1
+  sourceKey: string
+}
+
+interface KnowledgeBindingDemandV1 {
+  rumorNumber: number
+  sourceRumorKey: string
+  regionKey: string
+  propagationLocationCandidates: Array<{
+    candidateNumber: number
+    locationKey: string
+  }>
+  confirmationCandidates: KnowledgeConfirmationCandidateV1[]
+}
+
+type AchievementBindingCandidateV1 = KnowledgeConfirmationCandidateV1
 
 export interface TextOpenWorldQuestFinalizeInputContextV1 {
   schema: 'storyforge.text-open-world-quest-finalize-input'
@@ -65,8 +88,14 @@ export interface TextOpenWorldQuestFinalizeInputContextV1 {
   questLifecycleContract?: 'governed-v16'
   /** Missing from pre-G4-09 durable contexts; omission preserves v15/v16 combat bindings. */
   combatMechanicsContract?: 'governed-v17'
+  /** Missing from pre-G4-11 durable contexts; omission preserves the legacy Knowledge path. */
+  knowledgeProgressContract?: 'governed-v18'
+  knowledgeBindingDemands?: KnowledgeBindingDemandV1[]
+  achievementBindingCandidates?: AchievementBindingCandidateV1[]
   contextSelectionHash: string
 }
+
+type QuestFinalizeContextWithoutHashV1 = Omit<TextOpenWorldQuestFinalizeInputContextV1, 'contextSelectionHash'>
 
 export interface TextOpenWorldQuestFinalizeArtifactsV1 {
   questDesignDocuments: TextOpenWorldQuestDesignDocumentsV1
@@ -122,6 +151,12 @@ interface QuestFinalizeDraftV1 {
     cooldownMinutes: number
     upgradeTemplateNumber: number | null
   }>
+  knowledgeSelections?: Array<{
+    rumorNumber: number
+    propagationLocationNumber: number
+    confirmationCandidateNumbers: number[]
+  }>
+  achievementCandidateNumbers?: number[]
 }
 
 function fail(message: string): never { throw new Error(`[text-open-world-quest-finalize] ${message}`) }
@@ -206,6 +241,148 @@ function buildObjectiveDemands(
   }))
 }
 
+type RegionRumorV1 = TextOpenWorldRegionNarrativePacksV1['packs'][number]['rumors'][number]
+type GovernedRegionRumorV1 = RegionRumorV1 & {
+  truthSummary: string
+  reliability: 'uncertain' | 'likely' | 'confirmed'
+  subjectKind: 'location' | 'actor' | 'faction' | 'lore' | 'quest-clue'
+  subjectSourceKey: string | null
+  minimumRevealGate: {
+    kind: 'regional-public' | 'mainline-stage-complete' | 'significant-stage-complete'
+    stageKey: string | null
+  }
+}
+
+function governedRumor(value: RegionRumorV1): value is GovernedRegionRumorV1 {
+  return typeof value.truthSummary === 'string'
+    && ['uncertain', 'likely', 'confirmed'].includes(value.reliability ?? '')
+    && ['location', 'actor', 'faction', 'lore', 'quest-clue'].includes(value.subjectKind ?? '')
+    && (typeof value.subjectSourceKey === 'string' || value.subjectSourceKey === null)
+    && value.minimumRevealGate != null
+    && ['regional-public', 'mainline-stage-complete', 'significant-stage-complete'].includes(value.minimumRevealGate.kind)
+    && (typeof value.minimumRevealGate.stageKey === 'string' || value.minimumRevealGate.stageKey === null)
+}
+
+function protectedQuestCandidates(context: QuestFinalizeContextWithoutHashV1): KnowledgeConfirmationCandidateV1[] {
+  return context.questSkeletons.quests.filter(quest => (
+    (quest.type === 'mainline' || quest.type === 'significant')
+    && quest.lifecyclePlan.lifecyclePolicy === 'protected-wait'
+    && !quest.lifecyclePlan.repeatable
+    && context.itemRewardCatalog.rewardContracts.some(reward => reward.sourceKind === 'quest' && reward.sourceSemanticKey === quest.key)
+  )).map(quest => ({
+    candidateNumber: 0,
+    sourceKind: 'quest-reward-claim' as const,
+    sourceKey: quest.key,
+  }))
+}
+
+function endingCandidates(context: QuestFinalizeContextWithoutHashV1): KnowledgeConfirmationCandidateV1[] {
+  return [...context.mainlineThread.endingRoutes]
+    .sort((left, right) => context.mainlineThread.thread.endingKeys.indexOf(left.endingKey)
+      - context.mainlineThread.thread.endingKeys.indexOf(right.endingKey))
+    .map(route => ({
+      candidateNumber: 0,
+      sourceKind: 'ending-action' as const,
+      sourceKey: route.endingKey,
+    }))
+}
+
+function numberedCandidates(values: KnowledgeConfirmationCandidateV1[]): KnowledgeConfirmationCandidateV1[] {
+  const uniqueValues = values.filter((value, index) => values.findIndex(candidate => (
+    candidate.sourceKind === value.sourceKind && candidate.sourceKey === value.sourceKey
+  )) === index)
+  return uniqueValues.map((value, index) => ({ ...value, candidateNumber: index + 1 }))
+}
+
+function confirmationCandidatesForRumor(input: {
+  context: QuestFinalizeContextWithoutHashV1
+  regionKey: string
+  rumor: GovernedRegionRumorV1
+}): KnowledgeConfirmationCandidateV1[] {
+  const protectedQuests = protectedQuestCandidates(input.context)
+  const endings = endingCandidates(input.context)
+  const gate = input.rumor.minimumRevealGate
+  let quests: KnowledgeConfirmationCandidateV1[] = []
+  if (gate.kind === 'regional-public') {
+    quests = protectedQuests.filter(candidate => input.context.questSkeletons.quests
+      .find(quest => quest.key === candidate.sourceKey)?.regionKeys.includes(input.regionKey))
+    if (!quests.length) quests = protectedQuests
+  } else if (gate.kind === 'mainline-stage-complete') {
+    const gateStage = input.context.mainlineThread.stages.find(stage => stage.key === gate.stageKey)
+      ?? fail(`传闻主线门槛不存在:${input.rumor.key}`)
+    quests = protectedQuests.filter(candidate => {
+      const quest = input.context.questSkeletons.quests.find(item => item.key === candidate.sourceKey)
+      const stage = quest?.source.kind === 'mainline-stage'
+        ? input.context.mainlineThread.stages.find(item => item.key === quest.source.sourceKey)
+        : null
+      // The reward for the quest compiled from the gate stage is claimed only
+      // after that quest has completed, so the gate stage itself is a valid
+      // confirmation owner. Never require an artificial later mainline stage.
+      return stage != null && stage.order >= gateStage.order
+    })
+  } else {
+    const gateStage = input.context.significantThreads.stages.find(stage => stage.key === gate.stageKey)
+      ?? fail(`传闻重要支线门槛不存在:${input.rumor.key}`)
+    quests = protectedQuests.filter(candidate => {
+      const quest = input.context.questSkeletons.quests.find(item => item.key === candidate.sourceKey)
+      const stage = quest?.source.kind === 'significant-stage'
+        ? input.context.significantThreads.stages.find(item => item.key === quest.source.sourceKey)
+        : null
+      return stage != null && stage.threadKey === gateStage.threadKey && stage.order >= gateStage.order
+    })
+  }
+  // A global ending is not proof that an arbitrary significant thread reached
+  // its gated stage. Significant rumors therefore stay confirmable only by a
+  // reward in that same thread at or after the gate.
+  const result = numberedCandidates([
+    ...quests,
+    ...(gate.kind === 'significant-stage-complete' ? [] : endings),
+  ])
+  if (!result.length) fail(`传闻缺少可保证到达的确认候选:${input.rumor.key}`)
+  return result
+}
+
+function buildKnowledgeProductionDemands(context: QuestFinalizeContextWithoutHashV1): {
+  governed: boolean
+  knowledgeBindingDemands: KnowledgeBindingDemandV1[]
+  achievementBindingCandidates: AchievementBindingCandidateV1[]
+} {
+  const rows = context.regionNarrativePacks.packs.flatMap(pack => pack.rumors.map(rumor => ({ pack, rumor })))
+  const governedCount = rows.filter(row => governedRumor(row.rumor)).length
+  const anyGovernedField = rows.some(({ rumor }) => rumor.truthSummary !== undefined
+    || rumor.reliability !== undefined || rumor.subjectKind !== undefined
+    || rumor.subjectSourceKey !== undefined || rumor.minimumRevealGate !== undefined)
+  if (anyGovernedField && governedCount !== rows.length) fail('P7传闻治理字段只能全部存在或全部缺失')
+  if (!rows.length || governedCount === 0) {
+    return { governed: false, knowledgeBindingDemands: [], achievementBindingCandidates: [] }
+  }
+  const knowledgeBindingDemands = rows.map(({ pack, rumor }, index) => {
+    if (!governedRumor(rumor)) fail(`P7传闻治理字段缺失:${rumor.key}`)
+    const propagationLocationCandidates = context.mapInteractionCatalog.locations
+      .filter(location => location.regionKey === pack.regionKey)
+      .sort((left, right) => left.order - right.order || left.key.localeCompare(right.key))
+      .map((location, locationIndex) => ({ candidateNumber: locationIndex + 1, locationKey: location.key }))
+    if (!propagationLocationCandidates.length) fail(`传闻地区缺少传播地点:${rumor.key}`)
+    return {
+      rumorNumber: index + 1,
+      sourceRumorKey: rumor.key,
+      regionKey: pack.regionKey,
+      propagationLocationCandidates,
+      confirmationCandidates: confirmationCandidatesForRumor({ context, regionKey: pack.regionKey, rumor }),
+    }
+  })
+  const achievementBindingCandidates = numberedCandidates([
+    ...protectedQuestCandidates(context),
+    ...endingCandidates(context),
+  ])
+  if (achievementBindingCandidates.length < 3
+    || !achievementBindingCandidates.some(candidate => candidate.sourceKind === 'quest-reward-claim')
+    || !achievementBindingCandidates.some(candidate => candidate.sourceKind === 'ending-action')) {
+    fail('首版需要至少三个且同时覆盖受保护任务与结局的成就候选')
+  }
+  return { governed: true, knowledgeBindingDemands, achievementBindingCandidates }
+}
+
 async function validateUpstream(context: Omit<TextOpenWorldQuestFinalizeInputContextV1, 'contextSelectionHash'>): Promise<void> {
   if (context.questLifecycleContract !== undefined && context.questLifecycleContract !== 'governed-v16') {
     fail('Quest生命周期生产合同无效')
@@ -213,9 +390,26 @@ async function validateUpstream(context: Omit<TextOpenWorldQuestFinalizeInputCon
   if (context.combatMechanicsContract !== undefined && context.combatMechanicsContract !== 'governed-v17') {
     fail('结构化战斗机制生产合同无效')
   }
+  if (context.knowledgeProgressContract !== undefined && context.knowledgeProgressContract !== 'governed-v18') {
+    fail('Knowledge进展生产合同无效')
+  }
   if (context.combatMechanicsContract === 'governed-v17'
     && context.progressionCatalogs.governance.structuredCombatSemanticsReady !== true) {
     fail('结构化战斗机制合同缺少已验收的P8语义')
+  }
+  const knowledgeProduction = buildKnowledgeProductionDemands(context)
+  if (knowledgeProduction.governed !== (context.knowledgeProgressContract === 'governed-v18')) {
+    fail('Knowledge进展合同与P7传闻治理状态不一致')
+  }
+  if (context.knowledgeProgressContract === 'governed-v18') {
+    if (canonicalProductProductionJsonV2(context.knowledgeBindingDemands)
+        !== canonicalProductProductionJsonV2(knowledgeProduction.knowledgeBindingDemands)
+      || canonicalProductProductionJsonV2(context.achievementBindingCandidates)
+        !== canonicalProductProductionJsonV2(knowledgeProduction.achievementBindingCandidates)) {
+      fail('Knowledge/成就候选不是上游目录的确定性投影')
+    }
+  } else if (context.knowledgeBindingDemands !== undefined || context.achievementBindingCandidates !== undefined) {
+    fail('历史P8F Context不能携带Knowledge/成就候选')
   }
   const artifacts: Array<[Record<string, unknown>, string, string]> = [
     [context.mainlineThread as unknown as Record<string, unknown>, 'mainlineThreadHash', 'MainlineThread'],
@@ -335,6 +529,12 @@ async function loadContext(input: { scope: WorkspaceScope; productionId: number;
       ? { combatMechanicsContract: 'governed-v17' as const }
       : {}),
   }
+  const knowledgeProduction = buildKnowledgeProductionDemands(body)
+  if (knowledgeProduction.governed) {
+    body.knowledgeProgressContract = 'governed-v18'
+    body.knowledgeBindingDemands = knowledgeProduction.knowledgeBindingDemands
+    body.achievementBindingCandidates = knowledgeProduction.achievementBindingCandidates
+  }
   await validateUpstream(body)
   const context = { ...body, contextSelectionHash: await hashProductProductionValueV2(body) }
   if (canonicalProductProductionJsonV2(context).length > MAX_CONTEXT_CHARS) fail('QuestFinalize Context超过硬上限')
@@ -359,7 +559,16 @@ async function parseContext(value: string): Promise<TextOpenWorldQuestFinalizeIn
 
 function parseDraft(value: unknown, context: TextOpenWorldQuestFinalizeInputContextV1): QuestFinalizeDraftV1 {
   const root = record(value, 'draft')
-  exactKeys(root, ['schema', 'version', 'quests', 'objectives', 'decks', 'templates', 'randomEvents'], 'draft')
+  const governedKnowledge = context.knowledgeProgressContract === 'governed-v18'
+  const hasKnowledgeSelections = Object.prototype.hasOwnProperty.call(root, 'knowledgeSelections')
+  const hasAchievementSelections = Object.prototype.hasOwnProperty.call(root, 'achievementCandidateNumbers')
+  if (governedKnowledge && hasKnowledgeSelections !== hasAchievementSelections) {
+    fail('Knowledge与成就模型选择字段必须同时存在或同时缺失')
+  }
+  const explicitKnowledgeSelections = governedKnowledge && hasKnowledgeSelections && hasAchievementSelections
+  exactKeys(root, explicitKnowledgeSelections
+    ? ['schema', 'version', 'quests', 'objectives', 'decks', 'templates', 'randomEvents', 'knowledgeSelections', 'achievementCandidateNumbers']
+    : ['schema', 'version', 'quests', 'objectives', 'decks', 'templates', 'randomEvents'], 'draft')
   if (root.schema !== 'storyforge.text-open-world-quest-finalize-draft' || root.version !== 1) fail('draft schema/version无效')
   if (!Array.isArray(root.quests) || root.quests.length !== context.questSkeletons.quests.length) fail(`quests必须与${context.questSkeletons.quests.length}项骨架一一对应`)
   const quests = root.quests.map((value, index) => {
@@ -400,6 +609,16 @@ function parseDraft(value: unknown, context: TextOpenWorldQuestFinalizeInputCont
     }
   })
   if (decks.some((deck, index) => deck.regionNumber !== index + 1)) fail('decks必须按地区顺序精确覆盖')
+  if (governedKnowledge) {
+    const knowledgeRegionKeys = new Set((context.knowledgeBindingDemands ?? []).map(demand => demand.regionKey))
+    decks.forEach((deck, index) => {
+      const region = context.mapInteractionCatalog.regions[index]!
+      if (knowledgeRegionKeys.has(region.key)
+        && !deck.triggerKinds.includes('rest')) {
+        fail(`decks[${index}]承载Knowledge传播时必须包含编译器保证可达的rest触发`)
+      }
+    })
+  }
   const templateQuests = context.questSkeletons.quests.filter(quest => quest.type === 'template')
   if (!Array.isArray(root.templates) || root.templates.length !== templateQuests.length) fail('templates必须逐模板任务覆盖')
   const categories = ['help', 'resource', 'exploration', 'conflict', 'mystery'] as const
@@ -427,6 +646,7 @@ function parseDraft(value: unknown, context: TextOpenWorldQuestFinalizeInputCont
     const upgradeTemplateNumber = row.upgradeTemplateNumber === null ? null
       : integer(row.upgradeTemplateNumber, `randomEvents[${index}].upgradeTemplateNumber`, 1, templateQuests.length)
     const kind = enumValue(row.kind, eventKinds, `randomEvents[${index}].kind`)
+    if (governedKnowledge && kind === 'clue') fail(`randomEvents[${index}]不能绕过P7传闻绑定创建线索`)
     if ((kind === 'quest-upgrade') !== (upgradeTemplateNumber !== null)
       || (upgradeTemplateNumber !== null && !regionTemplateIndexes.includes(upgradeTemplateNumber))) fail(`randomEvents[${index}]升级模板与地区或类型不一致`)
     if (kind === 'resource' && !context.itemRewardCatalog.items.some(item => item.kind === 'material' && !item.critical)) {
@@ -444,7 +664,82 @@ function parseDraft(value: unknown, context: TextOpenWorldQuestFinalizeInputCont
     }
   })
   if (randomEvents.some((event, index) => event.seedNumber !== index + 1)) fail('randomEvents必须按序精确覆盖')
-  return { quests, objectives, decks, templates, randomEvents }
+  if (!governedKnowledge) return { quests, objectives, decks, templates, randomEvents }
+  const demands = context.knowledgeBindingDemands ?? fail('Knowledge选择缺少候选合同')
+  if (!explicitKnowledgeSelections) {
+    const achievementCandidates = context.achievementBindingCandidates ?? fail('成就选择缺少候选合同')
+    const firstQuest = achievementCandidates.find(candidate => candidate.sourceKind === 'quest-reward-claim')
+      ?? fail('成就默认选择缺少任务来源')
+    const firstEnding = achievementCandidates.find(candidate => candidate.sourceKind === 'ending-action')
+      ?? fail('成就默认选择缺少结局来源')
+    const achievementCandidateNumbers = [firstQuest.candidateNumber, firstEnding.candidateNumber]
+    for (const candidate of achievementCandidates) {
+      if (achievementCandidateNumbers.length >= 3) break
+      if (!achievementCandidateNumbers.includes(candidate.candidateNumber)) achievementCandidateNumbers.push(candidate.candidateNumber)
+    }
+    achievementCandidateNumbers.sort((left, right) => left - right)
+    return {
+      quests, objectives, decks, templates, randomEvents,
+      knowledgeSelections: demands.map(demand => ({
+        rumorNumber: demand.rumorNumber,
+        propagationLocationNumber: 1,
+        confirmationCandidateNumbers: [1],
+      })),
+      achievementCandidateNumbers,
+    }
+  }
+  if (!Array.isArray(root.knowledgeSelections) || root.knowledgeSelections.length !== demands.length) {
+    fail(`knowledgeSelections必须与${demands.length}条传闻一一对应`)
+  }
+  const knowledgeSelections = root.knowledgeSelections.map((value, index) => {
+    const row = record(value, `knowledgeSelections[${index}]`)
+    exactKeys(row, ['rumorNumber', 'propagationLocationNumber', 'confirmationCandidateNumbers'], `knowledgeSelections[${index}]`)
+    const demand = demands[index]!
+    const rumorNumber = integer(row.rumorNumber, `knowledgeSelections[${index}].rumorNumber`, 1, demands.length)
+    if (rumorNumber !== index + 1 || rumorNumber !== demand.rumorNumber) fail('knowledgeSelections必须按传闻顺序精确覆盖')
+    const propagationLocationNumber = integer(
+      row.propagationLocationNumber,
+      `knowledgeSelections[${index}].propagationLocationNumber`,
+      1,
+      demand.propagationLocationCandidates.length,
+    )
+    if (!Array.isArray(row.confirmationCandidateNumbers)
+      || row.confirmationCandidateNumbers.length < 1 || row.confirmationCandidateNumbers.length > 3) {
+      fail(`knowledgeSelections[${index}]必须选择1到3个确认候选`)
+    }
+    const confirmationCandidateNumbers = row.confirmationCandidateNumbers.map((value, candidateIndex) => integer(
+      value,
+      `knowledgeSelections[${index}].confirmationCandidateNumbers[${candidateIndex}]`,
+      1,
+      demand.confirmationCandidates.length,
+    ))
+    if (new Set(confirmationCandidateNumbers).size !== confirmationCandidateNumbers.length
+      || confirmationCandidateNumbers.some((number, candidateIndex) => candidateIndex > 0 && number <= confirmationCandidateNumbers[candidateIndex - 1]!)) {
+      fail(`knowledgeSelections[${index}]确认候选必须严格升序且不重复`)
+    }
+    return { rumorNumber, propagationLocationNumber, confirmationCandidateNumbers }
+  })
+  const achievementCandidates = context.achievementBindingCandidates ?? fail('成就选择缺少候选合同')
+  if (!Array.isArray(root.achievementCandidateNumbers)
+    || root.achievementCandidateNumbers.length < 3 || root.achievementCandidateNumbers.length > 6) {
+    fail('achievementCandidateNumbers必须选择3到6个候选')
+  }
+  const achievementCandidateNumbers = root.achievementCandidateNumbers.map((value, index) => integer(
+    value,
+    `achievementCandidateNumbers[${index}]`,
+    1,
+    achievementCandidates.length,
+  ))
+  if (new Set(achievementCandidateNumbers).size !== achievementCandidateNumbers.length
+    || achievementCandidateNumbers.some((number, index) => index > 0 && number <= achievementCandidateNumbers[index - 1]!)) {
+    fail('achievementCandidateNumbers必须严格升序且不重复')
+  }
+  const selectedAchievements = achievementCandidateNumbers.map(number => achievementCandidates[number - 1]!)
+  if (!selectedAchievements.some(candidate => candidate.sourceKind === 'quest-reward-claim')
+    || !selectedAchievements.some(candidate => candidate.sourceKind === 'ending-action')) {
+    fail('首版成就必须同时覆盖受保护任务与结局')
+  }
+  return { quests, objectives, decks, templates, randomEvents, knowledgeSelections, achievementCandidateNumbers }
 }
 
 function action(input: Partial<TextOpenWorldActionDefinitionV1> & Pick<TextOpenWorldActionDefinitionV1, 'key' | 'category' | 'label' | 'description'>): TextOpenWorldActionDefinitionV1 {
@@ -558,14 +853,20 @@ export function compileTextOpenWorldQuestFinalizeItemRuntimeContractV1(
   }
 }
 
-function questUnlockCondition(input: {
+export function deriveTextOpenWorldQuestUnlockConditionV1(input: {
   quest: TextOpenWorldQuestSkeletonsV1['quests'][number]
   context: TextOpenWorldQuestFinalizeInputContextV1
 }): TextOpenWorldConditionDefinitionV1 | null {
   if (input.quest.type === 'mainline') {
-    const mainQuests = input.context.questSkeletons.quests.filter(quest => quest.type === 'mainline')
+    const stageOrder = new Map(input.context.mainlineThread.stages.map(stage => [stage.key, stage.order]))
+    const mainQuests = input.context.questSkeletons.quests
+      .filter(quest => quest.type === 'mainline')
+      .sort((left, right) => (stageOrder.get(left.source.sourceKey) ?? Number.MAX_SAFE_INTEGER)
+        - (stageOrder.get(right.source.sourceKey) ?? Number.MAX_SAFE_INTEGER)
+        || left.key.localeCompare(right.key))
     const index = mainQuests.findIndex(quest => quest.key === input.quest.key)
-    if (index <= 0) return null
+    if (index < 0) fail(`主线任务没有来源Stage:${input.quest.key}`)
+    if (index === 0) return null
     return {
       key: `condition.unlock.${input.quest.key}`,
       expression: { op: 'quest-status', questKey: mainQuests[index - 1]!.key, statuses: ['completed'] },
@@ -575,6 +876,27 @@ function questUnlockCondition(input: {
   if (input.quest.type === 'significant') {
     const sourceStage = input.context.significantThreads.stages.find(stage => stage.key === input.quest.source.sourceKey)
     const thread = sourceStage ? input.context.significantThreads.threads.find(item => item.key === sourceStage.threadKey) : null
+    if (!sourceStage || !thread || input.quest.storylineKey !== thread.key) {
+      fail(`重要任务没有唯一所属故事线:${input.quest.key}`)
+    }
+    const sameThreadQuests = input.context.questSkeletons.quests
+      .filter(quest => quest.type === 'significant' && quest.storylineKey === thread.key)
+      .sort((left, right) => {
+        const leftOrder = input.context.significantThreads.stages.find(stage => stage.key === left.source.sourceKey)?.order
+          ?? Number.MAX_SAFE_INTEGER
+        const rightOrder = input.context.significantThreads.stages.find(stage => stage.key === right.source.sourceKey)?.order
+          ?? Number.MAX_SAFE_INTEGER
+        return leftOrder - rightOrder || left.key.localeCompare(right.key)
+      })
+    const index = sameThreadQuests.findIndex(quest => quest.key === input.quest.key)
+    if (index < 0) fail(`重要任务没有来源Stage:${input.quest.key}`)
+    if (index > 0) {
+      return {
+        key: `condition.unlock.${input.quest.key}`,
+        expression: { op: 'quest-status', questKey: sameThreadQuests[index - 1]!.key, statuses: ['completed'] },
+        failureMessage: '需要先完成这条重要故事的上一阶段。',
+      }
+    }
     const mainlineStage = thread
       ? input.context.mainlineThread.stages.find(stage => stage.key === thread.mainlineCompatibility.availableAfterStageKey)
       : null
@@ -628,15 +950,55 @@ function supportActionsForDefinitions(input: {
   return [...new Set(result)]
 }
 
+function stableRumorSuffix(sourceRumorKey: string): string {
+  const matched = /^rumor-seed\.(\d{3})$/.exec(sourceRumorKey)
+  if (!matched) fail(`传闻稳定键无效:${sourceRumorKey}`)
+  return matched[1]!
+}
+
+function subjectDefinitionKey(input: {
+  context: TextOpenWorldQuestFinalizeInputContextV1
+  rumor: GovernedRegionRumorV1
+}): string | null {
+  const sourceKey = input.rumor.subjectSourceKey
+  if (input.rumor.subjectKind === 'lore') return null
+  if (!sourceKey) fail(`传闻主题缺少来源键:${input.rumor.key}`)
+  if (input.rumor.subjectKind === 'location') {
+    return input.context.mapInteractionCatalog.locations.find(item => item.key === sourceKey)?.key
+      ?? fail(`传闻地点主题未兑现:${input.rumor.key}:${sourceKey}`)
+  }
+  if (input.rumor.subjectKind === 'actor') {
+    const matches = input.context.npcRuntimeCatalog.actors.filter(item => item.key === sourceKey
+      || item.fulfilledRequirementKeys.includes(sourceKey))
+    if (matches.length !== 1) fail(`传闻Actor主题必须唯一兑现:${input.rumor.key}:${sourceKey}`)
+    return matches[0]!.key
+  }
+  if (input.rumor.subjectKind === 'faction') {
+    const matches = input.context.npcRuntimeCatalog.factions.filter(item => item.key === sourceKey
+      || item.fulfilledRequirementKeys.includes(sourceKey))
+    if (matches.length !== 1) fail(`传闻Faction主题必须唯一兑现:${input.rumor.key}:${sourceKey}`)
+    return matches[0]!.key
+  }
+  const quest = input.context.questSkeletons.quests.find(item => item.key === sourceKey || item.source.sourceKey === sourceKey)
+  if (quest) return quest.key
+  const eventIndex = input.context.regionNarrativePacks.packs.flatMap(pack => pack.randomEventSeeds)
+    .findIndex(item => item.key === sourceKey)
+  if (eventIndex >= 0) return `event.director.${String(eventIndex + 1).padStart(3, '0')}`
+  fail(`传闻任务线索主题未兑现:${input.rumor.key}:${sourceKey}`)
+}
+
 async function createArtifacts(input: {
   context: TextOpenWorldQuestFinalizeInputContextV1
   draft: QuestFinalizeDraftV1
   createdAt: number
   lifecycleContract?: 'legacy' | 'governed-v16'
   combatMechanicsContract?: 'legacy' | 'governed-v17'
+  knowledgeProgressContract?: 'legacy' | 'governed-v18'
 }): Promise<TextOpenWorldQuestFinalizeArtifactsV1> {
   const governedLifecycle = input.lifecycleContract !== 'legacy'
   const governedCombatMechanics = input.combatMechanicsContract === 'governed-v17'
+  const governedKnowledge = input.knowledgeProgressContract === 'governed-v18'
+  const governedProtectedStoryReveal = governedLifecycle && governedCombatMechanics && governedKnowledge
   if (governedCombatMechanics) {
     input.context.progressionCatalogs.statuses.forEach(compileTextOpenWorldStatusDefinitionV2)
     input.context.progressionCatalogs.skills.forEach(skill => {
@@ -986,9 +1348,13 @@ async function createArtifacts(input: {
     stageRows.push({ key: stage.key, questKey: stage.questKey, order: stage.order, title: stage.title, objectiveKeys: stage.objectiveKeys, completionConditionKeys, completionActionKey: actionKey })
   })
 
+  const firstMainlineQuestKey = input.context.questSkeletons.quests
+    .find(quest => quest.type === 'mainline'
+      && deriveTextOpenWorldQuestUnlockConditionV1({ quest, context: input.context }) === null)?.key
+    ?? fail('任务骨架缺少主线任务')
   input.context.questSkeletons.quests.forEach((quest, index) => {
     const draft = input.draft.quests[index]!
-    const unlock = questUnlockCondition({ quest, context: input.context })
+    const unlock = deriveTextOpenWorldQuestUnlockConditionV1({ quest, context: input.context })
     if (unlock) addCondition(unlock)
     const orderedStages = input.context.questSkeletons.stages
       .filter(stage => stage.questKey === quest.key)
@@ -1006,6 +1372,29 @@ async function createArtifacts(input: {
     addEffect({ key: acceptOne, operation: 'transition-quest', payload: { questKey: quest.key, status: 'accepted', stageKey: null } })
     addEffect({ key: activate, operation: 'transition-quest', payload: { questKey: quest.key, status: 'active', stageKey: firstStage.key } })
     addAction(action({ key: acceptActionKey, category: 'accept-quest', label: `接受：${quest.title}`, description: draft.description, targetScope: 'quest', requirementConditionKeys: unlock ? [unlock.key] : [], successEffectKeys: [acceptOne, activate] }))
+    const initialStatus: TextOpenWorldQuestDesignDocumentsV1['quests'][number]['initialStatus'] = quest.type === 'template'
+      ? 'locked'
+      : quest.type === 'mainline' && quest.key === firstMainlineQuestKey
+        ? 'revealed'
+        : quest.type === 'ordinary' ? 'available' : 'locked'
+    if (governedProtectedStoryReveal && initialStatus === 'locked'
+      && (quest.type === 'mainline' || quest.type === 'significant')) {
+      if (!unlock) fail(`受保护任务缺少揭示条件:${quest.key}`)
+      const unlockEffectKey = `effect.unlock.${quest.key}`
+      const revealEffectKey = `effect.reveal.${quest.key}`
+      addEffect({ key: unlockEffectKey, operation: 'transition-quest', payload: { questKey: quest.key, status: 'available', stageKey: null } })
+      addEffect({ key: revealEffectKey, operation: 'transition-quest', payload: { questKey: quest.key, status: 'revealed', stageKey: null } })
+      addAction(action({
+        key: `action.reveal.${quest.key}`,
+        category: 'quest-action',
+        label: `揭示：${quest.title}`,
+        description: '前置故事完成后，由任务系统确定性公开这条受保护故事线。',
+        actorScope: 'system',
+        targetScope: 'quest',
+        requirementConditionKeys: [unlock.key],
+        successEffectKeys: [unlockEffectKey, revealEffectKey],
+      }))
+    }
     let abandonActionKey: string | null = null
     if (quest.lifecyclePlan.abandonable) {
       abandonActionKey = `action.abandon.${quest.key}`
@@ -1095,7 +1484,7 @@ async function createArtifacts(input: {
       lifecyclePolicy, timePolicy: quest.lifecyclePlan.timePolicy,
       expirationMinutes: quest.lifecyclePlan.expirationMinutes, repeatable: quest.lifecyclePlan.repeatable,
       instantiationPolicy: quest.lifecyclePlan.instantiationPolicy,
-      initialStatus: quest.type === 'template' ? 'locked' : quest.type === 'mainline' && index === 0 ? 'revealed' : quest.type === 'ordinary' ? 'available' : 'locked',
+      initialStatus,
       estimatedMinutes: quest.estimatedMinutes, tags: [...new Set([quest.type, ...draft.tags])],
     })
   })
@@ -1191,6 +1580,152 @@ async function createArtifacts(input: {
     addEffect({ key, operation: 'grant-item', payload: { itemKey: nonCriticalMaterial.key, quantity: 1 } })
     return [key]
   })
+  type KnowledgeBindingV1 = NonNullable<TextOpenWorldQuestDesignDocumentsV1['knowledgeBindings']>[number]
+  type AchievementBindingV1 = NonNullable<TextOpenWorldQuestDesignDocumentsV1['achievementBindings']>[number]
+  const sourceOwner = (candidate: KnowledgeConfirmationCandidateV1) => {
+    if (candidate.sourceKind === 'quest-reward-claim') {
+      const quest = questRows.find(item => item.key === candidate.sourceKey)
+        ?? fail(`Knowledge候选任务不存在:${candidate.sourceKey}`)
+      const reward = rewardBindings.find(item => item.rewardContractKey === quest.rewardContractKey
+        && item.sourceQuestKey === quest.key) ?? fail(`Knowledge候选任务缺少RewardContract:${quest.key}`)
+      return {
+        sourceActionKey: quest.claimActionKey,
+        effectOwnerKind: 'reward-contract' as const,
+        effectOwnerKey: reward.rewardContractKey,
+        appendEffectKeys(effectKeys: string[]) {
+          effectKeys.forEach(effectKey => {
+            if (reward.effectKeys.includes(effectKey)) fail(`RewardContract重复绑定Effect:${reward.rewardContractKey}:${effectKey}`)
+            reward.effectKeys.push(effectKey)
+          })
+          quest.rewardEffectKeys = [...reward.effectKeys]
+        },
+      }
+    }
+    const route = endingBindings.routes.find(item => item.endingKey === candidate.sourceKey)
+      ?? fail(`Knowledge候选结局不存在:${candidate.sourceKey}`)
+    const endingAction = actions.find(item => item.key === route.actionKey)
+      ?? fail(`Knowledge候选结局Action不存在:${route.actionKey}`)
+    return {
+      sourceActionKey: route.actionKey,
+      effectOwnerKind: 'action' as const,
+      effectOwnerKey: route.actionKey,
+      appendEffectKeys(effectKeys: string[]) {
+        effectKeys.forEach(effectKey => {
+          if (endingAction.successEffectKeys.includes(effectKey)) fail(`结局Action重复绑定Effect:${route.actionKey}:${effectKey}`)
+          endingAction.successEffectKeys.push(effectKey)
+        })
+      },
+    }
+  }
+  const knowledgeBindings: KnowledgeBindingV1[] = []
+  const achievementBindings: AchievementBindingV1[] = []
+  if (governedKnowledge) {
+    const demands = input.context.knowledgeBindingDemands ?? fail('Knowledge编译缺少绑定需求')
+    const selections = input.draft.knowledgeSelections ?? fail('Knowledge编译缺少模型选择')
+    const sourceRumors = input.context.regionNarrativePacks.packs.flatMap(pack => pack.rumors.map(rumor => ({ pack, rumor })))
+    demands.forEach((demand, index) => {
+      const source = sourceRumors[index] ?? fail(`Knowledge缺少P7传闻:${demand.sourceRumorKey}`)
+      if (source.rumor.key !== demand.sourceRumorKey || source.pack.regionKey !== demand.regionKey || !governedRumor(source.rumor)) {
+        fail(`Knowledge需求与P7传闻不一致:${demand.sourceRumorKey}`)
+      }
+      const selection = selections[index] ?? fail(`Knowledge缺少模型选择:${demand.sourceRumorKey}`)
+      const propagationLocation = demand.propagationLocationCandidates[selection.propagationLocationNumber - 1]
+        ?? fail(`Knowledge传播地点选择无效:${demand.sourceRumorKey}`)
+      const suffix = stableRumorSuffix(demand.sourceRumorKey)
+      const knowledgeKey = `knowledge.${suffix}`
+      const rumorKey = `rumor.${suffix}`
+      const unreadConditionKey = `condition.knowledge.${suffix}.unread`
+      addCondition({
+        key: unreadConditionKey,
+        expression: {
+          op: 'all',
+          conditions: [
+            { op: 'knowledge-rumor-read', rumorKey, read: false },
+            { op: 'not', condition: { op: 'knowledge-visibility', knowledgeKey, minimum: 'known' } },
+          ],
+        },
+        failureMessage: '这条传闻已经听过，或其真相已经被确认。',
+      })
+      const propagationConditionKeys = [unreadConditionKey]
+      if (source.rumor.minimumRevealGate.kind !== 'regional-public') {
+        const stageKey = source.rumor.minimumRevealGate.stageKey
+          ?? fail(`Knowledge阶段门槛缺少stageKey:${demand.sourceRumorKey}`)
+        const expectedSourceKind = source.rumor.minimumRevealGate.kind === 'mainline-stage-complete'
+          ? 'mainline-stage' : 'significant-stage'
+        const gateQuests = questRows.filter(quest => {
+          const skeleton = input.context.questSkeletons.quests.find(item => item.key === quest.key)
+          return skeleton?.source.kind === expectedSourceKind && skeleton.source.sourceKey === stageKey
+        })
+        if (gateQuests.length !== 1) {
+          fail(`Knowledge阶段门槛必须由唯一任务兑现:${demand.sourceRumorKey}:${stageKey}`)
+        }
+        const gateQuest = gateQuests[0]!
+        const gateConditionKey = `condition.knowledge.${suffix}.gate`
+        addCondition({
+          key: gateConditionKey,
+          expression: { op: 'quest-status', questKey: gateQuest.key, statuses: ['completed'] },
+          failureMessage: '这条传闻尚未进入可以公开传播的故事阶段。',
+        })
+        propagationConditionKeys.push(gateConditionKey)
+      }
+      const confirmationBindings = selection.confirmationCandidateNumbers.map((candidateNumber, confirmationIndex) => {
+        const candidate = demand.confirmationCandidates[candidateNumber - 1]
+          ?? fail(`Knowledge确认候选不存在:${demand.sourceRumorKey}:${candidateNumber}`)
+        const revealEffectKey = `effect.knowledge.${suffix}.confirm.${String(confirmationIndex + 1).padStart(3, '0')}`
+        addEffect({ key: revealEffectKey, operation: 'reveal-knowledge', payload: { knowledgeKey, visibility: 'known' } })
+        const owner = sourceOwner(candidate)
+        owner.appendEffectKeys([revealEffectKey])
+        return {
+          order: confirmationIndex + 1,
+          sourceKind: candidate.sourceKind,
+          sourceKey: candidate.sourceKey,
+          sourceActionKey: owner.sourceActionKey,
+          effectOwnerKind: owner.effectOwnerKind,
+          effectOwnerKey: owner.effectOwnerKey,
+          revealEffectKey,
+        }
+      })
+      knowledgeBindings.push({
+        order: index + 1,
+        sourceRumorKey: demand.sourceRumorKey,
+        regionKey: demand.regionKey,
+        propagationLocationKey: propagationLocation.locationKey,
+        knowledgeKey,
+        kind: source.rumor.subjectKind,
+        subjectSourceKey: source.rumor.subjectSourceKey,
+        subjectDefinitionKey: subjectDefinitionKey({ context: input.context, rumor: source.rumor }),
+        truthSummary: source.rumor.truthSummary,
+        sourceClaimKeys: [...source.rumor.sourceClaimKeys],
+        rumorKey,
+        rumorText: source.rumor.text,
+        reliability: source.rumor.reliability,
+        minimumRevealGate: { ...source.rumor.minimumRevealGate },
+        propagationEventKey: `event.director.rumor.${suffix}`,
+        propagationConditionKeys,
+        confirmationBindings,
+      })
+    })
+    const achievementCandidates = input.context.achievementBindingCandidates ?? fail('成就编译缺少候选合同')
+    const achievementSelections = input.draft.achievementCandidateNumbers ?? fail('成就编译缺少模型选择')
+    achievementSelections.forEach((candidateNumber, index) => {
+      const candidate = achievementCandidates[candidateNumber - 1] ?? fail(`成就候选不存在:${candidateNumber}`)
+      const achievementKey = `achievement.${candidate.sourceKey}`
+      const earnEffectKey = `effect.achievement.${candidate.sourceKey}.earn`
+      addEffect({ key: earnEffectKey, operation: 'earn-achievement', payload: { achievementKey } })
+      const owner = sourceOwner(candidate)
+      owner.appendEffectKeys([earnEffectKey])
+      achievementBindings.push({
+        order: index + 1,
+        achievementKey,
+        sourceKind: candidate.sourceKind,
+        sourceKey: candidate.sourceKey,
+        sourceActionKey: owner.sourceActionKey,
+        effectOwnerKind: owner.effectOwnerKind,
+        effectOwnerKey: owner.effectOwnerKey,
+        earnEffectKey,
+      })
+    })
+  }
   const questBody: Omit<TextOpenWorldQuestDesignDocumentsV1, 'questDesignDocumentsHash'> = {
     schema: 'storyforge.text-open-world-quest-design-documents', version: 1, productType: 'text-open-world',
     productInstanceKey: input.context.productInstanceKey, mainlineThreadHash: input.context.mainlineThread.mainlineThreadHash,
@@ -1205,6 +1740,7 @@ async function createArtifacts(input: {
     npcRuntimeCatalogHash: input.context.npcRuntimeCatalog.npcRuntimeCatalogHash,
     mapInteractionCatalogHash: input.context.mapInteractionCatalog.mapInteractionCatalogHash,
     requirementBindings, quests: questRows, stages: stageRows, objectives: objectiveRows, conditions, effects, actions,
+    ...(governedKnowledge ? { knowledgeBindings, achievementBindings } : {}),
     endingBindings,
     catalogBindings: {
       skills: skillBindings, enemies: enemyBindings, encounters: encounterBindings, items: itemBindings,
@@ -1221,6 +1757,14 @@ async function createArtifacts(input: {
       referencedCatalogDefinitionKeys,
       requiredEndingKeys: input.context.mainlineThread.thread.endingKeys,
       boundEndingKeys: endingRouteBindings.map(binding => binding.endingKey),
+      ...(governedKnowledge ? {
+        requiredKnowledgeKeys: knowledgeBindings.map(binding => binding.knowledgeKey),
+        confirmableKnowledgeKeys: knowledgeBindings.filter(binding => binding.confirmationBindings.length > 0).map(binding => binding.knowledgeKey),
+        requiredRumorSeedKeys: knowledgeBindings.map(binding => binding.sourceRumorKey),
+        boundRumorSeedKeys: knowledgeBindings.map(binding => binding.sourceRumorKey),
+        requiredAchievementKeys: achievementBindings.map(binding => binding.achievementKey),
+        earnableAchievementKeys: achievementBindings.map(binding => binding.achievementKey),
+      } : {}),
       orphanActionKeys: [], orphanEffectKeys: [], uncoveredRequirementKeys: [],
     },
     governance: {
@@ -1232,6 +1776,13 @@ async function createArtifacts(input: {
         restartActionsRequireOriginalOfferRoute: true as const,
       } : {}),
       ...(governedCombatMechanics ? { structuredCombatMechanicsReady: true as const } : {}),
+      ...(governedKnowledge ? {
+        allRumorsHaveUniquePropagationPath: true as const,
+        allKnowledgeHasConfirmationPath: true as const,
+        allAchievementsOneTimeReachable: true as const,
+        knowledgeProgressReady: true as const,
+      } : {}),
+      ...(governedProtectedStoryReveal ? { protectedStoryRevealActionsReady: true as const } : {}),
       allCatalogBindingsResolved: true,
       allEndingsRuntimeBound: true, sceneBindingsDeferred: true, questAndEncounterBindingsReady: true,
     },
@@ -1258,7 +1809,7 @@ async function createArtifacts(input: {
       presentationBinding: { status: 'variant-text-unbound' as const, variantTextKeys: [] as [] },
     }
   })
-  const randomEvents = randomSeeds.map(({ pack, seed }, index) => {
+  const randomEvents: TextOpenWorldDirectorDecksV1['randomEvents'] = randomSeeds.map(({ pack, seed }, index) => {
     const draft = input.draft.randomEvents[index]!
     const regionEncounter = input.context.enemyEncounterCatalog.encounters.find(encounter => encounter.regionKey === pack.regionKey)
     const actionKeys = draft.kind === 'encounter' && regionEncounter ? [`action.start.${regionEncounter.key}`] : []
@@ -1268,10 +1819,34 @@ async function createArtifacts(input: {
       title: seed.title, description: draft.description, kind: draft.kind, regionKeys: [pack.regionKey], locationKeys: seed.locationKeys,
       actionKeys, effectKeys, conditionKeys: [], fingerprint: `fingerprint.event.${String(index + 1).padStart(3, '0')}`,
       rumorRequirementKey: draft.kind === 'clue' ? `rumor-requirement.${seed.key}` : null,
+      ...(governedKnowledge ? { rumorKey: null } : {}),
       upgradeTemplateKey: draft.upgradeTemplateNumber === null ? null : templates[draft.upgradeTemplateNumber - 1]!.key,
       intensity: draft.intensity, weight: draft.weight, cooldownMinutes: draft.cooldownMinutes,
     }
   })
+  if (governedKnowledge) {
+    knowledgeBindings.forEach(binding => {
+      randomEvents.push({
+        key: binding.propagationEventKey,
+        sourceSeedKey: binding.sourceRumorKey,
+        title: `传闻线索 ${String(binding.order).padStart(3, '0')}`,
+        description: binding.rumorText,
+        kind: 'clue',
+        regionKeys: [binding.regionKey],
+        locationKeys: [binding.propagationLocationKey],
+        actionKeys: [],
+        effectKeys: [],
+        conditionKeys: [...binding.propagationConditionKeys],
+        fingerprint: `fingerprint.rumor.${stableRumorSuffix(binding.sourceRumorKey)}`,
+        rumorRequirementKey: `rumor-requirement.${binding.sourceRumorKey}`,
+        rumorKey: binding.rumorKey,
+        upgradeTemplateKey: null,
+        intensity: 1,
+        weight: 20,
+        cooldownMinutes: 1_440,
+      })
+    })
+  }
   const decks = input.context.mapInteractionCatalog.regions.map((region, index) => {
     const draft = input.draft.decks[index]!
     return {
@@ -1304,22 +1879,46 @@ async function createArtifacts(input: {
       requiredRegionKeys: input.context.mapInteractionCatalog.regions.map(region => region.key), coveredRegionKeys: decks.map(deck => deck.regionKey),
       ordinaryQuestKeys: questRows.filter(quest => quest.type === 'ordinary').map(quest => quest.key), fixedQuestKeys: decks.flatMap(deck => deck.fixedQuestKeys),
       templateQuestKeys: questRows.filter(quest => quest.type === 'template').map(quest => quest.key), coveredTemplateQuestKeys: templates.map(template => template.questKey),
-      randomEventSeedKeys: randomSeeds.map(row => row.seed.key), coveredRandomEventSeedKeys: randomEvents.map(event => event.sourceSeedKey),
+      randomEventSeedKeys: randomSeeds.map(row => row.seed.key),
+      coveredRandomEventSeedKeys: randomEvents.filter(event => !event.rumorKey).map(event => event.sourceSeedKey),
+      ...(governedKnowledge ? {
+        requiredRumorSeedKeys: knowledgeBindings.map(binding => binding.sourceRumorKey),
+        boundRumorSeedKeys: randomEvents.filter(event => event.rumorKey).map(event => event.sourceSeedKey),
+      } : {}),
       emptyPlayableDeckRegionKeys: [] as [],
     },
     governance: {
       regionalBudgetsBounded: true, protectedStoriesExcluded: true, mainlinePressureDisabled: true,
       duplicateFingerprintsRejected: true, highIntensityStreakBounded: true, runtimeHistorySessionOwned: true,
       presentationVariantsDeferred: true, directorRuntimeReadyExceptPresentation: true,
+      ...(governedKnowledge ? { allRumorsHaveUniquePropagationPath: true as const, knowledgeProgressReady: true as const } : {}),
     },
     basisHash: await hashProductProductionValueV2({
       questDesignDocumentsHash: questDesignDocuments.questDesignDocumentsHash,
       regionNarrativePacksHash: input.context.regionNarrativePacks.regionNarrativePacksHash,
       mapInteractionCatalogHash: input.context.mapInteractionCatalog.mapInteractionCatalogHash,
       deckRegions: decks.map(deck => deck.regionKey), eventSeedKeys: randomSeeds.map(row => row.seed.key),
+      ...(governedKnowledge ? { rumorSeedKeys: knowledgeBindings.map(binding => binding.sourceRumorKey) } : {}),
     }), createdAt: input.createdAt,
   }
   assertDirectorArtifact(directorBody)
+  if (governedKnowledge) {
+    validateTextOpenWorldKnowledgeProductionClosureV1({
+      quests: questDesignDocuments,
+      director: {
+        ...directorBody,
+        directorDecksHash: await hashProductProductionValueV2(directorBody),
+      },
+      questSkeletons: input.context.questSkeletons,
+    })
+    assertTextOpenWorldSceneDemandCapacityV1({
+      quests: questDesignDocuments.quests,
+      objectives: questDesignDocuments.objectives,
+      actors: input.context.npcRuntimeCatalog.actors,
+      interactions: input.context.mapInteractionCatalog.interactions,
+      randomEvents: directorBody.randomEvents,
+    })
+  }
   return {
     questDesignDocuments,
     directorDecks: { ...directorBody, directorDecksHash: await hashProductProductionValueV2(directorBody) },
@@ -1347,6 +1946,110 @@ function assertQuestArtifact(artifact: Omit<TextOpenWorldQuestDesignDocumentsV1,
     || artifact.governance.restartActionsRequireOriginalOfferRoute !== undefined
   const governedLifecycle = artifact.governance.allAbandonableQuestStagesCovered === true
     && artifact.governance.restartActionsRequireOriginalOfferRoute === true
+  const knowledgeGovernanceDeclared = artifact.knowledgeBindings !== undefined
+    || artifact.achievementBindings !== undefined
+    || artifact.governance.knowledgeProgressReady !== undefined
+    || artifact.coverage.requiredRumorSeedKeys !== undefined
+  const governedKnowledge = artifact.knowledgeBindings !== undefined
+    && artifact.achievementBindings !== undefined
+    && artifact.governance.allRumorsHaveUniquePropagationPath === true
+    && artifact.governance.allKnowledgeHasConfirmationPath === true
+    && artifact.governance.allAchievementsOneTimeReachable === true
+    && artifact.governance.knowledgeProgressReady === true
+  const knowledgeBindings = artifact.knowledgeBindings ?? []
+  const achievementBindings = artifact.achievementBindings ?? []
+  const ownerEffectKeys = (binding: {
+    effectOwnerKind: 'reward-contract' | 'action'
+    effectOwnerKey: string
+  }): string[] => binding.effectOwnerKind === 'reward-contract'
+    ? artifact.catalogBindings.rewards.find(item => item.rewardContractKey === binding.effectOwnerKey)?.effectKeys ?? []
+    : artifact.actions.find(item => item.key === binding.effectOwnerKey)?.successEffectKeys ?? []
+  const sourceOwnerValid = (binding: {
+    sourceKind: KnowledgeConfirmationSourceKindV1
+    sourceKey: string
+    sourceActionKey: string
+    effectOwnerKind: 'reward-contract' | 'action'
+    effectOwnerKey: string
+  }): boolean => {
+    if (binding.sourceKind === 'quest-reward-claim') {
+      const quest = artifact.quests.find(item => item.key === binding.sourceKey)
+      return quest != null && quest.claimActionKey === binding.sourceActionKey
+        && quest.rewardContractKey === binding.effectOwnerKey && binding.effectOwnerKind === 'reward-contract'
+    }
+    const route = artifact.endingBindings.routes.find(item => item.endingKey === binding.sourceKey)
+    return route != null && route.actionKey === binding.sourceActionKey
+      && route.actionKey === binding.effectOwnerKey && binding.effectOwnerKind === 'action'
+  }
+  const knowledgeRowsInvalid = knowledgeBindings.some((binding, index) => {
+    const suffix = stableRumorSuffix(binding.sourceRumorKey)
+    const unread = artifact.conditions.find(item => item.key === binding.propagationConditionKeys[0])
+    const gate = binding.propagationConditionKeys[1]
+      ? artifact.conditions.find(item => item.key === binding.propagationConditionKeys[1]) : null
+    const gateExpression = gate?.expression
+    const gateQuest = gateExpression?.op === 'quest-status'
+      ? artifact.quests.find(item => item.key === gateExpression.questKey) : undefined
+    const expectedGateQuestType = binding.minimumRevealGate.kind === 'mainline-stage-complete'
+      ? 'mainline' : 'significant'
+    const expectedUnread = {
+      op: 'all', conditions: [
+        { op: 'knowledge-rumor-read', rumorKey: binding.rumorKey, read: false },
+        { op: 'not', condition: { op: 'knowledge-visibility', knowledgeKey: binding.knowledgeKey, minimum: 'known' } },
+      ],
+    }
+    return binding.order !== index + 1
+      || binding.knowledgeKey !== `knowledge.${suffix}` || binding.rumorKey !== `rumor.${suffix}`
+      || binding.propagationEventKey !== `event.director.rumor.${suffix}`
+      || binding.propagationConditionKeys[0] !== `condition.knowledge.${suffix}.unread`
+      || !binding.truthSummary.trim() || !binding.rumorText.trim() || !binding.sourceClaimKeys.length
+      || canonicalProductProductionJsonV2(unread?.expression) !== canonicalProductProductionJsonV2(expectedUnread)
+      || (binding.minimumRevealGate.kind === 'regional-public'
+        ? binding.minimumRevealGate.stageKey !== null || binding.propagationConditionKeys.length !== 1
+        : binding.minimumRevealGate.stageKey === null || binding.propagationConditionKeys.length !== 2
+          || binding.propagationConditionKeys[1] !== `condition.knowledge.${suffix}.gate`
+          || gate?.expression.op !== 'quest-status' || !same(gate.expression.statuses, ['completed'])
+          || gateQuest?.type !== expectedGateQuestType)
+      || binding.confirmationBindings.length < 1 || binding.confirmationBindings.length > 3
+      || binding.confirmationBindings.some((confirmation, confirmationIndex) => {
+        const effect = artifact.effects.find(item => item.key === confirmation.revealEffectKey)
+        return confirmation.order !== confirmationIndex + 1
+          || confirmation.revealEffectKey !== `effect.knowledge.${suffix}.confirm.${String(confirmationIndex + 1).padStart(3, '0')}`
+          || !sourceOwnerValid(confirmation)
+          || ownerEffectKeys(confirmation).filter(key => key === confirmation.revealEffectKey).length !== 1
+          || canonicalProductProductionJsonV2(effect) !== canonicalProductProductionJsonV2({
+            key: confirmation.revealEffectKey,
+            operation: 'reveal-knowledge',
+            payload: { knowledgeKey: binding.knowledgeKey, visibility: 'known' },
+          })
+      })
+  })
+  const achievementRowsInvalid = achievementBindings.some((binding, index) => {
+    const earn = artifact.effects.find(item => item.key === binding.earnEffectKey)
+    const ownerEffects = ownerEffectKeys(binding)
+    return binding.order !== index + 1 || !sourceOwnerValid(binding)
+      || binding.achievementKey !== `achievement.${binding.sourceKey}`
+      || binding.earnEffectKey !== `effect.achievement.${binding.sourceKey}.earn`
+      || canonicalProductProductionJsonV2(earn) !== canonicalProductProductionJsonV2({
+        key: binding.earnEffectKey,
+        operation: 'earn-achievement',
+        payload: { achievementKey: binding.achievementKey },
+      })
+      || ownerEffects.filter(key => key === binding.earnEffectKey).length !== 1
+  })
+  const knowledgeCoverageInvalid = knowledgeGovernanceDeclared && (!governedKnowledge
+    || knowledgeRowsInvalid || achievementRowsInvalid
+    || achievementBindings.length < 3 || achievementBindings.length > 6
+    || !achievementBindings.some(binding => binding.sourceKind === 'quest-reward-claim')
+    || !achievementBindings.some(binding => binding.sourceKind === 'ending-action')
+    || new Set(knowledgeBindings.map(binding => binding.knowledgeKey)).size !== knowledgeBindings.length
+    || new Set(knowledgeBindings.map(binding => binding.rumorKey)).size !== knowledgeBindings.length
+    || new Set(knowledgeBindings.map(binding => binding.sourceRumorKey)).size !== knowledgeBindings.length
+    || new Set(achievementBindings.map(binding => binding.achievementKey)).size !== achievementBindings.length
+    || !same(artifact.coverage.requiredKnowledgeKeys ?? [], knowledgeBindings.map(binding => binding.knowledgeKey))
+    || !same(artifact.coverage.confirmableKnowledgeKeys ?? [], knowledgeBindings.map(binding => binding.knowledgeKey))
+    || !same(artifact.coverage.requiredRumorSeedKeys ?? [], knowledgeBindings.map(binding => binding.sourceRumorKey))
+    || !same(artifact.coverage.boundRumorSeedKeys ?? [], knowledgeBindings.map(binding => binding.sourceRumorKey))
+    || !same(artifact.coverage.requiredAchievementKeys ?? [], achievementBindings.map(binding => binding.achievementKey))
+    || !same(artifact.coverage.earnableAchievementKeys ?? [], achievementBindings.map(binding => binding.achievementKey)))
   const questTransitionsFor = (actionKey: string) => {
     const action = artifact.actions.find(item => item.key === actionKey)
     return action?.successEffectKeys.map(effectKey => artifact.effects.find(effect => effect.key === effectKey))
@@ -1374,6 +2077,48 @@ function assertQuestArtifact(artifact: Omit<TextOpenWorldQuestDesignDocumentsV1,
         { status: 'accepted', stageKey: null }, { status: 'active', stageKey: quest.stageKeys[0]! },
       ])
   })
+  const protectedRevealDeclared = artifact.governance.protectedStoryRevealActionsReady !== undefined
+  const protectedRevealReady = artifact.governance.protectedStoryRevealActionsReady === true
+  const protectedLockedQuests = artifact.quests.filter(quest => (
+    (quest.type === 'mainline' || quest.type === 'significant')
+    && quest.initialStatus === 'locked'
+    && quest.lifecyclePolicy === 'protected-wait'
+    && quest.timePolicy === 'waits'
+    && quest.instantiationPolicy === 'session-start'
+  ))
+  const protectedRevealCoverageInvalid = protectedRevealDeclared && (
+    !protectedRevealReady
+    || artifact.governance.structuredCombatMechanicsReady !== true
+    || !governedLifecycle
+    || protectedLockedQuests.some(quest => {
+      const action = artifact.actions.find(item => item.key === `action.reveal.${quest.key}`)
+      const unlock = artifact.effects.find(item => item.key === `effect.unlock.${quest.key}`)
+      const reveal = artifact.effects.find(item => item.key === `effect.reveal.${quest.key}`)
+      return canonicalProductProductionJsonV2(unlock) !== canonicalProductProductionJsonV2({
+        key: `effect.unlock.${quest.key}`,
+        operation: 'transition-quest',
+        payload: { questKey: quest.key, status: 'available', stageKey: null },
+      }) || canonicalProductProductionJsonV2(reveal) !== canonicalProductProductionJsonV2({
+        key: `effect.reveal.${quest.key}`,
+        operation: 'transition-quest',
+        payload: { questKey: quest.key, status: 'revealed', stageKey: null },
+      }) || !action || action.category !== 'quest-action' || action.actorScope !== 'system'
+        || action.targetScope !== 'quest' || action.locationKeys.length
+        || canonicalProductProductionJsonV2(action.requirementConditionKeys)
+          !== canonicalProductProductionJsonV2(quest.prerequisiteConditionKeys)
+        || action.costEffectKeys.length || action.failureEffectKeys.length
+        || canonicalProductProductionJsonV2(action.successEffectKeys)
+          !== canonicalProductProductionJsonV2([`effect.unlock.${quest.key}`, `effect.reveal.${quest.key}`])
+        || action.timeCostMinutes !== 0 || action.confirmationPolicy !== 'never'
+        || action.repeatPolicy !== 'repeatable' || action.cooldownMinutes !== null
+    })
+    || artifact.actions.some(action => {
+      const transitions = questTransitionsFor(action.key)
+      if (!transitions.some(effect => effect.payload.status === 'available' || effect.payload.status === 'revealed')) return false
+      return !protectedLockedQuests.some(quest => action.key === `action.reveal.${quest.key}`)
+        && action.category === 'quest-action' && action.actorScope === 'system'
+    })
+  )
   if (!same(artifact.coverage.requiredQuestKeys, artifact.coverage.finalizedQuestKeys)
     || !same(artifact.coverage.requiredObjectiveKeys, artifact.coverage.finalizedObjectiveKeys)
     || !same(artifact.coverage.requiredRequirementKeys, artifact.coverage.boundRequirementKeys)
@@ -1385,6 +2130,8 @@ function assertQuestArtifact(artifact: Omit<TextOpenWorldQuestDesignDocumentsV1,
       && (quest.lifecyclePolicy !== 'protected-wait' || quest.timePolicy !== 'waits' || quest.abandonActionKey !== null))
     || artifact.quests.some(quest => quest.timePolicy === 'timed' && quest.expirationActionKeys.length !== quest.stageKeys.length + 1)
     || lifecycleGovernanceDeclared && (!governedLifecycle || abandonCoverageInvalid || restartCoverageInvalid)
+    || protectedRevealCoverageInvalid
+    || knowledgeCoverageInvalid
     || artifact.catalogBindings.encounters.some(binding => !binding.rewardContractKey || !binding.startActionKey)
     || new Set(artifact.conditions.map(item => item.key)).size !== artifact.conditions.length
     || new Set(artifact.effects.map(item => item.key)).size !== artifact.effects.length
@@ -1411,6 +2158,14 @@ function assertQuestArtifact(artifact: Omit<TextOpenWorldQuestDesignDocumentsV1,
     const unlockEffect = artifact.effects.find(item => item.key === binding.unlockEffectKey)
     const reachEffect = artifact.effects.find(item => item.key === binding.reachEffectKey)
     const endingAction = artifact.actions.find(item => item.key === binding.actionKey)
+    const governedSuffixEffectKeys = [
+      ...knowledgeBindings.flatMap(knowledge => knowledge.confirmationBindings
+        .filter(confirmation => confirmation.sourceKind === 'ending-action' && confirmation.sourceKey === binding.endingKey)
+        .map(confirmation => confirmation.revealEffectKey)),
+      ...achievementBindings.filter(achievement => achievement.sourceKind === 'ending-action'
+        && achievement.sourceKey === binding.endingKey)
+        .map(achievement => achievement.earnEffectKey),
+    ]
     if (canonicalProductProductionJsonV2(condition?.expression) !== canonicalProductProductionJsonV2({
       op: 'all', conditions: [
         { op: 'quest-status', questKey: finalQuest.key, statuses: ['completed'] },
@@ -1431,7 +2186,9 @@ function assertQuestArtifact(artifact: Omit<TextOpenWorldQuestDesignDocumentsV1,
       || !same(endingAction.locationKeys, [artifact.endingBindings.finalLocationKey])
       || !same(endingAction.requirementConditionKeys, [artifact.endingBindings.selectionReadyConditionKey])
       || canonicalProductProductionJsonV2(endingAction.successEffectKeys)
-        !== canonicalProductProductionJsonV2([binding.routeEffectKey, binding.unlockEffectKey, binding.reachEffectKey])
+        !== canonicalProductProductionJsonV2([
+          binding.routeEffectKey, binding.unlockEffectKey, binding.reachEffectKey, ...governedSuffixEffectKeys,
+        ])
       || endingAction.costEffectKeys.length || endingAction.failureEffectKeys.length
       || endingAction.confirmationPolicy !== 'always' || endingAction.repeatPolicy !== 'once') {
       fail(`结局运行绑定没有形成唯一Condition/Action/Effect闭环:${binding.endingKey}`)
@@ -1440,6 +2197,15 @@ function assertQuestArtifact(artifact: Omit<TextOpenWorldQuestDesignDocumentsV1,
 }
 
 function assertDirectorArtifact(artifact: Omit<TextOpenWorldDirectorDecksV1, 'directorDecksHash'>): void {
+  const knowledgeDeclared = artifact.coverage.requiredRumorSeedKeys !== undefined
+    || artifact.coverage.boundRumorSeedKeys !== undefined
+    || artifact.governance.knowledgeProgressReady !== undefined
+  const governedKnowledge = artifact.coverage.requiredRumorSeedKeys !== undefined
+    && artifact.coverage.boundRumorSeedKeys !== undefined
+    && artifact.governance.allRumorsHaveUniquePropagationPath === true
+    && artifact.governance.knowledgeProgressReady === true
+  const rumorEvents = artifact.randomEvents.filter(event => typeof event.rumorKey === 'string')
+  const originalEvents = artifact.randomEvents.filter(event => event.rumorKey == null)
   if (!same(artifact.coverage.requiredRegionKeys, artifact.coverage.coveredRegionKeys)
     || !same(artifact.coverage.ordinaryQuestKeys, artifact.coverage.fixedQuestKeys)
     || !same(artifact.coverage.templateQuestKeys, artifact.coverage.coveredTemplateQuestKeys)
@@ -1448,7 +2214,16 @@ function assertDirectorArtifact(artifact: Omit<TextOpenWorldDirectorDecksV1, 'di
       || (!deck.fixedQuestKeys.length && !deck.templateKeys.length && !deck.randomEventKeys.length))
     || new Set([...artifact.templates.map(item => item.fingerprint), ...artifact.randomEvents.map(item => item.fingerprint)]).size
       !== artifact.templates.length + artifact.randomEvents.length
-    || artifact.randomEvents.some(event => (event.kind === 'quest-upgrade') !== (event.upgradeTemplateKey !== null))) {
+    || artifact.randomEvents.some(event => (event.kind === 'quest-upgrade') !== (event.upgradeTemplateKey !== null))
+    || knowledgeDeclared && (!governedKnowledge
+      || artifact.randomEvents.some(event => !Object.prototype.hasOwnProperty.call(event, 'rumorKey'))
+      || originalEvents.some(event => event.kind === 'clue' || event.rumorKey !== null)
+      || rumorEvents.some(event => event.kind !== 'clue' || event.actionKeys.length || event.effectKeys.length
+        || event.upgradeTemplateKey !== null || event.conditionKeys.length < 1 || event.locationKeys.length !== 1
+        || event.regionKeys.length !== 1 || event.rumorRequirementKey === null)
+      || new Set(rumorEvents.map(event => event.rumorKey)).size !== rumorEvents.length
+      || !same(artifact.coverage.requiredRumorSeedKeys ?? [], artifact.coverage.boundRumorSeedKeys ?? [])
+      || !same(artifact.coverage.boundRumorSeedKeys ?? [], rumorEvents.map(event => event.sourceSeedKey)))) {
     fail('Director地区覆盖、预算、指纹或事件升级绑定无效')
   }
 }
@@ -1461,6 +2236,24 @@ function assertCrossArtifacts(artifacts: TextOpenWorldQuestFinalizeArtifactsV1):
   const conditionKeys = new Set(quest.conditions.map(item => item.key))
   const questKeys = new Set(quest.quests.map(item => item.key))
   const catalogKeys = new Set(quest.coverage.catalogDefinitionKeys)
+  const knowledgeBindings = quest.knowledgeBindings ?? []
+  const governedKnowledge = quest.governance.knowledgeProgressReady === true
+    || director.governance.knowledgeProgressReady === true
+  const rumorEvents = director.randomEvents.filter(event => typeof event.rumorKey === 'string')
+  const knowledgeCrossInvalid = governedKnowledge && (
+    quest.governance.knowledgeProgressReady !== true || director.governance.knowledgeProgressReady !== true
+    || knowledgeBindings.some(binding => {
+      const matches = rumorEvents.filter(event => event.key === binding.propagationEventKey)
+      if (matches.length !== 1) return true
+      const event = matches[0]!
+      return event.sourceSeedKey !== binding.sourceRumorKey || event.rumorKey !== binding.rumorKey
+        || !same(event.regionKeys, [binding.regionKey]) || !same(event.locationKeys, [binding.propagationLocationKey])
+        || !same(event.conditionKeys, binding.propagationConditionKeys)
+    })
+    || rumorEvents.some(event => knowledgeBindings.filter(binding => binding.propagationEventKey === event.key).length !== 1)
+    || !same(director.coverage.requiredRumorSeedKeys ?? [], knowledgeBindings.map(binding => binding.sourceRumorKey))
+    || !same(director.coverage.boundRumorSeedKeys ?? [], knowledgeBindings.map(binding => binding.sourceRumorKey))
+  )
   if (director.questDesignDocumentsHash !== quest.questDesignDocumentsHash
     || !actionKeys.has(director.rules.systemActionKey)
     || quest.actions.find(action => action.key === director.rules.systemActionKey)?.category !== 'director-action'
@@ -1481,7 +2274,8 @@ function assertCrossArtifacts(artifacts: TextOpenWorldQuestFinalizeArtifactsV1):
       || template.conditionKeys.some(key => !conditionKeys.has(key)))
     || director.randomEvents.some(event => event.actionKeys.some(key => !actionKeys.has(key))
       || event.effectKeys.some(key => !effectKeys.has(key))
-      || event.conditionKeys.some(key => !conditionKeys.has(key)))) {
+      || event.conditionKeys.some(key => !conditionKeys.has(key)))
+    || knowledgeCrossInvalid) {
     fail('QuestDesign与Director跨Artifact引用未闭合')
   }
   const basicAttacks = quest.actions.filter(action => action.category === 'combat-basic-attack')
@@ -1494,8 +2288,16 @@ function assertCrossArtifacts(artifacts: TextOpenWorldQuestFinalizeArtifactsV1):
   }
 }
 
-function draftFromArtifacts(artifacts: TextOpenWorldQuestFinalizeArtifactsV1): unknown {
-  return {
+function draftFromArtifacts(
+  artifacts: TextOpenWorldQuestFinalizeArtifactsV1,
+  context: TextOpenWorldQuestFinalizeInputContextV1,
+): unknown {
+  const governedKnowledge = context.knowledgeProgressContract === 'governed-v18'
+  const randomSeedKeys = new Set(context.regionNarrativePacks.packs.flatMap(pack => pack.randomEventSeeds.map(seed => seed.key)))
+  const sourceRandomEvents = governedKnowledge
+    ? artifacts.directorDecks.randomEvents.filter(event => randomSeedKeys.has(event.sourceSeedKey))
+    : artifacts.directorDecks.randomEvents
+  const body = {
     schema: 'storyforge.text-open-world-quest-finalize-draft', version: 1,
     quests: artifacts.questDesignDocuments.quests.map((quest, index) => ({
       questNumber: index + 1, description: quest.description,
@@ -1513,12 +2315,58 @@ function draftFromArtifacts(artifacts: TextOpenWorldQuestFinalizeArtifactsV1): u
       templateNumber: index + 1, category: template.category, intensity: template.intensity,
       weight: template.weight, cooldownMinutes: template.cooldownMinutes,
     })),
-    randomEvents: artifacts.directorDecks.randomEvents.map((event, index) => ({
+    randomEvents: sourceRandomEvents.map((event, index) => ({
       seedNumber: index + 1, description: event.description, kind: event.kind, intensity: event.intensity,
       weight: event.weight, cooldownMinutes: event.cooldownMinutes,
       upgradeTemplateNumber: event.upgradeTemplateKey === null ? null
         : artifacts.directorDecks.templates.findIndex(template => template.key === event.upgradeTemplateKey) + 1,
     })),
+  }
+  if (!governedKnowledge) return body
+  const demands = context.knowledgeBindingDemands ?? fail('Knowledge反向验证缺少候选合同')
+  const knowledgeBindings = artifacts.questDesignDocuments.knowledgeBindings ?? []
+  const achievementBindings = artifacts.questDesignDocuments.achievementBindings ?? []
+  return {
+    ...body,
+    knowledgeSelections: demands.map(demand => {
+      const binding = knowledgeBindings.find(item => item.sourceRumorKey === demand.sourceRumorKey)
+      return {
+        rumorNumber: demand.rumorNumber,
+        propagationLocationNumber: demand.propagationLocationCandidates
+          .find(candidate => candidate.locationKey === binding?.propagationLocationKey)?.candidateNumber ?? 0,
+        confirmationCandidateNumbers: binding?.confirmationBindings.map(confirmation => demand.confirmationCandidates
+          .find(candidate => candidate.sourceKind === confirmation.sourceKind && candidate.sourceKey === confirmation.sourceKey)
+          ?.candidateNumber ?? 0) ?? [],
+      }
+    }),
+    achievementCandidateNumbers: achievementBindings.map(binding => context.achievementBindingCandidates
+      ?.find(candidate => candidate.sourceKind === binding.sourceKind && candidate.sourceKey === binding.sourceKey)
+      ?.candidateNumber ?? 0),
+  }
+}
+
+function assertKnowledgeStageGateSources(input: {
+  artifacts: TextOpenWorldQuestFinalizeArtifactsV1
+  context: TextOpenWorldQuestFinalizeInputContextV1
+}): void {
+  for (const binding of input.artifacts.questDesignDocuments.knowledgeBindings ?? []) {
+    if (binding.minimumRevealGate.kind === 'regional-public') continue
+    const stageKey = binding.minimumRevealGate.stageKey
+      ?? fail(`Knowledge阶段门槛缺少stageKey:${binding.knowledgeKey}`)
+    const gateConditionKey = binding.propagationConditionKeys[1]
+      ?? fail(`Knowledge阶段门槛缺少Condition:${binding.knowledgeKey}`)
+    const gate = input.artifacts.questDesignDocuments.conditions.find(item => item.key === gateConditionKey)
+    if (!gate || gate.expression.op !== 'quest-status') {
+      fail(`Knowledge阶段门槛Condition无效:${binding.knowledgeKey}`)
+    }
+    const expectedSourceKind = binding.minimumRevealGate.kind === 'mainline-stage-complete'
+      ? 'mainline-stage' : 'significant-stage'
+    const matchingSkeletons = input.context.questSkeletons.quests.filter(item => (
+      item.source.kind === expectedSourceKind && item.source.sourceKey === stageKey
+    ))
+    if (matchingSkeletons.length !== 1 || matchingSkeletons[0]!.key !== gate.expression.questKey) {
+      fail(`Knowledge阶段门槛没有绑定唯一来源任务:${binding.knowledgeKey}`)
+    }
   }
 }
 
@@ -1531,7 +2379,8 @@ export async function validateTextOpenWorldQuestFinalizeArtifactsV1(input: {
     || !isSha256Hash(input.artifacts.questDesignDocuments.questDesignDocumentsHash)
     || !isSha256Hash(input.artifacts.directorDecks.directorDecksHash)) fail('P8F Artifact身份或Hash无效')
   const context = await parseContext(canonicalProductProductionJsonV2(input.context))
-  const draft = parseDraft(draftFromArtifacts(input.artifacts), context)
+  assertKnowledgeStageGateSources({ artifacts: input.artifacts, context })
+  const draft = parseDraft(draftFromArtifacts(input.artifacts, context), context)
   const lifecycleContract = context.questLifecycleContract ?? 'legacy'
   const expected = await createArtifacts({
     context,
@@ -1539,6 +2388,7 @@ export async function validateTextOpenWorldQuestFinalizeArtifactsV1(input: {
     createdAt: input.artifacts.questDesignDocuments.createdAt,
     lifecycleContract,
     combatMechanicsContract: context.combatMechanicsContract ?? 'legacy',
+    knowledgeProgressContract: context.knowledgeProgressContract ?? 'legacy',
   })
   assertCrossArtifacts(input.artifacts)
   if (canonicalProductProductionJsonV2(expected) !== canonicalProductProductionJsonV2(input.artifacts)) fail('P8F Artifact固定引用、运行定义、预算或Hash被篡改')
@@ -1550,15 +2400,25 @@ function prompts(context: TextOpenWorldQuestFinalizeInputContextV1) {
     '你是StoryForge文字开放世界的任务最终化与地区导演设计师。只能返回JSON。',
     '所有稳定键、目录引用、数值奖励、生命周期、Action、Condition和Effect由代码生成；你只写任务/目标可玩语义与有界发牌参数。',
     '主线与重要故事必须等待玩家、不可放弃或过期；不得用地点抵达作为唯一关键触发。随机事件不得阻断主线。',
+    ...(context.knowledgeProgressContract === 'governed-v18' ? [
+      'Knowledge与成就只能从输入候选编号中选择；不得改写事实、传闻、可靠度、来源或创建稳定键。',
+      '凡承载Knowledge传播的地区牌组，triggerKinds必须包含rest；这是编译器保证可在传播地点执行的稳定触发。',
+    ] : []),
   ].join('\n')
   const user = [
     '以下用户消息将提供已登记、已验签且字段精确的QuestFinalize输入合同。',
     `quests按${context.questSkeletons.quests.length}项顺序输出questNumber/description/tags；objectives按${context.objectiveBindingDemands.length}项顺序输出objectiveNumber/description/successDescription/timeCostMinutes(0-60)。`,
     `decks按${context.mapInteractionCatalog.regions.length}个地区顺序输出regionNumber、非空triggerKinds、maximumRevealed(1-4)、maximumActive(1-3且不大于revealed)、cooldownMinutes(60-1440)、blankWeight(1-100)。`,
     `templates按${context.questSkeletons.quests.filter(quest => quest.type === 'template').length}项顺序输出templateNumber/category/help|resource|exploration|conflict|mystery、intensity(1-6)、weight(1-100)、cooldownMinutes(60-10080)。`,
-    `randomEvents按${context.regionNarrativePacks.packs.flatMap(pack => pack.randomEventSeeds).length}项顺序输出seedNumber/description/kind(atmosphere|resource|encounter|clue|quest-upgrade)/intensity/weight/cooldownMinutes/upgradeTemplateNumber；只有quest-upgrade必须且只能选择本地区模板编号。`,
+    `randomEvents按${context.regionNarrativePacks.packs.flatMap(pack => pack.randomEventSeeds).length}项顺序输出seedNumber/description/kind(${context.knowledgeProgressContract === 'governed-v18' ? 'atmosphere|resource|encounter|quest-upgrade' : 'atmosphere|resource|encounter|clue|quest-upgrade'})/intensity/weight/cooldownMinutes/upgradeTemplateNumber；只有quest-upgrade必须且只能选择本地区模板编号。`,
+    ...(context.knowledgeProgressContract === 'governed-v18' ? [
+      `knowledgeSelections按${context.knowledgeBindingDemands?.length ?? 0}条传闻顺序输出rumorNumber/propagationLocationNumber/confirmationCandidateNumbers；传播地点只能选本条location候选编号，确认必须严格升序选择1到3个本条候选编号。`,
+      `achievementCandidateNumbers严格升序选择3到6个输入候选编号，并同时包含至少一个任务奖励来源和一个结局来源。`,
+    ] : []),
     '不要输出敌人、物品、角色、地点、奖励、Action、Condition、Effect、Quest键或任何未要求字段。',
-    '返回：{"schema":"storyforge.text-open-world-quest-finalize-draft","version":1,"quests":[...],"objectives":[...],"decks":[...],"templates":[...],"randomEvents":[...]}',
+    context.knowledgeProgressContract === 'governed-v18'
+      ? '返回：{"schema":"storyforge.text-open-world-quest-finalize-draft","version":1,"quests":[...],"objectives":[...],"decks":[...],"templates":[...],"randomEvents":[...],"knowledgeSelections":[...],"achievementCandidateNumbers":[...]}'
+      : '返回：{"schema":"storyforge.text-open-world-quest-finalize-draft","version":1,"quests":[...],"objectives":[...],"decks":[...],"templates":[...],"randomEvents":[...]}',
   ].join('\n')
   return { system, user }
 }
@@ -1601,6 +2461,7 @@ export function createTextOpenWorldQuestFinalizeExecutorV1(options: {
       context, draft, createdAt: integer(now(), 'createdAt', 0, Number.MAX_SAFE_INTEGER),
       lifecycleContract: context.questLifecycleContract ?? 'legacy',
       combatMechanicsContract: context.combatMechanicsContract ?? 'legacy',
+      knowledgeProgressContract: context.knowledgeProgressContract ?? 'legacy',
     })
     await validateTextOpenWorldQuestFinalizeArtifactsV1({ artifacts, context })
     const durationMs = Math.max(0, Math.round(performance.now() - started))

@@ -261,7 +261,8 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
       const requirementKey = nullableKey(item.rumorRequirementKey, `${label}.rumorRequirementKey`)
       const rumorText = item.rumorText == null ? null : text(item.rumorText, `${label}.rumorText`)
       if ((rumorKey != null) !== (requirementKey != null) || (rumorKey != null) !== (rumorText != null)
-        || (rumorKey != null) !== (item.reliability === 'uncertain')) fail(`${label}传闻字段必须成组出现`)
+        || (rumorKey != null) !== (item.reliability === 'uncertain'
+          || item.reliability === 'likely' || item.reliability === 'confirmed')) fail(`${label}传闻字段必须成组出现`)
       strings(item.sourceClaimKeys, `${label}.sourceClaimKeys`)
       return order
     })
@@ -467,7 +468,7 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
     if (actorRows.find(actor => actor.key === item.actorKey)?.scheduleKey !== item.key) fail(`schedule/actor反向引用不一致:${String(item.key)}`)
   })
 
-  const actions = versioned(packageValue, 'actions', [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17])
+  const actions = versioned(packageValue, 'actions', [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18])
   const modernActionModule = Number(actions.version) >= 2
   const travelActionModule = Number(actions.version) >= 3
   const fastTravelActionModule = Number(actions.version) >= 4
@@ -484,6 +485,7 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
   const inputBindingActionModule = Number(actions.version) >= 15
   const governedQuestLifecycleActionModule = Number(actions.version) >= 16
   const scaledCombatActionModule = Number(actions.version) >= 17
+  const protectedStoryRevealActionModule = Number(actions.version) >= 18
   if (actorScheduleActionModule && legacyActorModule) fail('Action v6必须搭配Actor v2')
   if (actorLifecycleActionModule && !actorLifecycleModule) fail('Action v7必须搭配Actor v3')
   if (combatStateActionModule !== (packageValue.modules.combat.schemaVersion >= 2)) fail('Action v9+必须与Combat v2+一起发布')
@@ -1096,6 +1098,101 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
         fail(`重接Action必须精确绑定原发布场景与地点:${String(quest.key)}`)
       }
       requireSameKeys(strings(action.locationKeys, `restart action ${actionKey} locations`), [String(offerScene.locationKey)], `重接Action ${actionKey} 原发布地点`)
+    })
+  }
+  if (protectedStoryRevealActionModule && !legacyQuestModule) {
+    const protectedQuests = questRows.filter(quest => (
+      (quest.type === 'mainline' || quest.type === 'significant')
+      && quest.lifecyclePolicy === 'protected-wait'
+      && quest.timePolicy === 'waits'
+      && quest.instantiationPolicy === 'session-start'
+    ))
+    const stageForQuest = (quest: Row): Row => {
+      const matches = narrativeStages.filter(stage => (
+        stage.storylineKey === quest.storylineKey
+        && strings(stage.questKeys, `narrative stage ${String(stage.key)} questKeys`).includes(String(quest.key))
+      ))
+      if (matches.length !== 1) fail(`Action v18受保护任务必须唯一绑定叙事Stage:${String(quest.key)}`)
+      return matches[0]!
+    }
+    const orderedStoryQuests = (storylineKey: string) => protectedQuests
+      .filter(quest => quest.storylineKey === storylineKey)
+      .sort((left, right) => Number(stageForQuest(left).order) - Number(stageForQuest(right).order)
+        || String(left.key).localeCompare(String(right.key)))
+    const mainlineKey = String(mainline.key)
+    const mainlineQuests = orderedStoryQuests(mainlineKey)
+    if (!mainlineQuests.length || mainlineQuests[0]!.initialStatus !== 'revealed'
+      || strings(mainlineQuests[0]!.prerequisiteConditionKeys, `quest ${String(mainlineQuests[0]!.key)} prerequisites`).length
+      || mainlineQuests.slice(1).some(quest => quest.initialStatus !== 'locked')
+      || protectedQuests.filter(quest => quest.type === 'mainline').some(quest => quest.storylineKey !== mainlineKey)
+      || protectedQuests.filter(quest => quest.type === 'significant').some(quest => quest.initialStatus !== 'locked')) {
+      fail('Action v18受保护故事初始状态或主线顺序无效')
+    }
+    const expectedRevealQuests = protectedQuests.filter(quest => quest.initialStatus === 'locked')
+    const transitionRowsFor = (action: Row) => strings(action.successEffectKeys, `reveal action ${String(action.key)} effects`)
+      .map(effectKey => effects.find(effect => effect.key === effectKey)!)
+      .filter(effect => effect.operation === 'transition-quest')
+    const revealTransitionActions = actionRows.filter(action => {
+      if (action.category !== 'quest-action' || action.actorScope !== 'system') return false
+      return transitionRowsFor(action).some(effect => {
+        const payload = row(effect.payload, `reveal transition ${String(effect.key)} payload`)
+        return payload.status === 'available' || payload.status === 'revealed'
+      })
+    })
+    requireSameKeys(
+      revealTransitionActions.map(action => String(action.key)),
+      expectedRevealQuests.map(quest => `action.reveal.${String(quest.key)}`),
+      'Action v18受保护故事揭示Action覆盖',
+    )
+    expectedRevealQuests.forEach(quest => {
+      const questKey = String(quest.key)
+      const actionKey = `action.reveal.${questKey}`
+      const action = revealTransitionActions.find(candidate => candidate.key === actionKey)
+        ?? fail(`Action v18缺少受保护故事揭示Action:${questKey}`)
+      const prerequisiteKeys = strings(quest.prerequisiteConditionKeys, `quest ${questKey} prerequisites`)
+      const condition = prerequisiteKeys.length === 1
+        ? conditions.find(candidate => candidate.key === prerequisiteKeys[0])
+        : null
+      const expression = condition ? row(condition.expression, `quest ${questKey} unlock expression`) : null
+      if (prerequisiteKeys[0] !== `condition.unlock.${questKey}`
+        || !expression || expression.op !== 'quest-status'
+        || canonicalProductProductionJsonV2(expression.statuses) !== canonicalProductProductionJsonV2(['completed'])) {
+        fail(`Action v18受保护任务必须由唯一已完成任务解锁:${questKey}`)
+      }
+      const sourceQuestKey = String(expression.questKey)
+      const storyQuests = orderedStoryQuests(String(quest.storylineKey))
+      const index = storyQuests.findIndex(candidate => candidate.key === quest.key)
+      const expectedPrevious = index > 0 ? String(storyQuests[index - 1]!.key) : null
+      if (quest.type === 'mainline') {
+        if (!expectedPrevious || sourceQuestKey !== expectedPrevious) {
+          fail(`Action v18后续主线必须由紧邻前序主线解锁:${questKey}`)
+        }
+      } else if (expectedPrevious ? sourceQuestKey !== expectedPrevious : !mainlineQuests.some(candidate => candidate.key === sourceQuestKey)) {
+        fail(`Action v18重要故事必须由同线前序或主线窗口解锁:${questKey}`)
+      }
+      const expectedEffectKeys = [`effect.unlock.${questKey}`, `effect.reveal.${questKey}`]
+      const transitionEffects = transitionRowsFor(action)
+      const normalizedTransitions = transitionEffects.map(effect => ({
+        key: String(effect.key),
+        operation: String(effect.operation),
+        payload: row(effect.payload, `reveal effect ${String(effect.key)} payload`),
+      }))
+      if (action.targetScope !== 'quest'
+        || strings(action.locationKeys, `${actionKey}.locationKeys`).length
+        || canonicalProductProductionJsonV2(strings(action.requirementConditionKeys, `${actionKey}.requirements`))
+          !== canonicalProductProductionJsonV2(prerequisiteKeys)
+        || strings(action.costEffectKeys, `${actionKey}.costs`).length
+        || strings(action.failureEffectKeys, `${actionKey}.failures`).length
+        || canonicalProductProductionJsonV2(strings(action.successEffectKeys, `${actionKey}.success`))
+          !== canonicalProductProductionJsonV2(expectedEffectKeys)
+        || action.timeCostMinutes !== 0 || action.confirmationPolicy !== 'never'
+        || action.repeatPolicy !== 'repeatable' || action.cooldownMinutes != null
+        || canonicalProductProductionJsonV2(normalizedTransitions) !== canonicalProductProductionJsonV2([
+          { key: expectedEffectKeys[0], operation: 'transition-quest', payload: { questKey, status: 'available', stageKey: null } },
+          { key: expectedEffectKeys[1], operation: 'transition-quest', payload: { questKey, status: 'revealed', stageKey: null } },
+        ])) {
+        fail(`Action v18受保护故事揭示合同无效:${questKey}`)
+      }
     })
   }
 
@@ -2175,7 +2272,7 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
     if (!legacyActorModule) requireSameKeys(entries.map(entry => String(row(entry, 'schedule entry').timePeriodKey)), [...periodKeys], `schedule ${String(item.key)} time period coverage`)
   })
 
-  const director = versioned(packageValue, 'director', [1, 2])
+  const director = versioned(packageValue, 'director', [1, 2, 3])
   const legacyDirector = director.version === 1
   exact(director, legacyDirector
     ? ['version', 'rules', 'decks', 'templates', 'randomEvents']
@@ -2234,13 +2331,17 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
     intensity: legacyDirector ? 1 : int(item.intensity, `director.templates[${index}].intensity`, 1, 10),
     weight: legacyDirector ? 100 : int(item.weight, `director.templates[${index}].weight`, 1, 1_000_000),
   }))
+  const locationBoundDirector = director.version === 3
   const rawRandomEvents = catalog(director.randomEvents, 'director.randomEvents', legacyDirector
     ? ['key', 'title', 'regionKeys', 'actionKeys', 'effectKeys', 'intensity', 'cooldownMinutes']
-    : ['key', 'title', 'kind', 'regionKeys', 'actionKeys', 'effectKeys', 'conditionKeys', 'fingerprint', 'rumorKey', 'upgradeTemplateKey', 'intensity', 'weight', 'cooldownMinutes'])
+    : locationBoundDirector
+      ? ['key', 'title', 'kind', 'regionKeys', 'locationKeys', 'actionKeys', 'effectKeys', 'conditionKeys', 'fingerprint', 'rumorKey', 'upgradeTemplateKey', 'intensity', 'weight', 'cooldownMinutes']
+      : ['key', 'title', 'kind', 'regionKeys', 'actionKeys', 'effectKeys', 'conditionKeys', 'fingerprint', 'rumorKey', 'upgradeTemplateKey', 'intensity', 'weight', 'cooldownMinutes'])
   const randomEvents: TextOpenWorldParsedModulesV1['director']['randomEvents'] = rawRandomEvents.map((item, index) => ({
     key: key(item.key, `director.randomEvents[${index}].key`),
     title: text(item.title, `director.randomEvents[${index}].title`, 2_000),
     regionKeys: strings(item.regionKeys, `director.randomEvents[${index}].regionKeys`),
+    locationKeys: locationBoundDirector ? strings(item.locationKeys, `director.randomEvents[${index}].locationKeys`) : [],
     actionKeys: strings(item.actionKeys, `director.randomEvents[${index}].actionKeys`),
     effectKeys: strings(item.effectKeys, `director.randomEvents[${index}].effectKeys`),
     intensity: int(item.intensity, `director.randomEvents[${index}].intensity`, 1, 10),
@@ -2288,6 +2389,13 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
   randomEvents.forEach((item, index) => {
     text(item.title, `director.randomEvents[${index}].title`, 2_000)
     requireRefs(strings(item.regionKeys, `director.randomEvents[${index}].regionKeys`), regionKeys, 'random event region')
+    requireRefs(item.locationKeys, locationKeys, 'random event location')
+    item.locationKeys.forEach(locationKey => {
+      const locationRegionKey = normalizedWorld.locations.find(location => location.key === locationKey)?.regionKey
+      if (!item.regionKeys.includes(locationRegionKey ?? '')) {
+        fail(`随机事件地点不属于事件地区:${String(item.key)}:${locationKey}`)
+      }
+    })
     requireRefs(strings(item.actionKeys, `director.randomEvents[${index}].actionKeys`), actionKeys, 'random event action')
     requireRefs(strings(item.effectKeys, `director.randomEvents[${index}].effectKeys`), effectKeys, 'random event effect')
     requireRefs(item.conditionKeys as string[], conditionKeys, 'random event condition')
@@ -2337,7 +2445,8 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
     if (!(item.triggerKinds as unknown[]).length) fail(`director.decks[${index}]至少需要一个触发类型`)
   })
   const normalizedDirector = {
-    version: 2 as const, sourceVersion: legacyDirector ? 1 as const : 2 as const,
+    version: locationBoundDirector ? 3 as const : 2 as const,
+    sourceVersion: legacyDirector ? 1 as const : locationBoundDirector ? 3 as const : 2 as const,
     rules: directorRules, decks, templates, randomEvents, regionRules,
   }
   if (directorActionModule !== !legacyDirector) fail('Action v14必须与Director v2一起发布')
@@ -2364,19 +2473,46 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
   }
 
   const knowledge = versioned(packageValue, 'knowledge')
-  exact(knowledge, ['version', 'entries', 'rumors', 'achievements'], 'knowledge'); const entries = catalog(knowledge.entries, 'knowledge.entries', ['key', 'kind', 'title', 'content', 'sourceRefs', 'initialPlayerVisibility', 'actorKeys']); const rumors = catalog(knowledge.rumors, 'knowledge.rumors', ['key', 'knowledgeKey', 'text', 'reliability']); const achievements = catalog(knowledge.achievements, 'knowledge.achievements', ['key', 'title', 'description', 'conditionKeys']); const knowledgeKeys = keysOf(entries, 'knowledge.entries'); const rumorKeys = keysOf(rumors, 'knowledge.rumors'); keysOf(achievements, 'knowledge.achievements')
+  exact(knowledge, ['version', 'entries', 'rumors', 'achievements'], 'knowledge'); const entries = catalog(knowledge.entries, 'knowledge.entries', ['key', 'kind', 'title', 'content', 'sourceRefs', 'initialPlayerVisibility', 'actorKeys']); const rumors = catalog(knowledge.rumors, 'knowledge.rumors', ['key', 'knowledgeKey', 'text', 'reliability']); const achievements = array(knowledge.achievements, 'knowledge.achievements').map((value, index) => { const item = row(value, `knowledge.achievements[${index}]`); const ownerAction = Object.prototype.hasOwnProperty.call(item, 'grantAuthority'); exact(item, ownerAction ? ['key', 'title', 'description', 'conditionKeys', 'grantAuthority'] : ['key', 'title', 'description', 'conditionKeys'], `knowledge.achievements[${index}]`); return item }); const knowledgeKeys = keysOf(entries, 'knowledge.entries'); const rumorKeys = keysOf(rumors, 'knowledge.rumors'); keysOf(achievements, 'knowledge.achievements')
+  const ownerActionAchievementCount = achievements.filter(item => Object.prototype.hasOwnProperty.call(item, 'grantAuthority')).length
+  if (ownerActionAchievementCount !== 0 && ownerActionAchievementCount !== achievements.length) fail('knowledge.achievements不能混用legacy与owner-action授予合同')
   entries.forEach((item, index) => { enumValue(item.kind, ['location', 'actor', 'faction', 'enemy', 'lore', 'quest-clue'], `knowledge.entries[${index}].kind`); text(item.title, `knowledge.entries[${index}].title`, 2_000); text(item.content, `knowledge.entries[${index}].content`); strings(item.sourceRefs, `knowledge.entries[${index}].sourceRefs`, 'text'); enumValue(item.initialPlayerVisibility, ['hidden', 'rumor', 'known'], `knowledge.entries[${index}].initialPlayerVisibility`); requireRefs(strings(item.actorKeys, `knowledge.entries[${index}].actorKeys`), actorKeys, 'knowledge actor') })
   rumors.forEach((item, index) => { requireRef(key(item.knowledgeKey, `knowledge.rumors[${index}].knowledgeKey`), knowledgeKeys, 'rumor knowledge'); text(item.text, `knowledge.rumors[${index}].text`); enumValue(item.reliability, ['uncertain', 'likely', 'confirmed'], `knowledge.rumors[${index}].reliability`) })
-  achievements.forEach((item, index) => { text(item.title, `knowledge.achievements[${index}].title`, 2_000); text(item.description, `knowledge.achievements[${index}].description`); requireRefs(strings(item.conditionKeys, `knowledge.achievements[${index}].conditionKeys`), conditionKeys, 'achievement condition') })
+  achievements.forEach((item, index) => { text(item.title, `knowledge.achievements[${index}].title`, 2_000); text(item.description, `knowledge.achievements[${index}].description`); const achievementConditionKeys = strings(item.conditionKeys, `knowledge.achievements[${index}].conditionKeys`); requireRefs(achievementConditionKeys, conditionKeys, 'achievement condition'); if (Object.prototype.hasOwnProperty.call(item, 'grantAuthority') && (enumValue(item.grantAuthority, ['owner-action'], `knowledge.achievements[${index}].grantAuthority`) !== 'owner-action' || achievementConditionKeys.length)) fail(`knowledge.achievements[${index}] owner-action不能声明Director条件`) })
   randomEvents.forEach((item, index) => {
     requireRef(item.rumorKey as string | null, rumorKeys, `director.randomEvents[${index}].rumorKey`)
     requireRef(item.upgradeTemplateKey as string | null, templateKeys, `director.randomEvents[${index}].upgradeTemplateKey`)
+    if (ownerActionAchievementCount > 0 && (item.effectKeys as string[]).some(effectKey => {
+      const operation = effects.find(effect => effect.key === effectKey)?.operation
+      return operation === 'reveal-knowledge' || operation === 'earn-achievement'
+    })) fail(`owner-action Knowledge或成就Effect不能由Director事件执行:${String(item.key)}`)
     if (item.kind === 'atmosphere' && ((item.effectKeys as string[]).length || item.rumorKey != null || item.upgradeTemplateKey != null)) fail(`氛围事件只能留下已见历程:${String(item.key)}`)
     if (item.kind === 'clue' && (item.rumorKey == null || item.upgradeTemplateKey != null)) fail(`线索事件必须且只能绑定一条传闻:${String(item.key)}`)
     if (item.kind === 'quest-upgrade' && item.upgradeTemplateKey == null) fail(`升级事件必须绑定任务模板:${String(item.key)}`)
     if (item.kind !== 'quest-upgrade' && item.upgradeTemplateKey != null) fail(`非升级事件不能绑定任务模板:${String(item.key)}`)
     if (!['atmosphere', 'clue', 'quest-upgrade'].includes(String(item.kind)) && !(item.effectKeys as string[]).length && !(item.actionKeys as string[]).length) fail(`资源或遭遇事件必须包含Action或Effect:${String(item.key)}`)
   })
+  if (ownerActionAchievementCount > 0) {
+    const restAction = actionRows.find(action => action.key === 'action.rest.standard')
+    if (!restAction || restAction.category !== 'rest' || restAction.actorScope !== 'player'
+      || restAction.targetScope !== 'none'
+      || strings(restAction.locationKeys, 'action.rest.standard.locationKeys').length
+      || strings(restAction.requirementConditionKeys, 'action.rest.standard.requirementConditionKeys').length
+      || restAction.repeatPolicy !== 'repeatable') {
+      fail('受治理Knowledge缺少可在任意地点执行的编译器休息Action')
+    }
+    randomEvents.filter(event => event.rumorKey != null).forEach(event => {
+      const propagationDecks = decks.filter(deck => deck.randomEventKeys.includes(event.key))
+      if (!locationBoundDirector || event.regionKeys.length !== 1 || event.locationKeys.length !== 1
+        || propagationDecks.length !== 1
+        || propagationDecks[0]!.regionKey !== event.regionKeys[0]) {
+        fail(`受治理传闻事件必须冻结唯一地点并唯一进入对应地区牌组:${event.key}`)
+      }
+      if (!propagationDecks[0]!.triggerKinds.includes('rest')) {
+        fail(`受治理传闻地区牌组缺少编译器保证可达的rest触发:${event.key}`)
+      }
+    })
+  }
   if (authoredNarrativeModule) randomEventPresentations.forEach((item, index) => {
     requireRef(nullableKey(item.rumorKey, `narrative.randomEventPresentations[${index}].rumorKey`), rumorKeys, 'random event presentation rumor')
     const event = randomEvents.find(candidate => candidate.key === item.randomEventKey) ?? fail(`随机事件表现引用未知事件:${String(item.key)}`)
@@ -2548,6 +2684,11 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
         fail(`${label}偷窃成功分支必须产生预制物品结果`)
       }
       witnessedEffectKeys.forEach(effectKey => {
+        const operation = effects.find(effect => effect.key === effectKey)?.operation
+        if (ownerActionAchievementCount > 0
+          && (operation === 'reveal-knowledge' || operation === 'earn-achievement')) {
+          fail(`owner-action Knowledge或成就Effect不能作为犯罪目击后果:${effectKey}`)
+        }
         if (witnessedEffectOwners.has(effectKey)) fail(`目击后果Effect不能被多个犯罪定义共享:${effectKey}`)
         witnessedEffectOwners.set(effectKey, String(crime.key))
         if (actionRows.some(candidate => [...strings(candidate.costEffectKeys, `action ${String(candidate.key)} costs`), ...strings(candidate.successEffectKeys, `action ${String(candidate.key)} success`), ...strings(candidate.failureEffectKeys, `action ${String(candidate.key)} failure`)].includes(effectKey))) {

@@ -37,6 +37,7 @@ import {
   type WorkspaceScope,
 } from '../types'
 import { assertRecordInScope } from '../workspace/scope'
+import { validateTextOpenWorldKnowledgeProductionClosureV1 } from './knowledge-production'
 
 const SKILL_ID = 'text-open-world.production.system-finalize.v1'
 const P10_INPUT_SPECS = [
@@ -168,9 +169,12 @@ export interface TextOpenWorldSystemFinalizeInputContextV1 {
   actors: Array<{ key: string; name: string; portrayal: string; regionKey: string }>
   /**
    * Missing from the pre-G4-05 durable P10 context contract; omission means
-   * Action v15. Version 17 also selects Progression v2 and Combat v4.
+   * Action v15. Versions 17+ also select Progression v2 and Combat v4;
+   * v18 adds the protected-story reveal graph.
    */
-  questLifecycleActionVersion?: 15 | 16 | 17
+  questLifecycleActionVersion?: 15 | 16 | 17 | 18
+  /** Missing from historical P10 contexts, whose Knowledge sources stay byte-stable. */
+  knowledgeProgressContract?: 'governed-v1'
   quests: Array<Pick<TextOpenWorldQuestDesignDocumentsV1['quests'][number], 'key' | 'type' | 'title' | 'regionKeys' | 'estimatedMinutes' | 'lifecyclePolicy' | 'timePolicy'>>
   director: {
     templates: Array<Pick<TextOpenWorldDirectorDecksV1['templates'][number], 'key' | 'questKey' | 'regionKeys' | 'variantTextRequirementKeys'>>
@@ -208,7 +212,7 @@ interface SystemFinalizeDraftV1 {
   mediaSlots: Array<{ slotNumber: number; creativeBrief: string }>
 }
 
-const MODULE_SOURCES: Record<TextOpenWorldRuntimeModuleKeyV1, TextOpenWorldProductionArtifactKindV1[]> = {
+const LEGACY_MODULE_SOURCES: Record<TextOpenWorldRuntimeModuleKeyV1, TextOpenWorldProductionArtifactKindV1[]> = {
   narrative: ['text-open-world.quest-design-documents', 'text-open-world.scene-scripts', 'text-open-world.choice-contracts'],
   world: ['text-open-world.map-interaction-catalog'],
   actors: ['text-open-world.player-build', 'text-open-world.npc-runtime-catalog'],
@@ -224,6 +228,19 @@ const MODULE_SOURCES: Record<TextOpenWorldRuntimeModuleKeyV1, TextOpenWorldProdu
   director: ['text-open-world.director-decks'],
   knowledge: ['text-open-world.scene-scripts', 'text-open-world.director-decks'],
   presentation: ['text-open-world.presentation-profile', 'text-open-world.scene-scripts', 'text-open-world.action-bindings'],
+}
+
+function moduleSources(
+  context: TextOpenWorldSystemFinalizeInputContextV1,
+  moduleKey: TextOpenWorldRuntimeModuleKeyV1,
+): TextOpenWorldProductionArtifactKindV1[] {
+  return moduleKey === 'knowledge' && context.knowledgeProgressContract === 'governed-v1'
+    ? [
+        'text-open-world.quest-design-documents',
+        'text-open-world.director-decks',
+        'text-open-world.scene-scripts',
+      ]
+    : LEGACY_MODULE_SOURCES[moduleKey]
 }
 
 const MODULE_SCHEMA_VERSIONS: Record<TextOpenWorldRuntimeModuleKeyV1, number> = {
@@ -444,11 +461,16 @@ async function buildContext(scope: WorkspaceScope, buildId: number): Promise<Tex
     })),
     regions: artifacts.map.regions.map(region => ({ key: region.key, title: region.title, description: region.description })),
     actors: artifacts.npcs.actors.map(actor => ({ key: actor.key, name: actor.name, portrayal: actor.portrayal, regionKey: actor.regionKey })),
-    ...(artifacts.quests.governance.structuredCombatMechanicsReady === true
+    ...(artifacts.quests.governance.protectedStoryRevealActionsReady === true
+      ? { questLifecycleActionVersion: 18 as const }
+      : artifacts.quests.governance.structuredCombatMechanicsReady === true
       ? { questLifecycleActionVersion: 17 as const }
       : artifacts.quests.governance.allAbandonableQuestStagesCovered === true
       && artifacts.quests.governance.restartActionsRequireOriginalOfferRoute === true
       ? { questLifecycleActionVersion: 16 as const }
+      : {}),
+    ...(artifacts.quests.governance.knowledgeProgressReady === true
+      ? { knowledgeProgressContract: 'governed-v1' as const }
       : {}),
     quests: artifacts.quests.quests.map(quest => ({
       key: quest.key, type: quest.type, title: quest.title, regionKeys: quest.regionKeys,
@@ -475,6 +497,7 @@ async function parseContext(value: string): Promise<TextOpenWorldSystemFinalizeI
   const row = record(parseProductionModelJsonObjectV1(value, 'text-open-world-system-finalize-input'), 'context')
   const expected = ['schema', 'version', 'productInstanceKey', 'artifactHashes', 'gameBrief', 'experience', 'gameplayRuleset', 'presentationProfile', 'player', 'regionPacks', 'regions', 'actors', 'quests', 'director', 'scenes', 'mediaSlotDemands', 'contextSelectionHash']
   if (row.questLifecycleActionVersion !== undefined) expected.push('questLifecycleActionVersion')
+  if (row.knowledgeProgressContract !== undefined) expected.push('knowledgeProgressContract')
   exactKeys(row, expected, 'context')
   if (row.schema !== 'storyforge.text-open-world-system-finalize-input' || row.version !== 1 || !isSha256Hash(row.contextSelectionHash)) fail('Context身份无效')
   const body = { ...row }; delete body.contextSelectionHash
@@ -483,9 +506,12 @@ async function parseContext(value: string): Promise<TextOpenWorldSystemFinalizeI
   if (context.questLifecycleActionVersion !== undefined
     && context.questLifecycleActionVersion !== 15
     && context.questLifecycleActionVersion !== 16
-    && context.questLifecycleActionVersion !== 17) {
+    && context.questLifecycleActionVersion !== 17
+    && context.questLifecycleActionVersion !== 18) {
     fail('任务生命周期Action版本无效')
   }
+  if (context.knowledgeProgressContract !== undefined
+    && context.knowledgeProgressContract !== 'governed-v1') fail('Knowledge生产合同无效')
   if (!context.artifactHashes.every(item => isSha256Hash(item.contentHash) && isSha256Hash(item.payloadHash))
     || context.artifactHashes.length !== P10_INPUT_SPECS.length
     || !same(context.artifactHashes.map(item => item.artifactKey), P10_INPUT_SPECS.map(item => item[0]))) fail('Context Artifact Hash清单无效')
@@ -613,16 +639,19 @@ async function createArtifacts(input: {
       moduleKey,
       schemaVersion: moduleKey === 'actions'
         ? context.questLifecycleActionVersion ?? 15
-        : moduleKey === 'progression' && context.questLifecycleActionVersion === 17
+        : moduleKey === 'director' && context.knowledgeProgressContract === 'governed-v1'
+          ? 3
+        : moduleKey === 'progression' && (context.questLifecycleActionVersion ?? 0) >= 17
           ? 2
-          : moduleKey === 'combat' && context.questLifecycleActionVersion === 17
+          : moduleKey === 'combat' && (context.questLifecycleActionVersion ?? 0) >= 17
             ? 4
             : MODULE_SCHEMA_VERSIONS[moduleKey],
-      sourceArtifactKeys: MODULE_SOURCES[moduleKey], status: 'ready-for-v3-assembly' as const,
+      sourceArtifactKeys: moduleSources(context, moduleKey), status: 'ready-for-v3-assembly' as const,
     })),
     uiConsumers: context.presentationProfile.consumerSlots.map(slot => ({
       key: slot.key,
-      sourceArtifactKeys: [...new Set((UI_MODULES[slot.key] ?? fail(`未知消费槽:${slot.key}`)).flatMap(moduleKey => MODULE_SOURCES[moduleKey]))],
+      sourceArtifactKeys: [...new Set((UI_MODULES[slot.key] ?? fail(`未知消费槽:${slot.key}`))
+        .flatMap(moduleKey => moduleSources(context, moduleKey)))],
       requiredRuntimeModuleKeys: UI_MODULES[slot.key]!, status: 'ready' as const,
     })),
     runtimePolicies: {
@@ -782,7 +811,7 @@ export function createTextOpenWorldSystemFinalizeExecutorV1(options: {
   }
 }
 
-function parsePreflightInput(rows: ProductBuildArtifactRecordV1[]) {
+async function parsePreflightInput(rows: ProductBuildArtifactRecordV1[]) {
   const specs = [
     ['text-open-world.system-configs', 'storyforge.text-open-world-system-configs', 'systemConfigsHash'],
     ['text-open-world.media-requirements', 'storyforge.text-open-world-media-requirements', 'mediaRequirementsHash'],
@@ -793,33 +822,51 @@ function parsePreflightInput(rows: ProductBuildArtifactRecordV1[]) {
     ['text-open-world.action-bindings', 'storyforge.text-open-world-action-bindings', 'actionBindingsHash'],
   ] as const
   const values = new Map<string, Record<string, unknown>>()
-  return Promise.all(specs.map(async ([key, schema, hashKey]) => {
+  await Promise.all(specs.map(async ([key, schema, hashKey]) => {
     const row = rows.find(item => item.artifactKey === key) ?? fail(`预检缺少${key}`)
     const value = record(JSON.parse(row.payloadJson), key)
     if (value.schema !== schema || value.version !== 1 || row.contentHash !== await hashProductProductionValueV2(value)) fail(`预检${key}身份或记录Hash无效`)
     await assertOwnHash(value, hashKey, key); values.set(key, value)
-  })).then(() => ({
+  }))
+  const quests = values.get('text-open-world.quest-design-documents') as unknown as TextOpenWorldQuestDesignDocumentsV1
+  let director: TextOpenWorldDirectorDecksV1 | null = null
+  if (quests.governance.knowledgeProgressReady === true) {
+    const key = 'text-open-world.director-decks'
+    const row = rows.find(item => item.artifactKey === key) ?? fail(`预检缺少${key}`)
+    const value = record(JSON.parse(row.payloadJson), key)
+    if (value.schema !== 'storyforge.text-open-world-director-decks' || value.version !== 1
+      || row.contentHash !== await hashProductProductionValueV2(value)) fail(`预检${key}身份或记录Hash无效`)
+    await assertOwnHash(value, 'directorDecksHash', key)
+    director = value as unknown as TextOpenWorldDirectorDecksV1
+  }
+  return {
     system: values.get('text-open-world.system-configs') as unknown as TextOpenWorldSystemConfigsV1,
     media: values.get('text-open-world.media-requirements') as unknown as TextOpenWorldMediaRequirementsV1,
     budget: values.get('text-open-world.content-budget') as unknown as TextOpenWorldContentBudgetV1,
-    quests: values.get('text-open-world.quest-design-documents') as unknown as TextOpenWorldQuestDesignDocumentsV1,
+    quests,
+    director,
     scenes: values.get('text-open-world.scene-scripts') as unknown as TextOpenWorldSceneScriptsV1,
     choices: values.get('text-open-world.choice-contracts') as unknown as TextOpenWorldChoiceContractsV1,
     bindings: values.get('text-open-world.action-bindings') as unknown as TextOpenWorldActionBindingsV1,
-  }))
+  }
 }
 
 export async function createTextOpenWorldDeterministicPreflightV1(input: {
   rows: ProductBuildArtifactRecordV1[]
   createdAt: number
 }): Promise<TextOpenWorldDeterministicPreflightV1> {
-  const { system, media, budget, quests, scenes, choices, bindings } = await parsePreflightInput(input.rows)
+  const { system, media, budget, quests, director, scenes, choices, bindings } = await parsePreflightInput(input.rows)
+  const governedKnowledge = quests.governance.knowledgeProgressReady === true
   if (new Set([system.productInstanceKey, media.productInstanceKey, budget.productInstanceKey, quests.productInstanceKey,
+    ...(director ? [director.productInstanceKey] : []),
     scenes.productInstanceKey, choices.productInstanceKey, bindings.productInstanceKey]).size !== 1) fail('预检输入跨产品')
   if (system.questDesignDocumentsHash !== quests.questDesignDocumentsHash
     || system.actionBindingsHash !== bindings.actionBindingsHash
     || system.sceneScriptsHash !== scenes.sceneScriptsHash
     || system.choiceContractsHash !== choices.choiceContractsHash
+    || (governedKnowledge && (!director
+      || system.directorDecksHash !== director.directorDecksHash
+      || director.questDesignDocumentsHash !== quests.questDesignDocumentsHash))
     || choices.questDesignDocumentsHash !== quests.questDesignDocumentsHash
     || choices.sceneScriptsHash !== scenes.sceneScriptsHash
     || bindings.questDesignDocumentsHash !== quests.questDesignDocumentsHash
@@ -827,6 +874,13 @@ export async function createTextOpenWorldDeterministicPreflightV1(input: {
     || bindings.choiceContractsHash !== choices.choiceContractsHash
     || media.presentationProfileHash !== system.presentationProfileHash
     || budget.questDesignDocumentsHash !== quests.questDesignDocumentsHash) fail('预检输入Hash链不一致')
+  if (governedKnowledge) {
+    validateTextOpenWorldKnowledgeProductionClosureV1({
+      quests,
+      director: director ?? fail('受治理预检缺少Director'),
+      scenes,
+    })
+  }
   if (!same(system.coverage.requiredRuntimeModuleKeys, TEXT_OPEN_WORLD_RUNTIME_MODULE_KEYS_V1)
     || !same(system.coverage.readyRuntimeModuleKeys, TEXT_OPEN_WORLD_RUNTIME_MODULE_KEYS_V1)
     || system.coverage.missingRuntimeModuleKeys.length || system.coverage.missingConsumerKeys.length) fail('预检运行模块或消费槽未闭合')
@@ -875,11 +929,22 @@ export async function createTextOpenWorldDeterministicPreflightV1(input: {
     const reachEffect = quests.effects.find(item => item.key === route.reachEffectKey)
     const routeChoices = choices.choices.filter(choice => choice.sceneKey === endingScene.key && choice.actionKey === route.actionKey)
     const inputBinding = bindings.actions.find(binding => binding.actionKey === route.actionKey)
+    const governedSuffixEffectKeys = [
+      ...(quests.knowledgeBindings ?? []).flatMap(knowledge => knowledge.confirmationBindings
+        .filter(confirmation => confirmation.sourceKind === 'ending-action'
+          && confirmation.sourceKey === route.endingKey)
+        .map(confirmation => confirmation.revealEffectKey)),
+      ...(quests.achievementBindings ?? []).filter(achievement => (
+        achievement.sourceKind === 'ending-action' && achievement.sourceKey === route.endingKey
+      )).map(achievement => achievement.earnEffectKey),
+    ]
     if (!action || action.category !== 'quest-action' || action.actorScope !== 'player' || action.targetScope !== 'none'
       || !same(action.locationKeys, [ending.finalLocationKey])
       || !same(action.requirementConditionKeys, [ending.selectionReadyConditionKey])
       || canonicalProductProductionJsonV2(action.successEffectKeys)
-        !== canonicalProductProductionJsonV2([route.routeEffectKey, route.unlockEffectKey, route.reachEffectKey])
+        !== canonicalProductProductionJsonV2([
+          route.routeEffectKey, route.unlockEffectKey, route.reachEffectKey, ...governedSuffixEffectKeys,
+        ])
       || action.confirmationPolicy !== 'always' || action.repeatPolicy !== 'once'
       || !condition || !same(condition.expression, { op: 'all', conditions: [
         { op: 'quest-status', questKey: ending.finalMainlineQuestKey, statuses: ['completed'] },
@@ -897,7 +962,89 @@ export async function createTextOpenWorldDeterministicPreflightV1(input: {
     }
   }
   if (unknownConditions.size || unknownEffects.size || unknownActions.size) fail(`预检存在悬空引用 condition=${[...unknownConditions]} effect=${[...unknownEffects]} action=${[...unknownActions]}`)
-  const mainline = quests.quests.filter(quest => quest.type === 'mainline').sort((a, b) => a.order - b.order)
+  const actionModuleVersion = system.runtimeModules.find(module => module.moduleKey === 'actions')?.schemaVersion
+    ?? fail('预检缺少Action模块版本')
+  const protectedRevealReady = quests.governance.protectedStoryRevealActionsReady === true
+  if ((actionModuleVersion === 18) !== protectedRevealReady) {
+    fail('预检Action v18与受保护故事揭示治理声明不一致')
+  }
+  const unorderedMainline = quests.quests.filter(quest => quest.type === 'mainline')
+  let mainline = [...unorderedMainline].sort((a, b) => a.order - b.order)
+  const protectedWaitQuests = quests.quests.filter(quest => (
+    (quest.type === 'mainline' || quest.type === 'significant')
+    && quest.lifecyclePolicy === 'protected-wait'
+    && quest.timePolicy === 'waits'
+  ))
+  if (protectedRevealReady) {
+    const revealPredecessorByQuestKey = new Map<string, string>()
+    for (const quest of protectedWaitQuests.filter(item => item.initialStatus === 'locked')) {
+      const prerequisiteKey = quest.prerequisiteConditionKeys.length === 1
+        ? quest.prerequisiteConditionKeys[0]!
+        : fail(`预检受保护任务缺少唯一前置条件:${quest.key}`)
+      if (prerequisiteKey !== `condition.unlock.${quest.key}`) {
+        fail(`预检受保护任务前置条件稳定键无效:${quest.key}`)
+      }
+      const prerequisite = quests.conditions.find(condition => condition.key === prerequisiteKey)
+      const predecessorKey = prerequisite?.expression.op === 'quest-status'
+        && same(prerequisite.expression.statuses, ['completed'])
+        ? prerequisite.expression.questKey
+        : fail(`预检受保护任务前置条件不是已完成任务:${quest.key}`)
+      const action = actionByKey.get(`action.reveal.${quest.key}`)
+      const unlockEffect = quests.effects.find(effect => effect.key === `effect.unlock.${quest.key}`)
+      const revealEffect = quests.effects.find(effect => effect.key === `effect.reveal.${quest.key}`)
+      if (!action || action.category !== 'quest-action' || action.actorScope !== 'system'
+        || action.targetScope !== 'quest' || action.locationKeys.length
+        || !same(action.requirementConditionKeys, [prerequisiteKey])
+        || action.costEffectKeys.length || action.failureEffectKeys.length
+        || !same(action.successEffectKeys, [`effect.unlock.${quest.key}`, `effect.reveal.${quest.key}`])
+        || action.timeCostMinutes !== 0 || action.confirmationPolicy !== 'never'
+        || action.repeatPolicy !== 'repeatable' || action.cooldownMinutes !== null
+        || !same(unlockEffect, {
+          key: `effect.unlock.${quest.key}`, operation: 'transition-quest',
+          payload: { questKey: quest.key, status: 'available', stageKey: null },
+        })
+        || !same(revealEffect, {
+          key: `effect.reveal.${quest.key}`, operation: 'transition-quest',
+          payload: { questKey: quest.key, status: 'revealed', stageKey: null },
+        })) {
+        fail(`预检受保护任务揭示Action图无效:${quest.key}`)
+      }
+      revealPredecessorByQuestKey.set(quest.key, predecessorKey)
+    }
+    const mainlineRoots = unorderedMainline.filter(quest => quest.initialStatus === 'revealed')
+    if (mainlineRoots.length !== 1 || mainlineRoots[0]!.prerequisiteConditionKeys.length) {
+      fail('预检主线必须有且只有一个无前置的揭示根节点')
+    }
+    const orderedMainline = [mainlineRoots[0]!]
+    while (orderedMainline.length < unorderedMainline.length) {
+      const currentKey = orderedMainline[orderedMainline.length - 1]!.key
+      const next = unorderedMainline.filter(quest => (
+        !orderedMainline.some(item => item.key === quest.key)
+        && revealPredecessorByQuestKey.get(quest.key) === currentKey
+      ))
+      if (next.length !== 1) fail('预检主线揭示链存在断点、分叉或环')
+      orderedMainline.push(next[0]!)
+    }
+    mainline = orderedMainline
+    const mainlineKeys = new Set(mainline.map(quest => quest.key))
+    const significantStorylineKeys = [...new Set(protectedWaitQuests
+      .filter(quest => quest.type === 'significant')
+      .map(quest => quest.storylineKey ?? fail(`重要任务缺少故事线:${quest.key}`)))]
+    for (const storylineKey of significantStorylineKeys) {
+      const threadQuests = protectedWaitQuests.filter(quest => quest.type === 'significant'
+        && quest.storylineKey === storylineKey)
+      const roots = threadQuests.filter(quest => mainlineKeys.has(revealPredecessorByQuestKey.get(quest.key) ?? ''))
+      if (roots.length !== 1) fail(`预检重要故事必须有且只有一个主线窗口根节点:${storylineKey}`)
+      const ordered = [roots[0]!]
+      while (ordered.length < threadQuests.length) {
+        const currentKey = ordered[ordered.length - 1]!.key
+        const next = threadQuests.filter(quest => !ordered.some(item => item.key === quest.key)
+          && revealPredecessorByQuestKey.get(quest.key) === currentKey)
+        if (next.length !== 1) fail(`预检重要故事揭示链存在断点、分叉或环:${storylineKey}`)
+        ordered.push(next[0]!)
+      }
+    }
+  }
   if (!mainline.length
     || mainline.some(quest => quest.lifecyclePolicy !== 'protected-wait' || quest.timePolicy !== 'waits')
     || mainline[0]!.initialStatus !== 'revealed'
@@ -917,14 +1064,19 @@ export async function createTextOpenWorldDeterministicPreflightV1(input: {
     actionBindingsHash: bindings.actionBindingsHash, checks,
     reachability: {
       mainlineQuestKeys: mainline.map(quest => quest.key), reachableMainlineQuestKeys: mainline.map(quest => quest.key),
-      protectedWaitQuestKeys: mainline.map(quest => quest.key), ordinaryContentMayBlockMainline: false,
+      protectedWaitQuestKeys: protectedRevealReady
+        ? protectedWaitQuests.map(quest => quest.key)
+        : mainline.map(quest => quest.key),
+      ordinaryContentMayBlockMainline: false,
       unknownConditionKeys: [], unknownEffectKeys: [], unknownActionKeys: [],
     },
     result: { passedCheckKeys: checks.map(check => check.key), blockingCheckKeys: [], readyForModelReviews: true },
     governance: { codeOnly: true, noSemanticQualityClaims: true, boundedAbstractReachability: true, exactInputHashesVerified: true },
     basisHash: await hashProductProductionValueV2({
       system: system.systemConfigsHash, media: media.mediaRequirementsHash, budget: budget.contentBudgetHash,
-      quests: quests.questDesignDocumentsHash, scenes: scenes.sceneScriptsHash,
+      quests: quests.questDesignDocumentsHash,
+      ...(governedKnowledge ? { director: (director ?? fail('受治理预检缺少Director')).directorDecksHash } : {}),
+      scenes: scenes.sceneScriptsHash,
       choices: choices.choiceContractsHash, bindings: bindings.actionBindingsHash,
     }),
     createdAt: input.createdAt,

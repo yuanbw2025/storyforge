@@ -147,7 +147,8 @@ function candidates(input: {
   })
   deck.randomEventKeys.forEach(eventKey => {
     const event = modules.director.randomEvents.find(item => item.key === eventKey)!
-    if (!allSatisfied(event.conditionKeys, conditionResults)
+    if (event.locationKeys.length && !event.locationKeys.includes(state.map.currentLocationKey)
+      || !allSatisfied(event.conditionKeys, conditionResults)
       || sourceCoolingDown(state, event.key, event.cooldownMinutes)
       || recentEnough(state, event.fingerprint, event.cooldownMinutes)
       || event.intensity >= 7 && state.director.highIntensityStreak >= modules.director.rules.highIntensityStreakLimit) return
@@ -183,7 +184,8 @@ function requestsFor(input: ReturnType<typeof candidates>, drawNumber: number): 
 }
 
 function earnedAchievements(modules: TextOpenWorldParsedModulesV1, state: TextOpenWorldEffectStateV1, conditionResults: ConditionResults) {
-  return modules.knowledge.achievements.filter(achievement => !state.knowledge.earnedAchievementKeys.includes(achievement.key)
+  return modules.knowledge.achievements.filter(achievement => achievement.grantAuthority !== 'owner-action'
+    && !state.knowledge.earnedAchievementKeys.includes(achievement.key)
     && allSatisfied(achievement.conditionKeys, conditionResults)).map(achievement => achievement.key).sort()
 }
 
@@ -259,10 +261,17 @@ export function createTextOpenWorldDirectorCatalogV1(
     } else if (selection.outcomeKind === 'random-event') {
       const event = modules.director.randomEvents.find(item => item.key === selection.sourceKey)
       if (!event || canonicalProductProductionJsonV2(event.effectKeys) !== canonicalProductProductionJsonV2(selection.effectKeys)
-        || event.rumorKey !== selection.rumorKey) fail('Director随机事件授权无效')
+        || event.rumorKey !== selection.rumorKey
+        || event.locationKeys.length && !event.locationKeys.includes(input.state.map.currentLocationKey)) {
+        fail('Director随机事件授权无效')
+      }
     }
     input.authorization.earnedAchievementKeys.forEach(key => {
-      if (!modules.knowledge.achievements.some(item => item.key === key) || input.state.knowledge.earnedAchievementKeys.includes(key)) fail(`Director成就授权无效:${key}`)
+      const achievement = modules.knowledge.achievements.find(item => item.key === key)
+      if (!achievement || achievement.grantAuthority === 'owner-action'
+        || input.state.knowledge.earnedAchievementKeys.includes(key)) {
+        fail(`Director成就授权无效:${key}`)
+      }
     })
   }
   return {

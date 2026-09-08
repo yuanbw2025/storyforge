@@ -775,6 +775,14 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     const capabilityBindings = [{ requirementKey: requirement.requirementKey, adapterId: 'configured-text.v1', bindingHash }]
     const outputs = modelOutputs(owned.brief.source.worldContentHash, 'text-adventure')
     const calls: string[] = []
+    const authorEditExecutions: Array<{
+      idempotencyKey: string
+      authorDraftJson: string
+      durationMs: number
+      storageBytes: number
+      taskDurationMs: number
+      taskStorageBytes: number
+    }> = []
     const runText: ProductionTextRunnerV1 = async request => {
       const taskKey = Object.keys(outputs).find(key => request.system.includes(`任务=${key}。`)) as keyof typeof outputs
       calls.push(taskKey)
@@ -786,8 +794,29 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
           credentialPresent: true, capabilityHash: bindingHash, boundAt: 1, receiptHash: 'b'.repeat(64),
         } }
     }
-    const execute = async () => runProductProductionUntilBlockedV1({ scope: owned.scope, productionId: owned.productionId, capabilityBindings,
-      executor: createConfiguredProductProductionExecutorV1({ production: (await db.productProductions.get(owned.productionId))!, brief: owned.brief, runText }) })
+    const execute = async () => {
+      const configured = createConfiguredProductProductionExecutorV1({
+        production: (await db.productProductions.get(owned.productionId))!, brief: owned.brief, runText,
+      })
+      return runProductProductionUntilBlockedV1({
+        scope: owned.scope,
+        productionId: owned.productionId,
+        capabilityBindings,
+        executor: async request => {
+          if (request.authorDraftJson !== undefined) {
+            authorEditExecutions.push({
+              idempotencyKey: request.idempotencyKey,
+              authorDraftJson: request.authorDraftJson,
+              durationMs: request.attemptBudgetReservation!.durationMs,
+              storageBytes: request.attemptBudgetReservation!.storageBytes,
+              taskDurationMs: request.task.budgetReservation.durationMs,
+              taskStorageBytes: request.task.budgetReservation.storageBytes,
+            })
+          }
+          return configured(request)
+        },
+      })
+    }
     const first = await execute()
     expect(first.buildStatus).toBe('recovery-required')
     const repair = async (draft: unknown, taskKey = 'content.product-module') => executeProductProductionCommand({ scope: owned.scope, productionId: owned.productionId,
@@ -801,12 +830,30 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     const completed = await execute()
     expect(completed.buildStatus).toBe('release-ready')
     expect(calls.filter(key => key === 'content.product-module')).toHaveLength(1)
+    expect(authorEditExecutions).toHaveLength(2)
+    expect(new Set(authorEditExecutions.map(item => item.idempotencyKey)).size).toBe(2)
+    expect(authorEditExecutions.map(item => item.authorDraftJson)).toEqual([
+      '{}',
+      JSON.stringify(outputs['content.product-module']),
+    ])
+    expect(authorEditExecutions.every(item => (
+      item.durationMs === item.taskDurationMs
+      && item.storageBytes === item.taskStorageBytes
+      && item.durationMs > 0
+    ))).toBe(true)
     const artifact = await db.productBuildArtifacts.where('buildId').equals(completed.buildId)
       .filter(row => row.artifactKey === 'content.product-module' && row.controlEpoch === completed.controlEpoch).first()
     expect(JSON.parse(artifact!.rightsJson).origin).toBe('author-revised-model-draft')
     const events = await db.agentRunEvents.where('runId').equals(artifact!.producerRunId!).toArray()
     expect(events.some(row => row.type === 'model.requested')).toBe(false)
     expect(events.some(row => row.type === 'evidence.artifact.recorded' && JSON.parse(row.payloadJson).artifactKind === 'source-snapshot')).toBe(true)
+    const authorSnapshots = (await db.agentRunArtifacts.toArray())
+      .filter(row => row.artifactKind === 'source-snapshot')
+      .map(row => row.content)
+    expect(authorSnapshots).toEqual(expect.arrayContaining([
+      '{}',
+      JSON.stringify(outputs['content.product-module']),
+    ]))
   }, 30000)
 
   it('四种共享生产产品经过正式生产、可玩 Build Preview 与同包原子发布', async () => {

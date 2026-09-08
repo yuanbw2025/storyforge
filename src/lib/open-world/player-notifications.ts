@@ -5,6 +5,7 @@ import type {
   TextOpenWorldEffectDefinitionV1,
   TextOpenWorldEffectsAppliedEventPayloadV1,
   TextOpenWorldParsedModulesV1,
+  TextOpenWorldQuestStatusV1,
   TextOpenWorldRulesetStampV1,
   TextOpenWorldSessionProjectionV1,
 } from '../types'
@@ -22,6 +23,18 @@ const MAXIMUM_DETAIL_COUNT = 3
 const MAXIMUM_HEADLINE_LENGTH = 160
 const MAXIMUM_DETAIL_LENGTH = 500
 
+const DISCLOSED_QUEST_STATUSES = new Set<TextOpenWorldQuestStatusV1>([
+  'revealed', 'accepted', 'active', 'suspended', 'completed', 'failed',
+  'expired', 'abandoned', 'withdrawn',
+])
+
+interface PlayerDisclosureScope {
+  actorKeys: Set<string>
+  factionKeys: Set<string>
+  locationKeys: Set<string>
+  regionKeys: Set<string>
+}
+
 function fail(message: string): never { throw new Error(`[text-open-world-player-notifications] ${message}`) }
 function eventPayload(event: ProductRuntimeEvent): unknown {
   try { return JSON.parse(event.payloadJson) } catch { fail(`事件${event.sequence}不是合法JSON`) }
@@ -37,6 +50,36 @@ function uniqueDetails(values: Array<string | null>): string[] {
   return [...new Set(values.filter((value): value is string => Boolean(value?.trim())))]
     .slice(0, MAXIMUM_DETAIL_COUNT)
     .map(value => boundedText(value, MAXIMUM_DETAIL_LENGTH))
+}
+
+function playerDisclosureScope(
+  projection: TextOpenWorldSessionProjectionV1,
+  modules: TextOpenWorldParsedModulesV1,
+): PlayerDisclosureScope {
+  const actorKeys = new Set(modules.actors.actors.filter(actor => {
+    const actorState = projection.state.actors[actor.key]
+    return actorState?.alive && actorState.present && actorState.locationKey === projection.state.map.currentLocationKey
+  }).map(actor => actor.key))
+  const factionKeys = new Set<string>()
+  Object.values(projection.state.quests.instancesByKey).forEach(instance => {
+    if (!DISCLOSED_QUEST_STATUSES.has(instance.status) || instance.offeredAtWorldMinute == null) return
+    const quest = modules.quests.quests.find(candidate => candidate.key === instance.definitionKey)
+    if (quest?.ownerKind === 'actor' && quest.ownerKey) actorKeys.add(quest.ownerKey)
+    if (quest?.ownerKind === 'faction' && quest.ownerKey) factionKeys.add(quest.ownerKey)
+  })
+  actorKeys.forEach(actorKey => {
+    const factionKey = modules.actors.actors.find(actor => actor.key === actorKey)?.factionKey
+    if (factionKey) factionKeys.add(factionKey)
+  })
+  const regionKeys = new Set(modules.world.regions.filter(region => (
+    (projection.state.map.regionKnowledgeByKey[region.key] ?? 'unknown') !== 'unknown'
+      || region.knowledgePolicy === 'always-visible'
+  )).map(region => region.key))
+  const locationKeys = new Set(modules.world.locations.filter(location => (
+    regionKeys.has(location.regionKey)
+      && (projection.state.map.locationKnowledgeByKey[location.key] ?? 'unknown') !== 'unknown'
+  )).map(location => location.key))
+  return { actorKeys, factionKeys, locationKeys, regionKeys }
 }
 
 export type TextOpenWorldPlayerNotificationCategoryV1 =
@@ -193,14 +236,24 @@ function terminalEvidence(input: {
   return terminals
 }
 
-function effectDetail(effect: TextOpenWorldEffectDefinitionV1, modules: TextOpenWorldParsedModulesV1): string | null {
+function effectDetail(
+  effect: TextOpenWorldEffectDefinitionV1,
+  modules: TextOpenWorldParsedModulesV1,
+  disclosure: PlayerDisclosureScope,
+): string | null {
   const itemTitle = (key: string) => modules.items.items.find(item => item.key === key)?.title ?? null
   const skillTitle = (key: string) => modules.progression.skills.find(skill => skill.key === key)?.title ?? null
   const statusTitle = (key: string) => modules.progression.statuses.find(status => status.key === key)?.title ?? null
   const recipeTitle = (key: string) => modules.crafting.recipes.find(recipe => recipe.key === key)?.title ?? null
-  const locationTitle = (key: string) => modules.world.locations.find(location => location.key === key)?.title ?? null
-  const actorName = (key: string) => modules.actors.actors.find(actor => actor.key === key)?.name ?? null
-  const factionTitle = (key: string) => modules.actors.factions.find(faction => faction.key === key)?.title ?? null
+  const locationTitle = (key: string) => disclosure.locationKeys.has(key)
+    ? modules.world.locations.find(location => location.key === key)?.title ?? null
+    : null
+  const actorName = (key: string) => disclosure.actorKeys.has(key)
+    ? modules.actors.actors.find(actor => actor.key === key)?.name ?? null
+    : null
+  const factionTitle = (key: string) => disclosure.factionKeys.has(key)
+    ? modules.actors.factions.find(faction => faction.key === key)?.title ?? null
+    : null
   switch (effect.operation) {
     case 'change-player-resource': {
       const resource = effect.payload.resource === 'health' ? '生命' : '技能资源'
@@ -221,9 +274,11 @@ function effectDetail(effect: TextOpenWorldEffectDefinitionV1, modules: TextOpen
       ? `${factionTitle(effect.payload.factionKey)}亲合度${effect.payload.amount >= 0 ? '提高' : '降低'}${Math.abs(effect.payload.amount)}`
       : '阵营态度发生变化'
     case 'set-story-modifier': return actorName(effect.payload.actorKey) ? `${actorName(effect.payload.actorKey)}对你的态度发生变化` : '角色态度发生变化'
-    case 'reveal-knowledge': return modules.knowledge.entries.find(entry => entry.key === effect.payload.knowledgeKey)?.title
-      ? `获得线索：${modules.knowledge.entries.find(entry => entry.key === effect.payload.knowledgeKey)!.title}`
-      : '获得一条新线索'
+    case 'reveal-knowledge': {
+      if (effect.payload.visibility !== 'known') return '获得一条新线索'
+      const title = modules.knowledge.entries.find(entry => entry.key === effect.payload.knowledgeKey)?.title
+      return title ? `确认线索：${title}` : '确认一条新线索'
+    }
     case 'reveal-location': return locationTitle(effect.payload.locationKey) ? `发现地点：${locationTitle(effect.payload.locationKey)}` : '发现新地点'
     case 'unlock-fast-travel': {
       const point = modules.world.fastTravelPoints.find(candidate => candidate.key === effect.payload.fastTravelPointKey)
@@ -238,7 +293,8 @@ function effectDetail(effect: TextOpenWorldEffectDefinitionV1, modules: TextOpen
     case 'rest': return '休整完成'
     case 'respawn': return '已在安全地点复苏'
     case 'change-actor-state': return actorName(effect.payload.actorKey) ? `${actorName(effect.payload.actorKey)}的状态发生重要变化` : '一名角色的状态发生重要变化'
-    case 'change-region-state': return modules.world.regions.find(region => region.key === effect.payload.regionKey)?.title
+    case 'change-region-state': return disclosure.regionKeys.has(effect.payload.regionKey)
+      && modules.world.regions.find(region => region.key === effect.payload.regionKey)?.title
       ? `${modules.world.regions.find(region => region.key === effect.payload.regionKey)!.title}的局势发生变化`
       : '地区局势发生变化'
     case 'set-world-flag': return '世界状态发生变化'
@@ -298,8 +354,10 @@ function authorizationPresentation(input: {
   authorization: NonNullable<TextOpenWorldEffectsAppliedEventPayloadV1['plan']['authorization']>
   payload: TextOpenWorldEffectsAppliedEventPayloadV1
   modules: TextOpenWorldParsedModulesV1
+  projection: TextOpenWorldSessionProjectionV1
+  disclosure: PlayerDisclosureScope
 }): { category: TextOpenWorldPlayerNotificationCategoryV1; headline: string; details: string[]; priority: 'normal' | 'important' | 'critical'; worldMinute: number | null } | null {
-  const { authorization, payload, modules } = input
+  const { authorization, payload, modules, projection, disclosure } = input
   if (authorization.kind === 'director-settlement') {
     const random = resolvedRandomEvent({ authorization, payload, modules })
     if (authorization.selection.outcomeKind === 'random-event') return random ? {
@@ -307,6 +365,10 @@ function authorizationPresentation(input: {
     } : null
     if (payload.outcome === 'failure') return null
     if (authorization.selection.outcomeKind === 'fixed-quest' || authorization.selection.outcomeKind === 'template-quest') {
+      const instance = authorization.selection.questInstanceKey
+        ? projection.state.quests.instancesByKey[authorization.selection.questInstanceKey]
+        : null
+      if (!instance || !DISCLOSED_QUEST_STATUSES.has(instance.status) || instance.offeredAtWorldMinute == null) return null
       const quest = modules.quests.quests.find(candidate => candidate.key === authorization.selection.definitionKey)
       const variant = modules.presentation.taskTextVariants.find(candidate => candidate.key === authorization.selection.variantTextKey)
       if (!quest) return null
@@ -315,7 +377,9 @@ function authorizationPresentation(input: {
         priority: 'important', worldMinute: authorization.worldMinute,
       }
     }
-    const regions = authorization.regionChanges.map(change => modules.world.regions.find(region => region.key === change.regionKey)?.title ?? null)
+    const regions = authorization.regionChanges.map(change => disclosure.regionKeys.has(change.regionKey)
+      ? modules.world.regions.find(region => region.key === change.regionKey)?.title ?? null
+      : null)
     if (!regions.some(Boolean)) return null
     return {
       category: 'world', headline: '地区局势已经演化', details: uniqueDetails(regions.map(title => title ? `${title}出现了新的变化` : null)),
@@ -324,6 +388,8 @@ function authorizationPresentation(input: {
   }
   if (payload.outcome === 'failure') return null
   if (authorization.kind === 'quest-transition') {
+    const finalInstance = projection.state.quests.instancesByKey[authorization.instanceKey]
+    if (!finalInstance || !DISCLOSED_QUEST_STATUSES.has(finalInstance.status) || finalInstance.offeredAtWorldMinute == null) return null
     const quest = modules.quests.quests.find(candidate => candidate.key === authorization.definitionKey)
     if (!quest) return null
     const finalStatus = authorization.transitions[authorization.transitions.length - 1]?.toStatus
@@ -356,7 +422,9 @@ function authorizationPresentation(input: {
     } : null
   }
   if (authorization.kind === 'fast-travel') {
-    const destination = modules.world.locations.find(candidate => candidate.key === authorization.destinationLocationKey)
+    const destination = disclosure.locationKeys.has(authorization.destinationLocationKey)
+      ? modules.world.locations.find(candidate => candidate.key === authorization.destinationLocationKey)
+      : null
     return destination ? {
       category: 'world', headline: `已抵达：${destination.title}`, details: [], priority: 'normal',
       worldMinute: authorization.baseWorldMinute + authorization.travelMinutes,
@@ -364,7 +432,9 @@ function authorizationPresentation(input: {
   }
   if (authorization.kind === 'weather-settlement') {
     const changes = authorization.changes.filter(change => change.fromWeatherKey !== change.toWeatherKey).map(change => {
-      const region = modules.world.regions.find(candidate => candidate.key === change.regionKey)
+      const region = disclosure.regionKeys.has(change.regionKey)
+        ? modules.world.regions.find(candidate => candidate.key === change.regionKey)
+        : null
       const weather = modules['time-weather'].weather.find(candidate => candidate.key === change.toWeatherKey)
       return region && weather ? `${region.title}转为${weather.label}` : null
     })
@@ -374,7 +444,9 @@ function authorizationPresentation(input: {
   }
   if (authorization.kind === 'actor-schedule-settlement') return null
   if (authorization.kind === 'crime') {
-    const actor = modules.actors.actors.find(candidate => candidate.key === authorization.targetActorKey)
+    const actor = disclosure.actorKeys.has(authorization.targetActorKey)
+      ? modules.actors.actors.find(candidate => candidate.key === authorization.targetActorKey)
+      : null
     return {
       category: 'relationship', headline: authorization.outcome === 'success' ? '行动后果已经结算' : '行动没有成功',
       details: uniqueDetails([actor ? `${actor.name}及附近目击者可能改变对你的态度` : '附近人物可能改变对你的态度']),
@@ -416,12 +488,16 @@ function categoryForEffects(effects: readonly TextOpenWorldEffectDefinitionV1[])
 function notificationFor(
   terminal: TerminalEvidence,
   modules: TextOpenWorldParsedModulesV1,
+  projection: TextOpenWorldSessionProjectionV1,
+  disclosure: PlayerDisclosureScope,
   sessionId: number,
 ): TextOpenWorldPlayerNotificationV1 | null {
   const authorization = terminal.payload.plan.authorization
-  const authored = authorization ? authorizationPresentation({ authorization, payload: terminal.payload, modules }) : null
+  const authored = authorization
+    ? authorizationPresentation({ authorization, payload: terminal.payload, modules, projection, disclosure })
+    : null
   if (authorization?.kind === 'director-settlement' && authorization.selection.outcomeKind === 'random-event' && !authored) return null
-  const details = authored?.details ?? uniqueDetails(terminal.payload.plan.effects.map(effect => effectDetail(effect, modules)))
+  const details = authored?.details ?? uniqueDetails(terminal.payload.plan.effects.map(effect => effectDetail(effect, modules, disclosure)))
   if (!authored && (terminal.payload.outcome === 'failure' || details.length === 0)) return null
   const headline = authored?.headline ?? `${terminal.actionLabel}已结算`
   return {
@@ -456,8 +532,9 @@ export function projectTextOpenWorldPlayerNotificationsV1(input: {
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAXIMUM_NOTIFICATION_LIMIT) fail('limit无效')
   const projection = parseTextOpenWorldSessionProjectionV1(input.projection)
   const modules = parseTextOpenWorldModulesV1(projection.runtimePackage)
+  const disclosure = playerDisclosureScope(projection, modules)
   const notifications = terminalEvidence({ sessionId: input.sessionId, projection, modules, events: input.events })
-    .map(terminal => notificationFor(terminal, modules, input.sessionId))
+    .map(terminal => notificationFor(terminal, modules, projection, disclosure, input.sessionId))
     .filter((notification): notification is TextOpenWorldPlayerNotificationV1 => notification != null)
   return notifications.slice(-limit)
 }

@@ -79,7 +79,7 @@ export type TextOpenWorldSceneProjectionV1 =
   | {
       status: 'ready'
       narrativeVersion: 2
-      actionVersion: 15 | 16 | 17
+      actionVersion: 15 | 16 | 17 | 18
       currentLocationKey: string
       randomEventPolicy: 'hidden-without-current-activation-evidence'
       scenes: TextOpenWorldProjectedSceneV1[]
