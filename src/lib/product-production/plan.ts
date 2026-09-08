@@ -40,10 +40,12 @@ export function textAdventureProductionBudgetFloorV1(
     sum + textAdventureSceneScriptPartSceneKeysV1(brief, actIndex).length
   ), 0)
   const modelTaskCount = 25 + sceneScriptPartCount + Number(activeVisual)
-  // Structured-output providers can legitimately need one repair pass for
-  // several specialist schemas. Reserve half a pipeline (at least 16 calls),
-  // not merely one optimistic retry per eight tasks.
-  const retryReserveSlots = Math.max(16, Math.ceil(modelTaskCount * 0.5))
+  // A complete commercial run exercises many deep structured schemas. Live
+  // provider evidence showed that half-pipeline retry headroom was exhausted
+  // before the remaining prose/editing Runs could even be admitted. Reserve
+  // one bounded recovery slot per model task: attempts remain capped per task,
+  // while the Build ledger still rejects every call beyond this hard total.
+  const retryReserveSlots = Math.max(32, modelTaskCount)
   const minimumModelCalls = modelTaskCount + retryReserveSlots
   return {
     modelTaskCount,
@@ -54,7 +56,11 @@ export function textAdventureProductionBudgetFloorV1(
       100_000,
       brief.scale.targetWordCount * 8 + 60_000,
       brief.scale.targetPlayMinutes * 2_000 + 40_000,
-      modelTaskCount * 6_250,
+      // Completion receipts can include hidden reasoning in addition to the
+      // visible JSON. Size the lifetime envelope for admitted attempts rather
+      // than only successful task count; task-local ceilings remain fixed
+      // below and therefore cannot inflate one response to consume the pool.
+      minimumModelCalls * 8_000,
     ),
   }
 }
@@ -479,13 +485,25 @@ export async function createProductProductionPlanV3(input: {
     ? 0
     : Math.floor(brief.productionBudget.maximumStorageBytes / activeMediaTaskCount)
 
+  // Increasing the Build lifetime envelope must create retry/aggregate
+  // headroom, not silently make every individual provider request larger.
+  // These baselines preserve the reviewed task ceilings of the 200k/528k
+  // flagship plan while the append-only ledger may admit the remaining Runs.
+  const textAdventureTaskOutputBaseline = Math.min(
+    brief.productionBudget.maximumOutputTokens,
+    200_000,
+  )
+  const textAdventureTaskInputBaseline = Math.min(
+    brief.productionBudget.maximumInputTokens,
+    528_000,
+  )
   const modelBudget = (taskKey: string) => reservation({
     modelCalls: 1,
     inputTokens: textAdventure && textAdventureInputWeights[taskKey] != null
-      ? Math.floor(brief.productionBudget.maximumInputTokens * textAdventureInputWeights[taskKey])
+      ? Math.floor(textAdventureTaskInputBaseline * textAdventureInputWeights[taskKey])
       : perInput,
     outputTokens: textAdventure
-      ? Math.floor(brief.productionBudget.maximumOutputTokens * textAdventureOutputWeights[taskKey])
+      ? Math.floor(textAdventureTaskOutputBaseline * textAdventureOutputWeights[taskKey])
       : perOutput,
     maximumCostUsd: perCost,
     durationMs: perDuration,

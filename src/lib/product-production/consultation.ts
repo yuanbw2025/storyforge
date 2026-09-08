@@ -386,11 +386,12 @@ export async function draftProductProductionBriefV3(input: {
   }
   if (textAdventure) unresolvedDecisionKeys.push(...unresolvedTextAdventureProductionBriefDecisionsV1(textAdventure))
   const productionModelCalls = textAdventure
-    // The current professional pipeline owns 31–32 model Runs depending on
-    // whether visual production is active. Forty-eight calls leave sixteen
-    // explicit recovery slots; structured specialist schemas commonly need
-    // more than one repair across a full commercial pipeline.
-    ? Math.max(48, 28 + textAdventure.narrative.targetSceneCount + scale.targetEndingCount)
+    // The professional pipeline owns 31–32 model Runs depending on visual
+    // production. A live full run consumed 41 attempts before the six bounded
+    // prose packets and three dialogue passes had finished, proving that the
+    // old 48-call envelope was not truthful. Sixty-four keeps one bounded
+    // recovery slot per specialist Run without permitting unbounded retries.
+    ? Math.max(64, 28 + textAdventure.narrative.targetSceneCount + scale.targetEndingCount)
     : 16
   const productionInputTokens = textAdventure
     ? Math.max(300_000, productionModelCalls * 16_000)
@@ -400,7 +401,11 @@ export async function draftProductProductionBriefV3(input: {
         100_000,
         scale.targetWordCount * 8 + 60_000,
         scale.targetPlayMinutes * 2_000 + 40_000,
-        200_000,
+        // Provider completion receipts include hidden reasoning. The 200k
+        // envelope was exhausted during act prose even though the visible
+        // story was still incomplete; 8k per admitted attempt is the measured
+        // commercial lifetime floor, not a per-response generation target.
+        productionModelCalls * 8_000,
       )
     : 60_000
   return parseProductProductionBriefV3({
