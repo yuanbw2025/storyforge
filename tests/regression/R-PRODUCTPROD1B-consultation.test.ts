@@ -105,7 +105,8 @@ describe('R-PRODUCTPROD-1B · consultation and reviewable Brief', () => {
       openingSituation: '从用户确认的潮门信号塔入口开始调查。',
     })
     expect(resolvedAdventure.unresolvedDecisionKeys).not.toContain('adventure-starting-location')
-    expect(resolvedAdventure.productionBudget.maximumOutputTokens).toBe(160_000)
+    expect(resolvedAdventure.productionBudget.maximumModelCalls).toBe(79)
+    expect(resolvedAdventure.productionBudget.maximumOutputTokens).toBe(632_000)
 
     const ttrpgWithoutConfirmation = await draftProductProductionBriefV3({
       scope: owned.scope, worldReleaseId: owned.release.id!, suggestionKey: mainline.suggestionKey,
