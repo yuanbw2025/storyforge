@@ -4380,7 +4380,8 @@ async function executeTextAdventureVisualQualityReviewTask(
   const visionImages: Parameters<ProductionVisionRunnerV1>[0]['images'] = []
   let carriedPriorReviewCount = 0
   for (const audited of auditedAssets) {
-    if (repairTargetKeys && !repairTargetKeys.has(audited.artifactKey)) {
+    if (repairTargetKeys && !repairTargetKeys.has(audited.artifactKey)
+      && audited.requirementBinding !== 'revalidated-reuse') {
       const prior = priorReviewByKey.get(audited.artifactKey)
       if (!prior || prior.contentHash !== audited.contentHash
         || !['accept', 'not-applicable-text-fallback'].includes(prior.verdict)
