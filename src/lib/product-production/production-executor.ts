@@ -4485,14 +4485,19 @@ async function executeNarrativeIntegrationTask(
 ): Promise<ProductProductionTaskExecutionResultV1> {
   const startedAt = performance.now()
   const sceneInputs = parseTextAdventureSceneInputsV1(input, options.brief)
-  const dialoguePasses = sceneInputs.bundles.map((bundle, actIndex) => (
-    parseTextAdventureDialoguePassArtifactV1({
-      value: artifactPayload(input, `content.dialogue-pass.act-${actIndex + 1}`),
-      brief: options.brief,
-      cast: sceneInputs.cast,
-      bundles: [bundle],
-    })
-  ))
+  const dialoguePasses = sceneInputs.bundles.map((bundle, actIndex) => {
+    const artifactKey = `content.dialogue-pass.act-${actIndex + 1}`
+    try {
+      return parseTextAdventureDialoguePassArtifactV1({
+        value: artifactPayload(input, artifactKey),
+        brief: options.brief,
+        cast: sceneInputs.cast,
+        bundles: [bundle],
+      })
+    } catch (error) {
+      fail(`${artifactKey} 与当前场景包不兼容:${error instanceof Error ? error.message : String(error)}`)
+    }
+  })
   const revisedBundles = sceneInputs.bundles.flatMap((bundle, actIndex) => (
     applyTextAdventureDialoguePassV1({ bundles: [bundle], dialoguePass: dialoguePasses[actIndex] })
   ))
