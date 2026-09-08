@@ -1683,6 +1683,33 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
       'choices[0].unavailableReason<-null-as-omitted',
     ])
 
+    const dialogueReview = legalizeProductionModelProtocolDefaultsV1(
+      'content.dialogue-pass.act-3',
+      {
+        schema: 'provider.dialogue-review', version: 2, actKey: 'act.1',
+        reviewedCharacterCount: 2, reviewedBeatCount: 18, reviewedChoiceCount: 4,
+        beatReviews: [], choiceReviews: [],
+      },
+      {
+        dialogueReviewContract: {
+          actKey: 'act.3', reviewedCharacterCount: 3,
+          reviewedBeatCount: 34, reviewedChoiceCount: 6,
+        },
+      },
+    )
+    expect(dialogueReview.payload).toMatchObject({
+        schema: 'storyforge.text-adventure-dialogue-pass-artifact', version: 1, actKey: 'act.3',
+        reviewedCharacterCount: 3, reviewedBeatCount: 34, reviewedChoiceCount: 6,
+    })
+    expect(dialogueReview.defaultedFields).toEqual([
+      'schema<-frozen-dialogue-review-contract',
+      'version<-frozen-dialogue-review-contract',
+      'actKey<-frozen-dialogue-review-contract',
+      'reviewedCharacterCount<-frozen-dialogue-review-contract',
+      'reviewedBeatCount<-frozen-dialogue-review-contract',
+      'reviewedChoiceCount<-frozen-dialogue-review-contract',
+    ])
+
     const narrative = legalizeProductionModelProtocolDefaultsV1('content.narrative', {
       nodes: [{
         key: 'entry', kind: 'entry', title: '入口', summary: '开始。',

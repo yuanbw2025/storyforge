@@ -3265,7 +3265,7 @@ export const AGENT_SKILLS = [
     defaultForAgent: true,
     label: '文字冒险对白声音与知识边界审校',
     owner: 'text-adventure-dialogue-editor',
-    promptVersion: 'text-adventure-dialogue-pass-v1',
+    promptVersion: 'text-adventure-dialogue-pass-v2',
     executionMode: 'product-production',
     contextTaskKind: 'agent-prose',
     readToolNames: [],

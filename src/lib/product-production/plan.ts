@@ -45,7 +45,12 @@ export function textAdventureProductionBudgetFloorV1(
   // before the remaining prose/editing Runs could even be admitted. Reserve
   // one bounded recovery slot per model task: attempts remain capped per task,
   // while the Build ledger still rejects every call beyond this hard total.
-  const retryReserveSlots = Math.max(32, modelTaskCount)
+  // A complete flagship rehearsal consumed 64 calls before the final
+  // dialogue pass could be accepted, leaving continuity, media direction,
+  // visual QA and playtest planning unstarted. Reserve 1.5 recovery calls per
+  // specialist so the author-approved envelope can finish the whole team,
+  // rather than silently dropping late quality roles.
+  const retryReserveSlots = Math.max(48, Math.ceil(modelTaskCount * 1.5))
   const minimumModelCalls = modelTaskCount + retryReserveSlots
   return {
     modelTaskCount,

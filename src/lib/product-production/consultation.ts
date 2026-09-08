@@ -385,13 +385,26 @@ export async function draftProductProductionBriefV3(input: {
     unresolvedDecisionKeys.push(...unresolvedTtrpgProductionBriefDecisionsV2(ttrpg!))
   }
   if (textAdventure) unresolvedDecisionKeys.push(...unresolvedTextAdventureProductionBriefDecisionsV1(textAdventure))
+  const textAdventureModelTaskCount = textAdventure
+    ? (() => {
+        const baseScenesPerAct = Math.floor(textAdventure.narrative.targetSceneCount / 3)
+        const extraScenes = textAdventure.narrative.targetSceneCount % 3
+        const scenePacketCount = [0, 1, 2].reduce((sum, actIndex) => {
+          const sceneCount = baseScenesPerAct + (actIndex < extraScenes ? 1 : 0)
+          return sum + (sceneCount <= 1 ? 1 : 2)
+        }, 0)
+        return 25 + scenePacketCount + Number(media.imageCount > 0)
+      })()
+    : 0
   const productionModelCalls = textAdventure
-    // The professional pipeline owns 31–32 model Runs depending on visual
-    // production. A live full run consumed 41 attempts before the six bounded
-    // prose packets and three dialogue passes had finished, proving that the
-    // old 48-call envelope was not truthful. Sixty-four keeps one bounded
-    // recovery slot per specialist Run without permitting unbounded retries.
-    ? Math.max(64, 28 + textAdventure.narrative.targetSceneCount + scale.targetEndingCount)
+    // The professional pipeline owns 31–32 first-attempt model Runs. A live
+    // flagship rehearsal exhausted 64 calls before late quality roles began,
+    // so the governed default now reserves 1.5 bounded recovery calls per
+    // specialist, matching textAdventureProductionBudgetFloorV1.
+    ? Math.max(
+        textAdventureModelTaskCount + Math.max(48, Math.ceil(textAdventureModelTaskCount * 1.5)),
+        28 + textAdventure.narrative.targetSceneCount + scale.targetEndingCount,
+      )
     : 16
   const productionInputTokens = textAdventure
     ? Math.max(300_000, productionModelCalls * 16_000)

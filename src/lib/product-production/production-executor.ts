@@ -631,6 +631,12 @@ export function legalizeProductionModelProtocolDefaultsV1(
     }
     questScriptAbilityKeys?: readonly string[]
     sceneScriptModuleTitle?: string
+    dialogueReviewContract?: {
+      actKey: string
+      reviewedCharacterCount: number
+      reviewedBeatCount: number
+      reviewedChoiceCount: number
+    }
   } = {},
 ): ProductionModelProtocolLegalizationV1 {
   const defaultedFields: string[] = []
@@ -1442,6 +1448,31 @@ export function legalizeProductionModelProtocolDefaultsV1(
     })
     if (Object.prototype.hasOwnProperty.call(payload, 'choices')) {
       next.choices = normalizeChoices(payload.choices, 'choices')
+    }
+    return { payload: next, defaultedFields, discardedNullEntries, discardedUnregisteredStateFields }
+  }
+  if (textAdventureDialoguePassActIndex(taskKey) != null && options.dialogueReviewContract) {
+    const next: JsonRecord = { ...payload }
+    const usesOrdinalProtocol = [
+      payload.reviewedCharacterCount,
+      payload.reviewedBeatCount,
+      payload.reviewedChoiceCount,
+    ].some(value => value !== undefined)
+    if (!usesOrdinalProtocol) {
+      return { payload: next, defaultedFields, discardedNullEntries, discardedUnregisteredStateFields }
+    }
+    const frozenEnvelope: Readonly<Record<string, unknown>> = {
+      schema: 'storyforge.text-adventure-dialogue-pass-artifact',
+      version: 1,
+      actKey: options.dialogueReviewContract.actKey,
+      reviewedCharacterCount: options.dialogueReviewContract.reviewedCharacterCount,
+      reviewedBeatCount: options.dialogueReviewContract.reviewedBeatCount,
+      reviewedChoiceCount: options.dialogueReviewContract.reviewedChoiceCount,
+    }
+    for (const [field, value] of Object.entries(frozenEnvelope)) {
+      if (next[field] === value) continue
+      next[field] = value
+      defaultedFields.push(`${field}<-frozen-dialogue-review-contract`)
     }
     return { payload: next, defaultedFields, discardedNullEntries, discardedUnregisteredStateFields }
   }
@@ -2747,6 +2778,24 @@ async function executeModelTask(input: ProductProductionTaskExecutionInputV1, op
         return typeof storyBible.title === 'string' ? storyBible.title : undefined
       })()
     : undefined
+  const textAdventureDialogueSceneInputs = dialoguePassActIndex != null
+    ? parseTextAdventureSceneInputsV1(input, options.brief, [dialoguePassActIndex])
+    : null
+  const textAdventureDialogueReviewContract = textAdventureDialogueSceneInputs
+    ? (() => {
+        const bundle = textAdventureDialogueSceneInputs.bundles[0]
+        const dialogueBeats = [
+          ...bundle.scenes.flatMap(scene => scene.beats),
+          ...bundle.endings.flatMap(ending => ending.beats),
+        ].filter(beat => beat.kind === 'dialogue')
+        return {
+          actKey: bundle.actKey,
+          reviewedCharacterCount: new Set(dialogueBeats.map(beat => beat.speakerKey)).size,
+          reviewedBeatCount: dialogueBeats.length,
+          reviewedChoiceCount: bundle.choices.length,
+        }
+      })()
+    : undefined
   const system = textSystem(
     input.task.taskKey,
     options.brief,
@@ -2806,6 +2855,7 @@ async function executeModelTask(input: ProductProductionTaskExecutionInputV1, op
     questScriptIdentityPlan: textAdventureQuestScriptIdentityPlan,
     questScriptAbilityKeys: textAdventureSystemAbilityKeys,
     sceneScriptModuleTitle: textAdventureSceneScriptModuleTitle,
+    dialogueReviewContract: textAdventureDialogueReviewContract,
   })
   const raw = legalized.payload
   let payload: unknown
@@ -3086,7 +3136,8 @@ async function executeModelTask(input: ProductProductionTaskExecutionInputV1, op
       endingCount: bundle.endings.length,
     }
   } else if (dialoguePassActIndex != null) {
-    const sceneInputs = parseTextAdventureSceneInputsV1(input, options.brief, [dialoguePassActIndex])
+    const sceneInputs = textAdventureDialogueSceneInputs
+      ?? parseTextAdventureSceneInputsV1(input, options.brief, [dialoguePassActIndex])
     const dialoguePass = parseTextAdventureDialoguePassArtifactV1({
       value: raw,
       brief: options.brief,
