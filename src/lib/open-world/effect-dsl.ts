@@ -589,10 +589,13 @@ function applyDefinitions(
         const field = payload.resource === 'health' ? 'health' : 'skillResource'
         const maximum = payload.resource === 'health' ? state.player.maximumHealth : state.player.maximumSkillResource
         const before = state.player[field]
-        const after = before + payload.amount
-        if (after < 0 || after > maximum) fail(`${effect.key}会让${payload.resource}越界`)
+        const requestedAfter = before + payload.amount
+        if (requestedAfter < 0) fail(`${effect.key}会让${payload.resource}越界`)
+        const after = payload.amount > 0 ? Math.min(maximum, requestedAfter) : requestedAfter
+        if (after > maximum) fail(`${effect.key}会让${payload.resource}越界`)
+        const appliedAmount = after - before
         state.player[field] = after
-        record(changes, effect, `玩家${payload.resource}变化${payload.amount}`, before, after)
+        record(changes, effect, `玩家${payload.resource}变化${appliedAmount}${appliedAmount !== payload.amount ? '（已按上限封顶）' : ''}`, before, after)
         break
       }
       case 'grant-experience': {

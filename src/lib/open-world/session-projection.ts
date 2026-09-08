@@ -25,6 +25,7 @@ import {
   createInitialTextOpenWorldInventoryV1,
   deriveTextOpenWorldEquippedItemKeysV1,
   deriveTextOpenWorldInventoryQuantitiesV1,
+  deriveTextOpenWorldRemovableInventoryQuantitiesV1,
 } from './inventory'
 import { deriveTextOpenWorldPlayerStatsFromModulesV1 } from './player-stats'
 import { deriveTextOpenWorldProgressionStatusV1 } from './progression'
@@ -61,6 +62,36 @@ function enumToken<T extends string>(value: unknown, allowed: readonly T[], labe
 function nullableToken(value: unknown, label: string, pattern = STABLE_KEY): string | null { return value == null ? null : token(value, label, pattern) }
 function uniqueTokens(value: unknown, label: string, pattern = STABLE_KEY): string[] { if (!Array.isArray(value)) fail(`${label}必须是数组`); const parsed = value.map((item, index) => token(item, `${label}[${index}]`, pattern)); if (new Set(parsed).size !== parsed.length) fail(`${label}不能重复`); return parsed }
 function json(event: ProductRuntimeEvent): unknown { try { return JSON.parse(event.payloadJson) } catch { fail(`事件${event.sequence}不是合法JSON`) } }
+
+function assertTextOpenWorldItemActionReplayBindingV1(input: {
+  action: TextOpenWorldParsedModulesV1['actions']['actions'][number]
+  effects: TextOpenWorldEffectDefinitionV1[]
+  pendingActorKey: 'player' | 'system' | null
+  pendingTargetKey: string | null
+}): void {
+  const category = input.action.category
+  if (!['use', 'drop', 'equip', 'unequip'].includes(category)) return
+  const ownedEffectKeys = new Set([
+    ...input.action.costEffectKeys,
+    ...input.action.successEffectKeys,
+    ...input.action.failureEffectKeys,
+  ])
+  const candidates = input.effects.filter(effect => {
+    if (!ownedEffectKeys.has(effect.key)) return false
+    if (category === 'use') return effect.operation === 'remove-item' && effect.payload.reason === 'consume'
+    if (category === 'drop') return effect.operation === 'remove-item' && effect.payload.reason === 'drop'
+    return effect.operation === `${category}-item`
+  })
+  if (candidates.length !== 1) fail('物品Action缺少唯一固定物品Effect')
+  const candidate = candidates[0]!
+  const itemKey = candidate.operation === 'remove-item' || candidate.operation === 'equip-item' || candidate.operation === 'unequip-item'
+    ? candidate.payload.itemKey
+    : fail('物品Action固定Effect类型无效')
+  if (input.pendingActorKey !== 'player' || input.action.actorScope !== 'player'
+    || input.action.targetScope !== 'item' || input.pendingTargetKey !== itemKey) {
+    fail('物品Action与命令操作者或目标不一致')
+  }
+}
 
 function timePeriodKey(modules: TextOpenWorldParsedModulesV1, worldMinute: number): string {
   const minute = worldMinute % modules['time-weather'].minutesPerDay
@@ -712,6 +743,16 @@ export function applyTextOpenWorldSessionEventV1(current: TextOpenWorldSessionPr
       const expectedEffectKeys = [...new Set([...action.costEffectKeys, ...outcomeEffectKeys])]
       if (canonicalProductProductionJsonV2(applied.plan.effectKeys) !== canonicalProductProductionJsonV2(expectedEffectKeys)) fail('EffectPlan与命令Action不一致')
       if (applied.plan.effectKeys.some(effectKey => dropEffectKeys.has(effectKey))) fail('掉落Effect缺少RewardContract授权')
+      if (['use', 'drop', 'equip', 'unequip'].includes(action.category)) {
+        assertTextOpenWorldItemActionReplayBindingV1({
+          action,
+          effects: modules.actions.effects,
+          pendingActorKey: projection.protocol.pendingActorKey === 'player' || projection.protocol.pendingActorKey === 'system'
+            ? projection.protocol.pendingActorKey
+            : projection.protocol.pendingActorKey === null ? null : fail('物品Action命令操作者无效'),
+          pendingTargetKey: projection.protocol.pendingTargetKey,
+        })
+      }
       const actorStateEffect = applied.plan.effects.find((effect): effect is Extract<TextOpenWorldEffectDefinitionV1, { operation: 'change-actor-state' }> => effect.operation === 'change-actor-state')
       if (actorStateEffect) {
         if (projection.protocol.pendingTargetKey !== actorStateEffect.payload.actorKey || action.targetScope !== 'actor') fail('Actor状态Effect与命令目标不一致')
@@ -756,6 +797,7 @@ export function deriveTextOpenWorldContextsV1(value: TextOpenWorldSessionProject
   })
   const progression = deriveTextOpenWorldProgressionStatusV1(modules, state.player.experience)
   const inventoryQuantities = deriveTextOpenWorldInventoryQuantitiesV1(modules, state.inventory)
+  const removableInventoryQuantities = deriveTextOpenWorldRemovableInventoryQuantitiesV1(modules, state.inventory)
   const questCondition = deriveTextOpenWorldQuestConditionProjectionV1(modules, state.quests)
   const condition: TextOpenWorldConditionEvaluationContextV1 = {
     player: {
@@ -797,6 +839,7 @@ export function deriveTextOpenWorldContextsV1(value: TextOpenWorldSessionProject
       : {},
     knownRecipeKeys: [...state.inventory.knownRecipeKeys],
     inventoryQuantities: structuredClone(inventoryQuantities),
+    removableInventoryQuantities: structuredClone(removableInventoryQuantities),
     conditionResults: Object.fromEntries(Object.entries(evaluations).map(([key, result]) => [key, { satisfied: result.satisfied, publicReason: result.publicReason }])),
     openEdgeKeys: [...state.map.openEdgeKeys],
     unlockedFastTravelPointKeys: [...state.map.unlockedFastTravelPointKeys],

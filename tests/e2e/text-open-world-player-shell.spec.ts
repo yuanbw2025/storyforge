@@ -15,9 +15,18 @@ test('文字开放世界玩家壳在桌面三栏与移动五入口之间保持�
       importer('/storyforge/tests/helpers/text-open-world-product-session.ts'),
       importer('/storyforge/tests/helpers/text-open-world-vnext-fixture.ts'),
     ])
+    const textOpenWorldVNext = createTextOpenWorldVNextFixture()
+    const actors = textOpenWorldVNext.modules.actors.payload as {
+      player: { build: { startingItemKeys: string[] } }
+    }
+    actors.player.build.startingItemKeys.push(
+      'item.brine-tonic',
+      'item.salt-crystal',
+      'item.canal-seal',
+    )
     const created = await createGovernedTextOpenWorldSessionFixtureV1({
       name: '浏览器文字开放世界壳验收',
-      textOpenWorldVNext: createTextOpenWorldVNextFixture(),
+      textOpenWorldVNext,
       runtimeShape: 'vnext-only',
       title: '盐脊浏览器存档',
       seed: 'browser-open-world-shell',
@@ -155,6 +164,72 @@ test('文字开放世界玩家壳在桌面三栏与移动五入口之间保持�
   })
   expect(characterStateAfter).toBe(characterStateBefore)
 
+  await left.getByRole('button', { name: '更多', exact: true }).click()
+  await expect(main).toHaveAttribute('data-open-world-view', 'more')
+  const inventoryPanel = page.getByTestId('text-open-world-inventory-panel')
+  await expect(inventoryPanel).toBeVisible()
+  await expect(inventoryPanel.getByTestId('text-open-world-inventory-summary')).toContainText('种类4')
+  await expect(inventoryPanel.getByTestId('text-open-world-inventory-summary')).toContainText('总数量4')
+  await expect(inventoryPanel.getByTestId('text-open-world-inventory-summary')).toContainText('已装备0/3')
+  await expect(inventoryPanel.getByTestId('text-open-world-inventory-summary')).toContainText('盐票20')
+  await expect(inventoryPanel).not.toContainText(/(?:action|condition|effect|instance|item)\./)
+  await expect(inventoryPanel).not.toContainText('world-release:')
+
+  const inventoryStateBeforeUiOnly = await page.evaluate(async () => {
+    const importer = new Function('path', 'return import(path)') as (path: string) => Promise<any>
+    const { useTextOpenWorldPlayerStore } = await importer('/storyforge/src/stores/text-open-world-player.ts')
+    const state = useTextOpenWorldPlayerStore.getState()
+    return JSON.stringify({ runtimeState: state.runtimeState, events: state.events })
+  })
+  const inventorySearch = inventoryPanel.getByRole('searchbox', { name: '搜索背包' })
+  await inventorySearch.fill('守渠印')
+  await expect(inventoryPanel.getByTestId('text-open-world-inventory-detail')).toContainText('关键物品受到保护')
+  await expect(inventoryPanel.getByTestId('text-open-world-inventory-detail')).toContainText('不能出售')
+  await inventoryPanel.getByRole('button', { name: '材料 1', exact: true }).click()
+  await expect(inventoryPanel).toContainText('没有符合当前筛选的物品')
+  await inventoryPanel.getByRole('button', { name: '清除筛选', exact: true }).click()
+  await inventoryPanel.getByRole('combobox', { name: '背包排序' }).selectOption('base-value')
+  const inventoryStateAfterUiOnly = await page.evaluate(async () => {
+    const importer = new Function('path', 'return import(path)') as (path: string) => Promise<any>
+    const { useTextOpenWorldPlayerStore } = await importer('/storyforge/src/stores/text-open-world-player.ts')
+    const state = useTextOpenWorldPlayerStore.getState()
+    return JSON.stringify({ runtimeState: state.runtimeState, events: state.events })
+  })
+  expect(inventoryStateAfterUiOnly).toBe(inventoryStateBeforeUiOnly)
+
+  await inventorySearch.fill('盐露药剂')
+  const tonicDetail = inventoryPanel.getByTestId('text-open-world-inventory-detail')
+  await expect(tonicDetail).toContainText('盐露药剂')
+  await expect(tonicDetail.getByRole('button', { name: '使用盐露药剂', exact: true })).toBeDisabled()
+  await expect(tonicDetail).toContainText('生命已经满了')
+
+  await inventorySearch.fill('盐晶')
+  const saltDetail = inventoryPanel.getByTestId('text-open-world-inventory-detail')
+  await expect(saltDetail).toContainText('需前往商店交易')
+  await saltDetail.getByRole('button', { name: '丢弃盐晶', exact: true }).click()
+  const dropConfirmation = page.getByRole('alertdialog', { name: '确认高风险行动' })
+  await expect(dropConfirmation).toBeVisible()
+  await expect(dropConfirmation).toContainText('丢弃盐晶')
+  await dropConfirmation.getByRole('button', { name: '确认执行', exact: true }).click()
+  await expect(dropConfirmation).toBeHidden()
+  await expect(inventoryPanel).toContainText('没有符合当前筛选的物品')
+  await expect(inventoryPanel.getByTestId('text-open-world-inventory-feedback')).toContainText('丢弃盐晶')
+
+  await inventoryPanel.getByRole('button', { name: '清除筛选', exact: true }).click()
+  await inventoryPanel.getByRole('button', { name: '装备', exact: true }).click()
+  const equipmentView = inventoryPanel.getByTestId('text-open-world-equipment-view')
+  await expect(equipmentView.getByTestId('text-open-world-equipment-slot')).toHaveCount(3)
+  const weaponSlot = equipmentView.getByLabel('武器候选装备')
+  await expect(weaponSlot).toContainText('旧盐刀')
+  await weaponSlot.getByText('查看装备后的旧值、新值与差值', { exact: true }).click()
+  await expect(weaponSlot.locator('tr[data-change-direction="increase"]').filter({ hasText: '攻击' })).toContainText('+2')
+  await weaponSlot.getByRole('button', { name: '装备旧盐刀', exact: true }).click()
+  await expect(equipmentView.getByLabel('武器当前装备')).toContainText('旧盐刀')
+  await expect(inventoryPanel.getByTestId('text-open-world-inventory-summary')).toContainText('已装备1/3')
+
+  await page.getByRole('button', { name: '返回当前场景', exact: true }).click()
+  await expect(main).toHaveAttribute('data-open-world-view', 'scene')
+
   const timelineBeforeConfirmation = await page.getByTestId('text-open-world-global-status').textContent()
   const riskyAction = page.locator('button').filter({ hasText: '偷取盐露药剂' }).first()
   const underlyingAction = page.locator('button').filter({ hasText: '休息' }).first()
@@ -223,6 +298,24 @@ test('文字开放世界玩家壳在桌面三栏与移动五入口之间保持�
   await characterStatuses.scrollIntoViewIfNeeded()
   await expect(characterStatuses).toBeVisible()
   await expect(characterStatuses).toContainText('当前没有持续状态')
+
+  await mobileNavigation.getByRole('button', { name: '更多', exact: true }).click()
+  await expect(main).toHaveAttribute('data-open-world-view', 'more')
+  await expect(inventoryPanel).toBeVisible()
+  await inventoryPanel.getByRole('button', { name: '背包', exact: true }).click()
+  await expect(inventoryPanel.getByTestId('text-open-world-inventory-list')).toBeVisible()
+  const mobileInventoryColumns = await page.evaluate(() => {
+    const list = document.querySelector<HTMLElement>('[aria-label="背包列表"]')!.getBoundingClientRect()
+    const detail = document.querySelector<HTMLElement>('[data-testid="text-open-world-inventory-detail"]')!
+      .getBoundingClientRect()
+    return {
+      list: { left: list.left, right: list.right, bottom: list.bottom },
+      detail: { left: detail.left, right: detail.right, top: detail.top },
+    }
+  })
+  expect(Math.abs(mobileInventoryColumns.list.left - mobileInventoryColumns.detail.left)).toBeLessThanOrEqual(1)
+  expect(Math.abs(mobileInventoryColumns.list.right - mobileInventoryColumns.detail.right)).toBeLessThanOrEqual(1)
+  expect(mobileInventoryColumns.detail.top).toBeGreaterThanOrEqual(mobileInventoryColumns.list.bottom - 1)
 
   await page.getByRole('button', { name: '打开当前位置上下文', exact: true }).click()
   await expect(right).toBeVisible()

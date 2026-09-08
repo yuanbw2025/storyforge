@@ -29,6 +29,34 @@ export function deriveTextOpenWorldInventoryQuantitiesV1(modules: TextOpenWorldP
   return quantities
 }
 
+/**
+ * Quantity that can be removed without first changing equipment state.
+ *
+ * This is deliberately derived from the authoritative inventory projection and
+ * never persisted.  Stacked items are always removable; instanced items exclude
+ * every instance currently occupying an equipment slot.  Action projection and
+ * item UI use the same value so an equipped unique item cannot be advertised as
+ * immediately consumable, droppable or sellable and then fail during Effect
+ * application.
+ */
+export function deriveTextOpenWorldRemovableInventoryQuantitiesV1(
+  modules: TextOpenWorldParsedModulesV1,
+  inventory: Inventory,
+): Record<string, number> {
+  const equippedInstanceIds = new Set(Object.values(inventory.equippedItemInstanceIdBySlot)
+    .filter((value): value is string => value != null))
+  const quantities: Record<string, number> = {}
+  for (const item of modules.items.items) {
+    const quantity = item.stackPolicy === 'stacked'
+      ? inventory.stackQuantities[item.key] ?? 0
+      : Object.entries(inventory.itemInstances).filter(([instanceId, instance]) => (
+          instance.itemKey === item.key && !equippedInstanceIds.has(instanceId)
+        )).length
+    if (quantity > 0) quantities[item.key] = quantity
+  }
+  return quantities
+}
+
 export function deriveTextOpenWorldEquippedItemKeysV1(modules: TextOpenWorldParsedModulesV1, inventory: Inventory): EquipmentSlots {
   const slots = inventory.equippedItemInstanceIdBySlot
   const actual = Object.keys(slots).sort().join(',')
@@ -47,16 +75,23 @@ export function createTextOpenWorldInventoryCatalogV1(runtimePackage: TextOpenWo
   const itemByKey = new Map(modules.items.items.map(item => [item.key, item]))
   const project = (inventory: Inventory) => {
     const quantities = deriveTextOpenWorldInventoryQuantitiesV1(modules, inventory)
+    const removableQuantities = deriveTextOpenWorldRemovableInventoryQuantitiesV1(modules, inventory)
     return Object.entries(quantities).map(([itemKey, quantity]) => {
       const item = itemByKey.get(itemKey) ?? fail(`库存引用未知物品:${itemKey}`)
+      const removableQuantity = removableQuantities[itemKey] ?? 0
       const instances = Object.entries(inventory.itemInstances).filter(([, instance]) => instance.itemKey === itemKey)
         .map(([itemInstanceId, instance]) => ({
           itemInstanceId, ...structuredClone(instance),
           equippedSlotKey: Object.entries(inventory.equippedItemInstanceIdBySlot).find(([, equippedId]) => equippedId === itemInstanceId)?.[0] ?? null,
         }))
       return {
-        key: itemKey, item: structuredClone(item), quantity, instances,
-        actions: { usable: item.consumable, droppable: item.droppable, sellable: item.sellable, equipable: item.kind === 'equipment' },
+        key: itemKey, item: structuredClone(item), quantity, removableQuantity, instances,
+        actions: {
+          usable: item.consumable && removableQuantity > 0,
+          droppable: item.droppable && removableQuantity > 0,
+          sellable: item.sellable && removableQuantity > 0,
+          equipable: item.kind === 'equipment' && removableQuantity > 0,
+        },
       }
     })
   }

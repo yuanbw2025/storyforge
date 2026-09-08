@@ -1295,10 +1295,24 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
   requireRefs(strings(build.startingItemKeys, 'actors.player.build.startingItemKeys'), itemKeys, 'player starting item')
   itemRows.filter(item => item.useActionKey != null).forEach(item => {
     const action = actionRows.find(candidate => candidate.key === item.useActionKey) ?? fail(`物品useAction不存在:${String(item.key)}`)
-    const removeEffects = strings(action.costEffectKeys, `item ${String(item.key)} use cost effects`).map(effectKey => effects.find(effect => effect.key === effectKey)!)
+    const costEffectKeys = strings(action.costEffectKeys, `item ${String(item.key)} use cost effects`)
+    const ownedEffects = [
+      ...costEffectKeys,
+      ...strings(action.successEffectKeys, `item ${String(item.key)} use success effects`),
+      ...strings(action.failureEffectKeys, `item ${String(item.key)} use failure effects`),
+    ].map(effectKey => effects.find(effect => effect.key === effectKey)!)
+    const removeEffects = costEffectKeys.map(effectKey => effects.find(effect => effect.key === effectKey)!)
       .filter(effect => effect.operation === 'remove-item' && row(effect.payload, `item ${String(item.key)} remove payload`).reason === 'consume')
-    if (action.category !== 'use' || action.targetScope !== 'item' || removeEffects.length !== 1
-      || row(removeEffects[0].payload, `item ${String(item.key)} consume payload`).itemKey !== item.key) fail(`物品${String(item.key)}的useAction没有消费自身`)
+    const allRemoveEffects = ownedEffects
+      .filter(effect => effect.operation === 'remove-item' && row(effect.payload, `item ${String(item.key)} owned remove payload`).reason === 'consume')
+    const consumePayload = removeEffects.length === 1
+      ? row(removeEffects[0].payload, `item ${String(item.key)} consume payload`)
+      : null
+    if (action.category !== 'use' || action.actorScope !== 'player' || action.targetScope !== 'item'
+      || removeEffects.length !== 1 || allRemoveEffects.length !== 1
+      || consumePayload?.itemKey !== item.key || consumePayload?.quantity !== 1) {
+      fail(`物品${String(item.key)}的useAction必须由玩家固定消费一件自身`)
+    }
     requireSameKeys(strings(action.successEffectKeys, `item ${String(item.key)} use success effects`), strings(item.effectKeys, `item ${String(item.key)} effects`), `item ${String(item.key)} use effects`)
   })
   itemRows.filter(item => item.kind === 'equipment').forEach(item => {
@@ -1308,7 +1322,7 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
       const successEffects = strings(action.successEffectKeys, `item ${String(item.key)} ${mode} success effects`)
         .map(effectKey => effects.find(effect => effect.key === effectKey)!)
       const equipmentEffects = successEffects.filter(effect => effect.operation === `${mode}-item`)
-      if (action.category !== mode || action.targetScope !== 'item' || strings(action.costEffectKeys, `item ${String(item.key)} ${mode} costs`).length
+      if (action.category !== mode || action.actorScope !== 'player' || action.targetScope !== 'item' || strings(action.costEffectKeys, `item ${String(item.key)} ${mode} costs`).length
         || strings(action.failureEffectKeys, `item ${String(item.key)} ${mode} failures`).length || successEffects.length !== 1
         || equipmentEffects.length !== 1 || row(equipmentEffects[0].payload, `item ${String(item.key)} ${mode} payload`).itemKey !== item.key
         || action.confirmationPolicy !== 'never' || action.repeatPolicy !== 'repeatable') fail(`物品${String(item.key)}的${mode}Action不符合装备事务`)
@@ -1322,12 +1336,25 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
   })
   actionRows.filter(action => action.category === 'drop' || (!economyActionModule && action.category === 'sell')).forEach(action => {
     const reason = action.category === 'drop' ? 'drop' : 'sell'
-    const removal = strings(action.costEffectKeys, `item action ${String(action.key)} cost effects`).map(effectKey => effects.find(effect => effect.key === effectKey)!)
+    const costEffectKeys = strings(action.costEffectKeys, `item action ${String(action.key)} cost effects`)
+    const removal = costEffectKeys.map(effectKey => effects.find(effect => effect.key === effectKey)!)
       .filter(effect => effect.operation === 'remove-item' && row(effect.payload, `item action ${String(action.key)} payload`).reason === reason)
-    if (action.targetScope !== 'item' || removal.length !== 1) fail(`物品Action没有唯一${reason}移除Effect:${String(action.key)}`)
-    const itemKey = key(row(removal[0].payload, `item action ${String(action.key)} removal`).itemKey, `item action ${String(action.key)} itemKey`)
+    const allRemoval = [
+      ...costEffectKeys,
+      ...strings(action.successEffectKeys, `item action ${String(action.key)} success effects`),
+      ...strings(action.failureEffectKeys, `item action ${String(action.key)} failure effects`),
+    ].map(effectKey => effects.find(effect => effect.key === effectKey)!)
+      .filter(effect => effect.operation === 'remove-item'
+        && row(effect.payload, `item action ${String(action.key)} owned payload`).reason === reason)
+    if (action.targetScope !== 'item' || removal.length !== 1 || allRemoval.length !== 1) fail(`物品Action没有唯一${reason}移除Effect:${String(action.key)}`)
+    const removalPayload = row(removal[0].payload, `item action ${String(action.key)} removal`)
+    const itemKey = key(removalPayload.itemKey, `item action ${String(action.key)} itemKey`)
     const definition = itemRows.find(item => item.key === itemKey) ?? fail(`物品Action引用不存在:${itemKey}`)
     if ((reason === 'drop' && definition.droppable !== true) || (reason === 'sell' && definition.sellable !== true)) fail(`物品Action违反${reason}保护:${itemKey}`)
+    if (reason === 'drop' && (action.actorScope !== 'player' || removalPayload.quantity !== 1
+      || action.confirmationPolicy !== 'always')) {
+      fail(`丢弃Action必须由玩家固定移除一件并二次确认:${String(action.key)}`)
+    }
   })
 
   const combat = versioned(packageValue, 'combat', [1, 2, 3])

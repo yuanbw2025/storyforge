@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Backpack, Bell, GitBranch, Save, Swords } from 'lucide-react'
-import { createTextOpenWorldInventoryCatalogV1 } from '../../lib/open-world/inventory'
+import { Bell, GitBranch, Save, Swords } from 'lucide-react'
 import { deriveTextOpenWorldLifeProjectionV1 } from '../../lib/open-world/life-cycle'
 import { parseTextOpenWorldModulesV1 } from '../../lib/open-world/modules'
 import { projectTextOpenWorldPlayerHudV1 } from '../../lib/open-world/player-hud'
@@ -17,8 +16,8 @@ import {
 } from '../../stores/text-open-world-player'
 import TextOpenWorldActorsPanel from './TextOpenWorldActorsPanel'
 import TextOpenWorldCharacterPanel from './TextOpenWorldCharacterPanel'
-import TextOpenWorldEquipmentPanel from './TextOpenWorldEquipmentPanel'
 import TextOpenWorldGameShell from './TextOpenWorldGameShell'
+import TextOpenWorldInventoryPanel from './TextOpenWorldInventoryPanel'
 import TextOpenWorldMapPanel, { type TextOpenWorldMapTravelRequestV1 } from './TextOpenWorldMapPanel'
 import TextOpenWorldQuestLogPanel from './TextOpenWorldQuestLogPanel'
 import TextOpenWorldRelationshipsPanel from './TextOpenWorldRelationshipsPanel'
@@ -187,7 +186,6 @@ export default function TextOpenWorldVNextPlayer() {
   const respawnAction = availableActions.find(action => action.action.category === 'respawn')
   const location = modules.world.locations.find(item => item.key === state.map.currentLocationKey)
   const region = modules.world.regions.find(item => item.key === location?.regionKey)
-  const inventory = createTextOpenWorldInventoryCatalogV1(runtimePackage).project(state.inventory)
   const derived = deriveTextOpenWorldContextsV1(projection)
 
   const run = async (operation: () => Promise<unknown>) => {
@@ -327,24 +325,16 @@ export default function TextOpenWorldVNextPlayer() {
   const characterView = <TextOpenWorldCharacterPanel projection={projection} />
 
   const moreView = <div className="space-y-3">
-    <TextOpenWorldEquipmentPanel
-      runtimePackage={runtimePackage}
-      state={state}
-      actions={availableActions}
+    <TextOpenWorldInventoryPanel
+      sessionKey={sessionKey}
+      projection={projection}
       busy={store.busy}
+      feedback={store.lastFeedback}
       onExecute={(actionKey, itemKey) => {
-        void run(() => store.executeVNextAction(actionKey, itemKey))
+        const action = projectedActions.find(item => item.action.key === actionKey)
+        if (action) executeProjectedAction(action, itemKey)
       }}
     />
-    <article className="rounded border border-border bg-bg-surface p-4">
-      <div className="mb-2 flex items-center gap-2 text-sm font-semibold">
-        <Backpack className="h-4 w-4 text-accent" />背包
-      </div>
-      {inventory.map(({ item, key, quantity }) => <div key={key} className="flex justify-between text-xs">
-        <span>{item?.title ?? key}</span><strong>×{quantity}</strong>
-      </div>)}
-      {!inventory.length && <p className="text-xs text-text-muted">背包为空。</p>}
-    </article>
     <TextOpenWorldRelationshipsPanel runtimePackage={runtimePackage} state={state} />
     <article className="rounded border border-border bg-bg-surface p-4">
       <div className="mb-2 flex items-center gap-2 text-sm font-semibold">

@@ -217,7 +217,7 @@ describe('Text Open World G4 · 真实 vNext 玩家壳集成', () => {
     const more = viewSection(main, 'more')
     expect(shell.getAttribute('data-active-view')).toBe('more')
     expect(more.hidden).toBe(false)
-    expect(more.querySelector('[data-testid="text-open-world-equipment"]')).toBeTruthy()
+    expect(more.querySelector('[data-testid="text-open-world-inventory-panel"]')).toBeTruthy()
     expect(more.querySelector('[data-testid="text-open-world-relationships"]')).toBeTruthy()
     expect(more.textContent).toContain('背包')
     expect(more.textContent).toContain('存档与分支')

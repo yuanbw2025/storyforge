@@ -437,6 +437,109 @@ function action(input: Partial<TextOpenWorldActionDefinitionV1> & Pick<TextOpenW
   }
 }
 
+export type TextOpenWorldQuestFinalizeRuntimeItemInputV1 = Pick<
+  TextOpenWorldItemRewardCatalogV1['items'][number],
+  'key' | 'title' | 'description' | 'kind' | 'consumable' | 'critical' | 'droppable'
+>
+
+export interface TextOpenWorldQuestFinalizeItemRuntimeContractV1 {
+  conditions: TextOpenWorldConditionDefinitionV1[]
+  effects: TextOpenWorldEffectDefinitionV1[]
+  actions: TextOpenWorldActionDefinitionV1[]
+  binding: TextOpenWorldQuestDesignDocumentsV1['catalogBindings']['items'][number]
+}
+
+/** Deterministic P8F item contract. No model-authored Action/Condition/Effect is accepted here. */
+export function compileTextOpenWorldQuestFinalizeItemRuntimeContractV1(
+  item: TextOpenWorldQuestFinalizeRuntimeItemInputV1,
+): TextOpenWorldQuestFinalizeItemRuntimeContractV1 {
+  const conditions: TextOpenWorldConditionDefinitionV1[] = []
+  const effects: TextOpenWorldEffectDefinitionV1[] = []
+  const actions: TextOpenWorldActionDefinitionV1[] = []
+  let useActionKey: string | null = null
+  let equipActionKey: string | null = null
+  let unequipActionKey: string | null = null
+  const equipConditionKeys: string[] = []
+  const itemEffectKeys: string[] = []
+
+  if (item.consumable) {
+    useActionKey = `action.use.${item.key}`
+    const usableCondition = `condition.use.${item.key}.health-below-maximum`
+    const consume = `effect.use.${item.key}.consume`
+    const restore = `effect.use.${item.key}.restore`
+    conditions.push({
+      key: usableCondition,
+      expression: { op: 'player-resource-below-maximum', resource: 'health' },
+      failureMessage: '生命已经满了。',
+    })
+    effects.push(
+      { key: consume, operation: 'remove-item', payload: { itemKey: item.key, quantity: 1, reason: 'consume' } },
+      { key: restore, operation: 'change-player-resource', payload: { resource: 'health', amount: 10 } },
+    )
+    itemEffectKeys.push(restore)
+    actions.push(
+      action({
+        key: useActionKey, category: 'use', label: `使用${item.title}`, description: item.description,
+        targetScope: 'item', requirementConditionKeys: [usableCondition], costEffectKeys: [consume], successEffectKeys: [restore],
+      }),
+      action({
+        key: `action.combat.item.${item.key}`, category: 'combat-item', label: `战斗中使用${item.title}`, description: item.description,
+        targetScope: 'item', requirementConditionKeys: [usableCondition], costEffectKeys: [consume],
+        successEffectKeys: [restore, `effect.combat.item.${item.key}`],
+      }),
+    )
+    effects.push({
+      key: `effect.combat.item.${item.key}`,
+      operation: 'perform-combat-action',
+      payload: { kind: 'item', skillKey: null, itemKey: item.key },
+    })
+  }
+
+  if (item.kind === 'equipment') {
+    equipActionKey = `action.equip.${item.key}`
+    unequipActionKey = `action.unequip.${item.key}`
+    const equipCondition = `condition.equip.${item.key}.not-equipped`
+    const unequipCondition = `condition.unequip.${item.key}.equipped`
+    const equip = `effect.equip.${item.key}`
+    const unequip = `effect.unequip.${item.key}`
+    equipConditionKeys.push(equipCondition)
+    conditions.push(
+      { key: equipCondition, expression: { op: 'inventory-equipped', itemKey: item.key, equipped: false }, failureMessage: '该物品已经装备。' },
+      { key: unequipCondition, expression: { op: 'inventory-equipped', itemKey: item.key, equipped: true }, failureMessage: '该物品当前未装备。' },
+    )
+    effects.push(
+      { key: equip, operation: 'equip-item', payload: { itemKey: item.key } },
+      { key: unequip, operation: 'unequip-item', payload: { itemKey: item.key } },
+    )
+    actions.push(
+      action({
+        key: equipActionKey, category: 'equip', label: `装备${item.title}`, description: item.description,
+        targetScope: 'item', requirementConditionKeys: [equipCondition], successEffectKeys: [equip],
+      }),
+      action({
+        key: unequipActionKey, category: 'unequip', label: `卸下${item.title}`, description: item.description,
+        targetScope: 'item', requirementConditionKeys: [unequipCondition], successEffectKeys: [unequip],
+      }),
+    )
+  }
+
+  if (item.droppable && !item.critical) {
+    const remove = `effect.drop.${item.key}.remove`
+    effects.push({ key: remove, operation: 'remove-item', payload: { itemKey: item.key, quantity: 1, reason: 'drop' } })
+    actions.push(action({
+      key: `action.drop.${item.key}`, category: 'drop', label: `丢弃${item.title}`,
+      description: `从背包中丢弃一件${item.title}。`, targetScope: 'item', costEffectKeys: [remove], confirmationPolicy: 'always',
+    }))
+  }
+
+  return {
+    conditions,
+    effects,
+    actions,
+    binding: { itemKey: item.key, useActionKey, equipActionKey, unequipActionKey, equipConditionKeys, effectKeys: itemEffectKeys },
+  }
+}
+
 function questUnlockCondition(input: {
   quest: TextOpenWorldQuestSkeletonsV1['quests'][number]
   context: TextOpenWorldQuestFinalizeInputContextV1
@@ -669,28 +772,11 @@ async function createArtifacts(input: {
   addAction(action({ key: 'action.combat.escape', category: 'escape', label: '逃跑', description: '尝试离开当前战斗。', successEffectKeys: [escapeMarker] }))
 
   const itemBindings: TextOpenWorldQuestDesignDocumentsV1['catalogBindings']['items'] = input.context.itemRewardCatalog.items.map(item => {
-    let useActionKey: string | null = null; let equipActionKey: string | null = null; let unequipActionKey: string | null = null
-    const itemEffectKeys: string[] = []
-    if (item.consumable) {
-      useActionKey = `action.use.${item.key}`
-      const consume = `effect.use.${item.key}.consume`; const restore = `effect.use.${item.key}.restore`
-      addEffect({ key: consume, operation: 'remove-item', payload: { itemKey: item.key, quantity: 1, reason: 'consume' } })
-      addEffect({ key: restore, operation: 'change-player-resource', payload: { resource: 'health', amount: 10 } })
-      itemEffectKeys.push(restore)
-      addAction(action({ key: useActionKey, category: 'use', label: `使用${item.title}`, description: item.description, targetScope: 'item', costEffectKeys: [consume], successEffectKeys: [restore] }))
-      const marker = `effect.combat.item.${item.key}`
-      addEffect({ key: marker, operation: 'perform-combat-action', payload: { kind: 'item', skillKey: null, itemKey: item.key } })
-      addAction(action({ key: `action.combat.item.${item.key}`, category: 'combat-item', label: `战斗中使用${item.title}`, description: item.description, targetScope: 'item', costEffectKeys: [consume], successEffectKeys: [...itemEffectKeys, marker] }))
-    }
-    if (item.kind === 'equipment') {
-      equipActionKey = `action.equip.${item.key}`; unequipActionKey = `action.unequip.${item.key}`
-      const equip = `effect.equip.${item.key}`; const unequip = `effect.unequip.${item.key}`
-      addEffect({ key: equip, operation: 'equip-item', payload: { itemKey: item.key } })
-      addEffect({ key: unequip, operation: 'unequip-item', payload: { itemKey: item.key } })
-      addAction(action({ key: equipActionKey, category: 'equip', label: `装备${item.title}`, description: item.description, targetScope: 'item', successEffectKeys: [equip] }))
-      addAction(action({ key: unequipActionKey, category: 'unequip', label: `卸下${item.title}`, description: item.description, targetScope: 'item', successEffectKeys: [unequip] }))
-    }
-    return { itemKey: item.key, useActionKey, equipActionKey, unequipActionKey, equipConditionKeys: [], effectKeys: itemEffectKeys }
+    const compiled = compileTextOpenWorldQuestFinalizeItemRuntimeContractV1(item)
+    compiled.conditions.forEach(addCondition)
+    compiled.effects.forEach(addEffect)
+    compiled.actions.forEach(addAction)
+    return compiled.binding
   })
 
   const recipeBindings: TextOpenWorldQuestDesignDocumentsV1['catalogBindings']['recipes'] = input.context.craftingEconomyCatalog.recipes.map(recipe => {

@@ -35,6 +35,8 @@ export interface TextOpenWorldActionProjectionContextV1 {
   combatSkillCooldownRemainingTurnsBySkillKey?: Record<string, number>
   knownRecipeKeys: string[]
   inventoryQuantities: Record<string, number>
+  /** Runtime-only projection; omitted legacy callers fall back to total quantities. */
+  removableInventoryQuantities?: Record<string, number>
   conditionResults: Record<string, TextOpenWorldConditionResultV1>
   openEdgeKeys: string[]
   unlockedFastTravelPointKeys: string[]

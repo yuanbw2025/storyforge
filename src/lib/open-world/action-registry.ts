@@ -87,6 +87,13 @@ function parseContext(value: TextOpenWorldActionProjectionContextV1, modules: Te
     if (!itemKeys.has(stableKey(itemKey, 'inventoryQuantities itemKey'))) fail(`inventoryQuantities引用未知物品:${itemKey}`)
     inventoryQuantities[itemKey] = finiteInteger(itemQuantity, `inventoryQuantities.${itemKey}`)
   }
+  const removableInventoryQuantities: Record<string, number> = {}
+  for (const [itemKey, itemQuantity] of Object.entries(value.removableInventoryQuantities ?? inventoryQuantities)) {
+    if (!itemKeys.has(stableKey(itemKey, 'removableInventoryQuantities itemKey'))) fail(`removableInventoryQuantities引用未知物品:${itemKey}`)
+    const quantity = finiteInteger(itemQuantity, `removableInventoryQuantities.${itemKey}`)
+    if (quantity > (inventoryQuantities[itemKey] ?? 0)) fail(`removableInventoryQuantities超过库存总量:${itemKey}`)
+    if (quantity > 0) removableInventoryQuantities[itemKey] = quantity
+  }
   const conditionKeys = new Set(modules.actions.conditions.map(item => item.key))
   const conditionResults: TextOpenWorldActionProjectionContextV1['conditionResults'] = {}
   for (const [conditionKey, result] of Object.entries(value.conditionResults ?? {})) {
@@ -180,6 +187,7 @@ function parseContext(value: TextOpenWorldActionProjectionContextV1, modules: Te
     combatSkillCooldownRemainingTurnsBySkillKey,
     knownRecipeKeys,
     inventoryQuantities,
+    removableInventoryQuantities,
     conditionResults,
     openEdgeKeys,
     unlockedFastTravelPointKeys,
@@ -228,6 +236,7 @@ export function createTextOpenWorldActionRegistryV1(value: TextOpenWorldRuntimeP
     return entries.map(entry => {
       const action = entry.action
       const unavailableReasons: TextOpenWorldActionAvailabilityV1['unavailableReasons'] = []
+      const removableQuantity = (itemKey: string) => context.removableInventoryQuantities?.[itemKey] ?? 0
       const defeated = context.playerHealth === 0 || context.combatStatus === 'defeat'
       const modernCombatAction = modules.actions.version >= 10
         && ['combat-basic-attack', 'combat-skill', 'combat-item', 'escape'].includes(action.category)
@@ -346,9 +355,15 @@ export function createTextOpenWorldActionRegistryV1(value: TextOpenWorldRuntimeP
         const reason = action.category === 'use' ? 'consume' : action.category
         const removal = action.costEffectKeys.map(effectKey => effectByKey.get(effectKey))
           .find(effect => effect?.operation === 'remove-item' && effect.payload.reason === reason)
+        const boundTargetWasPresent = removal?.operation === 'remove-item' && validTargetKeys.includes(removal.payload.itemKey)
         validTargetKeys = removal?.operation === 'remove-item'
-          ? validTargetKeys.filter(itemKey => itemKey === removal.payload.itemKey)
+          ? validTargetKeys.filter(itemKey => itemKey === removal.payload.itemKey
+            && removableQuantity(itemKey) >= removal.payload.quantity)
           : []
+        if (boundTargetWasPresent && removal?.operation === 'remove-item'
+          && removableQuantity(removal.payload.itemKey) < removal.payload.quantity) {
+          unavailableReasons.push({ code: 'item-unavailable', message: '当前没有足够的未装备物品可执行该行动。', conditionKey: null })
+        }
       }
       if (action.targetScope === 'vendor' && ['buy', 'sell'].includes(action.category) && modules.actions.version >= 13) {
         const marker = action.successEffectKeys.map(effectKey => effectByKey.get(effectKey))
@@ -385,7 +400,8 @@ export function createTextOpenWorldActionRegistryV1(value: TextOpenWorldRuntimeP
         const removal = action.costEffectKeys.map(effectKey => effectByKey.get(effectKey))
           .find(effect => effect?.operation === 'remove-item' && effect.payload.reason === 'consume')
         validTargetKeys = marker?.operation === 'perform-combat-action' && marker.payload.itemKey && removal?.operation === 'remove-item'
-          ? validTargetKeys.filter(itemKey => itemKey === marker.payload.itemKey && itemKey === removal.payload.itemKey)
+          ? validTargetKeys.filter(itemKey => itemKey === marker.payload.itemKey && itemKey === removal.payload.itemKey
+            && removableQuantity(itemKey) >= removal.payload.quantity)
           : []
         if (!validTargetKeys.length) unavailableReasons.push({ code: 'item-unavailable', message: '当前没有可使用的该战斗道具。', conditionKey: null })
       }
@@ -408,9 +424,16 @@ export function createTextOpenWorldActionRegistryV1(value: TextOpenWorldRuntimeP
       if (action.targetScope === 'item' && ['equip', 'unequip'].includes(action.category)) {
         const equipment = action.successEffectKeys.map(effectKey => effectByKey.get(effectKey))
           .find(effect => effect?.operation === `${action.category}-item`)
+        const boundTargetWasPresent = (equipment?.operation === 'equip-item' || equipment?.operation === 'unequip-item')
+          && validTargetKeys.includes(equipment.payload.itemKey)
         validTargetKeys = equipment?.operation === 'equip-item' || equipment?.operation === 'unequip-item'
-          ? validTargetKeys.filter(itemKey => itemKey === equipment.payload.itemKey)
+          ? validTargetKeys.filter(itemKey => itemKey === equipment.payload.itemKey
+            && (action.category !== 'equip' || removableQuantity(itemKey) >= 1))
           : []
+        if (action.category === 'equip' && boundTargetWasPresent && equipment?.operation === 'equip-item'
+          && removableQuantity(equipment.payload.itemKey) < 1) {
+          unavailableReasons.push({ code: 'item-unavailable', message: '当前没有未装备的该物品实例。', conditionKey: null })
+        }
       }
       if (action.targetScope === 'actor' && (action.category === 'attack-actor' || action.category === 'actor-state-action')) {
         const actorStateEffect = action.successEffectKeys.map(effectKey => effectByKey.get(effectKey))

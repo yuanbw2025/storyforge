@@ -13,6 +13,7 @@ import {
 function context(overrides: Partial<TextOpenWorldActionProjectionContextV1> = {}): TextOpenWorldActionProjectionContextV1 {
   return {
     actorKey: 'player', currentLocationKey: 'location.salt-port', worldMinute: 480, playerHealth: 37, combatStatus: null,
+    knownRecipeKeys: [], inventoryQuantities: {}, removableInventoryQuantities: {},
     conditionResults: {}, completedOnceActionKeys: [], cooldownUntilWorldMinuteByActionKey: {},
     openEdgeKeys: ['edge.port-ridge'],
     unlockedFastTravelPointKeys: ['fast-travel.salt-port'],
@@ -120,6 +121,8 @@ describe('Text Open World vNext · unified Action registry and availability proj
     const registry = createTextOpenWorldActionRegistryV1(createTextOpenWorldVNextFixture())
     const itemContext = context({
       conditionResults: { 'condition.health-not-full': { satisfied: true, publicReason: null } },
+      inventoryQuantities: { 'item.rust-sword': 1, 'item.salt-crystal': 1, 'item.brine-tonic': 1 },
+      removableInventoryQuantities: { 'item.rust-sword': 1, 'item.salt-crystal': 1, 'item.brine-tonic': 1 },
       validTargetKeysByScope: { item: ['item.rust-sword', 'item.salt-crystal', 'item.brine-tonic'] },
     })
     const projection = registry.project(itemContext)
