@@ -10,6 +10,7 @@ import {
   assertProductProductionBudgetLedgerV1,
   runProductProductionSchedulerCycleV1,
   runProductProductionUntilBlockedV1,
+  textAdventureNarrativeRepairPreservesFrozenMediaV1,
   type ProductProductionTaskExecutionResultV1,
   type ProductProductionTaskExecutorV1,
 } from '../../src/lib/product-production/scheduler'
@@ -149,6 +150,23 @@ function executorFor(
 }
 
 describe('R-PRODUCTPROD-1D · durable bounded DAG scheduler', () => {
+  it('只有节点、地点与选择衔接修正可以复用冻结媒资，视觉语义改动必须重做媒资链', () => {
+    expect(textAdventureNarrativeRepairPreservesFrozenMediaV1([{
+      severity: 'blocking', artifactKey: 'content.narrative',
+      detail: 'choice.013 的 targetNodeKey 与 scene.008 的 locationOrdinal 错位。',
+      recommendation: '修正选择标签与目标节点。',
+    }])).toBe(true)
+    expect(textAdventureNarrativeRepairPreservesFrozenMediaV1([{
+      severity: 'blocking', artifactKey: 'content.narrative',
+      detail: 'scene.008 的角色身份与插图视觉锚点不一致。',
+      recommendation: '替换图片与服饰。',
+    }])).toBe(false)
+    expect(textAdventureNarrativeRepairPreservesFrozenMediaV1([{
+      severity: 'blocking', artifactKey: 'content.adventure-side-quests',
+      detail: '支线地点错位。', recommendation: '重写。',
+    }])).toBe(false)
+  })
+
   beforeAll(async () => { await db.delete(); await db.open() })
   beforeEach(async () => {
     // Repeated versionchange/delete cycles can leave fake-indexeddb waiting on

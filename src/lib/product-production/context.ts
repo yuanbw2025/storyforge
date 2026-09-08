@@ -881,12 +881,13 @@ export async function readTextAdventureRepairFeedbackV1(input: AssembleContextIn
   if (blockingIssues.length === 0 && taskFailures.size === 0) return ''
   return JSON.stringify({
     schema: 'storyforge.text-adventure-repair-feedback', version: 1,
+    targetTaskKey: input.productProductionTaskKey ?? null,
     source: review ? {
       artifactKey: review.artifactKey, artifactVersion: review.version,
       contentHash: review.contentHash, producerReceiptHash: review.producerReceiptHash,
       controlEpoch: review.controlEpoch,
     } : null,
-    instruction: '只修复与当前任务输出对应的 blocking 问题和 lastTaskFailures 中同 taskKey 的精确协议错误；保持冻结 Brief、架构、稳定 key 与未受影响内容。',
+    instruction: '只修复与 targetTaskKey 当前输出相关的 blocking 问题和 lastTaskFailures 中同 taskKey 的精确协议错误；当问题原定位为 content.narrative 时，当前场景/对白任务必须修正其所拥有 scene/choice 的标签、目标节点、地点与开场衔接；保持冻结 Brief、架构、稳定 key 与未受影响内容。',
     scores: payload.scores,
     blockingIssues,
     lastTaskFailures: [...taskFailures.values()].sort((left, right) => left.taskKey.localeCompare(right.taskKey)),

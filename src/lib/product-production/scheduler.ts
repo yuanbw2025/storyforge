@@ -1211,6 +1211,24 @@ function taskFailureEnvelope(
   }
 }
 
+export function textAdventureNarrativeRepairPreservesFrozenMediaV1(issues: unknown): boolean {
+  if (!Array.isArray(issues)) return false
+  const blocking = issues.flatMap(value => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return []
+    const row = value as Record<string, unknown>
+    return row.severity === 'blocking' ? [row] : []
+  })
+  if (!blocking.length) return false
+  return blocking.every(issue => {
+    if (issue.artifactKey !== 'content.narrative'
+      || typeof issue.detail !== 'string' || typeof issue.recommendation !== 'string') return false
+    const evidence = `${issue.detail}\n${issue.recommendation}`
+    const mechanicalNarrativeReference = /choice\.|scene\.|locationOrdinal|targetNodeKey|openingBeat|选择文案|选择标签|目标节点|地点错位|场景衔接/.test(evidence)
+    const visualImpact = /视觉|美术|插图|媒资|图片|画面|角色身份|服饰|道具|色板|构图|\b(?:asset|image|media|visual)\b/i.test(evidence)
+    return mechanicalNarrativeReference && !visualImpact
+  })
+}
+
 /**
  * A deterministic integration blocker can prove that an accepted model
  * artifact is unsuitable. Recovery must invalidate that artifact and every
@@ -1314,6 +1332,7 @@ async function recoveryInvalidatedTaskKeys(input: {
           ? [issue.artifactKey] : []
       })
     : []
+  const preserveFrozenMedia = textAdventureNarrativeRepairPreservesFrozenMediaV1(reviewPayload.issues)
   const sceneScriptTaskKeys = [
     'content.scene-script.act-1', 'content.scene-script.act-2', 'content.scene-script.act-3',
   ]
@@ -1347,6 +1366,7 @@ async function recoveryInvalidatedTaskKeys(input: {
     expanded = false
     for (const task of input.plan.tasks) {
       if (invalidated.has(task.taskKey) || !task.dependsOn.some(key => invalidated.has(key))) continue
+      if (preserveFrozenMedia && task.taskKey === 'media.requirements') continue
       invalidated.add(task.taskKey)
       expanded = true
     }
