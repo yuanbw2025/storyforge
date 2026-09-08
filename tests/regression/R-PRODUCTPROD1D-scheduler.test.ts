@@ -464,6 +464,46 @@ describe('R-PRODUCTPROD-1D · durable bounded DAG scheduler', () => {
     expect((await db.productBuilds.get(blocked.buildId))?.failureJson).toContain('task-budget-exceeded')
   }, 30_000)
 
+  it('仅容纳 provider 隐藏推理的微小计费偏差，并仍按真实用量计入 Build 总账', async () => {
+    const owned = await fixture('scheduler-provider-accounting-tolerance')
+    const calls = new Map<string, number>()
+    const concurrency = { active: 0, peak: 0 }
+    const basePlan = await createProductProductionPlanV3({
+      buildNumber: 1,
+      briefHash: await hashProductProductionValueV2(owned.brief),
+      brief: owned.brief,
+    })
+    const plan = {
+      ...basePlan,
+      tasks: basePlan.tasks.map(task => task.taskKey === 'content.design'
+        ? { ...task, budgetReservation: { ...task.budgetReservation, outputTokens: 1_000 } }
+        : task),
+    }
+    const baseExecutor = executorFor(owned, calls, concurrency)
+    const executor: ProductProductionTaskExecutorV1 = async request => {
+      const result = await baseExecutor(request)
+      return request.task.taskKey === 'content.design'
+        ? { ...result, usage: { ...result.usage, outputTokens: 1_020 } }
+        : result
+    }
+    const textRequirement = owned.brief.capabilityRequirements.find(item => item.mediaClass === 'text')!
+    const completed = await runProductProductionUntilBlockedV1({
+      scope: owned.scope,
+      productionId: owned.productionId,
+      executor,
+      suppliedPlan: plan,
+      capabilityBindings: [{
+        requirementKey: textRequirement.requirementKey,
+        adapterId: 'configured-text-provider.v1',
+        bindingHash: await hashProductProductionValueV2({ provider: 'configured' }),
+      }],
+    })
+    expect(completed).toMatchObject({ terminal: true, buildStatus: 'release-ready' })
+    expect(completed.budget.usage.outputTokens).toBeGreaterThanOrEqual(1_020)
+    const build = await db.productBuilds.get(completed.buildId)
+    expect(() => assertProductProductionBudgetLedgerV1(build!.budgetLedgerJson)).not.toThrow()
+  }, 30_000)
+
   it('即使 provider 忽略 abort 也按任务合同强制结算超时，并保存 task-timeout 恢复证据', async () => {
     const owned = await fixture('scheduler-task-timeout')
     const basePlan = await createProductProductionPlanV3({

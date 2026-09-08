@@ -271,11 +271,11 @@ export function parseProductProductionPlanV3(
     const budget = brief.productionBudget
     // Provider completion usage can include hidden reasoning tokens even when
     // visible JSON is tightly bounded. Text-adventure task ceilings may be
-    // overbooked by at most 25%; the scheduler's append-only Build ledger is
+    // overbooked by at most 30%; the scheduler's append-only Build ledger is
     // still the hard authority and refuses each call once real usage plus
     // in-flight reservations would exceed the author-approved total.
     const maximumReservedOutputTokens = productType === 'text-adventure'
-      ? Math.floor(budget.maximumOutputTokens * 1.25)
+      ? Math.floor(budget.maximumOutputTokens * 1.3)
       : budget.maximumOutputTokens
     if (totals.modelCalls > budget.maximumModelCalls || totals.inputTokens > budget.maximumInputTokens
       || totals.outputTokens > maximumReservedOutputTokens || totals.mediaCalls > budget.maximumMediaCalls
@@ -384,15 +384,19 @@ export async function createProductProductionPlanV3(input: {
     'content.narrative-decision-plan': 0.03,
     'content.main-quest-plan': 0.035,
     // One whole act still encouraged providers to collapse multi-route
-    // objectives. Each act therefore has a simple and complex Run that share
-    // the same professional Skill and together keep the former 5.5% envelope.
-    'content.quest-script.main.act-1.single': 0.02,
-    'content.quest-script.main.act-1.multi': 0.025,
-    'content.quest-script.main.act-2.single': 0.02,
-    'content.quest-script.main.act-2.multi': 0.025,
-    'content.quest-script.main.act-3.single': 0.02,
-    'content.quest-script.main.act-3.multi': 0.025,
-    'content.quest-script.supplemental': 0.03,
+    // objectives. Each act therefore has a simple and complex Run. Live Agnes
+    // receipts include hidden reasoning: even a one-objective single-route
+    // packet reported 4,074 tokens against a 4,000 visible-output ceiling.
+    // Reserve 5k/6k in the 200k flagship envelope and 8k for the ten-stage
+    // supplemental bundle; the append-only Build ledger remains the aggregate
+    // authority and charges actual provider usage.
+    'content.quest-script.main.act-1.single': 0.025,
+    'content.quest-script.main.act-1.multi': 0.03,
+    'content.quest-script.main.act-2.single': 0.025,
+    'content.quest-script.main.act-2.multi': 0.03,
+    'content.quest-script.main.act-3.single': 0.025,
+    'content.quest-script.main.act-3.multi': 0.03,
+    'content.quest-script.supplemental': 0.04,
     // Scene prose is the player-visible product, not scaffolding. Each act's
     // 18% envelope is split into two bounded scene packets so a provider cannot
     // strand a whole act in one oversized request.

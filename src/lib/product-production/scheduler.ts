@@ -435,13 +435,23 @@ function permitsAutomaticTaskRetry(failureCode: string | undefined): boolean {
 }
 
 function boundedUsage(usage: ProductProductionTaskUsageV1, reservation: ProductTaskBudgetReservationV1): void {
+  // OpenAI-compatible providers can include hidden reasoning and protocol
+  // framing in completion_tokens, so the receipt may exceed the maxTokens sent
+  // on the wire by a very small accounting delta. Accept at most 2%/128 tokens
+  // for normal-sized model tasks, retain the real receipt in the append-only
+  // ledger, and let the author-approved Build lifetime budget remain the hard
+  // aggregate ceiling. Tiny reservations get no tolerance, keeping budget
+  // boundary tests and deliberately narrow contracts exact.
+  const outputAccountingTolerance = reservation.outputTokens >= 1_000 && usage.modelCalls > 0
+    ? Math.min(128, Math.ceil(reservation.outputTokens * 0.02))
+    : 0
   const integers = [usage.modelCalls, usage.inputTokens, usage.outputTokens, usage.mediaCalls, usage.durationMs, usage.storageBytes]
   const invalid = integers.some(value => !Number.isInteger(value) || value < 0)
     || (usage.costUsd != null && (!Number.isFinite(usage.costUsd) || usage.costUsd < 0))
   const exceeded = [
     ['modelCalls', usage.modelCalls, reservation.modelCalls],
     ['inputTokens', usage.inputTokens, reservation.inputTokens],
-    ['outputTokens', usage.outputTokens, reservation.outputTokens],
+    ['outputTokens', usage.outputTokens, reservation.outputTokens + outputAccountingTolerance],
     ['mediaCalls', usage.mediaCalls, reservation.mediaCalls],
     ['durationMs', usage.durationMs, reservation.durationMs],
     ['storageBytes', usage.storageBytes, reservation.storageBytes],

@@ -1193,10 +1193,12 @@ export function legalizeProductionModelProtocolDefaultsV1(
           return stage
         }
         const nextStage = { ...(stage as JsonRecord) }
-        const decisiveSurface = [
-          nextStage.title, nextStage.objective, nextStage.successText,
-          nextStage.costlySuccessText, nextStage.failureText,
-        ].filter((value): value is string => typeof value === 'string').join('\n')
+        // A settlement can legitimately point at the next location. Freeze the
+        // current action location from the stage title/objective only, matching
+        // the strict parser's definition of the action surface.
+        const decisiveSurface = [nextStage.title, nextStage.objective]
+          .filter((value): value is string => typeof value === 'string')
+          .join('\n')
         const mentionedOrdinals = locationTitles.flatMap((title, titleIndex) => (
           decisiveSurface.includes(title) ? [titleIndex + 1] : []
         ))
