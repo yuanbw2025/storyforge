@@ -22,6 +22,7 @@ import {
   planTextAdventureMainQuestIdentityV1,
   parseProductMediaRequirementsArtifactV2,
   parseProductionModelJsonObjectV1,
+  parseTextAdventureVisualQualityReviewArtifactV1,
   type ProductionTextRunnerV1,
   type ProductionVisionRunnerV1,
 } from '../../src/lib/product-production/production-executor'
@@ -1051,6 +1052,29 @@ async function relayCapabilities(brief: Awaited<ReturnType<typeof fixture>>['bri
 }
 
 describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
+  it('保留陌生 Visual QA 分类的问题内容，并确定性归入通用 artifact 类别', () => {
+    const parsed = parseTextAdventureVisualQualityReviewArtifactV1({
+      schema: 'storyforge.text-adventure-visual-quality-review-artifact', version: 1,
+      buildNumber: 7, mediaAuditHash: 'a'.repeat(64), status: 'revision-required',
+      reviews: [{
+        artifactKey: 'media.visual.008', contentHash: 'b'.repeat(64), verdict: 'revise',
+        scores: {
+          requirementFit: 3, identityContinuity: 4, styleContinuity: 4,
+          composition: 3, technicalCleanliness: 3,
+        },
+        issues: [{
+          severity: 'blocking', category: 'semantic-consistency',
+          detail: '关键场景对象与冻结需求不一致', recommendation: '按冻结需求重生成',
+        }],
+        reviewSource: 'multimodal-model',
+      }],
+      blockingIssueCount: 1, providerReviewCompleted: true,
+    })
+    expect(parsed.reviews[0].issues[0]).toMatchObject({
+      severity: 'blocking', category: 'artifact', detail: '关键场景对象与冻结需求不一致',
+    })
+  })
+
   it('按商业时长冻结完整主线阶段与目标槽位，不允许单对象样例替代任务量', () => {
     const brief = {
       qualityProfile: 'commercial-candidate',

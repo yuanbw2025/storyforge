@@ -3914,6 +3914,37 @@ const VISUAL_REVIEW_CATEGORIES = [
   'identity', 'setting', 'style', 'composition', 'spoiler', 'artifact', 'text', 'accessibility',
 ] as const
 
+function visualReviewCategory(value: unknown, label: string): typeof VISUAL_REVIEW_CATEGORIES[number] {
+  if (typeof value !== 'string' || !value.trim() || value.length > 80) fail(`${label} 枚举无效`)
+  const normalized = value.trim().toLowerCase().replace(/[ _]+/g, '-')
+  if ((VISUAL_REVIEW_CATEGORIES as readonly string[]).includes(normalized)) {
+    return normalized as typeof VISUAL_REVIEW_CATEGORIES[number]
+  }
+  const aliases: Record<string, typeof VISUAL_REVIEW_CATEGORIES[number]> = {
+    character: 'identity',
+    'character-consistency': 'identity',
+    'identity-continuity': 'identity',
+    environment: 'setting',
+    world: 'setting',
+    worldbuilding: 'setting',
+    continuity: 'style',
+    consistency: 'style',
+    framing: 'composition',
+    layout: 'composition',
+    typography: 'text',
+    readability: 'accessibility',
+    technical: 'artifact',
+    quality: 'artifact',
+    requirement: 'artifact',
+    'requirement-fit': 'artifact',
+  }
+  // The category is diagnostic taxonomy, not a gate authority. Preserve the
+  // model's severity/detail/recommendation and fail closed on those fields,
+  // while folding a novel but bounded label into the generic artifact bucket
+  // instead of paying for an identical retry or discarding a blocking issue.
+  return aliases[normalized] ?? 'artifact'
+}
+
 function visualReviewScore(value: unknown, label: string): number {
   if (!Number.isInteger(value) || Number(value) < 1 || Number(value) > 5) fail(`${label} 必须是 1–5 整数`)
   return Number(value)
@@ -3926,7 +3957,7 @@ function parseVisualReviewIssuesV1(value: unknown, label: string) {
     exactKeys(issue, ['severity', 'category', 'detail', 'recommendation'], `${label}[${index}]`)
     return {
       severity: enumValue(issue.severity, ['warning', 'blocking'], `${label}[${index}].severity`),
-      category: enumValue(issue.category, VISUAL_REVIEW_CATEGORIES, `${label}[${index}].category`),
+      category: visualReviewCategory(issue.category, `${label}[${index}].category`),
       detail: text(issue.detail, `${label}[${index}].detail`, 1_000),
       recommendation: text(issue.recommendation, `${label}[${index}].recommendation`, 1_000),
     }
