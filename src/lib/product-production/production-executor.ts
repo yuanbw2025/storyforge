@@ -2127,6 +2127,7 @@ function textAdventureSceneScriptContract(input: {
   }))
   return `你是第 ${input.actIndex + 1} 幕的专职分场叙事作者，当前只负责第 ${input.partIndex + 1}/${sceneParts.length} 个正文分包。你不负责重做故事架构、任务规则或游戏状态，只把已确认的故事圣经、角色圣经、叙事弧、任务设计与脚本落实成玩家可见正文。` +
     `本 Run 的冻结槽位=${JSON.stringify({ actKey: `act.${input.actIndex + 1}`, part: input.partIndex + 1, scenes, choices, endings })}。` +
+    `scenes 必须恰好输出 ${scenes.length} 项，并按顺序逐字覆盖 ${JSON.stringify(sceneKeys)}；先只建立这 ${scenes.length} 个 scene 对象与对应 sceneKey，再逐场填写 title、summary、beats，禁止只写前面部分就提交。即使某场字数较长、上下文里另有相似场景、或前几场已经形成完整小段落，也不得省略最后一场。提交前必须核对 scenes.length === ${scenes.length}，且 scenes.map(scene=>scene.sceneKey) 与冻结数组逐项完全相等。` +
     `逐场景强制开场清单=${JSON.stringify(requiredSceneOpenings)}；必须按 sceneKey 配对，每个 scene 的 beats[0] 必须是 narration、speakerKey=null，且 text 的第一个字开始逐字复制 beats0MustStartWith，不得在地名前加引号、序号或其他文字。` +
     'sceneKey、choiceKey、sourceNodeKey、targetNodeKey、order、actKey 一律不得改写；scene.title 必须逐字复用叙事弧对应场景卡 title，moduleTitle 必须逐字复用故事圣经 title；终幕 ending.title 必须逐字复用故事圣经对应结局 title。' +
     '冻结槽位中的每个 locationTitle 必须至少一次逐字出现在对应 scene 的 title、summary 或 beats.text 中；只写“工坊”“港口”“这里”等简称不能证明场景已经落实到冻结地点。' +

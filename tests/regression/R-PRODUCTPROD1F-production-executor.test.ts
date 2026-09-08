@@ -2775,6 +2775,10 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
       system.includes('任务=content.scene-script.act-3.part-2')
     ))
     expect(actOneSceneSystem).toContain('你是第 1 幕的专职分场叙事作者')
+    expect(actOneSceneSystem).toContain(
+      'scenes 必须恰好输出 2 项，并按顺序逐字覆盖 ["scene.001","scene.002"]',
+    )
+    expect(actOneSceneSystem).toContain('禁止只写前面部分就提交')
     expect(actOneSceneSystem).toContain('"sceneKey":"scene.001","locationTitle":"地点 1-1-1"')
     expect(actOneSceneSystem).toContain('"sceneKey":"scene.001","beats0MustStartWith":"地点 1-1-1"')
     expect(actOneSceneSystem).toContain('beats[0] 必须是 narration、speakerKey=null')
