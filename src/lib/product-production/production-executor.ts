@@ -26,7 +26,12 @@ import {
 } from './capabilities'
 import { canonicalProductProductionJsonV2, hashProductProductionValueV2 } from './hash'
 import { putMediaBlobObject, readMediaBlobObjectData, sha256MediaData } from './media-blob-store'
-import { detectProductImageDimensionsV1, type ProductMediaClassV1, type ProductMediaRequestV1 } from './media-adapters'
+import {
+  detectProductImageDimensionsV1,
+  isProductImageDeliveryDimensionCompatibleV1,
+  type ProductMediaClassV1,
+  type ProductMediaRequestV1,
+} from './media-adapters'
 import { ensureGeneratedCharacterAlphaV1 } from './character-alpha-matting'
 import type { ResolvedProductMediaCapabilityV1 } from './media-transport'
 import { parseProductRuntimePackageV1 } from './runtime-package'
@@ -3803,6 +3808,15 @@ async function executeTextAdventureMediaAuditTask(
     const licenseComplete = typeof metadata.license === 'string' && metadata.license.trim().length > 0
     const mediaSource = sourceComplete ? (metadata.source as string).trim() : ''
     const mediaLicense = licenseComplete ? (metadata.license as string).trim() : ''
+    const actualWidth = typeof metadata.width === 'number' && Number.isSafeInteger(metadata.width)
+      ? metadata.width : 0
+    const actualHeight = typeof metadata.height === 'number' && Number.isSafeInteger(metadata.height)
+      ? metadata.height : 0
+    // Image providers expose a bounded set of native sizes. The request and
+    // its intended dimensions remain frozen, while the delivered bitmap must
+    // preserve the requested aspect ratio and a useful minimum resolution.
+    // Responsive runtime layout uses the intrinsic delivered dimensions; it
+    // must not pretend that a 1K provider response is the requested 1280px.
     const failedChecks = [
       ['payload-schema', payload.schema === 'storyforge.generated-media-artifact' && payload.version === 1],
       ['request', canonicalProductProductionJsonV2(payload.request) === canonicalProductProductionJsonV2(requirement)],
@@ -3811,7 +3825,11 @@ async function executeTextAdventureMediaAuditTask(
       ['media-kind', artifact.mediaKind === requirement.mediaKind],
       ['blob', artifact.blobObjectId != null],
       ['mime', artifact.mimeType?.startsWith('image/') === true],
-      ['dimensions', metadata.width === requirement.width && metadata.height === requirement.height],
+      [`dimensions-${actualWidth}x${actualHeight}-for-${requirement.width}x${requirement.height}`,
+        isProductImageDeliveryDimensionCompatibleV1({
+          requestedWidth: requirement.width, requestedHeight: requirement.height,
+          actualWidth, actualHeight,
+        })],
       ['source', sourceComplete],
       ['license', licenseComplete],
       ['rights-license', metadata.license === rights.license],
@@ -3823,7 +3841,7 @@ async function executeTextAdventureMediaAuditTask(
     assets.push({
       artifactKey: requirement.artifactKey, status: 'fulfilled', assetKey: expectedAssetKey,
       requirementHash, contentHash: artifact.contentHash,
-      mimeType: artifact.mimeType, width: requirement.width, height: requirement.height,
+      mimeType: artifact.mimeType, width: actualWidth, height: actualHeight,
       source: mediaSource, license: mediaLicense, rightsComplete: true, fallbackReason: null,
     })
   }

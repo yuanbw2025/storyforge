@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   agnesImage21FlashAdapterV1,
   detectProductImageDimensionsV1,
+  isProductImageDeliveryDimensionCompatibleV1,
   elevenLabsMusicAdapterV2,
   listProductMediaProviderCapabilitiesV1,
   openAIGptImage2AdapterV1,
@@ -69,6 +70,18 @@ describe('R-PRODUCTPROD-1E · central media provider adapters', () => {
     expect(detectProductImageDimensionsV1(jpeg)).toEqual({ width: 1024, height: 576 })
     expect(detectProductImageDimensionsV1(webp.buffer)).toEqual({ width: 1024, height: 576 })
     expect(detectProductImageDimensionsV1(PNG)).toBeNull()
+    expect(isProductImageDeliveryDimensionCompatibleV1({
+      requestedWidth: 1280, requestedHeight: 720, actualWidth: 1024, actualHeight: 576,
+    })).toBe(true)
+    expect(isProductImageDeliveryDimensionCompatibleV1({
+      requestedWidth: 720, requestedHeight: 1080, actualWidth: 683, actualHeight: 1024,
+    })).toBe(true)
+    expect(isProductImageDeliveryDimensionCompatibleV1({
+      requestedWidth: 1280, requestedHeight: 720, actualWidth: 1024, actualHeight: 1024,
+    })).toBe(false)
+    expect(isProductImageDeliveryDimensionCompatibleV1({
+      requestedWidth: 1280, requestedHeight: 720, actualWidth: 300, actualHeight: 169,
+    })).toBe(false)
   })
 
   it('Agnes 图片 adapter 复用 browser transport，并按官方 2.1 接口请求 Base64 图片', async () => {

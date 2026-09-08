@@ -249,6 +249,25 @@ export function detectProductImageDimensionsV1(data: ArrayBuffer): { width: numb
   return null
 }
 
+/**
+ * Providers may honor an authorized aspect ratio with a native 1K/2K size
+ * rather than the exact requested pixels. Preserve the actual dimensions and
+ * accept only a useful delivery whose ratio stays within the governed target.
+ */
+export function isProductImageDeliveryDimensionCompatibleV1(input: {
+  requestedWidth: number
+  requestedHeight: number
+  actualWidth: number
+  actualHeight: number
+}): boolean {
+  const values = [input.requestedWidth, input.requestedHeight, input.actualWidth, input.actualHeight]
+  if (values.some(value => !Number.isSafeInteger(value) || value < 1 || value > 32_768)) return false
+  if (input.actualWidth < 320 || input.actualHeight < 320) return false
+  const requestedRatio = input.requestedWidth / input.requestedHeight
+  const actualRatio = input.actualWidth / input.actualHeight
+  return Math.abs(actualRatio - requestedRatio) / requestedRatio <= 0.08
+}
+
 async function candidate(input: {
   adapterId: string
   request: ProductMediaRequestV1
