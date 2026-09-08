@@ -3959,7 +3959,10 @@ function visualReviewScore(value: unknown, label: string): number {
 function parseVisualReviewIssuesV1(value: unknown, label: string) {
   if (!Array.isArray(value) || value.length > 12) fail(`${label} 必须是有界数组`)
   return value.map((entry, index) => {
-    const issue = record(entry, `${label}[${index}]`)
+    const issue = { ...record(entry, `${label}[${index}]`) }
+    if (issue.recommendation == null) {
+      issue.recommendation = '修正上述问题，并重新执行独立 Visual QA。'
+    }
     exactKeys(issue, ['severity', 'category', 'detail', 'recommendation'], `${label}[${index}]`)
     return {
       severity: enumValue(issue.severity, ['warning', 'blocking'], `${label}[${index}].severity`),

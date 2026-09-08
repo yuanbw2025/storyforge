@@ -1064,7 +1064,7 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
         },
         issues: [{
           severity: 'blocking', category: 'semantic-consistency',
-          detail: '关键场景对象与冻结需求不一致', recommendation: '按冻结需求重生成',
+          detail: '关键场景对象与冻结需求不一致',
         }],
         reviewSource: 'multimodal-model',
       }],
@@ -1072,6 +1072,7 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
     })
     expect(parsed.reviews[0].issues[0]).toMatchObject({
       severity: 'blocking', category: 'artifact', detail: '关键场景对象与冻结需求不一致',
+      recommendation: '修正上述问题，并重新执行独立 Visual QA。',
     })
   })
 
