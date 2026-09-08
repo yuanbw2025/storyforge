@@ -485,6 +485,10 @@ export async function createProductProductionPlanV3(input: {
     'content.dialogue-pass.act-2': 0.035,
     'content.dialogue-pass.act-3': 0.035,
     'content.adventure-quality-review': 0.075,
+    // Four provider-native 1K images plus the frozen QA packet consumed
+    // 19,379 input tokens in a real browser run. Reserve 26,400 against the
+    // stable 528k baseline so the valid paid response can be settled.
+    'media.visual-quality-review': 0.05,
   }
   // Every provider task and deterministic integration receives a declared
   // slice. Text adventure reserves separate bounded specialists for the
@@ -540,7 +544,10 @@ export async function createProductProductionPlanV3(input: {
     // 230s. Reserve the same bounded duration locally instead of rejecting a
     // successful paid response against the generic per-task average.
     durationMs: textAdventure && /^content\.scene-script\.act-[1-3]\.part-[1-2]$/.test(taskKey)
-      ? 300_000 : perDuration,
+      ? 300_000
+      : textAdventure && taskKey === 'media.visual-quality-review'
+        ? 270_000
+        : perDuration,
   })
   const tasks: ProductProductionPlanTaskV3[] = []
   if (textAdventure) tasks.push(productionTask({
@@ -1019,7 +1026,7 @@ export async function createProductProductionPlanV3(input: {
       concurrencyGroup: 'text-provider',
       subjectLockKeys: ['quality.visual-review-provider'], priority: 56,
       budgetReservation: modelBudget('media.visual-quality-review'), maxAttempts: 2,
-      timeoutMs: 240_000,
+      timeoutMs: 270_000,
       failurePolicy: brief.qualityProfile === 'commercial-candidate' ? 'pause' : 'skip-optional',
       fallbackTaskKey: null,
       acceptanceGateIds: ['artifact.protocol', 'media.visual-semantic-review-batch-executed'],

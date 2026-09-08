@@ -322,7 +322,10 @@ describe('R-TEXTADV2-production · 文字冒险正式生产契约与工作台', 
         'media.visual.001', 'media.visual.002',
       ],
       outputArtifactKeys: ['quality.visual-review.batch-1'],
-      timeoutMs: 240_000,
+      timeoutMs: 270_000,
+      budgetReservation: expect.objectContaining({
+        inputTokens: Math.floor(528_000 * 0.05), durationMs: 270_000,
+      }),
     })
     expect(taskByKey.get('media.visual-quality-review')).toMatchObject({
       executionMode: 'deterministic', skillId: null,
