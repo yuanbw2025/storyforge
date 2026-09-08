@@ -357,60 +357,61 @@ export async function createProductProductionPlanV3(input: {
     // Agnes/OpenAI-compatible usage receipts include the Showrunner's hidden
     // reasoning tokens. A real commercial run used 2,522 output tokens while
     // the former 1.5% reservation only allowed 1,500, so the otherwise valid
-    // first task was stranded before any downstream work could start. Reserve
-    // 3% (at least 3,000 tokens for the minimum 100k text-adventure budget),
-    // while the Build-lifetime ledger remains the hard aggregate authority.
-    'production.supervision': 0.03,
+    // first task was stranded before any downstream work could start. Two
+    // percent gives the repaired 160k envelope a 3,200-token ceiling, while
+    // the Build-lifetime ledger remains the hard aggregate authority.
+    'production.supervision': 0.02,
     // The full WorldRelease sufficiency audit is another reasoning-heavy
     // planning task. Real commercial attempts reported 3,687 and 5,363
     // billed output tokens, so the previous 2%/2,000-token slice was not a
-    // truthful ceiling. Five percent gives a repaired 160k Brief an 8,000
-    // token ceiling while returning unused reservation to adjacent bibles.
-    'content.source-sufficiency': 0.05,
+    // truthful ceiling. Four percent gives a repaired 160k Brief a 6,400-token
+    // ceiling while returning unused reservation to adjacent bibles.
+    'content.source-sufficiency': 0.04,
     'content.design': 0.015,
-    // A real commercial Story Bible receipt used 2,835 output tokens. Three
-    // percent keeps legacy 100k Briefs truthful; repaired/new Briefs receive
-    // the larger production envelope computed above.
-    'content.story-bible': 0.03,
-    // Cast, space and system bibles have comparable schema depth. A real Cast
-    // Bible receipt used 3,811 tokens, beyond the former 3,200-token slice.
-    'content.cast-bible': 0.03,
-    'content.adventure-architecture': 0.03,
-    'content.product-module': 0.03,
-    'content.narrative-arc-scenes': 0.025,
-    'content.narrative-decision-plan': 0.02,
-    'content.main-quest-plan': 0.025,
+    // A real commercial Story Bible receipt used 2,835 output tokens. The
+    // repaired 160k envelope therefore reserves 4,000 tokens.
+    'content.story-bible': 0.025,
+    // Cast, space and system bibles have comparable schema depth. Real Cast
+    // Bible receipts used up to 5,914 tokens; the three specialists therefore
+    // receive 6,400–7,200 token ceilings in the repaired 160k envelope.
+    'content.cast-bible': 0.045,
+    'content.adventure-architecture': 0.04,
+    'content.product-module': 0.04,
+    'content.narrative-arc-scenes': 0.035,
+    'content.narrative-decision-plan': 0.03,
+    'content.main-quest-plan': 0.035,
     // One whole act still encouraged providers to collapse multi-route
     // objectives. Each act therefore has a simple and complex Run that share
     // the same professional Skill and together keep the former 5.5% envelope.
-    'content.quest-script.main.act-1.single': 0.015,
-    'content.quest-script.main.act-1.multi': 0.02,
-    'content.quest-script.main.act-2.single': 0.015,
-    'content.quest-script.main.act-2.multi': 0.02,
-    'content.quest-script.main.act-3.single': 0.015,
-    'content.quest-script.main.act-3.multi': 0.02,
-    'content.quest-script.supplemental': 0.025,
+    'content.quest-script.main.act-1.single': 0.02,
+    'content.quest-script.main.act-1.multi': 0.025,
+    'content.quest-script.main.act-2.single': 0.02,
+    'content.quest-script.main.act-2.multi': 0.025,
+    'content.quest-script.main.act-3.single': 0.02,
+    'content.quest-script.main.act-3.multi': 0.025,
+    'content.quest-script.supplemental': 0.03,
     // Scene prose is the player-visible product, not scaffolding. Each act's
     // 18% envelope is split into two bounded scene packets so a provider cannot
     // strand a whole act in one oversized request.
-    // Real accepted scene packets are roughly 9–18 KiB. An 8% slice still
-    // leaves ample visible-prose and reasoning headroom while returning 6% of
-    // the Build envelope to the measured planning-task overage above.
-    'content.scene-script.act-1.part-1': 0.08,
-    'content.scene-script.act-1.part-2': 0.08,
-    'content.scene-script.act-2.part-1': 0.08,
-    'content.scene-script.act-2.part-2': 0.08,
-    'content.scene-script.act-3.part-1': 0.08,
-    'content.scene-script.act-3.part-2': 0.08,
+    // Real accepted scene packets are roughly 9–18 KiB. A 7% slice gives each
+    // writer 11,200 tokens in the current commercial envelope and leaves room
+    // for the measured reasoning overhead of upstream specialist bibles.
+    'content.scene-script.act-1.part-1': 0.07,
+    'content.scene-script.act-1.part-2': 0.07,
+    'content.scene-script.act-2.part-1': 0.07,
+    'content.scene-script.act-2.part-2': 0.07,
+    'content.scene-script.act-3.part-1': 0.07,
+    'content.scene-script.act-3.part-2': 0.07,
     // The provider usage receipt may include hidden reasoning. Each Dialogue
-    // Editor therefore receives a 6.5% ceiling while returning only an ordinal
+    // Editor therefore receives an 8,800-token ceiling in the repaired Brief
+    // while returning only an ordinal
     // delta; the Build-lifetime ledger, not the sum of task ceilings, remains
     // the author-approved hard budget.
-    'content.dialogue-pass.act-1': 0.065,
-    'content.dialogue-pass.act-2': 0.065,
-    'content.dialogue-pass.act-3': 0.065,
-    'content.adventure-side-quests': 0.015,
-    'content.adventure-ambient-events': 0.02,
+    'content.dialogue-pass.act-1': 0.055,
+    'content.dialogue-pass.act-2': 0.055,
+    'content.dialogue-pass.act-3': 0.055,
+    'content.adventure-side-quests': 0.025,
+    'content.adventure-ambient-events': 0.03,
     // Independent continuity review is reasoning-heavy even though its visible
     // result is a compact scorecard. Provider receipts may charge those hidden
     // reasoning tokens as output, so its task ceiling must reflect observed
