@@ -1012,7 +1012,12 @@ export async function createProductProductionPlanV3(input: {
       ],
       outputArtifactKeys: [batch.artifactKey], requirementKeys: [],
       capabilityRequirementKeys: textCapabilities,
-      concurrencyGroup: 'text-provider', subjectLockKeys: [batch.artifactKey], priority: 56,
+      // Browser-direct OpenAI-compatible relays may reject concurrent
+      // multimodal uploads even when ordinary text concurrency is two. Keep
+      // independent batch receipts/retries, but serialize this one provider
+      // resource so one failed connection cannot poison its sibling request.
+      concurrencyGroup: 'text-provider',
+      subjectLockKeys: ['quality.visual-review-provider'], priority: 56,
       budgetReservation: modelBudget('media.visual-quality-review'), maxAttempts: 2,
       timeoutMs: 240_000,
       failurePolicy: brief.qualityProfile === 'commercial-candidate' ? 'pause' : 'skip-optional',

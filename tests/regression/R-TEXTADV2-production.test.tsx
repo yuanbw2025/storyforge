@@ -399,6 +399,9 @@ describe('R-TEXTADV2-production · 文字冒险正式生产契约与工作台', 
     const reviewBatches = keyIllustrationPlan.tasks
       .filter(task => /^media\.visual-quality-review\.batch-\d+$/.test(task.taskKey))
     expect(reviewBatches).toHaveLength(3)
+    expect(reviewBatches.every(task => (
+      task.subjectLockKeys.join(',') === 'quality.visual-review-provider'
+    ))).toBe(true)
     expect(reviewBatches.map(task => task.inputArtifactKeys.filter(key => /^media\.visual\.\d{3}$/.test(key))))
       .toEqual([
         ['media.visual.001', 'media.visual.002', 'media.visual.003', 'media.visual.004'],
