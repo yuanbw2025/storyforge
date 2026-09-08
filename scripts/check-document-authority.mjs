@@ -30,6 +30,7 @@ const activeDocs = [
   'docs/AI-FUNCTIONS-MANUAL.semantic.md',
   'docs/CONSISTENCY-COVERAGE-MAP.md',
   'docs/MEMORY-WORKSPACE-GUIDE.md',
+  'docs/assets/support/afdian-aloneone.jpeg',
   'docs/guides/I18N.md',
   'docs/products/README.md',
   'docs/products/LONGFORM-AND-NODE.md',
@@ -87,7 +88,8 @@ for (const file of [...activeRootDocuments, ...activeDocs]) {
 }
 
 const archivedAuthority =
-  /MASTER-BLUEPRINT|ROADMAP-LEGACY|FEATURE-GUIDE|docs\/(?:refactor|completion|text-game|pitch|assets|brand|evals|product-platform|readme|adr|archive)\//
+  /MASTER-BLUEPRINT|ROADMAP-LEGACY|FEATURE-GUIDE|docs\/(?:refactor|completion|text-game|pitch|brand|evals|product-platform|readme|adr|archive)\//
+const archivedAssetReference = /docs\/assets\/(?!support\/afdian-aloneone\.jpeg)/
 for (const file of [...activeRootDocuments, ...activeDocs]) {
   if (
     file === 'CHANGELOG.md' ||
@@ -98,7 +100,8 @@ for (const file of [...activeRootDocuments, ...activeDocs]) {
   }
   const absolute = path.join(root, file)
   if (!fs.existsSync(absolute) || path.extname(file) !== '.md') continue
-  if (archivedAuthority.test(fs.readFileSync(absolute, 'utf8'))) {
+  const source = fs.readFileSync(absolute, 'utf8')
+  if (archivedAuthority.test(source) || archivedAssetReference.test(source)) {
     failures.push(`active document references archived authority: ${file}`)
   }
 }
