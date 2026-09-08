@@ -1082,12 +1082,18 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
         quests: [{
           key: 'invented-main', characterKeys: [],
           stages: plan.stages.map((_, index) => ({
-            key: `invented-stage-${index}`, title: `阶段 ${index + 1}`, objectiveKeys: [],
+            key: `invented-stage-${index}`, stageKey: `stage-scaffold-${index}`,
+            title: `阶段 ${index + 1}`, objectiveKeys: [],
           })),
           objectives: plan.objectives.map((_, index) => ({
             key: `invented-objective-${index}`, stageKey: 'invented-stage',
             title: `目标 ${index + 1}`, narrativePurpose: '推进主线。',
-            sceneKeys: ['scene.999'], locationOrdinal: 99, alternatives: [],
+            sceneKeys: ['scene.999'], sceneKey: 'scene.prompt-scaffold',
+            locationOrdinal: 99, alternatives: [],
+            objectiveKey: 'objective.prompt-scaffold',
+            nonPlayerCastKeys: ['character.prompt-scaffold'],
+            alternativeKeys: ['alternative.prompt-scaffold'],
+            requiredActionKinds: ['talk'],
           })),
         }],
       },
@@ -1109,6 +1115,20 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
       sceneKey: objective.sceneKey,
       locationOrdinal: objective.locationOrdinal,
     })))
+    expect(quest.stages as Array<Record<string, unknown>>).toEqual(
+      expect.not.arrayContaining([expect.objectContaining({ stageKey: expect.anything() })]),
+    )
+    expect(quest.objectives as Array<Record<string, unknown>>).toEqual(
+      expect.not.arrayContaining([
+        expect.objectContaining({ requiredActionKinds: expect.anything() }),
+        expect.objectContaining({ nonPlayerCastKeys: expect.anything() }),
+        expect.objectContaining({ alternativeKeys: expect.anything() }),
+      ]),
+    )
+    expect(legalized.defaultedFields).toEqual(expect.arrayContaining([
+      'quests[0].stages[0].stageKey<-discarded-prompt-scaffold',
+      'quests[0].objectives[0].requiredActionKinds<-discarded-prompt-scaffold',
+    ]))
   })
 
   it('角色 provider prompt 在冻结前剥离模型夹带的场景描述', () => {

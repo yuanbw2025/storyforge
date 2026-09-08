@@ -953,6 +953,15 @@ export function legalizeProductionModelProtocolDefaultsV1(
         (objective, objectiveIndex) => {
           if (!objective || typeof objective !== 'object' || Array.isArray(objective)) return objective
           const nextObjective = { ...(objective as JsonRecord) }
+          for (const scaffoldField of [
+            'objectiveKey', 'sceneKey', 'nonPlayerCastKeys', 'alternativeKeys', 'requiredActionKinds',
+          ]) {
+            if (!Object.prototype.hasOwnProperty.call(nextObjective, scaffoldField)) continue
+            delete nextObjective[scaffoldField]
+            defaultedFields.push(
+              `quests[${questIndex}].objectives[${objectiveIndex}].${scaffoldField}<-discarded-prompt-scaffold`,
+            )
+          }
           const identity = identityPlan?.objectives[objectiveIndex]
           if (identity && item.objectives && (item.objectives as unknown[]).length === identityPlan!.objectives.length) {
             if (nextObjective.key !== identity.objectiveKey) {
@@ -1065,6 +1074,12 @@ export function legalizeProductionModelProtocolDefaultsV1(
           item.stages = item.stages.map((stage, stageIndex) => {
             if (!stage || typeof stage !== 'object' || Array.isArray(stage)) return stage
             const nextStage = { ...(stage as JsonRecord) }
+            if (Object.prototype.hasOwnProperty.call(nextStage, 'stageKey')) {
+              delete nextStage.stageKey
+              defaultedFields.push(
+                `quests[${questIndex}].stages[${stageIndex}].stageKey<-discarded-prompt-scaffold`,
+              )
+            }
             const identity = identityPlan.stages[stageIndex]
             if (nextStage.key !== identity.stageKey) {
               nextStage.key = identity.stageKey
