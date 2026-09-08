@@ -3418,6 +3418,43 @@ export function productImageNegativePromptV1(
   ].join('；')
 }
 
+export function textAdventureVisualRepairCastConstraintV1(input: {
+  repairEvidence: string
+  mediaKind: ProductMediaKind
+  characters: ReadonlyArray<{
+    key: string
+    name: string
+    role: 'player' | 'major-npc' | 'supporting-npc'
+    publicIdentity: string
+    visualAnchor: string
+  }>
+}): { promptSuffix: string; negativePromptSuffix: string } {
+  const identityRepair = input.mediaKind === 'cg'
+    && /对峙|角色身份|身份归属|无关角色|未登记角色|视觉锚点/.test(input.repairEvidence)
+  const namedNpc = identityRepair
+    ? input.characters
+        .filter(character => character.role !== 'player' && input.repairEvidence.includes(character.name))
+        .map(character => ({ character, offset: input.repairEvidence.indexOf(character.name) }))
+        .sort((left, right) => left.offset - right.offset || left.character.key.localeCompare(right.character.key))[0]
+        ?.character ?? null
+    : null
+  const banMilitary = /军服|军事|军队|大檐帽|肩章|军人|长柄斧|持斧/.test(input.repairEvidence)
+  const banUnknownCast = /无关角色|未登记角色|身份归属不明|无匹配/.test(input.repairEvidence)
+  return {
+    promptSuffix: namedNpc
+      ? `\n本次返修的对峙 NPC 冻结为已登记角色「${namedNpc.name}」：${namedNpc.publicIdentity}；` +
+        `视觉锚点：${namedNpc.visualAnchor}。画面只能出现主角与「${namedNpc.name}」两名有身份角色，` +
+        '采用面对面或隔着关键物件的对峙构图，禁止群像海报排布、无身份第三人和自由发明服饰。'
+      : '',
+    negativePromptSuffix: [
+      ...(banMilitary
+        ? ['现实军服、大檐帽、肩章、军用徽章、持斧军人、长柄斧、枪械、modern military uniform, peaked cap, epaulets, soldier, axe, weapon']
+        : []),
+      ...(banUnknownCast ? ['未登记角色、无身份群众、第三人物、unregistered character, anonymous extra'] : []),
+    ].join('；'),
+  }
+}
+
 async function executeVisualTask(input: ProductProductionTaskExecutionInputV1, options: {
   production: ProductProductionRecordV1
   brief: ProductProductionBriefV3
@@ -3489,6 +3526,7 @@ async function executeVisualTask(input: ProductProductionTaskExecutionInputV1, o
     ))
     let repairInstruction = ''
     let repairRequiresGlyphSuppression = false
+    let repairEvidence = ''
     if (repairFeedbackArtifact) {
       const repair = record(JSON.parse(repairFeedbackArtifact.payloadJson), 'media.repair-feedback')
       exactKeys(repair, [
@@ -3538,8 +3576,13 @@ async function executeVisualTask(input: ProductProductionTaskExecutionInputV1, o
       })
       repairInstruction = `\n本次是受 Visual QA 约束的返修，不是自由变体。禁止重复上轮已识别缺陷。` +
         `逐项落实以下审查意见，并继续遵守原始需求、视觉圣经和角色锚点：\n${issueInstructions.join('\n')}`
+      repairEvidence = issueInstructions.join('\n')
     }
-    const providerPrompt = `${baseProviderPrompt}${repairInstruction}` + (repairRequiresGlyphSuppression
+    const repairCastConstraint = textAdventureVisualRepairCastConstraintV1({
+      repairEvidence, mediaKind: requirement.mediaKind,
+      characters: cast?.characters ?? [],
+    })
+    const providerPrompt = `${baseProviderPrompt}${repairInstruction}${repairCastConstraint.promptSuffix}` + (repairRequiresGlyphSuppression
       ? '\nABSOLUTE REPAIR CONSTRAINT: blank artifact surfaces; no readable text, letters, numbers, pseudo-text, runes, labels, logos, signatures, or character-like marks. Do not replace forbidden text with invented glyphs.'
       : '')
     if (binding?.adapterId === 'storyforge.procedural-svg.v1') {
@@ -3571,10 +3614,13 @@ async function executeVisualTask(input: ProductProductionTaskExecutionInputV1, o
       execution: input, options,
       requirement: capability, artifactKey, mediaClass: 'image', mediaKind: requirement.mediaKind,
       prompt: providerPrompt,
-      negativePrompt: productImageNegativePromptV1(
-        options.brief.intent.productType,
-        repairRequiresGlyphSuppression,
-      ),
+      negativePrompt: [
+        productImageNegativePromptV1(
+          options.brief.intent.productType,
+          repairRequiresGlyphSuppression,
+        ),
+        repairCastConstraint.negativePromptSuffix,
+      ].filter(Boolean).join('；'),
       width: requirement.width, height: requirement.height,
       durationMs: null, index,
     })

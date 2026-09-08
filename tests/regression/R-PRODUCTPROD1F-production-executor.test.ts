@@ -24,6 +24,7 @@ import {
   parseProductionModelJsonObjectV1,
   parseTextAdventureVisualQualityReviewArtifactV1,
   productImageNegativePromptV1,
+  textAdventureVisualRepairCastConstraintV1,
   type ProductionTextRunnerV1,
   type ProductionVisionRunnerV1,
 } from '../../src/lib/product-production/production-executor'
@@ -1063,6 +1064,24 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
     expect(repaired).toContain('汉字')
     expect(repaired).toContain('pseudo-text')
     expect(productImageNegativePromptV1('avg')).not.toContain('汉字')
+  })
+
+  it('对峙 CG 返修只绑定证据中最先出现的已登记 NPC，并排除军装与无身份配角', () => {
+    const constraint = textAdventureVisualRepairCastConstraintV1({
+      mediaKind: 'cg',
+      repairEvidence: '对峙建议使用沉砾或涅洛；当前持斧军人为未登记角色，身份归属不明。',
+      characters: [
+        { key: 'character.player', name: '岚舟', role: 'player', publicIdentity: '守灯人', visualAnchor: '铜扣护腕' },
+        { key: 'character.mentor', name: '沉砾', role: 'major-npc', publicIdentity: '失踪导师', visualAnchor: '铜制调律棒' },
+        { key: 'character.guide', name: '涅洛', role: 'major-npc', publicIdentity: '退役领航员', visualAnchor: '银铃' },
+      ],
+    })
+    expect(constraint.promptSuffix).toContain('「沉砾」')
+    expect(constraint.promptSuffix).toContain('铜制调律棒')
+    expect(constraint.promptSuffix).toContain('只能出现主角与「沉砾」两名')
+    expect(constraint.promptSuffix).not.toContain('「涅洛」')
+    expect(constraint.negativePromptSuffix).toContain('现实军服')
+    expect(constraint.negativePromptSuffix).toContain('未登记角色')
   })
 
   it('保留陌生 Visual QA 分类的问题内容，并确定性归入通用 artifact 类别', () => {
