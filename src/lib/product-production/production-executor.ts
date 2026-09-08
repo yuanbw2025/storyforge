@@ -3899,7 +3899,17 @@ function parseMultimodalVisualReviewsV1(value: unknown, expected: Map<string, st
     exactKeys(review, ['artifactKey', 'contentHash', 'verdict', 'scores', 'issues'], `visualReviewModelOutput.reviews[${index}]`)
     const artifactKey = key(review.artifactKey, `visualReviewModelOutput.reviews[${index}].artifactKey`)
     if (expected.get(artifactKey) !== review.contentHash) fail(`视觉审查 key/hash 越界:${artifactKey}`)
-    const scores = record(review.scores, `visualReviewModelOutput.reviews[${index}].scores`)
+    const scores = { ...record(review.scores, `visualReviewModelOutput.reviews[${index}].scores`) }
+    // One live OpenAI-compatible response used "technicalCleanfulness" for
+    // this schema field. Canonicalize only that observed alias and reject an
+    // ambiguous response containing both spellings.
+    if (scores.technicalCleanliness != null && scores.technicalCleanfulness != null) {
+      fail(`visualReviewModelOutput.reviews[${index}].scores 清洁度字段冲突`)
+    }
+    if (scores.technicalCleanliness == null && scores.technicalCleanfulness != null) {
+      scores.technicalCleanliness = scores.technicalCleanfulness
+      delete scores.technicalCleanfulness
+    }
     exactKeys(scores, [
       'requirementFit', 'identityContinuity', 'styleContinuity', 'composition', 'technicalCleanliness',
     ], `visualReviewModelOutput.reviews[${index}].scores`)

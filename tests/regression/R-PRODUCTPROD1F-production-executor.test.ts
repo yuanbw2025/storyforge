@@ -2050,12 +2050,17 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
       return {
         output: JSON.stringify({
           schema: 'storyforge.text-adventure-visual-quality-model-output', version: 1,
-          reviews: request.images.map(image => ({
+          reviews: request.images.map((image, index) => ({
             artifactKey: image.artifactKey, contentHash: image.contentHash, verdict: 'accept',
-            scores: {
-              requirementFit: 5, identityContinuity: 5, styleContinuity: 4,
-              composition: 4, technicalCleanliness: 5,
-            },
+            scores: index === request.images.length - 1
+              ? {
+                  requirementFit: 5, identityContinuity: 5, styleContinuity: 4,
+                  composition: 4, technicalCleanfulness: 5,
+                }
+              : {
+                  requirementFit: 5, identityContinuity: 5, styleContinuity: 4,
+                  composition: 4, technicalCleanliness: 5,
+                },
             issues: [],
           })),
         }),
