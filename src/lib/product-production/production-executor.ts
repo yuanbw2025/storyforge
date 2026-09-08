@@ -3492,12 +3492,14 @@ async function executeVisualTask(input: ProductProductionTaskExecutionInputV1, o
     if (repairFeedbackArtifact) {
       const repair = record(JSON.parse(repairFeedbackArtifact.payloadJson), 'media.repair-feedback')
       exactKeys(repair, [
-        'schema', 'version', 'sourceBuildNumber', 'sourceReviewArtifactHash', 'targets',
+        'schema', 'version', 'sourceBuildNumber', 'sourceReviewArtifactHash', 'sourceReview', 'targets',
       ], 'media.repair-feedback')
       if (repair.schema !== 'storyforge.text-adventure-visual-repair-feedback'
         || repair.version !== 1 || !Number.isSafeInteger(repair.sourceBuildNumber)
         || typeof repair.sourceReviewArtifactHash !== 'string'
         || !/^[a-f0-9]{64}$/.test(repair.sourceReviewArtifactHash)
+        || !repair.sourceReview || typeof repair.sourceReview !== 'object' || Array.isArray(repair.sourceReview)
+        || await hashProductProductionValueV2(repair.sourceReview) !== repair.sourceReviewArtifactHash
         || !Array.isArray(repair.targets)) {
         fail('视觉返修反馈合同无效')
       }
@@ -4186,9 +4188,62 @@ async function executeTextAdventureVisualQualityReviewTask(
     || auditedAssets.length !== selectedArtifactKeys.length) {
     fail(`视觉审查批次与 media.audit 不一致:${input.task.taskKey}`)
   }
+  const repairFeedbackArtifact = input.inputArtifacts.find(artifact => (
+    artifact.artifactKey === 'media.repair-feedback'
+  ))
+  let repairTargetKeys: Set<string> | null = null
+  let priorReviewByKey = new Map<string, TextAdventureVisualQualityReviewArtifactV1['reviews'][number]>()
+  if (repairFeedbackArtifact) {
+    const repair = record(JSON.parse(repairFeedbackArtifact.payloadJson), 'media.repair-feedback')
+    exactKeys(repair, [
+      'schema', 'version', 'sourceBuildNumber', 'sourceReviewArtifactHash', 'sourceReview', 'targets',
+    ], 'media.repair-feedback')
+    if (repair.schema !== 'storyforge.text-adventure-visual-repair-feedback'
+      || repair.version !== 1 || !Number.isSafeInteger(repair.sourceBuildNumber)
+      || typeof repair.sourceReviewArtifactHash !== 'string'
+      || !/^[a-f0-9]{64}$/.test(repair.sourceReviewArtifactHash)
+      || !repair.sourceReview || typeof repair.sourceReview !== 'object' || Array.isArray(repair.sourceReview)
+      || await hashProductProductionValueV2(repair.sourceReview) !== repair.sourceReviewArtifactHash
+      || !Array.isArray(repair.targets)) {
+      fail('视觉返修审查反馈合同无效')
+    }
+    const sourceReview = parseTextAdventureVisualQualityReviewArtifactV1(repair.sourceReview)
+    if (sourceReview.buildNumber !== repair.sourceBuildNumber) {
+      fail('视觉返修审查来源 Build 不一致')
+    }
+    priorReviewByKey = new Map(sourceReview.reviews.map(review => [review.artifactKey, review]))
+    const targetKeys = repair.targets.map((value, index) => {
+      const target = record(value, `media.repair-feedback.targets[${index}]`)
+      exactKeys(target, [
+        'artifactKey', 'priorContentHash', 'verdict', 'scores', 'issues',
+      ], `media.repair-feedback.targets[${index}]`)
+      const artifactKey = key(target.artifactKey, `media.repair-feedback.targets[${index}].artifactKey`)
+      if (typeof target.priorContentHash !== 'string' || !/^[a-f0-9]{64}$/.test(target.priorContentHash)
+        || priorReviewByKey.get(artifactKey)?.contentHash !== target.priorContentHash) {
+        fail(`视觉返修审查目标与来源报告不一致:${artifactKey}`)
+      }
+      return artifactKey
+    })
+    repairTargetKeys = new Set(targetKeys)
+    if (!targetKeys.length || repairTargetKeys.size !== targetKeys.length) {
+      fail('视觉返修审查目标为空或重复')
+    }
+  }
   const deterministicReviews: TextAdventureVisualQualityReviewArtifactV1['reviews'] = []
   const visionImages: Parameters<ProductionVisionRunnerV1>[0]['images'] = []
+  let carriedPriorReviewCount = 0
   for (const audited of auditedAssets) {
+    if (repairTargetKeys && !repairTargetKeys.has(audited.artifactKey)) {
+      const prior = priorReviewByKey.get(audited.artifactKey)
+      if (!prior || prior.contentHash !== audited.contentHash
+        || !['accept', 'not-applicable-text-fallback'].includes(prior.verdict)
+        || prior.issues.some(issue => issue.severity === 'blocking')) {
+        fail(`未变图片缺少可复用的独立审图证据:${audited.artifactKey}`)
+      }
+      deterministicReviews.push(prior)
+      carriedPriorReviewCount += 1
+      continue
+    }
     if (audited.status === 'text-fallback') {
       deterministicReviews.push({
         artifactKey: audited.artifactKey, contentHash: audited.contentHash,
@@ -4294,6 +4349,7 @@ async function executeTextAdventureVisualQualityReviewTask(
         visualSemanticReviewExecuted: true, status: report.status,
         providerReviewCompleted: report.providerReviewCompleted,
         blockingIssueCount: report.blockingIssueCount,
+        carriedPriorReviewCount,
       },
       rights: { origin: 'configured-vision-review', containsThirdPartyMedia: false },
     }],

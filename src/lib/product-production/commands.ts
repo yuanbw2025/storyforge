@@ -253,7 +253,18 @@ async function createMediaRevisionPlan(input: {
       continue
     }
     if (invalidated.has(task.taskKey)) {
-      tasks.push(task)
+      tasks.push(input.command.includeVisualRepairFeedback
+        && task.kind === 'text-adventure-visual-quality-review-batch'
+        ? {
+            ...task,
+            dependsOn: [...task.dependsOn, MEDIA_REPAIR_FEEDBACK_TASK_KEY],
+            requiredReceipts: [
+              ...task.requiredReceipts,
+              { taskKey: MEDIA_REPAIR_FEEDBACK_TASK_KEY, receiptHash: null },
+            ],
+            inputArtifactKeys: [...task.inputArtifactKeys, MEDIA_REPAIR_FEEDBACK_TASK_KEY],
+          }
+        : task)
       continue
     }
     const outputs = task.outputArtifactKeys.map(key => artifacts.get(key))
@@ -682,6 +693,9 @@ async function applyCommand(input: {
         || !Array.isArray(report.reviews)) {
         reject('media-revision-invalid', 'Visual QA 报告与父 Build 不一致')
       }
+      if (await hashProductProductionValueV2(report) !== sourceArtifact.contentHash) {
+        reject('source-stale', 'Visual QA 报告内容与冻结 hash 不一致')
+      }
       const reviewByKey = new Map<string, Record<string, unknown>>()
       for (const value of report.reviews) {
         if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -731,6 +745,7 @@ async function applyCommand(input: {
         schema: 'storyforge.text-adventure-visual-repair-feedback', version: 1,
         sourceBuildNumber: parentBuild.buildNumber,
         sourceReviewArtifactHash: sourceArtifact.contentHash,
+        sourceReview: report,
         targets: feedbackTargets.sort((left, right) => left.artifactKey.localeCompare(right.artifactKey)),
       }
       visualRepairFeedback = {

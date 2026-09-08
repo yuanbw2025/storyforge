@@ -859,6 +859,11 @@ describe('PRODUCTPROD-1B · user command control plane', () => {
       reuse: null,
     })
     expect(childPlan.tasks.find(task => task.taskKey === accepted.artifactKey)?.reuse).not.toBeNull()
+    expect(childPlan.tasks.find(task => task.kind === 'text-adventure-visual-quality-review-batch'))
+      .toMatchObject({
+        dependsOn: expect.arrayContaining(['media.repair-feedback']),
+        inputArtifactKeys: expect.arrayContaining(['media.repair-feedback']),
+      })
     const feedback = await db.productBuildArtifacts
       .where('[buildId+artifactKey]').equals([child!.id!, 'media.repair-feedback']).first()
     expect(feedback).toMatchObject({
@@ -866,6 +871,7 @@ describe('PRODUCTPROD-1B · user command control plane', () => {
     })
     expect(JSON.parse(feedback!.payloadJson)).toMatchObject({
       sourceBuildNumber: 1, sourceReviewArtifactHash: reviewHash,
+      sourceReview: reviewPayload,
       targets: [{
         artifactKey: rejected.artifactKey, priorContentHash: rejected.contentHash,
         verdict: 'replace',

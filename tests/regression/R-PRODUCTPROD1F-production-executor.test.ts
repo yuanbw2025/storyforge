@@ -2145,6 +2145,70 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
         },
       }],
     })
+    const sourceReview = structuredClone(result.artifacts[0].payload) as {
+      buildNumber: number
+      status: 'passed' | 'revision-required'
+      blockingIssueCount: number
+      reviews: Array<{
+        artifactKey: string; contentHash: string; verdict: string; scores: unknown
+        issues: Array<{ severity: string; category: string; detail: string; recommendation: string }>
+      }>
+    }
+    sourceReview.reviews[0].verdict = 'revise'
+    sourceReview.reviews[0].issues = [{
+      severity: 'blocking', category: 'text', detail: '画面出现伪文字',
+      recommendation: '去除全部字形',
+    }]
+    sourceReview.status = 'revision-required'
+    sourceReview.blockingIssueCount = 1
+    const sourceReviewArtifactHash = await hashProductProductionValueV2(sourceReview)
+    const repairFeedback = {
+      schema: 'storyforge.text-adventure-visual-repair-feedback', version: 1,
+      sourceBuildNumber: 1, sourceReviewArtifactHash, sourceReview,
+      targets: [{
+        artifactKey: sourceReview.reviews[0].artifactKey,
+        priorContentHash: sourceReview.reviews[0].contentHash,
+        verdict: 'revise', scores: sourceReview.reviews[0].scores,
+        issues: sourceReview.reviews[0].issues,
+      }],
+    }
+    const repairAudit = { ...auditPayload, buildNumber: 2 }
+    const repairAuditHash = await hashProductProductionValueV2(repairAudit)
+    seen.length = 0
+    const repairedBatch = await executor({
+      scope: owned.scope, productionId: owned.productionId, buildId: 2, buildNumber: 2,
+      controlEpoch: 1, planHash: '9'.repeat(64),
+      task: { ...task, inputArtifactKeys: [...task.inputArtifactKeys, 'media.repair-feedback'] },
+      attempt: 1, idempotencyKey: '8'.repeat(64), contextText: '{"registered":true}',
+      capabilityBindings: [{
+        requirementKey: textRequirement.requirementKey, adapterId: 'configured-text.v1', bindingHash,
+      }],
+      inputArtifacts: [
+        artifact('media.audit', {
+          kind: 'integration-report', mediaKind: null, blobObjectId: null, mimeType: null,
+          contentHash: repairAuditHash, payloadJson: JSON.stringify(repairAudit), byteSize: 1,
+        }),
+        ...imageKeys.map(artifactKey => artifact(artifactKey)),
+        artifact('media.repair-feedback', {
+          kind: 'integration-report', mediaKind: null, blobObjectId: null, mimeType: null,
+          contentHash: await hashProductProductionValueV2(repairFeedback),
+          payloadJson: JSON.stringify(repairFeedback), byteSize: 1,
+        }),
+      ],
+      authorResolution: null, signal: new AbortController().signal,
+    })
+    expect(seen).toEqual([{
+      artifactKey: imageKeys[0], contentHash: blob.contentHash, byteLength: blob.byteSize,
+    }])
+    expect(repairedBatch).toMatchObject({
+      usage: { modelCalls: 1 },
+      artifacts: [{
+        payload: { status: 'passed', reviews: expect.arrayContaining([
+          expect.objectContaining({ artifactKey: imageKeys[1], verdict: 'accept' }),
+        ]) },
+        quality: { carriedPriorReviewCount: 1 },
+      }],
+    })
     const batchPayload = result.artifacts[0].payload
     const batchPayloadJson = JSON.stringify(batchPayload)
     const batchHash = await hashProductProductionValueV2(batchPayload)
