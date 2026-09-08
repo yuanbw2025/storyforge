@@ -58,6 +58,7 @@
 
 - 根目录 `README.md`：当前产品概览与本地运行。
 - `docs/MEMORY-WORKSPACE-GUIDE.md`：本地记忆工作区操作与隐私边界。
+- `docs/assets/support/afdian-aloneone.jpeg`：根目录 README 使用的爱发电赞助二维码展示资产。
 - `docs/guides/I18N.md`：界面多语言维护规则。
 - `docs/ttrpg/licenses/SRD-5.2.1-CC-BY-4.0.md`：规则引用许可说明。
 

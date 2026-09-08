@@ -179,3 +179,23 @@ npm run ci:e2e   # 涉及真实 UI/恢复/跨产品纵切面时
 ## 支持项目
 
 如果 StoryForge 对你的创作有帮助，可以通过 issue、测试、文档、代码贡献或传播项目参与建设。
+
+---
+
+## 收藏趋势
+
+[![StoryForge Star History](https://raw.githubusercontent.com/yuanbw2025/storyforge/readme-assets/storyforge-star-history.svg)](https://www.star-history.com/?repos=yuanbw2025%2Fstoryforge&type=date&legend=top-left)
+
+折线图由 GitHub 官方 stargazer 时间数据生成，并由 [`star-history.yml`](./.github/workflows/star-history.yml) 每 15 分钟刷新到独立的 `readme-assets` 分支；也可在 Actions 中手动触发，不会产生主干提交或应用部署。
+
+---
+
+## 自愿赞助
+
+StoryForge 的全部功能与后续更新不会因是否赞助而有区别。赞助款主要用于缓解开发者的大模型订阅和项目维护成本，并帮助项目继续迭代。
+
+感谢每一份支持。希望 StoryForge 能帮助更多人把脑海中的想法完成为真正的作品，再让作品中的世界获得被阅读、游玩、共同创造和持续演化的生命。
+
+<p align="center">
+  <img src="./docs/assets/support/afdian-aloneone.jpeg" alt="StoryForge 爱发电赞助二维码" width="420" />
+</p>
