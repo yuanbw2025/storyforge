@@ -557,7 +557,12 @@ export async function createProductProductionPlanV3(input: {
       ? Math.floor(textAdventureTaskInputBaseline * textAdventureInputWeights[taskKey])
       : perInput,
     outputTokens: textAdventure
-      ? Math.floor(textAdventureTaskOutputBaseline * textAdventureOutputWeights[taskKey])
+      ? taskKey === 'media.requirements'
+        ? Math.min(
+            brief.productionBudget.maximumOutputTokens,
+            Math.max(5_000, Math.floor(textAdventureTaskOutputBaseline * textAdventureOutputWeights[taskKey])),
+          )
+        : Math.floor(textAdventureTaskOutputBaseline * textAdventureOutputWeights[taskKey])
       : perOutput,
     maximumCostUsd: perCost,
     // Long-form scene packets have a 300s task timeout and live receipts above
