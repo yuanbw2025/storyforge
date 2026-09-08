@@ -435,6 +435,16 @@ export async function createProductProductionPlanV3(input: {
   // ceiling while retaining aggregate input headroom for retries. The
   // append-only Build ledger below the Plan remains the hard authority.
   const textAdventureInputWeights: Record<string, number> = {
+    // Live flagship receipts reached 16,549 input tokens after the scene
+    // packet, system schema and provider framing were accounted together.
+    // Reserve 18,480 in the 528k envelope for every bounded prose packet;
+    // aggregate reservations still remain below the Build hard ceiling.
+    'content.scene-script.act-1.part-1': 0.035,
+    'content.scene-script.act-1.part-2': 0.035,
+    'content.scene-script.act-2.part-1': 0.035,
+    'content.scene-script.act-2.part-2': 0.035,
+    'content.scene-script.act-3.part-1': 0.035,
+    'content.scene-script.act-3.part-2': 0.035,
     'content.dialogue-pass.act-1': 0.035,
     'content.dialogue-pass.act-2': 0.035,
     'content.dialogue-pass.act-3': 0.035,

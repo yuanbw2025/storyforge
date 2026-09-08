@@ -114,6 +114,8 @@ describe('R-TEXTADV2-production · 文字冒险正式生产契约与工作台', 
       .toBe(Math.floor(brief.productionBudget.maximumOutputTokens * 0.055))
     expect(taskByKey.get('content.dialogue-pass.act-1')?.budgetReservation.inputTokens)
       .toBe(Math.floor(brief.productionBudget.maximumInputTokens * 0.035))
+    expect(taskByKey.get('content.scene-script.act-1.part-1')?.budgetReservation.inputTokens)
+      .toBe(Math.floor(brief.productionBudget.maximumInputTokens * 0.035))
     expect(taskByKey.get('content.adventure-quality-review')?.budgetReservation.inputTokens)
       .toBe(Math.floor(brief.productionBudget.maximumInputTokens * 0.075))
     expect(taskByKey.get('content.adventure-quality-review')?.budgetReservation.outputTokens)
