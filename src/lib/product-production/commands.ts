@@ -20,6 +20,7 @@ import {
 } from './source-contracts'
 import { assertFormalProductProductionStartV1 } from '../product/source-contracts'
 import { createWorldReferenceV1 } from '../product/source'
+import { assertAiTownWorldSourceSelectionHashV1 } from '../ai-town/contracts'
 
 export type ProductProductionErrorCodeV1 =
   | 'production-not-found'
@@ -612,6 +613,7 @@ export async function executeProductProductionCommand(input: {
       throw new Error('[product-production] save-brief-revision 缺少 productionId')
     }
     const production = await productionInScope(scope, input.productionId!)
+    if (command.brief.aiTown) await assertAiTownWorldSourceSelectionHashV1(command.brief.aiTown.sourceSelection)
     preparedSourcePlan = await createProductProductionSourcePlanV1({
       scope,
       productionKey: production.productionKey,
@@ -628,6 +630,8 @@ export async function executeProductProductionCommand(input: {
     if (!briefRow || briefRow.briefHash !== command.briefHash) {
       throw new Error('[product-production] authorize-start 的 Brief 不存在或 hash 已变化')
     }
+    const storedBrief = parseProductProductionBriefV3(briefRow.briefJson)
+    if (storedBrief.aiTown) await assertAiTownWorldSourceSelectionHashV1(storedBrief.aiTown.sourceSelection)
     preparedSourcePlan = await parseProductProductionSourcePlanV1(briefRow)
     preparedConfirmedBrief = await createConfirmedProductBriefV1({
       productionKey: production.productionKey,

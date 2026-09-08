@@ -230,6 +230,18 @@ export function parseProductProductionPlanV3(
         && (totals.maximumCostUsd == null || totals.maximumCostUsd > budget.maximumCostUsd))) {
       fail('Plan 预算预留超过 Brief 授权')
     }
+    const canonicalInputBudget = Math.floor(budget.maximumInputTokens / 5)
+    const canonicalInputTasks = [
+      'content.design', 'content.narrative', 'content.product-module',
+      'media.requirements', 'integration.package',
+    ]
+    const isCanonicalProductionPlan = canonicalInputTasks.some(taskKey => taskByKey.has(taskKey))
+      || taskByKey.has('qa.release')
+    if (isCanonicalProductionPlan && canonicalInputTasks.some(taskKey => (
+      taskByKey.get(taskKey)?.budgetReservation.inputTokens !== canonicalInputBudget
+    ))) {
+      fail('Plan 输入预算切片不是当前生产协议')
+    }
   }
   return {
     schema: 'storyforge.product-production-plan', version: 3,
@@ -296,7 +308,8 @@ export async function createProductProductionPlanV3(input: {
     (_, index) => `media.audio.${String(index + 1).padStart(3, '0')}`,
   )
   // Four model tasks and deterministic package integration each receive a
-  // declared slice. Integration reads the frozen world through Context Gateway.
+  // declared slice. Integration reserves only the immutable Brief from its
+  // normal-context slice and gives the remainder to full-depth world evidence.
   const perInput = Math.floor(brief.productionBudget.maximumInputTokens / 5)
   const perOutput = Math.floor(brief.productionBudget.maximumOutputTokens / 4)
   const perDuration = Math.floor(brief.productionBudget.maximumDurationMs / 8)

@@ -130,6 +130,40 @@ describe('CTXG-7 · Gateway fast/complex execution', () => {
     expect(enabled.metrics.additionalToolCalls).toBe(0)
   })
 
+  it('applies the frozen resource allow-list before selection and conflict checks', async () => {
+    const fixture = await seedWorkspace('产品 SourcePlan 精确选择')
+    for (const description of ['被选择的地点正史', '未选择的同名冲突正史']) {
+      await addScoped(fixture.scope, 'importantLocations', {
+        parentId: null,
+        name: '新地点',
+        tags: '[]',
+        description,
+        significance: '两个版本不能同时成立。',
+        sortOrder: 0,
+      }, 'world')
+    }
+    const locationDescriptors = (await descriptors(fixture.scope)).filter(item => item.kind === 'location')
+    const allowed = locationDescriptors.find(item => item.shortSummary.includes('被选择的地点正史'))!
+    expect(allowed).toBeTruthy()
+
+    const result = await executeContextGatewayV1({
+      skill: worldviewSkill(),
+      scope: fixture.scope,
+      worldGroupId: null,
+      budgetTokens: 8_000,
+      allowedResourceKeys: [allowed.resourceKey],
+      mandatoryResourceKeys: [allowed.resourceKey],
+      targetResourceKeys: [allowed.resourceKey],
+      additionalReadsEnabled: false,
+    })
+
+    expect(result.metrics.catalogResources).toBe(1)
+    expect(result.selector.selected.map(item => item.resourceKey)).toEqual([allowed.resourceKey])
+    expect(result.sufficiency.obligations.some(item => item.id.startsWith('same-name-conflict:'))).toBe(false)
+    expect(result.contextPacket.content).toContain('被选择的地点正史')
+    expect(result.contextPacket.content).not.toContain('未选择的同名冲突正史')
+  })
+
   it('complex soft deficit enters the same Runner once and is bounded by the Skill allowlist/budgets', async () => {
     const fixture = await seedWorkspace()
     await addScoped(fixture.scope, 'worldviews', {

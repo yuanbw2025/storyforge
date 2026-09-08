@@ -19,6 +19,7 @@ import { PRODUCT_MEDIA_KINDS, PRODUCT_PRODUCTION_COMMAND_TYPES, PRODUCTION_PRODU
 import { isSha256Hash } from './hash'
 import { parseProductWorldSourceSelectionV1 } from './runtime-package'
 import { parseTtrpgProductionBriefV2 } from '../ttrpg/production-brief'
+import { parseAiTownProductionBriefV1 } from '../ai-town/contracts'
 
 const STABLE_KEY = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/
 
@@ -251,6 +252,7 @@ export function parseProductProductionBriefV3(value: unknown): ProductProduction
     'productionBudget', 'qualityProfile', 'capabilityRequirements', 'externalDataPolicy',
     'fallbackPolicy', 'completionContract', 'unresolvedDecisionKeys',
     ...(Object.prototype.hasOwnProperty.call(row, 'ttrpg') ? ['ttrpg'] : []),
+    ...(Object.prototype.hasOwnProperty.call(row, 'aiTown') ? ['aiTown'] : []),
     ...(Object.prototype.hasOwnProperty.call(row, 'authorConfirmations') ? ['authorConfirmations'] : []),
     ...(Object.prototype.hasOwnProperty.call(row, 'evolution') ? ['evolution'] : []),
   ], 'brief')
@@ -301,6 +303,9 @@ export function parseProductProductionBriefV3(value: unknown): ProductProduction
     ...(Object.prototype.hasOwnProperty.call(row, 'ttrpg')
       ? { ttrpg: parseTtrpgProductionBriefV2(row.ttrpg) }
       : {}),
+    ...(Object.prototype.hasOwnProperty.call(row, 'aiTown')
+      ? { aiTown: parseAiTownProductionBriefV1(row.aiTown) }
+      : {}),
     ...(Object.prototype.hasOwnProperty.call(row, 'authorConfirmations')
       ? { authorConfirmations: (() => {
         const confirmations = record(row.authorConfirmations, 'authorConfirmations')
@@ -322,6 +327,32 @@ export function parseProductProductionBriefV3(value: unknown): ProductProduction
   }
   if ((parsed.intent.productType === 'ttrpg') !== (parsed.ttrpg != null)) {
     fail('ttrpg 产品与 TtrpgProductionBriefV2 不闭合')
+  }
+  if ((parsed.intent.productType === 'ai-town') !== (parsed.aiTown != null)) {
+    fail('ai-town 产品与 AiTownProductionBriefV1 不闭合')
+  }
+  if (parsed.aiTown) {
+    const townSource = parsed.aiTown.sourceSelection
+    if (townSource.worldReleaseId !== parsed.source.worldReleaseId
+      || townSource.worldContentHash !== parsed.source.worldContentHash
+      || townSource.worldReferenceHash !== parsed.source.selection.worldReferenceHash) {
+      fail('AI 小镇专属来源与产品冻结来源不一致')
+    }
+    const selected = new Set(parsed.source.selection.resourceKeys)
+    const relationKeys = new Set(townSource.relationSubgraphResourceKeys)
+    const explicitKeys = [
+      ...townSource.endingResourceKeys, ...townSource.residentResourceKeys,
+      ...townSource.locationResourceKeys, ...townSource.ruleAndLoreResourceKeys,
+      ...townSource.artifactResourceKeys,
+    ]
+    if (explicitKeys.some(key => !selected.has(key))) fail('AI 小镇显式来源超出产品冻结选择')
+    if ([...selected].some(key => !townSource.dependencyClosureResourceKeys.includes(key))
+      || townSource.dependencyClosureResourceKeys.some(key => !selected.has(key) && !relationKeys.has(key))) {
+      fail('AI 小镇来源闭包与产品冻结选择/关系子图不一致')
+    }
+    if (!parsed.aiTown.authorConfirmed && !parsed.unresolvedDecisionKeys.includes('ai-town-author-confirmation')) {
+      fail('AI 小镇未确认状态必须登记 unresolved decision')
+    }
   }
   if (parsed.ttrpg) {
     if (parsed.ttrpg.campaignDesign.sourceWorldContentHash !== parsed.source.worldContentHash) {

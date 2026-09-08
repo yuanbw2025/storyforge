@@ -27,6 +27,8 @@ describe('R-PRODUCTPROD-1D · reuse existing text provider configuration', () =>
       endpointOrigin: 'https://apihub.agnes-ai.com', credentialSource: 'existing-ai-config',
       credentialPresent: true, issue: null,
     },
+    authoredImagePackConfigured: false, authoredImagePackReady: false,
+    authoredImagePackManifestPath: null, authoredImagePackIssue: '当前部署未绑定作者媒资包。',
     mediaRelayConfigured: false, mediaRelayReady: false, mediaRelayOrigin: null,
     mediaRelayIssue: '外部媒体可信中继尚未由部署方配置。',
     ...overrides,

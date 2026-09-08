@@ -3,6 +3,7 @@ import { AIError } from '../../src/lib/types'
 import { classifyHarnessFailureV1 } from '../../src/lib/agent/run/harness-failure'
 import {
   agnesImage21FlashAdapterV1,
+  authoredImagePackAdapterV1,
   detectProductImageDimensionsV1,
   elevenLabsMusicAdapterV2,
   listProductMediaProviderCapabilitiesV1,
@@ -13,6 +14,7 @@ import {
   type MediaProviderTransportV1,
   type MediaTransportResponseV1,
 } from '../../src/lib/product-production/media-adapters'
+import { sha256MediaData } from '../../src/lib/product-production/media-blob-store'
 
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).buffer
 const MP3 = new Uint8Array([0x49, 0x44, 0x33, 0x04, 0x00, 0x00, 0x00, 0x00]).buffer
@@ -137,6 +139,58 @@ describe('R-PRODUCTPROD-1E · central media provider adapters', () => {
     await expect(agnesImage21FlashAdapterV1.generate(request({
       adapterId: 'agnes.image-2.1-flash.v1',
     }), unknownMetadata.value, new AbortController().signal)).rejects.toThrow(/未允许字段/)
+  })
+
+  it('作者媒资包按 artifactKey 导入真实 PNG，并复核清单 hash 与固有尺寸', async () => {
+    const png = Uint8Array.from([
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+      0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
+      0x00, 0x00, 0x06, 0x88, 0x00, 0x00, 0x03, 0xad,
+    ]).buffer
+    const contentHash = await sha256MediaData(png)
+    const direct = transport({
+      executionLocation: 'browser-direct',
+      response: {
+        status: 200, contentType: 'image/png', body: png,
+        json: {
+          packId: 'tidewake-town.prototype.v1', packVersion: 1,
+          artifactKey: 'media.visual.001', fileName: 'town-overview.png',
+          declaredContentHash: contentHash, mimeType: 'image/png', width: 1672, height: 941,
+          title: '回潮镇', altText: '海湾小镇',
+          license: 'StoryForge-community-prototype-rights-pending-v1', commercialUse: false,
+          source: 'StoryForge original AI-generated concept art',
+        },
+        providerRequestId: null, usage: null, costUsd: null,
+      },
+    })
+    const candidates = await authoredImagePackAdapterV1.generate(request({
+      adapterId: 'storyforge.authored-image-pack.v1', artifactKey: 'media.visual.001',
+      width: 1200, height: 675,
+    }), direct.value, new AbortController().signal)
+    expect(direct.call.mock.calls[0][0]).toMatchObject({
+      adapterId: 'storyforge.authored-image-pack.v1',
+      endpoint: '/v1/storyforge/authored-image-pack/read',
+      body: { artifactKey: 'media.visual.001', mediaKind: 'background' },
+    })
+    expect(candidates[0]).toMatchObject({
+      contentHash, mimeType: 'image/png',
+      rights: { origin: 'generated', commercialUse: false, requiresProviderTermsReview: true },
+      metadata: { packId: 'tidewake-town.prototype.v1', width: 1672, height: 941 },
+    })
+
+    direct.value.request = vi.fn(async () => ({
+      ...direct.call.mock.results[0].value,
+      status: 200, contentType: 'image/png', body: png,
+      json: { ...(await direct.call.mock.results[0].value).json, declaredContentHash: 'f'.repeat(64) },
+      providerRequestId: null, usage: null, costUsd: null,
+    }))
+    await expect(authoredImagePackAdapterV1.generate(request({
+      adapterId: 'storyforge.authored-image-pack.v1', artifactKey: 'media.visual.001',
+    }), direct.value, new AbortController().signal)).rejects.toThrow(/内容哈希/)
+    await expect(authoredImagePackAdapterV1.generate(request({
+      adapterId: 'storyforge.authored-image-pack.v1', artifactKey: 'media.visual.001',
+      qualityProfile: 'commercial-candidate',
+    }), direct.value, new AbortController().signal)).rejects.toThrow(/商业权利复核/)
   })
 
   it('Agnes 图片兼容有界 Data URI、换行、无 padding 与 URL-safe Base64，仍以真实 MIME 验证', async () => {
@@ -337,6 +391,7 @@ describe('R-PRODUCTPROD-1E · central media provider adapters', () => {
     expect(listProductMediaProviderCapabilitiesV1().map(item => item.adapterId)).toEqual([
       'agnes.image-2.1-flash.v1', 'elevenlabs.music.v2', 'elevenlabs.sound-effects.v2', 'existing-project-media.v1',
       'fixture.media.v1', 'local-import-media.v1', 'openai.gpt-image-2.v1', 'procedural-audio.v1',
+      'storyforge.authored-image-pack.v1',
     ])
     expect(() => resolveProductMediaProviderAdapterV1('existing-project-media.v1')).toThrow(/catalog-service/)
   })

@@ -41,6 +41,7 @@ export interface UpperProductWorldRequirementGoalV1 {
 
 const PRODUCT_AREAS: Readonly<Record<ProductionProductKindV1, WorldCapabilityArea[]>> = {
   'character-interaction': ['foundation', 'characters', 'relations', 'story', 'storylines', 'entities', 'multi-world'],
+  'ai-town': ['foundation', 'characters', 'relations', 'story', 'storylines', 'outline', 'detailed-outline', 'entities'],
   'text-adventure': ['foundation', 'characters', 'relations', 'story', 'storylines', 'outline', 'detailed-outline', 'entities', 'multi-world'],
   avg: ['foundation', 'characters', 'relations', 'story', 'storylines', 'outline', 'detailed-outline', 'manuscript', 'entities'],
   'text-open-world': ['foundation', 'characters', 'relations', 'story', 'storylines', 'outline', 'detailed-outline', 'manuscript', 'entities', 'multi-world'],
@@ -49,6 +50,7 @@ const PRODUCT_AREAS: Readonly<Record<ProductionProductKindV1, WorldCapabilityAre
 
 const PRODUCT_CONTEXT_KINDS: Readonly<Record<ProductionProductKindV1, ContextResourceKind[]>> = {
   'character-interaction': ['world', 'worldview-field', 'character', 'character-relation', 'story-core-field', 'story-arc', 'storyline-progress', 'location', 'codex-entry', 'fact', 'world-link'],
+  'ai-town': ['world', 'worldview-field', 'character', 'character-relation', 'story-core-field', 'story-arc', 'storyline-progress', 'outline-node', 'detailed-outline', 'location', 'codex-entry', 'fact'],
   'text-adventure': ['world', 'worldview-field', 'story-core-field', 'character', 'character-relation', 'story-arc', 'storyline-progress', 'outline-node', 'detailed-outline', 'foreshadow', 'location', 'codex-entry', 'fact', 'world-link'],
   avg: ['world', 'worldview-field', 'story-core-field', 'character', 'character-relation', 'story-arc', 'storyline-progress', 'outline-node', 'detailed-outline', 'chapter', 'foreshadow', 'location', 'codex-entry', 'fact'],
   'text-open-world': ['world', 'worldview-field', 'world-link', 'story-core-field', 'character', 'character-relation', 'story-arc', 'storyline-progress', 'outline-node', 'detailed-outline', 'chapter', 'foreshadow', 'location', 'codex-entry', 'fact'],
@@ -89,8 +91,8 @@ function upperProductRules(
   if (goal.participantCount > 0) rules.push({
     key: 'product-cast',
     label: '产品参与角色',
-    level: productType === 'character-interaction' || productType === 'ttrpg' ? 'stable-required' : 'recommended',
-    minimumResources: Math.max(1, goal.participantCount),
+    level: productType === 'character-interaction' || productType === 'ttrpg' || productType === 'ai-town' ? 'stable-required' : 'recommended',
+    minimumResources: productType === 'ai-town' ? Math.max(4, goal.participantCount) : Math.max(1, goal.participantCount),
     selector: selector({ areas: ['characters'], resourceKinds: ['character'], contextKinds: ['character'] }),
     condition: null,
   })
@@ -154,6 +156,7 @@ function createUpperProductWorldRequirementAdapterV1(
 
 export const TTRPG_WORLD_REQUIREMENT_ADAPTER_V1 = createUpperProductWorldRequirementAdapterV1('ttrpg')
 export const CHARACTER_INTERACTION_WORLD_REQUIREMENT_ADAPTER_V1 = createUpperProductWorldRequirementAdapterV1('character-interaction')
+export const AI_TOWN_WORLD_REQUIREMENT_ADAPTER_V1 = createUpperProductWorldRequirementAdapterV1('ai-town')
 export const TEXT_ADVENTURE_WORLD_REQUIREMENT_ADAPTER_V1 = createUpperProductWorldRequirementAdapterV1('text-adventure')
 export const AVG_WORLD_REQUIREMENT_ADAPTER_V1 = createUpperProductWorldRequirementAdapterV1('avg')
 export const TEXT_OPEN_WORLD_REQUIREMENT_ADAPTER_V1 = createUpperProductWorldRequirementAdapterV1('text-open-world')
@@ -164,6 +167,7 @@ const UPPER_PRODUCT_WORLD_REQUIREMENT_ADAPTERS_V1: ReadonlyMap<
 > = new Map([
   ['ttrpg', TTRPG_WORLD_REQUIREMENT_ADAPTER_V1],
   ['character-interaction', CHARACTER_INTERACTION_WORLD_REQUIREMENT_ADAPTER_V1],
+  ['ai-town', AI_TOWN_WORLD_REQUIREMENT_ADAPTER_V1],
   ['text-adventure', TEXT_ADVENTURE_WORLD_REQUIREMENT_ADAPTER_V1],
   ['avg', AVG_WORLD_REQUIREMENT_ADAPTER_V1],
   ['text-open-world', TEXT_OPEN_WORLD_REQUIREMENT_ADAPTER_V1],
@@ -195,6 +199,13 @@ export function compileUpperProductWorldRoleBindingsV1(
   if (productType === 'character-interaction') return {
     participants: [...catalog.characterResourceKeys],
     context: [...catalog.storyResourceKeys, ...catalog.storyArcResourceKeys],
+  }
+  if (productType === 'ai-town') return {
+    residents: [...catalog.characterResourceKeys],
+    ending: [...catalog.storyResourceKeys, ...catalog.storyArcResourceKeys],
+    locations: [...catalog.importantLocationResourceKeys],
+    lore: [...catalog.codexEntryResourceKeys],
+    artifacts: [...catalog.artifactResourceKeys],
   }
   if (productType === 'text-adventure') return {
     locations: [...catalog.importantLocationResourceKeys],

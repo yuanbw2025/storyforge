@@ -106,6 +106,7 @@ export const PROVIDER_MODELS: Record<string, { value: string; label: string; des
     { value: 'GLM-5.1-FM', label: 'GLM 5.1 FM' },
   ],
   nvidia: [
+    { value: 'nvidia/nemotron-3-super-120b-a12b', label: 'Nemotron 3 Super 120B', desc: 'NVIDIA 托管大模型端点 · 适合长上下文结构化生产，受开发账户限速' },
     { value: 'mistralai/mistral-nemotron', label: 'Mistral Nemotron ⭐', desc: 'NVIDIA 托管文本端点·当前实测低延迟' },
     { value: 'deepseek-ai/deepseek-v4-flash-0731', label: 'DeepSeek V4 Flash 0731', desc: 'NVIDIA 托管目录当前 V4 端点；可能冷启动或长时间排队' },
     { value: 'minimaxai/minimax-m3', label: 'MiniMax M3', desc: 'NVIDIA 托管目录当前文本端点·推理与 Agent' },

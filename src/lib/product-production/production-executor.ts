@@ -53,8 +53,12 @@ const COLOR = /^#[0-9a-fA-F]{6}$/
 type JsonRecord = Record<string, unknown>
 
 function productCharacterKeys(brief: ProductProductionBriefV3): string[] {
+  if (brief.intent.productType === 'ai-town' && brief.aiTown) {
+    return [...brief.aiTown.sourceSelection.residentResourceKeys]
+  }
   const resources = brief.source.selection.roleBindings.characters
-    ?? brief.source.selection.roleBindings.participants ?? []
+    ?? brief.source.selection.roleBindings.participants
+    ?? brief.source.selection.roleBindings.residents ?? []
   return resources.slice(0, 100).map((_, index) => `character:${index + 1}`)
 }
 
@@ -571,14 +575,58 @@ function parseProductModule(value: unknown, brief: ProductProductionBriefV3): Pr
 }
 
 function expectedVisualKeys(brief: ProductProductionBriefV3): string[] {
-  if (!['avg', 'ttrpg'].includes(brief.intent.productType) || brief.media.imageCount < 1) return []
+  if (!['avg', 'ttrpg', 'ai-town'].includes(brief.intent.productType) || brief.media.imageCount < 1) return []
   return Array.from({ length: brief.media.imageCount }, (_, index) => `media.visual.${String(index + 1).padStart(3, '0')}`)
 }
 
 function expectedAudioKeys(brief: ProductProductionBriefV3): string[] {
-  if (brief.intent.productType !== 'avg') return []
+  if (brief.intent.productType !== 'avg' && brief.intent.productType !== 'ai-town') return []
   const count = brief.media.musicTrackCount + brief.media.sfxCount + brief.media.voiceLineCount
   return Array.from({ length: count }, (_, index) => `media.audio.${String(index + 1).padStart(3, '0')}`)
+}
+
+interface FixedAiTownVisualContractV1 {
+  artifactKey: string
+  mediaKind: 'background' | 'character-pose' | 'character-expression'
+  sceneTag: string
+  width: number
+  height: number
+  characterAnchorRefs: string[]
+}
+
+function fixedAiTownVisualContractsV1(brief: ProductProductionBriefV3): FixedAiTownVisualContractV1[] {
+  if (brief.intent.productType !== 'ai-town' || !brief.aiTown) return []
+  const keys = expectedVisualKeys(brief)
+  const requestedLocations = brief.aiTown.media.locationCards ? brief.aiTown.town.majorLocationTarget : 0
+  const requestedPortraits = brief.aiTown.media.portraits ? brief.aiTown.town.residentTarget : 0
+  const locationCount = Math.min(keys.length, requestedLocations)
+  const portraitCount = Math.min(keys.length - locationCount, requestedPortraits)
+  const characters = productCharacterKeys(brief)
+  if (portraitCount > characters.length || keys.length - locationCount - portraitCount > characters.length) {
+    fail('AI 小镇媒资角色数量与冻结居民绑定不一致')
+  }
+  return keys.map((artifactKey, index) => {
+    if (index < locationCount) return {
+      artifactKey,
+      mediaKind: 'background' as const,
+      sceneTag: `town-location-${String(index + 1).padStart(3, '0')}`,
+      width: 1280,
+      height: 720,
+      characterAnchorRefs: [],
+    }
+    const characterIndex = index - locationCount
+    const expression = characterIndex >= portraitCount
+    const residentIndex = expression ? characterIndex - portraitCount : characterIndex
+    const anchor = characters[residentIndex] ?? fail('AI 小镇媒资缺少冻结居民锚点')
+    return {
+      artifactKey,
+      mediaKind: expression ? 'character-expression' as const : 'character-pose' as const,
+      sceneTag: `town-resident-${String(residentIndex + 1).padStart(3, '0')}${expression ? '-expression' : ''}`,
+      width: 720,
+      height: 1080,
+      characterAnchorRefs: [anchor],
+    }
+  })
 }
 
 export function isolateCharacterProviderPromptV1(prompt: string, fallback: string): string {
@@ -670,10 +718,28 @@ export function parseProductMediaRequirementsArtifactV2(
   }
   exactSet(visual.map(item => item.artifactKey), expectedVisualKeys(brief), 'visual')
   exactSet(audio.map(item => item.artifactKey), expectedAudioKeys(brief), 'audio')
-  if (['avg', 'ttrpg'].includes(brief.intent.productType) && visual.length > 0) {
-    if (!visual.some(item => item.mediaKind === 'background')) fail(`${brief.intent.productType} 视觉需求缺少 background`)
+  if (brief.intent.productType === 'ai-town') {
+    const fixedVisual = new Map(fixedAiTownVisualContractsV1(brief).map(item => [item.artifactKey, item]))
+    for (const item of visual) {
+      const expected = fixedVisual.get(item.artifactKey) ?? fail(`AI 小镇视觉 key 不在冻结计划:${item.artifactKey}`)
+      if (item.mediaKind !== expected.mediaKind || item.sceneTag !== expected.sceneTag
+        || item.width !== expected.width || item.height !== expected.height
+        || item.characterAnchorRefs.join(',') !== expected.characterAnchorRefs.join(',')) {
+        fail(`AI 小镇视觉语义与冻结计划不一致:${item.artifactKey}`)
+      }
+    }
+    for (const item of audio) {
+      if (item.mediaKind !== 'ambience' || item.sceneTag !== 'town-ambience') {
+        fail(`AI 小镇环境音语义与冻结计划不一致:${item.artifactKey}`)
+      }
+    }
+  }
+  if (['avg', 'ttrpg', 'ai-town'].includes(brief.intent.productType) && visual.length > 0) {
+    if (brief.media.requiredMediaKinds.includes('background') && !visual.some(item => item.mediaKind === 'background')) fail(`${brief.intent.productType} 视觉需求缺少 background`)
     if (brief.media.requiredMediaKinds.includes('character-pose')
       && !visual.some(item => item.mediaKind === 'character-pose')) fail(`${brief.intent.productType} 视觉需求缺少 character-pose`)
+    if (brief.media.requiredMediaKinds.includes('character-expression')
+      && !visual.some(item => item.mediaKind === 'character-expression')) fail(`${brief.intent.productType} 视觉需求缺少 character-expression`)
   }
   return { schema: 'storyforge.product-media-requirements-artifact', version: 2, visual, audio }
 }
@@ -713,29 +779,42 @@ function textSystem(taskKey: string, brief: ProductProductionBriefV3): string {
     (ttrpgDesign ? '\n跑团的本任务只生成公开场景骨架：所有 condition、displayCondition、availableCondition 必须为 {}，所有 effects 必须为 []；线索获得、检定、角色秘密和结局门槛由后续 ttrpgScenario 任务定义，禁止虚构 has_evidence、beats_unlocked 或 evidence 字段。' +
       '所有 beat 均使用 narration 且 speakerKey=null，可在叙述中写可公开的 NPC 对话。不要在开场或场景描述提前解释悬疑真相、自动授予线索或公开玩家私人物证；只写感官现象、可调查对象和待验证的问题。' +
       '按作者指定的场景数和场景清单生成，不额外增加抉择节点；调查地点之间应可往返，不能查完一处就被迫进入结局。作者没有要求的捐忆、强制坦白或永久代价不得加入结局。' : '') +
-    (ttrpgDesign ? `\n这是作者已比较/混合的跑团战役方向，必须落实且不得改写 lockedSections：${JSON.stringify(ttrpgDesign)}。` : '')
+    (ttrpgDesign ? `\n这是作者已比较/混合的跑团战役方向，必须落实且不得改写 lockedSections：${JSON.stringify(ttrpgDesign)}。` : '') +
+    (brief.intent.productType === 'ai-town'
+      ? '\n这是无限后日谈生活模拟的开场内容种子，不得写成要求玩家通关的主线；ending 仅表示本次生产片段结束，不结束小镇运行。'
+      : '')
   }
   if (taskKey === 'content.product-module' && brief.intent.productType === 'ttrpg') return `${common}\n${TTRPG_SCENARIO_PROMPT_V1}`
   if (taskKey === 'content.product-module') return `${common}\n输出字段必须精确为：` +
     `{"schema":"storyforge.product-module-artifact","version":1,"productType":"${PRODUCTION_PRODUCT_KINDS_V1.join('|')}","interfaceStyle":"...","interactionNotes":["..."],"presentationPolicy":{"pacing":"slow|balanced|fast","transitionMs":500,"backgroundStrategy":"none|key-scenes"}}。` +
     `productType 必须为 ${brief.intent.productType}；纯文字使用 none，AVG/TTRPG 按 Brief 视觉目标选择。`
-  const visual = expectedVisualKeys(brief).map((artifactKey, index) => ({
-    artifactKey,
-    mediaKind: index === 0 ? 'background' : 'character-pose',
-    sceneTag: index === 0 ? 'opening' : 'protagonist',
-    beatKey: index === 0 ? 'opening-beat-key' : 'first-character-beat-key',
-    prompt: '具体可施工的原创画面描述', altText: '无障碍描述',
-    width: index === 0 ? 1280 : 720, height: index === 0 ? 720 : 1080,
-    palette: ['#112233', '#445566', '#ddeeff'],
-    characterAnchorRefs: index === 0 ? [] : [productCharacterKeys(brief)[0] ?? 'intent:protagonist'],
-    hardConstraints: index === 0 ? [] : [...new Set([
-      '保持角色身份、年龄段与核心视觉特征', `角色定位：${brief.intent.playerRole}`,
-      ...brief.intent.forbiddenChanges,
-    ])].sort(),
-  }))
+  const fixedTownVisual = new Map(fixedAiTownVisualContractsV1(brief).map(item => [item.artifactKey, item]))
+  const visual = expectedVisualKeys(brief).map((artifactKey, index) => {
+    const fixed = fixedTownVisual.get(artifactKey)
+    const isCharacter = fixed
+      ? fixed.mediaKind === 'character-pose' || fixed.mediaKind === 'character-expression'
+      : index > 0
+    return {
+      artifactKey,
+      mediaKind: fixed?.mediaKind ?? (index === 0 ? 'background' : 'character-pose'),
+      sceneTag: fixed?.sceneTag ?? (index === 0 ? 'opening' : 'protagonist'),
+      beatKey: index === 0 ? 'opening-beat-key' : 'first-character-beat-key',
+      prompt: '具体可施工的原创画面描述',
+      altText: '无障碍描述',
+      width: fixed?.width ?? (index === 0 ? 1280 : 720),
+      height: fixed?.height ?? (index === 0 ? 720 : 1080),
+      palette: ['#112233', '#445566', '#ddeeff'],
+      characterAnchorRefs: fixed?.characterAnchorRefs ?? (isCharacter ? [productCharacterKeys(brief)[0] ?? 'intent:protagonist'] : []),
+      hardConstraints: isCharacter ? [...new Set([
+        '保持角色身份、年龄段与核心视觉特征', `角色定位：${brief.intent.playerRole}`,
+        ...brief.intent.forbiddenChanges,
+      ])].sort() : [],
+    }
+  })
   const audio = expectedAudioKeys(brief).map((artifactKey, index) => ({
-    artifactKey, mediaKind: index < brief.media.musicTrackCount ? 'bgm' : 'sfx',
-    sceneTag: 'opening', beatKey: 'opening-beat-key', prompt: '声音意图', altText: '声音说明', durationMs: 3000,
+    artifactKey, mediaKind: brief.intent.productType === 'ai-town' ? 'ambience' : index < brief.media.musicTrackCount ? 'bgm' : 'sfx',
+    sceneTag: brief.intent.productType === 'ai-town' ? 'town-ambience' : 'opening',
+    beatKey: 'opening-beat-key', prompt: '声音意图', altText: '声音说明', durationMs: 3000,
   }))
   return `${common}\n把设计拆成精确媒资清单。输出字段必须精确为：` +
     '{"schema":"storyforge.product-media-requirements-artifact","version":2,"visual":[],"audio":[]}。' +
@@ -1283,12 +1362,13 @@ async function executeIntegrationTask(input: ProductProductionTaskExecutionInput
   const modules = buildUpperProductModulesV1({
     brief: options.brief, narrative, sourceCatalog, ttrpg,
   })
+  const hasAiTownPresentation = options.brief.intent.productType === 'ai-town' && assets.length > 0
   const runtimePackage: ProductRuntimePackageV1 = {
     schema: 'storyforge.product-runtime-package', version: 1, productType: options.brief.intent.productType,
     definition: {
       productKey: options.production.productionKey, title: options.production.title,
       description: `${narrative.moduleTitle} · ${options.brief.intent.coreExperience.join('；')}`,
-      enabledCapabilities: modules.enabledCapabilities,
+      enabledCapabilities: hasAiTownPresentation ? [...modules.enabledCapabilities, 'presentation'] : modules.enabledCapabilities,
       rulesetVersion: 1,
       initialVariables: {
         productAdapterId: modules.adapterId,
@@ -1306,7 +1386,8 @@ async function executeIntegrationTask(input: ProductProductionTaskExecutionInput
   if (modules.openWorldEvolution) runtimePackage.openWorldEvolution = modules.openWorldEvolution
   if (modules.openWorld) runtimePackage.openWorld = modules.openWorld
   if (modules.ttrpg) runtimePackage.ttrpg = modules.ttrpg
-  if (options.brief.intent.productType === 'avg' || options.brief.intent.productType === 'ttrpg') {
+  if (modules.town) runtimePackage.town = modules.town
+  if (options.brief.intent.productType === 'avg' || options.brief.intent.productType === 'ttrpg' || hasAiTownPresentation) {
     const firstBeatKey = narrative.beats[0]?.beatKey
     const knownBeatKeys = new Set(narrative.beats.map(beat => beat.beatKey))
     const cues: NonNullable<ProductRuntimePackageV1['presentation']>['cues'] = []

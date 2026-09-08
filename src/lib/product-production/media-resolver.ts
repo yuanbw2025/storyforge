@@ -15,6 +15,11 @@ interface ResolverLease {
   release(): Promise<void>
 }
 
+// React may dispose one preview resolver and mount the next in the same tick.
+// Serialize lease release before the next resolver acquires so switching saves
+// never produces a false "other reader" degradation.
+let buildResolverLeaseReleaseBarrier: Promise<void> = Promise.resolve()
+
 function assetCatalog(runtimePackage: ProductRuntimePackageV1): Map<string, FrozenRuntimeMediaAssetV2> {
   return new Map((runtimePackage.presentation?.assets ?? []).map(asset => [asset.assetKey, asset]))
 }
@@ -104,8 +109,14 @@ export async function createBuildProductMediaResolver(input: {
   preview: ProductBuildPreviewManifestV1
 }): Promise<ProductMediaResolverV1> {
   const scope = await resolveScope({ scope: input.scope })
-  const owner = `preview:${input.productBuildId}:${crypto.randomUUID()}`
+  // A browser Work is one logical read owner. React StrictMode, HMR and quick
+  // Build switches may legitimately keep two read-only resolvers alive for a
+  // few milliseconds; a random per-component owner turns that overlap into a
+  // false exclusive-lease conflict. Blob scope and artifact hashes still gate
+  // every read, while a stable Work owner lets those readers share the lease.
+  const owner = `preview:work-${scope.workId}`
   const leases = new Map<number, ResolverLease>()
+  const byteReads = new Map<number, Promise<ArrayBuffer>>()
   const bindings = new Map(input.preview.mediaBindings.map(binding => [binding.assetKey, binding]))
   return createResolver({
     runtimePackage: input.preview.runtimePackage,
@@ -123,22 +134,35 @@ export async function createBuildProductMediaResolver(input: {
         || !await assertRecordInScope(scope, 'productBuildArtifacts', artifact, { owner: 'work' })) {
         throw new Error(`[product-media-resolver] Build Artifact 缺失或不匹配:${binding.artifactKey}`)
       }
-      if (!leases.has(artifact.blobObjectId)) {
-        leases.set(artifact.blobObjectId, await acquireMediaBlobLease({
+      const blobObjectId = artifact.blobObjectId
+      const existingRead = byteReads.get(blobObjectId)
+      if (existingRead) return (await existingRead).slice(0)
+      const read = (async () => {
+        await buildResolverLeaseReleaseBarrier
+        if (!leases.has(blobObjectId)) {
+          leases.set(blobObjectId, await acquireMediaBlobLease({ scope, blobObjectId, owner }))
+        }
+        return readMediaBlobObjectData({
           scope,
-          blobObjectId: artifact.blobObjectId,
-          owner,
-        }))
-      }
-      return readMediaBlobObjectData({
-        scope,
-        blobObjectId: artifact.blobObjectId,
-        expected: { contentHash: asset.blobContentHash, byteSize: asset.byteSize, mimeType: asset.mimeType },
-      })
+          blobObjectId,
+          expected: { contentHash: asset.blobContentHash, byteSize: asset.byteSize, mimeType: asset.mimeType },
+        })
+      })()
+      byteReads.set(blobObjectId, read)
+      try { return (await read).slice(0) }
+      catch (cause) { byteReads.delete(blobObjectId); throw cause }
     },
     async releaseAll() {
-      await Promise.all([...leases.values()].map(lease => lease.release()))
-      leases.clear()
+      const previousBarrier = buildResolverLeaseReleaseBarrier
+      const release = (async () => {
+        await previousBarrier.catch(() => undefined)
+        await Promise.allSettled([...byteReads.values()])
+        await Promise.all([...leases.values()].map(lease => lease.release()))
+        leases.clear()
+        byteReads.clear()
+      })()
+      buildResolverLeaseReleaseBarrier = release.catch(() => undefined)
+      await release
     },
   })
 }

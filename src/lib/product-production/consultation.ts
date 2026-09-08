@@ -8,11 +8,13 @@ import type {
   ProductStartingPointSuggestionV1,
   ProductWorldSourceSelectionV1,
   WorkspaceScope,
+  AiTownBriefSettingsV1,
 } from '../types'
 import { resolveScope } from '../workspace/scope'
 import { compileUpperProductWorldRoleBindingsV1 } from '../product/world-requirement-adapters'
 import { hashProductProductionValueV2 } from './hash'
 import { parseProductProductionBriefV3 } from './contracts'
+import { freezeAiTownWorldSourceSelectionV1, loadAiTownWorldSourceCatalogV1 } from '../ai-town/world-source'
 import {
   loadProductProductionConsultationSourceV2,
   type ProductProductionConsultationSourceV2,
@@ -47,11 +49,11 @@ function suggestion(input: Omit<ProductStartingPointSuggestionV1, 'suggestionKey
 }
 
 function productFit(kind: ProductStartingPointSuggestionV1['kind']): ProductionProductKindV1[] {
-  if (kind === 'character') return ['character-interaction', 'avg', 'text-adventure', 'ttrpg']
-  if (kind === 'history') return ['text-open-world', 'text-adventure', 'ttrpg']
+  if (kind === 'character') return ['character-interaction', 'ai-town', 'avg', 'text-adventure', 'ttrpg']
+  if (kind === 'history') return ['ai-town', 'text-open-world', 'text-adventure', 'ttrpg']
   if (kind === 'branch') return ['text-adventure', 'text-open-world', 'ttrpg']
   if (kind === 'custom') return ['text-adventure', 'avg', 'text-open-world', 'ttrpg']
-  return ['text-adventure', 'avg', 'ttrpg']
+  return ['ai-town', 'text-adventure', 'avg', 'ttrpg']
 }
 
 export interface ProductConsultationSuggestionSetV1 {
@@ -142,17 +144,34 @@ function mediaProfile(input: {
   productType: ProductionProductKindV1
   visualLevel: ProductProductionMediaProfileV1['visualLevel']
   audioLevel: ProductProductionMediaProfileV1['audioLevel']
+  aiTown?: Pick<AiTownBriefSettingsV1,
+    'residentTarget' | 'majorLocationTarget' | 'portraits' | 'expressions' | 'locationCards' | 'ambientAudio'>
 }): ProductProductionMediaProfileV1 {
-  // AVG and the governed TTRPG tabletop both bind presentation assets.
-  const presentationEnabled = input.productType === 'avg' || input.productType === 'ttrpg'
-  const images = !presentationEnabled || input.visualLevel === 'none' ? 0 : input.visualLevel === 'key-scenes' ? 2 : 8
-  const music = !presentationEnabled || input.audioLevel === 'none' ? 0 : 1
-  const sfx = !presentationEnabled || input.audioLevel === 'none' ? 0 : input.audioLevel === 'music-sfx' ? 3 : 8
+  // Each presentation product owns its own count/profile while sharing the
+  // content-addressed media transport and release integrity primitives.
+  const presentationEnabled = input.productType === 'avg' || input.productType === 'ttrpg' || input.productType === 'ai-town'
+  const townImages = input.productType === 'ai-town' && input.visualLevel !== 'none'
+    ? (input.aiTown?.locationCards === false ? 0 : input.aiTown?.majorLocationTarget ?? 4)
+      + (input.aiTown?.portraits === false ? 0 : input.aiTown?.residentTarget ?? 6)
+      + (input.aiTown?.expressions === false ? 0 : input.aiTown?.residentTarget ?? 6)
+    : 0
+  const images = !presentationEnabled || input.visualLevel === 'none' ? 0
+    : input.productType === 'ai-town' ? Math.min(28, townImages)
+      : input.visualLevel === 'key-scenes' ? 2 : 8
+  const townAudio = input.productType === 'ai-town' && input.aiTown?.ambientAudio === true && input.audioLevel !== 'none'
+  const music = input.productType === 'ai-town' ? 0 : !presentationEnabled || input.audioLevel === 'none' ? 0 : 1
+  const sfx = input.productType === 'ai-town' ? (townAudio ? 1 : 0)
+    : !presentationEnabled || input.audioLevel === 'none' ? 0 : input.audioLevel === 'music-sfx' ? 3 : 8
   const requiredMediaKinds: ProductProductionMediaProfileV1['requiredMediaKinds'] = []
-  if (images > 0) requiredMediaKinds.push('background')
-  if ((input.productType === 'avg' || input.productType === 'ttrpg') && images > 0) requiredMediaKinds.push('character-pose')
+  if (input.productType === 'ai-town') {
+    if (images > 0 && input.aiTown?.locationCards !== false) requiredMediaKinds.push('background')
+    if (images > 0 && input.aiTown?.portraits !== false) requiredMediaKinds.push('character-pose')
+    if (images > 0 && input.aiTown?.expressions !== false) requiredMediaKinds.push('character-expression')
+  } else if (images > 0) {
+    requiredMediaKinds.push('background', 'character-pose')
+  }
   if (music > 0) requiredMediaKinds.push('bgm')
-  if (sfx > 0) requiredMediaKinds.push('sfx')
+  if (sfx > 0) requiredMediaKinds.push(townAudio ? 'ambience' : 'sfx')
   return {
     visualLevel: images > 0 ? input.visualLevel : 'none',
     audioLevel: music + sfx > 0 ? input.audioLevel : 'none', imageCount: images,
@@ -287,6 +306,7 @@ export async function draftProductProductionBriefV3(input: {
   contentBoundaries?: string[]
   confirmTtrpgDefaultMappings?: boolean
   ttrpg?: TtrpgProductionBriefDraftInputV2
+  aiTown?: AiTownBriefSettingsV1
   sourceSelection?: ProductProductionSourceSelectionV1
 }): Promise<ProductProductionBriefV3> {
   const scope = await resolveScope({ scope: input.scope })
@@ -303,13 +323,35 @@ export async function draftProductProductionBriefV3(input: {
   const selectedScale = input.scale ?? selected.scale
   const qualityProfile = input.qualityProfile ?? 'prototype'
   const scale = { scope: selectedScale, ...SCALE_DEFAULTS[selectedScale] }
+  const selectedCatalog = normalizeAuthorSelection({
+    source, selected, authorSelection: input.sourceSelection,
+  })
+  if (input.productType === 'ai-town') {
+    const residentTarget = input.aiTown?.residentTarget ?? 6
+    const majorLocationTarget = input.aiTown?.majorLocationTarget ?? 4
+    if (!Number.isInteger(residentTarget) || residentTarget < 4 || residentTarget > 8) throw new Error('[product-production] AI 小镇居民目标必须是 4..8')
+    if (!Number.isInteger(majorLocationTarget) || majorLocationTarget < 4 || majorLocationTarget > 12) throw new Error('[product-production] AI 小镇主要地点目标必须是 4..12')
+    selectedCatalog.characterResourceKeys = selectedCatalog.characterResourceKeys.slice(0, residentTarget)
+    selectedCatalog.importantLocationResourceKeys = selectedCatalog.importantLocationResourceKeys.slice(0, majorLocationTarget)
+    if (selectedCatalog.characterResourceKeys.length < 4) {
+      throw new Error('[product-production] AI 小镇首版需要从冻结 WorldRelease 选择至少 4 名角色')
+    }
+    if (selectedCatalog.storyResourceKeys.length + selectedCatalog.storyArcResourceKeys.length < 1) {
+      throw new Error('[product-production] 严格后日谈需要至少一个冻结故事终局/故事弧资源')
+    }
+  }
   const media = mediaProfile({
     productType: input.productType,
     visualLevel: input.visualLevel ?? 'key-scenes',
     audioLevel: input.audioLevel ?? 'none',
-  })
-  const selectedCatalog = normalizeAuthorSelection({
-    source, selected, authorSelection: input.sourceSelection,
+    aiTown: input.productType === 'ai-town' ? {
+      residentTarget: selectedCatalog.characterResourceKeys.length,
+      majorLocationTarget: input.aiTown?.majorLocationTarget ?? 4,
+      portraits: input.aiTown?.portraits ?? true,
+      expressions: input.aiTown?.expressions ?? true,
+      locationCards: input.aiTown?.locationCards ?? true,
+      ambientAudio: input.aiTown?.ambientAudio ?? false,
+    } : undefined,
   })
   const roleBindings = compileUpperProductWorldRoleBindingsV1(input.productType, selectedCatalog)
   const selection: ProductWorldSourceSelectionV1 = {
@@ -329,6 +371,32 @@ export async function draftProductProductionBriefV3(input: {
     confirmDefaultMappings: input.confirmTtrpgDefaultMappings === true,
     draft: input.ttrpg,
   }) : null
+  const aiTown = input.productType === 'ai-town' ? await (async () => {
+    const settings = input.aiTown
+    const townCatalog = await loadAiTownWorldSourceCatalogV1({ scope, worldReleaseId: input.worldReleaseId })
+    const sourceSelection = await freezeAiTownWorldSourceSelectionV1({
+      catalog: townCatalog,
+      endingResourceKeys: [...selectedCatalog.storyResourceKeys, ...selectedCatalog.storyArcResourceKeys].sort(),
+      residentResourceKeys: [...selectedCatalog.characterResourceKeys].sort(),
+      locationResourceKeys: [...selectedCatalog.importantLocationResourceKeys].sort(),
+      ruleAndLoreResourceKeys: [...selectedCatalog.codexEntryResourceKeys].sort(),
+      artifactResourceKeys: [...selectedCatalog.artifactResourceKeys].sort(),
+    })
+    return {
+      schema: 'storyforge.ai-town-production-brief' as const,
+      version: 1 as const,
+      sourceSelection,
+      player: { role: settings?.playerRole ?? 'new-resident' as const, name: settings?.playerName.trim() || input.playerRole?.trim() || '新居民', homeConcept: settings?.homeConcept.trim() || '一间靠近公共空间、可安全休息的小屋' },
+      continuity: { mode: 'strict-post-canon' as const, elapsedDays: settings?.elapsedDays ?? 90, romance: settings?.romance ?? 'off' as const },
+      town: { title: settings?.townTitle.trim() || `${selected.title} · 后日谈小镇`, premise: input.openingSituation?.trim() || '原作结束三个月后，人物在新的共同体里重新安顿生活。', majorLocationTarget: settings?.majorLocationTarget ?? 4, residentTarget: selectedCatalog.characterResourceKeys.length },
+      clock: { slots: ['morning', 'late-morning', 'noon', 'afternoon', 'evening', 'midnight'] as const, actionsPerDay: settings?.actionsPerDay ?? 3 },
+      autonomy: { level: 'observational-high' as const, offlineEnabled: settings?.offlineEnabled ?? true, offlineMaximumDays: settings?.offlineMaximumDays ?? 3 },
+      management: { resourceKeys: settings?.resourceKeys ?? ['materials', 'food', 'care'], startingMoney: settings?.startingMoney ?? 200, sharedProjectConcept: settings?.sharedProjectConcept.trim() || '修复一处让居民能够共同生活与相遇的公共设施' },
+      safety: { boundaries: [...new Set(input.contentBoundaries?.length ? input.contentBoundaries : ['不生成未授权的露骨或仇恨内容'])], majorChangeConfirmation: true as const, privateMindPlayerAccess: 'none' as const },
+      media: { portraits: settings?.portraits ?? true, expressions: settings?.expressions ?? true, locationCards: settings?.locationCards ?? true, map: true as const, ambientAudio: settings?.ambientAudio ?? false },
+      authorConfirmed: true,
+    }
+  })() : null
   const requirements = [await capabilityRequirement({
     // The built-in deterministic compiler provides a no-provider vertical
     // slice. External text generation is an optional quality upgrade and may
@@ -420,6 +488,7 @@ export async function draftProductProductionBriefV3(input: {
     },
     unresolvedDecisionKeys,
     ...(ttrpg ? { ttrpg } : {}),
+    ...(aiTown ? { aiTown } : {}),
     ...(input.productType === 'ttrpg' ? {
       authorConfirmations: { ttrpgDefaultRuleMappings: input.confirmTtrpgDefaultMappings === true },
     } : {}),

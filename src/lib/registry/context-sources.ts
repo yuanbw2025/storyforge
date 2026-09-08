@@ -541,7 +541,7 @@ async function readInteractionRuntimeContext(input: AssembleContextInput): Promi
   if (!participantKey) return ''
   const session = await db.productRuntimeSessions.get(input.productRuntimeSessionId)
   if (!session || session.projectId !== input.projectId
-    || !['character-interaction', 'text-adventure', 'text-open-world'].includes(session.kind)) return ''
+    || !['character-interaction', 'ai-town', 'text-adventure', 'text-open-world'].includes(session.kind)) return ''
   if (input.worldGroupId !== undefined && (session.worldGroupId ?? null) !== (input.worldGroupId ?? null)) return ''
   if (session.worldId == null || session.workId == null || !session.runtimeSourceHash) {
     throw new Error('正式角色互动实例缺少产品运行源。')
@@ -562,6 +562,28 @@ async function readInteractionRuntimeContext(input: AssembleContextInput): Promi
     maxCharacters: 24_000,
     maxRecentMessages: 32,
   })
+  const town = state.town
+  const townResident = town?.content.residents.find(item => {
+    const profileIndex = state.interaction?.profiles.findIndex(profile => profile.participantKey === participantKey) ?? -1
+    return town.content.residents[profileIndex]?.residentKey === item.residentKey
+  })
+  const townResidentState = townResident ? town?.residents[townResident.residentKey] : null
+  if (session.kind === 'ai-town' && townResidentState?.residencyStatus !== 'resident') return ''
+  const townKnowledge = town && townResident ? Object.values(town.knowledge).filter(fact => (
+    fact.visibility === 'public' || fact.holders[townResident.residentKey] != null
+  )).slice(-40) : []
+  const townMemories = town && townResident ? town.memories.filter(memory => (
+    memory.ownerResidentKey === townResident.residentKey || memory.visibility === 'public'
+  )).slice(-20) : []
+  const townLines = town && townResident ? [
+    `【小镇当下】第${town.day}日｜${town.slot}｜你在${townResidentState?.locationKey ?? '未知地点'}｜玩家在${town.player.locationKey}`,
+    `【自己的日程与目标】${townResidentState?.activity ?? ''}｜${townResidentState?.activeGoal ?? ''}`,
+    '【自己可知的小镇事实】',
+    ...(townKnowledge.length ? townKnowledge.map(fact => `- ${fact.factKey}｜${fact.statement}`) : ['- 无']),
+    '【自己的后日谈记忆】',
+    ...(townMemories.length ? townMemories.map(memory => `- ${memory.summary}｜证据=${memory.sourceSequences.join(',') || '初始'}`) : ['- 无']),
+    '【小镇行为边界】你拥有自己的生活和立场；只能谈论自己知道的事实；不得替玩家决定行动；不得把私密想法当作玩家已知信息。',
+  ] : []
   return [
     `【角色互动视角】${profile.name}｜key=${profile.participantKey}｜身份=${profile.roleLabel}`,
     `【说话约束】${profile.voiceRules}`,
@@ -575,6 +597,70 @@ async function readInteractionRuntimeContext(input: AssembleContextInput): Promi
     '【该角色可见对话】',
     ...(view.messages.length ? view.messages.map(message => `- #${message.eventSequence}｜${message.speakerKey}｜${message.text}`) : ['- 无']),
     `【预算证据】省略早期消息=${view.omittedMessageCount}｜字符=${view.characterCount}`,
+    ...townLines,
+  ].join('\n')
+}
+
+async function readAiTownRuntimeContext(input: AssembleContextInput): Promise<string> {
+  if (input.productRuntimeSessionId == null) return ''
+  const session = await db.productRuntimeSessions.get(input.productRuntimeSessionId)
+  if (!session || session.projectId !== input.projectId || session.kind !== 'ai-town') return ''
+  const context = await readInteractionRuntimeContext(input)
+  return context ? [
+    '【后日谈 AI 小镇专属运行上下文】以下内容来自冻结 ProductRelease 与当前小镇事件投影；原世界在运行期只读。',
+    context,
+  ].join('\n') : ''
+}
+
+async function readAiTownDirectorRuntimeContext(input: AssembleContextInput): Promise<string> {
+  if (input.productRuntimeSessionId == null) return ''
+  const session = await db.productRuntimeSessions.get(input.productRuntimeSessionId)
+  if (!session || session.projectId !== input.projectId || session.kind !== 'ai-town'
+    || (session.productReleaseId == null && session.productBuildId == null)) return ''
+  if (input.worldGroupId !== undefined && (session.worldGroupId ?? null) !== (input.worldGroupId ?? null)) return ''
+  if (session.worldId == null || session.workId == null) throw new Error('正式 AI 小镇实例缺少工作区作用域。')
+  const [playable, runtimeModule, state] = await Promise.all([
+    verifyPlayableRuntimeSession({
+      scope: { projectId: session.projectId, worldId: session.worldId, workId: session.workId },
+      session,
+    }),
+    import('../ai-town/runtime'),
+    readProductRuntimeStateForContext(session.id!),
+  ])
+  if (playable.runtimePackage.productType !== 'ai-town' || !playable.runtimePackage.town
+    || playable.runtimeSourceHash !== session.runtimeSourceHash || !state.town) {
+    throw new Error('AI 小镇 RuntimePackage 校验失败。')
+  }
+  const town = state.town
+  const residents = town.content.residents.map(definition => {
+    const current = town.residents[definition.residentKey]
+    const location = town.content.map.locations.find(item => item.key === current.locationKey)
+    return `- ${definition.residentKey}｜${definition.name}｜${current.residencyStatus}｜地点=${location?.title ?? current.locationKey}｜行动=${current.activity}｜情绪=${current.mood}`
+  })
+  const lifeThreads = town.content.lifeThreads.map(definition => {
+    const current = town.lifeThreads[definition.key]
+    return `- ${definition.key}｜${definition.title}｜${current.stage}｜进度=${current.progress}`
+  })
+  const events = runtimeModule.availableAiTownEventSeedsV1(town.content, town).map(item => (
+    `- ${item.seed.key}｜${item.seed.title}｜强度=${item.seed.intensity}｜${item.available ? '可触发' : `不可触发:${item.reason}`}｜当前可观察参与者=${item.participantKeys.join('、') || '无'}｜${item.seed.summary}`
+  ))
+  const relationships = Object.values(town.relationships)
+    .filter(edge => edge.toResidentKey === 'player')
+    .map(edge => `- ${edge.fromResidentKey}->player｜trust=${edge.trust}｜intimacy=${edge.intimacy}｜wariness=${edge.wariness}`)
+  const majorChangeEligibility = runtimeModule.aiTownMajorChangeEligibilityV1(town)
+  return [
+    `【后日谈 AI 小镇导演运行上下文】${session.title}｜第${town.day}日｜${town.slot}｜天气=${town.weatherKey}｜事件序号=${state.lastSequence}`,
+    `【冻结运行源】${playable.packageHash.slice(0, 16)}｜玩家地点=${town.player.locationKey}｜今日事件强度余额=${town.cadence.remainingIntensity}`,
+    `【共同建设】${town.sharedProject.key}:${town.sharedProject.title}｜${town.sharedProject.progress}/${town.sharedProject.targetProgress}｜里程碑=${town.sharedProject.completed ? '已解锁' : '未解锁'}`,
+    '【居民公开运行状态】', ...residents,
+    '【生活线进度】', ...lifeThreads,
+    '【玩家可观察关系】', ...relationships,
+    '【事件闭集】', ...events,
+    '【最近公开事件】', ...(town.latestPublicEvents.slice(-12).map(item => `- ${item}`)),
+    `【重大变化提案门槛】${majorChangeEligibility.eligible ? '已满足' : `未满足：${majorChangeEligibility.reason}`}`,
+    `【允许的重大变化类型】${town.content.safety.majorChangeKinds.join('、') || '无'}`,
+    `【边界】${town.content.safety.boundaries.join('；')}`,
+    '只能选择标记为“可触发”的事件 seed，或提出一个尚未生效的重大变化候选。不得直接改变世界、资源、关系、知识或居民去留，不得读取或泄露居民私密事实。',
   ].join('\n')
 }
 
@@ -1767,6 +1853,29 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     requiresProductRuntimeSessionId: true,
     enabled: input => !!input.interactionParticipantKey?.trim(),
     read: readInteractionRuntimeContext,
+  },
+  {
+    key: 'aiTownRuntime',
+    label: '后日谈 AI 小镇居民单一视角',
+    scope: 'runtime',
+    ownerFrom: 'instance',
+    layer: 'L0',
+    budgetTokens: 8000,
+    protectedFromTrim: true,
+    requiresProductRuntimeSessionId: true,
+    enabled: input => !!input.interactionParticipantKey?.trim(),
+    read: readAiTownRuntimeContext,
+  },
+  {
+    key: 'aiTownDirectorRuntime',
+    label: '后日谈 AI 小镇导演公开运行视角',
+    scope: 'runtime',
+    ownerFrom: 'instance',
+    layer: 'L0',
+    budgetTokens: 10_000,
+    protectedFromTrim: true,
+    requiresProductRuntimeSessionId: true,
+    read: readAiTownDirectorRuntimeContext,
   },
   {
     // ProductRuntime 只读不可变产品来源、当前事件投影，不读取可变世界草稿。

@@ -14,6 +14,7 @@ import {
   createConfirmedProductBriefV1 as createConfirmedProductBriefContractV1,
   freezeProductSourcePlanV1,
   resolveProductSourceReadBoundaryV1,
+  type ProductSourceReadBoundaryV1,
   validateConfirmedProductBriefV1,
   validateProductSourcePlanV1,
 } from '../product/source-contracts'
@@ -46,6 +47,7 @@ function requirementGoal(input: {
 }): UpperProductWorldRequirementGoalV1 {
   const participantKeys = input.brief.source.selection.roleBindings.participants
     ?? input.brief.source.selection.roleBindings.characters
+    ?? input.brief.source.selection.roleBindings.residents
     ?? []
   const selectedKinds = new Set(input.descriptors.map(item => item.worldSemantic!.resourceKind))
   const selectedAreas = unique(input.descriptors.map(item => item.worldSemantic!.area))
@@ -174,6 +176,36 @@ export function productProductionWorldQueryV1(brief: ProductProductionBriefV3, t
   ].map(value => value.trim()).filter(Boolean)).join('；').slice(0, 4_000)
 }
 
+/** Product production is allowed to read only the exact frozen product
+ * selection (plus an explicitly frozen dependency closure). The generic
+ * SourcePlan permission is a semantic upper bound, not authorization to pull
+ * every record of the same kind from the WorldRelease. */
+export function narrowProductProductionReadBoundaryV1(input: {
+  boundary: ProductSourceReadBoundaryV1
+  selectionResourceKeys: readonly string[]
+  dependencyClosureResourceKeys?: readonly string[]
+}): ProductSourceReadBoundaryV1 {
+  const authorized = new Set(unique([
+    ...input.selectionResourceKeys,
+    ...(input.dependencyClosureResourceKeys ?? []),
+  ]))
+  const permitted = new Set(input.boundary.allowedResourceKeys)
+  const outside = [...authorized].filter(key => !permitted.has(key))
+  if (outside.length) {
+    throw new Error(`[product-production-source] 冻结产品选择越过 SourcePlan permission:${outside.join(',')}`)
+  }
+  const allowedResourceKeys = input.boundary.allowedResourceKeys.filter(key => authorized.has(key))
+  if (!allowedResourceKeys.length) throw new Error('[product-production-source] 冻结产品选择为空')
+  const allowed = new Set(allowedResourceKeys)
+  return {
+    sourceScope: input.boundary.sourceScope,
+    allowedResourceKeys,
+    mandatoryResourceKeys: input.boundary.mandatoryResourceKeys.filter(key => allowed.has(key)),
+    mandatoryFullResourceKeys: input.boundary.mandatoryFullResourceKeys.filter(key => allowed.has(key)),
+    targetResourceKeys: input.boundary.targetResourceKeys.filter(key => allowed.has(key)),
+  }
+}
+
 /** Execute one production task against the exact frozen SourcePlan boundary. */
 export async function executeProductProductionWorldGatewayV1(input: {
   scope: WorkspaceScope
@@ -185,7 +217,6 @@ export async function executeProductProductionWorldGatewayV1(input: {
   signal?: AbortSignal
 }): Promise<ContextGatewayExecutionV1> {
   const skill = getAgentSkillV1(input.task.skillId ?? 'product-production.integrate.v1')
-  const boundary = await resolveProductSourceReadBoundaryV1(input.sourcePlan)
   const compilationDescriptors = input.requireCompilationResources
     ? resolveProductProductionWorldCompilationDescriptorsV2({
       descriptors: (await openWorldSemanticResourceCatalogV1({
@@ -197,6 +228,18 @@ export async function executeProductProductionWorldGatewayV1(input: {
     })
     : []
   const compilationResources = compilationDescriptors.map(descriptor => descriptor.resourceKey)
+  const boundary = narrowProductProductionReadBoundaryV1({
+    boundary: await resolveProductSourceReadBoundaryV1(input.sourcePlan),
+    selectionResourceKeys: input.brief.source.selection.resourceKeys,
+    // Model-authored tasks receive only the author's explicit selection. The
+    // deterministic compiler may additionally receive the relation/category
+    // closure derived from the same immutable WorldRelease; it is still
+    // intersected with the frozen SourcePlan permission below.
+    dependencyClosureResourceKeys: [
+      ...(input.brief.aiTown?.sourceSelection.dependencyClosureResourceKeys ?? []),
+      ...compilationResources,
+    ],
+  })
   const allowed = new Set(boundary.allowedResourceKeys)
   const forbiddenCompilationResources = compilationDescriptors.filter(descriptor => !allowed.has(descriptor.resourceKey))
   if (forbiddenCompilationResources.length) {

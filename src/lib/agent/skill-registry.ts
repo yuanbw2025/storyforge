@@ -76,6 +76,7 @@ export type AgentSkillExecutionModeV1 =
   | 'consistency'
   | 'character-reply'
   | 'scene-director'
+  | 'ai-town-director'
   | 'memory-curator'
   | 'character-interaction-production'
   | 'adventure-intent'
@@ -1131,6 +1132,24 @@ const INTERACTION_RUNTIME_INPUT_POLICY: AgentSkillInputPolicyV1 = {
   },
 }
 const INTERACTION_RUNTIME_COMPRESSION_POLICY = compressionPolicy(['interactionRuntime'])
+const AI_TOWN_RUNTIME_INPUT_POLICY: AgentSkillInputPolicyV1 = {
+  sourceKeys: ['aiTownRuntime'],
+  states: {
+    empty: { handling: 'require-upstream', instruction: '缺少后日谈小镇居民可见上下文时停止，不得臆造日程、知识、关系或原作事实。' },
+    partial: { handling: 'require-upstream', instruction: '后日谈小镇运行时上下文不完整时停止，等待重新装配。' },
+    complete: { handling: 'grounded-transform', instruction: '只能依据该居民可见的小镇状态生成候选；保持角色自主性，不得泄露其他居民私密事实。' },
+  },
+}
+const AI_TOWN_RUNTIME_COMPRESSION_POLICY = compressionPolicy(['aiTownRuntime'])
+const AI_TOWN_DIRECTOR_RUNTIME_INPUT_POLICY: AgentSkillInputPolicyV1 = {
+  sourceKeys: ['aiTownDirectorRuntime'],
+  states: {
+    empty: { handling: 'require-upstream', instruction: '缺少 AI 小镇导演公开运行上下文时停止，不得臆造事件或重大变化。' },
+    partial: { handling: 'require-upstream', instruction: '小镇导演运行上下文不完整时停止，等待重新装配。' },
+    complete: { handling: 'grounded-transform', instruction: '只能选择当前事件闭集中的可触发 seed，或形成需作者确认的重大变化候选。' },
+  },
+}
+const AI_TOWN_DIRECTOR_RUNTIME_COMPRESSION_POLICY = compressionPolicy(['aiTownDirectorRuntime'])
 const ADVENTURE_RUNTIME_INPUT_POLICY: AgentSkillInputPolicyV1 = {
   sourceKeys: ['adventureRuntime'],
   states: {
@@ -2976,6 +2995,26 @@ export const AGENT_SKILLS = [
   },
   {
     version: 1,
+    id: 'character.ai-town-reply',
+    agentId: 'character',
+    defaultForAgent: false,
+    label: '后日谈 AI 小镇居民回复候选',
+    owner: 'ai-town-product',
+    promptVersion: 'ai-town-character-reply-v1',
+    executionMode: 'character-reply',
+    contextTaskKind: 'agent-character',
+    readToolNames: [],
+    contextSourceKeys: ['aiTownRuntime'],
+    optionalContextSourceKeys: [],
+    inputPolicy: AI_TOWN_RUNTIME_INPUT_POLICY,
+    contextCompression: AI_TOWN_RUNTIME_COMPRESSION_POLICY,
+    maxOutputTokens: 2_000,
+    writeTargets: [],
+    lastVerifiedAt: '2026-08-17',
+    regressionTests: ['R-AITOWN1-runtime'],
+  },
+  {
+    version: 1,
     id: 'prose.interaction-scene-director',
     agentId: 'prose',
     defaultForAgent: false,
@@ -2993,6 +3032,26 @@ export const AGENT_SKILLS = [
     writeTargets: [],
     lastVerifiedAt: '2026-08-14',
     regressionTests: ['R-HARNESS-RUNTIME1-instance-ledger'],
+  },
+  {
+    version: 1,
+    id: 'prose.ai-town-director',
+    agentId: 'prose',
+    defaultForAgent: false,
+    label: '后日谈 AI 小镇自治导演候选',
+    owner: 'ai-town-product',
+    promptVersion: 'ai-town-director-v1',
+    executionMode: 'ai-town-director',
+    contextTaskKind: 'agent-prose',
+    readToolNames: [],
+    contextSourceKeys: ['aiTownDirectorRuntime'],
+    optionalContextSourceKeys: [],
+    inputPolicy: AI_TOWN_DIRECTOR_RUNTIME_INPUT_POLICY,
+    contextCompression: AI_TOWN_DIRECTOR_RUNTIME_COMPRESSION_POLICY,
+    maxOutputTokens: 2_000,
+    writeTargets: [],
+    lastVerifiedAt: '2026-09-06',
+    regressionTests: ['R-AITOWN2-director'],
   },
   {
     version: 1,
@@ -3713,7 +3772,7 @@ export function validateAgentSkillDefinitionsV1(
     character: new Set(['create', 'supplement', 'lifecycle', 'relationships', 'character-reply', 'memory-curator']),
     inspiration: new Set(['reference-summary', 'reference-characters', 'reverse', 'review']),
     outline: new Set(['auto', 'story-arcs', 'foreshadow-suggestions', 'storyline-progress', 'character-driven', 'character-revision', 'impact-summary-regenerate', 'volumes', 'chapters', 'details', 'adaptation-source-analysis', 'adaptation-causal-graph', 'screenplay-adaptation-brief', 'screenplay-decision-pass', 'screenplay-beat-sheet', 'screenplay-scene-card', 'screenplay-grounding-review', 'screenplay-dramaturgy-review', 'comic-adaptation-brief', 'comic-decision-pass', 'comic-script-adaptation', 'comic-page-rhythm', 'comic-panel-plan', 'comic-visual-bible', 'comic-image-request', 'comic-visual-continuity-review', 'comic-targeted-repair', 'comic-page-review', 'short-intent-brief', 'short-story-design', 'short-scene-plan', 'short-continuity-review', 'character-interaction-production', 'product-production']),
-    prose: new Set(['auto', 'generate', 'continue', 'emotion-beats', 'inventory-extraction', 'story-timeline-extraction', 'cultivation-progress-extraction', 'style-learn', 'selection-edit', 'selection-check', 'review', 'revise', 'organize', 'memory', 'consistency', 'scene-director', 'adventure-intent', 'adventure-narrator', 'open-world-briefing', 'open-world-advisor', 'open-world-outcome-narrator', 'open-world-actor-suggestion', 'open-world-expression', 'open-world-narration', 'screenplay-scene-draft', 'screenplay-targeted-rewrite', 'short-chapter-draft', 'short-targeted-rewrite', 'ttrpg-gm-narrator', 'ttrpg-gm-actor-intent', 'ttrpg-director', 'ttrpg-private-guidance', 'ttrpg-player-intent']),
+    prose: new Set(['auto', 'generate', 'continue', 'emotion-beats', 'inventory-extraction', 'story-timeline-extraction', 'cultivation-progress-extraction', 'style-learn', 'selection-edit', 'selection-check', 'review', 'revise', 'organize', 'memory', 'consistency', 'scene-director', 'ai-town-director', 'adventure-intent', 'adventure-narrator', 'open-world-briefing', 'open-world-advisor', 'open-world-outcome-narrator', 'open-world-actor-suggestion', 'open-world-expression', 'open-world-narration', 'screenplay-scene-draft', 'screenplay-targeted-rewrite', 'short-chapter-draft', 'short-targeted-rewrite', 'ttrpg-gm-narrator', 'ttrpg-gm-actor-intent', 'ttrpg-director', 'ttrpg-private-guidance', 'ttrpg-player-intent']),
   }
   const ids = new Set<string>()
   const defaultAgents = new Set<DomainAgentId>()

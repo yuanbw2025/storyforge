@@ -1151,8 +1151,9 @@ async function runClaimedTask(input: {
   const totalInputBudget = Math.max(1, input.task.budgetReservation.inputTokens)
   const worldGatewayRequired = productProductionTaskUsesWorldGatewayV1(input.task)
   const requiresExactContext = worldGatewayRequired || input.task.executionMode === 'model'
-  // The actual frozen world packet is added and checked below; a fixed 40%
-  // slice needlessly truncated valid Brief + repair inputs in small worlds.
+  // The gateway below receives the declared budget minus the context actually
+  // assembled here. A fixed percentage cap would reject a valid, exact Brief
+  // and artifact set before the remaining world budget can even be measured.
   const normalInputBudget = totalInputBudget
   let normalAssembled: AssembleContextResult
   try {

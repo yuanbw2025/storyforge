@@ -14,6 +14,7 @@ import type { AdventureRuntimeState } from "./adventure";
 import type { AvgRuntimePresentationState } from "./avg";
 import type { OpenWorldEvolutionState } from "./open-world-evolution";
 import type { OpenWorldRuntimeState } from "./open-world";
+import type { AiTownRuntimeStateV1 } from "./ai-town";
 import type {
   TtrpgAbilityRuntimeStateV2,
   TtrpgDegreeV2,
@@ -1107,6 +1108,8 @@ export interface ProductRuntimeState {
   openWorldEvolution?: OpenWorldEvolutionState | null;
   /** Text-open-world governed regional, travel and dynamic quest projection. */
   openWorld?: OpenWorldRuntimeState | null;
+  /** AI Town owns time, schedules, presence, relationships and bounded life simulation. */
+  town?: AiTownRuntimeStateV1 | null;
   lastSequence: number;
 }
 
@@ -1258,6 +1261,22 @@ export const PRODUCT_RUNTIME_EVENT_TYPES = [
   "world.quest.superseded",
   "world.tick.completed",
   "world.narrative.synced",
+  "town.started",
+  "town.action.performed",
+  "town.player.moved",
+  "town.time.advanced",
+  "town.relationship.changed",
+  "town.knowledge.exposed",
+  "town.memory.recorded",
+  "town.thread.progressed",
+  "town.resource.changed",
+  "town.event.resolved",
+  "town.conversation.integrated",
+  "town.major-change.proposed",
+  "town.major-change.accepted",
+  "town.major-change.rejected",
+  "town.day.closed",
+  "town.offline-batch.completed",
 ] as const;
 export type ProductRuntimeEventType = (typeof PRODUCT_RUNTIME_EVENT_TYPES)[number];
 
@@ -1303,5 +1322,6 @@ export const EMPTY_PRODUCT_RUNTIME_STATE: ProductRuntimeState = {
   presentation: null,
   openWorldEvolution: null,
   openWorld: null,
+  town: null,
   lastSequence: 0,
 };

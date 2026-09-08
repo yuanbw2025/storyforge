@@ -25,6 +25,7 @@ import {
 import { runProductProductionUntilBlockedV1 } from '../../src/lib/product-production/scheduler'
 import { parseProductRuntimePackageV1 } from '../../src/lib/product-production/runtime-package'
 import { resolveProductRuntimeSource } from '../../src/lib/product-production/preview-source'
+import { exportCommunityPrototypeDistributionBundleV2 } from '../../src/lib/product-platform/distribution-bundle'
 import {
   recordProductBrowserPerformanceMeasurementV1,
   recordProductBuildMainRoutePlaythroughV1,
@@ -46,7 +47,11 @@ import {
   configureTtrpgSessionParticipantV2,
   readTtrpgSessionParticipantsV2,
 } from '../../src/lib/ttrpg/participants'
-import type { ProductionProductKindV1 } from '../../src/lib/types'
+import {
+  AI_TOWN_DAY_SLOTS,
+  type ProductProductionBriefV3,
+  type ProductionProductKindV1,
+} from '../../src/lib/types'
 import { seedCurrentProductWorld } from '../helpers/current-product-world'
 
 async function fixture(qualityProfile: 'prototype' | 'commercial-candidate' = 'prototype') {
@@ -83,7 +88,10 @@ async function fixture(qualityProfile: 'prototype' | 'commercial-candidate' = 'p
 }
 
 async function fixtureForProduct(productType: ProductionProductKindV1) {
-  const owned = await seedCurrentProductWorld(`formal-${productType}`)
+  const owned = await seedCurrentProductWorld(
+    `formal-${productType}`,
+    productType === 'ai-town' ? { minimumCharacters: 4 } : {},
+  )
   const release = owned.release
   const suggestions = await suggestProductStartingPoints({ scope: owned.scope, worldReleaseId: release.id! })
   const brief = await draftProductProductionBriefV3({
@@ -122,6 +130,55 @@ async function fixtureForProduct(productType: ProductionProductKindV1) {
     throw new Error(`authorize ${productType} failed: ${authorized.errorCode ?? 'unknown'} ${String(authorized.result.message ?? '')}`)
   }
   return { ...owned, release, brief, productionId: created.productionId }
+}
+
+async function fixtureAiTownWithMedia() {
+  const owned = await seedCurrentProductWorld('formal-ai-town-media', { minimumCharacters: 4 })
+  const suggestions = await suggestProductStartingPoints({ scope: owned.scope, worldReleaseId: owned.release.id! })
+  const brief = await draftProductProductionBriefV3({
+    scope: owned.scope,
+    worldReleaseId: owned.release.id!,
+    suggestionKey: suggestions.suggestions[0].suggestionKey,
+    productType: 'ai-town',
+    qualityProfile: 'prototype',
+    scale: 'scene',
+    visualLevel: 'key-scenes',
+    audioLevel: 'music-sfx',
+    playerRole: '原作结束后来到共同体的新居民',
+    openingSituation: '原作终局九十日后，四位居民开始修复共同生活的旧庭院。',
+    requiredFacts: ['冻结世界事实保持一致'],
+    forbiddenChanges: ['不得写回世界正式表'],
+    aiTown: {
+      playerRole: 'new-resident', playerName: '新居民', homeConcept: '广场旁的小屋',
+      townTitle: '潮门后日镇', elapsedDays: 90, romance: 'off', residentTarget: 4,
+      majorLocationTarget: 4, actionsPerDay: 3, offlineEnabled: true, offlineMaximumDays: 3,
+      resourceKeys: ['materials', 'food', 'care'], startingMoney: 200,
+      sharedProjectConcept: '修复旧庭院', portraits: true, expressions: true,
+      locationCards: true, ambientAudio: true,
+    },
+  })
+  const created = await executeProductProductionCommand({
+    scope: owned.scope,
+    command: {
+      type: 'create-intent', commandId: 'town-media.intent', productionKey: 'town-media.production',
+      productType: 'ai-town', worldReleaseId: owned.release.id!, userText: '制作带正式小镇媒资的后日谈产品',
+    },
+  })
+  const saved = await executeProductProductionCommand({
+    scope: owned.scope, productionId: created.productionId,
+    command: {
+      type: 'save-brief-revision', commandId: 'town-media.brief', expectedStateRevision: 0,
+      parentRevision: null, brief,
+    },
+  })
+  await executeProductProductionCommand({
+    scope: owned.scope, productionId: created.productionId,
+    command: {
+      type: 'authorize-start', commandId: 'town-media.authorize', expectedStateRevision: 1,
+      briefRevision: 1, briefHash: saved.result.briefHash as string, authorizationNonce: 'town-media.click',
+    },
+  })
+  return { ...owned, brief, productionId: created.productionId }
 }
 
 function firstCharacterAnchor(brief: Awaited<ReturnType<typeof fixture>>['brief']): string {
@@ -223,6 +280,44 @@ function modelOutputs(
       ],
     },
   } as const
+}
+
+function aiTownMediaRequirements(brief: ProductProductionBriefV3) {
+  const settings = brief.aiTown!
+  const characterAnchors = settings.sourceSelection.residentResourceKeys
+  const visual: Array<Record<string, unknown>> = []
+  const appendVisual = (value: Record<string, unknown>) => visual.push({
+    artifactKey: `media.visual.${String(visual.length + 1).padStart(3, '0')}`,
+    beatKey: 'beat.opening', prompt: '原创后日谈小镇画面，保持冻结世界的身份连续性。',
+    altText: '后日谈小镇发布媒资。', palette: ['#18392b', '#58745f', '#e4cfaa'],
+    hardConstraints: [], ...value,
+  })
+  if (settings.media.locationCards) {
+    for (let index = 0; index < settings.town.majorLocationTarget; index += 1) appendVisual({
+      mediaKind: 'background', sceneTag: `town-location-${String(index + 1).padStart(3, '0')}`,
+      width: 1280, height: 720, characterAnchorRefs: [],
+    })
+  }
+  if (settings.media.portraits) {
+    for (let index = 0; index < settings.town.residentTarget; index += 1) appendVisual({
+      mediaKind: 'character-pose', sceneTag: `town-resident-${String(index + 1).padStart(3, '0')}`,
+      width: 720, height: 1080, characterAnchorRefs: [characterAnchors[index]],
+    })
+  }
+  if (settings.media.expressions) {
+    for (let index = 0; index < settings.town.residentTarget; index += 1) appendVisual({
+      mediaKind: 'character-expression', sceneTag: `town-resident-${String(index + 1).padStart(3, '0')}-expression`,
+      width: 720, height: 1080, characterAnchorRefs: [characterAnchors[index]],
+    })
+  }
+  return {
+    schema: 'storyforge.product-media-requirements-artifact', version: 2,
+    visual,
+    audio: brief.media.sfxCount > 0 ? [{
+      artifactKey: 'media.audio.001', mediaKind: 'ambience', sceneTag: 'town-ambience',
+      beatKey: 'beat.opening', prompt: '安静、可循环的小镇环境声。', altText: '小镇环境音。', durationMs: 3000,
+    }] : [],
+  }
 }
 
 async function relayCapabilities(brief: Awaited<ReturnType<typeof fixture>>['brief'], calls: RedactedMediaTransportRequestV1[]) {
@@ -809,9 +904,140 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     expect(events.some(row => row.type === 'evidence.artifact.recorded' && JSON.parse(row.payloadJson).artifactKind === 'source-snapshot')).toBe(true)
   }, 30000)
 
-  it('五种现行生产产品经过正式生产、可玩 Build Preview 与同包原子发布', async () => {
+  it('AI 小镇按地点、居民和环境音的冻结语义生产媒资并进入同一发布包', async () => {
+    const owned = await fixtureAiTownWithMedia()
+    const textRequirement = owned.brief.capabilityRequirements.find(item => item.mediaClass === 'text')!
+    const imageRequirement = owned.brief.capabilityRequirements.find(item => item.mediaClass === 'image')!
+    const audioRequirement = owned.brief.capabilityRequirements.find(item => item.mediaClass === 'sfx')!
+    const bindingHash = await hashProductProductionValueV2({ provider: 'existing-global-config', productType: 'ai-town' })
+    const outputs = modelOutputs(owned.brief.source.worldContentHash, 'ai-town')
+    const mediaRequirements = aiTownMediaRequirements(owned.brief)
+    const forged = structuredClone(mediaRequirements)
+    forged.visual[0].sceneTag = 'town-location-999'
+    expect(() => parseProductMediaRequirementsArtifactV2(forged, owned.brief))
+      .toThrow(/视觉语义与冻结计划不一致/)
+    const runText: ProductionTextRunnerV1 = async request => {
+      const taskKey = Object.keys(outputs).find(key => request.system.includes(`任务=${key}。`)) as keyof typeof outputs
+      if (!taskKey) throw new Error('unknown AI town model task')
+      return {
+        output: JSON.stringify(taskKey === 'media.requirements' ? mediaRequirements : outputs[taskKey]),
+        usage: { inputTokens: 100, outputTokens: 100 },
+        bindingReceipt: {
+          schema: 'storyforge.provider-binding-receipt', version: 1,
+          requirementKey: textRequirement.requirementKey, adapterId: 'configured-text.v1', adapterVersion: 1,
+          provider: 'fixture', model: 'fixture-model', endpointOrigin: 'https://fixture.invalid',
+          executionLocation: 'browser-direct', credentialSource: 'existing-ai-config', credentialPresent: true,
+          capabilityHash: bindingHash, boundAt: 1, receiptHash: 'e'.repeat(64),
+        },
+      }
+    }
+    const capabilityBindings = [
+      { requirementKey: textRequirement.requirementKey, adapterId: 'configured-text.v1', bindingHash },
+      await createBuiltInProductionCapabilityBindingV1({
+        requirementKey: imageRequirement.requirementKey, adapterId: 'storyforge.procedural-svg.v1',
+      }),
+      await createBuiltInProductionCapabilityBindingV1({
+        requirementKey: audioRequirement.requirementKey, adapterId: 'storyforge.procedural-audio.v1',
+      }),
+    ]
+    const projection = await runProductProductionUntilBlockedV1({
+      scope: owned.scope, productionId: owned.productionId,
+      executor: createConfiguredProductProductionExecutorV1({
+        production: (await db.productProductions.get(owned.productionId))!, brief: owned.brief, runText,
+      }),
+      capabilityBindings,
+    })
+    const build = (await db.productBuilds.get(projection.buildId))!
+    expect(
+      projection,
+      `AI town media production projection:\n${JSON.stringify(projection, null, 2)}\nfailure=${build.failureJson}`,
+    ).toMatchObject({ terminal: true, buildStatus: 'release-ready' })
+    const packageArtifact = await db.productBuildArtifacts
+      .where('[buildId+artifactKey]').equals([build.id!, 'runtime.package']).first()
+    const runtimePackage = parseProductRuntimePackageV1(packageArtifact!.payloadJson)
+    expect(runtimePackage.definition.enabledCapabilities).toEqual(['narrative', 'interaction', 'town', 'presentation'])
+    expect(runtimePackage.presentation?.assets).toHaveLength(13)
+    expect(runtimePackage.presentation?.assets.filter(item => item.kind === 'background')).toHaveLength(4)
+    expect(runtimePackage.presentation?.assets.filter(item => item.kind === 'character-pose')).toHaveLength(4)
+    expect(runtimePackage.presentation?.assets.filter(item => item.kind === 'character-expression')).toHaveLength(4)
+    expect(runtimePackage.presentation?.assets.filter(item => item.kind === 'ambience')).toHaveLength(1)
+    const firstMediaArtifact = (await db.productBuildArtifacts.where('buildId').equals(build.id!).toArray())
+      .find(item => item.blobObjectId != null)!
+    const originalRightsJson = firstMediaArtifact.rightsJson
+    await db.productBuildArtifacts.update(firstMediaArtifact.id!, {
+      rightsJson: JSON.stringify({
+        ...JSON.parse(firstMediaArtifact.rightsJson),
+        commercialUse: false,
+        requiresProviderTermsReview: false,
+        license: 'rights-policy:StoryForge-community-prototype-rights-pending-v1',
+      }),
+    })
+    await expect(exportCommunityPrototypeDistributionBundleV2({
+      scope: owned.scope, productionId: owned.productionId,
+    })).rejects.toThrow(/社区原型媒资权利声明不完整/)
+    await db.productBuildArtifacts.update(firstMediaArtifact.id!, {
+      rightsJson: JSON.stringify({
+        ...JSON.parse(firstMediaArtifact.rightsJson),
+        commercialUse: false,
+        requiresProviderTermsReview: true,
+        license: 'rights-policy:StoryForge-community-prototype-rights-pending-v1',
+      }),
+    })
+    await expect(prepareProductProductionAdoption({
+      scope: owned.scope, productionId: owned.productionId,
+    })).rejects.toThrow(/媒资商业权利不完整/)
+    const prototypeBundle = await exportCommunityPrototypeDistributionBundleV2({
+      scope: owned.scope, productionId: owned.productionId,
+    })
+    expect(prototypeBundle).toMatchObject({
+      schema: 'storyforge.product-distribution-bundle', version: 2,
+      productRelease: { manifest: { productType: 'ai-town' } },
+      sourceWorld: { contentHash: owned.brief.source.worldContentHash },
+    })
+    expect(prototypeBundle.media).toHaveLength(13)
+    await db.productBuildArtifacts.update(firstMediaArtifact.id!, { rightsJson: originalRightsJson })
+    const preview = await startProductProductionPreviewV1({ scope: owned.scope, productionId: owned.productionId })
+    expect((await readProductRuntimeState(preview.sessionId)).town?.content.title).toBe('潮门后日镇')
+    const playable = await resolveProductRuntimeSource({
+      scope: owned.scope,
+      source: { kind: 'build', productBuildId: build.id!, expectedPreviewHash: build.previewHash },
+    })
+    const concurrentPlayable = await resolveProductRuntimeSource({
+      scope: owned.scope,
+      source: { kind: 'build', productBuildId: build.id!, expectedPreviewHash: build.previewHash },
+    })
+    const background = runtimePackage.presentation!.assets.find(item => item.kind === 'background')!
+    const [loaded, concurrentlyLoaded] = await Promise.all([
+      playable.mediaResolver.read(background.assetKey),
+      concurrentPlayable.mediaResolver.read(background.assetKey),
+    ])
+    expect(loaded).toMatchObject({ type: 'image/svg+xml', size: expect.any(Number) })
+    expect(loaded.size).toBeGreaterThan(100)
+    expect(concurrentlyLoaded.size).toBe(loaded.size)
+    playable.mediaResolver.dispose()
+    concurrentPlayable.mediaResolver.dispose()
+    const reopened = await resolveProductRuntimeSource({
+      scope: owned.scope,
+      source: { kind: 'build', productBuildId: build.id!, expectedPreviewHash: build.previewHash },
+    })
+    const reloaded = await reopened.mediaResolver.preload({
+      assetKeys: runtimePackage.presentation!.assets.map(item => item.assetKey),
+      maximumBytes: runtimePackage.presentation!.assets.reduce((sum, item) => sum + item.byteSize, 0),
+    })
+    expect(reloaded.failures).toEqual([])
+    reopened.mediaResolver.dispose()
+    const published = await publishProductProductionV1({ scope: owned.scope, productionId: owned.productionId })
+    const released = await resolveProductRuntimeSource({
+      scope: owned.scope, source: { kind: 'release', productReleaseId: published.receipt.productReleaseId },
+    })
+    expect(released.runtimePackage.presentation?.assets.map(item => item.blobContentHash))
+      .toEqual(runtimePackage.presentation?.assets.map(item => item.blobContentHash))
+    released.mediaResolver.dispose()
+  }, 30_000)
+
+  it('六种现行生产产品经过正式生产、可玩 Build Preview 与同包原子发布', async () => {
     const products: ProductionProductKindV1[] = [
-      'character-interaction', 'text-adventure', 'avg', 'text-open-world', 'ttrpg',
+      'character-interaction', 'ai-town', 'text-adventure', 'avg', 'text-open-world', 'ttrpg',
     ]
     for (const productType of products) {
       const owned = await fixtureForProduct(productType)
@@ -864,6 +1090,14 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
       const runtimePackage = parseProductRuntimePackageV1(packageArtifact!.payloadJson)
       expect(runtimePackage.productType).toBe(productType)
       expect(runtimePackage.sourceWorld.selection).toEqual(owned.brief.source.selection)
+      if (productType === 'ai-town') {
+        expect(runtimePackage.town).toMatchObject({
+          schema: 'storyforge.ai-town-runtime-content',
+          clock: { slots: [...AI_TOWN_DAY_SLOTS] },
+          offline: { maximumDays: 3 },
+        })
+        expect(runtimePackage.town?.residents).toHaveLength(4)
+      }
       if (productType === 'ttrpg') {
         expect(runtimePackage.ttrpg).toMatchObject({
           rulePack: { contentHash: owned.brief.ttrpg?.rules.effectiveContentHash },

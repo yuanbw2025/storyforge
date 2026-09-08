@@ -1,0 +1,34 @@
+{
+  "schema": "storyforge.community-prototype-catalog",
+  "version": 1,
+  "prototypes": [
+    {
+      "prototypeId": "tidewake-town.v1",
+      "productType": "ai-town",
+      "title": "《潮痕灯塔》后日谈：回潮镇",
+      "summary": "战争落幕之后，幸存者带着记忆灯塔在回潮湾重新生活。拜访居民、延续旧事、劳动经营、共同建设，并让新的日常故事在私域时间线中生长。",
+      "version": "1.0.0",
+      "language": "zh-CN",
+      "maturity": "community-prototype",
+      "releasePath": "/prototypes/tidewake-town/release.storyforge-product.json",
+      "heroPath": "/prototypes/tidewake-town/media/town-overview.png",
+      "galleryPaths": [
+        "/prototypes/tidewake-town/media/tide-clinic.png",
+        "/prototypes/tidewake-town/media/boat-workshop.png",
+        "/prototypes/tidewake-town/media/salt-bell-plaza.png"
+      ],
+      "featureHighlights": [
+        "冻结世界版本与自包含 ProductRelease",
+        "六时段居民日程与地点移动",
+        "真实 AI 角色对话、知识、记忆与关系演化",
+        "劳动、资源、货币、精力与共同建设",
+        "确定性离线演化、检查点与重大变化确认",
+        "四张场景背景与十四个角色立绘/表情媒资槽位"
+      ],
+      "contentWarnings": [
+        "战争后创伤",
+        "死亡与失踪回忆"
+      ]
+    }
+  ]
+}

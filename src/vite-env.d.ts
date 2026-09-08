@@ -3,6 +3,8 @@
 declare const __STORYFORGE_BUILD_SHA__: string
 
 interface ImportMetaEnv {
+  /** Same-origin, hash-verified image pack for an explicitly configured community prototype. */
+  readonly VITE_STORYFORGE_AUTHORED_IMAGE_PACK_URL?: string
   readonly VITE_STORYFORGE_MEDIA_RELAY_URL?: string
   readonly VITE_STORYFORGE_ONLINE_SERVICE_URL?: string
   readonly VITE_STORYFORGE_PLATFORM_SERVICE_URL?: string

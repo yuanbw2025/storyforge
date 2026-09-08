@@ -218,7 +218,7 @@ async function insertPreviewBuild(input: {
   return { buildId, previewHash: preview.previewHash }
 }
 
-describe('R-PRODUCTPROD-1G · five-product adapter registry', () => {
+describe('R-PRODUCTPROD-1G · upper-product adapter registry', () => {
   it('文字开放世界内部模拟使用现行 schema，并只在解析旧存档时单向归一化', () => {
     const initial = createInitialOpenWorldEvolutionState(
       runtimePackage('text-open-world').openWorldEvolution!,
@@ -231,10 +231,10 @@ describe('R-PRODUCTPROD-1G · five-product adapter registry', () => {
     })?.schema).toBe('storyforge.text-open-world.evolution')
   })
 
-  it('四类非跑团产品与 TTRPG 共享同一 registry，但未过 Golden 的 TTRPG 不得标商业就绪', () => {
+  it('现行上层产品共享 registry，但未过 Golden 的 TTRPG 不得标商业就绪', () => {
     const catalog = listUpperProductProductionAdaptersV1()
-    expect(catalog.map(item => item.productType)).toEqual([...PRODUCTS, 'ttrpg'])
-    expect(catalog.filter(item => item.commercialReady).map(item => item.productType)).toEqual(PRODUCTS)
+    expect(catalog.map(item => item.productType)).toEqual(['character-interaction', 'ai-town', 'text-adventure', 'avg', 'text-open-world', 'ttrpg'])
+    expect(catalog.filter(item => item.commercialReady).map(item => item.productType)).toEqual(['character-interaction', 'ai-town', 'text-adventure', 'avg', 'text-open-world'])
 
     for (const productType of PRODUCTS) {
       const currentBrief = brief(productType)
@@ -305,6 +305,12 @@ describe('R-PRODUCTPROD-1G · five-product adapter registry', () => {
       }
       if (parsed.interaction) {
         expect(parsed.interaction.sceneTemplates).toHaveLength(currentNarrative.nodes.filter(node => node.kind !== 'ending').length)
+      }
+      if (productType === 'ai-town') {
+        expect(modules.town).toBeDefined()
+        expect(modules.interaction?.profiles.map(profile => profile.characterKey)).toEqual(
+          modules.town!.residents.map(resident => resident.sourceCharacterResourceKey),
+        )
       }
       if (parsed.adventure) {
         expect(parsed.adventure.locations).toHaveLength(currentNarrative.nodes.length)

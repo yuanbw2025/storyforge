@@ -35,14 +35,18 @@ import {
   type ProductProductionSchedulerProjectionV1,
 } from './scheduler'
 import { createProductRuntimeInstanceFromSource } from '../product/runtime-instances'
+import { startAiTownInitialSceneV1 } from '../ai-town/runtime-api'
 import {
   listProductMediaProviderCapabilitiesV1,
   type ProductMediaProviderCapabilityV1,
 } from './media-adapters'
 import {
+  configuredAuthoredImagePackUrlV1,
   configuredMediaRelayUrlV1,
+  inspectAuthoredImagePackConfigurationV1,
   inspectConfiguredAgnesImageCapabilityV1,
   inspectTrustedRelayMediaConfigurationV1,
+  resolveAuthoredImagePackCapabilityV1,
   resolveConfiguredAgnesImageCapabilityV1,
   resolveTrustedRelayMediaCapabilityV1,
   type ConfiguredAgnesImageReadinessV1,
@@ -93,6 +97,10 @@ export async function readProductProductionTaskEvidenceV1(input: {
 export interface ProductProductionCapabilityReadinessV1 {
   text: ConfiguredTextCapabilityReadinessV1
   image: ConfiguredAgnesImageReadinessV1
+  authoredImagePackConfigured: boolean
+  authoredImagePackReady: boolean
+  authoredImagePackManifestPath: string | null
+  authoredImagePackIssue: string | null
   mediaRelayConfigured: boolean
   mediaRelayReady: boolean
   mediaRelayOrigin: string | null
@@ -111,12 +119,17 @@ export function inspectProductProductionCapabilityReadinessV1(input: {
   projectId: number
 }): ProductProductionCapabilityReadinessV1 {
   const relay = inspectTrustedRelayMediaConfigurationV1()
+  const authoredPack = inspectAuthoredImagePackConfigurationV1()
   return {
     text: inspectConfiguredTextCapabilityV1({
       projectId: input.projectId,
       category: 'product-production.content',
     }),
     image: inspectConfiguredAgnesImageCapabilityV1({ projectId: input.projectId }),
+    authoredImagePackConfigured: authoredPack.configured,
+    authoredImagePackReady: authoredPack.ready,
+    authoredImagePackManifestPath: authoredPack.manifestPath,
+    authoredImagePackIssue: authoredPack.issue,
     mediaRelayConfigured: relay.configured,
     mediaRelayReady: relay.ready,
     mediaRelayOrigin: relay.relayOrigin,
@@ -456,11 +469,21 @@ export async function runAuthorizedProductProductionV1(input: {
   }]
   const mediaCapabilities = new Map<string, ResolvedProductMediaCapabilityV1>()
   const relayUrl = configuredMediaRelayUrlV1()
+  const authoredImagePackUrl = configuredAuthoredImagePackUrlV1()
+  const authoredImagePackReadiness = inspectAuthoredImagePackConfigurationV1({ manifestUrl: authoredImagePackUrl })
   const agnesImageReadiness = inspectConfiguredAgnesImageCapabilityV1({ projectId: scope.projectId })
   const useExternalMedia = brief.qualityProfile !== 'prototype'
   for (const requirement of brief.capabilityRequirements) {
     if (!['image', 'music', 'sfx'].includes(requirement.mediaClass)) continue
-    if (requirement.mediaClass === 'image' && useExternalMedia && agnesImageReadiness.ready) {
+    if (requirement.mediaClass === 'image'
+      && brief.intent.productType === 'ai-town'
+      && brief.qualityProfile === 'internal'
+      && authoredImagePackUrl != null
+      && authoredImagePackReadiness.ready) {
+      const resolved = await resolveAuthoredImagePackCapabilityV1({ requirement, manifestUrl: authoredImagePackUrl })
+      mediaCapabilities.set(requirement.requirementKey, resolved)
+      capabilityBindings.push(resolved.binding)
+    } else if (requirement.mediaClass === 'image' && useExternalMedia && agnesImageReadiness.ready) {
       const resolved = await resolveConfiguredAgnesImageCapabilityV1({
         projectId: scope.projectId, requirement,
       })
@@ -561,6 +584,12 @@ export async function startProductProductionPreviewV1(input: {
     title: `${details.production.title} · Build #${details.build.buildNumber} 预览`,
     worldGroupId: input.worldGroupId ?? null,
   })
+  if (brief.intent.productType === 'ai-town') {
+    await startAiTownInitialSceneV1({
+      sessionId: session.id!,
+      commandId: `product-preview:ai-town-scene:${session.id}`,
+    })
+  }
   return { sessionId: session.id!, productType: brief.intent.productType }
 }
 

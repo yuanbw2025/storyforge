@@ -63,6 +63,7 @@ export async function captureRuntimeHarnessBoundaryV1(input: {
   );
   if (
     session.kind !== "character-interaction" &&
+    session.kind !== "ai-town" &&
     session.kind !== "text-adventure" &&
     session.kind !== "text-open-world"
   ) {
@@ -194,6 +195,78 @@ export async function assertAdventureRuntimeHarnessFreshV1(input: {
   });
   if (current.boundaryHash !== (await hashCanonicalValue(expected))) {
     fail("冒险状态、可用行动、叙事选择或发布来源已经变化");
+  }
+}
+
+/** Capture the AI-town director's public operational view and frozen release boundary. */
+export async function captureAiTownDirectorRuntimeHarnessBoundaryV1(input: {
+  scope: WorkspaceScope;
+  productRuntimeSessionId: number;
+}): Promise<RuntimeHarnessBoundaryV1> {
+  const session = await assertRuntimeInstanceBinding(input.productRuntimeSessionId, input.scope);
+  if (session.kind !== "ai-town" || (session.productReleaseId == null && session.productBuildId == null)) {
+    fail("AI 小镇导演只能绑定冻结 Build 或 ProductRelease 实例");
+  }
+  const [version, state, frozen] = await Promise.all([
+    readRuntimeStateVersion(session.id!),
+    readRuntimeState(session.id!),
+    frozenRuntimeSource(session.id!),
+  ]);
+  if (!state.town || frozen.runtimePackage.productType !== "ai-town" || !frozen.runtimePackage.town) {
+    fail("AI 小镇实例缺少冻结小镇状态");
+  }
+  const { availableAiTownEventSeedsV1 } = await import("../../ai-town/runtime");
+  const town = state.town;
+  const visibilityHash = await hashCanonicalValue({
+    day: town.day,
+    slot: town.slot,
+    weatherKey: town.weatherKey,
+    playerLocationKey: town.player.locationKey,
+    residents: Object.values(town.residents).map(resident => ({
+      residentKey: resident.residentKey,
+      locationKey: resident.locationKey,
+      residencyStatus: resident.residencyStatus,
+      mood: resident.mood,
+      activity: resident.activity,
+      activeGoal: resident.activeGoal,
+    })),
+    lifeThreads: Object.values(town.lifeThreads),
+    sharedProject: town.sharedProject,
+    cadence: town.cadence,
+    availableEvents: availableAiTownEventSeedsV1(town.content, town).map(item => ({
+      key: item.seed.key,
+      available: item.available,
+      reason: item.reason,
+      participantKeys: item.participantKeys,
+    })),
+    pendingMajorChanges: town.pendingMajorChanges,
+    latestPublicEvents: town.latestPublicEvents,
+  });
+  const runtime = {
+    productRuntimeSessionId: session.id!,
+    baseSequence: version.sequence,
+    stateHash: version.stateHash,
+    visibilityHash,
+    releaseHash: frozen.runtimeSourceHash,
+  };
+  return {
+    scope: { projectId: input.scope.projectId, worldGroupId: session.worldGroupId ?? null, runtime },
+    boundaryHash: await hashCanonicalValue(runtime),
+  };
+}
+
+export async function assertAiTownDirectorRuntimeHarnessFreshV1(input: {
+  scope: WorkspaceScope;
+  contractScope: AgentRunScopeV1;
+}): Promise<void> {
+  const expected = input.contractScope.runtime;
+  if (!expected) fail("RunContract 缺少 AI 小镇 runtime 边界");
+  const current = await captureAiTownDirectorRuntimeHarnessBoundaryV1({
+    scope: input.scope,
+    productRuntimeSessionId: expected.productRuntimeSessionId,
+  });
+  if (current.boundaryHash !== (await hashCanonicalValue(expected))) {
+    fail("AI 小镇时间、居民、事件闭集或发布来源已变化");
   }
 }
 

@@ -12,6 +12,13 @@ import { createWorkspace } from '../../src/lib/workspace/create-workspace'
 import { stampNewRecord } from '../../src/lib/workspace/scope'
 import { createWorldRevision, publishWorldRevision } from '../../src/lib/world-engine/releases'
 import { createProductProductionWithBriefV1 } from '../../src/lib/product-production/service'
+import { assertAiTownWorldSourceSelectionHashV1 } from '../../src/lib/ai-town/contracts'
+import {
+  assertAiTownWorldSourceCatalogHashV1,
+  freezeAiTownWorldSourceSelectionV1,
+  loadAiTownWorldSourceCatalogV1,
+} from '../../src/lib/ai-town/world-source'
+import type { AiTownBriefSettingsV1 } from '../../src/lib/types'
 
 async function workspace(name: string) {
   return seedCurrentProductWorld(name)
@@ -219,6 +226,88 @@ describe('R-PRODUCTPROD-1B · consultation and reviewable Brief', () => {
       scope: owned.scope, worldReleaseId: owned.release.id!, suggestionKey: customStart.suggestionKey,
       productType: 'avg', sourceSelection: selection,
     })).rejects.toThrow(/不属于当前 WorldRelease/)
+  })
+
+  it('AI 小镇专属表单冻结为严格 Brief，且不可放宽重大变化与私密心智边界', async () => {
+    const owned = await seedCurrentProductWorld('AI 小镇 Brief', { minimumCharacters: 5 })
+    const townCatalog = await loadAiTownWorldSourceCatalogV1({ scope: owned.scope, worldReleaseId: owned.release.id! })
+    expect(townCatalog).toMatchObject({ productType: 'ai-town', worldContentHash: owned.release.contentHash })
+    expect(townCatalog.residentCandidates).toHaveLength(5)
+    await expect(assertAiTownWorldSourceCatalogHashV1({
+      ...townCatalog,
+      worldContentHash: 'b'.repeat(64),
+    })).rejects.toThrow(/catalogHash/)
+    const frozenSelection = await freezeAiTownWorldSourceSelectionV1({
+      catalog: townCatalog,
+      endingResourceKeys: [townCatalog.endingCandidates[0].resourceKey],
+      residentResourceKeys: townCatalog.residentCandidates.slice(0, 4).map(item => item.resourceKey),
+      locationResourceKeys: townCatalog.locationCandidates.map(item => item.resourceKey),
+      ruleAndLoreResourceKeys: townCatalog.ruleAndLoreCandidates.map(item => item.resourceKey),
+      artifactResourceKeys: townCatalog.artifactCandidates.map(item => item.resourceKey),
+    })
+    const selectedResidents = new Set(frozenSelection.residentResourceKeys)
+    expect(frozenSelection.relationSubgraphResourceKeys).toEqual(townCatalog.relationEdges
+      .filter(edge => selectedResidents.has(edge.fromCharacterResourceKey) && selectedResidents.has(edge.toCharacterResourceKey))
+      .map(item => item.resourceKey))
+    expect(frozenSelection.dependencyClosureResourceKeys).toEqual(expect.arrayContaining(frozenSelection.relationSubgraphResourceKeys))
+    const suggestions = await suggestProductStartingPoints({ scope: owned.scope, worldReleaseId: owned.release.id! })
+    const customStart = suggestions.suggestions.find(item => item.kind === 'custom')!
+    const townSettings: AiTownBriefSettingsV1 = {
+      playerRole: 'caretaker', playerName: '阿晴', homeConcept: '带工作台的旧灯塔看守房',
+      townTitle: '潮声余居', elapsedDays: 730, romance: 'opt-in', residentTarget: 4,
+      majorLocationTarget: 6, actionsPerDay: 5, offlineEnabled: true, offlineMaximumDays: 2,
+      resourceKeys: ['wood', 'food'], startingMoney: 360, sharedProjectConcept: '修复海边温室',
+      portraits: true, expressions: false, locationCards: true, ambientAudio: true,
+    }
+    const brief = await draftProductProductionBriefV3({
+      scope: owned.scope, worldReleaseId: owned.release.id!, suggestionKey: customStart.suggestionKey,
+      productType: 'ai-town', visualLevel: 'key-scenes', audioLevel: 'music-sfx',
+      playerRole: '扮演新居民', openingSituation: '危机结束两年后，旧友共同修复海边温室。',
+      aiTown: townSettings,
+    })
+    expect(parseProductProductionBriefV3(brief)).toEqual(brief)
+    expect(brief.aiTown).toMatchObject({
+      player: { role: 'caretaker', name: '阿晴' },
+      continuity: { elapsedDays: 730, romance: 'opt-in' },
+      town: { title: '潮声余居', residentTarget: 4, majorLocationTarget: 6 },
+      clock: { actionsPerDay: 5 }, autonomy: { offlineMaximumDays: 2 },
+      management: { resourceKeys: ['wood', 'food'], startingMoney: 360 },
+      safety: { majorChangeConfirmation: true, privateMindPlayerAccess: 'none' },
+    })
+    expect(brief.media).toMatchObject({
+      imageCount: 10,
+      musicTrackCount: 0,
+      sfxCount: 1,
+      requiredMediaKinds: ['background', 'character-pose', 'ambience'],
+    })
+    expect(brief.capabilityRequirements.filter(item => item.mediaClass !== 'text').map(item => item.mediaClass).sort())
+      .toEqual(['image', 'sfx'])
+    const boundedResidents = await draftProductProductionBriefV3({
+      scope: owned.scope, worldReleaseId: owned.release.id!, suggestionKey: customStart.suggestionKey,
+      productType: 'ai-town', visualLevel: 'key-scenes', audioLevel: 'none',
+      aiTown: { ...townSettings, residentTarget: 8, expressions: true },
+    })
+    expect(boundedResidents.aiTown?.town.residentTarget).toBe(5)
+    expect(boundedResidents.media).toMatchObject({ imageCount: 16 })
+    const silentTown = await draftProductProductionBriefV3({
+      scope: owned.scope, worldReleaseId: owned.release.id!, suggestionKey: customStart.suggestionKey,
+      productType: 'ai-town', visualLevel: 'none', audioLevel: 'music-sfx',
+      aiTown: { ...townSettings, portraits: false, expressions: false, locationCards: false, ambientAudio: false },
+    })
+    expect(silentTown.media).toMatchObject({
+      visualLevel: 'none', audioLevel: 'none', imageCount: 0, musicTrackCount: 0, sfxCount: 0,
+      requiredMediaKinds: [],
+    })
+    expect(brief.aiTown?.sourceSelection.residentResourceKeys).toHaveLength(4)
+    await expect(assertAiTownWorldSourceSelectionHashV1({
+      ...brief.aiTown!.sourceSelection,
+      worldContentHash: 'b'.repeat(64),
+    })).rejects.toThrow(/selectionHash/)
+
+    await expect(draftProductProductionBriefV3({
+      scope: owned.scope, worldReleaseId: owned.release.id!, suggestionKey: customStart.suggestionKey,
+      productType: 'ai-town', aiTown: { ...brief.aiTown!, residentTarget: 9 } as never,
+    })).rejects.toThrow(/4\.\.8/)
   })
 
   it('拒绝伪造 suggestionKey、跨 Work Release 与被篡改的冻结来源', async () => {

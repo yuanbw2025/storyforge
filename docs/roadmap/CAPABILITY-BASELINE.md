@@ -50,7 +50,7 @@
 | ID | 状态 | 当前事实与证据 | 缺口 |
 |---|---|---|---|
 | D-WORLD-01 | implemented | 独立作品、内部 scope 与显式 `world-draft` 身份已分离；世界 code/revision、按 World/Work 隔离的语义投影、诚实能力画像和不可变 release/hash 已形成闭环 | 新语义域加入时继续登记覆盖、证据、候选/冲突/遗漏统计 |
-| D-WORLD-02 | implemented | `describe/search/read/readOriginalEvidence` 中立 WorldRelease provider、冻结 SourcePlan、per-run Context Manifest、发布 SourceManifest，以及跑团、角色互动、文字冒险、AVG、文字开放世界五个 requirement adapter 已验证 | AI 小镇未来增加自己的 adapter；不得把网关扩成固定万能数据包 |
+| D-WORLD-02 | implemented | `describe/search/read/readOriginalEvidence` 中立 WorldRelease provider、冻结 SourcePlan、per-run Context Manifest、发布 SourceManifest，以及跑团、角色互动、AI 小镇、文字冒险、AVG、文字开放世界六个 requirement adapter 已验证 | 新产品继续增加自己的 adapter；不得把网关扩成固定万能数据包 |
 | D-WORLD-03 | implemented | 长篇/短篇可显式一键派生且保存来源 revision/range/hash；剧本/漫画被拒绝；多世界关系、通道式导航、导入重映射和 World/Work 隔离已有回归 | 产品是否使用跨世界资源由自己的 adapter 与 Brief 决定 |
 | D-WORLD-04 | implemented | `PROJECT_TABLES.worldSemantic` 是封存集合唯一来源；WorldRelease、导出和中立读取排除 product production、媒资、build、可执行蓝图、session 与 runtime | 产品媒资与运行状态继续由各产品生命周期测试守门 |
 
@@ -60,7 +60,7 @@
 |---|---|---|---|
 | E-TTRPG-01 | partial | 已接入中立世界协议、专用需求适配器、统一 Production/Build/ProductRelease v1、AI GM runtime、事件/存档与在线 handoff | 专用生产体验、完整媒资、权限隔离、真实多人体验和产品级 E2E 尚未封板 |
 | E-CHAT-01 | partial | 单/多角色互动已接入专用需求适配器、统一 Production/Build/ProductRelease v1、玩家 runtime 与 runtime Skill | 主 Agent 会谈、多人导演、长期记忆/可见性和完整发布运行体验需验收 |
-| E-TOWN-01 | missing | 有角色互动和通用产品运行时基础能力可复用 | 没有独立 AI 小镇产品的时间、日程、地点、群体与离线演化闭环 |
+| E-TOWN-01 | partial | 已有专属 Brief/SourceSelection/adapter、Production/Build/ProductRelease、六时段语义地图、居民日程、知识隔离、证据化对话记忆、关系/轻经营、离线演化、检查点/分支、14 日回放、重大变化确认、durable 自治导演、产品专属地点/肖像/表情/环境音媒资 lane、玩家界面与冻结 Build 浏览器旅程 E2E | 真实模型长期角色一致性、真实媒体 provider 的肖像/音频质量、权利/成本/性能回执及非 fixture 浏览器商业验收仍需继续 |
 | E-TEXTADV-01 | partial | 文字冒险已接入专用需求适配器、统一 Production/Build/ProductRelease v1 和独立玩家面 | 可玩内容、规则、媒资、结局和真实 E2E 仍需专项封板 |
 | E-AVG-01 | partial | AVG 已接入专用需求适配器、统一 Production/Build/ProductRelease v1、演出与独立玩家面 | 真实视觉/声音资产、演出绑定和完整体验未验收 |
 | E-OPENWORLD-01 | partial | 文字开放世界已接入专用需求适配器、统一 Production/Build/ProductRelease v1、专用运行 API 和独立玩家面；状态演化仅是该产品的内部能力 | 区域按需演化、角色自治、长期任务演化与性能门未完整 |

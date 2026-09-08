@@ -8,6 +8,7 @@ import { useCharacterStore } from '../../stores/character'
 import { useAIStream } from '../../hooks/useAIStream'
 import { createAISessionKey } from '../../stores/ai-generation-session'
 import { useAutoSave } from '../../hooks/useAutoSave'
+import { buildChapterStatusPatchV1, shouldPersistChapterEditorContentV1 } from '../../lib/authoring/chapter-editor-save'
 import { useBeforeUnload } from '../../hooks/useBeforeUnload'
 import { useActiveWork } from '../../hooks/useActiveWork'
 import { buildChapterContentPrompt, buildContinuePrompt, buildPolishPrompt, buildExpandPrompt, buildDeAIPrompt } from '../../lib/ai/adapters/chapter-adapter'
@@ -85,6 +86,7 @@ import { buildEditorEntityReferences } from '../../lib/editor/entity-reference'
 import type {
   AgentSkillExecutionBindingV2,
   ChatMessage,
+  ChapterStatus,
   Project,
   StateDiffItem,
   WorkspaceScope,
@@ -852,6 +854,22 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     }
   }, [manualSaving, persistCurrentEditorContent])
 
+  const handleStatusChange = useCallback(async (status: ChapterStatus) => {
+    if (!currentChapter?.id) return
+    setManualSaveError('')
+    try {
+      const html = editorRef.current?.getHTML() ?? content
+      const plain = editorRef.current?.getPlainText() ?? htmlToPlainText(html)
+      const wc = countWords(plain)
+      await updateChapter(currentChapter.id, buildChapterStatusPatchV1(html, wc, status))
+      setContent(html)
+      setPlainText(plain)
+      setSavedContent(html)
+    } catch (error) {
+      setManualSaveError(error instanceof Error ? error.message : String(error))
+    }
+  }, [content, currentChapter?.id, updateChapter])
+
   // 切换章节：同步到本地 state（RichEditor 会基于 value 重建内容）
   useEffect(() => {
     const raw = currentChapter?.content || ''
@@ -885,10 +903,11 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   useAutoSave(content, useCallback(async (html: string) => {
     if (currentChapter?.id) {
       const wc = countWords(htmlToPlainText(html))
+      if (!shouldPersistChapterEditorContentV1(currentChapter, html, wc)) return
       await updateChapter(currentChapter.id, { content: html, wordCount: wc })
       setSavedContent(html)
     }
-  }, [currentChapter?.id, updateChapter]))
+  }, [currentChapter, updateChapter]))
 
   const outlineNode = currentChapter ? nodes.find(n => n.id === currentChapter.outlineNodeId) : null
   const chapterDisplay = useMemo(() => {
@@ -1471,6 +1490,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       contentRevision,
     }).catch(error => {
       console.error('[ChapterEditor] 生成节点执行失败:', error)
+      setProseGenerationError(error instanceof Error ? error.message : '正文生成执行失败。')
     })
     scheduleRecentMemoryRebuild(backgroundMemoryIds)
   }
@@ -1524,66 +1544,70 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       setProseGenerationError(error instanceof Error ? error.message : '作者编辑保存失败，已阻止正式生成。')
       return
     }
-    await persistCurrentEditorContent()
-    const backgroundMemoryIds = await prepareContinuityBeforeGeneration()
-    const scope = await resolveScopeLike(project.id!)
-    const contentRevision = await captureWorkspaceContentRevisionV1({
-      scope,
-      worldGroupId: chapterWorldGroupId ?? null,
-    })
-    const {
-      text: fullCtx,
-      segments: assembledSegments,
-      assembled,
-      generationBinding,
-      characterContext,
-      worldRulesContext,
-      continuity,
-      continuityBudgetTokens,
-    } = await buildFullWorldCtx('generate', 'write')
-    await assertWorkspaceContentRevisionFreshV1(contentRevision, {
-      scope,
-      worldGroupId: chapterWorldGroupId ?? null,
-    })
-    const informationBoundary = await buildChapterInformationBoundaryV1({
-      scope: await resolveScopeLike(project.id!),
-      chapterId: currentChapter?.id ?? null,
-      outlineNodeId: outlineNode.id!,
-      worldGroupId: chapterWorldGroupId ?? null,
-      perspectiveCharacterId,
-    })
-    const messages = buildChapterContentPrompt(
-      outlineNode.title,
-      outlineNode.summary,
-      fullCtx,
-      characterContext,
-      continuity.previousTail,
-      worldRulesContext,
-      [buildInformationBoundaryInstructionV1(informationBoundary), customInstruction.trim()]
-        .filter(Boolean)
-        .join('\n'),
-      { continuity, continuityBudgetTokens },
-    )
+    try {
+      await persistCurrentEditorContent()
+      const backgroundMemoryIds = await prepareContinuityBeforeGeneration()
+      const scope = await resolveScopeLike(project.id!)
+      const contentRevision = await captureWorkspaceContentRevisionV1({
+        scope,
+        worldGroupId: chapterWorldGroupId ?? null,
+      })
+      const {
+        text: fullCtx,
+        segments: assembledSegments,
+        assembled,
+        generationBinding,
+        characterContext,
+        worldRulesContext,
+        continuity,
+        continuityBudgetTokens,
+      } = await buildFullWorldCtx('generate', 'write')
+      await assertWorkspaceContentRevisionFreshV1(contentRevision, {
+        scope,
+        worldGroupId: chapterWorldGroupId ?? null,
+      })
+      const informationBoundary = await buildChapterInformationBoundaryV1({
+        scope: await resolveScopeLike(project.id!),
+        chapterId: currentChapter?.id ?? null,
+        outlineNodeId: outlineNode.id!,
+        worldGroupId: chapterWorldGroupId ?? null,
+        perspectiveCharacterId,
+      })
+      const messages = buildChapterContentPrompt(
+        outlineNode.title,
+        outlineNode.summary,
+        fullCtx,
+        characterContext,
+        continuity.previousTail,
+        worldRulesContext,
+        [buildInformationBoundaryInstructionV1(informationBoundary), customInstruction.trim()]
+          .filter(Boolean)
+          .join('\n'),
+        { continuity, continuityBudgetTokens },
+      )
 
-    // Phase 21.3: 计算上下文预算
-    const segments = analyzeContextSegments([
-      { label: 'System Prompt', content: messages.find(m => m.role === 'system')?.content || '', layer: 'L0' },
-      { label: '章节大纲', content: outlineNode.summary || '', layer: 'L1' },
-      ...assembledSegments,
-      { label: 'User Prompt', content: messages.find(m => m.role === 'user')?.content || '', layer: 'L1' },
-    ])
-    setContextBudget(calculateBudget(aiConfig.provider, aiConfig.model, segments, aiConfig.contextWindow))
+      // Phase 21.3: 计算上下文预算
+      const segments = analyzeContextSegments([
+        { label: 'System Prompt', content: messages.find(m => m.role === 'system')?.content || '', layer: 'L0' },
+        { label: '章节大纲', content: outlineNode.summary || '', layer: 'L1' },
+        ...assembledSegments,
+        { label: 'User Prompt', content: messages.find(m => m.role === 'user')?.content || '', layer: 'L1' },
+      ])
+      setContextBudget(calculateBudget(aiConfig.provider, aiConfig.model, segments, aiConfig.contextWindow))
 
-    prepareOrRunChapterGeneration(
-      'generate',
-      'chapter.content',
-      messages,
-      backgroundMemoryIds,
-      assembled,
-      generationBinding,
-      informationBoundary,
-      contentRevision,
-    )
+      prepareOrRunChapterGeneration(
+        'generate',
+        'chapter.content',
+        messages,
+        backgroundMemoryIds,
+        assembled,
+        generationBinding,
+        informationBoundary,
+        contentRevision,
+      )
+    } catch (error) {
+      setProseGenerationError(error instanceof Error ? error.message : '正文生成准备失败。')
+    }
   }
 
   const handleContinue = async () => {
@@ -3333,9 +3357,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
           saving={manualSaving}
           saveError={manualSaveError}
           isSaved={content === savedContent}
-          onStatusChange={status => {
-            if (currentChapter.id) void updateChapter(currentChapter.id, { status })
-          }}
+          onStatusChange={status => { void handleStatusChange(status) }}
           onToggleContext={() => setShowContext(!showContext)}
           onOpenCompare={() => { void handleOpenComparePolish() }}
           onSave={() => { void handleManualSave() }}

@@ -30,7 +30,8 @@ describe('R-E-group-ui-and-divine · E 组收尾', () => {
     const headerSource = read('src/components/editor/ChapterEditorHeader.tsx')
     expect(editorSource).toContain('<ChapterEditorHeader')
     expect(editorSource).toContain('onStatusChange={status =>')
-    expect(editorSource).toContain('void updateChapter(currentChapter.id, { status })')
+    expect(editorSource).toContain('void handleStatusChange(status)')
+    expect(editorSource).toContain('buildChapterStatusPatchV1(html, wc, status)')
     expect(headerSource).toContain('aria-label="章节状态"')
     for (const status of ['outline', 'draft', 'revised', 'polished', 'final']) {
       expect(headerSource).toContain(`value: '${status}'`)

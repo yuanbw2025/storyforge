@@ -11,6 +11,7 @@ import type {
   ProductRuntimePackageV1,
   CharacterInteractionProductRuntimePackageV1,
   TextOpenWorldProductRuntimePackageV1,
+  AiTownProductRuntimePackageV1,
 } from '../types'
 
 export interface RuntimePlayerCharacterV2 {
@@ -103,4 +104,12 @@ export function parseTextOpenWorldProductReleaseManifest(value: string): TextOpe
     throw new Error('[text-open-world] 不是当前文字开放世界 ProductRelease')
   }
   return parsed as TextOpenWorldProductRuntimePackageV1
+}
+
+export function parseAiTownProductReleaseManifest(value: string): AiTownProductRuntimePackageV1 {
+  const parsed = parseAnyProductReleaseManifest(value)
+  if (parsed.productType !== 'ai-town' || !parsed.interaction || !parsed.town) {
+    throw new Error('[ai-town] 不是当前 AI 小镇 ProductRelease')
+  }
+  return parsed as AiTownProductRuntimePackageV1
 }

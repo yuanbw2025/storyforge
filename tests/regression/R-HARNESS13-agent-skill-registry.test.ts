@@ -36,7 +36,7 @@ describe('R-HARNESS13 · Agent Skill 单一事实源', () => {
       'prose.generate',
       'prose.continue',
     ]))
-    expect(new Set(AGENT_SKILLS.map(skill => skill.owner)).size).toBe(9)
+    expect(new Set(AGENT_SKILLS.map(skill => skill.owner)).size).toBe(10)
     expect(AGENT_SKILLS.filter(skill => skill.owner === 'short-novel-production-agent')).toHaveLength(6)
     expect(AGENT_SKILLS.filter(skill => skill.owner === 'screenplay-product')).toHaveLength(8)
     expect(AGENT_SKILLS.filter(skill => skill.owner === 'adaptation-products')).toHaveLength(2)

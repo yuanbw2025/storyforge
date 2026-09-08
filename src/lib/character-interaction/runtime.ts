@@ -78,7 +78,9 @@ function profile(value: unknown): InteractionRuntimeProfile {
   if (!isObject(value)) throw new Error('互动角色快照必须是对象。')
   return {
     participantKey: text(value.participantKey, '互动角色 key', 160),
-    characterKey: text(value.characterKey, '互动角色实体 key', 160),
+    // Portable WorldRelease resource keys include the release hash, semantic
+    // coordinate and record hash; 160 bytes is too short for a valid identity.
+    characterKey: text(value.characterKey, '互动角色实体 key', 500),
     name: text(value.name, '互动角色名称', 240),
     roleLabel: text(value.roleLabel, '互动角色定位', 500),
     voiceRules: text(value.voiceRules, '互动角色语气规则', 8_000),

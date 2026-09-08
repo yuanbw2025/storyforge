@@ -78,6 +78,7 @@ export const MODEL_CONTEXT_PRESETS: Record<string, ModelContextPreset> = {
 
   // NVIDIA NIM
   'nvidia': { label: 'NVIDIA NIM 默认', maxContext: 128_000, maxOutput: 4_096 },
+  'nvidia:nvidia/nemotron-3-super-120b-a12b': { label: 'NVIDIA Nemotron 3 Super 120B', maxContext: 128_000, maxOutput: 32_768 },
   'nvidia:deepseek-ai/deepseek-v4-flash-0731': { label: 'NVIDIA DeepSeek V4 Flash 0731', maxContext: 1_000_000, maxOutput: 384_000 },
   'nvidia:minimaxai/minimax-m3': { label: 'NVIDIA MiniMax M3', maxContext: 1_000_000, maxOutput: 16_384 },
   'nvidia:mistralai/mistral-nemotron': { label: 'NVIDIA Mistral Nemotron', maxContext: 128_000, maxOutput: 4_096 },

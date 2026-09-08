@@ -80,7 +80,7 @@
 
 ## 二、上下文源清单（CONTEXT_SOURCES · AI 读什么）
 
-共 97 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
+共 99 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
 
 | key | 标签 | 作用域 | 层级 | 预算(token) |
 |---|---|---|---|---|
@@ -118,6 +118,8 @@
 | `textOpenWorldEvolutionRuntime` | 文字开放世界·内部状态演化玩家视角 | runtime | L0 | 8000 |
 | `openWorldRuntime` | 文字开放世界玩家视角 | runtime | L0 | 8000 |
 | `interactionRuntime` | 角色互动单一视角 | runtime | L0 | 8000 |
+| `aiTownRuntime` | 后日谈 AI 小镇居民单一视角 | runtime | L0 | 8000 |
+| `aiTownDirectorRuntime` | 后日谈 AI 小镇导演公开运行视角 | runtime | L0 | 10000 |
 | `productRuntime` | 冻结运行时状态 | runtime | L0 | 8000 |
 | `workStatus` | 作品概况 | project | L2 | 1200 |
 | `worldGroups` | 世界组目录 | project | L2 | 1500 |
@@ -300,7 +302,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ## 四、AI 调用点（消耗统计 category · 在哪触发)
 
-共 42 个 category。
+共 43 个 category。
 未分类调用: 0 个。动态 category 调用: 36 个。
 
 | category | 触发文件 |
@@ -313,9 +315,9 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `chapter.content` | `src/lib/generation/chapter-generation-node.ts:23` |
 | `chapter.continue` | `src/lib/generation/chapter-generation-node.ts:26` |
 | `chapter.continuity` | `src/lib/node-authoring/domain-execution.ts:776`<br/>`src/lib/node-authoring/domain-execution.ts:840` |
-| `chapter.deai` | `src/components/editor/ChapterEditor.tsx:1683` |
-| `chapter.expand` | `src/components/editor/ChapterEditor.tsx:1661` |
-| `chapter.polish` | `src/components/editor/ChapterEditor.tsx:1651` |
+| `chapter.deai` | `src/components/editor/ChapterEditor.tsx:1707` |
+| `chapter.expand` | `src/components/editor/ChapterEditor.tsx:1685` |
+| `chapter.polish` | `src/components/editor/ChapterEditor.tsx:1675` |
 | `chapter.toolbar` | `src/lib/agent/run/selection-edit-durable.ts:567` |
 | `cultivation.progress` | `src/lib/agent/run/cultivation-progress-extraction-durable.ts:558` |
 | `detail.chapter-planning` | `src/lib/node-authoring/domain-execution.ts:605` |
@@ -339,7 +341,8 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `review.outline-workshop` | `src/lib/outline/workshop.ts:457` |
 | `review.quality` | `src/components/editor/ReviewPanel.tsx:112` |
 | `review.readability` | `src/components/editor/ReviewPanel.tsx:133` |
-| `review.revise` | `src/components/editor/ChapterEditor.tsx:1711` |
+| `review.revise` | `src/components/editor/ChapterEditor.tsx:1735` |
+| `runtime.prose.ai-town-director` | `src/lib/ai-town/director-harness.ts:271` |
 | `runtime.ttrpg-gm` | `src/lib/ttrpg/decision-harness.ts:134` |
 | `runtime.ttrpg-player` | `src/lib/ttrpg/player-harness.ts:310` |
 | `scene.verify` | `src/components/scene/SceneVerifyPanel.tsx:81` |
@@ -374,7 +377,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 - `src/lib/agent/story-core-copilot.ts:557 · chat`
 - `src/lib/agent/storyline-progress-copilot.ts:366 · chat`
 - `src/lib/agent/worldview-field-copilot.ts:890 · chat`
-- `src/lib/character-interaction/harness.ts:396 · chat`
+- `src/lib/character-interaction/harness.ts:403 · chat`
 - `src/lib/comic/durable-production.ts:269 · chat`
 - `src/lib/evals/agent-harness/story-arc-main-path-browser.ts:98 · chat`
 - `src/lib/evals/creative-reliability/browser.ts:89 · chat`
@@ -432,4 +435,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `5b147b37`
+生成时间基准:commit `a77ebcde`
