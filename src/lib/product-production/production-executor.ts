@@ -1397,7 +1397,20 @@ export function legalizeProductionModelProtocolDefaultsV1(
       if (ordered.some((entry, index) => entry.index !== index)) {
         defaultedFields.push(`${path}<-stable-order`)
       }
-      return ordered.map(entry => entry.beat)
+      return ordered.map((entry, index) => {
+        if (!entry.beat || typeof entry.beat !== 'object' || Array.isArray(entry.beat)) {
+          return entry.beat
+        }
+        const beat = { ...(entry.beat as JsonRecord) }
+        // Beat order is protocol bookkeeping, not authored prose. Canonicalize
+        // it after preserving the provider's declared order so duplicate,
+        // gapped or whitespace-sensitive keys cannot trigger another paid run.
+        if (beat.order !== index) {
+          beat.order = index
+          defaultedFields.push(`${path}[${index}].order<-canonical-position`)
+        }
+        return beat
+      })
     }
     const normalizeChoices = (value: unknown, path: string): unknown => (
       Array.isArray(value) ? value.map((choice, index) => {

@@ -1662,7 +1662,7 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
       actKey: 'act.2',
       moduleTitle: '潮钟群岛：最后的灯火',
       scenes: [{
-        beats: [{ beatKey: 'beat.1' }, { beatKey: 'beat.2' }],
+        beats: [{ beatKey: 'beat.1', order: 0 }, { beatKey: 'beat.2', order: 1 }],
         choices: [expect.not.objectContaining({ unavailableReason: expect.anything() })],
       }],
       choices: [expect.not.objectContaining({ unavailableReason: expect.anything() })],
@@ -1674,8 +1674,12 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
       'actKey<-frozen-scene-script-envelope',
       'moduleTitle<-frozen-scene-script-envelope',
       'scenes[0].beats<-stable-order',
+      'scenes[0].beats[0].order<-canonical-position',
+      'scenes[0].beats[1].order<-canonical-position',
       'scenes[0].choices[0].unavailableReason<-null-as-omitted',
       'endings[0].beats<-stable-order',
+      'endings[0].beats[0].order<-canonical-position',
+      'endings[0].beats[1].order<-canonical-position',
       'choices[0].unavailableReason<-null-as-omitted',
     ])
 
