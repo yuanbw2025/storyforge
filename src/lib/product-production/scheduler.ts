@@ -1331,7 +1331,16 @@ async function recoveryInvalidatedTaskKeys(input: {
       ? narrativeIntegrationOwnerTaskKeys
       : sceneScriptPartKeys(taskKey)
   )
-  const unresolvedFailureTaskKeys = [...textAdventureTaskFailures(input.failureJson).keys()]
+  const directlyResolvedFailureTaskKey = previousFailure
+    && typeof previousFailure.taskKey === 'string'
+    && (previousFailure.taskKey.startsWith('content.') || previousFailure.taskKey === 'integration.narrative')
+    ? previousFailure.taskKey : null
+  // A resolve-blocker envelope names the current failure in previousFailure.
+  // Prefer that root over append-only diagnostic history; otherwise an older,
+  // already repaired failure can rewind unrelated acts in every later epoch.
+  const unresolvedFailureTaskKeys = (directlyResolvedFailureTaskKey
+    ? [directlyResolvedFailureTaskKey]
+    : [...textAdventureTaskFailures(input.failureJson).keys()])
     .filter(taskKey => {
       if (taskKey === 'integration.narrative') return true
       const task = input.plan.tasks.find(candidate => candidate.taskKey === taskKey)
