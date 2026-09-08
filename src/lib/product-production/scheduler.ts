@@ -1350,7 +1350,9 @@ async function recoveryInvalidatedTaskKeys(input: {
   )
   const directlyResolvedFailureTaskKey = previousFailure
     && typeof previousFailure.taskKey === 'string'
-    && (previousFailure.taskKey.startsWith('content.') || previousFailure.taskKey === 'integration.narrative')
+    && (previousFailure.taskKey.startsWith('content.')
+      || previousFailure.taskKey === 'integration.narrative'
+      || previousFailure.taskKey === 'media.requirements')
     ? previousFailure.taskKey : null
   // A resolve-blocker envelope names the current failure in previousFailure.
   // Prefer that root over append-only diagnostic history; otherwise an older,
