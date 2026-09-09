@@ -3093,7 +3093,7 @@ function textSystem(
     return `${common}\n你是同一位叙事设计师的决定设计 Run，只负责为已经冻结的三幕场景卡设计玩家决定，不得改写场景、地点或结局。` +
       '输出字段必须精确为：{"schema":"storyforge.text-adventure-narrative-decision-plan-artifact","version":1,"decisions":[{"key":"decision.some-key","sceneKey":"scene.001","prompt":"...","options":[{"key":"option.some-key","label":"...","cost":"...","persistentEffectKey":"flag.some-key","echoSceneKeys":["scene.002","scene.003"]}]}]}。' +
       `decisions 必须恰好 ${decisionSceneKeys.length} 项；稳定身份冻结映射=${JSON.stringify(decisionIdentityPlan)}，必须逐项复制 decisionKey→key、sceneKey、optionKeys→两个 option.key、persistentEffectKeys→两个 option.persistentEffectKey，不得错位、跳号或自造身份。系统还会按数组序号再次冻结这些纯机器身份；它们不得承载世界事实。` +
-      '每个决定恰好两个立场、代价或手段显著不同的选项，并至少在两个真实后续场景回响。prompt、label、cost 必须简洁具体，不得输出场景正文、背景复述或系统解释。'
+      `每个决定恰好两个立场、代价或手段显著不同的选项；每个 option.echoSceneKeys 必须包含至少两个在该 decision.sceneKey 之后出现的冻结场景 key，禁止引用决定当场或已经走过的场景。冻结场景顺序=${JSON.stringify(skeleton.sceneKeys)}。prompt、label、cost 必须简洁具体，不得输出场景正文、背景复述或系统解释。`
   }
   const dialoguePassActIndex = textAdventureDialoguePassActIndex(taskKey)
   if (dialoguePassActIndex != null) {

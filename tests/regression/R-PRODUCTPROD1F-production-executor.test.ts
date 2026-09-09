@@ -37,6 +37,7 @@ import {
 import { putMediaBlobObject } from '../../src/lib/product-production/media-blob-store'
 import { runProductProductionUntilBlockedV1 } from '../../src/lib/product-production/scheduler'
 import { parseProductRuntimePackageV1 } from '../../src/lib/product-production/runtime-package'
+import { analyzeTextAdventureRouteQualityV1 } from '../../src/lib/adventure/quality-analysis'
 import { adventureNarrativeActionContext, availableAdventureActions } from '../../src/lib/adventure/runtime'
 import { commitAdventureAction, commitAdventureNarrativeChoice } from '../../src/lib/adventure/runtime-api'
 import { planTextAdventureNarrativeLocationsV1 } from '../../src/lib/adventure/narrative-location-plan'
@@ -3706,6 +3707,11 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     expect(echoActions.every(action => action.requirements.some(requirement => (
       'conditionKey' in requirement && requirement.conditionPresent === true
     )))).toBe(true)
+    const packageWithoutEchoes = structuredClone(runtimePackage)
+    packageWithoutEchoes.adventure!.actions = packageWithoutEchoes.adventure!.actions.filter(item => (
+      !item.key.startsWith('action.echo.')
+    ))
+    expect(analyzeTextAdventureRouteQualityV1(packageWithoutEchoes).minimumRouteStatefulDecisions).toBe(0)
     const firstDecisionChoices = runtimePackage.narrative.choices.filter(choice => (
       choice.sourceNodeKey === runtimePackage.narrative.entryNodeKey
     ))

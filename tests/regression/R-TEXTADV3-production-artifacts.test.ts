@@ -336,6 +336,11 @@ describe('TEXTADV-3 · 专业生产工件合同', () => {
     broken.decisions[0].options[0].echoSceneKeys = ['scene.002']
     expect(() => parseTextAdventureNarrativeArcPlanArtifactV1({ value: broken, brief: brief(), cast, storyBible: story }))
       .toThrow('数量无效')
+    const pastEcho = structuredClone(value)
+    pastEcho.decisions[0].options[0].echoSceneKeys = ['scene.001', 'scene.002']
+    expect(() => parseTextAdventureNarrativeArcPlanArtifactV1({
+      value: pastEcho, brief: brief(), cast, storyBible: story,
+    })).toThrow('回响必须位于决定场景之后')
   })
 
   it('主线任务计划把阶段、目标、场景、通用解法与持久后果精确闭合', () => {

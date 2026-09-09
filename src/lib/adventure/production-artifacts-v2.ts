@@ -862,6 +862,10 @@ export function parseTextAdventureNarrativeArcPlanArtifactV1(input: {
       exactKeys(option, ['key', 'label', 'cost', 'persistentEffectKey', 'echoSceneKeys'], `decisions[${index}].options[${optionIndex}]`)
       const echoSceneKeys = keyArray(option.echoSceneKeys, `decisions[${index}].options[${optionIndex}].echoSceneKeys`, 2, 20)
       if (echoSceneKeys.some(value => !sceneKeys.has(value))) fail(`decisions[${index}] 回响场景不存在`)
+      const decisionSceneIndex = skeleton.sceneKeys.indexOf(sceneKey)
+      if (echoSceneKeys.some(value => skeleton.sceneKeys.indexOf(value) <= decisionSceneIndex)) {
+        fail(`decisions[${index}] 回响必须位于决定场景之后`)
+      }
       return {
         key: key(option.key, `decisions[${index}].options[${optionIndex}].key`),
         label: text(option.label, `decisions[${index}].options[${optionIndex}].label`, 120),
@@ -918,7 +922,8 @@ export interface TextAdventureNarrativeDecisionPlanArtifactV1 {
 function placeholderNarrativeDecisionsV1(brief: ProductProductionBriefV3) {
   const skeleton = textAdventureNarrativeSkeletonV1(brief)
   return skeleton.sceneKeys.slice(0, skeleton.statefulDecisionSceneCount).map((sceneKey, index) => {
-    const echoes = skeleton.sceneKeys.filter(key => key !== sceneKey).slice(0, 2)
+    const decisionSceneIndex = skeleton.sceneKeys.indexOf(sceneKey)
+    const echoes = skeleton.sceneKeys.slice(decisionSceneIndex + 1, decisionSceneIndex + 3)
     return {
       key: `decision.placeholder.${index + 1}`,
       sceneKey,

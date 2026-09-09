@@ -90,6 +90,60 @@ function actionCreatesPersistentDifference(
   ].some(effect => hasPersistentAdventureEffect(adventure, effect)))
 }
 
+function reachableNarrativeNodeKeys(
+  narrative: FrozenProductNarrativeV1,
+  startNodeKey: string,
+): Set<string> {
+  const successorsByNode = new Map(narrative.nodes.map(node => [node.key, new Set(node.successorKeys)]))
+  for (const choice of narrative.choices) {
+    const successors = successorsByNode.get(choice.sourceNodeKey) ?? new Set<string>()
+    successors.add(choice.targetNodeKey)
+    successorsByNode.set(choice.sourceNodeKey, successors)
+  }
+  const reachable = new Set<string>()
+  const pending = [startNodeKey]
+  while (pending.length > 0) {
+    const nodeKey = pending.shift()!
+    if (reachable.has(nodeKey)) continue
+    reachable.add(nodeKey)
+    pending.push(...(successorsByNode.get(nodeKey) ?? []))
+  }
+  return reachable
+}
+
+function choiceHasObservableLaterEchoes(
+  narrative: FrozenProductNarrativeV1,
+  adventure: AdventureContentV2,
+  choice: FrozenProductNarrativeV1['choices'][number],
+): boolean {
+  const persistentConditionKeys = new Set(adventure.actions
+    .filter(action => action.narrativeChoiceKey === choice.choiceKey)
+    .flatMap(action => [
+      ...action.successEffects, ...action.costlySuccessEffects, ...action.failureEffects,
+    ])
+    .flatMap(effect => effect.op === 'apply-condition' ? [effect.conditionKey] : []))
+  if (persistentConditionKeys.size === 0) return false
+
+  const reachableAfterChoice = reachableNarrativeNodeKeys(narrative, choice.targetNodeKey)
+  reachableAfterChoice.delete(choice.sourceNodeKey)
+  const echoNodeKeys = new Set<string>()
+  for (const action of adventure.actions) {
+    if (!action.successText.trim()) continue
+    const echoNodeKey = action.requirements.find(requirement => (
+      requirement.narrativePath === '__storyforge.currentNarrativeNodeKey'
+      && typeof requirement.narrativeEquals === 'string'
+    ))?.narrativeEquals
+    if (typeof echoNodeKey !== 'string' || !reachableAfterChoice.has(echoNodeKey)) continue
+    if (!action.requirements.some(requirement => (
+      requirement.conditionPresent === true
+      && requirement.conditionKey != null
+      && persistentConditionKeys.has(requirement.conditionKey)
+    ))) continue
+    echoNodeKeys.add(echoNodeKey)
+  }
+  return echoNodeKeys.size >= 2
+}
+
 function collectCopyIssues(runtimePackage: ProductRuntimePackageV1): TextAdventureCopyIssueV1[] {
   const adventure = runtimePackage.adventure
   const surfaces: Array<{ surfaceKey: string; text: string; actionLabel?: boolean }> = [
@@ -200,7 +254,7 @@ function narrativeRoutes(
       const stateful = choices.length > 1 && laterNodeCapacity >= 2 && (
         hasPersistentNarrativeEffect(choice.effectsJson)
         || actionCreatesPersistentDifference(adventure, choice.choiceKey)
-      )
+      ) && choiceHasObservableLaterEchoes(narrative, adventure, choice)
       visit({
         nodeKey: choice.targetNodeKey,
         nodeKeys,
