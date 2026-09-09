@@ -589,6 +589,92 @@ describe('PRODUCTPROD-1B · user command control plane', () => {
       .filter(key => /^media\.visual\.\d{3}$/.test(key)).length === 1)).toBe(true)
   })
 
+  it('视觉合同质量失败可派生 visual-only 恢复 Build，非视觉装配失败不能冒用该通道', async () => {
+    const prepareRecovery = async (productionKey: string, failureDetail: string) => {
+      const f = await fixture('text-adventure', 'key-scenes')
+      const created = await executeProductProductionCommand({
+        scope: f.scope,
+        command: {
+          type: 'create-intent', commandId: `${productionKey}.intent`, productionKey,
+          productType: 'text-adventure', worldReleaseId: f.worldReleaseId,
+          userText: '验证视觉合同的受治理恢复路径',
+        },
+      })
+      const saved = await executeProductProductionCommand({
+        scope: f.scope, productionId: created.productionId,
+        command: {
+          type: 'save-brief-revision', commandId: `${productionKey}.brief`, expectedStateRevision: 0,
+          parentRevision: null, brief: f.brief,
+        },
+      })
+      await executeProductProductionCommand({
+        scope: f.scope, productionId: created.productionId,
+        command: {
+          type: 'authorize-start', commandId: `${productionKey}.start`, expectedStateRevision: 1,
+          briefRevision: 1, briefHash: saved.result.briefHash as string,
+          authorizationNonce: `${productionKey}.click`,
+        },
+      })
+      const build = (await db.productBuilds.where('productionId').equals(created.productionId).first())!
+      const plan = await createProductProductionPlanV3({
+        buildNumber: build.buildNumber, controlEpoch: build.controlEpoch,
+        briefHash: saved.result.briefHash as string, brief: f.brief,
+      })
+      const planHash = await hashProductProductionValueV2(plan)
+      await db.productBuilds.update(build.id!, {
+        status: 'recovery-required', planRevision: 1,
+        planJson: canonicalProductProductionJsonV2(plan), planHash,
+        failureJson: canonicalProductProductionJsonV2({
+          taskKey: 'integration.package', code: 'task-executor-failed', attempt: 1,
+          detail: failureDetail,
+        }),
+      })
+      return { ...f, productionId: created.productionId, build, planHash, briefHash: saved.result.briefHash as string }
+    }
+
+    const visual = await prepareRecovery(
+      'visual-contract-recovery',
+      '商业候选的独立图片审查发现媒资规划重复，必须修订 visual contract',
+    )
+    const evolved = await beginProductProductionEvolutionV1({
+      scope: visual.scope, productionId: visual.productionId,
+      userText: '只重建十二项不可重复的媒资规划，保留剧情、任务和玩法。',
+      affectedLanes: ['visual'],
+    })
+    const evolvedBriefRow = (await db.productProductionBriefs
+      .where('[productionId+revision]').equals([visual.productionId, evolved.briefRevision]).first())!
+    expect(parseProductProductionBriefV3(evolvedBriefRow.briefJson).evolution).toMatchObject({
+      affectedLanes: ['visual'],
+      base: {
+        kind: 'recovery-build', buildNumber: 1,
+        briefHash: visual.briefHash, planHash: visual.planHash,
+        controlEpoch: visual.build.controlEpoch,
+      },
+    })
+    const production = (await db.productProductions.get(visual.productionId))!
+    const authorized = await executeProductProductionCommand({
+      scope: visual.scope, productionId: visual.productionId,
+      command: {
+        type: 'authorize-start', commandId: 'visual-contract-recovery.restart',
+        expectedStateRevision: production.stateRevision, briefRevision: evolved.briefRevision,
+        briefHash: evolvedBriefRow.briefHash, authorizationNonce: 'visual-contract-recovery.restart-click',
+      },
+    })
+    expect(authorized).toMatchObject({ ok: true, result: { buildNumber: 2 } })
+    expect(await db.productBuilds.get(visual.build.id!)).toMatchObject({
+      status: 'recovery-required', planHash: visual.planHash,
+    })
+
+    const runtime = await prepareRecovery(
+      'runtime-failure-no-visual-recovery',
+      '运行包中的行动注册表缺少必需命令',
+    )
+    await expect(beginProductProductionEvolutionV1({
+      scope: runtime.scope, productionId: runtime.productionId,
+      userText: '尝试借视觉通道跳过运行包错误。', affectedLanes: ['visual'],
+    })).rejects.toThrow('没有可验证的视觉合同或媒资质量阻断')
+  })
+
   it('只允许文字冒险来源作者闸门接受产品私域补充，并冻结命令证据', async () => {
     const f = await fixture('text-adventure')
     const created = await executeProductProductionCommand({

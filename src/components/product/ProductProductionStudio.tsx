@@ -7,6 +7,7 @@ import {
   authorizeProductProductionStartV1,
   archiveProductProductionV1,
   beginProductProductionEvolutionV1,
+  canRepairTextAdventureVisualContractV1,
   canUpgradeTextAdventureProductionPlanV1,
   canRetryProductProductionBlockerV1,
   compileProductProductionBriefV3,
@@ -1150,6 +1151,18 @@ export default function ProductProductionStudio(props: {
     setMessage(`旧 Build 保持不可变；逐图审查升级已形成 Brief r${created.briefRevision}。授权后将创建子 Build，复用正文和图片，仅重跑装配与质量审查。`)
   }, '创建逐图审查升级 Brief')
 
+  const repairVisualContract = () => run(async () => {
+    if (!details) throw new Error('缺少 Production。')
+    const created = await beginProductProductionEvolutionV1({
+      scope: props.scope,
+      productionId: details.production.id!,
+      userText: '修订当前文字冒险的美术需求合同：按商业旗舰固定生成十二个不可重复的媒资职责，分别覆盖封面、两张区域图、三位角色锚点、四个关键场景和两个关键物品；每项必须绑定唯一场景、冻结人物设定与叙事用途。保留已签收的世界来源、剧情、任务、对白、玩法与音频，只重跑美术规划、视觉圣经、图片生产、独立审图、装配及其质量闭包。',
+      affectedLanes: ['visual'],
+    })
+    await refresh(details.production.id)
+    setMessage(`视觉合同修复已形成 Brief r${created.briefRevision}；审查并授权后将创建子 Build，正文与玩法继续按 hash 复用。`)
+  }, '创建视觉合同修复 Brief')
+
   const reviseMediaAsset = (
     asset: TextAdventureMediaAssetV1,
     action: 'upload-replacement' | 'regenerate' | 'lock' | 'unlock',
@@ -1247,8 +1260,9 @@ export default function ProductProductionStudio(props: {
   const selectedSuggestion = suggestions.find(item => item.suggestionKey === suggestionKey) ?? null
   const canPause = details && ['producing', 'preview-ready'].includes(details.production.status)
     && details.build && !['released', 'cancelled', 'failed', 'archived', 'paused', 'recovery-required'].includes(details.build.status)
+  const canRepairVisualContract = !!details && canRepairTextAdventureVisualContractV1(details)
   const canRetryBlocker = details?.production.status === 'producing'
-    && canRetryProductProductionBlockerV1(details)
+    && canRetryProductProductionBlockerV1(details) && !canRepairVisualContract
   const canUpgradeExecutionPlan = !!details && canUpgradeTextAdventureProductionPlanV1(details)
   const sourceDecisionBlocker = !!details && isTextAdventureSourceDecisionBlockerV1(details)
   const sourceDecision = useMemo(
@@ -1538,6 +1552,7 @@ export default function ProductProductionStudio(props: {
             {communityCandidateRepairAvailable && activeBriefRepairDraft && <button disabled={busy || productionRunning} onClick={saveCommunityCandidateBriefRepair} className="flex items-center gap-2 rounded bg-success px-4 py-2 text-xs text-white disabled:opacity-40"><ShieldCheck className="h-3.5 w-3.5" />保存为 Brief r{(details.brief?.revision ?? 0) + 1}</button>}
             {canRecoverProductionBudget && <button disabled={busy || productionRunning} onClick={recoverProductionBudget} className="flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white"><RefreshCw className="h-3.5 w-3.5" />扩充预算并续建</button>}
             {canUpgradeExecutionPlan && <button disabled={busy || productionRunning} onClick={upgradeExecutionPlan} className="flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white"><GitBranch className="h-3.5 w-3.5" />生成逐图审查升级 Brief</button>}
+            {canRepairVisualContract && <button disabled={busy || productionRunning} onClick={repairVisualContract} className="flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white"><GitBranch className="h-3.5 w-3.5" />重建媒资规划 Brief</button>}
             {canRetryBlocker && !modelBudgetExhausted && !canUpgradeExecutionPlan && <button disabled={busy || productionRunning} onClick={retryBlocker} className="flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white"><RefreshCw className="h-3.5 w-3.5" />修正后重试</button>}
             {details.build && ['preview-ready', 'release-ready', 'released'].includes(details.build.status) && <button disabled={busy || productionRunning} onClick={preview} className="flex items-center gap-2 rounded border border-accent/40 bg-accent/10 px-4 py-2 text-xs text-accent"><Play className="h-3.5 w-3.5" />{details.build.status === 'released' ? '试玩此 Build' : '试玩未发布 Build'}</button>}
             {details.build?.status === 'release-ready' && <button disabled={busy || productionRunning || (commercialPerformanceRequired && !commercialQualityPassed)} onClick={publish} className="flex items-center gap-2 rounded bg-success px-4 py-2 text-xs text-white disabled:opacity-40"><Rocket className="h-3.5 w-3.5" />复验并原子发布</button>}

@@ -117,6 +117,39 @@ export function canUpgradeTextAdventureVisualReviewPlanV1(
   } catch { return false }
 }
 
+/**
+ * Allows a failed text-adventure visual closure to become an immutable visual-only
+ * evolution Build. This is intentionally narrower than generic blocker retry: a
+ * deterministic package/release failure must carry explicit visual evidence, and
+ * the frozen Plan must contain the governed media planning/production topology.
+ */
+export function canReviseTextAdventureVisualContractFromRecoveryV1(
+  build: Pick<ProductBuildRecordV1, 'status' | 'failureJson' | 'planJson'>,
+): boolean {
+  if (build.status !== 'recovery-required') return false
+  try {
+    const failure = JSON.parse(build.failureJson) as {
+      taskKey?: unknown
+      detail?: unknown
+    }
+    if (typeof failure.taskKey !== 'string') return false
+    const directlyVisual = failure.taskKey === 'media.requirements'
+      || failure.taskKey === 'media.audit'
+      || failure.taskKey === 'media.visual-quality-review'
+      || /^media\.visual(?:\.\d{3}|-quality-review\.batch-\d+)$/.test(failure.taskKey)
+    const visualClosureFailure = failure.taskKey === 'integration.package'
+      || failure.taskKey === 'qa.release'
+    const detail = typeof failure.detail === 'string' ? failure.detail : ''
+    if (!directlyVisual && !(visualClosureFailure
+      && /media|visual|image|图片|插图|媒资|视觉/iu.test(detail))) return false
+    const plan = parseProductProductionPlanV3(build.planJson)
+    return plan.productType === 'text-adventure'
+      && plan.tasks.some(task => task.taskKey === 'media.requirements')
+      && plan.tasks.some(task => /^media\.visual\.\d{3}$/.test(task.taskKey))
+      && plan.tasks.some(task => task.taskKey === 'media.visual-quality-review')
+  } catch { return false }
+}
+
 async function productionInScope(scope: WorkspaceScope, productionId: number): Promise<ProductProductionRecordV1 & { id: number }> {
   const production = await db.productProductions.get(productionId)
   if (!production || !await assertRecordInScope(scope, 'productProductions', production, { owner: 'work' })) {
@@ -1022,11 +1055,13 @@ async function applyCommand(input: {
     && affectedLanes.length === 1 && affectedLanes[0] === 'production-budget'
   const planUpgradeRecovery = recoveryBase != null
     && affectedLanes.length === 1 && affectedLanes[0] === 'execution-plan'
-  const recoveryEvolution = budgetRecovery || planUpgradeRecovery
+  const visualContractRecovery = recoveryBase != null
+    && affectedLanes.length === 1 && affectedLanes[0] === 'visual'
+  const recoveryEvolution = budgetRecovery || planUpgradeRecovery || visualContractRecovery
   if (recoveryEvolution) {
     if (production.productType !== 'text-adventure' || production.status !== 'producing'
       || production.currentBuildNumber !== recoveryBase.buildNumber) {
-      reject('invalid-state-transition', '只有当前文字冒险恢复 Build 可以升级生产预算或执行计划')
+      reject('invalid-state-transition', '只有当前文字冒险恢复 Build 可以升级生产预算、执行计划或视觉合同')
     }
     const base = await db.productBuilds
       .where('[productionId+buildNumber]').equals([production.id, recoveryBase.buildNumber]).first()
@@ -1038,6 +1073,9 @@ async function applyCommand(input: {
     }
     if (planUpgradeRecovery && !canUpgradeTextAdventureVisualReviewPlanV1(base)) {
       reject('invalid-state-transition', '当前 Build 不属于可升级的旧版多图 Visual QA 计划')
+    }
+    if (visualContractRecovery && !canReviseTextAdventureVisualContractFromRecoveryV1(base)) {
+      reject('invalid-state-transition', '当前 Build 没有可验证的视觉合同或媒资质量阻断')
     }
   } else {
     if (affectedLanes.includes('production-budget') || affectedLanes.includes('execution-plan')

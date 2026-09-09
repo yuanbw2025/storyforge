@@ -17,6 +17,7 @@ import { assertRecordInScope, resolveScope } from '../workspace/scope'
 import { listWorldReferenceCatalogV1 } from '../product/source'
 import { prepareProductProductionAdoption, publishProductProductionBuild } from './adoption'
 import {
+  canReviseTextAdventureVisualContractFromRecoveryV1,
   canUpgradeTextAdventureVisualReviewPlanV1,
   executeProductProductionCommand,
   isRepairRetryableFailedProductBuildV1,
@@ -145,6 +146,13 @@ export function canUpgradeTextAdventureProductionPlanV1(details: ProductProducti
     && details.production.status === 'producing'
     && !!details.build
     && canUpgradeTextAdventureVisualReviewPlanV1(details.build)
+}
+
+export function canRepairTextAdventureVisualContractV1(details: ProductProductionDetailsV1): boolean {
+  return details.production.productType === 'text-adventure'
+    && details.production.status === 'producing'
+    && !!details.build
+    && canReviseTextAdventureVisualContractFromRecoveryV1(details.build)
 }
 
 const AUTHOR_REVIEW_ARTIFACT_KEYS = new Set([
@@ -1057,7 +1065,8 @@ export async function beginProductProductionEvolutionV1(input: {
   let base: ProductEvolutionBaseV1
   const budgetRecovery = affectedLanes.length === 1 && affectedLanes[0] === 'production-budget'
   const planUpgradeRecovery = affectedLanes.length === 1 && affectedLanes[0] === 'execution-plan'
-  const recoveryEvolution = budgetRecovery || planUpgradeRecovery
+  const visualContractRecovery = affectedLanes.length === 1 && affectedLanes[0] === 'visual'
+  const recoveryEvolution = budgetRecovery || planUpgradeRecovery || visualContractRecovery
   if (recoveryEvolution) {
     if (details.production.productType !== 'text-adventure'
       || details.production.status !== 'producing'
@@ -1074,6 +1083,9 @@ export async function beginProductProductionEvolutionV1(input: {
     }
     if (planUpgradeRecovery && !canUpgradeTextAdventureVisualReviewPlanV1(details.build)) {
       throw new Error('[product-production-service] 当前 Build 不是可升级的旧版多图 Visual QA 计划')
+    }
+    if (visualContractRecovery && !canReviseTextAdventureVisualContractFromRecoveryV1(details.build)) {
+      throw new Error('[product-production-service] 当前 Build 没有可验证的视觉合同或媒资质量阻断')
     }
     base = {
       kind: 'recovery-build', buildNumber: details.build.buildNumber,

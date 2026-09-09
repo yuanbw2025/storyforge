@@ -46,4 +46,6 @@
 
 已实现：严格 `revise-media-asset` 命令、production revision 与旧图片 hash CAS、作者上传 Blob 的物理 hash/MIME/字节复验、商业权利门、父子 Build lineage、未受影响 Artifact 的 Build-local carry-forward、目标图片 human-import 零调用回执、目标图片及下游定向重跑、锁定后拒绝直接重生成，以及工作台中的缩略图、许可声明、上传替换、锁定、解锁和单项重生成入口。未修改的媒资沿用原 Blob/content hash，但 payload 与 metadata 的稳定 `assetKey` 会确定性重绑当前子 Build；否则新 `media.audit` 会正确拒绝父 Build key。隔离浏览器已覆盖退回、真实 PNG 上传、暂停恢复、新 Build 重审和新旧逐图回执隔离。
 
+当独立审图或装配质量闭包暴露的是上游视觉合同错误，而非某一张图片的偶发缺陷时，`recovery-required` Build 不得无限重试旧 `media.requirements`。系统只在冻结失败证据明确指向媒资/视觉、且 Plan 可验证包含美术规划、逐图生产和独立审图拓扑时，开放“重建媒资规划 Brief”：它以当前失败 Build 为不可变 parent，只把 `visual` 标为受影响泳道，按 hash 携带世界来源、剧情、任务、对白、玩法与音频，重新生产 `media.requirements`、视觉圣经、人物锚点决定、图片与下游质量闭包。普通装配或运行失败不能借此获得特权恢复路径。
+
 本批验证要求：类型检查、命令与调度回归、完整文字冒险生产回归、架构/表/AI 手工调用检查和生产构建全部通过后才允许提交。真实浏览器 file input、刷新与新 Preview 的 E2E 证据在端到端黄金产品验收批次统一冻结，不能用 jsdom 单元测试冒充。
