@@ -13,6 +13,7 @@ export interface TextAdventurePlayerVisibleLanguageIssueGroupV1 {
 
 const PLAYER_VISIBLE_ARTIFACT_KEYS = new Set([
   'content.main-quest-plan',
+  'content.narrative-arc-scenes',
   'content.adventure-side-quests',
   'content.adventure-ambient-events',
   'content.quest-script',
@@ -20,9 +21,16 @@ const PLAYER_VISIBLE_ARTIFACT_KEYS = new Set([
   'content.product-module',
 ])
 
+const PLAYER_VISIBLE_ARTIFACT_PREFIXES = [
+  'content.scene-script.',
+  'content.dialogue-pass.',
+  'content.quest-script.',
+] as const
+
 const PLAYER_VISIBLE_FIELD_KEYS = new Set([
   'title', 'text', 'summary', 'description', 'unavailableReason', 'hook', 'objective',
   'narrativePurpose', 'successText', 'costlySuccessText', 'failureText', 'failureForwardText',
+  'successConsequence', 'failureForwardConsequence', 'revisedText', 'revisedDescription',
 ])
 
 /**
@@ -60,7 +68,8 @@ export function findTextAdventurePlayerVisibleLanguageIssuesV1(
     ))
   }
   for (const artifact of artifacts) {
-    if (!PLAYER_VISIBLE_ARTIFACT_KEYS.has(artifact.artifactKey)) continue
+    if (!PLAYER_VISIBLE_ARTIFACT_KEYS.has(artifact.artifactKey)
+      && !PLAYER_VISIBLE_ARTIFACT_PREFIXES.some(prefix => artifact.artifactKey.startsWith(prefix))) continue
     visit(artifact.artifactKey, artifact.payload, '', null)
   }
   return issues.slice(0, 40)

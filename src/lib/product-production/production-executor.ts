@@ -3075,6 +3075,7 @@ function textSystem(
       `合法角色 key 白名单=${JSON.stringify(textAdventureCastKeys)}；castKeys 的每一项必须逐字来自这个数组，严禁填写角色姓名、称谓、英文转写、角色类型或自造 key。` +
       `合法铺垫回收 key 白名单=${JSON.stringify(textAdventureSetupPayoffKeys)}；setupKeys/payoffKeys 只能逐字来自这个数组，不适用时必须为 []，严禁根据内容另造近义 key。` +
       `场景与地点的冻结映射=${JSON.stringify(frozenSceneLocations)}；每张场景卡必须逐项复制对应 locationOrdinal，不得自选地点、使用最小目标规模猜上限或填写地点标题。即使你在内部采用五幕、英雄旅程或其他理论，也必须压缩为且只输出 act.1、act.2、act.3 三个对象，禁止输出第4幕、第5幕或幕外附录；提交前必须确认 acts.length === 3，并分别核对三幕 sceneCards.length 与冻结数组完全相等。` +
+      '每个 sceneCard.title 必须逐字包含冻结映射中的 locationTitle，再加本场独有的冲突或事件短语；不得把另一个地点写进 title。若修复反馈指出 content.narrative 的 locationOrdinal、场景标题或地点内容错位，必须在本结构工件中把 title、purpose、entryState、exitState 全部改回冻结 locationTitle，绝不能修改冻结 locationOrdinal 迎合旧文案。' +
       '这是结构规划工件，不是正文：每个场景 title 最多 30 个中文字符，purpose/conflict/entryState/exitState 各用 20–90 个中文字符；每幕 goal/irreversibleTurn 各用 40–120 个中文字符。禁止写对白或长篇背景复述；后续三个分场叙事作者会扩写足量正文。'
   }
   if (taskKey === 'content.narrative-decision-plan') {
@@ -4067,6 +4068,18 @@ async function executeModelTask(input: ProductProductionTaskExecutionInputV1, op
       recommendation: strategy.recommendation,
     }
   } else fail(`未实现模型任务:${input.task.taskKey}`)
+  const outputArtifactKey = input.task.outputArtifactKeys[0]
+  if (options.brief.textAdventure && outputArtifactKey) {
+    const languageIssues = findTextAdventurePlayerVisibleLanguageIssuesV1([{
+      artifactKey: outputArtifactKey, payload,
+    }])
+    if (languageIssues.length > 0) {
+      const evidence = languageIssues.slice(0, 8).map(issue => (
+        `${issue.path}:${issue.tokens.join('、')}`
+      )).join('；')
+      fail(`文字冒险玩家可见字段混入未本地化外语:${evidence}`)
+    }
+  }
   return {
     artifacts: [{
       artifactKey: input.task.outputArtifactKeys[0], kind, payload, quality,

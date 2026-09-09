@@ -580,7 +580,8 @@ function professionalTextAdventurePlanningOutputs(
   let sceneOffset = 0
   const acts = actSceneCounts.map((count, actIndex) => {
     const sceneCards = sceneKeys.slice(sceneOffset, sceneOffset + count).map((sceneKey, localIndex) => ({
-      key: sceneKey, title: `第 ${actIndex + 1} 幕场景 ${localIndex + 1}`,
+      key: sceneKey,
+      title: `${['潮门广场', '旧仓街', '信号塔'][sceneLocationPlan[sceneOffset + localIndex].locationIndex]} · 第 ${actIndex + 1} 幕场景 ${localIndex + 1}`,
       locationOrdinal: sceneLocationPlan[sceneOffset + localIndex].locationOrdinal,
       purpose: '推进主冲突并让玩家获得可行动的信息。', conflict: '公开事实与保护眼前人物无法同时零成本完成。',
       entryState: '玩家带着上一场留下的关系与资源后果进入。', exitState: '局面发生不可忽略的变化并开启下一目标。',
@@ -4015,8 +4016,8 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     const expectedCalls = new Map([
       ['production.supervision', 1], ['content.source-sufficiency', 1], ['content.design', 1], ['content.story-bible', 1],
       ['content.cast-bible', 1], ['content.adventure-architecture', 1],
-      ['content.narrative-arc-scenes', 1], ['content.narrative-decision-plan', 1],
-      ['content.main-quest-plan', 1],
+      ['content.narrative-arc-scenes', 2], ['content.narrative-decision-plan', 2],
+      ['content.main-quest-plan', 2],
       ['content.scene-script.act-1.part-1', 4], ['content.scene-script.act-1.part-2', 2],
       ['content.scene-script.act-2.part-1', 2],
       ['content.scene-script.act-3.part-1', 1],
@@ -4027,7 +4028,7 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
       ['content.quest-script.main.act-2.single', 2], ['content.quest-script.main.act-2.multi', 2],
       ['content.quest-script.main.act-3.single', 2], ['content.quest-script.main.act-3.multi', 2],
       ['content.quest-script.supplemental', 2],
-      ['content.adventure-ambient-events', 1], ['content.adventure-quality-review', 2],
+      ['content.adventure-ambient-events', 2], ['content.adventure-quality-review', 2],
       ['media.requirements', 1], ['qa.playtest-strategy', 1],
     ])
     expect(taskCalls).toEqual(expectedCalls)

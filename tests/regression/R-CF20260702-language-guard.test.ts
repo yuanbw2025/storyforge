@@ -69,4 +69,17 @@ describe('R-CF20260702-language-guard', () => {
       ]),
     })])
   })
+
+  it('在专业场景、对白和任务脚本分片进入装配前识别语言泄漏', () => {
+    const artifactKeys = [
+      'content.scene-script.act-2.part-1',
+      'content.dialogue-pass.act-2',
+      'content.quest-script.main.act-2.single',
+    ]
+    for (const artifactKey of artifactKeys) {
+      expect(findTextAdventurePlayerVisibleLanguageIssuesV1([{
+        artifactKey, payload: { revisedText: '她 waits for the bell。' },
+      }])).toEqual([expect.objectContaining({ artifactKey, tokens: ['waits', 'for', 'the', 'bell'] })])
+    }
+  })
 })

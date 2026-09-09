@@ -808,9 +808,16 @@ export function parseTextAdventureNarrativeArcPlanArtifactV1(input: {
           )
         }
       }
+      const parsedTitle = text(scene.title, `sceneCards[${sceneIndex}].title`, 300)
+      if (input.locationTitles) {
+        const assignedLocationTitle = input.locationTitles[parsedLocationOrdinal - 1]
+        if (assignedLocationTitle && !parsedTitle.includes(assignedLocationTitle)) {
+          fail(`sceneCards[${sceneIndex}].title 必须包含冻结地点 ${assignedLocationTitle}`)
+        }
+      }
       return {
         key: sceneKey,
-        title: text(scene.title, `sceneCards[${sceneIndex}].title`, 300),
+        title: parsedTitle,
         locationOrdinal: parsedLocationOrdinal,
         purpose: text(scene.purpose, `sceneCards[${sceneIndex}].purpose`, 2_000),
         conflict: text(scene.conflict, `sceneCards[${sceneIndex}].conflict`, 2_000),
@@ -949,10 +956,12 @@ function placeholderNarrativeActsV1(input: {
     irreversibleTurn: '占位转折，仅用于分段工件协议校验。',
     sceneCards: textAdventureActSceneKeysV1(input.brief, actIndex).map(sceneKey => {
       const sceneIndex = skeleton.sceneKeys.indexOf(sceneKey)
+      const locationOrdinal = locationPlan[sceneIndex].locationOrdinal
+      const locationTitle = input.locationTitles?.[locationOrdinal - 1]
       return {
         key: sceneKey,
-        title: `${sceneKey} 占位`,
-        locationOrdinal: locationPlan[sceneIndex].locationOrdinal,
+        title: locationTitle ? `${locationTitle} · 占位` : `${sceneKey} 占位`,
+        locationOrdinal,
         purpose: '占位目的。',
         conflict: '占位冲突。',
         entryState: '占位进入状态。',

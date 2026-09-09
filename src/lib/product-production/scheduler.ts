@@ -1456,14 +1456,20 @@ async function recoveryInvalidatedTaskKeys(input: {
   const taskByArtifactKey = new Map(input.plan.tasks.flatMap(task => (
     task.outputArtifactKeys.map(artifactKey => [artifactKey, task.taskKey] as const)
   )))
-  const blockingArtifactKeys = Array.isArray(reviewPayload.issues)
+  const blockingIssues = Array.isArray(reviewPayload.issues)
     ? reviewPayload.issues.flatMap(value => {
         const issue = value && typeof value === 'object' && !Array.isArray(value)
           ? value as Record<string, unknown> : {}
-        return issue.severity === 'blocking' && typeof issue.artifactKey === 'string'
-          ? [issue.artifactKey] : []
+        return issue.severity === 'blocking' && typeof issue.artifactKey === 'string' ? [issue] : []
       })
     : []
+  const blockingArtifactKeys = blockingIssues.map(issue => issue.artifactKey as string)
+  const narrativeArcNeedsRepair = blockingIssues.some(issue => (
+    issue.artifactKey === 'content.narrative'
+      && /locationOrdinal|场景标题|title.*地点|地点.*title|冻结地点|地点错位/.test(
+        `${typeof issue.detail === 'string' ? issue.detail : ''}\n${typeof issue.recommendation === 'string' ? issue.recommendation : ''}`,
+      )
+  ))
   const sceneScriptTaskKeys = [
     'content.scene-script.act-1', 'content.scene-script.act-2', 'content.scene-script.act-3',
   ]
@@ -1478,7 +1484,10 @@ async function recoveryInvalidatedTaskKeys(input: {
       ))
     : blockingArtifactKeys.flatMap(artifactKey => {
         if (artifactKey === 'content.narrative') {
-          return [...sceneScriptTaskKeys.flatMap(sceneScriptPartKeys), ...dialoguePassTaskKeys]
+          return [
+            ...(narrativeArcNeedsRepair ? ['content.narrative-arc-scenes'] : []),
+            ...sceneScriptTaskKeys.flatMap(sceneScriptPartKeys), ...dialoguePassTaskKeys,
+          ]
         }
         if (artifactKey === 'content.quest-script') {
           return [...questScriptTaskKeys, 'content.quest-script']
