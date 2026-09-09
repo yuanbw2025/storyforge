@@ -533,6 +533,7 @@ function modelOutputs(
 
 function professionalTextAdventurePlanningOutputs(
   brief: Awaited<ReturnType<typeof fixtureForProduct>>['brief'],
+  frozenLocationTitles: readonly string[] = ['潮门广场', '旧仓街', '信号塔'],
 ) {
   const contract = brief.textAdventure!
   const sceneCount = Math.max(3, contract.narrative.targetSceneCount)
@@ -581,7 +582,7 @@ function professionalTextAdventurePlanningOutputs(
   const acts = actSceneCounts.map((count, actIndex) => {
     const sceneCards = sceneKeys.slice(sceneOffset, sceneOffset + count).map((sceneKey, localIndex) => ({
       key: sceneKey,
-      title: `${['潮门广场', '旧仓街', '信号塔'][sceneLocationPlan[sceneOffset + localIndex].locationIndex]} · 第 ${actIndex + 1} 幕场景 ${localIndex + 1}`,
+      title: `${frozenLocationTitles[sceneLocationPlan[sceneOffset + localIndex].locationIndex]} · 第 ${actIndex + 1} 幕场景 ${localIndex + 1}`,
       locationOrdinal: sceneLocationPlan[sceneOffset + localIndex].locationOrdinal,
       purpose: '推进主冲突并让玩家获得可行动的信息。', conflict: '公开事实与保护眼前人物无法同时零成本完成。',
       entryState: '玩家带着上一场留下的关系与资源后果进入。', exitState: '局面发生不可忽略的变化并开启下一目标。',
@@ -926,7 +927,7 @@ function fullLengthTextAdventureOutputs(
       rewardExperience: 3, rewardCurrency: 1,
     }
   }
-  const professional = professionalTextAdventurePlanningOutputs(brief)
+  const professional = professionalTextAdventurePlanningOutputs(brief, locationTitles)
   const sceneScripts = professionalTextAdventureSceneScriptOutputs(brief, professional, locationTitles)
   const sideEntries = Array.from(
     { length: contract.narrative.targetSideQuestCount }, (_, index) => questEntry('side', index),

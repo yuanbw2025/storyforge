@@ -275,9 +275,13 @@ export async function readTextAdventureSceneScriptInputsV1(input: AssembleContex
       difficulty: stage.difficulty,
       costlySuccessFloor: stage.costlySuccessFloor,
       timeCostMinutes: stage.timeCostMinutes,
-      successText: contextText(stage.successText, 300),
-      costlySuccessText: contextText(stage.costlySuccessText, 300),
-      failureForwardText: contextText(stage.failureForwardText, 300),
+      // Scene writers need the outcome semantics, not the complete runtime
+      // settlement copy already frozen in the Quest Script artifact. Keep the
+      // three branches distinct while preventing a multi-stage regional side
+      // quest from consuming the entire bounded prose packet.
+      successText: contextText(stage.successText, 220),
+      costlySuccessText: contextText(stage.costlySuccessText, 220),
+      failureForwardText: contextText(stage.failureForwardText, 220),
     })),
   })
   const packet = {
