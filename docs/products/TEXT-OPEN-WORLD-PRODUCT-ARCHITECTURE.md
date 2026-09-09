@@ -1,6 +1,6 @@
 # AI 主导文字开放世界游戏 · 整体产品与游戏系统施工规格
 
-> 规格版本：1.1.51
+> 规格版本：1.1.52
 > 生效日期：2026-09-06
 > 文档层级：L2 文字开放世界整体产品施工入口
 > 当前状态：目标架构已冻结并进入分阶段实现；实际完成度以完整开发清单为准
@@ -2193,6 +2193,10 @@ Session ID + Action Key + Recipe/Vendor Target + Item Key? + Quantity
 | 试玩 | 隔离Build实例、标准路径、回执和问题记录 |
 | 发布 | 版本、兼容、包Hash、终态receipt和发布说明 |
 
+来源页已经以独立的文字开放世界创作者入口落地，不再复用通用文字游戏生产表单。它同时支持两条受治理来源：一条从中立`WorldReference`目录选择精确的冻结`WorldRelease`，展示版本、完整Hash、能力、资源和预检缺口；另一条从独立小说Work选择整部、卷、章节范围或自定义章节，展示正文/大纲覆盖、规模以及与正式P0冻结完全相同算法计算的`sourceVersionHash`和`sourceBoundaryHash`。世界和小说来源各自携带明确`WorkspaceScope`，允许小说入口在没有世界工程时成立，`worldGroupId`只负责路由与重置，不能冒充数据owner。
+
+这个页面仍属于“确认来源”的第二阶段：目录与预览只读，不创建Production、Brief、Build、SourcePin、Ledger、GapReport、Release、Session，也不触发模型读取、计费或生产。预检缺口只是目录可见性的候选判断，不能冒充P1实际逐项读取后的GapReport。交给下一阶段的临时候选必须携带精确来源身份；正式冻结时以WorldRelease `releaseHash`或小说两枚预览Hash进行compare-and-swap，来源在确认后变化就失败关闭并要求重新确认。旧WorldRelease生产调用也必须从已授权Brief派生相同版本证据，不能只信任本地记录ID。
+
 ### 24.3 表格编辑原则
 
 AI创建任务、物品、敌人或配方时，本质上生成结构化候选行或聚合对象。工作台必须允许：
@@ -2904,6 +2908,7 @@ Session中的高频状态优先作为Event和可重建Projection存在，不建�
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| 1.1.52 | 2026-09-09 | 完成G5-01独立创作者来源入口：文字开放世界从通用文字游戏生产表单拆出，提供冻结WorldRelease与受治理小说双入口、独立owner scope、精确版本/Hash、能力目录、资源范围和预检缺口；小说预览不返回正文，并与正式P0复用同一快照/分片/Hash算法。来源确认阶段零Production/Build/SourcePin/Release/Session写入、零模型读取和计费；世界与小说正式冻结均以已确认Hash做CAS，旧生产路径从授权Brief派生版本证据。小说-only与旧WorldRelease精确选择真实浏览器路径、通用文字冒险兼容路径及27项关联回归通过。 |
 | 1.1.51 | 2026-09-09 | 实现G4-13渐进式教程合同：教程进度限定为按作品和Release/Preview通道隔离的浏览器本地表现状态；系统与Presentation作者步骤只在当前页面、选中场景、真实可见Action及就绪战斗首次出现时逐项披露，每周期最多一项并随目标失效清理。帮助中心支持跳过、暂停恢复、重看和重置，冻结内容经白名单、有界兼容诊断且不泄漏；离屏定位、live region、焦点、高对比、层级和移动长文滚动完成收口。vNext/legacy共用同一Coach，无独立教学场景，也不写任何运行、发布、导出、提示词或凭证状态。 |
 | 1.1.50 | 2026-09-09 | 完成G4-12玩家保存与设置纵切面：共享Checkpoint显式区分手动、自动、战前、里程碑和系统用途，历史缺失用途按手动档兼容；玩家领域限定20个手动槽、系统派生档有界轮转、规范终态时间校准、owner/来源/Hash/Projection修复与同不可变Release子分支，非手动档不可由玩家删除。统一保存中心展示存档、分支、固定版本与设置；每个Session单独验真，损坏记录只显示安全诊断，Build Preview禁用正式保存与分支，新Release仅展示只读兼容声明且绝不迁移旧档。偏好按冻结productKey浏览器本地持久化，未知字段和凭证拒绝；所有异步结果受Session与操作代次隔离。无新表、Schema、Context Source、AI写入口或WorldRelease回写。 |
 | 1.1.49 | 2026-09-09 | G4-11最终语义收口：fresh生产升级为Action v18，以唯一主线根、Stage顺序及主线窗口/重要故事线内前驱生成系统`locked → available → revealed`链，P10从前置图拒绝断点、分叉和环；Director v3冻结传闻唯一地点、唯一地区牌组和`rest`可达触发，候选/授权/Replay复核地点，Director v2重冻结时删除归一字段以保持原字节与Hash。Knowledge确认只能来自同Stage或更晚的合法Reward/结局下游，重要支线不得借全局结局绕过，Knowledge/成就Effect只允许唯一RewardContract/领奖Action或结局Action owner。P9作者聚合稿先以Hash绑定幂等键并记录`source-snapshot`，再以零模型/零token/零费用走同一编译验收；已返回的超额模型响应先持久原始证据和真实usage、再阻断候选。当前库内为50项新增回归用例、1项Playwright及1项既有作者修订用例增强；完整CI的619个测试文件、3007项测试，以及正式Release桌面/390px刷新Playwright均通过。 |
