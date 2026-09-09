@@ -484,10 +484,11 @@ export async function createProductProductionPlanV3(input: {
     // reasoning tokens as output, so its task ceiling must reflect observed
     // billable usage rather than the JSON byte count alone.
     'content.adventure-quality-review': 0.075,
-    // A live 12-image flagship manifest reported 3,627 billable output
-    // tokens. Reserve 5,000 at the reviewed 200k baseline so visual direction
-    // can describe every asset without weakening the Build-lifetime ceiling.
-    'media.requirements': 0.025,
+    // Live 12-image flagship manifests reached 5,552 billable output tokens
+    // after explicit narrative-beat grounding was added. Reserve 7,000 at the
+    // reviewed 200k baseline so hidden reasoning cannot invalidate an otherwise
+    // bounded receipt; the Build-lifetime ledger remains the hard ceiling.
+    'media.requirements': 0.035,
     // Each bounded Visual QA Run returns up to four scorecards. The final
     // whole-set conclusion is assembled deterministically without a model.
     'media.visual-quality-review': 0.01,
