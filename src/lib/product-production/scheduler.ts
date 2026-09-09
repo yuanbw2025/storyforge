@@ -1443,6 +1443,11 @@ async function recoveryInvalidatedTaskKeys(input: {
     ? [directlyResolvedFailureTaskKey]
     : [...textAdventureTaskFailures(input.failureJson).keys()])
     .filter(taskKey => {
+      // A blocker the author just resolved is the authoritative current
+      // failure even when an older artifact with the same output key was
+      // carried into the previous epoch. Historical acceptance cannot prove
+      // that the current deterministic revalidation succeeded.
+      if (taskKey === directlyResolvedFailureTaskKey) return true
       if (taskKey === 'integration.narrative') return true
       const task = input.plan.tasks.find(candidate => candidate.taskKey === taskKey)
       return task && !task.outputArtifactKeys.every(artifactKey => acceptedArtifactKeys.has(artifactKey))
