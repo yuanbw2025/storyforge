@@ -1892,6 +1892,44 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
       'choices[0].unavailableReason<-null-as-omitted',
     ])
 
+    const recoveredSceneChoice = legalizeProductionModelProtocolDefaultsV1(
+      'content.scene-script.act-1.part-2',
+      {
+        schema: 'storyforge.text-adventure-scene-script-bundle-artifact',
+        version: 1,
+        actKey: 'act.1',
+        moduleTitle: '潮钟群岛：最后的灯火',
+        scenes: [{
+          sceneKey: 'scene.003', title: '守望台', summary: '风暴逼近。', beats: [],
+          choices: [{
+            choiceKey: 'choice.005', sourceNodeKey: 'scene.003', targetNodeKey: 'scene.004',
+            text: '公开警报', description: '承担港区恐慌的即时压力。', unavailableReason: '', order: 0,
+          }],
+        }],
+        endings: [],
+      },
+      {
+        sceneScriptModuleTitle: '潮钟群岛：最后的灯火',
+        sceneScriptChoiceFallbacks: [{
+          choiceKey: 'choice.005', sourceNodeKey: 'scene.003', targetNodeKey: 'scene.004',
+          text: '公开警报', description: '承担港区恐慌的即时压力。', unavailableReason: '', order: 0,
+        }, {
+          choiceKey: 'choice.006', sourceNodeKey: 'scene.003', targetNodeKey: 'scene.004',
+          text: '先护送居民', description: '延迟警报并承担失去先机的代价。', unavailableReason: '', order: 1,
+        }],
+      },
+    )
+    expect(recoveredSceneChoice.payload).toMatchObject({
+      scenes: [{ choices: [{ choiceKey: 'choice.005', text: '公开警报' }] }],
+      choices: [{
+        choiceKey: 'choice.006', sourceNodeKey: 'scene.003', targetNodeKey: 'scene.004',
+        text: '先护送居民', description: '延迟警报并承担失去先机的代价。', order: 1,
+      }],
+    })
+    expect(recoveredSceneChoice.defaultedFields).toEqual([
+      'choices[0]<-frozen-decision-fallback',
+    ])
+
     const dialogueReview = legalizeProductionModelProtocolDefaultsV1(
       'content.dialogue-pass.act-3',
       {

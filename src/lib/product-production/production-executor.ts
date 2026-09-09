@@ -646,6 +646,15 @@ export function legalizeProductionModelProtocolDefaultsV1(
     }
     questScriptAbilityKeys?: readonly string[]
     sceneScriptModuleTitle?: string
+    sceneScriptChoiceFallbacks?: readonly {
+      choiceKey: string
+      sourceNodeKey: string
+      targetNodeKey: string
+      text: string
+      description: string
+      unavailableReason: string
+      order: number
+    }[]
     dialogueReviewContract?: {
       actKey: string
       reviewedCharacterCount: number
@@ -1585,6 +1594,34 @@ export function legalizeProductionModelProtocolDefaultsV1(
     })
     if (Object.prototype.hasOwnProperty.call(payload, 'choices')) {
       next.choices = normalizeChoices(payload.choices, 'choices')
+    }
+    if (options.sceneScriptChoiceFallbacks?.length) {
+      const choiceKeys = new Set<string>()
+      const collectChoiceKeys = (value: unknown): void => {
+        if (!Array.isArray(value)) return
+        for (const entry of value) {
+          if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue
+          const choiceKey = (entry as JsonRecord).choiceKey
+          if (typeof choiceKey === 'string') choiceKeys.add(choiceKey)
+        }
+      }
+      collectChoiceKeys(next.choices)
+      if (Array.isArray(next.scenes)) {
+        for (const scene of next.scenes) {
+          if (!scene || typeof scene !== 'object' || Array.isArray(scene)) continue
+          collectChoiceKeys((scene as JsonRecord).choices)
+        }
+      }
+      const rootChoices = Array.isArray(next.choices) ? [...next.choices] : []
+      for (const fallback of options.sceneScriptChoiceFallbacks) {
+        if (choiceKeys.has(fallback.choiceKey)) continue
+        rootChoices.push({ ...fallback })
+        choiceKeys.add(fallback.choiceKey)
+        defaultedFields.push(
+          `choices[${rootChoices.length - 1}]<-frozen-decision-fallback`,
+        )
+      }
+      next.choices = rootChoices
     }
     return { payload: next, defaultedFields, discardedNullEntries, discardedUnregisteredStateFields }
   }
@@ -2606,9 +2643,9 @@ function textAdventureSceneScriptContract(input: {
     80,
     Math.min(400, Math.ceil(input.brief.scale.targetPlayMinutes * 4)),
   )
-  const targetUnitsPerScene = Math.ceil(minimumActUnits / scenes.length)
   const maximumActUnits = Math.ceil(minimumActUnits * 1.4)
-  const targetSubmissionUnits = Math.min(maximumActUnits, Math.ceil(minimumActUnits * 1.15))
+  const targetSubmissionUnits = Math.min(maximumActUnits, Math.ceil(minimumActUnits * 1.35))
+  const targetUnitsPerScene = Math.ceil(targetSubmissionUnits / scenes.length)
   const requiredSceneOpenings = scenes.map(scene => ({
     sceneKey: scene.sceneKey,
     beats0MustStartWith: scene.locationTitle,
@@ -3164,6 +3201,81 @@ async function executeModelTask(input: ProductProductionTaskExecutionInputV1, op
         return typeof storyBible.title === 'string' ? storyBible.title : undefined
       })()
     : undefined
+  const textAdventureSceneScriptChoiceFallbacks = sceneScriptBoundary != null
+    && options.brief.textAdventure
+    && input.inputArtifacts.some(artifact => artifact.artifactKey === 'content.narrative-arc-plan')
+    && input.inputArtifacts.some(artifact => artifact.artifactKey === 'content.story-bible')
+    ? (() => {
+        const skeleton = textAdventureNarrativeSkeletonV1(options.brief)
+        const partSceneKeys = new Set(
+          textAdventureSceneScriptPartSceneKeysV1(
+            options.brief,
+            sceneScriptBoundary.actIndex,
+          )[sceneScriptBoundary.partIndex] ?? [],
+        )
+        const arcPlan = artifactPayload(input, 'content.narrative-arc-plan') as JsonRecord
+        const acts = Array.isArray(arcPlan.acts) ? arcPlan.acts : []
+        const sceneCards = acts.flatMap(act => {
+          if (!act || typeof act !== 'object' || Array.isArray(act)) return []
+          const cards = (act as JsonRecord).sceneCards
+          return Array.isArray(cards) ? cards : []
+        })
+        const sceneCopyByKey = new Map(sceneCards.flatMap(scene => {
+          if (!scene || typeof scene !== 'object' || Array.isArray(scene)) return []
+          const row = scene as JsonRecord
+          return typeof row.key === 'string'
+            && typeof row.title === 'string'
+            && typeof row.purpose === 'string'
+            ? [[row.key, { text: row.title, description: row.purpose }] as const]
+            : []
+        }))
+        const decisions = Array.isArray(arcPlan.decisions) ? arcPlan.decisions : []
+        const decisionOptionsBySceneKey = new Map(decisions.flatMap(decision => {
+          if (!decision || typeof decision !== 'object' || Array.isArray(decision)) return []
+          const row = decision as JsonRecord
+          return typeof row.sceneKey === 'string' && Array.isArray(row.options)
+            ? [[row.sceneKey, row.options.flatMap(option => {
+                if (!option || typeof option !== 'object' || Array.isArray(option)) return []
+                const optionRow = option as JsonRecord
+                return typeof optionRow.label === 'string' && typeof optionRow.cost === 'string'
+                  ? [{ text: optionRow.label, description: optionRow.cost }]
+                  : []
+              })] as const]
+            : []
+        }))
+        const storyBible = artifactPayload(input, 'content.story-bible') as JsonRecord
+        const storyEndings = Array.isArray(storyBible.endings) ? storyBible.endings : []
+        const endingCopyByKey = new Map(storyEndings.flatMap(ending => {
+          if (!ending || typeof ending !== 'object' || Array.isArray(ending)) return []
+          const row = ending as JsonRecord
+          return typeof row.key === 'string'
+            && typeof row.title === 'string'
+            && typeof row.dramaticAnswer === 'string'
+            ? [[row.key, { text: row.title, description: row.dramaticAnswer }] as const]
+            : []
+        }))
+        return skeleton.edges.flatMap(edge => {
+          if (!partSceneKeys.has(edge.sourceNodeKey)) return []
+          const sourceEdges = skeleton.edges.filter(candidate => (
+            candidate.sourceNodeKey === edge.sourceNodeKey
+          ))
+          const optionIndex = sourceEdges.findIndex(candidate => candidate.choiceKey === edge.choiceKey)
+          const copy = decisionOptionsBySceneKey.get(edge.sourceNodeKey)?.[optionIndex]
+            ?? sceneCopyByKey.get(edge.targetNodeKey)
+            ?? endingCopyByKey.get(edge.targetNodeKey)
+          if (!copy?.text.trim() || !copy.description.trim()) return []
+          return [{
+            choiceKey: edge.choiceKey,
+            sourceNodeKey: edge.sourceNodeKey,
+            targetNodeKey: edge.targetNodeKey,
+            text: copy.text,
+            description: copy.description,
+            unavailableReason: '',
+            order: edge.order,
+          }]
+        })
+      })()
+    : undefined
   const textAdventureDialogueSceneInputs = dialoguePassActIndex != null
     ? parseTextAdventureSceneInputsV1(input, options.brief, [dialoguePassActIndex])
     : null
@@ -3257,6 +3369,7 @@ async function executeModelTask(input: ProductProductionTaskExecutionInputV1, op
     questScriptIdentityPlan: textAdventureQuestScriptIdentityPlan,
     questScriptAbilityKeys: textAdventureSystemAbilityKeys,
     sceneScriptModuleTitle: textAdventureSceneScriptModuleTitle,
+    sceneScriptChoiceFallbacks: textAdventureSceneScriptChoiceFallbacks,
     dialogueReviewContract: textAdventureDialogueReviewContract,
   })
   const raw = legalized.payload
