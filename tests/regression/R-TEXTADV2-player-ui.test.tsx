@@ -134,6 +134,7 @@ describe('TEXTADV-2 · 玩家界面纵切面', () => {
 
     await clickNavigation('任务')
     const quests = host.querySelector('[aria-label="任务"]')
+    expect(quests?.textContent).toContain('主线任务')
     expect(quests?.textContent).toContain('当前阶段 · 穿越盐沼')
     expect(quests?.textContent).toContain('确认穿过盐沼的路线')
     expect(quests?.textContent).toContain('地点：回声盐沼')
