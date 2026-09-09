@@ -473,7 +473,11 @@ export async function createProductProductionPlanV3(input: {
     'content.dialogue-pass.act-1': 0.055,
     'content.dialogue-pass.act-2': 0.055,
     'content.dialogue-pass.act-3': 0.055,
-    'content.adventure-side-quests': 0.025,
+    // Three multi-stage side quests reported 5,722 billable output tokens on
+    // the live flagship, including provider-hidden reasoning. Reserve 7,000
+    // at the reviewed baseline while the append-only Build ledger continues
+    // to enforce the author-approved aggregate ceiling.
+    'content.adventure-side-quests': 0.035,
     'content.adventure-ambient-events': 0.03,
     // Independent continuity review is reasoning-heavy even though its visible
     // result is a compact scorecard. Provider receipts may charge those hidden
