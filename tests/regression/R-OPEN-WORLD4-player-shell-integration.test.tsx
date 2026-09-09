@@ -6,6 +6,7 @@ import TextOpenWorldPlayer from '../../src/components/text-game/TextOpenWorldPla
 import TextOpenWorldVNextPlayer from '../../src/components/text-game/TextOpenWorldVNextPlayer'
 import { db } from '../../src/lib/db/schema'
 import { createTextOpenWorldCombatStateMachineV1 } from '../../src/lib/open-world/combat-state-machine'
+import { classifyTextOpenWorldPlayerIssueV1 } from '../../src/lib/open-world/player-resilience'
 import { createInitialTextOpenWorldSessionProjectionV1 } from '../../src/lib/open-world/session-projection'
 import { EMPTY_PRODUCT_RUNTIME_STATE } from '../../src/lib/types'
 import { useTextOpenWorldPlayerStore } from '../../src/stores/text-open-world-player'
@@ -34,6 +35,9 @@ function resetStore() {
     selectedManifest: null,
     lastFeedback: null,
     generatedCandidate: null,
+    issue: null,
+    recovery: null,
+    recoveryNotice: '',
     loading: false,
     busy: false,
     error: '',
@@ -367,6 +371,7 @@ describe('Text Open World G4 · 真实 vNext 玩家壳集成', () => {
     const leakedActionKey = 'action.private-vault-operation'
     const leakedItemKey = 'item.private-ledger'
     const leakedHash = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'
+    const operationError = `[text-open-world-action-executor] Release不存在Action:${leakedActionKey}; ${leakedItemKey}; ${leakedHash}`
     useTextOpenWorldPlayerStore.setState({
       sessions: [],
       releases: [],
@@ -379,7 +384,8 @@ describe('Text Open World G4 · 真实 vNext 玩家壳集成', () => {
       events: [],
       busy: false,
       lastFeedback: null,
-      error: `[text-open-world-action-executor] Release不存在Action:${leakedActionKey}; ${leakedItemKey}; ${leakedHash}`,
+      error: operationError,
+      issue: classifyTextOpenWorldPlayerIssueV1({ error: operationError, surface: 'runtime-operation' }),
     })
 
     await act(async () => {
@@ -388,36 +394,43 @@ describe('Text Open World G4 · 真实 vNext 玩家壳集成', () => {
     })
 
     const alert = host.querySelector('[role="alert"]')
-    expect(alert?.textContent).toBe('操作未能完成，请确认当前状态后重试。')
+    expect(alert?.textContent).toContain('操作未能完成')
+    expect(alert?.getAttribute('data-diagnostic-code')).toBe('TOW-PLAYER-OPERATION')
     expect(host.innerHTML).not.toContain(leakedActionKey)
     expect(host.innerHTML).not.toContain(leakedItemKey)
     expect(host.innerHTML).not.toContain(leakedHash)
 
     await act(async () => {
+      const error = `[text-open-world-action-executor] 确认基线已变化，请刷新当前状态后重新确认:${leakedActionKey}`
       useTextOpenWorldPlayerStore.setState({
-        error: `[text-open-world-action-executor] 确认基线已变化，请刷新当前状态后重新确认:${leakedActionKey}`,
+        error,
+        issue: classifyTextOpenWorldPlayerIssueV1({ error, surface: 'runtime-operation' }),
       })
     })
     expect(host.querySelector('[role="alert"]')?.textContent)
-      .toBe('游戏状态已经变化，请查看最新状态后重新选择并确认。')
+      .toContain('游戏状态已经更新')
     expect(host.innerHTML).not.toContain(leakedActionKey)
 
     await act(async () => {
+      const error = `[text-open-world] 存档加载失败，可返回游戏库重试：${leakedHash}`
       useTextOpenWorldPlayerStore.setState({
-        error: `[text-open-world] 存档加载失败，可返回游戏库重试：${leakedHash}`,
+        error,
+        issue: classifyTextOpenWorldPlayerIssueV1({ error, surface: 'runtime-load' }),
       })
     })
     expect(host.querySelector('[role="alert"]')?.textContent)
-      .toBe('存档加载失败，请返回游戏库后重试。')
+      .toContain('存档暂时无法载入')
     expect(host.innerHTML).not.toContain(leakedHash)
 
     await act(async () => {
+      const error = `[text-open-world] 只能删除当前World/Work和世界分组内的文字开放世界存档。:${leakedItemKey}`
       useTextOpenWorldPlayerStore.setState({
-        error: `[text-open-world] 只能删除当前World/Work和世界分组内的文字开放世界存档。:${leakedItemKey}`,
+        error,
+        issue: classifyTextOpenWorldPlayerIssueV1({ error, surface: 'runtime-operation' }),
       })
     })
     expect(host.querySelector('[role="alert"]')?.textContent)
-      .toBe('只能删除当前工作区和世界分组内的文字开放世界存档。')
+      .toContain('操作未能完成')
     expect(host.innerHTML).not.toContain(leakedItemKey)
   })
 })

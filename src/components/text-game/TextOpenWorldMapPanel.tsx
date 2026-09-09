@@ -14,6 +14,7 @@ import {
   type TextOpenWorldPlayerMapLocationFunctionV1,
   type TextOpenWorldPlayerMapLocationV1,
 } from '../../lib/open-world/player-map'
+import { classifyTextOpenWorldPlayerIssueV1 } from '../../lib/open-world/player-resilience'
 import type {
   TextOpenWorldFastTravelOptionV1,
   TextOpenWorldTravelOptionV1,
@@ -73,7 +74,10 @@ function requestMatchesReceipt(
 }
 
 function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
+  return classifyTextOpenWorldPlayerIssueV1({
+    error,
+    surface: 'runtime-operation',
+  })?.message ?? '地图操作未能完成。'
 }
 
 function firstReason(
@@ -371,7 +375,7 @@ export default function TextOpenWorldMapPanel(props: {
       </button>)}
     </div>
 
-    <div className="mt-3 grid min-w-0 gap-3 lg:grid-cols-[minmax(0,1fr)_18rem]">
+    <div className="open-world-player-map-primary mt-3 grid min-w-0 gap-3 lg:grid-cols-[minmax(0,1fr)_18rem]">
       <section className="min-w-0" aria-label="交互式节点地图">
         <svg
           role="group"
@@ -431,6 +435,7 @@ export default function TextOpenWorldMapPanel(props: {
                 data-map-location-hit={location.locationKey}
                 aria-hidden="true"
               />
+              <circle r="52" className="open-world-player-map-focus-ring" aria-hidden="true" />
               {focused && <circle r={location.current ? 49 : 42} className="fill-none stroke-accent" strokeWidth="5" strokeDasharray="10 7" aria-hidden="true" />}
               {selected && <circle r={location.current ? 40 : 34} className="fill-none stroke-warning" strokeWidth="5" aria-hidden="true" />}
               <circle

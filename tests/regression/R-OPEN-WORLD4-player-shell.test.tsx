@@ -102,8 +102,8 @@ function OverlaySafetyHarness(props: {
       'aria-label': '确认高风险行动',
     },
     createElement('strong', null, '确认执行高风险行动'),
-    createElement('button', { type: 'button' }, '确认执行'),
     createElement('button', { type: 'button', onClick: dismiss }, '取消'),
+    createElement('button', { type: 'button' }, '确认执行'),
     )
     : null
 
@@ -216,6 +216,7 @@ describe('Text Open World G4 · 玩家游戏壳', () => {
   afterEach(async () => {
     await act(async () => root.unmount())
     host.remove()
+    vi.restoreAllMocks()
     vi.unstubAllGlobals()
   })
 
@@ -236,6 +237,45 @@ describe('Text Open World G4 · 玩家游戏壳', () => {
     expect(context?.getAttribute('aria-label')).toBe('当前位置上下文')
     expect(host.querySelector('[data-testid="text-open-world-global-status"]')?.tagName).toBe('FOOTER')
     expect(host.textContent).toContain('当前任务：检查盐渠')
+  })
+
+  it('离线提示只降级可选联网表现，不阻塞确定性游玩', async () => {
+    let online = false
+    vi.spyOn(window.navigator, 'onLine', 'get').mockImplementation(() => online)
+    const onDeterministicAction = vi.fn()
+    const shellViews = views()
+    shellViews.scene = createElement('article', null,
+      createElement('button', {
+        type: 'button',
+        onClick: onDeterministicAction,
+      }, '执行确定性行动'),
+    )
+
+    await act(async () => root.render(createElement(TextOpenWorldGameShell, props({ views: shellViews }))))
+
+    const shell = host.querySelector('[data-testid="text-open-world-shell"]')
+    const offline = host.querySelector('[data-testid="text-open-world-offline-status"]')
+    const scene = host.querySelector(
+      '[data-testid="text-open-world-main-view"] > section[data-open-world-view="scene"]',
+    )
+    const action = buttonByText(host, '执行确定性行动')
+    expect(shell?.getAttribute('data-connectivity')).toBe('offline')
+    expect(offline?.getAttribute('role')).toBe('status')
+    expect(offline?.textContent).toContain('离线确定性模式')
+    expect(offline?.textContent).toContain('核心玩法与本地存档可继续')
+    expect(scene?.hasAttribute('inert')).toBe(false)
+    expect(action.disabled).toBe(false)
+
+    await click(action)
+    expect(onDeterministicAction).toHaveBeenCalledTimes(1)
+
+    online = true
+    await act(async () => {
+      window.dispatchEvent(new Event('online'))
+      await Promise.resolve()
+    })
+    expect(shell?.getAttribute('data-connectivity')).toBe('online')
+    expect(host.querySelector('[data-testid="text-open-world-offline-status"]')).toBeNull()
   })
 
   it('移动导航严格保持五个入口的顺序和唯一当前页', async () => {
@@ -432,17 +472,17 @@ describe('Text Open World G4 · 玩家游戏壳', () => {
     const dialog = host.querySelector('[role="alertdialog"][aria-modal="true"]')!
     const confirm = buttonByText(dialog, '确认执行')
     const cancel = buttonByText(dialog, '取消')
-    expect(document.activeElement).toBe(confirm)
-
-    const reverseTab = await keyDown(confirm, 'Tab', true)
-    expect(reverseTab.defaultPrevented).toBe(true)
     expect(document.activeElement).toBe(cancel)
 
-    const forwardTab = await keyDown(cancel, 'Tab')
-    expect(forwardTab.defaultPrevented).toBe(true)
+    const reverseTab = await keyDown(cancel, 'Tab', true)
+    expect(reverseTab.defaultPrevented).toBe(true)
     expect(document.activeElement).toBe(confirm)
 
-    const escape = await keyDown(confirm, 'Escape')
+    const forwardTab = await keyDown(confirm, 'Tab')
+    expect(forwardTab.defaultPrevented).toBe(true)
+    expect(document.activeElement).toBe(cancel)
+
+    const escape = await keyDown(cancel, 'Escape')
     expect(escape.defaultPrevented).toBe(true)
     expect(onDismiss).toHaveBeenCalledTimes(1)
     expect(host.querySelector('[role="alertdialog"]')).toBeNull()
@@ -464,7 +504,8 @@ describe('Text Open World G4 · 玩家游戏壳', () => {
     const main = host.querySelector('[data-testid="text-open-world-main-view"]')
     expect(main?.hasAttribute('inert')).toBe(true)
     expect(main?.getAttribute('aria-hidden')).toBe('true')
-    expect(action.closest('[inert]')).toBe(main)
+    expect(action.closest('[inert]')).toBeTruthy()
+    expect(main?.contains(action.closest('[inert]'))).toBe(true)
   })
 
   it('移动端上下文抽屉将 Tab 与 Shift+Tab 循环限制在抽屉内', async () => {

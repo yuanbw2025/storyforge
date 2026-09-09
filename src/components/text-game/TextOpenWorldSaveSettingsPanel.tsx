@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { createPortal } from 'react-dom'
 import {
   AlertTriangle,
   CheckCircle2,
@@ -55,6 +57,20 @@ interface ConfirmationRequest {
   onSuccess?(): void
 }
 
+const CONFIRMATION_FOCUSABLE_SELECTOR = [
+  'button:not([disabled])',
+  'a[href]',
+  'input:not([disabled])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  '[tabindex]:not([tabindex="-1"])',
+].join(',')
+
+function confirmationFocusableElements(container: HTMLElement): HTMLElement[] {
+  return Array.from(container.querySelectorAll<HTMLElement>(CONFIRMATION_FOCUSABLE_SELECTOR))
+    .filter(element => !element.closest('[hidden]') && element.getAttribute('aria-hidden') !== 'true')
+}
+
 const PURPOSE_ORDER: ReadonlyArray<TextOpenWorldPlayerCheckpointV1['purpose']> = [
   'manual', 'autosave', 'combat-retry', 'milestone', 'system', 'invalid',
 ]
@@ -96,8 +112,12 @@ export default function TextOpenWorldSaveSettingsPanel(
   const [operationPending, setOperationPending] = useState(false)
   const [localError, setLocalError] = useState('')
   const operationRevisionRef = useRef(0)
+  const panelRef = useRef<HTMLElement | null>(null)
   const confirmationRef = useRef<HTMLElement | null>(null)
+  const confirmationCancelRef = useRef<HTMLButtonElement | null>(null)
   const confirmationReturnFocusRef = useRef<HTMLElement | null>(null)
+  const restoreConfirmationFocusRef = useRef(false)
+  const confirmationOpen = confirmation != null
 
   useEffect(() => {
     operationRevisionRef.current += 1
@@ -105,15 +125,38 @@ export default function TextOpenWorldSaveSettingsPanel(
     setSaveName('')
     setBranchTitle('')
     setConfirmation(null)
+    restoreConfirmationFocusRef.current = false
     confirmationReturnFocusRef.current = null
     setOperationPending(false)
     setLocalError('')
   }, [props.formalSaveAvailable, props.sessionKey])
 
   useEffect(() => {
-    if (!confirmation) return
-    confirmationRef.current?.querySelector<HTMLButtonElement>('button')?.focus()
-  }, [confirmation])
+    if (!confirmationOpen || typeof document === 'undefined') return
+    const panel = panelRef.current
+    const background = panel?.closest<HTMLElement>('[data-testid="text-open-world-shell"]') ?? panel
+    const backgroundHadInert = background?.hasAttribute('inert') ?? false
+    const backgroundAriaHidden = background?.getAttribute('aria-hidden') ?? null
+    const cancel = confirmationCancelRef.current
+    if (cancel && !cancel.disabled) cancel.focus()
+    else confirmationRef.current?.focus()
+    background?.setAttribute('inert', '')
+    background?.setAttribute('aria-hidden', 'true')
+    return () => {
+      if (background) {
+        if (!backgroundHadInert) background.removeAttribute('inert')
+        if (backgroundAriaHidden == null) background.removeAttribute('aria-hidden')
+        else background.setAttribute('aria-hidden', backgroundAriaHidden)
+      }
+      if (!restoreConfirmationFocusRef.current) return
+      const target = confirmationReturnFocusRef.current
+      restoreConfirmationFocusRef.current = false
+      confirmationReturnFocusRef.current = null
+      queueMicrotask(() => {
+        if (target?.isConnected) target.focus()
+      })
+    }
+  }, [confirmationOpen])
 
   const allBranches = useMemo(
     () => props.saves.groups.flatMap(group => group.branches.map(branch => ({ group, branch }))),
@@ -144,25 +187,48 @@ export default function TextOpenWorldSaveSettingsPanel(
   }
   const requestConfirmation = (request: ConfirmationRequest) => {
     if (disabled) return
+    restoreConfirmationFocusRef.current = false
     confirmationReturnFocusRef.current = document.activeElement instanceof HTMLElement
       ? document.activeElement
       : null
     setConfirmation(request)
   }
   const closeConfirmation = () => {
-    const target = confirmationReturnFocusRef.current
-    confirmationReturnFocusRef.current = null
+    restoreConfirmationFocusRef.current = true
     setConfirmation(null)
-    queueMicrotask(() => {
-      if (target?.isConnected) target.focus()
-    })
   }
   const confirm = async () => {
     const request = confirmation
     if (!request || disabled) return
+    restoreConfirmationFocusRef.current = false
     confirmationReturnFocusRef.current = null
     setConfirmation(null)
     await execute(request.run, request.onSuccess)
+  }
+  const handleConfirmationKeyDown = (event: ReactKeyboardEvent<HTMLElement>) => {
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      event.stopPropagation()
+      closeConfirmation()
+      return
+    }
+    if (event.key !== 'Tab') return
+    const elements = confirmationFocusableElements(event.currentTarget)
+    if (!elements.length) {
+      event.preventDefault()
+      event.currentTarget.focus()
+      return
+    }
+    const first = elements[0]!
+    const last = elements[elements.length - 1]!
+    const active = document.activeElement
+    if (event.shiftKey && (active === first || !event.currentTarget.contains(active))) {
+      event.preventDefault()
+      last.focus()
+    } else if (!event.shiftKey && (active === last || !event.currentTarget.contains(active))) {
+      event.preventDefault()
+      first.focus()
+    }
   }
 
   const tabs: ReadonlyArray<{ key: SaveSettingsTab; label: string; count?: number; disabled?: boolean }> = [
@@ -173,6 +239,7 @@ export default function TextOpenWorldSaveSettingsPanel(
   ]
 
   return <section
+    ref={panelRef}
     className="open-world-save-settings"
     data-testid="text-open-world-save-settings"
     data-open-world-ui-key="system.save-branches system.settings-help"
@@ -199,28 +266,41 @@ export default function TextOpenWorldSaveSettingsPanel(
 
     {visibleError && <p className="open-world-save-settings-error" role="alert">{visibleError}</p>}
 
-    {confirmation && <section
-      ref={confirmationRef}
-      className={`open-world-save-settings-confirmation${confirmation.danger ? ' is-danger' : ''}`}
-      role="alertdialog"
-      aria-labelledby="text-open-world-save-confirmation-title"
-      aria-describedby="text-open-world-save-confirmation-detail"
-      onKeyDown={event => {
-        if (event.key !== 'Escape') return
-        event.preventDefault()
-        closeConfirmation()
+    {confirmation && typeof document !== 'undefined' && createPortal(<div
+      data-testid="text-open-world-save-confirmation-backdrop"
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 100,
+        display: 'grid',
+        placeItems: 'center',
+        overflowY: 'auto',
+        padding: 16,
+        background: 'rgba(0, 0, 0, 0.72)',
       }}
     >
-      <AlertTriangle aria-hidden="true" />
-      <div>
-        <strong id="text-open-world-save-confirmation-title">{confirmation.title}</strong>
-        <p id="text-open-world-save-confirmation-detail">{confirmation.detail}</p>
-        <span>
-          <button type="button" disabled={disabled} onClick={() => void confirm()}>{confirmation.confirmLabel}</button>
-          <button type="button" disabled={disabled} onClick={closeConfirmation}>取消</button>
-        </span>
-      </div>
-    </section>}
+      <section
+        ref={confirmationRef}
+        className={`open-world-save-settings open-world-save-settings-confirmation${confirmation.danger ? ' is-danger' : ''}`}
+        style={{ width: 'min(100%, 34rem)', maxHeight: 'calc(100vh - 2rem)', overflowY: 'auto' }}
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="text-open-world-save-confirmation-title"
+        aria-describedby="text-open-world-save-confirmation-detail"
+        tabIndex={-1}
+        onKeyDown={handleConfirmationKeyDown}
+      >
+        <AlertTriangle aria-hidden="true" />
+        <div>
+          <strong id="text-open-world-save-confirmation-title">{confirmation.title}</strong>
+          <p id="text-open-world-save-confirmation-detail">{confirmation.detail}</p>
+          <span>
+            <button type="button" disabled={disabled} onClick={() => void confirm()}>{confirmation.confirmLabel}</button>
+            <button ref={confirmationCancelRef} type="button" disabled={disabled} onClick={closeConfirmation}>取消</button>
+          </span>
+        </div>
+      </section>
+    </div>, document.body)}
 
     {props.formalSaveAvailable && tab === 'saves' && <div className="open-world-save-settings-content" data-testid="text-open-world-save-list">
       {currentBranch ? <>

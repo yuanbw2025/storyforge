@@ -6,6 +6,8 @@ import {
   executeTextOpenWorldActionV1,
   resumeTextOpenWorldSystemWorkV1,
 } from '../lib/open-world/action-executor'
+import { getTextOpenWorldCommandStatusV1 } from '../lib/open-world/commands'
+import { readTextOpenWorldFeedbackV1 } from '../lib/open-world/feedback'
 import {
   branchTextOpenWorldSessionFromCheckpointV1,
   createTextOpenWorldCheckpointV1,
@@ -26,6 +28,11 @@ import {
   projectTextOpenWorldPlayerVersionCompatibilityV1,
   type TextOpenWorldPlayerVersionCompatibilityProjectionV1,
 } from '../lib/open-world/player-version-compatibility'
+import {
+  classifyTextOpenWorldPlayerIssueV1,
+  type TextOpenWorldPlayerIssueSurfaceV1,
+  type TextOpenWorldPlayerIssueV1,
+} from '../lib/open-world/player-resilience'
 import {
   adoptOpenWorldRuntimeCandidateV1,
   generateOpenWorldRuntimeCandidateV1,
@@ -84,6 +91,10 @@ export interface TextOpenWorldExecuteActionOptions {
   itemKey?: string
 }
 
+export type TextOpenWorldPlayerRecoveryRequestV1 =
+  | { kind: 'refresh-session'; sessionId: number }
+  | { kind: 'resume-settlement'; sessionId: number; commandId: string }
+
 interface TextOpenWorldProjectionRequest {
   revision: number
   scope: WorkspaceScope
@@ -120,6 +131,13 @@ export interface TextOpenWorldPlayerState {
   selectedManifest: PlayableTextOpenWorldProductRuntimePackageV1 | null
   lastFeedback: TextOpenWorldFeedbackReceiptV1 | null
   generatedCandidate: OpenWorldRuntimeCandidateV1 | null
+  /** Optional AI expression has its own lifecycle and never locks deterministic gameplay. */
+  presentationBusy: boolean
+  presentationIssue: TextOpenWorldPlayerIssueV1 | null
+  /** Player-safe structured issue; raw diagnostics remain in `error` for development only. */
+  issue: TextOpenWorldPlayerIssueV1 | null
+  recovery: TextOpenWorldPlayerRecoveryRequestV1 | null
+  recoveryNotice: string
   loading: boolean
   busy: boolean
   error: string
@@ -135,12 +153,15 @@ export interface TextOpenWorldPlayerState {
     options?: TextOpenWorldExecuteActionOptions,
   ): Promise<TextOpenWorldFeedbackReceiptV1>
   generatePresentation(skillId: OpenWorldRuntimeSkillIdV1, objective: string, aiConfig: AIConfig): Promise<void>
+  cancelPresentation(): void
   saveCheckpoint(name: string): Promise<void>
   forkCheckpoint(checkpointId: number, title?: string): Promise<number>
   deleteCheckpoint(checkpointId: number): Promise<void>
   repairCheckpoint(checkpointId: number): Promise<void>
   repairRuntimeHead(sessionId: number): Promise<void>
   refreshSaveCenter(): Promise<void>
+  recover(): Promise<void>
+  dismissIssue(): void
   retryDefeatedCombat(title?: string): Promise<number>
   forkCurrent(title?: string): Promise<number>
   remove(sessionId: number): Promise<void>
@@ -215,7 +236,12 @@ function emptySelectionState(error = '') {
     runtimeState: structuredClone(EMPTY_PRODUCT_RUNTIME_STATE),
     selectedManifest: null,
     generatedCandidate: null,
+    presentationBusy: false,
+    presentationIssue: null,
     lastFeedback: null,
+    issue: null,
+    recovery: null,
+    recoveryNotice: '',
     error,
   }
 }
@@ -260,25 +286,33 @@ async function readDetails(scope: WorkspaceScope, worldGroupId: number | null, s
   const selectedManifest = playableManifest(playable.runtimePackage)
   // Legacy open-world packages do not own the vNext Action/Effect projection.
   // Only the frozen vNext package may enter system follow-up recovery.
+  let recoveredFeedback: TextOpenWorldFeedbackReceiptV1 | null = null
   if (selectedManifest.textOpenWorldVNext) {
-    await resumeTextOpenWorldSystemWorkV1(sessionId)
+    recoveredFeedback = await resumeTextOpenWorldSystemWorkV1(sessionId)
     await reconcileTextOpenWorldAutomaticSavesV1({
       owner: { scope, worldGroupId },
       sessionId,
     })
   }
-  const session = await assertSession(scope, sessionId)
-  const [events, checkpoints, runtimeState, saveProjection, versionCompatibility] = await Promise.all([
+  // Freeze one authoritative state prefix first. Event rows are append-only,
+  // so a concurrent tab may only add a newer suffix; trimming that suffix
+  // prevents UI projectors from observing state N with events N+1.
+  const runtimeState = await readProductRuntimeState(sessionId)
+  const [allEvents, allCheckpoints, session, saveProjection, versionCompatibility] = await Promise.all([
     db.productRuntimeEvents.where('sessionId').equals(sessionId).sortBy('sequence'),
     db.productRuntimeCheckpoints.where('sessionId').equals(sessionId).toArray(),
-    readProductRuntimeState(sessionId),
+    assertSession(scope, sessionId),
     projectTextOpenWorldPlayerSavesV1({
       owner: { scope, worldGroupId },
       currentSessionId: sessionId,
-      includeBuildPreviews: session.productReleaseId == null,
+      includeBuildPreviews: selectedSession.productReleaseId == null,
     }),
     projectTextOpenWorldPlayerVersionCompatibilityV1({ scope, currentSessionId: sessionId }),
   ])
+  const events = allEvents.filter(event => event.sequence <= runtimeState.lastSequence)
+  const checkpoints = allCheckpoints.filter(checkpoint => (
+    checkpoint.throughSequence <= runtimeState.lastSequence
+  ))
   if (runtimeState.textOpenWorld) {
     const binding = await verifyTextOpenWorldVNextSessionBindingV1(session)
     if (!selectedManifest.textOpenWorldVNext
@@ -296,6 +330,10 @@ async function readDetails(scope: WorkspaceScope, worldGroupId: number | null, s
     versionCompatibility,
     runtimeState,
     selectedManifest,
+    lastFeedback: recoveredFeedback,
+    recoveryNotice: recoveredFeedback
+      ? '检测到一项已记录但未完成展示的操作；播放器已沿用原命令完成核对，没有重复提交。'
+      : '',
   }
 }
 
@@ -303,6 +341,17 @@ export const useTextOpenWorldPlayerStore = create<TextOpenWorldPlayerState>((set
   let projectionRequestRevision = 0
   let actionRequestRevision = 0
   let sessionOperationRevision = 0
+  let presentationRequestRevision = 0
+  let presentationAbortController: AbortController | null = null
+  let presentationInFlight: Promise<void> | null = null
+  const startOperationInFlight = new Map<string, Promise<number>>()
+  const legacyOperationInFlight = new Map<string, Promise<void>>()
+  const invalidatePresentation = () => {
+    presentationRequestRevision += 1
+    presentationAbortController?.abort()
+    presentationAbortController = null
+    presentationInFlight = null
+  }
   const beginProjectionRequest = (
     scope: WorkspaceScope,
     worldGroupId: number | null,
@@ -445,22 +494,97 @@ export const useTextOpenWorldPlayerStore = create<TextOpenWorldPlayerState>((set
   const run = async <T>(
     operation: () => Promise<T>,
     mayPublish: () => boolean = () => true,
+    options: {
+      surface?: TextOpenWorldPlayerIssueSurfaceV1
+      recovery?: () => TextOpenWorldPlayerRecoveryRequestV1 | null
+    } = {},
   ): Promise<T> => {
-    if (mayPublish()) set({ busy: true, error: '' })
+    if (mayPublish()) set({
+      busy: true,
+      error: '',
+      issue: null,
+      recovery: null,
+      recoveryNotice: '',
+    })
     try { return await operation() }
     catch (error) {
-      if (mayPublish()) set({ error: error instanceof Error ? error.message : String(error) })
+      if (mayPublish()) set({
+        error: error instanceof Error ? error.message : String(error),
+        issue: classifyTextOpenWorldPlayerIssueV1({
+          error,
+          surface: options.surface ?? 'runtime-operation',
+        }),
+        recovery: options.recovery?.()
+          ?? (get().selectedSessionId == null
+            ? null
+            : { kind: 'refresh-session', sessionId: get().selectedSessionId! }),
+      })
       throw error
     }
     finally { if (mayPublish()) set({ busy: false }) }
+  }
+  const runLegacyMutation = (
+    identity: string,
+    commit: (input: {
+      sessionId: number
+      commandId: string
+      baseSequence: number
+      baseStateHash: string
+    }) => Promise<unknown>,
+  ): Promise<void> => {
+    const selectedSessionId = get().selectedSessionId
+    const scope = get().scope
+    if (selectedSessionId == null || !scope) {
+      return run(async () => {
+        throw new Error('[text-open-world] 请先开始正式开放世界。')
+      })
+    }
+    const operationKey = `${selectedSessionId}:${identity}`
+    const existing = legacyOperationInFlight.get(operationKey)
+    if (existing) return existing
+
+    invalidatePresentation()
+    set({ presentationBusy: false, presentationIssue: null })
+    const request = beginSessionOperation()
+    const mayPublish = () => isCurrentSessionOperation(request)
+    const commandId = `text-open-world:legacy:${selectedSessionId}:${crypto.randomUUID()}`
+    const operation = run(async () => {
+      const projection = sessionOperationProjection(request)
+      if (!projection || request.selectedSessionId !== selectedSessionId) {
+        throw new Error('[text-open-world] 运行中的操作不属于当前存档。')
+      }
+      await assertSessionProjection(projection.scope, projection.worldGroupId, selectedSessionId)
+      const base = await readProductRuntimeStateVersion(selectedSessionId)
+      await commit({
+        sessionId: selectedSessionId,
+        commandId,
+        baseSequence: base.sequence,
+        baseStateHash: base.stateHash,
+      })
+      if (mayPublish()) set({ generatedCandidate: null })
+      await refresh(projection, selectedSessionId, mayPublish)
+    }, mayPublish, {
+      recovery: () => ({ kind: 'refresh-session', sessionId: selectedSessionId }),
+    })
+    legacyOperationInFlight.set(operationKey, operation)
+    const clear = () => {
+      if (legacyOperationInFlight.get(operationKey) === operation) {
+        legacyOperationInFlight.delete(operationKey)
+      }
+    }
+    operation.then(clear, clear)
+    return operation
   }
   return {
     scope: null, worldGroupId: null, releases: [], sessions: [], selectedSessionId: null,
     selectedSession: null, selectedSessionSource: null, events: [], checkpoints: [],
     saveProjection: emptySaveProjection(), versionCompatibility: null,
     runtimeState: structuredClone(EMPTY_PRODUCT_RUNTIME_STATE), selectedManifest: null, lastFeedback: null,
-    generatedCandidate: null, loading: false, busy: false, error: '',
+    generatedCandidate: null, presentationBusy: false, presentationIssue: null,
+    issue: null, recovery: null, recoveryNotice: '',
+    loading: false, busy: false, error: '',
     load: async (scope, worldGroupId, initialSessionId) => {
+      invalidatePresentation()
       const request = beginProjectionRequest(scope, worldGroupId)
       set({
         scope, worldGroupId, releases: [], sessions: [], loading: true, busy: false,
@@ -470,13 +594,21 @@ export const useTextOpenWorldPlayerStore = create<TextOpenWorldPlayerState>((set
       catch (error) {
         if (!isCurrentProjectionRequest(request)) return
         const detail = error instanceof Error ? error.message : String(error)
-        set(emptySelectionState(`[text-open-world] 存档加载失败，可返回游戏库重试：${detail}`))
+        const diagnostic = `[text-open-world] 存档加载失败，可返回游戏库重试：${detail}`
+        set({
+          ...emptySelectionState(diagnostic),
+          issue: classifyTextOpenWorldPlayerIssueV1({
+            error: diagnostic,
+            surface: initialSessionId == null ? 'library-load' : 'runtime-load',
+          }),
+        })
       }
       finally {
         if (isCurrentProjectionRequest(request)) set({ loading: false })
       }
     },
     select: async sessionId => {
+      invalidatePresentation()
       const scope = get().scope
       if (!scope) {
         projectionRequestRevision += 1
@@ -484,7 +616,18 @@ export const useTextOpenWorldPlayerStore = create<TextOpenWorldPlayerState>((set
         return
       }
       const request = beginProjectionRequest(scope, get().worldGroupId)
-      set({ loading: true, busy: false, error: '', generatedCandidate: null, lastFeedback: null })
+      set({
+        loading: true,
+        busy: false,
+        error: '',
+        issue: null,
+        recovery: null,
+        recoveryNotice: '',
+        generatedCandidate: null,
+        presentationBusy: false,
+        presentationIssue: null,
+        lastFeedback: null,
+      })
       try {
         if (sessionId == null) {
           if (isCurrentProjectionRequest(request)) set(emptySelectionState())
@@ -496,55 +639,83 @@ export const useTextOpenWorldPlayerStore = create<TextOpenWorldPlayerState>((set
       } catch (error) {
         if (!isCurrentProjectionRequest(request)) return
         const detail = error instanceof Error ? error.message : String(error)
-        set(emptySelectionState(`[text-open-world] 存档加载失败，可返回游戏库重试：${detail}`))
+        const diagnostic = `[text-open-world] 存档加载失败，可返回游戏库重试：${detail}`
+        set({
+          ...emptySelectionState(diagnostic),
+          issue: classifyTextOpenWorldPlayerIssueV1({ error: diagnostic, surface: 'runtime-load' }),
+        })
       } finally {
         if (isCurrentProjectionRequest(request)) set({ loading: false })
       }
     },
-    start: async (productReleaseId, title) => run(async () => {
+    start: (productReleaseId, title) => {
+      const request = captureProjectionRequest()
       const item = get().releases.find(row => row.release.id === productReleaseId)
-      if (!item?.manifest || !get().scope) throw new Error('[text-open-world] 请选择有效发布。')
+      if (!request || !item?.manifest) {
+        return run(async () => {
+          throw new Error('[text-open-world] 请选择有效发布。')
+        })
+      }
       const displayTitle = item.manifest.definition.title
-      const session = await createTextOpenWorldInstance({
-        scope: get().scope!, productReleaseId,
-        title: title?.trim() || `${displayTitle} · 新旅程`,
-        worldGroupId: get().worldGroupId,
-      })
-      await reload(session.id!)
-      return session.id!
-    }),
-    command: async command => run(async () => {
-      const sessionId = get().selectedSessionId
-      if (sessionId == null || !get().scope) throw new Error('[text-open-world] 请先开始正式开放世界。')
-      await assertSession(get().scope!, sessionId)
-      const base = await readProductRuntimeStateVersion(sessionId)
-      await commitOpenWorldCommand({ sessionId, command, commandId: `text-open-world:${command.kind}:${sessionId}:${crypto.randomUUID()}`, baseSequence: base.sequence, baseStateHash: base.stateHash })
-      set({ generatedCandidate: null })
-      await refresh()
-    }),
-    resolveAdventureAction: async actionKey => run(async () => {
-      const sessionId = get().selectedSessionId
-      if (sessionId == null || !get().scope) throw new Error('[text-open-world] 请先开始正式开放世界。')
-      await assertSession(get().scope!, sessionId)
-      const base = await readProductRuntimeStateVersion(sessionId)
-      await commitAdventureAction({ sessionId, actionKey, commandId: `text-open-world:adventure:${sessionId}:${crypto.randomUUID()}`, baseSequence: base.sequence, baseStateHash: base.stateHash })
-      set({ generatedCandidate: null })
-      await refresh()
-    }),
-    choose: async choiceKey => run(async () => {
-      const sessionId = get().selectedSessionId
-      if (sessionId == null || !get().scope) throw new Error('[text-open-world] 请先开始正式开放世界。')
-      await assertSession(get().scope!, sessionId)
-      const base = await readProductRuntimeStateVersion(sessionId)
-      await commitNarrativeChoice({ sessionId, choiceKey, commandId: `text-open-world:ending:${sessionId}:${crypto.randomUUID()}`, baseSequence: base.sequence, baseStateHash: base.stateHash })
-      set({ generatedCandidate: null })
-      await refresh()
-    }),
+      const requestedTitle = title?.trim() || `${displayTitle} · 新旅程`
+      const operationKey = [
+        request.scope.projectId,
+        request.scope.worldId,
+        request.scope.workId,
+        request.worldGroupId ?? 'root',
+        productReleaseId,
+        requestedTitle,
+      ].join(':')
+      const existing = startOperationInFlight.get(operationKey)
+      if (existing) return existing
+
+      invalidatePresentation()
+      set({ presentationBusy: false, presentationIssue: null })
+      const mayPublish = () => isCurrentProjectionRequest(request)
+      const operation = run(async () => {
+        const session = await createTextOpenWorldInstance({
+          scope: request.scope,
+          productReleaseId,
+          title: requestedTitle,
+          worldGroupId: request.worldGroupId,
+        })
+        await reload(session.id!, request, mayPublish)
+        return session.id!
+      }, mayPublish)
+      startOperationInFlight.set(operationKey, operation)
+      const clear = () => {
+        if (startOperationInFlight.get(operationKey) === operation) {
+          startOperationInFlight.delete(operationKey)
+        }
+      }
+      operation.then(clear, clear)
+      return operation
+    },
+    command: command => runLegacyMutation(
+      `command:${JSON.stringify(command)}`,
+      input => commitOpenWorldCommand({ ...input, command }),
+    ),
+    resolveAdventureAction: actionKey => runLegacyMutation(
+      `adventure:${actionKey}`,
+      input => commitAdventureAction({ ...input, actionKey }),
+    ),
+    choose: choiceKey => runLegacyMutation(
+      `ending:${choiceKey}`,
+      input => commitNarrativeChoice({ ...input, choiceKey }),
+    ),
     executeVNextAction: async (actionKey, targetKey, options) => {
       const sessionId = get().selectedSessionId
       const request = captureProjectionRequest()
       if (sessionId == null || !request) throw new Error('[text-open-world] 请先开始正式开放世界。')
       const requestedTargetKey = targetKey ?? null
+      const expectedBaseSequence = options?.expectedBaseSequence ?? get().runtimeState.lastSequence
+      // The player client owns one stable identity before dispatch. If the
+      // caller loses the return value after the Command became durable, the
+      // same identity can be queried/resumed instead of generating a retry.
+      const commandId = options?.commandId
+        ?? `text-open-world:action:${sessionId}:${crypto.randomUUID()}`
+      let commandNeedsSettlement = false
+      let terminalFeedback: TextOpenWorldFeedbackReceiptV1 | null = null
       const actionRevision = ++actionRequestRevision
       const mayPublish = () => actionRequestRevision === actionRevision
         && isCurrentSessionRequest(request, sessionId)
@@ -556,10 +727,10 @@ export const useTextOpenWorldPlayerStore = create<TextOpenWorldPlayerState>((set
             sessionId,
             actionKey,
             targetKey,
-            commandId: options?.commandId,
+            commandId,
             confirmed: options?.confirmed,
             source: options?.source,
-            expectedBaseSequence: options?.expectedBaseSequence,
+            expectedBaseSequence,
             quantity: options?.quantity,
             itemKey: options?.itemKey,
           })
@@ -567,32 +738,110 @@ export const useTextOpenWorldPlayerStore = create<TextOpenWorldPlayerState>((set
             sessionId,
             actionKey,
             targetKey: requestedTargetKey,
-            commandId: options?.commandId,
-            expectedBaseSequence: options?.expectedBaseSequence,
+            commandId,
+            expectedBaseSequence,
           })
           await refresh(request, sessionId)
           if (mayPublish()) set({ generatedCandidate: null, lastFeedback: feedback })
           return feedback
         } catch (error) {
-          // A stale confirmation is expected under another tab/process. Refresh
-          // only the captured Session projection before exposing the original
-          // error; a later scope/Session must never receive this receipt.
+          // Querying is read-only. Distinguish an actually pending envelope
+          // from a terminal receipt whose subsequent UI refresh failed.
           if (mayPublish()) {
-            try { await refresh(request, sessionId) } catch { /* Preserve the action failure. */ }
+            // Failure to verify canonical evidence is deliberately allowed to
+            // replace the original diagnostic: it is the more severe failure
+            // and must not be flattened to an ordinary retry.
+            const status = await getTextOpenWorldCommandStatusV1({
+              sessionId,
+              commandId,
+            })
+            if (status.status === 'committed') {
+              const observed = await readTextOpenWorldFeedbackV1({ sessionId, commandId })
+              assertActionFeedbackIdentity(observed, {
+                sessionId,
+                actionKey,
+                targetKey: requestedTargetKey,
+                commandId,
+                expectedBaseSequence,
+              })
+              if (observed.phase === 'terminal') terminalFeedback = observed
+              else commandNeedsSettlement = true
+            }
+            if (terminalFeedback) set({ lastFeedback: terminalFeedback })
+            if (!commandNeedsSettlement && !terminalFeedback) {
+              // A stale confirmation is expected under another tab/process.
+              // Refresh only the captured Session before exposing the failure.
+              try { await refresh(request, sessionId) } catch { /* Preserve the action failure. */ }
+            }
+          }
+          if (commandNeedsSettlement) {
+            throw new Error('[text-open-world] 请求结果未知；原命令已记录，必须核对并恢复，不能重新提交。')
           }
           throw error
         }
-      }, mayPublish)
-    },
-    generatePresentation: async (skillId, objective, aiConfig) => run(async () => {
-      const sessionId = get().selectedSessionId
-      if (sessionId == null || !get().scope) throw new Error('[text-open-world] 请先开始正式开放世界。')
-      const generated = await generateOpenWorldRuntimeCandidateV1({
-        scope: get().scope!, productRuntimeSessionId: sessionId, skillId, objective, aiConfig,
+      }, mayPublish, {
+        recovery: () => commandNeedsSettlement
+          ? { kind: 'resume-settlement', sessionId, commandId }
+          : { kind: 'refresh-session', sessionId },
       })
-      await adoptOpenWorldRuntimeCandidateV1({ scope: get().scope!, runId: generated.snapshot.run.id })
-      set({ generatedCandidate: generated.candidate })
-    }),
+    },
+    generatePresentation: (skillId, objective, aiConfig) => {
+      if (presentationInFlight) return presentationInFlight
+      const request = captureProjectionRequest()
+      const sessionId = get().selectedSessionId
+      if (!request || sessionId == null) {
+        return Promise.reject(new Error('[text-open-world] 请先开始正式开放世界。'))
+      }
+      const revision = ++presentationRequestRevision
+      const controller = new AbortController()
+      presentationAbortController = controller
+      const mayPublish = () => presentationRequestRevision === revision
+        && isCurrentSessionRequest(request, sessionId)
+      set({ presentationBusy: true, presentationIssue: null })
+      const operation = (async () => {
+        try {
+          await assertSessionProjection(request.scope, request.worldGroupId, sessionId)
+          const generated = await generateOpenWorldRuntimeCandidateV1({
+            scope: request.scope,
+            productRuntimeSessionId: sessionId,
+            skillId,
+            objective,
+            aiConfig,
+            signal: controller.signal,
+          })
+          if (!mayPublish()) return
+          await adoptOpenWorldRuntimeCandidateV1({
+            scope: request.scope,
+            runId: generated.snapshot.run.id,
+          })
+          if (mayPublish()) set({
+            generatedCandidate: generated.candidate,
+            presentationIssue: null,
+          })
+        } catch (error) {
+          if (mayPublish()) set({
+            presentationIssue: classifyTextOpenWorldPlayerIssueV1({
+              error,
+              surface: 'optional-ai',
+            }),
+          })
+          throw error
+        }
+      })()
+      presentationInFlight = operation
+      const clear = () => {
+        if (presentationRequestRevision !== revision) return
+        if (presentationInFlight === operation) presentationInFlight = null
+        if (presentationAbortController === controller) presentationAbortController = null
+        if (mayPublish()) set({ presentationBusy: false })
+      }
+      operation.then(clear, clear)
+      return operation
+    },
+    cancelPresentation: () => {
+      invalidatePresentation()
+      set({ presentationBusy: false, presentationIssue: null })
+    },
     saveCheckpoint: async name => {
       const request = beginSessionOperation()
       const mayPublish = () => isCurrentSessionOperation(request)
@@ -680,6 +929,60 @@ export const useTextOpenWorldPlayerStore = create<TextOpenWorldPlayerState>((set
         if (sessionId == null || !projection) throw new Error('[text-open-world] 请先开始正式开放世界。')
         await refresh(projection, sessionId, mayPublish)
       }, mayPublish)
+    },
+    recover: async () => {
+      const recovery = get().recovery
+      if (!recovery) throw new Error('[text-open-world] 当前没有可执行的恢复请求。')
+      let nextRecovery: TextOpenWorldPlayerRecoveryRequestV1 | null = recovery
+      const request = beginSessionOperation()
+      const mayPublish = () => isCurrentSessionOperation(request)
+      return run(async () => {
+        const projection = sessionOperationProjection(request)
+        if (!projection || request.selectedSessionId !== recovery.sessionId) {
+          throw new Error('[text-open-world] 恢复请求不属于当前存档。')
+        }
+        await assertSessionProjection(projection.scope, projection.worldGroupId, recovery.sessionId)
+        let feedback: TextOpenWorldFeedbackReceiptV1 | null = null
+        if (recovery.kind === 'resume-settlement') {
+          const status = await getTextOpenWorldCommandStatusV1({
+            sessionId: recovery.sessionId,
+            commandId: recovery.commandId,
+          })
+          if (status.status !== 'committed') {
+            // The exact command is no longer recoverable. Do not keep offering
+            // resume-settlement for an identity that canonical storage cannot
+            // prove; downgrade the next action to a fresh read-only verification.
+            nextRecovery = { kind: 'refresh-session', sessionId: recovery.sessionId }
+            throw new Error('[text-open-world] 原命令记录未通过完整性校验，已停止续结。')
+          }
+          await resumeTextOpenWorldSystemWorkV1(recovery.sessionId)
+          feedback = await readTextOpenWorldFeedbackV1({
+            sessionId: recovery.sessionId,
+            commandId: recovery.commandId,
+          })
+          if (feedback.phase !== 'terminal') {
+            throw new Error('[text-open-world] 请求结果未知；原命令仍未形成终态。')
+          }
+        }
+        await refresh(projection, recovery.sessionId, mayPublish)
+        if (mayPublish()) set({
+          error: '',
+          issue: null,
+          recovery: null,
+          ...(feedback ? { lastFeedback: feedback } : {}),
+          recoveryNotice: recovery.kind === 'resume-settlement'
+            ? '已从事件时间线核对并续结原操作；没有创建新的命令或重复写入。'
+            : '已核对当前存档并恢复到最新安全状态。',
+        })
+      }, mayPublish, {
+        surface: 'runtime-load',
+        recovery: () => nextRecovery,
+      })
+    },
+    dismissIssue: () => {
+      const issue = get().issue
+      if (!issue || issue.state === 'blocking-error') return
+      set({ error: '', issue: null, recovery: null })
     },
     retryDefeatedCombat: async title => {
       const request = beginSessionOperation()

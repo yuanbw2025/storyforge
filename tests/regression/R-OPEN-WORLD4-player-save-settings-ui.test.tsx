@@ -225,6 +225,12 @@ function articleByText(root: ParentNode, text: string): HTMLElement {
   return result
 }
 
+function confirmationDialog(): HTMLElement {
+  const result = document.querySelector<HTMLElement>('[role="alertdialog"]')
+  if (!result) throw new Error('找不到存档确认框')
+  return result
+}
+
 async function click(target: HTMLButtonElement) {
   await act(async () => {
     target.click()
@@ -333,26 +339,47 @@ describe('Text Open World G4-12E · 存档、分支、版本与设置纯组件',
     const continueButton = buttonByText(manual, '从此处继续')
     continueButton.focus()
     await click(continueButton)
-    let forkDialog = host.querySelector<HTMLElement>('[role="alertdialog"]')!
+    let forkDialog = confirmationDialog()
+    const panel = host.querySelector<HTMLElement>('[data-testid="text-open-world-save-settings"]')!
+    const confirmForkButton = buttonByText(forkDialog, '建立分支并继续')
+    const cancelForkButton = buttonByText(forkDialog, '取消')
     expect(actions.onForkCheckpoint).not.toHaveBeenCalled()
+    expect(forkDialog.getAttribute('aria-modal')).toBe('true')
+    expect(document.querySelector('[data-testid="text-open-world-save-confirmation-backdrop"]')).toBeTruthy()
+    expect(panel.hasAttribute('inert')).toBe(true)
+    expect(panel.getAttribute('aria-hidden')).toBe('true')
     expect(forkDialog.textContent).toContain('当前时间线和之后发生的事件都会保留')
     expect(forkDialog.textContent).toContain('新的时间线分支')
-    expect(document.activeElement?.textContent).toContain('建立分支并继续')
+    expect(document.activeElement).toBe(cancelForkButton)
+    await act(async () => {
+      cancelForkButton.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }))
+      await new Promise(resolve => setTimeout(resolve, 0))
+    })
+    expect(document.activeElement).toBe(confirmForkButton)
+    await act(async () => {
+      confirmForkButton.dispatchEvent(new KeyboardEvent('keydown', {
+        key: 'Tab', shiftKey: true, bubbles: true,
+      }))
+      await new Promise(resolve => setTimeout(resolve, 0))
+    })
+    expect(document.activeElement).toBe(cancelForkButton)
     await act(async () => {
       document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
       await new Promise(resolve => setTimeout(resolve, 0))
     })
-    expect(host.querySelector('[role="alertdialog"]')).toBeNull()
+    expect(document.querySelector('[role="alertdialog"]')).toBeNull()
+    expect(panel.hasAttribute('inert')).toBe(false)
+    expect(panel.getAttribute('aria-hidden')).toBeNull()
     expect(document.activeElement).toBe(continueButton)
 
     await click(continueButton)
-    forkDialog = host.querySelector<HTMLElement>('[role="alertdialog"]')!
+    forkDialog = confirmationDialog()
     await click(buttonByText(forkDialog, '建立分支并继续'))
     expect(actions.onForkCheckpoint).toHaveBeenCalledWith(
       MANUAL_CHECKPOINT_ID,
       '当前盐脊时间线 · 进入盐渠前',
     )
-    expect(host.querySelector('[role="alertdialog"]')).toBeNull()
+    expect(document.querySelector('[role="alertdialog"]')).toBeNull()
 
     const repairable = articleByText(host, '抵达盐港')
     expect(buttonByText(repairable, '从此处继续').disabled).toBe(true)
@@ -361,7 +388,7 @@ describe('Text Open World G4-12E · 存档、分支、版本与设置纯组件',
     expect(actions.onRepairCheckpoint).toHaveBeenCalledWith(AUTOSAVE_CHECKPOINT_ID)
 
     await click(buttonByText(manual, '删除'))
-    const deleteDialog = host.querySelector<HTMLElement>('[role="alertdialog"]')!
+    const deleteDialog = confirmationDialog()
     expect(actions.onDeleteCheckpoint).not.toHaveBeenCalled()
     expect(deleteDialog.textContent).toContain('不会删除所属时间线或正式发布')
     expect(deleteDialog.textContent).toContain('释放一个手动档位')
@@ -385,7 +412,7 @@ describe('Text Open World G4-12E · 存档、分支、版本与设置纯组件',
     expect(actions.onRepairRuntimeHead).toHaveBeenCalledWith(HISTORICAL_SESSION_ID)
 
     await click(buttonByText(historical, '删除时间线'))
-    const dialog = host.querySelector<HTMLElement>('[role="alertdialog"]')!
+    const dialog = confirmationDialog()
     expect(actions.onDeleteBranch).not.toHaveBeenCalled()
     expect(dialog.textContent).toContain('不会删除共享 Release、父时间线或其它分支')
     await click(buttonByText(dialog, '确认删除时间线'))

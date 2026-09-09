@@ -336,18 +336,20 @@ export default function TextOpenWorldQuestLogPanel(props: TextOpenWorldQuestLogP
 
     <div className="grid min-w-0 items-start gap-3 lg:grid-cols-[minmax(15rem,0.9fr)_minmax(0,1.6fr)]">
       <div className="min-w-0 space-y-2" role="list" aria-label="筛选后的任务">
-        {filtered.map(entry => <button
+        {filtered.map(entry => <div
           key={entry.instanceKey}
-          type="button"
           role="listitem"
-          aria-current={entry.instanceKey === selected?.instanceKey || undefined}
-          onClick={() => setSelectedInstanceKey(entry.instanceKey)}
-          className="block w-full min-w-0 rounded border border-border bg-bg-surface p-3 text-left text-xs aria-[current=true]:border-accent aria-[current=true]:bg-accent/5"
           data-quest-instance={entry.instanceKey}
           data-quest-category={entry.category}
           data-quest-status={entry.status}
           data-quest-tracking={entry.tracking ?? 'untracked'}
         >
+          <button
+            type="button"
+            aria-current={entry.instanceKey === selected?.instanceKey || undefined}
+            onClick={() => setSelectedInstanceKey(entry.instanceKey)}
+            className="block w-full min-w-0 rounded border border-border bg-bg-surface p-3 text-left text-xs aria-[current=true]:border-accent aria-[current=true]:bg-accent/5"
+          >
           <span className="flex min-w-0 flex-wrap items-center justify-between gap-2">
             <strong className="min-w-0 break-words">{entry.title}</strong>
             <span className="shrink-0 text-text-muted">{STATUS_LABELS[entry.status]}</span>
@@ -360,7 +362,8 @@ export default function TextOpenWorldQuestLogPanel(props: TextOpenWorldQuestLogP
             {entry.deadline.label && <span className={entry.deadline.expired ? 'text-danger' : 'text-warning'}>{entry.deadline.label}</span>}
           </span>
           {entry.currentStage && <span className="mt-1 block truncate text-text-muted">当前阶段：{entry.currentStage.title}</span>}
-        </button>)}
+          </button>
+        </div>)}
         {!filtered.length && <div className="rounded border border-border bg-bg-surface p-4 text-xs text-text-muted">
           <p>没有符合当前筛选条件的任务。</p>
           <button type="button" onClick={resetFilters} className="mt-2 rounded border border-border px-2 py-1 text-accent">

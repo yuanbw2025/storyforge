@@ -8,6 +8,7 @@ import {
   type TextOpenWorldPlayerCraftingEconomyExecuteRequestV1,
 } from '../../lib/open-world/player-crafting-economy'
 import { projectTextOpenWorldPlayerHudV1 } from '../../lib/open-world/player-hud'
+import { textOpenWorldProjectionUnavailableIssueV1 } from '../../lib/open-world/player-resilience'
 import {
   projectTextOpenWorldPlayerNotificationsV1,
   type TextOpenWorldPlayerNotificationCategoryV1,
@@ -51,67 +52,6 @@ const NOTIFICATION_CATEGORY_LABELS: Record<TextOpenWorldPlayerNotificationCatego
   combat: '战斗', achievement: '成就', 'random-event': '随机事件',
 }
 
-const PLAYER_SAFE_ERROR_RULES: ReadonlyArray<{
-  markers: readonly string[]
-  message: string
-}> = [
-  {
-    markers: ['存档加载失败'],
-    message: '存档加载失败，请返回游戏库后重试。',
-  },
-  {
-    markers: ['只能删除当前World/Work和世界分组内'],
-    message: '只能删除当前工作区和世界分组内的文字开放世界存档。',
-  },
-  {
-    markers: ['只能操作当前World/Work和世界分组内'],
-    message: '只能操作当前工作区和世界分组内的文字开放世界存档。',
-  },
-  {
-    markers: ['制作预览不提供正式手动存档或时间线分支'],
-    message: '制作预览不提供正式存档与分支；请发布后开始正式旅程。',
-  },
-  {
-    markers: [
-      '确认基线已变化',
-      '世界状态已变化',
-      '演化状态已变化',
-      '回执属于过期的Session事件基线',
-      '地图状态已经变化',
-      '制作或交易状态已经变化',
-    ],
-    message: '游戏状态已经变化，请查看最新状态后重新选择并确认。',
-  },
-  {
-    markers: ['检查点无效'],
-    message: '这个存档点不可用，请选择其他存档点后重试。',
-  },
-  {
-    markers: ['请先开始正式开放世界'],
-    message: '请先开始或选择一段文字开放世界旅程。',
-  },
-  {
-    markers: ['请选择有效发布'],
-    message: '请选择一个可用的正式发布后再开始。',
-  },
-  {
-    markers: ['scope 缺失'],
-    message: '当前工作区信息不可用，请返回游戏库后重试。',
-  },
-  {
-    markers: ['只有 active 实例可以提交命令'],
-    message: '当前旅程暂时不能继续操作，请返回游戏库检查存档状态。',
-  },
-]
-
-function playerSafeError(rawError: string): string {
-  const diagnostic = rawError.trim()
-  if (!diagnostic) return ''
-  return PLAYER_SAFE_ERROR_RULES.find(rule => (
-    rule.markers.some(marker => diagnostic.includes(marker))
-  ))?.message ?? '操作未能完成，请确认当前状态后重试。'
-}
-
 export default function TextOpenWorldVNextPlayer() {
   const store = useTextOpenWorldPlayerStore()
   const [dismissedCombatIdentity, setDismissedCombatIdentity] = useState<string | null>(null)
@@ -144,7 +84,7 @@ export default function TextOpenWorldVNextPlayer() {
     value: { systemActions: false, fixedChoices: false, naturalInput: false, actionKeys: [] },
   })
   const projection = store.runtimeState.textOpenWorld
-  const publicError = playerSafeError(store.error)
+  const storeIssue = store.issue
   const runtimePackage = store.selectedManifest?.textOpenWorldVNext
   const projectedActions = selectTextOpenWorldVNextActions(store)
   const availableActions = projectedActions.filter(action => action.available)
@@ -210,20 +150,24 @@ export default function TextOpenWorldVNextPlayer() {
   }, [projection, projectionSequence, selectedSessionId, store.events])
   const notificationsReady = notificationProjection.ready
   const notifications = notificationProjection.entries
-  const worldRecordProjection = useMemo(() => {
-    if (!projection || projectionSequence == null || selectedSessionId == null) return null
+  const worldRecordProjectionResult = useMemo(() => {
+    if (!projection || projectionSequence == null || selectedSessionId == null) {
+      return { ready: true, value: null }
+    }
     try {
-      return projectTextOpenWorldPlayerWorldRecordV1({
-        sessionId: selectedSessionId,
-        projection,
-        events: store.events,
-      })
+      return {
+        ready: true,
+        value: projectTextOpenWorldPlayerWorldRecordV1({
+          sessionId: selectedSessionId,
+          projection,
+          events: store.events,
+        }),
+      }
     } catch {
-      // Projection and Event rows refresh independently. Keep the record closed
-      // until the pure projector can verify one coherent same-Session snapshot.
-      return null
+      return { ready: false, value: null }
     }
   }, [projection, projectionSequence, selectedSessionId, store.events])
+  const worldRecordProjection = worldRecordProjectionResult.value
   const combatProjectionResult = useMemo((): {
     ready: boolean
     value: ReturnType<typeof projectTextOpenWorldPlayerCombatV1>
@@ -248,20 +192,31 @@ export default function TextOpenWorldVNextPlayer() {
     }
   }, [projection, projectionSequence, projectedActions, selectedSessionId, store.checkpoints, store.events])
   const combatProjection = combatProjectionResult.value
-  const craftingEconomyProjection = useMemo(() => {
-    if (!projection || selectedSessionId == null) return null
+  const craftingEconomyProjectionResult = useMemo(() => {
+    if (!projection || selectedSessionId == null) return { ready: true, value: null }
     try {
-      return projectTextOpenWorldPlayerCraftingEconomyV1({
-        sessionId: selectedSessionId,
-        projection,
-        runtimeEventSequence: store.runtimeState.lastSequence,
-      })
+      return {
+        ready: true,
+        value: projectTextOpenWorldPlayerCraftingEconomyV1({
+          sessionId: selectedSessionId,
+          projection,
+          runtimeEventSequence: store.runtimeState.lastSequence,
+        }),
+      }
     } catch {
-      // The same read can briefly span an Event commit and Store refresh. The
-      // player surface remains closed until one authoritative snapshot parses.
-      return null
+      return { ready: false, value: null }
     }
   }, [projection, selectedSessionId, store.runtimeState.lastSequence])
+  const craftingEconomyProjection = craftingEconomyProjectionResult.value
+  const projectionIssue = !notificationsReady
+    || !combatProjectionResult.ready
+    || !worldRecordProjectionResult.ready
+    || !craftingEconomyProjectionResult.ready
+    ? textOpenWorldProjectionUnavailableIssueV1()
+    : null
+  const issue = storeIssue ?? projectionIssue
+  const interactionLocked = store.busy || store.loading
+    || issue?.gameplayAvailability !== undefined && issue.gameplayAvailability !== 'enabled'
   const combatIdentity = combatProjection
     ? `${combatProjection.operationIdentity.sessionId}:${combatProjection.operationIdentity.combatInstanceKey ?? 'legacy'}`
     : null
@@ -556,7 +511,7 @@ export default function TextOpenWorldVNextPlayer() {
     {combatSurfaceVisible ? <TextOpenWorldCombatPanel
       projection={combatProjection}
       synchronizing={!combatProjectionResult.ready}
-      busy={store.busy}
+      busy={interactionLocked}
       onExecute={handleCombatAction}
       onRetry={() => void run(() => store.retryDefeatedCombat())}
       onDismissResult={() => {
@@ -568,7 +523,7 @@ export default function TextOpenWorldVNextPlayer() {
       projection={sceneProjection}
       availableActions={availableActions}
       feedback={store.lastFeedback}
-      busy={store.busy}
+      busy={interactionLocked}
       fallback={{
         regionTitle: region?.title ?? '未知区域',
         locationTitle: location?.title ?? state.map.currentLocationKey,
@@ -587,7 +542,7 @@ export default function TextOpenWorldVNextPlayer() {
       <h2 className="text-lg font-semibold">世界主线已经完成</h2>
       <button
         type="button"
-        disabled={store.busy}
+        disabled={interactionLocked}
         onClick={() => void run(() => store.choose('ending.world'))}
         className="mt-3 rounded bg-accent px-3 py-2 text-xs text-white"
       >
@@ -603,7 +558,7 @@ export default function TextOpenWorldVNextPlayer() {
         projection={projection}
         events={store.events}
         actions={projectedActions}
-        busy={store.busy}
+        busy={interactionLocked}
         onExecute={(action, instanceKey) => executeProjectedAction(action, instanceKey)}
         onFocusLocation={focusQuestLocation}
       />
@@ -614,7 +569,7 @@ export default function TextOpenWorldVNextPlayer() {
     {craftingEconomyProjection ? <TextOpenWorldCraftingEconomyPanel
       sessionKey={sessionKey}
       projection={craftingEconomyProjection}
-      busy={store.busy}
+      busy={interactionLocked}
       onExecute={handleCraftingEconomyAction}
     /> : <article
       className="rounded border border-border bg-bg-surface p-4 text-xs text-text-muted"
@@ -624,7 +579,7 @@ export default function TextOpenWorldVNextPlayer() {
     <TextOpenWorldInventoryPanel
       sessionKey={sessionKey}
       projection={projection}
-      busy={store.busy}
+      busy={interactionLocked}
       feedback={store.lastFeedback}
       onExecute={(actionKey, itemKey) => {
         const action = projectedActions.find(item => item.action.key === actionKey)
@@ -647,8 +602,7 @@ export default function TextOpenWorldVNextPlayer() {
       audioAvailable={false}
       saves={store.saveProjection}
       versions={store.versionCompatibility}
-      busy={store.busy}
-      error={publicError}
+      busy={interactionLocked}
       onCreateManualSave={name => store.saveCheckpoint(name)}
       onForkCurrent={title => store.forkCurrent(title)}
       onForkCheckpoint={(checkpointId, title) => store.forkCheckpoint(checkpointId, title)}
@@ -701,9 +655,10 @@ export default function TextOpenWorldVNextPlayer() {
     <strong>确认“{pendingConfirmation.label}”</strong>
     <p>{pendingConfirmation.description} 此操作会写入正式事件记录。</p>
     <div>
+      <button type="button" disabled={store.busy} onClick={dismissConfirmation}>取消</button>
       <button
         type="button"
-        disabled={store.busy}
+        disabled={interactionLocked}
         onClick={() => {
           const request = pendingConfirmation
           const liveStore = useTextOpenWorldPlayerStore.getState()
@@ -728,7 +683,6 @@ export default function TextOpenWorldVNextPlayer() {
       >
         确认执行
       </button>
-      <button type="button" disabled={store.busy} onClick={dismissConfirmation}>取消</button>
     </div>
   </section>
 
@@ -739,9 +693,11 @@ export default function TextOpenWorldVNextPlayer() {
       aria-live="polite"
       aria-atomic="true"
       data-testid="text-open-world-important-change-announcement"
-    >{liveAnnouncement?.sessionId === selectedSessionId
-        ? <span key={liveAnnouncement.notificationId}>{liveAnnouncement.text}</span>
-        : null}</div>
+    >{store.recoveryNotice
+        ? <span key={`recovery:${projection.lastEventSequence}`}>{store.recoveryNotice}</span>
+        : liveAnnouncement?.sessionId === selectedSessionId
+          ? <span key={liveAnnouncement.notificationId}>{liveAnnouncement.text}</span>
+          : null}</div>
     <TextOpenWorldGameShell
       sessionKey={sessionKey}
       preferenceProductionKey={productionKey}
@@ -768,7 +724,7 @@ export default function TextOpenWorldVNextPlayer() {
         map: <TextOpenWorldMapPanel
           projection={projection}
           runtimeEventSequence={store.runtimeState.lastSequence}
-          busy={store.busy}
+          busy={interactionLocked}
           sessionKey={sessionKey}
           focusedLocationKey={questMapFocus?.sessionKey === sessionKey ? questMapFocus.locationKey : null}
           focusedLocationRequestId={questMapFocus?.sessionKey === sessionKey ? questMapFocus.requestId : null}
@@ -809,13 +765,19 @@ export default function TextOpenWorldVNextPlayer() {
         <span data-testid="text-open-world-runtime-package-hash">
           <strong>运行包</strong>{runtimeSourceEvidence}
         </span>
-        <span><strong>保存状态</strong>{store.busy ? '正在结算' : publicError ? '需要处理' : '事件已落盘'}</span>
+        <span><strong>保存状态</strong>{store.busy ? '正在结算' : issue ? '需要处理' : '事件已落盘'}</span>
       </>}
       navigationSupplement={trackedQuestContent}
       overlay={confirmationOverlay}
       onDismissOverlay={dismissConfirmation}
-      error={publicError}
+      issue={issue}
+      onRecover={() => void (store.recovery
+        ? store.recover()
+        : store.select(store.selectedSessionId))}
       busy={store.busy}
+      viewStates={{
+        quests: hasVisibleQuest ? 'ready' : 'empty',
+      }}
       onExit={() => void store.select(null)}
     />
   </div>

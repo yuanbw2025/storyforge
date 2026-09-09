@@ -5,7 +5,11 @@ import {
   executeTextOpenWorldSystemCombatTransitionV1,
 } from '../../src/lib/open-world/action-executor'
 import { ensureTextOpenWorldCombatRetryCheckpointV1 } from '../../src/lib/open-world/checkpoints'
-import { readProductRuntimeState } from '../../src/lib/product/runtime-core'
+import { commitTextOpenWorldCommandV1 } from '../../src/lib/open-world/commands'
+import {
+  hashProductRuntimeStateV1,
+  readProductRuntimeState,
+} from '../../src/lib/product/runtime-core'
 import { EMPTY_PRODUCT_RUNTIME_STATE, type TextOpenWorldRuntimePackageV1 } from '../../src/lib/types'
 import { useTextOpenWorldPlayerStore } from '../../src/stores/text-open-world-player'
 import { createGovernedTextOpenWorldSessionFixtureV1 } from '../helpers/text-open-world-product-session'
@@ -25,10 +29,17 @@ function resetStore() {
     selectedSessionSource: null,
     events: [],
     checkpoints: [],
+    saveProjection: { groups: [], totalBranches: 0, totalCheckpoints: 0 },
+    versionCompatibility: null,
     runtimeState: structuredClone(EMPTY_PRODUCT_RUNTIME_STATE),
     selectedManifest: null,
     lastFeedback: null,
     generatedCandidate: null,
+    presentationBusy: false,
+    presentationIssue: null,
+    issue: null,
+    recovery: null,
+    recoveryNotice: '',
     loading: false,
     busy: false,
     error: '',
@@ -276,4 +287,100 @@ describe('Text Open World G4 · 玩家Store异步操作作用域', () => {
       delayed.restore()
     }
   }, 15_000)
+
+  it('Legacy 同一次重复行动共用一个稳定命令，并独立撤销可选 AI 忙碌态', async () => {
+    const created = await createGovernedTextOpenWorldSessionFixtureV1({
+      name: `Legacy 重复行动-${crypto.randomUUID()}`,
+      textOpenWorldVNext: createTextOpenWorldVNextFixture(),
+      runtimeShape: 'hybrid',
+      title: 'Legacy 重复行动',
+      seed: 'legacy-command-deduplication',
+    })
+    await useTextOpenWorldPlayerStore.getState().load(created.scope, null, created.session.id)
+    useTextOpenWorldPlayerStore.setState({
+      presentationBusy: true,
+      presentationIssue: {
+        state: 'degraded',
+        code: 'TOW-PLAYER-OPTIONAL-AI',
+        title: '测试中的可选 AI',
+        message: '可继续游玩。',
+        guidance: '无需处理。',
+        retryAllowed: false,
+        gameplayAvailability: 'enabled',
+        recoveryActions: ['dismiss'],
+      },
+    })
+
+    const first = useTextOpenWorldPlayerStore.getState().command({ kind: 'tick' })
+    const duplicate = useTextOpenWorldPlayerStore.getState().command({ kind: 'tick' })
+    expect(duplicate).toBe(first)
+    expect(useTextOpenWorldPlayerStore.getState()).toMatchObject({
+      presentationBusy: false,
+      presentationIssue: null,
+    })
+
+    await Promise.all([first, duplicate])
+    const commandEvents = (await db.productRuntimeEvents
+      .where('sessionId').equals(created.session.id!).toArray())
+      .filter(event => event.commandId?.startsWith('text-open-world:legacy:'))
+    expect(commandEvents).toHaveLength(1)
+    expect(new Set(commandEvents.map(event => event.commandId)).size).toBe(1)
+    expect(useTextOpenWorldPlayerStore.getState().runtimeState.openWorld?.tick).toBe(1)
+    expect(useTextOpenWorldPlayerStore.getState()).toMatchObject({ busy: false, issue: null })
+  }, 15_000)
+
+  it('未知结果恢复只续结事件日志中已有的同一命令，不创建第二次玩家请求', async () => {
+    const created = await fixture('未知结果恢复')
+    await useTextOpenWorldPlayerStore.getState().load(created.scope, null, created.session.id)
+    const commandId = 'command.player-store.resume-existing'
+    const before = await readProductRuntimeState(created.session.id!)
+    await commitTextOpenWorldCommandV1({
+      schema: 'storyforge.text-open-world.command',
+      version: 1,
+      commandId,
+      sessionId: created.session.id!,
+      actorKey: 'player',
+      actionKey: 'action.talk-caretaker',
+      payload: { targetKey: 'actor.caretaker' },
+      baseSequence: before.lastSequence,
+      baseStateHash: await hashProductRuntimeStateV1(before),
+      source: 'system-action',
+      requestedAt: 1,
+    })
+    useTextOpenWorldPlayerStore.setState({
+      error: '[text-open-world] 请求结果未知；原命令已记录。',
+      issue: {
+        state: 'recoverable-error',
+        code: 'TOW-PLAYER-UNKNOWN-RESULT',
+        title: '需要核对上一次操作',
+        message: '上一次请求的最终结果尚未确认。',
+        guidance: '核对同一命令。',
+        retryAllowed: true,
+        gameplayAvailability: 'read-only',
+        recoveryActions: ['resume-settlement', 'return-library'],
+      },
+      recovery: { kind: 'resume-settlement', sessionId: created.session.id!, commandId },
+    })
+
+    await useTextOpenWorldPlayerStore.getState().recover()
+
+    const events = await db.productRuntimeEvents
+      .where('sessionId').equals(created.session.id!).sortBy('sequence')
+    expect(events.filter(event => (
+      event.type === 'text-open-world.command.committed' && event.commandId === commandId
+    ))).toHaveLength(1)
+    expect(events.filter(event => (
+      event.type === 'text-open-world.effects.applied'
+      && JSON.parse(event.payloadJson).commandId === commandId
+    ))).toHaveLength(1)
+    expect(useTextOpenWorldPlayerStore.getState()).toMatchObject({
+      busy: false,
+      error: '',
+      issue: null,
+      recovery: null,
+      lastFeedback: { commandId, phase: 'terminal' },
+    })
+    expect(useTextOpenWorldPlayerStore.getState().recoveryNotice)
+      .toContain('没有创建新的命令或重复写入')
+  }, 20_000)
 })

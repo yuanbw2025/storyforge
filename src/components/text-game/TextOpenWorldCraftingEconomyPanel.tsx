@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type MouseEvent } from 'react'
+import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react'
 import {
   CheckCircle2,
   Coins,
@@ -18,10 +18,25 @@ import type {
   TextOpenWorldPlayerCraftingEconomyReceiptV1,
   TextOpenWorldPlayerTradeEquipmentComparisonV1,
 } from '../../lib/open-world/player-crafting-economy'
+import { classifyTextOpenWorldPlayerIssueV1 } from '../../lib/open-world/player-resilience'
 
 type PrimaryView = 'crafting' | 'shop'
 type TradeView = 'buy' | 'sell'
 type CraftingFilter = 'all' | 'available' | 'materials-insufficient'
+
+function nextHorizontalTab<T extends string>(
+  event: KeyboardEvent<HTMLButtonElement>,
+  order: readonly T[],
+  current: T,
+): T | null {
+  const currentIndex = order.indexOf(current)
+  if (currentIndex < 0) return null
+  if (event.key === 'Home') return order[0] ?? null
+  if (event.key === 'End') return order[order.length - 1] ?? null
+  if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return null
+  const direction = event.key === 'ArrowRight' ? 1 : -1
+  return order[(currentIndex + direction + order.length) % order.length] ?? null
+}
 
 type ExecuteResult =
   | TextOpenWorldPlayerCraftingEconomyReceiptV1
@@ -80,12 +95,13 @@ function requestsEqual(
 }
 
 function publicError(error: unknown): string {
-  if (error instanceof Error && error.message.trim()) {
-    const message = error.message.trim()
-    const exposesOpaqueIdentity = /\b(?:action|condition|effect|item|recipe|vendor|claim|instance|session)\.[\w.-]+\b/i.test(message)
-      || /\b[a-f\d]{32,}\b/i.test(message)
-    if (!exposesOpaqueIdentity) return message
-  }
+  const issue = classifyTextOpenWorldPlayerIssueV1({
+    error,
+    surface: 'runtime-operation',
+  })
+  if (issue?.code === 'TOW-PLAYER-STALE') return '交易状态已变化，请重新确认。'
+  if (issue?.code === 'TOW-PLAYER-UNKNOWN-RESULT') return '上一项交易结果尚未确认，请先核对当前存档。'
+  if (issue?.state === 'blocking-error') return issue.message
   return '请求未能完成，请确认当前状态后重试。'
 }
 
@@ -182,10 +198,12 @@ function ConfirmationDialog(props: {
   onConfirm(): void
 }) {
   const dialogRef = useRef<HTMLElement>(null)
-  const confirmRef = useRef<HTMLButtonElement>(null)
+  const cancelRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
-    confirmRef.current?.focus()
+    // A confirmation should never place keyboard focus on the irreversible
+    // action by default. The safe exit is the initial focus target.
+    cancelRef.current?.focus()
   }, [])
 
   return <section
@@ -244,13 +262,13 @@ function ConfirmationDialog(props: {
       </p>
       <div className="mt-4 flex flex-wrap justify-end gap-2">
         <button
+          ref={cancelRef}
           type="button"
           disabled={props.busy}
           onClick={props.onCancel}
           className="min-h-10 rounded border border-border px-4 py-2 text-xs text-text-muted disabled:opacity-45"
         >取消</button>
         <button
-          ref={confirmRef}
           type="button"
           disabled={props.busy}
           onClick={props.onConfirm}
@@ -533,8 +551,23 @@ export default function TextOpenWorldCraftingEconomyPanel(
           role="tab"
           data-testid="text-open-world-crafting-tab"
           aria-selected={primaryView === 'crafting'}
+          tabIndex={primaryView === 'crafting' ? 0 : -1}
           aria-controls="text-open-world-crafting-view"
           onClick={() => { setPrimaryView('crafting'); setQuantity(1); setOutcome(null) }}
+          onKeyDown={event => {
+            const next = nextHorizontalTab(event, ['crafting', 'shop'] as const, primaryView)
+            if (!next) return
+            event.preventDefault()
+            if (next === 'crafting') {
+              setPrimaryView('crafting')
+              setQuantity(1)
+              setOutcome(null)
+            } else {
+              setPrimaryView('shop')
+              resetChoice()
+            }
+            queueMicrotask(() => document.getElementById(`text-open-world-${next}-tab-control`)?.focus())
+          }}
           className={primaryView === 'crafting'
             ? 'min-h-10 rounded bg-accent px-4 py-2 text-xs text-white'
             : 'min-h-10 rounded border border-border px-4 py-2 text-xs text-text-muted'}
@@ -545,8 +578,23 @@ export default function TextOpenWorldCraftingEconomyPanel(
           role="tab"
           data-testid="text-open-world-shop-tab"
           aria-selected={primaryView === 'shop'}
+          tabIndex={primaryView === 'shop' ? 0 : -1}
           aria-controls="text-open-world-shop-view"
           onClick={() => { setPrimaryView('shop'); resetChoice() }}
+          onKeyDown={event => {
+            const next = nextHorizontalTab(event, ['crafting', 'shop'] as const, primaryView)
+            if (!next) return
+            event.preventDefault()
+            if (next === 'crafting') {
+              setPrimaryView('crafting')
+              setQuantity(1)
+              setOutcome(null)
+            } else {
+              setPrimaryView('shop')
+              resetChoice()
+            }
+            queueMicrotask(() => document.getElementById(`text-open-world-${next}-tab-control`)?.focus())
+          }}
           className={primaryView === 'shop'
             ? 'min-h-10 rounded bg-accent px-4 py-2 text-xs text-white'
             : 'min-h-10 rounded border border-border px-4 py-2 text-xs text-text-muted'}
@@ -773,7 +821,16 @@ export default function TextOpenWorldCraftingEconomyPanel(
                 aria-controls="text-open-world-trade-view"
                 data-testid={`text-open-world-${kind}-tab`}
                 aria-selected={tradeView === kind}
+                tabIndex={tradeView === kind ? 0 : -1}
                 onClick={() => { setTradeView(kind); resetChoice() }}
+                onKeyDown={event => {
+                  const next = nextHorizontalTab(event, ['buy', 'sell'] as const, tradeView)
+                  if (!next) return
+                  event.preventDefault()
+                  setTradeView(next)
+                  resetChoice()
+                  queueMicrotask(() => document.getElementById(`text-open-world-${next}-tab-control`)?.focus())
+                }}
                 className={tradeView === kind ? 'min-h-10 flex-1 rounded bg-accent px-3 py-2 text-xs text-white' : 'min-h-10 flex-1 rounded border border-border px-3 py-2 text-xs text-text-muted'}
               >{kind === 'buy' ? '买入' : '卖出'}</button>)}
             </div>

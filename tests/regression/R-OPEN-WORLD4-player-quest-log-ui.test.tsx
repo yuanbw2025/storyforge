@@ -314,7 +314,7 @@ describe('Text Open World G4-05 · 完整玩家任务日志 UI', () => {
       await new Promise(resolve => setTimeout(resolve, 0))
     })
     await click(buttonByText(host.querySelector('[data-testid="text-open-world-navigation-rail"]')!, '任务'))
-    await click(host.querySelector(`[role="listitem"][data-quest-instance="${random.instanceKey}"]`) as HTMLButtonElement)
+    await click(host.querySelector(`[role="listitem"][data-quest-instance="${random.instanceKey}"] button`) as HTMLButtonElement)
     const locate = host.querySelector('button[aria-label="在地图定位断脊渠口"]') as HTMLButtonElement
     await click(locate)
     await act(async () => { await new Promise(resolve => setTimeout(resolve, 20)) })

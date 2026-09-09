@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  AlertTriangle,
   ArrowLeft,
   CalendarDays,
   ChevronRight,
@@ -12,10 +11,10 @@ import {
   PackageCheck,
   Play,
   Plus,
-  RefreshCw,
   Save,
   Trash2,
 } from 'lucide-react'
+import { classifyTextOpenWorldPlayerIssueV1 } from '../../lib/open-world/player-resilience'
 import {
   currentTextOpenWorldReleasesV1,
   summarizeTextOpenWorldReleaseV1,
@@ -24,6 +23,7 @@ import {
 import type { WorkspaceScope } from '../../lib/types'
 import { useTextOpenWorldPlayerStore } from '../../stores/text-open-world-player'
 import { useDialog } from '../shared/Dialog'
+import TextOpenWorldPlayerStateNotice from './TextOpenWorldPlayerStateNotice'
 import './player-roadshow.css'
 
 function dateLabel(timestamp: number): string {
@@ -51,6 +51,9 @@ export default function TextOpenWorldLauncher(props: {
   const store = useTextOpenWorldPlayerStore()
   const dialog = useDialog()
   const [catalogReleaseId, setCatalogReleaseId] = useState<number | null>(null)
+  const detailBackRef = useRef<HTMLButtonElement>(null)
+  const catalogRef = useRef<HTMLElement>(null)
+  const catalogReturnIdRef = useRef<number | null>(null)
   const formalSessions = useMemo(() => store.sessions.filter(session => (
     session.productReleaseId != null && session.productBuildId == null
   )), [store.sessions])
@@ -74,12 +77,37 @@ export default function TextOpenWorldLauncher(props: {
     : []
   const selectedReleaseSessions = selectedRelease?.release.id == null
     ? [] : formalSessions.filter(session => session.productReleaseId === selectedRelease.release.id)
+  const libraryIssue = useMemo(() => store.issue ?? classifyTextOpenWorldPlayerIssueV1({
+    error: store.error,
+    surface: 'library-load',
+  }), [store.error, store.issue])
+  const selectedReleaseIssue = useMemo(() => classifyTextOpenWorldPlayerIssueV1({
+    error: selectedRelease?.error ?? '',
+    surface: 'runtime-load',
+  }), [selectedRelease?.error])
 
   useEffect(() => {
     if (catalogReleaseId != null && !store.releases.some(item => item.release.id === catalogReleaseId)) {
       setCatalogReleaseId(null)
     }
   }, [store.releases, catalogReleaseId])
+
+  useEffect(() => {
+    if (selectedRelease) queueMicrotask(() => detailBackRef.current?.focus())
+  }, [selectedRelease])
+
+  const openRelease = (releaseId: number | null) => {
+    if (releaseId == null) return
+    catalogReturnIdRef.current = releaseId
+    setCatalogReleaseId(releaseId)
+  }
+  const closeRelease = () => {
+    const releaseId = catalogReturnIdRef.current
+    setCatalogReleaseId(null)
+    queueMicrotask(() => catalogRef.current
+      ?.querySelector<HTMLButtonElement>(`[data-release-id="${releaseId ?? ''}"]`)
+      ?.focus())
+  }
 
   const run = async (operation: () => Promise<unknown>) => {
     try { await operation() } catch { /* Store exposes a recoverable error. */ }
@@ -95,7 +123,11 @@ export default function TextOpenWorldLauncher(props: {
     if (confirmed) await store.remove(sessionId)
   }
 
-  return <div className="avg-title-screen open-world-launcher" data-testid="text-open-world-player">
+  return <div
+    className="avg-title-screen open-world-launcher"
+    data-testid="text-open-world-player"
+    aria-busy={store.loading || undefined}
+  >
     <div className="avg-title-atmosphere open-world-launcher-atmosphere" aria-hidden="true" />
     <main className="avg-title-content open-world-launcher-content">
       <span className="avg-title-kicker"><Globe2 />STORYFORGE · TEXT OPEN WORLD</span>
@@ -104,20 +136,19 @@ export default function TextOpenWorldLauncher(props: {
         ? '确认主角、世界规模与冻结版本，再开始一条新的冒险时间线。'
         : '从正式发布开始开放世界旅程；新游戏和每一个旧存档都精确绑定自己的不可变版本。'}</p>
 
-      {store.error && <div role="alert" className="avg-alert open-world-launcher-alert">
-        <AlertTriangle />
-        <span>{store.error}</span>
-        <button type="button" disabled={store.loading || store.busy} onClick={() => void run(() => store.load(
-          props.scope, props.worldGroupId,
-        ))}><RefreshCw />重新加载</button>
-      </div>}
+      {libraryIssue && <TextOpenWorldPlayerStateNotice
+        issue={libraryIssue}
+        compact
+        primaryLabel="重新加载游戏库"
+        onPrimary={() => void run(() => store.load(props.scope, props.worldGroupId))}
+      />}
 
       {store.loading && store.releases.length === 0 && store.sessions.length === 0
         ? <div className="avg-title-empty" data-testid="text-open-world-library-loading">
           <Loader2 className="animate-spin" /><span>正在核验游戏发布与存档…</span>
         </div>
         : selectedRelease ? <section className="textgame-title-page open-world-title-page" aria-label="文字开放世界游戏详情">
-          <button type="button" className="textgame-catalog-back" onClick={() => setCatalogReleaseId(null)}>
+          <button ref={detailBackRef} type="button" className="textgame-catalog-back" onClick={closeRelease}>
             <ArrowLeft />返回全部游戏
           </button>
           <div className="textgame-title-art open-world-title-art" aria-hidden="true">
@@ -155,8 +186,15 @@ export default function TextOpenWorldLauncher(props: {
                 onClick={() => setCatalogReleaseId(item.release.id ?? null)}
               >v{item.release.version}{item.error ? ' · 损坏' : ''}</button>)}</div>
             </div>}
-            {selectedRelease.error
-              ? <small className="open-world-release-error">{selectedRelease.error}</small>
+            {selectedReleaseIssue
+              ? <TextOpenWorldPlayerStateNotice
+                issue={selectedReleaseIssue}
+                compact
+                primaryLabel="重新核对版本"
+                onPrimary={() => void run(() => store.load(props.scope, props.worldGroupId))}
+                secondaryLabel="返回全部游戏"
+                onSecondary={closeRelease}
+              />
               : <div className="textgame-title-actions">
                 <button type="button" className="textgame-start" disabled={!selectedRelease.manifest || store.loading || store.busy}
                   onClick={() => void run(() => store.start(selectedRelease.release.id!))}>
@@ -170,18 +208,19 @@ export default function TextOpenWorldLauncher(props: {
           </div>
         </section> : <>
           <div className="textgame-catalog-heading"><span>当前可玩版本</span><small>{catalog.filter(item => item.manifest).length} 部作品</small></div>
-          <section className="textgame-catalog-list" aria-label="文字开放世界游戏列表">
+          <section ref={catalogRef} className="textgame-catalog-list" aria-label="文字开放世界游戏列表">
             {catalog.map(item => {
               const summary = item.release.id == null ? null : summaries.get(item.release.id) ?? null
               return <article key={item.release.id ?? item.release.contentHash}>
                 <button type="button" aria-label={`查看游戏：${summary?.title ?? item.release.label}`}
+                  data-release-id={item.release.id ?? undefined}
                   disabled={store.loading || store.busy}
-                  onClick={() => setCatalogReleaseId(item.release.id ?? null)}>
+                  onClick={() => openRelease(item.release.id ?? null)}>
                   <span className="textgame-catalog-icon open-world-catalog-icon"><Globe2 /></span>
                   <span className="textgame-catalog-copy">
                     <small>Release v{item.release.version} · {summary?.shapeLabel ?? '完整性校验失败'}</small>
                     <strong>{summary?.title ?? item.release.label}</strong>
-                    <p>{summary?.description ?? item.error}</p>
+                    <p>{summary?.description ?? '这个版本未通过完整性核对，暂时不能开始新旅程。'}</p>
                     {summary && <i>{summary.regionCount} 地区 · {summary.locationCount} 地点 · {summary.questCount} 任务 · 主角 {summary.protagonistName}</i>}
                   </span>
                   <span className="textgame-catalog-open">查看详情<ChevronRight /></span>

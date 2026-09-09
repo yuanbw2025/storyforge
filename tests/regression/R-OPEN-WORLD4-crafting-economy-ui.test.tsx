@@ -228,9 +228,35 @@ function buttonContaining(scope: ParentNode, text: string): HTMLButtonElement {
   return button
 }
 
+function buttonByText(scope: ParentNode, text: string): HTMLButtonElement {
+  const button = Array.from(scope.querySelectorAll('button'))
+    .find(candidate => candidate.textContent?.trim() === text)
+  if (!(button instanceof HTMLButtonElement)) throw new Error(`找不到按钮：${text}`)
+  return button
+}
+
 function setNumber(input: HTMLInputElement, value: number) {
   Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, String(value))
   input.dispatchEvent(new Event('input', { bubbles: true }))
+}
+
+async function keyDown(target: EventTarget, key: string): Promise<KeyboardEvent> {
+  const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true })
+  await act(async () => {
+    target.dispatchEvent(event)
+    await Promise.resolve()
+  })
+  return event
+}
+
+function expectRovingTabs(
+  tabs: readonly HTMLButtonElement[],
+  selected: HTMLButtonElement,
+): void {
+  expect(tabs.filter(tab => tab.tabIndex === 0)).toEqual([selected])
+  expect(tabs.filter(tab => tab.getAttribute('aria-selected') === 'true')).toEqual([selected])
+  expect(tabs.filter(tab => tab.tabIndex === -1)).toHaveLength(tabs.length - 1)
+  expect(document.activeElement).toBe(selected)
 }
 
 describe('Text Open World G4-10 · 制作、商店和交易 UI', () => {
@@ -246,6 +272,45 @@ describe('Text Open World G4-10 · 制作、商店和交易 UI', () => {
   afterEach(async () => {
     await act(async () => root.unmount())
     host.remove()
+  })
+
+  it('两组水平页签支持方向键、Home 与 End，并始终只保留一个顺序焦点', async () => {
+    await act(async () => {
+      root.render(createElement(TextOpenWorldCraftingEconomyPanel, {
+        sessionKey: 'keyboard-tabs', projection: projection(), busy: false, onExecute: vi.fn(),
+      }))
+    })
+
+    const crafting = host.querySelector<HTMLButtonElement>('[data-testid="text-open-world-crafting-tab"]')!
+    const shop = host.querySelector<HTMLButtonElement>('[data-testid="text-open-world-shop-tab"]')!
+    const primaryTabs = [crafting, shop]
+    crafting.focus()
+    expectRovingTabs(primaryTabs, crafting)
+
+    expect((await keyDown(crafting, 'ArrowLeft')).defaultPrevented).toBe(true)
+    expectRovingTabs(primaryTabs, shop)
+    expect((await keyDown(shop, 'Home')).defaultPrevented).toBe(true)
+    expectRovingTabs(primaryTabs, crafting)
+    expect((await keyDown(crafting, 'End')).defaultPrevented).toBe(true)
+    expectRovingTabs(primaryTabs, shop)
+    expect((await keyDown(shop, 'ArrowRight')).defaultPrevented).toBe(true)
+    expectRovingTabs(primaryTabs, crafting)
+
+    await keyDown(crafting, 'End')
+    const buy = host.querySelector<HTMLButtonElement>('[data-testid="text-open-world-buy-tab"]')!
+    const sell = host.querySelector<HTMLButtonElement>('[data-testid="text-open-world-sell-tab"]')!
+    const tradeTabs = [buy, sell]
+    buy.focus()
+    expectRovingTabs(tradeTabs, buy)
+
+    expect((await keyDown(buy, 'ArrowLeft')).defaultPrevented).toBe(true)
+    expectRovingTabs(tradeTabs, sell)
+    expect((await keyDown(sell, 'Home')).defaultPrevented).toBe(true)
+    expectRovingTabs(tradeTabs, buy)
+    expect((await keyDown(buy, 'End')).defaultPrevented).toBe(true)
+    expectRovingTabs(tradeTabs, sell)
+    expect((await keyDown(sell, 'ArrowRight')).defaultPrevented).toBe(true)
+    expectRovingTabs(tradeTabs, buy)
   })
 
   it('展示公开配方、材料库存、产物与锁定占位，并在本地摘要二次确认后提交精确请求', async () => {
@@ -308,11 +373,16 @@ describe('Text Open World G4-10 · 制作、商店和交易 UI', () => {
     expect(background.hasAttribute('inert')).toBe(true)
     expect(background.getAttribute('aria-hidden')).toBe('true')
     expect(dialog.closest('[inert]')).toBeNull()
-    expect(document.activeElement).toBe(host.querySelector('[data-testid="text-open-world-crafting-economy-confirm-submit"]'))
+    const closeDialog = dialog.querySelector<HTMLButtonElement>('[aria-label="取消并关闭确认"]')!
+    const cancelDialog = buttonByText(dialog, '取消')
+    const confirmDialog = host.querySelector<HTMLButtonElement>('[data-testid="text-open-world-crafting-economy-confirm-submit"]')!
+    expect(document.activeElement).toBe(cancelDialog)
+    confirmDialog.focus()
     await act(async () => dialog.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true })))
-    expect(document.activeElement).toBe(dialog.querySelector('[aria-label="取消并关闭确认"]'))
+    expect(document.activeElement).toBe(closeDialog)
+    closeDialog.focus()
     await act(async () => dialog.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true })))
-    expect(document.activeElement).toBe(host.querySelector('[data-testid="text-open-world-crafting-economy-confirm-submit"]'))
+    expect(document.activeElement).toBe(confirmDialog)
 
     await act(async () => dialog.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })))
     await act(async () => Promise.resolve())

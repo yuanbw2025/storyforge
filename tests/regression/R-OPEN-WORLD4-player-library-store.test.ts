@@ -22,10 +22,17 @@ function resetStore() {
     selectedSessionSource: null,
     events: [],
     checkpoints: [],
+    saveProjection: { groups: [], totalBranches: 0, totalCheckpoints: 0 },
+    versionCompatibility: null,
     runtimeState: structuredClone(EMPTY_PRODUCT_RUNTIME_STATE),
     selectedManifest: null,
     lastFeedback: null,
     generatedCandidate: null,
+    presentationBusy: false,
+    presentationIssue: null,
+    issue: null,
+    recovery: null,
+    recoveryNotice: '',
     loading: false,
     busy: false,
     error: '',
@@ -92,6 +99,81 @@ describe('Text Open World G4 · 玩家库与显式Session加载', () => {
     expect(useTextOpenWorldPlayerStore.getState().runtimeState)
       .toEqual(EMPTY_PRODUCT_RUNTIME_STATE)
   })
+
+  it('同一正式版本的新旅程重复点击只创建并选择一个Session', async () => {
+    const created = await fixture()
+    await useTextOpenWorldPlayerStore.getState().load(created.scope, null)
+
+    const first = useTextOpenWorldPlayerStore.getState().start(created.release.id!, '唯一新旅程')
+    const duplicate = useTextOpenWorldPlayerStore.getState().start(created.release.id!, '唯一新旅程')
+    expect(duplicate).toBe(first)
+
+    const [firstSessionId, duplicateSessionId] = await Promise.all([first, duplicate])
+    expect(duplicateSessionId).toBe(firstSessionId)
+    const matching = (await db.productRuntimeSessions.toArray()).filter(session => (
+      session.projectId === created.scope.projectId
+      && session.worldId === created.scope.worldId
+      && session.workId === created.scope.workId
+      && session.title === '唯一新旅程'
+    ))
+    expect(matching).toHaveLength(1)
+    expect(useTextOpenWorldPlayerStore.getState()).toMatchObject({
+      selectedSessionId: firstSessionId,
+      selectedSession: { id: firstSessionId },
+      busy: false,
+      issue: null,
+    })
+  })
+
+  it('旧scope的新旅程延迟完成后保留其Session，但不覆盖较新的游戏库', async () => {
+    const stale = await fixture()
+    const current = await fixture()
+    await useTextOpenWorldPlayerStore.getState().load(stale.scope, null)
+    let releaseStart!: () => void
+    let startEntered!: () => void
+    const gate = new Promise<void>(resolve => { releaseStart = resolve })
+    const started = new Promise<void>(resolve => { startEntered = resolve })
+    const originalGet = db.productReleases.get.bind(db.productReleases)
+    let shouldDelay = true
+    const spy = vi.spyOn(db.productReleases, 'get').mockImplementation(async key => {
+      const result = originalGet(key)
+      if (shouldDelay && key === stale.release.id) {
+        shouldDelay = false
+        startEntered()
+        await gate
+      }
+      return result
+    })
+
+    try {
+      const staleStart = useTextOpenWorldPlayerStore.getState()
+        .start(stale.release.id!, '旧scope新旅程')
+      await started
+      await useTextOpenWorldPlayerStore.getState().load(current.scope, null)
+      releaseStart()
+      const staleSessionId = await staleStart
+
+      await expect(db.productRuntimeSessions.get(staleSessionId)).resolves.toMatchObject({
+        projectId: stale.scope.projectId,
+        worldId: stale.scope.worldId,
+        workId: stale.scope.workId,
+        title: '旧scope新旅程',
+      })
+      expect(useTextOpenWorldPlayerStore.getState()).toMatchObject({
+        scope: current.scope,
+        selectedSessionId: null,
+        selectedSession: null,
+        busy: false,
+        error: '',
+        issue: null,
+      })
+      expect(useTextOpenWorldPlayerStore.getState().releases.map(item => item.release.id))
+        .toEqual([current.release.id])
+    } finally {
+      releaseStart()
+      spy.mockRestore()
+    }
+  }, 15_000)
 
   it('显式initialSessionId一次装载Build Preview，统一Session集合仍保留两种来源', async () => {
     const created = await fixture()

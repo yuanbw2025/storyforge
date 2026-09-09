@@ -17,11 +17,17 @@ import {
   PanelRightOpen,
   ScrollText,
   UserRound,
+  WifiOff,
   X,
   type LucideIcon,
 } from 'lucide-react'
 import { createTextOpenWorldPlayerPreferencesStoreV1 } from '../../lib/open-world/player-preferences'
+import {
+  classifyTextOpenWorldPlayerIssueV1,
+  type TextOpenWorldPlayerIssueV1,
+} from '../../lib/open-world/player-resilience'
 import type { TextOpenWorldTutorialFeatureV1 } from '../../lib/open-world/player-tutorials'
+import TextOpenWorldPlayerStateNotice from './TextOpenWorldPlayerStateNotice'
 import TextOpenWorldTutorialCoach, {
   type TextOpenWorldTutorialCoachProps,
 } from './TextOpenWorldTutorialCoach'
@@ -32,6 +38,7 @@ export const TEXT_OPEN_WORLD_GAME_VIEW_KEYS = ['scene', 'map', 'quests', 'charac
 export type TextOpenWorldGameViewKey = typeof TEXT_OPEN_WORLD_GAME_VIEW_KEYS[number]
 
 export type TextOpenWorldGameViews = Record<TextOpenWorldGameViewKey, ReactNode>
+export type TextOpenWorldGameViewState = 'empty' | 'ready'
 
 export interface TextOpenWorldGameViewRequest {
   /** Bind the request to one runtime session so a stale task link cannot move a new save. */
@@ -63,6 +70,8 @@ export interface TextOpenWorldGameShellProps {
   locationTitle: string
   sourceLabel: string
   views: TextOpenWorldGameViews
+  /** Optional truthful empty/ready projection for automated and assistive diagnostics. */
+  viewStates?: Partial<Record<TextOpenWorldGameViewKey, TextOpenWorldGameViewState>>
   context: ReactNode
   status: ReactNode
   navigationSupplement?: ReactNode
@@ -72,6 +81,8 @@ export interface TextOpenWorldGameShellProps {
   overlay?: ReactNode
   onDismissOverlay?(): void
   error?: string | null
+  issue?: TextOpenWorldPlayerIssueV1 | null
+  onRecover?(): void
   busy?: boolean
   onExit(): void
 }
@@ -177,6 +188,7 @@ function tutorialForActiveView(
 
 function NavigationButtons(props: {
   activeView: TextOpenWorldGameViewKey
+  mainId: string
   onSelect(view: TextOpenWorldGameViewKey): void
 }) {
   return <>{NAVIGATION.map(item => {
@@ -185,8 +197,20 @@ function NavigationButtons(props: {
       key={item.key}
       type="button"
       aria-current={props.activeView === item.key ? 'page' : undefined}
+      aria-controls={props.mainId}
       data-open-world-ui-key={`navigation.${item.key}`}
       onClick={() => props.onSelect(item.key)}
+      onKeyDown={event => {
+        if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return
+        const buttons = Array.from(event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('button') ?? [])
+        const current = buttons.indexOf(event.currentTarget)
+        if (current < 0 || !buttons.length) return
+        event.preventDefault()
+        const next = event.key === 'Home' ? 0
+          : event.key === 'End' ? buttons.length - 1
+            : (current + (event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? -1 : 1) + buttons.length) % buttons.length
+        buttons[next]?.focus()
+      }}
     >
       <Icon aria-hidden="true" />
       <span>{item.label}</span>
@@ -200,6 +224,10 @@ export default function TextOpenWorldGameShell(props: TextOpenWorldGameShellProp
   const [contextDrawerMode, setContextDrawerMode] = useState(() => (
     typeof window !== 'undefined' && window.matchMedia?.('(max-width: 1180px)').matches
   ))
+  const [online, setOnline] = useState(() => (
+    typeof navigator === 'undefined' || navigator.onLine !== false
+  ))
+  const [operationAnnouncement, setOperationAnnouncement] = useState('')
   const mainRef = useRef<HTMLElement>(null)
   const shellRef = useRef<HTMLElement>(null)
   const contextTriggerRef = useRef<HTMLButtonElement>(null)
@@ -209,11 +237,18 @@ export default function TextOpenWorldGameShell(props: TextOpenWorldGameShellProp
   const overlayReturnFocusRef = useRef<HTMLElement | null>(null)
   const restoreContextFocusAfterCloseRef = useRef(false)
   const previousSessionKey = useRef(props.sessionKey)
+  const previousBusy = useRef(Boolean(props.busy))
   const consumedViewRequestRef = useRef<string | null>(null)
   const overlayOpen = props.overlay != null
   const onDismissOverlay = props.onDismissOverlay
   const contextModalOpen = contextOpen && contextDrawerMode && !overlayOpen
   const backgroundInert = overlayOpen || contextModalOpen
+  const mainId = `text-open-world-main-${String(props.sessionKey).replace(/[^A-Za-z0-9_-]/g, '-')}`
+  const issue = useMemo(() => props.issue ?? classifyTextOpenWorldPlayerIssueV1({
+    error: props.error ?? '',
+    surface: 'runtime-operation',
+  }), [props.error, props.issue])
+  const blocked = issue?.state === 'blocking-error'
   const preferencesStore = useMemo(
     () => createTextOpenWorldPlayerPreferencesStoreV1({ productionKey: props.preferenceProductionKey }),
     [props.preferenceProductionKey],
@@ -240,6 +275,10 @@ export default function TextOpenWorldGameShell(props: TextOpenWorldGameShellProp
   }, [])
 
   useEffect(() => {
+    queueMicrotask(() => mainRef.current?.focus())
+  }, [])
+
+  useEffect(() => {
     const media = window.matchMedia('(max-width: 1180px)')
     const sync = () => {
       setContextDrawerMode(media.matches)
@@ -254,6 +293,24 @@ export default function TextOpenWorldGameShell(props: TextOpenWorldGameShellProp
     media.addEventListener('change', sync)
     return () => media.removeEventListener('change', sync)
   }, [])
+
+  useEffect(() => {
+    const sync = () => setOnline(navigator.onLine !== false)
+    window.addEventListener('online', sync)
+    window.addEventListener('offline', sync)
+    sync()
+    return () => {
+      window.removeEventListener('online', sync)
+      window.removeEventListener('offline', sync)
+    }
+  }, [])
+
+  useEffect(() => {
+    const wasBusy = previousBusy.current
+    previousBusy.current = Boolean(props.busy)
+    if (props.busy) setOperationAnnouncement('正在核对并结算游戏操作。')
+    else if (wasBusy) setOperationAnnouncement(issue ? '操作已经停止，请查看恢复提示。' : '操作已经完成，当前状态已保存。')
+  }, [issue, props.busy])
 
   useEffect(() => {
     if (previousSessionKey.current === props.sessionKey) return
@@ -329,6 +386,8 @@ export default function TextOpenWorldGameShell(props: TextOpenWorldGameShellProp
     data-high-contrast={preferences.highContrast || undefined}
     data-reduced-motion={preferences.reducedMotion || undefined}
     data-muted={preferences.muted || undefined}
+    data-connectivity={online ? 'online' : 'offline'}
+    data-player-state={blocked ? 'blocking-error' : issue?.state ?? 'ready'}
     style={{
       '--open-world-reader-font-size': `${preferences.fontSizePx}px`,
       '--open-world-reader-line-height': preferences.lineHeight,
@@ -340,6 +399,18 @@ export default function TextOpenWorldGameShell(props: TextOpenWorldGameShellProp
       event.stopPropagation()
     }}
   >
+    <a
+      href={`#${mainId}`}
+      className="open-world-game-skip-link"
+      onClick={() => queueMicrotask(() => mainRef.current?.focus())}
+    >跳到游戏主要内容</a>
+    <div
+      className="open-world-game-live-announcement"
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+      data-testid="text-open-world-operation-announcement"
+    >{operationAnnouncement}</div>
     <header
       className="open-world-game-header"
       data-testid="text-open-world-header"
@@ -391,13 +462,14 @@ export default function TextOpenWorldGameShell(props: TextOpenWorldGameShellProp
         aria-hidden={backgroundInert || undefined}
       >
         <nav aria-label="开放世界主导航">
-          <NavigationButtons activeView={activeView} onSelect={selectView} />
+          <NavigationButtons activeView={activeView} mainId={mainId} onSelect={selectView} />
         </nav>
         {props.navigationSupplement && <div className="open-world-game-navigation-supplement">{props.navigationSupplement}</div>}
       </aside>
 
       <main
         ref={mainRef}
+        id={mainId}
         className="open-world-game-main-view"
         data-testid="text-open-world-main-view"
         data-open-world-view={activeView}
@@ -405,14 +477,34 @@ export default function TextOpenWorldGameShell(props: TextOpenWorldGameShellProp
         inert={backgroundInert}
         aria-hidden={backgroundInert || undefined}
       >
-        {props.error && <div className="open-world-game-error" role="alert">{props.error}</div>}
+        {!online && <section
+          className="open-world-game-connectivity"
+          role="status"
+          data-testid="text-open-world-offline-status"
+        >
+          <WifiOff aria-hidden="true" />
+          <span><strong>离线确定性模式</strong>核心玩法与本地存档可继续；需要网络或模型的可选表现暂不可用。</span>
+        </section>}
+        {issue && <TextOpenWorldPlayerStateNotice
+          issue={issue}
+          compact
+          primaryLabel={issue.code === 'TOW-PLAYER-UNKNOWN-RESULT' ? '核对并恢复' : '重新核对当前存档'}
+          onPrimary={issue.retryAllowed ? props.onRecover : undefined}
+          secondaryLabel="返回游戏库"
+          onSecondary={blocked ? props.onExit : undefined}
+        />}
         {TEXT_OPEN_WORLD_GAME_VIEW_KEYS.map(view => <section
           key={view}
           className="open-world-game-view"
           data-open-world-view={view}
           data-open-world-ui-key={VIEW_UI_KEYS[view]}
+          data-player-state={blocked
+            ? 'blocking-error'
+            : issue?.state === 'recoverable-error' ? 'recoverable-error'
+              : props.viewStates?.[view] ?? 'ready'}
           aria-label={NAVIGATION.find(item => item.key === view)!.label}
           hidden={activeView !== view}
+          inert={blocked || backgroundInert}
         >
           {props.views[view]}
         </section>)}
@@ -463,7 +555,7 @@ export default function TextOpenWorldGameShell(props: TextOpenWorldGameShellProp
       inert={backgroundInert}
       aria-hidden={backgroundInert || undefined}
     >
-      <NavigationButtons activeView={activeView} onSelect={selectView} />
+      <NavigationButtons activeView={activeView} mainId={mainId} onSelect={selectView} />
     </nav>
 
     {props.overlay && <div

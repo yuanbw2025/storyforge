@@ -98,10 +98,33 @@
 .open-world-save-open p { margin: 0; color: #9cabac; font-size: 9px; }
 .open-world-save-open small { display: inline-flex; align-items: center; gap: 4px; color: #708489; font-size: 8px; }
 
+/* Text open world loading/error boundaries and shared player-facing recovery notices. */
+.open-world-player-boundary { display: grid; min-height: min(720px,100dvh); place-items: center; overflow: auto; }
+.open-world-player-boundary .open-world-launcher-content { display: grid; width: min(760px,calc(100% - 32px)); min-height: min(720px,100dvh); box-sizing: border-box; align-content: center; justify-items: start; padding: clamp(28px,8vh,72px) 0; }
+.open-world-player-boundary .open-world-launcher-content>svg { width: 28px; height: 28px; margin-bottom: 12px; color: #d5b77e; }
+.open-world-player-state-notice { display: grid; width: min(100%,760px); box-sizing: border-box; grid-template-columns: auto minmax(0,1fr); gap: 11px; margin: 0 0 18px; padding: 14px; border: 1px solid rgba(218,156,93,.5); border-radius: 10px; background: rgba(83,54,21,.3); color: #f5e4ca; box-shadow: 0 14px 36px rgba(0,0,0,.2); }
+.open-world-player-state-notice.is-compact { width: 100%; margin-bottom: 12px; padding: 11px 12px; }
+.open-world-player-state-notice[data-player-state="blocking-error"] { border-color: rgba(239,142,128,.62); background: rgba(104,37,32,.38); color: #ffd7d0; }
+.open-world-player-state-notice[data-player-state="degraded"] { border-color: rgba(119,189,161,.55); background: rgba(34,83,66,.34); color: #d7f4e8; }
+.open-world-player-state-notice>svg { width: 20px; height: 20px; margin-top: 1px; }
+.open-world-player-state-notice>div { display: grid; min-width: 0; gap: 5px; }
+.open-world-player-state-notice strong { overflow-wrap: anywhere; font-family: var(--font-serif); font-size: 15px; }
+.open-world-player-state-notice p,.open-world-player-state-notice small { overflow-wrap: anywhere; margin: 0; line-height: 1.6; }
+.open-world-player-state-notice p { color: inherit; font-size: 11px; }
+.open-world-player-state-notice small { color: #b8c4c1; font-size: 9px; }
+.open-world-player-state-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 3px; }
+.open-world-player-state-actions button { display: inline-flex; min-height: 44px; align-items: center; justify-content: center; gap: 6px; padding: 0 13px; border: 1px solid currentColor; border-radius: 7px; background: rgba(255,255,255,.06); color: inherit; cursor: pointer; }
+.open-world-player-state-actions button:focus-visible { outline: 2px solid #ffdf6b; outline-offset: 2px; }
+
 /* Text open world runtime shell: responsive navigation and projection-owned status slots. */
 .open-world-game-shell { --open-world-reader-font-size: 18px; --open-world-reader-line-height: 1.9; position: relative; display: grid; width: 100%; height: min(860px,calc(100dvh - 32px)); min-height: 700px; max-height: 900px; grid-template-rows: auto minmax(0,1fr) auto auto; overflow: hidden; background: radial-gradient(circle at 72% -8%,rgba(83,132,112,.14),transparent 32%),#091218; color: #e7ecea; font-family: var(--font-sans); }
 .open-world-game-shell svg { width: 16px; height: 16px; }
 .open-world-game-shell .open-world-player-map-svg { display: block; width: 100%; height: auto; min-height: 256px; }
+.open-world-game-skip-link { position: absolute; z-index: 90; top: 8px; left: 8px; max-width: calc(100% - 16px); transform: translateY(calc(-100% - 16px)); padding: 10px 14px; border: 2px solid #ffdf6b; border-radius: 7px; outline: 0; background: #000; color: #fff; font-size: 12px; font-weight: 700; text-decoration: none; }
+.open-world-game-skip-link:focus-visible { transform: translateY(0); outline: 3px solid #fff; outline-offset: 2px; }
+.open-world-player-map-svg [data-map-location]:focus-visible { outline: none; }
+.open-world-player-map-focus-ring { opacity: 0; fill: none; stroke: #ffdf6b; stroke-width: 7; vector-effect: non-scaling-stroke; pointer-events: none; }
+.open-world-player-map-svg [data-map-location]:focus-visible .open-world-player-map-focus-ring { opacity: 1; }
 .open-world-game-shell button { font: inherit; }
 .open-world-game-shell button:focus-visible,.open-world-game-main-view:focus-visible { outline: 2px solid #d2aa6c; outline-offset: -2px; }
 .open-world-game-header { position: relative; z-index: 20; display: grid; min-height: 66px; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 13px; padding: 8px 14px; border-bottom: 1px solid rgba(255,255,255,.1); background: rgba(7,15,20,.94); box-shadow: 0 10px 28px rgba(0,0,0,.22); backdrop-filter: blur(14px); }
@@ -164,6 +187,10 @@
 .open-world-game-notifications li>span { color: #b9945d; font-family: var(--font-mono); font-size: 7px; letter-spacing: .06em; }
 .open-world-game-notifications li>strong { font-size: 11px; }
 .open-world-game-live-announcement { position: absolute; width: 1px; height: 1px; overflow: hidden; margin: -1px; padding: 0; clip: rect(0 0 0 0); border: 0; white-space: nowrap; }
+.open-world-game-connectivity { display: grid; width: min(100%,980px); box-sizing: border-box; grid-template-columns: auto minmax(0,1fr); align-items: start; gap: 9px; margin: 0 auto 12px; padding: 10px 12px; border: 1px solid rgba(218,174,103,.48); border-radius: 8px; background: rgba(95,63,24,.24); color: #ead5b1; font-size: 10px; line-height: 1.55; }
+.open-world-game-connectivity>svg { margin-top: 1px; color: #ffcf7a; }
+.open-world-game-connectivity span { min-width: 0; overflow-wrap: anywhere; }
+.open-world-game-connectivity strong { display: block; margin-bottom: 2px; color: #fff0d5; font-size: 11px; }
 .open-world-game-scene-card { min-height: 205px; padding: 28px clamp(20px,4vw,44px); border: 1px solid rgba(207,173,114,.2); border-radius: 11px; background: radial-gradient(circle at 82% 17%,rgba(177,128,65,.18),transparent 28%),linear-gradient(142deg,rgba(46,87,77,.45),rgba(11,25,30,.96) 68%); box-shadow: inset 0 0 60px rgba(0,0,0,.18); }
 .open-world-game-scene-card h1 { margin: 12px 0 9px; color: #f3eadc; font-family: var(--font-serif); font-size: clamp(27px,4vw,42px); font-weight: 500; line-height: 1.15; }
 .open-world-game-scene-card p { max-width: 760px; margin: 0; color: #c6d0cc; font-family: var(--font-serif); font-size: var(--open-world-reader-font-size); line-height: var(--open-world-reader-line-height); }
@@ -328,7 +355,7 @@
 .open-world-save-settings-disclosure strong { color: #cfc3ae; font-weight: 600; }
 .open-world-save-settings-disclosure small { color: #687d7e; font-size: 8px; line-height: 1.55; }
 
-.open-world-game-shell[data-high-contrast] { background: #000; color: #fff; }
+.open-world-game-shell[data-high-contrast] { --bg-base: #000; --bg-surface: #000; --bg-elevated: #0a0a0a; --bg-hover: #202020; --text-primary: #fff; --text-secondary: #fff; --text-muted: #f2f2f2; --accent: #ffdf6b; --accent-hover: #ffe994; --accent-muted: #ffdf6b; --accent-soft: rgba(255,223,107,.2); --border: #fff; --border-hover: #ffdf6b; --border-subtle: #bfbfbf; --success: #9dffbc; --warning: #ffdf6b; --error: #ffaaa1; --info: #acd7ff; color-scheme: dark; background: #000; color: #fff; }
 .open-world-game-shell[data-high-contrast] .open-world-game-header,
 .open-world-game-shell[data-high-contrast] .open-world-game-navigation-rail,
 .open-world-game-shell[data-high-contrast] .open-world-game-context-rail,
@@ -355,6 +382,7 @@
 .open-world-game-shell[data-high-contrast] .open-world-version-catalog article,
 .open-world-game-shell[data-high-contrast] .open-world-save-settings-preferences,
 .open-world-game-shell[data-high-contrast] .open-world-save-settings-fields>label { border-color: #fff; background: #000; box-shadow: none; }
+.open-world-game-shell[data-high-contrast] :is(.open-world-player-state-notice,.open-world-game-connectivity,.open-world-combat-heading,.open-world-combat-compatibility,.open-world-combat-settling,.open-world-combat-hero,.open-world-combat-player,.open-world-combat-enemies,.open-world-combat-enemies>label,.open-world-combat-actions>article,.open-world-combat-log,.open-world-combat-result,.open-world-combat-recovery) { border-color: #fff; background: #000; box-shadow: none; }
 .open-world-game-shell[data-high-contrast] .open-world-game-scene-card p,
 .open-world-game-shell[data-high-contrast] .open-world-scene-narrative>p,
 .open-world-game-shell[data-high-contrast] .open-world-scene-dialogue blockquote,
@@ -362,11 +390,25 @@
 .open-world-game-shell[data-high-contrast] .open-world-game-context-card p,
 .open-world-game-shell[data-high-contrast] .open-world-save-settings-disclosure p,
 .open-world-game-shell[data-high-contrast] .open-world-save-settings-disclosure small { color: #fff; }
+.open-world-game-shell[data-high-contrast] :is(.open-world-game-heading,.open-world-game-global-status,.open-world-game-navigation-rail,.open-world-game-context-rail,.open-world-player-state-notice,.open-world-game-connectivity,.open-world-combat-panel) :is(p,small,span,strong,h1,h2,h3,dt,dd,label,legend,blockquote) { color: #fff; }
+.open-world-game-shell[data-high-contrast] .bg-accent { background-color: #ffdf6b!important; color: #000!important; }
+.open-world-game-shell[data-high-contrast] :is(button,input,select,textarea,a,[role="button"]):focus-visible { outline: 3px solid #ffdf6b!important; outline-offset: 2px; box-shadow: none!important; }
+.open-world-game-shell[data-high-contrast] .open-world-player-map-focus-ring { stroke: #ffdf6b; }
 .open-world-game-shell[data-high-contrast] button:focus-visible,
 .open-world-game-shell[data-high-contrast] input:focus-visible,
 .open-world-game-shell[data-high-contrast] .open-world-game-main-view:focus-visible { outline-color: #ffdf6b; outline-offset: 2px; }
 .open-world-game-shell[data-reduced-motion],.open-world-game-shell[data-reduced-motion] * { scroll-behavior: auto!important; }
 .open-world-game-shell[data-reduced-motion] *,.open-world-game-shell[data-reduced-motion] *::before,.open-world-game-shell[data-reduced-motion] *::after { animation-duration: .001ms!important; animation-iteration-count: 1!important; transition-duration: .001ms!important; }
+
+@media (prefers-reduced-motion: reduce) {
+  .open-world-launcher,.open-world-launcher *,.open-world-game-shell,.open-world-game-shell * { scroll-behavior: auto!important; }
+  .open-world-launcher *,.open-world-launcher *::before,.open-world-launcher *::after,.open-world-game-shell *,.open-world-game-shell *::before,.open-world-game-shell *::after { animation-duration: .001ms!important; animation-iteration-count: 1!important; transition-duration: .001ms!important; }
+}
+
+@media (forced-colors: active) {
+  .open-world-game-skip-link,.open-world-game-shell :is(button,input,select,textarea,a,[role="button"]):focus-visible { outline: 3px solid Highlight!important; outline-offset: 2px; }
+  .open-world-player-map-focus-ring { stroke: Highlight; }
+}
 
 /* G4-09: dedicated, event-backed combat surface. */
 .open-world-combat-panel { display: grid; min-width: 0; gap: 12px; color: #e7ecea; }
@@ -419,6 +461,12 @@
   .open-world-game-layout { grid-template-columns: minmax(0,1fr); }
   .open-world-game-navigation-rail { display: none; }
   .open-world-game-main-view { padding: 11px; scrollbar-gutter: auto; }
+  .open-world-player-map-primary { display: none; }
+  .open-world-game-connectivity { margin-bottom: 9px; }
+  .open-world-player-state-notice { grid-template-columns: minmax(0,1fr); }
+  .open-world-player-state-notice>svg { margin: 0; }
+  .open-world-player-state-actions { display: grid; grid-template-columns: minmax(0,1fr); }
+  .open-world-player-boundary .open-world-launcher-content { width: min(calc(100% - 24px),760px); }
   .open-world-game-context-rail.is-drawer-open { top: auto; right: 0; bottom: 0; left: 0; width: 100%; max-height: min(72dvh,620px); border: 1px solid rgba(210,173,111,.25); border-right: 0; border-bottom: 0; border-left: 0; border-radius: 16px 16px 0 0; box-shadow: 0 -26px 70px rgba(0,0,0,.58); }
   .open-world-game-global-status { min-height: 34px; gap: 7px 16px; padding: 5px 10px; white-space: nowrap; }
   .open-world-game-mobile-navigation { position: relative; z-index: 24; display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); border-top: 1px solid rgba(255,255,255,.1); background: rgba(7,15,20,.98); box-shadow: 0 -9px 24px rgba(0,0,0,.22); }
