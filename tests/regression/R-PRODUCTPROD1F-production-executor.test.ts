@@ -2690,7 +2690,9 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
         { key: 'node.003', kind: 'ending', title: '结局', summary: '', conditionJson: '{}', effectsJson: '[]', successorKeys: [] },
       ],
       beats: [
-        { beatKey: 'beat.act-1.001', nodeKey: 'node.001', kind: 'narration', speakerKey: null, text: '岚舟走进断裂的潮钟核心，伸手检查停止转动的黄铜齿轮。', order: 0 },
+        { beatKey: 'beat.act-1.001', nodeKey: 'node.001', kind: 'narration', speakerKey: null, text: '晨雾覆盖灯塔，岚舟收起沉砾留下的调音钥匙。', order: 0 },
+        { beatKey: 'beat.act-1.002', nodeKey: 'node.001', kind: 'narration', speakerKey: null, text: '岚舟发现断裂的潮钟核心，伸手检查停止转动的黄铜齿轮。', order: 1 },
+        { beatKey: 'beat.act-1.003', nodeKey: 'node.001', kind: 'action', speakerKey: null, text: '她穿过环礁栈桥，向下一座钟楼前进。', order: 2 },
         { beatKey: 'beat.act-2.001', nodeKey: 'node.002', kind: 'action', speakerKey: null, text: '岚舟打开机械记忆匣，冷蓝光照亮霜潮工坊。', order: 0 },
         { beatKey: 'beat.act-3.001', nodeKey: 'node.003', kind: 'narration', speakerKey: null, text: '雾潮退去，岚舟在潮钟塔顶看见海面重新泛起晨光。', order: 0 },
       ],
@@ -2699,9 +2701,11 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     const sourceGrounded = parseProductMediaRequirementsArtifactV2(
       modelHallucination, owned.brief, anchors, frozenNarrative as never,
     )
-    expect(sourceGrounded.visual[3].beatKey).toBe('beat.act-1.001')
-    expect(sourceGrounded.visual[3].prompt).toContain('岚舟走进断裂的潮钟核心')
+    expect(sourceGrounded.visual[3].beatKey).toBe('beat.act-1.002')
+    expect(sourceGrounded.visual[3].prompt).toContain('岚舟发现断裂的潮钟核心')
     expect(sourceGrounded.visual[3].prompt).not.toContain('机械遗骸')
+    expect(sourceGrounded.visual[5].prompt).toContain('机械记忆匣')
+    expect(sourceGrounded.visual[5].prompt).toContain('不出现人物、手部或额外场景事件')
     expect(productMediaCharacterPresentationConstraintV1('character-pose')).toContain('透明背景')
     expect(productMediaCharacterPresentationConstraintV1('cg')).toContain('禁止透明背景')
   })

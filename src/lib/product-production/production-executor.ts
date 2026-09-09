@@ -2207,7 +2207,7 @@ export function productMediaCharacterPresentationConstraintV1(
 function glyphSafeTextAdventureItemPromptV1(prompt: string): string {
   const normalized = prompt
     .replace(/指针停在\s*[「『“"]?[^，。；\n」』”"]+[」』”"]?\s*位置/gu, '指针偏转至异常边界')
-    .replace(/(?:背面|正面|表面|柄部)?(?:刻有|刻满|写有|写满|标有|印有|显示)[^，。；\n]*(?:字样|文字|名称|词句|铭文|符文|字符|字母|数字|人名|名字|姓名|名姓)/gu, '')
+    .replace(/(?:背面|正面|表面|柄部|匙身)?(?:刻有|刻满|刻着|写有|写满|写着|标有|印有|显示)[^，。；\n]*(?:字样|文字|名称|词句|铭文|符文|字符|字母|数字|人名|名字|姓名|名姓|标记)/gu, '')
     .replace(/表盘刻有潮位刻度/gu, '表盘环绕抽象潮汐刻度线')
     .replace(/[「『“"][^」』”"]+[」』”"]/gu, '抽象无字标记')
     .replace(/[，。；]{2,}/gu, '。')
@@ -2229,7 +2229,7 @@ function glyphSafeTextAdventureScenePromptV1(
       '纸面仅以无字的抽象线条表现研究轨迹',
     )
     .replace(
-      /(?:刻有|刻满|写有|写满|写着|记录着|标注着|标有|印有|显示)[^，。；\n]*(?:姓名|死亡日期|日期|字样|文字|名称|词句|铭文|符文|字符|字母|数字|人名|名字|协议)[^，。；\n]*/gu,
+      /(?:刻有|刻满|刻着|写有|写满|写着|记录着|标注着|标有|印有|显示)[^，。；\n]*(?:姓名|死亡日期|日期|字样|文字|名称|词句|铭文|符文|字符|字母|数字|人名|名字|协议|标记)[^，。；\n]*/gu,
       '以无字凿痕、抽象图形与磨损表达历史痕迹',
     )
     .replace(
@@ -2239,6 +2239,10 @@ function glyphSafeTextAdventureScenePromptV1(
     .replace(
       /(?:柱身|墙壁|墙面|石壁|碑面|表面)(?:上)?[^，。；\n]{0,32}(?:记号|标记|符号)/gu,
       '表面仅保留无字的几何划痕',
+    )
+    .replace(
+      /(?:姓名|名字|名姓)[^，。；\n]{0,24}(?:浮现|显示|滚动|出现)/gu,
+      '无字的人形记忆光点依次亮起',
     )
     .replace(
       /面前悬浮着三个选择的光影[：:][^。；\n]+/gu,
@@ -2287,12 +2291,27 @@ function textAdventureNarrativeBeatForVisualV1(input: {
   const act = (ordinal: number) => usable.filter(beat => (
     new RegExp(`(?:^|[.:-])act-${ordinal}(?:[.:-]|$)`, 'i').test(beat.beatKey)
   ))
-  if (input.sceneTag === 'mainline-turn-act-1') return pick(act(1), 0.75)
-  if (input.sceneTag === 'mainline-turn-act-2') return pick(act(2), 0.75)
-  if (input.sceneTag === 'mainline-turn-act-3') return pick(act(3), 0.75)
+  const strongest = (beats: FrozenNarrativeBeat[], terms: readonly string[]) => (
+    beats.map((beat, index) => ({
+      beat,
+      index,
+      score: terms.reduce((score, term) => score + Number(beat.text.includes(term)), 0)
+        + Number(beat.kind === 'action') * 0.25,
+    })).sort((left, right) => right.score - left.score || right.index - left.index)[0]?.beat ?? first
+  )
+  if (input.sceneTag === 'mainline-turn-act-1') {
+    return strongest(act(1), ['发现', '真相', '代价', '日志', '危机', '断裂', '雾潮', '失踪'])
+  }
+  if (input.sceneTag === 'mainline-turn-act-2') {
+    return strongest(act(2), ['发现', '真相', '揭露', '记忆', '牺牲', '代价', '潮钟', '危机'])
+  }
+  if (input.sceneTag === 'mainline-turn-act-3') {
+    return strongest(act(3), ['选择', '决定', '代价', '启动', '按下', '注入', '公开', '撤离', '钟钮'])
+  }
   if (input.sceneTag === 'secondary-region-anchor') return pick(act(2), 0.1)
   if (input.sceneTag === 'ending-consequence' || input.sceneTag === 'alternate-ending-consequence') {
-    return usable.find(beat => nodeKind.get(beat.nodeKey) === 'ending') ?? usable[usable.length - 1] ?? null
+    const endingBeats = usable.filter(beat => nodeKind.get(beat.nodeKey) === 'ending')
+    return endingBeats[endingBeats.length - 1] ?? usable[usable.length - 1] ?? null
   }
   if (input.sceneTag.includes('character') || input.sceneTag.includes('protagonist')) {
     return input.narrative.beats.find(beat => (
@@ -2302,9 +2321,25 @@ function textAdventureNarrativeBeatForVisualV1(input: {
   if (input.sceneTag.includes('item')) {
     const itemTerms = ['记忆匣', '调音钥匙', '潮汐钟钥', '钟钥', '钥匙', '罗盘', '调音叉']
       .filter(term => input.prompt.includes(term))
-    return usable.find(beat => itemTerms.some(term => beat.text.includes(term))) ?? first
+    const direct = usable.find(beat => itemTerms.some(term => beat.text.includes(term)))
+    if (direct) return direct
+    const registeredItemBeats = ['记忆匣', '调音钥匙', '潮汐钟钥', '钟钥', '钥匙', '罗盘', '调音叉']
+      .flatMap(term => usable.filter(beat => beat.text.includes(term)).slice(0, 1))
+      .filter((beat, index, beats) => beats.findIndex(candidate => candidate.beatKey === beat.beatKey) === index)
+    return input.sceneTag.includes('secondary')
+      ? registeredItemBeats[1] ?? pick(act(2), 0.5)
+      : input.sceneTag.includes('tertiary')
+        ? registeredItemBeats[2] ?? pick(act(3), 0.5)
+        : registeredItemBeats[0] ?? pick(act(1), 0.25)
   }
+  if (input.sceneTag === 'region-map') return usable[2] ?? usable[1] ?? first
   return first
+}
+
+function textAdventureItemEvidenceSentenceV1(textValue: string): string {
+  const terms = ['记忆匣', '调音钥匙', '潮汐钟钥', '钟钥', '钥匙', '罗盘', '调音叉']
+  return textValue.split(/[。！？\n]+/u).map(value => value.trim())
+    .find(value => terms.some(term => value.includes(term))) ?? textValue
 }
 
 function textAdventureCharacterFramingPromptV1(
@@ -2353,11 +2388,16 @@ function normalizeTextAdventureVisualRequirementPromptV1(input: {
     || input.sceneTag === 'important-item-secondary'
     || input.sceneTag === 'important-item-tertiary') {
     const editorialJob = input.blueprint?.prompt ?? '关键物品的原创叙事特写'
-    const safePrompt = glyphSafeTextAdventureItemPromptV1(input.prompt)
+    const itemEvidence = input.narrativeBeat
+      ? textAdventureItemEvidenceSentenceV1(input.narrativeBeat.text)
+      : input.prompt
+    const safePrompt = glyphSafeTextAdventureItemPromptV1(itemEvidence)
     const detail = safePrompt.startsWith(editorialJob)
       ? safePrompt.slice(editorialJob.length).replace(/^[，。；:\s]+/u, '')
       : safePrompt
-    return `${editorialJob}。${detail ? `${detail}。` : ''}` +
+    return `${editorialJob}。${input.narrativeBeat ? '只依据冻结叙事节拍中的物品事实。' : ''}` +
+      `${detail ? `${detail}。` : ''}` +
+      '画面仅包含物品本体及中性承托面，不出现人物、手部或额外场景事件。' +
       '全部信息只用材质、颜色、形状、抽象刻度和磨损表达；物品与背景上不得出现任何可读文字、字母、数字、品牌或标志。'
   }
   const narrativeGroundedPrompt = input.mediaKind === 'cg' && input.narrativeBeat
@@ -2401,6 +2441,7 @@ export function parseProductMediaRequirementsArtifactV2(
   const textAdventureBlueprints = brief.intent.productType === 'text-adventure'
     ? textAdventureVisualBlueprintsV1(row.visual.length)
     : []
+  const claimedVisualBeatKeys = new Set<string>()
   const visual: VisualRequirementV1[] = row.visual.map((value, index) => {
     const item = record(value, `visual[${index}]`)
     exactKeys(item, [
@@ -2429,6 +2470,20 @@ export function parseProductMediaRequirementsArtifactV2(
           narrative,
         })
       : null
+    let cueBeat = sourceBeat
+    if (sourceBeat && narrative && !isCharacter && (mediaKind === 'background' || mediaKind === 'cg')) {
+      const eligible = narrative.beats.filter(beat => beat.kind === 'narration' || beat.kind === 'action')
+      if (claimedVisualBeatKeys.has(sourceBeat.beatKey)) {
+        const sourceIndex = eligible.findIndex(beat => beat.beatKey === sourceBeat?.beatKey)
+        const itemTerms = ['记忆匣', '调音钥匙', '潮汐钟钥', '钟钥', '钥匙', '罗盘', '调音叉']
+          .filter(term => sourceBeat?.text.includes(term))
+        cueBeat = eligible.slice(Math.max(0, sourceIndex + 1)).find(beat => (
+          !claimedVisualBeatKeys.has(beat.beatKey)
+          && (itemTerms.length === 0 || itemTerms.some(term => beat.text.includes(term)))
+        )) ?? eligible.find(beat => !claimedVisualBeatKeys.has(beat.beatKey)) ?? sourceBeat
+      }
+      claimedVisualBeatKeys.add(cueBeat?.beatKey ?? sourceBeat.beatKey)
+    }
     const characterGroundingPrompt = sourceBeat && !isCharacter ? sourceBeat.text : rawPrompt
     const groundedSuppliedRefs = brief.intent.productType === 'text-adventure'
       && !isCharacter && characterAnchors.length > 0
@@ -2487,7 +2542,7 @@ export function parseProductMediaRequirementsArtifactV2(
       artifactKey: key(item.artifactKey, `visual[${index}].artifactKey`),
       mediaKind,
       sceneTag: key(item.sceneTag, `visual[${index}].sceneTag`),
-      beatKey: sourceBeat?.beatKey ?? key(item.beatKey, `visual[${index}].beatKey`),
+      beatKey: cueBeat?.beatKey ?? key(item.beatKey, `visual[${index}].beatKey`),
       prompt: brief.intent.productType === 'text-adventure'
         ? normalizeTextAdventureVisualRequirementPromptV1({
             prompt: rawPrompt,
