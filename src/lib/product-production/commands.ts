@@ -97,6 +97,26 @@ export function isRepairRetryableFailedProductBuildV1(
   } catch { return false }
 }
 
+/**
+ * Detects the frozen two-or-more-image Visual QA topology used by older text-adventure Builds.
+ * The failure task and the frozen plan must agree; a generic failed Build must never gain the
+ * privileged recovery-build evolution path.
+ */
+export function canUpgradeTextAdventureVisualReviewPlanV1(
+  build: Pick<ProductBuildRecordV1, 'status' | 'failureJson' | 'planJson'>,
+): boolean {
+  if (build.status !== 'recovery-required') return false
+  try {
+    const failure = JSON.parse(build.failureJson) as { taskKey?: unknown }
+    if (typeof failure.taskKey !== 'string'
+      || !/^media\.visual-quality-review\.batch-\d+$/.test(failure.taskKey)) return false
+    const plan = parseProductProductionPlanV3(build.planJson)
+    const task = plan.tasks.find(candidate => candidate.taskKey === failure.taskKey)
+    return task?.kind === 'text-adventure-visual-quality-review-batch'
+      && task.inputArtifactKeys.filter(key => /^media\.visual\.\d{3}$/.test(key)).length > 1
+  } catch { return false }
+}
+
 async function productionInScope(scope: WorkspaceScope, productionId: number): Promise<ProductProductionRecordV1 & { id: number }> {
   const production = await db.productProductions.get(productionId)
   if (!production || !await assertRecordInScope(scope, 'productProductions', production, { owner: 'work' })) {
@@ -1000,10 +1020,13 @@ async function applyCommand(input: {
   const recoveryBase = command.base.kind === 'recovery-build' ? command.base : null
   const budgetRecovery = recoveryBase != null
     && affectedLanes.length === 1 && affectedLanes[0] === 'production-budget'
-  if (budgetRecovery) {
+  const planUpgradeRecovery = recoveryBase != null
+    && affectedLanes.length === 1 && affectedLanes[0] === 'execution-plan'
+  const recoveryEvolution = budgetRecovery || planUpgradeRecovery
+  if (recoveryEvolution) {
     if (production.productType !== 'text-adventure' || production.status !== 'producing'
       || production.currentBuildNumber !== recoveryBase.buildNumber) {
-      reject('invalid-state-transition', '只有当前文字冒险恢复 Build 可以扩充生产预算')
+      reject('invalid-state-transition', '只有当前文字冒险恢复 Build 可以升级生产预算或执行计划')
     }
     const base = await db.productBuilds
       .where('[productionId+buildNumber]').equals([production.id, recoveryBase.buildNumber]).first()
@@ -1011,11 +1034,15 @@ async function applyCommand(input: {
       || base.briefHash !== recoveryBase.briefHash
       || base.planHash !== recoveryBase.planHash
       || base.controlEpoch !== recoveryBase.controlEpoch) {
-      reject('source-stale', '预算恢复 Build 基线不可验证')
+      reject('source-stale', '恢复 Build 基线不可验证')
+    }
+    if (planUpgradeRecovery && !canUpgradeTextAdventureVisualReviewPlanV1(base)) {
+      reject('invalid-state-transition', '当前 Build 不属于可升级的旧版多图 Visual QA 计划')
     }
   } else {
-    if (affectedLanes.includes('production-budget') || command.base.kind === 'recovery-build') {
-      reject('invalid-state-transition', '生产预算只能从当前恢复 Build 单独扩充')
+    if (affectedLanes.includes('production-budget') || affectedLanes.includes('execution-plan')
+      || command.base.kind === 'recovery-build') {
+      reject('invalid-state-transition', '生产预算或执行计划只能从当前恢复 Build 单独升级')
     }
     if (!['preview-ready', 'released'].includes(production.status)) reject('invalid-state-transition', '当前 Production 不能开始演化会谈')
   }
@@ -1040,8 +1067,8 @@ async function applyCommand(input: {
     : command.base.kind === 'release'
       ? `product-release:${command.base.productReleaseId}:${command.base.contentHash}`
       : `recovery-build:${command.base.buildNumber}:${command.base.briefHash}:${command.base.planHash}:${command.base.controlEpoch}`
-  const budgetFloor = budgetRecovery ? textAdventureProductionBudgetFloorV1(priorBrief) : null
-  if (budgetFloor && priorBrief.productionBudget.maximumModelCalls >= budgetFloor.minimumModelCalls
+  const budgetFloor = recoveryEvolution ? textAdventureProductionBudgetFloorV1(priorBrief) : null
+  if (budgetRecovery && budgetFloor && priorBrief.productionBudget.maximumModelCalls >= budgetFloor.minimumModelCalls
     && priorBrief.productionBudget.maximumInputTokens >= budgetFloor.minimumInputTokens
     && priorBrief.productionBudget.maximumOutputTokens >= budgetFloor.minimumOutputTokens) {
     reject('invalid-state-transition', '当前 Brief 已满足专业生产预算底线，不能创建无变化的预算恢复版本')

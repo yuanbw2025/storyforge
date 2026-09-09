@@ -235,7 +235,7 @@ function parseEvolutionBase(value: unknown, label: string): ProductEvolutionBase
 }
 
 const EVOLUTION_LANES: readonly ProductEvolutionAffectedLaneV1[] = [
-  'content', 'product', 'visual', 'audio', 'runtime', 'world-source', 'production-budget',
+  'content', 'product', 'visual', 'audio', 'runtime', 'world-source', 'production-budget', 'execution-plan',
 ]
 
 function parseEvolutionImpact(value: unknown): ProductEvolutionImpactV1 {

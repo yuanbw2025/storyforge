@@ -7,6 +7,7 @@ import {
   authorizeProductProductionStartV1,
   archiveProductProductionV1,
   beginProductProductionEvolutionV1,
+  canUpgradeTextAdventureProductionPlanV1,
   canRetryProductProductionBlockerV1,
   compileProductProductionBriefV3,
   consultProductProductionStartV1,
@@ -36,6 +37,7 @@ import {
   setProductProductionPausedV1,
   startProductProductionPreviewV1,
   stopProductProductionV1,
+  upgradeTextAdventureProductionPlanV1,
   type ProductProductionDetailsV1,
   type ProductProductionProgressV1,
   type ProductProductionReviewArtifactV1,
@@ -1138,6 +1140,16 @@ export default function ProductProductionStudio(props: {
     setMessage(`预算恢复已形成 Brief r${created.briefRevision}；审查并授权后将创建子 Build，继承已签收成果继续生产。`)
   }, '创建预算恢复 Brief')
 
+  const upgradeExecutionPlan = () => run(async () => {
+    if (!details) throw new Error('缺少 Production。')
+    const created = await upgradeTextAdventureProductionPlanV1({
+      scope: props.scope,
+      productionId: details.production.id!,
+    })
+    await refresh(details.production.id)
+    setMessage(`旧 Build 保持不可变；逐图审查升级已形成 Brief r${created.briefRevision}。授权后将创建子 Build，复用正文和图片，仅重跑装配与质量审查。`)
+  }, '创建逐图审查升级 Brief')
+
   const reviseMediaAsset = (
     asset: TextAdventureMediaAssetV1,
     action: 'upload-replacement' | 'regenerate' | 'lock' | 'unlock',
@@ -1236,6 +1248,7 @@ export default function ProductProductionStudio(props: {
   const canPause = details && ['producing', 'preview-ready'].includes(details.production.status)
     && details.build && !['released', 'cancelled', 'failed', 'archived', 'paused', 'recovery-required'].includes(details.build.status)
   const canRetryBlocker = !!details && canRetryProductProductionBlockerV1(details)
+  const canUpgradeExecutionPlan = !!details && canUpgradeTextAdventureProductionPlanV1(details)
   const sourceDecisionBlocker = !!details && isTextAdventureSourceDecisionBlockerV1(details)
   const sourceDecision = useMemo(
     () => sourceDecisionBlocker ? sourceDecisionDisplay(reviewArtifacts) : null,
@@ -1523,7 +1536,8 @@ export default function ProductProductionStudio(props: {
             {communityCandidateRepairAvailable && !activeBriefRepairDraft && <button disabled={busy || productionRunning} onClick={prepareCommunityCandidateBriefRepair} className="flex items-center gap-2 rounded border border-accent/40 bg-accent/10 px-4 py-2 text-xs text-accent disabled:opacity-40"><FileCheck2 className="h-3.5 w-3.5" />{commercialTextAdventureImageMinimum > 0 ? `生成 ${commercialTextAdventureImageMinimum} 图修订 Brief` : '生成社区候选修订 Brief'}</button>}
             {communityCandidateRepairAvailable && activeBriefRepairDraft && <button disabled={busy || productionRunning} onClick={saveCommunityCandidateBriefRepair} className="flex items-center gap-2 rounded bg-success px-4 py-2 text-xs text-white disabled:opacity-40"><ShieldCheck className="h-3.5 w-3.5" />保存为 Brief r{(details.brief?.revision ?? 0) + 1}</button>}
             {canRecoverProductionBudget && <button disabled={busy || productionRunning} onClick={recoverProductionBudget} className="flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white"><RefreshCw className="h-3.5 w-3.5" />扩充预算并续建</button>}
-            {canRetryBlocker && !modelBudgetExhausted && <button disabled={busy || productionRunning} onClick={retryBlocker} className="flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white"><RefreshCw className="h-3.5 w-3.5" />修正后重试</button>}
+            {canUpgradeExecutionPlan && <button disabled={busy || productionRunning} onClick={upgradeExecutionPlan} className="flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white"><GitBranch className="h-3.5 w-3.5" />生成逐图审查升级 Brief</button>}
+            {canRetryBlocker && !modelBudgetExhausted && !canUpgradeExecutionPlan && <button disabled={busy || productionRunning} onClick={retryBlocker} className="flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white"><RefreshCw className="h-3.5 w-3.5" />修正后重试</button>}
             {details.build && ['preview-ready', 'release-ready', 'released'].includes(details.build.status) && <button disabled={busy || productionRunning} onClick={preview} className="flex items-center gap-2 rounded border border-accent/40 bg-accent/10 px-4 py-2 text-xs text-accent"><Play className="h-3.5 w-3.5" />{details.build.status === 'released' ? '试玩此 Build' : '试玩未发布 Build'}</button>}
             {details.build?.status === 'release-ready' && <button disabled={busy || productionRunning || (commercialPerformanceRequired && !commercialQualityPassed)} onClick={publish} className="flex items-center gap-2 rounded bg-success px-4 py-2 text-xs text-white disabled:opacity-40"><Rocket className="h-3.5 w-3.5" />复验并原子发布</button>}
             {details.production.status === 'released' && <button disabled={busy} onClick={() => props.onPublished?.(details.production.productType)} className="flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white"><Gamepad2 className="h-3.5 w-3.5" />进入玩家模式</button>}

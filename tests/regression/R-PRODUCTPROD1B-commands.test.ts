@@ -487,6 +487,108 @@ describe('PRODUCTPROD-1B · user command control plane', () => {
     })
   })
 
+  it('旧版多图 Visual QA 失败时通过审查 Brief 派生逐图审查 Build', async () => {
+    const f = await fixture('text-adventure', 'key-scenes')
+    const created = await executeProductProductionCommand({
+      scope: f.scope,
+      command: {
+        type: 'create-intent', commandId: 'visual-plan-upgrade.intent',
+        productionKey: 'visual-plan-upgrade-story', productType: 'text-adventure',
+        worldReleaseId: f.worldReleaseId, userText: '验证旧版多图审图计划的不可变升级',
+      },
+    })
+    const saved = await executeProductProductionCommand({
+      scope: f.scope, productionId: created.productionId,
+      command: {
+        type: 'save-brief-revision', commandId: 'visual-plan-upgrade.brief', expectedStateRevision: 0,
+        parentRevision: null, brief: f.brief,
+      },
+    })
+    await executeProductProductionCommand({
+      scope: f.scope, productionId: created.productionId,
+      command: {
+        type: 'authorize-start', commandId: 'visual-plan-upgrade.start', expectedStateRevision: 1,
+        briefRevision: 1, briefHash: saved.result.briefHash as string,
+        authorizationNonce: 'visual-plan-upgrade.click',
+      },
+    })
+    const parent = (await db.productBuilds.where('productionId').equals(created.productionId).first())!
+    const currentPlan = await createProductProductionPlanV3({
+      buildNumber: parent.buildNumber, controlEpoch: parent.controlEpoch,
+      briefHash: saved.result.briefHash as string, brief: f.brief,
+    })
+    const batches = currentPlan.tasks
+      .filter(task => task.kind === 'text-adventure-visual-quality-review-batch')
+    expect(batches.length).toBeGreaterThanOrEqual(2)
+    const first = batches[0]
+    const second = batches[1]
+    const legacyCandidate = {
+      ...currentPlan,
+      tasks: currentPlan.tasks
+        .filter(task => task.taskKey !== second.taskKey)
+        .map(task => task.taskKey === first.taskKey ? {
+          ...task,
+          inputArtifactKeys: [...task.inputArtifactKeys, ...second.inputArtifactKeys
+            .filter(key => /^media\.visual\.\d{3}$/.test(key))],
+        } : task.taskKey === 'media.visual-quality-review' ? {
+          ...task,
+          dependsOn: task.dependsOn.filter(key => key !== second.taskKey),
+          requiredReceipts: task.requiredReceipts.filter(item => item.taskKey !== second.taskKey),
+          inputArtifactKeys: task.inputArtifactKeys
+            .filter(key => !second.outputArtifactKeys.includes(key)),
+        } : task),
+    }
+    const legacyPlan = parseProductProductionPlanV3(legacyCandidate, f.brief, saved.result.briefHash as string)
+    const legacyPlanHash = await hashProductProductionValueV2(legacyPlan)
+    await db.productBuilds.update(parent.id!, {
+      status: 'recovery-required', planRevision: 1,
+      planJson: canonicalProductProductionJsonV2(legacyPlan), planHash: legacyPlanHash,
+      failureJson: canonicalProductProductionJsonV2({
+        taskKey: first.taskKey, code: 'task-executor-failed', attempt: 2,
+        detail: '旧版多图审查返回数量不匹配',
+      }),
+    })
+
+    const evolved = await beginProductProductionEvolutionV1({
+      scope: f.scope, productionId: created.productionId,
+      userText: '只升级旧版多图 Visual QA 为逐图审查，不改变正文与图片。',
+      affectedLanes: ['execution-plan'],
+    })
+    const evolvedBriefRow = (await db.productProductionBriefs
+      .where('[productionId+revision]').equals([created.productionId, evolved.briefRevision]).first())!
+    const evolvedBrief = parseProductProductionBriefV3(evolvedBriefRow.briefJson)
+    expect(evolvedBrief.evolution).toMatchObject({
+      affectedLanes: ['execution-plan'],
+      base: { kind: 'recovery-build', buildNumber: 1, planHash: legacyPlanHash },
+    })
+    expect(await db.productBuilds.get(parent.id!)).toMatchObject({
+      status: 'recovery-required', planHash: legacyPlanHash,
+    })
+
+    const production = (await db.productProductions.get(created.productionId))!
+    const authorized = await executeProductProductionCommand({
+      scope: f.scope, productionId: created.productionId,
+      command: {
+        type: 'authorize-start', commandId: 'visual-plan-upgrade.restart',
+        expectedStateRevision: production.stateRevision, briefRevision: evolved.briefRevision,
+        briefHash: evolvedBriefRow.briefHash, authorizationNonce: 'visual-plan-upgrade.restart-click',
+      },
+    })
+    expect(authorized).toMatchObject({ ok: true, result: { buildNumber: 2 } })
+    const child = (await db.productBuilds
+      .where('[productionId+buildNumber]').equals([created.productionId, 2]).first())!
+    const childPlan = await createProductProductionPlanV3({
+      buildNumber: child.buildNumber, controlEpoch: child.controlEpoch,
+      briefHash: child.briefHash, brief: evolvedBrief,
+    })
+    const childBatches = childPlan.tasks
+      .filter(task => task.kind === 'text-adventure-visual-quality-review-batch')
+    expect(childBatches.length).toBeGreaterThan(legacyPlan.tasks
+      .filter(task => task.kind === 'text-adventure-visual-quality-review-batch').length)
+    expect(childBatches.every(task => task.inputArtifactKeys
+      .filter(key => /^media\.visual\.\d{3}$/.test(key)).length === 1)).toBe(true)
+  })
+
   it('只允许文字冒险来源作者闸门接受产品私域补充，并冻结命令证据', async () => {
     const f = await fixture('text-adventure')
     const created = await executeProductProductionCommand({

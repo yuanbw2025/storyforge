@@ -16,7 +16,11 @@ import type {
 import { assertRecordInScope, resolveScope } from '../workspace/scope'
 import { listWorldReferenceCatalogV1 } from '../product/source'
 import { prepareProductProductionAdoption, publishProductProductionBuild } from './adoption'
-import { executeProductProductionCommand, isRepairRetryableFailedProductBuildV1 } from './commands'
+import {
+  canUpgradeTextAdventureVisualReviewPlanV1,
+  executeProductProductionCommand,
+  isRepairRetryableFailedProductBuildV1,
+} from './commands'
 import { draftProductProductionBriefV3, suggestProductStartingPoints } from './consultation'
 import { parseProductProductionBriefV3 } from './contracts'
 import {
@@ -134,6 +138,13 @@ export function canRetryProductProductionBlockerV1(details: ProductProductionDet
       && !isTextAdventureSourceDecisionBlockerV1(details)
       && !isTextAdventureMediaAnchorBlockerV1(details))
     || !!details.build && isRepairRetryableFailedProductBuildV1(details.build)
+}
+
+export function canUpgradeTextAdventureProductionPlanV1(details: ProductProductionDetailsV1): boolean {
+  return details.production.productType === 'text-adventure'
+    && details.production.status === 'producing'
+    && !!details.build
+    && canUpgradeTextAdventureVisualReviewPlanV1(details.build)
 }
 
 const AUTHOR_REVIEW_ARTIFACT_KEYS = new Set([
@@ -1045,19 +1056,24 @@ export async function beginProductProductionEvolutionV1(input: {
   if (!details.build) throw new Error('[product-production-service] 演化需要一个可验证的 Preview 或 Release 基线')
   let base: ProductEvolutionBaseV1
   const budgetRecovery = affectedLanes.length === 1 && affectedLanes[0] === 'production-budget'
-  if (budgetRecovery) {
+  const planUpgradeRecovery = affectedLanes.length === 1 && affectedLanes[0] === 'execution-plan'
+  const recoveryEvolution = budgetRecovery || planUpgradeRecovery
+  if (recoveryEvolution) {
     if (details.production.productType !== 'text-adventure'
       || details.production.status !== 'producing'
       || details.build.status !== 'recovery-required'
       || !details.build.briefHash || !details.build.planHash) {
-      throw new Error('[product-production-service] 当前状态不能创建文字冒险预算恢复 Build')
+      throw new Error('[product-production-service] 当前状态不能创建文字冒险恢复 Build')
     }
     const brief = parseProductProductionBriefV3(details.brief?.briefJson ?? '')
     const floor = textAdventureProductionBudgetFloorV1(brief)
-    if (brief.productionBudget.maximumModelCalls >= floor.minimumModelCalls
+    if (budgetRecovery && brief.productionBudget.maximumModelCalls >= floor.minimumModelCalls
       && brief.productionBudget.maximumInputTokens >= floor.minimumInputTokens
       && brief.productionBudget.maximumOutputTokens >= floor.minimumOutputTokens) {
       throw new Error('[product-production-service] 当前 Brief 已满足专业生产预算底线，请检查实际 blocker 后重试')
+    }
+    if (planUpgradeRecovery && !canUpgradeTextAdventureVisualReviewPlanV1(details.build)) {
+      throw new Error('[product-production-service] 当前 Build 不是可升级的旧版多图 Visual QA 计划')
     }
     base = {
       kind: 'recovery-build', buildNumber: details.build.buildNumber,
@@ -1089,4 +1105,16 @@ export async function beginProductProductionEvolutionV1(input: {
   const briefRevision = receipt.result.briefRevision
   if (typeof briefRevision !== 'number') throw new Error('[product-production-service] 演化命令未返回 Brief revision')
   return { briefRevision }
+}
+
+/** Creates a reviewable Brief that moves a frozen legacy multi-image QA Build to single-image QA. */
+export async function upgradeTextAdventureProductionPlanV1(input: {
+  scope: WorkspaceScope
+  productionId: number
+}): Promise<{ briefRevision: number }> {
+  return beginProductProductionEvolutionV1({
+    ...input,
+    userText: '将旧版多图一批的 Visual QA 执行计划升级为逐图、逐回执、有界重试的审查计划；继承所有可证明未变化且已签收的正文与媒资，不修改剧情、玩法、世界来源、图片内容或媒资范围。',
+    affectedLanes: ['execution-plan'],
+  })
 }
