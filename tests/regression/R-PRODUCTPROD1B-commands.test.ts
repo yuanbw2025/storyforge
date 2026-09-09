@@ -629,7 +629,7 @@ describe('PRODUCTPROD-1B · user command control plane', () => {
           detail: failureDetail,
         }),
       })
-      return { ...f, productionId: created.productionId, build, planHash, briefHash: saved.result.briefHash as string }
+      return { ...f, productionId: created.productionId, build, plan, planHash, briefHash: saved.result.briefHash as string }
     }
 
     const visual = await prepareRecovery(
@@ -664,6 +664,78 @@ describe('PRODUCTPROD-1B · user command control plane', () => {
     expect(await db.productBuilds.get(visual.build.id!)).toMatchObject({
       status: 'recovery-required', planHash: visual.planHash,
     })
+
+    const rejected = await prepareRecovery(
+      'rejected-anchor-visual-recovery',
+      '角色视觉锚点等待作者判断',
+    )
+    const supervisionTask = rejected.plan.tasks.find(task => task.taskKey === 'production.supervision')!
+    const supervisionHash = await hashProductProductionValueV2({ accepted: true })
+    await db.productBuildArtifacts.add({
+      projectId: rejected.scope.projectId, worldId: rejected.scope.worldId, workId: rejected.scope.workId,
+      buildId: rejected.build.id!, artifactKey: supervisionTask.outputArtifactKeys[0], requirementKey: null,
+      version: 1, kind: 'product-design', mediaKind: null, status: 'accepted', producerRunId: null,
+      producerReceiptHash: null, controlEpoch: rejected.build.controlEpoch, inputHash: 'a'.repeat(64),
+      contentHash: supervisionHash, payloadJson: canonicalProductProductionJsonV2({ accepted: true }),
+      metadataJson: '{}', qualityJson: '{}', rightsJson: '{}', blobObjectId: null, mimeType: null,
+      byteSize: 16, parentArtifactHash: null, carriedFrom: null, createdAt: Date.now(), updatedAt: Date.now(),
+    } satisfies ProductBuildArtifactRecordV1)
+    await db.productBuilds.update(rejected.build.id!, {
+      failureJson: canonicalProductProductionJsonV2({
+        taskKey: 'media.anchor-author-gate', code: 'task-executor-failed', attempt: 1,
+        detail: '商业候选生成图片前需要作者明确确认角色视觉锚点',
+      }),
+    })
+    const beforeReject = (await db.productProductions.get(rejected.productionId))!
+    const cancelled = await executeProductProductionCommand({
+      scope: rejected.scope, productionId: rejected.productionId,
+      command: {
+        type: 'resolve-blocker', commandId: 'rejected-anchor.cancel',
+        expectedStateRevision: beforeReject.stateRevision,
+        blockerKey: 'media.anchor-author-gate',
+        resolution: { action: 'cancel', note: '角色描述与冻结视觉锚点冲突，需要重建媒资规划。' },
+      },
+    })
+    expect(cancelled).toMatchObject({ ok: true, result: { action: 'cancel' } })
+    expect(await db.productProductions.get(rejected.productionId)).toMatchObject({ status: 'stopped' })
+    expect(await db.productBuilds.get(rejected.build.id!)).toMatchObject({ status: 'cancelled' })
+    const rejectedEvolution = await beginProductProductionEvolutionV1({
+      scope: rejected.scope, productionId: rejected.productionId,
+      userText: '只修订被作者退回的媒资规划与角色锚点绑定。', affectedLanes: ['visual'],
+    })
+    const rejectedBrief = (await db.productProductionBriefs
+      .where('[productionId+revision]').equals([rejected.productionId, rejectedEvolution.briefRevision]).first())!
+    expect(parseProductProductionBriefV3(rejectedBrief.briefJson).evolution).toMatchObject({
+      affectedLanes: ['visual'],
+      base: { kind: 'recovery-build', buildNumber: 1, controlEpoch: rejected.build.controlEpoch },
+    })
+    const rejectedProduction = (await db.productProductions.get(rejected.productionId))!
+    await executeProductProductionCommand({
+      scope: rejected.scope, productionId: rejected.productionId,
+      command: {
+        type: 'authorize-start', commandId: 'rejected-anchor.restart',
+        expectedStateRevision: rejectedProduction.stateRevision,
+        briefRevision: rejectedEvolution.briefRevision, briefHash: rejectedBrief.briefHash,
+        authorizationNonce: 'rejected-anchor.restart-click',
+      },
+    })
+    const rejectedChild = (await db.productBuilds
+      .where('[productionId+buildNumber]').equals([rejected.productionId, 2]).first())!
+    const evolvedRejectedBrief = parseProductProductionBriefV3(rejectedBrief.briefJson)
+    await runProductProductionSchedulerCycleV1({
+      scope: rejected.scope, productionId: rejected.productionId,
+      capabilityBindings: evolvedRejectedBrief.capabilityRequirements.map(requirement => ({
+        requirementKey: requirement.requirementKey,
+        adapterId: `fixture.${requirement.mediaClass}`,
+        bindingHash: 'f'.repeat(64),
+      })),
+      executor: async () => { throw new Error('fixture stops after rejected-anchor reuse materialization') },
+    })
+    expect(await db.productBuildArtifacts
+      .where('[buildId+artifactKey]').equals([rejectedChild.id!, supervisionTask.outputArtifactKeys[0]]).first())
+      .toMatchObject({
+        status: 'carried-forward', contentHash: supervisionHash, parentArtifactHash: supervisionHash,
+      })
 
     const runtime = await prepareRecovery(
       'runtime-failure-no-visual-recovery',

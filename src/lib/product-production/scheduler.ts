@@ -817,10 +817,16 @@ async function applyCrossBuildEvolutionReuse(input: {
     && evolution.base.buildNumber !== parentBuild.buildNumber) {
     throw new Error('[product-production-scheduler] 演化 impact 与 parent Build 不一致')
   }
+  const parentFrozenPlanEpoch = evolution.base.kind === 'recovery-build'
+    ? (() => {
+        try { return parseProductProductionPlanV3(parentBuild.planJson).controlEpoch } catch { return null }
+      })()
+    : null
   if (evolution.base.kind === 'recovery-build'
     && (evolution.base.briefHash !== parentBuild.briefHash
       || evolution.base.planHash !== parentBuild.planHash
-      || evolution.base.controlEpoch !== parentBuild.controlEpoch)) {
+      || (evolution.base.controlEpoch !== parentBuild.controlEpoch
+        && evolution.base.controlEpoch !== parentFrozenPlanEpoch))) {
     throw new Error('[product-production-scheduler] 恢复 Build 的 Brief/Plan/epoch 已变化')
   }
   const parentBriefRow = await db.productProductionBriefs
@@ -847,8 +853,10 @@ async function applyCrossBuildEvolutionReuse(input: {
     return { plan: input.plan, reusableArtifactKeys: [], sourceBuildId: parentBuild.id }
   }
   const parentTasks = new Map(parentPlan.tasks.map(task => [task.taskKey, task]))
+  const sourceControlEpoch = evolution.base.kind === 'recovery-build'
+    ? evolution.base.controlEpoch : parentBuild.controlEpoch
   const parentArtifacts = (await db.productBuildArtifacts.where('buildId').equals(parentBuild.id).toArray())
-    .filter(row => row.controlEpoch === parentBuild.controlEpoch
+    .filter(row => row.controlEpoch === sourceControlEpoch
       && (row.status === 'accepted' || row.status === 'carried-forward'))
   const artifactByKey = new Map(parentArtifacts.map(row => [row.artifactKey, row]))
   const affected = new Set(evolution.affectedLanes)

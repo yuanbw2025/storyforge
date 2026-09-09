@@ -56,7 +56,7 @@ import {
 import { readAcceptedBuildArtifacts } from './artifact-store'
 import { putMediaBlobObject, readMediaBlobObjectData } from './media-blob-store'
 import { minimumTextAdventureCommercialImageCountV1 } from '../adventure/production-brief'
-import { textAdventureProductionBudgetFloorV1 } from './plan'
+import { parseProductProductionPlanV3, textAdventureProductionBudgetFloorV1 } from './plan'
 
 export interface ProductProductionDetailsV1 {
   production: ProductProductionRecordV1
@@ -150,8 +150,8 @@ export function canUpgradeTextAdventureProductionPlanV1(details: ProductProducti
 
 export function canRepairTextAdventureVisualContractV1(details: ProductProductionDetailsV1): boolean {
   return details.production.productType === 'text-adventure'
-    && details.production.status === 'producing'
     && !!details.build
+    && (details.production.status === 'producing' || details.production.status === 'stopped')
     && canReviseTextAdventureVisualContractFromRecoveryV1(details.build)
 }
 
@@ -1068,9 +1068,13 @@ export async function beginProductProductionEvolutionV1(input: {
   const visualContractRecovery = affectedLanes.length === 1 && affectedLanes[0] === 'visual'
   const recoveryEvolution = budgetRecovery || planUpgradeRecovery || visualContractRecovery
   if (recoveryEvolution) {
+    const rejectedAnchorRecovery = visualContractRecovery
+      && details.production.status === 'stopped'
+      && details.build.status === 'cancelled'
+      && canReviseTextAdventureVisualContractFromRecoveryV1(details.build)
     if (details.production.productType !== 'text-adventure'
-      || details.production.status !== 'producing'
-      || details.build.status !== 'recovery-required'
+      || (!rejectedAnchorRecovery && (details.production.status !== 'producing'
+        || details.build.status !== 'recovery-required'))
       || !details.build.briefHash || !details.build.planHash) {
       throw new Error('[product-production-service] 当前状态不能创建文字冒险恢复 Build')
     }
@@ -1087,10 +1091,13 @@ export async function beginProductProductionEvolutionV1(input: {
     if (visualContractRecovery && !canReviseTextAdventureVisualContractFromRecoveryV1(details.build)) {
       throw new Error('[product-production-service] 当前 Build 没有可验证的视觉合同或媒资质量阻断')
     }
+    const recoveryControlEpoch = rejectedAnchorRecovery
+      ? parseProductProductionPlanV3(details.build.planJson).controlEpoch
+      : details.build.controlEpoch
     base = {
       kind: 'recovery-build', buildNumber: details.build.buildNumber,
       briefHash: details.build.briefHash, planHash: details.build.planHash,
-      controlEpoch: details.build.controlEpoch,
+      controlEpoch: recoveryControlEpoch,
     }
   } else if (details.production.status === 'released' && details.production.currentProductReleaseId != null) {
     const release = await db.productReleases.get(details.production.currentProductReleaseId)

@@ -7,6 +7,7 @@ import type {
 } from '../types'
 import { assertRecordInScope, resolveScope, scopeTransactionTables, stampNewRecord } from '../workspace/scope'
 import { canonicalProductProductionJsonV2, hashProductProductionValueV2, isSha256Hash } from './hash'
+import { parseProductProductionPlanV3 } from './plan'
 
 const STABLE_KEY = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/
 
@@ -318,11 +319,29 @@ export async function carryForwardProductBuildArtifactsAcrossBuildsV1(input: {
     const [sourceBuild, targetBuild] = await Promise.all([
       db.productBuilds.get(input.sourceBuildId), db.productBuilds.get(input.targetBuildId),
     ])
-    const recoverySourceAllowed = sourceBuild?.status === 'recovery-required'
+    const activeRecoverySourceAllowed = sourceBuild?.status === 'recovery-required'
       && input.recoverySource != null
       && input.recoverySource.briefHash === sourceBuild.briefHash
       && input.recoverySource.planHash === sourceBuild.planHash
       && input.recoverySource.controlEpoch === sourceBuild.controlEpoch
+    const rejectedAnchorRecoverySourceAllowed = (() => {
+      if (sourceBuild?.status !== 'cancelled' || input.recoverySource == null
+        || input.recoverySource.briefHash !== sourceBuild.briefHash
+        || input.recoverySource.planHash !== sourceBuild.planHash) return false
+      try {
+        const failure = JSON.parse(sourceBuild.failureJson) as {
+          blockerKey?: unknown
+          resolution?: { action?: unknown }
+          previousFailure?: { taskKey?: unknown }
+        }
+        return failure.blockerKey === 'media.anchor-author-gate'
+          && failure.resolution?.action === 'cancel'
+          && failure.previousFailure?.taskKey === 'media.anchor-author-gate'
+          && input.recoverySource.controlEpoch === parseProductProductionPlanV3(sourceBuild.planJson).controlEpoch
+      } catch { return false }
+    })()
+    const recoverySourceAllowed = activeRecoverySourceAllowed || rejectedAnchorRecoverySourceAllowed
+    const sourceControlEpoch = input.recoverySource?.controlEpoch ?? sourceBuild?.controlEpoch
     if (!sourceBuild || !targetBuild
       || !await assertRecordInScope(scope, 'productBuilds', sourceBuild, { owner: 'work' })
       || !await assertRecordInScope(scope, 'productBuilds', targetBuild, { owner: 'work' })
@@ -344,7 +363,7 @@ export async function carryForwardProductBuildArtifactsAcrossBuildsV1(input: {
       db.productBuildArtifacts.where('buildId').equals(targetBuild.id!).toArray(),
     ])
     const sources = sourceRows.filter(row => keys.includes(row.artifactKey)
-      && row.controlEpoch === sourceBuild.controlEpoch
+      && row.controlEpoch === sourceControlEpoch
       && (row.status === 'accepted' || row.status === 'carried-forward'))
     if (sources.length !== keys.length || new Set(sources.map(row => row.artifactKey)).size !== keys.length) {
       throw new Error('[product-production-artifact] cross-build 来源 Artifact 不完整或不唯一')

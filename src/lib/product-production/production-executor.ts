@@ -2050,6 +2050,62 @@ export function isolateCharacterProviderPromptV1(prompt: string, fallback: strin
   return subjectOnly.length >= 12 ? subjectOnly : fallback.trim()
 }
 
+export function productMediaCharacterPresentationConstraintV1(
+  mediaKind: ProductMediaKind,
+): string {
+  return mediaKind === 'character-pose' || mediaKind === 'character-expression'
+    ? '角色需透明背景以供舞台自动合成。'
+    : '这是完整叙事场景；角色必须融入场景，禁止透明背景、角色卡、拼贴、分屏或舞台立绘排布。'
+}
+
+function glyphSafeTextAdventureItemPromptV1(prompt: string): string {
+  const normalized = prompt
+    .replace(/指针停在\s*[「『“"]?[^，。；\n」』”"]+[」』”"]?\s*位置/gu, '指针偏转至异常边界')
+    .replace(/(?:背面|正面|表面)?(?:刻有|写有|标有|印有|显示)[^，。；\n]*(?:字样|文字|名称|词句|铭文)/gu, '')
+    .replace(/表盘刻有潮位刻度/gu, '表盘环绕抽象潮汐刻度线')
+    .replace(/[「『“"][^」』”"]+[」』”"]/gu, '抽象无字标记')
+    .replace(/[，。；]{2,}/gu, '。')
+    .trim()
+  return normalized || '以材质、形状、颜色和使用痕迹表达物品的剧情功能'
+}
+
+function normalizeTextAdventureVisualRequirementPromptV1(input: {
+  prompt: string
+  blueprint: TextAdventureVisualBlueprintV1 | null
+  mediaKind: VisualRequirementV1['mediaKind']
+  sceneTag: string
+  palette: readonly [string, string, string]
+  anchoredCharacters: readonly ProductMediaCharacterAnchorV1[]
+}): string {
+  const isCharacter = input.mediaKind === 'character-pose' || input.mediaKind === 'character-expression'
+  if (isCharacter && input.anchoredCharacters.length > 0) {
+    const character = input.anchoredCharacters[0]
+    const editorialJob = input.blueprint?.prompt
+      ?? '透明背景的单人角色视觉锚点立绘，头部、双手与身份物件完整清晰'
+    return `${editorialJob}。仅表现已冻结角色「${character.name}」：${character.publicIdentity}。` +
+      `冻结外观必须逐项呈现：${character.visualAnchor}。` +
+      '使用自然站姿和克制表情，不新增年龄、发色、伤痕、服饰、肢体或身份设定。'
+  }
+  if (input.sceneTag === 'region-map') {
+    return textAdventureGlyphSafeMapRepairPromptV1({
+      originalPrompt: input.prompt,
+      palette: input.palette,
+    }) || input.prompt
+  }
+  if (input.sceneTag === 'important-item-primary'
+    || input.sceneTag === 'important-item-secondary'
+    || input.sceneTag === 'important-item-tertiary') {
+    const editorialJob = input.blueprint?.prompt ?? '关键物品的原创叙事特写'
+    return `${editorialJob}。${glyphSafeTextAdventureItemPromptV1(input.prompt)}。` +
+      '全部信息只用材质、颜色、形状、抽象刻度和磨损表达；物品与背景上不得出现任何可读文字、字母、数字、品牌或标志。'
+  }
+  if (input.anchoredCharacters.length === 0) return input.prompt
+  const authority = input.anchoredCharacters.map(character => (
+    `「${character.name}」=${character.publicIdentity}；${character.visualAnchor}`
+  )).join('。')
+  return `${input.prompt}。画面中的已登记角色必须严格服从冻结身份与外观：${authority}。`
+}
+
 export function parseProductMediaRequirementsArtifactV2(
   value: unknown,
   brief: ProductProductionBriefV3,
@@ -2064,6 +2120,9 @@ export function parseProductMediaRequirementsArtifactV2(
     ...productCharacterKeys(brief),
     ...characterAnchors.flatMap(anchor => [anchor.characterKey, ...(anchor.sourceResourceKey ? [anchor.sourceResourceKey] : [])]),
   ])
+  const textAdventureBlueprints = brief.intent.productType === 'text-adventure'
+    ? textAdventureVisualBlueprintsV1(row.visual.length)
+    : []
   const visual: VisualRequirementV1[] = row.visual.map((value, index) => {
     const item = record(value, `visual[${index}]`)
     exactKeys(item, [
@@ -2074,9 +2133,16 @@ export function parseProductMediaRequirementsArtifactV2(
       fail(`visual[${index}].palette 无效`)
     }
     const mediaKind = enumValue(item.mediaKind, ['background', 'character-pose', 'character-expression', 'cg', 'ui'] as const, `visual[${index}].mediaKind`)
-    const characterAnchorRefs = textArray(item.characterAnchorRefs, `visual[${index}].characterAnchorRefs`, 20).sort()
-    textArray(item.hardConstraints, `visual[${index}].hardConstraints`, 30)
+    const rawPrompt = text(item.prompt, `visual[${index}].prompt`, 8_000)
     const isCharacter = mediaKind === 'character-pose' || mediaKind === 'character-expression'
+    const mentionedCharacterRefs = brief.intent.productType === 'text-adventure' && !isCharacter
+      ? characterAnchors.filter(character => rawPrompt.includes(character.name)).map(character => character.characterKey)
+      : []
+    const characterAnchorRefs = [...new Set([
+      ...textArray(item.characterAnchorRefs, `visual[${index}].characterAnchorRefs`, 20),
+      ...mentionedCharacterRefs,
+    ])].sort()
+    textArray(item.hardConstraints, `visual[${index}].hardConstraints`, 30)
     const canContainCharacter = isCharacter || mediaKind === 'background' || mediaKind === 'cg'
     const hasCharacterContract = characterAnchorRefs.length > 0
     if (hasCharacterContract) {
@@ -2090,10 +2156,14 @@ export function parseProductMediaRequirementsArtifactV2(
     // Character constraints are authority-owned data derived from the frozen
     // Brief. The planning model may suggest them, but cannot weaken, expand or
     // reorder the contract that is sent to providers and frozen in proof.
-    const anchoredCharacters = characterAnchorRefs.flatMap(anchorRef => characterAnchors.filter(character => (
-      character.characterKey === anchorRef || character.sourceResourceKey === anchorRef
-      || anchorRef === 'intent:protagonist' && character.role === 'player'
-    )))
+    const anchoredCharacters = [...new Map(
+      characterAnchorRefs.flatMap(anchorRef => characterAnchors
+        .filter(character => (
+          character.characterKey === anchorRef || character.sourceResourceKey === anchorRef
+          || anchorRef === 'intent:protagonist' && character.role === 'player'
+        ))
+        .map(character => [character.characterKey, character] as const)),
+    ).values()]
     const requiredCharacterConstraints = [...new Set([
       '保持角色身份、年龄段与核心视觉特征',
       ...(anchoredCharacters.length > 0
@@ -2110,7 +2180,16 @@ export function parseProductMediaRequirementsArtifactV2(
       mediaKind,
       sceneTag: key(item.sceneTag, `visual[${index}].sceneTag`),
       beatKey: key(item.beatKey, `visual[${index}].beatKey`),
-      prompt: text(item.prompt, `visual[${index}].prompt`, 8_000),
+      prompt: brief.intent.productType === 'text-adventure'
+        ? normalizeTextAdventureVisualRequirementPromptV1({
+            prompt: rawPrompt,
+            blueprint: textAdventureBlueprints[index] ?? null,
+            mediaKind,
+            sceneTag: key(item.sceneTag, `visual[${index}].sceneTag`),
+            palette: [...item.palette] as [string, string, string],
+            anchoredCharacters,
+          })
+        : rawPrompt,
       altText: text(item.altText, `visual[${index}].altText`, 1_000),
       width: integer(item.width, `visual[${index}].width`, 320, 4096),
       height: integer(item.height, `visual[${index}].height`, 320, 4096),
@@ -3794,7 +3873,8 @@ async function executeVisualTask(input: ProductProductionTaskExecutionInputV1, o
         : requirement.prompt
     const baseProviderPrompt = requirement.characterAnchorRefs.length
       ? `${governedPrompt}\n冻结角色锚点：${requirement.characterAnchorRefs.join('、')}。` +
-        `必须遵守：${requirement.hardConstraints.join('；')}。若前文描述与这些冻结约束冲突，以冻结约束为唯一权威并主动修正。角色需透明背景以供舞台自动合成。` +
+        `必须遵守：${requirement.hardConstraints.join('；')}。若前文描述与这些冻结约束冲突，以冻结约束为唯一权威并主动修正。` +
+        productMediaCharacterPresentationConstraintV1(requirement.mediaKind) +
         (isAgnesCharacter
           ? '这是单人角色立绘素材，不是场景、海报或角色卡：画布只能有一个完整角色；必须完整保留提示指定的头部、双手、身份物件和身体取景，头顶及左右轮廓留出至少 8% 安全边距，禁止裁掉头部。禁止灯塔、风景、文字、边框、光效和装饰元素。' +
             '不得把透明背景画成棋盘格、网格或光栅；若无法直接输出真实 alpha，角色以外的每一个像素都只能是纯品红 #FF00FF，禁止阴影、纹理、渐变和杂色。'

@@ -126,20 +126,30 @@ export function canUpgradeTextAdventureVisualReviewPlanV1(
 export function canReviseTextAdventureVisualContractFromRecoveryV1(
   build: Pick<ProductBuildRecordV1, 'status' | 'failureJson' | 'planJson'>,
 ): boolean {
-  if (build.status !== 'recovery-required') return false
   try {
     const failure = JSON.parse(build.failureJson) as {
       taskKey?: unknown
       detail?: unknown
+      blockerKey?: unknown
+      resolution?: { action?: unknown }
+      previousFailure?: { taskKey?: unknown; detail?: unknown }
     }
-    if (typeof failure.taskKey !== 'string') return false
-    const directlyVisual = failure.taskKey === 'media.requirements'
-      || failure.taskKey === 'media.audit'
-      || failure.taskKey === 'media.visual-quality-review'
-      || /^media\.visual(?:\.\d{3}|-quality-review\.batch-\d+)$/.test(failure.taskKey)
-    const visualClosureFailure = failure.taskKey === 'integration.package'
-      || failure.taskKey === 'qa.release'
-    const detail = typeof failure.detail === 'string' ? failure.detail : ''
+    const rejectedAnchorBuild = build.status === 'cancelled'
+      && failure.blockerKey === 'media.anchor-author-gate'
+      && failure.resolution?.action === 'cancel'
+      && failure.previousFailure?.taskKey === 'media.anchor-author-gate'
+    if (build.status !== 'recovery-required' && !rejectedAnchorBuild) return false
+    const taskKey = rejectedAnchorBuild ? failure.previousFailure?.taskKey : failure.taskKey
+    if (typeof taskKey !== 'string') return false
+    const directlyVisual = taskKey === 'media.requirements'
+      || taskKey === 'media.audit'
+      || taskKey === 'media.visual-quality-review'
+      || taskKey === 'media.anchor-author-gate'
+      || /^media\.visual(?:\.\d{3}|-quality-review\.batch-\d+)$/.test(taskKey)
+    const visualClosureFailure = taskKey === 'integration.package'
+      || taskKey === 'qa.release'
+    const rawDetail = rejectedAnchorBuild ? failure.previousFailure?.detail : failure.detail
+    const detail = typeof rawDetail === 'string' ? rawDetail : ''
     if (!directlyVisual && !(visualClosureFailure
       && /media|visual|image|图片|插图|媒资|视觉/iu.test(detail))) return false
     const plan = parseProductProductionPlanV3(build.planJson)
@@ -1059,16 +1069,23 @@ async function applyCommand(input: {
     && affectedLanes.length === 1 && affectedLanes[0] === 'visual'
   const recoveryEvolution = budgetRecovery || planUpgradeRecovery || visualContractRecovery
   if (recoveryEvolution) {
-    if (production.productType !== 'text-adventure' || production.status !== 'producing'
+    if (production.productType !== 'text-adventure'
       || production.currentBuildNumber !== recoveryBase.buildNumber) {
       reject('invalid-state-transition', '只有当前文字冒险恢复 Build 可以升级生产预算、执行计划或视觉合同')
     }
     const base = await db.productBuilds
       .where('[productionId+buildNumber]').equals([production.id, recoveryBase.buildNumber]).first()
-    if (!base || base.status !== 'recovery-required'
+    const rejectedAnchorRecovery = !!base && visualContractRecovery
+      && production.status === 'stopped'
+      && canReviseTextAdventureVisualContractFromRecoveryV1(base)
+    const sourceControlEpoch = rejectedAnchorRecovery
+      ? parseProductProductionPlanV3(base.planJson).controlEpoch
+      : base?.controlEpoch
+    if (!base || (!rejectedAnchorRecovery
+        && (production.status !== 'producing' || base.status !== 'recovery-required'))
       || base.briefHash !== recoveryBase.briefHash
       || base.planHash !== recoveryBase.planHash
-      || base.controlEpoch !== recoveryBase.controlEpoch) {
+      || sourceControlEpoch !== recoveryBase.controlEpoch) {
       reject('source-stale', '恢复 Build 基线不可验证')
     }
     if (planUpgradeRecovery && !canUpgradeTextAdventureVisualReviewPlanV1(base)) {

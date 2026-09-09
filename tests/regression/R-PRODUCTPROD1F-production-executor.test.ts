@@ -24,6 +24,7 @@ import {
   parseProductionModelJsonObjectV1,
   parseTextAdventureVisualQualityReviewArtifactV1,
   positiveImageRepairDirectiveV1,
+  productMediaCharacterPresentationConstraintV1,
   productImageNegativePromptV1,
   textAdventureVisualAnchorConfirmationHashV1,
   textAdventureGlyphSafeMapRepairPromptV1,
@@ -2424,6 +2425,65 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
 describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
   beforeEach(async () => { await db.delete(); await db.open() })
   afterEach(() => db.close())
+
+  it('文字冒险美术合同覆盖冲突角色描述、绑定场景人物并移除可读物品文字', async () => {
+    const owned = await fixtureForProduct('text-adventure', {
+      scale: 'short-arc', visualLevel: 'key-scenes', qualityProfile: 'commercial-candidate',
+    })
+    const anchors = [{
+      characterKey: 'character.player', sourceResourceKey: null, name: '岚舟', role: 'player' as const,
+      publicIdentity: '见习守灯人与机械修复师',
+      visualAnchor: '黑短发带盐雾浅灰发梢，深蓝修复工外套与铜扣护腕，左眉细疤',
+    }, {
+      characterKey: 'character.npc.1', sourceResourceKey: null, name: '涅洛', role: 'major-npc' as const,
+      publicIdentity: '失去右臂的退役领航员',
+      visualAnchor: '深褐皮肤，失去右臂，腰间系刻空名字的银铃',
+    }, {
+      characterKey: 'character.npc.2', sourceResourceKey: null, name: '阿塔', role: 'major-npc' as const,
+      publicIdentity: '冰窟渔村村长与北境领航者',
+      visualAnchor: '银发粗辫，左眼磨砂冰晶镜片，多层鲸皮外套与折叠冰镐',
+    }]
+    const blueprints = textAdventureVisualBlueprintsV1(owned.brief.media.imageCount)
+    const requirements = {
+      schema: 'storyforge.product-media-requirements-artifact', version: 2,
+      visual: blueprints.map((blueprint, index) => ({
+        artifactKey: `media.visual.${String(index + 1).padStart(3, '0')}`,
+        mediaKind: blueprint.mediaKind, sceneTag: blueprint.sceneTag, beatKey: blueprint.beatKey,
+        prompt: blueprint.prompt, altText: blueprint.altText,
+        width: blueprint.width, height: blueprint.height,
+        palette: ['#112233', '#445566', '#ddeeff'],
+        characterAnchorRefs: blueprint.characterOrdinal == null
+          ? [] : [anchors[blueprint.characterOrdinal].characterKey],
+        hardConstraints: [],
+      })),
+      audio: [],
+    }
+    requirements.visual[1].prompt = '岚舟，浅棕短发，右脸有疤，穿灰白制服。'
+    requirements.visual[3].prompt = '岚舟在潮钟塔前发现导师日记，雾潮正在逼近。'
+    requirements.visual[6].prompt = '沉砾，灰白短发与胡须，双手持黄铜手杖。'
+    requirements.visual[8].prompt = '屿娘，短黑发，双手布满冻疮，腰挂鱼刀。'
+    requirements.visual[2].prompt = '无文字区域地图，标注雾湾环礁和霜潮列岛，以航线连接。'
+    requirements.visual[5].prompt = '黄铜罗盘，表盘刻有潮位刻度，指针停在「临界」位置，背面刻有「守灯人传承」字样。'
+
+    const parsed = parseProductMediaRequirementsArtifactV2(requirements, owned.brief, anchors)
+    expect(parsed.visual[1].prompt).toContain('岚舟')
+    expect(parsed.visual[1].prompt).toContain('黑短发带盐雾浅灰发梢')
+    expect(parsed.visual[1].prompt).toContain('左眉细疤')
+    expect(parsed.visual[1].prompt).not.toContain('右脸有疤')
+    expect(parsed.visual[6].prompt).toContain('涅洛')
+    expect(parsed.visual[6].prompt).not.toContain('沉砾')
+    expect(parsed.visual[8].prompt).toContain('阿塔')
+    expect(parsed.visual[8].prompt).not.toContain('屿娘')
+    expect(parsed.visual[3].characterAnchorRefs).toEqual(['character.player'])
+    expect(parsed.visual[3].hardConstraints).toContain('视觉锚点：黑短发带盐雾浅灰发梢，深蓝修复工外套与铜扣护腕，左眉细疤')
+    expect(parsed.visual[2].prompt).toContain('UNLABELED VISUAL-ONLY')
+    expect(parsed.visual[2].prompt).not.toContain('雾湾环礁')
+    expect(parsed.visual[5].prompt).toContain('不得出现任何可读文字')
+    expect(parsed.visual[5].prompt).not.toContain('守灯人传承')
+    expect(parsed.visual[5].prompt).not.toContain('「临界」')
+    expect(productMediaCharacterPresentationConstraintV1('character-pose')).toContain('透明背景')
+    expect(productMediaCharacterPresentationConstraintV1('cg')).toContain('禁止透明背景')
+  })
 
   it('复用非密钥 binding，并行生成内容、视觉、音频，预览后完成三轮连续演化', async () => {
     const owned = await fixture()
