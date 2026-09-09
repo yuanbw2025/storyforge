@@ -39,6 +39,8 @@ Long fiction needs evidence from earlier chapters. Adaptation needs traceable de
 | Worlds | Versioned semantic snapshots and product-specific source plans | Reuse a known version across multiple works |
 | Interactive previews | Dedicated rules, character knowledge, event histories and runtime state | Preserve consequences and independent playthroughs |
 
+See the [architecture and long-term consistency loop](#shared-execution-and-data-architecture) for diagrams, implementation links and regression evidence.
+
 ## Quick start
 
 Open the [web app](https://yuanbw.vercel.app/storyforge/) or run the source locally. Core local creation does not require a StoryForge account. AI generation uses your own provider credentials; cloud API charges are separate.
@@ -156,15 +158,89 @@ Online community and commercial services are later-stage work.
 
 ## Shared execution and data architecture
 
-Formal authoring follows: **freeze scope and sources → retrieve context → run a dedicated Skill → validate and persist a candidate → author approval → version-checked adoption → downstream updates**. Interactive runtimes instead advance through their product's authorized commands and state machines.
+### Independent products, shared governed AI execution
 
-- **Task contracts** declare context, output shape, allowed writes and budget. Deterministic checks enforce scope, versions and structure.
-- **Durable Harness execution** persists events, candidates, checkpoints and terminal receipts. Failures retain evidence, and retries are bounded. Authors can recover saved state after refresh and inspect the next action. A provider request with an unknown outcome still needs explicit handling; interruption recovery is not universally lossless.
-- **Candidate approval and revision checks** let authors reject output and protect newer edits from stale results.
-- **Three registries** govern readable context, canonical writes and table lifecycles, including backup, import, deletion and ownership. New features must account for these paths.
-- **Local-first, separate ownership** keeps work in IndexedDB and assigns each product its own artifacts, media and saves while sharing versioned worlds.
+Each product owns its domain services and artifacts. **Harness is the execution and validation system around model calls**: it records task contracts, actual inputs, candidates, versions, checkpoints and results, connecting that evidence to the work.
 
-These mechanisms govern execution and data integrity. Literary and visual quality still depend on models and author judgment.
+```mermaid
+flowchart TB
+  subgraph PRODUCTS["Products · domain services and separate ownership"]
+    L["Long fiction / Nodes"]
+    C["Short fiction / Screenplays / Comics"]
+    W["World engine"]
+    I["TTRPG / Character chat / AI town / Text games"]
+  end
+  L & C & W & I --> H["Shared Harness · Formal AI tasks<br/>Skill + Run Contract · Budget · Versions · Recovery"]
+  H --> G["Context Gateway / Memory<br/>Registered sources · Retrieval · Original evidence"]
+  H --> M["Model adapters<br/>Candidates and raw responses"]
+  H --> A["Formal authoring adoption<br/>Author approval · Validation · adopt"]
+  H -.-> E["Durable ledger<br/>Events · Checkpoints · Verification receipts"]
+  G -->|"Scoped reads"| D["Local data and files<br/>IndexedDB / File and media storage<br/>PROJECT_TABLES governs lifecycles"]
+  A -->|"Transactional writes and readback"| D
+  E --> D
+  classDef engine fill:#e8f0fa,stroke:#5279a4,color:#18324f
+  classDef author fill:#fff2df,stroke:#b58a45,color:#593b16
+  classDef data fill:#eaf4ee,stroke:#628b73,color:#254a34
+  class H,M,E engine
+  class A author
+  class G,D data
+```
+
+Arrows show dependencies or data access, not execution order. Long and short fiction do not require the world engine. Interactive runtimes use product-specific commands and state machines; each product owns its media and saves. The next diagram follows formal long-fiction authoring.
+
+### How Harness maintains long-term consistency
+
+Consistency depends on a continuing cycle: **retrieve evidence, approve changes, and make the correct version available to the next task**. Chapter generation, memory settlement, review and future planning each contribute.
+
+```mermaid
+flowchart TB
+  K["Confirmed records<br/>Text / Facts / State / Clues"]
+  K --> R["1. Freeze task and retrieve<br/>Scope, time, versions and deficits"]
+  R --> C["2. Generate and check candidate<br/>Structure, information boundaries<br/>Semantic review when configured"]
+  C --> A["3. Author approval and version check<br/>Adopt → Read back → Receipt"]
+  A --> P["4. Settlement and future impact<br/>Propose changes → Author approval"]
+  P -->|"Update records and indexes for later chapters"| K
+  R -. "Required evidence missing" .-> X["Pause / Reject writeback<br/>Preserve evidence for resolution"]
+  A -. "Source or target is stale" .-> X
+  classDef engine fill:#e8f0fa,stroke:#5279a4,color:#18324f
+  classDef author fill:#fff2df,stroke:#b58a45,color:#593b16
+  classDef data fill:#eaf4ee,stroke:#628b73,color:#254a34
+  classDef paused fill:#f7eaea,stroke:#b27a7a,color:#6a3030
+  class R,C engine
+  class A,P author
+  class K data
+  class X paused
+```
+
+Each formal run also persists its ledger and checkpoints. Settlement and future revisions are separate, bounded runs with their own version checks and approvals; the loop can span multiple writing sessions.
+
+| Consistency risk | Implemented control | Inspectable evidence |
+|---|---|---|
+| Forgotten early facts or clues | Structured facts, layered summaries and long-tail retrieval lead back to original text; required-source deficits block progress | Context Manifest with sources, hashes, actual reads and missing evidence |
+| Wrong work or premature knowledge | Work/world scope and task time boundaries filter sources; information-boundary checks apply | Source scope and boundary evidence |
+| Author edits while generation is running | Adoption rechecks relevant context and target revisions; stale candidates cannot overwrite newer work | Input versions, stale status and retained output |
+| A saved chapter fails to carry forward | Readback verifies persisted state; settlement connects memory, retrieval and storylines; authors handle future-impact candidates | Adoption events, post-state, linked runs and receipts |
+| Review no longer matches the manuscript | Explicit consistency audits bind to the text hash; edits invalidate old audit evidence | Recoverable audit candidates, sources and findings |
+| Refresh or interruption breaks the process | Verified checkpoints restore saved candidates with version checks; unknown external outcomes are not blindly retried | Run, attempt, checkpoint and terminal records |
+
+For example, chapter 8 establishes who holds a unique token. When chapter 80 needs it, retrieval supplies the original passage and confirmed ownership state. If the author changes ownership while a candidate is awaiting approval, revision checks block direct adoption of the stale result. After the new chapter is accepted, confirmed settlement updates become available to later chapters. This illustrates the mechanism; detecting every implicit contradiction still depends on review and author judgment.
+
+### Evidence you can inspect
+
+These existing regression tests cover concrete promises and failure cases:
+
+| Claim | Regression evidence |
+|---|---|
+| Distant, middle and recent evidence at 100k / 300k / 1m characters; future/wrong-world isolation | [Long-form scale gate](./tests/regression/R-PHASE4-long-form-scale-gate.test.ts) |
+| Missing required evidence blocks progress; exact edit targets cannot degrade to a prefix | [Gateway execution](./tests/regression/R-CTXG7-gateway-execution.test.ts) |
+| Changed prose or upstream settings block stale adoption | [Prose adoption](./tests/regression/R-HARNESS7-prose-generation-durable.test.ts) |
+| Saved chapter-settlement candidates recover without another model call | [Settlement recovery](./tests/regression/R-HARNESS20-chapter-post-adoption-durable.test.ts) |
+| Text changes invalidate audits; unknown model outcomes do not auto-retry | [Explicit consistency audit](./tests/regression/R-MEMORY-CLOSE1-consistency-audit-durable.test.ts) |
+| Written history is preserved and upstream changes invalidate future plans | [Future evolution boundaries](./tests/regression/R-FUTURE1-continuous-evolution.test.ts) |
+
+Implementation: [formal prose runs](./src/lib/agent/run/prose-generation-durable.ts), [verification receipts](./src/lib/agent/run/verification-receipt.ts), [architecture](./docs/ARCHITECTURE.md), [Harness standard](./docs/HARNESS-QUALITY-STANDARD.md).
+
+**Scope of assurance:** deterministic code checks versions, scope, structure, state transitions and writeback rules. Semantic review depends on task configuration or explicit author action. Subtext, metaphors, unregistered clues and literary quality still require model and human judgment. Scale fixtures demonstrate engineering behavior, not verified literary consistency across a million-word novel. Recovery covers persisted state; auxiliary and experimental entries retain their explicitly registered limits.
 
 ## Models, storage and privacy
 
