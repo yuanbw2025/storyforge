@@ -236,6 +236,9 @@ export async function* streamChat(
     url: req.url,
     model: config.model,
     status: 'pending',
+  }, {
+    sensitiveValues: [config.apiKey],
+    baseUrl: config.baseUrl,
   })
 
   const startTime = Date.now()
@@ -364,7 +367,10 @@ export async function chat(
   }
   const req = buildRequest(config, trimmed.messages, false, options)
   const startedAt = Date.now()
-  const log = createLog({ type: 'chat', provider: config.provider, model: config.model, url: req.url, status: 'pending' })
+  const log = createLog(
+    { type: 'chat', provider: config.provider, model: config.model, url: req.url, status: 'pending' },
+    { sensitiveValues: [config.apiKey], baseUrl: config.baseUrl },
+  )
   try {
     const response = await fetch(req.url, {
       method: 'POST',

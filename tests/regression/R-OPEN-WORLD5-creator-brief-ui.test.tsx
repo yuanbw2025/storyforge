@@ -8,9 +8,11 @@ import type {
   WorkspaceScope,
 } from '../../src/lib/types'
 import type { TextOpenWorldCreatorBriefSessionV1 } from '../../src/lib/open-world/creator-brief'
+import { hashCanonicalValue } from '../../src/lib/agent/run/hash'
 
 const creatorBriefMocks = vi.hoisted(() => ({
   recover: vi.fn(),
+  recoverExact: vi.fn(),
   start: vi.fn(),
   save: vi.fn(),
   consult: vi.fn(),
@@ -22,6 +24,7 @@ vi.mock('../../src/lib/open-world/creator-brief', async importOriginal => {
   return {
     ...actual,
     recoverLatestTextOpenWorldCreatorBriefSessionV1: creatorBriefMocks.recover,
+    recoverTextOpenWorldCreatorBriefSessionByIdentityV1: creatorBriefMocks.recoverExact,
     startTextOpenWorldCreatorBriefSessionV1: creatorBriefMocks.start,
     saveTextOpenWorldCreatorBriefDraftV1: creatorBriefMocks.save,
     generateTextOpenWorldCreatorBriefCandidateV1: creatorBriefMocks.consult,
@@ -53,7 +56,6 @@ const SCOPE: WorkspaceScope = { projectId: 51, worldId: 52, workId: 53 }
 const SOURCE_VERSION_HASH = 'a'.repeat(64)
 const SOURCE_BOUNDARY_HASH = 'b'.repeat(64)
 const SOURCE_BINDING_HASH = 'c'.repeat(64)
-const BRIEF_HASH = 'd'.repeat(64)
 
 function sourceSelection(): TextOpenWorldCreatorSourceSelectionV1 {
   return {
@@ -209,14 +211,23 @@ function consultationSession(overrides: Partial<TextOpenWorldCreatorBriefSession
   }
 }
 
-function confirmedBrief(session: TextOpenWorldCreatorBriefSessionV1, draft: TextOpenWorldCreatorBriefDraftV1): TextOpenWorldCreatorBriefV1 {
+function resumeTarget(session: TextOpenWorldCreatorBriefSessionV1) {
   return {
+    conversationId: session.conversation.id,
+    productInstanceKey: session.productInstanceKey,
+    sourceBindingHash: session.sourceBindingHash,
+    sourceBinding: session.sourceBinding,
+  }
+}
+
+async function confirmedBrief(session: TextOpenWorldCreatorBriefSessionV1, draft: TextOpenWorldCreatorBriefDraftV1): Promise<TextOpenWorldCreatorBriefV1> {
+  const body: Omit<TextOpenWorldCreatorBriefV1, 'briefHash'> = {
     schema: 'storyforge.text-open-world-creator-brief',
     version: 1,
     productInstanceKey: session.productInstanceKey,
     revision: 1,
     sourceBinding: session.sourceBinding,
-    sourceBindingHash: session.sourceBindingHash,
+    sourceBindingHash: await hashCanonicalValue(session.sourceBinding),
     sourceSummary: session.sourceSummary,
     draft,
     productBoundary: {
@@ -243,11 +254,11 @@ function confirmedBrief(session: TextOpenWorldCreatorBriefSessionV1, draft: Text
       candidateHash: 'e'.repeat(64),
       runBindingHash: 'f'.repeat(64),
       origin: 'author',
-      contextManifestHashes: [],
+      contextManifestHashes: ['1'.repeat(64)],
     },
     confirmedAt: 1_788_000_000_100,
-    briefHash: BRIEF_HASH,
   }
+  return { ...body, briefHash: await hashCanonicalValue(body) }
 }
 
 function button(host: ParentNode, label: string): HTMLButtonElement {
@@ -309,6 +320,7 @@ describe('TOW-G5-02 · Creator Brief UI', () => {
       },
     })
     creatorBriefMocks.recover.mockResolvedValue(null)
+    creatorBriefMocks.recoverExact.mockResolvedValue(null)
     creatorBriefMocks.start.mockImplementation(async () => consultationSession())
     creatorBriefMocks.save.mockImplementation(async input => ({
       ...input.session,
@@ -316,7 +328,7 @@ describe('TOW-G5-02 · Creator Brief UI', () => {
       conversation: { ...input.session.conversation, updatedAt: 1_788_000_000_050 },
     }))
     creatorBriefMocks.confirm.mockImplementation(async input => {
-      const brief = confirmedBrief(input.session, input.draft)
+      const brief = await confirmedBrief(input.session, input.draft)
       return {
         ...input.session,
         draft: input.draft,
@@ -397,6 +409,12 @@ describe('TOW-G5-02 · Creator Brief UI', () => {
     await waitFor(() => expect(host.textContent).toContain('Brief 已就绪'))
     expect(host.textContent).toContain('已确认 v1')
     expect(host.textContent).toContain('Build 0')
+
+    await act(async () => button(host, '核对模型与预算').click())
+    await waitFor(() => expect(
+      host.querySelector('[data-testid="text-open-world-creator-production-readiness"]'),
+    ).not.toBeNull())
+    expect(host.textContent).toContain('核对模型、凭证与生产预算')
   })
 
   it('来源漂移时保留表单但阻断保存、Agent 与确认，并允许返回来源重选', async () => {
@@ -421,5 +439,88 @@ describe('TOW-G5-02 · Creator Brief UI', () => {
     expect(onBack).toHaveBeenCalledTimes(1)
     expect(creatorBriefMocks.save).not.toHaveBeenCalled()
     expect(creatorBriefMocks.confirm).not.toHaveBeenCalled()
+  })
+
+  it('把余额拒绝显示为不含供应商原文的暂停说明，且不会隐藏重发', async () => {
+    const secret = 'sk-provider-secret-must-not-render'
+    useAIConfigStore.setState({
+      config: {
+        provider: 'deepseek',
+        apiKey: secret,
+        baseUrl: 'https://api.deepseek.com/v1',
+        model: 'deepseek-v4-flash',
+        temperature: 0.7,
+        maxTokens: 0,
+      },
+      rememberApiKey: false,
+    })
+    creatorBriefMocks.consult.mockRejectedValue({
+      status: 429,
+      body: `insufficient balance; upstream diagnostic ${secret}`,
+    })
+
+    await act(async () => root.render(createElement(TextOpenWorldCreatorBriefStudio, {
+      initialSession: consultationSession(),
+      onBack: vi.fn(),
+    })))
+    await act(async () => button(host, '请求主 Agent').click())
+
+    await waitFor(() => expect(host.querySelector('[role="alert"]')?.textContent).toContain('余额不足'))
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain('没有隐藏重发')
+    expect(host.innerHTML).not.toContain(secret)
+    expect(host.innerHTML).not.toContain('upstream diagnostic')
+    expect(creatorBriefMocks.consult).toHaveBeenCalledTimes(1)
+  })
+
+  it('从设置返回后恢复已确认 Brief，并直接回到模型与预算核对页', async () => {
+    const recovered = consultationSession()
+    const draft = { ...recovered.draft, unresolvedQuestions: [] }
+    const brief = await confirmedBrief(recovered, draft)
+    const exactTarget = resumeTarget(recovered)
+    creatorBriefMocks.recoverExact.mockResolvedValue({
+      ...recovered,
+      draft,
+      confirmedBrief: brief,
+      production: {
+        ...recovered.production,
+        status: 'brief-ready',
+        currentBriefRevision: 1,
+      },
+    })
+
+    await act(async () => root.render(createElement(TextOpenWorldCreatorWorkflow, {
+      novelScope: SCOPE,
+      initialSourceKind: 'novel',
+      initialView: 'readiness',
+      initialResumeTarget: exactTarget,
+    })))
+
+    await waitFor(() => expect(
+      host.querySelector('[data-testid="text-open-world-creator-production-readiness"]'),
+    ).not.toBeNull())
+    expect(creatorBriefMocks.recoverExact).toHaveBeenCalledWith([SCOPE], exactTarget)
+    expect(creatorBriefMocks.recover).not.toHaveBeenCalled()
+    expect(host.textContent).toContain('核对模型、凭证与生产预算')
+    await waitFor(() => expect(host.textContent).toContain('缺少远程服务 Key'))
+  })
+
+  it('设置返回目标失效时不回退到其他来源的最新会谈', async () => {
+    const exactTarget = resumeTarget(consultationSession())
+    creatorBriefMocks.recoverExact.mockResolvedValue(null)
+    creatorBriefMocks.recover.mockResolvedValue(consultationSession({
+      conversation: { ...consultationSession().conversation, id: 999, updatedAt: 1_788_000_000_999 },
+    }))
+
+    await act(async () => root.render(createElement(TextOpenWorldCreatorWorkflow, {
+      novelScope: SCOPE,
+      initialSourceKind: 'novel',
+      initialView: 'readiness',
+      initialResumeTarget: exactTarget,
+    })))
+
+    await waitFor(() => expect(host.querySelector('[data-testid="mock-creator-source-studio"]')).not.toBeNull())
+    expect(creatorBriefMocks.recoverExact).toHaveBeenCalledWith([SCOPE], exactTarget)
+    expect(creatorBriefMocks.recover).not.toHaveBeenCalled()
+    expect(host.querySelector('[data-testid="text-open-world-creator-production-readiness"]')).toBeNull()
   })
 })

@@ -65,6 +65,7 @@ const REVIEW_PREFIXES = [
 ]
 
 const CREATION_PREFIXES = [
+  'product-production',
   'chapter.',
   'outline.',
   'detail.',

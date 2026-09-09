@@ -122,6 +122,16 @@ export interface TextOpenWorldCreatorBriefSessionV1 {
   sourceIssue: string | null
 }
 
+/** Exact, credential-free identity used to resume one creator conversation
+ * after a settings round-trip. It deliberately carries the portable source
+ * binding rather than source text or a local database locator. */
+export interface TextOpenWorldCreatorBriefResumeTargetV1 {
+  conversationId: number
+  productInstanceKey: string
+  sourceBindingHash: string
+  sourceBinding: TextOpenWorldCreatorSourceBindingV1
+}
+
 export class TextOpenWorldCreatorBriefErrorV1 extends Error {
   constructor(readonly code: string, message: string) {
     super(`[text-open-world-creator-brief:${code}] ${message}`)
@@ -578,6 +588,37 @@ export async function recoverLatestTextOpenWorldCreatorBriefSessionV1(
   for (const candidate of candidates) {
     try { return await hydrateSession(candidate.scope, candidate.conversation, { recheck: true }) }
     catch { /* a corrupt unrelated session must not hide a later valid one */ }
+  }
+  return null
+}
+
+/** Resume only the conversation named by a settings-return capability.
+ * A missing, stale, corrupt, cross-product, or cross-source target never
+ * falls back to another recent conversation. */
+export async function recoverTextOpenWorldCreatorBriefSessionByIdentityV1(
+  scopes: readonly WorkspaceScope[],
+  target: TextOpenWorldCreatorBriefResumeTargetV1,
+): Promise<TextOpenWorldCreatorBriefSessionV1 | null> {
+  if (!Number.isSafeInteger(target.conversationId) || target.conversationId < 1
+    || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(target.productInstanceKey)
+    || !HASH.test(target.sourceBindingHash)
+    || await hashCanonicalValue(target.sourceBinding) !== target.sourceBindingHash) return null
+  const uniqueScopes = scopes.filter((scope, index, all) => (
+    all.findIndex(candidate => sameScope(candidate, scope)) === index
+  ))
+  for (const scope of uniqueScopes) {
+    const conversations = await readOwnedRows<AgentConversation>(scope, 'agentConversations', { owner: 'work' })
+    const conversation = conversations.find((row): row is AgentConversation & { id: number } => (
+      row.id === target.conversationId
+      && row.status === 'active'
+      && row.purpose.startsWith(TEXT_OPEN_WORLD_CREATOR_BRIEF_PURPOSE_PREFIX_V1)
+    ))
+    if (!conversation) continue
+    const session = await hydrateSession(scope, conversation, { recheck: true })
+    if (session.productInstanceKey !== target.productInstanceKey
+      || session.sourceBindingHash !== target.sourceBindingHash
+      || canonicalStringify(session.sourceBinding) !== canonicalStringify(target.sourceBinding)) return null
+    return session
   }
   return null
 }

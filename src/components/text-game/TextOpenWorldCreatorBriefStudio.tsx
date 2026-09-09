@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import {
   AlertTriangle,
   ArrowLeft,
+  ArrowRight,
   CheckCircle2,
   FileCheck2,
   Loader2,
@@ -19,6 +20,7 @@ import {
   TEXT_OPEN_WORLD_CREATOR_PRODUCT_BOUNDARY_V1,
   type TextOpenWorldCreatorBriefSessionV1,
 } from '../../lib/open-world/creator-brief'
+import { describeTextOpenWorldProviderFailureV1 } from '../../lib/open-world/creator-production-preflight'
 import type {
   TextOpenWorldCreatorBriefDraftV1,
   TextOpenWorldCreatorSourceSelectionV1,
@@ -31,6 +33,7 @@ export interface TextOpenWorldCreatorBriefStudioProps {
   initialSession?: TextOpenWorldCreatorBriefSessionV1 | null
   onBack: () => void
   onConfirmed?: (session: TextOpenWorldCreatorBriefSessionV1) => void
+  onContinue?: (session: TextOpenWorldCreatorBriefSessionV1) => void
 }
 
 type BusyAction = 'opening' | 'saving' | 'consulting' | 'confirming' | null
@@ -197,7 +200,10 @@ export function TextOpenWorldCreatorBriefStudio(props: TextOpenWorldCreatorBrief
       })
       setSession(next); setDraft(next.draft); setFollowUp('')
       setNotice('主 Agent 已形成理解候选。请审阅后决定是否采纳。')
-    } catch (cause) { setError(errorMessage(cause, '主 Agent 会谈失败；你仍可人工填写并确认。')) }
+    } catch (cause) {
+      const failure = describeTextOpenWorldProviderFailureV1(cause)
+      setError(`${failure.message} ${failure.retryHint} 你仍可人工填写并确认 Brief。`)
+    }
     finally { setBusy(null) }
   }
 
@@ -417,6 +423,12 @@ export function TextOpenWorldCreatorBriefStudio(props: TextOpenWorldCreatorBrief
           : '确认只保存 Brief，不会启动计费生产。'}
       </div>
       <div className="flex flex-wrap gap-2">
+        {session.confirmedBrief && props.onContinue && <button type="button" disabled={Boolean(busy)}
+          onClick={() => props.onContinue?.(session)}
+          data-testid="text-open-world-creator-brief-continue"
+          className="inline-flex items-center gap-2 rounded-lg border border-accent px-4 py-2 text-xs font-semibold text-accent disabled:opacity-40">
+          核对模型与预算<ArrowRight className="h-4 w-4" />
+        </button>}
         <button type="button" disabled={Boolean(busy) || Boolean(session.sourceIssue) || !(session.selection ?? props.selection)} onClick={resetDraft}
           className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs disabled:opacity-40">
           <RotateCcw className="h-4 w-4" />恢复预填

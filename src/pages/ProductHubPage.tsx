@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { useNavigate } from 'react-router'
+import { useLocation, useNavigate } from 'react-router'
 import {
   ArrowRight,
   BookOpenText,
@@ -72,6 +72,13 @@ import {
   type ProductSurfaceIdV1,
   type StoryForgeProductIdV1,
 } from '../lib/product/product-catalog'
+import type { TextOpenWorldCreatorBriefResumeTargetV1 } from '../lib/open-world/creator-brief'
+import {
+  parseTextOpenWorldSettingsReturnV1,
+  resolveProjectSelectionAfterInitialLoadV1,
+  type TextOpenWorldEntrySourceV1,
+  type TextOpenWorldSettingsReturnV1,
+} from '../lib/open-world/creator-settings-navigation'
 import './product-hub.css'
 
 const NodeAuthoringWorkspace = lazy(() => import('../components/node-authoring/NodeAuthoringWorkspace'))
@@ -92,7 +99,6 @@ const ComicStudio = lazy(() => import('../components/comic/ComicStudio'))
 
 type TabId = 'home' | 'worlds' | 'novel' | 'nodes' | 'ttrpg' | 'chat' | 'text-games' | 'market'
 type Accent = 'ochre' | 'teal' | 'blue' | 'violet' | 'rust'
-type TextOpenWorldEntrySourceV1 = 'world-release' | 'novel'
 
 const TTRPG_PRODUCTION_PRODUCTS = ['ttrpg'] as const
 const CHARACTER_INTERACTION_PRODUCTION_PRODUCTS = ['character-interaction'] as const
@@ -622,6 +628,9 @@ function TextGamePage({
   world,
   onOpenWorldPicker,
   onCreate,
+  onOpenSettings,
+  initialOpenWorldCreatorView,
+  initialOpenWorldResumeTarget,
   initialProduct = 'text-adventure',
   initialMode = 'play',
   initialProductionHandoff = null,
@@ -634,6 +643,9 @@ function TextGamePage({
   world?: ProductWorld
   onOpenWorldPicker: () => void
   onCreate: () => void
+  onOpenSettings: (target: TextOpenWorldCreatorBriefResumeTargetV1) => void
+  initialOpenWorldCreatorView?: 'brief' | 'readiness'
+  initialOpenWorldResumeTarget?: TextOpenWorldCreatorBriefResumeTargetV1 | null
   initialProduct?: TextGameProductKindV1
   initialMode?: 'play' | 'production'
   initialProductionHandoff?: ProductProductionHandoffV1 | null
@@ -704,6 +716,9 @@ function TextGamePage({
               ? initialProductionHandoff
               : null}
             initialSourceKind={initialOpenWorldSource}
+            onOpenSettings={onOpenSettings}
+            initialView={initialOpenWorldCreatorView}
+            initialResumeTarget={initialOpenWorldResumeTarget}
           />
         </>
         : <section className="sf-product-empty" data-testid="text-open-world-source-empty">
@@ -858,24 +873,33 @@ function MobileNavPanel({ activeTab, onClose, onSelect }: { activeTab: TabId; on
 
 export default function ProductHubPage() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const settingsReturn = useMemo(() => parseTextOpenWorldSettingsReturnV1(location.state), [location.state])
   const { projects, loadProjects } = useProjectStore()
-  const [activeTab, setActiveTab] = useState<TabId>('home')
-  const [activeWorkProjectId, setActiveWorkProjectId] = useState<number | null>(null)
-  const [activeWorldProjectId, setActiveWorldProjectId] = useState<number | null>(null)
+  const [activeTab, setActiveTab] = useState<TabId>(settingsReturn ? 'text-games' : 'home')
+  const [activeWorkProjectId, setActiveWorkProjectId] = useState<number | null>(settingsReturn?.activeWorkProjectId ?? null)
+  const [activeWorldProjectId, setActiveWorldProjectId] = useState<number | null>(settingsReturn?.activeWorldProjectId ?? null)
   const [showCreate, setShowCreate] = useState(false)
   const [showWorldPicker, setShowWorldPicker] = useState(false)
   const [showMobileNav, setShowMobileNav] = useState(false)
-  const [textGameProduct, setTextGameProduct] = useState<TextGameProductKindV1>('text-adventure')
-  const [textGameInitialMode, setTextGameInitialMode] = useState<'play' | 'production'>('play')
+  const [textGameProduct, setTextGameProduct] = useState<TextGameProductKindV1>(settingsReturn ? 'text-open-world' : 'text-adventure')
+  const [textGameInitialMode, setTextGameInitialMode] = useState<'play' | 'production'>(settingsReturn ? 'production' : 'play')
   const [textProductProductionHandoff, setTextProductProductionHandoff] = useState<ProductProductionHandoffV1 | null>(null)
-  const [textOpenWorldEntrySource, setTextOpenWorldEntrySource] = useState<TextOpenWorldEntrySourceV1>('world-release')
+  const [textOpenWorldEntrySource, setTextOpenWorldEntrySource] = useState<TextOpenWorldEntrySourceV1>(settingsReturn?.sourceKind ?? 'world-release')
   const [ttrpgInitialSessionId, setTtrpgInitialSessionId] = useState<number | null>(null)
   const [ttrpgProductionHandoff, setTtrpgProductionHandoff] = useState<ProductProductionHandoffV1 | null>(null)
   const [onlineRoomHandoff, setOnlineRoomHandoff] = useState<OnlineRoomJoinHandoffV1 | null>(null)
   const [projections, setProjections] = useState<Record<number, WorldProjection>>({})
+  const [projectsInitialized, setProjectsInitialized] = useState(false)
   const activeWorldGroupId = useWorldGroupStore(state => state.activeGroupId)
 
-  useEffect(() => { void loadProjects() }, [loadProjects])
+  useEffect(() => {
+    let cancelled = false
+    void loadProjects().finally(() => {
+      if (!cancelled) setProjectsInitialized(true)
+    })
+    return () => { cancelled = true }
+  }, [loadProjects])
 
   useEffect(() => {
     let cancelled = false
@@ -900,18 +924,27 @@ export default function ProductHubPage() {
     project.workspacePurpose !== 'world-engine'
   )), [projects])
   useEffect(() => {
-    if (activeWorkProjectId != null && workProjects.some(project => project.id === activeWorkProjectId)) return
-    setActiveWorkProjectId(workProjects[0]?.id ?? null)
-  }, [activeWorkProjectId, workProjects])
+    const next = resolveProjectSelectionAfterInitialLoadV1({
+      currentProjectId: activeWorkProjectId,
+      projectsInitialized,
+      authoritativeProjectIds: workProjects.flatMap(project => project.id == null ? [] : [project.id]),
+    })
+    if (next !== activeWorkProjectId) setActiveWorkProjectId(next)
+  }, [activeWorkProjectId, projectsInitialized, workProjects])
   useEffect(() => {
     // Project identity is authoritative while the derived world projection is
     // still loading. Otherwise a newly-created/imported world is immediately
     // reset to the first stale projection before its own projection arrives.
-    if (activeWorldProjectId != null && projects.some(project => (
-      project.id === activeWorldProjectId && project.workspacePurpose === 'world-engine'
-    ))) return
-    setActiveWorldProjectId(worlds[0]?.projectId ?? null)
-  }, [activeWorldProjectId, projects, worlds])
+    const next = resolveProjectSelectionAfterInitialLoadV1({
+      currentProjectId: activeWorldProjectId,
+      projectsInitialized,
+      authoritativeProjectIds: projects.flatMap(project => (
+        project.id != null && project.workspacePurpose === 'world-engine' ? [project.id] : []
+      )),
+      fallbackProjectIds: worlds.map(world => world.projectId),
+    })
+    if (next !== activeWorldProjectId) setActiveWorldProjectId(next)
+  }, [activeWorldProjectId, projects, projectsInitialized, worlds])
   const activeWorkProject = workProjects.find(project => project.id === activeWorkProjectId) ?? workProjects[0]
   const activeWorld = worlds.find(world => world.projectId === activeWorldProjectId) ?? worlds[0]
   const activeWorldProject = activeWorld?.project
@@ -1000,7 +1033,13 @@ export default function ProductHubPage() {
       case 'nodes': return <NodesPage project={activeWorkProject} onCreate={() => setShowCreate(true)} />
       case 'ttrpg': return <TtrpgPage project={activeWorldProject} world={activeWorld} onOpenWorldPicker={() => setShowWorldPicker(true)} onCreate={() => setShowCreate(true)} initialSessionId={ttrpgInitialSessionId} initialProductionHandoff={ttrpgProductionHandoff} initialOnlineHandoff={onlineRoomHandoff} onOnlineHandoffConsumed={() => setOnlineRoomHandoff(null)} />
       case 'chat': return <CharacterInteractionPage project={activeWorldProject} world={activeWorld} onOpenWorldPicker={() => setShowWorldPicker(true)} onCreate={() => setShowCreate(true)} />
-      case 'text-games': return <TextGamePage project={activeWorldProject} novelProject={activeWorkProject} world={activeWorld} onOpenWorldPicker={() => setShowWorldPicker(true)} onCreate={() => setShowCreate(true)} initialProduct={textGameProduct} initialMode={textGameInitialMode} initialProductionHandoff={textProductProductionHandoff} initialOpenWorldSource={textOpenWorldEntrySource} />
+      case 'text-games': return <TextGamePage project={activeWorldProject} novelProject={activeWorkProject} world={activeWorld} onOpenWorldPicker={() => setShowWorldPicker(true)} onCreate={() => setShowCreate(true)} onOpenSettings={resumeTarget => navigate('/settings', { state: { storyforgeProductHubReturn: {
+        schema: 'storyforge.text-open-world-settings-return', version: 1,
+        activeWorkProjectId: activeWorkProject?.id ?? null,
+        activeWorldProjectId: activeWorldProject?.id ?? null,
+        sourceKind: resumeTarget.sourceBinding.kind,
+        ...resumeTarget,
+      } satisfies TextOpenWorldSettingsReturnV1 } })} initialOpenWorldCreatorView={settingsReturn ? 'readiness' : 'brief'} initialOpenWorldResumeTarget={settingsReturn} initialProduct={textGameProduct} initialMode={textGameInitialMode} initialProductionHandoff={textProductProductionHandoff} initialOpenWorldSource={textOpenWorldEntrySource} />
       case 'market': return <MarketplacePage project={activeWorldProject} world={activeWorld} onOpenWorldPicker={() => setShowWorldPicker(true)} onImported={loadProjects} onRoomHandoff={openAcceptedOnlineRoom} />
       default: return home()
     }

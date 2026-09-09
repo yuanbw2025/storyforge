@@ -473,6 +473,9 @@ export const useAIConfigStore = create<AIConfigStore>((set, get) => ({
       url,
       model: config.model,
       status: 'pending',
+    }, {
+      sensitiveValues: [config.apiKey],
+      baseUrl: config.baseUrl,
     })
 
     try {

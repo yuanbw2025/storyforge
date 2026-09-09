@@ -15,6 +15,7 @@ import type { TextOpenWorldConditionDefinitionV1 } from './text-open-world-condi
 import type { TextOpenWorldEffectDefinitionV1, TextOpenWorldEffectOperationV1 } from './text-open-world-effect'
 import type { TextOpenWorldRuntimeModuleKeyV1 } from './text-open-world-runtime'
 import type { WorkspaceScope } from './world-ownership'
+import type { AIProvider } from './ai'
 
 /**
  * Stable, product-owned artifacts in the text-open-world production compiler.
@@ -434,6 +435,111 @@ export interface TextOpenWorldCreatorBriefV1 {
   }
   confirmedAt: number
   briefHash: string
+}
+
+export type TextOpenWorldCreatorCredentialModeV1 =
+  | 'session'
+  | 'remembered-browser'
+  | 'local-no-key'
+  | 'missing'
+
+/**
+ * Non-secret model binding shown before production. API keys and full request
+ * URLs are deliberately absent; G5-04 may freeze this value but must resolve
+ * the credential again at execution time.
+ */
+export interface TextOpenWorldCreatorProviderBindingV1 {
+  schema: 'storyforge.text-open-world-creator-provider-binding'
+  version: 1
+  provider: AIProvider
+  model: string
+  /** Safe display value only; request paths are never exposed here. */
+  endpointOrigin: string
+  /** Hash of the normalized origin + base path, excluding userinfo/query/fragment. */
+  endpointRouteHash: string
+  /** True only when the resolved route exactly matches this provider's registered commercial endpoint. */
+  catalogPricingEligible: boolean
+  credentialMode: TextOpenWorldCreatorCredentialModeV1
+  credentialPresent: boolean
+  credentialReady: boolean
+  temperature: number
+  maxTokens: number
+  contextWindow: number | null
+  bindingHash: string
+}
+
+export type TextOpenWorldCreatorPriceQuoteSourceV1 =
+  | 'storyforge-catalog'
+  | 'author-provided'
+  | 'author-confirmed-local-zero'
+
+/** One author-reviewable USD text-token price snapshot. */
+export interface TextOpenWorldCreatorPriceQuoteV1 {
+  schema: 'storyforge.text-open-world-creator-price-quote'
+  version: 1
+  provider: AIProvider
+  model: string
+  source: TextOpenWorldCreatorPriceQuoteSourceV1
+  sourceLabel: string
+  catalogVersion: string | null
+  asOf: string
+  currency: 'USD'
+  inputUsdPerMillionTokens: number
+  outputUsdPerMillionTokens: number
+  quoteHash: string
+}
+
+export interface TextOpenWorldCreatorProductionEstimateV1 {
+  schema: 'storyforge.text-open-world-creator-production-estimate'
+  version: 1
+  recommendedModelCalls: number
+  maximumModelCalls: number
+  reservedInputTokens: number
+  reservedOutputTokens: number
+  estimatedTextCostUsd: number | null
+  maximumCostUsd: number
+  maximumDurationMs: number
+  maximumStorageBytes: number
+  mediaCostPolicy: 'deferred-until-media-plan'
+  estimateHash: string
+}
+
+/**
+ * Ephemeral G5-03 readiness snapshot. It creates no Build, SourcePlan or DB
+ * record; G5-04 must CAS the confirmed Brief and freeze an equivalent snapshot
+ * atomically when production is authorized.
+ */
+export interface TextOpenWorldCreatorProductionPreflightV1 {
+  schema: 'storyforge.text-open-world-creator-production-preflight'
+  version: 1
+  productInstanceKey: string
+  briefHash: string
+  sourceBindingHash: string
+  providerBinding: TextOpenWorldCreatorProviderBindingV1
+  priceQuote: TextOpenWorldCreatorPriceQuoteV1 | null
+  estimate: TextOpenWorldCreatorProductionEstimateV1
+  blockers: string[]
+  warnings: string[]
+  ready: boolean
+  preflightHash: string
+}
+
+export interface TextOpenWorldCreatorProductionPreflightConfirmationV1 {
+  schema: 'storyforge.text-open-world-creator-production-preflight-confirmation'
+  version: 1
+  productInstanceKey: string
+  briefHash: string
+  providerBindingHash: string
+  priceQuoteHash: string
+  estimateHash: string
+  acknowledgement: {
+    credentialPolicyReviewed: true
+    providerAndModelReviewed: true
+    priceAndBudgetReviewed: true
+    mediaCostBoundaryReviewed: true
+  }
+  confirmedAt: number
+  confirmationHash: string
 }
 
 export type TextOpenWorldSourceRightsBasisV1 =

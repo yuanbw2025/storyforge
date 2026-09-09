@@ -5,6 +5,7 @@ import {
   confirmTextOpenWorldCreatorBriefV1,
   generateTextOpenWorldCreatorBriefCandidateV1,
   recoverLatestTextOpenWorldCreatorBriefSessionV1,
+  recoverTextOpenWorldCreatorBriefSessionByIdentityV1,
   startTextOpenWorldCreatorBriefSessionV1,
 } from '../../src/lib/open-world/creator-brief'
 import {
@@ -264,6 +265,38 @@ describe('R-OPEN-WORLD5 · Creator Brief 会谈、确认与持久化', () => {
           === 'storyforge.text-open-world-creator-brief-session-start'
       } catch { return false }
     })).toHaveLength(1)
+  }, 30_000)
+
+  it('设置往返按会谈、产品与来源绑定精确恢复，绝不误选同 Work 的更新会谈', async () => {
+    const novel = await seedNovel(`TOW G5 Brief 精确恢复 ${crypto.randomUUID()}`)
+    const first = await startTextOpenWorldCreatorBriefSessionV1({
+      selection: await novelSelection(novel),
+      sessionKey: 'settings-first',
+    })
+    const second = await startTextOpenWorldCreatorBriefSessionV1({
+      selection: await novelSelection(novel, { mode: 'chapters', chapterIds: [novel.chapterId] }),
+      sessionKey: 'settings-second',
+    })
+    await db.agentConversations.update(first.conversation.id, { updatedAt: novel.now + 10 })
+    await db.agentConversations.update(second.conversation.id, { updatedAt: novel.now + 20 })
+
+    const latest = await recoverLatestTextOpenWorldCreatorBriefSessionV1([novel.scope])
+    expect(latest?.conversation.id).toBe(second.conversation.id)
+    const exact = await recoverTextOpenWorldCreatorBriefSessionByIdentityV1([novel.scope], {
+      conversationId: first.conversation.id,
+      productInstanceKey: first.productInstanceKey,
+      sourceBindingHash: first.sourceBindingHash,
+      sourceBinding: first.sourceBinding,
+    })
+    expect(exact?.conversation.id).toBe(first.conversation.id)
+    expect(exact?.sourceBinding).toEqual(first.sourceBinding)
+
+    await expect(recoverTextOpenWorldCreatorBriefSessionByIdentityV1([novel.scope], {
+      conversationId: first.conversation.id,
+      productInstanceKey: second.productInstanceKey,
+      sourceBindingHash: second.sourceBindingHash,
+      sourceBinding: second.sourceBinding,
+    })).resolves.toBeNull()
   }, 30_000)
 
   it('小说来源在会谈后发生正文漂移时 fail-closed，不写 Brief 或虚假完成 Run', async () => {

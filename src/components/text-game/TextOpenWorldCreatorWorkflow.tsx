@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   recoverLatestTextOpenWorldCreatorBriefSessionV1,
+  recoverTextOpenWorldCreatorBriefSessionByIdentityV1,
+  type TextOpenWorldCreatorBriefResumeTargetV1,
   type TextOpenWorldCreatorBriefSessionV1,
 } from '../../lib/open-world/creator-brief'
 import type {
@@ -13,6 +15,7 @@ import {
   type CreatorSourceKindV1,
 } from './TextOpenWorldCreatorStudio'
 import { TextOpenWorldCreatorBriefStudio } from './TextOpenWorldCreatorBriefStudio'
+import { TextOpenWorldCreatorProductionReadiness } from './TextOpenWorldCreatorProductionReadiness'
 
 export interface TextOpenWorldCreatorWorkflowProps {
   worldScope?: WorkspaceScope | null
@@ -20,9 +23,12 @@ export interface TextOpenWorldCreatorWorkflowProps {
   worldGroupId?: number | null
   initialSource?: ProductProductionHandoffV1 | null
   initialSourceKind?: CreatorSourceKindV1
+  initialView?: 'brief' | 'readiness'
+  initialResumeTarget?: TextOpenWorldCreatorBriefResumeTargetV1 | null
+  onOpenSettings?: (target: TextOpenWorldCreatorBriefResumeTargetV1) => void
 }
 
-type WorkflowViewV1 = 'recovering' | 'source' | 'brief'
+type WorkflowViewV1 = 'recovering' | 'source' | 'brief' | 'readiness'
 
 function sameScope(left: WorkspaceScope, right: WorkspaceScope): boolean {
   return left.projectId === right.projectId
@@ -95,12 +101,15 @@ export function TextOpenWorldCreatorWorkflow(props: TextOpenWorldCreatorWorkflow
       setView('source')
       return
     }
-    void recoverLatestTextOpenWorldCreatorBriefSessionV1(scopes).then(recovered => {
+    const recovery = props.initialResumeTarget
+      ? recoverTextOpenWorldCreatorBriefSessionByIdentityV1(scopes, props.initialResumeTarget)
+      : recoverLatestTextOpenWorldCreatorBriefSessionV1(scopes)
+    void recovery.then(recovered => {
       if (generation.current !== current) return
       if (recovered && matchesExplicitHandoff(recovered, explicitHandoff, worldScope)) {
         setSession(recovered)
         setSelection(recovered.selection)
-        setView('brief')
+        setView(props.initialView === 'readiness' && recovered.confirmedBrief ? 'readiness' : 'brief')
         return
       }
       setView('source')
@@ -110,7 +119,7 @@ export function TextOpenWorldCreatorWorkflow(props: TextOpenWorldCreatorWorkflow
       setView('source')
     })
     return () => { generation.current += 1 }
-  }, [explicitHandoff, novelScope, props.initialSourceKind, worldScope])
+  }, [explicitHandoff, novelScope, props.initialResumeTarget, props.initialSourceKind, props.initialView, worldScope])
 
   const continueToBrief = (next: TextOpenWorldCreatorSourceSelectionV1) => {
     generation.current += 1
@@ -144,6 +153,25 @@ export function TextOpenWorldCreatorWorkflow(props: TextOpenWorldCreatorWorkflow
       initialSession={session}
       onBack={returnToSource}
       onConfirmed={setSession}
+      onContinue={next => {
+        setSession(next)
+        setView('readiness')
+      }}
+    />
+  }
+
+  if (view === 'readiness' && session?.confirmedBrief) {
+    return <TextOpenWorldCreatorProductionReadiness
+      session={session}
+      onBack={() => setView('brief')}
+      onOpenSettings={props.onOpenSettings
+        ? () => props.onOpenSettings?.({
+            conversationId: session.conversation.id,
+            productInstanceKey: session.productInstanceKey,
+            sourceBindingHash: session.sourceBindingHash,
+            sourceBinding: structuredClone(session.sourceBinding),
+          })
+        : undefined}
     />
   }
 
