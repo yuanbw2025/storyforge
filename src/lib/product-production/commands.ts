@@ -97,6 +97,17 @@ export function isRepairRetryableFailedProductBuildV1(
   } catch { return false }
 }
 
+/** A child Build may reset the same per-Build limits only after proven exhaustion. */
+export function isTextAdventureBuildLifetimeBudgetExhaustedV1(
+  build: Pick<ProductBuildRecordV1, 'status' | 'failureJson'>,
+): boolean {
+  if (build.status !== 'recovery-required') return false
+  try {
+    JSON.parse(build.failureJson)
+    return build.failureJson.includes('Build lifetime budget 不足:')
+  } catch { return false }
+}
+
 /**
  * Detects an obsolete text-adventure execution reservation or Visual QA
  * topology. The failure and frozen Plan must agree; a generic failed Build
@@ -1131,7 +1142,12 @@ async function applyCommand(input: {
       ? `product-release:${command.base.productReleaseId}:${command.base.contentHash}`
       : `recovery-build:${command.base.buildNumber}:${command.base.briefHash}:${command.base.planHash}:${command.base.controlEpoch}`
   const budgetFloor = recoveryEvolution ? textAdventureProductionBudgetFloorV1(priorBrief) : null
-  if (budgetRecovery && budgetFloor && priorBrief.productionBudget.maximumModelCalls >= budgetFloor.minimumModelCalls
+  if (budgetRecovery && budgetFloor
+    && !isTextAdventureBuildLifetimeBudgetExhaustedV1(
+      (await db.productBuilds.where('[productionId+buildNumber]')
+        .equals([production.id, recoveryBase!.buildNumber]).first())!,
+    )
+    && priorBrief.productionBudget.maximumModelCalls >= budgetFloor.minimumModelCalls
     && priorBrief.productionBudget.maximumInputTokens >= budgetFloor.minimumInputTokens
     && priorBrief.productionBudget.maximumOutputTokens >= budgetFloor.minimumOutputTokens) {
     reject('invalid-state-transition', '当前 Brief 已满足专业生产预算底线，不能创建无变化的预算恢复版本')

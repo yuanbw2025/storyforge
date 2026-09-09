@@ -7,6 +7,7 @@ import {
 import type { WorkspaceScope } from '../types'
 import type { AssembleContextInput } from '../registry/types'
 import { assertRecordInScope } from '../workspace/scope'
+import { textAdventureQualityIssueOwnerArtifactKeyV1 } from './text-adventure-quality'
 
 function requiredScope(input: AssembleContextInput): WorkspaceScope {
   if (!input.scope) throw new Error('[product-production-context] 缺少已解析 WorkspaceScope')
@@ -918,7 +919,7 @@ export async function readTextAdventureRepairFeedbackV1(input: AssembleContextIn
     .filter(issue => issue.severity === 'blocking')
     .slice(0, 40)
     .map(issue => ({
-      artifactKey: contextText(issue.artifactKey, 120),
+      artifactKey: contextText(textAdventureQualityIssueOwnerArtifactKeyV1(issue), 120),
       detail: contextText(issue.detail, 240),
       recommendation: contextText(issue.recommendation, 240),
     }))

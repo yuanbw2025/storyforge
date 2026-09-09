@@ -1138,8 +1138,8 @@ export default function ProductProductionStudio(props: {
       affectedLanes: ['production-budget'],
     })
     await refresh(details.production.id)
-    setMessage(`预算恢复已形成 Brief r${created.briefRevision}；审查并授权后将创建子 Build，继承已签收成果继续生产。`)
-  }, '创建预算恢复 Brief')
+    setMessage(`续建预算已形成 Brief r${created.briefRevision}；审查并授权后将创建子 Build，继承已签收成果继续生产。`)
+  }, '创建续建预算 Brief')
 
   const upgradeExecutionPlan = () => run(async () => {
     if (!details) throw new Error('缺少 Production。')
@@ -1550,7 +1550,7 @@ export default function ProductProductionStudio(props: {
             {mediaAnchorBlocker && <button disabled={busy || productionRunning} onClick={() => resolveMediaAnchorDecision('cancel')} className="flex items-center gap-2 rounded border border-error/40 px-4 py-2 text-xs text-error disabled:opacity-40"><Square className="h-3.5 w-3.5" />拒绝并取消 Build</button>}
             {communityCandidateRepairAvailable && !activeBriefRepairDraft && <button disabled={busy || productionRunning} onClick={prepareCommunityCandidateBriefRepair} className="flex items-center gap-2 rounded border border-accent/40 bg-accent/10 px-4 py-2 text-xs text-accent disabled:opacity-40"><FileCheck2 className="h-3.5 w-3.5" />{commercialTextAdventureImageMinimum > 0 ? `生成 ${commercialTextAdventureImageMinimum} 图修订 Brief` : '生成社区候选修订 Brief'}</button>}
             {communityCandidateRepairAvailable && activeBriefRepairDraft && <button disabled={busy || productionRunning} onClick={saveCommunityCandidateBriefRepair} className="flex items-center gap-2 rounded bg-success px-4 py-2 text-xs text-white disabled:opacity-40"><ShieldCheck className="h-3.5 w-3.5" />保存为 Brief r{(details.brief?.revision ?? 0) + 1}</button>}
-            {canRecoverProductionBudget && <button disabled={busy || productionRunning} onClick={recoverProductionBudget} className="flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white"><RefreshCw className="h-3.5 w-3.5" />扩充预算并续建</button>}
+            {canRecoverProductionBudget && <button disabled={busy || productionRunning} onClick={recoverProductionBudget} className="flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white"><RefreshCw className="h-3.5 w-3.5" />续建预算并启动子 Build</button>}
             {canUpgradeExecutionPlan && <button disabled={busy || productionRunning} onClick={upgradeExecutionPlan} className="flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white"><GitBranch className="h-3.5 w-3.5" />生成执行计划升级 Brief</button>}
             {canRepairVisualContract && <button disabled={busy || productionRunning} onClick={repairVisualContract} className="flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white"><GitBranch className="h-3.5 w-3.5" />重建媒资规划 Brief</button>}
             {canRetryBlocker && !modelBudgetExhausted && !canUpgradeExecutionPlan && <button disabled={busy || productionRunning} onClick={retryBlocker} className="flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white"><RefreshCw className="h-3.5 w-3.5" />修正后重试</button>}

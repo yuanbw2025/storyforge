@@ -21,6 +21,7 @@ import {
   canUpgradeTextAdventureExecutionPlanV1,
   executeProductProductionCommand,
   isRepairRetryableFailedProductBuildV1,
+  isTextAdventureBuildLifetimeBudgetExhaustedV1,
 } from './commands'
 import { draftProductProductionBriefV3, suggestProductStartingPoints } from './consultation'
 import { parseProductProductionBriefV3 } from './contracts'
@@ -1080,7 +1081,8 @@ export async function beginProductProductionEvolutionV1(input: {
     }
     const brief = parseProductProductionBriefV3(details.brief?.briefJson ?? '')
     const floor = textAdventureProductionBudgetFloorV1(brief)
-    if (budgetRecovery && brief.productionBudget.maximumModelCalls >= floor.minimumModelCalls
+    if (budgetRecovery && !isTextAdventureBuildLifetimeBudgetExhaustedV1(details.build)
+      && brief.productionBudget.maximumModelCalls >= floor.minimumModelCalls
       && brief.productionBudget.maximumInputTokens >= floor.minimumInputTokens
       && brief.productionBudget.maximumOutputTokens >= floor.minimumOutputTokens) {
       throw new Error('[product-production-service] 当前 Brief 已满足专业生产预算底线，请检查实际 blocker 后重试')

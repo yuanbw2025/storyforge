@@ -3,6 +3,7 @@ import { db } from '../../src/lib/db/schema'
 import {
   canUpgradeTextAdventureExecutionPlanV1,
   executeProductProductionCommand,
+  isTextAdventureBuildLifetimeBudgetExhaustedV1,
 } from '../../src/lib/product-production/commands'
 import { draftProductProductionBriefV3, suggestProductStartingPoints } from '../../src/lib/product-production/consultation'
 import {
@@ -84,6 +85,13 @@ async function completedTextAdventureMediaFixture() {
         schema: 'storyforge.generated-media-artifact', version: 1,
         assetKey: `media-revision-story.build-1.${artifactKey}`,
         request: { beatKey: 'beat.opening', width: 1280, height: 720 },
+      } : artifactKey === 'quality.adventure-review' ? {
+        schema: 'storyforge.text-adventure-quality-review-artifact', version: 1,
+        scores: {
+          causality: 5, playerAgency: 5, routeDifferentiation: 5, pacing: 5,
+          setupPayoff: 5, characterMotivation: 5, emotionalImpact: 5,
+        },
+        issues: [], passed: true,
       } : { schema: 'test-artifact', version: 1, artifactKey }
       const payloadJson = canonicalProductProductionJsonV2(payload)
       const contentHash = image ? blob.contentHash : await hashProductProductionValueV2(payload)
@@ -120,6 +128,21 @@ async function completedTextAdventureMediaFixture() {
 }
 
 describe('PRODUCTPROD-1B · user command control plane', () => {
+  it('只有真实 Build lifetime budget blocker 可获得子 Build 续建资格', () => {
+    expect(isTextAdventureBuildLifetimeBudgetExhaustedV1({
+      status: 'recovery-required',
+      failureJson: JSON.stringify({ detail: 'Build lifetime budget 不足:modelCalls=109/108' }),
+    })).toBe(true)
+    expect(isTextAdventureBuildLifetimeBudgetExhaustedV1({
+      status: 'recovery-required',
+      failureJson: JSON.stringify({ detail: 'provider safety refusal' }),
+    })).toBe(false)
+    expect(isTextAdventureBuildLifetimeBudgetExhaustedV1({
+      status: 'building',
+      failureJson: JSON.stringify({ detail: '不得借用历史错误' }),
+    })).toBe(false)
+  })
+
   beforeEach(async () => { await db.delete(); await db.open() })
   afterEach(() => db.close())
 

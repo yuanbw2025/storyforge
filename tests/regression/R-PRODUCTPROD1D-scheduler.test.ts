@@ -21,6 +21,7 @@ import {
 import type { ProductBuildArtifactKindV1, ProductRuntimePackageV1 } from '../../src/lib/types'
 import { seedCurrentProductWorld } from '../helpers/current-product-world'
 import { resolveProductProductionWorldCompilationDescriptorsV2 } from '../../src/lib/product-production/world-source'
+import { textAdventureQualityIssueOwnerArtifactKeyV1 } from '../../src/lib/product-production/text-adventure-quality'
 
 async function fixture(name: string, options: { retryModelCallHeadroom?: number } = {}) {
   const owned = await seedCurrentProductWorld(name)
@@ -154,6 +155,19 @@ function executorFor(
 }
 
 describe('R-PRODUCTPROD-1D · durable bounded DAG scheduler', () => {
+  it('把审查模型错称为任务脚本的主线地点字段归还给真正 owner', () => {
+    expect(textAdventureQualityIssueOwnerArtifactKeyV1({
+      severity: 'blocking', artifactKey: 'content.quest-script',
+      detail: 'stage.01 的 objective.03 locationOrdinal 与 description 中的地点错配。',
+      recommendation: '修正目标发生地。',
+    })).toBe('content.main-quest-plan')
+    expect(textAdventureQualityIssueOwnerArtifactKeyV1({
+      severity: 'blocking', artifactKey: 'content.quest-script',
+      detail: 'objective.03 的 failureForwardText 没有产生新局面。',
+      recommendation: '重写失败推进结算文本。',
+    })).toBe('content.quest-script')
+  })
+
   it('只有节点、地点与选择衔接修正可以复用冻结媒资，视觉语义改动必须重做媒资链', () => {
     expect(textAdventureNarrativeRepairPreservesFrozenMediaV1([{
       severity: 'blocking', artifactKey: 'content.narrative',

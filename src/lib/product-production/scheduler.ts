@@ -55,6 +55,7 @@ import {
 } from './source-contracts'
 import { assertFormalProductProductionStartV1 } from '../product/source-contracts'
 import { parseTextAdventureQualityReviewArtifactV1 } from '../adventure/production-artifacts'
+import { textAdventureQualityIssueOwnerArtifactKeyV1 } from './text-adventure-quality'
 
 const ROOT_TASK_KEY = '$root'
 const ROOT_STEP_ID = '$join'
@@ -1488,7 +1489,7 @@ async function recoveryInvalidatedTaskKeys(input: {
         return issue.severity === 'blocking' && typeof issue.artifactKey === 'string' ? [issue] : []
       })
     : []
-  const blockingArtifactKeys = blockingIssues.map(issue => issue.artifactKey as string)
+  const blockingArtifactKeys = blockingIssues.map(textAdventureQualityIssueOwnerArtifactKeyV1)
   const narrativeArcNeedsRepair = blockingIssues.some(issue => (
     issue.artifactKey === 'content.narrative'
       && /locationOrdinal|场景标题|title.*地点|地点.*title|冻结地点|地点错位/.test(
