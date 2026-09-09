@@ -13,7 +13,12 @@ const STABLE_KEY = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/
 const LANES = ['planning', 'content', 'visual', 'audio', 'integration', 'qa'] as const
 const EXECUTION_MODES = ['deterministic', 'model', 'media-provider', 'human-import'] as const
 const FAILURE_POLICIES = ['fail-build', 'pause', 'fallback', 'skip-optional'] as const
-export const TEXT_ADVENTURE_VISUAL_REVIEW_BATCH_SIZE_V1 = 2
+// Each commercial review Run owns exactly one frozen image. Live
+// OpenAI-compatible vision providers repeatedly returned only the first item
+// from two-image JSON batches, leaving the second image without evidence.
+// One image per Run keeps retries, receipts, budgets and repair lineage
+// truthful instead of treating provider batch cardinality as a prompt concern.
+export const TEXT_ADVENTURE_VISUAL_REVIEW_BATCH_SIZE_V1 = 1
 
 export function textAdventureVisualReviewArtifactBatchesV1(
   artifactKeys: readonly string[],

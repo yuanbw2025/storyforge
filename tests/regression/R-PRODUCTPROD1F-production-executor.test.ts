@@ -2074,9 +2074,21 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
     const owned = await fixtureForProduct('text-adventure', { visualLevel: 'key-scenes' })
     const briefHash = await hashProductProductionValueV2(owned.brief)
     const plan = await createProductProductionPlanV3({ buildNumber: 1, briefHash, brief: owned.brief })
-    const task = plan.tasks.find(item => item.taskKey === 'media.visual-quality-review.batch-1')!
-    const assemblyTask = plan.tasks.find(item => item.taskKey === 'media.visual-quality-review')!
-    const imageKeys = task.inputArtifactKeys.filter(item => /^media\.visual\.\d{3}$/.test(item))
+    const plannedTask = plan.tasks.find(item => item.taskKey === 'media.visual-quality-review.batch-1')!
+    // Keep one legacy two-image task fixture to prove an in-flight plan from
+    // before the one-image-per-Run migration remains parseable and repairable.
+    const imageKeys = ['media.visual.001', 'media.visual.002']
+    const task = {
+      ...plannedTask,
+      inputArtifactKeys: [...plannedTask.inputArtifactKeys, imageKeys[1]],
+    }
+    const plannedAssemblyTask = plan.tasks.find(item => item.taskKey === 'media.visual-quality-review')!
+    const assemblyTask = {
+      ...plannedAssemblyTask,
+      dependsOn: [task.taskKey],
+      inputArtifactKeys: ['media.audit', task.outputArtifactKeys[0]],
+      requiredReceipts: [{ taskKey: task.taskKey, receiptHash: null }],
+    }
     const blob = await putMediaBlobObject({
       scope: owned.scope,
       data: new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]).buffer,

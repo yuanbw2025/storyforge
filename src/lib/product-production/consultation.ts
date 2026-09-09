@@ -393,14 +393,17 @@ export async function draftProductProductionBriefV3(input: {
           const sceneCount = baseScenesPerAct + (actIndex < extraScenes ? 1 : 0)
           return sum + (sceneCount <= 1 ? 1 : 2)
         }, 0)
-        return 25 + scenePacketCount + Number(media.imageCount > 0)
+        // Visual QA owns one provider Run per frozen image. Count every Run
+        // in the author-visible production envelope instead of treating the
+        // whole illustrated release as one hidden model call.
+        return 25 + scenePacketCount + (media.imageCount > 0 ? Math.max(1, media.imageCount) : 0)
       })()
     : 0
   const productionModelCalls = textAdventure
-    // The professional pipeline owns 31–32 first-attempt model Runs. A live
-    // flagship rehearsal exhausted 64 calls before late quality roles began,
-    // so the governed default now reserves 1.5 bounded recovery calls per
-    // specialist, matching textAdventureProductionBudgetFloorV1.
+    // The professional pipeline owns one first-attempt Run per specialist and
+    // per frozen image review. A live flagship rehearsal exhausted its former
+    // envelope before late quality roles began, so the governed default keeps
+    // explicit bounded recovery headroom, matching the Plan floor.
     ? Math.max(
         textAdventureModelTaskCount + Math.max(48, Math.ceil(textAdventureModelTaskCount * 1.5)),
         28 + textAdventure.narrative.targetSceneCount + scale.targetEndingCount,

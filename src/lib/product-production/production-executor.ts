@@ -4446,6 +4446,14 @@ async function executeTextAdventureVisualQualityReviewTask(
     const binding = input.capabilityBindings.find(item => item.requirementKey === requirementKey)
     if (!requirementKey || !binding) fail('独立视觉审查缺少已冻结 AI capability binding')
     const expected = new Map(visionImages.map(image => [image.artifactKey, image.contentHash]))
+    const exactReviewSkeleton = [...expected].map(([artifactKey, contentHash]) => ({
+      artifactKey, contentHash, verdict: 'accept|revise|replace|human-review',
+      scores: {
+        requirementFit: 1, identityContinuity: 1, styleContinuity: 1,
+        composition: 1, technicalCleanliness: 1,
+      },
+      issues: [],
+    }))
     const system = '你是独立于美术总监和图片生成 Provider 的文字冒险 Visual QA Director。' +
       '你必须实际观察随请求附带的每张图片，并依据登记上下文逐项检查：需求匹配、角色身份连续、整体风格连续、构图可读性、明显畸形或伪影、文字水印、剧情剧透和替代文本。' +
       '不得修改图片、世界事实、视觉圣经、权利或发布状态；不确定时使用 human-review。' +
@@ -4455,7 +4463,9 @@ async function executeTextAdventureVisualQualityReviewTask(
       '"scores":{"requirementFit":1,"identityContinuity":1,"styleContinuity":1,"composition":1,"technicalCleanliness":1},' +
       '"issues":[{"severity":"warning|blocking","category":"identity|setting|style|composition|spoiler|artifact|text|accessibility","detail":"...","recommendation":"..."}]}]}。' +
       `必须恰好覆盖这些图片 key/hash，不能漏项、重复或改写：${JSON.stringify([...expected])}。` +
-      '评分只能是 1–5 整数；存在明显身份错误、需求错位、严重畸形、不可接受剧透或伪文字时不得 verdict=accept。'
+      `reviews 必须严格包含 ${expected.size} 项；先复制这一骨架再填判断：${JSON.stringify(exactReviewSkeleton)}。` +
+      '每张图最多列 3 条 issues，每条 detail 和 recommendation 各不超过 160 字；通过时 issues 必须是空数组。' +
+      '不要输出思考过程或 JSON 之外的文字。评分只能是 1–5 整数；存在明显身份错误、需求错位、严重畸形、不可接受剧透或伪文字时不得 verdict=accept。'
     try {
       const response = await options.runVision({
         projectId: input.scope.projectId, requirementKey, category: options.category,
