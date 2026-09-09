@@ -26,6 +26,7 @@ import {
   positiveImageRepairDirectiveV1,
   productImageNegativePromptV1,
   textAdventureVisualAnchorConfirmationHashV1,
+  textAdventureGlyphSafeMapRepairPromptV1,
   textAdventureVisualRepairCastConstraintV1,
   type ProductionTextRunnerV1,
   type ProductionVisionRunnerV1,
@@ -1074,6 +1075,37 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
     expect(positiveImageRepairDirectiveV1('去除所有汉字；改为古旧黄铜匣', 'style'))
       .toBe('使用古旧黄铜匣')
     expect(positiveImageRepairDirectiveV1('清除伪文字', 'text')).toBe('')
+  })
+
+  it('文字地图返修移除可被画进像素的地名，并保留空间、航线和地标关系', () => {
+    const prompt = textAdventureGlyphSafeMapRepairPromptV1({
+      originalPrompt: '无文字示意地图。中央描绘潮钟群岛，标注雾湾环礁位于东端、霜潮列岛位于西北端，以虚线航道连接，三座潮钟沿线分布，并从东南角画出方向箭头。',
+      palette: ['#0a1a2e', '#3a5f7a', '#c8a86e'],
+    })
+    expect(prompt).toContain('UNLABELED VISUAL-ONLY')
+    expect(prompt).toContain('eastern edge')
+    expect(prompt).toContain('northwestern edge')
+    expect(prompt).toContain('central island group')
+    expect(prompt).toContain('three small brass mechanical bell pictograms')
+    expect(prompt).toContain('dotted route')
+    expect(prompt).not.toContain('雾湾环礁')
+    expect(prompt).not.toContain('霜潮列岛')
+    expect(textAdventureGlyphSafeMapRepairPromptV1({
+      originalPrompt: '角色全身立绘', palette: ['#000000', '#111111', '#222222'],
+    })).toBe('')
+  })
+
+  it('角色返修把彩色边缘和额外肩甲转成正向轮廓约束与负向禁止项', () => {
+    const constraint = textAdventureVisualRepairCastConstraintV1({
+      mediaKind: 'character-pose',
+      repairEvidence: '肩部金色护甲属于额外装饰；透明背景边缘存在品红色光晕伪影。',
+      characters: [],
+    })
+    expect(constraint.promptSuffix).toContain('肩部造型保持简洁')
+    expect(constraint.promptSuffix).toContain('边缘干净、无残色')
+    expect(constraint.negativePromptSuffix).toContain('magenta')
+    expect(constraint.negativePromptSuffix).toContain('extra shoulder armor')
+    expect(constraint.negativePromptSuffix).toContain('color fringe')
   })
 
   it('保留陌生 Visual QA 分类的问题内容，并确定性归入通用 artifact 类别', () => {

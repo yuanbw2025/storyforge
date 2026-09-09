@@ -3471,12 +3471,28 @@ export function textAdventureVisualRepairCastConstraintV1(input: {
   const player = input.characters.find(character => character.role === 'player') ?? null
   const banMilitary = /军服|军事|军队|大檐帽|肩章|军人|长柄斧|持斧/.test(input.repairEvidence)
   const banUnknownCast = /无关角色|未登记角色|身份归属不明|无匹配/.test(input.repairEvidence)
-  return {
-    promptSuffix: namedNpc
-      ? `\n本次返修的对峙 NPC 冻结为已登记角色「${namedNpc.name}」：${namedNpc.publicIdentity}；` +
+  const banMagenta = /品红|洋红|粉紫|粉色|紫色光|magenta|pink glow/i.test(input.repairEvidence)
+  const banUnregisteredShoulderArmor = /肩部.{0,12}(?:护甲|装甲|装饰)|额外.{0,8}(?:护甲|装甲)/.test(input.repairEvidence)
+  const needsCleanCutout = (input.mediaKind === 'character-pose' || input.mediaKind === 'character-expression')
+    && /透明|轮廓|边缘|光晕|辉光|伪影|抠图/.test(input.repairEvidence)
+  const promptSuffix = [
+    namedNpc
+      ? `本次返修的对峙 NPC 冻结为已登记角色「${namedNpc.name}」：${namedNpc.publicIdentity}；` +
         `视觉锚点：${namedNpc.visualAnchor}。画面只能出现主角与「${namedNpc.name}」两名有身份角色，` +
         '采用面对面或隔着关键物件的对峙构图，禁止群像海报排布、无身份第三人和自由发明服饰。'
       : '',
+    banMagenta
+      ? '所有发光部件只使用中性暖白或低饱和淡金色；角色固有色保持自然，不添加彩色轮廓光。'
+      : '',
+    banUnregisteredShoulderArmor
+      ? '肩部造型保持简洁，只呈现冻结角色锚点明确登记的服装，不增加额外护甲或醒目装饰。'
+      : '',
+    needsCleanCutout
+      ? '输出边缘干净、无残色的单一完整角色剪影；角色之外必须为真实透明区域。'
+      : '',
+  ].filter(Boolean).join('\n')
+  return {
+    promptSuffix: promptSuffix ? `\n${promptSuffix}` : '',
     promptOverride: namedNpc && player
       ? `电影感横幅海洋奇幻与机械遗迹插画。叙事目标：${input.scenePrompt ?? '关键真相揭露的对峙时刻'}。` +
         `画面严格只有两名已登记角色：角色 A「${player.name}」，${player.publicIdentity}，${player.visualAnchor}；` +
@@ -3489,8 +3505,55 @@ export function textAdventureVisualRepairCastConstraintV1(input: {
         ? ['现实军服、大檐帽、肩章、军用徽章、持斧军人、长柄斧、枪械、modern military uniform, peaked cap, epaulets, soldier, axe, weapon']
         : []),
       ...(banUnknownCast ? ['未登记角色、无身份群众、第三人物、unregistered character, anonymous extra'] : []),
+      ...(banMagenta
+        ? ['品红色、洋红色、粉紫色、粉色光晕、紫色轮廓光、magenta, pink glow, purple rim light']
+        : []),
+      ...(banUnregisteredShoulderArmor
+        ? ['额外肩甲、金色肩部装饰、醒目肩章、extra shoulder armor, gold shoulder ornament']
+        : []),
+      ...(needsCleanCutout
+        ? ['彩色边缘、残色、光晕、辉光、伪影、color fringe, halo, glow, background residue']
+        : []),
     ].join('；'),
   }
+}
+
+/**
+ * Text-to-image models frequently copy proper nouns from a map brief into the
+ * pixels even when the same brief says "no text". Once Visual QA proves that
+ * failure, do not keep sampling the contradictory prompt. Compile a visual-only
+ * map brief with the registered spatial relations but without any proper noun
+ * that could be rendered as a label.
+ */
+export function textAdventureGlyphSafeMapRepairPromptV1(input: {
+  originalPrompt: string
+  palette: readonly [string, string, string]
+}): string {
+  const prompt = input.originalPrompt
+  if (!/地图|map|区域.{0,8}关系/i.test(prompt)) return ''
+  const regions = [
+    /东端|东侧|eastern?/i.test(prompt) ? 'one distinct region at the eastern edge' : '',
+    /西北端|西北侧|northwestern?/i.test(prompt) ? 'one distinct region at the northwestern edge' : '',
+    /中央|中心|central|center/i.test(prompt) ? 'a central island group' : '',
+    /东南角|东南侧|southeastern?/i.test(prompt) ? 'open sea at the southeastern edge' : '',
+  ].filter(Boolean)
+  const landmarkCount = /三座|三个|3\s*(?:座|个)?/.test(prompt) ? 'three' : 'several'
+  const landmark = /钟/.test(prompt)
+    ? `${landmarkCount} small brass mechanical bell pictograms`
+    : `${landmarkCount} small story-specific landmark pictograms`
+  const route = /虚线|dotted|dashed/i.test(prompt) ? 'a clean dotted route' : 'a clean visual route'
+  const arrow = /箭头|方向|arrow/i.test(prompt)
+    ? 'Add one thin pale-gold direction arrow made only from a line and arrowhead.'
+    : ''
+  return [
+    'UNLABELED VISUAL-ONLY REGIONAL MAP ILLUSTRATION.',
+    `Use a deep-ocean palette (${input.palette.join(', ')}) with subtle salt-fog, water-stain, and ice-crystal texture.`,
+    `Arrange ${regions.length ? regions.join(', ') : 'three clearly distinct regional landmass groups'}.`,
+    `Connect the regions with ${route}; distribute ${landmark} evenly along that route.`,
+    arrow,
+    'Communicate every relationship using silhouettes, spacing, color, pictograms, and geometry only.',
+    'Every surface must remain blank. Render no title, legend, caption, place name, word, letter, number, rune, pseudo-text, logo, signature, or character-like mark.',
+  ].filter(Boolean).join(' ')
 }
 
 export function positiveImageRepairDirectiveV1(recommendation: string, category: string): string {
@@ -3650,8 +3713,15 @@ async function executeVisualTask(input: ProductProductionTaskExecutionInputV1, o
       scenePrompt: requirement.prompt,
       characters: cast?.characters ?? [],
     })
-    const providerPrompt = `${repairCastConstraint.promptOverride || baseProviderPrompt}` +
-      `${repairCastConstraint.promptOverride ? '' : repairInstruction}${repairCastConstraint.promptSuffix}` + (repairRequiresGlyphSuppression
+    const glyphSafeMapPrompt = repairRequiresGlyphSuppression
+      ? textAdventureGlyphSafeMapRepairPromptV1({
+          originalPrompt: requirement.prompt,
+          palette: requirement.palette,
+        })
+      : ''
+    const providerPromptOverride = repairCastConstraint.promptOverride || glyphSafeMapPrompt
+    const providerPrompt = `${providerPromptOverride || baseProviderPrompt}` +
+      `${providerPromptOverride ? '' : repairInstruction}${repairCastConstraint.promptSuffix}` + (repairRequiresGlyphSuppression
       ? '\nABSOLUTE REPAIR CONSTRAINT: blank artifact surfaces; no readable text, letters, numbers, pseudo-text, runes, labels, logos, signatures, or character-like marks. Do not replace forbidden text with invented glyphs.'
       : '')
     if (binding?.adapterId === 'storyforge.procedural-svg.v1') {
