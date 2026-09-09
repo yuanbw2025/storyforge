@@ -1,5 +1,6 @@
 import type { ProductProductionBriefV3, ProductRuntimePackageV1 } from '../types'
 import { analyzeTextAdventureRouteQualityV1 } from '../adventure/quality-analysis'
+import { TEXT_ADVENTURE_COMMERCIAL_VISUAL_BASELINE_V1 } from '../adventure/media-composition'
 import { minimumTextAdventureCommercialImageCountV1 } from '../adventure/production-brief'
 import { validateTtrpgCampaignForPublicationV1 } from '../ttrpg/campaign'
 
@@ -285,6 +286,14 @@ export function evaluateProductRuntimeProductQualityV1(input: {
         const imageKinds = new Set(runtimePackage.presentation?.assets.map(asset => asset.kind) ?? [])
         const requiredImageKinds = productionContract.media.mode === 'text-only'
           ? [] : ['background', 'character-pose']
+        const requiredVisualComposition = productionContract.media.mode === 'text-only'
+          ? [] : TEXT_ADVENTURE_COMMERCIAL_VISUAL_BASELINE_V1
+        const visualKindBySceneTag = new Map(runtimePackage.presentation?.assets.map(asset => (
+          [asset.sceneTag, asset.kind] as const
+        )) ?? [])
+        const missingVisualRoles = requiredVisualComposition.filter(role => (
+          visualKindBySceneTag.get(role.sceneTag) !== role.mediaKind
+        ))
         const minimumRouteUnits = Math.max(
           brief.scale.targetWordCount,
           Math.ceil(brief.scale.targetPlayMinutes * 200),
@@ -302,8 +311,14 @@ export function evaluateProductRuntimeProductQualityV1(input: {
         const minimumEndingUnits = Math.max(80, Math.min(400, Math.ceil(brief.scale.targetPlayMinutes * 4)))
         gates.push(
           gate('product.adventure.recommendation-media-composition', actualImages >= minimumImageCount
-            && requiredImageKinds.every(kind => imageKinds.has(kind as 'background' | 'character-pose')),
-          [`images=${actualImages}/${minimumImageCount}`, `kinds=${[...imageKinds].sort().join(',') || 'none'}`, `requiredKinds=${requiredImageKinds.join(',') || 'none'}`]),
+            && requiredImageKinds.every(kind => imageKinds.has(kind as 'background' | 'character-pose'))
+            && missingVisualRoles.length === 0,
+          [
+            `images=${actualImages}/${minimumImageCount}`,
+            `kinds=${[...imageKinds].sort().join(',') || 'none'}`,
+            `requiredKinds=${requiredImageKinds.join(',') || 'none'}`,
+            `missingRoles=${missingVisualRoles.map(role => `${role.sceneTag}:${role.mediaKind}`).join(',') || 'none'}`,
+          ]),
           gate('product.adventure.recommendation-analysis-complete', !routeQuality.truncated
             && routeQuality.routes.length >= productionContract.narrative.minimumDistinctRoutes
             && routeQuality.reachableEndingKeys.length >= productionContract.narrative.targetEndingCount,

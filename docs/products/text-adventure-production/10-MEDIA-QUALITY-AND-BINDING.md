@@ -1,6 +1,6 @@
 # 10 · 媒资质量与三向绑定方案
 
-> 层级：L2 · 版本：1.2.0 · 生效：2026-09-08
+> 层级：L2 · 版本：1.3.0 · 生效：2026-09-10
 > 性质：文字冒险媒资需求、生产结果、运行引用和独立审图的正式施工合同。
 
 ## 1. 目标与边界
@@ -27,6 +27,12 @@
 `integration.package` 只在审计通过后装配图片，并把审计 hash 固定进运行定义。既有 package parser、产品质量门和 adoption 校验继续验证“Artifact → Runtime asset → presentation 引用”；Preview 的媒资运行校验继续验证“Runtime asset → Blob 字节 → 浏览器可解码对象”。因此证据链是：
 
 `冻结需求 → media.audit → Build Artifact → RuntimePackage asset/presentation → Blob → 浏览器解码回执`
+
+含图商业候选还必须满足共享的最低视觉构成合同，而不是只达到图片总数。关键插图档的 12 个唯一
+编辑职责固定覆盖：封面/开场、主角锚点、区域地图、三幕各一次关键转折、第二大区环境锚点、两件
+不同关键物品、两名不同 NPC 锚点和结局后果。Art Director 的冻结槽位与最终 RuntimePackage
+推荐质量门共同读取同一合同，并同时核对 `sceneTag + mediaKind`；十二张泛图、重复封面、把地图换成
+普通背景或用同一人物立绘凑数，即使文件、数量和权利全部合法，也不得通过社区推荐质量门。
 
 ## 3. 独立审图岗位
 

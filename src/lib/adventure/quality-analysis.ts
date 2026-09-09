@@ -126,6 +126,7 @@ function choiceHasObservableLaterEchoes(
 
   const reachableAfterChoice = reachableNarrativeNodeKeys(narrative, choice.targetNodeKey)
   reachableAfterChoice.delete(choice.sourceNodeKey)
+  const sourceNodeIndex = narrative.nodes.findIndex(node => node.key === choice.sourceNodeKey)
   const echoNodeKeys = new Set<string>()
   for (const action of adventure.actions) {
     if (!action.successText.trim()) continue
@@ -133,7 +134,10 @@ function choiceHasObservableLaterEchoes(
       requirement.narrativePath === '__storyforge.currentNarrativeNodeKey'
       && typeof requirement.narrativeEquals === 'string'
     ))?.narrativeEquals
-    if (typeof echoNodeKey !== 'string' || !reachableAfterChoice.has(echoNodeKey)) continue
+    const echoNodeIndex = typeof echoNodeKey === 'string'
+      ? narrative.nodes.findIndex(node => node.key === echoNodeKey) : -1
+    if (typeof echoNodeKey !== 'string' || echoNodeIndex <= sourceNodeIndex
+      || !reachableAfterChoice.has(echoNodeKey)) continue
     if (!action.requirements.some(requirement => (
       requirement.conditionPresent === true
       && requirement.conditionKey != null

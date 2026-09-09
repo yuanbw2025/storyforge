@@ -89,6 +89,7 @@ import {
   parseTextAdventureDialoguePassArtifactV1,
 } from '../adventure/dialogue-pass'
 import { minimumTextAdventureCommercialImageCountV1 } from '../adventure/production-brief'
+import { TEXT_ADVENTURE_COMMERCIAL_VISUAL_BASELINE_V1 } from '../adventure/media-composition'
 import {
   findTextAdventurePlayerVisibleLanguageIssuesV1,
   groupTextAdventurePlayerVisibleLanguageIssuesV1,
@@ -2100,62 +2101,62 @@ export function textAdventureVisualBlueprintsV1(count: number): TextAdventureVis
   if (!Number.isSafeInteger(count) || count < 0 || count > 10_000) fail('文字冒险图片数量无效')
   const baseline: TextAdventureVisualBlueprintV1[] = [
     {
-      mediaKind: 'background', sceneTag: 'cover-opening', beatKey: 'opening-beat-key',
+      ...TEXT_ADVENTURE_COMMERCIAL_VISUAL_BASELINE_V1[0], beatKey: 'opening-beat-key',
       prompt: '封面兼开场的无人物环境主视觉，建立大区域、主目标与倒计时冲突',
       altText: '游戏封面与开场大区域主视觉', width: 1280, height: 720, characterOrdinal: null,
     },
     {
-      mediaKind: 'character-pose', sceneTag: 'protagonist-anchor', beatKey: 'first-character-beat-key',
+      ...TEXT_ADVENTURE_COMMERCIAL_VISUAL_BASELINE_V1[1], beatKey: 'first-character-beat-key',
       prompt: '主要角色透明背景三分之二身视觉锚点立绘；头部、双手与身份物件必须完整清晰，脸部细节可辨',
       altText: '主要角色三分之二身视觉锚点图', width: 720, height: 1080, characterOrdinal: 0,
     },
     {
-      mediaKind: 'background', sceneTag: 'region-map', beatKey: 'opening-beat-key',
+      ...TEXT_ADVENTURE_COMMERCIAL_VISUAL_BASELINE_V1[2], beatKey: 'opening-beat-key',
       prompt: '清晰表达大区域、区域、地点、核心地标和可行动路线关系的无文字示意地图',
       altText: '大区域与地点关系地图', width: 1280, height: 720, characterOrdinal: null,
     },
     {
-      mediaKind: 'cg', sceneTag: 'mainline-turn-act-1', beatKey: 'act-1-turn-beat-key',
+      ...TEXT_ADVENTURE_COMMERCIAL_VISUAL_BASELINE_V1[3], beatKey: 'act-1-turn-beat-key',
       prompt: '第一幕不可逆转折的原创叙事插图，准确表现当幕行动与直接后果',
       altText: '第一幕关键转折场面', width: 1280, height: 720, characterOrdinal: null,
     },
     {
-      mediaKind: 'background', sceneTag: 'secondary-region-anchor', beatKey: 'act-2-location-beat-key',
+      ...TEXT_ADVENTURE_COMMERCIAL_VISUAL_BASELINE_V1[4], beatKey: 'act-2-location-beat-key',
       prompt: '第二个大区域的无人物环境锚点图；与开场区域在地貌、光线和核心地标上明显不同',
       altText: '第二个大区域环境锚点图', width: 1280, height: 720, characterOrdinal: null,
     },
     {
-      mediaKind: 'cg', sceneTag: 'important-item-primary', beatKey: 'item-primary-beat-key',
+      ...TEXT_ADVENTURE_COMMERCIAL_VISUAL_BASELINE_V1[5], beatKey: 'item-primary-beat-key',
       prompt: '第一件关键物品的原创叙事特写，准确表现材质、使用痕迹和剧情功能，不含品牌与文字',
       altText: '第一件关键物品特写', width: 1024, height: 1024, characterOrdinal: null,
     },
     {
-      mediaKind: 'character-pose', sceneTag: 'major-character-anchor', beatKey: 'major-character-beat-key',
+      ...TEXT_ADVENTURE_COMMERCIAL_VISUAL_BASELINE_V1[6], beatKey: 'major-character-beat-key',
       prompt: '第一位主要 NPC 的透明背景三分之二身视觉锚点立绘；脸部、双手和身份物件清晰可辨',
       altText: '主要 NPC 视觉锚点图', width: 720, height: 1080, characterOrdinal: 1,
     },
     {
-      mediaKind: 'cg', sceneTag: 'mainline-turn-act-2', beatKey: 'act-2-turn-beat-key',
+      ...TEXT_ADVENTURE_COMMERCIAL_VISUAL_BASELINE_V1[7], beatKey: 'act-2-turn-beat-key',
       prompt: '第二幕危机升级或真相揭露的原创叙事插图，必须与第一幕转折形成不同构图和事件',
       altText: '第二幕关键转折场面', width: 1280, height: 720, characterOrdinal: null,
     },
     {
-      mediaKind: 'character-pose', sceneTag: 'supporting-character-anchor', beatKey: 'supporting-character-beat-key',
+      ...TEXT_ADVENTURE_COMMERCIAL_VISUAL_BASELINE_V1[8], beatKey: 'supporting-character-beat-key',
       prompt: '第二位关键 NPC 的透明背景三分之二身视觉锚点立绘；脸部、双手和身份物件清晰可辨',
       altText: '关键 NPC 视觉锚点图', width: 720, height: 1080, characterOrdinal: 2,
     },
     {
-      mediaKind: 'cg', sceneTag: 'mainline-turn-act-3', beatKey: 'act-3-turn-beat-key',
+      ...TEXT_ADVENTURE_COMMERCIAL_VISUAL_BASELINE_V1[9], beatKey: 'act-3-turn-beat-key',
       prompt: '第三幕高潮决定的原创叙事插图，表现玩家面对最终代价时的行动瞬间',
       altText: '第三幕高潮决定场面', width: 1280, height: 720, characterOrdinal: null,
     },
     {
-      mediaKind: 'cg', sceneTag: 'important-item-secondary', beatKey: 'item-secondary-beat-key',
+      ...TEXT_ADVENTURE_COMMERCIAL_VISUAL_BASELINE_V1[10], beatKey: 'item-secondary-beat-key',
       prompt: '第二件关键物品的原创叙事特写；外形、材质和用途必须与第一件关键物品显著不同，不含品牌与文字',
       altText: '第二件关键物品特写', width: 1024, height: 1024, characterOrdinal: null,
     },
     {
-      mediaKind: 'cg', sceneTag: 'ending-consequence', beatKey: 'ending-beat-key',
+      ...TEXT_ADVENTURE_COMMERCIAL_VISUAL_BASELINE_V1[11], beatKey: 'ending-beat-key',
       prompt: '回应玩家行动链和持久状态的结局后果插图，不提前泄露其他结局',
       altText: '结局后果场面', width: 1280, height: 720, characterOrdinal: null,
     },
