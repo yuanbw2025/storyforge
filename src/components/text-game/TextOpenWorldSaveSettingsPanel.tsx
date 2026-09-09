@@ -197,7 +197,7 @@ export default function TextOpenWorldSaveSettingsPanel(
     restoreConfirmationFocusRef.current = true
     setConfirmation(null)
   }
-  const confirm = async () => {
+  const confirmRequestedOperation = async () => {
     const request = confirmation
     if (!request || disabled) return
     restoreConfirmationFocusRef.current = false
@@ -295,7 +295,7 @@ export default function TextOpenWorldSaveSettingsPanel(
           <strong id="text-open-world-save-confirmation-title">{confirmation.title}</strong>
           <p id="text-open-world-save-confirmation-detail">{confirmation.detail}</p>
           <span>
-            <button type="button" disabled={disabled} onClick={() => void confirm()}>{confirmation.confirmLabel}</button>
+            <button type="button" disabled={disabled} onClick={() => void confirmRequestedOperation()}>{confirmation.confirmLabel}</button>
             <button ref={confirmationCancelRef} type="button" disabled={disabled} onClick={closeConfirmation}>取消</button>
           </span>
         </div>
