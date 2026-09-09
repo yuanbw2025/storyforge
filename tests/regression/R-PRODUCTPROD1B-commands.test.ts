@@ -602,7 +602,7 @@ describe('PRODUCTPROD-1B · user command control plane', () => {
       status: 'recovery-required' as const,
       planJson: canonicalProductProductionJsonV2(plan),
       failureJson: canonicalProductProductionJsonV2({
-        taskKey: batch.taskKey, code: 'task-executor-failed', attempt: 1,
+        taskKey: batch.taskKey, code: 'task-budget-exceeded', attempt: 1,
         detail: 'task usage 超出 Plan 预算预留:outputTokens=2782/2040',
       }),
     }

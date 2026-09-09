@@ -118,7 +118,7 @@ export function canUpgradeTextAdventureVisualReviewPlanV1(
         const task = plan.tasks.find(candidate => candidate.taskKey === failure.taskKey)
     return task?.kind === 'text-adventure-visual-quality-review-batch'
       && (task.inputArtifactKeys.filter(key => /^media\.visual\.\d{3}$/.test(key)).length > 1
-        || failure.code === 'task-executor-failed'
+        || failure.code === 'task-budget-exceeded'
           && typeof failure.detail === 'string'
           && failure.detail.includes('task usage 超出 Plan 预算预留'))
   } catch { return false }
