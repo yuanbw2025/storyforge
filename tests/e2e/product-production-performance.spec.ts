@@ -104,7 +104,7 @@ async function createPerformanceBuild(page: Page) {
   await page.goto('./')
   await page.getByTestId('product-tab-worlds').click()
   const pipeline = await publishCurrentWorldRelease(page, '性能验收来源')
-  await pipeline.getByRole('button', { name: '交给文字游戏', exact: true }).click()
+  await pipeline.getByRole('button', { name: '交给文字冒险', exact: true }).click()
 
   const enableProduction = page.getByRole('button', { name: '为当前项目显式启用', exact: true })
   if (await enableProduction.isVisible().catch(() => false)) await enableProduction.click()

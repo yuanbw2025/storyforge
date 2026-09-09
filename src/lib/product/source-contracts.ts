@@ -56,6 +56,16 @@ export class ProductSourceContractErrorV1 extends Error {
   }
 }
 
+/**
+ * Pure, read-only projection of one product adapter against an already opened
+ * neutral WorldRelease catalog. It deliberately does not create a SourcePlan,
+ * permission, manifest, run, or any database row.
+ */
+export interface WorldRequirementPreviewV1 {
+  adapter: WorldRequirementAdapterSnapshotV1
+  requirements: WorldRequirementResolutionV1[]
+}
+
 function fail(code: string, message: string): never {
   throw new ProductSourceContractErrorV1(code, message)
 }
@@ -204,6 +214,36 @@ function readiness(input: {
     : 'ready-with-gaps'
 }
 
+export async function previewWorldRequirementsV1<TGoal>(input: {
+  adapter: WorldRequirementAdapterV1<TGoal>
+  goal: TGoal
+  descriptors: readonly ContextResourceDescriptorV1[]
+}): Promise<WorldRequirementPreviewV1> {
+  assertStableKey(input.adapter.adapterId, 'adapterId')
+  if (!Number.isSafeInteger(input.adapter.adapterVersion) || input.adapter.adapterVersion < 1) {
+    fail('adapter', 'adapterVersion 必须是正整数')
+  }
+  const rules = input.adapter.resolve(input.goal).map(normalizeRequirement)
+  if (!rules.length || new Set(rules.map(item => item.key)).size !== rules.length) {
+    fail('adapter', '需求适配器必须返回非空且 key 唯一的规则')
+  }
+  const requirements = rules.map(rule => resolveRequirement(rule, input.descriptors))
+  const adapter: WorldRequirementAdapterSnapshotV1 = {
+    adapterId: input.adapter.adapterId,
+    adapterVersion: input.adapter.adapterVersion,
+    productType: input.adapter.productType,
+    contextTaskKind: input.adapter.contextTaskKind,
+    contractHash: await hashCanonicalValue({
+      adapterId: input.adapter.adapterId,
+      adapterVersion: input.adapter.adapterVersion,
+      productType: input.adapter.productType,
+      contextTaskKind: input.adapter.contextTaskKind,
+      rules,
+    }),
+  }
+  return { adapter, requirements }
+}
+
 export async function freezeProductSourcePlanV1<TGoal>(input: {
   productInstanceKey: string
   worldReference: WorldReferenceV1
@@ -218,18 +258,15 @@ export async function freezeProductSourcePlanV1<TGoal>(input: {
   createdAt?: number
 }): Promise<ProductSourcePlanV1> {
   assertStableKey(input.productInstanceKey, 'productInstanceKey')
-  assertStableKey(input.adapter.adapterId, 'adapterId')
-  if (!Number.isSafeInteger(input.adapter.adapterVersion) || input.adapter.adapterVersion < 1) {
-    fail('adapter', 'adapterVersion 必须是正整数')
-  }
   const worldReference = await validateWorldReferenceV1(input.worldReference)
   const scope = await resolveWorldReferenceResourceScopeV1(worldReference)
   const descriptors = await listWorldSemanticResourceDescriptorsV1(scope)
-  const rules = input.adapter.resolve(input.goal).map(normalizeRequirement)
-  if (!rules.length || new Set(rules.map(item => item.key)).size !== rules.length) {
-    fail('adapter', '需求适配器必须返回非空且 key 唯一的规则')
-  }
-  const requirements = rules.map(rule => resolveRequirement(rule, descriptors))
+  const requirementPreview = await previewWorldRequirementsV1({
+    adapter: input.adapter,
+    goal: input.goal,
+    descriptors,
+  })
+  const { adapter, requirements } = requirementPreview
   const active = requirements.filter(item => item.level !== 'prohibited'
     && !(item.level === 'conditional' && !item.condition?.active))
   const allowedContextKinds = uniqueSorted(active.flatMap(item => item.selector.contextKinds))
@@ -247,19 +284,6 @@ export async function freezeProductSourcePlanV1<TGoal>(input: {
     maxRetrievedTokens: input.maxRetrievedTokens ?? 100_000,
     allowOriginalRead: allowedDepths.includes('original'),
     candidateAccess: 'forbidden' as const,
-  }
-  const adapter: WorldRequirementAdapterSnapshotV1 = {
-    adapterId: input.adapter.adapterId,
-    adapterVersion: input.adapter.adapterVersion,
-    productType: input.adapter.productType,
-    contextTaskKind: input.adapter.contextTaskKind,
-    contractHash: await hashCanonicalValue({
-      adapterId: input.adapter.adapterId,
-      adapterVersion: input.adapter.adapterVersion,
-      productType: input.adapter.productType,
-      contextTaskKind: input.adapter.contextTaskKind,
-      rules,
-    }),
   }
   const consultationContextManifests = [...(input.consultationContextManifests ?? [])]
     .sort((left, right) => left.manifestHash.localeCompare(right.manifestHash)

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import {
   Gamepad2,
   GitBranch,
+  Globe2,
   Loader2,
   Rocket,
   ShieldCheck,
@@ -188,7 +189,10 @@ export default function WorldNarrativeReleasePanel({
           {selectedRelease && <code>{selectedRelease.sourceWorldCode}@v{selectedRelease.version} · {selectedRelease.contentHash.slice(0, 16)}…</code>}
           <div className="sf-world-pipeline-actions">
             <button className="sf-button sf-button-secondary" onClick={() => handoff('text-adventure')} disabled={!selectedRelease?.id}>
-              <Gamepad2 className="h-4 w-4" />交给文字游戏
+              <Gamepad2 className="h-4 w-4" />交给文字冒险
+            </button>
+            <button className="sf-button sf-button-secondary" onClick={() => handoff('text-open-world')} disabled={!selectedRelease?.id}>
+              <Globe2 className="h-4 w-4" />交给文字开放世界
             </button>
             <button className="sf-button sf-button-primary" onClick={() => handoff('ttrpg')} disabled={!selectedRelease?.id}>
               <WandSparkles className="h-4 w-4" />交给跑团

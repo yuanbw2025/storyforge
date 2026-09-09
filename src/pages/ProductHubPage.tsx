@@ -81,6 +81,8 @@ const CharacterInteractionPanel = lazy(() => import('../components/character-int
 const AdventureGamePlayer = lazy(() => import('../components/text-game/AdventureGamePlayer'))
 const AvgGamePlayer = lazy(() => import('../components/text-game/AvgGamePlayer'))
 const TextOpenWorldPlayer = lazy(() => import('../components/text-game/TextOpenWorldPlayer'))
+const TextOpenWorldCreatorStudio = lazy(() => import('../components/text-game/TextOpenWorldCreatorStudio')
+  .then(module => ({ default: module.TextOpenWorldCreatorStudio })))
 const ProductProductionStudio = lazy(() => import('../components/product/ProductProductionStudio'))
 const MarketplacePanel = lazy(() => import('../components/community/MarketplacePanel'))
 const OutlinePanel = lazy(() => import('../components/outline/OutlinePanel'))
@@ -90,6 +92,7 @@ const ComicStudio = lazy(() => import('../components/comic/ComicStudio'))
 
 type TabId = 'home' | 'worlds' | 'novel' | 'nodes' | 'ttrpg' | 'chat' | 'text-games' | 'market'
 type Accent = 'ochre' | 'teal' | 'blue' | 'violet' | 'rust'
+type TextOpenWorldEntrySourceV1 = 'world-release' | 'novel'
 
 const TTRPG_PRODUCTION_PRODUCTS = ['ttrpg'] as const
 const CHARACTER_INTERACTION_PRODUCTION_PRODUCTS = ['character-interaction'] as const
@@ -308,6 +311,17 @@ function BindingBanner({ world, onChange }: { world: ProductWorld; onChange: () 
   return <div className="sf-binding-banner"><span className="sf-binding-icon"><WorldGlyph accent={world.accent} small /></span><div><strong>当前世界入口：{world.name} <code>{world.code}</code></strong><p>这里显示的是可编辑世界草稿；开始生产时必须另选并冻结 WorldRelease，运行时只绑定 ProductRelease，绝不会把草稿版本冒充运行来源。</p></div><Button icon={Hash} onClick={onChange}>更换世界</Button></div>
 }
 
+function NovelSourceBanner({ project }: { project: Project }) {
+  const activeWork = useActiveWork(project)
+  return <div className="sf-binding-banner" data-testid="text-open-world-novel-source-banner">
+    <span className="sf-binding-icon"><BookOpenText className="h-5 w-5" /></span>
+    <div>
+      <strong>当前小说来源：{activeWork?.title ?? project.name}</strong>
+      <p>进入文字开放世界工作台后再选择故事核心、大纲与正文范围；后续生产授权时才建立产品私有 SourcePin，不修改原小说。</p>
+    </div>
+  </div>
+}
+
 function useSelectedWorldGroupId(project?: Project): number | null {
   const activeGroupId = useWorldGroupStore(state => state.activeGroupId)
   const loadAll = useWorldGroupStore(state => state.loadAll)
@@ -456,7 +470,17 @@ function WorldEnginePage({ worlds, activeWorld, onSelectWorld, onOpenCreate, onO
   </>
 }
 
-function NovelPage({ project, onCreate, onDerived }: { project?: Project; onCreate: () => void; onDerived: (projectId: number) => void | Promise<void> }) {
+function NovelPage({
+  project,
+  onCreate,
+  onDerived,
+  onOpenTextOpenWorldProduction,
+}: {
+  project?: Project
+  onCreate: () => void
+  onDerived: (projectId: number) => void | Promise<void>
+  onOpenTextOpenWorldProduction: (project: Project) => void
+}) {
   const [view, setView] = useState<'outline' | 'chapters'>('outline')
   const [nodeId, setNodeId] = useState<number | null>(null)
   const activeWork = useActiveWork(project)
@@ -501,7 +525,43 @@ function NovelPage({ project, onCreate, onDerived }: { project?: Project; onCrea
   }
   const alternateProductId: StoryForgeProductIdV1 = profile === 'short' ? 'independent.longform' : 'independent.shortform'
   const canSwitchProfile = productDecision(alternateProductId).enterable
-  return <><PageHeading eyebrow="AUTHORING / STEP BY STEP" title={profile === 'short' ? '短篇小说创作' : '长篇小说创作'} description={profile === 'short' ? '独立短篇产品复用同一份可靠 Canon 与生成底座。' : '独立运行完整的分步骤长篇创作流程；世界引擎不是前置条件。'} action={<div className="flex flex-wrap items-center justify-end gap-2">{activeWork && <WorkKindBadge work={activeWork} />}<MaturityBadge productId={activeProductId} /><WorldDerivationActions project={project} onDerived={onDerived} />{canSwitchProfile && <Button onClick={() => void changeProfile(profile === 'short' ? 'long' : 'short')} disabled={profileBusy}>{profileBusy ? '切换中…' : profile === 'short' ? '扩写为长篇' : '切换为短篇'}</Button>}<Button variant="primary" icon={ArrowRight} onClick={() => setView('chapters')}>打开正文</Button></div>} />{profileError && <p className="mb-3 text-sm text-red-600" role="alert">{profileError}</p>}<div className="sf-subnav"><button className={view === 'outline' ? 'active' : ''} onClick={() => setView('outline')}><BookOpenText className="h-4 w-4" />卷纲与章纲</button><button className={view === 'chapters' ? 'active' : ''} onClick={() => setView('chapters')}><BookOpenText className="h-4 w-4" />章节与正文</button><span className="sf-subnav-spacer" /><span className="sf-subnav-note">{activeWork?.title ?? '当前作品'}</span></div><section className="sf-product-panel sf-novel-panel"><Suspense fallback={<FeaturePanelFallback />}>{view === 'outline' ? <OutlinePanel project={project} onOpenChapter={id => { setNodeId(id); setView('chapters') }} /> : <ChaptersListPanel project={project} initialNodeId={nodeId} />}</Suspense></section></>
+  return <>
+    <PageHeading
+      eyebrow="AUTHORING / STEP BY STEP"
+      title={profile === 'short' ? '短篇小说创作' : '长篇小说创作'}
+      description={profile === 'short'
+        ? '独立短篇产品复用同一份可靠 Canon 与生成底座。'
+        : '独立运行完整的分步骤长篇创作流程；世界引擎不是前置条件。'}
+      action={<div className="flex flex-wrap items-center justify-end gap-2">
+        {activeWork && <WorkKindBadge work={activeWork} />}
+        <MaturityBadge productId={activeProductId} />
+        <WorldDerivationActions project={project} onDerived={onDerived} />
+        {productDecision('upper.text-open-world').enterable && <Button
+          icon={Globe2}
+          onClick={() => onOpenTextOpenWorldProduction(project)}
+        >制作文字开放世界</Button>}
+        {canSwitchProfile && <Button
+          onClick={() => void changeProfile(profile === 'short' ? 'long' : 'short')}
+          disabled={profileBusy}
+        >{profileBusy ? '切换中…' : profile === 'short' ? '扩写为长篇' : '切换为短篇'}</Button>}
+        <Button variant="primary" icon={ArrowRight} onClick={() => setView('chapters')}>打开正文</Button>
+      </div>}
+    />
+    {profileError && <p className="mb-3 text-sm text-red-600" role="alert">{profileError}</p>}
+    <div className="sf-subnav">
+      <button className={view === 'outline' ? 'active' : ''} onClick={() => setView('outline')}><BookOpenText className="h-4 w-4" />卷纲与章纲</button>
+      <button className={view === 'chapters' ? 'active' : ''} onClick={() => setView('chapters')}><BookOpenText className="h-4 w-4" />章节与正文</button>
+      <span className="sf-subnav-spacer" />
+      <span className="sf-subnav-note">{activeWork?.title ?? '当前作品'}</span>
+    </div>
+    <section className="sf-product-panel sf-novel-panel">
+      <Suspense fallback={<FeaturePanelFallback />}>
+        {view === 'outline'
+          ? <OutlinePanel project={project} onOpenChapter={id => { setNodeId(id); setView('chapters') }} />
+          : <ChaptersListPanel project={project} initialNodeId={nodeId} />}
+      </Suspense>
+    </section>
+  </>
 }
 
 function NodesPage({ project, onCreate }: { project?: Project; onCreate: () => void }) {
@@ -556,10 +616,33 @@ function CharacterInteractionPage({ project, world, onOpenWorldPicker, onCreate,
   return <><PageHeading eyebrow={mode === 'play' ? 'PLAY / CHARACTER-INTERACTION' : 'PRODUCE / CHARACTER-INTERACTION'} title="角色互动" description={mode === 'play' ? '从不可变 Product Release 启动单人或多角色会话，持续演化消息、知识、记忆、关系与场景。' : '通过统一产品生产 Harness 按角色互动需求读取冻结世界资源，形成自包含 Build 与 Product Release。'} action={<div className="product-mode-actions"><Button variant={mode === 'play' ? 'primary' : 'secondary'} icon={Gamepad2} onClick={() => setMode('play')}>玩家模式</Button><Button variant={mode === 'author' ? 'primary' : 'secondary'} icon={BookOpenText} onClick={() => setMode('author')}>正式制作</Button><Button icon={Hash} onClick={onOpenWorldPicker}>选择世界</Button></div>} /><BindingBanner world={world} onChange={onOpenWorldPicker} /><section className="sf-product-runtime-surface"><Suspense fallback={<FeaturePanelFallback />}>{mode === 'play' ? <CharacterInteractionPanel project={project} worldGroupId={worldGroupId} workspaceScope={scope} initialSessionId={previewSessionId ?? initialSessionId} /> : <ProductProductionStudio scope={scope} worldGroupId={worldGroupId} allowedProducts={CHARACTER_INTERACTION_PRODUCTION_PRODUCTS} initialProduct="character-interaction" onPublished={() => setMode('play')} onPreviewStarted={(_, sessionId) => { setPreviewSessionId(sessionId); setMode('play') }} />}</Suspense></section></>
 }
 
-function TextGamePage({ project, world, onOpenWorldPicker, onCreate, initialProduct = 'text-adventure', initialMode = 'play', initialProductionHandoff = null }: { project?: Project; world?: ProductWorld; onOpenWorldPicker: () => void; onCreate: () => void; initialProduct?: TextGameProductKindV1; initialMode?: 'play' | 'production'; initialProductionHandoff?: ProductProductionHandoffV1 | null }) {
+function TextGamePage({
+  project,
+  novelProject,
+  world,
+  onOpenWorldPicker,
+  onCreate,
+  initialProduct = 'text-adventure',
+  initialMode = 'play',
+  initialProductionHandoff = null,
+  initialOpenWorldSource = 'world-release',
+}: {
+  /** The independently-owned world-engine workspace, when one is selected. */
+  project?: Project
+  /** The independently-owned novel workspace, when one is selected. */
+  novelProject?: Project
+  world?: ProductWorld
+  onOpenWorldPicker: () => void
+  onCreate: () => void
+  initialProduct?: TextGameProductKindV1
+  initialMode?: 'play' | 'production'
+  initialProductionHandoff?: ProductProductionHandoffV1 | null
+  initialOpenWorldSource?: TextOpenWorldEntrySourceV1
+}) {
   const updateWorkspace = useProjectStore(state => state.updateWorkspace)
   const [mode, setMode] = useState<'play' | 'production'>(initialMode)
   const [product, setProduct] = useState<TextGameProductKindV1>(initialProduct)
+  const [creatorSourceConfirmed, setCreatorSourceConfirmed] = useState(false)
   const [previewHandoff, setPreviewHandoff] = useState<{
     productType: TextGameProductKindV1
     sessionId: number
@@ -579,20 +662,33 @@ function TextGamePage({ project, world, onOpenWorldPicker, onCreate, initialProd
     if (availableProducts.includes(product)) return
     if (availableProducts[0]) setProduct(availableProducts[0])
   }, [availableProducts, product])
+  useEffect(() => {
+    setCreatorSourceConfirmed(false)
+  }, [initialProductionHandoff, initialOpenWorldSource, novelProject?.id, project?.id])
+
   const worldGroupId = useSelectedWorldGroupId(project)
-  if (!project || !world) return <><PageHeading eyebrow="PLAY / TEXT GAME" title="文字游戏" description="选择世界与叙事蓝图，开始独立的可回放故事。" /><EmptyProjectState onCreate={onCreate} /></>
-  const scope = scopeForProject(project)
-  if (!scope) return <><PageHeading eyebrow="PLAY / TEXT GAME" title="文字游戏" description="从正式发布开始独立、可回放的文字游戏。" /><BindingBanner world={world} onChange={onOpenWorldPicker} /><section className="sf-product-empty"><ShieldCheck className="h-8 w-8" /><h2>工作区归属尚未就绪</h2><p>请先进入世界引擎完成 World/Work 初始化，再读取正式游戏发布。</p></section></>
   const isAdventure = product === 'text-adventure'
   const isAvg = product === 'avg'
   const isOpenWorld = product === 'text-open-world'
   const currentProductDecision = productDecision(textGameCatalogId(product))
   if (!currentProductDecision.enterable) return <><PageHeading eyebrow="PLAY / TEXT GAME" title={currentProductDecision.entry.label} description={currentProductDecision.entry.maturityNote} action={<MaturityBadge productId={currentProductDecision.entry.id} />} /><section className="sf-product-empty"><ShieldCheck className="h-8 w-8" /><h2>该文字游戏产品尚未开放</h2><p>{currentProductDecision.blockers.join('；')}</p></section></>
+
+  const worldScope = project ? scopeForProject(project) : undefined
+  const novelScope = novelProject ? scopeForProject(novelProject) : undefined
+  const isOpenWorldProduction = isOpenWorld && mode === 'production'
+  if (!isOpenWorldProduction && (!project || !world)) {
+    return <><PageHeading eyebrow="PLAY / TEXT GAME" title="文字游戏" description="选择世界与叙事蓝图，开始独立的可回放故事。" /><EmptyProjectState onCreate={onCreate} /></>
+  }
+  if (!isOpenWorldProduction && !worldScope) {
+    return <><PageHeading eyebrow="PLAY / TEXT GAME" title="文字游戏" description="从正式发布开始独立、可回放的文字游戏。" />{world && <BindingBanner world={world} onChange={onOpenWorldPicker} />}<section className="sf-product-empty"><ShieldCheck className="h-8 w-8" /><h2>工作区归属尚未就绪</h2><p>请先进入世界引擎完成 World/Work 初始化，再读取正式游戏发布。</p></section></>
+  }
+
   const productionDecision = evaluateProductPlatformCapabilityV1('product-production-v3', {
     environment: currentProductPlatformEnvironmentV1(), experimentalProject: false,
-    authorOptIn: project.productPlatformOptIns?.productProductionV3 === true,
+    authorOptIn: project?.productPlatformOptIns?.productProductionV3 === true,
     onlineServiceConfigured: false, aiGmBetaGatePassed: currentAiGmBetaGatePassedV1(),
   })
+  const genericProductionProducts = availableProducts.filter(kind => kind !== 'text-open-world')
   const productCode = isAdventure ? 'TEXT-ADVENTURE' : isAvg ? 'AVG' : 'TEXT-OPEN-WORLD'
   const productTitle = isAdventure ? '文字冒险' : isAvg ? 'AVG / Galgame' : '文字开放世界'
   const description = isAdventure
@@ -601,41 +697,94 @@ function TextGamePage({ project, world, onOpenWorldPicker, onCreate, initialProd
       ? (mode === 'play' ? '用背景、立绘、CG、音频和可恢复舞台演出同一份分支故事，也可纯文字通关。' : '导入版本化媒资，为 Narrative Beat 配置声明式 Cue 并发布不可变演出。')
       : (mode === 'play' ? '在多个区域之间旅行，让人物、组织、问题和动态任务在同一可回放世界时间线上持续演进。' : '组合区域目录、交通、发现渠道、固定任务、模板、日程和传播规则，并冻结全部共享能力。')
   const content = mode === 'production'
-    ? productionDecision.enabled ? <ProductProductionStudio
-      scope={scope}
-      worldGroupId={worldGroupId}
-      allowedProducts={availableProducts}
-      initialProduct={product}
-      initialSource={initialProductionHandoff}
-      onProductSelected={next => {
-        if (TEXT_GAME_PRODUCT_KINDS_V1.includes(next as TextGameProductKindV1) && productDecision(textGameCatalogId(next as TextGameProductKindV1)).enterable) {
-          setProduct(next as TextGameProductKindV1)
-        }
-      }}
-      onPublished={next => {
-        setPreviewHandoff(null)
-        if (TEXT_GAME_PRODUCT_KINDS_V1.includes(next as TextGameProductKindV1) && productDecision(textGameCatalogId(next as TextGameProductKindV1)).enterable) {
-          setProduct(next as TextGameProductKindV1)
-          setMode('play')
-        }
-      }}
-      onPreviewStarted={(next, sessionId) => {
-        if (TEXT_GAME_PRODUCT_KINDS_V1.includes(next as TextGameProductKindV1) && productDecision(textGameCatalogId(next as TextGameProductKindV1)).enterable) {
-          const productType = next as TextGameProductKindV1
-          setPreviewHandoff({ productType, sessionId })
-          setProduct(productType)
-          setMode('play')
-        }
-      }}
-    /> : <CapabilityConsentGate decision={productionDecision} onEnable={() => updateWorkspace(project.id!, {
-      productPlatformOptIns: { ...project.productPlatformOptIns, productProductionV3: true },
-    })} />
+    ? isOpenWorld
+      ? (worldScope || novelScope)
+        ? <>
+          <TextOpenWorldCreatorStudio
+            key={`${initialOpenWorldSource}:${initialProductionHandoff?.worldReleaseId ?? 'none'}:${initialProductionHandoff?.worldContentHash ?? 'none'}`}
+            worldScope={worldScope ?? null}
+            novelScope={novelScope ?? null}
+            worldGroupId={worldGroupId}
+            initialSource={initialProductionHandoff?.productType === 'text-open-world'
+              ? initialProductionHandoff
+              : null}
+            initialSourceKind={initialOpenWorldSource}
+            onContinue={() => setCreatorSourceConfirmed(true)}
+          />
+          {creatorSourceConfirmed && <p
+            className="mx-5 rounded border border-accent/30 bg-accent/5 px-4 py-3 text-xs leading-5 text-text-muted"
+            data-testid="text-open-world-creator-boundary"
+            role="status"
+          >来源交接已确认；下一步由体验会谈继续。本入口尚未创建 Production、Build、Release 或 Session。</p>}
+        </>
+        : <section className="sf-product-empty" data-testid="text-open-world-source-empty">
+          <BookOpenText className="h-8 w-8" />
+          <h2>小说或世界来源工作区归属尚未就绪</h2>
+          <p>请先选择已初始化的独立小说作品，或从世界引擎交接一个冻结 WorldRelease。</p>
+          <Button variant="primary" icon={Plus} onClick={onCreate}>新建内容</Button>
+        </section>
+      : productionDecision.enabled && worldScope && project
+        ? <ProductProductionStudio
+          scope={worldScope}
+          worldGroupId={worldGroupId}
+          allowedProducts={genericProductionProducts}
+          initialProduct={product}
+          initialSource={initialProductionHandoff?.productType === product
+            ? initialProductionHandoff
+            : null}
+          onProductSelected={next => {
+            if (TEXT_GAME_PRODUCT_KINDS_V1.includes(next as TextGameProductKindV1) && next !== 'text-open-world' && productDecision(textGameCatalogId(next as TextGameProductKindV1)).enterable) {
+              setProduct(next as TextGameProductKindV1)
+            }
+          }}
+          onPublished={next => {
+            setPreviewHandoff(null)
+            if (TEXT_GAME_PRODUCT_KINDS_V1.includes(next as TextGameProductKindV1) && next !== 'text-open-world' && productDecision(textGameCatalogId(next as TextGameProductKindV1)).enterable) {
+              setProduct(next as TextGameProductKindV1)
+              setMode('play')
+            }
+          }}
+          onPreviewStarted={(next, sessionId) => {
+            if (TEXT_GAME_PRODUCT_KINDS_V1.includes(next as TextGameProductKindV1) && next !== 'text-open-world' && productDecision(textGameCatalogId(next as TextGameProductKindV1)).enterable) {
+              const productType = next as TextGameProductKindV1
+              setPreviewHandoff({ productType, sessionId })
+              setProduct(productType)
+              setMode('play')
+            }
+          }}
+        />
+        : project
+          ? <CapabilityConsentGate decision={productionDecision} onEnable={() => updateWorkspace(project.id!, {
+            productPlatformOptIns: { ...project.productPlatformOptIns, productProductionV3: true },
+          })} />
+          : null
     : isAdventure
-      ? <AdventureGamePlayer project={project} scope={scope} worldGroupId={worldGroupId} initialSessionId={previewHandoff?.productType === 'text-adventure' ? previewHandoff.sessionId : null} />
+      ? <AdventureGamePlayer project={project!} scope={worldScope!} worldGroupId={worldGroupId} initialSessionId={previewHandoff?.productType === 'text-adventure' ? previewHandoff.sessionId : null} />
       : isAvg
-        ? <AvgGamePlayer project={project} scope={scope} worldGroupId={worldGroupId} initialSessionId={previewHandoff?.productType === 'avg' ? previewHandoff.sessionId : null} />
-        : <TextOpenWorldPlayer project={project} scope={scope} worldGroupId={worldGroupId} initialSessionId={previewHandoff?.productType === 'text-open-world' ? previewHandoff.sessionId : null} />
-  return <><PageHeading eyebrow={`${mode === 'play' ? 'PLAY' : 'PRODUCE'} / ${productCode}`} title={mode === 'production' ? '文字游戏制作中心' : productTitle} description={mode === 'production' ? '从冻结 WorldRelease 会谈、审查 Brief、显式授权、构建可玩预览，并经证据复验原子发布。' : description} action={<div className="product-mode-actions">{availableProducts.includes('text-adventure') && <Button variant={isAdventure ? 'primary' : 'secondary'} icon={Map} onClick={() => setProduct('text-adventure')}>文字冒险</Button>}{availableProducts.includes('avg') && <Button variant={isAvg ? 'primary' : 'secondary'} icon={MonitorPlay} onClick={() => setProduct('avg')}>AVG</Button>}{availableProducts.includes('text-open-world') && <Button variant={isOpenWorld ? 'primary' : 'secondary'} icon={Globe2} onClick={() => setProduct('text-open-world')}>文字开放世界</Button>}<Button variant={mode === 'play' ? 'primary' : 'secondary'} icon={Gamepad2} onClick={() => setMode('play')}>玩家</Button><Button variant={mode === 'production' ? 'primary' : 'secondary'} icon={Sparkles} onClick={() => setMode('production')}>制作</Button><Button icon={Hash} onClick={onOpenWorldPicker}>选择世界</Button></div>} /><BindingBanner world={world} onChange={onOpenWorldPicker} /><section className="sf-product-runtime-surface"><Suspense fallback={<FeaturePanelFallback />}>{content}</Suspense></section></>
+        ? <AvgGamePlayer project={project!} scope={worldScope!} worldGroupId={worldGroupId} initialSessionId={previewHandoff?.productType === 'avg' ? previewHandoff.sessionId : null} />
+        : <TextOpenWorldPlayer project={project!} scope={worldScope!} worldGroupId={worldGroupId} initialSessionId={previewHandoff?.productType === 'text-open-world' ? previewHandoff.sessionId : null} />
+  return <>
+    <PageHeading
+      eyebrow={`${mode === 'play' ? 'PLAY' : 'PRODUCE'} / ${productCode}`}
+      title={mode === 'production' ? (isOpenWorld ? '文字开放世界制作' : '文字游戏制作中心') : productTitle}
+      description={mode === 'production'
+        ? isOpenWorld
+          ? '从冻结 WorldRelease 或受治理小说来源开始；确认来源后再进入体验会谈、生产和发布。'
+          : '从冻结 WorldRelease 会谈、审查 Brief、显式授权、构建可玩预览，并经证据复验原子发布。'
+        : description}
+      action={<div className="product-mode-actions">
+        {availableProducts.includes('text-adventure') && <Button variant={isAdventure ? 'primary' : 'secondary'} icon={Map} onClick={() => setProduct('text-adventure')}>文字冒险</Button>}
+        {availableProducts.includes('avg') && <Button variant={isAvg ? 'primary' : 'secondary'} icon={MonitorPlay} onClick={() => setProduct('avg')}>AVG</Button>}
+        {availableProducts.includes('text-open-world') && <Button variant={isOpenWorld ? 'primary' : 'secondary'} icon={Globe2} onClick={() => setProduct('text-open-world')}>文字开放世界</Button>}
+        <Button variant={mode === 'play' ? 'primary' : 'secondary'} icon={Gamepad2} onClick={() => setMode('play')} disabled={isOpenWorldProduction && !worldScope}>玩家</Button>
+        <Button variant={mode === 'production' ? 'primary' : 'secondary'} icon={Sparkles} onClick={() => setMode('production')}>制作</Button>
+        {(!isOpenWorld || Boolean(worldScope)) && <Button icon={Hash} onClick={onOpenWorldPicker}>选择世界</Button>}
+      </div>}
+    />
+    {isOpenWorldProduction && initialOpenWorldSource === 'novel' && novelProject && <NovelSourceBanner project={novelProject} />}
+    {world && (!isOpenWorldProduction || initialOpenWorldSource === 'world-release') && <BindingBanner world={world} onChange={onOpenWorldPicker} />}
+    <section className="sf-product-runtime-surface"><Suspense fallback={<FeaturePanelFallback />}>{content}</Suspense></section>
+  </>
 }
 
 function CreatePanel({ onClose, onCreated }: { onClose: () => void; onCreated: (kind: 'worlds' | 'novel', id: number) => void }) {
@@ -730,6 +879,7 @@ export default function ProductHubPage() {
   const [textGameProduct, setTextGameProduct] = useState<TextGameProductKindV1>('text-adventure')
   const [textGameInitialMode, setTextGameInitialMode] = useState<'play' | 'production'>('play')
   const [textProductProductionHandoff, setTextProductProductionHandoff] = useState<ProductProductionHandoffV1 | null>(null)
+  const [textOpenWorldEntrySource, setTextOpenWorldEntrySource] = useState<TextOpenWorldEntrySourceV1>('world-release')
   const [ttrpgInitialSessionId, setTtrpgInitialSessionId] = useState<number | null>(null)
   const [ttrpgProductionHandoff, setTtrpgProductionHandoff] = useState<ProductProductionHandoffV1 | null>(null)
   const [onlineRoomHandoff, setOnlineRoomHandoff] = useState<OnlineRoomJoinHandoffV1 | null>(null)
@@ -844,16 +994,24 @@ export default function ProductHubPage() {
         if (!productDecision(textGameCatalogId(parsed.productType as TextGameProductKindV1)).enterable) {
           throw new Error('所选文字游戏产品当前未开放。')
         }
+        if (parsed.productType === 'text-open-world') setTextOpenWorldEntrySource('world-release')
         setTextGameProduct(parsed.productType as TextGameProductKindV1)
         setTextGameInitialMode('production')
         setTextProductProductionHandoff(parsed)
         setActiveTab('text-games')
       }} />
-      case 'novel': return <NovelPage project={activeWorkProject} onCreate={() => setShowCreate(true)} onDerived={async projectId => { await loadProjects(); setActiveWorldProjectId(projectId); setActiveTab('worlds') }} />
+      case 'novel': return <NovelPage project={activeWorkProject} onCreate={() => setShowCreate(true)} onDerived={async projectId => { await loadProjects(); setActiveWorldProjectId(projectId); setActiveTab('worlds') }} onOpenTextOpenWorldProduction={project => {
+        setActiveWorkProjectId(project.id ?? null)
+        setTextGameProduct('text-open-world')
+        setTextGameInitialMode('production')
+        setTextProductProductionHandoff(null)
+        setTextOpenWorldEntrySource('novel')
+        setActiveTab('text-games')
+      }} />
       case 'nodes': return <NodesPage project={activeWorkProject} onCreate={() => setShowCreate(true)} />
       case 'ttrpg': return <TtrpgPage project={activeWorldProject} world={activeWorld} onOpenWorldPicker={() => setShowWorldPicker(true)} onCreate={() => setShowCreate(true)} initialSessionId={ttrpgInitialSessionId} initialProductionHandoff={ttrpgProductionHandoff} initialOnlineHandoff={onlineRoomHandoff} onOnlineHandoffConsumed={() => setOnlineRoomHandoff(null)} />
       case 'chat': return <CharacterInteractionPage project={activeWorldProject} world={activeWorld} onOpenWorldPicker={() => setShowWorldPicker(true)} onCreate={() => setShowCreate(true)} />
-      case 'text-games': return <TextGamePage project={activeWorldProject} world={activeWorld} onOpenWorldPicker={() => setShowWorldPicker(true)} onCreate={() => setShowCreate(true)} initialProduct={textGameProduct} initialMode={textGameInitialMode} initialProductionHandoff={textProductProductionHandoff} />
+      case 'text-games': return <TextGamePage project={activeWorldProject} novelProject={activeWorkProject} world={activeWorld} onOpenWorldPicker={() => setShowWorldPicker(true)} onCreate={() => setShowCreate(true)} initialProduct={textGameProduct} initialMode={textGameInitialMode} initialProductionHandoff={textProductProductionHandoff} initialOpenWorldSource={textOpenWorldEntrySource} />
       case 'market': return <MarketplacePage project={activeWorldProject} world={activeWorld} onOpenWorldPicker={() => setShowWorldPicker(true)} onImported={loadProjects} onRoomHandoff={openAcceptedOnlineRoom} />
       default: return home()
     }

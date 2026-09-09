@@ -4,6 +4,7 @@ import {
   acceptTextOpenWorldSourcePinBundleV1,
   freezeTextOpenWorldNovelSourceV1,
   freezeTextOpenWorldWorldReleaseSourceV1,
+  prepareTextOpenWorldNovelSourceSnapshotV1,
   readAcceptedTextOpenWorldSourcePinBundleV1,
   validateTextOpenWorldSourcePinBundleV1,
   verifyTextOpenWorldSourcePinAvailabilityV1,
@@ -165,6 +166,7 @@ describe('R-OPEN-WORLD3 · WorldRelease/小说双来源 SourcePin', () => {
     const bundle = await freezeTextOpenWorldWorldReleaseSourceV1({
       scope: created.scope,
       localReleaseRecordId: created.release.id!,
+      expectedReleaseHash: created.release.contentHash,
       selection: { mode: 'selected-resources', resourceKeys: selectedResourceKeys },
       authorization: authorization(productionKey, 'world-source-authorization', capturedAt),
       createdAt: capturedAt,
@@ -236,10 +238,16 @@ describe('R-OPEN-WORLD3 · WorldRelease/小说双来源 SourcePin', () => {
     const created = await seedNovelSource()
     const productionKey = 'tow.source.novel'
     const build = await seedTextOpenWorldBuild(created.scope, productionKey)
+    const preview = await prepareTextOpenWorldNovelSourceSnapshotV1({
+      sourceScope: created.scope,
+      selection: { mode: 'entire-work' },
+    })
     const bundle = await freezeTextOpenWorldNovelSourceV1({
       targetScope: created.scope,
       sourceScope: created.scope,
       selection: { mode: 'entire-work' },
+      expectedSourceVersionHash: preview.sourceVersionHash,
+      expectedSourceBoundaryHash: preview.sourceBoundaryHash,
       authorization: authorization(productionKey, 'novel-source-authorization', created.now),
       createdAt: created.now,
     })
@@ -292,10 +300,25 @@ describe('R-OPEN-WORLD3 · WorldRelease/小说双来源 SourcePin', () => {
     await expect(verifyTextOpenWorldSourcePinAvailabilityV1({ scope: created.scope, pin: bundle.pin }))
       .resolves.toEqual({ kind: 'novel', selfContained: true })
 
+    await expect(freezeTextOpenWorldNovelSourceV1({
+      targetScope: created.scope,
+      sourceScope: created.scope,
+      selection: { mode: 'entire-work' },
+      expectedSourceVersionHash: preview.sourceVersionHash,
+      expectedSourceBoundaryHash: preview.sourceBoundaryHash,
+      authorization: authorization(productionKey, 'stale-source-authorization', created.now + 1),
+      createdAt: created.now + 1,
+    })).rejects.toThrow(/预览后变化/)
+    const changedPreview = await prepareTextOpenWorldNovelSourceSnapshotV1({
+      sourceScope: created.scope,
+      selection: { mode: 'entire-work' },
+    })
     const changed = await freezeTextOpenWorldNovelSourceV1({
       targetScope: created.scope,
       sourceScope: created.scope,
       selection: { mode: 'entire-work' },
+      expectedSourceVersionHash: changedPreview.sourceVersionHash,
+      expectedSourceBoundaryHash: changedPreview.sourceBoundaryHash,
       authorization: authorization(productionKey, 'changed-source-authorization', created.now + 1),
       createdAt: created.now + 1,
     })
@@ -319,6 +342,15 @@ describe('R-OPEN-WORLD3 · WorldRelease/小说双来源 SourcePin', () => {
     await expect(freezeTextOpenWorldWorldReleaseSourceV1({
       scope: world.scope,
       localReleaseRecordId: world.release.id!,
+      expectedReleaseHash: '0'.repeat(64),
+      selection: { mode: 'selected-resources', resourceKeys: [catalog.resources[0]!.resourceKey] },
+      authorization: authorization('tow.source.stale', 'stale-release', capturedAt),
+      createdAt: capturedAt,
+    })).rejects.toThrow(/预览后变化/)
+    await expect(freezeTextOpenWorldWorldReleaseSourceV1({
+      scope: world.scope,
+      localReleaseRecordId: world.release.id!,
+      expectedReleaseHash: world.release.contentHash,
       selection: { mode: 'selected-resources', resourceKeys: ['world-release:not-present'] },
       authorization: authorization('tow.source.invalid', 'invalid-resource', capturedAt),
       createdAt: capturedAt,
@@ -327,6 +359,7 @@ describe('R-OPEN-WORLD3 · WorldRelease/小说双来源 SourcePin', () => {
     await expect(freezeTextOpenWorldWorldReleaseSourceV1({
       scope: world.scope,
       localReleaseRecordId: world.release.id!,
+      expectedReleaseHash: world.release.contentHash,
       selection: { mode: 'selected-resources', resourceKeys: [catalog.resources[0]!.resourceKey] },
       authorization: {
         ...authorization('tow.source.invalid', 'invalid-rights', capturedAt),
@@ -338,6 +371,7 @@ describe('R-OPEN-WORLD3 · WorldRelease/小说双来源 SourcePin', () => {
     const valid = await freezeTextOpenWorldWorldReleaseSourceV1({
       scope: world.scope,
       localReleaseRecordId: world.release.id!,
+      expectedReleaseHash: world.release.contentHash,
       selection: { mode: 'selected-resources', resourceKeys: [catalog.resources[0]!.resourceKey] },
       authorization: authorization('tow.source.valid', 'valid-source', capturedAt),
       createdAt: capturedAt,
@@ -347,10 +381,16 @@ describe('R-OPEN-WORLD3 · WorldRelease/小说双来源 SourcePin', () => {
     await expect(validateTextOpenWorldSourcePinBundleV1(tampered)).rejects.toThrow(/Artifact Hash/)
 
     const novel = await seedNovelSource()
+    const novelPreview = await prepareTextOpenWorldNovelSourceSnapshotV1({
+      sourceScope: novel.scope,
+      selection: { mode: 'entire-work' },
+    })
     await expect(freezeTextOpenWorldNovelSourceV1({
       targetScope: world.scope,
       sourceScope: novel.scope,
       selection: { mode: 'entire-work' },
+      expectedSourceVersionHash: novelPreview.sourceVersionHash,
+      expectedSourceBoundaryHash: novelPreview.sourceBoundaryHash,
       authorization: authorization('tow.source.cross-project', 'cross-project', capturedAt),
       createdAt: capturedAt,
     })).rejects.toThrow(/同一项目/)
@@ -358,6 +398,8 @@ describe('R-OPEN-WORLD3 · WorldRelease/小说双来源 SourcePin', () => {
       targetScope: novel.scope,
       sourceScope: novel.scope,
       selection: { mode: 'chapters', chapterIds: [999_999] },
+      expectedSourceVersionHash: HASH,
+      expectedSourceBoundaryHash: HASH,
       authorization: authorization('tow.source.bad-chapter', 'bad-chapter', capturedAt),
       createdAt: capturedAt,
     })).rejects.toThrow(/越界 ID/)

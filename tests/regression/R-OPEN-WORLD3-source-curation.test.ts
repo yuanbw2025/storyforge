@@ -10,6 +10,7 @@ import {
   acceptTextOpenWorldSourcePinBundleV1,
   freezeTextOpenWorldNovelSourceV1,
   freezeTextOpenWorldWorldReleaseSourceV1,
+  prepareTextOpenWorldNovelSourceSnapshotV1,
 } from '../../src/lib/open-world/source-pin'
 import { openWorldSemanticResourceCatalogV1 } from '../../src/lib/context-gateway/world-release-client'
 import { hashProductProductionValueV2 } from '../../src/lib/product-production/hash'
@@ -85,8 +86,14 @@ async function seedNovelFixture() {
     subPlots: '沿途角色、势力和地区故事。',
     createdAt: build.now, updatedAt: build.now,
   } as never, { owner: 'work' }))
+  const preview = await prepareTextOpenWorldNovelSourceSnapshotV1({
+    sourceScope: created.scope,
+    selection: { mode: 'entire-work' },
+  })
   const bundle = await freezeTextOpenWorldNovelSourceV1({
     targetScope: created.scope, sourceScope: created.scope, selection: { mode: 'entire-work' },
+    expectedSourceVersionHash: preview.sourceVersionHash,
+    expectedSourceBoundaryHash: preview.sourceBoundaryHash,
     authorization: {
       productInstanceKey: 'tow.curation.novel', briefRevision: 1, briefHash: HASH,
       authorStartRevision: 1, authorizationNonce: 'p1-curation-test', rightsBasis: 'author-owned',
@@ -112,6 +119,7 @@ async function seedWorldFixture() {
   const bundle = await freezeTextOpenWorldWorldReleaseSourceV1({
     scope: created.scope,
     localReleaseRecordId: created.release.id!,
+    expectedReleaseHash: created.release.contentHash,
     selection: { mode: 'selected-resources', resourceKeys: selectedResourceKeys },
     authorization: {
       productInstanceKey: 'tow.curation.world-release',

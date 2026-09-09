@@ -38,6 +38,7 @@ import type {
   TextOpenWorldSourcePinUnitV1,
   TextOpenWorldSourcePinV1,
   TextOpenWorldSourceRightsBasisV1,
+  TextOpenWorldNovelSourceSnapshotPreviewV1,
   WorkspaceScope,
   WorldReferenceV1,
 } from '../types'
@@ -75,6 +76,34 @@ interface NovelSourceTextUnitV1 {
   kind: Exclude<TextOpenWorldSourcePinUnitKindV1, 'world-resource'>
   label: string
   text: string
+}
+
+type SourceUnitIdentityInputV1 = Pick<
+  TextOpenWorldSourcePinUnitRefV1,
+  | 'unitKey'
+  | 'kind'
+  | 'order'
+  | 'partIndex'
+  | 'partCount'
+  | 'readDepth'
+  | 'sourceResourceKey'
+  | 'sourceContentHash'
+>
+
+interface PreparedNovelSourceChunkV1 extends SourceUnitIdentityInputV1 {
+  label: string
+  contentText: string
+  charCount: number
+  wordCount: number
+}
+
+interface PreparedNovelSourceSnapshotInternalV1 {
+  scope: WorkspaceScope
+  source: Extract<TextOpenWorldSourcePinSourceV1, { kind: 'novel' }>
+  sourceVersionHash: string
+  sourceBoundaryHash: string
+  chunks: PreparedNovelSourceChunkV1[]
+  preview: TextOpenWorldNovelSourceSnapshotPreviewV1
 }
 
 function fail(message: string): never {
@@ -157,7 +186,7 @@ function unitRef(
   }
 }
 
-function sourceUnitIdentity(ref: TextOpenWorldSourcePinUnitRefV1): unknown {
+function sourceUnitIdentity(ref: SourceUnitIdentityInputV1): unknown {
   return {
     unitKey: ref.unitKey,
     kind: ref.kind,
@@ -173,7 +202,7 @@ function sourceUnitIdentity(ref: TextOpenWorldSourcePinUnitRefV1): unknown {
 async function sourceBoundaryHash(input: {
   sourceVersionHash: string
   source: TextOpenWorldSourcePinSourceV1
-  units: TextOpenWorldSourcePinUnitRefV1[]
+  units: readonly SourceUnitIdentityInputV1[]
 }): Promise<string> {
   return hashProductProductionValueV2({
     sourceVersionHash: input.sourceVersionHash,
@@ -463,42 +492,227 @@ function novelTextUnits(input: {
   return units.filter(item => item.text.trim())
 }
 
-async function buildNovelUnitArtifacts(input: {
-  productInstanceKey: string
-  units: NovelSourceTextUnitV1[]
-  capturedAt: number
-}): Promise<TextOpenWorldSourcePinBundleV1['units']> {
-  const expanded = input.units.flatMap(unit => {
+async function prepareNovelSourceChunksV1(
+  units: NovelSourceTextUnitV1[],
+): Promise<PreparedNovelSourceChunkV1[]> {
+  const expanded = units.flatMap(unit => {
     const parts = splitSourceText(unit.text)
-    return parts.map((contentText, index) => ({ unit, contentText, partIndex: index + 1, partCount: parts.length }))
+    return parts.map((contentText, index) => ({
+      unit,
+      contentText,
+      partIndex: index + 1,
+      partCount: parts.length,
+    }))
   })
   if (!expanded.length || expanded.length > MAX_SOURCE_UNITS) fail('小说冻结单元为空或超过上限')
-  return Promise.all(expanded.map(async (item, order) => {
-    const artifactKey = sourceUnitArtifactKey(order)
+  return Promise.all(expanded.map(async (item, order) => ({
+    unitKey: `source.novel.${String(order + 1).padStart(5, '0')}`,
+    kind: item.unit.kind,
+    label: item.partCount === 1 ? item.unit.label : `${item.unit.label}（${item.partIndex}/${item.partCount}）`,
+    order,
+    partIndex: item.partIndex,
+    partCount: item.partCount,
+    readDepth: 'full' as const,
+    sourceResourceKey: null,
+    sourceContentHash: await hashProductProductionValueV2(item.contentText),
+    contentText: item.contentText,
+    charCount: item.contentText.length,
+    wordCount: countWords(item.contentText),
+  })))
+}
+
+async function buildNovelUnitArtifacts(input: {
+  productInstanceKey: string
+  chunks: PreparedNovelSourceChunkV1[]
+  capturedAt: number
+}): Promise<TextOpenWorldSourcePinBundleV1['units']> {
+  return Promise.all(input.chunks.map(async item => {
+    const artifactKey = sourceUnitArtifactKey(item.order)
     const payload: TextOpenWorldSourcePinUnitV1 = {
       schema: 'storyforge.text-open-world-source-pin-unit',
       version: 1,
       productInstanceKey: input.productInstanceKey,
       sourceKind: 'novel',
-      unitKey: `source.novel.${String(order + 1).padStart(5, '0')}`,
+      unitKey: item.unitKey,
       artifactKey,
-      kind: item.unit.kind,
-      label: item.partCount === 1 ? item.unit.label : `${item.unit.label}（${item.partIndex}/${item.partCount}）`,
-      order,
+      kind: item.kind,
+      label: item.label,
+      order: item.order,
       partIndex: item.partIndex,
       partCount: item.partCount,
       readDepth: 'full',
       sourceResourceKey: null,
       sourceArea: null,
       sourceResourceKind: null,
-      sourceContentHash: await hashProductProductionValueV2(item.contentText),
+      sourceContentHash: item.sourceContentHash,
       contentText: item.contentText,
-      charCount: item.contentText.length,
-      wordCount: countWords(item.contentText),
+      charCount: item.charCount,
+      wordCount: item.wordCount,
       capturedAt: input.capturedAt,
     }
     return { payload, artifactContentHash: await hashProductProductionValueV2(payload) }
   }))
+}
+
+async function prepareNovelSourceSnapshotInternalV1(input: {
+  sourceScope: WorkspaceScope
+  selection: AdaptationSourceSelectionV1
+}): Promise<PreparedNovelSourceSnapshotInternalV1> {
+  const scope = await resolveScope({ scope: input.sourceScope })
+  const sourceWork = await db.works.get(scope.workId)
+  if (!sourceWork || sourceWork.projectId !== scope.projectId
+    || sourceWork.worldId !== scope.worldId || effectiveWorkKind(sourceWork) !== 'novel') {
+    fail('来源 scope 不是有效小说 Work')
+  }
+  const [outlines, chapters, storyCores] = await Promise.all([
+    readOwnedRows<OutlineNode>(scope, 'outlineNodes', { owner: 'work' }),
+    readOwnedRows<Chapter>(scope, 'chapters', { owner: 'work' }),
+    readOwnedRows<StoryCore>(scope, 'storyCores', { owner: 'work' }),
+  ])
+  const selected = selectedNovelRows({ selection: input.selection, outlines, chapters })
+  const textUnits = novelTextUnits({
+    title: sourceWork.title,
+    description: sourceWork.description,
+    genres: sourceWork.genres,
+    storyCores,
+    outlines: selected.outlines,
+    chapters: selected.chapters,
+  })
+  const chapterPreviews = selected.chapters.map((chapter, order) => {
+    if (chapter.id == null) fail('小说选择存在无 ID 章节')
+    const plain = htmlToPlainText(chapter.content || '').trim()
+    return {
+      id: chapter.id,
+      outlineNodeId: chapter.outlineNodeId,
+      title: chapter.title,
+      order,
+      wordCount: countWords(plain),
+      hasContent: Boolean(plain),
+    }
+  })
+  const outlinePreviews = selected.outlines.map(outline => {
+    if (outline.id == null) fail('小说选择存在无 ID 大纲')
+    return {
+      id: outline.id,
+      parentId: outline.parentId,
+      type: outline.type,
+      title: outline.title,
+      order: outline.order,
+    }
+  })
+  const hasFullText = chapterPreviews.some(chapter => chapter.hasContent)
+  const hasOutline = selected.outlines.some(outline => outline.summary.trim())
+    || storyCores.some(core => core.centralConflict.trim() || core.theme.trim())
+  if (!hasFullText && !hasOutline) fail('小说选择没有正文或有效故事/大纲内容')
+  const chunks = await prepareNovelSourceChunksV1(textUnits)
+  const sourceUpdatedAt = Math.max(
+    sourceWork.updatedAt,
+    ...selected.outlines.map(item => item.updatedAt),
+    ...selected.chapters.map(item => item.updatedAt),
+    ...storyCores.map(item => item.updatedAt),
+  )
+  const sourceVersionHash = await hashProductProductionValueV2({
+    workCode: sourceWork.code,
+    selectionMode: input.selection.mode,
+    units: chunks.map(sourceUnitIdentity),
+  })
+  const source: Extract<TextOpenWorldSourcePinSourceV1, { kind: 'novel' }> = {
+    kind: 'novel',
+    workCode: stableKey(sourceWork.code, 'workCode'),
+    workTitle: nonEmptyText(sourceWork.title, 'workTitle', 500),
+    snapshotVersion: 1,
+    sourceUpdatedAt,
+    sourceContentHash: sourceVersionHash,
+    coverage: hasFullText ? 'full-text' : 'outline-only',
+    selection: {
+      mode: input.selection.mode,
+      label: selected.label,
+      selectedChapterCount: selected.chapters.length,
+      selectedOutlineCount: selected.outlines.length,
+    },
+  }
+  const sourceBoundaryHashValue = await sourceBoundaryHash({
+    sourceVersionHash,
+    source,
+    units: chunks,
+  })
+  return {
+    scope,
+    source,
+    sourceVersionHash,
+    sourceBoundaryHash: sourceBoundaryHashValue,
+    chunks,
+    preview: {
+      schema: 'storyforge.text-open-world-novel-source-snapshot-preview',
+      version: 1,
+      sourceKind: 'novel',
+      workCode: source.workCode,
+      workTitle: source.workTitle,
+      sourceUpdatedAt,
+      sourceVersionHash,
+      sourceBoundaryHash: sourceBoundaryHashValue,
+      coverage: source.coverage,
+      selection: structuredClone(source.selection),
+      outlines: outlinePreviews,
+      chapters: chapterPreviews,
+      storyCoreCount: storyCores.length,
+      writtenChapterCount: chapterPreviews.filter(chapter => chapter.hasContent).length,
+      totalWordCount: chapterPreviews.reduce((total, chapter) => total + chapter.wordCount, 0),
+      sourceUnitCount: chunks.length,
+    },
+  }
+}
+
+/** Prepare the exact immutable identity later used by formal freeze without
+ * persisting anything or returning the internally read novel text. */
+export async function prepareTextOpenWorldNovelSourceSnapshotV1(input: {
+  sourceScope: WorkspaceScope
+  selection: AdaptationSourceSelectionV1
+}): Promise<TextOpenWorldNovelSourceSnapshotPreviewV1> {
+  const prepared = await prepareNovelSourceSnapshotInternalV1(input)
+  return structuredClone(prepared.preview)
+}
+
+async function resolveExpectedWorldReleaseHashV1(input: {
+  scope: WorkspaceScope
+  localReleaseRecordId: number
+  authorization: TextOpenWorldSourceAuthorizationInputV1
+  expectedReleaseHash?: string
+}): Promise<string> {
+  if (input.expectedReleaseHash != null) {
+    if (!isSha256Hash(input.expectedReleaseHash)) fail('expectedReleaseHash 非法')
+    return input.expectedReleaseHash
+  }
+
+  // The production executor predates the creator-source handoff contract. Its
+  // authorized Brief is nevertheless an immutable compare-and-swap witness,
+  // so derive the expected release identity from that row instead of silently
+  // trusting whatever currently occupies the local release id.
+  const productInstanceKey = stableKey(
+    input.authorization.productInstanceKey,
+    'productInstanceKey',
+  )
+  const production = await db.productProductions
+    .where('[workId+productionKey]')
+    .equals([input.scope.workId, productInstanceKey])
+    .first()
+  if (!production?.id
+    || !await assertRecordInScope(input.scope, 'productProductions', production, { owner: 'work' })) {
+    fail('正式冻结必须提供 expectedReleaseHash 或匹配的授权 Production')
+  }
+  const brief = await db.productProductionBriefs
+    .where('[productionId+revision]')
+    .equals([production.id, input.authorization.briefRevision])
+    .first()
+  if (!brief
+    || !await assertRecordInScope(input.scope, 'productProductionBriefs', brief, { owner: 'work' })
+    || brief.status !== 'authorized'
+    || brief.briefHash !== input.authorization.briefHash
+    || brief.sourceWorldReleaseId !== input.localReleaseRecordId
+    || !isSha256Hash(brief.sourceWorldContentHash)) {
+    fail('授权 Brief 不能证明待冻结 WorldRelease 的精确版本')
+  }
+  return brief.sourceWorldContentHash
 }
 
 /** Freeze only neutral WorldRelease catalog coordinates. P1 is responsible for
@@ -506,6 +720,9 @@ async function buildNovelUnitArtifacts(input: {
 export async function freezeTextOpenWorldWorldReleaseSourceV1(input: {
   scope: WorkspaceScope
   localReleaseRecordId: number
+  /** Exact creator-preview identity. Legacy production calls derive the same
+   * witness from their already-authorized Brief. */
+  expectedReleaseHash?: string
   selection: TextOpenWorldWorldSourceSelectionV1
   authorization: TextOpenWorldSourceAuthorizationInputV1
   createdAt?: number
@@ -513,11 +730,20 @@ export async function freezeTextOpenWorldWorldReleaseSourceV1(input: {
   const scope = await resolveScope({ scope: input.scope })
   const createdAt = timestamp(input.createdAt ?? Date.now(), 'createdAt')
   const productInstanceKey = stableKey(input.authorization.productInstanceKey, 'productInstanceKey')
+  const expectedReleaseHash = await resolveExpectedWorldReleaseHashV1({
+    scope,
+    localReleaseRecordId: input.localReleaseRecordId,
+    authorization: input.authorization,
+    expectedReleaseHash: input.expectedReleaseHash,
+  })
   const catalog = await openWorldSemanticResourceCatalogV1({
     localReleaseRecordId: input.localReleaseRecordId,
     expectedProjectId: scope.projectId,
     expectedWorldId: scope.worldId,
   })
+  if (catalog.description.identity.releaseHash !== expectedReleaseHash) {
+    fail('WorldRelease 已在预览后变化；请重新确认来源')
+  }
   const descriptorByKey = new Map(catalog.resources.map(item => [item.resourceKey, item]))
   const selectedResourceKeys = input.selection.mode === 'entire-release'
     ? [...descriptorByKey.keys()].sort()
@@ -604,84 +830,46 @@ export async function freezeTextOpenWorldNovelSourceV1(input: {
   targetScope: WorkspaceScope
   sourceScope: WorkspaceScope
   selection: AdaptationSourceSelectionV1
+  expectedSourceVersionHash: string
+  expectedSourceBoundaryHash: string
   authorization: TextOpenWorldSourceAuthorizationInputV1
   createdAt?: number
 }): Promise<TextOpenWorldSourcePinBundleV1> {
-  const [targetScope, sourceScope] = await Promise.all([
-    resolveScope({ scope: input.targetScope }),
-    resolveScope({ scope: input.sourceScope }),
-  ])
-  if (targetScope.projectId !== sourceScope.projectId) fail('小说来源必须与产品位于同一项目')
-  const sourceWork = await db.works.get(sourceScope.workId)
-  if (!sourceWork || sourceWork.projectId !== sourceScope.projectId
-    || sourceWork.worldId !== sourceScope.worldId || effectiveWorkKind(sourceWork) !== 'novel') {
-    fail('来源 scope 不是有效小说 Work')
+  if (!isSha256Hash(input.expectedSourceVersionHash)
+    || !isSha256Hash(input.expectedSourceBoundaryHash)) {
+    fail('小说来源预览 Hash 非法')
   }
-  const [outlines, chapters, storyCores] = await Promise.all([
-    readOwnedRows<OutlineNode>(sourceScope, 'outlineNodes', { owner: 'work' }),
-    readOwnedRows<Chapter>(sourceScope, 'chapters', { owner: 'work' }),
-    readOwnedRows<StoryCore>(sourceScope, 'storyCores', { owner: 'work' }),
+  const [targetScope, prepared] = await Promise.all([
+    resolveScope({ scope: input.targetScope }),
+    prepareNovelSourceSnapshotInternalV1({
+      sourceScope: input.sourceScope,
+      selection: input.selection,
+    }),
   ])
-  const selected = selectedNovelRows({ selection: input.selection, outlines, chapters })
-  const textUnits = novelTextUnits({
-    title: sourceWork.title,
-    description: sourceWork.description,
-    genres: sourceWork.genres,
-    storyCores,
-    outlines: selected.outlines,
-    chapters: selected.chapters,
-  })
-  const hasFullText = selected.chapters.some(chapter => htmlToPlainText(chapter.content || '').trim())
-  const hasOutline = selected.outlines.some(outline => outline.summary.trim())
-    || storyCores.some(core => core.centralConflict.trim() || core.theme.trim())
-  if (!hasFullText && !hasOutline) fail('小说选择没有正文或有效故事/大纲内容')
+  if (targetScope.projectId !== prepared.scope.projectId) fail('小说来源必须与产品位于同一项目')
+  if (prepared.sourceVersionHash !== input.expectedSourceVersionHash
+    || prepared.sourceBoundaryHash !== input.expectedSourceBoundaryHash) {
+    fail('小说来源已在预览后变化；请重新确认来源')
+  }
   const createdAt = timestamp(input.createdAt ?? Date.now(), 'createdAt')
   const productInstanceKey = stableKey(input.authorization.productInstanceKey, 'productInstanceKey')
-  const units = await buildNovelUnitArtifacts({ productInstanceKey, units: textUnits, capturedAt: createdAt })
-  const sourceUpdatedAt = Math.max(
-    sourceWork.updatedAt,
-    ...selected.outlines.map(item => item.updatedAt),
-    ...selected.chapters.map(item => item.updatedAt),
-    ...storyCores.map(item => item.updatedAt),
-  )
-  const refs = units.map(item => unitRef(item.payload, item.artifactContentHash))
-  const sourceContentHash = await hashProductProductionValueV2({
-    workCode: sourceWork.code,
-    selectionMode: input.selection.mode,
-    units: refs.map(sourceUnitIdentity),
-  })
-  const source: TextOpenWorldSourcePinSourceV1 = {
-    kind: 'novel',
-    workCode: stableKey(sourceWork.code, 'workCode'),
-    workTitle: nonEmptyText(sourceWork.title, 'workTitle', 500),
-    snapshotVersion: 1,
-    sourceUpdatedAt,
-    sourceContentHash,
-    coverage: hasFullText ? 'full-text' : 'outline-only',
-    selection: {
-      mode: input.selection.mode,
-      label: selected.label,
-      selectedChapterCount: selected.chapters.length,
-      selectedOutlineCount: selected.outlines.length,
-    },
-  }
-  const boundaryHash = await sourceBoundaryHash({
-    sourceVersionHash: sourceContentHash,
-    source,
-    units: refs,
+  const units = await buildNovelUnitArtifacts({
+    productInstanceKey,
+    chunks: prepared.chunks,
+    capturedAt: createdAt,
   })
   const authorization = await createAuthorization({
     sourceKind: 'novel',
-    sourceVersionHash: sourceContentHash,
-    sourceBoundaryHash: boundaryHash,
+    sourceVersionHash: prepared.sourceVersionHash,
+    sourceBoundaryHash: prepared.sourceBoundaryHash,
     authorization: input.authorization,
   })
   if (authorization.authorizedAt > createdAt) fail('createdAt 不能早于作者授权')
   const pin = await createPin({
     productInstanceKey,
-    sourceVersionHash: sourceContentHash,
-    sourceBoundaryHash: boundaryHash,
-    source,
+    sourceVersionHash: prepared.sourceVersionHash,
+    sourceBoundaryHash: prepared.sourceBoundaryHash,
+    source: prepared.source,
     units,
     authorization,
     method: 'novel-private-full-copy',

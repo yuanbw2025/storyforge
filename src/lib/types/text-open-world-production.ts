@@ -3,7 +3,12 @@ import type {
   ProductProductionTaskLaneV1,
   ProductTaskBudgetReservationV1,
 } from './product-production'
-import type { WorldReferenceV1 } from './world-product-contracts'
+import type { AdaptationSourceSelectionV1 } from './adaptation'
+import type { OutlineNodeType } from './outline'
+import type {
+  WorldReferenceV1,
+  WorldRequirementResolutionV1,
+} from './world-product-contracts'
 import type { WorldCapabilityArea } from '../registry/types'
 import type { TextOpenWorldActionDefinitionV1 } from './text-open-world-action'
 import type { TextOpenWorldConditionDefinitionV1 } from './text-open-world-condition'
@@ -64,6 +69,151 @@ export type TextOpenWorldProductionArtifactKindV1 =
   (typeof TEXT_OPEN_WORLD_PRODUCTION_ARTIFACT_KINDS_V1)[number]
 
 export type TextOpenWorldSourceKindV1 = 'world-release' | 'novel'
+
+export type TextOpenWorldCreatorSourceReadinessV1 =
+  | 'ready'
+  | 'ready-with-gaps'
+  | 'blocked'
+
+export type TextOpenWorldCreatorSourceGapSeverityV1 =
+  | 'blocking'
+  | 'warning'
+  | 'recommendation'
+
+/** Author-facing preflight evidence. It never carries source text or a
+ * physical WorldRelease manifest. */
+export interface TextOpenWorldCreatorSourceGapV1 {
+  code: string
+  severity: TextOpenWorldCreatorSourceGapSeverityV1
+  title: string
+  detail: string
+  requirementKey: string | null
+}
+
+export interface TextOpenWorldCreatorWorldResourceCountsV1 {
+  totalResources: number
+  totalRows: number
+  byArea: Array<{
+    area: WorldCapabilityArea
+    resourceCount: number
+    rowCount: number
+  }>
+  byKind: Array<{
+    resourceKind: string
+    resourceCount: number
+    rowCount: number
+  }>
+}
+
+/** Product-facing capability projection returned by the neutral Context
+ * Gateway. It intentionally does not depend on the physical WorldRelease
+ * manifest contract. */
+export interface TextOpenWorldCreatorWorldCapabilityV1 {
+  area: WorldCapabilityArea
+  resourceCount: number
+  rowCount: number
+  status: 'missing' | 'partial' | 'available'
+  selectionStatus: 'selected' | 'partial-selection' | 'omitted'
+  selectedResourceCount: number
+  omittedResourceCount: number
+  confirmedRowCount: number
+  candidateRowCount: number
+  conflictRowCount: number
+  omittedRowCount: number
+  latestRevision: number | null
+  originalEvidenceAvailable: boolean
+  queryableIndexAvailable: boolean
+}
+
+/** A verified, immutable world candidate available before product creation. */
+export interface TextOpenWorldCreatorWorldSourceCandidateV1 {
+  schema: 'storyforge.text-open-world-creator-world-source-candidate'
+  version: 1
+  sourceKind: 'world-release'
+  worldReference: WorldReferenceV1
+  label: string
+  worldName: string
+  workTitle: string
+  releasedAt: number
+  capabilities: TextOpenWorldCreatorWorldCapabilityV1[]
+  resourceCounts: TextOpenWorldCreatorWorldResourceCountsV1
+  requirements: WorldRequirementResolutionV1[]
+  readiness: TextOpenWorldCreatorSourceReadinessV1
+  gaps: TextOpenWorldCreatorSourceGapV1[]
+}
+
+export interface TextOpenWorldCreatorNovelOutlineOptionV1 {
+  id: number
+  parentId: number | null
+  type: OutlineNodeType
+  title: string
+  order: number
+}
+
+export interface TextOpenWorldCreatorNovelChapterOptionV1 {
+  id: number
+  outlineNodeId: number
+  title: string
+  order: number
+  wordCount: number
+  hasContent: boolean
+}
+
+export interface TextOpenWorldNovelSourceSnapshotPreviewV1 {
+  schema: 'storyforge.text-open-world-novel-source-snapshot-preview'
+  version: 1
+  sourceKind: 'novel'
+  workCode: string
+  workTitle: string
+  sourceUpdatedAt: number
+  sourceVersionHash: string
+  sourceBoundaryHash: string
+  coverage: 'full-text' | 'outline-only'
+  selection: {
+    mode: AdaptationSourceSelectionV1['mode']
+    label: string
+    selectedChapterCount: number
+    selectedOutlineCount: number
+  }
+  outlines: TextOpenWorldCreatorNovelOutlineOptionV1[]
+  chapters: TextOpenWorldCreatorNovelChapterOptionV1[]
+  storyCoreCount: number
+  writtenChapterCount: number
+  totalWordCount: number
+  sourceUnitCount: number
+}
+
+/** Read-only catalog for choosing an adaptation-style novel range. */
+export interface TextOpenWorldCreatorNovelSourceCatalogV1 {
+  schema: 'storyforge.text-open-world-creator-novel-source-catalog'
+  version: 1
+  sourceKind: 'novel'
+  workCode: string
+  workTitle: string
+  sourceUpdatedAt: number
+  coverage: 'full-text' | 'outline-only'
+  outlines: TextOpenWorldCreatorNovelOutlineOptionV1[]
+  chapters: TextOpenWorldCreatorNovelChapterOptionV1[]
+  range: {
+    firstChapterId: number | null
+    lastChapterId: number | null
+    outlineCount: number
+    chapterCount: number
+  }
+  totalWordCount: number
+  readiness: TextOpenWorldCreatorSourceReadinessV1
+  gaps: TextOpenWorldCreatorSourceGapV1[]
+}
+
+export interface TextOpenWorldCreatorNovelSourcePreviewV1
+  extends TextOpenWorldNovelSourceSnapshotPreviewV1 {
+  readiness: TextOpenWorldCreatorSourceReadinessV1
+  gaps: TextOpenWorldCreatorSourceGapV1[]
+}
+
+export type TextOpenWorldCreatorSourcePreviewV1 =
+  | TextOpenWorldCreatorWorldSourceCandidateV1
+  | TextOpenWorldCreatorNovelSourcePreviewV1
 
 export type TextOpenWorldSourceRightsBasisV1 =
   | 'author-owned'
