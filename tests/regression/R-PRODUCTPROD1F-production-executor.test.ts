@@ -1399,6 +1399,36 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
       'acts[0].sceneCards<-frozen-scene-key-group',
       'acts[1].sceneCards<-frozen-scene-key-group',
     ])
+    const arcCastAliases = legalizeProductionModelProtocolDefaultsV1(
+      'content.narrative-arc-scenes',
+      {
+        acts: [
+          { key: 'act.1', sceneCards: [{ key: 'scene.001', castKeys: ['岚舟', 'character.npc-01'] }] },
+          { key: 'act.2', sceneCards: [{ key: 'scene.002', castKeys: ['character.protagonist', '涅洛', '涅洛'] }] },
+          { key: 'act.3', sceneCards: [{ key: 'scene.003', castKeys: ['character.unregistered'] }] },
+        ],
+      },
+      {
+        narrativeArcSceneKeys: [['scene.001'], ['scene.002'], ['scene.003']],
+        narrativeCastIdentities: [
+          { key: 'character.player', name: '岚舟', role: 'player' },
+          { key: 'character.npc-01', name: '涅洛', role: 'major-npc' },
+        ],
+      },
+    )
+    expect((arcCastAliases.payload.acts as Array<{
+      sceneCards: Array<{ castKeys: string[] }>
+    }>).map(act => act.sceneCards[0].castKeys)).toEqual([
+      ['character.player', 'character.npc-01'],
+      ['character.player', 'character.npc-01'],
+      ['character.unregistered'],
+    ])
+    expect(arcCastAliases.defaultedFields).toContain(
+      'acts[0].sceneCards[0].castKeys<-registered-cast-aliases',
+    )
+    expect(arcCastAliases.defaultedFields).toContain(
+      'acts[1].sceneCards[0].castKeys<-registered-cast-aliases',
+    )
     const frozenArcLocations = legalizeProductionModelProtocolDefaultsV1(
       'content.narrative-arc-scenes',
       {
@@ -3278,6 +3308,8 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     expect(actThreeSceneSystem).toContain('"endings":["ending.001","ending.002","ending.003"]')
     expect(narrativeArcSystem).toContain('场景与地点的冻结映射=')
     expect(narrativeArcSystem).toContain('"sceneKey":"scene.001","locationOrdinal":1,"locationTitle":"地点 1-1-1"')
+    expect(narrativeArcSystem).toContain('合法角色 key 白名单=["character.player","character.npc.1"')
+    expect(narrativeArcSystem).toContain('严禁填写角色姓名、称谓、英文转写、角色类型或自造 key')
     expect(narrativeDecisionSystem).toContain('你是同一位叙事设计师的决定设计 Run')
     expect(narrativeDecisionSystem).toContain('"decisionKey":"decision.1","sceneKey":"scene.001"')
     expect(narrativeDecisionSystem).toContain('"optionKeys":["option.1.1","option.1.2"]')

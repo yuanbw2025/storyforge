@@ -780,7 +780,10 @@ export function parseTextAdventureNarrativeArcPlanArtifactV1(input: {
       const parsedCastKeys = keyArray(scene.castKeys, `sceneCards[${sceneIndex}].castKeys`, 0, 20)
       const parsedSetupKeys = keyArray(scene.setupKeys, `sceneCards[${sceneIndex}].setupKeys`, 0, 20)
       const parsedPayoffKeys = keyArray(scene.payoffKeys, `sceneCards[${sceneIndex}].payoffKeys`, 0, 20)
-      if (parsedCastKeys.some(value => !castKeys.has(value))) fail(`sceneCards[${sceneIndex}] 引用未知角色`)
+      const unknownCastKeys = parsedCastKeys.filter(value => !castKeys.has(value))
+      if (unknownCastKeys.length > 0) {
+        fail(`sceneCards[${sceneIndex}] 引用未知角色:${unknownCastKeys.join(',')}`)
+      }
       if ([...parsedSetupKeys, ...parsedPayoffKeys].some(value => !setupKeys.has(value))) {
         fail(`sceneCards[${sceneIndex}] 引用未知铺垫回收`)
       }

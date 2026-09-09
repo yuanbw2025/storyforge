@@ -600,6 +600,11 @@ export function legalizeProductionModelProtocolDefaultsV1(
     narrativeArcLocationOrdinals?: readonly number[]
     narrativeArcEndingKeys?: readonly string[]
     narrativeDecisionSceneKeys?: readonly string[]
+    narrativeCastIdentities?: readonly {
+      key: string
+      name: string
+      role: string
+    }[]
     questSceneCastPlan?: readonly {
       sceneKey: string
       castKeys: readonly string[]
@@ -793,6 +798,31 @@ export function legalizeProductionModelProtocolDefaultsV1(
         if (Array.isArray(item.sceneCards)) item.sceneCards = item.sceneCards.map((card, sceneIndex) => {
           if (!card || typeof card !== 'object' || Array.isArray(card)) return card
           const scene = { ...(card as JsonRecord) }
+          if (Array.isArray(scene.castKeys) && options.narrativeCastIdentities?.length) {
+            const identities = options.narrativeCastIdentities
+            const identityByAlias = new Map<string, string>()
+            for (const identity of identities) {
+              identityByAlias.set(identity.key.trim().normalize('NFC'), identity.key)
+              identityByAlias.set(identity.name.trim().normalize('NFC'), identity.key)
+            }
+            const player = identities.find(identity => identity.role === 'player')
+            if (player) {
+              for (const alias of ['player', 'protagonist', 'character.protagonist']) {
+                identityByAlias.set(alias, player.key)
+              }
+            }
+            const normalizedCastKeys = [...new Set(scene.castKeys.map(value => {
+              if (typeof value !== 'string') return value
+              const normalized = value.trim().normalize('NFC')
+              return identityByAlias.get(normalized) ?? normalized
+            }))]
+            if (JSON.stringify(scene.castKeys) !== JSON.stringify(normalizedCastKeys)) {
+              scene.castKeys = normalizedCastKeys
+              defaultedFields.push(
+                `acts[${actIndex}].sceneCards[${sceneIndex}].castKeys<-registered-cast-aliases`,
+              )
+            }
+          }
           if (typeof scene.locationOrdinal === 'string'
             && /^[1-9][0-9]*$/.test(scene.locationOrdinal)) {
             scene.locationOrdinal = Number(scene.locationOrdinal)
@@ -2651,6 +2681,7 @@ function textSystem(
       '输出字段必须精确为：{"schema":"storyforge.text-adventure-narrative-arc-scenes-artifact","version":1,"acts":[{"key":"act.1","title":"...","targetMinutes":20,"goal":"...","irreversibleTurn":"...","sceneCards":[{"key":"scene.001","title":"...","locationOrdinal":1,"purpose":"...","conflict":"...","entryState":"...","exitState":"...","castKeys":["character.some-key"],"setupKeys":[],"payoffKeys":[]}]}],"endings":[{"endingKey":"ending.some-key","sceneKey":"scene.012"}]}。' +
       `必须恰好三幕 act.1/act.2/act.3；各幕 sceneCards 数量必须依次为 ${JSON.stringify(actSceneKeys.map(keys => keys.length))}，并依次精确使用 ${JSON.stringify(actSceneKeys)}，总计 ${adventure.narrative.targetSceneCount} 张，不得增删。先逐字复制全部 scene key 槽位并按幕核对数量，再填写每张卡内容；不得把某幕的卡放入另一幕。targetMinutes 合计约 ${brief.scale.targetPlayMinutes} 分钟。` +
       `endings 必须依次复用 ${JSON.stringify(skeleton.endingKeys)} 且全部从 ${skeleton.sceneKeys[skeleton.sceneKeys.length - 1]} 汇出；角色、铺垫和回收必须逐字复用上游稳定 key。` +
+      `合法角色 key 白名单=${JSON.stringify(textAdventureCastKeys)}；castKeys 的每一项必须逐字来自这个数组，严禁填写角色姓名、称谓、英文转写、角色类型或自造 key。` +
       `场景与地点的冻结映射=${JSON.stringify(frozenSceneLocations)}；每张场景卡必须逐项复制对应 locationOrdinal，不得自选地点、使用最小目标规模猜上限或填写地点标题。即使你在内部采用五幕、英雄旅程或其他理论，也必须压缩为且只输出 act.1、act.2、act.3 三个对象，禁止输出第4幕、第5幕或幕外附录；提交前必须确认 acts.length === 3，并分别核对三幕 sceneCards.length 与冻结数组完全相等。` +
       '这是结构规划工件，不是正文：每个场景 title 最多 30 个中文字符，purpose/conflict/entryState/exitState 各用 20–90 个中文字符；每幕 goal/irreversibleTurn 各用 40–120 个中文字符。禁止写对白或长篇背景复述；后续三个分场叙事作者会扩写足量正文。'
   }
@@ -3122,6 +3153,11 @@ async function executeModelTask(input: ProductProductionTaskExecutionInputV1, op
     narrativeArcEndingKeys: options.brief.textAdventure
       ? textAdventureNarrativeSkeletonV1(options.brief).endingKeys
       : undefined,
+    narrativeCastIdentities: textAdventureCastCharacters.map(character => ({
+      key: character.key,
+      name: character.name,
+      role: character.role,
+    })),
     narrativeDecisionSceneKeys: options.brief.textAdventure
       ? textAdventureNarrativeSkeletonV1(options.brief).sceneKeys.slice(
           0,
