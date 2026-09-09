@@ -142,6 +142,13 @@ describe('TEXTADV-2 · 玩家界面纵切面', () => {
     expect(quests?.textContent).toContain('当前阶段 · 穿越盐沼')
     expect(quests?.textContent).toContain('确认穿过盐沼的路线')
     expect(quests?.textContent).toContain('地点：回声盐沼')
+    expect(quests?.textContent).toContain('可行路线 · 1')
+    expect(quests?.textContent).toContain('辨认稳定路线')
+    expect(quests?.textContent).toContain('感知 门槛 99')
+    expect(quests?.textContent).toContain('前往回声盐沼后尝试')
+    expect(quests?.textContent).toContain('失败有代价，但仍会推进目标')
+    expect(Array.from(quests?.querySelectorAll<HTMLButtonElement>('button') ?? [])
+      .find(button => button.textContent?.includes('辨认稳定路线'))?.disabled).toBe(true)
     await closePanel()
 
     await clickNavigation('关系')

@@ -348,6 +348,19 @@
 .adventure-quest-current small { color: #b99560; font-size: 8px; }
 .adventure-quest-current b { color: #e5d5bc; font-size: 10px; }
 .adventure-quest-current span { color: #849699; font-size: 8px; }
+.adventure-quest-routes { display: grid; gap: 7px; margin: 10px 0 12px; }
+.adventure-quest-routes>small { color: #a88655; font-size: 8px; letter-spacing: .05em; }
+.adventure-quest-routes>button { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 4px 12px; padding: 10px 11px; border: 1px solid rgba(198,159,98,.2); border-radius: 7px; background: rgba(154,108,51,.07); color: #d8dfdd; text-align: left; cursor: pointer; }
+.adventure-quest-routes>button:disabled { opacity: .7; cursor: not-allowed; }
+.adventure-quest-routes>button>span { display: grid; grid-row: span 2; gap: 2px; }
+.adventure-quest-routes>button>span i { color: #a98757; font-size: 7px; font-style: normal; text-transform: uppercase; }
+.adventure-quest-routes>button>span b { color: #dfd2bc; font-size: 9px; }
+.adventure-quest-routes>button>span small { color: #7e9094; font-size: 8px; line-height: 1.45; }
+.adventure-quest-routes>button>em { color: #a7b5b4; font-size: 8px; font-style: normal; text-align: right; }
+.adventure-quest-routes>button>strong { color: #aa806b; font-size: 8px; font-weight: 500; text-align: right; }
+.adventure-quest-routes>button>strong.available { color: #80ac92; }
+.adventure-quest-routes>button>mark { grid-column: 1/-1; width: fit-content; padding: 2px 5px; border-radius: 3px; background: rgba(92,137,113,.13); color: #8eb59f; font-size: 7px; }
+.adventure-quest-routes>button>mark.danger { background: rgba(146,76,62,.11); color: #c69488; }
 .adventure-ending-review { display: grid; gap: 10px; }
 .adventure-ending-review>header { display: grid; gap: 4px; padding: 0 0 14px; border-bottom: 1px solid rgba(255,255,255,.09); }
 .adventure-ending-review>header small,.adventure-ending-review>section>small { color: #b7935d; font-size: 9px; letter-spacing: .06em; }
