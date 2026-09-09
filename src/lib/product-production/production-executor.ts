@@ -3475,6 +3475,7 @@ export function textAdventureVisualRepairCastConstraintV1(input: {
   const banUnregisteredShoulderArmor = /肩部.{0,12}(?:护甲|装甲|装饰)|额外.{0,8}(?:护甲|装甲)/.test(input.repairEvidence)
   const needsCleanCutout = (input.mediaKind === 'character-pose' || input.mediaKind === 'character-expression')
     && /透明|轮廓|边缘|光晕|辉光|伪影|抠图/.test(input.repairEvidence)
+  const needsLeftEyebrowScar = /左眉.{0,16}(?:细疤|疤痕|伤疤)|(?:细疤|疤痕|伤疤).{0,16}左眉/.test(input.repairEvidence)
   const promptSuffix = [
     namedNpc
       ? `本次返修的对峙 NPC 冻结为已登记角色「${namedNpc.name}」：${namedNpc.publicIdentity}；` +
@@ -3489,6 +3490,9 @@ export function textAdventureVisualRepairCastConstraintV1(input: {
       : '',
     needsCleanCutout
       ? '输出边缘干净、无残色的单一完整角色剪影；角色之外必须为真实透明区域。'
+      : '',
+    needsLeftEyebrowScar
+      ? '身份识别锚点必须清晰可见：左眉上有一条细而自然、轮廓明确的旧疤，不能被头发、阴影或妆容遮住。'
       : '',
   ].filter(Boolean).join('\n')
   return {

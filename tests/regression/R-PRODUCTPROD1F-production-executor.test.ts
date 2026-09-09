@@ -1098,11 +1098,12 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
   it('角色返修把彩色边缘和额外肩甲转成正向轮廓约束与负向禁止项', () => {
     const constraint = textAdventureVisualRepairCastConstraintV1({
       mediaKind: 'character-pose',
-      repairEvidence: '肩部金色护甲属于额外装饰；透明背景边缘存在品红色光晕伪影。',
+      repairEvidence: '肩部金色护甲属于额外装饰；透明背景边缘存在品红色光晕伪影；左眉细疤未呈现。',
       characters: [],
     })
     expect(constraint.promptSuffix).toContain('肩部造型保持简洁')
     expect(constraint.promptSuffix).toContain('边缘干净、无残色')
+    expect(constraint.promptSuffix).toContain('左眉上有一条细而自然')
     expect(constraint.negativePromptSuffix).toContain('magenta')
     expect(constraint.negativePromptSuffix).toContain('extra shoulder armor')
     expect(constraint.negativePromptSuffix).toContain('color fringe')
