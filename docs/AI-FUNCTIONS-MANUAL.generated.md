@@ -94,7 +94,7 @@
 | `product-production.adventure-visual-quality-inputs` | 文字冒险独立图片审查投影 | project | L0 | 12500 |
 | `product-production.adventure-quality-inputs` | 文字冒险叙事质量审查投影 | project | L0 | 32000 |
 | `product-production.adventure-playtest-inputs` | 文字冒险试玩总监验收证据投影 | project | L0 | 8500 |
-| `product-production.adventure-repair-feedback` | 文字冒险上一轮质量修复反馈 | project | L0 | 3000 |
+| `product-production.adventure-repair-feedback` | 文字冒险上一轮质量修复反馈 | project | L0 | 6000 |
 | `product-production.quality-feedback` | 上层产品生产质量反馈 | project | L1 | 6000 |
 | `product-production.evolution-base` | 游戏持续演化基线 | project | L0 | 12000 |
 | `adaptation.sourceManifest` | 改编来源清单 | project | L0 | 6000 |
@@ -397,4 +397,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `382d2ea8`
+生成时间基准:commit `0f03b53e`

@@ -303,6 +303,9 @@ describe('TEXTADV-3 · 专业生产工件合同', () => {
     const parsed = parseTextAdventureNarrativeArcPlanArtifactV1({ value, brief: brief(), cast, storyBible: story })
     expect(parsed.acts.flatMap(act => act.sceneCards)).toHaveLength(3)
     const richerArchitectureValue = structuredClone(value)
+    richerArchitectureValue.acts[0].sceneCards[0].title = '潮门·开场'
+    richerArchitectureValue.acts[1].sceneCards[0].title = '旧仓街·转折'
+    richerArchitectureValue.acts[2].sceneCards[0].title = '外海灯塔·高潮'
     richerArchitectureValue.acts[2].sceneCards[0].locationOrdinal = 3
     expect(parseTextAdventureNarrativeArcPlanArtifactV1({
       value: richerArchitectureValue,
