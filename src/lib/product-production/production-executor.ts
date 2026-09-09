@@ -2257,6 +2257,7 @@ function glyphSafeTextAdventureScenePromptV1(
       '她面前的三组无字机械回路以不同状态等待一个实际动作',
     )
     .replace(/[「『“"'‘][^」』”"'’]{1,120}[」』”"'’]/gu, '无字的记忆意象')
+    .replace(/[。」』”]+(?:字迹|内容|署名)[^，。；\n]*/gu, '')
     .replace(
       /面前悬浮着三个选择的光影[：:][^。；\n]+/gu,
       '面前三组形态不同的无字机械光路正等待她以实际行动接通',
@@ -2282,12 +2283,12 @@ function textAdventurePromptVisuallyDepictsCharacterV1(
 ): boolean {
   const name = characterName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   const referenceOnly = [
-    new RegExp(`(?:证词|日志|档案|记录|回忆|记忆)[^。；\\n]{0,36}${name}`),
-    new RegExp(`${name}[^。；\\n]{0,24}(?:的证词|的日志|的档案|的记录|的回忆|的记忆|留下|遗留|保存|曾经|当年)`),
+    new RegExp(`(?:证词|日志|档案|记录|回忆|记忆)(?:中|里|内|显示|提到|关于)[^。；\\n]{0,12}${name}`),
+    new RegExp(`${name}(?:的(?:目击)?证词|的日志|的档案|的记录|的回忆|的记忆|留下|遗留|保存|曾经|当年)`),
   ].some(pattern => pattern.test(prompt))
   if (referenceOnly) return false
   return [
-    new RegExp(`${name}[^。；\\n]{0,36}(?:站|坐|走|跑|跪|抵达|进入|发现|面对|转身|抬手|伸手|举起|拿|握|持|穿|面向|凝视|表情|眼神|脸|面部|身影|侧面|正面|背影|手臂|双手)`),
+    new RegExp(`${name}[^。；\\n]{0,36}(?:站|坐|走|跑|跪|抵达|进入|发现|面对|转身|抬手|伸手|举起|拿|握|持|穿|靠|收回手|面向|凝视|表情|眼神|脸|面部|身影|侧面|正面|背影|手臂|双手)`),
     new RegExp(`${name}在(?:画面|前景|中景|近景|远景|场景|房间|大厅|工坊|钟楼|灯塔|海岸|甲板|道路)`),
     new RegExp(`(?:画面|前景|中景|近景|远景|中心|构图)[^。；\\n]{0,64}${name}`),
     new RegExp(`${name}[^。；\\n]{0,24}(?:与|和|同)[^。；\\n]{0,24}(?:并肩|对峙|交谈|行动|站立)`),
@@ -2346,7 +2347,10 @@ function textAdventureNarrativeBeatForVisualV1(input: {
     const itemOrdinal = input.sceneTag === 'important-item-secondary' ? 1
       : input.sceneTag === 'important-item-tertiary' ? 2 : 0
     const itemTerm = orderedItemTerms[itemOrdinal] ?? orderedItemTerms[0]
-    if (itemTerm) return usable.find(beat => beat.text.includes(itemTerm)) ?? first
+    if (itemTerm) {
+      const itemBeats = usable.filter(beat => beat.text.includes(itemTerm))
+      return strongest(itemBeats, [itemTerm, '铜', '表面', '纹', '形', '制', '磨损'])
+    }
     return input.sceneTag === 'important-item-secondary' ? pick(act(2), 0.5)
       : input.sceneTag === 'important-item-tertiary' ? pick(act(3), 0.5) : pick(act(1), 0.25)
   }
@@ -2358,6 +2362,21 @@ function textAdventureItemEvidenceSentenceV1(textValue: string): string {
   const terms = ['记忆匣', '调音钥匙', '潮汐钟钥', '钟钥', '钥匙', '罗盘', '调音叉']
   return textValue.split(/[。！？\n]+/u).map(value => value.trim())
     .find(value => terms.some(term => value.includes(term))) ?? textValue
+}
+
+function textAdventureVisualBeatExcerptV1(textValue: string): string {
+  const visualTerms = ['雾潮', '光', '海', '潮钟', '钟体', '钟楼', '灯塔', '齿轮', '记忆匣', '钥匙', '风雪', '冰', '门', '窗', '走', '站', '坐', '手', '火', '倒塌', '退去', '升起']
+  const excluded = /证词|说的是|知道|意味着|必须做出选择|三条可能的路|一是|二是|三是|愿意支付|将成为|代价是/u
+  const sentences = textValue.split(/(?<=[。！？])/u).map(value => value.trim()).filter(Boolean)
+  const ranked = sentences.map((sentence, index) => ({
+    sentence,
+    index,
+    score: visualTerms.reduce((score, term) => score + Number(sentence.includes(term)), 0),
+  })).filter(item => item.score > 0 && !excluded.test(item.sentence))
+    .sort((left, right) => right.score - left.score || left.index - right.index)
+    .slice(0, 2)
+    .sort((left, right) => left.index - right.index)
+  return ranked.length > 0 ? ranked.map(item => item.sentence).join('') : sentences[0] ?? textValue
 }
 
 function textAdventureCharacterFramingPromptV1(
@@ -2420,7 +2439,7 @@ function normalizeTextAdventureVisualRequirementPromptV1(input: {
   }
   const narrativeGroundedPrompt = input.mediaKind === 'cg' && input.narrativeBeat
     ? `${input.blueprint?.prompt ?? '关键叙事事件的原创插图'}。` +
-      `冻结叙事节拍（唯一事件事实）：${input.narrativeBeat.text}。` +
+      `冻结叙事节拍（唯一事件事实）：${textAdventureVisualBeatExcerptV1(input.narrativeBeat.text)}。` +
       '只把该节拍已经发生的人物、动作、地点、道具与后果转成一个明确画面；不得新增或改写人物身份、生死、道具、地点、选择与因果。'
     : input.prompt
   const glyphSafePrompt = glyphSafeTextAdventureScenePromptV1(

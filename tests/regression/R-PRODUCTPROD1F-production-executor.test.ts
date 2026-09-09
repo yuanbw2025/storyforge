@@ -2668,8 +2668,8 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     expect(parsed.visual[11].characterAnchorRefs).toEqual(['character.player'])
     expect(parsed.visual[5].prompt).not.toContain('「临界」')
     const routeAndArrival = structuredClone(requirements)
-    routeAndArrival.visual[3].prompt = '岚舟抵达断裂的潮钟核心，雾潮正从裂缝涌入。'
-    routeAndArrival.visual[3].characterAnchorRefs = []
+    routeAndArrival.visual[3].prompt = '岚舟抵达断裂的潮钟核心，沉砾保存的记忆在雾潮中回响。'
+    routeAndArrival.visual[3].characterAnchorRefs = ['character.player', 'character.npc.1']
     routeAndArrival.visual[4].prompt = '霜潮列岛由 icy灰白岩石与薄冰构成。'
     routeAndArrival.visual[9].prompt = '岚舟站在最终潮钟前，面前是三条路——注入记忆、释放记忆或带领村民撤离。'
     routeAndArrival.visual[9].characterAnchorRefs = ['character.player']
