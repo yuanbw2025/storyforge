@@ -15,6 +15,48 @@ interface RgbaRasterV1 {
   data: Uint8ClampedArray
 }
 
+function removeTransparentMagentaFringe(data: Uint8ClampedArray, width: number, height: number): number {
+  const pixelCount = width * height
+  const transparent = new Uint8Array(pixelCount)
+  for (let pixel = 0; pixel < pixelCount; pixel += 1) {
+    if (data[pixel * 4 + 3] < 32) transparent[pixel] = 1
+  }
+  const magentaFringe = (pixel: number) => {
+    const offset = pixel * 4
+    const red = data[offset]
+    const green = data[offset + 1]
+    const blue = data[offset + 2]
+    return data[offset + 3] > 0
+      && red >= 140 && blue >= 140
+      && Math.min(red, blue) - green >= 45
+      && Math.abs(red - blue) <= 110
+  }
+  let removed = 0
+  // Provider chroma-key halos are thin. Grow from real transparency for at
+  // most four pixels so legitimate interior colour details remain untouched.
+  for (let pass = 0; pass < 4; pass += 1) {
+    const newlyTransparent: number[] = []
+    for (let pixel = 0; pixel < pixelCount; pixel += 1) {
+      if (transparent[pixel] || !magentaFringe(pixel)) continue
+      const x = pixel % width
+      const y = Math.floor(pixel / width)
+      if ((x > 0 && transparent[pixel - 1])
+        || (x + 1 < width && transparent[pixel + 1])
+        || (y > 0 && transparent[pixel - width])
+        || (y + 1 < height && transparent[pixel + width])) {
+        newlyTransparent.push(pixel)
+      }
+    }
+    if (newlyTransparent.length === 0) break
+    for (const pixel of newlyTransparent) {
+      transparent[pixel] = 1
+      data[pixel * 4 + 3] = 0
+      removed += 1
+    }
+  }
+  return removed
+}
+
 function fail(message: string): never {
   throw new Error(`[product-character-alpha] ${message}`)
 }
@@ -70,6 +112,7 @@ export function matteEdgeConnectedCharacterBackdropV1(input: RgbaRasterV1): {
   data: Uint8ClampedArray
   removedPixelRatio: number
   alreadyTransparent: boolean
+  changed: boolean
 } {
   const { width, height } = input
   if (!Number.isInteger(width) || !Number.isInteger(height) || width < 2 || height < 2
@@ -80,7 +123,13 @@ export function matteEdgeConnectedCharacterBackdropV1(input: RgbaRasterV1): {
   let transparent = 0
   for (let offset = 3; offset < data.length; offset += 4) if (data[offset] < 250) transparent += 1
   if (transparent / (width * height) >= 0.001) {
-    return { data, removedPixelRatio: transparent / (width * height), alreadyTransparent: true }
+    const removedFringe = removeTransparentMagentaFringe(data, width, height)
+    return {
+      data,
+      removedPixelRatio: (transparent + removedFringe) / (width * height),
+      alreadyTransparent: true,
+      changed: removedFringe > 0,
+    }
   }
 
   const borders = borderOffsets(width, height)
@@ -163,7 +212,7 @@ export function matteEdgeConnectedCharacterBackdropV1(input: RgbaRasterV1): {
       ? 0
       : Math.round(Math.min(1, (distance - transparentDistance) / (opaqueDistance - transparentDistance)) * 255)
   }
-  return { data, removedPixelRatio, alreadyTransparent: false }
+  return { data, removedPixelRatio, alreadyTransparent: false, changed: true }
 }
 
 async function canvasBlob(canvas: HTMLCanvasElement): Promise<Blob> {
@@ -192,7 +241,7 @@ export async function ensureGeneratedCharacterAlphaV1(data: ArrayBuffer, mimeTyp
     const matte = matteEdgeConnectedCharacterBackdropV1({
       width: bitmap.width, height: bitmap.height, data: pixels.data,
     })
-    if (matte.alreadyTransparent) return {
+    if (matte.alreadyTransparent && !matte.changed) return {
       data: data.slice(0), width: bitmap.width, height: bitmap.height,
       changed: false, removedPixelRatio: matte.removedPixelRatio,
       mattingId: CHARACTER_ALPHA_MATTING_ID_V1,

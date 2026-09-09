@@ -44,6 +44,24 @@ describe('R-PRODUCTPROD-1F · character alpha matting', () => {
     data[3] = 0
     const result = matteEdgeConnectedCharacterBackdropV1({ width: 8, height: 8, data })
     expect(result.alreadyTransparent).toBe(true)
+    expect(result.changed).toBe(false)
     expect(result.data).toEqual(data)
+  })
+
+  it('已有真实 alpha 时仍移除紧邻透明区的品红残边，并保留主体内部品红细节', () => {
+    const width = 12; const height = 12
+    const data = new Uint8ClampedArray(width * height * 4)
+    for (let y = 0; y < height; y += 1) for (let x = 0; x < width; x += 1) {
+      const edge = x < 2 || x > 9 || y < 2 || y > 9
+      const fringe = x === 2 || x === 9 || y === 2 || y === 9
+      data.set(edge ? [255, 0, 255, 0] : fringe ? [220, 40, 210, 255] : [30, 60, 120, 255], (y * width + x) * 4)
+    }
+    data.set([220, 40, 210, 255], (6 * width + 6) * 4)
+
+    const result = matteEdgeConnectedCharacterBackdropV1({ width, height, data })
+    expect(result.alreadyTransparent).toBe(true)
+    expect(result.changed).toBe(true)
+    expect(result.data[(2 * width + 2) * 4 + 3]).toBe(0)
+    expect(result.data[(6 * width + 6) * 4 + 3]).toBe(255)
   })
 })
