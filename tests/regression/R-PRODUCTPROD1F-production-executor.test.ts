@@ -2201,6 +2201,9 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
     ].forEach((palette, paletteIndex) => {
       const visualIndex = [1, 3, 7, 9, 11][paletteIndex]
       mediaRequirements.visual[visualIndex].characterAnchorRefs = [castKeys[0]]
+      if (visualBlueprints[visualIndex].characterOrdinal == null) {
+        mediaRequirements.visual[visualIndex].prompt = `守灯人站在第 ${paletteIndex + 1} 个关键场面中采取行动。`
+      }
       mediaRequirements.visual[visualIndex].palette = palette
     })
     const artifact = async (
@@ -2610,13 +2613,18 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
       audio: [],
     }
     requirements.visual[1].prompt = '岚舟，浅棕短发，右脸有疤，穿灰白制服。'
-    requirements.visual[3].prompt = '岚舟在潮钟塔前发现导师日记，墙壁刻满历代守灯人的名字，雾潮正在逼近。'
+    requirements.visual[3].prompt = '岚舟发现潮钟内部刻有历代守灯人姓名与死亡日期，导师沉砾正是上一任牺牲者。画面中心是岚舟的手触碰发光的全息铭牌。'
+    requirements.visual[3].characterAnchorRefs = ['character.player', 'character.npc.1']
     requirements.visual[6].prompt = '沉砾，灰白短发与胡须，双手持黄铜手杖。'
     requirements.visual[8].prompt = '屿娘，短黑发，双手布满冻疮，腰挂鱼刀。'
-    requirements.visual[9].prompt = '最后抉择时，前景是岚舟的背影，远方三座潮钟同时启动。'
+    requirements.visual[7].prompt = "岚舟在废弃实验室发现全息记录，显示'记忆抽取协议'的字样。"
+    requirements.visual[9].prompt = '最后抉择时，前景是岚舟的背影，面前悬浮着三个选择的光影：公开真相、延续旧制度、替代方案。'
+    requirements.visual[9].characterAnchorRefs = ['character.player']
     requirements.visual[10].prompt = '银色潮汐钥匙，柄部刻有微小符文，边缘带有长期使用的磨损。'
     requirements.visual[2].prompt = '无文字区域地图，标注雾湾环礁和霜潮列岛，以航线连接。'
     requirements.visual[5].prompt = '黄铜罗盘，表盘刻有潮位刻度，指针停在「临界」位置，背面刻有「守灯人传承」字样。'
+    requirements.visual[11].prompt = '岚舟站在潮钟塔顶，身边站着海岬与其他幸存者，远处海面恢复平静。'
+    requirements.visual[11].characterAnchorRefs = ['character.player', 'character.npc.2']
 
     const parsed = parseProductMediaRequirementsArtifactV2(requirements, owned.brief, anchors)
     expect(parsed.visual[1].prompt).toContain('岚舟')
@@ -2632,16 +2640,27 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     expect(parsed.visual[8].prompt).not.toContain('屿娘')
     expect(parsed.visual[3].characterAnchorRefs).toEqual(['character.player'])
     expect(parsed.visual[3].hardConstraints).toContain('视觉锚点：黑短发带盐雾浅灰发梢，深蓝修复工外套与铜扣护腕，左眉细疤')
-    expect(parsed.visual[3].prompt).not.toContain('名字')
+    expect(parsed.visual[3].prompt).not.toContain('姓名')
+    expect(parsed.visual[3].prompt).not.toContain('死亡日期')
+    expect(parsed.visual[3].prompt).not.toContain('铭牌')
     expect(parsed.visual[3].prompt).toContain('无字凿痕')
+    expect(parsed.visual[7].prompt).not.toContain('记忆抽取协议')
+    expect(parsed.visual[7].prompt).not.toContain('全息记录')
     expect(parsed.visual[9].prompt).not.toContain('背影')
     expect(parsed.visual[9].prompt).toContain('三分之二侧面')
+    expect(parsed.visual[9].prompt).not.toContain('三个选择')
+    expect(parsed.visual[9].prompt).toContain('实际行动接通')
     expect(parsed.visual[10].prompt).not.toContain('符文')
     expect(parsed.visual[10].prompt).toContain('不得出现任何可读文字')
     expect(parsed.visual[2].prompt).toContain('UNLABELED VISUAL-ONLY')
     expect(parsed.visual[2].prompt).not.toContain('雾湾环礁')
+    expect(parsed.visual[2].prompt).not.toContain('霜潮列岛')
+    expect(parsed.visual[2].prompt).toContain('three clearly distinct regional landmass groups')
     expect(parsed.visual[5].prompt).toContain('不得出现任何可读文字')
+    expect(parsed.visual[6].prompt).toContain('画面不得出现任何可读文字')
     expect(parsed.visual[5].prompt).not.toContain('守灯人传承')
+    expect(parsed.visual[11].prompt).not.toContain('海岬')
+    expect(parsed.visual[11].characterAnchorRefs).toEqual(['character.player'])
     expect(parsed.visual[5].prompt).not.toContain('「临界」')
     expect(productMediaCharacterPresentationConstraintV1('character-pose')).toContain('透明背景')
     expect(productMediaCharacterPresentationConstraintV1('cg')).toContain('禁止透明背景')

@@ -2215,16 +2215,47 @@ function glyphSafeTextAdventureItemPromptV1(prompt: string): string {
   return normalized || '以材质、形状、颜色和使用痕迹表达物品的剧情功能'
 }
 
-function glyphSafeTextAdventureScenePromptV1(prompt: string): string {
+function glyphSafeTextAdventureScenePromptV1(
+  prompt: string,
+  portrayedCharacterNames: readonly string[],
+): string {
   return prompt
+    .replace(
+      /(?:发光的)?全息(?:铭牌|记录|文字|字样|界面)[^，。；\n]*/gu,
+      '无字的抽象光纹投影',
+    )
+    .replace(
+      /(?:刻有|刻满|写有|写满|标有|印有|显示)[^，。；\n]*(?:姓名|死亡日期|日期|字样|文字|名称|词句|铭文|符文|字符|字母|数字|人名|名字|协议)[^，。；\n]*/gu,
+      '以无字凿痕、抽象图形与磨损表达历史痕迹',
+    )
     .replace(
       /(?:墙壁|墙面|石壁|碑面|纸页|书页|牌面|表面)(?:上)?(?:刻有|刻满|写有|写满|标有|印有|显示)[^，。；\n]*(?:字样|文字|名称|词句|铭文|符文|字符|字母|数字|人名|名字|姓名)/gu,
       '以无字凿痕、抽象图形与磨损表达历史痕迹',
     )
+    .replace(
+      /面前悬浮着三个选择的光影[：:][^。；\n]+/gu,
+      '面前三组形态不同的无字机械光路正等待她以实际行动接通',
+    )
+    .replace(/身边站着([^，。；\n]{1,24})与其他幸存者/gu, (match, candidate: string) => (
+      portrayedCharacterNames.includes(candidate.trim()) ? match : '身边站着获救的群岛居民'
+    ))
     .replace(/前景是[^，。；\n]{1,40}的背影/gu, '前景以三分之二侧面清晰呈现已登记角色的面部与身份特征')
     .replace(/\bback view of [^,.\n]{1,80}/giu, 'three-quarter view of the registered character with identity features visible')
-    .replace(/[，。；]{2,}/gu, '。')
+    .replace(/。{2,}/gu, '。')
+    .replace(/[，；]{2,}/gu, '，')
     .trim()
+}
+
+function textAdventurePromptVisuallyDepictsCharacterV1(
+  prompt: string,
+  characterName: string,
+): boolean {
+  const name = characterName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return [
+    new RegExp(`${name}[^。；\\n]{0,36}(?:站|坐|走|跑|跪|转身|抬手|伸手|握|持|穿|面向|凝视|表情|眼神|脸|面部|身影|侧面|正面|背影|手臂|双手|在)`),
+    new RegExp(`(?:画面|前景|中景|近景|远景|中心|构图)[^。；\\n]{0,64}${name}`),
+    new RegExp(`${name}[^。；\\n]{0,24}(?:与|和|同)[^。；\\n]{0,24}(?:并肩|对峙|交谈|行动|站立)`),
+  ].some(pattern => pattern.test(prompt))
 }
 
 function textAdventureCharacterFramingPromptV1(
@@ -2250,6 +2281,7 @@ function normalizeTextAdventureVisualRequirementPromptV1(input: {
   anchoredCharacters: readonly ProductMediaCharacterAnchorV1[]
 }): string {
   const isCharacter = input.mediaKind === 'character-pose' || input.mediaKind === 'character-expression'
+  const noGlyphContract = '画面不得出现任何可读文字、字母、数字、符文、伪文字、Logo 或签名。'
   if (isCharacter && input.anchoredCharacters.length > 0) {
     const character = input.anchoredCharacters[0]
     const editorialJob = textAdventureCharacterFramingPromptV1(
@@ -2259,7 +2291,7 @@ function normalizeTextAdventureVisualRequirementPromptV1(input: {
     )
     return `${editorialJob}。仅表现已冻结角色「${character.name}」：${character.publicIdentity}。` +
       `冻结外观必须逐项呈现：${character.visualAnchor}。` +
-      '使用自然站姿和克制表情，不新增年龄、发色、伤痕、服饰、肢体或身份设定。'
+      `使用自然站姿和克制表情，不新增年龄、发色、伤痕、服饰、肢体或身份设定。${noGlyphContract}`
   }
   if (input.sceneTag === 'region-map') {
     return textAdventureGlyphSafeMapRepairPromptV1({
@@ -2271,11 +2303,17 @@ function normalizeTextAdventureVisualRequirementPromptV1(input: {
     || input.sceneTag === 'important-item-secondary'
     || input.sceneTag === 'important-item-tertiary') {
     const editorialJob = input.blueprint?.prompt ?? '关键物品的原创叙事特写'
-    return `${editorialJob}。${glyphSafeTextAdventureItemPromptV1(input.prompt)}。` +
+    const safePrompt = glyphSafeTextAdventureItemPromptV1(input.prompt)
+    const detail = safePrompt.startsWith(editorialJob)
+      ? safePrompt.slice(editorialJob.length).replace(/^[，。；:\s]+/u, '')
+      : safePrompt
+    return `${editorialJob}。${detail ? `${detail}。` : ''}` +
       '全部信息只用材质、颜色、形状、抽象刻度和磨损表达；物品与背景上不得出现任何可读文字、字母、数字、品牌或标志。'
   }
-  const glyphSafePrompt = glyphSafeTextAdventureScenePromptV1(input.prompt)
-  const noGlyphContract = '画面不得出现任何可读文字、字母、数字、符文、伪文字、Logo 或签名。'
+  const glyphSafePrompt = glyphSafeTextAdventureScenePromptV1(
+    input.prompt,
+    input.anchoredCharacters.map(character => character.name),
+  )
   if (input.anchoredCharacters.length === 0) return `${glyphSafePrompt}。${noGlyphContract}`
   const authority = input.anchoredCharacters.map(character => (
     `「${character.name}」=${character.publicIdentity}；${character.visualAnchor}`
@@ -2312,11 +2350,28 @@ export function parseProductMediaRequirementsArtifactV2(
     const mediaKind = enumValue(item.mediaKind, ['background', 'character-pose', 'character-expression', 'cg', 'ui'] as const, `visual[${index}].mediaKind`)
     const rawPrompt = text(item.prompt, `visual[${index}].prompt`, 8_000)
     const isCharacter = mediaKind === 'character-pose' || mediaKind === 'character-expression'
+    const suppliedCharacterRefs = textArray(item.characterAnchorRefs, `visual[${index}].characterAnchorRefs`, 20)
+    if (suppliedCharacterRefs.some(ref => !allowedCharacterAnchors.has(ref))) {
+      fail(`visual[${index}] 角色锚点未绑定 Brief 冻结角色`)
+    }
+    const characterForRef = (anchorRef: string) => characterAnchors.find(character => (
+      character.characterKey === anchorRef || character.sourceResourceKey === anchorRef
+      || anchorRef === 'intent:protagonist' && character.role === 'player'
+    ))
+    const groundedSuppliedRefs = brief.intent.productType === 'text-adventure'
+      && !isCharacter && characterAnchors.length > 0
+      ? suppliedCharacterRefs.filter(anchorRef => {
+          const character = characterForRef(anchorRef)
+          return character ? textAdventurePromptVisuallyDepictsCharacterV1(rawPrompt, character.name) : true
+        })
+      : suppliedCharacterRefs
     const mentionedCharacterRefs = brief.intent.productType === 'text-adventure' && !isCharacter
-      ? characterAnchors.filter(character => rawPrompt.includes(character.name)).map(character => character.characterKey)
+      ? characterAnchors.filter(character => (
+          textAdventurePromptVisuallyDepictsCharacterV1(rawPrompt, character.name)
+        )).map(character => character.characterKey)
       : []
     const characterAnchorRefs = [...new Set([
-      ...textArray(item.characterAnchorRefs, `visual[${index}].characterAnchorRefs`, 20),
+      ...groundedSuppliedRefs,
       ...mentionedCharacterRefs,
     ])].sort()
     textArray(item.hardConstraints, `visual[${index}].hardConstraints`, 30)
@@ -4070,7 +4125,7 @@ export function textAdventureGlyphSafeMapRepairPromptV1(input: {
   return [
     'UNLABELED VISUAL-ONLY REGIONAL MAP ILLUSTRATION.',
     `Use a deep-ocean palette (${input.palette.join(', ')}) with subtle salt-fog, water-stain, and ice-crystal texture.`,
-    `Arrange ${regions.length ? regions.join(', ') : 'three clearly distinct regional landmass groups'}.`,
+    `Arrange ${regions.length >= 3 ? regions.join(', ') : 'three clearly distinct regional landmass groups'}.`,
     `Connect the regions with ${route}; distribute ${landmark} evenly along that route.`,
     arrow,
     'Communicate every relationship using silhouettes, spacing, color, pictograms, and geometry only.',
