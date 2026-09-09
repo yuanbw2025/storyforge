@@ -6,7 +6,10 @@ import { createTextOpenWorldDirectorQuestInstanceV1 } from '../../src/lib/open-w
 import { createInitialTextOpenWorldSessionProjectionV1 } from '../../src/lib/open-world/session-projection'
 import { EMPTY_PRODUCT_RUNTIME_STATE } from '../../src/lib/types'
 import { useTextOpenWorldPlayerStore } from '../../src/stores/text-open-world-player'
-import { createTextOpenWorldProductRuntimePackageFixtureV1 } from '../helpers/text-open-world-product-session'
+import {
+  createTextOpenWorldPlayerSessionRowFixtureV1,
+  createTextOpenWorldProductRuntimePackageFixtureV1,
+} from '../helpers/text-open-world-product-session'
 import { createTextOpenWorldVNextFixture } from '../helpers/text-open-world-vnext-fixture'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
@@ -42,9 +45,14 @@ describe('Text Open World vNext · quest lifecycle player UI', () => {
     projection.director.revealedQuestInstanceKeys = [ordinary.instanceKey]
     projection.director.activeQuestInstanceKeys = [ordinary.instanceKey]
     projection.state.director = structuredClone(projection.director)
+    const selectedSession = createTextOpenWorldPlayerSessionRowFixtureV1({
+      sessionId: 1,
+      projection,
+    })
     const executeVNextAction = vi.fn(async () => ({}) as any)
     useTextOpenWorldPlayerStore.setState({
       selectedSessionId: 1, selectedManifest: productRuntimePackage,
+      selectedSession, sessions: [selectedSession], selectedSessionSource: 'build-preview',
       runtimeState: { ...structuredClone(EMPTY_PRODUCT_RUNTIME_STATE), textOpenWorld: projection },
       checkpoints: [], busy: false, lastFeedback: null, error: '', executeVNextAction,
     })
@@ -57,7 +65,7 @@ describe('Text Open World vNext · quest lifecycle player UI', () => {
     expect(host.textContent).toContain('短缺物资')
     expect(host.textContent).toContain('进行中')
     const ordinaryListItem = host.querySelector(
-      `[role="listitem"][data-quest-instance="${ordinary.instanceKey}"]`,
+      `[role="listitem"][data-quest-instance="${ordinary.instanceKey}"] button`,
     ) as HTMLButtonElement | null
     expect(ordinaryListItem).toBeTruthy()
     await act(async () => { ordinaryListItem!.click(); await new Promise(resolve => setTimeout(resolve, 0)) })

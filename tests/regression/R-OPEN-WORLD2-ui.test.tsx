@@ -102,16 +102,20 @@ describe('Text Open World vNext · ProductRuntime vNext player UI', () => {
     await waitFor(() => expect(host.querySelector('[data-testid="text-open-world-feedback"]')?.textContent ?? '').toContain('检查盐渠已完成'))
     expect(useTextOpenWorldPlayerStore.getState().runtimeState.textOpenWorld?.state.inventory.currency).toBe(30)
 
-    const input = host.querySelector('input[placeholder="检查点名称"]') as HTMLInputElement
+    const input = host.querySelector('#text-open-world-manual-save-name') as HTMLInputElement
     await act(async () => {
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, 'vNext调查完成')
       input.dispatchEvent(new Event('input', { bubbles: true }))
     })
-    await waitFor(() => expect(button(host, '保存').disabled).toBe(false))
-    await click(host, '保存')
+    await waitFor(() => expect(button(host, '保存当前进度').disabled).toBe(false))
+    await click(host, '保存当前进度')
     await waitFor(() => expect(useTextOpenWorldPlayerStore.getState().checkpoints.some(item => item.name === 'vNext调查完成')).toBe(true))
     const parentId = useTextOpenWorldPlayerStore.getState().selectedSessionId
-    await click(host, 'vNext调查完成', true)
+    const manualCheckpoint = Array.from(host.querySelectorAll('[data-save-purpose="manual"] article'))
+      .find(item => item.textContent?.includes('vNext调查完成'))
+    expect(manualCheckpoint).toBeTruthy()
+    await click(manualCheckpoint!, '从此处继续')
+    await click(document.body, '建立分支并继续')
     await waitFor(() => expect(useTextOpenWorldPlayerStore.getState().selectedSessionId).not.toBe(parentId))
     await waitFor(() => expect(useTextOpenWorldPlayerStore.getState().busy).toBe(false))
     const branchId = useTextOpenWorldPlayerStore.getState().selectedSessionId!

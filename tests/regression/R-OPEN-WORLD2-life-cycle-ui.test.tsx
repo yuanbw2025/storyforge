@@ -6,7 +6,10 @@ import { createTextOpenWorldCombatStateMachineV1 } from '../../src/lib/open-worl
 import { createInitialTextOpenWorldSessionProjectionV1 } from '../../src/lib/open-world/session-projection'
 import { EMPTY_PRODUCT_RUNTIME_STATE } from '../../src/lib/types'
 import { useTextOpenWorldPlayerStore } from '../../src/stores/text-open-world-player'
-import { createTextOpenWorldProductRuntimePackageFixtureV1 } from '../helpers/text-open-world-product-session'
+import {
+  createTextOpenWorldPlayerSessionRowFixtureV1,
+  createTextOpenWorldProductRuntimePackageFixtureV1,
+} from '../helpers/text-open-world-product-session'
 import { createTextOpenWorldVNextFixture } from '../helpers/text-open-world-vnext-fixture'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
@@ -43,8 +46,15 @@ describe('Text Open World vNext · defeated player recovery UI', () => {
     projection.state.combat = combatState.applyAuthorization({
       state: projection.state, authorization: combatState.prepare({ state: projection.state, intent: 'finish-defeat' }),
     })
+    const selectedSession = createTextOpenWorldPlayerSessionRowFixtureV1({
+      sessionId: 1,
+      projection,
+    })
     useTextOpenWorldPlayerStore.setState({
       selectedSessionId: 1,
+      selectedSession,
+      sessions: [selectedSession],
+      selectedSessionSource: 'build-preview',
       selectedManifest: productRuntimePackage,
       runtimeState: { ...structuredClone(EMPTY_PRODUCT_RUNTIME_STATE), textOpenWorld: projection },
       checkpoints: [{
@@ -71,6 +81,6 @@ describe('Text Open World vNext · defeated player recovery UI', () => {
     const respawn = buttons.find(button => button.textContent?.includes('恢复（保留进度）'))
     expect(respawn?.disabled).toBe(false)
     expect(respawn?.textContent).toContain('盐港广场')
-    expect(host.textContent).toContain('存档与分支')
+    expect(host.textContent).toContain('存档、分支与设置')
   })
 })
