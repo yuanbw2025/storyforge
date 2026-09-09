@@ -136,6 +136,7 @@ export const PRODUCT_PRODUCTION_COMMAND_TYPES = [
   "save-brief-revision",
   "save-text-open-world-creator-brief",
   "authorize-start",
+  "authorize-text-open-world-creator-start",
   "pause",
   "resume",
   "stop",
@@ -677,6 +678,21 @@ export type ProductProductionCommandV1 =
       briefRevision: number;
       briefHash: string;
       authorizationNonce: string;
+    }
+  | {
+      type: "authorize-text-open-world-creator-start";
+      commandId: string;
+      expectedStateRevision: number;
+      briefRevision: number;
+      briefHash: string;
+      sourceLocator: import("./text-open-world-production").TextOpenWorldCreatorSourceLocatorV1;
+      preflight: import("./text-open-world-production").TextOpenWorldCreatorProductionPreflightV1;
+      confirmation: import("./text-open-world-production").TextOpenWorldCreatorProductionPreflightConfirmationV1;
+      rightsBasis: import("./text-open-world-production").TextOpenWorldSourceRightsBasisV1;
+      rightsNote: string;
+      authorizationNonce: string;
+      expectedPlanHash: string;
+      authorizedAt: number;
     }
   | {
       type: "pause";

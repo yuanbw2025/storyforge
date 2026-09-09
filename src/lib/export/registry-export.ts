@@ -207,7 +207,7 @@ function toExportRow(
         obj[rr.field],
         rr.paths,
         idMaps.get(rr.remapVia),
-        rr.onUnmapped === 'require',
+        rr.onUnmapped ?? 'null',
         `${spec.name}.${rr.field}`,
       )
       // The portable shadow is authoritative. Never leak embedded local IDs
@@ -263,7 +263,7 @@ function remapJsonIdPathsForExport(
   value: unknown,
   paths: readonly string[],
   idMap: Map<number, number> | undefined,
-  required: boolean,
+  onUnmapped: 'require' | 'require-if-present' | 'null',
   label: string,
 ): string | null {
   if (value == null) return null
@@ -277,21 +277,35 @@ function remapJsonIdPathsForExport(
   for (const path of paths) {
     const parts = path.split('.').filter(Boolean)
     let owner = parsed as Record<string, unknown>
+    let parentExists = true
     for (const part of parts.slice(0, -1)) {
       const child = owner[part]
       if (!child || typeof child !== 'object' || Array.isArray(child)) {
-        if (required) throw new Error(`[deriveExport] ${label}.${path} 缺失`)
-        owner = {}
+        if (onUnmapped === 'require') throw new Error(`[deriveExport] ${label}.${path} 缺失`)
+        parentExists = false
         break
       }
       owner = child as Record<string, unknown>
     }
+    if (!parentExists) continue
     const field = parts[parts.length - 1]
     if (!field) continue
+    if (!(field in owner)) {
+      if (onUnmapped === 'require') throw new Error(`[deriveExport] ${label}.${path} 缺失`)
+      if (onUnmapped === 'require-if-present') continue
+    }
     const localId = owner[field]
-    if (localId == null) { owner[field] = null; continue }
+    if (localId == null) {
+      if (onUnmapped !== 'null') {
+        throw new Error(`[deriveExport] ${label}.${path} 缺少便携映射`)
+      }
+      owner[field] = null
+      continue
+    }
     const portableId = typeof localId === 'number' ? idMap?.get(localId) : undefined
-    if (portableId == null && required) throw new Error(`[deriveExport] ${label}.${path} 缺少便携映射`)
+    if (portableId == null && onUnmapped !== 'null') {
+      throw new Error(`[deriveExport] ${label}.${path} 缺少便携映射`)
+    }
     owner[field] = portableId ?? null
   }
   return JSON.stringify(parsed)

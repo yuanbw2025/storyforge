@@ -24,6 +24,8 @@ import {
 } from './source-contracts'
 import { assertFormalProductProductionStartV1 } from '../product/source-contracts'
 import { createWorldReferenceV1 } from '../product/source'
+import { inspectProductProductionBuildRecoveryPolicyV1 } from './recovery-policy'
+import { validateProductProductionRecoveryDirectiveV1 } from './context'
 import { readAgentRunV1 } from '../agent/run/event-store'
 import { createVerificationReceiptV1 } from '../agent/run/verification-receipt'
 import {
@@ -34,6 +36,14 @@ import {
   textOpenWorldCreatorProductionLocatorColumnsV1,
   verifyTextOpenWorldCreatorBriefV1,
 } from '../open-world/creator-brief-persistence'
+import {
+  assertTextOpenWorldCreatorProductionSourceCurrentV1,
+  createTextOpenWorldCreatorStartPreparationV1,
+  textOpenWorldCreatorProductionSourceTransactionTablesV1,
+  type TextOpenWorldCreatorStartPreparationV1,
+} from '../open-world/creator-production-start'
+import { verifyTextOpenWorldCreatorProductionPreflightConfirmationV1 } from '../open-world/creator-production-preflight'
+import { useAIConfigStore } from '../../stores/ai-config'
 
 export type ProductProductionErrorCodeV1 =
   | 'production-not-found'
@@ -76,9 +86,15 @@ function reject(code: ProductProductionErrorCodeV1, message: string): never {
   throw new ExpectedCommandFailure(code, message)
 }
 
+// authorDraftJson is contractually capped at 120k characters. Keep enough
+// envelope room for blocker identity, repair note and canonical JSON keys.
+const SAFE_COMMAND_JSON_MAX_CHARS = 140_000
+
 function safeJson(value: unknown): string {
   const json = canonicalProductProductionJsonV2(value)
-  if (json.length > 100_000) throw new Error('[product-production] command result 超出安全上限')
+  if (json.length > SAFE_COMMAND_JSON_MAX_CHARS) {
+    throw new Error('[product-production] command result 超出安全上限')
+  }
   return json
 }
 
@@ -136,6 +152,7 @@ async function applyCommand(input: {
     candidateHash: string
     terminalReceiptHash: string
   } | null
+  preparedCreatorStart?: TextOpenWorldCreatorStartPreparationV1 | null
   emptyHash: string
   now: number
 }): Promise<{ production: ProductProductionRecordV1 & { id: number }; result: Record<string, unknown> }> {
@@ -359,6 +376,80 @@ async function applyCommand(input: {
     return { production, result: { buildId, buildNumber, briefRevision: briefRow.revision, briefHash: briefRow.briefHash } }
   }
 
+  if (command.type === 'authorize-text-open-world-creator-start') {
+    if (production.currentBriefRevision !== command.briefRevision || production.status !== 'brief-ready'
+      || production.currentBuildNumber != null) {
+      reject('brief-not-authorized', '当前文字开放世界 Production 没有待授权 Creator Brief')
+    }
+    const briefRow = await db.productProductionBriefs
+      .where('[productionId+revision]').equals([production.id, command.briefRevision]).first()
+    const prepared = input.preparedCreatorStart
+    if (!briefRow?.id || briefRow.status !== 'draft'
+      || briefRow.briefKind !== 'text-open-world-creator-v1'
+      || briefRow.briefHash !== command.briefHash
+      || !prepared || prepared.production.id !== production.id
+      || prepared.briefRow.id !== briefRow.id
+      || prepared.start.authorStartRevision !== command.expectedStateRevision
+      || prepared.plan.briefHash !== briefRow.briefHash
+      || prepared.start.productionPlanHash !== command.expectedPlanHash
+      || await hashProductProductionValueV2(prepared.plan) !== command.expectedPlanHash) {
+      reject('brief-not-authorized', 'Creator Brief、来源、预检确认或生产计划已经变化')
+    }
+    const buildNumber = await nextBuildNumber(production.id)
+    if (buildNumber !== prepared.buildNumber) {
+      reject('production-state-conflict', 'Build 序号已被其他启动命令占用')
+    }
+    const build = stampNewRecord(scope, 'productBuilds', {
+      projectId: scope.projectId, worldId: scope.worldId, workId: scope.workId,
+      productionId: production.id, buildNumber, briefRevision: briefRow.revision, briefHash: briefRow.briefHash,
+      parentBuildNumber: production.currentBuildNumber, sourceProductReleaseId: production.currentProductReleaseId,
+      status: 'authorized' as const, resumeState: null, stateRevision: 0, controlEpoch: production.controlEpoch,
+      planRevision: 1,
+      planJson: canonicalProductProductionJsonV2(prepared.plan),
+      planHash: prepared.start.productionPlanHash,
+      budgetLedgerJson: '{}',
+      manifestJson: '{}', manifestHash: input.emptyHash, packageHash: '', previewManifestJson: '{}',
+      previewHash: '', qualityReportJson: '{}', qualityReportHash: input.emptyHash, compatibilityJson: '{}',
+      rootTerminalReceiptHash: null, adoptionIntentHash: null,
+      releasedProductReleaseId: null, failureJson: '{}', authorizedAt: prepared.start.authorizedAt,
+      startedAt: null, completedAt: null, createdAt: now, updatedAt: now,
+    } satisfies ProductBuildRecordV1, { owner: 'work' })
+    const buildId = await db.productBuilds.add(build) as number
+    await db.productProductionBriefs.where('[productionId+status]').equals([production.id, 'authorized'])
+      .modify({ status: 'superseded' })
+    await db.productProductionBriefs.update(briefRow.id, {
+      status: 'authorized',
+      sourcePlanJson: canonicalProductProductionJsonV2(prepared.sourcePlan),
+      sourcePlanHash: prepared.sourcePlan.planHash,
+      confirmedBriefJson: canonicalProductProductionJsonV2(prepared.start),
+      confirmedBriefHash: prepared.start.startHash,
+      authorizedAt: prepared.start.authorizedAt,
+    })
+    const stateRevision = production.stateRevision + 1
+    await db.productProductions.update(production.id, {
+      status: 'producing', currentBuildNumber: buildNumber, stateRevision, updatedAt: now,
+    })
+    production = {
+      ...production,
+      status: 'producing',
+      currentBuildNumber: buildNumber,
+      stateRevision,
+      updatedAt: now,
+    }
+    return {
+      production,
+      result: {
+        buildId,
+        buildNumber,
+        briefRevision: briefRow.revision,
+        briefHash: briefRow.briefHash,
+        sourcePlanHash: prepared.sourcePlan.planHash,
+        planHash: prepared.start.productionPlanHash,
+        startHash: prepared.start.startHash,
+      },
+    }
+  }
+
   if (command.type === 'pause') {
     if (!['producing', 'preview-ready'].includes(production.status)) reject('invalid-state-transition', '当前 Production 不能暂停')
     const build = await currentBuild(production)
@@ -495,18 +586,62 @@ async function applyCommand(input: {
     if (!['retry', 'author-edit', 'change-capability', 'cancel'].includes(command.resolution.action)) {
       reject('invalid-state-transition', '当前 blocker 只允许重试、更换能力后重试或取消；降级/豁免必须先生成新 Brief')
     }
-    if (command.resolution.action === 'author-edit') {
-      const failure = JSON.parse(build.failureJson)
-      if (failure.taskKey !== command.blockerKey || !['content.design', 'content.narrative', 'content.product-module', 'media.requirements'].includes(command.blockerKey)) {
-        reject('invalid-state-transition', '作者修订必须对应当前失败的文本任务')
+    let failure: Record<string, unknown> = {}
+    try {
+      const parsed = JSON.parse(build.failureJson)
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        failure = parsed as Record<string, unknown>
       }
+    } catch {
+      reject('invalid-state-transition', '当前 blocker 失败证据损坏')
+    }
+    if (command.resolution.action !== 'cancel'
+      && (build.status !== 'recovery-required' || failure.taskKey !== command.blockerKey)) {
+      reject('invalid-state-transition', '重试必须精确对应当前失败任务；暂停态请使用恢复命令')
+    }
+    if (command.resolution.action !== 'cancel') {
+      try {
+        await validateProductProductionRecoveryDirectiveV1({
+          scope,
+          productProductionId: production.id,
+          productBuildId: build.id!,
+          productProductionTaskKey: command.blockerKey,
+          expectedState: 'blocked',
+          requestedAction: command.resolution.action as 'retry' | 'author-edit' | 'change-capability',
+          allowLegacyRetry: true,
+        })
+      } catch {
+        reject('invalid-state-transition', '当前 blocker 缺少与失败 Run/epoch/attempt 一致的恢复证据')
+      }
+    }
+    if (command.resolution.action === 'author-edit') {
+      let authorDraftAllowed = false
+      try {
+        authorDraftAllowed = inspectProductProductionBuildRecoveryPolicyV1({
+          productType: production.productType,
+          planJson: build.planJson,
+          taskKey: command.blockerKey,
+        }).authorDraftAllowed
+      } catch { /* a corrupt or unrelated Plan can never authorize an author draft */ }
+      if (!authorDraftAllowed) {
+        reject('invalid-state-transition', '作者修订必须对应当前失败且支持作者修订的模型任务')
+      }
+    }
+    const previousFailure = {
+      taskKey: failure.taskKey,
+      code: failure.code,
+      failureProvenance: failure.failureProvenance ?? null,
     }
     const controlEpoch = production.controlEpoch + 1
     const stateRevision = production.stateRevision + 1
     if (command.resolution.action === 'cancel') {
       await db.productBuilds.update(build.id, {
         status: 'cancelled', resumeState: null, controlEpoch,
-        failureJson: safeJson({ blockerKey: command.blockerKey, resolution: command.resolution }),
+        failureJson: safeJson({
+          blockerKey: command.blockerKey,
+          resolution: command.resolution,
+          previousFailure,
+        }),
         stateRevision: build.stateRevision + 1, completedAt: now, updatedAt: now,
       })
       await db.productProductions.update(production.id, {
@@ -516,7 +651,12 @@ async function applyCommand(input: {
     } else {
       await db.productBuilds.update(build.id, {
         status: 'building', resumeState: null, controlEpoch,
-        failureJson: safeJson({ blockerKey: command.blockerKey, resolution: command.resolution, resolvedAt: now }),
+        failureJson: safeJson({
+          blockerKey: command.blockerKey,
+          resolution: command.resolution,
+          previousFailure,
+          resolvedAt: now,
+        }),
         stateRevision: build.stateRevision + 1, updatedAt: now,
       })
       await db.productProductions.update(production.id, {
@@ -637,17 +777,24 @@ async function executeTransaction(input: {
     candidateHash: string
     terminalReceiptHash: string
   } | null
+  preparedCreatorStart?: TextOpenWorldCreatorStartPreparationV1 | null
   preparedWorldReferenceHash: string | null
   emptyHash: string
   now: number
 }): Promise<ProductProductionCommandReceiptV1> {
   const { scope, command, now } = input
-  return db.transaction('rw', scopeTransactionTables(
+  const transactionTables = scopeTransactionTables(
     db.productReleases,
     db.productProductions, db.productProductionBriefs, db.productProductionCommands,
     db.productBuilds, db.productBuildArtifacts, db.mediaBlobObjects,
     db.agentRuns, db.agentRunEvents,
-  ), async () => {
+    ...(command.type === 'authorize-text-open-world-creator-start'
+      // Creator source adapters expose only opaque transaction capabilities;
+      // the command layer never learns physical WorldRelease/novel table names.
+      ? textOpenWorldCreatorProductionSourceTransactionTablesV1(command.sourceLocator)
+      : []),
+  )
+  return db.transaction('rw', transactionTables, async () => {
     let production: ProductProductionRecordV1 & { id: number }
     if (command.type === 'create-intent' || command.type === 'create-text-open-world-intent') {
       const existing = await db.productProductions.where('[workId+productionKey]').equals([scope.workId, command.productionKey]).first()
@@ -697,6 +844,36 @@ async function executeTransaction(input: {
       }
     }
 
+    const transactionCreatorStart = input.preparedCreatorStart ?? null
+    if (command.type === 'authorize-text-open-world-creator-start') {
+      if (!transactionCreatorStart) {
+        throw new Error('[product-production] Creator start 缺少事务外完整预检结果')
+      }
+      // The immutable Plan and its hashes were generated before opening the
+      // transaction. Re-read only the mutable external facts here while all
+      // source stores and Production stores are locked; no provider call is
+      // permitted in this boundary.
+      await assertTextOpenWorldCreatorProductionSourceCurrentV1({
+        scope,
+        sourceLocator: command.sourceLocator,
+      })
+      const aiState = useAIConfigStore.getState()
+      const confirmation = await Dexie.waitFor(
+        verifyTextOpenWorldCreatorProductionPreflightConfirmationV1({
+          brief: transactionCreatorStart.brief,
+          preflight: command.preflight,
+          confirmation: command.confirmation,
+          projectId: scope.projectId,
+          aiConfig: aiState.config,
+          rememberApiKey: aiState.rememberApiKey,
+        }),
+      )
+      if (confirmation.confirmationHash !== transactionCreatorStart.start.confirmation.confirmationHash
+        || transactionCreatorStart.start.productionPlanHash !== command.expectedPlanHash) {
+        throw new Error('[product-production] Creator 来源、模型或冻结计划在原子授权边界发生变化')
+      }
+    }
+
     const claim = stampNewRecord(scope, 'productProductionCommands', {
       projectId: scope.projectId, worldId: scope.worldId, workId: scope.workId, productionId: production.id,
       commandId: command.commandId, type: command.type, payloadHash: input.payloadHash,
@@ -716,6 +893,7 @@ async function executeTransaction(input: {
         preparedCreatorSource: input.preparedCreatorSource,
         preparedCreatorBrief: input.preparedCreatorBrief,
         preparedCreatorEvidence: input.preparedCreatorEvidence,
+        preparedCreatorStart: transactionCreatorStart,
         emptyHash: input.emptyHash,
         now,
       })
@@ -829,6 +1007,7 @@ export async function executeProductProductionCommand(input: {
     candidateHash: string
     terminalReceiptHash: string
   } | null = null
+  let preparedCreatorStart: TextOpenWorldCreatorStartPreparationV1 | null = null
   const preparedWorldReferenceHash = command.type === 'create-intent'
     ? (await createWorldReferenceV1(command.worldReleaseId)).referenceHash
     : null
@@ -929,6 +1108,30 @@ export async function executeProductProductionCommand(input: {
         summary: inspected.summary,
       }
     }
+  } else if (command.type === 'authorize-text-open-world-creator-start') {
+    if (!Number.isInteger(input.productionId)) {
+      throw new Error('[product-production] Creator start 缺少 productionId')
+    }
+    const aiState = useAIConfigStore.getState()
+    preparedCreatorStart = await createTextOpenWorldCreatorStartPreparationV1({
+      scope,
+      productionId: input.productionId!,
+      briefRevision: command.briefRevision,
+      briefHash: command.briefHash,
+      expectedStateRevision: command.expectedStateRevision,
+      sourceLocator: command.sourceLocator,
+      preflight: command.preflight,
+      confirmation: command.confirmation,
+      aiConfig: aiState.config,
+      rememberApiKey: aiState.rememberApiKey,
+      rightsBasis: command.rightsBasis,
+      rightsNote: command.rightsNote,
+      authorizationNonce: command.authorizationNonce,
+      authorizedAt: command.authorizedAt,
+    })
+    if (preparedCreatorStart.start.productionPlanHash !== command.expectedPlanHash) {
+      throw new Error('[product-production] 作者核对后的生产 Plan 已变化')
+    }
   } else if (command.type === 'authorize-start') {
     if (!Number.isInteger(input.productionId)) {
       throw new Error('[product-production] authorize-start 缺少 productionId')
@@ -966,6 +1169,7 @@ export async function executeProductProductionCommand(input: {
     preparedCreatorSource,
     preparedCreatorBrief,
     preparedCreatorEvidence,
+    preparedCreatorStart,
     preparedWorldReferenceHash,
     emptyHash,
     now,

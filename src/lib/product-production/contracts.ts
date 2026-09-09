@@ -418,6 +418,46 @@ export function parseProductProductionCommandV1(value: unknown): ProductProducti
     if (!isSha256Hash(row.briefHash)) fail('briefHash 无效')
     return { type, commandId, expectedStateRevision: expectedRevision(row.expectedStateRevision), briefRevision: positiveId(row.briefRevision, 'briefRevision'), briefHash: row.briefHash, authorizationNonce: stableKey(row.authorizationNonce, 'authorizationNonce') }
   }
+  if (type === 'authorize-text-open-world-creator-start') {
+    const commandId = commandHeader(row, type, [
+      'expectedStateRevision', 'briefRevision', 'briefHash', 'sourceLocator', 'preflight',
+      'confirmation', 'rightsBasis', 'rightsNote', 'authorizationNonce', 'expectedPlanHash',
+      'authorizedAt',
+    ])
+    if (!isSha256Hash(row.briefHash) || !isSha256Hash(row.expectedPlanHash)) {
+      fail('Creator start 的 briefHash/expectedPlanHash 无效')
+    }
+    if (!['author-owned', 'licensed', 'public-domain'].includes(String(row.rightsBasis))) {
+      fail('Creator start 的 rightsBasis 无效')
+    }
+    if (typeof row.rightsNote !== 'string' || !row.rightsNote.trim()
+      || row.rightsNote.trim().length > 2_000) {
+      fail('Creator start 的 rightsNote 无效')
+    }
+    record(row.preflight, 'command.preflight')
+    record(row.confirmation, 'command.confirmation')
+    return {
+      type,
+      commandId,
+      expectedStateRevision: expectedRevision(row.expectedStateRevision),
+      briefRevision: positiveId(row.briefRevision, 'briefRevision'),
+      briefHash: row.briefHash,
+      sourceLocator: parseTextOpenWorldCreatorSourceLocatorV1(row.sourceLocator),
+      preflight: structuredClone(row.preflight) as Extract<
+        ProductProductionCommandV1,
+        { type: 'authorize-text-open-world-creator-start' }
+      >['preflight'],
+      confirmation: structuredClone(row.confirmation) as Extract<
+        ProductProductionCommandV1,
+        { type: 'authorize-text-open-world-creator-start' }
+      >['confirmation'],
+      rightsBasis: row.rightsBasis as 'author-owned' | 'licensed' | 'public-domain',
+      rightsNote: row.rightsNote.trim().normalize('NFC'),
+      authorizationNonce: stableKey(row.authorizationNonce, 'authorizationNonce'),
+      expectedPlanHash: row.expectedPlanHash,
+      authorizedAt: finite(row.authorizedAt, 'authorizedAt', Number.MAX_SAFE_INTEGER, true),
+    }
+  }
   if (type === 'pause') return { type, commandId: commandHeader(row, type, ['expectedStateRevision', 'reason']), expectedStateRevision: expectedRevision(row.expectedStateRevision), reason: text(row.reason, 'reason', 4000) }
   if (type === 'resume') return { type, commandId: commandHeader(row, type, ['expectedStateRevision']), expectedStateRevision: expectedRevision(row.expectedStateRevision) }
   if (type === 'stop') return { type, commandId: commandHeader(row, type, ['expectedStateRevision', 'retention']), expectedStateRevision: expectedRevision(row.expectedStateRevision), retention: enumValue(row.retention, ['keep-build', 'discard-unreleased'], 'retention') }

@@ -15,9 +15,17 @@ import type {
   ProductProductionRecordV1,
   TextOpenWorldMediaRequirementsV1,
 } from '../types'
+import type { ProviderBindingReceiptV1 } from '../product-production/capabilities'
 import type { ResolvedProductMediaCapabilityV1 } from '../product-production/media-transport'
 import { textOpenWorldProductionArtifactKindForKeyV1 } from './production-contract'
-import { freezeTextOpenWorldWorldReleaseSourceV1 } from './source-pin'
+import {
+  freezeTextOpenWorldNovelSourceV1,
+  freezeTextOpenWorldWorldReleaseSourceV1,
+} from './source-pin'
+import {
+  readTextOpenWorldCreatorExecutionBriefV1,
+} from './creator-production-start'
+import { textOpenWorldCreatorLocatorFromBriefRowV1 } from './creator-brief-persistence'
 import { createTextOpenWorldSourceCurationExecutorV1 } from './source-curation'
 import { createTextOpenWorldExperienceDesignExecutorV1 } from './experience-design'
 import { createTextOpenWorldGameplayRulesetExecutorV1 } from './gameplay-ruleset'
@@ -49,6 +57,15 @@ import {
   createTextOpenWorldReleaseQaExecutorV1,
   createTextOpenWorldRuntimePackageExecutorV1,
 } from './runtime-package-production'
+import {
+  executeTextOpenWorldProductionModelProtocolV1,
+  type TextOpenWorldProductionDomainExecutorFactoryV1,
+  type TextOpenWorldProductionModelTransportV1,
+} from './production-model-protocol'
+import {
+  TEXT_OPEN_WORLD_AUTHOR_REPAIR_TASK_SKILL_IDS_V1,
+  type TextOpenWorldAuthorRepairTaskKeyV1,
+} from '../product-production/recovery-policy'
 
 function fail(message: string): never {
   throw new Error(`[text-open-world-production-executor] ${message}`)
@@ -75,28 +92,78 @@ export function createTextOpenWorldSourceLockExecutorV1(options: { now?: () => n
     if (!briefRow || briefRow.status !== 'authorized') {
       fail('找不到当前授权Production/Brief')
     }
-    const sourcePlan = await parseProductProductionSourcePlanV1(briefRow)
-    const confirmed = await parseConfirmedProductBriefV1({ row: briefRow, sourcePlan })
-    const brief = parseProductProductionBriefV3(briefRow.briefJson)
-    const createdAt = Math.max(now(), confirmed.confirmedAt)
-    const bundle = await freezeTextOpenWorldWorldReleaseSourceV1({
-      scope: execution.scope,
-      localReleaseRecordId: brief.source.worldReleaseId,
-      selection: { mode: 'selected-resources', resourceKeys: brief.source.selection.resourceKeys },
-      authorization: {
-        productInstanceKey: production.productionKey,
-        briefRevision: briefRow.revision,
-        briefHash: briefRow.briefHash,
-        authorStartRevision: confirmed.authorStartRevision,
-        // The already-frozen confirmation hash is a one-way authorization
-        // witness; no raw author click nonce is copied into Build artifacts.
-        authorizationNonce: confirmed.confirmationHash,
-        rightsBasis: 'author-owned',
-        rightsNote: '作者授权当前冻结WorldRelease仅用于本次文字开放世界产品派生。',
-        authorizedAt: confirmed.confirmedAt,
-      },
-      createdAt,
-    })
+    const build = await db.productBuilds.get(execution.buildId)
+    if (!build || build.productionId !== execution.productionId) fail('找不到当前 Build')
+    const bundle = briefRow.briefKind === 'text-open-world-creator-v1'
+      ? await (async () => {
+          const contracts = await readTextOpenWorldCreatorExecutionBriefV1({
+            briefRow,
+            planJson: build.planJson,
+          })
+          const locator = textOpenWorldCreatorLocatorFromBriefRowV1(briefRow)
+          const authorization = {
+            productInstanceKey: production.productionKey,
+            briefRevision: briefRow.revision,
+            briefHash: briefRow.briefHash,
+            authorStartRevision: contracts.start.authorStartRevision,
+            // Persisted one-way witness, hashed again with the exact P0 source
+            // boundary; the raw author nonce never enters an Artifact.
+            authorizationNonce: contracts.start.authorizationNonceHash,
+            rightsBasis: contracts.start.rightsBasis,
+            rightsNote: contracts.start.rightsNote,
+            authorizedAt: contracts.start.authorizedAt,
+          }
+          const createdAt = Math.max(now(), contracts.start.authorizedAt)
+          if (contracts.sourcePlan.sourceKind === 'world-release' && locator.kind === 'world-release'
+            && contracts.sourcePlan.selection.kind === 'world-release') {
+            return freezeTextOpenWorldWorldReleaseSourceV1({
+              scope: execution.scope,
+              localReleaseRecordId: locator.localReleaseRecordId,
+              expectedReleaseHash: contracts.sourcePlan.sourceVersionHash,
+              selection: {
+                mode: 'selected-resources',
+                resourceKeys: contracts.sourcePlan.selection.resourceKeys,
+              },
+              authorization,
+              createdAt,
+            })
+          }
+          if (contracts.sourcePlan.sourceKind === 'novel' && locator.kind === 'novel'
+            && contracts.sourcePlan.selection.kind === 'novel') {
+            return freezeTextOpenWorldNovelSourceV1({
+              targetScope: execution.scope,
+              sourceScope: execution.scope,
+              selection: locator.selection,
+              expectedSourceVersionHash: contracts.sourcePlan.sourceVersionHash,
+              expectedSourceBoundaryHash: contracts.sourcePlan.expectedSourceBoundaryHash!,
+              authorization,
+              createdAt,
+            })
+          }
+          return fail('Creator SourcePlan 与本地 locator 种类不一致')
+        })()
+      : await (async () => {
+          const sourcePlan = await parseProductProductionSourcePlanV1(briefRow)
+          const confirmed = await parseConfirmedProductBriefV1({ row: briefRow, sourcePlan })
+          const brief = parseProductProductionBriefV3(briefRow.briefJson)
+          const createdAt = Math.max(now(), confirmed.confirmedAt)
+          return freezeTextOpenWorldWorldReleaseSourceV1({
+            scope: execution.scope,
+            localReleaseRecordId: brief.source.worldReleaseId,
+            selection: { mode: 'selected-resources', resourceKeys: brief.source.selection.resourceKeys },
+            authorization: {
+              productInstanceKey: production.productionKey,
+              briefRevision: briefRow.revision,
+              briefHash: briefRow.briefHash,
+              authorStartRevision: confirmed.authorStartRevision,
+              authorizationNonce: confirmed.confirmationHash,
+              rightsBasis: 'author-owned',
+              rightsNote: '作者授权当前冻结WorldRelease仅用于本次文字开放世界产品派生。',
+              authorizedAt: confirmed.confirmedAt,
+            },
+            createdAt,
+          })
+        })()
     // Persist source units before the pin index. The pin is the closure marker,
     // so a process crash can never expose an accepted index whose units are
     // still missing.
@@ -169,13 +236,37 @@ function translatedMediaBrief(
   }
 }
 
+function assertMediaLaneCostBoundary(input: ProductProductionTaskExecutionInputV1, options: {
+  production: ProductProductionRecordV1
+  brief: ProductProductionBriefV3
+  mediaCapabilities: ReadonlyMap<string, ResolvedProductMediaCapabilityV1>
+}): void {
+  const isVisual = input.task.taskKey === 'media.visual'
+  if (input.task.budgetReservation.maximumCostUsd === 0) {
+    const expectedAdapter = isVisual
+      ? 'storyforge.procedural-svg.v1'
+      : 'storyforge.procedural-audio.v1'
+    if (input.task.capabilityRequirementKeys.length === 0) {
+      fail(`${input.task.taskKey} 零费用程序化任务缺少 capability 绑定`)
+    }
+    for (const requirementKey of input.task.capabilityRequirementKeys) {
+      const binding = input.capabilityBindings.find(item => item.requirementKey === requirementKey)
+      if (!binding || binding.adapterId !== expectedAdapter
+        || options.mediaCapabilities.has(requirementKey)) {
+        fail(`${input.task.taskKey} 未获外部媒资费用授权，只允许冻结的内置程序化 adapter`)
+      }
+    }
+  }
+}
+
 async function executeMediaLane(input: ProductProductionTaskExecutionInputV1, options: {
   production: ProductProductionRecordV1
   brief: ProductProductionBriefV3
   mediaCapabilities: ReadonlyMap<string, ResolvedProductMediaCapabilityV1>
 }): Promise<ProductProductionTaskExecutionResultV1> {
-  const requirements = mediaRequirement(input)
   const isVisual = input.task.taskKey === 'media.visual'
+  assertMediaLaneCostBoundary(input, options)
+  const requirements = mediaRequirement(input)
   const selected = requirements.slots.filter(slot => isVisual
     ? ['character-portrait', 'scene-background', 'ui-skin'].includes(slot.kind)
       && slot.productionMode !== 'fallback-only'
@@ -261,7 +352,105 @@ export interface TextOpenWorldProductionExecutorOptionsV1 {
   production: ProductProductionRecordV1
   brief: ProductProductionBriefV3
   mediaCapabilities?: ReadonlyMap<string, ResolvedProductMediaCapabilityV1>
+  /** Non-secret frozen provider identity used to validate author-revised JSON. */
+  textCapabilityReceipt?: ProviderBindingReceiptV1
+  /** Test seam for the shared configured-provider transport; never persisted. */
+  modelTransport?: TextOpenWorldProductionModelTransportV1
   taskExecutors?: Partial<Record<string, ProductProductionTaskExecutorV1>>
+}
+
+interface TextOpenWorldModelTaskProtocolV1 {
+  skillId: string
+  factory: TextOpenWorldProductionDomainExecutorFactoryV1
+  callPolicy?: 'single-exact-context' | 'bounded-derived-context'
+}
+
+type TextOpenWorldAuthorRepairModelProtocolsV1 = {
+  [TaskKey in TextOpenWorldAuthorRepairTaskKeyV1]: TextOpenWorldModelTaskProtocolV1 & {
+    skillId: typeof TEXT_OPEN_WORLD_AUTHOR_REPAIR_TASK_SKILL_IDS_V1[TaskKey]
+  }
+}
+
+const TEXT_OPEN_WORLD_AUTHOR_REPAIR_MODEL_PROTOCOLS_V1 = {
+  'p2.experience-design': {
+    skillId: 'text-open-world.production.experience-design.v1', factory: createTextOpenWorldExperienceDesignExecutorV1,
+  },
+  'p2.gameplay-ruleset': {
+    skillId: 'text-open-world.production.gameplay-ruleset.v1', factory: createTextOpenWorldGameplayRulesetExecutorV1,
+  },
+  'p2.presentation-profile': {
+    skillId: 'text-open-world.production.presentation-profile.v1', factory: createTextOpenWorldPresentationProfileExecutorV1,
+  },
+  'p3.story-architecture': {
+    skillId: 'text-open-world.production.story-architecture.v1', factory: createTextOpenWorldStoryArchitectureExecutorV1,
+  },
+  'p4.region-skeleton': {
+    skillId: 'text-open-world.production.region-skeleton.v1', factory: createTextOpenWorldRegionSkeletonExecutorV1,
+  },
+  'p4.player-build': {
+    skillId: 'text-open-world.production.player-build.v1', factory: createTextOpenWorldPlayerBuildExecutorV1,
+  },
+  'p5.mainline': {
+    skillId: 'text-open-world.production.mainline.v1', factory: createTextOpenWorldMainlineExecutorV1,
+  },
+  'p6.significant-threads': {
+    skillId: 'text-open-world.production.significant-threads.v1', factory: createTextOpenWorldSignificantThreadsExecutorV1,
+  },
+  'p7.region-narrative-packs': {
+    skillId: 'text-open-world.production.region-narrative-packs.v1', factory: createTextOpenWorldRegionNarrativePacksExecutorV1,
+  },
+  'p8.quest-skeletons': {
+    skillId: 'text-open-world.production.quest-skeletons.v1', factory: createTextOpenWorldQuestSkeletonsExecutorV1,
+  },
+  'p8.catalog.progression': {
+    skillId: 'text-open-world.production.progression-catalogs.v1', factory: createTextOpenWorldProgressionCatalogsExecutorV1,
+  },
+  'p8.catalog.encounters': {
+    skillId: 'text-open-world.production.encounter-catalog.v1', factory: createTextOpenWorldEncounterCatalogExecutorV1,
+  },
+  'p8.catalog.items-rewards': {
+    skillId: 'text-open-world.production.item-reward-catalog.v1', factory: createTextOpenWorldItemRewardCatalogExecutorV1,
+  },
+  'p8.catalog.crafting-economy': {
+    skillId: 'text-open-world.production.crafting-economy-catalog.v1', factory: createTextOpenWorldCraftingEconomyCatalogExecutorV1,
+  },
+  'p8.catalog.npc-runtime': {
+    skillId: 'text-open-world.production.npc-runtime-catalog.v1', factory: createTextOpenWorldNpcRuntimeCatalogExecutorV1,
+  },
+  'p8.catalog.map-interactions': {
+    skillId: 'text-open-world.production.map-interaction-catalog.v1', factory: createTextOpenWorldMapInteractionCatalogExecutorV1,
+  },
+  'p8f.quest-finalize': {
+    skillId: 'text-open-world.production.quest-finalize.v1', factory: createTextOpenWorldQuestFinalizeExecutorV1,
+  },
+  'p9.scene-scripts': {
+    skillId: 'text-open-world.production.scene-scripts.v1',
+    factory: createTextOpenWorldSceneScriptsExecutorV1,
+    callPolicy: 'bounded-derived-context',
+  },
+  'p10.system-finalize': {
+    skillId: 'text-open-world.production.system-finalize.v1', factory: createTextOpenWorldSystemFinalizeExecutorV1,
+  },
+} satisfies TextOpenWorldAuthorRepairModelProtocolsV1
+
+const TEXT_OPEN_WORLD_REVIEW_MODEL_PROTOCOLS_V1 = {
+  'v2.balance-review': {
+    skillId: 'text-open-world.production.balance-review.v1', factory: createTextOpenWorldBalanceReviewExecutorV1,
+  },
+  'v2.semantic-review': {
+    skillId: 'text-open-world.production.semantic-review.v1', factory: createTextOpenWorldSemanticReviewExecutorV1,
+  },
+} as const satisfies Record<string, TextOpenWorldModelTaskProtocolV1>
+
+const TEXT_OPEN_WORLD_MODEL_PROTOCOLS_V1 = {
+  ...TEXT_OPEN_WORLD_AUTHOR_REPAIR_MODEL_PROTOCOLS_V1,
+  ...TEXT_OPEN_WORLD_REVIEW_MODEL_PROTOCOLS_V1,
+}
+
+type TextOpenWorldModelTaskKeyV1 = keyof typeof TEXT_OPEN_WORLD_MODEL_PROTOCOLS_V1
+
+function isTextOpenWorldModelTaskKeyV1(taskKey: string): taskKey is TextOpenWorldModelTaskKeyV1 {
+  return Object.prototype.hasOwnProperty.call(TEXT_OPEN_WORLD_MODEL_PROTOCOLS_V1, taskKey)
 }
 
 /** The single dispatcher selected by the shared scheduler for text-open-world.
@@ -272,37 +461,40 @@ export function createTextOpenWorldProductionExecutorV1(
   const executors: Record<string, ProductProductionTaskExecutorV1> = {
     'p0.source-lock': createTextOpenWorldSourceLockExecutorV1(),
     'p1.source-curation': createTextOpenWorldSourceCurationExecutorV1(),
-    'p2.experience-design': createTextOpenWorldExperienceDesignExecutorV1(),
-    'p2.gameplay-ruleset': createTextOpenWorldGameplayRulesetExecutorV1(),
-    'p2.presentation-profile': createTextOpenWorldPresentationProfileExecutorV1(),
-    'p3.story-architecture': createTextOpenWorldStoryArchitectureExecutorV1(),
-    'p4.region-skeleton': createTextOpenWorldRegionSkeletonExecutorV1(),
-    'p4.player-build': createTextOpenWorldPlayerBuildExecutorV1(),
-    'p5.mainline': createTextOpenWorldMainlineExecutorV1(),
-    'p6.significant-threads': createTextOpenWorldSignificantThreadsExecutorV1(),
-    'p7.region-narrative-packs': createTextOpenWorldRegionNarrativePacksExecutorV1(),
-    'p8.quest-skeletons': createTextOpenWorldQuestSkeletonsExecutorV1(),
-    'p8.catalog.progression': createTextOpenWorldProgressionCatalogsExecutorV1(),
-    'p8.catalog.encounters': createTextOpenWorldEncounterCatalogExecutorV1(),
-    'p8.catalog.items-rewards': createTextOpenWorldItemRewardCatalogExecutorV1(),
-    'p8.catalog.crafting-economy': createTextOpenWorldCraftingEconomyCatalogExecutorV1(),
-    'p8.catalog.npc-runtime': createTextOpenWorldNpcRuntimeCatalogExecutorV1(),
-    'p8.catalog.map-interactions': createTextOpenWorldMapInteractionCatalogExecutorV1(),
-    'p8f.quest-finalize': createTextOpenWorldQuestFinalizeExecutorV1(),
-    'p9.scene-scripts': createTextOpenWorldSceneScriptsExecutorV1(),
-    'p10.system-finalize': createTextOpenWorldSystemFinalizeExecutorV1(),
     'v1.deterministic-preflight': createTextOpenWorldDeterministicPreflightExecutorV1(),
-    'v2.balance-review': createTextOpenWorldBalanceReviewExecutorV1(),
-    'v2.semantic-review': createTextOpenWorldSemanticReviewExecutorV1(),
     'v3.runtime-package': createTextOpenWorldRuntimePackageExecutorV1(),
     'qa.release': createTextOpenWorldReleaseQaExecutorV1(),
-    ...options.taskExecutors,
   }
   return async execution => {
     if (execution.task.taskKey === 'media.visual' || execution.task.taskKey === 'media.audio') {
-      return executeMediaLane(execution, {
+      const mediaOptions = {
         production: options.production, brief: options.brief,
         mediaCapabilities: options.mediaCapabilities ?? new Map(),
+      }
+      // The local-only media authorization is checked before any executor
+      // override so tests/extensions cannot bypass the same safety boundary.
+      assertMediaLaneCostBoundary(execution, mediaOptions)
+      const override = options.taskExecutors?.[execution.task.taskKey]
+      if (override && execution.task.budgetReservation.maximumCostUsd === 0) {
+        fail(`${execution.task.taskKey} 零费用程序化媒资禁止 executor override`)
+      }
+      if (override) return override(execution)
+      return executeMediaLane(execution, mediaOptions)
+    }
+    const override = options.taskExecutors?.[execution.task.taskKey]
+    if (override) return override(execution)
+    if (isTextOpenWorldModelTaskKeyV1(execution.task.taskKey)) {
+      const protocol = TEXT_OPEN_WORLD_MODEL_PROTOCOLS_V1[execution.task.taskKey]
+      if (execution.task.executionMode !== 'model' || execution.task.skillId !== protocol.skillId) {
+        fail(`${execution.task.taskKey} 与登记的模型任务协议不一致`)
+      }
+      return executeTextOpenWorldProductionModelProtocolV1({
+        execution,
+        factory: protocol.factory,
+        skillId: protocol.skillId,
+        callPolicy: 'callPolicy' in protocol ? protocol.callPolicy : undefined,
+        textCapabilityReceipt: options.textCapabilityReceipt,
+        modelTransport: options.modelTransport,
       })
     }
     const executor = executors[execution.task.taskKey]

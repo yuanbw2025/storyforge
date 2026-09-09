@@ -17,7 +17,10 @@ import {
   knownProviderModelPrice,
 } from '../ai/usage-log'
 import { isProviderQuotaRejectionV1 } from '../ai/provider-rejection'
-import { TEXT_OPEN_WORLD_PRODUCTION_TEXT_CATEGORY_V1 } from '../product-production/capabilities'
+import {
+  hashConfiguredTextEndpointRouteV1,
+  TEXT_OPEN_WORLD_PRODUCTION_TEXT_CATEGORY_V1,
+} from '../product-production/capabilities'
 import { DEFAULT_TEXT_OPEN_WORLD_CALIBRATION_V1 } from './product-config'
 import { TEXT_OPEN_WORLD_PRODUCTION_MODEL_CALL_BUDGET_V1 } from './production-contract'
 import { verifyTextOpenWorldCreatorBriefV1 } from './creator-brief-persistence'
@@ -552,9 +555,7 @@ async function currentProviderBinding(input: TextOpenWorldCreatorPreflightRuntim
     && !validContextWindow(aiConfig.contextWindow)) {
     blockers.push('模型上下文窗口配置无效。')
   }
-  const endpointRouteHash = await hashCanonicalValue({
-    route: endpoint?.route ?? '',
-  })
+  const endpointRouteHash = await hashConfiguredTextEndpointRouteV1(endpoint?.route ?? '')
   const providerBindingBody = {
     schema: 'storyforge.text-open-world-creator-provider-binding' as const,
     version: 1 as const,

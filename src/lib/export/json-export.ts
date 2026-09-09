@@ -238,7 +238,7 @@ export interface ProjectExportData {
     Omit<ProductProductionBriefRecordV1,
       'id' | 'projectId' | 'worldId' | 'workId' | 'productionId' | 'sourceWorldReleaseId'
       | 'sourceWorkId' | 'sourceOutlineRootId' | 'sourceStartChapterId' | 'sourceEndChapterId'
-      | 'sourceChapterIdsJson' | 'candidateRunId'>
+      | 'sourceChapterIdsJson' | 'sourcePlanJson' | 'candidateRunId'>
     & {
       _exportId: number
       _worldExportId: number
@@ -250,6 +250,7 @@ export interface ProjectExportData {
       _sourceStartChapterExportId?: number | null
       _sourceEndChapterExportId?: number | null
       _sourceChapterExportIds?: number[]
+      _sourcePlanPortableJson: string
       _candidateRunExportId?: number | null
     }
   )[]

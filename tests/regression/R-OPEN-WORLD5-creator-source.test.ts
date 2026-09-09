@@ -19,45 +19,11 @@ import { seedCurrentProductWorld } from '../helpers/current-product-world'
 const HASH = 'a'.repeat(64)
 const SECRET_BODY = '只可参与内部哈希、绝不能返回给创作者入口的小说正文。'
 
-async function protectedTableCounts() {
-  const [
-    worldReleases,
-    productions,
-    briefs,
-    commands,
-    builds,
-    artifacts,
-    qualityReceipts,
-    releases,
-    runtimeSessions,
-    runtimeEvents,
-    runtimeCheckpoints,
-  ] = await Promise.all([
-    db.worldReleases.count(),
-    db.productProductions.count(),
-    db.productProductionBriefs.count(),
-    db.productProductionCommands.count(),
-    db.productBuilds.count(),
-    db.productBuildArtifacts.count(),
-    db.productQualityGateReceipts.count(),
-    db.productReleases.count(),
-    db.productRuntimeSessions.count(),
-    db.productRuntimeEvents.count(),
-    db.productRuntimeCheckpoints.count(),
-  ])
-  return {
-    worldReleases,
-    productions,
-    briefs,
-    commands,
-    builds,
-    artifacts,
-    qualityReceipts,
-    releases,
-    runtimeSessions,
-    runtimeEvents,
-    runtimeCheckpoints,
-  }
+async function protectedDatabaseSnapshot() {
+  const entries = await Promise.all([...db.tables]
+    .sort((left, right) => left.name.localeCompare(right.name))
+    .map(async table => [table.name, await table.toArray()] as const))
+  return Object.fromEntries(entries)
 }
 
 async function seedNovel(name: string, options: {
@@ -143,7 +109,7 @@ describe('R-OPEN-WORLD5 · 创作者双来源目录与只读预检', () => {
 
   it('只通过 WorldReference 目录与中立语义目录校验世界 owner/id/hash，并返回能力、资源和需求预检', async () => {
     const owned = await seedCurrentProductWorld(`TOW G5 世界 ${crypto.randomUUID()}`)
-    const before = await protectedTableCounts()
+    const before = await protectedDatabaseSnapshot()
 
     const candidates = await listTextOpenWorldCreatorWorldSourcesV1(owned.scope)
     expect(candidates).toHaveLength(1)
@@ -179,22 +145,22 @@ describe('R-OPEN-WORLD5 · 创作者双来源目录与只读预检', () => {
       localReleaseRecordId: owned.release.id!,
       expectedReleaseHash: 'b'.repeat(64),
     })).rejects.toThrow(/Hash 已变化|身份不匹配/)
-    expect(await protectedTableCounts()).toEqual(before)
+    expect(await protectedDatabaseSnapshot()).toEqual(before)
 
     const other = await seedCurrentProductWorld(`TOW G5 另一世界 ${crypto.randomUUID()}`)
-    const beforeCrossScope = await protectedTableCounts()
+    const beforeCrossScope = await protectedDatabaseSnapshot()
     await expect(inspectTextOpenWorldCreatorWorldSourceV1({
       scope: other.scope,
       localReleaseRecordId: owned.release.id!,
       expectedReleaseHash: owned.release.contentHash,
     })).rejects.toThrow(/不属于给定 worldScope/)
-    expect(await protectedTableCounts()).toEqual(beforeCrossScope)
+    expect(await protectedDatabaseSnapshot()).toEqual(beforeCrossScope)
   }, 30_000)
 
   it('复用小说改编选择目录，预览与随后正式 freeze 在相同内容和 selection 下产生完全相同的来源 Hash', async () => {
     const novel = await seedNovel(`TOW G5 小说 ${crypto.randomUUID()}`)
     const selection = { mode: 'entire-work' } as const
-    const before = await protectedTableCounts()
+    const before = await protectedDatabaseSnapshot()
 
     const catalog = await listTextOpenWorldCreatorNovelSourceCatalogV1(novel.scope)
     expect(catalog).toMatchObject({
@@ -261,12 +227,13 @@ describe('R-OPEN-WORLD5 · 创作者双来源目录与只读预检', () => {
       await expect(hashProductProductionValueV2(unit.payload.contentText))
         .resolves.toBe(unit.payload.sourceContentHash)
     }
-    expect(await protectedTableCounts()).toEqual(before)
+    expect(await protectedDatabaseSnapshot()).toEqual(before)
 
     await db.chapters.update(novel.chapterId!, {
       content: '<p>来源正文已经发生明确变化。</p>',
       updatedAt: novel.now + 1,
     })
+    const afterSourceEdit = await protectedDatabaseSnapshot()
     await expect(freezeTextOpenWorldNovelSourceV1({
       targetScope: novel.scope,
       sourceScope: novel.scope,
@@ -282,14 +249,14 @@ describe('R-OPEN-WORLD5 · 创作者双来源目录与只读预检', () => {
     })
     expect(changed.sourceVersionHash).not.toBe(preview.sourceVersionHash)
     expect(changed.sourceBoundaryHash).not.toBe(preview.sourceBoundaryHash)
-    expect(await protectedTableCounts()).toEqual(before)
+    expect(await protectedDatabaseSnapshot()).toEqual(afterSourceEdit)
   }, 30_000)
 
   it('对非法 scope、串入其他小说的 selection 和空内容一律 fail-closed', async () => {
     const first = await seedNovel(`TOW G5 来源 A ${crypto.randomUUID()}`)
     const second = await seedNovel(`TOW G5 来源 B ${crypto.randomUUID()}`)
     const empty = await seedNovel(`TOW G5 空来源 ${crypto.randomUUID()}`, { withNarrative: false })
-    const before = await protectedTableCounts()
+    const before = await protectedDatabaseSnapshot()
 
     const invalidScope: WorkspaceScope = {
       ...first.scope,
@@ -303,6 +270,6 @@ describe('R-OPEN-WORLD5 · 创作者双来源目录与只读预检', () => {
     })).rejects.toThrow(/越界|跨 Work|不存在/)
     await expect(listTextOpenWorldCreatorNovelSourceCatalogV1(empty.scope))
       .rejects.toThrow(/没有正文或有效故事\/大纲内容/)
-    expect(await protectedTableCounts()).toEqual(before)
+    expect(await protectedDatabaseSnapshot()).toEqual(before)
   }, 30_000)
 })

@@ -33,21 +33,29 @@ import type {
   TextOpenWorldSourcePinUnitV1,
   WorkspaceScope,
 } from '../types'
-import { runConfiguredProductionTextV1, type ProviderBindingReceiptV1 } from '../product-production/capabilities'
+import {
+  ConfiguredProductionTextCallErrorV1,
+  runConfiguredProductionTextWithOutcomeV1,
+  type ProviderBindingReceiptV1,
+} from '../product-production/capabilities'
 import { hashProductProductionValueV2, isSha256Hash } from '../product-production/hash'
 import { parseProductProductionSourcePlanV1 } from '../product-production/source-contracts'
 import { parseProductionModelJsonObjectV1 } from '../product-production/production-executor'
-import type {
-  ProductProductionTaskExecutionInputV1,
-  ProductProductionTaskExecutionResultV1,
-  ProductProductionTaskExecutorV1,
-  ProductProductionTaskUsageV1,
+import {
+  ProductProductionDraftRejectedErrorV1,
+  ProductProductionResultUnknownErrorV1,
+  ProductProductionRetryableExecutionErrorV1,
+  type ProductProductionTaskExecutionInputV1,
+  type ProductProductionTaskExecutionResultV1,
+  type ProductProductionTaskExecutorV1,
+  type ProductProductionTaskUsageV1,
 } from '../product-production/scheduler'
 import {
   readAcceptedTextOpenWorldSourcePinBundleV1,
   validateTextOpenWorldSourcePinBundleV1,
   verifyTextOpenWorldSourcePinAvailabilityV1,
 } from './source-pin'
+import { readTextOpenWorldCreatorExecutionBriefV1 } from './creator-production-start'
 
 const SKILL_ID = 'text-open-world.production.source-curation.v1'
 const STABLE_KEY = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/
@@ -415,7 +423,10 @@ async function worldBatches(input: {
 }): Promise<CurationBatchV1[]> {
   const available = await verifyTextOpenWorldSourcePinAvailabilityV1({ scope: input.scope, pin: input.bundle.pin })
   if (available.kind !== 'world-release') fail('WorldRelease SourcePin 无法解析本地冻结来源')
-  const production = await db.productProductions.get(input.productionId)
+  const [production, build] = await Promise.all([
+    db.productProductions.get(input.productionId),
+    db.productBuilds.get(input.buildId),
+  ])
   const briefRow = production?.id && production.currentBriefRevision != null
     ? await db.productProductionBriefs
       .where('[productionId+revision]').equals([production.id, production.currentBriefRevision]).first()
@@ -423,12 +434,38 @@ async function worldBatches(input: {
   if (input.requireSourcePlan && (!briefRow || briefRow.status !== 'authorized')) {
     fail('正式P1缺少已授权Brief/SourcePlan')
   }
+  const creatorContracts = briefRow?.status === 'authorized'
+    && briefRow.briefKind === 'text-open-world-creator-v1'
+    ? await readTextOpenWorldCreatorExecutionBriefV1({
+        briefRow,
+        planJson: build?.planJson,
+      })
+    : null
   const sourcePlan = briefRow?.status === 'authorized'
+    && briefRow.briefKind !== 'text-open-world-creator-v1'
     ? await parseProductProductionSourcePlanV1(briefRow)
     : null
+  if (input.requireSourcePlan && (!build || build.productionId !== input.productionId
+    || (!sourcePlan && !creatorContracts))) {
+    fail('正式P1缺少当前Build或可验证SourcePlan')
+  }
   if (sourcePlan && (sourcePlan.worldReference.localReleaseRecordId !== available.worldReference.localReleaseRecordId
     || sourcePlan.worldReference.releaseHash !== available.worldReference.releaseHash)) {
     fail('P1 SourcePin与冻结SourcePlan不属于同一WorldRelease')
+  }
+  const creatorWorldPlan = creatorContracts?.sourcePlan.sourceKind === 'world-release'
+    && creatorContracts.sourcePlan.selection.kind === 'world-release'
+    && creatorContracts.sourcePlan.sourceBinding.kind === 'world-release'
+    ? {
+        referenceHash: creatorContracts.sourcePlan.sourceBinding.referenceHash,
+        releaseHash: creatorContracts.sourcePlan.sourceBinding.releaseHash,
+        resourceKeys: creatorContracts.sourcePlan.selection.resourceKeys,
+      }
+    : null
+  if (creatorContracts && (!creatorWorldPlan
+    || creatorWorldPlan.referenceHash !== available.worldReference.referenceHash
+    || creatorWorldPlan.releaseHash !== available.worldReference.releaseHash)) {
+    fail('P1 SourcePin与Creator SourcePlan不属于同一WorldRelease')
   }
   const boundary = sourcePlan ? await resolveProductSourceReadBoundaryV1(sourcePlan) : null
   const catalog = await openWorldSemanticResourceCatalogV1({
@@ -443,7 +480,11 @@ async function worldBatches(input: {
     .sort((left, right) => descriptorPriority(left) - descriptorPriority(right)
       || left.resourceKey.localeCompare(right.resourceKey))
   if (descriptors.length !== unitByResource.size) fail('WorldRelease目录未覆盖SourcePin全部资源')
-  const allowedResourceKeys = new Set(boundary?.allowedResourceKeys ?? descriptors.map(item => item.resourceKey))
+  const allowedResourceKeys = new Set(
+    creatorWorldPlan?.resourceKeys
+      ?? boundary?.allowedResourceKeys
+      ?? descriptors.map(item => item.resourceKey),
+  )
   if (descriptors.some(descriptor => !allowedResourceKeys.has(descriptor.resourceKey))) {
     fail('P1 SourcePin包含SourcePlan未授权资源')
   }
@@ -669,7 +710,7 @@ async function defaultModelRunner(
   input: Parameters<TextOpenWorldSourceCurationModelRunnerV1>[0],
 ): Promise<TextOpenWorldSourceCurationModelExecutionV1> {
   const result: ChatResult = {}
-  const response = await runConfiguredProductionTextV1({
+  const response = await runConfiguredProductionTextWithOutcomeV1({
     projectId: input.projectId,
     requirementKey: input.requirementKey,
     expectedCapabilityHash: input.expectedCapabilityHash,
@@ -746,6 +787,105 @@ async function restoreDurableBatchResponse(input: {
   return { response, draft }
 }
 
+function observedCurationUsage(value: unknown): { inputTokens: number; outputTokens: number } | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const usage = value as Record<string, unknown>
+  if (!Number.isSafeInteger(usage.inputTokens) || Number(usage.inputTokens) < 0
+    || !Number.isSafeInteger(usage.outputTokens) || Number(usage.outputTokens) < 0) return null
+  return {
+    inputTokens: Number(usage.inputTokens),
+    outputTokens: Number(usage.outputTokens),
+  }
+}
+
+function curationUsageForResponse(input: {
+  response: TextOpenWorldSourceCurationModelExecutionV1
+  batch: CurationBatchV1
+  startedAt: number
+}): ProductProductionTaskUsageV1 {
+  const observed = input.response.usage == null ? null : observedCurationUsage(input.response.usage)
+  if (input.response.usage != null && !observed) throw new ProductProductionResultUnknownErrorV1()
+  return {
+    modelCalls: 1,
+    inputTokens: observed?.inputTokens ?? estimateTokens(input.batch.contextText + systemPrompt(input.batch)),
+    outputTokens: observed?.outputTokens ?? estimateTokens(input.response.output),
+    mediaCalls: 0,
+    costUsd: null,
+    durationMs: Math.max(0, Math.round(performance.now() - input.startedAt)),
+    storageBytes: 0,
+  }
+}
+
+function knownPaidCurationFailure(
+  error: unknown,
+  usage: ProductProductionTaskUsageV1,
+): Error {
+  if (error instanceof ProductProductionResultUnknownErrorV1
+    || error instanceof ProductProductionRetryableExecutionErrorV1
+    || error instanceof ProductProductionDraftRejectedErrorV1) return error
+  return new ProductProductionRetryableExecutionErrorV1(
+    error instanceof Error ? error.message : String(error),
+    usage,
+  )
+}
+
+async function callCurationModel(input: {
+  execution: ProductProductionTaskExecutionInputV1
+  batch: CurationBatchV1
+  runModel: TextOpenWorldSourceCurationModelRunnerV1
+  requirementKey: string
+  bindingHash: string
+  maximumOutputTokens: number
+}): Promise<{
+  response: TextOpenWorldSourceCurationModelExecutionV1
+  usage: ProductProductionTaskUsageV1
+}> {
+  const startedAt = performance.now()
+  let response: TextOpenWorldSourceCurationModelExecutionV1
+  try {
+    response = await input.runModel({
+      projectId: input.execution.scope.projectId,
+      requirementKey: input.requirementKey,
+      expectedCapabilityHash: input.bindingHash,
+      category: 'text-open-world.production.source-curation',
+      system: systemPrompt(input.batch),
+      contextText: input.batch.contextText,
+      maximumOutputTokens: input.maximumOutputTokens,
+      signal: input.execution.signal,
+    })
+  } catch (error) {
+    if (!(error instanceof ConfiguredProductionTextCallErrorV1)) throw error
+    if (error.outcome.kind === 'not-dispatched') throw error.originalError
+    if (error.outcome.kind === 'result-unknown') throw new ProductProductionResultUnknownErrorV1()
+    if (error.outcome.usage) {
+      throw new ProductProductionRetryableExecutionErrorV1(
+        error.originalError instanceof Error ? error.originalError.message : String(error.originalError),
+        {
+          modelCalls: 1,
+          inputTokens: error.outcome.usage.inputTokens,
+          outputTokens: error.outcome.usage.outputTokens,
+          mediaCalls: 0,
+          costUsd: null,
+          durationMs: Math.max(0, Math.round(performance.now() - startedAt)),
+          storageBytes: 0,
+        },
+      )
+    }
+    if (error.outcome.responseStatus != null
+      && (error.outcome.responseStatus < 200 || error.outcome.responseStatus >= 300)) {
+      throw error.originalError
+    }
+    throw new ProductProductionResultUnknownErrorV1()
+  }
+  if (!response || typeof response.output !== 'string') {
+    throw new ProductProductionResultUnknownErrorV1()
+  }
+  return {
+    response,
+    usage: curationUsageForResponse({ response, batch: input.batch, startedAt }),
+  }
+}
+
 /** Persist the exact prompt, snapshots, retrieval trace and response around
  * each real P1 model call. The enclosing scheduler task remains responsible
  * for the aggregate Artifact candidate and terminal receipt. */
@@ -756,40 +896,43 @@ async function runDurableBatchModel(input: {
   requirementKey: string
   bindingHash: string
   maximumOutputTokens: number
-}): Promise<{ response: TextOpenWorldSourceCurationModelExecutionV1; draft: CurationDraftV1 }> {
+}): Promise<{
+  response: TextOpenWorldSourceCurationModelExecutionV1
+  draft: CurationDraftV1
+  usage: ProductProductionTaskUsageV1
+  chargeable: boolean
+}> {
   if (input.execution.taskRunId == null) {
-    const response = await input.runModel({
-      projectId: input.execution.scope.projectId,
-      requirementKey: input.requirementKey,
-      expectedCapabilityHash: input.bindingHash,
-      category: 'text-open-world.production.source-curation',
-      system: systemPrompt(input.batch),
-      contextText: input.batch.contextText,
-      maximumOutputTokens: input.maximumOutputTokens,
-      signal: input.execution.signal,
-    })
-    if (response.bindingReceipt.capabilityHash !== input.bindingHash) {
-      fail('执行时文本capability与Plan binding不一致')
-    }
-    return {
-      response,
-      draft: parseDraft(
-        parseProductionModelJsonObjectV1(response.output, `source-curation:${input.batch.batchKey}`),
-        input.batch,
-      ),
+    const called = await callCurationModel(input)
+    try {
+      if (called.response.bindingReceipt.capabilityHash !== input.bindingHash) {
+        fail('执行时文本capability与Plan binding不一致')
+      }
+      return {
+        response: called.response,
+        draft: parseDraft(
+          parseProductionModelJsonObjectV1(called.response.output, `source-curation:${input.batch.batchKey}`),
+          input.batch,
+        ),
+        usage: called.usage,
+        chargeable: true,
+      }
+    } catch (error) {
+      throw knownPaidCurationFailure(error, called.usage)
     }
   }
   const stepId = durableBatchStepId(input.execution, input.batch)
   let snapshot = await readAgentRunV1(input.execution.scope, input.execution.taskRunId)
   const existing = snapshot.projection.steps[stepId]
   if (existing?.status === 'succeeded') {
-    return restoreDurableBatchResponse({
+    const restored = await restoreDurableBatchResponse({
       execution: input.execution,
       snapshot,
       stepId,
       batch: input.batch,
       bindingHash: input.bindingHash,
     })
+    return { ...restored, usage: zeroUsage(), chargeable: false }
   }
   if (existing && existing.status !== 'failed' && existing.status !== 'scheduled') {
     fail(`P1批次存在结果未知或不可恢复状态:${input.batch.batchKey}:${existing.status}`)
@@ -854,17 +997,11 @@ async function runDurableBatchModel(input: {
     attempt: batchAttempt,
     bindingHash: input.bindingHash,
   })
+  let paidUsage: ProductProductionTaskUsageV1 | null = null
   try {
-    const response = await input.runModel({
-      projectId: input.execution.scope.projectId,
-      requirementKey: input.requirementKey,
-      expectedCapabilityHash: input.bindingHash,
-      category: 'text-open-world.production.source-curation',
-      system: systemPrompt(input.batch),
-      contextText: input.batch.contextText,
-      maximumOutputTokens: input.maximumOutputTokens,
-      signal: input.execution.signal,
-    })
+    const called = await callCurationModel(input)
+    const response = called.response
+    paidUsage = called.usage
     const candidateHash = await hashProductProductionValueV2(response.output)
     snapshot = await appendBatchEvent(input.execution.scope, snapshot, 'model.responded', {
       stepId,
@@ -921,7 +1058,7 @@ async function runDurableBatchModel(input: {
       attempt: batchAttempt,
       outputHash: candidateHash,
     })
-    return { response, draft }
+    return { response, draft, usage: paidUsage, chargeable: true }
   } catch (error) {
     snapshot = await readAgentRunV1(input.execution.scope, snapshot.run.id)
     if (snapshot.projection.steps[stepId]?.status === 'running') {
@@ -932,7 +1069,7 @@ async function runDurableBatchModel(input: {
         retryable: input.execution.attempt < input.execution.task.maxAttempts,
       })
     }
-    throw error
+    throw paidUsage ? knownPaidCurationFailure(error, paidUsage) : error
   }
 }
 
@@ -1337,38 +1474,88 @@ async function executeCuration(input: {
   if (!batches.length) fail('模型预算不足以完整读取任何来源单元')
   const drafts: CurationDraftV1[] = []
   let usage = zeroUsage()
-  const maximumOutputTokens = Math.max(1, Math.floor(task.budgetReservation.outputTokens / batches.length))
-  for (const batch of batches) {
-    const startedAt = performance.now()
-    const { response, draft } = await runDurableBatchModel({
-      execution: input.execution,
-      batch,
-      runModel: input.runModel,
-      requirementKey,
-      bindingHash: binding.bindingHash,
-      maximumOutputTokens,
-    })
-    drafts.push(draft)
-    usage = addUsage(usage, {
-      modelCalls: 1,
-      inputTokens: response.usage?.inputTokens ?? estimateTokens(batch.contextText + systemPrompt(batch)),
-      outputTokens: response.usage?.outputTokens ?? estimateTokens(response.output),
-      mediaCalls: 0,
-      costUsd: null,
-      durationMs: Math.max(0, Math.round(performance.now() - startedAt)),
-      storageBytes: 0,
-    })
+  const activeReservation = input.execution.attemptBudgetReservation ?? task.budgetReservation
+  const originalMaximumOutputTokens = Math.max(
+    1,
+    Math.floor(task.budgetReservation.outputTokens / batches.length),
+  )
+  let freshBatchKeys: Set<string>
+  if (input.execution.taskRunId == null) {
+    freshBatchKeys = new Set(batches.map(batch => batch.batchKey))
+  } else {
+    const snapshot = await readAgentRunV1(input.execution.scope, input.execution.taskRunId)
+    freshBatchKeys = new Set(batches.filter(batch => (
+      snapshot.projection.steps[durableBatchStepId(input.execution, batch)]?.status !== 'succeeded'
+    )).map(batch => batch.batchKey))
   }
-  const manifest = await createManifest({ bundle: input.bundle, batches, createdAt: input.createdAt })
-  const ledger = await createLedger({ manifest, batches, drafts, createdAt: input.createdAt })
-  const gapReport = await createGapReport({ manifest, ledger, drafts, createdAt: input.createdAt })
-  const readContents = new Map(batches.flatMap(batch => batch.reads.map(read => [read.unitKey, read.content] as const)))
-  const artifacts = await validateTextOpenWorldSourceCurationArtifactsV1({
-    bundle: input.bundle,
-    artifacts: { manifest, ledger, gapReport },
-    readContents,
-  })
-  return { artifacts, usage }
+  if (activeReservation.modelCalls < freshBatchKeys.size
+    || activeReservation.outputTokens < freshBatchKeys.size) {
+    fail(`P1本次attempt剩余模型预算不足:${freshBatchKeys.size}/${activeReservation.modelCalls}/${activeReservation.outputTokens}`)
+  }
+  try {
+    for (const batch of batches) {
+      const freshRemaining = freshBatchKeys.size
+      const remainingModelCalls = Math.max(0, activeReservation.modelCalls - usage.modelCalls)
+      const remainingInputTokens = Math.max(0, activeReservation.inputTokens - usage.inputTokens)
+      const remainingOutputTokens = Math.max(0, activeReservation.outputTokens - usage.outputTokens)
+      const remainingFreshInput = batches
+        .filter(candidate => freshBatchKeys.has(candidate.batchKey))
+        .reduce((sum, candidate) => sum + estimateTokens(candidate.contextText + systemPrompt(candidate)), 0)
+      if (freshBatchKeys.has(batch.batchKey)
+        && (remainingModelCalls < freshRemaining
+          || remainingInputTokens < remainingFreshInput
+          || remainingOutputTokens < freshRemaining)) {
+        fail(`P1本次attempt剩余预算不能覆盖未执行批次:${batch.batchKey}`)
+      }
+      const maximumOutputTokens = freshBatchKeys.has(batch.batchKey)
+        ? Math.min(originalMaximumOutputTokens, Math.floor(remainingOutputTokens / freshRemaining))
+        : originalMaximumOutputTokens
+      const result = await runDurableBatchModel({
+        execution: input.execution,
+        batch,
+        runModel: input.runModel,
+        requirementKey,
+        bindingHash: binding.bindingHash,
+        maximumOutputTokens,
+      })
+      drafts.push(result.draft)
+      if (result.chargeable) {
+        usage = addUsage(usage, result.usage)
+        freshBatchKeys.delete(batch.batchKey)
+      }
+    }
+    const manifest = await createManifest({ bundle: input.bundle, batches, createdAt: input.createdAt })
+    const ledger = await createLedger({ manifest, batches, drafts, createdAt: input.createdAt })
+    const gapReport = await createGapReport({ manifest, ledger, drafts, createdAt: input.createdAt })
+    const readContents = new Map(batches.flatMap(batch => batch.reads.map(read => [read.unitKey, read.content] as const)))
+    const artifacts = await validateTextOpenWorldSourceCurationArtifactsV1({
+      bundle: input.bundle,
+      artifacts: { manifest, ledger, gapReport },
+      readContents,
+    })
+    return { artifacts, usage }
+  } catch (error) {
+    if (error instanceof ProductProductionResultUnknownErrorV1) throw error
+    if (error instanceof ProductProductionRetryableExecutionErrorV1) {
+      throw new ProductProductionRetryableExecutionErrorV1(
+        error.message,
+        addUsage(usage, error.usage),
+      )
+    }
+    if (error instanceof ProductProductionDraftRejectedErrorV1) {
+      throw new ProductProductionDraftRejectedErrorV1(
+        error.message,
+        addUsage(usage, error.usage),
+      )
+    }
+    if (usage.modelCalls > 0) {
+      throw new ProductProductionRetryableExecutionErrorV1(
+        error instanceof Error ? error.message : String(error),
+        usage,
+      )
+    }
+    throw error
+  }
 }
 
 /** P1 executor adapter. It creates only Build Artifact candidates; the shared

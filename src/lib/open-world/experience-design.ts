@@ -1,7 +1,7 @@
 import type { ChatResult } from '../ai/client'
 import { estimateTokens } from '../ai/context-budget'
 import { db } from '../db/schema'
-import type { AssembleContextInput } from '../registry/types'
+import { ContextSourceBudgetErrorV1, type AssembleContextInput } from '../registry/types'
 import { assertRecordInScope } from '../workspace/scope'
 import { readAcceptedBuildArtifacts } from '../product-production/artifact-store'
 import {
@@ -29,6 +29,7 @@ import {
   readAcceptedTextOpenWorldSourcePinBundleV1,
   validateTextOpenWorldSourcePinBundleV1,
 } from './source-pin'
+import { readTextOpenWorldCreatorExecutionBriefV1 } from './creator-production-start'
 import { validateTextOpenWorldSourceCurationArtifactsV1 } from './source-curation'
 import { TEXT_OPEN_WORLD_PRODUCTION_MODEL_CALL_BUDGET_V1 } from './production-contract'
 import type {
@@ -246,6 +247,31 @@ async function authorizedProduction(input: {
     || !await assertRecordInScope(input.scope, 'productProductionBriefs', briefRow, { owner: 'work' })) {
     fail('Build缺少同revision/hash的作者授权Brief')
   }
+  if (briefRow.briefKind === 'text-open-world-creator-v1') {
+    const contracts = await readTextOpenWorldCreatorExecutionBriefV1({
+      briefRow,
+      planJson: build.planJson,
+    })
+    const brief = contracts.executionBrief
+    if (brief.intent.productType !== 'text-open-world' || brief.unresolvedDecisionKeys.length > 0) {
+      fail('Creator执行Brief产品身份或未决项无效')
+    }
+    return {
+      production,
+      build,
+      briefRow,
+      brief,
+      executionBriefHash: contracts.start.executionBriefHash,
+      sourceReferenceHash: contracts.sourcePlan.sourceBinding.kind === 'world-release'
+        ? contracts.sourcePlan.sourceBinding.referenceHash
+        : null,
+      confirmed: {
+        confirmationHash: contracts.start.startHash,
+        authorStartRevision: contracts.start.authorStartRevision,
+        confirmedAt: contracts.start.authorizedAt,
+      },
+    }
+  }
   const brief = parseProductProductionBriefV3(briefRow.briefJson)
   if (brief.intent.productType !== 'text-open-world'
     || brief.unresolvedDecisionKeys.length > 0
@@ -254,7 +280,15 @@ async function authorizedProduction(input: {
   }
   const sourcePlan = await parseProductProductionSourcePlanV1(briefRow)
   const confirmed = await parseConfirmedProductBriefV1({ row: briefRow, sourcePlan })
-  return { production, build, briefRow, brief, sourcePlan, confirmed }
+  return {
+    production,
+    build,
+    briefRow,
+    brief,
+    executionBriefHash: briefRow.briefHash,
+    sourceReferenceHash: sourcePlan.worldReference.referenceHash,
+    confirmed,
+  }
 }
 
 function curationPriority(
@@ -302,7 +336,14 @@ async function loadExperienceInput(input: {
   ledger: TextOpenWorldSourceLedgerV1
   gapReport: TextOpenWorldSourceGapReportV1
 }> {
-  const [{ production, briefRow, brief, sourcePlan, confirmed }, bundle, rows] = await Promise.all([
+  const [{
+    production,
+    briefRow,
+    brief,
+    executionBriefHash,
+    sourceReferenceHash,
+    confirmed,
+  }, bundle, rows] = await Promise.all([
     authorizedProduction(input),
     acceptedSourceBundle({ scope: input.scope, buildId: input.buildId }),
     readAcceptedBuildArtifacts({ scope: input.scope, buildId: input.buildId }),
@@ -317,7 +358,8 @@ async function loadExperienceInput(input: {
     const source = bundle.pin.source
     if (source.kind !== 'world-release'
       || source.releaseHash !== brief.source.worldContentHash
-      || source.worldReference.referenceHash !== sourcePlan.worldReference.referenceHash) {
+      || sourceReferenceHash == null
+      || source.worldReference.referenceHash !== sourceReferenceHash) {
       fail('WorldRelease SourcePin与作者Brief/SourcePlan不一致')
     }
   }
@@ -389,7 +431,10 @@ async function loadExperienceInput(input: {
       productionTitle: production.title,
       authorization: {
         productBriefRevision: briefRow.revision,
-        productBriefHash: briefRow.briefHash,
+        // For Creator rows this is the hash of the frozen scheduler execution
+        // envelope; the author Brief remains bound indirectly by Start hash and
+        // directly by Build/SourcePin. Generic products keep the same hash.
+        productBriefHash: executionBriefHash,
         confirmedBriefHash: confirmed.confirmationHash,
         authorStartRevision: confirmed.authorStartRevision,
         confirmedAt: confirmed.confirmedAt,
@@ -421,7 +466,15 @@ async function loadExperienceInput(input: {
   while (contextJson.length > MAX_CONTEXT_CHARS || estimateTokens(contextJson) > maximumContextTokens) {
     if (selectedGaps.length) selectedGaps = selectedGaps.slice(0, -1)
     else if (selectedClaims.length > 1) selectedClaims = selectedClaims.slice(0, -1)
-    else fail('P2输入预算不足以完整交付作者Brief和最低来源证据')
+    else {
+      const requiredTokens = estimateTokens(contextJson)
+      throw new ContextSourceBudgetErrorV1(
+        '[text-open-world-experience-design] P2输入预算不足以完整交付作者Brief和最低来源证据',
+        'text-open-world.experience-input',
+        requiredTokens,
+        maximumContextTokens,
+      )
+    }
     context = await buildContext()
     contextJson = canonicalProductProductionJsonV2(context)
   }

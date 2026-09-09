@@ -837,10 +837,13 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
       JSON.stringify(outputs['content.product-module']),
     ])
     expect(authorEditExecutions.every(item => (
-      item.durationMs === item.taskDurationMs
-      && item.storageBytes === item.taskStorageBytes
-      && item.durationMs > 0
+      item.durationMs > 0
+      && item.durationMs <= item.taskDurationMs
+      && item.storageBytes >= 0
+      && item.storageBytes <= item.taskStorageBytes
     ))).toBe(true)
+    expect(authorEditExecutions[1].durationMs).toBeLessThanOrEqual(authorEditExecutions[0].durationMs)
+    expect(authorEditExecutions[1].storageBytes).toBeLessThanOrEqual(authorEditExecutions[0].storageBytes)
     const artifact = await db.productBuildArtifacts.where('buildId').equals(completed.buildId)
       .filter(row => row.artifactKey === 'content.product-module' && row.controlEpoch === completed.controlEpoch).first()
     expect(JSON.parse(artifact!.rightsJson).origin).toBe('author-revised-model-draft')

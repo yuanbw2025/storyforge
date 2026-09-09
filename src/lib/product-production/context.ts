@@ -3,10 +3,21 @@ import type { TtrpgProductionBriefV2, WorkspaceScope } from '../types'
 import type { AssembleContextInput, ContextSourceTransformer } from '../registry/types'
 import { sha256Text } from '../ai/chapter-memory/text-normalization'
 import { assertRecordInScope } from '../workspace/scope'
-import { readAgentRunV1 } from '../agent/run/event-store'
+import { readAgentRunV1, type AgentRunSnapshotV1 } from '../agent/run/event-store'
 import { readAgentRunArtifactExactV1 } from '../memory/artifact-store'
 
 export class ProductProductionContextBudgetErrorV1 extends Error {}
+export class ProductProductionRecoveryDirectiveErrorV1 extends Error {}
+
+type ProductProductionRecoveryActionV1 = 'retry' | 'author-edit' | 'change-capability'
+
+export interface ValidatedProductProductionRecoveryDirectiveV1 {
+  resolvedDirective: boolean
+  resolution: Record<string, unknown> | null
+  previousFailure: Record<string, unknown> | null
+  snapshot: AgentRunSnapshotV1 | null
+  failedAttempt: number | null
+}
 
 /** Structured production contracts must remain exact JSON, including secrets
  * and late fields. Their registered cap is soft; the task budget is hard. */
@@ -50,6 +61,125 @@ async function productionAndBuild(input: AssembleContextInput) {
     throw new Error('[product-production-context] Build 不属于当前 Production/Work')
   }
   return { scope, production, build }
+}
+
+/**
+ * Validate one recovery directive against the exact failed task Run. Callers
+ * use `blocked` before accepting a command and `resolved` immediately before
+ * execution, so a persisted directive cannot bypass either boundary.
+ *
+ * Legacy failures without provenance may retain ordinary retry compatibility,
+ * but can never authorize a complete author JSON or a capability change.
+ */
+export async function validateProductProductionRecoveryDirectiveV1(input: {
+  scope: WorkspaceScope
+  productProductionId: number
+  productBuildId: number
+  productProductionTaskKey: string
+  expectedState: 'blocked' | 'resolved' | 'either'
+  requestedAction?: ProductProductionRecoveryActionV1
+  allowLegacyRetry?: boolean
+}): Promise<ValidatedProductProductionRecoveryDirectiveV1> {
+  const { scope, build } = await productionAndBuild({
+    projectId: input.scope.projectId,
+    scope: input.scope,
+    productProductionId: input.productProductionId,
+    productBuildId: input.productBuildId,
+  })
+  if (!build) throw new ProductProductionRecoveryDirectiveErrorV1('[product-production-context] 修复指令需要 Build')
+  let failureState: Record<string, unknown>
+  try {
+    const parsed = JSON.parse(build.failureJson)
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('invalid')
+    failureState = parsed as Record<string, unknown>
+  } catch {
+    throw new ProductProductionRecoveryDirectiveErrorV1('[product-production-context] 修复指令不是合法对象')
+  }
+  const resolvedDirective = typeof failureState.blockerKey === 'string'
+  if ((input.expectedState === 'blocked' && resolvedDirective)
+    || (input.expectedState === 'resolved' && !resolvedDirective)) {
+    throw new ProductProductionRecoveryDirectiveErrorV1('[product-production-context] 修复指令状态与执行阶段不一致')
+  }
+  const failureTaskKey = resolvedDirective ? failureState.blockerKey : failureState.taskKey
+  if (failureTaskKey !== input.productProductionTaskKey) {
+    throw new ProductProductionRecoveryDirectiveErrorV1('[product-production-context] 修复指令与当前 task 不一致')
+  }
+  const resolution = failureState.resolution && typeof failureState.resolution === 'object'
+    && !Array.isArray(failureState.resolution)
+    ? failureState.resolution as Record<string, unknown>
+    : null
+  const resolvedAction = resolvedDirective && typeof resolution?.action === 'string'
+    && ['retry', 'author-edit', 'change-capability'].includes(resolution.action)
+    ? resolution.action as ProductProductionRecoveryActionV1
+    : null
+  if (resolvedDirective && resolvedAction == null) {
+    throw new ProductProductionRecoveryDirectiveErrorV1('[product-production-context] 已解决 blocker 缺少合法恢复动作')
+  }
+  const action = resolvedDirective ? resolvedAction : input.requestedAction ?? null
+  const previousFailureValue = resolvedDirective ? failureState.previousFailure : failureState
+  const previousFailure = previousFailureValue && typeof previousFailureValue === 'object'
+    && !Array.isArray(previousFailureValue)
+    ? previousFailureValue as Record<string, unknown>
+    : null
+  const provenance = previousFailure?.failureProvenance
+    && typeof previousFailure.failureProvenance === 'object'
+    && !Array.isArray(previousFailure.failureProvenance)
+    ? previousFailure.failureProvenance as Record<string, unknown>
+    : null
+  if (!provenance) {
+    const legacyInspection = input.expectedState === 'either' && !resolvedDirective && action == null
+    if (legacyInspection || (input.allowLegacyRetry === true && action === 'retry')) {
+      return {
+        resolvedDirective,
+        resolution,
+        previousFailure,
+        snapshot: null,
+        failedAttempt: null,
+      }
+    }
+    throw new ProductProductionRecoveryDirectiveErrorV1('[product-production-context] 修复来源缺少可验证 failureProvenance')
+  }
+  const runId = provenance.runId
+  const rootRunId = provenance.rootRunId
+  const failedControlEpoch = provenance.controlEpoch
+  const failedPlanHash = provenance.planHash
+  const failedAttempt = provenance.attempt
+  if (previousFailure?.taskKey !== input.productProductionTaskKey
+    || typeof runId !== 'number' || !Number.isInteger(runId) || runId < 1
+    || typeof rootRunId !== 'number' || !Number.isInteger(rootRunId) || rootRunId < 1
+    || typeof failedControlEpoch !== 'number' || !Number.isInteger(failedControlEpoch) || failedControlEpoch < 0
+    || typeof failedPlanHash !== 'string' || !/^[a-f0-9]{64}$/.test(failedPlanHash)
+    || typeof failedAttempt !== 'number' || !Number.isInteger(failedAttempt) || failedAttempt < 1
+    || (resolvedDirective
+      ? failedControlEpoch + 1 !== build.controlEpoch
+      : failedControlEpoch !== build.controlEpoch)) {
+    throw new ProductProductionRecoveryDirectiveErrorV1('[product-production-context] 修复来源谱系无效')
+  }
+  const run = await db.agentRuns.get(runId)
+  if (!run || run.productBuildId !== build.id || run.status !== 'failed'
+    || run.parentRunId !== rootRunId
+    || run.parentRelation !== `task:${input.productProductionTaskKey}`) {
+    throw new ProductProductionRecoveryDirectiveErrorV1('[product-production-context] 修复来源 Run 不存在或越过 Build/task')
+  }
+  const snapshot = await readAgentRunV1(scope, runId)
+  const boundary = snapshot.contract.scope.productProduction
+  const failedStep = snapshot.projection.steps[input.productProductionTaskKey]
+  if (!boundary || boundary.productBuildId !== build.id
+    || boundary.controlEpoch !== failedControlEpoch
+    || boundary.planHash !== failedPlanHash
+    || boundary.taskKey !== input.productProductionTaskKey
+    || snapshot.run.parentRunId !== rootRunId
+    || failedStep?.status !== 'failed'
+    || failedStep.attempt !== failedAttempt) {
+    throw new ProductProductionRecoveryDirectiveErrorV1('[product-production-context] 修复草稿与失败 Run/epoch/attempt 不一致')
+  }
+  return {
+    resolvedDirective,
+    resolution,
+    previousFailure,
+    snapshot,
+    failedAttempt,
+  }
 }
 
 export async function readProductProductionBriefContext(input: AssembleContextInput): Promise<string> {
@@ -106,31 +236,43 @@ export async function readProductProductionQualityFeedback(input: AssembleContex
 export async function readProductProductionRepairFeedback(input: AssembleContextInput): Promise<string> {
   const { scope, build } = await productionAndBuild(input)
   if (!build || !input.productProductionTaskKey) throw new Error('[product-production-context] 修复反馈需要 Build 与 task key')
-  const resolution = JSON.parse(build.failureJson).resolution
+  const validated = await validateProductProductionRecoveryDirectiveV1({
+    scope,
+    productProductionId: requiredId(input.productProductionId, 'productProductionId'),
+    productBuildId: build.id!,
+    productProductionTaskKey: input.productProductionTaskKey,
+    expectedState: 'either',
+    allowLegacyRetry: true,
+  })
+  const resolution = validated.resolution
   const authorRepairNote = typeof resolution?.note === 'string' ? resolution.note : null
   const authorDraftJson = resolution?.action === 'author-edit' && typeof resolution.authorDraftJson === 'string' ? resolution.authorDraftJson : null
-  const runs = (await db.agentRuns.where('productBuildId').equals(build.id!).toArray())
-    .filter(run => run.status === 'failed' && run.parentRelation === `task:${input.productProductionTaskKey}`)
-    .sort((a, b) => b.updatedAt - a.updatedAt)
-  if (!runs.length) return JSON.stringify({ schema: 'storyforge.product-production.repair-feedback', version: 1, authorRepairNote, authorDraftJson, previous: null })
-  const snapshot = await readAgentRunV1(scope, runs[0].id!)
-  const boundary = snapshot.contract.scope.productProduction
-  if (!boundary || boundary.productBuildId !== build.id || boundary.taskKey !== input.productProductionTaskKey)
-    throw new Error('[product-production-context] 修复草稿与 Build/task 不一致')
+  const empty = () => JSON.stringify({
+    schema: 'storyforge.product-production.repair-feedback', version: 1,
+    authorRepairNote, authorDraftJson, previous: null,
+  })
+  // Historical blockers created before provenance existed may still carry an
+  // author note, but must never guess a prior Run by updatedAt.
+  if (!validated.snapshot || validated.failedAttempt == null) return empty()
+  const snapshot = validated.snapshot
+  const boundary = snapshot.contract.scope.productProduction!
+  const failedAttempt = validated.failedAttempt
   const events = snapshot.events.filter(event => event.type === 'evidence.artifact.recorded'
     && event.payload.stepId === input.productProductionTaskKey
+    && event.payload.attempt === failedAttempt
+    // source-snapshot includes the exact repair packet delivered to this Run.
+    // Feeding it back would recursively nest feedback on every author retry.
     && ['raw-response', 'tool-result'].includes(event.payload.artifactKind))
-  const latestAttempt = Math.max(0, ...events.map(event => event.type === 'evidence.artifact.recorded' ? event.payload.attempt ?? 0 : 0))
   const evidence = []
   for (const event of events) {
-    if (event.type !== 'evidence.artifact.recorded' || event.payload.attempt !== latestAttempt) continue
+    if (event.type !== 'evidence.artifact.recorded') continue
     evidence.push({ kind: event.payload.artifactKind, contentHash: event.payload.contentHash,
       content: await readAgentRunArtifactExactV1({ projectId: scope.projectId,
         artifactKind: event.payload.artifactKind, contentHash: event.payload.contentHash }) })
   }
   return JSON.stringify({ schema: 'storyforge.product-production.repair-feedback', version: 1,
     taskKey: input.productProductionTaskKey, authorRepairNote, authorDraftJson, previous: { runId: snapshot.run.id,
-      contractHash: snapshot.run.contractHash, controlEpoch: boundary.controlEpoch, attempt: latestAttempt, evidence } })
+      contractHash: snapshot.run.contractHash, controlEpoch: boundary.controlEpoch, attempt: failedAttempt, evidence } })
 }
 
 export async function readProductProductionEvolutionBase(input: AssembleContextInput): Promise<string> {

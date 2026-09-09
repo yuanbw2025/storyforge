@@ -779,8 +779,18 @@ function planTask(
 export async function createTextOpenWorldProductionPlanV1(input: {
   buildNumber: number
   controlEpoch?: number
+  /** Hash of the scheduler compatibility Brief supplied below. */
   briefHash: string
   brief: ProductProductionBriefV3 | string
+  /** Creator production keeps its author-confirmed Brief as the Build
+   * authority. When supplied, the Plan binds that hash while separately
+   * verifying `briefHash` against the compatibility projection. */
+  authoritativeBriefHash?: string
+  /** Exact P0 unit keys frozen by the dual-source creator SourcePlan. */
+  sourceUnitArtifactKeys?: string[]
+  /** G5-03 authorizes text cost only; procedural prototype media reserves no
+   * paid provider amount until the G5-08 media plan is confirmed. */
+  mediaCostAuthorized?: boolean
 }): Promise<ProductProductionPlanV3> {
   const brief = parseProductProductionBriefV3(input.brief)
   if (brief.intent.productType !== 'text-open-world') fail('只能为 text-open-world Brief 创建专属 Plan')
@@ -788,6 +798,8 @@ export async function createTextOpenWorldProductionPlanV1(input: {
   if (!Number.isInteger(input.buildNumber) || input.buildNumber < 1) fail('buildNumber 无效')
   if (!isSha256Hash(input.briefHash)) fail('briefHash 无效')
   if (await hashProductProductionValueV2(brief) !== input.briefHash) fail('briefHash 与 Brief 内容不一致')
+  const planBriefHash = input.authoritativeBriefHash ?? input.briefHash
+  if (!isSha256Hash(planBriefHash)) fail('authoritativeBriefHash 无效')
   const controlEpoch = input.controlEpoch ?? 0
   if (!Number.isInteger(controlEpoch) || controlEpoch < 0) fail('controlEpoch 无效')
 
@@ -815,7 +827,8 @@ export async function createTextOpenWorldProductionPlanV1(input: {
     (sum, contract) => sum + contract.durationBudgetWeight,
     mediaLaneCount * mediaDurationBudgetWeight,
   )
-  const costBearingUnits = plannedModelCalls + visualCount + audioCount
+  const mediaCostAuthorized = input.mediaCostAuthorized ?? true
+  const costBearingUnits = plannedModelCalls + (mediaCostAuthorized ? visualCount + audioCount : 0)
   const perStorage = Math.floor(brief.productionBudget.maximumStorageBytes / taskCount)
   const durationFor = (weight: number) => Math.floor(
     brief.productionBudget.maximumDurationMs * weight / durationBudgetWeightTotal,
@@ -843,12 +856,20 @@ export async function createTextOpenWorldProductionPlanV1(input: {
   // P0 freezes one immutable unit Artifact for every selected WorldRelease
   // resource. The contract declares the base kind; the concrete Plan owns the
   // exact bounded keys so P1 can prove that it read the complete selection.
-  const sourceUnitKeys = brief.source.selection.resourceKeys.map((_, index) => (
-    index === 0
-      ? 'text-open-world.source-pin-unit'
-      : `text-open-world.source-pin-unit.${String(index + 1).padStart(5, '0')}`
-  ))
+  const sourceUnitKeys = input.sourceUnitArtifactKeys
+    ? [...input.sourceUnitArtifactKeys]
+    : brief.source.selection.resourceKeys.map((_, index) => (
+        index === 0
+          ? 'text-open-world.source-pin-unit'
+          : `text-open-world.source-pin-unit.${String(index + 1).padStart(5, '0')}`
+      ))
   if (sourceUnitKeys.length === 0) fail('文字开放世界来源选择不能为空')
+  if (new Set(sourceUnitKeys).size !== sourceUnitKeys.length
+    || sourceUnitKeys.some((key, index) => key !== (index === 0
+      ? 'text-open-world.source-pin-unit'
+      : `text-open-world.source-pin-unit.${String(index + 1).padStart(5, '0')}`))) {
+    fail('P0来源单元 Artifact keys 不连续或不唯一')
+  }
   const p0 = tasks.find(task => task.taskKey === 'p0.source-lock')!
   p0.outputArtifactKeys = ['text-open-world.source-pin', ...sourceUnitKeys]
   p0.subjectLockKeys = [...p0.outputArtifactKeys]
@@ -880,7 +901,8 @@ export async function createTextOpenWorldProductionPlanV1(input: {
       capabilityRequirementKeys: config.capabilityRequirementKeys,
       concurrencyGroup: 'media-provider', subjectLockKeys: outputs, priority: 50,
       budgetReservation: reservation({
-        mediaCalls: config.count, maximumCostUsd: costForUnits(config.count),
+        mediaCalls: config.count,
+        maximumCostUsd: mediaCostAuthorized ? costForUnits(config.count) : 0,
         durationMs: durationFor(mediaDurationBudgetWeight), storageBytes: perStorage,
       }),
       maxAttempts: 2,
@@ -924,7 +946,7 @@ export async function createTextOpenWorldProductionPlanV1(input: {
   return parseProductProductionPlanV3({
     schema: 'storyforge.product-production-plan', version: 3,
     buildNumber: input.buildNumber, productType: brief.intent.productType,
-    briefHash: input.briefHash, controlEpoch,
+    briefHash: planBriefHash, controlEpoch,
     concurrency: {
       maximumCostBearingTasks: 3,
       maximumTextProviderTasks: 2,
@@ -932,7 +954,7 @@ export async function createTextOpenWorldProductionPlanV1(input: {
     },
     tasks,
     terminalTaskKey: 'qa.release',
-  }, brief, input.briefHash)
+  }, brief, planBriefHash)
 }
 
 export function textOpenWorldProductionArtifactKindForKeyV1(

@@ -542,6 +542,72 @@ export interface TextOpenWorldCreatorProductionPreflightConfirmationV1 {
   confirmationHash: string
 }
 
+/**
+ * Portable, product-owned source plan frozen when the author starts a Build.
+ * Local row ids stay in ProductProduction/Brief locator columns and are never
+ * copied into this hash. P0 must compare those local locators against this
+ * immutable identity before it writes the first SourcePin Artifact.
+ */
+export interface TextOpenWorldCreatorProductionSourcePlanV1 {
+  schema: 'storyforge.text-open-world-creator-production-source-plan'
+  version: 1
+  productType: 'text-open-world'
+  productInstanceKey: string
+  sourceKind: TextOpenWorldSourceKindV1
+  sourceBinding: TextOpenWorldCreatorSourceBindingV1
+  sourceBindingHash: string
+  sourceVersionHash: string
+  /** Exact for novel previews; null for a WorldRelease whose P0 boundary is
+   * derived from the immutable catalog selected below. */
+  expectedSourceBoundaryHash: string | null
+  selection:
+    | {
+        kind: 'world-release'
+        mode: 'entire-release'
+        resourceKeys: string[]
+      }
+    | {
+        kind: 'novel'
+        mode: AdaptationSourceSelectionV1['mode']
+        sourceUnitCount: number
+        selectedChapterCount: number
+        selectedOutlineCount: number
+      }
+  /** Concrete Artifact keys owned by P0 and consumed by P1. */
+  sourceUnitArtifactKeys: string[]
+  createdAt: number
+  planHash: string
+}
+
+/** One durable author authorization boundary for a Creator Brief Build. */
+export interface TextOpenWorldCreatorProductionStartV1 {
+  schema: 'storyforge.text-open-world-creator-production-start'
+  version: 1
+  productType: 'text-open-world'
+  productInstanceKey: string
+  briefRevision: number
+  briefHash: string
+  sourceBindingHash: string
+  sourcePlanHash: string
+  /** Exact G5-03 facts, frozen before a Build exists. */
+  preflight: TextOpenWorldCreatorProductionPreflightV1
+  confirmation: TextOpenWorldCreatorProductionPreflightConfirmationV1
+  /** Scheduler compatibility projection only. The Creator Brief above remains
+   * the authoring authority and this projection may not replace it. */
+  executionBrief: import('./product-production').ProductProductionBriefV3
+  executionBriefHash: string
+  /** Epoch of the exact plan authorized by the author. Later scheduler plans
+   * may only rebind this one field while retaining the frozen plan body. */
+  productionPlanControlEpoch: number
+  productionPlanHash: string
+  authorStartRevision: number
+  authorizationNonceHash: string
+  rightsBasis: TextOpenWorldSourceRightsBasisV1
+  rightsNote: string
+  authorizedAt: number
+  startHash: string
+}
+
 export type TextOpenWorldSourceRightsBasisV1 =
   | 'author-owned'
   | 'licensed'

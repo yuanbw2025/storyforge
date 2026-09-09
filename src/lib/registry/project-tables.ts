@@ -1315,14 +1315,28 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
         onUnmapped: "require",
       },
     ],
-    exportRefRemap: [{
-      field: "sourceChapterIdsJson",
-      remapVia: "chapters",
-      kind: "id-array",
-      exportAs: "_sourceChapterExportIds",
-      storage: "json-string",
-      onUnmapped: "require",
-    }],
+    exportRefRemap: [
+      {
+        field: "sourceChapterIdsJson",
+        remapVia: "chapters",
+        kind: "id-array",
+        exportAs: "_sourceChapterExportIds",
+        storage: "json-string",
+        onUnmapped: "require",
+      },
+      {
+        // The generic ProductSourcePlan keeps its remappable host locator in
+        // this nested path while excluding it from planHash. Creator source
+        // plans use a different portable schema with no WorldReference, so the
+        // path is optional but must map exactly whenever present.
+        field: "sourcePlanJson",
+        remapVia: "worldReleases",
+        kind: "json-id-paths",
+        paths: ["worldReference.localReleaseRecordId"],
+        exportAs: "_sourcePlanPortableJson",
+        onUnmapped: "require-if-present",
+      },
+    ],
     memoryClassification: {
       version: 1,
       classification: "editable",

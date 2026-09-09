@@ -255,7 +255,13 @@ export type ExportRefRemap = {
   kind: 'json-id-paths'
   paths: readonly string[]
   exportAs: string
-  onUnmapped?: 'require' | 'null'
+  /**
+   * `require-if-present` lets a polymorphic JSON column participate in the
+   * portable lifecycle without requiring every schema stored in that column
+   * to expose the same nested locator. Once the path exists, however, its
+   * local/portable id must resolve in both directions.
+   */
+  onUnmapped?: 'require' | 'require-if-present' | 'null'
 }
 
 /**
@@ -952,6 +958,32 @@ export interface ContextSource {
 
 export type AssembleContextSourceStatus = 'included' | 'omitted' | 'trimmed'
 export type AssembleContextSourceDelivery = 'full' | 'compressed' | 'truncated' | 'none'
+
+/** A registered source could not honor the caller's explicit input budget. */
+export class ContextSourceBudgetErrorV1 extends Error {
+  constructor(
+    message: string,
+    readonly sourceKey: string,
+    readonly requiredTokens: number,
+    readonly budgetTokens: number,
+  ) {
+    super(message)
+    this.name = 'ContextSourceBudgetErrorV1'
+  }
+}
+
+/** An atomic source cannot be trimmed without changing the task contract. */
+export class AtomicContextSourceBudgetErrorV1 extends ContextSourceBudgetErrorV1 {
+  constructor(sourceKey: string, originalTokens: number, budgetTokens: number) {
+    super(
+      `[assembleContext] 原子来源 ${sourceKey} 超出预算:${originalTokens}>${budgetTokens}`,
+      sourceKey,
+      originalTokens,
+      budgetTokens,
+    )
+    this.name = 'AtomicContextSourceBudgetErrorV1'
+  }
+}
 
 /**
  * Per-source delivery evidence derived by assembleContext(). It records only

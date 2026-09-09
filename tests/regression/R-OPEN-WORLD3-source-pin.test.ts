@@ -1,5 +1,6 @@
-import { afterAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
+import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
 import {
   acceptTextOpenWorldSourcePinBundleV1,
   freezeTextOpenWorldNovelSourceV1,
@@ -12,6 +13,7 @@ import {
 import { openWorldSemanticResourceCatalogV1 } from '../../src/lib/context-gateway/world-release-client'
 import { hashProductProductionValueV2 } from '../../src/lib/product-production/hash'
 import { createWorkspace } from '../../src/lib/workspace/create-workspace'
+import { resolveWorkspaceOwnership } from '../../src/lib/workspace/ownership'
 import { stampNewRecord } from '../../src/lib/workspace/scope'
 import type { WorkspaceScope } from '../../src/lib/types'
 import { seedCurrentProductWorld } from '../helpers/current-product-world'
@@ -406,5 +408,84 @@ describe('R-OPEN-WORLD3 · WorldRelease/小说双来源 SourcePin', () => {
 
     const recomputed = await hashProductProductionValueV2(valid.units[0]!.payload)
     expect(recomputed).toBe(valid.units[0]!.artifactContentHash)
+  }, 30_000)
+
+  it('v10 导入在任何落库前验证 SourcePin Artifact payload、row hash 与 active 闭包', async () => {
+    const world = await seedCurrentProductWorld(`TOW SourcePin import ${crypto.randomUUID()}`)
+    const productionKey = 'tow.source.import-preflight'
+    const build = await seedTextOpenWorldBuild(world.scope, productionKey)
+    const catalog = await openWorldSemanticResourceCatalogV1({
+      localReleaseRecordId: world.release.id!,
+      expectedProjectId: world.scope.projectId,
+      expectedWorldId: world.scope.worldId,
+    })
+    const bundle = await freezeTextOpenWorldWorldReleaseSourceV1({
+      scope: world.scope,
+      localReleaseRecordId: world.release.id!,
+      expectedReleaseHash: world.release.contentHash,
+      selection: {
+        mode: 'selected-resources',
+        resourceKeys: catalog.resources.slice(0, 2).map(item => item.resourceKey),
+      },
+      authorization: authorization(productionKey, 'import-preflight-source', Date.now()),
+      createdAt: Date.now(),
+    })
+    await acceptTextOpenWorldSourcePinBundleV1({
+      scope: world.scope,
+      buildId: build.buildId,
+      controlEpoch: build.controlEpoch,
+      bundle,
+    })
+    const backup = await exportProjectJSON(world.scope.projectId)
+    const pinIndex = backup.productBuildArtifacts.findIndex(row => (
+      row.artifactKey === 'text-open-world.source-pin'
+    ))
+    const unitIndex = backup.productBuildArtifacts.findIndex(row => (
+      row.kind === 'text-open-world.source-pin-unit'
+    ))
+    expect(pinIndex).toBeGreaterThanOrEqual(0)
+    expect(unitIndex).toBeGreaterThanOrEqual(0)
+
+    const expectPreflightFailure = async (
+      candidate: typeof backup,
+      error: RegExp,
+    ): Promise<void> => {
+      const before = await Promise.all(db.tables.map(table => table.count()))
+      const transaction = vi.spyOn(db, 'transaction')
+      try {
+        await expect(importProjectJSON(candidate)).rejects.toThrow(error)
+        expect(transaction).not.toHaveBeenCalled()
+      } finally {
+        transaction.mockRestore()
+      }
+      expect(await Promise.all(db.tables.map(table => table.count()))).toEqual(before)
+    }
+
+    const payloadTampered = structuredClone(backup)
+    const pinPayload = JSON.parse(payloadTampered.productBuildArtifacts[pinIndex]!.payloadJson)
+    pinPayload.readEvidence.totalWords += 1
+    payloadTampered.productBuildArtifacts[pinIndex]!.payloadJson = JSON.stringify(pinPayload)
+    await expectPreflightFailure(payloadTampered, /SourcePin Artifact payload\/hash 无效/)
+
+    const rowHashTampered = structuredClone(backup)
+    rowHashTampered.productBuildArtifacts[unitIndex]!.contentHash = 'f'.repeat(64)
+    await expectPreflightFailure(rowHashTampered, /SourcePin Artifact payload\/hash 无效/)
+
+    const closureTampered = structuredClone(backup)
+    closureTampered.productBuildArtifacts.splice(unitIndex, 1)
+    await expectPreflightFailure(closureTampered, /SourcePin Artifact 闭包无效/)
+
+    const importedProjectId = await importProjectJSON(structuredClone(backup))
+    const [scope, importedBuild] = await Promise.all([
+      resolveWorkspaceOwnership(importedProjectId).then(value => value.scope),
+      db.productBuilds.where('projectId').equals(importedProjectId).first(),
+    ])
+    const imported = await readAcceptedTextOpenWorldSourcePinBundleV1({
+      scope,
+      buildId: importedBuild!.id!,
+    })
+    expect(imported.pinArtifact.contentHash).toBe(bundle.pin.pinHash)
+    expect(imported.unitArtifacts.map(row => row.contentHash).sort())
+      .toEqual(bundle.units.map(unit => unit.artifactContentHash).sort())
   }, 30_000)
 })

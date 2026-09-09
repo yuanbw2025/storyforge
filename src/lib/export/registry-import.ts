@@ -46,6 +46,12 @@ import {
   TEXT_OPEN_WORLD_CREATOR_BRIEF_STEP_ID_V1,
   verifyTextOpenWorldCreatorBriefV1,
 } from '../open-world/creator-brief-persistence'
+import {
+  validateTextOpenWorldSourcePinBundleV1,
+  validateTextOpenWorldSourcePinUnitV1,
+  validateTextOpenWorldSourcePinV1,
+} from '../open-world/source-pin'
+import { hashProductProductionValueV2 } from '../product-production/hash'
 
 function portableRows(value: Record<string, any>, name: string): Record<string, any>[] {
   const rows = value[name]
@@ -71,6 +77,112 @@ function maximumRuntimeSequence(
   let maximum = 0
   for (const sequence of sequences ?? []) maximum = Math.max(maximum, sequence)
   return maximum
+}
+
+const TEXT_OPEN_WORLD_SOURCE_PIN_KEY = 'text-open-world.source-pin'
+const TEXT_OPEN_WORLD_SOURCE_PIN_UNIT_KEY = /^text-open-world\.source-pin-unit(?:\.\d{5})?$/
+const PRODUCT_BUILD_ARTIFACT_STATUSES_V1 = new Set([
+  'pending', 'candidate', 'accepted', 'carried-forward', 'rejected', 'orphaned', 'invalid',
+])
+
+/**
+ * SourcePin is a multi-row closure rather than an opaque Artifact payload.
+ * Validate every claimed row before the import transaction starts, then prove
+ * each accepted/carried-forward index closes over exactly the active unit rows
+ * in the same Build epoch. Unit-only groups remain valid crash-recovery state:
+ * P0 deliberately writes units before its closure index.
+ */
+async function validateTextOpenWorldSourcePinArtifactsV10(input: {
+  artifacts: Record<string, any>[]
+  builds: Map<number, Record<string, any>>
+  productions: Map<number, Record<string, any>>
+}): Promise<void> {
+  type ParsedPin = Awaited<ReturnType<typeof validateTextOpenWorldSourcePinV1>>
+  type ParsedUnit = Awaited<ReturnType<typeof validateTextOpenWorldSourcePinUnitV1>>
+  type ActiveGroup = {
+    production: Record<string, any>
+    pins: Array<{ row: Record<string, any>; payload: ParsedPin }>
+    units: Array<{ row: Record<string, any>; payload: ParsedUnit }>
+  }
+  const activeGroups = new Map<string, ActiveGroup>()
+  for (const artifact of input.artifacts) {
+    const claimsPin = artifact.artifactKey === TEXT_OPEN_WORLD_SOURCE_PIN_KEY
+      || artifact.kind === TEXT_OPEN_WORLD_SOURCE_PIN_KEY
+    const claimsUnit = TEXT_OPEN_WORLD_SOURCE_PIN_UNIT_KEY.test(String(artifact.artifactKey ?? ''))
+      || artifact.kind === 'text-open-world.source-pin-unit'
+    const claimsRequirement = artifact.requirementKey === TEXT_OPEN_WORLD_SOURCE_PIN_KEY
+    if (!claimsPin && !claimsUnit && !claimsRequirement) continue
+    if ((claimsPin ? 1 : 0) + (claimsUnit ? 1 : 0) !== 1) {
+      throw new Error('[deriveImport] v10 TextOpenWorld SourcePin Artifact key/kind 冲突')
+    }
+    const build = input.builds.get(artifact._buildExportId)
+    const production = build ? input.productions.get(build._productionExportId) : null
+    if (!build || !production || production.productType !== 'text-open-world') {
+      throw new Error('[deriveImport] v10 TextOpenWorld SourcePin Artifact 不属于文字开放世界 Build')
+    }
+    if (!Number.isSafeInteger(artifact.controlEpoch) || artifact.controlEpoch < 0
+      || artifact.controlEpoch > build.controlEpoch
+      || !Number.isSafeInteger(artifact.version) || artifact.version < 1
+      || !PRODUCT_BUILD_ARTIFACT_STATUSES_V1.has(artifact.status)) {
+      throw new Error('[deriveImport] v10 TextOpenWorld SourcePin Artifact epoch/version 无效')
+    }
+    let payload: unknown
+    try {
+      if (typeof artifact.payloadJson !== 'string') throw new Error('not-json-text')
+      payload = JSON.parse(artifact.payloadJson)
+    } catch {
+      throw new Error('[deriveImport] v10 TextOpenWorld SourcePin Artifact payloadJson 无效')
+    }
+    let parsedPin: ParsedPin | null = null
+    let parsedUnit: ParsedUnit | null = null
+    try {
+      if (claimsPin) {
+        if (artifact.artifactKey !== TEXT_OPEN_WORLD_SOURCE_PIN_KEY
+          || artifact.kind !== TEXT_OPEN_WORLD_SOURCE_PIN_KEY) throw new Error('pin-key-kind')
+        parsedPin = await validateTextOpenWorldSourcePinV1(payload)
+        if (artifact.contentHash !== parsedPin.pinHash
+          || parsedPin.productInstanceKey !== production.productionKey) throw new Error('pin-row-hash-owner')
+      } else {
+        if (!TEXT_OPEN_WORLD_SOURCE_PIN_UNIT_KEY.test(String(artifact.artifactKey ?? ''))
+          || artifact.kind !== 'text-open-world.source-pin-unit') throw new Error('unit-key-kind')
+        parsedUnit = await validateTextOpenWorldSourcePinUnitV1(payload)
+        if (artifact.artifactKey !== parsedUnit.artifactKey
+          || artifact.contentHash !== await hashProductProductionValueV2(parsedUnit)
+          || parsedUnit.productInstanceKey !== production.productionKey) throw new Error('unit-row-hash-owner')
+      }
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error)
+      throw new Error(`[deriveImport] v10 TextOpenWorld SourcePin Artifact payload/hash 无效:${detail}`)
+    }
+    if (artifact.status !== 'accepted' && artifact.status !== 'carried-forward') continue
+    const groupKey = `${artifact._buildExportId}:${artifact.controlEpoch}`
+    const group = activeGroups.get(groupKey) ?? { production, pins: [], units: [] }
+    if (parsedPin) group.pins.push({ row: artifact, payload: parsedPin })
+    if (parsedUnit) group.units.push({ row: artifact, payload: parsedUnit })
+    activeGroups.set(groupKey, group)
+  }
+  for (const group of activeGroups.values()) {
+    // Units are intentionally durable before the index and may represent an
+    // interrupted P0 attempt. Once an active index exists, the closure must be
+    // exact and unique.
+    if (group.pins.length === 0) continue
+    if (group.pins.length !== 1) {
+      throw new Error('[deriveImport] v10 TextOpenWorld SourcePin active index 不唯一')
+    }
+    const pin = group.pins[0]!
+    try {
+      await validateTextOpenWorldSourcePinBundleV1({
+        pin: pin.payload,
+        units: group.units.map(unit => ({
+          payload: unit.payload,
+          artifactContentHash: unit.row.contentHash,
+        })),
+      })
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error)
+      throw new Error(`[deriveImport] v10 TextOpenWorld SourcePin Artifact 闭包无效:${detail}`)
+    }
+  }
 }
 
 async function validateProductArchitectureBackup(value: Record<string, any>): Promise<void> {
@@ -294,6 +406,7 @@ async function validateProductArchitectureBackup(value: Record<string, any>): Pr
     if (!build) throw new Error('[deriveImport] v10 Build 子记录引用越界')
     sameOwner(row, build, 'Build 子记录')
   }
+  await validateTextOpenWorldSourcePinArtifactsV10({ artifacts, builds, productions })
   for (const release of releases.values()) {
     if (!productKinds.has(release.productType) || !/^[a-f0-9]{64}$/.test(String(release.contentHash ?? ''))) {
       throw new Error('[deriveImport] v10 ProductRelease 身份或 hash 无效')
@@ -1103,7 +1216,7 @@ export async function deriveImportProjectJSON(data: ProjectExportData): Promise<
                     portableRefs,
                     rr.paths,
                     refMap,
-                    rr.onUnmapped === 'require',
+                    rr.onUnmapped ?? 'null',
                     `${spec.name}.${rr.field}`,
                   )
             if (patch !== undefined) {
@@ -1150,7 +1263,7 @@ function remapPortableJsonIdPaths(
   value: unknown,
   paths: readonly string[],
   idMap: Map<number, number>,
-  required: boolean,
+  onUnmapped: 'require' | 'require-if-present' | 'null',
   label: string,
 ): string | null | undefined {
   if (value == null) return value === null ? null : undefined
@@ -1164,21 +1277,35 @@ function remapPortableJsonIdPaths(
   for (const path of paths) {
     const parts = path.split('.').filter(Boolean)
     let owner = parsed as Record<string, unknown>
+    let parentExists = true
     for (const part of parts.slice(0, -1)) {
       const child = owner[part]
       if (!child || typeof child !== 'object' || Array.isArray(child)) {
-        if (required) throw new Error(`[deriveImport] ${label}.${path} 缺失`)
-        owner = {}
+        if (onUnmapped === 'require') throw new Error(`[deriveImport] ${label}.${path} 缺失`)
+        parentExists = false
         break
       }
       owner = child as Record<string, unknown>
     }
+    if (!parentExists) continue
     const field = parts[parts.length - 1]
     if (!field) continue
+    if (!(field in owner)) {
+      if (onUnmapped === 'require') throw new Error(`[deriveImport] ${label}.${path} 缺失`)
+      if (onUnmapped === 'require-if-present') continue
+    }
     const portableId = owner[field]
-    if (portableId == null) { owner[field] = null; continue }
+    if (portableId == null) {
+      if (onUnmapped !== 'null') {
+        throw new Error(`[deriveImport] ${label}.${path} 缺少本地映射`)
+      }
+      owner[field] = null
+      continue
+    }
     const localId = typeof portableId === 'number' ? idMap.get(portableId) : undefined
-    if (localId == null && required) throw new Error(`[deriveImport] ${label}.${path} 缺少本地映射`)
+    if (localId == null && onUnmapped !== 'null') {
+      throw new Error(`[deriveImport] ${label}.${path} 缺少本地映射`)
+    }
     owner[field] = localId ?? null
   }
   return JSON.stringify(parsed)

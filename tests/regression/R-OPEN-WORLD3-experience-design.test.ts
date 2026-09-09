@@ -2864,6 +2864,61 @@ describe('R-OPEN-WORLD3 · P2 GameBrief / ExperienceContract / ProtagonistAsset'
       .rejects.toThrow(/未交付的SourceLedger claim/)
   }, 30_000)
 
+  it('原子阶段包确实超过Plan预算时持久化阻断，且不调用模型', async () => {
+    const input = await fixture()
+    const plan = await createTextOpenWorldProductionPlanV1({
+      buildNumber: input.build.buildNumber,
+      controlEpoch: input.build.controlEpoch,
+      briefHash: input.briefRow.briefHash,
+      brief: input.brief,
+    })
+    const p2 = plan.tasks.find(task => task.taskKey === 'p2.experience-design')!
+    p2.budgetReservation.inputTokens = 1
+    const planHash = await hashProductProductionValueV2(plan)
+    await db.productBuilds.update(input.build.id!, {
+      planJson: JSON.stringify(plan),
+      planHash,
+    })
+    let p2ExecutorCalls = 0
+    const executor = createTextOpenWorldProductionExecutorV1({
+      production: input.production,
+      brief: input.brief,
+      taskExecutors: {
+        'p1.source-curation': createTextOpenWorldSourceCurationExecutorV1({
+          runModel: curationRunner(input.brief.intent.protagonistRefs[0]!),
+          now: () => NOW + 3,
+        }),
+        'p2.experience-design': async () => {
+          p2ExecutorCalls += 1
+          throw new Error('超预算任务不应进入executor')
+        },
+      },
+    })
+    const projection = await runProductProductionUntilBlockedV1({
+      scope: input.scope,
+      productionId: input.production.id!,
+      executor,
+      capabilityBindings: input.brief.capabilityRequirements
+        .filter(requirement => requirement.mediaClass === 'text')
+        .map(requirement => ({
+          requirementKey: requirement.requirementKey,
+          bindingHash: CAPABILITY_HASH,
+          adapterId: 'configured-text.v1',
+        })),
+    })
+    expect(p2ExecutorCalls).toBe(0)
+    expect(projection.tasks.find(task => task.taskKey === 'p2.experience-design'))
+      .toMatchObject({ status: 'blocked', blocker: 'run-failed' })
+    const blockedBuild = (await db.productBuilds.get(input.build.id!))!
+    expect(blockedBuild).toMatchObject({ status: 'recovery-required' })
+    expect(JSON.parse(blockedBuild.failureJson)).toMatchObject({
+      taskKey: 'p2.experience-design',
+      code: 'task-context-budget-exceeded',
+    })
+    expect(JSON.parse(blockedBuild.budgetLedgerJson).tasks['p2.experience-design'])
+      .toMatchObject({ status: 'failed', errorCode: 'task-context-budget-exceeded' })
+  }, 30_000)
+
   it('即使重新计算Artifact Hash，也拒绝篡改交互、主线和完整缺口边界', async () => {
     const input = await fixture()
     const artifacts = resultArtifacts(await executeP2(input))
@@ -4796,6 +4851,113 @@ describe('R-OPEN-WORLD3 · P9 SceneScripts / ChoiceContract / ActionBindings', (
     ])
   }, 360_000)
 
+  it('正式统一执行器允许 governed-v3 按冻结分片上下文执行有界多次模型调用', async () => {
+    const input = await sceneScriptsFixture()
+    const executionConfigHash = await hashProductProductionValueV2({
+      schema: 'test.execution-settings',
+      version: 1,
+    })
+    const identity = {
+      requirementKey: input.task.capabilityRequirementKeys[0]!,
+      adapterId: 'configured-text.v1' as const,
+      adapterVersion: 1 as const,
+      provider: 'test',
+      model: 'test-model',
+      endpointOrigin: 'https://example.invalid',
+      executionConfigHash,
+      executionLocation: 'browser-direct' as const,
+      credentialSource: 'existing-ai-config' as const,
+      credentialPresent: true as const,
+    }
+    const capabilityHash = await hashProductProductionValueV2(identity)
+    const receiptBody = {
+      schema: 'storyforge.provider-binding-receipt' as const,
+      version: 1 as const,
+      ...identity,
+      capabilityHash,
+      boundAt: NOW,
+    }
+    const receipt = {
+      ...receiptBody,
+      receiptHash: await hashProductProductionValueV2(receiptBody),
+    }
+    const domainRunner = sceneScriptsRunner()
+    let modelCalls = 0
+    const executor = createTextOpenWorldProductionExecutorV1({
+      production: input.production,
+      brief: input.brief,
+      textCapabilityReceipt: receipt,
+      modelTransport: async request => {
+        modelCalls += 1
+        const response = await domainRunner(request)
+        return { ...response, bindingReceipt: receipt }
+      },
+    })
+
+    const result = await executor({
+      scope: input.scope,
+      productionId: input.production.id!,
+      buildId: input.build.id!,
+      buildNumber: input.build.buildNumber,
+      controlEpoch: input.build.controlEpoch,
+      planHash: input.planHash,
+      task: input.task,
+      attemptBudgetReservation: input.task.budgetReservation,
+      attempt: 1,
+      idempotencyKey: await hashProductProductionValueV2('p9-shared-protocol-governed-v3'),
+      contextText: input.sceneScriptsContextText,
+      inputArtifacts: [],
+      capabilityBindings: [{
+        requirementKey: input.task.capabilityRequirementKeys[0]!,
+        bindingHash: capabilityHash,
+        adapterId: 'configured-text.v1',
+      }],
+      signal: new AbortController().signal,
+    })
+
+    expect(modelCalls).toBe(input.sceneScriptsContext.sceneDemands.length + 1)
+    expect(result.usage).toMatchObject({ modelCalls, mediaCalls: 0 })
+    expect(result.artifacts.map(artifact => artifact.artifactKey)).toEqual([
+      'text-open-world.scene-scripts',
+      'text-open-world.choice-contracts',
+      'text-open-world.action-bindings',
+    ])
+    const authorDraft = await domainRunner({
+      projectId: input.scope.projectId,
+      requirementKey: input.task.capabilityRequirementKeys[0]!,
+      expectedCapabilityHash: capabilityHash,
+      category: input.task.skillId,
+      system: '',
+      contextText: input.sceneScriptsContextText,
+      maximumOutputTokens: input.task.budgetReservation.outputTokens,
+      signal: new AbortController().signal,
+    })
+    const callsBeforeAuthorDraft = modelCalls
+    const authorResult = await executor({
+      scope: input.scope,
+      productionId: input.production.id!,
+      buildId: input.build.id!,
+      buildNumber: input.build.buildNumber,
+      controlEpoch: input.build.controlEpoch,
+      planHash: input.planHash,
+      task: input.task,
+      attemptBudgetReservation: input.task.budgetReservation,
+      attempt: 2,
+      idempotencyKey: await hashProductProductionValueV2('p9-shared-protocol-author-draft'),
+      contextText: input.sceneScriptsContextText,
+      authorDraftJson: authorDraft.output,
+      inputArtifacts: [],
+      capabilityBindings: [{
+        requirementKey: input.task.capabilityRequirementKeys[0]!,
+        bindingHash: capabilityHash,
+        adapterId: 'configured-text.v1',
+      }],
+      signal: new AbortController().signal,
+    })
+    expect(modelCalls).toBe(callsBeforeAuthorDraft)
+    expect(authorResult.usage).toMatchObject({ modelCalls: 0, inputTokens: 0, outputTokens: 0 })
+  }, 360_000)
+
   it('P9作者聚合稿在governed与legacy Context都直接校验成候选，且绝不再次调用模型', async () => {
     const authorDraftFor = async (input: Awaited<ReturnType<typeof sceneScriptsFixture>>) => (
       await sceneScriptsRunner()({
@@ -5882,10 +6044,12 @@ describe('R-OPEN-WORLD3 · V3运行包装配与QA', () => {
     const production = (await db.productProductions.get(input.production.id!))!
     let p1Calls = 0
     let p1ModelAttempts = 0
+    const p1OutputBudgets: number[] = []
     const groundedCuration = curationRunner(input.brief.intent.protagonistRefs[0]!)
     const p1Executor = createTextOpenWorldSourceCurationExecutorV1({
       runModel: async request => {
         p1ModelAttempts += 1
+        p1OutputBudgets.push(request.maximumOutputTokens)
         const response = await groundedCuration(request)
         return p1ModelAttempts === 1
           ? { ...response, output: JSON.stringify({ schema: 'invalid-first-p1-response' }) }
@@ -5944,6 +6108,7 @@ describe('R-OPEN-WORLD3 · V3运行包装配与QA', () => {
       },
     })).rejects.toThrow('injected-open-world-process-crash')
     expect(p1Calls).toBe(2)
+    expect(p1OutputBudgets[1]).toBeLessThan(p1OutputBudgets[0]!)
     const projection = await runProductProductionUntilBlockedV1({
       scope: input.scope, productionId: production.id!, executor, capabilityBindings: bindings,
     })
@@ -5955,6 +6120,12 @@ describe('R-OPEN-WORLD3 · V3运行包装配与QA', () => {
     ).toMatchObject({ terminal: true, buildStatus: 'release-ready' })
     expect(projection.tasks.every(task => task.status === 'completed')).toBe(true)
     const build = projectedBuild!
+    const budgetLedger = JSON.parse(build.budgetLedgerJson) as {
+      charges: Record<string, { taskKey: string; usage: { modelCalls: number } }>
+    }
+    expect(Object.values(budgetLedger.charges)
+      .filter(charge => charge.taskKey === 'p1.source-curation')
+      .reduce((sum, charge) => sum + charge.usage.modelCalls, 0)).toBe(p1ModelAttempts)
     const storedPlan = JSON.parse(build.planJson) as { tasks: Array<{ taskKey: string }> }
     expect(storedPlan.tasks.map(task => task.taskKey)).toEqual(expect.arrayContaining([
       'p0.source-lock', 'p10.system-finalize', 'v3.runtime-package', 'qa.release',

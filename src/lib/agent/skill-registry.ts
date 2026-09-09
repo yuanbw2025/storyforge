@@ -3000,7 +3000,7 @@ export const AGENT_SKILLS = [
     contextTaskKind: 'agent-outline',
     readToolNames: [],
     contextSourceKeys: ['text-open-world.experience-input'],
-    optionalContextSourceKeys: [],
+    optionalContextSourceKeys: ['product-production.repair-feedback'],
     inputPolicy: {
       sourceKeys: ['text-open-world.experience-input'],
       states: {
@@ -3031,7 +3031,7 @@ export const AGENT_SKILLS = [
     contextTaskKind: 'agent-outline',
     readToolNames: [],
     contextSourceKeys: ['text-open-world.gameplay-ruleset-input'],
-    optionalContextSourceKeys: [],
+    optionalContextSourceKeys: ['product-production.repair-feedback'],
     inputPolicy: {
       sourceKeys: ['text-open-world.gameplay-ruleset-input'],
       states: {
@@ -3062,7 +3062,7 @@ export const AGENT_SKILLS = [
     contextTaskKind: 'agent-outline',
     readToolNames: [],
     contextSourceKeys: ['text-open-world.player-build-input'],
-    optionalContextSourceKeys: [],
+    optionalContextSourceKeys: ['product-production.repair-feedback'],
     inputPolicy: {
       sourceKeys: ['text-open-world.player-build-input'],
       states: {
@@ -3093,7 +3093,7 @@ export const AGENT_SKILLS = [
     contextTaskKind: 'agent-outline',
     readToolNames: [],
     contextSourceKeys: ['text-open-world.story-architecture-input'],
-    optionalContextSourceKeys: [],
+    optionalContextSourceKeys: ['product-production.repair-feedback'],
     inputPolicy: {
       sourceKeys: ['text-open-world.story-architecture-input'],
       states: {
@@ -3124,7 +3124,7 @@ export const AGENT_SKILLS = [
     contextTaskKind: 'agent-outline',
     readToolNames: [],
     contextSourceKeys: ['text-open-world.region-skeleton-input'],
-    optionalContextSourceKeys: [],
+    optionalContextSourceKeys: ['product-production.repair-feedback'],
     inputPolicy: {
       sourceKeys: ['text-open-world.region-skeleton-input'],
       states: {
@@ -3155,7 +3155,7 @@ export const AGENT_SKILLS = [
     contextTaskKind: 'agent-outline',
     readToolNames: [],
     contextSourceKeys: ['text-open-world.mainline-input'],
-    optionalContextSourceKeys: [],
+    optionalContextSourceKeys: ['product-production.repair-feedback'],
     inputPolicy: {
       sourceKeys: ['text-open-world.mainline-input'],
       states: {
@@ -3186,7 +3186,7 @@ export const AGENT_SKILLS = [
     contextTaskKind: 'agent-outline',
     readToolNames: [],
     contextSourceKeys: ['text-open-world.significant-threads-input'],
-    optionalContextSourceKeys: [],
+    optionalContextSourceKeys: ['product-production.repair-feedback'],
     inputPolicy: {
       sourceKeys: ['text-open-world.significant-threads-input'],
       states: {
@@ -3217,7 +3217,7 @@ export const AGENT_SKILLS = [
     contextTaskKind: 'agent-outline',
     readToolNames: [],
     contextSourceKeys: ['text-open-world.region-narrative-packs-input'],
-    optionalContextSourceKeys: [],
+    optionalContextSourceKeys: ['product-production.repair-feedback'],
     inputPolicy: {
       sourceKeys: ['text-open-world.region-narrative-packs-input'],
       states: {
@@ -3248,7 +3248,7 @@ export const AGENT_SKILLS = [
     contextTaskKind: 'agent-outline',
     readToolNames: [],
     contextSourceKeys: ['text-open-world.quest-skeletons-input'],
-    optionalContextSourceKeys: [],
+    optionalContextSourceKeys: ['product-production.repair-feedback'],
     inputPolicy: {
       sourceKeys: ['text-open-world.quest-skeletons-input'],
       states: {
@@ -3279,7 +3279,7 @@ export const AGENT_SKILLS = [
     contextTaskKind: 'agent-outline',
     readToolNames: [],
     contextSourceKeys: ['text-open-world.progression-catalogs-input'],
-    optionalContextSourceKeys: [],
+    optionalContextSourceKeys: ['product-production.repair-feedback'],
     inputPolicy: {
       sourceKeys: ['text-open-world.progression-catalogs-input'],
       states: {
@@ -3310,7 +3310,7 @@ export const AGENT_SKILLS = [
     contextTaskKind: 'agent-outline',
     readToolNames: [],
     contextSourceKeys: ['text-open-world.encounter-catalog-input'],
-    optionalContextSourceKeys: [],
+    optionalContextSourceKeys: ['product-production.repair-feedback'],
     inputPolicy: {
       sourceKeys: ['text-open-world.encounter-catalog-input'],
       states: {
@@ -3341,7 +3341,7 @@ export const AGENT_SKILLS = [
     contextTaskKind: 'agent-outline',
     readToolNames: [],
     contextSourceKeys: ['text-open-world.item-reward-catalog-input'],
-    optionalContextSourceKeys: [],
+    optionalContextSourceKeys: ['product-production.repair-feedback'],
     inputPolicy: {
       sourceKeys: ['text-open-world.item-reward-catalog-input'],
       states: {
@@ -3372,7 +3372,7 @@ export const AGENT_SKILLS = [
     contextTaskKind: 'agent-outline',
     readToolNames: [],
     contextSourceKeys: ['text-open-world.crafting-economy-input'],
-    optionalContextSourceKeys: [],
+    optionalContextSourceKeys: ['product-production.repair-feedback'],
     inputPolicy: {
       sourceKeys: ['text-open-world.crafting-economy-input'],
       states: {
@@ -3403,7 +3403,7 @@ export const AGENT_SKILLS = [
     contextTaskKind: 'agent-outline',
     readToolNames: [],
     contextSourceKeys: ['text-open-world.npc-runtime-input'],
-    optionalContextSourceKeys: [],
+    optionalContextSourceKeys: ['product-production.repair-feedback'],
     inputPolicy: {
       sourceKeys: ['text-open-world.npc-runtime-input'],
       states: {
@@ -3434,7 +3434,7 @@ export const AGENT_SKILLS = [
     contextTaskKind: 'agent-outline',
     readToolNames: [],
     contextSourceKeys: ['text-open-world.map-interaction-input'],
-    optionalContextSourceKeys: [],
+    optionalContextSourceKeys: ['product-production.repair-feedback'],
     inputPolicy: {
       sourceKeys: ['text-open-world.map-interaction-input'],
       states: {
@@ -3465,7 +3465,7 @@ export const AGENT_SKILLS = [
     contextTaskKind: 'agent-outline',
     readToolNames: [],
     contextSourceKeys: ['text-open-world.quest-finalize-input'],
-    optionalContextSourceKeys: [],
+    optionalContextSourceKeys: ['product-production.repair-feedback'],
     inputPolicy: {
       sourceKeys: ['text-open-world.quest-finalize-input'],
       states: {
@@ -3496,7 +3496,7 @@ export const AGENT_SKILLS = [
     contextTaskKind: 'agent-outline',
     readToolNames: [],
     contextSourceKeys: ['text-open-world.scene-scripts-input'],
-    optionalContextSourceKeys: [],
+    optionalContextSourceKeys: ['product-production.repair-feedback'],
     inputPolicy: {
       sourceKeys: ['text-open-world.scene-scripts-input'],
       states: {
@@ -3527,7 +3527,7 @@ export const AGENT_SKILLS = [
     contextTaskKind: 'agent-outline',
     readToolNames: [],
     contextSourceKeys: ['text-open-world.presentation-profile-input'],
-    optionalContextSourceKeys: [],
+    optionalContextSourceKeys: ['product-production.repair-feedback'],
     inputPolicy: {
       sourceKeys: ['text-open-world.presentation-profile-input'],
       states: {
@@ -3558,7 +3558,7 @@ export const AGENT_SKILLS = [
     contextTaskKind: 'agent-outline',
     readToolNames: [],
     contextSourceKeys: ['text-open-world.system-finalize-input'],
-    optionalContextSourceKeys: [],
+    optionalContextSourceKeys: ['product-production.repair-feedback'],
     inputPolicy: {
       sourceKeys: ['text-open-world.system-finalize-input'],
       states: {

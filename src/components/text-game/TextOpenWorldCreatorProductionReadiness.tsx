@@ -12,7 +12,10 @@ import {
   Server,
   ShieldCheck,
 } from 'lucide-react'
-import type { TextOpenWorldCreatorProductionPreflightConfirmationV1 } from '../../lib/types'
+import type {
+  TextOpenWorldCreatorProductionPreflightConfirmationV1,
+  TextOpenWorldCreatorProductionPreflightV1,
+} from '../../lib/types'
 import type { TextOpenWorldCreatorBriefSessionV1 } from '../../lib/open-world/creator-brief'
 import {
   confirmTextOpenWorldCreatorProductionPreflightV1,
@@ -30,7 +33,10 @@ export interface TextOpenWorldCreatorProductionReadinessProps {
   session: TextOpenWorldCreatorBriefSessionV1
   onBack: () => void
   onOpenSettings?: () => void
-  onConfirmed?: (confirmation: TextOpenWorldCreatorProductionPreflightConfirmationV1) => void
+  onConfirmed?: (
+    confirmation: TextOpenWorldCreatorProductionPreflightConfirmationV1,
+    preflight: TextOpenWorldCreatorProductionPreflightV1,
+  ) => void
 }
 
 const EMPTY_ACKNOWLEDGEMENT: TextOpenWorldCreatorPreflightAcknowledgementV1 = {
@@ -144,7 +150,7 @@ export function TextOpenWorldCreatorProductionReadiness(
         acknowledgement,
       })
       setConfirmation(next)
-      props.onConfirmed?.(next)
+      props.onConfirmed?.(next, preflight)
     } catch {
       setError('当前检查尚未全部通过，或确认项不完整。')
     }

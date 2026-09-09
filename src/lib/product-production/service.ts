@@ -10,13 +10,24 @@ import type {
   ProductProductionCommandRecordV1,
   ProductProductionRecordV1,
   ProductionProductKindV1,
+  TextOpenWorldCreatorProductionPreflightConfirmationV1,
+  TextOpenWorldCreatorProductionPreflightV1,
+  TextOpenWorldCreatorSourceLocatorV1,
+  TextOpenWorldSourceRightsBasisV1,
   WorkspaceScope,
   WorldReferenceCatalogEntryV1,
 } from '../types'
 import { assertRecordInScope, resolveScope } from '../workspace/scope'
 import { listWorldReferenceCatalogV1 } from '../product/source'
 import { prepareProductProductionAdoption, publishProductProductionBuild } from './adoption'
-import { executeProductProductionCommand } from './commands'
+import {
+  executeProductProductionCommand,
+  type ProductProductionCommandReceiptV1,
+} from './commands'
+import {
+  inspectProductProductionBuildRecoveryPolicyV1,
+  readProductProductionRecoveryTaskKeyV1,
+} from './recovery-policy'
 import { draftProductProductionBriefV3, suggestProductStartingPoints } from './consultation'
 import { parseProductProductionBriefV3 } from './contracts'
 import {
@@ -29,6 +40,13 @@ import {
   createConfiguredProductProductionExecutorV1,
 } from './production-executor'
 import { createTextOpenWorldProductionExecutorV1 } from '../open-world/production-executor'
+import {
+  createTextOpenWorldCreatorStartPreparationV1,
+  readTextOpenWorldCreatorExecutionBriefV1,
+  type TextOpenWorldCreatorStartPreparationV1,
+} from '../open-world/creator-production-start'
+import { verifyTextOpenWorldCreatorProductionPreflightConfirmationV1 } from '../open-world/creator-production-preflight'
+import { useAIConfigStore } from '../../stores/ai-config'
 import {
   projectProductProductionSchedulerV1,
   runProductProductionUntilBlockedV1,
@@ -53,6 +71,9 @@ import {
 export interface ProductProductionDetailsV1 {
   production: ProductProductionRecordV1
   brief: ProductProductionBriefRecordV1 | null
+  /** Frozen scheduler/runtime envelope. Creator rows retain their own author
+   * Brief in `briefJson`; this projection is available only after start. */
+  executionBrief: ProductProductionBriefV3 | null
   build: ProductBuildRecordV1 | null
   artifactCount: number
   recentCommands: ProductProductionCommandRecordV1[]
@@ -73,10 +94,30 @@ export async function readProductProductionTaskEvidenceV1(input: {
   const task = progress.tasks.find(item => item.taskKey === input.taskKey)
   if (!task?.runId) return []
   const snapshot = await readAgentRunV1(scope, task.runId)
-  if (snapshot.run.productBuildId !== progress.buildId) throw new Error('任务证据不属于当前 Build')
+  const boundary = snapshot.contract.scope.productProduction
+  if (snapshot.run.productBuildId !== progress.buildId
+    || snapshot.run.parentRunId !== progress.rootRunId
+    || snapshot.run.parentRelation !== `task:${input.taskKey}`
+    || !boundary
+    || boundary.productBuildId !== progress.buildId
+    || boundary.controlEpoch !== progress.controlEpoch
+    || boundary.planHash !== progress.planHash
+    || boundary.taskKey !== input.taskKey) {
+    throw new Error('任务证据不属于当前 Build/task Run')
+  }
+  const isCurrentGovernedAttempt = (stepId: string | undefined, attempt: number | undefined) => {
+    if (stepId == null || attempt == null) return false
+    const step = snapshot.projection.steps[stepId]
+    if (!step || step.attempt !== attempt) return false
+    if (stepId === input.taskKey) return true
+    return input.taskKey === 'p1.source-curation'
+      && stepId.startsWith(`${input.taskKey}.world.source-curation.batch.`)
+      && ['succeeded', 'failed'].includes(step.status)
+  }
   const result: Array<{ attempt: number; kind: string; content: string }> = []
   for (const event of snapshot.events) {
-    if (event.type === 'evidence.artifact.recorded' && event.payload.stepId === input.taskKey
+    if (event.type === 'evidence.artifact.recorded'
+      && isCurrentGovernedAttempt(event.payload.stepId, event.payload.attempt)
       && ['raw-response', 'source-snapshot', 'tool-result'].includes(event.payload.artifactKind)) {
       const content = await readAgentRunArtifactExactV1({
         projectId: scope.projectId, artifactKind: event.payload.artifactKind,
@@ -84,7 +125,8 @@ export async function readProductProductionTaskEvidenceV1(input: {
       })
       result.push({ attempt: event.payload.attempt ?? 0, kind: event.payload.artifactKind, content })
     }
-    if (event.type === 'step.failed' && event.payload.stepId === input.taskKey) {
+    if (event.type === 'step.failed'
+      && isCurrentGovernedAttempt(event.payload.stepId, event.payload.attempt)) {
       result.push({ attempt: event.payload.attempt, kind: 'failure', content: event.payload.code })
     }
   }
@@ -171,6 +213,62 @@ function commandId(prefix: string): string {
   return `${prefix}.${crypto.randomUUID()}`
 }
 
+export interface TextOpenWorldCreatorStartInputV1 {
+  scope: WorkspaceScope
+  productionId: number
+  briefRevision: number
+  briefHash: string
+  expectedStateRevision: number
+  sourceLocator: TextOpenWorldCreatorSourceLocatorV1
+  preflight: TextOpenWorldCreatorProductionPreflightV1
+  confirmation: TextOpenWorldCreatorProductionPreflightConfirmationV1
+  rightsBasis: TextOpenWorldSourceRightsBasisV1
+  rightsNote: string
+  authorizationNonce: string
+  authorizedAt: number
+}
+
+/** Zero-write deterministic plan preview shown before the author starts. */
+export async function previewTextOpenWorldCreatorProductionStartV1(
+  input: TextOpenWorldCreatorStartInputV1,
+): Promise<TextOpenWorldCreatorStartPreparationV1> {
+  const state = useAIConfigStore.getState()
+  return createTextOpenWorldCreatorStartPreparationV1({
+    ...input,
+    aiConfig: state.config,
+    rememberApiKey: state.rememberApiKey,
+  })
+}
+
+/** Repeats the full CAS and atomically freezes SourcePlan/Start/Plan/Build. */
+export async function authorizeTextOpenWorldCreatorProductionStartV1(
+  input: TextOpenWorldCreatorStartInputV1 & { expectedPlanHash: string },
+): Promise<ProductProductionCommandReceiptV1> {
+  const receipt = await executeProductProductionCommand({
+    scope: input.scope,
+    productionId: input.productionId,
+    now: input.authorizedAt,
+    command: {
+      type: 'authorize-text-open-world-creator-start',
+      commandId: 'text-open-world.start.' + input.confirmation.confirmationHash.slice(0, 16)
+        + '.' + input.expectedPlanHash.slice(0, 12),
+      expectedStateRevision: input.expectedStateRevision,
+      briefRevision: input.briefRevision,
+      briefHash: input.briefHash,
+      sourceLocator: input.sourceLocator,
+      preflight: input.preflight,
+      confirmation: input.confirmation,
+      rightsBasis: input.rightsBasis,
+      rightsNote: input.rightsNote,
+      authorizationNonce: input.authorizationNonce,
+      expectedPlanHash: input.expectedPlanHash,
+      authorizedAt: input.authorizedAt,
+    },
+  })
+  if (!receipt.ok) throw new Error(String(receipt.result.message ?? receipt.errorCode ?? '文字开放世界启动失败'))
+  return receipt
+}
+
 export async function listProductProductionWorkspaceV1(
   scopeInput: WorkspaceScope,
   allowedProducts: readonly ProductionProductKindV1[],
@@ -246,9 +344,18 @@ export async function readProductProductionDetailsV1(
     }
     buildHistory.push(row)
   }
+  const executionBrief = brief?.briefKind === 'text-open-world-creator-v1'
+    ? brief.status === 'authorized' && build
+      ? (await readTextOpenWorldCreatorExecutionBriefV1({
+          briefRow: brief,
+          planJson: build.planJson,
+        })).executionBrief
+      : null
+    : brief ? parseProductProductionBriefV3(brief.briefJson) : null
   return {
     production,
     brief: brief ?? null,
+    executionBrief,
     build: build ?? null,
     artifactCount: build?.id == null ? 0 : await db.productBuildArtifacts.where('buildId').equals(build.id).count(),
     recentCommands,
@@ -395,22 +502,33 @@ export async function retryProductProductionBlockerV1(input: {
   if (!input.details.build || input.details.build.status !== 'recovery-required') {
     throw new Error('[product-production-service] 当前 Build 没有可重试 blocker')
   }
-  let blockerKey = 'build-recovery'
-  try {
-    const failure = JSON.parse(input.details.build.failureJson) as { taskKey?: unknown }
-    if (typeof failure.taskKey === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(failure.taskKey)) {
-      blockerKey = failure.taskKey
+  const taskKey = readProductProductionRecoveryTaskKeyV1(input.details.build.failureJson)
+  const blockerKey = taskKey ?? 'build-recovery'
+  const repairNote = input.repairNote?.trim() || undefined
+  const authorDraftJson = input.authorDraftJson?.trim() || undefined
+  if (repairNote || authorDraftJson) {
+    if (!taskKey) throw new Error('[product-production-service] 当前 blocker 不支持作者引导修复')
+    const policy = inspectProductProductionBuildRecoveryPolicyV1({
+      productType: input.details.production.productType,
+      planJson: input.details.build.planJson,
+      taskKey,
+    })
+    if (repairNote && !policy.repairNoteAllowed) {
+      throw new Error('[product-production-service] 当前任务不支持作者修复要求')
     }
-  } catch { /* command still records a generic blocker key */ }
+    if (authorDraftJson && !policy.authorDraftAllowed) {
+      throw new Error('[product-production-service] 当前任务不支持作者完整 JSON 修订')
+    }
+  }
   const receipt = await executeProductProductionCommand({
     scope: input.scope, productionId: input.details.production.id!,
     command: {
       type: 'resolve-blocker', commandId: commandId('resolve-blocker'),
       expectedStateRevision: input.details.production.stateRevision, blockerKey,
       resolution: {
-        action: input.authorDraftJson ? 'author-edit' : input.afterCapabilityChange ? 'change-capability' : 'retry',
-        ...(input.authorDraftJson ? { authorDraftJson: input.authorDraftJson } : {}),
-        note: input.repairNote?.trim() || (input.afterCapabilityChange ? '作者已调整全局能力配置并要求重试' : '作者从制作工作台要求重试'),
+        action: authorDraftJson ? 'author-edit' : input.afterCapabilityChange ? 'change-capability' : 'retry',
+        ...(authorDraftJson ? { authorDraftJson } : {}),
+        note: repairNote || (input.afterCapabilityChange ? '作者已调整全局能力配置并要求重试' : '作者从制作工作台要求重试'),
       },
     },
   })
@@ -444,11 +562,47 @@ export async function runAuthorizedProductProductionV1(input: {
   if (['preview-ready', 'release-ready', 'released'].includes(details.build.status)) {
     return projectProductProductionSchedulerV1({ scope, productionId: input.productionId })
   }
-  const brief = parseProductProductionBriefV3(details.brief.briefJson)
+  const creatorContracts = details.brief.briefKind === 'text-open-world-creator-v1'
+    ? await readTextOpenWorldCreatorExecutionBriefV1({
+        briefRow: details.brief,
+        planJson: details.build.planJson,
+      })
+    : null
+  if (creatorContracts) {
+    // Creator authorization freezes the complete non-secret route identity,
+    // pricing and generation settings. Re-prove it before every run/resume;
+    // resolving a fresh capability receipt alone would otherwise silently
+    // authorize whatever route happens to be configured now.
+    const aiState = useAIConfigStore.getState()
+    const confirmation = await verifyTextOpenWorldCreatorProductionPreflightConfirmationV1({
+      brief: creatorContracts.creatorBrief,
+      preflight: creatorContracts.start.preflight,
+      confirmation: creatorContracts.start.confirmation,
+      projectId: scope.projectId,
+      aiConfig: aiState.config,
+      rememberApiKey: aiState.rememberApiKey,
+    })
+    if (confirmation.confirmationHash !== creatorContracts.start.confirmation.confirmationHash) {
+      throw new Error('[product-production-service] Creator 模型授权已变化，请重新检查并确认生产')
+    }
+  }
+  const brief = creatorContracts?.executionBrief
+    ?? parseProductProductionBriefV3(details.brief.briefJson)
   const textRequirements = brief.capabilityRequirements.filter(requirement => requirement.mediaClass === 'text')
   if (textRequirements.length !== 1) throw new Error('[product-production-service] 正式制作需要唯一文本 capability requirement')
   const textCapability = await resolveConfiguredTextCapabilityV1({
     projectId: scope.projectId, category: 'product-production', requirementKey: textRequirements[0].requirementKey,
+    ...(creatorContracts ? {
+      expectedProviderIdentity: {
+        provider: creatorContracts.start.preflight.providerBinding.provider,
+        model: creatorContracts.start.preflight.providerBinding.model,
+        endpointOrigin: creatorContracts.start.preflight.providerBinding.endpointOrigin,
+        endpointRouteHash: creatorContracts.start.preflight.providerBinding.endpointRouteHash,
+        temperature: creatorContracts.start.preflight.providerBinding.temperature,
+        configuredMaxTokens: creatorContracts.start.preflight.providerBinding.maxTokens,
+        contextWindow: creatorContracts.start.preflight.providerBinding.contextWindow,
+      },
+    } : {}),
   })
   const capabilityBindings: ProductProductionCapabilityBindingV1[] = [{
     requirementKey: textRequirements[0].requirementKey,
@@ -488,6 +642,7 @@ export async function runAuthorizedProductProductionV1(input: {
   const executor = brief.intent.productType === 'text-open-world'
     ? createTextOpenWorldProductionExecutorV1({
       production: details.production, brief, mediaCapabilities,
+      textCapabilityReceipt: textCapability.receipt,
     })
     : createConfiguredProductProductionExecutorV1({
       production: details.production, brief, mediaCapabilities,
@@ -559,7 +714,8 @@ export async function startProductProductionPreviewV1(input: {
   if (previewHash !== details.build.previewHash) {
     throw new Error('[product-production-service] Preview command 返回的 hash 已过期')
   }
-  const brief = parseProductProductionBriefV3(details.brief.briefJson)
+  const brief = details.executionBrief
+  if (!brief) throw new Error('[product-production-service] 当前 Build 缺少可验证执行 Brief')
   const session = await createProductRuntimeInstanceFromSource({
     scope: input.scope,
     source: { kind: 'build', productBuildId: details.build.id!, expectedPreviewHash: previewHash },

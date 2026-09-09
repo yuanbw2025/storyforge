@@ -7,6 +7,8 @@ import {
 } from '../../lib/open-world/creator-brief'
 import type {
   ProductProductionHandoffV1,
+  TextOpenWorldCreatorProductionPreflightConfirmationV1,
+  TextOpenWorldCreatorProductionPreflightV1,
   TextOpenWorldCreatorSourceSelectionV1,
   WorkspaceScope,
 } from '../../lib/types'
@@ -16,6 +18,8 @@ import {
 } from './TextOpenWorldCreatorStudio'
 import { TextOpenWorldCreatorBriefStudio } from './TextOpenWorldCreatorBriefStudio'
 import { TextOpenWorldCreatorProductionReadiness } from './TextOpenWorldCreatorProductionReadiness'
+import { TextOpenWorldCreatorProductionStart } from './TextOpenWorldCreatorProductionStart'
+import ProductProductionStudio from '../product/ProductProductionStudio'
 
 export interface TextOpenWorldCreatorWorkflowProps {
   worldScope?: WorkspaceScope | null
@@ -28,7 +32,9 @@ export interface TextOpenWorldCreatorWorkflowProps {
   onOpenSettings?: (target: TextOpenWorldCreatorBriefResumeTargetV1) => void
 }
 
-type WorkflowViewV1 = 'recovering' | 'source' | 'brief' | 'readiness'
+type WorkflowViewV1 = 'recovering' | 'source' | 'brief' | 'readiness' | 'plan' | 'production'
+
+const OPEN_WORLD_PRODUCT = ['text-open-world'] as const
 
 function sameScope(left: WorkspaceScope, right: WorkspaceScope): boolean {
   return left.projectId === right.projectId
@@ -87,6 +93,10 @@ export function TextOpenWorldCreatorWorkflow(props: TextOpenWorldCreatorWorkflow
   const [view, setView] = useState<WorkflowViewV1>('recovering')
   const [selection, setSelection] = useState<TextOpenWorldCreatorSourceSelectionV1 | null>(null)
   const [session, setSession] = useState<TextOpenWorldCreatorBriefSessionV1 | null>(null)
+  const [readinessResult, setReadinessResult] = useState<{
+    preflight: TextOpenWorldCreatorProductionPreflightV1
+    confirmation: TextOpenWorldCreatorProductionPreflightConfirmationV1
+  } | null>(null)
   const [recoveryNotice, setRecoveryNotice] = useState('')
   const generation = useRef(0)
 
@@ -96,6 +106,7 @@ export function TextOpenWorldCreatorWorkflow(props: TextOpenWorldCreatorWorkflow
     setView('recovering')
     setSelection(null)
     setSession(null)
+    setReadinessResult(null)
     setRecoveryNotice('')
     if (scopes.length === 0) {
       setView('source')
@@ -109,7 +120,9 @@ export function TextOpenWorldCreatorWorkflow(props: TextOpenWorldCreatorWorkflow
       if (recovered && matchesExplicitHandoff(recovered, explicitHandoff, worldScope)) {
         setSession(recovered)
         setSelection(recovered.selection)
-        setView(props.initialView === 'readiness' && recovered.confirmedBrief ? 'readiness' : 'brief')
+        setView(recovered.production.currentBuildNumber != null
+          ? 'production'
+          : props.initialView === 'readiness' && recovered.confirmedBrief ? 'readiness' : 'brief')
         return
       }
       setView('source')
@@ -125,6 +138,7 @@ export function TextOpenWorldCreatorWorkflow(props: TextOpenWorldCreatorWorkflow
     generation.current += 1
     setRecoveryNotice('')
     setSession(null)
+    setReadinessResult(null)
     setSelection(next)
     setView('brief')
   }
@@ -132,6 +146,7 @@ export function TextOpenWorldCreatorWorkflow(props: TextOpenWorldCreatorWorkflow
   const returnToSource = () => {
     generation.current += 1
     setSession(null)
+    setReadinessResult(null)
     setSelection(null)
     setRecoveryNotice('已保留会谈草稿；重新选择来源后会建立对应的独立会谈。')
     setView('source')
@@ -172,6 +187,31 @@ export function TextOpenWorldCreatorWorkflow(props: TextOpenWorldCreatorWorkflow
             sourceBinding: structuredClone(session.sourceBinding),
           })
         : undefined}
+      onConfirmed={(confirmation, preflight) => {
+        setReadinessResult({ preflight, confirmation })
+        setView('plan')
+      }}
+    />
+  }
+
+  if (view === 'plan' && session?.confirmedBrief && readinessResult) {
+    return <TextOpenWorldCreatorProductionStart
+      session={session}
+      preflight={readinessResult.preflight}
+      confirmation={readinessResult.confirmation}
+      onBack={() => setView('readiness')}
+      onStarted={() => setView('production')}
+    />
+  }
+
+  if (view === 'production' && session?.production.id) {
+    return <ProductProductionStudio
+      scope={session.scope}
+      worldGroupId={props.worldGroupId}
+      allowedProducts={OPEN_WORLD_PRODUCT}
+      initialProduct="text-open-world"
+      initialProductionId={session.production.id}
+      productionOnly
     />
   }
 

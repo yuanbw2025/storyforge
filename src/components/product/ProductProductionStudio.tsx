@@ -62,6 +62,10 @@ import { resolveRequestConfig } from '../../lib/ai/client'
 import { isAIConfigReady } from '../../lib/ai/config-readiness'
 import { exportProductDistributionBundleV2 } from '../../lib/product-platform/distribution-bundle'
 import { downloadTextFile } from '../../lib/export/text-export'
+import {
+  inspectProductProductionBuildRecoveryPolicyV1,
+  readProductProductionRecoveryTaskKeyV1,
+} from '../../lib/product-production/recovery-policy'
 type SupportedProduct = ProductionProductKindV1
 
 const PRODUCT_LABELS: Record<SupportedProduct, string> = {
@@ -164,6 +168,10 @@ export default function ProductProductionStudio(props: {
   worldGroupId?: number | null
   allowedProducts: readonly SupportedProduct[]
   initialProduct?: SupportedProduct
+  /** Open an already-created Production instead of choosing the newest row. */
+  initialProductionId?: number | null
+  /** Embedded continuation used by product-specific creator workflows. */
+  productionOnly?: boolean
   initialSource?: ProductProductionHandoffV1 | null
   onProductSelected?: (productType: SupportedProduct) => void
   onPublished?: (productType: SupportedProduct) => void
@@ -207,7 +215,11 @@ export default function ProductProductionStudio(props: {
   const [taskEvidence, setTaskEvidence] = useState<{ taskKey: string; text: string } | null>(null)
   const [repairNote, setRepairNote] = useState('')
   const [authorDraftJson, setAuthorDraftJson] = useState('')
-  useEffect(() => setTaskEvidence(null), [selectedProductionId, progress?.controlEpoch])
+  useEffect(() => {
+    setTaskEvidence(null)
+    setRepairNote('')
+    setAuthorDraftJson('')
+  }, [selectedProductionId, progress?.controlEpoch])
   const [performanceGate, setPerformanceGate] = useState<VerifiedProductBrowserPerformanceGateV1 | null>(null)
   const [performanceGateError, setPerformanceGateError] = useState('')
   const [performanceLabRunning, setPerformanceLabRunning] = useState(false)
@@ -219,6 +231,7 @@ export default function ProductProductionStudio(props: {
   const [completedPlaythroughs, setCompletedPlaythroughs] = useState<CompletedProductBuildPlaythroughV1[]>([])
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
+  const [lockedProductionUnavailable, setLockedProductionUnavailable] = useState(false)
   const [commandActivity, setCommandActivity] = useState<CommandActivityV1 | null>(null)
   const [evolutionGoal, setEvolutionGoal] = useState('')
   const [evolutionLanes, setEvolutionLanes] = useState<ProductEvolutionAffectedLaneV1[]>([
@@ -257,11 +270,31 @@ export default function ProductProductionStudio(props: {
     setWorldReleaseId(current => parsedInitialSource
       ? handedOffRelease?.reference.localReleaseRecordId ?? null
       : current ?? nextReleases[0]?.reference.localReleaseRecordId ?? null)
-    const desired = preferredId !== undefined
-      ? preferredId
-      : selectedProductionId != null && nextProductions.some(row => row.id === selectedProductionId)
-        ? selectedProductionId
-        : nextProductions[0]?.id ?? null
+    const lockedProduction = props.productionOnly
+      ? props.initialProductionId == null
+        ? null
+        : nextProductions.find(row => row.id === props.initialProductionId) ?? null
+      : null
+    const lockedTargetMissing = props.productionOnly === true && lockedProduction == null
+    setLockedProductionUnavailable(lockedTargetMissing)
+    if (lockedTargetMissing) {
+      queuedProductionIdRef.current = null
+      productionAbort.current?.abort('locked-product-production-unavailable')
+      setError(props.initialProductionId == null
+        ? '嵌入式制作入口缺少锁定的 Production ID；已停止，未打开其他制作任务。'
+        : `锁定的 Production #${props.initialProductionId} 不存在、已失效或不属于当前产品；已停止，未打开其他制作任务。`)
+    }
+    const desired = props.productionOnly
+      ? lockedProduction?.id ?? null
+      : preferredId !== undefined
+        ? preferredId
+        : selectedProductionIdRef.current != null
+            && nextProductions.some(row => row.id === selectedProductionIdRef.current)
+          ? selectedProductionIdRef.current
+          : props.initialProductionId != null
+              && nextProductions.some(row => row.id === props.initialProductionId)
+            ? props.initialProductionId
+            : nextProductions[0]?.id ?? null
     selectedProductionIdRef.current = desired
     setSelectedProductionId(desired)
     if (desired == null) {
@@ -330,9 +363,9 @@ export default function ProductProductionStudio(props: {
       setMediaRuntimeGateError('')
       setCompletedPlaythroughs([])
     }
-  }, [allowedProducts, initialSource, onProductSelected, scope, selectedProductionId])
+  }, [allowedProducts, initialSource, onProductSelected, props.initialProductionId, props.productionOnly, scope])
 
-  useEffect(() => { void refresh() }, [props.scope.projectId, props.scope.worldId, props.scope.workId]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { void refresh() }, [refresh])
   useEffect(() => () => {
     queuedProductionIdRef.current = null
     productionAbort.current?.abort('product-production-studio-unmounted')
@@ -672,7 +705,12 @@ export default function ProductProductionStudio(props: {
   const retryBlocker = () => run(async () => {
     if (!details) throw new Error('缺少 Production。')
     const productionId = details.production.id!
-    await retryProductProductionBlockerV1({ scope: props.scope, details, repairNote, authorDraftJson: authorDraftJson.trim() || undefined })
+    await retryProductProductionBlockerV1({
+      scope: props.scope,
+      details,
+      ...(recoveryPolicy?.repairNoteAllowed ? { repairNote } : {}),
+      ...(recoveryPolicy?.authorDraftAllowed ? { authorDraftJson: authorDraftJson.trim() || undefined } : {}),
+    })
     setRepairNote('')
     setAuthorDraftJson('')
     await refresh(productionId)
@@ -704,14 +742,33 @@ export default function ProductProductionStudio(props: {
   }, [progress])
   const blockerSummary = details?.build?.status === 'recovery-required'
     ? buildFailureSummary(details.build.failureJson) : ''
+  const blockerTaskKey = details?.build?.status === 'recovery-required'
+    ? readProductProductionRecoveryTaskKeyV1(details.build.failureJson) : null
+  const recoveryPolicy = useMemo(() => {
+    if (!details?.build || details.build.status !== 'recovery-required' || !blockerTaskKey) return null
+    try {
+      return inspectProductProductionBuildRecoveryPolicyV1({
+        productType: details.production.productType,
+        planJson: details.build.planJson,
+        taskKey: blockerTaskKey,
+      })
+    } catch {
+      return null
+    }
+  }, [blockerTaskKey, details?.build, details?.production.productType])
   const compatibility = useMemo(
     () => compatibilityReport(details?.build?.compatibilityJson),
     [details?.build?.compatibilityJson],
   )
   const selectedBrief = useMemo(() => {
-    try { return details?.brief ? JSON.parse(details.brief.briefJson) as ProductProductionBriefV3 : null }
+    try {
+      return details?.executionBrief
+        ?? (details?.brief?.briefKind !== 'text-open-world-creator-v1'
+          ? JSON.parse(details?.brief?.briefJson ?? 'null') as ProductProductionBriefV3 | null
+          : null)
+    }
     catch { return null }
-  }, [details?.brief])
+  }, [details?.brief, details?.executionBrief])
   const commercialPerformanceRequired = selectedBrief?.qualityProfile === 'commercial-candidate'
   const commercialPerformancePassed = performanceGate?.gateReceipt.status === 'passed'
     && performanceGate.evidence.receipt.passed
@@ -732,6 +789,9 @@ export default function ProductProductionStudio(props: {
     || productType !== 'avg' || audioLevel === 'none' || capabilityReadiness.mediaRelayReady
   const authorizationReadiness = useMemo(() => {
     if (!details?.brief) return null
+    // Creator authorization is completed by its dedicated G5-03/G5-04
+    // preflight + frozen-plan flow before this embedded production view opens.
+    if (details.brief.briefKind === 'text-open-world-creator-v1') return null
     try {
       const brief = JSON.parse(details.brief.briefJson) as ProductProductionBriefV3
       return evaluateProductProductionAuthorizationReadinessV1({ brief, readiness: capabilityReadiness })
@@ -745,17 +805,25 @@ export default function ProductProductionStudio(props: {
     }
   }, [capabilityReadiness, details?.brief])
 
-  return <div className="grid min-h-[720px] grid-cols-1 bg-bg-base text-text-primary lg:grid-cols-[260px_minmax(0,1fr)]" data-testid="product-production-studio">
-    <aside className="border-b border-border bg-bg-surface p-4 lg:border-b-0 lg:border-r">
+  return <div className={`grid min-h-[720px] grid-cols-1 bg-bg-base text-text-primary ${props.productionOnly ? '' : 'lg:grid-cols-[260px_minmax(0,1fr)]'}`} data-testid="product-production-studio">
+    {!props.productionOnly && <aside className="border-b border-border bg-bg-surface p-4 lg:border-b-0 lg:border-r">
       <div className="flex items-center justify-between gap-2"><div><small className="font-mono text-[9px] text-accent">PRODUCT-PROD</small><h2 className="font-serif text-base">游戏制作</h2></div><button aria-label="刷新制作列表" onClick={() => void refresh()} className="rounded border border-border p-2 text-text-muted"><RefreshCw className="h-3.5 w-3.5" /></button></div>
       <button onClick={() => { setSelectedProductionId(null); setDetails(null); setProductType(initialProduct); props.onProductSelected?.(initialProduct); setSuggestions([]); setSourceOptions(null); setSelectionDefaults({}); setSourceSelection(null); setDraft(null); setMessage(''); setError('') }} className="mt-4 flex w-full items-center justify-center gap-2 rounded border border-accent/40 bg-accent/10 px-3 py-2 text-xs text-accent"><Plus className="h-3.5 w-3.5" />新建 Production</button>
       <div className="mt-4 grid gap-2">{productions.map(row => <button key={row.id} onClick={() => void refresh(row.id)} className={`rounded border p-3 text-left ${selectedProductionId === row.id ? 'border-accent bg-accent/10' : 'border-border bg-bg-base'}`}><strong className="block truncate text-xs">{row.title}</strong><span className="mt-1 flex items-center justify-between text-[9px] text-text-muted"><code>{row.productionKey}</code><em className="not-italic text-accent">{statusLabel(row.status)}</em></span></button>)}{productions.length === 0 && <p className="rounded border border-dashed border-border p-4 text-[10px] leading-relaxed text-text-muted">还没有 Production。会谈只读取冻结 WorldRelease，不会在后台自动开始制作。</p>}</div>
-    </aside>
+    </aside>}
     <main className="min-w-0 p-5 md:p-8">
       {(message || error) && <div role={error ? 'alert' : 'status'} aria-live={error ? 'assertive' : 'polite'} className={`mb-5 flex items-start gap-2 rounded border p-3 text-xs ${error ? 'border-error/30 bg-error/5 text-error' : 'border-success/30 bg-success/5 text-success'}`}>{error ? <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /> : <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />}<span>{error || message}</span></div>}
       {commandActivity && <div role="status" aria-live="polite" data-testid="product-production-command-activity" className={`mb-5 rounded border p-3 text-[10px] ${commandActivity.status === 'succeeded' ? 'border-success/30 bg-success/5 text-success' : commandActivity.status === 'conflict' ? 'border-error/30 bg-error/5 text-error' : 'border-accent/30 bg-accent/5 text-accent'}`}><strong>{commandActivity.label} · {commandActivity.status === 'pending' ? 'pending' : commandActivity.status === 'succeeded' ? 'succeeded' : 'conflict / failed'}</strong><span className="mt-1 block">{commandActivity.detail}</span></div>}
       {(busy || productionRunning) && <div role="status" aria-live="polite" aria-busy="true" className="mb-5 flex items-center gap-2 text-xs text-accent"><Loader2 className="h-4 w-4 animate-spin" />{productionRunning ? '内容、视觉、音频、装配与质检正在按 DAG 自动推进…' : '正在执行受治理的制作步骤…'}</div>}
-      {!details ? <>
+      {!details && props.productionOnly
+        ? lockedProductionUnavailable
+          ? <section role="alert" data-testid="product-production-locked-target-unavailable" className="rounded border border-error/30 bg-error/5 p-5 text-sm text-error">
+              锁定的文字开放世界 Production 当前不可用。为避免误执行其他任务，制作工作台已保持关闭。
+            </section>
+          : <section role="status" className="rounded border border-border bg-bg-elevated p-5 text-sm text-text-muted">
+              <Loader2 className="mr-2 inline h-4 w-4 animate-spin" />正在恢复已创建的文字开放世界 Production…
+            </section>
+        : !details ? <>
         <header className="mb-6 border-b border-border pb-5"><small className="font-mono text-[9px] tracking-widest text-accent">CONSULT → BRIEF → AUTHORIZE</small><h1 className="mt-2 font-serif text-2xl">从冻结世界版本开始制作</h1><p className="mt-2 max-w-3xl text-xs leading-6 text-text-muted">先选择来源和起点，系统生成可审查 Brief。只有点击“保存 Brief”并再次“授权开始”后，才会创建 Build。</p></header>
         <section className="grid gap-4 rounded border border-border bg-bg-elevated p-5 md:grid-cols-2">
           <label className="grid gap-2 text-[10px] text-text-muted">冻结 WorldRelease<select value={worldReleaseId ?? ''} onChange={event => { setWorldReleaseId(Number(event.target.value) || null); setSuggestions([]); setSourceOptions(null); setSelectionDefaults({}); setSourceSelection(null); setDraft(null) }} className="rounded border border-border bg-bg-base p-2 text-xs text-text-primary">{releases.map(release => <option key={release.reference.releaseUid} value={release.reference.localReleaseRecordId}>v{release.reference.releaseVersion} · {release.label}</option>)}</select></label>
@@ -837,7 +905,7 @@ export default function ProductProductionStudio(props: {
           </div>
         </header>
         <section className="mt-5 grid gap-3 md:grid-cols-4"><article className="rounded border border-border bg-bg-elevated p-4"><small className="text-[9px] text-text-muted">BRIEF</small><strong className="mt-1 block text-sm">{details.brief ? `r${details.brief.revision} · ${statusLabel(details.brief.status)}` : '未建立'}</strong></article><article className="rounded border border-border bg-bg-elevated p-4"><small className="text-[9px] text-text-muted">BUILD</small><strong className="mt-1 block text-sm">{details.build ? `#${details.build.buildNumber} · ${statusLabel(details.build.status)}` : '等待授权'}</strong></article><article className="rounded border border-border bg-bg-elevated p-4"><small className="text-[9px] text-text-muted">ARTIFACTS</small><strong className="mt-1 block text-sm">{details.artifactCount} 个版本</strong></article><article className="rounded border border-border bg-bg-elevated p-4"><small className="text-[9px] text-text-muted">RELEASE</small><strong className="mt-1 block text-sm">{details.production.currentProductReleaseId ? `#${details.production.currentProductReleaseId}` : '未发布'}</strong></article></section>
-        <section className="mt-5 rounded border border-border bg-bg-elevated p-5"><h2 className="text-sm font-semibold">下一步</h2><p className="mt-2 text-[10px] leading-5 text-text-muted">一次作者授权会启动整套自动制作；正式文本任务直接复用“设置”里的全局 AI 配置，不另收 API Key。每一步都有 CAS、scope、epoch 和 hash 复验。</p>{details.production.status === 'brief-ready' && authorizationReadiness && !authorizationReadiness.ready && <div className="mt-3 rounded border border-error/30 bg-error/5 p-3 text-[10px] text-error" data-testid="product-production-authorization-blocker"><strong className="block">能力未绑定，尚未创建 Build</strong><span className="mt-1 block">{authorizationReadiness.blockerMessages.join('；')}</span></div>}{details.build?.status === 'recovery-required' && <div className="mt-3 rounded border border-error/30 bg-error/5 p-3 text-[10px] text-error"><strong className="block">自动制作停在可恢复边界</strong><span className="mt-1 block">{blockerSummary || '制作任务未通过，请查看任务记录并说明修复要求。'}</span></div>}<div className="mt-4 flex flex-wrap gap-2">{details.production.status === 'brief-ready' && <button disabled={busy || productionRunning || authorizationReadiness?.ready !== true} onClick={authorize} className="flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white disabled:opacity-40"><ShieldCheck className="h-3.5 w-3.5" />作者授权并开始自动制作</button>}{details.build && ['authorized', 'building'].includes(details.build.status) && !productionRunning && <button disabled={busy} onClick={build} className="flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white"><PackageCheck className="h-3.5 w-3.5" />继续自动制作</button>}{details.build?.status === 'recovery-required' && <label className="w-full text-xs text-text-muted">本次修复要求（可选）<textarea aria-label="本次修复要求" maxLength={4000} value={repairNote} onChange={event => setRepairNote(event.target.value)} className="mt-2 block min-h-24 w-full rounded border border-border bg-bg-base p-3 text-text-main" placeholder="指出需要修正的内容；仍需遵守已确认的世界、规则和安全边界。" /></label>}{details.build?.status === 'recovery-required' && <details className="w-full text-xs text-text-muted"><summary className="cursor-pointer">直接修订任务草稿（高级）</summary><p className="my-2">填写完整 JSON 将跳过本次模型重写，按原任务规则校验；保留原始模型证据，记录为作者修订。只适用于失败的文本任务。</p><textarea aria-label="作者修订的完整任务 JSON" maxLength={120000} value={authorDraftJson} onChange={event => setAuthorDraftJson(event.target.value)} className="min-h-60 w-full rounded border border-border bg-bg-base p-3 font-mono text-text-main" /></details>}{details.build?.status === 'recovery-required' && <button disabled={busy || productionRunning} onClick={retryBlocker} className="flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white"><RefreshCw className="h-3.5 w-3.5" />修正后继续制作</button>}{details.build && ['preview-ready', 'release-ready', 'released'].includes(details.build.status) && <button disabled={busy || productionRunning} onClick={preview} className="flex items-center gap-2 rounded border border-accent/40 bg-accent/10 px-4 py-2 text-xs text-accent"><Play className="h-3.5 w-3.5" />{details.build.status === 'released' ? '试玩此 Build' : '试玩未发布 Build'}</button>}{details.build?.status === 'release-ready' && <button disabled={busy || productionRunning || (commercialPerformanceRequired && !commercialQualityPassed)} onClick={publish} className="flex items-center gap-2 rounded bg-success px-4 py-2 text-xs text-white disabled:opacity-40"><Rocket className="h-3.5 w-3.5" />复验并原子发布</button>}{details.production.status === 'released' && <button disabled={busy} onClick={() => props.onPublished?.(details.production.productType)} className="flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white"><Gamepad2 className="h-3.5 w-3.5" />进入玩家模式</button>}</div></section>
+        <section className="mt-5 rounded border border-border bg-bg-elevated p-5"><h2 className="text-sm font-semibold">下一步</h2><p className="mt-2 text-[10px] leading-5 text-text-muted">一次作者授权会启动整套自动制作；正式文本任务直接复用“设置”里的全局 AI 配置，不另收 API Key。每一步都有 CAS、scope、epoch 和 hash 复验。</p>{details.production.status === 'brief-ready' && authorizationReadiness && !authorizationReadiness.ready && <div className="mt-3 rounded border border-error/30 bg-error/5 p-3 text-[10px] text-error" data-testid="product-production-authorization-blocker"><strong className="block">能力未绑定，尚未创建 Build</strong><span className="mt-1 block">{authorizationReadiness.blockerMessages.join('；')}</span></div>}{details.build?.status === 'recovery-required' && <div className="mt-3 rounded border border-error/30 bg-error/5 p-3 text-[10px] text-error"><strong className="block">自动制作停在可恢复边界</strong><span className="mt-1 block">{blockerSummary || (recoveryPolicy?.repairNoteAllowed ? '制作任务未通过，请查看任务记录并说明修复要求。' : '制作任务未通过，请查看任务记录后按原冻结输入重试。')}</span></div>}<div className="mt-4 flex flex-wrap gap-2">{details.production.status === 'brief-ready' && <button disabled={busy || productionRunning || authorizationReadiness?.ready !== true} onClick={authorize} className="flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white disabled:opacity-40"><ShieldCheck className="h-3.5 w-3.5" />作者授权并开始自动制作</button>}{details.build && ['authorized', 'building'].includes(details.build.status) && !productionRunning && <button disabled={busy} onClick={build} className="flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white"><PackageCheck className="h-3.5 w-3.5" />继续自动制作</button>}{details.build?.status === 'recovery-required' && recoveryPolicy?.repairNoteAllowed && <label className="w-full text-xs text-text-muted">本次修复要求（可选）<textarea aria-label="本次修复要求" maxLength={4000} value={repairNote} onChange={event => setRepairNote(event.target.value)} className="mt-2 block min-h-24 w-full rounded border border-border bg-bg-base p-3 text-text-main" placeholder="指出需要修正的内容；仍需遵守已确认的世界、规则和安全边界。" /></label>}{details.build?.status === 'recovery-required' && recoveryPolicy?.authorDraftAllowed && <details className="w-full text-xs text-text-muted"><summary className="cursor-pointer">直接修订任务草稿（高级）</summary><p className="my-2">填写完整 JSON 将跳过本次模型重写，按原任务规则校验；保留原始模型证据，记录为作者修订。只适用于失败的文本任务。</p><textarea aria-label="作者修订的完整任务 JSON" maxLength={120000} value={authorDraftJson} onChange={event => setAuthorDraftJson(event.target.value)} className="min-h-60 w-full rounded border border-border bg-bg-base p-3 font-mono text-text-main" /></details>}{details.build?.status === 'recovery-required' && !recoveryPolicy?.repairNoteAllowed && <p className="w-full rounded border border-border bg-bg-base p-3 text-xs text-text-muted" data-testid="product-production-retry-only">当前任务暂不支持修复要求或直接 JSON 修订；可先查看制作记录，再按原冻结输入重试。</p>}{details.build?.status === 'recovery-required' && <button disabled={busy || productionRunning} onClick={retryBlocker} className="flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white"><RefreshCw className="h-3.5 w-3.5" />{recoveryPolicy?.repairNoteAllowed ? '修正后继续制作' : '重试失败任务'}</button>}{details.build && ['preview-ready', 'release-ready', 'released'].includes(details.build.status) && <button disabled={busy || productionRunning} onClick={preview} className="flex items-center gap-2 rounded border border-accent/40 bg-accent/10 px-4 py-2 text-xs text-accent"><Play className="h-3.5 w-3.5" />{details.build.status === 'released' ? '试玩此 Build' : '试玩未发布 Build'}</button>}{details.build?.status === 'release-ready' && <button disabled={busy || productionRunning || (commercialPerformanceRequired && !commercialQualityPassed)} onClick={publish} className="flex items-center gap-2 rounded bg-success px-4 py-2 text-xs text-white disabled:opacity-40"><Rocket className="h-3.5 w-3.5" />复验并原子发布</button>}{details.production.status === 'released' && <button disabled={busy} onClick={() => props.onPublished?.(details.production.productType)} className="flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white"><Gamepad2 className="h-3.5 w-3.5" />进入玩家模式</button>}</div></section>
         {details.production.productType === 'ttrpg' && details.production.currentProductReleaseId && <section className="mt-5 rounded border border-border bg-bg-elevated p-5">
           <h2 className="text-sm font-semibold">分享这个游戏</h2>
           <p className="mt-2 text-xs text-text-muted">完整游戏包包含已发布的剧情、角色、规则和图片。玩家存档、制作记录与 API 配置不会进入分发包。</p>
@@ -859,14 +927,31 @@ export default function ProductProductionStudio(props: {
             <article className="rounded bg-bg-base p-3 text-[10px]"><span className="text-text-muted">本轮成本</span><strong className="mt-1 block">{progress.budget.usage.costUsd == null ? '供应商未回传' : `$${progress.budget.usage.costUsd.toFixed(4)}`} / {progress.budget.limits.maximumCostUsd == null ? '未设金额上限' : `$${progress.budget.limits.maximumCostUsd.toFixed(2)}`}</strong></article>
             <article className="rounded bg-bg-base p-3 text-[10px]"><span className="text-text-muted">本轮新增媒资</span><strong className="mt-1 block">{formatBytes(progress.budget.usage.storageBytes)} / {formatBytes(progress.budget.limits.maximumStorageBytes)}</strong></article>
           </div>
-          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">{progress.tasks.map(task => <article key={task.taskKey} className="rounded border border-border bg-bg-base p-3"><span className="flex items-center justify-between gap-2"><strong className="text-[10px]">{task.taskKey}</strong><em className={`not-italic text-[9px] ${task.status === 'completed' ? 'text-success' : task.status === 'blocked' ? 'text-error' : 'text-accent'}`}>{statusLabel(task.status)}</em></span><p className="mt-2 text-[9px] text-text-muted">{task.lane} · attempt {task.attempt || '—'}{task.blocker ? ` · ${task.blocker}` : ''}</p>{task.runId && <button type="button" className="mt-2 text-xs text-accent underline" onClick={() => {
+          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">{progress.tasks.map(task => <article key={task.taskKey} className="rounded border border-border bg-bg-base p-3">
+            <span className="flex items-center justify-between gap-2"><strong className="text-[10px]">{task.taskKey}</strong><em className={`not-italic text-[9px] ${task.status === 'completed' ? 'text-success' : task.status === 'blocked' || task.status === 'stale' ? 'text-error' : 'text-accent'}`}>{statusLabel(task.status)}</em></span>
+            <p className="mt-2 text-[9px] leading-4 text-text-muted">
+              {task.lane} · {task.concurrencyGroup} · attempt {task.attempt || '—'}/{task.maxAttempts}<br />
+              依赖：{task.dependsOn.length ? task.dependsOn.join('、') : '起点'} · timeout {formatDurationMs(task.timeoutMs)}
+              {task.blocker ? <><br />阻塞：{task.blocker}</> : null}
+              {task.staleReason ? <><br />失效：{task.staleReason}</> : null}
+              {task.latestDurableBoundary ? <><br />边界：{task.latestDurableBoundary.eventType} #{task.latestDurableBoundary.sequence}</> : null}
+              {task.checkpoint ? <><br />checkpoint：{task.checkpoint.status} · {task.checkpoint.resumeKind}</> : null}
+            </p>
+            {task.steps.length > 0 && <details className="mt-2 text-[9px] text-text-muted">
+              <summary className="cursor-pointer text-accent">查看 step / attempt 历史</summary>
+              <ul className="mt-2 grid gap-1">{task.steps.map(step => <li key={step.stepId}>
+                <code>{step.stepId}</code> · {step.status} · {step.attempts.map(item => `#${item.attempt}:${item.status}${item.failureCode ? `(${item.failureCode})` : ''}`).join('、')}
+              </li>)}</ul>
+            </details>}
+            {task.runId && <button type="button" className="mt-2 text-xs text-accent underline" onClick={() => {
               setTaskEvidence(null)
               void readProductProductionTaskEvidenceV1({ scope: props.scope, productionId: progress.productionId, taskKey: task.taskKey })
                 .then(rows => setTaskEvidence({ taskKey: task.taskKey, text: rows.length
                   ? rows.map(row => `Attempt ${row.attempt} · ${row.kind}\n${row.content}`).join('\n\n')
                   : '此任务尚未保存模型正文或错误详情。' }))
                 .catch(cause => setError(cause instanceof Error ? cause.message : String(cause)))
-            }}>查看 {task.taskKey} 制作记录</button>}</article>)}</div>
+            }}>查看 {task.taskKey} 制作记录</button>}
+          </article>)}</div>
           {taskEvidence && <section className="mt-4 rounded border border-border bg-bg-base p-4" aria-label="任务制作记录">
             <div className="flex justify-between gap-3"><h3 className="text-sm font-bold">{taskEvidence.taskKey} · 制作记录</h3><button type="button" onClick={() => setTaskEvidence(null)}>关闭制作记录</button></div>
             <p className="my-2 text-xs text-text-muted">作者检查用的模型草稿与失败证据，可能包含剧情秘密，不会进入玩家界面。</p>

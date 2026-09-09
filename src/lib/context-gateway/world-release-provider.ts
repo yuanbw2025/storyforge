@@ -114,6 +114,33 @@ export class WorldReleaseResourceProviderErrorV1 extends Error {
   }
 }
 
+/** Transaction-safe identity compare-and-swap used by neutral clients. It
+ * deliberately returns no physical release row or manifest and performs no
+ * external hashing between this read and the caller's next IndexedDB write. */
+export async function assertWorldReleaseIdentityCurrentV1(input: {
+  localReleaseRecordId: number
+  expectedProjectId: number
+  expectedWorldId?: number
+  expectedReleaseHash: string
+}): Promise<void> {
+  if (!Number.isSafeInteger(input.localReleaseRecordId) || input.localReleaseRecordId < 1
+    || !HASH.test(input.expectedReleaseHash)) {
+    fail('reference', 'WorldRelease 身份 CAS 参数无效')
+  }
+  const release = await db.worldReleases.get(input.localReleaseRecordId)
+  if (!release?.id || release.projectId !== input.expectedProjectId
+    || (input.expectedWorldId != null && release.worldId !== input.expectedWorldId)
+    || release.contentHash !== input.expectedReleaseHash) {
+    fail('reference', 'WorldRelease 本地 ID、scope 与冻结 hash 不同时匹配')
+  }
+}
+
+/** Physical table capability retained inside the provider. Neutral clients
+ * may use it only to compose an atomic CAS transaction, never to read rows. */
+export function worldReleaseIdentityTransactionTablesV1() {
+  return [db.worldReleases]
+}
+
 function fail(code: string, message: string): never {
   throw new WorldReleaseResourceProviderErrorV1(code, message)
 }

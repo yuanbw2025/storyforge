@@ -4,6 +4,7 @@ import { parseProductProductionBriefV3 } from '../product-production/contracts'
 import { readMediaBlobObjectData } from '../product-production/media-blob-store'
 import { parseProductRuntimePackageV1 } from '../product-production/runtime-package'
 import { db } from '../db/schema'
+import { readTextOpenWorldCreatorExecutionBriefV1 } from './creator-production-start'
 import type {
   ProductProductionTaskExecutionInputV1,
   ProductProductionTaskExecutionResultV1,
@@ -1113,14 +1114,32 @@ export async function compileTextOpenWorldRuntimePackageV1(input: {
   // Reopen the exact authorized shared Brief before media verification. P2's
   // GameBrief is immutable production data, but commercial policy and provider
   // rights must also close against the source authorization that owns them.
-  const productionBriefRow = await db.productProductionBriefs
-    .where('[productionId+revision]').equals([
-      input.execution.productionId, artifacts.gameBrief.authorization.productBriefRevision,
-    ]).first() ?? fail('找不到授权Product Brief')
-  const sharedBrief = parseProductProductionBriefV3(productionBriefRow.briefJson)
+  const [productionBriefRow, productionBuild] = await Promise.all([
+    db.productProductionBriefs
+      .where('[productionId+revision]').equals([
+        input.execution.productionId, artifacts.gameBrief.authorization.productBriefRevision,
+      ]).first(),
+    db.productBuilds.get(input.execution.buildId),
+  ])
+  if (!productionBriefRow || !productionBuild
+    || productionBuild.productionId !== input.execution.productionId
+    || productionBuild.briefRevision !== productionBriefRow.revision
+    || productionBuild.briefHash !== productionBriefRow.briefHash) {
+    fail('找不到当前Build绑定的授权Product Brief')
+  }
+  const creatorContracts = productionBriefRow.briefKind === 'text-open-world-creator-v1'
+    ? await readTextOpenWorldCreatorExecutionBriefV1({
+        briefRow: productionBriefRow,
+        planJson: productionBuild.planJson,
+      })
+    : null
+  const sharedBrief = creatorContracts?.executionBrief
+    ?? parseProductProductionBriefV3(productionBriefRow.briefJson)
+  const sharedBriefHash = creatorContracts?.start.executionBriefHash
+    ?? productionBriefRow.briefHash
   if (productionBriefRow.status !== 'authorized'
-    || productionBriefRow.briefHash !== artifacts.gameBrief.authorization.productBriefHash
-    || await hashProductProductionValueV2(sharedBrief) !== productionBriefRow.briefHash
+    || sharedBriefHash !== artifacts.gameBrief.authorization.productBriefHash
+    || await hashProductProductionValueV2(sharedBrief) !== sharedBriefHash
     || sharedBrief.intent.productType !== 'text-open-world'
     || sharedBrief.qualityProfile !== artifacts.gameBrief.qualityProfile
     || sharedBrief.media.imageCount !== artifacts.gameBrief.media.imageCount

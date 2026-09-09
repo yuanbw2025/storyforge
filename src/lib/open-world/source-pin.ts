@@ -19,6 +19,7 @@ import { countWords, htmlToPlainText } from '../utils/html'
 import { effectiveWorkKind } from '../workspace/work-kind'
 import {
   assertRecordInScope,
+  getTableSpec,
   readOwnedRows,
   resolveScope,
 } from '../workspace/scope'
@@ -671,6 +672,11 @@ export async function prepareTextOpenWorldNovelSourceSnapshotV1(input: {
 }): Promise<TextOpenWorldNovelSourceSnapshotPreviewV1> {
   const prepared = await prepareNovelSourceSnapshotInternalV1(input)
   return structuredClone(prepared.preview)
+}
+
+/** Opaque transaction capability for the product-private novel source CAS. */
+export function textOpenWorldNovelSourceTransactionTablesV1() {
+  return ['outlineNodes', 'chapters', 'storyCores'].map(name => getTableSpec(name).table)
 }
 
 async function resolveExpectedWorldReleaseHashV1(input: {
