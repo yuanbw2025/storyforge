@@ -2194,6 +2194,51 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
         },
       }],
     })
+    const singletonExecutor = createConfiguredProductProductionExecutorV1({
+      production: (await db.productProductions.get(owned.productionId))!,
+      brief: owned.brief,
+      runVision: async request => ({
+        output: JSON.stringify({
+          schema: 'storyforge.text-adventure-visual-quality-model-output', version: 1,
+          reviews: [{
+            artifactKey: 'media.visual.999', contentHash: '0'.repeat(64), verdict: 'accept',
+            scores: {
+              requirementFit: 5, identityContinuity: 5, styleContinuity: 4,
+              composition: 4, technicalCleanliness: 5,
+            },
+            issues: [],
+          }],
+        }),
+        usage: { inputTokens: 200, outputTokens: 100 },
+        bindingReceipt: {
+          schema: 'storyforge.provider-binding-receipt', version: 1,
+          requirementKey: textRequirement.requirementKey,
+          adapterId: 'configured-text.v1', adapterVersion: 1,
+          provider: 'fixture', model: 'fixture-vision', endpointOrigin: 'https://fixture.invalid',
+          executionLocation: 'browser-direct', credentialSource: 'existing-ai-config', credentialPresent: true,
+          capabilityHash: bindingHash, boundAt: 1, receiptHash: 'e'.repeat(64),
+        },
+      }),
+    })
+    const singleton = await singletonExecutor({
+      scope: owned.scope, productionId: owned.productionId, buildId: 1, buildNumber: 1,
+      controlEpoch: 0, planHash: 'f'.repeat(64), task: plannedTask, attempt: 1,
+      idempotencyKey: '2'.repeat(64), contextText: '{"registered":true}',
+      capabilityBindings: [{
+        requirementKey: textRequirement.requirementKey, adapterId: 'configured-text.v1', bindingHash,
+      }],
+      inputArtifacts: [
+        artifact('media.audit', {
+          kind: 'integration-report', mediaKind: null, blobObjectId: null, mimeType: null,
+          contentHash: auditHash, payloadJson: JSON.stringify(auditPayload), byteSize: 1,
+        }),
+        artifact(imageKeys[0]),
+      ],
+      authorResolution: null, signal: new AbortController().signal,
+    })
+    expect(singleton.artifacts[0].payload).toMatchObject({
+      reviews: [{ artifactKey: imageKeys[0], contentHash: blob.contentHash, verdict: 'accept' }],
+    })
     const sourceReview = structuredClone(result.artifacts[0].payload) as {
       buildNumber: number
       status: 'passed' | 'revision-required'

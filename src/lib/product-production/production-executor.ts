@@ -4172,8 +4172,16 @@ function parseMultimodalVisualReviewsV1(value: unknown, expected: Map<string, st
   const reviews = row.reviews.map((value, index) => {
     const review = record(value, `visualReviewModelOutput.reviews[${index}]`)
     exactKeys(review, ['artifactKey', 'contentHash', 'verdict', 'scores', 'issues'], `visualReviewModelOutput.reviews[${index}]`)
-    const artifactKey = key(review.artifactKey, `visualReviewModelOutput.reviews[${index}].artifactKey`)
-    if (expected.get(artifactKey) !== review.contentHash) fail(`视觉审查 key/hash 越界:${artifactKey}`)
+    const reportedArtifactKey = key(review.artifactKey, `visualReviewModelOutput.reviews[${index}].artifactKey`)
+    // In a single-image Run, the gateway owns the only possible key/hash
+    // association. The model judges pixels; its echoed identifiers are not
+    // state authority and are deterministically rebound to the frozen input.
+    const singletonExpected = expected.size === 1 ? [...expected][0] : null
+    const artifactKey = singletonExpected?.[0] ?? reportedArtifactKey
+    const contentHash = singletonExpected?.[1] ?? review.contentHash
+    if (!singletonExpected && expected.get(artifactKey) !== contentHash) {
+      fail(`视觉审查 key/hash 越界:${artifactKey}`)
+    }
     const scores = { ...record(review.scores, `visualReviewModelOutput.reviews[${index}].scores`) }
     // One live OpenAI-compatible response used "technicalCleanfulness" for
     // this schema field. Canonicalize only that observed alias and reject an
@@ -4189,7 +4197,7 @@ function parseMultimodalVisualReviewsV1(value: unknown, expected: Map<string, st
       'requirementFit', 'identityContinuity', 'styleContinuity', 'composition', 'technicalCleanliness',
     ], `visualReviewModelOutput.reviews[${index}].scores`)
     return {
-      artifactKey, contentHash: review.contentHash as string,
+      artifactKey, contentHash: contentHash as string,
       verdict: enumValue(review.verdict, ['accept', 'revise', 'replace', 'human-review'], `visualReviewModelOutput.reviews[${index}].verdict`),
       scores: {
         requirementFit: visualReviewScore(scores.requirementFit, `${artifactKey}.requirementFit`),
