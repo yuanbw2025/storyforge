@@ -179,6 +179,20 @@ export async function readTextAdventureSceneScriptInputsV1(input: AssembleContex
   const ambientEntries = supplemental('content.adventure-ambient-events')
   const sideKeys = new Set(sideEntries.map(entry => contextText(entry.key, 200)).filter(Boolean))
   const ambientKeys = new Set(ambientEntries.map(entry => contextText(entry.key, 200)).filter(Boolean))
+  const relevantStageKeysByEntry = (entries: Record<string, unknown>[]) => new Map(
+    entries.map(entry => {
+      const entryKey = contextText(entry.key, 200)
+      const stageKeys = new Set(contextRows(entry.stages).flatMap(stage => (
+        Number.isSafeInteger(stage.locationOrdinal)
+          && locationOrdinals.has(Number(stage.locationOrdinal))
+          && typeof stage.key === 'string'
+          ? [stage.key] : []
+      )))
+      return [entryKey, stageKeys] as const
+    }),
+  )
+  const sideStageKeysByEntry = relevantStageKeysByEntry(sideEntries)
+  const ambientStageKeysByEntry = relevantStageKeysByEntry(ambientEntries)
   const mainScripts = contextRows(questScript.mainObjectiveScripts)
     .filter(script => objectiveKeys.has(contextText(script.objectiveKey, 200)))
   const sideScripts = contextRows(questScript.sideQuestScripts)
@@ -241,12 +255,18 @@ export async function readTextAdventureSceneScriptInputsV1(input: AssembleContex
     sceneKeys: objective.sceneKeys,
     locationOrdinal: objective.locationOrdinal,
   })
-  const projectSupplemental = (entry: Record<string, unknown>) => ({
+  const projectSupplemental = (
+    entry: Record<string, unknown>,
+    stageKeysByEntry: ReadonlyMap<string, ReadonlySet<string>>,
+  ) => ({
     key: entry.key,
     title: entry.title,
     description: contextText(entry.description, 350),
     hook: contextText(entry.hook, 350),
-    stages: contextRows(entry.stages).map(stage => ({
+    stages: contextRows(entry.stages).filter(stage => (
+      typeof stage.key === 'string'
+        && stageKeysByEntry.get(contextText(entry.key, 200))?.has(stage.key)
+    )).map(stage => ({
       key: stage.key,
       title: contextText(stage.title, 160),
       objective: contextText(stage.objective, 350),
@@ -266,9 +286,15 @@ export async function readTextAdventureSceneScriptInputsV1(input: AssembleContex
       failureForwardText: contextText(alternative.failureForwardText, 360),
     })),
   })
-  const projectSupplementalScript = (script: Record<string, unknown>) => ({
+  const projectSupplementalScript = (
+    script: Record<string, unknown>,
+    stageKeysByEntry: ReadonlyMap<string, ReadonlySet<string>>,
+  ) => ({
     entryKey: script.entryKey,
-    stages: contextRows(script.stages).map(stage => ({
+    stages: contextRows(script.stages).filter(stage => (
+      typeof stage.stageKey === 'string'
+        && stageKeysByEntry.get(contextText(script.entryKey, 200))?.has(stage.stageKey)
+    )).map(stage => ({
       stageKey: stage.stageKey,
       actionKind: stage.actionKind,
       abilityKey: stage.abilityKey,
@@ -365,10 +391,10 @@ export async function readTextAdventureSceneScriptInputsV1(input: AssembleContex
       objectives: objectives.map(projectObjective),
       scripts: mainScripts.map(projectMainScript),
     },
-    sideContent: sideEntries.map(projectSupplemental),
-    sideScripts: sideScripts.map(projectSupplementalScript),
-    ambientContent: ambientEntries.map(projectSupplemental),
-    ambientScripts: ambientScripts.map(projectSupplementalScript),
+    sideContent: sideEntries.map(entry => projectSupplemental(entry, sideStageKeysByEntry)),
+    sideScripts: sideScripts.map(script => projectSupplementalScript(script, sideStageKeysByEntry)),
+    ambientContent: ambientEntries.map(entry => projectSupplemental(entry, ambientStageKeysByEntry)),
+    ambientScripts: ambientScripts.map(script => projectSupplementalScript(script, ambientStageKeysByEntry)),
   }
   const serialized = JSON.stringify(packet)
   const estimatedTokens = estimateTokens(serialized)
