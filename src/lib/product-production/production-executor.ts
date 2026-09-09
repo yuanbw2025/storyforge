@@ -2207,7 +2207,7 @@ export function productMediaCharacterPresentationConstraintV1(
 function glyphSafeTextAdventureItemPromptV1(prompt: string): string {
   const normalized = prompt
     .replace(/指针停在\s*[「『“"]?[^，。；\n」』”"]+[」』”"]?\s*位置/gu, '指针偏转至异常边界')
-    .replace(/(?:背面|正面|表面|柄部)?(?:刻有|刻满|写有|写满|标有|印有|显示)[^，。；\n]*(?:字样|文字|名称|词句|铭文|符文|字符|字母|数字|人名|名字|姓名)/gu, '')
+    .replace(/(?:背面|正面|表面|柄部)?(?:刻有|刻满|写有|写满|标有|印有|显示)[^，。；\n]*(?:字样|文字|名称|词句|铭文|符文|字符|字母|数字|人名|名字|姓名|名姓)/gu, '')
     .replace(/表盘刻有潮位刻度/gu, '表盘环绕抽象潮汐刻度线')
     .replace(/[「『“"][^」』”"]+[」』”"]/gu, '抽象无字标记')
     .replace(/[，。；]{2,}/gu, '。')
@@ -2271,6 +2271,42 @@ function textAdventurePromptVisuallyDepictsCharacterV1(
   ].some(pattern => pattern.test(prompt))
 }
 
+function textAdventureNarrativeBeatForVisualV1(input: {
+  sceneTag: string
+  prompt: string
+  characterAnchorRefs: readonly string[]
+  narrative: NarrativeArtifactV1
+}): FrozenNarrativeBeat | null {
+  const nodeKind = new Map(input.narrative.nodes.map(node => [node.key, node.kind]))
+  const visualBeats = input.narrative.beats.filter(beat => beat.kind === 'narration' || beat.kind === 'action')
+  const usable = visualBeats.length > 0 ? visualBeats : input.narrative.beats
+  const first = usable[0] ?? null
+  const pick = (beats: FrozenNarrativeBeat[], ratio: number) => (
+    beats[Math.min(beats.length - 1, Math.max(0, Math.floor(beats.length * ratio)))] ?? first
+  )
+  const act = (ordinal: number) => usable.filter(beat => (
+    new RegExp(`(?:^|[.:-])act-${ordinal}(?:[.:-]|$)`, 'i').test(beat.beatKey)
+  ))
+  if (input.sceneTag === 'mainline-turn-act-1') return pick(act(1), 0.75)
+  if (input.sceneTag === 'mainline-turn-act-2') return pick(act(2), 0.75)
+  if (input.sceneTag === 'mainline-turn-act-3') return pick(act(3), 0.75)
+  if (input.sceneTag === 'secondary-region-anchor') return pick(act(2), 0.1)
+  if (input.sceneTag === 'ending-consequence' || input.sceneTag === 'alternate-ending-consequence') {
+    return usable.find(beat => nodeKind.get(beat.nodeKey) === 'ending') ?? usable[usable.length - 1] ?? null
+  }
+  if (input.sceneTag.includes('character') || input.sceneTag.includes('protagonist')) {
+    return input.narrative.beats.find(beat => (
+      beat.speakerKey != null && input.characterAnchorRefs.includes(beat.speakerKey)
+    )) ?? first
+  }
+  if (input.sceneTag.includes('item')) {
+    const itemTerms = ['记忆匣', '调音钥匙', '潮汐钟钥', '钟钥', '钥匙', '罗盘', '调音叉']
+      .filter(term => input.prompt.includes(term))
+    return usable.find(beat => itemTerms.some(term => beat.text.includes(term))) ?? first
+  }
+  return first
+}
+
 function textAdventureCharacterFramingPromptV1(
   character: ProductMediaCharacterAnchorV1,
   editorialJob: string,
@@ -2292,6 +2328,7 @@ function normalizeTextAdventureVisualRequirementPromptV1(input: {
   sceneTag: string
   palette: readonly [string, string, string]
   anchoredCharacters: readonly ProductMediaCharacterAnchorV1[]
+  narrativeBeat: FrozenNarrativeBeat | null
 }): string {
   const isCharacter = input.mediaKind === 'character-pose' || input.mediaKind === 'character-expression'
   const noGlyphContract = '画面不得出现任何可读文字、字母、数字、符文、伪文字、Logo 或签名。'
@@ -2323,8 +2360,13 @@ function normalizeTextAdventureVisualRequirementPromptV1(input: {
     return `${editorialJob}。${detail ? `${detail}。` : ''}` +
       '全部信息只用材质、颜色、形状、抽象刻度和磨损表达；物品与背景上不得出现任何可读文字、字母、数字、品牌或标志。'
   }
+  const narrativeGroundedPrompt = input.mediaKind === 'cg' && input.narrativeBeat
+    ? `${input.blueprint?.prompt ?? '关键叙事事件的原创插图'}。` +
+      `冻结叙事节拍（唯一事件事实）：${input.narrativeBeat.text}。` +
+      '只把该节拍已经发生的人物、动作、地点、道具与后果转成一个明确画面；不得新增或改写人物身份、生死、道具、地点、选择与因果。'
+    : input.prompt
   const glyphSafePrompt = glyphSafeTextAdventureScenePromptV1(
-    input.prompt,
+    narrativeGroundedPrompt,
     input.anchoredCharacters.map(character => character.name),
   )
   const identityVisiblePrompt = input.anchoredCharacters.reduce((prompt, character) => {
@@ -2345,6 +2387,7 @@ export function parseProductMediaRequirementsArtifactV2(
   value: unknown,
   brief: ProductProductionBriefV3,
   characterAnchors: readonly ProductMediaCharacterAnchorV1[] = [],
+  narrative: NarrativeArtifactV1 | null = null,
 ): MediaRequirementsArtifactV1 {
   const row = record(value, 'mediaRequirements')
   exactKeys(row, ['schema', 'version', 'visual', 'audio'], 'mediaRequirements')
@@ -2378,16 +2421,25 @@ export function parseProductMediaRequirementsArtifactV2(
       character.characterKey === anchorRef || character.sourceResourceKey === anchorRef
       || anchorRef === 'intent:protagonist' && character.role === 'player'
     ))
+    const sourceBeat = brief.intent.productType === 'text-adventure' && narrative
+      ? textAdventureNarrativeBeatForVisualV1({
+          sceneTag: key(item.sceneTag, `visual[${index}].sceneTag`),
+          prompt: rawPrompt,
+          characterAnchorRefs: suppliedCharacterRefs,
+          narrative,
+        })
+      : null
+    const characterGroundingPrompt = sourceBeat && !isCharacter ? sourceBeat.text : rawPrompt
     const groundedSuppliedRefs = brief.intent.productType === 'text-adventure'
       && !isCharacter && characterAnchors.length > 0
       ? suppliedCharacterRefs.filter(anchorRef => {
           const character = characterForRef(anchorRef)
-          return character ? textAdventurePromptVisuallyDepictsCharacterV1(rawPrompt, character.name) : true
+          return character ? textAdventurePromptVisuallyDepictsCharacterV1(characterGroundingPrompt, character.name) : true
         })
       : suppliedCharacterRefs
     const mentionedCharacterRefs = brief.intent.productType === 'text-adventure' && !isCharacter
       ? characterAnchors.filter(character => (
-          textAdventurePromptVisuallyDepictsCharacterV1(rawPrompt, character.name)
+          textAdventurePromptVisuallyDepictsCharacterV1(characterGroundingPrompt, character.name)
         )).map(character => character.characterKey)
       : []
     const characterAnchorRefs = [...new Set([
@@ -2435,7 +2487,7 @@ export function parseProductMediaRequirementsArtifactV2(
       artifactKey: key(item.artifactKey, `visual[${index}].artifactKey`),
       mediaKind,
       sceneTag: key(item.sceneTag, `visual[${index}].sceneTag`),
-      beatKey: key(item.beatKey, `visual[${index}].beatKey`),
+      beatKey: sourceBeat?.beatKey ?? key(item.beatKey, `visual[${index}].beatKey`),
       prompt: brief.intent.productType === 'text-adventure'
         ? normalizeTextAdventureVisualRequirementPromptV1({
             prompt: rawPrompt,
@@ -2444,6 +2496,7 @@ export function parseProductMediaRequirementsArtifactV2(
             sceneTag: key(item.sceneTag, `visual[${index}].sceneTag`),
             palette: [...item.palette] as [string, string, string],
             anchoredCharacters,
+            narrativeBeat: sourceBeat,
           })
         : rawPrompt,
       altText: governedAltText,
@@ -3052,13 +3105,14 @@ function textSystem(
   }))
   return `${common}\n把设计拆成精确媒资清单。输出字段必须精确为：` +
     '{"schema":"storyforge.product-media-requirements-artifact","version":2,"visual":[],"audio":[]}。' +
-    `visual 必须逐项使用这些固定 artifactKey、mediaKind、sceneTag、角色锚点与尺寸；只允许把 beatKey 改成上游设计中对应的稳定 key，并把 prompt/altText 扩写成该职责对应的具体内容：${JSON.stringify(visual)}。` +
+    `visual 必须逐项使用这些固定 artifactKey、mediaKind、sceneTag、角色锚点与尺寸；beatKey 必须逐字复制 content.narrative.beats 中真实存在且最符合该编辑职责的 key，禁止自造概括性 slug，并把 prompt/altText 扩写成该职责对应的具体内容：${JSON.stringify(visual)}。` +
     `audio 必须逐项使用这些固定 artifactKey：${JSON.stringify(audio)}。palette 只能是三个 #RRGGBB；不得出现商标、在世艺术家姓名或第三方角色。` +
     'character-pose/character-expression 的 prompt 只能描述角色主体、服饰、姿态和表情，禁止写入任何背景、场景、环境、远景、近景、文字、边框或光效；' +
     '当清单中已有独立角色立绘时，未携带角色锚点的 background 必须是无人物、无人形倒影、无人物剪影的纯空景；' +
     '它们必须携带示例中的角色锚点与完整 hardConstraints；background/cg 只有画面实际出现该冻结角色时才可携带同一合法合同，否则两个数组都必须为空；ui 的两个数组必须为空。' +
     (brief.intent.productType === 'text-adventure'
       ? '每个 sceneTag 代表一个不可替代的编辑职责，必须全局唯一；禁止复用封面、地图、同一角色或同一事件来凑图片数量。前三个角色槽位应分别落实清单冻结的角色，不得全部改回主角。prompt 与角色圣经/硬约束冲突时必须重写 prompt，不能让发色、年龄、服饰、伤痕或身份自相矛盾。'
+        + '所有叙事 CG 只能改编 content.narrative 中被 beatKey 引用的已采纳节拍，不得新增正文不存在的人名、遗骸、生死、道具、地点、选择或因果；确定性编译器会丢弃 CG 的模型剧情扩写并以真实节拍原文为事实权威。'
       : '')
 }
 
@@ -3805,10 +3859,19 @@ async function executeModelTask(input: ProductProductionTaskExecutionInputV1, op
           allowedResourceKeys: options.brief.source.selection.resourceKeys,
         })
       : null
+    const acceptedNarrative = options.brief.textAdventure
+      ? parseAcceptedNarrative(
+          artifactPayload(input, 'content.narrative'),
+          options.brief,
+          textAdventureLocationTitles,
+          cast?.characters.map(character => character.key) ?? [],
+        )
+      : null
     payload = parseProductMediaRequirementsArtifactV2(
       raw,
       options.brief,
       cast ? textAdventureCharacterAnchors(cast) : [],
+      acceptedNarrative,
     ); kind = 'asset-manifest'
     quality = { planKeysVerified: true }
   } else if (input.task.taskKey === 'content.adventure-side-quests'

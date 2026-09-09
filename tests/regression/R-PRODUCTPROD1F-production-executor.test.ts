@@ -2678,6 +2678,30 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     expect(governedVariant.visual[4].prompt).toContain('冰冷灰白')
     expect(governedVariant.visual[9].prompt).not.toContain('三条路')
     expect(governedVariant.visual[9].prompt).toContain('实际行动启动')
+    const modelHallucination = structuredClone(requirements)
+    modelHallucination.visual[3].beatKey = 'invented-act-one-slug'
+    modelHallucination.visual[3].prompt = '岚舟发现导师沉砾已经变成一具机械遗骸。'
+    const frozenNarrative = {
+      schema: 'storyforge.product-narrative-artifact', version: 1, moduleKind: 'main',
+      moduleTitle: '潮钟群岛', entryNodeKey: 'node.001',
+      nodes: [
+        { key: 'node.001', kind: 'entry', title: '第一幕', summary: '', conditionJson: '{}', effectsJson: '[]', successorKeys: ['node.002'] },
+        { key: 'node.002', kind: 'scene', title: '第二幕', summary: '', conditionJson: '{}', effectsJson: '[]', successorKeys: ['node.003'] },
+        { key: 'node.003', kind: 'ending', title: '结局', summary: '', conditionJson: '{}', effectsJson: '[]', successorKeys: [] },
+      ],
+      beats: [
+        { beatKey: 'beat.act-1.001', nodeKey: 'node.001', kind: 'narration', speakerKey: null, text: '岚舟走进断裂的潮钟核心，伸手检查停止转动的黄铜齿轮。', order: 0 },
+        { beatKey: 'beat.act-2.001', nodeKey: 'node.002', kind: 'action', speakerKey: null, text: '岚舟打开机械记忆匣，冷蓝光照亮霜潮工坊。', order: 0 },
+        { beatKey: 'beat.act-3.001', nodeKey: 'node.003', kind: 'narration', speakerKey: null, text: '雾潮退去，岚舟在潮钟塔顶看见海面重新泛起晨光。', order: 0 },
+      ],
+      choices: [],
+    }
+    const sourceGrounded = parseProductMediaRequirementsArtifactV2(
+      modelHallucination, owned.brief, anchors, frozenNarrative as never,
+    )
+    expect(sourceGrounded.visual[3].beatKey).toBe('beat.act-1.001')
+    expect(sourceGrounded.visual[3].prompt).toContain('岚舟走进断裂的潮钟核心')
+    expect(sourceGrounded.visual[3].prompt).not.toContain('机械遗骸')
     expect(productMediaCharacterPresentationConstraintV1('character-pose')).toContain('透明背景')
     expect(productMediaCharacterPresentationConstraintV1('cg')).toContain('禁止透明背景')
   })
