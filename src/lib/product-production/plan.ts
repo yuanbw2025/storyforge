@@ -580,6 +580,8 @@ export async function createProductProductionPlanV3(input: {
     // successful paid response against the generic per-task average.
     durationMs: textAdventure && /^content\.scene-script\.act-[1-3]\.part-[1-2]$/.test(taskKey)
       ? 300_000
+      : textAdventure && taskKey === 'media.requirements'
+        ? 180_000
       : textAdventure && taskKey === 'media.visual-quality-review'
         ? 270_000
         : perDuration,

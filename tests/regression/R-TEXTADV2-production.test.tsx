@@ -143,6 +143,10 @@ describe('R-TEXTADV2-production · 文字冒险正式生产契约与工作台', 
       .toBe(Math.floor(200_000 * 0.12) * 6)
     expect(taskByKey.get('content.scene-script.act-1.part-1')?.budgetReservation.durationMs)
       .toBe(300_000)
+    expect(taskByKey.get('media.requirements')?.budgetReservation).toMatchObject({
+      outputTokens: Math.floor(200_000 * 0.035),
+      durationMs: 180_000,
+    })
     expect(plan.tasks.reduce((sum, task) => sum + task.budgetReservation.outputTokens, 0))
       .toBeLessThanOrEqual(Math.floor(brief.productionBudget.maximumOutputTokens * 1.3))
     expect(plan.tasks.reduce((sum, task) => sum + task.budgetReservation.inputTokens, 0))
