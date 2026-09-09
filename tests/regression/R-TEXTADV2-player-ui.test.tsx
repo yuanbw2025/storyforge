@@ -3,7 +3,11 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import AdventureGamePlayer from '../../src/components/text-game/AdventureGamePlayer'
 import { DialogProvider } from '../../src/components/shared/Dialog'
-import { commitAdventureAction, readProductRuntimeStateVersion } from '../../src/lib/adventure/runtime-api'
+import {
+  commitAdventureAction,
+  readProductRuntimeStateVersion,
+  verifyProductRuntimeCheckpoint,
+} from '../../src/lib/adventure/runtime-api'
 import { db } from '../../src/lib/db/schema'
 import { useAdventureGamePlayerStore } from '../../src/stores/adventure-game-player'
 import { seedCurrentProductBuild } from '../helpers/current-product-build'
@@ -188,6 +192,10 @@ describe('TEXTADV-2 · 玩家界面纵切面', () => {
       await useAdventureGamePlayerStore.getState().saveCheckpoint('切换分支前')
     })
     const checkpoint = useAdventureGamePlayerStore.getState().checkpoints[0]
+    await db.productRuntimeCheckpoints.update(checkpoint.id!, {
+      stateJson: '{}', stateHash: '0'.repeat(64),
+    })
+    expect(await verifyProductRuntimeCheckpoint(checkpoint.id!)).toBe(false)
     let childSessionId = 0
     await act(async () => {
       childSessionId = await useAdventureGamePlayerStore.getState().forkCheckpoint(checkpoint.id!, '原子媒资分支')

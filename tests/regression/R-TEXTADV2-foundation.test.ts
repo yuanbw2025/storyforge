@@ -18,6 +18,7 @@ import {
   createProductRuntimeCheckpoint,
   readProductRuntimeState,
   readProductRuntimeStateVersion,
+  recoverProductRuntimeCheckpointFromEventsV1,
   verifyProductRuntimeCheckpoint,
 } from '../../src/lib/adventure/runtime-api'
 import { db } from '../../src/lib/db/schema'
@@ -382,6 +383,40 @@ describe('TEXTADV-2 · 通用文字冒险基座纵切面', () => {
     expect(replayed).toEqual(rescue)
     expect(branch).toMatchObject({ parentSessionId: seeded.sessionId, parentThroughSequence: checkpoint.throughSequence })
     expect(sealed.adventure?.resources['resource.time']).toBeGreaterThan(0)
+  })
+
+  it('检查点快照损坏时保留原证据，并从权威事件重建可分支检查点', async () => {
+    const seeded = await fixture()
+    const baseline = await createProductRuntimeCheckpoint({ sessionId: seeded.sessionId, name: '开局基线' })
+    await act(seeded.sessionId, 'action.talk.keeper', 'checkpoint:talk')
+    const damaged = await createProductRuntimeCheckpoint({ sessionId: seeded.sessionId, name: '交谈后' })
+    await db.productRuntimeCheckpoints.update(damaged.id!, {
+      stateJson: '{}',
+      stateHash: '0'.repeat(64),
+    })
+    expect(await verifyProductRuntimeCheckpoint(damaged.id!)).toBe(false)
+
+    const recovered = await recoverProductRuntimeCheckpointFromEventsV1(damaged.id!)
+    expect(recovered).toMatchObject({
+      damagedCheckpointId: damaged.id,
+      recoveryBaseCheckpointId: baseline.id,
+    })
+    expect(recovered.checkpoint.throughSequence).toBe(damaged.throughSequence)
+    expect(await verifyProductRuntimeCheckpoint(recovered.checkpoint.id!)).toBe(true)
+    expect((await db.productRuntimeCheckpoints.get(damaged.id!))?.stateJson).toBe('{}')
+
+    const repeated = await recoverProductRuntimeCheckpointFromEventsV1(damaged.id!)
+    expect(repeated.checkpoint.id).toBe(recovered.checkpoint.id)
+    const branch = await branchProductRuntimeSession({
+      parentSessionId: seeded.sessionId,
+      throughSequence: recovered.checkpoint.throughSequence,
+      title: '恢复后的时间线',
+    })
+    expect(branch).toMatchObject({
+      parentSessionId: seeded.sessionId,
+      parentThroughSequence: damaged.throughSequence,
+    })
+    expect((await readProductRuntimeState(branch.id!)).adventure?.actionHistory).toHaveLength(1)
   })
 
   it('可用行动闭集会隐藏未满足条件的移动，并为失败推进保留合法后续', () => {

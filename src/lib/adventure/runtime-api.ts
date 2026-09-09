@@ -11,5 +11,6 @@ export {
   deleteProductRuntimeSession,
   readProductRuntimeState,
   readProductRuntimeStateVersion,
+  recoverProductRuntimeCheckpointFromEventsV1,
   verifyProductRuntimeCheckpoint,
 } from '../product/runtime-api'

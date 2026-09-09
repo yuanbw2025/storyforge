@@ -8,6 +8,7 @@ import {
   deleteProductRuntimeSession,
   readProductRuntimeState,
   readProductRuntimeStateVersion,
+  recoverProductRuntimeCheckpointFromEventsV1,
   verifyProductRuntimeCheckpoint,
 } from '../lib/adventure/runtime-api'
 import { adventureNarrativeActionContext, availableAdventureActions } from '../lib/adventure/runtime'
@@ -381,9 +382,12 @@ export const useAdventureGamePlayerStore = create<AdventurePlayerState>((set, ge
     forkCheckpoint: (checkpointId, title) => run(async () => {
       const checkpoint = get().checkpoints.find(item => item.id === checkpointId)
       const parent = get().sessions.find(item => item.id === checkpoint?.sessionId)
-      if (!checkpoint || !parent || !await verifyProductRuntimeCheckpoint(checkpointId)) throw new Error('检查点不存在或完整性失败。')
+      if (!checkpoint || !parent) throw new Error('检查点不存在。')
+      const source = await verifyProductRuntimeCheckpoint(checkpointId)
+        ? checkpoint
+        : (await recoverProductRuntimeCheckpointFromEventsV1(checkpointId)).checkpoint
       const child = await branchProductRuntimeSession({
-        parentSessionId: parent.id!, throughSequence: checkpoint.throughSequence,
+        parentSessionId: parent.id!, throughSequence: source.throughSequence,
         title: title?.trim() || `${parent.title} · ${checkpoint.name}`,
       })
       await reload(child.id!); return child.id!
