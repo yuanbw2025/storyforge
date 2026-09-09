@@ -12,6 +12,7 @@ const activeRootDocuments = [
   'CLAUDE.md',
   'CONTRIBUTING.md',
   'README.md',
+  'README.en.md',
   'SECURITY.md',
 ]
 
@@ -31,6 +32,11 @@ const activeDocs = [
   'docs/CONSISTENCY-COVERAGE-MAP.md',
   'docs/MEMORY-WORKSPACE-GUIDE.md',
   'docs/assets/support/afdian-aloneone.jpeg',
+  'docs/assets/readme/product-hub.png',
+  'docs/assets/readme/create-work.png',
+  'docs/assets/readme/longform-outline.png',
+  'docs/assets/readme/ttrpg-preview.png',
+  'docs/assets/readme/data-management.png',
   'docs/guides/I18N.md',
   'docs/products/README.md',
   'docs/products/LONGFORM-AND-NODE.md',
@@ -89,7 +95,7 @@ for (const file of [...activeRootDocuments, ...activeDocs]) {
 
 const archivedAuthority =
   /MASTER-BLUEPRINT|ROADMAP-LEGACY|FEATURE-GUIDE|docs\/(?:refactor|completion|text-game|pitch|brand|evals|product-platform|readme|adr|archive)\//
-const archivedAssetReference = /docs\/assets\/(?!support\/afdian-aloneone\.jpeg)/
+const archivedAssetReference = /docs\/assets\/(?!support\/afdian-aloneone\.jpeg|readme\/(?:product-hub|create-work|longform-outline|ttrpg-preview|data-management)\.png)/
 for (const file of [...activeRootDocuments, ...activeDocs]) {
   if (
     file === 'CHANGELOG.md' ||

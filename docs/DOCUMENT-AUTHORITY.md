@@ -1,6 +1,6 @@
 # StoryForge 文档权威与归档规则
 
-> 版本：1.7.0 · 生效：2026-09-06
+> 版本：1.7.1 · 生效：2026-09-09
 > 本文回答“哪些文档仍可指导开发”。未列入现行清单的历史材料，不得作为设计或施工权威。
 
 ## 1. 裁决层级
@@ -56,11 +56,19 @@
 
 ### 2.4 用户、维护与法律资料
 
-- 根目录 `README.md`：当前产品概览与本地运行。
+- 根目录 `README.md` 与 `README.en.md`：L4 中英文用户首页，包含产品导览、开始方式、演示、隐私和交流入口；按当前主干核对，不替代产品契约。
+- `docs/assets/readme/product-hub.png`：2026-09-09 主干首页，隔离浏览器数据截图。
+- `docs/assets/readme/create-work.png`：同次核对的新建作品入口截图。
+- `docs/assets/readme/longform-outline.png`：同次核对的长篇大纲截图，使用手工演示内容。
+- `docs/assets/readme/ttrpg-preview.png`：同次核对的原创跑团入口截图。
+- `docs/assets/readme/data-management.png`：同次核对的数据管理截图。
+
 - `docs/MEMORY-WORKSPACE-GUIDE.md`：本地记忆工作区操作与隐私边界。
 - `docs/assets/support/afdian-aloneone.jpeg`：根目录 README 使用的爱发电赞助二维码展示资产。
 - `docs/guides/I18N.md`：界面多语言维护规则。
 - `docs/ttrpg/licenses/SRD-5.2.1-CC-BY-4.0.md`：规则引用许可说明。
+
+以上图片为 L4 展示资产，只说明截图时的界面；不承诺模型效果或产品完成度。更新 README 应保留或替换仍有效的用户入口、操作说明、教程、交流与支持信息；清理历史设计文档不能用工程规范摘要取代用户首页。
 
 根目录 `README.md`、`CONTRIBUTING.md`、`CHANGELOG.md`、`LICENSE`、`SECURITY.md` 和社区治理文件继续有效，但它们不能覆盖项目总纲。
 
