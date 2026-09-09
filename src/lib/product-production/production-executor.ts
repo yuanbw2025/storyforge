@@ -2245,6 +2245,19 @@ function glyphSafeTextAdventureScenePromptV1(
       '无字的人形记忆光点依次亮起',
     )
     .replace(
+      /(?:发现|看见|看到|读到|辨认出)[^，。；\n]{0,36}(?:字|字迹|文字|关键词)[^，。；\n]*/gu,
+      '发现一组无字的颜色与凿痕记号',
+    )
+    .replace(
+      /[^，。；\n]{0,36}(?:用|以)[^，。；\n]{0,12}(?:符文|文字|字母|数字)(?:写成|记录|标注)[^，。；\n]*/gu,
+      '表面只保留无字的抽象机械结构',
+    )
+    .replace(
+      /(?:你|她|岚舟)?手中握着三条可能的路[：:][^。\n]+/gu,
+      '她面前的三组无字机械回路以不同状态等待一个实际动作',
+    )
+    .replace(/[「『“"'‘][^」』”"'’]{1,120}[」』”"'’]/gu, '无字的记忆意象')
+    .replace(
       /面前悬浮着三个选择的光影[：:][^。；\n]+/gu,
       '面前三组形态不同的无字机械光路正等待她以实际行动接通',
     )
@@ -2268,8 +2281,14 @@ function textAdventurePromptVisuallyDepictsCharacterV1(
   characterName: string,
 ): boolean {
   const name = characterName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const referenceOnly = [
+    new RegExp(`(?:证词|日志|档案|记录|回忆|记忆)[^。；\\n]{0,36}${name}`),
+    new RegExp(`${name}[^。；\\n]{0,24}(?:的证词|的日志|的档案|的记录|的回忆|的记忆|留下|遗留|保存|曾经|当年)`),
+  ].some(pattern => pattern.test(prompt))
+  if (referenceOnly) return false
   return [
-    new RegExp(`${name}[^。；\\n]{0,36}(?:站|坐|走|跑|跪|抵达|进入|发现|面对|转身|抬手|伸手|举起|拿|握|持|穿|面向|凝视|表情|眼神|脸|面部|身影|侧面|正面|背影|手臂|双手|在)`),
+    new RegExp(`${name}[^。；\\n]{0,36}(?:站|坐|走|跑|跪|抵达|进入|发现|面对|转身|抬手|伸手|举起|拿|握|持|穿|面向|凝视|表情|眼神|脸|面部|身影|侧面|正面|背影|手臂|双手)`),
+    new RegExp(`${name}在(?:画面|前景|中景|近景|远景|场景|房间|大厅|工坊|钟楼|灯塔|海岸|甲板|道路)`),
     new RegExp(`(?:画面|前景|中景|近景|远景|中心|构图)[^。；\\n]{0,64}${name}`),
     new RegExp(`${name}[^。；\\n]{0,24}(?:与|和|同)[^。；\\n]{0,24}(?:并肩|对峙|交谈|行动|站立)`),
   ].some(pattern => pattern.test(prompt))
@@ -2319,18 +2338,17 @@ function textAdventureNarrativeBeatForVisualV1(input: {
     )) ?? first
   }
   if (input.sceneTag.includes('item')) {
-    const itemTerms = ['记忆匣', '调音钥匙', '潮汐钟钥', '钟钥', '钥匙', '罗盘', '调音叉']
-      .filter(term => input.prompt.includes(term))
-    const direct = usable.find(beat => itemTerms.some(term => beat.text.includes(term)))
-    if (direct) return direct
-    const registeredItemBeats = ['记忆匣', '调音钥匙', '潮汐钟钥', '钟钥', '钥匙', '罗盘', '调音叉']
-      .flatMap(term => usable.filter(beat => beat.text.includes(term)).slice(0, 1))
-      .filter((beat, index, beats) => beats.findIndex(candidate => candidate.beatKey === beat.beatKey) === index)
-    return input.sceneTag.includes('secondary')
-      ? registeredItemBeats[1] ?? pick(act(2), 0.5)
-      : input.sceneTag.includes('tertiary')
-        ? registeredItemBeats[2] ?? pick(act(3), 0.5)
-        : registeredItemBeats[0] ?? pick(act(1), 0.25)
+    const orderedItemTerms = ['记忆匣', '调音钥匙', '潮汐钟钥', '钟钥', '钥匙', '罗盘', '调音叉']
+      .filter(term => usable.some(beat => beat.text.includes(term)))
+      .filter((term, index, terms) => (
+        !terms.slice(0, index).some(prior => prior.includes(term) || term.includes(prior))
+      ))
+    const itemOrdinal = input.sceneTag === 'important-item-secondary' ? 1
+      : input.sceneTag === 'important-item-tertiary' ? 2 : 0
+    const itemTerm = orderedItemTerms[itemOrdinal] ?? orderedItemTerms[0]
+    if (itemTerm) return usable.find(beat => beat.text.includes(itemTerm)) ?? first
+    return input.sceneTag === 'important-item-secondary' ? pick(act(2), 0.5)
+      : input.sceneTag === 'important-item-tertiary' ? pick(act(3), 0.5) : pick(act(1), 0.25)
   }
   if (input.sceneTag === 'region-map') return usable[2] ?? usable[1] ?? first
   return first
@@ -2416,11 +2434,12 @@ function normalizeTextAdventureVisualRequirementPromptV1(input: {
       `${character.name}以三分之二侧面清晰呈现面部与身份特征`,
     )
   }, glyphSafePrompt)
-  if (input.anchoredCharacters.length === 0) return `${identityVisiblePrompt}。${noGlyphContract}`
+  const sentencePrompt = identityVisiblePrompt.replace(/。+$/u, '')
+  if (input.anchoredCharacters.length === 0) return `${sentencePrompt}。${noGlyphContract}`
   const authority = input.anchoredCharacters.map(character => (
     `「${character.name}」=${character.publicIdentity}；${character.visualAnchor}`
   )).join('。')
-  return `${identityVisiblePrompt}。画面中的已登记角色必须严格服从冻结身份与外观：${authority}。${noGlyphContract}`
+  return `${sentencePrompt}。画面中的已登记角色必须严格服从冻结身份与外观：${authority}。${noGlyphContract}`
 }
 
 export function parseProductMediaRequirementsArtifactV2(
@@ -2497,9 +2516,13 @@ export function parseProductMediaRequirementsArtifactV2(
           textAdventurePromptVisuallyDepictsCharacterV1(characterGroundingPrompt, character.name)
         )).map(character => character.characterKey)
       : []
+    const secondPersonPlayerRefs = sourceBeat && !isCharacter && /(?:^|[，。；！？\s])你(?:将|要|正|已|在|走|站|伸|拿|握|转|看|按|打开|选择|决定)/u.test(sourceBeat.text)
+      ? characterAnchors.filter(character => character.role === 'player').map(character => character.characterKey)
+      : []
     const characterAnchorRefs = [...new Set([
       ...groundedSuppliedRefs,
       ...mentionedCharacterRefs,
+      ...secondPersonPlayerRefs,
     ])].sort()
     textArray(item.hardConstraints, `visual[${index}].hardConstraints`, 30)
     const canContainCharacter = isCharacter || mediaKind === 'background' || mediaKind === 'cg'
