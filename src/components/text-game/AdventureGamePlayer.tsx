@@ -39,6 +39,7 @@ import {
 } from '../../lib/adventure/player-experience'
 import { adventureEffectiveAbilityValue } from '../../lib/adventure/runtime'
 import { verifyProductMediaRuntimeUrlsV1 } from '../../lib/product-production/media-runtime-verifier'
+import { createReleaseProductMediaResolver } from '../../lib/product-production/media-resolver'
 import { recordProductMediaRuntimeMeasurementV1 } from '../../lib/product-production/quality-receipts'
 import { currentPlayerReleases } from '../../lib/text-game/player-library'
 import type { AdventureProductRuntimePackageV1, Project, WorkspaceScope } from '../../lib/types'
@@ -217,6 +218,7 @@ export default function AdventureGamePlayer(props: {
   const [catalogReleaseId, setCatalogReleaseId] = useState<number | null>(null)
   const [mediaUrls, setMediaUrls] = useState<Record<string, string>>({})
   const [mediaFailures, setMediaFailures] = useState<Array<{ assetKey: string; reason: string }>>([])
+  const [catalogCover, setCatalogCover] = useState<{ url: string; altText: string } | null>(null)
   const [accessibility, setAccessibility] = useState<AdventureAccessibilityPreferences>(initialAccessibilityPreferences)
   const playbackSessionRef = useRef<number | null>(null)
   const transcriptHydratedRef = useRef(false)
@@ -241,6 +243,7 @@ export default function AdventureGamePlayer(props: {
     : selected?.productBuildId != null ? 'Build 预览 #' + selected.productBuildId : '未绑定运行来源'
   const catalog = useMemo(() => currentPlayerReleases(store.releases), [store.releases])
   const catalogRelease = catalog.find(item => item.release.id === catalogReleaseId) ?? null
+  const catalogCoverAsset = catalogRelease?.manifest?.presentation?.assets.find(asset => asset.sceneTag === 'cover-opening')
   const adventure = store.runtimeState.adventure
   const manifest = store.selectedManifest
   const adventureV2 = manifest?.adventure.version === 2 ? manifest.adventure : null
@@ -341,6 +344,32 @@ export default function AdventureGamePlayer(props: {
   useEffect(() => {
     localStorage.setItem('storyforge.text-adventure.accessibility', JSON.stringify(accessibility))
   }, [accessibility])
+
+  useEffect(() => {
+    let active = true
+    let finished = false
+    let resolver: Awaited<ReturnType<typeof createReleaseProductMediaResolver>> | null = null
+    setCatalogCover(null)
+    const load = async () => {
+      if (selected || !catalogRelease?.manifest || !catalogCoverAsset || catalogRelease.release.id == null) return
+      resolver = await createReleaseProductMediaResolver({
+        scope: props.scope,
+        productReleaseId: catalogRelease.release.id,
+        runtimePackage: catalogRelease.manifest,
+      })
+      if (!active) return resolver.dispose()
+      const loaded = await resolver.preload({
+        assetKeys: [catalogCoverAsset.assetKey],
+        maximumBytes: 16 * 1024 * 1024,
+      })
+      finished = true
+      if (!active) return resolver.dispose()
+      const url = loaded.urls[catalogCoverAsset.assetKey]
+      if (active && url) setCatalogCover({ url, altText: catalogCoverAsset.altText })
+    }
+    void load().catch(() => { finished = true; resolver?.dispose() })
+    return () => { active = false; if (finished) resolver?.dispose() }
+  }, [catalogCoverAsset, catalogRelease, props.scope, selected])
 
   useEffect(() => {
     let active = true
@@ -556,7 +585,11 @@ export default function AdventureGamePlayer(props: {
       {error && <div role="alert" className="adventure-alert">{error}</div>}
       {catalogRelease ? <section className="textgame-title-page adventure-title-page" aria-label="文字冒险游戏详情">
         <button type="button" className="textgame-catalog-back" onClick={() => setCatalogReleaseId(null)}><ArrowLeft />返回全部游戏</button>
-        <div className="textgame-title-art" aria-hidden="true"><Compass /><span>EXPLORE<br />THE UNKNOWN</span></div>
+        <div className="textgame-title-art">
+          {catalogCover
+            ? <img src={catalogCover.url} alt={catalogCover.altText} />
+            : <><Compass aria-hidden="true" /><span aria-hidden="true">EXPLORE<br />THE UNKNOWN</span></>}
+        </div>
         <div className="textgame-title-copy">
           <small>文字冒险 · 当前可玩版本</small>
           <h3>{presentationText(catalogRelease.manifest?.definition.title) || catalogRelease.release.label}</h3>
