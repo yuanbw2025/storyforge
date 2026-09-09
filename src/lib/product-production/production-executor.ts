@@ -4468,8 +4468,13 @@ async function executeTextAdventureVisualQualityReviewTask(
   const visionImages: Parameters<ProductionVisionRunnerV1>[0]['images'] = []
   let carriedPriorReviewCount = 0
   for (const audited of auditedAssets) {
-    if (repairTargetKeys && !repairTargetKeys.has(audited.artifactKey)
-      && audited.requirementBinding !== 'revalidated-reuse') {
+    // Batch repair is derived from a frozen parent review. A non-target image
+    // with the same bytes already passed that review against the parent media
+    // audit, including the case where an older image was explicitly
+    // revalidated for the current requirement. Re-running a stochastic vision
+    // judge here can reverse a previously accepted result and create an
+    // endless quality oscillation. Only the target bytes are reviewed again.
+    if (repairTargetKeys && !repairTargetKeys.has(audited.artifactKey)) {
       const prior = priorReviewByKey.get(audited.artifactKey)
       if (!prior || prior.contentHash !== audited.contentHash
         || !['accept', 'not-applicable-text-fallback'].includes(prior.verdict)

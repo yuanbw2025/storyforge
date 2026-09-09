@@ -2298,7 +2298,17 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
         issues: sourceReview.reviews[0].issues,
       }],
     }
-    const repairAudit = { ...auditPayload, buildNumber: 2 }
+    const repairAudit = {
+      ...auditPayload,
+      buildNumber: 2,
+      assets: auditPayload.assets.map((asset, index) => index === 1
+        ? {
+            ...asset,
+            sourceRequirementHash: 'f'.repeat(64),
+            requirementBinding: 'revalidated-reuse',
+          }
+        : asset),
+    }
     const repairAuditHash = await hashProductProductionValueV2(repairAudit)
     seen.length = 0
     const repairedBatch = await executor({
