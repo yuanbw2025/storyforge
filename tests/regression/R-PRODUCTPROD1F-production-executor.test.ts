@@ -3550,6 +3550,8 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     expect(mainQuestSystem).toContain('"nonPlayerCastKeys"')
     expect(mainQuestSystem).toContain('successConsequence 和 failureForwardConsequence 是玩家会直接读到的自然语言叙事')
     expect(mainQuestSystem).toContain('机器状态只能放入 persistentEffectKeys')
+    expect(mainQuestSystem).toContain('alternatives 的数量也是冻结拓扑，不是建议')
+    expect(mainQuestSystem).toContain('总数恰好')
     expect(sceneScriptContexts).toHaveLength(6)
     const actOneSceneContext = sceneScriptContexts.find(context => (
       context.includes('"taskKey":"content.scene-script.act-1.part-1"')
