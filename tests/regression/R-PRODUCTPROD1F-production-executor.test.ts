@@ -2694,7 +2694,7 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
         { beatKey: 'beat.act-1.002', nodeKey: 'node.001', kind: 'narration', speakerKey: null, text: '岚舟迅速将手探入断裂的潮钟核心，冷蓝光照亮墙上的记录；其中一份证词讲述沉砾当年保存的记忆。', order: 1 },
         { beatKey: 'beat.act-1.003', nodeKey: 'node.001', kind: 'action', speakerKey: null, text: '她穿过环礁栈桥，向下一座钟楼前进。', order: 2 },
         { beatKey: 'beat.act-2.001', nodeKey: 'node.002', kind: 'action', speakerKey: null, text: '岚舟打开机械记忆匣，冷蓝光照亮霜潮工坊。', order: 0 },
-        { beatKey: 'beat.act-3.001', nodeKey: 'node.003', kind: 'narration', speakerKey: null, text: '岚舟面前有三条可能的路，一是继续等待，二是公开真相，三是撤离；她必须做出选择。', order: 0 },
+        { beatKey: 'beat.act-3.001', nodeKey: 'node.003', kind: 'narration', speakerKey: null, text: '岚舟面对三个按钮，每个按钮都写着代价：第一个按钮公开真相，第二个按钮延续旧制，第三个按钮选择撤离。', order: 0 },
         { beatKey: 'beat.act-3.002', nodeKey: 'node.003', kind: 'action', speakerKey: null, text: '岚舟把调音钥匙插入主控接口，转动钟钮并按下启动机构，潮钟轰然苏醒。', order: 1 },
         { beatKey: 'beat.act-3.003', nodeKey: 'node.003', kind: 'narration', speakerKey: null, text: '岚舟收回手，潮钟继续运转，雾潮开始退去。', order: 2 },
       ],
@@ -2708,14 +2708,17 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     expect(sourceGrounded.visual[3].prompt).not.toContain('机械遗骸')
     expect(sourceGrounded.visual[3].characterAnchorRefs).toEqual(['character.player'])
     expect(sourceGrounded.visual[3].characterAnchorRefs).not.toContain('character.npc.1')
+    expect(sourceGrounded.visual[2].characterAnchorRefs).toEqual([])
     expect(sourceGrounded.visual[5].prompt).toContain('机械记忆匣')
     expect(sourceGrounded.visual[5].prompt).not.toContain('调音钥匙')
+    expect(sourceGrounded.visual[5].characterAnchorRefs).toEqual([])
     expect(sourceGrounded.visual[5].prompt).toContain('不出现人物、手部或额外场景事件')
     expect(sourceGrounded.visual[10].prompt).toContain('调音钥匙')
     expect(sourceGrounded.visual[10].prompt).not.toContain('机械记忆匣')
+    expect(sourceGrounded.visual[10].characterAnchorRefs).toEqual([])
     expect(sourceGrounded.visual[5].prompt).not.toBe(sourceGrounded.visual[10].prompt)
     expect(sourceGrounded.visual[9].prompt).toContain('按下启动机构')
-    expect(sourceGrounded.visual[9].prompt).not.toContain('三条可能的路')
+    expect(sourceGrounded.visual[9].prompt).not.toContain('三个按钮')
     expect(productMediaCharacterPresentationConstraintV1('character-pose')).toContain('透明背景')
     expect(productMediaCharacterPresentationConstraintV1('cg')).toContain('禁止透明背景')
   })

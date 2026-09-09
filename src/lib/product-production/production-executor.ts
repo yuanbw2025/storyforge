@@ -2347,10 +2347,12 @@ function textAdventureNarrativeBeatForVisualV1(input: {
   }
   if (input.sceneTag === 'mainline-turn-act-3') {
     const enactedClimaxBeats = act(3).filter(beat => (
-      !/(?:三条可能的路|三条路|一是[^。；\n]{0,80}二是|必须做出选择|面前(?:悬浮着|出现)三个选择)/u.test(beat.text)
+      nodeKind.get(beat.nodeKey) !== 'ending'
+      && !/(?:三条可能的路|三条路|三个按钮|第一个按钮[^。；\n]{0,240}第二个按钮|每个按钮|三种未来|必须做出选择|面前(?:悬浮着|出现)三个选择|她的选择将决定)/u.test(beat.text)
     ))
     return strongest(enactedClimaxBeats.length > 0 ? enactedClimaxBeats : act(3), [
-      '按下', '启动', '插入', '注入', '撤离', '公开', '释放', '切断', '转动', '决定', '代价',
+      '放置', '按下', '启动', '插入', '注入', '接入', '撤离', '公开', '释放', '切断', '转动',
+      '回路', '核心', '蓝光', '轰鸣', '流向', '骤然',
     ])
   }
   if (input.sceneTag === 'secondary-region-anchor') return pick(act(2), 0.1)
@@ -2553,7 +2555,11 @@ export function parseProductMediaRequirementsArtifactV2(
     const secondPersonPlayerRefs = sourceBeat && !isCharacter && /(?:^|[，。；！？\s])你(?:将|要|正|已|在|走|站|伸|拿|握|转|看|按|打开|选择|决定)/u.test(sourceBeat.text)
       ? characterAnchors.filter(character => character.role === 'player').map(character => character.characterKey)
       : []
-    const characterAnchorRefs = [...new Set([
+    const excludesCharactersByDesign = [
+      'cover-opening', 'region-map', 'secondary-region-anchor',
+      'important-item-primary', 'important-item-secondary', 'important-item-tertiary',
+    ].includes(key(item.sceneTag, `visual[${index}].sceneTag`))
+    const characterAnchorRefs = excludesCharactersByDesign ? [] : [...new Set([
       ...groundedSuppliedRefs,
       ...mentionedCharacterRefs,
       ...secondPersonPlayerRefs,
