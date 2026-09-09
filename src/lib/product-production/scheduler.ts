@@ -1394,11 +1394,25 @@ async function recoveryInvalidatedTaskKeys(input: {
     : []
   const mediaAuditRequiresRevalidationOnly = mediaAuditFailureSegments.length > 0
     && mediaAuditFailureSegments.every(segment => /^media\.visual\.\d{3}:request$/.test(segment.trim()))
+  const narrativeArcFailureOwnerTaskKeys = () => {
+    const owners: string[] = []
+    if (/sceneCards|acts|locationOrdinal|冻结地点|场景/.test(directlyResolvedFailureDetail)) {
+      owners.push('content.narrative-arc-scenes')
+    }
+    if (/decisions|decision\.|选择计划/.test(directlyResolvedFailureDetail)) {
+      owners.push('content.narrative-decision-plan')
+    }
+    return owners.length > 0
+      ? owners
+      : ['content.narrative-arc-scenes', 'content.narrative-decision-plan']
+  }
   const expandFailureOwnerTaskKeys = (taskKey: string) => (
     taskKey === 'integration.narrative'
       ? directlyResolvedFailureDetail.includes('content.dialogue-pass.act-')
         ? dialoguePassTaskKeys
         : narrativeIntegrationOwnerTaskKeys
+      : taskKey === 'content.narrative-arc-plan'
+        ? narrativeArcFailureOwnerTaskKeys()
       : /^content\.scene-script\.act-[1-3]$/.test(taskKey)
         && directlyResolvedFailureDetail.includes('跨场景 beatKey 重复')
         ? [taskKey]
