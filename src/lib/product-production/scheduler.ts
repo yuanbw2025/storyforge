@@ -1240,12 +1240,18 @@ export function textAdventureNarrativeRepairPreservesFrozenMediaV1(issues: unkno
   })
   if (!blocking.length) return false
   return blocking.every(issue => {
-    if (issue.artifactKey !== 'content.narrative'
-      || typeof issue.detail !== 'string' || typeof issue.recommendation !== 'string') return false
+    if (typeof issue.detail !== 'string' || typeof issue.recommendation !== 'string') return false
     const evidence = `${issue.detail}\n${issue.recommendation}`
-    const mechanicalNarrativeReference = /choice\.|scene\.|locationOrdinal|targetNodeKey|openingBeat|选择文案|选择标签|目标节点|地点错位|场景衔接/.test(evidence)
     const visualImpact = /视觉|美术|插图|媒资|图片|画面|角色身份|服饰|道具|色板|构图|\b(?:asset|image|media|visual)\b/i.test(evidence)
-    return mechanicalNarrativeReference && !visualImpact
+    if (visualImpact) return false
+    if (issue.artifactKey === 'content.narrative') {
+      return /choice\.|scene\.|locationOrdinal|targetNodeKey|openingBeat|选择文案|选择标签|目标节点|地点错位|场景衔接|未本地化|外语单词/.test(evidence)
+    }
+    if (issue.artifactKey === 'content.adventure-side-quests'
+      || issue.artifactKey === 'content.adventure-ambient-events') {
+      return /locationOrdinal|地点错位|发生地|绑定地点|未本地化|外语单词/.test(evidence)
+    }
+    return false
   })
 }
 

@@ -167,7 +167,11 @@ describe('R-PRODUCTPROD-1D · durable bounded DAG scheduler', () => {
     }])).toBe(false)
     expect(textAdventureNarrativeRepairPreservesFrozenMediaV1([{
       severity: 'blocking', artifactKey: 'content.adventure-side-quests',
-      detail: '支线地点错位。', recommendation: '重写。',
+      detail: '支线 stage-one 的 locationOrdinal 与发生地错位。', recommendation: '修正绑定地点。',
+    }])).toBe(true)
+    expect(textAdventureNarrativeRepairPreservesFrozenMediaV1([{
+      severity: 'blocking', artifactKey: 'content.adventure-side-quests',
+      detail: '支线中的关键道具与插图不一致。', recommendation: '重做媒资。',
     }])).toBe(false)
   })
 

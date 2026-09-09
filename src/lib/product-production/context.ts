@@ -1,5 +1,6 @@
 import { db } from '../db/schema'
 import { estimateTokens } from '../ai/context-budget'
+import { findTextAdventurePlayerVisibleLanguageIssuesV1 } from '../adventure/language-quality'
 import type { WorkspaceScope } from '../types'
 import type { AssembleContextInput } from '../registry/types'
 import { assertRecordInScope } from '../workspace/scope'
@@ -877,7 +878,7 @@ export async function readTextAdventureRepairFeedbackV1(input: AssembleContextIn
     .sort((left, right) => right.version - left.version) : []
   const review = reviews.find(row => contextRecord(JSON.parse(row.payloadJson)).passed === false)
   const payload = review ? contextRecord(JSON.parse(review.payloadJson)) : {}
-  const blockingIssues = contextRows(payload.issues)
+  const reviewBlockingIssues = contextRows(payload.issues)
     .filter(issue => issue.severity === 'blocking')
     .slice(0, 5)
     .map(issue => ({
@@ -885,6 +886,24 @@ export async function readTextAdventureRepairFeedbackV1(input: AssembleContextIn
       detail: contextText(issue.detail, 240),
       recommendation: contextText(issue.recommendation, 240),
     }))
+  const latestArtifacts = new Map<string, { artifactKey: string; payload: unknown }>()
+  for (const row of (await db.productBuildArtifacts.where('buildId').equals(build.id!).toArray())
+    .filter(row => row.controlEpoch < build.controlEpoch
+      && (row.status === 'accepted' || row.status === 'carried-forward'))
+    .sort((left, right) => left.controlEpoch - right.controlEpoch || left.version - right.version)) {
+    latestArtifacts.set(row.artifactKey, { artifactKey: row.artifactKey, payload: JSON.parse(row.payloadJson) })
+  }
+  const languageBlockingIssues = findTextAdventurePlayerVisibleLanguageIssuesV1([...latestArtifacts.values()])
+    .slice(0, 5)
+    .map(issue => ({
+      artifactKey: contextText(issue.artifactKey, 120),
+      detail: contextText(
+        `玩家可见字段 ${issue.path} 混入未本地化词 ${issue.tokens.join('、')}：${issue.excerpt}`,
+        240,
+      ),
+      recommendation: '保持稳定 key 和叙事含义，将混入的外语单词改成自然、完整的简体中文。',
+    }))
+  const blockingIssues = [...reviewBlockingIssues, ...languageBlockingIssues].slice(0, 8)
   if (blockingIssues.length === 0 && taskFailures.size === 0) return ''
   return JSON.stringify({
     schema: 'storyforge.text-adventure-repair-feedback', version: 1,
