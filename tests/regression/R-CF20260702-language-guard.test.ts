@@ -8,7 +8,10 @@ import {
   buildChapterContentPrompt,
   buildContinuePrompt,
 } from '../../src/lib/ai/adapters/chapter-adapter'
-import { findTextAdventurePlayerVisibleLanguageIssuesV1 } from '../../src/lib/adventure/language-quality'
+import {
+  findTextAdventurePlayerVisibleLanguageIssuesV1,
+  groupTextAdventurePlayerVisibleLanguageIssuesV1,
+} from '../../src/lib/adventure/language-quality'
 
 const textOf = (messages: { content: string }[]) => messages.map(m => m.content).join('\n\n')
 
@@ -44,6 +47,26 @@ describe('R-CF20260702-language-guard', () => {
     }])
     expect(issues).toEqual([expect.objectContaining({
       artifactKey: 'content.narrative', path: 'beats[0].text', tokens: ['carefully'],
+    })])
+  })
+
+  it('按工件聚合语言泄漏，避免同一专业 Agent 的修复反馈被重复条目挤掉', () => {
+    const issues = findTextAdventurePlayerVisibleLanguageIssuesV1([{
+      artifactKey: 'content.quest-script',
+      payload: {
+        outcomes: [
+          { text: '你 actively 推动了机关。' },
+          { text: '这段 secrets 属于旧守灯人。' },
+        ],
+      },
+    }])
+    expect(groupTextAdventurePlayerVisibleLanguageIssuesV1(issues)).toEqual([expect.objectContaining({
+      artifactKey: 'content.quest-script',
+      tokens: ['actively', 'secrets'],
+      examples: expect.arrayContaining([
+        expect.objectContaining({ path: 'outcomes[0].text' }),
+        expect.objectContaining({ path: 'outcomes[1].text' }),
+      ]),
     })])
   })
 })

@@ -54,6 +54,7 @@ import {
   parseProductProductionSourcePlanV1,
 } from './source-contracts'
 import { assertFormalProductProductionStartV1 } from '../product/source-contracts'
+import { parseTextAdventureQualityReviewArtifactV1 } from '../adventure/production-artifacts'
 
 const ROOT_TASK_KEY = '$root'
 const ROOT_STEP_ID = '$join'
@@ -1251,6 +1252,9 @@ export function textAdventureNarrativeRepairPreservesFrozenMediaV1(issues: unkno
       || issue.artifactKey === 'content.adventure-ambient-events') {
       return /locationOrdinal|地点错位|发生地|绑定地点|未本地化|外语单词/.test(evidence)
     }
+    if (issue.artifactKey === 'content.quest-script') {
+      return /未本地化|外语单词|结算文案|玩家可见字段/.test(evidence)
+    }
     return false
   })
 }
@@ -1463,6 +1467,9 @@ async function recoveryInvalidatedTaskKeys(input: {
   const sceneScriptTaskKeys = [
     'content.scene-script.act-1', 'content.scene-script.act-2', 'content.scene-script.act-3',
   ]
+  const questScriptTaskKeys = input.plan.tasks
+    .filter(task => /^content\.quest-script\.(?:main\.act-[1-3]\.(?:single|multi)|supplemental)$/.test(task.taskKey))
+    .map(task => task.taskKey)
   const invalidated = new Set<string>(unresolvedFailureTaskKeys.length > 0
     ? unresolvedFailureTaskKeys.flatMap(taskKey => (
         taskKey === 'integration.narrative'
@@ -1472,6 +1479,9 @@ async function recoveryInvalidatedTaskKeys(input: {
     : blockingArtifactKeys.flatMap(artifactKey => {
         if (artifactKey === 'content.narrative') {
           return [...sceneScriptTaskKeys.flatMap(sceneScriptPartKeys), ...dialoguePassTaskKeys]
+        }
+        if (artifactKey === 'content.quest-script') {
+          return [...questScriptTaskKeys, 'content.quest-script']
         }
         const taskKey = taskByArtifactKey.get(artifactKey)
         return taskKey ? sceneScriptPartKeys(taskKey) : []
@@ -2568,6 +2578,43 @@ function costBearing(task: ProductProductionPlanTaskV3): boolean {
     || (task.budgetReservation.maximumCostUsd ?? 0) > 0
 }
 
+async function pauseBeforeMediaForFailedTextAdventureReviewV1(input: {
+  buildId: number
+  controlEpoch: number
+  failureJson: string
+  plan: ProductProductionPlanV3
+  completedTaskKeys: ReadonlySet<string>
+}): Promise<boolean> {
+  if (input.plan.productType !== 'text-adventure'
+    || !input.completedTaskKeys.has('content.adventure-quality-review')) return false
+  const rows = (await db.productBuildArtifacts
+    .where('[buildId+artifactKey]').equals([input.buildId, 'quality.adventure-review']).toArray())
+    .filter(row => row.controlEpoch === input.controlEpoch
+      && (row.status === 'accepted' || row.status === 'carried-forward'))
+  if (rows.length !== 1) {
+    throw new Error('[product-production-scheduler] 当前 epoch 的叙事质量审查 Artifact 不唯一')
+  }
+  const review = parseTextAdventureQualityReviewArtifactV1(JSON.parse(rows[0].payloadJson))
+  if (review.passed) return false
+  const failure = {
+    taskKey: 'integration.package',
+    code: 'task-executor-failed',
+    attempt: 1,
+    detail: '[product-production-executor] 文字冒险叙事质量审查未通过，必须先修复阻塞问题并重新生产',
+  }
+  await db.transaction('rw', db.productBuilds, async () => {
+    const current = await db.productBuilds.get(input.buildId)
+    if (!current || current.controlEpoch !== input.controlEpoch
+      || ['recovery-required', 'failed', 'cancelled', 'archived', 'released'].includes(current.status)) return
+    await db.productBuilds.update(input.buildId, {
+      status: 'recovery-required',
+      failureJson: canonicalProductProductionJsonV2(taskFailureEnvelope(input.failureJson, failure)),
+      updatedAt: Date.now(),
+    })
+  })
+  return true
+}
+
 export async function runProductProductionSchedulerCycleV1(input: {
   scope: WorkspaceScope
   productionId: number
@@ -2606,6 +2653,13 @@ export async function runProductProductionSchedulerCycleV1(input: {
     child.projection.state === 'completed' && child.projection.terminalReceiptHash
       ? [[key, child.projection.terminalReceiptHash] as const] : []
   )))
+  if (await pauseBeforeMediaForFailedTextAdventureReviewV1({
+    buildId: state.build.id!, controlEpoch: state.build.controlEpoch,
+    failureJson: state.build.failureJson, plan: state.plan,
+    completedTaskKeys: new Set(completed.keys()),
+  })) {
+    return projectProductProductionSchedulerV1({ scope, productionId: input.productionId })
+  }
   if (completed.size === state.plan.tasks.length) {
     await compileTerminalBuild({
       scope, productionId: input.productionId, buildId: state.build.id!, root: state.root,

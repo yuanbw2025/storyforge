@@ -89,7 +89,10 @@ import {
   parseTextAdventureDialoguePassArtifactV1,
 } from '../adventure/dialogue-pass'
 import { minimumTextAdventureCommercialImageCountV1 } from '../adventure/production-brief'
-import { findTextAdventurePlayerVisibleLanguageIssuesV1 } from '../adventure/language-quality'
+import {
+  findTextAdventurePlayerVisibleLanguageIssuesV1,
+  groupTextAdventurePlayerVisibleLanguageIssuesV1,
+} from '../adventure/language-quality'
 import {
   parseTextAdventureAutoplayReportV1,
   parseTextAdventurePlaytestStrategyArtifactV1,
@@ -4017,10 +4020,12 @@ async function executeModelTask(input: ProductProductionTaskExecutionInputV1, op
     }
   } else if (input.task.taskKey === 'content.adventure-quality-review') {
     const review = parseTextAdventureQualityReviewArtifactV1(raw)
-    const languageLeaks = findTextAdventurePlayerVisibleLanguageIssuesV1(input.inputArtifacts.map(artifact => ({
-      artifactKey: artifact.artifactKey,
-      payload: JSON.parse(artifact.payloadJson),
-    })))
+    const languageLeaks = groupTextAdventurePlayerVisibleLanguageIssuesV1(
+      findTextAdventurePlayerVisibleLanguageIssuesV1(input.inputArtifacts.map(artifact => ({
+        artifactKey: artifact.artifactKey,
+        payload: JSON.parse(artifact.payloadJson),
+      }))),
+    )
     const augmentedReview = parseTextAdventureQualityReviewArtifactV1({
       ...review,
       issues: [
@@ -4028,7 +4033,7 @@ async function executeModelTask(input: ProductProductionTaskExecutionInputV1, op
         ...languageLeaks.map(issue => ({
           severity: 'blocking' as const,
           artifactKey: issue.artifactKey as TextAdventureQualityReviewArtifactV1['issues'][number]['artifactKey'],
-          detail: `玩家可见字段 ${issue.path} 混入未本地化词 ${issue.tokens.join('、')}：${issue.excerpt}`,
+          detail: `玩家可见字段混入未本地化词 ${issue.tokens.join('、')}；位置与摘录：${issue.examples.map(example => `${example.path}=${example.excerpt}`).join('；')}`,
           recommendation: '保持稳定 key 和叙事含义，将混入的外语单词改成自然、完整的简体中文。',
         })),
       ],

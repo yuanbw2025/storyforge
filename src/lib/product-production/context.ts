@@ -1,6 +1,9 @@
 import { db } from '../db/schema'
 import { estimateTokens } from '../ai/context-budget'
-import { findTextAdventurePlayerVisibleLanguageIssuesV1 } from '../adventure/language-quality'
+import {
+  findTextAdventurePlayerVisibleLanguageIssuesV1,
+  groupTextAdventurePlayerVisibleLanguageIssuesV1,
+} from '../adventure/language-quality'
 import type { WorkspaceScope } from '../types'
 import type { AssembleContextInput } from '../registry/types'
 import { assertRecordInScope } from '../workspace/scope'
@@ -893,12 +896,13 @@ export async function readTextAdventureRepairFeedbackV1(input: AssembleContextIn
     .sort((left, right) => left.controlEpoch - right.controlEpoch || left.version - right.version)) {
     latestArtifacts.set(row.artifactKey, { artifactKey: row.artifactKey, payload: JSON.parse(row.payloadJson) })
   }
-  const languageBlockingIssues = findTextAdventurePlayerVisibleLanguageIssuesV1([...latestArtifacts.values()])
-    .slice(0, 5)
+  const languageBlockingIssues = groupTextAdventurePlayerVisibleLanguageIssuesV1(
+    findTextAdventurePlayerVisibleLanguageIssuesV1([...latestArtifacts.values()]),
+  )
     .map(issue => ({
       artifactKey: contextText(issue.artifactKey, 120),
       detail: contextText(
-        `玩家可见字段 ${issue.path} 混入未本地化词 ${issue.tokens.join('、')}：${issue.excerpt}`,
+        `玩家可见字段混入未本地化词 ${issue.tokens.join('、')}；位置：${issue.examples.map(example => example.path).join('、')}`,
         240,
       ),
       recommendation: '保持稳定 key 和叙事含义，将混入的外语单词改成自然、完整的简体中文。',

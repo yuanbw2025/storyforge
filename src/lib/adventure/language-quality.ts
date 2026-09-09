@@ -5,6 +5,12 @@ export interface TextAdventurePlayerVisibleLanguageIssueV1 {
   excerpt: string
 }
 
+export interface TextAdventurePlayerVisibleLanguageIssueGroupV1 {
+  artifactKey: string
+  examples: TextAdventurePlayerVisibleLanguageIssueV1[]
+  tokens: string[]
+}
+
 const PLAYER_VISIBLE_ARTIFACT_KEYS = new Set([
   'content.main-quest-plan',
   'content.adventure-side-quests',
@@ -58,4 +64,20 @@ export function findTextAdventurePlayerVisibleLanguageIssuesV1(
     visit(artifact.artifactKey, artifact.payload, '', null)
   }
   return issues.slice(0, 40)
+}
+
+export function groupTextAdventurePlayerVisibleLanguageIssuesV1(
+  issues: readonly TextAdventurePlayerVisibleLanguageIssueV1[],
+): TextAdventurePlayerVisibleLanguageIssueGroupV1[] {
+  const groups = new Map<string, TextAdventurePlayerVisibleLanguageIssueV1[]>()
+  for (const issue of issues) {
+    const current = groups.get(issue.artifactKey) ?? []
+    current.push(issue)
+    groups.set(issue.artifactKey, current)
+  }
+  return [...groups].map(([artifactKey, entries]) => ({
+    artifactKey,
+    examples: entries.slice(0, 5),
+    tokens: [...new Set(entries.flatMap(entry => entry.tokens))].slice(0, 12),
+  }))
 }

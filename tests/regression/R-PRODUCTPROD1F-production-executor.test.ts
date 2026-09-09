@@ -788,7 +788,7 @@ function professionalTextAdventureSceneScriptOutputs(
       targetNodeKey: edge.targetNodeKey,
       text: edge.targetNodeKey.startsWith('ending.')
         ? `接受${endingByKey.get(edge.targetNodeKey)!.title}的结局`
-        : edge.order === 0 ? `以公开承担的方式进入${edge.targetNodeKey}` : `以保护同伴的方式进入${edge.targetNodeKey}`,
+        : edge.order === 0 ? '以公开承担的方式前往下一场景' : '以保护同伴的方式前往下一场景',
       description: edge.order === 0
         ? '把事实公开给相关角色，以关系压力换取共同决策。'
         : '先保护眼前的人，以有限时间和后续信任承担代价。',
@@ -3887,6 +3887,9 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
       }, {
         severity: 'blocking', artifactKey: 'content.adventure-side-quests',
         detail: '一条支线钩子与冻结地点错位。', recommendation: '保持稳定 key 并重写错位钩子。',
+      }, {
+        severity: 'blocking', artifactKey: 'content.quest-script',
+        detail: '任务脚本结算文案混入未本地化外语。', recommendation: '由对应专业脚本 Run 修复玩家可见文案。',
       }],
       passed: false,
     }
@@ -3932,6 +3935,8 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     expect(JSON.parse(review!.payloadJson)).toMatchObject({ passed: false })
     expect(await db.productBuildArtifacts
       .where('[buildId+artifactKey]').equals([build.id!, 'runtime.package']).count()).toBe(0)
+    expect(await db.productBuildArtifacts
+      .where('[buildId+artifactKey]').equals([build.id!, 'media.requirements']).count()).toBe(0)
 
     outputs['content.adventure-quality-review'] = {
       schema: 'storyforge.text-adventure-quality-review-artifact', version: 1,
@@ -4009,12 +4014,12 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
       ['content.dialogue-pass.act-1', 2], ['content.dialogue-pass.act-2', 1],
       ['content.dialogue-pass.act-3', 1],
       ['content.product-module', 1], ['content.adventure-side-quests', 2],
-      ['content.quest-script.main.act-1.single', 1], ['content.quest-script.main.act-1.multi', 1],
-      ['content.quest-script.main.act-2.single', 1], ['content.quest-script.main.act-2.multi', 1],
-      ['content.quest-script.main.act-3.single', 1], ['content.quest-script.main.act-3.multi', 1],
+      ['content.quest-script.main.act-1.single', 2], ['content.quest-script.main.act-1.multi', 2],
+      ['content.quest-script.main.act-2.single', 2], ['content.quest-script.main.act-2.multi', 2],
+      ['content.quest-script.main.act-3.single', 2], ['content.quest-script.main.act-3.multi', 2],
       ['content.quest-script.supplemental', 2],
       ['content.adventure-ambient-events', 1], ['content.adventure-quality-review', 2],
-      ['media.requirements', 2], ['qa.playtest-strategy', 1],
+      ['media.requirements', 1], ['qa.playtest-strategy', 1],
     ])
     expect(taskCalls).toEqual(expectedCalls)
     expect(repairedSceneContexts).toHaveLength(3)
