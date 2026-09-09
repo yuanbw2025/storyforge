@@ -2592,9 +2592,11 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
       audio: [],
     }
     requirements.visual[1].prompt = '岚舟，浅棕短发，右脸有疤，穿灰白制服。'
-    requirements.visual[3].prompt = '岚舟在潮钟塔前发现导师日记，雾潮正在逼近。'
+    requirements.visual[3].prompt = '岚舟在潮钟塔前发现导师日记，墙壁刻满历代守灯人的名字，雾潮正在逼近。'
     requirements.visual[6].prompt = '沉砾，灰白短发与胡须，双手持黄铜手杖。'
     requirements.visual[8].prompt = '屿娘，短黑发，双手布满冻疮，腰挂鱼刀。'
+    requirements.visual[9].prompt = '最后抉择时，前景是岚舟的背影，远方三座潮钟同时启动。'
+    requirements.visual[10].prompt = '银色潮汐钥匙，柄部刻有微小符文，边缘带有长期使用的磨损。'
     requirements.visual[2].prompt = '无文字区域地图，标注雾湾环礁和霜潮列岛，以航线连接。'
     requirements.visual[5].prompt = '黄铜罗盘，表盘刻有潮位刻度，指针停在「临界」位置，背面刻有「守灯人传承」字样。'
 
@@ -2605,10 +2607,19 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     expect(parsed.visual[1].prompt).not.toContain('右脸有疤')
     expect(parsed.visual[6].prompt).toContain('涅洛')
     expect(parsed.visual[6].prompt).not.toContain('沉砾')
+    expect(parsed.visual[6].prompt).toContain('冻结外观中实际存在的肢体')
+    expect(parsed.visual[6].prompt).toContain('严禁补画缺失肢体')
+    expect(parsed.visual[6].prompt).not.toContain('双手')
     expect(parsed.visual[8].prompt).toContain('阿塔')
     expect(parsed.visual[8].prompt).not.toContain('屿娘')
     expect(parsed.visual[3].characterAnchorRefs).toEqual(['character.player'])
     expect(parsed.visual[3].hardConstraints).toContain('视觉锚点：黑短发带盐雾浅灰发梢，深蓝修复工外套与铜扣护腕，左眉细疤')
+    expect(parsed.visual[3].prompt).not.toContain('名字')
+    expect(parsed.visual[3].prompt).toContain('无字凿痕')
+    expect(parsed.visual[9].prompt).not.toContain('背影')
+    expect(parsed.visual[9].prompt).toContain('三分之二侧面')
+    expect(parsed.visual[10].prompt).not.toContain('符文')
+    expect(parsed.visual[10].prompt).toContain('不得出现任何可读文字')
     expect(parsed.visual[2].prompt).toContain('UNLABELED VISUAL-ONLY')
     expect(parsed.visual[2].prompt).not.toContain('雾湾环礁')
     expect(parsed.visual[5].prompt).toContain('不得出现任何可读文字')

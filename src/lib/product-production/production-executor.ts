@@ -2207,12 +2207,38 @@ export function productMediaCharacterPresentationConstraintV1(
 function glyphSafeTextAdventureItemPromptV1(prompt: string): string {
   const normalized = prompt
     .replace(/指针停在\s*[「『“"]?[^，。；\n」』”"]+[」』”"]?\s*位置/gu, '指针偏转至异常边界')
-    .replace(/(?:背面|正面|表面)?(?:刻有|写有|标有|印有|显示)[^，。；\n]*(?:字样|文字|名称|词句|铭文)/gu, '')
+    .replace(/(?:背面|正面|表面|柄部)?(?:刻有|刻满|写有|写满|标有|印有|显示)[^，。；\n]*(?:字样|文字|名称|词句|铭文|符文|字符|字母|数字|人名|名字|姓名)/gu, '')
     .replace(/表盘刻有潮位刻度/gu, '表盘环绕抽象潮汐刻度线')
     .replace(/[「『“"][^」』”"]+[」』”"]/gu, '抽象无字标记')
     .replace(/[，。；]{2,}/gu, '。')
     .trim()
   return normalized || '以材质、形状、颜色和使用痕迹表达物品的剧情功能'
+}
+
+function glyphSafeTextAdventureScenePromptV1(prompt: string): string {
+  return prompt
+    .replace(
+      /(?:墙壁|墙面|石壁|碑面|纸页|书页|牌面|表面)(?:上)?(?:刻有|刻满|写有|写满|标有|印有|显示)[^，。；\n]*(?:字样|文字|名称|词句|铭文|符文|字符|字母|数字|人名|名字|姓名)/gu,
+      '以无字凿痕、抽象图形与磨损表达历史痕迹',
+    )
+    .replace(/前景是[^，。；\n]{1,40}的背影/gu, '前景以三分之二侧面清晰呈现已登记角色的面部与身份特征')
+    .replace(/\bback view of [^,.\n]{1,80}/giu, 'three-quarter view of the registered character with identity features visible')
+    .replace(/[，。；]{2,}/gu, '。')
+    .trim()
+}
+
+function textAdventureCharacterFramingPromptV1(
+  character: ProductMediaCharacterAnchorV1,
+  editorialJob: string,
+): string {
+  const anatomy = `${character.publicIdentity}\n${character.visualAnchor}`
+  const hasMissingUpperLimb = /(?:失去|缺失|截肢|断裂|断肢)[^，。；\n]{0,8}(?:手臂|臂|手)|(?:独臂|断臂|断手)/u.test(anatomy)
+  const visibleBody = hasMissingUpperLimb
+    ? '头部、冻结外观中实际存在的肢体与身份物件必须完整清晰，严禁补画缺失肢体'
+    : '头部、双手与身份物件必须完整清晰'
+  return editorialJob
+    .replace(/头部、双手与身份物件必须完整清晰，脸部细节可辨/gu, `${visibleBody}，脸部细节可辨`)
+    .replace(/脸部、双手和身份物件清晰可辨/gu, `脸部、${hasMissingUpperLimb ? '冻结外观中实际存在的肢体' : '双手'}和身份物件清晰可辨${hasMissingUpperLimb ? '，严禁补画缺失肢体' : ''}`)
 }
 
 function normalizeTextAdventureVisualRequirementPromptV1(input: {
@@ -2226,8 +2252,11 @@ function normalizeTextAdventureVisualRequirementPromptV1(input: {
   const isCharacter = input.mediaKind === 'character-pose' || input.mediaKind === 'character-expression'
   if (isCharacter && input.anchoredCharacters.length > 0) {
     const character = input.anchoredCharacters[0]
-    const editorialJob = input.blueprint?.prompt
+    const editorialJob = textAdventureCharacterFramingPromptV1(
+      character,
+      input.blueprint?.prompt
       ?? '透明背景的单人角色视觉锚点立绘，头部、双手与身份物件完整清晰'
+    )
     return `${editorialJob}。仅表现已冻结角色「${character.name}」：${character.publicIdentity}。` +
       `冻结外观必须逐项呈现：${character.visualAnchor}。` +
       '使用自然站姿和克制表情，不新增年龄、发色、伤痕、服饰、肢体或身份设定。'
@@ -2245,11 +2274,13 @@ function normalizeTextAdventureVisualRequirementPromptV1(input: {
     return `${editorialJob}。${glyphSafeTextAdventureItemPromptV1(input.prompt)}。` +
       '全部信息只用材质、颜色、形状、抽象刻度和磨损表达；物品与背景上不得出现任何可读文字、字母、数字、品牌或标志。'
   }
-  if (input.anchoredCharacters.length === 0) return input.prompt
+  const glyphSafePrompt = glyphSafeTextAdventureScenePromptV1(input.prompt)
+  const noGlyphContract = '画面不得出现任何可读文字、字母、数字、符文、伪文字、Logo 或签名。'
+  if (input.anchoredCharacters.length === 0) return `${glyphSafePrompt}。${noGlyphContract}`
   const authority = input.anchoredCharacters.map(character => (
     `「${character.name}」=${character.publicIdentity}；${character.visualAnchor}`
   )).join('。')
-  return `${input.prompt}。画面中的已登记角色必须严格服从冻结身份与外观：${authority}。`
+  return `${glyphSafePrompt}。画面中的已登记角色必须严格服从冻结身份与外观：${authority}。${noGlyphContract}`
 }
 
 export function parseProductMediaRequirementsArtifactV2(
@@ -3976,7 +4007,7 @@ export function textAdventureVisualRepairCastConstraintV1(input: {
       ? '输出边缘干净、无残色的单一完整角色剪影；角色之外必须为真实透明区域。'
       : '',
     needsLeftEyebrowScar
-      ? '身份识别锚点必须清晰可见：采用正面三分之二身取景，让脸部与双手占据足够像素；完整显示头顶。左眉上有一条细而自然、轮廓明确且与肤色有轻微明暗差的旧疤，不能被头发、阴影或妆容遮住；双眼明确看向正前方。'
+      ? '身份识别锚点必须清晰可见：采用正面三分之二身取景，让脸部与冻结外观中实际存在的手部占据足够像素；完整显示头顶。左眉上有一条细而自然、轮廓明确且与肤色有轻微明暗差的旧疤，不能被头发、阴影或妆容遮住；双眼明确看向正前方。'
       : '',
   ].filter(Boolean).join('\n')
   return {
@@ -4133,7 +4164,7 @@ async function executeVisualTask(input: ProductProductionTaskExecutionInputV1, o
         `必须遵守：${requirement.hardConstraints.join('；')}。若前文描述与这些冻结约束冲突，以冻结约束为唯一权威并主动修正。` +
         productMediaCharacterPresentationConstraintV1(requirement.mediaKind) +
         (isAgnesCharacter
-          ? '这是单人角色立绘素材，不是场景、海报或角色卡：画布只能有一个完整角色；必须完整保留提示指定的头部、双手、身份物件和身体取景，头顶及左右轮廓留出至少 8% 安全边距，禁止裁掉头部。禁止灯塔、风景、文字、边框、光效和装饰元素。' +
+          ? '这是单人角色立绘素材，不是场景、海报或角色卡：画布只能有一个完整角色；必须完整保留提示指定的头部、冻结外观中实际存在的肢体、身份物件和身体取景，严禁补画冻结外观明确缺失的肢体；头顶及左右轮廓留出至少 8% 安全边距，禁止裁掉头部。禁止灯塔、风景、文字、边框、光效和装饰元素。' +
             '不得把透明背景画成棋盘格、网格或光栅；若无法直接输出真实 alpha，角色以外的每一个像素都只能是纯品红 #FF00FF，禁止阴影、纹理、渐变和杂色。'
           : '')
       : governedPrompt
@@ -5057,7 +5088,7 @@ async function executeTextAdventureVisualQualityReviewTask(
       '"scores":{"requirementFit":1,"identityContinuity":1,"styleContinuity":1,"composition":1,"technicalCleanliness":1},' +
       '"issues":[{"severity":"warning|blocking","category":"identity|setting|style|composition|spoiler|artifact|text|accessibility","detail":"...","recommendation":"..."}]}]}。' +
       `必须恰好覆盖这些图片 key/hash，不能漏项、重复或改写：${JSON.stringify([...expected])}。` +
-      `本批每张图片的冻结审查合同=${JSON.stringify(exactReviewContracts)}。必须按相同 artifactKey 逐项对照，不能拿别的图片或全局印象代替。角色立绘的头部、双手或要求中的身份物件被裁掉，或固定角色硬约束与像素明显冲突时，属于需要返修的问题；不得用“全身图细节太小”替缺失的硬约束开脱。` +
+      `本批每张图片的冻结审查合同=${JSON.stringify(exactReviewContracts)}。必须按相同 artifactKey 逐项对照，不能拿别的图片或全局印象代替。角色立绘的头部、冻结外观中应存在的肢体或要求中的身份物件被裁掉，擅自补画冻结外观明确缺失的肢体，或固定角色硬约束与像素明显冲突时，属于需要返修的问题；不得用“全身图细节太小”替缺失的硬约束开脱。` +
       `reviews 必须严格包含 ${expected.size} 项；先复制这一骨架再填判断：${JSON.stringify(exactReviewSkeleton)}。` +
       '每张图最多列 3 条 issues，每条 detail 和 recommendation 各不超过 160 字；通过时 issues 必须是空数组。' +
       '不要输出思考过程或 JSON 之外的文字。评分只能是 1–5 整数；存在明显身份错误、需求错位、严重畸形、不可接受剧透或伪文字时不得 verdict=accept。'
