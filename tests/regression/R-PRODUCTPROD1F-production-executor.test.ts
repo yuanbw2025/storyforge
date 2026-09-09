@@ -2192,6 +2192,17 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
       })),
       audio: [],
     }
+    ;[
+      ['#101820', '#203040', '#304860'],
+      ['#402010', '#604020', '#806030'],
+      ['#102840', '#205080', '#3078A0'],
+      ['#302050', '#503070', '#704090'],
+      ['#204030', '#306050', '#408070'],
+    ].forEach((palette, paletteIndex) => {
+      const visualIndex = [1, 3, 7, 9, 11][paletteIndex]
+      mediaRequirements.visual[visualIndex].characterAnchorRefs = [castKeys[0]]
+      mediaRequirements.visual[visualIndex].palette = palette
+    })
     const artifact = async (
       artifactKey: string,
       kind: ProductBuildArtifactRecordV1['kind'],
@@ -2220,6 +2231,13 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
       authorResolution: null, signal: new AbortController().signal,
     })
     const visualBiblePayload = compileResult.artifacts[0].payload
+    const playerVisualAnchor = (
+      visualBiblePayload as { characterAnchors: Array<{ characterKey: string; palette: string[] }> }
+    ).characterAnchors.find(anchor => anchor.characterKey === castKeys[0])!
+    expect(playerVisualAnchor.palette).toHaveLength(8)
+    expect(playerVisualAnchor.palette).toEqual([
+      '#101820', '#203040', '#304860', '#402010', '#604020', '#806030', '#102840', '#205080',
+    ])
     const visualBibleArtifact = await artifact('media.visual-bible', 'visual-bible', visualBiblePayload)
     const gateInput = {
       scope: owned.scope, productionId: owned.productionId, buildId: 1, buildNumber: 1,

@@ -2491,7 +2491,10 @@ function compileTextAdventureVisualBibleV1(input: {
         identity: character.publicIdentity,
         visualAnchor: character.visualAnchor,
         requirementArtifactKeys: matchingRequirements.map(requirement => requirement.artifactKey).sort(),
-        palette: palette.length >= 3 ? palette : globalPalette,
+        // A character can appear in several CGs whose regional palettes differ.
+        // Preserve first-use order but keep the frozen anchor inside the same
+        // 3–8 color contract as the global Visual Bible.
+        palette: palette.length >= 3 ? palette.slice(0, 8) : globalPalette,
         hardConstraints,
       }
     }),
