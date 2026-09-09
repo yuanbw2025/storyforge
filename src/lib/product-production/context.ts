@@ -883,7 +883,7 @@ export async function readTextAdventureRepairFeedbackV1(input: AssembleContextIn
   const payload = review ? contextRecord(JSON.parse(review.payloadJson)) : {}
   const reviewBlockingIssues = contextRows(payload.issues)
     .filter(issue => issue.severity === 'blocking')
-    .slice(0, 5)
+    .slice(0, 40)
     .map(issue => ({
       artifactKey: contextText(issue.artifactKey, 120),
       detail: contextText(issue.detail, 240),
@@ -907,7 +907,7 @@ export async function readTextAdventureRepairFeedbackV1(input: AssembleContextIn
       ),
       recommendation: '保持稳定 key 和叙事含义，将混入的外语单词改成自然、完整的简体中文。',
     }))
-  const blockingIssues = [...reviewBlockingIssues, ...languageBlockingIssues].slice(0, 8)
+  const blockingIssues = [...reviewBlockingIssues, ...languageBlockingIssues].slice(0, 40)
   if (blockingIssues.length === 0 && taskFailures.size === 0) return ''
   return JSON.stringify({
     schema: 'storyforge.text-adventure-repair-feedback', version: 1,

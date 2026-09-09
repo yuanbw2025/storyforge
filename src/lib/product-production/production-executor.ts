@@ -2993,6 +2993,8 @@ function textSystem(
     '所有会展示给玩家的 title、text、summary、description、hook、objective 和结算文案必须使用自然、完整的简体中文；稳定机器 key 不受此限制，AI、HP、MP 等不超过两个字母的通用缩写可以保留，禁止把 recall、carefully 等未本地化外语单词混入中文句子。' +
     '若登记上下文含 storyforge.text-adventure-repair-feedback，必须只修复 targetTaskKey 与本任务相同的 blocking 问题，保持稳定 key、冻结架构与未受影响内容。' +
     '若问题 artifactKey=content.narrative，当前场景或对白任务必须修正其自己所拥有 scene/choice 的文案、targetNodeKey、locationOrdinal 或 openingBeat，不得以原定位为装配工件为由忽略。' +
+    '返修时必须逐条扫描 blockingIssues，凡 detail 提到本任务拥有的 sceneKey、choiceKey、beatKey 或玩家可见文本，全部修复后才能输出；不得只处理列表前几项。' +
+    '每个 choice 的文案与 description 必须描述 targetNodeKey 开场实际发生的立即行动；凡文案出现具体地点，该地点必须与目标场景 locationOrdinal 对应。每个场景的 title、summary、openingBeat 与 locationOrdinal 必须共同指向同一地点。' +
     '修复反馈中 detail 是需要消除的缺陷证据，recommendation 只是建议；不得机械照抄会造成新矛盾的建议。任务或事件的稳定 key、标题和目标若已共同指向某地，应优先重写错位的钩子与结果文本，只在 key、标题、目标和内容已一致指向另一地时才更改 locationOrdinal。' +
     '若反馈含 lastTaskFailures，还必须修复其中 taskKey 与当前任务相同的上一次确定性协议错误；其他任务的错误只作为不得破坏的边界。' +
     (attempt > 1

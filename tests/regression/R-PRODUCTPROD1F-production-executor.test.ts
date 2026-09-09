@@ -3890,6 +3890,15 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
       }, {
         severity: 'blocking', artifactKey: 'content.quest-script',
         detail: '任务脚本结算文案混入未本地化外语。', recommendation: '由对应专业脚本 Run 修复玩家可见文案。',
+      }, {
+        severity: 'blocking', artifactKey: 'content.narrative',
+        detail: 'choice.004 的立即行动与目标场景不一致。', recommendation: '重写选择文案。',
+      }, {
+        severity: 'blocking', artifactKey: 'content.narrative',
+        detail: 'scene.005 的标题与 locationOrdinal 不一致。', recommendation: '统一地点语义。',
+      }, {
+        severity: 'blocking', artifactKey: 'content.narrative',
+        detail: 'choice.007 的目标地点仍然错位。', recommendation: '按目标场景开场改写。',
       }],
       passed: false,
     }
@@ -4026,6 +4035,7 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     for (const repairedSceneContext of repairedSceneContexts) {
       expect(repairedSceneContext).toContain('storyforge.text-adventure-repair-feedback')
       expect(repairedSceneContext).toContain('主要转折缺少因果铺垫')
+      expect(repairedSceneContext).toContain('choice.007 的目标地点仍然错位')
     }
     expect(repairedSceneContexts[1]).toContain('lastTaskFailures')
     expect(repairedSceneContexts[1]).toContain('fixture repair provider timeout')

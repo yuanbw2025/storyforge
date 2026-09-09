@@ -1462,7 +1462,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     scope: 'project',
     layer: 'L0',
     ownerFrom: 'work',
-    budgetTokens: 3_000,
+    budgetTokens: 6_000,
     protectedFromTrim: true,
     enabled: input => Number.isInteger(input.productBuildId) && !!input.productArtifactKeys?.length,
     read: readTextAdventureRepairFeedbackV1,
