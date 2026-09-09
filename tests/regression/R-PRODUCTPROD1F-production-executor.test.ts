@@ -1153,6 +1153,33 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
     })
   })
 
+  it('玩法系统只丢弃初始装备的已知 descriptionCn 供应商别名', () => {
+    const legalized = legalizeProductionModelProtocolDefaultsV1('content.product-module', {
+      schema: 'storyforge.text-adventure-systems-artifact', version: 1,
+      starterEquipment: [{
+        key: 'item.starter-lamp', title: '守灯杖', description: '照亮雾中航标。',
+        descriptionCn: '照亮雾中航标。', slotKey: 'slot.weapon', tags: ['weapon'],
+        modifierAbilityKey: 'ability.perception', modifierDelta: 1,
+      }],
+    })
+
+    expect(legalized.payload.starterEquipment).toEqual([{
+      key: 'item.starter-lamp', title: '守灯杖', description: '照亮雾中航标。',
+      slotKey: 'slot.weapon', tags: ['weapon'],
+      modifierAbilityKey: 'ability.perception', modifierDelta: 1,
+    }])
+    expect(legalized.defaultedFields).toEqual([
+      'starterEquipment[0].descriptionCn<-discarded-provider-alias',
+    ])
+
+    const unknownField = legalizeProductionModelProtocolDefaultsV1('content.product-module', {
+      starterEquipment: [{ key: 'item.starter-lamp', unregisteredFact: '不得静默接纳' }],
+    })
+    expect(unknownField.payload.starterEquipment).toEqual([{
+      key: 'item.starter-lamp', unregisteredFact: '不得静默接纳',
+    }])
+  })
+
   it('按商业时长冻结完整主线阶段与目标槽位，不允许单对象样例替代任务量', () => {
     const brief = {
       qualityProfile: 'commercial-candidate',

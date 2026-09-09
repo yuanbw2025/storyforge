@@ -745,6 +745,25 @@ export function legalizeProductionModelProtocolDefaultsV1(
     )
     return { payload: next, defaultedFields, discardedNullEntries, discardedUnregisteredStateFields }
   }
+  if (taskKey === 'content.product-module' && Array.isArray(payload.starterEquipment)) {
+    const next: JsonRecord = { ...payload }
+    next.starterEquipment = payload.starterEquipment.map((entry, index) => {
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return entry
+      const item = { ...(entry as JsonRecord) }
+      // Some OpenAI-compatible providers echo a translated alias next to the
+      // registered `description` field.  It carries no additional system fact,
+      // so discard this one known provider annotation while preserving strict
+      // rejection for every other unknown equipment field.
+      if (Object.prototype.hasOwnProperty.call(item, 'descriptionCn')) {
+        delete item.descriptionCn
+        defaultedFields.push(
+          `starterEquipment[${index}].descriptionCn<-discarded-provider-alias`,
+        )
+      }
+      return item
+    })
+    return { payload: next, defaultedFields, discardedNullEntries, discardedUnregisteredStateFields }
+  }
   if (taskKey === 'content.narrative-arc-scenes' && options.narrativeArcSceneKeys?.length === 3) {
     const next: JsonRecord = { ...payload }
     if (Object.prototype.hasOwnProperty.call(next, 'metadata')) {
@@ -3426,7 +3445,10 @@ async function executeModelTask(input: ProductProductionTaskExecutionInputV1, op
     }
   } else if (input.task.taskKey === 'content.product-module') {
     payload = parseProductModule(raw, options.brief); kind = 'product-module'
-    quality = { productTypeVerified: true }
+    quality = {
+      productTypeVerified: true,
+      protocolDefaultsApplied: legalized.defaultedFields,
+    }
   } else if (input.task.taskKey === 'media.requirements') {
     const cast = options.brief.textAdventure
       ? parseTextAdventureCastBibleArtifactV1({
