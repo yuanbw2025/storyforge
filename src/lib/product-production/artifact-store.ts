@@ -1,3 +1,4 @@
+import Dexie from 'dexie'
 import { db } from '../db/schema'
 import type {
   ProductBuildArtifactKindV1,
@@ -19,6 +20,52 @@ function boundedJson(value: unknown, label: string): string {
   const json = canonicalProductProductionJsonV2(value)
   if (json.length > 2_000_000) throw new Error(`[product-production-artifact] ${label} 超出 2MB 上限`)
   return json
+}
+
+async function rebindBuildLocalTextAdventureMediaV1(input: {
+  productionKey: string | null
+  targetBuildNumber: number
+  source: ProductBuildArtifactRecordV1
+}): Promise<Pick<ProductBuildArtifactRecordV1, 'inputHash' | 'payloadJson' | 'metadataJson'>> {
+  if (!input.productionKey || (input.source.kind !== 'image' && input.source.kind !== 'audio')) {
+    return {
+      inputHash: input.source.inputHash,
+      payloadJson: input.source.payloadJson,
+      metadataJson: input.source.metadataJson,
+    }
+  }
+  let payload: Record<string, unknown>
+  let metadata: Record<string, unknown>
+  try {
+    payload = JSON.parse(input.source.payloadJson) as Record<string, unknown>
+    metadata = JSON.parse(input.source.metadataJson) as Record<string, unknown>
+  } catch {
+    throw new Error(`[product-production-artifact] 文字冒险媒资缺少可重绑定 JSON:${input.source.artifactKey}`)
+  }
+  if (!payload || Array.isArray(payload) || payload.schema !== 'storyforge.generated-media-artifact'
+    || payload.version !== 1 || typeof payload.assetKey !== 'string' || !payload.assetKey.trim()
+    || !metadata || Array.isArray(metadata)
+    || typeof metadata.assetKey !== 'string' || !metadata.assetKey.trim()) {
+    throw new Error(`[product-production-artifact] 文字冒险媒资缺少可重绑定生成合同:${input.source.artifactKey}`)
+  }
+  const assetKey = `${input.productionKey}.build-${input.targetBuildNumber}.${input.source.artifactKey}`
+  if (payload.assetKey === assetKey && metadata.assetKey === assetKey) {
+    return {
+      inputHash: input.source.inputHash,
+      payloadJson: input.source.payloadJson,
+      metadataJson: input.source.metadataJson,
+    }
+  }
+  const inputHash = await Dexie.waitFor(hashProductProductionValueV2({
+    schema: 'storyforge.text-adventure-carried-media-input', version: 1,
+    targetBuildNumber: input.targetBuildNumber, artifactKey: input.source.artifactKey,
+    assetKey, sourceInputHash: input.source.inputHash, contentHash: input.source.contentHash,
+  }))
+  return {
+    inputHash,
+    payloadJson: canonicalProductProductionJsonV2({ ...payload, assetKey }),
+    metadataJson: canonicalProductProductionJsonV2({ ...metadata, assetKey }),
+  }
 }
 
 /**
@@ -159,7 +206,7 @@ export async function carryForwardProductBuildArtifactsToEpochV1(input: {
   const keys = [...new Set(input.artifactKeys.map(value => stableKey(value, 'artifactKey')))]
   if (keys.length !== input.artifactKeys.length) throw new Error('[product-production-artifact] carry-forward keys 重复')
   return db.transaction('rw', scopeTransactionTables(
-    db.productBuilds, db.productBuildArtifacts, db.mediaBlobObjects,
+    db.productProductions, db.productBuilds, db.productBuildArtifacts, db.mediaBlobObjects,
   ), async () => {
     const build = await db.productBuilds.get(input.buildId)
     if (!build || !await assertRecordInScope(scope, 'productBuilds', build, { owner: 'work' })
@@ -167,6 +214,11 @@ export async function carryForwardProductBuildArtifactsToEpochV1(input: {
       || ['cancelled', 'failed', 'archived', 'released'].includes(build.status)) {
       throw new Error('[product-production-artifact] carry-forward Build/epoch 不可写')
     }
+    const production = await db.productProductions.get(build.productionId)
+    if (!production || !await assertRecordInScope(scope, 'productProductions', production, { owner: 'work' })) {
+      throw new Error('[product-production-artifact] carry-forward Production 缺失或跨 Work')
+    }
+    const productionKey = production.productType === 'text-adventure' ? production.productionKey : null
     const allRows = await db.productBuildArtifacts.where('buildId').equals(build.id!).toArray()
     const sourceRows = keys.flatMap(artifactKey => {
       const eligible = allRows.filter(row => row.artifactKey === artifactKey
@@ -207,13 +259,16 @@ export async function carryForwardProductBuildArtifactsToEpochV1(input: {
       }
       const version = Math.max(0, ...allRows.filter(row => row.artifactKey === source.artifactKey)
         .map(row => row.version)) + 1
+      const rebound = await rebindBuildLocalTextAdventureMediaV1({
+        productionKey, targetBuildNumber: build.buildNumber, source,
+      })
       const next = stampNewRecord(scope, 'productBuildArtifacts', {
         projectId: scope.projectId, worldId: scope.worldId, workId: scope.workId,
         buildId: build.id!, artifactKey: source.artifactKey, requirementKey: source.requirementKey,
         version, kind: source.kind, mediaKind: source.mediaKind, status: 'carried-forward' as const,
         producerRunId: null, producerReceiptHash: source.producerReceiptHash,
-        controlEpoch: input.toControlEpoch, inputHash: source.inputHash, contentHash: source.contentHash,
-        payloadJson: source.payloadJson, metadataJson: source.metadataJson,
+        controlEpoch: input.toControlEpoch, inputHash: rebound.inputHash, contentHash: source.contentHash,
+        payloadJson: rebound.payloadJson, metadataJson: rebound.metadataJson,
         qualityJson: source.qualityJson, rightsJson: source.rightsJson,
         blobObjectId: source.blobObjectId, mimeType: source.mimeType, byteSize: source.byteSize,
         parentArtifactHash: source.contentHash,
@@ -258,7 +313,7 @@ export async function carryForwardProductBuildArtifactsAcrossBuildsV1(input: {
     throw new Error('[product-production-artifact] cross-build carry-forward keys 为空或重复')
   }
   return db.transaction('rw', scopeTransactionTables(
-    db.productBuilds, db.productBuildArtifacts, db.mediaBlobObjects,
+    db.productProductions, db.productBuilds, db.productBuildArtifacts, db.mediaBlobObjects,
   ), async () => {
     const [sourceBuild, targetBuild] = await Promise.all([
       db.productBuilds.get(input.sourceBuildId), db.productBuilds.get(input.targetBuildId),
@@ -279,6 +334,11 @@ export async function carryForwardProductBuildArtifactsAcrossBuildsV1(input: {
       || ['cancelled', 'failed', 'archived', 'released'].includes(targetBuild.status)) {
       throw new Error('[product-production-artifact] cross-build 来源/目标关系不可复用')
     }
+    const production = await db.productProductions.get(targetBuild.productionId)
+    if (!production || !await assertRecordInScope(scope, 'productProductions', production, { owner: 'work' })) {
+      throw new Error('[product-production-artifact] cross-build Production 缺失或跨 Work')
+    }
+    const productionKey = production.productType === 'text-adventure' ? production.productionKey : null
     const [sourceRows, targetRows] = await Promise.all([
       db.productBuildArtifacts.where('buildId').equals(sourceBuild.id!).toArray(),
       db.productBuildArtifacts.where('buildId').equals(targetBuild.id!).toArray(),
@@ -312,13 +372,16 @@ export async function carryForwardProductBuildArtifactsAcrossBuildsV1(input: {
       }
       const version = Math.max(0, ...targetRows.filter(row => row.artifactKey === source.artifactKey)
         .map(row => row.version)) + 1
+      const rebound = await rebindBuildLocalTextAdventureMediaV1({
+        productionKey, targetBuildNumber: targetBuild.buildNumber, source,
+      })
       const next = stampNewRecord(scope, 'productBuildArtifacts', {
         projectId: scope.projectId, worldId: scope.worldId, workId: scope.workId,
         buildId: targetBuild.id!, artifactKey: source.artifactKey, requirementKey: source.requirementKey,
         version, kind: source.kind, mediaKind: source.mediaKind, status: 'carried-forward' as const,
         producerRunId: null, producerReceiptHash: source.producerReceiptHash,
-        controlEpoch: targetBuild.controlEpoch, inputHash: source.inputHash, contentHash: source.contentHash,
-        payloadJson: source.payloadJson, metadataJson: source.metadataJson,
+        controlEpoch: targetBuild.controlEpoch, inputHash: rebound.inputHash, contentHash: source.contentHash,
+        payloadJson: rebound.payloadJson, metadataJson: rebound.metadataJson,
         qualityJson: source.qualityJson, rightsJson: source.rightsJson,
         blobObjectId: source.blobObjectId, mimeType: source.mimeType, byteSize: source.byteSize,
         parentArtifactHash: source.contentHash,

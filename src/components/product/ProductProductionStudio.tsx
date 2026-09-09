@@ -1247,7 +1247,8 @@ export default function ProductProductionStudio(props: {
   const selectedSuggestion = suggestions.find(item => item.suggestionKey === suggestionKey) ?? null
   const canPause = details && ['producing', 'preview-ready'].includes(details.production.status)
     && details.build && !['released', 'cancelled', 'failed', 'archived', 'paused', 'recovery-required'].includes(details.build.status)
-  const canRetryBlocker = !!details && canRetryProductProductionBlockerV1(details)
+  const canRetryBlocker = details?.production.status === 'producing'
+    && canRetryProductProductionBlockerV1(details)
   const canUpgradeExecutionPlan = !!details && canUpgradeTextAdventureProductionPlanV1(details)
   const sourceDecisionBlocker = !!details && isTextAdventureSourceDecisionBlockerV1(details)
   const sourceDecision = useMemo(
