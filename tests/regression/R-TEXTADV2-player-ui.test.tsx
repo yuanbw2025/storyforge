@@ -174,6 +174,14 @@ describe('TEXTADV-2 · 玩家界面纵切面', () => {
     })
     await closePanel()
 
+    await clickNavigation('存档')
+    const saves = host.querySelector('[aria-label="存档与时间线"]')
+    expect(saves?.textContent).toContain('运行版本')
+    expect(saves?.textContent).toContain('Build 预览 #')
+    expect(saves?.textContent).toContain('内容校验')
+    expect(saves?.textContent).toContain('纯文字完整模式')
+    await closePanel()
+
     const parentResolver = useAdventureGamePlayerStore.getState().selectedMediaResolver
     expect(parentResolver).not.toBeNull()
     await act(async () => {

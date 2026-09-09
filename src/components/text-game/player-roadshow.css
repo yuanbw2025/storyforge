@@ -369,6 +369,15 @@
 @media (max-width: 1100px) {
   .adventure-layout { grid-template-columns: 180px minmax(420px,1fr); }.adventure-status-rail { display: none; }
 }
+.adventure-runtime-identity { display: grid; gap: 11px; margin-top: 16px; padding: 14px; border: 1px solid rgba(255,255,255,.09); border-radius: 9px; background: rgba(255,255,255,.025); }
+.adventure-runtime-identity h3 { display: flex; align-items: center; gap: 6px; margin: 0; color: #dfc9a8; font-size: 10px; }
+.adventure-runtime-identity h3 svg { width: 14px; height: 14px; color: #c09c67; }
+.adventure-runtime-identity dl { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; }
+.adventure-runtime-identity dl>div { display: grid; min-width: 130px; gap: 2px; padding: 8px 10px; border-radius: 6px; background: rgba(3,9,12,.36); }
+.adventure-runtime-identity dt { color: #76898e; font-size: 7px; }
+.adventure-runtime-identity dd { margin: 0; color: #d9e0de; font-family: var(--font-mono); font-size: 8px; }
+.adventure-runtime-identity p { margin: 0; color: #76898e; font-size: 8px; line-height: 1.6; }
+
 @media (max-width: 780px) {
   .textgame-catalog-list>article>button { grid-template-columns: 54px minmax(0,1fr); gap: 11px; padding: 11px; }.textgame-catalog-icon { width: 54px; height: 54px; }.textgame-catalog-open { display: none; }.textgame-catalog-copy>p { white-space: normal; }.textgame-title-page { grid-template-columns: 1fr; }.textgame-title-art { min-height: 155px; margin: 8px 14px 0; }.textgame-title-copy { padding: 22px 19px 27px; }
   .adventure-launcher-content { width: min(100% - 28px,1000px); padding-top: 36px; }.adventure-release-grid>article { grid-template-columns: 1fr; }.adventure-release-cover { min-height: 140px; }.adventure-launcher-saves { grid-template-columns: 1fr; }.adventure-gamebar { grid-template-columns: auto 1fr auto; padding: 0 10px; }.adventure-autosave,.adventure-gamebar nav { display: none; }.adventure-layout { display: block; padding-bottom: 60px; }.adventure-map-rail { display: none; }.adventure-scene-column { padding: 10px; }.adventure-scene { min-height: 330px; padding: 22px 17px; }.adventure-scene-characters article { min-width: min(100%,180px); }.adventure-actions>div { grid-template-columns: 1fr; }.adventure-mobile-dock { position: sticky; z-index: 28; bottom: 0; display: grid; grid-template-columns: repeat(5,1fr); border-top: 1px solid rgba(255,255,255,.1); background: rgba(8,16,22,.95); backdrop-filter: blur(12px); }.adventure-mobile-dock button { display: grid; place-items: center; gap: 3px; padding: 9px 2px; border: 0; background: transparent; color: #9ba9ab; font-size: 7px; }.adventure-panel-backdrop { inset: 64px 0 0; padding: 8px; }.adventure-panel { max-height: 91vh; }.adventure-inventory-grid,.adventure-system-grid { grid-template-columns: 1fr; }

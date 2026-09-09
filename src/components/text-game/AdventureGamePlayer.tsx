@@ -233,6 +233,12 @@ export default function AdventureGamePlayer(props: {
   }, [props.scope.projectId, props.scope.worldId, props.scope.workId, props.worldGroupId, props.initialSessionId])
 
   const selected = store.sessions.find(item => item.id === store.selectedSessionId) ?? null
+  const selectedRelease = selected?.productReleaseId != null
+    ? store.releases.find(item => item.release.id === selected.productReleaseId)?.release ?? null
+    : null
+  const runtimeSourceLabel = selectedRelease
+    ? 'ProductRelease v' + selectedRelease.version
+    : selected?.productBuildId != null ? 'Build 预览 #' + selected.productBuildId : '未绑定运行来源'
   const catalog = useMemo(() => currentPlayerReleases(store.releases), [store.releases])
   const catalogRelease = catalog.find(item => item.release.id === catalogReleaseId) ?? null
   const adventure = store.runtimeState.adventure
@@ -689,6 +695,16 @@ export default function AdventureGamePlayer(props: {
       {panel === 'accessibility' && <div className="adventure-accessibility"><label><span>正文字号</span><select aria-label="正文字号" value={accessibility.fontScale} onChange={event => setAccessibility(current => ({ ...current, fontScale: Number(event.target.value) }))}><option value={0.9}>较小</option><option value={1}>标准</option><option value={1.15}>较大</option><option value={1.3}>特大</option></select></label><label><span>正文行距</span><select aria-label="正文行距" value={accessibility.lineHeight} onChange={event => setAccessibility(current => ({ ...current, lineHeight: Number(event.target.value) }))}><option value={1.6}>紧凑</option><option value={1.9}>标准</option><option value={2.2}>宽松</option></select></label><label><span>高对比度</span><input type="checkbox" checked={accessibility.highContrast} onChange={event => setAccessibility(current => ({ ...current, highContrast: event.target.checked }))} /></label><label><span>减少动态效果</span><input type="checkbox" checked={accessibility.reducedMotion} onChange={event => setAccessibility(current => ({ ...current, reducedMotion: event.target.checked }))} /></label><button onClick={() => setAccessibility(DEFAULT_ACCESSIBILITY)}>恢复默认</button></div>}
       {panel === 'journal' && <div className="adventure-journal">{[...adventure.actionHistory].reverse().map(item => <article key={item.eventSequence}><i>{item.eventSequence}</i><div><small>{ACTION_KIND[item.kind]} · {item.outcome === 'success' ? '成功' : item.outcome}</small><strong>{manifest.adventure.actions.find(value => value.key === item.actionKey)?.label ?? item.actionKey}</strong><p>{item.narrative}</p></div></article>)}{!adventure.actionHistory.length && <div className="adventure-empty">你的冒险还没有留下行动记录。</div>}</div>}
       {panel === 'saves' && <div className="adventure-save-panel"><section><h3><Save />保存检查点</h3><div><input value={checkpointName} onChange={event => setCheckpointName(event.target.value)} placeholder="为此刻命名" /><button disabled={!checkpointName.trim()} onClick={() => void run(async () => { await store.saveCheckpoint(checkpointName); setCheckpointName('') })}>保存</button></div></section><section><h3><GitBranch />已有检查点</h3>{store.checkpoints.map(item => <button key={item.id} onClick={() => void run(() => store.forkCheckpoint(item.id!))}><span><strong>{item.name}</strong><small>事件 #{item.throughSequence} · {formatTime(item.createdAt)}</small></span><b>从这里分支</b></button>)}{!store.checkpoints.length && <p>行动会自动保存；你也可以为重要时刻建立手动检查点。</p>}</section><section><h3><GitBranch />当前时间线分支</h3><div><input value={branchTitle} onChange={event => setBranchTitle(event.target.value)} placeholder="新时间线名称" /><button disabled={!branchTitle.trim()} onClick={() => void run(async () => { await store.forkCurrent(branchTitle); setBranchTitle(''); setPanel(null) })}>建立分支</button></div></section></div>}
+      {panel === 'saves' && <section className="adventure-runtime-identity">
+        <h3><KeyRound />运行版本</h3>
+        <dl>
+          <div><dt>来源</dt><dd>{runtimeSourceLabel}</dd></div>
+          <div><dt>规则</dt><dd>Runtime v{selected.rulesetVersion}</dd></div>
+          <div><dt>内容校验</dt><dd title={selected.runtimeSourceHash}>{selected.runtimeSourceHash.slice(0, 12)}…</dd></div>
+          <div><dt>呈现模式</dt><dd>{mediaFailures.length ? '插图异常，已降级为纯文字' : manifest.presentation?.assets.length ? '插图与纯文字降级均可用' : '纯文字完整模式'}</dd></div>
+        </dl>
+        <p>存档固定在这一不可变来源上；刷新、分支和继续游玩不会静默切换版本。</p>
+      </section>}
     </div></section></div>}
   </div>
 }
