@@ -462,8 +462,15 @@ export async function readTextAdventureDialogueInputsV1(input: AssembleContextIn
   }
   const serialized = JSON.stringify(packet)
   const estimatedTokens = estimateTokens(serialized)
-  if (estimatedTokens > 12_500) {
-    throw new Error(`[product-production-context] 第 ${act} 幕对白审校投影超过登记预算:${estimatedTokens}/12500，必须增加更小的有界对白分包计划`)
+  // The current Plan reserves 18,480 input tokens for each independent
+  // Dialogue Editor. Keep the registered source packet below 16,500 so the
+  // system contract and provider framing retain roughly 2k tokens of explicit
+  // headroom. The former 12,500 ceiling predated that Plan reservation and
+  // rejected a valid 60-minute third act even though its role-specific packet
+  // stayed inside the durable task budget.
+  const maximumDialogueContextTokens = 16_500
+  if (estimatedTokens > maximumDialogueContextTokens) {
+    throw new Error(`[product-production-context] 第 ${act} 幕对白审校投影超过登记预算:${estimatedTokens}/${maximumDialogueContextTokens}，必须增加更小的有界对白分包计划`)
   }
   return serialized
 }
