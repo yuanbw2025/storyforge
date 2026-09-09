@@ -3600,6 +3600,15 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     expect(qualityReviewContext).toContain('"openingBeat"')
     expect(qualityReviewContext).toContain('"key":"choice.001"')
     expect(qualityReviewContext).toMatch(/"label":"[^"]+"/)
+    const qualityProjectionSegment = qualityReviewContext.split('\n\n').find(segment => (
+      segment.includes('storyforge.text-adventure-quality-inputs')
+    ))!
+    const qualityProjection = JSON.parse(qualityProjectionSegment) as {
+      narrative: { nodes: Array<{ summary: string; openingBeat: string }> }
+    }
+    expect(qualityProjection.narrative.nodes.every(node => (
+      node.summary.length <= 140 && node.openingBeat.length <= 200
+    ))).toBe(true)
     expect(qualityReviewContext).toContain('"title":"攻击","role":"stat","initial":3')
     expect(qualityReviewContext).toContain('"timeCostMinutes":')
     expect(qualityReviewContext).not.toContain('该上下文源已按预算截断')

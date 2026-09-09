@@ -633,8 +633,11 @@ export async function readTextAdventureQualityInputsV1(input: AssembleContextInp
       key: nodeKey,
       kind: contextText(node.kind, 40),
       title: contextText(node.title, 80),
-      summary: contextText(node.summary, 160),
-      openingBeat: contextText(beats[0]?.text, 220),
+      // The reviewer needs the immediate destination action, not a second
+      // copy of the full scene prose. Keep both excerpts bounded so a valid
+      // commercial-length narrative cannot overflow this registered source.
+      summary: contextText(node.summary, 140),
+      openingBeat: contextText(beats[0]?.text, 200),
       beatCount: beats.length,
       beatCharacters: beats.reduce((sum, beat) => sum + (typeof beat.text === 'string' ? beat.text.length : 0), 0),
     }
