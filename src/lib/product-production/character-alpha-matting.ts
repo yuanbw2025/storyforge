@@ -32,9 +32,13 @@ function removeTransparentMagentaFringe(data: Uint8ClampedArray, width: number, 
       && Math.abs(red - blue) <= 110
   }
   let removed = 0
-  // Provider chroma-key halos are thin. Grow from real transparency for at
-  // most four pixels so legitimate interior colour details remain untouched.
-  for (let pass = 0; pass < 4; pass += 1) {
+  // Provider chroma-key halos are normally thin, but real 1K deliveries can
+  // contain a 5–20px antialiased magenta band. Remove only magenta pixels that
+  // remain connected to already transparent backdrop; this preserves an
+  // interior costume colour while allowing the whole key-colour fringe to be
+  // consumed instead of freezing a visibly contaminated cutout.
+  const maximumPasses = 24
+  for (let pass = 0; pass < maximumPasses; pass += 1) {
     const newlyTransparent: number[] = []
     for (let pixel = 0; pixel < pixelCount; pixel += 1) {
       if (transparent[pixel] || !magentaFringe(pixel)) continue

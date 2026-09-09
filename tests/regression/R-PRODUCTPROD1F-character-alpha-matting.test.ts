@@ -64,4 +64,24 @@ describe('R-PRODUCTPROD-1F · character alpha matting', () => {
     expect(result.data[(2 * width + 2) * 4 + 3]).toBe(0)
     expect(result.data[(6 * width + 6) * 4 + 3]).toBe(255)
   })
+
+  it('移除真实 1K 出图常见的厚品红抠图带，而不穿透到非品红主体', () => {
+    const width = 80; const height = 80
+    const data = new Uint8ClampedArray(width * height * 4)
+    for (let y = 0; y < height; y += 1) for (let x = 0; x < width; x += 1) {
+      const distance = Math.min(x, y, width - 1 - x, height - 1 - y)
+      const pixel = distance < 10
+        ? [255, 0, 255, 0]
+        : distance < 20
+          ? [220, 35, 210, 255]
+          : [30, 60, 120, 255]
+      data.set(pixel, (y * width + x) * 4)
+    }
+
+    const result = matteEdgeConnectedCharacterBackdropV1({ width, height, data })
+    expect(result.alreadyTransparent).toBe(true)
+    expect(result.changed).toBe(true)
+    expect(result.data[(15 * width + 15) * 4 + 3]).toBe(0)
+    expect(result.data[(25 * width + 25) * 4 + 3]).toBe(255)
+  })
 })

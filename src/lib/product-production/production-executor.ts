@@ -1927,6 +1927,121 @@ function expectedAudioKeys(brief: ProductProductionBriefV3): string[] {
   return Array.from({ length: count }, (_, index) => `media.audio.${String(index + 1).padStart(3, '0')}`)
 }
 
+interface TextAdventureVisualBlueprintV1 {
+  mediaKind: VisualRequirementV1['mediaKind']
+  sceneTag: string
+  beatKey: string
+  prompt: string
+  altText: string
+  width: number
+  height: number
+  characterOrdinal: number | null
+}
+
+/**
+ * A commercial flagship needs twelve different editorial jobs, not eight
+ * generic jobs followed by four modulo duplicates. The first twelve slots are
+ * authority-owned so a planning model cannot satisfy the image count by
+ * repeating the cover, protagonist, map or first turning point. Extra rich-art
+ * slots also receive stable unique roles instead of wrapping this baseline.
+ */
+export function textAdventureVisualBlueprintsV1(count: number): TextAdventureVisualBlueprintV1[] {
+  if (!Number.isSafeInteger(count) || count < 0 || count > 10_000) fail('文字冒险图片数量无效')
+  const baseline: TextAdventureVisualBlueprintV1[] = [
+    {
+      mediaKind: 'background', sceneTag: 'cover-opening', beatKey: 'opening-beat-key',
+      prompt: '封面兼开场的无人物环境主视觉，建立大区域、主目标与倒计时冲突',
+      altText: '游戏封面与开场大区域主视觉', width: 1280, height: 720, characterOrdinal: null,
+    },
+    {
+      mediaKind: 'character-pose', sceneTag: 'protagonist-anchor', beatKey: 'first-character-beat-key',
+      prompt: '主要角色透明背景三分之二身视觉锚点立绘；头部、双手与身份物件必须完整清晰，脸部细节可辨',
+      altText: '主要角色三分之二身视觉锚点图', width: 720, height: 1080, characterOrdinal: 0,
+    },
+    {
+      mediaKind: 'background', sceneTag: 'region-map', beatKey: 'opening-beat-key',
+      prompt: '清晰表达大区域、区域、地点、核心地标和可行动路线关系的无文字示意地图',
+      altText: '大区域与地点关系地图', width: 1280, height: 720, characterOrdinal: null,
+    },
+    {
+      mediaKind: 'cg', sceneTag: 'mainline-turn-act-1', beatKey: 'act-1-turn-beat-key',
+      prompt: '第一幕不可逆转折的原创叙事插图，准确表现当幕行动与直接后果',
+      altText: '第一幕关键转折场面', width: 1280, height: 720, characterOrdinal: null,
+    },
+    {
+      mediaKind: 'background', sceneTag: 'secondary-region-anchor', beatKey: 'act-2-location-beat-key',
+      prompt: '第二个大区域的无人物环境锚点图；与开场区域在地貌、光线和核心地标上明显不同',
+      altText: '第二个大区域环境锚点图', width: 1280, height: 720, characterOrdinal: null,
+    },
+    {
+      mediaKind: 'cg', sceneTag: 'important-item-primary', beatKey: 'item-primary-beat-key',
+      prompt: '第一件关键物品的原创叙事特写，准确表现材质、使用痕迹和剧情功能，不含品牌与文字',
+      altText: '第一件关键物品特写', width: 1024, height: 1024, characterOrdinal: null,
+    },
+    {
+      mediaKind: 'character-pose', sceneTag: 'major-character-anchor', beatKey: 'major-character-beat-key',
+      prompt: '第一位主要 NPC 的透明背景三分之二身视觉锚点立绘；脸部、双手和身份物件清晰可辨',
+      altText: '主要 NPC 视觉锚点图', width: 720, height: 1080, characterOrdinal: 1,
+    },
+    {
+      mediaKind: 'cg', sceneTag: 'mainline-turn-act-2', beatKey: 'act-2-turn-beat-key',
+      prompt: '第二幕危机升级或真相揭露的原创叙事插图，必须与第一幕转折形成不同构图和事件',
+      altText: '第二幕关键转折场面', width: 1280, height: 720, characterOrdinal: null,
+    },
+    {
+      mediaKind: 'character-pose', sceneTag: 'supporting-character-anchor', beatKey: 'supporting-character-beat-key',
+      prompt: '第二位关键 NPC 的透明背景三分之二身视觉锚点立绘；脸部、双手和身份物件清晰可辨',
+      altText: '关键 NPC 视觉锚点图', width: 720, height: 1080, characterOrdinal: 2,
+    },
+    {
+      mediaKind: 'cg', sceneTag: 'mainline-turn-act-3', beatKey: 'act-3-turn-beat-key',
+      prompt: '第三幕高潮决定的原创叙事插图，表现玩家面对最终代价时的行动瞬间',
+      altText: '第三幕高潮决定场面', width: 1280, height: 720, characterOrdinal: null,
+    },
+    {
+      mediaKind: 'cg', sceneTag: 'important-item-secondary', beatKey: 'item-secondary-beat-key',
+      prompt: '第二件关键物品的原创叙事特写；外形、材质和用途必须与第一件关键物品显著不同，不含品牌与文字',
+      altText: '第二件关键物品特写', width: 1024, height: 1024, characterOrdinal: null,
+    },
+    {
+      mediaKind: 'cg', sceneTag: 'ending-consequence', beatKey: 'ending-beat-key',
+      prompt: '回应玩家行动链和持久状态的结局后果插图，不提前泄露其他结局',
+      altText: '结局后果场面', width: 1280, height: 720, characterOrdinal: null,
+    },
+  ]
+  const richRoles = [
+    ['cg', 'side-quest-turn-1', '支线一的关键行动与后果插图'],
+    ['cg', 'side-quest-turn-2', '支线二的关键行动与后果插图'],
+    ['cg', 'ambient-event-1', '第一个区域事件的新局面插图'],
+    ['cg', 'ambient-event-2', '第二个区域事件的新局面插图'],
+    ['background', 'location-detail-1', '第一处重要地点的无人物环境细节图'],
+    ['background', 'location-detail-2', '第二处重要地点的无人物环境细节图'],
+    ['cg', 'important-item-tertiary', '第三件重要物品的原创叙事特写'],
+    ['character-expression', 'major-character-expression', '主要 NPC 的关键情绪透明背景锚点图'],
+    ['character-expression', 'protagonist-expression', '主要角色的关键情绪透明背景锚点图'],
+    ['cg', 'decision-consequence-1', '第一项持久决定在后续场景中的回响插图'],
+    ['cg', 'decision-consequence-2', '第二项持久决定在后续场景中的回响插图'],
+    ['cg', 'alternate-ending-consequence', '另一条结局行动链的后果插图'],
+  ] as const
+  const all = [...baseline]
+  for (let index = baseline.length; index < count; index += 1) {
+    const richIndex = index - baseline.length
+    const role = richRoles[richIndex]
+    const ordinal = index + 1
+    const kind = role?.[0] ?? 'cg'
+    const tag = role?.[1] ?? `supplemental-story-moment-${String(ordinal).padStart(3, '0')}`
+    const prompt = role?.[2] ?? `第 ${ordinal} 项补充叙事时刻插图；不得复述其他图片已经承担的事件、地点或物品`
+    const characterOrdinal = tag === 'major-character-expression' ? 1
+      : tag === 'protagonist-expression' ? 0 : null
+    all.push({
+      mediaKind: kind, sceneTag: tag, beatKey: `${tag}-beat-key`, prompt,
+      altText: prompt, width: kind === 'character-expression' ? 720 : 1280,
+      height: kind === 'character-expression' ? 1080 : 720, characterOrdinal,
+    })
+  }
+  return all.slice(0, count)
+}
+
 export function isolateCharacterProviderPromptV1(prompt: string, fallback: string): string {
   const normalized = prompt.trim()
   const subjectOnly = normalized.split(
@@ -2024,6 +2139,40 @@ export function parseProductMediaRequirementsArtifactV2(
   }
   exactSet(visual.map(item => item.artifactKey), expectedVisualKeys(brief), 'visual')
   exactSet(audio.map(item => item.artifactKey), expectedAudioKeys(brief), 'audio')
+  if (brief.intent.productType === 'text-adventure') {
+    if (new Set(visual.map(item => item.sceneTag)).size !== visual.length) {
+      fail('文字冒险视觉需求不得重复 sceneTag 或用同一编辑职责凑数量')
+    }
+    if (brief.qualityProfile === 'commercial-candidate' && visual.length >= 12) {
+      const baseline = textAdventureVisualBlueprintsV1(12)
+      for (const [index, expected] of baseline.entries()) {
+        const actual = visual[index]
+        const expectedArtifactKey = `media.visual.${String(index + 1).padStart(3, '0')}`
+        if (actual.artifactKey !== expectedArtifactKey
+          || actual.sceneTag !== expected.sceneTag || actual.mediaKind !== expected.mediaKind
+          || actual.width !== expected.width || actual.height !== expected.height) {
+          fail(`文字冒险商业视觉槽位 ${index + 1} 必须为 ${expected.sceneTag}/${expected.mediaKind}`)
+        }
+        if (expected.characterOrdinal != null && characterAnchors.length > 0) {
+          const anchor = characterAnchors[expected.characterOrdinal] ?? characterAnchors[0]
+          const legalRefs = new Set([anchor.characterKey, ...(anchor.sourceResourceKey ? [anchor.sourceResourceKey] : [])])
+          if (actual.characterAnchorRefs.length !== 1 || !legalRefs.has(actual.characterAnchorRefs[0])) {
+            fail(`文字冒险商业角色槽位 ${index + 1} 未绑定冻结角色 ${anchor.characterKey}`)
+          }
+        }
+      }
+      const distribution = {
+        background: visual.slice(0, 12).filter(item => item.mediaKind === 'background').length,
+        character: visual.slice(0, 12).filter(item => (
+          item.mediaKind === 'character-pose' || item.mediaKind === 'character-expression'
+        )).length,
+        cg: visual.slice(0, 12).filter(item => item.mediaKind === 'cg').length,
+      }
+      if (distribution.background !== 3 || distribution.character !== 3 || distribution.cg !== 6) {
+        fail('文字冒险商业视觉槽位未覆盖封面/双区域、三角色锚点、四关键场景与双关键物品')
+      }
+    }
+  }
   if (['avg', 'ttrpg', 'text-adventure'].includes(brief.intent.productType) && visual.length > 0) {
     if (!visual.some(item => item.mediaKind === 'background')) fail(`${brief.intent.productType} 视觉需求缺少 background`)
     if (brief.media.requiredMediaKinds.includes('character-pose')
@@ -2525,23 +2674,23 @@ function textSystem(
       '至少安排两场 humanSessions：一名未参与生产的玩家完整计时黄金路线，以及作者或独立玩家验证替代路线/失败推进。自动游玩已经覆盖的项目引用 quality.autoplay；刷新、存读档、损坏恢复、导入导出和删除必须使用 real-browser；真实时长、理解、无聊点、选择感与情绪反馈必须使用 human-playtest。' +
       '若确定性自动游玩或质量报告未通过，或你发现无法由现有证据关闭的风险，必须写入 blockingRisks 并输出 blocked；即使输出 eligible，也只表示可以进入真人验证，绝不表示 release-ready。'
   }
-  const adventureVisualBlueprints = [
-    { mediaKind: 'background', sceneTag: 'cover-opening', beatKey: 'opening-beat-key', prompt: '封面兼开场的无人物环境主视觉，建立大区域与核心冲突', altText: '游戏开场所在大区域的环境主视觉', width: 1280, height: 720 },
-    { mediaKind: 'character-pose', sceneTag: 'protagonist-anchor', beatKey: 'first-character-beat-key', prompt: '主要角色透明背景全身设定图，严格保持视觉锚点', altText: '主要角色全身设定图', width: 720, height: 1080 },
-    { mediaKind: 'background', sceneTag: 'region-map', beatKey: 'opening-beat-key', prompt: '清晰表达大区域、区域和地点关系的无文字示意地图', altText: '大区域与地点关系地图', width: 1280, height: 720 },
-    { mediaKind: 'cg', sceneTag: 'mainline-turn', beatKey: 'mainline-turn-beat-key', prompt: '主线关键转折的原创叙事插图', altText: '主线关键转折场面', width: 1280, height: 720 },
-    { mediaKind: 'background', sceneTag: 'location-anchor', beatKey: 'location-beat-key', prompt: '关键地点的无人物环境锚点图', altText: '关键地点环境', width: 1280, height: 720 },
-    { mediaKind: 'cg', sceneTag: 'important-item', beatKey: 'item-beat-key', prompt: '重要物品的叙事特写，不含品牌与文字', altText: '重要物品特写', width: 1024, height: 1024 },
-    { mediaKind: 'ui', sceneTag: 'chapter-card', beatKey: 'chapter-beat-key', prompt: '与视觉圣经一致的章节装饰图形，不含文字', altText: '章节装饰图形', width: 1024, height: 1024 },
-    { mediaKind: 'cg', sceneTag: 'ending-echo', beatKey: 'ending-beat-key', prompt: '回应玩家行动后果的结局插图', altText: '结局后果场面', width: 1280, height: 720 },
-  ] as const
+  const adventureVisualBlueprints = brief.intent.productType === 'text-adventure'
+    ? textAdventureVisualBlueprintsV1(brief.media.imageCount)
+    : textAdventureVisualBlueprintsV1(Math.max(2, brief.media.imageCount))
   const visual = expectedVisualKeys(brief).map((artifactKey, index) => {
     const blueprint = brief.intent.productType === 'text-adventure'
-      ? adventureVisualBlueprints[index % adventureVisualBlueprints.length]
+      ? adventureVisualBlueprints[index]
       : index === 0
         ? adventureVisualBlueprints[0]
         : adventureVisualBlueprints[1]
-    const characterAsset = blueprint.mediaKind === 'character-pose'
+    const characterAsset = blueprint.mediaKind === 'character-pose' || blueprint.mediaKind === 'character-expression'
+    const characterAnchorRef = characterAsset
+      ? brief.textAdventure
+        ? textAdventureCastKeys[blueprint.characterOrdinal ?? 0]
+          ?? textAdventureCastKeys[0] ?? 'intent:protagonist'
+        : productCharacterKeys(brief)[blueprint.characterOrdinal ?? 0]
+          ?? productCharacterKeys(brief)[0] ?? 'intent:protagonist'
+      : null
     return {
     artifactKey,
     mediaKind: blueprint.mediaKind,
@@ -2550,11 +2699,7 @@ function textSystem(
     prompt: blueprint.prompt, altText: blueprint.altText,
     width: blueprint.width, height: blueprint.height,
     palette: ['#112233', '#445566', '#ddeeff'],
-    characterAnchorRefs: characterAsset
-      ? [brief.textAdventure
-          ? textAdventureCastKeys[0] ?? 'intent:protagonist'
-          : productCharacterKeys(brief)[0] ?? 'intent:protagonist']
-      : [],
+    characterAnchorRefs: characterAnchorRef ? [characterAnchorRef] : [],
     hardConstraints: characterAsset ? [...new Set([
       '保持角色身份、年龄段与核心视觉特征', `角色定位：${brief.intent.playerRole}`,
       ...brief.intent.forbiddenChanges,
@@ -2566,11 +2711,14 @@ function textSystem(
   }))
   return `${common}\n把设计拆成精确媒资清单。输出字段必须精确为：` +
     '{"schema":"storyforge.product-media-requirements-artifact","version":2,"visual":[],"audio":[]}。' +
-    `visual 必须逐项使用这些固定 artifactKey 与建议 kind/尺寸（beatKey 可改成设计中稳定 key）：${JSON.stringify(visual)}。` +
+    `visual 必须逐项使用这些固定 artifactKey、mediaKind、sceneTag、角色锚点与尺寸；只允许把 beatKey 改成上游设计中对应的稳定 key，并把 prompt/altText 扩写成该职责对应的具体内容：${JSON.stringify(visual)}。` +
     `audio 必须逐项使用这些固定 artifactKey：${JSON.stringify(audio)}。palette 只能是三个 #RRGGBB；不得出现商标、在世艺术家姓名或第三方角色。` +
     'character-pose/character-expression 的 prompt 只能描述角色主体、服饰、姿态和表情，禁止写入任何背景、场景、环境、远景、近景、文字、边框或光效；' +
     '当清单中已有独立角色立绘时，未携带角色锚点的 background 必须是无人物、无人形倒影、无人物剪影的纯空景；' +
-    '它们必须携带示例中的角色锚点与完整 hardConstraints；background/cg 只有画面实际出现该冻结角色时才可携带同一合法合同，否则两个数组都必须为空；ui 的两个数组必须为空。'
+    '它们必须携带示例中的角色锚点与完整 hardConstraints；background/cg 只有画面实际出现该冻结角色时才可携带同一合法合同，否则两个数组都必须为空；ui 的两个数组必须为空。' +
+    (brief.intent.productType === 'text-adventure'
+      ? '每个 sceneTag 代表一个不可替代的编辑职责，必须全局唯一；禁止复用封面、地图、同一角色或同一事件来凑图片数量。前三个角色槽位应分别落实清单冻结的角色，不得全部改回主角。prompt 与角色圣经/硬约束冲突时必须重写 prompt，不能让发色、年龄、服饰、伤痕或身份自相矛盾。'
+      : '')
 }
 
 async function defaultTextRunner(input: Parameters<ProductionTextRunnerV1>[0]): Promise<ProductionTextExecutionV1> {
@@ -3492,7 +3640,7 @@ export function textAdventureVisualRepairCastConstraintV1(input: {
       ? '输出边缘干净、无残色的单一完整角色剪影；角色之外必须为真实透明区域。'
       : '',
     needsLeftEyebrowScar
-      ? '身份识别锚点必须清晰可见：左眉上有一条细而自然、轮廓明确的旧疤，不能被头发、阴影或妆容遮住。'
+      ? '身份识别锚点必须清晰可见：采用正面三分之二身取景，让脸部与双手占据足够像素；完整显示头顶。左眉上有一条细而自然、轮廓明确且与肤色有轻微明暗差的旧疤，不能被头发、阴影或妆容遮住；双眼明确看向正前方。'
       : '',
   ].filter(Boolean).join('\n')
   return {
@@ -3640,15 +3788,15 @@ async function executeVisualTask(input: ProductProductionTaskExecutionInputV1, o
     const isAgnesCharacter = binding?.adapterId === 'agnes.image-2.1-flash.v1'
       && (requirement.mediaKind === 'character-pose' || requirement.mediaKind === 'character-expression')
     const governedPrompt = isAgnesCharacter
-      ? isolateCharacterProviderPromptV1(requirement.prompt, `单人全身角色立绘，角色身份：${options.brief.intent.playerRole}`)
+      ? isolateCharacterProviderPromptV1(requirement.prompt, `单人角色锚点立绘，角色身份：${options.brief.intent.playerRole}`)
       : requirement.mediaKind === 'background' && hasStandaloneCharacterArt && requirement.characterAnchorRefs.length === 0
         ? `${requirement.prompt}\n这是独立角色立绘背后的纯空景素材：不得出现任何人物、肖像、人形、倒影、剪影或照片。`
         : requirement.prompt
     const baseProviderPrompt = requirement.characterAnchorRefs.length
       ? `${governedPrompt}\n冻结角色锚点：${requirement.characterAnchorRefs.join('、')}。` +
-        `必须遵守：${requirement.hardConstraints.join('；')}。角色需透明背景以供舞台自动合成。` +
+        `必须遵守：${requirement.hardConstraints.join('；')}。若前文描述与这些冻结约束冲突，以冻结约束为唯一权威并主动修正。角色需透明背景以供舞台自动合成。` +
         (isAgnesCharacter
-          ? '这是单人角色立绘素材，不是场景、海报或角色卡：画布只能有一个完整角色，禁止灯塔、风景、文字、边框、光效和装饰元素。' +
+          ? '这是单人角色立绘素材，不是场景、海报或角色卡：画布只能有一个完整角色；必须完整保留提示指定的头部、双手、身份物件和身体取景，头顶及左右轮廓留出至少 8% 安全边距，禁止裁掉头部。禁止灯塔、风景、文字、边框、光效和装饰元素。' +
             '不得把透明背景画成棋盘格、网格或光栅；若无法直接输出真实 alpha，角色以外的每一个像素都只能是纯品红 #FF00FF，禁止阴影、纹理、渐变和杂色。'
           : '')
       : governedPrompt
@@ -4419,6 +4567,16 @@ async function executeTextAdventureVisualQualityReviewTask(
   const startedAt = performance.now()
   const mediaAuditArtifact = artifactRecord(input, 'media.audit')
   const mediaAudit = parseTextAdventureMediaAuditArtifactV1(artifactPayload(input, 'media.audit'))
+  const cast = parseTextAdventureCastBibleArtifactV1({
+    value: artifactPayload(input, 'content.cast-bible'), brief: options.brief,
+    allowedResourceKeys: options.brief.source.selection.resourceKeys,
+  })
+  const mediaRequirements = parseProductMediaRequirementsArtifactV2(
+    artifactPayload(input, 'media.requirements'), options.brief, textAdventureCharacterAnchors(cast),
+  )
+  const requirementByArtifactKey = new Map(mediaRequirements.visual.map(requirement => (
+    [requirement.artifactKey, requirement] as const
+  )))
   const selectedArtifactKeys = input.task.inputArtifactKeys
     .filter(artifactKey => /^media\.visual\.\d{3}$/.test(artifactKey))
   const selectedKeySet = new Set(selectedArtifactKeys)
@@ -4533,6 +4691,18 @@ async function executeTextAdventureVisualQualityReviewTask(
     const binding = input.capabilityBindings.find(item => item.requirementKey === requirementKey)
     if (!requirementKey || !binding) fail('独立视觉审查缺少已冻结 AI capability binding')
     const expected = new Map(visionImages.map(image => [image.artifactKey, image.contentHash]))
+    const exactReviewContracts = visionImages.map(image => {
+      const requirement = requirementByArtifactKey.get(image.artifactKey)
+      if (!requirement) fail(`独立视觉审查缺少逐图需求:${image.artifactKey}`)
+      return {
+        artifactKey: image.artifactKey, contentHash: image.contentHash,
+        mediaKind: requirement.mediaKind, sceneTag: requirement.sceneTag,
+        prompt: requirement.prompt, altText: requirement.altText,
+        requestedSize: [requirement.width, requirement.height],
+        characterAnchorRefs: requirement.characterAnchorRefs,
+        hardConstraints: requirement.hardConstraints,
+      }
+    })
     const exactReviewSkeleton = [...expected].map(([artifactKey, contentHash]) => ({
       artifactKey, contentHash, verdict: 'accept|revise|replace|human-review',
       scores: {
@@ -4550,6 +4720,7 @@ async function executeTextAdventureVisualQualityReviewTask(
       '"scores":{"requirementFit":1,"identityContinuity":1,"styleContinuity":1,"composition":1,"technicalCleanliness":1},' +
       '"issues":[{"severity":"warning|blocking","category":"identity|setting|style|composition|spoiler|artifact|text|accessibility","detail":"...","recommendation":"..."}]}]}。' +
       `必须恰好覆盖这些图片 key/hash，不能漏项、重复或改写：${JSON.stringify([...expected])}。` +
+      `本批每张图片的冻结审查合同=${JSON.stringify(exactReviewContracts)}。必须按相同 artifactKey 逐项对照，不能拿别的图片或全局印象代替。角色立绘的头部、双手或要求中的身份物件被裁掉，或固定角色硬约束与像素明显冲突时，属于需要返修的问题；不得用“全身图细节太小”替缺失的硬约束开脱。` +
       `reviews 必须严格包含 ${expected.size} 项；先复制这一骨架再填判断：${JSON.stringify(exactReviewSkeleton)}。` +
       '每张图最多列 3 条 issues，每条 detail 和 recommendation 各不超过 160 字；通过时 issues 必须是空数组。' +
       '不要输出思考过程或 JSON 之外的文字。评分只能是 1–5 整数；存在明显身份错误、需求错位、严重畸形、不可接受剧透或伪文字时不得 verdict=accept。'

@@ -27,6 +27,7 @@ import {
   productImageNegativePromptV1,
   textAdventureVisualAnchorConfirmationHashV1,
   textAdventureGlyphSafeMapRepairPromptV1,
+  textAdventureVisualBlueprintsV1,
   textAdventureVisualRepairCastConstraintV1,
   type ProductionTextRunnerV1,
   type ProductionVisionRunnerV1,
@@ -1109,6 +1110,24 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
     expect(constraint.negativePromptSuffix).toContain('color fringe')
   })
 
+  it('商业文字冒险的十二图槽位不重复，并覆盖三类角色与完整叙事职责', () => {
+    const blueprints = textAdventureVisualBlueprintsV1(12)
+    expect(blueprints).toHaveLength(12)
+    expect(new Set(blueprints.map(item => item.sceneTag)).size).toBe(12)
+    expect(blueprints.map(item => item.sceneTag)).toEqual([
+      'cover-opening', 'protagonist-anchor', 'region-map', 'mainline-turn-act-1',
+      'secondary-region-anchor', 'important-item-primary', 'major-character-anchor',
+      'mainline-turn-act-2', 'supporting-character-anchor', 'mainline-turn-act-3',
+      'important-item-secondary', 'ending-consequence',
+    ])
+    expect(blueprints.filter(item => item.mediaKind === 'background')).toHaveLength(3)
+    expect(blueprints.filter(item => item.mediaKind === 'character-pose')).toHaveLength(3)
+    expect(blueprints.filter(item => item.mediaKind === 'cg')).toHaveLength(6)
+    expect(blueprints.filter(item => item.characterOrdinal != null)
+      .map(item => item.characterOrdinal)).toEqual([0, 1, 2])
+    expect(new Set(textAdventureVisualBlueprintsV1(30).map(item => item.sceneTag)).size).toBe(30)
+  })
+
   it('保留陌生 Visual QA 分类的问题内容，并确定性归入通用 artifact 类别', () => {
     const parsed = parseTextAdventureVisualQualityReviewArtifactV1({
       schema: 'storyforge.text-adventure-visual-quality-review-artifact', version: 1,
@@ -2021,17 +2040,20 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
     const visualKeys = plan.tasks.filter(item => /^media\.visual\.\d{3}$/.test(item.taskKey))
       .map(item => item.taskKey)
     const professional = fullLengthTextAdventureOutputs(owned.brief) as Record<string, unknown>
+    const castKeys = ['character.player', 'character.npc.1', 'character.npc.2']
+    const visualBlueprints = textAdventureVisualBlueprintsV1(visualKeys.length)
     const mediaRequirements = {
       schema: 'storyforge.product-media-requirements-artifact', version: 2,
       visual: visualKeys.map((artifactKey, index) => ({
-        artifactKey, mediaKind: index === 1 ? 'character-pose' : index === 0 ? 'background' : 'cg',
-        sceneTag: `scene.${String(index + 1).padStart(3, '0')}`,
-        beatKey: `beat.${String(index + 1).padStart(3, '0')}`,
-        prompt: index === 1 ? '守灯人深蓝制服与铜色灯杖的角色定稿。' : `雾港关键场景插图 ${index + 1}。`,
-        altText: index === 1 ? '手持铜色灯杖的守灯人。' : `雾港关键场景 ${index + 1}。`,
-        width: index === 1 ? 720 : 1280, height: index === 1 ? 1080 : 720,
+        artifactKey, mediaKind: visualBlueprints[index].mediaKind,
+        sceneTag: visualBlueprints[index].sceneTag,
+        beatKey: visualBlueprints[index].beatKey,
+        prompt: visualBlueprints[index].prompt,
+        altText: visualBlueprints[index].altText,
+        width: visualBlueprints[index].width, height: visualBlueprints[index].height,
         palette: ['#172033', '#52647A', '#D8C6A0'],
-        characterAnchorRefs: index === 1 ? ['character.player'] : [],
+        characterAnchorRefs: visualBlueprints[index].characterOrdinal == null
+          ? [] : [castKeys[visualBlueprints[index].characterOrdinal]],
         hardConstraints: [],
       })),
       audio: [],
@@ -2192,6 +2214,24 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
     const executor = createConfiguredProductProductionExecutorV1({
       production: (await db.productProductions.get(owned.productionId))!, brief: owned.brief, runVision,
     })
+    const professional = professionalTextAdventurePlanningOutputs(owned.brief)
+    const mediaRequirements = {
+      ...modelOutputs(
+        owned.brief.source.worldContentHash, 'text-adventure',
+        firstCharacterAnchor(owned.brief), owned.brief.intent.playerRole,
+      )['media.requirements'],
+      audio: [],
+    }
+    const visualContextArtifacts = () => [
+      artifact('content.cast-bible', {
+        kind: 'product-design', mediaKind: null, blobObjectId: null, mimeType: null,
+        contentHash: '2'.repeat(64), payloadJson: JSON.stringify(professional['content.cast-bible']), byteSize: 1,
+      }),
+      artifact('media.requirements', {
+        kind: 'asset-manifest', mediaKind: null, blobObjectId: null, mimeType: null,
+        contentHash: '3'.repeat(64), payloadJson: JSON.stringify(mediaRequirements), byteSize: 1,
+      }),
+    ]
     const result = await executor({
       scope: owned.scope, productionId: owned.productionId, buildId: 1, buildNumber: 1,
       controlEpoch: 0, planHash: 'f'.repeat(64), task, attempt: 1,
@@ -2200,6 +2240,7 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
         requirementKey: textRequirement.requirementKey, adapterId: 'configured-text.v1', bindingHash,
       }],
       inputArtifacts: [
+        ...visualContextArtifacts(),
         artifact('media.audit', {
           kind: 'integration-report', mediaKind: null, blobObjectId: null, mimeType: null,
           contentHash: auditHash, payloadJson: JSON.stringify(auditPayload), byteSize: 1,
@@ -2261,6 +2302,7 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
         requirementKey: textRequirement.requirementKey, adapterId: 'configured-text.v1', bindingHash,
       }],
       inputArtifacts: [
+        ...visualContextArtifacts(),
         artifact('media.audit', {
           kind: 'integration-report', mediaKind: null, blobObjectId: null, mimeType: null,
           contentHash: auditHash, payloadJson: JSON.stringify(auditPayload), byteSize: 1,
@@ -2321,6 +2363,7 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
         requirementKey: textRequirement.requirementKey, adapterId: 'configured-text.v1', bindingHash,
       }],
       inputArtifacts: [
+        ...visualContextArtifacts(),
         artifact('media.audit', {
           kind: 'integration-report', mediaKind: null, blobObjectId: null, mimeType: null,
           contentHash: repairAuditHash, payloadJson: JSON.stringify(repairAudit), byteSize: 1,
