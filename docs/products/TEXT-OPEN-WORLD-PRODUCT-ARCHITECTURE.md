@@ -1,6 +1,6 @@
 # AI 主导文字开放世界游戏 · 整体产品与游戏系统施工规格
 
-> 规格版本：1.1.52
+> 规格版本：1.1.53
 > 生效日期：2026-09-06
 > 文档层级：L2 文字开放世界整体产品施工入口
 > 当前状态：目标架构已冻结并进入分阶段实现；实际完成度以完整开发清单为准
@@ -2197,6 +2197,12 @@ Session ID + Action Key + Recipe/Vendor Target + Item Key? + Quantity
 
 这个页面仍属于“确认来源”的第二阶段：目录与预览只读，不创建Production、Brief、Build、SourcePin、Ledger、GapReport、Release、Session，也不触发模型读取、计费或生产。预检缺口只是目录可见性的候选判断，不能冒充P1实际逐项读取后的GapReport。交给下一阶段的临时候选必须携带精确来源身份；正式冻结时以WorldRelease `releaseHash`或小说两枚预览Hash进行compare-and-swap，来源在确认后变化就失败关闭并要求重新确认。旧WorldRelease生产调用也必须从已授权Brief派生相同版本证据，不能只信任本地记录ID。
 
+来源确认后的专属Brief页已经落地。进入该页时才以稳定产品实例键创建统一`ProductProduction`，并把WorldRelease或小说选区的本地locator、便携来源身份与Hash同时固化在生产根；重复点击、刷新和React StrictMode并发只能得到一条会谈及一个来源起点。作者可以编辑主角模式、玩家体验、核心目标、来源保留/推演/禁改边界、未决问题、内容规模、最低媒资和完成条件；首版有边界自由、顺序主线、多结局、关键对象保护、四操作回合战斗和标准难度等能力边界由代码只读提供，模型与作者都不能改写。
+
+主Agent是可选理解辅助，不是生产启动器。它只能通过登记的正式入口和Skill读取作者表单、固定边界及G5-01的无正文来源摘要，每次尝试保存ContextManifest，协议错误最多修复一次；未配置Key时，作者人工填写仍会形成同一类可审计候选Run。正式确认必须同时满足四项显式确认、零未决问题、来源Hash再次复验，以及候选、ContextManifest、Run binding、步骤输出和终态receipt的一致性，随后才新增不可变`ProductProductionBrief`修订并把Production推进到`brief-ready`。此时依然没有Build、SourcePin、Release或Session；G5-04必须把Creator Brief显式提升为正式生产计划和来源授权，旧通用Brief命令不能旁路。
+
+Creator Brief自身只保存可移植来源身份和稳定Run binding；所有本地主键位于注册表治理的locator列，并在项目导出导入时严格重映射。导入会在事务前复核Brief行、Production、来源owner、候选Run事件投影及ContextManifest链；项目范围重绑后原终态receipt按Harness规则显式stale，但不可变Brief证明仍可随项目再次迁移。备份整体仍遵守项目现有的非签名本地备份信任边界，不把可重算Hash描述成外部签名。
+
 ### 24.3 表格编辑原则
 
 AI创建任务、物品、敌人或配方时，本质上生成结构化候选行或聚合对象。工作台必须允许：
@@ -2908,6 +2914,7 @@ Session中的高频状态优先作为Event和可重建Projection存在，不建�
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| 1.1.53 | 2026-09-09 | 完成G5-02专属主Agent会谈与Creator Brief：真实双来源选择进入统一Production/Brief生命周期；完整可编辑作者表单、代码冻结产品边界、可选正式AI入口与有界修复、无Key人工durable候选、四项确认/零未决/来源CAS/终态证据门全部落地。确认只推进`brief-ready`且G5-04前拒绝授权；刷新和StrictMode并发保持单一会谈。来源locator、Brief与candidate Run支持严格导出重映射、事务前RunContract Hash及逐事件世界组校验、导入事件重放和二次迁移，并明确非签名备份信任边界。 |
 | 1.1.52 | 2026-09-09 | 完成G5-01独立创作者来源入口：文字开放世界从通用文字游戏生产表单拆出，提供冻结WorldRelease与受治理小说双入口、独立owner scope、精确版本/Hash、能力目录、资源范围和预检缺口；小说预览不返回正文，并与正式P0复用同一快照/分片/Hash算法。来源确认阶段零Production/Build/SourcePin/Release/Session写入、零模型读取和计费；世界与小说正式冻结均以已确认Hash做CAS，旧生产路径从授权Brief派生版本证据。小说-only与旧WorldRelease精确选择真实浏览器路径、通用文字冒险兼容路径及27项关联回归通过。 |
 | 1.1.51 | 2026-09-09 | 实现G4-13渐进式教程合同：教程进度限定为按作品和Release/Preview通道隔离的浏览器本地表现状态；系统与Presentation作者步骤只在当前页面、选中场景、真实可见Action及就绪战斗首次出现时逐项披露，每周期最多一项并随目标失效清理。帮助中心支持跳过、暂停恢复、重看和重置，冻结内容经白名单、有界兼容诊断且不泄漏；离屏定位、live region、焦点、高对比、层级和移动长文滚动完成收口。vNext/legacy共用同一Coach，无独立教学场景，也不写任何运行、发布、导出、提示词或凭证状态。 |
 | 1.1.50 | 2026-09-09 | 完成G4-12玩家保存与设置纵切面：共享Checkpoint显式区分手动、自动、战前、里程碑和系统用途，历史缺失用途按手动档兼容；玩家领域限定20个手动槽、系统派生档有界轮转、规范终态时间校准、owner/来源/Hash/Projection修复与同不可变Release子分支，非手动档不可由玩家删除。统一保存中心展示存档、分支、固定版本与设置；每个Session单独验真，损坏记录只显示安全诊断，Build Preview禁用正式保存与分支，新Release仅展示只读兼容声明且绝不迁移旧档。偏好按冻结productKey浏览器本地持久化，未知字段和凭证拒绝；所有异步结果受Session与操作代次隔离。无新表、Schema、Context Source、AI写入口或WorldRelease回写。 |

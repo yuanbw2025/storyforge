@@ -1,6 +1,6 @@
 # AI 主导文字开放世界叙事基座 · StoryForge 施工规格
 
-> 规格版本：3.2.33
+> 规格版本：3.2.34
 > 生效日期：2026-09-06
 > 文档层级：L2 产品目标架构与施工规格
 > 当前状态：设计基线；不代表代码已经实现
@@ -403,7 +403,7 @@ P1专属Skill与Executor已经进入正式P0～P10生产Plan。共享durable sch
 
 `src/lib/open-world/experience-design.ts` 已把通用作者会谈终态和文字开放世界专属体验设计拆为“代码冻结边界 + 模型补充语义”，避免让模型重新解释已经确认的产品决策：
 
-- 现阶段复用现有`ProductProductionBriefV3`、`SourcePlan`和`ConfirmedProductBrief`作为作者会谈与开始授权事实。文字开放世界专属创建/编辑UI仍属于G5-01/G5-02，P2不能把缺少作者确认的字段当作默认值悄悄补齐；
+- G5-02已经用文字开放世界专属Creator Brief承接作者会谈，并把确认结果保存到统一`ProductProductionBrief`修订；它持久绑定G5-01来源身份、作者设定、规模、边界、媒资、完成条件和durable候选证据，但尚不是`SourcePlan`或开始授权。G5-04必须显式把它提升为现有生产链可消费的正式来源计划与确认事实；在此之前P2不能运行，也不能把缺少作者确认的字段当作默认值悄悄补齐；
 - 登记的`text-open-world.experience-input` Context Source只读取同一Work/Production/Build内的已授权Brief、SourcePin及已验收P1三件Artifact。它选择有界的高优先级Ledger事实和缺口，但把全部开放缺口key带入GameBrief；整个输入而非少数索引字段进入`contextSelectionHash`；
 - `GameBrief`完全由确定性代码投影作者意图和集中校准：主角来源模式、目标体量、至少两个结局、严格顺序主线、重要故事安全等待、普通世界持续演化、非地点唯一关键触发、有边界自由、三类输入、四类回合战斗操作、标准难度、三类首版视觉消费槽、成本上限和直接发布条件均不能由模型改写；
 - 模型只输出pitch、玩家幻想、叙事支柱、地区差异、成长承诺、基调及主角身份/动机/个人代价。每个来源引用必须是当前上下文已交付的`claimKey`；来源型主角还必须引用证据锚定到作者所选角色来源单元的claim，不能只根据显示名编写新小传；
@@ -1443,6 +1443,7 @@ StoryForge当前没有独立staging。发布前仍需在隔离数据中完成灰
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| 3.2.34 | 2026-09-09 | 接入G5-02作者会谈事实：专属Creator Brief完整保存作者设定、来源边界、未决项、规模、媒资与完成条件；主Agent仅通过正式Skill读取无正文来源摘要和作者输入，候选、ContextManifest、来源CAS及终态Run证据经四项作者确认后进入统一不可变Brief修订。便携导入在事务前先校验RunContract Hash与逐事件世界组，再重放终态证明；该终态仍不是SourcePlan或生产授权，P2在G5-04显式提升前保持不可执行。 |
 | 3.2.33 | 2026-09-09 | G4-12把叙事运行史接入正式保存语义：手动、自动、战前、里程碑和系统Checkpoint都只快照同一Event/Projection权威，规范任务终态决定派生档时间；从历史点继续必须创建固定原Release的子分支并保留父线未来，旧Release只继续原叙事规则，不以兼容声明静默迁移。每个Session独立核验来源、初始叙事Hash和运行绑定，损坏来源不向玩家泄露内部状态；Build Preview不冒充正式可保存发布。该纵切面不新增叙事状态、AI上下文或模型写入口。 |
 | 3.2.32 | 2026-09-09 | G4-11最终语义收口：fresh生产以Action v18冻结受保护主线与重要故事揭示图，主线依来源Stage order形成唯一初始根和严格前驱，重要故事首任务依声明的主线窗口、后续任务依同线前驱；系统`action.reveal.*`只按前置执行`locked → available → revealed`，P10拒绝断点、分叉、环和错误窗口。Director v3把每条受治理传闻冻结到唯一地区/地点及唯一地区牌组，以牌组`rest`触发和全局休息Action保证到达传播点后存在正式抽牌入口，候选、授权与Replay复核地点；Director v2重冻结时删除归一字段，保持历史字节与Hash。Knowledge确认只允许同Stage或更晚的合法任务Reward/结局下游，重要故事不得借全局结局越过自身进度；每个Knowledge/成就Effect只允许一组独占RewardContract/领奖Action或精确结局Action执行。P9完整`authorDraftJson`以作者稿Hash绑定结构输入与幂等键，执行前记录durable `source-snapshot`，以零模型调用、零token和零费用走同一编译验收；已返回但超预算的响应先持久原始证据与真实usage、再阻断候选。当前代码库存新增50项回归用例、1项Playwright并增强1项既有作者修订用例；完整CI的619个测试文件、3007项测试，以及正式Release桌面/390px刷新Playwright均通过。 |
 | 3.2.31 | 2026-09-08 | G4-11生产链审查收口：P8F成就由真实任务Reward/结局Action直接唯一授予，Director不再读取同批才写入的不可达资格标记；Knowledge摘要、传播位置与Stage完成来源逐字段验签。P8F/P9共用场景容量公式并在127项封顶；P9 fresh生成按Scene硬隔离并使用零Scene共享表现请求，最多127+1次初始调用及1次片段修复，模型不可读取其他Scene目标、未来目标、来源Claim和未声明公开的人物规划字段；片段保存durable原始响应与候选以供恢复。完整Build初始最多154次调用、总授权155次，token总权重156、时长总权重100，P8F/P9分别占12/19份token，P9占48份时长并保留最大片段输入/输出修复余量；历史P9与条件式成就保持原义。 |
