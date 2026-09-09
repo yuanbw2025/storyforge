@@ -3310,6 +3310,8 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     expect(narrativeArcSystem).toContain('"sceneKey":"scene.001","locationOrdinal":1,"locationTitle":"地点 1-1-1"')
     expect(narrativeArcSystem).toContain('合法角色 key 白名单=["character.player","character.npc.1"')
     expect(narrativeArcSystem).toContain('严禁填写角色姓名、称谓、英文转写、角色类型或自造 key')
+    expect(narrativeArcSystem).toContain('合法铺垫回收 key 白名单=["setup.warning-bell","setup.copper-mark"]')
+    expect(narrativeArcSystem).toContain('setupKeys/payoffKeys 只能逐字来自这个数组')
     expect(narrativeDecisionSystem).toContain('你是同一位叙事设计师的决定设计 Run')
     expect(narrativeDecisionSystem).toContain('"decisionKey":"decision.1","sceneKey":"scene.001"')
     expect(narrativeDecisionSystem).toContain('"optionKeys":["option.1.1","option.1.2"]')
