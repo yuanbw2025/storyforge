@@ -410,9 +410,15 @@ function modelOutputs(
     'content.product-module': productType === 'text-adventure' ? {
       schema: 'storyforge.text-adventure-systems-artifact', version: 1,
       abilities: [
+        { key: 'ability.health-capacity', title: '生命上限', description: '决定生命资源的承受上限。', role: 'stat', initial: 10, minimum: 0, maximum: 100 },
+        { key: 'ability.mana-capacity', title: '法力上限', description: '决定法力资源的承受上限。', role: 'stat', initial: 8, minimum: 0, maximum: 100 },
         { key: 'ability.attack', title: '攻击', description: '通用攻击能力。', role: 'stat', initial: 3, minimum: 0, maximum: 20 },
         { key: 'ability.defense', title: '防御', description: '通用防护能力。', role: 'stat', initial: 3, minimum: 0, maximum: 20 },
-        { key: 'ability.perception', title: '感知', description: '发现环境细节。', role: 'skill', initial: 4, minimum: 0, maximum: 20 },
+        { key: 'ability.agility', title: '敏捷', description: '快速反应与精细行动。', role: 'stat', initial: 3, minimum: 0, maximum: 20 },
+        { key: 'ability.perception', title: '感知', description: '发现环境细节。', role: 'stat', initial: 4, minimum: 0, maximum: 20 },
+        { key: 'ability.exploration', title: '探索', description: '调查环境并寻找路径。', role: 'skill', initial: 4, minimum: 0, maximum: 20 },
+        { key: 'ability.negotiation', title: '交涉', description: '通过沟通改变局面。', role: 'skill', initial: 4, minimum: 0, maximum: 20 },
+        { key: 'ability.craft', title: '技艺', description: '运用工具与专业知识。', role: 'skill', initial: 4, minimum: 0, maximum: 20 },
         { key: 'ability.resolve', title: '意志', description: '面对压力保持行动。', role: 'skill', initial: 4, minimum: 0, maximum: 20 },
       ],
       resources: [
@@ -427,6 +433,7 @@ function modelOutputs(
       equipmentSlots: [
         { key: 'slot.weapon', title: '武器', acceptsTags: ['weapon'] },
         { key: 'slot.body', title: '身体', acceptsTags: ['armor'] },
+        { key: 'slot.accessory', title: '饰品', acceptsTags: ['accessory'] },
       ],
       starterEquipment: [{
         key: 'item.starter-lamp', title: '守灯杖', description: '能照亮雾中标记的旧灯杖。',

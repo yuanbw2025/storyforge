@@ -250,8 +250,29 @@ export function parseTextAdventureSystemsArtifactV1(
   if (!clock || clock.initial !== 0 || clock.minimum !== 0) {
     fail('clock 必须以分钟记录开局后经过时间，且 initial/minimum 必须为 0')
   }
+  const skillPoints = resources.find(item => item.role === 'skill-points')
+  if (!skillPoints || skillPoints.minimum !== 0) {
+    fail('skill-points minimum 必须为 0，确保成长点数能够完整分配')
+  }
   if (new Set(resources.map(item => item.key)).size !== resources.length
     || new Set(resources.map(item => item.role)).size !== resources.length) fail('resource key/role 重复')
+
+  const abilityTitlesByRole = (role: 'stat' | 'skill') => abilities
+    .filter(item => item.role === role)
+    .map(item => item.title)
+  const statTitles = abilityTitlesByRole('stat')
+  const skillTitles = abilityTitlesByRole('skill')
+  if (new Set(statTitles).size !== statTitles.length || new Set(skillTitles).size !== skillTitles.length) {
+    fail('同一能力角色内的 title 不允许重复')
+  }
+  const missingStatLabels = brief.character.statLabels.filter(label => !statTitles.includes(label))
+  if (missingStatLabels.length) {
+    fail(`systems 缺少 Brief 要求的 stat 标签:${missingStatLabels.join('、')}`)
+  }
+  const missingSkillLabels = brief.character.skillLabels.filter(label => !skillTitles.includes(label))
+  if (missingSkillLabels.length) {
+    fail(`systems 缺少 Brief 要求的 skill 标签:${missingSkillLabels.join('、')}`)
+  }
   const equipmentSlots = row.equipmentSlots.map((value, index) => {
     const item = record(value, `equipmentSlots[${index}]`)
     exactKeys(item, ['key', 'title', 'acceptsTags'], `equipmentSlots[${index}]`)
@@ -262,6 +283,14 @@ export function parseTextAdventureSystemsArtifactV1(
   })
   if (equipmentSlots.length < 2 || new Set(equipmentSlots.map(item => item.key)).size !== equipmentSlots.length) {
     fail('equipmentSlots 数量或 key 无效')
+  }
+  if (new Set(equipmentSlots.map(item => item.title)).size !== equipmentSlots.length) {
+    fail('equipmentSlot title 不允许重复')
+  }
+  const missingEquipmentSlotLabels = brief.character.equipmentSlotLabels
+    .filter(label => !equipmentSlots.some(slot => slot.title === label))
+  if (missingEquipmentSlotLabels.length) {
+    fail(`systems 缺少 Brief 要求的装备槽:${missingEquipmentSlotLabels.join('、')}`)
   }
   const slotKeys = new Set(equipmentSlots.map(item => item.key))
   const abilityKeys = new Set(abilities.map(item => item.key))

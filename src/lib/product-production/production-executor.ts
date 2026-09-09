@@ -3146,7 +3146,8 @@ function textSystem(
   }
   if (taskKey === 'content.product-module' && adventure) return `${common}\n你是通用玩法与角色系统负责人。只能设计强类型通用属性、技能、资源、装备槽和初始装备，不得加入嫌疑人、证据盘、法庭、饥饿、政策、恋爱阶段或完整职业战斗循环。` +
     '输出字段必须精确为：{"schema":"storyforge.text-adventure-systems-artifact","version":1,"abilities":[{"key":"ability.attack","title":"攻击","description":"...","role":"stat|skill","initial":2,"minimum":0,"maximum":20}],"resources":[{"key":"resource.health","title":"生命","description":"...","role":"health|mana|stamina|experience|skill-points|currency|clock","initial":10,"minimum":0,"maximum":100}],"equipmentSlots":[{"key":"slot.weapon","title":"武器","acceptsTags":["weapon"]}],"starterEquipment":[{"key":"item.starter-weapon","title":"...","description":"...","slotKey":"slot.weapon","tags":["weapon"],"modifierAbilityKey":"ability.attack","modifierDelta":1}]}。' +
-    `abilities 必须覆盖 stat 与 skill；建议落实这些作者确认标签：属性=${JSON.stringify(adventure.character.statLabels)}，技能=${JSON.stringify(adventure.character.skillLabels)}。` +
+    `abilities 必须覆盖 stat 与 skill，并逐字、逐项落实这些作者确认标签，不得换名、遗漏或放入错误 role：属性=${JSON.stringify(adventure.character.statLabels)}，技能=${JSON.stringify(adventure.character.skillLabels)}。` +
+    `equipmentSlots 必须逐字、逐项落实这些作者确认槽位，不得换名或遗漏：${JSON.stringify(adventure.character.equipmentSlotLabels)}。` +
     'resources 必须且只能各有一个 health、mana、stamina、experience、skill-points、currency、clock；health 初始值必须严格高于下限，以便失败推进安全地产生代价；clock 表示开局后累计经过的分钟数，其 initial 和 minimum 必须同时为 0；equipmentSlots 至少两个，starterEquipment 至少一件且标签、槽位、修正能力闭合。'
   if (taskKey === 'content.product-module') return `${common}\n输出字段必须精确为：` +
     `{"schema":"storyforge.product-module-artifact","version":1,"productType":"${PRODUCTION_PRODUCT_KINDS_V1.join('|')}","interfaceStyle":"...","interactionNotes":["..."],"presentationPolicy":{"pacing":"slow|balanced|fast","transitionMs":500,"backgroundStrategy":"none|key-scenes"}}。` +

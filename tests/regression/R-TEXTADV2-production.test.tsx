@@ -482,8 +482,16 @@ describe('R-TEXTADV2-production · 文字冒险正式生产契约与工作台', 
     const systems = {
       schema: 'storyforge.text-adventure-systems-artifact', version: 1,
       abilities: [
+        { key: 'ability.health-capacity', title: '生命上限', description: '生命上限。', role: 'stat', initial: 10, minimum: 0, maximum: 100 },
+        { key: 'ability.mana-capacity', title: '法力上限', description: '法力上限。', role: 'stat', initial: 8, minimum: 0, maximum: 100 },
         { key: 'ability.attack', title: '攻击', description: '攻击。', role: 'stat', initial: 2, minimum: 0, maximum: 20 },
+        { key: 'ability.defense', title: '防御', description: '防御。', role: 'stat', initial: 2, minimum: 0, maximum: 20 },
+        { key: 'ability.agility', title: '敏捷', description: '敏捷。', role: 'stat', initial: 2, minimum: 0, maximum: 20 },
+        { key: 'ability.perception', title: '感知', description: '感知。', role: 'stat', initial: 2, minimum: 0, maximum: 20 },
         { key: 'ability.explore', title: '探索', description: '探索。', role: 'skill', initial: 2, minimum: 0, maximum: 20 },
+        { key: 'ability.negotiate', title: '交涉', description: '交涉。', role: 'skill', initial: 2, minimum: 0, maximum: 20 },
+        { key: 'ability.craft', title: '技艺', description: '技艺。', role: 'skill', initial: 2, minimum: 0, maximum: 20 },
+        { key: 'ability.resolve', title: '意志', description: '意志。', role: 'skill', initial: 2, minimum: 0, maximum: 20 },
       ],
       resources: [
         { key: 'resource.health', title: '生命', description: '生命。', role: 'health', initial: 0, minimum: 0, maximum: 10 },
@@ -497,6 +505,7 @@ describe('R-TEXTADV2-production · 文字冒险正式生产契约与工作台', 
       equipmentSlots: [
         { key: 'slot.weapon', title: '武器', acceptsTags: ['weapon'] },
         { key: 'slot.body', title: '身体', acceptsTags: ['armor'] },
+        { key: 'slot.accessory', title: '饰品', acceptsTags: ['accessory'] },
       ],
       starterEquipment: [{
         key: 'item.lamp', title: '灯杖', description: '旧灯杖。', slotKey: 'slot.weapon', tags: ['weapon'],
@@ -505,12 +514,38 @@ describe('R-TEXTADV2-production · 文字冒险正式生产契约与工作台', 
     }
     expect(() => parseTextAdventureSystemsArtifactV1(systems, brief.textAdventure!))
       .toThrow(/health 初始值必须高于下限/)
-    expect(() => parseTextAdventureSystemsArtifactV1({
+    const validSystems = {
       ...systems,
       resources: systems.resources.map(resource => resource.role === 'health'
         ? { ...resource, initial: 10 }
-        : resource.role === 'clock' ? { ...resource, initial: 3600, maximum: 10_000 } : resource),
+        : resource),
+    }
+    expect(() => parseTextAdventureSystemsArtifactV1({
+      ...validSystems,
+      resources: validSystems.resources.map(resource => resource.role === 'clock'
+        ? { ...resource, initial: 3600, maximum: 10_000 }
+        : resource),
     }, brief.textAdventure!)).toThrow(/clock 必须以分钟记录.*initial\/minimum 必须为 0/)
+    expect(() => parseTextAdventureSystemsArtifactV1({
+      ...validSystems,
+      resources: validSystems.resources.map(resource => resource.role === 'skill-points'
+        ? { ...resource, initial: 1, minimum: 1 }
+        : resource),
+    }, brief.textAdventure!)).toThrow(/skill-points minimum 必须为 0/)
+    expect(() => parseTextAdventureSystemsArtifactV1({
+      ...validSystems,
+      abilities: validSystems.abilities.filter(ability => ability.title !== '防御'),
+    }, brief.textAdventure!)).toThrow(/缺少 Brief 要求的 stat 标签:防御/)
+    expect(() => parseTextAdventureSystemsArtifactV1({
+      ...validSystems,
+      abilities: validSystems.abilities.filter(ability => ability.title !== '交涉'),
+    }, brief.textAdventure!)).toThrow(/缺少 Brief 要求的 skill 标签:交涉/)
+    expect(() => parseTextAdventureSystemsArtifactV1({
+      ...validSystems,
+      equipmentSlots: validSystems.equipmentSlots.filter(slot => slot.title !== '饰品'),
+    }, brief.textAdventure!)).toThrow(/缺少 Brief 要求的装备槽:饰品/)
+    expect(parseTextAdventureSystemsArtifactV1(validSystems, brief.textAdventure!))
+      .toMatchObject({ abilities: { length: 10 }, equipmentSlots: { length: 3 } })
     expect(parseTextAdventureQualityReviewArtifactV1({
       schema: 'storyforge.text-adventure-quality-review-artifact', version: 1,
       scores: {

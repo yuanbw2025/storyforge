@@ -1,6 +1,6 @@
 # 05 · Durable 生产 DAG 与工件方案
 
-> 层级：L2 · 版本：2.2.0 · 生效：2026-09-07
+> 层级：L2 · 版本：2.3.0 · 生效：2026-09-10
 > 性质：正式生产计划、Run Contract 和候选采纳目标契约。
 
 ## 1. 目标拓扑
@@ -67,6 +67,7 @@ WorldRelease + Confirmed Brief + Frozen SourcePlan
 - 一个 Artifact key 只有一个 owner task；审查只输出问题工件，不覆盖被审查对象。
 - 作者编辑生成新 revision，上游 hash 变化通过依赖图传播 stale；锁定只能阻止覆盖，不能把 stale 伪装成有效。
 - 固定内容和旧 Claude 原型仅可作为隔离夹具、算法或测试思想来源，不能整包合并，也不能复制 AI/DB/发布/媒资底座。
+- `content.product-module` 必须逐字覆盖冻结 Brief 的全部 `statLabels`、`skillLabels` 和 `equipmentSlotLabels`，且属性/技能不得放入错误 role；生命、法力、体力、经验、技能点、货币和时间资源必须不重不漏。提示词只负责帮助模型生成，严格 parser 才是发布前权威，不能以“至少一个属性和一个技能”冒充完整角色系统。
 
 ## 4. 预算与并发
 
