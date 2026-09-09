@@ -1429,6 +1429,44 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
     expect(arcCastAliases.defaultedFields).toContain(
       'acts[1].sceneCards[0].castKeys<-registered-cast-aliases',
     )
+    const fourActProviderShape = legalizeProductionModelProtocolDefaultsV1(
+      'content.narrative-arc-scenes',
+      {
+        acts: [
+          { key: 'act.1', title: '一', targetMinutes: 15, goal: '一', irreversibleTurn: '一', sceneCards: [{ key: 'scene.001' }] },
+          { key: 'act.2', title: '二', targetMinutes: 15, goal: '二', irreversibleTurn: '二', sceneCards: [{ key: 'scene.002' }] },
+          { key: 'act.3', title: '三', targetMinutes: 15, goal: '三', irreversibleTurn: '三', sceneCards: [{ key: 'scene.003' }] },
+          { key: 'act.4', title: '四', targetMinutes: 15, goal: '四', irreversibleTurn: '四', sceneCards: [{ key: 'scene.004' }] },
+        ],
+      },
+      {
+        narrativeArcSceneKeys: [['scene.001', 'scene.002'], ['scene.003'], ['scene.004']],
+        narrativeArcActTargetMinutes: [20, 20, 20],
+      },
+    )
+    const rebuiltActs = fourActProviderShape.payload.acts as Array<{
+      key: string
+      targetMinutes: number
+      sceneCards: Array<{ key: string }>
+    }>
+    expect(rebuiltActs.map(act => act.key)).toEqual(['act.1', 'act.2', 'act.3'])
+    expect(rebuiltActs.map(act => act.targetMinutes)).toEqual([20, 20, 20])
+    expect(rebuiltActs.map(act => act.sceneCards.map(scene => scene.key))).toEqual([
+      ['scene.001', 'scene.002'], ['scene.003'], ['scene.004'],
+    ])
+    expect(fourActProviderShape.defaultedFields).toContain('acts<-frozen-three-act-group')
+
+    const incompleteFourActShape = legalizeProductionModelProtocolDefaultsV1(
+      'content.narrative-arc-scenes',
+      { acts: [
+        { key: 'act.1', sceneCards: [{ key: 'scene.001' }] },
+        { key: 'act.2', sceneCards: [{ key: 'scene.002' }] },
+        { key: 'act.3', sceneCards: [{ key: 'scene.003' }] },
+        { key: 'act.4', sceneCards: [] },
+      ] },
+      { narrativeArcSceneKeys: [['scene.001', 'scene.002'], ['scene.003'], ['scene.004']] },
+    )
+    expect(incompleteFourActShape.payload.acts).toHaveLength(4)
     const frozenArcLocations = legalizeProductionModelProtocolDefaultsV1(
       'content.narrative-arc-scenes',
       {

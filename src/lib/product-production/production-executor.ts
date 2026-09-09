@@ -599,6 +599,7 @@ export function legalizeProductionModelProtocolDefaultsV1(
     narrativeArcSceneKeys?: readonly (readonly string[])[]
     narrativeArcLocationOrdinals?: readonly number[]
     narrativeArcEndingKeys?: readonly string[]
+    narrativeArcActTargetMinutes?: readonly number[]
     narrativeDecisionSceneKeys?: readonly string[]
     narrativeCastIdentities?: readonly {
       key: string
@@ -785,6 +786,65 @@ export function legalizeProductionModelProtocolDefaultsV1(
           sceneKey: finalSceneKey,
         }))
         defaultedFields.push('endings<-frozen-narrative-skeleton')
+      }
+    }
+    if (Array.isArray(payload.acts) && payload.acts.length > 0 && payload.acts.length !== 3) {
+      const sourceActs = payload.acts.flatMap((act, sourceActIndex) => (
+        act && typeof act === 'object' && !Array.isArray(act)
+          ? [{ sourceActIndex, act: act as JsonRecord }]
+          : []
+      ))
+      const sourceCards = sourceActs.flatMap(source => (
+        Array.isArray(source.act.sceneCards)
+          ? source.act.sceneCards.flatMap(card => (
+              card && typeof card === 'object' && !Array.isArray(card)
+                && typeof (card as JsonRecord).key === 'string'
+                ? [{ sourceActIndex: source.sourceActIndex, card: card as JsonRecord }]
+                : []
+            ))
+          : []
+      ))
+      const expectedSceneKeys = options.narrativeArcSceneKeys.flat()
+      const cardsByKey = new Map(sourceCards.map(source => [source.card.key as string, source.card]))
+      const hasExactFrozenSceneSet = sourceCards.length === expectedSceneKeys.length
+        && cardsByKey.size === expectedSceneKeys.length
+        && expectedSceneKeys.every(sceneKey => cardsByKey.has(sceneKey))
+      if (hasExactFrozenSceneSet) {
+        const rebuiltActs = options.narrativeArcSceneKeys.map((sceneKeys, actIndex) => {
+          const rankedSources = sourceActs.map(source => ({
+            ...source,
+            overlap: sourceCards.filter(card => (
+              card.sourceActIndex === source.sourceActIndex
+                && sceneKeys.includes(card.card.key as string)
+            )).length,
+          })).sort((left, right) => right.overlap - left.overlap
+            || left.sourceActIndex - right.sourceActIndex)
+          const source = rankedSources[0]?.act ?? {}
+          const rebuilt: JsonRecord = {
+            ...source,
+            key: `act.${actIndex + 1}`,
+            sceneCards: sceneKeys.map(sceneKey => cardsByKey.get(sceneKey)),
+          }
+          const targetMinutes = options.narrativeArcActTargetMinutes?.[actIndex]
+          if (Number.isSafeInteger(targetMinutes)) rebuilt.targetMinutes = targetMinutes
+          return rebuilt
+        })
+        const normalized = legalizeProductionModelProtocolDefaultsV1(
+          taskKey, { ...next, acts: rebuiltActs }, options,
+        )
+        return {
+          payload: normalized.payload,
+          defaultedFields: [
+            ...defaultedFields,
+            'acts<-frozen-three-act-group',
+            ...normalized.defaultedFields,
+          ],
+          discardedNullEntries: [...discardedNullEntries, ...normalized.discardedNullEntries],
+          discardedUnregisteredStateFields: [
+            ...discardedUnregisteredStateFields,
+            ...normalized.discardedUnregisteredStateFields,
+          ],
+        }
       }
     }
     if (Array.isArray(payload.acts) && payload.acts.length === 3) {
@@ -3168,6 +3228,16 @@ async function executeModelTask(input: ProductProductionTaskExecutionInputV1, op
       : undefined,
     narrativeArcEndingKeys: options.brief.textAdventure
       ? textAdventureNarrativeSkeletonV1(options.brief).endingKeys
+      : undefined,
+    narrativeArcActTargetMinutes: options.brief.textAdventure
+      ? (() => {
+          const baseMinutes = Math.floor(options.brief.scale.targetPlayMinutes / 3)
+          return [
+            baseMinutes,
+            baseMinutes,
+            options.brief.scale.targetPlayMinutes - baseMinutes * 2,
+          ]
+        })()
       : undefined,
     narrativeCastIdentities: textAdventureCastCharacters.map(character => ({
       key: character.key,
