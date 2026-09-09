@@ -4252,9 +4252,13 @@ export function textAdventureVisualRepairCastConstraintV1(input: {
   const banUnknownCast = /无关角色|未登记角色|身份归属不明|无匹配/.test(input.repairEvidence)
   const banMagenta = /品红|洋红|粉紫|粉色|紫色光|magenta|pink glow/i.test(input.repairEvidence)
   const banUnregisteredShoulderArmor = /肩部.{0,12}(?:护甲|装甲|装饰)|额外.{0,8}(?:护甲|装甲)/.test(input.repairEvidence)
+  const banUnregisteredSleeveMark = /(?:袖|袖口|袖子).{0,20}(?:图案|纹样|印记|徽章|Logo|伪文字)/i.test(input.repairEvidence)
   const needsCleanCutout = (input.mediaKind === 'character-pose' || input.mediaKind === 'character-expression')
     && /透明|轮廓|边缘|光晕|辉光|伪影|抠图/.test(input.repairEvidence)
   const needsLeftEyebrowScar = /左眉.{0,16}(?:细疤|疤痕|伤疤)|(?:细疤|疤痕|伤疤).{0,16}左眉/.test(input.repairEvidence)
+  const needsMissingRightArm = /失去右臂|右臂.{0,16}(?:完整|补画|去除)|去除右臂/.test(input.repairEvidence)
+  const needsMechanicalCasketShape = /机械记忆匣/.test(`${input.scenePrompt ?? ''}\n${input.repairEvidence}`)
+    && /(?:圆柱|手持工具|钥匙|匣\/盒|盒形|可开合)/.test(input.repairEvidence)
   const promptSuffix = [
     namedNpc
       ? `本次返修的对峙 NPC 冻结为已登记角色「${namedNpc.name}」：${namedNpc.publicIdentity}；` +
@@ -4267,11 +4271,20 @@ export function textAdventureVisualRepairCastConstraintV1(input: {
     banUnregisteredShoulderArmor
       ? '肩部造型保持简洁，只呈现冻结角色锚点明确登记的服装，不增加额外护甲或醒目装饰。'
       : '',
+    banUnregisteredSleeveMark
+      ? '外套袖口必须是没有图案、徽章、字形或装饰纹样的纯色布料，只保留自然缝线与褶皱。'
+      : '',
     needsCleanCutout
       ? '输出边缘干净、无残色的单一完整角色剪影；角色之外必须为真实透明区域。'
       : '',
     needsLeftEyebrowScar
-      ? '身份识别锚点必须清晰可见：采用正面三分之二身取景，让脸部与冻结外观中实际存在的手部占据足够像素；完整显示头顶。左眉上有一条细而自然、轮廓明确且与肤色有轻微明暗差的旧疤，不能被头发、阴影或妆容遮住；双眼明确看向正前方。'
+      ? '身份识别锚点必须清晰可见：左眉上有一条细长、已愈合、轮廓明确且与肤色有清晰明暗差的旧疤，不能被头发、阴影或妆容遮住。PROMINENT IDENTITY DETAIL: a clearly visible thin healed scar crosses the character anatomical LEFT eyebrow (viewer-right in a frontal view).'
+      : '',
+    needsMissingRightArm
+      ? '角色在肩部以下完全失去解剖学右臂，右侧袖筒为空且自然固定；只能用仍存在的左臂完成擦杯动作。ANATOMICAL CONSTRAINT: no right arm, no right hand, no prosthetic; the left hand wipes one cup.'
+      : '',
+    needsMechanicalCasketShape
+      ? '机械记忆匣必须是明确可开合、内部有容纳空间的盒形或匣形机械容器，主体宽度和长度明显大于厚度；绝不能画成钥匙、圆柱棒、手柄或手持工具。MECHANICAL CASKET: a box-shaped hinged container, not a key or cylindrical tool.'
       : '',
   ].filter(Boolean).join('\n')
   return {
@@ -4293,6 +4306,15 @@ export function textAdventureVisualRepairCastConstraintV1(input: {
         : []),
       ...(banUnregisteredShoulderArmor
         ? ['额外肩甲、金色肩部装饰、醒目肩章、extra shoulder armor, gold shoulder ornament']
+        : []),
+      ...(banUnregisteredSleeveMark
+        ? ['袖口图案、袖章、徽章、Logo、伪文字、sleeve emblem, sleeve logo, sleeve glyph']
+        : []),
+      ...(needsMissingRightArm
+        ? ['右臂、右手、双臂、义肢、假肢、right arm, right hand, two arms, prosthetic arm']
+        : []),
+      ...(needsMechanicalCasketShape
+        ? ['钥匙、圆柱工具、棒状工具、手柄、key, cylindrical tool, rod, handle']
         : []),
       ...(needsCleanCutout
         ? ['彩色边缘、残色、光晕、辉光、伪影、color fringe, halo, glow, background residue']
@@ -5352,7 +5374,7 @@ async function executeTextAdventureVisualQualityReviewTask(
       '"scores":{"requirementFit":1,"identityContinuity":1,"styleContinuity":1,"composition":1,"technicalCleanliness":1},' +
       '"issues":[{"severity":"warning|blocking","category":"identity|setting|style|composition|spoiler|artifact|text|accessibility","detail":"...","recommendation":"..."}]}]}。' +
       `必须恰好覆盖这些图片 key/hash，不能漏项、重复或改写：${JSON.stringify([...expected])}。` +
-      `本批每张图片的冻结审查合同=${JSON.stringify(exactReviewContracts)}。必须按相同 artifactKey 逐项对照，不能拿别的图片或全局印象代替。角色立绘的头部、冻结外观中应存在的肢体或要求中的身份物件被裁掉，擅自补画冻结外观明确缺失的肢体，或固定角色硬约束与像素明显冲突时，属于需要返修的问题；不得用“全身图细节太小”替缺失的硬约束开脱。` +
+      `本批每张图片的冻结审查合同=${JSON.stringify(exactReviewContracts)}。必须按相同 artifactKey 逐项对照，不能拿别的图片或全局印象代替。角色立绘的头部、冻结外观中应存在的肢体或要求中的身份物件被裁掉，擅自补画冻结外观明确缺失的肢体，或固定角色硬约束与像素明显冲突时，属于需要返修的问题；角色立绘不得用“全身图细节太小”替缺失的硬约束开脱。对于 cg/background 中合理远景或侧景的角色，只要求身份、体型、发色、服装轮廓、明确残障和关键道具不矛盾；疤痕、首饰或习惯动作等微小锚点因构图尺度不可确认时最多列 warning，不得单独导致 revise。只有 warning 而没有 blocking 问题时 verdict 必须为 accept。` +
       `reviews 必须严格包含 ${expected.size} 项；先复制这一骨架再填判断：${JSON.stringify(exactReviewSkeleton)}。` +
       '每张图最多列 3 条 issues，每条 detail 和 recommendation 各不超过 160 字；通过时 issues 必须是空数组。' +
       '不要输出思考过程或 JSON 之外的文字。评分只能是 1–5 整数；存在明显身份错误、需求错位、严重畸形、不可接受剧透或伪文字时不得 verdict=accept。'

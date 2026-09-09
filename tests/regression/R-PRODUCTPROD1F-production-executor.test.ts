@@ -1105,10 +1105,26 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
     })
     expect(constraint.promptSuffix).toContain('肩部造型保持简洁')
     expect(constraint.promptSuffix).toContain('边缘干净、无残色')
-    expect(constraint.promptSuffix).toContain('左眉上有一条细而自然')
+    expect(constraint.promptSuffix).toContain('左眉上有一条细长、已愈合')
     expect(constraint.negativePromptSuffix).toContain('magenta')
     expect(constraint.negativePromptSuffix).toContain('extra shoulder armor')
     expect(constraint.negativePromptSuffix).toContain('color fringe')
+  })
+
+  it('返修合同把断臂、袖口伪图案和机械匣外形编译为不可弱化约束', () => {
+    const constraint = textAdventureVisualRepairCastConstraintV1({
+      mediaKind: 'cg',
+      scenePrompt: '机械记忆匣的物品特写',
+      repairEvidence: '角色右臂被完整补画；袖口出现白色图案与 Logo；机械记忆匣被画成圆柱手持工具，应改为可开合盒形。',
+      characters: [],
+    })
+    expect(constraint.promptSuffix).toContain('完全失去解剖学右臂')
+    expect(constraint.promptSuffix).toContain('left hand wipes one cup')
+    expect(constraint.promptSuffix).toContain('纯色布料')
+    expect(constraint.promptSuffix).toContain('盒形或匣形机械容器')
+    expect(constraint.negativePromptSuffix).toContain('right arm')
+    expect(constraint.negativePromptSuffix).toContain('sleeve logo')
+    expect(constraint.negativePromptSuffix).toContain('cylindrical tool')
   })
 
   it('商业文字冒险的十二图槽位不重复，并覆盖三类角色与完整叙事职责', () => {
