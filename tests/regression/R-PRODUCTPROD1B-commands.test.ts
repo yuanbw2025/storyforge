@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import {
-  canUpgradeTextAdventureVisualReviewPlanV1,
+  canUpgradeTextAdventureExecutionPlanV1,
   executeProductProductionCommand,
 } from '../../src/lib/product-production/commands'
 import { draftProductProductionBriefV3, suggestProductStartingPoints } from '../../src/lib/product-production/consultation'
@@ -592,7 +592,7 @@ describe('PRODUCTPROD-1B · user command control plane', () => {
       .filter(key => /^media\.visual\.\d{3}$/.test(key)).length === 1)).toBe(true)
   })
 
-  it('逐图 Visual QA 实测输出超过旧冻结预留时允许派生执行计划升级', async () => {
+  it('任一正式任务的实测用量超过旧冻结预留时允许派生执行计划升级', async () => {
     const f = await fixture('text-adventure', 'key-scenes')
     const briefHash = await hashProductProductionValueV2(f.brief)
     const plan = await createProductProductionPlanV3({ buildNumber: 1, briefHash, brief: f.brief })
@@ -606,8 +606,16 @@ describe('PRODUCTPROD-1B · user command control plane', () => {
         detail: 'task usage 超出 Plan 预算预留:outputTokens=2782/2040',
       }),
     }
-    expect(canUpgradeTextAdventureVisualReviewPlanV1(candidate)).toBe(true)
-    expect(canUpgradeTextAdventureVisualReviewPlanV1({
+    expect(canUpgradeTextAdventureExecutionPlanV1(candidate)).toBe(true)
+    const supplemental = plan.tasks.find(task => task.taskKey === 'content.quest-script.supplemental')!
+    expect(canUpgradeTextAdventureExecutionPlanV1({
+      ...candidate,
+      failureJson: canonicalProductProductionJsonV2({
+        taskKey: supplemental.taskKey, code: 'task-budget-exceeded', attempt: 1,
+        detail: 'task usage 超出 Plan 预算预留:durationMs=128946/107462',
+      }),
+    })).toBe(true)
+    expect(canUpgradeTextAdventureExecutionPlanV1({
       ...candidate,
       failureJson: canonicalProductProductionJsonV2({
         taskKey: batch.taskKey, code: 'task-executor-failed', attempt: 1,

@@ -98,11 +98,11 @@ export function isRepairRetryableFailedProductBuildV1(
 }
 
 /**
- * Detects the frozen two-or-more-image Visual QA topology used by older text-adventure Builds.
- * The failure task and the frozen plan must agree; a generic failed Build must never gain the
- * privileged recovery-build evolution path.
+ * Detects an obsolete text-adventure execution reservation or Visual QA
+ * topology. The failure and frozen Plan must agree; a generic failed Build
+ * must never gain the privileged recovery-build evolution path.
  */
-export function canUpgradeTextAdventureVisualReviewPlanV1(
+export function canUpgradeTextAdventureExecutionPlanV1(
   build: Pick<ProductBuildRecordV1, 'status' | 'failureJson' | 'planJson'>,
 ): boolean {
   if (build.status !== 'recovery-required') return false
@@ -112,15 +112,16 @@ export function canUpgradeTextAdventureVisualReviewPlanV1(
       code?: unknown
       detail?: unknown
     }
-    if (typeof failure.taskKey !== 'string'
-      || !/^media\.visual-quality-review\.batch-\d+$/.test(failure.taskKey)) return false
+    if (typeof failure.taskKey !== 'string') return false
     const plan = parseProductProductionPlanV3(build.planJson)
-        const task = plan.tasks.find(candidate => candidate.taskKey === failure.taskKey)
-    return task?.kind === 'text-adventure-visual-quality-review-batch'
-      && (task.inputArtifactKeys.filter(key => /^media\.visual\.\d{3}$/.test(key)).length > 1
-        || failure.code === 'task-budget-exceeded'
-          && typeof failure.detail === 'string'
-          && failure.detail.includes('task usage 超出 Plan 预算预留'))
+    const task = plan.tasks.find(candidate => candidate.taskKey === failure.taskKey)
+    if (!task) return false
+    const measuredReservationDrift = failure.code === 'task-budget-exceeded'
+      && typeof failure.detail === 'string'
+      && failure.detail.includes('task usage 超出 Plan 预算预留')
+    const legacyMultiImageReview = task.kind === 'text-adventure-visual-quality-review-batch'
+      && task.inputArtifactKeys.filter(key => /^media\.visual\.\d{3}$/.test(key)).length > 1
+    return measuredReservationDrift || legacyMultiImageReview
   } catch { return false }
 }
 
@@ -1095,8 +1096,8 @@ async function applyCommand(input: {
       || sourceControlEpoch !== recoveryBase.controlEpoch) {
       reject('source-stale', '恢复 Build 基线不可验证')
     }
-    if (planUpgradeRecovery && !canUpgradeTextAdventureVisualReviewPlanV1(base)) {
-      reject('invalid-state-transition', '当前 Build 不属于可升级的旧版多图 Visual QA 计划')
+    if (planUpgradeRecovery && !canUpgradeTextAdventureExecutionPlanV1(base)) {
+      reject('invalid-state-transition', '当前 Build 没有可验证的执行计划升级证据')
     }
     if (visualContractRecovery && !canReviseTextAdventureVisualContractFromRecoveryV1(base)) {
       reject('invalid-state-transition', '当前 Build 没有可验证的视觉合同或媒资质量阻断')

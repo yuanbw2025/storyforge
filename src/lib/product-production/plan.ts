@@ -577,15 +577,25 @@ export async function createProductProductionPlanV3(input: {
         : Math.floor(textAdventureTaskOutputBaseline * textAdventureOutputWeights[taskKey])
       : perOutput,
     maximumCostUsd: perCost,
-    // Long-form scene packets have a 300s task timeout and live receipts above
-    // 230s. Reserve the same bounded duration locally instead of rejecting a
-    // successful paid response against the generic per-task average.
-    durationMs: textAdventure && /^content\.scene-script\.act-[1-3]\.part-[1-2]$/.test(taskKey)
+    // Provider latency is part of the task receipt, not merely a scheduler
+    // timeout. Reserve observed long-form ceilings so a successful paid
+    // response is not rejected against the generic average after it returns.
+    // The complete Plan still stays inside the author-approved Build duration
+    // envelope and the append-only ledger charges actual time.
+    durationMs: textAdventure && (
+      /^content\.scene-script\.act-[1-3]\.part-[1-2]$/.test(taskKey)
+      || /^content\.quest-script\./.test(taskKey)
+      || /^content\.dialogue-pass\.act-[1-3]$/.test(taskKey)
+      || taskKey === 'content.source-sufficiency'
+      || taskKey === 'content.main-quest-plan'
+    )
       ? 300_000
       : textAdventure && taskKey === 'media.requirements'
         ? 180_000
       : textAdventure && taskKey === 'media.visual-quality-review'
         ? 270_000
+      : textAdventure
+        ? 180_000
         : perDuration,
   })
   const tasks: ProductProductionPlanTaskV3[] = []

@@ -121,6 +121,8 @@ describe('R-TEXTADV2-production · 文字冒险正式生产契约与工作台', 
       .toBe(Math.floor(200_000 * 0.03))
     expect(taskByKey.get('content.quest-script.supplemental')?.budgetReservation.outputTokens)
       .toBe(Math.floor(200_000 * 0.04))
+    expect(taskByKey.get('content.quest-script.supplemental')?.budgetReservation.durationMs)
+      .toBe(300_000)
     expect(taskByKey.get('content.adventure-side-quests')?.budgetReservation.outputTokens)
       .toBe(Math.floor(200_000 * 0.035))
     expect(taskByKey.get('content.adventure-ambient-events')?.budgetReservation.outputTokens)

@@ -18,7 +18,7 @@ import { listWorldReferenceCatalogV1 } from '../product/source'
 import { prepareProductProductionAdoption, publishProductProductionBuild } from './adoption'
 import {
   canReviseTextAdventureVisualContractFromRecoveryV1,
-  canUpgradeTextAdventureVisualReviewPlanV1,
+  canUpgradeTextAdventureExecutionPlanV1,
   executeProductProductionCommand,
   isRepairRetryableFailedProductBuildV1,
 } from './commands'
@@ -145,7 +145,7 @@ export function canUpgradeTextAdventureProductionPlanV1(details: ProductProducti
   return details.production.productType === 'text-adventure'
     && details.production.status === 'producing'
     && !!details.build
-    && canUpgradeTextAdventureVisualReviewPlanV1(details.build)
+    && canUpgradeTextAdventureExecutionPlanV1(details.build)
 }
 
 export function canRepairTextAdventureVisualContractV1(details: ProductProductionDetailsV1): boolean {
@@ -1085,8 +1085,8 @@ export async function beginProductProductionEvolutionV1(input: {
       && brief.productionBudget.maximumOutputTokens >= floor.minimumOutputTokens) {
       throw new Error('[product-production-service] 当前 Brief 已满足专业生产预算底线，请检查实际 blocker 后重试')
     }
-    if (planUpgradeRecovery && !canUpgradeTextAdventureVisualReviewPlanV1(details.build)) {
-      throw new Error('[product-production-service] 当前 Build 不是可升级的旧版多图 Visual QA 计划')
+    if (planUpgradeRecovery && !canUpgradeTextAdventureExecutionPlanV1(details.build)) {
+      throw new Error('[product-production-service] 当前 Build 没有可验证的执行计划升级证据')
     }
     if (visualContractRecovery && !canReviseTextAdventureVisualContractFromRecoveryV1(details.build)) {
       throw new Error('[product-production-service] 当前 Build 没有可验证的视觉合同或媒资质量阻断')
@@ -1126,14 +1126,14 @@ export async function beginProductProductionEvolutionV1(input: {
   return { briefRevision }
 }
 
-/** Creates a reviewable Brief that upgrades a frozen Visual QA execution plan without changing content or media. */
+/** Creates a reviewable Brief that upgrades a frozen execution plan without changing product content. */
 export async function upgradeTextAdventureProductionPlanV1(input: {
   scope: WorkspaceScope
   productionId: number
 }): Promise<{ briefRevision: number }> {
   return beginProductProductionEvolutionV1({
     ...input,
-    userText: '升级 Visual QA 执行计划为当前逐图、逐回执、有界重试和实测预算预留；继承所有可证明未变化且已签收的正文与媒资，不修改剧情、玩法、世界来源、图片内容或媒资范围。',
+    userText: '依据当前 Build 的可验证失败回执升级执行计划：采用现行逐任务合同、实测时长与 token 预留、有界重试和持久化回执；继承所有可证明未变化且已签收的正文与媒资，不修改剧情、玩法、世界来源、图片内容或媒资范围。',
     affectedLanes: ['execution-plan'],
   })
 }
