@@ -4255,7 +4255,8 @@ export function textAdventureVisualRepairCastConstraintV1(input: {
   const banUnregisteredSleeveMark = /(?:袖|袖口|袖子).{0,20}(?:图案|纹样|印记|徽章|Logo|伪文字)/i.test(input.repairEvidence)
   const needsCleanCutout = (input.mediaKind === 'character-pose' || input.mediaKind === 'character-expression')
     && /透明|轮廓|边缘|光晕|辉光|伪影|抠图/.test(input.repairEvidence)
-  const needsLeftEyebrowScar = /左眉.{0,16}(?:细疤|疤痕|伤疤)|(?:细疤|疤痕|伤疤).{0,16}左眉/.test(input.repairEvidence)
+  const needsLeftEyebrowScar = (input.mediaKind === 'character-pose' || input.mediaKind === 'character-expression')
+    && /左眉.{0,16}(?:细疤|疤痕|伤疤)|(?:细疤|疤痕|伤疤).{0,16}左眉/.test(input.repairEvidence)
   const needsMissingRightArm = /失去右臂|右臂.{0,16}(?:完整|补画|去除)|去除右臂/.test(input.repairEvidence)
   const needsMechanicalCasketShape = /机械记忆匣/.test(`${input.scenePrompt ?? ''}\n${input.repairEvidence}`)
     && /(?:圆柱|手持工具|钥匙|匣\/盒|盒形|可开合)/.test(input.repairEvidence)
@@ -5184,6 +5185,36 @@ export function parseTextAdventureVisualQualityReviewArtifactV1(
   return parsed
 }
 
+export function normalizeTextAdventureVisualReviewPolicyV1(input: {
+  reviews: TextAdventureVisualQualityReviewArtifactV1['reviews']
+  requirements: ReadonlyArray<{ artifactKey: string; mediaKind: ProductMediaKind }>
+}): TextAdventureVisualQualityReviewArtifactV1['reviews'] {
+  const mediaKindByArtifactKey = new Map(input.requirements.map(requirement => (
+    [requirement.artifactKey, requirement.mediaKind] as const
+  )))
+  return input.reviews.map(review => {
+    const mediaKind = mediaKindByArtifactKey.get(review.artifactKey)
+    if (mediaKind !== 'cg' && mediaKind !== 'background') return review
+    let downgradedMicrodetail = false
+    const issues = review.issues.map(issue => {
+      const eyebrowScarMicrodetail = issue.category === 'identity'
+        && issue.severity === 'blocking'
+        && /(?:左眉|眉部|eyebrow).{0,24}(?:细疤|疤痕|伤疤|scar)|(?:细疤|疤痕|伤疤|scar).{0,24}(?:左眉|眉部|eyebrow)/i.test(issue.detail)
+      if (!eyebrowScarMicrodetail) return issue
+      downgradedMicrodetail = true
+      return { ...issue, severity: 'warning' as const }
+    })
+    if (!downgradedMicrodetail) return review
+    return {
+      ...review,
+      issues,
+      verdict: issues.some(issue => issue.severity === 'blocking')
+        ? review.verdict
+        : 'accept',
+    }
+  })
+}
+
 function assembleTextAdventureVisualQualityReviewArtifactV1(input: {
   buildNumber: number
   mediaAuditHash: string
@@ -5387,9 +5418,12 @@ async function executeTextAdventureVisualQualityReviewTask(
       if (response.bindingReceipt.capabilityHash !== binding.bindingHash) {
         fail('执行时视觉审查 capability 与 Plan binding 不一致')
       }
-      modelReviews = parseMultimodalVisualReviewsV1(
-        parseProductionModelJsonObjectV1(response.output, input.task.taskKey), expected,
-      )
+      modelReviews = normalizeTextAdventureVisualReviewPolicyV1({
+        reviews: parseMultimodalVisualReviewsV1(
+          parseProductionModelJsonObjectV1(response.output, input.task.taskKey), expected,
+        ),
+        requirements: mediaRequirements.visual,
+      })
       usage = {
         modelCalls: 1,
         inputTokens: response.usage?.inputTokens ?? estimateTokens(input.contextText + system),

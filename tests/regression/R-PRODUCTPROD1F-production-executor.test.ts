@@ -19,6 +19,7 @@ import {
   createConfiguredProductProductionExecutorV1,
   isolateCharacterProviderPromptV1,
   legalizeProductionModelProtocolDefaultsV1,
+  normalizeTextAdventureVisualReviewPolicyV1,
   planTextAdventureMainQuestIdentityV1,
   parseProductMediaRequirementsArtifactV2,
   parseProductionModelJsonObjectV1,
@@ -1125,6 +1126,31 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
     expect(constraint.negativePromptSuffix).toContain('right arm')
     expect(constraint.negativePromptSuffix).toContain('sleeve logo')
     expect(constraint.negativePromptSuffix).toContain('cylindrical tool')
+  })
+
+  it('远景 CG 的眉部细疤不可单独阻塞，角色立绘仍保持严格身份约束', () => {
+    const review = {
+      artifactKey: 'media.visual.012', contentHash: 'a'.repeat(64), verdict: 'revise' as const,
+      scores: {
+        requirementFit: 4, identityContinuity: 3, styleContinuity: 5,
+        composition: 5, technicalCleanliness: 5,
+      },
+      issues: [{
+        severity: 'blocking' as const, category: 'identity' as const,
+        detail: '左眉未出现细疤，与冻结外观明显冲突。',
+        recommendation: '请在左眉处添加细疤。',
+      }],
+      reviewSource: 'multimodal-model' as const,
+    }
+    const [cg] = normalizeTextAdventureVisualReviewPolicyV1({
+      reviews: [review], requirements: [{ artifactKey: review.artifactKey, mediaKind: 'cg' }],
+    })
+    const [portrait] = normalizeTextAdventureVisualReviewPolicyV1({
+      reviews: [{ ...review, artifactKey: 'media.visual.002' }],
+      requirements: [{ artifactKey: 'media.visual.002', mediaKind: 'character-pose' }],
+    })
+    expect(cg).toMatchObject({ verdict: 'accept', issues: [{ severity: 'warning' }] })
+    expect(portrait).toMatchObject({ verdict: 'revise', issues: [{ severity: 'blocking' }] })
   })
 
   it('商业文字冒险的十二图槽位不重复，并覆盖三类角色与完整叙事职责', () => {
