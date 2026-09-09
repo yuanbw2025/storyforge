@@ -3572,6 +3572,8 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     expect(questScriptSystem).toContain('不得重新命名、翻译、合并阶段、重设补充任务数值')
     expect(questScriptSystem).toContain('check.resolution.abilityKey 只能逐字使用')
     expect(questScriptSystem).toContain('"ability.perception"')
+    expect(questScriptSystem).toContain('补充任务的失败文案字段名是 failureText')
+    expect(questScriptSystem).toContain('"failureText":"..."')
     expect(dialoguePassSystems).toHaveLength(3)
     expect(dialoguePassSystems[0]).toContain('独立对白编辑，不是分场作者')
     expect(dialoguePassSystems[0]).toContain('使用序号差量协议')
