@@ -781,7 +781,7 @@ export function compileTextAdventureModuleV2(
     registerAction({
       key: `action.equip.${equipment.key}`, kind: 'use', label: `装备：${equipment.title}`,
       description: equipment.description, locationKey: entryLocationKey, targetKey: equipment.key,
-      requirements: [{ itemKey: equipment.key, itemQuantity: 1 }], rule: { kind: 'automatic' },
+      requirements: [{ itemKey: equipment.key, itemQuantity: 1, itemState: 'carried' }], rule: { kind: 'automatic' },
       successEffects: [{ op: 'change-item-state', itemKey: equipment.key, state: 'equipped' }],
       costlySuccessEffects: [], failureEffects: [], successText: `你装备了${equipment.title}。`,
       costlySuccessText: `你勉强装备了${equipment.title}。`, failureText: `你暂时无法装备${equipment.title}。`,
@@ -790,7 +790,7 @@ export function compileTextAdventureModuleV2(
     registerAction({
       key: `action.unequip.${equipment.key}`, kind: 'use', label: `卸下：${equipment.title}`,
       description: `把${equipment.title}从装备槽收回背包。`, locationKey: entryLocationKey, targetKey: equipment.key,
-      requirements: [{ itemKey: equipment.key, itemQuantity: 1 }], rule: { kind: 'automatic' },
+      requirements: [{ itemKey: equipment.key, itemQuantity: 1, itemState: 'equipped' }], rule: { kind: 'automatic' },
       successEffects: [{ op: 'change-item-state', itemKey: equipment.key, state: 'carried' }],
       costlySuccessEffects: [], failureEffects: [], successText: `你卸下了${equipment.title}。`,
       costlySuccessText: `你花了一些时间卸下${equipment.title}。`, failureText: `你暂时无法卸下${equipment.title}。`,

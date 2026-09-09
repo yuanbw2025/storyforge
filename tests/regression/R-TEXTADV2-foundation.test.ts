@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   adventureEffectiveAbilityValue,
+  adventureRequirementSatisfied,
   applyAdventureEffects,
   availableAdventureStorylets,
   availableAdventureActions,
@@ -113,6 +114,18 @@ describe('TEXTADV-2 · 通用文字冒险基座纵切面', () => {
       ...content,
       actions: content.actions.map((item, index) => index === 0 ? { ...item, suspectId: 'suspect.1' } : item),
     } as never)).toThrow('V2 行动字段不符合合同')
+    expect(() => parseAdventureContent({
+      ...content,
+      actions: content.actions.map((item, index) => index === 0 ? {
+        ...item, requirements: [{ itemKey: 'item.storm-cloak', itemState: 'stored' }],
+      } : item),
+    } as never)).toThrow('物品条件状态无效')
+    expect(() => parseAdventureContent({
+      ...content,
+      actions: content.actions.map((item, index) => index === 0 ? {
+        ...item, requirements: [{ itemState: 'carried' }],
+      } : item),
+    } as never)).toThrow('必须同时声明 itemKey')
     expect(() => parseAdventureContent({ ...content, suspectEvidenceBoard: [] } as never)).toThrow('字段不符合合同')
   })
 
@@ -208,12 +221,16 @@ describe('TEXTADV-2 · 通用文字冒险基座纵切面', () => {
     })
     if (content.version !== 2) throw new Error('装备测试没有进入 V2')
     const initial = createInitialAdventureState(content, 'a'.repeat(64))
+    expect(adventureRequirementSatisfied({ itemKey: 'item.storm-cloak', itemState: 'carried' }, initial)).toBe(true)
+    expect(adventureRequirementSatisfied({ itemKey: 'item.storm-cloak', itemState: 'equipped' }, initial)).toBe(false)
     expect(adventureEffectiveAbilityValue(content, initial, 'ability.perception')).toBe(2)
     const equipped = applyAdventureEffects(content, initial, [{
       op: 'change-item-state', itemKey: 'item.storm-cloak', state: 'equipped',
     }], 1)
     expect(equipped.abilities['ability.perception']).toBe(2)
     expect(adventureEffectiveAbilityValue(content, equipped, 'ability.perception')).toBe(3)
+    expect(adventureRequirementSatisfied({ itemKey: 'item.storm-cloak', itemState: 'carried' }, equipped)).toBe(false)
+    expect(adventureRequirementSatisfied({ itemKey: 'item.storm-cloak', itemState: 'equipped' }, equipped)).toBe(true)
     expect(() => applyAdventureEffects(content, equipped, [{
       op: 'change-item-state', itemKey: 'item.second-cloak', state: 'equipped',
     }], 2)).toThrow('装备槽已占用:slot.body')

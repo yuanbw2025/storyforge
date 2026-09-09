@@ -60,11 +60,18 @@ function questStatus(value: unknown): AdventureQuestStatus {
 
 function requirement(value: unknown): AdventureRequirement {
   const row = record(value, '前置条件')
-  const allowed = new Set(['itemKey', 'itemQuantity', 'resourceKey', 'resourceMinimum', 'abilityKey', 'abilityMinimum', 'conditionKey', 'conditionPresent', 'questKey', 'questStatus', 'narrativePath', 'narrativeEquals'])
+  const allowed = new Set(['itemKey', 'itemQuantity', 'itemState', 'resourceKey', 'resourceMinimum', 'abilityKey', 'abilityMinimum', 'conditionKey', 'conditionPresent', 'questKey', 'questStatus', 'narrativePath', 'narrativeEquals'])
   if (Object.keys(row).some(field => !allowed.has(field))) fail('前置条件包含未知字段')
   const result: AdventureRequirement = {}
   if (row.itemKey != null) result.itemKey = key(row.itemKey, '物品条件 key')
   if (row.itemQuantity != null) result.itemQuantity = integer(row.itemQuantity, '物品条件数量', 1, 1_000_000)
+  if (row.itemState != null) {
+    if (!['carried', 'equipped'].includes(String(row.itemState))) fail('物品条件状态无效')
+    result.itemState = String(row.itemState) as 'carried' | 'equipped'
+  }
+  if ((result.itemQuantity != null || result.itemState != null) && !result.itemKey) {
+    fail('物品数量或状态条件必须同时声明 itemKey')
+  }
   if (row.resourceKey != null) result.resourceKey = key(row.resourceKey, '资源条件 key')
   if (row.resourceMinimum != null) result.resourceMinimum = finite(row.resourceMinimum, '资源条件值', -1_000_000, 1_000_000)
   if (row.abilityKey != null) result.abilityKey = key(row.abilityKey, '能力条件 key')
@@ -921,7 +928,14 @@ export function adventureRequirementSatisfied(
   narrativeVariables: Record<string, unknown> = {},
   content?: AdventureContent,
 ): boolean {
-  if (requirement.itemKey && (state.inventory.find(item => item.itemKey === requirement.itemKey && item.ownerKey === 'player')?.quantity ?? 0) < (requirement.itemQuantity ?? 1)) return false
+  if (requirement.itemKey) {
+    const item = state.inventory.find(candidate => (
+      candidate.itemKey === requirement.itemKey && candidate.ownerKey === 'player'
+      && candidate.state !== 'transferred'
+    ))
+    if ((item?.quantity ?? 0) < (requirement.itemQuantity ?? 1)) return false
+    if (requirement.itemState != null && item?.state !== requirement.itemState) return false
+  }
   if (requirement.resourceKey && (state.resources[requirement.resourceKey] ?? Number.NEGATIVE_INFINITY) < (requirement.resourceMinimum ?? 0)) return false
   if (requirement.abilityKey) {
     const value = content

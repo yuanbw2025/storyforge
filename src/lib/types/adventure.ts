@@ -58,6 +58,7 @@ export interface AdventureResourceDefinition {
 export interface AdventureRequirement {
   itemKey?: string
   itemQuantity?: number
+  itemState?: 'carried' | 'equipped'
   resourceKey?: string
   resourceMinimum?: number
   abilityKey?: string

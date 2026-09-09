@@ -3826,10 +3826,14 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     expect(completedMainRoute.adventure?.quests.find(item => item.questKey === mainQuest.key)?.objectives
       .every(objective => objective.completed)).toBe(true)
     const equipActions = runtimePackage.adventure.actions.filter(action => action.key.startsWith('action.equip.'))
+    const unequipActions = runtimePackage.adventure.actions.filter(action => action.key.startsWith('action.unequip.'))
     const entrySceneActionKeys = new Set(runtimePackage.adventure.scenes
       .filter(scene => scene.locationKey === runtimePackage.adventure!.initialLocationKey)
       .flatMap(scene => scene.actionKeys))
     expect(equipActions).toHaveLength(2)
+    expect(unequipActions).toHaveLength(2)
+    expect(equipActions.every(action => action.requirements.some(requirement => requirement.itemState === 'carried'))).toBe(true)
+    expect(unequipActions.every(action => action.requirements.some(requirement => requirement.itemState === 'equipped'))).toBe(true)
     expect(equipActions.every(action => action.locationKey === runtimePackage.adventure!.initialLocationKey)).toBe(true)
     expect(equipActions.every(action => entrySceneActionKeys.has(action.key))).toBe(true)
 
