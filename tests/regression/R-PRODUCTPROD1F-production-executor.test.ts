@@ -3576,6 +3576,8 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     expect(questScriptSystem).toContain('"ability.perception"')
     expect(questScriptSystem).toContain('补充任务的失败推进字段名也是 failureForwardText')
     expect(questScriptSystem).toContain('"failureForwardText":"..."')
+    expect(questScriptSystem).toContain('sideQuestScripts 必须恰好输出 3 项')
+    expect(questScriptSystem).toContain('ambientEventScripts 必须恰好输出 4 项')
     expect(dialoguePassSystems).toHaveLength(3)
     expect(dialoguePassSystems[0]).toContain('独立对白编辑，不是分场作者')
     expect(dialoguePassSystems[0]).toContain('使用序号差量协议')

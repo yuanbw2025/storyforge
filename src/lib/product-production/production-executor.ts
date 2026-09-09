@@ -3171,10 +3171,10 @@ function textSystem(
   }
   if (isTextAdventureQuestScriptModelTask(taskKey)) {
     if (!adventure) return `${common}\n缺少文字冒险专用 Brief，停止。`
-    const boundary = textAdventureQuestScriptBoundary(taskKey)
-    const runBoundary = boundary == null
-      ? '本 Run 只编译支线与区域事件：mainObjectiveScripts 必须是空数组；sideQuestScripts 和 ambientEventScripts 必须按冻结清单完整输出。'
-      : `本 Run 只编译第 ${boundary.actIndex + 1} 幕${boundary.routeClass === 'single' ? '单解' : '多解'}主线目标：sideQuestScripts 和 ambientEventScripts 必须是空数组；mainObjectiveScripts 必须恰好输出冻结清单中的 ${textAdventureQuestScriptIdentityPlan?.mainObjectiveScripts.length ?? 0} 项，且每个目标的 alternatives 必须逐项覆盖 alternativeKeys，尤其不得把多解目标压成单解。`
+   const boundary = textAdventureQuestScriptBoundary(taskKey)
+   const runBoundary = boundary == null
+      ? `本 Run 只编译支线与区域事件：mainObjectiveScripts 必须是空数组；sideQuestScripts 必须恰好输出 ${textAdventureQuestScriptIdentityPlan?.sideQuestScripts.length ?? 0} 项，ambientEventScripts 必须恰好输出 ${textAdventureQuestScriptIdentityPlan?.ambientEventScripts.length ?? 0} 项。先按上游顺序一次性建立全部 entry 对象，再逐项填写 stages；不得只提交第一条作为示例。`
+     : `本 Run 只编译第 ${boundary.actIndex + 1} 幕${boundary.routeClass === 'single' ? '单解' : '多解'}主线目标：sideQuestScripts 和 ambientEventScripts 必须是空数组；mainObjectiveScripts 必须恰好输出冻结清单中的 ${textAdventureQuestScriptIdentityPlan?.mainObjectiveScripts.length ?? 0} 项，且每个目标的 alternatives 必须逐项覆盖 alternativeKeys，尤其不得把多解目标压成单解。`
     return `${common}\n你是任务脚本工程师。你不设计新故事、不修改上游阶段或目标，也不直接写运行状态；你的职责是把已采纳的主线、支线和区域事件计划逐项翻译为受控的检查参数、时间成本与三档结算文本。` +
       runBoundary +
       '输出字段必须精确为：{"schema":"storyforge.text-adventure-quest-script-artifact","version":2,"mainObjectiveScripts":[{"objectiveKey":"objective.some-key","sceneKey":"scene.001","alternatives":[{"alternativeKey":"alternative.some-key","resolution":{"mode":"automatic|check","abilityKey":null,"difficulty":null,"costlySuccessFloor":null},"timeCostMinutes":5,"successText":"...","costlySuccessText":"...","failureForwardText":"..."}]}],"sideQuestScripts":[{"entryKey":"side-key","stages":[{"stageKey":"stage-one","actionKind":"inspect|attempt|use|quest-action","abilityKey":"ability.some-key","difficulty":10,"costlySuccessFloor":6,"timeCostMinutes":8,"successText":"...","costlySuccessText":"...","failureForwardText":"..."}]}],"ambientEventScripts":[]}。' +
