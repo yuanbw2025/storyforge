@@ -2225,12 +2225,20 @@ function glyphSafeTextAdventureScenePromptV1(
       '无字的抽象光纹投影',
     )
     .replace(
-      /(?:刻有|刻满|写有|写满|标有|印有|显示)[^，。；\n]*(?:姓名|死亡日期|日期|字样|文字|名称|词句|铭文|符文|字符|字母|数字|人名|名字|协议)[^，。；\n]*/gu,
+      /(?:纸页|纸面|日志|手稿|档案)(?:上|中)?[^，。；\n]{0,20}(?:写着|写有|写满|记录着|标注着)[^，。；\n]*/gu,
+      '纸面仅以无字的抽象线条表现研究轨迹',
+    )
+    .replace(
+      /(?:刻有|刻满|写有|写满|写着|记录着|标注着|标有|印有|显示)[^，。；\n]*(?:姓名|死亡日期|日期|字样|文字|名称|词句|铭文|符文|字符|字母|数字|人名|名字|协议)[^，。；\n]*/gu,
       '以无字凿痕、抽象图形与磨损表达历史痕迹',
     )
     .replace(
       /(?:墙壁|墙面|石壁|碑面|纸页|书页|牌面|表面)(?:上)?(?:刻有|刻满|写有|写满|标有|印有|显示)[^，。；\n]*(?:字样|文字|名称|词句|铭文|符文|字符|字母|数字|人名|名字|姓名)/gu,
       '以无字凿痕、抽象图形与磨损表达历史痕迹',
+    )
+    .replace(
+      /(?:柱身|墙壁|墙面|石壁|碑面|表面)(?:上)?[^，。；\n]{0,32}(?:记号|标记|符号)/gu,
+      '表面仅保留无字的几何划痕',
     )
     .replace(
       /面前悬浮着三个选择的光影[：:][^。；\n]+/gu,
@@ -2314,11 +2322,18 @@ function normalizeTextAdventureVisualRequirementPromptV1(input: {
     input.prompt,
     input.anchoredCharacters.map(character => character.name),
   )
-  if (input.anchoredCharacters.length === 0) return `${glyphSafePrompt}。${noGlyphContract}`
+  const identityVisiblePrompt = input.anchoredCharacters.reduce((prompt, character) => {
+    const name = character.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    return prompt.replace(
+      new RegExp(`${name}的身影[^，。；\\n]{0,64}(?:剪影|轮廓)`, 'gu'),
+      `${character.name}以三分之二侧面清晰呈现面部与身份特征`,
+    )
+  }, glyphSafePrompt)
+  if (input.anchoredCharacters.length === 0) return `${identityVisiblePrompt}。${noGlyphContract}`
   const authority = input.anchoredCharacters.map(character => (
     `「${character.name}」=${character.publicIdentity}；${character.visualAnchor}`
   )).join('。')
-  return `${glyphSafePrompt}。画面中的已登记角色必须严格服从冻结身份与外观：${authority}。${noGlyphContract}`
+  return `${identityVisiblePrompt}。画面中的已登记角色必须严格服从冻结身份与外观：${authority}。${noGlyphContract}`
 }
 
 export function parseProductMediaRequirementsArtifactV2(

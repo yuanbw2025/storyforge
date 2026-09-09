@@ -2613,12 +2613,12 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
       audio: [],
     }
     requirements.visual[1].prompt = '岚舟，浅棕短发，右脸有疤，穿灰白制服。'
-    requirements.visual[3].prompt = '岚舟发现潮钟内部刻有历代守灯人姓名与死亡日期，导师沉砾正是上一任牺牲者。画面中心是岚舟的手触碰发光的全息铭牌。'
+    requirements.visual[3].prompt = '岚舟发现潮钟内部刻有历代守灯人姓名与死亡日期，导师沉砾正是上一任牺牲者。泛黄的纸质日志上用暗红色墨水写着「潮钟的真正代价」等字样；画面中心是岚舟的手触碰发光的全息铭牌。'
     requirements.visual[3].characterAnchorRefs = ['character.player', 'character.npc.1']
     requirements.visual[6].prompt = '沉砾，灰白短发与胡须，双手持黄铜手杖。'
     requirements.visual[8].prompt = '屿娘，短黑发，双手布满冻疮，腰挂鱼刀。'
     requirements.visual[7].prompt = "岚舟在废弃实验室发现全息记录，显示'记忆抽取协议'的字样。"
-    requirements.visual[9].prompt = '最后抉择时，前景是岚舟的背影，面前悬浮着三个选择的光影：公开真相、延续旧制度、替代方案。'
+    requirements.visual[9].prompt = '最后抉择时，前景是岚舟的背影，岚舟的身影被冷光勾勒成剪影，面前悬浮着三个选择的光影：公开真相、延续旧制度、替代方案。'
     requirements.visual[9].characterAnchorRefs = ['character.player']
     requirements.visual[10].prompt = '银色潮汐钥匙，柄部刻有微小符文，边缘带有长期使用的磨损。'
     requirements.visual[2].prompt = '无文字区域地图，标注雾湾环礁和霜潮列岛，以航线连接。'
@@ -2643,10 +2643,13 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     expect(parsed.visual[3].prompt).not.toContain('姓名')
     expect(parsed.visual[3].prompt).not.toContain('死亡日期')
     expect(parsed.visual[3].prompt).not.toContain('铭牌')
+    expect(parsed.visual[3].prompt).not.toContain('潮钟的真正代价')
+    expect(parsed.visual[3].prompt).not.toContain('写着')
     expect(parsed.visual[3].prompt).toContain('无字凿痕')
     expect(parsed.visual[7].prompt).not.toContain('记忆抽取协议')
     expect(parsed.visual[7].prompt).not.toContain('全息记录')
     expect(parsed.visual[9].prompt).not.toContain('背影')
+    expect(parsed.visual[9].prompt).not.toContain('剪影')
     expect(parsed.visual[9].prompt).toContain('三分之二侧面')
     expect(parsed.visual[9].prompt).not.toContain('三个选择')
     expect(parsed.visual[9].prompt).toContain('实际行动接通')
