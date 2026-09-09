@@ -707,6 +707,7 @@ export function validateAdventureContent(value: AdventureContent): AdventureCont
     if (levelAbility?.role !== 'stat' || levelAbility?.initial !== levelAbility?.minimum) error('等级能力必须是从最小值开始的 stat')
     if (experienceResource?.role !== 'experience') error('成长配置经验资源 role 必须是 experience')
     if (skillPointResource?.role !== 'skill-points') error('成长配置技能点资源 role 必须是 skill-points')
+    if (skillPointResource?.minimum !== 0) error('技能点资源 minimum 必须为 0')
     if (clockResource?.role !== 'clock') error('时间配置资源 role 必须是 clock')
     const singletonRoles = value.resources.filter(item => item.role !== 'custom').map(item => item.role)
     if (new Set(singletonRoles).size !== singletonRoles.length) error('非 custom 资源 role 不得重复')
@@ -864,6 +865,20 @@ export function applyAdventureEvent(value: AdventureRuntimeState | null, event: 
       const abilityKey = key(body.abilityKey, '能力 key'); const before = finite(body.before, '能力变化前', -1_000_000, 1_000_000); const after = finite(body.after, '能力变化后', -1_000_000, 1_000_000)
       if (state.abilities[abilityKey] !== before) fail(`能力前值不一致:${abilityKey}`)
       state.abilities[abilityKey] = after
+      break
+    }
+    case 'adventure.skill-point.allocated': {
+      const abilityKey = key(body.abilityKey, '成长能力 key')
+      const resourceKey = key(body.skillPointResourceKey, '技能点资源 key')
+      const abilityBefore = finite(body.abilityBefore, '能力成长前', -1_000_000, 1_000_000)
+      const abilityAfter = finite(body.abilityAfter, '能力成长后', -1_000_000, 1_000_000)
+      const skillPointsBefore = finite(body.skillPointsBefore, '技能点消费前', 0, 1_000_000)
+      const skillPointsAfter = finite(body.skillPointsAfter, '技能点消费后', 0, 1_000_000)
+      if (abilityAfter !== abilityBefore + 1 || skillPointsAfter !== skillPointsBefore - 1) fail('技能点分配变化量无效')
+      if (state.abilities[abilityKey] !== abilityBefore) fail(`成长能力前值不一致:${abilityKey}`)
+      if (state.resources[resourceKey] !== skillPointsBefore) fail(`技能点资源前值不一致:${resourceKey}`)
+      state.abilities[abilityKey] = abilityAfter
+      state.resources[resourceKey] = skillPointsAfter
       break
     }
     case 'adventure.condition.applied': {

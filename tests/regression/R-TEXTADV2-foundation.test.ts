@@ -12,6 +12,7 @@ import {
 } from '../../src/lib/adventure/runtime'
 import { analyzeTextAdventureRouteQualityV1 } from '../../src/lib/adventure/quality-analysis'
 import {
+  allocateAdventureSkillPoint,
   branchProductRuntimeSession,
   commitAdventureAction,
   commitAdventureNarrativeChoice,
@@ -111,6 +112,12 @@ describe('TEXTADV-2 · 通用文字冒险基座纵切面', () => {
       ...content,
       items: content.items.map((item, index) => index === 0 ? { ...item, equipmentSlotKey: 'slot.missing' } : item),
     })).toThrow('物品引用不存在装备槽')
+    expect(() => parseAdventureContent({
+      ...content,
+      resources: content.resources.map(item => item.role === 'skill-points'
+        ? { ...item, minimum: 1, initial: Math.max(1, item.initial) }
+        : item),
+    })).toThrow('技能点资源 minimum 必须为 0')
     expect(() => parseAdventureContent({
       ...content,
       actions: content.actions.map((item, index) => index === 0 ? { ...item, suspectId: 'suspect.1' } : item),
@@ -341,6 +348,31 @@ describe('TEXTADV-2 · 通用文字冒险基座纵切面', () => {
     expect(state.adventure?.abilities['ability.level']).toBe(2)
     expect((await db.productRuntimeEvents.where('sessionId').equals(seeded.sessionId).toArray())
       .some(event => event.type === 'adventure.ability.changed')).toBe(true)
+    const skillBase = await readProductRuntimeStateVersion(seeded.sessionId)
+    const skillInput = {
+      sessionId: seeded.sessionId,
+      commandId: 'golden:upgrade-navigation',
+      abilityKey: ' ability.navigation ',
+      baseSequence: skillBase.sequence,
+      baseStateHash: skillBase.stateHash,
+    }
+    const firstAllocation = await allocateAdventureSkillPoint(skillInput)
+    const eventCountAfterAllocation = await db.productRuntimeEvents.where('sessionId').equals(seeded.sessionId).count()
+    const replayedAllocation = await allocateAdventureSkillPoint(skillInput)
+    expect(replayedAllocation.id).toBe(firstAllocation.id)
+    expect(await db.productRuntimeEvents.where('sessionId').equals(seeded.sessionId).count()).toBe(eventCountAfterAllocation)
+    state = await readProductRuntimeState(seeded.sessionId)
+    expect(state.adventure?.resources['resource.skill-points']).toBe(0)
+    expect(state.adventure?.abilities['ability.navigation']).toBe(2)
+    expect((state.narrative?.variables.adventure as { abilities?: Record<string, number> })?.abilities?.['ability.navigation']).toBe(2)
+    const invalidSkillBase = await readProductRuntimeStateVersion(seeded.sessionId)
+    await expect(allocateAdventureSkillPoint({
+      sessionId: seeded.sessionId,
+      commandId: 'golden:upgrade-level-illegally',
+      abilityKey: 'ability.level',
+      baseSequence: invalidSkillBase.sequence,
+      baseStateHash: invalidSkillBase.stateHash,
+    })).rejects.toThrow('只能把技能');
     expect(state.narrative?.availableChoiceKeys).toContain('choice.enter-core')
 
     await commitAdventureNarrativeChoice({ sessionId: seeded.sessionId, choiceKey: 'choice.enter-core' })

@@ -54,6 +54,7 @@ describe('TEXTADV-2 · 玩家界面纵切面', () => {
     const legacyClock = runtimePackage.adventure.resources.find(resource => resource.role === 'clock')!
     legacyClock.initial = 3600
     legacyClock.maximum = 10_000
+    runtimePackage.adventure.resources.find(resource => resource.role === 'skill-points')!.initial = 1
     runtimePackage.adventure.locations[0].title = '**封港仓房**'
     runtimePackage.interaction.profiles = runtimePackage.interaction.profiles.map((profile, index) => ({
       ...profile, characterKey: `generated:participant.${index + 1}`, name: `产品角色 ${index + 1}`,
@@ -134,6 +135,22 @@ describe('TEXTADV-2 · 玩家界面纵切面', () => {
     const initialEquipment = host.querySelector('[aria-label="装备"]')
     expect(initialEquipment?.textContent).toContain('未装备')
     expect(initialEquipment?.textContent).toContain('装备守灯披风')
+    await closePanel()
+
+    await clickNavigation('技能')
+    const skills = host.querySelector('[aria-label="技能"]')
+    expect(skills?.textContent).toContain('可分配技能点1')
+    const upgradeNavigation = skills?.querySelector<HTMLButtonElement>('button[aria-label="提升导航"]')
+    expect(upgradeNavigation?.disabled).toBe(false)
+    await act(async () => {
+      upgradeNavigation?.click()
+      await vi.waitFor(() => {
+        expect(useAdventureGamePlayerStore.getState().runtimeState.adventure?.resources['resource.skill-points']).toBe(0)
+        expect(useAdventureGamePlayerStore.getState().runtimeState.adventure?.abilities['ability.navigation']).toBe(2)
+      })
+    })
+    expect(skills?.textContent).toContain('可分配技能点0')
+    expect(upgradeNavigation?.disabled).toBe(true)
     await closePanel()
 
     await clickNavigation('任务')

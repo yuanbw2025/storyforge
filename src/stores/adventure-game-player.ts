@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { db } from '../lib/db/schema'
 import {
+  allocateAdventureSkillPoint,
   branchProductRuntimeSession,
   commitAdventureAction,
   commitAdventureNarrativeChoice,
@@ -69,6 +70,7 @@ interface AdventurePlayerState {
   select(sessionId: number | null): Promise<void>
   start(productReleaseId: number, title?: string): Promise<number>
   act(actionKey: string, commandId?: string): Promise<void>
+  allocateSkillPoint(abilityKey: string, commandId?: string): Promise<void>
   generateIntent(text: string, aiConfig: AIConfig): Promise<void>
   adoptPendingIntent(): Promise<void>
   rejectPendingIntent(): Promise<void>
@@ -276,6 +278,19 @@ export const useAdventureGamePlayerStore = create<AdventurePlayerState>((set, ge
         baseSequence: base.sequence, baseStateHash: base.stateHash,
       })
       await automaticCheckpoint(sessionId)
+      await refresh()
+      set({ generatedNarrative: null })
+    }),
+    allocateSkillPoint: (abilityKey, commandId) => run(async () => {
+      const scope = get().scope; const sessionId = get().selectedSessionId
+      if (!scope || sessionId == null) throw new Error('请先开始或继续一个文字冒险。')
+      await assertAdventureSession(scope, sessionId)
+      const base = await readProductRuntimeStateVersion(sessionId)
+      await allocateAdventureSkillPoint({
+        sessionId, abilityKey,
+        commandId: commandId ?? `textadv-skill:${sessionId}:${crypto.randomUUID()}`,
+        baseSequence: base.sequence, baseStateHash: base.stateHash,
+      })
       await refresh()
       set({ generatedNarrative: null })
     }),

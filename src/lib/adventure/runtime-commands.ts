@@ -147,6 +147,14 @@ export interface AdventureCommandEnvelope {
   actionKey: string;
 }
 
+export interface AdventureSkillAllocationEnvelope {
+  sessionId: number;
+  commandId: string;
+  baseSequence: number;
+  baseStateHash: string;
+  abilityKey: string;
+}
+
 function adventureEvent(
   session: ProductRuntimeSession,
   sequence: number,
@@ -272,6 +280,155 @@ async function buildAdventureInteractionStateHashes(input: {
     );
   }
   return hashes;
+}
+
+function adventureSkillAllocationValues(
+  content: import('../types').AdventureContentV2,
+  state: NonNullable<ProductRuntimeState['adventure']>,
+  abilityKey: string,
+) {
+  const ability = content.abilities.find(item => item.key === abilityKey);
+  if (!ability || ability.role !== 'skill') {
+    throw new Error('[adventure] 只能把技能点分配给冻结的技能。');
+  }
+  const skillPointResourceKey = content.progression.skillPointResourceKey;
+  const skillPointResource = content.resources.find(item => item.key === skillPointResourceKey);
+  const skillPointsBefore = state.resources[skillPointResourceKey];
+  const abilityBefore = state.abilities[abilityKey];
+  if (!skillPointResource || skillPointsBefore == null || abilityBefore == null) {
+    throw new Error('[adventure] 成长状态与冻结内容不一致。');
+  }
+  if (skillPointsBefore - 1 < skillPointResource.minimum) {
+    throw new Error('[adventure] 没有可用技能点。');
+  }
+  if (abilityBefore >= ability.maximum) throw new Error(`[adventure] ${ability.title}已经达到上限。`);
+  return {
+    abilityKey,
+    skillPointResourceKey,
+    abilityBefore,
+    abilityAfter: abilityBefore + 1,
+    skillPointsBefore,
+    skillPointsAfter: skillPointsBefore - 1,
+  };
+}
+
+function priorAdventureSkillAllocation(
+  events: ProductRuntimeEvent[],
+  input: AdventureSkillAllocationEnvelope,
+  commandId: string,
+  abilityKey: string,
+): ProductRuntimeEvent | null {
+  const prior = events.find(event => event.commandId === commandId);
+  if (!prior) return null;
+  const body = parseEventPayload(prior);
+  if (
+    prior.type !== 'adventure.skill-point.allocated'
+    || body.abilityKey !== abilityKey
+    || prior.baseSequence !== input.baseSequence
+    || prior.baseStateHash !== input.baseStateHash
+  ) {
+    throw new Error('[adventure] commandId 已被不同命令使用。');
+  }
+  return prior;
+}
+
+/**
+ * Spends one frozen V2 skill point and raises one authored skill by one level.
+ * The allocation and Narrative projection refresh share one transaction, so a
+ * reload can never observe a spent point without the matching ability value.
+ */
+export async function allocateAdventureSkillPoint(
+  input: AdventureSkillAllocationEnvelope,
+): Promise<ProductRuntimeEvent> {
+  const commandId = normalizeCommandId(input.commandId);
+  const abilityKey = input.abilityKey.trim();
+  if (!abilityKey || abilityKey.length > 160) throw new Error('[adventure] 技能 key 无效。');
+  if (!Number.isInteger(input.baseSequence) || input.baseSequence < 0) {
+    throw new Error('[adventure] baseSequence 无效。');
+  }
+  if (!/^[a-f0-9]{64}$/.test(input.baseStateHash)) {
+    throw new Error('[adventure] baseStateHash 无效。');
+  }
+  const previewSession = await db.productRuntimeSessions.get(input.sessionId);
+  if (!previewSession || previewSession.kind !== 'text-adventure'
+    || (previewSession.productReleaseId == null && previewSession.productBuildId == null)) {
+    throw new Error('[adventure] 正式文字冒险实例不存在。');
+  }
+  const [previewEvents, frozen] = await Promise.all([
+    readSessionEvents(previewSession),
+    verifyFormalRuntimeSourceV1(previewSession, ['text-adventure']),
+  ]);
+  const previewPrior = priorAdventureSkillAllocation(previewEvents, input, commandId, abilityKey);
+  if (previewPrior) return previewPrior;
+  const content = frozen.runtimePackage.adventure;
+  if (!content || content.version !== 2) throw new Error('[adventure] 冻结内容不支持技能点成长。');
+  const previewState = replayProductRuntimeEvents(
+    parseProductRuntimeState(previewSession.initialStateJson),
+    previewEvents,
+  );
+  const previewStateHash = await hashStateJson(JSON.stringify(previewState));
+  if (!previewState.adventure || previewState.adventure.contentHash !== frozen.packageHash) {
+    throw new Error('[adventure] 实例 Product Release/Build 绑定无效。');
+  }
+  if (previewState.lastSequence !== input.baseSequence || previewStateHash !== input.baseStateHash) {
+    throw new Error('[adventure] 冒险状态已变化，请刷新后重试。');
+  }
+  adventureSkillAllocationValues(content, previewState.adventure, abilityKey);
+
+  return db.transaction(
+    'rw',
+    [
+      db.productRuntimeSessions,
+      db.productRuntimeEvents,
+      db.productReleases,
+      db.productBuilds,
+      db.productProductions,
+      db.productProductionBriefs,
+    ],
+    async () => {
+      const session = await db.productRuntimeSessions.get(input.sessionId);
+      if (!session || session.kind !== 'text-adventure'
+        || (session.productReleaseId == null && session.productBuildId == null)) {
+        throw new Error('[adventure] 正式文字冒险实例不存在。');
+      }
+      await assertFormalRuntimeSourceUnchangedV1({ previewSession, session, frozen });
+      const events = await readSessionEvents(session);
+      const prior = priorAdventureSkillAllocation(events, input, commandId, abilityKey);
+      if (prior) return prior;
+      if (session.status !== 'active') throw new Error('[adventure] 只有 active 实例可以分配技能点。');
+      let projected = replayProductRuntimeEvents(
+        parseProductRuntimeState(session.initialStateJson),
+        events,
+      );
+      const stateHash = await hashStateJson(JSON.stringify(projected));
+      if (projected.lastSequence !== input.baseSequence || stateHash !== input.baseStateHash) {
+        throw new Error('[adventure] 冒险状态已变化，请刷新后重试。');
+      }
+      if (!projected.adventure || projected.adventure.contentHash !== frozen.packageHash) {
+        throw new Error('[adventure] 实例 Product Release/Build 绑定无效。');
+      }
+      const payload = adventureSkillAllocationValues(content, projected.adventure, abilityKey);
+      const allocation = adventureEvent(
+        session,
+        projected.lastSequence + 1,
+        'adventure.skill-point.allocated',
+        payload,
+        { commandId, baseSequence: input.baseSequence, baseStateHash: input.baseStateHash },
+      );
+      projected = applyProductRuntimeEvent(projected, allocation);
+      allocation.id = await db.productRuntimeEvents.add(allocation) as number;
+      const sync = adventureEvent(
+        session,
+        projected.lastSequence + 1,
+        'adventure.narrative.synced',
+        { projection: adventureNarrativeProjection(projected.adventure!) },
+      );
+      projected = applyProductRuntimeEvent(projected, sync);
+      sync.id = await db.productRuntimeEvents.add(sync) as number;
+      await db.productRuntimeSessions.update(session.id!, { updatedAt: Date.now() });
+      return allocation;
+    },
+  );
 }
 
 /**
