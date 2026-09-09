@@ -2,11 +2,15 @@
 
 **Write stories. Step inside them.**
 
-[Start creating](#quick-start) · [Try Fog Harbor](#try-an-original-story) · [Explore the architecture](#shared-execution-and-data-architecture) · [简体中文](./README.md)
+<!-- readme-languages:start -->
+[简体中文](./README.md) · [English](./README.en.md) · [Français](./README.fr.md) · [Deutsch](./README.de.md) · [Italiano](./README.it.md) · [Español](./README.es.md) · [Português](./README.pt.md) · [日本語](./README.ja.md) · [한국어](./README.ko.md)
+<!-- readme-languages:end -->
+
+[Start creating](#quick-start) · [Try Fog Harbor](#try-an-original-story) · [Explore the architecture](#shared-execution-and-data-architecture)
 
 StoryForge is an open-source, local-first AI narrative creation and experience toolkit. Write long or short fiction, adapt a novel into a screenplay or comic, build reusable worlds, and explore character interaction and playable stories. You choose the workflow and approve AI candidates before they become part of your work.
 
-> Long fiction, short fiction, screenplays, comics and the world engine have released entries. Nodes and interactive products are previews.
+> Long fiction, short fiction, screenplays, comics and the world engine have released entries. Nodes and interactive products are previews. This README is available in nine languages; this does not imply matching coverage in the interface or linked documents. Screenshots and many guides are in Chinese.
 
 ## Try an original story
 

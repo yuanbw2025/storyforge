@@ -1,6 +1,6 @@
 # StoryForge 文档权威与归档规则
 
-> 版本：1.7.1 · 生效：2026-09-09
+> 版本：1.7.2 · 生效：2026-09-09
 > 本文回答“哪些文档仍可指导开发”。未列入现行清单的历史材料，不得作为设计或施工权威。
 
 ## 1. 裁决层级
@@ -56,7 +56,7 @@
 
 ### 2.4 用户、维护与法律资料
 
-- 根目录 `README.md` 与 `README.en.md`：L4 中英文用户首页，包含产品导览、开始方式、演示、隐私和交流入口；按当前主干核对，不替代产品契约。
+- 根目录 `README.md`、`README.en.md`、`README.fr.md`、`README.de.md`、`README.it.md`、`README.es.md`、`README.pt.md`、`README.ja.md`、`README.ko.md`：L4 九语言用户首页，包含产品导览、开始方式、演示、技术优势、Harness 架构、隐私和交流入口；按当前主干核对，不替代产品契约。更新公共能力、操作路径或限制时同步核对各语言版本，保持语言切换互通；README 翻译不代表界面或关联文档已完成同等语言覆盖。
 - `docs/assets/readme/product-hub.png`：2026-09-09 主干首页，隔离浏览器数据截图。
 - `docs/assets/readme/create-work.png`：同次核对的新建作品入口截图。
 - `docs/assets/readme/longform-outline.png`：同次核对的长篇大纲截图，使用手工演示内容。

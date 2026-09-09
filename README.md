@@ -5,13 +5,17 @@
 <h1 align="center">StoryForge · 故事熔炉</h1>
 
 <p align="center"><strong>写出故事，也走进故事。</strong></p>
+
+<!-- readme-languages:start -->
+[简体中文](./README.md) · [English](./README.en.md) · [Français](./README.fr.md) · [Deutsch](./README.de.md) · [Italiano](./README.it.md) · [Español](./README.es.md) · [Português](./README.pt.md) · [日本語](./README.ja.md) · [한국어](./README.ko.md)
+<!-- readme-languages:end -->
+
 <p align="center">开源、本地优先的 AI 叙事创作与体验工具。创作长短篇小说，将小说改编成剧本或漫画；也可以派生世界，制作跑团等互动体验。</p>
 
 <p align="center">
   <a href="#快速开始">开始创作</a> ·
   <a href="#先体验一个故事">体验《雾港》</a> ·
-  <a href="#共享技术底座">查看技术架构</a> ·
-  <a href="./README.en.md">English</a>
+  <a href="#共享技术底座">查看技术架构</a>
 </p>
 
 <p align="center">
@@ -21,7 +25,7 @@
   <img src="https://img.shields.io/badge/AI-Bring_Your_Own_Key-32776B" alt="使用自己的模型 API Key" />
 </p>
 
-> 长篇、短篇、剧本、漫画和世界引擎提供正式入口；节点与互动产品为预览。
+> 长篇、短篇、剧本、漫画和世界引擎提供正式入口；节点与互动产品为预览。README 提供九种语言；界面及关联文档的语言覆盖请以实际内容为准。
 
 ## 先体验一个故事
 
