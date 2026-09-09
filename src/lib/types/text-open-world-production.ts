@@ -14,6 +14,7 @@ import type { TextOpenWorldActionDefinitionV1 } from './text-open-world-action'
 import type { TextOpenWorldConditionDefinitionV1 } from './text-open-world-condition'
 import type { TextOpenWorldEffectDefinitionV1, TextOpenWorldEffectOperationV1 } from './text-open-world-effect'
 import type { TextOpenWorldRuntimeModuleKeyV1 } from './text-open-world-runtime'
+import type { WorkspaceScope } from './world-ownership'
 
 /**
  * Stable, product-owned artifacts in the text-open-world production compiler.
@@ -214,6 +215,226 @@ export interface TextOpenWorldCreatorNovelSourcePreviewV1
 export type TextOpenWorldCreatorSourcePreviewV1 =
   | TextOpenWorldCreatorWorldSourceCandidateV1
   | TextOpenWorldCreatorNovelSourcePreviewV1
+
+/** Local creator selection. `sourceScope` and numeric locators are deliberately
+ * excluded from the confirmed Brief hash; they are only used to re-open and
+ * compare-and-swap the exact source inside the current workspace. */
+export type TextOpenWorldCreatorSourceSelectionV1 =
+  | {
+      sourceKind: 'world-release'
+      sourceScope: WorkspaceScope
+      localReleaseRecordId: number
+      expectedReleaseHash: string
+      preview: TextOpenWorldCreatorWorldSourceCandidateV1
+    }
+  | {
+      sourceKind: 'novel'
+      sourceScope: WorkspaceScope
+      selection: AdaptationSourceSelectionV1
+      preview: TextOpenWorldCreatorNovelSourcePreviewV1
+    }
+
+/** Local, remappable locator persisted beside the portable creator Brief.
+ * Numeric ids never enter the Brief hash. */
+export type TextOpenWorldCreatorSourceLocatorV1 =
+  | {
+      kind: 'world-release'
+      localReleaseRecordId: number
+      expectedReleaseHash: string
+    }
+  | {
+      kind: 'novel'
+      sourceWorkId: number
+      selection: AdaptationSourceSelectionV1
+      expectedSourceVersionHash: string
+      expectedSourceBoundaryHash: string
+    }
+
+/** Portable identity copied from the G5-01 candidate. It contains no source
+ * text, physical WorldRelease manifest, API credential, or local database id. */
+export type TextOpenWorldCreatorSourceBindingV1 =
+  | {
+      kind: 'world-release'
+      worldCode: string
+      releaseUid: string
+      releaseVersion: number
+      releaseHash: string
+      referenceHash: string
+      manifestSchemaHash: string
+      capabilityCatalogHash: string
+      capabilityProfileHash: string
+    }
+  | {
+      kind: 'novel'
+      workCode: string
+      sourceVersionHash: string
+      sourceBoundaryHash: string
+      coverage: 'full-text' | 'outline-only'
+      selectionMode: AdaptationSourceSelectionV1['mode']
+      selectedChapterCount: number
+      selectedOutlineCount: number
+    }
+
+/** Source metadata visible to the consultation model. It is intentionally a
+ * bounded projection and never substitutes for P0/P1 source freezing/reading. */
+export interface TextOpenWorldCreatorSourceSummaryV1 {
+  label: string
+  sourceKind: TextOpenWorldSourceKindV1
+  coverage: 'world-release-catalog' | 'full-text' | 'outline-only'
+  resourceCount: number
+  rowOrWordCount: number
+  capabilityAreas: string[]
+  gaps: Array<{
+    code: string
+    severity: TextOpenWorldCreatorSourceGapSeverityV1
+    title: string
+  }>
+}
+
+export interface TextOpenWorldCreatorScaleV1 {
+  regions: number
+  namedLocations: { minimum: number; maximum: number }
+  mainlineStages: { minimum: number; maximum: number }
+  endings: number
+  significantStorylines: number
+  ordinaryQuests: { minimum: number; maximum: number }
+  taskTemplates: { minimum: number; maximum: number }
+  randomEvents: { minimum: number; maximum: number }
+  requiredPlayMinutes: { minimum: number; maximum: number }
+  optionalInventoryMinutes: { minimum: number; maximum: number }
+}
+
+export interface TextOpenWorldCreatorMediaIntentV1 {
+  proceduralMap: 'required'
+  characterPortraits: 'required'
+  sceneBackgrounds: 'required'
+  audio: 'none' | 'optional'
+  artDirection: string
+}
+
+export interface TextOpenWorldCreatorCompletionIntentV1 {
+  playablePreviewRequired: true
+  deterministicGatesRequired: true
+  semanticReviewRequired: true
+  publishAfterGates: true
+  humanPlaytest: 'post-release'
+  repairPolicy: 'new-release'
+}
+
+/** Current product-stage freedoms. These are code-owned capability boundaries,
+ * not model suggestions and not author-overridable promises. */
+export interface TextOpenWorldCreatorProductBoundaryV1 {
+  freedomModel: 'bounded-guided'
+  mainlineStructure: 'strict-sequential-with-multiple-endings'
+  mainlineWaitsForPlayer: true
+  significantStorylinesWaitAtSafePoints: true
+  ordinaryWorldContinues: true
+  criticalActorsProtected: true
+  criticalItemsProtected: true
+  freeTextPolicy: 'respond-then-redirect-or-reject'
+  unsupportedSolutionPolicy: 'declared-actions-only'
+  combatMode: 'turn-based-four-actions'
+  difficulty: 'standard'
+  locationOnlyCriticalTriggersForbidden: true
+}
+
+export interface TextOpenWorldCreatorBriefDraftV1 {
+  schema: 'storyforge.text-open-world-creator-brief-draft'
+  version: 1
+  gameTitle: string
+  playerRole: string
+  playerFantasy: string
+  protagonistMode: 'source-character' | 'author-defined'
+  protagonistDirective: string
+  coreGoal: string
+  primaryConflict: string
+  openingSituation: string
+  experiencePillars: string[]
+  toneKeywords: string[]
+  mustKeep: string[]
+  allowedInferences: string[]
+  forbiddenChanges: string[]
+  contentRating: string
+  contentBoundaries: string[]
+  authorNotes: string
+  unresolvedQuestions: string[]
+  acceptedAssumptions: string[]
+  scale: TextOpenWorldCreatorScaleV1
+  media: TextOpenWorldCreatorMediaIntentV1
+  completion: TextOpenWorldCreatorCompletionIntentV1
+}
+
+export interface TextOpenWorldCreatorBriefSynthesisV1 {
+  suggestedTitle: string
+  understandingSummary: string
+  playerFantasy: string
+  experiencePromise: string
+  primaryConflict: string
+  recommendedOpening: string
+  protagonistFit: string
+  experiencePillars: string[]
+  sourceUsePlan: string[]
+  unresolvedQuestions: string[]
+  assumptions: string[]
+  risks: string[]
+}
+
+export interface TextOpenWorldCreatorBriefModelEvidenceV1 {
+  provider: string
+  model: string
+  usageSource: 'provider' | 'estimated'
+  inputTokens: number
+  outputTokens: number
+  totalTokens: number
+  latencyMs: number
+  estimatedCostUsd: number | null
+}
+
+export interface TextOpenWorldCreatorBriefCandidateV1 {
+  schema: 'storyforge.text-open-world-creator-brief-candidate'
+  version: 1
+  origin: 'ai'
+  /** Portable runtime binding identity; unlike the full RunContract hash it
+   * does not change when a backup rebinds local project/record ids. */
+  runBindingHash: string
+  sourceBindingHash: string
+  draftHash: string
+  contextManifestHashes: string[]
+  synthesis: TextOpenWorldCreatorBriefSynthesisV1
+  modelCalls: TextOpenWorldCreatorBriefModelEvidenceV1[]
+  repairApplied: boolean
+  candidateHash: string
+}
+
+export interface TextOpenWorldCreatorBriefConfirmationV1 {
+  sourceIdentityReviewed: true
+  productBoundaryReviewed: true
+  unresolvedItemsClosed: true
+  directPublishWorkflowReviewed: true
+}
+
+/** Author-confirmed G5-02 terminal fact. It is still a creator-process record;
+ * G5-04 must promote it into ProductProduction rather than re-infer it. */
+export interface TextOpenWorldCreatorBriefV1 {
+  schema: 'storyforge.text-open-world-creator-brief'
+  version: 1
+  productInstanceKey: string
+  revision: number
+  sourceBinding: TextOpenWorldCreatorSourceBindingV1
+  sourceBindingHash: string
+  sourceSummary: TextOpenWorldCreatorSourceSummaryV1
+  draft: TextOpenWorldCreatorBriefDraftV1
+  productBoundary: TextOpenWorldCreatorProductBoundaryV1
+  confirmation: TextOpenWorldCreatorBriefConfirmationV1
+  candidateEvidence: {
+    candidateHash: string
+    runBindingHash: string
+    origin: 'ai' | 'author'
+    contextManifestHashes: string[]
+  }
+  confirmedAt: number
+  briefHash: string
+}
 
 export type TextOpenWorldSourceRightsBasisV1 =
   | 'author-owned'

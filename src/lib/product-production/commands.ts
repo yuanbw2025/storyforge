@@ -8,6 +8,10 @@ import type {
   ProductProductionCommandV1,
   ProductProductionRecordV1,
   ProductSourcePlanV1,
+  TextOpenWorldCreatorBriefV1,
+  TextOpenWorldCreatorSourceBindingV1,
+  TextOpenWorldCreatorSourceLocatorV1,
+  TextOpenWorldCreatorSourceSummaryV1,
   WorkspaceScope,
 } from '../types'
 import { assertRecordInScope, resolveScope, scopeTransactionTables, stampNewRecord } from '../workspace/scope'
@@ -20,6 +24,16 @@ import {
 } from './source-contracts'
 import { assertFormalProductProductionStartV1 } from '../product/source-contracts'
 import { createWorldReferenceV1 } from '../product/source'
+import { readAgentRunV1 } from '../agent/run/event-store'
+import { createVerificationReceiptV1 } from '../agent/run/verification-receipt'
+import {
+  inspectTextOpenWorldCreatorSourceLocatorV1,
+  TEXT_OPEN_WORLD_CREATOR_BRIEF_STEP_ID_V1,
+  TEXT_OPEN_WORLD_CREATOR_BRIEF_VERIFIER_V1,
+  textOpenWorldCreatorLocatorColumnsV1,
+  textOpenWorldCreatorProductionLocatorColumnsV1,
+  verifyTextOpenWorldCreatorBriefV1,
+} from '../open-world/creator-brief-persistence'
 
 export type ProductProductionErrorCodeV1 =
   | 'production-not-found'
@@ -108,13 +122,28 @@ async function applyCommand(input: {
   preparedBriefHash: string | null
   preparedSourcePlan: ProductSourcePlanV1 | null
   preparedConfirmedBrief: ConfirmedProductBriefV1 | null
+  preparedCreatorSource: {
+    locator: TextOpenWorldCreatorSourceLocatorV1
+    binding: TextOpenWorldCreatorSourceBindingV1
+    bindingHash: string
+    summary: TextOpenWorldCreatorSourceSummaryV1
+  } | null
+  preparedCreatorBrief: TextOpenWorldCreatorBriefV1 | null
+  preparedCreatorEvidence: {
+    runId: number
+    localContractHash: string
+    bindingHash: string
+    candidateHash: string
+    terminalReceiptHash: string
+  } | null
   emptyHash: string
   now: number
 }): Promise<{ production: ProductProductionRecordV1 & { id: number }; result: Record<string, unknown> }> {
   const { scope, command, now } = input
   let production = input.production
 
-  if (command.type !== 'create-intent' && command.expectedStateRevision !== production.stateRevision) {
+  if (command.type !== 'create-intent' && command.type !== 'create-text-open-world-intent'
+    && command.expectedStateRevision !== production.stateRevision) {
     reject('production-state-conflict', `Production revision 已从 ${command.expectedStateRevision} 变为 ${production.stateRevision}`)
   }
 
@@ -123,6 +152,30 @@ async function applyCommand(input: {
       reject('production-state-conflict', 'productionKey 已绑定其他产品，不能跨产品复用')
     }
     return { production, result: { status: production.status, productType: production.productType, created: production.createdAt === now } }
+  }
+
+  if (command.type === 'create-text-open-world-intent') {
+    if (production.productType !== 'text-open-world' || command.productType !== production.productType) {
+      reject('production-state-conflict', 'productionKey 已绑定其他产品，不能跨产品复用')
+    }
+    if (!input.preparedCreatorSource
+      || input.preparedCreatorSource.bindingHash !== command.expectedSourceBindingHash) {
+      reject('source-stale', '文字开放世界 intent 缺少当前来源的有效复验')
+    }
+    if (production.creatorSourceBindingHash !== input.preparedCreatorSource.bindingHash
+      || production.creatorSourceKind !== input.preparedCreatorSource.binding.kind) {
+      reject('source-stale', 'productionKey 已绑定另一来源，不能静默换源')
+    }
+    return {
+      production,
+      result: {
+        status: production.status,
+        productType: production.productType,
+        sourceKind: input.preparedCreatorSource.binding.kind,
+        sourceBindingHash: input.preparedCreatorSource.bindingHash,
+        created: production.createdAt === now,
+      },
+    }
   }
 
   if (command.type === 'save-brief-revision') {
@@ -144,6 +197,7 @@ async function applyCommand(input: {
     const row = stampNewRecord(scope, 'productProductionBriefs', {
       projectId: scope.projectId, worldId: scope.worldId, workId: scope.workId,
       productionId: production.id, revision, parentRevision: command.parentRevision, status: 'draft' as const,
+      briefKind: 'product-production-v3' as const, sourceKind: 'world-release' as const,
       sourceWorldReleaseId: brief.source.worldReleaseId, sourceWorldContentHash: brief.source.worldContentHash,
       userIntentSummary: brief.intent.openingSituation, unresolvedJson: safeJson(brief.unresolvedDecisionKeys),
       estimateJson: safeJson({
@@ -163,6 +217,95 @@ async function applyCommand(input: {
     return { production, result: { briefRevision: revision, briefHash, status } }
   }
 
+  if (command.type === 'save-text-open-world-creator-brief') {
+    const brief = input.preparedCreatorBrief
+    const source = input.preparedCreatorSource
+    if (production.productType !== 'text-open-world' || !brief || !source) {
+      reject('production-state-conflict', '文字开放世界 Brief 缺少已验证的产品或来源合同')
+    }
+    if (brief.productInstanceKey !== production.productionKey
+      || brief.sourceBindingHash !== source.bindingHash
+      || production.creatorSourceBindingHash !== source.bindingHash
+      || production.creatorSourceKind !== source.binding.kind
+    ) {
+      reject('source-stale', 'Creator Brief、Production 与来源绑定不一致')
+    }
+    const expectedParent = production.currentBriefRevision
+    if (command.parentRevision !== expectedParent) reject('production-state-conflict', 'Brief parent revision 已过期')
+    const revision = await nextBriefRevision(production.id)
+    if (brief.revision !== revision) reject('production-state-conflict', 'Creator Brief revision 与不可变历史不一致')
+    const evidence = input.preparedCreatorEvidence
+    const evidenceRun = await db.agentRuns.get(command.candidateRunId)
+    if (!evidence || evidence.runId !== command.candidateRunId
+      || evidence.bindingHash !== brief.candidateEvidence.runBindingHash
+      || evidence.candidateHash !== brief.candidateEvidence.candidateHash
+      || !evidenceRun || evidenceRun.status !== 'completed'
+      || evidenceRun.contractHash !== evidence.localContractHash
+      || evidenceRun.terminalReceiptHash !== evidence.terminalReceiptHash
+      || !await assertRecordInScope(scope, 'agentRuns', evidenceRun, { owner: 'work' })) {
+      reject('brief-not-authorized', 'Creator Brief 缺少当前 Work 内的 durable Run 证据')
+    }
+    const locatorColumns = textOpenWorldCreatorLocatorColumnsV1(source.locator)
+    const row = stampNewRecord(scope, 'productProductionBriefs', {
+      projectId: scope.projectId, worldId: scope.worldId, workId: scope.workId,
+      productionId: production.id, revision, parentRevision: command.parentRevision, status: 'draft' as const,
+      briefKind: 'text-open-world-creator-v1' as const,
+      sourceKind: source.binding.kind,
+      ...locatorColumns,
+      sourceWorldContentHash: source.binding.kind === 'world-release' ? source.binding.releaseHash : null,
+      sourceVersionHash: source.binding.kind === 'world-release'
+        ? source.binding.releaseHash
+        : source.binding.sourceVersionHash,
+      sourceBoundaryHash: source.binding.kind === 'world-release'
+        ? source.binding.referenceHash
+        : source.binding.sourceBoundaryHash,
+      sourceBindingJson: canonicalProductProductionJsonV2(source.binding),
+      sourceBindingHash: source.bindingHash,
+      candidateRunId: command.candidateRunId,
+      userIntentSummary: brief.draft.coreGoal,
+      unresolvedJson: '[]',
+      estimateJson: safeJson({
+        scale: brief.draft.scale,
+        media: brief.draft.media,
+        completion: brief.draft.completion,
+      }),
+      briefJson: canonicalProductProductionJsonV2(brief),
+      briefHash: brief.briefHash,
+      // G5-02 confirms creator intent only. G5-04 must create the formal,
+      // rights-bearing SourcePlan before authorize-start can create a Build.
+      sourcePlanJson: '{}',
+      sourcePlanHash: input.emptyHash,
+      confirmedBriefJson: '{}', confirmedBriefHash: '',
+      authorizedAt: null, createdAt: now,
+    } satisfies ProductProductionBriefRecordV1, { owner: 'work' })
+    await db.productProductionBriefs.add(row)
+    const stateRevision = production.stateRevision + 1
+    await db.productProductions.update(production.id, {
+      currentBriefRevision: revision,
+      status: 'brief-ready',
+      title: brief.draft.gameTitle,
+      stateRevision,
+      updatedAt: now,
+    })
+    production = {
+      ...production,
+      currentBriefRevision: revision,
+      status: 'brief-ready',
+      title: brief.draft.gameTitle,
+      stateRevision,
+      updatedAt: now,
+    }
+    return {
+      production,
+      result: {
+        briefRevision: revision,
+        briefHash: brief.briefHash,
+        sourceBindingHash: source.bindingHash,
+        status: 'brief-ready',
+      },
+    }
+  }
+
   if (command.type === 'authorize-start') {
     if (production.currentBriefRevision !== command.briefRevision || production.status !== 'brief-ready') {
       reject('brief-not-authorized', '当前 Production 没有待授权的 Brief')
@@ -171,6 +314,9 @@ async function applyCommand(input: {
       .where('[productionId+revision]').equals([production.id, command.briefRevision]).first()
     if (!briefRow || briefRow.status !== 'draft' || briefRow.briefHash !== command.briefHash) {
       reject('brief-not-authorized', 'Brief revision/hash/status 不一致')
+    }
+    if (briefRow.briefKind === 'text-open-world-creator-v1') {
+      reject('brief-not-authorized', 'Creator Brief 尚未完成 G5-04 正式来源计划，不能创建 Build')
     }
     const brief = parseProductProductionBriefV3(briefRow.briefJson)
     if (brief.unresolvedDecisionKeys.length > 0) reject('brief-unresolved', 'Brief 仍有未解决决策')
@@ -410,6 +556,9 @@ async function applyCommand(input: {
   const previous = await db.productProductionBriefs
     .where('[productionId+revision]').equals([production.id, production.currentBriefRevision]).first()
   if (!previous) reject('brief-not-authorized', '上一版 Brief 缺失')
+  if (previous.briefKind === 'text-open-world-creator-v1') {
+    reject('brief-not-authorized', 'Creator Brief 尚未进入可演化的正式生产版本')
+  }
   const priorBrief = parseProductProductionBriefV3(previous.briefJson)
   const evolutionGoal = command.userText.trim().slice(0, 2000)
   const affectedLanes = [...new Set(command.affectedLanes)]
@@ -446,6 +595,7 @@ async function applyCommand(input: {
   await db.productProductionBriefs.add(stampNewRecord(scope, 'productProductionBriefs', {
     projectId: scope.projectId, worldId: scope.worldId, workId: scope.workId,
     productionId: production.id, revision, parentRevision: previous.revision, status: 'draft' as const,
+    briefKind: 'product-production-v3' as const, sourceKind: 'world-release' as const,
     sourceWorldReleaseId: previous.sourceWorldReleaseId, sourceWorldContentHash: previous.sourceWorldContentHash,
     userIntentSummary: command.userText, unresolvedJson: safeJson(nextBrief.unresolvedDecisionKeys),
     estimateJson: safeJson({
@@ -473,6 +623,20 @@ async function executeTransaction(input: {
   preparedBriefHash: string | null
   preparedSourcePlan: ProductSourcePlanV1 | null
   preparedConfirmedBrief: ConfirmedProductBriefV1 | null
+  preparedCreatorSource: {
+    locator: TextOpenWorldCreatorSourceLocatorV1
+    binding: TextOpenWorldCreatorSourceBindingV1
+    bindingHash: string
+    summary: TextOpenWorldCreatorSourceSummaryV1
+  } | null
+  preparedCreatorBrief: TextOpenWorldCreatorBriefV1 | null
+  preparedCreatorEvidence: {
+    runId: number
+    localContractHash: string
+    bindingHash: string
+    candidateHash: string
+    terminalReceiptHash: string
+  } | null
   preparedWorldReferenceHash: string | null
   emptyHash: string
   now: number
@@ -482,21 +646,35 @@ async function executeTransaction(input: {
     db.productReleases,
     db.productProductions, db.productProductionBriefs, db.productProductionCommands,
     db.productBuilds, db.productBuildArtifacts, db.mediaBlobObjects,
+    db.agentRuns, db.agentRunEvents,
   ), async () => {
     let production: ProductProductionRecordV1 & { id: number }
-    if (command.type === 'create-intent') {
-      if (!input.preparedWorldReferenceHash) reject('source-stale', 'create-intent 缺少经中立边界验证的 WorldReference')
+    if (command.type === 'create-intent' || command.type === 'create-text-open-world-intent') {
       const existing = await db.productProductions.where('[workId+productionKey]').equals([scope.workId, command.productionKey]).first()
       if (existing) {
         if (!await assertRecordInScope(scope, 'productProductions', existing, { owner: 'work' })) reject('production-state-conflict', 'productionKey 跨 Work 冲突')
         production = existing as ProductProductionRecordV1 & { id: number }
       } else {
+        if (command.type === 'create-intent' && !input.preparedWorldReferenceHash) {
+          reject('source-stale', 'create-intent 缺少经中立边界验证的 WorldReference')
+        }
+        if (command.type === 'create-text-open-world-intent'
+          && input.preparedCreatorSource?.bindingHash !== command.expectedSourceBindingHash) {
+          reject('source-stale', '文字开放世界 intent 缺少当前来源复验')
+        }
         const row = stampNewRecord(scope, 'productProductions', {
           projectId: scope.projectId, worldId: scope.worldId, workId: scope.workId,
           productionKey: command.productionKey, productType: command.productType,
           title: command.userText.slice(0, 120), status: 'consulting' as const,
           stateRevision: 0, controlEpoch: 0, currentBriefRevision: null, currentBuildNumber: null,
           currentProductReleaseId: null, lastErrorJson: '{}', createdAt: now, updatedAt: now,
+          ...(command.type === 'create-text-open-world-intent' && input.preparedCreatorSource
+            ? textOpenWorldCreatorProductionLocatorColumnsV1(
+                input.preparedCreatorSource.locator,
+                input.preparedCreatorSource.binding,
+                input.preparedCreatorSource.bindingHash,
+              )
+            : {}),
         } satisfies ProductProductionRecordV1, { owner: 'work' })
         const id = await db.productProductions.add(row) as number
         production = { ...row, id }
@@ -522,7 +700,9 @@ async function executeTransaction(input: {
     const claim = stampNewRecord(scope, 'productProductionCommands', {
       projectId: scope.projectId, worldId: scope.worldId, workId: scope.workId, productionId: production.id,
       commandId: command.commandId, type: command.type, payloadHash: input.payloadHash,
-      expectedStateRevision: command.type === 'create-intent' ? null : command.expectedStateRevision,
+      expectedStateRevision: command.type === 'create-intent' || command.type === 'create-text-open-world-intent'
+        ? null
+        : command.expectedStateRevision,
       status: 'claimed' as const, resultJson: '{}', errorCode: null, createdAt: now, completedAt: null,
     } satisfies ProductProductionCommandRecordV1, { owner: 'work' })
     const claimId = await db.productProductionCommands.add(claim) as number
@@ -533,6 +713,9 @@ async function executeTransaction(input: {
         preparedBriefHash: input.preparedBriefHash,
         preparedSourcePlan: input.preparedSourcePlan,
         preparedConfirmedBrief: input.preparedConfirmedBrief,
+        preparedCreatorSource: input.preparedCreatorSource,
+        preparedCreatorBrief: input.preparedCreatorBrief,
+        preparedCreatorEvidence: input.preparedCreatorEvidence,
         emptyHash: input.emptyHash,
         now,
       })
@@ -579,7 +762,8 @@ export async function executeProductProductionCommand(input: {
   // resolvable. The first execution already froze and verified those inputs;
   // a refresh/retry replays that receipt before doing any WebCrypto/Gateway
   // preflight that could now fail for unrelated reasons.
-  if (command.type !== 'create-intent' && Number.isInteger(input.productionId)) {
+  if (command.type !== 'create-intent' && command.type !== 'create-text-open-world-intent'
+    && Number.isInteger(input.productionId)) {
     const existing = await db.productProductionCommands
       .where('[productionId+commandId]').equals([input.productionId!, command.commandId]).first()
     if (existing) {
@@ -591,6 +775,33 @@ export async function executeProductProductionCommand(input: {
         preparedBriefHash: null,
         preparedSourcePlan: null,
         preparedConfirmedBrief: null,
+        preparedCreatorSource: null,
+        preparedCreatorBrief: null,
+        preparedCreatorEvidence: null,
+        preparedWorldReferenceHash: null,
+        emptyHash,
+        now,
+      })
+      notifyProductionChanged(replay)
+      return replay
+    }
+  }
+  if (command.type === 'create-text-open-world-intent') {
+    const production = await db.productProductions
+      .where('[workId+productionKey]').equals([scope.workId, command.productionKey]).first()
+    const existing = production?.id == null ? null : await db.productProductionCommands
+      .where('[productionId+commandId]').equals([production.id, command.commandId]).first()
+    if (production?.id != null && existing) {
+      const replay = await executeTransaction({
+        scope,
+        command,
+        payloadHash,
+        preparedBriefHash: null,
+        preparedSourcePlan: null,
+        preparedConfirmedBrief: null,
+        preparedCreatorSource: null,
+        preparedCreatorBrief: null,
+        preparedCreatorEvidence: null,
         preparedWorldReferenceHash: null,
         emptyHash,
         now,
@@ -604,6 +815,20 @@ export async function executeProductProductionCommand(input: {
     : null
   let preparedSourcePlan: ProductSourcePlanV1 | null = null
   let preparedConfirmedBrief: ConfirmedProductBriefV1 | null = null
+  let preparedCreatorSource: {
+    locator: TextOpenWorldCreatorSourceLocatorV1
+    binding: TextOpenWorldCreatorSourceBindingV1
+    bindingHash: string
+    summary: TextOpenWorldCreatorSourceSummaryV1
+  } | null = null
+  let preparedCreatorBrief: TextOpenWorldCreatorBriefV1 | null = null
+  let preparedCreatorEvidence: {
+    runId: number
+    localContractHash: string
+    bindingHash: string
+    candidateHash: string
+    terminalReceiptHash: string
+  } | null = null
   const preparedWorldReferenceHash = command.type === 'create-intent'
     ? (await createWorldReferenceV1(command.worldReleaseId)).referenceHash
     : null
@@ -618,6 +843,92 @@ export async function executeProductProductionCommand(input: {
       brief: command.brief,
       createdAt: input.now,
     })
+  } else if (command.type === 'create-text-open-world-intent'
+    || command.type === 'save-text-open-world-creator-brief') {
+    const inspected = await inspectTextOpenWorldCreatorSourceLocatorV1({
+      scope,
+      locator: command.sourceLocator,
+    })
+    if (command.type === 'create-text-open-world-intent') {
+      if (inspected.bindingHash !== command.expectedSourceBindingHash) {
+        throw new Error('[product-production] 文字开放世界 intent 来源已变化')
+      }
+      preparedCreatorSource = {
+        locator: command.sourceLocator,
+        binding: inspected.binding,
+        bindingHash: inspected.bindingHash,
+        summary: inspected.summary,
+      }
+    } else {
+      if (!Number.isInteger(input.productionId)) {
+        throw new Error('[product-production] save-text-open-world-creator-brief 缺少 productionId')
+      }
+      const production = await productionInScope(scope, input.productionId!)
+      preparedCreatorBrief = await verifyTextOpenWorldCreatorBriefV1(command.brief)
+      if (production.productType !== 'text-open-world'
+        || preparedCreatorBrief.productInstanceKey !== production.productionKey
+        || preparedCreatorBrief.sourceBindingHash !== inspected.bindingHash
+        || canonicalProductProductionJsonV2(preparedCreatorBrief.sourceBinding)
+          !== canonicalProductProductionJsonV2(inspected.binding)
+        || canonicalProductProductionJsonV2(preparedCreatorBrief.sourceSummary)
+          !== canonicalProductProductionJsonV2(inspected.summary)) {
+        throw new Error('[product-production] Creator Brief 与当前来源复验不一致')
+      }
+      const snapshot = await readAgentRunV1(scope, command.candidateRunId)
+      const step = snapshot.projection.steps[TEXT_OPEN_WORLD_CREATOR_BRIEF_STEP_ID_V1]
+      const runContextManifestHashes = snapshot.events.flatMap(event => (
+        event.type === 'context.assembled'
+          && event.payload.stepId === TEXT_OPEN_WORLD_CREATOR_BRIEF_STEP_ID_V1
+          ? [event.payload.manifestHash]
+          : []
+      ))
+      const expectedTerminalReceipt = await createVerificationReceiptV1({
+        version: 1,
+        runId: snapshot.run.id,
+        generation: snapshot.projection.generation,
+        contractHash: snapshot.run.contractHash,
+        contextManifestHashes: preparedCreatorBrief.candidateEvidence.contextManifestHashes,
+        candidateHashes: [
+          preparedCreatorBrief.candidateEvidence.candidateHash,
+          preparedCreatorBrief.briefHash,
+        ],
+        adoptionEventIds: [],
+        postStateHash: preparedCreatorBrief.briefHash,
+        verifierSetVersion: TEXT_OPEN_WORLD_CREATOR_BRIEF_VERIFIER_V1,
+        criteria: [
+          { id: 'creator-brief.protocol-valid', status: 'passed', evidenceRefs: [`brief:${preparedCreatorBrief.briefHash}`] },
+          { id: 'creator-brief.source-bound', status: 'passed', evidenceRefs: [`source:${preparedCreatorBrief.sourceBindingHash}`] },
+          { id: 'creator-brief.author-confirmed', status: 'passed', evidenceRefs: [`candidate:${preparedCreatorBrief.candidateEvidence.candidateHash}`] },
+          { id: 'creator-brief.no-unresolved-items', status: 'passed', evidenceRefs: ['unresolved:0'] },
+        ],
+        acceptedAt: preparedCreatorBrief.confirmedAt,
+      })
+      if (snapshot.projection.state !== 'completed' || !snapshot.projection.terminalReceiptHash
+        || snapshot.contract.runtimeBindingHash !== preparedCreatorBrief.candidateEvidence.runBindingHash
+        || step?.confirmation !== 'adopt'
+        || step?.candidateHash !== preparedCreatorBrief.candidateEvidence.candidateHash
+        || step.outputHash !== preparedCreatorBrief.briefHash
+        || runContextManifestHashes.length !== preparedCreatorBrief.candidateEvidence.contextManifestHashes.length
+        || runContextManifestHashes.some((hash, index) => (
+          hash !== preparedCreatorBrief!.candidateEvidence.contextManifestHashes[index]
+        ))
+        || snapshot.projection.terminalReceiptHash !== expectedTerminalReceipt.receiptHash) {
+        throw new Error('[product-production] Creator Brief 的 durable Run 尚未完成或候选证据不一致')
+      }
+      preparedCreatorEvidence = {
+        runId: snapshot.run.id,
+        localContractHash: snapshot.run.contractHash,
+        bindingHash: snapshot.contract.runtimeBindingHash,
+        candidateHash: step.candidateHash,
+        terminalReceiptHash: snapshot.projection.terminalReceiptHash,
+      }
+      preparedCreatorSource = {
+        locator: command.sourceLocator,
+        binding: inspected.binding,
+        bindingHash: inspected.bindingHash,
+        summary: inspected.summary,
+      }
+    }
   } else if (command.type === 'authorize-start') {
     if (!Number.isInteger(input.productionId)) {
       throw new Error('[product-production] authorize-start 缺少 productionId')
@@ -628,19 +939,21 @@ export async function executeProductProductionCommand(input: {
     if (!briefRow || briefRow.briefHash !== command.briefHash) {
       throw new Error('[product-production] authorize-start 的 Brief 不存在或 hash 已变化')
     }
-    preparedSourcePlan = await parseProductProductionSourcePlanV1(briefRow)
-    preparedConfirmedBrief = await createConfirmedProductBriefV1({
-      productionKey: production.productionKey,
-      briefRow,
-      sourcePlan: preparedSourcePlan,
-      authorStartRevision: command.expectedStateRevision,
-      confirmedAt: input.now,
-    })
-    await assertFormalProductProductionStartV1({
-      sourcePlan: preparedSourcePlan,
-      confirmedBrief: preparedConfirmedBrief,
-      authorStartRevision: command.expectedStateRevision,
-    })
+    if (briefRow.briefKind !== 'text-open-world-creator-v1') {
+      preparedSourcePlan = await parseProductProductionSourcePlanV1(briefRow)
+      preparedConfirmedBrief = await createConfirmedProductBriefV1({
+        productionKey: production.productionKey,
+        briefRow,
+        sourcePlan: preparedSourcePlan,
+        authorStartRevision: command.expectedStateRevision,
+        confirmedAt: input.now,
+      })
+      await assertFormalProductProductionStartV1({
+        sourcePlan: preparedSourcePlan,
+        confirmedBrief: preparedConfirmedBrief,
+        authorStartRevision: command.expectedStateRevision,
+      })
+    }
   }
   const request = {
     scope,
@@ -650,6 +963,9 @@ export async function executeProductProductionCommand(input: {
     preparedBriefHash,
     preparedSourcePlan,
     preparedConfirmedBrief,
+    preparedCreatorSource,
+    preparedCreatorBrief,
+    preparedCreatorEvidence,
     preparedWorldReferenceHash,
     emptyHash,
     now,

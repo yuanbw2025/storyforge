@@ -176,7 +176,11 @@ function toExportRow(
     } else if (rr.kind === 'id-array') {
       const map = idMaps.get(rr.remapVia)
       const raw = parseIdArray(obj[rr.field])
-      obj[rr.exportAs] = raw.map(id => map?.get(id)).filter((id): id is number => id != null)
+      const mapped = raw.map(id => map?.get(id))
+      if (rr.onUnmapped === 'require' && mapped.some(id => id == null)) {
+        throw new Error(`[deriveExport] ${spec.name}.${rr.field} 缺少必填引用映射`)
+      }
+      obj[rr.exportAs] = mapped.filter((id): id is number => id != null)
       // Portable shadow indexes are authoritative; local numeric IDs must not
       // leak into or destabilize a later restore.
       if (strictOwners) delete obj[rr.field]

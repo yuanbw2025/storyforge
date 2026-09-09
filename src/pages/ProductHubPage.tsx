@@ -81,8 +81,8 @@ const CharacterInteractionPanel = lazy(() => import('../components/character-int
 const AdventureGamePlayer = lazy(() => import('../components/text-game/AdventureGamePlayer'))
 const AvgGamePlayer = lazy(() => import('../components/text-game/AvgGamePlayer'))
 const TextOpenWorldPlayer = lazy(() => import('../components/text-game/TextOpenWorldPlayer'))
-const TextOpenWorldCreatorStudio = lazy(() => import('../components/text-game/TextOpenWorldCreatorStudio')
-  .then(module => ({ default: module.TextOpenWorldCreatorStudio })))
+const TextOpenWorldCreatorWorkflow = lazy(() => import('../components/text-game/TextOpenWorldCreatorWorkflow')
+  .then(module => ({ default: module.TextOpenWorldCreatorWorkflow })))
 const ProductProductionStudio = lazy(() => import('../components/product/ProductProductionStudio'))
 const MarketplacePanel = lazy(() => import('../components/community/MarketplacePanel'))
 const OutlinePanel = lazy(() => import('../components/outline/OutlinePanel'))
@@ -642,7 +642,6 @@ function TextGamePage({
   const updateWorkspace = useProjectStore(state => state.updateWorkspace)
   const [mode, setMode] = useState<'play' | 'production'>(initialMode)
   const [product, setProduct] = useState<TextGameProductKindV1>(initialProduct)
-  const [creatorSourceConfirmed, setCreatorSourceConfirmed] = useState(false)
   const [previewHandoff, setPreviewHandoff] = useState<{
     productType: TextGameProductKindV1
     sessionId: number
@@ -662,10 +661,6 @@ function TextGamePage({
     if (availableProducts.includes(product)) return
     if (availableProducts[0]) setProduct(availableProducts[0])
   }, [availableProducts, product])
-  useEffect(() => {
-    setCreatorSourceConfirmed(false)
-  }, [initialProductionHandoff, initialOpenWorldSource, novelProject?.id, project?.id])
-
   const worldGroupId = useSelectedWorldGroupId(project)
   const isAdventure = product === 'text-adventure'
   const isAvg = product === 'avg'
@@ -700,7 +695,7 @@ function TextGamePage({
     ? isOpenWorld
       ? (worldScope || novelScope)
         ? <>
-          <TextOpenWorldCreatorStudio
+          <TextOpenWorldCreatorWorkflow
             key={`${initialOpenWorldSource}:${initialProductionHandoff?.worldReleaseId ?? 'none'}:${initialProductionHandoff?.worldContentHash ?? 'none'}`}
             worldScope={worldScope ?? null}
             novelScope={novelScope ?? null}
@@ -709,13 +704,7 @@ function TextGamePage({
               ? initialProductionHandoff
               : null}
             initialSourceKind={initialOpenWorldSource}
-            onContinue={() => setCreatorSourceConfirmed(true)}
           />
-          {creatorSourceConfirmed && <p
-            className="mx-5 rounded border border-accent/30 bg-accent/5 px-4 py-3 text-xs leading-5 text-text-muted"
-            data-testid="text-open-world-creator-boundary"
-            role="status"
-          >来源交接已确认；下一步由体验会谈继续。本入口尚未创建 Production、Build、Release 或 Session。</p>}
         </>
         : <section className="sf-product-empty" data-testid="text-open-world-source-empty">
           <BookOpenText className="h-8 w-8" />

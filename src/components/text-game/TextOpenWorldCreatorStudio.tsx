@@ -32,26 +32,14 @@ import type {
   TextOpenWorldCreatorNovelSourcePreviewV1,
   TextOpenWorldCreatorSourceGapV1,
   TextOpenWorldCreatorSourceReadinessV1,
+  TextOpenWorldCreatorSourceSelectionV1,
   TextOpenWorldCreatorWorldSourceCandidateV1,
   WorkspaceScope,
 } from '../../lib/types'
 
 export type CreatorSourceKindV1 = 'world-release' | 'novel'
 
-export type TextOpenWorldCreatorStudioSelectionV1 =
-  | {
-      sourceKind: 'world-release'
-      sourceScope: WorkspaceScope
-      localReleaseRecordId: number
-      expectedReleaseHash: string
-      preview: TextOpenWorldCreatorWorldSourceCandidateV1
-    }
-  | {
-      sourceKind: 'novel'
-      sourceScope: WorkspaceScope
-      selection: AdaptationSourceSelectionV1
-      preview: TextOpenWorldCreatorNovelSourcePreviewV1
-    }
+export type TextOpenWorldCreatorStudioSelectionV1 = TextOpenWorldCreatorSourceSelectionV1
 
 export interface TextOpenWorldCreatorStudioProps {
   /** Stage-one world context. It is deliberately independent from novelScope. */

@@ -376,7 +376,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ## 五、正式 AI 入口（FormalAIEntryBindingV1）
 
-共 36 个操作级绑定。运行时按 entryId 校验 category 和 Skill；采纳权限不由文字说明决定。
+共 37 个操作级绑定。运行时按 entryId 校验 category 和 Skill；采纳权限不由文字说明决定。
 
 | entryId | Skill | category | 边界 | 候选 | 采纳目标 | 调用方 |
 |---|---|---|---|---|---|---|
@@ -416,6 +416,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `prompt.examples.generate` | `inspiration.review` | `prompt.examples` | auxiliary / authoring-draft | `prompt-example-draft` | 禁止 | `src/components/settings/prompt/PromptExamplesEditor.tsx` |
 | `prompt.workflow.step` | `inspiration.review` | `*` | experimental / experimental | `prompt-workflow-step-draft` | 禁止 | `src/lib/generation/workflow-generation-node.ts` |
 | `style.calibration.preview` | `prose.style-learn` | `style.calibrate` | auxiliary / authoring-draft | `style-calibration-preview` | 禁止 | `src/components/style/StyleCalibrationPanel.tsx` |
+| `text-open-world.creator-brief.consult` | `text-open-world.creator-brief-consult.v1` | `authoring.text-open-world-creator-brief` | formal / durable-run | `text-open-world-creator-brief-synthesis` | 禁止 | `src/lib/open-world/creator-brief.ts` |
 
 ---
 

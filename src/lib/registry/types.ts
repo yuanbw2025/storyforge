@@ -233,6 +233,8 @@ export type ExportRefRemap = {
   kind: 'id-array'
   exportAs: string
   storage?: 'array' | 'json-string'
+  /** Fail closed when any non-null local/portable id has no mapping. */
+  onUnmapped?: 'require' | 'drop'
 } | {
   field: string
   remapVia: string

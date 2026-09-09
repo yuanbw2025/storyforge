@@ -19,6 +19,10 @@ import { PRODUCT_MEDIA_KINDS, PRODUCT_PRODUCTION_COMMAND_TYPES, PRODUCTION_PRODU
 import { isSha256Hash } from './hash'
 import { parseProductWorldSourceSelectionV1 } from './runtime-package'
 import { parseTtrpgProductionBriefV2 } from '../ttrpg/production-brief'
+import {
+  parseTextOpenWorldCreatorBriefV1,
+  parseTextOpenWorldCreatorSourceLocatorV1,
+} from '../open-world/creator-brief-persistence'
 
 const STABLE_KEY = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/
 
@@ -373,11 +377,41 @@ export function parseProductProductionCommandV1(value: unknown): ProductProducti
     productType: enumValue(row.productType, PRODUCTION_PRODUCT_KINDS_V1, 'productType'),
     userText: text(row.userText, 'userText', 20_000),
   }
+  if (type === 'create-text-open-world-intent') {
+    const commandId = commandHeader(row, type, [
+      'productionKey', 'productType', 'sourceLocator', 'expectedSourceBindingHash', 'userText',
+    ])
+    if (row.productType !== 'text-open-world' || !isSha256Hash(row.expectedSourceBindingHash)) {
+      fail('文字开放世界 intent 的产品身份或来源 Hash 无效')
+    }
+    return {
+      type,
+      commandId,
+      productionKey: stableKey(row.productionKey, 'productionKey'),
+      productType: 'text-open-world',
+      sourceLocator: parseTextOpenWorldCreatorSourceLocatorV1(row.sourceLocator),
+      expectedSourceBindingHash: row.expectedSourceBindingHash,
+      userText: text(row.userText, 'userText', 20_000),
+    }
+  }
   if (type === 'save-brief-revision') return {
     type, commandId: commandHeader(row, type, ['expectedStateRevision', 'parentRevision', 'brief']),
     expectedStateRevision: expectedRevision(row.expectedStateRevision),
     parentRevision: row.parentRevision === null ? null : finite(row.parentRevision, 'parentRevision', Number.MAX_SAFE_INTEGER, true),
     brief: parseProductProductionBriefV3(row.brief),
+  }
+  if (type === 'save-text-open-world-creator-brief') return {
+    type,
+    commandId: commandHeader(row, type, [
+      'expectedStateRevision', 'parentRevision', 'sourceLocator', 'candidateRunId', 'brief',
+    ]),
+    expectedStateRevision: expectedRevision(row.expectedStateRevision),
+    parentRevision: row.parentRevision === null
+      ? null
+      : finite(row.parentRevision, 'parentRevision', Number.MAX_SAFE_INTEGER, true),
+    sourceLocator: parseTextOpenWorldCreatorSourceLocatorV1(row.sourceLocator),
+    candidateRunId: positiveId(row.candidateRunId, 'candidateRunId'),
+    brief: parseTextOpenWorldCreatorBriefV1(row.brief),
   }
   if (type === 'authorize-start') {
     const commandId = commandHeader(row, type, ['expectedStateRevision', 'briefRevision', 'briefHash', 'authorizationNonce'])

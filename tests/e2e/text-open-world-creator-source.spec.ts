@@ -69,7 +69,7 @@ async function readProtectedTableCounts(page: Page): Promise<ProtectedTableCount
   })
 }
 
-test('小说项目无需世界项目即可从作品入口完成选区预检与来源确认，且不创建产品生命周期记录', async ({ page }) => {
+test('小说项目无需世界项目即可从作品入口完成选区预检与 Creator Brief 确认，且不提前创建 Build', async ({ page }) => {
   test.setTimeout(120_000)
   await openProductHub(page)
 
@@ -199,9 +199,29 @@ test('小说项目无需世界项目即可从作品入口完成选区预检与�
   const continueButton = studio.getByTestId('creator-source-continue')
   await expect(continueButton).toBeEnabled()
   await continueButton.click()
-  await expect(page.getByTestId('text-open-world-creator-boundary'))
-    .toContainText('尚未创建 Production、Build、Release 或 Session')
-  expect(await readProtectedTableCounts(page)).toEqual(before)
+  const briefStudio = page.getByTestId('text-open-world-creator-brief-studio')
+  await expect(briefStudio).toBeVisible({ timeout: 30_000 })
+  await expect(briefStudio.getByText('会谈中', { exact: true })).toBeVisible()
+  await expect(briefStudio.getByText('当前修订 0 · Build 0', { exact: true })).toBeVisible()
+  expect(await readProtectedTableCounts(page)).toEqual({
+    ...before,
+    productions: before.productions + 1,
+    commands: before.commands + 1,
+  })
+
+  await briefStudio.getByLabel('我确认当前来源身份与 Hash').check()
+  await briefStudio.getByLabel('我理解首版是有边界的自由演绎，关键主线受保护').check()
+  await briefStudio.getByLabel('我确认未决问题已经清空或转为接受的假设').check()
+  await briefStudio.getByLabel('我理解通过质量门后直接发布，问题以新版本修复').check()
+  await briefStudio.getByTestId('text-open-world-creator-brief-confirm').click()
+  await expect(briefStudio.getByText('Brief 已就绪', { exact: true })).toBeVisible({ timeout: 30_000 })
+  await expect(briefStudio).toContainText('已确认 v1')
+  expect(await readProtectedTableCounts(page)).toEqual({
+    ...before,
+    productions: before.productions + 1,
+    briefs: before.briefs + 1,
+    commands: before.commands + 2,
+  })
 })
 
 test('世界引擎 handoff 按用户选择的冻结 Release ID 与完整 Hash 打开同一候选，且保持只读', async ({ page }) => {
@@ -285,7 +305,13 @@ test('世界引擎 handoff 按用户选择的冻结 Release ID 与完整 Hash �
   const continueButton = studio.getByTestId('creator-source-continue')
   await expect(continueButton).toBeEnabled()
   await continueButton.click()
-  await expect(page.getByTestId('text-open-world-creator-boundary'))
-    .toContainText('来源交接已确认')
-  expect(await readProtectedTableCounts(page)).toEqual(before)
+  const briefStudio = page.getByTestId('text-open-world-creator-brief-studio')
+  await expect(briefStudio).toBeVisible({ timeout: 30_000 })
+  await expect(briefStudio.getByText('会谈中', { exact: true })).toBeVisible()
+  await expect(briefStudio).toContainText('主 Agent 只理解你的设定与来源摘要')
+  expect(await readProtectedTableCounts(page)).toEqual({
+    ...before,
+    productions: before.productions + 1,
+    commands: before.commands + 1,
+  })
 })

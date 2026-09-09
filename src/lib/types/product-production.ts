@@ -132,7 +132,9 @@ export function isProductBuildArtifactKindV1(
 
 export const PRODUCT_PRODUCTION_COMMAND_TYPES = [
   "create-intent",
+  "create-text-open-world-intent",
   "save-brief-revision",
+  "save-text-open-world-creator-brief",
   "authorize-start",
   "pause",
   "resume",
@@ -644,11 +646,29 @@ export type ProductProductionCommandV1 =
       userText: string;
     }
   | {
+      type: "create-text-open-world-intent";
+      commandId: string;
+      productionKey: string;
+      productType: "text-open-world";
+      sourceLocator: import("./text-open-world-production").TextOpenWorldCreatorSourceLocatorV1;
+      expectedSourceBindingHash: string;
+      userText: string;
+    }
+  | {
       type: "save-brief-revision";
       commandId: string;
       expectedStateRevision: number;
       parentRevision: number | null;
       brief: ProductProductionBriefV3;
+    }
+  | {
+      type: "save-text-open-world-creator-brief";
+      commandId: string;
+      expectedStateRevision: number;
+      parentRevision: number | null;
+      sourceLocator: import("./text-open-world-production").TextOpenWorldCreatorSourceLocatorV1;
+      candidateRunId: number;
+      brief: import("./text-open-world-production").TextOpenWorldCreatorBriefV1;
     }
   | {
       type: "authorize-start";
@@ -722,6 +742,20 @@ export interface ProductProductionRecordV1 {
   currentBriefRevision: number | null;
   currentBuildNumber: number | null;
   currentProductReleaseId: number | null;
+  /** Pre-authorization creator source locator. Local ids are registry-remapped;
+   * the portable binding/hash prevents an existing productionKey changing source. */
+  creatorSourceKind?: "world-release" | "novel" | null;
+  creatorSourceWorldReleaseId?: number | null;
+  creatorSourceWorkId?: number | null;
+  creatorSourceSelectionMode?: import("./adaptation").AdaptationSourceSelectionV1["mode"] | null;
+  creatorSourceOutlineRootId?: number | null;
+  creatorSourceStartChapterId?: number | null;
+  creatorSourceEndChapterId?: number | null;
+  creatorSourceChapterIdsJson?: string;
+  creatorSourceVersionHash?: string;
+  creatorSourceBoundaryHash?: string;
+  creatorSourceBindingJson?: string;
+  creatorSourceBindingHash?: string;
   lastErrorJson: string;
   createdAt: number;
   updatedAt: number;
@@ -736,8 +770,26 @@ export interface ProductProductionBriefRecordV1 {
   revision: number;
   parentRevision: number | null;
   status: "draft" | "authorized" | "superseded" | "withdrawn";
-  sourceWorldReleaseId: number;
-  sourceWorldContentHash: string;
+  /** Missing on records created before the dual-source creator contract. */
+  briefKind?: "product-production-v3" | "text-open-world-creator-v1";
+  /** Missing on legacy rows, where world-release is implied. */
+  sourceKind?: "world-release" | "novel";
+  sourceWorldReleaseId: number | null;
+  sourceWorldContentHash: string | null;
+  /** Local source locator columns. They are remapped on backup import and are
+   * excluded from the portable Brief/source-plan hashes. */
+  sourceWorkId?: number | null;
+  sourceOutlineRootId?: number | null;
+  sourceStartChapterId?: number | null;
+  sourceEndChapterId?: number | null;
+  sourceChapterIdsJson?: string;
+  sourceSelectionMode?: import("./adaptation").AdaptationSourceSelectionV1["mode"] | null;
+  sourceVersionHash?: string;
+  sourceBoundaryHash?: string;
+  sourceBindingJson?: string;
+  sourceBindingHash?: string;
+  /** Local evidence pointer. The portable Brief carries only the Run contract hash. */
+  candidateRunId?: number | null;
   userIntentSummary: string;
   unresolvedJson: string;
   estimateJson: string;

@@ -217,22 +217,40 @@ export interface ProjectExportData {
     & { _exportId: number; _worldExportId: number; _workExportId: number }
   )[]
   productProductions: (
-    Omit<ProductProductionRecordV1, 'id' | 'projectId' | 'worldId' | 'workId' | 'currentProductReleaseId'>
+    Omit<ProductProductionRecordV1,
+      'id' | 'projectId' | 'worldId' | 'workId' | 'currentProductReleaseId'
+      | 'creatorSourceWorldReleaseId' | 'creatorSourceWorkId' | 'creatorSourceOutlineRootId'
+      | 'creatorSourceStartChapterId' | 'creatorSourceEndChapterId' | 'creatorSourceChapterIdsJson'>
     & {
       _exportId: number
       _worldExportId: number
       _workExportId: number
       _currentProductReleaseExportId?: number | null
+      _creatorSourceWorldReleaseExportId?: number | null
+      _creatorSourceWorkExportId?: number | null
+      _creatorSourceOutlineRootExportId?: number | null
+      _creatorSourceStartChapterExportId?: number | null
+      _creatorSourceEndChapterExportId?: number | null
+      _creatorSourceChapterExportIds?: number[]
     }
   )[]
   productProductionBriefs: (
-    Omit<ProductProductionBriefRecordV1, 'id' | 'projectId' | 'worldId' | 'workId' | 'productionId' | 'sourceWorldReleaseId'>
+    Omit<ProductProductionBriefRecordV1,
+      'id' | 'projectId' | 'worldId' | 'workId' | 'productionId' | 'sourceWorldReleaseId'
+      | 'sourceWorkId' | 'sourceOutlineRootId' | 'sourceStartChapterId' | 'sourceEndChapterId'
+      | 'sourceChapterIdsJson' | 'candidateRunId'>
     & {
       _exportId: number
       _worldExportId: number
       _workExportId: number
       _productionExportId: number
-      _sourceWorldReleaseExportId: number
+      _sourceWorldReleaseExportId?: number | null
+      _sourceWorkExportId?: number | null
+      _sourceOutlineRootExportId?: number | null
+      _sourceStartChapterExportId?: number | null
+      _sourceEndChapterExportId?: number | null
+      _sourceChapterExportIds?: number[]
+      _candidateRunExportId?: number | null
     }
   )[]
   productProductionCommands: (

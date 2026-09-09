@@ -18,7 +18,10 @@ import type { TableSpec } from '../registry/types'
 import type { ProjectExportData } from './json-export'
 import { CURRENT_BACKUP_VERSION } from './backup-trust'
 import { rebindPortableAgentRunContractV1 } from '../agent/run/contract-portability'
-import { finalizeImportedAgentRunLedgersV1 } from '../agent/run/ledger-portability'
+import {
+  finalizeImportedAgentRunLedgersV1,
+  verifyPortableCompletedAgentRunEvidenceV1,
+} from '../agent/run/ledger-portability'
 import {
   generateWorkspaceUid,
   isWorkspaceUid,
@@ -36,6 +39,13 @@ import {
   PRODUCTION_PRODUCT_KINDS_V1,
 } from '../types'
 import { isCompleteCharacterAxes } from '../character/character-axes'
+import { hashCanonicalValue } from '../agent/run/hash'
+import { parseAgentRunContract } from '../agent/run/contract'
+import {
+  parseTextOpenWorldCreatorSourceBindingV1,
+  TEXT_OPEN_WORLD_CREATOR_BRIEF_STEP_ID_V1,
+  verifyTextOpenWorldCreatorBriefV1,
+} from '../open-world/creator-brief-persistence'
 
 function portableRows(value: Record<string, any>, name: string): Record<string, any>[] {
   const rows = value[name]
@@ -78,10 +88,110 @@ async function validateProductArchitectureBackup(value: Record<string, any>): Pr
   const runtimeEvents = portableRows(value, 'productRuntimeEvents')
   const runtimeCheckpoints = portableRows(value, 'productRuntimeCheckpoints')
   const worldReleases = new Map(portableRows(value, 'worldReleases').map(row => [row._exportId, row]))
+  const works = new Map(portableRows(value, 'works').map(row => [row._exportId, row]))
+  const outlineNodes = new Map(portableRows(value, 'outlineNodes').map(row => [row._exportId, row]))
+  const chapters = new Map((Array.isArray(value.chapters) ? value.chapters : [])
+    .map((row: Record<string, any>, index: number) => [index, row] as const))
+  const agentRuns = new Map(portableRows(value, 'agentRuns').map(row => [row._exportId, row]))
+  const agentRunEvents = Array.isArray(value.agentRunEvents)
+    ? value.agentRunEvents.filter((row): row is Record<string, any> => !!row && typeof row === 'object')
+    : []
+
+  const validHash = (candidate: unknown) => typeof candidate === 'string' && /^[a-f0-9]{64}$/.test(candidate)
+  const requirePortableRef = (
+    map: Map<number, Record<string, any>>,
+    candidate: unknown,
+    label: string,
+  ): Record<string, any> => {
+    if (!Number.isInteger(candidate) || !map.has(candidate as number)) {
+      throw new Error(`[deriveImport] v10 ${label} 引用越界`)
+    }
+    return map.get(candidate as number)!
+  }
+  const validateCreatorLocator = (
+    row: Record<string, any>,
+    prefix: 'creatorSource' | 'source',
+    ownerWorkExportId: number,
+  ) => {
+    const field = (name: string) => row[`${prefix}${name}`]
+    const shadow = (name: string) => row[`_${prefix}${name}ExportId`]
+    const shadowList = (name: string) => row[`_${prefix}${name}ExportIds`]
+    const kind = field('Kind')
+    if (!validHash(field('VersionHash')) || !validHash(field('BoundaryHash'))
+      || !validHash(field('BindingHash')) || typeof field('BindingJson') !== 'string') {
+      throw new Error('[deriveImport] v10 Creator 来源 Hash/Binding 无效')
+    }
+    let binding: ReturnType<typeof parseTextOpenWorldCreatorSourceBindingV1>
+    try { binding = parseTextOpenWorldCreatorSourceBindingV1(JSON.parse(field('BindingJson')) as unknown) }
+    catch { throw new Error('[deriveImport] v10 Creator SourceBinding JSON 或协议无效') }
+    if (kind === 'world-release') {
+      const release = requirePortableRef(worldReleases, shadow('WorldRelease'), 'Creator WorldRelease')
+      if (shadow('Work') != null || field('SelectionMode') != null
+        || shadow('OutlineRoot') != null || shadow('StartChapter') != null
+        || shadow('EndChapter') != null || (shadowList('Chapter')?.length ?? 0) !== 0) {
+        throw new Error('[deriveImport] v10 WorldRelease Creator locator 混入小说字段')
+      }
+      if (binding.kind !== 'world-release'
+        || binding.releaseHash !== field('VersionHash')
+        || binding.referenceHash !== field('BoundaryHash')
+        || binding.releaseHash !== release.contentHash
+        || binding.releaseUid !== release.releaseUid
+        || binding.releaseVersion !== release.version
+        || binding.worldCode !== release.sourceWorldCode
+        || row._worldExportId !== release._worldExportId) {
+        throw new Error('[deriveImport] v10 WorldRelease Creator binding、locator 或 owner 不一致')
+      }
+    } else if (kind === 'novel') {
+      const work = requirePortableRef(works, shadow('Work'), 'Creator source Work')
+      if (shadow('Work') !== ownerWorkExportId || shadow('WorldRelease') != null) {
+        throw new Error('[deriveImport] v10 小说 Creator locator owner 或种类冲突')
+      }
+      const mode = field('SelectionMode')
+      const outline = shadow('OutlineRoot')
+      const start = shadow('StartChapter')
+      const end = shadow('EndChapter')
+      const selected = shadowList('Chapter')
+      if (!Array.isArray(selected) || new Set(selected).size !== selected.length
+        || (mode === 'entire-work' && (outline != null || start != null || end != null || selected.length))
+        || (mode === 'outline-subtree' && (!Number.isInteger(outline) || start != null || end != null || selected.length))
+        || (mode === 'chapter-range' && (!Number.isInteger(start) || !Number.isInteger(end) || outline != null || selected.length))
+        || (mode === 'chapters' && (!selected.length || outline != null || start != null || end != null))
+        || !['entire-work', 'outline-subtree', 'chapter-range', 'chapters'].includes(mode)) {
+        throw new Error('[deriveImport] v10 小说 Creator selection locator 非法')
+      }
+      if (outline != null) requirePortableRef(outlineNodes, outline, 'Creator outline')
+      if (start != null) requirePortableRef(chapters, start, 'Creator start chapter')
+      if (end != null) requirePortableRef(chapters, end, 'Creator end chapter')
+      for (const chapter of selected) requirePortableRef(chapters, chapter, 'Creator selected chapter')
+      const referencedOutlines = outline == null ? [] : [requirePortableRef(outlineNodes, outline, 'Creator outline')]
+      const referencedChapters = [start, end, ...selected]
+        .filter((value): value is number => Number.isInteger(value))
+        .map(value => requirePortableRef(chapters, value, 'Creator chapter'))
+      if (binding.kind !== 'novel'
+        || binding.workCode !== work.code
+        || binding.selectionMode !== mode
+        || binding.sourceVersionHash !== field('VersionHash')
+        || binding.sourceBoundaryHash !== field('BoundaryHash')
+        || (mode === 'chapters' && binding.selectedChapterCount !== selected.length)
+        || referencedOutlines.some(candidate => candidate._workOwnerExportId !== ownerWorkExportId)
+        || referencedChapters.some(candidate => candidate._workOwnerExportId !== ownerWorkExportId)) {
+        throw new Error('[deriveImport] v10 小说 Creator binding、locator 或 owner 不一致')
+      }
+    } else {
+      throw new Error('[deriveImport] v10 Creator sourceKind 无效')
+    }
+    return binding
+  }
 
   for (const production of productions.values()) {
     if (!productKinds.has(production.productType) || typeof production.productionKey !== 'string' || !production.productionKey.trim()) {
       throw new Error('[deriveImport] v10 ProductProduction 身份无效')
+    }
+    if (production.creatorSourceKind != null) {
+      const binding = validateCreatorLocator(production, 'creatorSource', production._workExportId)
+      if (await hashCanonicalValue(binding) !== production.creatorSourceBindingHash) {
+        throw new Error('[deriveImport] v10 ProductProduction Creator SourceBinding Hash 不匹配')
+      }
     }
   }
   const sameOwner = (child: Record<string, any>, parent: Record<string, any>, label: string) => {
@@ -91,11 +201,82 @@ async function validateProductArchitectureBackup(value: Record<string, any>): Pr
   }
   for (const brief of briefs) {
     const production = productions.get(brief._productionExportId)
-    const worldRelease = worldReleases.get(brief._sourceWorldReleaseExportId)
-    if (!production || !worldRelease) throw new Error('[deriveImport] v10 ProductBrief 来源引用越界')
+    if (!production) throw new Error('[deriveImport] v10 ProductBrief 生产引用越界')
     sameOwner(brief, production, 'ProductBrief')
-    if (brief._worldExportId !== worldRelease._worldExportId) {
-      throw new Error('[deriveImport] v10 ProductBrief 与 WorldRelease 世界不一致')
+    if (brief.briefKind === 'text-open-world-creator-v1') {
+      if (production.productType !== 'text-open-world'
+        || brief.sourceKind !== production.creatorSourceKind
+        || brief.sourceBindingHash !== production.creatorSourceBindingHash) {
+        throw new Error('[deriveImport] v10 Creator Brief 与 Production 来源不一致')
+      }
+      const binding = validateCreatorLocator(brief, 'source', brief._workExportId)
+      if (await hashCanonicalValue(binding) !== brief.sourceBindingHash) {
+        throw new Error('[deriveImport] v10 Creator Brief SourceBinding Hash 不匹配')
+      }
+      const run = requirePortableRef(agentRuns, brief._candidateRunExportId, 'Creator candidate Run')
+      const creatorBrief = await verifyTextOpenWorldCreatorBriefV1(brief.briefJson)
+      if (run._workOwnerExportId !== brief._workExportId
+        || run._instanceOwnerExportId != null
+        || creatorBrief.productInstanceKey !== production.productionKey
+        || creatorBrief.revision !== brief.revision
+        || creatorBrief.briefHash !== brief.briefHash) {
+        throw new Error('[deriveImport] v10 Creator Brief 行、Production 或候选 Run owner 不一致')
+      }
+      let runContract: ReturnType<typeof parseAgentRunContract>
+      try {
+        runContract = parseAgentRunContract(JSON.parse(run.contractJson))
+      } catch {
+        throw new Error('[deriveImport] v10 Creator candidate RunContract 无效')
+      }
+      if (await hashCanonicalValue(runContract) !== run.contractHash) {
+        throw new Error('[deriveImport] v10 Creator candidate RunContract Hash 不匹配')
+      }
+      const runBindingHash = runContract.runtimeBindingHash
+      if (!validHash(runBindingHash)) {
+        throw new Error('[deriveImport] v10 Creator candidate RunContract 缺少 runtime binding')
+      }
+      const candidateRunEvents = agentRunEvents
+        .filter(event => event._agentRunExportId === brief._candidateRunExportId)
+        .sort((left, right) => left.sequence - right.sequence)
+      if (candidateRunEvents.some(event => event._worldGroupExportId !== run._worldGroupExportId)) {
+        throw new Error('[deriveImport] v10 Creator candidate Run event 世界组与运行不一致')
+      }
+      let completedProof
+      try {
+        completedProof = await verifyPortableCompletedAgentRunEvidenceV1(
+          run,
+          candidateRunEvents,
+        )
+      } catch {
+        throw new Error('[deriveImport] v10 Creator Brief 缺少完整且匹配的候选 Run 终态证据')
+      }
+      const step = completedProof.projection.steps[TEXT_OPEN_WORLD_CREATOR_BRIEF_STEP_ID_V1]
+      const contextManifestHashes = completedProof.events.flatMap(event => (
+        event.type === 'context.assembled'
+          && event.payload.stepId === TEXT_OPEN_WORLD_CREATOR_BRIEF_STEP_ID_V1
+          ? [event.payload.manifestHash]
+          : []
+      ))
+      if (step?.status !== 'succeeded'
+        || step.confirmation !== 'adopt'
+        || step.candidateHash !== creatorBrief.candidateEvidence.candidateHash
+        || step.outputHash !== creatorBrief.briefHash
+        || contextManifestHashes.length !== creatorBrief.candidateEvidence.contextManifestHashes.length
+        || contextManifestHashes.some((hash, index) => (
+          hash !== creatorBrief.candidateEvidence.contextManifestHashes[index]
+        ))) {
+        throw new Error('[deriveImport] v10 Creator Brief 缺少完整且匹配的候选 Run 终态证据')
+      }
+      if (creatorBrief.sourceBindingHash !== brief.sourceBindingHash
+        || creatorBrief.candidateEvidence.runBindingHash !== runBindingHash) {
+        throw new Error('[deriveImport] v10 Creator Brief 与 portable Run 证据不一致')
+      }
+    } else {
+      const worldRelease = worldReleases.get(brief._sourceWorldReleaseExportId)
+      if (!worldRelease) throw new Error('[deriveImport] v10 ProductBrief 来源引用越界')
+      if (brief._worldExportId !== worldRelease._worldExportId) {
+        throw new Error('[deriveImport] v10 ProductBrief 与 WorldRelease 世界不一致')
+      }
     }
   }
   for (const command of commands) {
@@ -899,7 +1080,13 @@ export async function deriveImportProjectJSON(data: ProjectExportData): Promise<
             const portableRefs = pending.stashed[rr.exportAs]
             if (portableRefs == null) continue
             const patch = rr.kind === 'id-array'
-              ? remapPortableIdArray(portableRefs, refMap, rr.storage === 'json-string')
+              ? remapPortableIdArray(
+                  portableRefs,
+                  refMap,
+                  rr.storage === 'json-string',
+                  rr.onUnmapped === 'require',
+                  `${spec.name}.${rr.field}`,
+                )
               : rr.kind === 'scene-character-ids'
                 ? await remapSceneCharacterIndexes((db as any)[spec.name], pending.newId, rr.field, portableRefs, refMap)
                 : rr.kind === 'object-array-id'
@@ -997,10 +1184,22 @@ function remapPortableJsonIdPaths(
   return JSON.stringify(parsed)
 }
 
-function remapPortableIdArray(value: unknown, idMap: Map<number, number>, stringify: boolean): number[] | string {
-  const mapped = Array.isArray(value)
-    ? value.map(index => typeof index === 'number' ? idMap.get(index) : undefined).filter((id): id is number => id != null)
-    : []
+function remapPortableIdArray(
+  value: unknown,
+  idMap: Map<number, number>,
+  stringify: boolean,
+  required = false,
+  label = 'id-array',
+): number[] | string {
+  if (!Array.isArray(value)) {
+    if (required) throw new Error(`[deriveImport] ${label} 必须是便携 ID 数组`)
+    return stringify ? '[]' : []
+  }
+  const candidates = value.map(index => typeof index === 'number' ? idMap.get(index) : undefined)
+  if (required && candidates.some(id => id == null)) {
+    throw new Error(`[deriveImport] ${label} 缺少必填本地映射`)
+  }
+  const mapped = candidates.filter((id): id is number => id != null)
   return stringify ? JSON.stringify(mapped) : mapped
 }
 

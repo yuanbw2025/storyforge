@@ -23,7 +23,7 @@ describe('OPEN-WORLD-5 · creator product entry wiring', () => {
     expect(textGamePage).toContain('const novelScope = novelProject ? scopeForProject(novelProject) : undefined')
     expect(textGamePage).toContain("const isOpenWorldProduction = isOpenWorld && mode === 'production'")
     expect(textGamePage).toContain('if (!isOpenWorldProduction && (!project || !world))')
-    expect(textGamePage).toContain('<TextOpenWorldCreatorStudio')
+    expect(textGamePage).toContain('<TextOpenWorldCreatorWorkflow')
     expect(textGamePage).toContain('worldScope={worldScope ?? null}')
     expect(textGamePage).toContain('novelScope={novelScope ?? null}')
     expect(textGamePage).toContain('initialSourceKind={initialOpenWorldSource}')
