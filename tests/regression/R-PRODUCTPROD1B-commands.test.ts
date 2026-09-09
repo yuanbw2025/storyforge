@@ -1,6 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../../src/lib/db/schema'
-import { executeProductProductionCommand } from '../../src/lib/product-production/commands'
+import {
+  canUpgradeTextAdventureVisualReviewPlanV1,
+  executeProductProductionCommand,
+} from '../../src/lib/product-production/commands'
 import { draftProductProductionBriefV3, suggestProductStartingPoints } from '../../src/lib/product-production/consultation'
 import {
   beginProductProductionEvolutionV1,
@@ -587,6 +590,30 @@ describe('PRODUCTPROD-1B · user command control plane', () => {
       .filter(task => task.kind === 'text-adventure-visual-quality-review-batch').length)
     expect(childBatches.every(task => task.inputArtifactKeys
       .filter(key => /^media\.visual\.\d{3}$/.test(key)).length === 1)).toBe(true)
+  })
+
+  it('逐图 Visual QA 实测输出超过旧冻结预留时允许派生执行计划升级', async () => {
+    const f = await fixture('text-adventure', 'key-scenes')
+    const briefHash = await hashProductProductionValueV2(f.brief)
+    const plan = await createProductProductionPlanV3({ buildNumber: 1, briefHash, brief: f.brief })
+    const batch = plan.tasks.find(task => task.kind === 'text-adventure-visual-quality-review-batch')!
+    expect(batch.inputArtifactKeys.filter(key => /^media\.visual\.\d{3}$/.test(key))).toHaveLength(1)
+    const candidate = {
+      status: 'recovery-required' as const,
+      planJson: canonicalProductProductionJsonV2(plan),
+      failureJson: canonicalProductProductionJsonV2({
+        taskKey: batch.taskKey, code: 'task-executor-failed', attempt: 1,
+        detail: 'task usage 超出 Plan 预算预留:outputTokens=2782/2040',
+      }),
+    }
+    expect(canUpgradeTextAdventureVisualReviewPlanV1(candidate)).toBe(true)
+    expect(canUpgradeTextAdventureVisualReviewPlanV1({
+      ...candidate,
+      failureJson: canonicalProductProductionJsonV2({
+        taskKey: batch.taskKey, code: 'task-executor-failed', attempt: 1,
+        detail: '其他不可重试错误',
+      }),
+    })).toBe(false)
   })
 
   it('视觉合同质量失败可派生 visual-only 恢复 Build，非视觉装配失败不能冒用该通道', async () => {

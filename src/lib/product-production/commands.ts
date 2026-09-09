@@ -107,13 +107,20 @@ export function canUpgradeTextAdventureVisualReviewPlanV1(
 ): boolean {
   if (build.status !== 'recovery-required') return false
   try {
-    const failure = JSON.parse(build.failureJson) as { taskKey?: unknown }
+    const failure = JSON.parse(build.failureJson) as {
+      taskKey?: unknown
+      code?: unknown
+      detail?: unknown
+    }
     if (typeof failure.taskKey !== 'string'
       || !/^media\.visual-quality-review\.batch-\d+$/.test(failure.taskKey)) return false
     const plan = parseProductProductionPlanV3(build.planJson)
-    const task = plan.tasks.find(candidate => candidate.taskKey === failure.taskKey)
+        const task = plan.tasks.find(candidate => candidate.taskKey === failure.taskKey)
     return task?.kind === 'text-adventure-visual-quality-review-batch'
-      && task.inputArtifactKeys.filter(key => /^media\.visual\.\d{3}$/.test(key)).length > 1
+      && (task.inputArtifactKeys.filter(key => /^media\.visual\.\d{3}$/.test(key)).length > 1
+        || failure.code === 'task-executor-failed'
+          && typeof failure.detail === 'string'
+          && failure.detail.includes('task usage 超出 Plan 预算预留'))
   } catch { return false }
 }
 

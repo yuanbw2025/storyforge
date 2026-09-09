@@ -489,9 +489,11 @@ export async function createProductProductionPlanV3(input: {
     // reviewed 200k baseline so hidden reasoning cannot invalidate an otherwise
     // bounded receipt; the Build-lifetime ledger remains the hard ceiling.
     'media.requirements': 0.035,
-    // Each bounded Visual QA Run returns up to four scorecards. The final
-    // whole-set conclusion is assembled deterministically without a model.
-    'media.visual-quality-review': 0.01,
+    // Each bounded Visual QA Run reviews one frozen image. A live repair
+    // review used 2,782 billable output tokens because the provider included
+    // detailed issue evidence and recommendations. Reserve 4,000 at the
+    // reviewed 200k baseline; the Build-lifetime ledger remains authoritative.
+    'media.visual-quality-review': 0.02,
     'qa.playtest-strategy': 0.015,
   }
   // Most model tasks consume a similarly sized context packet. Dialogue and

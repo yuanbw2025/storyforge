@@ -1126,14 +1126,14 @@ export async function beginProductProductionEvolutionV1(input: {
   return { briefRevision }
 }
 
-/** Creates a reviewable Brief that moves a frozen legacy multi-image QA Build to single-image QA. */
+/** Creates a reviewable Brief that upgrades a frozen Visual QA execution plan without changing content or media. */
 export async function upgradeTextAdventureProductionPlanV1(input: {
   scope: WorkspaceScope
   productionId: number
 }): Promise<{ briefRevision: number }> {
   return beginProductProductionEvolutionV1({
     ...input,
-    userText: '将旧版多图一批的 Visual QA 执行计划升级为逐图、逐回执、有界重试的审查计划；继承所有可证明未变化且已签收的正文与媒资，不修改剧情、玩法、世界来源、图片内容或媒资范围。',
+    userText: '升级 Visual QA 执行计划为当前逐图、逐回执、有界重试和实测预算预留；继承所有可证明未变化且已签收的正文与媒资，不修改剧情、玩法、世界来源、图片内容或媒资范围。',
     affectedLanes: ['execution-plan'],
   })
 }
