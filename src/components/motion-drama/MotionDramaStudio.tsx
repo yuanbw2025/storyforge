@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { AlertTriangle, Archive, BookOpenText, Boxes, Check, ChevronRight, Clapperboard, Download, FileJson, Film, Image, Layers3, Library, Loader2, PackageCheck, RefreshCw, Save, ShieldCheck, Sparkles, Upload, X } from 'lucide-react'
+import { AlertTriangle, Archive, BookOpenText, Boxes, Check, ChevronRight, Clapperboard, Copy, Download, FileJson, Film, Image, Layers3, Library, Loader2, PackageCheck, RefreshCw, Save, ShieldCheck, Sparkles, Upload, X } from 'lucide-react'
 import type { MotionDramaPromptPackMaturityV1, MotionDramaPromptStageV1, MotionDramaProviderTargetV1, Project, WorkspaceScope } from '../../lib/types'
 import { useAIConfigStore } from '../../stores/ai-config'
 import { getAIConfigRequiredMessage, isAIConfigReady } from '../../lib/ai/config-readiness'
@@ -19,7 +19,7 @@ import {
   updateMotionDramaReviewIssueStatusV1,
   type MotionDramaStudioSnapshotV1,
 } from '../../lib/motion-drama/service'
-import { compileMotionDramaPromptPackV1, verifyMotionDramaPromptPackV1 } from '../../lib/motion-drama/prompt-pack'
+import { compileMotionDramaPromptPackV1, SEEDANCE_PROVIDER_PROFILE_IDS, verifyMotionDramaPromptPackV1, type MotionDramaPromptPackManifest, type SeedanceProviderProfileId } from '../../lib/motion-drama/prompt-pack'
 import { inspectMotionDramaQualityV1, type MotionDramaQualityReportV1 } from '../../lib/motion-drama/quality'
 import { listMotionDramaReleasesV1, publishMotionDramaReleaseV1, readMotionDramaReleaseManifestV1 } from '../../lib/motion-drama/release'
 import { deleteMotionDramaPromptOverrideV1, getMotionDramaPromptDefinitionV1, listMotionDramaPromptOverridesV1, resolveMotionDramaPromptV1, saveMotionDramaPromptOverrideV1, type ResolvedMotionDramaPromptV1 } from '../../lib/motion-drama/prompts'
@@ -76,6 +76,9 @@ export default function MotionDramaStudio({ scope, project }: Props) {
   const [resolvedPrompt, setResolvedPrompt] = useState<ResolvedMotionDramaPromptV1 | null>(null)
   const [rightsConfirmed, setRightsConfirmed] = useState(false)
   const [previewUrls, setPreviewUrls] = useState<Record<string, string>>({})
+  const [packManifests, setPackManifests] = useState<Partial<Record<MotionDramaProviderTargetV1, MotionDramaPromptPackManifest>>>({})
+  const [copiedShotKey, setCopiedShotKey] = useState<string | null>(null)
+  const [seedanceProfileId, setSeedanceProfileId] = useState<SeedanceProviderProfileId>(SEEDANCE_PROVIDER_PROFILE_IDS[0])
   const activeGeneration = useRef<AbortController | null>(null)
   const aiConfig = useAIConfigStore(state => state.config)
 
@@ -85,6 +88,16 @@ export default function MotionDramaStudio({ scope, project }: Props) {
       inspectMotionDramaQualityV1({ scope, episodeNumber: studio.production.currentEpisodeNumber }),
       listMotionDramaReleasesV1(scope), listMotionDramaPromptOverridesV1(scope),
     ])
+    const latestByProvider = [...studio.promptPacks]
+      .filter(pack => pack.episodeNumber === studio.production.currentEpisodeNumber)
+      .sort((a, b) => b.version - a.version)
+      .filter((pack, index, rows) => rows.findIndex(row => row.provider === pack.provider) === index)
+    const verified = await Promise.all(latestByProvider.map(async pack => {
+      try { return [pack.provider, await verifyMotionDramaPromptPackV1(pack)] as const } catch { return null }
+    }))
+    const manifests = Object.fromEntries(verified.filter((value): value is NonNullable<typeof value> => value !== null)) as Partial<Record<MotionDramaProviderTargetV1, MotionDramaPromptPackManifest>>
+    setPackManifests(manifests)
+    if (manifests.seedance?.version === 2 && SEEDANCE_PROVIDER_PROFILE_IDS.includes(manifests.seedance.providerProfile.id as SeedanceProviderProfileId)) setSeedanceProfileId(manifests.seedance.providerProfile.id as SeedanceProviderProfileId)
     setSnapshot(studio); setQuality(report); setReleases(releaseRows); setOverrides(promptRows)
     if (followPhase) {
       const phaseMap: Record<string, View> = { source: 'source', 'series-bible': 'series-bible', 'asset-bible': 'asset-bible', 'episode-outline': 'episode-outline', script: 'episode-script', storyboard: 'shot-design', 'prompt-pack': 'prompt-pack', review: 'quality-review', 'release-ready': 'quality-review', complete: 'quality-review' }
@@ -179,7 +192,7 @@ export default function MotionDramaStudio({ scope, project }: Props) {
 
   const compilePack = (provider: MotionDramaProviderTargetV1) => {
     if (!snapshot) return
-    void act(() => compileMotionDramaPromptPackV1({ scope, episodeNumber: snapshot.production.currentEpisodeNumber, provider, expectedProductionRevision: snapshot.production.revision }))
+    void act(() => compileMotionDramaPromptPackV1({ scope, episodeNumber: snapshot.production.currentEpisodeNumber, provider, providerProfileId: provider === 'seedance' ? seedanceProfileId : undefined, expectedProductionRevision: snapshot.production.revision }))
   }
 
   const exportLatestPack = async (provider: MotionDramaProviderTargetV1) => {
@@ -187,6 +200,14 @@ export default function MotionDramaStudio({ scope, project }: Props) {
     const rows = snapshot.promptPacks.filter(pack => pack.episodeNumber === snapshot.production.currentEpisodeNumber && pack.provider === provider).sort((a, b) => b.version - a.version)
     if (!rows[0]) { setError(`请先编译 ${provider} 适配包`); return }
     try { const manifest = await verifyMotionDramaPromptPackV1(rows[0]); download(`${safeName(snapshot.work.title)}-EP${snapshot.production.currentEpisodeNumber}-${provider}-v${rows[0].version}.json`, JSON.stringify(manifest, null, 2)) } catch (cause) { setError(cause instanceof Error ? cause.message : '导出失败') }
+  }
+
+  const copyProviderPrompt = async (shotKey: string, content: string) => {
+    try {
+      await navigator.clipboard.writeText(content)
+      setCopiedShotKey(shotKey)
+      window.setTimeout(() => setCopiedShotKey(current => current === shotKey ? null : current), 1_500)
+    } catch { setError('复制失败，请展开提示词后手动复制') }
   }
 
   const publish = (tier: MotionDramaPromptPackMaturityV1) => {
@@ -206,6 +227,7 @@ export default function MotionDramaStudio({ scope, project }: Props) {
   const scenes = snapshot?.scenes.filter(row => row.episodeNumber === snapshot.production.currentEpisodeNumber) ?? []
   const shots = snapshot?.shots.filter(row => row.episodeNumber === snapshot.production.currentEpisodeNumber) ?? []
   const targetSpec = snapshot?.adaptation.targetSpec as import('../../lib/types').MotionDramaTargetSpecV1 | undefined
+  const seedanceManifest = packManifests.seedance?.version === 2 ? packManifests.seedance : null
   const sourceReady = snapshot?.adaptation.sourceCoverage === 'full-text'
   const stageDone = useMemo(() => new Set<View>([
     'source', ...(snapshot?.seriesBibleRecord ? ['series-bible' as View] : []), ...(snapshot?.assets.length ? ['asset-bible' as View] : []), ...(episode ? ['episode-outline' as View] : []), ...(scenes.length ? ['episode-script' as View] : []), ...(shots.length ? ['shot-design' as View] : []), ...(snapshot?.promptPacks.some(row => row.episodeNumber === snapshot.production.currentEpisodeNumber) ? ['prompt-pack' as View] : []), ...(quality?.ready ? ['quality-review' as View] : []),
@@ -244,9 +266,31 @@ export default function MotionDramaStudio({ scope, project }: Props) {
 
         {view === 'shot-design' && (shots.length ? <section className="motion-storyboard">{shots.map(shot => { const frame = snapshot.shotReferences.find(reference => reference.shotKey === shot.stableKey && reference.role === 'start-frame' && reference.selected); return <article key={shot.stableKey}><div className={`motion-frame ratio-${targetSpec?.aspectRatio.replace(':', '-')}`}>{frame && previewUrls[frame.stableKey] ? <img src={previewUrls[frame.stableKey]} alt={`镜头 ${shot.shotNumber} 起始帧`} /> : <><span>SHOT {String(shot.shotNumber).padStart(2, '0')}</span><Clapperboard /></>}<div><em>{shot.shotSize}</em><em>{shot.cameraMovement}</em><strong>{shot.targetSeconds}s</strong></div></div><div className="motion-shot-copy"><small>{shot.sceneKey} · {shot.narrativeFunction}</small><h4>{shot.visibleAction}</h4><p>{shot.composition}</p><div className="motion-shot-subjects">{shot.subjectKeys.map(key => <span key={key}>{key}</span>)}</div><details><summary>Image Prompt IR</summary><p>{shot.imagePrompt || '尚未生成'}</p></details><details><summary>Video Prompt IR</summary><p>{shot.videoPrompt || '尚未生成'}</p></details><label className={rightsConfirmed ? 'motion-upload' : 'motion-upload disabled'}><Image />上传起始帧<input type="file" accept="image/png,image/jpeg,image/webp" disabled={!rightsConfirmed || busy} onChange={event => uploadFrame(shot.stableKey, event.target.files?.[0])} /></label></div></article> })}</section> : <EmptyStage icon={Film} title="把剧本拆成逐镜分镜" text="每镜一个视觉职责、一段连续动作；再分别生成关键帧 IR 与运动 IR。" />)}
 
-        {view === 'prompt-pack' && <section className="motion-pack-stage"><div className="motion-ir-switch"><button className={promptKind === 'image' ? 'active' : ''} onClick={() => setPromptKind('image')}>1 · Image Prompt IR</button><button className={promptKind === 'video' ? 'active' : ''} onClick={() => setPromptKind('video')}>2 · Video Prompt IR</button><span>{shots.filter(shot => promptKind === 'image' ? shot.imagePrompt : shot.videoPrompt).length}/{shots.length} 镜完成</span></div><p className="motion-pack-intro">先确认厂商中立的双 IR，再确定性编译工具差异。适配包不会调用或冒充目标视频工具。</p><div className="motion-provider-grid">{(targetSpec?.providerTargets ?? []).map(provider => { const pack = snapshot.promptPacks.filter(row => row.episodeNumber === snapshot.production.currentEpisodeNumber && row.provider === provider).sort((a, b) => b.version - a.version)[0]; return <article key={provider}><span>{provider.toUpperCase()}</span><h4>{provider === 'seedance' ? '多模态时间序列包' : provider === 'runway' ? '参考图 + 运动指令包' : provider === 'ltx' ? 'Elements + Storyboard 包' : '厂商中立逐镜包'}</h4><p>{pack ? `v${pack.version} · ${pack.maturity === 'reference-ready' ? '参考物料就绪' : '仅提示词'}` : '尚未编译当前集'}</p><div><button onClick={() => compilePack(provider)} disabled={busy || shots.some(shot => !shot.imagePrompt || !shot.videoPrompt)}><RefreshCw />{pack ? '重新编译' : '编译适配包'}</button><button onClick={() => void exportLatestPack(provider)} disabled={!pack}><Download />导出</button></div></article> })}</div></section>}
+        {view === 'prompt-pack' && <section className="motion-pack-stage">
+          <div className="motion-ir-switch"><button className={promptKind === 'image' ? 'active' : ''} onClick={() => setPromptKind('image')}>1 · Image Prompt IR</button><button className={promptKind === 'video' ? 'active' : ''} onClick={() => setPromptKind('video')}>2 · Video Prompt IR</button><span>{shots.filter(shot => promptKind === 'image' ? shot.imagePrompt : shot.videoPrompt).length}/{shots.length} 镜完成</span></div>
+          <p className="motion-pack-intro">先确认厂商中立的双 IR，再编译上传槽位、时间轴、镜间交接、候选验收与定点返修。适配包不会调用或冒充目标视频工具。</p>
+          <div className="motion-provider-grid">{(targetSpec?.providerTargets ?? []).map(provider => {
+            const pack = snapshot.promptPacks.filter(row => row.episodeNumber === snapshot.production.currentEpisodeNumber && row.provider === provider).sort((a, b) => b.version - a.version)[0]
+            const manifest = packManifests[provider]
+            const direct = manifest?.version === 2 && manifest.directUseReady
+            return <article key={provider}><span>{provider.toUpperCase()}</span><h4>{provider === 'seedance' ? '生产执行包 v2' : provider === 'runway' ? '参考图 + 运动指令包' : provider === 'ltx' ? 'Elements + Storyboard 包' : '厂商中立逐镜包'}</h4><p>{pack ? `v${pack.version} · ${direct ? '可直接投喂' : pack.maturity === 'reference-ready' ? '参考物料就绪' : '提示词与待补物料'}` : '尚未编译当前集'}</p>{provider === 'seedance' && <select aria-label="Seedance 能力画像" value={seedanceProfileId} onChange={event => setSeedanceProfileId(event.target.value as SeedanceProviderProfileId)}><option value="seedance-2.5-2026-07">Seedance 2.5 · 30s / 30图</option><option value="seedance-2.0-2026-02">Seedance 2.0 兼容 · 15s / 9图</option></select>}<div><button onClick={() => compilePack(provider)} disabled={busy || shots.some(shot => !shot.imagePrompt || !shot.videoPrompt)}><RefreshCw />{pack ? '重新编译' : '编译适配包'}</button><button onClick={() => void exportLatestPack(provider)} disabled={!pack}><Download />导出</button></div></article>
+          })}</div>
 
-        {view === 'quality-review' && <section className="motion-review"><div className={`motion-quality-score ${quality?.ready ? 'ready' : ''}`}><div><small>DELIVERY READINESS</small><strong>{Math.round((quality?.metrics.promptCoverage ?? 0) * 100)}%</strong></div><dl><div><dt>场景</dt><dd>{quality?.metrics.sceneCount ?? 0}</dd></div><div><dt>镜头</dt><dd>{quality?.metrics.shotCount ?? 0}</dd></div><div><dt>时长</dt><dd>{quality?.metrics.totalSeconds ?? 0}s</dd></div><div><dt>适配包</dt><dd>{quality?.metrics.providerPackCount ?? 0}</dd></div></dl><span>{quality?.achievableTier === 'reference-ready' ? 'REFERENCE READY' : 'PROMPT ONLY'}</span></div>{quality?.blockers.length ? <div className="motion-issues blockers"><h4>发布阻塞</h4>{quality.blockers.map(item => <p key={item}><AlertTriangle />{item}</p>)}</div> : <div className="motion-quality-pass"><PackageCheck /><div><strong>当前集通过确定性质量门</strong><p>仍建议处理 major 警告并在目标工具内进行逐镜试片。</p></div></div>}{snapshot.reviewIssues.filter(issue => issue.episodeNumber === snapshot.production.currentEpisodeNumber).length > 0 && <div className="motion-issue-list">{snapshot.reviewIssues.filter(issue => issue.episodeNumber === snapshot.production.currentEpisodeNumber).map(issue => <article key={issue.stableKey} className={issue.severity}><span>{issue.severity} · {issue.category}</span><h4>{issue.problem}</h4><p>{issue.evidence}</p><em>{issue.suggestion}</em>{issue.status === 'open' && <div><button onClick={() => void act(() => updateMotionDramaReviewIssueStatusV1({ scope, issueId: issue.id!, status: 'resolved', expectedProductionRevision: snapshot.production.revision }))}>标记已解决</button><button onClick={() => void act(() => updateMotionDramaReviewIssueStatusV1({ scope, issueId: issue.id!, status: 'dismissed', expectedProductionRevision: snapshot.production.revision }))}>忽略</button></div>}</article>)}</div>}<div className="motion-release-actions"><button className="motion-primary" disabled={!quality?.ready || busy} onClick={() => publish('prompt-only')}><PackageCheck />发布 Prompt-only 包</button><button className="motion-primary accent" disabled={!quality?.ready || quality?.achievableTier !== 'reference-ready' || busy} onClick={() => publish('reference-ready')}><Image />发布 Reference-ready 包</button></div>{releases.length > 0 && <div className="motion-releases"><h4>不可变发布</h4>{releases.map(release => <button key={release.id} onClick={() => void exportRelease(release)}><FileJson /><span><strong>v{release.version} · {release.label}</strong><small>{new Date(release.createdAt).toLocaleString()}</small></span><Download /></button>)}</div>}</section>}
+          {seedanceManifest && <section className="motion-execution-pack" aria-label="Seedance 生产执行包">
+            <header><div><span>SEEDANCE EXECUTION PACK · SCHEMA V2</span><h4>逐镜生成、选片与交接运行单</h4><p>{seedanceManifest.providerProfile.label} · {seedanceManifest.target.aspectRatio} · 最长 {seedanceManifest.providerProfile.limits.maxDurationSeconds}s / 次 · 最多 {seedanceManifest.providerProfile.limits.maxImages} 图 + {seedanceManifest.providerProfile.limits.maxAudios} 音频</p></div><strong className={seedanceManifest.directUseReady ? 'ready' : ''}>{seedanceManifest.directUseReady ? '可直接投喂' : '待补参考物料'}</strong></header>
+            <ol className="motion-run-checklist">{seedanceManifest.executionPlan.operatorChecklist.map(item => <li key={item}>{item}</li>)}</ol>
+            <div className="motion-execution-shots">{seedanceManifest.shots.map((shot, index) => <article key={shot.shotKey}>
+              <header><span>SHOT {String(index + 1).padStart(2, '0')}</span><div><strong>{shot.durationSeconds}s · {shot.generation.candidateCount} 个候选</strong><small>{shot.continuity.strategy} · {shot.generation.mode}</small></div><em className={shot.directUseReady ? 'ready' : ''}>{shot.directUseReady ? 'READY' : 'MATERIALS PENDING'}</em></header>
+              <div className="motion-slot-map"><strong>上传顺序</strong>{shot.providerInputs.map(input => <div key={input.slot} className={input.ready ? 'ready' : ''}><span>{input.uploadOrder}</span><b>{input.slot}</b><p>{input.purpose}</p><em>{input.ready ? '已就绪' : '待补'}</em></div>)}</div>
+              <div className="motion-handoff"><strong>镜间交接</strong><p>{shot.continuity.operatorInstruction}</p><small>{shot.continuity.transition}</small></div>
+              <details open><summary>可直接复制的 Seedance 提示词 <button aria-label={`复制镜头 ${index + 1} Seedance 提示词`} onClick={event => { event.preventDefault(); void copyProviderPrompt(shot.shotKey, shot.providerPrompt) }}><Copy />{copiedShotKey === shot.shotKey ? '已复制' : '复制'}</button></summary><pre>{shot.providerPrompt}</pre></details>
+              <details><summary>候选验收清单</summary><ul>{shot.generation.selectionChecks.map(check => <li key={check}>{check}</li>)}</ul></details>
+              <details><summary>定点返修指令</summary><dl><div><dt>身份漂移</dt><dd>{shot.retryPrompts.identityDrift}</dd></div><div><dt>动作失败</dt><dd>{shot.retryPrompts.motionFailure}</dd></div><div><dt>衔接失败</dt><dd>{shot.retryPrompts.continuityFailure}</dd></div></dl></details>
+            </article>)}</div>
+          </section>}
+        </section>}
+
+        {view === 'quality-review' && <section className="motion-review"><div className={`motion-quality-score ${quality?.ready ? 'ready' : ''}`}><div><small>DELIVERY READINESS</small><strong>{Math.round((quality?.metrics.promptCoverage ?? 0) * 100)}%</strong></div><dl><div><dt>场景</dt><dd>{quality?.metrics.sceneCount ?? 0}</dd></div><div><dt>镜头</dt><dd>{quality?.metrics.shotCount ?? 0}</dd></div><div><dt>时长</dt><dd>{quality?.metrics.totalSeconds ?? 0}s</dd></div><div><dt>适配包</dt><dd>{quality?.metrics.providerPackCount ?? 0}</dd></div><div><dt>可直投</dt><dd>{quality?.metrics.directUseReadyProviderCount ?? 0}</dd></div></dl><span>{quality?.achievableTier === 'reference-ready' ? 'REFERENCE READY' : 'PROMPT ONLY'}</span></div>{quality?.blockers.length ? <div className="motion-issues blockers"><h4>发布阻塞</h4>{quality.blockers.map(item => <p key={item}><AlertTriangle />{item}</p>)}</div> : <div className="motion-quality-pass"><PackageCheck /><div><strong>当前集通过确定性质量门</strong><p>工具适配包已通过结构与能力校验；仍需在目标工具内逐镜生成、选片和定点返修。</p></div></div>}{snapshot.reviewIssues.filter(issue => issue.episodeNumber === snapshot.production.currentEpisodeNumber).length > 0 && <div className="motion-issue-list">{snapshot.reviewIssues.filter(issue => issue.episodeNumber === snapshot.production.currentEpisodeNumber).map(issue => <article key={issue.stableKey} className={issue.severity}><span>{issue.severity} · {issue.category}</span><h4>{issue.problem}</h4><p>{issue.evidence}</p><em>{issue.suggestion}</em>{issue.status === 'open' && <div><button onClick={() => void act(() => updateMotionDramaReviewIssueStatusV1({ scope, issueId: issue.id!, status: 'resolved', expectedProductionRevision: snapshot.production.revision }))}>标记已解决</button><button onClick={() => void act(() => updateMotionDramaReviewIssueStatusV1({ scope, issueId: issue.id!, status: 'dismissed', expectedProductionRevision: snapshot.production.revision }))}>忽略</button></div>}</article>)}</div>}<div className="motion-release-actions"><button className="motion-primary" disabled={!quality?.ready || busy} onClick={() => publish('prompt-only')}><PackageCheck />发布 Prompt-only 包</button><button className="motion-primary accent" disabled={!quality?.ready || quality?.achievableTier !== 'reference-ready' || busy} onClick={() => publish('reference-ready')}><Image />发布 Reference-ready 包</button></div>{releases.length > 0 && <div className="motion-releases"><h4>不可变发布</h4>{releases.map(release => <button key={release.id} onClick={() => void exportRelease(release)}><FileJson /><span><strong>v{release.version} · {release.label}</strong><small>{new Date(release.createdAt).toLocaleString()}</small></span><Download /></button>)}</div>}</section>}
 
         {currentStage && <section className="motion-author-note"><label>给当前岗位的附加要求<textarea value={authorInstruction} onChange={event => setAuthorInstruction(event.target.value)} placeholder="例如：保持克制写实；第 3 个节拍必须用无对白动作完成。留空则使用提示词库。" /></label><button onClick={() => { setPromptEditorStage(currentStage); setShowPromptLibrary(true) }}><Library />查看当前提示词</button></section>}
       </main>

@@ -9,7 +9,7 @@ export interface MotionDramaQualityReportV1 {
   achievableTier: MotionDramaPromptPackMaturityV1
   blockers: string[]
   warnings: string[]
-  metrics: { sceneCount: number; shotCount: number; totalSeconds: number; promptCoverage: number; openCritical: number; openMajor: number; providerPackCount: number }
+  metrics: { sceneCount: number; shotCount: number; totalSeconds: number; promptCoverage: number; openCritical: number; openMajor: number; providerPackCount: number; directUseReadyProviderCount: number }
 }
 
 export async function inspectMotionDramaQualityV1(input: { scope: WorkspaceScope; episodeNumber: number; providers?: MotionDramaProviderTargetV1[] }): Promise<MotionDramaQualityReportV1> {
@@ -47,14 +47,20 @@ export async function inspectMotionDramaQualityV1(input: { scope: WorkspaceScope
   const openCritical = issues.filter(issue => issue.severity === 'critical').length; const openMajor = issues.filter(issue => issue.severity === 'major').length
   if (openCritical) blockers.push(`仍有 ${openCritical} 个 critical 审查问题`)
   if (openMajor) warnings.push(`仍有 ${openMajor} 个 major 审查问题，建议发布前处理`)
+  let directUseReadyProviderCount = 0
   for (const provider of providers) {
     const latest = packs.filter(pack => pack.provider === provider).sort((a, b) => b.version - a.version)[0]
     if (!latest) blockers.push(`缺少 ${provider} 适配包`)
     else {
-      try { await verifyMotionDramaPromptPackV1(latest) } catch { blockers.push(`${provider} 适配包损坏`) }
+      try {
+        const manifest = await verifyMotionDramaPromptPackV1(latest)
+        if (manifest.version !== 2) blockers.push(`${provider} 适配包仍是旧版，请重新编译执行包`)
+        else if (manifest.directUseReady) directUseReadyProviderCount += 1
+        else if (provider === 'seedance') warnings.push('Seedance 执行包尚未达到可直接投喂：请补齐逐镜上传物料并重新编译')
+      } catch { blockers.push(`${provider} 适配包损坏`) }
     }
   }
   const maturity = inspectMotionDramaPackMaturityV1({ subjects, versions, shots, references })
   warnings.push(...maturity.missing)
-  return { episodeNumber: input.episodeNumber, ready: blockers.length === 0, achievableTier: maturity.maturity, blockers, warnings, metrics: { sceneCount: scenes.length, shotCount: shots.length, totalSeconds, promptCoverage: shots.length ? prompted / shots.length : 0, openCritical, openMajor, providerPackCount: packs.length } }
+  return { episodeNumber: input.episodeNumber, ready: blockers.length === 0, achievableTier: maturity.maturity, blockers, warnings, metrics: { sceneCount: scenes.length, shotCount: shots.length, totalSeconds, promptCoverage: shots.length ? prompted / shots.length : 0, openCritical, openMajor, providerPackCount: packs.length, directUseReadyProviderCount } }
 }

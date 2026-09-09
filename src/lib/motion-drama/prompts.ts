@@ -62,16 +62,19 @@ export const MOTION_DRAMA_PROMPT_LIBRARY_V1: Readonly<Record<MotionDramaPromptSt
     '一个 shot 只承载一个清楚的视觉意图和一段连续动作。用景别、机位、构图、表演、光线、镜头运动与转场共同服务 narrativeFunction。',
     '镜头通常 2～8 秒；复杂动作拆镜，不在一个短镜头中堆叠多次换景、多人连续事件或不可能的摄影机路径。静态对白也要用反应、遮挡、前后景和关系距离制造变化。',
     '保持轴线、视线、动作方向、人物站位、服装、道具和光源连续。subjectKeys 必须绑定物料库；sceneKey/sourceUnitKeys 必须逐字引用当前集合法 key。',
+    'transitionIn/transitionOut 必须写可执行的剪辑或接续意图：同场连续动作说明上一镜停在哪里、本镜从哪里接；匹配剪辑说明匹配形状、动作方向或注视点；硬切说明允许改变什么。禁止只写“顺滑转场”。',
     '本阶段 imagePrompt/videoPrompt 等 IR 字段先输出空字符串，避免把镜头设计和厂商提示词混成一步。shot order 从 0 连续，shotNumber 从 1 连续。',
   ].join('\n')),
   'image-prompts': define('image-prompts', '画面提示词 IR', '视觉开发 / 关键帧提示词设计师', '为每镜建立一致的起始、关键和结束画面', [
     '为当前集每个已确认镜头写厂商中立 Image Prompt IR。顺序建议：作品画风与媒介 → 角色/服装/场景/道具身份锁 → 精确时刻与可见动作 → 表情姿态 → 景别机位构图 → 光线色彩材质 → 画幅与质量。',
     'imagePrompt 描述代表性定帧；firstFramePrompt、keyFramePrompt、lastFramePrompt 分别描述动作起点、决定性中间状态和动作终点，三帧应形成可插值的连续变化，不是三个不同场景。',
+    '相邻同场镜头要把上一镜 lastFramePrompt 与下一镜 firstFramePrompt 对读：共同角色的屏幕左右、面朝方向、视线目标、持物手、伤痕、服装状态、主光方向和未完成动作必须能接上；需要改变时只能通过明确转场发生。',
     'negativeImagePrompt 排除身份漂移、额外肢体、服装变化、空间翻转、文字水印、错误人数、糊脸和风格漂移，不要堆无关质量词。expectedRevision 必须等于上下文镜头 revision。',
   ].join('\n')),
   'video-prompts': define('video-prompts', '视频提示词 IR', '动画导演 / 运动提示词设计师', '把分镜变成动作、摄影机、节奏、声音都明确的视频指令', [
     '为当前集每个已确认镜头写厂商中立 Video Prompt IR。优先描述“初始状态 → 主体动作 → 环境响应 → 摄影机运动 → 结束状态”，避免重新描写参考图已经锁定的静态身份。',
     '动作要物理可执行，有速度、幅度、方向和停点；摄影机只保留一个主要运动，必要时加一个轻微次运动；写清谁不动以及背景应保持什么。',
+    '镜头终点必须是可供下一镜接续或剪切的稳定状态；同场动作接续不得在下一镜重复起步、回弹或反向。不要把多个镜头、多个场景或相互矛盾的景别变化塞进一个视频提示词。',
     '对白镜头描述口型/呼吸/视线和微表演；动作镜头描述重心、惯性、碰撞与环境反馈。negativeVideoPrompt 排除抽搐、融化、身份切换、穿模、瞬移、镜头乱摆、口型漂移和循环动作。expectedRevision 必须匹配。',
   ].join('\n')),
   'quality-review': define('quality-review', '生产审查', '总导演 / 连续性主管 / AI 视频技术导演', '在导出前发现故事、连续性、可生成性与权利风险', [

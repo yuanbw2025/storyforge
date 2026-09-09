@@ -8,7 +8,7 @@ import {
   assertMotionDramaSeriesBibleV1,
   assertMotionDramaShotCandidateV1,
 } from './contracts'
-import { assertMotionDramaPromptPackManifestV1 } from './prompt-pack-contracts'
+import { assertMotionDramaPromptPackManifest } from './prompt-pack-contracts'
 
 const PROVIDERS = new Set(['seedance', 'runway', 'ltx', 'generic'])
 
@@ -84,8 +84,8 @@ export function assertMotionDramaReleaseManifestV1(value: unknown, workCode: str
 
   const packs = array(manifest.promptPacks, 'promptPacks'); const packPairs = new Set<string>()
   for (const pack of packs) {
-    assertMotionDramaPromptPackManifestV1(pack)
-    if (pack.schema !== 'storyforge.motion-drama-prompt-pack' || pack.version !== 1 || !PROVIDERS.has(pack.provider) || !episodeNumbers.has(pack.episodeNumber) || !['prompt-only', 'reference-ready'].includes(pack.maturity) || !Array.isArray(pack.shots)) throw new Error('[motion-drama-release] Prompt Pack 身份无效')
+    assertMotionDramaPromptPackManifest(pack)
+    if (pack.schema !== 'storyforge.motion-drama-prompt-pack' || ![1, 2].includes(pack.version) || !PROVIDERS.has(pack.provider) || !episodeNumbers.has(pack.episodeNumber) || !['prompt-only', 'reference-ready'].includes(pack.maturity) || !Array.isArray(pack.shots)) throw new Error('[motion-drama-release] Prompt Pack 身份无效')
     const pair = `${pack.episodeNumber}:${pack.provider}`
     if (packPairs.has(pair) || pack.shots.length !== shots.filter(shot => shot.episodeNumber === pack.episodeNumber).length || pack.shots.some((shot: any) => !shotKeys.has(shot.shotKey) || typeof shot.providerPrompt !== 'string' || !shot.providerPrompt.trim())) throw new Error('[motion-drama-release] Prompt Pack 覆盖、镜头或工具提示词无效')
     packPairs.add(pair)

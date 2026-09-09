@@ -30,6 +30,7 @@ import {
   compileMotionDramaPromptPackV1,
   verifyMotionDramaPromptPackV1,
 } from '../../src/lib/motion-drama/prompt-pack'
+import { assertMotionDramaPromptPackManifestV2 } from '../../src/lib/motion-drama/prompt-pack-contracts'
 import { inspectMotionDramaQualityV1 } from '../../src/lib/motion-drama/quality'
 import {
   publishMotionDramaReleaseV1,
@@ -125,6 +126,11 @@ function assetBible(sourceUnitKey: string) {
     appearance: '中低音区，气息轻，咬字清楚。', palette: [], materials: [], continuityLocks: ['普通语速', '情绪不外放'], prohibitedChanges: ['夸张哭腔', '卡通幼态'],
     basePrompt: '28 岁女性，中低音区，轻气声，普通话，克制而警觉。', negativePrompt: '播音腔，过度表演，机械音，背景噪声。',
     referenceBrief: '同一段中性、怀疑、恐惧三种强度的干声试听。', sourceUnitKeys: [sourceUnitKey],
+  }, {
+    stableKey: 'voice.announcer', kind: 'voice', label: '站内广播音色', identity: '遥远、失真的中性广播声。',
+    appearance: '窄频、长混响。', palette: [], materials: [], continuityLocks: ['距离感固定'], prohibitedChanges: ['贴耳近讲'],
+    basePrompt: '废弃地铁站的中性广播声。', negativePrompt: '播音棚干声。',
+    referenceBrief: '两句站内广播试听；未出场时不得绑定给角色对白。', sourceUnitKeys: [sourceUnitKey],
   }, {
     stableKey: 'sound.ticket-punch', kind: 'sound', label: '检票钳触发音', identity: '清脆金属咔哒后拖出极轻的低频回声。',
     appearance: '短促近场金属瞬态与远处隧道低频。', palette: [], materials: ['金属', '隧道混响'], continuityLocks: ['每次能力触发使用相同音色'], prohibitedChanges: ['喜剧卡通音效'],
@@ -233,7 +239,30 @@ describe('MOTION-DRAMA-1 · independent preproduction pipeline', () => {
 
     studio = await loadMotionDramaStudioV1(item.scope)
     const firstPack = await compileMotionDramaPromptPackV1({ scope: item.scope, episodeNumber: 1, provider: 'seedance', expectedProductionRevision: studio.production.revision })
-    expect((await verifyMotionDramaPromptPackV1(firstPack)).shots[0].providerPrompt).toContain('0.0s')
+    const firstManifest = await verifyMotionDramaPromptPackV1(firstPack)
+    expect(firstManifest.version).toBe(2)
+    if (firstManifest.version !== 2) throw new Error('expected v2 prompt pack')
+    expect(firstManifest).toMatchObject({ directUseReady: false, providerProfile: { id: 'seedance-2.5-2026-07', limits: { maxDurationSeconds: 30, maxImages: 30, maxVideos: 10, maxAudios: 10 } } })
+    expect(firstManifest.executionPlan).toMatchObject({ generationUnit: 'one-shot-per-generation', selectBeforeNextShot: true, defaultCandidateCount: 3 })
+    expect(firstManifest.shots[0].providerInputs.map(input => input.slot)).toEqual(['图片1', '图片2', '音频1', '音频2'])
+    expect(firstManifest.references.some(reference => reference.subjectKey === 'voice.announcer')).toBe(false)
+    expect(firstManifest.shots[0].providerInputs.find(input => input.mediaType === 'audio')?.purpose).toContain('林岚音色')
+    expect(firstManifest.shots[0].providerInputs.some(input => !input.ready)).toBe(true)
+    expect(firstManifest.shots[0].providerPrompt).toContain('【上传槽位与用途】')
+    expect(firstManifest.shots[0].providerPrompt).toContain('[0.0s-')
+    expect(firstManifest.shots[1].continuity).toMatchObject({ previousShotKey: 'episode.1.shot.1', strategy: 'match-cut' })
+    expect(firstManifest.shots[1].continuity.operatorInstruction).toContain('剪辑点')
+    expect(firstManifest.shots[0].retryPrompts.identityDrift).toContain('只返修身份连续性')
+    studio = await loadMotionDramaStudioV1(item.scope)
+    const compatibilityPack = await compileMotionDramaPromptPackV1({ scope: item.scope, episodeNumber: 1, provider: 'seedance', providerProfileId: 'seedance-2.0-2026-02', expectedProductionRevision: studio.production.revision })
+    const compatibilityManifest = await verifyMotionDramaPromptPackV1(compatibilityPack)
+    expect(compatibilityManifest.version).toBe(2)
+    if (compatibilityManifest.version !== 2) throw new Error('expected v2 compatibility pack')
+    expect(compatibilityManifest.providerProfile).toMatchObject({ id: 'seedance-2.0-2026-02', limits: { maxDurationSeconds: 15, maxImages: 9, maxVideos: 3, maxAudios: 3 } })
+    const overLimit = structuredClone(compatibilityManifest)
+    overLimit.shots[0].durationSeconds = 16
+    overLimit.shots[0].generation.durationSeconds = 16
+    expect(() => assertMotionDramaPromptPackManifestV2(overLimit)).toThrow('超出 providerProfile 能力')
     await saveMotionDramaPromptOverrideV1({ scope: item.scope, stage: 'video-prompts', overrideScope: 'work', episodeNumber: 1, instruction: '动作必须有起点、方向、速度与停点。' })
     await saveMotionDramaPromptOverrideV1({ scope: item.scope, stage: 'video-prompts', overrideScope: 'episode', episodeNumber: 1, instruction: '本集所有推进镜头保持缓慢压迫感。' })
     expect(await db.motionDramaPromptPacks.count()).toBe(0)
@@ -267,11 +296,18 @@ describe('MOTION-DRAMA-1 · independent preproduction pipeline', () => {
       const pack = await compileMotionDramaPromptPackV1({ scope: item.scope, episodeNumber: 1, provider, expectedProductionRevision: studio.production.revision })
       expect(pack.maturity).toBe('reference-ready')
       const manifest = await verifyMotionDramaPromptPackV1(pack)
+      expect(manifest.version).toBe(2)
+      if (manifest.version !== 2) throw new Error('expected v2 prompt pack')
       expect(manifest.references.length).toBeGreaterThanOrEqual(5)
       expect(manifest.references.filter(reference => reference.mimeType === 'audio/wav')).toHaveLength(2)
+      expect(manifest.directUseReady).toBe(provider === 'seedance')
+      if (provider === 'seedance') {
+        expect(manifest.shots.every(shot => shot.directUseReady && shot.providerInputs.every(input => input.ready))).toBe(true)
+        expect(manifest.shots[0].providerPrompt).toContain('@图片1：锁定镜头起始构图')
+      }
     }
     quality = await inspectMotionDramaQualityV1({ scope: item.scope, episodeNumber: 1, providers: [...providers] })
-    expect(quality).toMatchObject({ ready: true, achievableTier: 'reference-ready' })
+    expect(quality).toMatchObject({ ready: true, achievableTier: 'reference-ready', metrics: { directUseReadyProviderCount: 1 } })
     studio = await loadMotionDramaStudioV1(item.scope)
     const referenceRelease = await publishMotionDramaReleaseV1({ scope: item.scope, episodeNumbers: [1], providers: [...providers], tier: 'reference-ready', expectedProductionRevision: studio.production.revision })
     expect(referenceRelease).toMatchObject({ version: 2, parentReleaseId: promptRelease.id })

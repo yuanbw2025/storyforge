@@ -58,7 +58,7 @@ import {
 } from '../motion-drama/contracts'
 import { hashCanonicalValue } from '../agent/run/hash'
 import { assertMediaRightsV1 } from '../media/rights'
-import { assertMotionDramaPromptPackManifestV1 } from '../motion-drama/prompt-pack-contracts'
+import { assertMotionDramaPromptPackManifest } from '../motion-drama/prompt-pack-contracts'
 
 function portableRows(value: Record<string, any>, name: string): Record<string, any>[] {
   const rows = value[name]
@@ -500,9 +500,9 @@ async function validateMotionDramaBackup(value: Record<string, any>): Promise<vo
   for (const row of rows.motionDramaPromptPacks) {
     assertOwner(row, 'MotionDramaPromptPack')
     let manifest: Record<string, any>; try { manifest = JSON.parse(row.manifestJson) } catch { throw new Error('[deriveImport] v15 MotionDramaPromptPack manifest 不是 JSON') }
-    assertMotionDramaPromptPackManifestV1(manifest)
+    assertMotionDramaPromptPackManifest(manifest)
     const identity = `${row._adaptationProjectExportId}:${row.episodeNumber}:${row.provider}:${row.version}`
-    if (packIdentity.has(identity) || !episodeNumbers.has(`${row._adaptationProjectExportId}:${row.episodeNumber}`) || !['seedance', 'runway', 'ltx', 'generic'].includes(row.provider) || manifest.schema !== 'storyforge.motion-drama-prompt-pack' || manifest.version !== 1 || manifest.provider !== row.provider || manifest.episodeNumber !== row.episodeNumber || manifest.maturity !== row.maturity || await hashCanonicalValue(manifest) !== row.contentHash) throw new Error('[deriveImport] v15 MotionDramaPromptPack 身份、覆盖或 hash 非法')
+    if (packIdentity.has(identity) || !episodeNumbers.has(`${row._adaptationProjectExportId}:${row.episodeNumber}`) || !['seedance', 'runway', 'ltx', 'generic'].includes(row.provider) || manifest.schema !== 'storyforge.motion-drama-prompt-pack' || ![1, 2].includes(manifest.version) || manifest.provider !== row.provider || manifest.episodeNumber !== row.episodeNumber || manifest.maturity !== row.maturity || await hashCanonicalValue(manifest) !== row.contentHash) throw new Error('[deriveImport] v15 MotionDramaPromptPack 身份、覆盖或 hash 非法')
     packIdentity.add(identity)
   }
 

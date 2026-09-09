@@ -211,10 +211,12 @@ IR 是正式产品内容；工具适配包是从 IR 和 capability profile 确�
 
 ### 8.2 Seedance 适配器
 
-- 将已锁定图片、视频、音频分配为明确引用槽位并生成人类可读映射表。
-- 在 prompt 中说明每个引用负责人物身份、服装、场景、道具、声音、构图、运动或首尾帧中的哪一项。
-- 有多段动作时编译为时间戳段，检查段落总时长、角色站位和动作顺序。
-- capability profile 记录当前模型的参考数量、时长、画幅、音频、首尾帧和编辑能力；上限不硬编码到领域模型。
+- 将本镜实际使用的角色、服装、场景、道具、起始帧、音色和音效分配为按上传顺序排列的 `图片N / 音频N` 槽位；对白按角色 stable key/名称匹配专属 voice，歧义时不得把无关声音自动绑定，每项标记唯一用途和真实媒资就绪状态。
+- 将 provider-neutral Video Prompt IR 编译为起始、动作峰值、结束停点三个时间段，同时输出对白/旁白/声音、全程锁定与排除项；用户可以逐镜直接复制。
+- 为相邻镜头编译独立切、匹配剪辑或尾帧接续协议，显式约束角色身份、服装、道具、站位、视线、动作方向、光源与允许改变项。
+- 普通镜头至少生成 3 个候选，关键镜头至少 4 个；先按逐镜检查清单选片，再推进下一镜。身份、动作和连续性分别使用局部返修指令。
+- capability profile 与工具包一起版本化并在编译时校验逐镜上限。默认 Seedance 2.5 公开画像为 30 秒、30 图、10 视频、10 音频；实际入口仍为 2.0 时选择 15 秒、9 图、3 视频、3 音频的兼容画像。上限不进入核心 shot schema。
+- 只有所有必需槽位均为具备权利声明、hash 和 MIME 校验的真实媒资，且有对白镜头已精确绑定说话人声音时，包才标记 `directUseReady`；`prompt-only` 与“可直接投喂”必须在界面和导出中明确区分。
 
 ### 8.3 Runway 适配器
 
@@ -228,7 +230,7 @@ IR 是正式产品内容；工具适配包是从 IR 和 capability profile 确�
 - 输出镜头、关键帧、参考媒资和声音设计字段；保留系列资产稳定 key。
 - LTX 导出属于适配包，不把 LTX 的内部术语升级为 StoryForge 核心领域对象。
 
-官方资料说明了这条抽象的必要性：Seedance 2.5 强调多模态引用和时间戳控制；Runway 将输入图作为构图/主体/光线/风格锚点，并建议视频文本集中描述运动；LTX 以 Characters、Objects、Locations 等 Elements 维持跨镜一致性。供应商能力会变化，实施时必须以 adapter capability profile 重新验证。
+官方资料说明了这条抽象的必要性：Seedance 2.5 支持更长单次生成、多轮接续、更多多模态参考与时间戳编辑，Seedance 2.0 则有更保守的输入上限；Runway 将输入图作为构图/主体/光线/风格锚点，并建议视频文本集中描述运动；LTX 以 Characters、Objects、Locations 等 Elements 维持跨镜一致性。供应商能力会变化，实施时必须以 adapter capability profile 重新验证。
 
 ## 9. 物料库设计
 
@@ -481,6 +483,7 @@ reader 必须验证 project/world/work/production/episode/manifest/asset version
 ### 15.5 Prompt 包层
 
 - 每个物料和参考帧槽位都能解析到精确资产版本，引用用途无歧义。
+- 有对白的镜头只绑定实际说话人的 voice；多角色歧义未消除时阻止标记为可直接投喂。
 - 时间段总和、动作顺序、对白长度和镜头时长一致。
 - Prompt 没有互相冲突的构图、动作、镜头和风格指令。
 - adapter 输出满足当前 capability profile；超限必须拆分或阻断，不静默丢引用。
@@ -535,7 +538,7 @@ reader 必须验证 project/world/work/production/episode/manifest/asset version
 5. **MD-04 物料库**：六类物料、参考媒资候选、版本锁定、影响分析、上传/生成能力协商。
 6. **MD-05 单集剧本**：集纲、剧本 AST、审查、定点修订和上一集/本集状态交接。
 7. **MD-06 分镜、参考帧与 Prompt IR**：shot 结构、时长/连续性/生成风险校验、Image Prompt IR、分镜图/首尾帧候选选择和 Video Prompt IR。
-8. **MD-07 工具适配与导出**：Seedance/Runway/LTX capability profiles、适配包、单集/整季 Release 和 ZIP 导出。
+8. **MD-07 工具适配与导出**：Seedance/Runway/LTX capability profiles、逐镜上传槽位、时间轴、镜间交接、候选验收、定点返修、适配包、单集/整季 Release 和 ZIP 导出。
 9. **MD-08 产品体验与封板**：完整工作台、空态/错误/恢复/移动端、真实样例、质量评测、`npm run ci` 和 `npm run ci:e2e`。
 
 每个分包先做定向测试；代码提交前至少运行架构门、required tables、AI manual、TypeScript、相关测试和 build；交付单元运行完整 CI，纵切面运行隔离 E2E。
@@ -559,13 +562,14 @@ reader 必须验证 project/world/work/production/episode/manifest/asset version
 2. 一句话入口是否正确：用户在漫剧工坊同页完成，但小说 owner 和来源冻结仍遵守现有小说产品边界。
 3. 生产节奏是否正确：系列与物料一次建立，逐集完成剧本、分镜、参考帧和 Prompt 包并锁定，不用一个长任务跑完整季。
 4. 提示词自由度是否正确：每步可编辑、可覆盖、可恢复，但 schema、上下文、权限、版本和完成门不可编辑。
-5. 工具适配是否正确：核心保存通用 Prompt IR，Seedance/Runway/LTX 只是版本化编译器，而不是三套业务数据。
+5. 工具适配是否正确：核心保存通用 Prompt IR，Seedance/Runway/LTX 只是版本化编译器，而不是三套业务数据；Seedance 逐镜包必须给出真实槽位、时间轴、前后镜状态、选片标准和局部返修指令，只有实际物料与能力上限同时满足才标记可直接投喂。
 
 这五点确认后，才把本稿升级为现行专项方案并开始 MD-00。
 
 ## 20. 研究依据（仅支持流程设计）
 
 - [ByteDance Seed：Seedance 2.5 多模态引用、时间戳控制与专业编辑](https://seed.bytedance.com/en/blog/one-take-creation-flexible-referencing-introducing-seedance-2-5)
+- [ByteDance Seed：Seedance 2.0 Official Launch](https://seed.bytedance.com/en/blog/seedance-2-0-official-launch)
 - [Runway：Image-to-Video Prompting Guide](https://help.runwayml.com/hc/en-us/articles/48324313115155-Image-to-Video-Prompting-Guide)
 - [Runway：How to create longer videos and films](https://help.runwayml.com/hc/en-us/articles/26871350018835-How-to-create-longer-videos-and-films)
 - [Runway：Creating with Gen-4 Image References](https://help.runwayml.com/hc/en-us/articles/40042718905875-Creating-with-Gen-4-Image-References)
