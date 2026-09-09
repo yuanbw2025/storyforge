@@ -2244,11 +2244,16 @@ function glyphSafeTextAdventureScenePromptV1(
       /面前悬浮着三个选择的光影[：:][^。；\n]+/gu,
       '面前三组形态不同的无字机械光路正等待她以实际行动接通',
     )
+    .replace(
+      /面前是三条路[—–-]{1,2}[^。；\n]+/gu,
+      '面前三组形态与去向不同的机械路径结构正等待她以实际行动启动',
+    )
     .replace(/身边站着([^，。；\n]{1,24})与其他幸存者/gu, (match, candidate: string) => (
       portrayedCharacterNames.includes(candidate.trim()) ? match : '身边站着获救的群岛居民'
     ))
     .replace(/前景是[^，。；\n]{1,40}的背影/gu, '前景以三分之二侧面清晰呈现已登记角色的面部与身份特征')
     .replace(/\bback view of [^,.\n]{1,80}/giu, 'three-quarter view of the registered character with identity features visible')
+    .replace(/\bicy(?=[\p{Script=Han}])/giu, '冰冷')
     .replace(/。{2,}/gu, '。')
     .replace(/[，；]{2,}/gu, '，')
     .trim()
@@ -2260,7 +2265,7 @@ function textAdventurePromptVisuallyDepictsCharacterV1(
 ): boolean {
   const name = characterName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   return [
-    new RegExp(`${name}[^。；\\n]{0,36}(?:站|坐|走|跑|跪|转身|抬手|伸手|握|持|穿|面向|凝视|表情|眼神|脸|面部|身影|侧面|正面|背影|手臂|双手|在)`),
+    new RegExp(`${name}[^。；\\n]{0,36}(?:站|坐|走|跑|跪|抵达|进入|发现|面对|转身|抬手|伸手|举起|拿|握|持|穿|面向|凝视|表情|眼神|脸|面部|身影|侧面|正面|背影|手臂|双手|在)`),
     new RegExp(`(?:画面|前景|中景|近景|远景|中心|构图)[^。；\\n]{0,64}${name}`),
     new RegExp(`${name}[^。；\\n]{0,24}(?:与|和|同)[^。；\\n]{0,24}(?:并肩|对峙|交谈|行动|站立)`),
   ].some(pattern => pattern.test(prompt))
@@ -2422,6 +2427,10 @@ export function parseProductMediaRequirementsArtifactV2(
       ...brief.intent.forbiddenChanges,
     ])].sort()
     const hardConstraints = hasCharacterContract ? requiredCharacterConstraints : []
+    const rawAltText = text(item.altText, `visual[${index}].altText`, 1_000)
+    const governedAltText = isCharacter && anchoredCharacters.length > 0
+      ? `${anchoredCharacters[0].name}的${mediaKind === 'character-expression' ? '关键情绪' : '三分之二身'}透明背景视觉锚点图`
+      : rawAltText
     return {
       artifactKey: key(item.artifactKey, `visual[${index}].artifactKey`),
       mediaKind,
@@ -2437,7 +2446,7 @@ export function parseProductMediaRequirementsArtifactV2(
             anchoredCharacters,
           })
         : rawPrompt,
-      altText: text(item.altText, `visual[${index}].altText`, 1_000),
+      altText: governedAltText,
       width: integer(item.width, `visual[${index}].width`, 320, 4096),
       height: integer(item.height, `visual[${index}].height`, 320, 4096),
       palette: [...item.palette] as [string, string, string],

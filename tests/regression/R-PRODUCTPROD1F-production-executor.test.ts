@@ -2616,6 +2616,7 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     requirements.visual[3].prompt = '岚舟发现潮钟内部刻有历代守灯人姓名与死亡日期，导师沉砾正是上一任牺牲者。泛黄的纸质日志上用暗红色墨水写着「潮钟的真正代价」等字样；画面中心是岚舟的手触碰发光的全息铭牌。'
     requirements.visual[3].characterAnchorRefs = ['character.player', 'character.npc.1']
     requirements.visual[6].prompt = '沉砾，灰白短发与胡须，双手持黄铜手杖。'
+    requirements.visual[6].altText = '沉砾——失踪导师视觉锚点图'
     requirements.visual[8].prompt = '屿娘，短黑发，双手布满冻疮，腰挂鱼刀。'
     requirements.visual[7].prompt = "岚舟在废弃实验室发现全息记录，显示'记忆抽取协议'的字样。"
     requirements.visual[9].prompt = '最后抉择时，前景是岚舟的背影，岚舟的身影被冷光勾勒成剪影，面前悬浮着三个选择的光影：公开真相、延续旧制度、替代方案。'
@@ -2636,6 +2637,7 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     expect(parsed.visual[6].prompt).toContain('冻结外观中实际存在的肢体')
     expect(parsed.visual[6].prompt).toContain('严禁补画缺失肢体')
     expect(parsed.visual[6].prompt).not.toContain('双手')
+    expect(parsed.visual[6].altText).toBe('涅洛的三分之二身透明背景视觉锚点图')
     expect(parsed.visual[8].prompt).toContain('阿塔')
     expect(parsed.visual[8].prompt).not.toContain('屿娘')
     expect(parsed.visual[3].characterAnchorRefs).toEqual(['character.player'])
@@ -2665,6 +2667,17 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     expect(parsed.visual[11].prompt).not.toContain('海岬')
     expect(parsed.visual[11].characterAnchorRefs).toEqual(['character.player'])
     expect(parsed.visual[5].prompt).not.toContain('「临界」')
+    const routeAndArrival = structuredClone(requirements)
+    routeAndArrival.visual[3].prompt = '岚舟抵达断裂的潮钟核心，雾潮正从裂缝涌入。'
+    routeAndArrival.visual[3].characterAnchorRefs = []
+    routeAndArrival.visual[4].prompt = '霜潮列岛由 icy灰白岩石与薄冰构成。'
+    routeAndArrival.visual[9].prompt = '岚舟站在最终潮钟前，面前是三条路——注入记忆、释放记忆或带领村民撤离。'
+    routeAndArrival.visual[9].characterAnchorRefs = ['character.player']
+    const governedVariant = parseProductMediaRequirementsArtifactV2(routeAndArrival, owned.brief, anchors)
+    expect(governedVariant.visual[3].characterAnchorRefs).toEqual(['character.player'])
+    expect(governedVariant.visual[4].prompt).toContain('冰冷灰白')
+    expect(governedVariant.visual[9].prompt).not.toContain('三条路')
+    expect(governedVariant.visual[9].prompt).toContain('实际行动启动')
     expect(productMediaCharacterPresentationConstraintV1('character-pose')).toContain('透明背景')
     expect(productMediaCharacterPresentationConstraintV1('cg')).toContain('禁止透明背景')
   })
