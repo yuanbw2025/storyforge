@@ -3548,6 +3548,8 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     expect(mainQuestSystem).toContain('stage 及其 objectiveKeys 必须按场景约束数组中的 sceneKey 顺序单调推进')
     expect(mainQuestSystem).toContain('nonPlayerCastKeys 是 talk 目标的唯一白名单')
     expect(mainQuestSystem).toContain('"nonPlayerCastKeys"')
+    expect(mainQuestSystem).toContain('successConsequence 和 failureForwardConsequence 是玩家会直接读到的自然语言叙事')
+    expect(mainQuestSystem).toContain('机器状态只能放入 persistentEffectKeys')
     expect(sceneScriptContexts).toHaveLength(6)
     const actOneSceneContext = sceneScriptContexts.find(context => (
       context.includes('"taskKey":"content.scene-script.act-1.part-1"')
