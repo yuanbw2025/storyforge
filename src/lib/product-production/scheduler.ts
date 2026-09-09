@@ -1069,7 +1069,13 @@ async function ensurePlan(input: {
           }),
         }, state.brief, state.briefRow.briefHash)
       : freshBasePlan
-  if (!input.suppliedPlan && !currentMediaRevisionPlan) {
+  // Cross-Build reuse belongs only to the child's initial Plan. A later
+  // recovery epoch must derive reuse from the immediately preceding epoch so
+  // that a deterministic failure can invalidate a carried parent artifact.
+  // Re-applying parent reuse here would resurrect the exact stale artifact
+  // that the recovery closure just proved unsuitable.
+  if (!input.suppliedPlan && !currentMediaRevisionPlan
+    && currentPlan == null && state.build.planRevision === 0) {
     const reuse = await applyCrossBuildEvolutionReuse({
       scope: input.scope, build: state.build, brief: state.brief, plan,
     })
