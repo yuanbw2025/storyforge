@@ -2271,7 +2271,7 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
     const singletonExecutor = createConfiguredProductProductionExecutorV1({
       production: (await db.productProductions.get(owned.productionId))!,
       brief: owned.brief,
-      runVision: async request => ({
+      runVision: async _request => ({
         output: JSON.stringify({
           schema: 'storyforge.text-adventure-visual-quality-model-output', version: 1,
           reviews: [{
