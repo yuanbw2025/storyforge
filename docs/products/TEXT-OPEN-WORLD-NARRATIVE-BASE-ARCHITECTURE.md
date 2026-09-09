@@ -1,6 +1,6 @@
 # AI 主导文字开放世界叙事基座 · StoryForge 施工规格
 
-> 规格版本：3.2.34
+> 规格版本：3.2.36
 > 生效日期：2026-09-06
 > 文档层级：L2 产品目标架构与施工规格
 > 当前状态：设计基线；不代表代码已经实现
@@ -403,8 +403,8 @@ P1专属Skill与Executor已经进入正式P0～P10生产Plan。共享durable sch
 
 `src/lib/open-world/experience-design.ts` 已把通用作者会谈终态和文字开放世界专属体验设计拆为“代码冻结边界 + 模型补充语义”，避免让模型重新解释已经确认的产品决策：
 
-- G5-02已经用文字开放世界专属Creator Brief承接作者会谈，并把确认结果保存到统一`ProductProductionBrief`修订；它持久绑定G5-01来源身份、作者设定、规模、边界、媒资、完成条件和durable候选证据，但尚不是`SourcePlan`或开始授权。G5-04必须显式把它提升为现有生产链可消费的正式来源计划与确认事实；在此之前P2不能运行，也不能把缺少作者确认的字段当作默认值悄悄补齐；
-- G5-03在Creator Brief之后加入零写入的生产准备门：复用全局BYOK设置和正式creation任务路由，以provider、精确model、安全endpoint origin、规范基础路径Hash、真实凭证来源和非敏感生成参数形成绑定；远程必须HTTPS，URL内嵌凭证、查询或fragment直接阻断。目录价还要求命中注册的官方商业端点，中转、同域异路径和未复核模型都必须由作者录入报价，本地token零费用只允许明确localhost上的Ollama/custom。界面向作者展示完整叙事生产DAG的155次建议调用/160硬上限、120万输入/36万输出token、30美元文本硬保护、2小时和200MB资源边界，并明确媒资费用由G5-08另行排产；已发生的Brief会谈只把真实调用、token和耗时与非账单估价分开呈现。四项确认目前只形成内存Hash，但Verifier会以当前任务路由和AIConfig作外部真实性比较，空确认、自洽重算Hash、同域换路径均不能授权；设置往返只恢复精确会谈/产品/来源。它不创建Build或SourcePlan，G5-04仍须在原子启动边界重新CAS Brief、模型、报价和预算后才可运行P0。中央日志脱敏及供应商错误分类保证Key、认证头、完整URL和原始错误正文不会进入日志、Artifact或创作者页面；
+- G5-02已经用文字开放世界专属Creator Brief承接作者会谈，并把确认结果保存到统一`ProductProductionBrief`修订；它持久绑定G5-01来源身份、作者设定、规模、边界、媒资、完成条件和durable候选证据，但自身不是`SourcePlan`或开始授权。现在只有G5-04专属Creator启动命令能把它提升为生产链可消费的正式来源计划与确认事实；在该命令成功前P2不能运行，也不能把缺少作者确认的字段当作默认值悄悄补齐；
+- G5-03在Creator Brief之后加入零写入的生产准备门：复用全局BYOK设置和正式creation任务路由，以provider、精确model、安全endpoint origin、规范基础路径Hash、真实凭证来源和非敏感生成参数形成绑定；远程必须HTTPS，URL内嵌凭证、查询或fragment直接阻断。目录价还要求命中注册的官方商业端点，中转、同域异路径和未复核模型都必须由作者录入报价，本地token零费用只允许明确localhost上的Ollama/custom。界面向作者展示完整叙事生产DAG的155次建议调用/160硬上限、120万输入/36万输出token、30美元文本硬保护、2小时和200MB资源边界，并明确媒资费用由G5-08另行排产；已发生的Brief会谈只把真实调用、token和耗时与非账单估价分开呈现。四项确认在准备页只形成内存Hash，但Verifier会以当前任务路由和AIConfig作外部真实性比较，空确认、自洽重算Hash、同域换路径均不能授权；设置往返只恢复精确会谈/产品/来源。准备页不创建Build或SourcePlan，正式Creator启动会在原子边界重新CAS Brief、来源、模型、报价、预算和Plan Hash后才允许P0运行。中央日志脱敏及供应商错误分类保证Key、认证头、完整URL和原始错误正文不会进入日志、Artifact或创作者页面；
 - 登记的`text-open-world.experience-input` Context Source只读取同一Work/Production/Build内的已授权Brief、SourcePin及已验收P1三件Artifact。它选择有界的高优先级Ledger事实和缺口，但把全部开放缺口key带入GameBrief；整个输入而非少数索引字段进入`contextSelectionHash`；
 - `GameBrief`完全由确定性代码投影作者意图和集中校准：主角来源模式、目标体量、至少两个结局、严格顺序主线、重要故事安全等待、普通世界持续演化、非地点唯一关键触发、有边界自由、三类输入、四类回合战斗操作、标准难度、三类首版视觉消费槽、成本上限和直接发布条件均不能由模型改写；
 - 模型只输出pitch、玩家幻想、叙事支柱、地区差异、成长承诺、基调及主角身份/动机/个人代价。每个来源引用必须是当前上下文已交付的`claimKey`；来源型主角还必须引用证据锚定到作者所选角色来源单元的claim，不能只根据显示名编写新小传；
@@ -598,6 +598,19 @@ G3-18把此前逐项完成的生产零件接入共享正式Harness，而不是�
 - 端到端证据覆盖完整调度、断点恢复、Package/Quality Artifact、Build Preview媒资解析及真实Session启动。QA逐门重验Package、主线/结局、IntegrationReport和权利证据，不再把所有门直接标为通过；媒资覆盖不足只形成preview-ready，商业候选还必须在发布阶段补真实浏览器、主路线和媒资运行回执。ProductRelease仍只由发布动作创建。
 
 至此G3“来源→故事→任务→玩法目录→场景→可运行Build”出口闭合。下一阶段G4只消费统一运行包与Session能力建设真实玩家端，不回头复制生产逻辑。
+
+#### 5.4.18 G5-04 Creator生产启动、进度与恢复落地
+
+G5-04没有复制第二套叙事scheduler，而是把G5-01～G5-03的Creator事实原子接入G3共享生产链：
+
+- 专属启动页先要求作者选择`author-owned`、`licensed`或`public-domain`来源权利依据并填写说明。零写入预览复验当前Creator Brief、来源locator及生产预检，把作者意图确定性投影成不含本地ID的便携Creator SourcePlan和只供共享scheduler消费的`ProductProductionBriefV3`兼容Brief；后者的`worldReleaseId=1`只是满足共享parser的非定位占位值，P0/P1只能读取SourcePlan与注册表重映射的locator。随后生成精确P0～P10/V1～V3/QA动态Plan，依赖、并行组、模型、预算、完成条件和Plan Hash在写入前可见；
+- 正式开始重新CAS Production state revision、Creator Brief revision/Hash、WorldRelease或小说版本与边界、当前AI任务路由/凭证来源、模型绑定、报价预算、四项确认和预览Plan Hash。模型身份比较覆盖规范化完整route、query/fragment/userinfo变化、temperature、configured max tokens和`contextWindow`，实际调用复用这份已核对resolution，不能在下层再次解析成另一条路由。覆盖来源存储、Production、Brief、Command和Build的同一事务原子冻结Creator SourcePlan、Creator Start、Plan、授权Build和命令receipt，并把Brief标为authorized、Production推进为producing；该事务不调用provider。确定性command ID让重复提交只回读原receipt，不能重新授权；
+- Creator Brief继续是作者意图与产品边界的权威；兼容Brief不能反向改写它。P0从已验签的Creator Start链读取来源与权利，Plan继续令`mediaCostAuthorized: false`，头像、背景和音频费用仍由G5-08实际排产；v10导入在事务前校验SourcePin/Unit逐行payload、contentHash、owner及同Build/epoch闭包，通用SourcePlan内嵌WorldReference由`PROJECT_TABLES`重映射，Creator Start与SourcePlan保持原字节。这次落地复用现有Production、Brief、Command、Build、Artifact、AgentRun、checkpoint与ledger，没有增加物理表、Schema或migration；
+- 专属工作流以精确`productionId`进入`productionOnly`工作台，不回退通用新建或最近Production；锁定ID缺失、被过滤或已失效时显式失败并停止队列。进度投影逐任务显示依赖、lane/并行组、最大尝试、超时、当前step/attempt、尝试历史、最新durable边界、checkpoint verified/invalid、stale原因和预算实耗；scheduler仍以必需receipt和subject lock约束真正可运行集合；
+- scheduler把请求前后拆成可恢复付费边界：claim后未开始step时复用同一Run；已开始但尚未派发且超时可以安全恢复；已派发而结果未知时保留reservation并停机，不自动重发；provider响应和真实usage先于解析、验证与证据检查计账，候选checkpoint尚未形成时也停机；已验证候选checkpoint则跳过executor/provider，直接继续验收或下游。P1来源批次与P9场景分片采用登记的有界多调用协议，只重跑未完成分片并按当前attempt剩余额度缩减请求；作者P9聚合稿零模型调用。预算账本在同一Build内按taskKey跨Run/epoch累计paid charge与未知结果reservation，调用、token、费用、时长和存储都不能通过恢复重置；durable请求标记后、真正进入executor前再次核对Production/Build所有权，跨标签页pause/stop不会越过本地dispatch边界；
+- pause/resume先递增control epoch，旧epoch只显示stale且不能继续写，新epoch复用已验收Artifact。恢复命令精确绑定失败Run/rootRun、epoch、Plan Hash、task和attempt。已有可选`product-production.repair-feedback`仅作为隔离、不受信任数据进入原子上下文；作者完整JSON跳过provider但仍走同一解析、验证、候选checkpoint和来源记录。两者只开放给登记的P2～P10单次文本创作task/Skill组合，P1有界协议、V2评审、确定性任务和媒资任务只允许原冻结输入重试；Production或epoch变化会清除尚未提交的本地修复输入。
+
+因此G5-04关闭的是“作者可审查的正式启动与可恢复执行”，并不把生成内容浏览、编辑、影响分析或媒资生产提前并入同一工作包。下一项G5-05只读投影当前Build的受治理`productBuildArtifacts`，G5-06、G5-07和G5-08再分别承担编辑、stale/局部修复与媒资。
 
 ### 5.5 正确的验证顺序
 
@@ -1087,6 +1100,8 @@ CreativeArtifactEnvelope {
 9. 发布：通过硬闸门后生成正式ProductRelease；
 10. 更新：修复后生成新Build和新Release，显示存档兼容性。
 
+G5-04已经关闭第4、5项的正式启动和执行可见性。下一项G5-05只实现第6项的只读Artifact浏览：以当前Work/Product/Production/Build内的`productBuildArtifacts`不可变聚合为权威投影，展示类型、版本、状态、生产Run、Hash、来源证据和稳定引用；stale、损坏、悬空引用或跨作用域记录不得冒充当前有效内容。它不直接写Artifact，也不新建万能物理内容表；编辑、引用影响和局部修复仍分别属于G5-06、G5-07。
+
 ### 10.2 玩家端
 
 首阶段至少包含：
@@ -1444,6 +1459,7 @@ StoryForge当前没有独立staging。发布前仍需在隔离数据中完成灰
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| 3.2.36 | 2026-09-10 | 完成G5-04 Creator生产启动、进度与恢复：零写入预览生成不含本地ID的Creator SourcePlan、非定位兼容Brief和精确动态Plan；正式开始重验Production/Brief/来源、完整模型route与生成参数、报价预算、确认及Plan Hash，并在同一事务冻结Creator Start、Plan、Build与命令receipt。专属工作流只打开精确Production，目标缺失即失败关闭。P1/P9通过登记的有界多调用协议按分片恢复，provider响应先计账再解析；同一Build/task跨Run/epoch累计paid charge与未知reservation，durable请求标记后还会在executor前复核当前所有权，跨标签pause/stop不再产生本地可阻止的付费派发。恢复严格绑定原Run、epoch、Plan和attempt，作者修复只开放给白名单文本任务；v10导入写前验证SourcePin闭包并重映射通用SourcePlan locator。无新表、Schema或migration，媒资费用仍后置G5-08；下一项G5-05只读浏览受治理Artifact投影。 |
 | 3.2.35 | 2026-09-09 | 落地G5-03叙事生产前门：Creator Brief之后复用全局BYOK与正式creation任务路由；安全origin、基础路径Hash和凭证真实来源形成无密钥模型绑定，Verifier以当前配置作外部比较。目录价仅允许精确复核model和官方商业端点；中转、同域异路径、远程HTTP、URL内嵌凭证与自洽重算Hash均失败关闭。完整DAG的155/160调用、120万/36万token、$30文本、2小时/200MB上界与媒资费用后置规则可见；Brief已发生用量与非账单估价分开。设置往返精确恢复会谈/产品/来源；确认不创建Build/SourcePlan，G5-04仍须原子CAS授权。AI日志和错误UI统一清除Key、认证头、完整URL及供应商原始正文。 |
 | 3.2.34 | 2026-09-09 | 接入G5-02作者会谈事实：专属Creator Brief完整保存作者设定、来源边界、未决项、规模、媒资与完成条件；主Agent仅通过正式Skill读取无正文来源摘要和作者输入，候选、ContextManifest、来源CAS及终态Run证据经四项作者确认后进入统一不可变Brief修订。便携导入在事务前先校验RunContract Hash与逐事件世界组，再重放终态证明；该终态仍不是SourcePlan或生产授权，P2在G5-04显式提升前保持不可执行。 |
 | 3.2.33 | 2026-09-09 | G4-12把叙事运行史接入正式保存语义：手动、自动、战前、里程碑和系统Checkpoint都只快照同一Event/Projection权威，规范任务终态决定派生档时间；从历史点继续必须创建固定原Release的子分支并保留父线未来，旧Release只继续原叙事规则，不以兼容声明静默迁移。每个Session独立核验来源、初始叙事Hash和运行绑定，损坏来源不向玩家泄露内部状态；Build Preview不冒充正式可保存发布。该纵切面不新增叙事状态、AI上下文或模型写入口。 |

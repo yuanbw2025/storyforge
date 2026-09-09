@@ -63,7 +63,7 @@
 | E-TOWN-01 | missing | 有角色互动和通用产品运行时基础能力可复用 | 没有独立 AI 小镇产品的时间、日程、地点、群体与离线演化闭环 |
 | E-TEXTADV-01 | partial | 文字冒险已接入专用需求适配器、统一 Production/Build/ProductRelease v1 和独立玩家面 | 可玩内容、规则、媒资、结局和真实 E2E 仍需专项封板 |
 | E-AVG-01 | partial | AVG 已接入专用需求适配器、统一 Production/Build/ProductRelease v1、演出与独立玩家面 | 真实视觉/声音资产、演出绑定和完整体验未验收 |
-| E-OPENWORLD-01 | partial | 已在统一Production/Build/ProductRelease和ProductRuntime事件底座上完成vNext人工包及G2确定性玩法闭环：成长、任务、地图/快旅、时间天气、NPC日程/生死/关系、战斗、制作、经济、地区演化、受限发牌、动态任务、随机事件与知识历程均可重放；只读旧Release兼容 | AI内容生产编译链、创作者工作台、完整玩家信息架构、运行时有边界自由演绎、媒资/质量门、盐脊真人验收和旧入口收口仍未完成 |
+| E-OPENWORLD-01 | partial | 已在统一Production/Build/ProductRelease和ProductRuntime事件底座上完成G1运行治理、G2确定性玩法闭环、G3 P0～P10/V1～V3/QA内容生产编译器和G4完整玩家端；成长、任务、地图/快旅、时间天气、NPC日程/生死/关系、战斗、制作、经济、地区演化、受限发牌、动态任务、随机事件与知识历程均可重放。G5-01～G5-04已落地双来源Creator入口、Creator Brief、BYOK/模型/预算预检，以及原子Creator SourcePlan/Start、精确DAG、Run进度和付费边界恢复；只读旧Release继续兼容 | G5-05～G5-12的受治理Artifact浏览、编辑/stale修复、媒资、质量/试玩、发布更新和创作者E2E仍待完成；G6运行时有边界自由演绎、G7盐脊真人验收与旧入口收口仍未完成 |
 
 ## F · 平台与商业化
 

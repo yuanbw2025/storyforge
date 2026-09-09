@@ -1,6 +1,6 @@
 # StoryForge 当前架构总览
 
-> 版本：2.7.0 · 更新：2026-09-04 · 权威层级：L1
+> 版本：2.7.1 · 更新：2026-09-10 · 权威层级：L1
 > 本文描述当前主干代码事实与目标架构接缝。产品边界以项目总纲为准；代码偏差见对齐审计。
 
 ## 1. 运行形态
@@ -85,7 +85,7 @@ flowchart TB
 | 当前事实 | 数值 | 单一事实源 |
 |---|---:|---|
 | 应用语义版本 | `3.9.1` | `package.json` |
-| TypeScript 生产源码 | 1101 个文件 / 387361 行 | `tsconfig.json` |
+| TypeScript 生产源码 | 1126 个文件 / 403980 行 | `tsconfig.json` |
 | IndexedDB schema | v1 / 94 张 required tables | `schema.ts` / `REQUIRED_TABLES` |
 | PROJECT_TABLES | 94 张表 | `project-tables.ts` |
 | Prompt 主线 | 65 个 moduleKey / 210 条内置模板 | `PromptModuleKey` / `prompt-seeds*.ts` |
@@ -189,6 +189,10 @@ flowchart LR
 Durable Harness 将运行状态写入 ledger/checkpoint；provider 调用有 attempt identity；候选保存输入/目标 revision；采纳使用事务和 post-state。网络结果未知、认证/配额、stale、协议错误和不可恢复错误分开处理。
 
 UI 刷新后必须从 durable 状态恢复。没有 checkpoint 的辅助调用只能返回内存结果或只读报告，不得静默写正式数据。
+
+外部调用的恢复边界按持久证据而不是页面进度裁决：任务已claim但step尚未开始时复用同一Run；step已开始但请求尚未派发且已超时时可以安全恢复；请求已派发而结果未知时必须保留预算reservation并暂停，禁止自动重发；provider响应与真实usage必须先于解析、验证和候选写入持久化，若响应已记录但候选checkpoint尚未形成，同样禁止再次付费调用；只有已验证候选checkpoint才能跳过executor/provider并继续验收或下游调度。charge与reservation按Run/attempt保存，同时在同一Build内按task key跨Run/control epoch累计，retry不能重置任务级调用、token、费用、时长或存储上界。durable请求标记完成后、进入executor前还要重验当前Production/Build、status、epoch与Plan；这能阻止跨标签pause/stop之后尚未发生的本地派发，但不能伪称撤销已经到达远端provider的请求。
+
+pause/resume先持久变更control epoch；旧epoch的迟到写入必须失败关闭，并在UI明确投影为stale。恢复或修复命令必须绑定原失败Run/rootRun、epoch、Plan Hash、task和attempt，不能凭当前页面选中项推断目标。作者修复反馈若进入模型上下文，必须来自已登记的可选来源并作为隔离的不受信任数据交付；作者提供的完整候选也必须走同一解析、验证、checkpoint和来源记录，不能绕过治理边界。哪些任务允许这两种修复由确定性task/Skill策略声明，不能只靠提示词或UI控制。
 
 ## 10. 关键目录
 

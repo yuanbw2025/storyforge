@@ -1,6 +1,6 @@
 # AI 主导文字开放世界游戏 · 完整开发清单
 
-> 版本：1.1.89
+> 版本：1.1.90
 > 建立日期：2026-09-06
 > 对应总任务：`E-OPENWORLD-01`
 > 当前状态：`IN_PROGRESS`；用户已于2026-09-06明确下达完整产品开发指令
@@ -36,17 +36,17 @@
 | 指标 | 当前值 |
 |---|---|
 | 首版工作包 | 121 |
-| 已完成 | 87（G0、G1、G2、G3、G4及G5-01～G5-03完成） |
-| 产品总进度 | 87 / 121（71.9%） |
-| G1～G7业务功能进度 | 77 / 111（69.4%） |
+| 已完成 | 88（G0、G1、G2、G3、G4及G5-01～G5-04完成） |
+| 产品总进度 | 88 / 121（72.7%） |
+| G1～G7业务功能进度 | 78 / 111（70.3%） |
 | 当前阶段 | G5 创作者工作台与发布更新 |
 | G0阶段进度 | 10 / 10（100%） |
 | G1阶段进度 | 13 / 13（100%） |
 | G2阶段进度 | 28 / 28（100%） |
 | G3阶段进度 | 18 / 18（100%） |
 | G4阶段进度 | 15 / 15（100%） |
-| G5阶段进度 | 3 / 12（25.0%） |
-| 当前工作包 | `TOW-G5-04` |
+| G5阶段进度 | 4 / 12（33.3%） |
+| 当前工作包 | `TOW-G5-05` |
 | 当前阻塞项 | 无 |
 
 每次状态变化必须同时更新本节汇总、对应任务行、验证证据和变更记录。
@@ -241,17 +241,17 @@ G7 盐脊验收、发布更新与旧入口收口
 | ID | 状态 | 工作包 | 依赖 | 完成判据 |
 |---|---|---|---|---|
 | TOW-G5-01 | DONE | 独立产品创建入口与来源选择 | G3-02、G3-03 | 独立创作者入口支持冻结WorldRelease与受治理小说双来源及各自owner scope；世界展示精确Release版本/完整Hash/能力/资源/预检缺口，小说支持整部、卷、章节和自定义范围并以正式P0同算法预览版本与边界Hash；预览不返回正文、不读模型、不计费且不写Production、Brief、Build、SourcePin、Ledger、GapReport、Release或Session；交接候选携带精确身份，正式冻结以预览Hash或授权Brief证据CAS拒绝来源漂移；小说-only、旧Release精确选择及原文字冒险入口真实E2E通过 |
-| TOW-G5-02 | DONE | 主Agent会谈与Brief确认 | G3-04 | 专属工作流从G5-01精确选择进入统一ProductProduction `consulting`状态；作者可编辑主角/体验/来源边界/未决项/规模/媒资/完成条件，代码冻结首版产品边界。可选主Agent只读取受控来源摘要和作者表单，最多两次协议尝试；无Key也以作者候选进入同一durable Run。四项确认与零未决项、来源CAS、候选/ContextManifest/终态receipt一致后才写不可变Creator Brief并进入`brief-ready`，不创建Build/Release/Session；刷新恢复、StrictMode并发、双来源、四种小说locator、跨项目ID重映射、导入失效与二次迁移均验证。G5-04前拒绝授权，不能由旧通用Brief旁路 |
-| TOW-G5-03 | DONE | BYOK凭证、模型、预算和费用UI | G3-01、G5-02 | Creator Brief确认后进入专属无写入预检，复用全局BYOK与正式creation任务路由而不建立第二套Key。安全origin和不可反显基础路径Hash、实际凭证来源及生成参数组成模型绑定；远程必须HTTPS，URL内嵌/疑似凭证、同域换路径都会失效，误贴到endpoint、model、人工报价说明、blocker或warning的当前及常见Key也不会进入快照或日志。内置价只适用provider、显式复核model ID与官方商业端点，未知/中转必须人工录价，token零费用仅允许明确本地Ollama/custom。界面显示完整DAG 155次建议调用/160硬上限、120万输入/36万输出token、$30文本硬保护、2小时/200MB资源边界，并明确媒资费用后置到G5-08；Creator Brief已发生的真实调用、provider或估算token、耗时和估算费用可见但不冒充供应商账单。四项作者确认仅形成内存Hash，不创建Build/SourcePlan或计费；Verifier以当前任务路由/AIConfig作外部比较，按设置合同校验生成参数并拒绝空确认、自洽重算Hash，设置往返精确恢复会谈/产品/来源；G5-04仍须CAS并原子冻结等价快照。余额、欠费、授权、限流、超时、断网与结果未知转成无原始供应商正文的可恢复说明且不隐藏重发；中央AI日志在创建、更新、读取和格式化边界清除Key、认证头及URL敏感部分。14个关联文件125项回归、TypeScript和目标ESLint通过；无新表、Schema、migration、Context Source或AI写入口 |
-| TOW-G5-04 | READY | 生产计划、DAG、Run进度和恢复 | G3-01、G5-02、G5-03 | 依赖、并行组、步骤、尝试、暂停、重试、stale和checkpoint可见 |
-| TOW-G5-05 | QUEUED | Artifact浏览和受治理内容表 | G3-05～G3-16 | 故事、地区、角色、任务、物品、敌人、商店、配方及引用可查 |
+| TOW-G5-02 | DONE | 主Agent会谈与Brief确认 | G3-04 | 专属工作流从G5-01精确选择进入统一ProductProduction `consulting`状态；作者可编辑主角/体验/来源边界/未决项/规模/媒资/完成条件，代码冻结首版产品边界。可选主Agent只读取受控来源摘要和作者表单，最多两次协议尝试；无Key也以作者候选进入同一durable Run。四项确认与零未决项、来源CAS、候选/ContextManifest/终态receipt一致后才写不可变Creator Brief并进入`brief-ready`，不创建Build/Release/Session；刷新恢复、StrictMode并发、双来源、四种小说locator、跨项目ID重映射、导入失效与二次迁移均验证。专属Creator启动命令前拒绝授权，不能由旧通用Brief旁路 |
+| TOW-G5-03 | DONE | BYOK凭证、模型、预算和费用UI | G3-01、G5-02 | Creator Brief确认后进入专属无写入预检，复用全局BYOK与正式creation任务路由而不建立第二套Key。安全origin和不可反显基础路径Hash、实际凭证来源及生成参数组成模型绑定；远程必须HTTPS，URL内嵌/疑似凭证、同域换路径都会失效，误贴到endpoint、model、人工报价说明、blocker或warning的当前及常见Key也不会进入快照或日志。内置价只适用provider、显式复核model ID与官方商业端点，未知/中转必须人工录价，token零费用仅允许明确本地Ollama/custom。界面显示完整DAG 155次建议调用/160硬上限、120万输入/36万输出token、$30文本硬保护、2小时/200MB资源边界，并明确媒资费用后置到G5-08；Creator Brief已发生的真实调用、provider或估算token、耗时和估算费用可见但不冒充供应商账单。四项作者确认仅形成内存Hash，不创建Build/SourcePlan或计费；Verifier以当前任务路由/AIConfig作外部比较，按设置合同校验生成参数并拒绝空确认、自洽重算Hash，设置往返精确恢复会谈/产品/来源；正式开始仍须CAS并原子冻结等价快照。余额、欠费、授权、限流、超时、断网与结果未知转成无原始供应商正文的可恢复说明且不隐藏重发；中央AI日志在创建、更新、读取和格式化边界清除Key、认证头及URL敏感部分。14个关联文件125项回归、TypeScript和目标ESLint通过；无新表、Schema、migration、Context Source或AI写入口 |
+| TOW-G5-04 | DONE | 生产计划、DAG、Run进度和恢复 | G3-01、G5-02、G5-03 | Creator Brief后的专属零写入预览展示精确动态DAG、依赖、并行组、模型、预算、完成条件和计划Hash，并要求作者声明来源权利依据及说明。正式开始在同一事务内重新CAS Production revision、Creator Brief revision/Hash、来源版本/边界、完整模型route与参数、报价预算、四项确认和预览Plan Hash，原子冻结不含本地ID的Creator SourcePlan、Creator Start、兼容执行Brief、授权Build、命令receipt和Brief授权状态；Creator Brief仍是作者权威，兼容Brief只服务共享scheduler且使用非定位占位坐标。专属工作流以`productionOnly`打开精确Production，目标缺失或失效即停止，不回退最近记录。工作台显示依赖、并行组、尝试、超时、durable边界、checkpoint、stale及预算实耗；scheduler以必需receipt和subject lock守住可运行集合。P1来源批次和P9场景分片走登记的有界多调用协议，按剩余attempt预算只重跑未完成分片；provider响应先计账再解析，作者P9聚合稿零模型调用。同一Build/task跨Run/epoch累计paid charge和结果未知reservation，调用、token、费用、时长与存储不能经恢复重置；durable请求标记后、executor前再次复核当前Production/Build，跨标签pause/stop不产生本地可阻止的派发。恢复动作绑定失败Run/rootRun、epoch、Plan Hash、task与attempt；仅P2～P10白名单文本任务可接受隔离修复或作者JSON。v10导入在事务前验证SourcePin/Unit payload、contentHash、owner和闭包，并由`PROJECT_TABLES`重映射通用SourcePlan内嵌locator。复用现有生命周期，无新表、Schema、migration或AI写入口；媒资费用仍后置G5-08 |
+| TOW-G5-05 | READY | Artifact浏览和受治理内容表 | G3-05～G3-16 | 在当前Work/Product/Production/Build精确作用域内，以`productBuildArtifacts`不可变聚合为权威提供只读治理投影；故事、地区、角色、任务、物品、敌人、商店、配方及其稳定ID引用可查，并显示Artifact类型、版本、状态、生产Run、Hash和来源证据。stale、损坏、悬空引用或跨作用域记录不得冒充当前有效内容；刷新、大列表、移动端、键盘与读屏路径可用。除非索引和全生命周期需求被证明，不新增万能物理“内容表”；本项不直接写Artifact，直接编辑/Agent修改归G5-06，影响与局部修复归G5-07，媒资归G5-08 |
 | TOW-G5-06 | QUEUED | 直接编辑与Agent修改双入口 | G5-05、G1-12 | 两类修改都先成候选，验证后adopt；不允许页面散写正式表 |
 | TOW-G5-07 | QUEUED | 引用影响、stale、问题定位和局部修复 | G3-17、G5-06 | 修改上游时下游失效可见；修复有界，不默认全量重做 |
 | TOW-G5-08 | QUEUED | 媒资需求、生成/导入、权利和绑定 | G3-17 | 程序地图、头像、背景达到必需覆盖；音频可选且有降级 |
 | TOW-G5-09 | QUEUED | 质量门、灰盒试玩和问题回执 | G3-18、G2-28、G5-07 | 硬门、语义评测、豁免、隔离试玩和问题复现证据完整 |
 | TOW-G5-10 | QUEUED | Build装配、发布和不可变ProductRelease | G5-08、G5-09 | 一次授权后可完成生产；发布前验证消费槽、Hash和终态Receipt |
 | TOW-G5-11 | QUEUED | 新Release、兼容报告和存档迁移 | G1-09、G5-10 | 旧档留在旧Release；兼容时可预演迁移并保留原分支 |
-| TOW-G5-12 | QUEUED | 工作台导入导出、删除和真实E2E | G5-01～G5-11、G1-12 | 从来源到发布更新全路径通过，刷新/失败/导入导出和删除不丢数据；v10导入必须在事务前验证SourcePin/Unit payload、contentHash及pin↔unit闭包，并重绑`sourcePlanJson.worldReference.localReleaseRecordId`等嵌套便携引用，篡改备份失败关闭 |
+| TOW-G5-12 | QUEUED | 工作台导入导出、删除和真实E2E | G5-01～G5-11、G1-12 | 从来源到发布更新全路径通过，刷新/失败/导入导出和删除不丢数据；复验G5-04已落地的SourcePin/Unit写前闭包验真与通用SourcePlan嵌套locator重映射，并覆盖完整Creator工作流的篡改备份失败关闭、删除和真实浏览器往返 |
 
 阶段出口：创作者不需要手改JSON即可完成游戏生产和版本维护。
 
@@ -357,6 +357,7 @@ G7 盐脊验收、发布更新与旧入口收口
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| 1.1.90 | 2026-09-10 | 完成G5-04生产计划、DAG、Run进度和恢复：专属零写入预览显示精确计划、权利依据、模型和预算，正式开始CAS完整来源与模型事实并原子冻结不含本地ID的Creator SourcePlan、Creator Start、兼容Brief、Build和命令receipt；专属工作流只打开精确Production。P1/P9采用登记的有界多调用协议，按分片与剩余attempt预算恢复，响应先计账再解析；同一Build/task跨Run/epoch累计paid charge和未知reservation，executor前复核当前所有权，跨标签pause/stop不产生本地可阻止的付费派发。恢复命令绑定原Run、epoch、Plan和attempt，作者修复只开放给白名单文本任务。v10导入事务前验证SourcePin闭包并重映射通用SourcePlan locator；无新表、Schema、migration或AI写入口，媒资费用继续后置G5-08。总进度88/121，业务功能78/111，下一项G5-05；G5-05只读浏览当前Build的受治理Artifact投影，编辑、影响修复与媒资仍分别留在G5-06～G5-08 |
 | 1.1.89 | 2026-09-09 | 完成G5-03 BYOK凭证、模型、预算和费用UI：Creator Brief之后新增零写入生产预检，复用全局AI设置与正式creation任务路由且不复制Key入口；模型绑定保存安全origin、不可反显基础路径Hash、实际凭证来源与受设置合同约束的参数。目录价同时限定provider、显式复核model ID及官方商业端点，中转、同域异路径、远程HTTP、URL内嵌/疑似凭证和未知价格失败关闭；误贴到endpoint、model、报价说明、blocker、warning或日志hostname的Key不会进入任何显示/Hash。作者报价与严格本地零费用形成独立快照。完整生产预算显示155/160次调用、120万/36万token、$30文本费用、2小时和200MB硬保护，媒资成本明确延后；Brief用量与非账单估价分开。Verifier重新解析当前路由/AIConfig，拒绝空确认、自洽重算Hash和配置漂移；设置往返精确绑定会谈/产品/来源且初始化不丢项目。四项确认仍只在内存，Build为0；余额/欠费/授权/限流/断网/未知结果失败关闭且不隐藏重试。中央AI日志清除Key、认证头及URL敏感部分。14个关联文件125项回归、TypeScript和目标ESLint通过。总进度87/121，业务功能77/111，下一项G5-04 |
 | 1.1.88 | 2026-09-09 | 完成G5-02主Agent会谈与Creator Brief：真实来源入口进入统一Production/Brief生命周期，表单完整覆盖作者设定、主角、体验、来源边界、未决项、规模、媒资与完成条件；固定产品能力由代码持有。可选模型只读G5-01无正文摘要和作者输入，经正式AI入口、Skill、ContextManifest及最多两次有界修复形成候选；无Key人工确认也生成同类durable Run。四项作者确认、零未决项、来源Hash复验、候选/上下文/终态receipt一致后才保存不可变Brief并进入`brief-ready`，且G5-04前明确禁止授权或创建Build。Production、Brief、来源locator和candidate Run可跨项目重映射；导入事务前先验RunContract Hash与逐事件世界组，再重放完整终态证据，首次导入主动使本地终态receipt stale，二次迁移仍保留原Brief证明。修复StrictMode并发产生重复起点事件；30项G5回归、33项关联生命周期/导入导出回归、2项真实Chromium E2E、TypeScript、目标ESLint、架构门与生产Build通过。总进度86/121，业务功能76/111，下一项G5-03 |
 | 1.1.87 | 2026-09-09 | 完成G5-01独立产品创建入口与来源选择：新增文字开放世界专用创作者入口，支持冻结WorldRelease与受治理小说双来源、独立owner scope、精确版本/Hash、能力/资源/范围和目录预检缺口；小说预览与正式P0复用同一快照/分片/Hash算法且不返回正文。来源确认阶段零生命周期写入、零模型读取/计费，正式WorldRelease/小说冻结以已确认Hash或授权Brief证据CAS拒绝漂移；小说-only、旧Release精确交接、通用文字冒险兼容和性能路径E2E通过，27项关联回归及架构门通过。登记G5-12导入前SourcePin闭包验真与嵌套WorldReference重绑债务。总进度85/121，业务功能75/111，下一项G5-02 |
