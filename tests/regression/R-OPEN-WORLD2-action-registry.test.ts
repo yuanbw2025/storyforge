@@ -220,6 +220,80 @@ describe('Text Open World vNext · unified Action registry and availability proj
     })).toThrow('Action不可用:scene-unavailable')
   })
 
+  it('Action v18以前的冻结Release不追溯套用最终奖励领取门', () => {
+    const runtimePackage = createTextOpenWorldVNextP9Fixture()
+    const narrative = runtimePackage.modules.narrative.payload as any
+    const actions = runtimePackage.modules.actions.payload as any
+    const endingAction = {
+      key: 'action.legacy-ending', category: 'observe', label: '作出旧版最终选择',
+      description: '保留Action v15发布时已经冻结的结局语义。', actorScope: 'player', targetScope: 'none',
+      locationKeys: ['location.salt-port'], requirementConditionKeys: [], costEffectKeys: [],
+      successEffectKeys: ['effect.legacy-unlock-ending', 'effect.legacy-reach-ending'], failureEffectKeys: [],
+      timeCostMinutes: 0, confirmationPolicy: 'always', repeatPolicy: 'once', cooldownMinutes: null,
+    }
+    actions.effects.push(
+      { key: 'effect.legacy-unlock-ending', operation: 'unlock-ending', payload: { endingKey: 'ending.cooperate' } },
+      { key: 'effect.legacy-reach-ending', operation: 'reach-ending', payload: { endingKey: 'ending.cooperate' } },
+    )
+    actions.actions.push(endingAction)
+    const endingChoice = {
+      key: 'choice.legacy-ending', sceneKey: 'scene.resolution.main',
+      label: endingAction.label, description: endingAction.description,
+      actionKey: endingAction.key,
+    }
+    narrative.fixedChoices.push(endingChoice)
+    const endingScene = narrative.scenes.find((scene: any) => scene.key === 'scene.resolution.main')
+    endingScene.actionKeys.push(endingAction.key)
+    endingScene.fixedChoiceKeys.push(endingChoice.key)
+    actions.inputBindings.actions.push({
+      key: 'binding.action.legacy-ending',
+      order: actions.inputBindings.actions.length + 1,
+      actionKey: endingAction.key,
+      actionDefinitionHash: 'e'.repeat(64),
+      actorScope: endingAction.actorScope,
+      category: endingAction.category,
+      targetScope: endingAction.targetScope,
+      systemAction: {
+        enabled: true,
+        label: endingAction.label,
+        description: endingAction.description,
+        executionSource: 'system-action',
+      },
+      fixedChoiceKeys: [endingChoice.key],
+      naturalLanguage: {
+        mode: 'existing-action-candidate',
+        exampleUtterances: ['作出旧版最终选择', '决定盐渠旧版结局'],
+        candidateMayOnlySelectThisAction: true,
+        targetResolution: 'current-projection-valid-targets-only',
+        highConfidenceLowRisk: 'execute-after-runtime-validation',
+        highRiskOrIrreversible: 'require-explicit-confirmation',
+        lowConfidence: 'respond-and-recommend-formal-actions',
+        mayCreateAction: false,
+        mayCreateQuest: false,
+        mayCreateMapContent: false,
+        mayWriteState: false,
+      },
+      resultAuthority: {
+        artifactKey: 'text-open-world.quest-design-documents',
+        collection: 'actions',
+        actionKey: endingAction.key,
+        actionDefinitionHash: 'e'.repeat(64),
+      },
+    })
+    const finalInstance = 'quest-instance.legacy-mainline'
+    const availability = createTextOpenWorldActionRegistryV1(runtimePackage).project(context({
+      validTargetKeysByScope: { quest: [finalInstance] },
+      questDefinitionKeyByInstanceKey: { [finalInstance]: 'quest.main.1' },
+      questStatusByInstanceKey: { [finalInstance]: 'completed' },
+      questStageKeyByInstanceKey: { [finalInstance]: 'quest-stage.main.1' },
+      questObjectiveStatusByInstanceKey: { [finalInstance]: { 'objective.main.1': 'completed' } },
+      questRewardClaimKeyByInstanceKey: { [finalInstance]: null },
+      questDeadlineWorldMinuteByInstanceKey: { [finalInstance]: null },
+    })).find(item => item.action.key === endingAction.key)
+
+    expect(availability).toMatchObject({ available: true, unavailableReasons: [] })
+  })
+
   it('P9未落目录的Quest目标Action只作用于当前合法Objective所属实例', () => {
     const runtimePackage = createTextOpenWorldVNextP9Fixture()
     const narrative = runtimePackage.modules.narrative.payload as any

@@ -1206,6 +1206,69 @@ export async function updateProductRuntimeSessionHeadV1(input: {
   if (!updated) throw new Error("运行会话不存在，无法更新运行态缓存。");
 }
 
+/**
+ * Authorized lifecycle boundary for a product adapter that has already
+ * verified its domain terminal state. The adapter supplies the exact
+ * canonical head it inspected; a concurrent event or cache repair makes the
+ * comparison fail instead of completing a different state prefix.
+ */
+export async function completeProductRuntimeSessionV1(input: {
+  sessionId: number;
+  expectedSequence: number;
+  expectedStateJson: string;
+  expectedStateHash: string;
+}): Promise<boolean> {
+  if (!Number.isSafeInteger(input.sessionId) || input.sessionId < 1) {
+    throw new Error("运行会话 id 无效。");
+  }
+  if (!Number.isSafeInteger(input.expectedSequence) || input.expectedSequence < 0) {
+    throw new Error("运行会话完成序号无效。");
+  }
+  if (typeof input.expectedStateJson !== "string" || !input.expectedStateJson) {
+    throw new Error("运行会话完成状态无效。");
+  }
+  if (!/^[a-f0-9]{64}$/.test(input.expectedStateHash)) {
+    throw new Error("运行会话完成状态 Hash 无效。");
+  }
+  const expectedState = parseProductRuntimeState(input.expectedStateJson);
+  if (expectedState.lastSequence !== input.expectedSequence) {
+    throw new Error("运行会话完成状态与序号不一致。");
+  }
+  if (await hashStateJson(input.expectedStateJson) !== input.expectedStateHash) {
+    throw new Error("运行会话完成状态 Hash 不匹配。");
+  }
+  return db.transaction(
+    "rw",
+    db.productRuntimeSessions,
+    db.productRuntimeEvents,
+    async () => {
+      const session = await db.productRuntimeSessions.get(input.sessionId);
+      if (!session) throw new Error("产品运行会话不存在。");
+      const latest = await db.productRuntimeEvents
+        .where("[sessionId+sequence]")
+        .between(
+          [input.sessionId, Dexie.minKey],
+          [input.sessionId, Dexie.maxKey],
+        )
+        .last();
+      const latestSequence = latest?.sequence ?? 0;
+      const headMatches = latestSequence === input.expectedSequence
+        && session.runtimeHeadSequence === input.expectedSequence
+        && session.runtimeHeadStateJson === input.expectedStateJson
+        && session.runtimeHeadStateHash === input.expectedStateHash;
+      if (!headMatches) return false;
+      if (session.status === "completed") return true;
+      if (session.status !== "active") return false;
+      const updated = await db.productRuntimeSessions.update(input.sessionId, {
+        status: "completed",
+        updatedAt: Math.max(Date.now(), session.updatedAt + 1),
+      });
+      if (!updated) throw new Error("运行会话完成态写入失败。");
+      return true;
+    },
+  );
+}
+
 export async function readVerifiedProductRuntimeHeadV1(
   session: ProductRuntimeSession,
 ): Promise<ProductRuntimeHeadV1> {

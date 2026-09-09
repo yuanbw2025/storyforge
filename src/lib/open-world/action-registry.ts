@@ -73,6 +73,12 @@ function parseContext(value: TextOpenWorldActionProjectionContextV1, modules: Te
   const skillKeys = new Set(modules.progression.skills.map(skill => skill.key))
   learnedSkillKeys.forEach(skillKey => { if (!skillKeys.has(skillKey)) fail(`learnedSkillKeys引用未知技能:${skillKey}`) })
   const skillResource = finiteNumber(value.skillResource ?? 0, 'skillResource')
+  const reachedEndingKey = value.reachedEndingKey == null
+    ? null
+    : stableKey(value.reachedEndingKey, 'reachedEndingKey')
+  if (reachedEndingKey != null && !modules.narrative.endings.some(ending => ending.key === reachedEndingKey)) {
+    fail('reachedEndingKey不在Release中')
+  }
   const combatSkillCooldownRemainingTurnsBySkillKey: Record<string, number> = {}
   for (const [skillKey, turns] of Object.entries(value.combatSkillCooldownRemainingTurnsBySkillKey ?? {})) {
     if (!skillKeys.has(stableKey(skillKey, 'combat skill cooldown key'))) fail(`战斗冷却引用未知技能:${skillKey}`)
@@ -185,6 +191,7 @@ function parseContext(value: TextOpenWorldActionProjectionContextV1, modules: Te
     learnedSkillKeys,
     skillResource,
     combatSkillCooldownRemainingTurnsBySkillKey,
+    reachedEndingKey,
     knownRecipeKeys,
     inventoryQuantities,
     removableInventoryQuantities,
@@ -241,6 +248,13 @@ export function createTextOpenWorldActionRegistryV1(value: TextOpenWorldRuntimeP
       const modernCombatAction = modules.actions.version >= 10
         && ['combat-basic-attack', 'combat-skill', 'combat-item', 'escape'].includes(action.category)
       const legacyCombatAction = modules.actions.version < 10 && ['continue-combat', 'escape'].includes(action.category)
+      if (context.actorKey === 'player' && context.reachedEndingKey != null) {
+        unavailableReasons.push({
+          code: 'ending-reached',
+          message: '这条时间线已经抵达结局；你仍可查看记录、存档，或从结局前存档建立分支。',
+          conditionKey: null,
+        })
+      }
       if (context.actorKey === 'player' && defeated && !['respawn', 'load-branch'].includes(action.category)) unavailableReasons.push({ code: 'defeated', message: '战败后只能选择战前重试、读档或复活点恢复。', conditionKey: null })
       if (action.category === 'respawn' && context.combatStatus !== 'defeat') unavailableReasons.push({ code: 'combat-state', message: '只有战败后才能在复活点恢复。', conditionKey: null })
       const allowedDuringCombat = modules.actions.version >= 10
@@ -256,6 +270,37 @@ export function createTextOpenWorldActionRegistryV1(value: TextOpenWorldRuntimeP
         const result = context.conditionResults[conditionKey]
         if (!result) unavailableReasons.push({ code: 'condition-unknown', message: '行动条件尚未完成校验。', conditionKey })
         else if (!result.satisfied) unavailableReasons.push({ code: 'condition-failed', message: result.publicReason || '当前条件不允许执行该行动。', conditionKey })
+      }
+      const reachesEnding = action.successEffectKeys.some(effectKey => (
+        effectByKey.get(effectKey)?.operation === 'reach-ending'
+      ))
+      if (context.actorKey === 'player' && reachesEnding) {
+        const ownerQuestKeys = [...new Set((narrativeV2?.scenes ?? [])
+          .filter(scene => scene.sourceKind === 'quest-resolution'
+            && scene.questKey != null
+            && scene.actionKeys.includes(action.key))
+          .map(scene => scene.questKey!))]
+        const finalQuest = ownerQuestKeys.length === 1
+          ? modules.quests.quests.find(quest => quest.key === ownerQuestKeys[0]) ?? null
+          : null
+        if (modules.actions.version >= 18 && !finalQuest) unavailableReasons.push({
+          code: 'scene-unavailable',
+          message: '最终选择尚未绑定到可核验的主线收束场景。',
+          conditionKey: null,
+        })
+        const hasUnclaimedMainlineReward = modules.actions.version >= 18
+          && finalQuest?.type === 'mainline'
+          && finalQuest.rewardContractKey != null
+          && Object.entries(context.questDefinitionKeyByInstanceKey).some(([instanceKey, definitionKey]) => (
+            definitionKey === finalQuest.key
+            && context.questStatusByInstanceKey[instanceKey] === 'completed'
+            && context.questRewardClaimKeyByInstanceKey[instanceKey] == null
+          ))
+        if (hasUnclaimedMainlineReward) unavailableReasons.push({
+          code: 'reward-unclaimed',
+          message: '请先领取已完成的主线任务奖励，再作出最终选择。',
+          conditionKey: null,
+        })
       }
       if (action.repeatPolicy === 'once' && context.completedOnceActionKeys.includes(action.key)) unavailableReasons.push({ code: 'once-consumed', message: '该行动已经执行过。', conditionKey: null })
       const cooldownUntil = context.cooldownUntilWorldMinuteByActionKey[action.key] ?? 0

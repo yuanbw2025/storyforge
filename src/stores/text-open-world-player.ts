@@ -344,6 +344,14 @@ export const useTextOpenWorldPlayerStore = create<TextOpenWorldPlayerState>((set
   let presentationRequestRevision = 0
   let presentationAbortController: AbortController | null = null
   let presentationInFlight: Promise<void> | null = null
+  const publishDetails = (details: Awaited<ReturnType<typeof readDetails>>) => {
+    set(current => ({
+      ...details,
+      sessions: current.sessions.map(session => (
+        session.id === details.selectedSession.id ? details.selectedSession : session
+      )),
+    }))
+  }
   const startOperationInFlight = new Map<string, Promise<number>>()
   const legacyOperationInFlight = new Map<string, Promise<void>>()
   const invalidatePresentation = () => {
@@ -428,7 +436,7 @@ export const useTextOpenWorldPlayerStore = create<TextOpenWorldPlayerState>((set
     if (!request || sessionId == null || !mayPublish()) return
     try {
       const details = await readDetails(request.scope, request.worldGroupId, sessionId)
-      if (mayPublish()) set(details)
+      if (mayPublish()) publishDetails(details)
     } catch (error) {
       if (!mayPublish()) return
       throw error
@@ -634,7 +642,7 @@ export const useTextOpenWorldPlayerStore = create<TextOpenWorldPlayerState>((set
         }
         else {
           const details = await readDetails(request.scope, request.worldGroupId, sessionId)
-          if (isCurrentProjectionRequest(request)) set(details)
+          if (isCurrentProjectionRequest(request)) publishDetails(details)
         }
       } catch (error) {
         if (!isCurrentProjectionRequest(request)) return
@@ -1011,6 +1019,9 @@ export const useTextOpenWorldPlayerStore = create<TextOpenWorldPlayerState>((set
           throw new Error('[text-open-world] 制作预览不提供正式手动存档或时间线分支；请先发布Release。')
         }
         const state = await readProductRuntimeState(sessionId)
+        if (state.textOpenWorld?.state.endings.reachedKey != null) {
+          throw new Error('[text-open-world] 结局后的当前进度只能读取；请从结局前存档建立分支。')
+        }
         const child = state.textOpenWorld
           ? await (async () => {
               const checkpoint = await createTextOpenWorldCheckpointV1({

@@ -80,6 +80,8 @@ export interface TextOpenWorldPlayerCheckpointV1 {
   health: 'available' | 'repairable' | 'damaged'
   healthLabel: string
   repairable: boolean
+  /** True only when the verified checkpoint has already crossed the ending boundary. */
+  terminal?: boolean
 }
 
 export interface TextOpenWorldPlayerSaveBranchV1 {
@@ -98,6 +100,8 @@ export interface TextOpenWorldPlayerSaveBranchV1 {
   runtimeHealth: 'available' | 'repairable' | 'damaged'
   runtimeHealthLabel: string
   runtimeRepairable: boolean
+  /** Completed timelines stay readable but cannot branch from their current terminal head. */
+  terminal?: boolean
   manualSlots: { used: number; limit: number; remaining: number }
   checkpoints: TextOpenWorldPlayerCheckpointV1[]
 }
@@ -328,6 +332,7 @@ function checkpointPurposeLabel(purpose: ProductRuntimeCheckpointPurposeV1 | 'in
 function sessionStatusLabel(status: ProductRuntimeSession['status']): string {
   if (status === 'active') return '进行中'
   if (status === 'paused') return '已暂停'
+  if (status === 'completed') return '已完成'
   return '已归档'
 }
 
@@ -383,6 +388,7 @@ async function projectCheckpoint(
     health,
     healthLabel: health === 'available' ? '可读取' : health === 'repairable' ? '可从规范事件修复' : '需要保留诊断并选择其它存档',
     repairable,
+    terminal: state?.textOpenWorld?.state.endings.reachedKey != null,
   }
 }
 
@@ -403,6 +409,7 @@ function projectUnverifiedCheckpoint(
     health: 'damaged',
     healthLabel: '冻结来源无法核验；已保留用于诊断',
     repairable: false,
+    terminal: false,
   }
 }
 
@@ -550,6 +557,8 @@ export async function projectTextOpenWorldPlayerSavesV1(input: {
             ? '运行缓存可从规范事件修复'
             : sourceVerified ? '事件记录需要诊断' : '冻结来源无法核验；只保留诊断与删除入口',
         runtimeRepairable: runtimeInspection?.repairable ?? false,
+        terminal: session.status === 'completed'
+          || boundary?.state.textOpenWorld?.state.endings.reachedKey != null,
         manualSlots: {
           used: manualUsed,
           limit: TEXT_OPEN_WORLD_MANUAL_SAVE_LIMIT_V1,
@@ -775,6 +784,12 @@ export async function branchTextOpenWorldPlayerSaveV1(input: {
   const runtimeFormat = parseProductRuntimeState(parent.initialStateJson).textOpenWorld ? 'vnext' : 'legacy'
   if (runtimeFormat === 'legacy' && !(await verifyProductRuntimeCheckpoint(input.checkpointId))) {
     fail('旧版Release存档没有通过共享检查点验证')
+  }
+  if (runtimeFormat === 'vnext') {
+    const checkpointBoundary = await canonicalBoundary(parent, checkpoint.throughSequence)
+    if (checkpointBoundary.state.textOpenWorld?.state.endings.reachedKey != null) {
+      fail('结局后存档只能读取；请从抵达结局前的存档建立新分支')
+    }
   }
   const child = runtimeFormat === 'vnext'
     ? await branchTextOpenWorldSessionFromCheckpointV1({

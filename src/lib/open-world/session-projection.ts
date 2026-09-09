@@ -841,6 +841,7 @@ export function deriveTextOpenWorldContextsV1(value: TextOpenWorldSessionProject
           Math.max(0, (activeCombat.cooldownUntilRoundBySkillKey?.[skill.key] ?? 0) - activeCombat.round),
         ]))
       : {},
+    reachedEndingKey: state.endings.reachedKey,
     knownRecipeKeys: [...state.inventory.knownRecipeKeys],
     inventoryQuantities: structuredClone(inventoryQuantities),
     removableInventoryQuantities: structuredClone(removableInventoryQuantities),
@@ -873,6 +874,7 @@ export function deriveTextOpenWorldContextsV1(value: TextOpenWorldSessionProject
 export function rebaseTextOpenWorldSessionProjectionForBranchV1(value: TextOpenWorldSessionProjectionV1): TextOpenWorldSessionProjectionV1 {
   const projection = parseTextOpenWorldSessionProjectionV1(value)
   if (projection.protocol.pendingCommandId) fail('不能从尚未终结的命令批次创建分支')
+  if (projection.state.endings.reachedKey != null) fail('不能从已抵达结局的状态创建分支')
   projection.protocol = {
     pendingCommandId: null, pendingCommandSequence: null, pendingActionKey: null, pendingActorKey: null, pendingTargetKey: null, pendingCombatTransitionIntent: null, pendingActionQuantity: null, pendingActionItemKey: null,
     pendingDirectorTrigger: null, randomEvidence: [], lastCompletedCommandId: null, lastOutcomeFingerprint: null,

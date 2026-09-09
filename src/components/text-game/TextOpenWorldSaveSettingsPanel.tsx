@@ -357,7 +357,8 @@ export default function TextOpenWorldSaveSettingsPanel(
                 <footer>
                   <button
                     type="button"
-                    disabled={disabled || checkpoint.health !== 'available'}
+                    disabled={disabled || checkpoint.health !== 'available' || checkpoint.terminal === true}
+                    title={checkpoint.terminal ? '结局后存档只能读取，请选择更早的存档。' : undefined}
                     onClick={() => requestConfirmation({
                       title: `从“${checkpoint.name}”继续？`,
                       detail: '当前时间线和之后发生的事件都会保留；系统会从这个存档点建立一条新的时间线分支。',
@@ -398,11 +399,13 @@ export default function TextOpenWorldSaveSettingsPanel(
 
     {props.formalSaveAvailable && tab === 'branches' && <div className="open-world-save-settings-content" data-testid="text-open-world-branch-list">
       {currentBranch && <section className="open-world-branch-create">
-        <div><strong>从当前进度建立分支</strong><p>原时间线保持不变；新分支仍固定使用同一个 Release。</p></div>
+        <div><strong>从当前进度建立分支</strong><p>{currentBranch.terminal
+          ? '这条时间线已经抵达结局；请从结局前的存档建立分支。'
+          : '原时间线保持不变；新分支仍固定使用同一个 Release。'}</p></div>
         <form onSubmit={event => {
           event.preventDefault()
           const title = branchTitle.trim()
-          if (!title || disabled) return
+          if (!title || disabled || currentBranch.terminal) return
           requestConfirmation({
             title: `建立“${title}”？`,
             detail: '系统会先冻结当前进度，再建立新的子时间线；原时间线与其事件不会被覆盖。',
@@ -416,11 +419,11 @@ export default function TextOpenWorldSaveSettingsPanel(
             aria-label="新时间线名称"
             value={branchTitle}
             maxLength={200}
-            disabled={disabled}
+            disabled={disabled || currentBranch.terminal}
             onChange={event => setBranchTitle(event.currentTarget.value)}
             placeholder="新时间线名称"
           />
-          <button type="submit" disabled={disabled || !branchTitle.trim()}><GitBranch aria-hidden="true" />建立</button>
+          <button type="submit" disabled={disabled || currentBranch.terminal || !branchTitle.trim()}><GitBranch aria-hidden="true" />建立</button>
         </form>
       </section>}
       {props.saves.groups.map(group => <section className="open-world-branch-group" key={group.uiId}>

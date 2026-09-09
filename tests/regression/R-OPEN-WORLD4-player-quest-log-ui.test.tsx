@@ -15,7 +15,10 @@ import {
   type TextOpenWorldSessionProjectionV1,
 } from '../../src/lib/types'
 import { useTextOpenWorldPlayerStore } from '../../src/stores/text-open-world-player'
-import { createTextOpenWorldProductRuntimePackageFixtureV1 } from '../helpers/text-open-world-product-session'
+import {
+  createTextOpenWorldPlayerSessionRowFixtureV1,
+  createTextOpenWorldProductRuntimePackageFixtureV1,
+} from '../helpers/text-open-world-product-session'
 import {
   createTextOpenWorldVNextFixture,
   createTextOpenWorldVNextP9Fixture,
@@ -295,7 +298,10 @@ describe('Text Open World G4-05 · 完整玩家任务日志 UI', () => {
         sessions: [],
         releases: [],
         selectedSessionId: sessionId,
-        selectedSession: null,
+        selectedSession: createTextOpenWorldPlayerSessionRowFixtureV1({
+          sessionId,
+          projection: nextProjection,
+        }),
         selectedSessionSource: 'build-preview',
         selectedManifest: createTextOpenWorldProductRuntimePackageFixtureV1(runtimePackage),
         runtimeState: { ...structuredClone(EMPTY_PRODUCT_RUNTIME_STATE), textOpenWorld: nextProjection },

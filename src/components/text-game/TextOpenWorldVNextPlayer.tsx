@@ -8,6 +8,7 @@ import {
   type TextOpenWorldPlayerCraftingEconomyExecuteRequestV1,
 } from '../../lib/open-world/player-crafting-economy'
 import { projectTextOpenWorldPlayerHudV1 } from '../../lib/open-world/player-hud'
+import { projectTextOpenWorldPlayerEndingV1 } from '../../lib/open-world/player-ending'
 import { textOpenWorldProjectionUnavailableIssueV1 } from '../../lib/open-world/player-resilience'
 import {
   projectTextOpenWorldPlayerNotificationsV1,
@@ -25,6 +26,7 @@ import TextOpenWorldActorsPanel from './TextOpenWorldActorsPanel'
 import TextOpenWorldCharacterPanel from './TextOpenWorldCharacterPanel'
 import TextOpenWorldCombatPanel, { type TextOpenWorldCombatActionRequestV1 } from './TextOpenWorldCombatPanel'
 import TextOpenWorldCraftingEconomyPanel from './TextOpenWorldCraftingEconomyPanel'
+import TextOpenWorldEndingPanel from './TextOpenWorldEndingPanel'
 import TextOpenWorldGameShell from './TextOpenWorldGameShell'
 import TextOpenWorldInventoryPanel from './TextOpenWorldInventoryPanel'
 import TextOpenWorldMapPanel, { type TextOpenWorldMapTravelRequestV1 } from './TextOpenWorldMapPanel'
@@ -208,15 +210,33 @@ export default function TextOpenWorldVNextPlayer() {
     }
   }, [projection, selectedSessionId, store.runtimeState.lastSequence])
   const craftingEconomyProjection = craftingEconomyProjectionResult.value
+  const endingProjectionResult = useMemo(() => {
+    if (!projection) return { ready: true, value: null }
+    try {
+      return {
+        ready: true,
+        value: projectTextOpenWorldPlayerEndingV1({
+          projection,
+          sessionStatus: session?.status ?? 'active',
+        }),
+      }
+    } catch {
+      return { ready: false, value: null }
+    }
+  }, [projection, session?.status])
+  const endingProjection = endingProjectionResult.value
   const projectionIssue = !notificationsReady
     || !combatProjectionResult.ready
     || !worldRecordProjectionResult.ready
     || !craftingEconomyProjectionResult.ready
+    || !endingProjectionResult.ready
     ? textOpenWorldProjectionUnavailableIssueV1()
     : null
   const issue = storeIssue ?? projectionIssue
   const interactionLocked = store.busy || store.loading
     || issue?.gameplayAvailability !== undefined && issue.gameplayAvailability !== 'enabled'
+  const endingReached = endingProjection != null && endingProjection.phase !== 'in-progress'
+  const gameplayLocked = interactionLocked || endingReached || session?.status !== 'active'
   const combatIdentity = combatProjection
     ? `${combatProjection.operationIdentity.sessionId}:${combatProjection.operationIdentity.combatInstanceKey ?? 'legacy'}`
     : null
@@ -306,7 +326,7 @@ export default function TextOpenWorldVNextPlayer() {
     source: TextOpenWorldCommandSourceV1 = 'system-action',
     expectedBaseSequence?: number,
   ) => {
-    if (!action.available) return
+    if (gameplayLocked || !action.available) return
     if (action.targetScope === 'combatant' && explicitTargetKey === undefined) return
     const targetKey = explicitTargetKey !== undefined
       ? explicitTargetKey
@@ -507,11 +527,13 @@ export default function TextOpenWorldVNextPlayer() {
   const sceneTutorialActionKeys = combatTutorialAvailable
     ? combatProjection.actions.filter(action => action.available).map(action => action.actionKey)
     : currentSceneTutorialAvailability.actionKeys
-  const sceneView = <div className="space-y-3">
+  const sceneView = endingProjection && endingProjection.phase !== 'in-progress'
+    ? <TextOpenWorldEndingPanel projection={endingProjection} />
+    : <div className="space-y-3">
     {combatSurfaceVisible ? <TextOpenWorldCombatPanel
       projection={combatProjection}
       synchronizing={!combatProjectionResult.ready}
-      busy={interactionLocked}
+      busy={gameplayLocked}
       onExecute={handleCombatAction}
       onRetry={() => void run(() => store.retryDefeatedCombat())}
       onDismissResult={() => {
@@ -523,7 +545,7 @@ export default function TextOpenWorldVNextPlayer() {
       projection={sceneProjection}
       availableActions={availableActions}
       feedback={store.lastFeedback}
-      busy={interactionLocked}
+      busy={gameplayLocked}
       fallback={{
         regionTitle: region?.title ?? '未知区域',
         locationTitle: location?.title ?? state.map.currentLocationKey,
@@ -536,19 +558,6 @@ export default function TextOpenWorldVNextPlayer() {
       }}
       onTutorialAvailabilityChange={handleSceneTutorialAvailability}
     />}
-    {store.runtimeState.narrative?.availableChoiceKeys?.includes('ending.world') && <section
-      className="rounded border border-accent/30 bg-accent/5 p-5"
-    >
-      <h2 className="text-lg font-semibold">世界主线已经完成</h2>
-      <button
-        type="button"
-        disabled={interactionLocked}
-        onClick={() => void run(() => store.choose('ending.world'))}
-        className="mt-3 rounded bg-accent px-3 py-2 text-xs text-white"
-      >
-        进入正式结局
-      </button>
-    </section>}
   </div>
 
   const questsView = selectedSessionId == null
@@ -558,7 +567,7 @@ export default function TextOpenWorldVNextPlayer() {
         projection={projection}
         events={store.events}
         actions={projectedActions}
-        busy={interactionLocked}
+        busy={gameplayLocked}
         onExecute={(action, instanceKey) => executeProjectedAction(action, instanceKey)}
         onFocusLocation={focusQuestLocation}
       />
@@ -569,7 +578,7 @@ export default function TextOpenWorldVNextPlayer() {
     {craftingEconomyProjection ? <TextOpenWorldCraftingEconomyPanel
       sessionKey={sessionKey}
       projection={craftingEconomyProjection}
-      busy={interactionLocked}
+      busy={gameplayLocked}
       onExecute={handleCraftingEconomyAction}
     /> : <article
       className="rounded border border-border bg-bg-surface p-4 text-xs text-text-muted"
@@ -579,7 +588,7 @@ export default function TextOpenWorldVNextPlayer() {
     <TextOpenWorldInventoryPanel
       sessionKey={sessionKey}
       projection={projection}
-      busy={interactionLocked}
+      busy={gameplayLocked}
       feedback={store.lastFeedback}
       onExecute={(actionKey, itemKey) => {
         const action = projectedActions.find(item => item.action.key === actionKey)
@@ -658,7 +667,7 @@ export default function TextOpenWorldVNextPlayer() {
       <button type="button" disabled={store.busy} onClick={dismissConfirmation}>取消</button>
       <button
         type="button"
-        disabled={interactionLocked}
+        disabled={gameplayLocked}
         onClick={() => {
           const request = pendingConfirmation
           const liveStore = useTextOpenWorldPlayerStore.getState()
@@ -709,7 +718,7 @@ export default function TextOpenWorldVNextPlayer() {
       gameTitle={runtimePackage.metadata.title}
       locationTitle={`${region?.title ?? '未知区域'} · ${location?.title ?? state.map.currentLocationKey}`}
       sourceLabel={sourceLabel}
-      tutorial={tutorialAvailabilityReady ? {
+      tutorial={!endingReached && tutorialAvailabilityReady ? {
         productionKey,
         runtimeChannel: store.selectedSessionSource === 'build-preview' ? 'build-preview' : 'release',
         cycleKey: projection.lastEventSequence,
@@ -724,7 +733,7 @@ export default function TextOpenWorldVNextPlayer() {
         map: <TextOpenWorldMapPanel
           projection={projection}
           runtimeEventSequence={store.runtimeState.lastSequence}
-          busy={interactionLocked}
+          busy={gameplayLocked}
           sessionKey={sessionKey}
           focusedLocationKey={questMapFocus?.sessionKey === sessionKey ? questMapFocus.locationKey : null}
           focusedLocationRequestId={questMapFocus?.sessionKey === sessionKey ? questMapFocus.requestId : null}
@@ -762,6 +771,11 @@ export default function TextOpenWorldVNextPlayer() {
           {' · '}{hud.clockWeather.weatherLabel} · {hud.clockWeather.weatherDescription}
         </span>
         <span><strong>时间线</strong>事件 #{projection.lastEventSequence}</span>
+        <span data-testid="text-open-world-journey-status">
+          <strong>旅程</strong>{endingProjection?.phase === 'completed'
+            ? '已完成'
+            : endingProjection?.phase === 'settling' ? '正在收束' : '进行中'}
+        </span>
         <span data-testid="text-open-world-runtime-package-hash">
           <strong>运行包</strong>{runtimeSourceEvidence}
         </span>

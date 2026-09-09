@@ -35,6 +35,7 @@ export type ProductRuntimeKind = (typeof PRODUCT_RUNTIME_KINDS)[number];
 export const PRODUCT_RUNTIME_STATUSES = [
   "active",
   "paused",
+  "completed",
   "archived",
 ] as const;
 export type ProductRuntimeStatus =

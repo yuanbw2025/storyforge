@@ -713,11 +713,29 @@ export function projectTextOpenWorldPlayerCombatV1(input: {
 
   const currentInstanceKey = modernCombat?.instanceKey ?? null
   const log: TextOpenWorldPlayerCombatLogEntryV1[] = []
+  const baselineRewardClaimKey = combat.status === 'victory'
+    && automaticReward
+    && encounter.rewardContractKey
+    && currentInstanceKey
+    ? `claim.reward.${encounter.rewardContractKey}.${currentInstanceKey}`
+    : null
+  // A child branch begins with event sequence zero, so parent events are not
+  // copied into its log. The rebased state still carries the canonical applied
+  // claim ledger; use that ledger only to prove settlement, never to reconstruct
+  // reward amounts that are no longer present in this Session's event prefix.
+  const rewardSettledInBaseline = baselineRewardClaimKey != null
+    && projection.state.appliedClaimKeys.includes(baselineRewardClaimKey)
+  const baselineRewardContract = rewardSettledInBaseline
+    ? modules.items.rewardContracts.find(candidate => candidate.key === encounter.rewardContractKey)
+      ?? fail('已结算战斗奖励合同缺失')
+    : null
   let reward: TextOpenWorldPlayerCombatRewardV1 = {
     status: combat.status === 'victory'
-      ? automaticReward && encounter.rewardContractKey ? 'settling' : automaticReward ? 'none' : 'unavailable'
+      ? rewardSettledInBaseline ? 'granted'
+        : automaticReward && encounter.rewardContractKey ? 'settling'
+          : automaticReward ? 'none' : 'unavailable'
       : combat.status === 'active' ? 'not-applicable' : 'none',
-    title: null,
+    title: baselineRewardContract?.title ?? null,
     items: [],
     eventSequence: null,
   }

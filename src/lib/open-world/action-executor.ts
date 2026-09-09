@@ -1,6 +1,10 @@
 import { db } from '../db/schema'
 import { canonicalProductProductionJsonV2, hashProductProductionValueV2 } from '../product-production/hash'
-import { hashProductRuntimeStateV1, readProductRuntimeState } from '../product/runtime-core'
+import {
+  completeProductRuntimeSessionV1,
+  hashProductRuntimeStateV1,
+  readProductRuntimeState,
+} from '../product/runtime-core'
 import type { TextOpenWorldCombatTransitionIntentV1, TextOpenWorldCommandEnvelopeV1, TextOpenWorldDirectorTriggerV1, TextOpenWorldEffectDefinitionV1, TextOpenWorldEffectPlanV1, TextOpenWorldFeedbackReceiptV1, TextOpenWorldRandomEvidenceV1, TextOpenWorldRandomRequestV1 } from '../types'
 import { createTextOpenWorldActionRegistryV1 } from './action-registry'
 import { ensureTextOpenWorldCombatRetryCheckpointV1 } from './checkpoints'
@@ -542,6 +546,79 @@ async function latestUnsettledPlayerCauseV1(
     .sort((left, right) => right.sequence - left.sequence)[0]?.envelope ?? null
 }
 
+function hasUnclaimedFinalMainlineRewardV1(
+  projection: ReturnType<typeof parseTextOpenWorldSessionProjectionV1>,
+  modules: ReturnType<typeof parseTextOpenWorldModulesV1>,
+): boolean {
+  // The mandatory final-reward gate is introduced together with the v18
+  // protected story/ending binding. Older frozen Releases allowed their
+  // ending Effect before reward collection and must retain that behavior.
+  if (modules.actions.version < 18) return false
+  const reachedKey = projection.state.endings.reachedKey
+  if (reachedKey == null) return false
+  const endingActionKeys = modules.actions.actions
+    .filter(action => projection.actions.completedOnceActionKeys.includes(action.key)
+      && action.successEffectKeys.some(effectKey => {
+        const effect = modules.actions.effects.find(candidate => candidate.key === effectKey)
+        return effect?.operation === 'reach-ending' && effect.payload.endingKey === reachedKey
+      }))
+    .map(action => action.key)
+  const finalQuestKeys = [...new Set((modules.narrative.version === 2 ? modules.narrative.scenes : [])
+    .filter(scene => scene.sourceKind === 'quest-resolution'
+      && scene.questKey != null
+      && scene.actionKeys.some(actionKey => endingActionKeys.includes(actionKey)))
+    .map(scene => scene.questKey!))]
+  if (modules.actions.version >= 18 && (endingActionKeys.length !== 1 || finalQuestKeys.length !== 1)) {
+    fail('已抵达结局缺少唯一可核验的主线收束绑定')
+  }
+  if (finalQuestKeys.length !== 1) return false
+  const quest = modules.quests.quests.find(candidate => candidate.key === finalQuestKeys[0])
+    ?? fail('结局主线收束任务不存在')
+  if (quest.type !== 'mainline' || quest.rewardContractKey == null) return false
+  return Object.values(projection.state.quests.instancesByKey).some(instance => (
+    instance.definitionKey === quest.key
+    && instance.status === 'completed'
+    && instance.rewardClaimKey == null
+  ))
+}
+
+/**
+ * Reconciles the player-facing Session lifecycle from the canonical ending
+ * projection. `completed` is a verified cache: the ending Effect and every
+ * durable system follow-up remain the authority and must already be settled.
+ */
+export async function reconcileTextOpenWorldSessionCompletionV1(sessionId: number): Promise<boolean> {
+  if (!Number.isSafeInteger(sessionId) || sessionId < 1) fail('sessionId无效')
+  const previewSession = await db.productRuntimeSessions.get(sessionId)
+  if (!previewSession || previewSession.kind !== 'text-open-world') fail('文字开放世界Session不存在')
+  const binding = await verifyTextOpenWorldVNextSessionBindingV1(previewSession)
+  const runtime = await readProductRuntimeState(sessionId)
+  const projection = parseTextOpenWorldSessionProjectionV1(runtime.textOpenWorld)
+  assertTextOpenWorldVNextProjectionBindingV1(projection, binding)
+  const modules = parseTextOpenWorldModulesV1(projection.runtimePackage)
+  const endingReached = projection.state.endings.reachedKey != null
+  const unsettledPlayerCause = modules.actions.version >= 17
+    ? await latestUnsettledPlayerCauseV1(sessionId, modules)
+    : null
+  const terminalReady = endingReached
+    && projection.protocol.pendingCommandId == null
+    && !hasUnclaimedFinalMainlineRewardV1(projection, modules)
+    && unsettledPlayerCause == null
+
+  if (previewSession.status === 'completed') {
+    if (!terminalReady) fail('已完成Session与规范结局状态不一致')
+    return true
+  }
+  if (previewSession.status !== 'active' || !terminalReady) return false
+
+  return completeProductRuntimeSessionV1({
+    sessionId,
+    expectedSequence: runtime.lastSequence,
+    expectedStateJson: JSON.stringify(runtime),
+    expectedStateHash: await hashProductRuntimeStateV1(runtime),
+  })
+}
+
 async function completedLinkedQuestActionCountV1(
   sessionId: number,
   causeCommandId: string,
@@ -882,12 +959,26 @@ async function settleCombatSystemTransitionsV1(sessionId: number): Promise<void>
  * combat/quest/Director follow-ups.
  */
 export async function resumeTextOpenWorldSystemWorkV1(sessionId: number): Promise<TextOpenWorldFeedbackReceiptV1 | null> {
+  const session = await db.productRuntimeSessions.get(sessionId)
+  if (!session || session.kind !== 'text-open-world') fail('文字开放世界Session不存在')
+  if (session.status !== 'active') {
+    if (session.status === 'completed') await reconcileTextOpenWorldSessionCompletionV1(sessionId)
+    return null
+  }
   const recovered = await recoverPendingCommandV1(sessionId)
   const runtime = await readProductRuntimeState(sessionId)
   const projection = parseTextOpenWorldSessionProjectionV1(runtime.textOpenWorld)
   const modules = parseTextOpenWorldModulesV1(projection.runtimePackage)
   const modern = modules.actions.version >= 17
-  if (!modern && !recovered) return null
+  if (!modern && !recovered) {
+    // Older Action contracts have no durable player-cause ledger, but they can
+    // still contain a canonical reach-ending Effect. If the process stopped
+    // after that Effect committed and before the lifecycle CAS, there is no
+    // pending command to recover; reconcile the verified terminal projection
+    // instead of leaving the Session permanently active.
+    await reconcileTextOpenWorldSessionCompletionV1(sessionId)
+    return null
+  }
   await settleCombatSystemTransitionsV1(sessionId)
   await settleWeatherForCurrentEpochV1(sessionId)
   await settleActorSchedulesForCurrentPeriodV1(sessionId)
@@ -903,6 +994,7 @@ export async function resumeTextOpenWorldSystemWorkV1(sessionId: number): Promis
       await settleDirectorAfterActionV1(sessionId, recovered.feedback.commandId, recovered.envelope.actionKey)
     }
   }
+  await reconcileTextOpenWorldSessionCompletionV1(sessionId)
   return recovered?.feedback ?? null
 }
 
@@ -925,6 +1017,7 @@ export async function executeTextOpenWorldActionV1(input: ExecuteTextOpenWorldAc
     await settleActorSchedulesForCurrentPeriodV1(input.sessionId)
     await settleReadyQuestSystemActionsV1(input.sessionId, feedback.commandId)
     await settleDirectorAfterActionV1(input.sessionId, feedback.commandId, input.actionKey)
+    await reconcileTextOpenWorldSessionCompletionV1(input.sessionId)
   }
   return feedback
 }

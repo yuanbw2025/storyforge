@@ -2,6 +2,10 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { createTextOpenWorldActionRegistryV1 } from '../../src/lib/open-world/action-registry'
 import { executeTextOpenWorldActionV1 } from '../../src/lib/open-world/action-executor'
+import {
+  branchTextOpenWorldSessionFromCheckpointV1,
+  createTextOpenWorldCheckpointV1,
+} from '../../src/lib/open-world/checkpoints'
 import { createTextOpenWorldCombatStateMachineV1 } from '../../src/lib/open-world/combat-state-machine'
 import { projectTextOpenWorldPlayerCombatV1 } from '../../src/lib/open-world/player-combat'
 import {
@@ -204,6 +208,31 @@ describe('Text Open World vNext · disclosure-safe player combat projection', ()
     expect(result.reward.items.some(item => item.label === '经验 +100000')).toBe(false)
     expect(result.reward.items.some(item => item.label.startsWith('盐晶 × '))).toBe(true)
     expect(result.log.filter(entry => entry.tone === 'reward')).toHaveLength(1)
+
+    const checkpoint = await createTextOpenWorldCheckpointV1({
+      sessionId: session.id!,
+      name: '已结算战斗后的分支点',
+    })
+    const child = await branchTextOpenWorldSessionFromCheckpointV1({
+      checkpointId: checkpoint.id!,
+      title: '已结算战斗分支',
+    })
+    const childCurrent = await currentProjection(child.id!)
+    const childResult = projectTextOpenWorldPlayerCombatV1({
+      sessionId: child.id!,
+      projection: childCurrent.projection,
+      events: childCurrent.events,
+      projectedActions: childCurrent.actions,
+    })!
+    expect(childCurrent.events).toEqual([])
+    expect(childResult.result.status).toBe('victory')
+    expect(childResult.reward).toMatchObject({
+      status: 'granted',
+      title: '渠口伏兽奖励',
+      items: [],
+      eventSequence: null,
+    })
+    expect(childResult.log).toEqual([])
   }, 30_000)
 
   it('旧Combat投影不伪造敌人生命、回合、操作或日志', () => {

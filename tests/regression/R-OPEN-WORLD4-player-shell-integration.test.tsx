@@ -12,6 +12,7 @@ import { EMPTY_PRODUCT_RUNTIME_STATE } from '../../src/lib/types'
 import { useTextOpenWorldPlayerStore } from '../../src/stores/text-open-world-player'
 import {
   createGovernedTextOpenWorldSessionFixtureV1,
+  createTextOpenWorldPlayerSessionRowFixtureV1,
   createTextOpenWorldProductRuntimePackageFixtureV1,
 } from '../helpers/text-open-world-product-session'
 import { createTextOpenWorldVNextFixture } from '../helpers/text-open-world-vnext-fixture'
@@ -258,7 +259,10 @@ describe('Text Open World G4 · 真实 vNext 玩家壳集成', () => {
       sessions: [],
       releases: [],
       selectedSessionId: 101,
-      selectedSession: null,
+      selectedSession: createTextOpenWorldPlayerSessionRowFixtureV1({
+        sessionId: 101,
+        projection,
+      }),
       selectedSessionSource: 'build-preview',
       selectedManifest: productRuntimePackage,
       runtimeState: { ...structuredClone(EMPTY_PRODUCT_RUNTIME_STATE), textOpenWorld: projection },
@@ -282,6 +286,10 @@ describe('Text Open World G4 · 真实 vNext 玩家壳集成', () => {
     await act(async () => {
       useTextOpenWorldPlayerStore.setState({
         selectedSessionId: 202,
+        selectedSession: createTextOpenWorldPlayerSessionRowFixtureV1({
+          sessionId: 202,
+          projection,
+        }),
         runtimeState: {
           ...structuredClone(EMPTY_PRODUCT_RUNTIME_STATE),
           textOpenWorld: structuredClone(projection),
@@ -310,7 +318,10 @@ describe('Text Open World G4 · 真实 vNext 玩家壳集成', () => {
       sessions: [],
       releases: [],
       selectedSessionId: 303,
-      selectedSession: null,
+      selectedSession: createTextOpenWorldPlayerSessionRowFixtureV1({
+        sessionId: 303,
+        projection,
+      }),
       selectedSessionSource: 'build-preview',
       selectedManifest: productRuntimePackage,
       runtimeState: { ...structuredClone(EMPTY_PRODUCT_RUNTIME_STATE), textOpenWorld: projection },
@@ -376,7 +387,10 @@ describe('Text Open World G4 · 真实 vNext 玩家壳集成', () => {
       sessions: [],
       releases: [],
       selectedSessionId: 404,
-      selectedSession: null,
+      selectedSession: createTextOpenWorldPlayerSessionRowFixtureV1({
+        sessionId: 404,
+        projection,
+      }),
       selectedSessionSource: 'build-preview',
       selectedManifest: productRuntimePackage,
       runtimeState: { ...structuredClone(EMPTY_PRODUCT_RUNTIME_STATE), textOpenWorld: projection },

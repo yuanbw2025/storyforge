@@ -33,6 +33,8 @@ export interface TextOpenWorldActionProjectionContextV1 {
   learnedSkillKeys?: string[]
   skillResource?: number
   combatSkillCooldownRemainingTurnsBySkillKey?: Record<string, number>
+  /** A reached ending makes every further player mutation unavailable. */
+  reachedEndingKey?: string | null
   knownRecipeKeys: string[]
   inventoryQuantities: Record<string, number>
   /** Runtime-only projection; omitted legacy callers fall back to total quantities. */
@@ -67,6 +69,8 @@ export type TextOpenWorldActionUnavailableCodeV1 =
   | 'item-unavailable'
   | 'recipe-unavailable'
   | 'materials-insufficient'
+  | 'reward-unclaimed'
+  | 'ending-reached'
   | 'route-closed'
   | 'scene-unavailable'
 

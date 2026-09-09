@@ -16,6 +16,7 @@ import { EMPTY_PRODUCT_RUNTIME_STATE } from '../../src/lib/types'
 import { useTextOpenWorldPlayerStore } from '../../src/stores/text-open-world-player'
 import {
   createGovernedTextOpenWorldSessionFixtureV1,
+  createTextOpenWorldPlayerSessionRowFixtureV1,
   createTextOpenWorldProductRuntimePackageFixtureV1,
 } from '../helpers/text-open-world-product-session'
 import {
@@ -146,6 +147,10 @@ describe('Text Open World G4-03 · 场景与三类输入集成', () => {
     const neutral = createInitialTextOpenWorldSessionProjectionV1(runtimePackage)
     useTextOpenWorldPlayerStore.setState({
       selectedSessionId: 101,
+      selectedSession: createTextOpenWorldPlayerSessionRowFixtureV1({
+        sessionId: 101,
+        projection: neutral,
+      }),
       selectedSessionSource: 'build-preview',
       selectedManifest: manifest,
       runtimeState: { ...structuredClone(EMPTY_PRODUCT_RUNTIME_STATE), textOpenWorld: neutral },
@@ -465,13 +470,18 @@ describe('Text Open World G4-03 · 场景与三类输入集成', () => {
       .fixedChoiceKeys.push(riskyChoice.key)
 
     const executeVNextAction = vi.fn(async () => ({ status: 'committed' }) as never)
+    const projection = createInitialTextOpenWorldSessionProjectionV1(runtimePackage)
     useTextOpenWorldPlayerStore.setState({
       selectedSessionId: 303,
+      selectedSession: createTextOpenWorldPlayerSessionRowFixtureV1({
+        sessionId: 303,
+        projection,
+      }),
       selectedSessionSource: 'build-preview',
       selectedManifest: createTextOpenWorldProductRuntimePackageFixtureV1(runtimePackage),
       runtimeState: {
         ...structuredClone(EMPTY_PRODUCT_RUNTIME_STATE),
-        textOpenWorld: createInitialTextOpenWorldSessionProjectionV1(runtimePackage),
+        textOpenWorld: projection,
       },
       executeVNextAction,
     })
@@ -503,6 +513,10 @@ describe('Text Open World G4-03 · 场景与三类输入集成', () => {
     const projection = createInitialTextOpenWorldSessionProjectionV1(runtimePackage)
     useTextOpenWorldPlayerStore.setState({
       selectedSessionId: 202,
+      selectedSession: createTextOpenWorldPlayerSessionRowFixtureV1({
+        sessionId: 202,
+        projection,
+      }),
       selectedSessionSource: 'build-preview',
       selectedManifest: manifest,
       runtimeState: { ...structuredClone(EMPTY_PRODUCT_RUNTIME_STATE), textOpenWorld: projection },

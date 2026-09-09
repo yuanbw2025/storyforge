@@ -9,6 +9,7 @@ import type {
   ProductRuntimePackageV1,
   ProductRuntimeSession,
   TextOpenWorldRuntimePackageV1,
+  TextOpenWorldSessionProjectionV1,
 } from '../../src/lib/types'
 import { createWorkspace } from '../../src/lib/workspace/create-workspace'
 import {
@@ -155,13 +156,48 @@ export function createTextOpenWorldVNextOnlyProductRuntimePackageFixtureV1(
   })
 }
 
-export async function createGovernedTextOpenWorldSessionFixtureV1(input: {
+/** Complete in-memory Session row for component tests that hydrate the player Store directly. */
+export function createTextOpenWorldPlayerSessionRowFixtureV1(input: {
+  sessionId: number
+  projection: TextOpenWorldSessionProjectionV1
+  status?: ProductRuntimeSession['status']
+}): ProductRuntimeSession {
+  const lastSequence = input.projection.lastEventSequence
+  const stateJson = JSON.stringify({
+    lastSequence,
+    textOpenWorld: input.projection,
+  })
+  const now = 1_000 + input.sessionId
+  return {
+    id: input.sessionId,
+    projectId: 1,
+    worldGroupId: null,
+    worldId: 1,
+    workId: 1,
+    productReleaseId: null,
+    productBuildId: 1,
+    runtimeSourceHash: input.projection.runtimePackage.sourceManifest.contentHash,
+    kind: 'text-open-world',
+    title: `文字开放世界测试旅程 ${input.sessionId}`,
+    status: input.status ?? 'active',
+    rulesetVersion: input.projection.ruleset.version,
+    seed: `text-open-world-test-session-${input.sessionId}`,
+    canonSnapshotJson: '{}',
+    initialStateJson: stateJson,
+    runtimeHeadSequence: lastSequence,
+    runtimeHeadStateJson: stateJson,
+    runtimeHeadStateHash: 'd'.repeat(64),
+    parentSessionId: null,
+    parentThroughSequence: null,
+    createdAt: now,
+    updatedAt: now,
+  }
+}
+
+export async function createGovernedTextOpenWorldReleaseFixtureV1(input: {
   name: string
   textOpenWorldVNext: TextOpenWorldRuntimePackageV1
   runtimeShape?: 'hybrid' | 'vnext-only'
-  title?: string
-  seed?: string
-  status?: ProductRuntimeSession['status']
   releaseVersion?: number
 }) {
   const created = await createWorkspace({
@@ -193,16 +229,30 @@ export async function createGovernedTextOpenWorldSessionFixtureV1(input: {
     createdAt: now,
   }
   release.id = await db.productReleases.add(release) as number
+  return { ...created, runtimePackage, manifest, release }
+}
+
+export async function createGovernedTextOpenWorldSessionFixtureV1(input: {
+  name: string
+  textOpenWorldVNext: TextOpenWorldRuntimePackageV1
+  runtimeShape?: 'hybrid' | 'vnext-only'
+  title?: string
+  seed?: string
+  status?: ProductRuntimeSession['status']
+  releaseVersion?: number
+}) {
+  const released = await createGovernedTextOpenWorldReleaseFixtureV1(input)
   const session = await createTextOpenWorldInstance({
-    scope: created.scope,
-    productReleaseId: release.id,
+    scope: released.scope,
+    productReleaseId: released.release.id!,
     title: input.title ?? input.name,
     seed: input.seed,
   })
   if (input.status && input.status !== session.status) {
+    const now = Date.now()
     await db.productRuntimeSessions.update(session.id!, { status: input.status, updatedAt: now + 1 })
     session.status = input.status
     session.updatedAt = now + 1
   }
-  return { ...created, runtimePackage, manifest, release, session }
+  return { ...released, session }
 }
