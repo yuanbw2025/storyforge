@@ -3699,6 +3699,7 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     expect(runtimePackage.adventure.endings).toHaveLength(3)
     const routeQuality = analyzeTextAdventureRouteQualityV1(runtimePackage)
     expect(routeQuality.endingTextUnits).toHaveLength(3)
+    expect(routeQuality.minimumMainProgressActions).toBeGreaterThanOrEqual(20)
     expect(routeQuality.endingTextUnits.every(ending => (
       ending.npcDialogueTurns >= 1 && ending.stateSettlement
     ))).toBe(true)
@@ -3717,6 +3718,11 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
       !item.key.startsWith('action.echo.')
     ))
     expect(analyzeTextAdventureRouteQualityV1(packageWithoutEchoes).minimumRouteStatefulDecisions).toBe(0)
+    const packageWithoutNarrativeActions = structuredClone(runtimePackage)
+    packageWithoutNarrativeActions.adventure!.actions = packageWithoutNarrativeActions.adventure!.actions
+      .map(action => ({ ...action, narrativeChoiceKey: null }))
+    expect(analyzeTextAdventureRouteQualityV1(packageWithoutNarrativeActions).minimumMainProgressActions)
+      .toBeLessThan(20)
     const firstDecisionChoices = runtimePackage.narrative.choices.filter(choice => (
       choice.sourceNodeKey === runtimePackage.narrative.entryNodeKey
     ))
