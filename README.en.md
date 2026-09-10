@@ -6,6 +6,8 @@
 [简体中文](./README.md) · [English](./README.en.md) · [Français](./README.fr.md) · [Deutsch](./README.de.md) · [Italiano](./README.it.md) · [Español](./README.es.md) · [Português](./README.pt.md) · [日本語](./README.ja.md) · [한국어](./README.ko.md)
 <!-- readme-languages:end -->
 
+**Chinese tutorials & community:** [Bilibili video](https://www.bilibili.com/video/BV1q37j6QExh/) · [Zhihu introduction](https://zhuanlan.zhihu.com/p/2038714210188780594) · **QQ group: 1082374587** · [More community links](#community-and-contributing)
+
 [Start creating](#quick-start) · [Try Fog Harbor](#try-an-original-story) · [Explore the architecture](#shared-execution-and-data-architecture)
 
 StoryForge is an open-source, local-first AI narrative creation and experience toolkit. Write long or short fiction, adapt a novel into a screenplay or comic, build reusable worlds, and explore character interaction and playable stories. You choose the workflow and approve AI candidates before they become part of your work.
@@ -287,6 +289,7 @@ Implementation: [formal prose runs](./src/lib/agent/run/prose-generation-durable
 - [Bilibili video guide](https://www.bilibili.com/video/BV1q37j6QExh/) and [Zhihu introduction](https://zhuanlan.zhihu.com/p/2038714210188780594): historical Chinese tutorials; menus may differ from current versions.
 - QQ community: **1082374587**.
 - [Developer's project site](https://yuanbw.vercel.app/) and [GitHub Issues](https://github.com/yuanbw2025/storyforge/issues).
+- [Developer’s Zhihu profile](https://www.zhihu.com/people/dan-ran-xing-yuan-59).
 
 For bugs, include the app version, browser/OS, steps, expected behavior and actual result. Remove secrets and private writing from screenshots and logs. Stars, tutorials, examples, translations and contributions are welcome.
 

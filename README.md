@@ -10,6 +10,8 @@
 [简体中文](./README.md) · [English](./README.en.md) · [Français](./README.fr.md) · [Deutsch](./README.de.md) · [Italiano](./README.it.md) · [Español](./README.es.md) · [Português](./README.pt.md) · [日本語](./README.ja.md) · [한국어](./README.ko.md)
 <!-- readme-languages:end -->
 
+**教程与交流：** [B 站视频教程](https://www.bilibili.com/video/BV1q37j6QExh/) · [知乎专栏](https://zhuanlan.zhihu.com/p/2038714210188780594) · **QQ 交流群：1082374587** · [更多联系方式](#交流与支持)
+
 <p align="center">开源、本地优先的 AI 叙事创作与体验工具。创作长短篇小说，将小说改编成剧本或漫画；也可以派生世界，制作跑团等互动体验。</p>
 
 <p align="center">
