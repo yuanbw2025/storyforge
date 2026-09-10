@@ -6,6 +6,8 @@
 [简体中文](./README.md) · [English](./README.en.md) · [Français](./README.fr.md) · [Deutsch](./README.de.md) · [Italiano](./README.it.md) · [Español](./README.es.md) · [Português](./README.pt.md) · [日本語](./README.ja.md) · [한국어](./README.ko.md)
 <!-- readme-languages:end -->
 
+**중국어 튜토리얼·커뮤니티:** [Bilibili 동영상](https://www.bilibili.com/video/BV1q37j6QExh/) · [Zhihu 소개 글](https://zhuanlan.zhihu.com/p/2038714210188780594) · **QQ 그룹: 1082374587** · [다른 연락처](#community)
+
 [창작 시작하기](#quick-start) · [Fog Harbor 체험하기](#try-a-story) · [아키텍처 살펴보기](#architecture)
 
 StoryForge는 데이터를 로컬에 보관하는 방식을 기본으로 하는 오픈 소스 AI 서사 창작·체험 도구입니다. 장편과 단편을 쓰고, 소설을 시나리오나 만화로 각색하고, 재사용할 세계를 만들고, 상호작용형 이야기를 탐색할 수 있습니다. 작업 방식은 작가가 선택하며, AI 제안은 작가의 확인과 승인을 거쳐 작품에 반영됩니다.
@@ -249,7 +251,7 @@ flowchart TB
 
 ## 커뮤니티와 기여
 
-[GitHub Issues](https://github.com/yuanbw2025/storyforge/issues) · [개발자 사이트](https://yuanbw.vercel.app/) · QQ 그룹: **1082374587**
+[GitHub Issues](https://github.com/yuanbw2025/storyforge/issues) · [개발자 사이트](https://yuanbw.vercel.app/) · [개발자 Zhihu 프로필](https://www.zhihu.com/people/dan-ran-xing-yuan-59) · QQ 그룹: **1082374587**
 
 [Bilibili 동영상](https://www.bilibili.com/video/BV1q37j6QExh/)과 [Zhihu 소개](https://zhuanlan.zhihu.com/p/2038714210188780594)는 과거의 중국어 자료로 현재 메뉴와 다를 수 있습니다. 오류 보고에는 버전, 브라우저·OS, 재현 단계, 예상 결과와 실제 결과를 적고 이미지·로그에서 키와 비공개 원고를 제거하세요. Star, 예제, 영상, 번역, 개발 기여를 환영합니다.
 
