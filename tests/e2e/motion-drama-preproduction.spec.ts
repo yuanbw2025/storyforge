@@ -22,6 +22,11 @@ test('漫剧工坊从一句话建立独立小说来源并呈现完整八步前�
   await expect(studio.getByText('12 集', { exact: true })).toBeVisible()
   await expect(studio.getByText('来源已冻结', { exact: true })).toBeVisible()
   await expect(studio.getByRole('heading', { name: 'E2E 末班车回声 · 原著', exact: true })).toBeVisible()
+  const showcase = studio.getByTestId('motion-drama-showcase')
+  await expect(showcase.getByRole('heading', { name: '看到的不是一句提示词，而是一套可执行的逐镜生产包' })).toBeVisible()
+  await showcase.getByRole('button', { name: '查看《末班车回声》完整漫剧执行包' }).click()
+  await expect(page.getByRole('dialog', { name: '《末班车回声》生产执行包' })).toContainText('match-cut')
+  await page.getByRole('button', { name: '关闭漫剧执行包' }).click()
 
   for (const step of ['小说来源', '系列圣经', '物料圣经', '单集节拍', '漫剧剧本', '分镜与双 IR', '工具适配包', '审查与发布']) {
     await expect(studio.locator('.motion-rail').getByText(step, { exact: true })).toBeVisible()

@@ -24,6 +24,7 @@ import { inspectMotionDramaQualityV1, type MotionDramaQualityReportV1 } from '..
 import { listMotionDramaReleasesV1, publishMotionDramaReleaseV1, readMotionDramaReleaseManifestV1 } from '../../lib/motion-drama/release'
 import { deleteMotionDramaPromptOverrideV1, getMotionDramaPromptDefinitionV1, listMotionDramaPromptOverridesV1, resolveMotionDramaPromptV1, saveMotionDramaPromptOverrideV1, type ResolvedMotionDramaPromptV1 } from '../../lib/motion-drama/prompts'
 import type { CreationReleaseV1, MotionDramaPromptOverrideV1 } from '../../lib/types'
+import MotionDramaShowcase from './MotionDramaShowcase'
 import './motion-drama-studio.css'
 
 const ShortNovelStudio = lazy(() => import('../short-novel/ShortNovelStudio'))
@@ -295,6 +296,8 @@ export default function MotionDramaStudio({ scope, project }: Props) {
         {currentStage && <section className="motion-author-note"><label>给当前岗位的附加要求<textarea value={authorInstruction} onChange={event => setAuthorInstruction(event.target.value)} placeholder="例如：保持克制写实；第 3 个节拍必须用无对白动作完成。留空则使用提示词库。" /></label><button onClick={() => { setPromptEditorStage(currentStage); setShowPromptLibrary(true) }}><Library />查看当前提示词</button></section>}
       </main>
     </div>
+
+    <MotionDramaShowcase />
 
     {candidate && <div className="motion-candidate-backdrop"><aside className="motion-candidate"><header><div><span>CANDIDATE · NOT ADOPTED</span><h3>{getMotionDramaPromptDefinitionV1(candidate.stage).label}候选</h3><p>可直接编辑 JSON；只有确认后才写入正式生产数据。</p></div><button onClick={() => void rejectCandidate()}><X /></button></header><textarea value={candidate.text} onChange={event => setCandidate({ ...candidate, text: event.target.value })} spellCheck={false} /><footer><button onClick={() => void rejectCandidate()} disabled={busy}>放弃候选</button><button className="motion-primary" onClick={() => void acceptCandidate()} disabled={busy}><Check />确认写入</button></footer></aside></div>}
 
