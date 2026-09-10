@@ -304,6 +304,7 @@ export function evaluateProductRuntimeProductQualityV1(input: {
         )
         const minimumNpcCount = Math.max(1, Math.min(5, Math.ceil(brief.scale.targetPlayMinutes / 12)))
         const minimumDialogueTurns = Math.max(4, Math.ceil(brief.scale.targetPlayMinutes / 2))
+        const minimumNarrativeChoices = Math.max(2, Math.ceil(brief.scale.targetPlayMinutes / 6))
         const minimumDecisions = Math.max(2, Math.ceil(brief.scale.targetPlayMinutes / 10))
         const minimumMainStages = Math.max(2, Math.ceil(brief.scale.targetPlayMinutes / 20))
         const minimumMainObjectives = Math.max(3, Math.ceil(brief.scale.targetPlayMinutes / 7.5))
@@ -330,8 +331,13 @@ export function evaluateProductRuntimeProductQualityV1(input: {
           gate('product.adventure.recommendation-dialogue-and-cast', routeQuality.authoredNpcCount >= minimumNpcCount
             && routeQuality.talkActionCount >= 1 && routeQuality.minimumRouteDialogueTurns >= minimumDialogueTurns,
           [`authoredNpcs=${routeQuality.authoredNpcCount}/${minimumNpcCount}`, `talkActions=${routeQuality.talkActionCount}`, `minimumRouteDialogueTurns=${routeQuality.minimumRouteDialogueTurns}/${minimumDialogueTurns}`]),
-          gate('product.adventure.recommendation-decisions', routeQuality.minimumRouteStatefulDecisions >= minimumDecisions,
-            [`minimumRouteStatefulDecisions=${routeQuality.minimumRouteStatefulDecisions}/${minimumDecisions}`]),
+          gate('product.adventure.recommendation-decisions',
+            routeQuality.minimumRouteNarrativeChoices >= minimumNarrativeChoices
+              && routeQuality.minimumRouteStatefulDecisions >= minimumDecisions,
+            [
+              `minimumRouteNarrativeChoices=${routeQuality.minimumRouteNarrativeChoices}/${minimumNarrativeChoices}`,
+              `minimumRouteStatefulDecisions=${routeQuality.minimumRouteStatefulDecisions}/${minimumDecisions}`,
+            ]),
           gate('product.adventure.recommendation-main-quest', routeQuality.mainQuestStageCount >= minimumMainStages
             && routeQuality.mainQuestObjectiveCount >= minimumMainObjectives
             && routeQuality.minimumMainProgressActions >= minimumMainActions,

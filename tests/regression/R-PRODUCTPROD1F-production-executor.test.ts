@@ -37,6 +37,7 @@ import {
 import { putMediaBlobObject } from '../../src/lib/product-production/media-blob-store'
 import { runProductProductionUntilBlockedV1 } from '../../src/lib/product-production/scheduler'
 import { parseProductRuntimePackageV1 } from '../../src/lib/product-production/runtime-package'
+import { evaluateProductRuntimeProductQualityV1 } from '../../src/lib/product-production/product-quality'
 import { analyzeTextAdventureRouteQualityV1 } from '../../src/lib/adventure/quality-analysis'
 import { adventureNarrativeActionContext, availableAdventureActions } from '../../src/lib/adventure/runtime'
 import { commitAdventureAction, commitAdventureNarrativeChoice } from '../../src/lib/adventure/runtime-api'
@@ -3699,10 +3700,26 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     expect(runtimePackage.adventure.endings).toHaveLength(3)
     const routeQuality = analyzeTextAdventureRouteQualityV1(runtimePackage)
     expect(routeQuality.endingTextUnits).toHaveLength(3)
+    expect(routeQuality.minimumRouteNarrativeChoices).toBeGreaterThanOrEqual(10)
     expect(routeQuality.minimumMainProgressActions).toBeGreaterThanOrEqual(20)
     expect(routeQuality.endingTextUnits.every(ending => (
       ending.npcDialogueTurns >= 1 && ending.stateSettlement
     ))).toBe(true)
+    const commercialQuality = evaluateProductRuntimeProductQualityV1({
+      runtimePackage,
+      brief: { ...owned.brief, qualityProfile: 'commercial-candidate' },
+    })
+    expect(commercialQuality.gates).toContainEqual(expect.objectContaining({
+      gateId: 'product.adventure.recommendation-decisions',
+      // This internal fixture has enough route choices but only two
+      // observable stateful decisions, so the combined commercial gate must
+      // remain closed while still proving the 60-minute 10-choice threshold.
+      passed: false,
+      evidence: expect.arrayContaining([
+        expect.stringMatching(/^minimumRouteNarrativeChoices=\d+\/10$/),
+        expect.stringMatching(/^minimumRouteStatefulDecisions=\d+\/6$/),
+      ]),
+    }))
     const echoActions = runtimePackage.adventure.actions.filter(item => item.key.startsWith('action.echo.'))
     const arcDecisionCount = (outputs['content.narrative-arc-plan'] as {
       decisions: Array<{ options: Array<{ echoSceneKeys: string[] }> }>
