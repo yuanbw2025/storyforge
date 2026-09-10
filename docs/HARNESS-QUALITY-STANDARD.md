@@ -1,6 +1,6 @@
 # StoryForge Agent 与 Harness 质量标准
 
-> 版本：1.2.0 · 生效：2026-08-27 · 权威层级：L1
+> 版本：1.3.0 · 生效：2026-09-10 · 权威层级：L1
 > 适用于分步骤长篇、节点、短篇、改编、世界引擎创作和上层产品生产/运行中的正式模型调用。
 
 ## 1. 目标与非目标
@@ -118,9 +118,9 @@ Context Gateway 应先给 Agent “能读什么”的目录，再根据任务、
 
 上层产品遵守项目三阶段主链：
 
-- 阶段一由世界引擎封存不可变语义版本；
-- 阶段二由具体产品读取 WorldReference、收集产品专用设置、完成意图会谈，并在用户明确开始时冻结 Brief 与 SourcePlan；
-- 阶段三由具体产品完成 production、内容/规则/媒资、组装、质量修复、ProductRelease、运行和私域演化；每个 run 只在 SourcePlan 锁定的世界版本与权限内渐进读取并保存不可变 Context Manifest，发布时聚合为 ProductSourceManifest。runtime 后续读取归 session/run 证据，不修改旧 release。
+- `S1 世界封存`由世界引擎封存不可变语义版本；
+- `S2 产品定向`由具体产品在用户选定冻结世界版本后生成并校验 WorldReference、收集产品专用设置、完成意图会谈，并在用户明确开始时冻结 WorldReference、Brief 与 SourcePlan；
+- `S3 产品执行`由具体产品完成 S3.1 生产、S3.2 验收、S3.3 发布、S3.4 运行与演化；每个 run 只在 SourcePlan 锁定的世界版本与权限内渐进读取并保存不可变 Context Manifest，发布时聚合为 ProductSourceManifest。runtime 后续读取归 session/run 证据，不修改旧 release。
 
 Harness 不统一时长、章节、结局或演化触发字段；它只执行产品已经定义的 Run Contract。任何长时或开放式体验仍须由一系列有限、可停止、可保存、可恢复的 durable run 组成，不能用一个永不结束的模型调用实现。运行绑定 ProductRelease，结果不得写回世界引擎。
 
