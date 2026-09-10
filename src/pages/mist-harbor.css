@@ -1,0 +1,300 @@
+.mist-page {
+  min-height: 100vh;
+  background: #0b171e;
+  color: #e9e6dc;
+  font-family: inherit;
+}
+.mist-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 22px 5vw;
+  border-bottom: 1px solid #bfa87530;
+  font-size: 12px;
+}
+.mist-nav a {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #d0c19e;
+}
+.mist-nav > span {
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  color: #8faaa9;
+}
+.mist-hero {
+  position: relative;
+  min-height: 610px;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+}
+.mist-backdrop {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+}
+.mist-hero:after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, #071219f2 0%, #0b171eb8 42%, #0b171e15 85%),
+    linear-gradient(0deg, #0b171e, transparent 45%);
+}
+.mist-hero-content {
+  position: relative;
+  z-index: 1;
+  width: min(620px, 90%);
+  margin: 65px 8vw;
+}
+.mist-kicker {
+  color: #c0b186;
+  font-size: 12px;
+  letter-spacing: 0.25em;
+}
+.mist-hero h1 {
+  font-family: serif;
+  font-size: 76px;
+  letter-spacing: 0.16em;
+  line-height: 1.2;
+  margin: 28px 0;
+  color: #f4eedc;
+  text-shadow: 0 3px 25px #0008;
+}
+.mist-hero h1 span {
+  display: block;
+  font-size: 27px;
+  font-weight: normal;
+  letter-spacing: 0.4em;
+  margin-top: 14px;
+}
+.mist-lead {
+  font-size: 21px;
+  line-height: 1.8;
+  margin: 26px 0 18px;
+}
+.mist-description {
+  max-width: 450px;
+  font-size: 14px;
+  line-height: 2;
+  color: #b4c4c7;
+}
+.mist-facts {
+  display: flex;
+  gap: 22px;
+  margin-top: 25px;
+  color: #baa981;
+  font-size: 12px;
+}
+.mist-selection {
+  position: relative;
+  max-width: 1150px;
+  margin: -25px auto 0;
+  padding: 0 30px 60px;
+  z-index: 2;
+}
+.mist-editions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+}
+.mist-editions button {
+  background: #11252ddd;
+  border: 1px solid #829b9f45;
+  border-radius: 10px;
+  padding: 26px 30px;
+  text-align: left;
+  transition:
+    border-color 0.2s,
+    background 0.2s;
+}
+.mist-editions button.selected {
+  border-color: #c7b37a;
+  background: #203638;
+}
+.mist-editions button > span {
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  color: #b7a87e;
+}
+.mist-editions h2 {
+  font-family: serif;
+  font-size: 25px;
+  margin: 9px 0;
+}
+.mist-editions p {
+  font-size: 13px;
+  color: #b6c4c8;
+  line-height: 1.9;
+  max-width: 400px;
+}
+.mist-start {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin-top: 28px;
+}
+.mist-start p {
+  font-size: 13px;
+  color: #d0d3c9;
+}
+.mist-start small {
+  display: block;
+  font-size: 11px;
+  color: #8fa5ab;
+  line-height: 1.8;
+  margin-top: 6px;
+}
+.mist-start-buttons {
+  display: flex;
+  gap: 12px;
+  flex-shrink: 0;
+}
+.mist-start button,
+.mist-player-header button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid #9fb2af66;
+  padding: 12px 22px;
+  border-radius: 6px;
+  font-size: 13px;
+}
+.mist-start button.primary {
+  background: #c9b580;
+  color: #17242a;
+  border-color: #c9b580;
+}
+.mist-page button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+.mist-page button:focus-visible,
+.mist-page a:focus-visible {
+  outline: 2px solid #e4cc91;
+  outline-offset: 5px;
+}
+.mist-message {
+  margin-top: 20px;
+  font-size: 13px;
+  color: #c9b580;
+}
+.mist-error {
+  color: #ffb5a3;
+}
+.mist-playing {
+  max-width: 1440px;
+  margin: auto;
+  padding: 20px;
+}
+.mist-player-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 18px;
+}
+.mist-player-header h1 {
+  font-family: serif;
+  font-size: 22px;
+}
+.mist-player-header button {
+  padding: 8px 12px;
+  color: #b7c9ca;
+}
+.mist-shelf {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin: 20px 0;
+  padding: 24px 30px;
+  border: 1px solid #b6a27066;
+  border-radius: 12px;
+  background:
+    linear-gradient(90deg, #10232bf2, #10232baa),
+    url('/storyforge/demo-assets/mist-harbor/mist-bg-harbor.webp') center/cover;
+  color: #eee7d3;
+}
+.mist-shelf h2 {
+  font-family: serif;
+  font-size: 24px;
+  margin: 6px 0;
+}
+.mist-shelf p {
+  font-size: 12px;
+  color: #b8c9ca;
+  line-height: 1.8;
+}
+.mist-shelf small {
+  letter-spacing: 0.18em;
+  color: #c9b580;
+  font-size: 10px;
+}
+.mist-shelf > span {
+  flex-shrink: 0;
+  font-size: 13px;
+  color: #dbc795;
+}
+@media (max-width: 640px) {
+  .mist-nav {
+    padding: 18px;
+    flex-wrap: wrap;
+  }
+  .mist-nav > span {
+    display: none;
+  }
+  .mist-hero {
+    min-height: 570px;
+  }
+  .mist-hero-content {
+    margin: 45px 7vw;
+  }
+  .mist-hero h1 {
+    font-size: 60px;
+  }
+  .mist-hero:after {
+    background: linear-gradient(90deg, #071219e8, #0b171e80), linear-gradient(0deg, #0b171e, transparent 55%);
+  }
+  .mist-description {
+    font-size: 13px;
+  }
+  .mist-selection {
+    padding: 0 18px 40px;
+  }
+  .mist-editions {
+    grid-template-columns: 1fr;
+  }
+  .mist-editions button {
+    padding: 20px;
+  }
+  .mist-start {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .mist-start-buttons button {
+    flex: 1;
+  }
+  .mist-player-header h1 {
+    font-size: 16px;
+  }
+  .mist-playing {
+    padding: 12px;
+  }
+  .mist-shelf {
+    padding: 20px;
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .mist-facts {
+    gap: 15px;
+  }
+}

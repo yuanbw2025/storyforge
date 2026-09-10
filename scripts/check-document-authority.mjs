@@ -12,6 +12,14 @@ const activeRootDocuments = [
   'CLAUDE.md',
   'CONTRIBUTING.md',
   'README.md',
+  'README.en.md',
+  'README.fr.md',
+  'README.de.md',
+  'README.it.md',
+  'README.es.md',
+  'README.pt.md',
+  'README.ja.md',
+  'README.ko.md',
   'SECURITY.md',
 ]
 
@@ -31,6 +39,11 @@ const activeDocs = [
   'docs/CONSISTENCY-COVERAGE-MAP.md',
   'docs/MEMORY-WORKSPACE-GUIDE.md',
   'docs/assets/support/afdian-aloneone.jpeg',
+  'docs/assets/readme/product-hub.png',
+  'docs/assets/readme/create-work.png',
+  'docs/assets/readme/longform-outline.png',
+  'docs/assets/readme/ttrpg-preview.png',
+  'docs/assets/readme/data-management.png',
   'docs/guides/I18N.md',
   'docs/products/README.md',
   'docs/products/LONGFORM-AND-NODE.md',
@@ -56,6 +69,22 @@ const activeDocs = [
 
 const failures = []
 const activeSet = new Set(activeDocs)
+const publicReadmes = activeRootDocuments.filter(file => /^README(?:\.[a-z]+)?\.md$/.test(file))
+
+for (const file of publicReadmes) {
+  const absolute = path.join(root, file)
+  if (!fs.existsSync(absolute)) continue
+  const source = fs.readFileSync(absolute, 'utf8')
+  const navigation = source.match(/<!-- readme-languages:start -->([\s\S]*?)<!-- readme-languages:end -->/)
+  if (!navigation) {
+    failures.push(`missing README language navigation: ${file}`)
+    continue
+  }
+  const targets = [...navigation[1].matchAll(/\[[^\]]+\]\(\.\/([^)]*)\)/g)].map(match => match[1])
+  if (targets.length !== publicReadmes.length || publicReadmes.some(target => !targets.includes(target))) {
+    failures.push(`incomplete README language navigation: ${file}`)
+  }
+}
 
 const walk = directory => {
   const result = []
@@ -93,7 +122,7 @@ for (const file of [...activeRootDocuments, ...activeDocs]) {
 
 const archivedAuthority =
   /MASTER-BLUEPRINT|ROADMAP-LEGACY|FEATURE-GUIDE|docs\/(?:refactor|completion|text-game|pitch|brand|evals|product-platform|readme|adr|archive)\//
-const archivedAssetReference = /docs\/assets\/(?!support\/afdian-aloneone\.jpeg)/
+const archivedAssetReference = /docs\/assets\/(?!support\/afdian-aloneone\.jpeg|readme\/(?:product-hub|create-work|longform-outline|ttrpg-preview|data-management)\.png)/
 for (const file of [...activeRootDocuments, ...activeDocs]) {
   if (
     file === 'CHANGELOG.md' ||

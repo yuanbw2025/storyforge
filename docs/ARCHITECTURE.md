@@ -11,6 +11,7 @@ StoryForge 当前是 React + TypeScript + Vite 的本地优先单页应用，核
 
 - `/`：产品综合页 `ProductHubPage`；
 - `/play`：社区跑团目录和本地存档；
+- `/play/mist-harbor`：雾港内置作品介绍、明确开始、恢复存档；使用现行世界封存、生产与产品发布链，无模型调用；
 - `/play/:gameKey`：冻结社区模组的介绍与明确开始入口；
 - `/play/session/:sessionId`：绑定正式发布或受治理预览的沉浸跑团桌面；
 - `/settings`：模型与应用设置；
@@ -84,7 +85,7 @@ flowchart TB
 | 当前事实 | 数值 | 单一事实源 |
 |---|---:|---|
 | 应用语义版本 | `3.9.1` | `package.json` |
-| TypeScript 生产源码 | 1040 个文件 / 343294 行 | `tsconfig.json` |
+| TypeScript 生产源码 | 1047 个文件 / 345975 行 | `tsconfig.json` |
 | IndexedDB schema | v6 / 118 张 required tables | `schema.ts` / `REQUIRED_TABLES` |
 | PROJECT_TABLES | 118 张表 | `project-tables.ts` |
 | Prompt 主线 | 65 个 moduleKey / 210 条内置模板 | `PromptModuleKey` / `prompt-seeds*.ts` |
