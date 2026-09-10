@@ -7,6 +7,7 @@ import type {
   AdaptationSourceFactV1,
   ComicTargetSpecV1,
   ComicGlobalVisualBibleV1,
+  MotionDramaTargetSpecV1,
   ScreenplayTargetSpecV1,
   Work,
 } from '../types'
@@ -177,6 +178,19 @@ export function assertComicTargetSpecV1(spec: ComicTargetSpecV1): void {
   assertText(spec.artStyleBrief, 'comic.artStyleBrief', 8_000)
 }
 
+export function assertMotionDramaTargetSpecV1(spec: MotionDramaTargetSpecV1): void {
+  if (spec.format !== 'motion-drama' || spec.language !== 'zh-CN') throw new Error('[adaptation] 漫剧 V1 仅支持 zh-CN motion-drama')
+  if (!Number.isInteger(spec.episodeCount) || spec.episodeCount < 1 || spec.episodeCount > 200) throw new Error('[adaptation] 漫剧集数必须是 1～200 的整数')
+  if (!Number.isInteger(spec.targetSecondsPerEpisode) || spec.targetSecondsPerEpisode < 15 || spec.targetSecondsPerEpisode > 600) throw new Error('[adaptation] 漫剧单集时长必须是 15～600 秒的整数')
+  if (!['9:16', '16:9', '1:1'].includes(spec.aspectRatio)) throw new Error('[adaptation] 漫剧画幅非法')
+  if (!['animated-comic', 'illustrated-motion', 'hybrid'].includes(spec.narrativeMode)) throw new Error('[adaptation] 漫剧叙事模式非法')
+  if (!['low', 'balanced', 'high'].includes(spec.dialogueDensity)) throw new Error('[adaptation] 漫剧对白密度非法')
+  if (!Array.isArray(spec.providerTargets) || !spec.providerTargets.length || new Set(spec.providerTargets).size !== spec.providerTargets.length || spec.providerTargets.some(value => !['seedance', 'runway', 'ltx', 'generic'].includes(value))) throw new Error('[adaptation] 漫剧目标工具非法或重复')
+  assertText(spec.audience, 'motionDrama.audience', 1_000)
+  assertText(spec.rating, 'motionDrama.rating', 200)
+  assertText(spec.artDirection, 'motionDrama.artDirection', 8_000)
+}
+
 export function assertComicGlobalVisualBibleV1(value: ComicGlobalVisualBibleV1): void {
   if (!value || value.version !== 1) throw new Error('[adaptation] 漫画视觉圣经版本非法')
   assertText(value.artDirection, 'visualBible.artDirection', 8_000)
@@ -190,7 +204,8 @@ export function assertComicGlobalVisualBibleV1(value: ComicGlobalVisualBibleV1):
 
 export function assertAdaptationProjectInvariant(root: AdaptationProject, targetWork?: Work, sourceWork?: Work | null): void {
   if (root.medium === 'screenplay') assertScreenplayTargetSpecV1(root.targetSpec)
-  else assertComicTargetSpecV1(root.targetSpec)
+  else if (root.medium === 'comic') assertComicTargetSpecV1(root.targetSpec)
+  else assertMotionDramaTargetSpecV1(root.targetSpec)
   if (!Number.isInteger(root.activeSourceManifestVersion) || root.activeSourceManifestVersion <= 0) throw new Error('[adaptation] active manifest 版本非法')
   if (!/^[a-f0-9]{64}$/i.test(root.activeSourceManifestHash)) throw new Error('[adaptation] manifest hash 非法')
   if (!Number.isInteger(root.revision) || root.revision <= 0) throw new Error('[adaptation] revision 非法')

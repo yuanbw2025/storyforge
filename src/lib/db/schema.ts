@@ -44,6 +44,18 @@ import type {
   InspirationWorkspace,
   ItemLedgerEntry,
   MediaBlobObjectRecordV1,
+  MotionDramaAssetBindingV1,
+  MotionDramaAssetSubjectV1,
+  MotionDramaAssetVersionV1,
+  MotionDramaEpisodeV1,
+  MotionDramaProductionV1,
+  MotionDramaPromptOverrideV1,
+  MotionDramaPromptPackV1,
+  MotionDramaReviewIssueV1,
+  MotionDramaScriptSceneV1,
+  MotionDramaSeriesBibleRecordV1,
+  MotionDramaShotReferenceV1,
+  MotionDramaShotV1,
   NarrativeBeat,
   NarrativeChoice,
   NarrativeModule,
@@ -109,7 +121,7 @@ import type { RetrievalChunk } from '../types/retrieval-chunk'
 import type { TemporalFact } from '../types/temporal-fact'
 
 export const STORYFORGE_DATABASE_NAME = 'storyforge-core'
-export const STORYFORGE_SCHEMA_VERSION = 5
+export const STORYFORGE_SCHEMA_VERSION = 6
 
 /** The hard-cutover baseline released before independent creation releases. */
 export const STORYFORGE_STORES_V1 = {
@@ -232,13 +244,30 @@ export const STORYFORGE_STORES_V4 = {
   screenplayReviewIssues: '++id, projectId, workId, adaptationProjectId, &[adaptationProjectId+manifestVersion+stableKey], [adaptationProjectId+manifestVersion], sceneKey, category, severity, status, updatedAt',
 } as const satisfies Record<string, string>
 
-/** The only writable current schema. V5 adds comic production and release-asset stores. */
-export const STORYFORGE_STORES = {
+/** The released v5 schema retained as the exact migration step. */
+export const STORYFORGE_STORES_V5 = {
   ...STORYFORGE_STORES_V4,
   comicScriptBeats: '++id, projectId, workId, adaptationProjectId, &[adaptationProjectId+manifestVersion+stableKey], [adaptationProjectId+manifestVersion], chapterNumber, sectionKey, order, updatedAt',
   comicPagePlans: '++id, projectId, workId, adaptationProjectId, &[adaptationProjectId+manifestVersion+stableKey], &[adaptationProjectId+manifestVersion+pageNumber], [adaptationProjectId+manifestVersion], chapterNumber, order, updatedAt',
   comicReviewIssues: '++id, projectId, workId, adaptationProjectId, &[adaptationProjectId+manifestVersion+stableKey], [adaptationProjectId+manifestVersion], pageKey, panelKey, category, severity, status, updatedAt',
   creationReleaseAssets: '++id, projectId, worldId, workId, releaseId, &[releaseId+assetKey], blobObjectId, contentHash, createdAt',
+} as const satisfies Record<string, string>
+
+/** The only writable current schema. V6 adds the independent motion-drama preproduction stores. */
+export const STORYFORGE_STORES = {
+  ...STORYFORGE_STORES_V5,
+  motionDramaProductions: '++id, projectId, worldId, &workId, adaptationProjectId, phase, currentEpisodeNumber, currentReleaseId, updatedAt',
+  motionDramaSeriesBibles: '++id, projectId, workId, adaptationProjectId, &[adaptationProjectId+version], sourceManifestVersion, contentHash, createdAt',
+  motionDramaEpisodes: '++id, projectId, workId, adaptationProjectId, &[adaptationProjectId+episodeNumber], &[adaptationProjectId+stableKey], manifestVersion, authorStatus, updatedAt',
+  motionDramaScriptScenes: '++id, projectId, workId, adaptationProjectId, &[adaptationProjectId+stableKey], &[adaptationProjectId+episodeNumber+sceneNumber], manifestVersion, episodeNumber, order, updatedAt',
+  motionDramaAssetSubjects: '++id, projectId, workId, adaptationProjectId, &[adaptationProjectId+stableKey], manifestVersion, kind, authorStatus, updatedAt',
+  motionDramaAssetVersions: '++id, projectId, worldId, workId, adaptationProjectId, &[adaptationProjectId+stableKey], &[adaptationProjectId+subjectKey+version], subjectKey, blobObjectId, contentHash, updatedAt',
+  motionDramaAssetBindings: '++id, projectId, workId, adaptationProjectId, episodeNumber, shotKey, subjectKey, assetVersionKey, updatedAt',
+  motionDramaShots: '++id, projectId, workId, adaptationProjectId, &[adaptationProjectId+stableKey], &[adaptationProjectId+episodeNumber+order], manifestVersion, sceneKey, episodeNumber, order, updatedAt',
+  motionDramaShotReferences: '++id, projectId, worldId, workId, adaptationProjectId, &[adaptationProjectId+stableKey], shotKey, role, subjectKey, assetVersionId, blobObjectId, selected, updatedAt',
+  motionDramaPromptOverrides: '++id, projectId, workId, stage, scope, episodeNumber, &[workId+stage+scope+episodeNumber], updatedAt',
+  motionDramaPromptPacks: '++id, projectId, workId, adaptationProjectId, episodeNumber, provider, &[adaptationProjectId+episodeNumber+provider+version], maturity, contentHash, createdAt',
+  motionDramaReviewIssues: '++id, projectId, workId, adaptationProjectId, &[adaptationProjectId+manifestVersion+stableKey], manifestVersion, episodeNumber, sceneKey, shotKey, category, severity, status, updatedAt',
 } as const satisfies Record<string, string>
 
 export class StoryForgeDB extends Dexie {
@@ -348,6 +377,18 @@ export class StoryForgeDB extends Dexie {
   shortNovelProductions!: Table<ShortNovelProductionV1, number>
   creationReleases!: Table<CreationReleaseV1, number>
   creationReleaseAssets!: Table<CreationReleaseAssetV1, number>
+  motionDramaProductions!: Table<MotionDramaProductionV1, number>
+  motionDramaSeriesBibles!: Table<MotionDramaSeriesBibleRecordV1, number>
+  motionDramaEpisodes!: Table<MotionDramaEpisodeV1, number>
+  motionDramaScriptScenes!: Table<MotionDramaScriptSceneV1, number>
+  motionDramaAssetSubjects!: Table<MotionDramaAssetSubjectV1, number>
+  motionDramaAssetVersions!: Table<MotionDramaAssetVersionV1, number>
+  motionDramaAssetBindings!: Table<MotionDramaAssetBindingV1, number>
+  motionDramaShots!: Table<MotionDramaShotV1, number>
+  motionDramaShotReferences!: Table<MotionDramaShotReferenceV1, number>
+  motionDramaPromptOverrides!: Table<MotionDramaPromptOverrideV1, number>
+  motionDramaPromptPacks!: Table<MotionDramaPromptPackV1, number>
+  motionDramaReviewIssues!: Table<MotionDramaReviewIssueV1, number>
 
   constructor(databaseName = STORYFORGE_DATABASE_NAME) {
     super(databaseName)
@@ -355,6 +396,7 @@ export class StoryForgeDB extends Dexie {
     this.version(2).stores(STORYFORGE_STORES_V2)
     this.version(3).stores(STORYFORGE_STORES_V3)
     this.version(4).stores(STORYFORGE_STORES_V4)
+    this.version(5).stores(STORYFORGE_STORES_V5)
     this.version(STORYFORGE_SCHEMA_VERSION).stores(STORYFORGE_STORES)
   }
 }

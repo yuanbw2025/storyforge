@@ -8,7 +8,8 @@ export async function completeAdaptationProductionV1(input: { scope: WorkspaceSc
   if (!root?.id || root.projectId !== scope.projectId || root.worldId !== scope.worldId || !['producing', 'review'].includes(root.status)) throw new Error('[adaptation] 改编不在可完稿的生产/审校阶段')
   if (root.revision !== input.expectedRevision) throw new Error('[adaptation] 改编根已变化，请刷新')
   if (root.medium === 'screenplay') throw new Error('[adaptation] 旧剧本完稿入口已停用；请完成双重审查并发布不可变剧本 Release')
-  throw new Error('[adaptation] 旧漫画完稿入口已停用；请通过专业分镜版或视觉版 Release 发布')
+  if (root.medium === 'comic') throw new Error('[adaptation] 旧漫画完稿入口已停用；请通过专业分镜版或视觉版 Release 发布')
+  throw new Error('[adaptation] 漫剧必须通过前期制作质量门并发布不可变 Prompt Pack Release')
 }
 
 /**

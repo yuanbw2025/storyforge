@@ -21,6 +21,7 @@ export type StoryForgeProductIdV1 =
   | 'independent.shortform'
   | 'independent.screenplay'
   | 'independent.comic'
+  | 'independent.motion-drama'
   | 'authoring.nodes'
   | 'upper.ttrpg'
   | 'upper.character-interaction'
@@ -82,6 +83,7 @@ export const PRODUCT_CATALOG_V1: readonly ProductCatalogEntryV1[] = Object.freez
   entry({ id: 'independent.shortform', label: '短篇小说', family: 'independent-creation', status: 'released', charterPhase: 'C', requiresWorldReference: false, ownsRuntime: false, ownsMedia: false, maturityNote: '独立 Brief、故事设计、章节卡、逐章正文、审校、定向重写、冻结发布与三格式导出已形成闭环。' }),
   entry({ id: 'independent.screenplay', label: '小说转剧本', family: 'independent-creation', status: 'released', charterPhase: 'C', requiresWorldReference: false, ownsRuntime: false, ownsMedia: false, maturityNote: '来源冻结、十步专业改编、双重审查、定点修订、不可变版本与 Fountain/FDX/打印导出已形成闭环。' }),
   entry({ id: 'independent.comic', label: '小说转漫画', family: 'independent-creation', status: 'released', charterPhase: 'C', requiresWorldReference: false, ownsRuntime: false, ownsMedia: true, maturityNote: '十二步专业改编、页格与本地排字、双层审查、分镜/视觉不可变发布及 PNG/WebP/CBZ/PDF 导出已形成闭环；视觉版按 provider 实际能力和媒资权利严格放行。' }),
+  entry({ id: 'independent.motion-drama', label: '漫剧工坊', family: 'independent-creation', status: 'released', charterPhase: 'C', requiresWorldReference: false, ownsRuntime: false, ownsMedia: true, maturityNote: '一句话或小说来源冻结、系列与物料圣经、逐集剧本、分镜、双 Prompt IR、Seedance 逐镜执行包、Runway/LTX 适配包、质量门与不可变发布已形成闭环；不包含视频生成和成片制作。' }),
   entry({ id: 'authoring.nodes', label: '节点创作', family: 'authoring-view', status: 'preview', charterPhase: 'B', requiresWorldReference: false, ownsRuntime: false, ownsMedia: false, maturityNote: '已与分步骤领域后端同源；完整跨模式真实 UI 验收仍持续。' }),
   entry({ id: 'upper.ttrpg', label: '跑团', family: 'upper-product', status: 'preview', charterPhase: 'E', requiresWorldReference: true, ownsRuntime: true, ownsMedia: true, maturityNote: '架构入口与既有功能可预览，玩法和多人体验尚未专项封板。' }),
   entry({ id: 'upper.character-interaction', label: '角色聊天', family: 'upper-product', status: 'preview', charterPhase: 'E', requiresWorldReference: true, ownsRuntime: true, ownsMedia: true, maturityNote: '冻结来源生产与运行纵切面可预览，完整长期体验待专项验收。' }),
@@ -99,7 +101,7 @@ export const PRODUCT_CATALOG_BY_ID_V1: ReadonlyMap<StoryForgeProductIdV1, Produc
 export const PRODUCT_SURFACES_V1: readonly ProductSurfaceEntryV1[] = Object.freeze([
   surface({ id: 'world-engine', label: '世界引擎', productIds: ['world-engine'] }),
   surface({ id: 'independent-works', label: '作品创作', productIds: [
-    'independent.longform', 'independent.shortform', 'independent.screenplay', 'independent.comic',
+    'independent.longform', 'independent.shortform', 'independent.screenplay', 'independent.comic', 'independent.motion-drama',
   ] }),
   surface({ id: 'node-authoring', label: '节点创作', productIds: ['authoring.nodes'] }),
   surface({ id: 'ttrpg', label: '跑团', productIds: ['upper.ttrpg'] }),

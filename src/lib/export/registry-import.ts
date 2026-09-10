@@ -47,6 +47,18 @@ import type { AdaptationProject, ComicLetteringItemV1, ComicMediaAsset, Creation
 import { PRODUCTION_PRODUCT_KINDS_V1 } from '../types'
 import { isCompleteCharacterAxes } from '../character/character-axes'
 import { parseAndVerifyCreationReleaseManifestV1 } from '../creation-release/contracts'
+import { assertMotionDramaReleaseManifestV1 } from '../motion-drama/release-contracts'
+import {
+  assertMotionDramaAssetSubjectCandidateV1,
+  assertMotionDramaEpisodeCandidateV1,
+  assertMotionDramaReviewIssueCandidateV1,
+  assertMotionDramaScriptSceneCandidateV1,
+  assertMotionDramaSeriesBibleV1,
+  assertMotionDramaShotCandidateV1,
+} from '../motion-drama/contracts'
+import { hashCanonicalValue } from '../agent/run/hash'
+import { assertMediaRightsV1 } from '../media/rights'
+import { assertMotionDramaPromptPackManifest } from '../motion-drama/prompt-pack-contracts'
 
 function portableRows(value: Record<string, any>, name: string): Record<string, any>[] {
   const rows = value[name]
@@ -178,7 +190,7 @@ async function validateIndependentCreationBackup(value: Record<string, any>): Pr
   for (const release of releases.values()) {
     const work = works.get(release._workExportId)
     const expectedKind = release.productKind === 'short-novel' ? 'novel' : release.productKind
-    if (!work || !['short-novel', 'screenplay', 'comic'].includes(release.productKind)
+    if (!work || !['short-novel', 'screenplay', 'comic', 'motion-drama'].includes(release.productKind)
       || work.kind !== expectedKind
       || (release.productKind === 'short-novel' && work.novelProfile !== 'short')
       || release._worldExportId !== work._worldExportId
@@ -223,6 +235,10 @@ async function validateIndependentCreationBackup(value: Record<string, any>): Pr
       assertComicReleaseManifestV1(manifest, work.code, release.sourceRevision)
       continue
     }
+    if (release.productKind === 'motion-drama') {
+      assertMotionDramaReleaseManifestV1(manifest, work.code)
+      continue
+    }
     if (release.productKind !== 'short-novel') {
       throw new Error(`[deriveImport] ${release.productKind} Release codec 尚未随对应产品启用`)
     }
@@ -235,7 +251,7 @@ async function validateIndependentCreationBackup(value: Record<string, any>): Pr
   for (const asset of releaseAssets) {
     const release = releases.get(asset._releaseExportId); const blob = blobs.get(asset._blobObjectExportId)
     const identity = `${asset._releaseExportId}:${asset.assetKey}`
-    if (!release || release.productKind !== 'comic' || !blob || release._workExportId !== asset._workExportId || release._worldExportId !== asset._worldExportId || releaseAssetIdentity.has(identity)
+    if (!release || (release.productKind !== 'comic' && release.productKind !== 'motion-drama') || !blob || release._workExportId !== asset._workExportId || release._worldExportId !== asset._worldExportId || releaseAssetIdentity.has(identity)
       || asset.contentHash !== blob.contentHash || !/^[a-f0-9]{64}$/i.test(asset.contentHash) || typeof asset.assetKey !== 'string' || !asset.assetKey.trim()) {
       throw new Error('[deriveImport] v14 CreationReleaseAsset owner、Release 或 Blob 引用非法')
     }
@@ -335,6 +351,7 @@ async function validateCurrentBackup(data: ProjectExportData): Promise<void> {
   validateScreenplayBackup(value)
   validateComicStoryboardBackup(value)
   validateComicMediaBackup(value)
+  await validateMotionDramaBackup(value)
   validateProductArchitectureBackup(value)
   await validateIndependentCreationBackup(value)
   for (const spec of PROJECT_TABLES) {
@@ -349,6 +366,157 @@ async function validateCurrentBackup(data: ProjectExportData): Promise<void> {
       const validIds = shadow.kind === 'world' ? worldIds : shadow.kind === 'work' ? workIds : instanceIds
       if (!validIds.has(shadow.exportId)) throw new Error(`[deriveImport] owner 越界:${spec.name}`)
     }
+  }
+}
+
+async function validateMotionDramaBackup(value: Record<string, any>): Promise<void> {
+  const tableNames = [
+    'motionDramaProductions', 'motionDramaSeriesBibles', 'motionDramaEpisodes', 'motionDramaScriptScenes',
+    'motionDramaAssetSubjects', 'motionDramaAssetVersions', 'motionDramaAssetBindings', 'motionDramaShots',
+    'motionDramaShotReferences', 'motionDramaPromptOverrides', 'motionDramaPromptPacks', 'motionDramaReviewIssues',
+  ] as const
+  const rows = Object.fromEntries(tableNames.map(name => [name, portableRows(value, name)])) as Record<typeof tableNames[number], Record<string, any>[]>
+  const adaptations = new Map<number, Record<string, any>>((value.adaptationProjects ?? []).filter((row: Record<string, any>) => row.medium === 'motion-drama').map((row: Record<string, any>) => [row._exportId, row]))
+  const works = new Map<number, Record<string, any>>((value.works ?? []).map((row: Record<string, any>) => [row._exportId, row]))
+  const releases = new Map<number, Record<string, any>>((value.creationReleases ?? []).map((row: Record<string, any>) => [row._exportId, row]))
+  const blobs = new Map<number, Record<string, any>>((value.mediaBlobObjects ?? []).map((row: Record<string, any>) => [row._exportId, row]))
+  const sourceKeys = new Map<string, Set<string>>()
+  for (const row of value.adaptationSourceUnits as Record<string, any>[]) {
+    const group = `${row._adaptationProjectExportId}:${row.manifestVersion}`
+    sourceKeys.set(group, new Set([...(sourceKeys.get(group) ?? []), row.sourceUnitKey]))
+  }
+  const assertOwner = (row: Record<string, any>, label: string) => {
+    const root = adaptations.get(row._adaptationProjectExportId)
+    if (!root || root._workExportId !== row._workExportId) throw new Error(`[deriveImport] v15 ${label} owner 或漫剧改编引用越界`)
+    return root
+  }
+  const assertSources = (row: Record<string, any>, keys: string[], label: string) => {
+    const valid = sourceKeys.get(`${row._adaptationProjectExportId}:${row.manifestVersion}`)
+    if (!valid || !Array.isArray(keys) || !keys.length || keys.some(key => !valid.has(key))) throw new Error(`[deriveImport] v15 ${label} 冻结来源引用越界`)
+  }
+  const candidate = (row: Record<string, any>, fields: readonly string[]) => Object.fromEntries(fields.map(field => [field, row[field]]))
+  const assetFields = ['stableKey', 'kind', 'label', 'identity', 'appearance', 'palette', 'materials', 'continuityLocks', 'prohibitedChanges', 'basePrompt', 'negativePrompt', 'referenceBrief', 'sourceUnitKeys'] as const
+  const episodeFields = ['stableKey', 'episodeNumber', 'title', 'logline', 'synopsis', 'openingHook', 'beats', 'endHook', 'continuityIn', 'continuityOut', 'sourceUnitKeys'] as const
+  const sceneFields = ['stableKey', 'episodeNumber', 'sceneNumber', 'order', 'heading', 'location', 'timeOfDay', 'dramaticPurpose', 'entryState', 'exitState', 'visibleAction', 'dialogue', 'narration', 'soundCues', 'emotionalTurn', 'estimatedSeconds', 'characterKeys', 'sourceUnitKeys'] as const
+  const shotFields = ['stableKey', 'episodeNumber', 'sceneKey', 'shotNumber', 'order', 'narrativeFunction', 'targetSeconds', 'shotSize', 'cameraAngle', 'cameraMovement', 'composition', 'visibleAction', 'performance', 'lighting', 'transitionIn', 'transitionOut', 'dialogue', 'narration', 'soundPlan', 'subjectKeys', 'sourceUnitKeys', 'imagePrompt', 'negativeImagePrompt', 'firstFramePrompt', 'keyFramePrompt', 'lastFramePrompt', 'videoPrompt', 'negativeVideoPrompt'] as const
+  const issueFields = ['stableKey', 'episodeNumber', 'sceneKey', 'shotKey', 'subjectKey', 'category', 'severity', 'evidence', 'problem', 'suggestion'] as const
+
+  const productionByRoot = new Map<number, Record<string, any>>()
+  for (const row of rows.motionDramaProductions) {
+    const root = assertOwner(row, 'MotionDramaProduction')
+    if (productionByRoot.has(row._adaptationProjectExportId) || row._worldExportId !== root._worldExportId || !Number.isInteger(row.revision) || row.revision < 1 || !Number.isInteger(row.currentEpisodeNumber) || row.currentEpisodeNumber < 1 || !['source', 'series-bible', 'asset-bible', 'episode-outline', 'script', 'storyboard', 'prompt-pack', 'review', 'release-ready', 'complete'].includes(row.phase)) throw new Error('[deriveImport] v15 MotionDramaProduction 身份或状态非法')
+    if (row._currentReleaseExportId != null) {
+      const release = releases.get(row._currentReleaseExportId)
+      if (!release || release.productKind !== 'motion-drama' || release._workExportId !== row._workExportId) throw new Error('[deriveImport] v15 MotionDramaProduction 当前发布引用越界')
+    }
+    productionByRoot.set(row._adaptationProjectExportId, row)
+  }
+  for (const rootId of adaptations.keys()) if (!productionByRoot.has(rootId)) throw new Error('[deriveImport] v15 漫剧改编缺少唯一生产根')
+
+  const bibleVersions = new Set<string>()
+  for (const row of rows.motionDramaSeriesBibles) {
+    const root = assertOwner(row, 'MotionDramaSeriesBible')
+    assertMotionDramaSeriesBibleV1(row.bible)
+    const identity = `${row._adaptationProjectExportId}:${row.version}`
+    if (!Number.isInteger(row.version) || row.version < 1 || bibleVersions.has(identity) || row.sourceManifestVersion > root.activeSourceManifestVersion || await hashCanonicalValue(row.bible) !== row.contentHash) throw new Error('[deriveImport] v15 MotionDramaSeriesBible 版本、来源或 hash 非法')
+    bibleVersions.add(identity)
+  }
+  for (const [rootId, production] of productionByRoot) if (production.activeSeriesBibleVersion != null && !bibleVersions.has(`${rootId}:${production.activeSeriesBibleVersion}`)) throw new Error('[deriveImport] v15 活动系列圣经版本不存在')
+
+  const episodeKeys = new Set<string>(); const episodeNumbers = new Set<string>()
+  for (const row of rows.motionDramaEpisodes) {
+    const root = assertOwner(row, 'MotionDramaEpisode'); assertMotionDramaEpisodeCandidateV1(candidate(row, episodeFields))
+    assertSources(row, [...row.sourceUnitKeys, ...row.beats.flatMap((beat: any) => beat.sourceUnitKeys)], 'MotionDramaEpisode')
+    const stable = `${row._adaptationProjectExportId}:${row.stableKey}`; const numbered = `${row._adaptationProjectExportId}:${row.episodeNumber}`
+    if (row.manifestVersion > root.activeSourceManifestVersion || row.authorStatus !== 'confirmed' || episodeKeys.has(stable) || episodeNumbers.has(numbered)) throw new Error('[deriveImport] v15 MotionDramaEpisode 身份、状态或版本非法')
+    episodeKeys.add(stable); episodeNumbers.add(numbered)
+  }
+
+  const sceneKeys = new Set<string>(); const sceneNumbers = new Set<string>()
+  for (const row of rows.motionDramaScriptScenes) {
+    const root = assertOwner(row, 'MotionDramaScriptScene'); assertMotionDramaScriptSceneCandidateV1(candidate(row, sceneFields)); assertSources(row, row.sourceUnitKeys, 'MotionDramaScriptScene')
+    const stable = `${row._adaptationProjectExportId}:${row.stableKey}`; const numbered = `${row._adaptationProjectExportId}:${row.episodeNumber}:${row.sceneNumber}`
+    if (!episodeNumbers.has(`${row._adaptationProjectExportId}:${row.episodeNumber}`) || row.manifestVersion > root.activeSourceManifestVersion || row.authorStatus !== 'confirmed' || sceneKeys.has(stable) || sceneNumbers.has(numbered)) throw new Error('[deriveImport] v15 MotionDramaScriptScene 身份、状态或分集引用非法')
+    sceneKeys.add(stable); sceneNumbers.add(numbered)
+  }
+
+  const subjectKeys = new Set<string>(); const subjectKinds = new Map<string, string>()
+  for (const row of rows.motionDramaAssetSubjects) {
+    const root = assertOwner(row, 'MotionDramaAssetSubject'); assertMotionDramaAssetSubjectCandidateV1(candidate(row, assetFields)); assertSources(row, row.sourceUnitKeys, 'MotionDramaAssetSubject')
+    const identity = `${row._adaptationProjectExportId}:${row.stableKey}`
+    if (row.manifestVersion > root.activeSourceManifestVersion || row.authorStatus !== 'confirmed' || subjectKeys.has(identity)) throw new Error('[deriveImport] v15 MotionDramaAssetSubject 身份、状态或版本非法')
+    subjectKeys.add(identity); subjectKinds.set(identity, row.kind)
+  }
+
+  const versionIds = new Set<number>(); const versionKeys = new Set<string>(); const versionSubjects = new Map<string, string>()
+  for (const row of rows.motionDramaAssetVersions) {
+    assertOwner(row, 'MotionDramaAssetVersion')
+    const identity = `${row._adaptationProjectExportId}:${row.stableKey}`
+    if (!subjectKeys.has(`${row._adaptationProjectExportId}:${row.subjectKey}`) || versionKeys.has(identity) || !Number.isInteger(row.version) || row.version < 1 || !/^[a-f0-9]{64}$/i.test(row.contentHash) || !['prompt-only', 'author-upload', 'provider-generated'].includes(row.origin)) throw new Error('[deriveImport] v15 MotionDramaAssetVersion 身份或主体引用非法')
+    if (row._blobObjectExportId == null) {
+      if (row.origin !== 'prompt-only' || row.rights !== null) throw new Error('[deriveImport] v15 prompt-only 物料不得伪装真实参考素材')
+    } else {
+      const blob = blobs.get(row._blobObjectExportId)
+      const kind = subjectKinds.get(`${row._adaptationProjectExportId}:${row.subjectKey}`)
+      const expectedFamily = kind === 'voice' || kind === 'sound' ? 'audio/' : 'image/'
+      if (!blob || blob.contentHash !== row.contentHash || !String(blob.mimeType).startsWith(expectedFamily)) throw new Error('[deriveImport] v15 MotionDramaAssetVersion Blob 引用或媒资类型非法')
+      assertMediaRightsV1(row.rights)
+    }
+    versionIds.add(row._exportId); versionKeys.add(identity); versionSubjects.set(identity, row.subjectKey)
+  }
+  for (const subject of rows.motionDramaAssetSubjects) if (subject.selectedVersionKey != null) {
+    const versionIdentity = `${subject._adaptationProjectExportId}:${subject.selectedVersionKey}`
+    if (!versionKeys.has(versionIdentity) || versionSubjects.get(versionIdentity) !== subject.stableKey) throw new Error('[deriveImport] v15 物料所选版本不存在或属于其他主体')
+  }
+
+  const shotKeys = new Set<string>(); const shotOrders = new Set<string>()
+  for (const row of rows.motionDramaShots) {
+    const root = assertOwner(row, 'MotionDramaShot'); assertMotionDramaShotCandidateV1(candidate(row, shotFields)); assertSources(row, row.sourceUnitKeys, 'MotionDramaShot')
+    const identity = `${row._adaptationProjectExportId}:${row.stableKey}`; const order = `${row._adaptationProjectExportId}:${row.episodeNumber}:${row.order}`
+    if (!episodeNumbers.has(`${row._adaptationProjectExportId}:${row.episodeNumber}`) || !sceneKeys.has(`${row._adaptationProjectExportId}:${row.sceneKey}`) || row.subjectKeys.some((key: string) => !subjectKeys.has(`${row._adaptationProjectExportId}:${key}`)) || row.manifestVersion > root.activeSourceManifestVersion || row.authorStatus !== 'confirmed' || shotKeys.has(identity) || shotOrders.has(order)) throw new Error('[deriveImport] v15 MotionDramaShot 身份、场景、物料或顺序非法')
+    shotKeys.add(identity); shotOrders.add(order)
+  }
+
+  const selectedReferenceRoles = new Set<string>()
+  for (const row of rows.motionDramaShotReferences) {
+    assertOwner(row, 'MotionDramaShotReference')
+    if (!shotKeys.has(`${row._adaptationProjectExportId}:${row.shotKey}`) || !['character', 'costume', 'location', 'prop', 'style', 'voice', 'start-frame', 'key-frame', 'end-frame'].includes(row.role) || row._assetVersionExportId != null && !versionIds.has(row._assetVersionExportId) || row._blobObjectExportId != null && !blobs.has(row._blobObjectExportId)) throw new Error('[deriveImport] v15 MotionDramaShotReference 镜头、版本或 Blob 引用非法')
+    if (row._blobObjectExportId != null) assertMediaRightsV1(row.rights)
+    if (row.selected) {
+      const identity = `${row._adaptationProjectExportId}:${row.shotKey}:${row.role}`
+      if (selectedReferenceRoles.has(identity)) throw new Error('[deriveImport] v15 同一镜头角色存在多个已选参考')
+      selectedReferenceRoles.add(identity)
+    }
+  }
+
+  const overrideKeys = new Set<string>()
+  for (const row of rows.motionDramaPromptOverrides) {
+    const work = works.get(row._workExportId); const identity = `${row._workExportId}:${row.stage}:${row.scope}:${row.episodeNumber ?? 'all'}`
+    if (!work || work.kind !== 'motion-drama' || !['series-bible', 'asset-bible', 'episode-outline', 'episode-script', 'shot-design', 'image-prompts', 'video-prompts', 'quality-review'].includes(row.stage) || !['work', 'episode'].includes(row.scope) || (row.scope === 'work') !== (row.episodeNumber == null) || typeof row.instruction !== 'string' || !row.instruction.trim() || overrideKeys.has(identity)) throw new Error('[deriveImport] v15 MotionDramaPromptOverride 作用域或身份非法')
+    overrideKeys.add(identity)
+  }
+
+  const packIdentity = new Set<string>()
+  for (const row of rows.motionDramaPromptPacks) {
+    assertOwner(row, 'MotionDramaPromptPack')
+    let manifest: Record<string, any>; try { manifest = JSON.parse(row.manifestJson) } catch { throw new Error('[deriveImport] v15 MotionDramaPromptPack manifest 不是 JSON') }
+    assertMotionDramaPromptPackManifest(manifest)
+    const identity = `${row._adaptationProjectExportId}:${row.episodeNumber}:${row.provider}:${row.version}`
+    if (packIdentity.has(identity) || !episodeNumbers.has(`${row._adaptationProjectExportId}:${row.episodeNumber}`) || !['seedance', 'runway', 'ltx', 'generic'].includes(row.provider) || manifest.schema !== 'storyforge.motion-drama-prompt-pack' || ![1, 2].includes(manifest.version) || manifest.provider !== row.provider || manifest.episodeNumber !== row.episodeNumber || manifest.maturity !== row.maturity || await hashCanonicalValue(manifest) !== row.contentHash) throw new Error('[deriveImport] v15 MotionDramaPromptPack 身份、覆盖或 hash 非法')
+    packIdentity.add(identity)
+  }
+
+  const issueKeys = new Set<string>()
+  for (const row of rows.motionDramaReviewIssues) {
+    const root = assertOwner(row, 'MotionDramaReviewIssue'); assertMotionDramaReviewIssueCandidateV1(candidate(row, issueFields))
+    const identity = `${row._adaptationProjectExportId}:${row.manifestVersion}:${row.stableKey}`
+    if (!episodeNumbers.has(`${row._adaptationProjectExportId}:${row.episodeNumber}`) || row.manifestVersion > root.activeSourceManifestVersion || !['open', 'resolved', 'dismissed'].includes(row.status) || row.sceneKey != null && !sceneKeys.has(`${row._adaptationProjectExportId}:${row.sceneKey}`) || row.shotKey != null && !shotKeys.has(`${row._adaptationProjectExportId}:${row.shotKey}`) || row.subjectKey != null && !subjectKeys.has(`${row._adaptationProjectExportId}:${row.subjectKey}`) || issueKeys.has(identity)) throw new Error('[deriveImport] v15 MotionDramaReviewIssue 身份、状态或定位引用非法')
+    issueKeys.add(identity)
+  }
+
+  for (const row of rows.motionDramaAssetBindings) {
+    assertOwner(row, 'MotionDramaAssetBinding')
+    if (!episodeNumbers.has(`${row._adaptationProjectExportId}:${row.episodeNumber}`) || !subjectKeys.has(`${row._adaptationProjectExportId}:${row.subjectKey}`) || row.shotKey != null && !shotKeys.has(`${row._adaptationProjectExportId}:${row.shotKey}`) || row.assetVersionKey != null && !versionKeys.has(`${row._adaptationProjectExportId}:${row.assetVersionKey}`)) throw new Error('[deriveImport] v15 MotionDramaAssetBinding 语义引用越界')
   }
 }
 

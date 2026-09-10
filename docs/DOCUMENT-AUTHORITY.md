@@ -34,6 +34,7 @@
 - `docs/products/README.md`
 - `docs/products/LONGFORM-AND-NODE.md`
 - `docs/products/INDEPENDENT-CREATION.md`
+- `docs/products/MOTION-DRAMA.md`
 - `docs/products/WORLD-ENGINE.md`
 - `docs/products/UPPER-PRODUCTS.md`
 - `docs/products/TTRPG-AI-KP.md`：跑团 AI KP 专项产品契约。
@@ -44,6 +45,8 @@
 - `docs/roadmap/SHORT-NOVEL-DEVELOPMENT-PLAN.md`
 - `docs/roadmap/NOVEL-TO-SCREENPLAY-DEVELOPMENT-PLAN.md`
 - `docs/roadmap/NOVEL-TO-COMIC-DEVELOPMENT-PLAN.md`
+- `docs/roadmap/MOTION-DRAMA-PREPRODUCTION-DEVELOPMENT-PLAN.md`
+- `docs/roadmap/MOTION-DRAMA-CONTENT-PRODUCTION-FLOW.md`
 - `docs/roadmap/COMPLETED.md`
 
 ### 2.3 机器事实与质量证据
@@ -53,6 +56,7 @@
 - `docs/CONSISTENCY-COVERAGE-MAP.md`：Canon 一致性反例状态。
 - `docs/audits/CURRENT-ARCHITECTURE-AUDIT-20260903.md`：当前代码树的项目级架构闭环审计；不替代具体产品方案和质量认证。
 - `docs/roadmap/INDEPENDENT-CREATION-PLAN-AUDIT.md`：三份独立创作专项方案的边界、共享底座和分支隔离审查证据；不替代专项方案。
+- `docs/roadmap/MOTION-DRAMA-PLAN-AUDIT.md`：漫剧前期生产方案对当前行业流程的交叉审查与修订证据。
 
 ### 2.4 用户、维护与法律资料
 

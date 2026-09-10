@@ -10,6 +10,7 @@ import {
   STORYFORGE_STORES_V2,
   STORYFORGE_STORES_V3,
   STORYFORGE_STORES_V4,
+  STORYFORGE_STORES_V5,
 } from '../../src/lib/db/schema'
 import {
   assertCurrentSchemaDefinition,
@@ -17,7 +18,7 @@ import {
   REQUIRED_TABLES,
 } from '../../src/lib/db/ensure-schema'
 
-describe('CURRENT-SCHEMA · v1/v2/v3/v4 to v5 additive migration', () => {
+describe('CURRENT-SCHEMA · v1/v2/v3/v4/v5 to v6 additive migration', () => {
   beforeEach(async () => {
     db.close()
     await db.delete()
@@ -25,9 +26,9 @@ describe('CURRENT-SCHEMA · v1/v2/v3/v4 to v5 additive migration', () => {
 
   afterEach(() => db.close())
 
-  it('数据库使用独立当前命名空间和 v5 schema', () => {
+  it('数据库使用独立当前命名空间和 v6 schema', () => {
     expect(STORYFORGE_DATABASE_NAME).toBe('storyforge-core')
-    expect(STORYFORGE_SCHEMA_VERSION).toBe(5)
+    expect(STORYFORGE_SCHEMA_VERSION).toBe(6)
     expect(db.name).toBe(STORYFORGE_DATABASE_NAME)
     expect(db.verno).toBe(STORYFORGE_SCHEMA_VERSION)
   })
@@ -64,7 +65,7 @@ describe('CURRENT-SCHEMA · v1/v2/v3/v4 to v5 additive migration', () => {
     const upgraded = new StoryForgeDB(databaseName)
     try {
       await upgraded.open()
-      expect(upgraded.verno).toBe(5)
+      expect(upgraded.verno).toBe(6)
       expect(await upgraded.projects.get(projectId)).toMatchObject({ name: '迁移保留样例' })
       expect(await upgraded.shortNovelProductions.count()).toBe(0)
       expect(await upgraded.creationReleases.count()).toBe(0)
@@ -108,7 +109,7 @@ describe('CURRENT-SCHEMA · v1/v2/v3/v4 to v5 additive migration', () => {
     const upgraded = new StoryForgeDB(databaseName)
     try {
       await upgraded.open()
-      expect(upgraded.verno).toBe(5)
+      expect(upgraded.verno).toBe(6)
       expect(await upgraded.projects.get(projectId)).toMatchObject({ name: 'v2 短篇保留样例' })
       expect(await upgraded.creationReleases.count()).toBe(1)
       expect(await upgraded.adaptationSourceFacts.count()).toBe(0)
@@ -151,7 +152,7 @@ describe('CURRENT-SCHEMA · v1/v2/v3/v4 to v5 additive migration', () => {
     const upgraded = new StoryForgeDB(databaseName)
     try {
       await upgraded.open()
-      expect(upgraded.verno).toBe(5)
+      expect(upgraded.verno).toBe(6)
       expect(await upgraded.projects.get(projectId)).toMatchObject({ name: 'v3 改编分析保留样例' })
       expect(await upgraded.adaptationSourceFacts.count()).toBe(1)
       expect(await upgraded.screenplayBeats.count()).toBe(0)
@@ -174,12 +175,34 @@ describe('CURRENT-SCHEMA · v1/v2/v3/v4 to v5 additive migration', () => {
     const upgraded = new StoryForgeDB(databaseName)
     try {
       await upgraded.open()
-      expect(upgraded.verno).toBe(5)
+      expect(upgraded.verno).toBe(6)
       expect(await upgraded.screenplayBeats.count()).toBe(1)
       expect(await upgraded.comicScriptBeats.count()).toBe(0)
       expect(await upgraded.comicPagePlans.count()).toBe(0)
       expect(await upgraded.comicReviewIssues.count()).toBe(0)
       expect(await upgraded.creationReleaseAssets.count()).toBe(0)
+    } finally {
+      upgraded.close()
+      await upgraded.delete()
+    }
+  })
+
+  it('从 v5 原位升级时保留漫画数据并新增漫剧前期生产表', async () => {
+    const databaseName = `storyforge-schema-v5-migration-${Date.now()}-${Math.random()}`
+    const oldDb = new Dexie(databaseName)
+    oldDb.version(5).stores(STORYFORGE_STORES_V5)
+    await oldDb.open()
+    const projectId = await oldDb.table('projects').add({ workspaceUid: 'WS-05HZZZZZZZZZZZZZZZZZZZZZZZ', workspacePurpose: 'independent-work', name: 'v5 漫画保留样例', createdAt: 5, updatedAt: 5 })
+    await oldDb.table('comicScriptBeats').add({ projectId, workId: 1, adaptationProjectId: 1, manifestVersion: 1, stableKey: 'comic_keep', chapterNumber: 1, sectionKey: 'chapter-1', order: 0, updatedAt: 5 })
+    oldDb.close()
+    const upgraded = new StoryForgeDB(databaseName)
+    try {
+      await upgraded.open()
+      expect(upgraded.verno).toBe(6)
+      expect(await upgraded.comicScriptBeats.count()).toBe(1)
+      expect(await upgraded.motionDramaProductions.count()).toBe(0)
+      expect(await upgraded.motionDramaPromptPacks.count()).toBe(0)
+      expect(await upgraded.motionDramaShotReferences.count()).toBe(0)
     } finally {
       upgraded.close()
       await upgraded.delete()

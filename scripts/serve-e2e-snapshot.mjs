@@ -12,6 +12,7 @@ const snapshotEntries = [
   'data',
   'showcase/short-novel',
   'showcase/screenplay',
+  'showcase/motion-drama',
   'showcase/comic/before-rain-stops/art/final/community-preview-ui.jpg',
   'showcase/comic/borrowed-flame/art/final/community-preview-ui.jpg',
   'showcase/comic/before-the-gun/art/final/community-preview-ui.jpg',

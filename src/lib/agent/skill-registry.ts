@@ -113,6 +113,14 @@ export type AgentSkillExecutionModeV1 =
   | 'comic-visual-continuity-review'
   | 'comic-targeted-repair'
   | 'comic-page-review'
+  | 'motion-drama-series-bible'
+  | 'motion-drama-asset-bible'
+  | 'motion-drama-episode-outline'
+  | 'motion-drama-episode-script'
+  | 'motion-drama-shot-design'
+  | 'motion-drama-image-prompts'
+  | 'motion-drama-video-prompts'
+  | 'motion-drama-quality-review'
   | 'short-intent-brief'
   | 'short-story-design'
   | 'short-scene-plan'
@@ -265,6 +273,8 @@ const COMIC_VISUAL_BIBLE_CONTEXT_KEYS = ['adaptation.sourceManifest', 'adaptatio
 const COMIC_IMAGE_REQUEST_CONTEXT_KEYS = ['adaptation.sourceManifest', 'adaptation.sourceContent', 'comic.currentPages', 'comic.visualBible', 'comic.selectedMedia'] as const
 const COMIC_REVIEW_CONTEXT_KEYS = ['adaptation.sourceManifest', 'adaptation.sourceContent', 'adaptation.sourceFacts', 'adaptation.decisions', 'comic.scriptBeats', 'comic.pagePlans', 'comic.currentPages', 'comic.visualBible', 'comic.selectedMedia'] as const
 const COMIC_REPAIR_CONTEXT_KEYS = [...COMIC_REVIEW_CONTEXT_KEYS, 'comic.reviewIssues'] as const
+const MOTION_DRAMA_SERIES_CONTEXT_KEYS = ['adaptation.sourceManifest', 'adaptation.sourceContent', 'motionDrama.production'] as const
+const MOTION_DRAMA_EPISODE_CONTEXT_KEYS = ['adaptation.sourceManifest', 'adaptation.sourceContent', 'motionDrama.production'] as const
 const SHORT_NOVEL_DESIGN_CONTEXT_SOURCE_KEYS = ['workStatus', 'shortNovel.production'] as const
 const SHORT_NOVEL_MANUSCRIPT_CONTEXT_SOURCE_KEYS = ['workStatus', 'shortNovel.production', 'shortNovel.manuscript'] as const
 const SHORT_NOVEL_INPUT_POLICY: AgentSkillInputPolicyV1 = {
@@ -2360,6 +2370,54 @@ export const AGENT_SKILLS = [
     writeTargets: [{ table: 'comicReviewIssues', fields: ['category', 'severity', 'pageKey', 'panelKey', 'subjectKey', 'assetKey', 'evidence', 'problem', 'suggestion', 'sourceUnitKeys'], adoptionExtension: 'comic-review-issue-lifecycle' }], lastVerifiedAt: '2026-09-06', regressionTests: ['R-COMIC2-professional-pipeline'],
   },
   {
+    version: 1, id: 'motion-drama.series-bible', agentId: 'outline', defaultForAgent: false,
+    label: '漫剧系列定位与系列圣经', owner: 'motion-drama-product', promptVersion: 'motion-drama-series-bible-v1', executionMode: 'motion-drama-series-bible', contextTaskKind: 'agent-outline', readToolNames: [],
+    contextSourceKeys: MOTION_DRAMA_SERIES_CONTEXT_KEYS, optionalContextSourceKeys: [], inputPolicy: ADAPTATION_INPUT_POLICY, contextCompression: compressionPolicy(MOTION_DRAMA_SERIES_CONTEXT_KEYS), maxOutputTokens: 10_000,
+    writeTargets: [{ table: 'motionDramaSeriesBibles', fields: ['bible'], adoptionExtension: 'motion-drama-series-bible-lifecycle' }], lastVerifiedAt: '2026-09-09', regressionTests: ['R-MOTIONDRAMA1-preproduction'],
+  },
+  {
+    version: 1, id: 'motion-drama.asset-bible', agentId: 'outline', defaultForAgent: false,
+    label: '漫剧角色服装场景道具与声音物料', owner: 'motion-drama-product', promptVersion: 'motion-drama-asset-bible-v1', executionMode: 'motion-drama-asset-bible', contextTaskKind: 'agent-outline', readToolNames: [],
+    contextSourceKeys: MOTION_DRAMA_EPISODE_CONTEXT_KEYS, optionalContextSourceKeys: [], inputPolicy: ADAPTATION_INPUT_POLICY, contextCompression: compressionPolicy(MOTION_DRAMA_EPISODE_CONTEXT_KEYS), maxOutputTokens: 16_000,
+    writeTargets: [{ table: 'motionDramaAssetSubjects', fields: ['kind', 'label', 'identity', 'appearance', 'palette', 'materials', 'continuityLocks', 'prohibitedChanges', 'basePrompt', 'negativePrompt', 'referenceBrief', 'sourceUnitKeys'], adoptionExtension: 'motion-drama-asset-subject-lifecycle' }], lastVerifiedAt: '2026-09-09', regressionTests: ['R-MOTIONDRAMA1-preproduction'],
+  },
+  {
+    version: 1, id: 'motion-drama.episode-outline', agentId: 'outline', defaultForAgent: false,
+    label: '漫剧逐集集纲与节拍', owner: 'motion-drama-product', promptVersion: 'motion-drama-episode-outline-v1', executionMode: 'motion-drama-episode-outline', contextTaskKind: 'agent-outline', readToolNames: [],
+    contextSourceKeys: MOTION_DRAMA_EPISODE_CONTEXT_KEYS, optionalContextSourceKeys: [], inputPolicy: ADAPTATION_INPUT_POLICY, contextCompression: compressionPolicy(MOTION_DRAMA_EPISODE_CONTEXT_KEYS), maxOutputTokens: 10_000,
+    writeTargets: [{ table: 'motionDramaEpisodes', fields: ['title', 'logline', 'synopsis', 'openingHook', 'beats', 'endHook', 'continuityIn', 'continuityOut', 'sourceUnitKeys'], adoptionExtension: 'motion-drama-episode-lifecycle' }], lastVerifiedAt: '2026-09-09', regressionTests: ['R-MOTIONDRAMA1-preproduction'],
+  },
+  {
+    version: 1, id: 'motion-drama.episode-script', agentId: 'prose', defaultForAgent: false,
+    label: '漫剧逐集可拍场景稿', owner: 'motion-drama-product', promptVersion: 'motion-drama-episode-script-v1', executionMode: 'motion-drama-episode-script', contextTaskKind: 'agent-prose', readToolNames: [],
+    contextSourceKeys: MOTION_DRAMA_EPISODE_CONTEXT_KEYS, optionalContextSourceKeys: [], inputPolicy: ADAPTATION_INPUT_POLICY, contextCompression: compressionPolicy(MOTION_DRAMA_EPISODE_CONTEXT_KEYS), maxOutputTokens: 18_000,
+    writeTargets: [{ table: 'motionDramaScriptScenes', fields: ['heading', 'location', 'timeOfDay', 'dramaticPurpose', 'entryState', 'exitState', 'visibleAction', 'dialogue', 'narration', 'soundCues', 'emotionalTurn', 'estimatedSeconds', 'characterKeys', 'sourceUnitKeys'], adoptionExtension: 'motion-drama-script-scene-lifecycle' }], lastVerifiedAt: '2026-09-09', regressionTests: ['R-MOTIONDRAMA1-preproduction'],
+  },
+  {
+    version: 1, id: 'motion-drama.shot-design', agentId: 'outline', defaultForAgent: false,
+    label: '漫剧逐镜头分镜设计', owner: 'motion-drama-product', promptVersion: 'motion-drama-shot-design-v1', executionMode: 'motion-drama-shot-design', contextTaskKind: 'agent-outline', readToolNames: [],
+    contextSourceKeys: MOTION_DRAMA_EPISODE_CONTEXT_KEYS, optionalContextSourceKeys: [], inputPolicy: ADAPTATION_INPUT_POLICY, contextCompression: compressionPolicy(MOTION_DRAMA_EPISODE_CONTEXT_KEYS), maxOutputTokens: 20_000,
+    writeTargets: [{ table: 'motionDramaShots', fields: ['narrativeFunction', 'targetSeconds', 'shotSize', 'cameraAngle', 'cameraMovement', 'composition', 'visibleAction', 'performance', 'lighting', 'transitionIn', 'transitionOut', 'dialogue', 'narration', 'soundPlan', 'subjectKeys', 'sourceUnitKeys'], adoptionExtension: 'motion-drama-shot-lifecycle' }], lastVerifiedAt: '2026-09-09', regressionTests: ['R-MOTIONDRAMA1-preproduction'],
+  },
+  {
+    version: 1, id: 'motion-drama.image-prompts', agentId: 'outline', defaultForAgent: false,
+    label: '漫剧静帧与关键帧 Prompt IR', owner: 'motion-drama-product', promptVersion: 'motion-drama-image-prompts-v1', executionMode: 'motion-drama-image-prompts', contextTaskKind: 'agent-outline', readToolNames: [],
+    contextSourceKeys: MOTION_DRAMA_EPISODE_CONTEXT_KEYS, optionalContextSourceKeys: [], inputPolicy: ADAPTATION_INPUT_POLICY, contextCompression: compressionPolicy(MOTION_DRAMA_EPISODE_CONTEXT_KEYS), maxOutputTokens: 18_000,
+    writeTargets: [{ table: 'motionDramaShots', fields: ['imagePrompt', 'negativeImagePrompt', 'firstFramePrompt', 'keyFramePrompt', 'lastFramePrompt'], adoptionExtension: 'motion-drama-shot-lifecycle' }], lastVerifiedAt: '2026-09-09', regressionTests: ['R-MOTIONDRAMA1-preproduction'],
+  },
+  {
+    version: 1, id: 'motion-drama.video-prompts', agentId: 'outline', defaultForAgent: false,
+    label: '漫剧视频运动 Prompt IR', owner: 'motion-drama-product', promptVersion: 'motion-drama-video-prompts-v1', executionMode: 'motion-drama-video-prompts', contextTaskKind: 'agent-outline', readToolNames: [],
+    contextSourceKeys: MOTION_DRAMA_EPISODE_CONTEXT_KEYS, optionalContextSourceKeys: [], inputPolicy: ADAPTATION_INPUT_POLICY, contextCompression: compressionPolicy(MOTION_DRAMA_EPISODE_CONTEXT_KEYS), maxOutputTokens: 18_000,
+    writeTargets: [{ table: 'motionDramaShots', fields: ['videoPrompt', 'negativeVideoPrompt'], adoptionExtension: 'motion-drama-shot-lifecycle' }], lastVerifiedAt: '2026-09-09', regressionTests: ['R-MOTIONDRAMA1-preproduction'],
+  },
+  {
+    version: 1, id: 'motion-drama.quality-review', agentId: 'outline', defaultForAgent: false,
+    label: '漫剧前期包质量审查', owner: 'motion-drama-product', promptVersion: 'motion-drama-quality-review-v1', executionMode: 'motion-drama-quality-review', contextTaskKind: 'agent-outline', readToolNames: [],
+    contextSourceKeys: MOTION_DRAMA_EPISODE_CONTEXT_KEYS, optionalContextSourceKeys: [], inputPolicy: ADAPTATION_INPUT_POLICY, contextCompression: compressionPolicy(MOTION_DRAMA_EPISODE_CONTEXT_KEYS), maxOutputTokens: 12_000,
+    writeTargets: [{ table: 'motionDramaReviewIssues', fields: ['category', 'severity', 'sceneKey', 'shotKey', 'subjectKey', 'evidence', 'problem', 'suggestion'], adoptionExtension: 'motion-drama-review-issue-lifecycle' }], lastVerifiedAt: '2026-09-09', regressionTests: ['R-MOTIONDRAMA1-preproduction'],
+  },
+  {
     version: 1,
     id: 'short.intent-brief',
     agentId: 'outline',
@@ -3771,8 +3829,8 @@ export function validateAgentSkillDefinitionsV1(
     'world-origin': new Set(['worldview-field', 'world-suggest', 'worldview-expand', 'world-link-context', 'constitution-extract', 'codex-extract', 'codex-enrich', 'story-core', 'creative-rules', 'locations', 'map-config', 'history-consult', 'history-storm', 'review']),
     character: new Set(['create', 'supplement', 'lifecycle', 'relationships', 'character-reply', 'memory-curator']),
     inspiration: new Set(['reference-summary', 'reference-characters', 'reverse', 'review']),
-    outline: new Set(['auto', 'story-arcs', 'foreshadow-suggestions', 'storyline-progress', 'character-driven', 'character-revision', 'impact-summary-regenerate', 'volumes', 'chapters', 'details', 'adaptation-source-analysis', 'adaptation-causal-graph', 'screenplay-adaptation-brief', 'screenplay-decision-pass', 'screenplay-beat-sheet', 'screenplay-scene-card', 'screenplay-grounding-review', 'screenplay-dramaturgy-review', 'comic-adaptation-brief', 'comic-decision-pass', 'comic-script-adaptation', 'comic-page-rhythm', 'comic-panel-plan', 'comic-visual-bible', 'comic-image-request', 'comic-visual-continuity-review', 'comic-targeted-repair', 'comic-page-review', 'short-intent-brief', 'short-story-design', 'short-scene-plan', 'short-continuity-review', 'character-interaction-production', 'product-production']),
-    prose: new Set(['auto', 'generate', 'continue', 'emotion-beats', 'inventory-extraction', 'story-timeline-extraction', 'cultivation-progress-extraction', 'style-learn', 'selection-edit', 'selection-check', 'review', 'revise', 'organize', 'memory', 'consistency', 'scene-director', 'ai-town-director', 'adventure-intent', 'adventure-narrator', 'open-world-briefing', 'open-world-advisor', 'open-world-outcome-narrator', 'open-world-actor-suggestion', 'open-world-expression', 'open-world-narration', 'screenplay-scene-draft', 'screenplay-targeted-rewrite', 'short-chapter-draft', 'short-targeted-rewrite', 'ttrpg-gm-narrator', 'ttrpg-gm-actor-intent', 'ttrpg-director', 'ttrpg-private-guidance', 'ttrpg-player-intent']),
+    outline: new Set(['auto', 'story-arcs', 'foreshadow-suggestions', 'storyline-progress', 'character-driven', 'character-revision', 'impact-summary-regenerate', 'volumes', 'chapters', 'details', 'adaptation-source-analysis', 'adaptation-causal-graph', 'screenplay-adaptation-brief', 'screenplay-decision-pass', 'screenplay-beat-sheet', 'screenplay-scene-card', 'screenplay-grounding-review', 'screenplay-dramaturgy-review', 'comic-adaptation-brief', 'comic-decision-pass', 'comic-script-adaptation', 'comic-page-rhythm', 'comic-panel-plan', 'comic-visual-bible', 'comic-image-request', 'comic-visual-continuity-review', 'comic-targeted-repair', 'comic-page-review', 'motion-drama-series-bible', 'motion-drama-asset-bible', 'motion-drama-episode-outline', 'motion-drama-shot-design', 'motion-drama-image-prompts', 'motion-drama-video-prompts', 'motion-drama-quality-review', 'short-intent-brief', 'short-story-design', 'short-scene-plan', 'short-continuity-review', 'character-interaction-production', 'product-production']),
+    prose: new Set(['auto', 'generate', 'continue', 'emotion-beats', 'inventory-extraction', 'story-timeline-extraction', 'cultivation-progress-extraction', 'style-learn', 'selection-edit', 'selection-check', 'review', 'revise', 'organize', 'memory', 'consistency', 'scene-director', 'ai-town-director', 'adventure-intent', 'adventure-narrator', 'open-world-briefing', 'open-world-advisor', 'open-world-outcome-narrator', 'open-world-actor-suggestion', 'open-world-expression', 'open-world-narration', 'screenplay-scene-draft', 'screenplay-targeted-rewrite', 'motion-drama-episode-script', 'short-chapter-draft', 'short-targeted-rewrite', 'ttrpg-gm-narrator', 'ttrpg-gm-actor-intent', 'ttrpg-director', 'ttrpg-private-guidance', 'ttrpg-player-intent']),
   }
   const ids = new Set<string>()
   const defaultAgents = new Set<DomainAgentId>()

@@ -50,6 +50,18 @@ export const REQUIRED_TABLES = [
   'itemLedger',
   'knowledgeLedger',
   'mediaBlobObjects',
+  'motionDramaAssetBindings',
+  'motionDramaAssetSubjects',
+  'motionDramaAssetVersions',
+  'motionDramaEpisodes',
+  'motionDramaProductions',
+  'motionDramaPromptOverrides',
+  'motionDramaPromptPacks',
+  'motionDramaReviewIssues',
+  'motionDramaScriptScenes',
+  'motionDramaSeriesBibles',
+  'motionDramaShotReferences',
+  'motionDramaShots',
   'narrativeBeats',
   'narrativeChoices',
   'narrativeModules',
@@ -127,8 +139,8 @@ export function assertCurrentSchemaDefinition(): void {
   }
 }
 
-/** Opens the current schema. Dexie preserves v1-v4 release steps, then adds
- * the v5 comic production and immutable release-asset stores. */
+/** Opens the current schema. Dexie preserves v1-v5 release steps, then adds
+ * the v6 motion-drama preproduction stores. */
 export async function openCurrentSchema(): Promise<CurrentSchemaState> {
   assertCurrentSchemaDefinition()
   await db.open()

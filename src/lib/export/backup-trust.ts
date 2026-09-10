@@ -166,7 +166,7 @@ export function inspectProjectBackup(input: unknown): BackupTrustReport {
         if (row.novelProfile !== 'short' && row.novelProfile !== 'long') {
           errors.push(`works[${index}] 的小说流程配置无效。`)
         }
-      } else if ((row.kind !== 'screenplay' && row.kind !== 'comic') || row.novelProfile !== null) {
+      } else if ((row.kind !== 'screenplay' && row.kind !== 'comic' && row.kind !== 'motion-drama') || row.novelProfile !== null) {
         errors.push(`works[${index}] 的作品类型或流程配置无效。`)
       }
     })

@@ -335,7 +335,7 @@ export interface CreationReleaseAssetV1 {
   workId: number
   releaseId: number
   assetKey: string
-  role: ComicMediaAssetRole
+  role: ComicMediaAssetRole | 'motion-subject-reference' | 'motion-shot-reference' | 'motion-audio-reference'
   pageKey: string | null
   panelKey: string | null
   blobObjectId: number

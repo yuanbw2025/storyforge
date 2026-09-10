@@ -1,4 +1,6 @@
-export type AdaptationMedium = 'screenplay' | 'comic'
+import type { MotionDramaTargetSpecV1 } from './motion-drama'
+
+export type AdaptationMedium = 'screenplay' | 'comic' | 'motion-drama'
 export type AdaptationStatus =
   | 'source-frozen'
   | 'brief-review'
@@ -146,6 +148,12 @@ export type AdaptationProject = AdaptationProjectBase & (
       targetSpec: ComicTargetSpecV1
       visualBibleSourceManifestVersion: number | null
       visualBible: ComicGlobalVisualBibleV1 | null
+    }
+  | {
+      medium: 'motion-drama'
+      targetSpec: MotionDramaTargetSpecV1
+      visualBibleSourceManifestVersion: null
+      visualBible?: null
     }
 )
 

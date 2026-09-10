@@ -1,12 +1,13 @@
 import Dexie from 'dexie'
 import { db } from '../db/schema'
-import type { MediaBlobObject, WorkspaceScope } from '../types'
+import type { MediaBlobObject, MediaBlobObjectRecordV1, WorkspaceScope } from '../types'
 import { assertRecordInScope, resolveScope, stampNewRecord } from '../workspace/scope'
 import { hashCanonicalValue } from '../agent/run/hash'
 import { assertMediaBlobObjectV1 } from '../comic/contracts'
 import { PROJECT_TABLES } from '../registry/project-tables'
 
 const MAX_IMAGE_BYTES = 25 * 1024 * 1024
+const MAX_AUDIO_BYTES = 50 * 1024 * 1024
 
 export interface PreparedMediaBlobV1 {
   data: ArrayBuffer
@@ -14,6 +15,12 @@ export interface PreparedMediaBlobV1 {
   mimeType: MediaBlobObject['mimeType']
   width: number
   height: number
+}
+
+export interface PreparedAudioBlobV1 {
+  data: ArrayBuffer
+  contentHash: string
+  mimeType: 'audio/mpeg' | 'audio/ogg' | 'audio/wav' | 'audio/mp4'
 }
 
 function mediaReferenceSpecs() {
@@ -81,10 +88,58 @@ export function inspectImageBytesV1(data: ArrayBuffer): { mimeType: MediaBlobObj
   return result
 }
 
+/** Sniff audio bytes instead of trusting a browser-supplied extension or MIME. */
+export function inspectAudioBytesV1(data: ArrayBuffer): { mimeType: PreparedAudioBlobV1['mimeType'] } {
+  if (!(data instanceof ArrayBuffer) || data.byteLength < 4 || data.byteLength > MAX_AUDIO_BYTES) throw new Error('[media] 音频体积非法或超过 50 MiB')
+  const bytes = new Uint8Array(data)
+  const ascii = (start: number, length: number) => String.fromCharCode(...bytes.subarray(start, start + length))
+  if (bytes.length >= 12 && ascii(0, 4) === 'RIFF' && ascii(8, 4) === 'WAVE') return { mimeType: 'audio/wav' }
+  if (ascii(0, 4) === 'OggS') return { mimeType: 'audio/ogg' }
+  if (ascii(0, 3) === 'ID3' || bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0) return { mimeType: 'audio/mpeg' }
+  if (bytes.length >= 12 && ascii(4, 4) === 'ftyp') {
+    const brand = ascii(8, 4)
+    if (['M4A ', 'M4B ', 'mp41', 'mp42', 'isom'].includes(brand)) return { mimeType: 'audio/mp4' }
+  }
+  throw new Error('[media] 仅支持可验证签名的 MP3、WAV、OGG、M4A 音频')
+}
+
 /** Prepare and hash bytes before entering a caller-owned IndexedDB transaction. */
 export async function prepareMediaBlobV1(data: ArrayBuffer): Promise<PreparedMediaBlobV1> {
   const image = inspectImageBytesV1(data)
   return { data: data.slice(0), contentHash: await sha256BinaryV1(data), ...image }
+}
+
+export async function prepareAudioBlobV1(data: ArrayBuffer): Promise<PreparedAudioBlobV1> {
+  const audio = inspectAudioBytesV1(data)
+  return { data: data.slice(0), contentHash: await sha256BinaryV1(data), ...audio }
+}
+
+/** Store verified audio bytes in the same content-addressed registry used by visual references. */
+export async function putPreparedAudioBlobV1(
+  scope: WorkspaceScope,
+  audio: PreparedAudioBlobV1,
+): Promise<MediaBlobObjectRecordV1 & { id: number }> {
+  const existing = await db.mediaBlobObjects.where('[workId+contentHash]').equals([scope.workId, audio.contentHash]).first()
+  if (existing?.id) {
+    if (!await assertRecordInScope(scope, 'mediaBlobObjects', existing, { owner: 'work' })) throw new Error('[media] 同 hash Blob 越界')
+    if (existing.storageState !== 'ready' || existing.byteSize !== audio.data.byteLength || existing.mimeType !== audio.mimeType) throw new Error('[media] 同 hash 音频 Blob 元数据冲突')
+    if (existing.disposition === 'pending-delete') {
+      const restored = { ...existing, disposition: 'available' as const, storageState: 'ready' as const, deleteRequestedAt: null, deleteReceiptHash: null, updatedAt: Date.now() }
+      await db.mediaBlobObjects.put(restored)
+      return restored as MediaBlobObjectRecordV1 & { id: number }
+    }
+    return existing as MediaBlobObjectRecordV1 & { id: number }
+  }
+  const now = Date.now()
+  const row: MediaBlobObjectRecordV1 = stampNewRecord(scope, 'mediaBlobObjects', {
+    projectId: scope.projectId, worldId: scope.worldId, workId: scope.workId,
+    contentHash: audio.contentHash, mimeType: audio.mimeType, byteSize: audio.data.byteLength,
+    data: audio.data.slice(0), backend: 'indexeddb', storageState: 'ready', opfsPath: null,
+    leaseOwner: null, leaseExpiresAt: null, lastVerifiedAt: now, disposition: 'available',
+    deleteRequestedAt: null, deleteReceiptHash: null, createdAt: now, updatedAt: now,
+  }, { owner: 'work' })
+  const id = await db.mediaBlobObjects.add(row) as number
+  return { ...row, id }
 }
 
 /**
@@ -151,6 +206,15 @@ export async function readVerifiedMediaBlobV1(input: { scope: WorkspaceScope; bl
 
 export async function mediaBlobDataUrlV1(input: { scope: WorkspaceScope; blobObjectId: number }): Promise<string> {
   const row = await readVerifiedMediaBlobV1(input)
+  return binaryDataUrlV1(row.data, row.mimeType)
+}
+
+/** Product-neutral preview helper for verified image or audio references. */
+export async function mediaObjectDataUrlV1(input: { scope: WorkspaceScope; blobObjectId: number }): Promise<string> {
+  const scope = await resolveScope({ scope: input.scope })
+  const row = await db.mediaBlobObjects.get(input.blobObjectId)
+  if (!row?.id || !await assertRecordInScope(scope, 'mediaBlobObjects', row, { owner: 'work' }) || row.storageState !== 'ready' || row.disposition === 'pending-delete' || !row.data) throw new Error('[media] Blob 不存在、已回收、越界或不支持本地预览')
+  if (row.data.byteLength !== row.byteSize || await sha256BinaryV1(row.data) !== row.contentHash) throw new Error('[media] Blob 内容校验失败')
   return binaryDataUrlV1(row.data, row.mimeType)
 }
 
